@@ -1,62 +1,68 @@
-# fpaq0mw — bytewise coding of a bitwise model by journaled speculative execution
+# Bytewise coding of a bitwise model, by journaled speculative execution
 
-This document describes what the program in this repository does and how the
+This document describes what the programs in this repository do and how the
 pieces fit together. It was written from the sources of iteration `024`
 (`024-track_inc`), the state of the experiment recorded at the bottom of
-`log.txt`.
+`log.txt`, and extended when the Tangelo model was ported onto the same
+machinery.
 
 Contents
 
-1. [What the program is](#1-what-the-program-is)
+1. [What the programs are](#1-what-the-programs-are)
 2. [Source map](#2-source-map)
-3. [The bitwise model](#3-the-bitwise-model)
+3. [The models](#3-the-models)
 4. [From bit probabilities to a byte distribution](#4-from-bit-probabilities-to-a-byte-distribution)
 5. [Journaled speculative execution](#5-journaled-speculative-execution)
 6. [The build pipeline: instrumenting the compiler's output](#6-the-build-pipeline-instrumenting-the-compilers-output)
 7. [The range coder](#7-the-range-coder)
 8. [Main loop and file format](#8-main-loop-and-file-format)
 9. [Numeric formats](#9-numeric-formats)
-10. [Performance history](#10-performance-history)
+10. [Performance](#10-performance)
 11. [Limitations and caveats](#11-limitations-and-caveats)
 
 ---
 
-## 1. What the program is
+## 1. What the programs are
 
-`fpaq0mw` is an experimental lossless compressor in the *fpaq0* family: an
-order-0 model that predicts a byte one bit at a time, with the 0..7 bits
-already seen of the current byte as the only context.
+Two lossless compressors that code a whole **byte** per arithmetic-coder step,
+using a model that predicts one **bit** at a time. They share every line of the
+machinery and differ only in the model:
 
-The standard way to use such a model is to run a **binary** arithmetic coder
-eight times per byte: predict bit, code bit, update model, repeat. This program
-does something different. For every input byte it
+| Program | Model | `book1` |
+| --- | --- | ---: |
+| `fpaq0mw` | order-0: two counters and a mixer per partial-byte context | 446 962 |
+| `tangelo_w` | Tangelo: a paq/lpaq-class model, about 361 MB of state | 197 483 |
 
-1. derives the full **256-symbol probability distribution** that the bitwise
+The usual way to use a bitwise model is to run a **binary** arithmetic coder
+eight times per byte: predict bit, code bit, update model, repeat. These
+programs do something different. For every input byte they
+
+1. derive the full **256-symbol probability distribution** that the bitwise
    model implies for the next byte,
-2. codes the byte with a single **multi-symbol** range-coder step against that
+2. code the byte with a single **multi-symbol** range-coder step against that
    distribution, and
-3. only then updates the model with the eight bits of the byte actually coded.
+3. only then update the model with the eight bits of the byte actually coded.
 
 Step 1 is the interesting part. The probability of a byte `d` under a bitwise
-model is the product of the eight conditional bit probabilities along `d`'s
-path through the binary tree of prefixes. But a real model does not stand
-still between bits: after each bit it *updates itself* (counters, mixer
-weights, its notion of the current context), and the prediction for the next
-bit is made from that updated state. To evaluate all 256 paths one therefore
-has to run the model's actual *predict-and-update* step down every branch of
-the tree and roll it back again on the way up.
+model is the product of the eight conditional bit probabilities along `d`'s path
+through the binary tree of prefixes. But a real model does not stand still
+between bits: after each bit it *updates itself* (counters, mixer weights, hash
+slots, its notion of the current context), and the prediction for the next bit is
+made from that updated state. To evaluate all 256 paths one therefore has to run
+the model's actual *predict-and-update* step down every branch of the tree and
+roll it back again on the way up.
 
-Rather than hand-writing a "predict without side effects" version of the
-model, the program treats the compiled model step as a black box and makes it
+Rather than hand-writing a "predict without side effects" version of the model,
+these programs treat the compiled model step as a black box and make it
 reversible mechanically:
 
 * the model step (`encode_sim`) is compiled to assembly language,
-* a script (`track.pl`) inserts a call to a small journaling routine in front
-  of **every memory store** in that assembly,
-* the journaling routine records the address and the old contents of each
-  store, and
-* `NEST()` / `UNDO()` mark a point in the journal and restore everything
-  written since that point.
+* a script (`track.pl`) inserts a call to a small journaling routine in front of
+  **every memory write** in that assembly,
+* the journaling routine records the address and the old contents of each write,
+  and
+* `NEST()` / `UNDO()` mark a point in the journal and restore everything written
+  since that point.
 
 This is, in effect, a software transactional memory for a single function,
 implemented by binary instrumentation of the compiler's output. (The comment
@@ -66,68 +72,89 @@ tried for the same purpose before this software journal; those files are not
 part of this snapshot.)
 
 Because the full tree walk costs up to 254 simulated model steps per byte, the
-walk is pruned: sub-trees whose prefix has already become too improbable are
-not explored and their leaves get the minimum frequency.
+walk is pruned: sub-trees whose prefix has already become too improbable are not
+explored and their leaves get the minimum frequency.
 
-The model used here is deliberately simple so that the machinery, not the
-model, is what is being tested. For this particular model the per-node state
-is disjoint between the tree nodes, so the journal is only strictly needed to
-roll back the context variable; the point of the design is that it works
-unchanged for models where that is not true (hashed or shared counters, SSE
-stages, mixers with shared weights, and so on). The by-product of the walk,
-the code length of *every* possible next byte, is also exactly what an
-optimal-parsing encoder (for example an LZ parser) needs from a model.
+`fpaq0mw`'s model is deliberately simple, so that the machinery rather than the
+model is what is being tested; its per-node state is disjoint between tree nodes,
+so the journal is only strictly needed there to roll back the context variable.
+Tangelo is the other case, and the one the technique is for: hash tables with
+eviction, shared mixer weights, a match model with its own cursor, a randomised
+state decay. Nothing about it is written to be reversible, and it does not need
+to be. The by-product of the walk - the code length of *every* possible next
+byte - is also exactly what an optimal-parsing encoder (for example an LZ parser)
+needs from a model.
 
-The compression gain over plain bitwise coding of the same model is
-negligible (see [§10](#10-performance-history)); the experiment is about the
-technique and its cost.
+The compression gain over plain bitwise coding of the same model is negligible,
+and at these thresholds slightly negative (see [§10](#10-performance)); the
+experiment is about the technique and its cost.
 
 ## 2. Source map
 
+Shared machinery:
+
 | File | Role |
 | --- | --- |
-| `fpaq0mw.cpp` | Includes everything else; `main()` with the per-byte encode/decode loop. Compiled **twice**: once with `-DSIM_FUNC` (only the model step, to assembly) and once normally (the program). |
-| `model.inc` | `Predictor`: the bitwise order-0 model (two counters and a mixer per context). |
-| `sh_mixer.inc` | `iMixer`: a one-weight interpolating mixer that combines the two counters. |
-| `sh_v1m.inc` | `Rangecoder`: 32-bit-low / 64-bit-range range coder with explicit carry handling. |
-| `coder.inc` | `Coder`: glues predictor and range coder; `encode_sim()` = one predict-and-update step, exported with C linkage in the `SIM_FUNC` build. |
-| `log2lut.inc` | `log2LUT`: integer log2 table in 16.16 fixed point. |
-| `track.inc` | The journal (`trk`, `NEST`, `UNDO`), the `track1/2/4/8` journaling stubs (assembly), the pruned tree walk `TEST_ENCODE` / `test_encode()`, the `unlog` table. |
+| `main.inc` | The driver: per-byte walk, frequency table, one coding step, real update. Model-agnostic; both programs include it. |
+| `track.inc` | The journal (`trk`, `NEST`, `UNDO`), the `track1` … `track64` journaling stubs (assembly), the pruned tree walk `TEST_ENCODE` / `test_encode()`, the `unlog` table. |
 | `track.pl` | Build step: inserts the journaling calls into the compiler-generated assembly. |
-| `build.sh`, `build.bat` | The three-step build on Linux / Windows. |
+| `log2lut.inc` | `log2LUT`: integer log2 table in 16.16 fixed point. |
+| `sh_v1m.inc` | `Rangecoder`: 32-bit-low / 64-bit-range range coder with explicit carry handling. |
+| `build.sh`, `build.bat` | The three-step build on Linux / Windows, for each program. |
 | `test.sh`, `test.bat`, `timetest.cpp` | Round-trip and timing test that appends to `log.txt`. |
 | `log.txt`, `log1.txt`, `log.pl` | The experiment log (size and timings per change) and the script that tabulates it. |
-| `legacy/` | The original Windows-only scripts (`g.bat` for MinGW GCC, `c.bat` for Intel ICX via LLVM `llc`, `1.pl`/`1a.pl`, `t.bat`, `icx64.cfg`) kept for reference. |
 
-## 3. The bitwise model
+`fpaq0mw`:
 
-### 3.1 Context
+| File | Role |
+| --- | --- |
+| `fpaq0mw.cpp` | Includes the model, the coder and `main.inc`. Compiled **twice**: once with `-DSIM_FUNC` (only the model step, to assembly) and once normally (the program). |
+| `model.inc` | `Predictor`: the bitwise order-0 model (two counters and a mixer per context). |
+| `sh_mixer.inc` | `iMixer`: a one-weight interpolating mixer that combines the two counters. |
+| `coder.inc` | `Coder`: glues predictor and range coder; `P()` / `encode_sim()` are what the walk calls. |
 
-`Predictor::cxt` is the classic fpaq0 context: the bits of the current byte
-seen so far, with a leading 1. It starts at 1 for every byte, becomes
-`cxt*2+bit` after each bit, and is reset to 1 when it reaches 256 (after the
-eighth bit). The 255 reachable values 1..255 are the internal nodes of a
+`tangelo_w`:
+
+| File | Role |
+| --- | --- |
+| `tangelo_w.cpp` | Same shape as `fpaq0mw.cpp`, plus the single definition of the model's shared globals. |
+| `tangelo/tangelo.inc` | Includes the model's parts, in order; lists the five edits made to the original. |
+| `tangelo/common.inc` | Probability scale, `MEM`, the `extern` declarations, locale-free character classes. |
+| `tangelo/{window,random,ilog,idiv,hash,table_fsm,stsq}.inc` | History buffer, the random generator, the `ilog`/`1/(2i+3)`/`squash`/`stretch` tables, the hash, the 256-state FSM table. |
+| `tangelo/{mixer_train,mixer1,mixer}.inc` | SSE dot product and weight update; the one-layer and two-layer mixers. |
+| `tangelo/{counter,CM_small,CM,CM_match,APM}.inc` | `StateMap`, the small stationary maps, the 22-context `ContextMap`, the match model, the APM/SSE stage. |
+| `tangelo/CM_main.inc` | `Model::predictNext()`: the contexts, the mixing, the APM chain. |
+| `coder_tangelo.inc` | `Coder`: adapts Tangelo's inverted step to what the walk expects. |
+
+`legacy/` keeps the original Windows-only scripts (`g.bat` for MinGW GCC, `c.bat`
+for Intel ICX via LLVM `llc`, `1.pl`/`1a.pl`, `t.bat`, `icx64.cfg`) and
+`tangelo_orig.cpp`, the single-file Tangelo this port started from.
+
+## 3. The models
+
+### 3.1 fpaq0mw: two counters and a mixer
+
+**Context.** `Predictor::cxt` is the classic fpaq0 context: the bits of the
+current byte seen so far, with a leading 1. It starts at 1 for every byte,
+becomes `cxt*2+bit` after each bit, and is reset to 1 when it reaches 256 (after
+the eighth bit). The 255 reachable values 1..255 are the internal nodes of a
 binary tree whose 256 leaves are the byte values.
 
-### 3.2 Two counters per context
-
-Each context owns two 12-bit probabilities of a 1 bit (`SCALE = 4096`),
-updated as shift-based exponential moving averages at different rates:
+**Two counters per context.** Each context owns two 12-bit probabilities of a 1
+bit (`SCALE = 4096`), updated as shift-based exponential moving averages at
+different rates:
 
 ```
 p1 += (SCALE - p1) >> 4   on a 1        p1 -= p1 >> 4   on a 0      (fast, 1/16)
 p2 += (SCALE - p2) >> 8   on a 1        p2 -= p2 >> 8   on a 0      (slow, 1/256)
 ```
 
-Because of the integer shifts the counters saturate short of the limits:
-`p1` stays in [15, 4081] and `p2` in [255, 3841], so no probability is ever
-0 or 1.
+Because of the integer shifts the counters saturate short of the limits: `p1`
+stays in [15, 4081] and `p2` in [255, 3841], so no probability is ever 0 or 1.
 
-### 3.3 The mixer
-
-`iMixer` (one 16-bit weight `w` per context, `SCALE = 32768`) does not add
-stretched inputs like a logistic mixer. It **interpolates** between the two
-counters:
+**The mixer.** `iMixer` (one 16-bit weight `w` per context, `SCALE = 32768`) does
+not add stretched inputs like a logistic mixer. It **interpolates** between the
+two counters:
 
 ```
 P = p1 + ((p2 - p1) * w) >> 15          w = 0 -> p1,   w = 32768 -> p2
@@ -135,29 +162,26 @@ P = p1 + ((p2 - p1) * w) >> 15          w = 0 -> p1,   w = 32768 -> p2
 
 `w` starts at 32768, so a fresh context predicts with the slow counter.
 
-Its update is a closed-form step towards the weight that would have predicted
-the bit perfectly. Working in a 15-bit probability-of-zero space
-(`q = 32768 - 8*p`), with target `T = 100` if the bit was 1 and `32668` if it
-was 0 (i.e. about 0.3 % / 99.7 %), the ideal weight is the position of `T` on
-the line from `q1` to `q2`:
+Its update is a closed-form step towards the weight that would have predicted the
+bit perfectly. Working in a 15-bit probability-of-zero space (`q = 32768 - 8p`),
+with target `T = 100` if the bit was 1 and `32668` if it was 0 (i.e. about 0.3 % /
+99.7 %), the ideal weight is the position of `T` on the line from `q1` to `q2`:
 
 ```
 w* = (T - q1) / (q2 - q1)                (as a fraction, scaled by 32768)
 w  = clamp( (5/6) * w + (1/6) * w*, 0, 32768 )       (wr = 32768/6)
 ```
 
-The step is skipped when the two counters are within `Limit = 100` (of 32768)
-of each other, where the division would explode and mixing cannot help
-anyway. Since the map from the 12-bit probability-of-one space to the 15-bit
-probability-of-zero space is affine, the interpolation weight found in one
-space is the right weight in the other; that is why `Update` and `Mixup` can
-work in different spaces.
+The step is skipped when the two counters are within `Limit = 100` (of 32768) of
+each other, where the division would explode and mixing cannot help anyway. Since
+the map from the 12-bit probability-of-one space to the 15-bit
+probability-of-zero space is affine, the interpolation weight found in one space
+is the right weight in the other; that is why `Update` and `Mixup` can work in
+different spaces.
 
-### 3.4 One model step
-
-`Predictor::update(y)` runs, in this order: mixer update (using the old
-counter values), counter updates, context shift. `Coder::encode_sim(y)` is
-"predict, then update" and returns the prediction:
+**One model step.** `Predictor::update(y)` runs, in this order: mixer update
+(using the old counter values), counter updates, context shift.
+`Coder::encode_sim(y)` is "predict, then update" and returns the prediction:
 
 ```cpp
 uint encode_sim( int y ) {
@@ -170,6 +194,83 @@ uint encode_sim( int y ) {
 One step writes exactly four words of state: `p1[cxt]`, `p2[cxt]`,
 `mix[cxt].w` and `cxt`. Those four stores are what the journal has to capture.
 
+### 3.2 Tangelo: a paq-class model
+
+`tangelo/` holds a model of the kind this technique was built for: some hundreds
+of times the state and the arithmetic of §3.1, and roughly the compression of the
+paq8/lpaq family. Its step, `Model::predictNext()`, folds the bit just coded (the
+global `y`) into the state and returns the probability of the next bit, also on a
+12-bit scale.
+
+**Contexts.** Once per byte (`bpos == 0`) it computes 22 context values and hands
+them to the ContextMap: orders 0 to 4, taken straight from the last four bytes
+`c4`; hashed orders 5, 6 and 14 from a rolling chain `cxt[]`; three sparse masks
+of `c4` (`0xf8f8c0ff`, `0x00e0e0e0`, `0xffc0ff80`); three combinations of the
+current match length with parts of `c4`; a character-class history (each byte
+mapped to one of eight classes - letter, punctuation, space, `0xFF`, small,
+medium, other - three bits per byte) and a hash of two such histories; four
+indirect contexts built from `t1[]` and `t2[]`, which remember which bytes
+followed a given byte and a given byte pair; and a word model, hashing the
+current run of letters and the previous word.
+
+**ContextMap** (`tangelo/CM.inc`) is most of the model and nearly all of the
+memory: 2^22 buckets of 64 bytes, each holding seven 16-bit checksums and seven
+slots of seven bit-history bytes, so one bucket covers one context's byte with a
+nibble-indexed tree inside it. Per context and per bit it advances a bit-history
+state through `State_table` (a 256-state nonstationary counter FSM, with a
+randomised decay of high states - that is what `Random` is for), turns the state
+into a probability with a per-slot `StateMap` (an adaptive probability/count
+pair, stepped by `1/(2n+3)`), and separately runs a run model over the `runp`
+bytes that predicts a repeat of the byte last seen in this context, weighted by
+`ilog(run length)`.
+
+**MatchModel** (`tangelo/CM_match.inc`) hashes the recent bytes into a table of
+positions, and when the history repeats it predicts the byte that followed last
+time, with a confidence rising in the match length. Two small stationary maps,
+keyed on the position and on the distance since the last line break, ride along
+with it.
+
+**Mixing.** Everything above pushes stretched probabilities into a 73-input mixer
+with 1160 weight sets, selected by five contexts (`c1`, `c0`, a summary of how
+many contexts are active plus a few flags, `c2`, and the match length); a second
+layer (`Mixer1<5,1,1>`) combines those five outputs. The result passes through
+three APM/SSE stages keyed on `c0`, on `c0` with `c1`, and on a hash of `bpos`,
+`c1` and `c2`, blended 5:15:12.
+
+| | |
+| --- | ---: |
+| `sizeof(Model)` | 360.8 MB |
+| ContextMap hash table | 256.0 MB (4 194 304 buckets x 64 B) |
+| match model + history buffer | 96.3 MB |
+| three APMs | 8.3 MB |
+| mixer weights | 181.5 KB |
+
+**The step is inverted** relative to §3.1, which is the one thing the port has to
+reconcile. fpaq0mw's model predicts and is then told the bit; Tangelo's is told
+the bit and then predicts. `coder_tangelo.inc` keeps the pending prediction in a
+member, so the walk still sees "give me the prediction you are about to use, then
+consume this bit":
+
+```cpp
+uint P()                 { return p; }                                  // the 8th-bit leaf
+uint encode_sim( int b ) { uint p0=p; y=b; p=clamp(M.predictNext()); return p0; }
+```
+
+`p` starts at `hSCALE`, which is what Tangelo's own encoder seeds it with, and is
+clamped into [1, SCALE-1] because the coder takes both `LOG2(p)` and
+`LOG2(SCALE-p)` and cannot code a zero-width interval. The clamp applies to the
+pending value only, so the model's own feedback path still sees its unclamped
+`pr0`. (Tangelo's own coder instead does `p += p < 2048` before every use, which
+nudges every probability below a half.)
+
+**Where the byte boundary falls.** The walk calls the step for bits 0..6 and
+reads `P()` for bit 7 (§4.2), so inside a simulated byte `c0` never reaches 256:
+the byte-flush path - appending to the history buffer, shifting `c4`, and the
+whole `bpos == 0` context rebuild - runs only in the real update. What the
+simulation does touch is `bpos`, which it takes from 0 up to 7, and with it the
+`if (bpos == 7) cn = 0;` in `ContextMap::mix`. Those are ordinary memory writes,
+journaled and rolled back like everything else.
+
 ## 4. From bit probabilities to a byte distribution
 
 ### 4.1 Costs in the log domain
@@ -180,9 +281,9 @@ Multiplying eight 12-bit probabilities is done as a sum of logarithms.
 (the table values carry a constant bias of 31..32 units which cancels in the
 differences taken below).
 
-`test_encode()` fills `clen[0x200]`, indexed by tree node (`1` = root,
-children `2n` and `2n+1`, leaves `0x100 + byte`). For a node the value is the
-accumulated `Σ LOG2(p_i)` over the bits on the path to it, i.e. 2^16 times the
+`test_encode()` fills `clen[0x200]`, indexed by tree node (`1` = root, children
+`2n` and `2n+1`, leaves `0x100 + byte`). For a node the value is the accumulated
+`Σ LOG2(p_i)` over the bits on the path to it, i.e. 2^16 times the
 log-probability numerator; the cost of the path in bits is
 `12·depth - clen/2^16`. The array is initialised to `0xFFFFF` everywhere
 (meaning "not evaluated" / cost about 16 bits) with `clen[1] = 0`.
@@ -199,39 +300,43 @@ p = encode_sim(&E, bit)                  // real predict + update, journaled
 if bit == 0:                             // p is the same for both children,
     clen[2*ctx+0] = clen[ctx] + LOG2(SCALE - p)     // so fill both at once
     clen[2*ctx+1] = clen[ctx] + LOG2(p)
-if clen[cty] > 0x90000 * depth:          // pruning test, see below
+if clen[cty] > PRUNE_LOG * depth:        // pruning test, see below
     TEST_ENCODE<0, cty, K-1>             // descend into both children
     TEST_ENCODE<1, cty, K-1>
 UNDO()                                   // roll the model back
 ```
 
 `K` counts down from 7 at the root; `depth = 8 - K`. The `bit == 1`
-instantiation still has to call `encode_sim` so that the model is in the
-right state for its sub-tree, even though the two `clen` entries were already
-filled by its sibling.
+instantiation still has to call `encode_sim` so that the model is in the right
+state for its sub-tree, even though the two `clen` entries were already filled by
+its sibling.
 
-At the last level (`K == 0`, the eighth bit) no update is needed, because
-nothing is predicted after it inside this byte, so the specialisation only
-reads `E.predictor.P()` and fills the two leaves. This removes 128 of the 254
-simulated steps and all their journaling (the log calls it "probability reuse
-on last bit").
+At the last level (`K == 0`, the eighth bit) no update is needed, because nothing
+is predicted after it inside this byte, so the specialisation only reads `E.P()`
+and fills the two leaves. This removes 128 of the 254 simulated steps and all of
+their journaling (the log calls it "probability reuse on last bit").
 
 ### 4.3 Pruning
 
 A sub-tree is entered only if its prefix is still probable enough:
 
 ```
-clen[cty] > 0x90000 * depth     <=>    Σ log2(p_i) > 9 * depth
-                                <=>    cost so far < 3 bits per bit
-                                <=>    P(prefix) > 8^-depth
+clen[cty] > PRUNE_LOG * depth   <=>   Σ log2(p_i) > (PRUNE_LOG/2^16) * depth
 ```
 
-Prefixes that fail keep `0xFFFFF` in all their leaves, which becomes the
-minimum frequency 1 in the next step. The threshold is a trade-off recorded in
-`log.txt`: with `0x80000` (4 bits/bit) the distribution is exact and
-compression is 446 945 bytes at 1.96 s; `0x90000` gives 446 962 bytes at
-1.77 s; `0xA0000` (2 bits/bit) already loses 3.6 %; `0xC0000` prunes
-everything and the output is the raw file.
+With the fpaq0mw default of `0x90000` that is 9.0 per bit, i.e. `P(prefix)` is
+still above `8^-depth`, a cost of under 3 bits per bit. Prefixes that fail keep
+`0xFFFFF` in all their leaves, which becomes the minimum frequency 1 in the next
+step.
+
+The threshold is a speed/size trade-off, and the right value depends on how sharp
+the model is; it is a macro (`PRUNE_LOG`), defaulted per program and overridable
+from the build. `log.txt` records the fpaq0mw sweep: `0x80000` (4 bits/bit) makes
+the distribution effectively exact at 446 945 bytes and 1.96 s, `0x90000` gives
+446 962 at 1.77 s, `0xA0000` (2 bits/bit) already loses 3.6 %, and `0xC0000`
+prunes everything so the output is the raw file. Tangelo predicts far more
+sharply, so the same threshold cuts deeper into the distribution that matters and
+its default is `0x80000` instead - see the table in §10.
 
 ### 4.4 Frequencies
 
@@ -244,9 +349,9 @@ freq[d] = unlog[r]                           // = floor(2^16 * 2^(-r/2^16)), at 
 ```
 
 `unlog` is a 2^20-entry table built once with `pow()` at start-up
-(`PSCALE = 2^16`). The frequencies therefore sum to about 2^16 (plus rounding
-and the 1s of pruned symbols), and `total` is their exact sum, computed on the
-fly and identical in encoder and decoder.
+(`PSCALE = 2^16`). The frequencies therefore sum to about 2^16 (plus rounding and
+the 1s of pruned symbols), and `total` is their exact sum, computed on the fly and
+identical in encoder and decoder.
 
 ## 5. Journaled speculative execution
 
@@ -259,99 +364,161 @@ uint trkptr;            // next free cell
 uint nest_trkptr[0x200], nesting;   // stack of saved journal positions
 ```
 
-`NEST()` pushes `trkptr`. `UNDO()` pops it and walks the cells written since
-then **backwards**, restoring `*ptr = (*ptr & ~msk) | val` for each, so that
-several stores to the same location unwind in the right order. The mask lets a
-1-, 2- or 4-byte store be recorded as a 32-bit read of its address; 8-byte
-stores are recorded as two cells.
+`NEST()` pushes `trkptr`. `UNDO()` pops it and walks the cells written since then
+**backwards**, restoring `*ptr = (*ptr & ~msk) | val` for each, so that several
+writes to the same location unwind in the right order. The mask lets a 1-, 2- or
+4-byte write be recorded as a 32-bit read of its address; wider writes are
+recorded as several cells.
 
-Only the current root-to-node path is ever live in the journal (at most seven
-steps of four stores), so the capacity is far larger than needed.
+Only the current root-to-node path is ever live in the journal, so the capacity is
+far larger than needed: fpaq0mw uses at most seven steps of four writes, and
+Tangelo a few thousand cells. `NEST()` checks the remaining capacity once per
+step, since a journal that silently ran off the end would corrupt memory rather
+than restore it.
 
-### 5.2 Which stores are journaled
+### 5.2 Which writes are journaled
 
-There are two versions of the model step in the executable:
+Only the instrumented copy of the model step journals (§5.4), and it journals
+every write it makes to memory that is not its own stack frame:
 
-* the **instrumented** `encode_sim` — the C function exported by `coder.inc`
-  in the `SIM_FUNC` build, compiled to assembly and patched by `track.pl`.
-  `test_encode` calls this one through the `extern "C"` declaration in
-  `track.inc`;
-* the **plain** `Coder::encode_sim` member function, inlined into `main()`
-  from the normal build, used for the real update after the byte is coded.
+* **Plain stores** - `mov SIZE PTR <mem>, <src>`, for SIZE from `byte` to
+  `qword`.
+* **Vector stores** - `movdqa`/`movdqu`/`movaps`/`movq`/`vextract…` with a memory
+  destination, up to `zmmword`. The Tangelo build produces 16-byte stores from
+  the SSE mixer update in `tangelo/mixer_train.inc` and 32-byte ones from loops
+  the auto-vectorizer widened. A store under an AVX-512 write mask is journaled
+  at its full width, which is still correct: saving and restoring bytes the store
+  never wrote is a no-op.
+* **Read-modify-writes** - `add`/`inc`/`and`/`xadd`/… with a memory destination.
+  These are exactly as journalable as a plain store, because `UNDO()` only needs
+  the destination's contents from before the instruction ran, not a description
+  of what it did to them. Tangelo's `++ptr` in the match model compiles to
+  `inc DWORD PTR`, so this is not hypothetical.
+* **Not the stack.** A write relative to `rsp` is skipped whatever the
+  instruction: it belongs to the step's own frame, which is dead by the time
+  `UNDO()` runs - and `UNDO()`'s own frame would then sit at the same addresses,
+  so restoring it would be actively harmful.
+* **Nothing else.** Any other memory-writing instruction fails the build. A write
+  the journal does not see cannot be undone, and the resulting failure is silent
+  (§11), so the default is to refuse rather than to guess. Scatter stores and
+  `rep stos` are named explicitly: one instruction, many addresses, and no `lea`
+  that reproduces them.
 
-Only the first version journals its stores; the real update is meant to stick.
-Both come from the same source, compiled with the same compiler and flags, so
-they agree on the layout of `Coder`.
+The instrumentation writes `push ARG` at `[rsp-8]`, so the 128-byte **red zone**
+below `rsp` must not be in use. The instrumented compile gets `-mno-red-zone` for
+that reason, and `track.pl` stops if it sees a negative `rsp` displacement anyway.
+This is not theoretical either: GCC put a spilled accumulator at `-8[rsp]` in the
+Tangelo step.
+
+**Calls out of the step are the remaining hazard.** Anything the step calls that
+was compiled into the same translation unit is instrumented too, because
+`track.pl` processes the whole file. A call to a *library* function is not:
+`memset()` inside the ContextMap's bucket eviction was rewritten as an explicit
+loop for exactly this reason, and the `<ctype.h>` calls in the byte classifier
+were replaced with open-coded tests - which also makes the compressed output
+independent of the process locale. After those two changes the instrumented
+Tangelo step contains no calls at all.
 
 ### 5.3 The journaling stubs
 
-`track1`, `track2`, `track4`, `track8` (in `track.inc`) each append one cell
-(two for `track8`) for the address passed in the first-argument register
-(`rcx` on Windows, `rdi` on Linux). They are written in assembly using only
-`mov`, `movzx`, `lea`, `push`, `pop` and `ret`, so they preserve every
-register **and EFLAGS**. That matters: the compiler is free to keep a
-comparison result live across a store (the GCC output for this very model has
-`cmp` / `mov [mem],reg` / `cmovge`), and a stub that clobbered the flags would
-corrupt the model. The original C stubs used
-`__attribute__((no_caller_saved_registers))`, which saves registers but not
-flags, and needed a `pushf`/`popf` pair around every call; `log.txt` records
-that dropping the pair ("drop pushf") took the run from 7.5 s to 3.2 s, which
-is why the stubs are now flag-neutral by construction.
+`track1`, `track2` and `track4` (in `track.inc`) append one cell each; `track8`,
+`track16`, `track32` and `track64` append 2, 4, 8 and 16 cells, one per 4-byte
+word of the destination, since `Cell::val` is 32 bits. All of them take the
+address in the first-argument register (`rcx` on Windows, `rdi` on Linux).
+
+They are written in assembly using only `mov`, `movzx`, `lea`, `push`, `pop` and
+`ret`, so they preserve every register **and EFLAGS**. That matters twice over:
+the compiler keeps comparison results live across stores (the GCC output for
+fpaq0mw has `cmp` / `mov [mem],reg` / `cmovge`), and a read-modify-write such as
+`inc [mem]` sets flags that a following branch reads. A stub that clobbered flags
+would corrupt the model in both cases. The wide stubs are unrolled rather than
+looped for the same reason: a loop counter needs a flag-setting instruction.
+
+The original C stubs used `__attribute__((no_caller_saved_registers))`, which
+saves registers but not flags, and needed a `pushf`/`popf` pair around every
+call; `log.txt` records that dropping the pair ("drop pushf") took fpaq0mw from
+7.5 s to 3.2 s, which is why the stubs are now flag-neutral by construction.
+
+### 5.4 Two copies of the model, and keeping them apart
+
+The program contains the model step twice: the instrumented copy, compiled with
+`-DSIM_FUNC` and patched by `track.pl`, which the walk calls through the
+`extern "C" encode_sim`; and the ordinary copy, inlined into `main()`, which
+performs the real update after the byte is coded. Both come from the same source
+with the same flags, so they agree on the layout of every object - and they must
+operate on the *same* objects, which is why the Tangelo model's mutable globals
+(`y`, `bpos`, `rnd`, `ilog`, `pt`, `stretch`) are only declared in
+`tangelo/common.inc` and are defined once, in `tangelo_w.cpp`. If any of them
+existed twice, the simulation would quietly drift away from the model it is
+supposed to be simulating.
+
+The subtler version of the same trap is C++ linkage. A member function the
+compiler declines to inline is emitted as a **weak COMDAT symbol** - and the
+normal build emits the same symbol from the same source. The linker keeps exactly
+one of the two, and if it keeps the uninstrumented one, the walk runs with no
+journaling at all: every speculative branch then leaks into the real model,
+`UNDO()` restores nothing, and the model is destroyed a little more with every
+byte. Nothing crashes. Both sides of the codec corrupt the model identically, so
+the round trip still succeeds; it just compresses terribly. This is what happened
+first during the Tangelo port - `Model::predictNext()` was too big for GCC to
+inline - and it turned `book1`'s first 64 KB into 130 088 bytes instead of
+20 739.
+
+Three things now prevent it:
+
+1. `Model::predictNext()`, `ContextMap::mix()` and `Coder::encode_sim()` are
+   marked `INLINE` (`always_inline`), so the instrumented translation unit
+   defines exactly one symbol: `encode_sim`.
+2. `track.pl` refuses any input that defines a weak symbol, and says why.
+3. `main.inc` checks, after the first byte, that the walk journaled and rolled
+   back something, and stops if it did not.
 
 ## 6. The build pipeline: instrumenting the compiler's output
 
-```
-fpaq0mw.cpp --(CXX -S -masm=intel -DSIM_FUNC)--> coder.s
-coder.s     --(perl track.pl)-------------------> coder1.s
-fpaq0mw.cpp + coder1.s --(CXX)------------------> fpaq0mw[.exe]
-```
-
-`track.pl` reads the Intel-syntax assembly and, for every plain store
+Per program (`fpaq0mw`, `tangelo_w`):
 
 ```
-mov  {byte|word|dword|qword} ptr <mem>, <src>
+<prog>.cpp  --(CXX -S -masm=intel -mno-red-zone -DSIM_FUNC)-->  coder-<prog>.s
+coder-<prog>.s  --(perl track.pl)---------------------------->  coder1-<prog>.s
+<prog>.cpp + coder1-<prog>.s  --(CXX)------------------------>  <prog>[.exe]
 ```
 
-inserts, in front of it:
+`track.pl` reads the Intel-syntax assembly and, in front of every write listed in
+§5.2, inserts:
 
 ```
 push ARG                 ; ARG = rcx (Win64) or rdi (SysV x86-64)
 lea  ARG, <mem>
-call trackN              ; N = width of the store in bytes
+call trackN              ; N = width of the write in bytes
 pop  ARG
 ```
 
-The address is computed with `lea` from the same operand the store uses, so
-the stub sees the exact location before it is overwritten. The ABI is
-auto-detected from the assembly (COFF `.seh_proc`/`.def` directives mean
-Win64, ELF `.type name, @function` means SysV) and can be forced with
-`--abi=`. On Windows the script also appends the `.def` declarations the
-original scripts emitted.
+The address is computed with `lea` from the same operand the write uses, so the
+stub sees the exact location before it is overwritten; the `push` does not
+disturb that even when the operand is based on `ARG` itself. The ABI is
+auto-detected from the assembly (COFF `.seh_proc`/`.def` directives mean Win64,
+ELF `.type name, @function` means SysV) and can be forced with `--abi=`. On
+Windows the script also appends the `.def` declarations the original scripts
+emitted. `-v` lists every write it instruments or skips.
 
-Stores relative to `rsp` are deliberately **not** instrumented: they are the
-function's own stack frame, which is dead when `UNDO()` runs — and `UNDO()`'s
-own frame would then occupy the same addresses, so "restoring" them would be
-harmful. Any other memory-writing instruction the script does not know how to
-handle (read-modify-write ALU ops such as `add [mem], reg`, SSE/AVX stores,
-`xchg`, string ops) is reported and fails the build, because a store the
-journal does not see cannot be undone; `--lax` downgrades that to a warning.
-For the model in this snapshot GCC and Clang both produce exactly four plain
-stores (three `word`, one `dword`) and nothing else, matching the four state
-words of [§3.4](#34-one-model-step).
+For fpaq0mw, GCC and Clang both produce exactly four plain stores (three `word`,
+one `dword`) and nothing else, matching the four state words of §3.1. For
+tangelo_w the same compile produces about 146 writes in six different widths,
+plus about 67 stack writes that are skipped.
 
 Why assembly-level instrumentation rather than a compiler option: it needs no
-support from the compiler, applies to already optimised code (the stores that
-survive optimisation are exactly the ones that matter), and it leaves the
-model source untouched.
+support from the compiler, it applies to already optimised code (the writes that
+survive optimisation are exactly the ones that matter), and it leaves the model
+source almost untouched - the Tangelo port needed five edits to the model itself,
+all of them listed at the top of `tangelo/tangelo.inc`.
 
 ## 7. The range coder
 
-`sh_v1m.inc` is a byte-oriented range coder with a 32-bit `low`, a separate
-carry bit, and a 64-bit `range` (so that it can start at exactly 2^32).
+`sh_v1m.inc` is a byte-oriented range coder with a 32-bit `low`, a separate carry
+bit, and a 64-bit `range` (so that it can start at exactly 2^32).
 
-**Interval selection.** For a symbol with cumulative frequency `cum`,
-frequency `freq` and total `tot`, the sub-interval is computed from the top
-down:
+**Interval selection.** For a symbol with cumulative frequency `cum`, frequency
+`freq` and total `tot`, the sub-interval is computed from the top down:
 
 ```
 tmp  = range - floor((tot - cum)        * range / tot)     // start
@@ -360,39 +527,38 @@ encoder: low += tmp        decoder: code -= tmp
 range = rnew - tmp
 ```
 
-Written this way the 256 sub-intervals tile `[0, range)` exactly: the first
-symbol starts at 0 and the last one ends at `range`, with no rounding gap.
+Written this way the 256 sub-intervals tile `[0, range)` exactly: the first symbol
+starts at 0 and the last one ends at `range`, with no rounding gap.
 
 **Renormalisation.** While `range < 2^24` the coder shifts out a byte:
-`range <<= 8`, and the encoder runs `ShiftLow()` while the decoder pulls in
-the next input byte.
+`range <<= 8`, and the encoder runs `ShiftLow()` while the decoder pulls in the
+next input byte.
 
 **Carry propagation.** `low` and `Carry` overlay a 64-bit `lowc`, so
 `lowc += tmp` deposits any carry out of bit 31 into `Carry` for free.
-`ShiftLow()` is the usual cached-byte scheme: the top byte of `low` is held
-back in `Cache`; if the byte to be shifted out is `0xFF` and no carry is
-pending it is only counted (`FFNum++`), because a later carry could still
-turn it into `0x00` and bump `Cache`. When a non-`0xFF` byte or a carry
-arrives, `Cache + Carry` and then `FFNum` bytes of `0xFF + Carry` are written
-out.
+`ShiftLow()` is the usual cached-byte scheme: the top byte of `low` is held back
+in `Cache`; if the byte to be shifted out is `0xFF` and no carry is pending it is
+only counted (`FFNum++`), because a later carry could still turn it into `0x00`
+and bump `Cache`. When a non-`0xFF` byte or a carry arrives, `Cache + Carry` and
+then `FFNum` bytes of `0xFF + Carry` are written out.
 
-**Flush.** `rc_Quit()` widens `low` with as many trailing `0xFF` bytes as
-still fit below `low + range` and then omits them from the output; the decoder
-reads `0xFF` for every byte past the end of the file (`getc` returns EOF, which
+**Flush.** `rc_Quit()` widens `low` with as many trailing `0xFF` bytes as still
+fit below `low + range` and then omits them from the output; the decoder reads
+`0xFF` for every byte past the end of the file (`getc` returns EOF, which
 `byte()` truncates to `0xFF`), so the truncated tail decodes identically. The
 decoder pre-loads four bytes into `code`, matching the 32-bit `low`.
 
 **Decoding a symbol.** `rc_GetFreq(tot) = floor(code * tot / range)` gives a
-value in `[cum, cum + freq)` of the coded symbol; `main()` finds it with a
-linear scan over the cumulative frequencies. (The `Coder` struct also keeps a
-binary `encode_p`/`decode_p` interface from earlier fpaq0 versions; the
-bytewise path does not use it.)
+value in `[cum, cum + freq)` of the coded symbol; `main()` finds it with a linear
+scan over the cumulative frequencies. (The fpaq0mw `Coder` also keeps a binary
+`encode_p`/`decode_p` interface from earlier versions; the bytewise path does not
+use it.)
 
 ## 8. Main loop and file format
 
-The output is a 4-byte native-endian length followed by the range coder
-stream. Per byte, encoder and decoder run the same code except for where the
-symbol comes from:
+The output is a 4-byte native-endian length followed by the range coder stream.
+Per byte, encoder and decoder run the same code except for where the symbol comes
+from:
 
 ```
 test_encode(E, clen)                       // pruned tree walk, journaled
@@ -406,30 +572,32 @@ rc.rc_Process(low, freq[c], total)
 for j = 7..0: E.encode_sim((c >> j) & 1)   // real, non-journaled update
 ```
 
-After the last byte the encoder calls `flush()`. The decoder knows the count
-from the header, so no end-of-stream symbol is coded.
+After the last byte the encoder calls `flush()`. The decoder knows the count from
+the header, so no end-of-stream symbol is coded.
 
 ## 9. Numeric formats
 
 | Quantity | Format | Range / notes |
 | --- | --- | --- |
-| Counter `p1`, `p2` | 12-bit probability of 1 (`SCALE = 4096`) | [15, 4081] / [255, 3841] |
-| Mixer weight `w` | 16-bit, 15 fractional bits (`32768` = 1.0) | [0, 32768], starts at 32768 |
-| Mixer update space | 15-bit probability of 0 | `q = 32768 - 8p`, targets 100 / 32668 |
+| Model output `p` | 12-bit probability of a 1 (`SCALE = 4096`) | both models; clamped to [1, 4095] for the coder |
+| fpaq0mw counters `p1`, `p2` | 12-bit probability of 1 | [15, 4081] / [255, 3841] |
+| fpaq0mw mixer weight `w` | 16-bit, 15 fractional bits | [0, 32768], starts at 32768 |
+| Tangelo mixer weights | 16-bit, dot product `>>8` per pair, output `>>5` then squashed | trained with error `((y<<12)-pr)*7` |
 | `LOG2(i)` | 16.16 fixed-point log2 | table for `i` ≤ 32768, bias ≈ −31.5, cancels |
 | `clen[node]` | 2^16 · Σ log2(p) along the path | init `0xFFFFF`, root 0 |
-| Pruning threshold | `0x90000 · depth` = 9.0 per bit | i.e. cost < 3 bits per bit |
+| `PRUNE_LOG` | 16.16 log2 per bit | `0x90000` = 3 bits/bit (fpaq0mw), `0x80000` = 4 bits/bit (tangelo_w) |
 | `r` (byte cost) | 2^16 · bits | capped at `0xFFFFF` ≈ 16 bits |
 | `freq[d]` | 2^16 · P(d) (`PSCALE = 65536`) | at least 1; `unlog` table of 2^20 entries |
 | Range coder | `low` 32 bit + carry, `range` 64 bit | renormalise below 2^24, bytewise |
 | Journal cell | `{ptr, msk, val}` = 16 bytes | 2^20 cells, nest stack of 512 |
 
-## 10. Performance history
+## 10. Performance
 
-`log.txt` is the author's lab notebook: after each change, `t.bat` appended
-the encode and decode wall time and the compressed size of `book1` (Calgary
-corpus, 768 771 bytes); `log.pl` tabulates it into `log1.txt`. The key
-milestones:
+### 10.1 fpaq0mw
+
+`log.txt` is the author's lab notebook: after each change, `t.bat` appended the
+encode and decode wall time and the compressed size of `book1` (Calgary corpus,
+768 771 bytes); `log.pl` tabulates it into `log1.txt`. The key milestones:
 
 | Stage (comment in log) | Size | Enc | Dec |
 | --- | ---: | ---: | ---: |
@@ -443,54 +611,81 @@ milestones:
 | LOG-scale `clen`, `022`: return p from `encode_sim` | 446 945 | 7.5 s | 7.6 s |
 | drop `pushf` | 446 945 | 3.2 s | 3.3 s |
 | `023`: pruning at `0x80000·depth` | 446 945 | 1.96 s | 1.97 s |
-| `024`: pruning at `0x90000·depth` (this snapshot) | 446 962 | 1.77 s | 1.79 s |
+| `024`: pruning at `0x90000·depth` | 446 962 | 1.77 s | 1.79 s |
 
-The numbers were measured on the author's Windows machine with Intel ICX or
-MinGW GCC; the comment lines are the author's. The Linux build of this
-repository produces the identical 446 962-byte output for `book1` and decodes
-it back bit-exactly (2.5 s each way on the container used for the port).
+Those were measured on the author's Windows machine with Intel ICX or MinGW GCC;
+the comment lines are the author's.
 
-So the bytewise reformulation costs roughly 20× the time of bitwise coding
-and gains about 0.02 % in size (the exact distribution codes 447 071 →
-446 945; pruning gives back 17 bytes). The value of the experiment is the
-machinery of [§5](#5-journaled-speculative-execution) and [§6](#6-the-build-pipeline-instrumenting-the-compilers-output),
-not this model.
+### 10.2 tangelo_w
+
+Measured here, on `book1` and on its first 64 KB, with GCC 13 `-O3
+-march=native` on a 2.8 GHz Xeon. The reference row is `legacy/tangelo_orig.cpp`,
+the same model with its own binary arithmetic coder, coding bit by bit.
+
+| | `book1` size | enc | 64 KB size | enc |
+| --- | ---: | ---: | ---: | ---: |
+| Tangelo, bitwise (reference) | 197 022 | 5.0 s | 20 706 | 0.68 s |
+| tangelo_w, no pruning | | | 20 734 | 15.1 s |
+| tangelo_w, `PRUNE_LOG=0x80000` (default) | 197 483 | 100.7 s | 20 739 | 10.9 s |
+| tangelo_w, `PRUNE_LOG=0x90000` | | | 20 804 | 8.1 s |
+| tangelo_w, `PRUNE_LOG=0xA0000` | | | 21 307 | 5.6 s |
+| tangelo_w, `PRUNE_LOG=0xB0000` | | | 25 160 | 3.6 s |
+
+Two things are worth reading off that table. First, the bytewise reformulation
+does not pay for itself in size: even with the walk unpruned, coding the byte in
+one step costs 28 bytes more than coding its eight bits separately, because the
+256 frequencies are quantised to a 2^16 scale with a floor of 1 while the binary
+coder uses the model's 12-bit probability directly. Second, the pruning threshold
+that was right for fpaq0mw is not right here: at `0x90000` Tangelo loses 0.34 %,
+where fpaq0mw lost 0.004 %, because a sharp model puts real probability mass on
+prefixes that a 3-bit-per-bit cut-off throws away.
+
+The cost is the point of the exercise: about 150 journaled writes per model step,
+and roughly 20 model steps per byte after pruning, for a model that already took
+5 s to run 8 steps per byte.
 
 ## 11. Limitations and caveats
 
-* **Only plain `mov` stores are journaled.** A model whose compiled step
-  contains read-modify-write instructions, SSE/AVX stores or string
-  operations makes `track.pl` fail the build (by design). Such a model needs
-  either source changes that steer the compiler towards plain stores, or new
-  stubs plus script support for the instruction forms involved.
-* **Calls out of the model step are invisible** unless the callee is compiled
-  in the same `SIM_FUNC` translation unit (then it is instrumented too).
-  Library calls such as `memset`/`memcpy` are not.
-* **Stack stores are skipped** on the assumption that the model keeps no state
-  in the step's own frame. With frame-pointer-based code (`[rbp-…]`) the script
-  cannot tell stack from heap and journals them; build with
+* **Only fixed-width writes are journaled.** A model whose compiled step
+  contains scatter stores or string operations makes `track.pl` fail the build
+  (by design). Such a model needs either source changes that steer the compiler
+  towards ordinary writes, or new stubs plus script support for the instruction
+  forms involved.
+* **Calls out of the model step are invisible** unless the callee is compiled in
+  the same `SIM_FUNC` translation unit (then it is instrumented too). Library
+  calls such as `memset`/`memcpy` are not, which is why the Tangelo port removed
+  the two it had. There is no automatic check for this; read `track.pl -v` output
+  and the `call` instructions in `coder-<prog>.s` when porting a new model.
+* **Weak symbols are a silent trap**, and the reason for the three guards in
+  §5.4. Any future model whose step is too large to inline will hit it.
+* **Stack writes are skipped** on the assumption that the model keeps no state in
+  the step's own frame. With frame-pointer-based code (`[rbp-…]`) the script
+  cannot tell stack from heap and would journal them; build with
   `-fomit-frame-pointer` as the scripts do.
-* **Journal capacity** is 2^20 cells and 512 nesting levels; nothing checks
-  for overflow. A model step with more than ~150 000 stores per nesting level
-  would overrun it.
-* **Both copies of the model must match**: the instrumented `encode_sim` and
-  the inlined `Coder::encode_sim` are compiled separately, so they must be
-  built with the same compiler and the same flags (the build scripts enforce
-  this by using one `CXX`/`CXXFLAGS` for both steps).
-* **The `unlog` table is built with floating-point `pow()`.** Encoder and
-  decoder of the same binary always agree, but a different libm could in
-  principle round one table entry differently, which would make streams
-  incompatible between builds. In practice the tables from GCC and Clang on
-  Linux and from MinGW on Windows produced identical output in this port.
-* **Pruning makes the coded distribution an approximation** of the model's;
-  this is harmless for correctness (the decoder computes the same
-  approximation) but it costs a little compression, tunable via the
-  `0x90000` constant in `track.inc`.
-* **Decoding is a linear scan** over 256 cumulative frequencies; a binary
-  search would be the obvious improvement if the coder itself ever mattered.
+* **Journal capacity** is 2^20 cells and 512 nesting levels. `NEST()` checks both
+  once per step and exits rather than overrunning, but there is no per-write
+  check: a single model step writing more than 64 K cells would still overrun.
+* **Both copies of the model must match**: the instrumented `encode_sim` and the
+  inlined one are compiled separately, so they must be built with the same
+  compiler and the same flags (the build scripts enforce this by using one
+  `CXX`/`CXXFLAGS` for both steps; only `-mno-red-zone` differs, which changes no
+  arithmetic).
+* **The `unlog` table is built with floating-point `pow()`.** Encoder and decoder
+  of the same binary always agree, but a different libm could in principle round
+  one table entry differently, which would make streams incompatible between
+  builds. In practice the tables from GCC and Clang on Linux and from MinGW on
+  Windows produced identical output in this port.
+* **Pruning makes the coded distribution an approximation** of the model's; this
+  is harmless for correctness (the decoder computes the same approximation) but
+  it costs compression, tunably (§4.3).
+* **Decoding is a linear scan** over 256 cumulative frequencies; a binary search
+  would be the obvious improvement if the coder itself ever mattered.
 * **Files are limited to 4 GiB** by the 4-byte length header, and there is no
   error checking on the input (a truncated stream decodes silently as `0xFF`
   bytes).
+* **tangelo_w needs about 380 MB of address space** for its model, in BSS. It
+  relies on that memory starting out zeroed, which is true of BSS but was *not*
+  true of the `new byte[]` the original `tangelo_orig.cpp` used.
 * **x86-64 only**, GNU assembler syntax only: GCC or Clang on Linux, MinGW-w64
-  GCC or Clang on Windows. The MSVC/Intel toolchain path of the original
-  `c.bat` (ICX → LLVM bitcode → `llc` → MASM-style listing) is not ported.
+  GCC or Clang on Windows. The MSVC/Intel toolchain path of the original `c.bat`
+  (ICX → LLVM bitcode → `llc` → MASM-style listing) is not ported.

@@ -262,3 +262,27 @@
 1.789s: fpaq0mw d 1 2
 446962
 
+
+// ---- ported to linux/windows; gcc 13.3 -O3 -march=native, 2.8GHz Xeon ----
+2.528s: fpaq0mw c ../book1 1
+2.535s: fpaq0mw d 1 2
+446962
+
+// ---- tangelo_w: the Tangelo model on the same machinery ----
+// PRUNE_LOG sweep, book1's first 64 KB (size, enc, dec):
+//   bitwise reference  20706   0.68
+//   no pruning         20734  15.06  14.93
+//   0x80000 (default)  20739  10.92  11.04
+//   0x90000            20804   8.13   8.09
+//   0xA0000            21307   5.63   5.66
+//   0xB0000            25160   3.65   3.66
+
+// tangelo bitwise reference: legacy/tangelo_orig.cpp
+4.975s: tangelo_orig c ../book1 1
+4.921s: tangelo_orig d 1 2
+197022
+
+// tangelo_w, PRUNE_LOG=0x80000
+100.679s: tangelo_w c ../book1 1
+103.283s: tangelo_w d 1 2
+197483

@@ -52,4 +52,7 @@
  768775  0.216  0.239 // clen[cty]>0xC0000*(8-K)
  446962  1.766  1.789 // clen[cty]>0x90000*(8-K)
  463225  1.228  1.259 // clen[cty]>0xA0000*(8-K)
- 446962  1.760  1.789 
+ 446962  1.760  1.789 // 024
+ 446962  2.528  2.535 // ---- ported to linux/windows; gcc 13.3 -O3 -march=native, 2.8GHz Xeon ----
+ 197022  4.975  4.921 // tangelo bitwise reference: legacy/tangelo_orig.cpp
+ 197483 100.679 103.283 // tangelo_w, PRUNE_LOG=0x80000

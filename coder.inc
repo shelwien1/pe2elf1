@@ -43,6 +43,11 @@ struct Coder {
     predictor.update(y);
   }
 
+  // The two calls the walk in track.inc makes on a model (see main.inc):
+  // P() is the prediction the next coded bit will use, encode_sim() returns it
+  // and then advances the model past that bit.
+  uint P( void ) { return predictor.P(); }
+
   uint encode_sim( int y ) {
     uint p = predictor.P();
     predictor.update(y);
