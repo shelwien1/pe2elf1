@@ -1,5 +1,5 @@
 
-enum{ N_Cells=1<<20, N_Nest=0x200 };
+enum{ N_Cells=1<<20, N_Nest=0x200, N_Margin=1<<16 };
 
 // A prefix is explored while its accumulated code length stays below
 // PRUNE_LOG per bit, in the 16.16 log2 scale of log2lut.inc; everything below
@@ -17,21 +17,25 @@ struct Cell {
 };
 
 extern "C" uint trkptr;
-extern "C" Cell trk[N_Cells];
+extern "C" Cell trk[N_Cells + N_Margin];
 
 uint trkptr = 0;
 uint nesting = 0;
 
 uint nest_trkptr[N_Nest];
 
-alignas(64) Cell trk[N_Cells];
+// N_Margin cells of slack past N_Cells: the stubs reserve their cells and write
+// them with no bound test (that is the hot path), so the only guard is the
+// capacity check in NEST() below, which runs once per step. If a step ever
+// writes more cells than the margin, the slack is what keeps the overrun inside
+// this array instead of on top of nest_trkptr, which immediately follows it in
+// bss and which the check itself depends on.
+alignas(64) Cell trk[N_Cells + N_Margin];
 
 // Journal capacity is not checked per store - that is the hot path - so it is
 // checked once per speculative step instead. A model step writing more than
 // N_Margin cells would run off the end of trk[] and corrupt memory instead of
 // restoring it, which is worth a loud death rather than a silent wrong answer.
-enum{ N_Margin = 1<<16 };
-
 void NEST( void ) {
   if( (trkptr>N_Cells-N_Margin) || (nesting>=N_Nest) ) {
     fprintf( stderr, "track: journal overflow (trkptr=%u nesting=%u)\n", trkptr, nesting );
@@ -48,10 +52,13 @@ void UNDO( void ) {
   trk_undone += trkptr - k;
   for( i=trkptr-1; int(i)>=int(k); i-- ) {
     Cell& c = trk[i];
-    uint* p = (uint*)c.ptr;
-    uint d = p[0] & (~c.msk);
-    d |= c.val;
-    p[0] = d;
+    // Restore at the cell's own width, which is what its mask records. Doing it
+    // with a 32-bit read-modify-write instead - the same for every cell - would
+    // read and write up to 3 bytes past a 1- or 2-byte cell: harmless in the
+    // middle of a global, but a fault at the end of a mapping, and slower.
+    if(      c.msk==0xFFFFFFFFu ) *(uint*)c.ptr = c.val;
+    else if( c.msk==0x0000FFFFu ) *(word*)c.ptr = word(c.val);
+    else                          *(byte*)c.ptr = byte(c.val);
   }
   trkptr = k;
 }

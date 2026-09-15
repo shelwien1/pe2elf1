@@ -365,11 +365,14 @@ uint trkptr;            // next free cell
 uint nest_trkptr[0x200], nesting;   // stack of saved journal positions
 ```
 
-`NEST()` pushes `trkptr`. `UNDO()` pops it and walks the cells written since then
-**backwards**, restoring `*ptr = (*ptr & ~msk) | val` for each, so that several
-writes to the same location unwind in the right order. The mask lets a 1-, 2- or
-4-byte write be recorded as a 32-bit read of its address; wider writes are
-recorded as several cells.
+`NEST()` pushes `trkptr`. `UNDO()` pops it and walks the cells written since
+then **backwards**, so that several writes to the same location unwind in the
+right order. `msk` records the width: a 1-, 2- or 4-byte write is saved as a
+32-bit read of its address, masked, and restored at its own width. (Restoring
+every cell with one 32-bit read-modify-write would be simpler, and correct - the
+extra bytes are written back unchanged - but it reads and writes up to 3 bytes
+past a narrow cell, which is a fault at the end of a mapping, and it measured
+9 % slower.) Wider writes are recorded as several cells.
 
 Only the current root-to-node path is ever live in the journal, so the capacity is
 far larger than needed: fpaq0mw uses at most seven steps of four writes, and
@@ -760,15 +763,13 @@ because only the current root-to-leaf path is ever live.
   addressing every local off `rsp`, and MinGW has no frame pointer and uses
   `rbp` as the base for ContextMap writes. Build with `-fomit-frame-pointer`, as
   the scripts do.
-* **`UNDO()` restores through a 4-byte read-modify-write**, so rolling back a
-  1- or 2-byte cell reads and writes up to 3 bytes past the object that was
-  written. That is harmless when the model lives in a global (the bytes it
-  touches belong to the same object or its padding, and the backward walk has
-  already restored them), but a model placed at the very end of a tight heap
-  allocation would need 4 bytes of slack.
 * **Journal capacity** is 2^20 cells and 512 nesting levels. `NEST()` checks both
   once per step and exits rather than overrunning, but there is no per-write
-  check: a single model step writing more than 64 K cells would still overrun.
+  check, because that is the hot path: a single model step writing more than the
+  64 K-cell margin would still overrun. `trk[]` is allocated with that margin
+  past `N_Cells` so that such an overrun stays inside the array rather than
+  landing on the very variables the check reads (`nest_trkptr` follows `trk`
+  immediately in bss). Measured peak use is 2 527 cells.
 * **Both copies of the model must match**: the instrumented `encode_sim` and the
   inlined one are compiled separately, so they must be built with the same
   compiler and the same flags (the build scripts enforce this by using one
