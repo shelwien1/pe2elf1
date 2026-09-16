@@ -175,11 +175,38 @@ size nothing is evicted early. And deleting one of the 146 journaling calls from
 | `write.inc` | journaling from the model's own source (`W(x)`) |
 | `fpaq0mw.cpp`, `model.inc`, `sh_mixer.inc`, `coder.inc` | the small model |
 | `tangelo_w.cpp`, `tangelo_s.cpp`, `tangelo/*.inc`, `coder_tangelo.inc` | the Tangelo model, both ways |
+| `tangelo_bm.inc` | the model packaged for a host program with its own coder |
+| `tf003/` | a transformer-based coder with the Tangelo model in place of its PPMD |
 | `build.sh`, `build.bat` | build scripts |
 | `test.sh`, `test.bat`, `timetest.cpp` | round-trip / timing test |
 | `log.txt`, `log1.txt`, `log.pl` | experiment log |
 | `ALGORITHM.md`, `SPEED.md` | how it works, and where its time goes |
 | `legacy/` | the original Windows-only scripts and `tangelo_orig.cpp`, unchanged |
+
+## Using the model from another program
+
+The three programs above are their own compressors. A host that already has an
+arithmetic coder and just wants `P(next byte)` - which is what a PPM or PPMD
+model hands a mixer - includes `tangelo_bm.inc` instead:
+
+```cpp
+tangelo::ByteSource bs;
+bs.Init( cmap );          // cmap[256], nonzero where the byte can occur
+bs.Predict( probs );      // P(next byte) into 256 floats, summing to 1
+... the host codes a byte c ...
+bs.Update( c );           // advance the model over c's eight bits
+```
+
+Everything is inside `namespace tangelo`, because such a host has its own
+`SCALE` and its own `Rangecoder`. Only `tangelo_s`'s route can be embedded this
+way: the model marks its own writes (`write.inc`), so there is no second compile
+of the model step, no instrumented assembly and no perl in the host's build.
+`-DTRACK_VERIFY` works there too, and is the thing to reach for first.
+
+`tf003/` is a worked example - the Tangelo model replacing the PPMD one that
+feeds a transformer's prior and a binary mixer. It is 7-11 % smaller than PPMD
+as a context model on its own, and 1.6-4.6 % smaller once the transformer is in
+the mix; `tf003/README.md` has the numbers and the caveats.
 
 ## Porting notes
 

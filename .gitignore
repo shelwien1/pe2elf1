@@ -17,4 +17,8 @@ tangelo_w
 tangelo_w.exe
 tangelo_s
 tangelo_s.exe
+# tf003 (the transformer coder)
+tf003/coder0
+tf003/coder0-*
+tf003/*.exe
 bp1

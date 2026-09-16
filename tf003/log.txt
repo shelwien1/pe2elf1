@@ -1,0 +1,38 @@
+
+1.549s: ..\memchk coder0.exe c book1000 1
+1.636s: ..\memchk coder0.exe d 1 2
+
+204669 196.559s 179.332s // transformer enc/dec (hsw)
+204669 189.317s 193.343s // native/znver5
+
+194398  29.971s  29.580s: coder0.exe c ../book1 1     (lstm)
+204669 189.317s 179.332s: coder0.exe c ../book1 1     (tf)
+
+197102  52.523s  53.766s: coder0.exe c ../enwik6wrt 1 (lstm)
+152661 152.525s 151.981s: coder0.exe c ../enwik6wrt 1 (tf)
+
+182080  37.683s  37.732s: coder0.exe c ../book1wrt 1  (lstm)
+169727 115.249s 117.829s: coder0.exe c ../book1wrt 1  (tf)
+
+60.318s: ..\memchk coder0.exe c book1000 1 // -DTF_TRAIN=3
+59.549s: ..\memchk coder0.exe d 1 2
+
+       10878.192s: coder0.exe c ..\book1 1 nul w.bin
+203934  1559.199s: coder0.exe c ..\book1 1 w.bin
+
+
+768771 -> 10878.192s
+
+589321046 -> 589321046/768771*10878.192 = 8338955.928s = 
+
+8338955.928/3600/24
+
+170.873s: coder0.exe c ..\enwik6wrt 1 ..\6m-q4-fp32.tfwc2 
+0.007s: coder0.exe c ..\enwik6wrt 1 ..\6m-q4-fp32.tfwc2
+1.726s: tf-coder0.exe c ..\enwik6wrt 1 ..\6m-q4-fp32.tfwc2
+1.555s: coder0.exe c ..\enwik6wrt 1 ..\6m-q4-fp32.tfwc2 
+172.727s: coder0.exe c ..\enwik6wrt 1 ..\6m-q4-fp32.tfwc2 
+175.647s: coder0.exe c book1 1 
+173.653s: coder0.exe d 1 2
+107.645s: coder0.exe c book1wrt 1 
+108.686s: coder0.exe d 1 2

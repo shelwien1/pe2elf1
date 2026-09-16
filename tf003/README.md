@@ -1,0 +1,103 @@
+# The Tangelo model in place of PPMD, under a transformer
+
+This is the transformer-based coder with its **context model** replaced: the
+thing that hands a distribution over the next byte to the mixer, and to the
+transformer as its prior, was PPMD (`ppmd2.hpp`) and is now the Tangelo model
+from the rest of this repository, run a byte at a time by journaled speculative
+execution over its own bit predictions ([../ALGORITHM.md](../ALGORITHM.md)).
+
+Nothing else moved. The range coder, the binary mixer, the transformer, the
+weights format and the main loop are the ones that were here.
+
+## Results
+
+`book1000` is the 4 KB sample that ships with this directory; the 64 KB column
+is the first 65 536 bytes of `book1wrt`. Every row round-trips.
+
+| context model | `book1000` | + transformer | `book1wrt`[:64K] | + transformer |
+| --- | ---: | ---: | ---: | ---: |
+| PPMD | 2 579 | 1 895 | 31 725 | 25 803 |
+| Tangelo | **2 298** | **1 807** | **29 425** | **25 396** |
+| | −10.9 % | −4.6 % | −7.3 % | −1.6 % |
+
+Two things are worth reading off that.
+
+**Tangelo is the better context model**, by 7-11 % on its own. That is not
+surprising - it is a paq/lpaq-class model with 361 MB of state against PPMD's
+order-9 - but it is the first time it has been measured here against anything
+but itself.
+
+**Most of that gain does not survive the mixer.** With the transformer in the
+mix the margin falls to 4.6 % and 1.6 %, because the transformer already knows
+much of what Tangelo adds over PPMD. There is also a reason to expect the
+remaining margin to be understated: the transformer was *trained* with PPMD's
+distribution as its prior (`Transformer::Predict` takes it as `ppmd_probs`), and
+it is now being handed a different model's. Retraining it against Tangelo's
+priors is the obvious next experiment and is not something this port can do.
+
+The cost is the walk: about 70 µs per byte here, which on the 64 KB file takes
+the whole run from 17.6 s to 24.4 s. Tangelo alone goes from 1.7 s (PPMD alone)
+to 6.2 s. [../SPEED.md](../SPEED.md) is where that time goes and what has been
+done about it.
+
+## Building
+
+```sh
+./build.sh                    # Tangelo as the context model (the default)
+USE_PPMD=1 ./build.sh         # PPMD instead, for comparison
+```
+
+One translation unit, and the Tangelo half needs no build machinery at all: it
+is `tangelo_s`'s route, where the model marks its own writes in its source
+(`W(x) = ...`, see [../write.inc](../write.inc)), so there is no second compile
+of the model step, no assembly, no perl and no instrumenter. The `track.pl`
+route could not have been embedded here without all of that.
+
+`gc.bat` is the original Windows/clang build with the MSVC headers, and takes
+the same switches.
+
+```
+coder0 c|d <input> <output> [weights_in] [weights_out]
+```
+
+Naming a weights file that does not exist runs the context model alone, which is
+the "alone" column above. About 380 MB of memory goes to Tangelo, on top of the
+transformer's.
+
+## What changed
+
+| | |
+| --- | --- |
+| [`../tangelo_bm.inc`](../tangelo_bm.inc) | new: Tangelo packaged as `P(next byte)` for a host program that has its own coder |
+| `transformer.inc` | `UnifiedModel`'s context model, behind `USE_PPMD` |
+| `coder0.cpp` | includes the above; `ppmd_probs_` renamed `ctx_probs_`, `UpdatePPMD` renamed `UpdateCtx` |
+| `build.sh` | new: the Linux build |
+| `ppmd2.hpp` | unchanged, and still compiled in - `-DUSE_PPMD=1` is a flag, not a fork |
+
+The host's side of it is three lines:
+
+```cpp
+tangelo::ByteSource ctx_model_;
+ctx_model_.Init(vocab);               // vocab[256]: which bytes can occur
+ctx_model_.Update(c);                 // the eight real steps for the coded byte
+ctx_model_.Predict(ctx_probs_);       // P(next byte) into 256 floats
+```
+
+`Update` then `Predict` is the same shape as PPMD's `ppmd_UpdateByte` then
+`ppmd_PrepareByte`, which is why the main loop did not have to change.
+
+## Checking it
+
+A model that marks its own writes can miss one, and the failure is silent -
+encoder and decoder corrupt the model identically, so the round trip still
+passes and only the compressed size suffers. `-DTRACK_VERIFY` is what finds it:
+
+```sh
+VERIFY="-DTRACK_VERIFY=32 -DTRACK_VERIFY_EVERY=200" ./build.sh
+./coder0 c book1000 /tmp/out
+```
+
+It compares every byte of the 360.8 MB of model state across each walk, and
+cross-checks the walk's predicted code length for the byte actually coded
+against the model's own eight per-bit predictions. Both pass here, and the
+compressed output is identical to the ordinary build's.
