@@ -8,8 +8,9 @@ journal. This document is about what that costs, where the cost actually is, and
 what can be done about it.
 
 The short version: **about four fifths of the time is the journal, not the
-model.** Four changes came out of that, worth 40 % together on `tangelo_w`, and
-one plausible-looking idea turned out to be worth nothing at all.
+model.** Four changes came out of that - 36 % faster by default and 40 % with the
+opt-in fourth, on `tangelo_w` - and one plausible-looking idea turned out to be
+worth nothing at all.
 
 Contents
 
@@ -260,7 +261,7 @@ constraints available: an order-1 alphabet map (which bytes can follow the
 previous byte) would prune far harder, at 8 KB of header rather than 32 bytes,
 and is worth trying on a long file.
 
-**What cannot be removed.** The model step itself, 1.2 s of the 6.2 s, is the
+**What cannot be removed.** The model step itself, 1.2 s of the 6.5 s, is the
 floor for this approach: the framework's whole premise is that the model is a
 black box whose real step must run. The eighth bit is already free - the walk
 reads the pending prediction rather than advancing - and that is worth half the
