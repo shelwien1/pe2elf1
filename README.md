@@ -8,12 +8,17 @@ journaling calls are injected into the compiler's assembly output at build time.
 
 | Program | Model | `book1` (768 771 bytes) |
 | --- | --- | ---: |
-| `fpaq0mw` | order-0: two counters and a mixer per partial-byte context | 446 962 |
-| `tangelo_w` | Tangelo: a paq/lpaq-class model, ~361 MB of state | 197 483 |
+| `fpaq0mw` | order-0: two counters and a mixer per partial-byte context | 446 555 |
+| `tangelo_w` | Tangelo: a paq/lpaq-class model, ~361 MB of state | 197 078 |
 
 Both share every line of the machinery - the walk, the journal, the range coder
-and the driver - and differ only in the model.
-[ALGORITHM.md](ALGORITHM.md) describes all of it.
+and the driver - and differ only in the model. `ByteModel` (`bytemodel.inc`) is
+where a bitwise model becomes a byte distribution, and it is the same interface
+an optimal parser would want: `Predict()` then either code the byte or read the
+code length of every byte that could have come next.
+
+[ALGORITHM.md](ALGORITHM.md) describes how it works; [SPEED.md](SPEED.md) is
+where the time goes and what has been done about it.
 
 ## Building
 
@@ -95,14 +100,15 @@ in the repository: it is the Calgary corpus file, 768 771 bytes, from
 `0a0fdbaf0589c9713bde9120cbb20199`). The scripts default to `../book1`, where
 the author's log keeps it.
 
-Expected for `book1`: `fpaq0mw` gives 446 962 bytes, the number the author
-recorded for iteration `024` on Windows, and `tangelo_w` gives 197 483.
-GCC and Clang on Linux and MinGW-w64 GCC produce byte-identical compressed
-output.
+Expected for `book1`: 446 555 bytes from `fpaq0mw` and 197 078 from
+`tangelo_w`. GCC and Clang on Linux and MinGW-w64 GCC produce byte-identical
+compressed output.
 
-The speed/size knob is `PRUNE_LOG` (§4.3): building with `-DPRUNE_LOG=0x90000`
-trades 0.3 % of `tangelo_w`'s compression for 27 % of its time (20 804 bytes in
-7.5 s against 20 739 in 10.2 s, on `book1`'s first 64 KB).
+`PRUNE_LOG` (§4.3) trades compression for time: `-DPRUNE_LOG=0x90000` gives up
+0.3 % of `tangelo_w`'s compression for about a quarter of its time. `TRACKFLAGS`
+passes options to the instrumenter, of which `--inline` is 5 % faster for 48 %
+more assembly. SPEED.md measures both, and the three changes that were worth
+taking by default.
 
 `-DTRACK_VERIFY=n` builds a self-checking binary, which is what to reach for when
 porting a new model. It checks the two things a round trip cannot, because
@@ -134,12 +140,13 @@ size nothing is evicted early. And deleting one of the 146 journaling calls from
 
 | | |
 | --- | --- |
-| `main.inc`, `track.inc`, `track.pl`, `log2lut.inc`, `sh_v1m.inc` | the shared machinery |
+| `main.inc`, `bytemodel.inc`, `track.inc`, `track.pl`, `log2lut.inc`, `sh_v1m.inc` | the shared machinery |
 | `fpaq0mw.cpp`, `model.inc`, `sh_mixer.inc`, `coder.inc` | the small model |
 | `tangelo_w.cpp`, `tangelo/*.inc`, `coder_tangelo.inc` | the Tangelo model |
 | `build.sh`, `build.bat` | build scripts |
 | `test.sh`, `test.bat`, `timetest.cpp` | round-trip / timing test |
 | `log.txt`, `log1.txt`, `log.pl` | experiment log |
+| `ALGORITHM.md`, `SPEED.md` | how it works, and where its time goes |
 | `legacy/` | the original Windows-only scripts and `tangelo_orig.cpp`, unchanged |
 
 ## Porting notes

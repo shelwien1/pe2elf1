@@ -304,3 +304,21 @@
 97.169s: tangelo_w c ../book1 1
 96.514s: tangelo_w d 1 2
 197483
+
+// ---- ByteModel wrapper; walk tests before the step, not after ----
+// identical output, tangelo_w 64KB: 10.20s -> 8.71s
+// ---- alphabet map (256 flags, 32 bytes of header) ----
+// tangelo_w 64KB: 20739 -> 20687 at 7.02s
+// ---- one journal record per wide store (was 4-8 cells) ----
+// journal 28554 -> 24091 cells/byte; tangelo_w 64KB 7.02s -> 6.48s
+// measured: the journal is 81% of the run, the model 19% (track.pl --repeat)
+
+// fpaq0mw, alphabet map
+2.301s: fpaq0mw c ../book1 1
+2.115s: fpaq0mw d 1 2
+446555
+
+// tangelo_w, alphabet map + wide journal records
+66.603s: tangelo_w c ../book1 1
+66.853s: tangelo_w d 1 2
+197078

@@ -1,11 +1,11 @@
 // The driver, shared by every model in this repository (fpaq0mw.cpp,
-// tangelo_w.cpp). It is model-agnostic: it only needs a Coder that offers
-// rc_Init / P / encode_sim / flush, and a probability scale SCALE.
+// tangelo_w.cpp). It is model-agnostic: everything about turning a bitwise
+// model into a byte distribution lives in ByteModel (bytemodel.inc), and this
+// file only codes the symbols that distribution describes.
 //
-// Per input byte: walk the prefix tree speculatively to get the code length of
-// all 256 possible bytes (track.inc), turn those into frequencies, code the
-// byte in ONE multi-symbol range coder step, and only then update the model for
-// real with the eight bits that were actually coded.
+// Per input byte: ask the model for P(next byte) over all 256 values, code the
+// byte in ONE multi-symbol range coder step, then update the model for real
+// with the eight bits that were actually coded.
 //
 // Compiled only into the normal build; the -DSIM_FUNC build stops before this
 // and contributes just the instrumented encode_sim.
@@ -21,10 +21,19 @@ uint flen( FILE* f ) {
 
 #include "log2lut.inc"
 #include "track.inc"
+#include "bytemodel.inc"
 
 //////////////////////////// main ////////////////////////////
 
-Coder E;
+ByteModel<Coder> M;
+
+// One binary decision at even odds, straight into the range coder. The alphabet
+// map is 256 of these, so it costs exactly 32 bytes.
+static uint code_flag( Rangecoder& rc, uint f_DEC, uint bit ) {
+  if( f_DEC ) bit = (rc.rc_GetFreq(2)!=0);
+  rc.rc_Process( bit, 1, 2 );
+  return bit;
+}
 
 #ifdef TRACK_VERIFY
 // Self-check, built with -DTRACK_VERIFY=<n>. Two different checks, and it is
@@ -50,7 +59,9 @@ Coder E;
 //   whole file.
 //
 // A program lists any model state living outside the Coder object in
-// TRACK_VERIFY_RANGES (each entry ", {name, address, size}").
+// TRACK_VERIFY_RANGES (each entry ", {name, address, size}"). Note that
+// ByteModel's own clen/freq/live are NOT model state: the walk writes them and
+// is meant to.
 #ifndef TRACK_VERIFY_RANGES
  #define TRACK_VERIFY_RANGES
 #endif
@@ -64,7 +75,7 @@ static int verify_this( uint i ) {
 }
 
 struct VRange { const char* name; byte* p; uint n; };
-VRange vrange[] = { {"Coder",(byte*)&E,sizeof(Coder)} TRACK_VERIFY_RANGES };
+VRange vrange[] = { {"Coder",(byte*)&M.E,sizeof(Coder)} TRACK_VERIFY_RANGES };
 enum{ N_VRange = sizeof(vrange)/sizeof(vrange[0]) };
 byte* vsnap = 0;
 
@@ -104,23 +115,47 @@ int main(int argc, char** argv) {
 
   FILE *in=fopen(argv[2], "rb");  if( in==0 ) perror(argv[2]), exit(1);
   FILE *out=fopen(argv[3], "wb"); if( out==0 ) perror(argv[3]), exit(1);
-  int c,d;
-  uint i,j,f_len,r;
-  int code,low,total=0,freq[1+256];
+  uint i,c,low,f_len;
+  byte cmap[256];
 
   Track_Init();
 
   if( f_DEC==0 ) {
     f_len=flen(in); fwrite( &f_len,1,4,out );
-    E.rc_Init(COMPRESS,out);
+    M.Init(COMPRESS,out);
   } else {
     f_len=0; if( fread( &f_len,1,4,in )!=4 ) f_len=0;
-    E.rc_Init(DECOMPRESS,in);
+    M.Init(DECOMPRESS,in);
+  }
+
+  // The alphabet map. Every byte value absent from the input can be dropped
+  // from the distribution, which removes both the probability mass its minimum
+  // frequency was taking and the tree that leads to it. It is only worth its 32
+  // bytes on a long enough file, so the encoder decides and spends one bit
+  // saying so - it is the side that knows how many values are missing.
+  uint use_cmap = 0;
+  for( i=0; i<256; i++ ) cmap[i] = 1;
+
+  if( f_DEC==0 ) {
+    uint dead = 256;
+    for( i=0; i<256; i++ ) cmap[i] = 0;
+    for( i=0; i<f_len; i++ ) { uint b=byte(getc(in)); dead -= (cmap[b]==0); cmap[b]=1; }
+    fseek( in, 0, SEEK_SET );
+    // Each dead symbol holds one of the ~PSCALE frequency units. Dropping them
+    // saves log2(PSCALE/(PSCALE-dead)) bits on every byte of the file; the map
+    // itself costs 256 bits, and the decision to send it one more.
+    double gain = double(f_len) * log2( double(PSCALE)/double(PSCALE-dead) );
+    use_cmap = (dead>0) && (gain>257.0);
+  }
+
+  use_cmap = code_flag( M.E.rc, f_DEC, use_cmap );
+
+  if( use_cmap ) {
+    for( i=0; i<256; i++ ) cmap[i] = code_flag( M.E.rc, f_DEC, cmap[i] );
+    M.SetAlphabet( cmap );
   }
 
   for( i=0; i<f_len; i++ ) {
-
-    uint clen[0x200];
 
     // The walk explores seven levels and reads the eighth off P(), so it only
     // means anything from a byte boundary; entering mid-byte would silently
@@ -128,7 +163,7 @@ int main(int argc, char** argv) {
     // notice: the walk and the real update would stay consistently mis-aligned,
     // so the round trip, the journal check and both halves of -DTRACK_VERIFY
     // all still pass, and only the compression suffers. Hence a direct check.
-    if( !E.at_byte_boundary() ) {
+    if( !M.AtByteBoundary() ) {
       fprintf( stderr, "track: the speculative walk entered mid-byte at input byte %u -\n"
                        "  the byte distribution it produces is meaningless.\n", i );
       exit(8);
@@ -138,7 +173,7 @@ int main(int argc, char** argv) {
     if( verify_this(i) ) verify_save();
 #endif
 
-    test_encode( E, clen );
+    M.Predict();
 
 #ifdef TRACK_VERIFY
     if( verify_this(i) ) verify_check(i);
@@ -156,58 +191,41 @@ int main(int argc, char** argv) {
       exit(6);
     }
 
-    for( d=0,low=0; d<256; d++ ) {
-      r = LOG2(SCALE)*8 - clen[0x100+d];
-
-      if( r>0xFFFFF ) r=0xFFFFF;
-      freq[d]=unlog[r];
-      low += freq[d];
-    } freq[256] = total = low;
-
     if( f_DEC==0 ) {
-
-      c = byte(getc(in));
-      for( j=0,low=0; j<uint(c); j++ ) low+=freq[j];
-
+      c   = byte(getc(in));
+      low = M.Cum(c);
     } else {
-
-      code = E.rc.rc_GetFreq(total);
-      // c<255 only bounds the scan: for a well-formed stream rc_GetFreq()
-      // returns a value below total, so the scan always stops on its own. A
-      // corrupt stream can hand it anything, and without the bound the scan
-      // walks off the end of freq[].
-      for( c=0,low=0; (c<255) && (low+freq[c]<=code); c++ ) low+=freq[c];
+      c   = M.Symbol( M.E.rc.rc_GetFreq(M.Total()), low );
       putc( byte(c), out );
-
     }
 
-    E.rc.rc_Process(low,freq[c],total);
+    M.E.rc.rc_Process( low, M.Freq(c), M.Total() );
 
     // actually update the model with the symbol that was coded
 #ifdef TRACK_VERIFY
     uint sum = 0;
     for( int j=7; j>=0; --j ) {
       uint bit = (c>>j)&1;
-      uint pp  = E.encode_sim( bit );
+      uint pp  = M.E.encode_sim( bit );
       sum += bit ? LOG2(pp) : LOG2(SCALE-pp);
     }
-    // The walk claimed this byte would cost clen[0x100+c]; the model just said
+    // The walk claimed this byte would cost CodeLength(c); the model just said
     // what it really costs. They must agree exactly, unless the byte's prefix
     // was pruned (its leaf is still the 0xFFFFF the array was filled with).
-    if( (clen[0x100+c]!=0xFFFFF) && (sum!=clen[0x100+c]) ) {
+    if( (M.CodeLength(c)!=0xFFFFF) && (sum!=M.CodeLength(c)) ) {
       fprintf( stderr, "track: at input byte %u the walk predicted %u for symbol %u "
                        "but the model then produced %u\n"
                        "  the simulated step is not reproducing the real one\n",
-               i, clen[0x100+c], c, sum );
+               i, M.CodeLength(c), c, sum );
       exit(7);
     }
 #else
-    for( int j=7; j>=0; --j ) E.encode_sim( (c>>j)&1 );
+    M.Update( c );
 #endif
 
   } // for i
 
-  if( f_DEC==0 ) E.flush();
+  if( f_DEC==0 ) M.E.flush();
 
   fclose(out);
   fclose(in);

@@ -30,8 +30,8 @@ machinery and differ only in the model:
 
 | Program | Model | `book1` |
 | --- | --- | ---: |
-| `fpaq0mw` | order-0: two counters and a mixer per partial-byte context | 446 962 |
-| `tangelo_w` | Tangelo: a paq/lpaq-class model, about 361 MB of state | 197 483 |
+| `fpaq0mw` | order-0: two counters and a mixer per partial-byte context | 446 555 |
+| `tangelo_w` | Tangelo: a paq/lpaq-class model, about 361 MB of state | 197 078 |
 
 The usual way to use a bitwise model is to run a **binary** arithmetic coder
 eight times per byte: predict bit, code bit, update model, repeat. These
@@ -95,10 +95,12 @@ Shared machinery:
 
 | File | Role |
 | --- | --- |
-| `main.inc` | The driver: per-byte walk, frequency table, one coding step, real update. Model-agnostic; both programs include it. |
-| `track.inc` | The journal (`trk`, `NEST`, `UNDO`), the `track1` … `track64` journaling stubs (assembly), the pruned tree walk `TEST_ENCODE` / `test_encode()`, the `unlog` table. |
+| `main.inc` | The driver: the alphabet map, one coding step per byte, the real update. Model-agnostic; both programs include it. |
+| `bytemodel.inc` | `ByteModel`: the walk, and a bitwise model presented as a source of byte distributions. This is the interface an optimal parser would use too. |
+| `track.inc` | The journal (`trk`, `NEST`, `UNDO`), the `track1` … `track64` journaling stubs (assembly), the `unlog` table. |
 | `track.pl` | Build step: inserts the journaling calls into the compiler-generated assembly. |
 | `-DTRACK_VERIFY=n` | Not a file: the self-check build described in §5.5. |
+| `SPEED.md` | Not a file of the program: where the time goes, and what has been done about it. |
 | `log2lut.inc` | `log2LUT`: integer log2 table in 16.16 fixed point. |
 | `sh_v1m.inc` | `Rangecoder`: 32-bit-low / 64-bit-range range coder with explicit carry handling. |
 | `build.sh`, `build.bat` | The three-step build on Linux / Windows, for each program. |
@@ -291,35 +293,50 @@ log-probability numerator; the cost of the path in bits is
 
 ### 4.2 The tree walk
 
-`TEST_ENCODE<Model, bit, ctx, K>` is a template instantiated once per
-(depth, bit) so that the whole walk unrolls into straight-line code. At an
-internal node `ctx` with a chosen `bit` (child `cty = 2*ctx + bit`):
+`WALK<Coder, ctx, depth>` is a template instantiated once per node position, so
+that the whole walk unrolls into straight-line code with no tree bookkeeping at
+run time. At node `ctx`, with the model standing at that node:
 
 ```
-NEST()                                   // remember the journal position
-p = encode_sim(&E, bit)                  // real predict + update, journaled
-if bit == 0:                             // p is the same for both children,
-    clen[2*ctx+0] = clen[ctx] + LOG2(SCALE - p)     // so fill both at once
-    clen[2*ctx+1] = clen[ctx] + LOG2(p)
-if clen[cty] > PRUNE_LOG * depth:        // pruning test, see below
-    TEST_ENCODE<0, cty, K-1>             // descend into both children
-    TEST_ENCODE<1, cty, K-1>
-UNDO()                                   // roll the model back
+p = E.P()                                // no update, no side effect
+clen[2*ctx+0] = clen[ctx] + LOG2(SCALE - p)     // both children, from one
+clen[2*ctx+1] = clen[ctx] + LOG2(p)             // prediction at the parent
+for bit in 0, 1:
+    child = 2*ctx + bit
+    if live[child] and clen[child] > PRUNE_LOG * (depth+1):
+        NEST()                           // remember the journal position
+        encode_sim(&E, bit)              // real predict + update, journaled
+        WALK<child, depth+1>             // descend
+        UNDO()                           // roll the model back
 ```
 
-`K` counts down from 7 at the root; `depth = 8 - K`. The `bit == 1`
-instantiation still has to call `encode_sim` so that the model is in the right
-state for its sub-tree, even though the two `clen` entries were already filled by
-its sibling.
+The order matters: **the test comes before the model step, not after it.** Both
+children's code lengths come from the prediction at the parent, which `P()`
+gives without advancing anything, so a child that is dead or too improbable costs
+nothing at all - no step, no journaling, no rollback. The earlier shape of this
+walk entered a child and tested afterwards, which paid a full model step for
+every child of every visited node including the ones it declined to explore;
+moving the test in front was worth 15 % (SPEED.md §3.1) and changed no output.
 
-At the last level (`K == 0`, the eighth bit) no update is needed, because nothing
-is predicted after it inside this byte, so the specialisation only reads `E.P()`
-and fills the two leaves. This removes 128 of the 254 simulated steps and all of
-their journaling (the log calls it "probability reuse on last bit").
+At depth 7 the children are the leaves. Nothing is predicted after the eighth
+bit inside this byte, so the model is not advanced there at all - the two leaf
+code lengths come off `P()`. That is half the tree's nodes kept out of the
+journal entirely (the log calls it "probability reuse on last bit").
 
 ### 4.3 Pruning
 
-A sub-tree is entered only if its prefix is still probable enough:
+There are two tests, and the difference between them matters.
+
+**The alphabet map is exact.** `live[]` marks the tree nodes that still have a
+reachable symbol under them, built bottom-up from a 256-bit map of which byte
+values occur in this input at all (§8). A subtree with no reachable symbol is
+worth nothing, whatever its probability, so skipping it costs no compression -
+it *gains* some, by not spending frequency units on symbols that cannot occur.
+On `book1`, which uses 82 of the 256 values, that is 405 bytes and 19 % of the
+time (SPEED.md §3.2).
+
+**The code-length threshold is approximate.** A sub-tree is entered only if its
+prefix is still probable enough:
 
 ```
 clen[cty] > PRUNE_LOG * depth   <=>   Σ log2(p_i) > (PRUNE_LOG/2^16) * depth
@@ -354,6 +371,9 @@ freq[d] = unlog[r]                           // = floor(2^16 * 2^(-r/2^16)), at 
 the 1s of pruned symbols), and `total` is their exact sum, computed on the fly and
 identical in encoder and decoder.
 
+A symbol the alphabet map rules out gets frequency 0 rather than 1, and is not
+looked up at all - which is most of the loop when the map is in use.
+
 ## 5. Journaled speculative execution
 
 ### 5.1 The journal
@@ -372,7 +392,15 @@ right order. `msk` records the width: a 1-, 2- or 4-byte write is saved as a
 every cell with one 32-bit read-modify-write would be simpler, and correct - the
 extra bytes are written back unchanged - but it reads and writes up to 3 bytes
 past a narrow cell, which is a fault at the end of a mapping, and it measured
-9 % slower.) Wider writes are recorded as several cells.
+9 % slower.)
+
+An 8-byte write takes two cells. Anything wider is one **record** instead: the
+overwritten bytes copied verbatim, 16 to a cell, followed by a footer holding the
+address and the width. The backward walk meets the footer first, which is why it
+is written last, and its width field is what tells a record from a plain cell -
+16, 32 and 64 are none of the narrow tags. A 32-byte store is three cells this
+way and was eight before, which matters because wide stores were 46.7 % of all
+journal cells (SPEED.md §3.3).
 
 Only the current root-to-node path is ever live in the journal, so the capacity is
 far larger than needed: fpaq0mw uses at most seven steps of four writes, and
@@ -455,10 +483,16 @@ containing an `.init_array` entry.
 
 ### 5.3 The journaling stubs
 
-`track1`, `track2` and `track4` (in `track.inc`) append one cell each; `track8`,
-`track16`, `track32` and `track64` append 2, 4, 8 and 16 cells, one per 4-byte
-word of the destination, since `Cell::val` is 32 bits. All of them take the
-address in the first-argument register (`rcx` on Windows, `rdi` on Linux).
+`track1`, `track2` and `track4` (in `track.inc`) append one cell each and
+`track8` two; `track16`, `track32` and `track64` append a record - one cell per
+16 bytes overwritten, plus a footer. All of them take the address in the
+first-argument register (`rcx` on Windows, `rdi` on Linux). The record payload is
+copied through `rdx` in 8-byte pieces rather than through a vector register,
+since saving an XMM register would cost more than the copy it saves.
+
+`track.pl --inline` writes the cell at the store site instead of calling the
+stub, for the three narrow widths. It is 5 % faster and 48 % more assembly, and
+off by default for that reason (SPEED.md §3.4).
 
 They are written in assembly using only `mov`, `movzx`, `lea`, `push`, `pop` and
 `ret`, so they preserve every register **and EFLAGS**. That matters twice over:
@@ -668,24 +702,38 @@ use it.)
 
 ## 8. Main loop and file format
 
-The output is a 4-byte native-endian length followed by the range coder stream.
-Per byte, encoder and decoder run the same code except for where the symbol comes
-from:
+The output is a 4-byte native-endian length, then the range coder stream, whose
+first bits are the alphabet map. Everything about turning the model into a
+distribution is behind `ByteModel` (`bytemodel.inc`), so the driver is short:
 
 ```
-test_encode(E, clen)                       // pruned tree walk, journaled
-freq[d] = unlog[min(LOG2(SCALE)*8 - clen[0x100+d], 0xFFFFF)] for all d
-total   = Σ freq[d]
+                                           // header, at even odds, 1 bit each
+use_map = code_flag()                       //   is a map coming?
+if use_map: cmap[0..255] = code_flag() x256 //   which byte values occur
+            M.SetAlphabet(cmap)
 
-encoder: c = next input byte               decoder: v = rc.rc_GetFreq(total)
-         low = Σ_{j<c} freq[j]                      scan for c with cum[c] <= v < cum[c]+freq[c]
-                                                    emit c
-rc.rc_Process(low, freq[c], total)
-for j = 7..0: E.encode_sim((c >> j) & 1)   // real, non-journaled update
+per byte:
+  M.Predict()                              // the walk; fills freq[] and total
+
+  encoder: c = next input byte             decoder: c = M.Symbol(rc_GetFreq(total), low)
+           low = M.Cum(c)                           emit c
+  rc.rc_Process(low, M.Freq(c), M.Total())
+
+  M.Update(c)                              // real, non-journaled, eight bits
 ```
+
+The encoder decides whether the map is worth sending, because it is the side
+that knows how many values are missing: it costs 256 bits and saves
+`log2(PSCALE/(PSCALE-dead))` bits on every byte of the file, so it pays for
+itself above about 64 KB. One bit says which way it went.
 
 After the last byte the encoder calls `flush()`. The decoder knows the count from
 the header, so no end-of-stream symbol is coded.
+
+`Predict()` / `Update()` is the coding interface. `Predict()` / `CodeLength(c)`
+is the other one, and the same walk serves it: the code length of *every*
+possible next byte is what an optimal-parsing encoder wants from a model, and
+getting all 256 of them is what this machinery is for.
 
 ## 9. Numeric formats
 
@@ -724,6 +772,7 @@ encode and decode wall time and the compressed size of `book1` (Calgary corpus,
 | drop `pushf` | 446 945 | 3.2 s | 3.3 s |
 | `023`: pruning at `0x80000·depth` | 446 945 | 1.96 s | 1.97 s |
 | `024`: pruning at `0x90000·depth` | 446 962 | 1.77 s | 1.79 s |
+| this port, with the alphabet map | 446 555 | 2.30 s | 2.12 s |
 
 Those were measured on the author's Windows machine with Intel ICX or MinGW GCC;
 the comment lines are the author's.
@@ -739,20 +788,26 @@ Clang).
 | | `book1` size | enc | 64 KB size | enc |
 | --- | ---: | ---: | ---: | ---: |
 | Tangelo, bitwise (reference) | 197 022 | 5.0 s | 20 706 | 0.68 s |
-| tangelo_w, no pruning | | | 20 734 | 14.3 s |
-| tangelo_w, `PRUNE_LOG=0x80000` (default) | 197 483 | 97.2 s | 20 739 | 10.2 s |
-| tangelo_w, `PRUNE_LOG=0x90000` | | | 20 804 | 7.5 s |
-| tangelo_w, `PRUNE_LOG=0xA0000` | | | 21 307 | 5.2 s |
-| tangelo_w, `PRUNE_LOG=0xB0000` | | | 25 160 | 3.7 s |
+| tangelo_w | 197 078 | 66.6 s | 20 687 | 6.48 s |
+| … as it was before SPEED.md | 197 483 | 97.2 s | 20 739 | 10.2 s |
+| … `PRUNE_LOG=0x90000` (then) | | | 20 804 | 7.5 s |
+| … `PRUNE_LOG=0xA0000` (then) | | | 21 307 | 5.2 s |
+| … unpruned (then) | | | 20 734 | 14.3 s |
 
 Two things are worth reading off that table. First, the bytewise reformulation
-does not pay for itself in size: even with the walk unpruned, coding the byte in
-one step costs 28 bytes more than coding its eight bits separately, because the
-256 frequencies are quantised to a 2^16 scale with a floor of 1 while the binary
-coder uses the model's 12-bit probability directly. Second, the pruning threshold
-that was right for fpaq0mw is not right here: at `0x90000` Tangelo loses 0.34 %,
-where fpaq0mw lost 0.004 %, because a sharp model puts real probability mass on
-prefixes that a 3-bit-per-bit cut-off throws away.
+still does not pay for itself in size against coding the same model's bits
+directly - it is 56 bytes behind on `book1`, where before the alphabet map it was
+461 behind. The 256 frequencies are quantised to a 2^16 scale with a floor of 1,
+while the binary coder uses the model's 12-bit probability directly; dropping the
+symbols that cannot occur removes most of what that quantisation was costing.
+Second, the pruning threshold that was right for fpaq0mw is not right here: at
+`0x90000` Tangelo lost 0.34 %, where fpaq0mw lost 0.004 %, because a sharp model
+puts real probability mass on prefixes that a 3-bit-per-bit cut-off throws away.
+
+Where the remaining time goes, and what has been done about it, is
+[SPEED.md](SPEED.md). The summary: four fifths of it is the journal rather than
+the model, and the four changes measured there took `book1` from 97.2 s to
+66.6 s while making the output 405 bytes smaller.
 
 The cost is the point of the exercise. Measured over 64 KB, `tangelo_w` rolls
 back 2.47 billion journal cells on text and 6.20 billion on random data (which

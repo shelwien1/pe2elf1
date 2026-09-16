@@ -11,6 +11,16 @@
 #                      ELF ".type sym, @function" => sysv).
 #   --entry=NAME       the one function this translation unit may export.
 #                      Default: encode_sim.
+#   --inline           write the cell at the store site instead of calling a
+#                      stub, for the 1-, 2- and 4-byte widths. Measured 5%
+#                      faster on tangelo_w and 48% more instrumented assembly;
+#                      off by default for that reason. See SPEED.md.
+#   --repeat=N         emit each journaling call N times instead of once. A
+#                      measurement tool, not a feature: journaling the same
+#                      location twice is harmless (both cells save the same
+#                      pre-store value, and UNDO restores both), so N=1,2,3 give
+#                      the marginal cost of a journal entry with the program
+#                      still producing correct output. See SPEED.md.
 #   --flags            also wrap each call in pushfq/popfq. Not needed with the
 #                      assembly track stubs from track.inc (they preserve EFLAGS);
 #                      only for a stub implementation that may clobber flags.
@@ -86,11 +96,15 @@ use strict;
 use warnings;
 
 my ($abi, $flags, $lax, $verbose) = ('', 0, 0, 0);
+my $repeat = 1;
+my $inline = 0;
 my $entry = 'encode_sim';
 my @files;
 for (@ARGV) {
   if    (/^--abi=(win64|sysv)$/) { $abi = $1 }
   elsif (/^--entry=(\S+)$/)      { $entry = $1 }
+  elsif (/^--repeat=(\d+)$/)     { $repeat = $1 }
+  elsif ($_ eq '--inline')       { $inline = 1 }
   elsif ($_ eq '--flags')        { $flags = 1 }
   elsif ($_ eq '--lax')          { $lax = 1 }
   elsif ($_ eq '-v')             { $verbose = 1 }
@@ -318,9 +332,38 @@ for my $line (@a) {
       if (!defined $n) { report_unhandled($line); last; }
 
       print STDERR "  track$n : $line\n" if $verbose;
-      push @o, "\tpushfq" if $flags;
-      push @o, "\tpush\t$ARG", "\tlea\t$ARG, $mem", "\tcall\ttrack$n", "\tpop\t$ARG";
-      push @o, "\tpopfq" if $flags;
+      # --inline: write the cell here instead of calling the stub. Saves the
+      # call/ret pair per store; costs one extra push/pop, because inline code
+      # needs three scratch values (cell address, target address, old value)
+      # where the stub gets the target for free in its argument register.
+      if( $inline && $n<=4 ) {
+        my %ld = ( 1=>'movzx edx, byte ptr', 2=>'movzx edx, word ptr', 4=>'mov edx, dword ptr' );
+        my %mk = ( 1=>'0xFF', 2=>'0xFFFF', 4=>'-1' );
+        for my $r (1..$repeat) {
+          push @o,
+            "\tpush\trax", "\tpush\trdx",
+            "\tlea\trax, $mem", "\tpush\trax",
+            "\tmov\teax, dword ptr [rip+trkptr]",
+            "\tlea\tedx, [rax+1]",
+            "\tmov\tdword ptr [rip+trkptr], edx",
+            "\tlea\trdx, [rip+trk]",
+            "\tlea\trax, [rax*8]",
+            "\tlea\trax, [rdx+rax*2]",
+            "\tpop\trdx",
+            "\tmov\tqword ptr [rax], rdx",
+            "\tmov\tdword ptr [rax+8], $mk{$n}",
+            "\t$ld{$n} [rdx]",
+            "\tmov\tdword ptr [rax+12], edx",
+            "\tpop\trdx", "\tpop\trax";
+        }
+        $count{$n} += $repeat;
+        last;
+      }
+      for my $r (1..$repeat) {
+        push @o, "\tpushfq" if $flags;
+        push @o, "\tpush\t$ARG", "\tlea\t$ARG, $mem", "\tcall\ttrack$n", "\tpop\t$ARG";
+        push @o, "\tpopfq" if $flags;
+      }
       $used{"track$n"} = 1;
       $count{$n}++;
       last;

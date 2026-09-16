@@ -43,8 +43,8 @@ for p in $progs; do
   echo "[$p 1/3] $CXX $CXXFLAGS $SIMFLAGS -S -masm=intel -DSIM_FUNC $p.cpp -o coder-$p.s"
   $CXX $CXXFLAGS $SIMFLAGS -S -masm=intel -DSIM_FUNC "$p.cpp" -o "coder-$p.s"
 
-  echo "[$p 2/3] perl track.pl coder-$p.s coder1-$p.s"
-  perl track.pl "coder-$p.s" "coder1-$p.s"
+  echo "[$p 2/3] perl track.pl ${TRACKFLAGS:-} coder-$p.s coder1-$p.s"
+  perl track.pl ${TRACKFLAGS:-} "coder-$p.s" "coder1-$p.s"
 
   echo "[$p 3/3] $CXX $CXXFLAGS $p.cpp coder1-$p.s $LDFLAGS -o $exe"
   $CXX $CXXFLAGS "$p.cpp" "coder1-$p.s" $LDFLAGS -o "$exe"
