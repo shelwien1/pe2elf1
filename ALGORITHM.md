@@ -543,9 +543,10 @@ only when that write happens to change one of the eight predictions it compares.
 It is cheap enough to leave on for the whole file, and that is the point of it.
 
 Both programs pass, on all three toolchains - GCC 13, Clang 18 and MinGW-w64
-(run under wine). `fpaq0mw` is checked over all of `book1`; `tangelo_w` with all
-360.8 MB of its model state compared byte for byte, and its predictions checked
-over every byte of `book1`.
+(run under wine). The deepest run: `tangelo_w` over `book1` with
+`-DTRACK_VERIFY=64 -DTRACK_VERIFY_EVERY=5000`, which is 218 comparisons of all
+360.8 MB of model state, spread from the first byte to the last, and the
+prediction check on every one of the 768 771 bytes. 137 s, no difference found.
 
 One path needs help to be reached: at 4 194 304 buckets the ContextMap never
 evicts anything in a short run, so the eviction branch of `E::get` - the one that

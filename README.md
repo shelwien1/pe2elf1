@@ -104,23 +104,31 @@ The speed/size knob is `PRUNE_LOG` (§4.3): building with `-DPRUNE_LOG=0x90000`
 trades 0.3 % of `tangelo_w`'s compression for 27 % of its time (20 804 bytes in
 7.5 s against 20 739 in 10.2 s, on `book1`'s first 64 KB).
 
-`-DTRACK_VERIFY=n` (optionally with `-DTRACK_VERIFY_EVERY=k`) builds a
-self-checking binary, which is what to reach for when porting a new model. It proves the two halves of the contract that a round
-trip cannot: that the journal restores **everything** (for the first `n` input
-bytes it snapshots every byte of model state, runs the walk, and compares), and
-that the simulated step reproduces the real one (for every byte, the walk's
-predicted code length for the symbol actually coded must equal the sum of the
-eight real per-bit code lengths). Both failures are otherwise silent - they cost
-compression without ever breaking a round trip.
+`-DTRACK_VERIFY=n` builds a self-checking binary, which is what to reach for when
+porting a new model. It checks the two things a round trip cannot, because
+encoder and decoder make the same mistake and still agree:
+
+* **that no write escapes the journal** - for `n` input bytes it snapshots every
+  byte of model state, runs the walk, and compares. Thorough and expensive, so
+  `-DTRACK_VERIFY_EVERY=k` samples every `k`-th byte after the first `n` rather
+  than paying for all of them;
+* **that the simulated step matches the real one** - for every byte of the file,
+  the walk's predicted code length for the symbol actually coded must equal the
+  sum of the eight real per-bit code lengths.
 
 ```sh
-CXXFLAGS="-O3 -march=native -DTRACK_VERIFY=48" ./build.sh tangelo_w
+CXXFLAGS="-O3 -march=native -DTRACK_VERIFY=64 -DTRACK_VERIFY_EVERY=5000"   ./build.sh tangelo_w
 ./tangelo_w c book1 /tmp/out      # says nothing and exits 0 if the port is sound
 ```
 
-Both programs pass on GCC, Clang and MinGW-w64 alike. `-DMEM=<bytes>` shrinks
-the Tangelo model, which is how its hash-table eviction path gets exercised:
-at full size nothing is evicted in a short run.
+Both programs pass, on GCC, Clang and MinGW-w64 alike. That command is the real
+one: 218 comparisons of all 360.8 MB of model state, spread across `book1`, plus
+the prediction check on every one of its 768 771 bytes.
+
+Two knobs help reach paths a short run misses. `-DMEM=<bytes>` shrinks the model,
+which is how the hash table's eviction branch gets exercised at all - at full
+size nothing is evicted early. And deleting one of the 146 journaling calls from
+`coder1-tangelo_w.s` by hand is worth doing once, to watch the check catch it.
 
 ## Layout
 
