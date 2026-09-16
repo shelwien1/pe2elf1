@@ -379,28 +379,50 @@ looked up at all - which is most of the loop when the map is in use.
 ### 5.1 The journal
 
 ```cpp
-struct Cell { void* ptr; uint msk; uint val; };   // 16 bytes
-Cell trk[1<<20];        // the journal
-uint trkptr;            // next free cell
-uint nest_trkptr[0x200], nesting;   // stack of saved journal positions
+struct Cell { uint off; uint val; };      // 8 bytes
+Cell  trk[1<<20];                         // the journal
+Cell* trkptr;                             // next free cell
+Cell* nest_trkptr[0x200]; uint nesting;   // stack of saved journal positions
 ```
 
 `NEST()` pushes `trkptr`. `UNDO()` pops it and walks the cells written since
 then **backwards**, so that several writes to the same location unwind in the
-right order. `msk` records the width: a 1-, 2- or 4-byte write is saved as a
-32-bit read of its address, masked, and restored at its own width. (Restoring
-every cell with one 32-bit read-modify-write would be simpler, and correct - the
-extra bytes are written back unchanged - but it reads and writes up to 3 bytes
-past a narrow cell, which is a fault at the end of a mapping, and it measured
-9 % slower.)
+right order.
 
-An 8-byte write takes two cells. Anything wider is one **record** instead: the
-overwritten bytes copied verbatim, 16 to a cell, followed by a footer holding the
-address and the width. The backward walk meets the footer first, which is why it
-is written last, and its width field is what tells a record from a plain cell -
-16, 32 and 64 are none of the narrow tags. A 32-byte store is three cells this
-way and was eight before, which matters because wide stores were 46.7 % of all
-journal cells (SPEED.md §3.3).
+A cell holds no pointer. Everything the instrumented step writes lives inside
+one window of memory - the `Coder` object and the few globals beside it, which a
+program declares in `TRACK_STATE_RANGES` and `Track_Base()` measures at startup -
+so an address is recorded as a 30-bit offset into that window, and the two bits
+that frees carry the width:
+
+```
+off = (address - trk_base) | (tag<<30)    tag 0, 1, 2 = 1, 2, 4 bytes
+                                          tag 3       = wide record footer
+val = the overwritten bytes               (in a footer: the record's width)
+```
+
+Restoring is then one indexed store. `UNDO()` keeps four base pointers, one per
+tag, each pre-biased by that tag's bit pattern, so a cell's offset can be added
+to the right one without masking the tag out of it first, and the tag is read by
+comparing the offset against the tag boundaries rather than by extracting it.
+(Restoring every cell with one 32-bit read-modify-write would need no branch at
+all, and would be correct - the extra bytes are written back unchanged - but it
+reads and writes up to 3 bytes past a narrow cell, which is a fault at the end of
+a mapping, and it measures 8-9 % more instructions and 12 % more data reads.)
+
+Anything wider than 4 bytes is one **record** instead: the overwritten bytes
+copied verbatim, 8 to a cell, followed by a footer holding the offset and the
+width. The backward walk meets the footer first, which is why it is written last,
+and the footer's tag is what tells a record from a plain cell. A 32-byte store is
+five cells and 40 bytes of journal this way; as single-word cells it was eight
+cells and 128 bytes, and wide stores were 46.7 % of all journal cells
+(SPEED.md §3.3, §3.5).
+
+The offset is what makes the cell 8 bytes rather than 16, and it is also the one
+assumption in the design that a model can break: a store outside the declared
+window would be journaled against an address that aliases something else inside
+it. So `Track_Base()` refuses a window larger than 2^30 bytes at startup, and
+`-DTRACK_VERIFY` checks every cell's offset against the declared state (§5.5).
 
 Only the current root-to-node path is ever live in the journal, so the capacity is
 far larger than needed: fpaq0mw uses at most seven steps of four writes, and
@@ -483,9 +505,9 @@ containing an `.init_array` entry.
 
 ### 5.3 The journaling stubs
 
-`track1`, `track2` and `track4` (in `track.inc`) append one cell each and
-`track8` two; `track16`, `track32` and `track64` append a record - one cell per
-16 bytes overwritten, plus a footer. All of them take the address in the
+`track1`, `track2` and `track4` (in `track.inc`) append one cell each; `track8`,
+`track16`, `track32` and `track64` append a record - one cell per 8 bytes
+overwritten, plus a footer. All of them take the address in the
 first-argument register (`rcx` on Windows, `rdi` on Linux). The record payload is
 copied through `rdx` in 8-byte pieces rather than through a vector register,
 since saving an XMM register would cost more than the copy it saves.
@@ -556,8 +578,11 @@ decoder run the same code, so they corrupt the model identically and still agree
 
 **The journal restores everything.** Every byte of model state is copied aside,
 the walk runs, and the state is compared byte for byte. The ranges compared are
-the whole `Coder` object plus anything a program lists in `TRACK_VERIFY_RANGES` -
-for tangelo_w that is `y`, `bpos` and the random generator. A single write
+the whole `Coder` object plus anything a program lists in `TRACK_STATE_RANGES` -
+for tangelo_w that is `y`, `bpos` and the random generator. The same list is what
+the journal takes its address window from, so this build also checks the other
+side of that: every cell's offset must land inside the state declared here, which
+catches a model writing somewhere it never said it would. A single write
 escaping the instrumentation shows up as a named offset at the byte where it
 happened. This is the escape detector, and it is the expensive one: the whole
 model, read twice, per checked byte. It runs for the first `n` input bytes, and
@@ -749,7 +774,7 @@ getting all 256 of them is what this machinery is for.
 | `r` (byte cost) | 2^16 · bits | capped at `0xFFFFF` ≈ 16 bits |
 | `freq[d]` | 2^16 · P(d) (`PSCALE = 65536`) | at least 1; `unlog` table of 2^20 entries |
 | Range coder | `low` 32 bit + carry, `range` 64 bit | renormalise below 2^24, bytewise |
-| Journal cell | `{ptr, msk, val}` = 16 bytes | 2^20 cells, nest stack of 512 |
+| Journal cell | `{off, val}` = 8 bytes | 30-bit offset + 2-bit width tag; 2^20 cells, nest stack of 512 |
 
 ## 10. Performance
 
@@ -788,7 +813,7 @@ Clang).
 | | `book1` size | enc | 64 KB size | enc |
 | --- | ---: | ---: | ---: | ---: |
 | Tangelo, bitwise (reference) | 197 022 | 5.0 s | 20 706 | 0.68 s |
-| tangelo_w | 197 078 | 66.6 s | 20 687 | 6.48 s |
+| tangelo_w | 197 078 | 62.3 s | 20 687 | 6.15 s |
 | … as it was before SPEED.md | 197 483 | 97.2 s | 20 739 | 10.2 s |
 | … `PRUNE_LOG=0x90000` (then) | | | 20 804 | 7.5 s |
 | … `PRUNE_LOG=0xA0000` (then) | | | 21 307 | 5.2 s |
@@ -806,21 +831,23 @@ puts real probability mass on prefixes that a 3-bit-per-bit cut-off throws away.
 
 Where the remaining time goes, and what has been done about it, is
 [SPEED.md](SPEED.md). The summary: four fifths of it is the journal rather than
-the model, and the four changes measured there took `book1` from 97.2 s to
-66.6 s while making the output 405 bytes smaller.
+the model, and the changes measured there took `book1` from 97.2 s to 62.3 s
+while making the output 405 bytes smaller.
 
 The cost is the point of the exercise. Measured over 64 KB, `tangelo_w` rolls
-back 2.47 billion journal cells on text and 6.20 billion on random data (which
-prunes almost not at all) - around 38 000 cells per input byte, or 600 KB of
+back 1.73 billion journal cells on text and 5.68 billion on random data (which
+prunes almost not at all) - around 26 000 cells per input byte, or 206 KB of
 journal traffic for every byte of output. What it never runs short of is
-capacity: peak live journal use is 2 527 cells of the 1 048 576 available, 0.24 %,
+capacity: peak live journal use is 2 339 cells of the 1 048 576 available, 0.22 %,
 because only the current root-to-leaf path is ever live.
 
 | | text (64 KB of book1) | random (64 KB) |
 | --- | ---: | ---: |
-| cells rolled back | 2 469 607 148 | 6 195 434 587 |
-| peak live cells | 2 527 | 2 383 |
-| of `N_Cells` | 0.24 % | 0.23 % |
+| speculative steps per input byte | 73.5 | 254.0 |
+| cells rolled back | 1 725 081 138 | 5 679 080 411 |
+| journal traffic per input byte | 206 KB | 677 KB |
+| peak live cells | 2 339 | 2 227 |
+| of `N_Cells` | 0.22 % | 0.21 % |
 
 ## 11. Limitations and caveats
 

@@ -334,26 +334,33 @@ for my $line (@a) {
       print STDERR "  track$n : $line\n" if $verbose;
       # --inline: write the cell here instead of calling the stub. Saves the
       # call/ret pair per store; costs one extra push/pop, because inline code
-      # needs three scratch values (cell address, target address, old value)
+      # needs three live values (target address, old value, journal position)
       # where the stub gets the target for free in its argument register.
+      #
+      # The cell layout is track.inc's: off = (address - trk_base) | tag<<30 at
+      # +0, the overwritten bytes at +4. Like the stubs, this uses only mov,
+      # movzx, lea, push and pop, so it preserves EFLAGS; the base is added
+      # negated because lea cannot subtract a register and sub sets flags.
+      #
+      # "lea rax, $mem" has to come first, while the original rax and rdx are
+      # both still live: the address expression may name either of them.
       if( $inline && $n<=4 ) {
-        my %ld = ( 1=>'movzx edx, byte ptr', 2=>'movzx edx, word ptr', 4=>'mov edx, dword ptr' );
-        my %mk = ( 1=>'0xFF', 2=>'0xFFFF', 4=>'-1' );
+        my %ld  = ( 1=>'movzx edx, byte ptr', 2=>'movzx edx, word ptr', 4=>'mov edx, dword ptr' );
+        my %tag = ( 1=>'', 2=>'+0x40000000', 4=>'-0x80000000' );
         for my $r (1..$repeat) {
           push @o,
             "\tpush\trax", "\tpush\trdx",
-            "\tlea\trax, $mem", "\tpush\trax",
-            "\tmov\teax, dword ptr [rip+trkptr]",
-            "\tlea\tedx, [rax+1]",
-            "\tmov\tdword ptr [rip+trkptr], edx",
-            "\tlea\trdx, [rip+trk]",
-            "\tlea\trax, [rax*8]",
-            "\tlea\trax, [rdx+rax*2]",
+            "\tlea\trax, $mem",                        # rax = target address
+            "\t$ld{$n} [rax]",                          # edx = overwritten bytes
+            "\tpush\trdx",
+            "\tmov\trdx, qword ptr [rip+trk_negbase]",
+            "\tlea\tedx, [rax+rdx$tag{$n}]",           # edx = offset | tag<<30
+            "\tmov\trax, qword ptr [rip+trkptr]",      # rax = &trk[trkptr]
+            "\tmov\tdword ptr [rax], edx",
+            "\tlea\trdx, [rax+8]",
+            "\tmov\tqword ptr [rip+trkptr], rdx",
             "\tpop\trdx",
-            "\tmov\tqword ptr [rax], rdx",
-            "\tmov\tdword ptr [rax+8], $mk{$n}",
-            "\t$ld{$n} [rdx]",
-            "\tmov\tdword ptr [rax+12], edx",
+            "\tmov\tdword ptr [rax+4], edx",
             "\tpop\trdx", "\tpop\trax";
         }
         $count{$n} += $repeat;

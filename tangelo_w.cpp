@@ -76,8 +76,9 @@ Stretch stretch;
 
 #endif
 
-// Model state that does not live inside the Coder object, for -DTRACK_VERIFY.
-#define TRACK_VERIFY_RANGES \
+// Model state that does not live inside the Coder object: the journal's address
+// window has to cover it, and -DTRACK_VERIFY compares it (main.inc).
+#define TRACK_STATE_RANGES \
   , {"y",   (byte*)&y,    sizeof(y)   } \
   , {"bpos",(byte*)&bpos, sizeof(bpos)} \
   , {"rnd", (byte*)&rnd,  sizeof(rnd) }

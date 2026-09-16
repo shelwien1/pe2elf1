@@ -60,3 +60,5 @@
  197483 97.169 96.514 // tangelo_w, width-exact UNDO
  446555  2.301  2.115 // fpaq0mw, alphabet map
  197078 66.603 66.853 // tangelo_w, alphabet map + wide journal records
+ 446555  1.833  1.884 // fpaq0mw, 8-byte journal cells
+ 197078 62.834 63.733 // tangelo_w, 8-byte journal cells

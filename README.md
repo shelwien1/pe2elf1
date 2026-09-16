@@ -107,20 +107,28 @@ compressed output.
 `PRUNE_LOG` (§4.3) trades compression for time: `-DPRUNE_LOG=0x90000` gives up
 0.3 % of `tangelo_w`'s compression for about a quarter of its time. `TRACKFLAGS`
 passes options to the instrumenter, of which `--inline` is 5 % faster for 48 %
-more assembly. SPEED.md measures both, and the three changes that were worth
+more assembly. SPEED.md measures both, and the four changes that were worth
 taking by default.
 
 `-DTRACK_VERIFY=n` builds a self-checking binary, which is what to reach for when
-porting a new model. It checks the two things a round trip cannot, because
+porting a new model. It checks the three things a round trip cannot, because
 encoder and decoder make the same mistake and still agree:
 
 * **that no write escapes the journal** - for `n` input bytes it snapshots every
   byte of model state, runs the walk, and compares. Thorough and expensive, so
   `-DTRACK_VERIFY_EVERY=k` samples every `k`-th byte after the first `n` rather
   than paying for all of them;
+* **that no write lands outside the state the model declared** - a journal cell
+  holds a 30-bit offset into one window of memory rather than a pointer
+  (SPEED.md §3.5), so a store outside that window would be rolled back to the
+  wrong address. Every cell's offset is checked against the declared state;
 * **that the simulated step matches the real one** - for every byte of the file,
   the walk's predicted code length for the symbol actually coded must equal the
   sum of the eight real per-bit code lengths.
+
+The window comes from `TRACK_STATE_RANGES`, where a program names any model state
+outside the `Coder` object (`tangelo_w.cpp` names `y`, `bpos` and `rnd`); getting
+that list wrong is what the second check is there to catch.
 
 ```sh
 CXXFLAGS="-O3 -march=native -DTRACK_VERIFY=64 -DTRACK_VERIFY_EVERY=5000"   ./build.sh tangelo_w
@@ -178,6 +186,7 @@ The model's arithmetic is untouched; so are the walk, the journal and the coder.
 **The build machinery** gained: `track.pl` handling vector stores up to 64 bytes
 and read-modify-write instructions, skipping stack writes from any instruction,
 and refusing out-of-file calls, weak symbols, static initialisers or red-zone
-use; `track8/16/32/64` stubs; `-mno-red-zone -fno-builtin` on the instrumented
-compile; a `PRUNE_LOG` knob; a journal-capacity check in `NEST()`; a runtime
-check that the walk really is journaling; and the `-DTRACK_VERIFY` self-check.
+use; `track8/16/32/64` stubs; an 8-byte journal cell holding an offset rather
+than a pointer; `-mno-red-zone -fno-builtin` on the instrumented compile; a
+`PRUNE_LOG` knob; a journal-capacity check in `NEST()`; a runtime check that the
+walk really is journaling; and the `-DTRACK_VERIFY` self-check.

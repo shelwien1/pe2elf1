@@ -27,6 +27,48 @@ uint flen( FILE* f ) {
 
 ByteModel<Coder> M;
 
+// The model's state, as one list of ranges, which the journal needs for two
+// different reasons.
+//
+//   Its extent is the journal's address space. A cell records a store as a
+//   30-bit offset from the base of the window these ranges span (track.inc), so
+//   every address the instrumented step writes has to be inside it. Track_Base()
+//   below checks the window is small enough to address; -DTRACK_VERIFY checks
+//   every cell lands inside it.
+//
+//   Its contents are what -DTRACK_VERIFY snapshots and compares, to catch a
+//   store that escaped the journal entirely.
+//
+// The Coder object is always the first entry - it holds the model - and a
+// program adds anything else the model writes in TRACK_STATE_RANGES, each entry
+// ", {name, address, size}". Note that ByteModel's own clen/freq/live are NOT
+// model state: the walk writes them and is meant to.
+//
+// Two objects the linker happens to put far apart would make the window bigger
+// than the state in it, and more than a gigabyte apart would stop the program at
+// startup rather than let it journal an address it cannot represent. All of
+// these are static objects in the same bss, so in practice the window is the
+// model plus whatever small tables the linker put beside it.
+#ifndef TRACK_STATE_RANGES
+ #define TRACK_STATE_RANGES
+#endif
+
+struct VRange { const char* name; byte* p; uint n; };
+VRange vrange[] = { {"Coder",(byte*)&M.E,sizeof(Coder)} TRACK_STATE_RANGES };
+enum{ N_VRange = sizeof(vrange)/sizeof(vrange[0]) };
+
+// Hand the journal the window those ranges span. Called once, before the first
+// walk; every address is static, so there is nothing to recompute later.
+static void Track_Arena( void ) {
+  byte* lo = vrange[0].p;
+  byte* hi = vrange[0].p + vrange[0].n;
+  for( uint k=1; k<N_VRange; k++ ) {
+    if( vrange[k].p            < lo ) lo = vrange[k].p;
+    if( vrange[k].p+vrange[k].n > hi ) hi = vrange[k].p+vrange[k].n;
+  }
+  Track_Base( lo, hi );
+}
+
 // One binary decision at even odds, straight into the range coder. The alphabet
 // map is 256 of these, so it costs exactly 32 bytes.
 static uint code_flag( Rangecoder& rc, uint f_DEC, uint bit ) {
@@ -58,13 +100,7 @@ static uint code_flag( Rangecoder& rc, uint f_DEC, uint bit ) {
 //   eight predictions the check compares. Cheap enough to leave on for the
 //   whole file.
 //
-// A program lists any model state living outside the Coder object in
-// TRACK_VERIFY_RANGES (each entry ", {name, address, size}"). Note that
-// ByteModel's own clen/freq/live are NOT model state: the walk writes them and
-// is meant to.
-#ifndef TRACK_VERIFY_RANGES
- #define TRACK_VERIFY_RANGES
-#endif
+// What it compares is the state declared above, in TRACK_STATE_RANGES.
 #ifndef TRACK_VERIFY_EVERY
  #define TRACK_VERIFY_EVERY 0
 #endif
@@ -74,9 +110,6 @@ static int verify_this( uint i ) {
   return (i<TRACK_VERIFY) || (TRACK_VERIFY_EVERY && ((i%TRACK_VERIFY_EVERY)==0));
 }
 
-struct VRange { const char* name; byte* p; uint n; };
-VRange vrange[] = { {"Coder",(byte*)&M.E,sizeof(Coder)} TRACK_VERIFY_RANGES };
-enum{ N_VRange = sizeof(vrange)/sizeof(vrange[0]) };
 byte* vsnap = 0;
 
 void verify_save( void ) {
@@ -118,6 +151,7 @@ int main(int argc, char** argv) {
   uint i,c,low,f_len;
   byte cmap[256];
 
+  Track_Arena();
   Track_Init();
 
   if( f_DEC==0 ) {

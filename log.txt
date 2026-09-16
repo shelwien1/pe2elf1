@@ -322,3 +322,18 @@
 66.603s: tangelo_w c ../book1 1
 66.853s: tangelo_w d 1 2
 197078
+
+// 8-byte journal cell: a 30-bit offset into the model state plus a 2-bit width
+// tag, instead of a pointer and a mask word. Journal traffic 376 -> 206 KB per
+// input byte; instructions 7.33G -> 6.34G (cachegrind, 4KB); tangelo_w 64KB
+// 6.52s -> 6.15s, fpaq0mw book1 1.99s -> 1.78s. Output byte-identical.
+// fpaq0mw, 8-byte journal cells
+1.833s: ./fpaq0mw c book1 1
+1.884s: ./fpaq0mw d 1 2
+446555
+
+// tangelo_w, 8-byte journal cells
+62.834s: ./tangelo_w c book1 1
+63.733s: ./tangelo_w d 1 2
+197078
+

@@ -8,8 +8,8 @@ journal. This document is about what that costs, where the cost actually is, and
 what can be done about it.
 
 The short version: **about four fifths of the time is the journal, not the
-model.** Four changes came out of that - 36 % faster by default and 40 % with the
-opt-in fourth, on `tangelo_w` - and one plausible-looking idea turned out to be
+model.** Four changes came out of that - 40 % faster by default on `tangelo_w`,
+43 % with the opt-in fifth - and two plausible-looking ideas turned out to be
 worth nothing at all.
 
 Contents
@@ -28,7 +28,8 @@ Contents
 Everything below is `tangelo_w` on the first 64 KB of `book1`, built with GCC 13
 `-O3 -march=native` and run on a 2.8 GHz Xeon, best of four runs. The machine is
 noisy to about ±10 % on a single run, which is enough to hide any of the smaller
-effects, so nothing here rests on one timing.
+effects, so nothing here rests on one timing: where two builds are compared they
+are run alternately in one session and the best of each is taken.
 
 Three tools made the difference between guessing and knowing.
 
@@ -56,12 +57,27 @@ would have been worthless anyway: with nothing rolled back the model corrupts,
 the code lengths change, the pruning changes, and the program stops doing the
 same amount of work.
 
+**Counting instructions, when the clock will not hold still.** Several of the
+changes here are worth a few per cent, and on this machine a few per cent is not
+something the clock can see. Not because of noise that averaging removes: two
+builds whose hot code is *the same instructions* can differ by 8 % because the
+linker put `UNDO()` at a different offset, and that difference is perfectly
+stable across runs. (That is not hypothetical - it is how the first version of
+§3.5 was nearly accepted, and then nearly rejected, on the same code.)
+`valgrind --tool=cachegrind` counts instructions, data reads, data writes and
+cache misses exactly, per function, unaffected by alignment or scheduling and
+reproducible to the instruction. The rule used from §3.5 on: **cachegrind says
+whether a change is real, the clock says whether it matters**, and where they
+disagree both are reported. Cachegrind cannot run AVX-512, so those runs are
+built `-march=x86-64-v3`, and they use a 4 KB input because they are ~50x slower.
+
 **Verifying every step.** Each change here alters hand-written assembly or the
 shape of the walk. `-DTRACK_VERIFY=48` (§5.5 of ALGORITHM.md) compares all
-360.8 MB of model state before and after each walk and checks the walk's
-predicted code length against the model's real one for every byte. Every
-optimisation below was kept only after that passed and the compressed output
-came out byte for byte identical.
+360.8 MB of model state before and after each walk, checks that every journal
+cell points inside the state the model declared, and checks the walk's predicted
+code length against the model's real one for every byte. Every optimisation below
+was kept only after that passed and the compressed output came out byte for byte
+identical.
 
 ## 2. Where the time goes
 
@@ -70,9 +86,9 @@ Per input byte, on English text, with the default pruning:
 | | |
 | --- | ---: |
 | speculative model steps | 73.5 |
-| journal cells | 24 091 |
-| journal cells per model step | 327.7 |
-| journal traffic | 376 KB |
+| journal cells | 26 323 |
+| journal cells per model step | 358.1 |
+| journal traffic | 206 KB |
 
 Two things stand out.
 
@@ -90,6 +106,10 @@ per input byte is the direct consequence of that.
 So the cost is not the model's arithmetic. It is the bookkeeping around the
 model's *writes*, and every worthwhile optimisation below either reduces the
 number of writes journaled or reduces what journaling one write costs.
+
+(Those figures are after §3.5. Before it a cell was 16 bytes: 24 091 cells and
+376 KB per input byte. The cell count went *up* and the traffic nearly halved,
+which is the whole of §3.5 in one line.)
 
 ## 3. What worked
 
@@ -159,9 +179,9 @@ saved data. A 16-byte SSE store from the mixer's weight update therefore cost
 four cells, 64 bytes of journal, to save 16 bytes; a 32-byte store cost eight
 cells and 128 bytes. Those wide stores were **46.7 % of all journal cells**.
 
-They are now one record: the overwritten bytes copied verbatim, 16 to a cell,
-followed by a footer naming the address and the width. A 32-byte store is three
-cells instead of eight. `UNDO()` walks backwards, so the footer is written last
+They are now one record: the overwritten bytes copied verbatim, 16 to a cell
+(8 since §3.5), followed by a footer naming the address and the width. A 32-byte
+store is three cells instead of eight. `UNDO()` walks backwards, so the footer is written last
 and is met first; its mask field holds the width, which is what distinguishes a
 record from a plain cell (16, 32 and 64 are none of the narrow tags 0xFF,
 0xFFFF, 0xFFFFFFFF).
@@ -191,9 +211,79 @@ code has three live values (the cell address, the target address, the saved
 word) and two scratch registers, so the target goes on the stack. Even so it
 wins the call and the return.
 
-5 % faster, and 48 % more instrumented assembly. It is off by default for that
-reason: the trade was measured on one model, and a bigger model's step is more
+5 % faster, and 48 % more instrumented assembly - and still 5 % after §3.5 made
+the stub it replaces cheaper, 6.20 s to 5.87 s. It is off by default for the
+assembly: the trade was measured on one model, and a bigger model's step is more
 likely to care about instruction cache than this one is.
+
+### 3.5 A journal cell in 8 bytes (6 %, and 10 % for `fpaq0mw`)
+
+The cell was `{void* ptr; uint msk; uint val;}` - 16 bytes, of which eight were a
+pointer and four a width tag, to save at most four bytes of data. But every
+address the journal ever sees is inside one window of memory: the model object
+and the few globals beside it. So the pointer is now a 30-bit offset from the
+base of that window, and the width is the two bits that frees:
+
+```
+off = (address - trk_base) | (tag<<30)     tag 0, 1, 2 = 1, 2, 4 bytes
+val = the overwritten bytes                tag 3       = wide record footer
+```
+
+Three things had to work out, and the second one is the whole story.
+
+**The stub has to form the offset without touching EFLAGS.** `sub` sets flags and
+`lea` cannot subtract a register, so the base is kept negated in memory and added
+instead: `mov rdx,[rip+trk_negbase]` then `lea edx,[ARG+rdx+tag<<30]`, where the
+tag is a displacement and therefore free. That load is the one instruction the
+new format adds to a stub. It takes back three: `trkptr` is now a pointer rather
+than an index, so the cell address needs no scaling, and the cell is two stores
+where it was three. `track4` went from 15 instructions to 13, and from 962 M
+instructions to 834 M on the reference run.
+
+**`UNDO()` must not pay the offset back.** The obvious `p = base + (off &
+0x3FFFFFFF)` costs a mask and an add per cell, and the first version of this
+change did exactly that. Measured: the stubs got 15 % cheaper and `UNDO()` got
+15 % dearer, for a total of **+0.3 % instructions** - a change that nearly halves
+the journal's memory traffic and comes out slightly *worse*. It is avoided by keeping four base
+pointers in `UNDO()`, one per tag, each pre-biased by that tag's bit pattern; the
+cell's offset then indexes the right one directly and the compiler folds the bias
+into the store's displacement (`mov [r10+rdi-0x80000000],edx`). The tag is read by
+comparing the whole offset against the tag boundaries rather than by shifting it
+out. The inner loop went from 12 instructions per 4-byte cell to 9, and `UNDO()`
+from 2.44 G instructions to 1.79 G.
+
+**The wide-record branch must stay out of the common path.** Inlined, its copy
+loop wants four callee-saved registers, so `UNDO()` built a stack frame and saved
+them on *every* call - four stack writes and four reads per speculative step,
+paid in full by
+`fpaq0mw`, whose model has no store wider than 4 bytes and never reaches the
+branch at all. Records of one or two payload cells - every 8- and 16-byte store,
+which is nearly all of them - are now copied straight line, and only the tail is
+a call. An 8-byte store became a record too: the same two cells as before, but
+one iteration of `UNDO()`'s loop instead of two.
+
+| `tangelo_w` | before | after |
+| --- | ---: | ---: |
+| instructions (4 KB of `book1`) | 7.33 G | 6.34 G |
+| data writes | 1.54 G | 1.38 G |
+| L1 data misses | 14.5 M | 9.7 M |
+| journal cells per input byte | 24 091 | 26 323 |
+| journal traffic per input byte | 376 KB | 206 KB |
+| time (64 KB of `book1`) | 6.52 s | 6.15 s |
+
+`fpaq0mw` gains more, because its model step is four stores and almost all of its
+time is journal: 1.99 G instructions to 1.85 G, and `book1` from 1.985 s to
+1.777 s. Both outputs are byte for byte identical, and both pass
+`-DTRACK_VERIFY=64 -DTRACK_VERIFY_EVERY=5000` over all of `book1`.
+
+What it costs is an assumption: a store outside the declared window would be
+journaled against an address that aliases something else inside it. A program
+declares its state in `TRACK_STATE_RANGES`, `Track_Base()` refuses a window wider
+than 2^30 bytes at startup, and `-DTRACK_VERIFY` checks every cell's offset
+against that window. The trade is deliberate - it is the same shape as the
+annotations in §5, an optional promise from the model that the self-check
+verifies - but it is the first place in this design where the model has to tell
+the framework anything at all.
 
 ## 4. What did not
 
@@ -203,7 +293,7 @@ one qword indexed by `p` makes it one 8-byte load from a 32 KB table, which
 looks like an obvious win: half the lookups, a quarter of the footprint.
 
 Measured: 7.02 s to 6.97 s. Nothing, inside the noise. The table is hot, the
-loads are independent, and there are only 73.5 nodes per byte against 24 091
+loads are independent, and there are only 73.5 nodes per byte against 26 323
 journal cells - the walk's own arithmetic is not where the time is. Rejected,
 and worth stating because the same reasoning kills several similar ideas: the
 frequency loop's 256 lookups, the cumulative-frequency scans (~128 adds per
@@ -215,8 +305,13 @@ poorly-predicted three-way branch over tens of thousands of cells per byte. The
 obvious fix is to restore every cell with one unconditional 32-bit
 read-modify-write - which is what the code used to do. It was **9 % slower** and
 could fault, because it reads and writes up to 3 bytes past a 1-byte cell.
-Restoring at the cell's own width, branch and all, is the faster and safer
-version.
+
+Re-measured against the 8-byte cell it is worse still, because the mask is no
+longer in the cell and has to be looked up from the tag: **8 % more instructions
+on `tangelo_w`, 9 % on `fpaq0mw`, and 12 % more data reads on both**, for
+identical output. The read is the problem, not the branch. Restoring at the
+cell's own width, with a plain store that never reads its destination, is the
+faster and the safer version.
 
 ## 5. What is left
 
@@ -231,19 +326,10 @@ one wider journaling call covering both. That is a peephole pass over the
 assembly it is already rewriting, and it attacks exactly the quantity that is
 left: the number of calls.
 
-**Compact cells (est. 10 %, more work).** A cell is 16 bytes: an 8-byte pointer,
-a 4-byte width tag, 4 bytes of data. Everything journaled lives inside one
-object, so the pointer could be a 32-bit offset from a base, with the width in
-its spare bits - 8 bytes a cell, half the traffic. The obstacles are real but
-small: the stub needs a flag-neutral subtract (`lea` cannot subtract a register,
-and `sub` sets flags), and the model's globals would have to live inside the same
-arena as the model object, which for `tangelo_w` means moving `y`, `bpos` and
-`rnd` into the `Coder`.
-
 **Let the model declare bulk state (est. 10-15 %, invasive).** Half of each
 step's writes are the mixer rewriting five rows of 80 weights. Journaling that as
-five block copies of 160 bytes, once per `NEST()`, would cost 800 bytes where 200
-cells cost 3 200. It needs the model to say "this region is bulk state", which
+five block copies of 160 bytes, once per `NEST()`, would cost 800 bytes where the
+200 cells that cover them cost 1 600. It needs the model to say "this region is bulk state", which
 breaks the black-box premise the whole design rests on - but as an *optional*
 annotation, checked by `-DTRACK_VERIFY`, it is defensible.
 
@@ -261,7 +347,7 @@ constraints available: an order-1 alphabet map (which bytes can follow the
 previous byte) would prune far harder, at 8 KB of header rather than 32 bytes,
 and is worth trying on a long file.
 
-**What cannot be removed.** The model step itself, 1.2 s of the 6.5 s, is the
+**What cannot be removed.** The model step itself, 1.4 s of the 6.15 s, is the
 floor for this approach: the framework's whole premise is that the model is a
 black box whose real step must run. The eighth bit is already free - the walk
 reads the pending prediction rather than advancing - and that is worth half the
@@ -278,8 +364,27 @@ Every row produced a bit-identical round trip and passed `-DTRACK_VERIFY`.
 | test before the step (§3.1) | 20 739 | 8.71 s |
 | + alphabet map (§3.2) | 20 687 | 7.02 s |
 | + wide journal records (§3.3) | 20 687 | 6.48 s |
-| + `--inline` (§3.4, opt-in) | 20 687 | 6.17 s |
+| + 8-byte journal cells (§3.5) | 20 687 | 6.15 s |
+| + `--inline` (§3.4, opt-in) | 20 687 | 5.87 s |
 | paired log table (§4, rejected) | 20 687 | 6.97 s |
+
+Times in that column come from different sessions, and this machine drifts by a
+few per cent between them; each step was also measured against the one before it,
+interleaved in a single session, which is the number to trust. For §3.5 that was
+6.52 s to 6.15 s.
+
+Instruction counts for §3.5, which timing could not resolve. `tangelo_w`, first
+4 KB of `book1`, GCC 13 `-O3 -march=x86-64-v3`, `valgrind --tool=cachegrind`:
+
+| | before §3.5 | after §3.5 |
+| --- | ---: | ---: |
+| instructions | 7 327 250 450 | 6 337 775 432 |
+| — `UNDO()` | 2 439 883 133 | 1 788 298 266 |
+| — `track4`, the commonest stub | 962 093 310 | 833 814 202 |
+| — the model step and its call sites | 2 376 596 776 | 2 376 596 776 |
+| data reads | 1 782 413 887 | 1 753 192 075 |
+| data writes | 1 544 891 550 | 1 376 178 507 |
+| L1 data misses | 14 477 251 | 9 678 329 |
 
 Journal share, by `--repeat`:
 
@@ -287,19 +392,31 @@ Journal share, by `--repeat`:
 | --- | ---: | ---: | ---: | ---: | ---: |
 | before §3.3 | 7.02 s | 12.59 s | 17.94 s | 5.46 s | 1.56 s (22 %) |
 | after §3.3 | 6.48 s | 11.75 s | 17.00 s | 5.26 s | 1.22 s (19 %) |
+| after §3.5 | 6.37 s | 11.18 s | 16.26 s | 4.95 s | 1.42 s (22 %) |
 
 Journal composition, per input byte:
 
-| | before §3.3 | after §3.3 |
-| --- | ---: | ---: |
-| speculative steps | 73.5 | 73.5 |
-| cells | 28 554 | 24 091 |
-| cells per step | 388.5 | 327.7 |
-| traffic | 457 KB | 376 KB |
-| 1-byte cells | 5.3 % | 6.2 % |
-| 2-byte cells | 16.6 % | 19.6 % |
-| 4-byte cells | 31.5 % | 55.6 % |
-| wide stores | 46.7 % | 18.6 % |
+| | before §3.3 | after §3.3 | after §3.5 |
+| --- | ---: | ---: | ---: |
+| speculative steps | 73.5 | 73.5 | 73.5 |
+| cells | 28 554 | 24 091 | 26 323 |
+| cells per step | 388.5 | 327.7 | 358.1 |
+| traffic | 457 KB | 376 KB | 206 KB |
+| 1-byte cells | 5.3 % | 6.2 % | 5.7 % |
+| 2-byte cells | 16.6 % | 19.6 % | 18.0 % |
+| 4-byte cells | 31.5 % | 55.6 % | 34.2 % |
+| wide stores | 46.7 % | 18.6 % | 42.1 % |
+
+The last two columns are not measuring quite the same thing: since §3.5 an
+8-byte store is a record rather than two 4-byte cells, so it moved from the
+4-byte row into the wide row. That is also why the cell count went up while the
+traffic nearly halved.
+
+`fpaq0mw` for comparison, on all of `book1`: 95.5 speculative steps per input
+byte, 4.0 journal cells per step, 3 030 bytes of journal traffic per input byte,
+and a peak of 24 live cells. Its model step is four stores, so it is almost pure
+journal, and it gains most from §3.5: 1.985 s to 1.777 s, and 1.99 G
+instructions to 1.85 G.
 
 Reproducing any of it:
 
