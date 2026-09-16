@@ -23,10 +23,15 @@
 //   mixer.inc       "using Base::" for the dependent base members, which GCC and
 //                   Clang require and MSVC does not
 //   CM_small.inc    a template parameter renamed so it stops shadowing "m"
+//   all of them      every write to model state wrapped in W(...), which marks
+//                   it for tangelo_s and is "#define W(x) (x)" for tangelo_w -
+//                   see ../write.inc and ALGORITHM.md section 5.6. mixer1.inc
+//                   also declares the mixer's arrays with W_block(), which is
+//                   the one thing the source can say and the assembly cannot
 //
-// window.inc, table_fsm.inc, mixer_train.inc, mixer1.inc, APM.inc and
-// counter.inc are byte for byte the original. The last two entries are what the
-// original needs merely to compile with GCC or Clang.
+// window.inc, table_fsm.inc and mixer_train.inc are byte for byte the original;
+// the rest differ only by the write markers and the entries above. The last two
+// of those are what the original needs merely to compile with GCC or Clang.
 //
 // The model predicts one bit at a time: Model::predictNext() folds the bit just
 // coded (the global y) into the state and returns P(next bit = 1) as a 12-bit

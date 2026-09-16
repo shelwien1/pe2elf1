@@ -643,6 +643,87 @@ track: the speculative walk entered mid-byte at input byte 0 -
   the byte distribution it produces is meaningless.
 ```
 
+### 5.6 The other route: a model that marks its own writes
+
+Everything above is one answer to the question "how do the model's writes reach
+the journal": compile the step twice and rewrite one of the two copies. There is
+another, and `tangelo_s` is it - the same Tangelo model, the same walk, the same
+journal, and the same compressed file byte for byte, with the journaling coming
+from the model's own source instead of from `track.pl`.
+
+Every write to model state is marked where it is made:
+
+```cpp
+W(c0) += c0 + y;                        // Model::c0
+W(*cp[i]) = ns;                         // a bit-history byte in the ContextMap
+W(runp[i][0]) += 2;                     // a run length
+W(t[index]) += (g - t[index]) >> rate;  // an APM entry
+```
+
+`W(x)` (`write.inc`) appends the journal cell and returns `x` by reference, so
+the write itself is untouched and the marker is an annotation rather than a
+rewrite; compound assignment, `++` and pointer targets all work unchanged. In
+the `track.pl` programs `W` is `#define W(x) (x)` and compiles to nothing:
+`track.pl` instruments the same 146 stores in the same places as it did before
+the markers existed.
+
+Two differences of substance, beyond the mechanism.
+
+**One copy of the step, and a flag.** There is no second translation unit, so
+the walk and the real update run the same code, and something has to say which
+is which. `ByteModel::Predict()` sets `trk_on` around the walk and clears it
+after; `W()` tests it. The flag changes twice per input byte, so the branch
+costs nothing measurable, and the whole of section 5.4 - weak symbols, the
+exported-symbol check, `INLINE` as a correctness requirement, one definition of
+every shared global - simply does not arise. Neither does the red zone, nor
+`-fno-builtin`, nor an instrumenter that has to understand every store the
+compiler might emit. The step is `NOINLINE` for one reason that does survive:
+the walk is 254 unrolled call sites, and letting Tangelo inline into all of them
+is a five-minute compile and a 2.4 MB binary.
+
+**A model can state a fact about a region.** The rule the marked-up source has to
+keep is weaker than `track.pl`'s, and worth stating exactly: *a location must be
+journaled at least once before its first modification inside a speculative step.*
+Journaling it more often is merely wasteful, because `UNDO()` walks the cells
+backwards and the oldest value wins. So a model that rewrites a whole array in a
+step can say so once. `Mixer1::update()` is the first thing a step does to the
+mixer, and it journals the input vector, the five contexts, their probabilities
+and each weight row about to be trained - four records and five rows, in place of
+some ninety separate cells - after which `add()`, `set()` and `p()` write into
+them unmarked. No instrumenter reading the assembly can infer that; it is a fact
+about the model, and only the model knows it.
+
+**What it risks** is the one thing `track.pl` cannot get wrong. A missed `W()`
+is invisible in a round trip - encoder and decoder corrupt the model identically
+and still agree - and shows up only as a slightly larger output file. Section
+5.5's `-DTRACK_VERIFY` is therefore not optional here in the way it is for
+`tangelo_w`; `tangelo_s` passes it over all of `book1` (218 comparisons of every
+byte of the 360.8 MB of model state, plus the prediction check on all 768 771
+bytes), with the hash table's eviction path forced by `-DMEM=0x20000`, and the
+two programs agree byte for byte on every file tried.
+
+**What it costs and what it buys**, on the first 64 KB of `book1` and on all of
+it, GCC 13 `-O3 -march=native`:
+
+| | `tangelo_w` | `tangelo_s` |
+| --- | ---: | ---: |
+| journaling | `track.pl`, on the assembly | `W(x)`, in the source |
+| build | 3 steps, 2 compiles of the step, perl | 1 compile |
+| 64 KB of `book1` | 5.99 s | 3.73 s |
+| all of `book1` | 60.3 s | 37.1 s |
+| instructions (4 KB, `-march=x86-64-v3`) | 6.34 G | 4.05 G |
+| data reads | 1.75 G | 0.86 G |
+| data writes | 1.38 G | 0.52 G |
+| journal cells per input byte | 26 323 | 21 277 |
+| journal traffic per input byte | 206 KB | 166 KB |
+| `book1` | 197 078 | 197 078 |
+
+A fifth of the instruction saving is the smaller journal; the rest is the cost of
+journaling one write. A `track.pl` store site is `push`/`lea`/`call`/`pop` around
+a stub that must preserve every register and EFLAGS because the compiler knows
+nothing about it. `W()` is four instructions the compiler can see, schedule and
+keep registers across.
+
 ## 6. The build pipeline: instrumenting the compiler's output
 
 Per program (`fpaq0mw`, `tangelo_w`):
@@ -813,7 +894,8 @@ Clang).
 | | `book1` size | enc | 64 KB size | enc |
 | --- | ---: | ---: | ---: | ---: |
 | Tangelo, bitwise (reference) | 197 022 | 5.0 s | 20 706 | 0.68 s |
-| tangelo_w | 197 078 | 62.3 s | 20 687 | 6.15 s |
+| tangelo_w | 197 078 | 60.3 s | 20 687 | 5.99 s |
+| tangelo_s (section 5.6) | 197 078 | 37.1 s | 20 687 | 3.73 s |
 | … as it was before SPEED.md | 197 483 | 97.2 s | 20 739 | 10.2 s |
 | … `PRUNE_LOG=0x90000` (then) | | | 20 804 | 7.5 s |
 | … `PRUNE_LOG=0xA0000` (then) | | | 21 307 | 5.2 s |
@@ -831,8 +913,9 @@ puts real probability mass on prefixes that a 3-bit-per-bit cut-off throws away.
 
 Where the remaining time goes, and what has been done about it, is
 [SPEED.md](SPEED.md). The summary: four fifths of it is the journal rather than
-the model, and the changes measured there took `book1` from 97.2 s to 62.3 s
-while making the output 405 bytes smaller.
+the model, and the changes measured there took `book1` from 97.2 s to just over
+60 s while making the output 405 bytes smaller. Journaling from the model's own
+source instead (section 5.6) takes it to 37.1 s, for the same 197 078 bytes.
 
 The cost is the point of the exercise. Measured over 64 KB, `tangelo_w` rolls
 back 1.73 billion journal cells on text and 5.68 billion on random data (which
@@ -851,6 +934,13 @@ because only the current root-to-leaf path is ever live.
 
 ## 11. Limitations and caveats
 
+* **Two journaling routes, two different risks.** `track.pl` cannot miss a store
+  but fails the build on anything it does not recognise, needs perl and a second
+  compile of the step, and brings the weak-symbol, red-zone and library-call
+  constraints of section 5.4 with it. Marking the writes in the model's source
+  (section 5.6) has none of that and is 38 % faster, but a missed marker is a
+  silent wrong answer, so `-DTRACK_VERIFY` stops being a porting aid and becomes
+  the thing that holds it up.
 * **Only fixed-width writes are journaled.** A model whose compiled step
   contains scatter stores or string operations makes `track.pl` fail the build
   (by design). Such a model needs either source changes that steer the compiler

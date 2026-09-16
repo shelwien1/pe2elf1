@@ -62,3 +62,4 @@
  197078 66.603 66.853 // tangelo_w, alphabet map + wide journal records
  446555  1.833  1.884 // fpaq0mw, 8-byte journal cells
  197078 62.834 63.733 // tangelo_w, 8-byte journal cells
+ 197078 37.613 37.963 // tangelo_s, writes journaled from source

@@ -107,7 +107,13 @@ struct ByteModel {
     for( j=0; j<0x200; j++ ) clen[j] = 0xFFFFF;   // "not evaluated": ~16 bits
     clen[1] = 0;
 
+    // The one place journaling is on. Outside it the model's writes are
+    // permanent: Update() below, and everything before the first byte. The
+    // track.pl route ignores this - its two copies of the step differ in the
+    // code, not in a flag - see write.inc.
+    trk_on = true;
     WALK<Coder,1,0>::go( E, clen, live );
+    trk_on = false;
 
     uint total = 0;
     for( j=0; j<256; j++ ) {

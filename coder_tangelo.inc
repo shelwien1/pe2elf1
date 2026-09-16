@@ -53,7 +53,7 @@ struct Coder {
   INLINE
   uint encode_sim( int bit ) {
     uint p0 = p;
-    y = bit;
+    W(y) = bit;
     int pr = M.predictNext();
     // The upper clamp is load-bearing: the walk takes LOG2(SCALE-p) in unsigned
     // arithmetic, so a p above SCALE-1 would wrap to an index of about four
@@ -63,7 +63,7 @@ struct Coder {
     // combination in predictNext() lands in [0, SCALE-1] by construction.
     // Clamping the pending value and not the model's own pr0 leaves the APM
     // feedback path untouched.
-    p = (pr<1) ? 1 : ( (pr>SCALE-1) ? SCALE-1 : uint(pr) );
+    W(p) = (pr<1) ? 1 : ( (pr>SCALE-1) ? SCALE-1 : uint(pr) );
     return p0;
   }
 

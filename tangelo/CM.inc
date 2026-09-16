@@ -11,7 +11,7 @@ struct E {
     if (chk[last & 15] == ch) return &bh[last & 15][0];
     int b = 0xffff, bi = 0;
     for (int i = 0; i < 7; ++i) {
-      if (chk[i] == ch) return last = last << 4 | i, (byte*) &bh[i][0];
+      if (chk[i] == ch) return W(last) = last << 4 | i, (byte*) &bh[i][0];
       int pri = bh[i][0];
       if (pri < b && (last & 15) != i && last >> 4 != i) b = pri, bi = i;
     }
@@ -19,10 +19,10 @@ struct E {
     // the journal (they are not in the instrumented translation unit), so the
     // eviction would not be rolled back. Spelled out, it compiles to plain
     // stores that track.pl can journal.
-    last = 0xf0 | bi;
-    chk[bi] = ch;
+    W(last) = 0xf0 | bi;
+    W(chk[bi]) = ch;
     byte* q = &bh[bi][0];
-    for( int k = 0; k < 7; ++k ) q[k] = 0;
+    for( int k = 0; k < 7; ++k ) W(q[k]) = 0;
     return q;
   }
 
@@ -51,11 +51,11 @@ struct ContextMap {
   }
 
   void set(uint cx, int next=-1) {
-    int i = cn++;
+    int i = W(cn)++;
     i &= next;
     cx = cx * 987654323 + i;
     cx = cx << 16 | cx >> 16;
-    cxt[i] = cx * 123456791 + i;
+    W(cxt[i]) = cx * 123456791 + i;
   }
 
   // INLINE for the same reason as Model::predictNext(): no COMDAT symbol may
@@ -68,38 +68,38 @@ struct ContextMap {
       if (cp[i]) {
         int ns = State_table[*cp[i]][y];
         if (ns >= 204 && rnd() << ((452 - ns) >> 3)) ns -= 4;
-        *cp[i] = ns;
+        W(*cp[i]) = ns;
       }
       if (bpos > 1 && runp[i][0] == 0) {
-        cp[i] = 0;
+        W(cp[i]) = 0;
       } else {
         switch(bpos) {
-          case 1: case 3: case 6: cp[i] = cp0[i] + 1 + (c0 & 1); break;
-          case 4: case 7: cp[i] = cp0[i] + 3 + (c0 & 3); break;
-          case 2: case 5: cp0[i] = cp[i] = t[(cxt[i] + c0) & (t_size - 1)].get(cxt[i] >> 16); break;
+          case 1: case 3: case 6: W(cp[i]) = cp0[i] + 1 + (c0 & 1); break;
+          case 4: case 7: W(cp[i]) = cp0[i] + 3 + (c0 & 3); break;
+          case 2: case 5: W(cp0[i]) = W(cp[i]) = t[(cxt[i] + c0) & (t_size - 1)].get(cxt[i] >> 16); break;
           default: {
-            cp0[i] = cp[i] = t[(cxt[i] + c0) & (t_size - 1)].get(cxt[i] >> 16);
+            W(cp0[i]) = W(cp[i]) = t[(cxt[i] + c0) & (t_size - 1)].get(cxt[i] >> 16);
             if (cp0[i][3] == 2) {
               const int c = cp0[i][4] + 256;
               byte *p = t[(cxt[i] + (c >> 6)) & (t_size - 1)].get(cxt[i] >> 16);
-              p[0] = 1 + ((c >> 5) & 1);
-              p[1 + ((c >> 5) & 1)] = 1 + ((c >> 4) & 1);
-              p[3 + ((c >> 4) & 3)] = 1 + ((c >> 3) & 1);
+              W(p[0]) = 1 + ((c >> 5) & 1);
+              W(p[1 + ((c >> 5) & 1)]) = 1 + ((c >> 4) & 1);
+              W(p[3 + ((c >> 4) & 3)]) = 1 + ((c >> 3) & 1);
               p = t[(cxt[i] + (c >> 3)) & (t_size - 1)].get(cxt[i] >> 16);
-              p[0] = 1 + ((c >> 2) & 1);
-              p[1 + ((c >> 2) & 1)] = 1 + ((c >> 1) & 1);
-              p[3 + ((c >> 1) & 3)] = 1 + (c & 1);
-              cp0[i][6] = 0;
+              W(p[0]) = 1 + ((c >> 2) & 1);
+              W(p[1 + ((c >> 2) & 1)]) = 1 + ((c >> 1) & 1);
+              W(p[3 + ((c >> 1) & 3)]) = 1 + (c & 1);
+              W(cp0[i][6]) = 0;
             }
             int c1 = buf(1);
             if (runp[i][0] == 0) {
-              runp[i][0] = 2, runp[i][1] = c1;
+              W(runp[i][0]) = 2, W(runp[i][1]) = c1;
             } else if (runp[i][1] != c1) {
-              runp[i][0] = 1, runp[i][1] = c1;
+              W(runp[i][0]) = 1, W(runp[i][1]) = c1;
             } else if (runp[i][0] < 254) {
-              runp[i][0] += 2;
+              W(runp[i][0]) += 2;
             }
-            runp[i] = cp0[i] + 3;
+            W(runp[i]) = cp0[i] + 3;
           } break;
         }
       }
@@ -120,7 +120,7 @@ struct ContextMap {
       }
       m.add(stretch(p));
     }
-    if (bpos == 7) cn=0;
+    if (bpos == 7) W(cn)=0;
     return result;
   }
 

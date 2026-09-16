@@ -1,3 +1,5 @@
+#ifndef TRACK_INC
+#define TRACK_INC
 
 enum{ N_Cells=1<<20, N_Nest=0x200, N_Margin=1<<16 };
 
@@ -98,6 +100,15 @@ void NEST( void ) {
 
 qword trk_undone = 0;   // cells rolled back so far; checked once, in main.inc
 
+// Journaling is on only inside the speculative walk: ByteModel::Predict() turns
+// it on around the walk and off again, and the model's real update then runs
+// with nothing recorded. The track.pl route does not need this - there the walk
+// and the real update are two separately compiled copies of the step, and only
+// one of them has journaling calls in it - but a model that marks its own writes
+// (write.inc) has a single copy of each write, so the flag is what tells that
+// copy which of the two it is running as.
+bool trk_on = false;
+
 // A wide record: c is its footer, naming the address and the width, and the
 // bytes it saved are in the cells just below, packed 8 to a cell. One record for
 // a store of 8 bytes or more, rather than the two to sixteen single-word cells
@@ -169,6 +180,11 @@ void UNDO( void ) {
   }
   trkptr = k;
 }
+
+// The journaling stubs, for the track.pl route only. A program that marks its
+// own writes instead (write.inc, -DTRACK_SRC) journals them inline, and needs
+// neither the stubs nor a separately compiled encode_sim.
+#ifndef TRACK_SRC
 
 // track1 ... track64 are the journaling stubs that track.pl inserts in front
 // of every byte/word/dword/qword store in the compiled encode_sim():
@@ -313,8 +329,7 @@ uint encode_sim( void* _p, int y ); // instrumented model step, see coder.inc
 
 }
 
-
-
+#endif // !TRACK_SRC
 
 // The walk that uses all of this lives in bytemodel.inc, which turns the model
 // step into a byte distribution. What stays here is the journal itself, and the
@@ -327,3 +342,5 @@ void Track_Init( void ) {
   LOG2.Init();
   for( i=0; i<0x100000; i++ ) { unlog[i]=double(PSCALE)*pow(2.0,-double(i)/0x10000); if( unlog[i]<1 ) unlog[i]=1; }
 }
+
+#endif // TRACK_INC

@@ -16,7 +16,8 @@ struct Random {
   }
 
   uint operator()() {
-    return ++i, table[i & 63] = table[(i - 24) & 63] ^ table[(i - 55) & 63];
+    ++W(i);
+    return W(table[i & 63]) = table[(i - 24) & 63] ^ table[(i - 55) & 63];
   }
 
 };

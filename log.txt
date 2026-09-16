@@ -337,3 +337,12 @@
 63.733s: ./tangelo_w d 1 2
 197078
 
+// The same Tangelo model journaling its own writes from source (W(x) in
+// tangelo/*.inc) instead of track.pl rewriting the assembly. One translation
+// unit, one compile, no perl. Same output byte for byte; 26323 -> 21277
+// cells/byte, 6.34G -> 4.05G instructions, 64KB 5.99s -> 3.73s.
+// tangelo_s, writes journaled from source
+37.613s: ./tangelo_s c book1 1
+37.963s: ./tangelo_s d 1 2
+197078
+

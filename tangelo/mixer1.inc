@@ -18,12 +18,24 @@ struct Mixer1 {
     for( int j=0; j<N*M; j++ ) wx[j] = w;
   }
 
+  // update() is the first thing a model step does to this mixer, which is what
+  // lets everything it and the rest of the step will write be journaled here,
+  // once, as whole arrays: the inputs, the five contexts, their probabilities,
+  // and the weight row of each context that is about to be trained. add(),
+  // set() and p() then write into them unmarked. For the 73-input mixer that is
+  // four records and five weight rows instead of some ninety separate cells,
+  // and it is the one thing this route can do that track.pl's cannot - see
+  // write.inc for why journaling a location once, early, is enough.
   void update() {
+    W_block( &tx[0],  sizeof(tx)  );
+    W_block( &cxt[0], sizeof(cxt) );
+    W_block( &pr[0],  sizeof(pr)  );
     for( int i=0; i<ncxt; i++ ) {
       int err = ((y << 12) - pr[i]) * 7;
+      if( err ) W_block( &wx[cxt[i] * N], N*sizeof(short) );
       train(&tx[0], &wx[cxt[i] * N], nx, err);
     }
-    nx = base = ncxt = 0;
+    W(nx) = W(base) = W(ncxt) = 0;
   }
 
   void add( int x ) { tx[nx++] = x; }

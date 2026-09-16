@@ -21,8 +21,9 @@ struct StateMap {
     if (n < 1023) ++p0;
     else p0 = (p0 & 0xfffffc00) | 1023;
     p0 += (((y << 22) - pr) >> 3) * pt(n) & 0xfffffc00;
-    p[0] = p0;
-    return t[cxt = cx] >> 20;
+    W(p[0]) = p0;
+    W(cxt) = cx;
+    return t[cxt] >> 20;
   }
 
 };

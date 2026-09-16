@@ -1,3 +1,5 @@
+#ifndef LOG2LUT_INC
+#define LOG2LUT_INC
 
 struct log2LUT {
 
@@ -31,3 +33,5 @@ struct log2LUT {
 };
 
 log2LUT LOG2;
+
+#endif // LOG2LUT_INC

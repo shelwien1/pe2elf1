@@ -1,11 +1,16 @@
 // Shared declarations for the Tangelo model.
 //
-// The model is compiled TWICE into one program: once with -DSIM_FUNC (the
-// instrumented encode_sim whose stores are journaled, see ../ALGORITHM.md §5)
-// and once normally (the real, persistent model update). Both copies must work
-// on the SAME state, so every mutable global is only DECLARED here and is
-// DEFINED exactly once, in the main translation unit (../tangelo_w.cpp).
+// For ../tangelo_w.cpp the model is compiled TWICE into one program: once with
+// -DSIM_FUNC (the instrumented encode_sim whose stores are journaled, see
+// ../ALGORITHM.md §5) and once normally (the real, persistent model update).
+// Both copies must work on the SAME state, so every mutable global is only
+// DECLARED here and is DEFINED exactly once, in the main translation unit.
 // Free functions are static: they are pure, so a per-TU copy cannot diverge.
+//
+// ../tangelo_s.cpp journals the model's writes from the model's own source
+// (§5.6) and so has just one translation unit; there these declarations are
+// simply matched by definitions in the same file, and none of the above is a
+// constraint at all.
 
 enum {
   SCALElog = 12,            // squash() and the APMs output a 12-bit probability

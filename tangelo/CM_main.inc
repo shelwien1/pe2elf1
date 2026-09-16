@@ -35,13 +35,13 @@ struct Model {
     MatchModel::t_buf& buf = match.buf;
     int& pos = match.buf.pos;
 
-    c0 += c0 + y;
+    W(c0) += c0 + y;
     if (c0 >= 256) {
-      buf[pos++] = c0;
-      c4 = (c4 << 8) + c0 - 256;
-      c0 = 1;
+      W(buf[pos]) = c0; W(pos)++;
+      W(c4) = (c4 << 8) + c0 - 256;
+      W(c0) = 1;
     }   
-    bpos = (bpos + 1) & 7;  
+    W(bpos) = (bpos + 1) & 7;  
     int c1 = c4 & 0xff, c2 = (c4 & 0xff00) >> 8;
 
     mixer.update();
@@ -50,7 +50,7 @@ struct Model {
 
     if (bpos == 0) {
       for (int i = 14; i > 0; --i) {
-        cxt[i] = hash(cxt[i - 1], c1);
+        W(cxt[i]) = hash(cxt[i - 1], c1);
       }
       cm.set(0);
       cm.set(c1);
@@ -66,15 +66,15 @@ struct Model {
       cm.set(ismatch | (c4 & 0xffff0000));
       cm.set(ismatch | (c4 & 0x0000ff00));
       cm.set(ismatch | (c4 & 0x00ff0000));
-      mask = (mask << 3) | (!c1 ? 0 : is_alpha(c1) ? 1 : is_punct(c1) ? 2 :
+      W(mask) = (mask << 3) | (!c1 ? 0 : is_alpha(c1) ? 1 : is_punct(c1) ? 2 :
         is_space(c1) ? 3 : (c1 == 255) ? 4 : (c1 < 16) ? 5 : (c1 < 64) ? 6 : 7);
       cm.set(mask);
-      mask2 = (mask2 << 3) | ((mask >> 27) & 7);
+      W(mask2) = (mask2 << 3) | ((mask >> 27) & 7);
       cm.set(hash(mask << 5, mask2 << 2));
       uint& ic1r = t1[c2];
-      ic1r = ic1r << 8 | c1;
+      W(ic1r) = ic1r << 8 | c1;
       word& ic2r = t2[(buf(3) << 8) | c2];
-      ic2r = ic2r << 8 | c1;
+      W(ic2r) = ic2r << 8 | c1;
       const uint ic1 = c1 | t1[c1] << 8;
       const uint ic2 = ((c2 << 8) | c1) | t2[(c2 << 8) | c1] << 16;
       cm.set((ic1 >> 8) & ((1 << 16) - 1));
@@ -85,8 +85,8 @@ struct Model {
       //       + 12 * (buf(5) == 0x67) + (buf(4) == 0x0f) + 2 * (buf(4) == 0x66)
       //       + 3 * (buf(4) == 0x67), buf(3), buf(2) & 0xc7));   
       int c = (c1 >= 'A' && c1 <= 'Z') ? c1 + 'a' - 'A' : c1;
-      if ((c >= 'a' && c <= 'z') || c >= 128) word0 = hash(word0, c);
-      else if (word0) word1 = word0, word0 = 0;
+      if ((c >= 'a' && c <= 'z') || c >= 128) W(word0) = hash(word0, c);
+      else if (word0) W(word1) = word0, W(word0) = 0;
       cm.set(word0);
       cm.set(hash(word0, word1));
     }

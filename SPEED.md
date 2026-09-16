@@ -10,7 +10,10 @@ what can be done about it.
 The short version: **about four fifths of the time is the journal, not the
 model.** Four changes came out of that - 40 % faster by default on `tangelo_w`,
 43 % with the opt-in fifth - and two plausible-looking ideas turned out to be
-worth nothing at all.
+worth nothing at all. Then a change that is really a second implementation:
+letting the model journal its own writes, rather than having `track.pl` do it
+from the assembly, is another 38 % for the same output byte for byte
+(section 3.6).
 
 Contents
 
@@ -99,8 +102,8 @@ compression; §4.3 of ALGORITHM.md has the trade curve.
 
 **Each model step writes ~1.3 KB of state.** That is Tangelo, not the framework:
 22 context slots each advancing a bit-history byte and a `StateMap` entry, five
-mixer contexts each rewriting 80 weights, three APM stages, the match model. 328
-journal cells per step is the direct consequence, and 376 KB of journal traffic
+mixer contexts each rewriting 80 weights, three APM stages, the match model. 358
+journal cells per step is the direct consequence, and 206 KB of journal traffic
 per input byte is the direct consequence of that.
 
 So the cost is not the model's arithmetic. It is the bookkeeping around the
@@ -285,6 +288,49 @@ annotations in §5, an optional promise from the model that the self-check
 verifies - but it is the first place in this design where the model has to tell
 the framework anything at all.
 
+### 3.6 Letting the model journal its own writes (38 %, and a different program)
+
+Everything above is `tangelo_w`, whose journaling comes from `track.pl` rewriting
+the compiler's assembly. `tangelo_s` is the same model, the same walk and the
+same journal, with every write to model state marked in the model's own source
+instead - `W(c0) += c0 + y;` and so on, see `write.inc` and section 5.6 of
+ALGORITHM.md. It is a different program rather than an optimisation of this one,
+but it is by some way the largest number in this document, so it belongs here.
+
+| `tangelo_w` | `tangelo_s` | |
+| ---: | ---: | --- |
+| 5.99 s | **3.73 s** | 64 KB of `book1` |
+| 60.3 s | **37.1 s** | all of `book1` |
+| 6.34 G | **4.05 G** | instructions (4 KB, cachegrind) |
+| 1.75 G | **0.86 G** | data reads |
+| 1.38 G | **0.52 G** | data writes |
+| 26 323 | **21 277** | journal cells per input byte |
+| 206 KB | **166 KB** | journal traffic per input byte |
+| 197 078 | 197 078 | `book1` |
+
+Two things account for it, in roughly a one-to-four split.
+
+**A smaller journal.** The source knows things the assembly cannot say. The rule
+a marked-up model has to keep is only that a location is journaled once before
+its first modification in a step - `UNDO()` walks backwards, so the oldest value
+wins - which lets `Mixer1::update()` journal the input vector, the five contexts,
+their probabilities and each weight row about to be trained as four records and
+five rows, where `track.pl` journals the same state as some ninety separate
+cells. That is section 5's "let the model declare bulk state", and it is worth
+19 % of the cells.
+
+**A cheaper write.** The rest, and the larger part. A `track.pl` store site is
+`push`/`lea`/`call`/`pop` around a stub that has to preserve every register and
+EFLAGS, because nothing in the compiler knows what it does. `W()` is four
+instructions the compiler can see through, schedule, and keep registers across -
+and the data writes tell the story, down 63 % where the cell count is down only
+19 %: most of what disappeared was the stub's own stack traffic.
+
+What it costs is the guarantee. `track.pl` cannot miss a store; a marked-up model
+can, and the failure is the silent kind - the output is a little larger and
+nothing else changes. `-DTRACK_VERIFY` over all of `book1`, and byte-identical
+output from both programs on GCC, Clang and MinGW-w64, is what stands in for it.
+
 ## 4. What did not
 
 **A paired log table.** Every node takes `LOG2(SCALE-p)` and `LOG2(p)` - two
@@ -326,12 +372,14 @@ one wider journaling call covering both. That is a peephole pass over the
 assembly it is already rewriting, and it attacks exactly the quantity that is
 left: the number of calls.
 
-**Let the model declare bulk state (est. 10-15 %, invasive).** Half of each
-step's writes are the mixer rewriting five rows of 80 weights. Journaling that as
-five block copies of 160 bytes, once per `NEST()`, would cost 800 bytes where the
-200 cells that cover them cost 1 600. It needs the model to say "this region is bulk state", which
-breaks the black-box premise the whole design rests on - but as an *optional*
-annotation, checked by `-DTRACK_VERIFY`, it is defensible.
+**Let the model declare bulk state - done, in `tangelo_s` (19 % of the cells).**
+Half of each step's writes are the mixer rewriting five rows of 80 weights, and
+journaling those as block copies costs a fifth of what the individual cells cost.
+It needs the model to say "this region is about to change", which no instrumenter
+working from assembly can infer - so it is not available to `tangelo_w` at all,
+and is one of the two things section 3.6 measures. The nearest equivalent here
+would be an annotation that `track.pl` reads, which is a good deal more machinery
+for the same end.
 
 **Not journaling state that is dead across a step (unsound to infer).** `tx[]`,
 the mixer's input vector, is overwritten from index 0 every step before it is
@@ -347,8 +395,8 @@ constraints available: an order-1 alphabet map (which bytes can follow the
 previous byte) would prune far harder, at 8 KB of header rather than 32 bytes,
 and is worth trying on a long file.
 
-**What cannot be removed.** The model step itself, 1.4 s of the 6.15 s, is the
-floor for this approach: the framework's whole premise is that the model is a
+**What cannot be removed.** The model step itself, 1.4 s of `tangelo_w`'s 6.15 s,
+is the floor for this approach: the framework's whole premise is that the model is a
 black box whose real step must run. The eighth bit is already free - the walk
 reads the pending prediction rather than advancing - and that is worth half the
 tree.
@@ -418,10 +466,29 @@ and a peak of 24 live cells. Its model step is four stores, so it is almost pure
 journal, and it gains most from §3.5: 1.985 s to 1.777 s, and 1.99 G
 instructions to 1.85 G.
 
+`tangelo_s` (section 3.6), same input and same measurements as the right-hand
+column above:
+
+| | `tangelo_w` | `tangelo_s` |
+| --- | ---: | ---: |
+| speculative steps | 73.5 | 73.5 |
+| cells | 26 323 | 21 277 |
+| cells per step | 358.1 | 289.5 |
+| traffic | 206 KB | 166 KB |
+| peak live cells | 2 339 | 2 026 |
+| 1-byte cells | 5.7 % | 9.5 % |
+| 2-byte cells | 18.0 % | 3.2 % |
+| 4-byte cells | 34.2 % | 21.9 % |
+| wide records and their payload | 42.1 % | 65.5 % |
+
+The shift into the wide rows is the mixer: `tangelo_w` journals its weights and
+inputs as thousands of 2-byte cells, `tangelo_s` as a few records per step.
+
 Reproducing any of it:
 
 ```sh
 CXXFLAGS="-O3 -march=native" ./build.sh tangelo_w      # the default build
+CXXFLAGS="-O3 -march=native" ./build.sh tangelo_s      # section 3.6, one compile
 TRACKFLAGS="--repeat=2"      ./build.sh tangelo_w      # journal cost, still correct
 TRACKFLAGS="--inline"        ./build.sh tangelo_w      # §3.4
 CXXFLAGS="-O3 -march=native -DPRUNE_LOG=0x90000" ./build.sh tangelo_w

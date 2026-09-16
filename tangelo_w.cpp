@@ -53,6 +53,11 @@ typedef unsigned long long qword;
  #define PRUNE_LOG 0x80000
 #endif
 
+// W(x), the marker the model's writes are wrapped in. Here it is the identity
+// function: this program's journaling comes from track.pl rewriting the
+// assembly, not from the source. tangelo_s.cpp is the other half of the story.
+#include "write.inc"
+
 #include "tangelo/tangelo.inc"
 
 #include "sh_v1m.inc"

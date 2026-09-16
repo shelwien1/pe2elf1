@@ -3,7 +3,7 @@ rem
 rem build.bat [program...] - build on Windows with MinGW-w64 GCC (or Clang) from
 rem a plain cmd prompt. Needs g++ (or clang++) and perl on PATH, e.g. from
 rem MSYS2 / w64devkit / Strawberry Perl / Git for Windows.
-rem Programs default to "fpaq0mw tangelo_w"; each is built from <program>.cpp.
+rem Programs default to "fpaq0mw tangelo_w tangelo_s"; each is from <program>.cpp.
 rem
 rem   build.bat tangelo_w                   - just one
 rem   set CXX=clang++          & build.bat  - pick the compiler
@@ -13,6 +13,10 @@ rem The three steps per program mirror the original g.bat:
 rem   1. compile the model step (encode_sim) to Intel-syntax assembly,
 rem   2. let track.pl insert a journaling call in front of every store,
 rem   3. build the executable from the main source plus the instrumented assembly.
+rem
+rem A program that journals its own writes from its own source (tangelo_s, which
+rem says so with #define TRACK_SRC - see write.inc) needs none of that: it is one
+rem translation unit and one ordinary compile, with no assembly step and no perl.
 
 setlocal
 cd /d "%~dp0" || (echo build.bat: cannot enter "%~dp0" - run from a local path, not a UNC share & exit /b 1)
@@ -27,7 +31,7 @@ rem compiler synthesising a memset call, whose writes the journal cannot see.
 if "%SIMFLAGS%"=="" set SIMFLAGS=-mno-red-zone -fno-builtin
 
 set progs=%*
-if "%progs%"=="" set progs=fpaq0mw tangelo_w
+if "%progs%"=="" set progs=fpaq0mw tangelo_w tangelo_s
 
 for %%p in (%progs%) do call :build %%p || exit /b 1
 
@@ -37,6 +41,12 @@ exit /b 0
 :build
 set p=%1
 del /q coder-%p%.s coder1-%p%.s %p%.exe 2>nul
+
+findstr /b /c:"#define TRACK_SRC" %p%.cpp >nul 2>&1 && (
+  echo [%p% 1/1] %CXX% %CXXFLAGS% %p%.cpp -o %p%.exe
+  %CXX% %CXXFLAGS% %p%.cpp %LDFLAGS% -o %p%.exe || goto :fail
+  exit /b 0
+)
 
 echo [%p% 1/3] %CXX% %CXXFLAGS% %SIMFLAGS% -S -masm=intel -DSIM_FUNC %p%.cpp -o coder-%p%.s
 %CXX% %CXXFLAGS% %SIMFLAGS% -S -masm=intel -DSIM_FUNC %p%.cpp -o coder-%p%.s || goto :fail

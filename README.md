@@ -1,31 +1,42 @@
 # Bytewise coding of a bitwise model, by journaled speculative execution
 
-Two experimental compressors that code a whole **byte** per arithmetic-coder
+Three experimental compressors that code a whole **byte** per arithmetic-coder
 step, using a model that predicts one **bit** at a time. The 256-symbol
-distribution is obtained by running the compiled model step speculatively down
-the prefix tree and rolling its memory writes back through a journal; the
-journaling calls are injected into the compiler's assembly output at build time.
+distribution is obtained by running the model step speculatively down the prefix
+tree and rolling its memory writes back through a journal.
 
-| Program | Model | `book1` (768 771 bytes) |
-| --- | --- | ---: |
-| `fpaq0mw` | order-0: two counters and a mixer per partial-byte context | 446 555 |
-| `tangelo_w` | Tangelo: a paq/lpaq-class model, ~361 MB of state | 197 078 |
+| Program | Model | Where the journaling comes from | `book1` (768 771 bytes) |
+| --- | --- | --- | ---: |
+| `fpaq0mw` | order-0: two counters and a mixer per partial-byte context | the assembly, rewritten by `track.pl` | 446 555 |
+| `tangelo_w` | Tangelo: a paq/lpaq-class model, ~361 MB of state | the assembly, rewritten by `track.pl` | 197 078 |
+| `tangelo_s` | the same Tangelo model | the model's own source | 197 078 |
 
-Both share every line of the machinery - the walk, the journal, the range coder
-and the driver - and differ only in the model. `ByteModel` (`bytemodel.inc`) is
-where a bitwise model becomes a byte distribution, and it is the same interface
-an optimal parser would want: `Predict()` then either code the byte or read the
-code length of every byte that could have come next.
+All three share every line of the machinery - the walk, the journal, the range
+coder and the driver. `ByteModel` (`bytemodel.inc`) is where a bitwise model
+becomes a byte distribution, and it is the same interface an optimal parser
+would want: `Predict()` then either code the byte or read the code length of
+every byte that could have come next.
+
+`tangelo_w` and `tangelo_s` are the same model journaled two different ways, and
+they produce the same compressed file byte for byte. `track.pl` compiles the
+model step to assembly and inserts a journaling call in front of every store it
+finds; `tangelo_s` instead has every write to model state spelled `W(x) = ...`
+in the model's own source (`write.inc`). The first cannot miss a store and needs
+perl, a second compile of the step and a list of refusals; the second is one
+ordinary compile of one translation unit, is 38 % faster, and can be wrong in a
+way only `-DTRACK_VERIFY` will tell you about. Section 5.6 of
+[ALGORITHM.md](ALGORITHM.md) is the comparison.
 
 [ALGORITHM.md](ALGORITHM.md) describes how it works; [SPEED.md](SPEED.md) is
 where the time goes and what has been done about it.
 
 ## Building
 
-Requirements: an x86-64 C++ compiler that emits GNU assembler syntax (GCC or
-Clang; on Windows MinGW-w64 GCC or Clang, e.g. from MSYS2 or w64devkit) and
-`perl` (on Windows: MSYS2, Strawberry Perl or the one shipped with Git for
-Windows).
+Requirements: a C++ compiler, plus - for the two `track.pl` programs only - an
+x86-64 target whose compiler emits GNU assembler syntax (GCC or Clang; on Windows
+MinGW-w64 GCC or Clang, e.g. from MSYS2 or w64devkit) and `perl` (on Windows:
+MSYS2, Strawberry Perl or the one shipped with Git for Windows). `tangelo_s`
+needs none of that.
 
 Linux (or MSYS2 bash on Windows):
 
@@ -49,7 +60,13 @@ Cross-building the Windows binaries from Linux also works:
 CXX=x86_64-w64-mingw32-g++ EXT=.exe LDFLAGS="-static -s" ./build.sh
 ```
 
-Each program is built in the same three steps as the original `g.bat`:
+`tangelo_s` is one ordinary compile:
+
+```sh
+$CXX $CXXFLAGS tangelo_s.cpp -o tangelo_s
+```
+
+The other two are built in the same three steps as the original `g.bat`:
 
 1. `CXX $CXXFLAGS -mno-red-zone -fno-builtin -S -masm=intel -DSIM_FUNC <prog>.cpp
    -o coder-<prog>.s` - the model step (`encode_sim`) as Intel-syntax assembly.
@@ -78,9 +95,11 @@ fpaq0mw   c input output      compress
 fpaq0mw   d input output      decompress
 tangelo_w c input output
 tangelo_w d input output
+tangelo_s c input output
+tangelo_s d input output
 ```
 
-`tangelo_w` needs about 380 MB of memory.
+Both Tangelo builds need about 380 MB of memory.
 
 ## Testing
 
@@ -91,6 +110,7 @@ file with `timetest` and append the timings and the compressed size to
 ```sh
 ./test.sh fpaq0mw   ../book1     # defaults: fpaq0mw, ../book1 (Calgary corpus)
 ./test.sh tangelo_w ../book1
+./test.sh tangelo_s ../book1
 perl log.pl                      # tabulate log.txt into log1.txt
 ```
 
@@ -100,9 +120,11 @@ in the repository: it is the Calgary corpus file, 768 771 bytes, from
 `0a0fdbaf0589c9713bde9120cbb20199`). The scripts default to `../book1`, where
 the author's log keeps it.
 
-Expected for `book1`: 446 555 bytes from `fpaq0mw` and 197 078 from
-`tangelo_w`. GCC and Clang on Linux and MinGW-w64 GCC produce byte-identical
-compressed output.
+Expected for `book1`: 446 555 bytes from `fpaq0mw` and 197 078 from both
+`tangelo_w` and `tangelo_s`. GCC and Clang on Linux and MinGW-w64 GCC produce
+byte-identical compressed output, and so do the two Tangelo builds as against
+each other - which is the main check that the hand-marked writes in `tangelo_s`
+are complete.
 
 `PRUNE_LOG` (§4.3) trades compression for time: `-DPRUNE_LOG=0x90000` gives up
 0.3 % of `tangelo_w`'s compression for about a quarter of its time. `TRACKFLAGS`
@@ -148,9 +170,11 @@ size nothing is evicted early. And deleting one of the 146 journaling calls from
 
 | | |
 | --- | --- |
-| `main.inc`, `bytemodel.inc`, `track.inc`, `track.pl`, `log2lut.inc`, `sh_v1m.inc` | the shared machinery |
+| `main.inc`, `bytemodel.inc`, `track.inc`, `log2lut.inc`, `sh_v1m.inc` | the shared machinery |
+| `track.pl` | journaling by rewriting the assembly |
+| `write.inc` | journaling from the model's own source (`W(x)`) |
 | `fpaq0mw.cpp`, `model.inc`, `sh_mixer.inc`, `coder.inc` | the small model |
-| `tangelo_w.cpp`, `tangelo/*.inc`, `coder_tangelo.inc` | the Tangelo model |
+| `tangelo_w.cpp`, `tangelo_s.cpp`, `tangelo/*.inc`, `coder_tangelo.inc` | the Tangelo model, both ways |
 | `build.sh`, `build.bat` | build scripts |
 | `test.sh`, `test.bat`, `timetest.cpp` | round-trip / timing test |
 | `log.txt`, `log1.txt`, `log.pl` | experiment log |

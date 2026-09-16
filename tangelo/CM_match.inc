@@ -26,24 +26,24 @@ struct MatchModel {
     int& pos = buf.pos;
 
     if (!bpos) {
-      h = (h * 997 * 8 + buf(1) + 1) & (t_size - 1);
+      W(h) = (h * 997 * 8 + buf(1) + 1) & (t_size - 1);
       if (len) {
-        ++len, ++ptr;
+        ++W(len), ++W(ptr);
       } else {
-        ptr = t[h];
+        W(ptr) = t[h];
         if (ptr && pos - ptr < buf.size()) {
-          while (buf(len + 1) == buf[ptr - len - 1] && len < MAXLEN) ++len;
+          while (buf(len + 1) == buf[ptr - len - 1] && len < MAXLEN) ++W(len);
         }
       }
-      t[h] = pos;
-      result = len;
+      W(t[h]) = pos;
+      W(result) = len;
       scm1.set(pos);
-      if (buf(1) == 0xff || buf(1) == '\r' || buf(1) == '\n') posnl = pos;
+      if (buf(1) == 0xff || buf(1) == '\r' || buf(1) == '\n') W(posnl) = pos;
       scm2.set(min(pos - posnl, 255));
     }
     if (len) {
       if (buf(1) == buf[ptr - 1] && c0 == (buf[ptr] + 256) >> (8 - bpos)) {
-        if (len > MAXLEN) len = MAXLEN;
+        if (len > MAXLEN) W(len) = MAXLEN;
         if (buf[ptr] >> (7 - bpos) & 1) {
           m.add(ilog(len) << 2);
           m.add(min(len, 32) << 6);
@@ -52,7 +52,7 @@ struct MatchModel {
           m.add(-(min(len, 32) << 6));
         }
       } else {
-        len=0;
+        W(len)=0;
         m.add(0);
         m.add(0);
       }

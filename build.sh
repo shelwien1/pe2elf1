@@ -1,7 +1,7 @@
 #!/bin/sh
 #
 # build.sh [program...] - build with GCC or Clang (Linux; also MSYS2/MinGW bash).
-# Programs default to "fpaq0mw tangelo_w"; each is built from <program>.cpp.
+# Programs default to "fpaq0mw tangelo_w tangelo_s"; each is from <program>.cpp.
 #
 #   ./build.sh                                    # both
 #   ./build.sh tangelo_w                          # just one
@@ -13,6 +13,10 @@
 #   1. compile the model step (encode_sim) to Intel-syntax assembly,
 #   2. let track.pl insert a journaling call in front of every store,
 #   3. build the executable from the main source plus the instrumented assembly.
+#
+# A program that journals its own writes from its own source (tangelo_s, which
+# says so with #define TRACK_SRC - see write.inc) needs none of that: it is one
+# translation unit and one ordinary compile, with no assembly step and no perl.
 set -eu
 cd "$(dirname "$0")"
 
@@ -34,11 +38,17 @@ if [ -z "$EXT" ]; then
   case "$($CXX -dumpmachine 2>/dev/null)" in *mingw*|*cygwin*) EXT=.exe;; esac
 fi
 
-progs="${*:-fpaq0mw tangelo_w}"
+progs="${*:-fpaq0mw tangelo_w tangelo_s}"
 
 for p in $progs; do
   exe="$p$EXT"
   rm -f "coder-$p.s" "coder1-$p.s" "$exe"
+
+  if grep -q '^#define TRACK_SRC' "$p.cpp"; then
+    echo "[$p 1/1] $CXX $CXXFLAGS $p.cpp -o $exe"
+    $CXX $CXXFLAGS "$p.cpp" $LDFLAGS -o "$exe"
+    continue
+  fi
 
   echo "[$p 1/3] $CXX $CXXFLAGS $SIMFLAGS -S -masm=intel -DSIM_FUNC $p.cpp -o coder-$p.s"
   $CXX $CXXFLAGS $SIMFLAGS -S -masm=intel -DSIM_FUNC "$p.cpp" -o "coder-$p.s"

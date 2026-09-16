@@ -16,10 +16,10 @@ struct APM {
   int p(int pr = 2048, int cxt = 0, int rate = 7) {
     pr = stretch(pr);
     int g = (y << 16) + (y << rate) - y - y;
-    t[index] += (g - t[index]) >> rate;
-    t[index + 1] += (g - t[index + 1]) >> rate;
+    W(t[index]) += (g - t[index]) >> rate;
+    W(t[index + 1]) += (g - t[index + 1]) >> rate;
     const int w = pr & 127;
-    index = ((pr + 2048) >> 7) + cxt * 33;
+    W(index) = ((pr + 2048) >> 7) + cxt * 33;
     return(t[index] * (128 - w) + t[index + 1] * w) >> 11;
   }
 
