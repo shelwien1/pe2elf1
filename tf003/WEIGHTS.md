@@ -149,6 +149,25 @@ code length by 10⁻⁴–10⁻² bits out of ~2 × 10⁵, which is the noise fl
 fp32 summation over 64 K terms, so it must accumulate each token's delta
 against the baseline and sum those in fp64, or it is ranking rounding error.
 
+**At the real target, `enwik9.wrt` (~5.5 × 10⁸ tokens), the same arithmetic
+gives:**
+
+| | FLOP | one A100 |
+| --- | ---: | ---: |
+| one forward pass over the file (one code length) | 8.3 PFLOP | 80–170 s |
+| one ±1 sweep, 11.7 M variants | 5 × 10⁷ PFLOP | 15–30 GPU-years |
+| one gradient epoch, forward + backward | 25 PFLOP | 4–8 min |
+| a 1 % uniform subsample, per variant / per sweep | | 0.4–0.9 s / 70 days |
+| head-only exact sweep, cached final-norm vectors (211 GB, streamed) | ~10¹⁵ | minutes |
+| for scale: one CPU forward over the file, this machine | | 38 h |
+
+A single code length is a minute of GPU, a sweep is decades, and the 1 %
+subsample - which at this size is a sound proxy for aggregate decisions -
+still leaves a sweep at 70 days. What fits is anything with at most 10⁴–10⁵
+evaluations: the head, its scales, and verification of gradient-proposed
+batches. The file is ~10⁹ bits and a single move is worth 1–100 of them, so
+fp64 accumulation stops being advice and becomes a requirement.
+
 **Cheaper proxies do not rescue it.** A shorter window (4 K tokens) is 16×
 cheaper and 16× more prone to fitting the window: a ±1 int4 step is about a
 seventh of the row's maximum, a coarse move, and choosing 5.87 M of them by
@@ -238,7 +257,10 @@ archive). Which term matters depends entirely on how much data there is:
 | `book1` (768 KB) | ~180 KB | 2.8 MB | 1 : 15 |
 | enwik9-class (1 GB) | ~110 MB | 2.8 MB | 40 : 1 |
 
-Three consequences.
+Three consequences - and note that at the last row the picture inverts: for
+`enwik9.wrt`, 2.8 MB is 2.5 % of the output, a 0.25 % modelling gain is
+~275 KB, and the model's size is bounded by decode time on a CPU (550 M tokens
+at 15 MFLOP each is the 38 hours above), not by the container.
 
 **Below a few MB of input, the container is the whole problem.** No weight
 adjustment that keeps 5.87 M weights at 3.76 bits each is worth anything on
@@ -313,7 +335,17 @@ Ranked by expected gain per unit of work, with what each one needs.
    decides these.
 
 What is deliberately not on the list: a GPU search over the body's weights.
-Everything it could find, (1)–(3) find first and cheaper.
+Everything it could find, (1)–(3) find first and cheaper. And for `enwik9.wrt`
+specifically, the weights were already gradient-trained on that file - by
+upstream's Muon/AdamW and again by zmix's λ\* run - so a search would be
+hunting for what those left behind, which is two named things: the
+quantization loss between the fp32 checkpoint and its int4 rounding (one
+number, measurable on a 1 % sample in seconds if the checkpoint is at hand -
+zmix names theirs, `t1-lambda1-fp32.tch`), and the objective mismatch of a
+model trained on PPMD's prior and its own cross-entropy but deployed on
+Tangelo's through a mixer. Those are (3) and (4). Full online training at
+decode time is out at this scale (9 ms/token is `log.txt`'s own 96-day
+estimate); the adapter-sized `TF_TRAIN=1` update is what remains affordable.
 
 ## 6. Where an OpenCL kernel earns its place
 
