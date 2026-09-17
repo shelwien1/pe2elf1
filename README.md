@@ -177,6 +177,7 @@ size nothing is evicted early. And deleting one of the 146 journaling calls from
 | `tangelo_w.cpp`, `tangelo_s.cpp`, `tangelo/*.inc`, `coder_tangelo.inc` | the Tangelo model, both ways |
 | `tangelo_bm.inc` | the model packaged for a host program with its own coder |
 | `tf003/` | a transformer-based coder with the Tangelo model in place of its PPMD |
+| `tf003/tfwc/` | a converter between the two transformer weight containers, `FX2TFWC2` and `FX2TFWC3` |
 | `build.sh`, `build.bat` | build scripts |
 | `test.sh`, `test.bat`, `timetest.cpp` | round-trip / timing test |
 | `log.txt`, `log1.txt`, `log.pl` | experiment log |

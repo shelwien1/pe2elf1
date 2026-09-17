@@ -21,4 +21,8 @@ tangelo_s.exe
 tf003/coder0
 tf003/coder0-*
 tf003/*.exe
+tf003/tfwc/3to2
+tf003/*.tfwc2
+tf003/*.tfwc3
+!tf003/6m-q4-fp32.tfwc2
 bp1

@@ -73,6 +73,7 @@ transformer's.
 | `coder0.cpp` | includes the above; `ppmd_probs_` renamed `ctx_probs_`, `UpdatePPMD` renamed `UpdateCtx` |
 | `build.sh` | new: the Linux build |
 | `ppmd2.hpp` | unchanged, and still compiled in - `-DUSE_PPMD=1` is a flag, not a fork |
+| [`tfwc/`](tfwc/) | new: a converter between the `FX2TFWC2` weights container this reads and the `FX2TFWC3` one zmix ships, so coder0 can be run on zmix's retrained weights |
 
 The host's side of it is three lines:
 
@@ -85,6 +86,16 @@ ctx_model_.Predict(ctx_probs_);       // P(next byte) into 256 floats
 
 `Update` then `Predict` is the same shape as PPMD's `ppmd_UpdateByte` then
 `ppmd_PrepareByte`, which is why the main loop did not have to change.
+
+## Other weights
+
+`tfwc/` converts between this container (`FX2TFWC2`) and the `FX2TFWC3` one
+[zmix](https://zmix.frostbyrne.io/) v1.0 ships, in both directions and without
+changing a tensor value. coder0 runs on zmix's retrained
+`6m-q4-fp32-t1lambda1` weights with no change at all once they are converted -
+1 802 bytes on `book1000` against 1 807 for the gen-7 blob, and 25 333 against
+25 396 on the 64 KB slice. `tfwc/README.md` has the numbers and how the
+converter was checked against the blobs zmix ships in both containers.
 
 ## Checking it
 
