@@ -10,7 +10,9 @@ And what is actually the best route to a smaller file?
 
 Short version. **The search is feasible as engineering and hopeless as a method
 for the body of the model, by a factor of about two million against a
-gradient.** A gradient pass *is* the evaluation of every single-weight
+gradient.** The largest headroom actually measured (section 7) is the
+quantization itself: the int4 model is 0.78 % behind the fp32 model it was made
+from, and that is a training-side number. A gradient pass *is* the evaluation of every single-weight
 perturbation at once, to first order, and one already exists in this tree in
 fp32 (`TF_TRAIN=3`), measured at 5 % on the same objective. Discreteness is a
 real problem but a solved one: it is the whole subject of post-training
@@ -24,7 +26,9 @@ container against 25 KB of `book1wrt[:64K]`, so "best compression" is a
 question about the container first and the cross-entropy second.
 
 Everything below is measured on this tree's model and hardware unless it says
-otherwise.
+otherwise. Section 7 was added after the rest: it measures what the int4
+quantization actually costs this model, which the earlier sections could only
+guess at, and it moves one recommendation.
 
 Contents
 
@@ -34,6 +38,7 @@ Contents
 4. [What "best compression" means when the weights ship too](#4-what-best-compression-means-when-the-weights-ship-too)
 5. [What to actually do, in order](#5-what-to-actually-do-in-order)
 6. [Where an OpenCL kernel earns its place](#6-where-an-opencl-kernel-earns-its-place)
+7. [Measured: what the quantization costs](#7-measured-what-the-quantization-costs)
 
 ---
 
@@ -214,21 +219,28 @@ so it is a filter, not an answer; but it turns a 6 EFLOP search into a few
 TFLOP of confirmations.
 
 **3.3 Hessian-based rounding: OBQ / GPTQ.** This is the direct answer to "the
-weights are discrete." For one linear layer with inputs X (the calibration
-activations, N × d_in), quantizing the row w to ŵ costs ‖(w − ŵ)X‖², a quadratic
-with Hessian H = XXᵀ - **192 × 192 or 768 × 768 per layer, tiny**. OBQ rounds
-one weight at a time and moves the *unrounded* weights of the row to cancel the
-error, by the closed form
+weights are discrete" *when the rounding is done after training*. For one
+linear layer with inputs X (the calibration activations, N × d_in), quantizing
+the row w to ŵ costs ‖(w − ŵ)X‖², a quadratic with Hessian H = XXᵀ - 192 × 192
+or 768 × 768 per layer, tiny. OBQ rounds one weight at a time and moves the
+*unrounded* weights of the row to cancel the error, by the closed form
 
     δw = −(w_q − round(w_q)) / [H⁻¹]_qq · [H⁻¹]_{:,q}
 
-GPTQ is the same in a column order that lets it run over all rows at once. It
-is the standard for int4 language models and it is what the C++ in this tree
-can already feed: `fp32_model` dequantizes the weights, the forward pass yields
-X for every layer, the quantizer in `weights_write.inc` writes the result. **It
-needs no backward pass at all** - one forward pass over a calibration window,
-a small matrix inverse per tensor, and it makes the rounding decisions with
-second-order information that the ±1 search would have to discover by trial.
+GPTQ is the same in a column order that lets it run over all rows at once, and
+it needs no backward pass: one forward pass for X, a small inverse per tensor.
+
+Where it applies here is narrower than this document first said. Upstream's
+checkpoints are not rounded after training: `pysrc/quantization.py` fake-
+quantizes weights and activations *in the forward pass* with a straight-through
+backward, the row scales are learned parameters, and the shipped blob is that
+model's forward bit for bit (section 7 reproduces it from `6m-q4-fp32.tch`
+with zero mismatches). There is no post-training rounding left to improve. What
+GPTQ does still apply to is the one place in this tree where rounding *is*
+post-training: `SaveWeights` after `TF_TRAIN=3`, which re-rounds fp32 weights
+that were trained unquantized. The QAT gap itself - what the model lost by
+being int4 at all, after its own recovery training - is measured in section 7,
+and its levers are training-side.
 
 **3.4 Learned rounding (AdaRound).** Between the two: each weight gets a
 continuous parameter deciding "round up or down", trained by gradient with a
@@ -311,12 +323,17 @@ Ranked by expected gain per unit of work, with what each one needs.
    coder0 loads as it is. Cost: a day in `fp32_model.inc`; evaluation is the
    same run as (1).
 
-3. **GPTQ the requantization.** Whatever produces fp32 weights - (2), or a
-   PyTorch retrain with the upstream training code as zmix did - round them
-   with the layer Hessians rather than to nearest. One calibration forward
-   pass, a 192² inverse per tensor, `weights_write.inc` to write it. Compare
-   against round-to-nearest with coder0; this is where the discreteness is
-   actually handled.
+3. **Find where the 0.8 % lives.** Section 7 puts the whole cost of int4 at
+   0.66 % and int8 activations at 0.12 %, after quantization-aware training.
+   The fp32 engine now loads plain fp32 matrices, and `tfwc/tch2bin.py`
+   writes them, so a file with *some* tensors fp32 and the rest int4 is a
+   numpy line: quantize one tensor class at a time and measure. Twenty
+   minutes a run here, thirteen classes, and the answer says whether the gap
+   is spread thin (then only better QAT helps - which is what zmix's retrain
+   did, recovering 80 % of it) or concentrated in a few tensors that an
+   engine change could keep at higher precision for a few hundred KB of
+   container. GPTQ belongs only to the requantization after (1), where the
+   rounding really is post-training.
 
 4. **Train against the mixed code length, with the Tangelo prior.** The
    gradient at the transformer's output from `newton.inc`'s math, fed into the
@@ -375,6 +392,53 @@ EFLOP. It is the OpenCL kernel of the original idea, put to the one use where
 it multiplies a gradient instead of replacing one.
 
 For scale: this session's machine has no GPU. The head polish and the
-`TF_TRAIN=3` measurement both run without one; QAT and GPTQ are a day each in
-the C++; the mixed-objective training is the larger piece and the one with the
-most headroom.
+`TF_TRAIN=3` measurement both run without one; QAT in the C++ is a day; the
+mixed-objective training is the larger piece and the one with the most
+headroom.
+
+## 7. Measured: what the quantization costs
+
+Upstream publishes two checkpoints of this model: `models/6m.tch`, the fp32
+model at the end of `train_6m`, before any quantization; and
+`models/6m-q4-fp32.tch`, after the `quantize` and `cooldown` stages, which
+train with fake-quantized weights and activations and learned row scales
+(`pysrc/quantization.py`). `tfwc/tch2bin.py` reads either without torch.
+Applying upstream's quantizer to the second reproduces the shipped
+`6m-q4-fp32.tfwc2` with **0 mismatches** in 5 868 864 int4 weights, 111 scale
+tensors, 119 activation scales and 88 raw tensors, which is the check that the
+reading and the quantizer are right. The first can only be run as fp32; the
+fp32 engine (`TF_FP32=1`) now loads a plain `.weight` matrix where it finds
+one, and `coder0` reports each model's own code length before mixing.
+
+`book1wrt`, 468 594 bytes, through coder0 with the Tangelo prior:
+
+| weights | engine | transformer alone, bits/byte | mixed output |
+| --- | --- | ---: | ---: |
+| `6m.tch`, fp32, before QAT | fp32 | **2.9642** | **166 250** |
+| zmix `t1lambda1`, int4 | int4 | 2.9687 | 167 284 |
+| gen-7 blob, int4 weights, activations unquantized | fp32 | 2.9838 | 167 592 |
+| gen-7 blob, W4A8 - the shipped model | int4 | 2.9874 | 167 692 |
+| `6m-q4-fp32.tch`, the QAT masters run unquantized | fp32 | 3.1668 | 171 707 |
+| the Tangelo prior alone, for reference | | 3.1882 | |
+
+(The int4-weights-in-the-fp32-engine row was run twice, through the `.weight.q`
+path and through the new `.weight` path, and came out byte-identical.)
+
+**The int4 model is 0.78 % behind the fp32 one it was made from**, after its own
+quantization-aware training: 0.66 % for the weights, 0.12 % for the int8
+activations. On a ~110 MB enwik9 output that is ~860 KB - a third of the
+container, and three times the retraining gain measured in `README.md`. It is
+the largest headroom this document has found that does not need a different
+objective, and it is a training-side quantity: zmix's retrain, which is QAT
+with an entropy penalty, lands at 2.9687, having recovered 80 % of it.
+
+**The QAT checkpoint's fp32 weights are not a model.** Run unquantized they
+are 6.8 % worse than the blob they produce. Straight-through training moves the
+latent weights only through the quantizer's view of them, so the "fp32
+checkpoint" of a QAT model is the wrong thing to measure a gap against; the
+pre-QAT model is the right one.
+
+**Activation quantization is nearly free**, at 0.12 %, so a higher-precision
+activation path would not be worth its decode-time cost. The weights are where
+the 0.66 % is, and which of the 111 matrices carry it is the next measurement
+(section 5, item 3).

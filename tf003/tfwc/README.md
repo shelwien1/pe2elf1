@@ -76,6 +76,24 @@ The converted v2 files are *smaller* than the upstream v2 blob even though v2 is
 the fatter container, because their 88 raw f32 tensors have 16 zero bits each
 after the bf16 rounding and the plane models eat that for free.
 
+## `tch2bin.py` — a checkpoint as a weights file
+
+```
+python3 tch2bin.py <ckpt.tch> <out.bin>            quantized, like the shipped blobs
+python3 tch2bin.py <ckpt.tch> <out.bin> --fp32     the 111 matrices left as fp32
+```
+
+Reads upstream's PyTorch checkpoints (a `torch.save` zip) with no torch, only
+numpy, and writes the uncompressed `FX2TFW01` container every loader in `../tf/`
+accepts. Quantized output applies upstream's own quantizer with the checkpoint's
+learned row scales; from `models/6m-q4-fp32.tch` in
+[fx2-cmix-transformer-v1](https://github.com/astOwOlfo/fx2-cmix-transformer-v1)
+it reproduces `6m-q4-fp32.tfwc2` with 0 mismatches in every tensor. `--fp32` is
+for a checkpoint from before quantization-aware training (`models/6m.tch` has
+no scales), and needs the `TF_FP32=1` engine, whose loader takes a plain
+`.weight` where it finds one. `../WEIGHTS.md` section 7 is what it was built to
+measure.
+
 ## Getting the weights
 
 They are not in this repository; both are GPL-3 assets of other projects.

@@ -370,6 +370,18 @@ struct ModelImpl {
 // there is no activation quantizer any more.
 void ModelImpl::dequant(const WeightsFile& wf, const std::string& prefix,
                         int d_out, int d_in, Lin* out) {
+  // A checkpoint that was never quantized stores the matrix as plain fp32
+  // under ".weight" instead of ".weight.q" + ".weight.scale"; take it as it
+  // is. (tfwc/README.md: how such a file is made from an upstream .tch.)
+  if (wf.has(prefix + ".weight")) {
+    const WTensor& w = wf.get(prefix + ".weight", DT_F32,
+                              {uint32_t(d_out), uint32_t(d_in)});
+    out->d_out = d_out;
+    out->d_in = d_in;
+    out->w = take(size_t(d_out) * d_in);
+    std::memcpy(out->w, w.f32(), sizeof(float) * size_t(d_out) * d_in);
+    return;
+  }
   const WTensor& wq = wf.get(prefix + ".weight.q", DT_I8,
                              {uint32_t(d_out), uint32_t(d_in)});
   const WTensor& ws =
@@ -439,7 +451,15 @@ void ModelImpl::load(const char* path, size_t rope_rows, uint64_t seed) {
   // 5,897,145 floats of parameters; round up
   arena.assign(size_t(6) << 20, 0.0f);
 
-  {  // normed token embedding rows
+  if (wf.has("embedding.weight")) {  // plain fp32 embedding, see dequant()
+    const WTensor& ew = wf.get("embedding.weight", DT_F32, {V, D});
+    tok_table = take(size_t(V) * D);
+    for (int c = 0; c < V; c++) {
+      float* row = tok_table + size_t(c) * D;
+      std::memcpy(row, ew.f32() + size_t(c) * D, sizeof(float) * D);
+      rms_norm_vec(row, row, D);
+    }
+  } else {  // normed token embedding rows
     const WTensor& eq = wf.get("embedding.weight.q", DT_I8, {V, D});
     const WTensor& es = wf.get("embedding.weight.scale", DT_BF16, {V});
     tok_table = take(size_t(V) * D);

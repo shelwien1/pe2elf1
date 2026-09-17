@@ -73,7 +73,9 @@ transformer's.
 | `coder0.cpp` | includes the above; `ppmd_probs_` renamed `ctx_probs_`, `UpdatePPMD` renamed `UpdateCtx` |
 | `build.sh` | new: the Linux build |
 | `ppmd2.hpp` | unchanged, and still compiled in - `-DUSE_PPMD=1` is a flag, not a fork |
-| [`tfwc/`](tfwc/) | new: a converter between the `FX2TFWC2` weights container this reads and the `FX2TFWC3` one zmix ships, so coder0 can be run on zmix's retrained weights |
+| [`tfwc/`](tfwc/) | new: `3to2`, a converter between the `FX2TFWC2` container this reads and the `FX2TFWC3` one zmix ships; `tch2bin.py`, upstream's PyTorch checkpoints as weight files, quantized or fp32 |
+| `tf/fp32_model.inc` | the fp32 engine loads a plain fp32 `.weight` matrix where the file has one instead of `.weight.q` + `.weight.scale` (`tf/PORTING.md`, change 8) |
+| `coder0.cpp` | reports each model's own code length before mixing, `coder0: alone, transformer … context model …`, on stderr at the end |
 
 The host's side of it is three lines:
 
@@ -99,7 +101,9 @@ converter was checked against the blobs zmix ships in both containers.
 
 ## Could the weights themselves be tuned for compression?
 
-[WEIGHTS.md](WEIGHTS.md) works through it with this model's numbers: what a
+[WEIGHTS.md](WEIGHTS.md) works through it with this model's numbers, and
+measures the one headroom that turned out to be large - the int4 model is
+0.78 % behind the fp32 model it was quantized from (section 7). It covers what a
 search over ±1 weight moves would cost on a GPU and why a gradient is two
 million times cheaper for the same information, how quantized weights are
 trained and rounded in practice (QAT, GPTQ), the fact that the container is

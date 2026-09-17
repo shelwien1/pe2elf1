@@ -226,6 +226,11 @@ int main(int argc, char** argv) {
 
   uint history = 0;
 
+  // The two models' own code lengths, before mixing: what each would have
+  // cost on its own, in bits per byte. The mixed result is what gets written,
+  // but this is the number a change to one model shows up in undamped.
+  double tf_bits = 0.0, ctx_bits = 0.0;
+
   Progress prog;
   prog.Init(f_len);
 
@@ -278,6 +283,9 @@ int main(int argc, char** argv) {
     uint bit = (c>' ');
     history = (history<<1)|bit;
 
+    tf_bits  -= log2(M.tf_probs_[c]>1e-30f ? M.tf_probs_[c] : 1e-30f);
+    ctx_bits -= log2(M.ctx_probs_[c]>1e-30f ? M.ctx_probs_[c] : 1e-30f);
+
     M.UpdateCtx(c);
     M.UpdateTransformer(c);
     mixer[ctx].Update(c);
@@ -286,6 +294,9 @@ int main(int argc, char** argv) {
   if( f_DEC==0 )
     rc.FinishEncode();
   prog.Done(f_len);
+  if( f_len )
+    fprintf(stderr, "coder0: alone, transformer %.4f bits/byte, context model %.4f bits/byte\n",
+            tf_bits/f_len, ctx_bits/f_len);
   fclose(g);
   fclose(f);
 

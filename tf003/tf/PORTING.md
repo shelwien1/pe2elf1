@@ -69,6 +69,15 @@ Only seven changes were made, all mechanical:
 No numerical change: with the cap left at 0 the engine is bit-identical to the
 original.
 
+8. **The fp32 engine loads unquantized matrices** (`fp32_model.inc`,
+   `ModelImpl::dequant` and the embedding block of `load`). Where the file has
+   a plain `DT_F32` `<prefix>.weight` it is copied as it is; otherwise the
+   original `.weight.q` × `.weight.scale` dequantization runs unchanged. This
+   is how a checkpoint from before quantization-aware training
+   (`tfwc/tch2bin.py --fp32`) is run at all, and it is what `WEIGHTS.md`
+   section 7 measures with. A file with `.weight.q` loads exactly as before,
+   byte-identical output.
+
 ## weights_write.inc
 
 Also not from the submission: the encoder for the FX2TFWC2 format, the mirror
