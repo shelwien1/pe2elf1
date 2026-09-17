@@ -39,6 +39,7 @@ Contents
 5. [What to actually do, in order](#5-what-to-actually-do-in-order)
 6. [Where an OpenCL kernel earns its place](#6-where-an-opencl-kernel-earns-its-place)
 7. [Measured: what the quantization costs](#7-measured-what-the-quantization-costs)
+8. [A direct optimizer over the int4 weights](#8-a-direct-optimizer-over-the-int4-weights)
 
 ---
 
@@ -442,3 +443,73 @@ pre-QAT model is the right one.
 activation path would not be worth its decode-time cost. The weights are where
 the 0.66 % is, and which of the 111 matrices carry it is the next measurement
 (section 5, item 3).
+
+## 8. A direct optimizer over the int4 weights
+
+Two facts from practice reopen the search, on narrower terms than section 2
+closed it. Online training (`TF_TRAIN=3`) followed by saving the weights does
+not improve the next run: it optimizes the *adaptive* code length and hands
+back the weights from the end of the file, which is why a per-article training
+protocol was needed upstream, and nobody knows how far that protocol is from
+what this exact model could do. A search over ±1 int4 moves scored by the
+actual compressed size optimizes exactly the static objective, starting from
+the trained weights, so whatever it finds is a lower bound on the headroom that
+is really there. The question is then not whether to search but how to make a
+screen of single moves into an optimization step that moves many weights.
+
+**The screen is a gradient.** Evaluating +1 and −1 for a weight gives ΔL₊ and
+ΔL₋: a finite-difference slope g = (ΔL₊ − ΔL₋)/2 on that coordinate and a
+curvature h = ΔL₊ + ΔL₋, so each screened weight is known to sit at a grid
+optimum (both positive), to want one step, or to be worth testing at two.
+What a screen lacks is what gradient descent has: a rule for combining
+coordinates, a step size, and a check. All three transplant to the grid.
+
+**The step.**
+
+1. *Predict.* The surrogate is additive: ΔL̂(S) = Σᵢ ΔLᵢ over the moves in S.
+   Build S greedily from the best ΔLᵢ < 0, **at most one move per matrix
+   row** - two changes to one output neuron share a nonlinearity and interact
+   at first order; moves in different rows or layers interact only through
+   downstream layers, at second order - up to a radius K.
+2. *Verify.* One evaluation of the whole set: ρ = ΔL(S)/ΔL̂(S), the
+   trust-region ratio. ρ ≥ 0.75: accept, double K. ρ < 0.25: reject, halve K,
+   retry with the better half - one evaluation, not a bisection. Between:
+   accept, keep K.
+3. *Refresh lazily.* Accepting S changes other candidates' ΔLᵢ, but
+   materially only in the same rows and nearby layers. Keep a pool of
+   candidates with cached ΔLᵢ, re-screen the neighbourhood of what was
+   accepted, and let the rest age. The pool persists across rounds, the
+   radius adapts, and the screening cost is paid mostly once.
+
+That is coordinate descent with the step size and the line search a
+single-move screen lacks: N screens and one or two verifications per round,
+for up to K accepted moves, rather than N screens per move.
+
+**Choosing what to screen** is the whole cost, so candidates are priced by
+where they sit and taken in order of leverage per evaluation:
+
+| candidates | count | cost of one screen | why first |
+| --- | ---: | --- | --- |
+| the unembedding, ±1 | 78 720 | O(tokens) from one cached pass | exact; repeated passes converge with no trust region, the interactions are computable (section 6) |
+| the row scales, ±1 bf16 ulp | 52 166 | one forward from that layer on | one move rescales a whole row of 192–768 weights coherently |
+| near-boundary weights, by \|frac(w/s) − ½\| | as many as time allows | one forward from that layer on | the QAT checkpoint says which roundings were close calls; those are where a ±1 is most likely to help, and it costs nothing to know |
+| late layers before early | | 1/12 of the network at layer 11, all of it at layer 0 | screening cost differs 12× across the model, so go back to front |
+
+Two rules from section 2 carry over unchanged. Screen on a 1 % uniform sample
+(0.5 s per evaluation on an A100 in the layer-major layout), but verify every
+accepted set on a larger one before it is kept, so the sample is not what is
+being fitted. And accumulate each token's delta against the baseline in fp64;
+a single move is below fp32 summation noise.
+
+**What a gradient is still for.** Not training - that is the point above - but
+screening: a backward pass is the first-order ΔLᵢ of every weight at once, and
+the same direct verification decides. The algorithm does not need it, and the
+near-boundary prior does most of its job for free; it is an accelerator,
+available if the pool runs dry.
+
+**Expectation.** Unknown until the first round, and that is the first thing
+to measure: the accepted moves per round and the bytes each is worth on the
+verification sample. Section 7 puts the distance to the fp32 model at 0.78 %,
+of which a QAT retrain recovered 80 %; the search competes for what is left of
+that and for whatever the retrain's objective missed, from a starting point
+that can only improve.
