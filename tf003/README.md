@@ -97,6 +97,15 @@ changing a tensor value. coder0 runs on zmix's retrained
 25 396 on the 64 KB slice. `tfwc/README.md` has the numbers and how the
 converter was checked against the blobs zmix ships in both containers.
 
+## Could the weights themselves be tuned for compression?
+
+[WEIGHTS.md](WEIGHTS.md) works through it with this model's numbers: what a
+search over ±1 weight moves would cost on a GPU and why a gradient is two
+million times cheaper for the same information, how quantized weights are
+trained and rounded in practice (QAT, GPTQ), the fact that the container is
+110× the compressed data at 64 KB, and the one place - the unembedding - where
+an exact code-length search is the right tool and needs no GPU at all.
+
 ## Checking it
 
 A model that marks its own writes can miss one, and the failure is silent -
