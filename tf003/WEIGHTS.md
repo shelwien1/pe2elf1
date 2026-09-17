@@ -123,12 +123,31 @@ position. Nothing after L is shareable. Averaged over the layers, a variant
 recomputes half the network: ~0.5 TFLOP per variant on a 64 K window.
 
 **One sweep is 6 EFLOP.** 5.87 M weights, two directions each: 11.7 M variants
-× 0.5 TFLOP. A GPU quoted at 20 TFLOPS fp32 would need 3.4 days at 100 %
-utilization, and the model is a recurrence - each variant is a sequential
-64 K-step scan of small ops, so utilization comes only from breadth, i.e. from
-thousands of variants resident at 5 MB each. A realistic 5 TFLOPS makes it two
-weeks. And a sweep is one coordinate-descent pass; the fp32 gradient result
-above took thousands of steps.
+× 0.5 TFLOP. What that costs on an A100 depends on the layout more than on the
+chip. Token-major - thousands of variants stepping through the tokens together
+- touches every variant's 442 KB of KDA state on every token, and at 2 TB/s
+that is ~35 full-window evaluations per second with the tensor cores idle.
+Layer-major and chunked, the layout training kernels use, keeps each (variant,
+layer, head) state on-chip and turns the matmuls across variants into one GEMM
+with M = variants × tokens; the weight matrix is shared even in the perturbed
+layer, since a ±1 move is a rank-1 correction on top of it. At the 50–100
+TFLOPS such an implementation gets from bf16 tensor cores:
+
+| window | per variant | evaluations / s | one ±1 sweep |
+| --- | ---: | ---: | ---: |
+| 64 K tokens | ~0.55 TFLOP | 100–200 | 16–32 h |
+| 16 K | ~0.14 TFLOP | 400–800 | 4–8 h |
+| 4 K (`book1000`) | ~34 GFLOP | 1 500–3 000 | ~1 h |
+
+About 10⁴ variants can be resident at once (an 8 K-token chunk of residual
+stream is 3 MB per variant per layer, double-buffered), so residency is not the
+limit. The sweep is: it is one coordinate-descent pass, whose first-order
+content is a backward pass over the same window - 2 ms at 4 K tokens, 30 ms at
+64 K - and the fp32 gradient result above took thousands of such steps. One
+more thing the kernel has to get right: a single move changes the window's
+code length by 10⁻⁴–10⁻² bits out of ~2 × 10⁵, which is the noise floor of
+fp32 summation over 64 K terms, so it must accumulate each token's delta
+against the baseline and sum those in fp64, or it is ranking rounding error.
 
 **Cheaper proxies do not rescue it.** A shorter window (4 K tokens) is 16×
 cheaper and 16× more prone to fitting the window: a ±1 int4 step is about a
@@ -137,7 +156,7 @@ their effect on 4 K tokens is memorizing those tokens. The evaluation has to be
 on data at the scale of what will be compressed.
 
 **Against the gradient.** One forward+backward pass over the same window is
-3 TFLOP - well under a second on that GPU, under a minute on this CPU - and
+3 TFLOP - tens of milliseconds on that GPU, under a minute on this CPU - and
 returns ∂L/∂w for all 5.87 M weights at once. That is the first-order value of
 every one of the 11.7 M variants, from one pass: **the gradient is the batched
 perturbation experiment, done analytically.** The ratio is 6 EFLOP to 3 TFLOP,
