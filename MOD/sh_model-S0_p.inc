@@ -8,7 +8,7 @@ static uint S0_MakeCx( uint c2, uint c1, uint cxt ) {
 
   Cx = 0;
   Cx = (Cx<<8) + (((c2)&255)); // 11111111
-  Cx = (Cx<<8) + (((c1)&255)); // 11111111
+  Cx = (Cx<<5) + (((c1)&31)); // 00011111
   Cx = Cx*(256) + (cxt);
   return uint(Cx);
 }
@@ -16,6 +16,6 @@ static uint S0_MakeCx3( uint c3 ) {
   int Cx3;
 
   Cx3 = 0;
-  Cx3 = (Cx3<<5) + (((c3)&31)); // 00011111
+  Cx3 = (Cx3<<6) + (((((c3)>>6)&1)<<5) + ((c3)&31)); // 01011111
   return uint(Cx3);
 }
