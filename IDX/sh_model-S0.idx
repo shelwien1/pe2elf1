@@ -41,7 +41,11 @@ Number T0,     1,0!0000100000000   # initial mass n0+n1 of a fresh cell, /256
 Number W,      1,0!111001100110011   # weight of the SSE output in the final p, /32768
 Number ILOG,   1,0!1   # 1: interpolate the two cells in the stretch domain
 Number BLOG,   1,0!1   # 1: blend SSE output with p_in in the stretch domain
-Number UPD,    1,0!1   # 0: update the nearer cell only; 1: update both
+Number UPD,    1,0!10   # 0: nearer cell only; 1: both cells; 2: proportional (1-wt, wt)
+Number UPMIN,  1,0!00000000   # floor of the proportional weights, /256 (256 = same as UPD 1)
+Number QLIN,   1,0!0   # 0: buckets uniform in stretch(p); 1: uniform in p
+Number HW,     1,0!00  # history bits per row selecting one of 2^HW sub-rows (0 = off)
+Number HMODE,  1,0!0   # history holds: 0 the row's recent bits; 1 recent SSE successes
 
 Const 0
 

@@ -8,13 +8,19 @@
 // the order-1 model's cells, with its own parameter bundle (CP_S0).
 //
 //   Predict(cx, p):  s  = clip(stretch(p), +-LIM)
-//                    x  = (s+LIM) * (NB-1)/(2 LIM);  j = floor(x);  wt = x-j
+//                    x  = (s+LIM) * (NB-1)/(2 LIM)   (QLIN: x = p*(NB-1))
+//                    j = floor(x);  wt = x-j;  sub-row from the row's history
 //                    p_sse = lerp( c[j].p, c[j+1].p, wt )   (prob. or stretch)
 //                    p_out = p + (p_sse - p) * W             (prob. or stretch)
-//   Update(bit):     C_Update(bit) on both cells, or on the nearer one.
+//   Update(bit):     C_Update(bit, g): UPD 0 nearer cell, 1 both (g=1),
+//                    2 proportional (g = 1-wt, wt, floored at UPMIN);
+//                    then the row history shifts in the bit (HMODE 0) or
+//                    whether the SSE gave the bit p > 0.5 (HMODE 1).
 //
-// Rows beyond 1<<HBITS (or the SSE_MAXCELLS_LOG cap) are hashed.  Every
-// knob comes from the bundle (CP::NB, CP::LIM, ...; config.hpp with CP_SSE).
+// A row has 2^HW sub-rows selected by its own HW-bit history (the "width"
+// of sh_SSE1.inc).  Rows beyond 1<<HBITS (or the SSE_MAXCELLS_LOG cap) are
+// hashed.  Every knob comes from the bundle (CP::NB, CP::LIM, ...;
+// config.hpp with CP_SSE).
 //
 // Two versions, selected by USE_NEW from the generated IDX headers:
 //   USE_NEW=0 (shipping) SSE_Ctr<CP, CP::NB>: NB is a plain template
@@ -42,16 +48,22 @@ template<class CP, int NB> struct SSE_Ctr {
   typedef Counter<CP> Cell;
   static_assert( NB>=2 && NB<=SSE_NB_MAX, "SSE bucket count out of range" );
 
-  Cell* t;        // ncx rows of NB cells
+  Cell* t;        // ncx rows x (1<<hw) sub-rows x NB cells
+  byte* hist;     // per-row history (hw bits used)
   uint  ncx;      // rows allocated
   qword vol;      // context volume asked for; rows are hashed when vol > ncx
+  int   hw;       // history bits (clamped CP::HW)
   float lim;      // stretch clip (clamped CP::LIM)
   float qscale;   // (NB-1) / (2*lim)
   float w;        // weight of p_sse in the output (clamped CP::W)
+  float upmin;    // floor of the proportional update weights
+  int   upd;      // clamped CP::UPD
 
   // Per-query state, valid between Predict() and Update()
   Cell* c;
   float wt;
+  float ps;       // SSE output before blending
+  uint  row;
 
   static float stf( float p ) {
     p = clamp( p, 1.0f/65536, 1.0f-1.0f/65536 );
@@ -63,16 +75,22 @@ template<class CP, int NB> struct SSE_Ctr {
   void Init( qword volume ) {
     vol   = volume;
     int hbits = iclamp( CP::HBITS, 8, 30 );
+    hw    = iclamp( CP::HW, 0, 6 );
     lim   = clamp( CP::LIM, 0.25f, 16.0f );
     qscale = float(NB-1) / (2.0f*lim);
     w     = clamp( CP::W, 0.0f, 1.0f );
+    upmin = clamp( CP::UPMIN, 0.0f, 1.0f );
+    upd   = iclamp( CP::UPD, 0, 2 );
 
     ncx = uint( vol < (qword(1)<<hbits) ? vol : (qword(1)<<hbits) );
     qword maxcells = qword(1)<<SSE_MAXCELLS_LOG;
-    if( qword(ncx)*NB > maxcells ) ncx = uint(maxcells/NB);
+    qword percx = qword(NB)<<hw;
+    if( qword(ncx)*percx > maxcells ) ncx = uint(maxcells/percx);
     if( ncx<1 ) ncx = 1;
 
-    t = new Cell[ qword(ncx)*NB ];
+    t = new Cell[ qword(ncx)*percx ];
+    hist = new byte[ ncx ];
+    memset( hist, 0, ncx );
 
     // Identity init: column j of every row starts at its bucket's own
     // probability sq(s_j), inverted through the cell's output map
@@ -81,17 +99,17 @@ template<class CP, int NB> struct SSE_Ctr {
     float T0 = clamp( CP::T0, 1.0f/256, 4096.0f );
     float a[NB], b[NB];
     for( int j=0; j<NB; j++ ) {
-      float s_j = -lim + float(j)*(2.0f*lim/float(NB-1));
+      float s_j = CP::QLIN ? stf( float(j)/float(NB-1) ) : -lim + float(j)*(2.0f*lim/float(NB-1));
       float pm  = sqf( s_j / CP::K );
       float q0  = (pm - CP::mwP0*CP::M) / (1.0f - CP::M);
       q0 = clamp( q0, 1.0f/4096, 1.0f-1.0f/4096 );
       a[j] = q0*T0; b[j] = (1.0f-q0)*T0;
     }
     // row-major pass: the table is far bigger than any cache
-    for( uint r=0; r<ncx; r++ ) for( int j=0; j<NB; j++ ) t[ qword(r)*NB + j ].InitN( a[j], b[j] );
+    for( qword r=0; r<(qword(ncx)<<hw); r++ ) for( int j=0; j<NB; j++ ) t[ r*NB + j ].InitN( a[j], b[j] );
   }
 
-  void Quit() { delete[] t; t=0; }
+  void Quit() { delete[] t; t=0; delete[] hist; hist=0; }
 
   uint Row( qword cx ) const {
     if( vol<=ncx ) return uint(cx);
@@ -103,20 +121,31 @@ template<class CP, int NB> struct SSE_Ctr {
   float Predict( qword cx, float p ) {
     float s0 = stf(p);
     float s  = clamp( s0, -lim, lim );
-    float x  = (s + lim) * qscale;
+    float x  = CP::QLIN ? p * float(NB-1) : (s + lim) * qscale;
     int   j  = int(x); if( j > NB-2 ) j = NB-2;
     wt = x - float(j);
-    c  = t + qword(Row(cx))*NB + j;
+    row = Row(cx);
+    uint sub = (row << hw) + (hist[row] & ((1u<<hw)-1));
+    c  = t + qword(sub)*NB + j;
     float p0 = c[0].PredictF();
     float p1 = c[1].PredictF();
-    float ps = CP::ILOG ? sqf( stf(p0) + wt*(stf(p1)-stf(p0)) ) : p0 + wt*(p1-p0);
+    ps = CP::ILOG ? sqf( stf(p0) + wt*(stf(p1)-stf(p0)) ) : p0 + wt*(p1-p0);
     float pf = CP::BLOG ? sqf( s0 + (stf(ps)-s0)*w ) : p + (ps-p)*w;
     return pf;
   }
 
   void Update( int bit ) {
-    if( CP::UPD ) { c[0].C_Update(bit); c[1].C_Update(bit); }
-    else          { (wt<0.5f ? c[0] : c[1]).C_Update(bit); }
+    if( upd==1 )      { c[0].C_Update(bit); c[1].C_Update(bit); }
+    else if( upd==2 ) {
+      float g1 = wt<upmin ? upmin : wt;
+      float g0 = 1.0f-wt<upmin ? upmin : 1.0f-wt;
+      c[0].C_Update(bit, g0); c[1].C_Update(bit, g1);
+    }
+    else              { (wt<0.5f ? c[0] : c[1]).C_Update(bit); }
+    if( hw ) {
+      int h = CP::HMODE ? ((ps>=0.5f) == (bit==0)) : bit;
+      hist[row] = byte((hist[row]<<1) | h);
+    }
   }
 };
 

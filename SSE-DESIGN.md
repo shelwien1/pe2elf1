@@ -171,15 +171,20 @@ confident instead of pulling them linearly toward `p_in`.
 ### 3.4 Update
 
 ```
-c[j].C_Update(bit);  c[j+1].C_Update(bit);      (UPD=1)
+UPD=1:  c[j].C_Update(bit);          c[j+1].C_Update(bit);
+UPD=2:  c[j].C_Update(bit, 1-wt);    c[j+1].C_Update(bit, wt);     (each floored at UPMIN)
+UPD=0:  (wt<0.5 ? c[j] : c[j+1]).C_Update(bit);
 ```
 
-Both neighbours are trained on the bit as if each had predicted alone.  This
-replaces `sh_SSE1.inc`'s explicit residual split: every cell already runs a
-Newton step on its own loss, so the interpolation weight does not enter the
-update at all.  Updating only the nearer cell (`UPD=0`) is available and
-measured clearly worse (§6.5): with few buckets each cell must learn from
-every event that lands near it.
+`Counter::C_Update(bit, g)` takes the weight of the observation: the loss
+gradient is scaled by `g`, and in the count recursion every `wr` becomes
+`wr·g` and every injected count `g`, so the RTRL traces remain the exact
+derivatives of the weighted recursion (`g=1` is bit-identical to the plain
+update).  `UPD=2` is therefore the interpolated update of `sh_SSE1.inc` —
+the event is split between the two cells in proportion to their share of
+the prediction — without the explicit residual arithmetic: each cell runs
+its own Newton step on a fractional event.  It measured best (§6.6);
+updating both cells fully is second, the nearer cell alone clearly worst.
 
 ### 3.5 Initialization
 
@@ -228,7 +233,9 @@ Index Cx                      # row context, part 1 (int volume, <= 24 bits)
 Index Cx3                     # row context, part 2
  c3: c3, &00011111            #   bits of the third-last byte
 Number HBITS, NB, LIM         # rows limit, buckets, stretch clip
-Number T0, W, ILOG, BLOG, UPD # init mass, blend weight/domain, interpolation domain, update mode
+Number T0, W, ILOG, BLOG      # init mass, blend weight/domain, interpolation domain
+Number UPD, UPMIN, QLIN       # update rule (nearer / both / proportional + floor), input domain
+Number HW, HMODE              # per-row history sub-rows: width, bits or successes
 Number P0 … mwXhi             # the cell counter constants, same meaning as C0_*
 ```
 
@@ -240,7 +247,7 @@ Number P0 … mwXhi             # the cell counter constants, same meaning as C0
   (`./gc.sh`) and to patchable `!MAP!` objects in the tuning build
   (`./gc.sh tune`); `config.hpp` (with `CP_SSE`) derives the `CP_S0`
   constants — counter floats and the SSE knobs `NB`, `HBITS`, `LIM`, `T0`,
-  `W`, `ILOG`, `BLOG`, `UPD` — from either.
+  `W`, `ILOG`, `BLOG`, `UPD`, `UPMIN`, `QLIN`, `HW`, `HMODE` — from either.
 * **Clamps at the point of use.**  `SSE_Ctr::Init()` clamps `nb` to
   `[2,64]`, `HBITS` to `[8,30]`, `LIM` to `[0.25,16]`, `T0`, `W`, and caps the
   cells at `2^SSE_MAXCELLS_LOG`, so any bit pattern the optimizer visits runs
@@ -406,10 +413,73 @@ Same base as 6.4 (576529):
 | update nearer cell only (`UPD = 0`) | 587430 | both cells must learn |
 
 These seeds — 8 buckets, full `c2`, `c3 = 00011111`, `W = 0.9` stretch,
-`ILOG = 1`, `T0 = 1`, `wr = 0.2`, `wr1 = +0.025` — are the values in
-`IDX/sh_model-S0.idx` before the optimizer run, at **543866**.
+`ILOG = 1`, `T0 = 1`, `wr = 0.2`, `wr1 = +0.025` — gave **543866**; with
+the proportional update of §6.6 the values in `IDX/sh_model-S0.idx` before
+the optimizer run stand at **542195**.
 
-### 6.6 Tuned result
+### 6.6 Update rule, input domain, internal width
+
+Base: the seeds of §6.5 (543866; rows `c3[4:0],c2,c1,cxt`).
+
+**Interpolated (proportional) update** — `UPD=2`, each cell gets the event
+with its interpolation weight, floored at `UPMIN`:
+
+| update | book1 | wcc386 | total |
+|---|---|---|---|
+| both cells, `g=1` (`UPD=1`) | 248078 | 295788 | 543866 |
+| proportional, floor 0 | 248282 | 293913 | **542195** |
+| proportional, floor 0.25 | 248180 | 294026 | 542206 |
+| proportional, floor 0.5 | 248051 | 294433 | 542484 |
+| proportional, floor 0.75 | 247934 | 295040 | 542974 |
+| nearer cell only (`UPD=0`, §6.5 base) | | | +11K |
+
+The x86 file gains ~1.9K from not training a cell on events that mostly
+belong to its neighbour; text prefers slightly heavier updates (the floor
+trades one against the other).  With `c3` off the picture is the same
+(567388 → 566041).  Proportional with floor 0 is now the seed.
+
+**Input domain** — `QLIN=1` places the buckets uniformly in probability
+instead of in `stretch(p)`:
+
+| quantizer | buckets | book1 | wcc386 | total |
+|---|---|---|---|---|
+| stretch, `LIM=8` | 8 | 248078 | 295788 | 543866 |
+| linear | 8 | 248860 | 295956 | 544816 |
+| linear | 12 | 250901 | 299099 | 550000 |
+| linear | 16 | 252916 | 301306 | 554222 |
+
+Linear buckets waste resolution where the coding cost is (near 0 and 1);
+adding buckets to compensate costs rows under the cell cap and loses more.
+The stretch axis stays.
+
+**Internal width** — `HW` history bits per row select one of `2^HW`
+sub-rows, `HMODE=0` the row's recent bits (`sh_SSE1.inc`'s `ssebits`),
+`HMODE=1` its recent SSE successes (the SSE gave the occurring bit
+`p > 0.5`):
+
+| rows | `HW` | history | book1 | wcc386 | total |
+|---|---|---|---|---|---|
+| `c3,c2,c1,cxt` | 0 | | 248078 | 295788 | 543866 |
+| | 1 | bits | 253095 | 302129 | 555224 |
+| | 2 | bits | 258592 | 308491 | 567083 |
+| | 1 | successes | 254258 | 302927 | 557185 |
+| | 2 | successes | 260870 | 308971 | 569841 |
+| `c2,c1,cxt` | 0 | | 280297 | 287091 | 567388 |
+| | 1 | bits | 282113 | 291287 | 573400 |
+| | 2 | bits | 284511 | 296205 | 580716 |
+| | 1 | successes | 282651 | 293486 | 576137 |
+| | 2 | successes | 285513 | 298745 | 584258 |
+
+Both flavours lose, with or without `c3`, and more with each bit.  Part of
+that is rows (sub-rows share the cell cap: one history bit halves the
+rows, which alone costs ~2K per §6.3), the rest is dilution: the row
+already carries the bit-tree node and two or three whole bytes, and a cell
+that adapts its own rate and confidence already reacts to a run of
+surprises the way a "success" sub-row would, without splitting its
+statistics.  The width made sense in `sh_SSE1.inc`, whose rows were plain
+order-1 contexts with fixed-rate cells; here it stays a knob, at 0.
+
+### 6.7 Tuned result
 
 *(filled in from the `opt.pl` run, §8)*
 

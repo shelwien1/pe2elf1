@@ -170,13 +170,14 @@ template<class cfg> struct ParamUpdater<1, cfg> {
     R = cfg::R0;
   }
 
+  // g = weight of this observation (1 = a full event); scales the loss.
   INLINE void Accum(
-    float dp, float d2p, float inv_p, float inv_p2, float inv_pq
+    float dp, float d2p, float inv_p, float inv_p2, float inv_pq, float g = 1.0f
   ) {
-    float dp_inv = dp * inv_p;
-    float dp2_inv = (dp * dp) * inv_p2;
+    float dp_inv = dp * inv_p * g;
+    float dp2_inv = (dp * dp) * inv_p2 * g;
     (void)inv_pq;
-    float d2p_inv = d2p * inv_p;
+    float d2p_inv = d2p * inv_p * g;
 
     // --- GRADIENT CLIPPING ---
     d2p_inv= clip( d2p_inv, cfg::grad2_clip );
@@ -209,9 +210,9 @@ template<class cfg> struct ParamUpdater<1, cfg> {
 
   void Update(
     float dp, float d2p, float inv_p, float inv_p2, float inv_pq, float sc,
-    float lo, float hi
+    float lo, float hi, float g = 1.0f
   ) {
-    Accum(dp, d2p, inv_p, inv_p2, inv_pq);
+    Accum(dp, d2p, inv_p, inv_p2, inv_pq, g);
     (void)sc;
     Apply(StepRaw(), lo, hi);
   }
@@ -221,11 +222,11 @@ template<class cfg> struct ParamUpdater<1, cfg> {
 // Inactive parameter state
 template<class cfg> struct ParamUpdater<0, cfg> {
   void Init(float /*init_val*/) {}
-  inline void Accum(float, float, float, float, float) {}
+  inline void Accum(float, float, float, float, float, float = 1.0f) {}
   inline float Denom() const { return 1.0f; }
   inline float StepRaw() const { return 0.0f; }
   inline void Apply(float, float, float) {}
-  inline void Update(float /*dp*/, float /*d2p*/, float /*inv_p*/, float /*inv_p2*/, float /*inv_pq*/, float /*sc*/, float /*lo*/, float /*hi*/) {}
+  inline void Update(float /*dp*/, float /*d2p*/, float /*inv_p*/, float /*inv_p2*/, float /*inv_pq*/, float /*sc*/, float /*lo*/, float /*hi*/, float = 1.0f) {}
 };
 
 
@@ -330,7 +331,11 @@ template<class CP> struct Counter {
     return p_out;
   }
 
-  void C_Update( const int bit ) {
+  // g = weight of this observation, 1 = a full event (bit-identical to the
+  // unweighted update).  A fractional event scales the loss by g, and in the
+  // count recursion every wr becomes wr*g and every injected count g, so
+  // the RTRL traces stay the exact derivatives of the weighted recursion.
+  void C_Update( const int bit, const float g = 1.0f ) {
     float sign = 1.0f - float(bit + bit); 
 
     float pK_t = pK * sign + float(bit);
@@ -423,14 +428,14 @@ template<class CP> struct Counter {
     // 2.1 UV2X2 + XHESS + RAYCL: one EMA cross term, 2x2 Newton solve with
     // det guard (or P11 CSHRK soft shrink), joint direction-preserving
     // trust region. Reduces to the diagonal path when the guard trips.
-    wr0_state.Accum(g_u * sign, h_d * sign, inv_pK_t, inv_pK_t2, inv_pq);
-    wr1_state.Accum(g_v * sign, h_d * sign, inv_pK_t, inv_pK_t2, inv_pq);
+    wr0_state.Accum(g_u * sign, h_d * sign, inv_pK_t, inv_pK_t2, inv_pq, g);
+    wr1_state.Accum(g_v * sign, h_d * sign, inv_pK_t, inv_pK_t2, inv_pq, g);
 
     // XHESS: exact rotated cross diagonal h_uv = h00 - h11 (MIXTR-free part),
     // exposed through the signed shaper XHW with its own clip (G2_u/v are 0
     // in the delivered constants, so the cross channel gets a dedicated one).
     float h_x = clip( (d2pK_dwr02 - d2pK_dwr12) * sign * inv_pK_t, CP::XHC );
-    rt.R_uv = rt.R_uv * Config_U::momentum_R + CP::CXW * (g_u * g_v * inv_pK_t2 - CP::XHW * h_x);
+    rt.R_uv = rt.R_uv * Config_U::momentum_R + CP::CXW * (g_u * g_v * inv_pK_t2 - CP::XHW * h_x) * g;
 
     {
       float a_u = wr0_state.Denom();
@@ -485,7 +490,7 @@ template<class CP> struct Counter {
       float f2m = f1m * (1.0f - 2.0f * mws);
       float g_xm = dpK_dmw * f1m;
       float h_xm = d2pK_dmw2 * (f1m * f1m) + dpK_dmw * f2m;
-      mw_state.Update(g_xm * sign, h_xm * sign, inv_pK_t, inv_pK_t2, inv_pq, bias_sc, CP::MWXLO, CP::MWXHI);
+      mw_state.Update(g_xm * sign, h_xm * sign, inv_pK_t, inv_pK_t2, inv_pq, bias_sc, CP::MWXLO, CP::MWXHI, g);
     }
     }  // ADAPT_MW
 
@@ -499,7 +504,7 @@ template<class CP> struct Counter {
       // P24: chain to y = ln K: f' = f'' = K.
       float g_yk = dpK_dK * curr_K;
       float h_yk = d2pK_dK2 * (curr_K * curr_K) + dpK_dK * curr_K;
-      k_state.Update(g_yk * sign, h_yk * sign, inv_pK_t, inv_pK_t2, inv_pq, bias_sc, CP::KYLO, CP::KYHI);
+      k_state.Update(g_yk * sign, h_yk * sign, inv_pK_t, inv_pK_t2, inv_pq, bias_sc, CP::KYLO, CP::KYHI, g);
     }
     }  // ADAPT_K
 
@@ -513,9 +518,10 @@ template<class CP> struct Counter {
       cur_wr1 = CP::W1;
     }
     
-    // Calculate the actual retention weights (1.0 - decay_rate)
-    float w0_retention = 1.0f - cur_wr0;
-    float w1_retention = 1.0f - cur_wr1;
+    // Calculate the actual retention weights (1.0 - decay_rate), for an
+    // observation of weight g
+    float w0_retention = 1.0f - cur_wr0*g;
+    float w1_retention = 1.0f - cur_wr1*g;
 
     float w0b = (bit == 0) ? w0_retention : w1_retention;
     float w1b = (bit == 0) ? w1_retention : w0_retention;
@@ -524,31 +530,31 @@ template<class CP> struct Counter {
     // Applying the chain rule for d/d(alpha). Since (1 - alpha) handles retention, 
     // the injected variable acts negatively in the derivative: d/d_alpha (1 - alpha)*n = -n
     if (bit == 0) {
-      rt.n0_ww0 = rt.n0_ww0 * w0_retention - 2.0f * rt.n0_w0;
+      rt.n0_ww0 = rt.n0_ww0 * w0_retention - 2.0f * rt.n0_w0 * g;
       rt.n0_ww1 = rt.n0_ww1 * w0_retention;
       rt.n1_ww0 = rt.n1_ww0 * w1_retention;
-      rt.n1_ww1 = rt.n1_ww1 * w1_retention - 2.0f * rt.n1_w1;
+      rt.n1_ww1 = rt.n1_ww1 * w1_retention - 2.0f * rt.n1_w1 * g;
 
-      rt.n0_w0 = rt.n0_w0 * w0_retention - n0;
+      rt.n0_w0 = rt.n0_w0 * w0_retention - n0 * g;
       rt.n0_w1 = rt.n0_w1 * w0_retention;
       rt.n1_w0 = rt.n1_w0 * w1_retention;
-      rt.n1_w1 = rt.n1_w1 * w1_retention - n1;
+      rt.n1_w1 = rt.n1_w1 * w1_retention - n1 * g;
     } else {
       rt.n0_ww0 = rt.n0_ww0 * w1_retention;
-      rt.n0_ww1 = rt.n0_ww1 * w1_retention - 2.0f * rt.n0_w1;
-      rt.n1_ww0 = rt.n1_ww0 * w0_retention - 2.0f * rt.n1_w0;
+      rt.n0_ww1 = rt.n0_ww1 * w1_retention - 2.0f * rt.n0_w1 * g;
+      rt.n1_ww0 = rt.n1_ww0 * w0_retention - 2.0f * rt.n1_w0 * g;
       rt.n1_ww1 = rt.n1_ww1 * w0_retention;
 
       rt.n0_w0 = rt.n0_w0 * w1_retention;
-      rt.n0_w1 = rt.n0_w1 * w1_retention - n0;
-      rt.n1_w0 = rt.n1_w0 * w0_retention - n1;
+      rt.n0_w1 = rt.n0_w1 * w1_retention - n0 * g;
+      rt.n1_w0 = rt.n1_w0 * w0_retention - n1 * g;
       rt.n1_w1 = rt.n1_w1 * w0_retention;
     }
     }  // ADAPT_WR
 
     // --- 5. Update n0 and n1 model values ---
-    n0 = n0 * w0b + (1.0f - float(bit));
-    n1 = n1 * w1b + float(bit);
+    n0 = n0 * w0b + (1.0f - float(bit)) * g;
+    n1 = n1 * w1b + float(bit) * g;
 
 
     //const float leakage1 = 0.998f;
