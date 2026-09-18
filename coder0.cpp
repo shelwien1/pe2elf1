@@ -135,10 +135,19 @@ static inline float clamp(float x, float min_val, float max_val) {
   return fminf(fmaxf(x, min_val), max_val);
 }
 
+// Init-time transcendentals that must not be constant-folded: the shipping
+// build would fold logf/expf of folded knobs at compile time (MPFR,
+// correctly rounded) while the tuning build calls libm at runtime, and the
+// two can differ by an ulp -- enough to change the stream by a byte.  Both
+// builds go through libm for these; the per-bit paths are runtime anyway.
+__attribute__((noipa)) static float rt_logf( float x ) { return logf(x); }
+__attribute__((noipa)) static float rt_expf( float x ) { return expf(x); }
+
 // --- Configuration Struct Declarations ---
 
 #define def_Config(Config) struct Config {\
-  static const float momentum_D, momentum_R, NW, inc, stepMax, minVal,maxVal, grad1_clip, grad2_clip, D_clip, R_clip, R0, hbeta, efw; };
+  static const float momentum_D, momentum_R, NW, inc, stepMax, minVal,maxVal, grad1_clip, grad2_clip, D_clip, R_clip, R0, hbeta, efw; \
+  static const int OPT; };
 
 // Parameter bundle of the order-1 model: C0_* constants from
 // IDX/sh_model-C0.idx, adaptation flags from the ADAPT_* toggles above.
@@ -196,7 +205,8 @@ template<class cfg> struct ParamUpdater<1, cfg> {
 
 
     D = D * cfg::momentum_D - dp_inv;
-    R = R * cfg::momentum_R + dp2_inv - d2p_inv;
+    if( cfg::OPT==3 ) R = R * cfg::momentum_R + dp2_inv;             // Adam: second moment of the gradient
+    else              R = R * cfg::momentum_R + dp2_inv - d2p_inv;   // Newton: EMA of the Hessian of -ln p
 
     D = clip(D,cfg::D_clip);
     //R = clip(R,cfg::R_clip);
@@ -205,9 +215,12 @@ template<class cfg> struct ParamUpdater<1, cfg> {
 
   INLINE float Denom() const { return R + cfg::inc; }
 
+  // step rule (cfg::OPT): 0 Newton D/(R+inc); 2 normalized momentum
+  // D/(|D|+inc), the scalar form of Muon (a step of magnitude NW along the
+  // momentum, no curvature); 3 Adam D/(sqrt(R)+inc) with R the second moment
   INLINE float StepRaw() const {
-    //float safe_R = fabsf(R) + cfg::inc;
-    //float safe_R = Max(R,0.0f) + cfg::inc;
+    if( cfg::OPT==2 ) return cfg::NW * D / (fabsf(D) + cfg::inc);
+    if( cfg::OPT==3 ) return cfg::NW * D / (sqrtf(R) + cfg::inc);
     float safe_R = R + cfg::inc;
     return cfg::NW * D / safe_R;
   }

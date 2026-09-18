@@ -315,10 +315,15 @@ cd IDX && perl import.pl sh_model-S0.idx ../export.!!! > t && mv t sh_model-S0.i
 `setp.pl` performs the same in-place edit of the `"!MAP!name!base\0pattern"`
 strings that `opt.pl` does, so a hand experiment measures exactly what the
 climb would.  The two builds are byte-identical only with FMA contraction
-and reassociation off (`-ffp-contract=off -fno-associative-math` in
-`gc.sh`): with knobs folded in one build and runtime in the other, gcc
-otherwise contracts or reorders the same float expressions differently
-and the streams drift by a few bytes.  `opt.pl` gained an optional map-name regex (third argument) and
+and the unsafe float algebra off (`-ffp-contract=off
+-fno-unsafe-math-optimizations` in `gc.sh`): with knobs folded in one
+build and runtime in the other, gcc otherwise contracts, reassociates,
+replaces divisions by reciprocals or refactors common terms differently
+in the two, and the streams drift by a byte or two (found by tracing the
+per-bit probabilities of both builds to the first divergent bit).  The
+init-time `logf`/`expf` of knob-derived values go through `noipa` wrappers
+for the same reason: the shipping build would otherwise fold them with
+MPFR while the tuning build calls libm.  `opt.pl` gained an optional map-name regex (third argument) and
 `OPT_JOBS` for compressing the corpus files in parallel; it treats a coder
 that did not exit cleanly as a failed measurement (a crashed or OOM-killed
 run leaves a short output behind, which used to count as an improvement).

@@ -49,7 +49,7 @@ template<class CP> struct Mix2 {
     vol = contexts < 1 ? 1 : contexts;
     n = mix_rows( vol );
     float w0 = clamp( CP::W0, 1.0f/65536, 1.0f-1.0f/65536 );
-    float W0 = clip( logf(w0/(1.0f-w0)), CP::Wclip );
+    float W0 = clip( rt_logf(w0/(1.0f-w0)), CP::Wclip );
     for( uint i=0; i<n; i++ ) { t[i].w.Init(W0); t[i].b.Init(0.0f); }
   }
   // p1, p2 = P(bit==0) of the two inputs; returns the mixed P(bit==0)

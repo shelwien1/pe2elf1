@@ -36,6 +36,8 @@ Number STEPw, 1,0!1111010010000000001   # step clip = STEPw/(SCALE<<8)
 Number G2w,   1,0!0000110   # curvature clip = G2w/32
 Number DCw,   1,0!001000010   # D clip = DCw/16
 Number RCw,   1,0!100000000000000   # R clip = RCw/16
+Number OPTw,  1,0!00   # step rule of W: 0 Newton D/(R+inc); 2 normalized momentum D/(|D|+inc); 3 Adam D/(sqrt R+inc)
+Number R0w,   1,0!00000000   # initial curvature R (prior), /256
 
 Const 0
 
@@ -48,5 +50,7 @@ Number STEPb, 1,0!1111111101000000100
 Number G2b,   1,0!0100000
 Number DCb,   1,0!100000000
 Number RCb,   1,0!100000000000000
+Number OPTb,  1,0!00   # step rule of the bias, as OPTw
+Number R0b,   1,0!00000000   # initial curvature of the bias, /256
 
 Const 0

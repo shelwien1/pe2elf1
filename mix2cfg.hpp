@@ -35,8 +35,9 @@ set grad1_clip = 0.0f;
 set grad2_clip = float(CPX(G2w)) / (1<<5);
 set D_clip     = float(CPX(DCw)) / (1<<4);
 set R_clip     = float(CPX(RCw)) / (1<<4);
-set R0         = 0.0f;
+set R0         = float(CPX(R0w)) / (1<<8);
 #undef set
+const int CP_NAME::Config_W::OPT = CPX(OPTw);
 
 #define set  const float CP_NAME::Config_B::
 set momentum_D = 1.0f - float(CPX(M1b)) / (SCALE<<9);
@@ -50,8 +51,9 @@ set grad1_clip = 0.0f;
 set grad2_clip = float(CPX(G2b)) / (1<<5);
 set D_clip     = float(CPX(DCb)) / (1<<4);
 set R_clip     = float(CPX(RCb)) / (1<<4);
-set R0         = 0.0f;
+set R0         = float(CPX(R0b)) / (1<<8);
 #undef set
+const int CP_NAME::Config_B::OPT = CPX(OPTb);
 
 const int   CP_NAME::ON    = CPX(ON);
 const float CP_NAME::W0    = float(CPX(W0)) / SCALE;

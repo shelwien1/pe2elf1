@@ -90,11 +90,12 @@ template<class CP, int NB> struct SSE_Ctr {
     // probability sq(s_j), inverted through the cell's output map
     // p = sq( K * st( q0*(1-mw) + mwP0*mw ) ) at the seed K and mw, with
     // total mass T0 so the first updates move it at a controlled rate.
+    // (rt_expf: not constant-folded, see coder0.cpp)
     float T0 = clamp( CP::T0, 1.0f/256, 4096.0f );
     float a[NB], b[NB];
     for( int j=0; j<NB; j++ ) {
       float s_j = -lim + float(j)*(2.0f*lim/float(NB-1));
-      float pm  = sqf( s_j / CP::K );
+      float pm  = 1.0f/(1.0f+rt_expf( -(s_j / CP::K) ));
       float q0  = (pm - CP::mwP0*CP::M) / (1.0f - CP::M);
       q0 = clamp( q0, 1.0f/4096, 1.0f-1.0f/4096 );
       a[j] = q0*T0; b[j] = (1.0f-q0)*T0;

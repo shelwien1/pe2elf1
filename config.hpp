@@ -61,6 +61,7 @@ struct CP_NAME {
 };
 
 #define set  const float CP_NAME::Config_MW::
+const int CP_NAME::Config_MW::OPT = 0;   // Newton step (the tuned counters)
 set momentum_D = 1.0f-float(CPX(M1_m))/(SCALE<<8);
 set momentum_R = 1.0f-float(CPX(M2_m))/(SCALE<<8);
 set NW         = float(CPX(NWm))/(SCALE<<8);
@@ -76,6 +77,7 @@ set R0 = 0.0f;
 #undef set
 
 #define set  const float CP_NAME::Config_K::
+const int CP_NAME::Config_K::OPT = 0;   // Newton step (the tuned counters)
 set momentum_D = 1.0f-float(CPX(M1_k))/(SCALE<<8);
 set momentum_R = 1.0f-float(CPX(M2_k))/(SCALE<<8);
 set NW         = float(CPX(NWk)) / (SCALE<<8);
@@ -102,6 +104,7 @@ set R0 = 0.0f;
 // -------------------------------------------------------------
 
 #define set  const float CP_NAME::Config_U::
+const int CP_NAME::Config_U::OPT = 0;   // Newton step (the tuned counters)
 set momentum_D = 1.0f-float(CPX(M1_u))/(SCALE<<8);
 set momentum_R = 1.0f-float(CPX(M2_u))/(SCALE<<8);
 set NW         = float(CPX(NWu))/(SCALE<<8);
@@ -117,6 +120,7 @@ set R0 = float(CPX(R0_u))/256;
 #undef set
 
 #define set  const float CP_NAME::Config_V::
+const int CP_NAME::Config_V::OPT = 0;   // Newton step (the tuned counters)
 set momentum_D = 1.0f-float(CPX(M1_v))/(SCALE<<8);
 set momentum_R = 1.0f-float(CPX(M2_v))/(SCALE<<8);
 set NW         = float(CPX(NWv))/(SCALE<<8);
@@ -150,12 +154,12 @@ set M = float(CPX(mw))/SCALE;
 set K = float(CPX(K))/SCALE;
 
 // LOGWR/UVROT seeds and log-space box (dynamic init, order matters)
-set LW0   = logf(CP_NAME::W0);
-set LW1   = logf(CP_NAME::W1);
+set LW0   = rt_logf(CP_NAME::W0);
+set LW1   = rt_logf(CP_NAME::W1);
 set UV_U0 = 0.5f*(CP_NAME::LW0+CP_NAME::LW1);   // mean log-decay seed
 set UV_V0 = 0.5f*(CP_NAME::LW0-CP_NAME::LW1);   // hit/miss asymmetry seed
-set UVLO  = logf(CP_NAME::Config_U::minVal);
-set UVHI  = logf(CP_NAME::Config_U::maxVal);
+set UVLO  = rt_logf(CP_NAME::Config_U::minVal);
+set UVHI  = rt_logf(CP_NAME::Config_U::maxVal);
 set UV_VH = 0.5f*(CP_NAME::UVHI-CP_NAME::UVLO)*(float(CPX(UVH))/1024);   // |v| bound
 
 set CXW   = float(CPX(CXW))/1024;
@@ -167,12 +171,12 @@ set iStepV = 1.0f/(float(CPX(vStep))/(SCALE<<8));
 
 set MWspan = CP_NAME::Config_MW::maxVal - CP_NAME::Config_MW::minVal;
 set MWs0   = (CP_NAME::M - CP_NAME::Config_MW::minVal) / CP_NAME::MWspan;
-set MWX0   = logf(CP_NAME::MWs0/(1.0f-CP_NAME::MWs0));
+set MWX0   = rt_logf(CP_NAME::MWs0/(1.0f-CP_NAME::MWs0));
 set MWXLO  = float(CPX(mwXlo) - 8192)/1024;   // signed
 set MWXHI  = float(CPX(mwXhi) - 8192)/1024;   // signed
-set KY0    = logf(CP_NAME::K);
-set KYLO   = logf(CP_NAME::Config_K::minVal);
-set KYHI   = logf(CP_NAME::Config_K::maxVal);
+set KY0    = rt_logf(CP_NAME::K);
+set KYLO   = rt_logf(CP_NAME::Config_K::minVal);
+set KYHI   = rt_logf(CP_NAME::Config_K::maxVal);
 #undef set
 
 #ifdef CP_SSE
