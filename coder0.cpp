@@ -99,18 +99,6 @@ static const float iSCALE = 1.0f/SCALE;
 
 
 
-// --- Configuration Struct Declarations ---
-
-//template< int idx > struct Config {
-//  static const float momentum_D, momentum_R, NW, inc, stepMax, minVal,maxVal, grad1_clip, grad2_clip, D_clip, R_clip, R0;
-//};
-
-#define def_Config(Config) struct Config {\
-  static const float momentum_D, momentum_R, NW, inc, stepMax, minVal,maxVal, grad1_clip, grad2_clip, D_clip, R_clip, R0, hbeta, efw; };
-
-
-#include "config.hpp"
-
 // ---------------------------------------------
 
 static inline float Max( float x, float d ) {
@@ -129,75 +117,19 @@ static inline float clamp(float x, float min_val, float max_val) {
   return fminf(fmaxf(x, min_val), max_val);
 }
 
-static const float stP_min = float(C0_stP_min) / float(SCALE);
-static const float leakage1 = float(C0_leak1) / float(SCALE);
-static const float leakage2 = float(C0_leak2) / float(SCALE);
-static const float mwP0 = float(C0_mwP0) / float(SCALE);
+// --- Configuration Struct Declarations ---
 
-// Float equivalents utilizing delta decoding for P1
-static const float F0_P0 = float(2*C0_P0) / float(SCALE);
-static const float F0_P1_raw = float(2 * (C0_P0 + ((C0_P1 & 1) ? -int(C0_P1 >> 1) : int(C0_P1 >> 1)))) / float(SCALE);
-static const float F0_P1 = (F0_P1_raw < 0.0f) ? 0.0f : F0_P1_raw;
+#define def_Config(Config) struct Config {\
+  static const float momentum_D, momentum_R, NW, inc, stepMax, minVal,maxVal, grad1_clip, grad2_clip, D_clip, R_clip, R0, hbeta, efw; };
 
-// W0 and W1 now natively track the DECAY rate (alpha). Scale subtraction is removed.
-static const float W0_raw = float(C0_wr) / float(SCALE);
-static const float W0 = clamp(W0_raw, 0.0f, 1.0f);
-
-static const float W1_raw = float(C0_wr + ((C0_wr1 & 1) ? -int(C0_wr1 >> 1) : int(C0_wr1 >> 1))) / float(SCALE);
-static const float W1 = clamp(W1_raw, 0.0f, 1.0f);
-
-static const float M = float(C0_mw)/SCALE;
-static const float K = float(C0_K)/SCALE;
-
-// LOGWR/UVROT seeds and log-space box (dynamic init, order matters)
-static const float LW0   = logf(W0);
-static const float LW1   = logf(W1);
-static const float UV_U0 = 0.5f*(LW0+LW1);   // mean log-decay seed
-static const float UV_V0 = 0.5f*(LW0-LW1);   // hit/miss asymmetry seed
-static const float UVLO  = logf(Config_U::minVal);
-static const float UVHI  = logf(Config_U::maxVal);
-static const float UV_VH = 0.5f*(UVHI-UVLO)*(float(C0_UVH)/1024);   // |v| bound
-
-// --- Derived constants for the r8/counter-scope proposals ---
-// P4 AWIND: momentum bleed factors (1.0 == off)
-static const float AWF   = float(C0_AWF)/1024;
-static const float AWFo  = float(C0_AWFo)/1024;
-// 2.1 UV2X2/XHESS/RAYCL: cross-EMA weight, signed h00-h11 shaper, det guard,
-// dedicated clip for the cross-Hessian channel, 1/stepMax for the ray clip
-static const float CXW   = float(C0_CXW)/1024;
-static const float XHW   = float(C0_XHW - 1024)/1024;   // signed, seed < 0 per r7 evidence
-static const float UVDET = float(C0_UVDET)/1024;
-static const float XHC   = float(C0_XHC)/(1<<5);
-static const float iStepU = 1.0f/(float(C0_uStep)/(SCALE<<8));
-static const float iStepV = 1.0f/(float(C0_vStep)/(SCALE<<8));
-// P10 MKCPL constants (statics valid for both coordinate systems; the ray
-// clip inverses are against the (x,y) stepMax which equal the class stepMax).
-static const float CMK   = float(C0_CMK)/1024;
-static const float iStepM = 1.0f/(float(C0_mwStep)/(SCALE<<8));
-static const float iStepK = 1.0f/(float(C0_kStep)/(SCALE<<8));
-static const float MKDET = float(C0_MKDET)/1024;
-// P9 ALEAK: leak1_eff = 1 - clamp(LKA*wr_geo + LKB, LKlo, LKhi)
-static const float LKA   = float(C0_LKA)/4096;
-static const float LKB   = float(C0_LKB)/(SCALE<<2);
-static const float LKlo  = float(C0_LKlo)/(SCALE<<2);
-static const float LKhi  = float(C0_LKhi)/(SCALE<<2);
-// 3 SMASS: mass conditioning of mw/K; MPW ramps the MPATH correction
-static const float SMW_M = float(C0_SMWm - 8192)/(SCALE<<2);   // signed
-static const float SMW_K = float(C0_SMWk - 8192)/(SCALE<<2);   // signed
-static const float SM0   = float(C0_SM0)/(SCALE>>3);
-static const float MPW   = float(C0_MPW)/1024;
-// P18 BIASC: warmup ramp n_sum/(n_sum+BWT)
-static const float BWT   = float(C0_BWT)/(SCALE>>3);
-// P24 MWLGT: mw = mwMin + span*sigma(x), K = exp(y); seeds map the current
-// linear seeds, x gets its own (wide) box, y reuses the exact ln K box.
-static const float MWspan = Config_MW::maxVal - Config_MW::minVal;
-static const float MWs0   = (::M - Config_MW::minVal) / MWspan;
-static const float MWX0   = logf(MWs0/(1.0f-MWs0));
-static const float MWXLO  = float(C0_mwXlo - 8192)/1024;   // signed
-static const float MWXHI  = float(C0_mwXhi - 8192)/1024;   // signed
-static const float KY0    = logf(::K);
-static const float KYLO   = logf(Config_K::minVal);
-static const float KYHI   = logf(Config_K::maxVal);
+// Parameter bundle of the order-1 model: C0_* constants from
+// IDX/sh_model-C0.idx, adaptation flags from the ADAPT_* toggles above.
+#define CP_NAME     CP_C0
+#define CP_PFX      C0_
+#define CP_ADAPT_WR ADAPT_WR
+#define CP_ADAPT_MW ADAPT_MW
+#define CP_ADAPT_K  ADAPT_K
+#include "config.hpp"
 
 
 template<int ADAPT, class cfg> struct ParamUpdater;
@@ -276,7 +208,28 @@ template<class cfg> struct ParamUpdater<0, cfg> {
 };
 
 
-struct Counter {
+// Real-Time Recurrent Learning traces of {n0, n1} w.r.t. wr0/wr1, plus the
+// UV2X2 cross-curvature EMA.  Split out of Counter so that a component with
+// ADAPT_WR=0 (e.g. SSE cells) carries none of these 9 floats.
+template<int ADAPT> struct RTRLState {
+  float n0_w0, n0_ww0, n0_w1, n0_ww1;
+  float n1_w0, n1_ww0, n1_w1, n1_ww1;
+  float R_uv;   // 2.1: EMA of the rotated (u,v) cross curvature (+1 float)
+};
+template<> struct RTRLState<0> {};
+
+
+// Counter<CP>: one adaptive binary probability cell.  CP is a parameter
+// bundle made by config.hpp (CP_C0 for the order-1 model, CP_S0 for the SSE
+// cells): it carries the ADAPT_* flags, the four ParamUpdater configs and
+// every derived constant the counter reads.  The arithmetic is exactly the
+// pre-template Counter's; the #if ADAPT_* blocks became if constexpr.
+template<class CP> struct Counter {
+  typedef typename CP::Config_U  Config_U;
+  typedef typename CP::Config_V  Config_V;
+  typedef typename CP::Config_MW Config_MW;
+  typedef typename CP::Config_K  Config_K;
+
   float n0;
   float n1;
   float pK;
@@ -285,73 +238,73 @@ struct Counter {
   // Context-adaptive parameters logic encapsulating both wr limits
   // UVROT: wr0_state tracks u = (ln wr0 + ln wr1)/2,
   //        wr1_state tracks v = (ln wr0 - ln wr1)/2
-  ParamUpdater<ADAPT_WR, Config_U>  wr0_state;
-  ParamUpdater<ADAPT_WR, Config_V>  wr1_state;
-  ParamUpdater<ADAPT_MW, Config_MW> mw_state;
-  ParamUpdater<ADAPT_K,  Config_K>  k_state;
+  [[no_unique_address]] ParamUpdater<CP::A_WR, Config_U>  wr0_state;
+  [[no_unique_address]] ParamUpdater<CP::A_WR, Config_V>  wr1_state;
+  [[no_unique_address]] ParamUpdater<CP::A_MW, Config_MW> mw_state;
+  [[no_unique_address]] ParamUpdater<CP::A_K,  Config_K>  k_state;
 
   // Real-Time Recurrent Learning helper states for {n0, n1} variables
-#if ADAPT_WR
-  float n0_w0, n0_ww0, n0_w1, n0_ww1;
-  float n1_w0, n1_ww0, n1_w1, n1_ww1;
-#endif
+  [[no_unique_address]] RTRLState<CP::A_WR> rt;
 
-#if OPT_UV2X2 && ADAPT_WR
-  float R_uv;   // 2.1: EMA of the rotated (u,v) cross curvature (+1 float)
-#endif
-
-  float st( const float p_ ) const {
+  static float st( const float p_ ) {
     float p = p_ * 0.999998f + 0.000001f;
     return logf(p/(1.0f-p));
   }
 
-  float sq( const float x ) const {
+  static float sq( const float x ) {
     return 1.0f/(1.0f+expf(-x));
   }
 
-  void Init() {
-    n0 = F0_P0;
-    n1 = F0_P1;
+  // Init with explicit counts; SSE cells start at their bucket's probability.
+  void InitN( float a, float b ) {
+    n0 = a;
+    n1 = b;
     if( n0+n1==0.0f ) {
       n0 = iSCALE; 
       n1 = iSCALE;
     }
 
 
-    wr0_state.Init(::UV_U0);
-    wr1_state.Init(::UV_V0);
-    mw_state.Init(::MWX0);
-    k_state.Init(::KY0);
+    wr0_state.Init(CP::UV_U0);
+    wr1_state.Init(CP::UV_V0);
+    mw_state.Init(CP::MWX0);
+    k_state.Init(CP::KY0);
 
-#if ADAPT_WR
-    n0_w0 = 0.0f; n0_ww0 = 0.0f; n0_w1 = 0.0f; n0_ww1 = 0.0f;
-    n1_w0 = 0.0f; n1_ww0 = 0.0f; n1_w1 = 0.0f; n1_ww1 = 0.0f;
-#endif
-
-#if OPT_UV2X2 && ADAPT_WR
-    R_uv = 0.0f;
-#endif
+    if constexpr( CP::A_WR ) {
+      rt.n0_w0 = 0.0f; rt.n0_ww0 = 0.0f; rt.n0_w1 = 0.0f; rt.n0_ww1 = 0.0f;
+      rt.n1_w0 = 0.0f; rt.n1_ww0 = 0.0f; rt.n1_w1 = 0.0f; rt.n1_ww1 = 0.0f;
+      rt.R_uv = 0.0f;
+    }
   } 
 
-  float Predict() {
-#if ADAPT_MW
-    float cur_mw = Config_MW::minVal + MWspan * sq(mw_state.val);
-#else
-    float cur_mw = ::M;
-#endif
+  void Init() {
+    InitN( CP::F0_P0, CP::F0_P1 );
+  }
 
-#if ADAPT_K
-    float curr_K = expf(k_state.val);
-#else
-    float curr_K = ::K;
-#endif
+  // Current mixing weight / logistic scale (adaptive or the fixed seed)
+  float cur_mw() const {
+    if constexpr( CP::A_MW ) return Config_MW::minVal + CP::MWspan * sq(mw_state.val);
+    else                         return CP::M;
+  }
+  float cur_K() const {
+    if constexpr( CP::A_K ) return expf(k_state.val);
+    else                        return CP::K;
+  }
+
+  // Raw probability of bit==0, kept in pK for C_Update()
+  float PredictF() {
+    float cur_mw = this->cur_mw();
+    float curr_K = this->cur_K();
 
     float n_sum = n0 + n1 + 1e-8f;
     float p0 = n0 / n_sum;
-    p0 = p0 * (1.0f - cur_mw) + mwP0 * cur_mw;
+    p0 = p0 * (1.0f - cur_mw) + CP::mwP0 * cur_mw;
     pK = sq(curr_K * st(p0));
-    
-    float p_out = pK * float(SCALE);
+    return pK;
+  }
+
+  float Predict() {
+    float p_out = PredictF() * float(SCALE);
     p_out = clamp(p_out);
     return p_out;
   }
@@ -367,31 +320,28 @@ struct Counter {
     const float inv_pq = 0.0f;
     const float bias_sc = 1.0f;
 
-#if ADAPT_WR
-    float cur_wr0 = expf(clamp(wr0_state.val + wr1_state.val, UVLO, UVHI));
-    float cur_wr1 = expf(clamp(wr0_state.val - wr1_state.val, UVLO, UVHI));
-#else
-    float cur_wr0 = ::W0;
-    float cur_wr1 = ::W1;
-#endif
+    float cur_wr0, cur_wr1;
+    if constexpr( CP::A_WR ) {
+      cur_wr0 = expf(clamp(wr0_state.val + wr1_state.val, CP::UVLO, CP::UVHI));
+      cur_wr1 = expf(clamp(wr0_state.val - wr1_state.val, CP::UVLO, CP::UVHI));
+    } else {
+      cur_wr0 = CP::W0;
+      cur_wr1 = CP::W1;
+    }
 
-#if ADAPT_MW
-    float mws = sq(mw_state.val);
-    float cur_mw = Config_MW::minVal + MWspan * mws;
-#else
-    float cur_mw = ::M;
-#endif
+    float mws = 0.0f, cur_mw;
+    if constexpr( CP::A_MW ) {
+      mws = sq(mw_state.val);
+      cur_mw = Config_MW::minVal + CP::MWspan * mws;
+    } else {
+      cur_mw = CP::M;
+    }
 
-#if ADAPT_WR || ADAPT_MW
-    #if ADAPT_K
-        float curr_K = expf(k_state.val);
-    #else
-        float curr_K = ::K;
-    #endif
+    float curr_K = this->cur_K();
 
     float n_sum = n0 + n1 + 1e-8f;
     float q0 = n0 / n_sum;
-    float p_mix = q0 * (1.0f - cur_mw) + mwP0 * cur_mw;
+    float p_mix = q0 * (1.0f - cur_mw) + CP::mwP0 * cur_mw;
 
     float P_adj = p_mix * 0.999998f + 0.000001f;
     float P_adj_inv = 1.0f / P_adj;
@@ -401,10 +351,9 @@ struct Counter {
 
     float dpK_dpmix = pK * (1.0f - pK) * curr_K * d_st_dP;
     float d2pK_dpmix2 = (1.0f - 2.0f * pK) * dpK_dpmix * curr_K * d_st_dP + pK * (1.0f - pK) * curr_K * d2_st_dP2;
-#endif
 
     // --- 1. Update WR0 and WR1 parameters based on current derivatives ---
-#if ADAPT_WR
+    if constexpr( CP::A_WR ) {
     float dpmix_dq0 = (1.0f - cur_mw);
     float dpK_dq0 = dpK_dpmix * dpmix_dq0;
     float d2pK_dq02 = d2pK_dpmix2 * (dpmix_dq0 * dpmix_dq0);
@@ -421,14 +370,14 @@ struct Counter {
     float cross = (n0 - n1) * inv_n_sum3;
 
     // Chain to parameters
-    float dq0_dwr0 = dq0_dn0 * n0_w0 + dq0_dn1 * n1_w0;
-    float dq0_dwr1 = dq0_dn0 * n0_w1 + dq0_dn1 * n1_w1;
+    float dq0_dwr0 = dq0_dn0 * rt.n0_w0 + dq0_dn1 * rt.n1_w0;
+    float dq0_dwr1 = dq0_dn0 * rt.n0_w1 + dq0_dn1 * rt.n1_w1;
 
-    float d2q0_dwr02 = d2q0_dn02 * (n0_w0*n0_w0) + d2q0_dn12 * (n1_w0*n1_w0) + 2.0f * cross * n0_w0 * n1_w0 
-                     + dq0_dn0 * n0_ww0 + dq0_dn1 * n1_ww0;
+    float d2q0_dwr02 = d2q0_dn02 * (rt.n0_w0*rt.n0_w0) + d2q0_dn12 * (rt.n1_w0*rt.n1_w0) + 2.0f * cross * rt.n0_w0 * rt.n1_w0 
+                     + dq0_dn0 * rt.n0_ww0 + dq0_dn1 * rt.n1_ww0;
 
-    float d2q0_dwr12 = d2q0_dn02 * (n0_w1*n0_w1) + d2q0_dn12 * (n1_w1*n1_w1) + 2.0f * cross * n0_w1 * n1_w1
-                     + dq0_dn0 * n0_ww1 + dq0_dn1 * n1_ww1;
+    float d2q0_dwr12 = d2q0_dn02 * (rt.n0_w1*rt.n0_w1) + d2q0_dn12 * (rt.n1_w1*rt.n1_w1) + 2.0f * cross * rt.n0_w1 * rt.n1_w1
+                     + dq0_dn0 * rt.n0_ww1 + dq0_dn1 * rt.n1_ww1;
 
     float dpK_dwr0 = dpK_dq0 * dq0_dwr0;
     float d2pK_dwr02 = d2pK_dq02 * (dq0_dwr0 * dq0_dwr0) + dpK_dq0 * d2q0_dwr02;
@@ -459,28 +408,28 @@ struct Counter {
     // XHESS: exact rotated cross diagonal h_uv = h00 - h11 (MIXTR-free part),
     // exposed through the signed shaper XHW with its own clip (G2_u/v are 0
     // in the delivered constants, so the cross channel gets a dedicated one).
-    float h_x = clip( (d2pK_dwr02 - d2pK_dwr12) * sign * inv_pK_t, XHC );
-    R_uv = R_uv * Config_U::momentum_R + CXW * (g_u * g_v * inv_pK_t2 - XHW * h_x);
+    float h_x = clip( (d2pK_dwr02 - d2pK_dwr12) * sign * inv_pK_t, CP::XHC );
+    rt.R_uv = rt.R_uv * Config_U::momentum_R + CP::CXW * (g_u * g_v * inv_pK_t2 - CP::XHW * h_x);
 
     {
       float a_u = wr0_state.Denom();
       float a_v = wr1_state.Denom();
-      float cc  = R_uv;
+      float cc  = rt.R_uv;
       float det = a_u * a_v - cc * cc;
-      if( det > UVDET * a_u * a_v ) {
+      if( det > CP::UVDET * a_u * a_v ) {
         float b_u = Config_U::NW * wr0_state.D;
         float b_v = Config_V::NW * wr1_state.D;
         float idet = 1.0f / det;
         float s_u = (b_u * a_v - cc * b_v) * idet;
         float s_v = (a_u * b_v - cc * b_u) * idet;
         // RAYCL: rescale jointly so neither component exceeds its stepMax.
-        float r = fmaxf( fmaxf( fabsf(s_u)*iStepU, fabsf(s_v)*iStepV ), 1.0f );
+        float r = fmaxf( fmaxf( fabsf(s_u)*CP::iStepU, fabsf(s_v)*CP::iStepV ), 1.0f );
         float ir = 1.0f / r;
-        wr0_state.Apply(s_u * ir, UVLO, UVHI);
-        wr1_state.Apply(s_v * ir, -UV_VH, UV_VH);
+        wr0_state.Apply(s_u * ir, CP::UVLO, CP::UVHI);
+        wr1_state.Apply(s_v * ir, -CP::UV_VH, CP::UV_VH);
       } else {
-        wr0_state.Apply(wr0_state.StepRaw(), UVLO, UVHI);
-        wr1_state.Apply(wr1_state.StepRaw(), -UV_VH, UV_VH);
+        wr0_state.Apply(wr0_state.StepRaw(), CP::UVLO, CP::UVHI);
+        wr1_state.Apply(wr1_state.StepRaw(), -CP::UV_VH, CP::UV_VH);
       }
     }
 
@@ -489,103 +438,59 @@ struct Counter {
     // u,v are individually legal but u+-v is pinned at the exp-time clamp
     // (measured 26-37% of wr updates) while the stored coordinates drift.
     {
-      float t0 = clamp(wr0_state.val + wr1_state.val, UVLO, UVHI);
-      float t1 = clamp(wr0_state.val - wr1_state.val, UVLO, UVHI);
+      float t0 = clamp(wr0_state.val + wr1_state.val, CP::UVLO, CP::UVHI);
+      float t1 = clamp(wr0_state.val - wr1_state.val, CP::UVLO, CP::UVHI);
       float nu = 0.5f * (t0 + t1);
       float nv = 0.5f * (t0 - t1);
       wr0_state.val = nu;
       wr1_state.val = nv;
     }
-#endif
+    }  // ADAPT_WR
 
-    // --- 2.+3. coupled (mw,K) update, P10 MKCPL ---
-#if OPT_MKCPL && ADAPT_MW && ADAPT_K
-    {
-      float dpmix_dmw = mwP0 - q0;
-      float dpK_dmw = dpK_dpmix * dpmix_dmw;
-      float d2pK_dmw2 = d2pK_dpmix2 * (dpmix_dmw * dpmix_dmw);
-      float f1m = MWspan * mws * (1.0f - mws);
-      float f2m = f1m * (1.0f - 2.0f * mws);
-      float g_m = dpK_dmw * f1m;
-      float h_m = d2pK_dmw2 * (f1m * f1m) + dpK_dmw * f2m;
-      const float mw_lo = MWXLO, mw_hi = MWXHI;
-      float stP = st(p_mix);
-      float dpK_dK = pK * (1.0f - pK) * stP;
-      float d2pK_dK2 = dpK_dK * (1.0f - 2.0f * pK) * stP;
-      float g_k = dpK_dK * curr_K;
-      float h_k = d2pK_dK2 * (curr_K * curr_K) + dpK_dK * curr_K;
-      const float k_lo = KYLO, k_hi = KYHI;
-      if( fabsf(stP)>=stP_min ) {
-        // gate open: both rows identifiable -> accumulate, EMA the cross,
-        // 2x2 solve with det guard + joint ray clip (UV2X2 machinery).
-        mw_state.Accum(g_m * sign, h_m * sign, inv_pK_t, inv_pK_t2, inv_pq);
-        k_state.Accum (g_k * sign, h_k * sign, inv_pK_t, inv_pK_t2, inv_pq);
-        R_mk = R_mk * Config_MW::momentum_R + CMK * (g_m * g_k * inv_pK_t2);
-        float a_m = mw_state.Denom();
-        float a_k = k_state.Denom();
-        float cc  = R_mk;
-        float det = a_m * a_k - cc * cc;
-        if( det > MKDET * a_m * a_k ) {
-          float b_m = Config_MW::NW * mw_state.D;
-          float b_k = Config_K::NW * k_state.D;
-          float idet = 1.0f / det;
-          float s_m = (b_m * a_k - cc * b_k) * idet;
-          float s_k = (a_m * b_k - cc * b_m) * idet;
-          mw_state.Apply(s_m, mw_lo, mw_hi);
-          k_state.Apply (s_k, k_lo, k_hi);
-        } else {
-          mw_state.Apply(mw_state.StepRaw(), mw_lo, mw_hi);
-          k_state.Apply (k_state.StepRaw(),  k_lo, k_hi);
-        }
-      } else {
-        // gate closed: K row unidentifiable -> independent mw update (doc),
-        // cross EMA decays without injection.
-        mw_state.Update(g_m * sign, h_m * sign, inv_pK_t, inv_pK_t2, inv_pq, bias_sc, mw_lo, mw_hi);
-        R_mk = R_mk * Config_MW::momentum_R;
-      }
-    }
-#else
+    // (The P10 MKCPL coupled (mw,K) variant that used to sit here was dead
+    // code -- OPT_MKCPL=0, tested as a loss, see the header notes -- and is
+    // not carried into the template.)
+
     // --- 2. Update MW parameter ---
-#if ADAPT_MW
-    float dpmix_dmw = mwP0 - q0;
+    if constexpr( CP::A_MW ) {
+    float dpmix_dmw = CP::mwP0 - q0;
     float dpK_dmw = dpK_dpmix * dpmix_dmw;
     float d2pK_dmw2 = d2pK_dpmix2 * (dpmix_dmw * dpmix_dmw);
 
     // P24: chain to the logit coordinate, mw = lo + span*sigma(x):
     // f' = span*s(1-s), f'' = f'*(1-2s) (the commonly-dropped term kept).
     {
-      float f1m = MWspan * mws * (1.0f - mws);
+      float f1m = CP::MWspan * mws * (1.0f - mws);
       float f2m = f1m * (1.0f - 2.0f * mws);
       float g_xm = dpK_dmw * f1m;
       float h_xm = d2pK_dmw2 * (f1m * f1m) + dpK_dmw * f2m;
-      mw_state.Update(g_xm * sign, h_xm * sign, inv_pK_t, inv_pK_t2, inv_pq, bias_sc, MWXLO, MWXHI);
+      mw_state.Update(g_xm * sign, h_xm * sign, inv_pK_t, inv_pK_t2, inv_pq, bias_sc, CP::MWXLO, CP::MWXHI);
     }
-#endif
+    }  // ADAPT_MW
 
     // --- 3. Update K parameter ---
-#if ADAPT_K
+    if constexpr( CP::A_K ) {
     float stP = st(p_mix);
     float dpK_dK = pK * (1.0f - pK) * stP;
     float d2pK_dK2 = dpK_dK * (1.0f - 2.0f * pK) * stP;
     
-    if( fabsf(stP)>=stP_min ) {
+    if( fabsf(stP)>=CP::stP_min ) {
       // P24: chain to y = ln K: f' = f'' = K.
       float g_yk = dpK_dK * curr_K;
       float h_yk = d2pK_dK2 * (curr_K * curr_K) + dpK_dK * curr_K;
-      k_state.Update(g_yk * sign, h_yk * sign, inv_pK_t, inv_pK_t2, inv_pq, bias_sc, KYLO, KYHI);
+      k_state.Update(g_yk * sign, h_yk * sign, inv_pK_t, inv_pK_t2, inv_pq, bias_sc, CP::KYLO, CP::KYHI);
     }
-#endif
-#endif  // OPT_MKCPL sections 2+3 variant select
+    }  // ADAPT_K
 
 
     // --- 4. Update the derivative states for the NEXT cycle using NEW parameter weights ---
-#if ADAPT_WR
-    cur_wr0 = expf(clamp(wr0_state.val + wr1_state.val, UVLO, UVHI));
-    cur_wr1 = expf(clamp(wr0_state.val - wr1_state.val, UVLO, UVHI));
-#else
-    cur_wr0 = ::W0;
-    cur_wr1 = ::W1;
-#endif
+    if constexpr( CP::A_WR ) {
+      cur_wr0 = expf(clamp(wr0_state.val + wr1_state.val, CP::UVLO, CP::UVHI));
+      cur_wr1 = expf(clamp(wr0_state.val - wr1_state.val, CP::UVLO, CP::UVHI));
+    } else {
+      cur_wr0 = CP::W0;
+      cur_wr1 = CP::W1;
+    }
     
     // Calculate the actual retention weights (1.0 - decay_rate)
     float w0_retention = 1.0f - cur_wr0;
@@ -594,31 +499,31 @@ struct Counter {
     float w0b = (bit == 0) ? w0_retention : w1_retention;
     float w1b = (bit == 0) ? w1_retention : w0_retention;
 
-#if ADAPT_WR
+    if constexpr( CP::A_WR ) {
     // Applying the chain rule for d/d(alpha). Since (1 - alpha) handles retention, 
     // the injected variable acts negatively in the derivative: d/d_alpha (1 - alpha)*n = -n
     if (bit == 0) {
-      n0_ww0 = n0_ww0 * w0_retention - 2.0f * n0_w0;
-      n0_ww1 = n0_ww1 * w0_retention;
-      n1_ww0 = n1_ww0 * w1_retention;
-      n1_ww1 = n1_ww1 * w1_retention - 2.0f * n1_w1;
+      rt.n0_ww0 = rt.n0_ww0 * w0_retention - 2.0f * rt.n0_w0;
+      rt.n0_ww1 = rt.n0_ww1 * w0_retention;
+      rt.n1_ww0 = rt.n1_ww0 * w1_retention;
+      rt.n1_ww1 = rt.n1_ww1 * w1_retention - 2.0f * rt.n1_w1;
 
-      n0_w0 = n0_w0 * w0_retention - n0;
-      n0_w1 = n0_w1 * w0_retention;
-      n1_w0 = n1_w0 * w1_retention;
-      n1_w1 = n1_w1 * w1_retention - n1;
+      rt.n0_w0 = rt.n0_w0 * w0_retention - n0;
+      rt.n0_w1 = rt.n0_w1 * w0_retention;
+      rt.n1_w0 = rt.n1_w0 * w1_retention;
+      rt.n1_w1 = rt.n1_w1 * w1_retention - n1;
     } else {
-      n0_ww0 = n0_ww0 * w1_retention;
-      n0_ww1 = n0_ww1 * w1_retention - 2.0f * n0_w1;
-      n1_ww0 = n1_ww0 * w0_retention - 2.0f * n1_w0;
-      n1_ww1 = n1_ww1 * w0_retention;
+      rt.n0_ww0 = rt.n0_ww0 * w1_retention;
+      rt.n0_ww1 = rt.n0_ww1 * w1_retention - 2.0f * rt.n0_w1;
+      rt.n1_ww0 = rt.n1_ww0 * w0_retention - 2.0f * rt.n1_w0;
+      rt.n1_ww1 = rt.n1_ww1 * w0_retention;
 
-      n0_w0 = n0_w0 * w1_retention;
-      n0_w1 = n0_w1 * w1_retention - n0;
-      n1_w0 = n1_w0 * w0_retention - n1;
-      n1_w1 = n1_w1 * w0_retention;
+      rt.n0_w0 = rt.n0_w0 * w1_retention;
+      rt.n0_w1 = rt.n0_w1 * w1_retention - n0;
+      rt.n1_w0 = rt.n1_w0 * w0_retention - n1;
+      rt.n1_w1 = rt.n1_w1 * w0_retention;
     }
-#endif
+    }  // ADAPT_WR
 
     // --- 5. Update n0 and n1 model values ---
     n0 = n0 * w0b + (1.0f - float(bit));
@@ -627,10 +532,10 @@ struct Counter {
 
     //const float leakage1 = 0.998f;
     //const float leakage2 = 0.990f;
-#if ADAPT_WR
-    n0_w0 *= leakage1; n0_w1 *= leakage1; n1_w0 *= leakage1; n1_w1 *= leakage1;
-    n0_ww0 *= leakage2; n0_ww1 *= leakage2; n1_ww0 *= leakage2; n1_ww1 *= leakage2;
-#endif
+    if constexpr( CP::A_WR ) {
+    rt.n0_w0 *= CP::leakage1; rt.n0_w1 *= CP::leakage1; rt.n1_w0 *= CP::leakage1; rt.n1_w1 *= CP::leakage1;
+    rt.n0_ww0 *= CP::leakage2; rt.n0_ww1 *= CP::leakage2; rt.n1_ww0 *= CP::leakage2; rt.n1_ww1 *= CP::leakage2;
+    }
   }
 
 }; // struct
@@ -638,7 +543,7 @@ struct Counter {
 static const uint CNUM = 256;
 
 ALIGN(64) Rangecoder rc;
-Counter o1[256][256];
+Counter<CP_C0> o1[256][256];
 
 int main( int argc, char** argv ) {
   uint f_DEC, i, j, c, f_len, f_pos, cxt, bit, p;

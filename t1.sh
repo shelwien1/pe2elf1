@@ -16,7 +16,12 @@ EXE=${1:-./coder0}
 case "$EXE" in */*) ;; *) EXE="./$EXE" ;; esac
 [ -x "$EXE" ] || { echo "no executable $EXE -- run ./gc.sh first" >&2; exit 2; }
 [ $# -gt 0 ] && shift
-[ $# -gt 0 ] || set -- book1 wcc386
+if [ $# -eq 0 ]; then
+  # book1wcc (log.txt's third column) is book1 followed by wcc386: it measures
+  # re-adaptation across the file boundary.  Built here, not kept in git.
+  [ -f book1wcc ] || cat book1 wcc386 > book1wcc
+  set -- book1 wcc386 book1wcc
+fi
 
 now() { date +%s.%N; }
 
