@@ -70,13 +70,16 @@ template<class CP> struct SSE_Ctr {
     // p = sq( K * st( q0*(1-mw) + mwP0*mw ) ) at the seed K and mw, with
     // total mass T0 so the first updates move it at a controlled rate.
     float T0 = float( iclamp(t0_256, 1, 1<<20) ) / 256;
+    float a[64], b[64];
     for( uint j=0; j<nb; j++ ) {
       float s_j = -lim + float(j)*(2.0f*lim/float(nb-1));
       float pm  = sqf( s_j / CP::K );
       float q0  = (pm - CP::mwP0*CP::M) / (1.0f - CP::M);
       q0 = clamp( q0, 1.0f/4096, 1.0f-1.0f/4096 );
-      for( uint r=0; r<ncx; r++ ) t[ qword(r)*nb + j ].InitN( q0*T0, (1.0f-q0)*T0 );
+      a[j] = q0*T0; b[j] = (1.0f-q0)*T0;
     }
+    // row-major pass: the table is far bigger than any cache
+    for( uint r=0; r<ncx; r++ ) for( uint j=0; j<nb; j++ ) t[ qword(r)*nb + j ].InitN( a[j], b[j] );
   }
 
   void Quit() { delete[] t; t=0; }
