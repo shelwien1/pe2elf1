@@ -45,7 +45,11 @@ Number UPD,    1,0!10   # 0: nearer cell only; 1: both cells; 2: proportional (1
 Number UPMIN,  1,0!00000000   # floor of the proportional weights, /256 (256 = same as UPD 1)
 Number QLIN,   1,0!0   # 0: buckets uniform in stretch(p); 1: uniform in p
 Number HW,     1,0!00  # history bits per row selecting one of 2^HW sub-rows (0 = off)
-Number HMODE,  1,0!0   # history holds: 0 the row's recent bits; 1 recent SSE successes
+Number HMODE,  1,0!00  # sub-row selector: 0 the row's recent bits; 1 recent SSE successes;
+                       #   2 the order-1 counter's delay register (HW bits incl. the leading 1)
+Number DM,     1,0!000 # delayed-update counter: the order-1 cell learns each bit DM steps late
+                       #   (0 = plain counter); with HMODE 2 the register holds HW-1 bits
+Number DSIM,   1,0!1   # HMODE 2 init: 1 simulate the non-delayed counter, 0 identity
 Number DEG,    1,1!00  # B-spline degree of the interpolation kernel: 1 linear (2 cells), 2 (3 cells), 3 (4 cells)
 
 Const 0

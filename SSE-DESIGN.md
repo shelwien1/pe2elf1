@@ -237,6 +237,7 @@ Number T0, W, ILOG, BLOG      # init mass, blend weight/domain, interpolation do
 Number UPD, UPMIN, QLIN       # update rule (nearer / both / proportional + floor), input domain
 Number HW, HMODE              # per-row history sub-rows: width, bits or successes
 Number DEG                    # B-spline degree of the interpolation kernel (1..3)
+Number DM, DSIM               # delayed-update counter: delay, simulation init (with HMODE 2)
 Number P0 … mwXhi             # the cell counter constants, same meaning as C0_*
 ```
 
@@ -248,8 +249,8 @@ Number P0 … mwXhi             # the cell counter constants, same meaning as C0
   (`./gc.sh`) and to patchable `!MAP!` objects in the tuning build
   (`./gc.sh tune`); `config.hpp` (with `CP_SSE`) derives the `CP_S0`
   constants — counter floats and the SSE knobs `NB`, `HBITS`, `LIM`, `T0`,
-  `W`, `ILOG`, `BLOG`, `UPD`, `UPMIN`, `QLIN`, `HW`, `HMODE`, `DEG` — from
-  either.
+  `W`, `ILOG`, `BLOG`, `UPD`, `UPMIN`, `QLIN`, `HW`, `HMODE`, `DEG`, `DM`,
+  `DSIM` — from either.
 * **Clamps at the point of use.**  `SSE_Ctr::Init()` clamps `nb` to
   `[2,64]`, `HBITS` to `[8,30]`, `LIM` to `[0.25,16]`, `T0`, `W`, and caps the
   cells at `2^SSE_MAXCELLS_LOG`, so any bit pattern the optimizer visits runs
@@ -513,9 +514,55 @@ wider kernel spreads every event over cells that mostly belong to other
 input probabilities (the same effect that made the full-both update lose
 to the proportional one).  Linear stays; `DEG` remains a knob.
 
-### 6.7 Tuned result
+### 6.7 The delayed-update counter reading of SSE
 
-*(filled in from the `opt.pl` run, §8)*
+A *delayed-update counter* keeps an M-bit register of its most recent bits
+(with a leading marker bit, so M+1 bits of state cover the warm-up) and
+learns each bit only when it falls out of the register, M steps late.  Its
+prediction therefore lags, and a *contextual transformation* indexed by the
+register turns the lagging prediction into the current one.  The transform
+can be initialized to reproduce the plain counter exactly — apply the M
+pending bits to a counter state that would give the delayed prediction —
+and then adapt, so the counter's fixed recursion over its last M bits is
+replaced by a learned function of those very bits.  That is an SSE whose
+row context is the counter's own register and whose input is the delayed
+counter; implemented here as `S0_DM` (delay), `S0_HMODE=2` (the order-1
+cell's register selects the sub-row) and `S0_DSIM` (simulation vs.
+identity init of the sub-rows, `duc_sim()` in coder0.cpp, at the seed
+rates and steady-state mass).
+
+As a refinement of the order-1 model alone (rows `c1,cxt` = the counter's
+own context, `W=1` so the transform output is used as is; plain counters
+654602):
+
+| register | delay | init | `T0` | book1 | wcc386 | total |
+|---|---|---|---|---|---|---|
+| 1 bit | 0 | — | 1 | 344713 | 309988 | 654701 |
+| 1 bit | 1 | simulation | 1 | 344714 | 309531 | 654245 |
+| 1 bit | 1 | simulation | 4 | 344777 | 308387 | **653164** |
+| 2 bits | 2 | simulation | 1 | 345620 | 310437 | 656057 |
+| 2 bits | 2 | identity | 1 | 345495 | 314192 | 659687 |
+| 2 bits | 2 | simulation, `W=0.9` | 1 | 345197 | 309835 | 655032 |
+
+The mechanism works as described: the simulation init lands close to the
+plain counter (identity init costs 3–9K more) and a one-bit delay with a
+learned transform is worth −1438 (−0.2%), all of it on the x86 file.  A
+two-bit register already loses: every register value splits the row's
+statistics further, and the adaptive counter's own recursion over its
+last bits is hard to beat with a table that has to learn it per row.
+
+Inside the full stage (rows `c3[4:0],c2,c1,cxt`) the register costs rows
+under the cell cap and dilutes the order-3 statistics; against the plain
+SSE at the same row count it loses 11K with one register bit and 20K with
+two, delayed or not, and 21K in the best delayed configuration (563590
+vs. 542194).  The one table is worth far more spent on context the
+counter does not have (§6.2) than on re-learning what the counter does
+with the context it has; the delayed reading would be a second, small
+stage on the order-1 model, and the knobs stay in the code for that.
+
+### 6.8 Tuned result
+
+*(filled in from the `opt.pl` run)*
 
 ---
 

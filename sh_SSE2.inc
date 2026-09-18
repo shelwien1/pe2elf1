@@ -23,9 +23,13 @@
 //                    whether the SSE gave the bit p > 0.5 (HMODE 1).
 //
 // A row has 2^HW sub-rows selected by its own HW-bit history (the "width"
-// of sh_SSE1.inc).  Rows beyond 1<<HBITS (or the SSE_MAXCELLS_LOG cap) are
-// hashed.  Every knob comes from the bundle (CP::NB, CP::LIM, ...;
-// config.hpp with CP_SSE).
+// of sh_SSE1.inc), or -- HMODE 2, the delayed-update-counter reading of SSE
+// -- by a register the caller passes in (the order-1 cell's last bits, the
+// ones its delayed counter has not learned yet); Init() can then seed
+// every sub-row so that transform(delayed p) reproduces the non-delayed
+// counter.  Rows beyond 1<<HBITS (or the SSE_MAXCELLS_LOG cap) are hashed.
+// Every knob comes from the bundle (CP::NB, CP::LIM, ...; config.hpp with
+// CP_SSE).
 //
 // Two versions, selected by USE_NEW from the generated IDX headers:
 //   USE_NEW=0 (shipping) SSE_Ctr<CP, CP::NB>: NB is a plain template
@@ -82,7 +86,18 @@ template<class CP, int NB> struct SSE_Ctr {
   static float sqf( float x ) { return 1.0f/(1.0f+expf(-x)); }
   static int iclamp( int x, int lo, int hi ) { return x<lo ? lo : x>hi ? hi : x; }
 
-  void Init( qword volume ) {
+  // p_target -> counts (a, b) of a fresh cell that predicts it: inverts the
+  // cell's output map p = sq( K * st( q0*(1-mw) + mwP0*mw ) ) at the seeds.
+  static void TargetCounts( float s_target, float T0, float& a, float& b ) {
+    float pm  = sqf( s_target / CP::K );
+    float q0  = (pm - CP::mwP0*CP::M) / (1.0f - CP::M);
+    q0 = clamp( q0, 1.0f/4096, 1.0f-1.0f/4096 );
+    a = q0*T0; b = (1.0f-q0)*T0;
+  }
+
+  // sim(h, p): the probability the transform should return for sub-row h
+  // and input p before any adaptation (0 = identity); used with HMODE 2.
+  void Init( qword volume, float (*sim)( int h, float p ) = 0 ) {
     vol   = volume;
     int hbits = iclamp( CP::HBITS, 8, 30 );
     hw    = iclamp( CP::HW, 0, 6 );
@@ -118,13 +133,30 @@ template<class CP, int NB> struct SSE_Ctr {
     for( int k=0; k<NB+2; k++ ) {
       int   j   = k-1;
       float s_j = CP::QLIN ? stf( float(j)/float(NB-1) ) : -lim + float(j)*(2.0f*lim/float(NB-1));
-      float pm  = sqf( s_j / CP::K );
-      float q0  = (pm - CP::mwP0*CP::M) / (1.0f - CP::M);
-      q0 = clamp( q0, 1.0f/4096, 1.0f-1.0f/4096 );
-      a[k] = q0*T0; b[k] = (1.0f-q0)*T0;
+      TargetCounts( s_j, T0, a[k], b[k] );
     }
-    // row-major pass: the table is far bigger than any cache
-    for( qword r=0; r<(qword(ncx)<<hw); r++ ) for( int k=0; k<stride; k++ ) t[ r*stride + k ].InitN( a[k+1-pad], b[k+1-pad] );
+    if( sim && hw ) {
+      // per sub-row targets: what the transform must return for input p_j
+      // under register h, e.g. the non-delayed counter simulated from the
+      // delayed one (HMODE 2 / DSIM)
+      uint nsub = 1u<<hw;
+      float* as = new float[ nsub*(NB+2) ];
+      float* bs = new float[ nsub*(NB+2) ];
+      for( uint h=0; h<nsub; h++ ) for( int k=0; k<NB+2; k++ ) {
+        int   j   = k-1;
+        float s_j = CP::QLIN ? stf( float(j)/float(NB-1) ) : -lim + float(j)*(2.0f*lim/float(NB-1));
+        float pt  = sim( int(h), sqf(s_j) );
+        TargetCounts( stf(pt), T0, as[h*(NB+2)+k], bs[h*(NB+2)+k] );
+      }
+      for( qword r=0; r<(qword(ncx)<<hw); r++ ) {
+        uint h = uint(r) & (nsub-1);
+        for( int k=0; k<stride; k++ ) t[ r*stride + k ].InitN( as[h*(NB+2)+k+1-pad], bs[h*(NB+2)+k+1-pad] );
+      }
+      delete[] as; delete[] bs;
+    } else {
+      // row-major pass: the table is far bigger than any cache
+      for( qword r=0; r<(qword(ncx)<<hw); r++ ) for( int k=0; k<stride; k++ ) t[ r*stride + k ].InitN( a[k+1-pad], b[k+1-pad] );
+    }
   }
 
   void Quit() { delete[] t; t=0; delete[] hist; hist=0; }
@@ -135,13 +167,15 @@ template<class CP, int NB> struct SSE_Ctr {
     return uint( (qword(h) * ncx) >> 32 );
   }
 
-  // p = P(bit==0) from the primary model; returns the refined P(bit==0)
-  float Predict( qword cx, float p ) {
+  // p = P(bit==0) from the primary model; returns the refined P(bit==0).
+  // hsel: the caller's sub-row selector, used with HMODE 2.
+  float Predict( qword cx, float p, uint hsel = 0 ) {
     float s0 = stf(p);
     float s  = clamp( s0, -lim, lim );
     float x  = CP::QLIN ? p * float(NB-1) : (s + lim) * qscale;
     row = Row(cx);
-    uint sub = (row << hw) + (hist[row] & ((1u<<hw)-1));
+    uint h = CP::HMODE==2 ? hsel : hist[row];
+    uint sub = (row << hw) + (h & ((1u<<hw)-1));
     Cell* base = t + qword(sub)*stride + pad;       // base[0..NB-1] = the buckets
     if( deg==1 ) {
       // linear: the two neighbours (kept as the exact lerp)
@@ -192,7 +226,7 @@ template<class CP, int NB> struct SSE_Ctr {
       int kb = 0; for( int k=1; k<n; k++ ) if( wk[k]>wk[kb] ) kb = k;
       c[kb].C_Update(bit);
     }
-    if( hw ) {
+    if( hw && CP::HMODE!=2 ) {
       int h = CP::HMODE ? ((ps>=0.5f) == (bit==0)) : bit;
       hist[row] = byte((hist[row]<<1) | h);
     }
@@ -203,16 +237,16 @@ template<class CP, int NB> struct SSE_Ctr {
 // SSE_Ctr<CP,NB> instantiation is used from then on.
 template<class CP> struct SSE_Dyn {
   struct If {
-    virtual void  Init( qword volume ) = 0;
-    virtual float Predict( qword cx, float p ) = 0;
+    virtual void  Init( qword volume, float (*sim)(int,float) ) = 0;
+    virtual float Predict( qword cx, float p, uint hsel ) = 0;
     virtual void  Update( int bit ) = 0;
     virtual void  Quit() = 0;
     virtual ~If() {}
   };
   template<int NB> struct Impl : If {
     SSE_Ctr<CP,NB> s;
-    void  Init( qword volume ) { s.Init(volume); }
-    float Predict( qword cx, float p ) { return s.Predict(cx,p); }
+    void  Init( qword volume, float (*sim)(int,float) ) { s.Init(volume, sim); }
+    float Predict( qword cx, float p, uint hsel ) { return s.Predict(cx,p,hsel); }
     void  Update( int bit ) { s.Update(bit); }
     void  Quit() { s.Quit(); }
   };
@@ -223,8 +257,8 @@ template<class CP> struct SSE_Dyn {
 
   If* p;
   int nb;
-  void  Init( qword volume ) { nb = sse_nb_clamp(CP::NB); p = make<2>(nb); p->Init(volume); }
-  float Predict( qword cx, float x ) { return p->Predict(cx,x); }
+  void  Init( qword volume, float (*sim)(int,float) = 0 ) { nb = sse_nb_clamp(CP::NB); p = make<2>(nb); p->Init(volume, sim); }
+  float Predict( qword cx, float x, uint hsel = 0 ) { return p->Predict(cx,x,hsel); }
   void  Update( int bit ) { p->Update(bit); }
   void  Quit() { p->Quit(); delete p; p=0; }
 };

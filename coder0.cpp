@@ -574,6 +574,36 @@ static const uint CNUM = 256;
 
 ALIGN(64) Rangecoder rc;
 Counter<CP_C0> o1[256][256];
+
+// Delayed-update counter (S0_DM > 0): each order-1 cell keeps a register of
+// its last bits with a leading 1 (capacity DUC_C bits) and learns a bit only
+// DM steps after it was coded; the SSE sub-row selected by the register
+// (S0_HMODE 2) is the contextual transform that turns the delayed
+// prediction into the current one.
+byte o1reg[256][256];
+static int DUC_C  = 0;   // register capacity (bits), HW-1 with HMODE 2
+static int DUC_DM = 0;   // delay
+
+// The transform's initial state: the non-delayed counter simulated from
+// the delayed one -- a counter state predicting p at the seed rates, moved
+// by the (at most DM) most recent bits of register h, oldest first.
+static float duc_sim( int h, float p ) {
+  typedef Counter<CP_C0> C;
+  if( h<1 || DUC_DM<1 ) return p;
+  int m = 0; while( (2<<m) <= h ) m++;                 // bits stored in h
+  int n = m < DUC_DM ? m : DUC_DM;                     // bits the counter has not seen
+  float pm = C::sq( C::st(p) / CP_C0::K );
+  float q0 = clamp( (pm - CP_C0::mwP0*CP_C0::M) / (1.0f - CP_C0::M), 1.0f/4096, 1.0f-1.0f/4096 );
+  float T  = 1.0f / CP_C0::W0;                         // steady-state mass
+  float n0 = q0*T, n1 = (1.0f-q0)*T;
+  for( int i=n-1; i>=0; i-- ) {
+    if( ((h>>i)&1)==0 ) { n0 = n0*(1.0f-CP_C0::W0) + 1.0f; n1 = n1*(1.0f-CP_C0::W1); }
+    else                { n1 = n1*(1.0f-CP_C0::W0) + 1.0f; n0 = n0*(1.0f-CP_C0::W1); }
+  }
+  float p0 = n0 / (n0+n1+1e-8f);
+  p0 = p0*(1.0f-CP_C0::M) + CP_C0::mwP0*CP_C0::M;
+  return C::sq( CP_C0::K * C::st(p0) );
+}
 // USE_NEW comes from the generated IDX headers: 1 = tuning build (knobs are
 // runtime values, dispatch on NB), 0 = shipping build (NB folded).
 #if USE_NEW
@@ -624,7 +654,13 @@ int main( int argc, char** argv ) {
 
   // Initialize Order-1 Predictor array
   for( i=0; i<CNUM; i++) for( j=0; j<CNUM; j++ ) o1[i][j].Init();
-  sse.Init( qword(S0_Cx_Volume)*S0_Cx3_Volume );
+  {
+    int hw = CP_S0::HW<0 ? 0 : CP_S0::HW>6 ? 6 : CP_S0::HW;
+    DUC_C  = CP_S0::HMODE==2 ? (hw>0 ? hw-1 : 0) : 7;
+    DUC_DM = CP_S0::DM<0 ? 0 : CP_S0::DM>DUC_C ? DUC_C : CP_S0::DM;
+    for( i=0; i<CNUM; i++) for( j=0; j<CNUM; j++ ) o1reg[i][j] = 1;
+    sse.Init( qword(S0_Cx_Volume)*S0_Cx3_Volume, (CP_S0::HMODE==2 && CP_S0::DSIM) ? duc_sim : 0 );
+  }
 
   int last_c = 0, c2 = 0, c3 = 0;
 
@@ -637,12 +673,22 @@ int main( int argc, char** argv ) {
       // primary order-1 prediction, refined by the SSE stage
       float p1 = o1[last_c][cxt].PredictF();
       qword cx = qword(S0_MakeCx(c2, last_c, cxt))*S0_Cx3_Volume + S0_MakeCx3(c3);
-      float pf = sse.Predict( cx, p1 );
+      float pf = sse.Predict( cx, p1, o1reg[last_c][cxt] );
       p = uint( clamp( pf*float(SCALE) ) );
       
       bit = rc.rc_BProcess( p, bit );
 
-      o1[last_c][cxt].C_Update( bit );
+      if( DUC_DM==0 ) o1[last_c][cxt].C_Update( bit );
+      else {
+        // feed the bit that is DM steps old, once the register holds DM bits
+        uint r = o1reg[last_c][cxt];
+        if( r >= (1u<<DUC_DM) ) o1[last_c][cxt].C_Update( (r>>(DUC_DM-1))&1 );
+      }
+      if( DUC_C ) {
+        uint r = (uint(o1reg[last_c][cxt])<<1) | bit;
+        if( r >= (2u<<DUC_C) ) r = (r & ((1u<<DUC_C)-1)) | (1u<<DUC_C);   // keep C bits + marker
+        o1reg[last_c][cxt] = byte(r);
+      }
       sse.Update( bit );
 
       c<<=1; cxt+=cxt+bit;
