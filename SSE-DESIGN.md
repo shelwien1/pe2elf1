@@ -710,6 +710,55 @@ included) took 517322 → 516174: it widened the mixer's `c2` context to six
 bits, raised the bias box and both step clips, and lowered the weight's
 curvature clip.
 
+### 6.10 The step rule of `ParamUpdater`
+
+`ParamUpdater` is a diagonal online Newton method: `D = EMA(−∂ln p/∂θ)`,
+`R = EMA((∂p/∂θ)²/p² − ∂²p/∂θ²/p)` (the exact Hessian of `−ln p`, not
+just the squared gradient), `step = NW·D/(R+inc)`, clipped and boxed.
+Muon-style ideas apply to it only in their scalar form — Muon
+orthogonalizes a *matrix* momentum, which for independent per-context
+scalars collapses to normalized momentum (a step of fixed size along the
+momentum, no curvature) — so the rules compared, as the mixer's `OPTw` /
+`OPTb` knobs, are: Newton (0), normalized momentum `D/(|D|+inc)` (2), Adam
+`D/(√EMA(g²)+inc)` (3), each also at a quarter of the rate since their
+effective step sizes differ, plus a curvature prior `R0` for the Newton
+rule (the mixer's contexts see ~10 events on average, so the EMAs barely
+warm up).  Mixer at the tuned seeds (515550):
+
+| rule | on | rate | book1 | wcc386 | total |
+|---|---|---|---|---|---|
+| Newton | — | tuned | 235043 | 280507 | **515550** |
+| normalized momentum | weight | tuned / ÷4 | 235752 / 235599 | 281282 / 281399 | 517034 / 516998 |
+| normalized momentum | bias | tuned / ÷4 | 245179 / 237946 | 287584 / 284251 | 532763 / 522197 |
+| Adam | weight | tuned / ÷4 / ÷2 | 235126 / 235652 / 235309 | 281067 / 281545 / 281277 | 516193 / 517197 / 516586 |
+| Adam | bias | tuned / ÷4 | 236817 / 235549 | 281999 / 281969 | 518816 / 517518 |
+| Newton, `R0` = 0.25 / 1.0 | weight | tuned | 235157 / 235372 | 280680 / 281107 | 515837 / 516479 |
+| Newton, `R0` = 0.25 / 1.0 | bias | tuned | 235105 / 235238 | 280816 / 281375 | 515921 / 516613 |
+
+With an exact second derivative available per parameter, the Newton
+step beats both scale-free rules, by a little on the weight and by a lot
+on the bias (whose gradient scale varies most across contexts, which is
+exactly what the curvature normalizes away), and the EMAs are better
+started empty than from a prior.  What would still be worth trying, in
+order of expected value: a Nesterov look-ahead (the step from
+`β·D_new + g` instead of `D_new`; needs the last gradient), the 2×2
+coupled solve of the (weight, bias) pair with the cross curvature
+`∂²p/∂W∂b = p''(st)·(s1−s2)·w(1−w)` (the counters already do this for
+their (u, v) pair), and per-cell step-size adaptation on the sign
+agreement of consecutive gradients.  The knobs stay at Newton; the
+counters were never switched.
+
+**The offline optimizer** (`opt.pl`) is a different problem: coordinate
+descent over bit patterns with one full corpus run per evaluation.  Its
+cost is the number of evaluations, and the useful improvements are about
+that rather than about the search direction: evaluating several
+candidate flips of one knob in parallel and keeping the best (the corpus
+runs are independent), climbing values by ±1/±2/±4 steps rather than
+single bits (a high bit flip is a huge jump that almost never helps, a
+low one is noise), racing — aborting a run as soon as its size at a
+checkpoint exceeds the incumbent's — and visiting knobs in the order of
+their last measured effect.
+
 ## 7. Cost, and how to trade it
 
 | | no SSE | SSE, defaults |
