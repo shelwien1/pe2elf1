@@ -311,7 +311,10 @@ and reassociation off (`-ffp-contract=off -fno-associative-math` in
 `gc.sh`): with knobs folded in one build and runtime in the other, gcc
 otherwise contracts or reorders the same float expressions differently
 and the streams drift by a few bytes.  `opt.pl` gained an optional map-name regex (third argument) and
-`OPT_JOBS` for compressing the corpus files in parallel.  `gc.sh` passes
+`OPT_JOBS` for compressing the corpus files in parallel; it treats a coder
+that did not exit cleanly as a failed measurement (a crashed or OOM-killed
+run leaves a short output behind, which used to count as an improvement).
+`gc.sh` passes
 `USE_NEW` (1 for `tune`, 0 otherwise) as the second argument of
 `idx2inc.pl`, and leaves `MOD/` in the shipping state after either build.
 
