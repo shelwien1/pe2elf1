@@ -651,8 +651,31 @@ Seeds of §6.8 (529128), SSE `W = 1`, mixer as in §3.7:
 | same | `c1[7:4]`, `c2[7:4]`, node | 237035 | 280488 | 517523 |
 | same, SSE `W = 0.81` kept | `c1`, `c2`, node | 236847 | 282141 | 518988 |
 
-The mixer's table is small (2^20 contexts × 24 B = 25 MB) and its cost per
+The mixer's table is small (2^20 contexts × 36 B = 38 MB) and its cost per
 bit negligible next to the SSE cells.
+
+**Weight domain** (`WDOM`): the parametrization `w = f(W)` decides the box
+and the shape of the Newton step; only `f'` and `f''` change in the update.
+At the seeds above (rates chosen for the logistic domain; the linear and
+free forms take a 4× larger effective step, so they were also tried at a
+quarter of the rate):
+
+| domain | box | book1 | wcc386 | total |
+|---|---|---|---|---|
+| logistic `w = sq(W)` | `W` in ±8 | 236097 | 281225 | **517322** |
+| linear `w = W` | `w` in [0, 1] | 235951 | 281425 | 517376 |
+| linear `w = W` | `w` in [−1, 2] | 236810 | 282882 | 519692 |
+| linear, rate ÷4 | `w` in [−1, 2] | 236940 | 282276 | 519216 |
+| reciprocal `w = 1/V` | `V` in [0.5, 64] | 237401 | 282759 | 520160 |
+| log `w = exp(W)` | `W` in ±8 | 253733 | 298255 | 551988 |
+| free `W1·s1 + W2·s2` | each in [−1, 2] | 236809 | 283466 | 520275 |
+| free, rate ÷4 | each in [−1, 2] | 236811 | 282389 | 519200 |
+
+Bounded to [0, 1] the domain hardly matters; every form that lets the
+weight extrapolate beyond the two inputs, or scale the confidence freely,
+loses 2–3K, and the log domain much more.  With per-context Newton steps
+and few events per context, the self-damping of the logistic map near
+the ends is worth more than the extra freedom.  `WDOM` stays a knob at 0.
 
 ## 7. Cost, and how to trade it
 

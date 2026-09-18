@@ -19,8 +19,8 @@
 struct CP_NAME {
   def_Config(Config_W)
   def_Config(Config_B)
-  static const int   ON, BIAS;
-  static const float W0, Wclip, Bclip, Pmin;
+  static const int   ON, BIAS, WDOM;
+  static const float W0, Wclip, Bclip, Pmin, Wlin;
 };
 
 #define set  const float CP_NAME::Config_W::
@@ -55,9 +55,11 @@ set R0         = 0.0f;
 
 const int   CP_NAME::ON    = CPX(ON);
 const int   CP_NAME::BIAS  = CPX(BIAS);
+const int   CP_NAME::WDOM  = CPX(WDOM);
 const float CP_NAME::W0    = float(CPX(W0)) / SCALE;
 const float CP_NAME::Wclip = float(CPX(Wclip)) / (1<<8);
 const float CP_NAME::Bclip = float(CPX(Bclip)) / (1<<8);
+const float CP_NAME::Wlin  = float(CPX(Wlin)) / (1<<8);
 const float CP_NAME::Pmin  = fmaxf( float(CPX(Pmin)) / (float(SCALE) * 65536.0f), 1.0f/(1<<24) );   // never 0: st() would be infinite
 
 #undef CPX
