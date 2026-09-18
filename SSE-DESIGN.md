@@ -251,10 +251,10 @@ whole stage — geometry, context, and the full counter parameter set — is one
 ```
 Index Cx                      # row context, part 1 (int volume, <= 24 bits)
  c2: c2, &11111111            #   bits of the byte before last
- c1: c1, &11111111            #   bits of the last byte
- ADD 256: cxt                 #   bit-tree node, always in
+ c1: c1, &00011111            #   bits of the last byte
+ cx: cxt, b&00000000          #   bit-tree node (b&: node bits merged relative to the leading 1)
 Index Cx3                     # row context, part 2
- c3: c3, &00011111            #   bits of the third-last byte
+ c3: c3, &01011111            #   bits of the third-last byte
 Number HBITS, NB, LIM         # rows limit, buckets, stretch clip
 Number T0, W, ILOG, BLOG      # init mass, blend weight/domain, interpolation domain
 Number UPD, UPMIN, QLIN       # update rule (nearer / both / proportional + floor), input domain
@@ -265,8 +265,13 @@ Number P0 … mwXhi             # the cell counter constants, same meaning as C0
 ```
 
 * **Context masks** are IDX bitmask mappings: each `1` keeps a bit of the
-  byte, so the optimizer decides how much of `c3`/`c2`/`c1` a row sees.  Two
-  `Index` blocks exist only because the generator's volume is an `int`;
+  byte, so the optimizer decides how much of `c3`/`c2`/`c1` a row sees.  The
+  bit-tree node goes through the incremental mask `b&` (`masking_b` /
+  `pmask2`): a `1` at position *k* merges the nodes that differ in the
+  *k*-th bit after the leading 1, at every depth, so the optimizer can also
+  coarsen the node context (all zeros = every node distinct).  The mixer's
+  context (`IDX/sh_model-M0.idx`) uses the same three lines.  Two `Index`
+  blocks exist only because the generator's volume is an `int`;
   `coder0.cpp` combines them as `Cx·Cx3_Volume + Cx3` in 64 bits.
 * **`Number` knobs** compile to literals in the shipping build
   (`./gc.sh`) and to patchable `!MAP!` objects in the tuning build

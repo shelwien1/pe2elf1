@@ -16,7 +16,7 @@ Const 0
 Index Cx
  c2: c2, &11110000    # byte before last (bits tunable)
  c1: c1, &11111111    # last byte (bits tunable)
- ADD 256: cxt         # bit-tree node 1..255, always in
+ cx: cxt, b&00000000  # bit-tree node: b& merges node bits counted from the leading 1 (0 = keep)
 
 # --- weight / bias seeds and boxes --------------------------------------
 Number ON,     1,0!1   # 0: mixer bypassed, final p = SSE output (the pre-mixer pipeline)

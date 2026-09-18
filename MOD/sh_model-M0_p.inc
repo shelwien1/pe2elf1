@@ -7,6 +7,6 @@ static uint M0_MakeCx( uint c2, uint c1, uint cxt ) {
   Cx = 0;
   Cx = (Cx<<4) + ((((c2)>>4)&15)); // 11110000
   Cx = (Cx<<8) + (((c1)&255)); // 11111111
-  Cx = Cx*(256) + (cxt);
+  Cx = (Cx*255) + M0_cx[(cxt)<1?1:((cxt)>255?255:(cxt))]; // 00000000
   return uint(Cx);
 }

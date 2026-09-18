@@ -111,7 +111,11 @@ while( <I1> ) {
       $lmap = length($map);
       $h = 1 << $lmap;
       $sz = 1 << $lmap;
-      if( $ccount>0 ) {
+      # Always the table path, also for an all-zero mask: masking_b renumbers
+      # the nodes to 0..k-1 with Size=k whatever the mask, and the old
+      # "($index*$sz) + var" shortcut for a zero mask gave the Const build a
+      # different index (and volume) from the tuning build's object.
+      if( 1 ) {
         $mask = unpack( "N", pack( "B32", substr(('0' x 32).$map,-32) ) );
         undef @pmap;
         for( $i=0; $i<$h; $i++ ) { $pmap[$i]=0; }

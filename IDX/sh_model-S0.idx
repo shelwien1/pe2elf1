@@ -26,7 +26,7 @@ Const 0
 Index Cx
  c2: c2, &11111111    # byte before last (all off = order-1 SSE; bits tunable)
  c1: c1, &00011111    # last byte
- ADD 256: cxt         # bit-tree node 1..255, always in (last factor)
+ cx: cxt, b&00000000  # bit-tree node: b& merges node bits counted from the leading 1 (0 = keep)
 
 Index Cx3
  c3: c3, &01011111    # third-last byte, low 5 bits (bits tunable)
