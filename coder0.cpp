@@ -582,7 +582,7 @@ int main( int argc, char** argv ) {
   if( argc < 4 ) {
     print_usage:
     printf(
-      "O1 Compressor - Order-1 adaptive lossless compression\n"
+      "O1 Compressor - Order-1 adaptive lossless compression + SSE stage\n"
       "\n"
       "Usage: %s <mode> <input> <output>\n"
       "\n"

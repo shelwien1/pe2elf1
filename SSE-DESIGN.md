@@ -397,8 +397,9 @@ These seeds — 8 buckets, full `c2`, `c3 = 00011111`, `W = 0.9` stretch,
 | time, book1 | ~1.0 s | ~5 s |
 
 The stage does two full `Counter` predictions and updates per bit on top of
-the order-1 one, over a table that does not fit any cache.  The levers, with
-their measured cost from §6:
+the order-1 one, over a table that does not fit any cache.  About 0.7 s of
+the run is allocating and identity-initializing the table (row-major; the
+remainder is page faulting).  The levers, with their measured cost from §6:
 
 * `S0_HBITS` / `SSE_MAXCELLS_LOG`: rows.  400 MB costs ~3K (`wcc386`),
   100 MB ~12K.
