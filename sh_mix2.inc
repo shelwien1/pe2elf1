@@ -13,13 +13,18 @@
 // w = 1 - W_sse; adaptive it learns the blend per context.
 // -------------------------------------------------------------
 
+#ifndef MIX_MAXCTX_LOG
+#define MIX_MAXCTX_LOG 24      // cap on mixer contexts; beyond it they are hashed
+#endif
+
 template<class CP> struct Mix2 {
   struct Cell {
     ParamUpdater<1, typename CP::Config_W> w;
     ParamUpdater<1, typename CP::Config_B> b;
   };
   Cell* t;
-  uint  n;
+  uint  n;        // contexts allocated
+  uint  vol;      // contexts asked for; hashed when vol > n
 
   // per-query state, valid between Mix() and Update()
   Cell* c;
@@ -32,7 +37,8 @@ template<class CP> struct Mix2 {
   static float sqf( float x ) { return 1.0f/(1.0f+expf(-x)); }
 
   void Init( uint contexts ) {
-    n = contexts;
+    vol = contexts < 1 ? 1 : contexts;
+    n = vol < (1u<<MIX_MAXCTX_LOG) ? vol : (1u<<MIX_MAXCTX_LOG);
     t = new Cell[n];
     float w0 = clamp( CP::W0, 1.0f/65536, 1.0f-1.0f/65536 );
     float W0 = clip( logf(w0/(1.0f-w0)), CP::Wclip );
@@ -43,7 +49,7 @@ template<class CP> struct Mix2 {
   // p1, p2 = P(bit==0) of the two inputs; returns the mixed P(bit==0)
   float Mix( uint cx, float p1, float p2 ) {
     if( !CP::ON ) { p0 = p2; return p2; }     // bypass: the SSE output as is
-    c  = t + (cx < n ? cx : cx % n);
+    c  = t + ( vol<=n ? cx : uint( (qword(cx*0x9E3779B1u) * n) >> 32 ) );
     s1 = stf(p1);
     s2 = stf(p2);
     wv = sqf( c->w.val );

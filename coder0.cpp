@@ -602,7 +602,7 @@ static float duc_sim( int h, float p ) {
   int n = m < DUC_DM ? m : DUC_DM;                     // bits the counter has not seen
   float pm = C::sq( C::st(p) / CP_C0::K );
   float q0 = clamp( (pm - CP_C0::mwP0*CP_C0::M) / (1.0f - CP_C0::M), 1.0f/4096, 1.0f-1.0f/4096 );
-  float T  = 1.0f / CP_C0::W0;                         // steady-state mass
+  float T  = 1.0f / fmaxf( CP_C0::W0, 1.0f/256 );      // steady-state mass
   float n0 = q0*T, n1 = (1.0f-q0)*T;
   for( int i=n-1; i>=0; i-- ) {
     if( ((h>>i)&1)==0 ) { n0 = n0*(1.0f-CP_C0::W0) + 1.0f; n1 = n1*(1.0f-CP_C0::W1); }
@@ -622,7 +622,7 @@ SSE_Ctr<CP_S0, sse_nb_clamp(CP_S0::NB)> sse;
 Mix2<CP_M0> mix;   // final p = mix( order-1 prediction, SSE output )
 
 int main( int argc, char** argv ) {
-  uint f_DEC, i, j, c, f_len, f_pos, cxt, bit, p;
+  uint f_DEC, i, j, c=0, f_len, f_pos, cxt, bit=0, p;
   FILE* f;
   FILE* g;
 
@@ -657,15 +657,17 @@ int main( int argc, char** argv ) {
     rc.StartEncode(g);
   } else {
     f_len = 0;
-    fread( &f_len, 1,sizeof(f_len), f );
+    if( fread( &f_len, 1,sizeof(f_len), f ) != sizeof(f_len) ) { fclose(g); fclose(f); return 4; }
     rc.StartDecode(f);
   }
 
   // Initialize Order-1 Predictor array
   for( i=0; i<CNUM; i++) for( j=0; j<CNUM; j++ ) o1[i][j].Init();
   {
+    // register capacity: HW-1 bits when it selects the SSE sub-row, else
+    // 7 when the counter is delayed, else none (no register maintained)
     int hw = CP_S0::HW<0 ? 0 : CP_S0::HW>6 ? 6 : CP_S0::HW;
-    DUC_C  = CP_S0::HMODE==2 ? (hw>0 ? hw-1 : 0) : 7;
+    DUC_C  = CP_S0::HMODE==2 ? (hw>0 ? hw-1 : 0) : (CP_S0::DM>0 ? 7 : 0);
     DUC_DM = CP_S0::DM<0 ? 0 : CP_S0::DM>DUC_C ? DUC_C : CP_S0::DM;
     for( i=0; i<CNUM; i++) for( j=0; j<CNUM; j++ ) o1reg[i][j] = 1;
     sse.Init( qword(S0_Cx_Volume)*S0_Cx3_Volume, (CP_S0::HMODE==2 && CP_S0::DSIM) ? duc_sim : 0 );

@@ -27,7 +27,7 @@ struct CP_NAME {
 set momentum_D = 1.0f - float(CPX(M1w)) / (SCALE<<9);
 set momentum_R = 1.0f - float(CPX(M2w)) / (SCALE<<11);
 set NW         = float(CPX(NWw)) / (SCALE<<9);
-set inc        = float(CPX(INCw)) / (SCALE<<11);
+set inc        = fmaxf( float(CPX(INCw)) / (SCALE<<11), 1.0f/(SCALE<<11) );   // never 0: R+inc divides
 set stepMax    = float(CPX(STEPw)) / (SCALE<<8);
 set minVal     = 0.0f;
 set maxVal     = 0.0f;
@@ -42,7 +42,7 @@ set R0         = 0.0f;
 set momentum_D = 1.0f - float(CPX(M1b)) / (SCALE<<9);
 set momentum_R = 1.0f - float(CPX(M2b)) / (SCALE<<11);
 set NW         = float(CPX(NWb)) / (SCALE<<9);
-set inc        = float(CPX(INCb)) / (SCALE<<11);
+set inc        = fmaxf( float(CPX(INCb)) / (SCALE<<11), 1.0f/(SCALE<<11) );
 set stepMax    = float(CPX(STEPb)) / (SCALE<<8);
 set minVal     = 0.0f;
 set maxVal     = 0.0f;
@@ -58,7 +58,7 @@ const int   CP_NAME::BIAS  = CPX(BIAS);
 const float CP_NAME::W0    = float(CPX(W0)) / SCALE;
 const float CP_NAME::Wclip = float(CPX(Wclip)) / (1<<8);
 const float CP_NAME::Bclip = float(CPX(Bclip)) / (1<<8);
-const float CP_NAME::Pmin  = float(CPX(Pmin)) / (float(SCALE) * 65536.0f);
+const float CP_NAME::Pmin  = fmaxf( float(CPX(Pmin)) / (float(SCALE) * 65536.0f), 1.0f/(1<<24) );   // never 0: st() would be infinite
 
 #undef CPX
 #undef CP_CAT

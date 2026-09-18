@@ -48,25 +48,29 @@ $jobs = $ENV{OPT_JOBS} || 1;
 sub measure {
   my $t = 0;
   my (@pids, @outs);
+  my $bad = 0;   # a coder that did not exit cleanly (crash, OOM kill, bad
+                 # alloc) may leave a short output behind; that is not a
+                 # smaller file but a failed measurement
   for my $i (0..$#files) {
     my $f = $files[$i];
     my $o = "$tmp.$i";
     unlink $o;
     if( $jobs > 1 ) {
-      waitpid( shift @pids, 0 ) while @pids >= $jobs;
+      while( @pids >= $jobs ) { waitpid( shift @pids, 0 ); $bad = 1 if $?; }
       my $pid = fork();
       if( !$pid ) { exec( "$exe c \"$f\" $o >/dev/null 2>&1" ); exit 1; }
       push @pids, $pid;
     } else {
       system( "$exe c \"$f\" $o >/dev/null 2>&1" );
+      $bad = 1 if $?;
     }
     push @outs, $o;
   }
-  waitpid( $_, 0 ) for @pids;
+  for (@pids) { waitpid( $_, 0 ); $bad = 1 if $?; }
   for my $o (@outs) {
     my $s = -s $o;
     unlink $o;
-    return 0x7FFFFFFF if !defined($s) || $s < 64;   # crashed / refused
+    return 0x7FFFFFFF if $bad || !defined($s) || $s < 64;   # crashed / refused
     $t += $s;
   }
   return $t;
