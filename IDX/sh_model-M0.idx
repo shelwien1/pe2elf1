@@ -22,11 +22,7 @@ Index Cx
 Number ON,     1,0!1   # 0: mixer bypassed, final p = SSE output (the pre-mixer pipeline)
 Number W0,    1,0!001100000000111   # initial w (weight of p1), /32768
 Number Wclip, 1,0!100000000000   # |W| box in logit coordinates, /256
-Number BIAS,  1,0!1   # 1: adaptive stretch-domain bias per context; 0: none
 Number Bclip, 1,0!11000000001   # |b| box, /256
-Number WDOM,  1,0!000   # weight domain: 0 logistic w=sq(W); 1 linear w=W; 2 log w=exp(W);
-                        #   3 reciprocal w=1/V; 4 free W1*st(p1)+W2*st(p2) (no sum-to-1 constraint)
-Number Wlin,  1,0!00100000000   # box margin of the linear domains, /256: w in [-Wlin, 1+Wlin]
 Number Pmin,  1,0!101001111100011   # input probability clip, /(SCALE<<16)
 
 Const 0

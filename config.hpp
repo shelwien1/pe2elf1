@@ -55,8 +55,8 @@ struct CP_NAME {
   // shipping build these are constant expressions -- NB is the template
   // argument of SSE_Ctr -- in the tuning build they are runtime values that
   // opt.pl patches, and SSE_Dyn dispatches on NB at Init().
-  static const int   NB, HBITS, ILOG, BLOG, UPD, QLIN, HW, HMODE, DEG, DM, DSIM;
-  static const float LIM, T0, W, UPMIN;
+  static const int   ON, NB, HBITS, UPD;
+  static const float LIM, T0, UPMIN;
 #endif
 };
 
@@ -177,22 +177,14 @@ set KYHI   = logf(CP_NAME::Config_K::maxVal);
 
 #ifdef CP_SSE
 #define set  const int CP_NAME::
+set ON    = CPX(ON);
 set NB    = CPX(NB);
 set HBITS = CPX(HBITS);
-set ILOG  = CPX(ILOG);
-set BLOG  = CPX(BLOG);
 set UPD   = CPX(UPD);
-set QLIN  = CPX(QLIN);
-set HW    = CPX(HW);
-set HMODE = CPX(HMODE);
-set DEG   = CPX(DEG);
-set DM    = CPX(DM);
-set DSIM  = CPX(DSIM);
 #undef set
 #define set  const float CP_NAME::
 set LIM   = float(CPX(LIM)) / 256;     // |stretch| clip
 set T0    = float(CPX(T0)) / 256;      // initial cell mass
-set W     = float(CPX(W)) / SCALE;     // weight of the SSE output
 set UPMIN = float(CPX(UPMIN)) / 256;   // floor of the proportional update weight
 #undef set
 #endif

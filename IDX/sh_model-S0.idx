@@ -36,21 +36,11 @@ Number HBITS,  1,0!10110   # rows = min(Cx_Volume, 1<<HBITS); rows beyond are ha
 Number NB,     1,2!00110   # interpolation buckets (columns) per row: 2 + pattern
 Number LIM,    1,0!100000000000   # |stretch(p_in)| clip, /256  (2048 = 8.0)
 
-# --- cell init and output ------------------------------------------------
+# --- cell init and update ------------------------------------------------
 Number T0,     1,0!0001010000000   # initial mass n0+n1 of a fresh cell, /256
-Number W,      1,0!111111111111111   # weight of the SSE output in the final p, /32768
-Number ILOG,   1,0!1   # 1: interpolate the two cells in the stretch domain
-Number BLOG,   1,0!1   # 1: blend SSE output with p_in in the stretch domain
-Number UPD,    1,0!01   # 0: nearer cell only; 1: both cells; 2: proportional (1-wt, wt)
+Number ON,     1,0!1    # 0: stage bypassed (SSE(p) = p, no table)
+Number UPD,    1,0!01   # 1: both cells fully; 2: proportional (1-wt, wt), the interpolated update
 Number UPMIN,  1,0!00000000   # floor of the proportional weights, /256 (256 = same as UPD 1)
-Number QLIN,   1,0!0   # 0: buckets uniform in stretch(p); 1: uniform in p
-Number HW,     1,0!00  # history bits per row selecting one of 2^HW sub-rows (0 = off)
-Number HMODE,  1,0!00  # sub-row selector: 0 the row's recent bits; 1 recent SSE successes;
-                       #   2 the order-1 counter's delay register (HW bits incl. the leading 1)
-Number DM,     1,0!000 # delayed-update counter: the order-1 cell learns each bit DM steps late
-                       #   (0 = plain counter); with HMODE 2 the register holds HW-1 bits
-Number DSIM,   1,0!1   # HMODE 2 init: 1 simulate the non-delayed counter, 0 identity
-Number DEG,    1,1!00  # B-spline degree of the interpolation kernel: 1 linear (2 cells), 2 (3 cells), 3 (4 cells)
 
 Const 0
 

@@ -155,25 +155,24 @@ in the shipping build, runtime in the tuning build, clamped at `Init()`.
 
 ```
 s     = clip( st(p_in), -LIM, +LIM )           st = ln(p/(1-p))
-x     = (s + LIM) · (nb-1) / (2·LIM)           bucket coordinate, 0 .. nb-1
+x     = (s + LIM) · (NB-1) / (2·LIM)           bucket coordinate, 0 .. NB-1
 j     = floor(x),  wt = x - j                  two neighbouring cells c[j], c[j+1]
 p0    = c[j].PredictF(),  p1 = c[j+1].PredictF()
-p_sse = ILOG ? sq( st(p0) + wt·(st(p1)-st(p0)) ) : p0 + wt·(p1-p0)
-p_out = BLOG ? sq( st(p_in) + (st(p_sse)-st(p_in))·W ) : p_in + (p_sse-p_in)·W
+p_sse = sq( st(p0) + wt·(st(p1)-st(p0)) )      interpolated in the stretch domain
 ```
 
-`PredictF()` stores the cell's own `pK`, which its update needs.  The final
-blend with `p_in` is a fixed weight `W`; with `BLOG=1` it is applied in the
-stretch domain, which measured better than the probability domain at every
-`W` (§6.4) — the stretch blend keeps the SSE's confident predictions
-confident instead of pulling them linearly toward `p_in`.
+`PredictF()` stores the cell's own `pK`, which its update needs.  The stage
+returns `p_sse` as is; blending it with `p_in` is the mixer's job (§3.7).
+Before the mixer existed the stage carried a fixed blend weight `W`, in the
+probability or the stretch domain; the stretch domain won at every `W`
+(§6.4), and that is the form the mixer generalizes.  Interpolating in the
+stretch domain rather than in probability was worth a further 600 bytes.
 
 ### 3.4 Update
 
 ```
 UPD=1:  c[j].C_Update(bit);          c[j+1].C_Update(bit);
 UPD=2:  c[j].C_Update(bit, 1-wt);    c[j+1].C_Update(bit, wt);     (each floored at UPMIN)
-UPD=0:  (wt<0.5 ? c[j] : c[j+1]).C_Update(bit);
 ```
 
 `Counter::C_Update(bit, g)` takes the weight of the observation: the loss
@@ -183,8 +182,10 @@ derivatives of the weighted recursion (`g=1` is bit-identical to the plain
 update).  `UPD=2` is therefore the interpolated update of `sh_SSE1.inc` —
 the event is split between the two cells in proportion to their share of
 the prediction — without the explicit residual arithmetic: each cell runs
-its own Newton step on a fractional event.  It measured best (§6.6);
-updating both cells fully is second, the nearer cell alone clearly worst.
+its own Newton step on a fractional event.  At the first seeds it measured
+best (§6.6); after the parameter passes the full update of both cells is
+ahead again, and the knob is left to the optimizer.  Updating the nearer
+cell alone was clearly worst and is gone from the source.
 
 ### 3.5 Initialization
 
@@ -239,8 +240,8 @@ blend byte for byte (529128), which is the regression check.  Adaptive
 blend of "what this byte pair's order-1 counter says" and "what the
 order-3 row says" differs a lot between contexts, and the bias corrects
 the row's calibration where the cells have not caught up.  With the mixer
-in place the SSE's own `W` is seeded to 1 (its output is used as is; the
-tuned 0.81 blend measured 600 bytes worse on top of the mixer).
+in place the SSE's own blend is gone (its output is used as is; keeping
+the tuned 0.81 blend underneath the mixer measured 600 bytes worse).
 
 ## 4. Parameterization: `IDX/sh_model-S0.idx`
 
@@ -256,11 +257,8 @@ Index Cx                      # row context, part 1 (int volume, <= 24 bits)
 Index Cx3                     # row context, part 2
  c3: c3, &01011111            #   bits of the third-last byte
 Number HBITS, NB, LIM         # rows limit, buckets, stretch clip
-Number T0, W, ILOG, BLOG      # init mass, blend weight/domain, interpolation domain
-Number UPD, UPMIN, QLIN       # update rule (nearer / both / proportional + floor), input domain
-Number HW, HMODE              # per-row history sub-rows: width, bits or successes
-Number DEG                    # B-spline degree of the interpolation kernel (1..3)
-Number DM, DSIM               # delayed-update counter: delay, simulation init (with HMODE 2)
+Number T0, ON                 # init mass, stage on/off
+Number UPD, UPMIN             # update rule (both cells / proportional + floor)
 Number P0 … mwXhi             # the cell counter constants, same meaning as C0_*
 ```
 
@@ -276,9 +274,8 @@ Number P0 … mwXhi             # the cell counter constants, same meaning as C0
 * **`Number` knobs** compile to literals in the shipping build
   (`./gc.sh`) and to patchable `!MAP!` objects in the tuning build
   (`./gc.sh tune`); `config.hpp` (with `CP_SSE`) derives the `CP_S0`
-  constants — counter floats and the SSE knobs `NB`, `HBITS`, `LIM`, `T0`,
-  `W`, `ILOG`, `BLOG`, `UPD`, `UPMIN`, `QLIN`, `HW`, `HMODE`, `DEG`, `DM`,
-  `DSIM` — from either.
+  constants — counter floats and the SSE knobs `ON`, `NB`, `HBITS`, `LIM`,
+  `T0`, `UPD`, `UPMIN` — from either.
 * **Clamps at the point of use.**  `SSE_Ctr::Init()` clamps `nb` to
   `[2,64]`, `HBITS` to `[8,30]`, `LIM` to `[0.25,16]`, `T0`, `W`, and caps the
   cells at `2^SSE_MAXCELLS_LOG`, so any bit pattern the optimizer visits runs
@@ -327,20 +324,23 @@ Per bit, in `main()`:
 ```
 p1  = o1[c1][cxt].PredictF();                          // primary, P(bit=0)
 cx  = S0_MakeCx(c2, c1, cxt) * S0_Cx3_Volume + S0_MakeCx3(c3);
-p2  = sse.Predict( cx, p1, o1reg[c1][cxt] );           // refined P(bit=0)
+p2  = sse.Predict( cx, p1 );                           // SSE(p1)
 pf  = mix.Mix( M0_MakeCx(c2, c1, cxt), p1, p2 );       // learned blend (§3.7)
 p   = uint( clamp( pf * SCALE ) );
 bit = rc.rc_BProcess( p, bit );
-o1[c1][cxt].C_Update( bit );   (delayed by DM bits when S0_DM > 0)
+o1[c1][cxt].C_Update( bit );
 sse.Update( bit );
 mix.Update( bit );
 ```
 
 `S0_MakeCx`/`S0_MakeCx3` are generated by `idx2inc.pl` from the `Index` blocks
 (`MOD/sh_model-S0_p.inc`).  With the mixer bypassed (`M0_ON = 0`) the final p is the
-SSE output with its own blend (529128 at the tuned `W`), and with
-`S0_W = 0` as well the coder reproduces the pre-SSE stream byte for byte
-(344899 / 309703): the regression checks for the whole path.
+SSE output as is (533676 at the tuned knobs), and with the SSE bypassed as
+well (`S0_ON = 0`) the coder reproduces the pre-SSE stream to within one
+byte (344899 / 309702 against 309703): the original binary folded
+`pK·SCALE` into `SCALE/(1+e^-x)` under `-ffast-math`, one rounding, which
+cannot happen once `pK` is materialized as the SSE's input.  Those are the
+regression checks for the whole path.
 
 ---
 
@@ -519,7 +519,11 @@ already carries the bit-tree node and two or three whole bytes, and a cell
 that adapts its own rate and confidence already reacts to a run of
 surprises the way a "success" sub-row would, without splitting its
 statistics.  The width made sense in `sh_SSE1.inc`, whose rows were plain
-order-1 contexts with fixed-rate cells; here it stays a knob, at 0.
+order-1 contexts with fixed-rate cells.
+
+*The linear-domain quantizer and the history sub-rows were removed from
+the source after these measurements (commit 431db07 is the last with
+them); the tables stand as the record.*
 
 **Interpolation degree** — `DEG` selects the uniform B-spline kernel: 1 =
 linear over 2 cells (the default), 2 = quadratic over 3, 3 = cubic over 4.
@@ -547,7 +551,8 @@ learn is not smooth in the way a spline assumes: with adaptive cells the
 two-cell linear scheme already lets each bucket move on its own, and a
 wider kernel spreads every event over cells that mostly belong to other
 input probabilities (the same effect that made the full-both update lose
-to the proportional one).  Linear stays; `DEG` remains a knob.
+to the proportional one).  Linear stays; the higher-degree kernels were
+removed from the source with the other losing variants (commit 431db07).
 
 ### 6.7 The delayed-update counter reading of SSE
 
@@ -593,7 +598,9 @@ two, delayed or not, and 21K in the best delayed configuration (563590
 vs. 542194).  The one table is worth far more spent on context the
 counter does not have (§6.2) than on re-learning what the counter does
 with the context it has; the delayed reading would be a second, small
-stage on the order-1 model, and the knobs stay in the code for that.
+stage on the order-1 model.  Its code (`DM`, `HMODE 2`, `DSIM`, the
+register and `duc_sim`) was removed from the source after these
+measurements (last present in commit 431db07).
 
 ### 6.8 Tuned result
 
@@ -675,7 +682,13 @@ Bounded to [0, 1] the domain hardly matters; every form that lets the
 weight extrapolate beyond the two inputs, or scale the confidence freely,
 loses 2–3K, and the log domain much more.  With per-context Newton steps
 and few events per context, the self-damping of the logistic map near
-the ends is worth more than the extra freedom.  `WDOM` stays a knob at 0.
+the ends is worth more than the extra freedom.  The logistic map is the
+one in the source; the other domains were removed (commit 431db07).
+
+**Mixer pass.** One `opt.pl` pass over the 25 mixer knobs (node mask
+included) took 517322 → 516174: it widened the mixer's `c2` context to six
+bits, raised the bias box and both step clips, and lowered the weight's
+curvature clip.
 
 ## 7. Cost, and how to trade it
 
