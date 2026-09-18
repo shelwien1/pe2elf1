@@ -2,6 +2,11 @@
 Prefix C0
 Debug 1
 
+# Lines marked '!' are frozen (IDX-FORMAT.md sec.10): the coder no longer
+# reads them (AWIND/HBETA/EFISH/ALEAK/SMASS/MKCPL/BIASC constants of rejected
+# proposals, and grad1_clip which ParamUpdater never uses), so opt.pl would
+# only waste evaluations on them.  Values are kept as documentation.
+
 Const 1
 
 # only used with ADAPT_L=1
@@ -78,7 +83,7 @@ Number RUinc, 1,0!110011100101100000
 Number uStep, 1,0!11011111100110000
 Number uMin,  1,0!1100000000
 Number uMax,  1,0!01011000100000000000000
-Number G1_u,  1,0!01001110001000
+!Number G1_u,  1,0!01001110001000
 Number G2_u,  1,0!000000000
 Number G3_u,  1,0!01000000000000000000
 Number G4_u,  1,0!00000110011
@@ -89,7 +94,7 @@ Number M2_v,  1,0!000011001
 Number NWv,   1,0!111111111100010000
 Number RVinc, 1,0!10100100100000111111
 Number vStep, 1,0!1111000010000000
-Number G1_v,  1,0!01001110001000
+!Number G1_v,  1,0!01001110001000
 Number G2_v,  1,0!000000000
 Number G3_v,  1,0!01000000000000000000
 Number G4_v,  1,0!00011010000
@@ -100,33 +105,33 @@ Number UVH, 1,0!101001001001
 Const 0
 
 # added from sh_model-C0_h.inc
-Number AWF, 1,0!010000000000
-Number AWFo, 1,0!010000000000
+!Number AWF, 1,0!010000000000
+!Number AWFo, 1,0!010000000000
 
-Number HB_u, 1,0!01000000000
-Number HB_v, 1,0!01000000000
-Number HB_m, 1,0!01000000000
-Number HB_k, 1,0!01000000000
+!Number HB_u, 1,0!01000000000
+!Number HB_v, 1,0!01000000000
+!Number HB_m, 1,0!01000000000
+!Number HB_k, 1,0!01000000000
 
-Number EFW_u, 1,0!000000000
-Number EFW_v, 1,0!000000000
-Number EFW_m, 1,0!000000000
-Number EFW_k, 1,0!000000000
+!Number EFW_u, 1,0!000000000
+!Number EFW_v, 1,0!000000000
+!Number EFW_m, 1,0!000000000
+!Number EFW_k, 1,0!000000000
 
 Number CXW, 1,0!01011110011
 Number XHW, 1,0!01010000000
 Number UVDET, 1,0!011001101
 Number XHC, 1,0!0110010000000
-Number LKA, 1,0!000000000
-Number LKB, 1,0!0100111111100
-Number LKlo, 1,0!000000000
-Number LKhi, 1,0!01111010111000
-Number SMWm, 1,0!010000000000000
-Number SMWk, 1,0!010000000000000
-Number SM0, 1,0!010100000000000
-Number MPW, 1,0!010000000000
-Number CMK, 1,0!01000000000
-Number MKDET, 1,0!011001101
+!Number LKA, 1,0!000000000
+!Number LKB, 1,0!0100111111100
+!Number LKlo, 1,0!000000000
+!Number LKhi, 1,0!01111010111000
+!Number SMWm, 1,0!010000000000000
+!Number SMWk, 1,0!010000000000000
+!Number SM0, 1,0!010100000000000
+!Number MPW, 1,0!010000000000
+!Number CMK, 1,0!01000000000
+!Number MKDET, 1,0!011001101
 Number mwXlo, 1,0!111000000
 Number mwXhi, 1,0!0100000000000000
-Number BWT, 1,0!000000000
+!Number BWT, 1,0!000000000

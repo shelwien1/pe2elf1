@@ -230,6 +230,11 @@ Number P0 … mwXhi             # the cell counter constants, same meaning as C0
 * **Compile-time only**: the adaptation flags `S0_ADAPT_WR/MW/K` (they change
   the cell layout) and the cell cap `SSE_MAXCELLS_LOG`; both can be given on
   the build line (`CXXEXTRA="-DS0_ADAPT_WR=0" ./gc.sh tune`).
+* **Frozen lines** (`!` prefix, IDX-FORMAT.md §10) keep knobs the code never
+  reads out of the search space: `P0`/`P1` (cells are initialized per bucket)
+  and `G1_*` (`grad1_clip` is never used) in the S0 file, and the constants of
+  the rejected proposals in the C0 file.  A first `opt.pl` pass spent a
+  quarter of its evaluations on them before they were frozen.
 
 ### 4.1 Tuning workflow on Linux
 
