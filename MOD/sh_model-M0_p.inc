@@ -20,6 +20,8 @@ static const int M0_STEPw = (500737+0) * (1);
 static const int M0_G2w = (6+0) * (1);
 static const int M0_DCw = (66+0) * (1);
 static const int M0_RCw = (16384+0) * (1);
+static const int M0_OPTw = (0+0) * (1);
+static const int M0_R0w = (0+0) * (1);
 static const int M0_M1b = (524160+0) * (1);
 static const int M0_M2b = (67108+0) * (1);
 static const int M0_NWb = (419430+0) * (1);
@@ -28,6 +30,8 @@ static const int M0_STEPb = (522756+0) * (1);
 static const int M0_G2b = (32+0) * (1);
 static const int M0_DCb = (256+0) * (1);
 static const int M0_RCb = (16384+0) * (1);
+static const int M0_OPTb = (0+0) * (1);
+static const int M0_R0b = (0+0) * (1);
 
 
 

@@ -1,6 +1,6 @@
 
 static const int S0_Cx_Volume = 1* (1<<8)* (1<<5)* 255; // 2088960
-static const int S0_Cx3_Volume = 1* (1<<6); // 64
+static const int S0_Cx3_Volume = 1* (1<<7); // 128
 
 struct S0_T { 
 #undef USE_NEW

@@ -29,15 +29,15 @@ Index Cx
  cx: cxt, b&00000000  # bit-tree node: b& merges node bits counted from the leading 1 (0 = keep)
 
 Index Cx3
- c3: c3, &01011111    # third-last byte, low 5 bits (bits tunable)
+ c3: c3, &11011111    # third-last byte, low 5 bits (bits tunable)
 
 # --- table geometry -----------------------------------------------------
 Number HBITS,  1,0!10110   # rows = min(Cx_Volume, 1<<HBITS); rows beyond are hashed
 Number NB,     1,2!00110   # interpolation buckets (columns) per row: 2 + pattern
-Number LIM,    1,0!100000000000   # |stretch(p_in)| clip, /256  (2048 = 8.0)
+Number LIM,    1,0!100001000000   # |stretch(p_in)| clip, /256  (2048 = 8.0)
 
 # --- cell init and update ------------------------------------------------
-Number T0,     1,0!0001010000000   # initial mass n0+n1 of a fresh cell, /256
+Number T0,     1,0!0001000000000   # initial mass n0+n1 of a fresh cell, /256
 Number ON,     1,0!1    # 0: stage bypassed (SSE(p) = p, no table)
 Number UPD,    1,0!01   # 1: both cells fully; 2: proportional (1-wt, wt), the interpolated update
 Number UPMIN,  1,0!00000000   # floor of the proportional weights, /256 (256 = same as UPD 1)
@@ -49,21 +49,21 @@ Const 0
 # counts / rates
 !Number P0,     1,1!100101000001000
 !Number P1,     1,0!01010000010001
-Number wr,     1,1!01100110011000
-Number wr1,    1,0!011111100100
+Number wr,     1,1!01011000110100
+Number wr1,    1,0!010111000000
 Number mw,     1,1!0100000000000
-Number K,      1,0!0110111111111101
+Number K,      1,0!1000001100101010
 
 Const 0
 
 # K optimizer
 Number NWk,    1,1!1111111111000000
 Number RKinc,  1,1!000000010010110
-Number kStep,  1,1!11111111111101001
+Number kStep,  1,1!11000011110000011
 Number kMin,   1,1!1111100100000000000001
-Number kMax,   1,1!011000000000010
-Number M1_k,   1,1!10110010000000000000
-Number M2_k,   1,1!100001000000010110
+Number kMax,   1,1!011000000010000
+Number M1_k,   1,1!10000010101000001000
+Number M2_k,   1,1!001011100110010110
 !Number G1_k,   1,0!001001110001000
 Number G2_k,   1,0!000000000000000
 Number G3_k,   1,0!0010010001100000111
@@ -72,61 +72,61 @@ Number G4_k,   1,0!0001000011110110100
 Const 0
 
 # mw optimizer
-Number NWm,    1,1!111000000000010000
+Number NWm,    1,1!100001110010100100
 Number MWinc,  1,1!110100000000010
 Number mwStep, 1,1!111111111101000001
 Number mwMin,  1,1!000100000110000
 Number mwMax,  1,1!111111111111111
-Number M1_m,   1,1!100000010000000000
+Number M1_m,   1,1!111110111000000000
 Number M2_m,   1,1!000000110000000
 !Number G1_m,   1,0!001001110001000
 Number G2_m,   1,0!0000000100001
 Number G3_m,   1,0!1000000000000000000
 Number G4_m,   1,0!0100000000110100010
 Number mwXlo,  1,0!111000000
-Number mwXhi,  1,0!0010000000000000
-Number mwP0,   1,1!101000000000001
+Number mwXhi,  1,0!0010101101010001
+Number mwP0,   1,1!011101000110100
 
 Const 0
 
 # u (memory length) optimizer
-Number M1_u,   1,0!011010101000101000
+Number M1_u,   1,0!011000110000100000
 Number M2_u,   1,0!11001100110
-Number NWu,    1,0!1100000000010000001
-Number RUinc,  1,0!000000000000000010
+Number NWu,    1,0!1010111101000000001
+Number RUinc,  1,0!000000001010000000
 Number uStep,  1,0!11111111110110000
-Number uMin,   1,0!0100001000
-Number uMax,   1,0!01011000100000000000000
+Number uMin,   1,0!0000000001
+Number uMax,   1,0!00111111101011000100001
 !Number G1_u,   1,0!01001110001000
 Number G2_u,   1,0!000000000
 Number G3_u,   1,0!01000000000000000000
-Number G4_u,   1,0!00000100011
-Number R0_u,   1,0!10110100
+Number G4_u,   1,0!01000011001
+Number R0_u,   1,0!11101010
 
 Const 0
 
 # v (hit/miss asymmetry) optimizer
-Number M1_v,   1,0!100000001000100010
+Number M1_v,   1,0!100111011000000000
 Number M2_v,   1,0!010010011
-Number NWv,    1,0!111111111100010000
+Number NWv,    1,0!111101111001010000
 Number RVinc,  1,0!00000000000000100000
 Number vStep,  1,0!1111111111001000
 !Number G1_v,   1,0!01001110001000
 Number G2_v,   1,0!000000000
 Number G3_v,   1,0!01000000000000000000
 Number G4_v,   1,0!10000000000
-Number R0_v,   1,0!00000000
+Number R0_v,   1,0!10000000
 Number UVH,    1,0!001110001010
 
 Const 0
 
 # UV2X2 cross terms, RTRL leakage
-Number CXW,    1,0!01111111111
-Number XHW,    1,0!10010101000
+Number CXW,    1,0!01111111110
+Number XHW,    1,0!10100110000
 Number UVDET,  1,0!001000001
-Number XHC,    1,0!0110010000000
+Number XHC,    1,0!0000000000100
 Number leak1,  1,1!0111111101111101
-Number leak2,  1,1!0111111111010000
+Number leak2,  1,1!0111111111110001
 Number stP_min,1,1!000000000000000
 
 Const 0
