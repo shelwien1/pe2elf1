@@ -741,14 +741,40 @@ With an exact second derivative available per parameter, the Newton
 step beats both scale-free rules, by a little on the weight and by a lot
 on the bias (whose gradient scale varies most across contexts, which is
 exactly what the curvature normalizes away), and the EMAs are better
-started empty than from a prior.  What would still be worth trying, in
-order of expected value: a Nesterov look-ahead (the step from
-`β·D_new + g` instead of `D_new`; needs the last gradient), the 2×2
-coupled solve of the (weight, bias) pair with the cross curvature
-`∂²p/∂W∂b = p''(st)·(s1−s2)·w(1−w)` (the counters already do this for
-their (u, v) pair), and per-cell step-size adaptation on the sign
-agreement of consecutive gradients.  The knobs stay at Newton; the
-counters were never switched.
+started empty than from a prior.
+
+Three refinements of the Newton rule were then tried on the mixer:
+
+| variant | book1 | wcc386 | total |
+|---|---|---|---|
+| Newton (above) | 235043 | 280507 | 515550 |
+| Nesterov look-ahead (`OPT=1`), weight | 235029 | 280517 | 515546 |
+| Nesterov, bias | 234992 | 280181 | 515173 |
+| Nesterov, both | 234978 | 280193 | 515171 |
+| Nesterov, both, bias rate at its box top | 235025 | 280132 | **515157** |
+| 2×2 coupled (weight, bias) solve (`X2`), cross weight 1 / 0.5 / 2 | 235009 / 235009 / 235263 | 280551 / 280629 / 280662 | 515560 / 515638 / 515925 |
+| 2×2, det guard 0.1 / 0.4 | 235015 / 235006 | 280559 / 280528 | 515574 / 515534 |
+| sign-agreement gain ×1.2 / ×0.6 | 236221 | 281349 | 517570 |
+| gain ×1.1 / ×0.8 | 236223 | 281308 | 517531 |
+| gain ×1.05 / ×0.95 | 235817 | 280971 | 516788 |
+| gain ×1.2 / ×0.6, box [0.125, 4] | 242596 | 286946 | 529542 |
+
+* **Nesterov** (`OPT=1`: the step is taken from `β·D_new − g` instead of
+  `D_new`; `Accum` returns the gradient so nothing is stored) is a small,
+  consistent gain, essentially all on the bias, and wants the bias rate a
+  little higher.  It is the seed now (`OPTw = OPTb = 1`).
+* **The 2×2 coupled solve** (`X2`: EMA of the cross curvature of `−ln p`,
+  `gW·gb/p² − ∂²p/∂W∂b/p`, then the counters' det-guarded solve with joint
+  ray clipping) is neutral: the weight and the bias of a context barely
+  interact at these rates.  It stays a knob, off.
+* **Step-size gain on sign agreement** (a per-state multiplier grown when
+  the new gradient agrees with the momentum, shrunk otherwise) loses at
+  every setting: the Newton step already normalizes the scale, and a
+  gain that reacts to single events only adds noise in contexts that see
+  a handful of them.  Off (`GUP = GDN = 1`), the state costs a float per
+  updater in the mixer only.
+
+The counters were never switched away from Newton.
 
 **The offline optimizer** (`opt.pl`) is a different problem: coordinate
 descent over bit patterns with one full corpus run per evaluation.  Its

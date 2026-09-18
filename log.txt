@@ -9,3 +9,7 @@ book1          wcc386         book1wcc
 # with the SSE stage and the mixer (sh_SSE2.inc, sh_mix2.inc; IDX/sh_model-S0.idx, -M0.idx after three opt.pl passes):
 book1          wcc386         book1wcc
 235043 6.048s  280507 4.611s  518841 9.474s
+
+# + Nesterov step in the mixer updaters:
+book1          wcc386         book1wcc
+235025 5.596s  280132 4.610s  518553 9.336s

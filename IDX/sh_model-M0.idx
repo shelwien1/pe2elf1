@@ -24,6 +24,13 @@ Number W0,    1,0!001100000000111   # initial w (weight of p1), /32768
 Number Wclip, 1,0!100000000000   # |W| box in logit coordinates, /256
 Number Bclip, 1,0!11000000001   # |b| box, /256
 Number Pmin,  1,0!101001111100011   # input probability clip, /(SCALE<<16)
+Number X2,    1,0!0   # 1: 2x2 coupled (W, b) Newton solve with the cross curvature EMA
+Number CXWm,  1,0!10000000000   # weight of the cross-curvature EMA, /1024
+Number DETm,  1,0!011001101     # det guard of the 2x2 solve (fraction of a_w*a_b), /1024
+Number GUP,   1,0!100000000   # step gain growth on sign agreement, /256 (256 = off)
+Number GDN,   1,0!100000000   # step gain shrink on disagreement, /256 (256 = off)
+Number GMX,   1,0!0100000000   # gain box top, /256
+Number GMN,   1,0!01000000     # gain box bottom, /256
 
 Const 0
 
@@ -36,7 +43,7 @@ Number STEPw, 1,0!1111010010000000001   # step clip = STEPw/(SCALE<<8)
 Number G2w,   1,0!0000110   # curvature clip = G2w/32
 Number DCw,   1,0!001000010   # D clip = DCw/16
 Number RCw,   1,0!100000000000000   # R clip = RCw/16
-Number OPTw,  1,0!00   # step rule of W: 0 Newton D/(R+inc); 2 normalized momentum D/(|D|+inc); 3 Adam D/(sqrt R+inc)
+Number OPTw,  1,0!01   # step rule of W: 0 Newton D/(R+inc); 1 Nesterov look-ahead; 2 normalized momentum D/(|D|+inc); 3 Adam D/(sqrt R+inc)
 Number R0w,   1,0!00000000   # initial curvature R (prior), /256
 
 Const 0
@@ -44,13 +51,13 @@ Const 0
 # --- ParamUpdater of the bias --------------------------------------------
 Number M1b,   1,0!1111111111110000000
 Number M2b,   1,0!10000011000100100
-Number NWb,   1,0!1100110011001100110
+Number NWb,   1,0!1111111111111111111
 Number INCb,  1,0!110101001011000111
 Number STEPb, 1,0!1111111101000000100
 Number G2b,   1,0!0100000
 Number DCb,   1,0!100000000
 Number RCb,   1,0!100000000000000
-Number OPTb,  1,0!00   # step rule of the bias, as OPTw
+Number OPTb,  1,0!01   # step rule of the bias, as OPTw
 Number R0b,   1,0!00000000   # initial curvature of the bias, /256
 
 Const 0
