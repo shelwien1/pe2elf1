@@ -1,0 +1,52 @@
+
+Prefix M0
+Debug 1
+
+# ======================================================================
+# sh_model-M0.idx -- every tunable of the 2-input mixer (sh_mix2.inc).
+#
+# p = sq( w*st(p1) + (1-w)*st(p2) + b ),  w = sq(W), per mixer context:
+# W and b are ParamUpdater states (the Newton updater of newton.inc),
+# p1 = the order-1 prediction, p2 = the SSE output.  See SSE-DESIGN.md.
+# ======================================================================
+
+Const 0
+
+# --- mixer context ------------------------------------------------------
+Index Cx
+ c2: c2, &11110000    # byte before last (bits tunable)
+ c1: c1, &11111111    # last byte (bits tunable)
+ ADD 256: cxt         # bit-tree node 1..255, always in
+
+# --- weight / bias seeds and boxes --------------------------------------
+Number W0,    1,0!001100000000111   # initial w (weight of p1), /32768
+Number Wclip, 1,0!100000000000   # |W| box in logit coordinates, /256
+Number BIAS,  1,0!1   # 1: adaptive stretch-domain bias per context; 0: none
+Number Bclip, 1,0!01000000000   # |b| box, /256
+Number Pmin,  1,0!101001111100011   # input probability clip, /(SCALE<<16)
+
+Const 0
+
+# --- ParamUpdater of W: newton.inc scalings ------------------------------
+Number M1w,   1,0!1111010111000010100   # momentum_D = 1 - M1w/(SCALE<<9)
+Number M2w,   1,0!10000011000100100   # momentum_R = 1 - M2w/(SCALE<<11)
+Number NWw,   1,0!1010001111010111000   # step gain NW = NWw/(SCALE<<9)
+Number INCw,  1,0!110001001001101110   # Newton damping inc = INCw/(SCALE<<11)
+Number STEPw, 1,0!1100110011001100110   # step clip = STEPw/(SCALE<<8)
+Number G2w,   1,0!0100000   # curvature clip = G2w/32
+Number DCw,   1,0!100000000   # D clip = DCw/16
+Number RCw,   1,0!100000000000000   # R clip = RCw/16
+
+Const 0
+
+# --- ParamUpdater of the bias --------------------------------------------
+Number M1b,   1,0!1111010111000010100
+Number M2b,   1,0!10000011000100100
+Number NWb,   1,0!1100110011001100110
+Number INCb,  1,0!110001001001101110
+Number STEPb, 1,0!0101000111101011100
+Number G2b,   1,0!0100000
+Number DCb,   1,0!100000000
+Number RCb,   1,0!100000000000000
+
+Const 0

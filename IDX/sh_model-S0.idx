@@ -38,7 +38,7 @@ Number LIM,    1,0!100000000000   # |stretch(p_in)| clip, /256  (2048 = 8.0)
 
 # --- cell init and output ------------------------------------------------
 Number T0,     1,0!0001010000000   # initial mass n0+n1 of a fresh cell, /256
-Number W,      1,0!110011111111000   # weight of the SSE output in the final p, /32768
+Number W,      1,0!111111111111111   # weight of the SSE output in the final p, /32768
 Number ILOG,   1,0!1   # 1: interpolate the two cells in the stretch domain
 Number BLOG,   1,0!1   # 1: blend SSE output with p_in in the stretch domain
 Number UPD,    1,0!01   # 0: nearer cell only; 1: both cells; 2: proportional (1-wt, wt)

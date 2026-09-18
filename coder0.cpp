@@ -108,6 +108,7 @@ static const float iSCALE = 1.0f/SCALE;
 #include "MOD/sh_model-C0_h.inc"
 //#include "sh_model-C0_h.inc"
 #include "MOD/sh_model-S0_h.inc"
+#include "MOD/sh_model-M0_h.inc"
 
 
 
@@ -151,6 +152,11 @@ static inline float clamp(float x, float min_val, float max_val) {
 #define CP_ADAPT_K  S0_ADAPT_K
 #define CP_SSE      1
 #include "config.hpp"
+
+// Parameter bundle of the 2-input mixer: M0_* constants from IDX/sh_model-M0.idx.
+#define CP_NAME     CP_M0
+#define CP_PFX      M0_
+#include "mix2cfg.hpp"
 
 
 template<int ADAPT, class cfg> struct ParamUpdater;
@@ -569,6 +575,8 @@ template<class CP> struct Counter {
 
 #include "sh_SSE2.inc"
 #include "MOD/sh_model-S0_p.inc"   // S0_MakeCx()
+#include "sh_mix2.inc"
+#include "MOD/sh_model-M0_p.inc"   // M0_MakeCx()
 
 static const uint CNUM = 256;
 
@@ -611,6 +619,7 @@ SSE_Dyn<CP_S0> sse;
 #else
 SSE_Ctr<CP_S0, sse_nb_clamp(CP_S0::NB)> sse;
 #endif
+Mix2<CP_M0> mix;   // final p = mix( order-1 prediction, SSE output )
 
 int main( int argc, char** argv ) {
   uint f_DEC, i, j, c, f_len, f_pos, cxt, bit, p;
@@ -660,6 +669,7 @@ int main( int argc, char** argv ) {
     DUC_DM = CP_S0::DM<0 ? 0 : CP_S0::DM>DUC_C ? DUC_C : CP_S0::DM;
     for( i=0; i<CNUM; i++) for( j=0; j<CNUM; j++ ) o1reg[i][j] = 1;
     sse.Init( qword(S0_Cx_Volume)*S0_Cx3_Volume, (CP_S0::HMODE==2 && CP_S0::DSIM) ? duc_sim : 0 );
+    mix.Init( M0_Cx_Volume );
   }
 
   int last_c = 0, c2 = 0, c3 = 0;
@@ -673,7 +683,8 @@ int main( int argc, char** argv ) {
       // primary order-1 prediction, refined by the SSE stage
       float p1 = o1[last_c][cxt].PredictF();
       qword cx = qword(S0_MakeCx(c2, last_c, cxt))*S0_Cx3_Volume + S0_MakeCx3(c3);
-      float pf = sse.Predict( cx, p1, o1reg[last_c][cxt] );
+      float p2 = sse.Predict( cx, p1, o1reg[last_c][cxt] );
+      float pf = mix.Mix( M0_MakeCx(c2, last_c, cxt), p1, p2 );
       p = uint( clamp( pf*float(SCALE) ) );
       
       bit = rc.rc_BProcess( p, bit );
@@ -690,6 +701,7 @@ int main( int argc, char** argv ) {
         o1reg[last_c][cxt] = byte(r);
       }
       sse.Update( bit );
+      mix.Update( bit );
 
       c<<=1; cxt+=cxt+bit;
     }
@@ -703,6 +715,7 @@ int main( int argc, char** argv ) {
 
   if( f_DEC==0 ) rc.FinishEncode();
   sse.Quit();
+  mix.Quit();
 
   fclose(g);
   fclose(f);
