@@ -2,4 +2,6 @@
 book1          wcc386         book1wcc
 344899 0.906s  309703 0.679s  656161 1.572s
 
-
+# with the SSE stage (sh_SSE2.inc, IDX/sh_model-S0.idx after one opt.pl pass), gcc 13.3 linux:
+book1          wcc386         book1wcc
+241409 5.650s  287719 4.456s  531716 9.509s

@@ -562,7 +562,40 @@ stage on the order-1 model, and the knobs stay in the code for that.
 
 ### 6.8 Tuned result
 
-*(filled in from the `opt.pl` run)*
+One `opt.pl` pass over the S0 file (two climbs on disjoint halves, about
+1.3k evaluations of the pair, 7 s each on 4 cores), then the exports
+folded into `IDX/sh_model-S0.idx`:
+
+| | no SSE | SSE, seeds (§6.5) | SSE, tuned |
+|---|---|---|---|
+| book1 | 344899 | 248078 | **241409** (−30.0%) |
+| wcc386 | 309703 | 295788 | **287719** (−7.1%) |
+| book1 + wcc386 | 654602 | 543866 | **529128** (−19.2%) |
+| book1wcc (concatenation) | 656163 | | **531716** (−19.0%) |
+| book1 encode / decode | 1.0 s | | 5.7 s / 5.7 s |
+
+All three roundtrips verify (`t1.sh`), and the shipping and tuning builds
+produce the same bytes.  What the pass moved, in order of effect:
+
+* the cells' logistic scale `K` (0.74 → 0.87) and the top of its box
+  `kMax` (0.94 → 1.50): SSE cells want to be sharper than the order-1
+  counters are allowed to be;
+* the init mass `T0` (1 → 2.5) and the blend `W` (0.90 → 0.81);
+* the row context: `c1` narrowed to its low 5 bits, `c3` widened to
+  `01011111` — the optimizer trades resolution in the last byte for a bit
+  more of the third-last one, in the same cell budget;
+* the K optimizer's curvature clip `G2_k` → 0 and clamp `G4_k` up, the mw
+  optimizer's momentum shortened (`M1_m`, `M2_m`), `mwMin` raised;
+* the u/v knobs: momentum, `RUinc`/`RVinc` (the Newton damping) down to
+  almost nothing, `UVH` (the |v| bound) down, `CXW` up — together worth
+  under 500 bytes.
+
+The u/v rate optimizer of the cells matters little once the seeds are
+right; `K`, `T0`, `W` and the context masks carry the result.  A second
+pass over all S0 knobs jointly and a pass over the C0 knobs (the order-1
+model tuned as an SSE *input* rather than as the final predictor) are the
+obvious next steps and were started; their outcome is recorded below when
+available.
 
 ---
 
@@ -571,7 +604,7 @@ stage on the order-1 model, and the knobs stay in the code for that.
 | | no SSE | SSE, defaults |
 |---|---|---|
 | memory | ~6 MB | 2^24 cells × 96 B = 1.6 GB |
-| time, book1 | ~1.0 s | ~5 s |
+| time, book1 | ~1.0 s | ~5.7 s |
 
 The stage does two full `Counter` predictions and updates per bit on top of
 the order-1 one, over a table that does not fit any cache.  About 0.7 s of
