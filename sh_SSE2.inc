@@ -41,12 +41,23 @@
 
 static constexpr int sse_nb_clamp( int nb ) { return nb<2 ? 2 : nb>SSE_NB_MAX ? SSE_NB_MAX : nb; }
 
+// Rows of the table for a context volume: min(volume, 2^HBITS, cap/NB).
+// A constant expression in the shipping build (it sizes the Table() array
+// of the generated S0_T), a runtime value in the tuning build.
+static constexpr qword sse_rows( qword vol, int hbits, int nb ) {
+  hbits = hbits<8 ? 8 : hbits>30 ? 30 : hbits;
+  qword ncx = vol < (qword(1)<<hbits) ? vol : (qword(1)<<hbits);
+  qword maxcells = qword(1)<<SSE_MAXCELLS_LOG;
+  if( ncx*qword(nb) > maxcells ) ncx = maxcells/qword(nb);
+  return ncx<1 ? 1 : ncx;
+}
+
 template<class CP, int NB> struct SSE_Ctr {
   typedef Counter<CP> Cell;
   static_assert( NB>=2 && NB<=SSE_NB_MAX, "SSE bucket count out of range" );
 
-  Cell* t;        // ncx rows of NB cells
-  uint  ncx;      // rows allocated
+  Cell* t;        // ncx rows of NB cells: the Table() of the generated S0_T
+  uint  ncx;      // rows
   qword vol;      // context volume asked for; rows are hashed when vol > ncx
   float lim;      // stretch clip (clamped CP::LIM)
   float qscale;   // (NB-1) / (2*lim)
@@ -64,22 +75,16 @@ template<class CP, int NB> struct SSE_Ctr {
   static float sqf( float x ) { return 1.0f/(1.0f+expf(-x)); }
   static int iclamp( int x, int lo, int hi ) { return x<lo ? lo : x>hi ? hi : x; }
 
-  void Init( qword volume ) {
-    t = 0; ncx = 0;
+  // table: sse_rows(volume, HBITS, NB) * NB cells, owned by the caller
+  void Init( Cell* table, qword volume ) {
+    t = table; ncx = 0;
     if( !CP::ON ) return;
     vol   = volume;
-    int hbits = iclamp( CP::HBITS, 8, 30 );
     lim   = clamp( CP::LIM, 0.25f, 16.0f );
     qscale = float(NB-1) / (2.0f*lim);
     upmin = clamp( CP::UPMIN, 0.0f, 1.0f );
     upd   = iclamp( CP::UPD, 1, 2 );
-
-    ncx = uint( vol < (qword(1)<<hbits) ? vol : (qword(1)<<hbits) );
-    qword maxcells = qword(1)<<SSE_MAXCELLS_LOG;
-    if( qword(ncx)*NB > maxcells ) ncx = uint(maxcells/NB);
-    if( ncx<1 ) ncx = 1;
-
-    t = new Cell[ qword(ncx)*NB ];
+    ncx   = uint( sse_rows( vol, CP::HBITS, NB ) );
 
     // Identity init: column j of every row starts at its bucket's own
     // probability sq(s_j), inverted through the cell's output map
@@ -97,8 +102,6 @@ template<class CP, int NB> struct SSE_Ctr {
     // row-major pass: the table is far bigger than any cache
     for( uint r=0; r<ncx; r++ ) for( int j=0; j<NB; j++ ) t[ qword(r)*NB + j ].InitN( a[j], b[j] );
   }
-
-  void Quit() { delete[] t; t=0; }
 
   uint Row( qword cx ) const {
     if( vol<=ncx ) return uint(cx);
@@ -133,19 +136,18 @@ template<class CP, int NB> struct SSE_Ctr {
 // Tuning-build front end: CP::NB is read once at Init() and the matching
 // SSE_Ctr<CP,NB> instantiation is used from then on.
 template<class CP> struct SSE_Dyn {
+  typedef Counter<CP> Cell;
   struct If {
-    virtual void  Init( qword volume ) = 0;
+    virtual void  Init( Cell* table, qword volume ) = 0;
     virtual float Predict( qword cx, float p ) = 0;
     virtual void  Update( int bit ) = 0;
-    virtual void  Quit() = 0;
     virtual ~If() {}
   };
   template<int NB> struct Impl : If {
     SSE_Ctr<CP,NB> s;
-    void  Init( qword volume ) { s.Init(volume); }
+    void  Init( Cell* table, qword volume ) { s.Init(table, volume); }
     float Predict( qword cx, float p ) { return s.Predict(cx,p); }
     void  Update( int bit ) { s.Update(bit); }
-    void  Quit() { s.Quit(); }
   };
   template<int NB> static If* make( int nb ) {
     if constexpr( NB > SSE_NB_MAX ) { (void)nb; return 0; }
@@ -153,8 +155,7 @@ template<class CP> struct SSE_Dyn {
   }
 
   If* p;
-  void  Init( qword volume ) { p = make<2>( sse_nb_clamp(CP::NB) ); p->Init(volume); }
+  void  Init( Cell* table, qword volume ) { p = make<2>( sse_nb_clamp(CP::NB) ); p->Init(table, volume); }
   float Predict( qword cx, float x ) { return p->Predict(cx,x); }
   void  Update( int bit ) { p->Update(bit); }
-  void  Quit() { p->Quit(); delete p; p=0; }
 };

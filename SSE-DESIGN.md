@@ -284,6 +284,17 @@ Number P0 … mwXhi             # the cell counter constants, same meaning as C0
   the cell layout), the cell cap `SSE_MAXCELLS_LOG` and the dispatcher's
   range `SSE_NB_MAX` (16; the measured optimum is 6–8); all can be given on
   the build line (`CXXEXTRA="-DS0_ADAPT_WR=0" ./gc.sh tune`).
+* **Storage** is declared in the templates with the IDX `Table()` line
+  (`IDX/sh_model-S0.inc`: `Table( SSE_Cell, %M%tbl, sse_table_cells(...) )`,
+  likewise `Mix2_Cell` in `sh_model-M0.inc`): in the shipping build the
+  generated `S0_T`/`M0_T` hold the cells as fixed array members (static
+  storage, 1.7 GB of BSS, no allocation anywhere), in the tuning build as
+  pointers allocated by `S0_Init()`/`M0_Init()` (IDX-FORMAT.md §9).  The
+  size helpers are constant expressions in the shipping build, runtime
+  values in the tuning one; the components receive the table base and the
+  row count at `Init()` and own nothing.  `MakeTables` in the templates
+  routes the knobs and masks into the `_p.inc` so that the cell types are
+  complete before the `_h.inc` declares the arrays.
 * **Frozen lines** (`!` prefix, IDX-FORMAT.md §10) keep knobs the code never
   reads out of the search space: `P0`/`P1` (cells are initialized per bucket)
   and `G1_*` (`grad1_clip` is never used) in the S0 file, and the constants of
@@ -322,6 +333,10 @@ run leaves a short output behind, which used to count as an improvement).
 Per bit, in `main()`:
 
 ```
+S0.S0_Init(); M0.M0_Init();                            // tables (tuning build: allocate)
+sse.Init( S0.S0_tbl, S0_Cx_Volume * S0_Cx3_Volume );
+mix.Init( M0.M0_tbl, M0_Cx_Volume );
+...
 p1  = o1[c1][cxt].PredictF();                          // primary, P(bit=0)
 cx  = S0_MakeCx(c2, c1, cxt) * S0_Cx3_Volume + S0_MakeCx3(c3);
 p2  = sse.Predict( cx, p1 );                           // SSE(p1)
@@ -699,8 +714,8 @@ curvature clip.
 
 The stage does two full `Counter` predictions and updates per bit on top of
 the order-1 one, over a table that does not fit any cache.  About 0.7 s of
-the run is allocating and identity-initializing the table (row-major; the
-remainder is page faulting).  The levers, with their measured cost from §6:
+the run is identity-initializing the table (row-major; the remainder is
+page faulting of the static storage).  The levers, with their measured cost from §6:
 
 * `S0_HBITS` / `SSE_MAXCELLS_LOG`: rows.  400 MB costs ~3K (`wcc386`),
   100 MB ~12K.

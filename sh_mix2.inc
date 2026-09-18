@@ -17,13 +17,19 @@
 #define MIX_MAXCTX_LOG 24      // cap on mixer contexts; beyond it they are hashed
 #endif
 
+// Contexts of the mixer table for a context volume (sizes the Table() of
+// the generated M0_T in the shipping build).
+static constexpr uint mix_rows( qword vol ) {
+  return uint( vol < 1 ? 1 : vol < (qword(1)<<MIX_MAXCTX_LOG) ? vol : (qword(1)<<MIX_MAXCTX_LOG) );
+}
+
 template<class CP> struct Mix2 {
   struct Cell {
     ParamUpdater<1, typename CP::Config_W> w;
     ParamUpdater<1, typename CP::Config_B> b;
   };
-  Cell* t;
-  uint  n;        // contexts allocated
+  Cell* t;        // the Table() of the generated M0_T
+  uint  n;        // contexts
   uint  vol;      // contexts asked for; hashed when vol > n
 
   // per-query state, valid between Mix() and Update()
@@ -36,18 +42,16 @@ template<class CP> struct Mix2 {
   }
   static float sqf( float x ) { return 1.0f/(1.0f+expf(-x)); }
 
-  void Init( uint contexts ) {
-    t = 0; n = 0;
+  // table: mix_rows(contexts) cells, owned by the caller
+  void Init( Cell* table, uint contexts ) {
+    t = table; n = 0;
     if( !CP::ON ) return;
     vol = contexts < 1 ? 1 : contexts;
-    n = vol < (1u<<MIX_MAXCTX_LOG) ? vol : (1u<<MIX_MAXCTX_LOG);
-    t = new Cell[n];
+    n = mix_rows( vol );
     float w0 = clamp( CP::W0, 1.0f/65536, 1.0f-1.0f/65536 );
     float W0 = clip( logf(w0/(1.0f-w0)), CP::Wclip );
     for( uint i=0; i<n; i++ ) { t[i].w.Init(W0); t[i].b.Init(0.0f); }
   }
-  void Quit() { delete[] t; t=0; }
-
   // p1, p2 = P(bit==0) of the two inputs; returns the mixed P(bit==0)
   float Mix( uint cx, float p1, float p2 ) {
     if( !CP::ON ) return p2;

@@ -107,8 +107,13 @@ static const float iSCALE = 1.0f/SCALE;
 #include "sh_mapping.inc"
 #include "MOD/sh_model-C0_h.inc"
 //#include "sh_model-C0_h.inc"
-#include "MOD/sh_model-S0_h.inc"
-#include "MOD/sh_model-M0_h.inc"
+// S0/M0 knobs, context masks and context builders (their Table() storage
+// comes with the _h.inc headers below, once the cell types are complete)
+#include "MOD/sh_model-S0_p.inc"
+#include "MOD/sh_model-M0_p.inc"
+
+// Table() element counts of the tuning build (IDX-FORMAT.md sec.9)
+static inline unsigned long long tbl_n( unsigned long long n ) { return n; }
 
 
 
@@ -574,9 +579,22 @@ template<class CP> struct Counter {
 }; // struct
 
 #include "sh_SSE2.inc"
-#include "MOD/sh_model-S0_p.inc"   // S0_MakeCx()
 #include "sh_mix2.inc"
-#include "MOD/sh_model-M0_p.inc"   // M0_MakeCx()
+
+// Cell types and table sizes of the two stages, then the generated structs
+// that hold their Table() storage: S0_T::S0_tbl / M0_T::M0_tbl are fixed
+// arrays in the shipping build and pointers allocated by S0_Init()/M0_Init()
+// in the tuning build.
+typedef Counter<CP_S0> SSE_Cell;
+static constexpr qword sse_table_cells( qword volume ) {
+  return CP_S0::ON ? sse_rows( volume, CP_S0::HBITS, sse_nb_clamp(CP_S0::NB) ) * qword(sse_nb_clamp(CP_S0::NB)) : 1;
+}
+typedef Mix2<CP_M0>::Cell Mix2_Cell;
+static constexpr uint mix_table_ctx( qword volume ) {
+  return CP_M0::ON ? mix_rows( volume ) : 1;
+}
+#include "MOD/sh_model-S0_h.inc"
+#include "MOD/sh_model-M0_h.inc"
 
 static const uint CNUM = 256;
 
@@ -585,6 +603,8 @@ Counter<CP_C0> o1[256][256];
 
 // USE_NEW comes from the generated IDX headers: 1 = tuning build (knobs are
 // runtime values, dispatch on NB), 0 = shipping build (NB folded).
+S0_T S0;           // SSE cell table
+M0_T M0;           // mixer cell table
 #if USE_NEW
 SSE_Dyn<CP_S0> sse;
 #else
@@ -634,8 +654,9 @@ int main( int argc, char** argv ) {
 
   // Initialize Order-1 Predictor array
   for( i=0; i<CNUM; i++) for( j=0; j<CNUM; j++ ) o1[i][j].Init();
-  sse.Init( qword(S0_Cx_Volume)*S0_Cx3_Volume );
-  mix.Init( M0_Cx_Volume );
+  S0.S0_Init(); M0.M0_Init();   // tuning build: allocate the tables
+  sse.Init( S0.S0_tbl, qword(S0_Cx_Volume)*S0_Cx3_Volume );
+  mix.Init( M0.M0_tbl, M0_Cx_Volume );
 
   int last_c = 0, c2 = 0, c3 = 0;
 
@@ -669,8 +690,7 @@ int main( int argc, char** argv ) {
   }
 
   if( f_DEC==0 ) rc.FinishEncode();
-  sse.Quit();
-  mix.Quit();
+  S0.S0_Quit(); M0.M0_Quit();
 
   fclose(g);
   fclose(f);
