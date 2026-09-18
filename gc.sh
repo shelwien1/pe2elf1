@@ -11,7 +11,8 @@
 # Overridable from the environment:
 #   CXX    compiler            (default: g++)
 #   TARG   -march/-mtune target (default: haswell, as in gc.bat)
-#   CXXEXTRA  extra flags appended to the compile line (e.g. -DOPT_UV2X2=0)
+#   CXXEXTRA  extra flags appended to the compile line (e.g. -DS0_ADAPT_WR=0)
+#   OUT    output executable name (default coder0 / coder0t)
 
 set -e
 cd "$(dirname "$0")"
@@ -21,8 +22,8 @@ CXX=${CXX:-g++}
 TARG=${TARG:-haswell}
 
 case "$MODE" in
-  release|"") NOCONST=1; EXE=coder0 ;;
-  tune)       NOCONST=0; EXE=coder0t ;;
+  release|"") NOCONST=1; EXE=${OUT:-coder0} ;;
+  tune)       NOCONST=0; EXE=${OUT:-coder0t} ;;
   *) echo "usage: $0 [release|tune]" >&2; exit 1 ;;
 esac
 

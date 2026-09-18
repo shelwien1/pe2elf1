@@ -7,7 +7,11 @@
 # with no argument.  ./mk.sh release folds every parameter to a literal and
 # there is nothing left to find.
 #
-#   perl IDX/opt.pl [corpus-file-list] [exe]
+#   perl IDX/opt.pl [corpus-file-list] [exe] [map-name-regex]
+#
+# map-name-regex: only maps whose name matches are climbed (e.g. '^S0_' for
+# the SSE stage alone); every map is still exported.  OPT_JOBS=N in the
+# environment compresses up to N corpus files at a time.
 #
 # corpus-file-list: text file, one .bmp path per line (default: opt.lst, and if
 # that is missing, the single file $deffile below).  Optimizing on one image
@@ -39,12 +43,29 @@ if( defined($lst) && -e $lst ) {
 }
 printf "corpus: %i file(s): %s\n", scalar(@files), join(" ",@files);
 
+$jobs = $ENV{OPT_JOBS} || 1;
+
 sub measure {
   my $t = 0;
-  for my $f (@files) {
-    unlink $tmp;
-    system( "$exe c \"$f\" $tmp >/dev/null 2>&1" );
-    my $s = -s $tmp;
+  my (@pids, @outs);
+  for my $i (0..$#files) {
+    my $f = $files[$i];
+    my $o = "$tmp.$i";
+    unlink $o;
+    if( $jobs > 1 ) {
+      waitpid( shift @pids, 0 ) while @pids >= $jobs;
+      my $pid = fork();
+      if( !$pid ) { exec( "$exe c \"$f\" $o >/dev/null 2>&1" ); exit 1; }
+      push @pids, $pid;
+    } else {
+      system( "$exe c \"$f\" $o >/dev/null 2>&1" );
+    }
+    push @outs, $o;
+  }
+  waitpid( $_, 0 ) for @pids;
+  for my $o (@outs) {
+    my $s = -s $o;
+    unlink $o;
     return 0x7FFFFFFF if !defined($s) || $s < 64;   # crashed / refused
     $t += $s;
   }
@@ -67,6 +88,15 @@ for (sort keys %adr) { printf "%08X %-16s %i\n", $adr{$_}, $_, $len{$_}; }
 printf "%i maps, %i bits total\n", scalar(keys %adr), $lsum;
 die "no !MAP! markers -- this is a Const/release build\n" if $lsum==0;
 
+$filt = $ARGV[2];
+@keys = sort keys %adr;
+if( defined $filt ) {
+  @keys = grep { /$filt/ } @keys;
+  $lsum = 0; $lsum += $len{$_} for @keys;
+  printf "climbing %i maps matching /%s/, %i bits\n", scalar(@keys), $filt, $lsum;
+  die "no map matches /$filt/\n" if !@keys;
+}
+
 sub wexe {                      # write $_[1] at offset $_[0]
   1 while not open EXE,"+<$exe"; binmode EXE;
   seek EXE,$_[0],0; print EXE $_[1]; close EXE;
@@ -87,7 +117,7 @@ $flag=1; $ct0=0;
 while( $flag==1 ) {
 
   $flag = 0; $lcnt=$lsum; $stim=time();
-  for $key (sort keys %adr) {
+  for $key (@keys) {
     $addr = $adr{$key};
     $leng = $len{$key};
     printf "!!! %06X: %s !!!\n", $addr, $key;

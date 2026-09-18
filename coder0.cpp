@@ -22,6 +22,17 @@
 #define ADAPT_WR 1
 #define ADAPT_MW 1
 #define ADAPT_K  1
+// Same toggles for the SSE cells (sh_SSE2.inc, parameters S0_*); these and
+// SSE_MAXCELLS_LOG may be overridden from the build line (gc.sh CXXEXTRA).
+#ifndef S0_ADAPT_WR
+#define S0_ADAPT_WR 1
+#endif
+#ifndef S0_ADAPT_MW
+#define S0_ADAPT_MW 1
+#endif
+#ifndef S0_ADAPT_K
+#define S0_ADAPT_K  1
+#endif
 
 // -------------------------------------------------------------
 // Optimizer-proposal toggles (coder0_counter_scope.md / r8 doc).
@@ -96,6 +107,7 @@ static const float iSCALE = 1.0f/SCALE;
 #include "sh_mapping.inc"
 #include "MOD/sh_model-C0_h.inc"
 //#include "sh_model-C0_h.inc"
+#include "MOD/sh_model-S0_h.inc"
 
 
 
@@ -129,6 +141,14 @@ static inline float clamp(float x, float min_val, float max_val) {
 #define CP_ADAPT_WR ADAPT_WR
 #define CP_ADAPT_MW ADAPT_MW
 #define CP_ADAPT_K  ADAPT_K
+#include "config.hpp"
+
+// Parameter bundle of the SSE cells: S0_* constants from IDX/sh_model-S0.idx.
+#define CP_NAME     CP_S0
+#define CP_PFX      S0_
+#define CP_ADAPT_WR S0_ADAPT_WR
+#define CP_ADAPT_MW S0_ADAPT_MW
+#define CP_ADAPT_K  S0_ADAPT_K
 #include "config.hpp"
 
 
@@ -540,10 +560,14 @@ template<class CP> struct Counter {
 
 }; // struct
 
+#include "sh_SSE2.inc"
+#include "MOD/sh_model-S0_p.inc"   // S0_MakeCx()
+
 static const uint CNUM = 256;
 
 ALIGN(64) Rangecoder rc;
 Counter<CP_C0> o1[256][256];
+SSE_Ctr<CP_S0> sse;
 
 int main( int argc, char** argv ) {
   uint f_DEC, i, j, c, f_len, f_pos, cxt, bit, p;
@@ -587,8 +611,9 @@ int main( int argc, char** argv ) {
 
   // Initialize Order-1 Predictor array
   for( i=0; i<CNUM; i++) for( j=0; j<CNUM; j++ ) o1[i][j].Init();
+  sse.Init( qword(S0_Cx_Volume)*S0_Cx3_Volume, S0_HBITS, S0_NB, S0_LIM, S0_T0, S0_W, S0_ILOG, S0_BLOG, S0_UPD );
 
-  int last_c = 0; 
+  int last_c = 0, c2 = 0, c3 = 0;
 
   for( f_pos=0; f_pos<f_len; f_pos++ ) {
     if( f_DEC==0 ) c = getc(f);
@@ -596,11 +621,16 @@ int main( int argc, char** argv ) {
     for( cxt=1; cxt<CNUM; ) {
       if( f_DEC==0 ) bit=(c>>7)&1;
 
-      p = o1[last_c][cxt].Predict();
+      // primary order-1 prediction, refined by the SSE stage
+      float p1 = o1[last_c][cxt].PredictF();
+      qword cx = qword(S0_MakeCx(c2, last_c, cxt))*S0_Cx3_Volume + S0_MakeCx3(c3);
+      float pf = sse.Predict( cx, p1 );
+      p = uint( clamp( pf*float(SCALE) ) );
       
       bit = rc.rc_BProcess( p, bit );
 
       o1[last_c][cxt].C_Update( bit );
+      sse.Update( bit );
 
       c<<=1; cxt+=cxt+bit;
     }
@@ -609,10 +639,11 @@ int main( int argc, char** argv ) {
 
     if( f_DEC==1 ) putc(cxt,g);
 
-    last_c = cxt; 
+    c3 = c2; c2 = last_c; last_c = cxt; 
   }
 
   if( f_DEC==0 ) rc.FinishEncode();
+  sse.Quit();
 
   fclose(g);
   fclose(f);

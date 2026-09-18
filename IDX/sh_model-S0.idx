@@ -1,0 +1,130 @@
+
+Prefix S0
+Debug 1
+
+# ======================================================================
+# sh_model-S0.idx -- every tunable of the SSE/APM stage (sh_SSE2.inc).
+#
+# The stage is a table of Counter<CP_S0> cells: a row per context Cx
+# (below), a column per bucket of the quantized input probability, and
+# linear interpolation between the two nearest columns.  See SSE-DESIGN.md.
+#
+# The cell counter constants at the end have exactly the meaning of their
+# C0_* namesakes (config.hpp derives the same floats from either prefix)
+# and are seeded from IDX/sh_model-C0.idx; the optimizer moves them
+# independently of the order-1 model.
+# ======================================================================
+
+Const 0
+
+# --- row context: which bits of the byte history select the row ---------
+# Two indexes, combined in 64 bits by the coder (Cx*Cx3_Volume + Cx3) so the
+# generated int volumes never overflow; rows beyond HBITS are hashed anyway.
+Index Cx
+ c2: c2, &11111111    # byte before last (all off = order-1 SSE; bits tunable)
+ c1: c1, &11111111    # last byte
+ ADD 256: cxt         # bit-tree node 1..255, always in (last factor)
+
+Index Cx3
+ c3: c3, &00011111    # third-last byte, low 5 bits (bits tunable)
+
+# --- table geometry -----------------------------------------------------
+Number HBITS,  1,0!10110   # rows = min(Cx_Volume, 1<<HBITS); rows beyond are hashed
+Number NB,     1,2!00110   # interpolation buckets (columns) per row: 2 + pattern
+Number LIM,    1,0!100000000000   # |stretch(p_in)| clip, /256  (2048 = 8.0)
+
+# --- cell init and output ------------------------------------------------
+Number T0,     1,0!0000100000000   # initial mass n0+n1 of a fresh cell, /256
+Number W,      1,0!111001100110011   # weight of the SSE output in the final p, /32768
+Number ILOG,   1,0!1   # 1: interpolate the two cells in the stretch domain
+Number BLOG,   1,0!1   # 1: blend SSE output with p_in in the stretch domain
+Number UPD,    1,0!1   # 0: update the nearer cell only; 1: update both
+
+Const 0
+
+# --- cell counter parameters: same meaning as C0_*, seeded from C0 --------
+
+# counts / rates
+Number P0,     1,1!100101000001000
+Number P1,     1,0!01010000010001
+Number wr,     1,1!01100110011000
+Number wr1,    1,0!011001100110
+Number mw,     1,1!0101000000000
+Number K,      1,0!0101111001100000
+
+Const 0
+
+# K optimizer
+Number NWk,    1,1!1111111111000000
+Number RKinc,  1,1!000000001100111
+Number kStep,  1,1!11111100001000000
+Number kMin,   1,1!1111100100000000000001
+Number kMax,   1,1!001111000001000
+Number M1_k,   1,1!10000000010000000000
+Number M2_k,   1,1!101111000000010010
+Number G1_k,   1,0!001001110001000
+Number G2_k,   1,0!000110010000000
+Number G3_k,   1,0!0010010001100000111
+Number G4_k,   1,0!0000000000000010100
+
+Const 0
+
+# mw optimizer
+Number NWm,    1,1!111111101111000101
+Number MWinc,  1,1!110100000000010
+Number mwStep, 1,1!111111111101000001
+Number mwMin,  1,1!000000000010000
+Number mwMax,  1,1!111111111111111
+Number M1_m,   1,1!111111111010000000
+Number M2_m,   1,1!001100101000000
+Number G1_m,   1,0!001001110001000
+Number G2_m,   1,0!0000000100001
+Number G3_m,   1,0!1000000000000000000
+Number G4_m,   1,0!0100000000110100010
+Number mwXlo,  1,0!111000000
+Number mwXhi,  1,0!0100000000000000
+Number mwP0,   1,1!101000101001010
+
+Const 0
+
+# u (memory length) optimizer
+Number M1_u,   1,0!111111001100000000
+Number M2_u,   1,0!11001100110
+Number NWu,    1,0!1101111000001000000
+Number RUinc,  1,0!110011100101100000
+Number uStep,  1,0!11011111100110000
+Number uMin,   1,0!1100000000
+Number uMax,   1,0!01011000100000000000000
+Number G1_u,   1,0!01001110001000
+Number G2_u,   1,0!000000000
+Number G3_u,   1,0!01000000000000000000
+Number G4_u,   1,0!00000110011
+Number R0_u,   1,0!10010000
+
+Const 0
+
+# v (hit/miss asymmetry) optimizer
+Number M1_v,   1,0!101011001000010001
+Number M2_v,   1,0!000011001
+Number NWv,    1,0!111111111100010000
+Number RVinc,  1,0!10100100100000111111
+Number vStep,  1,0!1111000010000000
+Number G1_v,   1,0!01001110001000
+Number G2_v,   1,0!000000000
+Number G3_v,   1,0!01000000000000000000
+Number G4_v,   1,0!00011010000
+Number R0_v,   1,0!10101000
+Number UVH,    1,0!101001001001
+
+Const 0
+
+# UV2X2 cross terms, RTRL leakage
+Number CXW,    1,0!01011110011
+Number XHW,    1,0!01010000000
+Number UVDET,  1,0!011001101
+Number XHC,    1,0!0110010000000
+Number leak1,  1,1!0111110011111100
+Number leak2,  1,1!0111111111010000
+Number stP_min,1,1!000000000000000
+
+Const 0
