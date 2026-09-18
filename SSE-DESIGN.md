@@ -128,12 +128,28 @@ columns : nb buckets on the stretch axis, uniform in [-LIM, +LIM]
 cell    : Counter<CP_S0>
 ```
 
-`rows = min( Cx_Volume·Cx3_Volume, 2^HBITS, 2^SSE_MAXCELLS_LOG / nb )`.  When
+`rows = min( Cx_Volume·Cx3_Volume, 2^HBITS, 2^SSE_MAXCELLS_LOG / NB )`.  When
 the context volume exceeds the rows, the 64-bit context is hashed
 (multiplicative, high bits) — so widening a mask in the `.idx` never changes
-the memory footprint, only the collision rate.  `nb`, `HBITS`, `LIM` are
-runtime values read from the bundle at `Init()`, which is what lets `opt.pl`
-sweep them in the tuning build.
+the memory footprint, only the collision rate.
+
+`NB` is a template parameter of `SSE_Ctr<CP, NB>`: the column stride, the
+quantizer scale and the init arrays are compile-time in the build that
+ships.  It is still an IDX knob, through the two-version scheme of
+`freq_SSE1_dbg.inc` (`SSEjQ`'s `switch(Q)` over `SSEii<Q>`), selected by the
+`USE_NEW` macro that `idx2inc.pl` writes into the generated headers:
+
+| build | `USE_NEW` | object | `NB` |
+|---|---|---|---|
+| shipping (`./gc.sh`) | 0 | `SSE_Ctr<CP_S0, CP_S0::NB>` | literal from the `.idx`, folded |
+| tuning (`./gc.sh tune`) | 1 | `SSE_Dyn<CP_S0>` | patchable; `Init()` reads it once and picks the `SSE_Ctr<CP_S0, NB>` instantiation for every `NB` in `[2, SSE_NB_MAX]` |
+
+so `opt.pl` measures exactly the code that ships (checked: a tuning binary
+patched to `NB = 6` and a shipping build compiled with `NB = 6` produce the
+same 545345 bytes).  The dispatcher is one recursive template plus a small
+virtual interface; the shipping build contains neither.  `HBITS`, `LIM`,
+`T0`, `W` and the mode flags are bundle constants (`CP_S0::LIM`, …): folded
+in the shipping build, runtime in the tuning build, clamped at `Init()`.
 
 ### 3.3 Prediction
 
@@ -222,13 +238,16 @@ Number P0 … mwXhi             # the cell counter constants, same meaning as C0
   `coder0.cpp` combines them as `Cx·Cx3_Volume + Cx3` in 64 bits.
 * **`Number` knobs** compile to literals in the shipping build
   (`./gc.sh`) and to patchable `!MAP!` objects in the tuning build
-  (`./gc.sh tune`); `config.hpp` derives the `CP_S0` floats from either.
+  (`./gc.sh tune`); `config.hpp` (with `CP_SSE`) derives the `CP_S0`
+  constants — counter floats and the SSE knobs `NB`, `HBITS`, `LIM`, `T0`,
+  `W`, `ILOG`, `BLOG`, `UPD` — from either.
 * **Clamps at the point of use.**  `SSE_Ctr::Init()` clamps `nb` to
   `[2,64]`, `HBITS` to `[8,30]`, `LIM` to `[0.25,16]`, `T0`, `W`, and caps the
   cells at `2^SSE_MAXCELLS_LOG`, so any bit pattern the optimizer visits runs
   (IDX-FORMAT.md §5).
 * **Compile-time only**: the adaptation flags `S0_ADAPT_WR/MW/K` (they change
-  the cell layout) and the cell cap `SSE_MAXCELLS_LOG`; both can be given on
+  the cell layout), the cell cap `SSE_MAXCELLS_LOG` and the dispatcher's
+  range `SSE_NB_MAX` (16; the measured optimum is 6–8); all can be given on
   the build line (`CXXEXTRA="-DS0_ADAPT_WR=0" ./gc.sh tune`).
 * **Frozen lines** (`!` prefix, IDX-FORMAT.md §10) keep knobs the code never
   reads out of the search space: `P0`/`P1` (cells are initialized per bucket)
@@ -250,7 +269,9 @@ cd IDX && perl import.pl sh_model-S0.idx ../export.!!! > t && mv t sh_model-S0.i
 `setp.pl` performs the same in-place edit of the `"!MAP!name!base\0pattern"`
 strings that `opt.pl` does, so a hand experiment measures exactly what the
 climb would.  `opt.pl` gained an optional map-name regex (third argument) and
-`OPT_JOBS` for compressing the corpus files in parallel.
+`OPT_JOBS` for compressing the corpus files in parallel.  `gc.sh` passes
+`USE_NEW` (1 for `tune`, 0 otherwise) as the second argument of
+`idx2inc.pl`, and leaves `MOD/` in the shipping state after either build.
 
 ---
 

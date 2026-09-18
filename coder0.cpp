@@ -149,6 +149,7 @@ static inline float clamp(float x, float min_val, float max_val) {
 #define CP_ADAPT_WR S0_ADAPT_WR
 #define CP_ADAPT_MW S0_ADAPT_MW
 #define CP_ADAPT_K  S0_ADAPT_K
+#define CP_SSE      1
 #include "config.hpp"
 
 
@@ -567,7 +568,13 @@ static const uint CNUM = 256;
 
 ALIGN(64) Rangecoder rc;
 Counter<CP_C0> o1[256][256];
-SSE_Ctr<CP_S0> sse;
+// USE_NEW comes from the generated IDX headers: 1 = tuning build (knobs are
+// runtime values, dispatch on NB), 0 = shipping build (NB folded).
+#if USE_NEW
+SSE_Dyn<CP_S0> sse;
+#else
+SSE_Ctr<CP_S0, sse_nb_clamp(CP_S0::NB)> sse;
+#endif
 
 int main( int argc, char** argv ) {
   uint f_DEC, i, j, c, f_len, f_pos, cxt, bit, p;
@@ -611,7 +618,7 @@ int main( int argc, char** argv ) {
 
   // Initialize Order-1 Predictor array
   for( i=0; i<CNUM; i++) for( j=0; j<CNUM; j++ ) o1[i][j].Init();
-  sse.Init( qword(S0_Cx_Volume)*S0_Cx3_Volume, S0_HBITS, S0_NB, S0_LIM, S0_T0, S0_W, S0_ILOG, S0_BLOG, S0_UPD );
+  sse.Init( qword(S0_Cx_Volume)*S0_Cx3_Volume );
 
   int last_c = 0, c2 = 0, c3 = 0;
 

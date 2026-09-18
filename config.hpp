@@ -10,6 +10,7 @@
 //   #define CP_ADAPT_WR 1       // per-cell adaptive wr (u/v) + RTRL traces
 //   #define CP_ADAPT_MW 1       // per-cell adaptive mw
 //   #define CP_ADAPT_K  1       // per-cell adaptive K
+//   #define CP_SSE      1       // also derive the SSE-stage knobs (S0 only)
 //   #include "config.hpp"
 //
 // The bundle holds the four ParamUpdater configs (Config_U/V/MW/K) and every
@@ -48,6 +49,15 @@ struct CP_NAME {
   // P24 MWLGT: mw = mwMin + span*sigma(x), K = exp(y); seeds map the linear
   // seeds, x gets its own (wide) box, y reuses the exact ln K box.
   static const float MWspan, MWs0, MWX0, MWXLO, MWXHI, KY0, KYLO, KYHI;
+
+#ifdef CP_SSE
+  // SSE stage (sh_SSE2.inc): table geometry and output knobs.  In the
+  // shipping build these are constant expressions -- NB is the template
+  // argument of SSE_Ctr -- in the tuning build they are runtime values that
+  // opt.pl patches, and SSE_Dyn dispatches on NB at Init().
+  static const int   NB, HBITS, ILOG, BLOG, UPD;
+  static const float LIM, T0, W;
+#endif
 };
 
 #define set  const float CP_NAME::Config_MW::
@@ -165,6 +175,21 @@ set KYLO   = logf(CP_NAME::Config_K::minVal);
 set KYHI   = logf(CP_NAME::Config_K::maxVal);
 #undef set
 
+#ifdef CP_SSE
+#define set  const int CP_NAME::
+set NB    = CPX(NB);
+set HBITS = CPX(HBITS);
+set ILOG  = CPX(ILOG);
+set BLOG  = CPX(BLOG);
+set UPD   = CPX(UPD);
+#undef set
+#define set  const float CP_NAME::
+set LIM = float(CPX(LIM)) / 256;     // |stretch| clip
+set T0  = float(CPX(T0)) / 256;      // initial cell mass
+set W   = float(CPX(W)) / SCALE;     // weight of the SSE output
+#undef set
+#endif
+
 #undef CPX
 #undef CP_CAT
 #undef CP_CAT2
@@ -173,3 +198,4 @@ set KYHI   = logf(CP_NAME::Config_K::maxVal);
 #undef CP_ADAPT_WR
 #undef CP_ADAPT_MW
 #undef CP_ADAPT_K
+#undef CP_SSE
