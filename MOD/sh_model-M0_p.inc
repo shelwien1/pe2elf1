@@ -12,13 +12,6 @@ static const int M0_W0 = (6151+0) * (1);
 static const int M0_Wclip = (2048+0) * (1);
 static const int M0_Bclip = (1537+0) * (1);
 static const int M0_Pmin = (21475+0) * (1);
-static const int M0_X2 = (0+0) * (1);
-static const int M0_CXWm = (1024+0) * (1);
-static const int M0_DETm = (205+0) * (1);
-static const int M0_GUP = (256+0) * (1);
-static const int M0_GDN = (256+0) * (1);
-static const int M0_GMX = (256+0) * (1);
-static const int M0_GMN = (64+0) * (1);
 static const int M0_M1w = (523792+0) * (1);
 static const int M0_M2w = (67108+0) * (1);
 static const int M0_NWw = (355489+0) * (1);
@@ -27,8 +20,7 @@ static const int M0_STEPw = (500737+0) * (1);
 static const int M0_G2w = (6+0) * (1);
 static const int M0_DCw = (66+0) * (1);
 static const int M0_RCw = (16384+0) * (1);
-static const int M0_OPTw = (1+0) * (1);
-static const int M0_R0w = (0+0) * (1);
+static const int M0_NAGw = (1+0) * (1);
 static const int M0_M1b = (524160+0) * (1);
 static const int M0_M2b = (67108+0) * (1);
 static const int M0_NWb = (524287+0) * (1);
@@ -37,8 +29,7 @@ static const int M0_STEPb = (522756+0) * (1);
 static const int M0_G2b = (32+0) * (1);
 static const int M0_DCb = (256+0) * (1);
 static const int M0_RCb = (16384+0) * (1);
-static const int M0_OPTb = (1+0) * (1);
-static const int M0_R0b = (0+0) * (1);
+static const int M0_NAGb = (1+0) * (1);
 
 
 

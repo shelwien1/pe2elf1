@@ -61,9 +61,7 @@ struct CP_NAME {
 };
 
 #define set  const float CP_NAME::Config_MW::
-const int CP_NAME::Config_MW::OPT = 0;   // Newton step (the tuned counters)
-const int CP_NAME::Config_MW::GAIN = 0;
-const float CP_NAME::Config_MW::gup = 1.0f, CP_NAME::Config_MW::gdn = 1.0f, CP_NAME::Config_MW::gmax = 1.0f, CP_NAME::Config_MW::gmin = 1.0f;
+const int CP_NAME::Config_MW::NAG = 0;   // plain Newton step (the tuned counters)
 set momentum_D = 1.0f-float(CPX(M1_m))/(SCALE<<8);
 set momentum_R = 1.0f-float(CPX(M2_m))/(SCALE<<8);
 set NW         = float(CPX(NWm))/(SCALE<<8);
@@ -79,9 +77,7 @@ set R0 = 0.0f;
 #undef set
 
 #define set  const float CP_NAME::Config_K::
-const int CP_NAME::Config_K::OPT = 0;   // Newton step (the tuned counters)
-const int CP_NAME::Config_K::GAIN = 0;
-const float CP_NAME::Config_K::gup = 1.0f, CP_NAME::Config_K::gdn = 1.0f, CP_NAME::Config_K::gmax = 1.0f, CP_NAME::Config_K::gmin = 1.0f;
+const int CP_NAME::Config_K::NAG = 0;   // plain Newton step (the tuned counters)
 set momentum_D = 1.0f-float(CPX(M1_k))/(SCALE<<8);
 set momentum_R = 1.0f-float(CPX(M2_k))/(SCALE<<8);
 set NW         = float(CPX(NWk)) / (SCALE<<8);
@@ -108,9 +104,7 @@ set R0 = 0.0f;
 // -------------------------------------------------------------
 
 #define set  const float CP_NAME::Config_U::
-const int CP_NAME::Config_U::OPT = 0;   // Newton step (the tuned counters)
-const int CP_NAME::Config_U::GAIN = 0;
-const float CP_NAME::Config_U::gup = 1.0f, CP_NAME::Config_U::gdn = 1.0f, CP_NAME::Config_U::gmax = 1.0f, CP_NAME::Config_U::gmin = 1.0f;
+const int CP_NAME::Config_U::NAG = 0;   // plain Newton step (the tuned counters)
 set momentum_D = 1.0f-float(CPX(M1_u))/(SCALE<<8);
 set momentum_R = 1.0f-float(CPX(M2_u))/(SCALE<<8);
 set NW         = float(CPX(NWu))/(SCALE<<8);
@@ -126,9 +120,7 @@ set R0 = float(CPX(R0_u))/256;
 #undef set
 
 #define set  const float CP_NAME::Config_V::
-const int CP_NAME::Config_V::OPT = 0;   // Newton step (the tuned counters)
-const int CP_NAME::Config_V::GAIN = 0;
-const float CP_NAME::Config_V::gup = 1.0f, CP_NAME::Config_V::gdn = 1.0f, CP_NAME::Config_V::gmax = 1.0f, CP_NAME::Config_V::gmin = 1.0f;
+const int CP_NAME::Config_V::NAG = 0;   // plain Newton step (the tuned counters)
 set momentum_D = 1.0f-float(CPX(M1_v))/(SCALE<<8);
 set momentum_R = 1.0f-float(CPX(M2_v))/(SCALE<<8);
 set NW         = float(CPX(NWv))/(SCALE<<8);

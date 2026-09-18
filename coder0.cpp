@@ -147,7 +147,7 @@ __attribute__((noipa)) static float rt_expf( float x ) { return expf(x); }
 
 #define def_Config(Config) struct Config {\
   static const float momentum_D, momentum_R, NW, inc, stepMax, minVal,maxVal, grad1_clip, grad2_clip, D_clip, R_clip, R0, hbeta, efw; \
-  static const int OPT, GAIN; static const float gup, gdn, gmax, gmin; };
+  static const int NAG; };
 
 // Parameter bundle of the order-1 model: C0_* constants from
 // IDX/sh_model-C0.idx, adaptation flags from the ADAPT_* toggles above.
@@ -175,12 +175,6 @@ __attribute__((noipa)) static float rt_expf( float x ) { return expf(x); }
 
 template<int ADAPT, class cfg> struct ParamUpdater;
 
-// Per-state step-size gain (cfg::GAIN): grown by gup when the new gradient
-// agrees with the momentum's direction, shrunk by gdn otherwise, boxed to
-// [gmin, gmax]; multiplies the step.  Absent (no storage) when GAIN=0.
-template<int G> struct UpdGain { float v; void Init() { v = 1.0f; } };
-template<> struct UpdGain<0> { void Init() {} };
-
 // Active parameter state 
 // Split into Accum (D/R statistics) / StepRaw (Newton step) / Apply (clip,
 // move, box) so the UV2X2 coupled solve can interpose between the halves;
@@ -189,13 +183,11 @@ template<class cfg> struct ParamUpdater<1, cfg> {
   float val;
   float D;
   float R;
-  [[no_unique_address]] UpdGain<cfg::GAIN> gain;
 
   void Init(float init_val) {
     val = init_val;
     D = 0.0f;
     R = cfg::R0;
-    gain.Init();
   }
 
   // g = weight of this observation (1 = a full event); scales the loss.
@@ -212,14 +204,8 @@ template<class cfg> struct ParamUpdater<1, cfg> {
     d2p_inv= clip( d2p_inv, cfg::grad2_clip );
     // -------------------------
 
-    if constexpr( cfg::GAIN ) {
-      // D accumulates -dp_inv: the new gradient agrees with the momentum when dp_inv*D < 0
-      gain.v = (dp_inv * D < 0.0f) ? fminf( gain.v * cfg::gup, cfg::gmax ) : fmaxf( gain.v * cfg::gdn, cfg::gmin );
-    }
-
     D = D * cfg::momentum_D - dp_inv;
-    if( cfg::OPT==3 ) R = R * cfg::momentum_R + dp2_inv;             // Adam: second moment of the gradient
-    else              R = R * cfg::momentum_R + dp2_inv - d2p_inv;   // Newton: EMA of the Hessian of -ln p
+    R = R * cfg::momentum_R + dp2_inv - d2p_inv;
 
     D = clip(D,cfg::D_clip);
     //R = clip(R,cfg::R_clip);
@@ -229,18 +215,14 @@ template<class cfg> struct ParamUpdater<1, cfg> {
 
   INLINE float Denom() const { return R + cfg::inc; }
 
-  // step rule (cfg::OPT): 0 Newton D/(R+inc); 2 normalized momentum
-  // D/(|D|+inc), the scalar form of Muon (a step of magnitude NW along the
-  // momentum, no curvature); 3 Adam D/(sqrt(R)+inc) with R the second moment
   INLINE float StepRaw() const {
-    if( cfg::OPT==2 ) return cfg::NW * D / (fabsf(D) + cfg::inc);
-    if( cfg::OPT==3 ) return cfg::NW * D / (sqrtf(R) + cfg::inc);
+    //float safe_R = fabsf(R) + cfg::inc;
+    //float safe_R = Max(R,0.0f) + cfg::inc;
     float safe_R = R + cfg::inc;
     return cfg::NW * D / safe_R;
   }
 
   INLINE void Apply( float step, float lo, float hi ) {
-    if constexpr( cfg::GAIN ) step *= gain.v;
     step = clip(step, cfg::stepMax);
 
     float nv = val - step;
@@ -253,7 +235,7 @@ template<class cfg> struct ParamUpdater<1, cfg> {
   ) {
     float dp_inv = Accum(dp, d2p, inv_p, inv_p2, inv_pq, g);
     (void)sc;
-    if( cfg::OPT==1 ) {
+    if( cfg::NAG ) {
       // Nesterov look-ahead: the step from momentum_D*D_new - g instead of D_new
       float Dn = D * cfg::momentum_D - dp_inv;
       Apply( cfg::NW * Dn / (R + cfg::inc), lo, hi );

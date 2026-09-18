@@ -720,12 +720,12 @@ just the squared gradient), `step = NW·D/(R+inc)`, clipped and boxed.
 Muon-style ideas apply to it only in their scalar form — Muon
 orthogonalizes a *matrix* momentum, which for independent per-context
 scalars collapses to normalized momentum (a step of fixed size along the
-momentum, no curvature) — so the rules compared, as the mixer's `OPTw` /
-`OPTb` knobs, are: Newton (0), normalized momentum `D/(|D|+inc)` (2), Adam
-`D/(√EMA(g²)+inc)` (3), each also at a quarter of the rate since their
-effective step sizes differ, plus a curvature prior `R0` for the Newton
-rule (the mixer's contexts see ~10 events on average, so the EMAs barely
-warm up).  Mixer at the tuned seeds (515550):
+momentum, no curvature) — so the rules compared on the mixer were: Newton,
+normalized momentum `D/(|D|+inc)`, Adam `D/(√EMA(g²)+inc)`, each also at a
+quarter of the rate since their effective step sizes differ, plus a
+curvature prior `R0` for the Newton rule (the mixer's contexts see ~10
+events on average, so the EMAs barely warm up).  Mixer at the tuned seeds
+(515550):
 
 | rule | on | rate | book1 | wcc386 | total |
 |---|---|---|---|---|---|
@@ -759,22 +759,25 @@ Three refinements of the Newton rule were then tried on the mixer:
 | gain ×1.05 / ×0.95 | 235817 | 280971 | 516788 |
 | gain ×1.2 / ×0.6, box [0.125, 4] | 242596 | 286946 | 529542 |
 
-* **Nesterov** (`OPT=1`: the step is taken from `β·D_new − g` instead of
-  `D_new`; `Accum` returns the gradient so nothing is stored) is a small,
+* **Nesterov** (the step is taken from `β·D_new − g` instead of `D_new`;
+  `Accum` returns the gradient so nothing is stored) is a small,
   consistent gain, essentially all on the bias, and wants the bias rate a
-  little higher.  It is the seed now (`OPTw = OPTb = 1`).
-* **The 2×2 coupled solve** (`X2`: EMA of the cross curvature of `−ln p`,
+  little higher.  It is the one refinement kept: the `NAG` switch of a
+  `ParamUpdater` config, on for the mixer (`NAGw`, `NAGb`), off for the
+  counters.
+* **The 2×2 coupled solve** (EMA of the cross curvature of `−ln p`,
   `gW·gb/p² − ∂²p/∂W∂b/p`, then the counters' det-guarded solve with joint
   ray clipping) is neutral: the weight and the bias of a context barely
-  interact at these rates.  It stays a knob, off.
+  interact at these rates.
 * **Step-size gain on sign agreement** (a per-state multiplier grown when
   the new gradient agrees with the momentum, shrunk otherwise) loses at
   every setting: the Newton step already normalizes the scale, and a
   gain that reacts to single events only adds noise in contexts that see
-  a handful of them.  Off (`GUP = GDN = 1`), the state costs a float per
-  updater in the mixer only.
+  a handful of them.
 
-The counters were never switched away from Newton.
+The counters were never switched away from Newton.  The normalized
+momentum, Adam, curvature prior, coupled solve and gain code was removed
+after these measurements (last present in commit 9d3e993).
 
 **The offline optimizer** (`opt.pl`) is a different problem: coordinate
 descent over bit patterns with one full corpus run per evaluation.  Its

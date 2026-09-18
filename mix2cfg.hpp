@@ -7,8 +7,8 @@
 //   #include "mix2cfg.hpp"
 //
 // Config_W / Config_B are ParamUpdater configs with the scalings of
-// newton.inc (F_W_M1_F = 1 - I_W_M1/(SCALE<<9), ...); the rest are the
-// mixer's seeds and boxes.  Constant expressions in the shipping build,
+// newton.inc (F_W_M1_F = 1 - I_W_M1/(SCALE<<9), ...) plus the Nesterov
+// switch NAG; the rest are the mixer's seeds and boxes.  Constant expressions in the shipping build,
 // runtime reads of the patchable knobs in the tuning build.
 // -------------------------------------------------------------
 
@@ -19,8 +19,8 @@
 struct CP_NAME {
   def_Config(Config_W)
   def_Config(Config_B)
-  static const int   ON, X2;
-  static const float W0, Wclip, Bclip, Pmin, CXW, DET;
+  static const int   ON;
+  static const float W0, Wclip, Bclip, Pmin;
 };
 
 #define set  const float CP_NAME::Config_W::
@@ -35,12 +35,9 @@ set grad1_clip = 0.0f;
 set grad2_clip = float(CPX(G2w)) / (1<<5);
 set D_clip     = float(CPX(DCw)) / (1<<4);
 set R_clip     = float(CPX(RCw)) / (1<<4);
-set R0         = float(CPX(R0w)) / (1<<8);
+set R0         = 0.0f;
 #undef set
-const int CP_NAME::Config_W::OPT = CPX(OPTw);
-const int CP_NAME::Config_W::GAIN = 1;
-const float CP_NAME::Config_W::gup = float(CPX(GUP))/256, CP_NAME::Config_W::gdn = float(CPX(GDN))/256,
-            CP_NAME::Config_W::gmax = float(CPX(GMX))/256, CP_NAME::Config_W::gmin = float(CPX(GMN))/256;
+const int CP_NAME::Config_W::NAG = CPX(NAGw);
 
 #define set  const float CP_NAME::Config_B::
 set momentum_D = 1.0f - float(CPX(M1b)) / (SCALE<<9);
@@ -54,17 +51,11 @@ set grad1_clip = 0.0f;
 set grad2_clip = float(CPX(G2b)) / (1<<5);
 set D_clip     = float(CPX(DCb)) / (1<<4);
 set R_clip     = float(CPX(RCb)) / (1<<4);
-set R0         = float(CPX(R0b)) / (1<<8);
+set R0         = 0.0f;
 #undef set
-const int CP_NAME::Config_B::OPT = CPX(OPTb);
-const int CP_NAME::Config_B::GAIN = 1;
-const float CP_NAME::Config_B::gup = float(CPX(GUP))/256, CP_NAME::Config_B::gdn = float(CPX(GDN))/256,
-            CP_NAME::Config_B::gmax = float(CPX(GMX))/256, CP_NAME::Config_B::gmin = float(CPX(GMN))/256;
+const int CP_NAME::Config_B::NAG = CPX(NAGb);
 
 const int   CP_NAME::ON    = CPX(ON);
-const int   CP_NAME::X2    = CPX(X2);
-const float CP_NAME::CXW   = float(CPX(CXWm)) / 1024;
-const float CP_NAME::DET   = float(CPX(DETm)) / 1024;
 const float CP_NAME::W0    = float(CPX(W0)) / SCALE;
 const float CP_NAME::Wclip = float(CPX(Wclip)) / (1<<8);
 const float CP_NAME::Bclip = float(CPX(Bclip)) / (1<<8);
