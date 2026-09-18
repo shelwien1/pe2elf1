@@ -14,6 +14,7 @@ static const int S0_UPMIN = (0+0) * (1);
 static const int S0_QLIN = (0+0) * (1);
 static const int S0_HW = (0+0) * (1);
 static const int S0_HMODE = (0+0) * (1);
+static const int S0_DEG = (0+1) * (1);
 static const int S0_P0 = (18952+1) * (1);
 static const int S0_P1 = (5137+0) * (1);
 static const int S0_wr = (6552+1) * (1);

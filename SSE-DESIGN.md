@@ -236,6 +236,7 @@ Number HBITS, NB, LIM         # rows limit, buckets, stretch clip
 Number T0, W, ILOG, BLOG      # init mass, blend weight/domain, interpolation domain
 Number UPD, UPMIN, QLIN       # update rule (nearer / both / proportional + floor), input domain
 Number HW, HMODE              # per-row history sub-rows: width, bits or successes
+Number DEG                    # B-spline degree of the interpolation kernel (1..3)
 Number P0 … mwXhi             # the cell counter constants, same meaning as C0_*
 ```
 
@@ -247,7 +248,8 @@ Number P0 … mwXhi             # the cell counter constants, same meaning as C0
   (`./gc.sh`) and to patchable `!MAP!` objects in the tuning build
   (`./gc.sh tune`); `config.hpp` (with `CP_SSE`) derives the `CP_S0`
   constants — counter floats and the SSE knobs `NB`, `HBITS`, `LIM`, `T0`,
-  `W`, `ILOG`, `BLOG`, `UPD`, `UPMIN`, `QLIN`, `HW`, `HMODE` — from either.
+  `W`, `ILOG`, `BLOG`, `UPD`, `UPMIN`, `QLIN`, `HW`, `HMODE`, `DEG` — from
+  either.
 * **Clamps at the point of use.**  `SSE_Ctr::Init()` clamps `nb` to
   `[2,64]`, `HBITS` to `[8,30]`, `LIM` to `[0.25,16]`, `T0`, `W`, and caps the
   cells at `2^SSE_MAXCELLS_LOG`, so any bit pattern the optimizer visits runs
@@ -275,7 +277,10 @@ cd IDX && perl import.pl sh_model-S0.idx ../export.!!! > t && mv t sh_model-S0.i
 
 `setp.pl` performs the same in-place edit of the `"!MAP!name!base\0pattern"`
 strings that `opt.pl` does, so a hand experiment measures exactly what the
-climb would.  `opt.pl` gained an optional map-name regex (third argument) and
+climb would.  The two builds are byte-identical only with FMA contraction
+off (`-ffp-contract=off` in `gc.sh`): with knobs folded in one build and
+runtime in the other, gcc otherwise contracts the same float expressions
+differently and the streams drift by a few bytes.  `opt.pl` gained an optional map-name regex (third argument) and
 `OPT_JOBS` for compressing the corpus files in parallel.  `gc.sh` passes
 `USE_NEW` (1 for `tune`, 0 otherwise) as the second argument of
 `idx2inc.pl`, and leaves `MOD/` in the shipping state after either build.
@@ -415,7 +420,8 @@ Same base as 6.4 (576529):
 These seeds — 8 buckets, full `c2`, `c3 = 00011111`, `W = 0.9` stretch,
 `ILOG = 1`, `T0 = 1`, `wr = 0.2`, `wr1 = +0.025` — gave **543866**; with
 the proportional update of §6.6 the values in `IDX/sh_model-S0.idx` before
-the optimizer run stand at **542195**.
+the optimizer run stand at **542194** (542195 in the tables of §6.6, which
+were measured before FMA contraction was switched off).
 
 ### 6.6 Update rule, input domain, internal width
 
@@ -478,6 +484,34 @@ that adapts its own rate and confidence already reacts to a run of
 surprises the way a "success" sub-row would, without splitting its
 statistics.  The width made sense in `sh_SSE1.inc`, whose rows were plain
 order-1 contexts with fixed-rate cells; here it stays a knob, at 0.
+
+**Interpolation degree** — `DEG` selects the uniform B-spline kernel: 1 =
+linear over 2 cells (the default), 2 = quadratic over 3, 3 = cubic over 4.
+The cells are the spline's control points, the kernel weights are
+non-negative and sum to 1, so they serve both the prediction and the
+proportional update (they are exactly ∂p_sse/∂cell; a Catmull-Rom cubic,
+which passes through the nodes, has negative weights and is not offered).
+Rows get one padding cell at each end so no weight is ever clamped.
+
+| kernel | buckets | update | book1 | wcc386 | total |
+|---|---|---|---|---|---|
+| linear | 8 | proportional | 248282 | 293913 | **542195** |
+| quadratic | 8 | proportional | 248853 | 295079 | 543932 |
+| cubic | 8 | proportional | 249325 | 296048 | 545373 |
+| quadratic | 10 | proportional | 249023 | 294750 | 543773 |
+| cubic | 10 | proportional | 249336 | 295206 | 544542 |
+| quadratic | 6 | proportional | 248961 | 296509 | 545470 |
+| quadratic | 8 | all cells, `g=1` | 248592 | 300748 | 549340 |
+| cubic | 8 | all cells, `g=1` | 248922 | 305379 | 554301 |
+| quadratic | 8 | proportional, prob. domain | 250036 | 296415 | 546451 |
+
+Every higher degree loses, and adding buckets to give the smoother kernel
+back its resolution does not recover it.  The curve an SSE row has to
+learn is not smooth in the way a spline assumes: with adaptive cells the
+two-cell linear scheme already lets each bucket move on its own, and a
+wider kernel spreads every event over cells that mostly belong to other
+input probabilities (the same effect that made the full-both update lose
+to the proportional one).  Linear stays; `DEG` remains a knob.
 
 ### 6.7 Tuned result
 

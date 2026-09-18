@@ -46,8 +46,14 @@ genmod $NOCONST $USENEW
 
 # 2. Compile.  Mirrors the clang line in gc.bat as far as gcc/linux allow:
 #    -O3 -ffast-math == -Ofast, LTO, static link, stripped.
+#    -ffp-contract=off: the shipping and the tuning build compile the same
+#    float expressions with different constness (folded vs. runtime knobs),
+#    and gcc then contracts a*b+c into FMAs differently, which changed the
+#    stream by a few bytes between the two builds.  With contraction off
+#    both builds are byte-identical, and the pre-SSE baseline is unchanged
+#    (book1 344899, wcc386 309703).
 INCS="-std=c++23 -DNDEBUG -D_FILE_OFFSET_BITS=64"
-OPTS="-O3 -ffast-math -fomit-frame-pointer -fno-stack-protector -fstrict-aliasing -flto"
+OPTS="-O3 -ffast-math -ffp-contract=off -fomit-frame-pointer -fno-stack-protector -fstrict-aliasing -flto"
 ARCH="-march=$TARG -mtune=$TARG -m64"
 WARN="-Wno-format -Wno-unused-result -Wno-unused-variable -Wno-unused-but-set-variable"
 

@@ -10,10 +10,15 @@
 //   Predict(cx, p):  s  = clip(stretch(p), +-LIM)
 //                    x  = (s+LIM) * (NB-1)/(2 LIM)   (QLIN: x = p*(NB-1))
 //                    j = floor(x);  wt = x-j;  sub-row from the row's history
-//                    p_sse = lerp( c[j].p, c[j+1].p, wt )   (prob. or stretch)
+//                    p_sse = sum_k w_k c[k].p over the DEG+1 cells around x,
+//                    w_k = uniform B-spline basis of degree DEG (1: linear,
+//                    2: quadratic over 3 cells, 3: cubic over 4), in the
+//                    probability or the stretch domain (ILOG)
 //                    p_out = p + (p_sse - p) * W             (prob. or stretch)
-//   Update(bit):     C_Update(bit, g): UPD 0 nearer cell, 1 both (g=1),
-//                    2 proportional (g = 1-wt, wt, floored at UPMIN);
+//   Update(bit):     C_Update(bit, g): UPD 0 the heaviest cell, 1 every
+//                    contributing cell with g=1, 2 proportional (g = w_k,
+//                    floored at UPMIN -- the B-spline weights are >= 0 and
+//                    sum to 1, and are exactly dp_sse/dcell);
 //                    then the row history shifts in the bit (HMODE 0) or
 //                    whether the SSE gave the bit p > 0.5 (HMODE 1).
 //
@@ -48,11 +53,14 @@ template<class CP, int NB> struct SSE_Ctr {
   typedef Counter<CP> Cell;
   static_assert( NB>=2 && NB<=SSE_NB_MAX, "SSE bucket count out of range" );
 
-  Cell* t;        // ncx rows x (1<<hw) sub-rows x NB cells
+  Cell* t;        // ncx rows x (1<<hw) sub-rows x stride cells
   byte* hist;     // per-row history (hw bits used)
   uint  ncx;      // rows allocated
   qword vol;      // context volume asked for; rows are hashed when vol > ncx
   int   hw;       // history bits (clamped CP::HW)
+  int   deg;      // kernel degree (clamped CP::DEG)
+  int   pad;      // padding cells at each end of a sub-row (1 for deg > 1)
+  int   stride;   // cells per sub-row: NB + 2*pad
   float lim;      // stretch clip (clamped CP::LIM)
   float qscale;   // (NB-1) / (2*lim)
   float w;        // weight of p_sse in the output (clamped CP::W)
@@ -60,7 +68,9 @@ template<class CP, int NB> struct SSE_Ctr {
   int   upd;      // clamped CP::UPD
 
   // Per-query state, valid between Predict() and Update()
-  Cell* c;
+  Cell* c;        // first contributing cell
+  int   n;        // contributing cells (deg+1)
+  float wk[4];    // their kernel weights
   float wt;
   float ps;       // SSE output before blending
   uint  row;
@@ -81,10 +91,13 @@ template<class CP, int NB> struct SSE_Ctr {
     w     = clamp( CP::W, 0.0f, 1.0f );
     upmin = clamp( CP::UPMIN, 0.0f, 1.0f );
     upd   = iclamp( CP::UPD, 0, 2 );
+    deg   = iclamp( CP::DEG, 1, 3 );
+    pad   = deg>1;
+    stride = NB + 2*pad;
 
     ncx = uint( vol < (qword(1)<<hbits) ? vol : (qword(1)<<hbits) );
     qword maxcells = qword(1)<<SSE_MAXCELLS_LOG;
-    qword percx = qword(NB)<<hw;
+    qword percx = qword(stride)<<hw;
     if( qword(ncx)*percx > maxcells ) ncx = uint(maxcells/percx);
     if( ncx<1 ) ncx = 1;
 
@@ -96,17 +109,22 @@ template<class CP, int NB> struct SSE_Ctr {
     // probability sq(s_j), inverted through the cell's output map
     // p = sq( K * st( q0*(1-mw) + mwP0*mw ) ) at the seed K and mw, with
     // total mass T0 so the first updates move it at a controlled rate.
+    // (padding cells continue the identity line beyond the ends).  The
+    // values are computed for all NB+2 slots with a constant loop bound so
+    // that both builds (stride runtime vs. folded) evaluate the same float
+    // expressions the same way and stay byte-identical.
     float T0 = clamp( CP::T0, 1.0f/256, 4096.0f );
-    float a[NB], b[NB];
-    for( int j=0; j<NB; j++ ) {
+    float a[NB+2], b[NB+2];
+    for( int k=0; k<NB+2; k++ ) {
+      int   j   = k-1;
       float s_j = CP::QLIN ? stf( float(j)/float(NB-1) ) : -lim + float(j)*(2.0f*lim/float(NB-1));
       float pm  = sqf( s_j / CP::K );
       float q0  = (pm - CP::mwP0*CP::M) / (1.0f - CP::M);
       q0 = clamp( q0, 1.0f/4096, 1.0f-1.0f/4096 );
-      a[j] = q0*T0; b[j] = (1.0f-q0)*T0;
+      a[k] = q0*T0; b[k] = (1.0f-q0)*T0;
     }
     // row-major pass: the table is far bigger than any cache
-    for( qword r=0; r<(qword(ncx)<<hw); r++ ) for( int j=0; j<NB; j++ ) t[ r*NB + j ].InitN( a[j], b[j] );
+    for( qword r=0; r<(qword(ncx)<<hw); r++ ) for( int k=0; k<stride; k++ ) t[ r*stride + k ].InitN( a[k+1-pad], b[k+1-pad] );
   }
 
   void Quit() { delete[] t; t=0; delete[] hist; hist=0; }
@@ -122,26 +140,58 @@ template<class CP, int NB> struct SSE_Ctr {
     float s0 = stf(p);
     float s  = clamp( s0, -lim, lim );
     float x  = CP::QLIN ? p * float(NB-1) : (s + lim) * qscale;
-    int   j  = int(x); if( j > NB-2 ) j = NB-2;
-    wt = x - float(j);
     row = Row(cx);
     uint sub = (row << hw) + (hist[row] & ((1u<<hw)-1));
-    c  = t + qword(sub)*NB + j;
-    float p0 = c[0].PredictF();
-    float p1 = c[1].PredictF();
-    ps = CP::ILOG ? sqf( stf(p0) + wt*(stf(p1)-stf(p0)) ) : p0 + wt*(p1-p0);
+    Cell* base = t + qword(sub)*stride + pad;       // base[0..NB-1] = the buckets
+    if( deg==1 ) {
+      // linear: the two neighbours (kept as the exact lerp)
+      int j = int(x); if( j > NB-2 ) j = NB-2;
+      wt = x - float(j);
+      c = base + j; n = 2; wk[0] = 1.0f-wt; wk[1] = wt;
+      float p0 = c[0].PredictF();
+      float p1 = c[1].PredictF();
+      ps = CP::ILOG ? sqf( stf(p0) + wt*(stf(p1)-stf(p0)) ) : p0 + wt*(p1-p0);
+    } else {
+      if( deg==2 ) {
+        // quadratic B-spline: nearest knot j and its two neighbours, t in [-1/2, 1/2]
+        int j = int(x + 0.5f); if( j > NB-1 ) j = NB-1;
+        float u = x - float(j);
+        c = base + j - 1; n = 3;
+        wk[0] = 0.5f*(0.5f-u)*(0.5f-u);
+        wk[1] = 0.75f - u*u;
+        wk[2] = 0.5f*(0.5f+u)*(0.5f+u);
+        wt = 0.5f+u;
+      } else {
+        // cubic B-spline: cells j-1..j+2, t in [0,1]
+        int j = int(x); if( j > NB-2 ) j = NB-2;
+        float u = x - float(j), u2 = u*u, u3 = u2*u, v = 1.0f-u;
+        c = base + j - 1; n = 4;
+        wk[0] = v*v*v/6.0f;
+        wk[1] = (3.0f*u3 - 6.0f*u2 + 4.0f)/6.0f;
+        wk[2] = (-3.0f*u3 + 3.0f*u2 + 3.0f*u + 1.0f)/6.0f;
+        wk[3] = u3/6.0f;
+        wt = u;
+      }
+      float acc = 0.0f;
+      for( int k=0; k<n; k++ ) {
+        float pk = c[k].PredictF();
+        acc += wk[k] * (CP::ILOG ? stf(pk) : pk);
+      }
+      ps = CP::ILOG ? sqf(acc) : acc;
+    }
     float pf = CP::BLOG ? sqf( s0 + (stf(ps)-s0)*w ) : p + (ps-p)*w;
     return pf;
   }
 
   void Update( int bit ) {
-    if( upd==1 )      { c[0].C_Update(bit); c[1].C_Update(bit); }
+    if( upd==1 )      { for( int k=0; k<n; k++ ) c[k].C_Update(bit); }
     else if( upd==2 ) {
-      float g1 = wt<upmin ? upmin : wt;
-      float g0 = 1.0f-wt<upmin ? upmin : 1.0f-wt;
-      c[0].C_Update(bit, g0); c[1].C_Update(bit, g1);
+      for( int k=0; k<n; k++ ) c[k].C_Update(bit, wk[k]<upmin ? upmin : wk[k]);
     }
-    else              { (wt<0.5f ? c[0] : c[1]).C_Update(bit); }
+    else {
+      int kb = 0; for( int k=1; k<n; k++ ) if( wk[k]>wk[kb] ) kb = k;
+      c[kb].C_Update(bit);
+    }
     if( hw ) {
       int h = CP::HMODE ? ((ps>=0.5f) == (bit==0)) : bit;
       hist[row] = byte((hist[row]<<1) | h);
