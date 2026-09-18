@@ -1,0 +1,14 @@
+# build outputs
+coder0
+coder0t
+*.o
+*.exe
+# test outputs (t1.sh / t1.bat)
+*.1
+*.2
+/1
+/2
+# optimizer state (IDX/opt.pl)
+*.opt_tmp
+export.!!!
+opttimes.!!!
