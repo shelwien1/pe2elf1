@@ -624,20 +624,21 @@ measurements (last present in commit 431db07).
 
 ### 6.8 Tuned result
 
-One `opt.pl` pass over the S0 file (two climbs on disjoint halves, about
-1.3k evaluations of the pair, 7 s each on 4 cores), then the exports
-folded into `IDX/sh_model-S0.idx`:
+Three `opt.pl` passes: one over the S0 file (two climbs on disjoint
+halves, about 1.3k evaluations of the pair, 7 s each on 4 cores), then,
+with the mixer in place, one over the 25 mixer knobs and one over all 74
+S0 knobs jointly; each export folded into its `.idx`:
 
-| | no SSE | SSE, seeds (§6.5) | SSE, tuned |
-|---|---|---|---|
-| book1 | 344899 | 248078 | **241409** (−30.0%) |
-| wcc386 | 309703 | 295788 | **287719** (−7.1%) |
-| book1 + wcc386 | 654602 | 543866 | **529128** (−19.2%) |
-| book1wcc (concatenation) | 656163 | | **531716** (−19.0%) |
-| book1 encode / decode | 1.0 s | | 5.7 s / 5.7 s |
+| | no SSE | SSE, seeds (§6.5) | SSE tuned | + mixer, all tuned |
+|---|---|---|---|---|
+| book1 | 344899 | 248078 | 241409 | **235043** (−31.9%) |
+| wcc386 | 309703 | 295788 | 287719 | **280507** (−9.4%) |
+| book1 + wcc386 | 654602 | 543866 | 529128 | **515550** (−21.2%) |
+| book1wcc (concatenation) | 656163 | | 531716 | **518841** (−20.9%) |
+| book1 encode / decode | 1.0 s | | 5.7 s | 5.8 s / 5.7 s |
 
 All three roundtrips verify (`t1.sh`), and the shipping and tuning builds
-produce the same bytes.  What the pass moved, in order of effect:
+produce the same bytes.  What the first S0 pass moved, in order of effect:
 
 * the cells' logistic scale `K` (0.74 → 0.87) and the top of its box
   `kMax` (0.94 → 1.50): SSE cells want to be sharper than the order-1
@@ -653,11 +654,12 @@ produce the same bytes.  What the pass moved, in order of effect:
   under 500 bytes.
 
 The u/v rate optimizer of the cells matters little once the seeds are
-right; `K`, `T0`, `W` and the context masks carry the result.  A second
-pass over all S0 knobs jointly and a pass over the C0 knobs (the order-1
-model tuned as an SSE *input* rather than as the final predictor) are the
-obvious next steps and were started; their outcome is recorded below when
-available.
+right; `K`, `T0`, the blend and the context masks carry the result.  The
+mixer pass (§6.9) and the joint S0 pass on top of it were worth a further
+1.2K and 0.6K.  A pass over the C0 knobs (the order-1 model tuned as an
+SSE *input* rather than as the final predictor) was tried before the
+mixer existed and its changes did not transfer once the mixer was in
+place; it remains the obvious next step on the final configuration.
 
 ---
 
