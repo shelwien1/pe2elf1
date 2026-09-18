@@ -19,7 +19,7 @@
 struct CP_NAME {
   def_Config(Config_W)
   def_Config(Config_B)
-  static const int   BIAS;
+  static const int   ON, BIAS;
   static const float W0, Wclip, Bclip, Pmin;
 };
 
@@ -53,6 +53,7 @@ set R_clip     = float(CPX(RCb)) / (1<<4);
 set R0         = 0.0f;
 #undef set
 
+const int   CP_NAME::ON    = CPX(ON);
 const int   CP_NAME::BIAS  = CPX(BIAS);
 const float CP_NAME::W0    = float(CPX(W0)) / SCALE;
 const float CP_NAME::Wclip = float(CPX(Wclip)) / (1<<8);

@@ -42,6 +42,7 @@ template<class CP> struct Mix2 {
 
   // p1, p2 = P(bit==0) of the two inputs; returns the mixed P(bit==0)
   float Mix( uint cx, float p1, float p2 ) {
+    if( !CP::ON ) { p0 = p2; return p2; }     // bypass: the SSE output as is
     c  = t + (cx < n ? cx : cx % n);
     s1 = stf(p1);
     s2 = stf(p2);
@@ -52,6 +53,7 @@ template<class CP> struct Mix2 {
   }
 
   void Update( int bit ) {
+    if( !CP::ON ) return;
     float pK_t = bit ? (1.0f - p0) : p0;
     float sign = bit ? -1.0f : 1.0f;
     float inv_p  = 1.0f / fmaxf( pK_t, 1e-12f );

@@ -1,6 +1,7 @@
 
 
 
+static const int M0_ON = (1+0) * (1);
 static const int M0_W0 = (6151+0) * (1);
 static const int M0_Wclip = (2048+0) * (1);
 static const int M0_BIAS = (1+0) * (1);

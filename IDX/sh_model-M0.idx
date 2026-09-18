@@ -19,6 +19,7 @@ Index Cx
  ADD 256: cxt         # bit-tree node 1..255, always in
 
 # --- weight / bias seeds and boxes --------------------------------------
+Number ON,     1,0!1   # 0: mixer bypassed, final p = SSE output (the pre-mixer pipeline)
 Number W0,    1,0!001100000000111   # initial w (weight of p1), /32768
 Number Wclip, 1,0!100000000000   # |W| box in logit coordinates, /256
 Number BIAS,  1,0!1   # 1: adaptive stretch-domain bias per context; 0: none

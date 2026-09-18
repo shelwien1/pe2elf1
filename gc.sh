@@ -51,9 +51,11 @@ genmod $NOCONST $USENEW
 #    and gcc then contracts a*b+c into FMAs differently, which changed the
 #    stream by a few bytes between the two builds.  With contraction off
 #    both builds are byte-identical, and the pre-SSE baseline is unchanged
-#    (book1 344899, wcc386 309703).
+#    (book1 344899, wcc386 309703).  -fno-associative-math for the same
+#    reason: the mixer's sums were reassociated differently with folded
+#    knobs (2 bytes apart); it costs nothing measurable.
 INCS="-std=c++23 -DNDEBUG -D_FILE_OFFSET_BITS=64"
-OPTS="-O3 -ffast-math -ffp-contract=off -fomit-frame-pointer -fno-stack-protector -fstrict-aliasing -flto"
+OPTS="-O3 -ffast-math -ffp-contract=off -fno-associative-math -fomit-frame-pointer -fno-stack-protector -fstrict-aliasing -flto"
 ARCH="-march=$TARG -mtune=$TARG -m64"
 WARN="-Wno-format -Wno-unused-result -Wno-unused-variable -Wno-unused-but-set-variable"
 
