@@ -924,11 +924,14 @@ S0 `K`, S0 `NWv`.
 |---|---|---|---|---|
 | 061 baseline (all tuned, C0 in place) | 235391 | 275195 | 512847 | 1023433 |
 | A1 + A2 stack, hand seeds | 234499 | 274203 | 510950 | 1019652 |
-| + optv.pl passes 1–2 | **234269** | **273275** | **509562** | **1017106** (−0.62%) |
+| + optv.pl passes 1–2 | 234269 | 273275 | 509562 | 1017106 |
+| + pass 3 (`OPT_SCAN=2` over the momentum, damping, leak and rate knobs) | **234213** | **273291** | **509525** | **1017029** (−0.63%) |
 
-Roundtrips verify and both builds are byte-identical.  Encode time is
-unchanged within noise (the chain and the schedule are a few
-multiplications per bit).
+Pass 3's scan found no further decade-scale optimum (C0 `M1_u` −26,
+S0 `M1_k` −25, the rest single bytes), so the constants are at the noise
+floor of this corpus.  Roundtrips verify and both builds are
+byte-identical.  Encode time is unchanged within noise (the chain and the
+schedule are a few multiplications per bit).
 
 ## 7. Cost, and how to trade it
 

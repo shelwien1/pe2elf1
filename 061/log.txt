@@ -22,4 +22,4 @@ book1          wcc386         book1wcc
 # the order-1 cells (and 0.62 of it for the SSE cells), optv.pl passes
 # (SSE-DESIGN.md sec.6.11):
 book1          wcc386         book1wcc
-234269 5.167s  273275 4.377s  509562 8.404s
+234213 4.877s  273291 4.897s  509525 8.680s

@@ -29,7 +29,7 @@ Const 0
 
 # --- ParamUpdater of W: newton.inc scalings ------------------------------
 Number M1w,   1,0!1111111111000010000   # momentum_D = 1 - M1w/(SCALE<<9)
-Number M2w,   1,0!10000011100101010   # momentum_R = 1 - M2w/(SCALE<<11)
+Number M2w,   1,0!10000100000110001   # momentum_R = 1 - M2w/(SCALE<<11)
 Number NWw,   1,0!1010100000100111100   # step gain NW = NWw/(SCALE<<9)
 Number INCw,  1,0!111101001111000100   # Newton damping inc = INCw/(SCALE<<11)
 Number STEPw, 1,0!1101001000011110001   # step clip = STEPw/(SCALE<<8)
