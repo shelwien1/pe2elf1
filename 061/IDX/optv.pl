@@ -21,6 +21,10 @@
 #   OPT_MAXPASS=n   passes over the knob list (default 8)
 #   OPT_ORDER=a,b,c knobs to climb first, in this order (e.g. the biggest
 #                   gains of a previous run); the rest follow alphabetically
+#   OPT_SCAN=k      before a knob's local search, try value*2^j for j in
+#                   -k..k (j != 0) and start from the best: a momentum or a
+#                   rate can have its optimum a decade away from the seed,
+#                   where +-step never arrives (C0 M2_k: 32 -> 2048 events)
 #
 # Progress goes to stdout, the best total so far to opttimes.!!! as in opt.pl.
 
@@ -30,6 +34,7 @@ $jobs    = $ENV{OPT_JOBS} || 1;
 $minrel  = defined $ENV{OPT_MINREL} ? $ENV{OPT_MINREL} : 1/256;
 $step0f  = defined $ENV{OPT_STEP0}  ? $ENV{OPT_STEP0}  : 1/4;
 $maxpass = $ENV{OPT_MAXPASS} || 8;
+$scan    = $ENV{OPT_SCAN} || 0;
 
 #---------------------------------------------------------------- corpus
 $lst = $ARGV[0];
@@ -106,6 +111,21 @@ for my $pass (1..$maxpass) {
     my $step = int($ref * $step0f); $step = 1 if $step < 1;
     my $minstep = int($ref * $minrel); $minstep = 1 if $minstep < 1;
     printf "!!! %s = %i (+%s) [%i bits] step %i..%i  best %i  %is\n", $k, $p, $ofs{$k}, $len{$k}, $step, $minstep, $best, time-$t0;
+    if( $scan ) {                                  # coarse geometric scan first
+      my %seen = ($p => 1); my $bp = $p;
+      for my $j (-$scan..$scan) {
+        next if !$j;
+        my $q = int( ($p > 0 ? $p : 1) * 2**$j + 0.5 ); $q = $vmax if $q > $vmax;
+        next if $seen{$q}++;
+        setv($k, $q); my $s = measure();
+        printf "  %s scan %i -> %i : %i (%+i)\n", $k, $p, $q, $s, $s-$best;
+        if( $s < $best ) { $best = $s; $bp = $q; export(); note(); }
+      }
+      $p = $bp; setv($k, $p);
+      $ref  = $p > 16 ? $p : 16;
+      $step = int($ref * $step0f); $step = 1 if $step < 1;
+      $minstep = int($ref * $minrel); $minstep = 1 if $minstep < 1;
+    }
     while( $step >= $minstep ) {
       my $improved = 0;
       for my $dir (1, -1) {
