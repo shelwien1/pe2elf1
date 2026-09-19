@@ -1,0 +1,54 @@
+
+Prefix M0
+Debug 1
+
+# ======================================================================
+# sh_model-M0.idx -- every tunable of the 2-input mixer (sh_mix2.inc).
+#
+# p = sq( w*st(p1) + (1-w)*st(p2) + b ),  w = sq(W), per mixer context:
+# W and b are ParamUpdater states (the Newton updater of newton.inc),
+# p1 = the order-1 prediction, p2 = the SSE output.  See SSE-DESIGN.md.
+# ======================================================================
+
+Const 0
+
+# --- mixer context ------------------------------------------------------
+Index Cx
+ c2: c2, &11111111    # byte before last (bits tunable)
+ c1: c1, &11100100    # last byte (bits tunable)
+ cx: cxt, b&00000000  # bit-tree node: b& merges node bits counted from the leading 1 (0 = keep)
+
+# --- weight / bias seeds and boxes --------------------------------------
+Number ON,     1,0!1   # 0: mixer bypassed, final p = SSE output (the pre-mixer pipeline)
+Number W0,    1,0!011101111000101   # initial w (weight of p1), /32768
+Number Wclip, 1,0!100000000000   # |W| box in logit coordinates, /256
+Number Bclip, 1,0!01000000000   # |b| box, /256
+Number Pmin,  1,0!101001111100011   # input probability clip, /(SCALE<<16)
+
+Const 0
+
+# --- ParamUpdater of W: newton.inc scalings ------------------------------
+Number M1w,   1,0!1111111111000010000   # momentum_D = 1 - M1w/(SCALE<<9)
+Number M2w,   1,0!10000011000100100   # momentum_R = 1 - M2w/(SCALE<<11)
+Number NWw,   1,0!1010110110010100001   # step gain NW = NWw/(SCALE<<9)
+Number INCw,  1,0!111101001111000100   # Newton damping inc = INCw/(SCALE<<11)
+Number STEPw, 1,0!1111010010000000001   # step clip = STEPw/(SCALE<<8)
+Number G2w,   1,0!0000110   # curvature clip = G2w/32
+Number DCw,   1,0!001000010   # D clip = DCw/16
+Number RCw,   1,0!000000001001000   # R clip = RCw/16
+Number NAGw,  1,0!1   # 1: Nesterov look-ahead (step from momentum_D*D_new - g)
+
+Const 0
+
+# --- ParamUpdater of the bias --------------------------------------------
+Number M1b,   1,0!1111111111110000000
+Number M2b,   1,0!10000011000100100
+Number NWb,   1,0!1111011001000000000
+Number INCb,  1,0!000011000000000100
+Number STEPb, 1,0!1111111111100110001
+Number G2b,   1,0!0100000
+Number DCb,   1,0!100000000
+Number RCb,   1,0!100000000000000
+Number NAGb,  1,0!1   # 1: Nesterov look-ahead
+
+Const 0

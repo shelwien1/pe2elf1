@@ -1,0 +1,10 @@
+# build outputs and test artefacts (gc.sh / t1.sh / tm.sh / opt.pl)
+coder0
+coder0t
+*.o
+*.1
+*.2
+book1wcc
+*.opt_tmp*
+opttimes.!!!
+export.!!!

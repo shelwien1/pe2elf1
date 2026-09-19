@@ -1,0 +1,137 @@
+
+Prefix C0
+Debug 1
+
+# Lines marked '!' are frozen (IDX-FORMAT.md sec.10): the coder no longer
+# reads them (AWIND/HBETA/EFISH/ALEAK/SMASS/MKCPL/BIASC constants of rejected
+# proposals, and grad1_clip which ParamUpdater never uses), so opt.pl would
+# only waste evaluations on them.  Values are kept as documentation.
+
+Const 1
+
+# only used with ADAPT_L=1
+Number LWw,    1,1!000001100000000011
+Number LWk,    1,1!111111111100100
+Number LWm,    1,1!001000000100000
+
+Number mwMax,  1,1!111111111111111
+
+Number G1_m,   1,0!001001110001000
+Number G1_k,   1,0!001001110001000
+Number G3_m,   1,0!1000000000000000000
+
+Const 0
+
+Number P0,     1,1!100101000001000
+Number P1,     1,0!01100001010001
+
+Const 0
+
+Number wr,     1,1!10010000000000
+Number wr1,    1,0!101111000000
+Number mw,     1,1!0101111011001
+Number K,      1,0!0101001011011010
+Number NWk,    1,1!1111111111000000
+Number RKinc,  1,1!000000001100111
+Number kStep,  1,1!11111100001000000
+Number kMin,   1,1!1111100100000000000001
+Number kMax,   1,1!001111000001000
+
+Const 0
+
+Number NWm,    1,1!111111101111000101
+Number MWinc,  1,1!110100000000010
+Number mwStep, 1,1!111111111101000001
+Number mwMin,  1,1!000000000000000
+
+Const 0
+
+Number M1_m,   1,1!111111111010000000
+Number M2_m,   1,1!001100101000000
+
+Number M1_k,   1,1!10000000010000000000
+Number M2_k,   1,1!101111000000010010
+
+Number G2_m,   1,0!0000000100001
+Number G2_k,   1,0!000000000000000
+
+Const 0
+
+Number stP_min,1,1!000000000000000
+
+Number leak1,  1,1!0111011110000010
+Number leak2,  1,1!0111111111010000
+
+Const 0
+
+Number mwP0,   1,1!100011110110000
+
+Const 0
+
+Number G3_k,   1,0!0010010001100000111
+                              
+Number G4_m,   1,0!0100000000110100010
+Number G4_k,   1,0!0000000000000000101
+
+Const 0
+
+# added from sh_model-C0_h.inc
+Number M1_u,  1,0!111111110101010100
+Number M2_u,  1,0!11101101000
+Number NWu,   1,0!1000001001000000000
+Number RUinc, 1,0!110011100101100000
+Number uStep, 1,0!11011111100110000
+Number uMin,  1,0!1111110100
+Number uMax,  1,0!01011111111101000100100
+Number G1_u,  1,0!01001110001000
+Number G2_u,  1,0!000000000
+Number G3_u,  1,0!01000000000000000000
+Number G4_u,  1,0!00000110000
+Number R0_u,  1,0!10010101
+
+Number M1_v,  1,0!111111001000000000
+Number M2_v,  1,0!000011001
+Number NWv,   1,0!111111111100010000
+Number RVinc, 1,0!10100100100000111111
+Number vStep, 1,0!1111000010000000
+Number G1_v,  1,0!01001110001000
+Number G2_v,  1,0!000000100
+Number G3_v,  1,0!01000000000000000000
+Number G4_v,  1,0!11101000000
+Number R0_v,  1,0!10101000
+
+Number UVH, 1,0!101001001001
+
+Const 0
+
+# added from sh_model-C0_h.inc
+Number AWF, 1,0!010000000000
+Number AWFo, 1,0!010000000000
+
+Number HB_u, 1,0!01000000000
+Number HB_v, 1,0!01000000000
+Number HB_m, 1,0!01000000000
+Number HB_k, 1,0!01000000000
+
+Number EFW_u, 1,0!000000000
+Number EFW_v, 1,0!000000000
+Number EFW_m, 1,0!000000000
+Number EFW_k, 1,0!000000000
+
+Number CXW, 1,0!01000001110
+Number XHW, 1,0!01011001100
+Number UVDET, 1,0!110011011
+Number XHC, 1,0!0110010000000
+Number LKA, 1,0!000000000
+Number LKB, 1,0!0100111111100
+Number LKlo, 1,0!000000000
+Number LKhi, 1,0!01111010111000
+Number SMWm, 1,0!010000000000000
+Number SMWk, 1,0!010000000000000
+Number SM0, 1,0!010100000000000
+Number MPW, 1,0!010000000000
+Number CMK, 1,0!01000000000
+Number MKDET, 1,0!011001101
+Number mwXlo, 1,0!000000000
+Number mwXhi, 1,0!0100000000000000
+Number BWT, 1,0!000000000
