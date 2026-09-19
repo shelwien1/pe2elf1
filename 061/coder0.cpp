@@ -43,6 +43,26 @@
 #ifndef S0_E2E_ON
 #define S0_E2E_ON 1
 #endif
+// Diagnostic variants of the A2 path (compile-time, default 0 = as documented):
+//   E2E_NOCHAIN  the order-1 cell's chain factor is the mixer weight alone
+//                (drops the SSE input moving the interpolation point)
+//   E2E_SSEI     the SSE cells train on the interpolated SSE output's own
+//                loss, not on the final one
+//   E2E_HESS     the E2E error also scales the curvature (g^2 by gs^2, the
+//                d2p term by gs): the Newton step of the final loss
+//   UV_NW_AFTER  F4: NW applied after the 2x2 (u,v) solve, not inside its RHS
+#ifndef E2E_NOCHAIN
+#define E2E_NOCHAIN 0
+#endif
+#ifndef E2E_SSEI
+#define E2E_SSEI 0
+#endif
+#ifndef E2E_HESS
+#define E2E_HESS 0
+#endif
+#ifndef UV_NW_AFTER
+#define UV_NW_AFTER 0
+#endif
 
 // -------------------------------------------------------------
 // Optimizer-proposal toggles (coder0_counter_scope.md / r8 doc).
@@ -228,9 +248,15 @@ template<class cfg> struct ParamUpdater<1, cfg> {
     float dp, float d2p, float inv_p, float inv_p2, float inv_pq, float g = 1.0f, float gs = 1.0f
   ) {
     float dp_inv = dp * inv_p * g * gs;
+#if E2E_HESS
+    float dp2_inv = (dp * dp) * inv_p2 * g * (gs * gs);
+    (void)inv_pq;
+    float d2p_inv = d2p * inv_p * g * gs;
+#else
     float dp2_inv = (dp * dp) * inv_p2 * g;
     (void)inv_pq;
     float d2p_inv = d2p * inv_p * g;
+#endif
 
     // --- GRADIENT CLIPPING ---
     d2p_inv= clip( d2p_inv, cfg::grad2_clip );
@@ -525,11 +551,19 @@ template<class CP> struct Counter {
       float cc  = rt.R_uv;
       float det = a_u * a_v - cc * cc;
       if( det > CP::UVDET * a_u * a_v ) {
+#if UV_NW_AFTER
+        float b_u = wr0_state.D;
+        float b_v = wr1_state.D;
+        float idet = 1.0f / det;
+        float s_u = (b_u * a_v - cc * b_v) * idet * Config_U::NW;
+        float s_v = (a_u * b_v - cc * b_u) * idet * Config_V::NW;
+#else
         float b_u = Config_U::NW * wr0_state.D;
         float b_v = Config_V::NW * wr1_state.D;
         float idet = 1.0f / det;
         float s_u = (b_u * a_v - cc * b_v) * idet;
         float s_v = (a_u * b_v - cc * b_u) * idet;
+#endif
         // RAYCL: rescale jointly so neither component exceeds its stepMax
         // (widened by the age schedule while the cell is young).
         float agu = 1.0f + CP::AGAu * agd;
@@ -764,8 +798,9 @@ int main( int argc, char** argv ) {
       // order-1 logit (the SSE input also moves the interpolation point).
       float e_f = pf - float(1 - bit);
       float wv  = mix.weight();
-      o1[last_c][cxt].C_Update( bit, p1, 1.0f, e_f * (wv + (1.0f - wv) * sse.dz2_dz1()) );
-      sse.Update( bit, e_f * (1.0f - wv) );
+      float c_1 = E2E_NOCHAIN ? wv : wv + (1.0f - wv) * sse.dz2_dz1();
+      o1[last_c][cxt].C_Update( bit, p1, 1.0f, e_f * c_1 );
+      sse.Update( bit, E2E_SSEI ? p2 - float(1 - bit) : e_f * (1.0f - wv) );
       mix.Update( bit );
 
       c<<=1; cxt+=cxt+bit;
