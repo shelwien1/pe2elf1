@@ -13,3 +13,13 @@ book1          wcc386         book1wcc
 # + Nesterov step in the mixer updaters:
 book1          wcc386         book1wcc
 235025 5.596s  280132 4.610s  518553 9.336s
+
+# 061: C0 retuned in the pipeline (book1wcc):
+book1          wcc386         book1wcc
+235391 5.6s    275195 4.2s    512847 7.9s
+
+# + young-cell step schedule (S0 cells, mixer bias), end-to-end gradients for
+# the order-1 cells (and 0.62 of it for the SSE cells), optv.pl passes
+# (SSE-DESIGN.md sec.6.11):
+book1          wcc386         book1wcc
+234269 5.167s  273275 4.377s  509562 8.404s

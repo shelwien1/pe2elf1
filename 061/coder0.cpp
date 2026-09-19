@@ -116,6 +116,11 @@
 //   F13 [[no_unique_address]] on the adaptation members (reduced cells 36/12 B).
 //   The compile-time diagnostics E2E_NOCHAIN / E2E_SSEI / E2E_HESS /
 //   UV_NW_AFTER below all measured worse and default to 0.
+//   Tuned (optv.pl): 234269/273275/509562 = -0.62% vs. the 061 baseline.
+//   Build identity (F5): rt_logf/rt_expf now carry a volatile barrier (they
+//   were inlined and folded under LTO), and the RTRL leaks are clamped to
+//   [0,1] (a leak above 1 overflows the traces, and clip() of inf differs
+//   between the builds).  -DTRACE_P dumps the per-bit probabilities.
 
 // C library headers
 #include <stdlib.h>

@@ -328,9 +328,19 @@ build and runtime in the other, gcc otherwise contracts, reassociates,
 replaces divisions by reciprocals or refactors common terms differently
 in the two, and the streams drift by a byte or two (found by tracing the
 per-bit probabilities of both builds to the first divergent bit).  The
-init-time `logf`/`expf` of knob-derived values go through `noipa` wrappers
-for the same reason: the shipping build would otherwise fold them with
-MPFR while the tuning build calls libm.  `opt.pl` gained an optional map-name regex (third argument) and
+init-time `logf`/`expf` of knob-derived values go through `rt_logf` /
+`rt_expf` for the same reason: the shipping build would otherwise fold
+them with MPFR while the tuning build calls libm.  The wrappers take a
+`volatile` copy of the argument: a plain static wrapper is inlined and
+folded anyway under `-O3 -flto`, which surfaced when a tuner pass moved
+`kMax` to 1.0311 (libm's `logf` is an ulp below MPFR's there, so the K box
+wall `KYHI` differed and the streams drifted by a byte).  Every knob a
+consumer reads must also be clamped to its meaningful range: a pass had
+set `C0_leak2` above 1, the RTRL traces of long-lived cells overflowed to
+inf, and `clip()` of inf/NaN under `-ffinite-math-only` differs between
+the builds.  `-DTRACE_P` writes the per-bit `(p1, p2, pf, p)` of a build
+to `$TRACE_P`; comparing two such traces gives the first divergent bit,
+and a per-update dump of that cell the field.  `opt.pl` gained an optional map-name regex (third argument) and
 `OPT_JOBS` for compressing the corpus files in parallel; it treats a coder
 that did not exit cleanly as a failed measurement (a crashed or OOM-killed
 run leaves a short output behind, which used to count as an improvement).
@@ -900,9 +910,25 @@ files, so the code was removed.
 
 **Tuned result.**  `IDX/optv.pl` over the C0/S0/M0 rate, step, momentum,
 damping and seed knobs on top of the stack (objective book1 + wcc386 +
-book1wcc):
+book1wcc; the S0/M0 schedule knobs in a pass of their own).  Pass 1 over
+79 knobs: 1019646 → 1017882; pass 2 (the biggest gains first, the ceilings
+of `C0_M2_k` / `M0_NWb` widened): → 1017100, of which 9 bytes were the
+leak-overflow artifact above.  What moved, in order of effect: S0 `T0`
+2.0 → 1.3, `M0_W0` 0.47 → 0.59 (the end-to-end-trained order-1 input is
+worth more to the mixer), S0 `LIM` 7.25 → 3.1, S0 `E2E` 0.25 → 0.62, C0
+`M2_k` from τ = 43 to 2048 events (a decade away from its seed, found by
+the wider steps; hence `OPT_SCAN`), `M0_Bclip` 2.0 → 2.6, C0 `kStep`,
+S0 `K`, S0 `NWv`.
 
-TUNED_PLACEHOLDER
+| | book1 | wcc386 | book1wcc | total |
+|---|---|---|---|---|
+| 061 baseline (all tuned, C0 in place) | 235391 | 275195 | 512847 | 1023433 |
+| A1 + A2 stack, hand seeds | 234499 | 274203 | 510950 | 1019652 |
+| + optv.pl passes 1–2 | **234269** | **273275** | **509562** | **1017106** (−0.62%) |
+
+Roundtrips verify and both builds are byte-identical.  Encode time is
+unchanged within noise (the chain and the schedule are a few
+multiplications per bit).
 
 ## 7. Cost, and how to trade it
 
