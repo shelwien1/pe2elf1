@@ -43,22 +43,26 @@
 #ifndef S0_E2E_ON
 #define S0_E2E_ON 1
 #endif
+// Cache the post-step wr pair in the cell (+8 B) instead of recomputing the
+// two expf at the next update: on for the order-1 cells (6 MB table), off
+// for the SSE cells (1.6 GB, memory-bound).
+#ifndef C0_CACHE_WR
+#define C0_CACHE_WR 1
+#endif
+#ifndef S0_CACHE_WR
+#define S0_CACHE_WR 0
+#endif
 // Diagnostic variants of the A2 path (compile-time, default 0 = as documented):
 //   E2E_NOCHAIN  the order-1 cell's chain factor is the mixer weight alone
 //                (drops the SSE input moving the interpolation point)
 //   E2E_SSEI     the SSE cells train on the interpolated SSE output's own
 //                loss, not on the final one
-//   E2E_HESS     the E2E error also scales the curvature (g^2 by gs^2, the
-//                d2p term by gs): the Newton step of the final loss
 //   UV_NW_AFTER  F4: NW applied after the 2x2 (u,v) solve, not inside its RHS
 #ifndef E2E_NOCHAIN
 #define E2E_NOCHAIN 0
 #endif
 #ifndef E2E_SSEI
 #define E2E_SSEI 0
-#endif
-#ifndef E2E_HESS
-#define E2E_HESS 0
 #endif
 #ifndef UV_NW_AFTER
 #define UV_NW_AFTER 0
@@ -114,8 +118,12 @@
 //   A3  hypergradient on the stage rates: loses at every setting, removed.
 //   F4  NW after the 2x2 solve: +112 alone, -63 vs. the stack; off.
 //   F13 [[no_unique_address]] on the adaptation members (reduced cells 36/12 B).
-//   The compile-time diagnostics E2E_NOCHAIN / E2E_SSEI / E2E_HESS /
-//   UV_NW_AFTER below all measured worse and default to 0.
+//   The compile-time diagnostics E2E_NOCHAIN / E2E_SSEI / UV_NW_AFTER below
+//   all measured worse and default to 0 (E2E_HESS, the end-to-end curvature,
+//   was measured worse too and removed with the logit-domain chain).
+//   Divisions/transcendentals per bit cut from ~62/36 to ~33/24 (SSE-DESIGN
+//   sec.6.12): PredictF hands its intermediates to C_Update, the stages
+//   pass logits, the gradient chain runs in the logit domain.
 //   Tuned (optv.pl): 234213/273291/509525 = -0.63% vs. the 061 baseline.
 //   Build identity (F5): rt_logf/rt_expf now carry a volatile barrier (they
 //   were inlined and folded under LTO), and the RTRL leaks are clamped to
@@ -231,6 +239,7 @@ static float rt_expf( float x ) { volatile float v = x; return expf(v); }
 #define CP_ADAPT_MW ADAPT_MW
 #define CP_ADAPT_K  ADAPT_K
 #define CP_E2E      C0_E2E_ON
+#define CP_CACHE_WR C0_CACHE_WR
 #include "config.hpp"
 
 // Parameter bundle of the SSE cells: S0_* constants from IDX/sh_model-S0.idx.
@@ -240,6 +249,7 @@ static float rt_expf( float x ) { volatile float v = x; return expf(v); }
 #define CP_ADAPT_MW S0_ADAPT_MW
 #define CP_ADAPT_K  S0_ADAPT_K
 #define CP_E2E      S0_E2E_ON
+#define CP_CACHE_WR S0_CACHE_WR
 #define CP_SSE      1
 #include "config.hpp"
 
@@ -266,24 +276,18 @@ template<class cfg> struct ParamUpdater<1, cfg> {
     R = cfg::R0;
   }
 
-  // g = weight of this observation (1 = a full event); scales the loss.
-  // gs scales the gradient alone (A2: the end-to-end error replaces the
-  // cell's own; 1 = the cell's own loss, bit-identical).  The curvature R
-  // stays the cell's own, as the preconditioner.
-  // Returns the gradient term dp_inv (for the Nesterov look-ahead).
-  INLINE float Accum(
-    float dp, float d2p, float inv_p, float inv_p2, float inv_pq, float g = 1.0f, float gs = 1.0f
-  ) {
-    float dp_inv = dp * inv_p * g * gs;
-#if E2E_HESS
-    float dp2_inv = (dp * dp) * inv_p2 * g * (gs * gs);
-    (void)inv_pq;
-    float d2p_inv = d2p * inv_p * g * gs;
-#else
-    float dp2_inv = (dp * dp) * inv_p2 * g;
-    (void)inv_pq;
-    float d2p_inv = d2p * inv_p * g;
-#endif
+  // gd = the descent gradient -dL/dtheta accumulated into D; gr = the
+  // cell's own -dL/dtheta and hc = d2p/dtheta2 / p_t, so that gr^2 - hc is
+  // the exact d2L/dtheta2 of the cell's -ln p, accumulated into R (the
+  // callers form all three in the logit domain, see Counter::C_Update).
+  // gd differs from gr only under A2, where the gradient is blended with
+  // the final coder's error while the curvature stays the cell's own.
+  // w = weight of this observation (1 = a full event), scaling the loss.
+  // Returns the weighted descent gradient (for the Nesterov look-ahead).
+  INLINE float Accum( float gd, float gr, float hc, float w = 1.0f ) {
+    float dp_inv = gd * w;
+    float dp2_inv = (gr * gr) * w;
+    float d2p_inv = hc * w;
 
     // --- GRADIENT CLIPPING ---
     d2p_inv= clip( d2p_inv, cfg::grad2_clip );
@@ -315,17 +319,17 @@ template<class cfg> struct ParamUpdater<1, cfg> {
     val = clamp(nv, lo, hi);
   }
 
-  void Update(
-    float dp, float d2p, float inv_p, float inv_p2, float inv_pq, float sc,
-    float lo, float hi, float g = 1.0f, float smax = cfg::stepMax, float gs = 1.0f
-  ) {
-    float dp_inv = Accum(dp, d2p, inv_p, inv_p2, inv_pq, g, gs);
-    (void)sc;
+  void Update( float gd, float gr, float hc, float lo, float hi, float w, float smax ) {
+    float dp_inv = Accum(gd, gr, hc, w);
     if( cfg::NAG ) {
       // Nesterov look-ahead: the step from momentum_D*D_new - g instead of D_new
       float Dn = D * cfg::momentum_D - dp_inv;
       Apply( cfg::NW * Dn / (R + cfg::inc), lo, hi, smax );
     } else Apply(StepRaw(), lo, hi, smax);
+  }
+  // the plain case: descent gradient = own gradient
+  void Update( float gr, float hc, float lo, float hi, float w = 1.0f, float smax = cfg::stepMax ) {
+    Update( gr, gr, hc, lo, hi, w, smax );
   }
 
 };
@@ -333,11 +337,12 @@ template<class cfg> struct ParamUpdater<1, cfg> {
 // Inactive parameter state
 template<class cfg> struct ParamUpdater<0, cfg> {
   void Init(float /*init_val*/) {}
-  inline float Accum(float, float, float, float, float, float = 1.0f, float = 1.0f) { return 0.0f; }
+  inline float Accum(float, float, float, float = 1.0f) { return 0.0f; }
   inline float Denom() const { return 1.0f; }
   inline float StepRaw() const { return 0.0f; }
   inline void Apply(float, float, float, float = 0.0f) {}
-  inline void Update(float /*dp*/, float /*d2p*/, float /*inv_p*/, float /*inv_p2*/, float /*inv_pq*/, float /*sc*/, float /*lo*/, float /*hi*/, float = 1.0f, float = 0.0f, float = 1.0f) {}
+  inline void Update(float /*gd*/, float /*gr*/, float /*hc*/, float /*lo*/, float /*hi*/, float, float) {}
+  inline void Update(float /*gr*/, float /*hc*/, float /*lo*/, float /*hi*/, float = 1.0f, float = 0.0f) {}
 };
 
 
@@ -350,6 +355,11 @@ template<int ADAPT> struct RTRLState {
   float R_uv;   // 2.1: EMA of the rotated (u,v) cross curvature (+1 float)
 };
 template<> struct RTRLState<0> {};
+
+// The post-step wr pair, kept so the next update does not recompute its
+// two expf (CP::CACHE_WR); empty otherwise.
+template<int ON> struct WrCache { float wr0, wr1; };
+template<> struct WrCache<0> {};
 
 
 // Counter<CP>: one adaptive binary probability cell.  CP is a parameter
@@ -384,6 +394,23 @@ template<class CP> struct Counter {
 
   // Real-Time Recurrent Learning helper states for {n0, n1} variables
   NUA RTRLState<CP::A_WR> rt;
+  NUA WrCache<CP::A_WR && CP::CACHE_WR> wrc;
+
+  // What PredictF() computes and C_Update() needs back.  The caller keeps it
+  // between the two calls (per-query state), so nothing is stored in the
+  // cell and nothing is recomputed: q0, the prior mix, its stretch, the
+  // sigmoid of the mw coordinate and exp(K) each cost a division and/or a
+  // transcendental, and C_Update used to redo all of them.
+  struct Pred {
+    float pK;      // P(bit==0), the cell's prediction
+    float z;       // its logit K*st(p_mix): pK = sq(z); the stages pass logits on
+    float q0;      // n0/(n0+n1)
+    float inv_n;   // 1/(n0+n1)
+    float p_mix;   // q0 mixed with the prior mwP0 at weight mw
+    float stP;     // st(p_mix)
+    float mws;     // sigma(mw_state.val); unused when mw is fixed
+    float K;       // exp(k_state.val), or the fixed K
+  };
 
   static float st( const float p_ ) {
     float p = p_ * 0.999998f + 0.000001f;
@@ -414,6 +441,10 @@ template<class CP> struct Counter {
       rt.n0_w0 = 0.0f; rt.n0_ww0 = 0.0f; rt.n0_w1 = 0.0f; rt.n0_ww1 = 0.0f;
       rt.n1_w0 = 0.0f; rt.n1_ww0 = 0.0f; rt.n1_w1 = 0.0f; rt.n1_ww1 = 0.0f;
       rt.R_uv = 0.0f;
+      if constexpr( CP::CACHE_WR ) {   // exactly what the first C_Update would compute
+        wrc.wr0 = expf(clamp(wr0_state.val + wr1_state.val, CP::UVLO, CP::UVHI));
+        wrc.wr1 = expf(clamp(wr0_state.val - wr1_state.val, CP::UVLO, CP::UVHI));
+      }
     }
   } 
 
@@ -431,24 +462,37 @@ template<class CP> struct Counter {
     else                        return CP::K;
   }
 
-  // Raw probability of bit==0; the caller keeps it for C_Update()
-  float PredictF() const {
-    float cur_mw = this->cur_mw();
-    float curr_K = this->cur_K();
+  // The prediction (P(bit==0) in .pK) and its intermediates; the caller
+  // keeps the struct for C_Update()
+  Pred PredictF() const {
+    Pred r;
+    float cur_mw;
+    if constexpr( CP::A_MW ) {
+      r.mws  = sq(mw_state.val);
+      cur_mw = Config_MW::minVal + CP::MWspan * r.mws;
+    } else {
+      r.mws  = 0.0f;
+      cur_mw = CP::M;
+    }
+    r.K = this->cur_K();
 
     float n_sum = n0 + n1 + 1e-8f;
-    float p0 = n0 / n_sum;
-    p0 = p0 * (1.0f - cur_mw) + CP::mwP0 * cur_mw;
-    return sq(curr_K * st(p0));
+    r.inv_n = 1.0f / n_sum;
+    r.q0    = n0 * r.inv_n;
+    r.p_mix = r.q0 * (1.0f - cur_mw) + CP::mwP0 * cur_mw;
+    r.stP   = st(r.p_mix);
+    r.z     = r.K * r.stP;
+    r.pK    = sq(r.z);
+    return r;
   }
 
   float Predict() const {
-    float p_out = PredictF() * float(SCALE);
+    float p_out = PredictF().pK * float(SCALE);
     p_out = clamp(p_out);
     return p_out;
   }
 
-  // pK = this cell's PredictF() for the bit being coded.
+  // pr = this cell's PredictF() for the bit being coded.
   // g = weight of this observation, 1 = a full event (bit-identical to the
   // unweighted update).  A fractional event scales the loss by g, and in the
   // count recursion every wr becomes wr*g and every injected count g, so
@@ -457,7 +501,8 @@ template<class CP> struct Counter {
   // logit output, i.e. (p_final - [bit==0]) * dz_final/dz.  The cell's own
   // error is e = pK - [bit==0]; the gradient uses (1-E2E)*e + E2E*ef, the
   // curvature stays the cell's own.  E2E = 0 ignores ef (bit-identical).
-  void C_Update( const int bit, const float pK, const float g = 1.0f, const float ef = 0.0f ) {
+  void C_Update( const int bit, const Pred& pr, const float g = 1.0f, const float ef = 0.0f ) {
+    const float pK = pr.pK;
     float sign = 1.0f - float(bit + bit); 
 
     // A1: young-cell step schedule, per axis: stepMax*(1 + AGA*agd),
@@ -465,24 +510,31 @@ template<class CP> struct Counter {
     float agd = 1.0f / (1.0f + float(age) * CP::AGiB);
     if( age != ~0u ) age++;
 
-    float pK_t = pK * sign + float(bit);
-    if( pK_t < 1e-12f ) pK_t = 1e-12f;
-    float inv_pK_t = 1.0f / pK_t;
-    float inv_pK_t2 = inv_pK_t * inv_pK_t;
+    // Logit-domain chain.  z = K*st(p_mix) and pK = sq(z), so the loss
+    // gradient w.r.t. z is pK - [bit==0] = -e_o with e_o = sign*p_o, p_o the
+    // probability of the symbol that did not occur.  For a parameter t with
+    // z' = dz/dt and z'' = d2z/dt2, the two terms ParamUpdater takes are
+    //   g  = -dL/dt         = e_o*z'                    (was dpK/dt / p_t)
+    //   hc = d2pK/dt2 / p_t = e_o*((1-2pK)*z'^2 + z'')
+    // -- the p_t of the probability-domain form cancels, so no reciprocal
+    // is needed and a surprise (p_t -> 0) inflates nothing: p_o <= 1.
+    // A2 blends the cell's error with the final coder's in the gradient,
+    // ee = (1-E2E)*e_o - E2E*ef; the curvature stays the cell's own.
+    // (Where pK has saturated to exactly 1.0f, |z| > 16.6, the old chain's
+    // pK*(1-pK) was 0 and the cell saw no gradient; here e_o*z' is the true
+    // one.  Making that case a no-event changed nothing on the corpus.)
+    const float p_o = bit ? pK : 1.0f - pK;
+    const float e_o = sign * p_o;
+    float ee = e_o;
+    if constexpr( CP::E2E_ON ) ee = (1.0f - CP::E2E) * e_o - CP::E2E * ef;
+    const float c2 = 1.0f - 2.0f * pK;
 
-    // A2: gradient scale gs = ((1-E2E)*e + E2E*ef) / e with e = pK-[bit==0]
-    // = -sign*p_o, p_o = probability of the other symbol; 1 when E2E = 0.
-    float gs = 1.0f;
-    if constexpr( CP::E2E_ON ) {
-      float p_o = 1.0f - pK_t; if( p_o < 1e-12f ) p_o = 1e-12f;
-      gs = (1.0f - CP::E2E) - CP::E2E * ef * sign / p_o;
-    }
-
-    const float inv_pq = 0.0f;
-    const float bias_sc = 1.0f;
-
+    // the pre-step wr pair: the previous update's post-step pair
     float cur_wr0, cur_wr1;
-    if constexpr( CP::A_WR ) {
+    if constexpr( CP::A_WR && CP::CACHE_WR ) {
+      cur_wr0 = wrc.wr0;
+      cur_wr1 = wrc.wr1;
+    } else if constexpr( CP::A_WR ) {
       cur_wr0 = expf(clamp(wr0_state.val + wr1_state.val, CP::UVLO, CP::UVHI));
       cur_wr1 = expf(clamp(wr0_state.val - wr1_state.val, CP::UVLO, CP::UVHI));
     } else {
@@ -490,36 +542,35 @@ template<class CP> struct Counter {
       cur_wr1 = CP::W1;
     }
 
-    float mws = 0.0f, cur_mw;
-    if constexpr( CP::A_MW ) {
-      mws = sq(mw_state.val);
-      cur_mw = Config_MW::minVal + CP::MWspan * mws;
-    } else {
-      cur_mw = CP::M;
-    }
-
-    float curr_K = this->cur_K();
+    // from PredictF(): sigma(mw), mw, K, q0 and the prior mix
+    const float mws = pr.mws;
+    float cur_mw;
+    if constexpr( CP::A_MW ) cur_mw = Config_MW::minVal + CP::MWspan * mws;
+    else                     cur_mw = CP::M;
+    const float curr_K = pr.K;
 
     float n_sum = n0 + n1 + 1e-8f;
-    float q0 = n0 / n_sum;
-    float p_mix = q0 * (1.0f - cur_mw) + CP::mwP0 * cur_mw;
+    const float q0 = pr.q0;
+    const float p_mix = pr.p_mix;
 
+    // st'(P) = c/(P(1-P)), st''(P) = c^2 (2P-1)/(P(1-P))^2 with c = 0.999998:
+    // one reciprocal instead of 1/P and 1/(1-P)
     float P_adj = p_mix * 0.999998f + 0.000001f;
-    float P_adj_inv = 1.0f / P_adj;
-    float P_adj_inv_comp = 1.0f / (1.0f - P_adj);
-    float d_st_dP = 0.999998f * (P_adj_inv + P_adj_inv_comp);
-    float d2_st_dP2 = (0.999998f * 0.999998f) * (P_adj_inv_comp * P_adj_inv_comp - P_adj_inv * P_adj_inv);
+    float ipq = 1.0f / (P_adj * (1.0f - P_adj));
+    float d_st_dP = 0.999998f * ipq;
+    float d2_st_dP2 = (0.999998f * 0.999998f) * (2.0f * P_adj - 1.0f) * (ipq * ipq);
 
-    float dpK_dpmix = pK * (1.0f - pK) * curr_K * d_st_dP;
-    float d2pK_dpmix2 = (1.0f - 2.0f * pK) * dpK_dpmix * curr_K * d_st_dP + pK * (1.0f - pK) * curr_K * d2_st_dP2;
+    // z = K*st(p_mix): its derivatives w.r.t. p_mix
+    float dz_dpmix = curr_K * d_st_dP;
+    float d2z_dpmix2 = curr_K * d2_st_dP2;
 
     // --- 1. Update WR0 and WR1 parameters based on current derivatives ---
     if constexpr( CP::A_WR ) {
     float dpmix_dq0 = (1.0f - cur_mw);
-    float dpK_dq0 = dpK_dpmix * dpmix_dq0;
-    float d2pK_dq02 = d2pK_dpmix2 * (dpmix_dq0 * dpmix_dq0);
+    float dz_dq0 = dz_dpmix * dpmix_dq0;
+    float d2z_dq02 = d2z_dpmix2 * (dpmix_dq0 * dpmix_dq0);
 
-    float inv_n_sum = 1.0f / n_sum;
+    const float inv_n_sum = pr.inv_n;   // 1/n_sum from PredictF()
     float inv_n_sum2 = inv_n_sum * inv_n_sum;
     float inv_n_sum3 = inv_n_sum2 * inv_n_sum;
 
@@ -540,37 +591,40 @@ template<class CP> struct Counter {
     float d2q0_dwr12 = d2q0_dn02 * (rt.n0_w1*rt.n0_w1) + d2q0_dn12 * (rt.n1_w1*rt.n1_w1) + 2.0f * cross * rt.n0_w1 * rt.n1_w1
                      + dq0_dn0 * rt.n0_ww1 + dq0_dn1 * rt.n1_ww1;
 
-    float dpK_dwr0 = dpK_dq0 * dq0_dwr0;
-    float d2pK_dwr02 = d2pK_dq02 * (dq0_dwr0 * dq0_dwr0) + dpK_dq0 * d2q0_dwr02;
+    float dz_dwr0 = dz_dq0 * dq0_dwr0;
+    float d2z_dwr02 = d2z_dq02 * (dq0_dwr0 * dq0_dwr0) + dz_dq0 * d2q0_dwr02;
 
-    float dpK_dwr1 = dpK_dq0 * dq0_dwr1;
-    float d2pK_dwr12 = d2pK_dq02 * (dq0_dwr1 * dq0_dwr1) + dpK_dq0 * d2q0_dwr12;
+    float dz_dwr1 = dz_dq0 * dq0_dwr1;
+    float d2z_dwr12 = d2z_dq02 * (dq0_dwr1 * dq0_dwr1) + dz_dq0 * d2q0_dwr12;
 
     // LOGWR: chain to log coordinates, u? = ln(wr?):
-    // dp/du = dp/dwr * wr ; d2p/du2 = d2p/dwr2 * wr^2 + dp/dwr * wr
-    d2pK_dwr02 = d2pK_dwr02*(cur_wr0*cur_wr0) + dpK_dwr0*cur_wr0;
-    d2pK_dwr12 = d2pK_dwr12*(cur_wr1*cur_wr1) + dpK_dwr1*cur_wr1;
-    dpK_dwr0 *= cur_wr0;
-    dpK_dwr1 *= cur_wr1;
+    // dz/du = dz/dwr * wr ; d2z/du2 = d2z/dwr2 * wr^2 + dz/dwr * wr
+    d2z_dwr02 = d2z_dwr02*(cur_wr0*cur_wr0) + dz_dwr0*cur_wr0;
+    d2z_dwr12 = d2z_dwr12*(cur_wr1*cur_wr1) + dz_dwr1*cur_wr1;
+    dz_dwr0 *= cur_wr0;
+    dz_dwr1 *= cur_wr1;
 
     // UVROT: rotate to u = (u0+u1)/2, v = (u0-u1)/2; diagonal Newton with
-    // the shared curvature approximation h_uu ~ h_vv ~ h00 + h11.
-    float g_u = dpK_dwr0 + dpK_dwr1;
-    float g_v = dpK_dwr0 - dpK_dwr1;
-    float h_d = d2pK_dwr02 + d2pK_dwr12;
-
+    // the shared curvature approximation h_uu ~ h_vv ~ h00 + h11, where
+    // h?? = d2pK/dwr?2 / p_t = e_o*(c2*z'^2 + z'') per axis.
+    float g_u = dz_dwr0 + dz_dwr1;
+    float g_v = dz_dwr0 - dz_dwr1;
+    float hz0 = c2 * (dz_dwr0 * dz_dwr0) + d2z_dwr02;
+    float hz1 = c2 * (dz_dwr1 * dz_dwr1) + d2z_dwr12;
+    float h_d = e_o * (hz0 + hz1);
 
     // 2.1 UV2X2 + XHESS + RAYCL: one EMA cross term, 2x2 Newton solve with
     // det guard (or P11 CSHRK soft shrink), joint direction-preserving
     // trust region. Reduces to the diagonal path when the guard trips.
-    wr0_state.Accum(g_u * sign, h_d * sign, inv_pK_t, inv_pK_t2, inv_pq, g, gs);
-    wr1_state.Accum(g_v * sign, h_d * sign, inv_pK_t, inv_pK_t2, inv_pq, g, gs);
+    wr0_state.Accum(ee * g_u, e_o * g_u, h_d, g);
+    wr1_state.Accum(ee * g_v, e_o * g_v, h_d, g);
 
     // XHESS: exact rotated cross diagonal h_uv = h00 - h11 (MIXTR-free part),
     // exposed through the signed shaper XHW with its own clip (G2_u/v are 0
     // in the delivered constants, so the cross channel gets a dedicated one).
-    float h_x = clip( (d2pK_dwr02 - d2pK_dwr12) * sign * inv_pK_t, CP::XHC );
-    rt.R_uv = rt.R_uv * Config_U::momentum_R + CP::CXW * (g_u * g_v * inv_pK_t2 - CP::XHW * h_x) * g;
+    // The cross gradient term is the cell's own (e_o), like the curvature.
+    float h_x = clip( e_o * (hz0 - hz1), CP::XHC );
+    rt.R_uv = rt.R_uv * Config_U::momentum_R + CP::CXW * ((e_o * g_u) * (e_o * g_v) - CP::XHW * h_x) * g;
 
     {
       float a_u = wr0_state.Denom();
@@ -595,7 +649,7 @@ template<class CP> struct Counter {
         // (widened by the age schedule while the cell is young).
         float agu = 1.0f + CP::AGAu * agd;
         float r = fmaxf( fmaxf( fabsf(s_u)*CP::iStepU, fabsf(s_v)*CP::iStepV ) / agu, 1.0f );
-        float ir = 1.0f / r;
+        float ir = r > 1.0f ? 1.0f / r : 1.0f;   // the division only when the clip binds
         wr0_state.Apply(s_u * ir, CP::UVLO, CP::UVHI, Config_U::stepMax * agu);
         wr1_state.Apply(s_v * ir, -CP::UV_VH, CP::UV_VH, Config_V::stepMax * agu);
       } else {
@@ -626,33 +680,29 @@ template<class CP> struct Counter {
     // --- 2. Update MW parameter ---
     if constexpr( CP::A_MW ) {
     float dpmix_dmw = CP::mwP0 - q0;
-    float dpK_dmw = dpK_dpmix * dpmix_dmw;
-    float d2pK_dmw2 = d2pK_dpmix2 * (dpmix_dmw * dpmix_dmw);
+    float dz_dmw = dz_dpmix * dpmix_dmw;
+    float d2z_dmw2 = d2z_dpmix2 * (dpmix_dmw * dpmix_dmw);
 
     // P24: chain to the logit coordinate, mw = lo + span*sigma(x):
     // f' = span*s(1-s), f'' = f'*(1-2s) (the commonly-dropped term kept).
     {
       float f1m = CP::MWspan * mws * (1.0f - mws);
       float f2m = f1m * (1.0f - 2.0f * mws);
-      float g_xm = dpK_dmw * f1m;
-      float h_xm = d2pK_dmw2 * (f1m * f1m) + dpK_dmw * f2m;
-      mw_state.Update(g_xm * sign, h_xm * sign, inv_pK_t, inv_pK_t2, inv_pq, bias_sc, CP::MWXLO, CP::MWXHI, g,
-                      Config_MW::stepMax * (1.0f + CP::AGAm * agd), gs);
+      float g_xm = dz_dmw * f1m;
+      float h_xm = d2z_dmw2 * (f1m * f1m) + dz_dmw * f2m;
+      mw_state.Update(ee * g_xm, e_o * g_xm, e_o * (c2 * (g_xm * g_xm) + h_xm), CP::MWXLO, CP::MWXHI, g,
+                      Config_MW::stepMax * (1.0f + CP::AGAm * agd));
     }
     }  // ADAPT_MW
 
     // --- 3. Update K parameter ---
     if constexpr( CP::A_K ) {
-    float stP = st(p_mix);
-    float dpK_dK = pK * (1.0f - pK) * stP;
-    float d2pK_dK2 = dpK_dK * (1.0f - 2.0f * pK) * stP;
-    
+    const float stP = pr.stP;   // st(p_mix), from PredictF()
     if( fabsf(stP)>=CP::stP_min ) {
-      // P24: chain to y = ln K: f' = f'' = K.
-      float g_yk = dpK_dK * curr_K;
-      float h_yk = d2pK_dK2 * (curr_K * curr_K) + dpK_dK * curr_K;
-      k_state.Update(g_yk * sign, h_yk * sign, inv_pK_t, inv_pK_t2, inv_pq, bias_sc, CP::KYLO, CP::KYHI, g,
-                     Config_K::stepMax * (1.0f + CP::AGAk * agd), gs);
+      // P24: y = ln K and z = K*st(p_mix), so dz/dy = d2z/dy2 = z
+      const float zk = pr.z;
+      k_state.Update(ee * zk, e_o * zk, e_o * (c2 * (zk * zk) + zk), CP::KYLO, CP::KYHI, g,
+                     Config_K::stepMax * (1.0f + CP::AGAk * agd));
     }
     }  // ADAPT_K
 
@@ -661,6 +711,7 @@ template<class CP> struct Counter {
     if constexpr( CP::A_WR ) {
       cur_wr0 = expf(clamp(wr0_state.val + wr1_state.val, CP::UVLO, CP::UVHI));
       cur_wr1 = expf(clamp(wr0_state.val - wr1_state.val, CP::UVLO, CP::UVHI));
+      if constexpr( CP::CACHE_WR ) { wrc.wr0 = cur_wr0; wrc.wr1 = cur_wr1; }
     } else {
       cur_wr0 = CP::W0;
       cur_wr1 = CP::W1;
@@ -812,16 +863,21 @@ int main( int argc, char** argv ) {
       if( f_DEC==0 ) bit=(c>>7)&1;
 
       // p = mix( order-1 prediction, SSE(order-1 prediction) )
-      float p1 = o1[last_c][cxt].PredictF();
+      // The stages pass logits: the SSE quantizes the order-1 logit z1 and
+      // returns its interpolated logit z2, the mixer blends the two in the
+      // stretch domain -- the same values as st(p1), st(p2) up to rounding,
+      // without the five logf and the sq that produced and consumed p2.
+      Counter<CP_C0>::Pred pr = o1[last_c][cxt].PredictF();
+      float z1 = pr.z;
       qword cx = qword(S0_MakeCx(c2, last_c, cxt))*S0_Cx3_Volume + S0_MakeCx3(c3);
-      float p2 = sse.Predict( cx, p1 );
-      float pf = mix.Mix( M0_MakeCx(c2, last_c, cxt), p1, p2 );
+      float z2 = sse.Predict( cx, z1 );
+      float pf = mix.Mix( M0_MakeCx(c2, last_c, cxt), z1, z2 );
       p = uint( clamp( pf*float(SCALE) ) );
 #ifdef TRACE_P
       // -DTRACE_P: per-bit trace of (p1, p2, pf, p) as floats to $TRACE_P, to
       // find the first divergent bit between two builds (SSE-DESIGN.md sec.4.1)
       { static FILE* trf = fopen( getenv("TRACE_P") ? getenv("TRACE_P") : "trace.bin", "wb" );
-        float v[4] = { p1, p2, pf, float(p) }; if( trf ) fwrite( v, 4, 4, trf ); }
+        float v[4] = { pr.pK, z2, pf, float(p) }; if( trf ) fwrite( v, 4, 4, trf ); }
 #endif
       
       bit = rc.rc_BProcess( p, bit );
@@ -831,8 +887,8 @@ int main( int argc, char** argv ) {
       float e_f = pf - float(1 - bit);
       float wv  = mix.weight();
       float c_1 = E2E_NOCHAIN ? wv : wv + (1.0f - wv) * sse.dz2_dz1();
-      o1[last_c][cxt].C_Update( bit, p1, 1.0f, e_f * c_1 );
-      sse.Update( bit, E2E_SSEI ? p2 - float(1 - bit) : e_f * (1.0f - wv) );
+      o1[last_c][cxt].C_Update( bit, pr, 1.0f, e_f * c_1 );
+      sse.Update( bit, E2E_SSEI ? 1.0f/(1.0f+expf(-z2)) - float(1 - bit) : e_f * (1.0f - wv) );
       mix.Update( bit );
 
       c<<=1; cxt+=cxt+bit;

@@ -154,12 +154,17 @@ in the shipping build, runtime in the tuning build, clamped at `Init()`.
 ### 3.3 Prediction
 
 ```
-s     = clip( st(p_in), -LIM, +LIM )           st = ln(p/(1-p))
+s     = clip( z_in, -LIM, +LIM )               z_in = st(p_in) = ln(p/(1-p)), the order-1 logit
 x     = (s + LIM) · (NB-1) / (2·LIM)           bucket coordinate, 0 .. NB-1
 j     = floor(x),  wt = x - j                  two neighbouring cells c[j], c[j+1]
-p0    = c[j].PredictF(),  p1 = c[j+1].PredictF()
-p_sse = sq( st(p0) + wt·(st(p1)-st(p0)) )      interpolated in the stretch domain
+z0    = c[j].PredictF().z,  z1 = c[j+1].PredictF().z    the cells' logits, K·st(p_mix)
+z_sse = z0 + wt·(z1-z0)                        interpolated in the stretch domain
 ```
+
+Since §6.12 the stages pass logits: the SSE takes `z_in` and returns
+`z_sse`, and the mixer squashes once; `p_sse = sq(z_sse)` is never formed
+(the values equal `st(p)` of the old probabilities up to rounding, the
+clips of `st` kept as bounds on `z`).
 
 The stage keeps the two cells' own predictions and hands each back to its
 `C_Update()` (the cell's former `pK` slot holds its update count, §6.11).
@@ -368,14 +373,14 @@ S0.S0_Init(); M0.M0_Init();                            // tables (tuning build: 
 sse.Init( S0.S0_tbl, S0_Cx_Volume * S0_Cx3_Volume );
 mix.Init( M0.M0_tbl, M0_Cx_Volume );
 ...
-p1  = o1[c1][cxt].PredictF();                          // primary, P(bit=0)
+pr  = o1[c1][cxt].PredictF();                          // primary: pr.pK = P(bit=0), pr.z its logit
 cx  = S0_MakeCx(c2, c1, cxt) * S0_Cx3_Volume + S0_MakeCx3(c3);
-p2  = sse.Predict( cx, p1 );                           // SSE(p1)
-pf  = mix.Mix( M0_MakeCx(c2, c1, cxt), p1, p2 );       // learned blend (§3.7)
+z2  = sse.Predict( cx, pr.z );                         // SSE(z1), a logit (§3.3)
+pf  = mix.Mix( M0_MakeCx(c2, c1, cxt), pr.z, z2 );     // learned blend (§3.7), squashed once
 p   = uint( clamp( pf * SCALE ) );
 bit = rc.rc_BProcess( p, bit );
 e_f = pf - [bit==0];  w = mix.weight();                // final error (§6.11)
-o1[c1][cxt].C_Update( bit, p1, 1, e_f*(w + (1-w)*sse.dz2_dz1()) );
+o1[c1][cxt].C_Update( bit, pr, 1, e_f*(w + (1-w)*sse.dz2_dz1()) );
 sse.Update( bit, e_f*(1-w) );
 mix.Update( bit );
 ```
@@ -868,10 +873,9 @@ the final loss w.r.t. a cell's logit output is `e_f · dz_f/dz_cell`:
 its interpolation share) and `w + (1−w)·(z_c1 − z_c0)·(NB−1)/(2·LIM)` for
 the order-1 cell (the second term: its prediction is also the SSE's index
 and moves the interpolation point).  `C_Update(bit, pK, g, ef)` takes that
-error and scales the parameter gradients by `((1−E2E)·e_own + E2E·ef) /
-e_own` -- the gradient direction of the blended objective, the curvature
-(and so the Newton normalization) staying the cell's own.  Knobs `C0_E2E`,
-`S0_E2E` (/256).
+error; the parameter gradients use the blended error `(1−E2E)·e_own +
+E2E·ef` (times `dz/dθ`), the curvature (and so the Newton normalization)
+staying the cell's own.  Knobs `C0_E2E`, `S0_E2E` (/256).
 
 | objective | book1 | wcc386 | book1wcc | total |
 |---|---|---|---|---|
@@ -941,6 +945,61 @@ S0 `M1_k` −25, the rest single bytes), so the constants are at the noise
 floor of this corpus.  Roundtrips verify and both builds are
 byte-identical.  Encode time is unchanged within noise (the chain and the
 schedule are a few multiplications per bit).
+
+### 6.12 Divisions and transcendentals per bit
+
+The per-bit path had about 62 float divisions and 36 `expf`/`logf` calls
+(three `Counter` predict+update pairs, the SSE interpolation, the mixer).
+Three changes, the first bit-identical, the other two within rounding
+(1017029 → 1017031 bytes on the corpus of §6.11; `t1.sh` confirms the
+roundtrips and the build identity):
+
+1. **PredictF hands its intermediates to C_Update.**  `PredictF()` returns
+   a `Pred` struct (pK, its logit z, q0, 1/n_sum, the prior mix, its
+   stretch, sigma(mw), exp(K)); the caller keeps it between the two calls
+   (per-query state, nothing in the cell), and `C_Update` no longer
+   recomputes `n0/n_sum`, `st(p_mix)`, `sq(mw)` and `exp(K)`: −3
+   divisions, −3 transcendentals per cell.  The order-1 cells also keep
+   their post-step wr pair (`C0_CACHE_WR`, +8 B on a 6 MB table: −2
+   `expf` per bit); for the SSE cells the same cache is slower (memory).
+   The ray-clip reciprocal is taken only when the clip binds.
+2. **The stages pass logits** (§3.3, §5): the SSE quantizes `z1 = K·st(p_mix)`
+   of the order-1 cell instead of `st(sq(z1))`, interpolates the two
+   cells' logits, and returns `z_sse` unsquashed; the mixer takes `z1`,
+   `z_sse`.  Five `logf` and one `expf` with their divisions gone.
+3. **The gradient chain runs in the logit domain.**  With `pK = sq(z)`,
+   `dpK/dθ / p_t = p_o·dz/dθ` and `d²pK/dθ² / p_t = p_o·((1−2pK)(dz/dθ)² +
+   d²z/dθ²)`, `p_o` the probability of the symbol that did not occur: the
+   `1/p_t` of the probability-domain form cancels, so `C_Update` and the
+   mixer form `e_o·z'` and `e_o·(c2·z'² + z'')` directly (one reciprocal
+   per cell and the mixer's gone, no 1e-12 guards).  `st'` and `st''` come
+   from one reciprocal of `P(1−P)`.  `ParamUpdater::Accum(gd, gr, hc, w)`
+   takes the descent gradient (A2-blended), the cell's own gradient (for
+   R) and the curvature term.  A first version squared the blended
+   gradient into R -- the end-to-end curvature that §6.11 had already
+   measured worse -- and cost +1302 bytes; the split fixed it.
+
+Now about 33 divisions and 24 transcendentals per bit.  What remains is
+structural: per cell one `1/n_sum`, the `st` and two `sq` of the
+prediction, `1/(P(1−P))`, the 2×2 determinant, the age schedule's
+`1/(1+age/B)`, and the two Newton steps `D/(R+inc)`; the post-step
+`exp(u±v)` pair and `exp(K)`, `sq(mw)`.  Timing (user seconds, best of 3,
+one core, shipping build):
+
+| | book1 | wcc386 |
+|---|---|---|
+| before | 4.89 | 4.27 |
+| 1. cached intermediates | 4.63 | 4.01 |
+| 2. + logits between stages | 3.95 | 3.66 |
+| 3. + logit-domain chain | 3.85 | 3.53 |
+
+Further cuts need model changes rather than algebra: storing the counts
+as log-odds would remove `1/n_sum` and `st` from the prediction only if
+the prior mix moved to the logit domain as well (a different model), and
+the remaining `expf` are the parametrizations themselves (`mw` a logit,
+`K` and `wr` logs) -- a polynomial `exp2`/`log2` on the per-bit path (F5
+of the v3 document) would make them cheaper and platform-independent at
+once.
 
 ## 7. Cost, and how to trade it
 

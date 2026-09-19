@@ -9,9 +9,10 @@
 //             machinery as the order-1 model, with its own bundle CP_S0;
 //             identity-initialized with mass T0
 //
-//   Predict(cx, p):  s = clip(st(p), +-LIM);  x = (s+LIM)(NB-1)/(2 LIM)
+//   Predict(cx, z):  s = clip(z, +-LIM);  x = (s+LIM)(NB-1)/(2 LIM)      (z = st(p_in))
 //                    j = floor(x);  wt = x-j
-//                    p_sse = sq( st(c[j].p) + wt*(st(c[j+1].p) - st(c[j].p)) )
+//                    z_sse = z_j + wt*(z_j+1 - z_j)          (z_j = the cells' logits)
+//                    (the caller squashes; p_sse = sq(z_sse))
 //   Update(bit):     UPD 1: c[j].C_Update(bit); c[j+1].C_Update(bit)
 //                    UPD 2: the same with weights 1-wt and wt (floored at
 //                           UPMIN) -- the interpolated update, each cell
@@ -60,6 +61,7 @@ template<class CP, int NB> struct SSE_Ctr {
   uint  ncx;      // rows
   qword vol;      // context volume asked for; rows are hashed when vol > ncx
   float lim;      // stretch clip (clamped CP::LIM)
+  float zmax;     // |logit| bound, = stf's probability clip [1/65536, 1-1/65536]
   float qscale;   // (NB-1) / (2*lim)
   float upmin;    // floor of the proportional update weights
   int   upd;      // 1: both cells fully, 2: proportional
@@ -67,7 +69,7 @@ template<class CP, int NB> struct SSE_Ctr {
   // Per-query state, valid between Predict() and Update()
   Cell* c;
   float wt;
-  float pc0, pc1;   // the two cells' own predictions, passed back to C_Update()
+  typename Cell::Pred pr0, pr1;   // the two cells' predictions and intermediates, for C_Update()
   float dzdz;       // d st(p_sse) / d st(p_in): (NB-1)/(2 LIM) * (st(p1)-st(p0)), 0 when clipped
 
   static float stf( float p ) {
@@ -83,6 +85,7 @@ template<class CP, int NB> struct SSE_Ctr {
     if( !CP::ON ) return;
     vol   = volume;
     lim   = clamp( CP::LIM, 0.25f, 16.0f );
+    zmax  = rt_logf( 65535.0f );
     qscale = float(NB-1) / (2.0f*lim);
     upmin = clamp( CP::UPMIN, 0.0f, 1.0f );
     upd   = iclamp( CP::UPD, 1, 2 );
@@ -112,20 +115,20 @@ template<class CP, int NB> struct SSE_Ctr {
     return uint( (qword(h) * ncx) >> 32 );
   }
 
-  // p = P(bit==0) from the primary model; returns the SSE's P(bit==0)
-  float Predict( qword cx, float p ) {
-    if( !CP::ON ) return p;
-    float s0 = stf(p);
+  // z = logit of P(bit==0) from the primary model; returns the SSE's logit
+  float Predict( qword cx, float z ) {
+    if( !CP::ON ) return z;
+    float s0 = clamp( z, -zmax, zmax );
     float s  = clamp( s0, -lim, lim );
     float x  = (s + lim) * qscale;
     int   j  = int(x); if( j > NB-2 ) j = NB-2;
     wt = x - float(j);
     c  = t + qword(Row(cx))*NB + j;
-    pc0 = c[0].PredictF();
-    pc1 = c[1].PredictF();
-    float z0 = stf(pc0), z1 = stf(pc1);
+    pr0 = c[0].PredictF();
+    pr1 = c[1].PredictF();
+    float z0 = clamp( pr0.z, -zmax, zmax ), z1 = clamp( pr1.z, -zmax, zmax );
     dzdz = ( s0 > -lim && s0 < lim ) ? qscale * (z1 - z0) : 0.0f;
-    return sqf( z0 + wt*(z1-z0) );
+    return z0 + wt*(z1-z0);
   }
 
   // d st(p_sse) / d st(p_in) of the last Predict() (1 when the stage is off)
@@ -135,11 +138,11 @@ template<class CP, int NB> struct SSE_Ctr {
   // gets its interpolation share (the derivative of the output w.r.t. it).
   void Update( int bit, float ef = 0.0f ) {
     if( !CP::ON ) return;
-    if( upd==1 ) { c[0].C_Update(bit, pc0, 1.0f, ef*(1.0f-wt)); c[1].C_Update(bit, pc1, 1.0f, ef*wt); }
+    if( upd==1 ) { c[0].C_Update(bit, pr0, 1.0f, ef*(1.0f-wt)); c[1].C_Update(bit, pr1, 1.0f, ef*wt); }
     else {
       float g0 = 1.0f-wt, g1 = wt;
-      c[0].C_Update( bit, pc0, g0<upmin ? upmin : g0, ef*g0 );
-      c[1].C_Update( bit, pc1, g1<upmin ? upmin : g1, ef*g1 );
+      c[0].C_Update( bit, pr0, g0<upmin ? upmin : g0, ef*g0 );
+      c[1].C_Update( bit, pr1, g1<upmin ? upmin : g1, ef*g1 );
     }
   }
 };

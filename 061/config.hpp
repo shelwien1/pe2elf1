@@ -11,6 +11,7 @@
 //   #define CP_ADAPT_MW 1       // per-cell adaptive mw
 //   #define CP_ADAPT_K  1       // per-cell adaptive K
 //   #define CP_E2E      1       // compile the A2 end-to-end gradient path
+//   #define CP_CACHE_WR 1       // cache the post-step wr pair in the cell (+8 B)
 //   #define CP_SSE      1       // also derive the SSE-stage knobs (S0 only)
 //   #include "config.hpp"
 //
@@ -31,6 +32,7 @@
 
 struct CP_NAME {
   enum { A_WR = CP_ADAPT_WR, A_MW = CP_ADAPT_MW, A_K = CP_ADAPT_K };   // adaptation flags (names avoid the ADAPT_* macros)
+  enum { CACHE_WR = CP_CACHE_WR };   // keep the post-step wr pair in the cell
 
   def_Config(Config_MW)
   def_Config(Config_K)
@@ -229,5 +231,6 @@ set UPMIN = float(CPX(UPMIN)) / 256;   // floor of the proportional update weigh
 #undef CP_ADAPT_WR
 #undef CP_ADAPT_MW
 #undef CP_ADAPT_K
+#undef CP_CACHE_WR
 #undef CP_E2E
 #undef CP_SSE

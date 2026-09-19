@@ -2,7 +2,7 @@
 // -------------------------------------------------------------
 // sh_mix2.inc -- 2-input logistic mixer with Newton weight updates.
 //
-//   p = sq( w*st(p1) + (1-w)*st(p2) + b ),   w = sq(W)
+//   p = sq( w*z1 + (1-w)*z2 + b ),   w = sq(W),   z = st(p) of the inputs
 //
 // per mixer context (IDX Index of sh_model-M0.idx): W (logit coordinate,
 // box +-Wclip) and the stretch-domain bias b (box +-Bclip) are
@@ -37,6 +37,7 @@ template<class CP> struct Mix2 {
   // per-query state, valid between Mix() and Update()
   Cell* c;
   float s1, s2, wv, p0;
+  float zm;       // |logit| bound of the inputs, = stf's clip [Pmin, 1-Pmin]
 
   static float stf( float p ) {
     p = clamp( p, CP::Pmin, 1.0f-CP::Pmin );
@@ -50,19 +51,20 @@ template<class CP> struct Mix2 {
     if( !CP::ON ) return;
     vol = contexts < 1 ? 1 : contexts;
     n = mix_rows( vol );
+    zm = rt_logf( (1.0f - CP::Pmin) / CP::Pmin );
     float w0 = clamp( CP::W0, 1.0f/65536, 1.0f-1.0f/65536 );
     float W0 = clip( rt_logf(w0/(1.0f-w0)), CP::Wclip );
     for( uint i=0; i<n; i++ ) { t[i].w.Init(W0); t[i].b.Init(0.0f); t[i].age = 0; }
   }
-  // p1, p2 = P(bit==0) of the two inputs; returns the mixed P(bit==0)
+  // z1, z2 = logits of P(bit==0) of the two inputs; returns the mixed P(bit==0)
   // weight of p1 in the last Mix() (0 when the mixer is off: final p = p2)
   float weight() const { return CP::ON ? wv : 0.0f; }
 
-  float Mix( uint cx, float p1, float p2 ) {
-    if( !CP::ON ) return p2;
+  float Mix( uint cx, float z1, float z2 ) {
+    if( !CP::ON ) return sqf(z2);
     c  = t + ( vol<=n ? cx : uint( (qword(cx*0x9E3779B1u) * n) >> 32 ) );
-    s1 = stf(p1);
-    s2 = stf(p2);
+    s1 = clamp( z1, -zm, zm );
+    s2 = clamp( z2, -zm, zm );
     wv = sqf( c->w.val );
     p0 = sqf( wv*s1 + (1.0f-wv)*s2 + c->b.val );
     return p0;
@@ -70,34 +72,33 @@ template<class CP> struct Mix2 {
 
   void Update( int bit ) {
     if( !CP::ON ) return;
-    float pK_t = bit ? (1.0f - p0) : p0;
+    // logit-domain chain (see Counter::C_Update): with z = w*s1+(1-w)*s2+b
+    // and p0 = sq(z), the gradient of -ln p w.r.t. a parameter t is
+    // e_o*dz/dt and the curvature term e_o*((1-2p0)*(dz/dt)^2 + d2z/dt2),
+    // e_o = sign*p_o, p_o = the other symbol's probability; no reciprocal.
+    float p_o  = bit ? p0 : (1.0f - p0);
     float sign = bit ? -1.0f : 1.0f;
-    float inv_p  = 1.0f / fmaxf( pK_t, 1e-12f );
-    float inv_p2 = inv_p * inv_p;
+    float e_o  = sign * p_o;
+    float c2   = 1.0f - 2.0f * p0;
 
     // A1: young-cell step schedule, stepMax*(1 + AGA/(1 + age/B)); AGA = 0
     // reproduces the plain limit bit for bit.
     float agd = 1.0f / (1.0f + float(c->age) * CP::AGiB);
     if( c->age != ~0u ) c->age++;
 
-    // dp0/dst = p0(1-p0), d2p0/dst2 = p0(1-p0)(1-2p0)
-    float p0_1 = p0 * (1.0f - p0);
-    float p0_2 = p0_1 * (1.0f - 2.0f * p0);
-
-    // weight: st = w*s1 + (1-w)*s2, w = sq(W)
+    // weight: z = w*s1 + (1-w)*s2 + b, w = sq(W): dz/dW = (s1-s2) w(1-w),
+    // d2z/dW2 = (s1-s2) w(1-w)(1-2w)
     float diff = s1 - s2;
     float w_1  = wv * (1.0f - wv);
     float w_2  = w_1 * (1.0f - 2.0f * wv);
-    float dp0_dw   = p0_1 * diff;
-    float d2p0_dw2 = p0_2 * (diff * diff);
-    float dp0_dW   = dp0_dw * w_1;
-    float d2p0_dW2 = d2p0_dw2 * (w_1 * w_1) + dp0_dw * w_2;
+    float dz_dW   = diff * w_1;
+    float d2z_dW2 = diff * w_2;
 
-    c->w.Update( dp0_dW * sign, d2p0_dW2 * sign, inv_p, inv_p2, 0.0f, 1.0f, -CP::Wclip, CP::Wclip, 1.0f,
+    c->w.Update( e_o * dz_dW, e_o * (c2 * (dz_dW * dz_dW) + d2z_dW2), -CP::Wclip, CP::Wclip, 1.0f,
                  CP::Config_W::stepMax * (1.0f + CP::AGAw * agd) );
 
-    // bias: dp0/db = p0(1-p0), d2p0/db2 = p0(1-p0)(1-2p0)
-    c->b.Update( p0_1 * sign, p0_2 * sign, inv_p, inv_p2, 0.0f, 1.0f, -CP::Bclip, CP::Bclip, 1.0f,
+    // bias: dz/db = 1, d2z/db2 = 0
+    c->b.Update( e_o, e_o * c2, -CP::Bclip, CP::Bclip, 1.0f,
                  CP::Config_B::stepMax * (1.0f + CP::AGAb * agd) );
   }
 };

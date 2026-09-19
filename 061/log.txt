@@ -23,3 +23,9 @@ book1          wcc386         book1wcc
 # (SSE-DESIGN.md sec.6.11):
 book1          wcc386         book1wcc
 234213 4.877s  273291 4.897s  509525 8.680s
+
+# + fewer divisions/transcendentals per bit (cached prediction intermediates,
+# logits between the stages, logit-domain gradient chain; SSE-DESIGN.md
+# sec.6.12; within rounding of the above):
+book1          wcc386         book1wcc
+234214 3.85s   273292 3.53s   509525
