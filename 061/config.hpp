@@ -145,8 +145,13 @@ set R0 = float(CPX(R0_v))/256;
 
 #define set  const float CP_NAME::
 set stP_min  = float(CPX(stP_min)) / float(SCALE);
-set leakage1 = float(CPX(leak1)) / float(SCALE);
-set leakage2 = float(CPX(leak2)) / float(SCALE);
+// RTRL trace leaks: clamped to [0, 1] at the point of use (IDX-FORMAT.md
+// sec.5).  A leak above 1 amplifies the traces until they overflow to inf
+// (seen with C0_leak2 = 1.010 after a tuner pass: the ww traces of a
+// long-lived cell reached inf, and the shipping and tuning builds then
+// differed in how clip() treats inf/NaN under -ffinite-math-only).
+set leakage1 = clamp( float(CPX(leak1)) / float(SCALE), 0.0f, 1.0f );
+set leakage2 = clamp( float(CPX(leak2)) / float(SCALE), 0.0f, 1.0f );
 set mwP0     = float(CPX(mwP0)) / float(SCALE);
 
 set F0_P0     = float(2*CPX(P0)) / float(SCALE);

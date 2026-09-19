@@ -8,9 +8,9 @@ static const byte M0_cx[256]={ 0,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,
 
 
 static const int M0_ON = (1+0) * (1);
-static const int M0_W0 = (18588+0) * (1);
+static const int M0_W0 = (19386+0) * (1);
 static const int M0_Wclip = (1920+0) * (1);
-static const int M0_Bclip = (704+0) * (1);
+static const int M0_Bclip = (660+0) * (1);
 static const int M0_Pmin = (21475+0) * (1);
 static const int M0_M1w = (523792+0) * (1);
 static const int M0_M2w = (67370+0) * (1);
@@ -22,8 +22,8 @@ static const int M0_DCw = (66+0) * (1);
 static const int M0_RCw = (72+0) * (1);
 static const int M0_NAGw = (1+0) * (1);
 static const int M0_M1b = (524160+0) * (1);
-static const int M0_M2b = (88080+0) * (1);
-static const int M0_NWb = (524287+0) * (1);
+static const int M0_M2b = (77758+0) * (1);
+static const int M0_NWb = (544766+0) * (1);
 static const int M0_INCb = (9219+0) * (1);
 static const int M0_STEPb = (524081+0) * (1);
 static const int M0_G2b = (32+0) * (1);
@@ -31,7 +31,7 @@ static const int M0_DCb = (256+0) * (1);
 static const int M0_RCb = (16384+0) * (1);
 static const int M0_NAGb = (1+0) * (1);
 static const int M0_AGAw = (0+0) * (1);
-static const int M0_AGAb = (480+0) * (1);
+static const int M0_AGAb = (447+0) * (1);
 static const int M0_AGB = (64+0) * (1);
 
 

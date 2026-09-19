@@ -34,10 +34,10 @@ Index Cx3
 # --- table geometry -----------------------------------------------------
 Number HBITS,  1,0!10110   # rows = min(Cx_Volume, 1<<HBITS); rows beyond are hashed
 Number NB,     1,2!00010   # interpolation buckets (columns) per row: 2 + pattern
-Number LIM,    1,0!010110100100   # |stretch(p_in)| clip, /256  (2048 = 8.0)
+Number LIM,    1,0!001100010101   # |stretch(p_in)| clip, /256  (2048 = 8.0)
 
 # --- cell init and update ------------------------------------------------
-Number T0,     1,0!0000100110100   # initial mass n0+n1 of a fresh cell, /256
+Number T0,     1,0!0000101000111   # initial mass n0+n1 of a fresh cell, /256
 Number ON,     1,0!1    # 0: stage bypassed (SSE(p) = p, no table)
 Number UPD,    1,0!01   # 1: both cells fully; 2: proportional (1-wt, wt), the interpolated update
 Number UPMIN,  1,0!00000000   # floor of the proportional weights, /256 (256 = same as UPD 1)
@@ -52,7 +52,7 @@ Number P1,     1,0!01010000010001
 Number wr,     1,1!01001010101001
 Number wr1,    1,0!100100110100
 Number mw,     1,1!0100001000000
-Number K,      1,0!1000101101011101
+Number K,      1,0!1000111000010110
 
 Const 0
 
@@ -92,7 +92,7 @@ Const 0
 # u (memory length) optimizer
 Number M1_u,   1,0!100101111001100000
 Number M2_u,   1,0!11101110100
-Number NWu,    1,0!001101110001000100101
+Number NWu,    1,0!001111110011110110110
 Number RUinc,  1,0!000000001010000000
 Number uStep,  1,0!11100010000001000
 Number uMin,   1,0!0000000001
@@ -108,7 +108,7 @@ Const 0
 # v (hit/miss asymmetry) optimizer
 Number M1_v,   1,0!101011100010000000
 Number M2_v,   1,0!010100101
-Number NWv,    1,0!01000110011001110111
+Number NWv,    1,0!01100000110011100010
 Number RVinc,  1,0!00000000000000100000
 Number vStep,  1,0!1101011011010010
 Number G1_v,   1,0!01001110001000
@@ -138,7 +138,7 @@ Const 0
 # steps and on the u/v ray clip (AGAu); AGAx/256, 0 = plain limit.
 # B = AGB/16 updates (64 = 4 updates).
 Number AGAu,   1,0!000111111000
-Number AGAm,   1,0!010011101111
+Number AGAm,   1,0!011001111000
 Number AGAk,   1,0!001100000000
 Number AGB,    1,0!0100000000
 
@@ -146,4 +146,4 @@ Const 0
 
 # A2 end-to-end objective: the parameter gradients use
 # (1-E2E)*(own error) + E2E*(final error chained to this cell), E2E/256.
-Number E2E,    1,0!001101000
+Number E2E,    1,0!010011111

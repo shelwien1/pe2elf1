@@ -203,8 +203,12 @@ static inline float clamp(float x, float min_val, float max_val) {
 // correctly rounded) while the tuning build calls libm at runtime, and the
 // two can differ by an ulp -- enough to change the stream by a byte.  Both
 // builds go through libm for these; the per-bit paths are runtime anyway.
-static float rt_logf( float x ) { return logf(x); }
-static float rt_expf( float x ) { return expf(x); }
+// The volatile copy is the barrier: a plain static wrapper is inlined under
+// -O3/LTO and folded anyway (seen on KYHI = ln(kMax) at kMax = 1.0311, where
+// libm's logf is an ulp below MPFR's: the K box wall differed and the
+// streams drifted by a byte).
+static float rt_logf( float x ) { volatile float v = x; return logf(v); }
+static float rt_expf( float x ) { volatile float v = x; return expf(v); }
 
 // --- Configuration Struct Declarations ---
 
@@ -807,6 +811,12 @@ int main( int argc, char** argv ) {
       float p2 = sse.Predict( cx, p1 );
       float pf = mix.Mix( M0_MakeCx(c2, last_c, cxt), p1, p2 );
       p = uint( clamp( pf*float(SCALE) ) );
+#ifdef TRACE_P
+      // -DTRACE_P: per-bit trace of (p1, p2, pf, p) as floats to $TRACE_P, to
+      // find the first divergent bit between two builds (SSE-DESIGN.md sec.4.1)
+      { static FILE* trf = fopen( getenv("TRACE_P") ? getenv("TRACE_P") : "trace.bin", "wb" );
+        float v[4] = { p1, p2, pf, float(p) }; fwrite( v, 4, 4, trf ); }
+#endif
       
       bit = rc.rc_BProcess( p, bit );
 
