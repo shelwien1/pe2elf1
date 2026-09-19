@@ -57,7 +57,7 @@ Number K,      1,0!1000001100101010
 Const 0
 
 # K optimizer
-Number NWk,    1,1!1111111111000000
+Number NWk,    1,1!001111111111000000
 Number RKinc,  1,1!001000011110011
 Number kStep,  1,1!11111111001001001
 Number kMin,   1,1!1111100100000000000001
@@ -72,7 +72,7 @@ Number G4_k,   1,0!0001000011110110100
 Const 0
 
 # mw optimizer
-Number NWm,    1,1!100000001001100000
+Number NWm,    1,1!00100000001001100000
 Number MWinc,  1,1!001000000000110
 Number mwStep, 1,1!111111111101000001
 Number mwMin,  1,1!000011001000000
@@ -92,7 +92,7 @@ Const 0
 # u (memory length) optimizer
 Number M1_u,   1,0!100100110000000000
 Number M2_u,   1,0!11101110100
-Number NWu,    1,0!1100000001110100000
+Number NWu,    1,0!001100000001110100000
 Number RUinc,  1,0!000000001010000000
 Number uStep,  1,0!11111111110110000
 Number uMin,   1,0!0000000001
@@ -108,7 +108,7 @@ Const 0
 # v (hit/miss asymmetry) optimizer
 Number M1_v,   1,0!110001110000000000
 Number M2_v,   1,0!010010011
-Number NWv,    1,0!111100000101000000
+Number NWv,    1,0!00111100000101000000
 Number RVinc,  1,0!00000000000000100000
 Number vStep,  1,0!1111111111001000
 Number G1_v,   1,0!01001110001000
@@ -130,3 +130,20 @@ Number leak2,  1,1!0110111111011010
 Number stP_min,1,1!000000000000000
 
 Const 0
+
+Const 0
+
+# A1 young-cell step schedule (coder0.cpp Counter::C_Update):
+# stepMax_eff = stepMax*(1 + AGAx/(1 + age/B)) on the mw (AGAm) and K (AGAk)
+# steps and on the u/v ray clip (AGAu); AGAx/256, 0 = plain limit.
+# B = AGB/16 updates (64 = 4 updates).
+Number AGAu,   1,0!000000000000
+Number AGAm,   1,0!000000000000
+Number AGAk,   1,0!000000000000
+Number AGB,    1,0!0001000000
+
+Const 0
+
+# A2 end-to-end objective: the parameter gradients use
+# (1-E2E)*(own error) + E2E*(final error chained to this cell), E2E/256.
+Number E2E,    1,0!000000000

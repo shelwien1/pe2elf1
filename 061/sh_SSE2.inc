@@ -67,6 +67,8 @@ template<class CP, int NB> struct SSE_Ctr {
   // Per-query state, valid between Predict() and Update()
   Cell* c;
   float wt;
+  float pc0, pc1;   // the two cells' own predictions, passed back to C_Update()
+  float dzdz;       // d st(p_sse) / d st(p_in): (NB-1)/(2 LIM) * (st(p1)-st(p0)), 0 when clipped
 
   static float stf( float p ) {
     p = clamp( p, 1.0f/65536, 1.0f-1.0f/65536 );
@@ -113,23 +115,31 @@ template<class CP, int NB> struct SSE_Ctr {
   // p = P(bit==0) from the primary model; returns the SSE's P(bit==0)
   float Predict( qword cx, float p ) {
     if( !CP::ON ) return p;
-    float s  = clamp( stf(p), -lim, lim );
+    float s0 = stf(p);
+    float s  = clamp( s0, -lim, lim );
     float x  = (s + lim) * qscale;
     int   j  = int(x); if( j > NB-2 ) j = NB-2;
     wt = x - float(j);
     c  = t + qword(Row(cx))*NB + j;
-    float p0 = c[0].PredictF();
-    float p1 = c[1].PredictF();
-    return sqf( stf(p0) + wt*(stf(p1)-stf(p0)) );
+    pc0 = c[0].PredictF();
+    pc1 = c[1].PredictF();
+    float z0 = stf(pc0), z1 = stf(pc1);
+    dzdz = ( s0 > -lim && s0 < lim ) ? qscale * (z1 - z0) : 0.0f;
+    return sqf( z0 + wt*(z1-z0) );
   }
 
-  void Update( int bit ) {
+  // d st(p_sse) / d st(p_in) of the last Predict() (1 when the stage is off)
+  float dz2_dz1() const { return CP::ON ? dzdz : 1.0f; }
+
+  // ef = A2 end-to-end error at the SSE output, dL/d st(p_sse); each cell
+  // gets its interpolation share (the derivative of the output w.r.t. it).
+  void Update( int bit, float ef = 0.0f ) {
     if( !CP::ON ) return;
-    if( upd==1 ) { c[0].C_Update(bit); c[1].C_Update(bit); }
+    if( upd==1 ) { c[0].C_Update(bit, pc0, 1.0f, ef*(1.0f-wt)); c[1].C_Update(bit, pc1, 1.0f, ef*wt); }
     else {
       float g0 = 1.0f-wt, g1 = wt;
-      c[0].C_Update( bit, g0<upmin ? upmin : g0 );
-      c[1].C_Update( bit, g1<upmin ? upmin : g1 );
+      c[0].C_Update( bit, pc0, g0<upmin ? upmin : g0, ef*g0 );
+      c[1].C_Update( bit, pc1, g1<upmin ? upmin : g1, ef*g1 );
     }
   }
 };
@@ -141,14 +151,16 @@ template<class CP> struct SSE_Dyn {
   struct If {
     virtual void  Init( Cell* table, qword volume ) = 0;
     virtual float Predict( qword cx, float p ) = 0;
-    virtual void  Update( int bit ) = 0;
+    virtual void  Update( int bit, float ef ) = 0;
+    virtual float dz2_dz1() const = 0;
     virtual ~If() {}
   };
   template<int NB> struct Impl : If {
     SSE_Ctr<CP,NB> s;
     void  Init( Cell* table, qword volume ) { s.Init(table, volume); }
     float Predict( qword cx, float p ) { return s.Predict(cx,p); }
-    void  Update( int bit ) { s.Update(bit); }
+    void  Update( int bit, float ef ) { s.Update(bit, ef); }
+    float dz2_dz1() const { return s.dz2_dz1(); }
   };
   template<int NB> static If* make( int nb ) {
     if constexpr( NB > SSE_NB_MAX ) { (void)nb; return 0; }
@@ -158,5 +170,6 @@ template<class CP> struct SSE_Dyn {
   If* p;
   void  Init( Cell* table, qword volume ) { p = make<2>( sse_nb_clamp(CP::NB) ); p->Init(table, volume); }
   float Predict( qword cx, float x ) { return p->Predict(cx,x); }
-  void  Update( int bit ) { p->Update(bit); }
+  void  Update( int bit, float ef = 0.0f ) { p->Update(bit, ef); }
+  float dz2_dz1() const { return p->dz2_dz1(); }
 };

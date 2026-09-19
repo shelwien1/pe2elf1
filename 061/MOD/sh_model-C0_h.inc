@@ -85,6 +85,11 @@ static const int C0_MKDET = (205+0) * (1);
 static const int C0_mwXlo = (0+0) * (1);
 static const int C0_mwXhi = (16384+0) * (1);
 static const int C0_BWT = (0+0) * (1);
+static const int C0_AGAu = (0+0) * (1);
+static const int C0_AGAm = (0+0) * (1);
+static const int C0_AGAk = (0+0) * (1);
+static const int C0_AGB = (64+0) * (1);
+static const int C0_E2E = (0+0) * (1);
 
 
 

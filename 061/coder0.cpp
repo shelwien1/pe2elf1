@@ -35,6 +35,14 @@
 #ifndef S0_ADAPT_K
 #define S0_ADAPT_K  1
 #endif
+// A2 end-to-end gradient path (C0_E2E / S0_E2E knobs): compiled in by
+// default, since E2E = 0 is bit-identical; 0 removes the per-bit chain.
+#ifndef C0_E2E_ON
+#define C0_E2E_ON 1
+#endif
+#ifndef S0_E2E_ON
+#define S0_E2E_ON 1
+#endif
 
 // -------------------------------------------------------------
 // Optimizer-proposal toggles (coder0_counter_scope.md / r8 doc).
@@ -175,6 +183,7 @@ static float rt_expf( float x ) { return expf(x); }
 #define CP_ADAPT_WR ADAPT_WR
 #define CP_ADAPT_MW ADAPT_MW
 #define CP_ADAPT_K  ADAPT_K
+#define CP_E2E      C0_E2E_ON
 #include "config.hpp"
 
 // Parameter bundle of the SSE cells: S0_* constants from IDX/sh_model-S0.idx.
@@ -183,6 +192,7 @@ static float rt_expf( float x ) { return expf(x); }
 #define CP_ADAPT_WR S0_ADAPT_WR
 #define CP_ADAPT_MW S0_ADAPT_MW
 #define CP_ADAPT_K  S0_ADAPT_K
+#define CP_E2E      S0_E2E_ON
 #define CP_SSE      1
 #include "config.hpp"
 
@@ -210,11 +220,14 @@ template<class cfg> struct ParamUpdater<1, cfg> {
   }
 
   // g = weight of this observation (1 = a full event); scales the loss.
+  // gs scales the gradient alone (A2: the end-to-end error replaces the
+  // cell's own; 1 = the cell's own loss, bit-identical).  The curvature R
+  // stays the cell's own, as the preconditioner.
   // Returns the gradient term dp_inv (for the Nesterov look-ahead).
   INLINE float Accum(
-    float dp, float d2p, float inv_p, float inv_p2, float inv_pq, float g = 1.0f
+    float dp, float d2p, float inv_p, float inv_p2, float inv_pq, float g = 1.0f, float gs = 1.0f
   ) {
-    float dp_inv = dp * inv_p * g;
+    float dp_inv = dp * inv_p * g * gs;
     float dp2_inv = (dp * dp) * inv_p2 * g;
     (void)inv_pq;
     float d2p_inv = d2p * inv_p * g;
@@ -241,8 +254,9 @@ template<class cfg> struct ParamUpdater<1, cfg> {
     return cfg::NW * D / safe_R;
   }
 
-  INLINE void Apply( float step, float lo, float hi ) {
-    step = clip(step, cfg::stepMax);
+  // smax: the step limit, cfg::stepMax unless the caller schedules it (A1)
+  INLINE void Apply( float step, float lo, float hi, float smax = cfg::stepMax ) {
+    step = clip(step, smax);
 
     float nv = val - step;
     val = clamp(nv, lo, hi);
@@ -250,15 +264,15 @@ template<class cfg> struct ParamUpdater<1, cfg> {
 
   void Update(
     float dp, float d2p, float inv_p, float inv_p2, float inv_pq, float sc,
-    float lo, float hi, float g = 1.0f
+    float lo, float hi, float g = 1.0f, float smax = cfg::stepMax, float gs = 1.0f
   ) {
-    float dp_inv = Accum(dp, d2p, inv_p, inv_p2, inv_pq, g);
+    float dp_inv = Accum(dp, d2p, inv_p, inv_p2, inv_pq, g, gs);
     (void)sc;
     if( cfg::NAG ) {
       // Nesterov look-ahead: the step from momentum_D*D_new - g instead of D_new
       float Dn = D * cfg::momentum_D - dp_inv;
-      Apply( cfg::NW * Dn / (R + cfg::inc), lo, hi );
-    } else Apply(StepRaw(), lo, hi);
+      Apply( cfg::NW * Dn / (R + cfg::inc), lo, hi, smax );
+    } else Apply(StepRaw(), lo, hi, smax);
   }
 
 };
@@ -266,11 +280,11 @@ template<class cfg> struct ParamUpdater<1, cfg> {
 // Inactive parameter state
 template<class cfg> struct ParamUpdater<0, cfg> {
   void Init(float /*init_val*/) {}
-  inline float Accum(float, float, float, float, float, float = 1.0f) { return 0.0f; }
+  inline float Accum(float, float, float, float, float, float = 1.0f, float = 1.0f) { return 0.0f; }
   inline float Denom() const { return 1.0f; }
   inline float StepRaw() const { return 0.0f; }
-  inline void Apply(float, float, float) {}
-  inline void Update(float /*dp*/, float /*d2p*/, float /*inv_p*/, float /*inv_p2*/, float /*inv_pq*/, float /*sc*/, float /*lo*/, float /*hi*/, float = 1.0f) {}
+  inline void Apply(float, float, float, float = 0.0f) {}
+  inline void Update(float /*dp*/, float /*d2p*/, float /*inv_p*/, float /*inv_p2*/, float /*inv_pq*/, float /*sc*/, float /*lo*/, float /*hi*/, float = 1.0f, float = 0.0f, float = 1.0f) {}
 };
 
 
@@ -298,7 +312,13 @@ template<class CP> struct Counter {
 
   float n0;
   float n1;
-  float pK;
+  // Updates this cell has seen (saturating).  Drives the young-cell step
+  // schedule (A1): stepMax_eff = stepMax*(1 + AGA/(1 + age/B)) on the mw/K
+  // steps and on the u/v ray clip, so a fresh cell may move faster than a
+  // settled one.  It lives in what used to be the pK slot: the cell's own
+  // prediction is now passed back into C_Update() by the caller (which has
+  // it from PredictF() anyway), so the cell stays 96 B.
+  uint  age;
 
 
   // Context-adaptive parameters logic encapsulating both wr limits
@@ -329,6 +349,7 @@ template<class CP> struct Counter {
       n0 = iSCALE; 
       n1 = iSCALE;
     }
+    age = 0;
 
 
     wr0_state.Init(CP::UV_U0);
@@ -357,35 +378,52 @@ template<class CP> struct Counter {
     else                        return CP::K;
   }
 
-  // Raw probability of bit==0, kept in pK for C_Update()
-  float PredictF() {
+  // Raw probability of bit==0; the caller keeps it for C_Update()
+  float PredictF() const {
     float cur_mw = this->cur_mw();
     float curr_K = this->cur_K();
 
     float n_sum = n0 + n1 + 1e-8f;
     float p0 = n0 / n_sum;
     p0 = p0 * (1.0f - cur_mw) + CP::mwP0 * cur_mw;
-    pK = sq(curr_K * st(p0));
-    return pK;
+    return sq(curr_K * st(p0));
   }
 
-  float Predict() {
+  float Predict() const {
     float p_out = PredictF() * float(SCALE);
     p_out = clamp(p_out);
     return p_out;
   }
 
+  // pK = this cell's PredictF() for the bit being coded.
   // g = weight of this observation, 1 = a full event (bit-identical to the
   // unweighted update).  A fractional event scales the loss by g, and in the
   // count recursion every wr becomes wr*g and every injected count g, so
   // the RTRL traces stay the exact derivatives of the weighted recursion.
-  void C_Update( const int bit, const float g = 1.0f ) {
+  // ef = A2 end-to-end error: dL_final/dz where z = st(pK) is this cell's
+  // logit output, i.e. (p_final - [bit==0]) * dz_final/dz.  The cell's own
+  // error is e = pK - [bit==0]; the gradient uses (1-E2E)*e + E2E*ef, the
+  // curvature stays the cell's own.  E2E = 0 ignores ef (bit-identical).
+  void C_Update( const int bit, const float pK, const float g = 1.0f, const float ef = 0.0f ) {
     float sign = 1.0f - float(bit + bit); 
+
+    // A1: young-cell step schedule, per axis: stepMax*(1 + AGA*agd),
+    // agd = 1/(1 + age/B).  AGA = 0 reproduces the plain limit bit for bit.
+    float agd = 1.0f / (1.0f + float(age) * CP::AGiB);
+    if( age != ~0u ) age++;
 
     float pK_t = pK * sign + float(bit);
     if( pK_t < 1e-12f ) pK_t = 1e-12f;
     float inv_pK_t = 1.0f / pK_t;
     float inv_pK_t2 = inv_pK_t * inv_pK_t;
+
+    // A2: gradient scale gs = ((1-E2E)*e + E2E*ef) / e with e = pK-[bit==0]
+    // = -sign*p_o, p_o = probability of the other symbol; 1 when E2E = 0.
+    float gs = 1.0f;
+    if constexpr( CP::E2E_ON ) {
+      float p_o = 1.0f - pK_t; if( p_o < 1e-12f ) p_o = 1e-12f;
+      gs = (1.0f - CP::E2E) - CP::E2E * ef * sign / p_o;
+    }
 
     const float inv_pq = 0.0f;
     const float bias_sc = 1.0f;
@@ -472,8 +510,8 @@ template<class CP> struct Counter {
     // 2.1 UV2X2 + XHESS + RAYCL: one EMA cross term, 2x2 Newton solve with
     // det guard (or P11 CSHRK soft shrink), joint direction-preserving
     // trust region. Reduces to the diagonal path when the guard trips.
-    wr0_state.Accum(g_u * sign, h_d * sign, inv_pK_t, inv_pK_t2, inv_pq, g);
-    wr1_state.Accum(g_v * sign, h_d * sign, inv_pK_t, inv_pK_t2, inv_pq, g);
+    wr0_state.Accum(g_u * sign, h_d * sign, inv_pK_t, inv_pK_t2, inv_pq, g, gs);
+    wr1_state.Accum(g_v * sign, h_d * sign, inv_pK_t, inv_pK_t2, inv_pq, g, gs);
 
     // XHESS: exact rotated cross diagonal h_uv = h00 - h11 (MIXTR-free part),
     // exposed through the signed shaper XHW with its own clip (G2_u/v are 0
@@ -492,14 +530,17 @@ template<class CP> struct Counter {
         float idet = 1.0f / det;
         float s_u = (b_u * a_v - cc * b_v) * idet;
         float s_v = (a_u * b_v - cc * b_u) * idet;
-        // RAYCL: rescale jointly so neither component exceeds its stepMax.
-        float r = fmaxf( fmaxf( fabsf(s_u)*CP::iStepU, fabsf(s_v)*CP::iStepV ), 1.0f );
+        // RAYCL: rescale jointly so neither component exceeds its stepMax
+        // (widened by the age schedule while the cell is young).
+        float agu = 1.0f + CP::AGAu * agd;
+        float r = fmaxf( fmaxf( fabsf(s_u)*CP::iStepU, fabsf(s_v)*CP::iStepV ) / agu, 1.0f );
         float ir = 1.0f / r;
-        wr0_state.Apply(s_u * ir, CP::UVLO, CP::UVHI);
-        wr1_state.Apply(s_v * ir, -CP::UV_VH, CP::UV_VH);
+        wr0_state.Apply(s_u * ir, CP::UVLO, CP::UVHI, Config_U::stepMax * agu);
+        wr1_state.Apply(s_v * ir, -CP::UV_VH, CP::UV_VH, Config_V::stepMax * agu);
       } else {
-        wr0_state.Apply(wr0_state.StepRaw(), CP::UVLO, CP::UVHI);
-        wr1_state.Apply(wr1_state.StepRaw(), -CP::UV_VH, CP::UV_VH);
+        float agu = 1.0f + CP::AGAu * agd;
+        wr0_state.Apply(wr0_state.StepRaw(), CP::UVLO, CP::UVHI, Config_U::stepMax * agu);
+        wr1_state.Apply(wr1_state.StepRaw(), -CP::UV_VH, CP::UV_VH, Config_V::stepMax * agu);
       }
     }
 
@@ -534,7 +575,8 @@ template<class CP> struct Counter {
       float f2m = f1m * (1.0f - 2.0f * mws);
       float g_xm = dpK_dmw * f1m;
       float h_xm = d2pK_dmw2 * (f1m * f1m) + dpK_dmw * f2m;
-      mw_state.Update(g_xm * sign, h_xm * sign, inv_pK_t, inv_pK_t2, inv_pq, bias_sc, CP::MWXLO, CP::MWXHI, g);
+      mw_state.Update(g_xm * sign, h_xm * sign, inv_pK_t, inv_pK_t2, inv_pq, bias_sc, CP::MWXLO, CP::MWXHI, g,
+                      Config_MW::stepMax * (1.0f + CP::AGAm * agd), gs);
     }
     }  // ADAPT_MW
 
@@ -548,7 +590,8 @@ template<class CP> struct Counter {
       // P24: chain to y = ln K: f' = f'' = K.
       float g_yk = dpK_dK * curr_K;
       float h_yk = d2pK_dK2 * (curr_K * curr_K) + dpK_dK * curr_K;
-      k_state.Update(g_yk * sign, h_yk * sign, inv_pK_t, inv_pK_t2, inv_pq, bias_sc, CP::KYLO, CP::KYHI, g);
+      k_state.Update(g_yk * sign, h_yk * sign, inv_pK_t, inv_pK_t2, inv_pq, bias_sc, CP::KYLO, CP::KYHI, g,
+                     Config_K::stepMax * (1.0f + CP::AGAk * agd), gs);
     }
     }  // ADAPT_K
 
@@ -717,8 +760,12 @@ int main( int argc, char** argv ) {
       
       bit = rc.rc_BProcess( p, bit );
 
-      o1[last_c][cxt].C_Update( bit );
-      sse.Update( bit );
+      // A2: e_f = p_f - [bit==0] = dL/dz_f; chain to the SSE output and the
+      // order-1 logit (the SSE input also moves the interpolation point).
+      float e_f = pf - float(1 - bit);
+      float wv  = mix.weight();
+      o1[last_c][cxt].C_Update( bit, p1, 1.0f, e_f * (wv + (1.0f - wv) * sse.dz2_dz1()) );
+      sse.Update( bit, e_f * (1.0f - wv) );
       mix.Update( bit );
 
       c<<=1; cxt+=cxt+bit;

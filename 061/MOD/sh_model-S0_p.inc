@@ -77,6 +77,11 @@ static const int S0_XHC = (0+0) * (1);
 static const int S0_leak1 = (32208+1) * (1);
 static const int S0_leak2 = (28634+1) * (1);
 static const int S0_stP_min = (0+1) * (1);
+static const int S0_AGAu = (0+0) * (1);
+static const int S0_AGAm = (0+0) * (1);
+static const int S0_AGAk = (0+0) * (1);
+static const int S0_AGB = (64+0) * (1);
+static const int S0_E2E = (0+0) * (1);
 
 
 

@@ -28,6 +28,7 @@ template<class CP> struct Mix2 {
   struct Cell {
     ParamUpdater<1, typename CP::Config_W> w;
     ParamUpdater<1, typename CP::Config_B> b;
+    uint age;   // updates seen (saturating): the young-cell step schedule (A1)
   };
   Cell* t;        // the Table() of the generated M0_T
   uint  n;        // contexts
@@ -51,9 +52,12 @@ template<class CP> struct Mix2 {
     n = mix_rows( vol );
     float w0 = clamp( CP::W0, 1.0f/65536, 1.0f-1.0f/65536 );
     float W0 = clip( rt_logf(w0/(1.0f-w0)), CP::Wclip );
-    for( uint i=0; i<n; i++ ) { t[i].w.Init(W0); t[i].b.Init(0.0f); }
+    for( uint i=0; i<n; i++ ) { t[i].w.Init(W0); t[i].b.Init(0.0f); t[i].age = 0; }
   }
   // p1, p2 = P(bit==0) of the two inputs; returns the mixed P(bit==0)
+  // weight of p1 in the last Mix() (0 when the mixer is off: final p = p2)
+  float weight() const { return CP::ON ? wv : 0.0f; }
+
   float Mix( uint cx, float p1, float p2 ) {
     if( !CP::ON ) return p2;
     c  = t + ( vol<=n ? cx : uint( (qword(cx*0x9E3779B1u) * n) >> 32 ) );
@@ -71,6 +75,11 @@ template<class CP> struct Mix2 {
     float inv_p  = 1.0f / fmaxf( pK_t, 1e-12f );
     float inv_p2 = inv_p * inv_p;
 
+    // A1: young-cell step schedule, stepMax*(1 + AGA/(1 + age/B)); AGA = 0
+    // reproduces the plain limit bit for bit.
+    float agd = 1.0f / (1.0f + float(c->age) * CP::AGiB);
+    if( c->age != ~0u ) c->age++;
+
     // dp0/dst = p0(1-p0), d2p0/dst2 = p0(1-p0)(1-2p0)
     float p0_1 = p0 * (1.0f - p0);
     float p0_2 = p0_1 * (1.0f - 2.0f * p0);
@@ -84,9 +93,11 @@ template<class CP> struct Mix2 {
     float dp0_dW   = dp0_dw * w_1;
     float d2p0_dW2 = d2p0_dw2 * (w_1 * w_1) + dp0_dw * w_2;
 
-    c->w.Update( dp0_dW * sign, d2p0_dW2 * sign, inv_p, inv_p2, 0.0f, 1.0f, -CP::Wclip, CP::Wclip );
+    c->w.Update( dp0_dW * sign, d2p0_dW2 * sign, inv_p, inv_p2, 0.0f, 1.0f, -CP::Wclip, CP::Wclip, 1.0f,
+                 CP::Config_W::stepMax * (1.0f + CP::AGAw * agd) );
 
     // bias: dp0/db = p0(1-p0), d2p0/db2 = p0(1-p0)(1-2p0)
-    c->b.Update( p0_1 * sign, p0_2 * sign, inv_p, inv_p2, 0.0f, 1.0f, -CP::Bclip, CP::Bclip );
+    c->b.Update( p0_1 * sign, p0_2 * sign, inv_p, inv_p2, 0.0f, 1.0f, -CP::Bclip, CP::Bclip, 1.0f,
+                 CP::Config_B::stepMax * (1.0f + CP::AGAb * agd) );
   }
 };

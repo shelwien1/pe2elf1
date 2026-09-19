@@ -21,6 +21,9 @@ struct CP_NAME {
   def_Config(Config_B)
   static const int   ON;
   static const float W0, Wclip, Bclip, Pmin;
+  // A1 young-cell step schedule: stepMax*(1 + AGAx/(1 + age*AGiB)) on W (AGAw)
+  // and b (AGAb); AGiB = 1/B with B = AGB/16 updates.
+  static const float AGAw, AGAb, AGiB;
 };
 
 #define set  const float CP_NAME::Config_W::
@@ -60,6 +63,9 @@ const float CP_NAME::W0    = float(CPX(W0)) / SCALE;
 const float CP_NAME::Wclip = float(CPX(Wclip)) / (1<<8);
 const float CP_NAME::Bclip = float(CPX(Bclip)) / (1<<8);
 const float CP_NAME::Pmin  = fmaxf( float(CPX(Pmin)) / (float(SCALE) * 65536.0f), 1.0f/(1<<24) );   // never 0: st() would be infinite
+const float CP_NAME::AGAw  = float(CPX(AGAw)) / 256;
+const float CP_NAME::AGAb  = float(CPX(AGAb)) / 256;
+const float CP_NAME::AGiB  = 16.0f / float(CPX(AGB) < 1 ? 1 : CPX(AGB));   // never divides by 0
 
 #undef CPX
 #undef CP_CAT

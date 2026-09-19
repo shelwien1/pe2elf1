@@ -10,6 +10,7 @@
 //   #define CP_ADAPT_WR 1       // per-cell adaptive wr (u/v) + RTRL traces
 //   #define CP_ADAPT_MW 1       // per-cell adaptive mw
 //   #define CP_ADAPT_K  1       // per-cell adaptive K
+//   #define CP_E2E      1       // compile the A2 end-to-end gradient path
 //   #define CP_SSE      1       // also derive the SSE-stage knobs (S0 only)
 //   #include "config.hpp"
 //
@@ -49,6 +50,13 @@ struct CP_NAME {
   // P24 MWLGT: mw = mwMin + span*sigma(x), K = exp(y); seeds map the linear
   // seeds, x gets its own (wide) box, y reuses the exact ln K box.
   static const float MWspan, MWs0, MWX0, MWXLO, MWXHI, KY0, KYLO, KYHI;
+  // A1 young-cell step schedule: stepMax*(1 + AGAx/(1 + age*AGiB)) per axis
+  // (u/v share AGAu on the ray clip); AGiB = 1/B with B = AGB/16 updates.
+  static const float AGAu, AGAm, AGAk, AGiB;
+  // A2 end-to-end objective: the gradient uses (1-E2E)*own error + E2E*final
+  // error chained to this cell; E2E_ON compiles the path in (CP_E2E).
+  enum { E2E_ON = CP_E2E };
+  static const float E2E;
 
 #ifdef CP_SSE
   // SSE stage (sh_SSE2.inc): table geometry and output knobs.  In the
@@ -177,6 +185,12 @@ set MWXHI  = float(CPX(mwXhi) - 8192)/1024;   // signed
 set KY0    = rt_logf(CP_NAME::K);
 set KYLO   = rt_logf(CP_NAME::Config_K::minVal);
 set KYHI   = rt_logf(CP_NAME::Config_K::maxVal);
+
+set AGAu   = float(CPX(AGAu))/256;
+set AGAm   = float(CPX(AGAm))/256;
+set AGAk   = float(CPX(AGAk))/256;
+set AGiB   = 16.0f/float(CPX(AGB) < 1 ? 1 : CPX(AGB));   // never divides by 0
+set E2E    = clamp( float(CPX(E2E))/256, 0.0f, 1.0f );
 #undef set
 
 #ifdef CP_SSE
@@ -201,4 +215,5 @@ set UPMIN = float(CPX(UPMIN)) / 256;   // floor of the proportional update weigh
 #undef CP_ADAPT_WR
 #undef CP_ADAPT_MW
 #undef CP_ADAPT_K
+#undef CP_E2E
 #undef CP_SSE

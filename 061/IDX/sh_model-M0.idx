@@ -52,3 +52,12 @@ Number RCb,   1,0!100000000000000
 Number NAGb,  1,0!1   # 1: Nesterov look-ahead
 
 Const 0
+
+Const 0
+
+# --- A1 young-cell step schedule (sh_mix2.inc Update) ---------------------
+# stepMax_eff = stepMax*(1 + AGAx/(1 + age/B)) on W (AGAw) and b (AGAb);
+# AGAx/256, 0 = plain limit.  B = AGB/16 updates (64 = 4 updates).
+Number AGAw,   1,0!000000000000
+Number AGAb,   1,0!000000000000
+Number AGB,    1,0!0001000000

@@ -30,6 +30,9 @@ static const int M0_G2b = (32+0) * (1);
 static const int M0_DCb = (256+0) * (1);
 static const int M0_RCb = (16384+0) * (1);
 static const int M0_NAGb = (1+0) * (1);
+static const int M0_AGAw = (0+0) * (1);
+static const int M0_AGAb = (0+0) * (1);
+static const int M0_AGB = (64+0) * (1);
 
 
 
