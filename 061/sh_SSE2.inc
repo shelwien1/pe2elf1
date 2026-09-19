@@ -70,7 +70,8 @@ template<class CP, int NB> struct SSE_Ctr {
   Cell* c;
   float wt;
   typename Cell::Pred pr0, pr1;   // the two cells' predictions and intermediates, for C_Update()
-  float dzdz;       // d st(p_sse) / d st(p_in): (NB-1)/(2 LIM) * (st(p1)-st(p0)), 0 when clipped
+  float dzdz;       // d z_sse / d z_in: (NB-1)/(2 LIM) * (z1-z0), 0 when the input clip binds
+  float sh0, sh1;   // d z_sse / d z_cell: 1-wt and wt, or 0 where the cell's logit clip binds
 
   static float stf( float p ) {
     p = clamp( p, 1.0f/65536, 1.0f-1.0f/65536 );
@@ -128,21 +129,24 @@ template<class CP, int NB> struct SSE_Ctr {
     pr1 = c[1].PredictF();
     float z0 = clamp( pr0.z, -zmax, zmax ), z1 = clamp( pr1.z, -zmax, zmax );
     dzdz = ( s0 > -lim && s0 < lim ) ? qscale * (z1 - z0) : 0.0f;
+    sh0  = ( pr0.z > -zmax && pr0.z < zmax ) ? 1.0f - wt : 0.0f;
+    sh1  = ( pr1.z > -zmax && pr1.z < zmax ) ? wt : 0.0f;
     return z0 + wt*(z1-z0);
   }
 
   // d st(p_sse) / d st(p_in) of the last Predict() (1 when the stage is off)
   float dz2_dz1() const { return CP::ON ? dzdz : 1.0f; }
 
-  // ef = A2 end-to-end error at the SSE output, dL/d st(p_sse); each cell
-  // gets its interpolation share (the derivative of the output w.r.t. it).
+  // ef = A2 end-to-end error at the SSE output, dL/dz_sse; each cell gets
+  // it times the derivative of the output w.r.t. its logit (its
+  // interpolation share, 0 where its clip binds).
   void Update( int bit, float ef = 0.0f ) {
     if( !CP::ON ) return;
-    if( upd==1 ) { c[0].C_Update(bit, pr0, 1.0f, ef*(1.0f-wt)); c[1].C_Update(bit, pr1, 1.0f, ef*wt); }
+    if( upd==1 ) { c[0].C_Update(bit, pr0, 1.0f, ef*sh0); c[1].C_Update(bit, pr1, 1.0f, ef*sh1); }
     else {
       float g0 = 1.0f-wt, g1 = wt;
-      c[0].C_Update( bit, pr0, g0<upmin ? upmin : g0, ef*g0 );
-      c[1].C_Update( bit, pr1, g1<upmin ? upmin : g1, ef*g1 );
+      c[0].C_Update( bit, pr0, g0<upmin ? upmin : g0, ef*sh0 );
+      c[1].C_Update( bit, pr1, g1<upmin ? upmin : g1, ef*sh1 );
     }
   }
 };

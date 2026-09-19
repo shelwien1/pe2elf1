@@ -321,7 +321,10 @@ cd IDX && perl import.pl sh_model-S0.idx ../export.!!! > t && mv t sh_model-S0.i
 ./gc.sh && ./t1.sh                                  # shipping build, roundtrip check
 ```
 
-`setp.pl` performs the same in-place edit of the `"!MAP!name!base\0pattern"`
+`gt.sh` builds `gradtest.cpp`, which checks every gradient and curvature
+term the coder hands its updaters against finite differences of the
+codelength (§6.13); run it after touching `C_Update`, `Mix2::Update` or
+the chain in `main()`.  `setp.pl` performs the same in-place edit of the `"!MAP!name!base\0pattern"`
 strings that `opt.pl` does, so a hand experiment measures exactly what the
 climb would.  `IDX/optv.pl` (same arguments and export format) is the
 value-step climb of §6.11: it moves a `Number` knob by ±step of its value,
@@ -1000,6 +1003,62 @@ the remaining `expf` are the parametrizations themselves (`mw` a logit,
 `K` and `wr` logs) -- a polynomial `exp2`/`log2` on the per-bit path (F5
 of the v3 document) would make them cheaper and platform-independent at
 once.
+
+### 6.13 The derivation, from the codelength, and its check
+
+Everything the updaters receive is derived from the codelength of the
+coded bit, `CL = −log2 p_bit`, `p_bit = pK` for a 0 and `1 − pK` for a 1,
+with `pK = σ(z)`.  In nats, `L = CL·ln 2 = −ln p_bit`, and with `e_o =
+sign·p_o` (`p_o` the probability of the symbol that did not occur, `sign`
++1 for a 0):
+
+```
+dL/dz   = pK − [bit==0] = −e_o            d²L/dz² = pK(1−pK) = p_t·p_o
+dL/dt   = −e_o·z'                          for a parameter t, z' = dz/dt
+d²L/dt² = p_t p_o z'² − e_o z''  =  (e_o z')² − e_o((1−2pK) z'² + z'')
+```
+
+so `ParamUpdater` gets `gr = e_o z'` (the descent direction) and `hc =
+e_o((1−2pK) z'² + z'')`, and accumulates `gr² − hc`, the exact Hessian,
+into R.  The chains, `z = K·st(P)`, `P = c·p_mix + 10⁻⁶`, `c = 0.999998`,
+`p_mix = q0(1−mw) + mwP0·mw`, `q0 = n0/(n0+n1)`:
+
+* `st' = c/(P(1−P))`, `st'' = c²(2P−1)/(P(1−P))²`.
+* `y = ln K`: `z_y = z_yy = z`.
+* `x`, `mw = lo + span·σ(x)`, `f' = span σ(1−σ)`, `f'' = f'(1−2σ)`:
+  `z_x = K st' (mwP0 − q0) f'`, `z_xx = K st'' (mwP0−q0)² f'² + K st' (mwP0−q0) f''`.
+* `u, v`, `wr0 = e^{u+v}`, `wr1 = e^{u−v}`: `z_wr = K st' (1−mw) dq0/dwr`
+  with `dq0/dwr = ∂q0/∂n0·dn0/dwr + ∂q0/∂n1·dn1/dwr` from the RTRL traces
+  (and the second-order traces and `∂²q0` for `z_wrwr`); then to the log
+  coordinates `z_{u0} = z_wr0·wr0`, `z_{u0u0} = z_wr0wr0 wr0² + z_wr0 wr0`,
+  and the rotation `z_u = z_{u0} + z_{u1}`, `z_v = z_{u0} − z_{u1}`.  The
+  curvature uses the shared approximation `h_uu ≈ h_vv ≈ h00 + h11` (the
+  cross term `2h01` is dropped, the 050c design decision); `h_uv = h00 −
+  h11` is exact.
+* Mixer, `z_f = w s1 + (1−w) s2 + b`, `w = σ(W)`: `z_W = (s1−s2) w(1−w)`,
+  `z_WW = (s1−s2) w(1−w)(1−2w)`, `z_b = 1`, `z_bb = 0`.
+* End to end (A2): `dL_f/dz_f = e_f = p_f − [bit==0]`; `dz_f/dz1 = w·[|z1| < zm]
+  + (1−w)·[|z2| < zm]·(NB−1)/(2·LIM)·(z_c1 − z_c0)·[|z1| < LIM]` and
+  `dz_f/dz_cj = (1−w)·[|z2| < zm]·share_j·[|z_cj| < ln 65535]`, the
+  brackets the clips of the stretch functions.  The blended descent
+  gradient is `gd = ((1−E2E) e_o − E2E·ef) z'`, `ef = e_f·dz_f/dz_cell`.
+
+`gradtest.cpp` (`gt.sh`) checks all of it numerically: it builds the coder
+with `-DGRAD_TEST`, hooks what `Accum` receives, and compares with
+double-precision finite differences of `CL` for order-1 cells at three
+ages on both bits with and without an end-to-end error, for the mixer,
+and for the chain of `main()` through real `SSE_Ctr` and `Mix2` objects
+(196 checks; the counter terms agree to ~10⁻⁷).  It found two errors in
+the end-to-end chain, both at the clips: the order-1 logit beyond the
+mixer's input clip (±11.5) still carried the weight `w` although the
+clamped input has no derivative there, and an SSE cell beyond the SSE's
+logit clip would still have received its interpolation share.  Both are
+fixed (`Mix2::dzf_dz1/dzf_dz2`, `SSE_Ctr::sh0/sh1`); the corpus sizes did
+not change (the cases are rare: at the tuned constants an SSE cell's
+logit cannot reach its clip at all, since `mwMin` bounds `p_mix`).  The
+test also prints the gap between the shared u/v curvature and the exact
+one, typically a factor 0.5–2, which is the approximation the tuned R
+normalization absorbs.
 
 ## 7. Cost, and how to trade it
 

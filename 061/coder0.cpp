@@ -152,6 +152,16 @@ typedef unsigned long long qword;
 // 1 byte plus padding, and the reduced cells are 44/20 B instead of the
 // intended 36/12 B (SSE-DESIGN.md sec.3.6).  MSVC (and clang in MS mode)
 // ignore the standard spelling and need the msvc:: one.
+// gradtest.cpp (gt.sh) builds the coder with -DGRAD_TEST and checks every
+// gradient/curvature term handed to ParamUpdater against finite
+// differences; the hook records them and is empty otherwise.
+#ifdef GRAD_TEST
+ void grad_test_hook( float gd, float gr, float hc );
+ #define GRAD_HOOK(gd,gr,hc) grad_test_hook(gd,gr,hc)
+#else
+ #define GRAD_HOOK(gd,gr,hc) ((void)0)
+#endif
+
 #ifdef _MSC_VER
  #define NUA [[msvc::no_unique_address]]
 #else
@@ -285,6 +295,7 @@ template<class cfg> struct ParamUpdater<1, cfg> {
   // w = weight of this observation (1 = a full event), scaling the loss.
   // Returns the weighted descent gradient (for the Nesterov look-ahead).
   INLINE float Accum( float gd, float gr, float hc, float w = 1.0f ) {
+    GRAD_HOOK( gd, gr, hc );
     float dp_inv = gd * w;
     float dp2_inv = (gr * gr) * w;
     float d2p_inv = hc * w;
@@ -884,11 +895,12 @@ int main( int argc, char** argv ) {
 
       // A2: e_f = p_f - [bit==0] = dL/dz_f; chain to the SSE output and the
       // order-1 logit (the SSE input also moves the interpolation point).
+      // dzf_dz1/dzf_dz2 are the mixer weights, 0 where its input clip binds.
       float e_f = pf - float(1 - bit);
-      float wv  = mix.weight();
-      float c_1 = E2E_NOCHAIN ? wv : wv + (1.0f - wv) * sse.dz2_dz1();
+      float c_2 = mix.dzf_dz2();
+      float c_1 = E2E_NOCHAIN ? mix.dzf_dz1() : mix.dzf_dz1() + c_2 * sse.dz2_dz1();
       o1[last_c][cxt].C_Update( bit, pr, 1.0f, e_f * c_1 );
-      sse.Update( bit, E2E_SSEI ? 1.0f/(1.0f+expf(-z2)) - float(1 - bit) : e_f * (1.0f - wv) );
+      sse.Update( bit, E2E_SSEI ? 1.0f/(1.0f+expf(-z2)) - float(1 - bit) : e_f * c_2 );
       mix.Update( bit );
 
       c<<=1; cxt+=cxt+bit;

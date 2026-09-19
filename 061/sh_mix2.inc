@@ -37,6 +37,7 @@ template<class CP> struct Mix2 {
   // per-query state, valid between Mix() and Update()
   Cell* c;
   float s1, s2, wv, p0;
+  float d1, d2;   // dz_final/dz1, dz_final/dz2 of the last Mix(): the weight, or 0 where the input clip binds
   float zm;       // |logit| bound of the inputs, = stf's clip [Pmin, 1-Pmin]
 
   static float stf( float p ) {
@@ -57,8 +58,11 @@ template<class CP> struct Mix2 {
     for( uint i=0; i<n; i++ ) { t[i].w.Init(W0); t[i].b.Init(0.0f); t[i].age = 0; }
   }
   // z1, z2 = logits of P(bit==0) of the two inputs; returns the mixed P(bit==0)
-  // weight of p1 in the last Mix() (0 when the mixer is off: final p = p2)
-  float weight() const { return CP::ON ? wv : 0.0f; }
+  // derivatives of the final logit w.r.t. the two inputs of the last Mix()
+  // (the A2 chain): w and 1-w, or 0 where the input clip binds; with the
+  // mixer off the final p is sq(z2): 0 and 1.
+  float dzf_dz1() const { return CP::ON ? d1 : 0.0f; }
+  float dzf_dz2() const { return CP::ON ? d2 : 1.0f; }
 
   float Mix( uint cx, float z1, float z2 ) {
     if( !CP::ON ) return sqf(z2);
@@ -66,6 +70,8 @@ template<class CP> struct Mix2 {
     s1 = clamp( z1, -zm, zm );
     s2 = clamp( z2, -zm, zm );
     wv = sqf( c->w.val );
+    d1 = ( z1 > -zm && z1 < zm ) ? wv : 0.0f;
+    d2 = ( z2 > -zm && z2 < zm ) ? 1.0f - wv : 0.0f;
     p0 = sqf( wv*s1 + (1.0f-wv)*s2 + c->b.val );
     return p0;
   }
