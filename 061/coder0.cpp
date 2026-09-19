@@ -100,6 +100,22 @@
 // -------------------------------------------------------------
 // (OPT_UV2X2 is the only variant carried: the 2x2 (u,v) solve is unconditional in
 // Counter::C_Update; OPT_MKCPL was dropped with the template refactor.)
+// -------------------------------------------------------------
+// 061 (2026-09), from coder0_optimizer_improvements_v3.md; measurements in
+// SSE-DESIGN.md sec.6.11 (reference 235391/275195/512847 book1/wcc386/book1wcc):
+//   A1  per-cell update count (Counter: in the former pK slot, the caller
+//       passes pK to C_Update; Mix2: +4 B) and the young-cell step limit
+//       stepMax*(1 + AGA/(1 + age/B)), knobs *_AGAu/AGAm/AGAk/AGB, M0_AGAw/AGAb/AGB.
+//       S0 (mw, K, u/v ray) -472, M0 bias -498; C0 and the M0 weight: no.
+//   A2  end-to-end gradients: C_Update(bit, pK, g, ef) blends the cell's own
+//       error with the final coder's, chained through the mixer weight and
+//       the SSE interpolation (main() computes the chain).  C0_E2E = 1 -2161
+//       (with C0 rates x1.5 -2534), S0_E2E = 0.25 -137.  The stack -3781.
+//   A3  hypergradient on the stage rates: loses at every setting, removed.
+//   F4  NW after the 2x2 solve: +112 alone, -63 vs. the stack; off.
+//   F13 [[no_unique_address]] on the adaptation members (reduced cells 36/12 B).
+//   The compile-time diagnostics E2E_NOCHAIN / E2E_SSEI / E2E_HESS /
+//   UV_NW_AFTER below all measured worse and default to 0.
 
 // C library headers
 #include <stdlib.h>
@@ -193,7 +209,7 @@ static float rt_expf( float x ) { return expf(x); }
 // --- Configuration Struct Declarations ---
 
 #define def_Config(Config) struct Config {\
-  static const float momentum_D, momentum_R, NW, inc, stepMax, minVal,maxVal, grad1_clip, grad2_clip, D_clip, R_clip, R0, hbeta, efw; \
+  static const float momentum_D, momentum_R, NW, inc, stepMax, minVal,maxVal, grad1_clip, grad2_clip, D_clip, R_clip, R0; \
   static const int NAG; };
 
 // Parameter bundle of the order-1 model: C0_* constants from

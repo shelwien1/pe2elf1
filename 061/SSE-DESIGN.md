@@ -161,8 +161,10 @@ p0    = c[j].PredictF(),  p1 = c[j+1].PredictF()
 p_sse = sq( st(p0) + wt·(st(p1)-st(p0)) )      interpolated in the stretch domain
 ```
 
-`PredictF()` stores the cell's own `pK`, which its update needs.  The stage
-returns `p_sse` as is; blending it with `p_in` is the mixer's job (§3.7).
+The stage keeps the two cells' own predictions and hands each back to its
+`C_Update()` (the cell's former `pK` slot holds its update count, §6.11).
+The stage returns `p_sse` as is; blending it with `p_in` is the mixer's job
+(§3.7).
 Before the mixer existed the stage carried a fixed blend weight `W`, in the
 probability or the stretch domain; the stretch domain won at every `W`
 (§6.4), and that is the form the mixer generalizes.  Interpolating in the
@@ -314,7 +316,12 @@ cd IDX && perl import.pl sh_model-S0.idx ../export.!!! > t && mv t sh_model-S0.i
 
 `setp.pl` performs the same in-place edit of the `"!MAP!name!base\0pattern"`
 strings that `opt.pl` does, so a hand experiment measures exactly what the
-climb would.  The two builds are byte-identical only with FMA contraction
+climb would.  `IDX/optv.pl` (same arguments and export format) is the
+value-step climb of §6.11: it moves a `Number` knob by ±step of its value,
+from a quarter of it down to 1/256, and revisits knobs in the order of
+their last gain -- for the 18-20-bit rate knobs that reaches in a dozen
+evaluations what the bit flips of `opt.pl` mostly cannot (a high bit is a
+huge jump, a low one is noise).  The two builds are byte-identical only with FMA contraction
 and the unsafe float algebra off (`-ffp-contract=off
 -fno-unsafe-math-optimizations` in `gc.sh`): with knobs folded in one
 build and runtime in the other, gcc otherwise contracts, reassociates,
@@ -348,8 +355,9 @@ p2  = sse.Predict( cx, p1 );                           // SSE(p1)
 pf  = mix.Mix( M0_MakeCx(c2, c1, cxt), p1, p2 );       // learned blend (§3.7)
 p   = uint( clamp( pf * SCALE ) );
 bit = rc.rc_BProcess( p, bit );
-o1[c1][cxt].C_Update( bit );
-sse.Update( bit );
+e_f = pf - [bit==0];  w = mix.weight();                // final error (§6.11)
+o1[c1][cxt].C_Update( bit, p1, 1, e_f*(w + (1-w)*sse.dz2_dz1()) );
+sse.Update( bit, e_f*(1-w) );
 mix.Update( bit );
 ```
 
@@ -790,6 +798,112 @@ low one is noise), racing — aborting a run as soon as its size at a
 checkpoint exceeds the incumbent's — and visiting knobs in the order of
 their last measured effect.
 
+### 6.11 Young-cell step schedule, end-to-end gradients (2026-09)
+
+Follow-up to `coder0_optimizer_improvements_v3.md` (its A1, A2, A3, A4, F1,
+F4, F13), measured on the fully tuned pipeline (C0 retuned in place):
+reference **235391 / 275195 / 512847** (book1 / wcc386 / book1wcc, total
+1023433).  Every change is a knob that defaults to bit-identical output in
+both builds; deltas are in bytes on the three files, "total" over all
+three; the tuning build patched with `setp.pl`.
+
+**Cell age (A1).**  Every `Counter` and `Mix2` cell counts its updates.
+The counter keeps it in the former `pK` slot -- `PredictF()` no longer
+stores the prediction, the caller passes it back to `C_Update()` -- so the
+cells stay 96 B; the mixer cell grows 24 → 28 B.  The step limit becomes
+`stepMax·(1 + A/(1 + age/B))`: a fresh cell may move up to (1+A)× the
+tuned limit, a settled one is unchanged.  Knobs `AGAm`/`AGAk` (mw, K),
+`AGAu` (the u/v ray clip), `AGB` (B, in 1/16 updates) per counter stage,
+`AGAw`/`AGAb`/`AGB` on the mixer.  The v3 document had measured the S0
+version on Canterbury files; here:
+
+| schedule | book1 | wcc386 | book1wcc | total |
+|---|---|---|---|---|
+| S0 mw+K, A=1 B=4 | −82 | −8 | −61 | −151 |
+| S0 mw+K, A=3 B=4 | −144 | −12 | −114 | −270 |
+| S0 mw+K, A=6 B=4 | −152 | −14 | −132 | −298 |
+| S0 mw+K, A=3 B=16 | −163 | −16 | −135 | −314 |
+| S0 mw only, A=3 B=4 | −119 | −16 | −110 | −245 |
+| S0 K only, A=3 B=4 | −33 | −4 | −20 | −57 |
+| S0 u/v ray clip only, A=3 B=4 | −97 | +2 | −69 | −164 |
+| **S0 mw+K+u/v, A=3 B=16** | −279 | +2 | −195 | **−472** |
+| S0 mw+K+u/v, A=3 B=32 / B=64 | −273 / −252 | +7 / +10 | −178 / −152 | −444 / −394 |
+| S0 mw+K+u/v, A=6 B=32 | −165 | +13 | −91 | −243 |
+| C0 mw+K, A=1 B=4 / A=3 B=4 | −40 / −78 | +54 / +163 | +11 / +91 | +25 / +176 |
+| C0 mw / K / u alone, A=1 B=4 | −18 / −20 / −6 | +5 / +49 / +14 | −6 / +20 / +8 | −19 / +49 / +16 |
+| M0 weight, A=3 B=4 | −11 | +39 | +29 | +57 |
+| **M0 bias, A=3 B=4** | −43 | −217 | −238 | **−498** |
+| M0 bias, A=6 B=4 / A=3 B=8 / B=2 / B=1 | −48 / −44 / −41 / −36 | −191 / −217 / −217 / −215 | −209 / −239 / −237 / −234 | −448 / −500 / −495 / −485 |
+| S0 (A=3 B=16, three axes) + M0 bias (A=3 B=4) | −323 | −210 | −431 | −964 |
+
+The S0 schedule is a text gain (0.12%) and neutral on x86, the mixer-bias
+one an x86 gain (0.08%), and they add.  The order-1 cells and the mixer
+weight do not want it (their young cells are rare: 79% of C0 updates hit
+cells older than 256 events), and they still do not on the stack below
+(C0 mw −24, K +274, u +160, M0 weight +84).
+
+**End-to-end gradients (A2).**  A cell minimizes its own `−ln pK` while the
+coder pays `−ln p_final`.  With `e_f = p_final − [bit==0]` the gradient of
+the final loss w.r.t. a cell's logit output is `e_f · dz_f/dz_cell`:
+`(1−w)·wt_j` for an SSE cell (mixer weight `w` on the order-1 input, `wt_j`
+its interpolation share) and `w + (1−w)·(z_c1 − z_c0)·(NB−1)/(2·LIM)` for
+the order-1 cell (the second term: its prediction is also the SSE's index
+and moves the interpolation point).  `C_Update(bit, pK, g, ef)` takes that
+error and scales the parameter gradients by `((1−E2E)·e_own + E2E·ef) /
+e_own` -- the gradient direction of the blended objective, the curvature
+(and so the Newton normalization) staying the cell's own.  Knobs `C0_E2E`,
+`S0_E2E` (/256).
+
+| objective | book1 | wcc386 | book1wcc | total |
+|---|---|---|---|---|
+| S0 E2E = 0.25 / 0.5 / 1.0 | −13 / +50 / +924 | −39 / −71 / −79 | −85 / −101 / +629 | −137 / −122 / +1474 |
+| S0 E2E = 1.0, S0 NW ×2 | +258 | −95 | +66 | +229 |
+| C0 E2E = 0.25 / 0.5 | −74 / −148 | −202 / −408 | −286 / −580 | −562 / −1136 |
+| **C0 E2E = 1.0** | −339 | −676 | −1146 | **−2161** |
+| C0 E2E = 1.0, NWm / NWk / NWu / NWv ×1.5 | −407 / −344 / −400 / −377 | −680 / −718 / −621 / −714 | −1178 / −1216 / −1150 / −1223 | −2265 / −2278 / −2171 / −2314 |
+| C0 E2E = 1.0, all four NW ×1.5 / ×2 | −497 / −552 | −714 / −678 | −1313 / −1304 | −2524 / −2534 |
+| C0 E2E = 1.0 + S0 E2E = 0.25 / 0.5 | −355 / −295 | −710 / −739 | −1224 / −1232 | −2289 / −2266 |
+
+Training the order-1 cells on the final loss is the largest single item
+(0.2%), and it wants the C0 rates about 1.5× higher (the C0 `NW*` and
+step patterns were widened by two bits so the tuner can follow).  The SSE
+cells gain a little from a quarter of the final error and lose from all of
+it: their share `(1−w)·wt` is small, and with the curvature unchanged the
+step shrinks with it (raising their rates back does not recover it).
+
+**The stack** and the variants tried on it:
+
+| configuration | book1 | wcc386 | book1wcc | total |
+|---|---|---|---|---|
+| S0 schedule + M0 bias schedule + C0 E2E 1.0 with NW ×1.5 | −798 | −910 | −1718 | −3426 |
+| + S0 E2E = 0.25 | −833 | −971 | −1844 | **−3648** |
+| + C0 kMax 0.94 → 1.0 / 1.2 / 1.5 | −892 / −982 / −967 | −992 / −945 / −737 | −1897 / −1830 / −1413 | **−3781** / −3757 / −3117 |
+| `E2E_NOCHAIN`: order-1 chain = mixer weight only | −561 | −859 | −1489 | −2909 |
+| `E2E_SSEI`: SSE cells on the SSE output's own loss | −823 | −904 | −1745 | −3472 |
+| `E2E_HESS`: the E2E error also scales the curvature | −889 | −878 | −1556 | −3323 |
+| `UV_NW_AFTER` (F4): NW after the 2×2 solve; alone on the base | −755; +94 | −1009; −33 | −1821; +51 | −3585; +112 |
+| `UPD = 2` (proportional SSE update), floor 0 / 0.25 | −365 / −382 | −1043 / −1039 | −1783 / −1728 | −3191 / −3149 |
+
+The SSE-index term of the order-1 chain is worth 740 bytes; the SSE-only
+target, the end-to-end curvature (the exact Newton step of the final
+loss: it re-inflates the small-share cells' steps), F4 and the
+proportional update all lose.  The four variants stay in the source as
+compile-time diagnostics (default 0).
+
+**Hypergradient on the rates (A3), rejected.**  A stage-wide multiplier of
+NW per axis, moved by `exp(±ρ)` every 2^N updates against the sign of the
+summed `dL_{t+1}/dNW = dp_inv_{t+1} · D_t/(R_t+inc)` (the previous step
+of each cell, clip and box ignored).  On the −3781 stack: C0 ρ=0.01 N=4096
++1042, ρ=0.03 +1170, N=1024 +1262; S0 ρ=0.01 +861; M0 +8111; at ρ=0.0024
+N=65536 it is neutral (C0 +7, S0 +44).  It only hurts as it acts, on both
+files, so the code was removed.
+
+**Tuned result.**  `IDX/optv.pl` over the C0/S0/M0 rate, step, momentum,
+damping and seed knobs on top of the stack (objective book1 + wcc386 +
+book1wcc):
+
+TUNED_PLACEHOLDER
+
 ## 7. Cost, and how to trade it
 
 | | no SSE | SSE, defaults |
@@ -797,8 +911,9 @@ their last measured effect.
 | memory | ~6 MB | 2^24 cells × 96 B = 1.6 GB |
 | time, book1 | ~1.0 s | ~5.7 s |
 
-The stage does two full `Counter` predictions and updates per bit on top of
-the order-1 one, over a table that does not fit any cache.  About 0.7 s of
+(The mixer cell is 28 B since §6.11 added its update count.)  The stage
+does two full `Counter` predictions and updates per bit on top of the
+order-1 one, over a table that does not fit any cache.  About 0.7 s of
 the run is identity-initializing the table (row-major; the remainder is
 page faulting of the static storage).  The levers, with their measured cost from §6:
 
