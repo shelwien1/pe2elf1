@@ -34,10 +34,10 @@ Index Cx3
 # --- table geometry -----------------------------------------------------
 Number HBITS,  1,0!10110   # rows = min(Cx_Volume, 1<<HBITS); rows beyond are hashed
 Number NB,     1,2!00010   # interpolation buckets (columns) per row: 2 + pattern
-Number LIM,    1,0!011101000001   # |stretch(p_in)| clip, /256  (2048 = 8.0)
+Number LIM,    1,0!010110100100   # |stretch(p_in)| clip, /256  (2048 = 8.0)
 
 # --- cell init and update ------------------------------------------------
-Number T0,     1,0!0001000000000   # initial mass n0+n1 of a fresh cell, /256
+Number T0,     1,0!0000100110100   # initial mass n0+n1 of a fresh cell, /256
 Number ON,     1,0!1    # 0: stage bypassed (SSE(p) = p, no table)
 Number UPD,    1,0!01   # 1: both cells fully; 2: proportional (1-wt, wt), the interpolated update
 Number UPMIN,  1,0!00000000   # floor of the proportional weights, /256 (256 = same as UPD 1)
@@ -49,20 +49,20 @@ Const 0
 # counts / rates
 Number P0,     1,1!100101000001000
 Number P1,     1,0!01010000010001
-Number wr,     1,1!01001111010011
-Number wr1,    1,0!011111000000
-Number mw,     1,1!0100000000000
-Number K,      1,0!1000001100101010
+Number wr,     1,1!01001010101001
+Number wr1,    1,0!100100110100
+Number mw,     1,1!0100001000000
+Number K,      1,0!1000101101011101
 
 Const 0
 
 # K optimizer
-Number NWk,    1,1!001111111111000000
-Number RKinc,  1,1!001000011110011
-Number kStep,  1,1!11111111001001001
+Number NWk,    1,1!010000111110111100
+Number RKinc,  1,1!000111011010101
+Number kStep,  1,1!11111110001001011
 Number kMin,   1,1!1111100100000000000001
-Number kMax,   1,1!011010000111000
-Number M1_k,   1,1!10111011100001000000
+Number kMax,   1,1!011101010111111
+Number M1_k,   1,1!11010010111101001000
 Number M2_k,   1,1!000001100011100000
 Number G1_k,   1,0!001001110001000
 Number G2_k,   1,0!000000000000001
@@ -72,12 +72,12 @@ Number G4_k,   1,0!0001000011110110100
 Const 0
 
 # mw optimizer
-Number NWm,    1,1!00100000001001100000
-Number MWinc,  1,1!001000000000110
+Number NWm,    1,1!00100000101001101001
+Number MWinc,  1,1!000000100000000
 Number mwStep, 1,1!111111111101000001
 Number mwMin,  1,1!000011001000000
 Number mwMax,  1,1!111111111111111
-Number M1_m,   1,1!101100100010000000
+Number M1_m,   1,1!100001101111110001
 Number M2_m,   1,1!100000001000000
 Number G1_m,   1,0!001001110001000
 Number G2_m,   1,0!0000000100001
@@ -90,11 +90,11 @@ Number mwP0,   1,1!011101000001000
 Const 0
 
 # u (memory length) optimizer
-Number M1_u,   1,0!100100110000000000
+Number M1_u,   1,0!100101111001100000
 Number M2_u,   1,0!11101110100
-Number NWu,    1,0!001100000001110100000
+Number NWu,    1,0!001101110001000100101
 Number RUinc,  1,0!000000001010000000
-Number uStep,  1,0!11111111110110000
+Number uStep,  1,0!11100010000001000
 Number uMin,   1,0!0000000001
 Number uMax,   1,0!10000001101000000001000
 Number G1_u,   1,0!01001110001000
@@ -106,11 +106,11 @@ Number R0_u,   1,0!10010001
 Const 0
 
 # v (hit/miss asymmetry) optimizer
-Number M1_v,   1,0!110001110000000000
-Number M2_v,   1,0!010010011
-Number NWv,    1,0!00111100000101000000
+Number M1_v,   1,0!101011100010000000
+Number M2_v,   1,0!010100101
+Number NWv,    1,0!01000110011001110111
 Number RVinc,  1,0!00000000000000100000
-Number vStep,  1,0!1111111111001000
+Number vStep,  1,0!1101011011010010
 Number G1_v,   1,0!01001110001000
 Number G2_v,   1,0!000000000
 Number G3_v,   1,0!01000000000000000000
@@ -137,13 +137,13 @@ Const 0
 # stepMax_eff = stepMax*(1 + AGAx/(1 + age/B)) on the mw (AGAm) and K (AGAk)
 # steps and on the u/v ray clip (AGAu); AGAx/256, 0 = plain limit.
 # B = AGB/16 updates (64 = 4 updates).
-Number AGAu,   1,0!000000000000
-Number AGAm,   1,0!000000000000
-Number AGAk,   1,0!000000000000
-Number AGB,    1,0!0001000000
+Number AGAu,   1,0!000111111000
+Number AGAm,   1,0!010011101111
+Number AGAk,   1,0!001100000000
+Number AGB,    1,0!0100000000
 
 Const 0
 
 # A2 end-to-end objective: the parameter gradients use
 # (1-E2E)*(own error) + E2E*(final error chained to this cell), E2E/256.
-Number E2E,    1,0!000000000
+Number E2E,    1,0!001101000

@@ -19,6 +19,8 @@
 #   OPT_MINREL=x    stop refining a knob below a step of x*value (default 1/256)
 #   OPT_STEP0=x     first step as a fraction of the value (default 1/4)
 #   OPT_MAXPASS=n   passes over the knob list (default 8)
+#   OPT_ORDER=a,b,c knobs to climb first, in this order (e.g. the biggest
+#                   gains of a previous run); the rest follow alphabetically
 #
 # Progress goes to stdout, the best total so far to opttimes.!!! as in opt.pl.
 
@@ -67,6 +69,12 @@ $filt = $ARGV[2];
 @keys = grep { /_$/ } sort keys %adr;            # Number/Rate knobs only
 @keys = grep { /$filt/ } @keys if defined $filt;
 die "no Number map matches\n" if !@keys;
+if( $ENV{OPT_ORDER} ) {                          # these first, in the given order, then the rest
+  my %in = map { $_ => 1 } @keys;
+  my @first = grep { $in{$_} } split /,/, $ENV{OPT_ORDER};
+  my %f = map { $_ => 1 } @first;
+  @keys = ( @first, grep { !$f{$_} } @keys );
+}
 printf "%i knobs, %i bits: %s\n", scalar(@keys), eval { my $b=0; $b+=$len{$_} for @keys; $b }, join(" ", @keys);
 
 sub getv { my $k = shift; oct("0b".substr($exe_data,$adr{$k},$len{$k})); }

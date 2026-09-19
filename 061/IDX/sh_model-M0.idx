@@ -20,19 +20,19 @@ Index Cx
 
 # --- weight / bias seeds and boxes --------------------------------------
 Number ON,     1,0!1   # 0: mixer bypassed, final p = SSE output (the pre-mixer pipeline)
-Number W0,    1,0!011101111000101   # initial w (weight of p1), /32768
-Number Wclip, 1,0!100000000000   # |W| box in logit coordinates, /256
-Number Bclip, 1,0!01000000000   # |b| box, /256
+Number W0,    1,0!100100010011100   # initial w (weight of p1), /32768
+Number Wclip, 1,0!011110000000   # |W| box in logit coordinates, /256
+Number Bclip, 1,0!01011000000   # |b| box, /256
 Number Pmin,  1,0!101001111100011   # input probability clip, /(SCALE<<16)
 
 Const 0
 
 # --- ParamUpdater of W: newton.inc scalings ------------------------------
 Number M1w,   1,0!1111111111000010000   # momentum_D = 1 - M1w/(SCALE<<9)
-Number M2w,   1,0!10000011000100100   # momentum_R = 1 - M2w/(SCALE<<11)
-Number NWw,   1,0!1010110110010100001   # step gain NW = NWw/(SCALE<<9)
+Number M2w,   1,0!10000011100101010   # momentum_R = 1 - M2w/(SCALE<<11)
+Number NWw,   1,0!1010100000100111100   # step gain NW = NWw/(SCALE<<9)
 Number INCw,  1,0!111101001111000100   # Newton damping inc = INCw/(SCALE<<11)
-Number STEPw, 1,0!1111010010000000001   # step clip = STEPw/(SCALE<<8)
+Number STEPw, 1,0!1101001000011110001   # step clip = STEPw/(SCALE<<8)
 Number G2w,   1,0!0000110   # curvature clip = G2w/32
 Number DCw,   1,0!001000010   # D clip = DCw/16
 Number RCw,   1,0!000000001001000   # R clip = RCw/16
@@ -42,9 +42,9 @@ Const 0
 
 # --- ParamUpdater of the bias --------------------------------------------
 Number M1b,   1,0!1111111111110000000
-Number M2b,   1,0!10000011000100100
-Number NWb,   1,0!1111011001000000000
-Number INCb,  1,0!000011000000000100
+Number M2b,   1,0!10101100000010000
+Number NWb,   1,0!01111111111111111111
+Number INCb,  1,0!000010010000000011
 Number STEPb, 1,0!1111111111100110001
 Number G2b,   1,0!0100000
 Number DCb,   1,0!100000000
@@ -59,5 +59,5 @@ Const 0
 # stepMax_eff = stepMax*(1 + AGAx/(1 + age/B)) on W (AGAw) and b (AGAb);
 # AGAx/256, 0 = plain limit.  B = AGB/16 updates (64 = 4 updates).
 Number AGAw,   1,0!000000000000
-Number AGAb,   1,0!000000000000
+Number AGAb,   1,0!000111100000
 Number AGB,    1,0!0001000000
