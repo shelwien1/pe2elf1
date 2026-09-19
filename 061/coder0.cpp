@@ -4,8 +4,10 @@
 // rotated basis u=(ln wr0+ln wr1)/2 [memory length], v=(ln wr0-ln wr1)/2
 // [hit/miss asymmetry], each with a dedicated updater class (Config_U /
 // Config_V); relaxed wr box [0.00145, 0.3125]. Flat version: no globals,
-// no tiers, no cross-Hessian/2x2 -- diagonal Newton only, shared h00+h11
-// curvature for both axes. RTRL traces stay in linear wr space.
+// no tiers.  (Originally diagonal Newton only with the shared h00+h11
+// curvature; the 2x2 (u,v) solve with the R_uv cross EMA of 050c below is
+// now unconditional in Counter::C_Update.) RTRL traces stay in linear wr
+// space.
 // gcc 13.3 -O3 -march=haswell -ffast-math (linux, relative deltas only):
 //   book1        345650 -> 344968 (-682,  -0.197%)
 //   wcc386       313265 -> 311301 (-1964, -0.627%)
@@ -41,6 +43,9 @@
 // -------------------------------------------------------------
 // 050c results (book1/wcc386/book1_wcc386 vs 050b 345333/310485/657402):
 //   final: 344956/310144/656681 = -377/-341/-721; decode verified.
+//   (Order-1 model alone, before the SSE and mixer stages existed; with both
+//   stages bypassed the current coder gives 344899/309702, SSE-DESIGN.md
+//   sec.5.  The pipeline numbers are in log.txt.)
 // ON  (constants in sh_model-C0_h.inc retuned jointly for this stack):
 //   OPT_MWLGT  mw in logit coords, own x-box mwXlo/mwXhi   -210 isolated
 //   OPT_KLOG   K in ln coords, box = ln(kMin/kMax)          -96 isolated
@@ -57,8 +62,11 @@
 //   g_m*g_k channel is empty -- gradients already share dpK_dpmix/stP
 //   structure. Side finding: joint RAYCL on (mw,K) costs +131 by itself
 //   [OPT_MKRAY], mw/K saturate too often for a shared trust region).
-// d2p/ww note: with C0_G2_u=C0_G2_v=0 the u/v d2p channel clips to 0, so all
-//   n?_ww? traces stay dead code; reviving via G2>0 costs +110..+155 concat.
+// d2p/ww note: the u/v d2p channel is only dead while G2_u = G2_v = 0 and
+//   XHW*XHC = 0.  In the tuned constants C0_G2_v = 4 (clip 0.125) and
+//   S0_G2_u = 1 (clip 0.031), so the channel is live through h_d, and in C0
+//   the n?_ww? traces also feed the cross term h_x (XHC = 100).  Deleting the
+//   ww traces would need all of those set to 0, tested as one toggle.
 // Baseline recovery: -DOPT_MWLGT=0 -DOPT_KLOG=0 -DOPT_UV2X2=0 -DOPT_DIAMP=0
 //   plus 050b values of the 16 retuned constants (kept in .inc comments).
 // -------------------------------------------------------------
@@ -81,6 +89,17 @@ typedef unsigned short word;
 typedef unsigned int   uint;
 typedef unsigned char  byte;
 typedef unsigned long long qword;
+
+// [[no_unique_address]] for the Counter members that are empty when an
+// adaptation is off (ParamUpdater<0,..>, RTRLState<0>): without it each costs
+// 1 byte plus padding, and the reduced cells are 44/20 B instead of the
+// intended 36/12 B (SSE-DESIGN.md sec.3.6).  MSVC (and clang in MS mode)
+// ignore the standard spelling and need the msvc:: one.
+#ifdef _MSC_VER
+ #define NUA [[msvc::no_unique_address]]
+#else
+ #define NUA [[no_unique_address]]
+#endif
 
 #ifdef __GNUC__
  #define INLINE   __attribute__((always_inline))
@@ -285,13 +304,13 @@ template<class CP> struct Counter {
   // Context-adaptive parameters logic encapsulating both wr limits
   // UVROT: wr0_state tracks u = (ln wr0 + ln wr1)/2,
   //        wr1_state tracks v = (ln wr0 - ln wr1)/2
-  ParamUpdater<CP::A_WR, Config_U>  wr0_state;
-  ParamUpdater<CP::A_WR, Config_V>  wr1_state;
-  ParamUpdater<CP::A_MW, Config_MW> mw_state;
-  ParamUpdater<CP::A_K,  Config_K>  k_state;
+  NUA ParamUpdater<CP::A_WR, Config_U>  wr0_state;
+  NUA ParamUpdater<CP::A_WR, Config_V>  wr1_state;
+  NUA ParamUpdater<CP::A_MW, Config_MW> mw_state;
+  NUA ParamUpdater<CP::A_K,  Config_K>  k_state;
 
   // Real-Time Recurrent Learning helper states for {n0, n1} variables
-  RTRLState<CP::A_WR> rt;
+  NUA RTRLState<CP::A_WR> rt;
 
   static float st( const float p_ ) {
     float p = p_ * 0.999998f + 0.000001f;
