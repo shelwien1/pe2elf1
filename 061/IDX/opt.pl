@@ -1,11 +1,12 @@
-# opt.pl -- parameter optimizer for bmf.
+# opt.pl -- bit-flip parameter optimizer for coder0 (IDX/optv.pl is the
+# value-step one, better for the wide rate/momentum knobs).
 #
 # Flips the bits of the "!MAP!" pattern strings the tuning build embeds in the
 # executable, keeping whatever shrinks the corpus.  It does not parse or rebuild
 # anything: the patterns are patched in the binary in place, so one build serves
-# the whole hill-climb.  The build must therefore be the tuning build -- ./mk.sh
-# with no argument.  ./mk.sh release folds every parameter to a literal and
-# there is nothing left to find.
+# the whole hill-climb.  The build must therefore be the tuning build --
+# ./gc.sh tune -> ./coder0t.  ./gc.sh (shipping) folds every parameter to a
+# literal and there is nothing left to find.
 #
 #   perl IDX/opt.pl [corpus-file-list] [exe] [map-name-regex]
 #
@@ -13,22 +14,21 @@
 # the SSE stage alone); every map is still exported.  OPT_JOBS=N in the
 # environment compresses up to N corpus files at a time.
 #
-# corpus-file-list: text file, one .bmp path per line (default: opt.lst, and if
-# that is missing, the single file $deffile below).  Optimizing on one image
-# overfits it.  The corpus has to cover every coding path the parameters reach:
-# 1/8/24/32bpp, palette and truecolour, packed and unpacked -- a set that misses
-# 8bpp leaves the P1 and context-model parameters drifting while nothing
-# measures them.
+# corpus-file-list: text file, one path per line (default: opt.lst, and if
+# that is missing, the single file $deffile below).  Optimizing on one file
+# overfits it: keep a text file (book1) and a binary one (wcc386) in the
+# list, and confirm on a held-out file.
 #
-# exe: which binary to patch (default ./bmf).  Point it at a copy while tuning.
+# exe: which binary to patch (default ./coder0t).  Point it at a copy while
+# tuning.
 #
 # Results are written continuously to export.!!! (mdesc lines) and progress to
-# opttimes.!!!.  Fold them back into the .idx sources with:
-#   cd IDX && for f in bmf-*.idx; do perl import.pl $f ../export.!!! > t && mv t $f; done
-# then ./mk.sh to continue tuning, or ./mk.sh release to ship.
+# opttimes.!!!.  Fold them back into the .idx sources with IDX/import-all.sh
+# (or per file: cd IDX && perl import.pl sh_model-S0.idx ../export.!!! > t && mv t sh_model-S0.idx),
+# then ./gc.sh tune to continue tuning, or ./gc.sh to ship.
 
-$exe     = $ARGV[1] || "./bmf";
-$deffile = "testfiles/t24.bmp";
+$exe     = $ARGV[1] || "./coder0t";
+$deffile = "book1";
 $tmp     = "$exe.opt_tmp";
 $rndfrac = 0.75;   # bit is flipped in the initial random kick when rand>this
 
@@ -79,7 +79,7 @@ sub measure {
 #---------------------------------------------------------------- map table
 
 undef $/;
-open INP, "<$exe" or die "no $exe -- build it first (./mk.sh)\n";
+open INP, "<$exe" or die "no $exe -- build it first (./gc.sh tune)\n";
 binmode INP; $exe_data = <INP>; close INP;
 
 $lsum = 0;

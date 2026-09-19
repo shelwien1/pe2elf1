@@ -56,7 +56,11 @@ genmod $NOCONST $USENEW
 #    -ffast-math -- no errno, finite math -- stays); it costs nothing
 #    measurable.
 INCS="-std=c++23 -DNDEBUG -D_FILE_OFFSET_BITS=64"
-OPTS="-O3 -ffast-math -ffp-contract=off -fno-unsafe-math-optimizations -fomit-frame-pointer -fno-stack-protector -fstrict-aliasing -flto"
+#    -fno-builtin-logf -fno-builtin-expf: logf/expf are never recognized as
+#    builtins, so the shipping build cannot constant-fold one of a folded knob
+#    (MPFR) where the tuning build calls libm -- the F5 drift of
+#    SSE-DESIGN.md sec.4.1; every transcendental is a libm call in both.
+OPTS="-O3 -ffast-math -ffp-contract=off -fno-unsafe-math-optimizations -fno-builtin-logf -fno-builtin-expf -fomit-frame-pointer -fno-stack-protector -fstrict-aliasing -flto"
 ARCH="-march=$TARG -mtune=$TARG -m64"
 WARN="-Wno-format -Wno-unused-result -Wno-unused-variable -Wno-unused-but-set-variable"
 

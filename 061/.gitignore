@@ -8,3 +8,5 @@ book1wcc
 *.opt_tmp*
 opttimes.!!!
 export.!!!
+# .idx backups made by IDX/import-all.bat
+IDX/idx_*.rar

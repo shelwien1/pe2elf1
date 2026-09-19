@@ -211,7 +211,9 @@ static inline float clamp(float x, float min_val, float max_val) {
 // The volatile copy is the barrier: a plain static wrapper is inlined under
 // -O3/LTO and folded anyway (seen on KYHI = ln(kMax) at kMax = 1.0311, where
 // libm's logf is an ulp below MPFR's: the K box wall differed and the
-// streams drifted by a byte).
+// streams drifted by a byte).  gc.sh also passes -fno-builtin-logf
+// -fno-builtin-expf, which closes the same hole for any logf/expf of a
+// constant elsewhere; the wrappers keep it closed under other build lines.
 static float rt_logf( float x ) { volatile float v = x; return logf(v); }
 static float rt_expf( float x ) { volatile float v = x; return expf(v); }
 
@@ -716,26 +718,25 @@ template<class CP> struct Counter {
 #include "sh_SSE2.inc"
 #include "sh_mix2.inc"
 
-#ifdef USE_NEW
-#if USE_NEW
-#define constexpr
-#endif
-#endif
-
 // Cell types and table sizes of the two stages, then the generated structs
 // that hold their Table() storage: S0_T::S0_tbl / M0_T::M0_tbl are fixed
 // arrays in the shipping build and pointers allocated by S0_Init()/M0_Init()
-// in the tuning build.
+// in the tuning build.  The size helpers are constant expressions in the
+// shipping build (they size the arrays); in the tuning build the knobs they
+// read are runtime values, so there they are plain functions.
+#if defined(USE_NEW) && USE_NEW
+#define TBL_CONSTEXPR
+#else
+#define TBL_CONSTEXPR constexpr
+#endif
 typedef Counter<CP_S0> SSE_Cell;
-static constexpr qword sse_table_cells( qword volume ) {
+static TBL_CONSTEXPR qword sse_table_cells( qword volume ) {
   return CP_S0::ON ? sse_rows( volume, CP_S0::HBITS, sse_nb_clamp(CP_S0::NB) ) * qword(sse_nb_clamp(CP_S0::NB)) : 1;
 }
 typedef Mix2<CP_M0>::Cell Mix2_Cell;
-static constexpr uint mix_table_ctx( qword volume ) {
+static TBL_CONSTEXPR uint mix_table_ctx( qword volume ) {
   return CP_M0::ON ? mix_rows( volume ) : 1;
 }
-
-#undef constexpr
 
 #include "MOD/sh_model-S0_h.inc"
 #include "MOD/sh_model-M0_h.inc"
@@ -820,7 +821,7 @@ int main( int argc, char** argv ) {
       // -DTRACE_P: per-bit trace of (p1, p2, pf, p) as floats to $TRACE_P, to
       // find the first divergent bit between two builds (SSE-DESIGN.md sec.4.1)
       { static FILE* trf = fopen( getenv("TRACE_P") ? getenv("TRACE_P") : "trace.bin", "wb" );
-        float v[4] = { p1, p2, pf, float(p) }; fwrite( v, 4, 4, trf ); }
+        float v[4] = { p1, p2, pf, float(p) }; if( trf ) fwrite( v, 4, 4, trf ); }
 #endif
       
       bit = rc.rc_BProcess( p, bit );

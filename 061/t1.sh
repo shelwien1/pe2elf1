@@ -7,8 +7,11 @@
 #
 # For every file: compress to <file>.1, decompress to <file>.2, compare the
 # md5 of the original and the decoded copy, print size and timings, and
-# finish with a log.txt-style summary line.  Exit status is non-zero if any
-# roundtrip fails.
+# finish with a log.txt-style summary line.  When the other build is also
+# present (./coder0t next to ./coder0 or vice versa) the file is compressed
+# with it too and the two streams compared: the shipping and the tuning
+# build must be byte-identical (IDX-FORMAT.md sec.1, SSE-DESIGN.md sec.4.1).
+# Exit status is non-zero if any roundtrip fails or the builds differ.
 
 cd "$(dirname "$0")"
 
@@ -25,6 +28,13 @@ fi
 
 now() { date +%s.%N; }
 
+# the other build, for the identity check
+OTHER=
+case "$EXE" in
+  ./coder0)  [ -x ./coder0t ] && OTHER=./coder0t ;;
+  ./coder0t) [ -x ./coder0 ]  && OTHER=./coder0 ;;
+esac
+
 fail=0
 summary=""
 total=0
@@ -37,6 +47,11 @@ for f in "$@"; do
   sz=$(wc -c < "$f.1")
   tc=$(echo "$t1 - $t0" | bc); td=$(echo "$t2 - $t1" | bc)
   if [ "$m1" = "$m2" ]; then st=OK; else st=FAIL; fail=1; fi
+  if [ -n "$OTHER" ]; then
+    "$OTHER" c "$f" "$f.1o"
+    if cmp -s "$f.1" "$f.1o"; then st="$st builds-identical"; else st="$st BUILDS-DIFFER"; fail=1; fi
+    rm -f "$f.1o"
+  fi
   printf "%-10s %8d -> %8d  c=%6.3fs d=%6.3fs  md5 %s %s\n" "$f" "$(wc -c < "$f")" "$sz" "$tc" "$td" "$m1" "$st"
   summary="$summary$(printf '%-8s %7d %6.3fs  ' "$f" "$sz" "$tc")"
   total=$((total + sz))

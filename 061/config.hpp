@@ -166,13 +166,18 @@ set W1     = clamp(CP_NAME::W1_raw, 0.0f, 1.0f);
 set M = float(CPX(mw))/SCALE;
 set K = float(CPX(K))/SCALE;
 
-// LOGWR/UVROT seeds and log-space box (dynamic init, order matters)
-set LW0   = rt_logf(CP_NAME::W0);
-set LW1   = rt_logf(CP_NAME::W1);
+// LOGWR/UVROT seeds and log-space box (dynamic init, order matters).
+// Everything that goes through a log is floored first: the optimizer may
+// set a rate or a box edge to 0, and log(0) = -inf would seed every cell
+// with -inf (IDX-FORMAT.md sec.5: consumers clamp).  No-ops at the tuned
+// values.
+#define CP_LOGMIN (1.0f/(1<<24))
+set LW0   = rt_logf(fmaxf(CP_NAME::W0, CP_LOGMIN));
+set LW1   = rt_logf(fmaxf(CP_NAME::W1, CP_LOGMIN));
 set UV_U0 = 0.5f*(CP_NAME::LW0+CP_NAME::LW1);   // mean log-decay seed
 set UV_V0 = 0.5f*(CP_NAME::LW0-CP_NAME::LW1);   // hit/miss asymmetry seed
-set UVLO  = rt_logf(CP_NAME::Config_U::minVal);
-set UVHI  = rt_logf(CP_NAME::Config_U::maxVal);
+set UVLO  = rt_logf(fmaxf(CP_NAME::Config_U::minVal, CP_LOGMIN));
+set UVHI  = rt_logf(fmaxf(CP_NAME::Config_U::maxVal, CP_LOGMIN));
 set UV_VH = 0.5f*(CP_NAME::UVHI-CP_NAME::UVLO)*(float(CPX(UVH))/1024);   // |v| bound
 
 set CXW   = float(CPX(CXW))/1024;
@@ -182,14 +187,18 @@ set XHC   = float(CPX(XHC))/(1<<5);
 set iStepU = 1.0f/(float(CPX(uStep))/(SCALE<<8));
 set iStepV = 1.0f/(float(CPX(vStep))/(SCALE<<8));
 
-set MWspan = CP_NAME::Config_MW::maxVal - CP_NAME::Config_MW::minVal;
-set MWs0   = (CP_NAME::M - CP_NAME::Config_MW::minVal) / CP_NAME::MWspan;
+// mw box and logit seed: a seed on or beyond the box edge (mw >= mwMax,
+// mw <= mwMin, or an empty box) would give MWX0 = log(<= 0) = NaN and every
+// cell a NaN mw; clamp the seed inside as SSE_Ctr::Init does for q0.
+set MWspan = fmaxf(CP_NAME::Config_MW::maxVal - CP_NAME::Config_MW::minVal, 1.0f/4096);
+set MWs0   = clamp((CP_NAME::M - CP_NAME::Config_MW::minVal) / CP_NAME::MWspan, 1.0f/4096, 1.0f-1.0f/4096);
 set MWX0   = rt_logf(CP_NAME::MWs0/(1.0f-CP_NAME::MWs0));
 set MWXLO  = float(CPX(mwXlo) - 8192)/1024;   // signed
 set MWXHI  = float(CPX(mwXhi) - 8192)/1024;   // signed
-set KY0    = rt_logf(CP_NAME::K);
-set KYLO   = rt_logf(CP_NAME::Config_K::minVal);
-set KYHI   = rt_logf(CP_NAME::Config_K::maxVal);
+set KY0    = rt_logf(fmaxf(CP_NAME::K, CP_LOGMIN));
+set KYLO   = rt_logf(fmaxf(CP_NAME::Config_K::minVal, CP_LOGMIN));
+set KYHI   = rt_logf(fmaxf(CP_NAME::Config_K::maxVal, CP_LOGMIN));
+#undef CP_LOGMIN
 
 set AGAu   = float(CPX(AGAu))/256;
 set AGAm   = float(CPX(AGAm))/256;

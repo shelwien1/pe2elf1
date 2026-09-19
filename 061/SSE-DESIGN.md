@@ -300,8 +300,10 @@ Number P0 … mwXhi             # the cell counter constants, same meaning as C0
 * **Frozen lines** (`!` prefix, IDX-FORMAT.md §10) keep knobs the code never
   reads out of the search space: `P0`/`P1` (cells are initialized per bucket)
   and `G1_*` (`grad1_clip` is never used) in the S0 file, and the constants of
-  the rejected proposals in the C0 file.  A first `opt.pl` pass spent a
-  quarter of its evaluations on them before they were frozen.
+  the rejected proposals and `G1_u`/`G1_v` in the C0 file.  A first `opt.pl`
+  pass spent a quarter of its evaluations on them before they were frozen.
+  (The `!` had been missing from 29 of those lines until 061: the tuning
+  build carried 189 patchable knobs, 160 of which the coder reads.)
 
 ### 4.1 Tuning workflow on Linux
 
@@ -340,7 +342,14 @@ set `C0_leak2` above 1, the RTRL traces of long-lived cells overflowed to
 inf, and `clip()` of inf/NaN under `-ffinite-math-only` differs between
 the builds.  `-DTRACE_P` writes the per-bit `(p1, p2, pf, p)` of a build
 to `$TRACE_P`; comparing two such traces gives the first divergent bit,
-and a per-update dump of that cell the field.  `opt.pl` gained an optional map-name regex (third argument) and
+and a per-update dump of that cell the field.  `t1.sh` now performs the
+identity check itself whenever both executables are present (each corpus
+file is compressed with the other build and the streams compared), and
+`gc.sh` passes `-fno-builtin-logf -fno-builtin-expf` so no `logf`/`expf`
+of a constant can be folded in either build.  The seeds that go through
+a log or a logit (`LW0/LW1`, `UVLO/UVHI`, `KY0/KYLO/KYHI`, `MWX0`) are
+floored or clamped first: a knob at 0 or a `mw` seed outside its box used
+to seed every cell with -inf or NaN.  `opt.pl` gained an optional map-name regex (third argument) and
 `OPT_JOBS` for compressing the corpus files in parallel; it treats a coder
 that did not exit cleanly as a failed measurement (a crashed or OOM-killed
 run leaves a short output behind, which used to count as an improvement).
