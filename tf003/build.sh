@@ -6,6 +6,7 @@
 #
 #   ./build.sh                      # Tangelo as the context model (the default)
 #   USE_PPMD=1 ./build.sh           # PPMD instead, for comparison
+#   TF_CHAIN=1 ./build.sh           # a second transformer fed the mixed distribution
 #   CXX=clang++ ./build.sh
 #   VERIFY="-DTRACK_VERIFY=32 -DTRACK_VERIFY_EVERY=200" ./build.sh
 #
@@ -32,7 +33,7 @@ TFDEFS="${TFDEFS:--DTF_TRAIN=0 -DTF_FP32=0}"
 VERIFY="${VERIFY:-}"
 OUT="${OUT:-coder0}"
 
-DEFS="-DUSE_PPMD=${USE_PPMD:-0}"
+DEFS="-DUSE_PPMD=${USE_PPMD:-0} -DTF_CHAIN=${TF_CHAIN:-0}"
 
 echo "$CXX -std=c++17 $CXXFLAGS $ARCH $TFDEFS $DEFS $VERIFY -fpermissive -Wno-format coder0.cpp -o $OUT"
 $CXX -std=c++17 $CXXFLAGS $ARCH $TFDEFS $DEFS $VERIFY \

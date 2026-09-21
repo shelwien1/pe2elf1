@@ -341,7 +341,11 @@ Ranked by expected gain per unit of work, with what each one needs.
    existing backward pass. This aligns the model with the deployed objective
    and with the prior it is now given. Larger change, larger expected gain on
    the mixed result - the −0.25 % that survived the mixer in `README.md` is
-   the symptom it treats.
+   the symptom it treats, and so is the chained transformer there
+   (`TF_CHAIN`): handed the mixed distribution as its prior, the same model
+   gets *worse* the further that prior drifts from the PPMD-quality one it
+   was trained on. A model trained on the prior it is deployed with is what
+   both experiments ask for.
 
 5. **Polish the head by search - section 6.** After any of the above, a
    coordinate-descent pass over the unembedding and its scales against the

@@ -45,6 +45,7 @@ done about it.
 ```sh
 ./build.sh                    # Tangelo as the context model (the default)
 USE_PPMD=1 ./build.sh         # PPMD instead, for comparison
+TF_CHAIN=1 ./build.sh         # a second transformer fed the mix (see below)
 ```
 
 One translation unit, and the Tangelo half needs no build machinery at all: it
@@ -98,6 +99,68 @@ changing a tensor value. coder0 runs on zmix's retrained
 1 802 bytes on `book1000` against 1 807 for the gen-7 blob, and 25 333 against
 25 396 on the 64 KB slice. `tfwc/README.md` has the numbers and how the
 converter was checked against the blobs zmix ships in both containers.
+
+## A second transformer, fed the mix
+
+An idea that had to be tried: take the mixed distribution, mix(context model,
+transformer), and hand it to a *second* instance of the transformer as its
+prior, with the same weights file. The transformer was trained to correct a
+PPMD-quality prior. The mix is a much better prior, so a second instance would
+be a learned SSE/APM stage with the whole context at its disposal, for the
+price of a second forward pass and no new weights. `-DTF_CHAIN=1`
+(`TF_CHAIN=1 ./build.sh`) builds it: a second `Transformer`, a second bank of
+mixers after it, and the byte is coded with the second mix. `TF2_WEIGHTS=file`
+gives the second instance different weights, `TF2_PRIOR_POW=a` tempers the
+prior it is handed (pᵃ, renormalised), and `-DTF_CHAIN=2` feeds it the context
+model's distribution instead of the mix - a plain ensemble, which is what a
+chain has to beat.
+
+It helps on a small file and hurts on a large one. Same weights in both
+instances, Tangelo as the context model unless it says PPMD:
+
+| | `book1000` | `book1wrt`[:64K] | `book1wrt` |
+| --- | ---: | ---: | ---: |
+| gen-7 | 1 807 | 25 396 | 167 692 |
+| gen-7, chained | **1 741** (−3.7 %) | **25 323** (−0.3 %) | 168 476 (+0.5 %) |
+| `t1lambda1` | 1 802 | 25 333 | 167 284 |
+| `t1lambda1`, chained | | **25 220** (−0.4 %) | 167 977 (+0.4 %) |
+| PPMD, gen-7 | 1 895 | 25 803 | |
+| PPMD, gen-7, chained | | **25 500** (−1.2 %) | |
+
+The second instance, on its own, is a *worse* model than the first, and gets
+worse as the file grows: 3.209 against 3.159 bits/byte at 64 KB, 3.063 against
+2.987 on the whole file. It was trained on how far to trust a PPMD prior, and
+the mix is sharper than that and keeps getting sharper as Tangelo and the
+mixer learn - so it over-trusts, and drifts further from the distribution it
+was trained on the longer the file runs. Early on any second opinion helps the
+mixers, which are still learning; later the second mixer can only partly
+discount an input that is confidently wrong. That the PPMD-prior column gains
+the most fits the same reading: its mix is the closest to what the model saw
+in training. Tempering the prior does not fix it (64 KB, gen-7: a=0.75 gives
+25 314, a=0.5 gives 25 343).
+
+Two more rows at 64 KB say where the gain that does exist comes from. The
+ensemble control - the same weights twice, both fed the context model, so the
+second instance predicts exactly what the first does - gives 25 375: the second
+mixer stage alone is worth 21 bytes. With *different* weights in the second
+instance (`TF2_WEIGHTS`, gen-7 first and zmix's `t1lambda1` second) the
+ensemble gives 25 228 and the chain 25 161 - better than either model alone
+(25 396 and 25 333), the best 64 KB result in this directory. Neither
+survives the whole file: 167 638 for the ensemble and 167 796 for the chain,
+against 167 284 for `t1lambda1` alone. Past the first hundred KB a second
+model costs more than the second mixer stage recovers, whichever prior it is
+fed, and the chain is again the worse of the two - its second instance alone
+is 3.028 bits/byte where the same weights fed the context model give 2.969.
+
+The cost is a second full transformer pass per byte - 28 s to 53 s on the 64 KB
+slice - and it cannot be batched with the first: the second instance's prior
+at byte *t* is the first instance's output at byte *t*, so its whole recurrent
+state depends on the first's. What would make the chain earn that is the
+training-side change the results point at: a second-stage model trained on
+the first stage's *mixed* output as its prior, over the same data, rather than
+the same weights asked to play both roles. That is a variant of retraining
+against the deployed prior (WEIGHTS.md, section 5, item 4), and it is not
+something this coder can do.
 
 ## Could the weights themselves be tuned for compression?
 

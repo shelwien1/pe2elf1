@@ -51,6 +51,9 @@ rem Context model (see the header of coder0.cpp): the default is the Tangelo
 rem model from this repository, run a byte at a time by journaled speculative
 rem execution (..\tangelo_bm.inc). -DUSE_PPMD=1 puts ppmd2.hpp back instead.
 rem
+rem -DTF_CHAIN=1 adds a second transformer instance fed the mixed distribution
+rem as its prior (see coder0.cpp); measured worse at full file size, off.
+rem
 rem Model switches (see the header of transformer.inc):
 rem   set tfdefs=-DTF_TRAIN=3          train the whole model online
 rem   set tfdefs=-DTF_LOAD_WEIGHTS=0   initialize the weights instead of loading

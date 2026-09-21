@@ -141,6 +141,47 @@ ALIGN(64) Rangecoder rc;
 ALIGN(64) UnifiedModel<Transformer> M;
 ALIGN(64) BinaryMixer mixer[32];
 
+// -DTF_CHAIN=1: a second instance of the transformer, same weights, whose prior
+// is not the context model's distribution but the MIXED one - what the first
+// instance and the context model agree on - and a second mixer after it. The
+// transformer was trained to correct a PPMD-quality prior; this hands it a far
+// better one and asks it to correct that instead, which makes it a learned
+// APM/SSE stage with the whole context at its disposal. It cannot share work
+// with the first instance (its prior at byte t is the first instance's output
+// at byte t), so it is a second full transformer pass per byte.
+#ifndef TF_CHAIN
+ #define TF_CHAIN 0
+#endif
+//   TF_CHAIN=1   the second instance's prior is the first mix (the chain)
+//   TF_CHAIN=2   its prior is the context model's, as for the first instance:
+//                a plain ensemble, which is what a chain has to beat
+// Environment: TF2_WEIGHTS names a different weights file for the second
+// instance (default: the first's); TF2_PRIOR_POW=a raises the prior fed to it
+// to the power a and renormalises - a<1 flattens a mix that is sharper than
+// the PPMD-quality prior the model was trained to correct.
+#if TF_CHAIN
+ALIGN(64) Transformer tf2;
+ALIGN(64) BinaryMixer mixer2[32];
+ALIGN(64) float tf2_probs[256];
+ALIGN(64) float tf2_prior[256];
+static float tf2_pow = 1.0f;
+
+// The prior the second instance is handed, tempered if asked.
+static const float* tf2_prior_of(const float* p, const char* cmap) {
+  if( tf2_pow==1.0f )
+    return p;
+  double sum = 0.0;
+  for( uint i = 0; i<256; i++ ) {
+    tf2_prior[i] = cmap[i] && p[i]>0.0f ? powf(p[i], tf2_pow) : 0.0f;
+    sum += tf2_prior[i];
+  }
+  float inv = float(1.0/(sum+1e-30));
+  for( uint i = 0; i<256; i++ )
+    tf2_prior[i] *= inv;
+  return tf2_prior;
+}
+#endif
+
 int main(int argc, char** argv) {
   if( argc<4 ) {
     fprintf(stderr,
@@ -211,6 +252,21 @@ int main(int argc, char** argv) {
       fprintf(stderr, "coder0: transformer disabled (%s)\n",
               wpath ? "alphabet does not fit the model" : "no weights file");
   }
+#if TF_CHAIN
+  if( tf.Ready() ) {
+    const char* w2 = getenv("TF2_WEIGHTS");
+    const char* wpath = w2 ? find_weights(w2)
+                      : (warg && is_null_device(warg)) ? 0 : find_weights(warg);
+    if( getenv("TF2_PRIOR_POW") )
+      tf2_pow = (float)atof(getenv("TF2_PRIOR_POW"));
+    if( (w2 && !wpath) || !tf2.Init(wpath, cmap, f_len) )
+      fprintf(stderr, "coder0: second transformer disabled\n");
+    else
+      fprintf(stderr, "coder0: second transformer instance (%s), fed the %s%s\n",
+              wpath ? wpath : "initialized", TF_CHAIN==1 ? "mixed distribution" : "context model",
+              tf2_pow!=1.0f ? " (tempered)" : "");
+  }
+#endif
 #if TF_TRAIN>=3
   fprintf(stderr, "coder0: whole transformer trained online (%d params, "
                   "lr %g, batch %d)\n", 5897145,
@@ -223,30 +279,46 @@ int main(int argc, char** argv) {
 
   for( uint m_idx = 0; m_idx<32; ++m_idx )
     mixer[m_idx].Init();
+#if TF_CHAIN
+  for( uint m_idx = 0; m_idx<32; ++m_idx )
+    mixer2[m_idx].Init();
+#endif
 
   uint history = 0;
 
-  // The two models' own code lengths, before mixing: what each would have
-  // cost on its own, in bits per byte. The mixed result is what gets written,
-  // but this is the number a change to one model shows up in undamped.
-  double tf_bits = 0.0, ctx_bits = 0.0;
+  // The models' own code lengths, before mixing: what each would have cost on
+  // its own, in bits per byte. The mixed result is what gets written, but this
+  // is the number a change to one model shows up in undamped.
+  double tf_bits = 0.0, ctx_bits = 0.0, tf2_bits = 0.0;
 
   Progress prog;
   prog.Init(f_len);
 
+  // Everything that predicts the NEXT byte happens at the end of an iteration
+  // (and once here, for the first byte): the two models, the first mix, and
+  // with TF_CHAIN the second transformer fed that mix, and the second mix. The
+  // distribution the byte is coded with is what the last of those produced.
+  uint ctx = history&31;
+  mixer[ctx].Mix(M.tf_probs_, M.ctx_probs_, cmap);
+  const float* final_probs = mixer[ctx].probs_;
+#if TF_CHAIN
+  // No byte has been coded yet, so the second instance has nothing to go on:
+  // its prediction for the first byte is the first mix itself.
+  memcpy(tf2_probs, mixer[ctx].probs_, sizeof(tf2_probs));
+  mixer2[ctx].Mix(tf2_probs, mixer[ctx].probs_, cmap);
+  final_probs = mixer2[ctx].probs_;
+#endif
+
   for( f_pos = 0; f_pos<f_len; f_pos++ ) {
     if( (f_pos&prog.mask)==0 )
       prog.Tick(f_pos);
-
-    uint ctx = history&31;
-    mixer[ctx].Mix(M.tf_probs_, M.ctx_probs_, cmap);
 
     // Final frequency calculation with safety bounds
     total = 0;
     float weight = 0.00f;
     for( i = 0; i<CNUM; i++ ) {
       if( cmap[i] ) {
-        float p = (1.0f-weight)*mixer[ctx].probs_[i]+weight*M.ctx_probs_[i];
+        float p = (1.0f-weight)*final_probs[i]+weight*M.ctx_probs_[i];
         freq[i] = (uint)(p*SCALE);
         if( freq[i]<1 )
           freq[i] = 1;
@@ -280,23 +352,52 @@ int main(int argc, char** argv) {
       putc(c, g);
     }
 
-    uint bit = (c>' ');
-    history = (history<<1)|bit;
-
     tf_bits  -= log2(M.tf_probs_[c]>1e-30f ? M.tf_probs_[c] : 1e-30f);
     ctx_bits -= log2(M.ctx_probs_[c]>1e-30f ? M.ctx_probs_[c] : 1e-30f);
+#if TF_CHAIN
+    tf2_bits -= log2(tf2_probs[c]>1e-30f ? tf2_probs[c] : 1e-30f);
+#endif
 
+    // The mixers learn from the byte, on the state their Mix() left for it.
+    mixer[ctx].Update(c);
+#if TF_CHAIN
+    mixer2[ctx].Update(c);
+#endif
+
+    uint bit = (c>' ');
+    history = (history<<1)|bit;
+    ctx = history&31;
+
+    // ... and everything predicts the next byte.
     M.UpdateCtx(c);
     M.UpdateTransformer(c);
-    mixer[ctx].Update(c);
+    mixer[ctx].Mix(M.tf_probs_, M.ctx_probs_, cmap);
+    final_probs = mixer[ctx].probs_;
+#if TF_CHAIN
+    // The second instance is fed the byte just coded and, as its prior over
+    // the next byte, the first mix - the pairing the first instance was
+    // trained on, with a better prior in the slot.
+    {
+      const float* p2 = tf2_prior_of(TF_CHAIN==1 ? mixer[ctx].probs_ : M.ctx_probs_, cmap);
+      if( !tf2.Ready() || !tf2.Predict(c, p2, tf2_probs) )
+        memcpy(tf2_probs, mixer[ctx].probs_, sizeof(tf2_probs));
+    }
+    mixer2[ctx].Mix(tf2_probs, mixer[ctx].probs_, cmap);
+    final_probs = mixer2[ctx].probs_;
+#endif
   }
 
   if( f_DEC==0 )
     rc.FinishEncode();
   prog.Done(f_len);
-  if( f_len )
-    fprintf(stderr, "coder0: alone, transformer %.4f bits/byte, context model %.4f bits/byte\n",
+  if( f_len ) {
+    fprintf(stderr, "coder0: alone, transformer %.4f bits/byte, context model %.4f bits/byte",
             tf_bits/f_len, ctx_bits/f_len);
+#if TF_CHAIN
+    fprintf(stderr, ", second transformer %.4f bits/byte", tf2_bits/f_len);
+#endif
+    fprintf(stderr, "\n");
+  }
   fclose(g);
   fclose(f);
 
