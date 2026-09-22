@@ -1,0 +1,156 @@
+
+Prefix C0
+Debug 1
+
+# Lines marked '!' are frozen (IDX-FORMAT.md sec.10): the coder no longer
+# reads them (AWIND/HBETA/EFISH/ALEAK/SMASS/MKCPL/BIASC constants of rejected
+# proposals, and grad1_clip which ParamUpdater never uses), so opt.pl and
+# optv.pl would only waste evaluations on them.  Values are kept as
+# documentation.  (Until 061 the '!' was missing from the rejected-proposal
+# block and G1_u/G1_v: 23 patchable knobs that could not change the output.)
+
+Const 1
+
+# only used with ADAPT_L=1
+Number LWw,    1,1!000001100000000011
+Number LWk,    1,1!111111111100100
+Number LWm,    1,1!001000000100000
+
+Number mwMax,  1,1!111111111111111
+
+Number G1_m,   1,0!001001110001000
+Number G1_k,   1,0!001001110001000
+Number G3_m,   1,0!1000000000000000000
+
+Const 0
+
+Number P0,     1,1!100110100001101
+Number P1,     1,0!01100000010001
+
+Const 0
+
+Number wr,     1,1!10010011011010
+Number wr1,    1,0!100111001010
+Number mw,     1,1!0110110111111
+Number K,      1,0!0100100111011111
+Number NWk,    1,1!011111000111001100
+Number RKinc,  1,1!000101001110001
+Number kStep,  1,1!0010111001011100010
+Number kMin,   1,1!0101010010000001000000
+Number kMax,   1,1!001110000001001
+
+Const 0
+
+Number NWm,    1,1!10101101000010100000
+Number MWinc,  1,1!000000000011010
+Number mwStep, 1,1!00111011111100010100
+Number mwMin,  1,1!000000000001100
+
+Const 0
+
+Number M1_m,   1,1!111111100010000000
+Number M2_m,   1,1!001111111000000
+
+Number M1_k,   1,1!11001000110010010000
+Number M2_k,   1,1!0000000010000010100
+
+Number G2_m,   1,0!0000000001000
+Number G2_k,   1,0!000000000000100
+
+Const 0
+
+Number stP_min,1,1!000000001001001
+
+Number leak1,  1,1!0111110000101101
+Number leak2,  1,1!0111101110000010
+
+Const 0
+
+Number mwP0,   1,1!100100110100001
+
+Const 0
+
+Number G3_k,   1,0!0010010001100000111
+                              
+Number G4_m,   1,0!0100000000110100010
+Number G4_k,   1,0!0000000000000000101
+
+Const 0
+
+# added from sh_model-C0_h.inc
+Number M1_u,  1,0!111001100010000000
+Number M2_u,  1,0!11111011110
+Number NWu,   1,0!001100001111000011000
+Number RUinc, 1,0!101101001000110100
+Number uStep, 1,0!0010000101111100100
+Number uMin,  1,0!1111110100
+Number uMax,  1,0!01100101100100000100000
+!Number G1_u,  1,0!01001110001000
+Number G2_u,  1,0!000000000
+Number G3_u,  1,0!01000000000000000000
+Number G4_u,  1,0!00000111111
+Number R0_u,  1,0!10010101
+
+Number M1_v,  1,0!111101111110101000
+Number M2_v,  1,0!000001111
+Number NWv,   1,0!01100100100100000000
+Number RVinc, 1,0!10110111000000000010
+Number vStep, 1,0!001010100110000000
+!Number G1_v,  1,0!01001110001000
+Number G2_v,  1,0!000000001
+Number G3_v,  1,0!01000000000000000000
+Number G4_v,  1,0!00011001101
+Number R0_v,  1,0!10111100
+
+Number UVH, 1,0!001010000010
+
+Const 0
+
+# added from sh_model-C0_h.inc
+!Number AWF, 1,0!010000000000
+!Number AWFo, 1,0!010000000000
+
+!Number HB_u, 1,0!01000000000
+!Number HB_v, 1,0!01000000000
+!Number HB_m, 1,0!01000000000
+!Number HB_k, 1,0!01000000000
+
+!Number EFW_u, 1,0!000000000
+!Number EFW_v, 1,0!000000000
+!Number EFW_m, 1,0!000000000
+!Number EFW_k, 1,0!000000000
+
+Number CXW, 1,0!10000100001
+Number XHW, 1,0!01110011000
+Number UVDET, 1,0!010100010
+Number XHC, 1,0!0110010000000
+!Number LKA, 1,0!000000000
+!Number LKB, 1,0!0100111111100
+!Number LKlo, 1,0!000000000
+!Number LKhi, 1,0!01111010111000
+!Number SMWm, 1,0!010000000000000
+!Number SMWk, 1,0!010000000000000
+!Number SM0, 1,0!010100000000000
+!Number MPW, 1,0!010000000000
+!Number CMK, 1,0!01000000000
+!Number MKDET, 1,0!011001101
+Number mwXlo, 1,0!111000001
+Number mwXhi, 1,0!0100010100111100
+!Number BWT, 1,0!000000000
+
+Const 0
+
+# A1 young-cell step schedule (coder0.cpp Counter::C_Update):
+# stepMax_eff = stepMax*(1 + AGAx/(1 + age/B)) on the mw (AGAm) and K (AGAk)
+# steps and on the u/v ray clip (AGAu); AGAx/256, 0 = plain limit.
+# B = AGB/16 updates (64 = 4 updates).
+Number AGAu,   1,0!000001100000
+Number AGAm,   1,0!011111101000
+Number AGAk,   1,0!000000000001
+Number AGB,    1,0!0000011000
+
+Const 0
+
+# A2 end-to-end objective: the parameter gradients use
+# (1-E2E)*(own error) + E2E*(final error chained to this cell), E2E/256.
+Number E2E,    1,0!100000000

@@ -1,0 +1,149 @@
+
+Prefix S0
+Debug 1
+
+# Lines marked '!' are frozen: SSE cells are initialized per bucket (InitN),
+# so P0/P1 are unused, and grad1_clip (G1_*) is never read by ParamUpdater.
+
+# ======================================================================
+# sh_model-S0.idx -- every tunable of the SSE/APM stage (sh_SSE2.inc).
+#
+# The stage is a table of Counter<CP_S0> cells: a row per context Cx
+# (below), a column per bucket of the quantized input probability, and
+# linear interpolation between the two nearest columns.  See SSE-DESIGN.md.
+#
+# The cell counter constants at the end have exactly the meaning of their
+# C0_* namesakes (config.hpp derives the same floats from either prefix)
+# and are seeded from IDX/sh_model-C0.idx; the optimizer moves them
+# independently of the order-1 model.
+# ======================================================================
+
+Const 0
+
+# --- row context: which bits of the byte history select the row ---------
+# Two indexes, combined in 64 bits by the coder (Cx*Cx3_Volume + Cx3) so the
+# generated int volumes never overflow; rows beyond HBITS are hashed anyway.
+Index Cx
+ c2: c2, &01011111    # byte before last (all off = order-1 SSE; bits tunable)
+ c1: c1, &00011111    # last byte
+ cx: cxt, b&00000000  # bit-tree node: b& merges node bits counted from the leading 1 (0 = keep)
+
+Index Cx3
+ c3: c3, &11111111    # third-last byte, low 5 bits (bits tunable)
+
+# --- table geometry -----------------------------------------------------
+Number HBITS,  1,0!10110   # rows = min(Cx_Volume, 1<<HBITS); rows beyond are hashed
+Number NB,     1,2!00010   # interpolation buckets (columns) per row: 2 + pattern
+Number LIM,    1,0!001001001011   # |stretch(p_in)| clip, /256  (2048 = 8.0)
+
+# --- cell init and update ------------------------------------------------
+Number T0,     1,0!0000010111011   # initial mass n0+n1 of a fresh cell, /256
+Number ON,     1,0!1    # 0: stage bypassed (SSE(p) = p, no table)
+Number UPD,    1,0!01   # 1: both cells fully; 2: proportional (1-wt, wt), the interpolated update
+Number UPMIN,  1,0!00000000   # floor of the proportional weights, /256 (256 = same as UPD 1)
+
+Const 0
+
+# --- cell counter parameters: same meaning as C0_*, seeded from C0 --------
+
+# counts / rates
+!Number P0,     1,1!100101000001000
+!Number P1,     1,0!01010000010001
+Number wr,     1,1!01001000011010
+Number wr1,    1,0!110111000010
+Number mw,     1,1!0010111010010
+Number K,      1,0!1001000010000011
+
+Const 0
+
+# K optimizer
+Number NWk,    1,1!001111101100000011
+Number RKinc,  1,1!000110010010100
+Number kStep,  1,1!10111001001000001
+Number kMin,   1,1!1111100100000000000001
+Number kMax,   1,1!011000000001110
+Number M1_k,   1,1!10110010110000100000
+Number M2_k,   1,1!011000000100000000
+!Number G1_k,   1,0!001001110001000
+Number G2_k,   1,0!000000000000001
+Number G3_k,   1,0!0010010001100000111
+Number G4_k,   1,0!0000000000000000110
+
+Const 0
+
+# mw optimizer
+Number NWm,    1,1!00101000000001000110
+Number MWinc,  1,1!000000100000000
+Number mwStep, 1,1!111111111111001000
+Number mwMin,  1,1!000100001000001
+Number mwMax,  1,1!111111111111111
+Number M1_m,   1,1!110011010001000000
+Number M2_m,   1,1!010101101001000
+!Number G1_m,   1,0!001001110001000
+Number G2_m,   1,0!0000000100001
+Number G3_m,   1,0!1000000000000000000
+Number G4_m,   1,0!0100000000110100010
+Number mwXlo,  1,0!100000100
+Number mwXhi,  1,0!0010111100011111
+Number mwP0,   1,1!011101000001000
+
+Const 0
+
+# u (memory length) optimizer
+Number M1_u,   1,0!011100011100000000
+Number M2_u,   1,0!00000011100
+Number NWu,    1,0!001111110110111010010
+Number RUinc,  1,0!001100000010000000
+Number uStep,  1,0!11100111100101000
+Number uMin,   1,0!0000110000
+Number uMax,   1,0!01011000010111000000000
+!Number G1_u,   1,0!01001110001000
+Number G2_u,   1,0!000000001
+Number G3_u,   1,0!01000000000000000000
+Number G4_u,   1,0!00001010000
+Number R0_u,   1,0!10000011
+
+Const 0
+
+# v (hit/miss asymmetry) optimizer
+Number M1_v,   1,0!101101000001000000
+Number M2_v,   1,0!010100011
+Number NWv,    1,0!01110100001101000000
+Number RVinc,  1,0!00000000000000100000
+Number vStep,  1,0!1111111011000001
+!Number G1_v,   1,0!01001110001000
+Number G2_v,   1,0!000000000
+Number G3_v,   1,0!01000000000000000000
+Number G4_v,   1,0!00010001100
+Number R0_v,   1,0!01000010
+Number UVH,    1,0!001110001010
+
+Const 0
+
+# UV2X2 cross terms, RTRL leakage
+Number CXW,    1,0!01111111111
+Number XHW,    1,0!10100110000
+Number UVDET,  1,0!000010000
+Number XHC,    1,0!0000000000000
+Number leak1,  1,1!0111110111010000
+Number leak2,  1,1!0110100100100000
+Number stP_min,1,1!000000000000000
+
+Const 0
+
+Const 0
+
+# A1 young-cell step schedule (coder0.cpp Counter::C_Update):
+# stepMax_eff = stepMax*(1 + AGAx/(1 + age/B)) on the mw (AGAm) and K (AGAk)
+# steps and on the u/v ray clip (AGAu); AGAx/256, 0 = plain limit.
+# B = AGB/16 updates (64 = 4 updates).
+Number AGAu,   1,0!001110011011
+Number AGAm,   1,0!011101100001
+Number AGAk,   1,0!010111110001
+Number AGB,    1,0!0100000000
+
+Const 0
+
+# A2 end-to-end objective: the parameter gradients use
+# (1-E2E)*(own error) + E2E*(final error chained to this cell), E2E/256.
+Number E2E,    1,0!011011011
