@@ -9,6 +9,16 @@ Debug 1
 # deleted; git history has their last values, and the rejections are
 # summarized in coder0.cpp's header.
 
+Const 0
+
+# --- cell context: which bits of the last byte, and the bit-tree node,
+# select the order-1 cell.  With every bit on this is the o1[256][256]
+# array it replaces (255 nodes: the node index starts at 1), simulated
+# exactly; the bits are tunable.
+Index Cx
+ c1: c1, &11111111    # last byte (bits tunable)
+ cx: cxt, b&00000000  # bit-tree node: b& merges node bits counted from the leading 1 (0 = keep)
+
 Const 1
 
 

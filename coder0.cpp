@@ -142,9 +142,9 @@ static const int mSCALE = SCALE-1;
 static const float iSCALE = 1.0f/SCALE;
 
 #include "sh_mapping.inc"
-#include "MOD/sh_model-C0_h.inc"
-// S0/M0 knobs, context masks and context builders (their Table() storage
+// C0/S0/M0 knobs, context masks and context builders (their Table() storage
 // comes with the _h.inc headers below, once the cell types are complete)
+#include "MOD/sh_model-C0_p.inc"
 #include "MOD/sh_model-S0_p.inc"
 #include "MOD/sh_model-M0_p.inc"
 
@@ -249,6 +249,8 @@ static SSE_Seeds sse_seeds( int nb, float lim, float K, float M, float mwP0, flo
 // type; in the tuning build it is a load-time value, so S0_T::S0_tbl is an
 // SSE_Tbl<CP_S0> that instantiates the row for every NB and dispatches on the
 // one in force (sh_SSE.inc; the S0 template picks the form on USE_NEW).
+typedef Counter<CP_C0> C0_Cell;
+#include "MOD/sh_model-C0_h.inc"   // C0_T: the order-1 cells, one per context (IDX Index Cx of sh_model-C0.idx)
 template<int NB> using SSE_Row = SSE<CP_S0, NB>;
 typedef Mix2<CP_M0> Mix2_Cell;
 
@@ -275,7 +277,7 @@ static TBL_CONSTEXPR qword sse_row_count( qword volume ) {
 static const uint CNUM = 256;
 
 ALIGN(64) Rangecoder rc;
-Counter<CP_C0> o1[256][256];
+C0_T C0;           // the order-1 cells: C0.C0_tbl[C0_MakeCx(..)]
 
 S0_T S0;           // the SSE rows: S0.S0_tbl[row]
 M0_T M0;           // the mixer cells: M0.M0_tbl[context]
@@ -294,7 +296,7 @@ static uint S0_Row( qword cx ) {
 }
 
 int main( int argc, char** argv ) {
-  uint f_DEC, i, j, c=0, f_len, f_pos, cxt, bit=0, p;
+  uint f_DEC, i, c=0, f_len, f_pos, cxt, bit=0, p;
   FILE* f;
   FILE* g;
 
@@ -333,9 +335,8 @@ int main( int argc, char** argv ) {
     rc.StartDecode(f);
   }
 
-  // Initialize Order-1 Predictor array
-  for( i=0; i<CNUM; i++) for( j=0; j<CNUM; j++ ) o1[i][j].Init();
-  S0.S0_Init(); M0.M0_Init();   // tuning build: allocate the tables
+  C0.C0_Init(); S0.S0_Init(); M0.M0_Init();   // tuning build: allocate the tables
+  for( i=0; i<uint(C0_Cx_Volume); i++ ) C0.C0_tbl[i].Init();
   for( uint r=0; r<S0_ROWS; r++ ) S0.S0_tbl[r].Init();   // row-major: the table is far bigger than any cache
   for( i=0; i<uint(M0_Cx_Volume); i++ ) M0.M0_tbl[i].Init();
 
@@ -352,7 +353,8 @@ int main( int argc, char** argv ) {
       // returns its interpolated logit z2, the mixer blends the two in the
       // stretch domain -- the same values as st(p1), st(p2) up to rounding,
       // without the five logf and the sq that produced and consumed p2.
-      Counter<CP_C0>::Pred pr = o1[last_c][cxt].PredictF();
+      uint ox = C0_MakeCx(last_c, cxt);                                                        // order-1 cell
+      Counter<CP_C0>::Pred pr = C0.C0_tbl[ox].PredictF();
       uint sx = S0_Row( qword(S0_MakeCx(c2, last_c, cxt))*S0_Cx3_Volume + S0_MakeCx3(c3) );   // SSE row
       uint mx = M0_MakeCx(c2, last_c, cxt);                                                 // mixer cell
       SSE_Pred<CP_S0> ps = S0.S0_tbl[sx].Predict( pr.z );
@@ -372,7 +374,7 @@ int main( int argc, char** argv ) {
       // pm.d1/pm.d2 are the mixer weights, 0 where its input clip binds;
       // ps.dzdz is the SSE's interpolation slope.
       float e_f = pm.p - float(1 - bit);
-      o1[last_c][cxt].C_Update( bit, pr, 1.0f, e_f * (pm.d1 + pm.d2 * ps.dzdz) );
+      C0.C0_tbl[ox].C_Update( bit, pr, 1.0f, e_f * (pm.d1 + pm.d2 * ps.dzdz) );
       S0.S0_tbl[sx].Update( bit, ps, e_f * pm.d2 );
       M0.M0_tbl[mx].Update( bit, pm );
 
@@ -387,7 +389,7 @@ int main( int argc, char** argv ) {
   }
 
   if( f_DEC==0 ) rc.FinishEncode();
-  S0.S0_Quit(); M0.M0_Quit();
+  C0.C0_Quit(); S0.S0_Quit(); M0.M0_Quit();
 
   fclose(g);
   fclose(f);

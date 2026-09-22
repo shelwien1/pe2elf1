@@ -65,3 +65,8 @@ book1          wcc386         book1wcc
 # vMax, wr1b, AGAv, AGBuv, E2Euv), each seeded with the value it used to
 # share, so the stream is the line above byte for byte; opt.pl now sees 14
 # more.
+
+# Counter: wr cache a local, counts and RTRL traces arrays (the recursion
+# and leaks vectorize); the order-1 table is an IDX Table() with context
+# masks (C0 c1 &11111111 x node), simulating o1[256][256].  All byte for
+# byte the line above.
