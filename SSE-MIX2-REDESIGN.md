@@ -54,6 +54,19 @@ two calls, and the cell holds nothing that is not model state.  The A2 chain
 accessors `dz2_dz1()`, `dzf_dz1()`, `dzf_dz2()` exist only to read that hidden
 state back out.
 
+### 1.4 The precedent
+
+The original coder already had the split this plan asks for
+(`freq_SSE1.inc` / `freq_SSE1_dbg.inc`).  `SSEii<SSEQuant, SSEInter, Width>`
+is one row with a compile-time bucket count: `SSE_Pred()` fills an
+`SSEii_updstr` that the caller keeps and hands back to `SSE_Update()`, and the
+row holds nothing but model state.  Its resizable debug version,
+`SSEj<int& Q, int& N>`, is the *table*: templated on references to the two
+runtime knobs (the trick IDX-FORMAT.md sec.8 later named `IDXP`), its `Init()`
+runs `switch(Q) { case 2: p = new SSEii<2>[N]; ... }` and every call switches
+on Q again to reach `((SSEii<Q>*)p)[i]`.  `SSEii_updstr` is this plan's
+`Pred`; `SSEj` is its `SSE_Tbl` (sec.2.4).
+
 ## 2. Target shape
 
 ### 2.1 `Mix2<CP>` -- one mixer context
@@ -79,48 +92,46 @@ template<class CP> struct Mix2 {
 
 The nested `Cell` disappears: `Mix2` *is* the cell, exactly as `Counter` is.
 
-### 2.2 `SSE<CP>` -- one row: NB buckets over the quantized input logit
+### 2.2 `SSE<CP,NB>` -- one row: NB buckets over the quantized input logit
 
 "Mapping one prediction to another" needs the two bracketing buckets, so the
-row, not the bucket, is the unit.
+row, not the bucket, is the unit.  `Counter<CP> c[NB]` needs a constant, so NB
+is the row's template parameter -- exactly as `SSEii<SSEQuant>` was -- and the
+`Pred` struct, which does not depend on NB, is defined once beside it so that
+every instantiation and the tuning build's dispatcher return the same type.
 
 ```cpp
-template<class CP> struct SSE {
-  Counter<CP> c[CP::NB];
+template<class CP> struct SSE_Pred {
+  typename Counter<CP>::Pred pr0, pr1;   // the two bracketing cells' predictions
+  int   j;                               // left bucket
+  float wt;                              // interpolation weight of c[j+1]
+  float z;                               // the output logit z0 + wt*(z1-z0)
+  float dzdz;                            // dz/dz_in, 0 where the input clip binds
+  float sh0, sh1;                        // dz/dz_cell: 1-wt, wt, or 0 where a cell's clip binds
+};
 
-  struct Pred {
-    typename Counter<CP>::Pred pr0, pr1;   // the two bracketing cells' predictions
-    int   j;                               // left bucket
-    float wt;                              // interpolation weight of c[j+1]
-    float z;                               // the output logit z0 + wt*(z1-z0)
-    float dzdz;                            // dz/dz_in, 0 where the input clip binds
-    float sh0, sh1;                        // dz/dz_cell: 1-wt, wt, or 0 where a cell's clip binds
-  };
+template<class CP, int NB> struct SSE {
+  static_assert( NB>=2 && NB<=SSE_NB_MAX, "SSE bucket count out of range" );
+  Counter<CP> c[NB];
 
-  void Init() { for( int j=0; j<CP::NB; j++ ) c[j].InitN( CP::SEEDS.a[j], CP::SEEDS.b[j] ); }
-  Pred Predict( float z_in ) const;        // the current Predict() body minus Row()
-  void Update( int bit, const Pred& pr, float ef );
+  void Init() { for( int j=0; j<NB; j++ ) c[j].InitN( CP::SEEDS.a[j], CP::SEEDS.b[j] ); }
+  SSE_Pred<CP> Predict( float z_in ) const;      // the current Predict() body minus Row()
+  void Update( int bit, const SSE_Pred<CP>& pr, float ef );
 };
 ```
 
-`sizeof(SSE<CP_S0>)` = 4 x 96 = 384 B with no padding; a row-major
+`sizeof(SSE<CP_S0,4>)` = 4 x 96 = 384 B with no padding; a row-major
 `Counter[rows*NB]` and `SSE[rows]` have the same bytes in the same order, which
 is what makes phase 1 below verifiable bit for bit.
 
-**NB becomes a compile-time constant.**  It is an array bound, and there is no
-way around that in the tuning build: the `const int&` trick of IDX-FORMAT.md
-sec.8 binds a runtime knob to a template parameter but cannot size an array,
-and `SSE_Dyn`'s answer (instantiate every NB in [2,16], pick one at `Init()`
-through a vtable) is the pointer-and-allocation design this plan removes.  So
-`NB` leaves `sh_model-S0.idx` and is set where the bundle is configured, next
-to `CP_CACHE_WR`:
-
-```cpp
-#define CP_NB 4          // coder0.cpp, before #include "config.hpp" for CP_S0
-enum { NB = CP_NB };     // config.hpp, in the CP_SSE block
-```
-
-Retuning NB means editing that line and rebuilding; the delivered value is 4.
+**NB stays a patchable knob.**  In the shipping build `CP_S0::NB` is a folded
+literal and `SSE<CP_S0, CP_S0::NB>` is simply the table's element type, as
+`SSE_Ctr<CP_S0, NB>` is today.  In the tuning build it is a load-time value,
+so the row cannot be the `Table()` element there; instead the *table* is a
+dispatcher that instantiates the row for every NB in [2, `SSE_NB_MAX`] and
+switches on the value -- sec.2.4.  `SEEDS` is sized `SSE_NB_MAX` in the
+bundle and filled for the NB in force, so one array serves every
+instantiation.
 
 ### 2.3 The bundles pick up the constants
 
@@ -128,22 +139,22 @@ Retuning NB means editing that line and rebuilding; the delivered value is 4.
 / `LIM, T0, UPMIN`:
 
 ```cpp
-enum { NB = CP_NB };
+static const int   NB;               // the knob, as now; sse_nb_clamp()ed where it is used
 static const int   UPD;              // iclamp(knob, 1, 2)
 static const float LIM;              // clamp(knob/256, 0.25, 16): the |stretch| clip, already clamped
 static const float ZMAX;             // rt_logf(65535): the cells' |logit| bound
 static const float QSCALE;           // (NB-1) / (2*LIM)
 static const float UPMIN;            // clamp(knob/256, 0, 1)
 static const float T0;               // clamp(knob/256, 1/256, 4096)
-static const SSE_Seeds<NB> SEEDS;    // per-bucket InitN counts: {a[NB], b[NB]}
+static const SSE_Seeds SEEDS;        // per-bucket InitN counts: {a[SSE_NB_MAX], b[SSE_NB_MAX]}, filled for NB
 ```
 
 `SEEDS` is the `a[j]`/`b[j]` loop of today's `SSE_Ctr::Init()` -- the identity
 init inverted through the cell's output map at the seed K and mw, mass T0 --
 moved into one small struct returned by one function and evaluated once at
 load, through `rt_expf` as now.  It is the last definition of the bundle, after
-`K`, `M`, `mwP0`, `LIM` and `T0`, so the dependency order the tuning build
-relies on is kept.
+`K`, `M`, `mwP0`, `LIM`, `T0` and `NB`, so the dependency order the tuning
+build relies on is kept.
 
 `config_mix2.hpp`:
 
@@ -169,19 +180,72 @@ the stack.  (The tuning build's other allocations are the IDX runtime's own:
 the `mapping`/`masking` descriptor tables that `sh_mapping.inc` builds for the
 patchable knobs.  They are not the coder's and are untouched by this plan.)
 
-`IDX/sh_model-S0.inc` and `-M0.inc`:
+The mixer table is a plain `Table()`, in `IDX/sh_model-M0.inc`:
 
 ```
-Table( SSE_Row,   %M%tbl, %M%Cx_Volume );     // was sse_table_cells( qword(Cx_Volume)*Cx3_Volume )
 Table( Mix2_Cell, %M%tbl, %M%Cx_Volume );     // was mix_table_ctx( Cx_Volume )
 ```
 
-with `typedef SSE<CP_S0> SSE_Row;` and `typedef Mix2<CP_M0> Mix2_Cell;` in
-`coder0.cpp`.  `Table()` already does the right thing per build (a fixed array
-sized by the constant-expression `_Volume` in the shipping build, a pointer
-allocated by `S0_Init()`/`M0_Init()` from the runtime `_Volume` in the tuning
-build, IDX-FORMAT.md sec.9); the only thing the coder adds is the element type.
-`tbl_n()` stays, since the generated code calls it.
+with `typedef Mix2<CP_M0> Mix2_Cell;` in `coder0.cpp`.  `Table()` already does
+the right thing per build (a fixed array sized by the constant-expression
+`_Volume` in the shipping build, a pointer allocated by `M0_Init()` from the
+runtime `_Volume` in the tuning build, IDX-FORMAT.md sec.9); the only thing the
+coder adds is the element type.  `tbl_n()` stays, since the generated code
+calls it.
+
+**The SSE table** cannot go through `Table( SSE_Row, ... )` in the tuning
+build: its element type depends on NB, a runtime value there.  This is the
+`SSEj` case of sec.1.4, and it gets the same answer, with the knob read from
+the bundle instead of bound as a reference parameter:
+
+```cpp
+// tuning build only: the S0 table, resizable in NB
+template<class CP> struct SSE_Tbl {
+  void* p; uint n; int nb;
+  void Init( uint rows );        // nb = sse_nb_clamp(CP::NB); switch( nb ) { case 2: p = new SSE<CP,2>[rows]; ... }
+  ~SSE_Tbl();                    // the matching delete[]
+  struct Ref {                   // what tbl[i] yields; the table keeps no per-query state
+    SSE_Tbl& t; uint i;
+    SSE_Pred<CP> Predict( float z ) const;   // switch( t.nb ) { case 2: return ((SSE<CP,2>*)t.p)[i].Predict(z); ... }
+    void Update( int bit, const SSE_Pred<CP>& pr, float ef );
+  };
+  Ref operator[]( uint i ) { return { *this, i }; }
+};
+```
+
+The S0 template declares the table through `def_Data` / `def_Init`, which
+`idx2inc.pl` copies verbatim into `S0_T` *after* its own `#define USE_NEW`, so
+the two forms select themselves:
+
+```
+def_Data
+#if USE_NEW
+  SSE_Tbl<CP_S0> %M%tbl;
+#else
+  SSE_Row<CP_S0::NB> %M%tbl[ %M%Cx_Volume ];      // template<int NB> using SSE_Row = SSE<CP_S0,NB>;
+#endif
+end_Data
+def_Init
+#if USE_NEW
+  %M%tbl.Init( tbl_n(%M%Cx_Volume) );
+#endif
+end_Init
+```
+
+The allocation is therefore still the generated `S0_Init()`'s -- the IDX
+table's, the one place the rule of this section allows -- and `main()` spells
+`S0.S0_tbl[cx].Predict(pr.z)` identically in both builds: a plain
+`SSE<CP_S0,4>&` in one, a `Ref` in the other.  `idx2inc.pl` is not touched;
+should a second table ever need the pattern it earns a `Table()` form of its
+own.  Two small consequences: `%M%_Quit()` has no `def_Quit` hook, so
+`SSE_Tbl` frees in its destructor, and `%M%_Size` does not count this table
+(nothing in the coder reads it).
+
+Against today's `SSE_Dyn`: no virtual interface and no separately allocated
+`Impl`; the dispatcher *is* the table rather than a global next to it; and the
+row underneath has no `Cell* t`, `ncx`, `vol` or `Row()`.  The per-call
+`switch` is on a load-time constant and exists in the tuning build only -- the
+shipping build has neither switch nor vtable, as now.
 
 `main()` then reads like the order-1 model already does:
 
@@ -206,9 +270,11 @@ m.Update( bit, pm );
 Gone from `coder0.cpp`: `sse_table_cells`, `mix_table_ctx`, `TBL_CONSTEXPR`,
 the `#if USE_NEW` choice of front end, the global `sse`/`mix` objects, both
 `Init(table, ...)` calls, the `Cx*Cx3_Volume + Cx3` 64-bit combination.  Gone
-from the .inc files: `SSE_Dyn`, `sse_rows`, `sse_nb_clamp`, `Row()`,
-`mix_rows`, `SSE_MAXCELLS_LOG`, `SSE_NB_MAX`, `MIX_MAXCTX_LOG`, and the three
-chain accessors (their values are now `Pred` fields).
+from the .inc files: `SSE_Dyn` (replaced by `SSE_Tbl`), `sse_rows`, `Row()`,
+`mix_rows`, `SSE_MAXCELLS_LOG`, `MIX_MAXCTX_LOG`, and the three chain
+accessors (their values are now `Pred` fields).  `SSE_NB_MAX` and
+`sse_nb_clamp()` stay: they bound the dispatcher's switch and clamp the knob
+into it.
 
 ### 2.5 No hash means the S0 index must fit
 
@@ -232,7 +298,8 @@ Index Cx
 ```
 
 That is the same row count the hash produces today, direct instead of 32:1
-shared.  Whether it compresses better is a measurement, not a given: the S0
+shared (at NB = 4; a tuner move on NB scales the table with it, which is one
+more reason the pattern lengths, not the tuner, must own the budget).  Whether it compresses better is a measurement, not a given: the S0
 rates were tuned on the colliding table.  A smaller start (`c2` and `c1` as
 today, no `c3`: 522240 rows, 200 MB) is the cheaper first data point.  The
 `Cx3` index and `S0_MakeCx3()` go in either case, and so does `HBITS`, which
@@ -264,14 +331,16 @@ Both already recorded in this session's history.
 
 ### Phase 1 -- mechanical, byte-identical
 
-1. `config.hpp` / `config_mix2.hpp`: add the sec.2.3 constants, `CP_NB`,
-   `SSE_Seeds`; drop `ON`, `HBITS`, the `NB` knob.
+1. `config.hpp` / `config_mix2.hpp`: add the sec.2.3 constants and
+   `SSE_Seeds`; drop `HBITS`.
 2. `sh_mix2.inc`: `Mix2` becomes the cell; `Pred`; `Init()`, `Mix()`,
    `Update()` with the bodies unchanged apart from where the state lives.
-3. `sh_SSE.inc`: `SSE<CP>` row; `Pred`; `Init()`, `Predict()`, `Update()`;
-   delete `SSE_Dyn` and the geometry helpers.
-4. IDX templates: `Table()` lines of sec.2.4.  `.idx`: drop `NB` and `HBITS`
-   (`ON` is already gone); **keep `Cx3` for now**.
+3. `sh_SSE.inc`: `SSE_Pred<CP>`, the `SSE<CP,NB>` row with `Init()`,
+   `Predict()`, `Update()`, and `SSE_Tbl<CP>` in place of `SSE_Dyn`; delete
+   the geometry helpers.
+4. IDX templates: the M0 `Table()` line and the S0 `def_Data`/`def_Init`
+   block of sec.2.4.  `.idx`: drop `HBITS` (`ON` is already gone, `NB`
+   stays); **keep `Cx3` for now**.
 5. `coder0.cpp`: sec.2.4, but with one temporary:
 
    ```cpp
@@ -280,7 +349,7 @@ Both already recorded in this session's history.
    SSE_Row& s = S0.S0_tbl[ S0_Row( qword(S0_MakeCx(..))*S0_Cx3_Volume + S0_MakeCx3(c3) ) ];
    ```
 
-   and the `Table()` for S0 sized by that row count for this phase.
+   and the S0 table sized by that row count for this phase.
 6. Verify: `verify.sh` identical to phase 0 on both builds; `t1.sh`; the
    probe shows 96 / 384 / 28; `-DC0_CACHE_WR=0`, `-DTRACE_P`, `-DGRAD_TEST`
    still compile.
@@ -316,7 +385,7 @@ available.
   same places, only returned instead of stored.
 - The `UPD` proportional update, the young-cell schedule in the mixer, the
   `ZMAX`/`ZM` clips and the zero-derivative rule where a clip binds.
-- Every knob except `NB` and `HBITS` (and, in phase 2, the `Cx3` index)
-  stays patchable; opt.pl's search space loses only those, on top of the two
-  `ON` bypasses already removed.
+- Every knob except `HBITS` (and, in phase 2, the `Cx3` index) stays
+  patchable, `NB` included; opt.pl's search space loses only that, on top of
+  the two `ON` bypasses already removed.
 - The shipping/tuning identity contract, and `gc.sh` / `t1.sh` as its test.
