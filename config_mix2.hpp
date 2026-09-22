@@ -20,6 +20,10 @@ struct CP_NAME {
   def_Config(Config_W)
   def_Config(Config_B)
   static const float W0, Wclip, Bclip, Pmin;
+  // what the mixer derives from them: the |logit| bound of its inputs (the
+  // [Pmin, 1-Pmin] clip in the stretch domain) and the seed of the weight
+  // logit -- W0 kept inside (0,1), stretched, clipped to the W box
+  static const float ZM, W0c, WX0;
   // A1 young-cell step schedule: stepMax*(1 + AGAx/(1 + age*AGiB)) on W (AGAw)
   // and b (AGAb); AGiB = 1/B with B = AGB/16 updates.
   static const float AGAw, AGAb, AGiB;
@@ -59,6 +63,9 @@ const float CP_NAME::W0    = float(CPX(W0)) / SCALE;
 const float CP_NAME::Wclip = float(CPX(Wclip)) / (1<<8);
 const float CP_NAME::Bclip = float(CPX(Bclip)) / (1<<8);
 const float CP_NAME::Pmin  = fmaxf( float(CPX(Pmin)) / (float(SCALE) * 65536.0f), 1.0f/(1<<24) );   // never 0: st() would be infinite
+const float CP_NAME::ZM    = rt_logf( (1.0f - CP_NAME::Pmin) / CP_NAME::Pmin );
+const float CP_NAME::W0c   = clamp( CP_NAME::W0, 1.0f/65536, 1.0f-1.0f/65536 );
+const float CP_NAME::WX0   = clip( rt_logf( CP_NAME::W0c/(1.0f-CP_NAME::W0c) ), CP_NAME::Wclip );
 const float CP_NAME::AGAw  = float(CPX(AGAw)) / 256;
 const float CP_NAME::AGAb  = float(CPX(AGAb)) / 256;
 const float CP_NAME::AGiB  = 16.0f / float(CPX(AGB) < 1 ? 1 : CPX(AGB));   // never divides by 0

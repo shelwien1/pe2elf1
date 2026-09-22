@@ -242,7 +242,7 @@ end_Data
 def_Init
 #if USE_NEW
   %M%tbl.Init( tbl_n(%M%Cx_Volume) );
-  %M%_Size += %M%tbl.Bytes();
+  %M%Size += %M%tbl.Bytes();      // %M% expands to S0_, so this is S0_Size
 #endif
 end_Init
 def_Quit

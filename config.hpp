@@ -59,12 +59,20 @@ struct CP_NAME {
   static const float E2E;
 
 #ifdef CP_SSE
-  // SSE stage (sh_SSE2.inc): table geometry and output knobs.  In the
-  // shipping build these are constant expressions -- NB is the template
-  // argument of SSE_Ctr -- in the tuning build they are runtime values that
-  // opt.pl patches, and SSE_Dyn dispatches on NB at Init().
-  static const int   NB, HBITS, UPD;
-  static const float LIM, T0, UPMIN;
+  // SSE stage (sh_SSE.inc): the knobs, clamped here so that the row only
+  // ever sees sane values (IDX-FORMAT.md sec.5), and what the row derives
+  // from them.  In the shipping build these are constant expressions -- NB
+  // is the row's template argument -- in the tuning build they are runtime
+  // values that opt.pl patches, and SSE_Tbl dispatches on NB at Init().
+  static const int   NB;               // buckets per row, the raw knob: sse_nb_clamp()ed where it is used
+  static const int   HBITS;            // log2 of the row cap (phase 1: today's hashed table)
+  static const int   UPD;              // 1: both bracketing cells get a full event; 2: proportional
+  static const float LIM;              // |stretch| clip of the input, in [0.25, 16]
+  static const float ZMAX;             // |logit| bound of the cells' outputs, = ln 65535
+  static const float QSCALE;           // buckets per unit stretch: (NB-1) / (2 LIM)
+  static const float UPMIN;            // floor of the proportional update weights, in [0, 1]
+  static const float T0;               // mass n0+n1 of a fresh cell, in [1/256, 4096]
+  static const SSE_Seeds SEEDS;        // InitN counts of bucket j, for the clamped NB
 #endif
 };
 
@@ -209,13 +217,18 @@ set E2E    = clamp( float(CPX(E2E))/256, 0.0f, 1.0f );
 #define set  const int CP_NAME::
 set NB    = CPX(NB);
 set HBITS = CPX(HBITS);
-set UPD   = CPX(UPD);
+set UPD   = CPX(UPD) < 1 ? 1 : CPX(UPD) > 2 ? 2 : CPX(UPD);
 #undef set
 #define set  const float CP_NAME::
-set LIM   = float(CPX(LIM)) / 256;     // |stretch| clip
-set T0    = float(CPX(T0)) / 256;      // initial cell mass
-set UPMIN = float(CPX(UPMIN)) / 256;   // floor of the proportional update weight
+set LIM    = clamp( float(CPX(LIM)) / 256, 0.25f, 16.0f );
+set ZMAX   = rt_logf( 65535.0f );
+set QSCALE = float(sse_nb_clamp(CP_NAME::NB)-1) / (2.0f*CP_NAME::LIM);
+set UPMIN  = clamp( float(CPX(UPMIN)) / 256, 0.0f, 1.0f );
+set T0     = clamp( float(CPX(T0)) / 256, 1.0f/256, 4096.0f );
 #undef set
+// the identity init of a fresh row (sse_seeds, coder0.cpp), last: it reads
+// K, M, mwP0, LIM, T0 and NB above
+const SSE_Seeds CP_NAME::SEEDS = sse_seeds( sse_nb_clamp(CP_NAME::NB), CP_NAME::LIM, CP_NAME::K, CP_NAME::M, CP_NAME::mwP0, CP_NAME::T0 );
 #endif
 
 #undef CPX

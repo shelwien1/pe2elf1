@@ -202,6 +202,32 @@ static inline float clamp(float x, float min_val, float max_val) {
 static float rt_logf( float x ) { volatile float v = x; return logf(v); }
 static float rt_expf( float x ) { volatile float v = x; return expf(v); }
 
+// SSE stage geometry the CP_S0 bundle needs, ahead of config.hpp: the bound
+// on the bucket counts the tuning build's dispatcher instantiates, the clamp
+// of the NB knob into it, and the per-bucket seeds of a fresh row -- the
+// identity init of sh_SSE.inc: bucket j at its own probability sq(s_j),
+// inverted through the cell's output map p = sq( K * st( q0*(1-mw) +
+// mwP0*mw ) ) at the seed K and mw, with total mass T0 so the first updates
+// move it at a controlled rate.  Evaluated once per bundle (rt_expf: not
+// constant-folded).
+#ifndef SSE_NB_MAX
+#define SSE_NB_MAX 16          // bucket counts instantiated by the dispatcher
+#endif
+static constexpr int sse_nb_clamp( int nb ) { return nb<2 ? 2 : nb>SSE_NB_MAX ? SSE_NB_MAX : nb; }
+
+struct SSE_Seeds { float a[SSE_NB_MAX], b[SSE_NB_MAX]; };   // InitN( a[j], b[j] ) of bucket j
+static SSE_Seeds sse_seeds( int nb, float lim, float K, float M, float mwP0, float T0 ) {
+  SSE_Seeds s = {};
+  for( int j=0; j<nb; j++ ) {
+    float s_j = -lim + float(j)*(2.0f*lim/float(nb-1));
+    float pm  = 1.0f/(1.0f+rt_expf( -(s_j / K) ));
+    float q0  = (pm - mwP0*M) / (1.0f - M);
+    q0 = clamp( q0, 1.0f/4096, 1.0f-1.0f/4096 );
+    s.a[j] = q0*T0; s.b[j] = (1.0f-q0)*T0;
+  }
+  return s;
+}
+
 
 // --- Configuration Struct Declarations ---
 
@@ -235,24 +261,30 @@ static float rt_expf( float x ) { volatile float v = x; return expf(v); }
 #include "sh_SSE.inc"
 #include "sh_mix2.inc"
 
-// Cell types and table sizes of the two stages, then the generated structs
-// that hold their Table() storage: S0_T::S0_tbl / M0_T::M0_tbl are fixed
-// arrays in the shipping build and pointers allocated by S0_Init()/M0_Init()
-// in the tuning build.  The size helpers are constant expressions in the
-// shipping build (they size the arrays); in the tuning build the knobs they
-// read are runtime values, so there they are plain functions.
+// Element types of the two tables, then the generated structs that hold them
+// (IDX-FORMAT.md sec.9).  M0_T::M0_tbl is a Table() of mixer cells: a fixed
+// array in the shipping build, a pointer allocated by M0_Init() in the tuning
+// build.  The SSE table's element is a row of NB cells and NB is a knob: in
+// the shipping build it is folded and SSE_Row<NB> is the array's element
+// type; in the tuning build it is a load-time value, so S0_T::S0_tbl is an
+// SSE_Tbl<CP_S0> that instantiates the row for every NB and dispatches on the
+// one in force (sh_SSE.inc; the S0 template picks the form on USE_NEW).
+template<int NB> using SSE_Row = SSE<CP_S0, NB>;
+typedef Mix2<CP_M0> Mix2_Cell;
+
+// Phase-1 temporary (SSE-MIX2-REDESIGN.md sec.3): the SSE table keeps
+// today's row count -- min(volume, 2^HBITS, 2^SSE_MAXCELLS_LOG/NB) -- and
+// today's hash from the row context onto it, so that the stream is provably
+// unchanged; phase 2 indexes the rows by the context directly.  A constant
+// expression in the shipping build (it sizes the array); in the tuning build
+// the knobs it reads are runtime values, so there it is a plain function.
 #if defined(USE_NEW) && USE_NEW
 #define TBL_CONSTEXPR
 #else
 #define TBL_CONSTEXPR constexpr
 #endif
-typedef Counter<CP_S0> SSE_Cell;
-static TBL_CONSTEXPR qword sse_table_cells( qword volume ) {
-  return sse_rows( volume, CP_S0::HBITS, sse_nb_clamp(CP_S0::NB) ) * qword(sse_nb_clamp(CP_S0::NB));
-}
-typedef Mix2<CP_M0>::Cell Mix2_Cell;
-static TBL_CONSTEXPR uint mix_table_ctx( qword volume ) {
-  return mix_rows( volume );
+static TBL_CONSTEXPR qword sse_row_count( qword volume ) {
+  return sse_rows( volume, CP_S0::HBITS, sse_nb_clamp(CP_S0::NB) );
 }
 
 #include "MOD/sh_model-S0_h.inc"
@@ -263,16 +295,17 @@ static const uint CNUM = 256;
 ALIGN(64) Rangecoder rc;
 Counter<CP_C0> o1[256][256];
 
-// USE_NEW comes from the generated IDX headers: 1 = tuning build (knobs are
-// runtime values, dispatch on NB), 0 = shipping build (NB folded).
-S0_T S0;           // SSE cell table
-M0_T M0;           // mixer cell table
-#if USE_NEW
-SSE_Dyn<CP_S0> sse;
-#else
-SSE_Ctr<CP_S0, sse_nb_clamp(CP_S0::NB)> sse;
-#endif
-Mix2<CP_M0> mix;   // final p = mix( order-1 prediction, SSE output )
+S0_T S0;           // the SSE rows: S0.S0_tbl[row]
+M0_T M0;           // the mixer cells: M0.M0_tbl[context]
+
+// Phase-1 temporary: today's hash of the row context onto the capped table
+// (the Row() of the former SSE_Ctr), identity when the contexts fit.
+static const qword S0_ROWS = sse_row_count( qword(S0_Cx_Volume)*S0_Cx3_Volume );
+static uint S0_Row( qword cx ) {
+  if( qword(S0_Cx_Volume)*S0_Cx3_Volume <= S0_ROWS ) return uint(cx);
+  uint h = uint( (cx * 0x9E3779B97F4A7C15ull) >> 32 );
+  return uint( (qword(h) * S0_ROWS) >> 32 );
+}
 
 int main( int argc, char** argv ) {
   uint f_DEC, i, j, c=0, f_len, f_pos, cxt, bit=0, p;
@@ -317,8 +350,8 @@ int main( int argc, char** argv ) {
   // Initialize Order-1 Predictor array
   for( i=0; i<CNUM; i++) for( j=0; j<CNUM; j++ ) o1[i][j].Init();
   S0.S0_Init(); M0.M0_Init();   // tuning build: allocate the tables
-  sse.Init( S0.S0_tbl, qword(S0_Cx_Volume)*S0_Cx3_Volume );
-  mix.Init( M0.M0_tbl, M0_Cx_Volume );
+  for( uint r=0; r<S0_ROWS; r++ ) S0.S0_tbl[r].Init();   // row-major: the table is far bigger than any cache
+  for( i=0; i<uint(M0_Cx_Volume); i++ ) M0.M0_tbl[i].Init();
 
   int last_c = 0, c2 = 0, c3 = 0;
 
@@ -334,29 +367,28 @@ int main( int argc, char** argv ) {
       // stretch domain -- the same values as st(p1), st(p2) up to rounding,
       // without the five logf and the sq that produced and consumed p2.
       Counter<CP_C0>::Pred pr = o1[last_c][cxt].PredictF();
-      float z1 = pr.z;
-      qword cx = qword(S0_MakeCx(c2, last_c, cxt))*S0_Cx3_Volume + S0_MakeCx3(c3);
-      float z2 = sse.Predict( cx, z1 );
-      float pf = mix.Mix( M0_MakeCx(c2, last_c, cxt), z1, z2 );
-      p = uint( clamp( pf*float(SCALE) ) );
+      uint sx = S0_Row( qword(S0_MakeCx(c2, last_c, cxt))*S0_Cx3_Volume + S0_MakeCx3(c3) );   // SSE row
+      uint mx = M0_MakeCx(c2, last_c, cxt);                                                 // mixer cell
+      SSE_Pred<CP_S0> ps = S0.S0_tbl[sx].Predict( pr.z );
+      Mix2_Cell::Pred pm = M0.M0_tbl[mx].Mix( pr.z, ps.z );
+      p = uint( clamp( pm.p*float(SCALE) ) );
 #ifdef TRACE_P
       // -DTRACE_P: per-bit trace of (p1, p2, pf, p) as floats to $TRACE_P, to
       // find the first divergent bit between two builds (SSE-DESIGN.md sec.4.1)
       { static FILE* trf = fopen( getenv("TRACE_P") ? getenv("TRACE_P") : "trace.bin", "wb" );
-        float v[4] = { pr.pK, z2, pf, float(p) }; if( trf ) fwrite( v, 4, 4, trf ); }
+        float v[4] = { pr.pK, ps.z, pm.p, float(p) }; if( trf ) fwrite( v, 4, 4, trf ); }
 #endif
       
       bit = rc.rc_BProcess( p, bit );
 
       // A2: e_f = p_f - [bit==0] = dL/dz_f; chain to the SSE output and the
       // order-1 logit (the SSE input also moves the interpolation point).
-      // dzf_dz1/dzf_dz2 are the mixer weights, 0 where its input clip binds.
-      float e_f = pf - float(1 - bit);
-      float c_2 = mix.dzf_dz2();
-      float c_1 = mix.dzf_dz1() + c_2 * sse.dz2_dz1();
-      o1[last_c][cxt].C_Update( bit, pr, 1.0f, e_f * c_1 );
-      sse.Update( bit, e_f * c_2 );
-      mix.Update( bit );
+      // pm.d1/pm.d2 are the mixer weights, 0 where its input clip binds;
+      // ps.dzdz is the SSE's interpolation slope.
+      float e_f = pm.p - float(1 - bit);
+      o1[last_c][cxt].C_Update( bit, pr, 1.0f, e_f * (pm.d1 + pm.d2 * ps.dzdz) );
+      S0.S0_tbl[sx].Update( bit, ps, e_f * pm.d2 );
+      M0.M0_tbl[mx].Update( bit, pm );
 
       c<<=1; cxt+=cxt+bit;
     }
