@@ -47,3 +47,11 @@ book1          wcc386         book1wcc
 # hashed table (phase 1, the components as plain cells, was byte-identical):
 book1          wcc386         book1wcc
 239025 9.709s  273691 3.072s  514946 6.160s
+
+# The index above was the 1.6 GB budget's best split; memory is not a
+# constraint, so the .idx now carries the original masks, direct (c3 all 8
+# bits x c2 01011111 x c1 00011111 x 255 nodes = 133.7M rows, 51 GB): the
+# context the hashed table was tuned for, without its collisions.  Not
+# measurable on the 15 GB development box -- measure where it fits.  The S0
+# rates climbed on the 14-bit table (optv.pl, seven chunks) are folded in:
+# 512716 -> 512502 on book1+wcc386 there.

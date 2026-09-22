@@ -24,29 +24,25 @@ Const 0
 
 # --- row context: which bits of the byte history select the row ---------
 # One row per context, no hashing: the table is Cx_Volume rows of NB cells,
-# 384 B a row at NB = 4.  The hashed table this replaced had the full
-# third-last byte in its context (133M contexts hashed 32:1 into 4.19M
-# rows, 1.6 GB): that made the SSE the coder's only order-3 model, and
-# without c3 book1 loses 18%, every c3 bit being worth ~10 kB there
-# (SSE-MIX2-REDESIGN.md sec.2.5).  The masks below are the best split
-# measured at the same 1.6 GB: 5 + 5 + 4 = 14 bits x 255 nodes = 4.18M
-# rows.  opt.pl flips bits inside a pattern but never widens one, so the
-# pattern lengths own the budget: 5 + 5 + 4 characters is the 1.6 GB, a
-# mask move can only halve the table, and widening a pattern here is the
-# decision to spend more memory (a table that cannot be allocated is a
-# failed run opt.pl rejects, but one that can is kept if it pays).
+# 384 B a row at NB = 4, and memory is not a constraint.  The masks are the
+# ones the hashed table was tuned with (it hashed these 133.7M contexts 32:1
+# into 4.19M rows); direct, they are 133,693,440 rows = 51 GB.  The SSE is
+# the coder's only order-3 model -- without c3 book1 loses 18%, and every c3
+# bit is worth ~10 kB there (SSE-MIX2-REDESIGN.md sec.2.5) -- so the full
+# byte stays.  opt.pl flips bits inside a pattern but never widens one, and
+# a table it cannot allocate is a failed run it rejects.
 Index Cx
- c3: c3, &11111       # third-last byte, low 5 bits
- c2: c2, &11111       # byte before last, low 5 bits
- c1: c1, &1111        # last byte, low 4 bits
+ c3: c3, &11111111    # third-last byte (bits tunable)
+ c2: c2, &01011111    # byte before last (all off = order-2 SSE; bits tunable)
+ c1: c1, &00011111    # last byte (bits tunable)
  cx: cxt, b&00000000  # bit-tree node: b& merges node bits counted from the leading 1 (0 = keep)
 
 # --- table geometry -----------------------------------------------------
 Number NB,     1,2!00010   # interpolation buckets (columns) per row: 2 + pattern
-Number LIM,    1,0!001001001011   # |stretch(p_in)| clip, /256  (2048 = 8.0)
+Number LIM,    1,0!000111111001   # |stretch(p_in)| clip, /256  (2048 = 8.0)
 
 # --- cell init and update ------------------------------------------------
-Number T0,     1,0!0000010111011   # initial mass n0+n1 of a fresh cell, /256
+Number T0,     1,0!0000011000000   # initial mass n0+n1 of a fresh cell, /256
 Number UPD,    1,0!01   # 1: both cells fully; 2: proportional (1-wt, wt), the interpolated update
 Number UPMIN,  1,0!00000000   # floor of the proportional weights, /256 (256 = same as UPD 1)
 
@@ -63,12 +59,12 @@ Number K,      1,0!1001000010000011
 Const 0
 
 # K optimizer
-Number NWk,    1,1!001111101100000011
-Number RKinc,  1,1!000110010010100
+Number NWk,    1,1!001100000000101111
+Number RKinc,  1,1!000110011111000
 Number kStep,  1,1!10111001001000001
 Number kMin,   1,1!1111100100000000000001
 Number kMax,   1,1!011000000001110
-Number M1_k,   1,1!10110010110000100000
+Number M1_k,   1,1!01110101010011110101
 Number M2_k,   1,1!011000000100000000
 Number G2_k,   1,0!000000000000001
 Number G3_k,   1,0!0010010001100000111
@@ -94,11 +90,11 @@ Number mwP0,   1,1!011101000001000
 Const 0
 
 # u (memory length) optimizer
-Number M1_u,   1,0!011100011100000000
+Number M1_u,   1,0!010110001101111000
 Number M2_u,   1,0!00000011100
-Number NWu,    1,0!001111110110111010010
+Number NWu,    1,0!010001000110001100110
 Number RUinc,  1,0!001100000010000000
-Number uStep,  1,0!11100111100101000
+Number uStep,  1,0!11111111111111111
 Number uMin,   1,0!0000110000
 Number uMax,   1,0!01011000010111000000000
 Number G2_u,   1,0!000000001
@@ -111,7 +107,7 @@ Const 0
 # v (hit/miss asymmetry) optimizer
 Number M1_v,   1,0!101101000001000000
 Number M2_v,   1,0!010100011
-Number NWv,    1,0!01110100001101000000
+Number NWv,    1,0!10011000100001000100
 Number RVinc,  1,0!00000000000000100000
 Number vStep,  1,0!1111111011000001
 Number G2_v,   1,0!000000000
@@ -139,8 +135,8 @@ Const 0
 # stepMax_eff = stepMax*(1 + AGAx/(1 + age/B)) on the mw (AGAm) and K (AGAk)
 # steps and on the u/v ray clip (AGAu); AGAx/256, 0 = plain limit.
 # B = AGB/16 updates (64 = 4 updates).
-Number AGAu,   1,0!001110011011
-Number AGAm,   1,0!011101100001
+Number AGAu,   1,0!010001000110
+Number AGAm,   1,0!011111010111
 Number AGAk,   1,0!010111110001
 Number AGB,    1,0!0100000000
 
@@ -148,4 +144,4 @@ Const 0
 
 # A2 end-to-end objective: the parameter gradients use
 # (1-E2E)*(own error) + E2E*(final error chained to this cell), E2E/256.
-Number E2E,    1,0!011011011
+Number E2E,    1,0!011100101

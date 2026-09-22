@@ -255,7 +255,17 @@ end_Quit
 The allocation is therefore still the generated `S0_Init()`'s -- the IDX
 table's, the one place the rule of this section allows -- and `main()` spells
 `S0.S0_tbl[cx].Predict(pr.z)` identically in both builds: a plain
-`SSE<CP_S0,4>&` in one, a `Ref` in the other.  `def_Quit` / `end_Quit` is new
+`SSE<CP_S0,4>&` in one, a `Ref` in the other.
+
+*Amended in phase 2:* with the full-context index (sec.2.5) the table is
+51 GB, and a static object that size links on neither side -- the x86-64
+small code model's relocations reach 2 GB (the 51 GB `.bss` pushed even
+libc's own statics out of range: `R_X86_64_PC32 ... truncated to fit`), and
+a PE image on Windows cannot carry it at any code model.  So the shipping
+form is `SSE_Row<NB>* S0_tbl`, allocated in `S0_Init()` and freed in
+`S0_Quit()` through the same `def_Init` / `def_Quit`: the one Table()-style
+member that is a `new[]` in both builds, in the same place as the tuning
+build's.  The mixer table (14.6 MB) stays a fixed array.  `def_Quit` / `end_Quit` is new
 in `idx2inc.pl` (the exact mirror of `def_Init`, copied into `%M%_Quit()`
 after the `Table()` `delete[]`s), so the table is freed where the `Table()`
 members are; `%M%_Size` is a member the `def_Init` code can add to, so the
@@ -347,11 +357,22 @@ behind the hashed table before any retune of the S0 rates, which were tuned
 for a table where every row was shared 32:1.  One more `c3` bit (3.2 GB)
 closes to 0.6%: that is the budget's price, not the design's.
 
-The split being settled by that sweep, the `.idx` carries it as 5-, 5- and
-4-character all-ones patterns: the budget is then the pattern lengths, as
-this section asks, and a tuner move on a mask can only halve the table, so
-the mask pass of phase 2 step 3 has nothing left to find and only the rates
-are climbed.  `HBITS` and the separate `Cx3` index went with the hash.
+**Decision (review of these numbers): memory is not a constraint, so the
+index is the original masks, direct** -- `c3` all 8 bits x `c2 01011111` x
+`c1 00011111` x 255 nodes = 133,693,440 rows = 51 GB.  That is the context
+the hashed table was tuned for, so it can only do better than 234380 /
+271584 / 507868 (no collisions), and it is what the `.idx` now carries.  It
+cannot be measured on the 15 GB box this was developed on (the mapping is
+refused outright); the numbers are for the machine that can hold it.  The
+14-bit sweep above stands as the record of what each context bit is worth.
+`HBITS` and the separate `Cx3` index went with the hash.
+
+The S0 rates were climbed with `optv.pl` on the 14-bit table before this
+decision (seven chunks, `NW*`, `T0/LIM/E2E/mwP0`, `AGA*/AGB`, the step
+limits, `M1_*`, `M2_*`, `*inc`): 512716 -> 512502 on book1+wcc386, i.e.
+0.04% -- the rates were already close, and the loss was context, not
+tuning.  Those values are folded into the `.idx`; the remaining knobs, and a
+pass at the full index, are for the machine that can run it.
 
 The mixer side needs nothing: 522240 contexts are already direct-indexed, so
 deleting its hash is a no-op on the stream.

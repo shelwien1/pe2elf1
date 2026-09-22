@@ -11,20 +11,20 @@ static const byte S0_cx[256]={ 0,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,
 
 
 static const int S0_NB = (2+2) * (1);
-static const int S0_LIM = (587+0) * (1);
-static const int S0_T0 = (187+0) * (1);
+static const int S0_LIM = (505+0) * (1);
+static const int S0_T0 = (192+0) * (1);
 static const int S0_UPD = (1+0) * (1);
 static const int S0_UPMIN = (0+0) * (1);
 static const int S0_wr = (4634+1) * (1);
 static const int S0_wr1 = (3522+0) * (1);
 static const int S0_mw = (1490+1) * (1);
 static const int S0_K = (36995+0) * (1);
-static const int S0_NWk = (64259+1) * (1);
-static const int S0_RKinc = (3220+1) * (1);
+static const int S0_NWk = (49199+1) * (1);
+static const int S0_RKinc = (3320+1) * (1);
 static const int S0_kStep = (94785+1) * (1);
 static const int S0_kMin = (4079617+1) * (1);
 static const int S0_kMax = (12302+1) * (1);
-static const int S0_M1_k = (732192+1) * (1);
+static const int S0_M1_k = (480501+1) * (1);
 static const int S0_M2_k = (98560+1) * (1);
 static const int S0_G2_k = (1+0) * (1);
 static const int S0_G3_k = (74503+0) * (1);
@@ -42,11 +42,11 @@ static const int S0_G4_m = (131490+0) * (1);
 static const int S0_mwXlo = (260+0) * (1);
 static const int S0_mwXhi = (12063+0) * (1);
 static const int S0_mwP0 = (14856+1) * (1);
-static const int S0_M1_u = (116480+0) * (1);
+static const int S0_M1_u = (91000+0) * (1);
 static const int S0_M2_u = (28+0) * (1);
-static const int S0_NWu = (519634+0) * (1);
+static const int S0_NWu = (560230+0) * (1);
 static const int S0_RUinc = (49280+0) * (1);
-static const int S0_uStep = (118568+0) * (1);
+static const int S0_uStep = (131071+0) * (1);
 static const int S0_uMin = (48+0) * (1);
 static const int S0_uMax = (2895360+0) * (1);
 static const int S0_G2_u = (1+0) * (1);
@@ -55,7 +55,7 @@ static const int S0_G4_u = (80+0) * (1);
 static const int S0_R0_u = (131+0) * (1);
 static const int S0_M1_v = (184384+0) * (1);
 static const int S0_M2_v = (163+0) * (1);
-static const int S0_NWv = (475968+0) * (1);
+static const int S0_NWv = (624708+0) * (1);
 static const int S0_RVinc = (32+0) * (1);
 static const int S0_vStep = (65217+0) * (1);
 static const int S0_G2_v = (0+0) * (1);
@@ -70,11 +70,11 @@ static const int S0_XHC = (0+0) * (1);
 static const int S0_leak1 = (32208+1) * (1);
 static const int S0_leak2 = (26912+1) * (1);
 static const int S0_stP_min = (0+1) * (1);
-static const int S0_AGAu = (923+0) * (1);
-static const int S0_AGAm = (1889+0) * (1);
+static const int S0_AGAu = (1094+0) * (1);
+static const int S0_AGAm = (2007+0) * (1);
 static const int S0_AGAk = (1521+0) * (1);
 static const int S0_AGB = (256+0) * (1);
-static const int S0_E2E = (219+0) * (1);
+static const int S0_E2E = (229+0) * (1);
 
 
 
@@ -84,10 +84,17 @@ static uint S0_MakeCx( uint c3, uint c2, uint c1, uint cxt ) {
   int Cx;
 
   Cx = 0;
-  Cx = (Cx<<5) + (((c3)&31)); // 11111
-  Cx = (Cx<<5) + (((c2)&31)); // 11111
-  Cx = (Cx<<4) + (((c1)&15)); // 1111
+  Cx = (Cx<<8) + (((c3)&255)); // 11111111
+  Cx = (Cx<<6) + (((((c2)>>6)&1)<<5) + ((c2)&31)); // 01011111
+  Cx = (Cx<<5) + (((c1)&31)); // 00011111
   Cx = (Cx*255) + S0_cx[(cxt)<1?1:((cxt)>255?255:(cxt))]; // 00000000
   return uint(Cx);
 }
 
+// The shipping table is allocated too, not a fixed array as a Table()'s
+// would be: at 133.7M rows it is 51 GB, and a static object that size
+// links on neither side (2 GB: the x86-64 small code model's relocations,
+// and the PE image on Windows).  Same place as a Table() member's
+// allocation -- S0_Init() / S0_Quit() -- and no () on the new[] for the
+// same reason (IDX-FORMAT.md sec.9): Init() fills every row before it is
+// read.
