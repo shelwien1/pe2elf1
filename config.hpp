@@ -44,19 +44,22 @@ struct CP_NAME {
   // W0 and W1 natively track the DECAY rate (alpha)
   static const float W0_raw, W0, W1_raw, W1, M, K;
   // LOGWR/UVROT seeds and log-space box
-  static const float LW0, LW1, UV_U0, UV_V0, UVLO, UVHI, UV_VH;
+  static const float LW0, LW1, UV_U0, UV_V0, UVLO, UVHI, VLO, VHI, UV_VH;
   // 2.1 UV2X2/XHESS/RAYCL: cross-EMA weight, signed h00-h11 shaper, det guard,
   // dedicated clip for the cross-Hessian channel, 1/stepMax for the ray clip
-  static const float CXW, XHW, UVDET, XHC, iStepU, iStepV;
+  // -- and the cross EMA's own decay XM2 (M2_x), not the u axis's momentum_R
+  static const float CXW, XHW, UVDET, XHC, XM2, iStepU, iStepV;
   // P24 MWLGT: mw = mwMin + span*sigma(x), K = exp(y); seeds map the linear
   // seeds, x gets its own (wide) box, y reuses the exact ln K box.
   static const float MWspan, MWs0, MWX0, MWXLO, MWXHI, KY0, KYLO, KYHI;
   // A1 young-cell step schedule: stepMax*(1 + AGAx/(1 + age*AGiB)) per axis
-  // (u/v share AGAu on the ray clip); AGiB = 1/B with B = AGB/16 updates.
-  static const float AGAu, AGAm, AGAk, AGiB;
+  // (AGAu, AGAv on the u/v ray clip); AGiB = 1/B with B = AGB/16 updates for
+  // mw and K, AGiBuv = 16/AGBuv for the u/v ray clip.
+  static const float AGAu, AGAv, AGAm, AGAk, AGiB, AGiBuv;
   // A2 end-to-end objective: the gradient uses (1-E2E)*own error + E2E*final
   // error chained to this cell.
-  static const float E2E;
+  static const float E2E;      // mw and K
+  static const float E2Euv;    // the u/v axes
 
 #ifdef CP_SSE
   // SSE stage (sh_SSE.inc): the knobs, clamped here so that the row only
@@ -139,8 +142,8 @@ set momentum_R = 1.0f-float(CPX(M2_v))/(SCALE<<8);
 set NW         = float(CPX(NWv))/(SCALE<<8);
 set inc        = float(CPX(RVinc)) / (SCALE<<8);
 set stepMax    = float(CPX(vStep)) / (SCALE<<8);
-set minVal     = float(CPX(uMin)) / (SCALE<<3);
-set maxVal     = float(CPX(uMax)) / (SCALE<<8);
+set minVal     = float(CPX(vMin)) / (SCALE<<3);   // the v box: |v| <= UVH * half its ln width (UV_VH below)
+set maxVal     = float(CPX(vMax)) / (SCALE<<8);
 set grad2_clip = float(CPX(G2_v))/(1<<5);
 set D_clip = float(CPX(G3_v));
 set R_clip = float(CPX(G4_v));
@@ -166,7 +169,7 @@ set F0_P1     = (CP_NAME::F0_P1_raw < 0.0f) ? 0.0f : CP_NAME::F0_P1_raw;
 
 set W0_raw = float(CPX(wr)) / float(SCALE);
 set W0     = clamp(CP_NAME::W0_raw, 0.0f, 1.0f);
-set W1_raw = float(CPX(wr) + ((CPX(wr1) & 1) ? -int(CPX(wr1) >> 1) : int(CPX(wr1) >> 1))) / float(SCALE);
+set W1_raw = float(CPX(wr1b) + ((CPX(wr1) & 1) ? -int(CPX(wr1) >> 1) : int(CPX(wr1) >> 1))) / float(SCALE);   // wr1b: the base of wr1's delta, so W0 (wr) and W1 are separate knobs
 set W1     = clamp(CP_NAME::W1_raw, 0.0f, 1.0f);
 
 set M = float(CPX(mw))/SCALE;
@@ -184,12 +187,15 @@ set UV_U0 = 0.5f*(CP_NAME::LW0+CP_NAME::LW1);   // mean log-decay seed
 set UV_V0 = 0.5f*(CP_NAME::LW0-CP_NAME::LW1);   // hit/miss asymmetry seed
 set UVLO  = rt_logf(fmaxf(CP_NAME::Config_U::minVal, CP_LOGMIN));
 set UVHI  = rt_logf(fmaxf(CP_NAME::Config_U::maxVal, CP_LOGMIN));
-set UV_VH = 0.5f*(CP_NAME::UVHI-CP_NAME::UVLO)*(float(CPX(UVH))/1024);   // |v| bound
+set VLO   = rt_logf(fmaxf(CP_NAME::Config_V::minVal, CP_LOGMIN));
+set VHI   = rt_logf(fmaxf(CP_NAME::Config_V::maxVal, CP_LOGMIN));
+set UV_VH = 0.5f*(CP_NAME::VHI-CP_NAME::VLO)*(float(CPX(UVH))/1024);   // |v| bound, from the v box
 
 set CXW   = float(CPX(CXW))/1024;
 set XHW   = float(CPX(XHW) - 1024)/1024;   // signed, seed < 0 per r7 evidence
 set UVDET = float(CPX(UVDET))/1024;
 set XHC   = float(CPX(XHC))/(1<<5);
+set XM2   = 1.0f-float(CPX(M2_x))/(SCALE<<8);   // decay of the (u,v) cross EMA
 set iStepU = 1.0f/(float(CPX(uStep))/(SCALE<<8));
 set iStepV = 1.0f/(float(CPX(vStep))/(SCALE<<8));
 
@@ -207,10 +213,13 @@ set KYHI   = rt_logf(fmaxf(CP_NAME::Config_K::maxVal, CP_LOGMIN));
 #undef CP_LOGMIN
 
 set AGAu   = float(CPX(AGAu))/256;
+set AGAv   = float(CPX(AGAv))/256;
 set AGAm   = float(CPX(AGAm))/256;
 set AGAk   = float(CPX(AGAk))/256;
 set AGiB   = 16.0f/float(CPX(AGB) < 1 ? 1 : CPX(AGB));   // never divides by 0
+set AGiBuv = 16.0f/float(CPX(AGBuv) < 1 ? 1 : CPX(AGBuv));
 set E2E    = clamp( float(CPX(E2E))/256, 0.0f, 1.0f );
+set E2Euv  = clamp( float(CPX(E2Euv))/256, 0.0f, 1.0f );
 #undef set
 
 #ifdef CP_SSE

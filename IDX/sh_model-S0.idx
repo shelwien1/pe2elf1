@@ -50,6 +50,7 @@ Const 0
 # counts / rates
 Number wr,     1,1!01001000011010
 Number wr1,    1,0!110111000010
+Number wr1b,   1,1!01001000011010   # the base of wr1's delta, cloned from wr: W0 (wr) and W1 (wr1b + wr1) are separate knobs
 Number mw,     1,1!0010111010010
 Number K,      1,0!1001000010000011
 
@@ -89,11 +90,14 @@ Const 0
 # u (memory length) optimizer
 Number M1_u,   1,0!011100011100000000
 Number M2_u,   1,0!00000011100
+Number M2_x,   1,0!00000011100   # decay of the (u,v) cross EMA R_uv, cloned from M2_u (it used to share it)
 Number NWu,    1,0!001111110110111010010
 Number RUinc,  1,0!001100000010000000
 Number uStep,  1,0!11100111100101000
 Number uMin,   1,0!0000110000
 Number uMax,   1,0!01011000010111000000000
+Number vMin,   1,0!0000110000                # the v box, cloned from uMin/uMax: |v| <= UVH * half its ln width
+Number vMax,   1,0!01011000010111000000000   # (it used to be a fraction of the u box)
 Number G2_u,   1,0!000000001
 Number G3_u,   1,0!01000000000000000000
 Number G4_u,   1,0!00001010000
@@ -130,15 +134,19 @@ Const 0
 
 # A1 young-cell step schedule (coder0.cpp Counter::C_Update):
 # stepMax_eff = stepMax*(1 + AGAx/(1 + age/B)) on the mw (AGAm) and K (AGAk)
-# steps and on the u/v ray clip (AGAu); AGAx/256, 0 = plain limit.
-# B = AGB/16 updates (64 = 4 updates).
+# steps and on the u/v ray clip (AGAu, AGAv per axis); AGAx/256, 0 = plain
+# limit.  B = AGB/16 updates (64 = 4 updates) for mw and K, AGBuv/16 for u/v.
 Number AGAu,   1,0!001110011011
+Number AGAv,   1,0!001110011011   # cloned from AGAu (u and v used to share it)
 Number AGAm,   1,0!011101100001
 Number AGAk,   1,0!010111110001
 Number AGB,    1,0!0100000000
+Number AGBuv,  1,0!0100000000   # cloned from AGB (u/v used to share it with mw and K)
 
 Const 0
 
 # A2 end-to-end objective: the parameter gradients use
-# (1-E2E)*(own error) + E2E*(final error chained to this cell), E2E/256.
+# (1-E2E)*(own error) + E2E*(final error chained to this cell), E2E/256;
+# E2E for mw and K, E2Euv for the u/v axes.
 Number E2E,    1,0!011011011
+Number E2Euv,  1,0!011011011   # cloned from E2E (u/v used to share it with mw and K)

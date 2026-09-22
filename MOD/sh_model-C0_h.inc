@@ -6,6 +6,7 @@ static const int C0_P0 = (19725+1) * (1);
 static const int C0_P1 = (6161+0) * (1);
 static const int C0_wr = (9434+1) * (1);
 static const int C0_wr1 = (2506+0) * (1);
+static const int C0_wr1b = (9434+1) * (1);
 static const int C0_mw = (3519+1) * (1);
 static const int C0_K = (18911+0) * (1);
 static const int C0_NWk = (127436+1) * (1);
@@ -32,11 +33,14 @@ static const int C0_G4_m = (131490+0) * (1);
 static const int C0_G4_k = (5+0) * (1);
 static const int C0_M1_u = (235648+0) * (1);
 static const int C0_M2_u = (2014+0) * (1);
+static const int C0_M2_x = (2014+0) * (1);
 static const int C0_NWu = (400920+0) * (1);
 static const int C0_RUinc = (184884+0) * (1);
 static const int C0_uStep = (68580+0) * (1);
 static const int C0_uMin = (1012+0) * (1);
 static const int C0_uMax = (3328032+0) * (1);
+static const int C0_vMin = (1012+0) * (1);
+static const int C0_vMax = (3328032+0) * (1);
 static const int C0_G2_u = (0+0) * (1);
 static const int C0_G3_u = (262144+0) * (1);
 static const int C0_G4_u = (63+0) * (1);
@@ -58,10 +62,13 @@ static const int C0_XHC = (3200+0) * (1);
 static const int C0_mwXlo = (449+0) * (1);
 static const int C0_mwXhi = (17724+0) * (1);
 static const int C0_AGAu = (96+0) * (1);
+static const int C0_AGAv = (96+0) * (1);
 static const int C0_AGAm = (2024+0) * (1);
 static const int C0_AGAk = (1+0) * (1);
 static const int C0_AGB = (24+0) * (1);
+static const int C0_AGBuv = (24+0) * (1);
 static const int C0_E2E = (256+0) * (1);
+static const int C0_E2Euv = (256+0) * (1);
 
 
 

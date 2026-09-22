@@ -60,3 +60,8 @@ book1          wcc386         book1wcc
 # the original masks and rates, the 64-bit context hashed onto 4.19M rows
 # as before -- the profile of the 234380 / 271584 / 507867 line, byte for
 # byte (the direct-index lines above are the record of the experiment).
+
+# u/v decoupled, not tuned: seven knobs cloned per component (M2_x, vMin,
+# vMax, wr1b, AGAv, AGBuv, E2Euv), each seeded with the value it used to
+# share, so the stream is the line above byte for byte; opt.pl now sees 14
+# more.

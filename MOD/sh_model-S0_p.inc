@@ -19,6 +19,7 @@ static const int S0_UPD = (1+0) * (1);
 static const int S0_UPMIN = (0+0) * (1);
 static const int S0_wr = (4634+1) * (1);
 static const int S0_wr1 = (3522+0) * (1);
+static const int S0_wr1b = (4634+1) * (1);
 static const int S0_mw = (1490+1) * (1);
 static const int S0_K = (36995+0) * (1);
 static const int S0_NWk = (64259+1) * (1);
@@ -46,11 +47,14 @@ static const int S0_mwXhi = (12063+0) * (1);
 static const int S0_mwP0 = (14856+1) * (1);
 static const int S0_M1_u = (116480+0) * (1);
 static const int S0_M2_u = (28+0) * (1);
+static const int S0_M2_x = (28+0) * (1);
 static const int S0_NWu = (519634+0) * (1);
 static const int S0_RUinc = (49280+0) * (1);
 static const int S0_uStep = (118568+0) * (1);
 static const int S0_uMin = (48+0) * (1);
 static const int S0_uMax = (2895360+0) * (1);
+static const int S0_vMin = (48+0) * (1);
+static const int S0_vMax = (2895360+0) * (1);
 static const int S0_G2_u = (1+0) * (1);
 static const int S0_G3_u = (262144+0) * (1);
 static const int S0_G4_u = (80+0) * (1);
@@ -73,10 +77,13 @@ static const int S0_leak1 = (32208+1) * (1);
 static const int S0_leak2 = (26912+1) * (1);
 static const int S0_stP_min = (0+1) * (1);
 static const int S0_AGAu = (923+0) * (1);
+static const int S0_AGAv = (923+0) * (1);
 static const int S0_AGAm = (1889+0) * (1);
 static const int S0_AGAk = (1521+0) * (1);
 static const int S0_AGB = (256+0) * (1);
+static const int S0_AGBuv = (256+0) * (1);
 static const int S0_E2E = (219+0) * (1);
+static const int S0_E2Euv = (219+0) * (1);
 
 
 

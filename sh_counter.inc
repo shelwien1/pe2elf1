@@ -137,8 +137,10 @@ template<class CP> struct Counter {
     float sign = 1.0f - float(bit + bit); 
 
     // A1: young-cell step schedule, per axis: stepMax*(1 + AGA*agd),
-    // agd = 1/(1 + age/B).  AGA = 0 reproduces the plain limit bit for bit.
-    float agd = 1.0f / (1.0f + float(age) * CP::AGiB);
+    // agd = 1/(1 + age/B), B = AGB for mw and K and AGBuv for the u/v ray
+    // clip.  AGA = 0 reproduces the plain limit bit for bit.
+    float agd   = 1.0f / (1.0f + float(age) * CP::AGiB);
+    float agduv = 1.0f / (1.0f + float(age) * CP::AGiBuv);
     if( age != ~0u ) age++;
 
     // Logit-domain chain.  z = K*st(p_mix) and pK = sq(z), so the loss
@@ -156,7 +158,8 @@ template<class CP> struct Counter {
     // one.  Making that case a no-event changed nothing on the corpus.)
     const float p_o = bit ? pK : 1.0f - pK;
     const float e_o = sign * p_o;
-    const float ee = (1.0f - CP::E2E) * e_o - CP::E2E * ef;
+    const float ee   = (1.0f - CP::E2E)   * e_o - CP::E2E   * ef;   // mw and K
+    const float eeuv = (1.0f - CP::E2Euv) * e_o - CP::E2Euv * ef;   // the u/v axes
     const float c2 = 1.0f - 2.0f * pK;
 
     // the pre-step wr pair: the previous update's post-step pair
@@ -240,15 +243,16 @@ template<class CP> struct Counter {
     // 2.1 UV2X2 + XHESS + RAYCL: one EMA cross term, 2x2 Newton solve with
     // det guard (or P11 CSHRK soft shrink), joint direction-preserving
     // trust region. Reduces to the diagonal path when the guard trips.
-    wr0_state.Accum(ee * g_u, e_o * g_u, h_d, g);
-    wr1_state.Accum(ee * g_v, e_o * g_v, h_d, g);
+    wr0_state.Accum(eeuv * g_u, e_o * g_u, h_d, g);
+    wr1_state.Accum(eeuv * g_v, e_o * g_v, h_d, g);
 
     // XHESS: exact rotated cross diagonal h_uv = h00 - h11 (MIXTR-free part),
     // exposed through the signed shaper XHW with its own clip (G2_u/v are 0
     // in the delivered constants, so the cross channel gets a dedicated one).
     // The cross gradient term is the cell's own (e_o), like the curvature.
     float h_x = clip( e_o * (hz0 - hz1), CP::XHC );
-    rt.R_uv = rt.R_uv * Config_U::momentum_R + CP::CXW * ((e_o * g_u) * (e_o * g_v) - CP::XHW * h_x) * g;
+    // The EMA has its own decay, XM2 (M2_x), not the u axis's momentum_R.
+    rt.R_uv = rt.R_uv * CP::XM2 + CP::CXW * ((e_o * g_u) * (e_o * g_v) - CP::XHW * h_x) * g;
 
     {
       float a_u = wr0_state.Denom();
@@ -263,15 +267,17 @@ template<class CP> struct Counter {
         float s_v = (a_u * b_v - cc * b_u) * idet;
         // RAYCL: rescale jointly so neither component exceeds its stepMax
         // (widened by the age schedule while the cell is young).
-        float agu = 1.0f + CP::AGAu * agd;
-        float r = fmaxf( fmaxf( fabsf(s_u)*CP::iStepU, fabsf(s_v)*CP::iStepV ) / agu, 1.0f );
+        float agu = 1.0f + CP::AGAu * agduv;
+        float agv = 1.0f + CP::AGAv * agduv;
+        float r = fmaxf( fmaxf( fabsf(s_u)*CP::iStepU / agu, fabsf(s_v)*CP::iStepV / agv ), 1.0f );
         float ir = r > 1.0f ? 1.0f / r : 1.0f;   // the division only when the clip binds
         wr0_state.Apply(s_u * ir, CP::UVLO, CP::UVHI, Config_U::stepMax * agu);
-        wr1_state.Apply(s_v * ir, -CP::UV_VH, CP::UV_VH, Config_V::stepMax * agu);
+        wr1_state.Apply(s_v * ir, -CP::UV_VH, CP::UV_VH, Config_V::stepMax * agv);
       } else {
-        float agu = 1.0f + CP::AGAu * agd;
+        float agu = 1.0f + CP::AGAu * agduv;
+        float agv = 1.0f + CP::AGAv * agduv;
         wr0_state.Apply(wr0_state.StepRaw(), CP::UVLO, CP::UVHI, Config_U::stepMax * agu);
-        wr1_state.Apply(wr1_state.StepRaw(), -CP::UV_VH, CP::UV_VH, Config_V::stepMax * agu);
+        wr1_state.Apply(wr1_state.StepRaw(), -CP::UV_VH, CP::UV_VH, Config_V::stepMax * agv);
       }
     }
 

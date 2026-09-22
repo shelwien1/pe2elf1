@@ -25,6 +25,7 @@ Const 0
 
 Number wr,     1,1!10010011011010
 Number wr1,    1,0!100111001010
+Number wr1b,   1,1!10010011011010   # the base of wr1's delta, cloned from wr: W0 (wr) and W1 (wr1b + wr1) are separate knobs
 Number mw,     1,1!0110110111111
 Number K,      1,0!0100100111011111
 Number NWk,    1,1!011111000111001100
@@ -74,11 +75,14 @@ Const 0
 # added from sh_model-C0_h.inc
 Number M1_u,  1,0!111001100010000000
 Number M2_u,  1,0!11111011110
+Number M2_x,  1,0!11111011110   # decay of the (u,v) cross EMA R_uv, cloned from M2_u (it used to share it)
 Number NWu,   1,0!001100001111000011000
 Number RUinc, 1,0!101101001000110100
 Number uStep, 1,0!0010000101111100100
 Number uMin,  1,0!1111110100
 Number uMax,  1,0!01100101100100000100000
+Number vMin,  1,0!1111110100                # the v box, cloned from uMin/uMax: |v| <= UVH * half its ln width
+Number vMax,  1,0!01100101100100000100000   # (it used to be a fraction of the u box)
 Number G2_u,  1,0!000000000
 Number G3_u,  1,0!01000000000000000000
 Number G4_u,  1,0!00000111111
@@ -111,15 +115,19 @@ Const 0
 
 # A1 young-cell step schedule (coder0.cpp Counter::C_Update):
 # stepMax_eff = stepMax*(1 + AGAx/(1 + age/B)) on the mw (AGAm) and K (AGAk)
-# steps and on the u/v ray clip (AGAu); AGAx/256, 0 = plain limit.
-# B = AGB/16 updates (64 = 4 updates).
+# steps and on the u/v ray clip (AGAu, AGAv per axis); AGAx/256, 0 = plain
+# limit.  B = AGB/16 updates (64 = 4 updates) for mw and K, AGBuv/16 for u/v.
 Number AGAu,   1,0!000001100000
+Number AGAv,   1,0!000001100000   # cloned from AGAu (u and v used to share it)
 Number AGAm,   1,0!011111101000
 Number AGAk,   1,0!000000000001
 Number AGB,    1,0!0000011000
+Number AGBuv,  1,0!0000011000   # cloned from AGB (u/v used to share it with mw and K)
 
 Const 0
 
 # A2 end-to-end objective: the parameter gradients use
-# (1-E2E)*(own error) + E2E*(final error chained to this cell), E2E/256.
+# (1-E2E)*(own error) + E2E*(final error chained to this cell), E2E/256;
+# E2E for mw and K, E2Euv for the u/v axes.
 Number E2E,    1,0!100000000
+Number E2Euv,  1,0!100000000   # cloned from E2E (u/v used to share it with mw and K)
