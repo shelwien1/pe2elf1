@@ -38,12 +38,8 @@ template<class CP> struct Mix2 {
   Cell* c;
   float s1, s2, wv, p0;
   float d1, d2;   // dz_final/dz1, dz_final/dz2 of the last Mix(): the weight, or 0 where the input clip binds
-  float zm;       // |logit| bound of the inputs, = stf's clip [Pmin, 1-Pmin]
+  float zm;       // |logit| bound of the inputs, = the input clip [Pmin, 1-Pmin]
 
-  static float stf( float p ) {
-    p = clamp( p, CP::Pmin, 1.0f-CP::Pmin );
-    return logf( p/(1.0f-p) );
-  }
   static float sqf( float x ) { return 1.0f/(1.0f+expf(-x)); }
 
   // table: mix_rows(contexts) cells, owned by the caller

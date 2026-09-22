@@ -61,7 +61,7 @@ template<class CP, int NB> struct SSE_Ctr {
   uint  ncx;      // rows
   qword vol;      // context volume asked for; rows are hashed when vol > ncx
   float lim;      // stretch clip (clamped CP::LIM)
-  float zmax;     // |logit| bound, = stf's probability clip [1/65536, 1-1/65536]
+  float zmax;     // |logit| bound, = the probability clip [1/65536, 1-1/65536]
   float qscale;   // (NB-1) / (2*lim)
   float upmin;    // floor of the proportional update weights
   int   upd;      // 1: both cells fully, 2: proportional
@@ -73,11 +73,6 @@ template<class CP, int NB> struct SSE_Ctr {
   float dzdz;       // d z_sse / d z_in: (NB-1)/(2 LIM) * (z1-z0), 0 when the input clip binds
   float sh0, sh1;   // d z_sse / d z_cell: 1-wt and wt, or 0 where the cell's logit clip binds
 
-  static float stf( float p ) {
-    p = clamp( p, 1.0f/65536, 1.0f-1.0f/65536 );
-    return logf( p/(1.0f-p) );
-  }
-  static float sqf( float x ) { return 1.0f/(1.0f+expf(-x)); }
   static int iclamp( int x, int lo, int hi ) { return x<lo ? lo : x>hi ? hi : x; }
 
   // table: sse_rows(volume, HBITS, NB) * NB cells, owned by the caller

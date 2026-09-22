@@ -52,21 +52,6 @@
 #ifndef S0_CACHE_WR
 #define S0_CACHE_WR 0
 #endif
-// Diagnostic variants of the A2 path (compile-time, default 0 = as documented):
-//   E2E_NOCHAIN  the order-1 cell's chain factor is the mixer weight alone
-//                (drops the SSE input moving the interpolation point)
-//   E2E_SSEI     the SSE cells train on the interpolated SSE output's own
-//                loss, not on the final one
-//   UV_NW_AFTER  F4: NW applied after the 2x2 (u,v) solve, not inside its RHS
-#ifndef E2E_NOCHAIN
-#define E2E_NOCHAIN 0
-#endif
-#ifndef E2E_SSEI
-#define E2E_SSEI 0
-#endif
-#ifndef UV_NW_AFTER
-#define UV_NW_AFTER 0
-#endif
 
 // -------------------------------------------------------------
 // Optimizer-proposal toggles (coder0_counter_scope.md / r8 doc).
@@ -118,14 +103,16 @@
 //   A3  hypergradient on the stage rates: loses at every setting, removed.
 //   F4  NW after the 2x2 solve: +112 alone, -63 vs. the stack; off.
 //   F13 [[no_unique_address]] on the adaptation members (reduced cells 36/12 B).
-//   The compile-time diagnostics E2E_NOCHAIN / E2E_SSEI / UV_NW_AFTER below
-//   all measured worse and default to 0 (E2E_HESS, the end-to-end curvature,
-//   was measured worse too and removed with the logit-domain chain).
+//   The compile-time diagnostics E2E_NOCHAIN (chain factor = the mixer weight
+//   alone), E2E_SSEI (SSE cells train on the interpolated output's own loss)
+//   and UV_NW_AFTER (F4) all measured worse and have been removed, as was
+//   E2E_HESS, the end-to-end curvature.
 //   Divisions/transcendentals per bit cut from ~62/36 to ~33/24 (SSE-DESIGN
 //   sec.6.12): PredictF hands its intermediates to C_Update, the stages
 //   pass logits, the gradient chain runs in the logit domain.
-//   -DUSE_SCHRAU=1|2: Schraudolph's bit-trick exp/log/sq/st (schrau.inc)
-//   in place of libm's: -16% time, +0.014% size (sec.6.14); off by default.
+//   Schraudolph's bit-trick exp/log/stretch (schrau.inc) in place of libm's:
+//   -16% time, +0.014% size (sec.6.14).  Unconditional -- the knobs in IDX/
+//   are tuned for it, so the libm variant is no longer a build option.
 //   Tuned (optv.pl): 234213/273291/509525 = -0.63% vs. the 061 baseline.
 //   Build identity (F5): rt_logf/rt_expf now carry a volatile barrier (they
 //   were inlined and folded under LTO), and the RTRL leaks are clamped to
@@ -194,7 +181,6 @@ static const float iSCALE = 1.0f/SCALE;
 
 #include "sh_mapping.inc"
 #include "MOD/sh_model-C0_h.inc"
-//#include "sh_model-C0_h.inc"
 // S0/M0 knobs, context masks and context builders (their Table() storage
 // comes with the _h.inc headers below, once the cell types are complete)
 #include "MOD/sh_model-S0_p.inc"
@@ -207,9 +193,6 @@ static inline unsigned long long tbl_n( unsigned long long n ) { return n; }
 
 // ---------------------------------------------
 
-static inline float Max( float x, float d ) {
-  return fmax(d,x);
-}
 
 static inline float clip(float x, float d) {
   return fminf(fmaxf(x, -d), d);
@@ -223,36 +206,27 @@ static inline float clamp(float x, float min_val, float max_val) {
   return fminf(fmaxf(x, min_val), max_val);
 }
 
-// -DUSE_SCHRAU=1: Schraudolph's approximations replace logf/expf/sq/st from
-// here on, the init-time wrappers below included (schrau.inc).
-//#if defined(USE_SCHRAU) && USE_SCHRAU == 1
+// Schraudolph's approximations replace logf/expf from here on, the init-time
+// wrappers below included (schrau.inc).
 #include "schrau.inc"
-//#endif
 
 // Init-time transcendentals that must not be constant-folded: the shipping
-// build would fold logf/expf of folded knobs at compile time (MPFR,
-// correctly rounded) while the tuning build calls libm at runtime, and the
-// two can differ by an ulp -- enough to change the stream by a byte.  Both
-// builds go through libm for these; the per-bit paths are runtime anyway.
-// The volatile copy is the barrier: a plain static wrapper is inlined under
-// -O3/LTO and folded anyway (seen on KYHI = ln(kMax) at kMax = 1.0311, where
-// libm's logf is an ulp below MPFR's: the K box wall differed and the
-// streams drifted by a byte).  gc.sh also passes -fno-builtin-logf
-// -fno-builtin-expf, which closes the same hole for any logf/expf of a
-// constant elsewhere; the wrappers keep it closed under other build lines.
+// build would fold a log/exp of a folded knob at compile time while the
+// tuning build evaluates it at runtime, and the two can differ by an ulp --
+// enough to change the stream by a byte.  The volatile copy is the barrier:
+// a plain static wrapper is inlined under -O3/LTO and folded anyway (seen on
+// KYHI = ln(kMax) at kMax = 1.0311, where libm's logf is an ulp below MPFR's:
+// the K box wall differed and the streams drifted by a byte).  gc.sh also
+// passes -fno-builtin-logf -fno-builtin-expf, which closes the same hole for
+// any libm logf/expf of a constant elsewhere.
 static float rt_logf( float x ) { volatile float v = x; return logf(v); }
 static float rt_expf( float x ) { volatile float v = x; return expf(v); }
-
-// -DUSE_SCHRAU=2: the same, but the init-time logs/exps above stay libm's
-//#if defined(USE_SCHRAU) && USE_SCHRAU == 2
-//#include "schrau.inc"
-//#endif
 
 
 // --- Configuration Struct Declarations ---
 
 #define def_Config(Config) struct Config {\
-  static const float momentum_D, momentum_R, NW, inc, stepMax, minVal,maxVal, grad1_clip, grad2_clip, D_clip, R_clip, R0; \
+  static const float momentum_D, momentum_R, NW, inc, stepMax, minVal,maxVal, grad2_clip, D_clip, R_clip, R0; \
   static const int NAG; };
 
 // Parameter bundle of the order-1 model: C0_* constants from
@@ -407,9 +381,9 @@ int main( int argc, char** argv ) {
       // dzf_dz1/dzf_dz2 are the mixer weights, 0 where its input clip binds.
       float e_f = pf - float(1 - bit);
       float c_2 = mix.dzf_dz2();
-      float c_1 = E2E_NOCHAIN ? mix.dzf_dz1() : mix.dzf_dz1() + c_2 * sse.dz2_dz1();
+      float c_1 = mix.dzf_dz1() + c_2 * sse.dz2_dz1();
       o1[last_c][cxt].C_Update( bit, pr, 1.0f, e_f * c_1 );
-      sse.Update( bit, E2E_SSEI ? 1.0f/(1.0f+expf(-z2)) - float(1 - bit) : e_f * c_2 );
+      sse.Update( bit, e_f * c_2 );
       mix.Update( bit );
 
       c<<=1; cxt+=cxt+bit;

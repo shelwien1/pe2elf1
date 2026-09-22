@@ -2,24 +2,18 @@
 Prefix C0
 Debug 1
 
-# Lines marked '!' are frozen (IDX-FORMAT.md sec.10): the coder no longer
-# reads them (AWIND/HBETA/EFISH/ALEAK/SMASS/MKCPL/BIASC constants of rejected
-# proposals, and grad1_clip which ParamUpdater never uses), so opt.pl and
-# optv.pl would only waste evaluations on them.  Values are kept as
-# documentation.  (Until 061 the '!' was missing from the rejected-proposal
-# block and G1_u/G1_v: 23 patchable knobs that could not change the output.)
+# The knobs of the rejected proposals (AWIND/HBETA/EFISH/ALEAK/SMASS/MKCPL/
+# BIASC), the ADAPT_L rates LWw/LWk/LWm and the four grad1_clip knobs G1_*
+# used to sit here frozen with '!' -- 28 entries the coder did not read, so
+# neither opt.pl nor optv.pl could ever score a change to one.  They are
+# deleted; git history has their last values, and the rejections are
+# summarized in coder0.cpp's header.
 
 Const 1
 
-# only used with ADAPT_L=1
-Number LWw,    1,1!000001100000000011
-Number LWk,    1,1!111111111100100
-Number LWm,    1,1!001000000100000
 
 Number mwMax,  1,1!111111111111111
 
-Number G1_m,   1,0!001001110001000
-Number G1_k,   1,0!001001110001000
 Number G3_m,   1,0!1000000000000000000
 
 Const 0
@@ -85,7 +79,6 @@ Number RUinc, 1,0!101101001000110100
 Number uStep, 1,0!0010000101111100100
 Number uMin,  1,0!1111110100
 Number uMax,  1,0!01100101100100000100000
-!Number G1_u,  1,0!01001110001000
 Number G2_u,  1,0!000000000
 Number G3_u,  1,0!01000000000000000000
 Number G4_u,  1,0!00000111111
@@ -96,7 +89,6 @@ Number M2_v,  1,0!000001111
 Number NWv,   1,0!01100100100100000000
 Number RVinc, 1,0!10110111000000000010
 Number vStep, 1,0!001010100110000000
-!Number G1_v,  1,0!01001110001000
 Number G2_v,  1,0!000000001
 Number G3_v,  1,0!01000000000000000000
 Number G4_v,  1,0!00011001101
@@ -107,36 +99,13 @@ Number UVH, 1,0!001010000010
 Const 0
 
 # added from sh_model-C0_h.inc
-!Number AWF, 1,0!010000000000
-!Number AWFo, 1,0!010000000000
-
-!Number HB_u, 1,0!01000000000
-!Number HB_v, 1,0!01000000000
-!Number HB_m, 1,0!01000000000
-!Number HB_k, 1,0!01000000000
-
-!Number EFW_u, 1,0!000000000
-!Number EFW_v, 1,0!000000000
-!Number EFW_m, 1,0!000000000
-!Number EFW_k, 1,0!000000000
 
 Number CXW, 1,0!10000100001
 Number XHW, 1,0!01110011000
 Number UVDET, 1,0!010100010
 Number XHC, 1,0!0110010000000
-!Number LKA, 1,0!000000000
-!Number LKB, 1,0!0100111111100
-!Number LKlo, 1,0!000000000
-!Number LKhi, 1,0!01111010111000
-!Number SMWm, 1,0!010000000000000
-!Number SMWk, 1,0!010000000000000
-!Number SM0, 1,0!010100000000000
-!Number MPW, 1,0!010000000000
-!Number CMK, 1,0!01000000000
-!Number MKDET, 1,0!011001101
 Number mwXlo, 1,0!111000001
 Number mwXhi, 1,0!0100010100111100
-!Number BWT, 1,0!000000000
 
 Const 0
 

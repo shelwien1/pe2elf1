@@ -40,8 +40,12 @@ struct CP_NAME {
   def_Config(Config_V)
 
   static const float stP_min, leakage1, leakage2, mwP0;
-  // Float equivalents utilizing delta decoding for P1
+#ifndef CP_SSE
+  // Counter::Init() seeds, from the P0/P1 knobs.  Only the order-1 cells use
+  // them: the SSE cells are seeded per bucket through InitN(), so their
+  // bundle carries no P0/P1 and Counter<CP_S0>::Init() is never instantiated.
   static const float F0_P0, F0_P1_raw, F0_P1;
+#endif
   // W0 and W1 natively track the DECAY rate (alpha)
   static const float W0_raw, W0, W1_raw, W1, M, K;
   // LOGWR/UVROT seeds and log-space box
@@ -79,7 +83,6 @@ set inc        = float(CPX(MWinc)) / (SCALE<<8);
 set stepMax    = float(CPX(mwStep)) / (SCALE<<8);
 set minVal     = float(CPX(mwMin)) / (SCALE<<3);
 set maxVal     = float(CPX(mwMax)) / (SCALE<<3);
-set grad1_clip = float(CPX(G1_m));
 set grad2_clip = float(CPX(G2_m))/(1<<5);
 set D_clip = float(CPX(G3_m));
 set R_clip = float(CPX(G4_m));
@@ -95,7 +98,6 @@ set inc        = float(CPX(RKinc)) / (SCALE<<8);
 set stepMax    = float(CPX(kStep)) / (SCALE<<8);
 set minVal     = float(CPX(kMin)) / (SCALE<<8);
 set maxVal     = float(CPX(kMax)) / (SCALE>>2);
-set grad1_clip = float(CPX(G1_k));
 set grad2_clip = float(CPX(G2_k))/(1<<5);
 set D_clip = float(CPX(G3_k));
 set R_clip = float(CPX(G4_k));
@@ -122,7 +124,6 @@ set inc        = float(CPX(RUinc)) / (SCALE<<8);
 set stepMax    = float(CPX(uStep)) / (SCALE<<8);
 set minVal     = float(CPX(uMin)) / (SCALE<<3);
 set maxVal     = float(CPX(uMax)) / (SCALE<<8);
-set grad1_clip = float(CPX(G1_u));
 set grad2_clip = float(CPX(G2_u))/(1<<5);
 set D_clip = float(CPX(G3_u));
 set R_clip = float(CPX(G4_u));
@@ -138,7 +139,6 @@ set inc        = float(CPX(RVinc)) / (SCALE<<8);
 set stepMax    = float(CPX(vStep)) / (SCALE<<8);
 set minVal     = float(CPX(uMin)) / (SCALE<<3);
 set maxVal     = float(CPX(uMax)) / (SCALE<<8);
-set grad1_clip = float(CPX(G1_v));
 set grad2_clip = float(CPX(G2_v))/(1<<5);
 set D_clip = float(CPX(G3_v));
 set R_clip = float(CPX(G4_v));
@@ -156,9 +156,11 @@ set leakage1 = clamp( float(CPX(leak1)) / float(SCALE), 0.0f, 1.0f );
 set leakage2 = clamp( float(CPX(leak2)) / float(SCALE), 0.0f, 1.0f );
 set mwP0     = float(CPX(mwP0)) / float(SCALE);
 
+#ifndef CP_SSE
 set F0_P0     = float(2*CPX(P0)) / float(SCALE);
 set F0_P1_raw = float(2 * (CPX(P0) + ((CPX(P1) & 1) ? -int(CPX(P1) >> 1) : int(CPX(P1) >> 1)))) / float(SCALE);
 set F0_P1     = (CP_NAME::F0_P1_raw < 0.0f) ? 0.0f : CP_NAME::F0_P1_raw;
+#endif
 
 set W0_raw = float(CPX(wr)) / float(SCALE);
 set W0     = clamp(CP_NAME::W0_raw, 0.0f, 1.0f);

@@ -67,11 +67,7 @@ template<class CP> struct Counter {
 
   static float st( const float p_ ) {
     float p = p_ * 0.999998f + 0.000001f;
-#ifdef SCHRAUDOLPH
     return ::st_schraudolph(p);   // the bit-difference stretch of schrau.inc, no division
-#else
-    return logf(p/(1.0f-p));
-#endif
   }
 
   static float sq( const float x ) {
@@ -141,12 +137,6 @@ template<class CP> struct Counter {
     r.z     = r.K * r.stP;
     r.pK    = sq(r.z);
     return r;
-  }
-
-  float Predict() const {
-    float p_out = PredictF().pK * float(SCALE);
-    p_out = clamp(p_out);
-    return p_out;
   }
 
   // pr = this cell's PredictF() for the bit being coded.
@@ -289,19 +279,11 @@ template<class CP> struct Counter {
       float cc  = rt.R_uv;
       float det = a_u * a_v - cc * cc;
       if( det > CP::UVDET * a_u * a_v ) {
-#if UV_NW_AFTER
-        float b_u = wr0_state.D;
-        float b_v = wr1_state.D;
-        float idet = 1.0f / det;
-        float s_u = (b_u * a_v - cc * b_v) * idet * Config_U::NW;
-        float s_v = (a_u * b_v - cc * b_u) * idet * Config_V::NW;
-#else
         float b_u = Config_U::NW * wr0_state.D;
         float b_v = Config_V::NW * wr1_state.D;
         float idet = 1.0f / det;
         float s_u = (b_u * a_v - cc * b_v) * idet;
         float s_v = (a_u * b_v - cc * b_u) * idet;
-#endif
         // RAYCL: rescale jointly so neither component exceeds its stepMax
         // (widened by the age schedule while the cell is young).
         float agu = 1.0f + CP::AGAu * agd;

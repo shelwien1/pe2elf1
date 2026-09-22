@@ -38,7 +38,6 @@ template<class cfg> struct ParamUpdater<1, cfg> {
     R = R * cfg::momentum_R + dp2_inv - d2p_inv;
 
     D = clip(D,cfg::D_clip);
-    //R = clip(R,cfg::R_clip);
     R = clamp(R,0.0f,cfg::R_clip);
     return dp_inv;
   }
@@ -46,8 +45,6 @@ template<class cfg> struct ParamUpdater<1, cfg> {
   INLINE float Denom() const { return R + cfg::inc; }
 
   INLINE float StepRaw() const {
-    //float safe_R = fabsf(R) + cfg::inc;
-    //float safe_R = Max(R,0.0f) + cfg::inc;
     float safe_R = R + cfg::inc;
     return cfg::NW * D / safe_R;
   }

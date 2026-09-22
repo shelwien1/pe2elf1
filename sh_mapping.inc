@@ -118,9 +118,6 @@ struct masking_b {
   }
 };
 
-// Kept just in case you rely on them elsewhere
-#define GCCBUG1(X) #X
-#define GCCBUG2(X,Y) X##Y
 
 // Tunable: the descriptor starts with "!MAP!", so IDX/opt.pl's scan of the
 // executable finds the pattern and hill-climbs it in place.

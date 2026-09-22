@@ -2,8 +2,10 @@
 Prefix S0
 Debug 1
 
-# Lines marked '!' are frozen: SSE cells are initialized per bucket (InitN),
-# so P0/P1 are unused, and grad1_clip (G1_*) is never read by ParamUpdater.
+# P0/P1 and the four G1_* used to sit here frozen with '!': SSE cells are
+# seeded per bucket through InitN(), so they never read the Counter::Init()
+# seeds, and grad1_clip was never read by ParamUpdater.  Both are gone --
+# from the coder as well, so the entries cannot silently come back.
 
 # ======================================================================
 # sh_model-S0.idx -- every tunable of the SSE/APM stage (sh_SSE2.inc).
@@ -47,8 +49,6 @@ Const 0
 # --- cell counter parameters: same meaning as C0_*, seeded from C0 --------
 
 # counts / rates
-!Number P0,     1,1!100101000001000
-!Number P1,     1,0!01010000010001
 Number wr,     1,1!01001000011010
 Number wr1,    1,0!110111000010
 Number mw,     1,1!0010111010010
@@ -64,7 +64,6 @@ Number kMin,   1,1!1111100100000000000001
 Number kMax,   1,1!011000000001110
 Number M1_k,   1,1!10110010110000100000
 Number M2_k,   1,1!011000000100000000
-!Number G1_k,   1,0!001001110001000
 Number G2_k,   1,0!000000000000001
 Number G3_k,   1,0!0010010001100000111
 Number G4_k,   1,0!0000000000000000110
@@ -79,7 +78,6 @@ Number mwMin,  1,1!000100001000001
 Number mwMax,  1,1!111111111111111
 Number M1_m,   1,1!110011010001000000
 Number M2_m,   1,1!010101101001000
-!Number G1_m,   1,0!001001110001000
 Number G2_m,   1,0!0000000100001
 Number G3_m,   1,0!1000000000000000000
 Number G4_m,   1,0!0100000000110100010
@@ -97,7 +95,6 @@ Number RUinc,  1,0!001100000010000000
 Number uStep,  1,0!11100111100101000
 Number uMin,   1,0!0000110000
 Number uMax,   1,0!01011000010111000000000
-!Number G1_u,   1,0!01001110001000
 Number G2_u,   1,0!000000001
 Number G3_u,   1,0!01000000000000000000
 Number G4_u,   1,0!00001010000
@@ -111,7 +108,6 @@ Number M2_v,   1,0!010100011
 Number NWv,    1,0!01110100001101000000
 Number RVinc,  1,0!00000000000000100000
 Number vStep,  1,0!1111111011000001
-!Number G1_v,   1,0!01001110001000
 Number G2_v,   1,0!000000000
 Number G3_v,   1,0!01000000000000000000
 Number G4_v,   1,0!00010001100
