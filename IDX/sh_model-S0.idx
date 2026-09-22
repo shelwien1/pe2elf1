@@ -23,18 +23,25 @@ Debug 1
 Const 0
 
 # --- row context: which bits of the byte history select the row ---------
-# Two indexes, combined in 64 bits by the coder (Cx*Cx3_Volume + Cx3) so the
-# generated int volumes never overflow; rows beyond HBITS are hashed anyway.
+# One row per context, no hashing: the table is Cx_Volume rows of NB cells,
+# 384 B a row at NB = 4.  The hashed table this replaced had the full
+# third-last byte in its context (133M contexts hashed 32:1 into 4.19M
+# rows, 1.6 GB): that made the SSE the coder's only order-3 model, and
+# without c3 book1 loses 18%, every c3 bit being worth ~10 kB there
+# (SSE-MIX2-REDESIGN.md sec.2.5).  The masks below are the best split
+# measured at the same 1.6 GB: 5 + 5 + 4 = 14 bits x 255 nodes = 4.18M
+# rows.  opt.pl flips bits inside a pattern but never widens one, so the
+# pattern lengths own the budget: 5 + 5 + 4 characters is the 1.6 GB, a
+# mask move can only halve the table, and widening a pattern here is the
+# decision to spend more memory (a table that cannot be allocated is a
+# failed run opt.pl rejects, but one that can is kept if it pays).
 Index Cx
- c2: c2, &01011111    # byte before last (all off = order-1 SSE; bits tunable)
- c1: c1, &00011111    # last byte
+ c3: c3, &11111       # third-last byte, low 5 bits
+ c2: c2, &11111       # byte before last, low 5 bits
+ c1: c1, &1111        # last byte, low 4 bits
  cx: cxt, b&00000000  # bit-tree node: b& merges node bits counted from the leading 1 (0 = keep)
 
-Index Cx3
- c3: c3, &11111111    # third-last byte, low 5 bits (bits tunable)
-
 # --- table geometry -----------------------------------------------------
-Number HBITS,  1,0!10110   # rows = min(Cx_Volume, 1<<HBITS); rows beyond are hashed
 Number NB,     1,2!00010   # interpolation buckets (columns) per row: 2 + pattern
 Number LIM,    1,0!001001001011   # |stretch(p_in)| clip, /256  (2048 = 8.0)
 

@@ -9,32 +9,23 @@
 MakeTables
 
 // Row context of the SSE stage: c3/c2/c1 = the three last bytes, cxt = the
-// bit-tree node (1..255).  The coder combines the two results in 64 bits:
-// row = Cx * S0_Cx3_Volume + Cx3.
-static uint S0_MakeCx( uint c2, uint c1, uint cxt ) {
+// bit-tree node (1..255); one row per context, S0_tbl[S0_MakeCx(..)].
+static uint S0_MakeCx( uint c3, uint c2, uint c1, uint cxt ) {
   int Cx;
   MakeIndex Cx
   return uint(Cx);
 }
-static uint S0_MakeCx3( uint c3 ) {
-  int Cx3;
-  MakeIndex Cx3
-  return uint(Cx3);
-}
 
-// Phase 1: today's row count, min(volume, 2^HBITS, 2^SSE_MAXCELLS_LOG/NB),
-// with the coder hashing the context onto it (sse_row_count, coder0.cpp);
-// phase 2 sizes the table by Cx_Volume and indexes it directly.
 def_Data
 #if USE_NEW
   SSE_Tbl<CP_S0> %M%tbl;
 #else
-  SSE_Row<sse_nb_clamp(CP_S0::NB)> %M%tbl[ sse_row_count( qword(%M%Cx_Volume)*%M%Cx3_Volume ) ];
+  SSE_Row<sse_nb_clamp(CP_S0::NB)> %M%tbl[ %M%Cx_Volume ];
 #endif
 end_Data
 def_Init
 #if USE_NEW
-  %M%tbl.Init( tbl_n(sse_row_count( qword(%M%Cx_Volume)*%M%Cx3_Volume )) );
+  %M%tbl.Init( tbl_n(%M%Cx_Volume) );
   %M%Size += %M%tbl.Bytes();
 #endif
 end_Init

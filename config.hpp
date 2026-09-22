@@ -65,7 +65,6 @@ struct CP_NAME {
   // is the row's template argument -- in the tuning build they are runtime
   // values that opt.pl patches, and SSE_Tbl dispatches on NB at Init().
   static const int   NB;               // buckets per row, the raw knob: sse_nb_clamp()ed where it is used
-  static const int   HBITS;            // log2 of the row cap (phase 1: today's hashed table)
   static const int   UPD;              // 1: both bracketing cells get a full event; 2: proportional
   static const float LIM;              // |stretch| clip of the input, in [0.25, 16]
   static const float ZMAX;             // |logit| bound of the cells' outputs, = ln 65535
@@ -216,7 +215,6 @@ set E2E    = clamp( float(CPX(E2E))/256, 0.0f, 1.0f );
 #ifdef CP_SSE
 #define set  const int CP_NAME::
 set NB    = CPX(NB);
-set HBITS = CPX(HBITS);
 set UPD   = CPX(UPD) < 1 ? 1 : CPX(UPD) > 2 ? 2 : CPX(UPD);
 #undef set
 #define set  const float CP_NAME::

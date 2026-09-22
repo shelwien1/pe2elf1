@@ -272,21 +272,6 @@ static SSE_Seeds sse_seeds( int nb, float lim, float K, float M, float mwP0, flo
 template<int NB> using SSE_Row = SSE<CP_S0, NB>;
 typedef Mix2<CP_M0> Mix2_Cell;
 
-// Phase-1 temporary (SSE-MIX2-REDESIGN.md sec.3): the SSE table keeps
-// today's row count -- min(volume, 2^HBITS, 2^SSE_MAXCELLS_LOG/NB) -- and
-// today's hash from the row context onto it, so that the stream is provably
-// unchanged; phase 2 indexes the rows by the context directly.  A constant
-// expression in the shipping build (it sizes the array); in the tuning build
-// the knobs it reads are runtime values, so there it is a plain function.
-#if defined(USE_NEW) && USE_NEW
-#define TBL_CONSTEXPR
-#else
-#define TBL_CONSTEXPR constexpr
-#endif
-static TBL_CONSTEXPR qword sse_row_count( qword volume ) {
-  return sse_rows( volume, CP_S0::HBITS, sse_nb_clamp(CP_S0::NB) );
-}
-
 #include "MOD/sh_model-S0_h.inc"
 #include "MOD/sh_model-M0_h.inc"
 
@@ -295,17 +280,8 @@ static const uint CNUM = 256;
 ALIGN(64) Rangecoder rc;
 Counter<CP_C0> o1[256][256];
 
-S0_T S0;           // the SSE rows: S0.S0_tbl[row]
-M0_T M0;           // the mixer cells: M0.M0_tbl[context]
-
-// Phase-1 temporary: today's hash of the row context onto the capped table
-// (the Row() of the former SSE_Ctr), identity when the contexts fit.
-static const qword S0_ROWS = sse_row_count( qword(S0_Cx_Volume)*S0_Cx3_Volume );
-static uint S0_Row( qword cx ) {
-  if( qword(S0_Cx_Volume)*S0_Cx3_Volume <= S0_ROWS ) return uint(cx);
-  uint h = uint( (cx * 0x9E3779B97F4A7C15ull) >> 32 );
-  return uint( (qword(h) * S0_ROWS) >> 32 );
-}
+S0_T S0;           // the SSE rows, one per row context: S0.S0_tbl[S0_MakeCx(..)]
+M0_T M0;           // the mixer cells, one per context: M0.M0_tbl[M0_MakeCx(..)]
 
 int main( int argc, char** argv ) {
   uint f_DEC, i, j, c=0, f_len, f_pos, cxt, bit=0, p;
@@ -350,7 +326,7 @@ int main( int argc, char** argv ) {
   // Initialize Order-1 Predictor array
   for( i=0; i<CNUM; i++) for( j=0; j<CNUM; j++ ) o1[i][j].Init();
   S0.S0_Init(); M0.M0_Init();   // tuning build: allocate the tables
-  for( uint r=0; r<S0_ROWS; r++ ) S0.S0_tbl[r].Init();   // row-major: the table is far bigger than any cache
+  for( i=0; i<uint(S0_Cx_Volume); i++ ) S0.S0_tbl[i].Init();   // row-major: the table is far bigger than any cache
   for( i=0; i<uint(M0_Cx_Volume); i++ ) M0.M0_tbl[i].Init();
 
   int last_c = 0, c2 = 0, c3 = 0;
@@ -367,8 +343,8 @@ int main( int argc, char** argv ) {
       // stretch domain -- the same values as st(p1), st(p2) up to rounding,
       // without the five logf and the sq that produced and consumed p2.
       Counter<CP_C0>::Pred pr = o1[last_c][cxt].PredictF();
-      uint sx = S0_Row( qword(S0_MakeCx(c2, last_c, cxt))*S0_Cx3_Volume + S0_MakeCx3(c3) );   // SSE row
-      uint mx = M0_MakeCx(c2, last_c, cxt);                                                 // mixer cell
+      uint sx = S0_MakeCx(c3, c2, last_c, cxt);   // SSE row
+      uint mx = M0_MakeCx(c2, last_c, cxt);   // mixer cell
       SSE_Pred<CP_S0> ps = S0.S0_tbl[sx].Predict( pr.z );
       Mix2_Cell::Pred pm = M0.M0_tbl[mx].Mix( pr.z, ps.z );
       p = uint( clamp( pm.p*float(SCALE) ) );

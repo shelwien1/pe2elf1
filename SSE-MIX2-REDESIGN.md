@@ -315,24 +315,43 @@ be 51 GB; the present *table* is 1.6 GB with 32 contexts colliding per row.
 The .idx author bounds the table by what goes into the index and by the
 **pattern lengths**: opt.pl flips bits inside a `&` pattern but never widens
 it, so an n-character mask contributes at most 2^n rows whatever the tuner
-does, and the worst case is known before the first tuning pass.  For the same
-1.6 GB as today:
+does, and the worst case is known before the first tuning pass.  A table the
+tuner cannot allocate is a failed run, which `opt.pl` scores as infinitely
+bad (`0x7FFFFFFF`), so a doubling that does not fit is rejected, never kept.
+At NB = 4 the budget of today's table, 1.6 GB, is 14 mask bits over the
+three history bytes (2^14 x 255 nodes = 4,177,920 rows, within 0.4% of the
+hashed 4,194,304); a tuner move on NB scales the table with it.
+
+Measured (phase 2; the tuning binary re-masked in place with `setp.pl`,
+sizes book1 / wcc386 / book1wcc; the hashed table: 234380 / 271584 / 507868
+= 1013832):
 
 ```
-Index Cx
- c2: c2, &011111      # 6-char pattern: at most 64 rows from c2
- c1: c1, &11111111    # at most 256
- cx: cxt, b&00000000  # 255 nodes
-                      # max 64*256*255 = 4,177,920 rows * 384 B = 1.60 GB
+bits  c3      c2        c1      rows       MB    book1   wcc386  book1wcc   total
+ 11   --      01011111  011111    522240   200   277373  277288  556929   1111590
+ 13   0011    01011111  011111   2088960   802   259573  276280  538141   1073994
+ 14   0111    01011111  011111   4177920  1604   247951  274933  525048   1047932
+ 14   1111    00011111  011111   4177920  1604   240851  275028  518069   1033948
+ 14   011111  00001111  011111   4177920  1604   239870  274428  516584   1030882
+ 14   011111  00011111  001111   4177920  1604   239025  273691  514946   1027662  <- kept
+ 15   011111  00011111  011111   8355840  3208   235411  273532  511011   1019954  (over budget)
 ```
 
-That is within 0.4% of the row count the hash produces today (4,194,304),
-direct instead of 32:1 shared (at NB = 4; a tuner move on NB scales the table with it, which is one
-more reason the pattern lengths, not the tuner, must own the budget).  Whether it compresses better is a measurement, not a given: the S0
-rates were tuned on the colliding table.  A smaller start (`c2` and `c1` as
-today, no `c3`: 522240 rows, 200 MB) is the cheaper first data point.  The
-`Cx3` index and `S0_MakeCx3()` go in either case, and so does `HBITS`, which
-only ever capped the hash.
+The first line is the "smaller start" an earlier draft of this section
+proposed, and it is where the draft was wrong: the hashed context carried the
+full third-last byte, which made the SSE this coder's only order-3 model, and
+dropping `c3` costs 18% on book1.  Every `c3` bit is worth ~10 kB there;
+`c2` and `c1` bits are worth far less.  So `c3` is in the index, and at the
+budget the best split is `c3` low 5 bits x `c2` low 5 x `c1` low 4 -- 1.4%
+behind the hashed table before any retune of the S0 rates, which were tuned
+for a table where every row was shared 32:1.  One more `c3` bit (3.2 GB)
+closes to 0.6%: that is the budget's price, not the design's.
+
+The split being settled by that sweep, the `.idx` carries it as 5-, 5- and
+4-character all-ones patterns: the budget is then the pattern lengths, as
+this section asks, and a tuner move on a mask can only halve the table, so
+the mask pass of phase 2 step 3 has nothing left to find and only the rates
+are climbed.  `HBITS` and the separate `Cx3` index went with the hash.
 
 The mixer side needs nothing: 522240 contexts are already direct-indexed, so
 deleting its hash is a no-op on the stream.

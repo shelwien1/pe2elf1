@@ -13,3 +13,9 @@ gradtest
 
 # t1.sh builds book1wcc from book1 + wcc386 when it is missing
 book1wcc
+
+# tuning runs (IDX/opt.pl, IDX/optv.pl): the exe copy they patch and their outputs
+coder0t.tune
+*.opt_tmp*
+/export.!!!
+/opttimes.!!!

@@ -40,3 +40,10 @@ book1          wcc386         book1wcc
 234389         271609         507950
 
 234380         271584         507867
+
+# SSE-MIX2-REDESIGN phase 2: the SSE table indexed directly by its context
+# (no hash, no HBITS), c3 low 5 x c2 low 5 x c1 low 4 x 255 nodes = 4.18M
+# rows x 4 buckets, 1.6 GB as before; S0 rates still the ones tuned on the
+# hashed table (phase 1, the components as plain cells, was byte-identical):
+book1          wcc386         book1wcc
+239025 9.709s  273691 3.072s  514946 6.160s

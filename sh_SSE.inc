@@ -33,20 +33,6 @@
 // measurements: SSE-DESIGN.md.
 // -------------------------------------------------------------
 
-// Phase-1 temporary (SSE-MIX2-REDESIGN.md sec.3): the row cap and count of
-// today's hashed table; phase 2 indexes the rows by the context directly.
-#ifndef SSE_MAXCELLS_LOG
-#define SSE_MAXCELLS_LOG 24    // hard cap: 2^24 cells whatever HBITS/NB say
-#endif
-// Rows of the table for a context volume: min(volume, 2^HBITS, cap/NB).
-static constexpr qword sse_rows( qword vol, int hbits, int nb ) {
-  hbits = hbits<8 ? 8 : hbits>30 ? 30 : hbits;
-  qword ncx = vol < (qword(1)<<hbits) ? vol : (qword(1)<<hbits);
-  qword maxcells = qword(1)<<SSE_MAXCELLS_LOG;
-  if( ncx*qword(nb) > maxcells ) ncx = maxcells/qword(nb);
-  return ncx<1 ? 1 : ncx;
-}
-
 // What Predict() computes and Update() needs back.  It does not depend on
 // NB, so every SSE<CP,NB> and the tuning build's dispatcher return one type.
 template<class CP> struct SSE_Pred {
