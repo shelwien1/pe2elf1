@@ -16,5 +16,6 @@ struct M0_T {
   
   }
   void M0_Quit( void ) {
+  
   }
 };

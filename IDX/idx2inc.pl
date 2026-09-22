@@ -255,6 +255,8 @@ $t_siz = "";   # per-table byte counts, summed into ${prefix}_Size
 
 $f_init=0;
 $init_code = "";
+$f_quit=0;
+$quit_code = "";   # def_Quit .. end_Quit: verbatim into %M%_Quit(), after the Table() delete[]s
 
 $f_data=0;
 
@@ -271,6 +273,12 @@ while( <I2> ) {
   elsif( /^(\s*)end_Init\s*$/ ) { $f_init=0; next; } 
   elsif( $f_init==1 ) {
     $init_code .= $_; next;
+  }
+
+  if( /^(\s*)def_Quit\s*$/ ) { $f_quit=1; next; }
+  elsif( /^(\s*)end_Quit\s*$/ ) { $f_quit=0; next; }
+  elsif( $f_quit==1 ) {
+    $quit_code .= $_; next;
   }
 
   if( /^(\s*)MakeTables\s*$/ ) { 
@@ -353,6 +361,8 @@ chomp $t_con;
 chomp $t_des;
 chomp $init_code;
 $init_code =~ s/(^|\n)/$1  /g;
+chomp $quit_code;
+$quit_code =~ s/(^|\n)/$1  /g;
 $t_sta =~ s/(^|\n)/$1  /g;
 $t_ptr =~ s/(^|\n)/$1  /g;
 $t_con =~ s/(^|\n)/$1  /g;
@@ -373,6 +383,7 @@ $init_code
   }
   void ${prefix}_Quit( void ) {
 $t_des
+$quit_code
   }
 };
 TEXT
@@ -390,6 +401,7 @@ $t_sta
 $init_code
   }
   void ${prefix}_Quit( void ) {
+$quit_code
   }
 };
 TEXT

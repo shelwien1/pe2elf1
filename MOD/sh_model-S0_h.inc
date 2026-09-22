@@ -17,5 +17,6 @@ struct S0_T {
   
   }
   void S0_Quit( void ) {
+  
   }
 };

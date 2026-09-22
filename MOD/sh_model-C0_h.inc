@@ -78,5 +78,6 @@ struct C0_T {
   
   }
   void C0_Quit( void ) {
+  
   }
 };

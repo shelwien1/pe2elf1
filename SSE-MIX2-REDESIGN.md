@@ -203,7 +203,7 @@ the bundle instead of bound as a reference parameter:
 template<class CP> struct SSE_Tbl {
   void* p; uint n; int nb;
   void Init( uint rows );        // nb = sse_nb_clamp(CP::NB); switch( nb ) { case 2: p = new SSE<CP,2>[rows]; ... }
-  ~SSE_Tbl();                    // the matching delete[]
+  void Quit();                   // the matching delete[]
   struct Ref {                   // what tbl[i] yields; the table keeps no per-query state
     SSE_Tbl& t; uint i;
     SSE_Pred<CP> Predict( float z ) const;   // switch( t.nb ) { case 2: return ((SSE<CP,2>*)t.p)[i].Predict(z); ... }
@@ -228,18 +228,27 @@ end_Data
 def_Init
 #if USE_NEW
   %M%tbl.Init( tbl_n(%M%Cx_Volume) );
+  %M%_Size += %M%tbl.Bytes();
 #endif
 end_Init
+def_Quit
+#if USE_NEW
+  %M%tbl.Quit();
+#endif
+end_Quit
 ```
 
 The allocation is therefore still the generated `S0_Init()`'s -- the IDX
 table's, the one place the rule of this section allows -- and `main()` spells
 `S0.S0_tbl[cx].Predict(pr.z)` identically in both builds: a plain
-`SSE<CP_S0,4>&` in one, a `Ref` in the other.  `idx2inc.pl` is not touched;
-should a second table ever need the pattern it earns a `Table()` form of its
-own.  Two small consequences: `%M%_Quit()` has no `def_Quit` hook, so
-`SSE_Tbl` frees in its destructor, and `%M%_Size` does not count this table
-(nothing in the coder reads it).
+`SSE<CP_S0,4>&` in one, a `Ref` in the other.  `def_Quit` / `end_Quit` is new
+in `idx2inc.pl` (the exact mirror of `def_Init`, copied into `%M%_Quit()`
+after the `Table()` `delete[]`s), so the table is freed where the `Table()`
+members are; `%M%_Size` is a member the `def_Init` code can add to, so the
+tuning build's byte count stays complete (the shipping build's is a
+`constexpr` over the `Table()` lines only, and nothing in the coder reads
+either).  Should a second table ever need the pattern it earns a `Table()`
+form of its own.
 
 Against today's `SSE_Dyn`: no virtual interface and no separately allocated
 `Impl`; the dispatcher *is* the table rather than a global next to it; and the

@@ -166,7 +166,8 @@ prefix plus underscore.
 | `MakeIndex <name>` | the index-building statements |
 | `Table( T, %M%N, size )` | storage — see §9 |
 | `def_Data … end_Data` | verbatim into the generated struct |
-| `def_Init … end_Init` | verbatim into `%M%_Init()` |
+| `def_Init … end_Init` | verbatim into `%M%_Init()`, after the `Table()` allocations |
+| `def_Quit … end_Quit` | verbatim into `%M%_Quit()`, after the `Table()` deallocations |
 
 For each `Index` a row count is emitted:
 
