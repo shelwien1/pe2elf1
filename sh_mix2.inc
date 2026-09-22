@@ -26,8 +26,8 @@ static constexpr uint mix_rows( qword vol ) {
 
 template<class CP> struct Mix2 {
   struct Cell {
-    ParamUpdater<1, typename CP::Config_W> w;
-    ParamUpdater<1, typename CP::Config_B> b;
+    ParamUpdater<typename CP::Config_W> w;
+    ParamUpdater<typename CP::Config_B> b;
     uint age;   // updates seen (saturating): the young-cell step schedule (A1)
   };
   Cell* t;        // the Table() of the generated M0_T

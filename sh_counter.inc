@@ -1,13 +1,12 @@
 
 // Real-Time Recurrent Learning traces of {n0, n1} w.r.t. wr0/wr1, plus the
-// UV2X2 cross-curvature EMA.  Split out of Counter so that a component with
-// ADAPT_WR=0 (e.g. SSE cells) carries none of these 9 floats.
-template<int ADAPT> struct RTRLState {
+// UV2X2 cross-curvature EMA.  Carried by every cell: wr, mw and K adapt in
+// both components.
+struct RTRLState {
   float n0_w0, n0_ww0, n0_w1, n0_ww1;
   float n1_w0, n1_ww0, n1_w1, n1_ww1;
   float R_uv;   // 2.1: EMA of the rotated (u,v) cross curvature (+1 float)
 };
-template<> struct RTRLState<0> {};
 
 // The post-step wr pair, kept so the next update does not recompute its
 // two expf (CP::CACHE_WR); empty otherwise.
@@ -17,9 +16,9 @@ template<> struct WrCache<0> {};
 
 // Counter<CP>: one adaptive binary probability cell.  CP is a parameter
 // bundle made by config.hpp (CP_C0 for the order-1 model, CP_S0 for the SSE
-// cells): it carries the ADAPT_* flags, the four ParamUpdater configs and
-// every derived constant the counter reads.  The arithmetic is exactly the
-// pre-template Counter's; the #if ADAPT_* blocks became if constexpr.
+// cells): it carries the four ParamUpdater configs and every derived
+// constant the counter reads.  wr (as u/v), mw and K all adapt, and the A2
+// end-to-end term is always in the gradient.
 template<class CP> struct Counter {
   typedef typename CP::Config_U  Config_U;
   typedef typename CP::Config_V  Config_V;
@@ -40,14 +39,14 @@ template<class CP> struct Counter {
   // Context-adaptive parameters logic encapsulating both wr limits
   // UVROT: wr0_state tracks u = (ln wr0 + ln wr1)/2,
   //        wr1_state tracks v = (ln wr0 - ln wr1)/2
-  NUA ParamUpdater<CP::A_WR, Config_U>  wr0_state;
-  NUA ParamUpdater<CP::A_WR, Config_V>  wr1_state;
-  NUA ParamUpdater<CP::A_MW, Config_MW> mw_state;
-  NUA ParamUpdater<CP::A_K,  Config_K>  k_state;
+  ParamUpdater<Config_U>  wr0_state;
+  ParamUpdater<Config_V>  wr1_state;
+  ParamUpdater<Config_MW> mw_state;
+  ParamUpdater<Config_K>  k_state;
 
   // Real-Time Recurrent Learning helper states for {n0, n1} variables
-  NUA RTRLState<CP::A_WR> rt;
-  NUA WrCache<CP::A_WR && CP::CACHE_WR> wrc;
+  RTRLState rt;
+  NUA WrCache<CP::CACHE_WR> wrc;
 
   // What PredictF() computes and C_Update() needs back.  The caller keeps it
   // between the two calls (per-query state), so nothing is stored in the
@@ -90,14 +89,12 @@ template<class CP> struct Counter {
     mw_state.Init(CP::MWX0);
     k_state.Init(CP::KY0);
 
-    if constexpr( CP::A_WR ) {
-      rt.n0_w0 = 0.0f; rt.n0_ww0 = 0.0f; rt.n0_w1 = 0.0f; rt.n0_ww1 = 0.0f;
-      rt.n1_w0 = 0.0f; rt.n1_ww0 = 0.0f; rt.n1_w1 = 0.0f; rt.n1_ww1 = 0.0f;
-      rt.R_uv = 0.0f;
-      if constexpr( CP::CACHE_WR ) {   // exactly what the first C_Update would compute
-        wrc.wr0 = expf(clamp(wr0_state.val + wr1_state.val, CP::UVLO, CP::UVHI));
-        wrc.wr1 = expf(clamp(wr0_state.val - wr1_state.val, CP::UVLO, CP::UVHI));
-      }
+    rt.n0_w0 = 0.0f; rt.n0_ww0 = 0.0f; rt.n0_w1 = 0.0f; rt.n0_ww1 = 0.0f;
+    rt.n1_w0 = 0.0f; rt.n1_ww0 = 0.0f; rt.n1_w1 = 0.0f; rt.n1_ww1 = 0.0f;
+    rt.R_uv = 0.0f;
+    if constexpr( CP::CACHE_WR ) {   // exactly what the first C_Update would compute
+      wrc.wr0 = expf(clamp(wr0_state.val + wr1_state.val, CP::UVLO, CP::UVHI));
+      wrc.wr1 = expf(clamp(wr0_state.val - wr1_state.val, CP::UVLO, CP::UVHI));
     }
   } 
 
@@ -105,28 +102,15 @@ template<class CP> struct Counter {
     InitN( CP::F0_P0, CP::F0_P1 );
   }
 
-  // Current mixing weight / logistic scale (adaptive or the fixed seed)
-  float cur_mw() const {
-    if constexpr( CP::A_MW ) return Config_MW::minVal + CP::MWspan * sq(mw_state.val);
-    else                         return CP::M;
-  }
-  float cur_K() const {
-    if constexpr( CP::A_K ) return expf(k_state.val);
-    else                        return CP::K;
-  }
+  // Current logistic scale
+  float cur_K() const { return expf(k_state.val); }
 
   // The prediction (P(bit==0) in .pK) and its intermediates; the caller
   // keeps the struct for C_Update()
   Pred PredictF() const {
     Pred r;
-    float cur_mw;
-    if constexpr( CP::A_MW ) {
-      r.mws  = sq(mw_state.val);
-      cur_mw = Config_MW::minVal + CP::MWspan * r.mws;
-    } else {
-      r.mws  = 0.0f;
-      cur_mw = CP::M;
-    }
+    r.mws = sq(mw_state.val);
+    const float cur_mw = Config_MW::minVal + CP::MWspan * r.mws;
     r.K = this->cur_K();
 
     float n_sum = n0 + n1 + 1e-8f;
@@ -172,28 +156,22 @@ template<class CP> struct Counter {
     // one.  Making that case a no-event changed nothing on the corpus.)
     const float p_o = bit ? pK : 1.0f - pK;
     const float e_o = sign * p_o;
-    float ee = e_o;
-    if constexpr( CP::E2E_ON ) ee = (1.0f - CP::E2E) * e_o - CP::E2E * ef;
+    const float ee = (1.0f - CP::E2E) * e_o - CP::E2E * ef;
     const float c2 = 1.0f - 2.0f * pK;
 
     // the pre-step wr pair: the previous update's post-step pair
     float cur_wr0, cur_wr1;
-    if constexpr( CP::A_WR && CP::CACHE_WR ) {
+    if constexpr( CP::CACHE_WR ) {
       cur_wr0 = wrc.wr0;
       cur_wr1 = wrc.wr1;
-    } else if constexpr( CP::A_WR ) {
+    } else {
       cur_wr0 = expf(clamp(wr0_state.val + wr1_state.val, CP::UVLO, CP::UVHI));
       cur_wr1 = expf(clamp(wr0_state.val - wr1_state.val, CP::UVLO, CP::UVHI));
-    } else {
-      cur_wr0 = CP::W0;
-      cur_wr1 = CP::W1;
     }
 
     // from PredictF(): sigma(mw), mw, K, q0 and the prior mix
     const float mws = pr.mws;
-    float cur_mw;
-    if constexpr( CP::A_MW ) cur_mw = Config_MW::minVal + CP::MWspan * mws;
-    else                     cur_mw = CP::M;
+    const float cur_mw = Config_MW::minVal + CP::MWspan * mws;
     const float curr_K = pr.K;
 
     float n_sum = n0 + n1 + 1e-8f;
@@ -212,7 +190,6 @@ template<class CP> struct Counter {
     float d2z_dpmix2 = curr_K * d2_st_dP2;
 
     // --- 1. Update WR0 and WR1 parameters based on current derivatives ---
-    if constexpr( CP::A_WR ) {
     float dpmix_dq0 = (1.0f - cur_mw);
     float dz_dq0 = dz_dpmix * dpmix_dq0;
     float d2z_dq02 = d2z_dpmix2 * (dpmix_dq0 * dpmix_dq0);
@@ -310,14 +287,12 @@ template<class CP> struct Counter {
       wr0_state.val = nu;
       wr1_state.val = nv;
     }
-    }  // ADAPT_WR
 
     // (The P10 MKCPL coupled (mw,K) variant that used to sit here was dead
     // code -- OPT_MKCPL=0, tested as a loss, see the header notes -- and is
     // not carried into the template.)
 
     // --- 2. Update MW parameter ---
-    if constexpr( CP::A_MW ) {
     float dpmix_dmw = CP::mwP0 - q0;
     float dz_dmw = dz_dpmix * dpmix_dmw;
     float d2z_dmw2 = d2z_dpmix2 * (dpmix_dmw * dpmix_dmw);
@@ -332,10 +307,8 @@ template<class CP> struct Counter {
       mw_state.Update(ee * g_xm, e_o * g_xm, e_o * (c2 * (g_xm * g_xm) + h_xm), CP::MWXLO, CP::MWXHI, g,
                       Config_MW::stepMax * (1.0f + CP::AGAm * agd));
     }
-    }  // ADAPT_MW
 
     // --- 3. Update K parameter ---
-    if constexpr( CP::A_K ) {
     const float stP = pr.stP;   // st(p_mix), from PredictF()
     if( fabsf(stP)>=CP::stP_min ) {
       // P24: y = ln K and z = K*st(p_mix), so dz/dy = d2z/dy2 = z
@@ -343,18 +316,12 @@ template<class CP> struct Counter {
       k_state.Update(ee * zk, e_o * zk, e_o * (c2 * (zk * zk) + zk), CP::KYLO, CP::KYHI, g,
                      Config_K::stepMax * (1.0f + CP::AGAk * agd));
     }
-    }  // ADAPT_K
 
 
     // --- 4. Update the derivative states for the NEXT cycle using NEW parameter weights ---
-    if constexpr( CP::A_WR ) {
-      cur_wr0 = expf(clamp(wr0_state.val + wr1_state.val, CP::UVLO, CP::UVHI));
-      cur_wr1 = expf(clamp(wr0_state.val - wr1_state.val, CP::UVLO, CP::UVHI));
-      if constexpr( CP::CACHE_WR ) { wrc.wr0 = cur_wr0; wrc.wr1 = cur_wr1; }
-    } else {
-      cur_wr0 = CP::W0;
-      cur_wr1 = CP::W1;
-    }
+    cur_wr0 = expf(clamp(wr0_state.val + wr1_state.val, CP::UVLO, CP::UVHI));
+    cur_wr1 = expf(clamp(wr0_state.val - wr1_state.val, CP::UVLO, CP::UVHI));
+    if constexpr( CP::CACHE_WR ) { wrc.wr0 = cur_wr0; wrc.wr1 = cur_wr1; }
     
     // Calculate the actual retention weights (1.0 - decay_rate), for an
     // observation of weight g
@@ -364,7 +331,6 @@ template<class CP> struct Counter {
     float w0b = (bit == 0) ? w0_retention : w1_retention;
     float w1b = (bit == 0) ? w1_retention : w0_retention;
 
-    if constexpr( CP::A_WR ) {
     // Applying the chain rule for d/d(alpha). Since (1 - alpha) handles retention, 
     // the injected variable acts negatively in the derivative: d/d_alpha (1 - alpha)*n = -n
     if (bit == 0) {
@@ -388,7 +354,6 @@ template<class CP> struct Counter {
       rt.n1_w0 = rt.n1_w0 * w0_retention - n1 * g;
       rt.n1_w1 = rt.n1_w1 * w0_retention;
     }
-    }  // ADAPT_WR
 
     // --- 5. Update n0 and n1 model values ---
     n0 = n0 * w0b + (1.0f - float(bit)) * g;
@@ -397,10 +362,8 @@ template<class CP> struct Counter {
 
     //const float leakage1 = 0.998f;
     //const float leakage2 = 0.990f;
-    if constexpr( CP::A_WR ) {
     rt.n0_w0 *= CP::leakage1; rt.n0_w1 *= CP::leakage1; rt.n1_w0 *= CP::leakage1; rt.n1_w1 *= CP::leakage1;
     rt.n0_ww0 *= CP::leakage2; rt.n0_ww1 *= CP::leakage2; rt.n1_ww0 *= CP::leakage2; rt.n1_ww1 *= CP::leakage2;
-    }
   }
 
 }; // struct

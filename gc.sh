@@ -13,7 +13,7 @@
 # Overridable from the environment:
 #   CXX    compiler            (default: g++)
 #   TARG   -march/-mtune target (default: haswell, as in gc.bat)
-#   CXXEXTRA  extra flags appended to the compile line (e.g. -DS0_ADAPT_WR=0)
+#   CXXEXTRA  extra flags appended to the compile line (e.g. -DS0_CACHE_WR=1)
 #   OUT    output executable name (default coder0 / coder0t)
 
 set -e

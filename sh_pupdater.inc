@@ -1,11 +1,9 @@
 
-template<int ADAPT, class cfg> struct ParamUpdater;
-
 // Active parameter state 
 // Split into Accum (D/R statistics) / StepRaw (Newton step) / Apply (clip,
 // move, box) so the UV2X2 coupled solve can interpose between the halves;
 // Update() composes them and is bit-identical to the pre-split code.
-template<class cfg> struct ParamUpdater<1, cfg> {
+template<class cfg> struct ParamUpdater {
   float val;
   float D;
   float R;
@@ -70,15 +68,4 @@ template<class cfg> struct ParamUpdater<1, cfg> {
     Update( gr, gr, hc, lo, hi, w, smax );
   }
 
-};
-
-// Inactive parameter state
-template<class cfg> struct ParamUpdater<0, cfg> {
-  void Init(float /*init_val*/) {}
-  inline float Accum(float, float, float, float = 1.0f) { return 0.0f; }
-  inline float Denom() const { return 1.0f; }
-  inline float StepRaw() const { return 0.0f; }
-  inline void Apply(float, float, float, float = 0.0f) {}
-  inline void Update(float /*gd*/, float /*gr*/, float /*hc*/, float /*lo*/, float /*hi*/, float, float) {}
-  inline void Update(float /*gr*/, float /*hc*/, float /*lo*/, float /*hi*/, float = 1.0f, float = 0.0f) {}
 };

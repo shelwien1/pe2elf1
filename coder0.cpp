@@ -15,34 +15,14 @@
 // Isolated contributions on top of baseline: LOGWR+UVROT alone (old box)
 // -443; + relaxed box -4722 cum; + v/u step & clip re-tune -5178 cum.
 // New C0_*_u / C0_*_v constants defined in sh_model-C0_h.inc style.
-// Also fixed: trailing RTRL leakage lines now #if ADAPT_WR guarded
-// (ADAPT_WR=0 didn't compile before).
 // -------------------------------------------------------------
-// Toggles for enabling/disabling parameter adaptations.
-// Set to 0 to disable an update entirely (saves memory & compute).
+// Both cell components adapt all four parameters (wr as the rotated u/v
+// pair, mw and K) and both carry the A2 end-to-end gradient term; the
+// ADAPT_WR/ADAPT_MW/ADAPT_K and C0_E2E_ON/S0_E2E_ON switches that used to
+// make those optional are gone, along with the branches they selected.
+// The rates themselves stay tunable: E2E = 0 in an .idx still turns the
+// end-to-end blend off numerically.
 // -------------------------------------------------------------
-#define ADAPT_WR 1
-#define ADAPT_MW 1
-#define ADAPT_K  1
-// Same toggles for the SSE cells (sh_SSE2.inc, parameters S0_*); these and
-// SSE_MAXCELLS_LOG may be overridden from the build line (gc.sh CXXEXTRA).
-#ifndef S0_ADAPT_WR
-#define S0_ADAPT_WR 1
-#endif
-#ifndef S0_ADAPT_MW
-#define S0_ADAPT_MW 1
-#endif
-#ifndef S0_ADAPT_K
-#define S0_ADAPT_K  1
-#endif
-// A2 end-to-end gradient path (C0_E2E / S0_E2E knobs): compiled in by
-// default, since E2E = 0 is bit-identical; 0 removes the per-bit chain.
-#ifndef C0_E2E_ON
-#define C0_E2E_ON 1
-#endif
-#ifndef S0_E2E_ON
-#define S0_E2E_ON 1
-#endif
 // Cache the post-step wr pair in the cell (+8 B) instead of recomputing the
 // two expf at the next update: on for the order-1 cells (6 MB table), off
 // for the SSE cells (1.6 GB, memory-bound).
@@ -102,7 +82,7 @@
 //       (with C0 rates x1.5 -2534), S0_E2E = 0.25 -137.  The stack -3781.
 //   A3  hypergradient on the stage rates: loses at every setting, removed.
 //   F4  NW after the 2x2 solve: +112 alone, -63 vs. the stack; off.
-//   F13 [[no_unique_address]] on the adaptation members (reduced cells 36/12 B).
+//   F13 [[no_unique_address]] on the members that can be empty.
 //   The compile-time diagnostics E2E_NOCHAIN (chain factor = the mixer weight
 //   alone), E2E_SSEI (SSE cells train on the interpolated output's own loss)
 //   and UV_NW_AFTER (F4) all measured worse and have been removed, as was
@@ -136,11 +116,11 @@ typedef unsigned int   uint;
 typedef unsigned char  byte;
 typedef unsigned long long qword;
 
-// [[no_unique_address]] for the Counter members that are empty when an
-// adaptation is off (ParamUpdater<0,..>, RTRLState<0>): without it each costs
-// 1 byte plus padding, and the reduced cells are 44/20 B instead of the
-// intended 36/12 B (SSE-DESIGN.md sec.3.6).  MSVC (and clang in MS mode)
-// ignore the standard spelling and need the msvc:: one.
+// [[no_unique_address]] for the one Counter member that can be empty,
+// WrCache<0> (the SSE cells do not cache the post-step wr pair): without it
+// it costs 1 byte plus padding, taking the 96 B cell to 104 B for nothing
+// (SSE-DESIGN.md sec.3.6).  MSVC (and clang in MS mode) ignore the standard
+// spelling and need the msvc:: one.
 // gradtest.cpp (gt.sh) builds the coder with -DGRAD_TEST and checks every
 // gradient/curvature term handed to ParamUpdater against finite
 // differences; the hook records them and is empty otherwise.
@@ -230,23 +210,15 @@ static float rt_expf( float x ) { volatile float v = x; return expf(v); }
   static const int NAG; };
 
 // Parameter bundle of the order-1 model: C0_* constants from
-// IDX/sh_model-C0.idx, adaptation flags from the ADAPT_* toggles above.
+// IDX/sh_model-C0.idx.
 #define CP_NAME     CP_C0
 #define CP_PFX      C0_
-#define CP_ADAPT_WR ADAPT_WR
-#define CP_ADAPT_MW ADAPT_MW
-#define CP_ADAPT_K  ADAPT_K
-#define CP_E2E      C0_E2E_ON
 #define CP_CACHE_WR C0_CACHE_WR
 #include "config.hpp"
 
 // Parameter bundle of the SSE cells: S0_* constants from IDX/sh_model-S0.idx.
 #define CP_NAME     CP_S0
 #define CP_PFX      S0_
-#define CP_ADAPT_WR S0_ADAPT_WR
-#define CP_ADAPT_MW S0_ADAPT_MW
-#define CP_ADAPT_K  S0_ADAPT_K
-#define CP_E2E      S0_E2E_ON
 #define CP_CACHE_WR S0_CACHE_WR
 #define CP_SSE      1
 #include "config.hpp"

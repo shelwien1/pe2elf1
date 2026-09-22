@@ -7,10 +7,6 @@
 //
 //   #define CP_NAME     CP_C0   // name of the bundle struct to define
 //   #define CP_PFX      C0_     // prefix of the IDX constants (C0_wr, ...)
-//   #define CP_ADAPT_WR 1       // per-cell adaptive wr (u/v) + RTRL traces
-//   #define CP_ADAPT_MW 1       // per-cell adaptive mw
-//   #define CP_ADAPT_K  1       // per-cell adaptive K
-//   #define CP_E2E      1       // compile the A2 end-to-end gradient path
 //   #define CP_CACHE_WR 1       // cache the post-step wr pair in the cell (+8 B)
 //   #define CP_SSE      1       // also derive the SSE-stage knobs (S0 only)
 //   #include "config.hpp"
@@ -31,7 +27,6 @@
 #define CPX(n)       CP_CAT(CP_PFX, n)
 
 struct CP_NAME {
-  enum { A_WR = CP_ADAPT_WR, A_MW = CP_ADAPT_MW, A_K = CP_ADAPT_K };   // adaptation flags (names avoid the ADAPT_* macros)
   enum { CACHE_WR = CP_CACHE_WR };   // keep the post-step wr pair in the cell
 
   def_Config(Config_MW)
@@ -60,8 +55,7 @@ struct CP_NAME {
   // (u/v share AGAu on the ray clip); AGiB = 1/B with B = AGB/16 updates.
   static const float AGAu, AGAm, AGAk, AGiB;
   // A2 end-to-end objective: the gradient uses (1-E2E)*own error + E2E*final
-  // error chained to this cell; E2E_ON compiles the path in (CP_E2E).
-  enum { E2E_ON = CP_E2E };
+  // error chained to this cell.
   static const float E2E;
 
 #ifdef CP_SSE
@@ -230,9 +224,5 @@ set UPMIN = float(CPX(UPMIN)) / 256;   // floor of the proportional update weigh
 #undef CP_CAT2
 #undef CP_NAME
 #undef CP_PFX
-#undef CP_ADAPT_WR
-#undef CP_ADAPT_MW
-#undef CP_ADAPT_K
 #undef CP_CACHE_WR
-#undef CP_E2E
 #undef CP_SSE
