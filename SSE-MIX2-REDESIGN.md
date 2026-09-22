@@ -124,8 +124,8 @@ Retuning NB means editing that line and rebuilding; the delivered value is 4.
 
 ### 2.3 The bundles pick up the constants
 
-`config.hpp`, `#ifdef CP_SSE` block -- replacing the current `ON, NB, HBITS,
-UPD` / `LIM, T0, UPMIN`:
+`config.hpp`, `#ifdef CP_SSE` block -- replacing the current `NB, HBITS, UPD`
+/ `LIM, T0, UPMIN`:
 
 ```cpp
 enum { NB = CP_NB };
@@ -160,6 +160,14 @@ holds: the bundle is the consumer of the raw knob, the component only ever
 sees a sane value.
 
 ### 2.4 The tables are the IDX `Table()`s, indexed directly
+
+Rule: `Table()` is the only place anything is allocated.  It is a fixed array
+in the shipping build and a `new[]` in `%M%_Init()` in the tuning build, and
+that is the whole of the coder's dynamic memory -- the components hold no
+pointers, `main()` allocates nothing, and the per-query `Pred` structs live on
+the stack.  (The tuning build's other allocations are the IDX runtime's own:
+the `mapping`/`masking` descriptor tables that `sh_mapping.inc` builds for the
+patchable knobs.  They are not the coder's and are untouched by this plan.)
 
 `IDX/sh_model-S0.inc` and `-M0.inc`:
 
@@ -235,10 +243,11 @@ deleting its hash is a no-op on the stream.
 
 ### 2.6 `ON`, `UPD`, `UPMIN`
 
-- **`S0_ON` / `M0_ON`** -- stage bypasses, both 1.  A bypass is pipeline
-  wiring, not a property of a cell; the only place it could live in the new
-  shape is `main()`.  The log's "both stages bypassed" numbers were a one-time
-  reference.  Recommendation: remove both, as `ADAPT_*` and `*_E2E_ON` were.
+- **`S0_ON` / `M0_ON`** -- removed (commit "Remove the S0_ON / M0_ON stage
+  bypasses", ahead of phase 1).  Both were 1; a bypass is pipeline wiring, not
+  a property of a cell, and the log's "both stages bypassed" numbers were a
+  one-time reference.  The `if( !CP::ON )` early-outs, the `? : 1.0f` forms of
+  the chain accessors and the `ON ? rows : 1` table sizes went with them.
 - **`UPD` / `UPMIN`** -- 1 (both bracketing cells get a full event) and 0.
   This is a genuine model variant opt.pl may flip, and the branch in
   `SSE::Update()` folds to nothing in the shipping build, so it stays, as a
@@ -261,8 +270,8 @@ Both already recorded in this session's history.
    `Update()` with the bodies unchanged apart from where the state lives.
 3. `sh_SSE.inc`: `SSE<CP>` row; `Pred`; `Init()`, `Predict()`, `Update()`;
    delete `SSE_Dyn` and the geometry helpers.
-4. IDX templates: `Table()` lines of sec.2.4.  `.idx`: drop `NB`, `HBITS`,
-   `ON`; **keep `Cx3` for now**.
+4. IDX templates: `Table()` lines of sec.2.4.  `.idx`: drop `NB` and `HBITS`
+   (`ON` is already gone); **keep `Cx3` for now**.
 5. `coder0.cpp`: sec.2.4, but with one temporary:
 
    ```cpp
@@ -307,6 +316,7 @@ available.
   same places, only returned instead of stored.
 - The `UPD` proportional update, the young-cell schedule in the mixer, the
   `ZMAX`/`ZM` clips and the zero-derivative rule where a clip binds.
-- Every knob except `NB`, `HBITS`, `ON` (and, in phase 2, the `Cx3` index)
-  stays patchable; opt.pl's search space loses only those.
+- Every knob except `NB` and `HBITS` (and, in phase 2, the `Cx3` index)
+  stays patchable; opt.pl's search space loses only those, on top of the two
+  `ON` bypasses already removed.
 - The shipping/tuning identity contract, and `gc.sh` / `t1.sh` as its test.
