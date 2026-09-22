@@ -23,15 +23,6 @@
 // The rates themselves stay tunable: E2E = 0 in an .idx still turns the
 // end-to-end blend off numerically.
 // -------------------------------------------------------------
-// Cache the post-step wr pair in the cell (+8 B) instead of recomputing the
-// two expf at the next update: on for the order-1 cells (6 MB table), off
-// for the SSE cells (1.6 GB, memory-bound).
-#ifndef C0_CACHE_WR
-#define C0_CACHE_WR 1
-#endif
-#ifndef S0_CACHE_WR
-#define S0_CACHE_WR 0
-#endif
 
 // -------------------------------------------------------------
 // Optimizer-proposal toggles (coder0_counter_scope.md / r8 doc).
@@ -82,7 +73,8 @@
 //       (with C0 rates x1.5 -2534), S0_E2E = 0.25 -137.  The stack -3781.
 //   A3  hypergradient on the stage rates: loses at every setting, removed.
 //   F4  NW after the 2x2 solve: +112 alone, -63 vs. the stack; off.
-//   F13 [[no_unique_address]] on the members that can be empty.
+//   F13 [[no_unique_address]] on the members that could be empty (none are
+//       left: the cell is 96 B of state, its wr cache became a local).
 //   The compile-time diagnostics E2E_NOCHAIN (chain factor = the mixer weight
 //   alone), E2E_SSEI (SSE cells train on the interpolated output's own loss)
 //   and UV_NW_AFTER (F4) all measured worse and have been removed, as was
@@ -116,11 +108,6 @@ typedef unsigned int   uint;
 typedef unsigned char  byte;
 typedef unsigned long long qword;
 
-// [[no_unique_address]] for the one Counter member that can be empty,
-// WrCache<0> (the SSE cells do not cache the post-step wr pair): without it
-// it costs 1 byte plus padding, taking the 96 B cell to 104 B for nothing
-// (SSE-DESIGN.md sec.3.6).  MSVC (and clang in MS mode) ignore the standard
-// spelling and need the msvc:: one.
 // gradtest.cpp (gt.sh) builds the coder with -DGRAD_TEST and checks every
 // gradient/curvature term handed to ParamUpdater against finite
 // differences; the hook records them and is empty otherwise.
@@ -131,11 +118,6 @@ typedef unsigned long long qword;
  #define GRAD_HOOK(gd,gr,hc) ((void)0)
 #endif
 
-#ifdef _MSC_VER
- #define NUA [[msvc::no_unique_address]]
-#else
- #define NUA [[no_unique_address]]
-#endif
 
 #ifdef __GNUC__
  #define INLINE   __attribute__((always_inline))
@@ -239,13 +221,11 @@ static SSE_Seeds sse_seeds( int nb, float lim, float K, float M, float mwP0, flo
 // IDX/sh_model-C0.idx.
 #define CP_NAME     CP_C0
 #define CP_PFX      C0_
-#define CP_CACHE_WR C0_CACHE_WR
 #include "config.hpp"
 
 // Parameter bundle of the SSE cells: S0_* constants from IDX/sh_model-S0.idx.
 #define CP_NAME     CP_S0
 #define CP_PFX      S0_
-#define CP_CACHE_WR S0_CACHE_WR
 #define CP_SSE      1
 #include "config.hpp"
 

@@ -7,7 +7,7 @@
 //
 //   #define CP_NAME     CP_C0   // name of the bundle struct to define
 //   #define CP_PFX      C0_     // prefix of the IDX constants (C0_wr, ...)
-//   #define CP_CACHE_WR 1       // cache the post-step wr pair in the cell (+8 B)
+
 //   #define CP_SSE      1       // also derive the SSE-stage knobs (S0 only)
 //   #include "config.hpp"
 //
@@ -27,7 +27,7 @@
 #define CPX(n)       CP_CAT(CP_PFX, n)
 
 struct CP_NAME {
-  enum { CACHE_WR = CP_CACHE_WR };   // keep the post-step wr pair in the cell
+
 
   def_Config(Config_MW)
   def_Config(Config_K)
@@ -245,5 +245,5 @@ const SSE_Seeds CP_NAME::SEEDS = sse_seeds( sse_nb_clamp(CP_NAME::NB), CP_NAME::
 #undef CP_CAT2
 #undef CP_NAME
 #undef CP_PFX
-#undef CP_CACHE_WR
+
 #undef CP_SSE
