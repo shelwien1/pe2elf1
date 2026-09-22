@@ -248,11 +248,11 @@ static float rt_expf( float x ) { volatile float v = x; return expf(v); }
 #endif
 typedef Counter<CP_S0> SSE_Cell;
 static TBL_CONSTEXPR qword sse_table_cells( qword volume ) {
-  return CP_S0::ON ? sse_rows( volume, CP_S0::HBITS, sse_nb_clamp(CP_S0::NB) ) * qword(sse_nb_clamp(CP_S0::NB)) : 1;
+  return sse_rows( volume, CP_S0::HBITS, sse_nb_clamp(CP_S0::NB) ) * qword(sse_nb_clamp(CP_S0::NB));
 }
 typedef Mix2<CP_M0>::Cell Mix2_Cell;
 static TBL_CONSTEXPR uint mix_table_ctx( qword volume ) {
-  return CP_M0::ON ? mix_rows( volume ) : 1;
+  return mix_rows( volume );
 }
 
 #include "MOD/sh_model-S0_h.inc"

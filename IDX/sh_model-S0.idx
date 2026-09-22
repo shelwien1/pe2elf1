@@ -40,7 +40,6 @@ Number LIM,    1,0!001001001011   # |stretch(p_in)| clip, /256  (2048 = 8.0)
 
 # --- cell init and update ------------------------------------------------
 Number T0,     1,0!0000010111011   # initial mass n0+n1 of a fresh cell, /256
-Number ON,     1,0!1    # 0: stage bypassed (SSE(p) = p, no table)
 Number UPD,    1,0!01   # 1: both cells fully; 2: proportional (1-wt, wt), the interpolated update
 Number UPMIN,  1,0!00000000   # floor of the proportional weights, /256 (256 = same as UPD 1)
 

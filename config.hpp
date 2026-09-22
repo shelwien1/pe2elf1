@@ -63,7 +63,7 @@ struct CP_NAME {
   // shipping build these are constant expressions -- NB is the template
   // argument of SSE_Ctr -- in the tuning build they are runtime values that
   // opt.pl patches, and SSE_Dyn dispatches on NB at Init().
-  static const int   ON, NB, HBITS, UPD;
+  static const int   NB, HBITS, UPD;
   static const float LIM, T0, UPMIN;
 #endif
 };
@@ -207,7 +207,6 @@ set E2E    = clamp( float(CPX(E2E))/256, 0.0f, 1.0f );
 
 #ifdef CP_SSE
 #define set  const int CP_NAME::
-set ON    = CPX(ON);
 set NB    = CPX(NB);
 set HBITS = CPX(HBITS);
 set UPD   = CPX(UPD);

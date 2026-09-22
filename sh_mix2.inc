@@ -11,7 +11,7 @@
 // second derivative chain, here for two arbitrary probabilities instead
 // of the two model trees.  Frozen
 // (NW = 0, b = 0) it is a static stretch-domain blend; adaptive it learns
-// the blend per context.  ON=0 bypasses it: the final p is p2.
+// the blend per context.
 // -------------------------------------------------------------
 
 #ifndef MIX_MAXCTX_LOG
@@ -44,8 +44,7 @@ template<class CP> struct Mix2 {
 
   // table: mix_rows(contexts) cells, owned by the caller
   void Init( Cell* table, uint contexts ) {
-    t = table; n = 0;
-    if( !CP::ON ) return;
+    t = table;
     vol = contexts < 1 ? 1 : contexts;
     n = mix_rows( vol );
     zm = rt_logf( (1.0f - CP::Pmin) / CP::Pmin );
@@ -55,13 +54,11 @@ template<class CP> struct Mix2 {
   }
   // z1, z2 = logits of P(bit==0) of the two inputs; returns the mixed P(bit==0)
   // derivatives of the final logit w.r.t. the two inputs of the last Mix()
-  // (the A2 chain): w and 1-w, or 0 where the input clip binds; with the
-  // mixer off the final p is sq(z2): 0 and 1.
-  float dzf_dz1() const { return CP::ON ? d1 : 0.0f; }
-  float dzf_dz2() const { return CP::ON ? d2 : 1.0f; }
+  // (the A2 chain): w and 1-w, or 0 where the input clip binds.
+  float dzf_dz1() const { return d1; }
+  float dzf_dz2() const { return d2; }
 
   float Mix( uint cx, float z1, float z2 ) {
-    if( !CP::ON ) return sqf(z2);
     c  = t + ( vol<=n ? cx : uint( (qword(cx*0x9E3779B1u) * n) >> 32 ) );
     s1 = clamp( z1, -zm, zm );
     s2 = clamp( z2, -zm, zm );
@@ -73,7 +70,6 @@ template<class CP> struct Mix2 {
   }
 
   void Update( int bit ) {
-    if( !CP::ON ) return;
     // logit-domain chain (see Counter::C_Update): with z = w*s1+(1-w)*s2+b
     // and p0 = sq(z), the gradient of -ln p w.r.t. a parameter t is
     // e_o*dz/dt and the curvature term e_o*((1-2p0)*(dz/dt)^2 + d2z/dt2),

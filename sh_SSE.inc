@@ -77,8 +77,7 @@ template<class CP, int NB> struct SSE_Ctr {
 
   // table: sse_rows(volume, HBITS, NB) * NB cells, owned by the caller
   void Init( Cell* table, qword volume ) {
-    t = table; ncx = 0;
-    if( !CP::ON ) return;
+    t = table;
     vol   = volume;
     lim   = clamp( CP::LIM, 0.25f, 16.0f );
     zmax  = rt_logf( 65535.0f );
@@ -113,7 +112,6 @@ template<class CP, int NB> struct SSE_Ctr {
 
   // z = logit of P(bit==0) from the primary model; returns the SSE's logit
   float Predict( qword cx, float z ) {
-    if( !CP::ON ) return z;
     float s0 = clamp( z, -zmax, zmax );
     float s  = clamp( s0, -lim, lim );
     float x  = (s + lim) * qscale;
@@ -129,14 +127,13 @@ template<class CP, int NB> struct SSE_Ctr {
     return z0 + wt*(z1-z0);
   }
 
-  // d st(p_sse) / d st(p_in) of the last Predict() (1 when the stage is off)
-  float dz2_dz1() const { return CP::ON ? dzdz : 1.0f; }
+  // d st(p_sse) / d st(p_in) of the last Predict()
+  float dz2_dz1() const { return dzdz; }
 
   // ef = A2 end-to-end error at the SSE output, dL/dz_sse; each cell gets
   // it times the derivative of the output w.r.t. its logit (its
   // interpolation share, 0 where its clip binds).
   void Update( int bit, float ef = 0.0f ) {
-    if( !CP::ON ) return;
     if( upd==1 ) { c[0].C_Update(bit, pr0, 1.0f, ef*sh0); c[1].C_Update(bit, pr1, 1.0f, ef*sh1); }
     else {
       float g0 = 1.0f-wt, g1 = wt;

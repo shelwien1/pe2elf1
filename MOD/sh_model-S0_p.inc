@@ -13,7 +13,6 @@ static const int S0_HBITS = (22+0) * (1);
 static const int S0_NB = (2+2) * (1);
 static const int S0_LIM = (587+0) * (1);
 static const int S0_T0 = (187+0) * (1);
-static const int S0_ON = (1+0) * (1);
 static const int S0_UPD = (1+0) * (1);
 static const int S0_UPMIN = (0+0) * (1);
 static const int S0_wr = (4634+1) * (1);

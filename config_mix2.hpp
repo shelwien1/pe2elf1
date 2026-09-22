@@ -19,7 +19,6 @@
 struct CP_NAME {
   def_Config(Config_W)
   def_Config(Config_B)
-  static const int   ON;
   static const float W0, Wclip, Bclip, Pmin;
   // A1 young-cell step schedule: stepMax*(1 + AGAx/(1 + age*AGiB)) on W (AGAw)
   // and b (AGAb); AGiB = 1/B with B = AGB/16 updates.
@@ -56,7 +55,6 @@ set R0         = 0.0f;
 #undef set
 const int CP_NAME::Config_B::NAG = CPX(NAGb);
 
-const int   CP_NAME::ON    = CPX(ON);
 const float CP_NAME::W0    = float(CPX(W0)) / SCALE;
 const float CP_NAME::Wclip = float(CPX(Wclip)) / (1<<8);
 const float CP_NAME::Bclip = float(CPX(Bclip)) / (1<<8);
