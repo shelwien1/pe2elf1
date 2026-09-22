@@ -33,6 +33,21 @@
 // measurements: SSE-DESIGN.md.
 // -------------------------------------------------------------
 
+// Row count of the table for a context volume, min(volume, 2^HBITS, cap/NB):
+// the coder hashes the row context onto it (coder0.cpp, S0_Row); the rows
+// themselves know nothing of it.
+#ifndef SSE_MAXCELLS_LOG
+#define SSE_MAXCELLS_LOG 24    // hard cap: 2^24 cells whatever HBITS/NB say
+#endif
+// Rows of the table for a context volume: min(volume, 2^HBITS, cap/NB).
+static constexpr qword sse_rows( qword vol, int hbits, int nb ) {
+  hbits = hbits<8 ? 8 : hbits>30 ? 30 : hbits;
+  qword ncx = vol < (qword(1)<<hbits) ? vol : (qword(1)<<hbits);
+  qword maxcells = qword(1)<<SSE_MAXCELLS_LOG;
+  if( ncx*qword(nb) > maxcells ) ncx = maxcells/qword(nb);
+  return ncx<1 ? 1 : ncx;
+}
+
 // What Predict() computes and Update() needs back.  It does not depend on
 // NB, so every SSE<CP,NB> and the tuning build's dispatcher return one type.
 template<class CP> struct SSE_Pred {

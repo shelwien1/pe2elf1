@@ -55,3 +55,8 @@ book1          wcc386         book1wcc
 # measurable on the 15 GB development box -- measure where it fits.  The S0
 # rates climbed on the 14-bit table (optv.pl, seven chunks) are folded in:
 # 512716 -> 512502 on book1+wcc386 there.
+
+# Hashing restored, in main() (coder0.cpp S0_Row) and not in the component:
+# the original masks and rates, the 64-bit context hashed onto 4.19M rows
+# as before -- the profile of the 234380 / 271584 / 507867 line, byte for
+# byte (the direct-index lines above are the record of the experiment).
