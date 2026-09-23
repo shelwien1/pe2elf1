@@ -13,77 +13,77 @@ static const byte S0_cx[256]={ 0,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,
 
 static const int S0_HBITS = (22+0) * (1);
 static const int S0_NB = (2+2) * (1);
-static const int S0_LIM = (587+0) * (1);
-static const int S0_T0 = (187+0) * (1);
+static const int S0_LIM = (463+0) * (1);
+static const int S0_T0 = (412+0) * (1);
 static const int S0_UPD = (1+0) * (1);
 static const int S0_UPMIN = (0+0) * (1);
-static const int S0_wr = (4634+1) * (1);
-static const int S0_wr1 = (3522+0) * (1);
-static const int S0_wr1b = (4634+1) * (1);
-static const int S0_mw = (1490+1) * (1);
-static const int S0_K = (36995+0) * (1);
-static const int S0_NWk = (64259+1) * (1);
-static const int S0_RKinc = (3220+1) * (1);
+static const int S0_wr = (8178+1) * (1);
+static const int S0_wr1 = (4090+0) * (1);
+static const int S0_wr1b = (8032+1) * (1);
+static const int S0_mw = (1986+1) * (1);
+static const int S0_K = (37239+0) * (1);
+static const int S0_NWk = (169737+1) * (1);
+static const int S0_RKinc = (11001+1) * (1);
 static const int S0_kStep = (94785+1) * (1);
-static const int S0_kMin = (4079617+1) * (1);
-static const int S0_kMax = (12302+1) * (1);
-static const int S0_M1_k = (732192+1) * (1);
-static const int S0_M2_k = (98560+1) * (1);
+static const int S0_kMin = (475152+1) * (1);
+static const int S0_kMax = (14218+1) * (1);
+static const int S0_M1_k = (1033361+1) * (1);
+static const int S0_M2_k = (258337+1) * (1);
 static const int S0_G2_k = (1+0) * (1);
-static const int S0_G3_k = (74503+0) * (1);
-static const int S0_G4_k = (6+0) * (1);
+static const int S0_G3_k = (98309+0) * (1);
+static const int S0_G4_k = (4+0) * (1);
 static const int S0_NWm = (163910+1) * (1);
-static const int S0_MWinc = (256+1) * (1);
-static const int S0_mwStep = (262088+1) * (1);
-static const int S0_mwMin = (2113+1) * (1);
-static const int S0_mwMax = (32767+1) * (1);
+static const int S0_MWinc = (25744+1) * (1);
+static const int S0_mwStep = (60945+1) * (1);
+static const int S0_mwMin = (2145+1) * (1);
+static const int S0_mwMax = (32728+1) * (1);
 static const int S0_M1_m = (209984+1) * (1);
-static const int S0_M2_m = (11080+1) * (1);
-static const int S0_G2_m = (33+0) * (1);
+static const int S0_M2_m = (27011+1) * (1);
+static const int S0_G2_m = (19+0) * (1);
 static const int S0_G3_m = (262144+0) * (1);
 static const int S0_G4_m = (131490+0) * (1);
-static const int S0_mwXlo = (260+0) * (1);
-static const int S0_mwXhi = (12063+0) * (1);
-static const int S0_mwP0 = (14856+1) * (1);
-static const int S0_M1_u = (116480+0) * (1);
-static const int S0_M2_u = (28+0) * (1);
-static const int S0_M2_x = (28+0) * (1);
+static const int S0_mwXlo = (377+0) * (1);
+static const int S0_mwXhi = (16393+0) * (1);
+static const int S0_mwP0 = (13345+1) * (1);
+static const int S0_M1_u = (223812+0) * (1);
+static const int S0_M2_u = (11+0) * (1);
+static const int S0_M2_x = (1914+0) * (1);
 static const int S0_NWu = (519634+0) * (1);
-static const int S0_RUinc = (49280+0) * (1);
-static const int S0_uStep = (118568+0) * (1);
+static const int S0_RUinc = (196608+0) * (1);
+static const int S0_uStep = (74106+0) * (1);
 static const int S0_uMin = (48+0) * (1);
-static const int S0_uMax = (2895360+0) * (1);
+static const int S0_uMax = (4265850+0) * (1);
 static const int S0_vMin = (48+0) * (1);
 static const int S0_vMax = (2895360+0) * (1);
-static const int S0_G2_u = (1+0) * (1);
+static const int S0_G2_u = (0+0) * (1);
 static const int S0_G3_u = (262144+0) * (1);
-static const int S0_G4_u = (80+0) * (1);
-static const int S0_R0_u = (131+0) * (1);
+static const int S0_G4_u = (17+0) * (1);
+static const int S0_R0_u = (25+0) * (1);
 static const int S0_M1_v = (184384+0) * (1);
-static const int S0_M2_v = (163+0) * (1);
-static const int S0_NWv = (475968+0) * (1);
-static const int S0_RVinc = (32+0) * (1);
-static const int S0_vStep = (65217+0) * (1);
-static const int S0_G2_v = (0+0) * (1);
-static const int S0_G3_v = (262144+0) * (1);
-static const int S0_G4_v = (140+0) * (1);
-static const int S0_R0_v = (66+0) * (1);
+static const int S0_M2_v = (484+0) * (1);
+static const int S0_NWv = (485804+0) * (1);
+static const int S0_RVinc = (557712+0) * (1);
+static const int S0_vStep = (62656+0) * (1);
+static const int S0_G2_v = (1+0) * (1);
+static const int S0_G3_v = (4+0) * (1);
+static const int S0_G4_v = (41+0) * (1);
+static const int S0_R0_v = (62+0) * (1);
 static const int S0_UVH = (906+0) * (1);
-static const int S0_CXW = (1023+0) * (1);
-static const int S0_XHW = (1328+0) * (1);
-static const int S0_UVDET = (16+0) * (1);
+static const int S0_CXW = (473+0) * (1);
+static const int S0_XHW = (1424+0) * (1);
+static const int S0_UVDET = (121+0) * (1);
 static const int S0_XHC = (0+0) * (1);
-static const int S0_leak1 = (32208+1) * (1);
-static const int S0_leak2 = (26912+1) * (1);
+static const int S0_leak1 = (61940+1) * (1);
+static const int S0_leak2 = (60705+1) * (1);
 static const int S0_stP_min = (0+1) * (1);
-static const int S0_AGAu = (923+0) * (1);
-static const int S0_AGAv = (923+0) * (1);
-static const int S0_AGAm = (1889+0) * (1);
-static const int S0_AGAk = (1521+0) * (1);
-static const int S0_AGB = (256+0) * (1);
-static const int S0_AGBuv = (256+0) * (1);
-static const int S0_E2E = (219+0) * (1);
-static const int S0_E2Euv = (219+0) * (1);
+static const int S0_AGAu = (11+0) * (1);
+static const int S0_AGAv = (511+0) * (1);
+static const int S0_AGAm = (1536+0) * (1);
+static const int S0_AGAk = (26+0) * (1);
+static const int S0_AGB = (168+0) * (1);
+static const int S0_AGBuv = (154+0) * (1);
+static const int S0_E2E = (248+0) * (1);
+static const int S0_E2Euv = (474+0) * (1);
 
 
 
@@ -94,8 +94,7 @@ static uint S0_MakeCx( uint c2, uint c1, uint cxt ) {
   int Cx;
 
   Cx = 0;
-  Cx = (Cx<<6) + (((((c2)>>6)&1)<<5) + ((c2)&31)); // 01011111
-  Cx = (Cx<<5) + (((c1)&31)); // 00011111
+  Cx = (Cx<<5) + ((((c1)>>3)&31)); // 11111000
   Cx = (Cx*255) + S0_cx[(cxt)<1?1:((cxt)>255?255:(cxt))]; // 00000000
   return uint(Cx);
 }
@@ -103,7 +102,6 @@ static uint S0_MakeCx3( uint c3 ) {
   int Cx3;
 
   Cx3 = 0;
-  Cx3 = (Cx3<<8) + (((c3)&255)); // 11111111
   return uint(Cx3);
 }
 

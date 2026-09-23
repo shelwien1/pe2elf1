@@ -5,7 +5,7 @@
 // shipping build, a pointer allocated in C0_Init() in the tuning build.
 MakeTables
 
-static uint C0_MakeCx( uint c1, uint cxt ) {
+static uint C0_MakeCx( uint c2, uint c1, uint cxt ) {
   int Cx;
   MakeIndex Cx
   return uint(Cx);

@@ -1,5 +1,5 @@
 
-static const int C0_Cx_Volume = 1* (1<<8)* 255; // 65280
+static const int C0_Cx_Volume = 1* (1<<8)* (1<<8)* 255; // 16711680
 
 struct C0_T { 
 #undef USE_NEW

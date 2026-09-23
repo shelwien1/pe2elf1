@@ -66,7 +66,8 @@ template<class CP> struct Counter {
   }
 
   static float sq( const float x ) {
-    return 1.0f/(1.0f+expf(-x));
+    //return 1.0f/(1.0f+expf(-x));
+    return ::sq_schraudolph(x);
   }
 
   // Init with explicit counts; SSE cells start at their bucket's probability.

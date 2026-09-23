@@ -70,3 +70,23 @@ book1          wcc386         book1wcc
 # and leaks vectorize); the order-1 table is an IDX Table() with context
 # masks (C0 c1 &11111111 x node), simulating o1[256][256].  All byte for
 # byte the line above.
+
+
+234380         271584         507868
+
+253168         275229         529640
+
+276776         269754         547841
+
+282955         295449         581114 // ppmd sh9 @ o2
+285077         317595         602895 // C0 alone @ o2
+
+280628         310174         592026 // C0 alone @ o2; opt pass
+280558         309919         591641 // C0 alone @ o2; opt pass 2
+
+344899 0.906s  309703 0.679s  656161 1.572s // #050c baseline
+
+344098         312633         658581 // C0 alone @ o1; baseline
+344823         309677         656122 // C0 alone @ o1; opt pass
+344867         309587         656027 // C0 alone @ o1; opt pass 2
+

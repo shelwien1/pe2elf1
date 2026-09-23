@@ -335,10 +335,11 @@ int main( int argc, char** argv ) {
     rc.StartDecode(f);
   }
 
-  C0.C0_Init(); S0.S0_Init(); M0.M0_Init();   // tuning build: allocate the tables
-  for( i=0; i<uint(C0_Cx_Volume); i++ ) C0.C0_tbl[i].Init();
-  for( uint r=0; r<S0_ROWS; r++ ) S0.S0_tbl[r].Init();   // row-major: the table is far bigger than any cache
-  for( i=0; i<uint(M0_Cx_Volume); i++ ) M0.M0_tbl[i].Init();
+  C0.C0_Init(); for( i=0; i<uint(C0_Cx_Volume); i++ ) C0.C0_tbl[i].Init();
+#if 0
+  S0.S0_Init(); for( uint r=0; r<S0_ROWS; r++ ) S0.S0_tbl[r].Init();   // row-major: the table is far bigger than any cache
+  M0.M0_Init(); for( i=0; i<uint(M0_Cx_Volume); i++ ) M0.M0_tbl[i].Init();
+#endif
 
   int last_c = 0, c2 = 0, c3 = 0;
 
@@ -353,31 +354,29 @@ int main( int argc, char** argv ) {
       // returns its interpolated logit z2, the mixer blends the two in the
       // stretch domain -- the same values as st(p1), st(p2) up to rounding,
       // without the five logf and the sq that produced and consumed p2.
-      uint ox = C0_MakeCx(last_c, cxt);                                                        // order-1 cell
+      uint ox = C0_MakeCx(c2, last_c, cxt);                     // (c1, cxt) with the committed C0 index
       Counter<CP_C0>::Pred pr = C0.C0_tbl[ox].PredictF();
-      uint sx = S0_Row( qword(S0_MakeCx(c2, last_c, cxt))*S0_Cx3_Volume + S0_MakeCx3(c3) );   // SSE row
-      uint mx = M0_MakeCx(c2, last_c, cxt);                                                 // mixer cell
+#if 0
+      uint sx = S0_Row( qword(S0_MakeCx(c2, last_c, cxt))*S0_Cx3_Volume + S0_MakeCx3(c3) );
+      uint mx = M0_MakeCx(c2, last_c, cxt);
       SSE_Pred<CP_S0> ps = S0.S0_tbl[sx].Predict( pr.z );
       Mix2_Cell::Pred pm = M0.M0_tbl[mx].Mix( pr.z, ps.z );
-      p = uint( clamp( pm.p*float(SCALE) ) );
-#ifdef TRACE_P
-      // -DTRACE_P: per-bit trace of (p1, p2, pf, p) as floats to $TRACE_P, to
-      // find the first divergent bit between two builds (SSE-DESIGN.md sec.4.1)
-      { static FILE* trf = fopen( getenv("TRACE_P") ? getenv("TRACE_P") : "trace.bin", "wb" );
-        float v[4] = { pr.pK, ps.z, pm.p, float(p) }; if( trf ) fwrite( v, 4, 4, trf ); }
+      float pf = pm.p;                          // final P(bit==0)
+      float c1 = pm.d1 + pm.d2 * ps.dzdz;       // dz_final / dz_1
+#else
+      float pf = pr.pK;                         // the counter alone: its prediction is final
+      float c1 = 1.0f;                          // dz_final / dz_1
 #endif
-      
+      p = uint( clamp( pf*float(SCALE) ) );
+
       bit = rc.rc_BProcess( p, bit );
 
-      // A2: e_f = p_f - [bit==0] = dL/dz_f; chain to the SSE output and the
-      // order-1 logit (the SSE input also moves the interpolation point).
-      // pm.d1/pm.d2 are the mixer weights, 0 where its input clip binds;
-      // ps.dzdz is the SSE's interpolation slope.
-      float e_f = pm.p - float(1 - bit);
-      C0.C0_tbl[ox].C_Update( bit, pr, 1.0f, e_f * (pm.d1 + pm.d2 * ps.dzdz) );
+      float e_f = pf - float(1 - bit);          // dL/dz_final
+      C0.C0_tbl[ox].C_Update( bit, pr, 1.0f, e_f * c1 );
+#if 0
       S0.S0_tbl[sx].Update( bit, ps, e_f * pm.d2 );
       M0.M0_tbl[mx].Update( bit, pm );
-
+#endif
       c<<=1; cxt+=cxt+bit;
     }
 
