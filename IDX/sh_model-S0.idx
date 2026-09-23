@@ -22,19 +22,15 @@ Debug 1
 
 Const 1
 
-# --- row context: which bits of the byte history select the row ---------
-# Two indexes, combined in 64 bits by the coder (Cx*Cx3_Volume + Cx3) so the
-# generated int volumes never overflow; rows beyond HBITS are hashed anyway.
+# --- row context: which bits of the last byte select the row ------------
+# One row per context, indexed directly (no hashing): the table is
+# Cx_Volume rows of NB cells.  The 8-character c1 pattern bounds it at
+# 256 x 255 nodes = 65280 rows (25 MB at NB = 4) whatever the bits are.
 Index Cx
-# c2: c2, &01011111    # byte before last (all off = order-1 SSE; bits tunable)
- c1: c1, &11111000    # last byte
+ c1: c1, &11111000    # last byte (bits tunable)
  cx: cxt, b&00000000  # bit-tree node: b& merges node bits counted from the leading 1 (0 = keep)
 
-Index Cx3
-# c3: c3, &11111111    # third-last byte, low 5 bits (bits tunable)
-
 # --- table geometry -----------------------------------------------------
-Number HBITS,  1,0!10110   # rows = min(Cx_Volume, 1<<HBITS); rows beyond are hashed
 Number NB,     1,2!00010   # interpolation buckets (columns) per row: 2 + pattern
 Number LIM,    1,0!000111001111   # |stretch(p_in)| clip, /256  (2048 = 8.0)
 

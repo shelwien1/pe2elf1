@@ -452,3 +452,22 @@ available.
 - Every knob stays patchable, `NB` and `HBITS` included; opt.pl's search
   space lost only the two `ON` bypasses removed earlier.
 - The shipping/tuning identity contract, and `gc.sh` / `t1.sh` as its test.
+
+## 5. Later changes
+
+- **SSE storage is a plain `Table()` of cells.**  The row type no longer
+  carries NB as a template parameter: `SSE<CP>` is the mapping over a row,
+  taking the row's NB cells, and the S0 template declares
+  `Table( SSE_Cell, %M%tbl, %M%Cx_Volume * CP_S0::NB )`.  NB is clamped in
+  the bundle, so it is a folded constant in the shipping build (it sizes
+  the array, the row loops unroll) and a load-time value in the tuning
+  build (the Table() size is then runtime, which `new[]` in `S0_Init()`
+  takes as it takes every other).  The tuning-build dispatcher `SSE_Tbl`
+  of sec.2.4, and the `def_Data` / `def_Init` / `def_Quit` blocks that
+  declared it, are gone; the `def_Quit` hook stays in `idx2inc.pl`.
+- **The SSE context is direct, up to `c1`** (`c1` mask x node, one row per
+  context, no hashing): `S0_Row()`, `sse_rows()`, `HBITS`,
+  `SSE_MAXCELLS_LOG` and the `Cx3` index are gone.  The 8-character `c1`
+  pattern bounds the table at 65280 rows.
+- The pipeline is `p = SSE( mix2( C0, C1 ) )`, end to end through all
+  three stages (`gtm.sh` checks it).

@@ -62,13 +62,12 @@ struct CP_NAME {
   static const float E2Euv;    // the u/v axes
 
 #ifdef CP_SSE
-  // SSE stage (sh_SSE.inc): the knobs, clamped here so that the row only
-  // ever sees sane values (IDX-FORMAT.md sec.5), and what the row derives
-  // from them.  In the shipping build these are constant expressions -- NB
-  // is the row's template argument -- in the tuning build they are runtime
-  // values that opt.pl patches, and SSE_Tbl dispatches on NB at Init().
-  static const int   NB;               // buckets per row, the raw knob: sse_nb_clamp()ed where it is used
-  static const int   HBITS;            // log2 of the row cap: the coder hashes the context onto min(volume, 2^HBITS, 2^SSE_MAXCELLS_LOG/NB) rows
+  // SSE stage (sh_SSE.inc): the knobs, clamped here so that the SSE only
+  // ever sees sane values (IDX-FORMAT.md sec.5), and what it derives from
+  // them.  In the shipping build these are constant expressions -- NB sizes
+  // the S0 Table() -- in the tuning build runtime values opt.pl patches.
+  static const int   NB;               // buckets (cells) per row, clamped to [2, SSE_NB_MAX]
+
   static const int   UPD;              // 1: both bracketing cells get a full event; 2: proportional
   static const float LIM;              // |stretch| clip of the input, in [0.25, 16]
   static const float ZMAX;             // |logit| bound of the cells' outputs, = ln 65535
@@ -224,20 +223,20 @@ set E2Euv  = clamp( float(CPX(E2Euv))/256, 0.0f, 1.0f );
 
 #ifdef CP_SSE
 #define set  const int CP_NAME::
-set NB    = CPX(NB);
-set HBITS = CPX(HBITS);
+set NB    = sse_nb_clamp( CPX(NB) );
+
 set UPD   = CPX(UPD) < 1 ? 1 : CPX(UPD) > 2 ? 2 : CPX(UPD);
 #undef set
 #define set  const float CP_NAME::
 set LIM    = clamp( float(CPX(LIM)) / 256, 0.25f, 16.0f );
 set ZMAX   = rt_logf( 65535.0f );
-set QSCALE = float(sse_nb_clamp(CP_NAME::NB)-1) / (2.0f*CP_NAME::LIM);
+set QSCALE = float(CP_NAME::NB-1) / (2.0f*CP_NAME::LIM);
 set UPMIN  = clamp( float(CPX(UPMIN)) / 256, 0.0f, 1.0f );
 set T0     = clamp( float(CPX(T0)) / 256, 1.0f/256, 4096.0f );
 #undef set
 // the identity init of a fresh row (sse_seeds, coder0.cpp), last: it reads
 // K, M, mwP0, LIM, T0 and NB above
-const SSE_Seeds CP_NAME::SEEDS = sse_seeds( sse_nb_clamp(CP_NAME::NB), CP_NAME::LIM, CP_NAME::K, CP_NAME::M, CP_NAME::mwP0, CP_NAME::T0 );
+const SSE_Seeds CP_NAME::SEEDS = sse_seeds( CP_NAME::NB, CP_NAME::LIM, CP_NAME::K, CP_NAME::M, CP_NAME::mwP0, CP_NAME::T0 );
 #endif
 
 #undef CPX

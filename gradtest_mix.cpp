@@ -31,7 +31,12 @@ void grad_test_hook( float gd, float, float ) { hook.push_back(gd); }
 #include "coder0.cpp"
 #undef main
 
-typedef SSE_Row<sse_nb_clamp(CP_S0::NB)> Row;
+// a copy of one SSE row (its NB cells), for the perturbed evaluations
+struct Row {
+  SSE_Cell c[SSE_NB_MAX];
+  explicit Row( const SSE_Cell* p ) { for( int j=0; j<CP_S0::NB; j++ ) c[j] = p[j]; }
+  SSE_Pred<CP_S0> Predict( float z ) const { return S0_SSE::Predict( c, z ); }
+};
 static double lossof( const C0_Cell& a, const C1_Cell& b, const Mix2_Cell& m, const Row& s, int bit ) {
   auto p0 = a.PredictF(); auto p1 = b.PredictF(); auto pm = m.Mix( p0.z, p1.z ); auto ps = s.Predict( pm.z );
   double p = sq( ps.z ); return -log( bit ? 1.0-p : p );
@@ -49,11 +54,11 @@ int main() {
   C0.C0_Init(); for( uint i=0; i<uint(C0_Cx_Volume); i++ ) C0.C0_tbl[i].Init();
   C1.C1_Init(); for( uint i=0; i<uint(C1_Cx_Volume); i++ ) C1.C1_tbl[i].Init();
   M0.M0_Init(); for( uint i=0; i<uint(M0_Cx_Volume); i++ ) M0.M0_tbl[i].Init();
-  S0.S0_Init(); for( uint r=0; r<S0_ROWS; r++ ) S0.S0_tbl[r].Init();
+  S0.S0_Init(); for( uint i=0; i<uint(S0_Cx_Volume); i++ ) S0_SSE::Init( &S0.S0_tbl[ qword(i)*CP_S0::NB ] );
   Stat szm{"dL/dz_mix = e_f*dzdz"}, sz0{"dL/dz_C0 = e_m*d1"}, sz1{"dL/dz_C1 = e_m*d2"},
        ss0{"SSE cell j   K chain"}, ss1{"SSE cell j+1 K chain"}, sW{"mixer W (E2E=1)"}, sB{"mixer b (E2E=1)"},
        s0m{"C0 mw (E2E=1)"}, s0k{"C0 K  (E2E=1)"}, s1m{"C1 mw (E2E=1)"}, s1k{"C1 K  (E2E=1)"};
-  int last_c=0, c2=0, c3=0; long nbit=0, nsamp=0, nin=0;
+  int last_c=0, c2=0; long nbit=0, nsamp=0, nin=0;
   const double h = 5e-3;
   const float LIM = CP_S0::LIM, knot = 2.0f*LIM/float(sse_nb_clamp(CP_S0::NB)-1), zm = CP_M0::ZM, zx = CP_S0::ZMAX;
   for( size_t pos=0; pos<len; pos++ ) {
@@ -61,8 +66,8 @@ int main() {
     for( uint cxt=1; cxt<256; ) {
       int bit = (c>>7)&1;
       uint ox = C0_MakeCx(c2,last_c,cxt), oy = C1_MakeCx(c2,last_c,cxt), mx = M0_MakeCx(c2,last_c,cxt);
-      uint sx = S0_Row( qword(S0_MakeCx(c2,last_c,cxt))*S0_Cx3_Volume + S0_MakeCx3(c3) );
-      C0_Cell& a = C0.C0_tbl[ox]; C1_Cell& b = C1.C1_tbl[oy]; Mix2_Cell& m = M0.M0_tbl[mx]; Row& s = S0.S0_tbl[sx];
+      SSE_Cell* sr = &S0.S0_tbl[ qword(S0_MakeCx(last_c,cxt))*CP_S0::NB ];
+      C0_Cell& a = C0.C0_tbl[ox]; C1_Cell& b = C1.C1_tbl[oy]; Mix2_Cell& m = M0.M0_tbl[mx]; Row s( sr );
       auto pr0 = a.PredictF(); auto pr1 = b.PredictF(); auto pm = m.Mix( pr0.z, pr1.z ); auto ps = s.Predict( pm.z );
       float pf = sq( ps.z ), e_f = pf - float(1-bit), e_m = e_f * ps.dzdz;
       if( (++nbit % 97)==0 ) {
@@ -108,10 +113,10 @@ int main() {
       a.C_Update( bit, pr0, 1.0f, e_m*pm.d1 );
       b.C_Update( bit, pr1, 1.0f, e_m*pm.d2 );
       m.Update( bit, pm, e_m );
-      s.Update( bit, ps, e_f );
+      S0_SSE::Update( sr, bit, ps, e_f );
       c<<=1; cxt += cxt+bit;
     }
-    c3 = c2; c2 = last_c; last_c = buf[pos];
+    c2 = last_c; last_c = buf[pos];
   }
   printf("E2E: C0 %.3f  C1 %.3f  M0 %.3f   (1.0 = the updater's gradient is purely end-to-end)\n", CP_C0::E2E, CP_C1::E2E, CP_M0::E2E);
   printf("%ld bits, %ld sampled, %ld with the mixed logit inside the SSE's range (upstream checks);\n", nbit, nsamp, nin);

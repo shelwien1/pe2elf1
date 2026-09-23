@@ -187,7 +187,7 @@ static float rt_logf( float x ) { volatile float v = x; return logf(v); }
 static float rt_expf( float x ) { volatile float v = x; return expf(v); }
 
 // SSE stage geometry the CP_S0 bundle needs, ahead of config.hpp: the bound
-// on the bucket counts the tuning build's dispatcher instantiates, the clamp
+// on the bucket count (the seed arrays are sized by it), the clamp
 // of the NB knob into it, and the per-bucket seeds of a fresh row -- the
 // identity init of sh_SSE.inc: bucket j at its own probability sq(s_j),
 // inverted through the cell's output map p = sq( K * st( q0*(1-mw) +
@@ -195,7 +195,7 @@ static float rt_expf( float x ) { volatile float v = x; return expf(v); }
 // move it at a controlled rate.  Evaluated once per bundle (rt_expf: not
 // constant-folded).
 #ifndef SSE_NB_MAX
-#define SSE_NB_MAX 16          // bucket counts instantiated by the dispatcher
+#define SSE_NB_MAX 16          // bound on the bucket count (the seed arrays)
 #endif
 static constexpr int sse_nb_clamp( int nb ) { return nb<2 ? 2 : nb>SSE_NB_MAX ? SSE_NB_MAX : nb; }
 
@@ -249,37 +249,20 @@ static SSE_Seeds sse_seeds( int nb, float lim, float K, float M, float mwP0, flo
 #include "sh_SSE.inc"
 #include "sh_mix2.inc"
 
-// Element types of the two tables, then the generated structs that hold them
+// Element types of the tables, then the generated structs that hold them
 // (IDX-FORMAT.md sec.9).  M0_T::M0_tbl is a Table() of mixer cells: a fixed
 // array in the shipping build, a pointer allocated by M0_Init() in the tuning
-// build.  The SSE table's element is a row of NB cells and NB is a knob: in
-// the shipping build it is folded and SSE_Row<NB> is the array's element
-// type; in the tuning build it is a load-time value, so S0_T::S0_tbl is an
-// SSE_Tbl<CP_S0> that instantiates the row for every NB and dispatches on the
-// one in force (sh_SSE.inc; the S0 template picks the form on USE_NEW).
+// build.  So are the counter tables and the SSE's: S0_T::S0_tbl holds NB
+// cells per row context, a row being NB consecutive cells, and SSE<CP_S0>
+// is the mapping over one (sh_SSE.inc).
 typedef Counter<CP_C0> C0_Cell;
 typedef Counter<CP_C1> C1_Cell;
+typedef Counter<CP_S0> SSE_Cell;
+typedef SSE<CP_S0>     S0_SSE;
 #include "MOD/sh_model-C0_h.inc"   // C0_T: the C0 cells, one per context (IDX Index Cx of sh_model-C0.idx)
 #include "MOD/sh_model-C1_h.inc"   // C1_T: the C1 cells, one per context (IDX Index Cx of sh_model-C1.idx)
-template<int NB> using SSE_Row = SSE<CP_S0, NB>;
 typedef Mix2<CP_M0> Mix2_Cell;
 
-// Rows of the SSE table: min(volume, 2^HBITS, 2^SSE_MAXCELLS_LOG/NB).  The
-// row context -- c3, c2, c1 and the node, 133.7M contexts -- is far larger
-// than the table, and the coder hashes it onto the rows (S0_Row below), in
-// main() and not in the component: SSE<CP,NB> is one row and knows nothing
-// of the table it sits in (SSE-MIX2-REDESIGN.md sec.2.5).  A constant
-// expression in the shipping build (it sizes the array); in the tuning
-// build the knobs it reads are runtime values, so there it is a plain
-// function.
-#if defined(USE_NEW) && USE_NEW
-#define TBL_CONSTEXPR
-#else
-#define TBL_CONSTEXPR constexpr
-#endif
-static TBL_CONSTEXPR qword sse_row_count( qword volume ) {
-  return sse_rows( volume, CP_S0::HBITS, sse_nb_clamp(CP_S0::NB) );
-}
 
 #include "MOD/sh_model-S0_h.inc"
 #include "MOD/sh_model-M0_h.inc"
@@ -290,21 +273,8 @@ ALIGN(64) Rangecoder rc;
 C0_T C0;           // the C0 cells: C0.C0_tbl[C0_MakeCx(..)]
 C1_T C1;           // the C1 cells: C1.C1_tbl[C1_MakeCx(..)]
 
-S0_T S0;           // the SSE rows: S0.S0_tbl[row]
+S0_T S0;           // the SSE cells, NB per context: row at S0.S0_tbl[S0_MakeCx(..)*CP_S0::NB]
 M0_T M0;           // the mixer cells: M0.M0_tbl[context]
-
-// The row hash: the context onto the capped table, identity when the
-// contexts fit.  The table is sparse on this corpus (10.4M bit visits into
-// 4.19M rows), so collisions cost little, while the full third-last byte in
-// the context is what makes the SSE an order-3 model: a direct index at the
-// same memory holds 14 bits of byte history instead of 19 and loses 1.4%
-// (the sweep in sec.2.5 of the redesign notes).
-static const qword S0_ROWS = sse_row_count( qword(S0_Cx_Volume)*S0_Cx3_Volume );
-static uint S0_Row( qword cx ) {
-  if( qword(S0_Cx_Volume)*S0_Cx3_Volume <= S0_ROWS ) return uint(cx);
-  uint h = uint( (cx * 0x9E3779B97F4A7C15ull) >> 32 );
-  return uint( (qword(h) * S0_ROWS) >> 32 );
-}
 
 int main( int argc, char** argv ) {
   uint f_DEC, i, c=0, f_len, f_pos, cxt, bit=0, p;
@@ -349,9 +319,9 @@ int main( int argc, char** argv ) {
   C0.C0_Init(); for( i=0; i<uint(C0_Cx_Volume); i++ ) C0.C0_tbl[i].Init();
   C1.C1_Init(); for( i=0; i<uint(C1_Cx_Volume); i++ ) C1.C1_tbl[i].Init();
   M0.M0_Init(); for( i=0; i<uint(M0_Cx_Volume); i++ ) M0.M0_tbl[i].Init();
-  S0.S0_Init(); for( uint r=0; r<S0_ROWS; r++ ) S0.S0_tbl[r].Init();   // row-major
+  S0.S0_Init(); for( i=0; i<uint(S0_Cx_Volume); i++ ) S0_SSE::Init( &S0.S0_tbl[ qword(i)*CP_S0::NB ] );
 
-  int last_c = 0, c2 = 0, c3 = 0;
+  int last_c = 0, c2 = 0;
 
   for( f_pos=0; f_pos<f_len; f_pos++ ) {
     if( f_DEC==0 ) c = getc(f);
@@ -368,11 +338,11 @@ int main( int argc, char** argv ) {
       uint ox = C0_MakeCx(c2, last_c, cxt);    // C0 cell
       uint oy = C1_MakeCx(c2, last_c, cxt);    // C1 cell
       uint mx = M0_MakeCx(c2, last_c, cxt);    // mixer cell
-      uint sx = S0_Row( qword(S0_MakeCx(c2, last_c, cxt))*S0_Cx3_Volume + S0_MakeCx3(c3) );   // SSE row
+      SSE_Cell* sr = &S0.S0_tbl[ qword(S0_MakeCx(last_c, cxt)) * CP_S0::NB ];   // SSE row: its NB cells
       Counter<CP_C0>::Pred pr0 = C0.C0_tbl[ox].PredictF();
       Counter<CP_C1>::Pred pr1 = C1.C1_tbl[oy].PredictF();
       Mix2_Cell::Pred      pm  = M0.M0_tbl[mx].Mix( pr0.z, pr1.z );
-      SSE_Pred<CP_S0>      ps  = S0.S0_tbl[sx].Predict( pm.z );
+      SSE_Pred<CP_S0>      ps  = S0_SSE::Predict( sr, pm.z );
       float pf = sq( ps.z );                   // final P(bit==0)
       p = uint( clamp( pf*float(SCALE) ) );
 #ifdef TRACE_P
@@ -401,7 +371,7 @@ int main( int argc, char** argv ) {
       C0.C0_tbl[ox].C_Update( bit, pr0, 1.0f, e_m * pm.d1 );
       C1.C1_tbl[oy].C_Update( bit, pr1, 1.0f, e_m * pm.d2 );
       M0.M0_tbl[mx].Update( bit, pm, e_m );
-      S0.S0_tbl[sx].Update( bit, ps, e_f );
+      S0_SSE::Update( sr, bit, ps, e_f );
 
       c<<=1; cxt+=cxt+bit;
     }
@@ -410,7 +380,7 @@ int main( int argc, char** argv ) {
 
     if( f_DEC==1 ) putc(cxt,g);
 
-    c3 = c2; c2 = last_c; last_c = cxt; 
+    c2 = last_c; last_c = cxt; 
   }
 
   if( f_DEC==0 ) rc.FinishEncode();
