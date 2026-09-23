@@ -142,9 +142,11 @@ static const int mSCALE = SCALE-1;
 static const float iSCALE = 1.0f/SCALE;
 
 #include "sh_mapping.inc"
-// C0/S0/M0 knobs, context masks and context builders (their Table() storage
-// comes with the _h.inc headers below, once the cell types are complete)
+// C0/C1/S0/M0 knobs, context masks and context builders (their Table()
+// storage comes with the _h.inc headers below, once the cell types are
+// complete)
 #include "MOD/sh_model-C0_p.inc"
+#include "MOD/sh_model-C1_p.inc"
 #include "MOD/sh_model-S0_p.inc"
 #include "MOD/sh_model-M0_p.inc"
 
@@ -217,10 +219,16 @@ static SSE_Seeds sse_seeds( int nb, float lim, float K, float M, float mwP0, flo
   static const float momentum_D, momentum_R, NW, inc, stepMax, minVal,maxVal, grad2_clip, D_clip, R_clip, R0; \
   static const int NAG; };
 
-// Parameter bundle of the order-1 model: C0_* constants from
-// IDX/sh_model-C0.idx.
+// Parameter bundles of the two counter tables the mixer blends: C0_* and
+// C1_* constants from IDX/sh_model-C0.idx / -C1.idx.  Same cell, same
+// derived constants, independent knobs; the context each table is indexed
+// by is its .idx's Index Cx.
 #define CP_NAME     CP_C0
 #define CP_PFX      C0_
+#include "config.hpp"
+
+#define CP_NAME     CP_C1
+#define CP_PFX      C1_
 #include "config.hpp"
 
 // Parameter bundle of the SSE cells: S0_* constants from IDX/sh_model-S0.idx.
@@ -250,7 +258,9 @@ static SSE_Seeds sse_seeds( int nb, float lim, float K, float M, float mwP0, flo
 // SSE_Tbl<CP_S0> that instantiates the row for every NB and dispatches on the
 // one in force (sh_SSE.inc; the S0 template picks the form on USE_NEW).
 typedef Counter<CP_C0> C0_Cell;
-#include "MOD/sh_model-C0_h.inc"   // C0_T: the order-1 cells, one per context (IDX Index Cx of sh_model-C0.idx)
+typedef Counter<CP_C1> C1_Cell;
+#include "MOD/sh_model-C0_h.inc"   // C0_T: the C0 cells, one per context (IDX Index Cx of sh_model-C0.idx)
+#include "MOD/sh_model-C1_h.inc"   // C1_T: the C1 cells, one per context (IDX Index Cx of sh_model-C1.idx)
 template<int NB> using SSE_Row = SSE<CP_S0, NB>;
 typedef Mix2<CP_M0> Mix2_Cell;
 
@@ -277,7 +287,8 @@ static TBL_CONSTEXPR qword sse_row_count( qword volume ) {
 static const uint CNUM = 256;
 
 ALIGN(64) Rangecoder rc;
-C0_T C0;           // the order-1 cells: C0.C0_tbl[C0_MakeCx(..)]
+C0_T C0;           // the C0 cells: C0.C0_tbl[C0_MakeCx(..)]
+C1_T C1;           // the C1 cells: C1.C1_tbl[C1_MakeCx(..)]
 
 S0_T S0;           // the SSE rows: S0.S0_tbl[row]
 M0_T M0;           // the mixer cells: M0.M0_tbl[context]
@@ -308,7 +319,7 @@ int main( int argc, char** argv ) {
   if( argc < 4 ) {
     print_usage:
     printf(
-      "O1 Compressor - Order-1 adaptive lossless compression + SSE stage\n"
+      "Counter-mix compressor - two adaptive counter tables (C0, C1) and a 2-input mixer\n"
       "\n"
       "Usage: %s <mode> <input> <output>\n"
       "\n"
@@ -336,9 +347,10 @@ int main( int argc, char** argv ) {
   }
 
   C0.C0_Init(); for( i=0; i<uint(C0_Cx_Volume); i++ ) C0.C0_tbl[i].Init();
-#if 0
-  S0.S0_Init(); for( uint r=0; r<S0_ROWS; r++ ) S0.S0_tbl[r].Init();   // row-major: the table is far bigger than any cache
+  C1.C1_Init(); for( i=0; i<uint(C1_Cx_Volume); i++ ) C1.C1_tbl[i].Init();
   M0.M0_Init(); for( i=0; i<uint(M0_Cx_Volume); i++ ) M0.M0_tbl[i].Init();
+#if 0
+  S0.S0_Init(); for( uint r=0; r<S0_ROWS; r++ ) S0.S0_tbl[r].Init();   // SSE stage: not in the pipeline
 #endif
 
   int last_c = 0, c2 = 0, c3 = 0;
@@ -349,34 +361,38 @@ int main( int argc, char** argv ) {
     for( cxt=1; cxt<CNUM; ) {
       if( f_DEC==0 ) bit=(c>>7)&1;
 
-      // p = mix( order-1 prediction, SSE(order-1 prediction) )
-      // The stages pass logits: the SSE quantizes the order-1 logit z1 and
-      // returns its interpolated logit z2, the mixer blends the two in the
-      // stretch domain -- the same values as st(p1), st(p2) up to rounding,
-      // without the five logf and the sq that produced and consumed p2.
-      uint ox = C0_MakeCx(c2, last_c, cxt);                     // (c1, cxt) with the committed C0 index
-      Counter<CP_C0>::Pred pr = C0.C0_tbl[ox].PredictF();
-#if 0
-      uint sx = S0_Row( qword(S0_MakeCx(c2, last_c, cxt))*S0_Cx3_Volume + S0_MakeCx3(c3) );
-      uint mx = M0_MakeCx(c2, last_c, cxt);
-      SSE_Pred<CP_S0> ps = S0.S0_tbl[sx].Predict( pr.z );
-      Mix2_Cell::Pred pm = M0.M0_tbl[mx].Mix( pr.z, ps.z );
-      float pf = pm.p;                          // final P(bit==0)
-      float c1 = pm.d1 + pm.d2 * ps.dzdz;       // dz_final / dz_1
-#else
-      float pf = pr.pK;                         // the counter alone: its prediction is final
-      float c1 = 1.0f;                          // dz_final / dz_1
+      // p = mix2( C0, C1 ): each counter table's cell for this context
+      // predicts, and the mixer cell of this context blends the two logits
+      // in the stretch domain, p = sq( w*z0 + (1-w)*z1 + b ), w = sq(W).
+      uint ox = C0_MakeCx(c2, last_c, cxt);    // C0 cell
+      uint oy = C1_MakeCx(c2, last_c, cxt);    // C1 cell
+      uint mx = M0_MakeCx(c2, last_c, cxt);    // mixer cell
+      Counter<CP_C0>::Pred pr0 = C0.C0_tbl[ox].PredictF();
+      Counter<CP_C1>::Pred pr1 = C1.C1_tbl[oy].PredictF();
+      Mix2_Cell::Pred      pm  = M0.M0_tbl[mx].Mix( pr0.z, pr1.z );
+      p = uint( clamp( pm.p*float(SCALE) ) );
+#ifdef TRACE_P
+      // -DTRACE_P: per-bit trace of (p_C0, p_C1, p_final, p) as floats to
+      // $TRACE_P, to find the first divergent bit between two builds
+      { static FILE* trf = fopen( getenv("TRACE_P") ? getenv("TRACE_P") : "trace.bin", "wb" );
+        float v[4] = { pr0.pK, pr1.pK, pm.p, float(p) }; if( trf ) fwrite( v, 4, 4, trf ); }
 #endif
-      p = uint( clamp( pf*float(SCALE) ) );
 
       bit = rc.rc_BProcess( p, bit );
 
-      float e_f = pf - float(1 - bit);          // dL/dz_final
-      C0.C0_tbl[ox].C_Update( bit, pr, 1.0f, e_f * c1 );
-#if 0
-      S0.S0_tbl[sx].Update( bit, ps, e_f * pm.d2 );
+      // A2 end to end.  The loss is the coded bit's -ln p_final, so its
+      // gradient w.r.t. the final logit is e_f = p_final - [bit==0].  Each
+      // counter's logit reaches the final one only through the mixer:
+      // dz_f/dz0 = pm.d1 = w and dz_f/dz1 = pm.d2 = 1-w (0 where the mixer's
+      // input clip binds), so a counter gets e_f times its own factor as the
+      // end-to-end error (C_Update blends it with the cell's own error by
+      // E2E / E2Euv).  The mixer's output is the final prediction, so its own
+      // error already is e_f.
+      float e_f = pm.p - float(1 - bit);
+      C0.C0_tbl[ox].C_Update( bit, pr0, 1.0f, e_f * pm.d1 );
+      C1.C1_tbl[oy].C_Update( bit, pr1, 1.0f, e_f * pm.d2 );
       M0.M0_tbl[mx].Update( bit, pm );
-#endif
+
       c<<=1; cxt+=cxt+bit;
     }
 
@@ -388,7 +404,10 @@ int main( int argc, char** argv ) {
   }
 
   if( f_DEC==0 ) rc.FinishEncode();
-  C0.C0_Quit(); S0.S0_Quit(); M0.M0_Quit();
+  C0.C0_Quit(); C1.C1_Quit(); M0.M0_Quit();
+#if 0
+  S0.S0_Quit();
+#endif
 
   fclose(g);
   fclose(f);
