@@ -1,7 +1,7 @@
 #!/bin/sh
 # gtm.sh -- build and run gradtest_mix.cpp: finite-difference check of the
-# end-to-end gradients of p = mix2(C0, C1) (the chain factors main() hands
-# the counters, and what the mixer's and the counters' ParamUpdaters get).
+# end-to-end gradients of p = SSE(mix2(C0, C1)) (the chain factors main() hands
+# back through the stages, and what the mixer's and the counters' ParamUpdaters get).
 #
 # The check runs on a copy of the tree in a temporary directory whose
 # schrau.inc keeps the names but does exact libm math: the Schraudolph

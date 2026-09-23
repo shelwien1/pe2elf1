@@ -319,7 +319,7 @@ int main( int argc, char** argv ) {
   if( argc < 4 ) {
     print_usage:
     printf(
-      "Counter-mix compressor - two adaptive counter tables (C0, C1) and a 2-input mixer\n"
+      "Counter-mix compressor - SSE( mix2( C0, C1 ) ) of adaptive counter tables\n"
       "\n"
       "Usage: %s <mode> <input> <output>\n"
       "\n"
@@ -349,9 +349,7 @@ int main( int argc, char** argv ) {
   C0.C0_Init(); for( i=0; i<uint(C0_Cx_Volume); i++ ) C0.C0_tbl[i].Init();
   C1.C1_Init(); for( i=0; i<uint(C1_Cx_Volume); i++ ) C1.C1_tbl[i].Init();
   M0.M0_Init(); for( i=0; i<uint(M0_Cx_Volume); i++ ) M0.M0_tbl[i].Init();
-#if 0
-  S0.S0_Init(); for( uint r=0; r<S0_ROWS; r++ ) S0.S0_tbl[r].Init();   // SSE stage: not in the pipeline
-#endif
+  S0.S0_Init(); for( uint r=0; r<S0_ROWS; r++ ) S0.S0_tbl[r].Init();   // row-major
 
   int last_c = 0, c2 = 0, c3 = 0;
 
@@ -361,37 +359,49 @@ int main( int argc, char** argv ) {
     for( cxt=1; cxt<CNUM; ) {
       if( f_DEC==0 ) bit=(c>>7)&1;
 
-      // p = mix2( C0, C1 ): each counter table's cell for this context
-      // predicts, and the mixer cell of this context blends the two logits
-      // in the stretch domain, p = sq( w*z0 + (1-w)*z1 + b ), w = sq(W).
+      // p = SSE( mix2( C0, C1 ) ): each counter table's cell for this
+      // context predicts, the mixer cell of this context blends the two
+      // logits in the stretch domain, z_m = w*z0 + (1-w)*z1 + b, w = sq(W),
+      // and the SSE row of this context maps z_m to the final logit by
+      // interpolating between its bucket cells.  Logits all the way; the one
+      // squash is the final probability's.
       uint ox = C0_MakeCx(c2, last_c, cxt);    // C0 cell
       uint oy = C1_MakeCx(c2, last_c, cxt);    // C1 cell
       uint mx = M0_MakeCx(c2, last_c, cxt);    // mixer cell
+      uint sx = S0_Row( qword(S0_MakeCx(c2, last_c, cxt))*S0_Cx3_Volume + S0_MakeCx3(c3) );   // SSE row
       Counter<CP_C0>::Pred pr0 = C0.C0_tbl[ox].PredictF();
       Counter<CP_C1>::Pred pr1 = C1.C1_tbl[oy].PredictF();
       Mix2_Cell::Pred      pm  = M0.M0_tbl[mx].Mix( pr0.z, pr1.z );
-      p = uint( clamp( pm.p*float(SCALE) ) );
+      SSE_Pred<CP_S0>      ps  = S0.S0_tbl[sx].Predict( pm.z );
+      float pf = sq( ps.z );                   // final P(bit==0)
+      p = uint( clamp( pf*float(SCALE) ) );
 #ifdef TRACE_P
-      // -DTRACE_P: per-bit trace of (p_C0, p_C1, p_final, p) as floats to
-      // $TRACE_P, to find the first divergent bit between two builds
+      // -DTRACE_P: per-bit trace of (p_C0, p_C1, p_mix, p_final, p) as
+      // floats to $TRACE_P, to find the first divergent bit between two builds
       { static FILE* trf = fopen( getenv("TRACE_P") ? getenv("TRACE_P") : "trace.bin", "wb" );
-        float v[4] = { pr0.pK, pr1.pK, pm.p, float(p) }; if( trf ) fwrite( v, 4, 4, trf ); }
+        float v[5] = { pr0.pK, pr1.pK, pm.p, pf, float(p) }; if( trf ) fwrite( v, 4, 5, trf ); }
 #endif
 
       bit = rc.rc_BProcess( p, bit );
 
       // A2 end to end.  The loss is the coded bit's -ln p_final, so its
-      // gradient w.r.t. the final logit is e_f = p_final - [bit==0].  Each
-      // counter's logit reaches the final one only through the mixer:
-      // dz_f/dz0 = pm.d1 = w and dz_f/dz1 = pm.d2 = 1-w (0 where the mixer's
-      // input clip binds), so a counter gets e_f times its own factor as the
-      // end-to-end error (C_Update blends it with the cell's own error by
-      // E2E / E2Euv).  The mixer's output is the final prediction, so its own
-      // error already is e_f.
-      float e_f = pm.p - float(1 - bit);
-      C0.C0_tbl[ox].C_Update( bit, pr0, 1.0f, e_f * pm.d1 );
-      C1.C1_tbl[oy].C_Update( bit, pr1, 1.0f, e_f * pm.d2 );
-      M0.M0_tbl[mx].Update( bit, pm );
+      // gradient w.r.t. the final logit -- the SSE's output -- is
+      // e_f = p_final - [bit==0].  Backwards through the stages:
+      //   SSE cells    e_f times their interpolation share (SSE::Update)
+      //   mixer        e_m = e_f * dz_sse/dz_m = e_f * ps.dzdz, the slope of
+      //                the interpolation (0 where the SSE's input clip +-LIM
+      //                binds: there the final prediction does not depend on
+      //                anything upstream)
+      //   C0, C1       e_m * dz_m/dz0 = e_m*w and e_m * dz_m/dz1 = e_m*(1-w)
+      //                (0 where the mixer's input clip binds)
+      // Each stage blends its end-to-end error with its own by its E2E knobs;
+      // the curvature stays its own.
+      float e_f = pf - float(1 - bit);
+      float e_m = e_f * ps.dzdz;
+      C0.C0_tbl[ox].C_Update( bit, pr0, 1.0f, e_m * pm.d1 );
+      C1.C1_tbl[oy].C_Update( bit, pr1, 1.0f, e_m * pm.d2 );
+      M0.M0_tbl[mx].Update( bit, pm, e_m );
+      S0.S0_tbl[sx].Update( bit, ps, e_f );
 
       c<<=1; cxt+=cxt+bit;
     }
@@ -404,10 +414,7 @@ int main( int argc, char** argv ) {
   }
 
   if( f_DEC==0 ) rc.FinishEncode();
-  C0.C0_Quit(); C1.C1_Quit(); M0.M0_Quit();
-#if 0
-  S0.S0_Quit();
-#endif
+  C0.C0_Quit(); C1.C1_Quit(); M0.M0_Quit(); S0.S0_Quit();
 
   fclose(g);
   fclose(f);

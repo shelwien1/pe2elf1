@@ -60,3 +60,10 @@ Const 1
 Number AGAw,   1,0!010010001100
 Number AGAb,   1,0!001001100011
 Number AGB,    1,0!0000000010
+
+Const 1
+
+# --- A2 end-to-end objective (sh_mix2.inc Update) --------------------------
+# The W and b gradients use (1-E2E)*(own error) + E2E*(final error chained
+# through the SSE to the mixed logit), E2E/256; the curvature stays own.
+Number E2E,    1,0!100000000

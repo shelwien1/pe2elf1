@@ -27,6 +27,9 @@ struct CP_NAME {
   // A1 young-cell step schedule: stepMax*(1 + AGAx/(1 + age*AGiB)) on W (AGAw)
   // and b (AGAb); AGiB = 1/B with B = AGB/16 updates.
   static const float AGAw, AGAb, AGiB;
+  // A2 end-to-end objective: the W and b gradients use (1-E2E)*own error +
+  // E2E*final error chained to the mixer's logit (the curvature stays own)
+  static const float E2E;
 };
 
 #define set  const float CP_NAME::Config_W::
@@ -69,6 +72,7 @@ const float CP_NAME::WX0   = clip( rt_logf( CP_NAME::W0c/(1.0f-CP_NAME::W0c) ), 
 const float CP_NAME::AGAw  = float(CPX(AGAw)) / 256;
 const float CP_NAME::AGAb  = float(CPX(AGAb)) / 256;
 const float CP_NAME::AGiB  = 16.0f / float(CPX(AGB) < 1 ? 1 : CPX(AGB));   // never divides by 0
+const float CP_NAME::E2E   = clamp( float(CPX(E2E))/256, 0.0f, 1.0f );
 
 #undef CPX
 #undef CP_CAT

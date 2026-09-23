@@ -26,10 +26,11 @@ template<class CP> struct Mix2 {
   // What Mix() computes and Update() needs back: per-query state, kept by
   // the caller between the two calls
   struct Pred {
-    float p;        // the mixed P(bit==0)
+    float z;        // the mixed logit w*s1 + (1-w)*s2 + b: what the next stage takes
+    float p;        // sq(z), the mixed P(bit==0): the mixer's own prediction
     float s1, s2;   // the two inputs after the +-ZM clip
     float wv;       // sq(w.val), the weight of z1
-    float d1, d2;   // dz_final/dz1, dz_final/dz2 (the A2 chain): wv and 1-wv, or 0 where the input clip binds
+    float d1, d2;   // dz/dz1, dz/dz2 (the A2 chain): wv and 1-wv, or 0 where the input clip binds
   };
 
   static float sqf( float x ) { return 1.0f/(1.0f+expf(-x)); }
@@ -44,11 +45,17 @@ template<class CP> struct Mix2 {
     r.wv = sqf( w.val );
     r.d1 = ( z1 > -CP::ZM && z1 < CP::ZM ) ? r.wv : 0.0f;
     r.d2 = ( z2 > -CP::ZM && z2 < CP::ZM ) ? 1.0f - r.wv : 0.0f;
-    r.p  = sqf( r.wv*r.s1 + (1.0f-r.wv)*r.s2 + b.val );
+    r.z  = r.wv*r.s1 + (1.0f-r.wv)*r.s2 + b.val;
+    r.p  = sqf( r.z );
     return r;
   }
 
-  void Update( int bit, const Pred& pr ) {
+  // ef = A2 end-to-end error: dL_final/dz where z is this cell's mixed
+  // logit, i.e. (p_final - [bit==0]) * dz_final/dz -- the same convention as
+  // Counter::C_Update.  The gradient uses (1-E2E)*own + E2E*end-to-end
+  // error, the curvature stays the mixer's own.  When the mixer's output is
+  // the final prediction, ef = p - [bit==0] and the two coincide.
+  void Update( int bit, const Pred& pr, float ef ) {
     // logit-domain chain (see Counter::C_Update): with z = w*s1+(1-w)*s2+b
     // and p = sq(z), the gradient of -ln p w.r.t. a parameter t is
     // e_o*dz/dt and the curvature term e_o*((1-2p)*(dz/dt)^2 + d2z/dt2),
@@ -56,6 +63,7 @@ template<class CP> struct Mix2 {
     float p_o  = bit ? pr.p : (1.0f - pr.p);
     float sign = bit ? -1.0f : 1.0f;
     float e_o  = sign * p_o;
+    float ee   = (1.0f - CP::E2E) * e_o - CP::E2E * ef;   // the descent error, -dL/dz
     float c2   = 1.0f - 2.0f * pr.p;
 
     // A1: young-cell step schedule, stepMax*(1 + AGA/(1 + age/B)); AGA = 0
@@ -71,11 +79,11 @@ template<class CP> struct Mix2 {
     float dz_dW   = diff * w_1;
     float d2z_dW2 = diff * w_2;
 
-    w.Update( e_o * dz_dW, e_o * (c2 * (dz_dW * dz_dW) + d2z_dW2), -CP::Wclip, CP::Wclip, 1.0f,
+    w.Update( ee * dz_dW, e_o * dz_dW, e_o * (c2 * (dz_dW * dz_dW) + d2z_dW2), -CP::Wclip, CP::Wclip, 1.0f,
               CP::Config_W::stepMax * (1.0f + CP::AGAw * agd) );
 
     // bias: dz/db = 1, d2z/db2 = 0
-    b.Update( e_o, e_o * c2, -CP::Bclip, CP::Bclip, 1.0f,
+    b.Update( ee, e_o, e_o * c2, -CP::Bclip, CP::Bclip, 1.0f,
               CP::Config_B::stepMax * (1.0f + CP::AGAb * agd) );
   }
 };
