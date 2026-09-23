@@ -91,3 +91,4 @@ book1          wcc386         book1wcc
 344867         309587         656027 // C0 alone @ o1; opt pass 2
 
 277005         274838         553123 // mix2(C0 @ o2, C1 @ o1), end-to-end; M0 as delivered (tuned for o1+SSE), untuned
+277029         273821         552231 // mix2(C0,C1), M0 imported from the opt pass
