@@ -323,6 +323,8 @@ int main( int argc, char** argv ) {
 
   int last_c = 0, c2 = 0;
 
+double L = 0.0f;
+
   for( f_pos=0; f_pos<f_len; f_pos++ ) {
     if( f_DEC==0 ) c = getc(f);
 
@@ -353,6 +355,9 @@ int main( int argc, char** argv ) {
 #endif
 
       bit = rc.rc_BProcess( p, bit );
+
+L += log(double(SCALE)) - log( double(bit*SCALE+(1-2*bit)*p) );
+
 
       // A2 end to end.  The loss is the coded bit's -ln p_final, so its
       // gradient w.r.t. the final logit -- the SSE's output -- is
@@ -388,6 +393,8 @@ int main( int argc, char** argv ) {
 
   fclose(g);
   fclose(f);
+
+printf( "L = %.1lf bytes\n", L/log(double(2))/8 );
 
   return 0;
 }

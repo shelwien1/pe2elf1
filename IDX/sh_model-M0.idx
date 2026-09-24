@@ -10,7 +10,7 @@ Debug 1
 # p1 = the order-1 prediction, p2 = the SSE output.  See SSE-DESIGN.md.
 # ======================================================================
 
-Const 1
+Const 0
 
 # --- mixer context ------------------------------------------------------
 Index Cx
@@ -19,49 +19,49 @@ Index Cx
  cx: cxt, b&00000000  # bit-tree node: b& merges node bits counted from the leading 1 (0 = keep)
 
 # --- weight / bias seeds and boxes --------------------------------------
-Number W0,    1,0!010111110000000   # initial w (weight of p1), /32768
-Number Wclip, 1,0!000110001010   # |W| box in logit coordinates, /256
-Number Bclip, 1,0!00011000101   # |b| box, /256
+Number W0,    1,0!010101000000100   # initial w (weight of p1), /32768
+Number Wclip, 1,0!000101000110   # |W| box in logit coordinates, /256
+Number Bclip, 1,0!00010111110   # |b| box, /256
 Number Pmin,  1,0!101001111100011   # input probability clip, /(SCALE<<16)
 
-Const 1
+Const 0
 
 # --- ParamUpdater of W: newton.inc scalings ------------------------------
 Number M1w,   1,0!1111111111000010000   # momentum_D = 1 - M1w/(SCALE<<9)
-Number M2w,   1,0!10001000010000001   # momentum_R = 1 - M2w/(SCALE<<11)
-Number NWw,   1,0!1000100000000000000   # step gain NW = NWw/(SCALE<<9)
+Number M2w,   1,0!10010000000000000   # momentum_R = 1 - M2w/(SCALE<<11)
+Number NWw,   1,0!1010000100000100000   # step gain NW = NWw/(SCALE<<9)
 Number INCw,  1,0!010100000000000100   # Newton damping inc = INCw/(SCALE<<11)
-Number STEPw, 1,0!1101000010000110101   # step clip = STEPw/(SCALE<<8)
-Number G2w,   1,0!1111001   # curvature clip = G2w/32
+Number STEPw, 1,0!1110000100100000000   # step clip = STEPw/(SCALE<<8)
+Number G2w,   1,0!1111110   # curvature clip = G2w/32
 Number DCw,   1,0!101111001   # D clip = DCw/16
-Number RCw,   1,0!000000001000000   # R clip = RCw/16
+Number RCw,   1,0!000000010000000   # R clip = RCw/16
 Number NAGw,  1,0!1   # 1: Nesterov look-ahead (step from momentum_D*D_new - g)
 
-Const 1
+Const 0
 
 # --- ParamUpdater of the bias --------------------------------------------
 Number M1b,   1,0!1111111111110000000
-Number M2b,   1,0!00111010001000110
+Number M2b,   1,0!01000000000010000
 Number NWb,   1,0!10100010000101100000
 Number INCb,  1,0!100100001000000001
-Number STEPb, 1,0!1111111111010100000
+Number STEPb, 1,0!1110110100010010001
 Number G2b,   1,0!0000000
 Number DCb,   1,0!001100001
 Number RCb,   1,0!100000000000000
 Number NAGb,  1,0!1   # 1: Nesterov look-ahead
 
-Const 1
+Const 0
 
-Const 1
+Const 0
 
 # --- A1 young-cell step schedule (sh_mix2.inc Update) ---------------------
 # stepMax_eff = stepMax*(1 + AGAx/(1 + age/B)) on W (AGAw) and b (AGAb);
 # AGAx/256, 0 = plain limit.  B = AGB/16 updates (64 = 4 updates).
-Number AGAw,   1,0!010010001100
-Number AGAb,   1,0!001001100011
-Number AGB,    1,0!0000000010
+Number AGAw,   1,0!010011000100
+Number AGAb,   1,0!001000010000
+Number AGB,    1,0!0000001000
 
-Const 1
+Const 0
 
 # --- A2 end-to-end objective (sh_mix2.inc Update) --------------------------
 # The W and b gradients use (1-E2E)*(own error) + E2E*(final error chained

@@ -20,19 +20,19 @@ Index Cx
  c1: c1, &11111111    # last byte (bits tunable)
  cx: cxt, b&00000000  # bit-tree node: b& merges node bits counted from the leading 1 (0 = keep)
 
-Const 0
+Const 1
 
 
 Number mwMax,  1,1!111111111111000
 
 Number G3_m,   1,0!1000000000000000000
 
-Const 0
+Const 1
 
 Number P0,     1,1!010000000000000
 Number P1,     1,0!00111001001001
 
-Const 0
+Const 1
 
 Number wr,     1,1!10000001000011
 Number wr1,    1,0!110000000000
@@ -45,14 +45,14 @@ Number kStep,  1,1!0010011000001000100
 Number kMin,   1,1!1100000000000000000000
 Number kMax,   1,1!001101101100001
 
-Const 0
+Const 1
 
 Number NWm,    1,1!01010100100000011010
 Number MWinc,  1,1!000011001000000
 Number mwStep, 1,1!00110111101100000000
 Number mwMin,  1,1!000000000000000
 
-Const 0
+Const 1
 
 Number M1_m,   1,1!111111111100000000
 Number M2_m,   1,1!000011000100000
@@ -63,25 +63,25 @@ Number M2_k,   1,1!0000001101111000000
 Number G2_m,   1,0!1101000001111
 Number G2_k,   1,0!100000011000011
 
-Const 0
+Const 1
 
 Number stP_min,1,1!111111110000000
 
 Number leak1,  1,1!0111111011101000
 Number leak2,  1,1!1111011100000011
 
-Const 0
+Const 1
 
 Number mwP0,   1,1!100101011000001
 
-Const 0
+Const 1
 
 Number G3_k,   1,0!0010010001100000111
                               
 Number G4_m,   1,0!0100000000110100010
 Number G4_k,   1,0!0010001101000001011
 
-Const 0
+Const 1
 
 # added from sh_model-C0_h.inc
 Number M1_u,  1,0!111111110000000000
@@ -111,7 +111,7 @@ Number R0_v,  1,0!00000000
 
 Number UVH, 1,0!100111111110
 
-Const 0
+Const 1
 
 # added from sh_model-C0_h.inc
 
@@ -122,7 +122,7 @@ Number XHC, 1,0!0000000000000
 Number mwXlo, 1,0!010100100
 Number mwXhi, 1,0!0100000000000000
 
-Const 0
+Const 1
 
 # A1 young-cell step schedule (coder0.cpp Counter::C_Update):
 # stepMax_eff = stepMax*(1 + AGAx/(1 + age/B)) on the mw (AGAm) and K (AGAk)
@@ -135,7 +135,7 @@ Number AGAk,   1,0!011001100000
 Number AGB,    1,0!0000111001
 Number AGBuv,  1,0!0111110000   # cloned from AGB (u/v used to share it with mw and K)
 
-Const 0
+Const 1
 
 # A2 end-to-end objective: the parameter gradients use
 # (1-E2E)*(own error) + E2E*(final error chained to this cell), E2E/256;
