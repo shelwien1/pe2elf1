@@ -9,7 +9,8 @@ The starter pack is 33.7 GB; these tools work on a few sequences exported to TSV
 | `pred_baseline/seq-<seq_ix>.tsv` | predictions of the starter pack's GRU baseline (`baseline.onnx`) for these sequences |
 | `predict.cpp` | predictor template with a dummy model: `./predict data.tsv pred.tsv` |
 | `metric.cpp` | Global Weighted Pearson, the competition metric: `./metric data.tsv pred.tsv [data2.tsv pred2.tsv ...]` |
-| `tsv.h` | TSV reader and exact float formatting shared by both programs |
+| `quantize.cpp` | data + predictions ⇄ one integer (fixed-point) TSV: `./quantize c seq.tsv pred.tsv int.tsv`, `./quantize d int.tsv seq_out.tsv pred_out.tsv` |
+| `tsv.h` | TSV reader and exact float formatting shared by the C++ programs |
 | `extract.py` | parquet row groups → TSV (how `data/` was made) |
 | `baseline_predict.py` | runs the ONNX baseline on data TSVs (how `pred_baseline/` was made) |
 | `validate.py` | checks `./metric` against the official Python scorer (`utils.py`) |
@@ -18,7 +19,7 @@ The starter pack is 33.7 GB; these tools work on a few sequences exported to TSV
 ## Usage
 
 ```sh
-make            # builds ./predict and ./metric (g++ -O2, plain C++11)
+make            # builds ./predict, ./metric, ./quantize (g++ -O2, plain C++11)
 make data       # data/*.tsv.xz -> data/*.tsv (xz -dk)
 
 ./predict data/seq-256678.tsv pred.tsv
@@ -47,6 +48,29 @@ One file can hold several sequences. Models reset their state whenever `seq_ix` 
 (steps 99..19999, so 19,901 lines per sequence). `metric` also accepts one line per data row,
 in which case it ignores the warm-up lines. It checks that `seq_ix`/`step_in_seq` match the data file
 and it rejects non-finite predictions, as the platform does.
+
+**Integer TSV** (`quantize`): the data columns followed by `pred_t0 pred_t1`, one line per data row.
+Every float is stored as `round(v * 10^N)`, and the header records the scale in the column name,
+e.g. `i0_p0/10000`. `seq_ix`, `step_in_seq`, `need_prediction` and `is_scored` are unchanged.
+The prediction columns hold 0 on warm-up rows.
+
+```sh
+./quantize c [-dN] seq.tsv pred.tsv int.tsv        # N decimal digits, default 4
+./quantize d int.tsv seq_out.tsv pred_out.tsv      # values written as exact decimals (12345/10000 -> 1.2345)
+```
+
+Effect on the pooled WP of the 10 sequences:
+
+| digits | baseline preds, targets+preds dequantized | dummy re-run on dequantized data | GRU re-run on dequantized data |
+|---|---:|---:|---:|
+| original | 0.644815 | 0.440572 | 0.644815 |
+| `-d4` | 0.644818 | 0.440568 | 0.644817 |
+| `-d3` | 0.644811 | 0.440398 | 0.644829 |
+| `-d2` | 0.644673 | 0.438638 | – |
+
+With `-d4` every score moves by 4e-6 or less. The integer file for one sequence is 13.4 MB
+at `-d4` and 8.8 MB at `-d2`, against 25 MB for the float TSV. Quantizing a decoded file again
+gives the identical integer file.
 
 ## Predictor
 
