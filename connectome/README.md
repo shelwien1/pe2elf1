@@ -49,7 +49,7 @@ One file can hold several sequences. Models reset their state whenever `seq_ix` 
 in which case it ignores the warm-up lines. It checks that `seq_ix`/`step_in_seq` match the data file
 and it rejects non-finite predictions, as the platform does.
 
-**Integer TSV** (`quantize`): the data columns followed by `pred_t0 pred_t1`, one line per data row.
+**Integer TSV** (`quantize`): `pred_t0 pred_t1` followed by the data columns, one line per data row.
 Every float is stored as `round(v * 10^N)`, and the header records the scale in the column name,
 e.g. `i0_p0/10000`. `seq_ix`, `step_in_seq`, `need_prediction` and `is_scored` are unchanged.
 The prediction columns hold 0 on warm-up rows.

@@ -6,7 +6,7 @@
 // c: every float column is stored as round(v * 10^N) (default N=4, max abs
 //    error 0.5e-4). The header keeps the scale in the column name,
 //    e.g. "i0_p0/10000"; seq_ix, step_in_seq, need_prediction, is_scored
-//    stay as they are. The predictions become the last two columns
+//    stay as they are. The predictions are the first two columns
 //    pred_t0, pred_t1 (0 on rows without need_prediction).
 //    pred.tsv may have one row per need_prediction row or per data row.
 // d: restores seq_out.tsv (same columns as seq.tsv) and pred_out.tsv
@@ -54,19 +54,13 @@ static void compress(int dec, const char* sfn, const char* pfn, const char* ofn)
   std::vector<bool> isint(d.ncols);
   for (size_t c = 0; c < d.ncols; c++) isint[c] = is_int_col(d.names[c]);
   FILE* f = fopen(ofn, "wb"); if (!f) die("can't create %s", ofn);
+  fprintf(f, "pred_t0/%lld\tpred_t1/%lld", scale, scale);
   for (size_t c = 0; c < d.ncols; c++)
-    fprintf(f, isint[c] ? "%s\t" : "%s/%lld\t", d.names[c].c_str(), scale);
-  fprintf(f, "pred_t0/%lld\tpred_t1/%lld\n", scale, scale);
+    fprintf(f, isint[c] ? "\t%s" : "\t%s/%lld", d.names[c].c_str(), scale);
+  fputc('\n', f);
 
   size_t pr = 0;
   for (size_t r = 0; r < d.nrows; r++) {
-    for (size_t c = 0; c < d.ncols; c++) {
-      if (isint[c]) {
-        const char* n = d.names[c].c_str();
-        long long v = (!strcmp(n, "need_prediction") || !strcmp(n, "is_scored")) ? d.b(r, c) : d.i(r, c);
-        fprintf(f, "%lld\t", v);
-      } else fprintf(f, "%lld\t", quant(d.f(r, c), double(scale), d, r, c));
-    }
     bool need = d.b(r, c_need);
     long long q[2] = {0, 0};
     if (need || all_rows) {
@@ -79,7 +73,15 @@ static void compress(int dec, const char* sfn, const char* pfn, const char* ofn)
         for (int k = 0; k < 2; k++) q[k] = quant(p.f(pi, p_t[k]), double(scale), p, pi, p_t[k]);
       }
     }
-    fprintf(f, "%lld\t%lld\n", q[0], q[1]);
+    fprintf(f, "%lld\t%lld", q[0], q[1]);
+    for (size_t c = 0; c < d.ncols; c++) {
+      if (isint[c]) {
+        const char* n = d.names[c].c_str();
+        long long v = (!strcmp(n, "need_prediction") || !strcmp(n, "is_scored")) ? d.b(r, c) : d.i(r, c);
+        fprintf(f, "\t%lld", v);
+      } else fprintf(f, "\t%lld", quant(d.f(r, c), double(scale), d, r, c));
+    }
+    fputc('\n', f);
   }
   fclose(f);
   fprintf(stderr, "%s + %s -> %s: %zu rows, %zu predictions, scale %lld\n", sfn, pfn, ofn, d.nrows, nneed, scale);
