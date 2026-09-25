@@ -1,0 +1,7 @@
+/tsvcomp
+/tsvcompt
+/tsvcompt.tune
+*.opt_tmp*
+/export.!!!
+/opttimes.!!!
+/corpus/
