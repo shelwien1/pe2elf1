@@ -1,0 +1,21 @@
+# build outputs (gc.sh / gc.bat)
+coder0
+coder0t
+coder0c
+gradtest
+*.o
+*.obj
+
+# test scratch: t1.sh writes <file>.1/<file>.2, tm.sh writes to $TMPDIR
+*.1
+*.2
+*.1o
+
+# t1.sh builds book1wcc from book1 + wcc386 when it is missing
+book1wcc
+
+# tuning runs (IDX/opt.pl, IDX/optv.pl): the exe copy they patch and their outputs
+coder0t.tune
+*.opt_tmp*
+/export.!!!
+/opttimes.!!!

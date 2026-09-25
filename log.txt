@@ -1,0 +1,100 @@
+
+book1          wcc386         book1wcc
+344899 0.906s  309703 0.679s  656161 1.572s
+
+# with the SSE stage (sh_SSE2.inc, IDX/sh_model-S0.idx after one opt.pl pass), gcc 13.3 linux:
+book1          wcc386         book1wcc
+241409 5.650s  287719 4.456s  531716 9.509s
+
+# with the SSE stage and the mixer (sh_SSE2.inc, sh_mix2.inc; IDX/sh_model-S0.idx, -M0.idx after three opt.pl passes):
+book1          wcc386         book1wcc
+235043 6.048s  280507 4.611s  518841 9.474s
+
+# + Nesterov step in the mixer updaters:
+book1          wcc386         book1wcc
+235025 5.596s  280132 4.610s  518553 9.336s
+
+# 061: C0 retuned in the pipeline (book1wcc):
+book1          wcc386         book1wcc
+235391 5.6s    275195 4.2s    512847 7.9s
+
+# + young-cell step schedule (S0 cells, mixer bias), end-to-end gradients for
+# the order-1 cells (and 0.62 of it for the SSE cells), optv.pl passes
+# (SSE-DESIGN.md sec.6.11):
+book1          wcc386         book1wcc
+234213 4.877s  273291 4.897s  509525 8.680s
+
+# + fewer divisions/transcendentals per bit (cached prediction intermediates,
+# logits between the stages, logit-domain gradient chain; SSE-DESIGN.md
+# sec.6.12; within rounding of the above):
+book1          wcc386         book1wcc
+234214 3.85s   273292 3.53s   509525
+
+# -DUSE_SCHRAU=1 (schrau.inc: Schraudolph exp/log/sq/st in place of libm), same
+# constants; book1wcc 5.24 -> 4.42 s user (SSE-DESIGN.md sec.6.14):
+book1          wcc386         book1wcc
+234215         273334         509622
+
+234215         273335         509623 // schrau+clang
+
+234389         271609         507950
+
+234380         271584         507867
+
+# SSE-MIX2-REDESIGN phase 2: the SSE table indexed directly by its context
+# (no hash, no HBITS), c3 low 5 x c2 low 5 x c1 low 4 x 255 nodes = 4.18M
+# rows x 4 buckets, 1.6 GB as before; S0 rates still the ones tuned on the
+# hashed table (phase 1, the components as plain cells, was byte-identical):
+book1          wcc386         book1wcc
+239025 9.709s  273691 3.072s  514946 6.160s
+
+# The index above was the 1.6 GB budget's best split; memory is not a
+# constraint, so the .idx now carries the original masks, direct (c3 all 8
+# bits x c2 01011111 x c1 00011111 x 255 nodes = 133.7M rows, 51 GB): the
+# context the hashed table was tuned for, without its collisions.  Not
+# measurable on the 15 GB development box -- measure where it fits.  The S0
+# rates climbed on the 14-bit table (optv.pl, seven chunks) are folded in:
+# 512716 -> 512502 on book1+wcc386 there.
+
+# Hashing restored, in main() (coder0.cpp S0_Row) and not in the component:
+# the original masks and rates, the 64-bit context hashed onto 4.19M rows
+# as before -- the profile of the 234380 / 271584 / 507867 line, byte for
+# byte (the direct-index lines above are the record of the experiment).
+
+# u/v decoupled, not tuned: seven knobs cloned per component (M2_x, vMin,
+# vMax, wr1b, AGAv, AGBuv, E2Euv), each seeded with the value it used to
+# share, so the stream is the line above byte for byte; opt.pl now sees 14
+# more.
+
+# Counter: wr cache a local, counts and RTRL traces arrays (the recursion
+# and leaks vectorize); the order-1 table is an IDX Table() with context
+# masks (C0 c1 &11111111 x node), simulating o1[256][256].  All byte for
+# byte the line above.
+
+
+234380         271584         507868
+
+253168         275229         529640
+
+276776         269754         547841
+
+282955         295449         581114 // ppmd sh9 @ o2
+285077         317595         602895 // C0 alone @ o2
+
+280628         310174         592026 // C0 alone @ o2; opt pass
+280558         309919         591641 // C0 alone @ o2; opt pass 2
+
+344899 0.906s  309703 0.679s  656161 1.572s // #050c baseline
+
+344098         312633         658581 // C0 alone @ o1; baseline
+344823         309677         656122 // C0 alone @ o1; opt pass
+344867         309587         656027 // C0 alone @ o1; opt pass 2
+
+277005         274838         553123 // mix2(C0 @ o2, C1 @ o1), end-to-end; M0 as delivered (tuned for o1+SSE), untuned
+277029         273821         552231 // mix2(C0,C1), M0 imported from the opt pass
+285198         281051         567529 // SSE(mix2(C0,C1)), end-to-end; S0 context as in 066 (c1 &11111000 x node)
+
+285188         281045         567507 // 
+285344         281396         568045 // 
+277475         272641         551859 // 
+276990         272064         550705 // 
