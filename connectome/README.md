@@ -9,7 +9,7 @@ The starter pack is 33.7 GB; these tools work on a few sequences exported to TSV
 | `pred_baseline/seq-<seq_ix>.tsv` | predictions of the starter pack's GRU baseline (`baseline.onnx`) for these sequences |
 | `predict.cpp` | predictor template with a dummy model: `./predict data.tsv pred.tsv` |
 | `metric.cpp` | Global Weighted Pearson, the competition metric: `./metric data.tsv pred.tsv [data2.tsv pred2.tsv ...]` |
-| `quantize.cpp` | data + predictions ⇄ one integer (fixed-point) TSV: `./quantize c seq.tsv pred.tsv int.tsv`, `./quantize d int.tsv seq_out.tsv pred_out.tsv` |
+| `quantize.cpp` | data + predictions ⇄ one integer (fixed-point) table, as TSV (`c`/`d`) or packed little-endian binary (`bc`/`bd`) |
 | `tsv.h` | TSV reader and exact float formatting shared by the C++ programs |
 | `extract.py` | parquet row groups → TSV (how `data/` was made) |
 | `baseline_predict.py` | runs the ONNX baseline on data TSVs (how `pred_baseline/` was made) |
@@ -57,7 +57,23 @@ The prediction columns hold 0 on warm-up rows.
 ```sh
 ./quantize c [-dN] seq.tsv pred.tsv int.tsv        # N decimal digits, default 4
 ./quantize d int.tsv seq_out.tsv pred_out.tsv      # values written as exact decimals (12345/10000 -> 1.2345)
+./quantize bc [-dN] seq.tsv pred.tsv int.bin       # same table, packed binary
+./quantize bd int.bin seq_out.tsv pred_out.tsv
 ```
+
+**Packed binary** (`bc`/`bd`): the same integers and column order, all little-endian:
+
+| field | type |
+|---|---|
+| magic | `char[4]` = `CQB1` |
+| ncols, nrows | `u32`, `u32` |
+| per column | `u8` name length L, L bytes of name, `u8` decimals N (value = stored / 10^N), `u8` width W (1..8) |
+| per row | for each column, W bytes of signed two's complement |
+
+Each column's W is the smallest width that holds its range. Rows are fixed-size records in file
+order. At `-d4` a sequence packs into 248-byte records (widths: 108 × 2 bytes, 10 × 3 bytes,
+2 × 1 byte), so the file is 4.96 MB, against 13.4 MB for the integer TSV and 25 MB for the float TSV.
+`bd` gives exactly the same output as `d`.
 
 Effect on the pooled WP of the 10 sequences:
 
