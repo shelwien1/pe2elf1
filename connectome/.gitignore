@@ -1,0 +1,12 @@
+/predict
+/metric
+*.exe
+/data/*.tsv
+/pred/
+/pred_dummy/
+/pred_prevtarget/
+pred.tsv
+__pycache__/
+/wnn_connectome_starterpack/
+*.parquet
+._*
