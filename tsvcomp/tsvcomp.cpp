@@ -121,6 +121,7 @@ static const float iSCALE = 1.0f/SCALE;
 #include "MOD/tc_model-H0_p.inc"
 #include "MOD/tc_model-X0_p.inc"
 #include "MOD/tc_model-X1_p.inc"
+#include "MOD/tc_model-E0_p.inc"
 
 static inline unsigned long long tbl_n( unsigned long long n ) { return n; }
 
@@ -238,6 +239,7 @@ typedef MixN<CP_X1,NGRP> MixX1_Cell;
 #include "MOD/tc_model-H0_h.inc"
 #include "MOD/tc_model-X0_h.inc"
 #include "MOD/tc_model-X1_h.inc"
+#include "MOD/tc_model-E0_h.inc"
 
 // ---- the model ----------------------------------------------------------
 
@@ -253,6 +255,7 @@ M3_T M3;
 H0_T H0;
 X0_T X0;
 X1_T X1;
+E0_T E0;
 static double L = 0;   // ideal code length, bits
 
 // paq block (paq.inc): NCX hashed Counter tables, MixN group/final mixers
@@ -269,7 +272,7 @@ static void model_init() {
   M1.M1_Init(); for( qword i=0; i<qword(M1_Cx_Volume); i++ ) M1.M1_tbl[i].Init();
   M2.M2_Init(); for( qword i=0; i<qword(M2_Cx_Volume); i++ ) M2.M2_tbl[i].Init();
   M3.M3_Init(); for( qword i=0; i<qword(M3_Cx_Volume); i++ ) M3.M3_tbl[i].Init();
-  H0.H0_Init();
+  H0.H0_Init(); E0.E0_Init();
   X0.X0_Init(); for( qword i=0; i<qword(X0_Cx_Volume); i++ ) X0.X0_tbl[i].Init();
   X1.X1_Init(); for( qword i=0; i<qword(X1_Cx_Volume); i++ ) X1.X1_tbl[i].Init();
 #if PAQ
@@ -278,7 +281,7 @@ static void model_init() {
   S0.S0_Init(); for( qword i=0; i<qword(S0_Cx_Volume); i++ ) S0_SSE::Init( &S0.S0_tbl[ i*CP_S0::NB ] );
 }
 static void model_quit() {
-  C0.C0_Quit(); C1.C1_Quit(); C2.C2_Quit(); M0.M0_Quit(); M1.M1_Quit(); M2.M2_Quit(); M3.M3_Quit(); H0.H0_Quit(); X0.X0_Quit(); X1.X1_Quit(); S0.S0_Quit();
+  C0.C0_Quit(); C1.C1_Quit(); C2.C2_Quit(); M0.M0_Quit(); M1.M1_Quit(); M2.M2_Quit(); M3.M3_Quit(); H0.H0_Quit(); X0.X0_Quit(); X1.X1_Quit(); E0.E0_Quit(); S0.S0_Quit();
 }
 
 #ifndef FINAL_MIX
@@ -413,6 +416,8 @@ struct RowSide {
   qword psg;                 // hash of the i0_p* change directions
   qword aq;                  // hash of a0..a7 >> 12
   uint rpc;                  // rows since an i0_p* column last changed
+  uint pu, vu, i1u;          // of pm, vm, i1m: the columns that moved up
+  uint asg;                  // signs of a0..a7 (bit i: a_i > 0)
 };
 
 // codes (or decodes) target v of column k
@@ -442,7 +447,7 @@ static long long code_value( int dec, long long v, int k, Column& c, const RowSi
   long long zb = c.zrun > 255 ? 255 : c.zrun, z15 = zb > 15 ? 15 : zb, z7 = zb > 7 ? 7 : zb;
   auto lb = []( long long x, int sh ) { long long q = x >> sh; return q < -63 ? -63 : q > 63 ? 63 : q; };
   long long rpc = rs.rpc > 63 ? 63 : rs.rpc;
-  qword H[NCX] = {
+  qword H[NCX] = {   // the hand-written contexts; H[NHC..] = the masked models, below
     hashv({ 0, k }),                                      // order 0
     hashv({ 1, k, zb }),                                  // rows since the last change
     hashv({ 2, k, c.lastj }),                             // last jump
@@ -466,6 +471,21 @@ static long long code_value( int dec, long long v, int k, Column& c, const RowSi
     hashv({ 20, k, rs.pm, c.lastj }),                     // price columns x last jump
     hashv({ 21, k, (long long)rs.psg, c.ref }),           // price directions x level
   };
+  // the masked models (IDX/tc_model-E0.idx): candidate variables, masked by
+  // the E0 patterns, 9 indices per model, hashed with k
+  {
+    auto lv = []( long long x ) { long long q = (x >> 9) + 64; return int( q < 0 ? 0 : q > 127 ? 127 : q ); };
+    int eo[E0_NE * E0_NIDX];
+    E0_Make( int(zb), c.ep, int(sbucket( c.lastj )), int(sbucket( c.lastj2 )), rs.need, rs.sch,
+             lv( c.ref ), lv( o.ref ), int(oth), lv( pk ), lv( rs.pred[k^1] ), int(mq), int(dq), int(rs.asg),
+             int(rs.pm), int(rs.tm), int(rs.pu), int(rpc > 255 ? 255 : rpc), int(rs.vm), int(rs.vu),
+             int(rs.i1m), int(rs.i1u), eo );
+    for( int m = 0; m < E0_NE; m++ ) {
+      qword h = hashv({ 100 + m, k });
+      for( int j = 0; j < E0_NIDX; j++ ) h = mix64( h ^ qword(uint(eo[m*E0_NIDX + j])) ) + 0x9E3779B97F4A7C15ULL;
+      H[NHC + m] = h;
+    }
+  }
   auto bitc = [&]( int bit, qword node, int st, int e ) {
     BitCx x;
     qword nh = mix64( node * 0x9E3779B97F4A7C15ULL + 12345 );
@@ -614,12 +634,21 @@ static std::vector<RowSide> side_info( const std::vector<Line>& rest ) {
       uint m = 0; for( size_t j = 0; j < g.size() && j < 32; j++ ) if( changed( g[j] ) ) m |= 1u << j;
       return m;
     };
+    auto upmask = [&]( const std::vector<int>& g ) {
+      uint m = 0;
+      for( size_t j = 0; j < g.size() && j < 32; j++ )
+        if( changed( g[j] ) && field_int( f[g[j]] ) > field_int( (*pf)[g[j]] ) ) m |= 1u << j;
+      return m;
+    };
     RowSide x;
     x.need = 1;
     if( cneed >= 0 && size_t(cneed) < f.size() ) x.need = !(f[cneed].second == 1 && f[cneed].first[0] == '0');
     for( int k = 0; k < 2; k++ )
       x.pred[k] = cpred[k] >= 0 && size_t(cpred[k]) < f.size() ? field_int( f[cpred[k]] ) : 0;
     x.pm = mask( ip ); x.vm = mask( iv ); x.tm = mask( it ); x.i1m = mask( i1p );
+    x.pu = upmask( ip ); x.vu = upmask( iv ); x.i1u = upmask( i1p );
+    x.asg = 0;
+    for( size_t j = 0; j < ia.size() && j < 8; j++ ) if( size_t(ia[j]) < f.size() && field_int( f[ia[j]] ) > 0 ) x.asg |= 1u << j;
     x.sch = (x.pm != 0) | (x.vm != 0) << 1 | (x.tm != 0) << 2;
     x.psg = 0;
     for( size_t j = 0; j < ip.size(); j++ )

@@ -55,16 +55,18 @@ final mixer through the paq block's mixers into its counters, and into C0/C1/C2.
 
 ### paq block (`paq.inc`), built from the framework's parts
 
-- **22 hashed context models.** Each is a hash table of 2^TB `Counter<CP_H0>` cells
+- **32 hashed context models**: 22 with hand-written contexts (table below) and 10 masked ones
+  (`IDX/tc_model-E0.idx`, next section). Each is a hash table of 2^TB `Counter<CP_H0>` cells
   (`sh_counter.inc`, knobs in `IDX/tc_model-H0.idx`), plus a 32-bit check per slot. The slot of
   (the model's context hash for this value, bit node) is the cell that maps the context's
   history to a probability. A slot whose check doesn't match is re-initialized to the prior and
   taken over.
-- **Group mixers.** The 22 logits plus C0/C1/C2's are mixed in 5 groups of 5, each by a
+- **Group mixers.** The 32 logits plus C0/C1/C2's are mixed in 7 groups of 5, each by a
   `MixN<CP_X0,5>` cell (`sh_mixN.inc`, `IDX/tc_model-X0.idx`). A group's cell is selected by
   group × k × stage × exponent step. The groups are target history; levels, the other column
-  and change flags; price changes; predictions and a0..a7; and the rest with C0/C1/C2.
-- **Final mixer.** A `MixN<CP_X1,5>` cell (`IDX/tc_model-X1.idx`) mixes the group outputs. It is
+  and change flags; price changes; predictions and a0..a7; the rest with C0/C1/C2; and two
+  groups of masked models.
+- **Final mixer.** A `MixN<CP_X1,7>` cell (`IDX/tc_model-X1.idx`) mixes the group outputs. It is
   selected by k × stage × rows since the last change × change flags.
 - **Gain (not convex).** MixN's softmax weights sum to 1, so on their own they can never be more
   confident than the most confident input. Each MixN cell therefore also learns a gain:
@@ -88,6 +90,33 @@ final mixer through the paq block's mixers into its counters, and into C0/C1/C2.
 | 10 | rows since an i0 price column changed × rows since the last change | 21 | price directions × level |
 
 `-DNOCX=<mask>` drops the contexts of the models whose bits are set (for ablations).
+
+### Masked context models (`IDX/tc_model-E0.idx`), for the optimizer
+
+Each of the 10 masked models hashes 9 IDX indices built from the same candidate variables, and
+**every mask starts at zero**. So each model starts as an order-0 model (column × bit node), and
+`opt.pl` finds out which bits are worth turning on. There are 220 masks and 2,320 pattern bits. An
+index holds at most 30 bits even with every mask bit on, so the `int` the mask objects build never
+overflows, and the shipping build's `_Volume` constants still fit.
+
+| index | candidate variables (bits) |
+|---|---|
+| A | rows since the target changed (8), exponent of the previous delta (6), last jump (6), the one before (6), need_prediction (1), change flags (3) |
+| B | level (7), other column's level (7), other column's delta (6), prediction (7) |
+| C | other prediction (7), prediction − level (6), prediction change (6), signs of a0..a7 (8) |
+| D | which i0 price columns changed (22), which trade columns changed (8) |
+| E | which i0 price columns moved up (22), rows since a price change (8) |
+| F, G | which i0 volume columns changed / moved up (22 each) |
+| H, I | which i1 price columns changed / moved up (22 each) |
+
+Levels and predictions are value >> 9 + 64, clipped to 0..127. Jumps and deltas are sign +
+exponent buckets. The mask tags carry the model number (`E0_zr0` … `E0_iu9`), so
+`perl IDX/opt.pl opt.lst ./tsvcompt.tune '^E0_'` climbs only these.
+
+With all masks at zero the 10 extra models cost about 3% (duplicates of order 0 and a bigger final
+mixer): 12,715 / 11,121 / 12,541 bytes against 12,364 / 10,899 / 12,199 without them. Five masks
+set by hand as a smoke test (D0 full, zr1, j11, pu2) already won part of that back: 12,673 zeros,
+12,490 GRU.
 
 ### Counter/mixer stages (`IDX/tc_model-*.idx`)
 
@@ -128,7 +157,8 @@ The same targets with three kinds of predictions in `pred_t0`/`pred_t1`:
 
 | bytes, t0+t1 of all 10 files | pz: zeros | pd: dummy (`predict -m0`) | pb: GRU baseline |
 |---|---:|---:|---:|
-| **tsvcomp** (Counter/MixN paq block, MixN with gain) | **12,364** | **10,899** | **12,199** |
+| **tsvcomp** (+ 10 masked models, masks still zero) | **12,715** | **11,121** | **12,541** |
+| without the masked models (previous commit) | 12,364 | 10,899 | 12,199 |
 | convex MixN (`GON = 0`) | 12,715 | 11,208 | 12,582 |
 | previous commit: hand-written paq block (own StateMap-like slots, unconstrained 2-layer mixer) | 11,486 | 10,252 | 11,251 |
 | tsvcomp `-DPAQ=0` (tuned counters only) | 21,762 | 16,676 | 20,850 |
@@ -156,7 +186,7 @@ Almost all of the gain comes from which i0 price columns changed, and in which d
 move when the book moves. The prediction models help with the dummy predictions (−5%) but not
 with the GRU ones, as before.
 
-About 1.4 s per file each way. All 30 files round-trip in every mode, and the shipping and
+About 2 s per file each way, 580 MB. All 30 files round-trip in every mode, and the shipping and
 tuning builds produce identical streams. `tsvcomp.exe` in this directory is the previous
 version's build: it was not rebuilt here, so rebuild it with `gc.bat`.
 
@@ -171,4 +201,6 @@ cd IDX && for f in *.idx; do perl import.pl $f ../export.!!! > t && mv t $f; don
 ```
 
 The new modules to tune are H0 (the hashed counters and the table size TB), X0/X1 (the MixN
-group and final mixers, including their gain knobs) and M3.
+group and final mixers, including their gain knobs), M3, and the E0 masks. For E0 alone:
+`perl IDX/opt.pl opt.lst ./tsvcompt.tune '^E0_'`. `OPT_JOBS=N` runs corpus files in parallel, and
+a shorter `opt.lst` speeds up the climb (one full pass over the 30 files takes about 1 minute).

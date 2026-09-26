@@ -1,0 +1,352 @@
+Prefix E0
+Debug 1
+
+# ======================================================================
+# tc_model-E0.idx -- the masked context models of the paq block (paq.inc,
+# tsvcomp.cpp code_value).  Each of the NE models hashes 9 indices built
+# from the same candidate variables; every mask starts at zero, so each
+# model starts as an order-0 model (column x bit node), and opt.pl decides
+# which bits are worth turning on.  Each index holds at most 30 bits with
+# every mask bit on, so the int the mask objects build never overflows.
+#
+#  zr rows since the target changed (<=255)   ep exponent of the previous delta (40 = 0)
+#  j1 last jump, j2 the one before (sign + exponent)   ne need_prediction
+#  sc change flags (i0 price, volume, trade)   lv level, ol other column's level (>>9, +64)
+#  od other column's delta (sign + exponent)   pk prediction, po other prediction (>>9, +64)
+#  mq prediction - level, dq prediction change (sign + exponent)   sg signs of a0..a7
+#  pm/pu i0 price columns changed / moved up (22 bits)   tm trade columns changed
+#  rp rows since a price change (<=255)   vm/vu i0 volume columns changed / up
+#  im/iu i1 price columns changed / up
+# ======================================================================
+
+Const 0
+
+# --- model 0
+Index A0
+ zr0: zr, &00000000
+ ep0: ep, &000000
+ j10: j1, &000000
+ j20: j2, &000000
+ ne0: ne, &0
+ sc0: sc, &000
+Index B0
+ lv0: lv, &0000000
+ ol0: ol, &0000000
+ od0: od, &000000
+ pk0: pk, &0000000
+Index C0
+ po0: po, &0000000
+ mq0: mq, &000000
+ dq0: dq, &000000
+ sg0: sg, &00000000
+Index D0
+ pm0: pm, &0000000000000000000000
+ tm0: tm, &00000000
+Index E0
+ pu0: pu, &0000000000000000000000
+ rp0: rp, &00000000
+Index F0
+ vm0: vm, &0000000000000000000000
+Index G0
+ vu0: vu, &0000000000000000000000
+Index H0
+ im0: im, &0000000000000000000000
+Index I0
+ iu0: iu, &0000000000000000000000
+
+# --- model 1
+Index A1
+ zr1: zr, &00000000
+ ep1: ep, &000000
+ j11: j1, &000000
+ j21: j2, &000000
+ ne1: ne, &0
+ sc1: sc, &000
+Index B1
+ lv1: lv, &0000000
+ ol1: ol, &0000000
+ od1: od, &000000
+ pk1: pk, &0000000
+Index C1
+ po1: po, &0000000
+ mq1: mq, &000000
+ dq1: dq, &000000
+ sg1: sg, &00000000
+Index D1
+ pm1: pm, &0000000000000000000000
+ tm1: tm, &00000000
+Index E1
+ pu1: pu, &0000000000000000000000
+ rp1: rp, &00000000
+Index F1
+ vm1: vm, &0000000000000000000000
+Index G1
+ vu1: vu, &0000000000000000000000
+Index H1
+ im1: im, &0000000000000000000000
+Index I1
+ iu1: iu, &0000000000000000000000
+
+# --- model 2
+Index A2
+ zr2: zr, &00000000
+ ep2: ep, &000000
+ j12: j1, &000000
+ j22: j2, &000000
+ ne2: ne, &0
+ sc2: sc, &000
+Index B2
+ lv2: lv, &0000000
+ ol2: ol, &0000000
+ od2: od, &000000
+ pk2: pk, &0000000
+Index C2
+ po2: po, &0000000
+ mq2: mq, &000000
+ dq2: dq, &000000
+ sg2: sg, &00000000
+Index D2
+ pm2: pm, &0000000000000000000000
+ tm2: tm, &00000000
+Index E2
+ pu2: pu, &0000000000000000000000
+ rp2: rp, &00000000
+Index F2
+ vm2: vm, &0000000000000000000000
+Index G2
+ vu2: vu, &0000000000000000000000
+Index H2
+ im2: im, &0000000000000000000000
+Index I2
+ iu2: iu, &0000000000000000000000
+
+# --- model 3
+Index A3
+ zr3: zr, &00000000
+ ep3: ep, &000000
+ j13: j1, &000000
+ j23: j2, &000000
+ ne3: ne, &0
+ sc3: sc, &000
+Index B3
+ lv3: lv, &0000000
+ ol3: ol, &0000000
+ od3: od, &000000
+ pk3: pk, &0000000
+Index C3
+ po3: po, &0000000
+ mq3: mq, &000000
+ dq3: dq, &000000
+ sg3: sg, &00000000
+Index D3
+ pm3: pm, &0000000000000000000000
+ tm3: tm, &00000000
+Index E3
+ pu3: pu, &0000000000000000000000
+ rp3: rp, &00000000
+Index F3
+ vm3: vm, &0000000000000000000000
+Index G3
+ vu3: vu, &0000000000000000000000
+Index H3
+ im3: im, &0000000000000000000000
+Index I3
+ iu3: iu, &0000000000000000000000
+
+# --- model 4
+Index A4
+ zr4: zr, &00000000
+ ep4: ep, &000000
+ j14: j1, &000000
+ j24: j2, &000000
+ ne4: ne, &0
+ sc4: sc, &000
+Index B4
+ lv4: lv, &0000000
+ ol4: ol, &0000000
+ od4: od, &000000
+ pk4: pk, &0000000
+Index C4
+ po4: po, &0000000
+ mq4: mq, &000000
+ dq4: dq, &000000
+ sg4: sg, &00000000
+Index D4
+ pm4: pm, &0000000000000000000000
+ tm4: tm, &00000000
+Index E4
+ pu4: pu, &0000000000000000000000
+ rp4: rp, &00000000
+Index F4
+ vm4: vm, &0000000000000000000000
+Index G4
+ vu4: vu, &0000000000000000000000
+Index H4
+ im4: im, &0000000000000000000000
+Index I4
+ iu4: iu, &0000000000000000000000
+
+# --- model 5
+Index A5
+ zr5: zr, &00000000
+ ep5: ep, &000000
+ j15: j1, &000000
+ j25: j2, &000000
+ ne5: ne, &0
+ sc5: sc, &000
+Index B5
+ lv5: lv, &0000000
+ ol5: ol, &0000000
+ od5: od, &000000
+ pk5: pk, &0000000
+Index C5
+ po5: po, &0000000
+ mq5: mq, &000000
+ dq5: dq, &000000
+ sg5: sg, &00000000
+Index D5
+ pm5: pm, &0000000000000000000000
+ tm5: tm, &00000000
+Index E5
+ pu5: pu, &0000000000000000000000
+ rp5: rp, &00000000
+Index F5
+ vm5: vm, &0000000000000000000000
+Index G5
+ vu5: vu, &0000000000000000000000
+Index H5
+ im5: im, &0000000000000000000000
+Index I5
+ iu5: iu, &0000000000000000000000
+
+# --- model 6
+Index A6
+ zr6: zr, &00000000
+ ep6: ep, &000000
+ j16: j1, &000000
+ j26: j2, &000000
+ ne6: ne, &0
+ sc6: sc, &000
+Index B6
+ lv6: lv, &0000000
+ ol6: ol, &0000000
+ od6: od, &000000
+ pk6: pk, &0000000
+Index C6
+ po6: po, &0000000
+ mq6: mq, &000000
+ dq6: dq, &000000
+ sg6: sg, &00000000
+Index D6
+ pm6: pm, &0000000000000000000000
+ tm6: tm, &00000000
+Index E6
+ pu6: pu, &0000000000000000000000
+ rp6: rp, &00000000
+Index F6
+ vm6: vm, &0000000000000000000000
+Index G6
+ vu6: vu, &0000000000000000000000
+Index H6
+ im6: im, &0000000000000000000000
+Index I6
+ iu6: iu, &0000000000000000000000
+
+# --- model 7
+Index A7
+ zr7: zr, &00000000
+ ep7: ep, &000000
+ j17: j1, &000000
+ j27: j2, &000000
+ ne7: ne, &0
+ sc7: sc, &000
+Index B7
+ lv7: lv, &0000000
+ ol7: ol, &0000000
+ od7: od, &000000
+ pk7: pk, &0000000
+Index C7
+ po7: po, &0000000
+ mq7: mq, &000000
+ dq7: dq, &000000
+ sg7: sg, &00000000
+Index D7
+ pm7: pm, &0000000000000000000000
+ tm7: tm, &00000000
+Index E7
+ pu7: pu, &0000000000000000000000
+ rp7: rp, &00000000
+Index F7
+ vm7: vm, &0000000000000000000000
+Index G7
+ vu7: vu, &0000000000000000000000
+Index H7
+ im7: im, &0000000000000000000000
+Index I7
+ iu7: iu, &0000000000000000000000
+
+# --- model 8
+Index A8
+ zr8: zr, &00000000
+ ep8: ep, &000000
+ j18: j1, &000000
+ j28: j2, &000000
+ ne8: ne, &0
+ sc8: sc, &000
+Index B8
+ lv8: lv, &0000000
+ ol8: ol, &0000000
+ od8: od, &000000
+ pk8: pk, &0000000
+Index C8
+ po8: po, &0000000
+ mq8: mq, &000000
+ dq8: dq, &000000
+ sg8: sg, &00000000
+Index D8
+ pm8: pm, &0000000000000000000000
+ tm8: tm, &00000000
+Index E8
+ pu8: pu, &0000000000000000000000
+ rp8: rp, &00000000
+Index F8
+ vm8: vm, &0000000000000000000000
+Index G8
+ vu8: vu, &0000000000000000000000
+Index H8
+ im8: im, &0000000000000000000000
+Index I8
+ iu8: iu, &0000000000000000000000
+
+# --- model 9
+Index A9
+ zr9: zr, &00000000
+ ep9: ep, &000000
+ j19: j1, &000000
+ j29: j2, &000000
+ ne9: ne, &0
+ sc9: sc, &000
+Index B9
+ lv9: lv, &0000000
+ ol9: ol, &0000000
+ od9: od, &000000
+ pk9: pk, &0000000
+Index C9
+ po9: po, &0000000
+ mq9: mq, &000000
+ dq9: dq, &000000
+ sg9: sg, &00000000
+Index D9
+ pm9: pm, &0000000000000000000000
+ tm9: tm, &00000000
+Index E9
+ pu9: pu, &0000000000000000000000
+ rp9: rp, &00000000
+Index F9
+ vm9: vm, &0000000000000000000000
+Index G9
+ vu9: vu, &0000000000000000000000
+Index H9
+ im9: im, &0000000000000000000000
+Index I9
+ iu9: iu, &0000000000000000000000
