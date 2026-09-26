@@ -34,23 +34,23 @@
 //   jump sizes are learned exactly).
 // Every bit: p_n = mix2( mix2( C0, C1 ), C2 ), p_q = mix2( p_n, paq ),
 // p = mix2( p_q, SSE(p_q) ) (FINAL_MIX 0: p = SSE(p_q); PAQ 0: p_q = p_n);
-// the end-to-end gradients are chained back through every path of the
-// counter/mixer stages, the paq block learns from its own error.
-// paq block (paq.inc, knobs IDX/tc_model-P0.idx): NCX hashed context
-// models (context hash of the value x bit node -> slot {check, p, n}), their
-// st(p) and confidence-weighted st(p), the C0/C1/C2 logits and a bias go
-// into NSEL weight sets (selected by k/stage/exponent, rows since the last
-// change, change flags, prediction vs. level, number of price columns that
-// changed), mixed again by a layer-2 weight set per k x stage.  The context
-// models (see H[] in code_value): order 0; rows since the last change; the
-// last jump; the last two jumps; the level; both levels; the other column's
-// delta x the last jump; change flags; which i0 price columns changed; the
-// directions of those changes; rows since a price change; trade and volume
-// columns; prediction and level; prediction vs. level; prediction change;
-// both predictions; which i1 price columns changed; a0..a7; price
-// directions x the last jump's sign; which volume columns changed; price
-// columns x last jump; price directions x level.  -DNOCX=mask drops the
-// contexts of the models whose bit is set (ablation).
+// every stage learns end to end, the gradients chained back through every
+// path (the paq block's mixers into its counters, and into C0/C1/C2).
+// paq block (paq.inc): NCX hashed context models, each a hash table of
+// Counter<CP_H0> cells (sh_counter.inc, knobs IDX/tc_model-H0.idx) keyed by
+// (the model's context hash of the value, bit node); their logits and
+// C0/C1/C2's in 5 groups of 5, each mixed by a MixN<CP_X0,5> cell
+// (sh_mixN.inc, IDX/tc_model-X0.idx), and the group outputs by a
+// MixN<CP_X1,5> cell (IDX/tc_model-X1.idx).  The context models (see H[]
+// in code_value): order 0; rows since the last change; the last jump; the
+// last two jumps; the level; both levels; the other column's delta x the
+// last jump; change flags; which i0 price columns changed; the directions
+// of those changes; rows since a price change; trade and volume columns;
+// prediction and level; prediction vs. level; prediction change; both
+// predictions; which i1 price columns changed; a0..a7; price directions x
+// the last jump's sign; which volume columns changed; price columns x last
+// jump; price directions x level.  -DNOCX=mask drops the contexts of the
+// models whose bit is set (ablation).
 // Counter/mixer contexts (IDX/tc_model-*.idx):
 //   C0  hash(need_prediction, k, node, e of the previous delta)
 //       x rows since column k last changed x side-info change flags
@@ -63,6 +63,7 @@
 //   M0, M1  k x stage (zero/sign/exponent/mantissa) x exponent (step)
 //   M2  k x stage x the pred_tk - level bucket
 //   M3  (mixes in the paq block) as M2
+//   X0  group x k x stage x exponent step;  X1  k x stage x rows since the last change x change flags
 //   S0  k x stage x rows since the last change
 // Without pred_t0/pred_t1 columns the prediction contexts see 0.
 
@@ -117,7 +118,9 @@ static const float iSCALE = 1.0f/SCALE;
 #include "MOD/tc_model-M1_p.inc"
 #include "MOD/tc_model-M2_p.inc"
 #include "MOD/tc_model-M3_p.inc"
-#include "MOD/tc_model-P0_p.inc"
+#include "MOD/tc_model-H0_p.inc"
+#include "MOD/tc_model-X0_p.inc"
+#include "MOD/tc_model-X1_p.inc"
 
 static inline unsigned long long tbl_n( unsigned long long n ) { return n; }
 
@@ -184,10 +187,29 @@ static SSE_Seeds sse_seeds( int nb, float lim, float K, float M, float mwP0, flo
 #define CP_PFX      M3_
 #include "./config_mix2.hpp"
 
+// the paq block's bundles: hashed counters (H0), MixN group and final
+// mixers (X0, X1): a Mix2 bundle plus MixN's cross-curvature weight XW
+#define CP_NAME     CP_H0
+#define CP_PFX      H0_
+#include "./config.hpp"
+
+#define CP_NAME     CP_X0m
+#define CP_PFX      X0_
+#include "./config_mix2.hpp"
+struct CP_X0 : CP_X0m { static const float XW; };
+const float CP_X0::XW = float(X0_XW) / 1024;
+
+#define CP_NAME     CP_X1m
+#define CP_PFX      X1_
+#include "./config_mix2.hpp"
+struct CP_X1 : CP_X1m { static const float XW; };
+const float CP_X1::XW = float(X1_XW) / 1024;
+
 #include "./sh_pupdater.inc"
 #include "./sh_counter.inc"
 #include "./sh_SSE.inc"
 #include "./sh_mix2.inc"
+#include "./sh_mixN.inc"
 
 typedef Counter<CP_C0> C0_Cell;
 typedef Counter<CP_C1> C1_Cell;
@@ -206,8 +228,12 @@ typedef Mix2<CP_M3>    Mix2d_Cell;
 #include "MOD/tc_model-M1_h.inc"
 #include "MOD/tc_model-M2_h.inc"
 #include "MOD/tc_model-M3_h.inc"
-#include "MOD/tc_model-P0_h.inc"
 #include "./paq.inc"
+typedef MixN<CP_X0,GN>   MixX0_Cell;
+typedef MixN<CP_X1,NGRP> MixX1_Cell;
+#include "MOD/tc_model-H0_h.inc"
+#include "MOD/tc_model-X0_h.inc"
+#include "MOD/tc_model-X1_h.inc"
 
 // ---- the model ----------------------------------------------------------
 
@@ -220,17 +246,16 @@ M0_T M0;
 M1_T M1;
 M2_T M2;
 M3_T M3;
-P0_T P0;
+H0_T H0;
+X0_T X0;
+X1_T X1;
 static double L = 0;   // ideal code length, bits
 
-// paq block (paq.inc): NCX hashed context models, the 3 counter logits as
-// extra inputs, NSEL layer-1 weight-set selectors
+// paq block (paq.inc): NCX hashed Counter tables, MixN group/final mixers
 #ifndef PAQ
 #define PAQ 1
 #endif
-static const int NCX = 22, NSEL = 5;
-static const int SELSZ[NSEL] = { 128, 32, 32, 64, 32 }, SEL2SZ = 8;
-static paq::Block<NCX, 3, NSEL> PB;
+static HashCtr<CP_H0> HT[NCX];
 
 static void model_init() {
   C0.C0_Init(); for( qword i=0; i<qword(C0_Cx_Volume); i++ ) C0.C0_tbl[i].Init();
@@ -240,14 +265,16 @@ static void model_init() {
   M1.M1_Init(); for( qword i=0; i<qword(M1_Cx_Volume); i++ ) M1.M1_tbl[i].Init();
   M2.M2_Init(); for( qword i=0; i<qword(M2_Cx_Volume); i++ ) M2.M2_tbl[i].Init();
   M3.M3_Init(); for( qword i=0; i<qword(M3_Cx_Volume); i++ ) M3.M3_tbl[i].Init();
-  P0.P0_Init();
+  H0.H0_Init();
+  X0.X0_Init(); for( qword i=0; i<qword(X0_Cx_Volume); i++ ) X0.X0_tbl[i].Init();
+  X1.X1_Init(); for( qword i=0; i<qword(X1_Cx_Volume); i++ ) X1.X1_tbl[i].Init();
 #if PAQ
-  PB.init( SELSZ, SEL2SZ );
+  { int tb = H0_TB < 12 ? 12 : H0_TB > 22 ? 22 : H0_TB; for( int i = 0; i < NCX; i++ ) HT[i].init( tb ); }
 #endif
   S0.S0_Init(); for( qword i=0; i<qword(S0_Cx_Volume); i++ ) S0_SSE::Init( &S0.S0_tbl[ i*CP_S0::NB ] );
 }
 static void model_quit() {
-  C0.C0_Quit(); C1.C1_Quit(); C2.C2_Quit(); M0.M0_Quit(); M1.M1_Quit(); M2.M2_Quit(); M3.M3_Quit(); P0.P0_Quit(); S0.S0_Quit();
+  C0.C0_Quit(); C1.C1_Quit(); C2.C2_Quit(); M0.M0_Quit(); M1.M1_Quit(); M2.M2_Quit(); M3.M3_Quit(); H0.H0_Quit(); X0.X0_Quit(); X1.X1_Quit(); S0.S0_Quit();
 }
 
 #ifndef FINAL_MIX
@@ -256,7 +283,7 @@ static void model_quit() {
 
 // cell/row indices of one binary decision, and the paq block's context
 // hashes and selectors
-struct BitCx { uint c0, c1, c2, m0, m1, m2, m3, s0; qword h[NCX]; int sel[NSEL], sel2; };
+struct BitCx { uint c0, c1, c2, m0, m1, m2, m3, s0; qword h[NCX]; uint x0[NGRP], x1; };
 
 // one binary decision: p_m = mix2(C0, C1), p_n = mix2(p_m, C2),
 // p_q = mix2(p_n, paq) (PAQ 0: p_q = p_n), p = mix2'( p_q, SSE(p_q) )
@@ -269,9 +296,20 @@ static int code_bit( int bit, const BitCx& x ) {
   Mix2_Cell::Pred      pm  = M0.M0_tbl[x.m0].Mix( pr0.z, pr1.z );
   Mix2c_Cell::Pred     pn  = M2.M2_tbl[x.m2].Mix( pm.z, pr2.z );
 #if PAQ
-  float ext[3] = { -pr0.z, -pr1.z, -pr2.z };            // the paq block works with P(bit==1)
-  float zq = -PB.predict( x.h, ext, x.sel, x.sel2 );
-  Mix2d_Cell::Pred     pq  = M3.M3_tbl[x.m3].Mix( pn.z, zq );
+  // the paq block: hashed counters -> MixN per group -> MixN over the groups
+  Counter<CP_H0>* hc[NCX]; Counter<CP_H0>::Pred hp[NCX];
+  float zin[NIN];
+  for( int i = 0; i < NCX; i++ ) { hc[i] = &HT[i].get( x.h[i] ); hp[i] = hc[i]->PredictF(); zin[i] = hp[i].z; }
+  zin[NCX] = pr0.z; zin[NCX+1] = pr1.z; zin[NCX+2] = pr2.z;
+  MixX0_Cell* gm[NGRP]; MixX0_Cell::Pred pg[NGRP];
+  float zg[NGRP];
+  for( int g = 0; g < NGRP; g++ ) {
+    float zi[GN]; for( int j = 0; j < GN; j++ ) zi[j] = zin[ GRP[g][j] ];
+    gm[g] = &X0.X0_tbl[ x.x0[g] ]; pg[g] = gm[g]->Mix( zi ); zg[g] = pg[g].z;
+  }
+  MixX1_Cell& fm = X1.X1_tbl[ x.x1 ];
+  MixX1_Cell::Pred pfm = fm.Mix( zg );
+  Mix2d_Cell::Pred     pq  = M3.M3_tbl[x.m3].Mix( pn.z, pfm.z );
   float zn = pq.z;
 #else
   float zn = pn.z;
@@ -300,14 +338,29 @@ static int code_bit( int bit, const BitCx& x ) {
 #if PAQ
   float e_n = e_q * pq.d1;
   M3.M3_tbl[x.m3].Update( bit, pq, e_q );
-  PB.update( bit );                                // on its own error, as in paq
 #else
   float e_n = e_q;
 #endif
   float e_m = e_n * pn.d1;
-  C0.C0_tbl[x.c0].C_Update( bit, pr0, 1.0f, e_m * pm.d1 );
-  C1.C1_tbl[x.c1].C_Update( bit, pr1, 1.0f, e_m * pm.d2 );
-  C2.C2_tbl[x.c2].C_Update( bit, pr2, 1.0f, e_n * pn.d2 );
+  float ec[3] = { e_m * pm.d1, e_m * pm.d2, e_n * pn.d2 };   // C0, C1, C2 via the counter chain
+#if PAQ
+  {
+    // ... and via the paq block's mixers
+    float e_p = e_q * pq.d2;
+    fm.Update( bit, pfm, e_p );
+    for( int g = 0; g < NGRP; g++ ) {
+      float e_g = e_p * pfm.d[g];
+      gm[g]->Update( bit, pg[g], e_g );
+      for( int j = 0; j < GN; j++ ) {
+        int m = GRP[g][j]; float ef = e_g * pg[g].d[j];
+        if( m < NCX ) hc[m]->C_Update( bit, hp[m], 1.0f, ef ); else ec[m-NCX] += ef;
+      }
+    }
+  }
+#endif
+  C0.C0_tbl[x.c0].C_Update( bit, pr0, 1.0f, ec[0] );
+  C1.C1_tbl[x.c1].C_Update( bit, pr1, 1.0f, ec[1] );
+  C2.C2_tbl[x.c2].C_Update( bit, pr2, 1.0f, ec[2] );
   M0.M0_tbl[x.m0].Update( bit, pm, e_m );
   M2.M2_tbl[x.m2].Update( bit, pn, e_n );
   S0_SSE::Update( sr, bit, ps, e_s );
@@ -416,13 +469,8 @@ static long long code_value( int dec, long long v, int k, Column& c, const RowSi
 #define NOCX 0
 #endif
     for( int i = 0; i < NCX; i++ ) x.h[i] = mix64( ( (NOCX >> i) & 1 ? qword(i) : H[i] ) ^ nh );   // NOCX: bit i drops model i's context (ablation)
-    int ee = e > 15 ? 15 : e;
-    x.sel[0] = (k*4 + st)*16 + ee;
-    x.sel[1] = st*8 + int(z7);
-    x.sel[2] = st*8 + rs.sch;
-    x.sel[3] = st*16 + int(mq > 15 ? 15 : mq);
-    int pc = __builtin_popcount( rs.pm ); x.sel[4] = st*8 + (pc > 7 ? 7 : pc);
-    x.sel2 = k*4 + st;
+    for( int g = 0; g < NGRP; g++ ) x.x0[g] = X0_MakeCx( g, k, st, e );
+    x.x1 = X1_MakeCx( k, st, c.zrun, rs.sch );
     x.m3 = M3_MakeCx( k, st, mq );
     x.c0 = C0_MakeCx( hash64( base0 ^ node ), c.zrun, rs.sch );
     x.c1 = C1_MakeCx( hash64( base1 ^ node * 0xD6E8FEB86659FD93ULL ) );

@@ -1,0 +1,141 @@
+
+Prefix H0
+# tsvcomp copy: counter/mixer/SSE knobs as tuned for coder0 (../IDX), own Index
+Debug 1
+
+# The knobs of the rejected proposals (AWIND/HBETA/EFISH/ALEAK/SMASS/MKCPL/
+# BIASC), the ADAPT_L rates LWw/LWk/LWm and the four grad1_clip knobs G1_*
+# used to sit here frozen with '!' -- 28 entries the coder did not read, so
+# neither opt.pl nor optv.pl could ever score a change to one.  They are
+# deleted; git history has their last values, and the rejections are
+# summarized in coder0.cpp's header.
+
+Const 0
+Const 0
+# --- the paq block's hashed context models (paq.inc): each is a hash
+# table of 2^TB Counter<CP_H0> cells (+ a 32-bit check per slot).  The
+# counter knobs below started as a copy of the tuned C0 knobs.
+Number TB,     1,12!0101    # table size: 2^TB cells per context model (12..22); 17: 450 MB
+
+Const 0
+
+
+Number mwMax,  1,1!111111111111000
+
+Number G3_m,   1,0!1000000000000000000
+
+Const 0
+
+Number P0,     1,1!001101101010001
+Number P1,     1,0!00011110000000
+
+Const 0
+
+Number wr,     1,1!11111010000100
+Number wr1,    1,0!110000000000
+Number wr1b,   1,1!11110110010001   # the base of wr1's delta, cloned from wr: W0 (wr) and W1 (wr1b + wr1) are separate knobs
+Number mw,     1,1!0001001110000
+Number K,      1,0!1111010000000000
+Number NWk,    1,1!110010010100000000
+Number RKinc,  1,1!000000000000001
+Number kStep,  1,1!0010110001001000100
+Number kMin,   1,1!1100000000000000000000
+Number kMax,   1,1!001101101100001
+
+Const 0
+
+Number NWm,    1,1!01101111100000011000
+Number MWinc,  1,1!000000000000000
+Number mwStep, 1,1!01010111001000000000
+Number mwMin,  1,1!000000000000000
+
+Const 0
+
+Number M1_m,   1,1!101111001001000000
+Number M2_m,   1,1!100010101000000
+
+Number M1_k,   1,1!11111111110000011100
+Number M2_k,   1,1!0000001101111000000
+
+Number G2_m,   1,0!1101000001111
+Number G2_k,   1,0!100000011000011
+
+Const 0
+
+Number stP_min,1,1!010110000001100
+
+Number leak1,  1,1!0111111011101000
+Number leak2,  1,1!1111011100000011
+
+Const 0
+
+Number mwP0,   1,1!100101011000001
+
+Const 0
+
+Number G3_k,   1,0!0010010001100000111
+                              
+Number G4_m,   1,0!0100000000110100010
+Number G4_k,   1,0!0000000000000000000
+
+Const 0
+
+# added from sh_model-C0_h.inc
+Number M1_u,  1,0!010110000010000000
+Number M2_u,  1,0!10101010110
+Number M2_x,  1,0!11001000010   # decay of the (u,v) cross EMA R_uv, cloned from M2_u (it used to share it)
+Number NWu,   1,0!001110000000100000000
+Number RUinc, 1,0!010000000000010100
+Number uStep, 1,0!1000010010000000000
+Number uMin,  1,0!0100110000
+Number uMax,  1,0!10110001100000101010000
+Number vMin,  1,0!1110001101                # the v box, cloned from uMin/uMax: |v| <= UVH * half its ln width
+Number vMax,  1,0!01100101100100000100000   # (it used to be a fraction of the u box)
+Number G2_u,  1,0!000000000
+Number G3_u,  1,0!01000000000000000000
+Number G4_u,  1,0!01000100110
+Number R0_u,  1,0!00000001
+
+Number M1_v,  1,0!010100000000001000
+Number M2_v,  1,0!000001111
+Number NWv,   1,0!01100111000000000000
+Number RVinc, 1,0!00010000010000101011
+Number vStep, 1,0!100000000011010010
+Number G2_v,  1,0!000000010
+Number G3_v,  1,0!01000000000000000000
+Number G4_v,  1,0!00110110001
+Number R0_v,  1,0!00001000
+
+Number UVH, 1,0!100111111110
+
+Const 0
+
+# added from sh_model-C0_h.inc
+
+Number CXW, 1,0!00000000000
+Number XHW, 1,0!01110011000
+Number UVDET, 1,0!010100000
+Number XHC, 1,0!0000000000000
+Number mwXlo, 1,0!000000000
+Number mwXhi, 1,0!0111010000000000
+
+Const 0
+
+# A1 young-cell step schedule (coder0.cpp Counter::C_Update):
+# stepMax_eff = stepMax*(1 + AGAx/(1 + age/B)) on the mw (AGAm) and K (AGAk)
+# steps and on the u/v ray clip (AGAu, AGAv per axis); AGAx/256, 0 = plain
+# limit.  B = AGB/16 updates (64 = 4 updates) for mw and K, AGBuv/16 for u/v.
+Number AGAu,   1,0!010010001001
+Number AGAv,   1,0!010000100000   # cloned from AGAu (u and v used to share it)
+Number AGAm,   1,0!111101000000
+Number AGAk,   1,0!011001100000
+Number AGB,    1,0!1000001000
+Number AGBuv,  1,0!0111110000   # cloned from AGB (u/v used to share it with mw and K)
+
+Const 0
+
+# A2 end-to-end objective: the parameter gradients use
+# (1-E2E)*(own error) + E2E*(final error chained to this cell), E2E/256;
+# E2E for mw and K, E2Euv for the u/v axes.
+Number E2E,    1,0!100000000
+Number E2Euv,  1,0!101001011   # cloned from E2E (u/v used to share it with mw and K)

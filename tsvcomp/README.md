@@ -49,23 +49,23 @@ p_q = mix2( p_n, paq )                the paq-style block, mixed in by M3
 p   = mix2( p_q, SSE(p_q) )           (-DFINAL_MIX=0: p = SSE(p_q))
 ```
 
-The counter/mixer stages learn end to end, with the gradients chained back through every path.
-The paq block (`paq.inc`) learns from its own error, as in paq. Build with `-DPAQ=0` to leave it
-out; that gives exactly the previous version's output.
+Every stage learns end to end: the gradients are chained back through every path, from the
+final mixer through the paq block's mixers into its counters, and into C0/C1/C2. Build with
+`-DPAQ=0` to leave the paq block out; that gives exactly the output of the version without it.
 
-### paq block (`paq.inc`, knobs in `IDX/tc_model-P0.idx`)
+### paq block (`paq.inc`), built from the framework's parts
 
-- **22 hashed context models.** For each value, each model hashes its context; per bit that is
-  combined with the bit node (stage, exponent step, mantissa prefix). The result selects a slot
-  {32-bit check, p, n} in the model's table of 2^TB slots. On a match, p predicts and adapts at
-  rate 1/(n+1.5), n ≤ LIM (paq's StateMap without bit-history states). A mismatch is a new
-  context: it gives no input and takes the slot over on update.
-- **Mixer inputs:** each model gives st(p) and st(p)·n/(n+2). The C0/C1/C2 logits and a bias are
-  added, 48 inputs in all.
-- **Layer 1:** 5 weight sets, selected by k × stage × exponent, stage × rows since the last change,
-  stage × change flags, stage × (prediction − level) bucket, and stage × number of price columns
-  that changed.
-- **Layer 2:** mixes the 5 outputs with a weight set per k × stage.
+- **22 hashed context models.** Each is a hash table of 2^TB `Counter<CP_H0>` cells
+  (`sh_counter.inc`, knobs in `IDX/tc_model-H0.idx`), plus a 32-bit check per slot. The slot of
+  (the model's context hash for this value, bit node) is the cell that maps the context's
+  history to a probability. A slot whose check doesn't match is re-initialized to the prior and
+  taken over.
+- **Group mixers.** The 22 logits plus C0/C1/C2's are mixed in 5 groups of 5, each by a
+  `MixN<CP_X0,5>` cell (`sh_mixN.inc`, `IDX/tc_model-X0.idx`). A group's cell is selected by
+  group × k × stage × exponent step. The groups are target history; levels, the other column
+  and change flags; price changes; predictions and a0..a7; and the rest with C0/C1/C2.
+- **Final mixer.** A `MixN<CP_X1,5>` cell (`IDX/tc_model-X1.idx`) mixes the group outputs. It is
+  selected by k × stage × rows since the last change × change flags.
 
 | # | context of the model (with k) | # | context of the model (with k) |
 |---|---|---|---|
@@ -92,10 +92,13 @@ out; that gives exactly the previous version's output.
 | C2 | hash(k, bit node, `pred_tk` and the level in linear buckets of 1024, the change of `pred_tk`) |
 | M0, M1 | k × stage × exponent (step) |
 | M2, M3 | k × stage × (`pred_tk` − level) bucket |
+| X0 | group × k × stage × exponent step |
+| X1 | k × stage × rows since the last change × change flags |
 | S0 | k × stage × rows since the last change |
 
-C0–C2, M0–M2 and S0 hold the user's tuned knobs. M3 starts as a copy of M2, and the P0 knobs
-are untuned first guesses.
+C0–C2, M0–M2 and S0 hold the user's tuned knobs. The new modules start as copies: M3 of M2,
+H0 of C0, X0/X1 of M0 (plus MixN's XW). Of the few settings tried, `XW = 0` (diagonal steps) and
+`TB = 17` did best. The process then needs about 450 MB (TB = 16: 314 MB, 18: 727 MB).
 
 ## Results (10 connectome sequences, `-d4`; `./mkcorpus.sh` builds them)
 
@@ -103,13 +106,18 @@ The same targets with three kinds of predictions in `pred_t0`/`pred_t1`:
 
 | bytes, t0+t1 of all 10 files | pz: zeros | pd: dummy (`predict -m0`) | pb: GRU baseline |
 |---|---:|---:|---:|
-| **tsvcomp** (with the paq block) | **11,486** | **10,252** | **11,251** |
+| **tsvcomp** (Counter/MixN paq block, untuned) | **12,715** | **11,208** | **12,582** |
+| previous commit: hand-written paq block (own StateMap-like slots, unconstrained 2-layer mixer) | 11,486 | 10,252 | 11,251 |
 | tsvcomp `-DPAQ=0` (tuned counters only) | 21,762 | 16,676 | 20,850 |
 | xz -9e, cols.bin | 42,032 | 42,032 | 42,032 |
 | coder0, cols.bin | 64,916 | 64,916 | 64,916 |
 | raw cols.bin | 1,600,000 | 1,600,000 | 1,600,000 |
 
-What the paq block adds, by ablation (`-DNOCX`, from an earlier variant whose model 18 used
+The framework version is about 10% behind the hand-written block. Its knobs are copies tuned for
+other roles, and MixN's weights are convex (they sum to 1), so unlike paq's mixer it cannot
+sharpen when several models agree. Only the counters' K and the SSE/final stages can.
+
+What the paq block adds, by ablation (`-DNOCX`, measured with the hand-written block of the previous commit whose model 18 used
 `is_scored`; that model was replaced because it lost):
 
 | without | zeros | GRU |
@@ -124,7 +132,7 @@ Almost all of the gain comes from which i0 price columns changed, and in which d
 move when the book moves. The prediction models help with the dummy predictions (−5%) but not
 with the GRU ones, as before.
 
-About 0.8 s per file each way. All 30 files round-trip in every mode, and the shipping and
+About 1.4 s per file each way. All 30 files round-trip in every mode, and the shipping and
 tuning builds produce identical streams. `tsvcomp.exe` in this directory is the previous
 version's build: it was not rebuilt here, so rebuild it with `gc.bat`.
 
@@ -138,5 +146,5 @@ perl IDX/opt.pl opt.lst ./tsvcompt.tune        # or IDX/optv.pl; results in expo
 cd IDX && for f in *.idx; do perl import.pl $f ../export.!!! > t && mv t $f; done
 ```
 
-The P0 knobs (mixer learning rates LR1/LR2, counter limit LIM, initial weight W0, table size TB)
-and M3 are the new ones to tune.
+The new modules to tune are H0 (the hashed counters and the table size TB), X0/X1 (the MixN
+group and final mixers) and M3.
