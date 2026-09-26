@@ -1,0 +1,15 @@
+Prefix P0
+Debug 1
+
+# ======================================================================
+# tc_model-P0.idx -- knobs of the paq-style block (paq.inc): hashed
+# context models (probability + count per slot) and a 2-layer mixer.
+# ======================================================================
+
+Const 0
+
+Number LR1,   1,0!001010001111       # layer-1 mixer learning rate, /65536
+Number LR2,   1,0!000101001000       # layer-2 mixer learning rate, /65536
+Number LIM,   1,1!0001111110         # slot counter limit: rate = 1/(n+1.5), n <= LIM
+Number W0,    1,0!0000110011001101   # initial layer-1 weight, /65536
+Number TB,    1,16!011               # hash table size: 2^TB slots per context model (16..24)

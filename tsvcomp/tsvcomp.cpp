@@ -32,9 +32,26 @@
 //   ([e > j] for j = 0, 1, ..); the e bits of |d| below its leading 1, MSB
 //   first, each in the context of the bits above it (a bit tree: recurring
 //   jump sizes are learned exactly).
-// Every bit: p_n = mix2( mix2( C0, C1 ), C2 ), p = mix2( p_n, SSE(p_n) )
-// (FINAL_MIX 0: p = SSE(p_n)); the end-to-end gradients are chained back
-// through every path.  Contexts (IDX/tc_model-*.idx):
+// Every bit: p_n = mix2( mix2( C0, C1 ), C2 ), p_q = mix2( p_n, paq ),
+// p = mix2( p_q, SSE(p_q) ) (FINAL_MIX 0: p = SSE(p_q); PAQ 0: p_q = p_n);
+// the end-to-end gradients are chained back through every path of the
+// counter/mixer stages, the paq block learns from its own error.
+// paq block (paq.inc, knobs IDX/tc_model-P0.idx): NCX hashed context
+// models (context hash of the value x bit node -> slot {check, p, n}), their
+// st(p) and confidence-weighted st(p), the C0/C1/C2 logits and a bias go
+// into NSEL weight sets (selected by k/stage/exponent, rows since the last
+// change, change flags, prediction vs. level, number of price columns that
+// changed), mixed again by a layer-2 weight set per k x stage.  The context
+// models (see H[] in code_value): order 0; rows since the last change; the
+// last jump; the last two jumps; the level; both levels; the other column's
+// delta x the last jump; change flags; which i0 price columns changed; the
+// directions of those changes; rows since a price change; trade and volume
+// columns; prediction and level; prediction vs. level; prediction change;
+// both predictions; which i1 price columns changed; a0..a7; price
+// directions x the last jump's sign; which volume columns changed; price
+// columns x last jump; price directions x level.  -DNOCX=mask drops the
+// contexts of the models whose bit is set (ablation).
+// Counter/mixer contexts (IDX/tc_model-*.idx):
 //   C0  hash(need_prediction, k, node, e of the previous delta)
 //       x rows since column k last changed x side-info change flags
 //       (i0 price-like / volume-like / trade columns changed since the last row)
@@ -45,6 +62,7 @@
 //       sign + exponent bucket)
 //   M0, M1  k x stage (zero/sign/exponent/mantissa) x exponent (step)
 //   M2  k x stage x the pred_tk - level bucket
+//   M3  (mixes in the paq block) as M2
 //   S0  k x stage x rows since the last change
 // Without pred_t0/pred_t1 columns the prediction contexts see 0.
 
@@ -98,6 +116,8 @@ static const float iSCALE = 1.0f/SCALE;
 #include "MOD/tc_model-M0_p.inc"
 #include "MOD/tc_model-M1_p.inc"
 #include "MOD/tc_model-M2_p.inc"
+#include "MOD/tc_model-M3_p.inc"
+#include "MOD/tc_model-P0_p.inc"
 
 static inline unsigned long long tbl_n( unsigned long long n ) { return n; }
 
@@ -160,6 +180,10 @@ static SSE_Seeds sse_seeds( int nb, float lim, float K, float M, float mwP0, flo
 #define CP_PFX      M2_
 #include "./config_mix2.hpp"
 
+#define CP_NAME     CP_M3
+#define CP_PFX      M3_
+#include "./config_mix2.hpp"
+
 #include "./sh_pupdater.inc"
 #include "./sh_counter.inc"
 #include "./sh_SSE.inc"
@@ -173,6 +197,7 @@ typedef SSE<CP_S0>     S0_SSE;
 typedef Mix2<CP_M0>    Mix2_Cell;
 typedef Mix2<CP_M1>    Mix2b_Cell;
 typedef Mix2<CP_M2>    Mix2c_Cell;
+typedef Mix2<CP_M3>    Mix2d_Cell;
 #include "MOD/tc_model-C0_h.inc"
 #include "MOD/tc_model-C1_h.inc"
 #include "MOD/tc_model-C2_h.inc"
@@ -180,6 +205,9 @@ typedef Mix2<CP_M2>    Mix2c_Cell;
 #include "MOD/tc_model-M0_h.inc"
 #include "MOD/tc_model-M1_h.inc"
 #include "MOD/tc_model-M2_h.inc"
+#include "MOD/tc_model-M3_h.inc"
+#include "MOD/tc_model-P0_h.inc"
+#include "./paq.inc"
 
 // ---- the model ----------------------------------------------------------
 
@@ -191,7 +219,18 @@ S0_T S0;
 M0_T M0;
 M1_T M1;
 M2_T M2;
+M3_T M3;
+P0_T P0;
 static double L = 0;   // ideal code length, bits
+
+// paq block (paq.inc): NCX hashed context models, the 3 counter logits as
+// extra inputs, NSEL layer-1 weight-set selectors
+#ifndef PAQ
+#define PAQ 1
+#endif
+static const int NCX = 22, NSEL = 5;
+static const int SELSZ[NSEL] = { 128, 32, 32, 64, 32 }, SEL2SZ = 8;
+static paq::Block<NCX, 3, NSEL> PB;
 
 static void model_init() {
   C0.C0_Init(); for( qword i=0; i<qword(C0_Cx_Volume); i++ ) C0.C0_tbl[i].Init();
@@ -200,21 +239,28 @@ static void model_init() {
   M0.M0_Init(); for( qword i=0; i<qword(M0_Cx_Volume); i++ ) M0.M0_tbl[i].Init();
   M1.M1_Init(); for( qword i=0; i<qword(M1_Cx_Volume); i++ ) M1.M1_tbl[i].Init();
   M2.M2_Init(); for( qword i=0; i<qword(M2_Cx_Volume); i++ ) M2.M2_tbl[i].Init();
+  M3.M3_Init(); for( qword i=0; i<qword(M3_Cx_Volume); i++ ) M3.M3_tbl[i].Init();
+  P0.P0_Init();
+#if PAQ
+  PB.init( SELSZ, SEL2SZ );
+#endif
   S0.S0_Init(); for( qword i=0; i<qword(S0_Cx_Volume); i++ ) S0_SSE::Init( &S0.S0_tbl[ i*CP_S0::NB ] );
 }
 static void model_quit() {
-  C0.C0_Quit(); C1.C1_Quit(); C2.C2_Quit(); M0.M0_Quit(); M1.M1_Quit(); M2.M2_Quit(); S0.S0_Quit();
+  C0.C0_Quit(); C1.C1_Quit(); C2.C2_Quit(); M0.M0_Quit(); M1.M1_Quit(); M2.M2_Quit(); M3.M3_Quit(); P0.P0_Quit(); S0.S0_Quit();
 }
 
 #ifndef FINAL_MIX
 #define FINAL_MIX 1
 #endif
 
-// cell/row indices of one binary decision
-struct BitCx { uint c0, c1, c2, m0, m1, m2, s0; };
+// cell/row indices of one binary decision, and the paq block's context
+// hashes and selectors
+struct BitCx { uint c0, c1, c2, m0, m1, m2, m3, s0; qword h[NCX]; int sel[NSEL], sel2; };
 
 // one binary decision: p_m = mix2(C0, C1), p_n = mix2(p_m, C2),
-// p = mix2'( p_n, SSE(p_n) )  (FINAL_MIX 0: p = SSE(p_n))
+// p_q = mix2(p_n, paq) (PAQ 0: p_q = p_n), p = mix2'( p_q, SSE(p_q) )
+// (FINAL_MIX 0: p = SSE(p_q))
 static int code_bit( int bit, const BitCx& x ) {
   SSE_Cell* sr = &S0.S0_tbl[ qword(x.s0) * CP_S0::NB ];
   Counter<CP_C0>::Pred pr0 = C0.C0_tbl[x.c0].PredictF();
@@ -222,9 +268,17 @@ static int code_bit( int bit, const BitCx& x ) {
   Counter<CP_C2>::Pred pr2 = C2.C2_tbl[x.c2].PredictF();
   Mix2_Cell::Pred      pm  = M0.M0_tbl[x.m0].Mix( pr0.z, pr1.z );
   Mix2c_Cell::Pred     pn  = M2.M2_tbl[x.m2].Mix( pm.z, pr2.z );
-  SSE_Pred<CP_S0>      ps  = S0_SSE::Predict( sr, pn.z );
+#if PAQ
+  float ext[3] = { -pr0.z, -pr1.z, -pr2.z };            // the paq block works with P(bit==1)
+  float zq = -PB.predict( x.h, ext, x.sel, x.sel2 );
+  Mix2d_Cell::Pred     pq  = M3.M3_tbl[x.m3].Mix( pn.z, zq );
+  float zn = pq.z;
+#else
+  float zn = pn.z;
+#endif
+  SSE_Pred<CP_S0>      ps  = S0_SSE::Predict( sr, zn );
 #if FINAL_MIX
-  Mix2b_Cell::Pred     pz  = M1.M1_tbl[x.m1].Mix( pn.z, ps.z );
+  Mix2b_Cell::Pred     pz  = M1.M1_tbl[x.m1].Mix( zn, ps.z );
   float zf = pz.z;
 #else
   float zf = ps.z;
@@ -237,11 +291,18 @@ static int code_bit( int bit, const BitCx& x ) {
   float e_f = pf - float(1 - bit);
 #if FINAL_MIX
   float e_s = e_f * pz.d2;                         // SSE output -> final
-  float e_n = e_f * pz.d1 + e_s * ps.dzdz;         // p_n reaches the final directly and through the SSE
+  float e_q = e_f * pz.d1 + e_s * ps.dzdz;         // p_q reaches the final directly and through the SSE
   M1.M1_tbl[x.m1].Update( bit, pz, e_f );
 #else
   float e_s = e_f;
-  float e_n = e_f * ps.dzdz;
+  float e_q = e_f * ps.dzdz;
+#endif
+#if PAQ
+  float e_n = e_q * pq.d1;
+  M3.M3_tbl[x.m3].Update( bit, pq, e_q );
+  PB.update( bit );                                // on its own error, as in paq
+#else
+  float e_n = e_q;
 #endif
   float e_m = e_n * pn.d1;
   C0.C0_tbl[x.c0].C_Update( bit, pr0, 1.0f, e_m * pm.d1 );
@@ -258,6 +319,16 @@ static inline uint hash64( qword x ) {
   return uint(x);
 }
 static inline int ilog2( qword m ) { int e = 0; while( m >>= 1 ) e++; return e; }
+static inline qword mix64( qword x ) {
+  x ^= x >> 30; x *= 0xBF58476D1CE4E5B9ULL; x ^= x >> 27; x *= 0x94D049BB133111EBULL; x ^= x >> 31;
+  return x;
+}
+// hash of a list of values
+static qword hashv( std::initializer_list<long long> v ) {
+  qword h = 0x243F6A8885A308D3ULL;
+  for( long long x : v ) h = mix64( h ^ qword(x) ) + 0x9E3779B97F4A7C15ULL;
+  return h;
+}
 
 // sign + exponent bucket of a signed difference: 0 for 0, else
 // 1 + [x<0] + 2*min(floor(log2|x|), 30)  (< 64)
@@ -271,16 +342,25 @@ struct Column {
   long long ref = 0;     // previous row's target
   uint zrun = 0;         // rows since the target last changed
   long long lastj = 0;   // last nonzero delta
+  long long lastj2 = 0;  // the one before
   int ep = 40;           // exponent of the previous delta (40 = it was 0)
   uint dstate = 0;       // the previous delta's sbucket, for the other column
   long long pprev = 0;   // previous row's prediction
 };
 
 // side information of one row, from the non-target columns
-struct RowSide { byte need, sch; long long pred[2]; };
+struct RowSide {
+  byte need, sch;            // need_prediction; i0 price/volume/trade change flags
+  long long pred[2];         // pred_t0, pred_t1
+  uint pm, vm, tm, i1m;      // which i0_p*, i0_v*, i0_dp*/dv*, i1_p* columns changed
+  qword psg;                 // hash of the i0_p* change directions
+  qword aq;                  // hash of a0..a7 >> 12
+  uint rpc;                  // rows since an i0_p* column last changed
+};
 
 // codes (or decodes) target v of column k
-static long long code_value( int dec, long long v, int k, Column& c, const RowSide& rs, uint oth ) {
+static long long code_value( int dec, long long v, int k, Column& c, const RowSide& rs, const Column& o ) {
+  uint oth = o.dstate;
   long long d = dec ? 0 : v - c.ref;
   long long pk = rs.pred[k];
   // C2: the prediction and the current level in linear buckets of 2^PCX
@@ -300,8 +380,50 @@ static long long code_value( int dec, long long v, int k, Column& c, const RowSi
   qword base0 = hash64( (qword(rs.need)<<60) ^ (qword(k)<<56) ^ (qword(c.ep)<<48) );
   qword base1 = hash64( (qword(k)<<62) ^ (qword(oth)<<40) ^ qword(c.lastj) * 0x100000001B3ULL );
   qword base2 = hash64( (qword(k)<<62) ^ (qword(pq)<<48) ^ (qword(dq)<<40) ^ 0x5bd1e995ULL );
+  // paq block: one hash per context model for this value, combined with
+  // the bit node per bit
+  long long zb = c.zrun > 255 ? 255 : c.zrun, z15 = zb > 15 ? 15 : zb, z7 = zb > 7 ? 7 : zb;
+  auto lb = []( long long x, int sh ) { long long q = x >> sh; return q < -63 ? -63 : q > 63 ? 63 : q; };
+  long long rpc = rs.rpc > 63 ? 63 : rs.rpc;
+  qword H[NCX] = {
+    hashv({ 0, k }),                                      // order 0
+    hashv({ 1, k, zb }),                                  // rows since the last change
+    hashv({ 2, k, c.lastj }),                             // last jump
+    hashv({ 3, k, c.lastj, c.lastj2 }),                   // last two jumps
+    hashv({ 4, k, c.ref }),                               // level
+    hashv({ 5, k, c.ref, o.ref }),                        // both levels
+    hashv({ 6, k, (long long)oth, c.lastj }),             // the other column's delta, own last jump
+    hashv({ 7, k, rs.sch, z15 }),                         // change flags
+    hashv({ 8, k, rs.pm }),                               // which i0 price columns changed
+    hashv({ 9, k, (long long)rs.psg }),                   // their directions
+    hashv({ 10, k, rpc, z15 }),                           // rows since a price change
+    hashv({ 11, k, rs.tm, rs.vm & 0x3FF }),               // trade columns, some volume columns
+    hashv({ 12, k, lb( pk, 9 ), lb( c.ref, 9 ) }),        // prediction and level
+    hashv({ 13, k, mq, z15 }),                            // prediction vs. level
+    hashv({ 14, k, dq, rs.sch }),                         // prediction change
+    hashv({ 15, k, lb( rs.pred[k^1], 10 ), lb( pk, 10 ) }), // both predictions
+    hashv({ 16, k, rs.i1m }),                             // which i1 price columns changed
+    hashv({ 17, k, (long long)rs.aq }),                   // a0..a7
+    hashv({ 18, k, (long long)rs.psg, c.lastj > 0 ? 1 : c.lastj < 0 ? 2 : 0, z7 }), // price directions x last jump's sign
+    hashv({ 19, k, rs.vm }),                              // which i0 volume columns changed
+    hashv({ 20, k, rs.pm, c.lastj }),                     // price columns x last jump
+    hashv({ 21, k, (long long)rs.psg, c.ref }),           // price directions x level
+  };
   auto bitc = [&]( int bit, qword node, int st, int e ) {
     BitCx x;
+    qword nh = mix64( node * 0x9E3779B97F4A7C15ULL + 12345 );
+#ifndef NOCX
+#define NOCX 0
+#endif
+    for( int i = 0; i < NCX; i++ ) x.h[i] = mix64( ( (NOCX >> i) & 1 ? qword(i) : H[i] ) ^ nh );   // NOCX: bit i drops model i's context (ablation)
+    int ee = e > 15 ? 15 : e;
+    x.sel[0] = (k*4 + st)*16 + ee;
+    x.sel[1] = st*8 + int(z7);
+    x.sel[2] = st*8 + rs.sch;
+    x.sel[3] = st*16 + int(mq > 15 ? 15 : mq);
+    int pc = __builtin_popcount( rs.pm ); x.sel[4] = st*8 + (pc > 7 ? 7 : pc);
+    x.sel2 = k*4 + st;
+    x.m3 = M3_MakeCx( k, st, mq );
     x.c0 = C0_MakeCx( hash64( base0 ^ node ), c.zrun, rs.sch );
     x.c1 = C1_MakeCx( hash64( base1 ^ node * 0xD6E8FEB86659FD93ULL ) );
     x.c2 = C2_MakeCx( hash64( base2 ^ node * 0x9FB21C651E98DF25ULL ) );
@@ -329,6 +451,7 @@ static long long code_value( int dec, long long v, int k, Column& c, const RowSi
     }
     m = t;
     if( dec ) d = neg ? -(long long)m : (long long)m;
+    c.lastj2 = c.lastj;
     c.lastj = d;
     c.zrun = 0;
     c.ep = e;
@@ -404,39 +527,55 @@ static std::string colname( const Field& f ) {
 
 // Side information from the table without the targets (header + rows); the
 // same whether it comes from input.tsv or output.tsv.
+static long long field_int( const Field& f ) {
+  char buf[32]; size_t n = f.second < 31 ? f.second : 31;
+  memcpy( buf, f.first, n ); buf[n] = 0;
+  return strtoll( buf, 0, 10 );
+}
+static bool same( const Field& a, const Field& b ) { return a.second == b.second && !memcmp( a.first, b.first, a.second ); }
+
 static std::vector<RowSide> side_info( const std::vector<Line>& rest ) {
   std::vector<RowSide> s;
   if( rest.empty() ) return s;
   const std::vector<Field>& h = rest[0].f;
-  int cneed = -1, cpred[2] = {-1, -1}; std::vector<int> grp[3];
+  int cneed = -1, cpred[2] = {-1, -1};
+  std::vector<int> ip, iv, it, i1p, ia;   // i0_p*, i0_v*, i0_dp*/dv*, i1_p*, a*
   for( size_t i = 0; i < h.size(); i++ ) {
     std::string n = colname( h[i] );
-    if( n == "need_prediction" ) cneed = int(i);
-    else if( n == "pred_t0" ) cpred[0] = int(i);
-    else if( n == "pred_t1" ) cpred[1] = int(i);
-    else if( n.compare( 0, 4, "i0_p" ) == 0 ) grp[0].push_back( int(i) );
-    else if( n.compare( 0, 4, "i0_v" ) == 0 ) grp[1].push_back( int(i) );
-    else if( n.compare( 0, 4, "i0_d" ) == 0 ) grp[2].push_back( int(i) );
+    int c = int(i);
+    if( n == "need_prediction" ) cneed = c;
+    else if( n == "pred_t0" ) cpred[0] = c;
+    else if( n == "pred_t1" ) cpred[1] = c;
+    else if( n.compare( 0, 4, "i0_p" ) == 0 ) ip.push_back( c );
+    else if( n.compare( 0, 4, "i0_v" ) == 0 ) iv.push_back( c );
+    else if( n.compare( 0, 4, "i0_d" ) == 0 ) it.push_back( c );
+    else if( n.compare( 0, 4, "i1_p" ) == 0 ) i1p.push_back( c );
+    else if( n.size() == 2 && n[0] == 'a' && n[1] >= '0' && n[1] <= '9' ) ia.push_back( c );
   }
+  uint rpc = 0;
   for( size_t r = 1; r < rest.size(); r++ ) {
     const std::vector<Field>& f = rest[r].f;
-    RowSide x; x.need = 1; x.sch = 0;
+    const std::vector<Field>* pf = r > 1 ? &rest[r-1].f : 0;
+    auto ok = [&]( int c ) { return size_t(c) < f.size() && ( !pf || size_t(c) < pf->size() ); };
+    auto changed = [&]( int c ) { return pf && ok( c ) && !same( f[c], (*pf)[c] ); };
+    auto mask = [&]( const std::vector<int>& g ) {
+      uint m = 0; for( size_t j = 0; j < g.size() && j < 32; j++ ) if( changed( g[j] ) ) m |= 1u << j;
+      return m;
+    };
+    RowSide x;
+    x.need = 1;
     if( cneed >= 0 && size_t(cneed) < f.size() ) x.need = !(f[cneed].second == 1 && f[cneed].first[0] == '0');
-    for( int k = 0; k < 2; k++ ) {
-      x.pred[k] = 0;
-      if( cpred[k] >= 0 && size_t(cpred[k]) < f.size() && f[cpred[k]].second < 24 ) {
-        char buf[24]; memcpy( buf, f[cpred[k]].first, f[cpred[k]].second ); buf[f[cpred[k]].second] = 0;
-        x.pred[k] = strtoll( buf, 0, 10 );
-      }
-    }
-    if( r > 1 ) {
-      const std::vector<Field>& pf = rest[r-1].f;
-      for( int g = 0; g < 3; g++ )
-        for( int c : grp[g] ) {
-          if( size_t(c) >= f.size() || size_t(c) >= pf.size() ) continue;
-          if( f[c].second != pf[c].second || memcmp( f[c].first, pf[c].first, f[c].second ) ) { x.sch |= 1<<g; break; }
-        }
-    }
+    for( int k = 0; k < 2; k++ )
+      x.pred[k] = cpred[k] >= 0 && size_t(cpred[k]) < f.size() ? field_int( f[cpred[k]] ) : 0;
+    x.pm = mask( ip ); x.vm = mask( iv ); x.tm = mask( it ); x.i1m = mask( i1p );
+    x.sch = (x.pm != 0) | (x.vm != 0) << 1 | (x.tm != 0) << 2;
+    x.psg = 0;
+    for( size_t j = 0; j < ip.size(); j++ )
+      if( changed( ip[j] ) ) x.psg = mix64( x.psg ^ (j*2 + (field_int( f[ip[j]] ) > field_int( (*pf)[ip[j]] ))) + 1 );
+    x.aq = 0;
+    for( int c : ia ) if( size_t(c) < f.size() ) x.aq = mix64( x.aq ^ qword( field_int( f[c] ) >> 12 ) );
+    rpc = x.pm ? 0 : rpc + 1;
+    x.rpc = rpc;
     s.push_back( x );
   }
   return s;
@@ -523,8 +662,8 @@ static void run_model( int dec, Targets& t, const std::vector<RowSide>& side ) {
   size_t n = side.size();
   if( dec ) { t.v[0].assign( n, 0 ); t.v[1].assign( n, 0 ); }
   for( size_t r = 0; r < n; r++ ) {
-    long long a = code_value( dec, t.v[0][r], 0, c[0], side[r], c[1].dstate );
-    long long b = code_value( dec, t.v[1][r], 1, c[1], side[r], c[0].dstate );
+    long long a = code_value( dec, t.v[0][r], 0, c[0], side[r], c[1] );
+    long long b = code_value( dec, t.v[1][r], 1, c[1], side[r], c[0] );
     if( dec ) {
       if( a < INT32_MIN || a > INT32_MAX || b < INT32_MIN || b > INT32_MAX ) die( "corrupt stream" );
       t.v[0][r] = int32_t(a); t.v[1][r] = int32_t(b);
