@@ -66,6 +66,12 @@ final mixer through the paq block's mixers into its counters, and into C0/C1/C2.
   and change flags; price changes; predictions and a0..a7; and the rest with C0/C1/C2.
 - **Final mixer.** A `MixN<CP_X1,5>` cell (`IDX/tc_model-X1.idx`) mixes the group outputs. It is
   selected by k × stage × rows since the last change × change flags.
+- **Gain (not convex).** MixN's softmax weights sum to 1, so on their own they can never be more
+  confident than the most confident input. Each MixN cell therefore also learns a gain:
+  `z = e^g · Σ wᵢ sᵢ + b`. g is a `ParamUpdater` state of its own, with box and rates in the
+  bundle (`config_mixN.hpp`: `GON`, `G0`, `Glo`/`Ghi`, `M1g` … `NAGg`). The weights stay a
+  softmax, so their conditioning and the Gershgorin step bound are unchanged. `GON = 0` gives the
+  convex mixer, byte for byte, and at N = 2 that is still Mix2.
 
 | # | context of the model (with k) | # | context of the model (with k) |
 |---|---|---|---|
@@ -97,8 +103,24 @@ final mixer through the paq block's mixers into its counters, and into C0/C1/C2.
 | S0 | k × stage × rows since the last change |
 
 C0–C2, M0–M2 and S0 hold the user's tuned knobs. The new modules start as copies: M3 of M2,
-H0 of C0, X0/X1 of M0 (plus MixN's XW). Of the few settings tried, `XW = 0` (diagonal steps) and
-`TB = 17` did best. The process then needs about 450 MB (TB = 16: 314 MB, 18: 727 MB).
+H0 of C0, X0/X1 of M0 (plus MixN's XW and gain knobs). Of the few settings tried, `XW = 0`
+(diagonal steps) and `TB = 17` did best. The process then needs about 450 MB (TB = 16: 314 MB,
+18: 727 MB).
+
+The gain starts at 1.64 and learns slowly: NW and STEP are about 1/250 of the bias's. On the
+zeros / GRU corpora:
+
+| gain | zeros | GRU |
+|---|---:|---:|
+| none (`GON = 0`, convex) | 12,715 | 12,582 |
+| learned with the bias's rates | 20,751 | 20,805 |
+| learned, rates 1/16 | 13,437 | 13,307 |
+| fixed at 1 / 1.64 / 2 / 2.8 / 4 | 12,804 / 12,417 / 12,582 / 13,580 / 15,159 | 12,649 / 12,251 / 12,357 / 13,224 / 14,822 |
+| on X0 only / X1 only (fixed 1.64) | 12,386 / 12,380 | 12,274 / 12,260 |
+| **learned from 1.64, rates ~1/250** | **12,364** | **12,199** |
+
+A fixed gain of 1 is not byte-identical to `GON = 0`, because the Schraudolph `expf(0)` is not
+exactly 1; that is what the switch is for.
 
 ## Results (10 connectome sequences, `-d4`; `./mkcorpus.sh` builds them)
 
@@ -106,16 +128,18 @@ The same targets with three kinds of predictions in `pred_t0`/`pred_t1`:
 
 | bytes, t0+t1 of all 10 files | pz: zeros | pd: dummy (`predict -m0`) | pb: GRU baseline |
 |---|---:|---:|---:|
-| **tsvcomp** (Counter/MixN paq block, untuned) | **12,715** | **11,208** | **12,582** |
+| **tsvcomp** (Counter/MixN paq block, MixN with gain) | **12,364** | **10,899** | **12,199** |
+| convex MixN (`GON = 0`) | 12,715 | 11,208 | 12,582 |
 | previous commit: hand-written paq block (own StateMap-like slots, unconstrained 2-layer mixer) | 11,486 | 10,252 | 11,251 |
 | tsvcomp `-DPAQ=0` (tuned counters only) | 21,762 | 16,676 | 20,850 |
 | xz -9e, cols.bin | 42,032 | 42,032 | 42,032 |
 | coder0, cols.bin | 64,916 | 64,916 | 64,916 |
 | raw cols.bin | 1,600,000 | 1,600,000 | 1,600,000 |
 
-The framework version is about 10% behind the hand-written block. Its knobs are copies tuned for
-other roles, and MixN's weights are convex (they sum to 1), so unlike paq's mixer it cannot
-sharpen when several models agree. Only the counters' K and the SSE/final stages can.
+The gain takes about 3% off the convex MixN. The framework version is still about 7% behind the
+hand-written block, whose knobs were not tuned either. Most of the new modules' knobs are
+copies tuned for other roles, so this is the place for `opt.pl`. The Mix2 stages (M0–M3, M1)
+are still convex blends.
 
 What the paq block adds, by ablation (`-DNOCX`, measured with the hand-written block of the previous commit whose model 18 used
 `is_scored`; that model was replaced because it lost):
@@ -147,4 +171,4 @@ cd IDX && for f in *.idx; do perl import.pl $f ../export.!!! > t && mv t $f; don
 ```
 
 The new modules to tune are H0 (the hashed counters and the table size TB), X0/X1 (the MixN
-group and final mixers) and M3.
+group and final mixers, including their gain knobs) and M3.

@@ -56,6 +56,21 @@
 // weight W0 against each other input, and those start level with each other.
 // At N = 2, W0 is the initial weight of z_0, as in Mix2.
 //
+// Gain (GON = 1): the convex blend alone can never be more confident than
+// its most confident input, and a mixer of models that agree wants to be
+// (paq's mixers have unconstrained weights for that).  So the blend gets a
+// gain, a ParamUpdater state of its own in log coordinates:
+//
+//   z = G*zbar + b,   G = e^g,  g in [Glo, Ghi] (seed G0)
+//   dz/dg = d2z/dg2 = G*zbar,   dz/dW_k and all W curvatures scale by G,
+//   dz/ds_i = G*w_i
+//
+// The weights stay a softmax (their conditioning and the Gershgorin bound
+// are unchanged), G carries the overall sharpness.  Its knobs are the
+// bundle's Config_G, G0, Glo, Ghi (config_mixN.hpp).  GON = 0 leaves the
+// gain out: every float operation is then the convex mixer's, and N = 2
+// still reproduces Mix2 byte for byte.
+//
 // Like Mix2, the cell holds model state only: Mix() returns what Update()
 // needs in a Pred the caller keeps, and the table of cells is the Table() of
 // the generated M0_T, indexed by the caller.
@@ -72,16 +87,19 @@ template<class CP, int N> struct MixN : MixN_X<(N-1)*(N-2)/2> {
 
   ParamUpdater<typename CP::Config_W> W[M];   // weight logits of z_0..z_{N-2}, against z_{N-1}
   ParamUpdater<typename CP::Config_B> b;      // stretch-domain bias
+  ParamUpdater<typename CP::Config_G> G;      // log gain of the blend (GON)
   uint age;   // updates seen (saturating): the young-cell step schedule (A1)
 
   // What Mix() computes and Update() needs back: per-query state, kept by
   // the caller between the two calls
   struct Pred {
-    float z;        // the mixed logit sum_i w_i*s_i + b: what the next stage takes
+    float z;        // the mixed logit G*sum_i w_i*s_i + b: what the next stage takes
+    float zm;       // the convex blend sum_i w_i*s_i
+    float gv;       // the gain G (1 with GON = 0)
     float p;        // sq(z), the mixed P(bit==0): the mixer's own prediction
     float s[N];     // the inputs after the +-ZM clip
     float w[N];     // their weights
-    float d[N];     // dz/dz_i (the A2 chain): w[i], or 0 where input i's clip binds
+    float d[N];     // dz/dz_i (the A2 chain): G*w[i], or 0 where input i's clip binds
   };
 
   static float sqf( float x ) { return 1.0f/(1.0f+expf(-x)); }
@@ -90,6 +108,7 @@ template<class CP, int N> struct MixN : MixN_X<(N-1)*(N-2)/2> {
     W[0].Init( CP::WX0 );
     for( int k=1; k<M; k++ ) W[k].Init( 0.0f );
     b.Init( 0.0f );
+    G.Init( CP::G0 );
     age = 0;
     this->InitX();
   }
@@ -109,11 +128,13 @@ template<class CP, int N> struct MixN : MixN_X<(N-1)*(N-2)/2> {
     }
     r.w[M] = wl;
 
-    for( int i=0; i<N; i++ ) r.d[i] = ( z[i] > -CP::ZM && z[i] < CP::ZM ) ? r.w[i] : 0.0f;
+    r.gv = CP::GON ? expf( G.val ) : 1.0f;
+    for( int i=0; i<N; i++ ) r.d[i] = ( z[i] > -CP::ZM && z[i] < CP::ZM ) ? ( CP::GON ? r.gv*r.w[i] : r.w[i] ) : 0.0f;
 
     float zm = r.w[0]*r.s[0];
     for( int i=1; i<N; i++ ) zm += r.w[i]*r.s[i];
-    r.z = zm + b.val;
+    r.zm = zm;
+    r.z = CP::GON ? r.gv*zm + b.val : zm + b.val;
     r.p = sqf( r.z );
     return r;
   }
@@ -155,6 +176,7 @@ template<class CP, int N> struct MixN : MixN_X<(N-1)*(N-2)/2> {
         if( first ) { dz_dW = t1; d2z_dW2 = t2; first = false; }   // no 0+x: -0 stays -0, as in Mix2
         else { dz_dW += t1; d2z_dW2 += t2; }
       }
+      if( CP::GON ) { dz_dW *= pr.gv; d2z_dW2 *= pr.gv; }   // z = G*zbar + b
       g[k] = dz_dW;
       float dpi = W[k].Accum( ee * dz_dW, e_o * dz_dW, e_o * (c2 * (dz_dW * dz_dW) + d2z_dW2) );
       // the numerator, NW*D -- or NW*(momentum_D*D - g), the Nesterov
@@ -170,6 +192,13 @@ template<class CP, int N> struct MixN : MixN_X<(N-1)*(N-2)/2> {
     // bias: dz/db = 1, d2z/db2 = 0
     b.Update( ee, e_o, e_o * c2, -CP::Bclip, CP::Bclip, 1.0f,
               CP::Config_B::stepMax * (1.0f + CP::AGAb * agd) );
+
+    // gain: z = e^g*zbar + b, dz/dg = d2z/dg2 = G*zbar
+    if( CP::GON ) {
+      float dz_dg = pr.gv * pr.zm;
+      G.Update( ee * dz_dg, e_o * dz_dg, e_o * (c2 * (dz_dg * dz_dg) + dz_dg), CP::Glo, CP::Ghi, 1.0f,
+                CP::Config_G::stepMax );
+    }
   }
 
   // N > 2: the cross-curvature EMAs take this update's exact cross terms,

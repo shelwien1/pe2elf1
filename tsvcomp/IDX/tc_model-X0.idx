@@ -76,3 +76,20 @@ Const 0
 # --- MixN (sh_mixN.inc): XW/1024 = weight of the cross-curvature bound
 # in the weight-logit steps (1024 = Gershgorin's bound, 0 = diagonal steps)
 Number XW,     1,0!00000000000
+
+Const 0
+
+# --- MixN gain (sh_mixN.inc, config_mixN.hpp): z = e^g*zbar + b
+Number GON,    1,0!1                  # 1: the gain is on; 0: the convex mixer
+Number G0,     1,0!10001111110        # seed of g: (G0-1024)/256 (1024 = gain 1; 1150 = 1.64)
+Number Glo,    1,0!01000000000        # box of g: -Glo/256 .. Ghi/256
+Number Ghi,    1,0!01100000000
+Number M1g,    1,0!1010110000010110000   # the gain's ParamUpdater, seeded from M1b
+Number M2g,    1,0!11000000000000000   # the gain's ParamUpdater, seeded from M2b
+Number NWg,    1,0!00000000100111000100   # the gain's ParamUpdater: NW and STEP ~1/250 of the bias's (faster diverges)
+Number INCg,   1,0!100100001000000001   # the gain's ParamUpdater, seeded from INCb
+Number STEPg,  1,0!0000000011111010000   # the gain's ParamUpdater, seeded from STEPb
+Number G2g,    1,0!0000000   # the gain's ParamUpdater, seeded from G2b
+Number DCg,    1,0!001100001   # the gain's ParamUpdater, seeded from DCb
+Number RCg,    1,0!000000000000010   # the gain's ParamUpdater, seeded from RCb
+Number NAGg,   1,0!1   # the gain's ParamUpdater, seeded from NAGb

@@ -188,7 +188,7 @@ static SSE_Seeds sse_seeds( int nb, float lim, float K, float M, float mwP0, flo
 #include "./config_mix2.hpp"
 
 // the paq block's bundles: hashed counters (H0), MixN group and final
-// mixers (X0, X1): a Mix2 bundle plus MixN's cross-curvature weight XW
+// mixers (X0, X1): a Mix2 bundle plus MixN's knobs (config_mixN.hpp)
 #define CP_NAME     CP_H0
 #define CP_PFX      H0_
 #include "./config.hpp"
@@ -196,14 +196,18 @@ static SSE_Seeds sse_seeds( int nb, float lim, float K, float M, float mwP0, flo
 #define CP_NAME     CP_X0m
 #define CP_PFX      X0_
 #include "./config_mix2.hpp"
-struct CP_X0 : CP_X0m { static const float XW; };
-const float CP_X0::XW = float(X0_XW) / 1024;
+#define CP_NAME     CP_X0
+#define CP_BASE     CP_X0m
+#define CP_PFX      X0_
+#include "./config_mixN.hpp"
 
 #define CP_NAME     CP_X1m
 #define CP_PFX      X1_
 #include "./config_mix2.hpp"
-struct CP_X1 : CP_X1m { static const float XW; };
-const float CP_X1::XW = float(X1_XW) / 1024;
+#define CP_NAME     CP_X1
+#define CP_BASE     CP_X1m
+#define CP_PFX      X1_
+#include "./config_mixN.hpp"
 
 #include "./sh_pupdater.inc"
 #include "./sh_counter.inc"

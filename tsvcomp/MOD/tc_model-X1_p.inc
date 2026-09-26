@@ -62,6 +62,32 @@ pdesc( X1_E2E_, 0, "100000000" );
 static const int X1_E2E = X1_E2E_.value * (1);
 pdesc( X1_XW_, 0, "00000000000" );
 static const int X1_XW = X1_XW_.value * (1);
+pdesc( X1_GON_, 0, "1" );
+static const int X1_GON = X1_GON_.value * (1);
+pdesc( X1_G0_, 0, "10001111110" );
+static const int X1_G0 = X1_G0_.value * (1);
+pdesc( X1_Glo_, 0, "01000000000" );
+static const int X1_Glo = X1_Glo_.value * (1);
+pdesc( X1_Ghi_, 0, "01100000000" );
+static const int X1_Ghi = X1_Ghi_.value * (1);
+pdesc( X1_M1g_, 0, "1010110000010110000" );
+static const int X1_M1g = X1_M1g_.value * (1);
+pdesc( X1_M2g_, 0, "11000000000000000" );
+static const int X1_M2g = X1_M2g_.value * (1);
+pdesc( X1_NWg_, 0, "00000000100111000100" );
+static const int X1_NWg = X1_NWg_.value * (1);
+pdesc( X1_INCg_, 0, "100100001000000001" );
+static const int X1_INCg = X1_INCg_.value * (1);
+pdesc( X1_STEPg_, 0, "0000000011111010000" );
+static const int X1_STEPg = X1_STEPg_.value * (1);
+pdesc( X1_G2g_, 0, "0000000" );
+static const int X1_G2g = X1_G2g_.value * (1);
+pdesc( X1_DCg_, 0, "001100001" );
+static const int X1_DCg = X1_DCg_.value * (1);
+pdesc( X1_RCg_, 0, "000000000000010" );
+static const int X1_RCg = X1_RCg_.value * (1);
+pdesc( X1_NAGg_, 0, "1" );
+static const int X1_NAGg = X1_NAGg_.value * (1);
 
 
 
