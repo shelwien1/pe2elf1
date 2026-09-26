@@ -2,7 +2,7 @@
 // (connectome/quantize output), using every other column as context:
 // the predictions pred_t0/pred_t1, the features, need_prediction.  Built from
 // coder0's model: adaptive counter tables mixed by 2-input mixers and an SSE
-// stage (../sh_counter.inc, ../sh_mix2.inc, ../sh_SSE.inc), with tsvcomp's
+// stage (./sh_counter.inc, ./sh_mix2.inc, ./sh_SSE.inc), with tsvcomp's
 // own contexts (IDX/tc_model-*.idx).
 //
 //   tsvcomp c  input.tsv output.tsv output.rc   t0, t1 -> output.rc (compressed),
@@ -81,11 +81,11 @@ typedef unsigned long long qword;
 
 // ---- coder0's prelude (coder0.cpp), in the order its headers need it ----
 
-#include "../sh_v2f.inc"
+#include "./sh_v2f.inc"
 static const int mSCALE = SCALE-1;
 static const float iSCALE = 1.0f/SCALE;
 
-#include "../sh_mapping.inc"
+#include "./sh_mapping.inc"
 // the threshold mappings idx2inc.pl expands into lookup tables use these
 #ifndef __min
 #define __min(a,b) ((a)<(b)?(a):(b))
@@ -105,7 +105,7 @@ static inline float clip(float x, float d) { return fminf(fmaxf(x, -d), d); }
 static inline float clamp(float p) { return fminf(fmaxf(p, 1.0f), float(mSCALE)); }
 static inline float clamp(float x, float min_val, float max_val) { return fminf(fmaxf(x, min_val), max_val); }
 
-#include "../schrau.inc"
+#include "./schrau.inc"
 
 static float rt_logf( float x ) { volatile float v = x; return logf(v); }
 static float rt_expf( float x ) { volatile float v = x; return expf(v); }
@@ -133,37 +133,37 @@ static SSE_Seeds sse_seeds( int nb, float lim, float K, float M, float mwP0, flo
 
 #define CP_NAME     CP_C0
 #define CP_PFX      C0_
-#include "../config.hpp"
+#include "./config.hpp"
 
 #define CP_NAME     CP_C1
 #define CP_PFX      C1_
-#include "../config.hpp"
+#include "./config.hpp"
 
 #define CP_NAME     CP_C2
 #define CP_PFX      C2_
-#include "../config.hpp"
+#include "./config.hpp"
 
 #define CP_NAME     CP_S0
 #define CP_PFX      S0_
 #define CP_SSE      1
-#include "../config.hpp"
+#include "./config.hpp"
 
 #define CP_NAME     CP_M0
 #define CP_PFX      M0_
-#include "../config_mix2.hpp"
+#include "./config_mix2.hpp"
 
 #define CP_NAME     CP_M1
 #define CP_PFX      M1_
-#include "../config_mix2.hpp"
+#include "./config_mix2.hpp"
 
 #define CP_NAME     CP_M2
 #define CP_PFX      M2_
-#include "../config_mix2.hpp"
+#include "./config_mix2.hpp"
 
-#include "../sh_pupdater.inc"
-#include "../sh_counter.inc"
-#include "../sh_SSE.inc"
-#include "../sh_mix2.inc"
+#include "./sh_pupdater.inc"
+#include "./sh_counter.inc"
+#include "./sh_SSE.inc"
+#include "./sh_mix2.inc"
 
 typedef Counter<CP_C0> C0_Cell;
 typedef Counter<CP_C1> C1_Cell;

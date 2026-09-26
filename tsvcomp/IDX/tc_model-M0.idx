@@ -20,38 +20,38 @@ Const 0
 Index Cx
  k: k, &1
  s: st, 1!111
- e: e, 1!1111111111111111
+ e: e, 1!0001010100101000
 
 # --- weight / bias seeds and boxes --------------------------------------
-Number W0,    1,0!010101000000100   # initial w (weight of p1), /32768
-Number Wclip, 1,0!000101000110   # |W| box in logit coordinates, /256
-Number Bclip, 1,0!00010111110   # |b| box, /256
+Number W0,    1,0!010111001000001   # initial w (weight of p1), /32768
+Number Wclip, 1,0!000100000010   # |W| box in logit coordinates, /256
+Number Bclip, 1,0!00000001100   # |b| box, /256
 Number Pmin,  1,0!101001111100011   # input probability clip, /(SCALE<<16)
 
 Const 0
 
 # --- ParamUpdater of W: newton.inc scalings ------------------------------
 Number M1w,   1,0!1111111111000010000   # momentum_D = 1 - M1w/(SCALE<<9)
-Number M2w,   1,0!10010000000000000   # momentum_R = 1 - M2w/(SCALE<<11)
-Number NWw,   1,0!1010000100000100000   # step gain NW = NWw/(SCALE<<9)
-Number INCw,  1,0!010100000000000100   # Newton damping inc = INCw/(SCALE<<11)
+Number M2w,   1,0!01010000000000000   # momentum_R = 1 - M2w/(SCALE<<11)
+Number NWw,   1,0!1000000000000100000   # step gain NW = NWw/(SCALE<<9)
+Number INCw,  1,0!000000100000000000   # Newton damping inc = INCw/(SCALE<<11)
 Number STEPw, 1,0!1110000100100000000   # step clip = STEPw/(SCALE<<8)
-Number G2w,   1,0!1111110   # curvature clip = G2w/32
+Number G2w,   1,0!0101011   # curvature clip = G2w/32
 Number DCw,   1,0!101111001   # D clip = DCw/16
-Number RCw,   1,0!000000010000000   # R clip = RCw/16
+Number RCw,   1,0!001100001000010   # R clip = RCw/16
 Number NAGw,  1,0!1   # 1: Nesterov look-ahead (step from momentum_D*D_new - g)
 
 Const 0
 
 # --- ParamUpdater of the bias --------------------------------------------
-Number M1b,   1,0!1111111111110000000
-Number M2b,   1,0!01000000000010000
+Number M1b,   1,0!1010110000010110000
+Number M2b,   1,0!11000000000000000
 Number NWb,   1,0!10100010000101100000
 Number INCb,  1,0!100100001000000001
 Number STEPb, 1,0!1110110100010010001
 Number G2b,   1,0!0000000
 Number DCb,   1,0!001100001
-Number RCb,   1,0!100000000000000
+Number RCb,   1,0!000000000000010
 Number NAGb,  1,0!1   # 1: Nesterov look-ahead
 
 Const 0

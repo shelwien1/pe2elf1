@@ -3,7 +3,7 @@
 #
 #   ./gc.sh        shipping build: every IDX knob folded   -> ./tsvcomp
 #   ./gc.sh tune   tuning build: "Const 0" knobs patchable  -> ./tsvcompt
-#                  (tune with: perl ../IDX/opt.pl opt.lst ./tsvcompt)
+#                  (tune with: perl IDX/opt.pl opt.lst ./tsvcompt)
 #
 # CXX, TARG, CXXEXTRA, OUT as in ../gc.sh.
 set -e
@@ -24,7 +24,7 @@ genmod() {
   mkdir -p MOD
   for f in IDX/*.idx; do
     b=$(basename "$f" .idx)
-    IDX_NOCONST=$1 perl ../IDX/idx2inc.pl "$f" $2 >/dev/null
+    IDX_NOCONST=$1 perl IDX/idx2inc.pl "$f" $2 >/dev/null
     mv -f "IDX/${b}_h.inc" "IDX/${b}_p.inc" MOD/
   done
 }
@@ -41,5 +41,5 @@ echo "$CXX $INCS $OPTS $ARCH $WARN $CXXEXTRA tsvcomp.cpp -static -s -o $EXE"
 $CXX $INCS $OPTS $ARCH $WARN $CXXEXTRA tsvcomp.cpp -static -s -o "$EXE"
 ls -l "$EXE"
 
-# MOD/ ships in git in the shipping (folded) state
-[ "$NOCONST" = 1 ] || genmod 1 0
+# MOD/ is kept in the tuning state (USE_NEW=1), as in the gc.bat workflow
+[ "$NOCONST" = 0 ] || genmod 0 1
