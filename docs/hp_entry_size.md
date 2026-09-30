@@ -608,6 +608,11 @@ model that compares the words' contexts in enwik9 could probably predict them
 much better. The first 3,920 words' order costs close to what a random order
 would.
 
+[english_dic_reconstruction.md](english_dic_reconstruction.md) covers the
+reconstruction in more detail. It also measures ways to shrink the side file
+further: a prototype that predicts the order from word contexts in enwik9
+comes to 25,026 bytes.
+
 ### 8.8 Ideas that would change the algorithm's inputs, not just the layout
 
 - **Let the compressor build its own dictionary from enwik9**, as the FAQ
