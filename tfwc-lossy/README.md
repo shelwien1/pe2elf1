@@ -10,7 +10,7 @@ while `coder0 c book1wrt` gets at most 1% worse (169,223 → ≤ 170,915 bytes).
 | original `6m-q4-fp32-t1lambda1.tfwc2` | 2,845,074 | 169,223 | – |
 | original weights, lossless in the `tfwz` container | 2,806,749 (−1.35%) | 169,223 | 0 |
 | requantization only (GPTQ + per-component allocation) | 2,403,749 (−15.5%) | 170,855 | +0.964% |
-| **`weights/6m-q4-t1lambda1-lossy.tfwz`: + distillation** | **2,284,441 (−19.7%)** | **170,799** | **+0.931%** |
+| **`weights/6m-q4-t1lambda1-lossy.tfwz`: + distillation** | **2,284,440 (−19.7%)** | **170,799** | **+0.931%** |
 
 Verified end to end: `tfwz d` rebuilds the tfwc2, the unmodified `coder0`
 (clang 18, `-O3 -fno-math-errno -ffp-contract=off -march=skylake`,
@@ -147,7 +147,7 @@ component — see the table below.
    * On the book1wrt prefix this removes 42–47% of the loss of every allocation
      tried (budget 500: +1.21% → +0.64%, 600: +1.42% → +0.82%, 700: +1.52% →
      +0.86%). Full file: 500 → +0.774% (2,338,523 B), 600 → +0.931%
-     (2,284,441 B), 700 → +1.032% (2,238,976 B, over the limit).
+     (2,284,440 B), 700 → +1.032% (2,238,976 B, over the limit).
 
 8. **`tfwz` container** (`tfwz/tfwz.cpp`): the tensor schema (names, shapes,
    order) is built in, as it is in the engine; one binary arithmetic coder with
@@ -170,8 +170,8 @@ Per component, final vs original (order-0 entropy of the int4 values):
 | embedding, prior_embedding, unembedding | 55,190 | 55,190 | 0 | 3/3 |
 
 (This table is for the requantization-only file; the final one requantizes 12
-more groups, 58 of 84 — see `runs/choiceD_B600.json`.) The final file is 2,232,072 bytes of
-int4 weights, 24,543 of bf16 scales and 27,817 of fp32 values.
+more groups, 58 of 84 — see `runs/choiceD_B600.json`.) The final file is 2,232,062 bytes of
+int4 weights, 24,553 of bf16 scales and 27,816 of fp32 values.
 
 ## Also tried, rejected
 
