@@ -609,9 +609,13 @@ much better. The first 3,920 words' order costs close to what a random order
 would.
 
 [english_dic_reconstruction.md](english_dic_reconstruction.md) covers the
-reconstruction in more detail. It also measures ways to shrink the side file
-further: a prototype that predicts the order from word contexts in enwik9
-comes to 25,026 bytes.
+reconstruction in more detail, and ways to shrink the side file further.
+
+- A v2 side file (`tools/dicrank2.cpp`, integer arithmetic only) predicts the
+  order from word contexts in enwik9 and comes to 25,112 bytes.
+- With its lean decoder (`tools/dicrank2_dec.cpp`, 5,832 packed bytes per
+  copy), the compressor saves 63,312 bytes against english.dic, instead of
+  50,007 with v1.
 
 ### 8.8 Ideas that would change the algorithm's inputs, not just the layout
 
@@ -649,6 +653,9 @@ comes to 25,026 bytes.
 - `tools/dicrank_dec.cpp` is the same decoder without standard containers,
   for linking into a compressor: `DicrankDecode(text, side, out)`. Build it
   with `-DDICRANK_DEC_MAIN` for a command-line version.
+- `tools/dicrank2.cpp` and `tools/dicrank2_dec.cpp` are the v2 side file:
+  encoder/decoder, and the lean decoder (`Dicrank2Decode`). See
+  english_dic_reconstruction.md §8.
 
 To decode an embedded dictionary with an entry's own program (about 2
 minutes, 2.6 GB of memory, and a 14.7 GB sparse `ppm.temp`):

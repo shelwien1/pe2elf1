@@ -3,8 +3,9 @@
 Date: 2026-09-30. This covers the dictionary shared by fx2-cmix, cmix-lex and
 fx2-cmix-transformer. It explains how the compressor can rebuild that
 dictionary from the first 10^8 bytes of enwik9 plus a small side file,
-`dict.rank`. It then measures ways to make that side file smaller. The size
-accounting around it is in [hp_entry_size.md](hp_entry_size.md) §8.7.
+`dict.rank`. It then measures ways to make that side file smaller, and
+describes an integer-only implementation of the best of them (v2, §8). The
+size accounting around it is in [hp_entry_size.md](hp_entry_size.md) §8.7.
 
 ## Summary
 
@@ -20,12 +21,15 @@ accounting around it is in [hp_entry_size.md](hp_entry_size.md) §8.7.
   50 KB.
 - **The order is what costs bytes.** 34.4 KB of the 45.6 KB go into the run
   numbers that record the order of the 40,595 words in alphabetical runs.
-- **A prototype "v2" side file comes to 25,026 bytes.** It predicts that
-  order from how the words are used in enwik9 (their neighbouring words),
-  and leaves cmix as the coder. That is another 20.5 KB off.
-  - A v2 decoder has not been written.
-  - A real one needs integer arithmetic so that it reproduces bit-exactly on
-    the committee's machine.
+- **A "v2" side file comes to 25,112 bytes.** It predicts that order from
+  how the words are used in enwik9 (their neighbouring words), and leaves
+  cmix as the coder.
+  - It is implemented with integer arithmetic only (`tools/dicrank2.cpp`,
+    §8); builds with different compilers and flags give byte-identical
+    output.
+  - With its lean decoder (`tools/dicrank2_dec.cpp`) counted twice, the
+    compressor saves 63,312 bytes against english.dic, which is 13.3 KB
+    more than v1.
 
 ## 1. The dictionary and where it is stored
 
@@ -332,28 +336,10 @@ coded by cmix (approach A):
 Against english.dic in the compressor this is −75,062 bytes, i.e. −20,543
 beyond `dicrank` v1.
 
-**What a real v2 needs:**
-
-- **A decoder.** None exists yet, but every section only uses information a
-  decoder has at that point:
-  - the text's word counts, document frequencies and letter case;
-  - context counts from enwik9 for the set of words already decoded;
-  - the words and run assignments already decoded.
-- **Bit-exact arithmetic.** The prototype uses floating point (logarithms,
-  cosines, and SVD for the head vectors), which need not give identical
-  rankings on another CPU or build. The float differences that broke
-  fx2-cmix-transformer's July archive are the same kind of problem.
-  - Use integer counts, PPMI from a fixed-point log table, sparse vectors
-    (§7.1 shows SVD is unnecessary; the head section would need re-measuring
-    without it), 64-bit integer dot products, and exact comparisons.
-  - For example, compare dot²/|centroid|² across runs by 128-bit
-    cross-multiplication.
-- **Time.** Counting neighbours over enwik9's 141.6 million words and
-  scoring 40,595 words against 510 runs takes seconds in C++. Memory is
-  modest: only dictionary-candidate rows are kept.
-- **Code size.** The extra decoder code (context counting, PPMI, centroid
-  ranking, feature sort) is again stored twice in fx2-cmix's layout. A few
-  KB packed would still leave roughly −15 KB net. This is not measured.
+The prototype uses floating point, including SVD for the explicit-word
+vectors, which need not rank identically on another CPU or build. §8
+describes the integer implementation that replaces it: 25,112 bytes, and
+the same output from every build tested.
 
 ### 7.5 Further ideas, not measured
 
@@ -375,15 +361,145 @@ beyond `dicrank` v1.
 - **Structure in the head.** Use the tier boundary (80 / 3,840) and the
   pairs such as `benefits benefit` and `limit limits`.
 - **Trim the header** (~40 bytes).
+- **Shrink `dicrank2_dec`.** It adds 5.8 KB of packed code per copy of the
+  program. Every byte saved there is worth two in S, for example by sharing
+  the tokenizer and hash table with cmix's own dictionary code.
 - **Replace english.dic with a dictionary the compressor builds from enwik9
   itself.** This is outside exact reconstruction: the dictionary would still
   be stored in archive9, and the word codes, and so the enwik9 stream, would
   change.
 
-## 8. Reproducing the numbers
+## 8. The v2 implementation (`tools/dicrank2.cpp`, `tools/dicrank2_dec.cpp`)
 
-- **Side-file tools.** `tools/dicrank.cpp` and `tools/dicrank_dec.cpp`, with
-  the build and usage lines above.
+`dicrank2` implements the v2 side file in C++ with integer arithmetic only,
+so every machine and compiler rebuilds the same dictionary. There are two
+programs:
+
+- **`dicrank2.cpp`** encodes, and also decodes. The encoder decodes its own
+  output and fails unless it reproduces the dictionary byte for byte.
+- **`dicrank2_dec.cpp`** is a small decoder for linking into a compressor:
+  `Dicrank2Decode(text, side, out)`. It avoids standard containers and uses
+  only stdio, malloc and `qsort`.
+
+```sh
+g++ -O2 -std=c++17 -o dicrank2 tools/dicrank2.cpp
+./dicrank2 e enwik9 english.dic dict2.rank    # encode (~37 s) + check (~37 s)
+./dicrank2 d enwik9 dict2.rank english.dic    # decode (~37 s; dicrank2_dec 37-45 s)
+```
+
+Word counts, document frequencies and case come from the first 10^8 bytes;
+context statistics come from all of the text (`-n`, `-c` change that). The
+other options are `-k` (context words, default 4000), `-s` (explicitly
+ordered words, default 3920, at most 10,000) and `-v` (stage timings).
+
+**Format** (text, compressed with the entry's own `cmix -c`):
+
+```
+dicrank 2
+<counted bytes> <context bytes> <K> <explicit words S> <runs> <extra words>
+<extra words, one per line>            words that do not occur in the counted text
+<bitmap over ranks 0..>                which of them are explicit words
+<position of the first explicit word among them>
+<S-1 lines>                            position of each next explicit word, by similarity
+                                       to the previous two
+<number of candidates covered by the next bitmap>
+<bitmap>                               dictionary membership of the other candidates, in
+                                       order of word length, document frequency, count,
+                                       lowercase share
+<one line per member, most frequent first>
+                                       position of its run among the runs started so far,
+                                       by similarity to their centroids; n<k> = k-th run not
+                                       started yet
+```
+
+**How the arithmetic stays exact.** No floating point is used anywhere on
+the data path.
+
+- **Weights (PPMI).** Counts are exact integers. The weight is
+  L(count × total) − L(row sum × column sum), kept if positive, where L is
+  log2 in 16-bit fixed point. L is computed by repeatedly squaring the
+  mantissa with 128-bit products.
+- **Vector length.** Each vector is scaled to length ≤ 2^15 using an exact
+  integer square root, rounded up. That keeps the dot product of two
+  vectors within 32 bits.
+- **Explicit-word scores.** Score = 2 × dot(previous word) + dot(the word
+  before). The dot products come from an int32 similarity matrix of the
+  explicit words.
+- **Run scores.** Score = floor(dot(word, centroid) × 2^20 / isqrt(|centroid|²)),
+  with a 128-bit intermediate. Centroid lengths are kept exact by updating
+  |c + u|² = |c|² + 2 c·u + |u|².
+- **Ties** are broken by lower rank or run number, so encoder and decoder
+  always pick the same item.
+
+**Size.** Compressed with fx2-cmix's own cmix:
+
+| Section | v1 (`dicrank`) | Float prototype | **v2 (`dicrank2`)** |
+|---|---:|---:|---:|
+| Explicit words: set | (in ranks) | 158 | 158 |
+| Explicit words: order | 5,600 | 3,525 (SVD vectors) | 3,595 (sparse vectors) |
+| Membership of the other words | 5,659 | 2,544 | 2,546 |
+| Run numbers | 34,360 | 18,905 | 18,908 |
+| **Whole file** | **45,569** | **25,026** | **25,112** |
+
+The integer version matches the float prototype to within 86 bytes. Most of
+that (70 bytes) comes from the explicit-word order, which now uses sparse
+vectors instead of SVD.
+
+**Checks:**
+
+- **Round trip.** english.dic with enwik9 reproduces byte for byte.
+- **Determinism across builds.** Four builds of `dicrank2` produce
+  byte-identical side files, and each also passes its own round-trip check:
+  - g++ `-O2 -march=native` (AVX-512);
+  - clang++ `-O3`;
+  - g++ `-O1 -fno-tree-vectorize`;
+  - clang++ `-O2 -march=x86-64-v3 -ffast-math`.
+
+  Three differently compiled `dicrank2_dec` builds rebuild english.dic
+  exactly from that side file.
+- **Edge cases.** Both decoders reproduce these exactly:
+  - dictionaries containing words that are not in the text (in both parts);
+  - `-s 0`, and `-s 80`;
+  - every word its own run;
+  - all words explicit (a small dictionary).
+
+  AddressSanitizer and UBSan runs are clean.
+
+**Cost.**
+
+- **Time.** Decoding with enwik9 splits into word counts 1.4 s, context
+  vectors 22 s (the 1 GB scan), explicit-word similarity 8 s, and runs 5 s.
+- **Memory.** Peak 1.5 GB (`dicrank2`) or 1.39 GB (`dicrank2_dec`). Nearly
+  all of it is the dense neighbour counts: 44,515 words × 8,000 features ×
+  4 bytes.
+- **Code in fx2-cmix.** Measured by linking each decoder into an fx2-cmix
+  build compiled with `-Os`, packed with UPX 3.95 `-9` / `--ultra-brute`:
+  `dicrank2_dec` adds 5,832 / 5,432 bytes per copy; `dicrank2.cpp`'s decoder
+  adds 15,804 / 14,420.
+
+**Net effect on fx2-cmix's compressor**, with the entry's UPX 3.95 packing
+and the decoder code counted twice:
+
+| The compressor carries | Side file | Decoder code × 2 | Total | vs english.dic |
+|---|---:|---:|---:|---:|
+| english.dic, as shipped | 100,088 | — | 100,088 | — |
+| v1 side file + `dicrank_dec` | 45,569 | 4,512 | 50,081 | −50,007 |
+| **v2 side file + `dicrank2_dec`** | **25,112** | **11,664** | **36,776** | **−63,312** |
+| v2 side file + `dicrank2.cpp` decoder | 25,112 | 31,608 | 56,720 | −43,368 |
+
+**Only the lean decoder makes v2 pay.** With the STL decoder, v2 would lose
+to v1.
+
+**Integration** is the same as in §6, except that the compressor calls
+`Dicrank2Decode("enwik9", ".dict.rank", ".dict")`. That takes under a
+minute and 1.4 GB, freed before cmix's model allocates its memory. A complete modified
+fx2-cmix has not been built or run on enwik9.
+
+## 9. Reproducing the numbers
+
+- **Side-file tools.** `tools/dicrank.cpp` / `tools/dicrank_dec.cpp` (v1) and
+  `tools/dicrank2.cpp` / `tools/dicrank2_dec.cpp` (v2), with the build and
+  usage lines above.
 - **Experiments.** They are in `tools/dicrank_experiments/`, need numpy and
   scipy, and take their paths from the environment (`ENWIK8`, `ENWIK9`,
   `ENGLISH_DIC`, `WORK`). Run from that folder:
