@@ -1,0 +1,26 @@
+--- a/transformer.inc
++++ b/transformer.inc
+@@ -283,6 +283,8 @@
+ 
+ // ---------------------------------------------------------------------------
+ 
++static FILE* g_dump = 0;
++
+ struct Transformer {
+   enum {
+     TF_V = 205,           // the model's vocabulary size
+@@ -670,9 +672,14 @@
+       if( byte2tok_[i]>=0 )
+         prior_[byte2tok_[i]] = ppmd_probs[i];
+ 
++    const int newpiece = piece_pos_==0;
+     if( piece_pos_==0 )
+       net_->begin_article(0);
+     net_->step((uint8_t)byte2tok_[sym], prior_, out_);
++    if( g_dump ) {
++      uint8_t hdr[2] = { (uint8_t)newpiece, (uint8_t)byte2tok_[sym] };
++      fwrite(hdr, 1, 2, g_dump); fwrite(prior_, 4, TF_V, g_dump); fwrite(out_, 4, TF_V, g_dump);
++    }
+     ++piece_pos_;
+ #if TF_TRAIN>=1 && TF_TRAIN<=2
+     // Replace the engine's frozen output layer with the trained one; out_ and

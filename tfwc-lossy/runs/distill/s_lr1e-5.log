@@ -1,0 +1,20 @@
+dtrain: 110 matrices, 5829504 weights trainable, lr 1e-05, batch 32
+eval KL before: 0.045483 nats/token
+step 500 tok 16000 train KL 0.053330
+step 1000 tok 32000 train KL 0.037928
+step 1500 tok 48000 train KL 0.032164
+step 2000 tok 64000 train KL 0.033302
+step 2500 tok 80000 train KL 0.050233
+step 3000 tok 96000 train KL 0.034539
+step 3500 tok 112000 train KL 0.034594
+step 4000 tok 128000 train KL 0.028717
+step 4500 tok 144000 train KL 0.038129
+step 5000 tok 160000 train KL 0.030178
+step 5500 tok 176000 train KL 0.029275
+step 6000 tok 192000 train KL 0.026992
+step 6500 tok 208000 train KL 0.043007
+step 7000 tok 224000 train KL 0.027850
+step 7500 tok 240000 train KL 0.026448
+step 8000 tok 256000 train KL 0.026793
+eval KL after: 0.040367 nats/token
+dtrain: 262140 tokens, 8191 steps

@@ -1,0 +1,18 @@
+--- a/coder0.cpp
++++ b/coder0.cpp
+@@ -210,6 +210,7 @@
+ 
+   Progress prog;
+   prog.Init(f_len);
++  if( getenv("TF_DUMP") ) g_dump = fopen(getenv("TF_DUMP"), "wb");
+ 
+   for( f_pos = 0; f_pos<f_len; f_pos++ ) {
+     if( (f_pos&prog.mask)==0 )
+@@ -265,6 +266,7 @@
+     mixer[ctx].Update(c);
+   }
+ 
++  if( g_dump ) fclose(g_dump);
+   if( f_DEC==0 )
+     rc.FinishEncode();
+   prog.Done(f_len);

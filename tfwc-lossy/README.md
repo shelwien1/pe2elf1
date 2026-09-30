@@ -9,16 +9,27 @@ while `coder0 c book1wrt` gets at most 1% worse (169,223 → ≤ 170,915 bytes).
 |---|---:|---:|---:|
 | original `6m-q4-fp32-t1lambda1.tfwc2` | 2,845,074 | 169,223 | – |
 | original weights, lossless in the `tfwz` container | 2,806,749 (−1.35%) | 169,223 | 0 |
-| **`weights/6m-q4-t1lambda1-lossy.tfwz`** | **2,403,749 (−15.5%)** | **170,855** | **+0.964%** |
-| the same lossy weights written as a plain tfwc2 | 2,450,993 (−13.9%) | 170,855 | +0.964% |
+| requantization only (GPTQ + per-component allocation) | 2,403,749 (−15.5%) | 170,855 | +0.964% |
+| **`weights/6m-q4-t1lambda1-lossy.tfwz`: + distillation** | **2,284,441 (−19.7%)** | **170,799** | **+0.931%** |
 
 Verified end to end: `tfwz d` rebuilds the tfwc2, the unmodified `coder0`
 (clang 18, `-O3 -fno-math-errno -ffp-contract=off -march=skylake`,
-`TF_TRAIN=0 TF_FP32=0`, as in `gc.bat`) compresses book1wrt to 170,855 bytes and
-decompresses it back byte-identical. book1000: 1,889 → 1,908.
+`TF_TRAIN=0 TF_FP32=0`, as in `gc.bat`) compresses book1wrt to 170,799 bytes and
+decompresses it back byte-identical. (The same weights as a plain tfwc2 are
+2,335,054 bytes.)
 
-The first 128 KB of book1wrt were used for calibration; the loss there is
-+0.94%, on the remaining 72% of the file +0.98%.
+The requantization was calibrated on the first 128 KB of book1wrt; the
+distillation used only other novels. On three novels never used for anything,
+converted to book1wrt's format (128 KB each):
+
+| | Tess of the d'Urbervilles | Great Expectations | Pride and Prejudice |
+|---|---:|---:|---:|
+| original weights | 47,714 | 44,389 | 42,080 |
+| requantization only | 48,280 (+1.19%) | 44,935 (+1.23%) | 42,676 (+1.42%) |
+| final | 48,389 (+1.41%) | 44,862 (+1.07%) | 42,709 (+1.49%) |
+
+So on other text of the same kind the model loses 1.1–1.5%, not 0.93%: part of
+the fit is specific to book1wrt (its prefix drove the allocation).
 
 ```sh
 cd tfwz && ./build.sh
@@ -101,8 +112,10 @@ component — see the table below.
    ΔL_g = c_g · E_g, E_g = Σ_rows (w − ŵ)ᵀ A (w − ŵ).
 
 4. **Allocation.** A Lagrangian multiple-choice knapsack picks k ∈ {1 (lossless),
-   1.15, …, 4} per group to minimize the entropy under a loss budget. Final:
-   46 groups requantized, 38 kept lossless.
+   1.15, …, 4} per group to minimize the entropy under a loss budget (in
+   predicted bytes on the 128 KB prefix). Budget 370 — the largest that meets
+   the limit without distillation — requantizes 46 groups; the final file uses
+   budget 600: 58 groups requantized, 26 kept lossless.
 
 5. **Per-row steps for MLP up-projections.** A hidden unit's importance is
    4·E[relu(h)²]·‖W_down[:,j]‖² (forward statistics only); row steps are
@@ -112,7 +125,31 @@ component — see the table below.
 6. **fp32 side tensors** rounded to 4 mantissa bits (−10.8 KB, +11 bytes of
    loss on the prefix; 3 bits costs +84).
 
-7. **`tfwz` container** (`tfwz/tfwz.cpp`): the tensor schema (names, shapes,
+7. **Distillation** (`distill/`). With the loss recovered by training, the
+   allocation can be pushed further: the final file is the allocation for a
+   predicted budget of 600 (instead of 370), which alone would cost +1.42% on the
+   book1wrt prefix, after distillation +0.82%.
+   * Data: seven Gutenberg novels (The Return of the Native, Jude the Obscure,
+     The Mayor of Casterbridge, The Woodlanders, Under the Greenwood Tree,
+     Middlemarch, David Copperfield; 655K tokens) run through cmix's WRT
+     dictionary and fx2's permutation, which reproduces book1wrt's bytes exactly
+     (`distill/wrt.cpp`, `english.dic` from cmix). The model's own generations
+     are useless for this: from an empty PPMD state it produces loops or
+     character soup.
+   * Targets: the original model's 205-way distributions along those texts, with
+     the same PPMD priors coder0 would give it (`patches/*-dump.patch`).
+   * Training: the requantized model in the fp32 engine, KL(original‖student)
+     back-propagated through its (one-step truncated) backward pass; Adam
+     (lr 1e-5, batch 32) on latent fp32 copies of all 110 int4 matrices, every
+     weight re-snapped to its row's grid after each step (straight-through
+     estimator), scales unchanged. 2.4% of the weights end up on a different
+     level; the file grows by 4.6 KB.
+   * On the book1wrt prefix this removes 42–47% of the loss of every allocation
+     tried (budget 500: +1.21% → +0.64%, 600: +1.42% → +0.82%, 700: +1.52% →
+     +0.86%). Full file: 500 → +0.774% (2,338,523 B), 600 → +0.931%
+     (2,284,441 B), 700 → +1.032% (2,238,976 B, over the limit).
+
+8. **`tfwz` container** (`tfwz/tfwz.cpp`): the tensor schema (names, shapes,
    order) is built in, as it is in the engine; one binary arithmetic coder with
    KT-estimator bit trees; one int4 model per tensor and row class, the encoder
    choosing the row classes by simulated cost; row scales as deltas from the
@@ -132,8 +169,9 @@ Per component, final vs original (order-0 entropy of the int4 values):
 | KDA gates | 202,636 | 167,124 | 17.5% | 3/9 |
 | embedding, prior_embedding, unembedding | 55,190 | 55,190 | 0 | 3/3 |
 
-The final file is 2,351,690 bytes of int4 weights, 24,235 of bf16 scales and
-27,815 of fp32 values.
+(This table is for the requantization-only file; the final one requantizes 12
+more groups, 58 of 84 — see `runs/choiceD_B600.json`.) The final file is 2,232,072 bytes of
+int4 weights, 24,543 of bf16 scales and 27,817 of fp32 values.
 
 ## Also tried, rejected
 
@@ -160,14 +198,28 @@ The final file is 2,351,690 bytes of int4 weights, 24,235 of bf16 scales and
 - Calibration uses book1wrt itself (its first 128 KB): the activation statistics
   and the per-group measurements. Decisions are per component (84 step choices),
   never per weight from loss gradients, and nothing depends on which tokens
-  book1wrt uses (all embedding rows are untouched), so the model stays general.
-  The held-out 72% of the file loses the same as the calibration part.
+  book1wrt uses (all embedding rows are untouched). The held-out 72% of the file
+  loses the same as the calibration part, but other novels lose 1.1–1.5% (table
+  above), so some of the fit is book1-specific. The distillation step uses no
+  book1wrt data at all; it adapts the model toward 19th-century English novels.
 - Effects of a configuration are systematic, not luck: over 35 full-file
   candidates, held-out loss tracks prefix loss with correlation 0.979
-  (`runs/candidates.csv`). The final file is the smallest candidate within the
-  limit, 60 bytes under it; the one after it (2,403,179 bytes) was +1.015%.
+  (`runs/candidates.csv`, requantization only). The final file is 116 bytes
+  under the limit; the next larger allocation tried (budget 700, 2,238,976 bytes
+  after distillation) was 55 bytes over.
 - All numbers come from my Linux build; the engine is meant to be bit-exact
   across compilers (tf/PORTING.md), so the Windows clang build should match.
+
+## Side finding: book1wrt is permuted twice
+
+book1wrt already carries fx2's byte permutation (it contains `K O J L N` where
+the text has `; ? : < >`, and none of the originals), and coder0 applies
+`TF_Permute` to its input again. So on book1wrt these 2,742 punctuation bytes
+reach the model as spare tokens instead of the ones it was trained on. Feeding
+coder0 the un-permuted stream (apply `TF_Permute` once more to book1wrt, or skip
+the permutation when preparing the file) gives **168,353 bytes instead of
+169,223 (−0.51%)** with the original weights, round trip verified. Everything
+above uses book1wrt as given.
 
 ## Reproducing
 
@@ -207,11 +259,23 @@ and the final allocation (`choice9_B370.json`). The pipeline that produced them:
 `alloc.py` (solver) → `build.py`. `ev.sh` runs candidates in parallel,
 `heldout.py` splits their loss into prefix and held-out part.
 
-## Where more could come from
+## Distillation, reproducing
 
-The loss budget is spent almost entirely on second-order damage that GPTQ already
-minimizes layer by layer. The next step would be recovering it by training:
-distilling the requantized model toward the original on text the original model
-generates itself (it needs no data from book1wrt), with the int4 grid kept by a
-straight-through estimator. The fp32 engine has a (truncated) backward pass and
-AdamW, so this is feasible, but it is a project of its own.
+```sh
+# the WRT transform needs cmix's dictionary: github.com/byronknoll/cmix
+g++ -O2 distill/wrt.cpp $CMIX/src/preprocess/dictionary.cpp -I$CMIX/src/preprocess -o wrt
+./wrt $CMIX/dictionary/english.dic novel.txt novel.wrt     # Gutenberg text, header/footer cut
+# in 003/ with patches/*-dump.patch and fp32_model-linreg.patch applied:
+#   dgen = coder0 built with -DTF_FP32=1; TF_DUMP=file records token, prior, target
+TF_DUMP=novel.dump ./dgen c novel.wrt /dev/null 6m-q4-fp32-t1lambda1.tfwc2
+#   common_head.inc = coder0.cpp up to "static const uint CNUM"
+clang++ -std=c++17 -O3 -ffp-contract=off -march=native -DTF_FP32=1 -DTF_TRAIN=0 dtrain.cpp -o dtrain
+LR=1e-5 BATCH=32 ./dtrain requantized.tfwc2 out.q tr122.dump tr145.dump ...   # SLR=... also learns scales
+python3 tools/qmerge.py requantized.tfwc2 out.q distilled.tfwc2 scales
+```
+
+The final run used, in this order, the first 64 KB of Gutenberg #122 and the
+first 128 KB of #145, then 64 KB of #153, 128 KB of #766, 64 KB of #143, 128 KB
+of #2662 and 64 KB of #482; `SLR` (learned row scales) was not used for it. In a
+side run on the requantization-only weights, learned scales gave a further
+0.03–0.08% on all four test texts.

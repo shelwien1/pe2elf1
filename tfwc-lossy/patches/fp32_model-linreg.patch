@@ -1,0 +1,25 @@
+--- a/tf/fp32_model.inc
++++ b/tf/fp32_model.inc
+@@ -5,6 +5,10 @@
+ 
+ #include "weights_io.h"
+ 
++
++struct LinReg { std::string name; float* w; int d_out, d_in; std::vector<float> scale; };
++static std::vector<LinReg> g_linreg;
++
+ namespace fx2 {
+ namespace f32 {
+ 
+@@ -377,6 +381,11 @@
+   out->d_out = d_out;
+   out->d_in = d_in;
+   out->w = take(size_t(d_out) * d_in);
++  {
++    LinReg r; r.name = prefix; r.w = out->w; r.d_out = d_out; r.d_in = d_in;
++    for (int o = 0; o < d_out; o++) r.scale.push_back(bf16_to_f32(ws.bf16_bits()[o]));
++    g_linreg.push_back(r);
++  }
+   for (int o = 0; o < d_out; o++) {
+     const float s = bf16_to_f32(ws.bf16_bits()[o]);
+     const int8_t* src = wq.i8() + size_t(o) * d_in;
