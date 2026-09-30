@@ -1,0 +1,76 @@
+// Generated into MOD/dr3-H0_p.inc: the knobs of the hashed Counter cells
+// (dr3_model.inc).  No Table(): the hash tables are sized from TB.
+
+
+static const int H0_TB = (5+12) * (1);
+static const int H0_mwMax = (32760+1) * (1);
+static const int H0_G3_m = (262144+0) * (1);
+static const int H0_P0 = (10756+1) * (1);
+static const int H0_P1 = (2404+0) * (1);
+static const int H0_wr = (16004+1) * (1);
+static const int H0_wr1 = (3072+0) * (1);
+static const int H0_wr1b = (15761+1) * (1);
+static const int H0_mw = (624+1) * (1);
+static const int H0_K = (5266+0) * (1);
+static const int H0_NWk = (206080+1) * (1);
+static const int H0_RKinc = (1+1) * (1);
+static const int H0_kStep = (90692+1) * (1);
+static const int H0_kMin = (1167376+1) * (1);
+static const int H0_kMax = (5978+1) * (1);
+static const int H0_NWm = (49928+1) * (1);
+static const int H0_MWinc = (6678+1) * (1);
+static const int H0_mwStep = (356864+1) * (1);
+static const int H0_mwMin = (0+1) * (1);
+static const int H0_M1_m = (242752+1) * (1);
+static const int H0_M2_m = (17728+1) * (1);
+static const int H0_M1_k = (26665+1) * (1);
+static const int H0_M2_k = (7104+1) * (1);
+static const int H0_G2_m = (6671+0) * (1);
+static const int H0_G2_k = (16579+0) * (1);
+static const int H0_stP_min = (11276+1) * (1);
+static const int H0_leak1 = (32366+1) * (1);
+static const int H0_leak2 = (63235+1) * (1);
+static const int H0_mwP0 = (19137+1) * (1);
+static const int H0_G3_k = (74503+0) * (1);
+static const int H0_G4_m = (0+0) * (1);
+static const int H0_G4_k = (0+0) * (1);
+static const int H0_M1_u = (60648+0) * (1);
+static const int H0_M2_u = (1366+0) * (1);
+static const int H0_M2_x = (1602+0) * (1);
+static const int H0_NWu = (1511433+0) * (1);
+static const int H0_RUinc = (65556+0) * (1);
+static const int H0_uStep = (271360+0) * (1);
+static const int H0_uMin = (304+0) * (1);
+static const int H0_uMax = (5816656+0) * (1);
+static const int H0_vMin = (909+0) * (1);
+static const int H0_vMax = (3328032+0) * (1);
+static const int H0_G2_u = (0+0) * (1);
+static const int H0_G3_u = (262144+0) * (1);
+static const int H0_G4_u = (550+0) * (1);
+static const int H0_R0_u = (9+0) * (1);
+static const int H0_M1_v = (133168+0) * (1);
+static const int H0_M2_v = (310+0) * (1);
+static const int H0_NWv = (483592+0) * (1);
+static const int H0_RVinc = (66603+0) * (1);
+static const int H0_vStep = (131282+0) * (1);
+static const int H0_G2_v = (2+0) * (1);
+static const int H0_G3_v = (262144+0) * (1);
+static const int H0_G4_v = (1+0) * (1);
+static const int H0_R0_v = (8+0) * (1);
+static const int H0_UVH = (2558+0) * (1);
+static const int H0_CXW = (0+0) * (1);
+static const int H0_XHW = (920+0) * (1);
+static const int H0_UVDET = (160+0) * (1);
+static const int H0_XHC = (0+0) * (1);
+static const int H0_mwXlo = (0+0) * (1);
+static const int H0_mwXhi = (29696+0) * (1);
+static const int H0_AGAu = (1161+0) * (1);
+static const int H0_AGAv = (1056+0) * (1);
+static const int H0_AGAm = (3904+0) * (1);
+static const int H0_AGAk = (3600+0) * (1);
+static const int H0_AGB = (520+0) * (1);
+static const int H0_AGBuv = (496+0) * (1);
+static const int H0_E2E = (256+0) * (1);
+static const int H0_E2Euv = (91+0) * (1);
+
+
