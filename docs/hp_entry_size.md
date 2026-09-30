@@ -2,7 +2,8 @@
 
 Investigation date: 2026-09-30. Everything below comes from the entries' build
 scripts and self-extraction code, and from parsing the published `cmix` and
-`archive9` files byte by byte. No entry was re-run on enwik9.
+`archive9` files byte by byte. No entry was re-run on enwik9. To measure the
+layout options in §8, fx2-cmix was also rebuilt from source.
 
 ## Summary
 
@@ -24,6 +25,13 @@ scripts and self-extraction code, and from parsing the published `cmix` and
   it, because articles are put back in order by sorting on `<id>`.
 - **Everything except the enwik9 stream** is 0.62% of S for fx2-cmix,
   0.66% for cmix-lex and 6.6% for fx2-cmix-transformer.
+- **Layout alone can save about 48 KB on fx2-cmix** (§8), through stronger
+  packing and build flags. With the compressor submitted as a zip using LZMA
+  compression, and a decode-only program in archive9, the saving is about
+  66 KB.
+  - A decode-only program only pays off if the compressor is submitted as a
+    source zip.
+  - The separate-decompressor relaxation makes S larger.
 
 ## 1. The rule
 
@@ -34,7 +42,8 @@ From <http://prize.hutter1.net/hrules.htm>:
 > S := length(comp9.exe/zip)+length(archive9.exe).
 
 - **Alternative form:** if the decompressor is a separate program,
-  S = comp9a + 2 × decomp9 + archive9.bhm.
+  S = comp9a + 2 × decomp9 + archive9.bhm. The factor is 1× when comp9a
+  and decomp9 are the same program. §8 compares the methods.
 - **Source instead of executables:** a zip of the source code and makefile
   may be submitted, and its size is counted instead.
 - **Command-line options:** "If command-line options for execution or
@@ -208,7 +217,8 @@ in archive9.
 - **Program and compressed dictionary** (plus the transformer weights, where
   present) are byte-identical in both files. Every byte of them costs 2
   bytes of S. Because the same program both compresses and decompresses,
-  each copy also carries code only the other side uses.
+  each copy also carries code only the other side uses. §8.2 measures how
+  much a decode-only program would save.
 - **Article order** is only in the compressor and costs 1 byte of S per
   byte.
 - **Size header:** there is one in each file, but they hold different
@@ -338,23 +348,194 @@ Checks:
 - The compressor opens itself as `"cmix"` and the archive as `"archive9"`,
   both from the current directory. Neither file may be renamed.
 
-## 8. Where bytes could still be saved
+## 8. Improving the score through layout alone
 
-Program bytes count twice, so packing matters twice as much:
+This section keeps the algorithm and its output fixed and asks only how the
+parts are packaged and counted. The worked example is fx2-cmix, where
 
-| Program | As shipped | UPX 4.2.4 `--lzma --best` | UPX 4.2.4 `--ultra-brute` | Saving on S |
+S = 2P + 2D + O + X + 24
+
+- P = packed program, 140,320
+- D = dictionary stream, 100,088
+- O = article-order stream, 201,043
+- X = enwik9 stream, 110,111,245
+- 24 = the two 12-byte headers
+
+Sizes marked *rebuild* come from building fx2-cmix from source here, with
+clang 18 instead of 17, the entry's own makefile flags, and PGO (the profile
+comes from the entry's `prof_input/input`). They are applied as differences to
+the shipped binary, so they are estimates. Everything else is measured on the
+published files.
+
+At the current record, 1 byte of S is worth about €0.0045 (€1 per ~220
+bytes). More important is the 1% threshold: cmix-lex's official total cleared
+it by only 13,558 bytes. Savings of 50-65 KB can decide whether an entry
+qualifies at all.
+
+### 8.1 The accounting methods the rules allow
+
+| Method (hrules.htm) | Formula | fx2-cmix in these terms |
+|---|---|---|
+| Main rule: compressor that writes a self-extracting archive | S = comp9 + archive9 | (P + D + O) + (P + D + X) |
+| Relaxation: separate decompressor | S = comp9a + 2 × decomp9 + archive9.bhm | (P + D + O) + 2 × decomp9 + archive9.bhm |
+| Relaxation, same program for both | S = comp9a + decomp9 + archive9.bhm, i.e. 2 × program + archive9.bhm | 2 × (P + D + O) + X |
+| Source zip | a zip of "the source code and makefile, which create X.exe" may replace comp9, comp9a or decomp9, but not archive9 | zip replaces P + D + O |
+| Options | "If command-line options for execution or compilation are necessary, their length is added to S" | fx2-cmix's `-e enwik9 enwik9.comp` was not charged |
+
+Two older variants are commented out in the page's HTML and are no longer
+rules: "decomp9 plus archive9.bhm" without the 2×, and publishing only
+archive9's size. The FAQ explains the 2×: if a separately submitted
+decompressor were counted once, it could simply contain the archive.
+
+### 8.2 Is the program counted twice? Would a decode-only program help?
+
+Yes: the same packed program is in both files, so every byte of it costs 2
+bytes of S.
+
+**How it was measured.** A small patch, `tools/fx2-cmix-decode-only.patch`,
+makes `main()` keep only the self-extract and `-d` paths. The linker's
+`--gc-sections` then drops everything only the compressor uses: the forward
+phda9 transforms, the article reordering, the dictionary encoder, the
+arithmetic encoder and the other modes.
+
+- Both builds' output was checked: the decode-only builds restore data
+  compressed by the full build exactly.
+- Builds without unwind tables produce byte-identical compressed output.
+
+| Rebuild, with PGO | Unpacked | UPX 3.95 `-9` | UPX 4.2.4 `--ultra-brute` |
+|---|---:|---:|---:|
+| Full program | 303,152 | 134,996 | 123,660 |
+| Decode-only | 274,304 | 125,212 | 114,772 |
+| Full program, no unwind tables | 282,352 | 128,008 | 117,752 |
+| Decode-only, no unwind tables | 257,600 | 118,952 | 109,488 |
+
+The decode-only program is 9.5% smaller before packing and about 7% smaller
+packed (8,264-9,784 bytes, depending on packer and flags). Most of the
+program is the CM model, which both directions need.
+
+**The catch: the compressor has to produce it.** Under the main rule the
+compressor must write archive9, so it has to contain the decode-only program
+somehow:
+
+- **As an extra embedded copy.** That adds ~108-125 KB to the compressor, a
+  large net loss.
+- **By restructuring the compressor** as "decode-only program + an add-on
+  with the encode-only code". archive9 and the compressor each save ~8.3 KB,
+  but the compressor must also ship the add-on.
+  - The encode-only code is 24,752 bytes unpacked (the no-unwind-table rows
+    above). As a separately packed program it needs its own ELF and UPX
+    overhead.
+  - The net result is roughly break-even, a few KB at best (estimate, not
+    built).
+- **For free, if the compressor is submitted as a source zip (§8.4).** The
+  compressor's own binary isn't counted then, and its build can produce both
+  programs.
+
+Under the separate-decompressor relaxation, the decompressor counts twice,
+which is worse (§8.5).
+
+### 8.3 Measured savings that leave the compressed output unchanged
+
+| Change | Per copy of the program | On S | Basis |
+|---|---:|---:|---|
+| Pack with UPX 4.2.4 `--ultra-brute` (LZMA) instead of UPX 3.95 `-9` | −17,876 | −35,752 | Shipped binary: 140,320 → 122,444 |
+| Also build with `-fno-asynchronous-unwind-tables -fno-unwind-tables`, link with `--no-eh-frame-hdr --build-id=none`, drop `.comment` | −5,908 | −11,816 | Rebuild at `--ultra-brute`. Code uses `-fno-exceptions`; output verified identical |
+| Decode-only program in archive9 | −8,264 | archive9 only; see §8.2 for the compressor | Rebuild, both without unwind tables, `--ultra-brute` |
+| Custom LZMA packer instead of UPX | at most −3,584 | at most −7,168 | Raw `xz --x86` of the unpacked program is 118,860 vs UPX's 122,444; a packer's own loader eats into this |
+
+The same repack saves 56,624 on fx2-cmix-transformer 21 Aug (194,836 →
+166,524 per copy). cmix-lex already packs with LZMA `--ultra-brute` and
+strips `.comment` and notes.
+
+### 8.4 Submitting the compressor as a source zip
+
+The rules allow a zip of the source and makefile in place of comp9.exe. Its
+size then replaces S1. archive9 is still the executable that the built
+compressor writes. The build needs 75 source files, 512,206 bytes in total.
+
+| Zip contents (all include makefile, build script, PGO input, and the dictionary and order streams stored uncompressed, 301,131 bytes) | Zip size | Excluding the two streams |
+|---|---:|---:|
+| The 75 source files as published, `zip -9` | 455,159 | 154,028 |
+| All sources concatenated into one file, comments and indentation removed, `zip -9` | 425,171 | 124,040 |
+| Same, but compressed with LZMA inside the zip (zip method 14) | 407,054 | 105,923 |
+| For comparison: compressor as shipped / repacked with `--ultra-brute` | 441,463 / 423,587 | 140,332 / 122,456 |
+
+- **A plain source zip is larger than the packed program.** Only a single
+  concatenated file (deflate has no context across zip members, and each
+  member costs about 100 bytes of headers) gets below the shipped
+  compressor. Against a well-packed executable it is about break-even with
+  deflate, and about 16.5 KB smaller with LZMA-in-zip.
+- **The zip has to carry the cmix-compressed streams, not the raw files.**
+  With deflate, english.dic is 175,133 bytes and the order file 466,163,
+  instead of 100,088 and 201,043.
+  - That requires a bit-exact reproducible build: the committee's build must
+    decode the author's streams.
+  - It is fragile. On a 50 KB input, the PGO-instrumented and PGO-optimized
+    builds of the same source produce 6,140 vs 6,139 bytes.
+  - The compiler version, the `-march` target (not `native`) and
+    `-mrecip=none` would all have to be pinned, as fx2-cmix-transformer 21
+    Aug does.
+- **The real benefit is the decode-only archive program (§8.2).** The build
+  script can build both programs and embed the decode-only one in the
+  compressor at no cost to S.
+- **Open questions for the committee:**
+  - Does a concatenated, comment-stripped file count as "source code"? The
+    documented source must be published anyway before payment.
+  - Does LZMA-in-zip count as a zip file?
+  - Note that the committee rebuilt cmix-lex from source and scored the
+    compressor *executable* it built (470,599), not a zip.
+
+### 8.5 Why the separate-decompressor relaxation doesn't help here
+
+- **Same program for both jobs.** S = 2 × (P + D + O) + X. The article
+  order is now counted twice: **+201,043**.
+- **Separate decode-only decompressor.** The best case puts the dictionary
+  in archive9.bhm (counted once) and uses the decode-only program:
+  S = comp9a + 2 × P_d + (D + X). That is worse than the main rule by
+  2 × P_d − P, about **+100 KB** at the same packing.
+- **With zips.** Two copies of the zipped decoder source (about 115-124 KB
+  each) cost more than one packed decode-only program (about 108 KB).
+- **When it would help.** Only when the decompressor is much smaller than
+  the compressor, i.e. asymmetric codecs. CM uses the same model in both
+  directions.
+
+### 8.6 Totals for fx2-cmix under each layout
+
+| Layout | S1 | S2 | S | vs submitted |
 |---|---:|---:|---:|---:|
-| fx2-cmix | 140,320 | 122,580 | 122,444 | 35,752 |
-| fx2-cmix-transformer 21 Aug | 194,836 | 166,812 | 166,524 | 56,624 |
-| cmix-lex | 159,396 (already LZMA `--ultra-brute`) | — | — | — |
+| As submitted | 441,463 | 110,351,665 | 110,793,128 | — |
+| Main rule, both copies repacked with `--ultra-brute` | 423,587 | 110,333,789 | 110,757,376 | −35,752 |
+| Same, plus no unwind tables / `.comment` / build-id | 417,679 | 110,327,881 | 110,745,560 | −47,568 |
+| Compressor as a zip (deflate), archive9 as submitted | 425,171 | 110,351,665 | 110,776,836 | −16,292 |
+| Compressor as a zip (deflate), archive9 with a decode-only program, no unwind tables, `--ultra-brute` | 425,171 | 110,319,617 | 110,744,788 | −48,340 |
+| Same, with LZMA inside the zip | 407,054 | 110,319,617 | 110,726,671 | −66,457 |
+| Relaxation, comp9a = decomp9 = the shipped compressor | 441,463 + 441,463 | 110,111,245 | 110,994,171 | +201,043 |
+| Relaxation, decode-only decomp9 counted twice, dictionary in archive9.bhm | 417,679 + 2 × 108,272 | 110,211,345 | 110,845,568 | +52,440 |
 
-- **cmix-lex** also strips `.comment` and `.note.*` before packing. Its build
-  script says LZMA "is ~23 KB smaller than the default UCL mode".
-- **Dictionary:** the FAQ suggests building tables from enwik9 itself. A
-  dictionary that exists only in archive9, and is built by the compressor,
-  would be counted once instead of twice.
-- **Article order** already follows that pattern: it is counted once, since
-  the decompressor rebuilds the original order from `<id>`.
+The decode-only program size, 108,272, is the shipped binary's
+`--ultra-brute` size (122,444) minus the rebuild's 14,172-byte difference.
+
+**Conclusion.** Keep the main rule.
+
+- Packing and build flags alone give about −47.6 KB with no rule-interpretation
+  risk.
+- Submitting the compressor as a source zip adds almost nothing with deflate
+  (−0.8 KB more). It adds −18.9 KB more with LZMA-in-zip, if that is
+  accepted. Either way it needs a reproducible build.
+- A decode-only archive program only pays off together with the zip route.
+
+### 8.7 Ideas that would change the algorithm's inputs, not just the layout
+
+- **Build the dictionary from enwik9 inside the compressor**, as the FAQ
+  suggests. Then D would be counted once. But the dictionary changes, and so
+  does X.
+- **Encode the article order more compactly.** It currently costs about 9.3
+  bits per article.
+- **Put code needed only after startup into a cmix-compressed overlay inside
+  archive9.** This covers the inverse phda9 transform, article sorting and
+  the word-transform decoder. It would save only a few KB.
+- **Use a context-mixing packer for the program.** Its larger loader offsets
+  much of the gain.
 
 ## 9. Tools in this repo
 
@@ -369,6 +550,8 @@ Program bytes count twice, so packing matters twice as much:
   `LD_PRELOAD=$PWD/pinmmap.so ./archive9`.
 - `tools/remap_test.c` is a standalone reproduction of the remap move. Run it
   with and without the shim.
+- `tools/fx2-cmix-decode-only.patch` adds a `-DDECODE_ONLY` build of
+  fx2-cmix, used for the §8.2 measurements.
 
 To decode an embedded dictionary with an entry's own program (about 2
 minutes, 2.6 GB of memory, and a 14.7 GB sparse `ppm.temp`):

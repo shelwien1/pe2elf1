@@ -1,0 +1,47 @@
+Decode-only build of fx2-cmix (https://github.com/kaitz/fx2-cmix), used to measure
+how much of the program only the compressor needs. With -DDECODE_ONLY, main() keeps
+just the self-extract (no arguments) and -d paths, so --gc-sections drops the
+encode-only code (forward transforms, dictionary encoder, arithmetic encoder, etc.).
+
+Apply in an fx2-cmix checkout:  patch -p1 < fx2-cmix-decode-only.patch
+Build:  make CFLAGS_DEFINES="-DSEED=923 -DUPDATE_LIMIT=3000 -DDECODE_ONLY" cmix
+
+--- a/src/runner.cpp	2026-09-30 12:07:25.462912306 +0000
++++ b/src/runner.cpp	2026-09-30 12:07:25.465268046 +0000
+@@ -312,11 +312,17 @@
+ }
+ 
+ int main(int argc, char** argv) {
++#ifdef DECODE_ONLY
++  if (argc != 1 && (argc < 4 || argc > 5 || strcmp(argv[1], "-d") != 0)) {
++    return Help();
++  }
++#else
+   if ((argc != 1) && (argv[1][1] != 'h') && (argc < 4 || argc > 5 || strlen(argv[1]) != 2 || argv[1][0] != '-' ||
+       (argv[1][1] != 'c' && argv[1][1] != 'd' && argv[1][1] != 'x' && argv[1][1] != 's' &&
+       argv[1][1] != 'n' && argv[1][1] != 'e' ))) {
+     return Help();
+   }
++#endif
+    srand(SEED);
+ 
+   clock_t start = clock();
+@@ -376,6 +382,7 @@
+     goto print_end_message;
+   }
+ 
++#ifndef DECODE_ONLY
+   if (argv[1][1] == 's') {
+     if (!Store(input_path, temp_path, output_path, dictionary, &input_bytes,
+         &output_bytes)) {
+@@ -456,7 +463,9 @@
+     }
+     goto print_end_message;
+   }
+-  else {
++  else
++#endif
++  {
+     if (!RunDecompression(input_path, temp_path, output_path, dictionary,
+         &input_bytes, &output_bytes)) {
+       return Help();
