@@ -1,9 +1,11 @@
 # qmerge.py base.tfwc2 trained.q out.tfwc2 [scales] : replace the trained int4 matrices
 # (with 'scales': the .q file also carries the rows' bf16 scales, from SLR training)
-import numpy as np, struct, sys, subprocess, os, wd, rq
+import numpy as np, struct, sys, subprocess, os, tempfile, wd, rq
 tools = os.path.dirname(os.path.abspath(__file__))
-subprocess.check_call([os.path.join(tools, 'wdump'), 'x', sys.argv[1], '/tmp/claude-0/qm_base.wd'])
-ts = wd.load('/tmp/claude-0/qm_base.wd'); T = {t[0]: i for i, t in enumerate(ts)}
+fd, tmp = tempfile.mkstemp(suffix='.wd'); os.close(fd)
+subprocess.check_call([os.path.join(tools, 'wdump'), 'x', sys.argv[1], tmp])
+ts = wd.load(tmp); T = {t[0]: i for i, t in enumerate(ts)}
+os.remove(tmp)
 b = open(sys.argv[2], 'rb').read(); p = 0
 n, = struct.unpack_from('<I', b, p); p += 4
 changed = total = 0
