@@ -36,7 +36,7 @@ Number wr1,    1,0!110000000000
 Number wr1b,   1,1!11110110010001   # the base of wr1's delta, cloned from wr: W0 (wr) and W1 (wr1b + wr1) are separate knobs
 Number mw,     1,1!0001001110000
 Number K,      1,0!0001010010010010
-Number NWk,    1,1!110010010100000000
+Number NWk,    1,1!111010000001100110
 Number RKinc,  1,1!000000000000001
 Number kStep,  1,1!0010110001001000100
 Number kMin,   1,1!0100011101000000010000
@@ -44,7 +44,7 @@ Number kMax,   1,1!001011101011010
 
 Const 0
 
-Number NWm,    1,1!00001100001100001000
+Number NWm,    1,1!00000000011011100110
 Number MWinc,  1,1!001101000010110
 Number mwStep, 1,1!01010111001000000000
 Number mwMin,  1,1!000000000000000

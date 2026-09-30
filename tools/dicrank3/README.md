@@ -17,18 +17,19 @@ The side file needs no further compression. `dicrank2` stays as it is.
 | english.dic from enwik9 | dicrank2 + cmix | dicrank3 |
 |---|---:|---:|
 | Explicit words: set | 158 | 40 |
-| Explicit words: order | 3,595 | 3,563 |
-| Membership of the other words | 2,546 | 1,533 |
-| Run numbers | 18,908 | 16,676 |
+| Explicit words: order | 3,595 | 3,532 |
+| Membership of the other words | 2,546 | 1,498 |
+| Run numbers | 18,908 | 16,636 |
 | Header | (in the file) | 58 |
-| **Side file** | **25,112** | **21,870** |
+| **Side file** | **25,112** | **21,764** |
 
 The dicrank2 sections were compressed separately. The whole dicrank2 file,
-compressed as one, is 25,112 bytes. The coder's knobs are partly tuned (see
+compressed as one, is 25,112 bytes. The coder's knobs are partly tuned:
+with the values copied from tsvcomp, the side file is 22,186 bytes (see
 Tuning below).
 
 **The catch.** In fx2-cmix the decoder is part of the program, which is
-stored twice. The coder's code costs far more than the 3.2 KB it saves.
+stored twice. The coder's code costs far more than the 3.3 KB it saves.
 [../../docs/english_dic_reconstruction.md](../../docs/english_dic_reconstruction.md)
 §9 has the measurements.
 

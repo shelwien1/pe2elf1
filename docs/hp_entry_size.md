@@ -616,6 +616,10 @@ reconstruction in more detail, and ways to shrink the side file further.
 - With its lean decoder (`tools/dicrank2_dec.cpp`, 5,832 packed bytes per
   copy), the compressor saves 63,312 bytes against english.dic, instead of
   50,007 with v1.
+- A v3 side file (`tools/dicrank3/`) codes the same numbers with a
+  context-mixing coder of its own instead of cmix, and comes to 21,764
+  bytes. But the coder adds about 18 KB of packed code to each copy of the
+  program, so here v2 with cmix is far better.
 
 ### 8.8 Ideas that would change the algorithm's inputs, not just the layout
 
@@ -656,6 +660,8 @@ reconstruction in more detail, and ways to shrink the side file further.
 - `tools/dicrank2.cpp` and `tools/dicrank2_dec.cpp` are the v2 side file:
   encoder/decoder, and the lean decoder (`Dicrank2Decode`). See
   english_dic_reconstruction.md §8.
+- `tools/dicrank3/` is the v3 side file: v2's transform with a built-in
+  context-mixing coder (english_dic_reconstruction.md §9).
 
 To decode an embedded dictionary with an entry's own program (about 2
 minutes, 2.6 GB of memory, and a 14.7 GB sparse `ppm.temp`):

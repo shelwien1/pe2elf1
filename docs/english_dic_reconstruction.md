@@ -4,8 +4,9 @@ Date: 2026-09-30. This covers the dictionary shared by fx2-cmix, cmix-lex and
 fx2-cmix-transformer. It explains how the compressor can rebuild that
 dictionary from the first 10^8 bytes of enwik9 plus a small side file,
 `dict.rank`. It then measures ways to make that side file smaller, and
-describes an integer-only implementation of the best of them (v2, §8). The
-size accounting around it is in [hp_entry_size.md](hp_entry_size.md) §8.7.
+describes an integer-only implementation of the best of them (v2, §8). §9
+tries replacing cmix with a coder of its own (v3). The size accounting
+around it is in [hp_entry_size.md](hp_entry_size.md) §8.7.
 
 ## Summary
 
@@ -30,6 +31,16 @@ size accounting around it is in [hp_entry_size.md](hp_entry_size.md) §8.7.
   - With its lean decoder (`tools/dicrank2_dec.cpp`) counted twice, the
     compressor saves 63,312 bytes against english.dic, which is 13.3 KB
     more than v1.
+- **A built-in coder makes it smaller, but costs more than it saves.**
+  `tools/dicrank3/` (§9) codes v2's numbers itself instead of leaving them
+  to cmix.
+  - It uses a context-mixing coder built from the tsvcomp coder's
+    components.
+  - It sees what cmix can't: candidate scores, and each word's case,
+    length, frequency and suffixes.
+  - The side file drops to 21,764 bytes.
+  - But the coder adds about 18 KB of packed code to each copy of
+    fx2-cmix's program, which is stored twice.
 
 ## 1. The dictionary and where it is stored
 
@@ -346,7 +357,9 @@ the same output from every build tested.
 - **An arithmetic coder with the softmax model (approach B)** gains little
   over approach A. It saves about 0.5 KB on the run numbers (18,371 vs
   18,905) and 0.15 KB on the head (3,371 vs 3,525), and cmix already beats
-  the bitmap context model. It is not worth code stored twice.
+  the bitmap context model. It is not worth code stored twice. §9 measures
+  a full context-mixing coder: it saves more, but its code costs far more
+  still.
 - **Better context vectors.**
   - Wider windows (±2 words), context distribution smoothing, shifted PMI.
   - Features from document structure: same article, same section, inside
@@ -495,11 +508,215 @@ to v1.
 minute and 1.4 GB, freed before cmix's model allocates its memory. A complete modified
 fx2-cmix has not been built or run on enwik9.
 
-## 9. Reproducing the numbers
+## 9. dicrank3: a built-in coder instead of cmix (`tools/dicrank3/`)
 
-- **Side-file tools.** `tools/dicrank.cpp` / `tools/dicrank_dec.cpp` (v1) and
-  `tools/dicrank2.cpp` / `tools/dicrank2_dec.cpp` (v2), with the build and
-  usage lines above.
+**dicrank2 has no entropy coder.** It writes its positions and bitmaps as
+text and leaves all the coding to cmix. cmix sees only the digits. On the
+run numbers it does about as well as a model of the position alone: 18,908
+bytes, against 18,933 for dicrank3's coder with every context except the
+position replaced by a constant.
+
+At each step the decoder knows much more than the digits: how far each
+candidate scored below the top, and which runs already hold words with the
+same ending or the same capitalization. None of that is in the text file.
+
+**dicrank3 codes the streams itself.** dicrank2 is kept unchanged, and
+dicrank3 reuses its transform code unchanged.
+
+- **The coder** is built from the tsvcomp coder's components. Every binary
+  decision goes through five stages:
+  1. 28 hashed contexts, each mapped to a `Counter` cell;
+  2. 7 `MixN` group mixers;
+  3. a `MixN` final mixer;
+  4. an interpolated SSE stage;
+  5. a `Mix2` of the mixer output and the SSE output.
+
+  Every stage learns end to end. The knobs are declared in the IDX files
+  (`IDX/dr3-*.idx`), and `IDX/opt.pl` tunes them by patching the tuning
+  binary.
+- **How each stream is coded:**
+  - **The two bitmaps:** one decision per bit.
+  - **Explicit-word order:** each next word's position among the remaining
+    words, sorted by dicrank2's score. The first 16 positions are yes/no
+    decisions; after that comes an Elias-gamma escape.
+  - **Run numbers:** a "new run?" flag. A new run's index is coded as a
+    bit tree. Otherwise, one yes/no decision per started run, in the order
+    of dicrank2's centroid score.
+- **Contexts:**
+  - the candidate's position and score, and its margins to the top and to
+    the next candidate;
+  - the word's case, length, document frequency, count and suffixes;
+  - run statistics: size, recency, usual fit, and the share of members
+    with the word's suffix, case class, length class and count class.
+
+**Result** for english.dic, with the context statistics from enwik9:
+
+| Section | dicrank2 + cmix | dicrank3, tsvcomp's knobs | dicrank3, partly tuned |
+|---|---:|---:|---:|
+| Explicit words: set | 158 | 28 | 40 |
+| Explicit words: order | 3,595 | 3,610 | 3,532 |
+| Membership of the other words | 2,546 | 1,646 | 1,498 |
+| Run numbers | 18,908 | 16,844 | 16,636 |
+| Header | — | 58 | 58 |
+| **Side file** | **25,112** | **22,186** | **21,764** |
+
+The dicrank2 sections were compressed separately; its whole file,
+compressed as one, is 25,112 bytes.
+
+**Where the gain comes from.**
+
+- **Membership bitmap (−1,048).** The word's own features (case, length,
+  document frequency, count, suffix) are direct contexts. cmix gets them
+  only indirectly, through the order the bits are sorted in.
+- **Explicit-word order (−63).** Little. The order was made by hand, and
+  the similarity scores are the only real information about it.
+- **Run numbers (−2,272).** Case contributes the most of any group.
+  Replacing a group of contexts by a constant (tuned model) costs:
+
+| Contexts replaced by a constant | Run numbers | Change |
+|---|---:|---:|
+| none | 16,636 | |
+| Case: the word's lowercase share against the run members' (5 contexts) | 17,150 | +514 |
+| Score: the candidate's score, its margins to the top and to the next candidate (4) | 16,811 | +175 |
+| Run identity: the run alone, and with the word's length, burstiness, count class, fit (6) | 16,799 | +164 |
+| Suffix: members sharing the word's last 1-3 letters, the word's suffix per run (4) | 16,789 | +153 |
+| Run size, recency, usual fit, members' count class, the previous word's run (6) | 16,771 | +135 |
+| Case, length and count class agreement together (2) | 16,656 | +20 |
+| Everything except the position (27 of 28) | 18,933 | +2,297 |
+
+The case contexts compare the word's lowercase share with the run's. Many
+runs are proper nouns or common words only, and the context vectors hardly
+capture capitalization.
+
+**Tuning (partial).** `opt.pl` climbed 8 knobs (126 bits) in about half
+an hour, in parallel runs whose results were merged. It took the four
+streams from 22,128 to 21,706 bytes. The knobs that moved are:
+
+- the counters' starting logistic scale (`H0 K`);
+- how far the counters' decay-rate updates follow the final error instead
+  of the counter's own (`H0 E2Euv`);
+- the step gains of the counters' scale and prior-mix updates (`H0 NWk`,
+  `H0 NWm`);
+- the final Mix2's bias step (`M1 NWb`).
+
+**How the tuning runs.** `dr3_tune` codes the dumped streams in about 10 s
+instead of dicrank3's minute, and `opt.pl` patches the tuning binary
+between runs.
+
+**What is left.**
+
+- A full pass over the 44 knobs picked for tuning would take several
+  hours.
+- A pass over all 3,503 knob bits would take about 9 hours.
+- Further passes should shrink the file more.
+
+**Floating point.** The coder computes in floats. Encoder and decoder agree
+only if both round every operation the same way.
+
+- **What dicrank3 enforces:**
+  - it refuses to compile with `-ffast-math`;
+  - it disables FMA contraction with pragmas for GCC and clang;
+  - it requires `FLT_EVAL_METHOD == 0`;
+  - it sets flush-to-zero and denormals-are-zero while coding;
+  - its exp/log are Schraudolph's bit tricks, not libm.
+- **What was tested.** These builds produce the same stream:
+  - g++ `-O1 -fno-tree-vectorize`, `-O2` and `-O3 -march=native`;
+  - clang `-O3` and `-O2 -march=x86-64-v3`;
+  - the IDX tuning build.
+- **Cross-build decoding.** A clang `x86-64-v3` build decodes a gcc build's
+  side file exactly.
+- **Without the pragmas**, the gcc and clang FMA builds each produced a
+  different stream (22,169 and 22,168 bytes instead of 22,162). This was
+  measured on an earlier version of the model.
+- **Edge cases.** The dicrank2 cases also round-trip: words missing from
+  the text, `-s 0`, `-s 80`, all words explicit, every word its own run.
+
+**Cost.**
+
+- **Time and memory.** Encoding takes about 52 s, plus 50 s for the self
+  check. Decoding takes about 50 s, of which 14 s is the coder, and peaks
+  at 1.86 GB. The coder's hash tables take 367 MB.
+- **Code**, linked into an fx2-cmix build as in §8 (`-Os`, but the dicrank3
+  file without `-ffp-model=fast`):
+
+| Decoder in fx2-cmix | UPX 3.95 `-9` | UPX 4.2.4 `--ultra-brute` |
+|---|---:|---:|
+| none | 131,588 | 120,544 |
+| `dicrank2_dec` (lean) | +5,832 | +5,432 |
+| `dicrank2.cpp`'s decoder | +15,804 | +14,420 |
+| `dicrank3.cpp`'s decoder | +34,056 | +30,924 |
+
+The coder is the difference between the last two rows: +18,252 / +16,504
+bytes per copy of the program. In the unlinked object file:
+
+- the components take about 21 KB, including two `Counter` updates of
+  2.9 KB each and the float constants' initialization;
+- the four stream coders take 15.6 KB.
+
+**Net effect on fx2-cmix's compressor.** UPX 3.95, with the decoder code
+counted twice:
+
+| The compressor carries | Side file | Decoder code × 2 | Total | vs english.dic |
+|---|---:|---:|---:|---:|
+| v2 side file + `dicrank2_dec` | 25,112 | 11,664 | 36,776 | −63,312 |
+| v3 side file + `dicrank3.cpp`'s decoder | 21,764 | 68,112 | 89,876 | −10,212 |
+| v3 side file + lean transform + this coder (estimate) | 21,764 | 48,168 | 69,932 | −30,156 |
+
+**Verdict.**
+
+- **In compression, the coder beats cmix** by 3,348 bytes (13.3%),
+  because it sees what the decoder knows.
+- **In fx2-cmix it does not pay.** Its code is counted twice, and it costs
+  more than ten times what it saves. To pay, the coder's code would have
+  to fit in about 1,674 packed bytes per copy. One `Counter` update alone
+  is 2.9 KB unpacked.
+- **The source-zip layout** (hp_entry_size.md §8.4) counts compressor-only
+  code once, as compressed source. That halves the cost, which is still far
+  above the saving.
+
+**What might pay.**
+
+- **A small integer coder** for the few contexts that carry most of the
+  gain. Not built. Options:
+  - lpaq-style counters, one mixer and one APM;
+  - fx2-cmix's own mixer and SSE classes.
+
+  The code for the contexts alone might use up the budget.
+- **Case agreement in the transform: pays, measured.** It goes where cmix
+  codes it for free.
+  - The change: dicrank2's run order ranks by
+    score + 0.01 · 2^35 · ln((m + 0.5)/(n + 1)).
+    Here n is the run's size and m is the number of its members in the
+    word's case class (the BitmapKey lowercase-share bucket).
+  - The result: cmix codes the run numbers in 18,280 bytes instead of
+    18,908, i.e. −628. The weight was scanned on a proxy, the sum of
+    log2(position + 1).
+  - The cost is a few lines of transform code. It would need an integer
+    log for determinism, and `Log2Q16` is already there.
+  - This is not in dicrank2, which stays as it is.
+- **A better sort order for the membership bitmap: no gain.** Sorting the
+  bits by a 17-weight logistic model of membership (case, length, document
+  frequency, count, rank) gives cmix 2,577 bytes, against 2,540 in
+  BitmapKey order. What the coder gets from the word features (suffixes,
+  per-group bit history) does not fit into one sort key.
+
+## 10. Reproducing the numbers
+
+- **Side-file tools.**
+  - v1: `tools/dicrank.cpp` and `tools/dicrank_dec.cpp`.
+  - v2: `tools/dicrank2.cpp` and `tools/dicrank2_dec.cpp`, with the build
+    and usage lines above.
+  - v3: `tools/dicrank3/`, built with its `build.sh`; see its README.
+- **§9 numbers.**
+  - `dicrank3 e -v` prints each stream's size.
+  - `dicrank3 e -D dump ...` followed by `DR3_DUMP=dump dr3_tune c sbhr out`
+    recodes the streams in seconds.
+  - The ablations replace context groups with `DR3_NOCX=0:<hex mask>`.
+  - The two transform experiments read a dicrank3 dump; compress their
+    output with cmix. They are in `tools/dicrank_experiments/`:
+    - `case_rerank.cpp` puts case agreement into the run ranking:
+      `case_rerank DUMP 0.01 out.txt`;
+    - `bitmap_logit.py` sorts the membership bitmap by a logistic model.
 - **Experiments.** They are in `tools/dicrank_experiments/`, need numpy and
   scipy, and take their paths from the environment (`ENWIK8`, `ENWIK9`,
   `ENGLISH_DIC`, `WORK`). Run from that folder:
