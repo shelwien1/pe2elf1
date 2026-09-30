@@ -1,0 +1,99 @@
+--- a/tf/fp32_model.inc
++++ b/tf/fp32_model.inc
+@@ -5,6 +5,72 @@
+ 
+ #include "weights_io.h"
+ 
++
++// ---- calibration statistics hooks (stats build only) ----
++struct StatAcc {
++  std::string name; int d_out = 0, d_in = 0;
++  std::vector<double> A;    // d_in x d_in, sum x x^T (upper triangle filled at dump)
++  std::vector<float> Af;    // float partial sums, flushed every 256 calls
++  std::vector<double> G;    // d_out, sum dy^2
++  std::vector<double> F;    // d_out x d_in, sum (dy*x)^2
++  std::vector<double> X1;   // d_in, sum x
++  std::vector<double> X2;   // d_in, sum x^2
++  long nf = 0, nb = 0, pend = 0;
++};
++static std::unordered_map<const float*, StatAcc*> g_stats;
++static bool g_stats_on = false;
++static StatAcc* stat_reg(const float* w, const std::string& name, int d_out, int d_in) {
++  StatAcc* a = new StatAcc; a->name = name; a->d_out = d_out; a->d_in = d_in;
++  a->A.assign(size_t(d_in) * d_in, 0.0); a->Af.assign(size_t(d_in) * d_in, 0.0f);
++  a->G.assign(d_out, 0.0); a->F.assign(size_t(d_out) * d_in, 0.0);
++  a->X1.assign(d_in, 0.0); a->X2.assign(d_in, 0.0);
++  g_stats[w] = a; return a;
++}
++static void stat_flush(StatAcc* a) {
++  for (size_t i = 0; i < a->A.size(); i++) { a->A[i] += a->Af[i]; a->Af[i] = 0.0f; }
++  a->pend = 0;
++}
++static void stat_fwd(const float* w, const float* x) {
++  if (!g_stats_on) return;
++  auto it = g_stats.find(w); if (it == g_stats.end()) return;
++  StatAcc* a = it->second; const int n = a->d_in;
++  for (int i = 0; i < n; i++) {
++    const float xi = x[i]; a->X1[i] += xi; a->X2[i] += double(xi) * xi;
++    if (xi == 0.0f) continue;
++    float* row = a->Af.data() + size_t(i) * n;
++    for (int j = i; j < n; j++) row[j] += xi * x[j];
++  }
++  a->nf++; if (++a->pend >= 256) stat_flush(a);
++}
++static void stat_bwd(const float* W, const float* x, const float* dy) {
++  if (!g_stats_on) return;
++  auto it = g_stats.find(W); if (it == g_stats.end()) return;
++  StatAcc* a = it->second;
++  for (int o = 0; o < a->d_out; o++) {
++    const double g = dy[o]; a->G[o] += g * g;
++    if (g == 0.0) continue;
++    double* fr = a->F.data() + size_t(o) * a->d_in;
++    for (int i = 0; i < a->d_in; i++) { const double v = g * x[i]; fr[i] += v * v; }
++  }
++  a->nb++;
++}
++static void stat_dump(const char* path) {
++  FILE* f = fopen(path, "wb"); if (!f) return;
++  uint32_t n = g_stats.size(); fwrite("STAT", 1, 4, f); fwrite(&n, 4, 1, f);
++  for (auto& kv : g_stats) {
++    StatAcc* a = kv.second; stat_flush(a);
++    const int d = a->d_in;
++    for (int i = 0; i < d; i++) for (int j = 0; j < i; j++) a->A[size_t(i) * d + j] = a->A[size_t(j) * d + i];
++    uint32_t nl = a->name.size(); fwrite(&nl, 4, 1, f); fwrite(a->name.data(), 1, nl, f);
++    int32_t hd[2] = {a->d_out, a->d_in}; fwrite(hd, 4, 2, f);
++    int64_t cnt[2] = {a->nf, a->nb}; fwrite(cnt, 8, 2, f);
++    fwrite(a->A.data(), 8, a->A.size(), f); fwrite(a->G.data(), 8, a->G.size(), f);
++    fwrite(a->F.data(), 8, a->F.size(), f); fwrite(a->X1.data(), 8, a->X1.size(), f);
++    fwrite(a->X2.data(), 8, a->X2.size(), f);
++  }
++  fclose(f);
++}
++
+ namespace fx2 {
+ namespace f32 {
+ 
+@@ -64,6 +130,7 @@
+ // Both are accumulated; the caller zeroes dx.
+ void lin_back(const float* W, const float* x, const float* dy, int d_out,
+               int d_in, float* dW, float* dx) {
++  stat_bwd(W, x, dy);
+   for (int o = 0; o < d_out; o++) {
+     const float g = dy[o];
+     if (g != 0.0f) {
+@@ -212,6 +279,7 @@
+   float* w = nullptr;  // [d_out][d_in], row-major, no padding
+   int d_out = 0, d_in = 0;
+   void apply(const float* x, float* y) const {
++    stat_fwd(w, x);
+     for (int o = 0; o < d_out; o++)
+       y[o] = dot_f32(w + size_t(o) * d_in, x, d_in);
+   }
+@@ -377,6 +445,7 @@
+   out->d_out = d_out;
+   out->d_in = d_in;
+   out->w = take(size_t(d_out) * d_in);
++  stat_reg(out->w, prefix, d_out, d_in);
+   for (int o = 0; o < d_out; o++) {
+     const float s = bf16_to_f32(ws.bf16_bits()[o]);
+     const int8_t* src = wq.i8() + size_t(o) * d_in;

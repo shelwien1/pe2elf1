@@ -1,0 +1,10 @@
+49870 L1.up
+49863 L0.up
+49840 L0.gates
+49835 L11.value
+49845 L2.output
+49845 L3.output
+49841 L9.output
+49854 L3.down
+49927 prior_embedding
+49925 unembedding

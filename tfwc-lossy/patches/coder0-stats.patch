@@ -1,0 +1,18 @@
+--- a/coder0.cpp
++++ b/coder0.cpp
+@@ -202,6 +202,7 @@
+ #endif
+ 
+   M.Init(ppmd_order, ppmd_memory, cmap, &tf, f_len);
++  if( getenv("TF_STATS") ) g_stats_on = true;
+ 
+   for( uint m_idx = 0; m_idx<32; ++m_idx )
+     mixer[m_idx].Init();
+@@ -268,6 +269,7 @@
+   }
+ 
+   if( costlog ) fclose(costlog);
++  if( getenv("TF_STATS") ) stat_dump(getenv("TF_STATS"));
+   if( f_DEC==0 )
+     rc.FinishEncode();
+   prog.Done(f_len);

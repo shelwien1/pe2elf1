@@ -1,0 +1,11 @@
+50044 jxl_d0.6
+51547 jxl_d1.0
+52994 L0.gates_rng
+50480 webp_q75
+52825 L0.gates_zero
+53055 L0.key_rng
+51288 L0.key_zero
+51229 L0.query_rng
+57656 L0.value_rng
+51288 L0.query_zero
+51288 L0.value_zero

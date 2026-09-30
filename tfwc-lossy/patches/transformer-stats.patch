@@ -1,0 +1,10 @@
+--- a/transformer.inc
++++ b/transformer.inc
+@@ -605,6 +605,7 @@
+       dcap[o] = out_[o]*inv-(o==target ? 1.0f : 0.0f);
+     }
+     net_->backward(dcap);
++    if( getenv("TF_STATS") ) { net_->zero_grads(); return; }
+     if( ++accum_>=TF_BATCH ) {
+       accum_ = 0;
+       net_->adam_step(TF_FULL_LR_X1000000/1000000.0f*TF_BATCH,

@@ -1,0 +1,20 @@
+--- a/tf/weights_io.h
++++ b/tf/weights_io.h
+@@ -41,6 +41,7 @@
+ 
+ struct WeightsFile {
+   std::unordered_map<std::string, WTensor> tensors;
++  std::vector<std::string> order;  // tensor order in the file (load_compressed v2)
+ 
+   // parses the whole file; aborts with a message on any format error
+   static WeightsFile load(const char* path);
+--- a/tf/weights_io_compressed.inc
++++ b/tf/weights_io_compressed.inc
+@@ -384,6 +384,7 @@
+ 
+     if (!wf.tensors.emplace(name, std::move(t)).second)
+       die_wc("%s: duplicate tensor %s", path, name.c_str());
++    wf.order.push_back(name);
+   }
+   return wf;
+ }
