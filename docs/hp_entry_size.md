@@ -659,7 +659,7 @@ reconstruction in more detail, and ways to shrink the side file further.
   with `-DDICRANK_DEC_MAIN` for a command-line version.
 - `tools/dicrank2.cpp` and `tools/dicrank2_dec.cpp` are the v2 side file:
   encoder/decoder, and the lean decoder (`Dicrank2Decode`). See
-  english_dic_reconstruction.md §8.
+  `tools/dicrank2.md` for the options and english_dic_reconstruction.md §8.
 - `tools/dicrank3/` is the v3 side file: v2's transform with a built-in
   context-mixing coder (english_dic_reconstruction.md §9).
 

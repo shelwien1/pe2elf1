@@ -43,8 +43,8 @@ g++ -O2 -std=c++17 -ffp-contract=off -o dicrank3 dicrank3.cpp    # the same, wit
 ./dicrank3 d [-v] enwik9 dict3.rank english.dic
 ```
 
-The options are dicrank2's, plus `-D DIR`, which dumps the coder's inputs
-for `dr3_tune`.
+The options are dicrank2's (see [../dicrank2.md](../dicrank2.md)), plus
+`-D DIR`, which dumps the coder's inputs for `dr3_tune`.
 
 - **Self-check.** The encoder decodes its own output and fails unless it
   gets the dictionary back byte for byte.

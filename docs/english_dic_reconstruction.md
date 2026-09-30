@@ -405,6 +405,14 @@ context statistics come from all of the text (`-n`, `-c` change that). The
 other options are `-k` (context words, default 4000), `-s` (explicitly
 ordered words, default 3920, at most 10,000) and `-v` (stage timings).
 
+[`tools/dicrank2.md`](../tools/dicrank2.md) explains every option and
+measures what each one does to the side file.
+
+- More context words keep helping: `-k 8000` gives 24,485 bytes after cmix,
+  and `-k 16000` gives 24,240, against 25,112 at the default. The price is
+  memory, 2.9 and 5.6 GB, in the decoder too.
+- The other defaults are the best settings measured.
+
 **Format** (text, compressed with the entry's own `cmix -c`):
 
 ```
