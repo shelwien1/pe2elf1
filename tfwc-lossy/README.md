@@ -144,6 +144,11 @@ component — see the table below.
      weight re-snapped to its row's grid after each step (straight-through
      estimator), scales unchanged. 2.4% of the weights end up on a different
      level; the file grows by 4.6 KB.
+   * Learning rate matters: 1e-5 keeps improving; 3e-5 starts to drift after
+     ~100K tokens and 5e-5/1e-4 diverge (roundings keep flipping back and
+     forth). The 205-way KL on a held-out novel is a poor guide: for the
+     budget-600 run it got slightly worse while compression improved a lot —
+     the coder only uses the file's alphabet, mixed with PPMD.
    * On the book1wrt prefix this removes 42–47% of the loss of every allocation
      tried (budget 500: +1.21% → +0.64%, 600: +1.42% → +0.82%, 700: +1.52% →
      +0.86%). Full file: 500 → +0.774% (2,338,523 B), 600 → +0.931%
