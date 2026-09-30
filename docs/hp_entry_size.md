@@ -32,6 +32,10 @@ layout options in §8, fx2-cmix was also rebuilt from source.
   - A decode-only program only pays off if the compressor is submitted as a
     source zip.
   - The separate-decompressor relaxation makes S larger.
+- **The compressor's copy of english.dic can be replaced by a 45.6 KB side
+  file** (`tools/dicrank.cpp`). The compressor expands it using the word
+  statistics of enwik8. That saves about 50 KB of S on top of the layout
+  changes (§8.7).
 
 ## 1. The rule
 
@@ -524,11 +528,91 @@ The decode-only program size, 108,272, is the shipped binary's
   accepted. Either way it needs a reproducible build.
 - A decode-only archive program only pays off together with the zip route.
 
-### 8.7 Ideas that would change the algorithm's inputs, not just the layout
+### 8.7 Rebuilding english.dic from enwik8 inside the compressor
 
-- **Build the dictionary from enwik9 inside the compressor**, as the FAQ
-  suggests. Then D would be counted once. But the dictionary changes, and so
-  does X.
+The compressor has enwik9, and all 44,515 words of english.dic occur in its
+first 10^8 bytes (enwik8). This holds when the text is split into words
+exactly as cmix's word transform does it. A plain split into letter runs
+misses 11 words, such as `cript` (from `JScript`) and `donalds` (from
+`McDonalds`), which shows the dictionary was built with that same split.
+
+So the compressor can carry a much smaller side file and rebuild english.dic
+from it before compressing. archive9 still needs the full dictionary, because
+it has no enwik9 yet.
+
+**What the side file has to encode.** The dictionary's word order:
+
+- **The first 3,920 words** (the 1- and 2-byte codeword tiers) are
+  hand-ordered by meaning. They are stored as frequency ranks.
+- **The other 40,595 words** form 510 alphabetical runs of one kind of word
+  each: adverbs, inflected verbs, adjectives, plant names, medieval names,
+  and so on.
+  - They are stored as a membership bitmap over the frequency-sorted word
+    list, plus a run number for each word.
+  - The run numbers are listed in order of reversed spelling. Words with the
+    same ending, which mostly belong to the same run, then sit next to each
+    other.
+
+| Side file for english.dic, compressed with fx2-cmix's own `cmix -c` | Size |
+|---|---:|
+| english.dic itself, as shipped | 100,088 |
+| Every word as a plain frequency rank | 82,448 |
+| Runs, run numbers in frequency order | 51,478 |
+| Runs, run numbers in alphabetical order | 48,959 |
+| Runs, run numbers move-to-front coded, reversed-spelling order | 47,738 |
+| **Runs, run numbers in reversed-spelling order (`tools/dicrank`)** | **45,569** |
+| The same, counting words over all of enwik9 instead of enwik8 | 50,272 |
+
+- **Size breakdown of the chosen format.** Compressed separately, its three
+  parts are 5,600 bytes (the first 3,920 words' ranks), 5,659 (bitmap) and
+  34,360 (run numbers).
+- **Prototype rows.** The rows between the plain ranks and the chosen format
+  are prototype files with a one-line header. The tool's two-line header adds
+  19 bytes.
+
+**Net effect on S.** The compressor shrinks by 100,088 − 45,569 = 54,519
+bytes. The rebuilding code is compressor-only, but in fx2-cmix's layout the
+program is also copied into archive9, so that code counts twice.
+
+- `tools/dicrank_dec.cpp` (no standard containers) adds 2,256 bytes per copy
+  with UPX 3.95 `-9`, or 2,004 with `--ultra-brute`. The STL-based decoder in
+  `dicrank.cpp` would add 12,116.
+- Net: **about −50 KB** (−54,519 + 2 × 2,256 = −50,007).
+- Together with the packing and build-flag changes of §8.3 it comes to about
+  −98 KB (−47,568 − 54,519 + 2 × 2,004 = −98,079).
+
+**What changes in the compressor:**
+
+1. It stores the cmix-compressed side file where `comp_dict` was.
+2. At `-e`, it unpacks the side file with `./cmix -d` (about a minute).
+3. It rebuilds the dictionary with `DicrankDecode(enwik9, side, ".dict")`,
+   which takes about 2 s.
+4. It recreates the archive's dictionary stream with
+   `./cmix -c .dict .dict.comp`. The shipped binary turns the rebuilt
+   english.dic into a stream byte-identical to the one in archive9 (100,088
+   bytes, 112 s here). So archive9 does not change, and compression takes
+   about 3 minutes longer.
+
+**Checks:**
+
+- `dicrank` reproduces english.dic byte for byte from enwik8 and from enwik9.
+  Both give the same side file, because only the first 10^8 bytes are read.
+- `dicrank_dec` produces the same output as `dicrank d`. This was tested on
+  english.dic, on dictionaries containing words that are not in the text, on
+  a descending word list, and with `-s` = 0, 7, 80 and 100000.
+
+**Where the remaining bytes are.** The run numbers (34 KB) dominate.
+Spelling, word families and first occurrence predict them poorly: only 18% of
+words share a run with their prefix word. But the runs are word classes, so a
+model that compares the words' contexts in enwik9 could probably predict them
+much better. The first 3,920 words' order costs close to what a random order
+would.
+
+### 8.8 Ideas that would change the algorithm's inputs, not just the layout
+
+- **Let the compressor build its own dictionary from enwik9**, as the FAQ
+  suggests, instead of rebuilding english.dic as in §8.7. It would still
+  have to be stored in archive9, and the word codes, and so X, would change.
 - **Encode the article order more compactly.** It currently costs about 9.3
   bits per article.
 - **Put code needed only after startup into a cmix-compressed overlay inside
@@ -552,6 +636,14 @@ The decode-only program size, 108,272, is the shipped binary's
   with and without the shim.
 - `tools/fx2-cmix-decode-only.patch` adds a `-DDECODE_ONLY` build of
   fx2-cmix, used for the §8.2 measurements.
+- `tools/dicrank.cpp` stores english.dic as a side file that is expanded using
+  enwik8 or enwik9 (§8.7):
+  - `dicrank e enwik9 english.dic dict.rank` encodes and checks its own
+    output;
+  - `dicrank d enwik9 dict.rank english.dic` decodes.
+- `tools/dicrank_dec.cpp` is the same decoder without standard containers,
+  for linking into a compressor: `DicrankDecode(text, side, out)`. Build it
+  with `-DDICRANK_DEC_MAIN` for a command-line version.
 
 To decode an embedded dictionary with an entry's own program (about 2
 minutes, 2.6 GB of memory, and a 14.7 GB sparse `ppm.temp`):
