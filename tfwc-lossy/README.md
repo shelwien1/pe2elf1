@@ -197,7 +197,7 @@ int4 weights, 24,590 of bf16 scales and 27,815 of fp32 values.
   than a coarser uniform step.
 - **Rescaling MLP units** (up row ×α, down column ×α⁻², exact for relu²): 0–3%
   offline, and risky with the engine's fixed int8 activation scales.
-- **GPTQ damping** 0.03/0.1 is clearly worse (+1970/+2291 on the final
+- **GPTQ damping** 0.03/0.1 is clearly worse (+1970/+2291 on the budget-370
   allocation); 0.0001–0.003 give +1572..+1680 against +1632 at 0.01 — the same
   within configuration variation, at 1.7–3 KB more.
 - Sensitivity fits including plain-rounding measurements, or shrunk toward the
@@ -209,7 +209,7 @@ int4 weights, 24,590 of bf16 scales and 27,815 of fp32 values.
   and the per-group measurements. Decisions are per component (84 step choices),
   never per weight from loss gradients, and nothing depends on which tokens
   book1wrt uses (all embedding rows are untouched). The held-out 72% of the file
-  loses the same as the calibration part, but other novels lose 1.1–1.5% (table
+  loses the same as the calibration part, but other novels lose 1.1–1.6% (table
   above), so some of the fit is book1-specific. The distillation step uses no
   book1wrt data at all; it adapts the model toward 19th-century English novels.
 - Effects of a configuration are systematic, not luck: over 35 full-file
@@ -252,8 +252,9 @@ clang++ -std=c++17 -O3 -fno-math-errno -ffp-contract=off -march=native \
 head -c 131072 book1wrt > b128k
 TF_STATS=$X/runs/stats_b128k.bin ./coder0s c b128k /dev/null 6m-q4-fp32-t1lambda1.tfwc2
 
-cd $X/tools    # requantize with the final allocation -> out.tfwz, out.tfwc2
-python3 build.py ../runs/choice9_B370.json out
+cd $X/tools    # requantize -> out.tfwz, out.tfwc2
+python3 build.py ../runs/choice9_B370.json out    # the requantization-only file
+python3 build.py ../runs/choiceD_B700.json d700   # the final file's starting point
 ```
 
 (`patches/weights_io-order.patch` adds the `WeightsFile::order` list that
@@ -264,7 +265,8 @@ statistics.)
 `runs/` holds the measurements behind the allocation: the per-group sweeps
 (`g15.txt` plain rounding k=1.5, `gp20.txt`/`gp30.txt` GPTQ k=2/3, `op.txt` at the
 operating points), the rate/error tables, the fitted sensitivities (`c_v2.json`)
-and the final allocation (`choice9_B370.json`). The pipeline that produced them:
+and the allocations (`choice9_B370.json` requantization only, `choiceD_B700.json`
+for the final file). The pipeline that produced them:
 `table.py`/`table_up.py` (rate/error tables) → `plan1.py`, `plan2.py` (fits) →
 `alloc.py` (solver) → `build.py`. `ev.sh` runs candidates in parallel,
 `heldout.py` splits their loss into prefix and held-out part.
