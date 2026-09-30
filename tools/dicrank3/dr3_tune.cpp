@@ -3,16 +3,17 @@
 // a run takes seconds instead of a minute, which is what tuning the IDX knobs
 // with IDX/opt.pl needs.
 //
-//   dr3_tune c STREAMS OUT    code STREAMS into OUT (the form opt.pl runs: "exe c FILE OUT")
-//   dr3_tune d STREAMS IN     decode IN and check it against the dump
+//   dr3_tune c DIR/STREAMS OUT    code STREAMS into OUT (the form opt.pl runs: "exe c FILE OUT")
+//   dr3_tune d DIR/STREAMS IN     decode IN and check it against the dump
 //
-// STREAMS: any of s (explicit-word set), b (membership bitmap), h (explicit-
-// word order) and r (runs); they are coded in dicrank3's order s b h r, so
-// "sbhr" reproduces dicrank3's range coder stream byte for byte. The dump
-// folder is $DR3_DUMP (default ./dump). DR3_NOCX=<stream>:<hex mask>
-// replaces the contexts whose bits are set by a constant, for ablations
-// (streams: 0 runs, 1 explicit-word order, 2 membership bitmap, 3 explicit-
-// word set).
+// DIR is the dump folder; '/' and '\' both separate it, and without one the
+// dump is read from the current folder. STREAMS: any of s (explicit-word set),
+// b (membership bitmap), h (explicit-word order) and r (runs); they are coded
+// in dicrank3's order s b h r, so "DIR/sbhr" reproduces dicrank3's range coder
+// stream byte for byte. An opt.pl corpus list names stream sets as "files":
+// dump/sb, dump/h, dump/r. DR3_NOCX=<stream>:<hex mask> replaces the contexts
+// whose bits are set by a constant, for ablations (streams: 0 runs,
+// 1 explicit-word order, 2 membership bitmap, 3 explicit-word set).
 //
 // Dump files (little-endian):
 //   words.txt    one line per frequency rank: word count df lowercase-count
@@ -55,13 +56,16 @@ struct DumpScores {
 
 int main( int argc, char** argv ) {
   if( argc != 4 || (strcmp( argv[1], "c" ) && strcmp( argv[1], "d" )) ) {
-    fprintf( stderr, "usage: dr3_tune c|d STREAMS FILE   (STREAMS from sbhr; dump in $DR3_DUMP, default ./dump)\n" );
+    fprintf( stderr, "usage: dr3_tune c|d DIR/STREAMS FILE   (STREAMS from sbhr, DIR = the dump folder)\n" );
     return 2;
   }
   int dec = argv[1][0] == 'd';
-  std::string which = argv[2];
+  // DIR/STREAMS: the dump folder, then the streams to code
+  std::string arg = argv[2], dir = ".", which = arg;
+  size_t cut = arg.find_last_of( "/\\" );
+  if( cut != std::string::npos ) { dir = cut ? arg.substr( 0, cut ) : arg.substr( 0, 1 ); which = arg.substr( cut + 1 ); }
+  if( which.empty() || which.find_first_not_of( "sbhr" ) != std::string::npos ) Die( "streams must be letters from sbhr: ", argv[2] );
   auto has = [&]( char c ) { return which.find( c ) != std::string::npos; };
-  std::string dir = getenv( "DR3_DUMP" ) ? getenv( "DR3_DUMP" ) : "dump";
 
   // word features by rank
   std::vector<std::string> spell;
@@ -93,6 +97,7 @@ int main( int argc, char** argv ) {
   std::vector<uint32_t> border = br.Vec<uint32_t>( nb );
   std::vector<uint8_t> bbits = br.Vec<uint8_t>( nb );
   std::vector<uint32_t> hranks( nh ); for( uint i = 0; i < nh; i++ ) hranks[i] = i;
+  size_t S_ones = 0; for( uint8_t b : hbits ) S_ones += b;   // the explicit-word set ends with its S-th one
 
   uint S = 0; std::vector<uint32_t> head, seq; std::vector<int32_t> gram;
   if( has( 'h' ) ) {
@@ -119,8 +124,12 @@ int main( int argc, char** argv ) {
   std::vector<uint8_t> hb( hbits ), bb( bbits );
   std::vector<uint32_t> sq_( seq ), rn( run );
   if( dec ) { std::fill( hb.begin(), hb.end(), 0 ); std::fill( bb.begin(), bb.end(), 0 ); std::fill( sq_.begin(), sq_.end(), 0 ); std::fill( rn.begin(), rn.end(), 0 ); }
-  if( has( 's' ) ) { auto p = ptrs( hranks ); CodeBitmap( dec, kHeadSet, nh, p.data(), hb.data() ); }
-  if( has( 'b' ) ) { auto p = ptrs( border ); CodeBitmap( dec, kBitmap, nb, p.data(), bb.data() ); }
+  if( has( 's' ) ) {
+    auto p = ptrs( hranks );
+    if( CodeBitmap( dec, kHeadSet, nh, S_ones, [&]( size_t i ) -> const WordF& { return *p[i]; }, hb.data() ) != nh )
+      Die( "explicit-word set does not end with its last explicit word" );
+  }
+  if( has( 'b' ) ) { auto p = ptrs( border ); CodeBitmap( dec, kBitmap, nb, SIZE_MAX, [&]( size_t i ) -> const WordF& { return *p[i]; }, bb.data() ); }
   if( has( 'h' ) ) { auto p = ptrs( head ); CodeHead( dec, S, p.data(), gram.data(), sq_.data() ); }
   if( has( 'r' ) ) {
     auto p = ptrs( tail );

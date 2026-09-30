@@ -12,8 +12,8 @@
 #
 # Tuning (dumps from "dicrank3 e -D dump ..."):
 #   ./build.sh tune
-#   printf 'sb\nh\nr\n' > opt.lst          # stream sets, coded as separate "files"
-#   DR3_DUMP=dump OPT_JOBS=3 perl IDX/opt.pl opt.lst ./dr3_tune.tune [name-regex]
+#   printf 'dump/sb\ndump/h\ndump/r\n' > opt.lst    # stream sets, coded as separate "files"
+#   OPT_JOBS=3 perl IDX/opt.pl opt.lst ./dr3_tune.tune [name-regex]
 #   cd IDX && for f in *.idx; do perl import.pl $f ../export.!!! > t && mv t $f; done
 set -e
 cd "$(dirname "$0")"

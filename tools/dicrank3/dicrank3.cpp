@@ -30,11 +30,17 @@
 //   -D DIR    also write the coder's inputs to DIR, for dr3_tune
 //   -v        print the time each stage takes and the bytes of each stream
 //
-// Side file: two text lines, then the extra words, then the coded streams:
-//   dicrank 3
-//   <counted bytes> <context bytes> <K> <explicit words S> <runs> <extra words> <explicit-word bitmap length> <membership bitmap length>
-//   <extra words, one per line>
-//   <range coder stream: explicit-word set, membership bitmap, explicit-word order, runs>
+// Side file (binary):
+//   byte    0xD3, the signature
+//   7 nums  counted bytes, context bytes, K, explicit words S, runs,
+//           membership bitmap length, extra words
+//   the extra words, each spelled out and ended by a 0 byte
+//   the range coder stream: explicit-word set, membership bitmap,
+//   explicit-word order, runs
+// A num is a varint (7 bits per byte, low bits first, top bit set = more to
+// come) of 16*m + e for the value m * 10^e, e < 16, so a round value such as
+// 10^8 or 4000 takes one byte. The explicit-word bitmap's length is not
+// stored: it ends with its S-th explicit word.
 
 #include <chrono>
 #include <string>
@@ -555,49 +561,83 @@ struct Model {
 
 // ----------------------------------------------------------------- side file
 
+const int kSignature = 0xD3;
+
 struct Header {
   uint64_t scan8 = 100000000, scan9 = 0;
   uint32_t K = 4000;
   size_t S = 0, runs = 0;
-  size_t hset = 0;    // length of the explicit-word bitmap (ranks 0..hset-1)
   size_t n_cand = 0;  // length of the membership bitmap
   std::vector<std::string> extra;
 };
 
+// A number: the varint of 16*m + e for v = m * 10^e, with as many factors of
+// 10 in 10^e as fit (e < 16).
+void PutNum(FILE* f, uint64_t v) {
+  uint64_t e = 0;
+  while (v && e < 15 && v % 10 == 0) {
+    v /= 10;
+    ++e;
+  }
+  if (v > (UINT64_MAX >> 4)) Fail("number too large for the side file");
+  uint64_t x = v * 16 + e;
+  do {
+    int b = (int)(x & 127);
+    x >>= 7;
+    putc(x ? b | 128 : b, f);
+  } while (x);
+}
+
+uint64_t GetNum(FILE* f) {
+  uint64_t x = 0;
+  for (int shift = 0;; shift += 7) {
+    int b = getc(f);
+    if (b == EOF) Fail("side file is truncated");
+    if (shift > 56) Fail("bad number in side file");
+    x |= (uint64_t)(b & 127) << shift;
+    if (!(b & 128)) break;
+  }
+  uint64_t v = x >> 4;
+  for (int e = (int)(x & 15); e > 0; --e) {
+    if (v > UINT64_MAX / 10) Fail("bad number in side file");
+    v *= 10;
+  }
+  return v;
+}
+
 void WriteHeader(FILE* f, const Header& h) {
-  fprintf(f, "dicrank 3\n%llu %llu %u %zu %zu %zu %zu %zu\n", (unsigned long long)h.scan8,
-          (unsigned long long)h.scan9, h.K, h.S, h.runs, h.extra.size(), h.hset, h.n_cand);
-  for (auto& w : h.extra) fprintf(f, "%s\n", w.c_str());
+  putc(kSignature, f);
+  for (uint64_t v : {h.scan8, h.scan9, (uint64_t)h.K, (uint64_t)h.S, (uint64_t)h.runs, (uint64_t)h.n_cand,
+                     (uint64_t)h.extra.size()}) {
+    PutNum(f, v);
+  }
+  for (auto& w : h.extra) {
+    fputs(w.c_str(), f);
+    putc(0, f);
+  }
 }
 
 Header ReadHeader(FILE* f) {
-  char buf[1024];
-  auto line = [&]() {
-    if (!fgets(buf, sizeof(buf), f)) Fail("side file is truncated");
-    size_t n = strlen(buf);
-    if (!n || buf[n - 1] != '\n') Fail("bad line in side file");
-    return std::string(buf, n - 1);
-  };
-  if (line() != "dicrank 3") Fail("not a dicrank 3 side file");
+  if (getc(f) != kSignature) Fail("not a dicrank 3 side file");
   Header h;
-  unsigned long long scan8, scan9;
-  size_t extra;
-  std::string l = line();
-  if (sscanf(l.c_str(), "%llu %llu %u %zu %zu %zu %zu %zu", &scan8, &scan9, &h.K, &h.S, &h.runs, &extra,
-             &h.hset, &h.n_cand) != 8) {
-    Fail("bad side file header");
-  }
-  h.scan8 = scan8;
-  h.scan9 = scan9;
-  if (h.K == 0 || h.K > 32768) Fail("bad K in side file");
-  if (h.S > kMaxExplicit) Fail("too many explicit words in side file");
-  if (h.runs > (1u << 24) || extra > (1u << 24)) Fail("bad side file header");
-  for (size_t i = 0; i < extra; ++i) {
-    h.extra.push_back(line());
-    for (char c : h.extra.back()) {
-      if (c < 'a' || c > 'z') Fail("bad extra word in side file");
+  h.scan8 = GetNum(f);
+  h.scan9 = GetNum(f);
+  uint64_t K = GetNum(f), S = GetNum(f), runs = GetNum(f), n_cand = GetNum(f), extra = GetNum(f);
+  if (K == 0 || K > 32768) Fail("bad K in side file");
+  if (S > kMaxExplicit) Fail("too many explicit words in side file");
+  if (runs > (1u << 24) || extra > (1u << 24) || n_cand > UINT32_MAX) Fail("bad side file header");
+  h.K = (uint32_t)K;
+  h.S = S;
+  h.runs = runs;
+  h.n_cand = n_cand;
+  for (uint64_t i = 0; i < extra; ++i) {
+    std::string w;
+    for (int c; (c = getc(f)) != 0;) {
+      if (c < 'a' || c > 'z') Fail("bad extra word in side file");  // EOF included
+      w += (char)c;
     }
-    if (h.extra.back().empty()) Fail("bad extra word in side file");
+    if (w.empty()) Fail("bad extra word in side file");
+    h.extra.push_back(w);
   }
   return h;
 }
@@ -680,7 +720,6 @@ void Encode(const char* text_path, const std::vector<std::string>& dict, Header&
     hset_bits.push_back((uint8_t)is_head[r]);
     if (is_head[r]) m.head.push_back(r);
   }
-  h.hset = hset_ranks.size();
   // Other words: maximal ascending runs, membership bitmap.
   std::vector<uint32_t> run_of(voc.cand.size(), UINT32_MAX);
   uint32_t run = 0;
@@ -714,8 +753,13 @@ void Encode(const char* text_path, const std::vector<std::string>& dict, Header&
   ModelInit();
   g_m->rc.StartEncode(f);
   Feats fs(voc, hset_ranks), fb(voc, border), fh(voc, m.head), ft(voc, m.tail);
-  CodeBitmap(0, kHeadSet, hset_ranks.size(), fs.p.data(), hset_bits.data());
-  CodeBitmap(0, kBitmap, border.size(), fb.p.data(), bbits.data());
+  // the explicit-word set ends with its S-th one, so it needs no length
+  if (CodeBitmap(0, kHeadSet, hset_ranks.size(), h.S, [&](size_t i) -> const WordF& { return fs.f[i]; },
+                 hset_bits.data()) != hset_ranks.size()) {
+    Fail("internal error: explicit-word bitmap");
+  }
+  CodeBitmap(0, kBitmap, border.size(), SIZE_MAX, [&](size_t i) -> const WordF& { return fb.f[i]; },
+             bbits.data());
   CodeHead(0, (uint)m.head.size(), fh.p.data(), m.gram.data(), seq.data());
   std::string scores;
   CentroidScores prov(h.runs, 2 * h.K, m.tail_vec, dump_dir ? &scores : nullptr);
@@ -737,17 +781,15 @@ std::string Decode(const char* text_path, FILE* f) {
   m.voc.Build(text_path, h.scan8, h.extra);
   Stage("word counts");
   const Vocabulary& voc = m.voc;
-  if (h.hset > voc.cand.size()) Fail("explicit-word bitmap longer than the word list");
   Dr3Fpu fpu;
   ModelInit();
   g_m->rc.StartDecode(f);
-  std::vector<uint32_t> hset_ranks(h.hset);
-  for (size_t r = 0; r < h.hset; ++r) hset_ranks[r] = (uint32_t)r;
-  std::vector<uint8_t> hbits(h.hset);
-  Feats fs(voc, hset_ranks);
-  CodeBitmap(1, kHeadSet, h.hset, fs.p.data(), hbits.data());
+  // explicit-word set: bits over ranks 0, 1, ... up to the S-th explicit word
+  std::vector<uint8_t> hbits(voc.cand.size());
+  size_t nh = CodeBitmap(1, kHeadSet, voc.cand.size(), h.S, [&](size_t r) { return Feat(voc, (uint32_t)r); },
+                         hbits.data());
   std::vector<char> is_head(voc.cand.size(), 0);
-  for (uint32_t r = 0; r < h.hset; ++r) {
+  for (uint32_t r = 0; r < nh; ++r) {
     if (hbits[r]) {
       is_head[r] = 1;
       m.head.push_back(r);
@@ -757,7 +799,8 @@ std::string Decode(const char* text_path, FILE* f) {
   std::vector<uint32_t> border = BitmapOrder(voc, is_head, h.n_cand);
   std::vector<uint8_t> bbits(border.size());
   Feats fb(voc, border);
-  CodeBitmap(1, kBitmap, border.size(), fb.p.data(), bbits.data());
+  CodeBitmap(1, kBitmap, border.size(), SIZE_MAX, [&](size_t i) -> const WordF& { return fb.f[i]; },
+             bbits.data());
   for (size_t i = 0; i < border.size(); ++i) {
     if (bbits[i]) m.tail.push_back(border[i]);
   }

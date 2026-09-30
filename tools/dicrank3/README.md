@@ -20,16 +20,16 @@ The side file needs no further compression. `dicrank2` stays as it is.
 | Explicit words: order | 3,595 | 3,532 |
 | Membership of the other words | 2,546 | 1,498 |
 | Run numbers | 18,908 | 16,636 |
-| Header | (in the file) | 58 |
-| **Side file** | **25,112** | **21,764** |
+| Header | (in the file) | 12 |
+| **Side file** | **25,112** | **21,718** |
 
 The dicrank2 sections were compressed separately. The whole dicrank2 file,
 compressed as one, is 25,112 bytes. The coder's knobs are partly tuned:
-with the values copied from tsvcomp, the side file is 22,186 bytes (see
+with the values copied from tsvcomp, the side file is 22,140 bytes (see
 Tuning below).
 
 **The catch.** In fx2-cmix the decoder is part of the program, which is
-stored twice. The coder's code costs far more than the 3.3 KB it saves.
+stored twice. The coder's code costs far more than the 3.4 KB it saves.
 [../../docs/english_dic_reconstruction.md](../../docs/english_dic_reconstruction.md)
 §9 has the measurements.
 
@@ -52,14 +52,24 @@ The options are dicrank2's (see [../dicrank2.md](../dicrank2.md)), plus
   is about 50 s, of which the coder takes about 14 s. Decoding peaks at
   1.86 GB.
 
-**Side file.**
+**Side file.** It is binary, and starts with a header of 12 bytes for
+english.dic:
 
-```
-dicrank 3
-<counted bytes> <context bytes> <K> <explicit words S> <runs> <extra words> <explicit-word bitmap length> <membership bitmap length>
-<extra words, one per line>
-<range coder stream: explicit-word set, membership bitmap, explicit-word order, run numbers>
-```
+| Field | Size | Contents |
+|---|---|---|
+| Signature | 1 byte | `D3` |
+| Parameters | 7 numbers | counted bytes, context bytes, K, S, runs, membership bitmap length, extra words |
+| Extra words | 1 byte per letter, plus 1 | each word's letters, ended by a 0 byte |
+| Coded streams | the rest | range coder stream: explicit-word set, membership bitmap, explicit-word order, run numbers |
+
+- **Numbers.** Each number is a varint (7 bits per byte, low bits first,
+  top bit set means more follow) of 16·m + e, for the value m·10^e with
+  e < 16. So a round value like 10^8, 10^9 or 4000 takes one byte.
+- **The explicit-word bitmap's length is not stored.** The decoder reads
+  bits until it has seen S explicit words, because the bitmap ends with the
+  S-th.
+- **english.dic's header,** in hex: `D3 18 19 43 81 31 B1 06 F0 E1 41 00`.
+  That is 10^8, 10^9, 4000, 3920, 510, 67,343 and 0 extra words.
 
 ## The coder (`dr3_model.inc`)
 
@@ -122,16 +132,20 @@ seconds, instead of recomputing the context vectors for a minute:
 ```sh
 ./dicrank3 e -D dump enwik9 english.dic dict3.rank     # dump the coder's inputs
 ./build.sh tune                                        # -> dr3_tune.tune
-printf 'sb\nh\nr\n' > opt.lst                          # stream sets, measured as separate "files"
-DR3_DUMP=dump OPT_JOBS=3 perl IDX/opt.pl opt.lst ./dr3_tune.tune ['^H0_']
+printf 'dump/sb\ndump/h\ndump/r\n' > opt.lst          # stream sets, measured as separate "files"
+OPT_JOBS=3 perl IDX/opt.pl opt.lst ./dr3_tune.tune ['^H0_']
 cd IDX && for f in *.idx; do perl import.pl $f ../export.!!! > t && mv t $f; done && cd .. && ./build.sh
 ```
 
 **Checks.**
 
-- `DR3_DUMP=dump ./dr3_tune c sbhr out` writes exactly dicrank3's stream,
-  i.e. the side file without its 58-byte header.
-- `./dr3_tune d sbhr out` decodes it and checks it against the dump.
+- `./dr3_tune c dump/sbhr out` writes exactly dicrank3's stream, i.e. the
+  side file without its header.
+  - The argument is the dump folder, then the letters of the streams to
+    code.
+  - `/` and `\` both work as separators.
+  - Without a folder, the dump is read from the current one.
+- `./dr3_tune d dump/sbhr out` decodes it and checks it against the dump.
 - `DR3_NOCX=<stream>:<hex mask>` replaces contexts by a constant, for
   ablations.
 

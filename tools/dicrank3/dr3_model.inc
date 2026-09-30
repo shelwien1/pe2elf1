@@ -17,7 +17,8 @@
 // The contexts are what the decoder knows before each decision. There are
 // four streams, in file order:
 //
-//   3 explicit-word set:  bitmap over frequency ranks (is the word explicit?)
+//   3 explicit-word set:  bitmap over frequency ranks (is the word explicit?),
+//                          up to the S-th explicit word
 //   2 membership bitmap:  the other candidates in BitmapKey order
 //   1 explicit-word order: per word after the first, unary over the remaining
 //                          explicit words sorted by 2 cos(prev) + cos(prev2)
@@ -390,13 +391,18 @@ static uint CodeGamma( int dec, uint q, uint m, uint sid, uint st, int seed, lon
 
 // ---- streams 3 and 2: bitmaps ----------------------------------------------------
 
-// Codes bits[i] of the words w[i] (sid kHeadSet or kBitmap).
-static void CodeBitmap( int dec, int sid, size_t n, const WordF* const* w, uint8_t* bits ) {
+// Codes bits[i] of the words feat(i), i = 0, 1, ... (sid kHeadSet or kBitmap)
+// until n bits are coded or, before that, the bits hold `ones` ones. The
+// explicit-word bitmap ends with its S-th one, so its length need not be
+// stored. Returns the number of bits coded.
+template<class Feat>
+static size_t CodeBitmap( int dec, int sid, size_t n, size_t ones, Feat feat, uint8_t* bits ) {
   qword h = 0;                                            // bit history
   std::unordered_map<qword, std::pair<uint,uint>> grp;   // BitmapKey group -> (ones, bits)
   int runlen = 0, lastbit = 0;
-  for( size_t i = 0; i < n; i++ ) {
-    const WordF& f = *w[i];
+  size_t i = 0, seen = 0;
+  for( ; i < n && seen < ones; i++ ) {
+    const WordF& f = feat( i );
     qword key = ((qword(f.L) * 32 + f.D) * 32 + f.C) * 8 + f.W;
     auto& g = grp[key];
     int dens = g.second ? Cap( 1 + g.first * 14 / g.second, 15 ) : 0;
@@ -417,10 +423,12 @@ static void CodeBitmap( int dec, int sid, size_t n, const WordF* const* w, uint8
     Hash( x, 6000 + 100*sid, v );
     int b = CodeBit( dec ? 0 : bits[i], x );
     if( dec ) bits[i] = uint8_t(b);
+    seen += b;
     g.first += b; g.second++;
     h = h*2 + b;
     if( b == lastbit ) runlen++; else { runlen = 1; lastbit = b; }
   }
+  return i;
 }
 
 // ---- stream 1: explicit-word order ------------------------------------------------

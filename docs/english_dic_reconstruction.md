@@ -38,7 +38,7 @@ around it is in [hp_entry_size.md](hp_entry_size.md) §8.7.
     components.
   - It sees what cmix can't: candidate scores, and each word's case,
     length, frequency and suffixes.
-  - The side file drops to 21,764 bytes.
+  - The side file drops to 21,718 bytes.
   - But the coder adds about 18 KB of packed code to each copy of
     fx2-cmix's program, which is stored twice.
 
@@ -565,11 +565,12 @@ dicrank3 reuses its transform code unchanged.
 | Explicit words: order | 3,595 | 3,610 | 3,532 |
 | Membership of the other words | 2,546 | 1,646 | 1,498 |
 | Run numbers | 18,908 | 16,844 | 16,636 |
-| Header | — | 58 | 58 |
-| **Side file** | **25,112** | **22,186** | **21,764** |
+| Header | — | 12 | 12 |
+| **Side file** | **25,112** | **22,140** | **21,718** |
 
 The dicrank2 sections were compressed separately; its whole file,
-compressed as one, is 25,112 bytes.
+compressed as one, is 25,112 bytes. dicrank3's header is binary: a signature
+byte, then the parameters as varints of m·16 + e for m·10^e.
 
 **Where the gain comes from.**
 
@@ -667,16 +668,16 @@ counted twice:
 | The compressor carries | Side file | Decoder code × 2 | Total | vs english.dic |
 |---|---:|---:|---:|---:|
 | v2 side file + `dicrank2_dec` | 25,112 | 11,664 | 36,776 | −63,312 |
-| v3 side file + `dicrank3.cpp`'s decoder | 21,764 | 68,112 | 89,876 | −10,212 |
-| v3 side file + lean transform + this coder (estimate) | 21,764 | 48,168 | 69,932 | −30,156 |
+| v3 side file + `dicrank3.cpp`'s decoder | 21,718 | 68,112 | 89,830 | −10,258 |
+| v3 side file + lean transform + this coder (estimate) | 21,718 | 48,168 | 69,886 | −30,202 |
 
 **Verdict.**
 
-- **In compression, the coder beats cmix** by 3,348 bytes (13.3%),
+- **In compression, the coder beats cmix** by 3,394 bytes (13.5%),
   because it sees what the decoder knows.
 - **In fx2-cmix it does not pay.** Its code is counted twice, and it costs
   more than ten times what it saves. To pay, the coder's code would have
-  to fit in about 1,674 packed bytes per copy. One `Counter` update alone
+  to fit in about 1,697 packed bytes per copy. One `Counter` update alone
   is 2.9 KB unpacked.
 - **The source-zip layout** (hp_entry_size.md §8.4) counts compressor-only
   code once, as compressed source. That halves the cost, which is still far
@@ -717,7 +718,7 @@ counted twice:
   - v3: `tools/dicrank3/`, built with its `build.sh`; see its README.
 - **§9 numbers.**
   - `dicrank3 e -v` prints each stream's size.
-  - `dicrank3 e -D dump ...` followed by `DR3_DUMP=dump dr3_tune c sbhr out`
+  - `dicrank3 e -D dump ...` followed by `dr3_tune c dump/sbhr out`
     recodes the streams in seconds.
   - The ablations replace context groups with `DR3_NOCX=0:<hex mask>`.
   - The two transform experiments read a dicrank3 dump; compress their

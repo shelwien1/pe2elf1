@@ -617,7 +617,7 @@ reconstruction in more detail, and ways to shrink the side file further.
   copy), the compressor saves 63,312 bytes against english.dic, instead of
   50,007 with v1.
 - A v3 side file (`tools/dicrank3/`) codes the same numbers with a
-  context-mixing coder of its own instead of cmix, and comes to 21,764
+  context-mixing coder of its own instead of cmix, and comes to 21,718
   bytes. But the coder adds about 18 KB of packed code to each copy of the
   program, so here v2 with cmix is far better.
 
