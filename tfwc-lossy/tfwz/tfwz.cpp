@@ -200,39 +200,48 @@ struct PlanEntry {
   bool noise = false;        // a "noise" line was given
   std::vector<int> classes;  // "classes" line: per-row coding class (0..7)
 };
+// whitespace-separated tokens of a line (portable: no strtok_r / strtok_s)
+static std::vector<std::string> split_ws(const char* line) {
+  std::vector<std::string> v;
+  const char* p = line;
+  while (*p) {
+    while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
+    const char* q = p;
+    while (*q && *q != ' ' && *q != '\t' && *q != '\r' && *q != '\n') q++;
+    if (q > p) v.emplace_back(p, q);
+    p = q;
+  }
+  return v;
+}
+
 static std::unordered_map<std::string, PlanEntry> read_plan(const char* path) {
   std::unordered_map<std::string, PlanEntry> plan;
   if (!path) return plan;
   FILE* f = fopen(path, "rb");
   if (!f) fail("cannot open plan %s", path);
-  char line[1 << 16];
+  static char line[1 << 20];
   while (fgets(line, sizeof line, f)) {
-    char* save = nullptr;
-    char* tok = strtok_r(line, " \t\r\n", &save);
-    if (!tok || tok[0] == '#') continue;
-    if (!strcmp(tok, "classes")) {
-      const char* name = strtok_r(nullptr, " \t\r\n", &save);
-      if (!name) fail("plan: bad classes line");
-      PlanEntry& ns = plan[name];
-      while ((tok = strtok_r(nullptr, " \t\r\n", &save))) {
-        const int c = atoi(tok);
+    const std::vector<std::string> w = split_ws(line);
+    if (w.empty() || w[0][0] == '#') continue;
+    if (w[0] == "classes") {
+      if (w.size() < 2) fail("plan: bad classes line");
+      PlanEntry& ns = plan[w[1]];
+      for (size_t k = 2; k < w.size(); k++) {
+        const int c = atoi(w[k].c_str());
         if (c < 0 || c > 7) fail("plan: class out of range");
         ns.classes.push_back(c);
       }
       continue;
     }
-    if (strcmp(tok, "noise")) fail("plan: unknown directive %s", tok);
-    const char* name = strtok_r(nullptr, " \t\r\n", &save);
-    const char* seed = strtok_r(nullptr, " \t\r\n", &save);
-    if (!name || !seed) fail("plan: bad noise line");
-    PlanEntry& ns = plan[name];
+    if (w[0] != "noise") fail("plan: unknown directive %s", w[0].c_str());
+    if (w.size() < 3) fail("plan: bad noise line");
+    PlanEntry& ns = plan[w[1]];
     ns.noise = true;
-    ns.seed = strtoull(seed, nullptr, 0);
-    tok = strtok_r(nullptr, " \t\r\n", &save);
-    if (!tok) ns.all = true;
+    ns.seed = strtoull(w[2].c_str(), nullptr, 0);
+    if (w.size() == 3) ns.all = true;
     else {
-      if (strcmp(tok, "rows")) fail("plan: expected rows");
-      while ((tok = strtok_r(nullptr, " \t\r\n", &save))) ns.rows.push_back(atoi(tok));
+      if (w[3] != "rows") fail("plan: expected rows");
+      for (size_t k = 4; k < w.size(); k++) ns.rows.push_back(atoi(w[k].c_str()));
     }
   }
   fclose(f);

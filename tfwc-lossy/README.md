@@ -31,10 +31,17 @@ converted to book1wrt's format (128 KB each):
 So on other text of the same kind the model loses 1.1–1.6%, not 0.93%: part of
 the fit is specific to book1wrt (its prefix drove the allocation).
 
+`coder/` is the full coder0 source (version 003a) with TFWZ support: it loads
+the `.tfwz` directly (`tf/weights_io_tfwz.inc`, hooked into
+`WeightsFile::load_compressed` and both engines' loaders), with output
+byte-identical to loading the decoded tfwc2. Build it as before (`gc.bat`).
+With this version book1wrt gives 169,219 bytes with the original weights and
+170,795 (+0.931%) with the lossy ones.
+
 ```sh
-cd tfwz && ./build.sh
-./tfwz d ../weights/6m-q4-t1lambda1-lossy.tfwz 6m-lossy.tfwc2   # < 1 s
-coder0 c book1wrt book1wrt.cmp 6m-lossy.tfwc2
+coder0 c book1wrt book1wrt.cmp ../weights/6m-q4-t1lambda1-lossy.tfwz
+# or, for other tools, convert to tfwc2:
+cd tfwz && ./build.sh && ./tfwz d ../weights/6m-q4-t1lambda1-lossy.tfwz 6m-lossy.tfwc2
 ```
 
 ## What the weights look like
