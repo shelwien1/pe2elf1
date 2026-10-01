@@ -1,0 +1,21 @@
+# Local setup for the encode.su vBulletin 4.2.6 restore (PHP 5.6 + MySQL 8.0)
+[mysqld]
+# PHP 5.6 mysqlnd only understands mysql_native_password in the server greeting
+default_authentication_plugin = mysql_native_password
+# PHP 5.6 mysqlnd does not know collation id 255 (utf8mb4_0900_ai_ci); use a charset it knows.
+# The forum tables are utf8mb3 and vBulletin connects with charset 'utf8'.
+character-set-server = utf8mb3
+collation-server = utf8mb3_general_ci
+# vBulletin 4 is not strict-mode clean (it also forces '' per session)
+sql_mode = NO_ENGINE_SUBSTITUTION
+# Not a replication source; saves disk and speeds up the import
+skip-log-bin
+# Mostly MyISAM tables
+key_buffer_size = 1G
+myisam_sort_buffer_size = 512M
+bulk_insert_buffer_size = 256M
+max_allowed_packet = 256M
+max_heap_table_size = 256M
+tmp_table_size = 256M
+innodb_buffer_pool_size = 512M
+max_connections = 300
