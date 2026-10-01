@@ -75,9 +75,8 @@ To go back to HTTPS URLs, run `php5.6 vb_set_option.php /var/www/encode.su bburl
   5,820 of the 8,689 attachment files are present, and every one of them matches its database size.
   The 2,868 files uploaded after 2021-03-22 are not in the archive, and one file from 2010 is also missing.
   For those, `attachment.php` returns vBulletin's placeholder image.
-* **`clientscript/post_thanks.js` is missing.** This is the Post Thank You add-on. The AJAX "Thanks" button falls back to a
-  normal page load, and the browser console shows a 404. The live site is behind a Cloudflare
-  challenge, so the file could not be fetched from there.
+* **`clientscript/post_thanks.js` is not in the archive.** It belongs to the Post Thank You Hack 7.84 add-on.
+  A copy was supplied separately and `setup.sh` installs it from `files/post_thanks.js`.
 * **Guest permissions are as in production.** Member profiles and the member list ask guests to log in,
   and the "Non-public" forum is hidden from guests. The vBulletin archive (`/archive/`) is disabled
   in the settings and redirects to `forum.php`.
@@ -100,3 +99,4 @@ To go back to HTTPS URLs, run `php5.6 vb_set_option.php /var/www/encode.su bburl
 | `vb_set_option.php` | changes a vBulletin setting and rebuilds the options datastore |
 | `vb_rebuild_styles.php` | rebuilds all styles and the CSS files |
 | `local_mirror_fixes.sql` | the two template URL fixes |
+| `files/post_thanks.js` | Post Thank You Hack 7.84 script missing from the archive |

@@ -36,6 +36,7 @@ check "showpost redirect"  "$BASE/showpost.php?p=65504"                         
 check "legacy thread URL"  "$BASE/showthread.php?t=3422"                           301
 check "legacy forum URL"   "$BASE/forumdisplay.php?f=2"                            301
 check "attachment"         "$BASE/attachment.php?attachmentid=7643"                200
+check "post_thanks.js"     "$BASE/clientscript/post_thanks.js"                     200 'function post_thanks_give'
 check "stylesheet"         "$BASE/clientscript/vbulletin_css/style00002l/main-rollup.css" 200 'http://encode\.su/images/' 'https://encode\.su'
 
 if [ "$fail" = 0 ]; then

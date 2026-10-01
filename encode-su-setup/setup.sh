@@ -98,6 +98,10 @@ if [ ! -f "$FORUM/includes/config.php" ]; then
 	mkdir -p "$WEBROOT"
 	tar -xJf "$FILES_ARCHIVE" -C "$WEBROOT" --no-same-owner
 fi
+# Post Thank You Hack 7.84 script, missing from the file archive (supplied separately)
+if [ ! -f "$FORUM/clientscript/post_thanks.js" ]; then
+	install -m 644 "$HERE/files/post_thanks.js" "$FORUM/clientscript/post_thanks.js"
+fi
 chown -R www-data:www-data "$FORUM"
 
 # --- 5. MySQL ---------------------------------------------------------------
