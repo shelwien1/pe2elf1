@@ -1,0 +1,4322 @@
+diff --git a/acp/adminreputation.php b/acp/adminreputation.php
+index b3d52ea..4c5fead 100644
+--- a/acp/adminreputation.php
++++ b/acp/adminreputation.php
+@@ -564,7 +564,7 @@ if ($_REQUEST['do'] == 'editreputation')
+ 		print_input_row($vbphrase['comment'], 'reputation[reason]', $repinfo['reason']);
+ 		print_input_row($vbphrase['reputation'], 'reputation[reputation]', $repinfo['reputation'], 0, 5);
+ 		construct_hidden_code('reputationid', $vbulletin->GPC['reputationid']);
+-		construct_hidden_code('oldreputation', $repinfo[reputation]);
++		construct_hidden_code('oldreputation', $repinfo['reputation']);
+ 		construct_hidden_code('userid', $repinfo['userid']);
+ 		print_submit_row();
+ 	}
+diff --git a/acp/apistats.php b/acp/apistats.php
+index a3a90fc..61b9b33 100644
+--- a/acp/apistats.php
++++ b/acp/apistats.php
+@@ -270,7 +270,7 @@ if ($_REQUEST['do'] == 'client')
+ 			$cell[] = "<a href=\"apilog.php?" . $vbulletin->session->vars['sessionurl'] . "do=viewclient&amp;apiclientid=$log[apiclientid]\"><b>" . htmlspecialchars_uni($log['clientname']) . "</b></a>";
+ 			$cell[] = iif(!empty($log['username']), "<a href=\"user.php?" . $vbulletin->session->vars['sessionurl'] . "do=edit&amp;u=$log[userid]\"><b>$log[username]</b></a>", $vbphrase['guest']);
+ 			$cell[] = $log['c'];
+-			$cell[] = "<input type=\"button\" class=\"button\" value=\"$vbphrase[view_logs]\" onclick=\"window.location = 'apilog.php?{$vbulletin->session->vars[sessionurl_js]}do=view&apiclientid=$log[apiclientid]';\" />";
++			$cell[] = "<input type=\"button\" class=\"button\" value=\"$vbphrase[view_logs]\" onclick=\"window.location = 'apilog.php?{$vbulletin->session->vars['sessionurl_js']}do=view&apiclientid=$log[apiclientid]';\" />";
+ 			print_cells_row($cell);
+ 		}
+ 
+diff --git a/acp/bbcode.php b/acp/bbcode.php
+index 30f889d..51dc741 100644
+--- a/acp/bbcode.php
++++ b/acp/bbcode.php
+@@ -365,7 +365,7 @@ if ($_REQUEST['do'] == 'modify')
+ 		if ($bbcode['buttonimage'])
+ 		{
+ 			$src = $bbcode['buttonimage'];
+-			if (!preg_match('#^[a-z]+://#i', $src) AND $src{0} != '/')
++			if (!preg_match('#^[a-z]+://#i', $src) AND $src[0] != '/')
+ 			{
+ 				$src = "../$src";
+ 			}
+diff --git a/acp/blog_admin.php b/acp/blog_admin.php
+index 97549a6..1818b63 100644
+--- a/acp/blog_admin.php
++++ b/acp/blog_admin.php
+@@ -29,7 +29,7 @@ $phrasegroups = array(
+ 	'user',
+ 	'cpuser',
+ );
+-if ($_GET['do'] == 'stats')
++if (isset($_GET['do']) AND $_GET['do'] == 'stats')
+ {
+ 	$phrasegroups[] = 'stats';
+ }
+diff --git a/acp/calendarpermission.php b/acp/calendarpermission.php
+index bf9f4ad..b0f1783 100644
+--- a/acp/calendarpermission.php
++++ b/acp/calendarpermission.php
+@@ -197,7 +197,7 @@ if ($_POST['do'] == 'doupdate')
+ }
+ 
+ // ###################### Start fpgetstyle #######################
+-function fetch_forumpermission_style($color = '', $canview)
++function fetch_forumpermission_style($color, $canview)
+ {
+ 	if ($canview == 0)
+ 	{
+diff --git a/acp/diagnostic.php b/acp/diagnostic.php
+index 54a0ef3..8001d00 100644
+--- a/acp/diagnostic.php
++++ b/acp/diagnostic.php
+@@ -245,7 +245,6 @@ if ($_POST['do'] == 'domail')
+ 	if (strpos(@ini_get('disable_functions'), 'ob_start') !== false)
+ 	{
+ 		// alternate method in case OB is disabled; probably not as fool proof
+-		@ini_set('track_errors', true);
+ 		$oldlevel = error_reporting();
+ 	}
+ 	else
+@@ -258,7 +257,9 @@ if ($_POST['do'] == 'domail')
+ 	if (strpos(@ini_get('disable_functions'), 'ob_start') !== false)
+ 	{
+ 		error_reporting($oldlevel);
+-		$errors = $php_errormsg;
++		// $php_errormsg (track_errors) was removed in PHP 8
++		$last_error = error_get_last();
++		$errors = $last_error ? $last_error['message'] : '';
+ 	}
+ 	else
+ 	{
+diff --git a/acp/forum.php b/acp/forum.php
+index 1bba8e7..8302a37 100644
+--- a/acp/forum.php
++++ b/acp/forum.php
+@@ -199,7 +199,7 @@ if ($_REQUEST['do'] == 'add' OR $_REQUEST['do'] == 'edit')
+ 
+ 	print_table_header($vbphrase['style_options']);
+ 
+-	if ($forum['styleid'] == 0)
++	if (vb_loose_equals($forum['styleid'], 0)) // new forums have styleid '' (PHP 8: '' != 0)
+ 	{
+ 		$forum['styleid'] = -1; // to get the "use default style" option selected
+ 	}
+diff --git a/acp/index.php b/acp/index.php
+index 7d0670a..c84c7ac 100644
+--- a/acp/index.php
++++ b/acp/index.php
+@@ -213,6 +213,8 @@ if ($_REQUEST['do'] == 'navprefs')
+ 	if ($vbulletin->GPC['expand'])
+ 	{
+ 		$groups = explode(',', $vbulletin->GPC['groups']);
++		// was '' (TYPE_STR): PHP 5 silently turned it into an array on $x[] = ..., PHP 7.1+ throws
++		$vbulletin->GPC['navprefs'] = array();
+ 
+ 		foreach ($groups AS $group)
+ 		{
+diff --git a/acp/language.php b/acp/language.php
+index ecb96d0..ecf39f5 100644
+--- a/acp/language.php
++++ b/acp/language.php
+@@ -353,7 +353,7 @@ if ($_REQUEST['do'] == 'files')
+ 	// download form
+ 	print_form_header('language', 'download', 0, 1, 'downloadform" target="download');
+ 	print_table_header($vbphrase['download']);
+-	print_label_row($vbphrase['language'], '<select name="dolanguageid" tabindex="1" class="bginput" onchange="js_set_charset(this.form, this.value)">' . ($vbulletin->debug ? '<option value="-1">' . MASTER_LANGUAGE . '</option>' : '') . construct_select_options($languages, $vbulletin->GPC['dolanguageid']) . '</select>', '', 'top', 'languageid');
++	print_label_row($vbphrase['language'], '<select name="dolanguageid" tabindex="1" class="bginput" onchange="js_set_charset(this.form, this.value)">' . ($vbulletin->debug ? '<option value="-1">MASTER_LANGUAGE</option>' : '') . construct_select_options($languages, $vbulletin->GPC['dolanguageid']) . '</select>', '', 'top', 'languageid');
+ 	print_select_row($vbphrase['product'], 'product', fetch_product_list());
+ 	print_input_row($vbphrase['filename'], 'filename', DEFAULT_FILENAME);
+ 	print_select_row($vbphrase['charset'], 'charset', $charsets);
+@@ -929,7 +929,7 @@ if ($_REQUEST['do'] == 'edit')
+ 	construct_hidden_code('dolanguageid', $vbulletin->GPC['dolanguageid']);
+ 	construct_hidden_code('fieldname', $vbulletin->GPC['fieldname']);
+ 	construct_hidden_code('page', $vbulletin->GPC['pagenumber']);
+-	print_table_header(construct_phrase($vbphrase['edit_translate_x_y_phrases'], $languages["{$vbulletin->GPC['dolanguageid']}"]['title'], "<span class=\"normal\">" . $phrasetypes["{$vbulletin->GPC['fieldname']}"][title] . "</span>") . ' <span class="normal">' . construct_phrase($vbphrase['page_x_of_y'], $vbulletin->GPC['pagenumber'], $numpages) . '</span>');
++	print_table_header(construct_phrase($vbphrase['edit_translate_x_y_phrases'], $languages["{$vbulletin->GPC['dolanguageid']}"]['title'], "<span class=\"normal\">" . $phrasetypes["{$vbulletin->GPC['fieldname']}"]['title'] . "</span>") . ' <span class="normal">' . construct_phrase($vbphrase['page_x_of_y'], $vbulletin->GPC['pagenumber'], $numpages) . '</span>');
+ 	print_column_style_code(array('', '" width="20'));
+ 	$lasttype = '';
+ 	foreach ($printers AS $key => $blarg)
+diff --git a/acp/misc.php b/acp/misc.php
+index 226ade1..689fa3a 100644
+--- a/acp/misc.php
++++ b/acp/misc.php
+@@ -21,7 +21,7 @@ define('NOZIP', 1);
+ 
+ // #################### PRE-CACHE TEMPLATES AND DATA ######################
+ $phrasegroups = array('maintenance', 'attachment_image');
+-if ($_POST['do'] == 'rebuildstyles')
++if (isset($_POST['do']) AND $_POST['do'] == 'rebuildstyles')
+ {
+ 	$phrasegroups[] = 'style';
+ }
+diff --git a/acp/moderator.php b/acp/moderator.php
+index c45252d..e13eb87 100644
+--- a/acp/moderator.php
++++ b/acp/moderator.php
+@@ -373,7 +373,7 @@ if ($_POST['do'] == 'update')
+ 		if (!empty($moddata->errors))
+ 		{
+ 			$html = "<ul><li> " . $moddata->info['user']['username'] . "</li>";
+-			$html .= "<ul><li>" . implode($moddata->errors, "</li>\n<li>") . "</li></ul>";
++			$html .= "<ul><li>" . implode("</li>\n<li>", $moddata->errors) . "</li></ul>";
+ 			$html .="</ul>";
+ 			$dm_errors .= $html;
+ 		}
+@@ -400,7 +400,7 @@ if ($_POST['do'] == 'update')
+ 		print_description_row("$vbphrase[error_occurred_while_making_users_moderators]<blockquote>$dm_errors<br /></blockquote>");
+ 		if (!empty($not_affected))
+ 		{
+-			print_description_row("$vbphrase[the_following_users_were_made_moderators]<blockquote><ul><li>" . implode($not_affected, "</li>\n<li>") . "</li></ul></blockquote>");
++			print_description_row("$vbphrase[the_following_users_were_made_moderators]<blockquote><ul><li>" . implode("</li>\n<li>", $not_affected) . "</li></ul></blockquote>");
+ 		}
+ 		print_table_footer();
+ 		print_cp_footer();
+diff --git a/acp/prefix.php b/acp/prefix.php
+index c95c9b7..3ede7d4 100644
+--- a/acp/prefix.php
++++ b/acp/prefix.php
+@@ -71,9 +71,9 @@ if ($_REQUEST['do'] == 'duplicate')
+ 
+ 	while ($prefix = $vbulletin->db->fetch_array($prefixes_result))
+ 	{
+-		$prefixsetphrase = htmlspecialchars_uni($vbphrase["prefixset_{$prefix[prefixsetid]}_title"]);
++		$prefixsetphrase = htmlspecialchars_uni($vbphrase["prefixset_{$prefix['prefixsetid']}_title"]);
+ 
+-		$prefixes["$prefixsetphrase"]["$prefix[prefixid]"] = htmlspecialchars_uni($vbphrase["prefix_{$prefix[prefixid]}_title_plain"]);
++		$prefixes["$prefixsetphrase"]["$prefix[prefixid]"] = htmlspecialchars_uni($vbphrase["prefix_{$prefix['prefixid']}_title_plain"]);
+ 	}
+ 
+ 	if (empty($prefixes))
+diff --git a/acp/profilefield.php b/acp/profilefield.php
+index f52efde..ccf9ab2 100644
+--- a/acp/profilefield.php
++++ b/acp/profilefield.php
+@@ -195,7 +195,7 @@ if ($_POST['do'] == 'updatecat')
+ 			(
+ 				0,
+ 				'cprofilefield',
+-				'category{$vbulletin->GPC[profilefieldcategoryid]}_title',
++				'category{$vbulletin->GPC['profilefieldcategoryid']}_title',
+ 				'" . $db->escape_string($vbulletin->GPC['title']) .  "',
+ 				'vbulletin',
+ 				'" . $db->escape_string($vbulletin->userinfo['username']) . "',
+@@ -205,7 +205,7 @@ if ($_POST['do'] == 'updatecat')
+ 			(
+ 				0,
+ 				'cprofilefield',
+-				'category{$vbulletin->GPC[profilefieldcategoryid]}_desc',
++				'category{$vbulletin->GPC['profilefieldcategoryid']}_desc',
+ 				'" . $db->escape_string($vbulletin->GPC['desc']) . "',
+ 				'vbulletin',
+ 				'" . $db->escape_string($vbulletin->userinfo['username']) . "',
+diff --git a/acp/repair.php b/acp/repair.php
+index 74e9535..23f1830 100644
+--- a/acp/repair.php
++++ b/acp/repair.php
+@@ -399,7 +399,7 @@ if ($_REQUEST['do'] == 'fixunique')
+ 	{
+ 		if (preg_match('#unique key (\w+)\s*\(([\w, ]+)\)#siU', $query, $regs) OR ($tablename == 'access' AND preg_match('#primary key (\w+)\s*\(([\w, ]+)\)#siU', $query, $regs)))
+ 		{
+-			if (preg_match('#\t+(\w+id)\s+[\w- ]+AUTO_INCREMENT#iU', $query, $regs2))
++			if (preg_match('#\t+(\w+id)\s+[\w\- ]+AUTO_INCREMENT#iU', $query, $regs2)) // PCRE2 (PHP 7.3+) needs the escaped "-"
+ 			{
+ 				$autoinc = $regs2[1];
+ 			}
+diff --git a/acp/skimlinks.php b/acp/skimlinks.php
+index 771b599..89734ff 100644
+--- a/acp/skimlinks.php
++++ b/acp/skimlinks.php
+@@ -620,7 +620,7 @@ $skimlinks_forum_url = str_replace('http://', '', $vbulletin->options['bburl']);
+ 	<?php
+ }
+ 
+-function getCheckbox($name, $value = 1, $checked = true, array $attributes = null)
++function getCheckbox($name, $value = 1, $checked = true, $attributes = null)
+ {
+ 	$attributeString = '';
+ 
+@@ -959,7 +959,7 @@ if ($_POST['do'] == 'update')
+ 			break;
+ 		}
+ 
+-		case advanced:
++		case 'advanced':
+ 		{
+ 			$inputArray = array(
+ 				'skimlinks_disable_groups'           => TYPE_STR,
+diff --git a/acp/socialgroups.php b/acp/socialgroups.php
+index 683951c..dcdbc20 100644
+--- a/acp/socialgroups.php
++++ b/acp/socialgroups.php
+@@ -381,7 +381,7 @@ if ($_POST['do'] == 'killcategory')
+ 		$categoriesresult = $db->query_read("
+ 			SELECT *
+ 			FROM " . TABLE_PREFIX . "socialgroupcategory
+-			WHERE socialgroupcategoryid IN({$vbulletin->GPC[socialgroupcategoryid]}, {$vbulletin->GPC[destsocialgroupcategoryid]})
++			WHERE socialgroupcategoryid IN({$vbulletin->GPC['socialgroupcategoryid']}, {$vbulletin->GPC['destsocialgroupcategoryid']})
+ 		");
+ 		if ($db->num_rows($categoriesresult) == 2)
+ 		{
+@@ -395,7 +395,7 @@ if ($_POST['do'] == 'killcategory')
+ 			$groupsresult = $db->query_read("
+ 				SELECT *
+ 				FROM " . TABLE_PREFIX . "socialgroup
+-				WHERE socialgroupcategoryid = {$vbulletin->GPC[socialgroupcategoryid]}
++				WHERE socialgroupcategoryid = {$vbulletin->GPC['socialgroupcategoryid']}
+ 			");
+ 			while ($group = $db->fetch_array($groupsresult))
+ 			{
+@@ -483,7 +483,7 @@ if ($_REQUEST['do'] == 'deletecategory')
+ 			}
+ 			else
+ 			{
+-				$category_options["$category[socialgroupcategoryid]"] = $category['title'] . " (" . construct_phrase($vbphrase['x_groups'], $category[groupcount]) . ")";
++				$category_options["$category[socialgroupcategoryid]"] = $category['title'] . " (" . construct_phrase($vbphrase['x_groups'], $category['groupcount']) . ")";
+ 			}
+ 		}
+ 		unset($categories);
+diff --git a/acp/subscriptions.php b/acp/subscriptions.php
+index dfa6373..0e89e3e 100644
+--- a/acp/subscriptions.php
++++ b/acp/subscriptions.php
+@@ -36,7 +36,7 @@ $vbulletin->input->clean_array_gpc('r', array(
+ ));
+ 
+ // ############################# LOG ACTION ###############################
+-log_admin_action(!empty($vbulletin->GPC['userid']) ? "user id = " . $vbulletin->GPC['userid'] : !empty($vbulletin->GPC['subscriptionid']) ? "subscriptionid id = " . $vbulletin->GPC['subscriptionid'] : '');
++log_admin_action(!empty($vbulletin->GPC['userid']) ? "user id = " . $vbulletin->GPC['userid'] : (!empty($vbulletin->GPC['subscriptionid']) ? "subscriptionid id = " . $vbulletin->GPC['subscriptionid'] : ''));
+ 
+ // ########################################################################
+ // ######################### START MAIN SCRIPT ############################
+@@ -557,7 +557,7 @@ if ($_REQUEST['do'] == 'find')
+ 				$vbphrase['showing_subscriptions_x_to_y_of_z'],
+ 				($vbulletin->GPC['limitstart'] + 1),
+ 				iif($limitfinish > $countusers['users'], $countusers['users'], $limitfinish),
+-				$countusers[users]
++				$countusers['users']
+ 				), 6);
+ 
+ 		$addon  = "&amp;subscriptionid=" . $vbulletin->GPC['subscriptionid'];
+@@ -1597,7 +1597,7 @@ if ($_REQUEST['do'] == 'transactions')
+ 						$vbphrase['showing_transactions_x_to_y_of_z'],
+ 						($vbulletin->GPC['limitstart'] + 1),
+ 						iif($limitfinish > $counttrans['trans'], $counttrans['trans'], $limitfinish),
+-						$counttrans[trans]
++						$counttrans['trans']
+ 						), 7);
+ 
+ 				$addon = '&amp;limitnumber=' . $vbulletin->GPC['limitnumber'];
+diff --git a/acp/template.php b/acp/template.php
+index bd01e39..1c52536 100644
+--- a/acp/template.php
++++ b/acp/template.php
+@@ -15,7 +15,7 @@ error_reporting(E_ALL & ~E_NOTICE);
+ ignore_user_abort(true);
+ 
+ // Get styleid before global.php cleans it
+-$realstyleid = $_REQUEST['styleid'];
++$realstyleid = isset($_REQUEST['styleid']) ? $_REQUEST['styleid'] : null;
+ 
+ // ##################### DEFINE IMPORTANT CONSTANTS #######################
+ if (isset($_POST['do']))
+@@ -47,7 +47,7 @@ $vbulletin->input->clean_array_gpc('r', array(
+ ));
+ 
+ // ############################# LOG ACTION ###############################
+-log_admin_action(!empty($vbulletin->GPC['templateid']) ? 'template id = ' . $vbulletin->GPC['templateid'] : !empty($vbulletin->GPC['dostyleid']) ? 'style id = ' . $vbulletin->GPC['dostyleid'] : '');
++log_admin_action(!empty($vbulletin->GPC['templateid']) ? 'template id = ' . $vbulletin->GPC['templateid'] : (!empty($vbulletin->GPC['dostyleid']) ? 'style id = ' . $vbulletin->GPC['dostyleid'] : ''));
+ 
+ // ########################################################################
+ // ######################### START MAIN SCRIPT ############################
+diff --git a/acp/user.php b/acp/user.php
+index cc69ae3..6ad20d5 100644
+--- a/acp/user.php
++++ b/acp/user.php
+@@ -194,7 +194,7 @@ if ($_REQUEST['do'] == 'remove')
+ 
+ 	if ($hasgroups['total'])
+ 	{
+-		$extratext .= "<br /><br />" . construct_phrase($vbphrase[delete_user_transfer_social_groups], $hasgroups['total']) . " <input type=\"checkbox\" name=\"transfer_groups\" value=\"1\" />";
++		$extratext .= "<br /><br />" . construct_phrase($vbphrase['delete_user_transfer_social_groups'], $hasgroups['total']) . " <input type=\"checkbox\" name=\"transfer_groups\" value=\"1\" />";
+ 	}
+ 
+ 	print_delete_confirmation('user', $vbulletin->GPC['userid'], 'user', 'kill', 'user', '', $extratext);
+diff --git a/acp/usergroup.php b/acp/usergroup.php
+index 9a8ef13..bbcfd66 100644
+--- a/acp/usergroup.php
++++ b/acp/usergroup.php
+@@ -902,7 +902,7 @@ if ($_REQUEST['do'] == 'modify')
+ 
+ 		if ($promotions["$usergroup[usergroupid]"])
+ 		{
+-			$options['promote'] .= " (${promotions[$usergroup[usergroupid]]})";
++			$options['promote'] .= " ({$promotions[$usergroup['usergroupid']]})"; // "${...}" is deprecated in PHP 8.2
+ 		}
+ 
+ 		$cell = array();
+diff --git a/acp/verify.php b/acp/verify.php
+index d4f5256..e97d02b 100644
+--- a/acp/verify.php
++++ b/acp/verify.php
+@@ -520,7 +520,7 @@ if ($_POST['do'] == 'killquestion')
+ 	$db->query_write("
+ 		DELETE FROM " . TABLE_PREFIX . "phrase
+ 		WHERE fieldname = 'hvquestion' AND
+-			varname = 'question" . $question[questionid] . "'
++			varname = 'question" . $question['questionid'] . "'
+ 	");
+ 
+ 	require_once(DIR . '/includes/adminfunctions_language.php');
+diff --git a/activity.php b/activity.php
+index b17a6dc..db97cc5 100644
+--- a/activity.php
++++ b/activity.php
+@@ -16,7 +16,7 @@ error_reporting(E_ALL & ~E_NOTICE);
+ // #################### DEFINE IMPORTANT CONSTANTS #######################
+ define('THIS_SCRIPT', 'activity');
+ define('CSRF_PROTECTION', true);
+-if ($_POST['ajax'] == 1)
++if (isset($_POST['ajax']) AND $_POST['ajax'] == 1)
+ {
+ 	define('LOCATION_BYPASS', 1);
+ 	define('NOPMPOPUP', 1);
+diff --git a/ajax.php b/ajax.php
+index f750202..417854c 100644
+--- a/ajax.php
++++ b/ajax.php
+@@ -25,7 +25,7 @@ define('VB_ENTRY_TIME', microtime(true));
+ // ################### PRE-CACHE TEMPLATES AND DATA ######################
+ // get special phrase groups
+ $phrasegroups = array('posting', 'search', 'socialgroups');
+-switch ($_POST['do'])
++switch (isset($_POST['do']) ? $_POST['do'] : null)
+ {
+ 	case 'fetchuserfield':
+ 	case 'saveuserfield':
+diff --git a/album.php b/album.php
+index 8f2b0ab..679446d 100644
+--- a/album.php
++++ b/album.php
+@@ -101,11 +101,11 @@ if (empty($_REQUEST['do']))
+ 			$_REQUEST['do'] = 'album';
+ 		}
+ 	}
+-	else if ($_REQUEST['u'] OR $_REQUEST['userid'])
++	else if (!empty($_REQUEST['u']) OR !empty($_REQUEST['userid']))
+ 	{
+ 		$_REQUEST['do'] = 'user';
+ 	}
+-	else if($_REQUEST['do'] != 'latest')
++	else if (!isset($_REQUEST['do']) OR $_REQUEST['do'] != 'latest')
+ 	{
+ 		$_REQUEST['do'] = 'overview';
+ 	}
+@@ -1203,7 +1203,7 @@ if ($_POST['do'] == 'doaddgroup')
+ 
+ 					$activity = new vB_ActivityStream_Manage('socialgroup', 'photo');
+ 					$activity->set('contentid', $attachmentid);
+-					$activity->set('userid', $userinfo[userid]);
++					$activity->set('userid', $userinfo['userid']);
+ 					$activity->set('dateline', TIMENOW);
+ 					$activity->set('action', 'create');
+ 					$activity->save();
+diff --git a/api.php b/api.php
+index acccb2f..0bdbd1f 100644
+--- a/api.php
++++ b/api.php
+@@ -21,11 +21,11 @@ define('NOCOOKIES', true);
+ require_once(CWD_API . '/functions_api.php');
+ require_once(CWD_API . '/class_api.php');
+ 
+-$api_m = trim($_REQUEST['api_m']);
++$api_m = trim(isset($_REQUEST['api_m']) ? $_REQUEST['api_m'] : '');
+ if (strpos($api_m, 'cms.') !== 0)
+ {
+ 	// Method name should be in the format "scriptname_action" or "scriptname"
+-	list($api_script, $action) = explode("_", $api_m);
++	list($api_script, $action) = array_pad(explode("_", $api_m), 2, '');
+ 	$api_script = str_replace('.', '_', trim($api_script));
+ 	$_REQUEST['do'] = $_GET['do'] = $_POST['do'] = trim($action);
+ 	define('VB_API_CMS', false);
+@@ -40,7 +40,7 @@ else
+ 	define('VB_API_CMS', true);
+ }
+ // API Version
+-$api_version = intval($_REQUEST['api_v']);
++$api_version = isset($_REQUEST['api_v']) ? intval($_REQUEST['api_v']) : 0;
+ if (!$api_version)
+ {
+ 	$api_version = VB_API_VERSION;
+@@ -55,13 +55,13 @@ elseif ($api_version > VB_API_VERSION)
+ }
+ 
+ // Client ID
+-$api_c = intval($_REQUEST['api_c']);
++$api_c = isset($_REQUEST['api_c']) ? intval($_REQUEST['api_c']) : 0;
+ 
+ // Access token
+-$api_s = trim($_REQUEST['api_s']);
++$api_s = trim(isset($_REQUEST['api_s']) ? $_REQUEST['api_s'] : '');
+ 
+ // Request Signature Verification Prepare (Verified in init.php)
+-$api_sig = trim($_REQUEST['api_sig']);
++$api_sig = trim(isset($_REQUEST['api_sig']) ? $_REQUEST['api_sig'] : '');
+ unset($_GET['']); // See VBM-835
+ $VB_API_PARAMS_TO_VERIFY = $_GET;
+ unset($VB_API_PARAMS_TO_VERIFY['api_c'], $VB_API_PARAMS_TO_VERIFY['api_v'], $VB_API_PARAMS_TO_VERIFY['api_s'], $VB_API_PARAMS_TO_VERIFY['api_sig'],
+@@ -82,7 +82,7 @@ if (!$api_script)
+ }
+ 
+ // Check if the api method has been defined in versions
+-$api_script = loadAPI($api_script, $_REQUEST['do'], $api_version);
++$api_script = loadAPI($api_script, isset($_REQUEST['do']) ? $_REQUEST['do'] : '', $api_version);
+ 
+ //find the latest version of the class defined.  This could be written more
+ //cleanly but I'm trying not to touch the logic below that runs the class.
+diff --git a/assetmanage.php b/assetmanage.php
+index d7dccb1..b0091b6 100644
+--- a/assetmanage.php
++++ b/assetmanage.php
+@@ -372,7 +372,7 @@ if ($_POST['ajax'])
+ 			UPDATE " . TABLE_PREFIX . "attachment
+ 			SET displayorder =
+ 				CASE
+-					" . implode($casesql, "\r\n") . "
++					" . implode("\r\n", $casesql) . "
+ 					ELSE displayorder
+ 				END
+ 			WHERE userid = $userinfo[userid]
+@@ -585,7 +585,7 @@ if ($_POST['ajax'])
+ 				UPDATE " . TABLE_PREFIX . "attachmentcategory
+ 				SET displayorder =
+ 				CASE
+-					" . implode($casesql, "\r\n") . "
++					" . implode("\r\n", $casesql) . "
+ 					ELSE displayorder
+ 				END
+ 				WHERE
+diff --git a/attachment.php b/attachment.php
+index 6555aed..1556a5c 100644
+--- a/attachment.php
++++ b/attachment.php
+@@ -30,14 +30,14 @@ define('NOPMPOPUP', 1);
+ define('NONOTICES', 1);
+ 
+ // attachment.php/$attachmentid/file.mp3 -- for podcast and confused clients that determine file type in <enclosure> by the url extension <iTunes, I'm looking in your direction>
+-if (!$_REQUEST['attachmentid'])
++if (empty($_REQUEST['attachmentid']))
+ {
+ 	$url_info = $_SERVER['REQUEST_URI'] ? $_SERVER['REQUEST_URI'] : $_SERVER['PHP_SELF'];
+ 
+ 	if ($url_info != '')
+ 	{
+ 		preg_match('#attachment\.php/(\d+)/#si', $url_info, $matches);
+-		$_REQUEST['attachmentid'] = intval($matches[1]);
++		$_REQUEST['attachmentid'] = isset($matches[1]) ? intval($matches[1]) : 0;
+ 	}
+ }
+ 
+@@ -56,7 +56,7 @@ if (empty($_REQUEST['attachmentid']))
+ 	exit;
+ }
+ 
+-if ($_REQUEST['stc'] == 1) // we were called as <img src=> from showthread.php
++if (isset($_REQUEST['stc']) AND $_REQUEST['stc'] == 1) // we were called as <img src=> from showthread.php
+ {
+ 	define('NOSHUTDOWNFUNC', 1);
+ }
+@@ -160,7 +160,8 @@ if ($browsinginfo = $attach->fetch_browsinginfo())
+ 		$$arrayname = array();
+ 		foreach ($values AS $index => $value)
+ 		{
+-			$$arrayname[$$index] = $value;
++			// PHP 7 evaluates $$a[...] left to right; spell out the intended ${$a}[$index]
++			${$arrayname}[$index] = $value;
+ 		}
+ 	}
+ }
+diff --git a/blog.php b/blog.php
+index 06fc920..de6c980 100644
+--- a/blog.php
++++ b/blog.php
+@@ -58,12 +58,12 @@ $phrasegroups = array(
+ );
+ 
+ // $actionphrases is broken in 3.6.7 so simulate
+-if (in_array($_REQUEST['do'], array('sendtofriend', 'dosendtofriend')))
++if (isset($_REQUEST['do']) AND in_array($_REQUEST['do'], array('sendtofriend', 'dosendtofriend')))
+ {
+ 	$phrasegroups[] = 'messaging';
+ }
+ 
+-if (in_array($_REQUEST['do'], array('list', 'blog', 'comments')))
++if (isset($_REQUEST['do']) AND in_array($_REQUEST['do'], array('list', 'blog', 'comments')))
+ {
+ 	$phrasegroups[] = 'inlinemod';
+ }
+@@ -78,12 +78,12 @@ $specialtemplates = array(
+ 	'blogfeatured_entries',
+ );
+ 
+-if (in_array($_REQUEST['do'], array('list', 'bloglist', 'comments')))
++if (isset($_REQUEST['do']) AND in_array($_REQUEST['do'], array('list', 'bloglist', 'comments')))
+ {
+ 	$specialtemplates[] = 'blogtagcloud';
+ }
+ 
+-if ($_REQUEST['do'] == 'blog')
++if (isset($_REQUEST['do']) AND $_REQUEST['do'] == 'blog')
+ {
+ 	$specialtemplates[] = 'bookmarksitecache';
+ }
+diff --git a/blog_ajax.php b/blog_ajax.php
+index d56dd80..838ead6 100644
+--- a/blog_ajax.php
++++ b/blog_ajax.php
+@@ -30,11 +30,11 @@ $phrasegroups = array(
+ 	'user',
+ 	'vbblogglobal',
+ );
+-if (in_array($_POST['do'], array('quickeditcomment', 'quickeditentry')))
++if (isset($_POST['do']) AND in_array($_POST['do'], array('quickeditcomment', 'quickeditentry')))
+ {
+ 	$phrasegroups[] = 'posting';
+ }
+-else if ($_POST['do'] == 'loadentry')
++else if (isset($_POST['do']) AND $_POST['do'] == 'loadentry')
+ {
+ 	$phrasegroups[] = 'postbit';
+ }
+diff --git a/blog_inlinemod.php b/blog_inlinemod.php
+index 421c0b1..21e40ad 100644
+--- a/blog_inlinemod.php
++++ b/blog_inlinemod.php
+@@ -33,7 +33,7 @@ $phrasegroups = array(
+ // get special data templates from the datastore
+ $specialtemplates = array('blogcategorycache');
+ 
+-if (!$_REQUEST['userid'])
++if (empty($_REQUEST['userid']))
+ {
+ 	$specialtemplates[] = 'blogtagcloud';
+ }
+diff --git a/blog_post.php b/blog_post.php
+index cb6aa63..d5f97e4 100644
+--- a/blog_post.php
++++ b/blog_post.php
+@@ -22,7 +22,7 @@ define('VBBLOG_STYLE', true);
+ define('VBBLOG_SCRIPT', true);
+ define('GET_EDIT_TEMPLATES', 'newblog,editblog,updateblog,comment,editcomment,postcomment');
+ 
+-if ($_POST['do'] == 'postcomment')
++if (isset($_POST['do']) AND $_POST['do'] == 'postcomment')
+ {
+ 	if (isset($_POST['ajax']))
+ 	{
+diff --git a/blog_tag.php b/blog_tag.php
+index b79592c..4fcd1bb 100644
+--- a/blog_tag.php
++++ b/blog_tag.php
+@@ -77,7 +77,7 @@ if (empty($_REQUEST['do']))
+ 	}
+ }
+ 
+-if ($_REQUEST['do'] == 'cloud')
++if (isset($_REQUEST['do']) AND $_REQUEST['do'] == 'cloud')
+ {
+ 	$specialtemplates[] = 'blogtagcloud';
+ }
+diff --git a/blog_usercp.php b/blog_usercp.php
+index 17209bf..2f946bb 100644
+--- a/blog_usercp.php
++++ b/blog_usercp.php
+@@ -939,8 +939,8 @@ if ($_REQUEST['do'] == 'managetrackback')
+ 
+ 		switch ($vbulletin->GPC['type'])
+ 		{
+-			case 'fa';
+-			case 'fm';
++			case 'fa':
++			case 'fm':
+ 					if (!$canmoderateall)
+ 					{
+ 						$type = 'oa';
+@@ -2428,7 +2428,7 @@ if ($_POST['do'] == 'deleteuser')
+ 		$db->query_write("
+ 			DELETE FROM " . TABLE_PREFIX . "blog_groupmembership
+ 			WHERE bloguserid = " . $vbulletin->userinfo['userid'] . "
+-			AND userid IN (" . implode($remove, ', ') . ")
++			AND userid IN (" . implode(', ', $remove) . ")
+ 		");
+ 
+ 		$db->query_write("
+@@ -2439,7 +2439,7 @@ if ($_POST['do'] == 'deleteuser')
+ 			WHERE
+ 				userid = " . $vbulletin->userinfo['userid'] . "
+ 					AND
+-				postedby_userid IN (" . implode($remove, ', ') . ")
++				postedby_userid IN (" . implode(', ', $remove) . ")
+ 		");
+ 
+ 		build_blog_memberids($vbulletin->userinfo['userid']);
+diff --git a/converse.php b/converse.php
+index 2d16a1c..e9ce878 100644
+--- a/converse.php
++++ b/converse.php
+@@ -232,7 +232,7 @@ if ($vminfo['vmid'])
+ 		WHERE (
+ 			(" . implode(" AND ", $sql1) . ")
+ 			OR (" . implode(" AND ", $sql2) . ")
+-		) AND dateline >= " . $vminfo[dateline]
++		) AND dateline >= " . $vminfo['dateline']
+ 	);
+ 	$vbulletin->GPC['pagenumber'] = ceil($getpagenum['comments'] / $perpage);
+ }
+diff --git a/cron.php b/cron.php
+index de46774..b505996 100644
+--- a/cron.php
++++ b/cron.php
+@@ -68,7 +68,7 @@ if (empty($vbulletin->options['crontab']))
+ 
+ if (!defined('NOSHUTDOWNFUNC') AND !$vbulletin->options['crontab'])
+ {
+-	vB_Shutdown::add('exec_cron');
++	vB_Shutdown::instance()->add('exec_cron');
+ }
+ else
+ {
+diff --git a/css.php b/css.php
+index 612d9ba..ab934a3 100644
+--- a/css.php
++++ b/css.php
+@@ -52,7 +52,7 @@ $phrasegroups = array();
+ $specialtemplates = array();
+ 
+ // pre-cache templates used by all actions  - build
+-preg_match_all('#([a-z0-9_\-]+\.css)#i', $_REQUEST['sheet'], $matches);
++preg_match_all('#([a-z0-9_\-]+\.css)#i', isset($_REQUEST['sheet']) ? $_REQUEST['sheet'] : '', $matches);
+ if ($matches[1])
+ {
+ 	foreach ($matches[1] AS $cssfile)
+diff --git a/external.php b/external.php
+index 34932ec..62a7add 100644
+--- a/external.php
++++ b/external.php
+@@ -44,7 +44,7 @@ $actiontemplates = array();
+ 
+ // take the first of "forumids" and make it "forumid" for style stuff
+ // see bug #22743
+-if ($_REQUEST['forumids'])
++if (!empty($_REQUEST['forumids']))
+ {
+ 	// quick way of getting the first value
+ 	$_REQUEST['forumid'] = intval($_REQUEST['forumids']);
+diff --git a/forumrunner/checkstatus.php b/forumrunner/checkstatus.php
+index 0a1b6fe..a8f5132 100644
+--- a/forumrunner/checkstatus.php
++++ b/forumrunner/checkstatus.php
+@@ -24,7 +24,9 @@ if (!is_object($vbulletin->db)) {
+     exit;
+ }
+ 
+-define(MCWD, DIR . '/forumrunner');
++if (!defined('MCWD')) {
++    define('MCWD', DIR . '/forumrunner'); // was define(MCWD, ...): PHP 8 has no bareword constants
++}
+ 
+ require_once(DIR . '/forumrunner/support/Snoopy.class.php');
+ require_once(DIR . '/forumrunner/support/JSON.php');
+diff --git a/forumrunner/include/album.php b/forumrunner/include/album.php
+index 9171ef7..1301425 100644
+--- a/forumrunner/include/album.php
++++ b/forumrunner/include/album.php
+@@ -254,7 +254,7 @@ do_get_albums ()
+             'photo_count' => strval($album['picturecount']),
+         );
+         if ($album['hasthumbnail']) {
+-            $out['cover_url'] = fr_fix_url("attachment.php?{$session[sessionurl]}attachmentid={$album['attachmentid']}&thumb=1");
++            $out['cover_url'] = fr_fix_url("attachment.php?{$session['sessionurl']}attachmentid={$album['attachmentid']}&thumb=1");
+         }
+         if ($album['lastpicturedate']) {
+             $out['update_date'] = prepare_utf8_string($album['picturedate'] . ' ' . $album['picturetime']);
+@@ -365,7 +365,7 @@ do_get_photos ()
+ 
+         ($hook = vBulletinHook::fetch_hook('album_album_picturebit')) ? eval($hook) : false;
+ 
+-        $photo_url = "attachment.php?{$session[sessionurl]}attachmentid=$picture[attachmentid]";
++        $photo_url = "attachment.php?{$session['sessionurl']}attachmentid=$picture[attachmentid]";
+ 
+         $out_photos[] = array(
+             'photoid' => $picture['attachmentid'],
+@@ -379,7 +379,7 @@ do_get_photos ()
+ 
+     $show['add_picture_option'] = (
+         $userinfo['userid'] == $vbulletin->userinfo['userid']
+-        AND fetch_count_overage($userinfo['userid'], $albuminfo[albumid], $vbulletin->userinfo['permissions']['albummaxpics']) <= 0
++        AND fetch_count_overage($userinfo['userid'], $albuminfo['albumid'], $vbulletin->userinfo['permissions']['albummaxpics']) <= 0
+         AND (
+             !$vbulletin->options['album_maxpicsperalbum']
+             OR $totalpictures - $vbulletin->options['album_maxpicsperalbum'] < 0
+diff --git a/forumrunner/include/attach.php b/forumrunner/include/attach.php
+index 05af62f..a2ee1fb 100644
+--- a/forumrunner/include/attach.php
++++ b/forumrunner/include/attach.php
+@@ -34,13 +34,13 @@ if (!$vbulletin->userinfo['userid'] OR empty($vbulletin->GPC['poststarttime']))
+ $vbulletin->GPC['posthash'] = md5($vbulletin->GPC['poststarttime'] . $vbulletin->userinfo['userid'] . $vbulletin->userinfo['salt']);
+ 
+ if ($vbulletin->GPC_exists['forumid']) {
+-    $values[f] = $vbulletin->GPC['forumid'];
++    $values['f'] = $vbulletin->GPC['forumid'];
+ }
+ if ($vbulletin->GPC_exists['threadid']) {
+-    $values[t] = $vbulletin->GPC['threadid'];
++    $values['t'] = $vbulletin->GPC['threadid'];
+ }
+-$values[poststarttime] = $vbulletin->GPC['poststarttime'];
+-$values[posthash] = $vbulletin->GPC['posthash'];
++$values['poststarttime'] = $vbulletin->GPC['poststarttime'];
++$values['posthash'] = $vbulletin->GPC['posthash'];
+ 
+ if (!$attachlib = vB_Attachment_Store_Library::fetch_library($vbulletin, $contenttypeid, $vbulletin->GPC['categoryid'], $values)) {
+     json_error("eek");
+diff --git a/forumrunner/include/get_forum.php b/forumrunner/include/get_forum.php
+index 5a5fb71..e5e29d4 100644
+--- a/forumrunner/include/get_forum.php
++++ b/forumrunner/include/get_forum.php
+@@ -863,7 +863,7 @@ do_get_forum ()
+     	$pageinfo_replycount = $pageinfo + array('sort' => 'replycount', 'order' => ('replycount' == $sortfield) ? $oppositesort : 'desc');
+     	$pageinfo_views = $pageinfo + array('sort' => 'views', 'order' => ('views' == $sortfield) ? $oppositesort : 'desc');
+     
+-    	$pageinfo_sort = $pageinfo + array(sort => $sortfield, 'order' => $oppositesort, 'pp' => $perpage, 'page' => $pagenumber);
++    	$pageinfo_sort = $pageinfo + array('sort' => $sortfield, 'order' => $oppositesort, 'pp' => $perpage, 'page' => $pagenumber);
+     
+     
+     	if ($totalthreads > 0 OR $stickyids)
+diff --git a/forumrunner/include/moderation.php b/forumrunner/include/moderation.php
+index 1349a44..9dd4cd7 100644
+--- a/forumrunner/include/moderation.php
++++ b/forumrunner/include/moderation.php
+@@ -322,7 +322,7 @@ do_moderation ()
+ 			standard_error(fetch_error('you_do_not_have_permission_to_delete_threads_and_posts', $post['title'], $post['thread_title'], $vbulletin->forumcache["$post[forumid]"]['title']));
+ 		}
+ 		else if (
+-			!physicaldel
++			!$physicaldel
+ 			AND (
+ 				!can_moderate($post['forumid'], 'candeleteposts')
+ 				AND (
+@@ -1385,7 +1385,7 @@ do_moderation ()
+ }
+ 
+ function
+-get_forums ($parentid = -1, &$forums)
++get_forums ($parentid, &$forums)
+ {
+     global $vbulletin, $db, $foruminfo, $forumperms, $threadinfo, $postinfo, $vbphrase;
+     
+@@ -1409,7 +1409,7 @@ get_forums ($parentid = -1, &$forums)
+ 		$forum = $vbulletin->forumcache["$forumid"];
+ 
+ 		$optionvalue = $forumid;
+-		$optiontitle = $forum[title];
++		$optiontitle = $forum['title'];
+ 
+ 		$ok = true;
+ 		if ($forum['link'])
+diff --git a/forumrunner/include/pms.php b/forumrunner/include/pms.php
+index b31d00e..d359934 100644
+--- a/forumrunner/include/pms.php
++++ b/forumrunner/include/pms.php
+@@ -458,8 +458,8 @@ do_get_pms ()
+ 		// values for filters
+ 		$startdate = fetch_datearray_from_timestamp(($search['startdate'] ? $search['startdate'] : strtotime('last month', TIMENOW)));
+ 		$enddate = fetch_datearray_from_timestamp(($search['enddate'] ? $search['enddate'] : TIMENOW));
+-		$startmonth[$startdate[month]] = 'selected="selected"';
+-		$endmonth[$enddate[month]] = 'selected="selected"';
++		$startmonth[$startdate['month']] = 'selected="selected"';
++		$endmonth[$enddate['month']] = 'selected="selected"';
+ 		$readselection[$search['read']] = 'selected="selected"';
+ 
+ 		//eval('$sortfilter = "' . fetch_template('pm_filter') . '";');
+@@ -836,7 +836,7 @@ do_send_pm ()
+ 				SELECT userlist.relationid
+ 				FROM " . TABLE_PREFIX . "userlist AS userlist
+ 				WHERE userid = " . $vbulletin->userinfo['userid'] . "
+-					AND userlist.relationid IN(" . implode(array_keys($check_recipients), ',') . ")
++					AND userlist.relationid IN(" . implode(',', array_keys($check_recipients)) . ")
+ 					AND type = 'buddy'
+ 			");
+ 			while ($user = $db->fetch_array($users))
+diff --git a/forumrunner/include/post.php b/forumrunner/include/post.php
+index d55777d..5d9f21a 100644
+--- a/forumrunner/include/post.php
++++ b/forumrunner/include/post.php
+@@ -36,7 +36,7 @@ require_once(DIR . '/includes/functions_prefix.php');
+ 
+ $vbulletin->options['cybfrules_enable_global'] = false;
+ 
+-function fr_build_new_post($type = 'thread', $foruminfo, $threadinfo, $postinfo, &$post, &$errors)
++function fr_build_new_post($type, $foruminfo, $threadinfo, $postinfo, &$post, &$errors)
+ {
+ 	//NOTE: permissions are not checked in this function
+ 
+@@ -396,7 +396,7 @@ do_post_message ()
+     ($hook = vBulletinHook::fetch_hook('newthread_start')) ? eval($hook) : false;
+ 
+ 	// Variables reused in templates
+-	$poststarttime =& $vbulletin->input->clean_gpc('r', poststarttime, TYPE_UINT);
++	$poststarttime =& $vbulletin->input->clean_gpc('r', 'poststarttime', TYPE_UINT);
+         $posthash =  md5($vbulletin->GPC['poststarttime'] . $vbulletin->userinfo['userid'] . $vbulletin->userinfo['salt']);
+ 
+ 	$vbulletin->input->clean_array_gpc('r', array(
+@@ -599,7 +599,7 @@ do_post_reply ()
+     ($hook = vBulletinHook::fetch_hook('newreply_start')) ? eval($hook) : false;
+ 
+ 	// Variables reused in templates
+-	$poststarttime =& $vbulletin->input->clean_gpc('r', poststarttime, TYPE_UINT);
++	$poststarttime =& $vbulletin->input->clean_gpc('r', 'poststarttime', TYPE_UINT);
+         $posthash =  md5($vbulletin->GPC['poststarttime'] . $vbulletin->userinfo['userid'] . $vbulletin->userinfo['salt']);
+ 
+ 	$vbulletin->input->clean_array_gpc('p', array(
+@@ -851,7 +851,7 @@ do_post_edit ()
+ 	}
+ 
+ 	// Variables reused in templates
+-	$poststarttime =& $vbulletin->input->clean_gpc('r', poststarttime, TYPE_UINT);
++	$poststarttime =& $vbulletin->input->clean_gpc('r', 'poststarttime', TYPE_UINT);
+         $posthash =  md5($vbulletin->GPC['poststarttime'] . $vbulletin->userinfo['userid'] . $vbulletin->userinfo['salt']);
+ 
+ 	$vbulletin->input->clean_array_gpc('p', array(
+diff --git a/forumrunner/include/search.php b/forumrunner/include/search.php
+index 83ae90a..3570df8 100644
+--- a/forumrunner/include/search.php
++++ b/forumrunner/include/search.php
+@@ -79,7 +79,7 @@ do_showresults ($searchid, $pagenumber = 1, $perpage = 25)
+ 	    }
+ 	    if ($skip) {
+ 		$skipped++;
+-		continue;
++		break; // was "continue", which acts as "break" inside a switch
+ 	    }
+ 
+ 	    $lastread = $thread->get_forum()->get_last_read_by_current_user($current_user);
+@@ -160,7 +160,7 @@ do_showresults ($searchid, $pagenumber = 1, $perpage = 25)
+ 	    }
+ 	    if ($skip) {
+ 		$skipped++;
+-		continue;
++		break; // was "continue", which acts as "break" inside a switch
+ 	    }
+ 	    
+ 	    $date = vbdate($vbulletin->options['dateformat'], $post->get_field('dateline'));
+diff --git a/forumrunner/push.php b/forumrunner/push.php
+index 95c622d..3ef5c78 100644
+--- a/forumrunner/push.php
++++ b/forumrunner/push.php
+@@ -13,7 +13,9 @@ if (!is_object($vbulletin->db)) {
+     exit;
+ }
+ 
+-define(MCWD, DIR . '/forumrunner');
++if (!defined('MCWD')) {
++    define('MCWD', DIR . '/forumrunner'); // was define(MCWD, ...): PHP 8 has no bareword constants
++}
+ 
+ require_once(DIR . '/forumrunner/support/Snoopy.class.php');
+ if (file_exists(DIR . '/forumrunner/sitekey.php')) {
+diff --git a/forumrunner/support/JSON.php b/forumrunner/support/JSON.php
+index 7759563..88f50a5 100644
+--- a/forumrunner/support/JSON.php
++++ b/forumrunner/support/JSON.php
+@@ -153,7 +153,7 @@ class Services_JSON
+             return mb_convert_encoding($utf16, 'UTF-8', 'UTF-16');
+         }
+ 
+-        $bytes = (ord($utf16{0}) << 8) | ord($utf16{1});
++        $bytes = (ord($utf16[0]) << 8) | ord($utf16[1]);
+ 
+         switch(true) {
+             case ((0x7F & $bytes) == $bytes):
+@@ -206,17 +206,17 @@ class Services_JSON
+             case 2:
+                 // return a UTF-16 character from a 2-byte UTF-8 char
+                 // see: http://www.cl.cam.ac.uk/~mgk25/unicode.html#utf-8
+-                return chr(0x07 & (ord($utf8{0}) >> 2))
+-                     . chr((0xC0 & (ord($utf8{0}) << 6))
+-                         | (0x3F & ord($utf8{1})));
++                return chr(0x07 & (ord($utf8[0]) >> 2))
++                     . chr((0xC0 & (ord($utf8[0]) << 6))
++                         | (0x3F & ord($utf8[1])));
+ 
+             case 3:
+                 // return a UTF-16 character from a 3-byte UTF-8 char
+                 // see: http://www.cl.cam.ac.uk/~mgk25/unicode.html#utf-8
+-                return chr((0xF0 & (ord($utf8{0}) << 4))
+-                         | (0x0F & (ord($utf8{1}) >> 2)))
+-                     . chr((0xC0 & (ord($utf8{1}) << 6))
+-                         | (0x7F & ord($utf8{2})));
++                return chr((0xF0 & (ord($utf8[0]) << 4))
++                         | (0x0F & (ord($utf8[1]) >> 2)))
++                     . chr((0xC0 & (ord($utf8[1]) << 6))
++                         | (0x7F & ord($utf8[2])));
+         }
+ 
+         // ignoring UTF-32 for now, sorry
+@@ -261,7 +261,7 @@ class Services_JSON
+                 */
+                 for ($c = 0; $c < $strlen_var; ++$c) {
+ 
+-                    $ord_var_c = ord($var{$c});
++                    $ord_var_c = ord($var[$c]);
+ 
+                     switch (true) {
+                         case $ord_var_c == 0x08:
+@@ -284,18 +284,18 @@ class Services_JSON
+                         case $ord_var_c == 0x2F:
+                         case $ord_var_c == 0x5C:
+                             // double quote, slash, slosh
+-                            $ascii .= '\\'.$var{$c};
++                            $ascii .= '\\'.$var[$c];
+                             break;
+ 
+                         case (($ord_var_c >= 0x20) && ($ord_var_c <= 0x7F)):
+                             // characters U-00000000 - U-0000007F (same as ASCII)
+-                            $ascii .= $var{$c};
++                            $ascii .= $var[$c];
+                             break;
+ 
+                         case (($ord_var_c & 0xE0) == 0xC0):
+                             // characters U-00000080 - U-000007FF, mask 110XXXXX
+                             // see http://www.cl.cam.ac.uk/~mgk25/unicode.html#utf-8
+-                            $char = pack('C*', $ord_var_c, ord($var{$c + 1}));
++                            $char = pack('C*', $ord_var_c, ord($var[$c + 1]));
+                             $c += 1;
+                             $utf16 = $this->utf82utf16($char);
+                             $ascii .= sprintf('\u%04s', bin2hex($utf16));
+@@ -305,8 +305,8 @@ class Services_JSON
+                             // characters U-00000800 - U-0000FFFF, mask 1110XXXX
+                             // see http://www.cl.cam.ac.uk/~mgk25/unicode.html#utf-8
+                             $char = pack('C*', $ord_var_c,
+-                                         ord($var{$c + 1}),
+-                                         ord($var{$c + 2}));
++                                         ord($var[$c + 1]),
++                                         ord($var[$c + 2]));
+                             $c += 2;
+                             $utf16 = $this->utf82utf16($char);
+                             $ascii .= sprintf('\u%04s', bin2hex($utf16));
+@@ -316,9 +316,9 @@ class Services_JSON
+                             // characters U-00010000 - U-001FFFFF, mask 11110XXX
+                             // see http://www.cl.cam.ac.uk/~mgk25/unicode.html#utf-8
+                             $char = pack('C*', $ord_var_c,
+-                                         ord($var{$c + 1}),
+-                                         ord($var{$c + 2}),
+-                                         ord($var{$c + 3}));
++                                         ord($var[$c + 1]),
++                                         ord($var[$c + 2]),
++                                         ord($var[$c + 3]));
+                             $c += 3;
+                             $utf16 = $this->utf82utf16($char);
+                             $ascii .= sprintf('\u%04s', bin2hex($utf16));
+@@ -328,10 +328,10 @@ class Services_JSON
+                             // characters U-00200000 - U-03FFFFFF, mask 111110XX
+                             // see http://www.cl.cam.ac.uk/~mgk25/unicode.html#utf-8
+                             $char = pack('C*', $ord_var_c,
+-                                         ord($var{$c + 1}),
+-                                         ord($var{$c + 2}),
+-                                         ord($var{$c + 3}),
+-                                         ord($var{$c + 4}));
++                                         ord($var[$c + 1]),
++                                         ord($var[$c + 2]),
++                                         ord($var[$c + 3]),
++                                         ord($var[$c + 4]));
+                             $c += 4;
+                             $utf16 = $this->utf82utf16($char);
+                             $ascii .= sprintf('\u%04s', bin2hex($utf16));
+@@ -341,11 +341,11 @@ class Services_JSON
+                             // characters U-04000000 - U-7FFFFFFF, mask 1111110X
+                             // see http://www.cl.cam.ac.uk/~mgk25/unicode.html#utf-8
+                             $char = pack('C*', $ord_var_c,
+-                                         ord($var{$c + 1}),
+-                                         ord($var{$c + 2}),
+-                                         ord($var{$c + 3}),
+-                                         ord($var{$c + 4}),
+-                                         ord($var{$c + 5}));
++                                         ord($var[$c + 1]),
++                                         ord($var[$c + 2]),
++                                         ord($var[$c + 3]),
++                                         ord($var[$c + 4]),
++                                         ord($var[$c + 5]));
+                             $c += 5;
+                             $utf16 = $this->utf82utf16($char);
+                             $ascii .= sprintf('\u%04s', bin2hex($utf16));
+@@ -506,8 +506,8 @@ class Services_JSON
+                     // return (float)$str;
+ 
+                     // Return float or int, as appropriate
+-                    return ((float)$str == (integer)$str)
+-                        ? (integer)$str
++                    return ((float)$str == (int)$str)
++                        ? (int)$str
+                         : (float)$str;
+ 
+                 } elseif (preg_match('/^("|\').*(\1)$/s', $str, $m) && $m[1] == $m[2]) {
+@@ -520,7 +520,7 @@ class Services_JSON
+                     for ($c = 0; $c < $strlen_chrs; ++$c) {
+ 
+                         $substr_chrs_c_2 = substr($chrs, $c, 2);
+-                        $ord_chrs_c = ord($chrs{$c});
++                        $ord_chrs_c = ord($chrs[$c]);
+ 
+                         switch (true) {
+                             case $substr_chrs_c_2 == '\b':
+@@ -550,7 +550,7 @@ class Services_JSON
+                             case $substr_chrs_c_2 == '\\/':
+                                 if (($delim == '"' && $substr_chrs_c_2 != '\\\'') ||
+                                    ($delim == "'" && $substr_chrs_c_2 != '\\"')) {
+-                                    $utf8 .= $chrs{++$c};
++                                    $utf8 .= $chrs[++$c];
+                                 }
+                                 break;
+ 
+@@ -563,7 +563,7 @@ class Services_JSON
+                                 break;
+ 
+                             case ($ord_chrs_c >= 0x20) && ($ord_chrs_c <= 0x7F):
+-                                $utf8 .= $chrs{$c};
++                                $utf8 .= $chrs[$c];
+                                 break;
+ 
+                             case ($ord_chrs_c & 0xE0) == 0xC0:
+@@ -610,7 +610,7 @@ class Services_JSON
+                 } elseif (preg_match('/^\[.*\]$/s', $str) || preg_match('/^\{.*\}$/s', $str)) {
+                     // array, or object notation
+ 
+-                    if ($str{0} == '[') {
++                    if ($str[0] == '[') {
+                         $stk = array(SERVICES_JSON_IN_ARR);
+                         $arr = array();
+                     } else {
+@@ -649,7 +649,7 @@ class Services_JSON
+                         $top = end($stk);
+                         $substr_chrs_c_2 = substr($chrs, $c, 2);
+ 
+-                        if (($c == $strlen_chrs) || (($chrs{$c} == ',') && ($top['what'] == SERVICES_JSON_SLICE))) {
++                        if (($c == $strlen_chrs) || (($chrs[$c] == ',') && ($top['what'] == SERVICES_JSON_SLICE))) {
+                             // found a comma that is not inside a string, array, etc.,
+                             // OR we've reached the end of the character list
+                             $slice = substr($chrs, $top['where'], ($c - $top['where']));
+@@ -691,12 +691,12 @@ class Services_JSON
+ 
+                             }
+ 
+-                        } elseif ((($chrs{$c} == '"') || ($chrs{$c} == "'")) && ($top['what'] != SERVICES_JSON_IN_STR)) {
++                        } elseif ((($chrs[$c] == '"') || ($chrs[$c] == "'")) && ($top['what'] != SERVICES_JSON_IN_STR)) {
+                             // found a quote, and we are not inside a string
+-                            array_push($stk, array('what' => SERVICES_JSON_IN_STR, 'where' => $c, 'delim' => $chrs{$c}));
++                            array_push($stk, array('what' => SERVICES_JSON_IN_STR, 'where' => $c, 'delim' => $chrs[$c]));
+                             //print("Found start of string at {$c}\n");
+ 
+-                        } elseif (($chrs{$c} == $top['delim']) &&
++                        } elseif (($chrs[$c] == $top['delim']) &&
+                                  ($top['what'] == SERVICES_JSON_IN_STR) &&
+                                  ((strlen(substr($chrs, 0, $c)) - strlen(rtrim(substr($chrs, 0, $c), '\\'))) % 2 != 1)) {
+                             // found a quote, we're in a string, and it's not escaped
+@@ -705,24 +705,24 @@ class Services_JSON
+                             array_pop($stk);
+                             //print("Found end of string at {$c}: ".substr($chrs, $top['where'], (1 + 1 + $c - $top['where']))."\n");
+ 
+-                        } elseif (($chrs{$c} == '[') &&
++                        } elseif (($chrs[$c] == '[') &&
+                                  in_array($top['what'], array(SERVICES_JSON_SLICE, SERVICES_JSON_IN_ARR, SERVICES_JSON_IN_OBJ))) {
+                             // found a left-bracket, and we are in an array, object, or slice
+                             array_push($stk, array('what' => SERVICES_JSON_IN_ARR, 'where' => $c, 'delim' => false));
+                             //print("Found start of array at {$c}\n");
+ 
+-                        } elseif (($chrs{$c} == ']') && ($top['what'] == SERVICES_JSON_IN_ARR)) {
++                        } elseif (($chrs[$c] == ']') && ($top['what'] == SERVICES_JSON_IN_ARR)) {
+                             // found a right-bracket, and we're in an array
+                             array_pop($stk);
+                             //print("Found end of array at {$c}: ".substr($chrs, $top['where'], (1 + $c - $top['where']))."\n");
+ 
+-                        } elseif (($chrs{$c} == '{') &&
++                        } elseif (($chrs[$c] == '{') &&
+                                  in_array($top['what'], array(SERVICES_JSON_SLICE, SERVICES_JSON_IN_ARR, SERVICES_JSON_IN_OBJ))) {
+                             // found a left-brace, and we are in an array, object, or slice
+                             array_push($stk, array('what' => SERVICES_JSON_IN_OBJ, 'where' => $c, 'delim' => false));
+                             //print("Found start of object at {$c}\n");
+ 
+-                        } elseif (($chrs{$c} == '}') && ($top['what'] == SERVICES_JSON_IN_OBJ)) {
++                        } elseif (($chrs[$c] == '}') && ($top['what'] == SERVICES_JSON_IN_OBJ)) {
+                             // found a right-brace, and we're in an object
+                             array_pop($stk);
+                             //print("Found end of object at {$c}: ".substr($chrs, $top['where'], (1 + $c - $top['where']))."\n");
+diff --git a/forumrunner/support/Snoopy.class.php b/forumrunner/support/Snoopy.class.php
+index d87016b..6d4b996 100644
+--- a/forumrunner/support/Snoopy.class.php
++++ b/forumrunner/support/Snoopy.class.php
+@@ -177,7 +177,7 @@ class Snoopy
+ 						$frameurls = $this->_frameurls;
+ 						$this->_frameurls = array();
+ 						
+-						while(list(,$frameurl) = each($frameurls))
++						foreach ($frameurls as $frameurl)
+ 						{
+ 							if($this->_framedepth < $this->maxframes)
+ 							{
+@@ -237,7 +237,7 @@ class Snoopy
+ 					$frameurls = $this->_frameurls;
+ 					$this->_frameurls = array();
+ 
+-					while(list(,$frameurl) = each($frameurls))
++					foreach ($frameurls as $frameurl)
+ 					{
+ 						if($this->_framedepth < $this->maxframes)
+ 						{
+@@ -335,7 +335,7 @@ class Snoopy
+ 						$frameurls = $this->_frameurls;
+ 						$this->_frameurls = array();
+ 						
+-						while(list(,$frameurl) = each($frameurls))
++						foreach ($frameurls as $frameurl)
+ 						{														
+ 							if($this->_framedepth < $this->maxframes)
+ 							{
+@@ -402,7 +402,7 @@ class Snoopy
+ 					$frameurls = $this->_frameurls;
+ 					$this->_frameurls = array();
+ 
+-					while(list(,$frameurl) = each($frameurls))
++					foreach ($frameurls as $frameurl)
+ 					{														
+ 						if($this->_framedepth < $this->maxframes)
+ 						{
+@@ -623,13 +623,13 @@ class Snoopy
+ 
+ 		// catenate the non-empty matches from the conditional subpattern
+ 
+-		while(list($key,$val) = each($links[2]))
++		foreach ($links[2] as $key => $val)
+ 		{
+ 			if(!empty($val))
+ 				$match[] = $val;
+ 		}				
+ 		
+-		while(list($key,$val) = each($links[3]))
++		foreach ($links[3] as $key => $val)
+ 		{
+ 			if(!empty($val))
+ 				$match[] = $val;
+@@ -817,7 +817,7 @@ class Snoopy
+ 		{
+ 			if(!is_array($this->rawheaders))
+ 				$this->rawheaders = (array)$this->rawheaders;
+-			while(list($headerKey,$headerVal) = each($this->rawheaders))
++			foreach ($this->rawheaders as $headerKey => $headerVal)
+ 				$headers .= $headerKey.": ".$headerVal."\r\n";
+ 		}
+ 		if(!empty($content_type)) {
+@@ -983,7 +983,7 @@ class Snoopy
+ 		{
+ 			if(!is_array($this->rawheaders))
+ 				$this->rawheaders = (array)$this->rawheaders;
+-			while(list($headerKey,$headerVal) = each($this->rawheaders))
++			foreach ($this->rawheaders as $headerKey => $headerVal)
+ 				$headers[] = $headerKey.": ".$headerVal;
+ 		}
+ 		if(!empty($content_type)) {
+@@ -1199,9 +1199,9 @@ class Snoopy
+ 		switch ($this->_submit_type) {
+ 			case "application/x-www-form-urlencoded":
+ 				reset($formvars);
+-				while(list($key,$val) = each($formvars)) {
++				foreach ($formvars as $key => $val) {
+ 					if (is_array($val) || is_object($val)) {
+-						while (list($cur_key, $cur_val) = each($val)) {
++						foreach ($val as $cur_key => $cur_val) {
+ 							$postdata .= urlencode($key)."[]=".urlencode($cur_val)."&";
+ 						}
+ 					} else
+@@ -1213,9 +1213,9 @@ class Snoopy
+ 				$this->_mime_boundary = "Snoopy".md5(uniqid(microtime()));
+ 				
+ 				reset($formvars);
+-				while(list($key,$val) = each($formvars)) {
++				foreach ($formvars as $key => $val) {
+ 					if (is_array($val) || is_object($val)) {
+-						while (list($cur_key, $cur_val) = each($val)) {
++						foreach ($val as $cur_key => $cur_val) {
+ 							$postdata .= "--".$this->_mime_boundary."\r\n";
+ 							$postdata .= "Content-Disposition: form-data; name=\"$key\[\]\"\r\n\r\n";
+ 							$postdata .= "$cur_val\r\n";
+@@ -1228,9 +1228,9 @@ class Snoopy
+ 				}
+ 				
+ 				reset($formfiles);
+-				while (list($field_name, $file_names) = each($formfiles)) {
++				foreach ($formfiles as $field_name => $file_names) {
+ 					settype($file_names, "array");
+-					while (list(, $file_name) = each($file_names)) {
++					foreach ($file_names as $file_name) {
+ 						if (!is_readable($file_name)) continue;
+ 
+ 						$fp = fopen($file_name, "r");
+diff --git a/forumrunner/support/stringparser.class.php b/forumrunner/support/stringparser.class.php
+index c9f9fad..e8504e0 100644
+--- a/forumrunner/support/stringparser.class.php
++++ b/forumrunner/support/stringparser.class.php
+@@ -462,7 +462,7 @@ class StringParser {
+ 		// if yes, how should this be achieved? Another member of
+ 		// StringParser_Node?
+ 		$this->_setStatus (0);
+-		$res = $this->_appendText ($this->_text{$topelem->occurredAt});
++		$res = $this->_appendText ($this->_text[$topelem->occurredAt]);
+ 		if (!$res) {
+ 			return false;
+ 		}
+@@ -571,7 +571,7 @@ class StringParser {
+ 				return false;
+ 			}
+ 			if (!$res) {
+-				$res = $this->_appendText ($this->_text{$this->_cpos});
++				$res = $this->_appendText ($this->_text[$this->_cpos]);
+ 				if (!$res) {
+ 					return false;
+ 				}
+diff --git a/forumrunner/support/stringparser_bbcode.class.php b/forumrunner/support/stringparser_bbcode.class.php
+index a5c1a83..9a9c979 100644
+--- a/forumrunner/support/stringparser_bbcode.class.php
++++ b/forumrunner/support/stringparser_bbcode.class.php
+@@ -1053,12 +1053,12 @@ class StringParser_BBCode extends StringParser {
+ 			$ol = strlen ($output);
+ 			switch ($node->getFlag ('newlinemode.begin', 'integer', BBCODE_NEWLINE_PARSE)) {
+ 			case BBCODE_NEWLINE_IGNORE:
+-				if ($ol && $output{0} == "\n") {
++				if ($ol && $output[0] == "\n") {
+ 					$before = "\n";
+ 				}
+ 				// don't break!
+ 			case BBCODE_NEWLINE_DROP:
+-				if ($ol && $output{0} == "\n") {
++				if ($ol && $output[0] == "\n") {
+ 					$output = substr ($output, 1);
+ 					$ol--;
+ 				}
+@@ -1066,12 +1066,12 @@ class StringParser_BBCode extends StringParser {
+ 			}
+ 			switch ($node->getFlag ('newlinemode.end', 'integer', BBCODE_NEWLINE_PARSE)) {
+ 			case BBCODE_NEWLINE_IGNORE:
+-				if ($ol && $output{$ol-1} == "\n") {
++				if ($ol && $output[$ol-1] == "\n") {
+ 					$after = "\n";
+ 				}
+ 				// don't break!
+ 			case BBCODE_NEWLINE_DROP:
+-				if ($ol && $output{$ol-1} == "\n") {
++				if ($ol && $output[$ol-1] == "\n") {
+ 					$output = substr ($output, 0, -1);
+ 					$ol--;
+ 				}
+@@ -1449,10 +1449,10 @@ class StringParser_BBCode_Node_Paragraph extends StringParser_Node {
+ 			$f_begin = $this->_children[0]->getFlag ('newlinemode.begin', 'integer', BBCODE_NEWLINE_PARSE);
+ 			$f_end = $this->_children[0]->getFlag ('newlinemode.end', 'integer', BBCODE_NEWLINE_PARSE);
+ 			$content = $this->_children[0]->content;
+-			if ($f_begin != BBCODE_NEWLINE_PARSE && $content{0} == "\n") {
++			if ($f_begin != BBCODE_NEWLINE_PARSE && $content[0] == "\n") {
+ 				$content = substr ($content, 1);
+ 			}
+-			if ($f_end != BBCODE_NEWLINE_PARSE && $content{strlen($content)-1} == "\n") {
++			if ($f_end != BBCODE_NEWLINE_PARSE && $content[strlen($content)-1] == "\n") {
+ 				$content = substr ($content, 0, -1);
+ 			}
+ 			if (!strlen ($content)) {
+diff --git a/forumrunner/support/utils.php b/forumrunner/support/utils.php
+index fa6c5c8..2c9b7db 100644
+--- a/forumrunner/support/utils.php
++++ b/forumrunner/support/utils.php
+@@ -1511,7 +1511,7 @@ parse_post ($text, $allowsmilie=false)
+ 
+ 	    $parser = new vB_BbCodeParser($vbulletin, fetch_tag_list());
+ 	    $text = $parser->parse_smilies($text, false);
+-	    $text = preg_replace_callback('#img src="(.*?)"#is', parse_post_callback, $text);
++	    $text = preg_replace_callback('#img src="(.*?)"#is', 'parse_post_callback', $text);
+ 	}
+     }
+ 
+diff --git a/global.php b/global.php
+index 8422440..ea96029 100644
+--- a/global.php
++++ b/global.php
+@@ -17,10 +17,10 @@ require_once('./includes/class_bootstrap.php');
+ define('VB_AREA', 'Forum');
+ 
+ $bootstrap = new vB_Bootstrap_Forum();
+-$bootstrap->datastore_entries = $specialtemplates;
++$bootstrap->datastore_entries = isset($specialtemplates) ? $specialtemplates : null;
+ $bootstrap->cache_templates = vB_Bootstrap::fetch_required_template_list(
+ 	empty($_REQUEST['do']) ? '' : $_REQUEST['do'],
+-	$actiontemplates, $globaltemplates
++	isset($actiontemplates) ? $actiontemplates : null, isset($globaltemplates) ? $globaltemplates : null
+ );
+ 
+ $bootstrap->bootstrap();
+diff --git a/group.php b/group.php
+index b96e039..7a08dc1 100644
+--- a/group.php
++++ b/group.php
+@@ -1262,7 +1262,8 @@ if ($_REQUEST['do'] == 'owngroup')
+ 	if (!$vbulletin->GPC['ajax'])
+ 	{
+ 		$vbulletin->url = fetch_seo_url('grouphome', '');
+-		print_standard_redirect();
++		// the phrase argument is required (PHP 7.1+ throws ArgumentCountError); PHP 5 passed null
++		print_standard_redirect('');
+ 	}
+ 
+ 	require_once(DIR . '/includes/class_xml.php');
+diff --git a/group_inlinemod.php b/group_inlinemod.php
+index bcbd660..0a586fe 100644
+--- a/group_inlinemod.php
++++ b/group_inlinemod.php
+@@ -14,7 +14,7 @@
+ error_reporting(E_ALL & ~E_NOTICE);
+ 
+ // #################### DEFINE IMPORTANT CONSTANTS #######################
+-if ($_REQUEST['do'] == 'inlinemerge' OR $_POST['do'] == 'doinlinemerge')
++if ((isset($_REQUEST['do']) AND $_REQUEST['do'] == 'inlinemerge') OR (isset($_POST['do']) AND $_POST['do'] == 'doinlinemerge'))
+ {
+ 	define('GET_EDIT_TEMPLATES', true);
+ }
+diff --git a/image.php b/image.php
+index bc07dce..826e9e8 100644
+--- a/image.php
++++ b/image.php
+@@ -21,7 +21,7 @@ define('CSRF_PROTECTION', true);
+ define('VB_AREA', 'Forum');
+ define('NOPMPOPUP', 1);
+ 
+-if ((!empty($_SERVER['HTTP_IF_MODIFIED_SINCE']) OR !empty($_SERVER['HTTP_IF_NONE_MATCH'])) AND $_GET['type'] != 'regcheck')
++if ((!empty($_SERVER['HTTP_IF_MODIFIED_SINCE']) OR !empty($_SERVER['HTTP_IF_NONE_MATCH'])) AND (!isset($_GET['type']) OR $_GET['type'] != 'regcheck'))
+ {
+ 	// Don't check modify date as URLs contain unique items to nullify caching
+ 	$sapi_name = php_sapi_name();
+diff --git a/includes/adminfunctions.php b/includes/adminfunctions.php
+index b1da466..6047886 100644
+--- a/includes/adminfunctions.php
++++ b/includes/adminfunctions.php
+@@ -66,7 +66,10 @@ function print_cp_login($mismatch = false)
+ 			($hook = vBulletinHook::fetch_hook('admin_login_area_switch')) ? eval($hook) : false;
+ 	}
+ 
+-	define('NO_PAGE_TITLE', true);
++	if (!defined('NO_PAGE_TITLE'))
++	{
++		define('NO_PAGE_TITLE', true);
++	}
+ 	print_cp_header($vbphrase['log_in'], "document.forms.loginform.vb_login_$focusfield.focus()");
+ 
+ 	require_once(DIR . '/includes/functions_misc.php');
+@@ -230,7 +233,10 @@ function print_cp_login($mismatch = false)
+ 	</script>
+ 	<?php
+ 
+-	define('NO_CP_COPYRIGHT', true);
++	if (!defined('NO_CP_COPYRIGHT'))
++	{
++		define('NO_CP_COPYRIGHT', true);
++	}
+ 	unset($GLOBALS['DEVDEBUG']);
+ 	print_cp_footer();
+ }
+@@ -965,7 +971,7 @@ function print_input_row($title, $name, $value = '', $htmlise = true, $size = 35
+ * @param	mixed	If specified, overrides the default CSS class for the input field
+ * @param	boolean	Allow multiple selections from select field?
+ */
+-function print_input_select_row($title, $inputname, $inputvalue = '', $selectname, $selectarray, $selected = '', $htmlise = true, $inputsize = 35, $selectsize = 0, $maxlength = 0, $direction = '', $inputclass = false, $multiple = false)
++function print_input_select_row($title, $inputname, $inputvalue, $selectname, $selectarray, $selected = '', $htmlise = true, $inputsize = 35, $selectsize = 0, $maxlength = 0, $direction = '', $inputclass = false, $multiple = false)
+ {
+ 	global $vbulletin;
+ 
+@@ -1052,9 +1058,9 @@ function print_yes_no_row($title, $name, $value = 1, $onclick = '')
+ 	print_label_row(
+ 		$title,
+ 		"<div id=\"ctrl_$name\" class=\"smallfont\" style=\"white-space:nowrap\">
+-		<label for=\"rb_1_{$name}_$uniqueid\"><input type=\"radio\" name=\"$name\" id=\"rb_1_{$name}_$uniqueid\" value=\"" . (($name == 'user[pmpopup]' AND $value == 2) ? 2 : 1) . "\" tabindex=\"1\"$onclick" . iif($vbulletin->debug, " title=\"name=&quot;$name&quot; value=&quot;1&quot;\"") . iif($value == 1 OR ($name == 'user[pmpopup]' AND $value == 2), ' checked="checked"') . " />$vbphrase[yes]" . iif(vB_Template_Runtime::fetchStyleVar('textdirection') == 'rtl', "&rlm;") . "</label>
+-		<label for=\"rb_0_{$name}_$uniqueid\"><input type=\"radio\" name=\"$name\" id=\"rb_0_{$name}_$uniqueid\" value=\"0\" tabindex=\"1\"$onclick" . iif($vbulletin->debug, " title=\"name=&quot;$name&quot; value=&quot;0&quot;\"") . iif($value == 0, ' checked="checked"') . " />$vbphrase[no]" . iif(vB_Template_Runtime::fetchStyleVar('textdirection') == 'rtl', "&rlm;") . "</label>" .
+-		iif($value == 2 AND $name == 'customtitle', "
++		<label for=\"rb_1_{$name}_$uniqueid\"><input type=\"radio\" name=\"$name\" id=\"rb_1_{$name}_$uniqueid\" value=\"" . (($name == 'user[pmpopup]' AND vb_loose_equals($value, 2)) ? 2 : 1) . "\" tabindex=\"1\"$onclick" . iif($vbulletin->debug, " title=\"name=&quot;$name&quot; value=&quot;1&quot;\"") . iif(vb_loose_equals($value, 1) OR ($name == 'user[pmpopup]' AND vb_loose_equals($value, 2)), ' checked="checked"') . " />$vbphrase[yes]" . iif(vB_Template_Runtime::fetchStyleVar('textdirection') == 'rtl', "&rlm;") . "</label>
++		<label for=\"rb_0_{$name}_$uniqueid\"><input type=\"radio\" name=\"$name\" id=\"rb_0_{$name}_$uniqueid\" value=\"0\" tabindex=\"1\"$onclick" . iif($vbulletin->debug, " title=\"name=&quot;$name&quot; value=&quot;0&quot;\"") . iif(vb_loose_equals($value, 0), ' checked="checked"') . " />$vbphrase[no]" . iif(vB_Template_Runtime::fetchStyleVar('textdirection') == 'rtl', "&rlm;") . "</label>" .
++		iif(vb_loose_equals($value, 2) AND $name == 'customtitle', "
+ 			<label for=\"rb_2_{$name}_$uniqueid\"><input type=\"radio\" name=\"$name\" id=\"rb_2_{$name}_$uniqueid\" value=\"2\" tabindex=\"1\"$onclick" . iif($vbulletin->debug, " title=\"name=&quot;$name&quot; value=&quot;2&quot;\"") . " checked=\"checked\" />{$yes_but_not_parsing_html}</label>"
+ 		) . "\n\t</div>",
+ 		'', 'top', $name
+@@ -1085,9 +1091,9 @@ function print_yes_no_other_row($title, $name, $thirdopt, $value = 1, $onclick =
+ 	print_label_row(
+ 		$title,
+ 		"<div id=\"ctrl_$name\" class=\"smallfont\" style=\"white-space:nowrap\">
+-		<label for=\"rb_1_{$name}_$uniqueid\"><input type=\"radio\" name=\"$name\" id=\"rb_1_{$name}_$uniqueid\" value=\"1\" tabindex=\"1\"$onclick" . iif($vbulletin->debug, " title=\"name=&quot;$name&quot; value=&quot;1&quot;\"") . iif($value == 1, ' checked="checked"') . " />$vbphrase[yes]" . iif(vB_Template_Runtime::fetchStyleVar('textdirection') == 'rtl', "&rlm;") . "</label>
+-		<label for=\"rb_0_{$name}_$uniqueid\"><input type=\"radio\" name=\"$name\" id=\"rb_0_{$name}_$uniqueid\" value=\"0\" tabindex=\"1\"$onclick" . iif($vbulletin->debug, " title=\"name=&quot;$name&quot; value=&quot;0&quot;\"") . iif($value == 0, ' checked="checked"') . " />$vbphrase[no]" . iif(vB_Template_Runtime::fetchStyleVar('textdirection') == 'rtl', "&rlm;") . "</label>
+-		<label for=\"rb_x_{$name}_$uniqueid\"><input type=\"radio\" name=\"$name\" id=\"rb_x_{$name}_$uniqueid\" value=\"-1\" tabindex=\"1\"$onclick" . iif($vbulletin->debug, " title=\"name=&quot;$name&quot; value=&quot;-1&quot;\"") . iif($value == -1, ' checked="checked"') . " />$thirdopt" . iif(vB_Template_Runtime::fetchStyleVar('textdirection') == 'rtl', "&rlm;") . "</label>
++		<label for=\"rb_1_{$name}_$uniqueid\"><input type=\"radio\" name=\"$name\" id=\"rb_1_{$name}_$uniqueid\" value=\"1\" tabindex=\"1\"$onclick" . iif($vbulletin->debug, " title=\"name=&quot;$name&quot; value=&quot;1&quot;\"") . iif(vb_loose_equals($value, 1), ' checked="checked"') . " />$vbphrase[yes]" . iif(vB_Template_Runtime::fetchStyleVar('textdirection') == 'rtl', "&rlm;") . "</label>
++		<label for=\"rb_0_{$name}_$uniqueid\"><input type=\"radio\" name=\"$name\" id=\"rb_0_{$name}_$uniqueid\" value=\"0\" tabindex=\"1\"$onclick" . iif($vbulletin->debug, " title=\"name=&quot;$name&quot; value=&quot;0&quot;\"") . iif(vb_loose_equals($value, 0), ' checked="checked"') . " />$vbphrase[no]" . iif(vB_Template_Runtime::fetchStyleVar('textdirection') == 'rtl', "&rlm;") . "</label>
++		<label for=\"rb_x_{$name}_$uniqueid\"><input type=\"radio\" name=\"$name\" id=\"rb_x_{$name}_$uniqueid\" value=\"-1\" tabindex=\"1\"$onclick" . iif($vbulletin->debug, " title=\"name=&quot;$name&quot; value=&quot;-1&quot;\"") . iif(vb_loose_equals($value, -1), ' checked="checked"') . " />$thirdopt" . iif(vB_Template_Runtime::fetchStyleVar('textdirection') == 'rtl', "&rlm;") . "</label>
+ 		\n\t</div>",
+ 		'', 'top', $name
+ 	);
+@@ -1437,7 +1443,7 @@ function print_cells_row($array, $isheaderrow = false, $class = false, $i = 0, $
+ 			foreach($array AS $key => $val)
+ 			{
+ 				$j++;
+-				if ($val == '' AND !is_int($val))
++				if (vb_loose_equals($val, '') AND !is_int($val))
+ 				{
+ 					$val = '&nbsp;';
+ 				}
+@@ -1605,11 +1611,11 @@ function construct_select_options($array, $selectedid = '', $htmlise = false)
+ 			{
+ 				if (is_array($selectedid))
+ 				{
+-					$selected = iif(in_array($key, $selectedid), ' selected="selected"', '');
++					$selected = iif(vb_loose_in_array($key, $selectedid), ' selected="selected"', '');
+ 				}
+ 				else
+ 				{
+-					$selected = iif($key == $selectedid, ' selected="selected"', '');
++					$selected = iif(vb_loose_equals($key, $selectedid), ' selected="selected"', '');
+ 				}
+ 				$options .= "\t\t<option value=\"" . iif($key !== 'no_value', $key) . "\"$selected>" . iif($htmlise, htmlspecialchars_uni($val), $val) . "</option>\n";
+ 			}
+@@ -1669,7 +1675,7 @@ function construct_radio_options($name, $array, $checkedid = '', $htmlise = fals
+ 			}
+ 			else
+ 			{
+-				$options .= "\t\t<label for=\"rb_$name{$key}_$uniqueid\">$indent<input type=\"radio\" name=\"$name\" id=\"rb_$name{$key}_$uniqueid\" tabindex=\"1\" value=\"" . iif($key !== 'no_value', $key) . "\"" . iif($vbulletin->debug, " title=\"name=&quot;$name&quot; value=&quot;$key&quot;\"") . iif($key == $checkedid, ' checked="checked"') . " />" . iif($htmlise, htmlspecialchars_uni($val), $val) . "</label><br />\n";
++				$options .= "\t\t<label for=\"rb_$name{$key}_$uniqueid\">$indent<input type=\"radio\" name=\"$name\" id=\"rb_$name{$key}_$uniqueid\" tabindex=\"1\" value=\"" . iif($key !== 'no_value', $key) . "\"" . iif($vbulletin->debug, " title=\"name=&quot;$name&quot; value=&quot;$key&quot;\"") . iif(vb_loose_equals($key, $checkedid), ' checked="checked"') . " />" . iif($htmlise, htmlspecialchars_uni($val), $val) . "</label><br />\n";
+ 			}
+ 		}
+ 	}
+@@ -2911,7 +2917,10 @@ function print_stop_message($phrasename)
+ 
+ 	if (defined('CP_CONTINUE'))
+ 	{
+-		define('CP_REDIRECT', CP_CONTINUE);
++		if (!defined('CP_REDIRECT'))
++		{
++			define('CP_REDIRECT', CP_CONTINUE);
++		}
+ 	}
+ 
+ 	if ($vbulletin->GPC['ajax'])
+@@ -3121,7 +3130,10 @@ function assert_cp_sessionhash()
+ 		}
+ 	}
+ 
+-	define('CP_SESSIONHASH', $cpsession['hash']);
++	if (!defined('CP_SESSIONHASH'))
++	{
++		define('CP_SESSIONHASH', $cpsession['hash']);
++	}
+ }
+ 
+ // #############################################################################
+diff --git a/includes/adminfunctions_options.php b/includes/adminfunctions_options.php
+index ff482d5..4ae8778 100644
+--- a/includes/adminfunctions_options.php
++++ b/includes/adminfunctions_options.php
+@@ -571,7 +571,7 @@ function print_setting_row($setting, $settingphrase, $option_config = true)
+ 			$array = construct_forum_chooser_options(-1,$vbphrase['all']);
+ 			$size = sizeof($array);
+ 
+-			$vbphrase[forum_is_closed_for_posting] = $vbphrase[closed];
++			$vbphrase['forum_is_closed_for_posting'] = $vbphrase['closed'];
+ 			print_select_row($description, $name.'[]', $array, vb_unserialize($setting['value']), false, ($size > 10 ? 10 : $size), true);
+ 		}
+ 		break;
+@@ -581,7 +581,7 @@ function print_setting_row($setting, $settingphrase, $option_config = true)
+ 			$array = construct_forum_chooser_options(0,$vbphrase['none']);
+ 			$size = sizeof($array);
+ 
+-			$vbphrase[forum_is_closed_for_posting] = $vbphrase[closed];
++			$vbphrase['forum_is_closed_for_posting'] = $vbphrase['closed'];
+ 			print_select_row($description, $name.'[]', $array, vb_unserialize($setting['value']), false, ($size > 10 ? 10 : $size), true);
+ 		}
+ 		break;
+diff --git a/includes/adminfunctions_reminder.php b/includes/adminfunctions_reminder.php
+index 0500484..75b7d66 100644
+--- a/includes/adminfunctions_reminder.php
++++ b/includes/adminfunctions_reminder.php
+@@ -239,7 +239,7 @@ function print_reminder($event)
+ 
+ 	print_form_header('reminder', 'redirecter');
+ 	construct_hidden_code('reminderid', $event['reminderid']);
+-	print_table_header(construct_phrase($vbphrase['adminfunctions_reminder_showevent_adminreminderdue'], vbdate($vbphrase['adminfunctions_reminder_showevent_date'], $event['duedate']), $event[reminderid]));
++	print_table_header(construct_phrase($vbphrase['adminfunctions_reminder_showevent_adminreminderdue'], vbdate($vbphrase['adminfunctions_reminder_showevent_date'], $event['duedate']), $event['reminderid']));
+ 	print_label_row($vbphrase['adminfunctions_reminder_showevent_postedby'], "<a href=\"../member.php?" . $vbulletin->session->vars['sessionurl'] . "u=$event[userid]\" target=\"_blank\">$event[username]</a>");
+ 	print_label_row($vbphrase['title'], $event['title']);
+ 	if (!empty($event['text']))
+@@ -462,7 +462,7 @@ function fetch_reminders_array()
+ 		$reminders['script'] = "
+ 		<script type=\"text/javascript\">
+ 		<!--
+-		if (confirm('" . construct_phrase($vbphrase['adminfunctions_getreminders_confirm'], unhtmlspecialchars($vbulletin->userinfo['username']), $reminders[total], $reminders[s], $reminders[them]) . "'))
++		if (confirm('" . construct_phrase($vbphrase['adminfunctions_getreminders_confirm'], unhtmlspecialchars($vbulletin->userinfo['username']), $reminders['total'], $reminders['s'], $reminders['them']) . "'))
+ 		{
+ 			window.location = 'reminder.php?' . $vbulletin->session->vars['sessionurl_js'];
+ 		}
+diff --git a/includes/adminfunctions_template.php b/includes/adminfunctions_template.php
+index 45ce3f6..7bac878 100644
+--- a/includes/adminfunctions_template.php
++++ b/includes/adminfunctions_template.php
+@@ -1448,7 +1448,7 @@ function fetch_color_hex_value($csscolor)
+ 	{
+ 		if (strlen($match[1]) == 3)
+ 		{
+-			$hexcolor .= $match[1]{0} . $match[1]{0} . $match[1]{1} . $match[1]{1} . $match[1]{2} . $match[1]{2};
++			$hexcolor .= $match[1][0] . $match[1][0] . $match[1][1] . $match[1][1] . $match[1][2] . $match[1][2];
+ 		}
+ 		else
+ 		{
+@@ -2781,7 +2781,7 @@ function process_template_phrases($tagname, $text, $functionhandle, $extraargs =
+ 		$tagnameend = false;
+ 		for ($optionend = $tagbegin; $optionend <= $strlen; $optionend++)
+ 		{
+-			$char = $text{$optionend};
++			$char = $text[$optionend];
+ 			if (($char == '"' OR $char == "'") AND $inquote == '')
+ 			{
+ 				$inquote = $char; // wasn't in a quote, but now we are
+@@ -2910,11 +2910,11 @@ function parse_tag_attribute($option, $text)
+ 	if (($position = strpos($text, $option)) !== false)
+ 	{
+ 		$delimiter = $position + strlen($option);
+-		if ($text{$delimiter} == '"')
++		if ($text[$delimiter] == '"')
+ 		{ // read to another "
+ 			$delimchar = '"';
+ 		}
+-		else if ($text{$delimiter} == '\'')
++		else if ($text[$delimiter] == '\'')
+ 		{
+ 			$delimchar = '\'';
+ 		}
+@@ -5222,21 +5222,20 @@ function check_template_errors($template)
+ 	if (strpos(@ini_get('disable_functions'), 'ob_start') !== false)
+ 	{
+ 		// alternate method in case OB is disabled; probably not as fool proof
+-		@ini_set('track_errors', true);
+ 		$oldlevel = error_reporting();
+-		eval('$devnull = "' . $template . '";');
+-		error_reporting($oldlevel);
+-
+-		if (strpos(strtolower($php_errormsg), 'parse') !== false)
++		try
+ 		{
+-			// only return error if we think there's a parse error
+-			// best workaround to ignore "undefined variable" type errors
+-			return $php_errormsg;
++			eval('$devnull = "' . $template . '";');
+ 		}
+-		else
++		catch (Throwable $e)
+ 		{
+-			return '';
++			// PHP 7+ throws ParseError from eval() (track_errors/$php_errormsg are gone in PHP 8)
++			error_reporting($oldlevel);
++			return ($e instanceof ParseError ? 'Parse error: ' : 'Fatal error: ') . $e->getMessage() . ' on line ' . $e->getLine();
+ 		}
++		error_reporting($oldlevel);
++
++		return '';
+ 	}
+ 	else
+ 	{
+@@ -5244,13 +5243,21 @@ function check_template_errors($template)
+ 		$oldlevel = error_reporting();
+ 
+ 		ob_start();
+-		if (strpos($template, '$final_rendered') !== false)
++		try
+ 		{
+-			eval($template);
++			if (strpos($template, '$final_rendered') !== false)
++			{
++				eval($template);
++			}
++			else
++			{
++				eval('$devnull = "' . $template . '";');
++			}
+ 		}
+-		else
++		catch (Throwable $e)
+ 		{
+-			eval('$devnull = "' . $template . '";');
++			// PHP 7+ throws ParseError (or Error) from eval() instead of printing it
++			echo '<br /><b>' . ($e instanceof ParseError ? 'Parse error' : 'Fatal error') . '</b>: ' . htmlspecialchars($e->getMessage()) . ' on line <b>' . $e->getLine() . '</b><br />';
+ 		}
+ 
+ 		$errors = ob_get_contents();
+@@ -5822,7 +5829,7 @@ function print_style_palette($palette)
+ *
+ */
+ 
+-function generate_style($data, $parentid, $title, $anyversion = false, $displayorder, $userselect, $version)
++function generate_style($data, $parentid, $title, $anyversion, $displayorder, $userselect, $version)
+ {
+ 	global $vbulletin;
+ 	require_once(DIR . '/includes/class_xml.php');
+diff --git a/includes/api/2/content.php b/includes/api/2/content.php
+index f861b19..f948f46 100644
+--- a/includes/api/2/content.php
++++ b/includes/api/2/content.php
+@@ -17,7 +17,7 @@ global $methodsegments;
+ if ($methodsegments[1] == 'view')
+ {
+ 	// format switch
+-	if ($_REQUEST['apitextformat'])
++	if (!empty($_REQUEST['apitextformat']))
+ 	{
+ 		foreach ($VB_API_WHITELIST['response']['layout']['content']['comment_block']['node_comments']['cms_comments']['*']['postbit']['post'] as $k => $v)
+ 		{
+diff --git a/includes/api/2/forum.php b/includes/api/2/forum.php
+index 1ea6217..8f5b9a1 100644
+--- a/includes/api/2/forum.php
++++ b/includes/api/2/forum.php
+@@ -44,7 +44,7 @@ $VB_API_WHITELIST = array(
+ 	)
+ );
+ // format switch
+-if ($_REQUEST['apitextformat'])
++if (!empty($_REQUEST['apitextformat']))
+ {
+ 	foreach ($VB_API_WHITELIST['response']['header']['notices']['*'] as $k => $v)
+ 	{
+diff --git a/includes/api/2/search_showresults.php b/includes/api/2/search_showresults.php
+index b096e02..95d47cd 100644
+--- a/includes/api/2/search_showresults.php
++++ b/includes/api/2/search_showresults.php
+@@ -74,7 +74,7 @@ $VB_API_WHITELIST = array(
+ 	)
+ );
+ // format switch
+-if ($_REQUEST['apitextformat'])
++if (!empty($_REQUEST['apitextformat']))
+ {
+ 	foreach ($VB_API_WHITELIST['response']['searchbits']['*']['post'] as $k => $v)
+ 	{
+diff --git a/includes/api/4/api_forumlist.php b/includes/api/4/api_forumlist.php
+index 236bc58..31e51f5 100644
+--- a/includes/api/4/api_forumlist.php
++++ b/includes/api/4/api_forumlist.php
+@@ -142,7 +142,7 @@ class vB_APIMethod_api_forumlist_4 extends vBI_APIMethod
+ 					'subscribed' => (array_key_exists($forum['forumid'], $this->subscribed_forums) ? 1 : 0)
+ 				);
+                
+-                if(!empty($forum[link])) {
++                if(!empty($forum['link'])) {
+                     $forum2['is_link'] = 1;
+                     $forum2['link'] = $forum['link'];
+                 } else {
+diff --git a/includes/api/6/content.php b/includes/api/6/content.php
+index c83900a..4b09e63 100644
+--- a/includes/api/6/content.php
++++ b/includes/api/6/content.php
+@@ -83,7 +83,7 @@ if ($methodsegments[1] == 'view')
+ 	);
+ 	
+ 	// format switch
+-	if ($_REQUEST['apitextformat'])
++	if (!empty($_REQUEST['apitextformat']))
+ 	{
+ 		foreach ($VB_API_WHITELIST['response']['layout']['content']['comment_block']['node_comments']['cms_comments']['*']['postbit']['post'] as $k => $v)
+ 		{
+diff --git a/includes/api/7/api_forumlist.php b/includes/api/7/api_forumlist.php
+index f91e5a6..066d2ba 100644
+--- a/includes/api/7/api_forumlist.php
++++ b/includes/api/7/api_forumlist.php
+@@ -144,7 +144,7 @@ class vB_APIMethod_api_forumlist extends vBI_APIMethod
+ 					'subscribed' => (array_key_exists($forum['forumid'], $this->subscribed_forums) ? 1 : 0)
+ 				);
+ 
+-                if(!empty($forum[link])) {
++                if(!empty($forum['link'])) {
+                     $forum2['is_link'] = 1;
+                     $forum2['link'] = $forum['link'];
+                 } else {
+diff --git a/includes/api/7/content.php b/includes/api/7/content.php
+index 06dcea7..2c388e7 100644
+--- a/includes/api/7/content.php
++++ b/includes/api/7/content.php
+@@ -86,7 +86,7 @@ if ($methodsegments[1] == 'view')
+ 	processApiTextFormat($VB_API_WHITELIST['response']['layout']['content']);
+ 
+ 	// format switch
+-	if ($_REQUEST['apitextformat'])
++	if (!empty($_REQUEST['apitextformat']))
+ 	{
+ 		foreach ($VB_API_WHITELIST['response']['layout']['content']['comment_block']['node_comments']['cms_comments']['*']['postbit']['post'] as $k => $v)
+ 		{
+diff --git a/includes/api/commonwhitelist_2.php b/includes/api/commonwhitelist_2.php
+index cce1d75..c16db14 100644
+--- a/includes/api/commonwhitelist_2.php
++++ b/includes/api/commonwhitelist_2.php
+@@ -51,7 +51,7 @@ $VB_API_WHITELIST_COMMON['post'] = array(
+ 	'otherattachments', 'moderatedattachments', 'edit_username',
+ 	'edit_time', 'edit_reason', 'signature', 'del_userid', 'del_username', 'del_reason'
+ );
+-if ($_REQUEST['apitextformat'])
++if (!empty($_REQUEST['apitextformat']))
+ {
+ 	foreach ($VB_API_WHITELIST_COMMON['post'] as $k => $v)
+ 	{
+@@ -283,7 +283,7 @@ $VB_API_WHITELIST_COMMON['responsebits'] = array(
+ 	)
+ );
+ // format switch
+-if ($_REQUEST['apitextformat'])
++if (!empty($_REQUEST['apitextformat']))
+ {
+ 	foreach ($VB_API_WHITELIST_COMMON['responsebits']['*']['response'] as $k => $v)
+ 	{
+diff --git a/includes/api/commonwhitelist_5.php b/includes/api/commonwhitelist_5.php
+index 9f2c99f..d4383a2 100644
+--- a/includes/api/commonwhitelist_5.php
++++ b/includes/api/commonwhitelist_5.php
+@@ -51,7 +51,7 @@ $VB_API_WHITELIST_COMMON['post'] = array(
+ 	'otherattachments', 'moderatedattachments', 'edit_username',
+ 	'edit_time', 'edit_reason', 'signature', 'del_userid', 'del_username', 'del_reason'
+ );
+-if ($_REQUEST['apitextformat'])
++if (!empty($_REQUEST['apitextformat']))
+ {
+ 	foreach ($VB_API_WHITELIST_COMMON['post'] as $k => $v)
+ 	{
+@@ -280,7 +280,7 @@ $VB_API_WHITELIST_COMMON['responsebits'] = array(
+ 	)
+ );
+ // format switch
+-if ($_REQUEST['apitextformat'])
++if (!empty($_REQUEST['apitextformat']))
+ {
+ 	foreach ($VB_API_WHITELIST_COMMON['responsebits']['*']['response'] as $k => $v)
+ 	{
+diff --git a/includes/api/commonwhitelist_6.php b/includes/api/commonwhitelist_6.php
+index 9db34d0..0dbe767 100644
+--- a/includes/api/commonwhitelist_6.php
++++ b/includes/api/commonwhitelist_6.php
+@@ -51,7 +51,7 @@ $VB_API_WHITELIST_COMMON['post'] = array(
+ 	'otherattachments', 'moderatedattachments', 'edit_username',
+ 	'edit_time', 'edit_reason', 'signature', 'del_userid', 'del_username', 'del_reason'
+ );
+-if ($_REQUEST['apitextformat'])
++if (!empty($_REQUEST['apitextformat']))
+ {
+ 	foreach ($VB_API_WHITELIST_COMMON['post'] as $k => $v)
+ 	{
+@@ -280,7 +280,7 @@ $VB_API_WHITELIST_COMMON['responsebits'] = array(
+ 	)
+ );
+ // format switch
+-if ($_REQUEST['apitextformat'])
++if (!empty($_REQUEST['apitextformat']))
+ {
+ 	foreach ($VB_API_WHITELIST_COMMON['responsebits']['*']['response'] as $k => $v)
+ 	{
+diff --git a/includes/api/commonwhitelist_7.php b/includes/api/commonwhitelist_7.php
+index 125fba2..bf7b6ce 100644
+--- a/includes/api/commonwhitelist_7.php
++++ b/includes/api/commonwhitelist_7.php
+@@ -51,7 +51,7 @@ $VB_API_WHITELIST_COMMON['post'] = array(
+ 	'otherattachments', 'moderatedattachments', 'edit_username',
+ 	'edit_time', 'edit_reason', 'signature', 'del_userid', 'del_username', 'del_reason'
+ );
+-if ($_REQUEST['apitextformat'])
++if (!empty($_REQUEST['apitextformat']))
+ {
+ 	foreach ($VB_API_WHITELIST_COMMON['post'] as $k => $v)
+ 	{
+diff --git a/includes/api/commonwhitelist_8.php b/includes/api/commonwhitelist_8.php
+index 125fba2..bf7b6ce 100644
+--- a/includes/api/commonwhitelist_8.php
++++ b/includes/api/commonwhitelist_8.php
+@@ -51,7 +51,7 @@ $VB_API_WHITELIST_COMMON['post'] = array(
+ 	'otherattachments', 'moderatedattachments', 'edit_username',
+ 	'edit_time', 'edit_reason', 'signature', 'del_userid', 'del_username', 'del_reason'
+ );
+-if ($_REQUEST['apitextformat'])
++if (!empty($_REQUEST['apitextformat']))
+ {
+ 	foreach ($VB_API_WHITELIST_COMMON['post'] as $k => $v)
+ 	{
+diff --git a/includes/api/functions_api.php b/includes/api/functions_api.php
+index 8429233..f99eeff 100644
+--- a/includes/api/functions_api.php
++++ b/includes/api/functions_api.php
+@@ -157,7 +157,7 @@ function print_apierror($errorid, $errormessage = '')
+ 
+ function processApiTextFormat(&$source)
+ {
+-	if (!$_REQUEST['apitextformat'])
++	if (empty($_REQUEST['apitextformat']))
+ 	{
+ 		return;
+ 	}
+diff --git a/includes/blog_functions_category.php b/includes/blog_functions_category.php
+index 7339bfe..02e6c2e 100644
+--- a/includes/blog_functions_category.php
++++ b/includes/blog_functions_category.php
+@@ -249,7 +249,7 @@ function construct_category_select($parentid = 0, $userid = 0)
+ 			continue;
+ 		}
+ 		$optionvalue = $blogcategoryid;
+-		$optiontitle = $category[title];
++		$optiontitle = $category['title'];
+ 		$optionclass = 'd' . ($category['depth'] > 4) ? 4 : $category['depth'];
+ 		$optionselected = ($blogcategoryid == $parentid) ? 'selected="selected"' : '';
+ 
+diff --git a/includes/class_bbcode.php b/includes/class_bbcode.php
+index 59b3c12..d59dabf 100644
+--- a/includes/class_bbcode.php
++++ b/includes/class_bbcode.php
+@@ -982,7 +982,7 @@ class vB_BbCodeParser
+ 			while (($tag_pos = stripos($text, $search_string, $start_pos)) !== false)
+ 			{
+ 				$whitespace_pos = $tag_pos - 1;
+-				while ($whitespace_pos >= 0 AND $text{$whitespace_pos} == ' ')
++				while ($whitespace_pos >= 0 AND $text[$whitespace_pos] == ' ')
+ 				{
+ 					--$whitespace_pos;
+ 				}
+@@ -990,7 +990,7 @@ class vB_BbCodeParser
+ 				{
+ 					$whitespace_pos -= 2;
+ 				}
+-				else if ($whitespace_pos >= 0 AND ($text{$whitespace_pos} == "\r" OR $text{$whitespace_pos} == "\n"))
++				else if ($whitespace_pos >= 0 AND ($text[$whitespace_pos] == "\r" OR $text[$whitespace_pos] == "\n"))
+ 				{
+ 					--$whitespace_pos;
+ 				}
+@@ -1174,7 +1174,7 @@ class vB_BbCodeParser
+ 					}
+ 
+ 					// check to see if this is a closing tag, since behavior changes
+-					$closing_tag = ($text{$start_pos} == '/');
++					$closing_tag = ($text[$start_pos] == '/');
+ 					if ($closing_tag)
+ 					{
+ 						// we don't want the / to be saved
+@@ -1228,7 +1228,7 @@ class vB_BbCodeParser
+ 						}
+ 
+ 						// we have a = before a ], so we have an option
+-						$delimiter = $text{$tag_opt_start_pos + 1};
++						$delimiter = $text[$tag_opt_start_pos + 1];
+ 						if ($delimiter == '&' AND substr($text, $tag_opt_start_pos + 2, 5) == 'quot;')
+ 						{
+ 							$delimiter = '&quot;';
+@@ -2184,7 +2184,7 @@ class vB_BbCodeParser
+ 			$tagname = $tag;
+ 		}
+ 		// remove leading slash if there is one
+-		if ($tag{0} == '/')
++		if ($tag[0] == '/')
+ 		{
+ 			$tagname = substr($tagname, 1);
+ 		}
+@@ -2205,7 +2205,7 @@ class vB_BbCodeParser
+ 				break;
+ 			// form tags
+ 			//NOTE: Supposed to be a semi colon here ?
+-			case 'form';
++			case 'form':
+ 			case 'input':
+ 			case 'select':
+ 			case 'option':
+diff --git a/includes/class_bitfield_builder.php b/includes/class_bitfield_builder.php
+index bc01ec5..73cfcbc 100644
+--- a/includes/class_bitfield_builder.php
++++ b/includes/class_bitfield_builder.php
+@@ -72,7 +72,7 @@ class vB_Bitfield_Builder
+ 	*
+ 	* @return	array
+ 	*/
+-	function fetch_errors()
++	static function fetch_errors()
+ 	{
+ 		$obj = vB_Bitfield_Builder::init();
+ 		return $obj->errors;
+diff --git a/includes/class_block.php b/includes/class_block.php
+index ab3de0e..42cbfc9 100644
+--- a/includes/class_block.php
++++ b/includes/class_block.php
+@@ -280,7 +280,7 @@ abstract class vB_BlockType
+ 	 */
+ 	protected $settings = null;
+ 
+-	public function  __construct(&$registry, vB_Block $block = null)
++	public function  __construct(&$registry, $block = null)
+ 	{
+ 		$this->registry =& $registry;
+ 		$this->userinfo =& $this->registry->userinfo;
+diff --git a/includes/class_bootstrap.php b/includes/class_bootstrap.php
+index c53e527..9d375f8 100644
+--- a/includes/class_bootstrap.php
++++ b/includes/class_bootstrap.php
+@@ -742,7 +742,10 @@ class vB_Bootstrap
+ 
+ 		if (defined('CSRF_ERROR'))
+ 		{
+-			define('VB_ERROR_LITE', true);
++			if (!defined('VB_ERROR_LITE'))
++			{
++				define('VB_ERROR_LITE', true);
++			}
+ 
+ 			$ajaxerror = $vbulletin->GPC['ajax'] ? '_ajax' : '';
+ 
+diff --git a/includes/class_core.php b/includes/class_core.php
+index 7fb880f..b9b27c2 100644
+--- a/includes/class_core.php
++++ b/includes/class_core.php
+@@ -16,6 +16,87 @@ define('YUI_VERSION', '2.9.0'); // define the YUI version we bundle
+ define('JQUERY_VERSION', '1.6.4'); // define the jQuery version we use
+ define('JQUERY_MOBILE_VERSION', '1.0'); // define the jQuery Mobile Style Version
+ 
++// PHP 8: using an undefined constant is an Error. The error/exception handlers and
++// vB_Database::halt() need SAPI_NAME before init.php gets to define it.
++if (!defined('SAPI_NAME'))
++{
++	define('SAPI_NAME', php_sapi_name());
++}
++
++/**
++* Loose comparison (==) with the PHP 7 rule for a number and a non-numeric string: PHP 7
++* converted the string to a number (so 0 == '' and 0 == 'abc' were true), PHP 8 compares
++* them as strings. Form helpers use this to pre-select the same options as before.
++*
++* @param	mixed
++* @param	mixed
++*
++* @return	boolean
++*/
++function vb_loose_equals($a, $b)
++{
++	if ((is_int($a) OR is_float($a)) AND is_string($b) AND !is_numeric($b))
++	{
++		return $a == (float) $b;
++	}
++	if ((is_int($b) OR is_float($b)) AND is_string($a) AND !is_numeric($a))
++	{
++		return (float) $a == $b;
++	}
++	return $a == $b;
++}
++
++/**
++* in_array() using vb_loose_equals() (PHP 7 comparison rules).
++*
++* @param	mixed
++* @param	array
++*
++* @return	boolean
++*/
++function vb_loose_in_array($needle, $haystack)
++{
++	foreach ($haystack AS $value)
++	{
++		if (vb_loose_equals($needle, $value))
++		{
++			return true;
++		}
++	}
++	return false;
++}
++
++/**
++* Whether mbstring knows an encoding. PHP 8 throws ValueError for an unknown or empty
++* encoding where PHP 7 returned false, which the @mb_*() calls with a fallback relied on.
++*
++* @param	string	Encoding name (e.g. the language charset)
++*
++* @return	boolean
++*/
++function vb_mb_encoding_ok($encoding)
++{
++	static $known = array();
++
++	$encoding = strval($encoding);
++	if (!isset($known[$encoding]))
++	{
++		$known[$encoding] = false;
++		if ($encoding !== '' AND function_exists('mb_strlen'))
++		{
++			try
++			{
++				$known[$encoding] = (@mb_strlen('', $encoding) !== false);
++			}
++			catch (Throwable $e)
++			{
++			}
++		}
++	}
++
++	return $known[$encoding];
++}
++
+ /**#@+
+ * The maximum sizes for the "small" profile avatars
+ */
+@@ -411,7 +492,7 @@ class vB_Database
+ 	*
+ 	* @return	string
+ 	*/
+-	function execute_query($buffered = true, &$link)
++	function execute_query($buffered, &$link)
+ 	{
+ 		$this->connection_recent =& $link;
+ 		$this->querycount++;
+@@ -1378,7 +1459,7 @@ class vB_Database_MySQLi extends vB_Database
+ 	*
+ 	* @return	string
+ 	*/
+-	function execute_query($buffered = true, &$link)
++	function execute_query($buffered, &$link)
+ 	{
+ 		$this->connection_recent =& $link;
+ 		$this->querycount++;
+@@ -3861,7 +3942,7 @@ class vB_Session
+ 	*/
+ 	function set($key, $value)
+ 	{
+-		if (!isset($this->vars["$key"]) OR $this->vars["$key"] != $value)
++		if (!isset($this->vars["$key"]) OR !vb_loose_equals($this->vars["$key"], $value))
+ 		{
+ 			$this->vars["$key"] = $value;
+ 			$this->changes["$key"] = true;
+@@ -4410,7 +4491,7 @@ class vB_Template
+ 	 * @param	string	The name of the template to register for
+ 	 * @param	array	The variables to register
+ 	 */
+-	public static function preRegister($template_name, array $variables = NULL)
++	public static function preRegister($template_name, $variables = NULL)
+ 	{
+ 		if ($variables)
+ 		{
+@@ -5749,10 +5830,10 @@ function us_get_value(&$index, $strlen, $string)
+ 			break;
+ 		case 'd':
+ 			$value = us_get_prefix($index, $strlen, $string, ';');
+-			return (double) $value;
++			return (float) $value;
+ 			break;
+ 		case 'b':
+-			return (boolean) us_get_prefix($index, $strlen, $string, ';');
++			return (bool) us_get_prefix($index, $strlen, $string, ';');
+ 			break;
+ 		case 'n':
+ 			return us_get_null($index, $strlen, $string);
+@@ -5970,7 +6051,27 @@ function vbulletin_error_handler($errno, $errstr, $errfile, $errline)
+ 	{
+ 		return true; // Do nothing
+ 	}
+-	else
++
++	// PHP 8 turned many notices into warnings (undefined variables, array keys and properties,
++	// array offsets on null/false, ...). vBulletin is written with notices switched off, so
++	// treat them as notices again instead of filling the logs (or the page, where scripts
++	// enable display_errors) with them.
++	if ($errno == E_WARNING AND preg_match('#^(Undefined (variable|global variable|array key|offset|index|property)|Trying to access array offset on|Attempt to read property|Array to string conversion|Uninitialized string offset)#', $errstr))
++	{
++		if (!(error_reporting() & E_NOTICE))
++		{
++			return true;
++		}
++		$errno = E_NOTICE;
++	}
++
++	// Deprecation notices are only shown or logged with SHOW_DS_ERRORS (see below); PHP 8.x
++	// raises a great many of them for this code base.
++	if ($errno == E_DEPRECATED AND !defined('SHOW_DS_ERRORS'))
++	{
++		return true;
++	}
++
+ 	{
+ 		/* Figure out if php log and display errors is enabled
+ 		We may get '1' or 'On' returned (this changed in php 5.3) */
+@@ -6026,7 +6127,7 @@ function vbulletin_error_handler($errno, $errstr, $errfile, $errline)
+ 				$type = 'Fatal User Error';
+ 			break;
+ 
+-			case E_STRICT:
++			case 2048: // E_STRICT (the constant is deprecated in PHP 8.4)
+ 			case E_DEPRECATED:
+ 				// This setting overrides the config option.
+ 				if (!empty($vbulletin->options['hookerrors']))
+@@ -6119,10 +6220,11 @@ function vbulletin_exception_handler($throwable)
+ 	   We may get '1' or 'On' returned (this changed in php 5.3) */
+ 	$php_log_errors = in_array(strtolower(ini_get('log_errors')), array('on', '1')) ? true : false;
+ 
+-	if ($php_log_errors AND defined('LOG_VB_PHP_ERRORS'))
++	if ($php_log_errors)
+ 	{
+-		// If set, try to log to system log regardless of vB settings
+-		error_log("VB PHP Exception: $errstr in $errfile on line $errline");
++		// Without a handler PHP would log this; do the same (with the trace) so fatal
++		// PHP 7+ Errors (TypeError, ValueError, ...) do not vanish behind a blank page.
++		error_log("PHP Fatal error:  Uncaught $throwable");
+ 	}
+ 
+ 	$type = get_class($throwable);
+diff --git a/includes/class_database_explain.php b/includes/class_database_explain.php
+index 8a20b29..048928b 100644
+--- a/includes/class_database_explain.php
++++ b/includes/class_database_explain.php
+@@ -68,7 +68,7 @@ class vB_Database_Explain extends vB_Database
+ 		return $return;
+ 	}
+ 
+-	function execute_query($buffered = true, &$link)
++	function execute_query($buffered, &$link)
+ 	{
+ 		if ($link == $this->connection_slave AND preg_match('#^\s*SELECT\s#s', $this->sql))
+ 		{
+@@ -231,7 +231,7 @@ class vB_Database_MySQLi_Explain extends vB_Database_MySQLi
+ 		return $return;
+ 	}
+ 
+-	function &execute_query($buffered = true, &$link)
++	function &execute_query($buffered, &$link)
+ 	{
+ 		if ($link == $this->connection_slave AND preg_match('#^\s*SELECT\s#s', $this->sql))
+ 		{
+diff --git a/includes/class_dm.php b/includes/class_dm.php
+index a19fada..f0e8e10 100644
+--- a/includes/class_dm.php
++++ b/includes/class_dm.php
+@@ -843,7 +843,7 @@ class vB_DataManager
+ 			}
+ 			else
+ 			{
+-				trigger_error('<ul><li>' . implode($this->errors, '</li><li>') . '</ul>Unable to proceed with save while $errors array is not empty in class <strong>' . get_class($this) . '</strong>', E_USER_ERROR);
++				trigger_error('<ul><li>' . implode('</li><li>', $this->errors) . '</ul>Unable to proceed with save while $errors array is not empty in class <strong>' . get_class($this) . '</strong>', E_USER_ERROR);
+ 				return true;
+ 			}
+ 		}
+diff --git a/includes/class_dm_attachment.php b/includes/class_dm_attachment.php
+index 28592d9..22f923e 100644
+--- a/includes/class_dm_attachment.php
++++ b/includes/class_dm_attachment.php
+@@ -338,8 +338,9 @@ abstract class vB_DataManager_AttachData extends vB_DataManager
+ 					");
+ 				}
+ 
+-				// $php_errormsg is automatically set if track_vars is enabled
+-				$this->error('upload_copyfailed', htmlspecialchars_uni($php_errormsg), fetch_attachment_path($userid));
++				// $php_errormsg (track_errors) was removed in PHP 8
++				$last_error = error_get_last();
++				$this->error('upload_copyfailed', htmlspecialchars_uni($last_error ? $last_error['message'] : ''), fetch_attachment_path($userid));
+ 				return false;
+ 			}
+ 			else
+diff --git a/includes/class_dm_stylevar.php b/includes/class_dm_stylevar.php
+index 394e0d6..20d698e 100644
+--- a/includes/class_dm_stylevar.php
++++ b/includes/class_dm_stylevar.php
+@@ -143,7 +143,7 @@ class vB_DataManager_StyleVarDefn extends vB_DataManager
+ 			$styleid = $curstyle['parentid'];
+ 		}
+ 		$this->error('cant_parent_style_to_child');
+-		return flase;
++		return false;
+ 	}
+ 
+ 
+@@ -464,7 +464,11 @@ class vB_DataManager_StyleVar extends vB_DataManager
+ 				}
+ 				else
+ 				{
+-					$lamdafunction = create_function('&$data, &$dm', $field[VF_CODE]);
++					// create_function() was removed in PHP 8
++					$lamdafunction = function (&$data, &$dm) use ($field)
++					{
++						return eval($field[VF_CODE]);
++					};
+ 					return $lamdafunction($value, $this);
+ 				}
+ 			}
+diff --git a/includes/class_dm_user.php b/includes/class_dm_user.php
+index 775e310..35f72c8 100644
+--- a/includes/class_dm_user.php
++++ b/includes/class_dm_user.php
+@@ -720,7 +720,7 @@ class vB_DataManager_User extends vB_DataManager
+ 		// if usergroupids is set because of email validation, don't allow it to be re-written
+ 		if (isset($this->info['override_usergroupid']) AND $usergroupid != $this->user['usergroupid'])
+ 		{
+-			$this->error("::Usergroup ID is already set to {$this->user[usergroupid]} and can not be changed due to email validation regulations::");
++			$this->error("::Usergroup ID is already set to {$this->user['usergroupid']} and can not be changed due to email validation regulations::");
+ 			return false;
+ 		}
+ 
+diff --git a/includes/class_encryption.php b/includes/class_encryption.php
+index 2041019..a21d12b 100644
+--- a/includes/class_encryption.php
++++ b/includes/class_encryption.php
+@@ -189,7 +189,8 @@ class Diffie_Hellman_GMP extends Diffie_Hellman_Abstract
+ 	{
+ 		if (empty($privkey))
+ 		{
+-			$privkey = gmp_random(5);
++			// gmp_random() was removed in PHP 8; same size: 5 limbs
++			$privkey = function_exists('gmp_random_bits') ? gmp_random_bits(5 * GMP_LIMB_BITS) : gmp_random(5);
+ 		}
+ 		$this->privatekey = $privkey;
+ 	}
+@@ -462,7 +463,7 @@ class vB_Encrypt
+ 
+             $t = $this->S[($this->S[$i] + $this->S[$j]) % 256];
+ 
+-            $enc_data{$c} = chr(ord($data[$c]) ^ $t);
++            $enc_data[$c] = chr(ord($data[$c]) ^ $t);
+ 		}
+ 		return $enc_data;
+ 	}
+diff --git a/includes/class_friendly_url.php b/includes/class_friendly_url.php
+index d9b88f7..5b670cc 100644
+--- a/includes/class_friendly_url.php
++++ b/includes/class_friendly_url.php
+@@ -369,7 +369,7 @@ abstract class vB_Friendly_Url
+ 		}
+ 
+ 		// Convert to UTF-8
+-		if (self::UNI_CONVERT == $vbulletin->options['friendlyurl_unicode'])
++		if (self::UNI_CONVERT == intval($vbulletin->options['friendlyurl_unicode']))
+ 		{
+ 			// convert to UTF-8
+ 			$fragment = to_utf8($fragment, $vbulletin->userinfo['lang_charset']);
+@@ -377,7 +377,7 @@ abstract class vB_Friendly_Url
+ 			// convert NCRs
+ 			$fragment = unhtmlspecialchars($fragment, true);
+ 		}
+-		else if (self::UNI_STRIP == $vbulletin->options['friendlyurl_unicode'])
++		else if (self::UNI_STRIP == intval($vbulletin->options['friendlyurl_unicode']))
+ 		{
+ 			// strip NCRs
+ 			$fragment = stripncrs($fragment);
+@@ -387,7 +387,7 @@ abstract class vB_Friendly_Url
+ 		$fragment = self::clean_entities($fragment);
+ 
+ 		// Prepare the URL for output
+-		if (!$canonical AND (self::UNI_CONVERT == $vbulletin->options['friendlyurl_unicode']) AND ('UTF-8' != $vbulletin->userinfo['lang_charset']))
++		if (!$canonical AND (self::UNI_CONVERT == intval($vbulletin->options['friendlyurl_unicode'])) AND ('UTF-8' != $vbulletin->userinfo['lang_charset']))
+ 		{
+ 			if (is_browser('ie'))
+ 			{
+@@ -401,7 +401,7 @@ abstract class vB_Friendly_Url
+ 				$fragment = urlencode($fragment);
+ 			}
+ 		}
+-		else if ($canonical AND (self::UNI_IGNORE == $vbulletin->options['friendlyurl_unicode']))
++		else if ($canonical AND (self::UNI_IGNORE == intval($vbulletin->options['friendlyurl_unicode'])))
+ 		{
+ 			// ensure NCRs are converted
+ 			$fragment = unhtmlspecialchars($fragment, true);
+@@ -1523,8 +1523,8 @@ class vB_Friendly_Url_Forumhome extends vB_Friendly_Url_GenerationOnly
+ 
+ 	protected function __construct(
+ 		&$registry,
+-		array $linkinfo = null,
+-		array $pageinfo = null,
++		$linkinfo = null,
++		$pageinfo = null,
+ 		$idkey = false,
+ 		$titlekey = false,
+ 		$urloptions = 0
+@@ -1644,8 +1644,8 @@ class vB_Friendly_Url_Groupdiscussion extends vB_Friendly_Url_GenerationOnly
+ 
+ 	protected function __construct(
+ 		&$registry,
+-		array $linkinfo = null,
+-		array $pageinfo = null,
++		$linkinfo = null,
++		$pageinfo = null,
+ 		$idkey = false,
+ 		$titlekey = false,
+ 		$urloptions = 0
+@@ -1686,8 +1686,8 @@ class vB_Friendly_Url_Groupmessage extends vB_Friendly_Url_GenerationOnly
+ 
+ 	protected function __construct(
+ 		&$registry,
+-		array $linkinfo = null,
+-		array $pageinfo = null,
++		$linkinfo = null,
++		$pageinfo = null,
+ 		$idkey = false,
+ 		$titlekey = false,
+ 		$urloptions = 0
+@@ -1983,7 +1983,7 @@ class vB_Friendly_Url_vBCms extends vB_Friendly_Url
+ 	 * @param string $titlekey					- Override the key in $linkinfo for the resource title
+ 	 * @param int $urloptions					- Bitfield of environment options SEO_NOSESSION, SEO_JS, etc
+ 	 */
+-	protected function __construct(&$registry, array $linkinfo = null, array $pageinfo = null, $idkey = false, $titlekey = false, $urloptions = 0)
++	protected function __construct(&$registry, $linkinfo = null, $pageinfo = null, $idkey = false, $titlekey = false, $urloptions = 0)
+ 	{
+ 		$this->idvar = $this->ignorelist[] = $registry->options['route_requestvar'];
+ 		$this->script = basename(SCRIPT);
+diff --git a/includes/class_generator.php b/includes/class_generator.php
+index c58943e..46b3bef 100644
+--- a/includes/class_generator.php
++++ b/includes/class_generator.php
+@@ -94,7 +94,7 @@ class vB_PHP_Generator
+ 		}
+ 	}
+ 
+-	public function addFunctionCall($callback, array $parameters = array(), vB_PHP_Generator_Return_Data $returnData = null)
++	public function addFunctionCall($callback, array $parameters = array(), $returnData = null)
+ 	{
+ 		$resolved_callback = '';
+ 		if (!is_callable($callback, true, $resolved_callback))
+diff --git a/includes/class_image.php b/includes/class_image.php
+index 56d1842..3a255db 100644
+--- a/includes/class_image.php
++++ b/includes/class_image.php
+@@ -561,7 +561,18 @@ class vB_Image_Magick extends vB_Image_Abstract
+ 		);
+ 
+ 		$input = $imcommands["$command"] . ' ' . $args . ' 2>&1';
+-		$exec = @exec($input, $output, $this->returnvalue);
++		if (function_exists('error_clear_last'))
++		{
++			// $php_errormsg (track_errors) was removed in PHP 8
++			error_clear_last();
++			$exec = @exec($input, $output, $this->returnvalue);
++			$last_error = error_get_last();
++			$php_errormsg = $last_error ? $last_error['message'] : '';
++		}
++		else
++		{
++			$exec = @exec($input, $output, $this->returnvalue);
++		}
+ 
+ 		if ($this->returnvalue OR $exec === null)
+ 		{	// error was encountered
+diff --git a/includes/class_mail.php b/includes/class_mail.php
+index c2e80b7..96d8699 100644
+--- a/includes/class_mail.php
++++ b/includes/class_mail.php
+@@ -458,7 +458,7 @@ class vB_Mail
+ 
+ 			for ($i = 0; $i < strlen($text); $i++)
+ 			{
+-				if (ord($text{$i}) > 127)
++				if (ord($text[$i]) > 127)
+ 				{
+ 					// we have a non ascii character
+ 					$qp_encode = true;
+diff --git a/includes/class_paid_subscription.php b/includes/class_paid_subscription.php
+index 14fe26e..7cf5236 100644
+--- a/includes/class_paid_subscription.php
++++ b/includes/class_paid_subscription.php
+@@ -378,7 +378,7 @@ class vB_PaidSubscription
+ 
+ 				if (!empty($forumsql))
+ 				{
+-					$forumsql = implode($forumsql, ', ');
++					$forumsql = implode(', ', $forumsql);
+ 					/*insert query*/
+ 					$this->registry->db->query_write("
+ 						INSERT INTO " . TABLE_PREFIX . "access
+@@ -421,7 +421,7 @@ class vB_PaidSubscription
+ 						}
+ 					}
+ 				}
+-				$userdm->set('membergroupids', implode($membergroupids, ','));
++				$userdm->set('membergroupids', implode(',', $membergroupids));
+ 			}
+ 
+ 			$userdm->save();
+@@ -633,7 +633,7 @@ class vB_PaidSubscription
+ 			$reset_title = false;
+ 			if ($user['customtitle'] == 2)
+ 			{
+-				$groups = (empty($membergroupids) ? '' : implode($membergroupids, ',') . ',') . $user['pusergroupid'];
++				$groups = (empty($membergroupids) ? '' : implode(',', $membergroupids) . ',') . $user['pusergroupid'];
+ 				$usergroup = $this->registry->db->query_first_slave("
+ 					SELECT usergroupid
+ 					FROM " . TABLE_PREFIX . "usergroup
+@@ -678,7 +678,7 @@ class vB_PaidSubscription
+ 				}
+ 			}
+ 
+-			$userdm->set('membergroupids', implode($membergroupids, ','));
++			$userdm->set('membergroupids', implode(',', $membergroupids));
+ 			$userdm->set_bitfield('options', 'hasaccessmask', ($countaccess['masks'] ? true : false));
+ 			$userdm->set('displaygroupid', $user['displaygroupid']);
+ 
+diff --git a/includes/class_profileblock.php b/includes/class_profileblock.php
+index a39975e..eeb0b34 100644
+--- a/includes/class_profileblock.php
++++ b/includes/class_profileblock.php
+@@ -202,7 +202,7 @@ class vB_ProfileBlock
+ 	*
+ 	* @return	string	The Block's output to be shown on the profile page
+ 	*/
+-	function fetch($title, $id = '', $options = array(), $visitor)
++	function fetch($title, $id, $options, $visitor)
+ 	{
+ 		if ($this->block_is_enabled($id))
+ 		{
+@@ -1417,7 +1417,7 @@ class vB_ProfileBlock_VisitorMessaging extends vB_ProfileBlock
+ 	*
+ 	* @return	string	The Block's output to be shown on the profile page
+ 	*/
+-	function fetch($title, $id = '', $options = array(), $visitor)
++	function fetch($title, $id, $options, $visitor)
+ 	{
+ 		global $show;
+ 
+diff --git a/includes/class_profileblock_blog.php b/includes/class_profileblock_blog.php
+index 3a1bd02..b5a408b 100644
+--- a/includes/class_profileblock_blog.php
++++ b/includes/class_profileblock_blog.php
+@@ -424,7 +424,12 @@ class vB_ProfileBlock_Blog extends vB_ProfileBlock
+ 						'grouppermissions'   => $comment['grouppermissions'],
+ 					);
+ 					cache_permissions($bloginfo, false);
+-					$response_handler->bloginfo =& $bloginfo;
++					// sets the PREVIOUS handler's bloginfo (it is replaced below); on the first
++					// comment $response_handler did not exist yet, which PHP 8 makes an Error
++					if (isset($response_handler))
++					{
++						$response_handler->bloginfo =& $bloginfo;
++					}
+ 
+ 					$response_handler =& $factory->create($comment, 'Comment_Profile');
+ 					$response_handler->cachable = false;
+diff --git a/includes/class_sitemap.php b/includes/class_sitemap.php
+index 13e5038..615e195 100644
+--- a/includes/class_sitemap.php
++++ b/includes/class_sitemap.php
+@@ -1115,7 +1115,7 @@ class vB_SiteMap_Forum extends vB_SiteMap
+ 	* @param	vB_Registry		Instance of the vBulletin data registry object - expected to have the database object as one of its $this->db member.
+ 	* @param 	vB_XML_Parser 	Instance of the vBulletin XML parser.
+ 	*/
+-	function __construct(vB_Registry $registry, vB_XML_Parser $xml_handler = null)
++	function __construct(vB_Registry $registry, $xml_handler = null)
+ 	{
+ 		parent::__construct($registry, $xml_handler);
+ 
+@@ -1184,7 +1184,7 @@ class vB_SiteMap_Thread extends vB_SiteMap
+ 	* @param	vB_Registry		Instance of the vBulletin data registry object - expected to have the database object as one of its $this->db member.
+ 	* @param 	vB_XML_Parser 	Instance of the vBulletin XML parser.
+ 	*/
+-	function __construct(vB_Registry $registry, vB_XML_Parser $xml_handler = null)
++	function __construct(vB_Registry $registry, $xml_handler = null)
+ 	{
+ 		parent::__construct($registry, $xml_handler);
+ 
+@@ -1258,7 +1258,7 @@ class vB_SiteMap_Cms extends vB_SiteMap
+ 	 * @param	vB_Registry		Instance of the vBulletin data registry object - expected to have the database object as one of its $this->db member.
+ 	 * @param 	vB_XML_Parser 	Instance of the vBulletin XML parser.
+ 	 */
+-	function __construct(vB_Registry $registry, vB_XML_Parser $xml_handler = null)
++	function __construct(vB_Registry $registry, $xml_handler = null)
+ 	{
+ 		parent::__construct($registry, $xml_handler);
+ 
+@@ -1360,7 +1360,7 @@ class vB_SiteMap_Blog extends vB_SiteMap
+ 	 * @param	vB_Registry		Instance of the vBulletin data registry object - expected to have the database object as one of its $this->db member.
+ 	 * @param 	vB_XML_Parser 	Instance of the vBulletin XML parser.
+ 	 */
+-	function __construct(vB_Registry $registry, vB_XML_Parser $xml_handler = null)
++	function __construct(vB_Registry $registry, $xml_handler = null)
+ 	{
+ 		parent::__construct($registry, $xml_handler);
+ 
+diff --git a/includes/class_template_parser.php b/includes/class_template_parser.php
+index a693e93..3b59c4a 100644
+--- a/includes/class_template_parser.php
++++ b/includes/class_template_parser.php
+@@ -1358,7 +1358,9 @@ class vB_Template_Parser
+ 			($this->scanner->token != vbTemplateParser::CURLY_END AND $this->scanner->token != vbTemplateParser::CURLY_START AND $this->scanner->token != vbTemplateParser::TOKEN)
+ 		)
+ 		{
+-			$token .= $this->scanner->currentValue;
++			// Keep the quotes of a quoted array key (post['key']): the lexer strips them from
++			// STRING_VALUE tokens, which compiled to $post[key] -- an undefined constant, an Error in PHP 8.
++			$token .= ($this->scanner->token == vbTemplateParser::STRING_VALUE) ? $this->scanner->value : $this->scanner->currentValue;
+ 			if ($this->scanner->yylex() === false)
+ 			{
+ 				throw new vB_Exception_Parser('unclosed_curlybrace');
+diff --git a/includes/class_upload.php b/includes/class_upload.php
+index 47c4871..2a996ab 100644
+--- a/includes/class_upload.php
++++ b/includes/class_upload.php
+@@ -260,7 +260,6 @@ class vB_Upload_Abstract
+ 								$this->set_error('upload_fopen_disabled');
+ 								break;
+ 							case VURL_ERROR_SSL:
+-							case VURL_URL_URL:
+ 							default:
+ 								$this->set_error('retrieval_of_remote_file_failed');
+ 						}
+diff --git a/includes/class_userprofile.php b/includes/class_userprofile.php
+index df371f3..9d90917 100644
+--- a/includes/class_userprofile.php
++++ b/includes/class_userprofile.php
+@@ -766,7 +766,7 @@ class vB_UserProfile
+ 		 				AND $this->prepared['userperms']['pmquota']
+ 		 				AND (!$this->userinfo['receivepmbuddies']
+ 		 					OR can_moderate()
+-		 					OR strpos(" {$this->userinfo[buddylist]} ", ' ' . $this->registry->userinfo['userid'] . ' ') !== false
++		 					OR strpos(" {$this->userinfo['buddylist']} ", ' ' . $this->registry->userinfo['userid'] . ' ') !== false
+ 		 				)
+ 		 			)
+ 	 			)
+diff --git a/includes/class_wysiwygparser.php b/includes/class_wysiwygparser.php
+index 1e689cd..747c957 100644
+--- a/includes/class_wysiwygparser.php
++++ b/includes/class_wysiwygparser.php
+@@ -1558,7 +1558,7 @@ class vB_WysiwygHtmlParser
+ 			$tagnameend = false;
+ 			for ($optionend = $tagbegin; $optionend <= $strlen; $optionend++)
+ 			{
+-				$char = $text{$optionend};
++				$char = $text[$optionend];
+ 				if (($char == '"' OR $char == "'") AND $inquote == '')
+ 				{
+ 					$inquote = $char; // wasn't in a quote, but now we are
+@@ -1651,11 +1651,11 @@ class vB_WysiwygHtmlParser
+ 		if (($position = strpos($text, $option)) !== false)
+ 		{
+ 			$delimiter = $position + strlen($option);
+-			if ($text{$delimiter} == '"')
++			if ($text[$delimiter] == '"')
+ 			{ // read to another "
+ 				$delimchar = '"';
+ 			}
+-			else if ($text{$delimiter} == '\'')
++			else if ($text[$delimiter] == '\'')
+ 			{
+ 				$delimchar = '\'';
+ 			}
+diff --git a/includes/class_xml.php b/includes/class_xml.php
+index b9df87a..745ed7d 100644
+--- a/includes/class_xml.php
++++ b/includes/class_xml.php
+@@ -385,7 +385,7 @@ class vB_XML_Parser
+ 				$this->xmldata =& $encoded_data;
+ 			}
+ 
+-			if (!$iconv_passed AND function_exists('mb_convert_encoding') AND $encoded_data = @mb_convert_encoding($this->xmldata, $target_encoding, $in_encoding))
++			if (!$iconv_passed AND function_exists('mb_convert_encoding') AND vb_mb_encoding_ok($target_encoding) AND vb_mb_encoding_ok($in_encoding) AND $encoded_data = @mb_convert_encoding($this->xmldata, $target_encoding, $in_encoding))
+ 			{
+ 				$this->xmldata =& $encoded_data;
+ 			}
+@@ -421,7 +421,7 @@ class vB_XML_Parser
+ 	* @param	resource	Parser that called this
+ 	* @param	string		The CDATA
+ 	*/
+-	function handle_cdata(&$parser, $data)
++	function handle_cdata($parser, $data) // PHP 8 passes the parser by value: no &
+ 	{
+ 		$this->cdata .= $data;
+ 	}
+@@ -433,7 +433,7 @@ class vB_XML_Parser
+ 	* @param	string		The name of the tag opened
+ 	* @param	array		The tag's attributes
+ 	*/
+-	function handle_element_start(&$parser, $name, $attribs)
++	function handle_element_start($parser, $name, $attribs)
+ 	{
+ 		$this->cdata = '';
+ 
+@@ -454,7 +454,7 @@ class vB_XML_Parser
+ 	* @param	resource	Parser that called this
+ 	* @param	string		The name of the tag closed
+ 	*/
+-	function handle_element_end(&$parser, $name)
++	function handle_element_end($parser, $name)
+ 	{
+ 		$tag = array_shift($this->stack);
+ 		if ($tag['name'] != $name)
+@@ -999,8 +999,13 @@ class vB_AJAX_XML_Builder extends vB_XML_Builder
+ // #############################################################################
+ // legacy stuff
+ 
+-class XMLparser extends vB_XML_Parser
++// PHP 8 has a built-in XMLParser class (class names are case-insensitive): keep this
++// unused legacy alias only where the name is free
++if (!class_exists('XMLparser', false))
+ {
++	class XMLparser extends vB_XML_Parser
++	{
++	}
+ }
+ class XMLexporter extends vB_XML_Builder
+ {
+diff --git a/includes/class_xml_dom.php b/includes/class_xml_dom.php
+index 6b7eef8..7021126 100644
+--- a/includes/class_xml_dom.php
++++ b/includes/class_xml_dom.php
+@@ -500,7 +500,7 @@ class vB_CurlyNode implements vB_Node
+ 	public $attributes = null;
+ 	private $parent = null;
+ 
+-	public function __construct($node, vB_DomDocument $document = null)
++	public function __construct($node, $document = null)
+ 	{
+ 		$this->type = $node['type'];
+ 		if (isset($node['value']))
+diff --git a/includes/facebook/base_facebook.php b/includes/facebook/base_facebook.php
+index 3f45d40..85c5437 100644
+--- a/includes/facebook/base_facebook.php
++++ b/includes/facebook/base_facebook.php
+@@ -1149,7 +1149,7 @@ abstract class BaseFacebook
+         }
+       }
+       if (!empty($retained_params)) {
+-        $query = '?'.implode($retained_params, '&');
++        $query = '?'.implode('&', $retained_params);
+       }
+     }
+     // use port if non default
+diff --git a/includes/functions.php b/includes/functions.php
+index d3f83dd..3106c30 100644
+--- a/includes/functions.php
++++ b/includes/functions.php
+@@ -210,7 +210,7 @@ function datamanager_init($classtype, &$registry, $errtype = ERRTYPE_STANDARD, $
+ */
+ function vbstrtolower($string)
+ {
+-	if (function_exists('mb_strtolower') AND $newstring = @mb_strtolower($string, vB_Template_Runtime::fetchStyleVar('charset')))
++	if (function_exists('mb_strtolower') AND vb_mb_encoding_ok($charset = vB_Template_Runtime::fetchStyleVar('charset')) AND $newstring = @mb_strtolower($string, $charset))
+ 	{
+ 		return $newstring;
+ 	}
+@@ -268,7 +268,7 @@ function vbstrlen($string, $unhtmlspecialchars = false)
+ 		$string = unhtmlspecialchars($string, false);
+ 	}
+ 
+-	if (function_exists('mb_strlen') AND $length = @mb_strlen($string, vB_Template_Runtime::fetchStyleVar('charset')))
++	if (function_exists('mb_strlen') AND vb_mb_encoding_ok($charset = vB_Template_Runtime::fetchStyleVar('charset')) AND $length = @mb_strlen($string, $charset))
+ 	{
+ 		return $length;
+ 	}
+@@ -332,7 +332,15 @@ function vbchop($string, $length)
+ 	if (function_exists('mb_substr'))
+ 	{
+ 		$charset = vB_Template_Runtime::fetchStyleVar('charset');
+-		$substr = $charset ? @mb_substr($string, 0, $length, $charset) : @mb_substr($string, 0, $length);
++		if (!$charset)
++		{
++			$substr = @mb_substr($string, 0, $length);
++		}
++		else
++		{
++			// unknown charset: PHP 7 returned false here (substr() below), PHP 8 throws
++			$substr = vb_mb_encoding_ok($charset) ? @mb_substr($string, 0, $length, $charset) : '';
++		}
+ 	}
+ 
+ 	if ($substr != '' )
+@@ -463,7 +471,7 @@ function fetch_random_password($length = 8)
+ 			continue;
+ 		}
+ 
+-		$newpassword .= $password_characters{vbrand(0, $total_password_characters)};
++		$newpassword .= $password_characters[vbrand(0, $total_password_characters)];
+ 	}
+ 	return $newpassword;
+ }
+@@ -911,7 +919,7 @@ function verify_ip_ban()
+ 		$addresses = preg_split('#\s+#', $vbulletin->options['banip'], -1, PREG_SPLIT_NO_EMPTY);
+ 		foreach ($addresses AS $banned_ip)
+ 		{
+-			if (strpos($banned_ip, '*') === false AND $banned_ip{strlen($banned_ip) - 1} != '.')
++			if (strpos($banned_ip, '*') === false AND $banned_ip[strlen($banned_ip) - 1] != '.')
+ 			{
+ 				$banned_ip .= '.';
+ 			}
+@@ -1666,7 +1674,7 @@ function fetch_forum_clause_sql($forumid, $field = 'forumid', $joiner = 'OR', $p
+ 	}
+ 	else
+ 	{
+-		return "($field = '" . implode(explode(',', $parentlist), "' $joiner $field = '") . '\')';
++		return "($field = '" . implode("' $joiner $field = '", explode(',', $parentlist)) . '\')';
+ 	}
+ 
+ }
+@@ -3615,7 +3623,10 @@ function print_no_permission()
+ 	}
+ 	else
+ 	{
+-		define('VB_ERROR_PERMISSION', true);
++		if (!defined('VB_ERROR_PERMISSION'))
++		{
++			define('VB_ERROR_PERMISSION', true);
++		}
+ 		eval(standard_error(fetch_error('nopermission_loggedout')));
+ 	}
+ }
+@@ -3692,7 +3703,10 @@ function standard_error($error = '', $headinsert = '', $savebadlocation = true,
+ 	if (defined('VB_ERROR_LITE') AND VB_ERROR_LITE == true)
+ 	{
+ 		$templatename = 'STANDARD_ERROR_LITE';
+-		define('NOPMPOPUP', 1); // No Footer here
++		if (!defined('NOPMPOPUP'))
++		{
++			define('NOPMPOPUP', 1); // No Footer here
++		}
+ 	}
+ 	else
+ 	{
+@@ -3912,7 +3926,10 @@ function standard_redirect($message = '', $forceredirect = false, $bypasswhiteli
+ 	);
+ 	$url = preg_replace('#&amp%3B#i', '&amp;', $url);
+ 
+-	define('NOPMPOPUP', 1); // No footer here
++	if (!defined('NOPMPOPUP'))
++	{
++		define('NOPMPOPUP', 1); // No footer here
++	}
+ 
+ 	require_once(DIR . '/includes/functions_misc.php');
+ 	$postvars = construct_hidden_var_fields(verify_client_string($vbulletin->GPC['postvars']));
+@@ -3990,7 +4007,10 @@ function exec_header_redirect($url, $redirectcode = 303)
+ 		}
+ 	}
+ 
+-	define('NOPMPOPUP', 1);
++	if (!defined('NOPMPOPUP'))
++	{
++		define('NOPMPOPUP', 1);
++	}
+ 
+ 	$vbulletin->shutdown->shutdown();
+ 	if (defined('NOSHUTDOWNFUNC'))
+@@ -4019,7 +4039,7 @@ function create_full_url($url = '', $force_bburl = false)
+ 	// enforces HTTP 1.1 compliance
+ 	if (!preg_match('#^[a-z]+(?<!about|javascript|vbscript|data)://#i', $url))
+ 	{
+-		if ('/' == $url{0})
++		if ('/' == $url[0])
+ 		{
+ 			$vb_url_webroot = preg_replace('/^http:/si', 'https:', VB_URL_WEBROOT);
+ 			if (    stripos($vbulletin->options['bburl'], 'https', 0) === 0
+@@ -4943,7 +4963,7 @@ function to_utf8($in, $charset = false, $strip = true)
+ 	}
+ 
+ 	// Try mbstring
+-	if (function_exists('mb_convert_encoding') AND $out = @mb_convert_encoding($in, 'UTF-8', $charset))
++	if (function_exists('mb_convert_encoding') AND vb_mb_encoding_ok($charset) AND $out = @mb_convert_encoding($in, 'UTF-8', $charset))
+ 	{
+ 		return $out;
+ 	}
+@@ -5005,7 +5025,7 @@ function to_charset($in, $in_encoding, $target_encoding = false)
+ 	}
+ 
+ 	// Try mbstring
+-	if (function_exists('mb_convert_encoding') AND $out = @mb_convert_encoding($in, $target_encoding, $in_encoding))
++	if (function_exists('mb_convert_encoding') AND vb_mb_encoding_ok($target_encoding) AND vb_mb_encoding_ok($in_encoding) AND $out = @mb_convert_encoding($in, $target_encoding, $in_encoding))
+ 	{
+ 		return $out;
+ 	}
+@@ -5063,7 +5083,10 @@ function ncrencode($str, $skip_ascii = false, $skip_win = false)
+ 	{
+ 		return preg_replace_callback(
+ 			'#\X#u',
+-			create_function('$matches', 'return ncrencode_matches($matches, ' . (int)$skip_ascii . ', ' . (int)$skip_win . ');'),
++			function ($matches) use ($skip_ascii, $skip_win)
++			{
++				return ncrencode_matches($matches, (int)$skip_ascii, (int)$skip_win);
++			},
+ 			$str
+ 		);
+ 	}
+@@ -6976,7 +6999,7 @@ function is_came_from_search_engine()
+ 			$searchengines = preg_split('#\s+#', $vbulletin->options['searchenginereferrers'], -1, PREG_SPLIT_NO_EMPTY);
+ 			foreach ($searchengines AS $searchengine)
+ 			{
+-				if (strpos($searchengine, '*') === false AND $searchengine{strlen($searchengine) - 1} != '.')
++				if (strpos($searchengine, '*') === false AND $searchengine[strlen($searchengine) - 1] != '.')
+ 				{
+ 					$searchengine .= '.';
+ 				}
+@@ -7393,7 +7416,10 @@ function verify_seo_url($link, $linkinfo, $pageinfo = null, $primaryid = null, $
+ 	// Set the WOLPATH
+ 	$url = $canonical->get_url(FRIENDLY_URL_OFF);
+ 	$vbulletin->session->set('location', $url);
+-	define('WOLPATH', $vbulletin->input->strip_sessionhash($url));
++	if (!defined('WOLPATH')) // a second define() was a no-op (a warning since PHP 8)
++	{
++		define('WOLPATH', $vbulletin->input->strip_sessionhash($url));
++	}
+ }
+ 
+ 
+@@ -7484,7 +7510,7 @@ function verify_forum_url($scriptid = null)
+  * @param boolean $skip_empty					- Whether to skip empty elements
+  * @return string								- The imploded result
+  */
+-function implode_both($glue1 = '', $glue2 = '', $array, $skip_empty = false)
++function implode_both($glue1, $glue2, $array, $skip_empty = false)
+ {
+ 	if (!is_array($array))
+ 	{
+@@ -8045,7 +8071,7 @@ function fetch_version_array($version)
+ 			switch (strtoupper($match[1]))
+ 			{
+ 				case 'A':
+-				case 'ALPHA';
++				case 'ALPHA':
+ 					$version_bits[4] = -4;
+ 					break;
+ 
+@@ -8065,7 +8091,7 @@ function fetch_version_array($version)
+ 					break;
+ 
+ 				case 'PL':
+-				case 'PATCH LEVEL';
++				case 'PATCH LEVEL':
+ 					$version_bits[4] = 1;
+ 					break;
+ 
+@@ -8197,6 +8223,16 @@ function vb_number_format($number, $decimals = 0, $bytesize = false, $decimalsep
+ 				$number = $matches[1] * 1;
+ 		}
+ 	}
++	else if (is_string($number) AND !is_numeric($number))
++	{
++		// PHP 8 throws TypeError for a string like "0.29," (load averages parsed from uptime);
++		// PHP 5 used its leading number, or produced nothing if there was none
++		if (!preg_match('#^\s*[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?#i', $number, $matches))
++		{
++			return '';
++		}
++		$number = $matches[0];
++	}
+ 
+ 	if ($bytesize)
+ 	{
+diff --git a/includes/functions_calendar.php b/includes/functions_calendar.php
+index 82a80b0..05e53d1 100644
+--- a/includes/functions_calendar.php
++++ b/includes/functions_calendar.php
+@@ -955,7 +955,7 @@ function construct_calendar_jump($currentcalendarid, $month, $year)
+ }
+ 
+ // ###################### Start getfirstday #######################
+-function fetch_first_day($daynum = 1, $fullcalendar, $showweekends)
++function fetch_first_day($daynum, $fullcalendar, $showweekends)
+ {
+ 	global $vbphrase, $vbulletin;
+ 
+@@ -1003,7 +1003,7 @@ function fetch_first_day($daynum = 1, $fullcalendar, $showweekends)
+ }
+ 
+ // ###################### Start subtractdays #######################
+-function fetch_subtract_days($offset = 0, $dateVal)
++function fetch_subtract_days($offset, $dateVal)
+ {
+ 	// Takes number of days to subtract and the date to subtract from
+ 	// Returns an array containing month/day/year
+@@ -1012,7 +1012,7 @@ function fetch_subtract_days($offset = 0, $dateVal)
+ }
+ 
+ // ###################### Start adddays #######################
+-function fetch_add_days($offset = 0, $dateVal)
++function fetch_add_days($offset, $dateVal)
+ {
+ 	// Takes number of days to add and the date to add from
+ 	// Returns an array containing month/day/year
+@@ -1209,7 +1209,7 @@ function fetch_event_criteria($option)
+ 			}
+ 			else
+ 			{
+-				$seldays = $vbphrase[saturday];
++				$seldays = $vbphrase['saturday'];
+ 			}
+ 		}
+ 		$desc = construct_phrase($vbphrase['this_event_occurs_every_x_weeks_on_y'], $options[0], $seldays);
+diff --git a/includes/functions_cms_layout.php b/includes/functions_cms_layout.php
+index a3278ec..14ded51 100644
+--- a/includes/functions_cms_layout.php
++++ b/includes/functions_cms_layout.php
+@@ -109,7 +109,7 @@ function construct_category_select($parentid = 0)
+ 	foreach ($vbulletin->cms_layout['categorycache'] AS $categoryid => $category)
+ 	{
+ 		$optionvalue = $categoryid;
+-		$optiontitle = $category[title];
++		$optiontitle = $category['title'];
+ 		$optionclass = 'd' . ($category['depth'] > 4) ? 4 : $category['depth'];
+ 		$optionselected = ($categoryid == $parentid) ? 'selected="selected"' : '';
+ 
+diff --git a/includes/functions_misc.php b/includes/functions_misc.php
+index 821c54d..19be055 100644
+--- a/includes/functions_misc.php
++++ b/includes/functions_misc.php
+@@ -147,7 +147,7 @@ function construct_folder_jump($foldertype = 0, $selectedid = false, $exclusions
+ 			}
+ 			else
+ 			{
+-				if ($_folderid == $selectedid AND $selectedid !== false)
++				if (vb_loose_equals($_folderid, $selectedid) AND $selectedid !== false)
+ 				{
+ 					$folder = $_foldername;
+ 				}
+@@ -157,14 +157,14 @@ function construct_folder_jump($foldertype = 0, $selectedid = false, $exclusions
+ 					$_foldername = array(
+ 							'name' => $_foldername,
+ 							'id' => $_folderid,
+-							'selected' => ($_folderid == $selectedid),
++							'selected' => vb_loose_equals($_folderid, $selectedid),
+ 							'count' => (is_array($counters) ? intval($counters[$_folderid]) : 0),
+ 							'type' => (($foldertype == 1) ? $vbphrase['threads'] : $vbphrase['messages'])
+ 					);
+ 				}
+ 
+ 				$foldernames["$_folderid"] = $_foldername;
+-				$folderjump .= "<option value=\"$_folderid\" " . iif($_folderid == $selectedid, 'selected="selected"') . ">$_foldername" . iif(is_array($counters), ' (' . intval($counters["$_folderid"]) . iif($foldertype == 1, " $vbphrase[threads])", " $vbphrase[messages])")) . "</option>\n";
++				$folderjump .= "<option value=\"$_folderid\" " . iif(vb_loose_equals($_folderid, $selectedid), 'selected="selected"') . ">$_foldername" . iif(is_array($counters), ' (' . intval($counters["$_folderid"]) . iif($foldertype == 1, " $vbphrase[threads])", " $vbphrase[messages])")) . "</option>\n";
+ 			}
+ 		}
+ 	}
+diff --git a/includes/functions_navigation.php b/includes/functions_navigation.php
+index 3af72f6..bac771d 100644
+--- a/includes/functions_navigation.php
++++ b/includes/functions_navigation.php
+@@ -776,7 +776,7 @@ function get_navigation_tab_script()
+ *
+ * @return	int	Navbar tabid
+ */
+-function set_navigation_tab($tabid = 0, &$tabdata)
++function set_navigation_tab($tabid, &$tabdata)
+ {
+ 	global $vbulletin;
+ 
+@@ -972,7 +972,7 @@ function get_navigation_parents($navlist, $types = false, $byname = true)
+ 
+ // ################### Manager Cell Functions ################### //
+ 
+-function build_element_cell($name, $text, $depth, $bold = false, $subtext = '', $link = '', $url, $do = '', $session = '')
++function build_element_cell($name, $text, $depth, $bold, $subtext, $link, $url, $do = '', $session = '')
+ {
+ 	$cell = '<span title="'.$name.'">&nbsp;';
+ 	$cell .= $bold ? '<b>' : '';
+diff --git a/includes/functions_newpost.php b/includes/functions_newpost.php
+index c08ba13..cb31f60 100644
+--- a/includes/functions_newpost.php
++++ b/includes/functions_newpost.php
+@@ -302,7 +302,7 @@ function convert_url_to_bbcode_parenreplace($text)
+  * @param	array	(return) Array of errors
+  *
+  */
+-function build_new_post($type = 'thread', $foruminfo, $threadinfo, $postinfo, &$post, &$errors)
++function build_new_post($type, $foruminfo, $threadinfo, $postinfo, &$post, &$errors)
+ {
+ 	//NOTE: permissions are not checked in this function
+ 
+@@ -399,30 +399,30 @@ function build_new_post($type = 'thread', $foruminfo, $threadinfo, $postinfo, &$
+ 
+ 			switch ($vbulletin->options['dp_spacer'])
+ 			{
+-				case 1; // None
++				case 1: // None
+ 					$cstate = 2;
+ 					break;
+ 
+-				case 2; // Custom
++				case 2: // Custom
+ 					$spacer = $vbulletin->options['dp_text'];
+ 					break;
+ 
+-				default;
++				default:
+ 					$spacer = $vbphrase['dp_spacer_default'];
+ 					break;
+ 			}
+ 
+ 			switch ($cstate)
+ 			{
+-				case 1; // Coloured spacer
++				case 1: // Coloured spacer
+ 					$spacer = "\n\n" . '[COLOR="' . $vbulletin->options['dp_color'] . '"]' . $spacer . '[/COLOR]' . "\n\n";
+ 					break;
+ 
+-				case 2; // No spacer.
++				case 2: // No spacer.
+ 					$spacer = "\n\n";
+ 					break;
+ 
+-				default;
++				default:
+ 					$spacer = "\n\n" . $spacer . "\n\n";
+ 					break;
+ 			}
+@@ -1096,7 +1096,10 @@ function fetch_sentence_case($text)
+ {
+ 	return preg_replace_callback(
+ 		'#(^|\.\s+|\:\s+|\!\s+|\?\s+)[a-z]#',
+-		create_function('$matches', 'return strtoupper($matches[0]);'),
++		function ($matches)
++		{
++			return strtoupper($matches[0]);
++		},
+ 		vbstrtolower($text)
+ 	);
+ }
+@@ -1113,7 +1116,10 @@ function vbucwords($text)
+ {
+ 	return preg_replace_callback(
+ 		'#(^|\s)[a-z]#',
+-		create_function('$matches', 'return strtoupper($matches[0]);'),
++		function ($matches)
++		{
++			return strtoupper($matches[0]);
++		},
+ 		$text
+ 	);
+ }
+diff --git a/includes/functions_notice.php b/includes/functions_notice.php
+index b15ffbb..58f87dd 100644
+--- a/includes/functions_notice.php
++++ b/includes/functions_notice.php
+@@ -275,13 +275,13 @@ function fetch_relevant_notice_ids()
+ 						{
+ 							$start = mktime($start_time[1], $start_time[2]) + $vbulletin->options['hourdiff'];
+ 							$end   = mktime($end_time[1], $end_time[2]) + $vbulletin->options['hourdiff'];
+-							$now   = mktime() + $vbulletin->options['hourdiff'];
++							$now   = time() + $vbulletin->options['hourdiff']; // mktime() needs arguments in PHP 8
+ 						}
+ 						else // utc
+ 						{
+ 							$start = gmmktime($start_time[1], $start_time[2]);
+ 							$end   = gmmktime($end_time[1], $end_time[2]);
+-							$now   = gmmktime();
++							$now   = time(); // gmmktime() needs arguments in PHP 8
+ 						}
+ 
+ 						/* Account for end being before start, 
+diff --git a/includes/functions_online.php b/includes/functions_online.php
+index 42254b5..962ac4c 100644
+--- a/includes/functions_online.php
++++ b/includes/functions_online.php
+@@ -858,14 +858,14 @@ function construct_online_bit($userinfo, $doall = 0)
+ 
+ 				}
+ 				break;
+-			case 'calendarmonth';
++			case 'calendarmonth':
+ 				$userinfo['action'] = $vbphrase['viewing_calendar'];
+ 				if ($seecalendar)
+ 				{
+ 					$userinfo['where'] = '<a href="calendar.php?' . $vbulletin->session->vars['sessionurl'] . "do=displaymonth&amp;c=$calendarid&amp;month=$userinfo[month]&amp;year=$userinfo[year]\">$calendartitle</a>";
+ 				}
+ 				break;
+-			case 'calendaryear';
++			case 'calendaryear':
+ 				$userinfo['action'] = $vbphrase['viewing_calendar'];
+ 				if ($seecalendar)
+ 				{
+diff --git a/includes/functions_post_thanks.php b/includes/functions_post_thanks.php
+index cd4cd2c..191ebbc 100644
+--- a/includes/functions_post_thanks.php
++++ b/includes/functions_post_thanks.php
+@@ -102,7 +102,7 @@ function can_thank_this_post($postinfo = array(), $threadisdeleted = 0, $check_s
+ 		}
+ 	}
+ 
+-	if ($check_security && function_exists(verify_security_token))
++	if ($check_security && function_exists('verify_security_token'))
+ 	{
+ 		if (!verify_security_token($securitytoken, $vbulletin->userinfo['securitytoken_raw']))
+ 		{
+@@ -216,7 +216,7 @@ function fetch_thanks($postid = 0, $postids = array(), $fetch_again = false)
+ 	return $cache[$postid];
+ }
+ 
+-function fetch_thanks_bit($forumid = 0, $thanks)
++function fetch_thanks_bit($forumid, $thanks)
+ {
+ 	global $vbulletin;
+ 
+@@ -440,7 +440,7 @@ function delete_thanks($postinfo, $userid, $remove_users_thanks_count = true)
+ 	
+ 	$set_post = 'post_thanks_amount = post_thanks_amount - 1';
+ 
+-	if ($postinfo[post_thanks_amount] == 1 && ($remove_users_thanks_count == true || $vbulletin->options['post_thanks_delete_remove_thanks_count']))
++	if ($postinfo['post_thanks_amount'] == 1 && ($remove_users_thanks_count == true || $vbulletin->options['post_thanks_delete_remove_thanks_count']))
+ 	{
+ 		$set_user_got .= ', post_thanks_thanked_posts = post_thanks_thanked_posts - 1';
+ 	}
+@@ -451,7 +451,7 @@ function delete_thanks($postinfo, $userid, $remove_users_thanks_count = true)
+ 
+ 		if ($vbulletin->db->affected_rows() != 0)
+ 		{
+-			$set_user_got .= ", reputation = reputation - ". $vbulletin->options[post_thanks_reputation] ."";
++			$set_user_got .= ", reputation = reputation - ". $vbulletin->options['post_thanks_reputation'] ."";
+ 		}
+ 	}
+ 
+diff --git a/includes/functions_user.php b/includes/functions_user.php
+index 92407b3..3aec460 100644
+--- a/includes/functions_user.php
++++ b/includes/functions_user.php
+@@ -1049,7 +1049,7 @@ function build_user_activation_id($userid, $usergroupid, $type, $emailchange = 0
+  * @return	string	The built forum Jump menu
+  *
+  */
+-function construct_mod_forum_jump($parentid = -1, $selectedid, $modpermission = '')
++function construct_mod_forum_jump($parentid, $selectedid, $modpermission = '')
+ {
+ 	global $vbulletin;
+ 
+diff --git a/includes/init.php b/includes/init.php
+index f9cbc77..7812ebb 100644
+--- a/includes/init.php
++++ b/includes/init.php
+@@ -293,7 +293,10 @@ if ($vbulletin->options['cookietimeout'] < 60)
+ * Disable shutdown function for IIS CGI with Gzip enabled since it just doesn't work, sometimes, unless we kill the content-length header
+ * Also disable for PHP4 due to the echo() timeout issue
+ */
+-define('SAPI_NAME', php_sapi_name());
++if (!defined('SAPI_NAME'))
++{
++	define('SAPI_NAME', php_sapi_name());
++}
+ /*
+ if (!defined('NOSHUTDOWNFUNC'))
+ {
+@@ -307,7 +310,10 @@ if (!defined('NOSHUTDOWNFUNC'))
+ 	}
+ }
+ */
+-define('NOSHUTDOWNFUNC', true);
++if (!defined('NOSHUTDOWNFUNC'))
++{
++	define('NOSHUTDOWNFUNC', true);
++}
+ 
+ // fetch url of referring page after we have access to vboptions['forumhome']
+ $vbulletin->url = $vbulletin->input->fetch_url();
+diff --git a/includes/paymentapi/class_moneybookers.php b/includes/paymentapi/class_moneybookers.php
+index 97a9f39..3dc1d59 100644
+--- a/includes/paymentapi/class_moneybookers.php
++++ b/includes/paymentapi/class_moneybookers.php
+@@ -78,7 +78,7 @@ class vB_PaidSubscriptionMethod_moneybookers extends vB_PaidSubscriptionMethod
+ 					$cost = vb_unserialize($sub['cost']);
+ 					$this->paymentinfo['currency'] = strtolower($this->registry->GPC['currency']);
+ 					$this->paymentinfo['amount'] = floatval($this->registry->GPC['amount']);
+-					if (doubleval($this->registry->GPC['amount']) == doubleval($cost["{$this->paymentinfo[subscriptionsubid]}"]['cost'][strtolower($this->registry->GPC['currency'])]))
++					if (doubleval($this->registry->GPC['amount']) == doubleval($cost["{$this->paymentinfo['subscriptionsubid']}"]['cost'][strtolower($this->registry->GPC['currency'])]))
+ 					{
+ 						$this->type = 1;
+ 						return true;
+diff --git a/includes/paymentapi/class_nochex.php b/includes/paymentapi/class_nochex.php
+index 2a92dc6..d1b0e1a 100644
+--- a/includes/paymentapi/class_nochex.php
++++ b/includes/paymentapi/class_nochex.php
+@@ -114,7 +114,7 @@ class vB_PaidSubscriptionMethod_nochex extends vB_PaidSubscriptionMethod
+ 				$this->paymentinfo['currency'] = 'gbp';
+ 				$this->paymentinfo['amount'] = floatval($this->registry->GPC['amount']);
+ 				// Check if its a payment or if its a reversal
+-				if ($this->registry->GPC['amount'] == $cost["{$this->paymentinfo[subscriptionsubid]}"]['cost']['gbp'])
++				if ($this->registry->GPC['amount'] == $cost["{$this->paymentinfo['subscriptionsubid']}"]['cost']['gbp'])
+ 				{
+ 					$this->type = 1;
+ 				}
+diff --git a/includes/paymentapi/class_paypal.php b/includes/paymentapi/class_paypal.php
+index 91540c6..8d37b5f 100644
+--- a/includes/paymentapi/class_paypal.php
++++ b/includes/paymentapi/class_paypal.php
+@@ -116,7 +116,7 @@ class vB_PaidSubscriptionMethod_paypal extends vB_PaidSubscriptionMethod
+ 				// Check if its a payment or if its a reversal
+ 				if (($this->registry->GPC['txn_type'] == 'web_accept' OR $this->registry->GPC['txn_type'] == 'subscr_payment') AND $this->registry->GPC['payment_status'] == 'Completed')
+ 				{
+-					if ($mc_gross == doubleval($cost["{$this->paymentinfo[subscriptionsubid]}"]['cost'][strtolower($this->registry->GPC['mc_currency'])]))
++					if ($mc_gross == doubleval($cost["{$this->paymentinfo['subscriptionsubid']}"]['cost'][strtolower($this->registry->GPC['mc_currency'])]))
+ 					{
+ 						$this->type = 1;
+ 					}
+diff --git a/includes/paymentapi/class_worldpay.php b/includes/paymentapi/class_worldpay.php
+index 775fa57..0e6173d 100644
+--- a/includes/paymentapi/class_worldpay.php
++++ b/includes/paymentapi/class_worldpay.php
+@@ -73,7 +73,7 @@ class vB_PaidSubscriptionMethod_worldpay extends vB_PaidSubscriptionMethod
+ 				$this->paymentinfo['amount'] = floatval($this->registry->GPC['cost']);
+ 				if ($this->registry->GPC['transStatus'] == 'Y' AND ($this->registry->GPC['authMode'] == 'A' OR $this->registry->GPC['authMode'] == 'O'))
+ 				{
+-					if (doubleval($this->registry->GPC['cost']) == doubleval($cost["{$this->paymentinfo[subscriptionsubid]}"]['cost'][strtolower($this->registry->GPC['currency'])]))
++					if (doubleval($this->registry->GPC['cost']) == doubleval($cost["{$this->paymentinfo['subscriptionsubid']}"]['cost'][strtolower($this->registry->GPC['currency'])]))
+ 					{
+ 						$this->type = 1;
+ 					}
+diff --git a/inlinemod.php b/inlinemod.php
+index d8f078e..098474c 100644
+--- a/inlinemod.php
++++ b/inlinemod.php
+@@ -14,7 +14,7 @@
+ error_reporting(E_ALL & ~E_NOTICE);
+ 
+ // #################### DEFINE IMPORTANT CONSTANTS #######################
+-if ($_REQUEST['do'] == 'mergeposts' OR $_POST['do'] == 'domergeposts')
++if ((isset($_REQUEST['do']) AND $_REQUEST['do'] == 'mergeposts') OR (isset($_POST['do']) AND $_POST['do'] == 'domergeposts'))
+ {
+ 	define('GET_EDIT_TEMPLATES', true);
+ }
+@@ -2756,7 +2756,7 @@ if ($_POST['do'] == 'domergethreads')
+ 					$counter['deleted'][] = $thread['threadid'];
+ 					break;
+ 				default: // Invalid State
+-					continue;
++					break; // was "continue", which acts as "break" inside a switch
+ 			}
+ 		}
+ 
+@@ -3461,7 +3461,7 @@ if ($_POST['do'] == 'dodeleteposts')
+ 			eval(standard_error(fetch_error('you_do_not_have_permission_to_delete_threads_and_posts', $post['title'], $post['threadtitle'], $vbulletin->forumcache["$post[forumid]"]['title'])));
+ 		}
+ 		else if (
+-			!physicaldel
++			!$physicaldel
+ 			AND (
+ 				!can_moderate($post['forumid'], 'candeleteposts')
+ 				AND (
+@@ -4925,7 +4925,7 @@ if ($_POST['do'] == 'domoveposts')
+ 
+ 	// Search index maintenance
+ 	vb_Search_Indexcontroller_Queue::indexQueue('vBForum', 'Post',
+-   		'thread_data_change',  $destthreadinfo[threadid]);
++   		'thread_data_change',  $destthreadinfo['threadid']);
+ 
+ 	$userbyuserid = array();
+ 	foreach ($postarray AS $postid => $post)
+diff --git a/mcp/user.php b/mcp/user.php
+index e76af93..ffe78fa 100644
+--- a/mcp/user.php
++++ b/mcp/user.php
+@@ -556,7 +556,7 @@ if ($_REQUEST['do'] == 'viewuser')
+ 	// BROWSING OPTIONS SECTION
+ 	print_table_header($vbphrase['browsing_options']);
+ 	print_yes_no_row($vbphrase['receive_admin_emails'], 'options[adminemail]', $user['adminemail']);
+-	print_yes_no_row($vbphrase['display_email'], 'options[showemail]', $user[showemail]);
++	print_yes_no_row($vbphrase['display_email'], 'options[showemail]', $user['showemail']);
+ 	print_yes_no_row($vbphrase['invisible_mode'], 'options[invisible]', $user['invisible']);
+ 	print_yes_no_row($vbphrase['allow_vcard_download'], 'options[showvcard]', $user['showvcard']);
+ 	print_yes_no_row($vbphrase['receive_private_messages'], 'options[receivepm]', $user['receivepm']);
+diff --git a/member.php b/member.php
+index b0524ac..084fc28 100644
+--- a/member.php
++++ b/member.php
+@@ -123,7 +123,7 @@ $globaltemplates = array(
+ // pre-cache templates used by specific actions
+ $actiontemplates = array();
+ 
+-if ($_REQUEST['do'] == 'vcard') // don't alter this $_REQUEST
++if (isset($_REQUEST['do']) AND $_REQUEST['do'] == 'vcard') // don't alter this $_REQUEST
+ {
+ 	define('NOHEADER', 1);
+ }
+@@ -734,7 +734,7 @@ if ($show_customize_profile)
+ 		$themerow = array();
+ 	}
+ }
+-$jsblock = "settings_string = '{\\\n" . implode($themeblock, ",\\\n" ) . "}';\n" .
++$jsblock = "settings_string = '{\\\n" . implode(",\\\n", $themeblock) . "}';\n" .
+ 	"current_theme = '" . $initial_theme . "';\n";
+ 
+ $page_templater = vB_Template::create($templatename);
+diff --git a/member_inlinemod.php b/member_inlinemod.php
+index 0bc215b..94b7f64 100644
+--- a/member_inlinemod.php
++++ b/member_inlinemod.php
+@@ -14,7 +14,7 @@
+ error_reporting(E_ALL & ~E_NOTICE);
+ 
+ // #################### DEFINE IMPORTANT CONSTANTS #######################
+-if ($_REQUEST['do'] == 'inlinemerge' OR $_POST['do'] == 'doinlinemerge')
++if ((isset($_REQUEST['do']) AND $_REQUEST['do'] == 'inlinemerge') OR (isset($_POST['do']) AND $_POST['do'] == 'doinlinemerge'))
+ {
+ 	define('GET_EDIT_TEMPLATES', true);
+ }
+diff --git a/memberlist.php b/memberlist.php
+index a0b68ee..b9ddacc 100644
+--- a/memberlist.php
++++ b/memberlist.php
+@@ -846,7 +846,7 @@ if ($_REQUEST['do'] == 'getall')
+ 						unset($customfield);
+ 						foreach ($value['data'] AS $key => $val)
+ 						{
+-							if (intval($userinfo[$value[varname]]) & (2**$key))
++							if (intval($userinfo[$value['varname']]) & (2**$key))
+ 							{
+ 								$customfield .= iif($customfield, ', ') . $val;
+ 							}
+diff --git a/misc.php b/misc.php
+index 2b355b3..dffb79d 100644
+--- a/misc.php
++++ b/misc.php
+@@ -16,7 +16,7 @@ error_reporting(E_ALL & ~E_NOTICE);
+ // #################### DEFINE IMPORTANT CONSTANTS #######################
+ define('THIS_SCRIPT', 'misc');
+ define('CSRF_PROTECTION', true);
+-if (in_array($_GET['do'], array('whoposted', 'buddylist', 'getsmilies')))
++if (isset($_GET['do']) AND in_array($_GET['do'], array('whoposted', 'buddylist', 'getsmilies')))
+ {
+ 	define('NOPMPOPUP', 1);
+ }
+diff --git a/moderation.php b/moderation.php
+index 7c49b64..0241a1c 100644
+--- a/moderation.php
++++ b/moderation.php
+@@ -22,13 +22,13 @@ define('CONTENT_PAGE', false);
+ // get special phrase groups
+ $phrasegroups = array('user', 'forumdisplay', 'inlinemod');
+ 
+-if ($_REQUEST['do'] == 'viewattachments')
++if (isset($_REQUEST['do']) AND $_REQUEST['do'] == 'viewattachments')
+ {
+ 	$phrasegroups[] = 'album';
+ 	$phrasegroups[] = 'attachment_image';
+ 	$phrasegroups[] = 'posting';
+ }
+-else if ($_REQUEST['do'] == 'viewdiscussions')
++else if (isset($_REQUEST['do']) AND $_REQUEST['do'] == 'viewdiscussions')
+ {
+ 	$phrasegroups[] = 'socialgroups';
+ }
+diff --git a/newattachment.php b/newattachment.php
+index 23fd49a..0bf2be5 100644
+--- a/newattachment.php
++++ b/newattachment.php
+@@ -24,7 +24,7 @@ $flashstrings = array(
+ 	'^adobe flash player \d+$'
+ );
+ 
+-if (preg_match('/(' . implode('|', $flashstrings) . ')/si', $_SERVER['HTTP_USER_AGENT']) AND $_SERVER['REQUEST_METHOD'] == 'POST' AND $_POST['ajax'] == 1 AND $_POST['do'] == 'manageattach')
++if (isset($_SERVER['HTTP_USER_AGENT'], $_POST['ajax'], $_POST['do']) AND preg_match('/(' . implode('|', $flashstrings) . ')/si', $_SERVER['HTTP_USER_AGENT']) AND $_SERVER['REQUEST_METHOD'] == 'POST' AND $_POST['ajax'] == 1 AND $_POST['do'] == 'manageattach')
+ {
+ 
+ 	define('NOCHECKSTATE', 1);
+diff --git a/newreply.php b/newreply.php
+index 65c0687..ba8b747 100644
+--- a/newreply.php
++++ b/newreply.php
+@@ -17,7 +17,7 @@ error_reporting(E_ALL & ~E_NOTICE);
+ define('GET_EDIT_TEMPLATES', true);
+ define('THIS_SCRIPT', 'newreply');
+ define('CSRF_PROTECTION', true);
+-if ($_POST['do'] == 'postreply')
++if (isset($_POST['do']) AND $_POST['do'] == 'postreply')
+ {
+ 	if (isset($_POST['ajax']))
+ 	{
+diff --git a/packages/vbcms/comments.php b/packages/vbcms/comments.php
+index f2c24c6..e17d4ee 100644
+--- a/packages/vbcms/comments.php
++++ b/packages/vbcms/comments.php
+@@ -552,8 +552,8 @@ class vBCms_Comments
+ 	* @param int		thread id for comments
+ 	* @return string;
+ 	*/
+-	public static function showCommentsXml($nodeid, $userinfo, $pageno = 1,
+-		$perpage = 20, $target_url = '', $associatedthreadid = '', $all_comments)
++	public static function showCommentsXml($nodeid, $userinfo, $pageno,
++		$perpage, $target_url, $associatedthreadid, $all_comments)
+ 	{
+ 		require_once DIR . '/includes/functions_misc.php';
+ 		global $show;
+@@ -883,6 +883,7 @@ class vBCms_Comments
+ 		$contenttypeid = 0;
+ 		$attachinfo = fetch_attachmentinfo($posthash, $poststarttime, $contenttypeid);
+ 
++		$view = new stdClass(); // PHP 5 created this object implicitly; PHP 8 throws an Error
+ 		$view->editorid = construct_edit_toolbar(
+ 			$pagetext,
+ 			0,
+diff --git a/packages/vbcms/controller.php b/packages/vbcms/controller.php
+index f129a00..bc6cb54 100644
+--- a/packages/vbcms/controller.php
++++ b/packages/vbcms/controller.php
+@@ -101,7 +101,7 @@ abstract class vBCms_Controller extends vB_Controller
+ 	 * @param string $action
+ 	 * @return vB_Controller
+ 	 */
+-	public function create($package, $class, array $parameters = null, $action = false)
++	public function create($package, $class, $parameters = null, $action = false)
+ 	{
+ 		$class = $package . '_Controller_' . $class;
+ 		return new $class($parameters, $action);
+diff --git a/packages/vbcms/dm/content.php b/packages/vbcms/dm/content.php
+index 97a5386..7e75d1a 100644
+--- a/packages/vbcms/dm/content.php
++++ b/packages/vbcms/dm/content.php
+@@ -67,7 +67,7 @@ abstract class vBCms_DM_Content extends vB_DM
+ 	 *
+ 	 * @param vB_Item $existing_item				An existing item that will be updated.
+ 	 */
+-	public function __construct(vBCms_Item_Content $existing_item = null)
++	public function __construct($existing_item = null)
+ 	{
+ 		parent::__construct($existing_item);
+ 
+diff --git a/packages/vbcms/dm/node.php b/packages/vbcms/dm/node.php
+index 94fe651..248594f 100644
+--- a/packages/vbcms/dm/node.php
++++ b/packages/vbcms/dm/node.php
+@@ -574,7 +574,7 @@ class vBCms_DM_Node extends vBCMS_DM_Content
+ 			$title = new $vbphrase['new_page'];
+ 		}
+ 
+-		$error = string;
++		$error = '';
+ 		$count = 0;
+ 		$base_url = strtolower(vB_Friendly_Url::clean_entities($title));
+ 		$test_url = $base_url;
+@@ -690,7 +690,12 @@ class vBCms_DM_Node extends vBCMS_DM_Content
+ 
+ 		if (self::VM_LAMBDA == $field[self::VF_METHOD])
+ 		{
+-			$lambda = create_function('$value', '&$error', $field[self::VF_VERIFY]);
++			// create_function() was removed in PHP 8 (and was called with 3 arguments here,
++			// which never worked); the intended signature is ($value, &$error)
++			$lambda = function ($value, &$error) use ($field)
++			{
++				return eval($field[self::VF_VERIFY]);
++			};
+ 			$value = $lambda($value, $error);
+ 		}
+ 		else if (self::VM_CALLBACK == $field[self::VF_METHOD])
+diff --git a/packages/vbcms/item/rate.php b/packages/vbcms/item/rate.php
+index 6c2a083..30df22c 100644
+--- a/packages/vbcms/item/rate.php
++++ b/packages/vbcms/item/rate.php
+@@ -149,7 +149,7 @@ class vBCms_Item_Rate extends vB_Item
+ 			}
+ 			else if (is_numeric($this->nodeid))
+ 			{
+-				$sql .= ' rate.rateid = ' . intval($this->rate.rateid);
++				$sql .= ' rate.rateid = ' . intval($this->rate['rateid']);
+ 			}
+ 			$sql .= ' ' . $hook_query_where;
+ 
+diff --git a/packages/vbcms/permissions.php b/packages/vbcms/permissions.php
+index 197d54f..fa3ae9f 100644
+--- a/packages/vbcms/permissions.php
++++ b/packages/vbcms/permissions.php
+@@ -426,7 +426,7 @@
+  			return;
+  		}
+  		$sql = "SELECT nodeid, permissionsfrom, hidden, setpublish, publishdate, userid FROM " .
+- 			TABLE_PREFIX . "cms_node where nodeid in (" . implode(array_unique($nodes), ',') .
++ 			TABLE_PREFIX . "cms_node where nodeid in (" . implode(',', array_unique($nodes)) .
+  			")" ;
+ 		$qry_permissions = vB::$db->query_read($sql);
+ 
+diff --git a/packages/vbcms/route/content.php b/packages/vbcms/route/content.php
+index ee2c02f..6f97b5b 100644
+--- a/packages/vbcms/route/content.php
++++ b/packages/vbcms/route/content.php
+@@ -138,7 +138,7 @@ class vBCms_Route_Content extends vB_Route
+ 	 * @param array mixed $parameters			- Array of parameter values, in order
+ 	 * @return string							- The URL representing the route
+ 	 */
+-	public static function getURL(array $segments = null, array $parameters = null, $absolute_path = false)
++	public static function getURL($segments = null, $parameters = null, $absolute_path = false)
+ 	{
+ 		$route = vb_Route::create('vBCms_Route_Content');
+ 
+@@ -150,7 +150,7 @@ class vBCms_Route_Content extends vB_Route
+ 		return $route->getCurrentURL($segments, $parameters);
+ 	}
+ 
+-	public function getCurrentURL(array $segments = null, array $parameters = null, $query_string = '', $override_method = false, $canonical = false)
++	public function getCurrentURL($segments = null, $parameters = null, $query_string = '', $override_method = false, $canonical = false)
+ 	{
+ 		return parent::getCurrentURL($segments, $parameters, $query_string, $override_method, $canonical);
+ 	}
+diff --git a/packages/vbcms/route/list.php b/packages/vbcms/route/list.php
+index 7464412..7d8a67d 100644
+--- a/packages/vbcms/route/list.php
++++ b/packages/vbcms/route/list.php
+@@ -87,7 +87,7 @@ class vBCms_Route_List extends vB_Route
+ 	 * @param array mixed $parameters			- Array of parameter values, in order
+ 	 * @return string							- The URL representing the route
+ 	 */
+-	public static function getURL(array $segments = null, array $parameters = null, $absolute_path = false)
++	public static function getURL($segments = null, $parameters = null, $absolute_path = false)
+ 	{
+ 		$route = vb_Route::create('vBCms_Route_List');
+ 
+diff --git a/packages/vbcms/route/widget.php b/packages/vbcms/route/widget.php
+index b0300c4..2358410 100644
+--- a/packages/vbcms/route/widget.php
++++ b/packages/vbcms/route/widget.php
+@@ -77,7 +77,7 @@ class vBCms_Route_Widget extends vB_Route
+ 	 * @param array mixed $parameters			- Array of parameter values, in order
+ 	 * @return string							- The URL representing the route
+ 	 */
+-	public static function getURL(array $segments = null, array $parameters = null, $absolute_path = false)
++	public static function getURL($segments = null, $parameters = null, $absolute_path = false)
+ 	{
+ 		$route = vb_Route::create('vBCms_Route_Widget');
+ 
+diff --git a/packages/vbcms/search/result/content.php b/packages/vbcms/search/result/content.php
+index 0aa9ff6..05b37e4 100644
+--- a/packages/vbcms/search/result/content.php
++++ b/packages/vbcms/search/result/content.php
+@@ -69,7 +69,7 @@ class vBCms_Search_Result_Article extends vB_Search_Result
+ 				//If unpublished we hide this.
+ 				if (!($search_result['publishdate'] < TIMENOW))
+ 				{
+-					continue;
++					return false;
+ 				}
+ 				$item = new vBCms_Search_Result_Article();
+ 				$item->itemid = $search_result['itemid'];
+diff --git a/packages/vbcms/search/result/staticpage.php b/packages/vbcms/search/result/staticpage.php
+index 558da40..1e5f426 100644
+--- a/packages/vbcms/search/result/staticpage.php
++++ b/packages/vbcms/search/result/staticpage.php
+@@ -53,9 +53,9 @@ class vBCms_Search_Result_StaticPage extends vB_Search_Result
+ 	 * @param integer $id
+ 	 * @return result object
+ 	 */
+-	public function create($id)
++	public static function create($id)
+ 	{
+-		return $this->create_array(array($id));
++		return self::create_array(array($id));
+ 	}
+ 
+ 	/**
+diff --git a/packages/vbcms/search/searchcontroller/newcontentnode.php b/packages/vbcms/search/searchcontroller/newcontentnode.php
+index b33cda2..c73710f 100644
+--- a/packages/vbcms/search/searchcontroller/newcontentnode.php
++++ b/packages/vbcms/search/searchcontroller/newcontentnode.php
+@@ -70,8 +70,9 @@ class vBCms_Search_SearchController_NewContentNode extends vB_Search_SearchContr
+ 		}
+ 		else
+ 		{
+-			$where[] = " node.publishdate >= " . TIMENOW - 86400 *
+-				($vbulletin->GPC_exists['days'] ? $vbulletin->GPC['days'] : self::MAX_DAYS);
++			// PHP 8 evaluates "-" before "." (what was intended; PHP 5 subtracted from the string)
++			$where[] = " node.publishdate >= " . (TIMENOW - 86400 *
++				($vbulletin->GPC_exists['days'] ? $vbulletin->GPC['days'] : self::MAX_DAYS));
+ 		}
+ 
+ 		if (isset($equals_filters['userid']))
+diff --git a/packages/vbcms/types.php b/packages/vbcms/types.php
+index 7cec5dc..9246b01 100644
+--- a/packages/vbcms/types.php
++++ b/packages/vbcms/types.php
+@@ -211,7 +211,7 @@ class vBCms_Types extends vB_Types
+ 	 * @param vB_Exception $e					- An alternative exception to throw
+ 	 * @throws mixed							- Thrown if the given widgettype is not valid
+ 	 */
+-	public function assertWidgetType($widgettype, vB_Exception $e = null)
++	public function assertWidgetType($widgettype, $e = null)
+ 	{
+ 		if (!($id = $this->getWidgetTypeID($widgettype)))
+ 		{
+diff --git a/packages/vbcms/widget.php b/packages/vbcms/widget.php
+index 35f1a03..258bfdb 100644
+--- a/packages/vbcms/widget.php
++++ b/packages/vbcms/widget.php
+@@ -497,7 +497,7 @@ abstract class vBCms_Widget
+ 	 * @param vBCms_Content $content			- Content handler reference to give to widgets
+ 	 * @return array vBCms_Widget				- Array of widget controllers.
+ 	 */
+-	public static function getWidgetControllers(vBCms_Collection_Widget $widgets, $skip_errors = true, vBCms_Content $content = null)
++	public static function getWidgetControllers(vBCms_Collection_Widget $widgets, $skip_errors = true, $content = null)
+ 	{
+ 		$controllers = array();
+ 
+diff --git a/packages/vbforum/search/result/visitormessage.php b/packages/vbforum/search/result/visitormessage.php
+index 034d5dd..72ed615 100644
+--- a/packages/vbforum/search/result/visitormessage.php
++++ b/packages/vbforum/search/result/visitormessage.php
+@@ -38,7 +38,7 @@ class vBForum_Search_Result_VisitorMessage extends vB_Search_Result
+ 	 * @param integer $id
+ 	 * @return result object
+ 	 */
+-	public function create($id)
++	public static function create($id)
+ 	{
+ 		$items = self::create_array(array($id));
+ 		if (count($items))
+diff --git a/packages/vbforum/search/type/post.php b/packages/vbforum/search/type/post.php
+index 01b72dd..14f5644 100644
+--- a/packages/vbforum/search/type/post.php
++++ b/packages/vbforum/search/type/post.php
+@@ -454,9 +454,11 @@ class vBForum_Search_Type_Post extends vB_Search_Type
+ 			$criteria->add_group_filter($registry->GPC['searchthreadid']);
+ 
+ 			//some special handling for searching in threads
+-			$vbulletin->GPC['forumchoice'] = array();
+-			$vbulletin->GPC['replyless'] = false;
+-			$vbulletin->GPC['replylimit'] = false;
++			// (never had an effect: $vbulletin is not in scope here, so PHP 5 wrote to a new
++			// throwaway object; PHP 8 throws an Error instead)
++			// $vbulletin->GPC['forumchoice'] = array();
++			// $vbulletin->GPC['replyless'] = false;
++			// $vbulletin->GPC['replylimit'] = false;
+ 		}
+ 
+ 		if ($registry->GPC_exists['forumchoice'])
+diff --git a/packages/vbforum/taggablecontent/picture.php b/packages/vbforum/taggablecontent/picture.php
+index 03aa6e6..6e5cde7 100644
+--- a/packages/vbforum/taggablecontent/picture.php
++++ b/packages/vbforum/taggablecontent/picture.php
+@@ -45,7 +45,7 @@ class vBForum_TaggableContent_Picture extends vB_Taggable_Content_Item
+ 		{
+ 			$contentinfo = $this->fetch_content_info();
+ 			$this->registry->input->clean_array_gpc('r', array(
+-				'albumid' => UINT
++				'albumid' => TYPE_UINT
+ 			));
+ 
+ 			$url = "album.php?albumid=" . $this->registry->GPC['albumid'] . "&pictureid=$contentinfo[pictureid]#taglist";
+diff --git a/packages/vbforum/taggablecontent/thread.php b/packages/vbforum/taggablecontent/thread.php
+index 056c77a..e9b076c 100644
+--- a/packages/vbforum/taggablecontent/thread.php
++++ b/packages/vbforum/taggablecontent/thread.php
+@@ -145,7 +145,7 @@ class vBForum_TaggableContent_Thread extends vB_Taggable_Content_Item
+ 		$forums = array();
+ 
+ 		//limit cloud based on forum permissions
+-		$perm_limit = (boolean) $this->registry->options['tagcloud_usergroup'];
++		$perm_limit = (bool) $this->registry->options['tagcloud_usergroup'];
+ 		if ($perm_limit)
+ 		{
+ 			foreach ($this->registry->forumcache AS $forumid => $forum)
+diff --git a/picture_inlinemod.php b/picture_inlinemod.php
+index c175c38..3e53a9a 100644
+--- a/picture_inlinemod.php
++++ b/picture_inlinemod.php
+@@ -14,7 +14,7 @@
+ error_reporting(E_ALL & ~E_NOTICE);
+ 
+ // #################### DEFINE IMPORTANT CONSTANTS #######################
+-if ($_REQUEST['do'] == 'inlinemerge' OR $_POST['do'] == 'doinlinemerge')
++if ((isset($_REQUEST['do']) AND $_REQUEST['do'] == 'inlinemerge') OR (isset($_POST['do']) AND $_POST['do'] == 'doinlinemerge'))
+ {
+ 	define('GET_EDIT_TEMPLATES', true);
+ }
+diff --git a/picturecomment.php b/picturecomment.php
+index cea2fe8..8de07b4 100644
+--- a/picturecomment.php
++++ b/picturecomment.php
+@@ -19,7 +19,7 @@ define('CSRF_PROTECTION', true);
+ define('BYPASS_STYLE_OVERRIDE', 1);
+ define('GET_EDIT_TEMPLATES', 'message');
+ 
+-if ($_POST['do'] == 'message')
++if (isset($_POST['do']) AND $_POST['do'] == 'message')
+ {
+ 	if (isset($_POST['ajax']))
+ 	{
+diff --git a/private.php b/private.php
+index f343558..d74e437 100644
+--- a/private.php
++++ b/private.php
+@@ -1353,7 +1353,7 @@ if ($_POST['do'] == 'insertpm')
+ 				SELECT userlist.relationid
+ 				FROM " . TABLE_PREFIX . "userlist AS userlist
+ 				WHERE userid = " . $vbulletin->userinfo['userid'] . "
+-					AND userlist.relationid IN(" . implode(array_keys($check_recipients), ',') . ")
++					AND userlist.relationid IN(" . implode(',', array_keys($check_recipients)) . ")
+ 					AND type = 'buddy'
+ 			");
+ 			while ($user = $db->fetch_array($users))
+diff --git a/profile.php b/profile.php
+index f006fb0..ac83e9c 100644
+--- a/profile.php
++++ b/profile.php
+@@ -1160,7 +1160,7 @@ if ($_POST['do'] == 'updatelist')
+ 				WHERE userid = " . $vbulletin->userinfo['userid'] . "
+ 					AND type = 'buddy'
+ 					AND friend = 'yes'
+-					AND relationid IN (" . implode($remove['buddy'], ', ') . ")
++					AND relationid IN (" . implode(', ', $remove['buddy']) . ")
+ 			");
+ 			while ($friend = $db->fetch_array($friends))
+ 			{
+@@ -1173,7 +1173,7 @@ if ($_POST['do'] == 'updatelist')
+ 				$db->query_write("
+ 					UPDATE " . TABLE_PREFIX . "user
+ 					SET friendcount = IF(friendcount >= 1, friendcount - 1, 0)
+-					WHERE userid IN (" . implode($decrement_friends, ', ') . ")
++					WHERE userid IN (" . implode(', ', $decrement_friends) . ")
+ 				");
+ 			}
+ 
+@@ -1185,7 +1185,7 @@ if ($_POST['do'] == 'updatelist')
+ 				WHERE userid = " . $vbulletin->userinfo['userid'] . "
+ 					AND type = 'buddy'
+ 					AND friend = 'pending'
+-					AND relationid IN (" . implode($remove['buddy'], ', ') . ")
++					AND relationid IN (" . implode(', ', $remove['buddy']) . ")
+ 			");
+ 			while ($pendingreq = $db->fetch_array($pendingsreqs))
+ 			{
+@@ -1197,7 +1197,7 @@ if ($_POST['do'] == 'updatelist')
+ 				$db->query_write("
+ 					UPDATE " . TABLE_PREFIX . "user
+ 					SET friendreqcount = IF(friendreqcount >= 1, friendreqcount - 1, 0)
+-					WHERE userid IN (" . implode($decrement_pending, ', ') . ")
++					WHERE userid IN (" . implode(', ', $decrement_pending) . ")
+ 				");
+ 			}
+ 
+@@ -1206,7 +1206,7 @@ if ($_POST['do'] == 'updatelist')
+ 				DELETE FROM " . TABLE_PREFIX . "userlist
+ 				WHERE userid = " . $vbulletin->userinfo['userid'] . "
+ 					AND type = 'buddy'
+-					AND relationid IN (" . implode($remove['buddy'], ', ') . ")
++					AND relationid IN (" . implode(', ', $remove['buddy']) . ")
+ 			");
+ 			# remove friendships that already exist
+ 			$db->query_write("
+@@ -1215,7 +1215,7 @@ if ($_POST['do'] == 'updatelist')
+ 				WHERE type='buddy'
+ 					AND friend <> 'no'
+ 					AND relationid = " . $vbulletin->userinfo['userid'] . "
+-					AND userid IN (" . implode($remove['buddy'], ', ') . ")
++					AND userid IN (" . implode(', ', $remove['buddy']) . ")
+ 			");
+ 		}
+ 
+@@ -1228,7 +1228,7 @@ if ($_POST['do'] == 'updatelist')
+ 				WHERE type = 'buddy'
+ 					AND friend <> 'no'
+ 					AND userid = " . $vbulletin->userinfo['userid'] . "
+-					AND relationid IN (" . implode($remove['friend'], ', ') . ")
++					AND relationid IN (" . implode(', ', $remove['friend']) . ")
+ 			");
+ 
+ 			$updatecount_sql = $db->query_read("
+@@ -1237,7 +1237,7 @@ if ($_POST['do'] == 'updatelist')
+ 				WHERE type = 'buddy'
+ 					AND friend <> 'no'
+ 					AND relationid = " . $vbulletin->userinfo['userid'] . "
+-					AND userid IN (" . implode($remove['friend'], ', ') . ")
++					AND userid IN (" . implode(', ', $remove['friend']) . ")
+ 			");
+ 
+ 			$updatecount_userids = array();
+@@ -1251,7 +1251,7 @@ if ($_POST['do'] == 'updatelist')
+ 				$db->query_write("
+ 					UPDATE " . TABLE_PREFIX . "user
+ 					SET friendcount = IF(friendcount >= 1, friendcount - 1, 0)
+-					WHERE userid IN (" . implode($updatecount_userids, ', ') . ")
++					WHERE userid IN (" . implode(', ', $updatecount_userids) . ")
+ 				");
+ 			}
+ 
+@@ -1262,7 +1262,7 @@ if ($_POST['do'] == 'updatelist')
+ 				WHERE type = 'buddy'
+ 					AND friend <> 'no'
+ 					AND relationid = " . $vbulletin->userinfo['userid'] . "
+-					AND userid IN (" . implode($remove['friend'], ', ') . ")
++					AND userid IN (" . implode(', ', $remove['friend']) . ")
+ 			");
+ 
+ 			$rebuild_my_friendcount = true;
+@@ -1274,7 +1274,7 @@ if ($_POST['do'] == 'updatelist')
+ 				DELETE FROM " . TABLE_PREFIX . "userlist
+ 				WHERE userid = " . $vbulletin->userinfo['userid'] . "
+ 					AND type = 'ignore'
+-					AND relationid IN (" . implode($remove['ignore'], ', ') . ")
++					AND relationid IN (" . implode(', ', $remove['ignore']) . ")
+ 			");
+ 			$rebuild_friendreqcount[$vbulletin->userinfo['userid']] = true;
+ 		}
+@@ -1307,7 +1307,7 @@ if ($_POST['do'] == 'updatelist')
+ 				SELECT *
+ 				FROM " . TABLE_PREFIX . "userlist
+ 				WHERE userid = " . $vbulletin->userinfo['userid'] . "
+-					AND relationid IN (" . implode($addvalues, ', ') . ")
++					AND relationid IN (" . implode(', ', $addvalues) . ")
+ 			");
+ 			$usercache = array();
+ 			while ($current_status = $db->fetch_array($current_statuses))
+@@ -1322,7 +1322,7 @@ if ($_POST['do'] == 'updatelist')
+ 					SELECT *
+ 					FROM " . TABLE_PREFIX . "userlist
+ 					WHERE relationid = " . $vbulletin->userinfo['userid'] . "
+-						AND userid IN (" . implode(array_keys($add['friend']), ', ') . ")
++						AND userid IN (" . implode(', ', array_keys($add['friend'])) . ")
+ 				");
+ 				$pendingcache = array();
+ 				while ($pending_check = $db->fetch_array($pending_checks))
+@@ -1589,7 +1589,7 @@ if ($_REQUEST['do'] == 'buddylist')
+ 			INNER JOIN " . TABLE_PREFIX . "user AS user ON (user.userid = userlist.relationid)
+ 			" . ($vbulletin->options['avatarenabled'] ? "LEFT JOIN " . TABLE_PREFIX . "avatar AS avatar ON (avatar.avatarid = user.avatarid) LEFT JOIN " . TABLE_PREFIX . "customavatar AS customavatar ON (customavatar.userid = user.userid) " : '') . "
+ 			WHERE
+-				" . implode($condition1, " AND ") . "
++				" . implode(" AND ", $condition1) . "
+ 			ORDER BY user.username
+ 			LIMIT $start, $perpage
+ 		");
+@@ -2089,7 +2089,7 @@ if ($_REQUEST['do'] == 'editoptions')
+ 	$checked = array();
+ 	foreach ($vbulletin->userinfo AS $key => $val)
+ 	{
+-		if ($val != 0)
++		if (!vb_loose_equals($val, 0))
+ 		{
+ 			$checked["$key"] = 'checked="checked"';
+ 		}
+diff --git a/report.php b/report.php
+index 42e20f0..bf3eccc 100644
+--- a/report.php
++++ b/report.php
+@@ -89,6 +89,10 @@ else
+ 
+ 	$forumperms = fetch_permissions($threadinfo['forumid']);
+ 	if (
++		// no valid post: fetch_permissions() returned the usergroup permission array. PHP 5 ended up
++		// with "no permission" here too; PHP 8 throws TypeError for array & int
++		is_array($forumperms)
++			OR
+ 		!($forumperms & $vbulletin->bf_ugp_forumpermissions['canview'])
+ 			OR
+ 		!($forumperms & $vbulletin->bf_ugp_forumpermissions['canviewthreads'])
+diff --git a/search.php b/search.php
+index 4f9b385..6936d7c 100644
+--- a/search.php
++++ b/search.php
+@@ -69,7 +69,7 @@ $actiontemplates = array(
+ 
+ if (empty($_REQUEST['do']))
+ {
+-	if (intval($_REQUEST['searchid']))
++	if (!empty($_REQUEST['searchid']) AND intval($_REQUEST['searchid']))
+ 	{
+ 		$_REQUEST['do'] = 'showresults';
+ 	}
+diff --git a/sendmessage.php b/sendmessage.php
+index 6399253..7709afc 100644
+--- a/sendmessage.php
++++ b/sendmessage.php
+@@ -290,7 +290,7 @@ if ($_POST['do'] == 'docontactus')
+ 
+ 		($hook = vBulletinHook::fetch_hook('sendmessage_docontactus_complete')) ? eval($hook) : false;
+ 
+-		$url =& $vBulletin->url;
++		$url =& $vbulletin->url; // was $vBulletin (an undefined variable: always empty in PHP 5, an Error in PHP 8)
+ 		eval(fetch_email_phrases('contactus', $languageid));
+ 		vbmail($destemail, $subject, $message, false, $vbulletin->GPC['email'], '', $name);
+ 
+diff --git a/usernote.php b/usernote.php
+index a5fe9b1..8dd4ec0 100644
+--- a/usernote.php
++++ b/usernote.php
+@@ -61,7 +61,7 @@ $actiontemplates['viewuser'] =& $actiontemplates['none'];
+ $actiontemplates['editnote'] =& $actiontemplates['newnote'];
+ 
+ // get the editor templates if required
+-if (in_array($_REQUEST['do'], array('newnote', 'editnote')))
++if (isset($_REQUEST['do']) AND in_array($_REQUEST['do'], array('newnote', 'editnote')))
+ {
+ 	define('GET_EDIT_TEMPLATES', true);
+ }
+diff --git a/vb/activitystream/view/membertabajax.php b/vb/activitystream/view/membertabajax.php
+index aa7846d..7e891e7 100644
+--- a/vb/activitystream/view/membertabajax.php
++++ b/vb/activitystream/view/membertabajax.php
+@@ -59,7 +59,10 @@ class vB_ActivityStream_View_MembertabAjax extends vB_ActivityStream_View
+ 
+ 		if ($userhastheme AND $showusercss)
+ 		{
+-			define('AS_PROFILE', true);
++			if (!defined('AS_PROFILE'))
++			{
++				define('AS_PROFILE', true);
++			}
+ 		}
+ 
+ 		$userinfo = verify_id('user', vB::$vbulletin->GPC['userid'], 1, 1);
+diff --git a/vb/collection.php b/vb/collection.php
+index c73fdd4..1995332 100644
+--- a/vb/collection.php
++++ b/vb/collection.php
+@@ -434,7 +434,9 @@ abstract class vB_Collection extends vB_Model implements ArrayAccess, Iterator
+ 			}
+ 			else
+ 			{
+-				list($this->total) = vB::$db->num_rows($result);
++				// was list($this->total) = vB::$db->num_rows($result): destructuring an int has
++				// always given null (PHP 8.5 warns about it); keep that behaviour
++				$this->total = null;
+ 			}
+ 		}
+ 
+diff --git a/vb/controller.php b/vb/controller.php
+index 99ec747..3c2989e 100644
+--- a/vb/controller.php
++++ b/vb/controller.php
+@@ -105,7 +105,7 @@ abstract class vB_Controller
+ 	 * @param array mixed $parameters			- User requested parameters.
+ 	 * @param string $action					- Optional action for the controller's getResponse()
+ 	 */
+-	public function __construct(array $parameters = null, $action = false)
++	public function __construct($parameters = null, $action = false)
+ 	{
+ 		if (!isset($this->package) OR !isset($this->class))
+ 		{
+@@ -127,7 +127,7 @@ abstract class vB_Controller
+ 	 * @param string action						- Optional action
+ 	 * @return vB_Controller
+ 	 */
+-	public function create($package, $class, array $parameters = null, $action = false)
++	public function create($package, $class, $parameters = null, $action = false)
+ 	{
+ 		$class = $package . '_Controller_' . $class;
+ 		return new $class($parameters, $action);
+@@ -139,7 +139,7 @@ abstract class vB_Controller
+ 	 *
+ 	 * @param array mixed $parameters
+ 	 */
+-	protected function setParameters(array $parameters = null)
++	protected function setParameters($parameters = null)
+ 	{
+ 		$this->parameters = $parameters;
+ 	}
+diff --git a/vb/controller/error.php b/vb/controller/error.php
+index 870ee63..d43dbb4 100644
+--- a/vb/controller/error.php
++++ b/vb/controller/error.php
+@@ -49,7 +49,7 @@ class vB_Controller_Error extends vB_Controller
+ 	 * @param array mixed $parameters			- User requested parameters.
+ 	 * @param string $action					- Optional action for the controller's getResponse()
+ 	 */
+-	public function __construct(array $parameters = null, $action = false)
++	public function __construct($parameters = null, $action = false)
+ 	{
+ 		parent::__construct($parameters, $action);
+ 
+diff --git a/vb/db/query.php b/vb/db/query.php
+index 3ec994f..67158ff 100644
+--- a/vb/db/query.php
++++ b/vb/db/query.php
+@@ -407,13 +407,13 @@ class vB_dB_Query
+ 				{
+ 					$new_values[$key] = $key . "=" . $value;
+ 				}
+-				return "UPDATE " . TABLE_PREFIX . $this->queryid . " SET " . implode($new_values, ',') . " WHERE " .
++				return "UPDATE " . TABLE_PREFIX . $this->queryid . " SET " . implode(',', $new_values) . " WHERE " .
+ 					$this->primarykey . "='" . $this->db->escape_string($values[$this->primarykey]) . "' " .
+ 					 "\n/**" . $this->queryid . (defined('THIS_SCRIPT') ? '- ' . THIS_SCRIPT : '') . "**/";
+ 				break;
+ 			case 'i':
+-				return "INSERT INTO " . TABLE_PREFIX . $this->queryid . " (" . implode(array_keys($new_values), ',') . ")
+-				VALUES(" . implode($new_values, ',') . ")" .
++				return "INSERT INTO " . TABLE_PREFIX . $this->queryid . " (" . implode(',', array_keys($new_values)) . ")
++				VALUES(" . implode(',', $new_values) . ")" .
+ 					"\n/**" . $this->queryid . (defined('THIS_SCRIPT') ? '- ' . THIS_SCRIPT : '') . "**/";
+ 				break;
+ 			case 'd':
+@@ -429,7 +429,7 @@ class vB_dB_Query
+ 				{
+ 					$new_values[$key] = $key . "=" . $value;
+ 				}
+-				return "DELETE FROM " . TABLE_PREFIX . $this->queryid . " WHERE " . implode($new_values, ' AND ')  .
++				return "DELETE FROM " . TABLE_PREFIX . $this->queryid . " WHERE " . implode(' AND ', $new_values)  .
+ 					 "\n/**" . $this->queryid . (defined('THIS_SCRIPT') ? '- ' . THIS_SCRIPT : '') . "**/";
+ 				break;
+ 			case 's':
+@@ -437,7 +437,7 @@ class vB_dB_Query
+ 				{
+ 					$new_values[$key] = $key . "=" . $value;
+ 				}
+-				return "SELECT * FROM " . TABLE_PREFIX . $this->queryid . " WHERE " . implode($new_values, ' AND ')
++				return "SELECT * FROM " . TABLE_PREFIX . $this->queryid . " WHERE " . implode(' AND ', $new_values)
+ 					. ($this->sortorder ? " ORDER BY " . $this->sortorder : '') .
+ 					"\n/**" . $this->queryid . (defined('THIS_SCRIPT') ? '- ' . THIS_SCRIPT : '') . "**/" ;
+ 
+diff --git a/vb/db/result.php b/vb/db/result.php
+index 7c094d7..55c28d8 100644
+--- a/vb/db/result.php
++++ b/vb/db/result.php
+@@ -159,10 +159,10 @@ class vB_dB_Result implements iterator
+ 				$values[] = "\"$fieldname\":\"" . str_replace('"', '\"', $fieldvalue) . '"';
+ 				
+ 			}
+-			$json[] = $this->resultseq . "\":{\n" . implode($values, ",\n" ) . "}\n";
++			$json[] = $this->resultseq . "\":{\n" . implode(",\n", $values) . "}\n";
+ 			$this->next();
+ 		}
+-		return '{"' . implode($json, ",\n" ) . "}\n";
++		return '{"' . implode(",\n", $json) . "}\n";
+ 	}
+ 	
+ 		
+diff --git a/vb/dm.php b/vb/dm.php
+index 4670079..29e729e 100644
+--- a/vb/dm.php
++++ b/vb/dm.php
+@@ -272,7 +272,7 @@ abstract class vB_DM
+ 	*
+ 	* @param vB_Item $existing_item				An existing item that will be updated.
+ 	*/
+-	public function __construct(vB_Item $existing_item = null)
++	public function __construct($existing_item = null)
+ 	{
+ 		if ($existing_item)
+ 		{
+@@ -591,7 +591,12 @@ abstract class vB_DM
+ 
+ 		if (self::VM_LAMBDA == $field[self::VF_METHOD])
+ 		{
+-			$lambda = create_function('$value', '&$error', $field[self::VF_VERIFY]);
++			// create_function() was removed in PHP 8 (and was called with 3 arguments here,
++			// which never worked); the intended signature is ($value, &$error)
++			$lambda = function ($value, &$error) use ($field)
++			{
++				return eval($field[self::VF_VERIFY]);
++			};
+ 			$value = $lambda($value, $error);
+ 		}
+ 		else if (self::VM_CALLBACK == $field[self::VF_METHOD])
+@@ -1421,7 +1426,7 @@ abstract class vB_DM
+ 	 * @param array $fields						- Which errors to allow
+ 	 * @return array vB_Phrase
+ 	 */
+-	public function getErrors(array $fields = null)
++	public function getErrors($fields = null)
+ 	{
+ 		if ($fields)
+ 		{
+diff --git a/vb/phrase.php b/vb/phrase.php
+index ce6a6f7..76ea958 100644
+--- a/vb/phrase.php
++++ b/vb/phrase.php
+@@ -431,7 +431,7 @@ class vB_Phrase
+ 	 * @param array mixed $parameters			- The values to parse into the phrase
+ 	 * @return string							- The resulting string
+ 	 */
+-	public static function parsePhrase($phrase, array $parameters = null)
++	public static function parsePhrase($phrase, $parameters = null)
+ 	{
+ 		if (!$parameters)
+ 		{
+diff --git a/vb/profilecustomize.php b/vb/profilecustomize.php
+index 17ef9c8..e36549c 100644
+--- a/vb/profilecustomize.php
++++ b/vb/profilecustomize.php
+@@ -180,7 +180,7 @@ class vB_ProfileCustomize
+ 		 			}
+ 		 			$values[] = "\"$varname\":\"" . str_replace('"', '\"',  str_replace("\\", "\\\\", $value)) . '"';
+ 		 		}
+-		 		return "{\n" . implode($values, ",\n" ) . "}\n";
++		 		return "{\n" . implode(",\n", $values) . "}\n";
+ 		 		break;
+ 		 	default:
+ 		 		return self::$themes[$themeid];
+@@ -858,7 +858,7 @@ class vB_ProfileCustomize
+ 			{
+ 				$border_vars[] = $varname;
+ 			}
+-			else if (strpos(varname, 'background') !== false)
++			else if (strpos($varname, 'background') !== false)
+ 			{
+ 				$bg_vars[] = $varname;
+ 			}
+diff --git a/vb/route.php b/vb/route.php
+index 68c27d6..c54d361 100644
+--- a/vb/route.php
++++ b/vb/route.php
+@@ -299,7 +299,7 @@ class vB_Route
+ 	 * @param bool $canonical					- If true, don't encode for output
+ 	 * @return string							- The URL representing the route
+ 	 */
+-	public function getCurrentURL(array $segments = null, array $parameters = null, $query_string = '', $override_method = false, $canonical = false)
++	public function getCurrentURL($segments = null, $parameters = null, $query_string = '', $override_method = false, $canonical = false)
+ 	{
+ 		// Ensure the route is valid
+ 		if (!$this->isValid())
+@@ -423,7 +423,7 @@ class vB_Route
+ 	 * @param array mixed $parameters			- Array of parameter values, in order
+ 	 * @return string							- The URL representing the route
+ 	 */
+-	public static function getURL(array $segments = null, array $parameters = null, $absolute_path = false )
++	public static function getURL($segments = null, $parameters = null, $absolute_path = false )
+ 	{
+ 		$class = __CLASS__;
+ 		$route = vb_Route::create($class);
+diff --git a/vb/route/error.php b/vb/route/error.php
+index ab81387..e471c69 100644
+--- a/vb/route/error.php
++++ b/vb/route/error.php
+@@ -77,7 +77,7 @@ class vB_Route_Error extends vB_Route
+ 	 * @param array mixed $parameters			- Array of parameter values, in order
+ 	 * @return string							- The URL representing the route
+ 	 */
+-	public static function getURL(array $segments = null, array $parameters = null, $absolute_path = false)
++	public static function getURL($segments = null, $parameters = null, $absolute_path = false)
+ 	{
+ 		return vB_Route::create('vB_Route_Error')->getCurrentURL($segments);
+ 	}
+diff --git a/vb/route/httperror.php b/vb/route/httperror.php
+index 565de5a..5fa665d 100644
+--- a/vb/route/httperror.php
++++ b/vb/route/httperror.php
+@@ -43,7 +43,7 @@ class vB_Route_HttpError extends vB_Route_Error
+ 	 * @param array mixed $parameters			- Array of parameter values, in order
+ 	 * @return string							- The URL representing the route
+ 	 */
+-	public static function getURL(array $segments = null, array $parameters = null, $absolute_path = false)
++	public static function getURL($segments = null, $parameters = null, $absolute_path = false)
+ 	{
+ 		return vB_Route::create('vB_Route_HttpError')->getCurrentURL($segments);
+ 	}
+diff --git a/vb/router.php b/vb/router.php
+index 6af439c..b3aa0a6 100644
+--- a/vb/router.php
++++ b/vb/router.php
+@@ -729,7 +729,7 @@ abstract class vB_Router
+ 	 *
+ 	 * @return string
+ 	 */
+-	public function getCurrentURL($query_string = false)
++	public static function getCurrentURL($query_string = false)
+ 	{
+ 		if (!self::$current_route)
+ 		{
+@@ -745,7 +745,7 @@ abstract class vB_Router
+ 	 *
+ 	 * @return string
+ 	 */
+-	public function getInitialURL()
++	public static function getInitialURL()
+ 	{
+ 		if (!self::$initial_route)
+ 		{
+@@ -805,7 +805,7 @@ abstract class vB_Router
+ 	/**
+ 	 * Fetches the URL of the current route.
+ 	 */
+-	public static function getURL(array $segments = null, array $parameters = null, $query_string = false)
++	public static function getURL($segments = null, $parameters = null, $query_string = false)
+ 	{
+ 		if (!isset(self::$current_route))
+ 		{
+diff --git a/vb/search/core.php b/vb/search/core.php
+index 68fc3d3..d34ce15 100644
+--- a/vb/search/core.php
++++ b/vb/search/core.php
+@@ -328,7 +328,7 @@ class vB_Search_Core
+ 	*	This doesn't demand a factory method really, but it feels weird
+ 	* directly instantiating search objects
+ 	*/
+-	public function create_criteria($search_type = null)
++	public static function create_criteria($search_type = null)
+ 	{
+ 		return new vB_Search_Criteria($search_type);
+ 	}
+diff --git a/vb/search/criteria.php b/vb/search/criteria.php
+index 2c95def..38cf748 100644
+--- a/vb/search/criteria.php
++++ b/vb/search/criteria.php
+@@ -733,15 +733,15 @@ class vB_Search_Criteria
+ 		{
+ 			switch ($grouped)
+ 			{
+-				case vB_Search_Core::GROUP_YES;
++				case vB_Search_Core::GROUP_YES:
+ 					$prefix = 'group';
+ 					break;
+ 
+-				case vB_Search_Core::GROUP_NO;
++				case vB_Search_Core::GROUP_NO:
+ 					$prefix = '';
+ 					break;
+ 
+-				case vB_Search_Core::GROUP_DEFAULT;
++				case vB_Search_Core::GROUP_DEFAULT:
+ 					$prefix = 'default';
+ 					break;
+ 			}
+diff --git a/vb/search/searchtools.php b/vb/search/searchtools.php
+index d024b05..6630e00 100644
+--- a/vb/search/searchtools.php
++++ b/vb/search/searchtools.php
+@@ -315,7 +315,7 @@ class vB_Search_Searchtools
+ 			}
+ 		}
+ 
+-		$anythread_selected = (empty($prefixchoice) OR in_array('', $prefixchoice) ) ? ' selected="selected"' : '';
++		$anythread_selected = (empty($prefixchoice) OR vb_loose_in_array('', $prefixchoice) ) ? ' selected="selected"' : '';
+ 		$anyprefix_selected = ($prefixchoice AND in_array('-1', $prefixchoice)) ? ' selected="selected"' : '';
+ 		$none_selected = ($prefixchoice AND in_array('-1', $prefixchoice)) ? ' selected="selected"' : '';
+ 
+diff --git a/vb/style.php b/vb/style.php
+index f61ca21..66b26f6 100644
+--- a/vb/style.php
++++ b/vb/style.php
+@@ -42,7 +42,7 @@ class vB_Style
+ 	 * @param array $styles						- Current style map
+ 	 * @return array							- Finished map
+ 	 */
+-	public function getStyles($styleid = -1, $depth = 1, &$styles = false)
++	public static function getStyles($styleid = -1, $depth = 1, &$styles = false)
+ 	{
+ 		if ((-1 == $styleid) AND isset(self::$styles))
+ 		{
+diff --git a/vb/types.php b/vb/types.php
+index 933a69b..9b9bd56 100644
+--- a/vb/types.php
++++ b/vb/types.php
+@@ -369,7 +369,7 @@ class vB_Types
+ 	 * @param vB_Exception $e					- An alternative exception to throw
+ 	 * @throws mixed							- Thrown if the package was not valid
+ 	 */
+-	public function assertPackage($package, vB_Exception $e = null)
++	public function assertPackage($package, $e = null)
+ 	{
+ 		if (!($id = $this->getPackageID($package)))
+ 		{
+@@ -472,7 +472,7 @@ class vB_Types
+ 	 * @param vB_Exception $e					- An alternative exception to throw
+ 	 * @throws mixed							- Thrown if the given contenttype is not valid
+ 	 */
+-	public function assertContentType($contenttype, vB_Exception $e = null)
++	public function assertContentType($contenttype, $e = null)
+ 	{
+ 		if (!($id = $this->getContentTypeID($contenttype)))
+ 		{
+diff --git a/vb/view/ajaxhtml.php b/vb/view/ajaxhtml.php
+index bc3a49e..ab32d55 100644
+--- a/vb/view/ajaxhtml.php
++++ b/vb/view/ajaxhtml.php
+@@ -206,7 +206,7 @@ class vB_View_AJAXHTML extends vB_View
+ 	 * @param array array key => message
+ 	 * @param array string $errorcodes
+ 	 */
+-	public function addErrors($errors, array $errorcodes = null)
++	public function addErrors($errors, $errorcodes = null)
+ 	{
+ 		if (!is_array($errors) OR empty($errors))
+ 		{
+diff --git a/visitormessage.php b/visitormessage.php
+index d4dba1e..7a891dc 100644
+--- a/visitormessage.php
++++ b/visitormessage.php
+@@ -19,7 +19,7 @@ define('THIS_SCRIPT', 'visitormessage');
+ define('BYPASS_STYLE_OVERRIDE', 1);
+ define('GET_EDIT_TEMPLATES', 'message');
+ 
+-if ($_POST['do'] == 'message')
++if (isset($_POST['do']) AND $_POST['do'] == 'message')
+ {
+ 	if (isset($_POST['ajax']))
+ 	{
+@@ -42,7 +42,7 @@ $phrasegroups = array(
+ 	'posting'
+ );
+ 
+-if ($_REQUEST['do'] == 'message')
++if (isset($_REQUEST['do']) AND $_REQUEST['do'] == 'message')
+ {
+ 	$phrasegroups[] = 'inlinemod';
+ }

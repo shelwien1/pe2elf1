@@ -38,6 +38,8 @@ check "legacy forum URL"   "$BASE/forumdisplay.php?f=2"                         
 check "attachment"         "$BASE/attachment.php?attachmentid=7643"                200
 check "post_thanks.js"     "$BASE/clientscript/post_thanks.js"                     200 'function post_thanks_give'
 check "stylesheet"         "$BASE/clientscript/vbulletin_css/style00002l/main-rollup.css" 200 'http://encode\.su/images/' 'https://encode\.su'
+# PHP must be executed, never served as source (that would reveal the database password)
+check "PHP runs (no source)" "$BASE/includes/config.php"                         200 '' '\$config\['
 
 if [ "$fail" = 0 ]; then
 	echo "All checks passed."

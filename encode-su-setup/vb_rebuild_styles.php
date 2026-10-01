@@ -5,7 +5,7 @@
 // whose relative url()s are made absolute with the current bburl.
 //
 // Usage (run as the web server user so it can replace the CSS files later too):
-//   runuser -u www-data -- php5.6 vb_rebuild_styles.php /var/www/encode.su
+//   runuser -u www-data -- php vb_rebuild_styles.php /var/www/encode.su
 
 if (PHP_SAPI != 'cli')
 {
@@ -19,7 +19,7 @@ if ($argc < 2)
 // init.php unsets globals named like superglobal keys ($_SERVER['argv'] etc.)
 define('CLI_FORUMDIR', rtrim($argv[1], '/'));
 
-error_reporting(E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED);
+error_reporting(E_ALL & ~E_NOTICE & ~E_DEPRECATED & ~2048); // 2048: E_STRICT (PHP 5; the constant is deprecated in PHP 8.4)
 chdir(CLI_FORUMDIR);
 
 define('THIS_SCRIPT', 'cli_rebuild_styles');

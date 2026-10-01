@@ -1,0 +1,203 @@
+# vBulletin 4.2.6 (encode.su) on PHP 8.5
+
+vBulletin 4 was written for PHP 5 and does not run on PHP 8: the forum dies on the
+first page with fatal errors. This directory ports the encode.su installation to
+PHP 8.5. Everything here also runs on PHP 5.6 (PHP 5.6 syntax only), so it can be
+applied before PHP is upgraded.
+
+| File | What it changes |
+|---|---|
+| `vbulletin-php85.patch` | the forum scripts: 169 PHP files, about 660 changed lines |
+| `vb_php8_db_fix.php` | the PHP code stored in the database: plugins, the plugin cache, compiled templates, two setting checks |
+| `php8_barewords.php` | tokenizer-based quoting of undefined constants, used by `vb_php8_db_fix.php` |
+| `CHANGES.md` | commit log of the patch, one commit per topic |
+| `cmp7trace/` | diagnostic PHP extension used for testing (see below); not needed to run the forum |
+
+`../setup.sh` applies both. The patch is made against the files in the
+2021-03-23 archive.
+
+## Applying it to the live forum
+
+1. Back up the forum files and the database.
+2. Patch the scripts from the forum root. Try a dry run first:
+
+   ```sh
+   cd /path/to/forum
+   patch -p1 --binary --dry-run < vbulletin-php85.patch
+   patch -p1 --binary < vbulletin-php85.patch
+   ```
+
+   Files edited on the server since 2021 may need fuzz or manual merging. Check for
+   `*.rej` files after patching.
+3. Fix the database code. `includes/config.php` supplies the credentials. Without
+   `--apply` it only lists what it would change:
+
+   ```sh
+   php vb_php8_db_fix.php /path/to/forum
+   php vb_php8_db_fix.php /path/to/forum --apply
+   ```
+
+   It quotes barewords in plugins and compiled templates. A datastore cache
+   (memcache, APC, file cache) has to be cleared afterwards. Running it again is
+   safe: the second run finds nothing to change.
+4. Switch PHP to 8.5. The forum needs the `mysqli`, `mbstring`, `gd`, `xml` and
+   `curl` extensions.
+
+Later changes stay PHP 8 compatible on their own:
+
+* **Templates** saved in the Admin CP compile correctly, because the template
+  compiler is fixed.
+* **Plugins and products** installed later have to be PHP 8 clean. Write
+  `$vbulletin->options['x']`, not `$vbulletin->options[x]`, or run the database tool
+  again after installing them.
+
+## What was changed in the scripts
+
+**Removed syntax and functions**
+* `$str{0}` string offsets became `$str[0]`.
+* Unparenthesised nested ternaries got parentheses.
+* `continue` inside a `switch` became `break`, which is what it always did. For
+  the one `continue` outside any loop (vBCMS), see the behaviour changes below.
+* `implode()` calls with reversed arguments (39) were put in the right order.
+* `create_function()` became closures.
+* `each()` became `foreach`.
+* `$php_errormsg`/`track_errors` became `error_get_last()`.
+* `gmp_random()` became `gmp_random_bits()`.
+* `mktime()` without arguments was fixed.
+* The PCRE2 character class `[\w- ]` was fixed.
+* `$$a[$i]` (attachment.php) was rewritten.
+* Static calls to instance methods were fixed.
+
+**Undefined constants are an Error.** Bareword array keys such as
+`$vbulletin->options[foo]` and `define(MCWD, ...)` were quoted. The template
+compiler dropped the quotes of `{vb:raw var['key']}` keys and now keeps them.
+
+**Type errors**
+* `number_format()` on strings like `"0.29,"`, `array & int`, `$string[] = ...`.
+* `mb_*()` with an unknown or empty charset, which is now a ValueError and was
+  `false` before.
+* PHP 8.5's built-in `XMLParser` class clashes with vB's `XMLparser` alias.
+* The XML parser handlers took the parser by reference.
+* Writes through undefined variables. PHP 5 silently created an object; PHP 8
+  throws an Error. Affected: the thread search (`$vbulletin`), the Contact Us form
+  (`$vBulletin`), the blog profile block and the vBCMS comment editor.
+
+**Comparisons.** PHP 8 compares a number with a non-numeric string as strings, so
+`'' == 0` is false now. Places where that changed what the forum does now use
+`vb_loose_equals()`/`vb_loose_in_array()` (PHP 7 rules, in `class_core.php`) or
+`intval()`. They were found by page diffs and by tracing (see below):
+* pre-selected options and radio buttons in the Admin CP forms
+* session change tracking
+* the friendly-URL unicode setting
+* user option checkboxes
+* folder menus
+* the search prefix selector
+* the default style of a new forum
+
+**Error handling** (`vbulletin_error_handler`)
+* vBulletin runs with notices off. PHP 8 made many notices into warnings
+  (undefined variables, array keys and properties, offsets on null). Those are
+  treated as notices again.
+* Deprecations are only shown or logged with `SHOW_DS_ERRORS`, as vB intends.
+* Uncaught exceptions and errors are logged.
+* Code that runs before vB installs its handler got `isset()` guards: superglobal
+  reads at the top of entry scripts, `global.php`, the API files.
+* Constants that can be defined twice in one request are guarded, for the same
+  reason.
+
+**Compile-time deprecations.** None are left. The fixes:
+* `(integer)`, `(boolean)` and `(double)` casts
+* `case x;`
+* optional parameters before required ones; the never-usable default was removed
+* implicitly nullable `Type $x = null`; the type was dropped, because `?Type`
+  needs PHP 7.1
+* `"${expr}"` interpolation
+
+`CHANGES.md` has the commit log of the port, one commit per topic.
+
+### Behaviour changes on purpose
+
+Everything else keeps the PHP 5 behaviour. A few lines were already broken under
+PHP 5, and the port makes them do what they were written to do:
+
+* **Inline moderation:** `!physicaldel` was a bareword, so always false. It became
+  `!$physicaldel` in `inlinemod.php` and in Forum Runner's moderation code.
+* **`vb/profilecustomize.php`:** `strpos(varname, 'background')` became
+  `strpos($varname, ...)`. Background style variables are grouped as intended.
+* **`packages/vbforum/taggablecontent/picture.php`:** the input type `UINT` became
+  `TYPE_UINT`.
+* **`class_dm_stylevar.php`:** `return flase;`, a truthy string, became
+  `return false;`.
+* **Two Admin CP `log_admin_action()` calls:** they used unparenthesised nested
+  ternaries, which PHP 5 grouped left to right. They now log the intended text.
+* **`attachment.php`:** `$$arrayname[$$index]` became `${$arrayname}[$index]`. It
+  sets the who's-online thread/forum for attachment views, which never worked.
+* **Contact Us emails:** the "Referring Page" line was always empty because of a
+  `$vBulletin` typo. It now shows the page.
+* **vBCMS search results:** a `continue` outside a loop became `return false`.
+  Unpublished articles are skipped. Before, PHP 5 hit a fatal error when the line
+  ran, and since PHP 7 the file does not compile at all.
+* **Function parameters:**
+  * a default that could never be used, because it came before a required
+    parameter, was removed
+  * implicitly nullable typed parameters (`Type $x = null`) lost the type
+
+Admin CP plugin pages show highlighted PHP code in PHP 8.3's new
+`highlight_string()` markup (`<pre>`). The code itself is the same.
+
+### Not changed
+
+* `acp0/` and `mcp0/` are old copies of the Admin and Moderator CP that nothing
+  links to. They were not ported and fail on PHP 8. Consider deleting them on
+  the server.
+* The mobile API (`api.php`, disabled in the settings) was only made quiet.
+  `xmlrpc_*` functions are gone in PHP 8.
+* The `mysql_*` database driver was removed in PHP 7 and is not used:
+  `config.php` selects `mysqli`.
+* Bugs that behave the same on PHP 5.6:
+  * cron tasks `blog_cleanup` and `blog_pending` fail (SQL error; the blog
+    product's bitfields are missing)
+  * `vb/validate.php` uses `$this` in static methods
+  * a regex in `class_bbcode_alt.php`
+  * the ICQ regex without a closing delimiter
+
+## How it was tested
+
+* **Reference instance.** The unmodified scripts run on PHP 5.6 (port 8056)
+  against the same database as the patched scripts on PHP 8.5. The normalised
+  HTML of every page below was compared. The only differences are volatile ones:
+  online counts, timers, search ids, timestamps, the PHP version and phpinfo.
+  * **Guest:** 75 pages, 91 error and invalid-parameter URLs, and 135 pages found
+    by a crawler (one per script/action).
+  * **Logged-in member:** 43 pages, the same 91 error URLs, and 151 crawled pages.
+  * **Admin CP:** 139 navigation pages, plus 132 options groups and edit forms.
+* **Write paths** (18 tests): new thread, reply and quoted reply, AJAX quick
+  reply, edit with edit log, Thanks add/remove, private messages, subscriptions,
+  search, tags, a poll with a vote, attachment upload with a GD thumbnail,
+  moderation, logout.
+* **Admin CP** (30 tests): every options group, forum, usergroup and user forms
+  submitted unchanged must leave the database unchanged. Also template save,
+  template syntax-error rejection, plugin save, style rebuild, counters, user
+  search, statistics, running a cron task, avatar upload, registration with
+  COPPA and question verification, signatures, reports.
+* **Cron.** All 28 active cron tasks, forced due, on PHP 8.5 and on PHP 5.6. Same
+  results.
+* **Email.** Mail went through vBulletin's SMTP class to a local SMTP sink:
+  * the Admin CP mail test
+  * Contact Us
+  * a mail queue batch of digests, birthday greetings and contact messages
+* **Runtime tracing.** A small PHP extension hooks `==`, `!=`, `<`, `<=`,
+  `switch`, `in_array()` and `array_search()`. It logged every comparison whose
+  result differs between PHP 7 and PHP 8 rules while all of the above ran. None
+  are left. The source is in `cmp7trace/`.
+* **PHP 5.6.** The patched scripts on PHP 5.6 give the same pages as the original
+  scripts on PHP 5.6.
+* **Static checks.**
+  * PHPCompatibility (phpcs 4)
+  * PHPStan levels 0 and 1, reviewed for errors that are fatal only in PHP 8
+  * token-based scanners for barewords, curly offsets and comparisons
+  * a `php -l` lint of every file on PHP 8.5 with all warnings enabled; the
+    changed files were also linted on PHP 5.6
+* **Logs.** The PHP 8.5 error log stays empty: no fatal errors, warnings or
+  deprecations. The only entry is the expected SMTP timeout, because this
+  container cannot send mail.

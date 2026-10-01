@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Bring the mirror back up after a container/machine restart (no systemd here):
-# re-adds the /etc/hosts entries if they were reset, starts MySQL and Apache.
+# re-adds the /etc/hosts entries if they were reset, starts MySQL, PHP-FPM and Apache.
 set -euo pipefail
 
 LOCAL_HOSTS="encode.su www.encode.su robleto.iad1-mysql-e2-12a.dreamhost.com mysql.ctxmodel.net"
@@ -20,4 +20,8 @@ fi
 
 install -d -o mysql -g mysql /var/run/mysqld
 service mysql start
+# every installed PHP-FPM (setup.sh installs one, php8.5-fpm by default)
+for fpm in /etc/init.d/php*-fpm; do
+	[ -x "$fpm" ] && service "$(basename "$fpm")" start
+done
 service apache2 start

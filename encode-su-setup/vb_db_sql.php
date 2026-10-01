@@ -3,7 +3,7 @@
 // includes/config.php expects, so the config file itself can stay untouched.
 // The password is read from config.php and never shown on the terminal.
 //
-// Usage: php5.6 vb_db_sql.php /var/www/encode.su/includes/config.php | mysql -uroot
+// Usage: php vb_db_sql.php /var/www/encode.su/includes/config.php | mysql -uroot
 //        php5.6 vb_db_sql.php /var/www/encode.su/includes/config.php --dbname
 
 if (PHP_SAPI != 'cli')

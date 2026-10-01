@@ -2,8 +2,8 @@
 // Change a vBulletin 4 setting from the command line and rebuild the 'options'
 // datastore exactly like the Admin CP does (build_options()).
 //
-// Usage: php5.6 vb_set_option.php /var/www/encode.su bburl http://encode.su
-//        php5.6 vb_set_option.php /var/www/encode.su bburl          (show only)
+// Usage: php vb_set_option.php /var/www/encode.su bburl http://encode.su
+//        php vb_set_option.php /var/www/encode.su bburl          (show only)
 
 if (PHP_SAPI != 'cli')
 {
@@ -21,7 +21,7 @@ define('CLI_VARNAME', $argv[2]);
 define('CLI_SET', $argc > 3);
 define('CLI_VALUE', CLI_SET ? $argv[3] : '');
 
-error_reporting(E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED);
+error_reporting(E_ALL & ~E_NOTICE & ~E_DEPRECATED & ~2048); // 2048: E_STRICT (PHP 5; the constant is deprecated in PHP 8.4)
 chdir(CLI_FORUMDIR);
 
 define('THIS_SCRIPT', 'cli_set_option');
