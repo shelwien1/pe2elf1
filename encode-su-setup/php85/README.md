@@ -5,45 +5,115 @@ first page with fatal errors. This directory ports the encode.su installation to
 PHP 8.5. Everything here also runs on PHP 5.6 (PHP 5.6 syntax only), so it can be
 applied before PHP is upgraded.
 
-| File | What it changes |
+| File | Purpose |
 |---|---|
-| `vbulletin-php85.patch` | the forum scripts: 186 PHP files, about 890 changed lines |
-| `vb_php8_db_fix.php` | the PHP code stored in the database: plugins, the plugin cache, compiled templates, two setting checks |
+| `vbulletin-php85.patch` | ports the forum scripts: 186 PHP files, about 890 changed lines |
+| `vb_php8_db_fix.php` | ports the PHP code stored in the database: plugins, the plugin cache, compiled templates, two setting checks |
 | `php8_barewords.php` | tokenizer-based quoting of undefined constants, used by `vb_php8_db_fix.php` |
+| `php_constants.txt` | names of PHP's own constants (5.6 and 8.5), used by `vb_php8_db_fix.php` |
+| `php85fix.sh`, `php85undo.sh` | apply the patch and the database fix to a forum in place, with a backup, and undo them (see below) |
 | `CHANGES.md` | commit log of the patch, one commit per topic |
 | `cmp7trace/` | diagnostic PHP extension used for testing (see below); not needed to run the forum |
 
-`../setup.sh` applies both. The patch is made against the files in the
-2021-03-23 archive.
+`../setup.sh` applies the patch and the database fix to the local mirror. The
+patch is made against the files in the 2021-03-23 archive.
 
 ## Applying it to the live forum
 
-1. Back up the forum files and the database.
-2. Patch the scripts from the forum root. Try a dry run first:
+`php85fix.sh` backs up and patches a forum in place, and `php85undo.sh` puts it
+back. Copy these files to a directory outside the web root, because the backup
+holds a dump of the whole database. Next to the forum directory works, `tmp5/`
+in this example:
 
-   ```sh
-   cd /path/to/forum
-   patch -p1 --binary --dry-run < vbulletin-php85.patch
-   patch -p1 --binary < vbulletin-php85.patch
-   ```
+* `php85fix.sh`, `php85undo.sh`
+* `vbulletin-php85.patch`, `vb_php8_db_fix.php`, `php8_barewords.php`,
+  `php_constants.txt`
 
-   Files edited on the server since 2021 may need fuzz or manual merging. Check for
-   `*.rej` files after patching.
-3. Fix the database code. `includes/config.php` supplies the credentials. Without
-   `--apply` it only lists what it would change:
+Then run it from the forum's root directory, the one with `global.php`:
 
-   ```sh
-   php vb_php8_db_fix.php /path/to/forum
-   php vb_php8_db_fix.php /path/to/forum --apply
-   ```
+```sh
+cd encode.su
+sh ../tmp5/php85fix.sh
+```
 
-   It quotes barewords in plugins and compiled templates. A datastore cache
-   (memcache, APC, file cache) has to be cleared afterwards. Running it again is
-   safe: the second run finds nothing to change.
-4. Switch PHP to 8.5. The forum needs the `mysqli`, `mbstring`, `gd`, `xml` and
-   `curl` extensions. Keep `zend.assertions = -1`, the production default: with
-   assertions enabled, PHP 8 throws where a failed `assert()` in vB's code only
-   warned in PHP 5.
+It needs `patch`, `tar`, `gzip`, `mysql`, `mysqldump` and a PHP 5.6 or later
+command line binary with `mysqli`. To use another binary than `php`, run
+`PHP=/path/to/php sh ../tmp5/php85fix.sh`. It works in four steps:
+
+1. **Checks.** The patch must apply to the scripts, and the database login in
+   `includes/config.php` must work. Files of the patch that do not exist on the
+   site, such as a deleted `forumrunner/`, are skipped. A script that was edited
+   since 2021 in a line the patch changes stops it, and the log names the file.
+   If a check fails, nothing is changed.
+2. **Backup** to `../tmp5/php85-backup/`: the scripts that the patch changes
+   (`files.tar.gz`) and a dump of the whole database (`database.sql.gz`).
+3. **Scripts.** The patch is applied.
+4. **Database.** The PHP code stored in the database is fixed: plugins, the
+   plugin cache, compiled templates and two setting checks. The old value of
+   every field that changes is recorded in `database-undo.dat`.
+
+If step 3 or 4 fails, the scripts and the database values are put back. The
+backup is then kept as `php85-backup.failed-<date>`, with the log
+`php85fix.log`. If the script was stopped half way (by a power cut, say),
+`php85undo.sh --force` puts back whatever it changed.
+
+The tables are locked while they are dumped, for seconds to minutes depending on
+the size of the database. Run it when the forum is quiet, or turn the forum off
+for the switch (Admin CP > Settings > Options > Turn Your vBulletin On and
+Off). The dump is written unpacked and then compressed. Before it starts, the
+script checks that there is free space for twice the size of the table data:
+about 680 MB for the October 2025 database, whose compressed dump is 150 MB.
+
+Then switch the site to PHP 8.5. The patched scripts also run on PHP 5.6, so
+this can wait.
+
+* The forum needs the `mysqli`, `mbstring`, `gd`, `xml` and `curl` extensions.
+* Keep `zend.assertions = -1`, the production default. With assertions
+  enabled, PHP 8 throws where a failed `assert()` in vB's code only warned in
+  PHP 5.
+* A datastore cache (memcache, APC, file cache) in `includes/config.php` has to
+  be cleared, so that the fixed plugin code is used. The script says so when one
+  is configured.
+
+### Undoing it
+
+Switch the site back to PHP 5.6 first, because the original scripts do not run
+on PHP 8. Then run, from the forum root:
+
+```sh
+sh ../tmp5/php85undo.sh
+```
+
+It restores the scripts from `files.tar.gz` and puts back the old values of the
+database fields that `php85fix.sh` changed. Posts, users and everything else
+written since are kept. If a patched script or one of those database values
+was changed after `php85fix.sh` ran, it lists them and changes nothing. With
+`--force`, it overwrites them. Afterwards the backup is renamed to
+`php85-backup.undone-<date>`, so `php85fix.sh` can run again.
+
+`sh ../tmp5/php85undo.sh --full-db` loads the complete dump instead. The
+database is then exactly as it was before `php85fix.sh`, and everything written
+since is lost. The current database is dumped to
+`database-before-undo-<date>.sql.gz` first. That dump and the unpacked old one
+need about twice the size of the table data again, which is checked first.
+
+### By hand
+
+The scripts use the patch and the database tool, which can also be run
+directly. `includes/config.php` supplies the database login. Without `--apply`,
+the tool only lists what it would change:
+
+```sh
+cd /path/to/forum
+patch -p1 --binary --dry-run < vbulletin-php85.patch
+patch -p1 --binary < vbulletin-php85.patch
+php vb_php8_db_fix.php /path/to/forum
+php vb_php8_db_fix.php /path/to/forum --apply
+```
+
+Running the tool again is safe: the second run finds nothing to change. With
+`--apply --undo-file FILE`, it records the old values, and `--restore FILE` puts
+them back.
 
 Later changes stay PHP 8 compatible on their own:
 
@@ -300,3 +370,20 @@ Admin CP plugin pages show highlighted PHP code in PHP 8.3's new
 * **Logs.** The PHP 8.5 error log stays empty: no fatal errors, warnings or
   deprecations. The only entry is the expected SMTP timeout, because this
   container cannot send mail.
+* **`php85fix.sh` and `php85undo.sh`** were run on a copy of the 2021 files with
+  the October 2025 database:
+  * After the fix, the 186 scripts are byte-identical to the patched mirror,
+    and the plugins and templates match its database. 75 guest pages are
+    identical on PHP 5.6 and PHP 8.5.
+  * After the undo, every PHP file is identical to the original, and so are the
+    plugin, template and setting tables and the plugin cache. After
+    `--full-db`, all 259 tables are (`CHECKSUM TABLE`).
+  * 14 failure cases are refused or rolled back with nothing changed: the
+    wrong directory, the kit inside the web root, undo without a backup, the
+    fix run twice, a script or a database value changed after the fix
+    (`--force` restores anyway), a script the patch does not fit, scripts
+    patched by hand, a database user who may not update templates (the fix
+    fails half way and is rolled back), a dump that fails half way, too little
+    disk space for the fix or for `--full-db`, a `config.php` that names
+    another database, and a `--full-db` load that fails half way (a second run
+    then restores everything). A deleted `forumrunner/` and `PHP=php5.6` work.

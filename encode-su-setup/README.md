@@ -125,6 +125,7 @@ To go back to HTTPS URLs, run `php vb_set_option.php /var/www/encode.su bburl ht
 | `files/post_thanks.js` | Post Thank You Hack 7.84 script missing from the archive |
 | `php85/vbulletin-php85.patch` | PHP 8 port of the forum scripts (186 files) |
 | `php85/vb_php8_db_fix.php` | PHP 8 port of the PHP code stored in the database (plugins, templates) |
-| `php85/php8_barewords.php` | bareword quoting used by `vb_php8_db_fix.php` |
+| `php85/php8_barewords.php`, `php85/php_constants.txt` | bareword quoting used by `vb_php8_db_fix.php` |
+| `php85/php85fix.sh`, `php85/php85undo.sh` | apply the PHP 8 port to a forum in place, with a backup of the files and the database, and undo it |
 | `php85/README.md`, `php85/CHANGES.md` | what the port changes, how it was tested, how to apply it |
 | `php85/cmp7trace/` | diagnostic PHP extension used to test the port (not needed to run the forum) |
