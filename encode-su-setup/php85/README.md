@@ -224,12 +224,13 @@ Admin CP plugin pages show highlighted PHP code in PHP 8.3's new
   * **Logged-in member:** 43 pages, the same 91 error URLs, and 151 crawled pages.
   * **Admin CP:** 139 navigation pages, plus 132 options groups and edit forms.
 * **Real members.** The tests above use test accounts with clean data. The
-  scripts were also run as 312 real accounts, by inserting vB sessions: the 53
+  scripts were also run as 612 real accounts, by inserting vB sessions: the 53
   with an empty time zone, staff, banned users, users with unusual options,
-  empty or year-less birthdays and read markers, and top posters. 13 pages
-  each (forum home, user CP, option and profile forms, own profile, private
-  messages, subscriptions, new posts, post and thread search results, a forum
-  and a thread they read): 4,173 pages, identical apart from volatile parts.
+  empty or year-less birthdays and read markers, top posters and 300 random
+  members. 13 pages each (forum home, user CP, option and profile forms, own
+  profile, private messages, subscriptions, new posts, post and thread search
+  results, a forum and a thread they read): 8,073 pages, identical apart from
+  volatile parts.
   With the time zone fix taken out, every page of the 53 accounts failed.
 * **Write paths** (18 tests): new thread, reply and quoted reply, AJAX quick
   reply, edit with edit log, Thanks add/remove, private messages, subscriptions,
