@@ -123,7 +123,7 @@ To go back to HTTPS URLs, run `php vb_set_option.php /var/www/encode.su bburl ht
 | `vb_rebuild_styles.php` | rebuilds all styles and the CSS files |
 | `local_mirror_fixes.sql` | the two template URL fixes |
 | `files/post_thanks.js` | Post Thank You Hack 7.84 script missing from the archive |
-| `php85/vbulletin-php85.patch` | PHP 8 port of the forum scripts (169 files) |
+| `php85/vbulletin-php85.patch` | PHP 8 port of the forum scripts (185 files) |
 | `php85/vb_php8_db_fix.php` | PHP 8 port of the PHP code stored in the database (plugins, templates) |
 | `php85/php8_barewords.php` | bareword quoting used by `vb_php8_db_fix.php` |
 | `php85/README.md`, `php85/CHANGES.md` | what the port changes, how it was tested, how to apply it |

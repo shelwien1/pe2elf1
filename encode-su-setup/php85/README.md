@@ -7,7 +7,7 @@ applied before PHP is upgraded.
 
 | File | What it changes |
 |---|---|
-| `vbulletin-php85.patch` | the forum scripts: 169 PHP files, about 660 changed lines |
+| `vbulletin-php85.patch` | the forum scripts: 185 PHP files, about 840 changed lines |
 | `vb_php8_db_fix.php` | the PHP code stored in the database: plugins, the plugin cache, compiled templates, two setting checks |
 | `php8_barewords.php` | tokenizer-based quoting of undefined constants, used by `vb_php8_db_fix.php` |
 | `CHANGES.md` | commit log of the patch, one commit per topic |
@@ -41,7 +41,9 @@ applied before PHP is upgraded.
    (memcache, APC, file cache) has to be cleared afterwards. Running it again is
    safe: the second run finds nothing to change.
 4. Switch PHP to 8.5. The forum needs the `mysqli`, `mbstring`, `gd`, `xml` and
-   `curl` extensions.
+   `curl` extensions. Keep `zend.assertions = -1`, the production default: with
+   assertions enabled, PHP 8 throws where a failed `assert()` in vB's code only
+   warned in PHP 5.
 
 Later changes stay PHP 8 compatible on their own:
 
@@ -67,6 +69,9 @@ Later changes stay PHP 8 compatible on their own:
 * The PCRE2 character class `[\w- ]` was fixed.
 * `$$a[$i]` (attachment.php) was rewritten.
 * Static calls to instance methods were fixed.
+* A vBCMS controller method whose signature did not match its parent (a fatal
+  error in PHP 8) was fixed, and the Iterator/ArrayAccess methods of two
+  classes got `#[\ReturnTypeWillChange]` (a comment before PHP 8).
 
 **Undefined constants are an Error.** Bareword array keys such as
 `$vbulletin->options[foo]` and `define(MCWD, ...)` were quoted. The template
@@ -81,11 +86,36 @@ compiler dropped the quotes of `{vb:raw var['key']}` keys and now keeps them.
 * Writes through undefined variables. PHP 5 silently created an object; PHP 8
   throws an Error. Affected: the thread search (`$vbulletin`), the Contact Us form
   (`$vBulletin`), the blog profile block and the vBCMS comment editor.
+* Arrays that were never initialised: `count()`/`sizeof()`/`implode()` of an
+  unset variable (the Admin CP statistics for a date range without data, among
+  others) and `''` used as an array.
+* `sprintf()` with phrase formats from the database. PHP 8 throws for too few
+  arguments or a stray `%` in a phrase, where PHP 5 returned false or skipped
+  the bad part. `vb_sprintf_array()` (in `class_core.php`) gives the PHP 5
+  results; `construct_phrase()`, `vB_Phrase` and custom BB codes use it.
+* Values from the database or from users. `''` or `'-'` in arithmetic and
+  division by zero are errors in PHP 8:
+  * `user.timezoneoffset` is `''` for 53 old accounts. These members got a fatal
+    error on every page once logged in.
+  * A signature with `[size=-]` could not be saved (HTTP 500), and `[size=10-]`
+    got past the size limit.
+  * Calendar recurrence options with a missing number (crafted requests only).
+  * The vBCMS rating average divided by 0 when the setting for the number of
+    votes is 0.
+
+**Changed defaults**
+* `html_entity_decode()`, `htmlspecialchars_decode()`, `htmlentities()` and
+  `get_html_translation_table()` default to `ENT_QUOTES | ENT_SUBSTITUTE` since
+  PHP 8.1. The 21 calls without flags pass `ENT_COMPAT`, the PHP 5 default.
+* mysqli throws exceptions by default since PHP 8.1, which bypassed vB's own
+  database error handling (retries, the "Database error" page). It is switched
+  back to the PHP 5 default.
 
 **Comparisons.** PHP 8 compares a number with a non-numeric string as strings, so
 `'' == 0` is false now. Places where that changed what the forum does now use
 `vb_loose_equals()`/`vb_loose_in_array()` (PHP 7 rules, in `class_core.php`) or
-`intval()`. They were found by page diffs and by tracing (see below):
+`intval()`. They were found by page diffs, by tracing and by the review (see
+below):
 * pre-selected options and radio buttons in the Admin CP forms
 * session change tracking
 * the friendly-URL unicode setting
@@ -93,6 +123,8 @@ compiler dropped the quotes of `{vb:raw var['key']}` keys and now keeps them.
 * folder menus
 * the search prefix selector
 * the default style of a new forum
+* the time zone select for accounts with an empty time zone
+* the calendar's checks of recurrence options
 
 **Error handling** (`vbulletin_error_handler`)
 * vBulletin runs with notices off. PHP 8 made many notices into warnings
@@ -100,6 +132,9 @@ compiler dropped the quotes of `{vb:raw var['key']}` keys and now keeps them.
   treated as notices again.
 * Deprecations are only shown or logged with `SHOW_DS_ERRORS`, as vB intends.
 * Uncaught exceptions and errors are logged.
+* Warnings that PHP 5 did not raise at all, such as "A non-numeric value
+  encountered" for `'10px' + 1` and PHP 8.3's warnings from `array_sum()`, are
+  treated as notices too.
 * Code that runs before vB installs its handler got `isset()` guards: superglobal
   reads at the top of entry scripts, `global.php`, the API files.
 * Constants that can be defined twice in one request are guarded, for the same
@@ -134,6 +169,9 @@ PHP 5, and the port makes them do what they were written to do:
   sets the who's-online thread/forum for attachment views, which never worked.
 * **Contact Us emails:** the "Referring Page" line was always empty because of a
   `$vBulletin` typo. It now shows the page.
+* **Forum Runner:** `iconv()` was called with `iconv_substr()`'s arguments and
+  always failed. It is now `iconv_substr()`. It only runs when `mb_substr()` is
+  not available.
 * **vBCMS search results:** a `continue` outside a loop became `return false`.
   Unpublished articles are skipped. Before, PHP 5 hit a fatal error when the line
   ran, and since PHP 7 the file does not compile at all.
@@ -154,12 +192,26 @@ Admin CP plugin pages show highlighted PHP code in PHP 8.3's new
   `xmlrpc_*` functions are gone in PHP 8.
 * The `mysql_*` database driver was removed in PHP 7 and is not used:
   `config.php` selects `mysqli`.
+* Disabled products, which stay disabled:
+  * The plugin of the `stg_table` product (a table BB code) uses `''` as an
+    array and fails on PHP 8 if the product is enabled again. vBulletin 4.2 has
+    its own `[TABLE]` code, which is the one in use. Uninstall the product.
+  * Templates of disabled products (style ids -10 and -20) were compiled by an
+    older vBulletin and call `htmlspecialchars()` without flags. Rebuild the
+    styles after enabling such a product.
+* Settings that only an administrator can set to unusable values: a blog
+  "per page" option of 0 divides by zero (PHP 5 printed warnings and showed
+  an empty list; PHP 8 stops).
 * Bugs that behave the same on PHP 5.6:
   * cron tasks `blog_cleanup` and `blog_pending` fail (SQL error; the blog
     product's bitfields are missing)
   * `vb/validate.php` uses `$this` in static methods
   * a regex in `class_bbcode_alt.php`
   * the ICQ regex without a closing delimiter
+  * the status icons of search results are always "new" (`lastread` is read,
+    `readtime` is set)
+  * two vBCMS collection queries use `$this->itemdid` (a typo). They fail on both
+    versions: an SQL error on PHP 5, a TypeError on PHP 8.
 
 ## How it was tested
 
@@ -171,6 +223,14 @@ Admin CP plugin pages show highlighted PHP code in PHP 8.3's new
     by a crawler (one per script/action).
   * **Logged-in member:** 43 pages, the same 91 error URLs, and 151 crawled pages.
   * **Admin CP:** 139 navigation pages, plus 132 options groups and edit forms.
+* **Real members.** The tests above use test accounts with clean data. The
+  scripts were also run as 312 real accounts, by inserting vB sessions: the 53
+  with an empty time zone, staff, banned users, users with unusual options,
+  empty or year-less birthdays and read markers, and top posters. 13 pages
+  each (forum home, user CP, option and profile forms, own profile, private
+  messages, subscriptions, new posts, post and thread search results, a forum
+  and a thread they read): 4,173 pages, identical apart from volatile parts.
+  With the time zone fix taken out, every page of the 53 accounts failed.
 * **Write paths** (18 tests): new thread, reply and quoted reply, AJAX quick
   reply, edit with edit log, Thanks add/remove, private messages, subscriptions,
   search, tags, a poll with a vote, attachment upload with a GD thumbnail,
@@ -179,7 +239,10 @@ Admin CP plugin pages show highlighted PHP code in PHP 8.3's new
   submitted unchanged must leave the database unchanged. Also template save,
   template syntax-error rejection, plugin save, style rebuild, counters, user
   search, statistics, running a cron task, avatar upload, registration with
-  COPPA and question verification, signatures, reports.
+  COPPA and question verification, signatures, reports. After the review, the
+  Admin CP tests were run from the same database snapshot on PHP 5.6 and on
+  PHP 8.5, with identical results. On a freshly imported database a few forms
+  store `0` for settings that are empty, on both versions.
 * **Cron.** All 28 active cron tasks, forced due, on PHP 8.5 and on PHP 5.6. Same
   results.
 * **Email.** Mail went through vBulletin's SMTP class to a local SMTP sink:
@@ -192,10 +255,26 @@ Admin CP plugin pages show highlighted PHP code in PHP 8.3's new
   are left. The source is in `cmp7trace/`.
 * **PHP 5.6.** The patched scripts on PHP 5.6 give the same pages as the original
   scripts on PHP 5.6.
+* **Fuzzing.** `vb_sprintf_array()` against PHP 5.6's `sprintf()` with 400,000
+  random formats and argument lists, and the signature parser against PHP 5.6
+  with 6,632 `[size]` combinations: identical results.
 * **Static checks.**
   * PHPCompatibility (phpcs 4)
   * PHPStan levels 0 and 1, reviewed for errors that are fatal only in PHP 8
   * token-based scanners for barewords, curly offsets and comparisons
+  * a second pass with token-based scanners: method and callback signatures,
+    PHP 4 constructors, static calls, uniform variable syntax, `foreach` and the
+    array pointer, flags of the html functions, `func_get_args()`, functions
+    removed in PHP 7 and 8, arrays and objects created implicitly (also in
+    top-level script code and functions that run plugin hooks)
+  * every division and modulo (85 sites), and arguments that are a ValueError
+    in PHP 8 but only a warning in PHP 5: `strpos()` offsets, empty needles,
+    `str_repeat()` counts, `max()` of empty arrays, `mt_rand()` ranges,
+    `array_combine()` sizes, `explode()` delimiters
+  * the database: string columns that hold numbers were checked for `''`
+    (only `user.timezoneoffset`); the PHP code stored in it (plugins, setting
+    validation and option code, product install code, 2,437 compiled templates)
+    was linted on both versions and run through the same scanners
   * a `php -l` lint of every file on PHP 8.5 with all warnings enabled; the
     changed files were also linted on PHP 5.6
 * **Logs.** The PHP 8.5 error log stays empty: no fatal errors, warnings or

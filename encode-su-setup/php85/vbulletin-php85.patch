@@ -12,7 +12,7 @@ index b3d52ea..4c5fead 100644
  		print_submit_row();
  	}
 diff --git a/acp/apistats.php b/acp/apistats.php
-index a3a90fc..61b9b33 100644
+index a3a90fc..149ab7f 100644
 --- a/acp/apistats.php
 +++ b/acp/apistats.php
 @@ -270,7 +270,7 @@ if ($_REQUEST['do'] == 'client')
@@ -24,6 +24,14 @@ index a3a90fc..61b9b33 100644
  			print_cells_row($cell);
  		}
  
+@@ -361,6 +361,7 @@ if ($_REQUEST['do'] == 'activity')
+ 			ORDER BY $orderby
+ 		");
+ 
++		$dates = $results = array(); // sizeof() of the unset $results gave 0 in PHP 5, a TypeError in PHP 8
+ 		while ($stats = $db->fetch_array($statistics))
+ 		{ // we will now have each days total of the type picked and we can sort through it
+ 			$month = strtolower(date('F', $stats['dateline']));
 diff --git a/acp/bbcode.php b/acp/bbcode.php
 index 30f889d..51dc741 100644
 --- a/acp/bbcode.php
@@ -273,6 +281,18 @@ index 683951c..dcdbc20 100644
  			}
  		}
  		unset($categories);
+diff --git a/acp/stats.php b/acp/stats.php
+index 6125bb3..e04722b 100644
+--- a/acp/stats.php
++++ b/acp/stats.php
+@@ -183,6 +183,7 @@ if (!empty($vbulletin->GPC['scope']))
+ 		ORDER BY $orderby
+ 	");
+ 
++	$dates = $results = array(); // sizeof() of the unset $results gave 0 in PHP 5, a TypeError in PHP 8
+ 	while ($stats = $db->fetch_array($statistics))
+ 	{ // we will now have each days total of the type picked and we can sort through it
+ 		$month = strtolower(date('F', $stats['dateline']));
 diff --git a/acp/subscriptions.php b/acp/subscriptions.php
 index dfa6373..0e89e3e 100644
 --- a/acp/subscriptions.php
@@ -657,6 +677,19 @@ index 17209bf..2f946bb 100644
  		");
  
  		build_blog_memberids($vbulletin->userinfo['userid']);
+diff --git a/calendar.php b/calendar.php
+index 9b8956b..2caf469 100644
+--- a/calendar.php
++++ b/calendar.php
+@@ -2083,7 +2083,7 @@ if ($_REQUEST['do'] == 'add')
+ 	foreach (fetch_timezone() AS $optionvalue => $timezonephrase)
+ 	{
+ 		$optiontitle = $vbphrase["$timezonephrase"];
+-		$optionselected = ($optionvalue == $vbulletin->userinfo['timezoneoffset'] ? 'selected="selected"' : '');
++		$optionselected = (vb_loose_equals($optionvalue, $vbulletin->userinfo['timezoneoffset']) ? 'selected="selected"' : '');
+ 		$timezoneoptions .= render_option_template($optiontitle, $optionvalue, $optionselected, $optionclass);
+ 	}
+ 
 diff --git a/converse.php b/converse.php
 index 2d16a1c..e9ce878 100644
 --- a/converse.php
@@ -777,10 +810,32 @@ index 05af62f..a2ee1fb 100644
  
  if (!$attachlib = vB_Attachment_Store_Library::fetch_library($vbulletin, $contenttypeid, $vbulletin->GPC['categoryid'], $values)) {
      json_error("eek");
+diff --git a/forumrunner/include/cms.php b/forumrunner/include/cms.php
+index 5020cbe..3862d09 100644
+--- a/forumrunner/include/cms.php
++++ b/forumrunner/include/cms.php
+@@ -937,7 +937,7 @@ create_associated_thread ($article)
+     // set data
+ 
+     //title and message are needed for dupcheck later
+-    $title = new vB_Phrase('vbcms', 'comment_thread_title', htmlspecialchars_decode($article->getTitle()));
++    $title = new vB_Phrase('vbcms', 'comment_thread_title', htmlspecialchars_decode($article->getTitle(), ENT_COMPAT));
+     $message = new vB_Phrase('vbcms', 'comment_thread_firstpost', vBCms_Route_Content::getURL(array('node' => $article->getUrlSegment())));
+     $dataman->set('userid', $article->getUserId());
+     $dataman->set('title', $title);
 diff --git a/forumrunner/include/get_forum.php b/forumrunner/include/get_forum.php
-index 5a5fb71..e5e29d4 100644
+index 5a5fb71..7570e8a 100644
 --- a/forumrunner/include/get_forum.php
 +++ b/forumrunner/include/get_forum.php
+@@ -459,7 +459,7 @@ do_get_forum ()
+ 			'announcement' => 1,
+ 			'new_posts' => $announcement['readannounce'] ? 0 : 1,
+ 			'thread_title' => prepare_utf8_string(strip_tags($announcement['title'])),
+-			'thread_preview' => prepare_utf8_string(preview_chop(html_entity_decode($announcement['pagetext']), FR_PREVIEW_LEN)),
++			'thread_preview' => prepare_utf8_string(preview_chop(html_entity_decode($announcement['pagetext'], ENT_COMPAT), FR_PREVIEW_LEN)),
+ 			'post_userid' => $announcement['userid'],
+ 			'post_lastposttime' => prepare_utf8_string(date_trunc($announcement['postdate'])),
+ 			'post_username' => prepare_utf8_string(strip_tags($announcement['username'])),
 @@ -863,7 +863,7 @@ do_get_forum ()
      	$pageinfo_replycount = $pageinfo + array('sort' => 'replycount', 'order' => ('replycount' == $sortfield) ? $oppositesort : 'desc');
      	$pageinfo_views = $pageinfo + array('sort' => 'views', 'order' => ('views' == $sortfield) ? $oppositesort : 'desc');
@@ -790,6 +845,15 @@ index 5a5fb71..e5e29d4 100644
      
      
      	if ($totalthreads > 0 OR $stickyids)
+@@ -975,7 +975,7 @@ do_get_forum ()
+ 			    'forum_id' => $thread['forumid'],
+ 			    'total_posts' => $thread['totalposts'] ? $thread['totalposts'] : 0,
+ 			    'thread_title' => prepare_utf8_string(strip_tags($thread['threadtitle'])),
+-			    'thread_preview' => prepare_utf8_string(preview_chop(html_entity_decode($thread['preview']), FR_PREVIEW_LEN)),
++			    'thread_preview' => prepare_utf8_string(preview_chop(html_entity_decode($thread['preview'], ENT_COMPAT), FR_PREVIEW_LEN)),
+ 			    'post_userid' => $thread['lastpost_userid'],
+ 			    'post_lastposttime' => prepare_utf8_string(date_trunc($thread['lastpostdate']) . ' ' . $thread['lastposttime']),
+ 			    'post_username' => prepare_utf8_string(strip_tags($thread['lastpost_username'])),
 diff --git a/forumrunner/include/moderation.php b/forumrunner/include/moderation.php
 index 1349a44..9dd4cd7 100644
 --- a/forumrunner/include/moderation.php
@@ -885,8 +949,21 @@ index d55777d..5d9f21a 100644
          $posthash =  md5($vbulletin->GPC['poststarttime'] . $vbulletin->userinfo['userid'] . $vbulletin->userinfo['salt']);
  
  	$vbulletin->input->clean_array_gpc('p', array(
+diff --git a/forumrunner/include/profile.php b/forumrunner/include/profile.php
+index 7ca040c..0fa1a7e 100644
+--- a/forumrunner/include/profile.php
++++ b/forumrunner/include/profile.php
+@@ -76,7 +76,7 @@ do_get_profile ()
+     $joindate = vbdate($vbulletin->options['dateformat'], $userinfo['joindate']);
+ 
+     $out = array(
+-        'username' => html_entity_decode($userinfo['username']),
++        'username' => html_entity_decode($userinfo['username'], ENT_COMPAT),
+         'online' => fetch_online_status($userinfo, false),
+         'avatar_upload' => ($vbulletin->options['avatarenabled'] && ($permissions['genericpermissions'] & $vbulletin->bf_ugp_genericpermissions['canuseavatar'])),
+         'posts' => $posts,
 diff --git a/forumrunner/include/search.php b/forumrunner/include/search.php
-index 83ae90a..3570df8 100644
+index 83ae90a..763d2ae 100644
 --- a/forumrunner/include/search.php
 +++ b/forumrunner/include/search.php
 @@ -79,7 +79,7 @@ do_showresults ($searchid, $pagenumber = 1, $perpage = 25)
@@ -898,6 +975,15 @@ index 83ae90a..3570df8 100644
  	    }
  
  	    $lastread = $thread->get_forum()->get_last_read_by_current_user($current_user);
+@@ -120,7 +120,7 @@ do_showresults ($searchid, $pagenumber = 1, $perpage = 25)
+ 		'total_posts' => $thread->get_field('replycount'),
+ 		'forum_title' => prepare_utf8_string(strip_tags($foruminfo['title'])),
+ 		'thread_title' => prepare_utf8_string(strip_tags($thread->get_field('title'))),
+-		'thread_preview' => prepare_utf8_string(preview_chop(strip_tags(strip_bbcode(html_entity_decode($preview))), FR_PREVIEW_LEN)),
++		'thread_preview' => prepare_utf8_string(preview_chop(strip_tags(strip_bbcode(html_entity_decode($preview, ENT_COMPAT))), FR_PREVIEW_LEN)),
+ 		'post_userid' => $previewinfo['userid'],
+ 		'post_lastposttime' => prepare_utf8_string(date_trunc($date) . ' ' . $time),
+ 		'post_username' => prepare_utf8_string(strip_tags($previewinfo['username'])),
 @@ -160,7 +160,7 @@ do_showresults ($searchid, $pagenumber = 1, $perpage = 25)
  	    }
  	    if ($skip) {
@@ -907,6 +993,28 @@ index 83ae90a..3570df8 100644
  	    }
  	    
  	    $date = vbdate($vbulletin->options['dateformat'], $post->get_field('dateline'));
+@@ -184,7 +184,7 @@ do_showresults ($searchid, $pagenumber = 1, $perpage = 25)
+ 		'forum_id' => $thread->get_field('forumid'),
+ 		'forum_title' => prepare_utf8_string(strip_tags($foruminfo['title'])),
+ 		'thread_title' => prepare_utf8_string(strip_tags($thread->get_field('title'))),
+-		'thread_preview' => prepare_utf8_string(preview_chop(htmlspecialchars_uni(fetch_censored_text(strip_bbcode(strip_quotes(html_entity_decode($post->get_field('pagetext'))), false, true))), FR_PREVIEW_LEN)),
++		'thread_preview' => prepare_utf8_string(preview_chop(htmlspecialchars_uni(fetch_censored_text(strip_bbcode(strip_quotes(html_entity_decode($post->get_field('pagetext'), ENT_COMPAT)), false, true))), FR_PREVIEW_LEN)),
+ 		'post_userid' => $post->get_field('userid'),
+ 		'post_lastposttime' => prepare_utf8_string(date_trunc($date) . ' ' . $time),
+ 		'post_username' => prepare_utf8_string(strip_tags($post->get_field('username'))),
+diff --git a/forumrunner/include/subscriptions.php b/forumrunner/include/subscriptions.php
+index b056c34..579ea44 100644
+--- a/forumrunner/include/subscriptions.php
++++ b/forumrunner/include/subscriptions.php
+@@ -366,7 +366,7 @@ do_get_subscriptions ()
+ 			    'total_posts' => $thread['totalposts'] ? $thread['totalposts'] : 0,
+ 			    'forum_title' => prepare_utf8_string($thread['forumtitle']),
+ 			    'thread_title' => prepare_utf8_string($thread['threadtitle']),
+-			    'thread_preview' => prepare_utf8_string(preview_chop(html_entity_decode($thread['preview']), FR_PREVIEW_LEN)),
++			    'thread_preview' => prepare_utf8_string(preview_chop(html_entity_decode($thread['preview'], ENT_COMPAT), FR_PREVIEW_LEN)),
+ 			    'post_userid' => $thread['lastpost_userid'],
+ 			    'post_lastposttime' => prepare_utf8_string(date_trunc($thread['lastpostdate']) . ' ' . $thread['lastposttime']),
+ 			    'post_username' => prepare_utf8_string(strip_tags($thread['lastpost_username'])),
 diff --git a/forumrunner/push.php b/forumrunner/push.php
 index 95c622d..3ef5c78 100644
 --- a/forumrunner/push.php
@@ -1328,10 +1436,65 @@ index a5c1a83..9a9c979 100644
  			}
  			if (!strlen ($content)) {
 diff --git a/forumrunner/support/utils.php b/forumrunner/support/utils.php
-index fa6c5c8..2c9b7db 100644
+index fa6c5c8..a9d34e8 100644
 --- a/forumrunner/support/utils.php
 +++ b/forumrunner/support/utils.php
-@@ -1511,7 +1511,7 @@ parse_post ($text, $allowsmilie=false)
+@@ -277,7 +277,8 @@ frchop ($string, $length)
+ 
+     if (function_exists('mb_substr') && ($substr = @mb_substr($string, 0, $length, get_local_charset())) != '') {
+ 	return $substr;
+-    } else if (function_exists('iconv') && ($substr = @iconv($string, 0, $length, get_local_charset())) != '') {
++    } else if (function_exists('iconv_substr') && ($substr = @iconv_substr($string, 0, $length, get_local_charset())) != '') {
++	// was iconv() with iconv_substr()'s arguments: always failed in PHP 5, an ArgumentCountError in PHP 8
+ 	return $substr;
+     } else {
+ 	return substr($string, 0, $length);
+@@ -543,7 +544,7 @@ remove_bbcode ($str, $quote = false, $image = false, $url = false)
+ 
+ function reverse_htmlentities ($mixed)
+ {
+-    $htmltable = get_html_translation_table(HTML_ENTITIES);
++    $htmltable = get_html_translation_table(HTML_ENTITIES, ENT_COMPAT);
+     foreach ($htmltable as $key => $value)
+     {
+ 	$mixed = preg_replace('/' . addslashes($value) . '/', $key, $mixed);
+@@ -716,7 +717,7 @@ html_entity_decode_utf8 ($string, $htmltrans = false)
+ 
+     if (!isset($trans_tbl)) {
+         $trans_tbl = array();
+-	foreach (get_html_translation_table(HTML_ENTITIES) as $val => $key) {
++	foreach (get_html_translation_table(HTML_ENTITIES, ENT_COMPAT) as $val => $key) {
+ 	    $trans_tbl[$key] = utf8_encode($val);
+ 	}
+     }
+@@ -785,7 +786,7 @@ handle_quotes ($action, $attributes, $content, $params, $node_object)
+ 	    $attributes['default'] = str_replace(
+ 		array('"', '&quot;'),
+ 		array('', ''),
+-		html_entity_decode($attributes['default'])
++		html_entity_decode($attributes['default'], ENT_COMPAT)
+ 	    );
+             $tmp = preg_split('/;/', $attributes['default']);
+ 	    if ($tmp[0]) {
+@@ -903,7 +904,7 @@ handle_url ($action, $attributes, $content, $params, $node_object)
+ 
+                     if ($text == $url) {
+                         if ($thread['title']) {
+-                            $text = prepare_utf8_string(htmlentities($thread['title']));
++                            $text = prepare_utf8_string(htmlentities($thread['title'], ENT_COMPAT));
+                         } else {
+                             $text = 'Thread Link';
+                         }
+@@ -918,7 +919,7 @@ handle_url ($action, $attributes, $content, $params, $node_object)
+                     $forum = fetch_foruminfo($forumid);
+                     if ($text == $url) {
+                         if ($forum['title']) {
+-                            $text = prepare_utf8_string(htmlentities($forum['title']));
++                            $text = prepare_utf8_string(htmlentities($forum['title'], ENT_COMPAT));
+                         } else {
+                             $text = 'Forum Link';
+                         }
+@@ -1511,7 +1512,7 @@ parse_post ($text, $allowsmilie=false)
  
  	    $parser = new vB_BbCodeParser($vbulletin, fetch_tag_list());
  	    $text = $parser->parse_smilies($text, false);
@@ -1872,7 +2035,7 @@ index 7339bfe..02e6c2e 100644
  		$optionselected = ($blogcategoryid == $parentid) ? 'selected="selected"' : '';
  
 diff --git a/includes/class_bbcode.php b/includes/class_bbcode.php
-index 59b3c12..d59dabf 100644
+index 59b3c12..325172b 100644
 --- a/includes/class_bbcode.php
 +++ b/includes/class_bbcode.php
 @@ -982,7 +982,7 @@ class vB_BbCodeParser
@@ -1911,7 +2074,17 @@ index 59b3c12..d59dabf 100644
  						if ($delimiter == '&' AND substr($text, $tag_opt_start_pos + 2, 5) == 'quot;')
  						{
  							$delimiter = '&quot;';
-@@ -2184,7 +2184,7 @@ class vB_BbCodeParser
+@@ -1573,7 +1573,8 @@ class vB_BbCodeParser
+ 									//$replace = array('&#039;', '&#0061;');
+ 									//$open['data'] = str_replace($search, $replace, $open['data']);
+ 									//$open['option'] = str_replace($search, $replace, $open['option']);
+-									$pending_text = sprintf($tag_info['html'], $open['data'], $open['option'], htmlspecialchars_uni($this->registry->input->fetch_relpath()));
++									// PHP 8: sprintf() throws for a stray '%' in a custom BB code
++									$pending_text = vb_sprintf_array(array($tag_info['html'], $open['data'], $open['option'], htmlspecialchars_uni($this->registry->input->fetch_relpath())));
+ 								}
+ 								else if (isset($tag_info['callback']))
+ 								{
+@@ -2184,7 +2185,7 @@ class vB_BbCodeParser
  			$tagname = $tag;
  		}
  		// remove leading slash if there is one
@@ -1920,7 +2093,7 @@ index 59b3c12..d59dabf 100644
  		{
  			$tagname = substr($tagname, 1);
  		}
-@@ -2205,7 +2205,7 @@ class vB_BbCodeParser
+@@ -2205,7 +2206,7 @@ class vB_BbCodeParser
  				break;
  			// form tags
  			//NOTE: Supposed to be a semi colon here ?
@@ -1972,10 +2145,10 @@ index c53e527..9d375f8 100644
  			$ajaxerror = $vbulletin->GPC['ajax'] ? '_ajax' : '';
  
 diff --git a/includes/class_core.php b/includes/class_core.php
-index 7fb880f..b9b27c2 100644
+index 7fb880f..17f6aca 100644
 --- a/includes/class_core.php
 +++ b/includes/class_core.php
-@@ -16,6 +16,87 @@ define('YUI_VERSION', '2.9.0'); // define the YUI version we bundle
+@@ -16,6 +16,185 @@ define('YUI_VERSION', '2.9.0'); // define the YUI version we bundle
  define('JQUERY_VERSION', '1.6.4'); // define the jQuery version we use
  define('JQUERY_MOBILE_VERSION', '1.0'); // define the jQuery Mobile Style Version
  
@@ -2060,10 +2233,108 @@ index 7fb880f..b9b27c2 100644
 +	return $known[$encoding];
 +}
 +
++/**
++* sprintf() with an array of arguments (the format first), with the PHP 5 rules. vB formats
++* phrases from the database this way. For a bad format PHP 8 throws an Error, where PHP 5
++* returned false (too few arguments) or printed nothing for an unknown or incomplete
++* conversion specification (a lone '%' in a phrase, say) but still used up an argument.
++* PHP 8 also reads a precision without digits ('%.f') as 0; PHP 5 ignored it.
++*
++* @param	array	The format string, then the arguments
++*
++* @return	string|false
++*/
++function vb_sprintf_array($args)
++{
++	$args = array_values($args); // string keys would be named arguments in PHP 8
++	if (PHP_VERSION_ID < 80000)
++	{
++		return call_user_func_array('sprintf', $args);
++	}
++
++	$format = strval($args[0]);
++	if (!preg_match('#%(?!(?:\d+\$)?[sd])#', str_replace('%%', '', $format)))
++	{
++		// only %s, %d, %1$s, ... (most phrases): PHP 5 and PHP 8 agree, apart from errors
++		try
++		{
++			return call_user_func_array('sprintf', $args);
++		}
++		catch (Error $e) // ArgumentCountError (too few arguments), ValueError (argnum 0)
++		{
++			return false;
++		}
++	}
++
++	$length = strlen($format);
++	$args[0] = '';
++	$start = 0;
++	while (($pos = strpos($format, '%', $start)) !== false)
++	{
++		$args[0] .= substr($format, $start, $pos - $start);
++		$i = $pos + 1;
++		if ($i < $length AND $format[$i] == '%')
++		{
++			$args[0] .= '%%';
++			$start = $i + 1;
++			continue;
++		}
++
++		$spec = '';
++		$argnum = '';
++		// PHP 5 read argnum$, flags, width and precision only after an ASCII character that is not a letter
++		if ($i >= $length OR (ord($format[$i]) < 128 AND !preg_match('#[a-z]#i', $format[$i])))
++		{
++			preg_match('#((\d*)\$)?(?:[ 0+\-]|\'[\s\S])*\d*(\.\d*)?#A', $format, $match, 0, $i);
++			$i += strlen($match[0]);
++			$spec = $match[0];
++			if (isset($match[3]) AND $match[3] === '.')
++			{
++				$spec = substr($spec, 0, -1);
++			}
++			if (isset($match[1]))
++			{
++				$argnum = $match[1];
++			}
++		}
++		if ($i < $length AND $format[$i] == 'l')
++		{
++			$spec .= 'l';
++			$i++;
++		}
++
++		if ($i < $length AND $format[$i] == '%')
++		{
++			// '%' after a flag, width or precision: PHP 5 printed '%' and used up an argument
++			$args[0] .= '%' . $argnum . '.0s%%';
++		}
++		else if ($i < $length AND strpos('sdugGeEfFcoxXb', $format[$i]) !== false)
++		{
++			$args[0] .= '%' . $spec . $format[$i];
++		}
++		else
++		{
++			// an argument that prints nothing
++			$args[0] .= '%' . $argnum . '.0s';
++		}
++		$start = min($i + 1, $length);
++	}
++	$args[0] .= substr($format, $start);
++
++	try
++	{
++		return call_user_func_array('sprintf', $args);
++	}
++	catch (Error $e) // ArgumentCountError (too few arguments), ValueError (argnum 0, width too large)
++	{
++		return false;
++	}
++}
++
  /**#@+
  * The maximum sizes for the "small" profile avatars
  */
-@@ -411,7 +492,7 @@ class vB_Database
+@@ -411,7 +590,7 @@ class vB_Database
  	*
  	* @return	string
  	*/
@@ -2072,7 +2343,19 @@ index 7fb880f..b9b27c2 100644
  	{
  		$this->connection_recent =& $link;
  		$this->querycount++;
-@@ -1378,7 +1459,7 @@ class vB_Database_MySQLi extends vB_Database
+@@ -1332,6 +1511,11 @@ class vB_Database_MySQLi extends vB_Database
+ 	*/
+ 	function db_connect($servername, $port, $username, $password, $usepconnect, $configfile = '', $charset = '')
+ 	{
++		// PHP 8.1 made mysqli throw mysqli_sql_exception by default (MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT),
++		// which bypasses the retries and error pages below and vB's own query error handling (halt()).
++		// Use the PHP 5 default; show_errors() / hide_errors() still switch it as before.
++		mysqli_report(MYSQLI_REPORT_OFF);
++
+ 		if (function_exists('catch_db_error'))
+ 		{
+ 			set_error_handler('catch_db_error');
+@@ -1378,7 +1562,7 @@ class vB_Database_MySQLi extends vB_Database
  	*
  	* @return	string
  	*/
@@ -2081,7 +2364,7 @@ index 7fb880f..b9b27c2 100644
  	{
  		$this->connection_recent =& $link;
  		$this->querycount++;
-@@ -3861,7 +3942,7 @@ class vB_Session
+@@ -3861,7 +4045,7 @@ class vB_Session
  	*/
  	function set($key, $value)
  	{
@@ -2090,7 +2373,7 @@ index 7fb880f..b9b27c2 100644
  		{
  			$this->vars["$key"] = $value;
  			$this->changes["$key"] = true;
-@@ -4410,7 +4491,7 @@ class vB_Template
+@@ -4410,7 +4594,7 @@ class vB_Template
  	 * @param	string	The name of the template to register for
  	 * @param	array	The variables to register
  	 */
@@ -2099,7 +2382,7 @@ index 7fb880f..b9b27c2 100644
  	{
  		if ($variables)
  		{
-@@ -5749,10 +5830,10 @@ function us_get_value(&$index, $strlen, $string)
+@@ -5749,10 +5933,10 @@ function us_get_value(&$index, $strlen, $string)
  			break;
  		case 'd':
  			$value = us_get_prefix($index, $strlen, $string, ';');
@@ -2112,17 +2395,18 @@ index 7fb880f..b9b27c2 100644
  			break;
  		case 'n':
  			return us_get_null($index, $strlen, $string);
-@@ -5970,7 +6051,27 @@ function vbulletin_error_handler($errno, $errstr, $errfile, $errline)
+@@ -5970,7 +6154,28 @@ function vbulletin_error_handler($errno, $errstr, $errfile, $errline)
  	{
  		return true; // Do nothing
  	}
 -	else
 +
 +	// PHP 8 turned many notices into warnings (undefined variables, array keys and properties,
-+	// array offsets on null/false, ...). vBulletin is written with notices switched off, so
-+	// treat them as notices again instead of filling the logs (or the page, where scripts
-+	// enable display_errors) with them.
-+	if ($errno == E_WARNING AND preg_match('#^(Undefined (variable|global variable|array key|offset|index|property)|Trying to access array offset on|Attempt to read property|Array to string conversion|Uninitialized string offset)#', $errstr))
++	// array offsets on null/false, a number with trailing text such as '10px' in arithmetic, ...),
++	// and PHP 8.3 warns about non-numeric values in array_sum(); PHP 5 was silent. vBulletin is
++	// written with notices switched off, so treat them as notices again instead of filling the
++	// logs (or the page, where scripts enable display_errors) with them.
++	if ($errno == E_WARNING AND preg_match('#^(Undefined (variable|global variable|array key|offset|index|property)|Trying to access array offset on|Attempt to read property|Array to string conversion|Uninitialized string offset|String offset cast occurred|A non-numeric value encountered|array_(sum|product)\(\): (Addition|Multiplication) is not supported on type)#', $errstr))
 +	{
 +		if (!(error_reporting() & E_NOTICE))
 +		{
@@ -2141,7 +2425,7 @@ index 7fb880f..b9b27c2 100644
  	{
  		/* Figure out if php log and display errors is enabled
  		We may get '1' or 'On' returned (this changed in php 5.3) */
-@@ -6026,7 +6127,7 @@ function vbulletin_error_handler($errno, $errstr, $errfile, $errline)
+@@ -6026,7 +6231,7 @@ function vbulletin_error_handler($errno, $errstr, $errfile, $errline)
  				$type = 'Fatal User Error';
  			break;
  
@@ -2150,7 +2434,7 @@ index 7fb880f..b9b27c2 100644
  			case E_DEPRECATED:
  				// This setting overrides the config option.
  				if (!empty($vbulletin->options['hookerrors']))
-@@ -6119,10 +6220,11 @@ function vbulletin_exception_handler($throwable)
+@@ -6119,10 +6324,11 @@ function vbulletin_exception_handler($throwable)
  	   We may get '1' or 'On' returned (this changed in php 5.3) */
  	$php_log_errors = in_array(strtolower(ini_get('log_errors')), array('on', '1')) ? true : false;
  
@@ -2490,6 +2774,80 @@ index 3a1bd02..b5a408b 100644
  
  					$response_handler =& $factory->create($comment, 'Comment_Profile');
  					$response_handler->cachable = false;
+diff --git a/includes/class_sigparser.php b/includes/class_sigparser.php
+index 0931821..81822b8 100644
+--- a/includes/class_sigparser.php
++++ b/includes/class_sigparser.php
+@@ -193,13 +193,16 @@ class vB_SignatureParser extends vB_BbCodeParser
+ 		$base_size = 3;
+ 		foreach (array_reverse($size_mod) AS $tag_size)
+ 		{
++			// PHP 5 used the leading number of a non-numeric option ('10-' -> 10, '-' -> 0);
++			// PHP 8 throws a TypeError for '-' in arithmetic and compares '10-' > 7 as strings
++			$tag_num = (is_numeric($tag_size) ? $tag_size : (int) $tag_size);
+ 			if ($tag_size[0] == '-' OR $tag_size[0] == '+')
+ 			{
+-				$base_size += $tag_size;
++				$base_size += $tag_num;
+ 			}
+ 			else
+ 			{
+-				$base_size = $tag_size;
++				$base_size = $tag_num;
+ 			}
+ 		}
+ 
+diff --git a/includes/class_sigparser_char.php b/includes/class_sigparser_char.php
+index c1a6b9a..e4841fe 100644
+--- a/includes/class_sigparser_char.php
++++ b/includes/class_sigparser_char.php
+@@ -297,16 +297,18 @@ class vB_SignatureParser_CharCount extends vB_SignatureParser
+ 
+ 				if ($stack_tag['type'] == 'tag' AND $stack_tag['name'] == 'size')
+ 				{
+-					if ($stack_tag['option'] >= 0)
++					// PHP 5 used the leading number of a non-numeric option ('10-' -> 10, '-' -> 0)
++					$size_option = (is_numeric($stack_tag['option']) ? $stack_tag['option'] : (int) $stack_tag['option']);
++					if ($size_option >= 0)
+ 					{
+-						$parent_size = $stack_tag['option'] + $modifier;
++						$parent_size = $size_option + $modifier;
+ 						$modifier = 0;
+ 						break;
+ 					}
+ 					else
+ 					{
+ 						// relative size, need to continue on
+-						$modifier += $stack_tag['option'];
++						$modifier += $size_option;
+ 					}
+ 				}
+ 			}
+@@ -336,16 +338,20 @@ class vB_SignatureParser_CharCount extends vB_SignatureParser
+ 
+ 		$parent_size = $this->calculate_parent_size();
+ 
+-		if ($size < 0)
++		// PHP 5 used the leading number of a non-numeric option ('10-' -> 10, '-' -> 0);
++		// $size itself stays the option string unless it is changed (size_ratios lookup)
++		$size_num = (is_numeric($size) ? $size : (int) $size);
++		if ($size_num < 0)
+ 		{
+-			$size -= $parent_size;
++			$size = $size_num - $parent_size;
++			$size_num = $size;
+ 		}
+ 
+-		if ($size == 0)
++		if ($size_num == 0)
+ 		{
+ 			$size = 1;
+ 		}
+-		else if ($size > 7)
++		else if ($size_num > 7)
+ 		{
+ 			$size = 7;
+ 		}
 diff --git a/includes/class_sitemap.php b/includes/class_sitemap.php
 index 13e5038..615e195 100644
 --- a/includes/class_sitemap.php
@@ -2679,7 +3037,7 @@ index 3f45d40..85c5437 100644
      }
      // use port if non default
 diff --git a/includes/functions.php b/includes/functions.php
-index d3f83dd..3106c30 100644
+index d3f83dd..2aa7bb0 100644
 --- a/includes/functions.php
 +++ b/includes/functions.php
 @@ -210,7 +210,7 @@ function datamanager_init($classtype, &$registry, $errtype = ERRTYPE_STANDARD, $
@@ -2717,6 +3075,18 @@ index d3f83dd..3106c30 100644
  	}
  
  	if ($substr != '' )
+@@ -433,9 +441,9 @@ function to_ascii($str)
+ 		'&yuml;' => 'y'
+ 	);
+ 
+-    $str = htmlentities($str);
++    $str = htmlentities($str, ENT_COMPAT);
+     $str = str_replace(array_keys($lookup), array_values($lookup), $str);
+-    $str = html_entity_decode($str);
++    $str = html_entity_decode($str, ENT_COMPAT);
+     $str = preg_replace('#[^a-z0-9]+#i', '-', $str);
+ 
+     return $str;
 @@ -463,7 +471,7 @@ function fetch_random_password($length = 8)
  			continue;
  		}
@@ -2744,6 +3114,24 @@ index d3f83dd..3106c30 100644
  	}
  
  }
+@@ -3349,7 +3357,7 @@ function construct_phrase_from_array($phrase_array)
+ 	}
+ 
+ 	// call sprintf() on the first argument of this function
+-	$phrase = @call_user_func_array('sprintf', $phrase_array);
++	$phrase = @vb_sprintf_array($phrase_array); // PHP 8: sprintf() throws for too few arguments or a stray '%'
+ 	if ($phrase !== false)
+ 	{
+ 		return $phrase;
+@@ -3361,7 +3369,7 @@ function construct_phrase_from_array($phrase_array)
+ 		{
+ 			$phrase_array["$i"] = "[ARG:$i UNDEFINED]";
+ 		}
+-		if ($phrase = @call_user_func_array('sprintf', $phrase_array))
++		if ($phrase = @vb_sprintf_array($phrase_array))
+ 		{
+ 			return $phrase;
+ 		}
 @@ -3615,7 +3623,10 @@ function print_no_permission()
  	}
  	else
@@ -2801,7 +3189,26 @@ index d3f83dd..3106c30 100644
  		{
  			$vb_url_webroot = preg_replace('/^http:/si', 'https:', VB_URL_WEBROOT);
  			if (    stripos($vbulletin->options['bburl'], 'https', 0) === 0
-@@ -4943,7 +4963,7 @@ function to_utf8($in, $charset = false, $strip = true)
+@@ -4515,7 +4535,8 @@ function fetch_time_data()
+ 	}
+ 
+ 	// some stuff for the gmdate bug
+-	$vbulletin->options['hourdiff'] = @(date('Z', TIMENOW) / 3600 - $vbulletin->userinfo['tzoffset']) * 3600;
++	// (timezoneoffset is '' for some old accounts: PHP 5 counted it as 0, PHP 8 throws a TypeError)
++	$vbulletin->options['hourdiff'] = @(date('Z', TIMENOW) / 3600 - ($vbulletin->userinfo['tzoffset'] === '' ? 0 : $vbulletin->userinfo['tzoffset'])) * 3600;
+ 
+ 	if ($vbulletin->userinfo['tzoffset'])
+ 	{
+@@ -4591,7 +4612,7 @@ function vbdate($format, $timestamp = TIMENOW, $doyestoday = false, $locale = tr
+ 				$userinfo['timezoneoffset'] = '+' . $userinfo['timezoneoffset'];
+ 			}
+ 		}
+-		$hourdiff = (intval(date('Z', TIMENOW)) / 3600 - $userinfo['timezoneoffset']) * 3600;
++		$hourdiff = (intval(date('Z', TIMENOW)) / 3600 - ($userinfo['timezoneoffset'] === '' ? 0 : $userinfo['timezoneoffset'])) * 3600; // '' is a TypeError in PHP 8
+ 	}
+ 	else
+ 	{
+@@ -4943,7 +4964,7 @@ function to_utf8($in, $charset = false, $strip = true)
  	}
  
  	// Try mbstring
@@ -2810,7 +3217,7 @@ index d3f83dd..3106c30 100644
  	{
  		return $out;
  	}
-@@ -5005,7 +5025,7 @@ function to_charset($in, $in_encoding, $target_encoding = false)
+@@ -5005,7 +5026,7 @@ function to_charset($in, $in_encoding, $target_encoding = false)
  	}
  
  	// Try mbstring
@@ -2819,7 +3226,7 @@ index d3f83dd..3106c30 100644
  	{
  		return $out;
  	}
-@@ -5063,7 +5083,10 @@ function ncrencode($str, $skip_ascii = false, $skip_win = false)
+@@ -5063,7 +5084,10 @@ function ncrencode($str, $skip_ascii = false, $skip_win = false)
  	{
  		return preg_replace_callback(
  			'#\X#u',
@@ -2831,7 +3238,7 @@ index d3f83dd..3106c30 100644
  			$str
  		);
  	}
-@@ -6976,7 +6999,7 @@ function is_came_from_search_engine()
+@@ -6976,7 +7000,7 @@ function is_came_from_search_engine()
  			$searchengines = preg_split('#\s+#', $vbulletin->options['searchenginereferrers'], -1, PREG_SPLIT_NO_EMPTY);
  			foreach ($searchengines AS $searchengine)
  			{
@@ -2840,7 +3247,7 @@ index d3f83dd..3106c30 100644
  				{
  					$searchengine .= '.';
  				}
-@@ -7393,7 +7416,10 @@ function verify_seo_url($link, $linkinfo, $pageinfo = null, $primaryid = null, $
+@@ -7393,7 +7417,10 @@ function verify_seo_url($link, $linkinfo, $pageinfo = null, $primaryid = null, $
  	// Set the WOLPATH
  	$url = $canonical->get_url(FRIENDLY_URL_OFF);
  	$vbulletin->session->set('location', $url);
@@ -2852,7 +3259,7 @@ index d3f83dd..3106c30 100644
  }
  
  
-@@ -7484,7 +7510,7 @@ function verify_forum_url($scriptid = null)
+@@ -7484,7 +7511,7 @@ function verify_forum_url($scriptid = null)
   * @param boolean $skip_empty					- Whether to skip empty elements
   * @return string								- The imploded result
   */
@@ -2861,7 +3268,7 @@ index d3f83dd..3106c30 100644
  {
  	if (!is_array($array))
  	{
-@@ -8045,7 +8071,7 @@ function fetch_version_array($version)
+@@ -8045,7 +8072,7 @@ function fetch_version_array($version)
  			switch (strtoupper($match[1]))
  			{
  				case 'A':
@@ -2870,7 +3277,7 @@ index d3f83dd..3106c30 100644
  					$version_bits[4] = -4;
  					break;
  
-@@ -8065,7 +8091,7 @@ function fetch_version_array($version)
+@@ -8065,7 +8092,7 @@ function fetch_version_array($version)
  					break;
  
  				case 'PL':
@@ -2879,7 +3286,7 @@ index d3f83dd..3106c30 100644
  					$version_bits[4] = 1;
  					break;
  
-@@ -8197,6 +8223,16 @@ function vb_number_format($number, $decimals = 0, $bytesize = false, $decimalsep
+@@ -8197,6 +8224,16 @@ function vb_number_format($number, $decimals = 0, $bytesize = false, $decimalsep
  				$number = $matches[1] * 1;
  		}
  	}
@@ -2896,8 +3303,18 @@ index d3f83dd..3106c30 100644
  
  	if ($bytesize)
  	{
+@@ -8252,7 +8289,8 @@ function vb_base64_encode($string)
+ 	else
+ 	{
+ 		// Run Custom Version
+-		$enc1 = $enc2 = $enc3 = $enc4 = $chr1 = $chr2 = $chr3 = $return = '';
++		$enc1 = $enc2 = $enc3 = $enc4 = $chr1 = $chr2 = $chr3 = '';
++		$return = array(); // was '' (PHP 5 turned it into an array on $return[] = ...; PHP 8 throws)
+ 		$i = 0;
+ 		$base64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+ 
 diff --git a/includes/functions_calendar.php b/includes/functions_calendar.php
-index 82a80b0..05e53d1 100644
+index 82a80b0..6c6395a 100644
 --- a/includes/functions_calendar.php
 +++ b/includes/functions_calendar.php
 @@ -955,7 +955,7 @@ function construct_calendar_jump($currentcalendarid, $month, $year)
@@ -2936,6 +3353,43 @@ index 82a80b0..05e53d1 100644
  			}
  		}
  		$desc = construct_phrase($vbphrase['this_event_occurs_every_x_weeks_on_y'], $options[0], $seldays);
+@@ -1280,7 +1280,8 @@ function cache_event_info(&$event, $month, $day, $year, $adjust = 1, $cache = tr
+ 	{ // this is a recurring event
+ 		if ($event['recurring'] == 1)
+ 		{
+-			if ($event['recuroption'] == 0 OR ($todaystart - $e["$eventid"]['startday']) % (86400 * $event['recuroption']))
++			// vb_loose_equals(): '' == 0 is false in PHP 8, and '' in arithmetic a TypeError
++			if (vb_loose_equals($event['recuroption'], 0) OR ($todaystart - $e["$eventid"]['startday']) % (86400 * $event['recuroption']))
+ 			{
+ 				return false;
+ 			}
+@@ -1312,7 +1313,7 @@ function cache_event_info(&$event, $month, $day, $year, $adjust = 1, $cache = tr
+ 		{
+ 			$monthbit = explode('|', $event['recuroption']);
+ 			$weekrep = $monthbit[0];
+-			if ($weekrep == 0)
++			if (vb_loose_equals($weekrep, 0))
+ 			{
+ 				return false;
+ 			}
+@@ -1405,7 +1406,7 @@ function cache_event_info(&$event, $month, $day, $year, $adjust = 1, $cache = tr
+ 			$monthbit = explode('|', $event['recuroption']);
+ 			$monthrep = $monthbit[1];
+ 
+-			if ($monthbit[0] == 0 OR $monthbit[1] == 0)
++			if (vb_loose_equals($monthbit[0], 0) OR vb_loose_equals($monthbit[1], 0))
+ 			{
+ 				return false;
+ 			}
+@@ -1484,7 +1485,7 @@ function cache_event_info(&$event, $month, $day, $year, $adjust = 1, $cache = tr
+ 			$monthday = $monthbit[1];
+ 			$monthweek = $monthbit[0];
+ 
+-			if ($monthrep == 0 OR $monthweek < 1 OR $monthweek > 5 OR $monthday < 1 OR $monthday > 7)
++			if (vb_loose_equals($monthrep, 0) OR $monthweek < 1 OR $monthweek > 5 OR $monthday < 1 OR $monthday > 7)
+ 			{
+ 				return false;
+ 			}
 diff --git a/includes/functions_cms_layout.php b/includes/functions_cms_layout.php
 index a3278ec..14ded51 100644
 --- a/includes/functions_cms_layout.php
@@ -2949,6 +3403,20 @@ index a3278ec..14ded51 100644
  		$optionclass = 'd' . ($category['depth'] > 4) ? 4 : $category['depth'];
  		$optionselected = ($categoryid == $parentid) ? 'selected="selected"' : '';
  
+diff --git a/includes/functions_facebook.php b/includes/functions_facebook.php
+index e9d21af..7430e19 100644
+--- a/includes/functions_facebook.php
++++ b/includes/functions_facebook.php
+@@ -345,7 +345,8 @@ function get_vbprofileinfo()
+ 			$occupation[] = $history['description'];
+ 		}
+ 
+-		$profilefields['occupation'] = implode(', ', $occupation);
++		// PHP 5: implode() of the unset $occupation gave NULL; PHP 8 throws a TypeError
++		$profilefields['occupation'] = isset($occupation) ? implode(', ', $occupation) : null;
+ 	}
+ 
+ 	// location
 diff --git a/includes/functions_misc.php b/includes/functions_misc.php
 index 821c54d..19be055 100644
 --- a/includes/functions_misc.php
@@ -3432,6 +3900,60 @@ index f2c24c6..e17d4ee 100644
  		$view->editorid = construct_edit_toolbar(
  			$pagetext,
  			0,
+diff --git a/packages/vbcms/content.php b/packages/vbcms/content.php
+index 106d970..1669bc3 100644
+--- a/packages/vbcms/content.php
++++ b/packages/vbcms/content.php
+@@ -525,8 +525,9 @@ abstract class vBCms_Content extends vB_Content
+ 		{
+ 			$view->ratingtotal = $this->content->getRatingTotal();
+ 			$view->ratingnum = $this->content->getRatingNum();
+-			$view->ratingavg = vb_number_format($view->ratingtotal / $view->ratingnum, 2);
+-			$view->rating = intval(round($view->ratingtotal / $view->ratingnum));
++			// ratingnum can be 0 if showvotes is 0: x / 0 gave false in PHP 5, PHP 8 throws DivisionByZeroError
++			$view->ratingavg = vb_number_format($view->ratingnum ? $view->ratingtotal / $view->ratingnum : false, 2);
++			$view->rating = intval(round($view->ratingnum ? $view->ratingtotal / $view->ratingnum : false));
+ 			$view->showrating = true;
+ 		}
+ 		else
+@@ -1051,7 +1052,7 @@ abstract class vBCms_Content extends vB_Content
+ 		// set data
+ 
+ 		//title and message are needed for dupcheck later
+-		$title = new vB_Phrase('vbcms', 'comment_thread_title', htmlspecialchars_decode($node->getTitle()));
++		$title = new vB_Phrase('vbcms', 'comment_thread_title', htmlspecialchars_decode($node->getTitle(), ENT_COMPAT));
+ 		$message = new vB_Phrase('vbcms', 'comment_thread_firstpost', $this->getPageURL(array(), true));
+ 		$dataman->set('userid', $node->getUserId());
+ 		$dataman->set('title', $title);
+diff --git a/packages/vbcms/content/article.php b/packages/vbcms/content/article.php
+index 6460ff7..3da85c8 100644
+--- a/packages/vbcms/content/article.php
++++ b/packages/vbcms/content/article.php
+@@ -228,7 +228,7 @@ class vBCms_Content_Article extends vBCms_Content
+ 			$nodedm->set('userid', $record['userid']);
+ 			$nodedm->set('title', $record['title']);
+ 			$nodedm->set('html_title', $record['title']);
+-			$nodedm->set('url', vB_Friendly_Url::clean_entities(htmlspecialchars_decode($record['title'])));
++			$nodedm->set('url', vB_Friendly_Url::clean_entities(htmlspecialchars_decode($record['title'], ENT_COMPAT)));
+ 			$nodedm->set('contenttypeid', vB_Types::instance()->getContentTypeID("vBCms_Article"));
+ 			$nodedm->info['skip_verify_pagetext'] = true;
+ 			$nodedm->set('pagetext', $record['pagetext']);
+@@ -271,13 +271,13 @@ class vBCms_Content_Article extends vBCms_Content
+ 
+ 		if ($record = vB::$vbulletin->db->query_first($sql))
+ 		{
+-			$title = strlen($record['title']) > 0 ? htmlspecialchars_decode($record['title']) : htmlspecialchars_decode($record['threadtitle']);
++			$title = strlen($record['title']) > 0 ? htmlspecialchars_decode($record['title'], ENT_COMPAT) : htmlspecialchars_decode($record['threadtitle'], ENT_COMPAT);
+ 
+ 			$nodedm->set('description', $title);
+ 			$nodedm->set('userid', $record['userid']);
+ 			$nodedm->set('title', $title);
+ 			$nodedm->set('html_title', $title);
+-			$url = vB_Friendly_Url::clean_entities(htmlspecialchars_decode($title));
++			$url = vB_Friendly_Url::clean_entities(htmlspecialchars_decode($title, ENT_COMPAT));
+ 			$nodedm->set('url', $url);
+ 			$nodedm->set('contenttypeid', vB_Types::instance()->getContentTypeID("vBCms_Article"));
+ 			$nodedm->info['skip_verify_pagetext'] = true;
 diff --git a/packages/vbcms/controller.php b/packages/vbcms/controller.php
 index f129a00..bc6cb54 100644
 --- a/packages/vbcms/controller.php
@@ -3445,6 +3967,19 @@ index f129a00..bc6cb54 100644
  	{
  		$class = $package . '_Controller_' . $class;
  		return new $class($parameters, $action);
+diff --git a/packages/vbcms/controller/error.php b/packages/vbcms/controller/error.php
+index c41bf3b..e5dabca 100644
+--- a/packages/vbcms/controller/error.php
++++ b/packages/vbcms/controller/error.php
+@@ -48,7 +48,7 @@ class vB_Controller_Error extends vB_Controller
+ 	 *
+ 	 * @return string							- The final page output
+ 	 */
+-	public function getResponse($parameters)
++	public function getResponse($parameters = null) // PHP 8: must accept being called like vB_Controller::getResponse()
+ 	{
+ 		// Resolve rerouted error
+ 		$error = in_array($parameters[0], array('403', '404', '500')) ? $parameters[0] : '404';
 diff --git a/packages/vbcms/dm/content.php b/packages/vbcms/dm/content.php
 index 97a5386..7e75d1a 100644
 --- a/packages/vbcms/dm/content.php
@@ -3630,6 +4165,66 @@ index 35f1a03..258bfdb 100644
  	{
  		$controllers = array();
  
+diff --git a/packages/vbcms/widget/recentcmscomments.php b/packages/vbcms/widget/recentcmscomments.php
+index 6df94a9..e20de43 100644
+--- a/packages/vbcms/widget/recentcmscomments.php
++++ b/packages/vbcms/widget/recentcmscomments.php
+@@ -276,7 +276,7 @@ class vBCms_Widget_RecentCmsComments extends vBCms_Widget
+ 		$post['post_statustitle'] = $vbphrase['unread'];
+ 		$post['postid'] = $this_post->get_field('postid');
+ 		$post['postdateline'] = $this_post->get_field('dateline');
+-		$post['posttitle'] = htmlspecialchars_decode(vB_Search_Searchtools::stripHtmlTags($this_post->get_display_title()));
++		$post['posttitle'] = htmlspecialchars_decode(vB_Search_Searchtools::stripHtmlTags($this_post->get_display_title()), ENT_COMPAT);
+ 		$post['pagetext'] = nl2br($this_post->get_summary(100));
+ 		$post['visible'] = $this_post->get_field('visible');
+ 		$post['attach'] = $this_post->get_field('attach');
+diff --git a/packages/vbcms/widget/recentcontent.php b/packages/vbcms/widget/recentcontent.php
+index cbb8fb0..5a961b4 100644
+--- a/packages/vbcms/widget/recentcontent.php
++++ b/packages/vbcms/widget/recentcontent.php
+@@ -146,7 +146,8 @@ class vBCms_Widget_RecentContent extends vBCms_Widget_RecentArticle
+ 
+ 			//Let's get the tags and the categories
+ 			// we can do that with one query each.
+-			if (count($articles))
++			// $articles is never set: count(null) was 0 in PHP 5 (this block never ran), a TypeError in PHP 8
++			if (!empty($articles))
+ 			{
+ 				//first let's get categories
+ 				$nodeids = implode(', ', array_keys($item));
+diff --git a/packages/vbforum/search/result/post.php b/packages/vbforum/search/result/post.php
+index 7e6cbaf..256d140 100644
+--- a/packages/vbforum/search/result/post.php
++++ b/packages/vbforum/search/result/post.php
+@@ -106,6 +106,7 @@ class vBForum_Search_Result_Post extends vB_Search_Result
+ 
+ 		$this->set_replydata($this->post->get_field('threadid'), $this->post->get_field('postid'), $current_user);
+ 
++		$post_statusicon = array(); // count() of the unset variable gave 0 in PHP 5, a TypeError in PHP 8
+ 		if ($this->replydata['mylastpost'] > 0)
+ 		{
+ 			$post_statusicon[] = 'dot';
+@@ -130,7 +131,7 @@ class vBForum_Search_Result_Post extends vB_Search_Result
+ 
+ 		$post['postid'] = $this->post->get_field('postid');
+ 		$post['postdateline'] = $this->post->get_field('dateline');
+-		$post['posttitle'] = vB_Search_Searchtools::stripHtmlTags(htmlspecialchars_decode($this->post->get_display_title()));
++		$post['posttitle'] = vB_Search_Searchtools::stripHtmlTags(htmlspecialchars_decode($this->post->get_display_title(), ENT_COMPAT));
+ 		if(empty($post['posttitle'])) 
+ 		{ 
+ 			$post['posttitle'] = $vbphrase['view_post']; 
+diff --git a/packages/vbforum/search/result/thread.php b/packages/vbforum/search/result/thread.php
+index 53e1cc0..3b0f06b 100644
+--- a/packages/vbforum/search/result/thread.php
++++ b/packages/vbforum/search/result/thread.php
+@@ -138,6 +138,7 @@ class vBForum_Search_Result_Thread extends vB_Search_Result
+ 		}
+ 
+ 		//set the correct status
++		$post_statusicon = array(); // count() of the unset variable gave 0 in PHP 5, a TypeError in PHP 8
+ 		if ($this->replydata['mylastpost'] > 0)
+ 		{
+ 			$post_statusicon[] = 'dot';
 diff --git a/packages/vbforum/search/result/visitormessage.php b/packages/vbforum/search/result/visitormessage.php
 index 034d5dd..72ed615 100644
 --- a/packages/vbforum/search/result/visitormessage.php
@@ -3728,7 +4323,7 @@ index f343558..d74e437 100644
  			");
  			while ($user = $db->fetch_array($users))
 diff --git a/profile.php b/profile.php
-index f006fb0..ac83e9c 100644
+index f006fb0..57cdee2 100644
 --- a/profile.php
 +++ b/profile.php
 @@ -1160,7 +1160,7 @@ if ($_POST['do'] == 'updatelist')
@@ -3866,6 +4461,15 @@ index f006fb0..ac83e9c 100644
  		{
  			$checked["$key"] = 'checked="checked"';
  		}
+@@ -2188,7 +2188,7 @@ if ($_REQUEST['do'] == 'editoptions')
+ 	foreach (fetch_timezone() AS $optionvalue => $timezonephrase)
+ 	{
+ 		$optiontitle = $vbphrase["$timezonephrase"];
+-		$optionselected = iif($optionvalue == $vbulletin->userinfo['timezoneoffset'], 'selected="selected"', '');
++		$optionselected = iif(vb_loose_equals($optionvalue, $vbulletin->userinfo['timezoneoffset']), 'selected="selected"', '');
+ 		$timezoneoptions .= render_option_template($optiontitle, $optionvalue, $optionselected, $optionclass);
+ 	}
+ 	$templater = vB_Template::create('modifyoptions_timezone');
 diff --git a/report.php b/report.php
 index 42e20f0..bf3eccc 100644
 --- a/report.php
@@ -3937,7 +4541,7 @@ index aa7846d..7e891e7 100644
  
  		$userinfo = verify_id('user', vB::$vbulletin->GPC['userid'], 1, 1);
 diff --git a/vb/collection.php b/vb/collection.php
-index c73fdd4..1995332 100644
+index c73fdd4..96cd963 100644
 --- a/vb/collection.php
 +++ b/vb/collection.php
 @@ -434,7 +434,9 @@ abstract class vB_Collection extends vB_Model implements ArrayAccess, Iterator
@@ -3951,6 +4555,78 @@ index c73fdd4..1995332 100644
  			}
  		}
  
+@@ -794,6 +796,7 @@ abstract class vB_Collection extends vB_Model implements ArrayAccess, Iterator
+ 	 *
+ 	 * @return vB_Item
+ 	 */
++	#[\ReturnTypeWillChange]
+ 	public function current()
+ 	{
+ 		// Ensure collection is loaded
+@@ -807,6 +810,7 @@ abstract class vB_Collection extends vB_Model implements ArrayAccess, Iterator
+ 	 *
+ 	 * @return string | int
+ 	 */
++	#[\ReturnTypeWillChange]
+ 	public function key()
+ 	{
+ 		return key($this->collection);
+@@ -818,6 +822,7 @@ abstract class vB_Collection extends vB_Model implements ArrayAccess, Iterator
+ 	 *
+ 	 * @return vB_Item
+ 	 */
++	#[\ReturnTypeWillChange]
+ 	public function next()
+ 	{
+ 		return next($this->collection);
+@@ -827,6 +832,7 @@ abstract class vB_Collection extends vB_Model implements ArrayAccess, Iterator
+ 	/**
+ 	 * Returns pointer to the beginning.
+ 	 */
++	#[\ReturnTypeWillChange]
+ 	public function rewind()
+ 	{
+ 		reset($this->collection);
+@@ -838,6 +844,7 @@ abstract class vB_Collection extends vB_Model implements ArrayAccess, Iterator
+ 	 *
+ 	 * @return bool
+ 	 */
++	#[\ReturnTypeWillChange]
+ 	public function valid()
+ 	{
+ 		return $this->Load() AND (bool)current($this->collection);
+@@ -853,6 +860,7 @@ abstract class vB_Collection extends vB_Model implements ArrayAccess, Iterator
+ 	 * @param mixed $offset
+ 	 * @return bool
+ 	 */
++	#[\ReturnTypeWillChange]
+ 	public function offsetExists($offset)
+ 	{
+ 		if (!$this->loaded_info)
+@@ -872,6 +880,7 @@ abstract class vB_Collection extends vB_Model implements ArrayAccess, Iterator
+ 	 * @param mixed $offset
+ 	 * @return mixed
+ 	 */
++	#[\ReturnTypeWillChange]
+ 	public function offsetGet($offset)
+ 	{
+ 		if (!$this->loaded_info)
+@@ -896,6 +905,7 @@ abstract class vB_Collection extends vB_Model implements ArrayAccess, Iterator
+ 	 * @param mixed $offset
+ 	 * @param mixed $value
+ 	 */
++	#[\ReturnTypeWillChange]
+ 	public function offsetSet($offset, $value)
+ 	{
+ 		throw (new vB_Exception_Model('Cannot set vB_Collection items directly'));
+@@ -907,6 +917,7 @@ abstract class vB_Collection extends vB_Model implements ArrayAccess, Iterator
+ 	 *
+ 	 * @param mixed $offset
+ 	 */
++	#[\ReturnTypeWillChange]
+ 	public function offsetUnset($offset)
+ 	{
+ 		throw (new vB_Exception_Model('Cannot unset vB_Collection items directly'));
 diff --git a/vb/controller.php b/vb/controller.php
 index 99ec747..3c2989e 100644
 --- a/vb/controller.php
@@ -4035,10 +4711,49 @@ index 3ec994f..67158ff 100644
  					"\n/**" . $this->queryid . (defined('THIS_SCRIPT') ? '- ' . THIS_SCRIPT : '') . "**/" ;
  
 diff --git a/vb/db/result.php b/vb/db/result.php
-index 7c094d7..55c28d8 100644
+index 7c094d7..d9a0e24 100644
 --- a/vb/db/result.php
 +++ b/vb/db/result.php
-@@ -159,10 +159,10 @@ class vB_dB_Result implements iterator
+@@ -78,6 +78,7 @@ class vB_dB_Result implements iterator
+ 	}
+ 	
+ 	/* standard iterator method */
++	#[\ReturnTypeWillChange]
+ 	public function current()
+ 	{
+ 		if ($this->resultrow === false)
+@@ -88,12 +89,14 @@ class vB_dB_Result implements iterator
+ 	}
+ 	
+ 	/* standard iterator method */
++	#[\ReturnTypeWillChange]
+ 	public function key()
+ 	{
+ 		return $this->resultseq;
+ 	}
+ 	
+ 	/* standard iterator method */
++	#[\ReturnTypeWillChange]
+ 	public function next()
+ 	{
+ 		if ($this->eof)
+@@ -114,6 +117,7 @@ class vB_dB_Result implements iterator
+ 	}
+ 	
+ 	/* standard iterator method */
++	#[\ReturnTypeWillChange]
+ 	public function rewind()
+ 	{
+ 		if ($this->recordset)
+@@ -136,6 +140,7 @@ class vB_dB_Result implements iterator
+ 	}
+ 	
+ 	/* standard iterator method */
++	#[\ReturnTypeWillChange]
+ 	public function valid()
+ 	{
+ 		return ($this->recordset AND !$this->eof);
+@@ -159,10 +164,10 @@ class vB_dB_Result implements iterator
  				$values[] = "\"$fieldname\":\"" . str_replace('"', '\"', $fieldvalue) . '"';
  				
  			}
@@ -4052,7 +4767,7 @@ index 7c094d7..55c28d8 100644
  	
  		
 diff --git a/vb/dm.php b/vb/dm.php
-index 4670079..29e729e 100644
+index 4670079..196c0ba 100644
 --- a/vb/dm.php
 +++ b/vb/dm.php
 @@ -272,7 +272,7 @@ abstract class vB_DM
@@ -4078,7 +4793,27 @@ index 4670079..29e729e 100644
  			$value = $lambda($value, $error);
  		}
  		else if (self::VM_CALLBACK == $field[self::VF_METHOD])
-@@ -1421,7 +1426,7 @@ abstract class vB_DM
+@@ -1104,7 +1109,8 @@ abstract class vB_DM
+ 	 */
+ 	protected function allowUpdateWithoutCondition($table)
+ 	{
+-		return in_array($table, $this->allow_update_without_condition_tables);
++		// the default is false: in_array() returned NULL in PHP 5 and throws a TypeError in PHP 8
++		return (is_array($this->allow_update_without_condition_tables) AND in_array($table, $this->allow_update_without_condition_tables));
+ 	}
+ 
+ 
+@@ -1345,7 +1351,8 @@ abstract class vB_DM
+ 	 */
+ 	protected function allowDeleteWithoutCondition($table)
+ 	{
+-		return in_array($table, $this->allow_delete_without_condition_tables);
++		// the default is false: in_array() returned NULL in PHP 5 and throws a TypeError in PHP 8
++		return (is_array($this->allow_delete_without_condition_tables) AND in_array($table, $this->allow_delete_without_condition_tables));
+ 	}
+ 
+ 
+@@ -1421,7 +1428,7 @@ abstract class vB_DM
  	 * @param array $fields						- Which errors to allow
  	 * @return array vB_Phrase
  	 */
@@ -4087,11 +4822,24 @@ index 4670079..29e729e 100644
  	{
  		if ($fields)
  		{
+diff --git a/vb/model.php b/vb/model.php
+index 59a3543..e69f619 100644
+--- a/vb/model.php
++++ b/vb/model.php
+@@ -602,7 +602,7 @@ abstract class vB_Model
+ 			AND is_callable(array($this, 'getContentCacheEvent')))
+ 		{
+ 			$item = array();
+-			$item->values = array();
++			// $item->values = array(); -- a property write on an array: ignored by PHP 5, an Error in PHP 8
+ 			$hash = $this->getContentCacheHash();
+ 			if ($item = vB_Cache::instance()->read($hash, true))
+ 			{
 diff --git a/vb/phrase.php b/vb/phrase.php
-index ce6a6f7..76ea958 100644
+index ce6a6f7..9b0ab66 100644
 --- a/vb/phrase.php
 +++ b/vb/phrase.php
-@@ -431,7 +431,7 @@ class vB_Phrase
+@@ -431,14 +431,15 @@ class vB_Phrase
  	 * @param array mixed $parameters			- The values to parse into the phrase
  	 * @return string							- The resulting string
  	 */
@@ -4100,6 +4848,24 @@ index ce6a6f7..76ea958 100644
  	{
  		if (!$parameters)
  		{
+ 			return $phrase;
+ 		}
+ 
+-		if ($parsed = @call_user_func_array('sprintf', array_merge(array($phrase), $parameters)))
++		// PHP 8: sprintf() throws for too few arguments or a stray '%'
++		if ($parsed = @vb_sprintf_array(array_merge(array($phrase), $parameters)))
+ 		{
+ 			return $parsed;
+ 		}
+@@ -454,7 +455,7 @@ class vB_Phrase
+ 			$parameters[$i] = "[ARG:$i UNDEFINED]";
+ 		}
+ 
+-		if ($parsed = @call_user_func_array('sprintf', array_merge(array($phrase), $parameters)))
++		if ($parsed = @vb_sprintf_array(array_merge(array($phrase), $parameters)))
+ 		{
+ 			return $parsed;
+ 		}
 diff --git a/vb/profilecustomize.php b/vb/profilecustomize.php
 index 17ef9c8..e36549c 100644
 --- a/vb/profilecustomize.php

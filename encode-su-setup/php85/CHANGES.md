@@ -126,3 +126,98 @@ PHP 8 throws an Error.
 - vbcms comments.php: getConfigEditorView() wrote to an undefined $view; the
   object PHP 5 created implicitly is now created explicitly.
 
+## PHP 8 review: signatures, return types, entity-decoding defaults, mysqli exceptions
+
+A second pass over the patched scripts with token-based scanners (method and
+callback signatures, PHP 4 constructors, static calls, uniform variable syntax,
+foreach pointer use, flags of the html functions):
+- vBCMS error controller: getResponse() must accept the parameter of
+  vB_Controller::getResponse(); an incompatible signature is a fatal error.
+- vB_Collection and vB_dB_Result implement Iterator/ArrayAccess without return
+  types: #[\ReturnTypeWillChange] (a comment before PHP 8; PHP 8.1 deprecation).
+- Forum Runner called iconv() with iconv_substr()'s arguments: an
+  ArgumentCountError in PHP 8. It always failed in PHP 5, which then used the
+  next fallback; it is now the iconv_substr() call that was meant.
+- PHP 8.1 changed the default flags of html_entity_decode(),
+  htmlspecialchars_decode(), htmlentities() and get_html_translation_table()
+  from ENT_COMPAT to ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML401. The 21 calls
+  without flags pass ENT_COMPAT.
+- PHP 8.1 made mysqli throw mysqli_sql_exception by default, which bypassed
+  vB's connection retries, its database error page and halt():
+  mysqli_report(MYSQLI_REPORT_OFF), the PHP 5 default.
+
+## PHP 8 review: arrays and objects PHP 5 created or tolerated implicitly
+
+Found by a scope-aware scan for locals that are only built with $x[] = ...,
+were last assigned '' or a scalar, or are written as objects without being one;
+it now also covers top-level script code and functions that run plugin hooks.
+- vb_base64_encode() fallback: $return = '' and then $return[] = ...; PHP 5
+  turned '' into an array, PHP 8 throws.
+- Admin CP statistics (stats.php, apistats.php): sizeof($results) of the unset
+  variable when the date range has no data gave 0 in PHP 5 ("no matches"), a
+  TypeError in PHP 8.
+- vBCMS recent content widget: count() of the never-set $articles.
+- Facebook profile import: implode() of the unset $occupation (PHP 5: NULL).
+- vB_Model::writeCache(): a property write on an array, ignored by PHP 5.
+- Search result icons: count() of the unset $post_statusicon. Not reachable at
+  the moment (the code reads replydata['lastread'], which is never set, so
+  'new' is always added), but initialised for when it is.
+
+## PHP 8: sprintf() with phrase formats from the database
+
+vB formats phrases with @call_user_func_array('sprintf', ...). For a bad format
+PHP 5 returned false (too few arguments; construct_phrase() then fills in
+"[ARG:n UNDEFINED]" or returns the phrase as is) or skipped the bad conversion
+specification: a lone '%' in a phrase, '100%' at the end. PHP 8 throws an
+ArgumentCountError or ValueError, which @ does not suppress, so an edited or
+translated phrase with an extra {n} placeholder or a stray % killed the page.
+PHP 8 also reads '%.f' (precision without digits) as 0 digits, PHP 5 as 6, and
+understands '*' widths and %h/%H, which PHP 5 printed as nothing.
+
+vb_sprintf_array() (class_core.php) rewrites the specifications PHP 5 did not
+understand into '%.0s', which also uses up an argument and prints nothing,
+drops a precision without digits, and returns false for the errors. Checked
+against PHP 5.6's sprintf() with 400,000 random format strings and argument
+lists: identical results (except that PHP 7.1+ reads '1e3' as 1000 in %d).
+Used by construct_phrase_from_array() (all phrases, also {vb:rawphrase} in
+templates), vB_Phrase and the custom BB code replacement.
+
+## PHP 8: TypeErrors from data: empty timezone offset, calendar recurrence, signature sizes
+
+PHP 8 throws a TypeError when '' or another non-numeric string meets
+arithmetic, and compares a number with such a string as strings ('' == 0 is
+false), so guards like "== 0" stop catching it. Found by reviewing every
+division and by browsing as real members:
+- user.timezoneoffset is '' for 53 old accounts. fetch_time_data() computed
+  hourdiff with it on every page, so these members got a fatal error on every
+  page once logged in; the digest mails (vbdate() with a user's data) had the
+  same problem. '' counts as 0 again, as in PHP 5. The time zone select of the
+  profile and calendar forms pre-selects GMT for them again (vb_loose_equals()).
+- Calendar recurrence: a recuroption with a missing number (only from a
+  crafted request) passed the "== 0" checks and reached "% ''".
+- Signatures: the [size] option check allows '-', '+', '--1' or '10-'. A
+  signature with [size=-] gave an HTTP 500 when saved (int + '-'), and
+  '10-' > 7 compared as strings, so the size limit did not apply. The options
+  are read as PHP 5 did (the leading number); checked against PHP 5.6 with
+  6,632 signatures.
+- vBCMS: the rating average divided by the vote count, which is 0 when the
+  "votes needed to show the rating" setting is 0 (PHP 5: false, shown as 0).
+
+## PHP 8: more warnings that PHP 5 did not raise are handled as notices
+
+vbulletin_error_handler() already treats the notices PHP 8 promoted to
+warnings as notices (hidden, as vB runs with notices off). Added:
+"A non-numeric value encountered" (a number with trailing text such as '10px'
+in arithmetic: silent in PHP 5, a notice in PHP 7), "String offset cast
+occurred" (a notice before PHP 8) and PHP 8.3's warnings about non-numeric
+values in array_sum()/array_product().
+
+## PHP 8 review: vB_DM allow-lists, fast path for plain phrase formats
+
+- vB_DM::allowUpdateWithoutCondition()/allowDeleteWithoutCondition() call
+  in_array() on properties that default to false and are never overridden.
+  PHP 5 returned NULL (vB then threw its own vB_Exception_DM for an update or
+  delete without a condition); PHP 8 throws a TypeError instead.
+- vb_sprintf_array(): formats with only %s, %d and %1$s style conversions (and
+  %%), which PHP 5 and PHP 8 handle alike, go straight to sprintf(). The
+  results are unchanged (same 400,000-case comparison with PHP 5.6).
