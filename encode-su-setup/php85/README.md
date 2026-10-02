@@ -7,7 +7,7 @@ applied before PHP is upgraded.
 
 | File | What it changes |
 |---|---|
-| `vbulletin-php85.patch` | the forum scripts: 185 PHP files, about 840 changed lines |
+| `vbulletin-php85.patch` | the forum scripts: 186 PHP files, about 890 changed lines |
 | `vb_php8_db_fix.php` | the PHP code stored in the database: plugins, the plugin cache, compiled templates, two setting checks |
 | `php8_barewords.php` | tokenizer-based quoting of undefined constants, used by `vb_php8_db_fix.php` |
 | `CHANGES.md` | commit log of the patch, one commit per topic |
@@ -92,7 +92,20 @@ compiler dropped the quotes of `{vb:raw var['key']}` keys and now keeps them.
 * `sprintf()` with phrase formats from the database. PHP 8 throws for too few
   arguments or a stray `%` in a phrase, where PHP 5 returned false or skipped
   the bad part. `vb_sprintf_array()` (in `class_core.php`) gives the PHP 5
-  results; `construct_phrase()`, `vB_Phrase` and custom BB codes use it.
+  results, including PHP 5's conversion of numbers (`'1e3'` is 1 for `%d`);
+  `construct_phrase()`, `vB_Phrase` and custom BB codes use it.
+* String offsets past the end and negative offsets. PHP 8 throws a ValueError
+  for a `strpos()` offset past the end of the string, where PHP 5 returned
+  false, and reads negative string offsets from the end:
+  * A posted message with an attribute without a value (`<a href=>`) was a
+    fatal error. Any member could send it; the editor never produces it.
+  * Old-style template code ending in such an attribute or in `<if condition="`
+    (Admin CP template input).
+  * `vb_unserialize()` with a negative string length in crafted data recursed
+    until memory ran out.
+* Searching for an empty string finds it everywhere in PHP 8 and nowhere in
+  PHP 5: the `[url]` nofollow host check and the Admin CP error log viewer
+  (only with settings that are off on this forum).
 * Values from the database or from users. `''` or `'-'` in arithmetic and
   division by zero are errors in PHP 8:
   * `user.timezoneoffset` is `''` for 53 old accounts. These members got a fatal
@@ -212,6 +225,8 @@ Admin CP plugin pages show highlighted PHP code in PHP 8.3's new
     `readtime` is set)
   * two vBCMS collection queries use `$this->itemdid` (a typo). They fail on both
     versions: an SQL error on PHP 5, a TypeError on PHP 8.
+  * Forum Runner's text parser calls its parent constructor by the old name
+    (`parent::StringParser_Node()`), so it fails on both versions.
 
 ## How it was tested
 
@@ -256,9 +271,13 @@ Admin CP plugin pages show highlighted PHP code in PHP 8.3's new
   are left. The source is in `cmp7trace/`.
 * **PHP 5.6.** The patched scripts on PHP 5.6 give the same pages as the original
   scripts on PHP 5.6.
-* **Fuzzing.** `vb_sprintf_array()` against PHP 5.6's `sprintf()` with 400,000
-  random formats and argument lists, and the signature parser against PHP 5.6
-  with 6,632 `[size]` combinations: identical results.
+* **Fuzzing.** The same random input on PHP 5.6 and on PHP 8.5, with identical
+  results:
+  * `vb_sprintf_array()` against PHP 5.6's `sprintf()`: 700,000 random formats
+    and argument lists
+  * the signature parser: 6,632 `[size]` combinations
+  * the WYSIWYG and old-style template attribute parsers, the template
+    conditional parser and `vb_unserialize()`: 40,000 to 400,000 inputs each
 * **Static checks.**
   * PHPCompatibility (phpcs 4)
   * PHPStan levels 0 and 1, reviewed for errors that are fatal only in PHP 8

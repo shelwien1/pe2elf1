@@ -221,3 +221,36 @@ values in array_sum()/array_product().
 - vb_sprintf_array(): formats with only %s, %d and %1$s style conversions (and
   %%), which PHP 5 and PHP 8 handle alike, go straight to sprintf(). The
   results are unchanged (same 400,000-case comparison with PHP 5.6).
+
+## PHP 8: string offsets past the end, empty search strings, negative offsets
+
+PHP 8 throws a ValueError for a strpos() offset past the end of the string
+(PHP 5: false), finds an empty needle at the offset (PHP 5: false), and reads
+a negative string offset from the end (PHP 5: ''). Each call was reviewed;
+these could get such values (checked by running the functions on PHP 5.6 and
+8.5 with random input, 40,000 to 400,000 cases each):
+- WYSIWYG editor: an attribute without a value (<a href=>, <span style=>,
+  <font color=>, <div align=>) in a posted message was a fatal error. Any
+  member could send it with wysiwyg=1; normal editor use never produces it.
+  The attribute is dropped again, as in PHP 5.
+- The same attribute parser for old-style template tags (<phrase 1=>), and the
+  <if condition=" parser for old-style templates ending right after it:
+  template input in the Admin CP and style imports.
+- vb_unserialize(): a negative string length (s:-5:) in crafted or corrupt data
+  made the parser read from the end of the string and recurse until memory ran
+  out; it fails again as in PHP 5.
+- BB code [url] nofollow: the list of the forum's own hosts can contain '' (a
+  crafted "Host: www." header), which PHP 8 found in every link, so external
+  links lost rel="nofollow" (only with the nofollow setting on, off now).
+- Admin CP error log viewer: a log path ending in '/' listed every file of the
+  directory (only with that setting).
+
+## PHP 8: vb_sprintf_array() also converts numbers as PHP 5's sprintf() did
+
+PHP 5 converted the argument of %d (%u, %x, %f, ...) in place, with its own
+rules: '1e3' was 1 for %d (PHP 7.1+ reads 1000), and a later %1$s of the same
+argument printed the converted number. The slow path now rewrites every
+conversion with an explicit argument number and passes the numbers PHP 5 would
+have used; the fast path is for formats with only %s and %1$s. Identical to
+PHP 5.6's sprintf() on 700,000 random cases, including arguments like '1e3',
+'5 apples', ' 12', '0x1A', floats, booleans and null.

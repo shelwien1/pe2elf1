@@ -1,3 +1,17 @@
+diff --git a/acp/adminlog.php b/acp/adminlog.php
+index ce21f3b..678f93e 100644
+--- a/acp/adminlog.php
++++ b/acp/adminlog.php
+@@ -68,7 +68,8 @@ function fetch_log_file_array($type = 'database')
+ 			$namelength = strlen($filebase);
+ 			while ($file = readdir($handle))
+ 			{
+-				if (strpos($file, $filebase) === 0)
++				// substr() gives '' for a path ending in '/': PHP 5 (false) matched nothing, PHP 8 matches every file
++				if ($filebase != '' AND strpos($file, $filebase) === 0)
+ 				{
+ 					if ($unixdate = intval(substr($file, $namelength, -4)))
+ 					{
 diff --git a/acp/adminreputation.php b/acp/adminreputation.php
 index b3d52ea..4c5fead 100644
 --- a/acp/adminreputation.php
@@ -1724,7 +1738,7 @@ index 0500484..75b7d66 100644
  			window.location = 'reminder.php?' . $vbulletin->session->vars['sessionurl_js'];
  		}
 diff --git a/includes/adminfunctions_template.php b/includes/adminfunctions_template.php
-index 45ce3f6..7bac878 100644
+index 45ce3f6..13b7b47 100644
 --- a/includes/adminfunctions_template.php
 +++ b/includes/adminfunctions_template.php
 @@ -1448,7 +1448,7 @@ function fetch_color_hex_value($csscolor)
@@ -1736,7 +1750,17 @@ index 45ce3f6..7bac878 100644
  		}
  		else
  		{
-@@ -2781,7 +2781,7 @@ function process_template_phrases($tagname, $text, $functionhandle, $extraargs =
+@@ -2473,7 +2473,8 @@ function process_template_conditionals($template, $haltonerror = true)
+ 			continue;
+ 		}
+ 
+-		$if_end_location = strpos($template_cond, $if_end_lookfor, $condition_start + 3); // location of conditional terminator
++		// PHP 8: an offset past the end is a ValueError (PHP 5: false), e.g. a template ending in '<if condition="'
++		$if_end_location = ($condition_start + 3 <= $strlen ? strpos($template_cond, $if_end_lookfor, $condition_start + 3) : false); // location of conditional terminator
+ 		if ($if_end_location === false)
+ 		{ // move this code above the rest, if no end condition is found then the code below would get stuck
+ 			return str_replace("\\'", '\'', $template_cond); // no </if> found -- return the original template
+@@ -2781,7 +2782,7 @@ function process_template_phrases($tagname, $text, $functionhandle, $extraargs =
  		$tagnameend = false;
  		for ($optionend = $tagbegin; $optionend <= $strlen; $optionend++)
  		{
@@ -1745,7 +1769,7 @@ index 45ce3f6..7bac878 100644
  			if (($char == '"' OR $char == "'") AND $inquote == '')
  			{
  				$inquote = $char; // wasn't in a quote, but now we are
-@@ -2910,11 +2910,11 @@ function parse_tag_attribute($option, $text)
+@@ -2910,11 +2911,11 @@ function parse_tag_attribute($option, $text)
  	if (($position = strpos($text, $option)) !== false)
  	{
  		$delimiter = $position + strlen($option);
@@ -1759,7 +1783,17 @@ index 45ce3f6..7bac878 100644
  		{
  			$delimchar = '\'';
  		}
-@@ -5222,21 +5222,20 @@ function check_template_errors($template)
+@@ -2922,7 +2923,8 @@ function parse_tag_attribute($option, $text)
+ 		{ // read to a space
+ 			$delimchar = ' ';
+ 		}
+-		$delimloc = strpos($text, $delimchar, $delimiter + 1);
++		// PHP 8: an offset past the end is a ValueError (PHP 5: false), e.g. '<phrase 1=>'
++		$delimloc = ($delimiter + 1 <= strlen($text) ? strpos($text, $delimchar, $delimiter + 1) : false);
+ 		if ($delimloc === false)
+ 		{
+ 			$delimloc = strlen($text);
+@@ -5222,21 +5224,20 @@ function check_template_errors($template)
  	if (strpos(@ini_get('disable_functions'), 'ob_start') !== false)
  	{
  		// alternate method in case OB is disabled; probably not as fool proof
@@ -1790,7 +1824,7 @@ index 45ce3f6..7bac878 100644
  	}
  	else
  	{
-@@ -5244,13 +5243,21 @@ function check_template_errors($template)
+@@ -5244,13 +5245,21 @@ function check_template_errors($template)
  		$oldlevel = error_reporting();
  
  		ob_start();
@@ -1816,7 +1850,7 @@ index 45ce3f6..7bac878 100644
  		}
  
  		$errors = ob_get_contents();
-@@ -5822,7 +5829,7 @@ function print_style_palette($palette)
+@@ -5822,7 +5831,7 @@ function print_style_palette($palette)
  *
  */
  
@@ -2035,7 +2069,7 @@ index 7339bfe..02e6c2e 100644
  		$optionselected = ($blogcategoryid == $parentid) ? 'selected="selected"' : '';
  
 diff --git a/includes/class_bbcode.php b/includes/class_bbcode.php
-index 59b3c12..325172b 100644
+index 59b3c12..dfd6d96 100644
 --- a/includes/class_bbcode.php
 +++ b/includes/class_bbcode.php
 @@ -982,7 +982,7 @@ class vB_BbCodeParser
@@ -2102,6 +2136,16 @@ index 59b3c12..325172b 100644
  			case 'input':
  			case 'select':
  			case 'option':
+@@ -2494,7 +2495,8 @@ class vB_BbCodeParser
+ 
+ 			foreach ($allowed AS $host)
+ 			{
+-				if (stripos($target_url, $host) !== false)
++				// an empty host (e.g. from "Host: www.") matched nothing in PHP 5 and everything in PHP 8
++				if ($host !== '' AND stripos($target_url, $host) !== false)
+ 				{
+ 					$is_external = false;
+ 				}
 diff --git a/includes/class_bitfield_builder.php b/includes/class_bitfield_builder.php
 index bc01ec5..73cfcbc 100644
 --- a/includes/class_bitfield_builder.php
@@ -2145,10 +2189,10 @@ index c53e527..9d375f8 100644
  			$ajaxerror = $vbulletin->GPC['ajax'] ? '_ajax' : '';
  
 diff --git a/includes/class_core.php b/includes/class_core.php
-index 7fb880f..17f6aca 100644
+index 7fb880f..bf72bc1 100644
 --- a/includes/class_core.php
 +++ b/includes/class_core.php
-@@ -16,6 +16,185 @@ define('YUI_VERSION', '2.9.0'); // define the YUI version we bundle
+@@ -16,6 +16,227 @@ define('YUI_VERSION', '2.9.0'); // define the YUI version we bundle
  define('JQUERY_VERSION', '1.6.4'); // define the jQuery version we use
  define('JQUERY_MOBILE_VERSION', '1.0'); // define the jQuery Mobile Style Version
  
@@ -2238,7 +2282,9 @@ index 7fb880f..17f6aca 100644
 +* phrases from the database this way. For a bad format PHP 8 throws an Error, where PHP 5
 +* returned false (too few arguments) or printed nothing for an unknown or incomplete
 +* conversion specification (a lone '%' in a phrase, say) but still used up an argument.
-+* PHP 8 also reads a precision without digits ('%.f') as 0; PHP 5 ignored it.
++* PHP 8 also reads a precision without digits ('%.f') as 0, PHP 5 ignored it; and PHP 5
++* converted an argument for %d with its own rules ('1e3' is 1) and in place, so that a
++* later %1$s printed the number.
 +*
 +* @param	array	The format string, then the arguments
 +*
@@ -2253,9 +2299,9 @@ index 7fb880f..17f6aca 100644
 +	}
 +
 +	$format = strval($args[0]);
-+	if (!preg_match('#%(?!(?:\d+\$)?[sd])#', str_replace('%%', '', $format)))
++	if (!preg_match('#%(?!(?:\d+\$)?s)#', str_replace('%%', '', $format)))
 +	{
-+		// only %s, %d, %1$s, ... (most phrases): PHP 5 and PHP 8 agree, apart from errors
++		// only %s and %1$s (most phrases): PHP 5 and PHP 8 agree, apart from errors
 +		try
 +		{
 +			return call_user_func_array('sprintf', $args);
@@ -2266,75 +2312,115 @@ index 7fb880f..17f6aca 100644
 +		}
 +	}
 +
++	// rewrite the format as PHP 5 read it, with an argument number for every conversion
++	$count = count($args);
 +	$length = strlen($format);
-+	$args[0] = '';
++	$new = '';
 +	$start = 0;
++	$next = 1;
++	$converted = array(); // argument => index of the value PHP 5 converted it to
 +	while (($pos = strpos($format, '%', $start)) !== false)
 +	{
-+		$args[0] .= substr($format, $start, $pos - $start);
++		$new .= substr($format, $start, $pos - $start);
 +		$i = $pos + 1;
 +		if ($i < $length AND $format[$i] == '%')
 +		{
-+			$args[0] .= '%%';
++			$new .= '%%';
 +			$start = $i + 1;
 +			continue;
 +		}
 +
-+		$spec = '';
-+		$argnum = '';
++		$argnum = 0;
++		$modifiers = '';
 +		// PHP 5 read argnum$, flags, width and precision only after an ASCII character that is not a letter
 +		if ($i >= $length OR (ord($format[$i]) < 128 AND !preg_match('#[a-z]#i', $format[$i])))
 +		{
-+			preg_match('#((\d*)\$)?(?:[ 0+\-]|\'[\s\S])*\d*(\.\d*)?#A', $format, $match, 0, $i);
++			preg_match('#((\d*)\$)?((?:[ 0+\-]|\'[\s\S])*\d*)(\.\d*)?#A', $format, $match, 0, $i);
 +			$i += strlen($match[0]);
-+			$spec = $match[0];
-+			if (isset($match[3]) AND $match[3] === '.')
++			if (!empty($match[1]))
 +			{
-+				$spec = substr($spec, 0, -1);
++				$argnum = intval($match[2]);
++				if ($argnum <= 0)
++				{
++					return false;
++				}
 +			}
-+			if (isset($match[1]))
-+			{
-+				$argnum = $match[1];
-+			}
++			$modifiers = $match[3] . ((isset($match[4]) AND $match[4] !== '.') ? $match[4] : '');
 +		}
 +		if ($i < $length AND $format[$i] == 'l')
 +		{
-+			$spec .= 'l';
 +			$i++;
 +		}
-+
-+		if ($i < $length AND $format[$i] == '%')
-+		{
-+			// '%' after a flag, width or precision: PHP 5 printed '%' and used up an argument
-+			$args[0] .= '%' . $argnum . '.0s%%';
-+		}
-+		else if ($i < $length AND strpos('sdugGeEfFcoxXb', $format[$i]) !== false)
-+		{
-+			$args[0] .= '%' . $spec . $format[$i];
-+		}
-+		else
-+		{
-+			// an argument that prints nothing
-+			$args[0] .= '%' . $argnum . '.0s';
-+		}
++		$type = ($i < $length ? $format[$i] : '');
 +		$start = min($i + 1, $length);
++
++		$arg = ($argnum ? $argnum : $next++);
++		if ($arg >= $count)
++		{
++			return false; // too few arguments
++		}
++		if ($type === '%')
++		{
++			$new .= '%%';
++		}
++		else if ($type !== '' AND strpos('sdugGeEfFcoxXb', $type) !== false)
++		{
++			$value = (isset($converted[$arg]) ? $converted[$arg] : $arg);
++			if ($type != 's')
++			{
++				$args[] = vb_sprintf_number($args[$value], strpos('gGeEfF', $type) !== false);
++				$value = count($args) - 1;
++				if (!$argnum)
++				{
++					$converted[$arg] = $value;
++				}
++			}
++			$new .= '%' . $value . '$' . $modifiers . $type;
++		}
++		// else: an unknown or missing conversion type printed nothing
 +	}
-+	$args[0] .= substr($format, $start);
++	$args[0] = $new . substr($format, $start);
 +
 +	try
 +	{
 +		return call_user_func_array('sprintf', $args);
 +	}
-+	catch (Error $e) // ArgumentCountError (too few arguments), ValueError (argnum 0, width too large)
++	catch (Error $e) // ValueError (width or precision too large)
 +	{
 +		return false;
 +	}
 +}
 +
++/**
++* The number PHP 5's sprintf() made of an argument: the leading integer of a string for %d
++* ('1e3' is 1, PHP 7.1+ reads 1000), a float for %f.
++*
++* @param	mixed
++* @param	boolean	Float (%e, %f, %g) instead of integer
++*
++* @return	integer|float
++*/
++function vb_sprintf_number($value, $float)
++{
++	if (is_object($value))
++	{
++		return ($float ? 1.0 : 1);
++	}
++	if ($float)
++	{
++		return floatval($value);
++	}
++	if (is_string($value))
++	{
++		return (preg_match('#^[ \t\n\r\x0B\x0C]*[+-]?\d+#', $value, $match) ? intval($match[0]) : 0);
++	}
++	return intval($value);
++}
++
  /**#@+
  * The maximum sizes for the "small" profile avatars
  */
-@@ -411,7 +590,7 @@ class vB_Database
+@@ -411,7 +632,7 @@ class vB_Database
  	*
  	* @return	string
  	*/
@@ -2343,7 +2429,7 @@ index 7fb880f..17f6aca 100644
  	{
  		$this->connection_recent =& $link;
  		$this->querycount++;
-@@ -1332,6 +1511,11 @@ class vB_Database_MySQLi extends vB_Database
+@@ -1332,6 +1553,11 @@ class vB_Database_MySQLi extends vB_Database
  	*/
  	function db_connect($servername, $port, $username, $password, $usepconnect, $configfile = '', $charset = '')
  	{
@@ -2355,7 +2441,7 @@ index 7fb880f..17f6aca 100644
  		if (function_exists('catch_db_error'))
  		{
  			set_error_handler('catch_db_error');
-@@ -1378,7 +1562,7 @@ class vB_Database_MySQLi extends vB_Database
+@@ -1378,7 +1604,7 @@ class vB_Database_MySQLi extends vB_Database
  	*
  	* @return	string
  	*/
@@ -2364,7 +2450,7 @@ index 7fb880f..17f6aca 100644
  	{
  		$this->connection_recent =& $link;
  		$this->querycount++;
-@@ -3861,7 +4045,7 @@ class vB_Session
+@@ -3861,7 +4087,7 @@ class vB_Session
  	*/
  	function set($key, $value)
  	{
@@ -2373,7 +2459,7 @@ index 7fb880f..17f6aca 100644
  		{
  			$this->vars["$key"] = $value;
  			$this->changes["$key"] = true;
-@@ -4410,7 +4594,7 @@ class vB_Template
+@@ -4410,7 +4636,7 @@ class vB_Template
  	 * @param	string	The name of the template to register for
  	 * @param	array	The variables to register
  	 */
@@ -2382,7 +2468,17 @@ index 7fb880f..17f6aca 100644
  	{
  		if ($variables)
  		{
-@@ -5749,10 +5933,10 @@ function us_get_value(&$index, $strlen, $string)
+@@ -5732,7 +5958,8 @@ function us_get_value(&$index, $strlen, $string)
+ 	}
+ 	else
+ 	{
+-		$type = strtolower($string[$index]);
++		// a negative length ('s:-5:') can make $index negative: PHP 5 read '' there, PHP 7.1+ reads from the end
++		$type = ($index < 0 ? '' : strtolower($string[$index]));
+ 	}
+ 
+ 	switch($type)
+@@ -5749,10 +5976,10 @@ function us_get_value(&$index, $strlen, $string)
  			break;
  		case 'd':
  			$value = us_get_prefix($index, $strlen, $string, ';');
@@ -2395,7 +2491,25 @@ index 7fb880f..17f6aca 100644
  			break;
  		case 'n':
  			return us_get_null($index, $strlen, $string);
-@@ -5970,7 +6154,28 @@ function vbulletin_error_handler($errno, $errstr, $errfile, $errline)
+@@ -5797,7 +6024,7 @@ function us_get_array(&$index, $strlen, $string)
+ 		$array[$key] = $value;
+ 	}
+ 
+-	if ($string[$index] != '}')
++	if ($index < 0 OR $string[$index] != '}')
+ 	{
+ 		us_trigger_error('vb_unserialize: 06 - Expected } at position ' .  $index . ' found ' . $string[$index], E_USER_WARNING);
+ 		return false;
+@@ -5883,7 +6110,7 @@ function us_get_string(&$index, $strlen, $string, $length)
+ 
+ 	$index += $length+1;
+ 
+-	if ($string[$index] != '"')
++	if ($index < 0 OR $string[$index] != '"')
+ 	{
+ 		us_trigger_error('vb_unserialize: 15 - Expected " at position ' .  $index . ' found ' . $string[$index], E_USER_WARNING);
+ 		return false;
+@@ -5970,7 +6197,28 @@ function vbulletin_error_handler($errno, $errstr, $errfile, $errline)
  	{
  		return true; // Do nothing
  	}
@@ -2425,7 +2539,7 @@ index 7fb880f..17f6aca 100644
  	{
  		/* Figure out if php log and display errors is enabled
  		We may get '1' or 'On' returned (this changed in php 5.3) */
-@@ -6026,7 +6231,7 @@ function vbulletin_error_handler($errno, $errstr, $errfile, $errline)
+@@ -6026,7 +6274,7 @@ function vbulletin_error_handler($errno, $errstr, $errfile, $errline)
  				$type = 'Fatal User Error';
  			break;
  
@@ -2434,7 +2548,7 @@ index 7fb880f..17f6aca 100644
  			case E_DEPRECATED:
  				// This setting overrides the config option.
  				if (!empty($vbulletin->options['hookerrors']))
-@@ -6119,10 +6324,11 @@ function vbulletin_exception_handler($throwable)
+@@ -6119,10 +6367,11 @@ function vbulletin_exception_handler($throwable)
  	   We may get '1' or 'On' returned (this changed in php 5.3) */
  	$php_log_errors = in_array(strtolower(ini_get('log_errors')), array('on', '1')) ? true : false;
  
@@ -2929,7 +3043,7 @@ index df371f3..9d90917 100644
  		 			)
  	 			)
 diff --git a/includes/class_wysiwygparser.php b/includes/class_wysiwygparser.php
-index 1e689cd..747c957 100644
+index 1e689cd..0c84fc1 100644
 --- a/includes/class_wysiwygparser.php
 +++ b/includes/class_wysiwygparser.php
 @@ -1558,7 +1558,7 @@ class vB_WysiwygHtmlParser
@@ -2955,6 +3069,16 @@ index 1e689cd..747c957 100644
  			{
  				$delimchar = '\'';
  			}
+@@ -1663,7 +1663,8 @@ class vB_WysiwygHtmlParser
+ 			{ // read to a space
+ 				$delimchar = ' ';
+ 			}
+-			$delimloc = strpos($text, $delimchar, $delimiter + 1);
++			// PHP 8: an offset past the end is a ValueError (PHP 5: false), e.g. '<a href=>'
++			$delimloc = ($delimiter + 1 <= strlen($text) ? strpos($text, $delimchar, $delimiter + 1) : false);
+ 			if ($delimloc === false)
+ 			{
+ 				$delimloc = strlen($text);
 diff --git a/includes/class_xml.php b/includes/class_xml.php
 index b9df87a..745ed7d 100644
 --- a/includes/class_xml.php
