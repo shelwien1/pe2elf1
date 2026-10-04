@@ -33,11 +33,11 @@ window included.
 
 The table above is without packing (`PPMD_PACK=0`). With packing, the default:
 
-| file | tree MiB (live) | vs original | RSS MB | enc s |
+| file | tree MiB (live) | vs original | RSS MB | enc / dec s |
 |---|---|---|---|---|
-| e8m | 53.6 (50.9) | **−30.8%** | 66 | 16.1 |
-| enwik8 | 474.3 (450.3) | **−30.6%** | 580 | 218.7 |
-| enwik9 | 2871 (2725) | **−30.4%** | 3865 | 2460 |
+| e8m | 53.6 (50.9) | **−30.8%** | 66 | 16.1 / – |
+| enwik8 | 474.3 (450.3) | **−30.6%** | 580 | 218.7 / – |
+| enwik9 | 2871 (2725) | **−30.4%** | 3865 | 2460 / 2395 |
 
 On enwik9 Repack writes 259M packed records and 144M are unpacked again when they become
 current. Each unpack leaves a dead copy, and the extra compactions it causes are where the
