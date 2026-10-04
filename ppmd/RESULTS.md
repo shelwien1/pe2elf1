@@ -6,9 +6,9 @@
 * **Compressed output is byte-identical to the original.** The model, the probabilities and
   even the state order are unchanged. This holds on enwik8 and enwik9 and on all test files,
   for orders 1..200.
-* **enwik9, order 12, full 1 GB window, no resets:** the tree takes __E9_TOUCH__ MiB of RAM
-  instead of 4124 MiB (__E9_TOUCH_PCT__). Peak RSS of the process is __E9_RSS__ MiB instead of
-  5224 MiB. Encode time is __E9_ENC__ s, against 2056 s for the original.
+* **enwik9, order 12, full 1 GB window, no resets:** the tree takes 2978 MiB of RAM
+  instead of 4125 MiB (−27.8%; live records −31.2%). Peak RSS of the process is 3972 MiB instead of
+  5224 MiB. Encode time is 1682 s, against 2056 s for the original.
 * There is no 32-bit `SUCC` address-space limit any more. The original needs
   `1 + WinSize + arena/2 <= 2^32`, which caps the tree at 6.3 GB with the enwik9 window. Here,
   text pointers cover windows up to 4 GB and the tree size is bounded only by `MMAX`.
@@ -23,14 +23,17 @@ window included.
 
 | file | original: size / tree MiB / RSS MB / enc s | new: tree MiB (live) | new: RSS MB | new: enc / dec s |
 |---|---|---|---|---|
-| e8m (first 8 MiB of enwik8) | 1,937,536 / 77.5 / 217 / 17.7 | 56.0 (53.4) **−27.7%** | 69 | 8.1 / 8.6 |
-| e32m (first 32 MiB) | 7,312,689 / 267.0 / 418 / 71.4 | 192.8 (183.8) **−27.7%** | 231 | 40.3 / 40.4 |
+| e8m (first 8 MiB of enwik8) | 1,937,536 / 77.5 / 217 / 17.7 | 56.0 (53.4) **−27.8%** | 69 | 8.1 / 8.6 |
+| e32m (first 32 MiB) | 7,312,689 / 267.0 / 418 / 71.4 | 192.8 (183.8) **−27.8%** | 231 | 40.3 / 40.4 |
 | enwik8 | 20,828,759 / 683.2 / 995 / 209 | 493.7 (470.3) **−27.7%** | 599 | 127.8 / 129.6 |
-| enwik9 | 167,384,640 / 4125 / 5224 / 2056 | __E9_TOUCH__ (__E9_LIVE__) **__E9_TOUCH_PCT__** | __E9_RSS__ | __E9_ENC__ / __E9_DEC__ |
+| enwik9 | 167,384,640 / 4125 / 5224 / 2056 | 2978 (2837) **−27.8%** | 3972 | 1682 / 1737 |
 
 The compressed sizes of the new coder are identical, byte for byte, to the original column.
-Page metadata (page table, far tables, root table) adds 0.6 MB, 2.2 MB, 5.6 MB and __E9_META__ MB
-respectively; it is included in RSS.
+Page metadata (page table, far tables, root table) adds 0.6 MB, 2.2 MB, 5.6 MB and 34.5 MB
+respectively; it is included in RSS. The original decodes at the same speed it encodes
+(e8m: 17.7 s). The original's enwik9 run shared the machine with other jobs part of the time.
+The e8m, e32m and enwik8 times, and the new coder's enwik9 encode, were measured with the
+machine otherwise idle.
 
 ## Layout (what was implemented from the analysis)
 
@@ -77,8 +80,10 @@ Every state is one 32-bit word, `[sym:8][tf:8][succ:16]`. This is the unified 4-
   O(order) cost per change. That is why it is faster despite the scans and the page
   maintenance.
 
-Overhead of the paging on enwik8: dead bytes inside pages 1.3%, partially used last OS page of
-each page 3.7%, metadata 1.2% of the live tree.
+Overhead of the paging, relative to the live tree, is the same on enwik8 and enwik9: dead bytes
+inside pages 1.3%, partially used last OS page of each page 3.7%, metadata 1.2%. On enwik9 the
+tree uses 57,369 pages (50.6 KB live each) and 1.16M page roots. The largest far table measured
+(e32m) holds 307 entries out of 4096; a split that would overflow one is restricted instead.
 
 ## Not implemented, and why
 
@@ -109,11 +114,26 @@ g++ -O2 -o ppmd ppmd.cpp
 ```
 
 `MMAX` is the virtual page budget: the number of 64 KB pages times 64 KB. The memory actually
-committed is the "tree_touched" figure, about 75–85% of the pages used, and the coder resets
-(or replays with `reset_perc`) when it runs out of pages. At equal MMAX the new coder holds
-about 1.4× the contexts of the original before it has to reset.
+committed is the "tree_touched" figure, and the coder resets (or replays with `reset_perc`)
+when it runs out of pages. Under a memory limit the new coder resets less often, so it
+compresses better. On e8m at order 12:
 
-Environment knobs (they change speed and memory only, never the output): `PPMD_SCAN=0|1|2`
-(scalar / AVX2 / AVX-512 scan), `PPMD_DEADSH` (compaction threshold: dead > live>>n),
-`PPMD_SPLIT` (fraction moved per split, n/16), `PPMD_MARGIN`, `PPMD_RECVGAP`.
-`PPMD_CENSUS=1` and `PPMD_ALLOCSTATS=1` print record and allocator statistics.
+| MMAX | original: bytes (resets) | new: bytes (resets) |
+|---|---|---|
+| 16 | 2,148,996 (7) | 2,096,170 (4) |
+| 24 | 2,091,203 (4) | 2,053,672 (3) |
+| 40 | 2,031,805 (2) | 2,001,008 (1) |
+| 64 | 1,992,189 (1) | 1,962,162 (1) |
+
+Without resets the outputs are identical.
+
+Environment knobs (they change speed and memory only, never the output; encoder and decoder
+may use different values): `PPMD_SCAN=0|1|2` (scalar / AVX2 / AVX-512 scan), `PPMD_DEADSH`
+(compaction threshold: dead > live>>n), `PPMD_SPLIT` (fraction moved per split, n/16),
+`PPMD_MARGIN`, `PPMD_RECVGAP`.
+
+Debug knobs: `PPMD_CHECK=n` walks the whole tree every n steps and verifies every invariant
+(refs, parities, far tables, root lists, `SuffCache` reachability, parent slots).
+`PPMD_STATS=1`, `PPMD_CENSUS=1` and `PPMD_ALLOCSTATS=1` print maintenance, record and allocator
+statistics. `PPMD_CZK=k` forces a larger scan block. It normally leaves the output unchanged,
+but encoder and decoder must then use the same value.

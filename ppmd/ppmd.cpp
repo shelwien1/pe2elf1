@@ -288,12 +288,18 @@ struct SEE_Manager {
 //     >= FAR_LIM : near ref = page offset | M   (M=1 -> multi, 0 -> binary)
 //     <  FAR_LIM : index into the page's far table -> global root id -> GRoot
 //                  entry {page, near ref}, which is the parent slot of the root.
-//   Children are allocated in their parent's page. Pages are compacted / split
-//   (a set of sibling subtrees moves to a fresh page) only at the start of a
-//   step, so only SuffCache[] and parentSlot[] need fixing up.
+//   Children are allocated in their parent's page (per-page free lists, larger
+//   free records are carved). Pages are compacted or split (a set of sibling
+//   subtrees moves to a receiver page) only at the start of a step, so only
+//   SuffCache[] and parentSlot[] need fixing up.
+// * parentSlot[t] (the field referencing SuffCache[t]) is kept exact through
+//   swaps, reallocations and the rescale permutation; the original re-derived it
+//   by scanning all SuffCache entries for every state of a modified context.
 // * Text successors are coarse: P>>CZK in 16 bits. The exact P is recovered at
 //   materialisation by scanning that block for the first end of the context
-//   string + symbol (the last order+1 bytes of history).
+//   string + symbol (the last order+1 bytes of history). P is the end of the
+//   first occurrence of that pattern, so the recovery is exact.
+// * The model is untouched: compressed output is byte-identical to the original.
 // ===========================================================================
 
 typedef uintptr_t Ctx;     // record address | M
