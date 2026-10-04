@@ -35,6 +35,27 @@ respectively; it is included in RSS. The original decodes at the same speed it e
 The e8m, e32m and enwik8 times, and the new coder's enwik9 encode, were measured with the
 machine otherwise idle.
 
+### Baseline RSS with lazy arena init
+
+The original commits memory it has not used yet. `buildFreeChain` writes a link into every
+64 KB block of the arena, which is arena/16 of RSS before anything is stored. `FormatBlock`
+pre-links every slot of a new block. `ppmd_orig_lazy.cpp` is the original with both made
+lazy: blocks come from a bump pointer, and slots from a per-block `fresh` counter. Its output
+is still byte-identical, also with resets. Its RSS is the fairer baseline for the RSS column:
+
+| file | original RSS | lazy original RSS | new RSS |
+|---|---|---|---|
+| e8m (MMAX 2048) | 216 MB | 89 MB | 69 MB |
+| e32m (MMAX 2048) | 418 MB | 303 MB | 231 MB |
+| enwik9 (MMAX 6284) | 5224 MiB | ≈4830 MiB (estimated: −arena/16) | 3972 MiB (−18%) |
+
+`waste_size` (block headers plus block tails) is 0.04% on enwik9, so changing the block size
+would gain nothing at this scale. It would only help small files, where up to 256 partly
+used blocks are a fixed cost, and with lazy formatting their unused part is no longer
+committed either.
+
+The design of the new tree is described in `DESIGN.md`.
+
 ## Layout (what was implemented from the analysis)
 
 Every state is one 32-bit word, `[sym:8][tf:8][succ:16]`. This is the unified 4-byte state of
