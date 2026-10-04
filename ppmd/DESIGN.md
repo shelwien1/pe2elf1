@@ -60,6 +60,45 @@ text values are always below 0xFFFF (§4).
 A context handle (`Ctx`) is the record address with bit 0 = M (1 = multi). Records are
 2-byte aligned, so the bit is free.
 
+### 2.1 Packed cold multi records
+
+Most multi contexts are small and have small freqs. A multi context that is not current
+is stored, when that is smaller, in a **packed** form that keeps 4 bits of freq:
+
+```
+packed multi   (NU >= 2)
+   +0 bits 0-3 EscFreq, 4 rescaled, 5 mode, 6-7 nsm     NU = nsm+2 for nsm < 3
+  (+1 [NU-1]                                    only when nsm == 3)
+      sym[NU]
+      nibble[(NU+1)/2]    state j in nibble j (low nibble first); padded so succ is even
+      succ[NU]            16-bit words, as in State.succ
+   mode 1: nibble = freq-1, T = 0       all successors text/null, all freqs <= 16
+   mode 0: nibble = T<<3 | (freq-1)     otherwise, all freqs <= 8
+```
+
+A context qualifies when EscFreq ≤ 15, one mode fits, and the packed form is smaller. A
+record shrinks from 10 to 8 bytes for NU = 2, from 14 to 12 for NU = 3, from 18 to 16 for
+NU = 4, and by about NU/2 bytes beyond that.
+
+* **Where they live.** Packed records sit in the page region `[RESV, pbound)` (per-page
+  `pbound`). A ref has no spare bit, so the region tells the format: the address of a
+  multi record is enough to know whether it is packed.
+* **Who writes them.** Only `Repack` (§6). It packs every eligible multi context of the page
+  that is not a current context (`SuffCache`). Current contexts, and everything a split
+  moves to a receiver page, stay normal.
+* **Who reads them.** Coding needs the normal form. At the start of each step
+  (`unpackCurrent`, called from `EnsureHeadroom`) every packed `SuffCache` entry is unpacked
+  into a fresh normal record, and its parent slot is repointed. The packed copy becomes dead
+  bytes (`pdead`), reclaimed by the next compaction of the page. Lower-order reads that do
+  not go through `SuffCache` (`BequeathFreq`) decode the packed form in place
+  (`normalView`).
+* **The model is unchanged.** Packing is lossless, so the output stays byte-identical and
+  `PPMD_PACK=0` / `PPMD_PACK=1` streams decode either way.
+
+The cost is time: every unpack leaves a dead copy, and the dead copies trigger extra
+compactions. On enwik9 there are 259M packs and 144M unpacks, and encoding takes 1.46x as
+long as without packing (still 1.20x the original). The gain is 3.6% of tree memory.
+
 ## 3. Pages and references
 
 ### 3.1 Pages
@@ -173,7 +212,9 @@ then fail to allocate.
 * **Fast path.** A dense `pgSlack[]` array holds the bump space left before the next untouched
   OS page. If every current page has slack ≥ the total need, nothing more is checked.
 * **Slow path, per page.** The page is acted on if it is too tight, or if it would touch a
-  new OS page while holding dead bytes > live/64 (`PPMD_DEADSH`). Then:
+  new OS page while holding dead bytes > live/64 (`PPMD_DEADSH`). Dead bytes include the
+  packed copies left by unpacking (`PPMD_PDEAD`). The need of a packed current context
+  includes the size of its unpacked copy. Then:
   * if `live + need + 2 KB` still fits in the page, it is **compacted**;
   * otherwise it is **split**.
 
@@ -181,7 +222,9 @@ then fail to allocate.
 refs only, then one copy-and-patch pass.
 
 * **Compaction.** The reachable records are laid out again from `RESV`, grouped as
-  [multi][binary ≡0][binary ≡2] so parities need no padding, via a scratch page. Records that
+  [packed multi][multi][binary ≡0][binary ≡2] so parities need no padding, via a scratch
+  page. A size pass first chooses each multi record's format (§2.1). Records already packed
+  are copied as they are, and their successor words are patched in place. Records that
   are no longer reachable disappear. That includes subtrees disconnected when rescale drops
   a state; the original leaks those. Far-table entries nobody references any more are freed,
   and their roots marked dead.
@@ -193,9 +236,11 @@ refs only, then one copy-and-patch pass.
   * Each moved non-root subtree gets a new `GRoot` entry. Its parent field in the old page
     becomes a far ref, and a tracked parent slot pointing at that field is redirected to the
     `GRoot` entry.
-  * The rest of the page is compacted in the same pass.
+  * The rest of the page is compacted in the same pass. Moved records are written in the
+    normal form: [multi][binary ≡0][binary ≡2].
 * **Remapping.** Each `SuffCache[i]` and `parentSlot[i]` pointing into the page is
-  translated through the old→new offset table.
+  translated through the old→new offset table. A parent slot inside a record that changes
+  format is mapped to the matching successor word of the new form.
 * **Returning memory.** When a page's bump drops ≥ 8 KB below its high-water mark, the tail
   is returned to the OS with `madvise(MADV_DONTNEED)`.
 
@@ -208,14 +253,17 @@ coding the byte. Encoder and decoder do this at the same point.
 
 ## 7. Memory accounting
 
-| item | enwik9 o12 |
-|---|---|
-| live records | 2837 MiB |
-| dead bytes inside pages (free lists, pads, unreachable) | 36 MiB (1.3%) |
-| partly used last OS page of each page | 105 MiB (3.7%) |
-| page metadata, far tables, root table | 35 MiB (1.2%) |
-| text window | 954 MiB |
-| **peak RSS** | **3972 MiB** |
+enwik9, order 12:
+
+| item | no packing (`PPMD_PACK=0`) | packing (default) |
+|---|---|---|
+| live records | 2837 MiB | 2725 MiB |
+| dead bytes inside pages (free lists, pads, unreachable, unpacked copies) | 36 MiB (1.3%) | 53 MiB (1.9%) |
+| partly used last OS page of each page | 105 MiB (3.7%) | 94 MiB (3.4%) |
+| page metadata, far tables, root table | 35 MiB (1.2%) | 33 MiB (1.2%) |
+| **tree (touched pages)** | **2978 MiB** | **2871 MiB** |
+| text window | 954 MiB | 954 MiB |
+| **peak RSS** | **3972 MiB** | **3865 MiB** |
 
 The original's tree on the same input is 4125 MiB. Its peak RSS is 5224 MiB, or about
 4830 MiB with the lazy-init fix in `ppmd_orig_lazy.cpp`.
@@ -231,7 +279,9 @@ The original's tree on the same input is 4125 MiB. Its peak RSS is 5224 MiB, or 
 ## 9. Invariants (checked by `PPMD_CHECK=n`)
 
 * Every reachable record lies in `[RESV, bump)` of its page and is reached exactly once (tree).
-* Multi records have NumStats ≥ 1 and freqs ≤ 124. Binaries are even-aligned, and their
+* Multi records have NumStats ≥ 1 and freqs ≤ 124. Packed records lie only in
+  `[RESV, pbound)` and normal multi records never do. No `SuffCache` entry is packed once
+  `EnsureHeadroom` has run. Binaries are even-aligned, and their
   parity matches their successor type by construction.
 * Every far ref names a live far-table entry. Its root id is valid and listed in its page's
   root list.
@@ -249,6 +299,8 @@ These change speed and memory, never the output.
 | `PPMD_MARGIN` | split when live + need + margin > 60 KB | 2048 |
 | `PPMD_RECVGAP` | bytes a receiver page must keep free | 8192 |
 | `PPMD_SCAN` | 0 scalar, 1 AVX2, 2 AVX-512BW | best available |
+| `PPMD_PACK` | 1: pack cold multi records (§2.1), 0: never pack | 1 |
+| `PPMD_PDEAD` | 0: unpacked copies count as dead bytes for the compaction trigger, 1: they do not | 0 |
 
 Debug knobs: `PPMD_CHECK=n`, `PPMD_STATS`, `PPMD_CENSUS`, `PPMD_ALLOCSTATS`. `PPMD_CZK=k`
 forces larger scan blocks. Encoder and decoder must then agree on it.

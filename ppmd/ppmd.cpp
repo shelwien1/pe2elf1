@@ -329,12 +329,14 @@ struct PageMeta {
   uint bump;                   // first free offset (>= RESV)
   uint live;                   // bytes in allocated records (upper bound: unreachable records count until compaction)
   uint hwm;                    // highest bump since last trim (touched memory)
+  uint pbound;                 // records below this offset are packed (cold) multi records
+  uint pdead;                  // bytes of packed records that were unpacked since the last repack
   word freeHead[NFREE+1];      // [NFREE]: large records (>= NFREE states), each holding [next][NU]
   std::vector<uint> roots;     // global root ids whose record lives in this page
   std::vector<uint> fars;      // far table: global root id, or NO_ROOT when free
   std::vector<word> farFree;
   void reset() {
-    bump = RESV; live = 0; hwm = RESV;
+    bump = RESV; live = 0; hwm = RESV; pbound = RESV; pdead = 0;
     memset(freeHead, 0, sizeof(freeHead));
     roots.clear(); fars.clear(); farFree.clear();
   }
@@ -437,11 +439,12 @@ struct Model {
   std::vector<uint> freePages;
   std::vector<PageMeta> pm;
   std::vector<word> pgSlack;   // bytes a page can bump-allocate without touching a new OS page (dense, hot)
+  std::vector<word> pgPB;      // copy of PageMeta::pbound (dense, hot)
   GRootEnt* groot; uint nGroot, maxGroot;
   qword live_total;
   // statistics
   qword st_compact, st_split, st_scan, st_scanbytes, st_moves, st_pagefail;
-  qword tsc_compact, tsc_split, n_recs;
+  qword tsc_compact, tsc_split, n_recs, st_unpack = 0, st_pack = 0;
   qword touched_total;          // sum over pages of committed (touched) OS pages
   qword st_alloc[NFREE+1], st_free[NFREE+1], st_freehit[NFREE+1];
   // model state
@@ -461,6 +464,8 @@ struct Model {
   // maintenance policy
   uint pol_deadsh, pol_splitnum, pol_recvgap, pol_margin;
   uint recvPage;
+  uint pol_pdead;
+  uint stepNo = 0, pol_pack;
   // maintenance scratch
   word fwd[PG_SIZE/2];
   byte* scratch;
@@ -652,6 +657,7 @@ struct Model {
     else return DEAD_PAGE;
     if( p<pm.size() && pm[p].hwm>=RESV ) setHwm(p, RESV);
     pm[p].reset();
+    pgPB[p] = RESV;
     updSlack(p);
     return p;
   }
@@ -671,9 +677,95 @@ struct Model {
   }
   Ctx rootCtx(uint gid) const { const GRootEnt& g = groot[gid]; return mkCtx(pageBase(g.page)+(g.ref & ~1u), g.ref & 1u); }
 
+  // ---------------- packed (cold) multi records ----------------
+  // Written only by Repack, for contexts that are not current; unpacked at the step boundary
+  // when they become current, so the model code only ever sees normal records.
+  //   byte 0 : [esc:4][rescaled:1][mode:1][nsm:2]   NU = nsm+2 for nsm<3, else byte 1 = NU-1
+  //   sym[NU], nibble[NU] (two per byte, low first), pad to even, succ[NU] (16-bit, as in State)
+  //   mode 0: nibble = T<<3 | (freq-1)  (all freq <= 8)
+  //   mode 1: nibble = freq-1, all successors text (all freq <= 16)
+  // Eligible when EscFreq <= 15 and the packed form is smaller.
+  struct PInfo { uint h, nib, succ, size; };
+  static PInfo pinfo(uint NU) {
+    PInfo p; p.h = NU<=4 ? 1u : 2u; p.nib = p.h+NU; p.succ = (p.nib+(NU+1)/2+1) & ~1u; p.size = p.succ+2*NU;
+    return p;
+  }
+  static uint pNU(const byte* r) { uint nsm = r[0]>>6; return nsm<3 ? nsm+2 : r[1]+1u; }
+  bool isPacked(Ctx c) const { return isM(c) && offOf(rec(c))<pgPB[pageOf(rec(c))]; }
+  static uint packSize(const byte* r) {
+    uint NU = r[1]+1u;
+    if( (r[0] & 0x7F)>15 ) return 0;
+    const State* s = (const State*)(r+2);
+    uint mx = 0; bool tt = true;
+    for( uint j = 0; j<NU; j++ ) { uint f = MF(s[j]); if( f>mx ) mx = f; if( s[j].tf & 0x80 ) tt = false; }
+    if( !(mx<=8 || (tt && mx<=16)) ) return 0;
+    uint ps = pinfo(NU).size;
+    return ps<2+4*NU ? ps : 0u;
+  }
+  static void packTo(byte* d, const byte* r) {
+    uint NU = r[1]+1u;
+    PInfo pi = pinfo(NU);
+    const State* s = (const State*)(r+2);
+    uint mode = 1;
+    for( uint j = 0; j<NU; j++ ) if( s[j].tf & 0x80 ) mode = 0;
+    d[0] = byte((r[0] & 0x0F) | ((r[0]>>7)<<4) | (mode<<5) | ((NU<=4 ? NU-2 : 3u)<<6));
+    if( pi.h==2 ) d[1] = byte(NU-1);
+    memset(d+pi.nib, 0, pi.succ-pi.nib);
+    for( uint j = 0; j<NU; j++ ) {
+      d[pi.h+j] = s[j].sym;
+      uint v = mode ? (s[j].tf & 0x7Fu) : (((s[j].tf>>7)<<3) | (s[j].tf & 0x7Fu));
+      d[pi.nib+(j>>1)] |= byte(v<<(4*(j&1)));
+      *(word*)(d+pi.succ+2*j) = s[j].succ;
+    }
+  }
+  static void unpackTo(byte* d, const byte* r) {
+    uint NU = pNU(r);
+    PInfo pi = pinfo(NU);
+    uint mode = (r[0]>>5) & 1;
+    d[0] = byte((r[0] & 0x0F) | (((r[0]>>4) & 1)<<7));
+    d[1] = byte(NU-1);
+    State* s = (State*)(d+2);
+    for( uint j = 0; j<NU; j++ ) {
+      uint v = (r[pi.nib+(j>>1)]>>(4*(j&1))) & 15;
+      s[j].sym = r[pi.h+j];
+      s[j].tf = mode ? byte(v) : byte(((v>>3)<<7) | (v & 7));
+      s[j].succ = *(const word*)(r+pi.succ+2*j);
+    }
+  }
+  // a normal-form view of a (possibly packed) context, for read-only use
+  Ctx normalView(Ctx c, byte* tmp) {
+    if( !isPacked(c) ) return c;
+    unpackTo(tmp, rec(c));
+    return mkCtx(tmp, 1);
+  }
+  uint recBytes(Ctx c) const { return isPacked(c) ? pinfo(pNU(rec(c))).size : recSize(c); }
+  // unpacks the current contexts that are still packed (headroom has been reserved for them)
+  void unpackCurrent() {
+    for( int i = 0; i<=order; i++ ) {
+      Ctx c = SuffCache[i];
+      if( !isPacked(c) ) continue;
+      byte* old = rec(c);
+      uint NU = pNU(old);
+      PInfo pi = pinfo(NU);
+      uint p = pageOf(old);
+      byte* nr = allocRec(p, NU, false);
+      unpackTo(nr, old);
+      for( int t = 1; t<=hwm; t++ ) {
+        byte* s = (byte*)parentSlot[t];
+        if( s>=old+pi.succ && s<old+pi.size ) parentSlot[t] = (word*)(nr+4+4*((s-old-pi.succ)>>1));
+      }
+      Ctx nc = mkCtx(nr, 1);
+      if( i>0 && parentSlot[i] ) *parentSlot[i] = refOf(nc);
+      SuffCache[i] = nc;
+        pm[p].live -= pi.size; live_total -= pi.size;    // the packed copy is dead until the next repack
+      pm[p].pdead += pi.size;
+      st_unpack++;
+    }
+  }
+
   // ---------------- maintenance (step boundary only) ----------------
   enum { K_MULTI = 0, K_BIN0 = 1, K_BIN2 = 2 };
-  struct LNode { word off; word sz; int parent; word st; byte kind; byte moved; uint sub; };
+  struct LNode { word off; word sz; int parent; word st; byte kind; byte moved; uint sub; byte packed; byte dpack; word dsz; };
   std::vector<LNode> Ls;
   std::vector<int> selBuf, kidBuf;
   std::vector<uint> selGid;
@@ -689,27 +781,39 @@ struct Model {
   void enumPage(uint p) {
     PageMeta& m = pm[p];
     byte* base = pageBase(p);
+    uint pb = m.pbound;
     Ls.clear();
     for( size_t k = 0; k<m.roots.size(); k++ ) {
       word r = groot[m.roots[k]].ref;
-      Ls.push_back(LNode{word(r & ~1u), 0, -1, word(k), kindOfRef(r), 0, 0});
+      uint o = r & ~1u;
+      Ls.push_back(LNode{word(o), 0, -1, word(k), kindOfRef(r), 0, 0, byte((r & 1) && o<pb), 0, 0});
     }
     for( size_t k = 0; k<Ls.size(); k++ ) {
       byte* r = base+Ls[k].off;
       if( Ls[k].kind==K_MULTI ) {
-        uint ns = r[1];
-        Ls[k].sz = word(2+4*(ns+1));
-        State* s0 = (State*)(r+2);
-        for( uint j = 0; j<=ns; j++ ) {
-          if( !(s0[j].tf & 0x80) ) continue;
-          word c = s0[j].succ;
-          if( c>=FAR_LIM ) Ls.push_back(LNode{word(c & ~1u), 0, int(k), word(j), kindOfRef(c), 0, 0});
+        uint NU; const word* su; const byte* nb = 0; uint mode = 0;
+        const State* s0 = 0;
+        if( Ls[k].packed ) {
+          NU = pNU(r); PInfo pi = pinfo(NU);
+          Ls[k].sz = word(pi.size);
+          su = (const word*)(r+pi.succ); nb = r+pi.nib; mode = (r[0]>>5) & 1;
+          if( mode ) continue;     // all successors are text
+        } else {
+          NU = r[1]+1u;
+          Ls[k].sz = word(2+4*NU);
+          s0 = (const State*)(r+2); su = 0;
+        }
+        for( uint j = 0; j<NU; j++ ) {
+          word c;
+          if( s0 ) { if( !(s0[j].tf & 0x80) ) continue; c = s0[j].succ; }
+          else { if( !((nb[j>>1]>>(4*(j&1))) & 8) ) continue; c = su[j]; }
+          if( c>=FAR_LIM ) { uint o = c & ~1u; Ls.push_back(LNode{word(o), 0, int(k), word(j), kindOfRef(c), 0, 0, byte((c & 1) && o<pb), 0, 0}); }
         }
       } else {
         Ls[k].sz = 4;
         if( Ls[k].kind==K_BIN0 ) {
           word c = ((State*)r)->succ;
-          if( c>=FAR_LIM ) Ls.push_back(LNode{word(c & ~1u), 0, int(k), 0, kindOfRef(c), 0, 0});
+          if( c>=FAR_LIM ) { uint o = c & ~1u; Ls.push_back(LNode{word(o), 0, int(k), 0, kindOfRef(c), 0, 0, byte((c & 1) && o<pb), 0, 0}); }
         }
       }
     }
@@ -759,6 +863,8 @@ struct Model {
   uint farUsedCount(uint p) const { return uint(pm[p].fars.size()-pm[p].farFree.size()); }
   // Compacts page p in place. With doSplit, a set of sibling subtrees first moves to a receiver
   // page. Only SuffCache[0..order] and parentSlot[1..order] are live transient references.
+  // Staying records that are not current are written packed when eligible; current contexts
+  // and moved records are written in normal form.
   bool Repack(uint p, bool doSplit) {
     qword t0 = __rdtsc();
     removeDeadRoots(p);
@@ -773,23 +879,40 @@ struct Model {
       selectSplit();
       if( sel.empty() ) doSplit = false;
     }
+    byte* bp = pageBase(p);
+    // current contexts in this page are written unpacked
+    uint trk[MAX_O+2]; int ntr = 0;
+    for( int i = 0; i<=order; i++ ) if( pageOf(rec(SuffCache[i]))==p && isM(SuffCache[i]) ) trk[ntr++] = offOf(rec(SuffCache[i]));
     if( doSplit ) {
-      uint selBytes = 0;
-      for( size_t t = 0; t<sel.size(); t++ ) selBytes += Ls[sel[t]].sub;
       for( size_t t = 0; t<sel.size(); t++ ) Ls[sel[t]].moved = 1;
       for( size_t k = 0; k<n; k++ ) if( Ls[k].parent>=0 && Ls[Ls[k].parent].moved ) Ls[k].moved = 1;
-      // far refs that leave with the moved records, plus the moved roots' own entries
-      uint movedFar = uint(sel.size());
-      byte* bp0 = pageBase(p);
-      for( size_t k = 0; k<n; k++ ) {
-        if( !Ls[k].moved ) continue;
-        byte* r = bp0+Ls[k].off;
-        if( Ls[k].kind==K_MULTI ) {
-          State* s0 = (State*)(r+2);
-          for( uint j = 0; j<=r[1]; j++ ) if( (s0[j].tf & 0x80) && s0[j].succ<FAR_LIM ) movedFar++;
-        } else if( Ls[k].kind==K_BIN0 && ((State*)r)->succ<FAR_LIM ) movedFar++;
+    }
+    // destination format and size of every record
+    uint movedBytes0 = 0, movedFar = uint(sel.size());
+    byte tmp[2+4*256];
+    for( size_t k = 0; k<n; k++ ) {
+      LNode& L = Ls[k];
+      if( L.kind!=K_MULTI ) { L.dpack = 0; L.dsz = 4; }
+      else {
+        const byte* r = bp+L.off;
+        uint NU = L.packed ? pNU(r) : r[1]+1u;
+        bool cur = false;
+        for( int t = 0; t<ntr; t++ ) if( trk[t]==L.off ) cur = true;
+        if( L.moved || cur ) { L.dpack = 0; L.dsz = word(2+4*NU); }
+        else if( L.packed ) { L.dpack = 1; L.dsz = L.sz; }
+        else { uint ps = !pol_pack ? 0u : packSize(r); L.dpack = ps!=0; L.dsz = word(ps ? ps : L.sz); }
       }
-      if( recvPage!=DEAD_PAGE && recvPage!=p && recvPage<nPages && pm[recvPage].bump+selBytes+pol_recvgap<=PG_SIZE
+      if( L.moved ) {
+        movedBytes0 += L.dsz;
+        const byte* img = (L.kind==K_MULTI && L.packed) ? (unpackTo(tmp, bp+L.off), tmp) : bp+L.off;
+        if( L.kind==K_MULTI ) {
+          const State* s0 = (const State*)(img+2);
+          for( uint j = 0; j<=img[1]; j++ ) if( (s0[j].tf & 0x80) && s0[j].succ<FAR_LIM ) movedFar++;
+        } else if( L.kind==K_BIN0 && ((const State*)img)->succ<FAR_LIM ) movedFar++;
+      }
+    }
+    if( doSplit ) {
+      if( recvPage!=DEAD_PAGE && recvPage!=p && recvPage<nPages && pm[recvPage].bump+movedBytes0+pol_recvgap<=PG_SIZE
           && farUsedCount(recvPage)+movedFar+16<=FAR_LIM ) q = recvPage;
       else {
         q = newPage();
@@ -799,15 +922,17 @@ struct Model {
       st_split++;
     } else st_compact++;
     PageMeta& P = pm[p];
-    // layout: [multi][binary ≡0][binary ≡2] for the staying part (page p, rebuilt from RESV)
-    // and for the moved part (appended to page q)
-    uint sb[3] = {0, 0, 0}, mb[3] = {0, 0, 0};
+    // layout: staying part [packed][multi][binary ≡0][binary ≡2] from RESV; moved part
+    // [multi][binary ≡0][binary ≡2] appended to page q
+    uint sp_ = 0, sb[3] = {0, 0, 0}, mb[3] = {0, 0, 0};
     for( size_t k = 0; k<n; k++ ) {
-      uint* b = Ls[k].moved ? mb : sb;
-      if( Ls[k].kind==K_MULTI ) b[0] += Ls[k].sz; else b[Ls[k].kind]++;
+      const LNode& L = Ls[k];
+      uint* b = L.moved ? mb : sb;
+      if( L.kind==K_MULTI ) { if( L.dpack ) sp_ += L.dsz; else b[0] += L.dsz; }
+      else b[L.kind]++;
     }
-    uint so[3], mo[3], send, mend = 0, qstart = 0;
-    so[0] = RESV; so[1] = (RESV+sb[0]+3) & ~3u; so[2] = so[1]+4*sb[1]+2;
+    uint so[3], mo[3], spo = RESV, send, mend = 0, qstart = 0;
+    so[0] = RESV+sp_; so[1] = (so[0]+sb[0]+3) & ~3u; so[2] = so[1]+4*sb[1]+2;
     send = sb[2] ? so[2]+4*sb[2] : so[1]+4*sb[1];
     if( doSplit ) {
       qstart = (pm[q].bump+3) & ~3u;
@@ -817,13 +942,17 @@ struct Model {
     }
     if( send>PG_SIZE ) { fprintf(stderr, "\nfatal: repack overflow\n"); exit(7); }
     for( size_t k = 0; k<n; k++ ) {
-      uint* o = Ls[k].moved ? mo : so;
-      uint kd = Ls[k].kind;
-      uint no = o[kd];
-      o[kd] += (kd==K_MULTI) ? Ls[k].sz : 4u;
-      fwd[Ls[k].off>>1] = word(no | Ls[k].moved);
+      const LNode& L = Ls[k];
+      uint no;
+      if( L.kind==K_MULTI && L.dpack ) { no = spo; spo += L.dsz; }
+      else {
+        uint* o = L.moved ? mo : so;
+        uint kd = L.kind;
+        no = o[kd];
+        o[kd] += (kd==K_MULTI) ? L.dsz : 4u;
+      }
+      fwd[L.off>>1] = word(no | L.moved);
     }
-    byte* bp = pageBase(p);
     byte* bq = doSplit ? pageBase(q) : 0;
     // global ids of the moved subtree roots
     selGid.resize(sel.size());
@@ -841,6 +970,7 @@ struct Model {
     }
     memset(farUsed, 0, P.fars.size());
     uint stayBytes = 0, movedBytes = 0;
+    byte work[2+4*256];
     for( size_t k = 0; k<n; k++ ) {
       const LNode& L = Ls[k];
       uint f = fwd[L.off>>1];
@@ -849,14 +979,41 @@ struct Model {
       byte* src = bp+L.off;
       State* ds;
       uint cnt;
-      if( L.kind==K_MULTI ) {
+      if( L.kind==K_MULTI && L.packed && L.dpack ) {
+        // packed stays packed: copy and patch the 16-bit successors in place
         memcpy(dst, src, L.sz);
-        ds = (State*)(dst+2); cnt = dst[1]+1u;
+        stayBytes += L.sz;
+        if( (dst[0]>>5) & 1 ) continue;            // all successors are text
+        uint NU = pNU(dst);
+        PInfo pi = pinfo(NU);
+        word* su = (word*)(dst+pi.succ);
+        for( uint j = 0; j<NU; j++ ) {
+          if( !((dst[pi.nib+(j>>1)]>>(4*(j&1))) & 8) ) continue;
+          word c = su[j];
+          if( c>=FAR_LIM ) {
+            uint cf = fwd[(c & ~1u)>>1];
+            if( !(cf & 1) ) su[j] = word((cf & ~1u) | (c & 1u));
+            else {
+              uint t = 0;
+              while( Ls[sel[t]].off!=(c & ~1u) ) t++;
+              word jf = allocFar(p, selGid[t]);
+              farUsed[jf] = 1;
+              su[j] = jf;
+            }
+          } else farUsed[c] = 1;
+        }
+        continue;
+      }
+      if( L.kind==K_MULTI ) {
+        if( L.packed ) { unpackTo(work, src); ds = (State*)(work+2); }
+        else if( L.dpack ) { memcpy(work, src, L.sz); ds = (State*)(work+2); }
+        else { memcpy(dst, src, L.sz); ds = (State*)(dst+2); }
+        cnt = (L.packed ? pNU(src) : src[1]+1u);
       } else {
         *(uint32_t*)dst = *(const uint32_t*)src;
         ds = (State*)dst; cnt = (L.kind==K_BIN0) ? 1u : 0u;
       }
-      if( mv ) movedBytes += L.sz; else stayBytes += L.sz;
+      if( mv ) movedBytes += L.dsz; else stayBytes += L.dsz;
       for( uint j = 0; j<cnt; j++ ) {
         if( L.kind==K_MULTI && !(ds[j].tf & 0x80) ) continue;
         word c = ds[j].succ;
@@ -877,6 +1034,10 @@ struct Model {
           ds[j].succ = allocFar(q, gid);
         } else farUsed[c] = 1;
       }
+      if( L.kind==K_MULTI ) {
+        if( L.dpack ) { packTo(dst, work); st_pack++; }
+        else if( L.packed ) memcpy(dst, work, 2+4*cnt);
+      }
     }
     // remap the transient references into page p
     for( int i = 0; i<=order; i++ ) {
@@ -892,8 +1053,15 @@ struct Model {
       size_t k = 0;
       while( k<n && !(so_>=Ls[k].off && so_<uint(Ls[k].off)+Ls[k].sz) ) k++;
       if( k==n ) { fprintf(stderr, "\nfatal: parent slot not in a live record\n"); exit(7); }
-      uint f = fwd[Ls[k].off>>1];
-      uint nofs = (f & ~1u)+(so_-Ls[k].off);
+      const LNode& L = Ls[k];
+      uint f = fwd[L.off>>1];
+      uint j, nofs;
+      if( L.kind!=K_MULTI ) j = 0;
+      else if( L.packed ) j = (so_-L.off-pinfo(pNU(bp+L.off)).succ)>>1;
+      else j = (so_-L.off-4)>>2;
+      if( L.kind!=K_MULTI ) nofs = (f & ~1u)+2;
+      else if( L.dpack ) nofs = (f & ~1u)+pinfo(pNU(scratch+(f & ~1u))).succ+2*j;
+      else nofs = (f & ~1u)+4+4*j;
       if( f & 1 ) parentSlot[i] = (word*)(bq+nofs);
       else {
         word v = *(word*)(scratch+nofs);
@@ -909,6 +1077,9 @@ struct Model {
     live_total += qword(stayBytes)+movedBytes-P.live;
     P.live = stayBytes;
     P.bump = send;
+    P.pbound = RESV+sp_;
+    P.pdead = 0;
+    pgPB[p] = word(P.pbound);
     memset(P.freeHead, 0, sizeof(P.freeHead));
     for( size_t j = 0; j<P.fars.size(); j++ ) {
       if( P.fars[j]!=NO_ROOT && !farUsed[j] ) {
@@ -929,6 +1100,7 @@ struct Model {
     return true;
   }
   uint needFor(Ctx c) {
+    if( isPacked(c) ) { uint NU = pNU(rec(c)); return recSizeNU(NU)+(NU<256 ? recSizeNU(NU+1) : 0u)+12u; }
     uint NU = NS(c)+1;
     return (NU<256 ? recSizeNU(NU+1) : 0u) + 12u;
   }
@@ -940,7 +1112,7 @@ struct Model {
       for( int i = 0; i<=order; i++ ) sum += needFor(SuffCache[i]);
       int i = 0;
       while( i<=order && pgSlack[pageOf(rec(SuffCache[i]))]>=sum+64 ) i++;
-      if( i>order ) return true;
+      if( i>order ) { unpackCurrent(); return true; }
     }
     for( int iter = 0; iter<64; iter++ ) {
       uint pg[MAX_O+2], nd[MAX_O+2]; int np = 0;
@@ -957,14 +1129,15 @@ struct Model {
         uint freeb = PG_SIZE-m.bump;
         uint dead = m.bump-RESV-m.live;
         bool tight = freeb<nd[k]+64;
-        bool wasteful = (m.bump+nd[k]>((m.hwm+4095) & ~4095u)) && dead>(m.live>>pol_deadsh)+256;
+        // dead packed copies are not counted: repacking would mostly re-pack the same contexts
+        bool wasteful = (m.bump+nd[k]>((m.hwm+4095) & ~4095u)) && dead-m.pdead*pol_pdead>(m.live>>pol_deadsh)+256;
         if( tight || wasteful ) {
           bad = k;
           doSplit = (m.live+nd[k]+pol_margin>USABLE);
           break;
         }
       }
-      if( bad<0 ) { Order0 = rootCtx(0); return true; }
+      if( bad<0 ) { unpackCurrent(); Order0 = rootCtx(0); return true; }
       if( !Repack(pg[bad], doSplit) ) return false;
     }
     fprintf(stderr, "\nfatal: EnsureHeadroom did not converge\n");
@@ -986,17 +1159,20 @@ struct Model {
       Ctx c = st.back(); st.pop_back();
       uint p = pageOf(rec(c)), off = offOf(rec(c));
       if( p>=nPages ) CheckFail("page out of range", c);
-      if( off<RESV || off+recSize(c)>pm[p].bump ) CheckFail("record outside the allocated part of its page", c);
+      if( off<RESV || off+recBytes(c)>pm[p].bump ) CheckFail("record outside the allocated part of its page", c);
+      if( isM(c) && !isPacked(c) && off<pm[p].pbound ) CheckFail("normal record inside the packed region", c);
       if( !isM(c) && (off & 1) ) CheckFail("misaligned binary", c);
       size_t vi = (size_t(p)<<(PG_BITS-1))+(off>>1);
       if( seen[vi] ) CheckFail("record reachable twice", c);
       seen[vi] = 1;
-      if( isM(c) && NS(c)==0 ) CheckFail("multi record with NumStats 0", c);
-      State* s0 = S0(c);
-      uint ns = NS(c);
+      byte vtmp[2+4*256];
+      Ctx v = normalView(c, vtmp);
+      if( isM(v) && NS(v)==0 ) CheckFail("multi record with NumStats 0", c);
+      State* s0 = S0(v);
+      uint ns = NS(v);
       for( uint j = 0; j<=ns; j++ ) {
-        if( isM(c) && MF(s0[j])>124 ) CheckFail("multi freq above MAX_FREQ", c);
-        if( !succIsCtx(c, &s0[j]) ) continue;
+        if( isM(v) && MF(s0[j])>124 ) CheckFail("multi freq above MAX_FREQ", c);
+        if( !succIsCtx(v, &s0[j]) ) continue;
         word r = s0[j].succ;
         if( r<FAR_LIM ) {
           if( r>=pm[p].fars.size() || pm[p].fars[r]==NO_ROOT ) CheckFail("dangling far ref", c);
@@ -1006,7 +1182,7 @@ struct Model {
           for( size_t k = 0; k<pm[groot[gid].page].roots.size(); k++ ) if( pm[groot[gid].page].roots[k]==gid ) listed = true;
           if( !listed ) CheckFail("root missing from its page's root list", c);
         }
-        st.push_back(child(c, &s0[j], 0));
+        st.push_back(r>=FAR_LIM ? mkCtx(pageBase(p)+(r & ~1u), r & 1u) : rootCtx(pm[p].fars[r]));
       }
     }
     for( int i = 0; i<=order; i++ ) {
@@ -1096,6 +1272,8 @@ struct Model {
     pol_splitnum = getenv("PPMD_SPLIT") ? atoi(getenv("PPMD_SPLIT")) : 3;   // moved fraction = pol_splitnum/16
     pol_recvgap = getenv("PPMD_RECVGAP") ? atoi(getenv("PPMD_RECVGAP")) : 8192;
     pol_margin = getenv("PPMD_MARGIN") ? atoi(getenv("PPMD_MARGIN")) : 2048;
+    pol_pdead = getenv("PPMD_PDEAD") ? atoi(getenv("PPMD_PDEAD")) : 0;
+    pol_pack = getenv("PPMD_PACK") ? atoi(getenv("PPMD_PACK")) : 1;
     check_every = getenv("PPMD_CHECK") ? strtoull(getenv("PPMD_CHECK"), 0, 10) : 0;
     // sane ranges: a split moves at most half a page; the split threshold leaves at least half a page
     pol_splitnum = CLAMP(pol_splitnum, 1u, 8u);
@@ -1120,6 +1298,7 @@ struct Model {
     arena = (byte*)(((uintptr_t)arenaMap+PG_SIZE-1) & ~(uintptr_t)(PG_SIZE-1));
     pm.reserve(maxPages);
     pgSlack.assign(maxPages, 0);
+    pgPB.assign(maxPages, RESV);
     maxGroot = 1u<<25;
     groot = (GRootEnt*)map_mem(qword(maxGroot)*sizeof(GRootEnt));
     if( groot==0 ) return 1;
@@ -1245,7 +1424,9 @@ struct Model {
       return &s0[0];
     }
   }
-  uint BequeathFreq(Ctx pc, byte sym1) {
+  uint BequeathFreq(Ctx pc0, byte sym1) {
+    byte tmp[2+4*256];
+    Ctx pc = normalView(pc0, tmp);      // the inheritance source may be a cold (packed) context
     State* s0 = S0(pc);
     uint ns = NS(pc);
     if( ns!=0 ) {
@@ -1565,6 +1746,8 @@ struct Model {
       Reset("");
       if( !EnsureHeadroom() ) { fprintf(stderr, "fatal: no memory after reset\n"); exit(7); }
     }
+    stepNo++;
+    if( check_every ) for( int i = 0; i<=order; i++ ) if( isPacked(SuffCache[i]) ) CheckFail("current context is packed after EnsureHeadroom", SuffCache[i]);
     CacheNumstatsAndFlags(order);
     maxorder = order;
     MinContext = SuffCache[order];
@@ -1869,6 +2052,7 @@ int main(int argc, char** argv) {
       for( uint p = 0; p<C.nPages; p++ ) { if( C.pm[p].fars.size()>mx ) mx = C.pm[p].fars.size(); if( C.pm[p].roots.size()>mr ) mr = C.pm[p].roots.size(); }
       fprintf(stderr, "max far table=%zu max roots/page=%zu\n", mx, mr);
     }
+    fprintf(stderr, "packed: %llu packs, %llu unpacks\n", (unsigned long long)C.st_pack, (unsigned long long)C.st_unpack);
     fprintf(stderr, "stats: CZK=%u scans=%llu avgscan=%.1f compact=%llu split=%llu binmoves=%llu pagefail=%llu\n",
             C.CZK, (unsigned long long)C.st_scan, C.st_scan ? double(C.st_scanbytes)/C.st_scan : 0.0,
             (unsigned long long)C.st_compact, (unsigned long long)C.st_split, (unsigned long long)C.st_moves,
@@ -1877,13 +2061,15 @@ int main(int argc, char** argv) {
   if( getenv("PPMD_CENSUS") ) {
     // walk all live records
     qword nm = 0, nms = 0, nb0 = 0, nb2 = 0, ntext = 0, nctx = 0, nfar = 0, nnull = 0;
-    qword nu2tt = 0, nbb = 0;
+    qword nu2tt = 0, nbb = 0, npk = 0;
     for( uint p = 0; p<C.nPages; p++ ) {
       C.removeDeadRoots(p);
       C.enumPage(p);
       for( size_t k = 0; k<C.Ls.size(); k++ ) {
         const Model::LNode& L = C.Ls[k];
         byte* r = C.pageBase(p)+L.off;
+        byte ptmp[2+4*256];
+        if( L.kind==Model::K_MULTI && L.packed ) { Model::unpackTo(ptmp, r); r = ptmp; npk++; }
         if( L.kind==Model::K_MULTI ) {
           uint ns = r[1]; nm++; nms += ns+1;
           State* s0 = (State*)(r+2);
@@ -1906,7 +2092,7 @@ int main(int argc, char** argv) {
     fprintf(stderr, "census: multi=%llu (states %llu, avgNU %.2f) bin_ctx=%llu bin_text=%llu | succ: text=%llu ctx=%llu (far %llu) null=%llu | NU2 both-text=%llu\n",
       (unsigned long long)nm, (unsigned long long)nms, nm ? double(nms)/nm : 0.0, (unsigned long long)nb0, (unsigned long long)nb2,
       (unsigned long long)ntext, (unsigned long long)nctx, (unsigned long long)nfar, (unsigned long long)nnull, (unsigned long long)nu2tt);
-    fprintf(stderr, "census: binary->binary near links=%llu\n", (unsigned long long)nbb);
+    fprintf(stderr, "census: binary->binary near links=%llu, packed multi=%llu\n", (unsigned long long)nbb, (unsigned long long)npk);
     fprintf(stderr, "census bytes: multi hdr=%.2fMB multi states=%.2fMB binaries=%.2fMB\n", nm*2/1048576.0, nms*4/1048576.0, (nb0+nb2)*4/1048576.0);
   }
   if( getenv("PPMD_ALLOCSTATS") ) {
