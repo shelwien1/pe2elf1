@@ -361,6 +361,9 @@ These change speed and memory, never the output (`POL_*` in `Model`).
 
 ## 11. Platforms
 
-Linux (g++, clang++) and Windows (MSVC, MinGW), x86-64 with AVX2. The arena is reserved address
-space: `mmap(MAP_NORESERVE)` on Linux, `VirtualAlloc(MEM_RESERVE)` on Windows, where each page is
-committed as its high-water mark grows (`setHwm`) and decommitted when its tail is released.
+Linux (g++, clang++) and Windows (MSVC, MinGW), x86-64 with AVX2; the program checks for AVX2
+at startup. The arena and the root table are reserved address space: `mmap(MAP_NORESERVE)` on
+Linux, `VirtualAlloc(MEM_RESERVE)` on Windows, where each 64 KB page is committed when it is
+first used (and the root table in 64 KB steps). Committed but untouched memory uses no RAM.
+Released tails (`release_mem`) are `madvise(MADV_DONTNEED)` on Linux and `MEM_RESET` on Windows,
+so they stay usable. Inputs must be smaller than 4 GB (the size field is 32 bits).

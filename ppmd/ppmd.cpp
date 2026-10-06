@@ -61,6 +61,20 @@ static inline unsigned ctz64(unsigned long long x) { unsigned long i; _BitScanFo
 static inline unsigned ctz32(unsigned x) { return unsigned(__builtin_ctz(x)); }
 static inline unsigned ctz64(unsigned long long x) { return unsigned(__builtin_ctzll(x)); }
 #endif
+#ifdef _MSC_VER
+static bool cpu_has_avx2(void) {
+  int r[4];
+  __cpuid(r, 0);
+  if( r[0]<7 ) return false;
+  __cpuid(r, 1);
+  if( !(r[2] & (1<<27)) || !(r[2] & (1<<28)) ) return false;   // OSXSAVE, AVX
+  if( (_xgetbv(0) & 6)!=6 ) return false;                      // the OS saves the YMM state
+  __cpuidex(r, 7, 0);
+  return (r[1] & (1<<5))!=0;
+}
+#else
+static bool cpu_has_avx2(void) { __builtin_cpu_init(); return __builtin_cpu_supports("avx2"); }
+#endif
 
 typedef unsigned short word;
 typedef unsigned int uint;
@@ -390,16 +404,22 @@ static uint scan_avx2(const byte* win, uint lo, uint hi, const byte* pat, uint L
   return 0xFFFFFFFFu;
 }
 
-// map_mem reserves address space; physical memory is used only where it is touched. The arena
-// (commit=false) is committed page by page as it grows (commit_mem), which Windows needs and
-// Linux does by itself; release_mem returns memory to the OS.
+// map_mem reserves address space; physical memory is used only where it is touched. With
+// commit=false (the arena, the root table) the range is committed piecewise as it comes into
+// use (commit_mem), which Windows needs and Linux does by itself. release_mem returns the
+// physical memory of a range to the OS; the range stays usable, with undefined contents.
 #ifdef _WIN32
 static void* map_mem(qword size, bool commit = true) {
   return VirtualAlloc(0, SIZE_T(size), commit ? MEM_RESERVE|MEM_COMMIT : MEM_RESERVE, PAGE_READWRITE);
 }
 static void unmap_mem(void* p, qword) { if( p ) VirtualFree(p, 0, MEM_RELEASE); }
-static void commit_mem(void* p, qword size) { VirtualAlloc(p, SIZE_T(size), MEM_COMMIT, PAGE_READWRITE); }
-static void release_mem(void* p, qword size) { if( size ) VirtualFree(p, SIZE_T(size), MEM_DECOMMIT); }
+static void commit_mem(void* p, qword size) {
+  if( !VirtualAlloc(p, SIZE_T(size), MEM_COMMIT, PAGE_READWRITE) ) {
+    fprintf(stderr, "\nfatal: cannot commit %llu bytes of memory\n", (unsigned long long)size);
+    exit(7);
+  }
+}
+static void release_mem(void* p, qword size) { if( size ) VirtualAlloc(p, SIZE_T(size), MEM_RESET, PAGE_READWRITE); }
 #else
 static void* map_mem(qword size, bool = true) {
   void* p = mmap(0, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS|MAP_NORESERVE, -1, 0);
@@ -430,7 +450,9 @@ struct Model {
   std::vector<uint> freePages;
   std::vector<PageMeta> pm;
   std::vector<word> pgSlack;   // bytes a page can bump-allocate without touching a new OS page (dense, hot)
-  GRootEnt* groot; uint nGroot, maxGroot;
+  GRootEnt* groot; uint nGroot, maxGroot, grootCommitted;
+  uint nCommitted;              // arena pages committed so far (pages are used in order)
+  enum { GROOT_CHUNK = 8192 };
   qword live_total;
   // statistics
   qword touched_total;          // sum over pages of committed (touched) OS pages
@@ -448,7 +470,6 @@ struct Model {
   Ctx StateCacheCtx[MAX_O+2];
   word* parentSlot[MAX_O+2];
   int hwm;
-  // maintenance policy
   // maintenance policy
   enum {
     POL_DEADSH = 6,       // compact when dead bytes > live>>6 ...
@@ -606,11 +627,8 @@ struct Model {
     pushFree(m, pageBase(p), offOf(r), sz);
   }
   static uint osPages(uint hwm) { return ((hwm+4095)>>12)-1; }   // touched OS pages above RESV
-  // [RESV, hwm) of a page may be written; everything a page writes is below its hwm first
   void setHwm(uint p, uint hwm) {
     PageMeta& m = pm[p];
-    uint a = (m.hwm+4095) & ~4095u, b = (hwm+4095) & ~4095u;
-    if( b>a ) commit_mem(pageBase(p)+a, b-a);
     touched_total += (qword(osPages(hwm))-qword(osPages(m.hwm)))<<12;
     m.hwm = hwm;
   }
@@ -625,6 +643,7 @@ struct Model {
     if( !freePages.empty() ) { p = freePages.back(); freePages.pop_back(); }
     else if( nPages<maxPages ) { p = nPages++; if( pm.size()<nPages ) pm.emplace_back(); }
     else return DEAD_PAGE;
+    if( p>=nCommitted ) { commit_mem(pageBase(nCommitted), qword(p+1-nCommitted)<<PG_BITS); nCommitted = p+1; }
     if( p<pm.size() && pm[p].hwm>=RESV ) setHwm(p, RESV);
     pm[p].reset();
     pgCold[p] = RESV;
@@ -642,6 +661,7 @@ struct Model {
   uint newGRoot(uint page, word ref, uint depth) {
     if( nGroot>=maxGroot ) { fprintf(stderr, "\nfatal: root table full\n"); exit(7); }
     uint g = nGroot++;
+    if( g>=grootCommitted ) { commit_mem(groot+grootCommitted, GROOT_CHUNK*sizeof(GRootEnt)); grootCommitted += GROOT_CHUNK; }
     groot[g].page = page; groot[g].ref = ref; groot[g].depth = word(depth);
     return g;
   }
@@ -1166,7 +1186,6 @@ struct Model {
           Ls[h].fmt = F_CPATH; Ls[h].ns = byte(m-1); Ls[h].tail = last;
           { uint mx = 0; for( int e = h; ; e = Ls[e].next ) { if( Ls[e].sp[0].tf>mx ) mx = Ls[e].sp[0].tf; if( e==last ) break; } Ls[h].nib = mx<=16; }
           for( int e = Ls[h].next; e!=Ls[last].next; e = Ls[e].next ) Ls[e].fmt = F_INNER;
-         
         }
         if( m==0 ) {
           // a pinned or non-chain element: skip it
@@ -1185,15 +1204,13 @@ struct Model {
     uint cb = 0;   // cold bytes
     for( size_t k = n; k-->0; ) {
       LNode& L = Ls[k];
-      {
-        int c = -1;
-        if( L.fmt==F_CPATH ) c = Ls[L.tail].kind==K_LBIN ? -1 : Ls[L.tail].next;
-        else if( L.fmt==F_KEEP ) c = L.hdr ? -1 : L.next;
-        else if( L.fmt==F_HOT && L.kind==K_BIN0 && !L.pin && !L.moved ) c = L.next;
-        if( c>=0 && isColdFmt(Ls[c].fmt) && Ls[c].parent==(L.fmt==F_CPATH ? L.tail : int(k)) ) {
-          if( L.fmt==F_HOT ) { L.fmt = F_CPATH; L.ns = 0; L.tail = int(k); L.nib = 0; }
-          L.adj = 1;
-        }
+      int c = -1;
+      if( L.fmt==F_CPATH ) c = Ls[L.tail].kind==K_LBIN ? -1 : Ls[L.tail].next;
+      else if( L.fmt==F_KEEP ) c = L.hdr ? -1 : L.next;
+      else if( L.fmt==F_HOT && L.kind==K_BIN0 && !L.pin && !L.moved ) c = L.next;
+      if( c>=0 && isColdFmt(Ls[c].fmt) && Ls[c].parent==(L.fmt==F_CPATH ? L.tail : int(k)) ) {
+        if( L.fmt==F_HOT ) { L.fmt = F_CPATH; L.ns = 0; L.tail = int(k); L.nib = 0; }
+        L.adj = 1;
       }
       if( L.fmt==F_CNU2 ) {
         // NU=2: the first context child that is cold follows the record; then its code
@@ -1370,8 +1387,7 @@ struct Model {
     if( doSplit ) {
       PageMeta& Q = pm[q];
       Q.live += movedBytes;
-      if( mend>Q.bump ) Q.bump = mend;
-      if( Q.bump>Q.hwm ) setHwm(q, Q.bump);
+      if( mend>Q.bump ) Q.bump = mend;   // hwm already covers mend (set before the hot copies)
       updSlack(q);
     }
     return true;
@@ -1535,7 +1551,9 @@ struct Model {
     cbHash.assign(size_t(1)<<CBH_BITS, 0);
     cbKey.reserve(CB_MAX);
     maxGroot = 1u<<25;
-    groot = (GRootEnt*)map_mem(qword(maxGroot)*sizeof(GRootEnt));
+    groot = (GRootEnt*)map_mem(qword(maxGroot)*sizeof(GRootEnt), false);
+    grootCommitted = 0;
+    nCommitted = 0;
     if( groot==0 ) return 1;
     scratch = (byte*)malloc(PG_SIZE);
     Ls.a = (LNode*)malloc(sizeof(LNode)*DS_MAX); Ls.n = 0;
@@ -2045,7 +2063,7 @@ struct Model {
     }
     return c;
   }
-  Ctx UpdateModel(Ctx MinContext) {
+  void UpdateModel(Ctx MinContext) {
     byte FSymbol;
     uint ns, s0_caller, FFreq, f_order0;
     State* p = NULL;
@@ -2061,17 +2079,15 @@ struct Model {
       StateCacheCtx[order-1] = pc;
     }
     if( (OrderFall==0)&&!fNull ) {
-      return CreateSuccessors(1, p, pc, MinContext);
+      CreateSuccessors(1, p, pc, MinContext);
+      return;
     }
     if( isL(MinContext) ) { fprintf(stderr, "\nfatal: leaf context with OrderFall %d\n", OrderFall); exit(9); }
     word iSuccessor = textRef(pText);
-    Ctx iF;
     f_order0 = 0;
     if( !fNull ) {
-      if( fText ) iF = CreateSuccessors(0, p, pc, MinContext);
-      else iF = child(MinContext, FoundState, 0, order+1);
+      if( fText ) CreateSuccessors(0, p, pc, MinContext);
     } else {
-      iF = Order0;
       FoundState->tf &= 0x7F;           // null successors only exist in the (multi) order-0 context
       FoundState->succ = iSuccessor;
       OrderFall++;
@@ -2084,7 +2100,6 @@ struct Model {
       ExpandAndAdd(i, FSymbol, FFreq, s0_caller, ns, iSuccessor);
     --OrderFall;
     order = f_order0 ? 0 : order+1;
-    return iF;
   }
   Ctx CreateSuccessors(uint Skip, State* p, Ctx p_ctx, Ctx pc) {
     byte sym = FoundState->sym;
@@ -2168,10 +2183,17 @@ NO_LOOP:
   }
 };
 uint flen(FILE* f) {
-  fseek(f, 0, SEEK_END);
-  uint len = ftell(f);
-  fseek(f, 0, SEEK_SET);
-  return len;
+#ifdef _WIN32
+  _fseeki64(f, 0, SEEK_END);       // ftell's long is 32-bit on Windows
+  long long len = _ftelli64(f);
+  _fseeki64(f, 0, SEEK_SET);
+#else
+  fseeko(f, 0, SEEK_END);
+  long long len = ftello(f);
+  fseeko(f, 0, SEEK_SET);
+#endif
+  if( len<0 || len>0xFFFFFFFELL ) { fprintf(stderr, "ppmd: input must be smaller than 4 GB\n"); exit(5); }
+  return uint(len);
 }
 struct Model1 : Model {
   void do_process(void) {
@@ -2222,6 +2244,10 @@ int main(int argc, char** argv) {
   if( argc<4 ) {
     fprintf(stderr, "ppmd c|d input output [order [MMAX [reset_perc [win_perc [WinSize]]]]]\n");
     return 1;
+  }
+  if( !cpu_has_avx2() ) {
+    fprintf(stderr, "ppmd: this build needs a CPU with AVX2\n");
+    return 4;
   }
   FILE* f = fopen(argv[2], "rb"); if( f==0 ) return 2;
   FILE* g = fopen(argv[3], "wb"); if( g==0 ) return 3;
