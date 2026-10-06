@@ -204,7 +204,7 @@ Encoder and decoder still agree, and in every run measured the output was identi
 original. For a leaf the scan starts from the lazy state one order below, with a pattern one
 byte shorter (§2.1).
 
-* **The scan.** AVX-512BW, or AVX2 or scalar, chosen at run time. It keeps positions where
+* **The scan.** AVX2. It keeps positions where
   both the first and the last byte of the pattern match, then verifies the middle with
   `memcmp`. It prefetches ahead.
 * **Prefetch at `FoundState`.** The block's first lines are prefetched as soon as
@@ -254,8 +254,8 @@ as bump space. Nothing inside a step can then fail to allocate.
   second test does the per-page checks below with the total need as an upper bound of each
   page's need, which avoids grouping the contexts by page.
 * **Slow path, per page.** The page is acted on if it is too tight, or if it would touch a new
-  OS page while holding dead bytes > live/64 (`PPMD_DEADSH`). Dead cold bytes up to live/32
-  (`PPMD_CDEADSH`) are not counted for this. Then:
+  OS page while holding dead bytes > live/64 (`POL_DEADSH`). Dead cold bytes up to live/32
+  (`POL_CDEADSH`) are not counted for this. Then:
   * if `live + need + 2 KB` still fits in the page, it is **compacted**;
   * otherwise it is **split**.
 * Then the cold current contexts are expanded (§2.2).
@@ -281,7 +281,7 @@ Hot non-leaf states are read in place; the others are decoded into a buffer. The
 
 * **Split.** Subtree sizes (of the hot forms) come from the BFS list. The code descends along
   the heaviest child while that subtree is larger than 1.25 × target (target = 3/16 of the
-  page, `PPMD_SPLIT`). It then takes that node's children, largest first, up to the cap.
+  page, `POL_SPLITNUM`). It then takes that node's children, largest first, up to the cap.
   * The selected sibling subtrees move, in hot form, to a **receiver page**: the page that
     last received a split, while it has room and far-table space, otherwise a fresh page.
   * Each moved non-root subtree gets a new `GRoot` entry. Its parent field in the old page
@@ -298,8 +298,8 @@ Receivers keep the number of half-empty pages small.
 
 **Re-tiering.** A record that stops being current stays hot until its page is repacked.
 Records touched since the last Repack are therefore hot (about a quarter of the NU=2
-contexts at any time). With `PPMD_COLDQ=2` they are kept hot one Repack longer, which costs
-memory and saves expansions.
+contexts at any time). Keeping them hot one Repack longer was tried: it saves expansions but
+costs memory.
 
 **Out of pages** (`MMAX` exhausted): `EnsureHeadroom` fails and the coder resets
 (`StartModelRare`) or replays the tail of the window (`RestoreModelRare`, `reset_perc`) before
@@ -332,7 +332,7 @@ and 0.96M page roots.
 * **Per page:** at most 4096 far entries; the largest measured is 307.
 * **Orders:** 1..255 as in the original (tested 1..200).
 
-## 9. Invariants (checked by `PPMD_CHECK=n`)
+## 9. Invariants
 
 * Every reachable record is reached exactly once (tree). Hot records lie in
   `[pgCold[p], bump)`, cold records in `[RESV, pgCold[p])`.
@@ -347,21 +347,20 @@ and 0.96M page roots.
 * Every `SuffCache[0..order]` entry is reachable, and `*parentSlot[i]` references
   `SuffCache[i]`.
 
-## 10. Knobs
+## 10. Policy constants
 
-These change speed and memory, never the output.
+These change speed and memory, never the output (`POL_*` in `Model`).
 
-| knob | meaning | default |
+| constant | meaning | value |
 |---|---|---|
-| `PPMD_DEADSH` | compact when dead > live >> n | 6 |
-| `PPMD_SPLIT` | fraction of a page moved per split, n/16 | 3 |
-| `PPMD_MARGIN` | split when live + need + margin > 60 KB | 2048 |
-| `PPMD_RECVGAP` | bytes a receiver page must keep free | 8192 |
-| `PPMD_SCAN` | 0 scalar, 1 AVX2, 2 AVX-512BW | best available |
-| `PPMD_PACK` | 1: write cold records (§2.2), 0: never | 1 |
-| `PPMD_CDEADSH` | dead cold bytes up to live >> n do not trigger compaction | 5 |
-| `PPMD_COLDQ` | 1: everything not current turns cold at a Repack; 2: not what was touched since the previous one | 1 |
+| `POL_DEADSH` | compact when dead > live >> n | 6 |
+| `POL_CDEADSH` | dead cold bytes up to live >> n do not trigger compaction | 5 |
+| `POL_SPLITNUM` | fraction of a page moved per split, n/16 | 3 |
+| `POL_MARGIN` | split when live + need + margin > 60 KB | 2048 |
+| `POL_RECVGAP` | bytes a receiver page must keep free | 8192 |
 
-Debug knobs: `PPMD_CHECK=n` (and `PPMD_CHECKFROM=s`: every step from step s), `PPMD_STATS`,
-`PPMD_CENSUS`, `PPMD_ALLOCSTATS`. `PPMD_CZK=k` forces larger scan blocks. Encoder and decoder
-must then agree on it.
+## 11. Platforms
+
+Linux (g++, clang++) and Windows (MSVC, MinGW), x86-64 with AVX2. The arena is reserved address
+space: `mmap(MAP_NORESERVE)` on Linux, `VirtualAlloc(MEM_RESERVE)` on Windows, where each page is
+committed as its high-water mark grows (`setHwm`) and decommitted when its tail is released.

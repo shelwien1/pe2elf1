@@ -50,7 +50,7 @@ NU=2 records 429.6; adjacent children, nibble freqs in paths, and adjacent NU=2 
 now runs about 2.5 times as often (expanded copies fill pages) and does more per node.
 
 **Trading time for memory.** Compacting sooner leaves fewer dead and hot bytes:
-`PPMD_CDEADSH=7 PPMD_DEADSH=7` gives 2388 MiB on enwik9 (−19.8%, RSS 3381 MiB) at 1.59x, but
+`POL_CDEADSH=7, POL_DEADSH=7` gives 2388 MiB on enwik9 (−19.8%, RSS 3381 MiB) at 1.59x, but
 400.4 MiB on enwik8 at 2.01x, so it is not the default.
 
 The compressed sizes of the new coder are identical, byte for byte, to the original column.
@@ -100,7 +100,7 @@ Every state is one 32-bit word, `[sym:8][tf:8][succ:16]`. This is the unified 4-
   context string + symbol, which is the last order+1 bytes of history, ends. P is the end of
   the first occurrence of that pattern, so the recovery is exact. Recovered P matched the
   stored P in every call measured, and every output is byte-identical. The lower-order
-  sibling test compares "both lazy" instead of P (§8). The scan uses AVX-512BW or AVX2
+  sibling test compares "both lazy" instead of P (§8). The scan uses AVX2
   (first+last byte filter, verify the middle) and is prefetched at `FoundState` time.
 * **Paged 16-bit context successors** (§2.2). The tree lives in 64 KB pages, which are
   virtual address ranges committed on first touch. A context ref is 16 bits:
@@ -156,7 +156,8 @@ tree uses 57,369 pages (50.6 KB live each) and 1.16M page roots. The largest far
 ## Reproducing
 
 ```
-g++ -O2 -o ppmd ppmd.cpp
+g++ -O2 -o ppmd ppmd.cpp                # Linux (g++ or clang++)
+cl /O2 /EHsc ppmd.cpp                   # Windows (MSVC); MinGW: g++ -O2 -static -o ppmd.exe ppmd.cpp
 ./ppmd c enwik9 enwik9.ppm 12 8000      # order 12, page budget 8000 MB (virtual)
 ./ppmd d enwik9.ppm enwik9.out 12 8000
 ./test.sh 12 4000 -- file...            # original vs new: identical output + roundtrip
@@ -176,14 +177,6 @@ compresses better. On e8m at order 12:
 
 Without resets the outputs are identical.
 
-Environment knobs (they change speed and memory only, never the output; encoder and decoder
-may use different values): `PPMD_PACK=0|1` (cold records), `PPMD_CDEADSH`, `PPMD_COLDQ`,
-`PPMD_SCAN=0|1|2` (scalar / AVX2 / AVX-512 scan), `PPMD_DEADSH`
-(compaction threshold: dead > live>>n), `PPMD_SPLIT` (fraction moved per split, n/16),
-`PPMD_MARGIN`, `PPMD_RECVGAP`.
-
-Debug knobs: `PPMD_CHECK=n` walks the whole tree every n steps and verifies every invariant
-(refs, parities, far tables, root lists, `SuffCache` reachability, parent slots).
-`PPMD_STATS=1`, `PPMD_CENSUS=1` and `PPMD_ALLOCSTATS=1` print maintenance, record and allocator
-statistics. `PPMD_CZK=k` forces a larger scan block. It normally leaves the output unchanged,
-but encoder and decoder must then use the same value.
+The maintenance policy is fixed in the source (`POL_*` constants in `Model`). It changes speed
+and memory only, never the output, and encoder and decoder may use different values. The
+measurements above with other settings were made with switches that have since been removed.
