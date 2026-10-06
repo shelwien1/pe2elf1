@@ -283,6 +283,13 @@ struct SEE_Manager {
 //                     the record address: ≡0 mod 4 -> context, ≡2 mod 4 -> text.
 // * Multi record   : [esc:7|resc:1][NumStats] + NU states   = 2+4*NU bytes.
 //   Binary record  : one state                               = 4 bytes.
+// * Leaf contexts (depth MaxOrder) never get a context successor, and their text
+//   successor is never needed (CreateSuccessors takes it from the lazy state one
+//   order below). Their states are [sym][tf], 2 bytes: a leaf multi is 2+2*NU
+//   bytes, a leaf binary 2. A Ctx handle carries LEAFB for them.
+// * Contexts that are not current are stored by Repack in smaller read-only cold
+//   forms at the start of their page (path records for binary chains, codebooked
+//   NU=2 records; see "cold records") and expanded when they become current.
 // * The tree lives in 64 KB pages (virtual memory, committed on first touch).
 //   A context reference is 16 bits:
 //     >= FAR_LIM : near ref = page offset | M   (M=1 -> multi, 0 -> binary)
@@ -299,7 +306,8 @@ struct SEE_Manager {
 //   materialisation by scanning that block for the first end of the context
 //   string + symbol (the last order+1 bytes of history). P is the end of the
 //   first occurrence of that pattern, so the recovery is exact.
-// * The model is untouched: compressed output is byte-identical to the original.
+// * The model is untouched: compressed output is byte-identical to the original
+//   (except under a memory limit, where the smaller tree resets less often).
 // ===========================================================================
 
 typedef uintptr_t Ctx;     // record address | M
@@ -318,24 +326,29 @@ enum {
   FAR_LIM = RESV,              // ref values below FAR_LIM are far-table indices
   USABLE = PG_SIZE-RESV,
   NULL_SUCC = 0xFFFFu,
-  NFREE = 48,                  // free-list classes: 0/1 binary at ≡0/≡2 mod 4, n = multi with n states
+  NCLS = 63,                   // free-list classes by size: 0/1 = 4 bytes at ≡0/≡2 mod 4, 2 = 2 bytes,
+                               // k>=3 = 2k bytes; NCLS = larger records (size kept in the record)
+  ANYPAR = 4,                  // allocRec parity: any even offset
   NO_ROOT = 0xFFFFFFFFu,
   DEAD_PAGE = 0xFFFFFFFFu
 };
 
-struct GRootEnt { uint page; word ref; word _pad; };
+struct GRootEnt { uint page; word ref; word depth; };
 
 struct PageMeta {
   uint bump;                   // first free offset (>= RESV)
   uint live;                   // bytes in allocated records (upper bound: unreachable records count until compaction)
   uint hwm;                    // highest bump since last trim (touched memory)
-  word freeHead[NFREE+1];      // [NFREE]: large records (>= NFREE states), each holding [next][NU]
+  word freeHead[NCLS+1];       // [NCLS]: large records, each holding [next][size]
+  qword fmask;                 // bit k: freeHead[k] non-empty
+  uint cdead;                  // dead bytes in the cold region (expanded cold records)
+  uint rbase;                  // bump after the last Repack: records above it are recent
   std::vector<uint> roots;     // global root ids whose record lives in this page
   std::vector<uint> fars;      // far table: global root id, or NO_ROOT when free
   std::vector<word> farFree;
   void reset() {
     bump = RESV; live = 0; hwm = RESV;
-    memset(freeHead, 0, sizeof(freeHead));
+    memset(freeHead, 0, sizeof(freeHead)); fmask = 0; cdead = 0; rbase = RESV;
     roots.clear(); fars.clear(); farFree.clear();
   }
 };
@@ -443,7 +456,7 @@ struct Model {
   qword st_compact, st_split, st_scan, st_scanbytes, st_moves, st_pagefail;
   qword tsc_compact, tsc_split, n_recs;
   qword touched_total;          // sum over pages of committed (touched) OS pages
-  qword st_alloc[NFREE+1], st_free[NFREE+1], st_freehit[NFREE+1];
+  qword st_alloc[NCLS+1], st_free[NCLS+1], st_freehit[NCLS+1];
   // model state
   int OrderFall;
   int order, maxorder;
@@ -462,16 +475,25 @@ struct Model {
   uint pol_deadsh, pol_splitnum, pol_recvgap, pol_margin;
   uint recvPage;
   // maintenance scratch
-  word fwd[PG_SIZE/2];
   byte* scratch;
   byte farUsed[FAR_LIM];
 
   // ---------------- record / state accessors ----------------
+  // A context at depth MaxOrder (a leaf) stores no successors: its states are [sym][tf], 2 bytes.
+  // Its Ctx handle carries LEAFB.
+  // A cold record's Ctx carries COLDB (§ cold records).
+  static const Ctx LEAFB = Ctx(1)<<62, COLDB = Ctx(1)<<61;
   static bool isM(Ctx c) { return (c & 1)!=0; }
-  static byte* rec(Ctx c) { return (byte*)(c & ~(Ctx)1); }
+  static bool isL(Ctx c) { return (c & LEAFB)!=0; }
+  // bit 0 is M for a hot record; a cold record may start at an odd address
+  static byte* rec(Ctx c) { return (byte*)(c & ~LEAFB & ~COLDB & ~(((c>>61) & 1) ^ 1)); }
   static Ctx mkCtx(byte* r, uint m) { return (Ctx)r | (Ctx)m; }
+  static Ctx mkCtxL(byte* r, uint m, bool leaf) { return (Ctx)r | (Ctx)m | (leaf ? LEAFB : 0); }
+  static uint SH(Ctx c) { return isL(c) ? 1u : 2u; }     // log2 of the state size
   static uint NS(Ctx c) { return isM(c) ? rec(c)[1] : 0u; }
   static State* S0(Ctx c) { return (State*)(rec(c) + (isM(c) ? 2 : 0)); }
+  static State* SI(Ctx c, uint i) { return (State*)((byte*)S0(c) + (i<<SH(c))); }
+  static uint SIdx(Ctx c, const State* s) { return uint(((const byte*)s-(const byte*)S0(c))>>SH(c)); }
   static uint EscF(Ctx c) { return isM(c) ? (rec(c)[0] & 0x7Fu) : 0u; }
   static void setEscF(Ctx c, uint v) { if( isM(c) ) rec(c)[0] = byte((rec(c)[0] & 0x80) | ((v>127) ? 127u : v)); }
   static bool Resc(Ctx c) { return isM(c) && (rec(c)[0] & 0x80)!=0; }
@@ -480,139 +502,111 @@ struct Model {
   static uint MF(const State& s) { return (s.tf & 0x7Fu)+1; }              // multi freq
   static void MaddF(State& s, uint d) { s.tf = byte(s.tf+d); }             // freq+d must stay <= 128
   static uint F(Ctx c, const State* s) { return isM(c) ? MF(*s) : s->tf; }
-  static bool succIsCtx(Ctx c, const State* s) { return isM(c) ? (s->tf & 0x80)!=0 : (c & 2)==0; }
-  static bool succIsNull(Ctx c, const State* s) { return !succIsCtx(c, s) && s->succ==NULL_SUCC; }
-  static bool succIsText(Ctx c, const State* s) { return !succIsCtx(c, s) && s->succ!=NULL_SUCC; }
-  static uint recSizeNU(uint NU) { return NU==1 ? 4u : 2u+4u*NU; }
-  static uint recSize(Ctx c) { return isM(c) ? 2u+4u*(rec(c)[1]+1u) : 4u; }
+  static bool succIsCtx(Ctx c, const State* s) { return isL(c) ? false : isM(c) ? (s->tf & 0x80)!=0 : (c & 2)==0; }
+  static bool succIsNull(Ctx c, const State* s) { return !isL(c) && !succIsCtx(c, s) && s->succ==NULL_SUCC; }
+  static bool succIsText(Ctx c, const State* s) { return isL(c) || (!succIsCtx(c, s) && s->succ!=NULL_SUCC); }
+  static uint recSizeNU(uint NU, bool leaf) { return leaf ? (NU==1 ? 2u : 2u+2u*NU) : (NU==1 ? 4u : 2u+4u*NU); }
+  static uint recSize(Ctx c) { return recSizeNU(NS(c)+1, isL(c)); }
   static word refOf(Ctx c) { return word(((uintptr_t)rec(c) & (PG_SIZE-1)) | (c & 1)); }
   static uint offOf(const void* a) { return uint((uintptr_t)a & (PG_SIZE-1)); }
   byte* pageBase(uint p) const { return arena + (qword(p)<<PG_BITS); }
   uint pageOf(const void* a) const { return uint(qword((const byte*)a - arena)>>PG_BITS); }
   static void swapS(State& a, State& b) { State t = a; a = b; b = t; }
+  static void swapSt(Ctx c, State* a, State* b) {
+    if( isL(c) ) { word t = *(word*)a; *(word*)a = *(word*)b; *(word*)b = t; } else swapS(*a, *b);
+  }
 
-  Ctx child(Ctx c, State* s, word** slot) {
+  // cd: depth of the child
+  Ctx child(Ctx c, State* s, word** slot, int cd) {
     word r = s->succ;
+    bool leaf = cd>=_MaxOrder;
+    uint p = pageOf(rec(c));
     if( r>=FAR_LIM ) {
       if( slot ) *slot = &s->succ;
-      byte* base = (byte*)((uintptr_t)rec(c) & ~(uintptr_t)(PG_SIZE-1));
-      return mkCtx(base+(r & ~1u), r & 1u);
+      if( r<pgCold[p] ) return mkCtxL(pageBase(p)+r, 0, leaf) | COLDB;
+      return mkCtxL(pageBase(p)+(r & ~1u), r & 1u, leaf);
     }
-    uint gid = pm[pageOf(rec(c))].fars[r];
+    uint gid = pm[p].fars[r];
     GRootEnt& g = groot[gid];
     if( slot ) *slot = &g.ref;
-    return mkCtx(pageBase(g.page)+(g.ref & ~1u), g.ref & 1u);
+    if( g.ref<pgCold[g.page] ) return mkCtxL(pageBase(g.page)+g.ref, 0, leaf) | COLDB;
+    return mkCtxL(pageBase(g.page)+(g.ref & ~1u), g.ref & 1u, leaf);
   }
   uint SummFreq(Ctx c) {
     State* s0 = S0(c);
     if( !isM(c) ) return s0[0].tf;
-    uint sum = EscF(c), ns = NS(c);
-    for( uint i = 0; i<=ns; i++ ) sum += MF(s0[i]);
+    uint sum = EscF(c), ns = NS(c), sh = SH(c);
+    const byte* t = (const byte*)s0+1;
+    for( uint i = 0; i<=ns; i++ ) sum += (t[i<<sh] & 0x7Fu)+1;
     return sum;
   }
   State* FindState(Ctx c, byte sym) {
-    State* s0 = S0(c);
-    uint ns = NS(c);
-    for( uint i = 0; i<=ns; i++ ) if( s0[i].sym==sym ) return &s0[i];
+    byte* s0 = (byte*)S0(c);
+    uint ns = NS(c), sh = SH(c);
+    for( uint i = 0; i<=ns; i++ ) if( s0[i<<sh]==sym ) return (State*)(s0+(i<<sh));
     return 0;
   }
   word textRef(const byte* ptr) const { return word(uint(ptr-WinBeg)>>CZK); }
 
   // ---------------- per-page allocator ----------------
-  static uint freeClass(uint NU, uint addrBits) { return NU==1 ? ((addrBits & 2) ? 1u : 0u) : (NU<NFREE ? NU : NFREE); }
-  // Free-list classes: 0/1 = binary slot at ≡0/≡2 mod 4, n (2..NFREE-1) = multi with n states,
-  // NFREE = large multi (size kept in the record). A miss falls back to the smallest larger free
-  // record, which is carved; the remainder is kept as a smaller multi-sized free record (losing
-  // at most 2 bytes) so that it can serve the next expansion.
-  void pushFree(PageMeta& m, byte* base, uint cls, uint off) {
-    *(word*)(base+off) = m.freeHead[cls];
-    m.freeHead[cls] = word(off);
+  // Free records are kept by exact size (2-byte units); 4-byte slots also by parity, because a
+  // non-leaf binary's successor type is its address parity. A miss carves the smallest larger
+  // free record; every remainder (>= 2 bytes) is usable.
+  static uint clsOf(uint sz, uint off) { return sz==4 ? ((off & 2) ? 1u : 0u) : sz==2 ? 2u : (sz/2<NCLS ? sz/2 : (uint)NCLS); }
+  static uint clsSize(uint k, const byte* r) { return k<2 ? 4u : k==2 ? 2u : k<NCLS ? 2u*k : *(const word*)(r+2); }
+  void pushFree(PageMeta& m, byte* base, uint off, uint sz) {
+    if( sz<2 ) return;
+    uint k = clsOf(sz, off);
+    if( k==NCLS ) *(word*)(base+off+2) = word(sz);
+    *(word*)(base+off) = m.freeHead[k];
+    m.freeHead[k] = word(off);
+    m.fmask |= qword(1)<<k;
   }
-  void pushBinSlots(PageMeta& m, byte* base, uint off, uint n) {   // n slots of 4 bytes starting at off
-    uint cls = (off & 2) ? 1u : 0u;
-    for( uint k = 0; k<n; k++ ) pushFree(m, base, cls, off+4*k);
+  uint popCls(PageMeta& m, byte* base, uint k) {
+    uint off = m.freeHead[k];
+    m.freeHead[k] = *(word*)(base+off);
+    if( !m.freeHead[k] ) m.fmask &= ~(qword(1)<<k);
+    return off;
   }
-  void pushFreeMulti(PageMeta& m, byte* base, uint off, uint NU) {
-    if( NU<NFREE ) pushFree(m, base, NU, off);
-    else { *(word*)(base+off+2) = word(NU); pushFree(m, base, NFREE, off); }
-  }
-  // a free region of `bytes` (a multiple of 2) at off: as one multi record (+2 lost bytes) if it is
-  // large enough, otherwise as binary slots
-  void pushFreeTail(PageMeta& m, byte* base, uint off, uint bytes) {
-    if( bytes>=10 ) {
-      if( (bytes & 3)==2 ) pushFreeMulti(m, base, off, (bytes-2)/4);
-      else pushFreeMulti(m, base, off+2, (bytes-4)/4);   // 4k bytes: lose 2 at the front... and 0 at the end
-      return;
-    }
-    if( (bytes & 3)==0 ) pushBinSlots(m, base, off, bytes/4);
-    else if( bytes>=6 ) pushBinSlots(m, base, off+2, (bytes-2)/4);
-  }
-  // pops a free multi record with >= NU states (smallest class first); returns offset, sets *haveNU
-  uint popMultiAtLeast(PageMeta& m, byte* base, uint NU, uint* haveNU) {
-    for( uint c = (NU<2 ? 2u : NU); c<NFREE; c++ ) {
-      if( m.freeHead[c] ) {
-        uint off = m.freeHead[c];
-        m.freeHead[c] = *(word*)(base+off);
-        *haveNU = c;
-        return off;
-      }
-    }
-    // large list: first fit
-    word* link = &m.freeHead[NFREE];
-    while( *link ) {
-      uint off = *link;
-      uint n = *(word*)(base+off+2);
-      if( n>=NU ) {
-        *link = *(word*)(base+off);
-        *haveNU = n;
-        return off;
-      }
-      link = (word*)(base+off);
-    }
-    return 0;
-  }
-  byte* allocRec(uint p, uint NU, bool textSucc) {
+  // par: 0/2 = required offset mod 4 (4-byte binaries only), ANYPAR = any even offset
+  byte* allocRec(uint p, uint sz, uint par) {
     PageMeta& m = pm[p];
-    uint sz = recSizeNU(NU);
-    uint cls = (NU==1) ? (textSucc ? 1u : 0u) : (NU<NFREE ? NU : (uint)NFREE);
     byte* base = pageBase(p);
     m.live += sz; live_total += sz;
-    st_alloc[cls]++;
-    if( cls<NFREE && m.freeHead[cls] ) {
-      st_freehit[cls]++;
-      uint off = m.freeHead[cls];
-      m.freeHead[cls] = *(word*)(base+off);
+    uint k = sz==4 ? (par==2 ? 1u : 0u) : clsOf(sz, 0);
+    st_alloc[k]++;
+    if( k<NCLS && m.freeHead[k] ) { st_freehit[k]++; return base+popCls(m, base, k); }
+    // smallest larger exact class: sizes 2 (k=2) < 4 (k=0,1) < 6 (k=3) < ...
+    qword cand = m.fmask & ((qword(1)<<NCLS)-1);
+    if( sz==2 ) cand &= ~qword(4);
+    else cand &= ~qword(7) & ~((qword(2)<<(sz/2<NCLS ? sz/2 : NCLS-1))-1);
+    uint off = 0, have = 0;
+    if( cand ) {
+      uint c = __builtin_ctzll(cand);
+      off = popCls(m, base, c);
+      have = c<2 ? 4u : 2u*c;
+    } else if( m.freeHead[NCLS] ) {
+      word* link = &m.freeHead[NCLS];
+      while( *link ) {
+        uint o = *link;
+        uint n = *(word*)(base+o+2);
+        if( n>=sz+(sz==4 ? 2u : 0u) ) {
+          *link = *(word*)(base+o);
+          if( !m.freeHead[NCLS] ) m.fmask &= ~(qword(1)<<NCLS);
+          off = o; have = n;
+          break;
+        }
+        link = (word*)(base+o);
+      }
+    }
+    if( have ) {
+      st_freehit[k]++;
+      if( par!=ANYPAR && (off & 3)!=par ) { pushFree(m, base, off, 2); off += 2; have -= 2; }
+      pushFree(m, base, off+sz, have-sz);
       return base+off;
     }
-    uint have, off;
-    if( NU==1 ) {
-      uint want = textSucc ? 2u : 0u;
-      off = popMultiAtLeast(m, base, 2, &have);
-      if( off ) {
-        st_freehit[cls]++;
-        // take one slot from a free multi record; the rest stays a (smaller) multi-sized free record
-        if( (off & 3)==want ) {
-          // [slot][rest: 2+4*(have-1) bytes]
-          if( have-1>=2 ) pushFreeMulti(m, base, off+4, have-1); else pushFreeTail(m, base, off+4, 2+4*(have-1));
-          return base+off;
-        }
-        // [2 lost][slot][rest: 4*(have-1) bytes]
-        pushFreeTail(m, base, off+6, 4*(have-1));
-        return base+off+2;
-      }
-    } else {
-      off = popMultiAtLeast(m, base, NU+1, &have);
-      if( off ) {
-        st_freehit[cls]++;
-        pushFreeTail(m, base, off+2+4*NU, 4*(have-NU));   // remainder: 4*(have-NU) bytes
-        return base+off;
-      }
-    }
     off = m.bump;
-    if( NU==1 ) {
-      uint want = textSucc ? 2u : 0u;
-      if( (off & 3)!=want ) off += 2;
-    }
+    if( par!=ANYPAR && (off & 3)!=par ) { pushFree(m, base, off, 2); off += 2; }
     if( off+sz>PG_SIZE ) {
       fprintf(stderr, "\nfatal: page %u overflow (bump=%u sz=%u live=%u)\n", p, m.bump, sz, m.live);
       exit(7);
@@ -622,16 +616,12 @@ struct Model {
     updSlack(p);
     return base+off;
   }
-  void freeRec(byte* r, uint NU) {
+  void freeRec(byte* r, uint sz) {
     uint p = pageOf(r);
     PageMeta& m = pm[p];
-    uint sz = recSizeNU(NU);
     m.live -= sz; live_total -= sz;
-    uint cls = freeClass(NU, uint((uintptr_t)r));
-    st_free[cls]++;
-    if( cls>=NFREE ) { cls = NFREE; *(word*)(r+2) = word(NU); }
-    *(word*)r = m.freeHead[cls];
-    m.freeHead[cls] = word(offOf(r));
+    st_free[clsOf(sz, offOf(r))]++;
+    pushFree(m, pageBase(p), offOf(r), sz);
   }
   static uint osPages(uint hwm) { return ((hwm+4095)>>12)-1; }   // touched OS pages above RESV
   void setHwm(uint p, uint hwm) {
@@ -652,6 +642,7 @@ struct Model {
     else return DEAD_PAGE;
     if( p<pm.size() && pm[p].hwm>=RESV ) setHwm(p, RESV);
     pm[p].reset();
+    pgCold[p] = RESV;
     updSlack(p);
     return p;
   }
@@ -663,54 +654,304 @@ struct Model {
     return word(m.fars.size()-1);
   }
   void freeFar(uint p, word j) { pm[p].fars[j] = NO_ROOT; pm[p].farFree.push_back(j); }
-  uint newGRoot(uint page, word ref) {
+  uint newGRoot(uint page, word ref, uint depth) {
     if( nGroot>=maxGroot ) { fprintf(stderr, "\nfatal: root table full\n"); exit(7); }
     uint g = nGroot++;
-    groot[g].page = page; groot[g].ref = ref; groot[g]._pad = 0;
+    groot[g].page = page; groot[g].ref = ref; groot[g].depth = word(depth);
     return g;
   }
-  Ctx rootCtx(uint gid) const { const GRootEnt& g = groot[gid]; return mkCtx(pageBase(g.page)+(g.ref & ~1u), g.ref & 1u); }
+  Ctx rootCtx(uint gid) const {
+    const GRootEnt& g = groot[gid];
+    if( g.ref<pgCold[g.page] ) return mkCtxL(pageBase(g.page)+g.ref, 0, g.depth>=_MaxOrder) | COLDB;
+    return mkCtxL(pageBase(g.page)+(g.ref & ~1u), g.ref & 1u, g.depth>=_MaxOrder);
+  }
+
+  // ---------------- cold records ----------------
+  // Records that are not current can be stored in a smaller, read-only form. Repack writes them
+  // in [RESV, pgCold[p]) of each page, byte-aligned; a near ref below pgCold[p] is the exact byte
+  // offset of a cold record (no M bit), and the record's first byte tells its kind:
+  //   path  [A:1 (0x10)|L-1:4][sym x L][freq x L][end ref:16]
+  //         a chain of L binaries, each the only child of the previous one. The end ref (the
+  //         last element's child) is absent when the last element is a leaf, or when A is set:
+  //         then the child is the cold record that follows. L >= 2 unless A is set.
+  //   NU=2  [0x2000 + code (2 bytes, big-endian)][y0][y1][succ0:16][succ1:16, unless a leaf]
+  //         code -> (EscFreq|resc, tf0, tf1) through a codebook of the keys in use (reference
+  //         counted: a code is recycled when no cold record uses it)
+  // A cold record is expanded into its hot form (in the same page) when it becomes current, at
+  // the start of a step; its bytes stay dead until the next Repack of the page.
+  enum { CPATH_LIM = 0x20, CPATH_ADJ = 0x10, CNU2_BASE = 0x2000, CB_MAX = 0x10000-CNU2_BASE, CBH_BITS = 17, MAX_PATH = 16 };
+  std::vector<word> pgCold;     // per page: end of the cold region
+  std::vector<uint> cbKey;      // code -> key (byte0 | tf0<<8 | tf1<<16)
+  std::vector<qword> cbHash;    // open addressing: code<<32 | key+1
+  std::vector<uint> cbRef;      // cold records using each code
+  std::vector<uint> cbFree;     // recycled codes
+  byte coldTmp[64];
+  qword st_expand, st_coldpath, st_coldnu2, st_cbfull, st_tight = 0, st_waste = 0;
+  uint pol_pack, pol_cdeadsh, pol_coldq;
+  static bool isC(Ctx c) { return (c & COLDB)!=0; }
+  int cbCode(uint key) {
+    uint h = cbSlot(key);
+    for( ;; ) {
+      qword v = cbHash[h];
+      if( !v ) break;
+      if( uint(v)==key+1 ) return int(v>>32);
+      h = (h+1) & ((1u<<CBH_BITS)-1);
+    }
+    uint code;
+    if( !cbFree.empty() ) { code = cbFree.back(); cbFree.pop_back(); cbKey[code] = key; }
+    else if( cbKey.size()<CB_MAX ) { code = uint(cbKey.size()); cbKey.push_back(key); cbRef.push_back(0); }
+    else { st_cbfull++; return -1; }
+    cbHash[h] = (qword(code)<<32) | (key+1);
+    return int(code);
+  }
+  static uint cbSlot(uint key) { return (key*2654435761u)>>(32-CBH_BITS); }
+  void cbRelease(uint code) {
+    if( --cbRef[code] ) return;
+    // remove the key (linear probing, backward-shift deletion) and recycle the code
+    const uint M = (1u<<CBH_BITS)-1;
+    uint key = cbKey[code], i = cbSlot(key);
+    while( uint(cbHash[i])!=key+1 ) i = (i+1) & M;
+    for( ;; ) {
+      cbHash[i] = 0;
+      uint j = i;
+      for( ;; ) {
+        j = (j+1) & M;
+        if( !cbHash[j] ) { cbFree.push_back(code); return; }
+        uint k = cbSlot(uint(cbHash[j])-1);
+        // move j back to i unless its home slot k lies cyclically in (i, j]
+        bool stay = (i<=j) ? (i<k && k<=j) : (i<k || k<=j);
+        if( !stay ) { cbHash[i] = cbHash[j]; i = j; break; }
+      }
+    }
+  }
+  void cbReset() {
+    cbKey.clear(); cbRef.clear(); cbFree.clear();
+    std::fill(cbHash.begin(), cbHash.end(), 0);
+  }
+  static uint wget(const byte* p) { return p[0] | (uint(p[1])<<8); }
+  static void wput(byte* p, uint v) { p[0] = byte(v); p[1] = byte(v>>8); }
+  bool lastIsLeaf(uint depth, uint L) const { return int(depth+L-1)>=_MaxOrder; }
+  static uint pathL(const byte* r) { return (r[0] & 0x0Fu)+1; }
+  static bool pathAdj(const byte* r) { return (r[0] & CPATH_ADJ)!=0; }
+  uint coldSize(const byte* r, uint depth) const {
+    if( r[0]<CPATH_LIM ) { uint L = pathL(r); return 1+2*L+((pathAdj(r) || lastIsLeaf(depth, L)) ? 0u : 2u); }
+    return int(depth)>=_MaxOrder ? 4u : 8u;
+  }
+  uint coldHotSize(const byte* r, uint depth) const {
+    if( r[0]<CPATH_LIM ) { uint L = pathL(r); return 4*(L-1)+(lastIsLeaf(depth, L) ? 2u : 4u); }
+    return int(depth)>=_MaxOrder ? 6u : 10u;
+  }
+  // ref of the child of a path record's last element (not a leaf); off: the record's offset
+  word pathChild(const byte* r, uint off) const {
+    uint L = pathL(r);
+    return pathAdj(r) ? word(off+1+2*L) : word(wget(r+1+2*L));
+  }
+  // hot-format copy of a cold record's first context, for reading only (BequeathFreq)
+  Ctx coldView(Ctx c) {
+    const byte* r = rec(c);
+    byte* t = coldTmp;
+    if( r[0]<CPATH_LIM ) {
+      uint L = pathL(r);
+      t[0] = r[1]; t[1] = r[1+L]; t[2] = t[3] = 0;
+      return mkCtxL(t, 0, false);
+    }
+    uint key = cbKey[((r[0]<<8) | r[1])-CNU2_BASE];
+    bool leaf = isL(c);
+    t[0] = byte(key); t[1] = 1;
+    State* s = (State*)(t+2);
+    if( leaf ) {
+      t[2] = r[2]; t[3] = byte(key>>8); t[4] = r[3]; t[5] = byte(key>>16);
+    } else {
+      s[0].sym = r[2]; s[0].tf = byte(key>>8); s[0].succ = word(wget(r+4));
+      s[1].sym = r[3]; s[1].tf = byte(key>>16); s[1].succ = word(wget(r+6));
+    }
+    return mkCtxL(t, 1, leaf);
+  }
+  // Expands the cold SuffCache[i] in place of its page's free space; the page has the headroom.
+  void expandCold(int i) {
+    Ctx c = SuffCache[i];
+    byte* r = rec(c);
+    uint p = pageOf(r);
+    uint csz = coldSize(r, uint(i));
+    Ctx nc;
+    if( r[0]<CPATH_LIM ) {
+      uint L = pathL(r);
+      bool ll = lastIsLeaf(uint(i), L);
+      word nxt = ll ? 0 : pathChild(r, offOf(r));
+      byte* e = 0;
+      for( int k = int(L)-1; k>=0; k-- ) {
+        bool leaf = (k==int(L)-1) && ll;
+        e = allocRec(p, leaf ? 2u : 4u, leaf ? uint(ANYPAR) : 0u);
+        State* s = (State*)e;
+        s->sym = r[1+k]; s->tf = r[1+L+k];
+        if( !leaf ) s->succ = nxt;
+        nxt = word(offOf(e));
+      }
+      nc = mkCtxL(e, 0, L==1 && ll);
+    } else {
+      uint code = ((r[0]<<8) | r[1])-CNU2_BASE;
+      uint key = cbKey[code];
+      cbRelease(code);
+      bool leaf = isL(c);
+      byte* nr = allocRec(p, leaf ? 6u : 10u, ANYPAR);
+      nr[0] = byte(key); nr[1] = 1;
+      if( leaf ) {
+        nr[2] = r[2]; nr[3] = byte(key>>8); nr[4] = r[3]; nr[5] = byte(key>>16);
+      } else {
+        State* s = (State*)(nr+2);
+        s[0].sym = r[2]; s[0].tf = byte(key>>8); s[0].succ = word(wget(r+4));
+        s[1].sym = r[3]; s[1].tf = byte(key>>16); s[1].succ = word(wget(r+6));
+      }
+      nc = mkCtxL(nr, 1, leaf);
+    }
+    PageMeta& m = pm[p];
+    m.live -= csz; live_total -= csz; m.cdead += csz;
+    if( i>0 ) *parentSlot[i] = refOf(nc);
+    SuffCache[i] = nc;
+    st_expand++;
+  }
 
   // ---------------- maintenance (step boundary only) ----------------
-  enum { K_MULTI = 0, K_BIN0 = 1, K_BIN2 = 2 };
-  struct LNode { word off; word sz; int parent; word st; byte kind; byte moved; uint sub; };
-  std::vector<LNode> Ls;
+  // K_LBIN: leaf binary (2 bytes); K_PATH: a cold path record, as one node until it is exploded
+  enum { K_MULTI = 0, K_BIN0 = 1, K_BIN2 = 2, K_LBIN = 3, K_PATH = 4 };
+  // F_KEEP: a cold record copied as it is
+  enum { F_HOT = 0, F_CPATH = 1, F_CNU2 = 2, F_INNER = 3, F_KEEP = 4 };
+  enum { NOOFF = 0xFFFF };
+  // One node per context. off: offset of its source record (NOOFF for the inner elements of a
+  // cold path record); sz: size of its hot form; sp: its states (in the page for hot non-leaf
+  // records, otherwise decoded into DS).
+  struct LNode {
+    word off; word sz; int parent; word st; byte kind; byte moved; byte depth; byte leaf;
+    byte ns; byte hdr; byte cold; byte pin; byte fmt; byte adj; byte placed; word nref;
+    const State* sp; int next;
+    union { uint sub; uint gid; };     // subtree size (split selection), then the moved root's id
+    union { int tail; int code; };     // last element of a path / codebook index of an NU=2
+  };
+  static bool isColdFmt(uint f) { return f==F_CNU2 || f==F_CPATH || f==F_KEEP; }
+  uint coldNodeSize(const LNode& L) const {
+    if( L.fmt==F_CNU2 ) return L.leaf ? 4u : 8u;
+    uint m = L.ns+1u;
+    bool noEnd = L.adj || (L.fmt==F_CPATH ? Ls[L.tail].kind==K_LBIN : L.hdr!=0);
+    return 1+2*m+(noEnd ? 0u : 2u);
+  }
+  enum { DS_MAX = 40000 };
+  struct NodeBuf {
+    LNode* a; uint n;
+    LNode& operator[](size_t i) { return a[i]; }
+    const LNode& operator[](size_t i) const { return a[i]; }
+    size_t size() const { return n; }
+  } Ls;
+  uint enumRbase;               // records at or above it were allocated since the last Repack
+  uint nRootNodes;              // the first nodes are the page roots
+  LNode& newNode() {
+    if( Ls.n>=DS_MAX ) { fprintf(stderr, "\nfatal: node buffer full\n"); exit(7); }
+    return Ls.a[Ls.n++];
+  }
+  State DS[DS_MAX]; uint nDS;
+  State* dsAlloc(uint n) {
+    if( nDS+n>DS_MAX ) { fprintf(stderr, "\nfatal: decode buffer full\n"); exit(7); }
+    State* r = DS+nDS; nDS += n; return r;
+  }
   std::vector<int> selBuf, kidBuf;
-  std::vector<uint> selGid;
-  static byte kindOfRef(word r) { return (r & 1) ? byte(K_MULTI) : ((r & 2) ? byte(K_BIN2) : byte(K_BIN0)); }
+  uint fwdN[PG_SIZE/2];         // source offset/2 -> node index, valid where fwdStamp == enumStamp
+  uint fwdStamp[PG_SIZE/2];
+  uint enumStamp = 0;
   void removeDeadRoots(uint p) {
     std::vector<uint>& R = pm[p].roots;
     for( size_t k = 0; k<R.size(); ) {
       if( R[k]==NO_ROOT || groot[R[k]].page!=p ) { R[k] = R.back(); R.pop_back(); } else k++;
     }
   }
-  // Breadth-first list of the records of page p reachable from its roots through near refs
+  static void initNode(LNode& L, int parent, uint st, uint depth, bool leaf) {
+    L.parent = parent; L.st = word(st); L.depth = byte(depth); L.leaf = leaf;
+    L.moved = 0; L.ns = 0; L.hdr = 0; L.pin = 0; L.fmt = F_HOT; L.adj = 0; L.placed = 0; L.nref = 0; L.sub = 0;
+    L.next = -1; L.tail = -1;
+  }
+  __attribute__((always_inline)) inline int addNode(const byte* base, uint kc, word r, int parent, uint st, uint depth) {
+    int k = int(Ls.n);
+    bool leaf = int(depth)>=_MaxOrder;
+    if( r<kc ) {
+      const byte* c = base+r;
+      fwdN[r>>1] = uint(k); fwdStamp[r>>1] = enumStamp;
+      if( c[0]<CPATH_LIM ) {
+        uint n = pathL(c);
+        bool ll = lastIsLeaf(depth, n);
+        LNode& L = newNode();
+        initNode(L, parent, st, depth, leaf);
+        L.off = r; L.cold = 1; L.kind = K_PATH; L.ns = byte(n-1); L.hdr = ll;
+        L.sz = word(4*(n-1)+(ll ? 2u : 4u));
+        State* s = dsAlloc(1);   // the last element's successor
+        s->sym = 0; s->tf = 0; s->succ = ll ? 0 : pathChild(c, r);
+        L.sp = s;
+        return k;
+      }
+      LNode& L = newNode();
+      initNode(L, parent, st, depth, leaf);
+      L.off = r; L.cold = 1;
+      L.code = int(((c[0]<<8) | c[1])-CNU2_BASE);
+      uint key = cbKey[L.code];
+      L.kind = K_MULTI; L.ns = 1; L.hdr = byte(key);
+      L.sz = word(recSizeNU(2, leaf));
+      State* s = dsAlloc(2);
+      L.sp = s;
+      s[0].sym = c[2]; s[0].tf = byte(key>>8); s[1].sym = c[3]; s[1].tf = byte(key>>16);
+      s[0].succ = leaf ? 0 : word(wget(c+4)); s[1].succ = leaf ? 0 : word(wget(c+6));
+      return k;
+    }
+    LNode& L = newNode();
+    initNode(L, parent, st, depth, leaf);
+    L.cold = 0;
+    L.off = word(r & ~1u);
+    if( L.off>=enumRbase ) L.pin = 1;
+    fwdN[L.off>>1] = uint(k); fwdStamp[L.off>>1] = enumStamp;
+    const byte* h = base+L.off;
+    if( r & 1 ) {
+      L.kind = K_MULTI; L.ns = h[1]; L.hdr = h[0];
+      L.sz = word(recSizeNU(L.ns+1u, leaf));
+      if( leaf ) {
+        State* s = dsAlloc(L.ns+1u);
+        L.sp = s;
+        for( uint j = 0; j<=L.ns; j++ ) { s[j].sym = h[2+2*j]; s[j].tf = h[3+2*j]; s[j].succ = 0; }
+      } else L.sp = (const State*)(h+2);
+    } else if( leaf ) {
+      L.kind = K_LBIN; L.sz = 2;
+      State* s = dsAlloc(1);
+      L.sp = s;
+      s->sym = h[0]; s->tf = h[1]; s->succ = 0;
+    } else {
+      L.kind = (r & 2) ? byte(K_BIN2) : byte(K_BIN0); L.sz = 4;
+      L.sp = (const State*)h;
+    }
+    return k;
+  }
+  // Breadth-first list of the contexts of page p reachable from its roots through near refs
   // (parents precede their children).
   void enumPage(uint p) {
     PageMeta& m = pm[p];
-    byte* base = pageBase(p);
-    Ls.clear();
+    const byte* base = pageBase(p);
+    uint kc = pgCold[p];
+    Ls.n = 0; nDS = 0;
+    enumRbase = pol_coldq>=2 ? m.rbase : PG_SIZE;
+    if( ++enumStamp==0 ) { memset(fwdStamp, 0, sizeof(fwdStamp)); enumStamp = 1; }
     for( size_t k = 0; k<m.roots.size(); k++ ) {
-      word r = groot[m.roots[k]].ref;
-      Ls.push_back(LNode{word(r & ~1u), 0, -1, word(k), kindOfRef(r), 0, 0});
+      const GRootEnt& g = groot[m.roots[k]];
+      addNode(base, kc, g.ref, -1, uint(k), g.depth);
     }
+    nRootNodes = Ls.n;
     for( size_t k = 0; k<Ls.size(); k++ ) {
-      byte* r = base+Ls[k].off;
+      uint cd = Ls[k].depth+1u;
       if( Ls[k].kind==K_MULTI ) {
-        uint ns = r[1];
-        Ls[k].sz = word(2+4*(ns+1));
-        State* s0 = (State*)(r+2);
+        if( Ls[k].leaf ) continue;
+        uint ns = Ls[k].ns;
+        const State* sp = Ls[k].sp;
         for( uint j = 0; j<=ns; j++ ) {
-          if( !(s0[j].tf & 0x80) ) continue;
-          word c = s0[j].succ;
-          if( c>=FAR_LIM ) Ls.push_back(LNode{word(c & ~1u), 0, int(k), word(j), kindOfRef(c), 0, 0});
+          State s = sp[j];
+          if( (s.tf & 0x80) && s.succ>=FAR_LIM ) addNode(base, kc, s.succ, int(k), j, cd);
         }
-      } else {
-        Ls[k].sz = 4;
-        if( Ls[k].kind==K_BIN0 ) {
-          word c = ((State*)r)->succ;
-          if( c>=FAR_LIM ) Ls.push_back(LNode{word(c & ~1u), 0, int(k), 0, kindOfRef(c), 0, 0});
-        }
+      } else if( (Ls[k].kind==K_BIN0 && Ls[k].next<0) || (Ls[k].kind==K_PATH && !Ls[k].hdr) ) {
+        word c = Ls[k].sp[0].succ;
+        if( Ls[k].kind==K_PATH ) cd = Ls[k].depth+Ls[k].ns+1u;
+        if( c>=FAR_LIM ) { int ck = addNode(base, kc, c, int(k), 0, cd); Ls[k].next = ck; }
       }
     }
   }
@@ -757,8 +998,77 @@ struct Model {
     }
   }
   uint farUsedCount(uint p) const { return uint(pm[p].fars.size()-pm[p].farFree.size()); }
-  // Compacts page p in place. With doSplit, a set of sibling subtrees first moves to a receiver
-  // page. Only SuffCache[0..order] and parentSlot[1..order] are live transient references.
+  // group start offsets for byte totals b[kind], from start; returns the end
+  static uint layout(uint* o, const uint* b, uint start) {
+    o[K_MULTI] = start;
+    uint e = start+b[K_MULTI];
+    o[K_BIN0] = (e+3) & ~3u; e = o[K_BIN0]+b[K_BIN0];
+    o[K_LBIN] = e; e += b[K_LBIN];
+    if( b[K_BIN2] ) { o[K_BIN2] = (e & 2) ? e : e+2; e = o[K_BIN2]+b[K_BIN2]; } else o[K_BIN2] = e;
+    return e;
+  }
+  // number of far refs held by node k
+  uint farRefs(const LNode& L) const {
+    if( L.leaf ) return 0;
+    if( L.kind==K_MULTI ) {
+      uint c = 0;
+      for( uint j = 0; j<=L.ns; j++ ) if( (L.sp[j].tf & 0x80) && L.sp[j].succ<FAR_LIM ) c++;
+      return c;
+    }
+    if( L.kind==K_PATH ) return (!L.hdr && L.next<0) ? 1u : 0u;
+    return (L.kind==K_BIN0 && L.next<0 && L.sp[0].succ<FAR_LIM) ? 1u : 0u;
+  }
+  // replaces cold path node k by its elements (the head keeps index k); all inherit moved/pin
+  void explodePath(const byte* base, int k) {
+    LNode& H = Ls[k];
+    const byte* c = base+H.off;
+    uint n = H.ns+1u;
+    bool ll = H.hdr;
+    int child = H.next;
+    word endref = H.sp[0].succ;
+    State* s = dsAlloc(n);
+    int prev = -1;
+    for( uint e = 0; e<n; e++ ) {
+      int idx = e==0 ? k : int(Ls.n);
+      LNode& E = e==0 ? H : newNode();
+      if( e>0 ) {
+        initNode(E, prev, 0, H.depth+e, int(H.depth+e)>=_MaxOrder);
+        E.off = NOOFF; E.cold = 2; E.moved = H.moved; E.pin = H.pin;
+        Ls[prev].next = idx;
+      }
+      bool lb = (e==n-1) && ll;
+      E.kind = lb ? byte(K_LBIN) : byte(K_BIN0);
+      E.sz = lb ? 2 : 4;
+      E.ns = 0; E.hdr = 0;
+      E.sp = s+e;
+      s[e].sym = c[1+e]; s[e].tf = c[1+n+e]; s[e].succ = (e+1<n) ? 0 : endref;
+      prev = idx;
+    }
+    Ls[prev].next = child;
+    if( child>=0 ) Ls[child].parent = prev;
+  }
+  // new value of a child pointer v of node par (ck: the child's node, -1 for a far ref)
+  uint rp_p, rp_q;
+  inline word remapChild(const LNode& par, word v, int ck) {
+    if( ck>=0 && !Ls[ck].moved ) return Ls[ck].nref;
+    return remapSlow(par, v, ck);
+  }
+  word remapSlow(const LNode& par, word v, int ck) {
+    if( ck<0 ) {
+      if( par.moved ) { uint gid = pm[rp_p].fars[v]; freeFar(rp_p, v); return allocFar(rp_q, gid); }
+      farUsed[v] = 1;
+      return v;
+    }
+    const LNode& C = Ls[ck];
+    if( par.moved || !C.moved ) return C.nref;
+    word jf = allocFar(rp_p, C.gid);   // child is a moved subtree root: becomes a far ref
+    farUsed[jf] = 1;
+    return jf;
+  }
+  // Rebuilds page p: [cold records][multi][binary ≡0][leaf binary][binary ≡2] from RESV. With
+  // doSplit, a set of sibling subtrees first moves (in hot form) to a receiver page. Only
+  // SuffCache[0..order] and parentSlot[1..order] are live transient references; the records
+  // holding them stay hot.
   bool Repack(uint p, bool doSplit) {
     qword t0 = __rdtsc();
     removeDeadRoots(p);
@@ -778,17 +1088,8 @@ struct Model {
       for( size_t t = 0; t<sel.size(); t++ ) selBytes += Ls[sel[t]].sub;
       for( size_t t = 0; t<sel.size(); t++ ) Ls[sel[t]].moved = 1;
       for( size_t k = 0; k<n; k++ ) if( Ls[k].parent>=0 && Ls[Ls[k].parent].moved ) Ls[k].moved = 1;
-      // far refs that leave with the moved records, plus the moved roots' own entries
       uint movedFar = uint(sel.size());
-      byte* bp0 = pageBase(p);
-      for( size_t k = 0; k<n; k++ ) {
-        if( !Ls[k].moved ) continue;
-        byte* r = bp0+Ls[k].off;
-        if( Ls[k].kind==K_MULTI ) {
-          State* s0 = (State*)(r+2);
-          for( uint j = 0; j<=r[1]; j++ ) if( (s0[j].tf & 0x80) && s0[j].succ<FAR_LIM ) movedFar++;
-        } else if( Ls[k].kind==K_BIN0 && ((State*)r)->succ<FAR_LIM ) movedFar++;
-      }
+      for( size_t k = 0; k<n; k++ ) if( Ls[k].moved ) movedFar += farRefs(Ls[k]);
       if( recvPage!=DEAD_PAGE && recvPage!=p && recvPage<nPages && pm[recvPage].bump+selBytes+pol_recvgap<=PG_SIZE
           && farUsedCount(recvPage)+movedFar+16<=FAR_LIM ) q = recvPage;
       else {
@@ -798,118 +1099,236 @@ struct Model {
       }
       st_split++;
     } else st_compact++;
+    rp_p = p; rp_q = q;
     PageMeta& P = pm[p];
-    // layout: [multi][binary ≡0][binary ≡2] for the staying part (page p, rebuilt from RESV)
-    // and for the moved part (appended to page q)
-    uint sb[3] = {0, 0, 0}, mb[3] = {0, 0, 0};
-    for( size_t k = 0; k<n; k++ ) {
-      uint* b = Ls[k].moved ? mb : sb;
-      if( Ls[k].kind==K_MULTI ) b[0] += Ls[k].sz; else b[Ls[k].kind]++;
+    byte* bp = pageBase(p);
+    byte* bq = doSplit ? pageBase(q) : 0;
+    // transient references: their records stay hot
+    int slotNode[MAX_O+2]; uint slotDelta[MAX_O+2];
+    for( int i = 0; i<=order; i++ ) {
+      if( pageOf(rec(SuffCache[i]))==p ) Ls[fwdN[offOf(rec(SuffCache[i]))>>1]].pin = 1;
     }
-    uint so[3], mo[3], send, mend = 0, qstart = 0;
-    so[0] = RESV; so[1] = (RESV+sb[0]+3) & ~3u; so[2] = so[1]+4*sb[1]+2;
-    send = sb[2] ? so[2]+4*sb[2] : so[1]+4*sb[1];
+    for( int i = 1; i<=order; i++ ) {
+      slotNode[i] = -1;
+      byte* a = (byte*)parentSlot[i];
+      if( a<bp || a>=bp+PG_SIZE ) continue;
+      uint so_ = offOf(a);
+      // the record holding the slot starts at most 1026 bytes below it
+      size_t k = n;
+      for( uint o = so_ & ~1u; o>=RESV && o+1100>so_; o -= 2 ) {
+        if( fwdStamp[o>>1]!=enumStamp ) continue;
+        const LNode& C = Ls[fwdN[o>>1]];
+        if( C.cold==0 && C.off==o && so_<uint(C.off)+C.sz ) { k = fwdN[o>>1]; break; }
+      }
+      if( k==n ) { fprintf(stderr, "\nfatal: parent slot not in a live record\n"); exit(7); }
+      slotNode[i] = int(k); slotDelta[i] = so_-Ls[k].off;
+      Ls[k].pin = 1;
+    }
+    // output formats (pass 1, forward). Cold records stay as they are unless they are current or
+    // move to the receiver. (With PPMD_COLDQ=2, enumPage pins the records allocated since the
+    // last Repack: they were touched recently.)
+    for( size_t k = 0; k<Ls.n; k++ ) {
+      LNode& L = Ls[k];
+      if( L.cold==1 ) {
+        if( L.kind==K_PATH ) {
+          if( L.pin || L.moved ) explodePath(bp, int(k));
+          else { L.fmt = F_KEEP; continue; }
+        } else if( L.pin || L.moved ) { cbRelease(uint(L.code)); L.code = -1; }
+        else { L.fmt = F_CNU2; continue; }
+      }
+      if( !pol_pack || L.moved || L.fmt!=F_HOT ) continue;
+      if( L.kind==K_MULTI ) {
+        if( L.ns!=1 || L.pin ) continue;
+        uint key = L.hdr | (uint(L.sp[0].tf)<<8) | (uint(L.sp[1].tf)<<16);
+        L.code = cbCode(key);
+        if( L.code<0 ) continue;
+        cbRef[L.code]++;
+        L.fmt = F_CNU2;
+        st_coldnu2++;
+        continue;
+      }
+      if( L.kind!=K_BIN0 ) continue;
+      // chain head: not the continuation of a binary parent's chain
+      if( L.parent>=0 && Ls[L.parent].kind==K_BIN0 && Ls[L.parent].next==int(k) ) continue;
+      // segments of unpinned elements, at most MAX_PATH long
+      int cur = int(k);
+      while( cur>=0 ) {
+        int h = cur, m = 0, last = -1;
+        while( cur>=0 && !Ls[cur].pin && !Ls[cur].moved && (Ls[cur].kind==K_BIN0 || Ls[cur].kind==K_LBIN) && m<MAX_PATH ) {
+          last = cur; m++;
+          cur = (Ls[cur].kind==K_BIN0) ? Ls[cur].next : -1;
+        }
+        if( m>=2 ) {
+          Ls[h].fmt = F_CPATH; Ls[h].ns = byte(m-1); Ls[h].tail = last;
+          for( int e = Ls[h].next; e!=Ls[last].next; e = Ls[e].next ) Ls[e].fmt = F_INNER;
+          st_coldpath++;
+        }
+        if( m==0 ) {
+          // a pinned or non-chain element: skip it
+          if( cur<0 ) break;
+          const LNode& C = Ls[cur];
+          if( C.moved || !(C.kind==K_BIN0 || C.kind==K_LBIN) ) break;
+          cur = (C.kind==K_BIN0) ? C.next : -1;
+        }
+      }
+    }
+    n = Ls.size();
+    // pass 2, children first: a path whose end child is cold stores that child right after itself
+    // (no end ref), which also makes a lone binary with a cold child a path of 1. Sizes of the
+    // groups.
+    uint sb[4] = {0, 0, 0, 0}, mb[4] = {0, 0, 0, 0};
+    uint cb = 0;   // cold bytes
+    for( size_t k = n; k-->0; ) {
+      LNode& L = Ls[k];
+      if( pol_pack ) {
+        int c = -1;
+        if( L.fmt==F_CPATH ) c = Ls[L.tail].kind==K_LBIN ? -1 : Ls[L.tail].next;
+        else if( L.fmt==F_KEEP ) c = L.hdr ? -1 : L.next;
+        else if( L.fmt==F_HOT && L.kind==K_BIN0 && !L.pin && !L.moved ) c = L.next;
+        if( c>=0 && isColdFmt(Ls[c].fmt) && Ls[c].parent==(L.fmt==F_CPATH ? L.tail : int(k)) ) {
+          if( L.fmt==F_HOT ) { L.fmt = F_CPATH; L.ns = 0; L.tail = int(k); st_coldpath++; }
+          L.adj = 1;
+        }
+      }
+      if( L.fmt==F_HOT ) (L.moved ? mb : sb)[L.kind] += L.sz;
+      else if( isColdFmt(L.fmt) ) cb += coldNodeSize(L);
+    }
+    // pass 3: offsets. Cold records first (an adjacent child right after its parent), then the
+    // hot groups.
+    uint kc = (RESV+cb+1) & ~1u;
+    uint so[4], mo[4], send, mend = 0;
+    send = layout(so, sb, kc);
     if( doSplit ) {
-      qstart = (pm[q].bump+3) & ~3u;
-      mo[0] = qstart; mo[1] = (qstart+mb[0]+3) & ~3u; mo[2] = mo[1]+4*mb[1]+2;
-      mend = mb[2] ? mo[2]+4*mb[2] : mo[1]+4*mb[1];
+      mend = layout(mo, mb, pm[q].bump);
       if( mend>PG_SIZE ) { fprintf(stderr, "\nfatal: receiver overflow\n"); exit(7); }
     }
     if( send>PG_SIZE ) { fprintf(stderr, "\nfatal: repack overflow\n"); exit(7); }
+    uint co = RESV;
     for( size_t k = 0; k<n; k++ ) {
-      uint* o = Ls[k].moved ? mo : so;
-      uint kd = Ls[k].kind;
-      uint no = o[kd];
-      o[kd] += (kd==K_MULTI) ? Ls[k].sz : 4u;
-      fwd[Ls[k].off>>1] = word(no | Ls[k].moved);
+      LNode& L = Ls[k];
+      if( L.fmt==F_HOT ) {
+        uint* o = L.moved ? mo : so;
+        L.nref = word(o[L.kind] | (L.kind==K_MULTI ? 1u : 0u));
+        o[L.kind] += L.sz;
+        continue;
+      }
+      if( !isColdFmt(L.fmt) || L.placed ) continue;
+      int j = int(k);
+      for( ;; ) {
+        LNode& C = Ls[j];
+        if( C.placed ) { fprintf(stderr, "\nfatal: cold record placed twice\n"); exit(7); }
+        C.placed = 1;
+        C.nref = word(co);
+        co += coldNodeSize(C);
+        if( !C.adj ) break;
+        j = C.fmt==F_CPATH ? Ls[C.tail].next : C.next;
+      }
     }
-    byte* bp = pageBase(p);
-    byte* bq = doSplit ? pageBase(q) : 0;
+    if( co!=RESV+cb ) { fprintf(stderr, "\nfatal: cold layout mismatch\n"); exit(7); }
     // global ids of the moved subtree roots
-    selGid.resize(sel.size());
     for( size_t t = 0; t<sel.size(); t++ ) {
-      const LNode& s = Ls[sel[t]];
-      word nref = word((fwd[s.off>>1] & ~1u) | (s.kind==K_MULTI ? 1u : 0u));
+      LNode& s = Ls[sel[t]];
       uint gid;
       if( s.parent<0 ) {
         gid = P.roots[s.st];
-        groot[gid].page = q; groot[gid].ref = nref;
+        groot[gid].page = q; groot[gid].ref = s.nref;
         P.roots[s.st] = NO_ROOT;
-      } else gid = newGRoot(q, nref);
+      } else gid = newGRoot(q, s.nref, s.depth);
       pm[q].roots.push_back(gid);
-      selGid[t] = gid;
+      s.gid = gid;
     }
     memset(farUsed, 0, P.fars.size());
-    uint stayBytes = 0, movedBytes = 0;
+    uint stayBytes = cb, movedBytes = 0;
     for( size_t k = 0; k<n; k++ ) {
       const LNode& L = Ls[k];
-      uint f = fwd[L.off>>1];
-      bool mv = (f & 1)!=0;
-      byte* dst = mv ? bq+(f & ~1u) : scratch+f;
-      byte* src = bp+L.off;
-      State* ds;
-      uint cnt;
-      if( L.kind==K_MULTI ) {
-        memcpy(dst, src, L.sz);
-        ds = (State*)(dst+2); cnt = dst[1]+1u;
-      } else {
-        *(uint32_t*)dst = *(const uint32_t*)src;
-        ds = (State*)dst; cnt = (L.kind==K_BIN0) ? 1u : 0u;
-      }
-      if( mv ) movedBytes += L.sz; else stayBytes += L.sz;
-      for( uint j = 0; j<cnt; j++ ) {
-        if( L.kind==K_MULTI && !(ds[j].tf & 0x80) ) continue;
-        word c = ds[j].succ;
-        if( c>=FAR_LIM ) {
-          uint cf = fwd[(c & ~1u)>>1];
-          if( mv || !(cf & 1) ) ds[j].succ = word((cf & ~1u) | (c & 1u));
-          else {
-            // child is a moved subtree root: becomes a far ref
-            uint t = 0;
-            while( Ls[sel[t]].off!=(c & ~1u) ) t++;
-            word jf = allocFar(p, selGid[t]);
-            farUsed[jf] = 1;
-            ds[j].succ = jf;
+      if( L.fmt==F_INNER ) continue;
+      const State* ss = L.sp;
+      if( L.fmt==F_CNU2 ) {
+        byte* d = scratch+L.nref;
+        uint hv = CNU2_BASE+uint(L.code);
+        d[0] = byte(hv>>8); d[1] = byte(hv);
+        d[2] = ss[0].sym; d[3] = ss[1].sym;
+        if( !L.leaf ) {
+          for( uint j = 0; j<2; j++ ) {
+            word v = ss[j].succ;
+            if( ss[j].tf & 0x80 ) v = remapChild(L, v, v>=FAR_LIM ? int(fwdN[v>>1]) : -1);
+            wput(d+4+2*j, v);
           }
-        } else if( mv ) {
-          uint gid = P.fars[c];
-          freeFar(p, c);
-          ds[j].succ = allocFar(q, gid);
-        } else farUsed[c] = 1;
+        }
+        continue;
+      }
+      if( L.fmt==F_KEEP ) {
+        byte* d = scratch+L.nref;
+        uint m = L.ns+1u;
+        memcpy(d+1, bp+L.off+1, 2*m);
+        d[0] = byte((m-1) | (L.adj ? uint(CPATH_ADJ) : 0u));
+        if( !L.hdr && !L.adj ) wput(d+1+2*m, remapChild(L, ss[0].succ, L.next));
+        continue;
+      }
+      if( L.fmt==F_CPATH ) {
+        byte* d = scratch+L.nref;
+        uint m = L.ns+1u;
+        d[0] = byte((m-1) | (L.adj ? uint(CPATH_ADJ) : 0u));
+        int e = int(k), last = int(k);
+        for( uint t = 0; t<m; t++ ) {
+          d[1+t] = Ls[e].sp[0].sym; d[1+m+t] = Ls[e].sp[0].tf;
+          last = e; e = Ls[e].next;
+        }
+        if( Ls[last].kind!=K_LBIN && !L.adj ) wput(d+1+2*m, remapChild(Ls[last], Ls[last].sp[0].succ, Ls[last].next));
+        continue;
+      }
+      // hot
+      byte* d = (L.moved ? bq : scratch)+(L.nref & ~1u);
+      if( L.moved ) movedBytes += L.sz; else stayBytes += L.sz;
+      if( L.kind==K_MULTI ) {
+        d[0] = L.hdr; d[1] = L.ns;
+        if( L.leaf ) {
+          for( uint j = 0; j<=L.ns; j++ ) { d[2+2*j] = ss[j].sym; d[3+2*j] = ss[j].tf; }
+        } else {
+          State* ds = (State*)(d+2);
+          for( uint j = 0; j<=L.ns; j++ ) {
+            ds[j] = ss[j];
+            if( ss[j].tf & 0x80 ) ds[j].succ = remapChild(L, ss[j].succ, ss[j].succ>=FAR_LIM ? int(fwdN[ss[j].succ>>1]) : -1);
+          }
+        }
+      } else if( L.kind==K_LBIN ) {
+        d[0] = ss[0].sym; d[1] = ss[0].tf;
+      } else {
+        State* ds = (State*)d;
+        *ds = ss[0];
+        if( L.kind==K_BIN0 ) ds->succ = remapChild(L, ss[0].succ, L.next);
       }
     }
     // remap the transient references into page p
     for( int i = 0; i<=order; i++ ) {
       byte* r = rec(SuffCache[i]);
       if( pageOf(r)!=p ) continue;
-      uint f = fwd[offOf(r)>>1];
-      SuffCache[i] = mkCtx(((f & 1) ? bq : bp)+(f & ~1u), uint(SuffCache[i] & 1));
+      const LNode& L = Ls[fwdN[offOf(r)>>1]];
+      SuffCache[i] = mkCtxL((L.moved ? bq : bp)+(L.nref & ~1u), L.nref & 1u, L.leaf);
     }
     for( int i = 1; i<=order; i++ ) {
-      byte* a = (byte*)parentSlot[i];
-      if( a<bp || a>=bp+PG_SIZE ) continue;
-      uint so_ = offOf(a);
-      size_t k = 0;
-      while( k<n && !(so_>=Ls[k].off && so_<uint(Ls[k].off)+Ls[k].sz) ) k++;
-      if( k==n ) { fprintf(stderr, "\nfatal: parent slot not in a live record\n"); exit(7); }
-      uint f = fwd[Ls[k].off>>1];
-      uint nofs = (f & ~1u)+(so_-Ls[k].off);
-      if( f & 1 ) parentSlot[i] = (word*)(bq+nofs);
+      if( slotNode[i]<0 ) continue;
+      const LNode& L = Ls[slotNode[i]];
+      uint nofs = (L.nref & ~1u)+slotDelta[i];
+      if( L.moved ) parentSlot[i] = (word*)(bq+nofs);
       else {
         word v = *(word*)(scratch+nofs);
         parentSlot[i] = (v<FAR_LIM) ? &groot[P.fars[v]].ref : (word*)(bp+nofs);
       }
     }
     memcpy(bp+RESV, scratch+RESV, send-RESV);
-    for( size_t k = 0; k<n && Ls[k].parent<0; k++ ) {
+    for( size_t k = 0; k<nRootNodes; k++ ) {   // the roots are the first nodes
       if( Ls[k].moved ) continue;
-      groot[P.roots[Ls[k].st]].ref = word((fwd[Ls[k].off>>1] & ~1u) | (Ls[k].kind==K_MULTI ? 1u : 0u));
+      groot[P.roots[Ls[k].st]].ref = Ls[k].nref;
     }
     removeDeadRoots(p);
     live_total += qword(stayBytes)+movedBytes-P.live;
     P.live = stayBytes;
     P.bump = send;
-    memset(P.freeHead, 0, sizeof(P.freeHead));
+    P.cdead = 0;
+    P.rbase = send;
+    pgCold[p] = word(kc);
+    memset(P.freeHead, 0, sizeof(P.freeHead)); P.fmask = 0;
     for( size_t j = 0; j<P.fars.size(); j++ ) {
       if( P.fars[j]!=NO_ROOT && !farUsed[j] ) {
         groot[P.fars[j]].page = DEAD_PAGE;   // subtree dropped by rescale: unreachable
@@ -928,24 +1347,40 @@ struct Model {
     } else tsc_compact += __rdtsc()-t0;
     return true;
   }
-  uint needFor(Ctx c) {
+  uint needFor(Ctx c, int i) {
+    if( isC(c) ) return coldHotSize(rec(c), uint(i))+recSizeNU(3, false)+12u;
     uint NU = NS(c)+1;
-    return (NU<256 ? recSizeNU(NU+1) : 0u) + 12u;
+    return (NU<256 ? recSizeNU(NU+1, false) : 0u) + 12u;
   }
-  // Makes sure every page holding a current context can absorb this step's allocations.
+  void expandCurrent() {
+    for( int i = 1; i<=order; i++ ) if( isC(SuffCache[i]) ) expandCold(i);
+  }
+  // Makes sure every page holding a current context can absorb this step's allocations, then
+  // expands the cold current contexts.
   bool EnsureHeadroom() {
     {
       // fast path: every page can absorb the step's worst case for all current contexts together
       uint sum = 0;
-      for( int i = 0; i<=order; i++ ) sum += needFor(SuffCache[i]);
+      for( int i = 0; i<=order; i++ ) sum += needFor(SuffCache[i], i);
       int i = 0;
       while( i<=order && pgSlack[pageOf(rec(SuffCache[i]))]>=sum+64 ) i++;
-      if( i>order ) return true;
+      if( i>order ) { expandCurrent(); return true; }
+      // the page tests below with the total need of all pages (an upper bound of each page's)
+      for( ; i<=order; i++ ) {
+        const PageMeta& m = pm[pageOf(rec(SuffCache[i]))];
+        if( PG_SIZE-m.bump<sum+64 ) break;
+        if( m.bump+sum>((m.hwm+4095) & ~4095u) ) {
+          uint dead = m.bump-RESV-m.live;
+          uint cfree = m.cdead<(m.live>>pol_cdeadsh) ? m.cdead : (m.live>>pol_cdeadsh);
+          if( dead-cfree>(m.live>>pol_deadsh)+256 ) break;
+        }
+      }
+      if( i>order ) { expandCurrent(); return true; }
     }
     for( int iter = 0; iter<64; iter++ ) {
       uint pg[MAX_O+2], nd[MAX_O+2]; int np = 0;
       for( int i = 0; i<=order; i++ ) {
-        uint p = pageOf(rec(SuffCache[i])), n = needFor(SuffCache[i]);
+        uint p = pageOf(rec(SuffCache[i])), n = needFor(SuffCache[i], i);
         int k = 0;
         while( k<np && pg[k]!=p ) k++;
         if( k==np ) { pg[np] = p; nd[np] = 0; np++; }
@@ -956,15 +1391,17 @@ struct Model {
         PageMeta& m = pm[pg[k]];
         uint freeb = PG_SIZE-m.bump;
         uint dead = m.bump-RESV-m.live;
+        uint cfree = m.cdead<(m.live>>pol_cdeadsh) ? m.cdead : (m.live>>pol_cdeadsh);
         bool tight = freeb<nd[k]+64;
-        bool wasteful = (m.bump+nd[k]>((m.hwm+4095) & ~4095u)) && dead>(m.live>>pol_deadsh)+256;
+        bool wasteful = (m.bump+nd[k]>((m.hwm+4095) & ~4095u)) && dead-cfree>(m.live>>pol_deadsh)+256;
         if( tight || wasteful ) {
+          if( tight ) st_tight++; else st_waste++;
           bad = k;
           doSplit = (m.live+nd[k]+pol_margin>USABLE);
           break;
         }
       }
-      if( bad<0 ) { Order0 = rootCtx(0); return true; }
+      if( bad<0 ) { Order0 = rootCtx(0); expandCurrent(); return true; }
       if( !Repack(pg[bad], doSplit) ) return false;
     }
     fprintf(stderr, "\nfatal: EnsureHeadroom did not converge\n");
@@ -972,32 +1409,72 @@ struct Model {
   }
 
   // ---------------- debug: full tree consistency check (PPMD_CHECK=n: every n steps) ----------------
-  qword check_every = 0, check_step = 0;
+  qword check_every = 0, check_step = 0, check_from = ~0ull;
   void CheckFail(const char* msg, Ctx c) {
     fprintf(stderr, "\nCHECK FAILED at step %llu: %s (page %u off %u M=%d)\n", (unsigned long long)check_step, msg,
             pageOf(rec(c)), offOf(rec(c)), int(c & 1));
     exit(11);
   }
+  // the child context a ref value in page p names
+  Ctx refCtx(uint p, word r, int cd) {
+    bool leaf = cd>=_MaxOrder;
+    if( r<FAR_LIM ) {
+      if( r>=pm[p].fars.size() || pm[p].fars[r]==NO_ROOT ) return 0;
+      uint gid = pm[p].fars[r];
+      if( gid>=nGroot || groot[gid].page>=nPages ) return 0;
+      p = groot[gid].page; r = groot[gid].ref;
+    }
+    if( r<pgCold[p] ) return mkCtxL(pageBase(p)+r, 0, leaf) | COLDB;
+    return mkCtxL(pageBase(p)+(r & ~1u), r & 1u, leaf);
+  }
   void CheckTree() {
-    std::vector<byte> seen(size_t(nPages)<<(PG_BITS-1), 0);
-    std::vector<Ctx> st;
-    st.push_back(rootCtx(0));
+    std::vector<bool> seen(size_t(nPages)<<PG_BITS, false);
+    std::vector<std::pair<Ctx, int> > st;
+    std::vector<uint> cbUse(cbKey.size(), 0);
+    st.push_back(std::make_pair(rootCtx(0), 0));
     while( !st.empty() ) {
-      Ctx c = st.back(); st.pop_back();
+      Ctx c = st.back().first; int d = st.back().second; st.pop_back();
+      if( c==0 ) CheckFail("bad far ref", c);
+      if( isL(c)!=(d>=_MaxOrder) ) CheckFail("leaf flag does not match depth", c);
       uint p = pageOf(rec(c)), off = offOf(rec(c));
       if( p>=nPages ) CheckFail("page out of range", c);
-      if( off<RESV || off+recSize(c)>pm[p].bump ) CheckFail("record outside the allocated part of its page", c);
-      if( !isM(c) && (off & 1) ) CheckFail("misaligned binary", c);
-      size_t vi = (size_t(p)<<(PG_BITS-1))+(off>>1);
+      size_t vi = (size_t(p)<<PG_BITS)+off;
       if( seen[vi] ) CheckFail("record reachable twice", c);
-      seen[vi] = 1;
+      seen[vi] = true;
+      if( isC(c) ) {
+        const byte* r = rec(c);
+        if( off<RESV || off+coldSize(r, uint(d))>pgCold[p] ) CheckFail("cold record outside the cold region", c);
+        if( r[0]<CPATH_LIM ) {
+          uint L = pathL(r);
+          if( (L<2 && !pathAdj(r)) || d+int(L)-1>_MaxOrder ) CheckFail("bad path record length", c);
+          if( pathAdj(r) && lastIsLeaf(uint(d), L) ) CheckFail("adjacent child flag on a path ending at a leaf", c);
+          if( !lastIsLeaf(uint(d), L) ) {
+            word cr = pathChild(r, off);
+            if( pathAdj(r) && !(cr<pgCold[p]) ) CheckFail("adjacent child outside the cold region", c);
+            st.push_back(std::make_pair(refCtx(p, cr, d+int(L)), d+int(L)));
+          }
+        } else {
+          uint code = ((r[0]<<8) | r[1])-CNU2_BASE;
+          if( code>=cbKey.size() || cbRef[code]==0 ) CheckFail("bad codebook index", c);
+          cbUse[code]++;
+          uint key = cbKey[code];
+          if( d<_MaxOrder ) {
+            if( (key>>8) & 0x80 ) st.push_back(std::make_pair(refCtx(p, word(wget(r+4)), d+1), d+1));
+            if( (key>>16) & 0x80 ) st.push_back(std::make_pair(refCtx(p, word(wget(r+6)), d+1), d+1));
+          }
+        }
+        continue;
+      }
+      if( off<RESV || off<pgCold[p] || off+recSize(c)>pm[p].bump ) CheckFail("hot record outside the hot part of its page", c);
+      if( !isM(c) && (off & 1) ) CheckFail("misaligned binary", c);
       if( isM(c) && NS(c)==0 ) CheckFail("multi record with NumStats 0", c);
-      State* s0 = S0(c);
       uint ns = NS(c);
       for( uint j = 0; j<=ns; j++ ) {
-        if( isM(c) && MF(s0[j])>124 ) CheckFail("multi freq above MAX_FREQ", c);
-        if( !succIsCtx(c, &s0[j]) ) continue;
-        word r = s0[j].succ;
+        State* sj = SI(c, j);
+        if( isM(c) && MF(*sj)>124 ) CheckFail("multi freq above MAX_FREQ", c);
+        if( isL(c) && (sj->tf & 0x80) && isM(c) ) CheckFail("leaf state with a context successor", c);
+        if( !succIsCtx(c, sj) ) continue;
+        word r = sj->succ;
         if( r<FAR_LIM ) {
           if( r>=pm[p].fars.size() || pm[p].fars[r]==NO_ROOT ) CheckFail("dangling far ref", c);
           uint gid = pm[p].fars[r];
@@ -1006,16 +1483,24 @@ struct Model {
           for( size_t k = 0; k<pm[groot[gid].page].roots.size(); k++ ) if( pm[groot[gid].page].roots[k]==gid ) listed = true;
           if( !listed ) CheckFail("root missing from its page's root list", c);
         }
-        st.push_back(child(c, &s0[j], 0));
+        st.push_back(std::make_pair(child(c, sj, 0, d+1), d+1));
       }
     }
+    for( size_t k = 0; k<cbUse.size(); k++ ) if( cbUse[k]>cbRef[k] ) CheckFail("codebook reference count too low", 0);
     for( int i = 0; i<=order; i++ ) {
       uint p = pageOf(rec(SuffCache[i])), off = offOf(rec(SuffCache[i]));
-      if( !seen[(size_t(p)<<(PG_BITS-1))+(off>>1)] ) CheckFail("SuffCache entry unreachable", SuffCache[i]);
+      if( !seen[(size_t(p)<<PG_BITS)+off] ) CheckFail("SuffCache entry unreachable", SuffCache[i]);
       if( i>0 && *parentSlot[i]!=refOf(SuffCache[i]) ) CheckFail("parent slot does not reference SuffCache entry", SuffCache[i]);
+      if( isL(SuffCache[i])!=(i>=_MaxOrder) ) CheckFail("SuffCache leaf flag does not match its order", SuffCache[i]);
     }
   }
   // ---------------- model ----------------
+  static uint hasTextSym(Ctx pc) {
+    const byte* s0 = (const byte*)S0(pc);
+    uint ns = NS(pc), sh = SH(pc);
+    for( uint j = 0; j<=ns; j++ ) if( s0[j<<sh]>=0x40 ) return F_HasText;
+    return 0;
+  }
   void CacheNumstatsAndFlags(int order) {
     uint nextBit = 0;
     if( pText>WinBeg && pText[-1]>=0x40 ) nextBit = F_NextIsText;
@@ -1023,9 +1508,7 @@ struct Model {
       Ctx pc = SuffCache[i];
       uint ns = NS(pc);
       NumStats_Cache[i] = ns;
-      State* s0 = S0(pc);
-      uint hasText = 0;
-      for( uint j = 0; j<=ns; j++ ) if( s0[j].sym>=0x40 ) { hasText = F_HasText; break; }
+      uint hasText = hasTextSym(pc);
       uint rescaledBit = Resc(pc) ? F_Rescaled : 0;
       Flags_Cache[i] = rescaledBit+hasText+(i>0 ? nextBit : 0);
     }
@@ -1070,7 +1553,7 @@ struct Model {
       State* st = StateCache[i];
       if( !succIsCtx(sctx, st) ) { order = i; return; }
       word* slot;
-      SuffCache[i+1] = child(sctx, st, &slot);
+      SuffCache[i+1] = child(sctx, st, &slot, i+1);
       parentSlot[i+1] = slot;
     }
   }
@@ -1097,6 +1580,7 @@ struct Model {
     pol_recvgap = getenv("PPMD_RECVGAP") ? atoi(getenv("PPMD_RECVGAP")) : 8192;
     pol_margin = getenv("PPMD_MARGIN") ? atoi(getenv("PPMD_MARGIN")) : 2048;
     check_every = getenv("PPMD_CHECK") ? strtoull(getenv("PPMD_CHECK"), 0, 10) : 0;
+    if( getenv("PPMD_CHECKFROM") ) check_from = strtoull(getenv("PPMD_CHECKFROM"), 0, 10);
     // sane ranges: a split moves at most half a page; the split threshold leaves at least half a page
     pol_splitnum = CLAMP(pol_splitnum, 1u, 8u);
     pol_margin = CLAMP(pol_margin, 256u, 16384u);
@@ -1120,10 +1604,19 @@ struct Model {
     arena = (byte*)(((uintptr_t)arenaMap+PG_SIZE-1) & ~(uintptr_t)(PG_SIZE-1));
     pm.reserve(maxPages);
     pgSlack.assign(maxPages, 0);
+    pgCold.assign(maxPages, RESV);
+    cbHash.assign(size_t(1)<<CBH_BITS, 0);
+    cbKey.reserve(CB_MAX);
+    st_expand = st_coldpath = st_coldnu2 = st_cbfull = 0;
+    pol_pack = getenv("PPMD_PACK") ? atoi(getenv("PPMD_PACK")) : 1;
+    pol_cdeadsh = getenv("PPMD_CDEADSH") ? atoi(getenv("PPMD_CDEADSH")) : 5;
+    pol_cdeadsh = CLAMP(pol_cdeadsh, 1u, 16u);
+    pol_coldq = getenv("PPMD_COLDQ") ? atoi(getenv("PPMD_COLDQ")) : 1;
     maxGroot = 1u<<25;
     groot = (GRootEnt*)map_mem(qword(maxGroot)*sizeof(GRootEnt));
     if( groot==0 ) return 1;
     scratch = (byte*)malloc(PG_SIZE);
+    Ls.a = (LNode*)malloc(sizeof(LNode)*DS_MAX); Ls.n = 0;
     nPages = 0;
     st_compact = st_split = st_scan = st_scanbytes = st_moves = st_pagefail = 0;
     tsc_compact = tsc_split = n_recs = 0;
@@ -1136,6 +1629,7 @@ struct Model {
     unmap_mem(arenaMap, arenaMapSize);
     unmap_mem(groot, qword(maxGroot)*sizeof(GRootEnt));
     free(scratch);
+    free(Ls.a);
   }
   qword touchedBytes() const {
     qword t = 0;
@@ -1153,17 +1647,18 @@ struct Model {
     freePages.clear();
     nGroot = 0;
     live_total = 0;
+    cbReset();
     recvPage = DEAD_PAGE;
     pText = WinBeg;
     see.initialize(_MaxOrder);
     uint p = newPage();
-    byte* r = allocRec(p, 256, false);
+    byte* r = allocRec(p, recSizeNU(256, false), ANYPAR);
     Order0 = mkCtx(r, 1);
     r[0] = 1;       // EscFreq 1, not rescaled
     r[1] = 255;     // NumStats
     State* s0 = S0(Order0);
     for( i = 0; i<256; i++ ) { s0[i].sym = byte(i); s0[i].tf = 0; s0[i].succ = NULL_SUCC; }
-    uint g = newGRoot(p, refOf(Order0));
+    uint g = newGRoot(p, refOf(Order0), 0);
     pm[p].roots.push_back(g);
     maxorder = order = 0;
     SuffCache[0] = Order0;
@@ -1250,9 +1745,7 @@ struct Model {
     uint ns = NS(pc);
     if( ns!=0 ) {
       uint sf = SummFreq(pc);
-      uint i = 0;
-      while( s0[i].sym!=sym1 ) i++;
-      uint cf = MF(s0[i])-1;
+      uint cf = MF(*FindState(pc, sym1))-1;
       uint sc = 1+sf-(ns+1)-cf;
       sc <<= 7;
       cf = 1+((314*cf<sc) ? (1536*cf>sc) : 2+(cf*175)/sc);
@@ -1260,18 +1753,33 @@ struct Model {
     }
     return s0[0].tf;
   }
+  struct RU { byte sym; byte T; word succ; int f; byte orig; };
+  void rescaleStore(Ctx ctx, const RU* u, uint ns) {
+    if( isL(ctx) ) {
+      for( uint k = 0; k<=ns; k++ ) { State* sk = SI(ctx, k); sk->sym = u[k].sym; sk->tf = byte((u[k].f>0 ? u[k].f : 1)-1); }
+      return;
+    }
+    State* s0 = S0(ctx);
+    for( uint k = 0; k<=ns; k++ ) { s0[k].sym = u[k].sym; s0[k].tf = byte(u[k].T | ((u[k].f>0 ? u[k].f : 1)-1)); s0[k].succ = u[k].succ; }
+    byte ni[256]; for( uint k = 0; k<=ns; k++ ) ni[u[k].orig] = byte(k);
+    slotPermute(s0, ns+1, ni);
+  }
   // rescale of a multi context; mirrors the reference exactly (operates on an unpacked copy)
   uint rescale(Ctx ctx, int OrderFall, State*& FoundState) {
-    struct U { byte sym; byte T; word succ; int f; byte orig; };
+    typedef RU U;
     U u[256], tmp;
     int of, i, a, f0, sf_orig, esc_local;
     uint reallocSize = 0;
     clrResc(ctx);
     State* s0 = S0(ctx);
     uint ns = NS(ctx);
-    for( uint k = 0; k<=ns; k++ ) { u[k].sym = s0[k].sym; u[k].T = s0[k].tf & 0x80; u[k].succ = s0[k].succ; u[k].f = MF(s0[k]); u[k].orig = byte(k); }
+    bool leaf = isL(ctx);
+    for( uint k = 0; k<=ns; k++ ) {
+      const State* sk = SI(ctx, k);
+      u[k].sym = sk->sym; u[k].T = sk->tf & 0x80; u[k].succ = leaf ? 0 : sk->succ; u[k].f = MF(*sk); u[k].orig = byte(k);
+    }
     {
-      uint fs_idx = uint(FoundState-s0);
+      uint fs_idx = SIdx(ctx, FoundState);
       if( fs_idx!=0 ) {
         tmp = u[fs_idx];
         for( uint k = fs_idx; k>0; k-- ) u[k] = u[k-1];
@@ -1309,8 +1817,7 @@ struct Model {
       if( cur_ns==0 ) {
         i = (2*u[0].f+esc_local-1)/esc_local;
         u[0].f = i<MAX_FREQ/3 ? i : MAX_FREQ/3;
-        for( uint k = 0; k<=ns; k++ ) { s0[k].sym = u[k].sym; s0[k].tf = byte(u[k].T | ((u[k].f>0 ? u[k].f : 1)-1)); s0[k].succ = u[k].succ; }
-        { byte ni[256]; for( uint k = 0; k<=ns; k++ ) ni[u[k].orig] = byte(k); slotPermute(s0, ns+1, ni); }
+        rescaleStore(ctx, u, ns);
         FoundState = &s0[0];
         return reallocSize;
       }
@@ -1324,8 +1831,7 @@ struct Model {
     } else
       a = 2;
     u[0].f += a;
-    for( uint k = 0; k<=ns; k++ ) { s0[k].sym = u[k].sym; s0[k].tf = byte(u[k].T | ((u[k].f>0 ? u[k].f : 1)-1)); s0[k].succ = u[k].succ; }
-    { byte ni[256]; for( uint k = 0; k<=ns; k++ ) ni[u[k].orig] = byte(k); slotPermute(s0, ns+1, ni); }
+    rescaleStore(ctx, u, ns);
     setResc(ctx);
     FoundState = &s0[0];
     return reallocSize;
@@ -1333,33 +1839,34 @@ struct Model {
   Ctx ShrinkContext(Ctx old, uint OldNU, uint NewNU) {
     uint p = pageOf(rec(old));
     State* os = S0(old);
+    bool leaf = isL(old);
     Ctx nc;
     if( NewNU==1 ) {
       bool ctxSucc = (os[0].tf & 0x80)!=0;
-      byte* r = allocRec(p, 1, !ctxSucc);
-      nc = mkCtx(r, 0);
+      byte* r = allocRec(p, recSizeNU(1, leaf), leaf ? uint(ANYPAR) : ctxSucc ? 0u : 2u);
+      nc = mkCtxL(r, 0, leaf);
       State* ns0 = S0(nc);
       ns0[0].sym = os[0].sym;
       ns0[0].tf = byte(MF(os[0]));
-      ns0[0].succ = os[0].succ;
+      if( !leaf ) ns0[0].succ = os[0].succ;
     } else {
-      byte* r = allocRec(p, NewNU, false);
-      nc = mkCtx(r, 1);
+      byte* r = allocRec(p, recSizeNU(NewNU, leaf), ANYPAR);
+      nc = mkCtxL(r, 1, leaf);
       r[0] = rec(old)[0];
       r[1] = byte(NewNU-1);
-      memcpy(r+2, os, 4*NewNU);
+      memcpy(r+2, os, NewNU<<SH(old));
     }
-    freeRec(rec(old), OldNU);
+    freeRec(rec(old), recSizeNU(OldNU, leaf));
     return nc;
   }
   void FinishRescale(Ctx& ctx, State*& FoundState, uint newNU) {
     uint oldNU = NS(ctx)+1;
     if( newNU<oldNU ) {
-      uint idx = uint(FoundState-S0(ctx));
+      uint idx = SIdx(ctx, FoundState);
       State* oldS = S0(ctx);
       Ctx nc = ShrinkContext(ctx, oldNU, newNU);
-      slotMove(oldS, newNU, S0(nc));
-      FoundState = S0(nc)+idx;
+      if( !isL(nc) ) slotMove(oldS, newNU, S0(nc));
+      FoundState = SI(nc, idx);
       SuffCache[order] = nc;
       if( order>0 && parentSlot[order]!=0 ) *parentSlot[order] = refOf(nc);
       ctx = nc;
@@ -1372,28 +1879,30 @@ struct Model {
     uint ns1 = NumStats_Cache[i];
     uint OldNU = ns1+1;
     uint p = pageOf(rec(pc));
-    byte* nr = allocRec(p, OldNU+1, false);
-    Ctx nc = mkCtx(nr, 1);
+    bool leaf = isL(pc);
+    byte* nr = allocRec(p, recSizeNU(OldNU+1, leaf), ANYPAR);
+    Ctx nc = mkCtxL(nr, 1, leaf);
     State* n0 = (State*)(nr+2);
     if( ns1==0 ) {
-      State b = S0(pc)[0];
-      uint T = succIsCtx(pc, &b) ? 0x80u : 0u;
-      uint f = b.tf;
+      State* b = S0(pc);
+      uint T = succIsCtx(pc, b) ? 0x80u : 0u;
+      uint f = b->tf;
       f = (f<=MAX_FREQ/3) ? (2*f-1) : (MAX_FREQ-15);
       nr[0] = 0; nr[1] = 1;
-      n0[0].sym = b.sym; n0[0].tf = byte(T | (f-1)); n0[0].succ = b.succ;
+      n0[0].sym = b->sym; n0[0].tf = byte(T | (f-1));
+      if( !leaf ) n0[0].succ = b->succ;
       setEscF(nc, (ns>1)+ExpEscape[see.QTable[see.BSumm>>8]]);
     } else {
-      memcpy(nr, rec(pc), 2+4*OldNU);
+      memcpy(nr, rec(pc), recSizeNU(OldNU, leaf));
       nr[1] = byte(OldNU);
       setEscF(nc, EscF(nc)+(see.QTable[ns+4]>>3));
     }
-    slotMove(S0(pc), OldNU, n0);
-    freeRec(rec(pc), OldNU);
+    if( !leaf ) slotMove(S0(pc), OldNU, n0);
+    freeRec(rec(pc), recSizeNU(OldNU, leaf));
     if( parentSlot[i] ) *parentSlot[i] = refOf(nc);
     SuffCache[i] = nc;
     uint sumFreq = EscF(nc);
-    for( uint k = 0; k<OldNU; k++ ) sumFreq += MF(n0[k]);
+    for( uint k = 0; k<OldNU; k++ ) sumFreq += MF(*SI(nc, k));
     uint cf = (FFreq-1)*(5+sumFreq);
     uint sf = s0_caller+sumFreq;
     if( cf<=3*sf ) {
@@ -1402,10 +1911,10 @@ struct Model {
     } else {
       cf = 5+(cf>5*sf)+(cf>6*sf)+(cf>8*sf)+(cf>10*sf)+(cf>12*sf);
     }
-    State& np = n0[OldNU];
+    State& np = *SI(nc, OldNU);
     np.sym = FSymbol;
     np.tf = byte(cf-1);
-    np.succ = tsucc;
+    if( !leaf ) np.succ = tsucc;
     StateCache[i] = &np;
     StateCacheCtx[i] = nc;
   }
@@ -1450,6 +1959,8 @@ struct Model {
   State* processSymbol1(Ctx ctx, int symbol, RC &rc, int &OrderFall, uint &reallocSize) {
     int cnum, i, low, freq, total, flag, count = 0;
     State* s0 = S0(ctx);
+    uint sh = SH(ctx);
+#define SX(k) (*(State*)((byte*)s0+((k)<<sh)))
     cnum = NS(ctx);
     i = s0[0].sym;
     low = 0;
@@ -1470,23 +1981,23 @@ struct Model {
     } else {
       see.PrevSuccess = 0;
       for( low = freq, i = 1; i<=cnum; i++ ) {
-        freq = MF(s0[i]);
-        flag = (rc.f_DEC!=0) ? low+freq>count : s0[i].sym==symbol;
+        freq = MF(SX(i));
+        flag = (rc.f_DEC!=0) ? low+freq>count : SX(i).sym==symbol;
         if( flag!=0 ) break;
         low += freq;
       }
       if( flag!=0 ) {
-        MaddF(s0[i], 4);
-        if( MF(s0[i])>MF(s0[i-1]) ) {
-          slotSwap(&s0[i], &s0[i-1]);
-          swapS(s0[i], s0[i-1]);
+        MaddF(SX(i), 4);
+        if( MF(SX(i))>MF(SX(i-1)) ) {
+          if( !isL(ctx) ) slotSwap(&SX(i), &SX(i-1));
+          swapSt(ctx, &SX(i), &SX(i-1));
           i--;
         }
-        found = &s0[i];
+        found = &SX(i);
       } else {
         freq = total-low;
         see.NumMasked = cnum;
-        for( i = 0; i<=cnum; i++ ) see.CharMask[s0[i].sym] = see.EscCount;
+        for( i = 0; i<=cnum; i++ ) see.CharMask[SX(i).sym] = see.EscCount;
         found = 0;
       }
     }
@@ -1502,6 +2013,7 @@ struct Model {
     int flag, pl;
     int i, j, Total;
     State* s0 = S0(ctx);
+    uint sh = SH(ctx);
     cnum = NS(ctx);
     if( cnum!=0xFF ) {
       psee2c = see.SEE2Cont[see.QTable[cnum+3]-4];
@@ -1516,10 +2028,10 @@ struct Model {
     pl = 0;
     j = 0;
     for( i = 0, low = 0; i<=cnum; i++ ) {
-      c = s0[i].sym;
+      c = SX(i).sym;
       if( see.CharMask[c]!=see.EscCount ) {
         see.CharMask[c] = see.EscCount;
-        low += MF(s0[i]);
+        low += MF(SX(i));
         if( rc.f_DEC!=0 ) px[j++] = i;
         else if( c==symbol ) flag = 1, j = i, pl = low;
       }
@@ -1533,12 +2045,12 @@ struct Model {
     State* found = 0;
     if( flag!=0 ) {
       if( rc.f_DEC!=0 ) {
-        for( low = 0, i = 0; (low += MF(s0[px[i]]))<=count; i++ );
+        for( low = 0, i = 0; (low += MF(SX(px[i])))<=count; i++ );
         j = px[i];
       } else {
         low = pl;
       }
-      found = &s0[j];
+      found = &SX(j);
       freq = MF(*found);
       if( see_freq>2 ) psee2c->Summ -= see_freq;
       psee2c->update();
@@ -1554,6 +2066,7 @@ struct Model {
     }
     rc.rc_Process(low-freq, freq, Total);
     return found;
+#undef SX
   }
   template<class RC>
   uint ProcessByte(uint c, RC& rc) {
@@ -1576,10 +2089,7 @@ struct Model {
     }
     if( reallocSize!=0 ) {
       FinishRescale(MinContext, FoundState, reallocSize);
-      uint hasText = 0;
-      State* s0 = S0(MinContext);
-      uint ns = NS(MinContext);
-      for( uint j = 0; j<=ns; j++ ) if( s0[j].sym>=0x40 ) { hasText = F_HasText; break; }
+      uint hasText = hasTextSym(MinContext);
       uint rescaledBit = Resc(MinContext) ? F_Rescaled : 0;
       Flags_Cache[order] = rescaledBit+hasText+(Flags_Cache[order] & F_NextIsText);
     }
@@ -1593,10 +2103,7 @@ struct Model {
       FoundState = processSymbol2(MinContext, c, (order>0 ? NumStats_Cache[order-1] : 0), Flags_Cache[order], rc, OrderFall, reallocSize);
       if( reallocSize!=0 ) {
         FinishRescale(MinContext, FoundState, reallocSize);
-        uint hasText = 0;
-        State* s0 = S0(MinContext);
-        uint ns = NS(MinContext);
-        for( uint j = 0; j<=ns; j++ ) if( s0[j].sym>=0x40 ) { hasText = F_HasText; break; }
+        uint hasText = hasTextSym(MinContext);
         Flags_Cache[order] = hasText+(Flags_Cache[order] & F_NextIsText);
       }
     }
@@ -1608,7 +2115,7 @@ struct Model {
     StateCache[order] = FoundState;
     StateCacheCtx[order] = MinContext;
     bool fText = succIsText(MinContext, FoundState);
-    if( fText ) {
+    if( fText && !isL(MinContext) ) {
       const byte* blk = WinBeg+(uint(FoundState->succ)<<CZK);
       _mm_prefetch((const char*)blk, _MM_HINT_T0);
       _mm_prefetch((const char*)blk+64, _MM_HINT_T0);
@@ -1618,7 +2125,7 @@ struct Model {
     if( (order<_MaxOrder)||fText ) {
       p = UpdateModel(MinContext);
     } else {
-      p = succIsCtx(MinContext, FoundState) ? child(MinContext, FoundState, 0) : 0;
+      p = succIsCtx(MinContext, FoundState) ? child(MinContext, FoundState, 0, order+1) : 0;
     }
     if( p==0 ) {
       if( m_replay ) { m_replay_aborted = true; return c; }
@@ -1627,7 +2134,7 @@ struct Model {
     if( order+1>hwm ) hwm = order+1;
     CacheSuccessors(c);
     if( order+1>hwm ) hwm = order+1;
-    if( check_every && ++check_step%check_every==0 ) CheckTree();
+    if( check_every && (++check_step%check_every==0 || check_step>=check_from) ) CheckTree();
     if( pText>=WinEnd ) {
       if( m_replay ) { m_replay_aborted = true; return c; }
       Reset(" (text)");
@@ -1652,12 +2159,13 @@ struct Model {
     if( (OrderFall==0)&&!fNull ) {
       return CreateSuccessors(1, p, pc, MinContext);
     }
+    if( isL(MinContext) ) { fprintf(stderr, "\nfatal: leaf context with OrderFall %d\n", OrderFall); exit(9); }
     word iSuccessor = textRef(pText);
     Ctx iF;
     f_order0 = 0;
     if( !fNull ) {
       if( fText ) iF = CreateSuccessors(0, p, pc, MinContext);
-      else iF = child(MinContext, FoundState, 0);
+      else iF = child(MinContext, FoundState, 0, order+1);
     } else {
       iF = Order0;
       FoundState->tf &= 0x7F;           // null successors only exist in the (multi) order-0 context
@@ -1678,8 +2186,11 @@ struct Model {
     byte sym = FoundState->sym;
     bool upText = succIsText(pc, FoundState);
     bool upNull = succIsNull(pc, FoundState);
-    word upVal = FoundState->succ;
-    Ctx upCtx = (!upText && !upNull) ? child(pc, FoundState, 0) : 0;
+    // a leaf state has no successor field: its text position is recovered through ps[0], the
+    // lazy state one order below, which holds the end of the same occurrence (Skip is 1 here)
+    bool upLeaf = isL(pc);
+    word upVal = upLeaf ? 0 : FoundState->succ;
+    Ctx upCtx = (!upText && !upNull) ? child(pc, FoundState, 0, order+1) : 0;
     int i = order;
     State* ps[MAX_O+2];
     Ctx ps_ctx[MAX_O+2];
@@ -1702,9 +2213,9 @@ LOOP_ENTRY:
         bool same;
         if( upText ) same = succIsText(p_ctx, p);
         else if( upNull ) same = succIsNull(p_ctx, p);
-        else same = succIsCtx(p_ctx, p) && child(p_ctx, p, 0)==upCtx;
+        else same = succIsCtx(p_ctx, p) && child(p_ctx, p, 0, i+1)==upCtx;
         if( !same ) {
-          pc = succIsCtx(p_ctx, p) ? child(p_ctx, p, 0) : 0;
+          pc = succIsCtx(p_ctx, p) ? child(p_ctx, p, 0, i+1) : 0;
           break;
         }
       }
@@ -1714,9 +2225,9 @@ NO_LOOP:
     if( pc==0 ) pc = Order0;
     if( pps_n==0 ) return pc;
     {
-      byte* upPtr = textRecover(upVal, order+1);
+      byte* upPtr = upLeaf ? textRecover(ps[0]->succ, order) : textRecover(upVal, order+1);
       byte sym1 = *upPtr;
-      uint cf = BequeathFreq(pc, sym1);
+      uint cf = BequeathFreq(isC(pc) ? coldView(pc) : pc, sym1);
       word nsucc = textRef(upPtr+1);
       Ctx nc = 0;
       do {
@@ -1725,20 +2236,22 @@ NO_LOOP:
         State* pst = ps[pps_n];
         int pord = ps_ord[pps_n];
         uint pg = pageOf(rec(pctx));
-        byte* b = allocRec(pg, 1, true);
+        bool leaf = pord+1>=_MaxOrder;
+        byte* b = allocRec(pg, leaf ? 2u : 4u, leaf ? uint(ANYPAR) : 2u);
         State* bs = (State*)b;
-        bs->sym = sym1; bs->tf = byte(cf); bs->succ = nsucc;
-        nc = mkCtx(b, 0);
+        bs->sym = sym1; bs->tf = byte(cf);
+        if( !leaf ) bs->succ = nsucc;
+        nc = mkCtxL(b, 0, leaf);
         if( isM(pctx) ) {
           pst->tf |= 0x80;
           pst->succ = refOf(nc);
         } else {
           // a binary whose successor becomes a context moves to a ≡0 mod 4 slot
-          byte* nb = allocRec(pg, 1, false);
+          byte* nb = allocRec(pg, 4, 0);
           State* nbs = (State*)nb;
           *nbs = *pst;
           nbs->succ = refOf(nc);
-          freeRec(rec(pctx), 1);
+          freeRec(rec(pctx), 4);
           Ctx moved = mkCtx(nb, 0);
           st_moves++;
           if( parentSlot[pord] ) *parentSlot[pord] = refOf(moved);
@@ -1850,15 +2363,15 @@ int main(int argc, char** argv) {
       for( uint p = 0; p<C.nPages; p++ ) {
         const PageMeta& m = C.pm[p];
         lv += m.live; dead += m.bump-RESV-m.live; slack += ((m.hwm+4095) & ~4095u)-m.bump;
-        for( int k = 0; k<=NFREE; k++ ) { uint o = m.freeHead[k]; while( o ) { fl += (k<2 ? 4 : 2+4*(k<NFREE ? k : *(word*)(C.pageBase(p)+o+2))); o = *(word*)(C.pageBase(p)+o); } }
+        for( int k = 0; k<=NCLS; k++ ) { uint o = m.freeHead[k]; while( o ) { fl += Model::clsSize(k, C.pageBase(p)+o); o = *(word*)(C.pageBase(p)+o); } }
       }
       if( getenv("PPMD_ALLOCSTATS") ) {
-        qword clsb[NFREE+1]; memset(clsb, 0, sizeof(clsb));
+        qword clsb[NCLS+1]; memset(clsb, 0, sizeof(clsb));
         for( uint p = 0; p<C.nPages; p++ ) {
           const PageMeta& m = C.pm[p];
-          for( int k = 0; k<=NFREE; k++ ) { uint o = m.freeHead[k]; while( o ) { clsb[k] += (k<2 ? 4 : 2+4*(k<NFREE ? k : *(word*)(C.pageBase(p)+o+2))); o = *(word*)(C.pageBase(p)+o); } }
+          for( int k = 0; k<=NCLS; k++ ) { uint o = m.freeHead[k]; while( o ) { clsb[k] += Model::clsSize(k, C.pageBase(p)+o); o = *(word*)(C.pageBase(p)+o); } }
         }
-        for( int k = 0; k<=NFREE; k++ ) if( clsb[k] ) fprintf(stderr, "free cls %2d: %.3f MB\n", k, clsb[k]/1048576.0);
+        for( int k = 0; k<=NCLS; k++ ) if( clsb[k] ) fprintf(stderr, "free cls %2d: %.3f MB\n", k, clsb[k]/1048576.0);
       }
       fprintf(stderr, "pages: live=%.2fMB dead=%.2fMB (freelists %.2fMB) above-bump=%.2fMB avg_live/page=%.1fKB\n",
               lv/1048576.0, dead/1048576.0, fl/1048576.0, slack/1048576.0, C.nPages ? lv/1024.0/C.nPages : 0.0);
@@ -1869,6 +2382,9 @@ int main(int argc, char** argv) {
       for( uint p = 0; p<C.nPages; p++ ) { if( C.pm[p].fars.size()>mx ) mx = C.pm[p].fars.size(); if( C.pm[p].roots.size()>mr ) mr = C.pm[p].roots.size(); }
       fprintf(stderr, "max far table=%zu max roots/page=%zu\n", mx, mr);
     }
+    fprintf(stderr, "cold: %llu path / %llu nu2 records written, %llu expanded, codebook %zu (full %llu); repack triggers: tight %llu wasteful %llu\n",
+            (unsigned long long)C.st_coldpath, (unsigned long long)C.st_coldnu2, (unsigned long long)C.st_expand, C.cbKey.size(), (unsigned long long)C.st_cbfull,
+            (unsigned long long)C.st_tight, (unsigned long long)C.st_waste);
     fprintf(stderr, "stats: CZK=%u scans=%llu avgscan=%.1f compact=%llu split=%llu binmoves=%llu pagefail=%llu\n",
             C.CZK, (unsigned long long)C.st_scan, C.st_scan ? double(C.st_scanbytes)/C.st_scan : 0.0,
             (unsigned long long)C.st_compact, (unsigned long long)C.st_split, (unsigned long long)C.st_moves,
@@ -1876,42 +2392,50 @@ int main(int argc, char** argv) {
   }
   if( getenv("PPMD_CENSUS") ) {
     // walk all live records
-    qword nm = 0, nms = 0, nb0 = 0, nb2 = 0, ntext = 0, nctx = 0, nfar = 0, nnull = 0;
-    qword nu2tt = 0, nbb = 0;
+    qword cnt[4][2] = {{0}}, bytes[4][2] = {{0}}, states[2] = {0, 0};
+    qword nuc[12] = {0}, nub[12] = {0}, nub16[12] = {0};
+    qword cpath = 0, cpathEl = 0, cnu2 = 0, coldb = 0, pleaf = 0, pfar = 0, pcpath = 0, pcnu2 = 0, phot = 0;
     for( uint p = 0; p<C.nPages; p++ ) {
       C.removeDeadRoots(p);
       C.enumPage(p);
       for( size_t k = 0; k<C.Ls.size(); k++ ) {
         const Model::LNode& L = C.Ls[k];
-        byte* r = C.pageBase(p)+L.off;
-        if( L.kind==Model::K_MULTI ) {
-          uint ns = r[1]; nm++; nms += ns+1;
-          State* s0 = (State*)(r+2);
-          uint tt = 0;
-          for( uint j = 0; j<=ns; j++ ) {
-            if( s0[j].tf & 0x80 ) { nctx++; if( s0[j].succ<FAR_LIM ) nfar++; }
-            else if( s0[j].succ==NULL_SUCC ) nnull++;
-            else { ntext++; tt++; }
-          }
-          if( ns==1 && tt==2 ) nu2tt++;
-        } else if( L.kind==Model::K_BIN0 ) {
-          nb0++; nctx++;
-          word c = ((State*)r)->succ;
-          if( c<FAR_LIM ) nfar++;
-          else if( !(c & 1) ) nbb++;    // binary whose child is a binary in the same page
+        if( L.cold==1 ) {
+          const byte* r = C.pageBase(p)+L.off;
+          coldb += C.coldSize(r, L.depth);
+          if( r[0]<Model::CPATH_LIM ) {
+            cpath++; cpathEl += Model::pathL(r);
+            if( L.hdr ) pleaf++;
+            else if( L.next<0 ) pfar++;
+            else if( C.Ls[L.next].cold==1 ) { if( C.Ls[L.next].kind==Model::K_PATH ) pcpath++; else pcnu2++; }
+            else phot++;
+          } else cnu2++;
         }
-        else { nb2++; ntext++; }
+        if( L.cold ) continue;
+        if( L.kind==Model::K_MULTI && !L.leaf ) {
+          uint nu = L.ns+1u, b = nu<=8 ? nu : nu<=16 ? 9 : nu<=64 ? 10 : 11;
+          nuc[b]++; nub[b] += L.sz;
+          uint mx = 0; for( uint j = 0; j<nu; j++ ) { uint f = (L.sp[j].tf & 0x7F)+1; if( f>mx ) mx = f; }
+          if( mx<=16 ) nub16[b] += L.sz;
+        }
+        cnt[L.kind][L.leaf]++; bytes[L.kind][L.leaf] += L.sz;
+        if( L.kind==Model::K_MULTI ) states[L.leaf] += L.ns+1u;
       }
     }
-    fprintf(stderr, "census: multi=%llu (states %llu, avgNU %.2f) bin_ctx=%llu bin_text=%llu | succ: text=%llu ctx=%llu (far %llu) null=%llu | NU2 both-text=%llu\n",
-      (unsigned long long)nm, (unsigned long long)nms, nm ? double(nms)/nm : 0.0, (unsigned long long)nb0, (unsigned long long)nb2,
-      (unsigned long long)ntext, (unsigned long long)nctx, (unsigned long long)nfar, (unsigned long long)nnull, (unsigned long long)nu2tt);
-    fprintf(stderr, "census: binary->binary near links=%llu\n", (unsigned long long)nbb);
-    fprintf(stderr, "census bytes: multi hdr=%.2fMB multi states=%.2fMB binaries=%.2fMB\n", nm*2/1048576.0, nms*4/1048576.0, (nb0+nb2)*4/1048576.0);
+    fprintf(stderr, "census hot: multi=%llu (%llu states, %.2fMB) bin0=%llu bin2=%llu | leaf multi=%llu (%llu states, %.2fMB) leaf bin=%llu (%.2fMB)\n",
+      (unsigned long long)cnt[0][0], (unsigned long long)states[0], bytes[0][0]/1048576.0, (unsigned long long)cnt[1][0], (unsigned long long)cnt[2][0],
+      (unsigned long long)cnt[0][1], (unsigned long long)states[1], bytes[0][1]/1048576.0, (unsigned long long)cnt[3][1], bytes[3][1]/1048576.0);
+    fprintf(stderr, "census cold: path=%llu (%llu binaries) nu2=%llu, %.2fMB; codebook %zu keys\n",
+      (unsigned long long)cpath, (unsigned long long)cpathEl, (unsigned long long)cnu2, coldb/1048576.0, C.cbKey.size());
+    for( int b = 2; b<12; b++ ) fprintf(stderr, "census hot multi NU %s: %llu records, %.2fMB (maxfreq<=16: %.2fMB)\n",
+      b<=8 ? (b==2?"2":b==3?"3":b==4?"4":b==5?"5":b==6?"6":b==7?"7":"8") : b==9 ? "9-16" : b==10 ? "17-64" : "65+",
+      (unsigned long long)nuc[b], nub[b]/1048576.0, nub16[b]/1048576.0);
+    fprintf(stderr, "census path ends: leaf %llu far %llu cold path %llu cold nu2 %llu hot %llu\n", (unsigned long long)pleaf, (unsigned long long)pfar,
+      (unsigned long long)pcpath, (unsigned long long)pcnu2, (unsigned long long)phot);
   }
   if( getenv("PPMD_ALLOCSTATS") ) {
-    for( int k = 0; k<=NFREE; k++ ) if( C.st_alloc[k] ) fprintf(stderr, "cls %2d: alloc %10llu  freehit %10llu  free %10llu  sz=%d\n", k,
-      (unsigned long long)C.st_alloc[k], (unsigned long long)C.st_freehit[k], (unsigned long long)C.st_free[k], k<2 ? 4 : 2+4*k);
+    for( int k = 0; k<=NCLS; k++ ) if( C.st_alloc[k] ) fprintf(stderr, "cls %2d: alloc %10llu  freehit %10llu  free %10llu  sz=%d\n", k,
+      (unsigned long long)C.st_alloc[k], (unsigned long long)C.st_freehit[k], (unsigned long long)C.st_free[k], k<2 ? 4 : 2*k);
   }
   fclose(f);
   fclose(g);
