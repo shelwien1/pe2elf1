@@ -2,10 +2,12 @@
 
 This describes the context-tree storage of `ppmd.cpp`. The model itself (SEE, coding, update,
 rescale, inheritance) is the one in `ppmd_orig.cpp`, statement for statement. Only the
-storage changed, so compressed output is byte-identical to the original.
+storage changed, so compressed output is byte-identical to the original. (Under a memory
+limit the smaller tree resets less often, which changes the output and makes it smaller.)
 
-Measured results are in `RESULTS.md`. The analysis this design follows is
-`ppmd_tree_compaction.md`.
+Measured results are in `RESULTS.md`. The analyses this design follows are
+`ppmd_tree_compaction.md` (the first layout) and `ppmd_tree_compaction2v3.md` (leaf records
+and cold records, its §4.1, §4.3 and §4.4).
 
 ## 1. What has to be stored
 
@@ -58,46 +60,78 @@ a slot of the other parity. Its parent slot, its `SuffCache`/`StateCache` entrie
 text values are always below 0xFFFF (§4).
 
 A context handle (`Ctx`) is the record address with bit 0 = M (1 = multi). Records are
-2-byte aligned, so the bit is free.
+2-byte aligned, so the bit is free. Bit 62 (`LEAFB`) marks a leaf context (§2.1), bit 61
+(`COLDB`) a cold record (§2.2).
 
-### 2.1 Packed cold multi records
+### 2.1 Leaf records
 
-Most multi contexts are small and have small freqs. A multi context that is not current
-is stored, when that is smaller, in a **packed** form that keeps 4 bits of freq:
+A context at depth MaxOrder (a *leaf*) never gets a context successor, and the text value of
+its successors is never read. So its states have no `succ` field:
 
 ```
-packed multi   (NU >= 2)
-   +0 bits 0-3 EscFreq, 4 rescaled, 5 mode, 6-7 nsm     NU = nsm+2 for nsm < 3
-  (+1 [NU-1]                                    only when nsm == 3)
-      sym[NU]
-      nibble[(NU+1)/2]    state j in nibble j (low nibble first); padded so succ is even
-      succ[NU]            16-bit words, as in State.succ
-   mode 1: nibble = freq-1, T = 0       all successors text/null, all freqs <= 16
-   mode 0: nibble = T<<3 | (freq-1)     otherwise, all freqs <= 8
+leaf multi    [EscFreq:7 | rescaled:1][NumStats] + NU x [sym][freq-1]    2 + 2*NU bytes
+leaf binary   [sym][freq]                                               2 bytes
 ```
 
-A context qualifies when EscFreq ≤ 15, one mode fits, and the packed form is smaller. A
-record shrinks from 10 to 8 bytes for NU = 2, from 14 to 12 for NU = 3, from 18 to 16 for
-NU = 4, and by about NU/2 bytes beyond that.
+* **Why the successor is dead** (§2 I1 of the second analysis). `OrderFall + order <=
+  MaxOrder` always holds, so at `order == MaxOrder` the coder takes `CreateSuccessors(Skip=1)`
+  and never materialises the found leaf state. A leaf is created only with text successors
+  (`CreateSuccessors`, `ExpandAndAdd`). The only use of the leaf state's text value is as
+  the start of the block scan, and the lazy state one order below (`ps[0]`) holds the same
+  occurrence. So `CreateSuccessors` recovers the position from `ps[0]`, with a pattern one
+  byte shorter. A leaf reached with `OrderFall != 0` would be fatal; it never happens.
+* **Depth is always known.** `SuffCache[i]` is at depth i, a child is one deeper than its
+  parent, and each `GRoot` entry stores its root's depth. `child()` sets `LEAFB` from the
+  depth. State loops step by 2 or 4 bytes (`SI`, `SH`).
+* A leaf binary has no successor type, so it is not bound to an address parity and never
+  moves.
+* **Gain:** 2 bytes per leaf state. On enwik8 the tree drops from 493.7 to 459.3 MiB (−7.0%).
+  Speed is unchanged.
 
-* **Where they live.** Packed records sit in the page region `[RESV, pbound)` (per-page
-  `pbound`). A ref has no spare bit, so the region tells the format: the address of a
-  multi record is enough to know whether it is packed.
-* **Who writes them.** Only `Repack` (§6). It packs every eligible multi context of the page
-  that is not a current context (`SuffCache`). Current contexts, and everything a split
-  moves to a receiver page, stay normal.
-* **Who reads them.** Coding needs the normal form. At the start of each step
-  (`unpackCurrent`, called from `EnsureHeadroom`) every packed `SuffCache` entry is unpacked
-  into a fresh normal record, and its parent slot is repointed. The packed copy becomes dead
-  bytes (`pdead`), reclaimed by the next compaction of the page. Lower-order reads that do
-  not go through `SuffCache` (`BequeathFreq`) decode the packed form in place
-  (`normalView`).
-* **The model is unchanged.** Packing is lossless, so the output stays byte-identical and
-  `PPMD_PACK=0` / `PPMD_PACK=1` streams decode either way.
+### 2.2 Cold records
 
-The cost is time: every unpack leaves a dead copy, and the dead copies trigger extra
-compactions. On enwik9 there are 259M packs and 144M unpacks, and encoding takes 1.46x as
-long as without packing (still 1.20x the original). The gain is 3.6% of tree memory.
+Most contexts are rarely visited. A context that is not current is stored by `Repack` (§6) in
+a smaller *cold* form, which the model never reads or writes directly:
+
+```
+path record  [A:1 | L-1:4][sym x L][freq x L][end ref:16]
+             a chain of L binaries, each the only child of the previous one.
+             No end ref when the last element is a leaf, or when A=1: then the end child
+             is the cold record that follows this one.
+NU=2 record  [0x2000 + code, 2 bytes big-endian][y0][y1][succ0:16][succ1:16]
+             leaf: [code][y0][y1], no successors.
+             code -> (EscFreq|rescaled, tf0, tf1) through the codebook.
+```
+
+| context | hot | cold |
+|---|---|---|
+| chain of L binaries, ending in a non-leaf | 4L | 1 + 2L + 2, or 1 + 2L with A |
+| chain of L binaries, ending in a leaf | 4(L-1) + 2 | 1 + 2L |
+| one binary whose child is cold | 4 | 3 (A=1, L=1) |
+| NU=2 | 10 (leaf 6) | 8 (leaf 4) |
+
+* **Where they live.** Cold records fill `[RESV, pgCold[p])` of page p, byte-aligned, in
+  breadth-first order with each A-child placed right after its parent. A near ref below
+  `pgCold[p]` is the exact byte offset of a cold record. The first byte tells the kind
+  (below 0x20: path). Hot records start at `pgCold[p]` (even), so hot refs keep their M bit.
+  `child()` compares a near ref with `pgCold[p]`.
+* **Interior elements are not addressable.** A path record is entered only at its head. A
+  chain element becomes current only one step after its parent was current, and a current
+  path head is expanded as a whole. So no reference can point inside a cold path.
+* **The codebook** maps 24-bit keys (header byte, tf0, tf1) to codes. Codes are reference
+  counted: `Repack` acquires a code for every NU=2 record it writes cold and releases it when
+  the record is decoded again; expansion releases it too. A code whose count drops to 0 is
+  recycled. There are 57344 codes. On enwik9 they suffice for 99.6% of the NU=2 records; the
+  rest stay hot. Unreachable cold records (dropped by rescale) keep their codes until the next
+  model reset, which clears the codebook.
+* **Expansion.** At the start of a step `EnsureHeadroom` expands every cold `SuffCache`
+  entry into its hot form in the same page (a path into L binaries), updates `*parentSlot`
+  and `SuffCache`, and counts the cold bytes as dead (`cdead`) until the next `Repack`. The
+  headroom for this is part of the page's need (§6).
+* **Read-only use.** `BequeathFreq` reads the next step's context before it is expanded (I5 of
+  the second analysis). It reads a hot-format copy (`coldView`).
+* **Gain** (on top of §2.1): enwik8 459.3 → 429.6 MiB, enwik9 see `RESULTS.md`. The cost is
+  time: about 0.27 expansions per input byte on enwik9, and more frequent, slower Repacks.
 
 ## 3. Pages and references
 
@@ -113,10 +147,11 @@ allocated, so that OS page is never touched.
 ### 3.2 References (16 bits)
 
 ```
-ref >= 4096 : near ref = page offset | M         child lives in the same page
-ref <  4096 : far ref  = index into this page's far table
-                 far table[i]  -> global root id g
-                 GRoot[g]      =  {page, near ref inside that page}
+ref >= pgCold[p]        : near ref = page offset | M     hot child in the same page
+4096 <= ref < pgCold[p] : near ref = exact byte offset   cold child in the same page (§2.2)
+ref <  4096             : far ref  = index into this page's far table
+                            far table[i]  -> global root id g
+                            GRoot[g]      =  {page, ref inside that page, depth}
 ```
 
 * **Children are allocated in their parent's page.** Far refs exist only where a split moved
@@ -135,21 +170,19 @@ a far one.
 ### 3.3 Per-page allocator
 
 Each page has a bump pointer, a live-byte count and a high-water mark. Freed records go to
-exact free lists. All metadata lives in a `PageMeta` array, never in the page itself:
+exact free lists. All metadata lives in a `PageMeta` array, never in the page itself.
 
-| class | record |
-|---|---|
-| 0 / 1 | binary slot at ≡0 / ≡2 mod 4 |
-| 2..47 | multi record with that many states |
-| 48 | larger multi records (size kept in the free record) |
+Free records are kept by size, in 2-byte units: class k holds records of 2k bytes, with two
+classes for 4 bytes (≡0 and ≡2 mod 4, for the two binary parities), and one first-fit list
+for records of 126 bytes or more (size kept in the free record). A 64-bit mask tells which
+classes are non-empty.
 
-* **Larger-record fallback.** A request whose exact class is empty takes the smallest
-  larger free record and carves it. The remainder stays a multi-sized free record, losing
-  at most 2 bytes, so it can serve the next expansion. Expansion is the dominant churn: it
-  frees NU states and needs NU+1.
-* **Binary requests** carve one slot of the wanted parity out of a free multi record.
-* **Bump allocation of binaries** pads 2 bytes when the parity is wrong. The pad is
-  reclaimed by the next compaction.
+* **Larger-record fallback.** A request whose exact class is empty takes the smallest larger
+  free record (one bit scan of the mask) and carves it. Every remainder of 2 bytes or more is
+  a usable free record, because 2-byte leaf binaries fill the smallest holes.
+* **Parity.** A non-leaf binary that needs ≡0 or ≡2 and lands on the wrong parity gives up 2
+  bytes at the front, which become a 2-byte free record.
+* The cold region is never put on free lists. It is rebuilt only by `Repack`.
 
 ## 4. Text pointers
 
@@ -160,9 +193,12 @@ to 4 GB therefore fits in 16 bits.
 **When P is needed.** Only in `CreateSuccessors`, at materialisation of the found state.
 P is the end of the *first* occurrence of the found context's string plus its symbol, which
 is exactly the last order+1 bytes of the current history. So the coder scans that block for
-the first position where those bytes end, and that position is P. There is no earlier match
-in the block by construction, so the recovery is exact. It matched the stored P in every
-call measured.
+the first position where those bytes end, and that position is P when P is the first
+occurrence of that pattern. That is not guaranteed (the second analysis, §9, measured 0.01% of
+text states where it fails); the scan then finds the earlier occurrence in the same block.
+Encoder and decoder still agree, and in every run measured the output was identical to the
+original. For a leaf the scan starts from the lazy state one order below, with a pattern one
+byte shorter (§2.1).
 
 * **The scan.** AVX-512BW, or AVX2 or scalar, chosen at run time. It keeps positions where
   both the first and the last byte of the pattern match, then verifies the middle with
@@ -205,51 +241,66 @@ the only live transient references are `SuffCache[0..order]` and `parentSlot[1..
 
 **Headroom guarantee.** During one step a current context can at most be expanded by one
 state, shrunk by a rescale, receive one new binary child, and be moved once to the other
-binary parity. So `need(c) = size(NU+1) + 12` bytes. Every page holding a current context
-must have at least the sum of its contexts' needs as bump space. Nothing inside a step can
-then fail to allocate.
+binary parity. So `need(c) = size(NU+1) + 12` bytes, plus the size of its hot form if it is
+cold. Every page holding a current context must have at least the sum of its contexts' needs
+as bump space. Nothing inside a step can then fail to allocate.
 
 * **Fast path.** A dense `pgSlack[]` array holds the bump space left before the next untouched
-  OS page. If every current page has slack ≥ the total need, nothing more is checked.
-* **Slow path, per page.** The page is acted on if it is too tight, or if it would touch a
-  new OS page while holding dead bytes > live/64 (`PPMD_DEADSH`). Dead bytes include the
-  packed copies left by unpacking (`PPMD_PDEAD`). The need of a packed current context
-  includes the size of its unpacked copy. Then:
+  OS page. If every current page has slack ≥ the total need, nothing more is checked. A
+  second test does the per-page checks below with the total need as an upper bound of each
+  page's need, which avoids grouping the contexts by page.
+* **Slow path, per page.** The page is acted on if it is too tight, or if it would touch a new
+  OS page while holding dead bytes > live/64 (`PPMD_DEADSH`). Dead cold bytes up to live/32
+  (`PPMD_CDEADSH`) are not counted for this. Then:
   * if `live + need + 2 KB` still fits in the page, it is **compacted**;
   * otherwise it is **split**.
+* Then the cold current contexts are expanded (§2.2).
 
-**`Repack(page, split)`** makes one breadth-first pass from the page's roots, through near
-refs only, then one copy-and-patch pass.
+**`Repack(page, split)`** builds a list of the page's contexts, breadth first from its roots
+through near refs: one node per hot record, per cold NU=2 record and per cold path record.
+Hot non-leaf states are read in place; the others are decoded into a buffer. Then:
 
-* **Compaction.** The reachable records are laid out again from `RESV`, grouped as
-  [packed multi][multi][binary ≡0][binary ≡2] so parities need no padding, via a scratch
-  page. A size pass first chooses each multi record's format (§2.1). Records already packed
-  are copied as they are, and their successor words are patched in place. Records that
-  are no longer reachable disappear. That includes subtrees disconnected when rescale drops
-  a state; the original leaks those. Far-table entries nobody references any more are freed,
-  and their roots marked dead.
-* **Split.** Subtree sizes come from the BFS list. The code descends along the heaviest
-  child while that subtree is larger than 1.25 × target (target = 3/16 of the page,
-  `PPMD_SPLIT`). It then takes that node's children, largest first, up to the cap.
-  * The selected sibling subtrees move to a **receiver page**: the page that last received a
-    split, while it has room and far-table space, otherwise a fresh page.
+1. **Formats** (forward). A cold record stays as it is (copied, its refs patched) unless it
+   is current or moves to the receiver; a cold path is then split into its elements again.
+   Records that hold a `SuffCache` entry or a `parentSlot` target stay hot. Every other NU=2
+   context gets a code and turns cold, and chains of unpinned binaries become path records
+   of up to 16 elements.
+2. **Adjacency** (backward, children first). A path whose end child is cold drops its end ref
+   and stores the child right after itself; a lone binary with a cold child becomes a path of
+   1. The byte totals of each group are summed here.
+3. **Offsets**: [cold records][multi][binary ≡0][leaf binary][binary ≡2] from `RESV`, via a
+   scratch page, so parities need no padding.
+4. **Copy and patch.** Every child ref is rewritten from the child's new offset. Records that
+   are no longer reachable disappear, including subtrees disconnected when rescale drops a
+   state (the original leaks those). Far-table entries nobody references any more are
+   freed, and their roots marked dead.
+
+* **Split.** Subtree sizes (of the hot forms) come from the BFS list. The code descends along
+  the heaviest child while that subtree is larger than 1.25 × target (target = 3/16 of the
+  page, `PPMD_SPLIT`). It then takes that node's children, largest first, up to the cap.
+  * The selected sibling subtrees move, in hot form, to a **receiver page**: the page that
+    last received a split, while it has room and far-table space, otherwise a fresh page.
   * Each moved non-root subtree gets a new `GRoot` entry. Its parent field in the old page
     becomes a far ref, and a tracked parent slot pointing at that field is redirected to the
     `GRoot` entry.
-  * The rest of the page is compacted in the same pass. Moved records are written in the
-    normal form: [multi][binary ≡0][binary ≡2].
+  * The rest of the page is rebuilt in the same pass.
 * **Remapping.** Each `SuffCache[i]` and `parentSlot[i]` pointing into the page is
-  translated through the old→new offset table. A parent slot inside a record that changes
-  format is mapped to the matching successor word of the new form.
+  translated through its node's new offset.
 * **Returning memory.** When a page's bump drops ≥ 8 KB below its high-water mark, the tail
   is returned to the OS with `madvise(MADV_DONTNEED)`.
 
 Splitting keeps pages between ~48 KB and ~59 KB live (about 50 KB on average on enwik9).
 Receivers keep the number of half-empty pages small.
 
+**Re-tiering.** A record that stops being current stays hot until its page is repacked.
+Records touched since the last Repack are therefore hot (about a quarter of the NU=2
+contexts at any time). With `PPMD_COLDQ=2` they are kept hot one Repack longer, which costs
+memory and saves expansions.
+
 **Out of pages** (`MMAX` exhausted): `EnsureHeadroom` fails and the coder resets
 (`StartModelRare`) or replays the tail of the window (`RestoreModelRare`, `reset_perc`) before
-coding the byte. Encoder and decoder do this at the same point.
+coding the byte. Encoder and decoder do this at the same point: every storage decision
+depends only on the model state, never on time or RSS.
 
 ## 7. Memory accounting
 
@@ -278,11 +329,14 @@ The original's tree on the same input is 4125 MiB. Its peak RSS is 5224 MiB, or 
 
 ## 9. Invariants (checked by `PPMD_CHECK=n`)
 
-* Every reachable record lies in `[RESV, bump)` of its page and is reached exactly once (tree).
-* Multi records have NumStats ≥ 1 and freqs ≤ 124. Packed records lie only in
-  `[RESV, pbound)` and normal multi records never do. No `SuffCache` entry is packed once
-  `EnsureHeadroom` has run. Binaries are even-aligned, and their
-  parity matches their successor type by construction.
+* Every reachable record is reached exactly once (tree). Hot records lie in
+  `[pgCold[p], bump)`, cold records in `[RESV, pgCold[p])`.
+* A context is a leaf exactly when its depth is MaxOrder; `SuffCache[i]` has depth i.
+* Multi records have NumStats ≥ 1 and freqs ≤ 124. Leaf states have no context successor.
+  Binaries are even-aligned, and their parity matches their successor type by construction.
+* Path records have L ≥ 2 unless A is set, end at or above the leaf level, and an A-child
+  lies in the cold region. NU=2 records name a live code; no code is used by more records
+  than its reference count.
 * Every far ref names a live far-table entry. Its root id is valid and listed in its page's
   root list.
 * Every `SuffCache[0..order]` entry is reachable, and `*parentSlot[i]` references
@@ -299,8 +353,10 @@ These change speed and memory, never the output.
 | `PPMD_MARGIN` | split when live + need + margin > 60 KB | 2048 |
 | `PPMD_RECVGAP` | bytes a receiver page must keep free | 8192 |
 | `PPMD_SCAN` | 0 scalar, 1 AVX2, 2 AVX-512BW | best available |
-| `PPMD_PACK` | 1: pack cold multi records (§2.1), 0: never pack | 1 |
-| `PPMD_PDEAD` | 0: unpacked copies count as dead bytes for the compaction trigger, 1: they do not | 0 |
+| `PPMD_PACK` | 1: write cold records (§2.2), 0: never | 1 |
+| `PPMD_CDEADSH` | dead cold bytes up to live >> n do not trigger compaction | 5 |
+| `PPMD_COLDQ` | 1: everything not current turns cold at a Repack; 2: not what was touched since the previous one | 1 |
 
-Debug knobs: `PPMD_CHECK=n`, `PPMD_STATS`, `PPMD_CENSUS`, `PPMD_ALLOCSTATS`. `PPMD_CZK=k`
-forces larger scan blocks. Encoder and decoder must then agree on it.
+Debug knobs: `PPMD_CHECK=n` (and `PPMD_CHECKFROM=s`: every step from step s), `PPMD_STATS`,
+`PPMD_CENSUS`, `PPMD_ALLOCSTATS`. `PPMD_CZK=k` forces larger scan blocks. Encoder and decoder
+must then agree on it.
