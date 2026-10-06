@@ -94,21 +94,24 @@ Most contexts are rarely visited. A context that is not current is stored by `Re
 a smaller *cold* form, which the model never reads or writes directly:
 
 ```
-path record  [A:1 | L-1:4][sym x L][freq x L][end ref:16]
-             a chain of L binaries, each the only child of the previous one.
+path record  [A:1 | N:1 | L-1:3][sym x L][freq x L][end ref:16]
+             a chain of L <= 8 binaries, each the only child of the previous one.
+             N=1: freqs are nibbles (freq-1), (L+1)/2 bytes.
              No end ref when the last element is a leaf, or when A=1: then the end child
              is the cold record that follows this one.
-NU=2 record  [0x2000 + code, 2 bytes big-endian][y0][y1][succ0:16][succ1:16]
-             leaf: [code][y0][y1], no successors.
-             code -> (EscFreq|rescaled, tf0, tf1) through the codebook.
+NU=2 record  [code][y0][y1][succ0:16][succ1:16]
+             code: 0x2000 + code in 2 bytes, or 3 bytes [0xF0 | c>>16][c>>8][c] past the
+             first 53248 codes. leaf: [code][y0][y1], no successors.
+             code -> (EscFreq|rescaled, tf0, tf1, adj) through the codebook; adj = j+1
+             means state j's context child is the cold record that follows (no succ field).
 ```
 
 | context | hot | cold |
 |---|---|---|
-| chain of L binaries, ending in a non-leaf | 4L | 1 + 2L + 2, or 1 + 2L with A |
-| chain of L binaries, ending in a leaf | 4(L-1) + 2 | 1 + 2L |
+| chain of L binaries, ending in a non-leaf | 4L | 1 + 2L + 2, or 1 + 2L with A (N: L/2 less) |
+| chain of L binaries, ending in a leaf | 4(L-1) + 2 | 1 + 2L (N: L/2 less) |
 | one binary whose child is cold | 4 | 3 (A=1, L=1) |
-| NU=2 | 10 (leaf 6) | 8 (leaf 4) |
+| NU=2 | 10 (leaf 6) | 8, or 6 with an adjacent child (leaf 4); +1 with a long code |
 
 * **Where they live.** Cold records fill `[RESV, pgCold[p])` of page p, byte-aligned, in
   breadth-first order with each A-child placed right after its parent. A near ref below
@@ -121,8 +124,9 @@ NU=2 record  [0x2000 + code, 2 bytes big-endian][y0][y1][succ0:16][succ1:16]
 * **The codebook** maps 24-bit keys (header byte, tf0, tf1) to codes. Codes are reference
   counted: `Repack` acquires a code for every NU=2 record it writes cold and releases it when
   the record is decoded again; expansion releases it too. A code whose count drops to 0 is
-  recycled. There are 57344 codes. On enwik9 they suffice for 99.6% of the NU=2 records; the
-  rest stay hot. Unreachable cold records (dropped by rescale) keep their codes until the next
+  recycled. There are 131072 codes, 53248 of them short (2-byte header); new keys take a short
+  code while one is free. On enwik9 the codebook fills up for 0.006% of the NU=2 records,
+  which stay hot. Unreachable cold records (dropped by rescale) keep their codes until the next
   model reset, which clears the codebook.
 * **Expansion.** At the start of a step `EnsureHeadroom` expands every cold `SuffCache`
   entry into its hot form in the same page (a path into L binaries), updates `*parentSlot`
@@ -130,8 +134,8 @@ NU=2 record  [0x2000 + code, 2 bytes big-endian][y0][y1][succ0:16][succ1:16]
   headroom for this is part of the page's need (§6).
 * **Read-only use.** `BequeathFreq` reads the next step's context before it is expanded (I5 of
   the second analysis). It reads a hot-format copy (`coldView`).
-* **Gain** (on top of §2.1): enwik8 459.3 → 429.6 MiB, enwik9 see `RESULTS.md`. The cost is
-  time: about 0.27 expansions per input byte on enwik9, and more frequent, slower Repacks.
+* **Gain** (on top of §2.1): enwik8 459.3 → 414.6 MiB, enwik9 see `RESULTS.md`. The cost is
+  time: about 0.31 expansions per input byte on enwik9, and more frequent, slower Repacks.
 
 ## 3. Pages and references
 
@@ -306,24 +310,25 @@ depends only on the model state, never on time or RSS.
 
 enwik9, order 12:
 
-| item | no packing (`PPMD_PACK=0`) | packing (default) |
+| item | first version | current |
 |---|---|---|
-| live records | 2837 MiB | 2725 MiB |
-| dead bytes inside pages (free lists, pads, unreachable, unpacked copies) | 36 MiB (1.3%) | 53 MiB (1.9%) |
-| partly used last OS page of each page | 105 MiB (3.7%) | 94 MiB (3.4%) |
-| page metadata, far tables, root table | 35 MiB (1.2%) | 33 MiB (1.2%) |
-| **tree (touched pages)** | **2978 MiB** | **2871 MiB** |
+| live records | 2837 MiB | 2302 MiB |
+| dead bytes inside pages (free lists, pads, unreachable, expanded cold records) | 36 MiB (1.3%) | 69 MiB (3.0%) |
+| partly used last OS page of each page | 105 MiB (3.7%) | 102 MiB (4.4%) |
+| **tree (touched pages)** | **2978 MiB** | **2474 MiB** |
+| page metadata, far tables, root table, codebook | 35 MiB | 31 MiB + 3 MiB |
 | text window | 954 MiB | 954 MiB |
-| **peak RSS** | **3972 MiB** | **3865 MiB** |
+| **peak RSS** | **3972 MiB** | **3467 MiB** |
 
 The original's tree on the same input is 4125 MiB. Its peak RSS is 5224 MiB, or about
-4830 MiB with the lazy-init fix in `ppmd_orig_lazy.cpp`.
+4830 MiB with the lazy-init fix in `ppmd_orig_lazy.cpp`. The current tree uses 47,031 pages
+and 0.96M page roots.
 
 ## 8. Limits
 
 * **Window:** up to 4 GB. k grows with the window, and the scan block (2^k bytes) with it.
 * **Tree:** up to `MMAX` MB of pages. Page numbers are 32 bits and `GRoot` holds up to 2^25
-  roots (enwik9 uses 1.16M).
+  roots (enwik9 uses 0.96M).
 * **Per page:** at most 4096 far entries; the largest measured is 307.
 * **Orders:** 1..255 as in the original (tested 1..200).
 

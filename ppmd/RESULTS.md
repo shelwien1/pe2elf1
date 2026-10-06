@@ -5,13 +5,14 @@
 
 * **Compressed output is byte-identical to the original.** The model, the probabilities and
   even the state order are unchanged. This holds on enwik8 and enwik9 and on all test files,
-  for orders 1..200.
-* **enwik9, order 12, full 1 GB window, no resets:** the tree takes 2871 MiB of RAM
-  instead of 4125 MiB (−30.4%). Peak RSS of the process is 3865 MiB instead of 5224 MiB.
-  Encode time is 2460 s, against 2056 s for the original (1.20x).
-* Cold multi contexts are stored with 4-bit freqs (packed records, `DESIGN.md` §2.1). That
-  saves 3.6% of the tree and costs ~1.5x time. With `PPMD_PACK=0` the tree is 2978 MiB
-  (−27.8%) and encoding takes 1682 s, faster than the original.
+  for orders 1..200. Under a memory limit the smaller tree resets less often, so the output
+  then differs and is smaller.
+* **enwik9, order 12, full 1 GB window, no resets:** the tree takes 2474 MiB instead of
+  4125 MiB for the original (−40%) and 2978 MiB for the first version of this coder (−16.9%).
+  Peak RSS is 3467 MiB (original 5224, first version 3972). Encoding takes 1.30x as long as
+  the first version.
+* The second round (`ppmd_tree_compaction2v3.md`) added leaf records without successors and
+  cold records for contexts that are not current (`DESIGN.md` §2.1, §2.2).
 * There is no 32-bit `SUCC` address-space limit any more. The original needs
   `1 + WinSize + arena/2 <= 2^32`, which caps the tree at 6.3 GB with the enwik9 window. Here,
   text pointers cover windows up to 4 GB and the tree size is bounded only by `MMAX`.
@@ -31,23 +32,28 @@ window included.
 | enwik8 | 20,828,759 / 683.2 / 995 / 209 | 493.7 (470.3) **−27.7%** | 599 | 127.8 / 129.6 |
 | enwik9 | 167,384,640 / 4125 / 5224 / 2056 | 2978 (2837) **−27.8%** | 3972 | 1682 / 1737 |
 
-The table above is without packing (`PPMD_PACK=0`). With packing, the default:
+The table above is the first version (`ppmd.cpp` before the second round). The current
+coder:
 
-| file | tree MiB (live) | vs original | RSS MB | enc / dec s |
-|---|---|---|---|---|
-| e8m | 53.6 (50.9) | **−30.8%** | 66 | 16.1 / – |
-| enwik8 | 474.3 (450.3) | **−30.6%** | 580 | 218.7 / – |
-| enwik9 | 2871 (2725) | **−30.4%** | 3865 | 2460 / 2395 |
+| file | tree MiB (live) | vs first version | vs original | RSS MB | enc time vs first version |
+|---|---|---|---|---|---|
+| e8m | 47.4 (44.2) | **−15.3%** | −38.8% | 62 | 1.73x (17.0 / 9.8 s) |
+| enwik8 | 414.6 (385.9) | **−16.0%** | −39.3% | 522 | 1.51x (236 / 157 s) |
+| enwik9 | 2474 (2302) | **−16.9%** | −40.0% | 3467 MiB | 1.30x (2553 / 1958 s) |
 
-On enwik9 Repack writes 259M packed records and 144M are unpacked again when they become
-current. Each unpack leaves a dead copy, and the extra compactions it causes are where the
-time goes. A recency filter (do not pack recently unpacked contexts) did not reduce the
-unpacks measurably, so it was dropped. Compacting less often (`PPMD_DEADSH`) trades memory
-back for time. On e8m: 6 (default) gives 53.6 MB in 16.2 s, 5 gives 54.5 MB in 13.7 s,
-and 4 gives 55.1 MB in 12.3 s.
+The times in that column were measured with the first version running at the same time on the
+same machine (2-4 jobs at once), so they are slower than the solo times of the first table.
 
-The compressed sizes of the new coder, with or without packing, are identical, byte for
-byte, to the original column.
+Steps on enwik8 (tree touched, MiB): first version 493.7; leaf records 459.3; cold path and
+NU=2 records 429.6; adjacent children, nibble freqs in paths, and adjacent NU=2 children
+414.6. Leaf records cost no time; the cold records cost the rest, mostly in `Repack`, which
+now runs about 2.5 times as often (expanded copies fill pages) and does more per node.
+
+**Trading time for memory.** Compacting sooner leaves fewer dead and hot bytes:
+`PPMD_CDEADSH=7 PPMD_DEADSH=7` gives 2388 MiB on enwik9 (−19.8%, RSS 3381 MiB) at 1.59x, but
+400.4 MiB on enwik8 at 2.01x, so it is not the default.
+
+The compressed sizes of the new coder are identical, byte for byte, to the original column.
 Page metadata (page table, far tables, root table) adds 0.6 MB, 2.2 MB, 5.6 MB and 34.5 MB
 respectively; it is included in RSS. The original decodes at the same speed it encodes
 (e8m: 17.7 s). The original's enwik9 run shared the machine with other jobs part of the time.
@@ -127,13 +133,16 @@ tree uses 57,369 pages (50.6 KB live each) and 1.16M page roots. The largest far
 
 ## Not implemented, and why
 
-* **Binary-chain records (§2.1, §6.3).** About 70% of inner binaries link to another binary
-  in the same page, so a chain record could save ~8% more. It needs a fourth record kind that
-  can be addressed from inside a chain. A 16-bit ref here has no spare bit: 15 bits of offset
-  plus M, with the binary succ type in the address parity. Freeing a bit means 32 KB pages
-  (twice the partial-page waste) or 4-byte-aligned multi records (+2 bytes per multi
-  context), which costs about what chains would save. §6.3's text-anchored variant with
-  nibble freqs also changes the model.
+* **Binary-chain records (§2.1, §6.3)** as hot records: a chain is entered in the middle, and a
+  16-bit ref has no spare bit. They were built in the second round as *cold* path records,
+  which are entered only at their head and expanded when they become current
+  (`DESIGN.md` §2.2).
+* **From the second analysis** (`ppmd_tree_compaction2v3.md`): cold NU=3 records and 1-byte
+  refs in cold multis (§4.5, §4.6; its simulation shows they are written too often), lazy
+  binaries as a flag (§4.2; speed only), the metadata diet (§5.3; about 0.4% of RSS), and the
+  model changes of §3 (4-bit freqs alone add 0.02–0.06% to the compressed size, far above the
+  100-byte budget). A lossy counter state (FSM) instead of the freq is a model change of the
+  same kind; the exact form of that idea is the NU=2 codebook.
 * **Store-once text pointers (§6.2b).** The higher-order members of a duplicate group cannot
   be reached when the lowest member materialises, because there are no back links. Afterwards
   P can only be recovered via the first-follower path, and identifying that follower needs
@@ -158,17 +167,17 @@ committed is the "tree_touched" figure, and the coder resets (or replays with `r
 when it runs out of pages. Under a memory limit the new coder resets less often, so it
 compresses better. On e8m at order 12:
 
-| MMAX | original: bytes (resets) | new: bytes (resets) |
-|---|---|---|
-| 16 | 2,148,996 (7) | 2,096,170 (4) |
-| 24 | 2,091,203 (4) | 2,053,672 (3) |
-| 40 | 2,031,805 (2) | 2,001,008 (1) |
-| 64 | 1,992,189 (1) | 1,962,162 (1) |
+| MMAX | original: bytes (resets) | first version: bytes (resets) | current: bytes (resets) |
+|---|---|---|---|
+| 16 | 2,148,996 (7) | 2,096,170 (4) | 2,069,320 (3) |
+| 24 | 2,091,203 (4) | 2,053,672 (3) | 2,038,206 (2) |
+| 40 | 2,031,805 (2) | 2,001,008 (1) | 1,996,494 (1) |
+| 64 | 1,992,189 (1) | 1,962,162 (1) | 1,937,536 (0) |
 
 Without resets the outputs are identical.
 
 Environment knobs (they change speed and memory only, never the output; encoder and decoder
-may use different values): `PPMD_PACK=0|1` (packed cold records), `PPMD_PDEAD`,
+may use different values): `PPMD_PACK=0|1` (cold records), `PPMD_CDEADSH`, `PPMD_COLDQ`,
 `PPMD_SCAN=0|1|2` (scalar / AVX2 / AVX-512 scan), `PPMD_DEADSH`
 (compaction threshold: dead > live>>n), `PPMD_SPLIT` (fraction moved per split, n/16),
 `PPMD_MARGIN`, `PPMD_RECVGAP`.
