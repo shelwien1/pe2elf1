@@ -485,8 +485,10 @@ struct Model {
   static const Ctx LEAFB = Ctx(1)<<62, COLDB = Ctx(1)<<61;
   static bool isM(Ctx c) { return (c & 1)!=0; }
   static bool isL(Ctx c) { return (c & LEAFB)!=0; }
-  // bit 0 is M for a hot record; a cold record may start at an odd address
-  static byte* rec(Ctx c) { return (byte*)(c & ~LEAFB & ~COLDB & ~(((c>>61) & 1) ^ 1)); }
+  // rec: the record of a hot context (bit 0 is M); crec: also for a cold one, which may start at
+  // an odd address. Cold handles only reach the maintenance code and CheckTree.
+  static byte* rec(Ctx c) { return (byte*)(c & ~(Ctx)1 & ~LEAFB); }
+  static byte* crec(Ctx c) { return (byte*)(c & ~LEAFB & ~COLDB & ~(((c>>61) & 1) ^ 1)); }
   static Ctx mkCtx(byte* r, uint m) { return (Ctx)r | (Ctx)m; }
   static Ctx mkCtxL(byte* r, uint m, bool leaf) { return (Ctx)r | (Ctx)m | (leaf ? LEAFB : 0); }
   static uint SH(Ctx c) { return isL(c) ? 1u : 2u; }     // log2 of the state size
@@ -670,21 +672,26 @@ struct Model {
   // Records that are not current can be stored in a smaller, read-only form. Repack writes them
   // in [RESV, pgCold[p]) of each page, byte-aligned; a near ref below pgCold[p] is the exact byte
   // offset of a cold record (no M bit), and the record's first byte tells its kind:
-  //   path  [A:1 (0x10)|L-1:4][sym x L][freq x L][end ref:16]
-  //         a chain of L binaries, each the only child of the previous one. The end ref (the
-  //         last element's child) is absent when the last element is a leaf, or when A is set:
-  //         then the child is the cold record that follows. L >= 2 unless A is set.
-  //   NU=2  [0x2000 + code (2 bytes, big-endian)][y0][y1][succ0:16][succ1:16, unless a leaf]
-  //         code -> (EscFreq|resc, tf0, tf1) through a codebook of the keys in use (reference
-  //         counted: a code is recycled when no cold record uses it)
+  //   path  [A:1 (0x10)|N:1 (0x08)|L-1:3][sym x L][freq x L][end ref:16]
+  //         a chain of L binaries, each the only child of the previous one. With N the freqs
+  //         are nibbles (freq-1, element e in nibble e, low first, (L+1)/2 bytes). The end ref
+  //         (the last element's child) is absent when the last element is a leaf, or when A is
+  //         set: then the child is the cold record that follows. L >= 2 unless A is set.
+  //   NU=2  [code][y0][y1][succ0:16][succ1:16]          (a leaf has no successors)
+  //         code: 2 bytes big-endian 0x2000 + code for the first CB_SHORT codes, else 3 bytes
+  //         [0xF0 | c>>16][c>>8][c] with c = code - CB_SHORT.
+  //         code -> key (EscFreq|resc, tf0, tf1, adj) through a codebook of the keys in use
+  //         (reference counted: a code is recycled when no cold record uses it). adj = j+1:
+  //         the context child of state j is the cold record that follows (no succ field).
   // A cold record is expanded into its hot form (in the same page) when it becomes current, at
   // the start of a step; its bytes stay dead until the next Repack of the page.
-  enum { CPATH_LIM = 0x20, CPATH_ADJ = 0x10, CNU2_BASE = 0x2000, CB_MAX = 0x10000-CNU2_BASE, CBH_BITS = 17, MAX_PATH = 16 };
+  enum { CPATH_LIM = 0x20, CPATH_ADJ = 0x10, CPATH_NIB = 0x08, MAX_PATH = 8,
+         CNU2_BASE = 0x2000, CNU2_LONG = 0xF0, CB_SHORT = (CNU2_LONG<<8)-CNU2_BASE, CB_MAX = 1<<17, CBH_BITS = 18 };
   std::vector<word> pgCold;     // per page: end of the cold region
-  std::vector<uint> cbKey;      // code -> key (byte0 | tf0<<8 | tf1<<16)
+  std::vector<uint> cbKey;      // code -> key (byte0 | tf0<<8 | tf1<<16 | adj<<24)
   std::vector<qword> cbHash;    // open addressing: code<<32 | key+1
   std::vector<uint> cbRef;      // cold records using each code
-  std::vector<uint> cbFree;     // recycled codes
+  std::vector<uint> cbFree, cbFreeS;   // recycled long / short codes
   byte coldTmp[64];
   qword st_expand, st_coldpath, st_coldnu2, st_cbfull, st_tight = 0, st_waste = 0;
   uint pol_pack, pol_cdeadsh, pol_coldq;
@@ -697,8 +704,11 @@ struct Model {
       if( uint(v)==key+1 ) return int(v>>32);
       h = (h+1) & ((1u<<CBH_BITS)-1);
     }
+    // a short (2-byte) code if one is free, else a long one
     uint code;
-    if( !cbFree.empty() ) { code = cbFree.back(); cbFree.pop_back(); cbKey[code] = key; }
+    if( !cbFreeS.empty() ) { code = cbFreeS.back(); cbFreeS.pop_back(); cbKey[code] = key; }
+    else if( cbKey.size()<CB_SHORT ) { code = uint(cbKey.size()); cbKey.push_back(key); cbRef.push_back(0); }
+    else if( !cbFree.empty() ) { code = cbFree.back(); cbFree.pop_back(); cbKey[code] = key; }
     else if( cbKey.size()<CB_MAX ) { code = uint(cbKey.size()); cbKey.push_back(key); cbRef.push_back(0); }
     else { st_cbfull++; return -1; }
     cbHash[h] = (qword(code)<<32) | (key+1);
@@ -716,7 +726,7 @@ struct Model {
       uint j = i;
       for( ;; ) {
         j = (j+1) & M;
-        if( !cbHash[j] ) { cbFree.push_back(code); return; }
+        if( !cbHash[j] ) { (code<CB_SHORT ? cbFreeS : cbFree).push_back(code); return; }
         uint k = cbSlot(uint(cbHash[j])-1);
         // move j back to i unless its home slot k lies cyclically in (i, j]
         bool stay = (i<=j) ? (i<k && k<=j) : (i<k || k<=j);
@@ -725,17 +735,41 @@ struct Model {
     }
   }
   void cbReset() {
-    cbKey.clear(); cbRef.clear(); cbFree.clear();
+    cbKey.clear(); cbRef.clear(); cbFree.clear(); cbFreeS.clear();
     std::fill(cbHash.begin(), cbHash.end(), 0);
   }
   static uint wget(const byte* p) { return p[0] | (uint(p[1])<<8); }
   static void wput(byte* p, uint v) { p[0] = byte(v); p[1] = byte(v>>8); }
   bool lastIsLeaf(uint depth, uint L) const { return int(depth+L-1)>=_MaxOrder; }
-  static uint pathL(const byte* r) { return (r[0] & 0x0Fu)+1; }
+  // NU=2 record: header length and code
+  static uint nu2Hdr(const byte* r, uint* code) {
+    if( r[0]<CNU2_LONG ) { *code = ((r[0]<<8) | r[1])-CNU2_BASE; return 2; }
+    *code = CB_SHORT+(((r[0] & 0x0Fu)<<16) | (uint(r[1])<<8) | r[2]); return 3;
+  }
+  static uint nu2PutHdr(byte* d, uint code) {
+    if( code<CB_SHORT ) { uint v = CNU2_BASE+code; d[0] = byte(v>>8); d[1] = byte(v); return 2; }
+    uint c = code-CB_SHORT; d[0] = byte(CNU2_LONG | (c>>16)); d[1] = byte(c>>8); d[2] = byte(c); return 3;
+  }
+  static uint nu2Size(uint code, uint key, bool leaf) {
+    return (code<CB_SHORT ? 2u : 3u)+2+(leaf ? 0u : (key>>24) ? 2u : 4u);
+  }
+  // the successor of state j of the NU=2 record at offset off (hl: header length)
+  static word nu2Succ(const byte* r, uint off, uint hl, uint code, uint key, uint j, bool leaf) {
+    uint adj = key>>24;
+    if( adj==j+1 ) return word(off+nu2Size(code, key, leaf));
+    return word(wget(r+hl+2+((j==1 && adj!=1) ? 2u : 0u)));
+  }
+  static uint pathL(const byte* r) { return (r[0] & 0x07u)+1; }
+  static bool pathNib(const byte* r) { return (r[0] & CPATH_NIB)!=0; }
+  static uint pathFB(uint L, bool nib) { return nib ? (L+1)/2 : L; }   // bytes of freqs
+  static uint pathFreq(const byte* r, uint L, uint e) {
+    return pathNib(r) ? ((r[1+L+(e>>1)]>>(4*(e & 1))) & 15u)+1 : r[1+L+e];
+  }
   static bool pathAdj(const byte* r) { return (r[0] & CPATH_ADJ)!=0; }
   uint coldSize(const byte* r, uint depth) const {
-    if( r[0]<CPATH_LIM ) { uint L = pathL(r); return 1+2*L+((pathAdj(r) || lastIsLeaf(depth, L)) ? 0u : 2u); }
-    return int(depth)>=_MaxOrder ? 4u : 8u;
+    if( r[0]<CPATH_LIM ) { uint L = pathL(r); return 1+L+pathFB(L, pathNib(r))+((pathAdj(r) || lastIsLeaf(depth, L)) ? 0u : 2u); }
+    uint code; nu2Hdr(r, &code);
+    return nu2Size(code, cbKey[code], int(depth)>=_MaxOrder);
   }
   uint coldHotSize(const byte* r, uint depth) const {
     if( r[0]<CPATH_LIM ) { uint L = pathL(r); return 4*(L-1)+(lastIsLeaf(depth, L) ? 2u : 4u); }
@@ -744,33 +778,34 @@ struct Model {
   // ref of the child of a path record's last element (not a leaf); off: the record's offset
   word pathChild(const byte* r, uint off) const {
     uint L = pathL(r);
-    return pathAdj(r) ? word(off+1+2*L) : word(wget(r+1+2*L));
+    uint e = 1+L+pathFB(L, pathNib(r));
+    return pathAdj(r) ? word(off+e) : word(wget(r+e));
   }
   // hot-format copy of a cold record's first context, for reading only (BequeathFreq)
   Ctx coldView(Ctx c) {
-    const byte* r = rec(c);
+    const byte* r = crec(c);
     byte* t = coldTmp;
     if( r[0]<CPATH_LIM ) {
       uint L = pathL(r);
-      t[0] = r[1]; t[1] = r[1+L]; t[2] = t[3] = 0;
+      t[0] = r[1]; t[1] = byte(pathFreq(r, L, 0)); t[2] = t[3] = 0;
       return mkCtxL(t, 0, false);
     }
-    uint key = cbKey[((r[0]<<8) | r[1])-CNU2_BASE];
+    uint code, hl = nu2Hdr(r, &code), key = cbKey[code];
     bool leaf = isL(c);
     t[0] = byte(key); t[1] = 1;
     State* s = (State*)(t+2);
     if( leaf ) {
-      t[2] = r[2]; t[3] = byte(key>>8); t[4] = r[3]; t[5] = byte(key>>16);
+      t[2] = r[hl]; t[3] = byte(key>>8); t[4] = r[hl+1]; t[5] = byte(key>>16);
     } else {
-      s[0].sym = r[2]; s[0].tf = byte(key>>8); s[0].succ = word(wget(r+4));
-      s[1].sym = r[3]; s[1].tf = byte(key>>16); s[1].succ = word(wget(r+6));
+      s[0].sym = r[hl]; s[0].tf = byte(key>>8); s[0].succ = 0;
+      s[1].sym = r[hl+1]; s[1].tf = byte(key>>16); s[1].succ = 0;
     }
     return mkCtxL(t, 1, leaf);
   }
   // Expands the cold SuffCache[i] in place of its page's free space; the page has the headroom.
   void expandCold(int i) {
     Ctx c = SuffCache[i];
-    byte* r = rec(c);
+    byte* r = crec(c);
     uint p = pageOf(r);
     uint csz = coldSize(r, uint(i));
     Ctx nc;
@@ -783,25 +818,24 @@ struct Model {
         bool leaf = (k==int(L)-1) && ll;
         e = allocRec(p, leaf ? 2u : 4u, leaf ? uint(ANYPAR) : 0u);
         State* s = (State*)e;
-        s->sym = r[1+k]; s->tf = r[1+L+k];
+        s->sym = r[1+k]; s->tf = byte(pathFreq(r, L, uint(k)));
         if( !leaf ) s->succ = nxt;
         nxt = word(offOf(e));
       }
       nc = mkCtxL(e, 0, L==1 && ll);
     } else {
-      uint code = ((r[0]<<8) | r[1])-CNU2_BASE;
-      uint key = cbKey[code];
-      cbRelease(code);
+      uint code, hl = nu2Hdr(r, &code), key = cbKey[code];
       bool leaf = isL(c);
       byte* nr = allocRec(p, leaf ? 6u : 10u, ANYPAR);
       nr[0] = byte(key); nr[1] = 1;
       if( leaf ) {
-        nr[2] = r[2]; nr[3] = byte(key>>8); nr[4] = r[3]; nr[5] = byte(key>>16);
+        nr[2] = r[hl]; nr[3] = byte(key>>8); nr[4] = r[hl+1]; nr[5] = byte(key>>16);
       } else {
         State* s = (State*)(nr+2);
-        s[0].sym = r[2]; s[0].tf = byte(key>>8); s[0].succ = word(wget(r+4));
-        s[1].sym = r[3]; s[1].tf = byte(key>>16); s[1].succ = word(wget(r+6));
+        s[0].sym = r[hl]; s[0].tf = byte(key>>8); s[0].succ = nu2Succ(r, offOf(r), hl, code, key, 0, false);
+        s[1].sym = r[hl+1]; s[1].tf = byte(key>>16); s[1].succ = nu2Succ(r, offOf(r), hl, code, key, 1, false);
       }
+      cbRelease(code);
       nc = mkCtxL(nr, 1, leaf);
     }
     PageMeta& m = pm[p];
@@ -822,17 +856,17 @@ struct Model {
   // records, otherwise decoded into DS).
   struct LNode {
     word off; word sz; int parent; word st; byte kind; byte moved; byte depth; byte leaf;
-    byte ns; byte hdr; byte cold; byte pin; byte fmt; byte adj; byte placed; word nref;
+    byte ns; byte hdr; byte cold; byte pin; byte fmt; byte adj; byte placed; byte nib; word nref;
     const State* sp; int next;
     union { uint sub; uint gid; };     // subtree size (split selection), then the moved root's id
     union { int tail; int code; };     // last element of a path / codebook index of an NU=2
   };
   static bool isColdFmt(uint f) { return f==F_CNU2 || f==F_CPATH || f==F_KEEP; }
   uint coldNodeSize(const LNode& L) const {
-    if( L.fmt==F_CNU2 ) return L.leaf ? 4u : 8u;
+    if( L.fmt==F_CNU2 ) return nu2Size(uint(L.code), cbKey[L.code], L.leaf);
     uint m = L.ns+1u;
     bool noEnd = L.adj || (L.fmt==F_CPATH ? Ls[L.tail].kind==K_LBIN : L.hdr!=0);
-    return 1+2*m+(noEnd ? 0u : 2u);
+    return 1+m+pathFB(m, L.nib)+(noEnd ? 0u : 2u);
   }
   enum { DS_MAX = 40000 };
   struct NodeBuf {
@@ -864,7 +898,7 @@ struct Model {
   }
   static void initNode(LNode& L, int parent, uint st, uint depth, bool leaf) {
     L.parent = parent; L.st = word(st); L.depth = byte(depth); L.leaf = leaf;
-    L.moved = 0; L.ns = 0; L.hdr = 0; L.pin = 0; L.fmt = F_HOT; L.adj = 0; L.placed = 0; L.nref = 0; L.sub = 0;
+    L.moved = 0; L.ns = 0; L.hdr = 0; L.pin = 0; L.fmt = F_HOT; L.adj = 0; L.placed = 0; L.nib = 0; L.nref = 0; L.sub = 0;
     L.next = -1; L.tail = -1;
   }
   __attribute__((always_inline)) inline int addNode(const byte* base, uint kc, word r, int parent, uint st, uint depth) {
@@ -878,7 +912,7 @@ struct Model {
         bool ll = lastIsLeaf(depth, n);
         LNode& L = newNode();
         initNode(L, parent, st, depth, leaf);
-        L.off = r; L.cold = 1; L.kind = K_PATH; L.ns = byte(n-1); L.hdr = ll;
+        L.off = r; L.cold = 1; L.kind = K_PATH; L.ns = byte(n-1); L.hdr = ll; L.nib = pathNib(c);
         L.sz = word(4*(n-1)+(ll ? 2u : 4u));
         State* s = dsAlloc(1);   // the last element's successor
         s->sym = 0; s->tf = 0; s->succ = ll ? 0 : pathChild(c, r);
@@ -888,14 +922,15 @@ struct Model {
       LNode& L = newNode();
       initNode(L, parent, st, depth, leaf);
       L.off = r; L.cold = 1;
-      L.code = int(((c[0]<<8) | c[1])-CNU2_BASE);
-      uint key = cbKey[L.code];
+      uint code, hl = nu2Hdr(c, &code), key = cbKey[code];
+      L.code = int(code);
       L.kind = K_MULTI; L.ns = 1; L.hdr = byte(key);
       L.sz = word(recSizeNU(2, leaf));
       State* s = dsAlloc(2);
       L.sp = s;
-      s[0].sym = c[2]; s[0].tf = byte(key>>8); s[1].sym = c[3]; s[1].tf = byte(key>>16);
-      s[0].succ = leaf ? 0 : word(wget(c+4)); s[1].succ = leaf ? 0 : word(wget(c+6));
+      s[0].sym = c[hl]; s[0].tf = byte(key>>8); s[1].sym = c[hl+1]; s[1].tf = byte(key>>16);
+      s[0].succ = leaf ? 0 : nu2Succ(c, r, hl, code, key, 0, false);
+      s[1].succ = leaf ? 0 : nu2Succ(c, r, hl, code, key, 1, false);
       return k;
     }
     LNode& L = newNode();
@@ -1041,7 +1076,7 @@ struct Model {
       E.sz = lb ? 2 : 4;
       E.ns = 0; E.hdr = 0;
       E.sp = s+e;
-      s[e].sym = c[1+e]; s[e].tf = c[1+n+e]; s[e].succ = (e+1<n) ? 0 : endref;
+      s[e].sym = c[1+e]; s[e].tf = byte(pathFreq(c, n, e)); s[e].succ = (e+1<n) ? 0 : endref;
       prev = idx;
     }
     Ls[prev].next = child;
@@ -1106,7 +1141,7 @@ struct Model {
     // transient references: their records stay hot
     int slotNode[MAX_O+2]; uint slotDelta[MAX_O+2];
     for( int i = 0; i<=order; i++ ) {
-      if( pageOf(rec(SuffCache[i]))==p ) Ls[fwdN[offOf(rec(SuffCache[i]))>>1]].pin = 1;
+      if( pageOf(crec(SuffCache[i]))==p ) Ls[fwdN[offOf(crec(SuffCache[i]))>>1]].pin = 1;
     }
     for( int i = 1; i<=order; i++ ) {
       slotNode[i] = -1;
@@ -1139,11 +1174,8 @@ struct Model {
       if( !pol_pack || L.moved || L.fmt!=F_HOT ) continue;
       if( L.kind==K_MULTI ) {
         if( L.ns!=1 || L.pin ) continue;
-        uint key = L.hdr | (uint(L.sp[0].tf)<<8) | (uint(L.sp[1].tf)<<16);
-        L.code = cbCode(key);
-        if( L.code<0 ) continue;
-        cbRef[L.code]++;
-        L.fmt = F_CNU2;
+        L.fmt = F_CNU2;      // its code is chosen in pass 2, with its adjacent child
+        L.code = -1;
         st_coldnu2++;
         continue;
       }
@@ -1160,6 +1192,7 @@ struct Model {
         }
         if( m>=2 ) {
           Ls[h].fmt = F_CPATH; Ls[h].ns = byte(m-1); Ls[h].tail = last;
+          { uint mx = 0; for( int e = h; ; e = Ls[e].next ) { if( Ls[e].sp[0].tf>mx ) mx = Ls[e].sp[0].tf; if( e==last ) break; } Ls[h].nib = mx<=16; }
           for( int e = Ls[h].next; e!=Ls[last].next; e = Ls[e].next ) Ls[e].fmt = F_INNER;
           st_coldpath++;
         }
@@ -1186,9 +1219,29 @@ struct Model {
         else if( L.fmt==F_KEEP ) c = L.hdr ? -1 : L.next;
         else if( L.fmt==F_HOT && L.kind==K_BIN0 && !L.pin && !L.moved ) c = L.next;
         if( c>=0 && isColdFmt(Ls[c].fmt) && Ls[c].parent==(L.fmt==F_CPATH ? L.tail : int(k)) ) {
-          if( L.fmt==F_HOT ) { L.fmt = F_CPATH; L.ns = 0; L.tail = int(k); st_coldpath++; }
+          if( L.fmt==F_HOT ) { L.fmt = F_CPATH; L.ns = 0; L.tail = int(k); L.nib = 0; st_coldpath++; }
           L.adj = 1;
         }
+      }
+      if( L.fmt==F_CNU2 ) {
+        // NU=2: the first context child that is cold follows the record; then its code
+        uint adj = 0;
+        L.next = -1;
+        if( !L.leaf ) {
+          for( uint j = 0; j<2 && !adj; j++ ) {
+            if( !(L.sp[j].tf & 0x80) || L.sp[j].succ<FAR_LIM ) continue;
+            int c = int(fwdN[L.sp[j].succ>>1]);
+            if( isColdFmt(Ls[c].fmt) && Ls[c].parent==int(k) && !Ls[c].moved ) { adj = j+1; L.next = c; }
+          }
+        }
+        uint key = L.hdr | (uint(L.sp[0].tf)<<8) | (uint(L.sp[1].tf)<<16) | (adj<<24);
+        if( L.code<0 || cbKey[L.code]!=key ) {
+          if( L.code>=0 ) cbRelease(uint(L.code));
+          L.code = cbCode(key);
+          if( L.code>=0 ) cbRef[L.code]++;
+        }
+        if( L.code<0 ) { L.fmt = F_HOT; L.next = -1; adj = 0; }
+        L.adj = byte(adj);
       }
       if( L.fmt==F_HOT ) (L.moved ? mb : sb)[L.kind] += L.sz;
       else if( isColdFmt(L.fmt) ) cb += coldNodeSize(L);
@@ -1221,7 +1274,7 @@ struct Model {
         C.nref = word(co);
         co += coldNodeSize(C);
         if( !C.adj ) break;
-        j = C.fmt==F_CPATH ? Ls[C.tail].next : C.next;
+        j = C.fmt==F_CPATH ? Ls[C.tail].next : C.next;   // F_KEEP and F_CNU2 keep it in next
       }
     }
     if( co!=RESV+cb ) { fprintf(stderr, "\nfatal: cold layout mismatch\n"); exit(7); }
@@ -1245,36 +1298,40 @@ struct Model {
       const State* ss = L.sp;
       if( L.fmt==F_CNU2 ) {
         byte* d = scratch+L.nref;
-        uint hv = CNU2_BASE+uint(L.code);
-        d[0] = byte(hv>>8); d[1] = byte(hv);
-        d[2] = ss[0].sym; d[3] = ss[1].sym;
+        uint hl = nu2PutHdr(d, uint(L.code));
+        d[hl] = ss[0].sym; d[hl+1] = ss[1].sym;
         if( !L.leaf ) {
+          byte* o = d+hl+2;
           for( uint j = 0; j<2; j++ ) {
+            if( L.adj==j+1 ) continue;
             word v = ss[j].succ;
             if( ss[j].tf & 0x80 ) v = remapChild(L, v, v>=FAR_LIM ? int(fwdN[v>>1]) : -1);
-            wput(d+4+2*j, v);
+            wput(o, v); o += 2;
           }
         }
         continue;
       }
       if( L.fmt==F_KEEP ) {
         byte* d = scratch+L.nref;
-        uint m = L.ns+1u;
-        memcpy(d+1, bp+L.off+1, 2*m);
-        d[0] = byte((m-1) | (L.adj ? uint(CPATH_ADJ) : 0u));
-        if( !L.hdr && !L.adj ) wput(d+1+2*m, remapChild(L, ss[0].succ, L.next));
+        uint m = L.ns+1u, fb = pathFB(m, L.nib);
+        memcpy(d+1, bp+L.off+1, m+fb);
+        d[0] = byte((m-1) | (L.adj ? uint(CPATH_ADJ) : 0u) | (L.nib ? uint(CPATH_NIB) : 0u));
+        if( !L.hdr && !L.adj ) wput(d+1+m+fb, remapChild(L, ss[0].succ, L.next));
         continue;
       }
       if( L.fmt==F_CPATH ) {
         byte* d = scratch+L.nref;
-        uint m = L.ns+1u;
-        d[0] = byte((m-1) | (L.adj ? uint(CPATH_ADJ) : 0u));
+        uint m = L.ns+1u, fb = pathFB(m, L.nib);
+        d[0] = byte((m-1) | (L.adj ? uint(CPATH_ADJ) : 0u) | (L.nib ? uint(CPATH_NIB) : 0u));
+        if( L.nib ) memset(d+1+m, 0, fb);
         int e = int(k), last = int(k);
         for( uint t = 0; t<m; t++ ) {
-          d[1+t] = Ls[e].sp[0].sym; d[1+m+t] = Ls[e].sp[0].tf;
+          d[1+t] = Ls[e].sp[0].sym;
+          if( L.nib ) d[1+m+(t>>1)] |= byte((Ls[e].sp[0].tf-1u)<<(4*(t & 1)));
+          else d[1+m+t] = Ls[e].sp[0].tf;
           last = e; e = Ls[e].next;
         }
-        if( Ls[last].kind!=K_LBIN && !L.adj ) wput(d+1+2*m, remapChild(Ls[last], Ls[last].sp[0].succ, Ls[last].next));
+        if( Ls[last].kind!=K_LBIN && !L.adj ) wput(d+1+m+fb, remapChild(Ls[last], Ls[last].sp[0].succ, Ls[last].next));
         continue;
       }
       // hot
@@ -1301,7 +1358,7 @@ struct Model {
     }
     // remap the transient references into page p
     for( int i = 0; i<=order; i++ ) {
-      byte* r = rec(SuffCache[i]);
+      byte* r = crec(SuffCache[i]);
       if( pageOf(r)!=p ) continue;
       const LNode& L = Ls[fwdN[offOf(r)>>1]];
       SuffCache[i] = mkCtxL((L.moved ? bq : bp)+(L.nref & ~1u), L.nref & 1u, L.leaf);
@@ -1348,7 +1405,7 @@ struct Model {
     return true;
   }
   uint needFor(Ctx c, int i) {
-    if( isC(c) ) return coldHotSize(rec(c), uint(i))+recSizeNU(3, false)+12u;
+    if( isC(c) ) return coldHotSize(crec(c), uint(i))+recSizeNU(3, false)+12u;
     uint NU = NS(c)+1;
     return (NU<256 ? recSizeNU(NU+1, false) : 0u) + 12u;
   }
@@ -1363,11 +1420,11 @@ struct Model {
       uint sum = 0;
       for( int i = 0; i<=order; i++ ) sum += needFor(SuffCache[i], i);
       int i = 0;
-      while( i<=order && pgSlack[pageOf(rec(SuffCache[i]))]>=sum+64 ) i++;
+      while( i<=order && pgSlack[pageOf(crec(SuffCache[i]))]>=sum+64 ) i++;
       if( i>order ) { expandCurrent(); return true; }
       // the page tests below with the total need of all pages (an upper bound of each page's)
       for( ; i<=order; i++ ) {
-        const PageMeta& m = pm[pageOf(rec(SuffCache[i]))];
+        const PageMeta& m = pm[pageOf(crec(SuffCache[i]))];
         if( PG_SIZE-m.bump<sum+64 ) break;
         if( m.bump+sum>((m.hwm+4095) & ~4095u) ) {
           uint dead = m.bump-RESV-m.live;
@@ -1380,7 +1437,7 @@ struct Model {
     for( int iter = 0; iter<64; iter++ ) {
       uint pg[MAX_O+2], nd[MAX_O+2]; int np = 0;
       for( int i = 0; i<=order; i++ ) {
-        uint p = pageOf(rec(SuffCache[i])), n = needFor(SuffCache[i], i);
+        uint p = pageOf(crec(SuffCache[i])), n = needFor(SuffCache[i], i);
         int k = 0;
         while( k<np && pg[k]!=p ) k++;
         if( k==np ) { pg[np] = p; nd[np] = 0; np++; }
@@ -1412,7 +1469,7 @@ struct Model {
   qword check_every = 0, check_step = 0, check_from = ~0ull;
   void CheckFail(const char* msg, Ctx c) {
     fprintf(stderr, "\nCHECK FAILED at step %llu: %s (page %u off %u M=%d)\n", (unsigned long long)check_step, msg,
-            pageOf(rec(c)), offOf(rec(c)), int(c & 1));
+            pageOf(crec(c)), offOf(crec(c)), int(c & 1));
     exit(11);
   }
   // the child context a ref value in page p names
@@ -1436,13 +1493,13 @@ struct Model {
       Ctx c = st.back().first; int d = st.back().second; st.pop_back();
       if( c==0 ) CheckFail("bad far ref", c);
       if( isL(c)!=(d>=_MaxOrder) ) CheckFail("leaf flag does not match depth", c);
-      uint p = pageOf(rec(c)), off = offOf(rec(c));
+      uint p = pageOf(crec(c)), off = offOf(crec(c));
       if( p>=nPages ) CheckFail("page out of range", c);
       size_t vi = (size_t(p)<<PG_BITS)+off;
       if( seen[vi] ) CheckFail("record reachable twice", c);
       seen[vi] = true;
       if( isC(c) ) {
-        const byte* r = rec(c);
+        const byte* r = crec(c);
         if( off<RESV || off+coldSize(r, uint(d))>pgCold[p] ) CheckFail("cold record outside the cold region", c);
         if( r[0]<CPATH_LIM ) {
           uint L = pathL(r);
@@ -1454,13 +1511,18 @@ struct Model {
             st.push_back(std::make_pair(refCtx(p, cr, d+int(L)), d+int(L)));
           }
         } else {
-          uint code = ((r[0]<<8) | r[1])-CNU2_BASE;
+          uint code, hl = nu2Hdr(r, &code);
           if( code>=cbKey.size() || cbRef[code]==0 ) CheckFail("bad codebook index", c);
           cbUse[code]++;
-          uint key = cbKey[code];
+          uint key = cbKey[code], adj = key>>24;
+          if( adj>2 || (adj && (d>=_MaxOrder || !((key>>(8*adj)) & 0x80))) ) CheckFail("bad adjacent child of an NU=2 record", c);
           if( d<_MaxOrder ) {
-            if( (key>>8) & 0x80 ) st.push_back(std::make_pair(refCtx(p, word(wget(r+4)), d+1), d+1));
-            if( (key>>16) & 0x80 ) st.push_back(std::make_pair(refCtx(p, word(wget(r+6)), d+1), d+1));
+            for( uint j = 0; j<2; j++ ) {
+              if( !((key>>(8+8*j)) & 0x80) ) continue;
+              word cr = nu2Succ(r, off, hl, code, key, j, false);
+              if( adj==j+1 && !(cr<pgCold[p]) ) CheckFail("adjacent child outside the cold region", c);
+              st.push_back(std::make_pair(refCtx(p, cr, d+1), d+1));
+            }
           }
         }
         continue;
@@ -1488,9 +1550,9 @@ struct Model {
     }
     for( size_t k = 0; k<cbUse.size(); k++ ) if( cbUse[k]>cbRef[k] ) CheckFail("codebook reference count too low", 0);
     for( int i = 0; i<=order; i++ ) {
-      uint p = pageOf(rec(SuffCache[i])), off = offOf(rec(SuffCache[i]));
+      uint p = pageOf(crec(SuffCache[i])), off = offOf(crec(SuffCache[i]));
       if( !seen[(size_t(p)<<PG_BITS)+off] ) CheckFail("SuffCache entry unreachable", SuffCache[i]);
-      if( i>0 && *parentSlot[i]!=refOf(SuffCache[i]) ) CheckFail("parent slot does not reference SuffCache entry", SuffCache[i]);
+      if( i>0 && *parentSlot[i]!=word(offOf(crec(SuffCache[i])) | (isC(SuffCache[i]) ? 0u : uint(SuffCache[i] & 1))) ) CheckFail("parent slot does not reference SuffCache entry", SuffCache[i]);
       if( isL(SuffCache[i])!=(i>=_MaxOrder) ) CheckFail("SuffCache leaf flag does not match its order", SuffCache[i]);
     }
   }
