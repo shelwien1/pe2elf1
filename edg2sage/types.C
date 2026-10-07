@@ -291,6 +291,14 @@ SgType* Translator::convertType(a_type_ptr type) {
   return result;
 }
 
+// "enum E : unsigned char": the explicitly specified underlying type
+void Translator::setEnumBase(SgEnumDeclaration* decl, a_type_ptr type) {
+  if (type->variant.integer.has_explicit_enum_base && type->variant.integer.extra_info != nullptr &&
+      type->variant.integer.extra_info->base_type != nullptr) {
+    decl->set_field_type(convertType(type->variant.integer.extra_info->base_type));
+  }
+}
+
 // "decltype(auto)": ROSE has no representation of its own; a (hidden) typedef
 // of auto with that name prints as written.
 SgType* Translator::decltypeAutoType() {
@@ -364,6 +372,7 @@ SgEnumDeclaration* Translator::enumDeclarationFor(a_type_ptr type) {
   decl->set_isUnNamed(unnamed);
   decl->set_type(SgEnumType::createType(decl));
   if (type->variant.integer.is_scoped_enum) decl->set_isScopedEnum(true);
+  setEnumBase(decl, type);
   setPosition(decl, type->source_corresp.decl_position);
   SgEnumSymbol* sym = new SgEnumSymbol(decl);
   scope->insert_symbol(name, sym);

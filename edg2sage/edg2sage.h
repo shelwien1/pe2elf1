@@ -93,6 +93,7 @@ class Translator {
   void setTypedefBaseDeclaration(SgTypedefDeclaration* decl);
   SgClassDefinition* classDefinitionFor(edg::a_type_ptr classType);
   SgType* decltypeAutoType();
+  void setEnumBase(SgEnumDeclaration* decl, edg::a_type_ptr enumType);
 
   // ---------------------------------------------------------------- declarations
   void translateDeclarationList(SeqCursor& cursor, SgScopeStatement* scope, void* endOfConstructEntity);
@@ -256,6 +257,7 @@ class Translator {
   std::unordered_map<edg::a_label_ptr, SgLabelSymbol*> labelSymbols;
   std::set<edg::a_constant_ptr> foldedConstants;
   std::map<std::string, SgFunctionSymbol*> genericBuiltins;
+  std::unordered_map<edg::a_field_ptr, edg::a_variable_ptr> capturedVariables;  // closure field -> variable
   std::map<SgInitializedName*, SgVariableSymbol*> pendingParameterSymbols;
   // Start of the declaration specifiers of each variable declaration
   std::map<SgVariableDeclaration*, edg::a_source_position> declarationSpecifiers;

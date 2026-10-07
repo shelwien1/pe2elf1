@@ -532,6 +532,19 @@ SgExpression* Translator::convertFieldSelection(an_expr_node_ptr expr, bool arro
     // A member of an anonymous union is named directly.
     return convertExpression(memberNode);
   }
+  if (memberNode->kind == enk_field && memberNode->variant.field.ptr != nullptr) {
+    // A variable captured by a lambda, accessed through the closure object
+    auto cap = capturedVariables.find(memberNode->variant.field.ptr);
+    if (cap != capturedVariables.end()) {
+      an_expr_node_ptr obj = skipImplicitSteps(objectNode);
+      if (obj != nullptr && obj->kind == enk_variable && obj->variant.variable.ptr != nullptr &&
+          obj->variant.variable.ptr->is_this_parameter) {
+        SgExpression* e = convertVariableReference(cap->second, nullptr);
+        if (expr->is_parenthesized) e->set_need_paren(true);
+        return e;
+      }
+    }
+  }
   SgExpression* object = convertExpression(objectNode);
   // The implicit "this->" of a member named in a member function (or of a
   // captured variable in a lambda) is not written.
@@ -615,6 +628,10 @@ SgExpression* Translator::convertCall(an_expr_node_ptr expr) {
   function->set_parent(call);
   list->set_parent(call);
   if (expr->variant.operation.call_uses_operator_syntax) call->set_uses_operator_syntax(true);
+  if (first != nullptr && first->kind == enk_routine && first->variant.routine.ptr != nullptr &&
+      first->variant.routine.ptr->special_kind == sfk_udl_operator) {
+    call->set_uses_operator_syntax(false);  // a user-defined literal (see setSpecialFunctionKind())
+  }
   return call;
 }
 

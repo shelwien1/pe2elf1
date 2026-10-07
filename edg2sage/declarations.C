@@ -710,7 +710,9 @@ void Translator::setSpecialFunctionKind(SgFunctionDeclaration* decl, a_routine_p
       sm.setOperator();
       break;
     case sfk_udl_operator:
-      sm.setUldOperator();
+      // Not marked: ROSE's printing of literal operator calls ("12_km") does
+      // not work with the IL's calls; they are written as explicit calls of
+      // the operator ("operator\"\"_km(12ULL)"), see convertCall().
       break;
     default:
       break;
@@ -1008,6 +1010,8 @@ void Translator::translateTypeDeclaration(SeqCursor& cursor, a_type_ptr type, a_
       fwd->set_definingDeclaration(first->get_definingDeclaration());
       fwd->setForward();
       fwd->set_scope(first->get_scope());
+      fwd->set_isScopedEnum(first->get_isScopedEnum());
+      setEnumBase(fwd, type);
       setPosition(fwd, sec->decl_position);
       d = fwd;
     }
@@ -1109,6 +1113,7 @@ SgEnumDeclaration* Translator::translateEnumDefinition(SeqCursor& cursor, a_type
   def->set_parent(scope);
   def->set_isUnNamed(first->get_isUnNamed());
   def->set_isScopedEnum(first->get_isScopedEnum());
+  setEnumBase(def, type);
   definingEnumDecl[type] = def;
   SgType* enumType = first->get_type();
   SgScopeStatement* enumeratorScope = first->get_scope();

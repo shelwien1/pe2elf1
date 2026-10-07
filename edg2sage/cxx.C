@@ -299,6 +299,14 @@ SgExpression* Translator::convertLambda(a_lambda_ptr lambda) {
     setCompilerGenerated(cdef);
   }
 
+  // In the body, captured variables are named directly (rather than as fields
+  // of the closure object).
+  for (a_lambda_capture_ptr c = lambda->capture_list; c != nullptr; c = c->next) {
+    if (!c->is_init_capture && !c->is_indirect_init_capture && c->closure_field != nullptr &&
+        c->captured.variable != nullptr) {
+      capturedVariables[c->closure_field] = c->captured.variable;
+    }
+  }
   SgFunctionDeclaration* fn = translateRoutine(lambda->lambda_routine, nullptr, cdef);
   if (fn == nullptr) throw Unsupported("lambda function");
 
