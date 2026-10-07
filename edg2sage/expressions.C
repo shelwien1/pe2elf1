@@ -921,8 +921,19 @@ SgExpression* Translator::convertOperation(an_expr_node_ptr expr) {
     }
 
     case eok_dot_vacuous_destructor_call:
-    case eok_points_to_vacuous_destructor_call:
-      throw Unsupported("pseudo-destructor call");
+    case eok_points_to_vacuous_destructor_call: {
+      // "p->~T()" for a type without a destructor to call (ROSE prints the
+      // parentheses as part of the pseudo-destructor reference)
+      SgExpression* object = A();
+      a_type_ptr ot = skip_typerefs(a->type);
+      if (k == eok_points_to_vacuous_destructor_call && ot != nullptr && ot->kind == tk_pointer) {
+        ot = skip_typerefs(ot->variant.pointer.type);
+      }
+      SgPseudoDestructorRefExp* pd = new SgPseudoDestructorRefExp((Sg_File_Info*)nullptr, convertType(ot));
+      setPosition(pd, expr->position);
+      r = k == eok_dot_vacuous_destructor_call ? binaryOp<SgDotExp>(object, pd) : binaryOp<SgArrowExp>(object, pd);
+      break;
+    }
     default:
       throw Unsupported("operator kind " + std::to_string((int)k));
   }

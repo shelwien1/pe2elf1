@@ -228,7 +228,12 @@ SgType* Translator::convertType(a_type_ptr type) {
     }
     case tk_typeref: {
       a_typeref_kind trk = type->variant.typeref.kind;
-      if (typeref_is_typedef(type)) {
+      if (trk == trk_is_template_alias) {
+        // An instance of an alias template ("Table<int>"): the aliased type
+        // (ROSE has no representation of alias template instances).
+        result = convertType(type->variant.typeref.type);
+        if (type->variant.typeref.qualifiers != 0) result = qualify(result, type->variant.typeref.qualifiers);
+      } else if (typeref_is_typedef(type)) {
         SgTypedefDeclaration* decl = typedefDeclarationFor(type);
         result = decl ? decl->get_type() : convertType(type->variant.typeref.type);
       } else if (typeref_is_qualified(type)) {

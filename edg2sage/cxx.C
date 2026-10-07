@@ -133,10 +133,26 @@ SgDeclarationStatement* Translator::translateUsingDeclaration(a_using_decl_ptr u
         if (en != enumerators.end()) iname = en->second;
         break;
       }
+      case iek_base_class: {
+        // "using Base::Base;": inheriting constructors (a using declaration of
+        // a constructor of the base class)
+        if (!ud->is_inheriting_ctor) break;
+        a_type_ptr bt = skip_typerefs(((a_base_class_ptr)ptr)->type);
+        a_class_type_supplement_ptr bsp = bt != nullptr ? bt->variant.class_struct_union.extra_info : nullptr;
+        for (a_routine_ptr r = bsp && bsp->assoc_scope ? bsp->assoc_scope->routines : nullptr; r != nullptr; r = r->next) {
+          if (r->special_kind == sfk_constructor) {
+            decl = functionDeclarationFor(r);
+            break;
+          }
+        }
+        break;
+      }
       default:
         break;
     }
-    if (decl == nullptr && iname == nullptr) throw Unsupported("using declaration of this kind of entity");
+    if (decl == nullptr && iname == nullptr) {
+      throw Unsupported("using declaration of this kind of entity (" + std::to_string((int)ud->entity.kind) + ")");
+    }
     result = new SgUsingDeclarationStatement(decl, iname);
   }
   result->set_firstNondefiningDeclaration(result);
