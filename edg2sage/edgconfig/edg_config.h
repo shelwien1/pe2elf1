@@ -28,6 +28,10 @@
 /* Source sequence lists give the declarations/statements of each scope in source order. */
 #define GENERATE_SOURCE_SEQUENCE_LISTS 1
 
+/* No compiler-generated deallocation of variable length arrays (it would add
+   temporaries for return values, for instance). */
+#define VLA_DEALLOCATIONS_IN_IL 0
+
 /* asm operand constraints are kept as written (ROSE's SgAsmOp constraint strings). */
 #define RECORD_RAW_ASM_OPERAND_DESCRIPTIONS 1
 

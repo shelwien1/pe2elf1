@@ -1,0 +1,87 @@
+
+virtual $GRAMMAR_PREFIX_Node* $CLASSNAME::copy($GRAMMAR_PREFIX_CopyHelp& help) const {
+    $CLASSNAME* result{nullptr};
+
+    // Record the depth of the copy so that we build an clear internal state (new feature)
+    // used to associated old and new symbols in the original AST and the copy of the AST.
+    // The default value of the depth is 0, so after this call the depth is 1!
+    help.incrementDepth();
+
+    // Copy data members from base classes
+$CONSTRUCT_ARG_COPY 
+
+    // Build an empty copy of this object (NOTE: the parent MUST be set by the caller)
+    result = new $CLASSNAME($CONSTRUCT_ARG_LIST);
+    ASSERT_not_null(result);
+
+    // Copy data members of "this" class
+$POST_CONSTRUCT_COPY
+
+    // DQ (10/16/2007): The semantics of copy should include setting the parents of all
+    // the Sg_File_Info objects that are built for the new IR nodes.
+    SgLocatedNode* locatedNode = isSgLocatedNode(result);
+    if (locatedNode != nullptr) {
+        // If this is a SgLocatedNode then check the parents of the Sg_File_Info objects
+        Sg_File_Info* start = locatedNode->get_startOfConstruct();
+        ASSERT_not_null(start);
+
+        start->set_parent(locatedNode);
+        ASSERT_not_null(start->get_parent());
+
+        Sg_File_Info* end = locatedNode->get_endOfConstruct();
+        if (end == nullptr) {
+            printf ("Warning, input to AST copy was not a correct AST (with valid endOfConstruct pointer) this = %p = %s \n",this,this->class_name().c_str());
+        }
+        else {
+            end->set_parent(locatedNode);
+            ASSERT_not_null(end->get_parent());
+        }
+
+        SgExpression* expression = isSgExpression(result);
+        if (isSgExpression(this) != nullptr) {
+            Sg_File_Info* operatorPosition = expression->get_operatorPosition();
+
+            // Not all SgExpression IR nodes have a valid operatorPosition (only applies to actual operators)
+            if (operatorPosition != nullptr) {
+                operatorPosition->set_parent(expression);
+                ASSERT_not_null(operatorPosition->get_parent());
+            }
+        }
+    }
+
+    // Set the Sg_File_Info parents for the SgInitializedName
+    SgInitializedName* initializedName = isSgInitializedName(result);
+    if (initializedName != nullptr) {
+        // If this is a SgLocatedNode then check the parents of the Sg_File_Info objects
+        Sg_File_Info* start = initializedName->get_startOfConstruct();
+        ASSERT_not_null(start);
+
+        start->set_parent(initializedName);
+        ASSERT_not_null(start->get_parent());
+    }
+
+    // DQ (10/15/2007): Add everything to the map held internally so that we can more easily reference things like scopes.
+    help.insertCopiedNodePair(this,result);
+
+    // Record the depth of the copy so that we build an clear internal state (new feature)
+    // used to associated old and new symbols in the original AST and the copy of the AST.
+    help.decrementDepth();
+
+    // Test if this is the root of the copy!
+    if (help.get_depth() == 0) {
+        // This is the original calling node.
+
+        // Call the fixup mechanism to correct details of the AST copy mechanism.
+#if ALT_FIXUP_COPY
+        fixupCopy_scopes(result, help);
+        fixupCopy_symbols(result, help);
+        fixupCopy_references(result, help);
+#else
+        fixupCopy(result, help);
+#endif
+    }
+
+    return result;
+}
+
+

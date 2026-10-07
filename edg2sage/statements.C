@@ -44,6 +44,9 @@ static void positionImplicitBlock(Translator* t, SgBasicBlock* block) {
 
 SgBasicBlock* Translator::convertBlock(a_statement_ptr stmt, SgBasicBlock* block) {
   if (block == nullptr) block = SageBuilder::buildBasicBlock_nfi();
+  // A provisional parent (replaced when the block is attached): declarations
+  // inside need a complete scope chain (e.g. for mangled names).
+  if (block->get_parent() == nullptr) block->set_parent(currentScope());
   if (stmt == nullptr) {
     setCompilerGenerated(block, true);
     return block;
@@ -167,6 +170,7 @@ SgStatement* Translator::convertStatementKind(a_statement_ptr stmt) {
       return convertIfStatement(stmt);
     case stmk_while: {
       SgWhileStmt* w = new SgWhileStmt((SgStatement*)nullptr, (SgStatement*)nullptr);
+      w->set_parent(currentScope());
       scopeStack.push_back(w);
       SgStatement* cond = convertCondition(stmt->expr, w);
       w->set_condition(cond);
@@ -182,10 +186,7 @@ SgStatement* Translator::convertStatementKind(a_statement_ptr stmt) {
       SgStatement* body = convertBlock(stmt->variant.loop_statement);
       SgExpression* c = convertExpression(stmt->expr);
       SgExprStatement* cond = SageBuilder::buildExprStatement_nfi(c);
-      cond->set_startOfConstruct(new Sg_File_Info(*c->get_startOfConstruct()));
-      cond->set_endOfConstruct(new Sg_File_Info(*c->get_endOfConstruct()));
-      cond->get_startOfConstruct()->set_parent(cond);
-      cond->get_endOfConstruct()->set_parent(cond);
+      if (!copyPosition(cond, c)) setPosition(cond, stmt->position);
       SgDoWhileStmt* d = new SgDoWhileStmt(body, cond);
       body->set_parent(d);
       cond->set_parent(d);
@@ -257,14 +258,14 @@ SgStatement* Translator::convertStatementKind(a_statement_ptr stmt) {
       if (stmt->expr != nullptr) {
         e = convertExpression(stmt->expr);
       } else if (stmt->variant.return_dynamic_init != nullptr) {
-        SgInitializer* init = convertDynamicInit(stmt->variant.return_dynamic_init, nullptr);
-        if (SgAssignInitializer* ai = isSgAssignInitializer(init)) {
-          e = ai->get_operand();
-        } else {
-          e = init;
-        }
+        e = initializerExpression(convertDynamicInit(stmt->variant.return_dynamic_init, nullptr));
       }
       if (stmt->compiler_generated && e == nullptr) return nullptr;  // implicit return at the end
+      if (e == nullptr) {
+        // "return;" (ROSE uses a null expression)
+        e = SageBuilder::buildNullExpression_nfi();
+        setPosition(e, stmt->position);
+      }
       SgReturnStmt* r = SageBuilder::buildReturnStmt_nfi(e);
       if (e) e->set_parent(r);
       setPosition(r, stmt->position, endOf(stmt));
@@ -277,8 +278,7 @@ SgStatement* Translator::convertStatementKind(a_statement_ptr stmt) {
       if (stmt->expr != nullptr) {
         e = convertExpression(stmt->expr);
       } else if (stmt->variant.stmt_expr_result.dynamic_init != nullptr) {
-        SgInitializer* init = convertDynamicInit(stmt->variant.stmt_expr_result.dynamic_init, nullptr);
-        e = isSgAssignInitializer(init) ? isSgAssignInitializer(init)->get_operand() : (SgExpression*)init;
+        e = initializerExpression(convertDynamicInit(stmt->variant.stmt_expr_result.dynamic_init, nullptr));
       } else {
         e = SageBuilder::buildNullExpression_nfi();
       }
@@ -308,10 +308,15 @@ SgStatement* Translator::convertCondition(an_expr_node_ptr expr, SgScopeStatemen
   }
   SgExpression* e = convertExpression(expr);
   SgExprStatement* s = SageBuilder::buildExprStatement_nfi(e);
-  s->set_startOfConstruct(new Sg_File_Info(*e->get_startOfConstruct()));
-  s->set_endOfConstruct(new Sg_File_Info(*e->get_endOfConstruct()));
-  s->get_startOfConstruct()->set_parent(s);
-  s->get_endOfConstruct()->set_parent(s);
+  // The condition is written where its expression is (implicit conversions
+  // of the expression are compiler generated, the statement is not).
+  if (!copyPosition(s, e)) {
+    if (expr != nullptr && expr->position.seq != 0) {
+      setPosition(s, expr->position);
+    } else {
+      setCompilerGenerated(s, true);
+    }
+  }
   return s;
 }
 
@@ -325,6 +330,7 @@ SgStatement* Translator::convertIfStatement(a_statement_ptr stmt) {
     elseStmt = stmt->variant.if_stmt.else_statement;
   }
   SgIfStmt* ifs = new SgIfStmt((SgStatement*)nullptr, (SgStatement*)nullptr, (SgStatement*)nullptr);
+  ifs->set_parent(currentScope());
   if (stmt->kind == stmk_constexpr_if) ifs->set_is_if_constexpr_statement(true);
   scopeStack.push_back(ifs);
   SgStatement* cond = convertCondition(stmt->expr, ifs);
@@ -358,6 +364,7 @@ SgStatement* Translator::convertIfStatement(a_statement_ptr stmt) {
 SgStatement* Translator::convertForStatement(a_statement_ptr stmt) {
   a_for_loop_ptr fl = stmt->variant.for_loop.extra_info;
   SgForStatement* f = new SgForStatement((SgStatement*)nullptr, (SgExpression*)nullptr, (SgStatement*)nullptr);
+  f->set_parent(currentScope());
   SgForInitStatement* init = new SgForInitStatement();
   f->set_for_init_stmt(init);
   init->set_parent(f);
@@ -389,8 +396,9 @@ SgStatement* Translator::convertForStatement(a_statement_ptr stmt) {
   if (stmt->expr != nullptr) {
     test = convertCondition(stmt->expr, f);
   } else {
+    // "for (init; ; incr)": the null statement prints the ';'
     test = SageBuilder::buildNullStatement_nfi();
-    setCompilerGenerated(test);
+    setPosition(test, stmt->position);
   }
   f->set_test(test);
   test->set_parent(f);
@@ -438,6 +446,7 @@ void Translator::restructureSwitchBody(SgBasicBlock* body) {
 
 SgStatement* Translator::convertSwitchStatement(a_statement_ptr stmt) {
   SgSwitchStatement* sw = new SgSwitchStatement((SgStatement*)nullptr, (SgStatement*)nullptr);
+  sw->set_parent(currentScope());
   scopeStack.push_back(sw);
   SgStatement* sel = convertCondition(stmt->expr, sw);
   sw->set_item_selector(sel);
@@ -464,6 +473,7 @@ SgStatement* Translator::convertTryStatement(a_statement_ptr stmt) {
   }
   for (a_handler_ptr h = ts->handlers; h != nullptr; h = h->next) {
     SgCatchOptionStmt* c = new SgCatchOptionStmt(nullptr, nullptr, t);
+    c->set_parent(seq);
     scopeStack.push_back(c);
     SgVariableDeclaration* param = nullptr;
     if (h->parameter != nullptr) {
@@ -499,6 +509,7 @@ SgStatement* Translator::convertAsmStatement(an_asm_entry_ptr ae, const a_source
     text.assign(ae->asm_string->variant.string.value, len);
   }
   SgAsmStmt* a = new SgAsmStmt();
+  a->set_firstNondefiningDeclaration(a);  // SgAsmStmt is a declaration statement
   a->set_assemblyCode(text);
 #if GNU_EXTENSIONS_ALLOWED
   a->set_isVolatile(ae->has_volatile_keyword);

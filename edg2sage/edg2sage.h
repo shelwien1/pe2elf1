@@ -72,6 +72,7 @@ class Translator {
   // Gives every node of a subtree that still lacks a source position a
   // compiler-generated one.
   void fillMissingPositions(SgNode* root);
+  void checkTree(SgNode* node, int depth);  // EDG2SAGE_DEBUG: reports broken AST links
   std::string fileNameOf(edg::a_seq_number seq, edg::a_line_number* line = nullptr);
   bool isFromSourceFile(const edg::a_source_position& pos);
   // Text of the source between two positions on the same line (empty if unavailable)
@@ -114,6 +115,7 @@ class Translator {
   SgInitializer* convertDynamicInit(edg::a_dynamic_init_ptr dip, SgType* type);
   SgInitializer* convertInitializerConstant(edg::a_constant_ptr con, SgType* type);
   SgExprListExp* convertArgumentList(edg::an_expr_node_ptr first);
+  SgExpression* initializerExpression(SgInitializer* init);
 
  private:
   // --- declarations (declarations.C)
@@ -130,17 +132,38 @@ class Translator {
   SgTypedefDeclaration* translateTypedef(edg::a_type_ptr type, edg::a_src_seq_secondary_decl_ptr sec,
                                          SgScopeStatement* scope);
   SgFunctionParameterList* buildParameterList(edg::a_routine_ptr routine, bool defining);
+  void setSpecialFunctionKind(SgFunctionDeclaration* decl, edg::a_routine_ptr routine);
   void translateFunctionBody(edg::a_routine_ptr routine, SgFunctionDeclaration* defining);
   void setDeclarationModifiers(SgDeclarationStatement* decl, edg::a_source_correspondence* scp,
                                edg::a_storage_class sc);
   void setAccess(SgDeclarationStatement* decl, edg::an_access_specifier access);
   void attachPendingBaseTypeDeclaration(SgDeclarationStatement* decl);
+  SgVariableDeclaration* declaratorGroupFor(SgScopeStatement* scope, SgType* type,
+                                            const edg::a_source_position& specifiers);
+ public:
+  SgDeclarationStatement* typeDefinitionInExpression(edg::a_type_ptr type);
+ private:
   SgName nameOf(edg::a_source_correspondence* scp);
   void translateDeclarationStatement(edg::a_statement_ptr stmt, SgScopeStatement* scope);
   void skipToEndOfConstruct(SeqCursor& cursor, void* entity);
   SgPragmaDeclaration* translatePragma(edg::a_pragma_ptr pragma);
   SgDeclarationStatement* translateStaticAssertion(edg::a_static_assertion_ptr sa);
   void finishDeferredFunctionBodies();
+
+  // --- C++ declarations (cxx.C)
+ public:
+  SgNamespaceDeclarationStatement* namespaceDeclarationFor(edg::a_namespace_ptr ns);  // first declaration
+ private:
+  void translateNamespace(SeqCursor& cursor, edg::a_namespace_ptr ns, edg::a_src_seq_secondary_decl_ptr sec,
+                          SgScopeStatement* scope);
+  SgDeclarationStatement* translateUsingDeclaration(edg::a_using_decl_ptr ud, SgScopeStatement* scope);
+  void translateBaseClasses(edg::a_class_type_supplement_ptr ctsp, SgClassDefinition* cdef);
+  void translateConstructorInitializers(edg::a_scope_ptr fscope, SgMemberFunctionDeclaration* decl);
+
+  // --- attributes (attributes.C)
+  void applyClassAttributes(SgClassDeclaration* decl, edg::a_type_ptr type);
+  void applyVariableAttributes(SgInitializedName* in, edg::an_attribute_ptr attrs, bool packed, bool primaryOnly);
+  void applyFunctionAttributes(SgFunctionDeclaration* decl, edg::an_attribute_ptr attrs, bool primaryOnly);
 
   // --- statements (statements.C)
   SgStatement* convertStatementKind(edg::a_statement_ptr stmt);
@@ -159,6 +182,7 @@ class Translator {
   SgExpression* convertCall(edg::an_expr_node_ptr expr);
   SgExpression* convertVariableReference(edg::a_variable_ptr var, edg::an_expr_node_ptr expr);
   SgExpression* convertRoutineReference(edg::a_routine_ptr routine, edg::an_expr_node_ptr expr);
+  SgVariableSymbol* functionNameSymbol(const std::string& name, SgType* type);
   SgExpression* convertIntegerConstant(edg::a_constant_ptr con, edg::an_expr_node_ptr node);
   SgExpression* convertFloatConstant(edg::a_constant_ptr con, edg::an_expr_node_ptr node);
   SgExpression* convertStringConstant(edg::a_constant_ptr con, edg::an_expr_node_ptr node);
@@ -170,6 +194,7 @@ class Translator {
   SgExpression* convertFieldSelection(edg::an_expr_node_ptr expr, bool arrow);
   SgExpression* convertStatementExpression(edg::an_expr_node_ptr expr);
   SgAggregateInitializer* convertAggregate(edg::a_constant_ptr con, SgType* type);
+  void appendAggregateElements(SgExprListExp* list, edg::a_constant_ptr aggregate);
   void setExpressionPosition(SgExpression* e, edg::an_expr_node_ptr expr);
   bool isImplicitNode(edg::an_expr_node_ptr expr);
   edg::an_expr_node_ptr skipImplicitSteps(edg::an_expr_node_ptr expr);
@@ -189,12 +214,17 @@ class Translator {
   std::unordered_map<edg::a_type_ptr, SgEnumDeclaration*> firstEnumDecl;
   std::unordered_map<edg::a_type_ptr, SgEnumDeclaration*> definingEnumDecl;
   std::unordered_map<edg::a_type_ptr, SgTypedefDeclaration*> typedefDecls;
+  std::unordered_map<edg::a_namespace_ptr, SgNamespaceDeclarationStatement*> firstNamespaceDecl;
   std::unordered_map<edg::a_type_ptr, SgType*> typeCache;
   std::unordered_map<edg::a_constant_ptr, SgInitializedName*> enumerators;
   std::unordered_map<edg::a_scope_ptr, SgScopeStatement*> scopes;
   std::unordered_map<edg::a_label_ptr, SgLabelStatement*> labels;
   std::unordered_map<edg::a_label_ptr, SgLabelSymbol*> labelSymbols;
-  std::set<edg::a_constant_ptr> foldedConstants;  // constants whose backing expression is being translated
+  std::set<edg::a_constant_ptr> foldedConstants;
+  std::map<SgInitializedName*, SgVariableSymbol*> pendingParameterSymbols;
+  // Start of the declaration specifiers of each variable declaration
+  std::map<SgVariableDeclaration*, edg::a_source_position> declarationSpecifiers;
+  std::map<std::pair<SgScopeStatement*, std::string>, SgVariableSymbol*> functionNameSymbols;  // constants whose backing expression is being translated
   int compoundLiterals = 0;
   std::set<SgClassDeclaration*> firstUsedAsStatement;      // hidden first decl reused as forward declaration
   std::set<SgTypedefDeclaration*> typedefInStatementList;

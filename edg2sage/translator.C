@@ -1,6 +1,7 @@
 // Translator core: source positions, file names, scopes, and the top-level driver.
 #include "edg2sage.h"
 
+#include <cstdlib>
 #include <fstream>
 #include <unistd.h>
 
@@ -219,6 +220,12 @@ SgScopeStatement* Translator::scopeFor(a_scope_ptr scope) {
         }
       }
       break;
+    case sck_namespace:
+      if (scope->variant.assoc_namespace != nullptr) {
+        SgNamespaceDeclarationStatement* nd = namespaceDeclarationFor(scope->variant.assoc_namespace);
+        if (nd != nullptr && nd->get_definition() != nullptr) return nd->get_definition();
+      }
+      break;
     case sck_function:
       if (scope->variant.routine.ptr != nullptr) {
         auto d = definingRoutineDecl.find(scope->variant.routine.ptr);
@@ -248,6 +255,51 @@ SgName Translator::nameOf(a_source_correspondence* scp) {
 }
 
 // ---------------------------------------------------------------------------------
+// Debugging: reports deleted nodes and wrong parent pointers in the AST.
+// ---------------------------------------------------------------------------------
+
+namespace {
+// Named types must refer to the first nondefining declaration of their entity.
+class TypeDeclarationCheck : public ROSE_VisitTraversal {
+ public:
+  void visit(SgNode* n) override {
+    SgNamedType* t = isSgNamedType(n);
+    if (t == nullptr || t->get_declaration() == nullptr) return;
+    SgDeclarationStatement* d = t->get_declaration();
+    if (d != d->get_firstNondefiningDeclaration() && !isSgEnumDeclaration(d)) {
+      mlog[Sawyer::Message::ERROR] << t->class_name() << " " << t->get_name().getString()
+                                   << " refers to a declaration that is not the first nondefining one ("
+                                   << d->class_name() << ")\n";
+    }
+  }
+};
+}  // namespace
+
+void Translator::checkTree(SgNode* node, int depth) {
+  if (depth == 0) {
+    TypeDeclarationCheck check;
+    check.traverseMemoryPool();
+  }
+  if (node == nullptr || depth > 2000) return;
+  std::vector<SgNode*> children = node->get_traversalSuccessorContainer();
+  for (size_t i = 0; i < children.size(); i++) {
+    SgNode* c = children[i];
+    if (c == nullptr) continue;
+    if (c->variantT() == V_SgNode) {
+      mlog[Sawyer::Message::ERROR] << "deleted node as child " << i << " of " << node->class_name() << " "
+                                   << node->unparseToString() << "\n";
+      continue;
+    }
+    if (c->get_parent() != node) {
+      mlog[Sawyer::Message::WARN] << c->class_name() << " (child " << i << " of " << node->class_name()
+                                  << ") has parent " << (c->get_parent() ? c->get_parent()->class_name() : "null")
+                                  << "\n";
+    }
+    checkTree(c, depth + 1);
+  }
+}
+
+// ---------------------------------------------------------------------------------
 // Driver
 // ---------------------------------------------------------------------------------
 
@@ -266,6 +318,7 @@ void Translator::translate() {
   SageBuilder::setSourcePositionClassificationMode(savedMode);
 
   fillMissingPositions(globalScope);
+  if (std::getenv("EDG2SAGE_DEBUG") != nullptr) checkTree(globalScope, 0);
   if (warnings > 0 && SgProject::get_verbose() > 0) {
     mlog[Sawyer::Message::WARN] << warnings << " IL constructs could not be translated\n";
   }

@@ -119,8 +119,11 @@ SgFunctionType* Translator::convertFunctionType(a_type_ptr type, SgClassDefiniti
   SgFunctionType* ft = nullptr;
   if (memberOf != nullptr) {
     unsigned int cv = 0;
-    if (rtsp->this_qualifiers & TQ_CONST) cv |= SgMemberFunctionType::e_const;
-    if (rtsp->this_qualifiers & TQ_VOLATILE) cv |= SgMemberFunctionType::e_volatile;
+    // The cv-qualifiers of a member function ("int f() const")
+    unsigned int q = rtsp->qualifiers | rtsp->this_qualifiers;
+    if (q & TQ_CONST) cv |= SgMemberFunctionType::e_const;
+    if (q & TQ_VOLATILE) cv |= SgMemberFunctionType::e_volatile;
+    if (q & TQ_RESTRICT) cv |= SgMemberFunctionType::e_restrict;
     if (rtsp->ref_qualifiers == rqk_lvalue) cv |= SgMemberFunctionType::e_ref_qualifier_lvalue;
     if (rtsp->ref_qualifiers == rqk_rvalue) cv |= SgMemberFunctionType::e_ref_qualifier_rvalue;
     ft = SageBuilder::buildMemberFunctionType(returnType, params, memberOf, cv);
@@ -181,7 +184,8 @@ SgType* Translator::convertType(a_type_ptr type) {
     case tk_array: {
       SgType* base = convertType(type->variant.array.element_type);
       SgExpression* index = nullptr;
-      if (type->variant.array.is_vla || type->variant.array.is_variable_size_array) {
+      bool vla = type->variant.array.is_vla || type->variant.array.is_variable_size_array;
+      if (vla) {
         if (type->variant.array.has_assoc_vla_dimension && currentRoutine != nullptr) {
           // The dimension expression is on a list of the function scope.
           a_scope_ptr fs = functionScopeOf(currentRoutine);
@@ -192,7 +196,11 @@ SgType* Translator::convertType(a_type_ptr type) {
             break;
           }
         }
-        if (index == nullptr) index = SageBuilder::buildNullExpression_nfi();
+        if (index == nullptr) {
+          // "[*]" (e.g. in a prototype): the unparser prints the VLA flag as "*"
+          index = SageBuilder::buildNullExpression_nfi();
+          setCompilerGenerated(index);
+        }
       } else if (type->variant.array.bound_constant != nullptr) {
         index = convertConstant(type->variant.array.bound_constant);
       } else if (!type->incomplete) {
@@ -201,6 +209,7 @@ SgType* Translator::convertType(a_type_ptr type) {
       }
       SgArrayType* at = SageBuilder::buildArrayType(base, index);
       if (index != nullptr) index->set_parent(at);
+      if (vla) at->set_is_variable_length_array(true);
       if (type->variant.array.qualifiers & (TQ_CONST | TQ_VOLATILE | TQ_RESTRICT)) {
         result = qualify(at, type->variant.array.qualifiers);
       } else {
@@ -353,8 +362,7 @@ SgTypedefDeclaration* Translator::typedefDeclarationFor(a_type_ptr type) {
   if (again != typedefDecls.end()) return again->second;
   SgName name = nameOf(&type->source_corresp);
   SgTypedefDeclaration* decl = new SgTypedefDeclaration(name, base, nullptr, nullptr, nullptr);
-  decl->set_firstNondefiningDeclaration(decl);
-  decl->set_definingDeclaration(decl);
+  decl->set_firstNondefiningDeclaration(decl);  // ROSE: typedefs have no defining declaration
   decl->set_scope(scope);
   decl->set_parent(scope);
   decl->set_type(SgTypedefType::createType(decl));

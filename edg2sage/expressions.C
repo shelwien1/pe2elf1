@@ -129,6 +129,8 @@ bool isCastOperator(an_expr_operator_kind k) {
 
 }  // namespace
 
+static std::string literalSpelling(Translator* t, a_constant_ptr con, an_expr_node_ptr node);
+
 // ---------------------------------------------------------------------------------
 // Positions
 // ---------------------------------------------------------------------------------
@@ -228,14 +230,7 @@ SgExpression* Translator::convertExpression(an_expr_node_ptr expr) {
       SgExpression* operand = nullptr;
       a_throw_supplement_ptr ti = expr->variant.throw_info;
       if (ti != nullptr && ti->dynamic_init != nullptr) {
-        SgInitializer* init = convertDynamicInit(ti->dynamic_init, convertType(ti->type));
-        if (SgAssignInitializer* ai = isSgAssignInitializer(init)) {
-          operand = ai->get_operand();
-          operand->set_parent(nullptr);
-          ai->set_operand(nullptr);
-        } else {
-          operand = init;
-        }
+        operand = initializerExpression(convertDynamicInit(ti->dynamic_init, convertType(ti->type)));
       }
       SgThrowOp* t = new SgThrowOp(operand, convertType(expr->type),
                                    operand ? SgThrowOp::throw_expression : SgThrowOp::rethrow);
@@ -355,8 +350,45 @@ SgExpression* Translator::convertVariableReference(a_variable_ptr var, an_expr_n
     SgCompoundLiteralExp* cl = SageBuilder::buildCompoundLiteralExp_nfi(sym);
     return cl;
   }
+  if (var->compiler_generated && var->source_corresp.name == nullptr && var->init_kind == initk_static &&
+      var->initializer.constant != nullptr && var->initializer.constant->kind == ck_string) {
+    // The implicit variable of __func__, __FUNCTION__ or __PRETTY_FUNCTION__:
+    // the keyword if it is spelled in the source here, else its value.
+    std::string text;
+    if (expr != nullptr) {
+      a_source_position start, end;
+      rangeOf(expr, start, end);
+      text = sourceText(start, end);
+    }
+    if (text == "__func__" || text == "__FUNCTION__" || text == "__PRETTY_FUNCTION__") {
+      return SageBuilder::buildVarRefExp_nfi(functionNameSymbol(text, convertType(var->type)));
+    }
+    return convertStringConstant(var->initializer.constant, nullptr);
+  }
   SgVariableSymbol* sym = variableSymbolFor(var);
   return SageBuilder::buildVarRefExp_nfi(sym);
+}
+
+// A hidden declaration of __func__ (or __FUNCTION__, __PRETTY_FUNCTION__) in the
+// current function.
+SgVariableSymbol* Translator::functionNameSymbol(const std::string& name, SgType* type) {
+  SgScopeStatement* scope = currentFunctionDefinition != nullptr ? (SgScopeStatement*)currentFunctionDefinition
+                                                                  : (SgScopeStatement*)globalScope;
+  auto key = std::make_pair(scope, name);
+  auto it = functionNameSymbols.find(key);
+  if (it != functionNameSymbols.end()) return it->second;
+  SgInitializedName* in = SageBuilder::buildInitializedName_nfi(SgName(name), type, nullptr);
+  SgVariableDeclaration* decl = new SgVariableDeclaration(in);
+  decl->set_firstNondefiningDeclaration(decl);
+  decl->get_declarationModifier().get_storageModifier().setStatic();
+  in->set_scope(scope);
+  decl->set_parent(scope);
+  setCompilerGenerated(decl);
+  setCompilerGenerated(in);
+  SgVariableSymbol* sym = new SgVariableSymbol(in);
+  scope->insert_symbol(in->get_name(), sym);
+  functionNameSymbols[key] = sym;
+  return sym;
 }
 
 SgExpression* Translator::convertRoutineReference(a_routine_ptr routine, an_expr_node_ptr expr) {
@@ -394,13 +426,36 @@ SgExpression* Translator::convertCast(an_expr_node_ptr expr, SgExpression* opera
   operand->set_parent(c);
   if (implicit) {
     setCompilerGenerated(c);
+  } else if (SgDeclarationStatement* def = typeDefinitionInExpression(expr->type)) {
+    c->set_castContainsBaseTypeDefiningDeclaration(true);
+    def->set_parent(c);
   }
   return c;
+}
+
+// x.<anonymous member>: the selection of an unnamed struct/union member, which
+// is implicit in the source (its members are selected as if they were members
+// of the enclosing class).
+static bool isAnonymousMemberSelection(an_expr_node_ptr e) {
+  if (e == nullptr || e->kind != enk_operation) return false;
+  an_expr_operator_kind k = e->variant.operation.kind;
+  if (k != eok_dot_field && k != eok_points_to_field) return false;
+  an_expr_node_ptr m = e->variant.operation.operands ? e->variant.operation.operands->next : nullptr;
+  return m != nullptr && m->kind == enk_field && m->variant.field.ptr != nullptr &&
+         m->variant.field.ptr->source_corresp.name == nullptr;
 }
 
 SgExpression* Translator::convertFieldSelection(an_expr_node_ptr expr, bool arrow) {
   an_expr_node_ptr objectNode = expr->variant.operation.operands;
   an_expr_node_ptr memberNode = objectNode->next;
+  while (isAnonymousMemberSelection(objectNode)) {
+    arrow = objectNode->variant.operation.kind == eok_points_to_field;
+    objectNode = objectNode->variant.operation.operands;
+  }
+  if (isAnonymousMemberSelection(expr)) {
+    // A selection of the anonymous member itself (e.g. to copy it)
+    throw Unsupported("reference to an anonymous member");
+  }
   SgExpression* object = convertExpression(objectNode);
   SgExpression* member = convertExpression(memberNode);
   SgExpression* r = arrow ? binaryOp<SgArrowExp>(object, member) : binaryOp<SgDotExp>(object, member);
@@ -770,7 +825,13 @@ SgExpression* Translator::convertSizeof(an_expr_node_ptr expr) {
   SgExpression* r = nullptr;
   if (expr->kind == enk_sizeof) {
     if (isType) {
-      r = SageBuilder::buildSizeOfOp_nfi(convertType(expr->variant.sizeof_info.variant.type));
+      SgDeclarationStatement* def = typeDefinitionInExpression(expr->variant.sizeof_info.variant.type);
+      SgSizeOfOp* so = SageBuilder::buildSizeOfOp_nfi(convertType(expr->variant.sizeof_info.variant.type));
+      if (def != nullptr) {
+        so->set_sizeOfContainsBaseTypeDefiningDeclaration(true);
+        def->set_parent(so);
+      }
+      r = so;
     } else {
       r = SageBuilder::buildSizeOfOp_nfi(convertExpression(expr->variant.sizeof_info.variant.expr));
     }
@@ -819,6 +880,26 @@ SgExpression* Translator::convertTempInit(an_expr_node_ptr expr) {
     return SageBuilder::buildCompoundLiteralExp_nfi(sym);
   }
   SgInitializer* init = convertDynamicInit(dip, type);
+  a_type_ptr tt = skip_typerefs(expr->type);
+  bool transparentUnion = false;
+#if GNU_EXTENSIONS_ALLOWED
+  transparentUnion = tt->kind == tk_union && tt->variant.class_struct_union.is_transparent;
+#endif
+  if ((expr->compiler_generated || transparentUnion) && isSgAggregateInitializer(init) &&
+      isSgAggregateInitializer(init)->get_initializers()->get_expressions().size() == 1) {
+    // An implicit conversion to a GNU transparent union: just the argument
+    SgExpressionPtrList& elements = isSgAggregateInitializer(init)->get_initializers()->get_expressions();
+    SgExpression* e = elements[0];
+    if (SgDesignatedInitializer* di = isSgDesignatedInitializer(e)) {
+      e = di->get_memberInit();
+      di->set_memberInit(nullptr);
+    } else {
+      elements.clear();
+    }
+    if (SgAssignInitializer* ai = isSgAssignInitializer(e)) e = initializerExpression(ai);
+    e->set_parent(nullptr);
+    return e;
+  }
   if (init == nullptr) {
     // Value-initialized temporary, e.g. "T()"
     SgConstructorInitializer* ci = SageBuilder::buildConstructorInitializer_nfi(
@@ -831,13 +912,10 @@ SgExpression* Translator::convertTempInit(an_expr_node_ptr expr) {
     ci->set_need_parenthesis_after_name(true);
     return ci;
   }
-  if (SgAssignInitializer* ai = isSgAssignInitializer(init)) {
+  if (isSgAssignInitializer(init)) {
     // A temporary initialized by an expression (e.g. a functional-notation
     // cast to a class type with a converting constructor): just the expression.
-    SgExpression* e = ai->get_operand();
-    ai->set_operand(nullptr);
-    e->set_parent(nullptr);
-    return e;
+    return initializerExpression(init);
   }
   return init;
 }
@@ -858,11 +936,7 @@ SgExpression* Translator::convertNewDelete(an_expr_node_ptr expr) {
       ctor = isSgConstructorInitializer(init);
       if (ctor == nullptr && init != nullptr) {
         SgExprListExp* args = SageBuilder::buildExprListExp_nfi();
-        SgExpression* e = init;
-        if (SgAssignInitializer* ai = isSgAssignInitializer(init)) {
-          e = ai->get_operand();
-          ai->set_operand(nullptr);
-        }
+        SgExpression* e = initializerExpression(init);
         args->append_expression(e);
         e->set_parent(args);
         setCompilerGenerated(args);
@@ -947,6 +1021,33 @@ SgExpression* Translator::convertConstant(a_constant_ptr con, an_expr_node_ptr n
       r = convertAddressConstant(con, node);
       break;
 #if C99_IL_EXTENSIONS_SUPPORTED
+    case ck_complex: {
+      a_type_ptr t = skip_typerefs(con->type);
+      a_float_kind fk = t->variant.float_kind;
+      an_internal_complex_value_ptr cv = con->variant.complex_value;
+      auto part = [&](an_internal_float_value* v) -> SgValueExp* {
+        a_boolean pinf = FALSE, ninf = FALSE, nan = FALSE;
+        a_number_buffer buf = fp_to_string(fk, v, &pinf, &ninf, &nan);
+        std::string str = buf.as_temp_characters();
+        if (str.find_first_of(".eEnN") == std::string::npos) str += ".0";
+        SgValueExp* e = SageBuilder::buildDoubleVal_nfi(std::strtod(str.c_str(), nullptr), str);
+        setCompilerGenerated(e);
+        return e;
+      };
+      SgValueExp* re = part(&cv->real);
+      SgValueExp* im = part(&cv->imag);
+      std::string text = literalSpelling(this, con, node);
+      if (!isNumericLiteral(text)) text = "";
+      if (isSgDoubleVal(re)->get_value() == 0.0) {
+        delete re;
+        r = SageBuilder::buildImaginaryVal_nfi(im, text);
+      } else {
+        r = SageBuilder::buildComplexVal_nfi(re, im, text);
+        re->set_parent(r);
+      }
+      im->set_parent(r);
+      break;
+    }
     case ck_imaginary: {
       a_type_ptr t = skip_typerefs(con->type);
       a_float_kind fk = t->variant.float_kind;
@@ -961,14 +1062,7 @@ SgExpression* Translator::convertConstant(a_constant_ptr con, an_expr_node_ptr n
     }
 #endif
     case ck_dynamic_init: {
-      SgInitializer* init = convertDynamicInit(con->variant.dynamic_init.ptr, convertType(con->type));
-      if (SgAssignInitializer* ai = isSgAssignInitializer(init)) {
-        r = ai->get_operand();
-        ai->set_operand(nullptr);
-        r->set_parent(nullptr);
-      } else {
-        r = init;
-      }
+      r = initializerExpression(convertDynamicInit(con->variant.dynamic_init.ptr, convertType(con->type)));
       if (r == nullptr) throw Unsupported("empty dynamic initialization constant");
       return r;
     }
@@ -1276,6 +1370,19 @@ SgAssignInitializer* assignInitializer(Translator* t, SgExpression* e, SgType* t
 }
 }  // namespace
 
+// The expression an initializer stands for: the operand of an assignment
+// initializer (detached from it, so that the abandoned initializer does not
+// refer to a node of the AST), or the initializer itself.
+SgExpression* Translator::initializerExpression(SgInitializer* init) {
+  if (SgAssignInitializer* ai = isSgAssignInitializer(init)) {
+    SgExpression* e = ai->get_operand();
+    ai->set_operand(nullptr);
+    if (e != nullptr) e->set_parent(nullptr);
+    return e;
+  }
+  return init;
+}
+
 // Gives `node` the source position of `e`, looking through implicit
 // (compiler-generated) conversions.  Returns false if no position is known.
 bool Translator::copyPosition(SgLocatedNode* node, SgExpression* e) {
@@ -1302,6 +1409,17 @@ bool Translator::copyPosition(SgLocatedNode* node, SgExpression* e) {
   return true;
 }
 
+static a_local_static_variable_init_ptr findLocalStaticInit(a_scope_ptr scope, a_variable_ptr var) {
+  if (scope == nullptr) return nullptr;
+  for (a_local_static_variable_init_ptr li = scope->local_static_variable_inits; li != nullptr; li = li->next) {
+    if (li->variable == var) return li;
+  }
+  for (a_scope_ptr s = scope->scopes; s != nullptr; s = s->next) {
+    if (a_local_static_variable_init_ptr li = findLocalStaticInit(s, var)) return li;
+  }
+  return nullptr;
+}
+
 SgInitializer* Translator::convertVariableInitializer(a_variable_ptr var) {
   SgType* type = convertType(var->type);
   switch (var->init_kind) {
@@ -1310,16 +1428,12 @@ SgInitializer* Translator::convertVariableInitializer(a_variable_ptr var) {
     case initk_dynamic:
       return convertDynamicInit(var->initializer.dynamic, type);
     case initk_function_local: {
-      // Local static variable: the initialization is on a list of the scope.
-      for (a_scope_ptr s = var->source_corresp.parent_scope; s != nullptr; s = s->parent) {
-        for (a_local_static_variable_init_ptr li = s->local_static_variable_inits; li != nullptr; li = li->next) {
-          if (li->variable != var) continue;
-          if (li->init_kind == initk_static) return convertInitializerConstant(li->initializer.constant, type);
-          if (li->init_kind == initk_dynamic) return convertDynamicInit(li->initializer.dynamic, type);
-          return nullptr;
-        }
-        if (s->kind == sck_function) break;
-      }
+      // Local static variable: the initialization is on a list of the function
+      // or block scope (in the function's memory region).
+      a_local_static_variable_init_ptr li = findLocalStaticInit(functionScopeOf(currentRoutine), var);
+      if (li == nullptr) return nullptr;
+      if (li->init_kind == initk_static) return convertInitializerConstant(li->initializer.constant, type);
+      if (li->init_kind == initk_dynamic) return convertDynamicInit(li->initializer.dynamic, type);
       return nullptr;
     }
     default:
@@ -1364,8 +1478,30 @@ SgInitializer* Translator::convertDynamicInit(a_dynamic_init_ptr dip, SgType* ty
       }
       SgType* ctype = type;
       if (ctype == nullptr && dip->variable != nullptr) ctype = convertType(dip->variable->type);
+      a_type_ptr cls = nullptr;
+      if (ctor != nullptr) {
+        a_type_ptr rt = skip_typerefs(ctor->type);
+        if (rt->kind == tk_routine && rt->variant.routine.extra_info != nullptr) {
+          cls = rt->variant.routine.extra_info->this_class;
+        }
+      }
+      if (ctype == nullptr && cls != nullptr) ctype = convertType(cls);
+      if (ctype == nullptr) throw Unsupported("constructor call of unknown type");
+      a_type_qualifier_set quals = 0;
+      if (type == nullptr && dip->variable == nullptr && ctor != nullptr && cls != nullptr &&
+          args->get_expressions().size() == 1 &&
+          is_copy_constructor(ctor, cls, &quals, /*include_move_ctors=*/TRUE, /*is_declarative_context=*/FALSE)) {
+        // An (elided) copy of a returned or thrown object: just the object
+        SgExpression* e = args->get_expressions()[0];
+        args->get_expressions().clear();
+        e->set_parent(nullptr);
+        return assignInitializer(this, e, ctype);
+      }
+      // In a variable declaration "T x(args)" prints only "(args)"; elsewhere
+      // (a returned or thrown object, a temporary) the class name is needed.
+      bool needName = (type == nullptr && dip->variable == nullptr);
       SgConstructorInitializer* ci = SageBuilder::buildConstructorInitializer_nfi(
-          decl, args, ctype, false, false, !args->get_expressions().empty(), decl == nullptr);
+          decl, args, ctype, needName, false, needName || !args->get_expressions().empty(), decl == nullptr);
       args->set_parent(ci);
       setCompilerGenerated(ci);
       return ci;
@@ -1397,7 +1533,21 @@ SgInitializer* Translator::convertInitializerConstant(a_constant_ptr con, SgType
 SgAggregateInitializer* Translator::convertAggregate(a_constant_ptr con, SgType* type) {
   if (type == nullptr) type = convertType(con->type);
   SgExprListExp* list = SageBuilder::buildExprListExp_nfi();
+  appendAggregateElements(list, con);
+  setCompilerGenerated(list);
+  SgAggregateInitializer* ai = SageBuilder::buildAggregateInitializer_nfi(list, type);
+  list->set_parent(ai);
+  ai->set_need_explicit_braces(con->explicit_braces_on_aggregate);
+  if (con->source_corresp.decl_position.seq != 0) {
+    setPosition(ai, con->source_corresp.decl_position,
+                con->end_position.seq != 0 ? con->end_position : con->source_corresp.decl_position);
+  } else {
+    setCompilerGenerated(ai);
+  }
+  return ai;
+}
 
+void Translator::appendAggregateElements(SgExprListExp* list, a_constant_ptr con) {
   auto element = [&](a_constant_ptr c) -> SgInitializer* {
     SgType* et = c->type != nullptr ? convertType(c->type) : nullptr;
     if (c->kind == ck_aggregate) {
@@ -1412,11 +1562,21 @@ SgAggregateInitializer* Translator::convertAggregate(a_constant_ptr con, SgType*
       a_constant_ptr value = c->next;
       if (value == nullptr) break;
       SgExpression* designator = nullptr;
-      if (c->variant.designator.is_field_designator) {
+      if (c->variant.designator.is_field_designator && !c->variant.designator.is_generic) {
         a_field_ptr f = c->variant.designator.variant.field;
-        if (f == nullptr) throw Unsupported("unresolved field designator");
+        if (f == nullptr || f->source_corresp.name == nullptr) {
+          // Designator of an anonymous struct/union member (implicit in the
+          // source): the members' designators follow in its initializer.
+          if (value->kind == ck_aggregate) {
+            appendAggregateElements(list, value);
+            c = value;
+            continue;
+          }
+          throw Unsupported("designator of an anonymous member");
+        }
         designator = SageBuilder::buildVarRefExp_nfi(fieldSymbolFor(f));
       } else if (c->variant.designator.is_generic) {
+        if (c->variant.designator.is_field_designator) throw Unsupported("unresolved field designator");
         designator = convertConstant(c->variant.designator.variant.subscript, nullptr);
       } else {
         unsigned long index = (unsigned long)c->variant.designator.variant.array_element;
@@ -1467,17 +1627,6 @@ SgAggregateInitializer* Translator::convertAggregate(a_constant_ptr con, SgType*
     list->append_expression(e);
     e->set_parent(list);
   }
-  setCompilerGenerated(list);
-  SgAggregateInitializer* ai = SageBuilder::buildAggregateInitializer_nfi(list, type);
-  list->set_parent(ai);
-  ai->set_need_explicit_braces(con->explicit_braces_on_aggregate);
-  if (con->source_corresp.decl_position.seq != 0) {
-    setPosition(ai, con->source_corresp.decl_position,
-                con->end_position.seq != 0 ? con->end_position : con->source_corresp.decl_position);
-  } else {
-    setCompilerGenerated(ai);
-  }
-  return ai;
 }
 
 }  // namespace edg2sage

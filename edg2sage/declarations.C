@@ -117,9 +117,51 @@ void Translator::skipToEndOfConstruct(SeqCursor& cursor, void* entity) {
 // A tag type defined as part of another declaration ("struct S {...} x;",
 // "typedef struct {...} T;") becomes the base type defining declaration of the
 // declaration that follows it.
+// The class or enum type that a declarator type is built on (through
+// pointers, arrays, references, modifiers and function return types).
+static SgDeclarationStatement* baseTypeDeclaration(SgType* t) {
+  for (int depth = 0; t != nullptr && depth < 100; depth++) {
+    if (SgModifierType* m = isSgModifierType(t)) {
+      t = m->get_base_type();
+    } else if (SgPointerType* p = isSgPointerType(t)) {
+      t = p->get_base_type();
+    } else if (SgArrayType* a = isSgArrayType(t)) {
+      t = a->get_base_type();
+    } else if (SgReferenceType* r = isSgReferenceType(t)) {
+      t = r->get_base_type();
+    } else if (SgRvalueReferenceType* r = isSgRvalueReferenceType(t)) {
+      t = r->get_base_type();
+    } else if (SgFunctionType* f = isSgFunctionType(t)) {
+      t = f->get_return_type();
+    } else if (SgNamedType* n = isSgNamedType(t)) {
+      if (isSgClassType(n) || isSgEnumType(n)) {
+        SgDeclarationStatement* d = n->get_declaration();
+        return d != nullptr && d->get_firstNondefiningDeclaration() != nullptr ? d->get_firstNondefiningDeclaration() : d;
+      }
+      return nullptr;
+    } else {
+      return nullptr;
+    }
+  }
+  return nullptr;
+}
+
 void Translator::attachPendingBaseTypeDeclaration(SgDeclarationStatement* decl) {
   if (pendingBaseTypeDecl == nullptr) return;
   SgDeclarationStatement* base = pendingBaseTypeDecl;
+  // Only a declaration whose type is built on the defined type contains the
+  // definition ("struct S {...} x;"); otherwise the definition is part of an
+  // expression (see typeDefinitionInExpression()) or stands alone.
+  SgType* declType = nullptr;
+  if (SgVariableDeclaration* vd = isSgVariableDeclaration(decl)) {
+    if (!vd->get_variables().empty()) declType = vd->get_variables()[0]->get_type();
+  } else if (SgTypedefDeclaration* td = isSgTypedefDeclaration(decl)) {
+    declType = td->get_base_type();
+  } else if (SgFunctionDeclaration* fd = isSgFunctionDeclaration(decl)) {
+    declType = fd->get_type();
+  }
+  SgDeclarationStatement* first = base->get_firstNondefiningDeclaration() ? base->get_firstNondefiningDeclaration() : base;
+  if (declType == nullptr || baseTypeDeclaration(declType) != first) return;
   pendingBaseTypeDecl = nullptr;
   pendingBaseType = nullptr;
   if (SgVariableDeclaration* vd = isSgVariableDeclaration(decl)) {
@@ -199,6 +241,15 @@ void Translator::translateDeclarationEntry(SeqCursor& cursor, SgScopeStatement* 
         if (d) appendStatementTo(scope, d);
         return;
       }
+      case iek_namespace:
+        translateNamespace(cursor, (a_namespace_ptr)ptr, sec, scope);
+        return;  // advances the cursor itself
+      case iek_using_decl: {
+        SgDeclarationStatement* d = translateUsingDeclaration((a_using_decl_ptr)ptr, scope);
+        cursor.advance();
+        if (d) appendStatementTo(scope, d);
+        return;
+      }
       case iek_pragma: {
         SgPragmaDeclaration* d = translatePragma((a_pragma_ptr)ptr);
         cursor.advance();
@@ -247,19 +298,13 @@ SgDeclarationStatement* Translator::translateVariable(a_variable_ptr var, a_src_
 
   SgInitializer* init = nullptr;
   if (sec == nullptr) init = convertVariableInitializer(var);
+  if (init != nullptr && var->initializer_range.start.seq != 0 &&
+      (init->get_startOfConstruct() == nullptr || init->get_startOfConstruct()->isCompilerGenerated())) {
+    // e.g. the constructor initializer of "T x(1, 2);"
+    setPosition(init, var->initializer_range.start, var->initializer_range.end);
+  }
 
   SgInitializedName* iname = SageBuilder::buildInitializedName_nfi(name, type, init);
-  SgVariableDeclaration* decl = new SgVariableDeclaration(iname);
-  decl->set_firstNondefiningDeclaration(decl);
-  if (sec == nullptr && var->storage_class != sc_extern) decl->set_definingDeclaration(decl);
-  iname->set_scope(scope);
-  decl->set_parent(scope);
-  if (init) init->set_parent(iname);
-
-  a_storage_class sc = sec ? sec->declared_storage_class : var->declared_storage_class;
-  setDeclarationModifiers(decl, &var->source_corresp, sc);
-  if (var->is_thread_local) decl->get_declarationModifier().get_storageModifier().set_thread_local_storage(true);
-  if (var->is_constexpr) decl->set_is_constexpr(true);
 
   // Positions: the declaration spans the specifiers through the declarator/initializer.
   a_source_position start = sec ? sec->decl_position : var->source_corresp.decl_position;
@@ -270,7 +315,48 @@ SgDeclarationStatement* Translator::translateVariable(a_variable_ptr var, a_src_
     if (dpi->variant.declarator_range.end.seq != 0) end = dpi->variant.declarator_range.end;
   }
   if (sec == nullptr && var->initializer_range.end.seq != 0) end = var->initializer_range.end;
+
+  SgVariableDeclaration* group = init == nullptr ? declaratorGroupFor(scope, type, start) : nullptr;
+  if (group != nullptr) {
+    // A further declarator of "struct {...} a, b;"
+    group->append_variable(iname, init);
+    iname->set_scope(scope);
+    if (init) init->set_parent(iname);
+    setPosition(iname, sec ? sec->decl_position : var->source_corresp.decl_position);
+    if (SgDeclarationStatement* vdef = iname->get_declptr()) {
+      if (vdef != group) setPosition(vdef, start, end);
+    }
+    applyVariableAttributes(iname, sec ? sec->attributes : var->source_corresp.attributes, false, sec == nullptr);
+    if (variables.find(var) == variables.end()) {
+      variables[var] = iname;
+      if (!name.is_null()) scope->insert_symbol(name, new SgVariableSymbol(iname));
+    }
+    return nullptr;
+  }
+
+  SgVariableDeclaration* decl = new SgVariableDeclaration(iname);
+  decl->set_firstNondefiningDeclaration(decl);
+  if (sec == nullptr && var->storage_class != sc_extern) decl->set_definingDeclaration(decl);
+  // A static data member defined outside its class ("int C::x = 0;") or a
+  // namespace member defined outside its namespace belongs to that scope.
+  SgScopeStatement* semanticScope = parentScopeOf(&var->source_corresp, scope);
+  iname->set_scope(semanticScope);
+  decl->set_parent(scope);
+  if (init) init->set_parent(iname);
+
+  a_storage_class sc = sec ? sec->declared_storage_class : var->declared_storage_class;
+  setDeclarationModifiers(decl, &var->source_corresp, sc);
+  // GNU "__thread" is a declaration modifier; C11 _Thread_local and C++11
+  // thread_local set is_thread_local.
+#if DECL_MODIFIERS_IN_USE
+  if (var->decl_modifiers & DM_THREAD) decl->get_declarationModifier().get_storageModifier().set_thread_local_storage(true);
+#endif
+  if (var->is_thread_local) decl->set_is_thread_local(true);
+  applyVariableAttributes(iname, sec ? sec->attributes : var->source_corresp.attributes, false, sec == nullptr);
+  if (var->is_constexpr) decl->set_is_constexpr(true);
+
   setPosition(decl, start, end);
+  declarationSpecifiers[decl] = start;
   setPosition(iname, sec ? sec->decl_position : var->source_corresp.decl_position);
   if (SgDeclarationStatement* vdef = iname->get_declptr()) {
     if (vdef != decl) setPosition(vdef, start, end);
@@ -282,7 +368,7 @@ SgDeclarationStatement* Translator::translateVariable(a_variable_ptr var, a_src_
     variables[var] = iname;
     if (!name.is_null()) {
       SgVariableSymbol* sym = new SgVariableSymbol(iname);
-      scope->insert_symbol(name, sym);
+      semanticScope->insert_symbol(name, sym);
     }
   } else {
     iname->set_prev_decl_item(prev->second);
@@ -295,12 +381,57 @@ SgDeclarationStatement* Translator::translateVariable(a_variable_ptr var, a_src_
   return decl;
 }
 
+// "struct {...} a, b;": ROSE prints the definition of an unnamed class or enum
+// with every declaration of that type, so the declarators of such a declaration
+// stay in one SgVariableDeclaration (ROSE prints only the names of further
+// declarators, hence the type must be the same and there must be no
+// initializer).  Returns the declaration to add a declarator to, or nullptr.
+SgVariableDeclaration* Translator::declaratorGroupFor(SgScopeStatement* scope, SgType* type,
+                                                     const a_source_position& specifiers) {
+  if (pendingBaseTypeDecl != nullptr || specifiers.seq == 0) return nullptr;
+  SgStatement* last = nullptr;
+  if (SgGlobal* g = isSgGlobal(scope)) {
+    if (!g->get_declarations().empty()) last = g->get_declarations().back();
+  } else if (SgClassDefinition* c = isSgClassDefinition(scope)) {
+    if (!c->get_members().empty()) last = c->get_members().back();
+  } else if (SgBasicBlock* b = isSgBasicBlock(scope)) {
+    if (!b->get_statements().empty()) last = b->get_statements().back();
+  }
+  SgVariableDeclaration* prev = isSgVariableDeclaration(last);
+  if (prev == nullptr || !prev->get_variableDeclarationContainsBaseTypeDefiningDeclaration()) return nullptr;
+  auto it = declarationSpecifiers.find(prev);
+  if (it == declarationSpecifiers.end() || it->second.seq != specifiers.seq ||
+      it->second.column != specifiers.column) {
+    return nullptr;
+  }
+  if (prev->get_variables().empty() || prev->get_variables().back()->get_type() != type) return nullptr;
+  return prev;
+}
+
 SgDeclarationStatement* Translator::translateField(a_field_ptr field, SgClassDefinition* cdef) {
   SgType* type = convertType(field->type);
   SgName name = nameOf(&field->source_corresp);
   SgInitializer* init = nullptr;
   if (field->initializer != nullptr) init = convertDynamicInit(field->initializer, type);
   SgInitializedName* iname = SageBuilder::buildInitializedName_nfi(name, type, init);
+  a_source_position fstart = field->source_corresp.decl_position;
+  if (a_decl_position_supplement_ptr dpi = field->source_corresp.decl_pos_info) {
+    if (dpi->specifiers_range.start.seq != 0) fstart = dpi->specifiers_range.start;
+  }
+  if (!field->is_bit_field && init == nullptr) {
+    if (SgVariableDeclaration* group = declaratorGroupFor(cdef, type, fstart)) {
+      group->append_variable(iname, init);
+      iname->set_scope(cdef);
+      if (init) init->set_parent(iname);
+      setPosition(iname, field->source_corresp.decl_position);
+      if (SgDeclarationStatement* vdef = iname->get_declptr()) {
+        if (vdef != group) setPosition(vdef, fstart, field->source_corresp.decl_position);
+      }
+      fields[field] = iname;
+      if (!name.is_null()) cdef->insert_symbol(name, new SgVariableSymbol(iname));
+      return nullptr;
+    }
+  }
   SgVariableDeclaration* decl = new SgVariableDeclaration(iname);
   decl->set_firstNondefiningDeclaration(decl);
   decl->set_definingDeclaration(decl);
@@ -319,6 +450,11 @@ SgDeclarationStatement* Translator::translateField(a_field_ptr field, SgClassDef
     width->set_parent(decl);
   }
   if (field->is_mutable) decl->get_declarationModifier().get_storageModifier().setMutable();
+#if GNU_EXTENSIONS_ALLOWED
+  applyVariableAttributes(iname, field->source_corresp.attributes, field->is_packed, false);
+#else
+  applyVariableAttributes(iname, field->source_corresp.attributes, false, false);
+#endif
   setAccess(decl, (an_access_specifier)field->source_corresp.access);
 
   a_source_position start = field->source_corresp.decl_position, end = start;
@@ -327,6 +463,7 @@ SgDeclarationStatement* Translator::translateField(a_field_ptr field, SgClassDef
     if (dpi->variant.declarator_range.end.seq != 0) end = dpi->variant.declarator_range.end;
   }
   setPosition(decl, start, end);
+  declarationSpecifiers[decl] = start;
   setPosition(iname, field->source_corresp.decl_position);
   if (SgDeclarationStatement* vdef = iname->get_declptr()) {
     if (vdef != decl) setPosition(vdef, start, end);
@@ -359,6 +496,15 @@ SgInitializedName* Translator::variableFor(a_variable_ptr var) {
 
 SgVariableSymbol* Translator::variableSymbolFor(a_variable_ptr var) {
   SgInitializedName* iname = variableFor(var);
+  if (iname->get_scope() == nullptr) {
+    // A parameter referenced in the type of a later parameter (VLA): the
+    // symbol is inserted once the function definition exists.
+    auto p = pendingParameterSymbols.find(iname);
+    if (p != pendingParameterSymbols.end()) return p->second;
+    SgVariableSymbol* sym = new SgVariableSymbol(iname);
+    pendingParameterSymbols[iname] = sym;
+    return sym;
+  }
   SgVariableSymbol* sym = isSgVariableSymbol(iname->search_for_symbol_from_symbol_table());
   if (sym == nullptr) {
     sym = new SgVariableSymbol(iname);
@@ -392,6 +538,13 @@ SgFunctionParameterList* Translator::buildParameterList(a_routine_ptr routine, b
   SgFunctionParameterList* params = SageBuilder::buildFunctionParameterList_nfi();
   a_type_ptr rtype = skip_typerefs(routine->type);
   a_routine_type_supplement_ptr rtsp = rtype->variant.routine.extra_info;
+  // The types of VLA parameters refer to dimension expressions of the routine.
+  struct RoutineContext {
+    Translator* t;
+    a_routine_ptr saved;
+    RoutineContext(Translator* t, a_routine_ptr r) : t(t), saved(t->currentRoutine) { t->currentRoutine = r; }
+    ~RoutineContext() { t->currentRoutine = saved; }
+  } context(this, defining ? routine : currentRoutine);
   if (defining) {
     a_scope_ptr fscope = functionScopeOf(routine);
     a_variable_ptr pv = fscope ? fscope->variant.routine.parameters : nullptr;
@@ -456,6 +609,30 @@ static void replaceParameterList(SgFunctionDeclaration* decl, SgFunctionParamete
   if (old != nullptr && old != params) delete old;
 }
 
+// Constructors, destructors, conversion functions and operators
+void Translator::setSpecialFunctionKind(SgFunctionDeclaration* decl, a_routine_ptr routine) {
+  SgSpecialFunctionModifier& sm = decl->get_specialFunctionModifier();
+  switch (routine->special_kind) {
+    case sfk_constructor:
+      sm.setConstructor();
+      break;
+    case sfk_destructor:
+      sm.setDestructor();
+      break;
+    case sfk_conversion:
+      sm.setConversion();
+      break;
+    case sfk_operator:
+      sm.setOperator();
+      break;
+    case sfk_udl_operator:
+      sm.setUldOperator();
+      break;
+    default:
+      break;
+  }
+}
+
 SgFunctionDeclaration* Translator::functionDeclarationFor(a_routine_ptr routine) {
   auto it = firstRoutineDecl.find(routine);
   if (it != firstRoutineDecl.end()) return it->second;
@@ -481,6 +658,7 @@ SgFunctionDeclaration* Translator::functionDeclarationFor(a_routine_ptr routine)
   setPosition(decl, routine->source_corresp.decl_position);
   setPosition(params, routine->source_corresp.decl_position);
   setDeclarationModifiers(decl, &routine->source_corresp, routine->storage_class);
+  setSpecialFunctionKind(decl, routine);
   if (routine->source_corresp.decl_position.seq == 0) {
     setCompilerGenerated(decl);
     setCompilerGenerated(params);
@@ -549,13 +727,26 @@ SgFunctionDeclaration* Translator::translateRoutine(a_routine_ptr routine, a_src
   a_storage_class sc = sec ? sec->declared_storage_class : routine->declared_storage_class;
   setDeclarationModifiers(decl, &routine->source_corresp, sc);
   SgFunctionModifier& fm = decl->get_functionModifier();
-  if (routine->is_inline) fm.setInline();
+  if (routine->is_inline) {
+    // Member functions defined in their class are implicitly inline: only an
+    // "inline" keyword in the declaration specifiers is reproduced.
+    a_decl_position_supplement_ptr spi = sec ? sec->decl_pos_info : routine->source_corresp.decl_pos_info;
+    std::string spec;
+    if (spi != nullptr && spi->specifiers_range.start.seq != 0) {
+      spec = sourceText(spi->specifiers_range.start, spi->specifiers_range.end);
+    }
+    if (!isMember || spec.find("inline") != std::string::npos) fm.setInline();
+  }
   if (routine->is_virtual) fm.setVirtual();
   if (routine->pure_virtual) fm.setPureVirtual();
-  if (routine->is_explicit_constructor) fm.setExplicit();
+  if (routine->is_explicit_constructor || routine->is_explicit_conversion_function) fm.setExplicit();
   if (routine->is_defaulted) fm.setMarkedDefault();
   if (routine->is_deleted) fm.setMarkedDelete();
+  if (routine->override) decl->get_declarationModifier().setOverride();
+  if (routine->final) decl->get_declarationModifier().setFinal();
+  setSpecialFunctionKind(decl, routine);
   if (routine->is_declared_constexpr) decl->set_is_constexpr(true);
+  applyFunctionAttributes(decl, sec ? sec->attributes : routine->source_corresp.attributes, sec == nullptr);
   a_routine_type_supplement_ptr rtsp = skip_typerefs(routine->type)->variant.routine.extra_info;
   if (!rtsp->prototyped && isDefinition && !isCxx && rtsp->param_type_list != nullptr) {
     decl->set_oldStyleDefinition(true);
@@ -583,7 +774,15 @@ SgFunctionDeclaration* Translator::translateRoutine(a_routine_ptr routine, a_src
     for (SgInitializedName* in : params->get_args()) {
       in->set_scope(def);
       if (!in->get_name().is_null() && !isSgTypeEllipse(in->get_type())) {
-        def->insert_symbol(in->get_name(), new SgVariableSymbol(in));
+        SgVariableSymbol* sym = nullptr;
+        auto p = pendingParameterSymbols.find(in);
+        if (p != pendingParameterSymbols.end()) {
+          sym = p->second;
+          pendingParameterSymbols.erase(p);
+        } else {
+          sym = new SgVariableSymbol(in);
+        }
+        def->insert_symbol(in->get_name(), sym);
       }
     }
     scopes[fscope] = def;
@@ -619,6 +818,15 @@ void Translator::translateFunctionBody(a_routine_ptr routine, SgFunctionDeclarat
   currentFunctionDefinition = def;
   scopeStack.push_back(def);
   SageBuilder::pushScopeStack(def);
+  if (routine->special_kind == sfk_constructor) {
+    try {
+      translateConstructorInitializers(fscope, isSgMemberFunctionDeclaration(defining));
+    } catch (const Unsupported& u) {
+      warnings++;
+      mlog[WARN] << "incomplete constructor initializer list of " << defining->get_name().getString() << " ("
+                 << u.what << ")\n";
+    }
+  }
   try {
     if (fscope->assoc_block != nullptr) convertBlock(fscope->assoc_block, def->get_body());
   } catch (const Unsupported& u) {
@@ -712,6 +920,12 @@ void Translator::translateTypeDeclaration(SeqCursor& cursor, a_type_ptr type, a_
   }
 
   // A definition
+  if ((isClass && definingClassDecl.count(type)) || (isEnum && definingEnumDecl.count(type))) {
+    // Already translated, as part of an expression (e.g. "sizeof(struct {...})")
+    cursor.advance();
+    skipToEndOfConstruct(cursor, type);
+    return;
+  }
   SgDeclarationStatement* def = nullptr;
   if (isClass) {
     def = translateClassDefinition(cursor, type, scope);
@@ -742,9 +956,11 @@ SgClassDeclaration* Translator::translateClassDefinition(SeqCursor& cursor, a_ty
   def->set_parent(scope);
   def->set_isUnNamed(first->get_isUnNamed());
   definingClassDecl[type] = def;
+  applyClassAttributes(def, type);
 
   a_class_type_supplement_ptr ctsp = type->variant.class_struct_union.extra_info;
   if (ctsp != nullptr && ctsp->assoc_scope != nullptr) scopes[ctsp->assoc_scope] = cdef;
+  if (ctsp != nullptr) translateBaseClasses(ctsp, cdef);
 
   a_source_position start = type->source_corresp.decl_position;
   if (a_decl_position_supplement_ptr dpi = type->source_corresp.decl_pos_info) {
@@ -891,15 +1107,13 @@ SgTypedefDeclaration* Translator::translateTypedef(a_type_ptr type, a_src_seq_se
     decl->set_scope(scope);
     decl->set_parent(scope);
     if (existing == typedefDecls.end()) {
-      decl->set_firstNondefiningDeclaration(decl);
-      decl->set_definingDeclaration(decl);
+      decl->set_firstNondefiningDeclaration(decl);  // ROSE: typedefs have no defining declaration
       decl->set_type(SgTypedefType::createType(decl));
       typedefDecls[type] = decl;
       scope->insert_symbol(name, new SgTypedefSymbol(decl));
     } else {
       // A repeated typedef (allowed in C11 and C++)
       decl->set_firstNondefiningDeclaration(existing->second);
-      decl->set_definingDeclaration(existing->second);
       decl->set_type(existing->second->get_type());
     }
   }
@@ -956,6 +1170,57 @@ SgDeclarationStatement* Translator::translateStaticAssertion(a_static_assertion_
 // ---------------------------------------------------------------------------------
 // Declarations inside function bodies (stmk_decl statements)
 // ---------------------------------------------------------------------------------
+
+// A class or enum type defined within an expression ("sizeof(struct {...})",
+// "(union u {...} *)p"): its definition, translated on first use, belongs to
+// the expression.  Returns nullptr if the type has no such definition.
+SgDeclarationStatement* Translator::typeDefinitionInExpression(a_type_ptr type) {
+  a_type_ptr t = type;
+  for (int depth = 0; t != nullptr && depth < 100; depth++) {
+    if (t->kind == tk_typeref && !typeref_is_typedef(t)) {
+      t = t->variant.typeref.type;
+    } else if (t->kind == tk_pointer) {
+      t = t->variant.pointer.type;
+    } else if (t->kind == tk_array) {
+      t = t->variant.array.element_type;
+    } else if (t->kind == tk_routine) {
+      t = t->variant.routine.return_type;
+    } else {
+      break;
+    }
+  }
+  if (t == nullptr) return nullptr;
+  bool isClass = (t->kind == tk_class || t->kind == tk_struct || t->kind == tk_union);
+  bool isEnum = (t->kind == tk_enum && t->variant.integer.enum_type);
+  if (!isClass && !isEnum) return nullptr;
+  SgDeclarationStatement* def = nullptr;
+  if (isClass && definingClassDecl.count(t)) def = definingClassDecl[t];
+  if (isEnum && definingEnumDecl.count(t)) def = definingEnumDecl[t];
+  if (def != nullptr) {
+    // Translated already: claim it if it is not part of a declaration.
+    if (def == pendingBaseTypeDecl) {
+      pendingBaseTypeDecl = nullptr;
+      pendingBaseType = nullptr;
+      return def;
+    }
+    return nullptr;
+  }
+  if (t->source_corresp.source_sequence_entry == nullptr || t->source_corresp.name != nullptr) {
+    // Named types defined in expressions are rare; they are translated where
+    // the source sequence walk finds them.
+    if (t->source_corresp.source_sequence_entry == nullptr) return nullptr;
+  }
+  if (isClass && t->variant.class_struct_union.extra_info == nullptr) return nullptr;
+  SeqCursor cursor(t->source_corresp.source_sequence_entry);
+  if (cursor.atEnd() || cursor.ptr() != (char*)t) return nullptr;
+  SgScopeStatement* scope = currentScope();
+  if (isClass) {
+    def = translateClassDefinition(cursor, t, scope);
+  } else {
+    def = translateEnumDefinition(cursor, t, scope);
+  }
+  return def;
+}
 
 void Translator::translateDeclarationStatement(a_statement_ptr stmt, SgScopeStatement* scope) {
   // The declarations of the statement follow the statement's own source
