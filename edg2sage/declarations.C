@@ -150,6 +150,29 @@ static SgDeclarationStatement* baseTypeDeclaration(SgType* t) {
   return nullptr;
 }
 
+// Gives an unnamed class or enumeration a name, for declarations that refer to
+// it without containing its definition.
+void Translator::nameUnnamedType(SgDeclarationStatement* def) {
+  SgDeclarationStatement* first = def->get_firstNondefiningDeclaration() ? def->get_firstNondefiningDeclaration() : def;
+  SgDeclarationStatement* withSymbol = first->get_declaration_associated_with_symbol();
+  SgSymbol* sym = withSymbol != nullptr ? withSymbol->get_symbol_from_symbol_table() : nullptr;
+  SgScopeStatement* scope = sym != nullptr ? isSgScopeStatement(sym->get_parent()->get_parent()) : nullptr;
+  if (scope != nullptr) scope->remove_symbol(sym);
+  SgName unnamed("__unnamed_type_" + std::to_string(++unnamedTypes));
+  if (scope != nullptr) scope->insert_symbol(unnamed, sym);
+  for (SgDeclarationStatement* d : {def, first}) {
+    SgEnumDeclaration* ed = isSgEnumDeclaration(d);
+    SgClassDeclaration* cd = isSgClassDeclaration(d);
+    if (ed != nullptr && ed->get_isUnNamed()) {
+      ed->set_name(unnamed);
+      ed->set_isUnNamed(false);
+    } else if (cd != nullptr && cd->get_isUnNamed()) {
+      cd->set_name(unnamed);
+      cd->set_isUnNamed(false);
+    }
+  }
+}
+
 void Translator::attachPendingBaseTypeDeclaration(SgDeclarationStatement* decl) {
   if (pendingBaseTypeDecl == nullptr) return;
   SgDeclarationStatement* base = pendingBaseTypeDecl;
@@ -181,18 +204,7 @@ void Translator::attachPendingBaseTypeDeclaration(SgDeclarationStatement* decl) 
     // declaration, in C): emit the definition as a separate declaration.  An
     // unnamed type is given a name (ROSE does not print its generated names
     // "__anonymous_0x...") for the declaration to refer to.
-    SgName unnamed("__unnamed_type_" + std::to_string(++unnamedTypes));
-    for (SgDeclarationStatement* d : {base, first}) {
-      SgEnumDeclaration* ed = isSgEnumDeclaration(d);
-      SgClassDeclaration* cd = isSgClassDeclaration(d);
-      if (ed != nullptr && ed->get_isUnNamed()) {
-        ed->set_name(unnamed);
-        ed->set_isUnNamed(false);
-      } else if (cd != nullptr && cd->get_isUnNamed()) {
-        cd->set_name(unnamed);
-        cd->set_isUnNamed(false);
-      }
-    }
+    nameUnnamedType(base);
     appendStatementTo(isSgScopeStatement(decl->get_parent()) ? isSgScopeStatement(decl->get_parent()) : currentScope(),
                       base);
   }
@@ -505,11 +517,13 @@ SgVariableDeclaration* Translator::declaratorGroupFor(SgScopeStatement* scope, S
   if (prev->get_variables().empty()) return nullptr;
   // ("struct {...} *a, b[10];": the declarators share the base type; ROSE
   // prints the array declarators of the variables after the first one, but
-  // not their pointer declarators)
+  // not their pointer declarators: then the type is given a name for a
+  // declaration of its own)
   const unsigned char declarators = SgType::STRIP_ARRAY_TYPE | SgType::STRIP_POINTER_TYPE;
   SgType* lastType = prev->get_variables().back()->get_type();
-  if (lastType->stripType(declarators) != type->stripType(declarators) ||
-      type->stripType(SgType::STRIP_ARRAY_TYPE) != type->stripType(declarators)) {
+  if (lastType->stripType(declarators) != type->stripType(declarators)) return nullptr;
+  if (type->stripType(SgType::STRIP_ARRAY_TYPE) != type->stripType(declarators)) {
+    if (SgDeclarationStatement* def = prev->get_baseTypeDefiningDeclaration()) nameUnnamedType(def);
     return nullptr;
   }
   return prev;

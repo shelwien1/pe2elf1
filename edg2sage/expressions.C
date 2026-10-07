@@ -194,7 +194,10 @@ static bool isEmptyAggregate(SgExpression* e) {
 // "T()": a value-initialized temporary.  The type is written without
 // typedefs (ROSE qualifies the name of a class here, not of a typedef).
 static SgConstructorInitializer* valueInitializedTemporary(SgType* type) {
+  // (a class through its declaration; other types, e.g. pointers, by their
+  // typedef name, as "X()" -- "struct S *()" would not parse)
   SgType* t = type != nullptr ? type->stripType(SgType::STRIP_TYPEDEF_TYPE) : type;
+  if (isSgClassType(t) == nullptr && type != nullptr) t = type;
   SgExprListExp* args = SageBuilder::buildExprListExp_nfi();
   SgConstructorInitializer* ci = SageBuilder::buildConstructorInitializer_nfi(nullptr, args, t, true, false, true, true);
   args->set_parent(ci);

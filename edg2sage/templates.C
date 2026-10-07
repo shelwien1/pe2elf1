@@ -10,6 +10,8 @@
 // again), except explicit specializations, which are written in the source.
 #include "edg2sage.h"
 
+#include <cctype>
+
 using namespace edg;
 using namespace Sawyer::Message;
 
@@ -69,11 +71,33 @@ a_type_ptr prototypeTagType(a_template_ptr t) {
 
 }  // namespace
 
+// The text of a template.  EDG records the tokens; it spells the GNU keyword
+// "__typeof__" (or "__typeof") "typeof", which is not a keyword in the strict
+// standard modes, so it is spelled "__typeof__" again.
 std::string Translator::templateText(a_template_ptr tmpl) {
+  std::string text;
 #if RECORD_TEMPLATE_STRINGS
-  if (tmpl != nullptr && tmpl->text != nullptr) return std::string(tmpl->text);
+  if (tmpl != nullptr && tmpl->text != nullptr) text = tmpl->text;
 #endif
-  return "";
+  auto identifierChar = [](char c) { return std::isalnum((unsigned char)c) || c == '_' || c == '$'; };
+  for (size_t i = 0; i < text.size(); i++) {
+    char c = text[i];
+    if (c == '"' || c == '\'') {
+      // (not in literals)
+      for (i++; i < text.size() && text[i] != c; i++) {
+        if (text[i] == '\\') i++;
+      }
+    } else if (identifierChar(c)) {
+      size_t end = i;
+      while (end < text.size() && identifierChar(text[end])) end++;
+      if (text.compare(i, end - i, "typeof") == 0) {
+        text.replace(i, 6, "__typeof__");
+        end += 4;
+      }
+      i = end - 1;
+    }
+  }
+  return text;
 }
 
 // ---------------------------------------------------------------------------------

@@ -152,6 +152,7 @@ class Translator {
   void setAccess(SgDeclarationStatement* decl, edg::an_access_specifier access);
   void setLinkage(SgDeclarationStatement* decl, edg::a_decl_position_supplement_ptr dpi);
   void setExceptionSpecification(SgFunctionDeclaration* decl, edg::a_type_ptr routineType);
+  void nameUnnamedType(SgDeclarationStatement* definition);
   void attachPendingBaseTypeDeclaration(SgDeclarationStatement* decl);
   SgVariableDeclaration* declaratorGroupFor(SgScopeStatement* scope, SgType* type,
                                             const edg::a_source_position& specifiers);
