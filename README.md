@@ -96,9 +96,9 @@ standard library) are translated.  ROSE's own compile tests, translated with
 | `C11_tests` | 32 | 32 |
 | `Cxx_tests` | 2,449 | 2,428 (99.1%) |
 | `Cxx11_tests` | 1,016 | 988 (97.2%) |
-| `Cxx14_tests` | 31 | 30 |
+| `Cxx14_tests` | 31 | 31 |
 | `Cxx17_tests` | 61 | 57 |
-| all | 4,440 | 4,353 (98.0%) |
+| all | 4,440 | 4,354 (98.1%) |
 
 Most of the remaining failures are tests that ROSE itself lists as failing
 (`TESTCODE_CURRENTLY_FAILING` in their `Makefile.am`), a few that EDG rejects (they contain
@@ -194,9 +194,9 @@ counted than on Linux, because many use POSIX headers that MinGW-w64 does not ha
 | `Cxx17_tests` | 61 | 57 |
 | all | 4,285 | 4,204 (98.1%) |
 
-The failures are those of the Linux build, and six more: four tests whose inline assembly is
+All but six of the tests that fail also fail on Linux.  Of the six, four have inline assembly
 written for ELF targets or for a 64-bit `long` (the original programs do not assemble for
-Windows either; the script only checks that GCC parses the tests), and two with a flexible array
+Windows either; the script only checks that GCC parses the tests), and two have a flexible array
 member in an otherwise empty structure, which GCC 16 accepts and EDG, emulating the GCC 13 that
 the package was built with, rejects.
 
