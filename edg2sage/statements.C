@@ -195,6 +195,8 @@ SgStatement* Translator::convertStatementKind(a_statement_ptr stmt) {
     }
     case stmk_for:
       return convertForStatement(stmt);
+    case stmk_range_based_for:
+      return convertRangeBasedForStatement(stmt);
     case stmk_switch:
       return convertSwitchStatement(stmt);
     case stmk_switch_case: {
@@ -418,6 +420,56 @@ SgStatement* Translator::convertForStatement(a_statement_ptr stmt) {
   scopeStack.pop_back();
   setPosition(f, stmt->position, endOf(stmt));
   setPosition(init, stmt->position);
+  return f;
+}
+
+// "for (T x : range) body": EDG represents the loop rewritten with the
+// variables __range, __begin and __end; ROSE keeps the declaration of x and
+// the declaration of __range, whose initializer is the range expression.
+SgStatement* Translator::convertRangeBasedForStatement(a_statement_ptr stmt) {
+  a_range_based_for_loop_ptr rf = stmt->variant.range_based_for_loop.extra_info;
+  if (rf == nullptr || rf->iterator == nullptr || rf->range == nullptr) throw Unsupported("range-based for");
+  if (rf->initialization != nullptr) throw Unsupported("range-based for with an init-statement");
+  SgRangeBasedForStatement* f = new SgRangeBasedForStatement((SgVariableDeclaration*)nullptr, nullptr, nullptr, nullptr,
+                                                              nullptr, nullptr, nullptr);
+  f->set_parent(currentScope());
+  if (rf->range_based_for_scope != nullptr) scopes[rf->range_based_for_scope] = f;
+  if (rf->iterator_scope != nullptr) scopes[rf->iterator_scope] = f;
+  scopeStack.push_back(f);
+  SageBuilder::pushScopeStack(f);
+  SgDeclarationStatement* range = translateVariable(rf->range, nullptr, f);
+  // The iteration variable is initialized with "*__begin", which is not written.
+  bool saved = suppressInitializers;
+  suppressInitializers = true;
+  SgDeclarationStatement* iter = nullptr;
+  try {
+    iter = translateVariable(rf->iterator, nullptr, f);
+  } catch (...) {
+    suppressInitializers = saved;
+    SageBuilder::popScopeStack();
+    scopeStack.pop_back();
+    throw;
+  }
+  suppressInitializers = saved;
+  f->set_range_declaration(isSgVariableDeclaration(range));
+  f->set_iterator_declaration(isSgVariableDeclaration(iter));
+  if (range != nullptr) range->set_parent(f);
+  if (iter != nullptr) iter->set_parent(f);
+  // The body: a compiler-generated block around the statement as written.
+  a_statement_ptr bodyStmt = stmt->variant.range_based_for_loop.statement;
+  if (bodyStmt != nullptr && bodyStmt->kind == stmk_block && bodyStmt->compiler_generated &&
+      bodyStmt->variant.block.statements != nullptr && bodyStmt->variant.block.statements->next == nullptr &&
+      bodyStmt->variant.block.statements->kind == stmk_block &&
+      !bodyStmt->variant.block.statements->compiler_generated) {
+    bodyStmt = bodyStmt->variant.block.statements;
+  }
+  SgStatement* body = convertBlock(bodyStmt);
+  f->set_loop_body(body);
+  body->set_parent(f);
+  SageBuilder::popScopeStack();
+  scopeStack.pop_back();
+  if (range == nullptr || iter == nullptr) throw Unsupported("range-based for");
+  setPosition(f, stmt->position, endOf(stmt));
   return f;
 }
 

@@ -244,6 +244,9 @@ void Translator::translateDeclarationEntry(SeqCursor& cursor, SgScopeStatement* 
       case iek_namespace:
         translateNamespace(cursor, (a_namespace_ptr)ptr, sec, scope);
         return;  // advances the cursor itself
+      case iek_template:
+        translateTemplate(cursor, (a_template_ptr)ptr, sec, scope);
+        return;  // advances the cursor itself
       case iek_using_decl: {
         SgDeclarationStatement* d = translateUsingDeclaration((a_using_decl_ptr)ptr, scope);
         cursor.advance();
@@ -297,7 +300,7 @@ SgDeclarationStatement* Translator::translateVariable(a_variable_ptr var, a_src_
   if (unnamed && var->is_anonymous_parent_object) name = SgName("");
 
   SgInitializer* init = nullptr;
-  if (sec == nullptr) init = convertVariableInitializer(var);
+  if (sec == nullptr && !suppressInitializers) init = convertVariableInitializer(var);
   if (init != nullptr && var->initializer_range.start.seq != 0 &&
       (init->get_startOfConstruct() == nullptr || init->get_startOfConstruct()->isCompilerGenerated())) {
     // e.g. the constructor initializer of "T x(1, 2);"
@@ -517,6 +520,7 @@ SgVariableSymbol* Translator::variableSymbolFor(a_variable_ptr var) {
 SgInitializedName* Translator::fieldFor(a_field_ptr field) {
   auto it = fields.find(field);
   if (it != fields.end()) return it->second;
+  if (SgInitializedName* in = hiddenFieldFor(field)) return in;
   throw Unsupported("reference to a field of a class that was not translated");
 }
 
@@ -643,12 +647,9 @@ SgFunctionDeclaration* Translator::functionDeclarationFor(a_routine_ptr routine)
   SgName name = nameOf(&routine->source_corresp);
   SgFunctionType* ftype = convertFunctionType(routine->type);
   SgFunctionParameterList* params = buildParameterList(routine, false);
-  SgFunctionDeclaration* decl = nullptr;
-  if (isSgClassDefinition(scope)) {
-    decl = new SgMemberFunctionDeclaration(name, ftype, nullptr);
-  } else {
-    decl = new SgFunctionDeclaration(name, ftype, nullptr);
-  }
+  auto again = firstRoutineDecl.find(routine);  // created while converting its type
+  if (again != firstRoutineDecl.end()) return again->second;
+  SgFunctionDeclaration* decl = newFunctionDeclaration(routine, name, ftype, isSgClassDefinition(scope) != nullptr);
   replaceParameterList(decl, params);
   decl->set_firstNondefiningDeclaration(decl);
   decl->setForward();
@@ -667,7 +668,7 @@ SgFunctionDeclaration* Translator::functionDeclarationFor(a_routine_ptr routine)
   SgFunctionSymbol* sym = isSgMemberFunctionDeclaration(decl)
                               ? new SgMemberFunctionSymbol(isSgMemberFunctionDeclaration(decl))
                               : new SgFunctionSymbol(decl);
-  scope->insert_symbol(name, sym);
+  scope->insert_symbol(decl->get_name(), sym);
   return decl;
 }
 
@@ -699,8 +700,7 @@ SgFunctionDeclaration* Translator::translateRoutine(a_routine_ptr routine, a_src
                                               isMember ? isSgClassDefinition(semanticScope) : nullptr);
   SgFunctionParameterList* params = buildParameterList(routine, isDefinition);
 
-  SgFunctionDeclaration* decl = isMember ? new SgMemberFunctionDeclaration(name, ftype, nullptr)
-                                         : new SgFunctionDeclaration(name, ftype, nullptr);
+  SgFunctionDeclaration* decl = newFunctionDeclaration(routine, name, ftype, isMember);
   replaceParameterList(decl, params);
   decl->set_scope(semanticScope);
   decl->set_parent(scope);
@@ -719,7 +719,7 @@ SgFunctionDeclaration* Translator::translateRoutine(a_routine_ptr routine, a_src
     firstRoutineDecl[routine] = decl;
     SgFunctionSymbol* sym = isMember ? new SgMemberFunctionSymbol(isSgMemberFunctionDeclaration(decl))
                                      : new SgFunctionSymbol(decl);
-    semanticScope->insert_symbol(name, sym);
+    semanticScope->insert_symbol(decl->get_name(), sym);
   }
   decl->set_firstNondefiningDeclaration(first);
 
@@ -894,12 +894,13 @@ void Translator::translateTypeDeclaration(SeqCursor& cursor, a_type_ptr type, a_
         // The hidden first declaration becomes this forward declaration statement.
         fwd = first;
       } else {
-        fwd = new SgClassDeclaration(first->get_name(), first->get_class_type(), first->get_type(), nullptr);
-        fwd->set_firstNondefiningDeclaration(first);
-        fwd->set_definingDeclaration(first->get_definingDeclaration());
-        fwd->setForward();
-        fwd->set_scope(first->get_scope());
-        fwd->set_isUnNamed(first->get_isUnNamed());
+        fwd = newNondefiningClassDeclaration(first);
+        if (SgTemplateInstantiationDecl* ti = isSgTemplateInstantiationDecl(fwd)) {
+          for (SgTemplateArgument* a : convertTemplateArguments(type->variant.class_struct_union.extra_info->template_arg_list)) {
+            a->set_parent(ti);
+            ti->get_templateArguments().push_back(a);
+          }
+        }
       }
       firstUsedAsStatement.insert(first);
       setPosition(fwd, sec->decl_position);
@@ -920,7 +921,8 @@ void Translator::translateTypeDeclaration(SeqCursor& cursor, a_type_ptr type, a_
   }
 
   // A definition
-  if ((isClass && definingClassDecl.count(type)) || (isEnum && definingEnumDecl.count(type))) {
+  if ((isClass && definingClassDecl.count(type) && !hiddenDefinitions.count(definingClassDecl[type])) ||
+      (isEnum && definingEnumDecl.count(type))) {
     // Already translated, as part of an expression (e.g. "sizeof(struct {...})")
     cursor.advance();
     skipToEndOfConstruct(cursor, type);
@@ -945,20 +947,22 @@ void Translator::translateTypeDeclaration(SeqCursor& cursor, a_type_ptr type, a_
 
 SgClassDeclaration* Translator::translateClassDefinition(SeqCursor& cursor, a_type_ptr type, SgScopeStatement* scope) {
   SgClassDeclaration* first = classDeclarationFor(type);
-  SgClassDeclaration* def = new SgClassDeclaration(first->get_name(), first->get_class_type(), first->get_type(), nullptr);
-  SgClassDefinition* cdef = new SgClassDefinition(def);
-  def->set_definition(cdef);
-  cdef->set_parent(def);
-  def->set_firstNondefiningDeclaration(first);
-  def->set_definingDeclaration(def);
-  first->set_definingDeclaration(def);
-  def->set_scope(first->get_scope());
+  SgClassDefinition* cdef = nullptr;
+  SgClassDeclaration* def = newDefiningClassDeclaration(first, cdef);
   def->set_parent(scope);
-  def->set_isUnNamed(first->get_isUnNamed());
+  auto hidden = definingClassDecl.find(type);
+  if (hidden != definingClassDecl.end()) hiddenDefinitions.erase(hidden->second);
   definingClassDecl[type] = def;
   applyClassAttributes(def, type);
 
   a_class_type_supplement_ptr ctsp = type->variant.class_struct_union.extra_info;
+  if (SgTemplateInstantiationDecl* ti = isSgTemplateInstantiationDecl(def)) {
+    // An explicit specialization ("template<> struct S<int> {...};")
+    for (SgTemplateArgument* a : convertTemplateArguments(ctsp->template_arg_list)) {
+      a->set_parent(ti);
+      ti->get_templateArguments().push_back(a);
+    }
+  }
   if (ctsp != nullptr && ctsp->assoc_scope != nullptr) scopes[ctsp->assoc_scope] = cdef;
   if (ctsp != nullptr) translateBaseClasses(ctsp, cdef);
 

@@ -160,6 +160,26 @@ class Translator {
   void translateBaseClasses(edg::a_class_type_supplement_ptr ctsp, SgClassDefinition* cdef);
   void translateConstructorInitializers(edg::a_scope_ptr fscope, SgMemberFunctionDeclaration* decl);
 
+  // --- templates (templates.C)
+ public:
+  // The first (hidden) declaration of a template
+  SgDeclarationStatement* templateDeclarationFor(edg::a_template_ptr tmpl);
+  SgTemplateArgumentPtrList convertTemplateArguments(edg::a_template_arg_ptr args);
+  // Class template instances, members of class template instances
+  bool isTemplateInstance(edg::a_type_ptr classType);
+  SgClassDeclaration* instanceDeclarationFor(edg::a_type_ptr classType);
+  SgClassDeclaration* newDefiningClassDeclaration(SgClassDeclaration* first, SgClassDefinition*& def);
+  SgClassDeclaration* newNondefiningClassDeclaration(SgClassDeclaration* first);
+  SgClassDefinition* hiddenDefinitionFor(edg::a_type_ptr classType);
+  SgFunctionDeclaration* newFunctionDeclaration(edg::a_routine_ptr routine, const SgName& name, SgFunctionType* type,
+                                                bool member);
+  SgInitializedName* hiddenFieldFor(edg::a_field_ptr field);
+ private:
+  void translateTemplate(SeqCursor& cursor, edg::a_template_ptr tmpl, edg::a_src_seq_secondary_decl_ptr sec,
+                         SgScopeStatement* scope);
+  void skipTemplateMembers(SeqCursor& cursor, edg::a_template_ptr tmpl);
+  std::string templateText(edg::a_template_ptr tmpl);
+
   // --- attributes (attributes.C)
   void applyClassAttributes(SgClassDeclaration* decl, edg::a_type_ptr type);
   void applyVariableAttributes(SgInitializedName* in, edg::an_attribute_ptr attrs, bool packed, bool primaryOnly);
@@ -170,6 +190,7 @@ class Translator {
   void convertStatementListInto(edg::a_statement_ptr first, SgScopeStatement* scope, bool single = false);
   void attachDeferredInitializer(edg::a_statement_ptr initStmt);
   SgStatement* convertForStatement(edg::a_statement_ptr stmt);
+  SgStatement* convertRangeBasedForStatement(edg::a_statement_ptr stmt);
   SgStatement* convertSwitchStatement(edg::a_statement_ptr stmt);
   SgStatement* convertIfStatement(edg::a_statement_ptr stmt);
   SgStatement* convertCondition(edg::an_expr_node_ptr expr, SgScopeStatement* scope);
@@ -215,6 +236,8 @@ class Translator {
   std::unordered_map<edg::a_type_ptr, SgEnumDeclaration*> definingEnumDecl;
   std::unordered_map<edg::a_type_ptr, SgTypedefDeclaration*> typedefDecls;
   std::unordered_map<edg::a_namespace_ptr, SgNamespaceDeclarationStatement*> firstNamespaceDecl;
+  std::unordered_map<edg::a_template_ptr, SgDeclarationStatement*> firstTemplateDecl;  // canonical template ->
+  std::unordered_map<edg::a_template_ptr, SgDeclarationStatement*> definingTemplateDecl;
   std::unordered_map<edg::a_type_ptr, SgType*> typeCache;
   std::unordered_map<edg::a_constant_ptr, SgInitializedName*> enumerators;
   std::unordered_map<edg::a_scope_ptr, SgScopeStatement*> scopes;
@@ -226,7 +249,9 @@ class Translator {
   std::map<SgVariableDeclaration*, edg::a_source_position> declarationSpecifiers;
   std::map<std::pair<SgScopeStatement*, std::string>, SgVariableSymbol*> functionNameSymbols;  // constants whose backing expression is being translated
   int compoundLiterals = 0;
+  bool suppressInitializers = false;  // the iteration variable of a range-based for
   std::set<SgClassDeclaration*> firstUsedAsStatement;      // hidden first decl reused as forward declaration
+  std::set<SgClassDeclaration*> hiddenDefinitions;         // definitions of template instances (see templates.C)
   std::set<SgTypedefDeclaration*> typedefInStatementList;
 
   // A non-autonomous tag definition ("struct S {...} x;") waiting for the

@@ -125,6 +125,9 @@ SgDeclarationStatement* Translator::translateUsingDeclaration(a_using_decl_ptr u
       case iek_namespace:
         decl = namespaceDeclarationFor((a_namespace_ptr)ptr);
         break;
+      case iek_template:
+        decl = templateDeclarationFor((a_template_ptr)ptr);
+        break;
       case iek_constant: {
         auto en = enumerators.find((a_constant_ptr)ptr);
         if (en != enumerators.end()) iname = en->second;

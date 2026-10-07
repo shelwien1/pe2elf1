@@ -35,6 +35,10 @@
 /* asm operand constraints are kept as written (ROSE's SgAsmOp constraint strings). */
 #define RECORD_RAW_ASM_OPERAND_DESCRIPTIONS 1
 
+/* The text of each template declaration is kept in the IL: ROSE prints
+   template declarations from that text (SgTemplate*Declaration::get_string()). */
+#define RECORD_TEMPLATE_STRINGS 1
+
 /* Allow the IL to be dumped (--display_il style) for debugging the translation. */
 #define NEED_IL_DISPLAY 1
 

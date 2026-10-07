@@ -265,7 +265,9 @@ SgType* Translator::convertType(a_type_ptr type) {
       result = SgTypeNullptr::createType();
       break;
     case tk_template_param:
-      result = SgTypeUnknown::createType();
+      // "auto" (and "decltype(auto)") in a declaration is a special template
+      // parameter type; other template parameter types only occur in templates.
+      result = is_auto_type(type) ? (SgType*)SageBuilder::buildAutoType() : SgTypeUnknown::createType();
       break;
     default:
       result = SgTypeUnknown::createType();
@@ -283,6 +285,7 @@ SgClassDeclaration* Translator::classDeclarationFor(a_type_ptr type) {
   type = skip_typerefs(type);
   auto it = firstClassDecl.find(type);
   if (it != firstClassDecl.end()) return it->second;
+  if (isTemplateInstance(type)) return instanceDeclarationFor(type);
 
   SgClassDeclaration::class_types kind = SgClassDeclaration::e_struct;
   if (type->kind == tk_class) kind = SgClassDeclaration::e_class;
@@ -310,7 +313,7 @@ SgClassDefinition* Translator::classDefinitionFor(a_type_ptr type) {
   type = skip_typerefs(type);
   auto it = definingClassDecl.find(type);
   if (it != definingClassDecl.end()) return it->second->get_definition();
-  return nullptr;
+  return hiddenDefinitionFor(type);
 }
 
 SgEnumDeclaration* Translator::enumDeclarationFor(a_type_ptr type) {

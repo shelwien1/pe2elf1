@@ -299,9 +299,22 @@ SgExpression* Translator::convertExpression(an_expr_node_ptr expr) {
   return result;
 }
 
+// A copy of a default argument expression, supplied by the front end (possibly
+// converted to the parameter type).
+static bool isGeneratedDefaultArgument(an_expr_node_ptr a) {
+  for (int depth = 0; a != nullptr && depth < 10; depth++) {
+    if (a->generated_default_arg) return true;
+    if (a->kind != enk_operation || !a->compiler_generated || a->variant.operation.operands == nullptr) break;
+    a = a->variant.operation.operands;
+  }
+  return false;
+}
+
 SgExprListExp* Translator::convertArgumentList(an_expr_node_ptr first) {
   SgExprListExp* list = SageBuilder::buildExprListExp_nfi();
   for (an_expr_node_ptr a = first; a != nullptr; a = a->next) {
+    // Default arguments are not written in the call (they are trailing).
+    if (isCxx && isGeneratedDefaultArgument(a)) break;
     SgExpression* e = convertExpression(a);
     list->append_expression(e);
     e->set_parent(list);
