@@ -325,6 +325,8 @@ SgType* Translator::pseudoType(const std::string& name, SgType* base) {
     decl->set_firstNondefiningDeclaration(decl);
     decl->set_scope(globalScope);
     decl->set_parent(globalScope);
+    // (ROSE's mangled names, e.g. of template arguments, must not contain '<')
+    SgNode::get_globalMangledNameMap()[decl] = "typedef_pseudo_" + std::to_string(pseudoTypes.size());
     decl->set_type(SgTypedefType::createType(decl));
     setCompilerGenerated(decl);
     globalScope->insert_symbol(SgName(name), new SgTypedefSymbol(decl));

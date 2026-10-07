@@ -443,7 +443,17 @@ SgDeclarationStatement* Translator::translateVariable(a_variable_ptr var, a_src_
     return nullptr;
   }
 
-  SgVariableDeclaration* decl = new SgVariableDeclaration(iname);
+  SgVariableDeclaration* decl = nullptr;
+  if (isCxx && var->is_specialized && !var->specialized_with_old_syntax && var->source_corresp.is_class_member) {
+    // "template<> int X<int>::member = 1;" (ROSE prints "template <>" for it)
+    SgTemplateVariableInstantiation* vi =
+        new SgTemplateVariableInstantiation((SgTemplateVariableDeclaration*)nullptr, SgTemplateArgumentPtrList());
+    vi->append_variable(iname, init);
+    vi->set_specialization(SgDeclarationStatement::e_specialization);
+    decl = vi;
+  } else {
+    decl = new SgVariableDeclaration(iname);
+  }
   decl->set_firstNondefiningDeclaration(decl);
   if (sec == nullptr && var->storage_class != sc_extern) decl->set_definingDeclaration(decl);
   // A static data member defined outside its class ("int C::x = 0;") or a

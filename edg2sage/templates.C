@@ -383,8 +383,9 @@ SgTemplateArgumentPtrList Translator::convertTemplateArguments(a_template_arg_pt
           // names in the arguments of (shared) template instances is the one of
           // their last use.
           std::string text = templateArgumentText(a);
-          if (!text.empty() && text.find("<unnamed") == std::string::npos &&
-              text.find("<anon") == std::string::npos && text.find("lambda") == std::string::npos) {
+          // (not with template arguments: ROSE's mangled names of template
+          // arguments must not contain '<')
+          if (!text.empty() && text.find('<') == std::string::npos && text.find("lambda") == std::string::npos) {
             e = pseudoExpression(text, convertType(c->type));
           }
         }
