@@ -186,8 +186,9 @@ build generates (so neither ROSETTA, flex, bison nor a shell is needed); the par
 ROSE uses (the headers, selected with Boost's `bcp` tool, and the sources of the few compiled
 parts that the translators link); the package's run-time files; and a Makefile
 (`win32/source/Makefile`) whose recipes only run the compiler and `ar`, with the compiler options
-in response files.  Making it needs the Boost source tree, with `bcp` built in it, and 7-Zip
-(`apt install 7zip`):
+in response files.  Built from it under Wine with MSYS2's `mingw32-make` 4.4.1 and GCC 16.2
+(1.5 hours with `-j4`), the translators pass `test.bat` and the tests in `tests/`.  Making it
+needs the Boost source tree, with `bcp` built in it, and 7-Zip (`apt install 7zip`):
 
 ```
 (cd boost_1_83_0 && ./bootstrap.sh && ./b2 tools/bcp)

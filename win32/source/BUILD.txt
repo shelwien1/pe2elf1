@@ -25,7 +25,8 @@ Requirements
 ------------
 
 A MinGW-w64 GCC for x86-64 with C++14 support and GNU make for Windows
-(mingw32-make), for example from MSYS2 (https://www.msys2.org):
+(mingw32-make; tested with GCC 16.2 and make 4.4.1), for example from MSYS2
+(https://www.msys2.org):
 
   pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-make
 
@@ -40,8 +41,8 @@ In this folder, in a command prompt (or PowerShell, or an MSYS2 shell):
   mingw32-make -j8
 
 (-j: the number of files compiled at the same time; use the number of CPU
-cores.)  This compiles about 760 files into obj\, which takes a while (about
-an hour on 4 cores), and links bin\identityTranslator.exe and
+cores.)  This compiles about 760 files into obj\, which takes a while (an
+hour or two on 4 cores), and links bin\identityTranslator.exe and
 bin\dotGenerator.exe.  The folder is then a ROSE installation like the binary
 package: run test.bat.
 
