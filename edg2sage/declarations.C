@@ -361,7 +361,9 @@ void Translator::translateDeclarationEntry(SeqCursor& cursor, SgScopeStatement* 
     }
   } catch (const Unsupported& u) {
     warnings++;
-    mlog[WARN] << "skipping declaration (" << u.what << ")\n";
+    a_source_correspondence* sc = sec ? nullptr : source_corresp_for_il_entry(ptr, kind);
+    a_source_position pos = sec ? sec->decl_position : sc ? sc->decl_position : null_source_position;
+    (inSystemHeader(pos) ? mlog[TRACE] : mlog[WARN]) << "skipping declaration (" << u.what << ")\n";
     if (cursor.cur == entry) cursor.advance();
   }
 }
@@ -992,16 +994,17 @@ void Translator::translateFunctionBody(a_routine_ptr routine, SgFunctionDeclarat
       translateConstructorInitializers(fscope, isSgMemberFunctionDeclaration(defining));
     } catch (const Unsupported& u) {
       warnings++;
-      mlog[WARN] << "incomplete constructor initializer list of " << defining->get_name().getString() << " ("
-                 << u.what << ")\n";
+      (inSystemHeader(routine->source_corresp.decl_position) ? mlog[TRACE] : mlog[WARN])
+          << "incomplete constructor initializer list of " << defining->get_name().getString() << " (" << u.what
+          << ")\n";
     }
   }
   try {
     if (fscope->assoc_block != nullptr) convertBlock(fscope->assoc_block, def->get_body());
   } catch (const Unsupported& u) {
     warnings++;
-    mlog[WARN] << "incomplete translation of the body of " << defining->get_name().getString() << " (" << u.what
-               << ")\n";
+    (inSystemHeader(routine->source_corresp.decl_position) ? mlog[TRACE] : mlog[WARN])
+        << "incomplete translation of the body of " << defining->get_name().getString() << " (" << u.what << ")\n";
   }
   SageBuilder::popScopeStack();
   scopeStack.pop_back();
@@ -1430,7 +1433,8 @@ void Translator::translateDeclarationStatement(a_statement_ptr stmt, SgScopeStat
         }
       } catch (const Unsupported& u) {
         warnings++;
-        mlog[WARN] << "skipping local declaration (" << u.what << ")\n";
+        (inSystemHeader(stmt->position) ? mlog[TRACE] : mlog[WARN]) << "skipping local declaration (" << u.what
+                                                                   << ")\n";
       }
     }
     return;

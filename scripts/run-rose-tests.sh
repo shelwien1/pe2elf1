@@ -13,12 +13,20 @@
 # to ./rose-tests/results.txt (PASS, FAIL with the first error, or SKIP when
 # GCC does not compile the original), with the logs of failures under
 # ./rose-tests/work.
+#
+# A Windows translator (*.exe) is run with $RUN (default: wine) and needs a
+# Windows gcc/g++ in Wine's PATH (see tests/run-tests.sh); set CC and CXX to
+# MinGW-w64 compilers for the check of which tests GCC compiles.
 set -u
 tests=$(cd "$1" && pwd)
 here=$(cd "$(dirname "$0")" && pwd)
 translator=${2:-$here/../build/bin/identityTranslator}
 translator=$(cd "$(dirname "$translator")" && pwd)/$(basename "$translator")
 jobs=${3:-$(nproc 2>/dev/null || echo 1)}
+case "$translator" in
+  *.exe) run=${RUN:-wine} ;;
+  *) run=${RUN:-} ;;
+esac
 out=$(pwd)/rose-tests
 rm -rf "$out"
 mkdir -p "$out/work"
@@ -50,7 +58,7 @@ run_one() {
     rm -rf "$d"
     return
   fi
-  (cd "$d" && timeout 300 "$translator" $std -w -I"$(dirname "$f")" -c "$f" > rose.log 2>&1)
+  (cd "$d" && timeout 300 $run "$translator" $std -w -I"$(dirname "$f")" -c "$f" > rose.log 2>&1)
   st=$?
   if [ $st -eq 0 ]; then
     echo "PASS $dir/$n"

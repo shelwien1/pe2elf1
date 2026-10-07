@@ -47,4 +47,24 @@
 /* Allow the IL to be dumped (--display_il style) for debugging the translation. */
 #define NEED_IL_DISPLAY 1
 
+/* Code compiled by MinGW-w64 GCC (Windows) */
+#ifdef EDG2SAGE_TARGET_MINGW
+#include "mingw_x86_64.h"
+#endif
+
+/* EDG built with MinGW-w64 GCC (Windows host): source files are read as UTF-8, as on Linux and
+   as GCC does, rather than in the encoding of the Windows locale (which EDG supports only when
+   built with Visual C++). */
+#if defined(_WIN32) && !defined(_MSC_VER)
+#define NATIVE_MULTIBYTE_CHARS_SUPPORTED_WITH_UNICODE 0
+/* C++/CLI support needs the .NET hosting API (<metahost.h>), which MinGW-w64 lacks (these are
+   the settings of EDG's "cppcli/off" configuration). */
+#define CPPCLI_ENABLING_POSSIBLE 0
+#define CPPCX_ENABLING_POSSIBLE 0
+#define ALLOW_CPPCLI_AND_CPPCX_WITH_LOWERING 0
+#define READ_CPPCLI_PORTABLE_ASSEMBLIES 0
+/* EDG's Windows code uses fabs without including <math.h> (Visual C++ declares it elsewhere). */
+#include <math.h>
+#endif
+
 #endif

@@ -2,6 +2,7 @@
 // symbols librose expects from its EDG library.
 #include "edg2sage.h"
 #include "fixupTypeReferences.h"
+#include "rose_paths.h"
 
 #include <cstdlib>
 #include <cstring>
@@ -40,6 +41,7 @@ void initDiagnostics() {
     edg2sage::mlog[Sawyer::Message::WARN].enable();
     if (std::getenv("EDG2SAGE_DEBUG") != nullptr) {
       edg2sage::mlog[Sawyer::Message::INFO].enable();
+      edg2sage::mlog[Sawyer::Message::TRACE].enable();  // constructs skipped in system headers
 #pragma push_macro("DEBUG")
 #undef DEBUG  // EDG configuration macro
       edg2sage::mlog[Sawyer::Message::DEBUG].enable();
@@ -78,7 +80,10 @@ namespace {
 // Directory with EDG's run-time configuration (lib/predefined_macros.txt)
 std::string edgBaseDirectory() {
   if (const char* env = std::getenv("ROSE_EDG_BASE")) return env;
-#ifdef EDG2SAGE_EDG_BASE
+#ifdef _WIN32
+  // The Windows build is relocatable (see rose_paths.C)
+  return ROSE_AUTOMAKE_PREFIX + "/edg-base";
+#elif defined(EDG2SAGE_EDG_BASE)
   return EDG2SAGE_EDG_BASE;
 #else
   return "";

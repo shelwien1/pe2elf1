@@ -15,6 +15,8 @@ make check               # translate tests/ with identityTranslator and compare 
 build/bin/identityTranslator -c foo.c      # writes rose_foo.c and compiles it to foo.o
 ```
 
+The same Makefile cross-compiles ROSE for Windows with MinGW-w64 (see [Windows](#windows)).
+
 ## Layout
 
 | Directory | Contents |
@@ -26,7 +28,9 @@ build/bin/identityTranslator -c foo.c      # writes rose_foo.c and compiles it t
 | `edg2sage/` | the EDG IL → Sage III translator (new code), and the EDG configuration (`edgconfig/`) |
 | `tools/` | translators linked against librose (`identityTranslator`, `dotGenerator` from ROSE's examples) |
 | `tests/` | test programs and `run-tests.sh` (used by `make check`) |
+| `win32/` | portability layer for the Windows build (MinGW-w64) |
 | `scripts/vendor-sources.sh` | regenerates `rose/` and `edg/` from full checkouts |
+| `scripts/build-boost-mingw.sh`, `scripts/stage-sys-includes.sh` | Windows build helpers |
 
 ## Requirements
 
@@ -112,11 +116,89 @@ specializations and instantiation directives are translated from the source.
 Where ROSE has no representation of a type or expression, or its unparser prints one wrongly,
 the translator uses the text EDG prints for it, as the name of a hidden typedef or variable:
 GNU vector types, `decltype(auto)`, function and array types in template arguments, and the
-addresses of functions and members in template arguments.
+addresses of functions and members in template arguments.  Generic lambdas (whose `operator()`
+is a member template) are reproduced from their source text in the same way.
 
 Constructs that cannot be translated are reported as warnings (set `EDG2SAGE_DEBUG=1` for more
 diagnostics) and skipped.  EDG options can be passed through ROSE with `--edg:<option>`, e.g.
 `--edg:il_display` to dump the IL.
+
+## Windows
+
+The Makefile cross-compiles ROSE for 64-bit Windows when `CXX` is a MinGW-w64 compiler.  The
+result is a relocatable package with `identityTranslator.exe` and `dotGenerator.exe`, EDG's
+configuration, and the system headers that the front end parses with (see `win32/README.txt`
+for its use).  On Debian/Ubuntu:
+
+```
+apt install g++-mingw-w64-x86-64 libz-mingw-w64-dev zip wine   # cross compiler, zlib; Wine for tests
+scripts/build-boost-mingw.sh boost_1_83_0 $HOME/boost-mingw     # Boost for MinGW-w64, from an unpacked release
+make B=build-win CXX=x86_64-w64-mingw32-g++-posix BOOST_ROOT=$HOME/boost-mingw -j$(nproc)
+make B=build-win CXX=x86_64-w64-mingw32-g++-posix BOOST_ROOT=$HOME/boost-mingw package   # build-win/rose-2.18.0-win64.zip
+```
+
+Other translators are built the same way: `make B=build-win ... TOOL_SRC=<dir> build-win/bin/<name>.exe`
+compiles `<dir>/<name>.C` and links it with `librose.a`.  How the Windows build differs from the
+Linux build:
+
+* The programs that run during the build (ROSETTA's generator and EDG's `mk_errinfo`) are built a
+  second time, for the build machine, with `HOST_CXX` (default `g++`) and its own Boost.
+* librose is a static library, `librose.a`: a DLL cannot export more than 65,535 symbols.  The
+  executables are linked statically (no MinGW DLLs are needed), with a 64 MB stack.
+* The backend compiler is MinGW-w64 GCC: the predefined macros and system include directories
+  are taken from the cross compiler, and the headers are copied into the package
+  (`include/edg/`, by `scripts/stage-sys-includes.sh`).  At run time the translators find them,
+  and EDG's configuration, relative to the executable, and they run `gcc` and `g++` from the
+  PATH to compile their output (any MinGW-w64 GCC, e.g. MSYS2's).
+* EDG is configured for the MinGW-w64 x86_64 target (`edg2sage/edgconfig/mingw_x86_64.h`): the
+  Windows data model (32-bit `long`, 16-bit `wchar_t`) and bit-field layout, with GCC's
+  80-bit `long double` and the Itanium C++ ABI (`__attribute__((gcc_struct))` is not emulated).
+  It reads source files as UTF-8, as GCC does.
+* `win32/` adapts ROSE to MinGW-w64, so that `rose/` and `edg/` stay unmodified:
+  `rose_mingw.h`, which is force-included in every compilation (it disables ROSE's DLL
+  import/export attributes and declares the POSIX functions that `posix.C` implements),
+  replacements for POSIX headers (`include/`), a `processSupport.C` that runs the backend
+  compiler with `CreateProcess`, and changes to six ROSE sources (`patches/*.sed`, applied to
+  copies of them by `patch-source.sh`): no DLL attributes in Sawyer, pointers formatted with a
+  `0x` prefix (ROSE recognizes the names it makes from addresses by it), diagnostics on
+  stderr, without ANSI colors, with the program's name, `\` as a separator in path names, and
+  no check that IR nodes are not allocated within 10 KB of the stack frame (on Windows the heap
+  can be next to the stack).  A few analysis modules that convert pointers to `long` are
+  compiled with `-fpermissive` (the OpenAnalysis wrappers do not work on Windows).
+
+`make check` runs the tests with Wine; the translator needs a Windows `gcc`/`g++` in Wine's
+PATH, e.g. MSYS2's `mingw-w64-x86_64-gcc` and its dependencies unpacked from
+https://repo.msys2.org/mingw/mingw64/:
+
+```
+WINEPATH='Z:\path\to\mingw64\bin' make B=build-win CXX=x86_64-w64-mingw32-g++-posix BOOST_ROOT=$HOME/boost-mingw check
+```
+
+The package contains `test.bat`, a self test: it translates two example programs (C using the
+Windows API, and C++17 using the standard library) with `identityTranslator`, writes the AST of
+one with `dotGenerator`, and, when `gcc` and `g++` are in the PATH, checks that the programs
+built from the translated code print the same as those built from the originals.
+
+ROSE's compile tests, translated under Wine with MSYS2's GCC 16.2 as the backend compiler
+(`scripts/run-rose-tests.sh` with `CC='wine gcc'` and `CXX='wine g++'`; fewer C tests are
+counted than on Linux, because many use POSIX headers that MinGW-w64 does not have):
+
+| Tests | Programs | Unparsed into code that compiles |
+|-------|---------:|---------------------------------:|
+| `C_tests` | 765 | 735 (96.1%) |
+| `C99_tests` | 19 | 18 |
+| `C11_tests` | 30 | 30 |
+| `Cxx_tests` | 2,385 | 2,363 (99.1%) |
+| `Cxx11_tests` | 995 | 971 (97.6%) |
+| `Cxx14_tests` | 30 | 30 |
+| `Cxx17_tests` | 61 | 57 |
+| all | 4,285 | 4,204 (98.1%) |
+
+The failures are those of the Linux build, and six more: four tests whose inline assembly is
+written for ELF targets or for a 64-bit `long` (the original programs do not assemble for
+Windows either; the script only checks that GCC parses the tests), and two with a flexible array
+member in an otherwise empty structure, which GCC 16 accepts and EDG, emulating the GCC 13 that
+the package was built with, rejects.
 
 ## Provenance and licenses
 

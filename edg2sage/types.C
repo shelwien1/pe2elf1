@@ -97,9 +97,11 @@ SgType* floatType(a_float_kind kind) {
   }
 }
 
+// ROSE's unparser recognizes generated names by their "__anonymous_0x" prefix ("%p" has no "0x"
+// on Windows).
 std::string anonymousName(const void* entity) {
   char buf[64];
-  std::snprintf(buf, sizeof buf, "__anonymous_%p", entity);
+  std::snprintf(buf, sizeof buf, "__anonymous_0x%llx", (unsigned long long)(size_t)entity);
   return buf;
 }
 
@@ -252,20 +254,28 @@ SgType* Translator::convertType(a_type_ptr type) {
         result = decl ? decl->get_type() : convertType(type->variant.typeref.type);
       } else if (typeref_is_qualified(type)) {
         result = qualify(convertType(type->variant.typeref.type), type->variant.typeref.qualifiers);
-      } else if (trk == trk_is_typeof_with_expression && typeOperand(type) != nullptr) {
-        SgExpression* e = convertExpression(typeOperand(type));
+      } else if ((trk == trk_is_typeof_with_expression || trk == trk_is_decltype) && typeOperand(type) != nullptr) {
+        SgExpression* e = nullptr;
+        try {
+          e = convertExpression(typeOperand(type));
+        } catch (const Unsupported&) {
+          // E.g. references to the parameters of a function in its trailing return type (in an
+          // instance of a generic lambda's operator()): the type the operand has.
+          result = convertType(type->variant.typeref.type);
+          if (type->variant.typeref.qualifiers != 0) result = qualify(result, type->variant.typeref.qualifiers);
+          break;
+        }
+        if (trk == trk_is_decltype) {
+          SgDeclType* dt = new SgDeclType(e, convertType(type->variant.typeref.type));
+          e->set_parent(dt);
+          return dt;
+        }
         SgTypeOfType* tt = new SgTypeOfType(e, nullptr);
         e->set_parent(tt);
-        result = tt;
-        return result;  // owns its expression
+        return tt;  // owns its expression
       } else if (trk == trk_is_typeof_with_type_operand) {
         SgType* operand = convertType(type->variant.typeref.type);
         result = new SgTypeOfType(nullptr, operand);
-      } else if (trk == trk_is_decltype && typeOperand(type) != nullptr) {
-        SgExpression* e = convertExpression(typeOperand(type));
-        SgDeclType* dt = new SgDeclType(e, convertType(type->variant.typeref.type));
-        e->set_parent(dt);
-        return dt;
       } else {
         // Other typerefs (attributes, deduced types, type traits, ...): use the target type.
         result = convertType(type->variant.typeref.type);

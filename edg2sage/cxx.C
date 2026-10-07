@@ -280,7 +280,13 @@ SgExpression* Translator::convertLambda(a_lambda_ptr lambda) {
   if (lambda == nullptr || lambda->closure_class == nullptr || lambda->lambda_routine == nullptr) {
     throw Unsupported("lambda expression");
   }
-  if (lambda->is_generic || lambda->has_template_param_list) throw Unsupported("generic lambda");
+  if (lambda->is_generic || lambda->has_template_param_list) {
+    // The operator() of a generic lambda's closure class is a member template, which ROSE cannot
+    // represent here: the lambda is reproduced from its source text.
+    std::string text = lambdaText(lambda->start_position);
+    if (text.empty()) throw Unsupported("generic lambda");
+    return pseudoExpression(text, convertType(lambda->closure_class));
+  }
   for (a_lambda_capture_ptr c = lambda->capture_list; c != nullptr; c = c->next) {
     if (c->is_indirect_init_capture || c->is_pack_element) throw Unsupported("lambda capture");
   }

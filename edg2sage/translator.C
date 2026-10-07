@@ -1,7 +1,9 @@
 // Translator core: source positions, file names, scopes, and the top-level driver.
 #include "edg2sage.h"
 
+#include <cctype>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <unistd.h>
 
@@ -9,6 +11,20 @@ using namespace edg;
 
 namespace edg2sage {
 
+#ifdef _WIN32
+// Windows: _fullpath handles drive letters and both kinds of separators, and resolves "."
+// and ".." (the result has backslashes).
+std::string absolutePath(const std::string& path) {
+  char buf[4096];
+  if (path.empty() || _fullpath(buf, path.c_str(), sizeof buf) == nullptr) return path;
+  return buf;
+}
+
+// File names are not case sensitive on Windows
+static bool samePath(const std::string& a, const std::string& b) {
+  return a.size() == b.size() && _stricmp(a.c_str(), b.c_str()) == 0;
+}
+#else
 std::string absolutePath(const std::string& path) {
   std::string p = path;
   if (p.empty()) return p;
@@ -35,6 +51,9 @@ std::string absolutePath(const std::string& path) {
   for (const std::string& c : parts) r += "/" + c;
   return r.empty() ? "/" : r;
 }
+
+static bool samePath(const std::string& a, const std::string& b) { return a == b; }
+#endif
 
 Translator::Translator(SgSourceFile* file) : sourceFile(file) {
   globalScope = file->get_globalScope();
@@ -68,7 +87,7 @@ std::string Translator::fileNameOf(a_seq_number seq, a_line_number* line) {
     if (!sf->is_include_file && sf->top_level_file) {
       // The primary source file: use exactly the name ROSE knows it by.
       std::string base = absolutePath(primaryFileName);
-      if (base == name) name = primaryFileName;
+      if (samePath(base, name)) name = primaryFileName;
     }
   }
   fileNames[sf] = name;
@@ -94,6 +113,10 @@ Sg_File_Info* Translator::fileInfo(const a_source_position& pos) {
 bool Translator::isFromSourceFile(const a_source_position& pos) {
   if (pos.seq == 0) return false;
   return fileNameOf(pos.seq) == primaryFileName;
+}
+
+bool Translator::inSystemHeader(const a_source_position& pos) {
+  return pos.seq != 0 && seq_is_in_system_header(pos.seq);
 }
 
 void Translator::setPosition(SgLocatedNode* node, const a_source_position& start, const a_source_position& end) {
@@ -193,15 +216,7 @@ std::string Translator::sourceText(const a_source_position& start, const a_sourc
   a_line_number line = 0;
   std::string name = fileNameOf(start.seq, &line);
   if (name.empty() || line == 0) return "";
-  auto it = sourceLines.find(name);
-  if (it == sourceLines.end()) {
-    std::vector<std::string> lines;
-    std::ifstream in(name);
-    std::string l;
-    while (std::getline(in, l)) lines.push_back(l);
-    it = sourceLines.emplace(name, std::move(lines)).first;
-  }
-  const std::vector<std::string>& lines = it->second;
+  const std::vector<std::string>& lines = linesOf(name);
   if (line > lines.size()) return "";
   const std::string& text = lines[line - 1];
   // EDG columns count characters (a multibyte character counts as one column);
@@ -212,6 +227,109 @@ std::string Translator::sourceText(const a_source_position& start, const a_sourc
   size_t b = start.column - 1, e = end.column;  // end position is the last character
   if (e > text.size() || b >= e) return "";
   return text.substr(b, e - b);
+}
+
+const std::vector<std::string>& Translator::linesOf(const std::string& fileName) {
+  auto it = sourceLines.find(fileName);
+  if (it == sourceLines.end()) {
+    std::vector<std::string> lines;
+    std::ifstream in(fileName);
+    std::string l;
+    while (std::getline(in, l)) {
+      if (!l.empty() && l.back() == '\r') l.pop_back();
+      lines.push_back(l);
+    }
+    it = sourceLines.emplace(fileName, std::move(lines)).first;
+  }
+  return it->second;
+}
+
+namespace {
+// Whether the "'" at position i of a line separates the digits of a number (C++14), rather than
+// starting a character literal
+bool isDigitSeparator(const std::string& l, size_t i) {
+  size_t b = i;
+  while (b > 0 && (std::isalnum((unsigned char)l[b - 1]) || l[b - 1] == '_' || l[b - 1] == '\'' || l[b - 1] == '.')) --b;
+  return b < i && std::isdigit((unsigned char)l[b]);
+}
+}  // namespace
+
+std::string Translator::lambdaText(const a_source_position& start) {
+  if (start.seq == 0 || start.column == SP_COL_UNKNOWN) return "";
+  a_line_number line = 0;
+  std::string name = fileNameOf(start.seq, &line);
+  if (name.empty() || line == 0) return "";
+  const std::vector<std::string>& lines = linesOf(name);
+  if (line > lines.size()) return "";
+  size_t row = line - 1;
+  // EDG counts characters (a multibyte UTF-8 character is one column)
+  size_t col = 0;
+  for (a_column_number c = 1; c < start.column && col < lines[row].size(); ++c) {
+    ++col;
+    while (col < lines[row].size() && ((unsigned char)lines[row][col] & 0xC0) == 0x80) ++col;
+  }
+  if (col >= lines[row].size() || lines[row][col] != '[') return "";
+  // The body is the first "{" outside the brackets of the introducer, parameters, etc.
+  enum { CODE, LINE_COMMENT, BLOCK_COMMENT, STRING, CHARACTER, RAW_STRING } state = CODE;
+  std::string rawEnd;
+  int depth = 0;
+  bool inBody = false;
+  std::string text;
+  for (; row < lines.size(); ++row, col = 0) {
+    const std::string& l = lines[row];
+    size_t begin = col;
+    for (; col < l.size(); ++col) {
+      char c = l[col];
+      char next = col + 1 < l.size() ? l[col + 1] : '\0';
+      switch (state) {
+        case LINE_COMMENT:
+          break;
+        case BLOCK_COMMENT:
+          if (c == '*' && next == '/') state = CODE, begin = col + 2, ++col;
+          break;
+        case STRING:
+        case CHARACTER:
+          if (c == '\\') ++col;
+          else if (c == (state == STRING ? '"' : '\'')) state = CODE;
+          break;
+        case RAW_STRING:
+          if (l.compare(col, rawEnd.size(), rawEnd) == 0) state = CODE, col += rawEnd.size() - 1;
+          break;
+        case CODE:
+          if (c == '/' && next == '/') {
+            // Comments are left out: ROSE attaches them to the statement around the lambda.
+            text += l.substr(begin, col - begin);
+            state = LINE_COMMENT;
+          } else if (c == '/' && next == '*') {
+            text += l.substr(begin, col - begin) + " ";
+            state = BLOCK_COMMENT, ++col;
+          } else if (c == '"' && col > 0 && l[col - 1] == 'R') {
+            size_t open = l.find('(', col);
+            if (open == std::string::npos) return "";
+            rawEnd = ")" + l.substr(col + 1, open - col - 1) + "\"";
+            state = RAW_STRING, col = open;
+          } else if (c == '"') {
+            state = STRING;
+          } else if (c == '\'' && !isDigitSeparator(l, col)) {
+            state = CHARACTER;
+          } else if (c == '(' || c == '[' || c == '{') {
+            if (c == '{' && depth == 0) inBody = true;
+            ++depth;
+          } else if (c == ')' || c == ']' || c == '}') {
+            if (--depth < 0) return "";
+            if (depth == 0 && c == '}' && inBody) return text + l.substr(begin, col + 1 - begin);
+          }
+          break;
+      }
+    }
+    if (state == LINE_COMMENT || state == BLOCK_COMMENT) {
+      if (state == LINE_COMMENT) state = CODE;
+      text += "\n";
+    } else {
+      text += l.substr(begin) + "\n";
+    }
+  }
+  return "";
 }
 
 // ---------------------------------------------------------------------------------

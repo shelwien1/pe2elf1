@@ -75,8 +75,15 @@ class Translator {
   void checkTree(SgNode* node, int depth);  // EDG2SAGE_DEBUG: reports broken AST links
   std::string fileNameOf(edg::a_seq_number seq, edg::a_line_number* line = nullptr);
   bool isFromSourceFile(const edg::a_source_position& pos);
+  // Whether a position is in a system header (where constructs that cannot be translated, such
+  // as compiler intrinsics, are not reported as warnings: headers are not unparsed)
+  bool inSystemHeader(const edg::a_source_position& pos);
   // Text of the source between two positions on the same line (empty if unavailable)
   std::string sourceText(const edg::a_source_position& start, const edg::a_source_position& end);
+  // Source text of a lambda expression: from the "[" at its start to the "}" that ends its body
+  // (empty if unavailable)
+  std::string lambdaText(const edg::a_source_position& start);
+  const std::vector<std::string>& linesOf(const std::string& fileName);
 
   // ---------------------------------------------------------------- scopes
   SgScopeStatement* scopeFor(edg::a_scope_ptr scope);

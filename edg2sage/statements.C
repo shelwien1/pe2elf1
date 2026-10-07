@@ -117,7 +117,7 @@ void Translator::convertStatementListInto(a_statement_ptr first, SgScopeStatemen
       if (st != nullptr) appendStatementTo(scope, st);
     } catch (const Unsupported& u) {
       warnings++;
-      mlog[WARN] << "skipping statement (" << u.what << ")\n";
+      (inSystemHeader(s->position) ? mlog[TRACE] : mlog[WARN]) << "skipping statement (" << u.what << ")\n";
       SgStatement* st = SageBuilder::buildNullStatement_nfi();
       setPosition(st, s->position);
       appendStatementTo(scope, st);
