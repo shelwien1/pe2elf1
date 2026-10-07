@@ -89,13 +89,19 @@ class Translator {
                                       SgType* memberClassType = nullptr);
   SgClassDeclaration* classDeclarationFor(edg::a_type_ptr classType);   // first nondefining declaration
   SgEnumDeclaration* enumDeclarationFor(edg::a_type_ptr enumType);      // first nondefining declaration
+  SgInitializedName* enumeratorFor(edg::a_constant_ptr enumerator, edg::a_type_ptr enumType);
   SgTypedefDeclaration* typedefDeclarationFor(edg::a_type_ptr typedefType);
   SgSymbol* typedefParentScope(SgScopeStatement* scope);
   void setTypedefBaseDeclaration(SgTypedefDeclaration* decl);
   SgClassDefinition* classDefinitionFor(edg::a_type_ptr classType);
   SgType* pseudoType(const std::string& name, SgType* base);
   SgType* decltypeAutoType();
+  bool isPlaceholderType(SgType* type);
   SgType* vectorType(edg::a_type_ptr type);
+  std::string typeText(edg::a_type_ptr type);
+  std::string templateArgumentText(edg::a_template_arg_ptr arg);
+  SgExpression* pseudoExpression(const std::string& text, SgType* type);
+  SgType* templateArgumentType(edg::a_type_ptr type);
   void setEnumBase(SgEnumDeclaration* decl, edg::a_type_ptr enumType);
 
   // ---------------------------------------------------------------- declarations
@@ -232,6 +238,7 @@ class Translator {
   SgExpression* convertFieldSelection(edg::an_expr_node_ptr expr, bool arrow);
   SgExpression* convertStatementExpression(edg::an_expr_node_ptr expr);
   SgAggregateInitializer* convertAggregate(edg::a_constant_ptr con, SgType* type);
+  void markWrittenConstructorElement(SgInitializer* init, edg::a_dynamic_init_ptr dip);
   void appendAggregateElements(SgExprListExp* list, edg::a_constant_ptr aggregate);
   void setExpressionPosition(SgExpression* e, edg::an_expr_node_ptr expr);
   bool isImplicitNode(edg::an_expr_node_ptr expr);
@@ -268,8 +275,10 @@ class Translator {
   std::map<SgVariableDeclaration*, edg::a_source_position> declarationSpecifiers;
   std::map<std::pair<SgScopeStatement*, std::string>, SgVariableSymbol*> functionNameSymbols;  // constants whose backing expression is being translated
   int compoundLiterals = 0;
+  int unnamedTypes = 0;  // unnamed types given a name (see attachPendingBaseTypeDeclaration())
   bool suppressInitializers = false;  // the iteration variable of a range-based for
   std::map<std::string, SgTypedefDeclaration*> pseudoTypes;
+  std::map<std::string, SgVariableSymbol*> pseudoVariables;
   std::set<SgClassDeclaration*> firstUsedAsStatement;      // hidden first decl reused as forward declaration
   std::set<SgClassDeclaration*> hiddenDefinitions;         // definitions of template instances (see templates.C)
   std::set<SgTypedefDeclaration*> typedefInStatementList;

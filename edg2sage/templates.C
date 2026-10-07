@@ -347,14 +347,24 @@ SgTemplateArgumentPtrList Translator::convertTemplateArguments(a_template_arg_pt
     switch (a->kind) {
       case tak_type:
         arg = new SgTemplateArgument(SgTemplateArgument::type_argument, false,
-                                     convertType(accessibleArgumentType(a->variant.type)), nullptr, nullptr,
+                                     templateArgumentType(accessibleArgumentType(a->variant.type)), nullptr, nullptr,
                                      a->explicitly_specified);
         break;
       case tak_nontype: {
         SgExpression* e = nullptr;
-        if (!a->is_array_bound_of_unknown_type && a->variant.constant != nullptr) {
-          e = convertConstant(a->variant.constant);
+        a_constant_ptr c = a->is_array_bound_of_unknown_type ? nullptr : a->variant.constant;
+        if (c != nullptr && (c->kind == ck_address || c->kind == ck_ptr_to_member) && isCxx) {
+          // The address of a function, variable or member ("&C::f"): as EDG
+          // writes it (with a qualified name).  ROSE's name qualification of the
+          // names in the arguments of (shared) template instances is the one of
+          // their last use.
+          std::string text = templateArgumentText(a);
+          if (!text.empty() && text.find("<unnamed") == std::string::npos &&
+              text.find("<anon") == std::string::npos && text.find("lambda") == std::string::npos) {
+            e = pseudoExpression(text, convertType(c->type));
+          }
         }
+        if (e == nullptr && c != nullptr) e = convertConstant(c);
         if (e == nullptr) {
           e = SageBuilder::buildIntVal_nfi(0, "0");
           setCompilerGenerated(e);

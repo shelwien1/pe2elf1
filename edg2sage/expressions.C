@@ -996,11 +996,19 @@ SgExpression* Translator::convertOperation(an_expr_node_ptr expr) {
       // "p->~T()" for a type without a destructor to call (ROSE prints the
       // parentheses as part of the pseudo-destructor reference)
       SgExpression* object = A();
-      a_type_ptr ot = skip_typerefs(a->type);
-      if (k == eok_points_to_vacuous_destructor_call && ot != nullptr && ot->kind == tk_pointer) {
-        ot = skip_typerefs(ot->variant.pointer.type);
+      a_type_ptr ot = a->type;
+      if (k == eok_points_to_vacuous_destructor_call && skip_typerefs(ot)->kind == tk_pointer) {
+        ot = skip_typerefs(ot)->variant.pointer.type;
       }
-      SgPseudoDestructorRefExp* pd = new SgPseudoDestructorRefExp((Sg_File_Info*)nullptr, convertType(ot));
+      SgType* t = convertType(ot)->stripType(SgType::STRIP_MODIFIER_TYPE);
+      if (isSgNamedType(t) == nullptr) {
+        // "i.int::~int()": ROSE represents only pseudo-destructors of named
+        // types; the call has no effect, like "(void)i".
+        r = SageBuilder::buildCastExp_nfi(object, SgTypeVoid::createType(), SgCastExp::e_C_style_cast);
+        object->set_parent(r);
+        break;
+      }
+      SgPseudoDestructorRefExp* pd = new SgPseudoDestructorRefExp((Sg_File_Info*)nullptr, t);
       setPosition(pd, expr->position);
       r = k == eok_dot_vacuous_destructor_call ? binaryOp<SgDotExp>(object, pd) : binaryOp<SgArrowExp>(object, pd);
       break;
@@ -1396,10 +1404,10 @@ SgExpression* Translator::convertIntegerConstant(a_constant_ptr con, an_expr_nod
       long long ev = int_constant_is_signed(e) ? (long long)value_of_integer_constant(e, &ovf2)
                                                : (long long)unsigned_value_of_integer_constant(e, &ovf2);
       if (ev != sv) continue;
-      auto en = enumerators.find(e);
-      if (en == enumerators.end()) break;
-      SgEnumDeclaration* ed = isSgEnumDeclaration(en->second->get_parent());
-      return SageBuilder::buildEnumVal_nfi(sv, ed, en->second->get_name());
+      SgInitializedName* en = enumeratorFor(e, t);
+      if (en == nullptr) break;
+      SgEnumDeclaration* ed = isSgEnumDeclaration(en->get_parent());
+      return SageBuilder::buildEnumVal_nfi(sv, ed, en->get_name());
     }
     // Otherwise a cast of the value.
     SgExpression* v = SageBuilder::buildIntVal_nfi((int)sv, text);
@@ -1850,14 +1858,48 @@ SgAggregateInitializer* Translator::convertAggregate(a_constant_ptr con, SgType*
   return ai;
 }
 
+// A constructor call written as an element of an aggregate initializer
+// ("{T(1), {2, 3}}") is printed as written, with the class name or braces, and
+// is not compiler generated (ROSE stops printing the elements at the first
+// compiler-generated constructor call: the initialization of the elements
+// without initializer).
+void Translator::markWrittenConstructorElement(SgInitializer* init, a_dynamic_init_ptr dip) {
+  SgConstructorInitializer* ci = isSgConstructorInitializer(init);
+  if (ci == nullptr || dip == nullptr || dip->kind != dik_constructor) return;
+  bool hasArgs = !ci->get_args()->get_expressions().empty();
+  if (!dip->is_braced_initializer && !dip->is_explicit_cast && !hasArgs) return;
+  if (dip->is_braced_initializer && hasArgs) {
+    ci->set_is_braced_initialized(true);
+  } else if (dip->is_braced_initializer || dip->is_explicit_cast) {
+    ci->set_need_name(true);
+    ci->set_is_explicit_cast(true);
+  }  // (else an implicit conversion of the argument, printed "(arg)")
+  if (ci->isCompilerGenerated() && !(hasArgs && copyPosition(ci, ci->get_args()->get_expressions()[0]))) {
+    for (Sg_File_Info* fi : {ci->get_startOfConstruct(), ci->get_endOfConstruct(), ci->get_operatorPosition()}) {
+      if (fi != nullptr) {
+        fi->unsetCompilerGenerated();
+        fi->setTransformation();
+        fi->setOutputInCodeGeneration();
+      }
+    }
+  }
+}
+
 void Translator::appendAggregateElements(SgExprListExp* list, a_constant_ptr con) {
   auto element = [&](a_constant_ptr c) -> SgInitializer* {
     SgType* et = c->type != nullptr ? convertType(c->type) : nullptr;
-    if (c->kind == ck_aggregate) {
+    if (c->kind == ck_aggregate && !(c->is_result_of_constexpr_call && c->expr != nullptr)) {
       SgAggregateInitializer* sub = convertAggregate(c, et);
       return sub;
     }
-    return convertInitializerConstant(c, et);
+    SgInitializer* init = convertInitializerConstant(c, et);
+    if (c->kind == ck_dynamic_init) {
+      markWrittenConstructorElement(init, c->variant.dynamic_init.ptr);
+    } else if (c->kind == ck_aggregate && c->expr != nullptr && c->expr->kind == enk_temp_init) {
+      // the value of a constexpr constructor call: the call
+      markWrittenConstructorElement(init, c->expr->variant.init.dynamic_init);
+    }
+    return init;
   };
 
   for (a_constant_ptr c = con->variant.aggregate.first_constant; c != nullptr; c = c->next) {

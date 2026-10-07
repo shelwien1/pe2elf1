@@ -71,12 +71,13 @@ struct C : A, B {
 // names in nontype template arguments of member templates
 class T {
   static int twice(int x) { return 2 * x; }
-  static int twice(double x) { return (int)(2 * x); }
  public:
   template <int (*F)(int)> struct apply { int operator()(int x) const { return F(x); } };
-  static apply<twice>* make();
+  apply<twice> make();
 };
-T::apply<&T::twice>* T::make() { return 0; }
+T::apply<&T::twice> T::make() { return apply<twice>(); }
+struct M { int get() const { return 3; } };
+template <int (M::*G)() const> struct getter { int operator()(const M& m) const { return (m.*G)(); } };
 
 // protected member typedefs in template arguments of shared instances
 template <typename X> struct holder { typedef X type; X value; };
@@ -91,6 +92,6 @@ holder<wrapper<int>::visible> held = {42};
 int main() {
   std::printf("%d %d %d\n", selections(1), selections(5), counter);
   std::printf("%d %d %d\n", decltypes(), vectors(), typedefs());
-  std::printf("%g %d %d %d\n", news(), C().g(), T::make() == 0, held.value);
+  std::printf("%g %d %d %d\n", news(), C().g(), T().make()(21) + getter<&M::get>()(M()), held.value);
   return 0;
 }

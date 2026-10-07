@@ -2,6 +2,8 @@
 // (first nondefining) declarations that named types refer to.
 #include "edg2sage.h"
 
+#include "il_to_str.h"
+
 #include <cstdio>
 
 using namespace edg;
@@ -330,6 +332,71 @@ SgType* Translator::pseudoType(const std::string& name, SgType* base) {
   return decl->get_type();
 }
 
+// The text of a type as EDG writes it (with qualified names and without
+// typedefs), e.g. "int (const ns::S &)".
+static void appendTypeText(a_const_char* str, an_il_to_str_output_control_block_ptr octl) {
+  static_cast<std::string*>(octl->text_buffer)->append(str);
+}
+
+std::string Translator::typeText(a_type_ptr type) {
+  std::string text;
+  an_il_to_str_output_control_block octl;
+  clear_il_to_str_output_control_block(&octl);
+  octl.output_str = appendTypeText;
+  octl.text_buffer = &text;
+  octl.suppress_typedefs = TRUE;
+  form_type(type, &octl);
+  return text;
+}
+
+// The text of a template argument as EDG writes it.
+std::string Translator::templateArgumentText(a_template_arg_ptr arg) {
+  std::string text;
+  an_il_to_str_output_control_block octl;
+  clear_il_to_str_output_control_block(&octl);
+  octl.output_str = appendTypeText;
+  octl.text_buffer = &text;
+  octl.suppress_typedefs = TRUE;
+  form_a_template_arg(arg, &octl);
+  return text;
+}
+
+// The type of a template type argument.  ROSE prints function and array types
+// in template arguments wrongly when the template instance is used in a
+// reference or pointer to a cv-qualified type ("const std::function<int (int)>&"
+// becomes "const std::function<int ()(int)>&"): those are printed as written by
+// EDG, as pseudo types.
+SgType* Translator::templateArgumentType(a_type_ptr type) {
+  SgType* t = convertType(type);
+  a_type_ptr k = skip_typerefs(type);
+  if (k != nullptr && (k->kind == tk_routine || k->kind == tk_array) && isCxx) {
+    std::string text = typeText(type);
+    if (!text.empty()) return pseudoType(text, t);
+  }
+  return t;
+}
+
+// An expression ROSE has no representation of, printed as written: a reference
+// to a hidden variable (in global scope, never unparsed itself) with that name.
+SgExpression* Translator::pseudoExpression(const std::string& text, SgType* type) {
+  SgVariableSymbol*& sym = pseudoVariables[text];
+  if (sym == nullptr) {
+    SgInitializedName* in = SageBuilder::buildInitializedName_nfi(SgName(text), type, nullptr);
+    SgVariableDeclaration* decl = new SgVariableDeclaration(in);
+    decl->set_firstNondefiningDeclaration(decl);
+    decl->set_parent(globalScope);
+    in->set_scope(globalScope);
+    in->set_parent(decl);
+    setCompilerGenerated(decl);
+    setCompilerGenerated(in);
+    sym = new SgVariableSymbol(in);
+    globalScope->insert_symbol(SgName(text), sym);
+  }
+  SgVarRefExp* r = SageBuilder::buildVarRefExp_nfi(sym);
+  setCompilerGenerated(r);
+  return r;
+}
+
 // "decltype(auto)"
 SgType* Translator::decltypeAutoType() {
   return pseudoType("decltype(auto)", SageBuilder::buildAutoType());
@@ -406,6 +473,24 @@ SgEnumDeclaration* Translator::enumDeclarationFor(a_type_ptr type) {
   scope->insert_symbol(name, sym);
   firstEnumDecl[type] = decl;
   return decl;
+}
+
+// The enumerator of an enumeration constant.  The enumerators of enumerations
+// whose definition is not translated (members of template instances) are
+// created on demand, with the first declaration of the enumeration.
+SgInitializedName* Translator::enumeratorFor(a_constant_ptr e, a_type_ptr enumType) {
+  auto it = enumerators.find(e);
+  if (it != enumerators.end()) return it->second;
+  SgName name = nameOf(&e->source_corresp);
+  if (name.is_null()) return nullptr;
+  SgEnumDeclaration* ed = enumDeclarationFor(enumType);
+  SgInitializedName* in = SageBuilder::buildInitializedName_nfi(name, ed->get_type(), nullptr);
+  in->set_parent(ed);
+  in->set_scope(ed->get_scope());
+  setCompilerGenerated(in);
+  ed->get_scope()->insert_symbol(name, new SgEnumFieldSymbol(in));
+  enumerators[e] = in;
+  return in;
 }
 
 // A typedef of a class or enum type refers to the declaration of that type

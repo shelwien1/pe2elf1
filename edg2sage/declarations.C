@@ -178,7 +178,21 @@ void Translator::attachPendingBaseTypeDeclaration(SgDeclarationStatement* decl) 
     base->set_parent(td);
   } else {
     // Cannot be attached (e.g. a function returning a struct defined in its
-    // declaration): emit the definition as a separate declaration.
+    // declaration, in C): emit the definition as a separate declaration.  An
+    // unnamed type is given a name (ROSE does not print its generated names
+    // "__anonymous_0x...") for the declaration to refer to.
+    SgName unnamed("__unnamed_type_" + std::to_string(++unnamedTypes));
+    for (SgDeclarationStatement* d : {base, first}) {
+      SgEnumDeclaration* ed = isSgEnumDeclaration(d);
+      SgClassDeclaration* cd = isSgClassDeclaration(d);
+      if (ed != nullptr && ed->get_isUnNamed()) {
+        ed->set_name(unnamed);
+        ed->set_isUnNamed(false);
+      } else if (cd != nullptr && cd->get_isUnNamed()) {
+        cd->set_name(unnamed);
+        cd->set_isUnNamed(false);
+      }
+    }
     appendStatementTo(isSgScopeStatement(decl->get_parent()) ? isSgScopeStatement(decl->get_parent()) : currentScope(),
                       base);
   }
@@ -344,6 +358,13 @@ void Translator::translateDeclarationEntry(SeqCursor& cursor, SgScopeStatement* 
 // Variables and fields
 // ---------------------------------------------------------------------------------
 
+// "auto" or "decltype(auto)" (possibly cv-qualified)
+bool Translator::isPlaceholderType(SgType* type) {
+  type = type->stripType(SgType::STRIP_MODIFIER_TYPE);
+  SgTypedefType* tt = isSgTypedefType(type);
+  return isSgAutoType(type) != nullptr || (tt != nullptr && tt->get_name() == "decltype(auto)");
+}
+
 SgDeclarationStatement* Translator::translateVariable(a_variable_ptr var, a_src_seq_secondary_decl_ptr sec,
                                                       SgScopeStatement* scope) {
   a_type_ptr declaredType = sec != nullptr && sec->declared_type != nullptr ? sec->declared_type
@@ -367,6 +388,13 @@ SgDeclarationStatement* Translator::translateVariable(a_variable_ptr var, a_src_
 
   SgInitializer* init = nullptr;
   if (sec == nullptr && !suppressInitializers) init = convertVariableInitializer(var);
+  if ((isSgConstructorInitializer(init) != nullptr || isSgAggregateInitializer(init) != nullptr) &&
+      isPlaceholderType(type)) {
+    // "auto x = T(1, 2);", "auto x = T{1, 2};": the initializer does not name
+    // the type ("auto x(1, 2)", "auto x = {1, 2}" would mean something else),
+    // so the deduced type is declared ("T x(1, 2);").
+    type = convertType(var->type);
+  }
   if (init != nullptr && var->initializer_range.start.seq != 0 &&
       (init->get_startOfConstruct() == nullptr || init->get_startOfConstruct()->isCompilerGenerated())) {
     // e.g. the constructor initializer of "T x(1, 2);"
@@ -474,7 +502,16 @@ SgVariableDeclaration* Translator::declaratorGroupFor(SgScopeStatement* scope, S
       it->second.column != specifiers.column) {
     return nullptr;
   }
-  if (prev->get_variables().empty() || prev->get_variables().back()->get_type() != type) return nullptr;
+  if (prev->get_variables().empty()) return nullptr;
+  // ("struct {...} *a, b[10];": the declarators share the base type; ROSE
+  // prints the array declarators of the variables after the first one, but
+  // not their pointer declarators)
+  const unsigned char declarators = SgType::STRIP_ARRAY_TYPE | SgType::STRIP_POINTER_TYPE;
+  SgType* lastType = prev->get_variables().back()->get_type();
+  if (lastType->stripType(declarators) != type->stripType(declarators) ||
+      type->stripType(SgType::STRIP_ARRAY_TYPE) != type->stripType(declarators)) {
+    return nullptr;
+  }
   return prev;
 }
 
@@ -837,7 +874,9 @@ SgFunctionDeclaration* Translator::translateRoutine(a_routine_ptr routine, a_src
   if (routine->is_declared_constexpr) decl->set_is_constexpr(true);
   applyFunctionAttributes(decl, sec ? sec->attributes : routine->source_corresp.attributes, sec == nullptr);
   a_routine_type_supplement_ptr rtsp = skip_typerefs(routine->type)->variant.routine.extra_info;
-  if (!rtsp->prototyped && isDefinition && !isCxx && rtsp->param_type_list != nullptr) {
+  // (a definition with old-style parameters may follow a prototype)
+  if ((!rtsp->prototyped || rtsp->old_style_params_scanned) && isDefinition && !isCxx &&
+      rtsp->param_type_list != nullptr) {
     decl->set_oldStyleDefinition(true);
   }
 
@@ -852,6 +891,7 @@ SgFunctionDeclaration* Translator::translateRoutine(a_routine_ptr routine, a_src
   setPosition(params, start, end);
 
   if (isDefinition) {
+    attachPendingBaseTypeDeclaration(decl);  // (before the declarations in the body)
     SgBasicBlock* body = SageBuilder::buildBasicBlock_nfi();
     SgFunctionDefinition* def = new SgFunctionDefinition(decl, body);
     decl->set_definition(def);
@@ -980,8 +1020,21 @@ void Translator::translateTypeDeclaration(SeqCursor& cursor, a_type_ptr type, a_
     // mention of a tag in another declaration).
     cursor.advance();
     if (!autonomous) {
-      if (isClass) classDeclarationFor(type);
-      else enumDeclarationFor(type);
+      if (isClass) {
+        SgClassDeclaration* first = classDeclarationFor(type);
+        // "namespace N { struct A { struct B* p; }; }" declares N::B: ROSE
+        // prints the member with a qualified name ("struct N::B* p"), which
+        // needs a declaration of N::B before A.
+        SgScopeStatement* home = first->get_scope();
+        if (isCxx && sec->first_declaration && isSgClassDefinition(scope) != nullptr && home != scope &&
+            isSgClassDefinition(home) == nullptr && first->get_parent() == home && !firstUsedAsStatement.count(first)) {
+          firstUsedAsStatement.insert(first);
+          setPosition(first, sec->decl_position);
+          appendStatementTo(home, first);
+        }
+      } else {
+        enumDeclarationFor(type);
+      }
       return;
     }
     SgDeclarationStatement* d = nullptr;
