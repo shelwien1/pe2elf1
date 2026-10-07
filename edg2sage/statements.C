@@ -301,7 +301,8 @@ SgStatement* Translator::convertCondition(an_expr_node_ptr expr, SgScopeStatemen
     a_condition_supplement_ptr cs = expr->variant.condition;
     if (cs->scope != nullptr) scopes[cs->scope] = scope;
     a_variable_ptr var = nullptr;
-    if (cs->scope != nullptr) var = cs->scope->variables;
+    if (cs->dynamic_init != nullptr) var = cs->dynamic_init->variable;
+    if (var == nullptr && cs->scope != nullptr) var = cs->scope->variables;
     if (var != nullptr) {
       SgDeclarationStatement* d = translateVariable(var, nullptr, scope);
       return d;
@@ -536,8 +537,8 @@ SgStatement* Translator::convertTryStatement(a_statement_ptr stmt) {
       param = new SgVariableDeclaration(in);
       param->set_firstNondefiningDeclaration(param);
       in->set_scope(c);
-      setCompilerGenerated(param);
-      setCompilerGenerated(in);
+      setPosition(param, h->catch_position);  // printed as "..."
+      setPosition(in, h->catch_position);
     }
     c->set_condition(param);
     param->set_parent(c);

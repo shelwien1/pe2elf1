@@ -124,7 +124,7 @@ class Translator {
                                             SgScopeStatement* scope);
   SgDeclarationStatement* translateField(edg::a_field_ptr field, SgClassDefinition* cdef);
   SgFunctionDeclaration* translateRoutine(edg::a_routine_ptr routine, edg::a_src_seq_secondary_decl_ptr sec,
-                                          SgScopeStatement* scope);
+                                          SgScopeStatement* scope, bool declarationOnly = false);
   void translateTypeDeclaration(SeqCursor& cursor, edg::a_type_ptr type, edg::a_src_seq_secondary_decl_ptr sec,
                                 SgScopeStatement* scope);
   SgClassDeclaration* translateClassDefinition(SeqCursor& cursor, edg::a_type_ptr type, SgScopeStatement* scope);
@@ -181,6 +181,8 @@ class Translator {
   void translateTemplate(SeqCursor& cursor, edg::a_template_ptr tmpl, edg::a_src_seq_secondary_decl_ptr sec,
                          SgScopeStatement* scope);
   void skipTemplateMembers(SeqCursor& cursor, edg::a_template_ptr tmpl);
+  SgDeclarationStatement* translateInstantiationDirective(edg::an_instantiation_directive_ptr id,
+                                                          SgScopeStatement* scope);
   std::string templateText(edg::a_template_ptr tmpl);
 
   // --- attributes (attributes.C)

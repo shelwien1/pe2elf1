@@ -953,12 +953,25 @@ SgExpression* Translator::convertTempInit(an_expr_node_ptr expr) {
 SgExpression* Translator::convertNewDelete(an_expr_node_ptr expr) {
   a_new_delete_supplement_ptr nd = expr->variant.new_delete;
   if (nd->is_new) {
-    SgType* type = convertType(nd->type);
+    SgType* type = nullptr;
+    a_type_ptr nt = skip_typerefs(nd->type);
+    if (nd->number_of_elements != nullptr && nt != nullptr && nt->kind == tk_array) {
+      // "new T[n]": the type allocated is an array whose bound is the
+      // run-time number of elements.
+      SgExpression* n = convertExpression(nd->number_of_elements);
+      SgArrayType* at = SageBuilder::buildArrayType(convertType(nt->variant.array.element_type), n);
+      n->set_parent(at);
+      type = at;
+    } else {
+      type = convertType(nd->type);
+    }
     SgExprListExp* placement = nullptr;
     if (nd->placement_new && nd->arg != nullptr) {
-      // The first argument is the allocation size (implicit); the rest are the
-      // placement arguments.
-      placement = convertArgumentList(nd->arg->next);
+      // The arguments of the allocation function after the (implicit) size and
+      // alignment are the placement arguments.
+      an_expr_node_ptr first = nd->arg;
+      if (nd->aligned_version && first != nullptr) first = first->next;
+      placement = convertArgumentList(first);
     }
     SgConstructorInitializer* ctor = nullptr;
     if (nd->dynamic_init != nullptr) {
@@ -981,7 +994,6 @@ SgExpression* Translator::convertNewDelete(an_expr_node_ptr expr) {
     }
     if (ctor != nullptr) ctor->set_need_name(false);
     SgExpression* arraySize = nullptr;
-    if (nd->number_of_elements != nullptr) arraySize = convertExpression(nd->number_of_elements);
     SgFunctionDeclaration* op = nd->routine != nullptr ? functionDeclarationFor(nd->routine) : nullptr;
     SgNewExp* n = new SgNewExp(type, placement, ctor, arraySize, nd->global_new_or_delete ? 1 : 0, op);
     if (placement) placement->set_parent(n);
@@ -1178,8 +1190,24 @@ SgExpression* Translator::convertIntegerConstant(a_constant_ptr con, an_expr_nod
     return SageBuilder::buildLongLongIntVal_nfi(sv, text);
   }
   if (t->variant.integer.enum_type) {
-    // An integer value of an enumeration type that does not correspond to an
-    // enumerator reference: a cast of the value.
+    // A value of an enumeration type (e.g. a folded enumerator reference):
+    // the enumerator with that value, if there is one.
+    a_constant_ptr list = t->variant.integer.is_scoped_enum
+                              ? (t->variant.integer.enum_info.assoc_scope ? t->variant.integer.enum_info.assoc_scope->constants
+                                                                          : nullptr)
+                              : t->variant.integer.enum_info.constant_list;
+    for (a_constant_ptr e = list; e != nullptr; e = e->next) {
+      if (e->kind != ck_integer) continue;
+      a_boolean ovf2 = FALSE;
+      long long ev = int_constant_is_signed(e) ? (long long)value_of_integer_constant(e, &ovf2)
+                                               : (long long)unsigned_value_of_integer_constant(e, &ovf2);
+      if (ev != sv) continue;
+      auto en = enumerators.find(e);
+      if (en == enumerators.end()) break;
+      SgEnumDeclaration* ed = isSgEnumDeclaration(en->second->get_parent());
+      return SageBuilder::buildEnumVal_nfi(sv, ed, en->second->get_name());
+    }
+    // Otherwise a cast of the value.
     SgExpression* v = SageBuilder::buildIntVal_nfi((int)sv, text);
     setCompilerGenerated(v);
     SgCastExp* c = SageBuilder::buildCastExp_nfi(v, convertType(con->type), SgCastExp::e_C_style_cast);

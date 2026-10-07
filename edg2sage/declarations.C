@@ -39,6 +39,10 @@ void Translator::appendStatementTo(SgScopeStatement* scope, SgStatement* stmt) {
   } else if (SgClassDefinition* c = isSgClassDefinition(scope)) {
     SgDeclarationStatement* d = isSgDeclarationStatement(stmt);
     ROSE_ASSERT(d != nullptr);
+    // Declarations in a class that are not members (friends, ...) have the
+    // default access (ROSE requires one for every declaration in a class).
+    SgAccessModifier& am = d->get_declarationModifier().get_accessModifier();
+    if (!am.isPrivate() && !am.isProtected() && !am.isPublic() && !am.isDefault()) am.setDefault();
     c->append_member(d);
   } else if (SgNamespaceDefinitionStatement* n = isSgNamespaceDefinitionStatement(scope)) {
     SgDeclarationStatement* d = isSgDeclarationStatement(stmt);
@@ -247,6 +251,12 @@ void Translator::translateDeclarationEntry(SeqCursor& cursor, SgScopeStatement* 
       case iek_template:
         translateTemplate(cursor, (a_template_ptr)ptr, sec, scope);
         return;  // advances the cursor itself
+      case iek_instantiation_directive: {
+        SgDeclarationStatement* d = translateInstantiationDirective((an_instantiation_directive_ptr)ptr, scope);
+        cursor.advance();
+        if (d) appendStatementTo(scope, d);
+        return;
+      }
       case iek_using_decl: {
         SgDeclarationStatement* d = translateUsingDeclaration((a_using_decl_ptr)ptr, scope);
         cursor.advance();
@@ -685,9 +695,10 @@ SgFunctionSymbol* Translator::functionSymbolFor(a_routine_ptr routine) {
 }
 
 SgFunctionDeclaration* Translator::translateRoutine(a_routine_ptr routine, a_src_seq_secondary_decl_ptr sec,
-                                                   SgScopeStatement* scope) {
+                                                   SgScopeStatement* scope, bool declarationOnly) {
   a_scope_ptr fscope = functionScopeOf(routine);
-  bool isDefinition = (sec == nullptr) && fscope != nullptr && !routine->is_defaulted && !routine->is_deleted;
+  bool isDefinition = !declarationOnly && (sec == nullptr) && fscope != nullptr && !routine->is_defaulted &&
+                      !routine->is_deleted;
   SgScopeStatement* semanticScope = parentScopeOf(&routine->source_corresp, scope);
   bool isMember = isSgClassDefinition(semanticScope) != nullptr;
   SgName name = nameOf(&routine->source_corresp);
@@ -742,6 +753,8 @@ SgFunctionDeclaration* Translator::translateRoutine(a_routine_ptr routine, a_src
   if (routine->is_explicit_constructor || routine->is_explicit_conversion_function) fm.setExplicit();
   if (routine->is_defaulted) fm.setMarkedDefault();
   if (routine->is_deleted) fm.setMarkedDelete();
+  bool isFriend = sec != nullptr ? sec->friend_decl : (routine->defined_in_friend_decl && isSgClassDefinition(scope) != nullptr);
+  if (isFriend) decl->get_declarationModifier().setFriend();
   if (routine->override) decl->get_declarationModifier().setOverride();
   if (routine->final) decl->get_declarationModifier().setFinal();
   setSpecialFunctionKind(decl, routine);
@@ -904,6 +917,7 @@ void Translator::translateTypeDeclaration(SeqCursor& cursor, a_type_ptr type, a_
       }
       firstUsedAsStatement.insert(first);
       setPosition(fwd, sec->decl_position);
+      if (sec->friend_decl) fwd->get_declarationModifier().setFriend();
       d = fwd;
     } else {
       SgEnumDeclaration* first = enumDeclarationFor(type);

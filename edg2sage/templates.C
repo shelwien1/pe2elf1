@@ -254,6 +254,44 @@ void Translator::translateTemplate(SeqCursor& cursor, a_template_ptr tmpl, a_src
   appendStatementTo(scope, decl);
 }
 
+// "template class X<int>;", "extern template void f<int>(int);"
+SgDeclarationStatement* Translator::translateInstantiationDirective(an_instantiation_directive_ptr id,
+                                                                    SgScopeStatement* scope) {
+  SgDeclarationStatement* decl = nullptr;
+  switch ((an_il_entry_kind)id->entity.kind) {
+    case iek_type: {
+      a_type_ptr type = skip_typerefs((a_type_ptr)id->entity.ptr);
+      if (!isTemplateInstance(type)) break;
+      SgClassDeclaration* first = classDeclarationFor(type);
+      SgClassDeclaration* d = newNondefiningClassDeclaration(first);
+      if (SgTemplateInstantiationDecl* ti = isSgTemplateInstantiationDecl(d)) {
+        for (SgTemplateArgument* a : convertTemplateArguments(type->variant.class_struct_union.extra_info->template_arg_list)) {
+          a->set_parent(ti);
+          ti->get_templateArguments().push_back(a);
+        }
+      }
+      decl = d;
+      break;
+    }
+    case iek_routine: {
+      a_routine_ptr routine = (a_routine_ptr)id->entity.ptr;
+      if (routine->template_arg_list == nullptr) break;  // a member of a class template instance
+      decl = translateRoutine(routine, nullptr, scope, true);
+      break;
+    }
+    default:
+      break;
+  }
+  if (decl == nullptr) throw Unsupported("explicit instantiation of this kind of entity");
+  SgTemplateInstantiationDirectiveStatement* s = new SgTemplateInstantiationDirectiveStatement(decl);
+  decl->set_parent(s);
+  s->set_firstNondefiningDeclaration(s);
+  s->set_do_not_instantiate(id->do_not_instantiate);
+  setPosition(s, id->position);
+  setPosition(decl, id->position);
+  return s;
+}
+
 // ---------------------------------------------------------------------------------
 // Template arguments
 // ---------------------------------------------------------------------------------
@@ -279,6 +317,7 @@ SgTemplateArgumentPtrList Translator::convertTemplateArguments(a_template_arg_pt
         arg = new SgTemplateArgument(SgTemplateArgument::nontype_argument, false, nullptr, e, nullptr,
                                      a->explicitly_specified);
         e->set_parent(arg);
+        fillMissingPositions(e);
         break;
       }
       case tak_template: {
@@ -511,6 +550,15 @@ SgFunctionDeclaration* Translator::newFunctionDeclaration(a_routine_ptr routine,
     }
     if (routine->is_specialized) result->set_specialization(SgDeclarationStatement::e_specialization);
     return result;
+  }
+  if (member && routine->is_specialized && routine->is_template_function) {
+    // An explicit specialization of a member of a class template
+    // ("template<> void X<int>::f() {...}"): ROSE prints "template<>" for it.
+    SgTemplateInstantiationMemberFunctionDecl* d = new SgTemplateInstantiationMemberFunctionDecl(name, ftype, nullptr);
+    d->set_templateName(name);
+    d->set_nameResetFromMangledForm(true);
+    d->set_specialization(SgDeclarationStatement::e_specialization);
+    return d;
   }
   if (member) return new SgMemberFunctionDeclaration(name, ftype, nullptr);
   return new SgFunctionDeclaration(name, ftype, nullptr);

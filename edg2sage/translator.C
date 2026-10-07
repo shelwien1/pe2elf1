@@ -168,8 +168,22 @@ class MissingPositions : public ROSE_VisitTraversal {
 };
 }  // namespace
 
-void Translator::fillMissingPositions(SgNode*) {
+void Translator::fillMissingPositions(SgNode* root) {
   MissingPositions mp(this);
+  if (root != nullptr) {
+    // Only the subtree (e.g. an expression that is unparsed during the
+    // translation to name a template instance)
+    std::vector<SgNode*> work(1, root);
+    while (!work.empty()) {
+      SgNode* n = work.back();
+      work.pop_back();
+      mp.visit(n);
+      for (SgNode* c : n->get_traversalSuccessorContainer()) {
+        if (c != nullptr) work.push_back(c);
+      }
+    }
+    return;
+  }
   mp.traverseMemoryPool();
 }
 
@@ -335,7 +349,7 @@ void Translator::translate() {
   SageBuilder::popScopeStack();
   SageBuilder::setSourcePositionClassificationMode(savedMode);
 
-  fillMissingPositions(globalScope);
+  fillMissingPositions(nullptr);
   if (std::getenv("EDG2SAGE_DEBUG") != nullptr) checkTree(globalScope, 0);
   if (warnings > 0 && SgProject::get_verbose() > 0) {
     mlog[Sawyer::Message::WARN] << warnings << " IL constructs could not be translated\n";
