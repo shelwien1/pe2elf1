@@ -26,6 +26,13 @@ found:
   return i;
 }
 
+static int hidden = 11;
+extern int hidden; /* same (internal) linkage */
+static int read_hidden(void) {
+  extern int hidden; /* the file-scope variable, not a new local one */
+  return hidden;
+}
+
 int main(void) {
   int v[] = {4, 8, 15, 16, 23, 42};
   int a = 1, b = 2, c;
@@ -46,5 +53,7 @@ int main(void) {
   printf("%.4f %.2f\n", d, f);
   long long big = 1LL << 40;
   printf("%lld %llx\n", big, (unsigned long long)big);
+  hidden = 12;
+  printf("%d\n", read_hidden());
   return 0;
 }

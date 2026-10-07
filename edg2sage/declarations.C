@@ -497,7 +497,13 @@ SgDeclarationStatement* Translator::translateVariable(a_variable_ptr var, a_src_
       semanticScope->insert_symbol(name, sym);
     }
   } else {
-    iname->set_prev_decl_item(prev->second);
+    // (ROSE's unparser omits "extern" in a declaration whose previous
+    // declaration is static, but "extern int x;" in a block after
+    // "static int x;" is not "int x;")
+    SgVariableDeclaration* pd = isSgVariableDeclaration(prev->second->get_parent());
+    bool externAfterStatic = decl->get_declarationModifier().get_storageModifier().isExtern() && pd != nullptr &&
+                             pd->get_declarationModifier().get_storageModifier().isStatic();
+    if (!externAfterStatic) iname->set_prev_decl_item(prev->second);
     if (sec == nullptr) {
       // The defining declaration: later references use it for its initializer.
       prev->second->set_definition(decl);
