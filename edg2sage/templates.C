@@ -235,6 +235,7 @@ void Translator::translateTemplate(SeqCursor& cursor, a_template_ptr tmpl, a_src
       // instantiation.
       definingClassDecl[proto] = cd;
       firstClassDecl[proto] = fc;
+      classTypes[fc] = proto;
       a_class_type_supplement_ptr ctsp = proto->variant.class_struct_union.extra_info;
       if (ctsp != nullptr && ctsp->assoc_scope != nullptr) scopes[ctsp->assoc_scope] = def;
       setCompilerGenerated(def);
@@ -436,6 +437,7 @@ SgClassDeclaration* Translator::instanceDeclarationFor(a_type_ptr type) {
   // parameters) only appears in templates: it is represented by the template.
   if (type->variant.class_struct_union.is_nonreal_class && tdecl != nullptr) {
     firstClassDecl[type] = tdecl;
+    classTypes[tdecl] = type;
     return tdecl;
   }
   SgScopeStatement* scope = parentScopeOf(&type->source_corresp);
@@ -467,6 +469,7 @@ SgClassDeclaration* Translator::instanceDeclarationFor(a_type_ptr type) {
   }
   scope->insert_symbol(name, new SgClassSymbol(decl));
   firstClassDecl[type] = decl;
+  classTypes[decl] = type;
   return decl;
 }
 

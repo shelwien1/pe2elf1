@@ -193,16 +193,73 @@ static bool isEmptyAggregate(SgExpression* e) {
 
 // "T()": a value-initialized temporary.  The type is written without
 // typedefs (ROSE qualifies the name of a class here, not of a typedef).
-static SgConstructorInitializer* valueInitializedTemporary(SgType* type) {
-  // (a class through its declaration; other types, e.g. pointers, by their
-  // typedef name, as "X()" -- "struct S *()" would not parse)
-  SgType* t = type != nullptr ? type->stripType(SgType::STRIP_TYPEDEF_TYPE) : type;
-  if (isSgClassType(t) == nullptr && type != nullptr) t = type;
+// "T()": a value-initialized temporary.  Classes are referred to through
+// their default constructor (for a class without user-provided constructors,
+// a declaration of the implicit one): ROSE's unparser omits the name of a class
+// template instance in the arguments of a constructor call in a declaration
+// ("H h((L<int>()))" became "H h((()))") unless it is printed as the
+// qualifier of the constructor.  Other types, e.g. pointers, are referred to by
+// their typedef name ("X()"; "struct S *()" would not parse).
+SgConstructorInitializer* Translator::valueInitializedTemporary(SgType* type) {
+  SgType* t = type != nullptr ? type->stripType(SgType::STRIP_TYPEDEF_TYPE | SgType::STRIP_MODIFIER_TYPE) : type;
+  SgMemberFunctionDeclaration* ctor = nullptr;
+  if (SgClassType* ct = isSgClassType(t)) {
+    if (isCxx) ctor = implicitDefaultConstructor(ct);
+  } else if (type != nullptr) {
+    t = type->stripType(SgType::STRIP_MODIFIER_TYPE);
+  }
   SgExprListExp* args = SageBuilder::buildExprListExp_nfi();
-  SgConstructorInitializer* ci = SageBuilder::buildConstructorInitializer_nfi(nullptr, args, t, true, false, true, true);
+  SgConstructorInitializer* ci = SageBuilder::buildConstructorInitializer_nfi(ctor, args, t, true, false, true, true);
   args->set_parent(ci);
   if (isSgClassType(t)) ci->set_associated_class_unknown(false);
   return ci;
+}
+
+// The default constructor of a class: the declared one, or a (hidden)
+// declaration of the implicit one.
+SgMemberFunctionDeclaration* Translator::implicitDefaultConstructor(SgClassType* ct) {
+  SgDeclarationStatement* first = ct->get_declaration();
+  if (first != nullptr && first->get_firstNondefiningDeclaration() != nullptr) first = first->get_firstNondefiningDeclaration();
+  auto ti = classTypes.find(first);
+  if (ti == classTypes.end()) return nullptr;
+  a_type_ptr cls = ti->second;
+  auto it = implicitConstructors.find(cls);
+  if (it != implicitConstructors.end()) return it->second;
+  SgMemberFunctionDeclaration* d = nullptr;
+  a_class_type_supplement_ptr ctsp = cls->variant.class_struct_union.extra_info;
+  for (a_routine_ptr r = ctsp != nullptr && ctsp->assoc_scope ? ctsp->assoc_scope->routines : nullptr; r != nullptr; r = r->next) {
+    if (r->special_kind != sfk_constructor) continue;
+    a_type_ptr rt = skip_typerefs(r->type);
+    a_routine_type_supplement_ptr rtsp = rt->kind == tk_routine ? rt->variant.routine.extra_info : nullptr;
+    if (rtsp != nullptr && (rtsp->param_type_list == nullptr || rtsp->param_type_list->has_default_arg)) {
+      d = isSgMemberFunctionDeclaration(functionDeclarationFor(r));
+      break;
+    }
+  }
+  SgClassDefinition* cdef = d == nullptr ? classDefinitionFor(cls) : nullptr;
+  if (d == nullptr && cdef != nullptr) {
+    SgClassDeclaration* cdecl = isSgClassDeclaration(first);
+    SgName name = cdecl->get_name();
+    if (SgTemplateInstantiationDecl* tid = isSgTemplateInstantiationDecl(cdecl)) name = tid->get_templateName();
+    SgMemberFunctionType* ft = SageBuilder::buildMemberFunctionType(SgTypeVoid::createType(), new SgFunctionParameterTypeList(),
+                                                                    cdef, 0);
+    d = new SgMemberFunctionDeclaration(name, ft, nullptr);
+    SgFunctionParameterList* params = SageBuilder::buildFunctionParameterList_nfi();
+    SgFunctionParameterList* old = d->get_parameterList();
+    d->set_parameterList(params);
+    params->set_parent(d);
+    if (old != nullptr && old != params) delete old;
+    d->set_scope(cdef);
+    d->set_parent(cdef);
+    d->set_firstNondefiningDeclaration(d);
+    d->setForward();
+    d->get_specialFunctionModifier().setConstructor();
+    setCompilerGenerated(d);
+    setCompilerGenerated(params);
+    cdef->insert_symbol(name, new SgMemberFunctionSymbol(d));
+  }
+  implicitConstructors[cls] = d;
+  return d;
 }
 
 SgExpression* Translator::convertExpression(an_expr_node_ptr expr) {
@@ -1811,10 +1868,33 @@ SgInitializer* Translator::convertDynamicInit(a_dynamic_init_ptr dip, SgType* ty
   }
 }
 
+// Whether the default constructor of a class is explicit (then "T x = {};"
+// does not compile, "T x = T();" does).
+static bool hasExplicitDefaultConstructor(a_type_ptr type) {
+  type = skip_typerefs(type);
+  if (type == nullptr || (type->kind != tk_class && type->kind != tk_struct)) return false;
+  a_class_type_supplement_ptr ctsp = type->variant.class_struct_union.extra_info;
+  a_scope_ptr scope = ctsp != nullptr ? ctsp->assoc_scope : nullptr;
+  for (a_routine_ptr r = scope ? scope->routines : nullptr; r != nullptr; r = r->next) {
+    if (r->special_kind != sfk_constructor || !r->is_explicit_constructor) continue;
+    a_type_ptr rt = skip_typerefs(r->type);
+    a_routine_type_supplement_ptr rtsp = rt != nullptr && rt->kind == tk_routine ? rt->variant.routine.extra_info : nullptr;
+    if (rtsp != nullptr && (rtsp->param_type_list == nullptr || rtsp->param_type_list->has_default_arg)) return true;
+  }
+  return false;
+}
+
 SgInitializer* Translator::convertInitializerConstant(a_constant_ptr con, SgType* type) {
   if (con == nullptr) return nullptr;
   switch (con->kind) {
     case ck_aggregate: {
+      if (con->variant.aggregate.first_constant == nullptr && isCxx && hasExplicitDefaultConstructor(con->type)) {
+        // "T x = T();" with an explicit default constructor
+        SgConstructorInitializer* ci = valueInitializedTemporary(type != nullptr ? type : convertType(con->type));
+        ci->set_is_explicit_cast(true);
+        setCompilerGenerated(ci->get_args());
+        return ci;
+      }
       // The closure object of a lambda: the backing expression is the lambda.
       an_expr_node_ptr be = con->expr;
       if (be != nullptr && (be->kind == enk_lambda ||

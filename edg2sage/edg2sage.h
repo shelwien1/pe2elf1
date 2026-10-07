@@ -239,6 +239,8 @@ class Translator {
   SgExpression* convertFieldSelection(edg::an_expr_node_ptr expr, bool arrow);
   SgExpression* convertStatementExpression(edg::an_expr_node_ptr expr);
   SgAggregateInitializer* convertAggregate(edg::a_constant_ptr con, SgType* type);
+  SgConstructorInitializer* valueInitializedTemporary(SgType* type);
+  SgMemberFunctionDeclaration* implicitDefaultConstructor(SgClassType* type);
   void markWrittenConstructorElement(SgInitializer* init, edg::a_dynamic_init_ptr dip);
   void appendAggregateElements(SgExprListExp* list, edg::a_constant_ptr aggregate);
   void setExpressionPosition(SgExpression* e, edg::an_expr_node_ptr expr);
@@ -280,6 +282,8 @@ class Translator {
   bool suppressInitializers = false;  // the iteration variable of a range-based for
   std::map<std::string, SgTypedefDeclaration*> pseudoTypes;
   std::map<std::string, SgVariableSymbol*> pseudoVariables;
+  std::unordered_map<SgDeclarationStatement*, edg::a_type_ptr> classTypes;    // first declaration -> class
+  std::unordered_map<edg::a_type_ptr, SgMemberFunctionDeclaration*> implicitConstructors;
   std::set<SgClassDeclaration*> firstUsedAsStatement;      // hidden first decl reused as forward declaration
   std::set<SgClassDeclaration*> hiddenDefinitions;         // definitions of template instances (see templates.C)
   std::set<SgTypedefDeclaration*> typedefInStatementList;

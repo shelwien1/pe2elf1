@@ -483,6 +483,12 @@ SgDeclarationStatement* Translator::translateVariable(a_variable_ptr var, a_src_
   }
 
   // Symbol: all declarations of the variable share the symbol of the first one.
+  if (isSgClassDefinition(semanticScope) != nullptr && semanticScope != scope && variables.find(var) == variables.end()) {
+    // A static data member of a class whose definition was not translated (a
+    // template instance, "template<> int X<int>::m = 1;"): the declaration in
+    // the class, which references refer to.
+    variableFor(var);
+  }
   auto prev = variables.find(var);
   if (prev == variables.end()) {
     variables[var] = iname;

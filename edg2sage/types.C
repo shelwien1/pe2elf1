@@ -443,6 +443,7 @@ SgClassDeclaration* Translator::classDeclarationFor(a_type_ptr type) {
   SgClassSymbol* sym = new SgClassSymbol(decl);
   scope->insert_symbol(name, sym);
   firstClassDecl[type] = decl;
+  classTypes[decl] = type;
   return decl;
 }
 
