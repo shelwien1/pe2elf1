@@ -222,8 +222,11 @@ void Translator::translateConstructorInitializers(a_scope_ptr fscope, SgMemberFu
         name = bdecl->get_name();
         // A base with the name of the class itself ("struct I : A::I") must be
         // named with its qualification (the unqualified name is the class).
+        // So is a base that is a member of another class (it may be found
+        // through more than one base).
         SgClassDefinition* own = isSgClassDefinition(decl->get_scope());
-        if (own != nullptr && own->get_declaration() != nullptr && own->get_declaration()->get_name() == name) {
+        if ((own != nullptr && own->get_declaration() != nullptr && own->get_declaration()->get_name() == name) ||
+            isSgClassDefinition(bdecl->get_scope()) != nullptr) {
           name = bdecl->get_qualified_name();
         }
         type = convertType(bt);
@@ -289,6 +292,7 @@ SgExpression* Translator::convertLambda(a_lambda_ptr lambda) {
   if (existing != definingClassDecl.end()) {
     def = existing->second;
     cdef = def->get_definition();
+    hiddenDefinitions.erase(def);  // created on demand (see hiddenDefinitionFor()); part of the lambda now
   } else {
     def = newDefiningClassDeclaration(first, cdef);
     def->set_parent(first->get_parent());

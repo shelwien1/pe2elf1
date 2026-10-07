@@ -190,11 +190,14 @@ static bool isEmptyAggregate(SgExpression* e) {
   return ai != nullptr && (ai->get_initializers() == nullptr || ai->get_initializers()->get_expressions().empty());
 }
 
-// "T()": a value-initialized temporary
+// "T()": a value-initialized temporary.  The type is written without
+// typedefs (ROSE qualifies the name of a class here, not of a typedef).
 static SgConstructorInitializer* valueInitializedTemporary(SgType* type) {
+  SgType* t = type != nullptr ? type->stripType(SgType::STRIP_TYPEDEF_TYPE) : type;
   SgExprListExp* args = SageBuilder::buildExprListExp_nfi();
-  SgConstructorInitializer* ci = SageBuilder::buildConstructorInitializer_nfi(nullptr, args, type, true, false, true, true);
+  SgConstructorInitializer* ci = SageBuilder::buildConstructorInitializer_nfi(nullptr, args, t, true, false, true, true);
   args->set_parent(ci);
+  if (isSgClassType(t)) ci->set_associated_class_unknown(false);
   return ci;
 }
 
@@ -526,6 +529,11 @@ SgExpression* Translator::convertFieldSelection(an_expr_node_ptr expr, bool arro
   if (isAnonymousMemberSelection(expr)) {
     // A selection of the anonymous member itself (e.g. to copy it)
     throw Unsupported("reference to an anonymous member");
+  }
+  if (expr->is_objectless_nonstatic_data_mem_ref) {
+    // "sizeof(S::member)": a member named without an object (represented as
+    // a member of a null pointer)
+    return convertExpression(memberNode);
   }
   if (objectNode->kind == enk_variable && objectNode->variant.variable.ptr != nullptr &&
       objectNode->variant.variable.ptr->is_anonymous_parent_object) {
@@ -1046,8 +1054,7 @@ SgExpression* Translator::convertTempInit(an_expr_node_ptr expr) {
   }
   if (init == nullptr) {
     // Value-initialized temporary, e.g. "T()"
-    SgConstructorInitializer* ci = SageBuilder::buildConstructorInitializer_nfi(
-        nullptr, SageBuilder::buildExprListExp_nfi(), type, true, false, true, true);
+    SgConstructorInitializer* ci = valueInitializedTemporary(type);
     setCompilerGenerated(ci->get_args());
     return ci;
   }
@@ -1627,11 +1634,8 @@ SgInitializer* Translator::convertDynamicInit(a_dynamic_init_ptr dip, SgType* ty
     case dik_zero:
       if (dip->is_explicit_cast && type != nullptr) {
         // "T()": a value-initialized temporary (e.g. "return T();")
-        SgExprListExp* args = SageBuilder::buildExprListExp_nfi();
-        setCompilerGenerated(args);
-        SgConstructorInitializer* ci =
-            SageBuilder::buildConstructorInitializer_nfi(nullptr, args, type, true, false, true, true);
-        args->set_parent(ci);
+        SgConstructorInitializer* ci = valueInitializedTemporary(type);
+        setCompilerGenerated(ci->get_args());
         return ci;
       }
       return nullptr;
@@ -1644,11 +1648,8 @@ SgInitializer* Translator::convertDynamicInit(a_dynamic_init_ptr dip, SgType* ty
           dip->variant.constant.ptr->kind == ck_aggregate &&
           dip->variant.constant.ptr->variant.aggregate.first_constant == nullptr) {
         // "T()" for a class without a user-provided constructor
-        SgExprListExp* args = SageBuilder::buildExprListExp_nfi();
-        setCompilerGenerated(args);
-        SgConstructorInitializer* ci =
-            SageBuilder::buildConstructorInitializer_nfi(nullptr, args, type, true, false, true, true);
-        args->set_parent(ci);
+        SgConstructorInitializer* ci = valueInitializedTemporary(type);
+        setCompilerGenerated(ci->get_args());
         return ci;
       }
       if (a_constant_ptr c = dip->variant.constant.ptr) {

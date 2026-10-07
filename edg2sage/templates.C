@@ -464,7 +464,10 @@ SgClassDefinition* Translator::hiddenDefinitionFor(a_type_ptr type) {
   if (it != definingClassDecl.end()) return it->second->get_definition();
   a_class_type_supplement_ptr ctsp = type->variant.class_struct_union.extra_info;
   if (ctsp == nullptr || ctsp->assoc_scope == nullptr) return nullptr;  // not defined
-  if (!type->variant.class_struct_union.is_template_class || type->variant.class_struct_union.is_nonreal_class) {
+  // Classes generated from templates, and lambda closure classes (whose
+  // operator() can be referenced before the lambda is translated)
+  if ((!type->variant.class_struct_union.is_template_class && !ctsp->is_lambda_closure_class) ||
+      type->variant.class_struct_union.is_nonreal_class) {
     return nullptr;
   }
   SgClassDeclaration* first = classDeclarationFor(type);
