@@ -13,9 +13,10 @@ set "EXAMPLES=%ROSE%examples"
 set "WORK=%TEMP%\rose-test-%RANDOM%%RANDOM%"
 set "FAILED="
 
+rem Paths are echoed through FOR variables, so that they may contain an ampersand
 echo ROSE for Windows: self test
-echo   ROSE:   %ROSE%
-echo   output: %WORK%
+for %%i in ("%ROSE%") do echo   ROSE:   %%~i
+for %%i in ("%WORK%") do echo   output: %%~i
 echo.
 mkdir "%WORK%" 2> nul
 if not exist "%WORK%\" goto :cannot_create
@@ -47,7 +48,7 @@ echo       skipped: gcc and g++ are not in the PATH (see README.txt)
 goto :end
 
 :cannot_create
-echo cannot create the folder %WORK%
+for %%i in ("%WORK%") do echo cannot create the folder %%~i
 set "FAILED=1"
 goto :end
 
@@ -98,7 +99,7 @@ echo.
 set "STATUS=0"
 if defined FAILED set "STATUS=1"
 if defined FAILED echo Some tests FAILED.
-if not defined FAILED echo All tests passed.  The output files are in %WORK%
+if not defined FAILED for %%i in ("%WORK%") do echo All tests passed.  The output files are in %%~i
 rem Keep the window open when the script was started from Explorer
 if /i not "%~1"=="nopause" echo "%CMDCMDLINE%" | find /i "%~nx0" > nul && pause
 exit /b %STATUS%
