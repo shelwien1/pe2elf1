@@ -39,6 +39,11 @@
    template declarations from that text (SgTemplate*Declaration::get_string()). */
 #define RECORD_TEMPLATE_STRINGS 1
 
+/* The form of names as written is recorded (e.g. whether a member function
+   was named with a qualifier), without the extra "lexical" typerefs. */
+#define DEFAULT_RECORD_FORM_OF_NAME_REFERENCE 1
+#define CREATE_LEXICAL_TYPEREFS 0
+
 /* Allow the IL to be dumped (--display_il style) for debugging the translation. */
 #define NEED_IL_DISPLAY 1
 

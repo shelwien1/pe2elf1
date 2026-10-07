@@ -139,6 +139,7 @@ class Translator {
   void setDeclarationModifiers(SgDeclarationStatement* decl, edg::a_source_correspondence* scp,
                                edg::a_storage_class sc);
   void setAccess(SgDeclarationStatement* decl, edg::an_access_specifier access);
+  void setLinkage(SgDeclarationStatement* decl, edg::a_decl_position_supplement_ptr dpi);
   void attachPendingBaseTypeDeclaration(SgDeclarationStatement* decl);
   SgVariableDeclaration* declaratorGroupFor(SgScopeStatement* scope, SgType* type,
                                             const edg::a_source_position& specifiers);

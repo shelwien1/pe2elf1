@@ -184,6 +184,20 @@ an_expr_node_ptr Translator::skipImplicitSteps(an_expr_node_ptr expr) {
 // Expressions
 // ---------------------------------------------------------------------------------
 
+// An aggregate initializer without elements ("{}")
+static bool isEmptyAggregate(SgExpression* e) {
+  SgAggregateInitializer* ai = isSgAggregateInitializer(e);
+  return ai != nullptr && (ai->get_initializers() == nullptr || ai->get_initializers()->get_expressions().empty());
+}
+
+// "T()": a value-initialized temporary
+static SgConstructorInitializer* valueInitializedTemporary(SgType* type) {
+  SgExprListExp* args = SageBuilder::buildExprListExp_nfi();
+  SgConstructorInitializer* ci = SageBuilder::buildConstructorInitializer_nfi(nullptr, args, type, true, false, true, true);
+  args->set_parent(ci);
+  return ci;
+}
+
 SgExpression* Translator::convertExpression(an_expr_node_ptr expr) {
   if (expr == nullptr) {
     SgExpression* e = SageBuilder::buildNullExpression_nfi();
@@ -235,6 +249,9 @@ SgExpression* Translator::convertExpression(an_expr_node_ptr expr) {
           // "throw T(args)"
           ci->set_need_name(true);
           ci->set_need_parenthesis_after_name(true);
+        } else if (isEmptyAggregate(operand)) {
+          // "throw T()" of a class without a user-provided constructor
+          operand = valueInitializedTemporary(convertType(ti->type));
         }
       }
       SgThrowOp* t = new SgThrowOp(operand, convertType(expr->type),
@@ -515,11 +532,29 @@ SgExpression* Translator::convertCall(an_expr_node_ptr expr) {
       SgExpression* member = convertExpression(first);
       if (SgMemberFunctionRefExp* mref = isSgMemberFunctionRefExp(member)) {
         mref->set_virtual_call(expr->variant.operation.is_virtual_call);
-        // "p->Base::f()": a call of a virtual function that is not virtual
-        // was qualified.
-        bool qualified = first->kind == enk_routine && first->variant.routine.ptr != nullptr &&
-                         first->variant.routine.ptr->is_virtual && !expr->variant.operation.is_virtual_call;
+        // "p->Base::f()": the name was written with a qualifier (or a call of
+        // a virtual function is not virtual).
+        bool qualified = expr->variant.operation.call_with_qualified_function_name;
+        if (first->kind == enk_routine) {
+          a_name_reference_ptr nr = first->variant.routine.name_reference;
+          if (nr != nullptr && (nr->qualifier != nullptr || nr->is_global_qualified_name)) qualified = true;
+          a_routine_ptr r = first->variant.routine.ptr;
+          if (r != nullptr && r->is_virtual && !expr->variant.operation.is_virtual_call) qualified = true;
+        }
         mref->set_need_qualifier(qualified);
+        // "A::f()" in a member function (a qualified call on this): ROSE only
+        // qualifies member function names outside member accesses.
+        an_expr_node_ptr obj = skipImplicitSteps(objectNode);
+        while (obj != nullptr && obj->kind == enk_operation && obj->compiler_generated &&
+               (obj->variant.operation.kind == eok_base_class_cast || obj->variant.operation.kind == eok_cast)) {
+          obj = skipImplicitSteps(obj->variant.operation.operands);
+        }
+        if (qualified && k == eok_points_to_member_call && obj != nullptr && obj->kind == enk_variable &&
+            obj->variant.variable.ptr != nullptr && obj->variant.variable.ptr->is_this_parameter) {
+          function = member;
+          args = objectNode->next;
+          break;
+        }
       }
       SgExpression* object = convertExpression(objectNode);
       function = k == eok_dot_member_call ? binaryOp<SgDotExp>(object, member)
@@ -941,6 +976,12 @@ SgExpression* Translator::convertTempInit(an_expr_node_ptr expr) {
     if (SgAssignInitializer* ai = isSgAssignInitializer(e)) e = initializerExpression(ai);
     e->set_parent(nullptr);
     return e;
+  }
+  if (isEmptyAggregate(init) && skip_typerefs(expr->type) != nullptr &&
+      (skip_typerefs(expr->type)->kind == tk_class || skip_typerefs(expr->type)->kind == tk_struct ||
+       skip_typerefs(expr->type)->kind == tk_union) && isCxx) {
+    // "T()" of a class without a user-provided constructor
+    return valueInitializedTemporary(type);
   }
   if (init == nullptr) {
     // Value-initialized temporary, e.g. "T()"
@@ -1537,6 +1578,17 @@ SgInitializer* Translator::convertDynamicInit(a_dynamic_init_ptr dip, SgType* ty
     case dik_nonconstant_aggregate:
       if (dip->variant.constant.lambda != nullptr) {
         return assignInitializer(this, convertLambda(dip->variant.constant.lambda), type);
+      }
+      if (dip->is_explicit_cast && type != nullptr && dip->variant.constant.ptr != nullptr &&
+          dip->variant.constant.ptr->kind == ck_aggregate &&
+          dip->variant.constant.ptr->variant.aggregate.first_constant == nullptr) {
+        // "T()" for a class without a user-provided constructor
+        SgExprListExp* args = SageBuilder::buildExprListExp_nfi();
+        setCompilerGenerated(args);
+        SgConstructorInitializer* ci =
+            SageBuilder::buildConstructorInitializer_nfi(nullptr, args, type, true, false, true, true);
+        args->set_parent(ci);
+        return ci;
       }
       if (a_constant_ptr c = dip->variant.constant.ptr) {
         // The closure object of a lambda (with init-captures) is an aggregate

@@ -184,6 +184,29 @@ void Translator::attachPendingBaseTypeDeclaration(SgDeclarationStatement* decl) 
   }
 }
 
+// The language linkage of a declaration with its own linkage specification
+// ('extern "C" int f();'), from the text of its declaration specifiers (which
+// include the linkage specification); "" if there is none.  Declarations in
+// a linkage block ('extern "C" { ... }') get theirs from the block, which ROSE
+// reproduces from the preprocessing information.
+static std::string linkageSpecification(const std::string& specifiers) {
+  size_t i = specifiers.find_first_not_of(" \t");
+  if (i == std::string::npos || specifiers.compare(i, 6, "extern") != 0) return "";
+  size_t q = specifiers.find_first_not_of(" \t", i + 6);
+  if (q == std::string::npos || specifiers[q] != '"') return "";
+  size_t q2 = specifiers.find('"', q + 1);
+  if (q2 == std::string::npos) return "";
+  return specifiers.substr(q + 1, q2 - q - 1);
+}
+
+void Translator::setLinkage(SgDeclarationStatement* decl, a_decl_position_supplement_ptr dpi) {
+  if (!isCxx || dpi == nullptr || dpi->specifiers_range.start.seq == 0) return;
+  std::string linkage = linkageSpecification(sourceText(dpi->specifiers_range.start, dpi->specifiers_range.end));
+  if (linkage.empty()) return;
+  decl->get_declarationModifier().get_storageModifier().setExtern();
+  decl->set_linkage(linkage);
+}
+
 // ---------------------------------------------------------------------------------
 // The source sequence walk
 // ---------------------------------------------------------------------------------
@@ -365,6 +388,7 @@ SgDeclarationStatement* Translator::translateVariable(a_variable_ptr var, a_src_
   if (var->decl_modifiers & DM_THREAD) decl->get_declarationModifier().get_storageModifier().set_thread_local_storage(true);
 #endif
   if (var->is_thread_local) decl->set_is_thread_local(true);
+  setLinkage(decl, sec ? sec->decl_pos_info : var->source_corresp.decl_pos_info);
   applyVariableAttributes(iname, sec ? sec->attributes : var->source_corresp.attributes, false, sec == nullptr);
   if (var->is_constexpr) decl->set_is_constexpr(true);
 
@@ -569,7 +593,13 @@ SgFunctionParameterList* Translator::buildParameterList(a_routine_ptr routine, b
   if (defining) {
     a_scope_ptr fscope = functionScopeOf(routine);
     a_variable_ptr pv = fscope ? fscope->variant.routine.parameters : nullptr;
+    // Default arguments: those written in the definition (the type of the
+    // routine has those of all its declarations).
     a_param_type_ptr pt = rtsp->param_type_list;
+    if (declaredType != nullptr && skip_typerefs(declaredType)->kind == tk_routine &&
+        skip_typerefs(declaredType)->variant.routine.extra_info != nullptr) {
+      pt = skip_typerefs(declaredType)->variant.routine.extra_info->param_type_list;
+    }
     for (; pv != nullptr; pv = pv->next) {
       SgType* t = convertType(pv->declared_type ? pv->declared_type : pv->type);
       SgInitializer* defaultArg = nullptr;
@@ -760,6 +790,7 @@ SgFunctionDeclaration* Translator::translateRoutine(a_routine_ptr routine, a_src
   if (routine->is_explicit_constructor || routine->is_explicit_conversion_function) fm.setExplicit();
   if (routine->is_defaulted) fm.setMarkedDefault();
   if (routine->is_deleted) fm.setMarkedDelete();
+  setLinkage(decl, sec ? sec->decl_pos_info : routine->source_corresp.decl_pos_info);
   bool isFriend = sec != nullptr ? sec->friend_decl : (routine->defined_in_friend_decl && isSgClassDefinition(scope) != nullptr);
   if (isFriend) decl->get_declarationModifier().setFriend();
   if (routine->override) decl->get_declarationModifier().setOverride();
