@@ -28,9 +28,9 @@ The same Makefile cross-compiles ROSE for Windows with MinGW-w64 (see [Windows](
 | `edg2sage/` | the EDG IL → Sage III translator (new code), and the EDG configuration (`edgconfig/`) |
 | `tools/` | translators linked against librose (`identityTranslator`, `dotGenerator` from ROSE's examples) |
 | `tests/` | test programs and `run-tests.sh` (used by `make check`) |
-| `win32/` | portability layer for the Windows build (MinGW-w64); the Windows package's `README.txt`, `test.bat` and examples |
+| `win32/` | portability layer for the Windows build (MinGW-w64); the Windows package's `README.txt`, `test.bat` and examples; the Makefile of the source package (`source/`) |
 | `scripts/vendor-sources.sh` | regenerates `rose/` and `edg/` from full checkouts |
-| `scripts/build-boost-mingw.sh`, `scripts/stage-sys-includes.sh` | Windows build helpers |
+| `scripts/build-boost-mingw.sh`, `scripts/stage-sys-includes.sh`, `scripts/windows-source-package.sh` | Windows build helpers |
 
 ## Requirements
 
@@ -178,6 +178,21 @@ The package contains `test.bat`, a self test: it translates two example programs
 Windows API, and C++17 using the standard library) with `identityTranslator`, writes the AST of
 one with `dotGenerator`, and, when `gcc` and `g++` are in the PATH, checks that the programs
 built from the translated code print the same as those built from the originals.
+
+`make ... source-package` makes `build-win/rose-2.18.0-win64-src.7z`, from which the translators
+are built on Windows with MinGW-w64 GCC and `mingw32-make` alone (`win32/source/BUILD.txt`).
+It contains the files that the Windows build compiles and includes, among them those that the
+build generates (so neither ROSETTA, flex, bison nor a shell is needed); the parts of Boost that
+ROSE uses (the headers, selected with Boost's `bcp` tool, and the sources of the few compiled
+parts that the translators link); the package's run-time files; and a Makefile
+(`win32/source/Makefile`) whose recipes only run the compiler and `ar`, with the compiler options
+in response files.  Making it needs the Boost source tree, with `bcp` built in it, and 7-Zip
+(`apt install 7zip`):
+
+```
+(cd boost_1_83_0 && ./bootstrap.sh && ./b2 tools/bcp)
+make B=build-win CXX=x86_64-w64-mingw32-g++-posix BOOST_ROOT=$HOME/boost-mingw BOOST_SRC=$PWD/boost_1_83_0 source-package
+```
 
 ROSE's compile tests, translated under Wine with MSYS2's GCC 16.2 as the backend compiler
 (`scripts/run-rose-tests.sh` with `CC='wine gcc'` and `CXX='wine g++'`; fewer C tests are

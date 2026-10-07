@@ -519,6 +519,45 @@ package:
 	@echo "make package: only for the Windows build (CXX=x86_64-w64-mingw32-g++-posix ...)"; false
 endif
 
+################################################################################
+# Windows source package: what the Windows build compiles (with the files it generates, and the
+# parts of Boost that ROSE uses) and the package's run-time files, with a Makefile with which
+# mingw32-make builds the translators on Windows (win32/source/), as a 7z file.  BOOST_SRC is
+# the Boost source tree that BOOST_ROOT was built from, with Boost's bcp tool (./b2 tools/bcp).
+################################################################################
+
+SRC_PACKAGE := rose-$(ROSE_VERSION)-win64-src
+BOOST_SRC ?=
+BCP ?= $(BOOST_SRC)/dist/bin/bcp
+define SOURCE_PACKAGE_VARS
+OUT='$(B)/package/$(SRC_PACKAGE)'
+ARCHIVE='$(abspath $(B))/$(SRC_PACKAGE).7z'
+PKG_DIR='$(PKG_DIR)'
+GEN='$(GEN)'
+OBJ='$(OBJ)'
+OPT='$(OPT)'
+BOOST_INC='$(BOOST_ROOT)/include'
+BOOST_SRC='$(BOOST_SRC)'
+BCP='$(BCP)'
+LIB_OBJS='$(ALL_LIB_OBJS)'
+TOOL_OBJS='$(addprefix $(OBJ)/tools/,$(addsuffix .o,$(TOOLS)))'
+ROSE_FLAGS='$(ROSE_CXXFLAGS) $(ROSE_CPPFLAGS)'
+EDG_FLAGS='$(EDG_CXXFLAGS) $(EDG_CPPFLAGS)'
+CONN_FLAGS='$(ROSE_CXXFLAGS) $(ROSE_CPPFLAGS) -I$(CONN_SRC) $(EDG_CPPFLAGS)'
+LP64_OBJS='$(WIN32_LP64_OBJS)'
+API_OBJS='$(patsubst %.C,$(OBJ)/rose/%.o,$(WIN32_API_SRCS))'
+endef
+ifdef WINDOWS
+source-package: package
+	$(call msg,PACKAGE,$(B)/$(SRC_PACKAGE).7z)
+	$(file >$(B)/source-package.vars,$(SOURCE_PACKAGE_VARS))
+	$(Q)sh scripts/windows-source-package.sh $(B)/source-package.vars
+else
+source-package:
+	@echo "make source-package: only for the Windows build (CXX=x86_64-w64-mingw32-g++-posix ...)"; false
+endif
+.PHONY: source-package
+
 -include $(shell find $(OBJ) $(B)/host -name '*.d' 2>/dev/null)
 
 # Convenience targets for building parts of the tree

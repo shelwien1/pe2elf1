@@ -1,0 +1,54 @@
+Building ROSE 2.18.0 for Windows from source
+============================================
+
+This folder contains everything needed to build identityTranslator.exe and
+dotGenerator.exe (see README.txt for what they do) with MinGW-w64 GCC and
+GNU make:
+
+  src\rose\      the parts of ROSE 2.18.0 (https://github.com/llnl/rose) that
+                 the translators use
+  src\edg\       the EDG C/C++ front end (https://github.com/edgcpp/compiler)
+  src\edg2sage\  the translation of EDG's intermediate language into ROSE's AST
+  src\win32\     the adaptation of ROSE to MinGW-w64
+  src\gen\       the files that ROSE's own build generates (the AST classes
+                 written by ROSETTA, the lexers and parsers, the configuration
+                 headers, EDG's error tables, and the copies of a few ROSE
+                 sources with the changes of src\win32\patches)
+  src\boost\     the parts of Boost 1.83 (https://www.boost.org) that ROSE
+                 uses: headers, and the sources of the few compiled parts
+  src\tools\     the two translators
+  edg-base\, include\edg\, examples\, test.bat, licenses\
+                 the run-time files of the package (include\edg\ holds the
+                 MinGW-w64 GCC 13 headers that the front end parses with)
+
+Requirements
+------------
+
+A MinGW-w64 GCC for x86-64 with C++14 support and GNU make for Windows
+(mingw32-make), for example from MSYS2 (https://www.msys2.org):
+
+  pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-make
+
+and add C:\msys64\mingw64\bin to PATH.  Nothing else is needed: no shell or
+Unix tools, no Boost, flex or bison.
+
+Building
+--------
+
+In this folder, in a command prompt (or PowerShell, or an MSYS2 shell):
+
+  mingw32-make -j8
+
+(-j: the number of files compiled at the same time; use the number of CPU
+cores.)  This compiles about 790 files into obj\, which takes a while (about
+an hour on 4 cores), and links bin\identityTranslator.exe and
+bin\dotGenerator.exe.  The folder is then a ROSE installation like the binary
+package: run test.bat.
+
+The programs are linked statically, so bin\ can be copied elsewhere together
+with edg-base\ and include\ (the programs find those relative to their own
+folder).
+
+Options: mingw32-make OPT=-O1 (optimization; the default is -O2), CXX=<g++>
+(another compiler).  After changing options, run mingw32-make clean, which
+deletes obj\ and bin\.
