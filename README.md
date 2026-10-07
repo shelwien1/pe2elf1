@@ -81,15 +81,38 @@ on the command line ROSE builds; once the IL of the translation unit is complete
 | `attributes.C` | GNU/C11 attributes that ROSE represents |
 
 Status: C (C89 to C11 with GNU extensions) and C++ (up to C++17, including code using the
-standard library) are translated.  Of the programs in ROSE's own test corpora that GCC compiles,
-about 95% of the 833 `C_tests` and 98% of the 2,449 `Cxx_tests` are translated and unparsed into
-code that GCC compiles again; many of the rest exercise known limitations of ROSE's unparser.
+standard library) are translated.  ROSE's own compile tests, translated with
+`identityTranslator -c` and the `-std` option ROSE's test harness uses for each directory
+(`scripts/run-rose-tests.sh`; programs that GCC does not compile are not counted):
+
+| Tests | Programs | Unparsed into code that compiles |
+|-------|---------:|---------------------------------:|
+| `C_tests` | 833 | 800 (96.0%) |
+| `C99_tests` | 18 | 18 |
+| `C11_tests` | 32 | 32 |
+| `Cxx_tests` | 2,449 | 2,428 (99.1%) |
+| `Cxx11_tests` | 1,016 | 988 (97.2%) |
+| `Cxx14_tests` | 31 | 30 |
+| `Cxx17_tests` | 61 | 57 |
+| all | 4,440 | 4,353 (98.0%) |
+
+Most of the remaining failures are tests that ROSE itself lists as failing
+(`TESTCODE_CURRENTLY_FAILING` in their `Makefile.am`), a few that EDG rejects (they contain
+copies of old GCC library headers), and limitations of ROSE's unparser: GNU attributes in
+parameter types, transparent unions, `__builtin_va_arg`, function-like macros whose expansion is
+printed, friend function definitions in classes in namespaces (printed with a qualified name),
+and name qualification that ROSE computes once for constructs shared by several uses.
 
 Templates are represented as ROSE's unparser expects them: template declarations
 keep their text (EDG records it in the IL), which ROSE prints, and template instances become
 `SgTemplateInstantiation*` declarations that are referenced (for names, types and calls) but not
 printed, since the back-end compiler instantiates the templates again.  Explicit
 specializations and instantiation directives are translated from the source.
+
+Where ROSE has no representation of a type or expression, or its unparser prints one wrongly,
+the translator uses the text EDG prints for it, as the name of a hidden typedef or variable:
+GNU vector types, `decltype(auto)`, function and array types in template arguments, and the
+addresses of functions and members in template arguments.
 
 Constructs that cannot be translated are reported as warnings (set `EDG2SAGE_DEBUG=1` for more
 diagnostics) and skipped.  EDG options can be passed through ROSE with `--edg:<option>`, e.g.
