@@ -477,6 +477,11 @@ SgExpression* Translator::convertFieldSelection(an_expr_node_ptr expr, bool arro
     // A selection of the anonymous member itself (e.g. to copy it)
     throw Unsupported("reference to an anonymous member");
   }
+  if (objectNode->kind == enk_variable && objectNode->variant.variable.ptr != nullptr &&
+      objectNode->variant.variable.ptr->is_anonymous_parent_object) {
+    // A member of an anonymous union is named directly.
+    return convertExpression(memberNode);
+  }
   SgExpression* object = convertExpression(objectNode);
   // The implicit "this->" of a member named in a member function (or of a
   // captured variable in a lambda) is not written.
@@ -1518,6 +1523,15 @@ SgInitializer* Translator::convertDynamicInit(a_dynamic_init_ptr dip, SgType* ty
   switch (dip->kind) {
     case dik_none:
     case dik_zero:
+      if (dip->is_explicit_cast && type != nullptr) {
+        // "T()": a value-initialized temporary (e.g. "return T();")
+        SgExprListExp* args = SageBuilder::buildExprListExp_nfi();
+        setCompilerGenerated(args);
+        SgConstructorInitializer* ci =
+            SageBuilder::buildConstructorInitializer_nfi(nullptr, args, type, true, false, true, true);
+        args->set_parent(ci);
+        return ci;
+      }
       return nullptr;
     case dik_constant:
     case dik_nonconstant_aggregate:
@@ -1603,6 +1617,15 @@ SgInitializer* Translator::convertInitializerConstant(a_constant_ptr con, SgType
   if (con == nullptr) return nullptr;
   switch (con->kind) {
     case ck_aggregate: {
+      // The closure object of a lambda: the backing expression is the lambda.
+      an_expr_node_ptr be = con->expr;
+      if (be != nullptr && (be->kind == enk_lambda ||
+                            (be->kind == enk_initializer && be->variant.initializer.dyn_init != nullptr &&
+                             be->variant.initializer.dyn_init->kind == dik_lambda))) {
+        SgExpression* e = be->kind == enk_lambda ? convertLambda(be->variant.init.source.lambda)
+                                                 : convertLambda(be->variant.initializer.dyn_init->variant.constant.lambda);
+        return assignInitializer(this, e, type);
+      }
       SgAggregateInitializer* ai = convertAggregate(con, type);
       ai->set_need_explicit_braces(true);
       return ai;

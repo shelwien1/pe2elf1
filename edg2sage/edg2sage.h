@@ -85,7 +85,8 @@ class Translator {
 
   // ---------------------------------------------------------------- types
   SgType* convertType(edg::a_type_ptr type);
-  SgFunctionType* convertFunctionType(edg::a_type_ptr type, SgClassDefinition* memberOf = nullptr);
+  SgFunctionType* convertFunctionType(edg::a_type_ptr type, SgClassDefinition* memberOf = nullptr,
+                                      SgType* memberClassType = nullptr);
   SgClassDeclaration* classDeclarationFor(edg::a_type_ptr classType);   // first nondefining declaration
   SgEnumDeclaration* enumDeclarationFor(edg::a_type_ptr enumType);      // first nondefining declaration
   SgTypedefDeclaration* typedefDeclarationFor(edg::a_type_ptr typedefType);

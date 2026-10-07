@@ -103,7 +103,7 @@ std::string anonymousName(const void* entity) {
 
 }  // namespace
 
-SgFunctionType* Translator::convertFunctionType(a_type_ptr type, SgClassDefinition* memberOf) {
+SgFunctionType* Translator::convertFunctionType(a_type_ptr type, SgClassDefinition* memberOf, SgType* memberClassType) {
   a_type_ptr rt = skip_typerefs(type);
   ROSE_ASSERT(rt->kind == tk_routine);
   a_routine_type_supplement_ptr rtsp = rt->variant.routine.extra_info;
@@ -117,7 +117,7 @@ SgFunctionType* Translator::convertFunctionType(a_type_ptr type, SgClassDefiniti
     memberOf = classDefinitionFor(rtsp->this_class);
   }
   SgFunctionType* ft = nullptr;
-  if (memberOf != nullptr) {
+  if (memberOf != nullptr || memberClassType != nullptr) {
     unsigned int cv = 0;
     // The cv-qualifiers of a member function ("int f() const")
     unsigned int q = rtsp->qualifiers | rtsp->this_qualifiers;
@@ -126,7 +126,8 @@ SgFunctionType* Translator::convertFunctionType(a_type_ptr type, SgClassDefiniti
     if (q & TQ_RESTRICT) cv |= SgMemberFunctionType::e_restrict;
     if (rtsp->ref_qualifiers == rqk_lvalue) cv |= SgMemberFunctionType::e_ref_qualifier_lvalue;
     if (rtsp->ref_qualifiers == rqk_rvalue) cv |= SgMemberFunctionType::e_ref_qualifier_rvalue;
-    ft = SageBuilder::buildMemberFunctionType(returnType, params, memberOf, cv);
+    ft = memberOf != nullptr ? SageBuilder::buildMemberFunctionType(returnType, params, memberOf, cv)
+                             : SageBuilder::buildMemberFunctionType(returnType, params, memberClassType, cv);
   } else {
     ft = SageBuilder::buildFunctionType(returnType, params);
   }
@@ -256,8 +257,12 @@ SgType* Translator::convertType(a_type_ptr type) {
       break;
     }
     case tk_ptr_to_member: {
-      SgType* base = convertType(type->variant.ptr_to_member.type);
+      // A pointer to member function points to a member function type.
       SgType* cls = convertType(type->variant.ptr_to_member.class_of_which_a_member);
+      a_type_ptr mt = skip_typerefs(type->variant.ptr_to_member.type);
+      SgType* base = mt != nullptr && mt->kind == tk_routine && mt == type->variant.ptr_to_member.type
+                         ? convertFunctionType(mt, nullptr, cls)
+                         : convertType(type->variant.ptr_to_member.type);
       result = SgPointerMemberType::createType(base, cls);
       break;
     }
@@ -290,7 +295,9 @@ SgClassDeclaration* Translator::classDeclarationFor(a_type_ptr type) {
   SgClassDeclaration::class_types kind = SgClassDeclaration::e_struct;
   if (type->kind == tk_class) kind = SgClassDeclaration::e_class;
   if (type->kind == tk_union) kind = SgClassDeclaration::e_union;
-  bool unnamed = (type->source_corresp.name == nullptr);
+  // An unnamed class named by a typedef ("typedef struct {...} S;") has the
+  // typedef name for linkage purposes only.
+  bool unnamed = (type->source_corresp.name == nullptr) || type->variant.class_struct_union.originally_unnamed;
   SgName name = unnamed ? SgName(anonymousName(type)) : SgName(type->source_corresp.name);
   SgScopeStatement* scope = parentScopeOf(&type->source_corresp);
 

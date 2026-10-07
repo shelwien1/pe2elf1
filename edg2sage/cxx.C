@@ -202,7 +202,14 @@ void Translator::translateConstructorInitializers(a_scope_ptr fscope, SgMemberFu
       case cik_direct_base_class:
       case cik_virtual_base_class: {
         a_type_ptr bt = skip_typerefs(ci->variant.base_class->type);
-        name = classDeclarationFor(bt)->get_name();
+        SgClassDeclaration* bdecl = classDeclarationFor(bt);
+        name = bdecl->get_name();
+        // A base with the name of the class itself ("struct I : A::I") must be
+        // named with its qualification (the unqualified name is the class).
+        SgClassDefinition* own = isSgClassDefinition(decl->get_scope());
+        if (own != nullptr && own->get_declaration() != nullptr && own->get_declaration()->get_name() == name) {
+          name = bdecl->get_qualified_name();
+        }
         type = convertType(bt);
         break;
       }

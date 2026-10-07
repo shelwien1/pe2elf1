@@ -447,7 +447,9 @@ SgDeclarationStatement* Translator::translateField(a_field_ptr field, SgClassDef
   }
   SgVariableDeclaration* decl = new SgVariableDeclaration(iname);
   decl->set_firstNondefiningDeclaration(decl);
-  decl->set_definingDeclaration(decl);
+  // In C++ a data member declaration is not a "defining declaration" (ROSE's
+  // name qualification relies on it, e.g. for designators "{.x = 1}").
+  if (!isCxx) decl->set_definingDeclaration(decl);
   iname->set_scope(cdef);
   decl->set_parent(cdef);
   if (init) init->set_parent(iname);
@@ -898,6 +900,12 @@ void Translator::translateTypeDeclaration(SeqCursor& cursor, a_type_ptr type, a_
   }
 
   bool autonomous = sec ? sec->autonomous_tag_decl : type->autonomous_primary_tag_decl;
+  // An anonymous union ("union { int a; };" in a block or namespace) is part
+  // of the declaration of its unnamed object, which follows it.
+  if (isClass && type->variant.class_struct_union.extra_info != nullptr &&
+      type->variant.class_struct_union.extra_info->anonymous_union_kind == auk_variable) {
+    autonomous = false;
+  }
   if (sec != nullptr) {
     // A declaration that is not a definition ("struct S;", or the first
     // mention of a tag in another declaration).

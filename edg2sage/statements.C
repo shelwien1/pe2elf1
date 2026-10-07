@@ -260,7 +260,18 @@ SgStatement* Translator::convertStatementKind(a_statement_ptr stmt) {
       if (stmt->expr != nullptr) {
         e = convertExpression(stmt->expr);
       } else if (stmt->variant.return_dynamic_init != nullptr) {
-        e = initializerExpression(convertDynamicInit(stmt->variant.return_dynamic_init, nullptr));
+        // The return type is needed for "return T();" (a value-initialized
+        // temporary); constructor calls carry their class.
+        SgType* rt = nullptr;
+        a_dynamic_init_ptr rdi = stmt->variant.return_dynamic_init;
+        if (currentRoutine != nullptr && (rdi->kind == dik_zero || rdi->kind == dik_none)) {
+          a_type_ptr ft = skip_typerefs(currentRoutine->type);
+          if (ft != nullptr && ft->kind == tk_routine) rt = convertType(ft->variant.routine.return_type);
+        }
+        e = initializerExpression(convertDynamicInit(stmt->variant.return_dynamic_init, rt));
+        if (SgConstructorInitializer* ci = isSgConstructorInitializer(e)) {
+          if (ci->get_args()->get_expressions().empty()) ci->set_need_name(true);
+        }
       }
       if (stmt->compiler_generated && e == nullptr) return nullptr;  // implicit return at the end
       if (e == nullptr) {
