@@ -231,6 +231,11 @@ SgExpression* Translator::convertExpression(an_expr_node_ptr expr) {
       a_throw_supplement_ptr ti = expr->variant.throw_info;
       if (ti != nullptr && ti->dynamic_init != nullptr) {
         operand = initializerExpression(convertDynamicInit(ti->dynamic_init, convertType(ti->type)));
+        if (SgConstructorInitializer* ci = isSgConstructorInitializer(operand)) {
+          // "throw T(args)"
+          ci->set_need_name(true);
+          ci->set_need_parenthesis_after_name(true);
+        }
       }
       SgThrowOp* t = new SgThrowOp(operand, convertType(expr->type),
                                    operand ? SgThrowOp::throw_expression : SgThrowOp::rethrow);
@@ -289,7 +294,8 @@ SgExpression* Translator::convertExpression(an_expr_node_ptr expr) {
     case enk_reuse_value:
       throw Unsupported("reused value");
     case enk_lambda:
-      throw Unsupported("lambda expression");
+      result = convertLambda(expr->variant.init.source.lambda);
+      break;
     case enk_address_of_ellipsis:
       throw Unsupported("address of ellipsis");
     default:
@@ -470,6 +476,9 @@ SgExpression* Translator::convertFieldSelection(an_expr_node_ptr expr, bool arro
     throw Unsupported("reference to an anonymous member");
   }
   SgExpression* object = convertExpression(objectNode);
+  // The implicit "this->" of a member named in a member function (or of a
+  // captured variable in a lambda) is not written.
+  if (expr->compiler_generated && isSgThisExp(object)) setCompilerGenerated(object);
   SgExpression* member = convertExpression(memberNode);
   SgExpression* r = arrow ? binaryOp<SgArrowExp>(object, member) : binaryOp<SgDotExp>(object, member);
   return r;
@@ -488,6 +497,14 @@ SgExpression* Translator::convertCall(an_expr_node_ptr expr) {
     case eok_dot_member_call:
     case eok_points_to_member_call: {
       an_expr_node_ptr objectNode = first->next;
+      if (k == eok_dot_member_call && expr->compiler_generated && first->kind == enk_routine &&
+          first->variant.routine.ptr != nullptr && first->variant.routine.ptr->special_kind == sfk_conversion) {
+        // An implicit conversion by a conversion function ("operator T()"):
+        // written as the object itself.
+        SgExpression* object = convertExpression(objectNode);
+        if (expr->is_parenthesized) object->set_need_paren(true);
+        return object;
+      }
       SgExpression* member = convertExpression(first);
       if (SgMemberFunctionRefExp* mref = isSgMemberFunctionRefExp(member)) {
         mref->set_virtual_call(expr->variant.operation.is_virtual_call);
@@ -1462,8 +1479,24 @@ SgInitializer* Translator::convertDynamicInit(a_dynamic_init_ptr dip, SgType* ty
       return nullptr;
     case dik_constant:
     case dik_nonconstant_aggregate:
-      if (dip->variant.constant.lambda != nullptr) throw Unsupported("lambda initializer");
+      if (dip->variant.constant.lambda != nullptr) {
+        return assignInitializer(this, convertLambda(dip->variant.constant.lambda), type);
+      }
+      if (a_constant_ptr c = dip->variant.constant.ptr) {
+        // The closure object of a lambda (with init-captures) is an aggregate
+        // constant whose backing expression is the lambda.
+        an_expr_node_ptr be = c->expr;
+        if (be != nullptr && be->kind == enk_initializer && be->variant.initializer.dyn_init != nullptr &&
+            be->variant.initializer.dyn_init->kind == dik_lambda) {
+          return convertDynamicInit(be->variant.initializer.dyn_init, type);
+        }
+      }
       return convertInitializerConstant(dip->variant.constant.ptr, type);
+    case dik_lambda: {
+      // "auto f = [...](...) {...};"
+      SgExpression* e = convertLambda(dip->variant.constant.lambda);
+      return assignInitializer(this, e, type);
+    }
     case dik_expression:
     case dik_class_result_via_ctor: {
       SgExpression* e = convertExpression(dip->variant.expression);
@@ -1519,7 +1552,6 @@ SgInitializer* Translator::convertDynamicInit(a_dynamic_init_ptr dip, SgType* ty
       setCompilerGenerated(ci);
       return ci;
     }
-    case dik_lambda:
     default:
       throw Unsupported("dynamic initialization kind " + std::to_string((int)dip->kind));
   }

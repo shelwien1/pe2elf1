@@ -159,6 +159,9 @@ class Translator {
   SgDeclarationStatement* translateUsingDeclaration(edg::a_using_decl_ptr ud, SgScopeStatement* scope);
   void translateBaseClasses(edg::a_class_type_supplement_ptr ctsp, SgClassDefinition* cdef);
   void translateConstructorInitializers(edg::a_scope_ptr fscope, SgMemberFunctionDeclaration* decl);
+ public:
+  SgExpression* convertLambda(edg::a_lambda_ptr lambda);
+ private:
 
   // --- templates (templates.C)
  public:

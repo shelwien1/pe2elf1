@@ -246,4 +246,102 @@ void Translator::translateConstructorInitializers(a_scope_ptr fscope, SgMemberFu
   }
 }
 
+// A lambda expression.  Its closure class and the class's operator() (whose
+// parameters and body ROSE prints) are children of the SgLambdaExp; the body
+// refers to captured variables through fields of the closure class
+// ("this->x", where ROSE does not print the implicit "this->").
+SgExpression* Translator::convertLambda(a_lambda_ptr lambda) {
+  if (lambda == nullptr || lambda->closure_class == nullptr || lambda->lambda_routine == nullptr) {
+    throw Unsupported("lambda expression");
+  }
+  if (lambda->is_generic || lambda->has_template_param_list) throw Unsupported("generic lambda");
+  for (a_lambda_capture_ptr c = lambda->capture_list; c != nullptr; c = c->next) {
+    if (c->is_indirect_init_capture || c->is_pack_element) throw Unsupported("lambda capture");
+  }
+  a_type_ptr closure = skip_typerefs(lambda->closure_class);
+  SgClassDeclaration* first = classDeclarationFor(closure);
+  SgClassDefinition* cdef = nullptr;
+  SgClassDeclaration* def = nullptr;
+  auto existing = definingClassDecl.find(closure);
+  if (existing != definingClassDecl.end()) {
+    def = existing->second;
+    cdef = def->get_definition();
+  } else {
+    def = newDefiningClassDeclaration(first, cdef);
+    def->set_parent(first->get_parent());
+    definingClassDecl[closure] = def;
+    a_class_type_supplement_ptr ctsp = closure->variant.class_struct_union.extra_info;
+    if (ctsp != nullptr && ctsp->assoc_scope != nullptr) scopes[ctsp->assoc_scope] = cdef;
+    setCompilerGenerated(def);
+    setCompilerGenerated(cdef);
+  }
+
+  SgFunctionDeclaration* fn = translateRoutine(lambda->lambda_routine, nullptr, cdef);
+  if (fn == nullptr) throw Unsupported("lambda function");
+
+  SgLambdaCaptureList* captures = new SgLambdaCaptureList();
+  for (a_lambda_capture_ptr c = lambda->capture_list; c != nullptr; c = c->next) {
+    SgExpression* captured = nullptr;
+    if (c->is_init_capture) {
+      // "[name = initializer]": ROSE has no representation of its own; the
+      // capture is printed as an assignment to the closure field.
+      if (c->closure_field == nullptr) throw Unsupported("lambda init-capture");
+      SgExpression* field = SageBuilder::buildVarRefExp_nfi(fieldSymbolFor(c->closure_field));
+      SgExpression* value = initializerExpression(convertDynamicInit(c->captured.initializer, nullptr));
+      if (value == nullptr) throw Unsupported("lambda init-capture");
+      captured = SageBuilder::buildAssignOp_nfi(field, value);
+      field->set_parent(captured);
+      value->set_parent(captured);
+      setCompilerGenerated(field);
+      SgLambdaCapture* lc = new SgLambdaCapture(captured, nullptr, nullptr, c->capture_by_reference, false,
+                                                c->is_pack_expansion);
+      captured->set_parent(lc);
+      setPosition(lc, c->position);
+      setPosition(captured, c->position);
+      captures->get_capture_list().push_back(lc);
+      lc->set_parent(captures);
+      continue;
+    }
+    a_variable_ptr var = c->captured.variable;
+    if (var == nullptr) continue;
+    if (var->is_this_parameter) {
+      captured = convertVariableReference(var, nullptr);
+    } else {
+      captured = SageBuilder::buildVarRefExp_nfi(variableSymbolFor(var));
+    }
+    SgExpression* closureVar = nullptr;
+    if (c->closure_field != nullptr) {
+      try {
+        closureVar = SageBuilder::buildVarRefExp_nfi(fieldSymbolFor(c->closure_field));
+      } catch (const Unsupported&) {
+      }
+    }
+    SgLambdaCapture* lc = new SgLambdaCapture(captured, nullptr, closureVar, c->capture_by_reference, c->is_implicit,
+                                              c->is_pack_expansion);
+    captured->set_parent(lc);
+    if (closureVar != nullptr) closureVar->set_parent(lc);
+#if EXTRA_SOURCE_POSITIONS_IN_IL
+    if (!c->is_implicit && c->position.seq != 0) {
+      setPosition(lc, c->position, c->end_position);
+      setPosition(captured, c->position, c->end_position);
+    } else
+#endif
+    {
+      setCompilerGenerated(lc);
+      setCompilerGenerated(captured);
+    }
+    if (closureVar != nullptr) setCompilerGenerated(closureVar);
+    captures->get_capture_list().push_back(lc);
+    lc->set_parent(captures);
+  }
+  SgLambdaExp* le = SageBuilder::buildLambdaExp_nfi(captures, def, fn);
+  le->set_is_mutable(lambda->is_mutable);
+  le->set_capture_default(lambda->has_capture_default);
+  le->set_default_is_by_reference(lambda->has_capture_default && lambda->default_is_by_reference);
+  le->set_explicit_return_type(lambda->explicit_return_type);
+  le->set_has_parameter_decl(lambda->has_parameter_decl);
+  setPosition(captures, lambda->start_position);
+  return le;
+}
+
 }  // namespace edg2sage

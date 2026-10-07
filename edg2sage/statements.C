@@ -534,6 +534,7 @@ SgStatement* Translator::convertTryStatement(a_statement_ptr stmt) {
       // catch (...)
       SgInitializedName* in = SageBuilder::buildInitializedName_nfi(SgName(""), SgTypeEllipse::createType(), nullptr);
       param = new SgVariableDeclaration(in);
+      param->set_firstNondefiningDeclaration(param);
       in->set_scope(c);
       setCompilerGenerated(param);
       setCompilerGenerated(in);

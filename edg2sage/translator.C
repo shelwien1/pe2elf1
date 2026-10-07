@@ -275,10 +275,28 @@ class TypeDeclarationCheck : public ROSE_VisitTraversal {
 };
 }  // namespace
 
+namespace {
+// Declarations must have a first nondefining declaration.
+class FirstDeclarationCheck : public ROSE_VisitTraversal {
+ public:
+  void visit(SgNode* n) override {
+    SgDeclarationStatement* d = isSgDeclarationStatement(n);
+    if (d == nullptr || d->get_firstNondefiningDeclaration() != nullptr) return;
+    if (isSgFunctionParameterList(d) || isSgCtorInitializerList(d) || isSgVariableDefinition(d)) return;
+    Sg_File_Info* fi = d->get_startOfConstruct();
+    mlog[Sawyer::Message::ERROR] << d->class_name() << " without first nondefining declaration at "
+                                 << (fi ? fi->get_filenameString() + ":" + std::to_string(fi->get_line()) : "?")
+                                 << " parent " << (d->get_parent() ? d->get_parent()->class_name() : "null") << "\n";
+  }
+};
+}  // namespace
+
 void Translator::checkTree(SgNode* node, int depth) {
   if (depth == 0) {
     TypeDeclarationCheck check;
     check.traverseMemoryPool();
+    FirstDeclarationCheck first;
+    first.traverseMemoryPool();
   }
   if (node == nullptr || depth > 2000) return;
   std::vector<SgNode*> children = node->get_traversalSuccessorContainer();

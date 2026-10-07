@@ -479,7 +479,11 @@ SgFunctionDeclaration* Translator::newFunctionDeclaration(a_routine_ptr routine,
   if (routine->template_arg_list != nullptr && routine->assoc_template != nullptr) {
     // An instance (or explicit specialization) of a function template
     SgTemplateArgumentPtrList args = convertTemplateArguments(routine->template_arg_list);
-    SgName fullName = SageBuilder::appendTemplateArgumentsToName(name, args);
+    // ROSE names instances of operator templates without their arguments (so
+    // that calls can be printed with operator syntax).
+    bool isOperator = routine->special_kind == sfk_operator || routine->special_kind == sfk_conversion ||
+                      routine->special_kind == sfk_udl_operator;
+    SgName fullName = isOperator ? name : SageBuilder::appendTemplateArgumentsToName(name, args);
     SgDeclarationStatement* tdecl = templateDeclarationFor(routine->assoc_template);
     SgFunctionDeclaration* result = nullptr;
     if (member) {
