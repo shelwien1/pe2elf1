@@ -331,6 +331,17 @@ SgDeclarationStatement* Translator::translateVariable(a_variable_ptr var, a_src_
   SgName name = nameOf(&var->source_corresp);
   bool unnamed = name.is_null();
   if (unnamed && var->is_anonymous_parent_object) name = SgName("");
+  if (var->is_struct_binding_container) {
+    // "auto [a, b] = e;": ROSE has no structured bindings; the unnamed object
+    // is declared with the binding list as its name (the bindings themselves
+    // are referred to by name).
+    std::string list = "[";
+    for (an_il_entity_list_entry_ptr b = var->variant.bindings; b != nullptr; b = b->next) {
+      if (b != var->variant.bindings) list += ", ";
+      list += nameOf(&((a_variable_ptr)b->entity.ptr)->source_corresp).getString();
+    }
+    name = SgName(list + "]");
+  }
 
   SgInitializer* init = nullptr;
   if (sec == nullptr && !suppressInitializers) init = convertVariableInitializer(var);

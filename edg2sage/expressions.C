@@ -1711,6 +1711,12 @@ SgInitializer* Translator::convertInitializerConstant(a_constant_ptr con, SgType
                                                  : convertLambda(be->variant.initializer.dyn_init->variant.constant.lambda);
         return assignInitializer(this, e, type);
       }
+      if (con->is_result_of_constexpr_call && be != nullptr) {
+        // The value of a constexpr constructor call: the call as written.
+        SgExpression* e = convertExpression(be);
+        if (SgInitializer* i = isSgInitializer(e)) return i;
+        return assignInitializer(this, e, type);
+      }
       SgAggregateInitializer* ai = convertAggregate(con, type);
       ai->set_need_explicit_braces(true);
       return ai;

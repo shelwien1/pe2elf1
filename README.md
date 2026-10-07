@@ -75,16 +75,25 @@ on the command line ROSE builds; once the IL of the translation unit is complete
 | `types.C` | types (and the declarations named types refer to) |
 | `declarations.C` | the source sequence lists: variables, functions, classes, enums, typedefs, pragmas |
 | `statements.C` | function bodies |
-| `expressions.C` | expressions, constants, initializers |
+| `expressions.C` | expressions, constants, initializers, lambdas |
+| `cxx.C` | namespaces, using declarations, base classes, constructor initializers, lambdas |
+| `templates.C` | template declarations and template instances |
 | `attributes.C` | GNU/C11 attributes that ROSE represents |
 
-Status: C (C89 to C11 with GNU extensions) is well supported — of the 833 programs in ROSE's
-own `C_tests` corpus that GCC compiles, about 94% are translated and unparsed into code that
-GCC compiles again (many of the rest exercise known limitations of ROSE's unparser).  C++
-support covers the C subset plus classes and member functions; namespaces, templates and the
-rest of C++ are not translated yet.  Constructs that cannot be translated are reported as
-warnings (set `EDG2SAGE_DEBUG=1` for more diagnostics) and skipped.  EDG options can be passed
-through ROSE with `--edg:<option>`, e.g. `--edg:il_display` to dump the IL.
+Status: C (C89 to C11 with GNU extensions) and C++ (up to C++17, including code using the
+standard library) are translated.  Of the programs in ROSE's own test corpora that GCC compiles,
+about 95% of the 833 `C_tests` and 98% of the 2,449 `Cxx_tests` are translated and unparsed into
+code that GCC compiles again; many of the rest exercise known limitations of ROSE's unparser.
+
+Templates are represented as ROSE's unparser expects them: template declarations
+keep their text (EDG records it in the IL), which ROSE prints, and template instances become
+`SgTemplateInstantiation*` declarations that are referenced (for names, types and calls) but not
+printed, since the back-end compiler instantiates the templates again.  Explicit
+specializations and instantiation directives are translated from the source.
+
+Constructs that cannot be translated are reported as warnings (set `EDG2SAGE_DEBUG=1` for more
+diagnostics) and skipped.  EDG options can be passed through ROSE with `--edg:<option>`, e.g.
+`--edg:il_display` to dump the IL.
 
 ## Provenance and licenses
 
