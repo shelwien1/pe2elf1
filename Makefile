@@ -291,6 +291,10 @@ $(OBJ)/tools/%.o: $(TOOL_SRC)/%.C | $(LIB_PREREQS)
 	@mkdir -p $(@D)
 	$(Q)$(CXX) $(ROSE_CXXFLAGS) $(ROSE_CPPFLAGS) -MMD -MP -c $< -o $@
 
+# Keep the tool objects so that `make check` after `make all` does not
+# recompile them.
+.SECONDARY: $(addprefix $(OBJ)/tools/,$(addsuffix .o,$(TOOLS)))
+
 $(B)/bin/%: $(OBJ)/tools/%.o $(LIBROSE)
 	$(call msg,LINK,$@)
 	@mkdir -p $(@D)

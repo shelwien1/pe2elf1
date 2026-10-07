@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <set>
 
 using namespace edg;
 using namespace Sawyer::Message;
@@ -562,6 +563,34 @@ SgExpression* Translator::convertFieldSelection(an_expr_node_ptr expr, bool arro
   return r;
 }
 
+// The classes in which C++ name lookup of member "name" in class "type" finds
+// a declaration (more than one: the name is ambiguous there, e.g. a member of
+// two base classes).
+static void classesDeclaring(a_type_ptr type, const char* name, std::set<a_type_ptr>& found) {
+  type = skip_typerefs(type);
+  if (type == nullptr || (type->kind != tk_class && type->kind != tk_struct && type->kind != tk_union)) return;
+  auto named = [name](const char* n) { return n != nullptr && std::strcmp(n, name) == 0; };
+  a_class_type_supplement_ptr ctsp = type->variant.class_struct_union.extra_info;
+  bool declares = false;
+  for (a_field_ptr f = type->variant.class_struct_union.field_list; f != nullptr && !declares; f = f->next) {
+    declares = named(f->source_corresp.name);
+  }
+  a_scope_ptr scope = ctsp != nullptr ? ctsp->assoc_scope : nullptr;
+  for (a_routine_ptr r = scope ? scope->routines : nullptr; r != nullptr && !declares; r = r->next) {
+    declares = named(r->source_corresp.name);
+  }
+  for (a_variable_ptr v = scope ? scope->variables : nullptr; v != nullptr && !declares; v = v->next) {
+    declares = named(v->source_corresp.name);
+  }
+  if (declares) {
+    found.insert(type);
+    return;
+  }
+  for (a_base_class_ptr bc = ctsp ? ctsp->direct_base_classes : nullptr; bc != nullptr; bc = bc->next_direct) {
+    classesDeclaring(bc->type, name, found);
+  }
+}
+
 SgExpression* Translator::convertCall(an_expr_node_ptr expr) {
   an_expr_operator_kind k = expr->variant.operation.kind;
   an_expr_node_ptr first = expr->variant.operation.operands;
@@ -605,9 +634,20 @@ SgExpression* Translator::convertCall(an_expr_node_ptr expr) {
         }
         if (qualified && k == eok_points_to_member_call && obj != nullptr && obj->kind == enk_variable &&
             obj->variant.variable.ptr != nullptr && obj->variant.variable.ptr->is_this_parameter) {
-          function = member;
-          args = objectNode->next;
-          break;
+          // Unless the name is ambiguous in the class of this ("A::f()" with
+          // f in two bases): ROSE's name qualification then qualifies the
+          // member access "this->A::f()", through the (implicit) base class cast.
+          a_type_ptr thisType = skip_typerefs(obj->variant.variable.ptr->type);
+          a_routine_ptr r = first->kind == enk_routine ? first->variant.routine.ptr : nullptr;
+          std::set<a_type_ptr> found;
+          if (thisType != nullptr && thisType->kind == tk_pointer && r != nullptr && r->source_corresp.name != nullptr) {
+            classesDeclaring(thisType->variant.pointer.type, r->source_corresp.name, found);
+          }
+          if (found.size() <= 1) {
+            function = member;
+            args = objectNode->next;
+            break;
+          }
         }
       }
       SgExpression* object = convertExpression(objectNode);
@@ -712,7 +752,13 @@ SgExpression* Translator::convertOperation(an_expr_node_ptr expr) {
       r = unaryOp<SgBitComplementOp>(A());
       break;
     case eok_not:
+    case eok_vector_not:
       r = unaryOp<SgNotOp>(A());
+      break;
+    case eok_vector_fill:
+      // A scalar operand of a GNU vector operation ("v * 2"), implicitly
+      // converted to a vector with the value in every element.
+      r = A();
       break;
 #if C99_IL_EXTENSIONS_SUPPORTED
     case eok_xconj:
@@ -1071,6 +1117,20 @@ SgExpression* Translator::convertTempInit(an_expr_node_ptr expr) {
   return init;
 }
 
+// A new-type-id cannot contain parentheses ("new (float (*)())"), but ROSE's
+// unparser parenthesizes the type only when the new-expression has an initializer.
+static bool newTypeNeedsParentheses(SgType* t) {
+  bool indirect = false;
+  for (;;) {
+    t = t->stripType(SgType::STRIP_MODIFIER_TYPE);
+    SgPointerType* p = isSgPointerType(t);  // includes pointers to members
+    if (p == nullptr) break;
+    t = p->get_base_type();
+    indirect = true;
+  }
+  return indirect && (isSgFunctionType(t) != nullptr || isSgArrayType(t) != nullptr);
+}
+
 SgExpression* Translator::convertNewDelete(an_expr_node_ptr expr) {
   a_new_delete_supplement_ptr nd = expr->variant.new_delete;
   if (nd->is_new) {
@@ -1110,6 +1170,13 @@ SgExpression* Translator::convertNewDelete(an_expr_node_ptr expr) {
     } else if (nd->has_new_initializer) {
       ctor = SageBuilder::buildConstructorInitializer_nfi(nullptr, SageBuilder::buildExprListExp_nfi(), type,
                                                          false, false, true, true);
+      setCompilerGenerated(ctor->get_args());
+      setCompilerGenerated(ctor);
+    }
+    if (ctor == nullptr && newTypeNeedsParentheses(type)) {
+      // An empty initializer prints nothing, but the type is parenthesized.
+      ctor = SageBuilder::buildConstructorInitializer_nfi(nullptr, SageBuilder::buildExprListExp_nfi(), type,
+                                                         false, false, false, true);
       setCompilerGenerated(ctor->get_args());
       setCompilerGenerated(ctor);
     }
@@ -1229,9 +1296,15 @@ SgExpression* Translator::convertConstant(a_constant_ptr con, an_expr_node_ptr n
       if (r == nullptr) throw Unsupported("empty dynamic initialization constant");
       return r;
     }
-    case ck_aggregate:
-      r = convertAggregate(con, convertType(con->type));
+    case ck_aggregate: {
+      SgAggregateInitializer* ai = convertAggregate(con, convertType(con->type));
+      ai->set_need_explicit_braces(true);
+      // A GNU vector value (folded from "v * 2" in C++): a compound literal
+      a_type_ptr t = skip_typerefs(con->type);
+      if (t != nullptr && t->kind == tk_vector) ai->set_uses_compound_literal(true);
+      r = ai;
       break;
+    }
     case ck_ptr_to_member: {
       if (con->variant.ptr_to_member.is_function_ptr) {
         a_routine_ptr rout = con->variant.ptr_to_member.variant.routine;

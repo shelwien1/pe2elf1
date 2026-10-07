@@ -103,6 +103,18 @@ std::string anonymousName(const void* entity) {
 
 }  // namespace
 
+// The operand of "decltype(e)" or "typeof(e)": in the type entry, or (for a type
+// written in a function) on the function's list of local expressions.
+static an_expr_node_ptr typeOperand(a_type_ptr type) {
+  a_typeref_type_supplement_ptr ext = type->variant.typeref.extra_info;
+  if (ext == nullptr) return nullptr;
+  if (ext->expr != nullptr) return ext->expr;
+  a_routine_ptr r = type->source_corresp.enclosing_routine;
+  if (r == nullptr || r->function_def_number == NULL_function_def_number) return nullptr;
+  a_scope_ptr scope = scope_for_routine_or_null(r);
+  return scope != nullptr ? find_local_expr_node_in_scope((char*)type, lerk_decltype, scope) : nullptr;
+}
+
 SgFunctionType* Translator::convertFunctionType(a_type_ptr type, SgClassDefinition* memberOf, SgType* memberClassType) {
   a_type_ptr rt = skip_typerefs(type);
   ROSE_ASSERT(rt->kind == tk_routine);
@@ -238,9 +250,8 @@ SgType* Translator::convertType(a_type_ptr type) {
         result = decl ? decl->get_type() : convertType(type->variant.typeref.type);
       } else if (typeref_is_qualified(type)) {
         result = qualify(convertType(type->variant.typeref.type), type->variant.typeref.qualifiers);
-      } else if (trk == trk_is_typeof_with_expression && type->variant.typeref.extra_info != nullptr &&
-                 type->variant.typeref.extra_info->expr != nullptr) {
-        SgExpression* e = convertExpression(type->variant.typeref.extra_info->expr);
+      } else if (trk == trk_is_typeof_with_expression && typeOperand(type) != nullptr) {
+        SgExpression* e = convertExpression(typeOperand(type));
         SgTypeOfType* tt = new SgTypeOfType(e, nullptr);
         e->set_parent(tt);
         result = tt;
@@ -248,9 +259,8 @@ SgType* Translator::convertType(a_type_ptr type) {
       } else if (trk == trk_is_typeof_with_type_operand) {
         SgType* operand = convertType(type->variant.typeref.type);
         result = new SgTypeOfType(nullptr, operand);
-      } else if (trk == trk_is_decltype && type->variant.typeref.extra_info != nullptr &&
-                 type->variant.typeref.extra_info->expr != nullptr) {
-        SgExpression* e = convertExpression(type->variant.typeref.extra_info->expr);
+      } else if (trk == trk_is_decltype && typeOperand(type) != nullptr) {
+        SgExpression* e = convertExpression(typeOperand(type));
         SgDeclType* dt = new SgDeclType(e, convertType(type->variant.typeref.type));
         e->set_parent(dt);
         return dt;
@@ -283,6 +293,11 @@ SgType* Translator::convertType(a_type_ptr type) {
         result = is_auto_type(type) ? (SgType*)SageBuilder::buildAutoType() : SgTypeUnknown::createType();
       }
       break;
+#if GNU_VECTOR_TYPES_ALLOWED
+    case tk_vector:
+      result = vectorType(type);
+      break;
+#endif
     default:
       result = SgTypeUnknown::createType();
       break;
@@ -299,20 +314,33 @@ void Translator::setEnumBase(SgEnumDeclaration* decl, a_type_ptr type) {
   }
 }
 
-// "decltype(auto)": ROSE has no representation of its own; a (hidden) typedef
-// of auto with that name prints as written.
-SgType* Translator::decltypeAutoType() {
-  static const char* name = "decltype(auto)";
-  if (decltypeAuto == nullptr) {
-    decltypeAuto = new SgTypedefDeclaration(SgName(name), SageBuilder::buildAutoType(), nullptr, nullptr, nullptr);
-    decltypeAuto->set_firstNondefiningDeclaration(decltypeAuto);
-    decltypeAuto->set_scope(globalScope);
-    decltypeAuto->set_parent(globalScope);
-    decltypeAuto->set_type(SgTypedefType::createType(decltypeAuto));
-    setCompilerGenerated(decltypeAuto);
-    globalScope->insert_symbol(SgName(name), new SgTypedefSymbol(decltypeAuto));
+// A type ROSE has no representation of, printed as written: the type of a
+// hidden typedef (in global scope, never unparsed itself) with that name.
+SgType* Translator::pseudoType(const std::string& name, SgType* base) {
+  SgTypedefDeclaration*& decl = pseudoTypes[name];
+  if (decl == nullptr) {
+    decl = new SgTypedefDeclaration(SgName(name), base, nullptr, nullptr, nullptr);
+    decl->set_firstNondefiningDeclaration(decl);
+    decl->set_scope(globalScope);
+    decl->set_parent(globalScope);
+    decl->set_type(SgTypedefType::createType(decl));
+    setCompilerGenerated(decl);
+    globalScope->insert_symbol(SgName(name), new SgTypedefSymbol(decl));
   }
-  return decltypeAuto->get_type();
+  return decl->get_type();
+}
+
+// "decltype(auto)"
+SgType* Translator::decltypeAutoType() {
+  return pseudoType("decltype(auto)", SageBuilder::buildAutoType());
+}
+
+// GNU vector types: "float __attribute__((__vector_size__(16)))"
+SgType* Translator::vectorType(a_type_ptr type) {
+  SgType* element = convertType(skip_typerefs(type->variant.vector.element_type));
+  std::string name = element->unparseToString() + " __attribute__((__vector_size__(" +
+                     std::to_string((unsigned long)type->size) + ")))";
+  return pseudoType(name, element);
 }
 
 // ---------------------------------------------------------------------------------
@@ -395,6 +423,19 @@ void Translator::setTypedefBaseDeclaration(SgTypedefDeclaration* decl) {
   }
 }
 
+// The symbol of the class or namespace a typedef is declared in (as SageBuilder
+// sets it): SgTypedefType::createType returns an existing typedef type with the
+// same name, base type and parent scope symbol, so member typedefs of different
+// classes would otherwise share one type ("A::size_type" for "B::size_type").
+SgSymbol* Translator::typedefParentScope(SgScopeStatement* scope) {
+  SgDeclarationStatement* decl = nullptr;
+  if (SgClassDefinition* cd = isSgClassDefinition(scope)) decl = cd->get_declaration();
+  else if (SgNamespaceDefinitionStatement* nd = isSgNamespaceDefinitionStatement(scope)) decl = nd->get_namespaceDeclaration();
+  if (decl == nullptr) return nullptr;
+  SgDeclarationStatement* withSymbol = decl->get_declaration_associated_with_symbol();
+  return withSymbol != nullptr ? withSymbol->get_symbol_from_symbol_table() : nullptr;
+}
+
 SgTypedefDeclaration* Translator::typedefDeclarationFor(a_type_ptr type) {
   auto it = typedefDecls.find(type);
   if (it != typedefDecls.end()) return it->second;
@@ -405,7 +446,7 @@ SgTypedefDeclaration* Translator::typedefDeclarationFor(a_type_ptr type) {
   auto again = typedefDecls.find(type);  // converting the base type may have created it
   if (again != typedefDecls.end()) return again->second;
   SgName name = nameOf(&type->source_corresp);
-  SgTypedefDeclaration* decl = new SgTypedefDeclaration(name, base, nullptr, nullptr, nullptr);
+  SgTypedefDeclaration* decl = new SgTypedefDeclaration(name, base, nullptr, nullptr, typedefParentScope(scope));
   decl->set_firstNondefiningDeclaration(decl);  // ROSE: typedefs have no defining declaration
   decl->set_scope(scope);
   decl->set_parent(scope);

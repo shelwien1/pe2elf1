@@ -90,9 +90,12 @@ class Translator {
   SgClassDeclaration* classDeclarationFor(edg::a_type_ptr classType);   // first nondefining declaration
   SgEnumDeclaration* enumDeclarationFor(edg::a_type_ptr enumType);      // first nondefining declaration
   SgTypedefDeclaration* typedefDeclarationFor(edg::a_type_ptr typedefType);
+  SgSymbol* typedefParentScope(SgScopeStatement* scope);
   void setTypedefBaseDeclaration(SgTypedefDeclaration* decl);
   SgClassDefinition* classDefinitionFor(edg::a_type_ptr classType);
+  SgType* pseudoType(const std::string& name, SgType* base);
   SgType* decltypeAutoType();
+  SgType* vectorType(edg::a_type_ptr type);
   void setEnumBase(SgEnumDeclaration* decl, edg::a_type_ptr enumType);
 
   // ---------------------------------------------------------------- declarations
@@ -204,6 +207,8 @@ class Translator {
   SgStatement* convertRangeBasedForStatement(edg::a_statement_ptr stmt);
   SgStatement* convertSwitchStatement(edg::a_statement_ptr stmt);
   SgStatement* convertIfStatement(edg::a_statement_ptr stmt);
+  edg::a_statement_ptr selectionInitialization(edg::a_statement_ptr stmt);
+  SgStatement* convertInitializedSelection(edg::a_statement_ptr stmt);
   SgStatement* convertCondition(edg::an_expr_node_ptr expr, SgScopeStatement* scope);
   SgStatement* convertTryStatement(edg::a_statement_ptr stmt);
   SgStatement* convertAsmStatement(edg::an_asm_entry_ptr asm_entry, const edg::a_source_position& pos);
@@ -264,7 +269,7 @@ class Translator {
   std::map<std::pair<SgScopeStatement*, std::string>, SgVariableSymbol*> functionNameSymbols;  // constants whose backing expression is being translated
   int compoundLiterals = 0;
   bool suppressInitializers = false;  // the iteration variable of a range-based for
-  SgTypedefDeclaration* decltypeAuto = nullptr;
+  std::map<std::string, SgTypedefDeclaration*> pseudoTypes;
   std::set<SgClassDeclaration*> firstUsedAsStatement;      // hidden first decl reused as forward declaration
   std::set<SgClassDeclaration*> hiddenDefinitions;         // definitions of template instances (see templates.C)
   std::set<SgTypedefDeclaration*> typedefInStatementList;

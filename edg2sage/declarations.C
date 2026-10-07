@@ -810,15 +810,18 @@ SgFunctionDeclaration* Translator::translateRoutine(a_routine_ptr routine, a_src
   a_storage_class sc = sec ? sec->declared_storage_class : routine->declared_storage_class;
   setDeclarationModifiers(decl, &routine->source_corresp, sc);
   SgFunctionModifier& fm = decl->get_functionModifier();
+  bool isFriend = sec != nullptr ? sec->friend_decl : (routine->defined_in_friend_decl && isSgClassDefinition(scope) != nullptr);
   if (routine->is_inline) {
-    // Member functions defined in their class are implicitly inline: only an
-    // "inline" keyword in the declaration specifiers is reproduced.
+    // Functions defined in their class are implicitly inline, and in C++ a
+    // function is inline if any of its declarations is: only an "inline"
+    // keyword in the declaration specifiers is reproduced.
     a_decl_position_supplement_ptr spi = sec ? sec->decl_pos_info : routine->source_corresp.decl_pos_info;
     std::string spec;
     if (spi != nullptr && spi->specifiers_range.start.seq != 0) {
       spec = sourceText(spi->specifiers_range.start, spi->specifiers_range.end);
     }
-    if (!isMember || spec.find("inline") != std::string::npos) fm.setInline();
+    bool written = spec.find("inline") != std::string::npos;
+    if (written || (!isMember && !isFriend && (!isCxx || spec.empty()))) fm.setInline();
   }
   if (routine->is_virtual) fm.setVirtual();
   if (routine->pure_virtual) fm.setPureVirtual();
@@ -827,7 +830,6 @@ SgFunctionDeclaration* Translator::translateRoutine(a_routine_ptr routine, a_src
   if (routine->is_deleted) fm.setMarkedDelete();
   setLinkage(decl, sec ? sec->decl_pos_info : routine->source_corresp.decl_pos_info);
   setExceptionSpecification(decl, skip_typerefs(declaredType)->kind == tk_routine ? declaredType : routine->type);
-  bool isFriend = sec != nullptr ? sec->friend_decl : (routine->defined_in_friend_decl && isSgClassDefinition(scope) != nullptr);
   if (isFriend) decl->get_declarationModifier().setFriend();
   if (routine->override) decl->get_declarationModifier().setOverride();
   if (routine->final) decl->get_declarationModifier().setFinal();
@@ -1208,7 +1210,7 @@ SgTypedefDeclaration* Translator::translateTypedef(a_type_ptr type, a_src_seq_se
     decl = existing->second;  // created on demand before its declaration was reached
   } else {
     SgType* base = convertType(baseType);
-    decl = new SgTypedefDeclaration(name, base, nullptr, nullptr, nullptr);
+    decl = new SgTypedefDeclaration(name, base, nullptr, nullptr, typedefParentScope(scope));
     decl->set_scope(scope);
     decl->set_parent(scope);
     if (existing == typedefDecls.end()) {

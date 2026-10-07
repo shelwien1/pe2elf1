@@ -15,6 +15,33 @@ using namespace Sawyer::Message;
 
 namespace edg2sage {
 
+// The parent of the nontype arguments of template instances: ROSE's name
+// qualification qualifies the names in the expression of a nontype argument for
+// each use of the (shared) instance, in the scope of the use, only if no
+// statement encloses the expression -- the parent of a template argument must
+// be a type or symbol without parent, not the instance declaration (ROSE's own
+// types can have parents, e.g. in the function type table).
+static SgType* nontypeArgumentParent() {
+  static SgType* holder = new SgTypeUnknown();
+  return holder;
+}
+
+static void adoptNontypeArgument(SgTemplateArgument* a, SgDeclarationStatement* decl) {
+  if (a->get_argumentType() != SgTemplateArgument::nontype_argument) return;
+  a->set_parent(nontypeArgumentParent());
+  // ROSE prints all the arguments of class template instances (it recognizes
+  // them by their parent).
+  if (isSgClassDeclaration(decl) != nullptr) a->set_explicitlySpecified(true);
+}
+
+// Appends a template argument to the list of its instance declaration.
+static void appendTemplateArgument(SgTemplateArgumentPtrList& list, SgDeclarationStatement* decl,
+                                   SgTemplateArgument* a) {
+  a->set_parent(decl);
+  adoptNontypeArgument(a, decl);
+  list.push_back(a);
+}
+
 namespace {
 
 a_template_ptr canonicalOf(a_template_ptr t) {
@@ -273,8 +300,7 @@ SgDeclarationStatement* Translator::translateInstantiationDirective(an_instantia
       SgClassDeclaration* d = newNondefiningClassDeclaration(first);
       if (SgTemplateInstantiationDecl* ti = isSgTemplateInstantiationDecl(d)) {
         for (SgTemplateArgument* a : convertTemplateArguments(type->variant.class_struct_union.extra_info->template_arg_list)) {
-          a->set_parent(ti);
-          ti->get_templateArguments().push_back(a);
+          appendTemplateArgument(ti->get_templateArguments(), ti, a);
         }
       }
       decl = d;
@@ -303,14 +329,26 @@ SgDeclarationStatement* Translator::translateInstantiationDirective(an_instantia
 // Template arguments
 // ---------------------------------------------------------------------------------
 
+// The type of a template argument as it can be written anywhere: template
+// instances are shared by all their uses, so a protected or private member
+// typedef in an argument ("X<A::hidden_typedef>") is replaced by its type.
+static a_type_ptr accessibleArgumentType(a_type_ptr type) {
+  while (type != nullptr && type->kind == tk_typeref && typeref_is_typedef(type) &&
+         type->source_corresp.is_class_member && type->source_corresp.access != as_public) {
+    type = type->variant.typeref.type;
+  }
+  return type;
+}
+
 SgTemplateArgumentPtrList Translator::convertTemplateArguments(a_template_arg_ptr args) {
   SgTemplateArgumentPtrList result;
   for (a_template_arg_ptr a = args; a != nullptr; a = a->next) {
     SgTemplateArgument* arg = nullptr;
     switch (a->kind) {
       case tak_type:
-        arg = new SgTemplateArgument(SgTemplateArgument::type_argument, false, convertType(a->variant.type), nullptr,
-                                     nullptr, a->explicitly_specified);
+        arg = new SgTemplateArgument(SgTemplateArgument::type_argument, false,
+                                     convertType(accessibleArgumentType(a->variant.type)), nullptr, nullptr,
+                                     a->explicitly_specified);
         break;
       case tak_nontype: {
         SgExpression* e = nullptr;
@@ -384,7 +422,8 @@ SgClassDeclaration* Translator::instanceDeclarationFor(a_type_ptr type) {
   decl->setForward();
   decl->set_scope(scope);
   decl->set_parent(scope);
-  decl->set_type(SgClassType::createType(decl));
+  decl->set_type(SgClassType::createType(decl));  // (its mangled name needs the arguments' parents)
+  for (SgTemplateArgument* a : decl->get_templateArguments()) adoptNontypeArgument(a, decl);
   if (type->variant.class_struct_union.is_specialized) {
     decl->set_specialization(SgDeclarationStatement::e_specialization);
     setPosition(decl, type->source_corresp.decl_position);
@@ -478,8 +517,7 @@ SgClassDefinition* Translator::hiddenDefinitionFor(a_type_ptr type) {
   def->set_parent(first->get_parent());
   if (SgTemplateInstantiationDecl* ti = isSgTemplateInstantiationDecl(def)) {
     for (SgTemplateArgument* a : convertTemplateArguments(ctsp->template_arg_list)) {
-      a->set_parent(ti);
-      ti->get_templateArguments().push_back(a);
+      appendTemplateArgument(ti->get_templateArguments(), ti, a);
     }
   }
   setCompilerGenerated(def);
@@ -542,8 +580,7 @@ SgFunctionDeclaration* Translator::newFunctionDeclaration(a_routine_ptr routine,
       d->set_nameResetFromMangledForm(true);
       d->set_template_argument_list_is_explicit(routine->expl_template_arg_list_used);
       for (SgTemplateArgument* a : args) {
-        a->set_parent(d);
-        d->get_templateArguments().push_back(a);
+        appendTemplateArgument(d->get_templateArguments(), d, a);
       }
       result = d;
     } else {
@@ -553,8 +590,7 @@ SgFunctionDeclaration* Translator::newFunctionDeclaration(a_routine_ptr routine,
       d->set_nameResetFromMangledForm(true);
       d->set_template_argument_list_is_explicit(routine->expl_template_arg_list_used);
       for (SgTemplateArgument* a : args) {
-        a->set_parent(d);
-        d->get_templateArguments().push_back(a);
+        appendTemplateArgument(d->get_templateArguments(), d, a);
       }
       result = d;
     }

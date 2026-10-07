@@ -167,6 +167,7 @@ SgStatement* Translator::convertStatementKind(a_statement_ptr stmt) {
       return convertBlock(stmt);
     case stmk_if:
     case stmk_constexpr_if:
+      if (selectionInitialization(stmt) != nullptr) return convertInitializedSelection(stmt);
       return convertIfStatement(stmt);
     case stmk_while: {
       SgWhileStmt* w = new SgWhileStmt((SgStatement*)nullptr, (SgStatement*)nullptr);
@@ -198,6 +199,7 @@ SgStatement* Translator::convertStatementKind(a_statement_ptr stmt) {
     case stmk_range_based_for:
       return convertRangeBasedForStatement(stmt);
     case stmk_switch:
+      if (selectionInitialization(stmt) != nullptr) return convertInitializedSelection(stmt);
       return convertSwitchStatement(stmt);
     case stmk_switch_case: {
       a_switch_case_entry_ptr ce = stmt->variant.switch_case.extra_info;
@@ -306,6 +308,41 @@ SgStatement* Translator::convertStatementKind(a_statement_ptr stmt) {
   }
 }
 
+// Whether variable v is declared by one of the statements in a list.
+static bool declaredBy(a_statement_ptr list, a_variable_ptr v) {
+  for (a_statement_ptr s = list; s != nullptr; s = s->next) {
+    if (s->kind != stmk_decl) continue;
+    for (an_il_entity_list_entry_ptr e = s->variant.decl.entities; e != nullptr; e = e->next) {
+      if (e->entity.ptr == (char*)v) return true;
+    }
+  }
+  return false;
+}
+
+// The initialization statement of a C++17 selection statement ("if (init; c)").
+a_statement_ptr Translator::selectionInitialization(a_statement_ptr stmt) {
+  an_expr_node_ptr e = stmt->expr;
+  if (e == nullptr || e->kind != enk_condition || e->variant.condition == nullptr) return nullptr;
+  return e->variant.condition->initialization;
+}
+
+// "if (init; c) ..." and "switch (init; c) ...": ROSE's statements have no
+// initialization statement, so the statement and its initialization are put in
+// a block of their own, which has the same meaning.
+SgStatement* Translator::convertInitializedSelection(a_statement_ptr stmt) {
+  SgBasicBlock* block = SageBuilder::buildBasicBlock_nfi();
+  block->set_parent(currentScope());
+  scopeStack.push_back(block);
+  SageBuilder::pushScopeStack(block);
+  convertStatementListInto(selectionInitialization(stmt), block);
+  SgStatement* s = stmt->kind == stmk_switch ? convertSwitchStatement(stmt) : convertIfStatement(stmt);
+  appendStatementTo(block, s);
+  SageBuilder::popScopeStack();
+  scopeStack.pop_back();
+  setPosition(block, stmt->position, endOf(stmt));
+  return block;
+}
+
 SgStatement* Translator::convertCondition(an_expr_node_ptr expr, SgScopeStatement* scope) {
   if (expr != nullptr && expr->kind == enk_condition) {
     // A C++ condition declaration ("if (T x = ...)")
@@ -313,7 +350,12 @@ SgStatement* Translator::convertCondition(an_expr_node_ptr expr, SgScopeStatemen
     if (cs->scope != nullptr) scopes[cs->scope] = scope;
     a_variable_ptr var = nullptr;
     if (cs->dynamic_init != nullptr) var = cs->dynamic_init->variable;
-    if (var == nullptr && cs->scope != nullptr) var = cs->scope->variables;
+    if (var == nullptr && cs->scope != nullptr) {
+      // (the variables declared by an initialization statement are in the same scope)
+      for (a_variable_ptr v = cs->scope->variables; v != nullptr && var == nullptr; v = v->next) {
+        if (!declaredBy(cs->initialization, v)) var = v;
+      }
+    }
     if (var != nullptr) {
       SgDeclarationStatement* d = translateVariable(var, nullptr, scope);
       // A condition declaration is initialized with "= ..." (or braces).
