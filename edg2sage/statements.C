@@ -305,6 +305,14 @@ SgStatement* Translator::convertCondition(an_expr_node_ptr expr, SgScopeStatemen
     if (var == nullptr && cs->scope != nullptr) var = cs->scope->variables;
     if (var != nullptr) {
       SgDeclarationStatement* d = translateVariable(var, nullptr, scope);
+      // A condition declaration is initialized with "= ..." (or braces).
+      if (SgVariableDeclaration* vd = isSgVariableDeclaration(d)) {
+        for (SgInitializedName* in : vd->get_variables()) {
+          if (SgConstructorInitializer* ci = isSgConstructorInitializer(in->get_initializer())) {
+            if (!ci->get_is_braced_initialized()) ci->set_is_used_in_conditional(true);
+          }
+        }
+      }
       return d;
     }
     expr = cs->expr;
@@ -517,6 +525,7 @@ SgStatement* Translator::convertTryStatement(a_statement_ptr stmt) {
   a_try_supplement_ptr ts = stmt->variant.try_block;
   SgBasicBlock* body = convertBlock(ts->statement);
   SgTryStmt* t = new SgTryStmt(body);
+  t->set_parent(currentScope());  // provisional (for declarations in the handlers)
   body->set_parent(t);
   SgCatchStatementSeq* seq = t->get_catch_statement_seq_root();
   if (seq == nullptr) {

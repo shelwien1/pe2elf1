@@ -131,7 +131,8 @@ class Translator {
   SgEnumDeclaration* translateEnumDefinition(SeqCursor& cursor, edg::a_type_ptr type, SgScopeStatement* scope);
   SgTypedefDeclaration* translateTypedef(edg::a_type_ptr type, edg::a_src_seq_secondary_decl_ptr sec,
                                          SgScopeStatement* scope);
-  SgFunctionParameterList* buildParameterList(edg::a_routine_ptr routine, bool defining);
+  SgFunctionParameterList* buildParameterList(edg::a_routine_ptr routine, bool defining,
+                                              edg::a_type_ptr declaredType = nullptr);
   void setSpecialFunctionKind(SgFunctionDeclaration* decl, edg::a_routine_ptr routine);
   void translateFunctionBody(edg::a_routine_ptr routine, SgFunctionDeclaration* defining);
   void setDeclarationModifiers(SgDeclarationStatement* decl, edg::a_source_correspondence* scp,

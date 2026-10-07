@@ -548,9 +548,14 @@ SgVariableSymbol* Translator::fieldSymbolFor(a_field_ptr field) {
 // Functions
 // ---------------------------------------------------------------------------------
 
-SgFunctionParameterList* Translator::buildParameterList(a_routine_ptr routine, bool defining) {
+SgFunctionParameterList* Translator::buildParameterList(a_routine_ptr routine, bool defining, a_type_ptr declaredType) {
   SgFunctionParameterList* params = SageBuilder::buildFunctionParameterList_nfi();
+  // A declaration that is not the definition has the parameter types as
+  // written in it (e.g. an array bound written differently).
   a_type_ptr rtype = skip_typerefs(routine->type);
+  if (!defining && declaredType != nullptr && skip_typerefs(declaredType)->kind == tk_routine) {
+    rtype = skip_typerefs(declaredType);
+  }
   a_routine_type_supplement_ptr rtsp = rtype->variant.routine.extra_info;
   // The types of VLA parameters refer to dimension expressions of the routine.
   struct RoutineContext {
@@ -709,7 +714,7 @@ SgFunctionDeclaration* Translator::translateRoutine(a_routine_ptr routine, a_src
   SgFunctionType* ftype = convertFunctionType(skip_typerefs(declaredType)->kind == tk_routine ? declaredType
                                                                                               : routine->type,
                                               isMember ? isSgClassDefinition(semanticScope) : nullptr);
-  SgFunctionParameterList* params = buildParameterList(routine, isDefinition);
+  SgFunctionParameterList* params = buildParameterList(routine, isDefinition, declaredType);
 
   SgFunctionDeclaration* decl = newFunctionDeclaration(routine, name, ftype, isMember);
   replaceParameterList(decl, params);
@@ -800,9 +805,13 @@ SgFunctionDeclaration* Translator::translateRoutine(a_routine_ptr routine, a_src
     }
     scopes[fscope] = def;
     a_statement_ptr bodyStmt = fscope->assoc_block;
-    if (bodyStmt != nullptr) {
+    if (bodyStmt != nullptr && bodyStmt->kind == stmk_block && bodyStmt->variant.block.extra_info != nullptr) {
       setPosition(body, bodyStmt->position, bodyStmt->variant.block.extra_info->final_position);
       end = bodyStmt->variant.block.extra_info->final_position;
+    } else if (bodyStmt != nullptr) {
+      // A function-try-block ("void f() try {...} catch (...) {...}")
+      setPosition(body, bodyStmt->position, bodyStmt->end_position);
+      end = bodyStmt->end_position;
     }
     setPosition(def, start, end);
     if (classNesting > 0) {

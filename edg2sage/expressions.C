@@ -414,7 +414,9 @@ SgExpression* Translator::convertRoutineReference(a_routine_ptr routine, an_expr
   if (routine == nullptr) throw Unsupported("reference to unnamed routine");
   SgFunctionSymbol* sym = functionSymbolFor(routine);
   if (SgMemberFunctionSymbol* msym = isSgMemberFunctionSymbol(sym)) {
-    return SageBuilder::buildMemberFunctionRefExp_nfi(msym, false, false);
+    // Outside a member access ("A::f(1)", "&A::f") the name is qualified as
+    // needed (ROSE computes the qualifier); see also convertCall().
+    return SageBuilder::buildMemberFunctionRefExp_nfi(msym, false, true);
   }
   return SageBuilder::buildFunctionRefExp_nfi(sym);
 }
@@ -508,6 +510,11 @@ SgExpression* Translator::convertCall(an_expr_node_ptr expr) {
       SgExpression* member = convertExpression(first);
       if (SgMemberFunctionRefExp* mref = isSgMemberFunctionRefExp(member)) {
         mref->set_virtual_call(expr->variant.operation.is_virtual_call);
+        // "p->Base::f()": a call of a virtual function that is not virtual
+        // was qualified.
+        bool qualified = first->kind == enk_routine && first->variant.routine.ptr != nullptr &&
+                         first->variant.routine.ptr->is_virtual && !expr->variant.operation.is_virtual_call;
+        mref->set_need_qualifier(qualified);
       }
       SgExpression* object = convertExpression(objectNode);
       function = k == eok_dot_member_call ? binaryOp<SgDotExp>(object, member)
@@ -1394,6 +1401,13 @@ SgExpression* Translator::convertAddressConstant(a_constant_ptr con, an_expr_nod
       throw Unsupported("address constant kind");
   }
   if (base->get_startOfConstruct() == nullptr) setCompilerGenerated(base);
+  // The value of a reference (e.g. a template argument for a reference
+  // parameter) is the address of the object referred to, written as the object.
+  a_type_ptr ct = skip_typerefs(con->type);
+  if (ct != nullptr && ct->kind == tk_pointer && (ct->variant.pointer.is_reference || ct->variant.pointer.is_rvalue_reference) &&
+      con->variant.address.offset == 0) {
+    needAddressOf = false;
+  }
   SgExpression* r = base;
   if (needAddressOf) {
     r = unaryOp<SgAddressOfOp>(base);
