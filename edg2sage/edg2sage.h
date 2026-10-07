@@ -212,6 +212,7 @@ class Translator {
   SgExpression* convertVariableReference(edg::a_variable_ptr var, edg::an_expr_node_ptr expr);
   SgExpression* convertRoutineReference(edg::a_routine_ptr routine, edg::an_expr_node_ptr expr);
   SgVariableSymbol* functionNameSymbol(const std::string& name, SgType* type);
+  SgFunctionSymbol* genericBuiltinSymbol(const std::string& name, edg::a_routine_ptr concrete);
   SgExpression* convertIntegerConstant(edg::a_constant_ptr con, edg::an_expr_node_ptr node);
   SgExpression* convertFloatConstant(edg::a_constant_ptr con, edg::an_expr_node_ptr node);
   SgExpression* convertStringConstant(edg::a_constant_ptr con, edg::an_expr_node_ptr node);
@@ -252,6 +253,7 @@ class Translator {
   std::unordered_map<edg::a_label_ptr, SgLabelStatement*> labels;
   std::unordered_map<edg::a_label_ptr, SgLabelSymbol*> labelSymbols;
   std::set<edg::a_constant_ptr> foldedConstants;
+  std::map<std::string, SgFunctionSymbol*> genericBuiltins;
   std::map<SgInitializedName*, SgVariableSymbol*> pendingParameterSymbols;
   // Start of the declaration specifiers of each variable declaration
   std::map<SgVariableDeclaration*, edg::a_source_position> declarationSpecifiers;

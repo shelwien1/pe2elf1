@@ -414,6 +414,13 @@ SgStatement* Translator::convertForStatement(a_statement_ptr stmt) {
       }
     }
   }
+  if (init->get_init_stmt().size() > 1) {
+    // "for (int *i, *j; ...)": the declarators after the first are printed
+    // without the base type (but with their pointer declarators).
+    for (SgStatement* st : init->get_init_stmt()) {
+      if (SgVariableDeclaration* vd = isSgVariableDeclaration(st)) vd->set_isAssociatedWithDeclarationList(true);
+    }
+  }
   SgStatement* test = nullptr;
   if (stmt->expr != nullptr) {
     test = convertCondition(stmt->expr, f);

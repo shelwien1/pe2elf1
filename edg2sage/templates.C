@@ -201,17 +201,24 @@ void Translator::translateTemplate(SeqCursor& cursor, a_template_ptr tmpl, a_src
     SgTemplateFunctionDeclaration* f = new SgTemplateFunctionDeclaration(ff->get_name(), ff->get_type(), nullptr);
     f->get_parameterList()->set_parent(f);
     decl = f;
-  } else if (SgTemplateVariableDeclaration* fv = isSgTemplateVariableDeclaration(first)) {
-    SgInitializedName* fin = fv->get_variables().empty() ? nullptr : fv->get_variables()[0];
-    SgTemplateVariableDeclaration* v = new SgTemplateVariableDeclaration(fv->get_variables()[0]->get_name(),
-                                                                         fin ? fin->get_type() : SgTypeUnknown::createType(), nullptr);
-    for (SgInitializedName* in : v->get_variables()) {
-      in->set_scope(first->get_scope());
-      in->set_parent(v);
-      if (fin != nullptr) in->set_prev_decl_item(fin);
-      setPosition(in, tmpl->source_corresp.decl_position);
+  } else if (isSgTemplateVariableDeclaration(first)) {
+    // ROSE does not print variable templates (and static data members of class
+    // templates) from their text: the text is carried by a template statement
+    // that it prints verbatim.
+    SgTemplateClassDeclaration* cd =
+        new SgTemplateClassDeclaration(SgName(""), SgClassDeclaration::e_struct, nullptr, nullptr);
+    cd->set_firstNondefiningDeclaration(cd);
+    cd->setForward();
+    cd->set_scope(scope);
+    cd->set_parent(scope);
+    cd->set_string(text);
+    a_source_position start = tmpl->source_corresp.decl_position;
+    if (tmpl->template_decl != nullptr && tmpl->template_decl->template_pos.seq != 0) {
+      start = tmpl->template_decl->template_pos;
     }
-    decl = v;
+    setPosition(cd, start, tmpl->source_corresp.decl_position);
+    appendStatementTo(scope, cd);
+    return;
   }
   if (decl == nullptr) return;
   if (SgFunctionDeclaration* fd = isSgFunctionDeclaration(decl)) {

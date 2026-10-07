@@ -429,6 +429,19 @@ SgVariableSymbol* Translator::functionNameSymbol(const std::string& name, SgType
 
 SgExpression* Translator::convertRoutineReference(a_routine_ptr routine, an_expr_node_ptr expr) {
   if (routine == nullptr) throw Unsupported("reference to unnamed routine");
+#if DEFAULT_RECORD_FORM_OF_NAME_REFERENCE
+  if (expr != nullptr && expr->kind == enk_routine && expr->variant.routine.name_reference != nullptr &&
+      expr->variant.routine.name_reference->special_kind == sfk_gnu_sync_concrete_function) {
+    // A GNU __sync_... or __atomic_... builtin, written with its generic name
+    // and resolved to the version for the operand size (e.g. "..._8").
+    std::string name = nameOf(&routine->source_corresp).getString();
+    size_t u = name.find_last_of('_');
+    if (u != std::string::npos && u + 1 < name.size() &&
+        name.find_first_not_of("0123456789", u + 1) == std::string::npos) {
+      return SageBuilder::buildFunctionRefExp_nfi(genericBuiltinSymbol(name.substr(0, u), routine));
+    }
+  }
+#endif
   SgFunctionSymbol* sym = functionSymbolFor(routine);
   if (SgMemberFunctionSymbol* msym = isSgMemberFunctionSymbol(sym)) {
     // Outside a member access ("A::f(1)", "&A::f") the name is qualified as
@@ -436,6 +449,26 @@ SgExpression* Translator::convertRoutineReference(a_routine_ptr routine, an_expr
     return SageBuilder::buildMemberFunctionRefExp_nfi(msym, false, true);
   }
   return SageBuilder::buildFunctionRefExp_nfi(sym);
+}
+
+// A declaration for the generic name of an overloaded GNU builtin (not part
+// of any statement list).
+SgFunctionSymbol* Translator::genericBuiltinSymbol(const std::string& name, a_routine_ptr concrete) {
+  auto it = genericBuiltins.find(name);
+  if (it != genericBuiltins.end()) return it->second;
+  SgFunctionType* ftype = convertFunctionType(concrete->type);
+  SgFunctionDeclaration* decl = new SgFunctionDeclaration(SgName(name), ftype, nullptr);
+  decl->get_parameterList()->set_parent(decl);
+  decl->set_firstNondefiningDeclaration(decl);
+  decl->setForward();
+  decl->set_scope(globalScope);
+  decl->set_parent(globalScope);
+  setCompilerGenerated(decl);
+  setCompilerGenerated(decl->get_parameterList());
+  SgFunctionSymbol* sym = new SgFunctionSymbol(decl);
+  globalScope->insert_symbol(SgName(name), sym);
+  genericBuiltins[name] = sym;
+  return sym;
 }
 
 SgExpression* Translator::convertCast(an_expr_node_ptr expr, SgExpression* operand, bool implicit) {
