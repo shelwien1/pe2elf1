@@ -277,7 +277,11 @@ SgType* Translator::convertType(a_type_ptr type) {
     case tk_template_param:
       // "auto" (and "decltype(auto)") in a declaration is a special template
       // parameter type; other template parameter types only occur in templates.
-      result = is_auto_type(type) ? (SgType*)SageBuilder::buildAutoType() : SgTypeUnknown::createType();
+      if (is_decltype_auto_type(type)) {
+        result = decltypeAutoType();
+      } else {
+        result = is_auto_type(type) ? (SgType*)SageBuilder::buildAutoType() : SgTypeUnknown::createType();
+      }
       break;
     default:
       result = SgTypeUnknown::createType();
@@ -285,6 +289,22 @@ SgType* Translator::convertType(a_type_ptr type) {
   }
   typeCache[type] = result;
   return result;
+}
+
+// "decltype(auto)": ROSE has no representation of its own; a (hidden) typedef
+// of auto with that name prints as written.
+SgType* Translator::decltypeAutoType() {
+  static const char* name = "decltype(auto)";
+  if (decltypeAuto == nullptr) {
+    decltypeAuto = new SgTypedefDeclaration(SgName(name), SageBuilder::buildAutoType(), nullptr, nullptr, nullptr);
+    decltypeAuto->set_firstNondefiningDeclaration(decltypeAuto);
+    decltypeAuto->set_scope(globalScope);
+    decltypeAuto->set_parent(globalScope);
+    decltypeAuto->set_type(SgTypedefType::createType(decltypeAuto));
+    setCompilerGenerated(decltypeAuto);
+    globalScope->insert_symbol(SgName(name), new SgTypedefSymbol(decltypeAuto));
+  }
+  return decltypeAuto->get_type();
 }
 
 // ---------------------------------------------------------------------------------

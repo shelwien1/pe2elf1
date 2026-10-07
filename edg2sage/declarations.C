@@ -207,6 +207,28 @@ void Translator::setLinkage(SgDeclarationStatement* decl, a_decl_position_supple
   decl->set_linkage(linkage);
 }
 
+// Exception specifications written in a declaration.  ROSE prints only
+// dynamic exception specifications ("throw(A, B)"): a non-throwing noexcept is
+// written as the equivalent "throw()" (before C++20, which removed it).
+void Translator::setExceptionSpecification(SgFunctionDeclaration* decl, a_type_ptr routineType) {
+  a_type_ptr rt = skip_typerefs(routineType);
+  if (!isCxx || rt == nullptr || rt->kind != tk_routine || rt->variant.routine.extra_info == nullptr) return;
+  an_exception_specification_ptr es = rt->variant.routine.extra_info->exception_specification;
+  if (es == nullptr || es->compiler_generated || es->indeterminate || es->arg_cached || es->copy_from_prototype ||
+      es->throw_any) {
+    return;
+  }
+  if (es->is_noexcept) {
+    if (il_header.std_version >= 202002) return;
+    decl->get_declarationModifier().setThrow();
+    return;
+  }
+  decl->get_declarationModifier().setThrow();
+  for (an_exception_specification_type_ptr t = es->variant.exception_specification_type_list; t != nullptr; t = t->next) {
+    if (!t->redundant) decl->get_exceptionSpecification().push_back(convertType(t->type));
+  }
+}
+
 // ---------------------------------------------------------------------------------
 // The source sequence walk
 // ---------------------------------------------------------------------------------
@@ -802,6 +824,7 @@ SgFunctionDeclaration* Translator::translateRoutine(a_routine_ptr routine, a_src
   if (routine->is_defaulted) fm.setMarkedDefault();
   if (routine->is_deleted) fm.setMarkedDelete();
   setLinkage(decl, sec ? sec->decl_pos_info : routine->source_corresp.decl_pos_info);
+  setExceptionSpecification(decl, skip_typerefs(declaredType)->kind == tk_routine ? declaredType : routine->type);
   bool isFriend = sec != nullptr ? sec->friend_decl : (routine->defined_in_friend_decl && isSgClassDefinition(scope) != nullptr);
   if (isFriend) decl->get_declarationModifier().setFriend();
   if (routine->override) decl->get_declarationModifier().setOverride();

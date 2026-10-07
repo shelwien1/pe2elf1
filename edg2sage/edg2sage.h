@@ -92,6 +92,7 @@ class Translator {
   SgTypedefDeclaration* typedefDeclarationFor(edg::a_type_ptr typedefType);
   void setTypedefBaseDeclaration(SgTypedefDeclaration* decl);
   SgClassDefinition* classDefinitionFor(edg::a_type_ptr classType);
+  SgType* decltypeAutoType();
 
   // ---------------------------------------------------------------- declarations
   void translateDeclarationList(SeqCursor& cursor, SgScopeStatement* scope, void* endOfConstructEntity);
@@ -140,6 +141,7 @@ class Translator {
                                edg::a_storage_class sc);
   void setAccess(SgDeclarationStatement* decl, edg::an_access_specifier access);
   void setLinkage(SgDeclarationStatement* decl, edg::a_decl_position_supplement_ptr dpi);
+  void setExceptionSpecification(SgFunctionDeclaration* decl, edg::a_type_ptr routineType);
   void attachPendingBaseTypeDeclaration(SgDeclarationStatement* decl);
   SgVariableDeclaration* declaratorGroupFor(SgScopeStatement* scope, SgType* type,
                                             const edg::a_source_position& specifiers);
@@ -260,6 +262,7 @@ class Translator {
   std::map<std::pair<SgScopeStatement*, std::string>, SgVariableSymbol*> functionNameSymbols;  // constants whose backing expression is being translated
   int compoundLiterals = 0;
   bool suppressInitializers = false;  // the iteration variable of a range-based for
+  SgTypedefDeclaration* decltypeAuto = nullptr;
   std::set<SgClassDeclaration*> firstUsedAsStatement;      // hidden first decl reused as forward declaration
   std::set<SgClassDeclaration*> hiddenDefinitions;         // definitions of template instances (see templates.C)
   std::set<SgTypedefDeclaration*> typedefInStatementList;
