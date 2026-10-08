@@ -91,7 +91,10 @@ unchanged apart from a 32-byte header. The encoder decodes its own output
 and compares it with the input before writing anything (skip with `-n`).
 
 Build: `make`, or `g++ -O2 -o x64pp src/x64pp.cpp` (C++11, no
-dependencies; tested with gcc 13 and clang 18, MSVC untested).
+dependencies). Windows: `make x64pp.exe` with mingw-w64, or any C++11
+compiler on the single file. Tested with gcc 13, clang 18 and mingw-w64 13
+(the Windows binary was run under Wine and produces byte-identical output);
+MSVC untested.
 
 ## How it works
 
