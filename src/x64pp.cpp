@@ -43,7 +43,7 @@ enum StreamId {
 };
 
 // order of streams in the output file
-static const uint8_t kOrder[NSTREAM] = {S_DATA, S_ESC, S_IMM64, S_IMM32, S_DISP, S_RIP, S_CALL, S_JMP, S_OP, S_J8};
+static const uint8_t kOrder[NSTREAM] = {S_ESC, S_IMM64, S_IMM32, S_DISP, S_RIP, S_CALL, S_JMP, S_J8, S_OP, S_DATA};
 
 enum { kAlign = 16, kVersion = 1 };
 enum { FL_LABELS = 1 };

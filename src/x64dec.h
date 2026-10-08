@@ -302,7 +302,7 @@ static inline void decode(const uint8_t* p, size_t avail, Insn& I) {
       default: break;
     }
     I.nfield = (uint8_t)n;
-    unsigned len = i;
+    unsigned len = (unsigned)i;
     for (unsigned k = 0; k < n; k++) len += I.fsize[k];
     if (len > avail) goto truncated;
     I.len = (uint8_t)len;
