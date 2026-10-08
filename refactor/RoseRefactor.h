@@ -150,6 +150,10 @@ private:
 void recordCrossReferences(bool on = true);
 // More options for the EDG front end in the next frontend() calls, e.g. "--no_dep_name"
 void setFrontEndOptions(const std::vector<std::string>& options);
+// Whether the next frontend() calls translate the C/C++ code into ROSE's AST (they do by
+// default); tools that only use the cross-references can skip it (the files of the project then
+// have empty global scopes)
+void buildAst(bool on);
 // The cross-references of the last C or C++ file parsed by frontend() (empty if not recorded)
 const CrossReferences& crossReferences();
 

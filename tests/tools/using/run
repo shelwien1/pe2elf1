@@ -1,0 +1,4 @@
+# Using-declarations for the names of dependent base classes (twice: nothing more the second time)
+$USING main.cpp
+$USING main.cpp
+$USING dep.cpp Derived

@@ -310,12 +310,13 @@ void describe(RR::Entity& e, int symbolKind, char* il, an_il_entry_kind iek) {
         e.kind = r->special_kind == sfk_constructor  ? RR::Kind::Constructor
                  : r->special_kind == sfk_destructor ? RR::Kind::Destructor
                                                      : RR::Kind::MemberFunction;
-        e.isStatic = r->storage_class == sc_static;
         e.isVirtual = r->is_virtual;
         e.isPureVirtual = r->pure_virtual;
         a_type_ptr rt = skip_typerefs(r->type);
         if (rt != nullptr && rt->kind == tk_routine && rt->variant.routine.extra_info != nullptr) {
           e.isConst = (rt->variant.routine.extra_info->qualifiers & TQ_CONST) != 0;
+          // A static member function has no "this"
+          e.isStatic = rt->variant.routine.extra_info->this_class == nullptr;
         }
       } else if (e.kind != RR::Kind::FunctionTemplate) {
         e.kind = RR::Kind::Function;
@@ -412,6 +413,13 @@ void addOverrides(RR::CrossReferences& xr) {
     }
   }
 }
+
+}  // namespace
+
+// Whether back_end() builds the AST (refactoring tools may only need the cross-references)
+bool xrefBuildsAst() { return RR::impl::buildsAst(); }
+
+namespace {
 
 // Called (by the patched symbol_ref.c) for each record of the cross-reference listing
 void onReference(a_symbol_ptr sym, char code, a_const_char* fileName, a_line_number line, int column) {

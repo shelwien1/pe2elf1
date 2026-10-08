@@ -9,6 +9,7 @@ namespace RoseRefactor {
 namespace impl {
 
 bool recording();                                 // recordCrossReferences() was called
+bool buildsAst();                                 // buildAst()
 const std::vector<std::string>& frontEndOptions();  // setFrontEndOptions()
 CrossReferences& current();                       // what crossReferences() returns
 std::string temporaryFile(const char* prefix);    // a new, empty temporary file

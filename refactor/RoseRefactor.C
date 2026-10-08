@@ -229,6 +229,7 @@ void CrossReferences::clear() {
 
 namespace {
 bool recordingFlag = false;
+bool buildAstFlag = true;
 std::vector<std::string> options;
 CrossReferences* currentXref = nullptr;
 std::vector<std::string>* filesToRemove = nullptr;
@@ -243,11 +244,15 @@ void recordCrossReferences(bool on) { recordingFlag = on; }
 
 void setFrontEndOptions(const std::vector<std::string>& opts) { options = opts; }
 
+void buildAst(bool on) { buildAstFlag = on; }
+
 const CrossReferences& crossReferences() { return impl::current(); }
 
 namespace impl {
 
 bool recording() { return recordingFlag; }
+
+bool buildsAst() { return buildAstFlag; }
 
 const std::vector<std::string>& frontEndOptions() { return options; }
 

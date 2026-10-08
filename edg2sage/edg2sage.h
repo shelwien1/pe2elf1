@@ -335,6 +335,7 @@ std::string absolutePath(const std::string& path);
 // and the reading of the cross-reference listing at the end of back_end()
 void xrefOptions(std::vector<std::string>& args);
 void xrefCollect();
+bool xrefBuildsAst();
 
 }  // namespace edg2sage
 

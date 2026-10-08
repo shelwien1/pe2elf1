@@ -68,7 +68,7 @@ void back_end(void) {
   Translator t(currentSourceFile);
   translator = &t;
   try {
-    t.translate();
+    if (xrefBuildsAst()) t.translate();
   } catch (const Unsupported& u) {
     mlog[Sawyer::Message::ERROR] << "unsupported construct: " << u.what << "\n";
     translationErrors++;

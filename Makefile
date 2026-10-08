@@ -152,7 +152,7 @@ EDG_CXXFLAGS := -x c++ -std=c++14 $(OPT) $(TARGET_CXXFLAGS) -fno-rtti -w
 # Top-level targets
 ################################################################################
 
-TOOLS := identityTranslator dotGenerator rose-ren rose-using
+TOOLS := identityTranslator dotGenerator rose-ren rose-using rose-m2g
 ifdef WINDOWS
 EXE := .exe
 # A static library: a DLL cannot export more than 65535 symbols.
@@ -514,6 +514,7 @@ endif
 # The Windows build is tested under Wine (see tests/run-tests.sh)
 check: all
 	@CC="$(BACKEND_CC)" CXX="$(BACKEND_CXX)" sh tests/run-tests.sh $(B)/bin/identityTranslator$(EXE)
+	@CXX="$(HOST_CXX)" sh tests/tools/run-tests.sh $(B)/bin
 
 ################################################################################
 # Windows package: the translators with EDG's configuration and the system headers they parse

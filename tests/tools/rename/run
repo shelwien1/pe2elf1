@@ -1,0 +1,7 @@
+# Renames a virtual function (with its overrides), a class (with its constructor and destructor),
+# one of two local variables with the same name, a namespace and a static data member
+$REN -std=c++17 main.cpp area:1 surface
+$REN -std=c++17 main.cpp Shape Figure
+$REN -std=c++17 main.cpp count:1 inner
+$REN -std=c++17 main.cpp geo geometry
+$REN -std=c++17 main.cpp next nextId

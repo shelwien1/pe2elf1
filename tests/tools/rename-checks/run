@@ -1,0 +1,7 @@
+# Refused: a name in a template that refers to two entities, a clash, names in macro definitions
+! $REN main.cpp size:0 count
+! $REN main.cpp length size
+! $REN main.cpp value val
+! $REN main.cpp v w
+# Renamed
+$REN main.cpp length len

@@ -1,0 +1,2 @@
+# A member function declared by a macro: its name is renamed in the macro's arguments
+$REN main.cpp value val

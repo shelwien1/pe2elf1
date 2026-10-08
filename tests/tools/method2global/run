@@ -1,0 +1,10 @@
+# A member function defined outside the class, a const one, one with a default argument that is
+# called in the others; refused: virtual and static functions, a function whose address is taken
+$M2G main.cpp ns::Account::transfer
+$M2G main.cpp Account::balance
+$M2G main.cpp Account::deposit
+! $M2G calls.cpp Counter::reset
+! $M2G calls.cpp Counter::twice
+! $M2G calls.cpp Counter::value
+$M2G calls.cpp Counter::add
+$M2G calls.cpp Counter::Inner::get

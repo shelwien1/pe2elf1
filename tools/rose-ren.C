@@ -343,6 +343,7 @@ int main(int argc, char* argv[]) {
   }
 
   recordCrossReferences();
+  buildAst(false);  // only the cross-references are needed
   feArgs.push_back("-rose:skipfinalCompileStep");
   SgProject* project = frontend(feArgs);
   if (project == nullptr || project->get_frontendErrorCode() != 0) {
