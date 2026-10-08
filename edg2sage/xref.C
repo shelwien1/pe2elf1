@@ -118,8 +118,17 @@ RR::EntityId parentOf(a_source_correspondence* sc) {
   if (sc == nullptr || sc->parent_scope == nullptr) return 0;
   a_scope_ptr scope = sc->parent_scope;
   switch (scope->kind) {
-    case sck_class_struct_union:
-      return (RR::EntityId)(uintptr_t)scope->variant.assoc_type;
+    case sck_class_struct_union: {
+      // The members of the generic class of a class template (its prototype instantiation) are
+      // members of the template
+      a_type_ptr t = scope->variant.assoc_type;
+      if (t != nullptr && t->variant.class_struct_union.is_prototype_instantiation &&
+          t->variant.class_struct_union.extra_info != nullptr &&
+          t->variant.class_struct_union.extra_info->assoc_template != nullptr) {
+        return (RR::EntityId)(uintptr_t)t->variant.class_struct_union.extra_info->assoc_template;
+      }
+      return (RR::EntityId)(uintptr_t)t;
+    }
     case sck_namespace:
       return (RR::EntityId)(uintptr_t)scope->variant.assoc_namespace;
     default:
@@ -459,9 +468,13 @@ void onReference(a_symbol_ptr sym, char code, a_const_char* fileName, a_line_num
 
 }  // namespace
 
+int xrefRuns() { return RR::impl::frontEndRuns(); }
+
+void xrefRunAccepted(int run) { RR::impl::setFrontEndOptionsUsed(run); }
+
 // The options for the EDG front end of the next run (called by edgCommandLine())
-void xrefOptions(std::vector<std::string>& args) {
-  for (const std::string& o : RR::impl::frontEndOptions()) args.push_back(o);
+void xrefOptions(std::vector<std::string>& args, int run) {
+  for (const std::string& o : RR::impl::frontEndOptions(run)) args.push_back(o);
   listingFile.clear();
   pending.clear();
   records.clear();

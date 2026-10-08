@@ -1,0 +1,3 @@
+# A class, and a class template
+$REN main.cpp Res Resource
+$REN main.cpp Box Container

@@ -23,7 +23,13 @@
 // The options are those of the compiler (-I, -D, -std=...), and --dry-run (print the changed
 // files instead of writing them).  Not converted: virtual and static member functions,
 // operators, member function templates, members of class templates, and functions whose
-// address is taken (&Class::method).
+// address is taken (&Class::method).  The uses of the name that the front end did not resolve
+// (in code that the preprocessor skips, for example) are listed, and not changed.
+//
+// The front end parses the bodies of all templates, also of those that are not instantiated.
+// If it rejects the source, it parses it as GCC does (the bodies of templates only where they
+// are instantiated), and then as Visual C++ does (names used in templates are also looked up in
+// dependent base classes; see rose-using).
 #include "rose.h"
 #include "RoseRefactor.h"
 
@@ -704,6 +710,17 @@ int convert(const CrossReferences& xr, const std::string& className, const std::
     std::cerr << "rose-m2g: overlapping changes (at " << conflicts.front() << "); nothing changed\n";
     return 1;
   }
+  std::vector<Position> unresolved = unresolvedOccurrences(xr, method);
+  if (!unresolved.empty()) {
+    std::cerr << "rose-m2g: warning: not changed: " << unresolved.size() << (unresolved.size() == 1 ? " use" : " uses")
+              << " of " << method << " that the front end did not resolve (in code that the preprocessor skips, "
+              << "in macro definitions, members of template parameters"
+              << (frontEndOptionsUsed() > 0 ? ", templates that are not instantiated" : "") << "):\n";
+    for (const Position& p : unresolved) {
+      std::cerr << "  " << displayName(p.file) << ":" << p.line << ":" << p.column << ": "
+                << sourceText(p.file).line(p.line) << "\n";
+    }
+  }
   if (dryRun) {
     for (const std::string& f : edits.files()) {
       std::cout << "==== " << displayName(f) << "\n" << edits.apply(f, sourceText(f).text());
@@ -752,11 +769,20 @@ int main(int argc, char* argv[]) {
 
   recordCrossReferences();
   buildAst(false);  // only the cross-references are needed
+  // The bodies of all templates are parsed (by default, as GCC does, only where they are
+  // instantiated); if the front end rejects the source, it is parsed as GCC does, then as Visual
+  // C++ does (names in templates are also looked up in dependent base classes)
+  setFrontEndOptions({"--no_defer_parse_function_templates"});
+  setAlternativeFrontEndOptions({{}, {"--no_dep_name", "--no_parse_templates"}});
   feArgs.push_back("-rose:skipfinalCompileStep");
   SgProject* project = frontend(feArgs);
   if (project == nullptr || project->get_frontendErrorCode() != 0) {
     std::cerr << "rose-m2g: the source could not be parsed\n";
     return 1;
+  }
+  if (frontEndOptionsUsed() > 0) {
+    std::cerr << "rose-m2g: note: parsed as " << (frontEndOptionsUsed() == 1 ? "GCC" : "Visual C++")
+              << " does: templates are only parsed where they are instantiated\n";
   }
   return convert(crossReferences(), className, method, dryRun);
 }

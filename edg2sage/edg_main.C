@@ -3,9 +3,12 @@
 #include "edg2sage.h"
 #include "fixupTypeReferences.h"
 #include "rose_paths.h"
+#include "RoseRefactorImpl.h"
 
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <sstream>
 
 using namespace edg2sage;
@@ -95,8 +98,8 @@ std::string edgBaseDirectory() {
 bool startsWith(const std::string& s, const char* prefix) { return s.compare(0, std::strlen(prefix), prefix) == 0; }
 
 // Converts the command line built by ROSE (SgFile::build_EDG_CommandLine) into
-// one for the open-source EDG front end.
-std::vector<std::string> edgCommandLine(int argc, char* argv[]) {
+// one for the open-source EDG front end (for one of the runs of xrefRuns()).
+std::vector<std::string> edgCommandLine(int argc, char* argv[], int run) {
   std::vector<std::string> out;
   out.push_back("edg2sage");
   std::string base = edgBaseDirectory();
@@ -105,7 +108,7 @@ std::vector<std::string> edgCommandLine(int argc, char* argv[]) {
     out.push_back(base);
   }
   // Options of refactoring tools (RoseRefactor.h), and the cross-reference listing
-  xrefOptions(out);
+  xrefOptions(out, run);
   // EDG2SAGE_EDG_OPTIONS: more EDG options, separated by spaces (for debugging)
   if (const char* extra = std::getenv("EDG2SAGE_EDG_OPTIONS")) {
     std::istringstream words(extra);
@@ -128,28 +131,56 @@ std::vector<std::string> edgCommandLine(int argc, char* argv[]) {
 // --------------------------------------------------------------------------------------
 // ROSE's entry point: parse one C or C++ source file and build its AST in sageFile.
 // --------------------------------------------------------------------------------------
+// Refactoring tools can give alternative options (RoseRefactor::setAlternativeFrontEndOptions):
+// if the front end rejects the file, it runs again with the next options.  The diagnostics of a
+// run that may be followed by another are written to a file, and shown if the run succeeds.
 int edg_main(int argc, char* argv[], SgSourceFile& sageFile) {
   EDG_ROSE_Translation::initDiagnostics();
-  std::vector<std::string> args = edgCommandLine(argc, argv);
-  if (SgProject::get_verbose() > 0) {
-    std::string line;
-    for (const std::string& a : args) line += a + " ";
-    mlog[Sawyer::Message::INFO] << "EDG command line: " << line << "\n";
-  }
-  std::vector<char*> cargs;
-  for (std::string& a : args) cargs.push_back(&a[0]);
-  cargs.push_back(nullptr);
+  int runs = xrefRuns();
+  int status = 1;
+  for (int run = 0; run < runs; ++run) {
+    std::vector<std::string> args = edgCommandLine(argc, argv, run);
+    std::string diagnostics;
+    if (run + 1 < runs) {
+      diagnostics = RoseRefactor::impl::temporaryFile("rose-diagnostics");
+      if (!diagnostics.empty()) {
+        RoseRefactor::impl::removeAtExit(diagnostics);
+        args.insert(args.begin() + 1, {"--error_output", diagnostics});
+      }
+    }
+    if (SgProject::get_verbose() > 0) {
+      std::string line;
+      for (const std::string& a : args) line += a + " ";
+      mlog[Sawyer::Message::INFO] << "EDG command line: " << line << "\n";
+    }
+    std::vector<char*> cargs;
+    for (std::string& a : args) cargs.push_back(&a[0]);
+    cargs.push_back(nullptr);
 
-  currentSourceFile = &sageFile;
-  translationErrors = 0;
-  backEndCalled = false;
-  int status = edg::edg2sage_cfe_main((int)args.size(), cargs.data());
-  currentSourceFile = nullptr;
+    currentSourceFile = &sageFile;
+    translationErrors = 0;
+    backEndCalled = false;
+    status = edg::edg2sage_cfe_main((int)args.size(), cargs.data());
+    currentSourceFile = nullptr;
 
-  if (!backEndCalled && status == 0) {
-    // EDG reported success but did not call the back end
-    status = 1;
+    if (!backEndCalled && status == 0) {
+      // EDG reported success but did not call the back end
+      status = 1;
+    }
+    // Errors of the translation into the AST are not a reason to try other options
+    bool accepted = backEndCalled;
+    if (translationErrors > 0) status = 1;
+    if (accepted || run + 1 == runs) {
+      if (!diagnostics.empty()) {
+        std::ifstream in(diagnostics.c_str());
+        std::ostringstream text;
+        text << in.rdbuf();
+        std::fputs(text.str().c_str(), stderr);
+        std::fflush(stderr);
+      }
+      xrefRunAccepted(run);
+      break;
+    }
   }
-  if (translationErrors > 0) status = 1;
   return status;
 }

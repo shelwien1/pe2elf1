@@ -1,0 +1,2 @@
+# A global variable referenced in templates, also in templates that are not instantiated
+$REN main.cpp counter total

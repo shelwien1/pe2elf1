@@ -10,7 +10,11 @@ namespace impl {
 
 bool recording();                                 // recordCrossReferences() was called
 bool buildsAst();                                 // buildAst()
-const std::vector<std::string>& frontEndOptions();  // setFrontEndOptions()
+int frontEndRuns();                               // 1 + the number of alternative options
+// The options of a front end run: 0 for those of setFrontEndOptions(), 1 for the first
+// alternative, ...
+const std::vector<std::string>& frontEndOptions(int run);
+void setFrontEndOptionsUsed(int run);             // what frontEndOptionsUsed() returns
 CrossReferences& current();                       // what crossReferences() returns
 std::string temporaryFile(const char* prefix);    // a new, empty temporary file
 void removeAtExit(const std::string& file);       // removes the file when the program exits

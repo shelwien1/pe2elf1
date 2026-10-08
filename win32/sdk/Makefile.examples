@@ -10,6 +10,7 @@ include ../../rose.mk
 PROGRAMS := $(patsubst %.C,%.exe,$(wildcard *.C))
 
 all: $(PROGRAMS)
+.SECONDARY: $(PROGRAMS:.exe=.o)
 
 %.exe: %.o
 	$(CXX) $(ROSE_LDFLAGS) -o $@ $< $(ROSE_LIBS)

@@ -15,7 +15,14 @@
 // cross-reference listing, so names are found in all their uses (including qualified names,
 // using-declarations, base classes, template arguments and template instances); a class is
 // renamed with its constructors and destructor, a virtual function with the functions that
-// override it or that it overrides.
+// override it or that it overrides.  The uses of the name that the front end did not resolve
+// (in code that the preprocessor skips, for example) are listed, and not renamed.
+//
+// The front end parses the bodies of all templates, also of those that are not instantiated.
+// If it rejects the source, it parses it as GCC does (the bodies of templates only where they
+// are instantiated), and then as Visual C++ does (names used in templates are also looked up in
+// dependent base classes; see rose-using), so that code that only Visual C++ compiles can be
+// renamed too.
 #include "rose.h"
 #include "RoseRefactor.h"
 
@@ -289,6 +296,22 @@ int rename(const CrossReferences& xr, const std::vector<Item>& items, const std:
     std::cerr << "rose-ren: warning: " << oldName << " is also referenced " << systemRefs
               << " times in system headers (e.g. by library templates), which are not changed\n";
   }
+  // The other uses of the name that the front end did not resolve (a local variable or a
+  // parameter cannot be used elsewhere)
+  bool local = false;
+  for (const Entity* e : item.entities) local |= e->isLocal || e->kind == Kind::Parameter;
+  std::vector<Position> unresolved;
+  if (!local) unresolved = unresolvedOccurrences(xr, oldName);
+  if (!unresolved.empty()) {
+    std::cerr << "rose-ren: warning: not renamed: " << unresolved.size() << (unresolved.size() == 1 ? " use" : " uses")
+              << " of " << oldName << " that the front end did not resolve (in code that the preprocessor skips, "
+              << "in macro definitions, members of template parameters"
+              << (frontEndOptionsUsed() > 0 ? ", templates that are not instantiated" : "") << "):\n";
+    for (const Position& p : unresolved) {
+      std::cerr << "  " << displayName(p.file) << ":" << p.line << ":" << p.column << ": "
+                << sourceText(p.file).line(p.line) << "\n";
+    }
+  }
   if (problems > 0) {
     std::cerr << "rose-ren: nothing changed (use --force to rename anyway)\n";
     return 1;
@@ -344,11 +367,20 @@ int main(int argc, char* argv[]) {
 
   recordCrossReferences();
   buildAst(false);  // only the cross-references are needed
+  // The bodies of all templates are parsed (by default, as GCC does, only where they are
+  // instantiated); if the front end rejects the source, it is parsed as GCC does, then as Visual
+  // C++ does (names in templates are also looked up in dependent base classes)
+  setFrontEndOptions({"--no_defer_parse_function_templates"});
+  setAlternativeFrontEndOptions({{}, {"--no_dep_name", "--no_parse_templates"}});
   feArgs.push_back("-rose:skipfinalCompileStep");
   SgProject* project = frontend(feArgs);
   if (project == nullptr || project->get_frontendErrorCode() != 0) {
     std::cerr << "rose-ren: the source could not be parsed\n";
     return 1;
+  }
+  if (frontEndOptionsUsed() > 0) {
+    std::cerr << "rose-ren: note: parsed as " << (frontEndOptionsUsed() == 1 ? "GCC" : "Visual C++")
+              << " does: templates are only parsed where they are instantiated\n";
   }
   const CrossReferences& xr = crossReferences();
   if (xr.empty()) {

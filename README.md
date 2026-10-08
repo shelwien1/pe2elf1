@@ -10,12 +10,21 @@ into ROSE's Sage III AST) was never published.  `edg2sage/` is a new implementat
 connection for the open-source EDG release.
 
 ```
-make -j$(nproc)          # build/lib/librose.so, build/bin/identityTranslator, build/bin/dotGenerator
-make check               # translate tests/ with identityTranslator and compare program output
+make -j$(nproc)          # build/lib/librose.so and the programs in build/bin that use it
+make check               # translate tests/ with identityTranslator and compare program output,
+                         # and run the tests of the refactoring tools (tests/tools)
 build/bin/identityTranslator -c foo.c      # writes rose_foo.c and compiles it to foo.o
 ```
 
-The same Makefile cross-compiles ROSE for Windows with MinGW-w64 (see [Windows](#windows)).
+The programs are ROSE's example translators `identityTranslator` and `dotGenerator`, and three
+refactoring tools for C++ built on the EDG front end's cross-references (see
+[Refactoring tools](#refactoring-tools)): `rose-ren` (lists or renames the declarations of a
+name), `rose-using` (adds the using-declarations for names of dependent base classes that Visual
+C++ finds and GCC and Clang do not) and `rose-m2g` (turns a member function into a global
+function with an explicit `This` parameter).
+
+The same Makefile cross-compiles ROSE for Windows with MinGW-w64, as `rose.dll` with an SDK (see
+[Windows](#windows)).
 
 ## Layout
 
@@ -25,12 +34,13 @@ The same Makefile cross-compiles ROSE for Windows with MinGW-w64 (see [Windows](
 | `config/` | templates for ROSE's generated configuration files (`rose_config.h`, `rosePublicConfig.h`, `rose_paths.C`) |
 | `rose/` | the subset of ROSE 2.18.0 used by the build (C/C++ front end, Sage III, midend, unparser, ROSETTA) |
 | `edg/` | the subset of the EDG front end used by the build |
-| `edg2sage/` | the EDG IL → Sage III translator (new code), and the EDG configuration (`edgconfig/`) |
-| `tools/` | translators linked against librose (`identityTranslator`, `dotGenerator` from ROSE's examples) |
-| `tests/` | test programs and `run-tests.sh` (used by `make check`) |
-| `win32/` | portability layer for the Windows build (MinGW-w64); the Windows package's `README.txt`, `test.bat` and examples; the Makefile of the source package (`source/`) |
+| `edg2sage/` | the EDG IL → Sage III translator (new code), the EDG configuration (`edgconfig/`), the cross-references for refactoring tools (`xref.C`), and a change to an EDG source (`patches/`) |
+| `refactor/` | `RoseRefactor.h`: the API of the refactoring tools (cross-references, source text, edits), part of librose |
+| `tools/` | the programs linked against librose: `identityTranslator` and `dotGenerator` (ROSE's examples), `rose-ren`, `rose-using`, `rose-m2g` |
+| `tests/` | test programs and `run-tests.sh` (used by `make check`); `tests/tools/`: the tests of the refactoring tools |
+| `win32/` | portability layer for the Windows build (MinGW-w64); the Windows package's `README.txt`, `test.bat` and examples; the SDK's `rose.mk` and examples Makefile (`sdk/`); the program that lists the exports of `rose.dll` (`build/`); the Makefile of the source package (`source/`) |
 | `scripts/vendor-sources.sh` | regenerates `rose/` and `edg/` from full checkouts |
-| `scripts/build-boost-mingw.sh`, `scripts/stage-sys-includes.sh`, `scripts/windows-source-package.sh` | Windows build helpers |
+| `scripts/build-boost-mingw.sh`, `scripts/stage-sys-includes.sh`, `scripts/windows-sdk.sh`, `scripts/windows-source-package.sh` | Windows build helpers |
 
 ## Requirements
 
@@ -59,7 +69,7 @@ A complete build compiles about 1,400 files; with `-j8` it takes roughly 20 minu
 4. The ROSE library sources listed in `rose-sources.mk` (the C/C++ parts of librose as configured
    by ROSE's own CMake build without binary analysis, Fortran, Java, Ada, Jovial or Python
    support) and the EDG sources are compiled into `build/lib/librose.so`, together with
-   `edg2sage/`.
+   `edg2sage/` and `refactor/`; the programs in `build/bin` are linked against it.
 5. EDG's error tables are generated with `mk_errinfo`, and its table of predefined macros
    (`build/edg-base/lib/predefined_macros.txt`) is generated from `BACKEND_CC`/`BACKEND_CXX`.
 
@@ -123,33 +133,95 @@ Constructs that cannot be translated are reported as warnings (set `EDG2SAGE_DEB
 diagnostics) and skipped.  EDG options can be passed through ROSE with `--edg:<option>`, e.g.
 `--edg:il_display` to dump the IL.
 
+## Refactoring tools
+
+`refactor/RoseRefactor.h` is an API for refactoring tools that is part of librose: the
+cross-references of a translation unit (each entity with its kind, full name, type, enclosing
+class or namespace, access, base classes, overridden functions, and the positions of its
+declarations and references), the source text (positions, a simple lexer, bracket matching), and
+edits applied to the files all at once, keeping their formatting.  The cross-references come
+from the EDG front end's cross-reference listing (`--xref`): a copy of EDG's `symbol_ref.c`
+with the change in `edg2sage/patches/symbol_ref.c.sed` calls `edg2sage/xref.C` for each record,
+while the symbol is in memory, and at the end of the front end each entity is described from
+its IL entry.  Tools that only need the cross-references skip the translation into the AST.
+
+The three tools change the source file and the headers it includes (except system headers) in
+place; they take the compiler's options (`-I`, `-D`, `-std=...`) and `--dry-run`:
+
+* `rose-ren file.cpp name` lists the declarations called `name` that are outside system headers,
+  with an index: `[1] shapes.h:8  geo::Shape::area  double () const  (pure virtual member
+  function), 2 references`.  `rose-ren file.cpp name[:index] newname` renames one (`name` alone
+  if there is only one) in its declarations and all its uses (qualified names,
+  using-declarations, base classes, template arguments and instances, names written in macro
+  arguments); a class with its constructors and destructor, a virtual function with those that
+  override it or that it overrides.  It refuses (unless `--force`) when the new name is already
+  declared in the same scope, when a reference is also a reference to another entity (a template
+  for other arguments), and when the name is written in a macro definition or declared in a
+  system header.
+* `rose-using file.cpp [class]` finds the names that class templates use without qualification
+  and that refer to members of dependent base classes, which Visual C++ (without
+  `/permissive-`) finds and GCC and Clang do not, and adds using-declarations for them to the
+  class templates, with the access of the members (`using typename` for types, `template` for
+  member templates).  The front end parses the file as Visual C++ does (`--no_dep_name
+  --no_parse_templates`), so only the class templates that are instantiated are checked.
+* `rose-m2g file.cpp Class::method` turns a member function into a global function with an
+  explicit `This` parameter: `this` becomes `This`, members are accessed through it, static
+  members, types and enumerators are qualified with the class, the declaration in the class
+  becomes a friend declaration, a definition in the class moves after the class, and the calls
+  become calls of the global function (`obj.f(x)` → `f(&obj, x)`, `p->f(x)` → `f(p, x)`).
+
+By default, EDG emulates GCC by parsing the bodies of function templates only where they are
+instantiated, so it records no references in templates that are not instantiated.  `rose-ren`
+and `rose-m2g` therefore have all templates parsed (`--no_defer_parse_function_templates`); if
+the front end rejects the file, it parses it again as GCC does, and then as Visual C++ does
+(`RoseRefactor::setAlternativeFrontEndOptions`), so that code that only Visual C++ compiles can
+be changed too, with a note.  The uses of the name that the front end did not resolve (in code
+that the preprocessor skips, macro definitions, members of template parameters, or templates
+that are not instantiated in the fallback modes) are listed and not changed.
+
+`tests/tools/` has the tests of the tools (run by `make check`): each test runs tools on copies
+of its input files, compares the results with the expected files, and checks that the programs
+build and print the same as before (or, for code that only Visual C++ compiles, that they
+build after the changes).
+
 ## Windows
 
 The Makefile cross-compiles ROSE for 64-bit Windows when `CXX` is a MinGW-w64 compiler.  The
-result is a relocatable package with `identityTranslator.exe` and `dotGenerator.exe`, EDG's
-configuration, and the system headers that the front end parses with (see `win32/README.txt`
-for its use).  On Debian/Ubuntu:
+result is `rose.dll` with the import library `rose.lib`, and a relocatable package (a 7z file)
+with the DLL, the programs that use it, EDG's configuration, the system headers that the front
+end parses with, and an SDK for programs that use ROSE: `rose.lib`, the headers, `rose.mk` for
+Makefiles, and the programs' sources as examples (see `win32/README.txt`).  On Debian/Ubuntu:
 
 ```
-apt install g++-mingw-w64-x86-64 libz-mingw-w64-dev zip wine   # cross compiler, zlib; Wine for tests
-scripts/build-boost-mingw.sh boost_1_83_0 $HOME/boost-mingw     # Boost for MinGW-w64, from an unpacked release
+apt install g++-mingw-w64-x86-64 libz-mingw-w64-dev 7zip wine   # cross compiler, zlib, 7-Zip; Wine for tests
+scripts/build-boost-mingw.sh boost_1_83_0 $HOME/boost-mingw      # Boost for MinGW-w64, from an unpacked release
 make B=build-win CXX=x86_64-w64-mingw32-g++-posix BOOST_ROOT=$HOME/boost-mingw -j$(nproc)
-make B=build-win CXX=x86_64-w64-mingw32-g++-posix BOOST_ROOT=$HOME/boost-mingw package   # build-win/rose-2.18.0-win64.zip
+make B=build-win CXX=x86_64-w64-mingw32-g++-posix BOOST_ROOT=$HOME/boost-mingw package   # build-win/rose-2.18.0-win64.7z
 ```
 
-Other translators are built the same way: `make B=build-win ... TOOL_SRC=<dir> build-win/bin/<name>.exe`
-compiles `<dir>/<name>.C` and links it with `librose.a`.  How the Windows build differs from the
-Linux build:
+Other programs are built the same way: `make B=build-win ... TOOL_SRC=<dir> build-win/bin/<name>.exe`
+compiles `<dir>/<name>.C` and links it with `rose.lib`; or with the SDK, on Windows.  How the
+Windows build differs from the Linux build:
 
 * The programs that run during the build (ROSETTA's generator and EDG's `mk_errinfo`) are built a
   second time, for the build machine, with `HOST_CXX` (default `g++`) and its own Boost.
-* librose is a static library, `librose.a`: a DLL cannot export more than 65,535 symbols.  The
-  executables are linked statically (no MinGW DLLs are needed), with a 64 MB stack.
+* The library is linked from the static library `librose.a` into `rose.dll`.  A DLL cannot
+  export more than 65,535 names, and librose defines more than 100,000, so
+  `win32/build/rose-exports.C` (run with `nm` on `librose.a`) writes the list of ROSE's API,
+  `rose.def`: 62,643 names, without those of EDG, of the C and C++ run-time libraries, of
+  instances of standard library and Boost templates, and of the internals of the IR classes.
+  The MinGW C and C++ run-time libraries are linked statically into the DLL and into each
+  program (no MinGW DLLs are needed); the programs have a 64 MB stack.  The SDK's headers are
+  those that the programs include (from their dependency files, with the parts of Boost that
+  they include), and its compiler options (`include/rose/rose.rsp`) are those the programs are
+  compiled with, with the include directories relative to `include/rose` (`gcc -iprefix`), by
+  `scripts/windows-sdk.sh`.  Built from the SDK under Wine with MSYS2's GCC 16.2 and
+  `mingw32-make`, the programs pass the tests of the refactoring tools.
 * The backend compiler is MinGW-w64 GCC: the predefined macros and system include directories
   are taken from the cross compiler, and the headers are copied into the package
-  (`include/edg/`, by `scripts/stage-sys-includes.sh`).  At run time the translators find them,
-  and EDG's configuration, relative to the executable, and they run `gcc` and `g++` from the
-  PATH to compile their output (any MinGW-w64 GCC, e.g. MSYS2's).
+  (`include/edg/`, by `scripts/stage-sys-includes.sh`).  At run time `rose.dll` finds them, and
+  EDG's configuration, relative to its own location, and the translators run `gcc` and `g++`
+  from the PATH to compile their output (any MinGW-w64 GCC, e.g. MSYS2's).
 * EDG is configured for the MinGW-w64 x86_64 target (`edg2sage/edgconfig/mingw_x86_64.h`): the
   Windows data model (32-bit `long`, 16-bit `wchar_t`) and bit-field layout, with GCC's
   80-bit `long double` and the Itanium C++ ABI (`__attribute__((gcc_struct))` is not emulated).
@@ -166,8 +238,9 @@ Linux build:
   can be next to the stack).  A few analysis modules that convert pointers to `long` are
   compiled with `-fpermissive` (the OpenAnalysis wrappers do not work on Windows).
 
-`make check` runs the tests with Wine; the translator needs a Windows `gcc`/`g++` in Wine's
-PATH, e.g. MSYS2's `mingw-w64-x86_64-gcc` and its dependencies unpacked from
+`make check` runs the tests with Wine (the programs of the tests of the refactoring tools are
+built with the host's `g++`); the translator needs a Windows `gcc`/`g++` in Wine's PATH, e.g.
+MSYS2's `mingw-w64-x86_64-gcc` and its dependencies unpacked from
 https://repo.msys2.org/mingw/mingw64/:
 
 ```
@@ -176,8 +249,10 @@ WINEPATH='Z:\path\to\mingw64\bin' make B=build-win CXX=x86_64-w64-mingw32-g++-po
 
 The package contains `test.bat`, a self test: it translates two example programs (C using the
 Windows API, and C++17 using the standard library) with `identityTranslator`, writes the AST of
-one with `dotGenerator`, and, when `gcc` and `g++` are in the PATH, checks that the programs
-built from the translated code print the same as those built from the originals.
+one with `dotGenerator`, changes a copy of a third (code that only Visual C++ compiles) with
+`rose-ren`, `rose-m2g` and `rose-using`, and, when `gcc` and `g++` are in the PATH, checks that
+the programs built from the translated code print the same as those built from the originals,
+and that the changed program compiles and prints what it should.
 
 `make ... source-package` makes `build-win/rose-2.18.0-win64-src.7z`, from which the translators
 are built on Windows with MinGW-w64 GCC and `mingw32-make` alone (`win32/source/BUILD.txt`).
@@ -224,8 +299,10 @@ the package was built with, rejects.
   `ab57e548ad206b0fe193a2d44a3f681c91e9c25f` — Apache License 2.0 with LLVM exceptions
   (`edg/LICENSE.txt`).  `edg2sage/edgconfig/cmake_defines.h` was generated by EDG's CMake
   build for its `linux-gcc-release` configuration.
-* `tools/` are ROSE example translators (BSD).
-* `edg2sage/`, the Makefile, `config/`, `scripts/`, `tests/` and `win32/` are new (MIT, see `LICENSE`).
+* `tools/identityTranslator.C` and `tools/dotGenerator.C` are ROSE example translators (BSD).
+* `edg2sage/`, `refactor/`, the refactoring tools in `tools/`, the Makefile, `config/`,
+  `scripts/`, `tests/` and `win32/` are new (MIT, see `LICENSE`).
 
-The files in `rose/` and `edg/` are unmodified copies; `scripts/vendor-sources.sh` lists how
+The files in `rose/` and `edg/` are unmodified copies (the build applies its changes to a few of
+them to copies: `win32/patches/`, `edg2sage/patches/`); `scripts/vendor-sources.sh` lists how
 the subsets are chosen.

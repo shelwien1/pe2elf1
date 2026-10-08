@@ -1,0 +1,5 @@
+# Code that only Visual C++ compiles (Stack uses the members of its dependent base class without
+# qualification) is renamed and converted as Visual C++ parses it, then made standard C++
+$REN main.cpp balance:1 getBalance
+$M2G main.cpp Account::deposit
+$USING main.cpp

@@ -331,9 +331,12 @@ bool isNumericLiteral(const std::string& text);
 // Helper: normalizes a path to an absolute path without "." and ".." components
 std::string absolutePath(const std::string& path);
 
-// Cross-references for refactoring tools (xref.C): the EDG options for the next front end run,
-// and the reading of the cross-reference listing at the end of back_end()
-void xrefOptions(std::vector<std::string>& args);
+// Cross-references for refactoring tools (xref.C): the number of front end runs to try (with
+// the options of RoseRefactor::setFrontEndOptions() and its alternatives), the EDG options for a
+// run, and the reading of the cross-reference listing at the end of back_end()
+int xrefRuns();
+void xrefOptions(std::vector<std::string>& args, int run);
+void xrefRunAccepted(int run);
 void xrefCollect();
 bool xrefBuildsAst();
 

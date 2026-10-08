@@ -150,6 +150,13 @@ private:
 void recordCrossReferences(bool on = true);
 // More options for the EDG front end in the next frontend() calls, e.g. "--no_dep_name"
 void setFrontEndOptions(const std::vector<std::string>& options);
+// Other options to try when the front end rejects a source file with those of
+// setFrontEndOptions(): it runs again with each set of options in turn, until it accepts the
+// file.  The diagnostics of the runs that fail are not shown (except those of the last).
+void setAlternativeFrontEndOptions(const std::vector<std::vector<std::string>>& alternatives);
+// The options the front end accepted the last C or C++ file with: 0 for those of
+// setFrontEndOptions(), 1 for the first alternative, and so on
+int frontEndOptionsUsed();
 // Whether the next frontend() calls translate the C/C++ code into ROSE's AST (they do by
 // default); tools that only use the cross-references can skip it (the files of the project then
 // have empty global scopes)
@@ -176,6 +183,9 @@ public:
   int lineCount() const { return (int)lineStart_.size(); }
   // The identifier (or keyword) that starts at an offset ("" if none)
   std::string identifierAt(std::size_t offset) const;
+  // The offsets where an identifier is written in the code (not in comments or literals, and not
+  // as a part of a longer identifier or of a number)
+  std::vector<std::size_t> occurrences(const std::string& identifier) const;
   // The offset of the end of the comment or white space starting at offset (offset if none)
   std::size_t skipSpace(std::size_t offset) const;
   // The offset just after the last token before offset, skipping white space and comments
@@ -235,6 +245,13 @@ SourceText& sourceText(const std::string& file);
 // or the name is in the definition of a macro, whose name is then stored in *macro.
 std::size_t nameOffset(const CrossReferences& xr, const Position& pos, const std::string& name,
                        std::string* macro = nullptr);
+
+// Where a name is written in the code of the files of the cross-references (outside system
+// headers), but the front end recorded no reference to a declared entity of that name: in code
+// that the preprocessor skipped, in the definition of a macro, as the name of a member of a
+// template parameter, or in the body of a template that the front end did not parse (when
+// template bodies are only parsed where they are instantiated)
+std::vector<Position> unresolvedOccurrences(const CrossReferences& xr, const std::string& name);
 
 // ---------------------------------------------------------------------------------------------
 // Command lines of the tools

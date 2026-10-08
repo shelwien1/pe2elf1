@@ -231,6 +231,8 @@ namespace {
 bool recordingFlag = false;
 bool buildAstFlag = true;
 std::vector<std::string> options;
+std::vector<std::vector<std::string>> alternativeOptions;
+int optionsUsed = 0;
 CrossReferences* currentXref = nullptr;
 std::vector<std::string>* filesToRemove = nullptr;
 
@@ -244,6 +246,12 @@ void recordCrossReferences(bool on) { recordingFlag = on; }
 
 void setFrontEndOptions(const std::vector<std::string>& opts) { options = opts; }
 
+void setAlternativeFrontEndOptions(const std::vector<std::vector<std::string>>& alternatives) {
+  alternativeOptions = alternatives;
+}
+
+int frontEndOptionsUsed() { return optionsUsed; }
+
 void buildAst(bool on) { buildAstFlag = on; }
 
 const CrossReferences& crossReferences() { return impl::current(); }
@@ -254,7 +262,13 @@ bool recording() { return recordingFlag; }
 
 bool buildsAst() { return buildAstFlag; }
 
-const std::vector<std::string>& frontEndOptions() { return options; }
+int frontEndRuns() { return 1 + (int)alternativeOptions.size(); }
+
+const std::vector<std::string>& frontEndOptions(int run) {
+  return run > 0 && run <= (int)alternativeOptions.size() ? alternativeOptions[run - 1] : options;
+}
+
+void setFrontEndOptionsUsed(int run) { optionsUsed = run; }
 
 CrossReferences& current() {
   if (currentXref == nullptr) currentXref = new CrossReferences();
@@ -419,6 +433,21 @@ std::string SourceText::identifierAt(std::size_t off) const {
   return text_.substr(off, e - off);
 }
 
+std::vector<std::size_t> SourceText::occurrences(const std::string& id) const {
+  std::vector<std::size_t> out;
+  if (id.empty()) return out;
+  const std::vector<char>& cls = classes()[file_];
+  for (std::size_t off = text_.find(id); off != std::string::npos; off = text_.find(id, off + 1)) {
+    std::size_t end = off + id.size();
+    if (cls[off] != CODE || (end < text_.size() && isIdentChar((unsigned char)text_[end]))) continue;
+    // Not in the middle of an identifier or of a number (such as 1e5 or 0x1f)
+    std::size_t b = off;
+    while (b > 0 && isIdentChar((unsigned char)text_[b - 1])) --b;
+    if (b == off) out.push_back(off);
+  }
+  return out;
+}
+
 std::size_t SourceText::skipSpace(std::size_t off) const {
   const std::vector<char>& cls = classes()[file_];
   while (off < text_.size() && (cls[off] == SPACE || cls[off] == COMMENT)) ++off;
@@ -508,6 +537,23 @@ std::size_t nameOffset(const CrossReferences& xr, const Position& pos, const std
   if (st.text()[off] == '~') off = st.skipSpace(off + 1);  // destructor
   std::string id = st.identifierAt(off);
   if (id == name) return off;
+  // A qualified name: EDG records some references at the start of the name (a base class in a
+  // constructor's initializer list, "ns::Base(...)")
+  const std::string& t = st.text();
+  for (std::size_t q = off; t.compare(q, 2, "::") == 0 || !st.identifierAt(q).empty();) {
+    std::size_t after = q;
+    if (t.compare(q, 2, "::") != 0) {
+      after = st.skipSpace(q + st.identifierAt(q).size());
+      if (after < t.size() && t[after] == '<') {  // template arguments
+        std::size_t close = st.matching(after);
+        if (close == std::string::npos) break;
+        after = st.skipSpace(close + 1);
+      }
+      if (t.compare(after, 2, "::") != 0) break;
+    }
+    q = st.skipSpace(after + 2);
+    if (st.identifierAt(q) == name) return q;
+  }
   if (id.empty()) return std::string::npos;
   // A macro invocation?
   bool isMacro = false;
@@ -533,6 +579,37 @@ std::size_t nameOffset(const CrossReferences& xr, const Position& pos, const std
   }
   if (macro != nullptr) *macro = id;
   return std::string::npos;
+}
+
+std::vector<Position> unresolvedOccurrences(const CrossReferences& xr, const std::string& name) {
+  // The offsets of the name where a declared entity of that name (or a destructor of a class of
+  // that name) is referenced
+  std::map<std::string, std::set<std::size_t>> resolved;
+  std::vector<const Entity*> entities = xr.named(name), destructors = xr.named("~" + name);
+  entities.insert(entities.end(), destructors.begin(), destructors.end());
+  for (const Entity* e : entities) {
+    if (!e->isDeclared()) continue;
+    for (const Reference& r : e->references) {
+      if (r.inSystemHeader) continue;
+      std::size_t off = nameOffset(xr, r.pos, name);
+      if (off != std::string::npos) resolved[r.pos.file].insert(off);
+    }
+  }
+  std::set<std::string> files;
+  for (const auto& kv : xr.entities()) {
+    for (const Reference& r : kv.second.references) {
+      if (!r.inSystemHeader) files.insert(r.pos.file);
+    }
+  }
+  std::vector<Position> out;
+  for (const std::string& f : files) {
+    const SourceText& st = sourceText(f);
+    const std::set<std::size_t>& known = resolved[f];
+    for (std::size_t off : st.occurrences(name)) {
+      if (!known.count(off)) out.push_back(st.position(off));
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------------------------
