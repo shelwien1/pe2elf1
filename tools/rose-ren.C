@@ -128,13 +128,26 @@ std::vector<Item> itemsNamed(const CrossReferences& xr, const std::string& name)
     // (constructors and destructors are renamed with their class)
     if (done.count(e->id) || e->isImplicit || isConstructorOrDestructor(xr, *e)) continue;
     std::vector<const Entity*> group = xr.sameDeclaration(*e);
+    // A parameter of a function in K&R C is declared twice, in the identifier list and in the
+    // declaration list (two parameters with the same name in one function are those)
+    if (e->kind == Kind::Parameter && e->scope.kind == Scope::Kind::Function) {
+      for (const Entity* p : xr.named(name)) {
+        if (p->kind == Kind::Parameter && p->scope == e->scope && std::find(group.begin(), group.end(), p) == group.end()) {
+          group.push_back(p);
+        }
+      }
+    }
     for (const Entity* g : group) done.insert(g->id);
     Item item;
     item.entities = group;
-    // The main entity: the template (or the entity itself) rather than an instance
+    // The main entity: the template (or the entity itself) rather than an instance, one with a
+    // type rather than one without
     for (const Entity* g : group) {
       if (g->name != name || g->isImplicit) continue;
-      if (item.main == nullptr || (item.main->isTemplateInstance && !g->isTemplateInstance)) item.main = g;
+      if (item.main == nullptr || (item.main->isTemplateInstance && !g->isTemplateInstance) ||
+          (item.main->type.empty() && !g->type.empty() && item.main->isTemplateInstance == g->isTemplateInstance)) {
+        item.main = g;
+      }
     }
     if (item.main == nullptr) continue;
     for (const Entity* g : group) {
@@ -436,10 +449,12 @@ int nameClashes(const CrossReferences& xr, const std::set<const Entity*>& target
   }
 
   // A template parameter may not be declared again in its template, nor have the name of the
-  // template
+  // template (a qualified name, of a member defined outside its class, is not declared there)
   auto declaredWithin = [&](const Entity& e, const Scope& s) {
     for (const Reference& r : e.references) {
       if (!r.isDeclaration()) continue;
+      std::size_t off = nameOffset(xr, r.pos, e.name);
+      if (off != std::string::npos && isQualified(sourceText(r.pos.file), off)) continue;
       for (const Scope& c : xr.scopes(r.scopes)) {
         if (c == s) return true;
       }

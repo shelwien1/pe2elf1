@@ -18,6 +18,7 @@
 ! $REN main.cpp counter LIMIT
 ! $REN main.cpp total Base
 ! $REN tags.c origin point_t
+! $REN tags.c first second
 # Renamed
 $REN main.cpp early late
 $REN main.cpp first value
@@ -25,6 +26,7 @@ $REN main.cpp q r
 $REN main.cpp px x
 $REN main.cpp done counter
 $REN tags.c origin point
+$REN tags.c first one
 # Refused (more.cpp): function templates, template parameters, anonymous unions, the scopes of
 # for and if statements, a member named as its class, the name of a base class
 ! $REN more.cpp total maximum

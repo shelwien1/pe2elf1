@@ -773,6 +773,11 @@ void xrefCollect() {
           auto c = classTypes.find(s.id);
           if (c != classTypes.end() && isAnonymousClass(c->second)) continue;
         }
+        // (A parameter is in a function, or in a prototype scope that is not on the stack when the
+        // front end declares the members of a class template instance.)
+        if (e->kind == RR::Kind::Parameter && s.kind != RR::Scope::Kind::Function && s.kind != RR::Scope::Kind::Local) {
+          break;
+        }
         if (e->kind != RR::Kind::Label || s.kind == RR::Scope::Kind::Function) {
           e->scope = s;
           break;
