@@ -32,14 +32,14 @@ enum StreamId {
   S_DATA,   // everything outside code regions
   S_OP,     // prefixes, opcode, ModRM, SIB, imm8, disp8, imm16
   S_J8,     // rel8 branch targets: rank among nearby labels
-  S_JMP,    // rel32 jmp targets: label distance (1 byte), 0/255 = escape
+  S_JMP,    // rel32 jmp targets: label distance (1 byte), 0 / 255 = escape
   S_JCC,    // rel32 jcc targets: same coding
   S_CALL,   // rel32 call targets: label number, 0 = escape
   S_RIP,    // RIP-relative disp32: absolute address
   S_DISP,   // disp32
   S_IMM32,  // imm32
   S_IMM64,  // imm64, moffs64
-  S_ESC,    // escaped rel32 targets: absolute address or long label distance
+  S_ESC,    // escaped rel32 targets: absolute address or label number
   NSTREAM
 };
 
@@ -147,8 +147,9 @@ struct InStream {
 // nothing: the first instruction of a code region and the first non-padding
 // instruction after an unconditional control transfer.
 // Branch targets are coded through the sorted label set:
-//   jmp/jcc rel32  z = zigzag(label distance from the next instruction) + 1,
-//                  one byte if z < 255, else 255 and z in S_ESC
+//   jmp/jcc rel32  z = zigzag(label distance from the next instruction) + 1
+//                  in one byte if z < 255; else 255, and the label number + 1
+//                  in S_ESC (far jumps are often tail calls to functions)
 //   call rel32     label number + 1, big-endian 32-bit
 //   rel8           rank among the 256 possible targets, labels first
 // A code of 0 means the target is not a label; its address is in S_ESC.
@@ -350,7 +351,7 @@ struct Encoder {
             else {
               uint32_t z = zigzag((int64_t)r - (int64_t)L->lower(next)) + 1;
               if (z < 255) st.push_back((uint8_t)z);
-              else { st.push_back(255); putBE32(S[S_ESC], z); }
+              else { st.push_back(255); putBE32(S[S_ESC], (uint32_t)(r + 1)); }
             }
             break;
           }
@@ -462,8 +463,9 @@ struct Decoder {
             }
             if (!st->take(1)) return false;
             uint32_t z = s[0];
-            if (z == 255 && !escaped(z)) return false;
-            if (!target(z, false, next, v)) return false;
+            if (z == 255) {  // far: label number + 1
+              if (!escaped(z) || z == 0 || !target(z, true, next, v)) return false;
+            } else if (!target(z, false, next, v)) return false;
             break;
           }
           case x64::F_RIP:
