@@ -199,6 +199,20 @@ Entity& CrossReferences::add(EntityId id) {
   return e;
 }
 
+const std::vector<Scope>& CrossReferences::scopes(int index) const {
+  static const std::vector<Scope> none;
+  return index >= 0 && index < (int)scopes_.size() ? scopes_[index] : none;
+}
+
+int CrossReferences::addScopes(const std::vector<Scope>& scopes) {
+  auto it = scopeIndex_.find(scopes);
+  if (it != scopeIndex_.end()) return it->second;
+  int index = (int)scopes_.size();
+  scopes_.push_back(scopes);
+  scopeIndex_.emplace(scopes, index);
+  return index;
+}
+
 void CrossReferences::finish() {
   byName_.clear();
   byPosition_.clear();
@@ -226,6 +240,9 @@ void CrossReferences::clear() {
   byName_.clear();
   byPosition_.clear();
   byDeclaration_.clear();
+  scopes_.clear();
+  scopeIndex_.clear();
+  cplusplus_ = true;
 }
 
 namespace {

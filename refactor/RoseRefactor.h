@@ -59,6 +59,27 @@ const char* kindName(Kind k);  // "variable", "member function", ...
 enum class Access { None, Public, Protected, Private };
 const char* accessName(Access a);  // "public", ... ("" for None)
 
+// A scope in which names are declared and looked up.  Two scopes are the same scope if their
+// kinds and ids are equal.
+struct Scope {
+  enum class Kind : unsigned char {
+    None,       // unknown (macros, for example)
+    Global,     // the global namespace (id 0)
+    Namespace,  // a namespace (id: the namespace, an entity)
+    Class,      // a class, struct, union or scoped enum (id: that entity)
+    Function,   // the outermost block of a function, where its parameters are declared
+    Local       // a block, a condition, a template parameter list or a function prototype (in
+                // C++, the outermost block of a statement controlled by a condition is the scope
+                // of the condition; the condition and the outermost block of the body of a for
+                // statement are the scope of its init-statement or range declaration)
+  };
+  Kind kind = Kind::None;
+  std::uint64_t id = 0;   // for Function and Local, a number unique in the translation unit
+  bool operator==(const Scope& o) const { return kind == o.kind && id == o.id; }
+  bool operator!=(const Scope& o) const { return !(*this == o); }
+  bool operator<(const Scope& o) const { return kind != o.kind ? kind < o.kind : id < o.id; }
+};
+
 // A reference to an entity at a position: what EDG's cross-reference listing records.
 struct Reference {
   Position pos;            // the position of the entity's name
@@ -68,6 +89,8 @@ struct Reference {
   bool inSystemHeader = false;
   unsigned order = 0;      // the position of the reference in the translation unit (in the order
                            // in which the front end processes the text)
+  int scopes = -1;         // the scopes that enclose the reference, in which an unqualified name
+                           // is looked up: CrossReferences::scopes(scopes) (-1 if unknown)
   bool isDeclaration() const { return code == 'd' || code == 'D' || code == 't' || code == 'T'; }
   bool isDefinition() const { return code == 'D' || code == 'T'; }
 };
@@ -88,6 +111,8 @@ struct Entity {
   Kind kind = Kind::Other;
   std::string type;                 // the type as C++ text, for variables, functions, typedefs, ...
   EntityId parent = 0;              // the class (or namespace) the entity is a member of
+  Scope scope;                      // the scope the entity is declared in (for the members of an
+                                    // anonymous union, the scope that encloses it)
   Access access = Access::None;     // for class members
   bool isStatic = false;            // static member
   bool isVirtual = false;
@@ -133,9 +158,17 @@ public:
   bool isBaseOf(EntityId b, EntityId d) const;
   // The direct base of class d through which b is a base of d (or 0)
   const BaseClass* directBaseLeadingTo(EntityId d, EntityId b) const;
+  // The scopes that enclose a reference (Reference::scopes), innermost first: those in which an
+  // unqualified name is looked up there (empty if unknown).  A class scope stands for the class
+  // and its base classes; a namespace's using-directives are not included.
+  const std::vector<Scope>& scopes(int index) const;
+  // Whether the translation unit is C++ (rather than C)
+  bool cplusplus() const { return cplusplus_; }
 
   // Used by the front end
   Entity& add(EntityId id);
+  int addScopes(const std::vector<Scope>& scopes);  // the index of a list of scopes
+  void setCplusplus(bool on) { cplusplus_ = on; }
   void finish();  // sorts the references and builds the indexes
   void clear();
 
@@ -144,6 +177,9 @@ private:
   std::multimap<std::string, EntityId> byName_;
   std::multimap<Position, EntityId> byPosition_;
   std::multimap<Position, EntityId> byDeclaration_;
+  std::vector<std::vector<Scope>> scopes_;
+  std::map<std::vector<Scope>, int> scopeIndex_;
+  bool cplusplus_ = true;
 };
 
 // Makes the next frontend() calls record cross-references (in the EDG front end)

@@ -147,8 +147,9 @@ of the front end, with what ROSE passes and notes on their use here.
 
 `refactor/RoseRefactor.h` is an API for refactoring tools that is part of librose: the
 cross-references of a translation unit (each entity with its kind, full name, type, enclosing
-class or namespace, access, base classes, overridden functions, and the positions of its
-declarations and references), the source text (positions, a simple lexer, bracket matching), and
+class or namespace, access, base classes, overridden functions, the scope it is declared in, and
+the positions of its declarations and references, each with the scopes in which an unqualified
+name is looked up there), the source text (positions, a simple lexer, bracket matching), and
 edits applied to the files all at once, keeping their formatting.  The cross-references come
 from the EDG front end's cross-reference listing (`--xref`): a copy of EDG's `symbol_ref.c`
 with the change in `edg2sage/patches/symbol_ref.c.sed` calls `edg2sage/xref.C` for each record,
@@ -164,10 +165,17 @@ place; they take the compiler's options (`-I`, `-D`, `-std=...`) and `--dry-run`
   if there is only one) in its declarations and all its uses (qualified names,
   using-declarations, base classes, template arguments and instances, names written in macro
   arguments); a class with its constructors and destructor, a virtual function with those that
-  override it or that it overrides.  It refuses (unless `--force`) when the new name is already
-  declared in the same scope, when a reference is also a reference to another entity (a template
-  for other arguments), and when the name is written in a macro definition or declared in a
-  system header.
+  override it or that it overrides.  It refuses (unless `--force`) when a name would refer to
+  something else afterwards: when the new name is already declared in the same scope; when a use
+  of the renamed entity would find another declaration of the new name first (a local or
+  parameter of an inner scope, a member, a template parameter: unqualified name lookup is
+  simulated at each use, with the scopes the front end had there, but not using-directives and
+  argument-dependent lookup) or a use of another entity would find the renamed one; when a
+  renamed member would hide a member of a base class or be hidden by one of a derived class, or
+  would have the name of its class; when a name declared in a template would be that of one of
+  its template parameters; when the new name is a macro.  It also refuses when a reference is
+  also a reference to another entity (a template for other arguments), and when the name is
+  written in a macro definition or declared in a system header.
 * `rose-using file.cpp [class]` finds the names that class templates use without qualification
   and that refer to members of dependent base classes, which Visual C++ (without
   `/permissive-`) finds and GCC and Clang do not, and adds using-declarations for them to the

@@ -7,10 +7,15 @@
 // IL entity identifies the entity, so that the symbols of one entity (e.g. an injected class
 // name and the class) are one entity.  At the end of back_end(), while the IL is still in
 // memory, each entity is described from its IL entity (kind, type, enclosing class, access,
-// base classes, overridden virtual functions, ...).
+// base classes, overridden virtual functions, ...).  Each record also notes the scopes on the
+// front end's scope stack (the scopes in which an unqualified name is looked up there), and each
+// entity the scope it is declared in, so that tools can tell where a name would refer to another
+// entity.
 #include "edg2sage.h"
 #include "cmd_line.h"
 #include "il_to_str.h"
+#include "scope_stk.h"
+#include "symbol_ref.h"
 #include "symbol_tbl.h"
 #include "RoseRefactorImpl.h"
 
@@ -25,7 +30,7 @@ namespace RR = RoseRefactor;
 
 namespace edg {
 // In the patched copy of symbol_ref.c
-extern void (*edg2sage_xref_hook)(a_symbol_ptr, char, a_const_char*, a_line_number, int);
+extern void (*edg2sage_xref_hook)(a_symbol_ptr, char, a_const_char*, a_line_number, int, a_symbol_reference_kind);
 }  // namespace edg
 
 namespace edg2sage {
@@ -47,10 +52,15 @@ struct Record {
   std::string file;
   unsigned long line;
   int column;
+  int scopes;  // CrossReferences::scopes() index
 };
 std::map<RR::EntityId, Pending> pending;
 std::vector<Record> records;
 std::map<a_symbol_ptr, std::pair<RR::EntityId, std::string>> symbolEntities;
+// The blocks that are in the declarative region of an enclosing scope (scope numbers)
+std::map<a_scope_number, a_scope_number> regions;
+// The class types of the class scopes in the scopes of the records (by entity)
+std::map<RR::EntityId, a_type_ptr> classTypes;
 RR::EntityId nextSyntheticId = 1;
 
 // Formatted file names (as in the listing) -> absolute name, and whether a system header
@@ -134,6 +144,200 @@ RR::EntityId parentOf(a_source_correspondence* sc) {
     default:
       return 0;
   }
+}
+
+// The entity of a class (as parentOf())
+RR::EntityId classEntity(a_type_ptr t) {
+  if (t != nullptr && (t->kind == tk_class || t->kind == tk_struct || t->kind == tk_union) &&
+      t->variant.class_struct_union.is_prototype_instantiation &&
+      t->variant.class_struct_union.extra_info != nullptr &&
+      t->variant.class_struct_union.extra_info->assoc_template != nullptr) {
+    return (RR::EntityId)(uintptr_t)t->variant.class_struct_union.extra_info->assoc_template;
+  }
+  return (RR::EntityId)(uintptr_t)t;
+}
+
+// Whether a class is an anonymous union (or structure), whose members are declared in the
+// enclosing scope
+bool isAnonymousClass(a_type_ptr t) {
+  return t != nullptr && (t->kind == tk_class || t->kind == tk_struct || t->kind == tk_union) &&
+         (t->variant.class_struct_union.is_nonstd_anonymous_union_type ||
+          (t->variant.class_struct_union.extra_info != nullptr &&
+           t->variant.class_struct_union.extra_info->anonymous_union_kind != auk_none));
+}
+
+// The scope that an IL scope entry stands for (unknown for the members of an anonymous union,
+// whose scope is that of their declaration in the scope stack: see xrefCollect())
+RR::Scope scopeOf(a_scope_ptr scope) {
+  RR::Scope s;
+  if (scope == nullptr) return s;
+  switch (scope->kind) {
+    case sck_file:
+      s.kind = RR::Scope::Kind::Global;
+      break;
+    case sck_namespace:
+      s.kind = RR::Scope::Kind::Namespace;
+      s.id = (RR::EntityId)(uintptr_t)scope->variant.assoc_namespace;
+      break;
+    case sck_class_struct_union:
+    case sck_enum:
+      if (scope->kind == sck_class_struct_union && isAnonymousClass(scope->variant.assoc_type)) break;
+      s.kind = RR::Scope::Kind::Class;
+      s.id = classEntity(scope->variant.assoc_type);
+      break;
+    case sck_function:
+      s.kind = RR::Scope::Kind::Function;
+      s.id = (std::uint64_t)scope->number;
+      break;
+    default: {
+      s.kind = RR::Scope::Kind::Local;
+      auto r = regions.find(scope->number);
+      s.id = (std::uint64_t)(r != regions.end() ? r->second : scope->number);
+      break;
+    }
+  }
+  return s;
+}
+
+// Whether a scope of the scope stack declares the variable of a range-based for statement
+bool declaresRangeForVariable(a_scope_stack_entry* ssep) {
+  for (a_symbol_ptr sym = assoc_pointers_block_of(ssep)->symbols; sym != nullptr; sym = sym->next_in_scope) {
+    if (sym->kind == sk_variable && sym->variant.variable.ptr != nullptr &&
+        sym->variant.variable.ptr->is_enhanced_for_iterator) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// The number of the scope whose declarative region the scope at this depth of the scope stack
+// is in.  In C++, the outermost block of a statement controlled by a condition is in the region
+// of the condition; the condition and the outermost block of the body of a for statement in that
+// of its init-statement; the outermost block of the body of a range-based for statement in that
+// of its variable.  (A name declared there may not be declared again in that block.)
+a_scope_number regionOf(int depth) {
+  const a_scope_stack_entry& e = scope_stack[depth];
+  if (depth > 0 && C_dialect == C_dialect_cplusplus) {
+    a_scope_stack_entry& p = scope_stack[depth - 1];
+    bool same = false;
+    if (!p.is_dissociated_from_loop_scope) {
+      if (e.kind == sck_block) {
+        same = p.kind == sck_condition ||
+               (e.is_loop_scope && (p.is_for_init_block || declaresRangeForVariable(&p)));
+      } else if (e.kind == sck_condition) {
+        same = p.is_for_init_block;
+      }
+    }
+    if (same) {
+      a_scope_number r = regionOf(depth - 1);
+      regions[e.number] = r;
+      return r;
+    }
+  }
+  return e.number;
+}
+
+// The scope in which the entity of a scope stack entry (a class, a function or a namespace) is
+// declared, or null
+a_scope_ptr declaringScope(const a_scope_stack_entry& e) {
+  switch (e.kind) {
+    case sck_class_struct_union:
+    case sck_class_reactivation:
+      return e.assoc_type != nullptr ? e.assoc_type->source_corresp.parent_scope : nullptr;
+    case sck_function:
+      return e.assoc_routine != nullptr ? e.assoc_routine->source_corresp.parent_scope : nullptr;
+    case sck_namespace:
+    case sck_namespace_extension:
+    case sck_namespace_reactivation:
+      return e.assoc_namespace != nullptr ? e.assoc_namespace->source_corresp.parent_scope : nullptr;
+    default:
+      return nullptr;
+  }
+}
+
+// The scopes of the front end's scope stack, innermost first, in which an unqualified name is
+// looked up at this point.  In the body of a template (also when the front end parses it
+// generically), the scope that makes the template parameters visible is a template instantiation
+// scope with the number of the template parameter scope, and the scopes below the instantiation
+// context are those of the point of instantiation, which are not visible: the scopes that
+// enclose the template follow instead (from the IL).  The scopes that only control visibility
+// (pragmas, access checking) are left out.  A mem-initializer-id (the member that
+// a constructor initializes) is looked up without the constructor's scope, where its parameters
+// are declared.
+int currentScopes(bool memInitializerId) {
+  std::vector<RR::Scope> chain;
+  bool global = false;
+  int top = depth_scope_stack;
+  if (memInitializerId) {
+    for (int depth = top; depth >= 0; --depth) {
+      if (scope_stack[depth].kind == sck_function) {
+        top = depth - 1;
+        break;
+      }
+    }
+  }
+  for (int depth = top; depth >= 0; --depth) {
+    const a_scope_stack_entry& e = scope_stack[depth];
+    RR::Scope s;
+    switch (e.kind) {
+      case sck_file:
+        s.kind = RR::Scope::Kind::Global;
+        global = true;
+        break;
+      case sck_namespace:
+      case sck_namespace_extension:
+      case sck_namespace_reactivation:
+        s.kind = RR::Scope::Kind::Namespace;
+        s.id = (RR::EntityId)(uintptr_t)e.assoc_namespace;
+        break;
+      case sck_class_struct_union:
+      case sck_class_reactivation:
+      case sck_enum:
+        // (Not an enumeration that is not scoped: its enumerators are declared in the enclosing
+        // scope.  An anonymous union is not known to be one while its members are declared.)
+        if (e.kind == sck_enum && e.assoc_type != nullptr && !e.assoc_type->variant.integer.is_scoped_enum) break;
+        s.kind = RR::Scope::Kind::Class;
+        s.id = classEntity(e.assoc_type);
+        if (e.kind != sck_enum) classTypes.emplace(s.id, e.assoc_type);
+        break;
+      case sck_function:
+        s.kind = RR::Scope::Kind::Function;
+        s.id = (std::uint64_t)e.number;
+        break;
+      case sck_block:
+      case sck_condition:
+        s.kind = RR::Scope::Kind::Local;
+        s.id = (std::uint64_t)regionOf(depth);
+        break;
+      case sck_func_prototype:
+      case sck_template_declaration:
+      case sck_template_instantiation:
+        s.kind = RR::Scope::Kind::Local;
+        s.id = (std::uint64_t)e.number;
+        break;
+      default:
+        break;
+    }
+    if (e.kind == sck_instantiation_context) {
+      // The scopes that enclose the outermost class, function or namespace above the context
+      for (int d = depth + 1; d <= top; ++d) {
+        a_scope_ptr p = declaringScope(scope_stack[d]);
+        if (p == nullptr) continue;
+        for (; p != nullptr; p = p->kind == sck_file ? nullptr : p->parent) {
+          RR::Scope ps = scopeOf(p);
+          if (ps.kind == RR::Scope::Kind::Global) global = true;
+          if (ps.kind != RR::Scope::Kind::None && std::find(chain.begin(), chain.end(), ps) == chain.end()) {
+            chain.push_back(ps);
+          }
+        }
+        break;
+      }
+      break;
+    }
+    if (s.kind != RR::Scope::Kind::None && (chain.empty() || chain.back() != s)) chain.push_back(s);
+  }
+  if (!global) chain.push_back(RR::Scope{RR::Scope::Kind::Global, 0});
+  return RR::impl::current().addScopes(chain);
 }
 
 RR::Position positionOf(const a_source_position& pos) {
@@ -351,12 +555,18 @@ void describe(RR::Entity& e, int symbolKind, char* il, an_il_entry_kind iek) {
       e.kind = RR::Kind::Label;
       break;
     }
+    case iek_template: {
+      // Only the scope (the other properties of templates are those of their symbols)
+      e.scope = scopeOf(((a_template_ptr)il)->source_corresp.parent_scope);
+      break;
+    }
     default:
       break;
   }
   if (sc != nullptr) {
     if (sc->name != nullptr) e.name = sc->name;
     e.parent = parentOf(sc);
+    e.scope = scopeOf(sc->parent_scope);
     e.access = accessOf(sc);
     e.isLocal = sc->is_local_to_function;
     a_type_ptr pc = parentClass(sc);
@@ -431,11 +641,20 @@ bool xrefBuildsAst() { return RR::impl::buildsAst(); }
 namespace {
 
 // Called (by the patched symbol_ref.c) for each record of the cross-reference listing
-void onReference(a_symbol_ptr sym, char code, a_const_char* fileName, a_line_number line, int column) {
+void onReference(a_symbol_ptr sym, char code, a_const_char* fileName, a_line_number line, int column,
+                 a_symbol_reference_kind flags) {
   if (sym == nullptr || fileName == nullptr) return;
   if (sym->kind == sk_keyword || sym->kind == sk_undefined) return;
   an_il_entry_kind iek = iek_none;
   char* il = hasILEntry(sym) ? il_entry_for_symbol_null_okay(sym, &iek) : nullptr;
+  // In an instance of a template, the name of a template parameter is recorded again with the
+  // template argument (a type or a value) as its entity: not a reference to the argument (the
+  // records of the template have the parameter)
+  if (sym->is_template_param && il != nullptr &&
+      ((iek == iek_type && ((a_type_ptr)il)->kind != tk_template_param) ||
+       (iek == iek_constant && ((a_constant_ptr)il)->kind != ck_template_param))) {
+    return;
+  }
   std::string name = sym->header != nullptr && sym->header->identifier != nullptr ? sym->header->identifier : "";
   RR::EntityId id;
   if (il != nullptr) {
@@ -463,7 +682,11 @@ void onReference(a_symbol_ptr sym, char code, a_const_char* fileName, a_line_num
     octl.render_auto_deduction_typerefs = TRUE;
     form_symbol_name(sym, &octl);
   }
-  records.push_back(Record{id, code, fileName, (unsigned long)line, column});
+  // A member that a constructor initializes is looked up in its class (also by GCC when a parameter
+  // has its name; a base class is not)
+  bool memInitializerId = (flags & SRK_INITIALIZATION) != 0 &&
+                          (flags & (SRK_DECLARATION | SRK_DEFINITION)) == 0 && sym->kind == sk_field;
+  records.push_back(Record{id, code, fileName, (unsigned long)line, column, currentScopes(memInitializerId)});
 }
 
 }  // namespace
@@ -484,6 +707,8 @@ void xrefOptions(std::vector<std::string>& args, int run, bool cplusplus) {
   pending.clear();
   records.clear();
   symbolEntities.clear();
+  regions.clear();
+  classTypes.clear();
   RR::impl::current().clear();
   edg2sage_xref_hook = nullptr;
   if (!RR::impl::recording()) return;
@@ -509,6 +734,7 @@ void xrefCollect() {
   addFiles(il_header.primary_source_file, false);
 
   RR::CrossReferences& xr = RR::impl::current();
+  xr.setCplusplus(C_dialect == C_dialect_cplusplus);
   for (auto& kv : pending) {
     const Pending& p = kv.second;
     RR::Entity& e = xr.add(kv.first);
@@ -530,11 +756,31 @@ void xrefCollect() {
     ref.pos = RR::Position(fi.name, (int)r.line, r.column);
     ref.code = r.code;
     ref.inSystemHeader = fi.system;
+    ref.scopes = r.scopes;
     e->references.push_back(ref);
+    // A label is declared in the function that defines it; an entity whose IL entity does not
+    // tell its scope (the member of an anonymous union, a parameter in the identifier list of a
+    // function in K&R C), in the innermost scope of the scope stack where it is first declared
+    // (an anonymous union is not a scope)
+    if (e->scope.kind == RR::Scope::Kind::None && (r.code == 'd' || r.code == 'D') &&
+        e->kind != RR::Kind::Macro) {
+      for (const RR::Scope& s : xr.scopes(r.scopes)) {
+        if (s.kind == RR::Scope::Kind::Class) {
+          auto c = classTypes.find(s.id);
+          if (c != classTypes.end() && isAnonymousClass(c->second)) continue;
+        }
+        if (e->kind != RR::Kind::Label || s.kind == RR::Scope::Kind::Function) {
+          e->scope = s;
+          break;
+        }
+      }
+    }
   }
   pending.clear();
   records.clear();
   symbolEntities.clear();
+  regions.clear();
+  classTypes.clear();
   addOverrides(xr);
   xr.finish();
   // ROSE_REFACTOR_DUMP: lists the entities declared outside system headers (for debugging)
@@ -542,9 +788,10 @@ void xrefCollect() {
     for (const auto& kv : xr.entities()) {
       const RR::Entity& e = kv.second;
       if (e.declaredInSystemHeader()) continue;
-      std::fprintf(stderr, "%llx %s [%s] %s type='%s' parent=%llx access=%s%s%s%s%s%s\n",
+      std::fprintf(stderr, "%llx %s [%s] %s type='%s' parent=%llx scope=%d:%llx access=%s%s%s%s%s%s\n",
                    (unsigned long long)e.id, e.qualifiedName.c_str(), e.name.c_str(), RR::kindName(e.kind),
-                   e.type.c_str(), (unsigned long long)e.parent, RR::accessName(e.access),
+                   e.type.c_str(), (unsigned long long)e.parent, (int)e.scope.kind,
+                   (unsigned long long)e.scope.id, RR::accessName(e.access),
                    e.isStatic ? " static" : "", e.isVirtual ? " virtual" : "", e.isInTemplate ? " in-template" : "",
                    e.isTemplateInstance ? " instance" : "", e.isImplicit ? " implicit" : "");
       for (const RR::BaseClass& b : e.bases) {
@@ -553,7 +800,14 @@ void xrefCollect() {
       }
       for (RR::EntityId o : e.overrides) std::fprintf(stderr, "    overrides %llx\n", (unsigned long long)o);
       for (const RR::Reference& r : e.references) {
-        std::fprintf(stderr, "    %c %s%s\n", r.code, r.pos.str().c_str(), r.inSystemHeader ? " (system)" : "");
+        std::string chain;
+        for (const RR::Scope& s : xr.scopes(r.scopes)) {
+          char buf[64];
+          std::snprintf(buf, sizeof buf, " %d:%llx", (int)s.kind, (unsigned long long)s.id);
+          chain += buf;
+        }
+        std::fprintf(stderr, "    %c %s%s  in%s\n", r.code, r.pos.str().c_str(), r.inSystemHeader ? " (system)" : "",
+                     chain.c_str());
       }
     }
   }

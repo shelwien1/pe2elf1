@@ -1,0 +1,42 @@
+# Refused: after the renaming, a name would refer to another entity (or the new name is declared
+# in the same scope, or is a macro)
+! $REN main.cpp counter step
+! $REN main.cpp first second
+! $REN main.cpp in out
+! $REN main.cpp outer inner
+! $REN main.cpp sum:0 i
+! $REN main.cpp base delta
+! $REN main.cpp local total
+! $REN main.cpp counter m
+! $REN main.cpp n:0 m
+! $REN main.cpp k h
+! $REN main.cpp m n
+! $REN main.cpp py y
+! $REN main.cpp total value
+! $REN main.cpp counter T
+! $REN main.cpp done again
+! $REN main.cpp counter LIMIT
+! $REN main.cpp total Base
+! $REN tags.c origin point_t
+# Renamed
+$REN main.cpp early late
+$REN main.cpp first value
+$REN main.cpp q r
+$REN main.cpp px x
+$REN main.cpp done counter
+$REN tags.c origin point
+# Refused (more.cpp): function templates, template parameters, anonymous unions, the scopes of
+# for and if statements, a member named as its class
+! $REN more.cpp total maximum
+! $REN more.cpp maximum total
+! $REN more.cpp sum T
+! $REN more.cpp T:1 sum
+! $REN more.cpp kind i
+! $REN more.cpp d:0 kind
+! $REN more.cpp step i
+! $REN more.cpp add j
+! $REN more.cpp d:1 c
+! $REN more.cpp value Counter
+# Renamed (more.cpp): the same names in other scopes
+$REN more.cpp total sum
+$REN more.cpp step j

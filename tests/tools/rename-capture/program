@@ -1,0 +1,3 @@
+main.cpp
+tags.c -x c
+more.cpp -std=c++17

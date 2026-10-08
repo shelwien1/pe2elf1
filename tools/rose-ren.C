@@ -8,7 +8,8 @@
 //
 // The options are those of the compiler (-I, -D, -std=..., ...), and:
 //   --dry-run   show the changes without writing the files
-//   --force     rename even where the new name may clash or another entity shares a reference
+//   --force     rename even where a name would refer to something else afterwards, or another
+//               entity shares a reference
 //   --msvc      parse as Visual C++ does, with its headers (those of the INCLUDE environment
 //               variable) instead of GCC's; --msvc=<folder>: the headers of a portable Visual C++
 //               in that folder (include, ucrt\include, sdk\include); --msvc-version=<_MSC_VER>
@@ -22,6 +23,15 @@
 // override it or that it overrides.  The uses of the name that the front end did not resolve
 // (in code that the preprocessor skips, for example) are listed, and not renamed.
 //
+// Nothing is renamed where a name would refer to something else afterwards: the new name declared
+// in the same scope; a use of the renamed entity where unqualified name lookup of the new name
+// would find another entity first (declared in an inner scope, a member of a class, a template
+// parameter), or a use of another entity called the new name where it would find the renamed
+// one (lookup is simulated with the scopes that the front end had at each use; a class scope
+// includes the base classes; qualified names are not looked up there); a member that would hide
+// a member of a base class, or be hidden by one of a derived class; a member with the name of its
+// class; a name declared in a template with the name of one of its template parameters; macros.
+//
 // The front end parses the bodies of all templates, also of those that are not instantiated.
 // If it rejects the source, it parses it as GCC does (the bodies of templates only where they
 // are instantiated), and then as Visual C++ does (names used in templates are also looked up in
@@ -30,11 +40,13 @@
 #include "rose.h"
 #include "RoseRefactor.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cstring>
 #include <iostream>
 #include <unistd.h>
 #include <set>
+#include <tuple>
 
 using namespace RoseRefactor;
 
@@ -157,6 +169,343 @@ void list(const std::vector<Item>& items, const std::string& name) {
   }
 }
 
+// ---------------------------------------------------------------------------------------------
+// Where the new name would refer to something else
+// ---------------------------------------------------------------------------------------------
+
+bool isTag(const Entity& e) {
+  return e.kind == Kind::Class || e.kind == Kind::Struct || e.kind == Kind::Union || e.kind == Kind::Enum;
+}
+
+// Whether two entities' names can denote each other: in C, tags (struct, union and enum names)
+// are apart from the other names; labels and macros are apart from everything else
+bool sameNameSpace(const CrossReferences& xr, const Entity& a, const Entity& b) {
+  if ((a.kind == Kind::Label) != (b.kind == Kind::Label)) return false;
+  if ((a.kind == Kind::Macro) != (b.kind == Kind::Macro)) return false;
+  return xr.cplusplus() || isTag(a) == isTag(b);
+}
+
+// Whether the name at a reference is written qualified (after "::", "." or "->"), so that it is
+// not looked up in the scopes that enclose it
+bool isQualified(const SourceText& st, std::size_t offset) {
+  std::size_t p = st.skipSpaceBackward(offset);
+  const std::string& t = st.text();
+  if (p >= 8 && t.compare(p - 8, 8, "template") == 0 &&
+      (p == 8 || !(std::isalnum((unsigned char)t[p - 9]) || t[p - 9] == '_'))) {
+    p = st.skipSpaceBackward(p - 8);  // x.template f<T>()
+  }
+  if (p >= 2 && (t.compare(p - 2, 2, "::") == 0 || t.compare(p - 2, 2, "->") == 0)) return true;
+  return p >= 1 && t[p - 1] == '.';
+}
+
+// What unqualified lookup considers for a name: all names; types only, after struct, class, union
+// or enum (an elaborated type specifier); types and namespaces, before "::"
+enum class LookupKind { All, Types, TypesAndNamespaces };
+
+LookupKind lookupKind(const SourceText& st, std::size_t offset, std::size_t length) {
+  const std::string& t = st.text();
+  std::size_t next = st.skipSpace(offset + length);
+  if (next + 1 < t.size() && t.compare(next, 2, "::") == 0) return LookupKind::TypesAndNamespaces;
+  std::size_t p = st.skipSpaceBackward(offset);
+  std::size_t b = p;
+  while (b > 0 && (std::isalnum((unsigned char)t[b - 1]) || t[b - 1] == '_')) --b;
+  std::string word = t.substr(b, p - b);
+  if (word == "struct" || word == "class" || word == "union" || word == "enum") return LookupKind::Types;
+  return LookupKind::All;
+}
+
+// Unqualified name lookup of the new name, as it would be after the renaming: the entities with
+// the new name (those renamed to it included) that are declared in the innermost of the scopes
+// enclosing a reference that declares any.  In a class scope, those are the members of the
+// class, or else those found in its base classes (all members, wherever declared); in the other
+// scopes, only the declarations that precede the reference count.
+class Lookup {
+public:
+  Lookup(const CrossReferences& xr, const std::set<const Entity*>& targets, const std::string& oldName,
+         const std::string& newName)
+      : xr_(xr) {
+    for (const Entity* e : xr.named(newName)) {
+      if (!targets.count(e)) add(e);
+    }
+    for (const Entity* e : targets) {
+      if (e->name == oldName) add(e);
+    }
+  }
+  // The entities that the new name would refer to at r, written in place of the name of an
+  // entity like e
+  std::vector<const Entity*> at(const Reference& r, const Entity& e, LookupKind kind) {
+    std::vector<const Entity*> found;
+    for (const Scope& s : xr_.scopes(r.scopes)) {
+      if (s.kind == Scope::Kind::Class) {
+        std::set<EntityId> seen;
+        inClass(s.id, e, kind, found, seen);
+      } else {
+        for (const Entity* c : candidates_) {
+          if (considered(*c, e, kind) && c->scope == s && declaredBefore(*c, r)) found.push_back(c);
+        }
+      }
+      if (!found.empty()) break;
+    }
+    return found;
+  }
+
+private:
+  void add(const Entity* e) {
+    if (e->isImplicit || e->scope.kind == Scope::Kind::None) return;
+    const Reference* first = nullptr;
+    for (const Reference& r : e->references) {
+      if (r.isDeclaration() && (first == nullptr || r.order < first->order)) first = &r;
+    }
+    declared_[e] = first;
+    candidates_.push_back(e);
+  }
+  // Whether c is declared before the reference r: by their positions in one file (the front end
+  // may record a declaration later, a static array with the addresses of labels, for example),
+  // else in the order of the translation unit
+  bool declaredBefore(const Entity& c, const Reference& r) {
+    const Reference* d = declared_[&c];
+    if (d == nullptr) return true;
+    if (d->pos.file == r.pos.file) return d->pos < r.pos;
+    return d->order < r.order;
+  }
+  bool considered(const Entity& c, const Entity& e, LookupKind kind) const {
+    if (!sameNameSpace(xr_, c, e)) return false;
+    switch (kind) {
+      case LookupKind::Types:
+        return c.isType();
+      case LookupKind::TypesAndNamespaces:
+        return c.isType() || c.kind == Kind::Namespace;
+      default:
+        return true;
+    }
+  }
+  // Member name lookup in class cls: its members, or else those found in its base classes
+  void inClass(EntityId cls, const Entity& e, LookupKind kind, std::vector<const Entity*>& found,
+               std::set<EntityId>& seen) {
+    if (!seen.insert(cls).second) return;
+    std::size_t n = found.size();
+    for (const Entity* c : candidates_) {
+      if (considered(*c, e, kind) && c->scope.kind == Scope::Kind::Class && c->scope.id == cls) found.push_back(c);
+    }
+    if (found.size() > n) return;
+    if (const Entity* ce = xr_.entity(cls)) {
+      for (const BaseClass& b : ce->bases) inClass(b.entity, e, kind, found, seen);
+    }
+  }
+  const CrossReferences& xr_;
+  std::vector<const Entity*> candidates_;
+  std::map<const Entity*, const Reference*> declared_;  // the first declaration
+};
+
+// Whether another entity declared at the same positions as e (a template and its instances, or
+// the entities in them) is reported instead of e: the one declared in the source rather than by
+// a template instantiation, preferably a template
+bool isRepeatedInstance(const CrossReferences& xr, const Entity& e) {
+  auto rank = [](const Entity* x) {
+    bool declared = false;
+    for (const Reference& r : x->references) declared |= r.code == 'd' || r.code == 'D';
+    bool isTemplate =
+        x->kind == Kind::ClassTemplate || x->kind == Kind::FunctionTemplate || x->kind == Kind::VariableTemplate;
+    return std::make_tuple(x->isTemplateInstance, !declared, !isTemplate, x->id);
+  };
+  std::vector<const Entity*> group = xr.sameDeclaration(e);
+  return *std::min_element(group.begin(), group.end(),
+                           [&](const Entity* a, const Entity* b) { return rank(a) < rank(b); }) != &e;
+}
+
+std::string where(const Position& p) {
+  return displayName(p.file) + ":" + std::to_string(p.line) + ":" + std::to_string(p.column);
+}
+
+// The places where renaming the targets (the entities called oldName among them) to newName
+// would change what a name refers to: newName declared again in the same scope; a reference to a
+// renamed entity where newName would find another entity (declared in an inner scope, or in a
+// class that comes first); a reference to another entity called newName where the renamed entity
+// would be found instead; a member renamed to the name of a member of a base or derived class, or
+// of its class; a name in a template that is the name of a template parameter; and macros.
+// Returns the number of problems (none with force: then they are warnings).
+int nameClashes(const CrossReferences& xr, const std::set<const Entity*>& targets, const std::string& oldName,
+                const std::string& newName, bool force) {
+  const char* severity = force ? "warning: " : "";
+  int problems = 0;
+  std::set<std::string> reported;
+  auto report = [&](const std::string& message) {
+    if (!reported.insert(message).second) return;
+    if (reported.size() <= 20) std::cerr << "rose-ren: " << severity << message << "\n";
+    if (!force) ++problems;
+  };
+  std::vector<const Entity*> renamed;     // (an instance of a template is reported as the template)
+  std::vector<const Entity*> renamedAll;  // (the references to a function template are those of its instances)
+  for (const Entity* e : targets) {
+    if (e->name != oldName || e->isImplicit) continue;
+    renamedAll.push_back(e);
+    if (!isRepeatedInstance(xr, *e)) renamed.push_back(e);
+  }
+  auto declaredAt = [](const Entity& e) {
+    Position p = e.declaration();
+    return p.valid() ? ", declared at " + where(p) : std::string();
+  };
+
+  // Macros: a macro called newName would replace the renamed name, and a renamed macro would
+  // replace newName where it is used
+  bool renamingMacro = false;
+  for (const Entity* e : renamed) renamingMacro |= e->kind == Kind::Macro;
+  for (const Entity* x : xr.named(newName)) {
+    if (targets.count(x) || x->isImplicit || isRepeatedInstance(xr, *x)) continue;
+    if (x->kind == Kind::Macro) {
+      report(newName + " is a macro" + declaredAt(*x));
+    } else if (renamingMacro) {
+      report("the renamed macro would replace the name of " + describe(*x) + declaredAt(*x));
+    }
+  }
+
+  // newName declared again in the scope of a renamed entity (the class or namespace, for those
+  // whose scope is not known)
+  for (const Entity* x : xr.named(newName)) {
+    if (targets.count(x) || x->isImplicit || isRepeatedInstance(xr, *x)) continue;
+    for (const Entity* e : renamed) {
+      if (!sameNameSpace(xr, *x, *e) || e->kind == Kind::Macro) continue;
+      bool same = e->scope.kind != Scope::Kind::None
+                      ? x->scope == e->scope
+                      : !e->isLocal && e->kind != Kind::Parameter && !x->isLocal && x->kind != Kind::Parameter &&
+                            x->parent == e->parent;
+      if (same) {
+        report(newName + " is already declared in the same scope: " + describe(*x) + declaredAt(*x));
+        break;
+      }
+    }
+  }
+
+  // Members: a member of a base class or of a derived class called newName
+  for (const Entity* e : renamed) {
+    if (e->scope.kind != Scope::Kind::Class || e->kind == Kind::Constructor) continue;
+    for (const Entity* x : xr.named(newName)) {
+      if (targets.count(x) || x->isImplicit || isRepeatedInstance(xr, *x) || x->scope.kind != Scope::Kind::Class ||
+          x->scope == e->scope) {
+        continue;
+      }
+      if (!sameNameSpace(xr, *x, *e)) continue;
+      // (A constructor stands for the name of its class.)
+      const Entity* c = x->kind == Kind::Constructor ? xr.entity(x->scope.id) : nullptr;
+      if (xr.isBaseOf(x->scope.id, e->scope.id)) {
+        report("the renamed member would hide " +
+               (c != nullptr ? "the name of the base class " + describe(*c) : describe(*x) + " of a base class") +
+               declaredAt(c != nullptr ? *c : *x));
+      } else if (xr.isBaseOf(e->scope.id, x->scope.id)) {
+        report((c != nullptr ? "the name of the derived class " + describe(*c) : describe(*x) + " of a derived class") +
+               declaredAt(c != nullptr ? *c : *x) + ", would hide the renamed member");
+      }
+    }
+  }
+
+  // In C++, a member may not have the name of its class (constructors and destructors aside)
+  auto isClass = [&](const Entity& e) {
+    if (!xr.cplusplus()) return false;
+    return e.kind == Kind::Class || e.kind == Kind::Struct || e.kind == Kind::Union || e.kind == Kind::ClassTemplate;
+  };
+  auto isMemberOf = [](const Entity& m, const Entity& c) {
+    return m.scope.kind == Scope::Kind::Class && m.scope.id == c.id && m.kind != Kind::Constructor &&
+           m.kind != Kind::Destructor && !m.isImplicit;
+  };
+  for (const Entity* e : renamed) {
+    if (e->scope.kind == Scope::Kind::Class) {
+      const Entity* c = xr.entity(e->scope.id);
+      if (c != nullptr && isClass(*c) && c->name == newName && !targets.count(c) && isMemberOf(*e, *c)) {
+        report("the renamed member would have the name of its class, " + describe(*c));
+      }
+    }
+    if (isClass(*e)) {
+      for (const Entity* x : xr.named(newName)) {
+        if (!targets.count(x) && !isRepeatedInstance(xr, *x) && isMemberOf(*x, *e)) {
+          report(describe(*x) + declaredAt(*x) + ", would have the name of its renamed class");
+        }
+      }
+    }
+  }
+
+  // A template parameter may not be declared again in its template, nor have the name of the
+  // template
+  auto declaredWithin = [&](const Entity& e, const Scope& s) {
+    for (const Reference& r : e.references) {
+      if (!r.isDeclaration()) continue;
+      for (const Scope& c : xr.scopes(r.scopes)) {
+        if (c == s) return true;
+      }
+    }
+    return false;
+  };
+  for (const Entity* x : xr.named(newName)) {
+    if (targets.count(x) || x->isImplicit || isRepeatedInstance(xr, *x) || x->kind == Kind::Macro ||
+        x->kind == Kind::Label) {
+      continue;
+    }
+    for (const Entity* e : renamed) {
+      if (e->kind == Kind::Macro || e->kind == Kind::Label) continue;
+      if (x->kind == Kind::TemplateParameter && x->scope.kind != Scope::Kind::None && declaredWithin(*e, x->scope)) {
+        report("the renamed " + describe(*e) + " would be declared in the template of the template parameter " +
+               newName + declaredAt(*x));
+        break;
+      }
+      if (e->kind == Kind::TemplateParameter && e->scope.kind != Scope::Kind::None && declaredWithin(*x, e->scope)) {
+        report(describe(*x) + declaredAt(*x) + ", is declared in the template of the renamed template parameter");
+        break;
+      }
+    }
+  }
+
+  // The references written unqualified, as unqualified lookup would see them after the renaming
+  Lookup lookup(xr, targets, oldName, newName);
+  // (Not those at a declaration of the entity: the front end records the implicit use of the
+  // variable of a condition or of a range-based for statement where it is declared.)
+  auto unqualified = [&](const Entity& e, const Reference& r, const std::string& name, LookupKind& kind) {
+    if (r.isDeclaration() || r.inSystemHeader || r.scopes < 0) return false;
+    for (const Reference& d : e.references) {
+      if (d.isDeclaration() && d.pos == r.pos) return false;
+    }
+    std::size_t off = nameOffset(xr, r.pos, name);
+    if (off == std::string::npos) return false;
+    const SourceText& st = sourceText(r.pos.file);
+    if (isQualified(st, off)) return false;
+    kind = lookupKind(st, off, name.size());
+    return true;
+  };
+  // (Where lookup finds both a renamed entity and another one, they are declared in the same
+  // scope, which is reported above.)
+  std::set<Position> seen;
+  for (const Entity* e : renamedAll) {
+    if (e->kind == Kind::Macro || e->kind == Kind::Label) continue;
+    for (const Reference& r : e->references) {
+      LookupKind kind;
+      if (!unqualified(*e, r, oldName, kind) || !seen.insert(r.pos).second) continue;
+      std::vector<const Entity*> found = lookup.at(r, *e, kind);
+      if (found.empty() || std::any_of(found.begin(), found.end(), [&](const Entity* f) { return targets.count(f); })) {
+        continue;
+      }
+      report(where(r.pos) + ": here " + newName + " would refer to " + describe(*found[0]) + declaredAt(*found[0]));
+    }
+  }
+  seen.clear();
+  for (const Entity* x : xr.named(newName)) {
+    if (targets.count(x) || x->isImplicit || x->kind == Kind::Macro || x->kind == Kind::Label) continue;
+    for (const Reference& r : x->references) {
+      LookupKind kind;
+      if (!unqualified(*x, r, newName, kind) || !seen.insert(r.pos).second) continue;
+      std::vector<const Entity*> found = lookup.at(r, *x, kind);
+      if (std::find(found.begin(), found.end(), x) != found.end()) continue;
+      for (const Entity* e : found) {
+        if (!targets.count(e)) continue;
+        report(where(r.pos) + ": here " + newName + " would refer to the renamed " + describe(*e) + " instead of " +
+               describe(*x));
+        break;
+      }
+    }
+  }
+  if (reported.size() > 20) {
+    std::cerr << "rose-ren: " << severity << "and " << reported.size() - 20 << " more\n";
+  }
+  return problems;
+}
+
 // The virtual functions related to e by overriding (in both directions), e included
 void overrideFamily(const CrossReferences& xr, const Entity* e, std::set<const Entity*>& family) {
   std::vector<const Entity*> work{e};
@@ -233,22 +582,8 @@ int rename(const CrossReferences& xr, const std::vector<Item>& items, const std:
     }
   }
 
-  // New name clashes: entities called newName in the same class or namespace
-  std::set<EntityId> parents;
-  for (const Entity* e : targets) {
-    if (e->name == oldName && !e->isLocal && e->kind != Kind::Parameter) parents.insert(e->parent);
-  }
-  for (const Entity* e : xr.named(newName)) {
-    if (e->isImplicit || e->isLocal || e->kind == Kind::Parameter) continue;
-    if (parents.count(e->parent)) {
-      Position p = e->declaration();
-      std::cerr << "rose-ren: " << (force ? "warning: " : "") << newName << " is already declared there: "
-                << describe(*e);
-      if (p.valid()) std::cerr << " at " << displayName(p.file) << ":" << p.line;
-      std::cerr << "\n";
-      if (!force) ++problems;
-    }
-  }
+  // Where the new name would clash with, hide or be hidden by another entity
+  problems += nameClashes(xr, targets, oldName, newName, force);
 
   // The names to replace
   Edits edits;

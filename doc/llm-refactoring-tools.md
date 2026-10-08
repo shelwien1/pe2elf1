@@ -367,15 +367,16 @@ original text.  The preconditions are the queries of section 4.
 
 `rose-ren` lists the declarations of a name and renames one of them, with all its uses; it is
 scope-aware (a local is renamed in its function only), follows qualified names, base classes,
-templates and the arguments of macros, and refuses a new name that is already declared in the same
-scope.  The archive's `rename.py` also had:
+templates and the arguments of macros, and refuses a rename after which a name would refer to
+another entity.  That includes the capture by an inner declaration that the archive's `rename.py`
+checked ("a rename that would collide with a *local* of the same name in some body is reported
+and refused, because the two would become the same identifier"): `rose-ren` simulates the lookup
+of the new name at each use, with the scopes that the front end had there, so renaming the global
+`g` to `h` in `int f(void) { int h = 1; g = h; return g; }` is refused with
+`here h would refer to h  int  (local variable), declared at ...` for both uses, and so is the
+reverse (renaming a local to the name of a global that the function uses).  The archive's
+`rename.py` also had:
 
-* **Capture by an inner declaration**: "a rename that would collide with a *local* of the same
-  name in some body is reported and refused, because the two would become the same identifier".
-  `rose-ren` does not check this yet: renaming the global `g` to `h` in
-  `int f(void) { int h = 1; g = h; return g; }` makes the function's `g = h` into `h = h`.  The
-  check is a lookup of the new name at each reference: any declaration of it that would hide the
-  renamed entity there refuses the rename.
 * **Renames in batches** from a file, and `function:local` selectors.
 * **Renaming part of an identifier** (`rename.py --funcs`): a Hex-Rays function name inside the
   names of the forwarding shims, `__fwd_sub_402FE0_sub_403820`.
@@ -588,7 +589,8 @@ In order of value for the effort, given what `RoseRefactor` already has:
    that are cross-reference queries.
 3. **`rose-retype`** with its report of what changes meaning: the most error-prone change that the
    archive made, done one candidate at a time behind the tests.
-4. **`rose-ren`'s capture check** (section 5.1), since `rose-ren` already ships.
+4. **`rose-ren` in batches** (section 5.1): renames from a file, `function:local` selectors and a
+   log of the renames, since `rose-ren` already ships.
 5. **`rose-layout` and `rose-access`**: the core of struct recovery; they need the layout
    generators to handle packing.
 6. **`rose-same`**, cheap with tree comparison, and the way to check edits by hand.

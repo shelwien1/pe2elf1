@@ -114,9 +114,14 @@ seen by the front end.
       renames one of them (name alone if there is only one): its declarations
       and all its uses.  A class is renamed with its constructors and
       destructor, a virtual function with the functions that override it or
-      that it overrides.  Nothing is changed if the new name is already
-      declared in the same scope, or if the name is declared in a system
-      header or written in a macro definition (--force renames anyway).
+      that it overrides.  Nothing is changed if a name would refer to
+      something else afterwards: if the new name is already declared in the
+      same scope, if a use of the renamed entity would find another
+      declaration of the new name first (a local variable of an inner block,
+      a member, a template parameter, ...) or a use of another entity would
+      find the renamed one, if a member would hide another, or if the new
+      name is a macro; nor if the name is declared in a system header or
+      written in a macro definition (--force renames anyway).
 
   rose-using file.cpp [class]
       Visual C++ (without /permissive-) looks up the names used in a class
