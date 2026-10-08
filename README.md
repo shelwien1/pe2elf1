@@ -262,8 +262,10 @@ needed); the parts of Boost that ROSE uses (the headers, selected with Boost's `
 the sources of the few compiled parts that ROSE links); the files of the package that are not
 built (the run-time files, and the SDK's headers, `rose.mk` and examples); and a Makefile
 (`win32/source/Makefile`) whose recipes only run the compiler, `ar` and `rose-exports` (which
-runs `nm`), with the compiler options in response files.  Making it needs the Boost source
-tree, with `bcp` built in it, and 7-Zip (`apt install 7zip`):
+runs `nm`), with the compiler options in response files.  Built from it under Wine with MSYS2's
+`mingw32-make` 4.4.1 and GCC 16.2 (1.5 hours with `-j4`), the programs pass `test.bat`, the tests
+in `tests/` and those in `tests/tools/`.  Making it needs the Boost source tree, with `bcp` built
+in it, and 7-Zip (`apt install 7zip`):
 
 ```
 (cd boost_1_83_0 && ./bootstrap.sh && ./b2 tools/bcp)
