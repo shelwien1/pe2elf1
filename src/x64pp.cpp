@@ -583,7 +583,6 @@ static void unwindInfos(uint8_t* img, uint64_t n, const uint8_t* pd, const Regio
   uint64_t vbias = r.par[0];
   struct U { uint64_t off; uint32_t begin; };
   std::vector<U> list;
-  std::vector<uint32_t> seen;
   for (size_t i = 0; i + 12 <= r.size; i += 12) {
     uint32_t begin = tables::g32(pd + i), uw = tables::g32(pd + i + 8);
     for (size_t m = 1; m + 3 <= r.par.size(); m += 3) {
@@ -601,9 +600,7 @@ static void unwindInfos(uint8_t* img, uint64_t n, const uint8_t* pd, const Regio
   std::vector<char> keep(list.size(), 0);
   for (size_t k = 0; k < idx.size(); k++)
     if (k == 0 || list[idx[k]].off != list[idx[k - 1]].off) keep[idx[k]] = 1;
-  (void)seen;
   std::vector<tables::PEvent> ev;
-  cm.reset();
   for (size_t j = 0; j < list.size(); j++) {
     size_t k = fwd ? j : list.size() - 1 - j;
     if (!keep[k]) continue;
@@ -612,6 +609,7 @@ static void unwindInfos(uint8_t* img, uint64_t n, const uint8_t* pd, const Regio
     if (list[k].off + len > n || !plainData(R, list[k].off, len)) continue;
     uint64_t avail = 0;
     const uint8_t* code = cm.at(vbias + list[k].begin, avail);
+    cm.reset();  // per structure (at most 255 bytes of prolog): independent of the order
     tables::prologEvents(cm, code, code ? avail : 0, ev);
     tables::unwindInfo(u, len, ev, fwd);
   }
