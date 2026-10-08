@@ -22,7 +22,9 @@
 //
 // With a class name, only that class template is changed; otherwise every class template
 // defined outside system headers.  The options are those of the compiler (-I, -D, -std=...,
-// ...), and --dry-run (show the using-declarations without changing the files).
+// ...), --dry-run (show the using-declarations without changing the files), and
+// --msvc[=<folder>] and --msvc-version=<_MSC_VER> (parse with the headers of Visual C++ in its
+// Microsoft mode; see rose-ren).
 #include "rose.h"
 #include "RoseRefactor.h"
 
@@ -39,7 +41,8 @@ namespace {
 const char* usage =
     "usage: rose-using [options] source.cpp [class]\n"
     "Adds using-declarations for the names of dependent base classes that class templates use\n"
-    "without qualification.  options: the compiler's (-I, -D, -std=...), --dry-run\n";
+    "without qualification.  options: the compiler's (-I, -D, -std=...), --dry-run,\n"
+    "--msvc[=<Visual C++ folder>] (Visual C++ and its headers), --msvc-version=<_MSC_VER>\n";
 
 std::string displayName(const std::string& file) {
   char buf[4096];

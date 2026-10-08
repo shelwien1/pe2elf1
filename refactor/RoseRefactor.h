@@ -157,6 +157,19 @@ void setAlternativeFrontEndOptions(const std::vector<std::vector<std::string>>& 
 // The options the front end accepted the last C or C++ file with: 0 for those of
 // setFrontEndOptions(), 1 for the first alternative, and so on
 int frontEndOptionsUsed();
+// Parsing as Visual C++ parses, with its headers, rather than as GCC does: the front end runs in
+// its Microsoft mode (the language, extensions and predefined macros of Visual C++, and its data
+// model and class layout for x64), with includeDirs as the folders of the system headers instead
+// of GCC's (the folders of the INCLUDE environment variable of Visual C++).  version is the
+// _MSC_VER of the Visual C++ to emulate, such as 1920 for Visual Studio 2019 16.0; 0 takes the
+// version and the build number from the headers (crtversion.h).
+void setMicrosoftMode(const std::vector<std::string>& includeDirs, int version = 0);
+bool microsoftMode();  // setMicrosoftMode() was called
+// The folders of the headers of Visual C++ and of the Windows SDK: those of the INCLUDE environment
+// variable if dir is empty, otherwise those in dir that exist: include, atlmfc\include,
+// ucrt\include and sdk\include (with its ucrt, um, shared and winrt subfolders if it has them),
+// the layout of a portable Visual C++
+std::vector<std::string> microsoftIncludeDirs(const std::string& dir);
 // Whether the next frontend() calls translate the C/C++ code into ROSE's AST (they do by
 // default); tools that only use the cross-references can skip it (the files of the project then
 // have empty global scopes)
@@ -260,6 +273,8 @@ std::vector<Position> unresolvedOccurrences(const CrossReferences& xr, const std
 // Splits a tool's command line ("tool [options] source.cpp args...") into the command line for
 // frontend() (the program name, the options and the source files) and the other arguments.
 // Source files are recognized by their extension (.c .cc .cpp .cxx .c++ .C .h .hh .hpp .hxx).
+// The options --msvc (the headers of the INCLUDE environment variable), --msvc=<folder> and
+// --msvc-version=<_MSC_VER> are not passed on: they call setMicrosoftMode().
 void splitCommandLine(int argc, char* argv[], std::vector<std::string>& frontEndArgs,
                       std::vector<std::string>& toolArgs);
 

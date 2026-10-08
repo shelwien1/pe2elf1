@@ -16,6 +16,9 @@ int frontEndRuns();                               // 1 + the number of alternati
 const std::vector<std::string>& frontEndOptions(int run);
 void setFrontEndOptionsUsed(int run);             // what frontEndOptionsUsed() returns
 CrossReferences& current();                       // what crossReferences() returns
+const std::vector<std::string>& microsoftIncludeDirs();
+// The _MSC_VER of the Microsoft mode, and the build number (0 if unknown)
+int microsoftVersion(int* buildNumber);
 std::string temporaryFile(const char* prefix);    // a new, empty temporary file
 void removeAtExit(const std::string& file);       // removes the file when the program exits
 

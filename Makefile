@@ -162,7 +162,7 @@ LIBROSE := $(B)/lib/librose.so
 endif
 TOOL_PROGS := $(patsubst %,$(B)/bin/%$(EXE),$(TOOLS))
 
-all: $(TOOL_PROGS) $(B)/edg-base/lib/predefined_macros.txt
+all: $(TOOL_PROGS) $(B)/edg-base/lib/predefined_macros.txt $(B)/edg-base/lib_win64/predefined_macros.txt
 .PHONY: all check clean rosetta package
 
 clean:
@@ -431,6 +431,12 @@ $(patsubst %.c,$(OBJ)/edg/%.o,$(EDG_PATCHED)): $(OBJ)/edg/%.o: $(GEN)/edg-patche
 	@mkdir -p $(@D)
 	$(Q)$(CXX) $(EDG_CXXFLAGS) $(EDG_CPPFLAGS) -MMD -MP -c $< -o $@
 
+# The table of the win64 target configuration, used when parsing as Visual C++ does
+# (RoseRefactor::setMicrosoftMode): no macros, EDG defines those of Visual C++ itself
+$(B)/edg-base/lib_win64/predefined_macros.txt: $(CONN_SRC)/edgconfig/predefined_macros_win64.txt
+	@mkdir -p $(@D)
+	cp $< $@
+
 # EDG's table of predefined macros, scraped from the backend compilers (EDG's own script)
 $(B)/edg-base/lib/predefined_macros.txt: $(EDG_SRC)/util/make_predef_macro_table
 	@mkdir -p $(@D)
@@ -565,6 +571,7 @@ package: all
 	$(Q)cp $(TOOL_PROGS) $(ROSE_DLL) $(PKG_DIR)/bin/ && $(TARGET)-strip $(PKG_DIR)/bin/*.exe $(PKG_DIR)/bin/rose.dll
 	$(Q)cp $(ROSE_IMPLIB) $(PKG_DIR)/lib/
 	$(Q)cp $(B)/edg-base/lib/predefined_macros.txt $(PKG_DIR)/edg-base/lib/
+	$(Q)mkdir -p $(PKG_DIR)/edg-base/lib_win64 && cp $(B)/edg-base/lib_win64/predefined_macros.txt $(PKG_DIR)/edg-base/lib_win64/
 	$(Q)cp -R $(B)/include/edg $(PKG_DIR)/include/ && rm $(PKG_DIR)/include/edg/stamp
 	$(Q)cp -R win32/examples $(PKG_DIR)/
 	$(Q)for f in README.txt test.bat; do sed 's/$$/\r/' win32/$$f > $(PKG_DIR)/$$f; done

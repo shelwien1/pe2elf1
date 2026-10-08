@@ -5,6 +5,7 @@
 #include "rose_paths.h"
 #include "RoseRefactorImpl.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -107,8 +108,33 @@ std::vector<std::string> edgCommandLine(int argc, char* argv[], int run) {
     out.push_back("--edg_base");
     out.push_back(base);
   }
+  // Parsing as Visual C++ does (RoseRefactor::setMicrosoftMode): its data model and class layout
+  // (EDG's win64 target configuration), language and predefined macros (with those that cl.exe
+  // defines with /EHsc and EDG does not), and its headers instead of those of GCC
+  bool msvc = RoseRefactor::microsoftMode();
+  if (msvc) {
+    int build = 0;
+    int version = RoseRefactor::impl::microsoftVersion(&build);
+    out.insert(out.end(), {"--target", "win64", "--microsoft", "--microsoft_version", std::to_string(version)});
+    if (build > 0) out.insert(out.end(), {"--microsoft_build_number", std::to_string(build)});
+    for (const std::string& d : RoseRefactor::impl::microsoftIncludeDirs()) out.insert(out.end(), {"--sys_include", d});
+    out.insert(out.end(), {"-D_MT=1", "-D_CPPUNWIND=1"});
+  }
   // Options of refactoring tools (RoseRefactor.h), and the cross-reference listing
-  xrefOptions(out, run);
+  bool cplusplus = true;
+  for (int i = 1; i < argc; ++i) {
+    if (std::strcmp(argv[i], "--gcc") == 0 || std::strcmp(argv[i], "--c") == 0 ||
+        std::strcmp(argv[i], "-DROSE_LANGUAGE_MODE=0") == 0) {
+      cplusplus = false;
+    }
+  }
+  std::size_t toolOptions = out.size();
+  xrefOptions(out, run, cplusplus);
+  // Visual C++ parses the bodies of templates where they are defined only with /permissive-
+  // (two-phase name lookup)
+  if (msvc && std::find(out.begin() + toolOptions, out.end(), "--no_defer_parse_function_templates") != out.end()) {
+    out.push_back("--no_ms_permissive");
+  }
   // EDG2SAGE_EDG_OPTIONS: more EDG options, separated by spaces (for debugging)
   if (const char* extra = std::getenv("EDG2SAGE_EDG_OPTIONS")) {
     std::istringstream words(extra);
@@ -119,6 +145,28 @@ std::vector<std::string> edgCommandLine(int argc, char* argv[], int run) {
     // ROSE defines __STRICT_ANSI__ as 0 for GNU modes and expects its own preinclude header to
     // undo that; for EDG's native GNU emulation the macro must simply not be defined.
     if (a == "-D__STRICT_ANSI__=0") continue;
+    if (msvc) {
+      // Not GCC: no GNU mode, GCC's predefined macros or system include directories
+      if (a == "--gnu_version" || a == "--sys_include") {
+        ++i;
+        continue;
+      }
+      if (startsWith(a, "-D__GNUG__") || startsWith(a, "-D__GNUC__") || startsWith(a, "-D__GNUC_MINOR__") ||
+          startsWith(a, "-D__GNUC_PATCHLEVEL__")) {
+        continue;
+      }
+      if (a == "--g++") a = "--c++";
+      if (a == "--gcc") a = "--c";
+      // The language standard, as Visual C++ selects it (/std:c++14 is the oldest and the default;
+      // /std:c++20 since 19.29)
+      if (a == "--c++98" || a == "--c++03" || a == "--c++11" || a == "--c++14") a = "--ms_c++14";
+      if (a == "--c++17") a = "--ms_c++17";
+      if (a == "--c++20") a = RoseRefactor::impl::microsoftVersion(nullptr) >= 1929 ? "--ms_c++20" : "--ms_c++latest";
+      if (a == "--c++23" || a == "--c++26") a = "--ms_c++latest";
+      if (a == "--c89" || a == "--c99") continue;
+      if (a == "--c11") a = "--ms_c11";
+      if (a == "--c17" || a == "--c18" || a == "--c23") a = "--ms_c17";
+    }
     // EDG only needs declarations of the template specializations that are used.
     if (a == "--auto_instantiation" || a == "-tused" || a == "-tlocal" || a == "-tall") continue;
     out.push_back(a);

@@ -1,0 +1,5 @@
+# EDG predefined macro definition file for the win64 target configuration, used in Microsoft mode
+# (Visual C++ and its headers, see RoseRefactor::setMicrosoftMode).  It defines no macros: in
+# Microsoft mode EDG itself defines those of Visual C++ (_MSC_VER, _WIN64, _M_X64, ...), and
+# edg2sage adds _MT and _CPPUNWIND.  (The format of the entries is described in
+# edg-base/lib/predefined_macros.txt.)

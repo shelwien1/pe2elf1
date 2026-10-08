@@ -1,0 +1,4 @@
+# Visual C++ and its headers ($MSVC is --msvc=$MSVC_DIR): code that only Visual C++ compiles
+$REN $MSVC main.cpp balance:1 getBalance
+$M2G $MSVC main.cpp Account::deposit
+$USING $MSVC main.cpp

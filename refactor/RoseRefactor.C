@@ -16,6 +16,7 @@
 #define NOMINMAX
 #include <windows.h>
 #else
+#include <sys/stat.h>
 #include <unistd.h>
 #endif
 
@@ -233,6 +234,9 @@ bool buildAstFlag = true;
 std::vector<std::string> options;
 std::vector<std::vector<std::string>> alternativeOptions;
 int optionsUsed = 0;
+bool msMode = false;
+std::vector<std::string> msIncludeDirs;
+int msVersion = 0;
 CrossReferences* currentXref = nullptr;
 std::vector<std::string>* filesToRemove = nullptr;
 
@@ -252,6 +256,59 @@ void setAlternativeFrontEndOptions(const std::vector<std::vector<std::string>>& 
 
 int frontEndOptionsUsed() { return optionsUsed; }
 
+void setMicrosoftMode(const std::vector<std::string>& includeDirs, int version) {
+  msMode = true;
+  msIncludeDirs = includeDirs;
+  msVersion = version;
+}
+
+bool microsoftMode() { return msMode; }
+
+namespace {
+bool isDirectory(const std::string& path) {
+#ifdef _WIN32
+  DWORD a = GetFileAttributesA(path.c_str());
+  return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY) != 0;
+#else
+  struct stat st;
+  return stat(path.c_str(), &st) == 0 && S_ISDIR(st.st_mode);
+#endif
+}
+}  // namespace
+
+std::vector<std::string> microsoftIncludeDirs(const std::string& dir) {
+  std::vector<std::string> dirs;
+  if (dir.empty()) {
+    const char* include = std::getenv("INCLUDE");
+    std::string list = include != nullptr ? include : "";
+    std::size_t start = 0;
+    while (start <= list.size()) {
+      std::size_t end = list.find(';', start);
+      if (end == std::string::npos) end = list.size();
+      std::string d = list.substr(start, end - start);
+      if (!d.empty()) dirs.push_back(d);
+      start = end + 1;
+    }
+    return dirs;
+  }
+#ifdef _WIN32
+  const std::string sep = "\\";
+#else
+  const std::string sep = "/";
+#endif
+  std::string base = dir;
+  while (base.size() > 1 && (base.back() == '/' || base.back() == '\\')) base.pop_back();
+  for (const char* sub : {"include", "atlmfc/include", "ucrt/include", "sdk/include", "sdk/include/ucrt",
+                          "sdk/include/um", "sdk/include/shared", "sdk/include/winrt"}) {
+    std::string d = base + sep + sub;
+#ifdef _WIN32
+    for (char& c : d) if (c == '/') c = '\\';
+#endif
+    if (isDirectory(d)) dirs.push_back(d);
+  }
+  return dirs;
+}
+
 void buildAst(bool on) { buildAstFlag = on; }
 
 const CrossReferences& crossReferences() { return impl::current(); }
@@ -269,6 +326,34 @@ const std::vector<std::string>& frontEndOptions(int run) {
 }
 
 void setFrontEndOptionsUsed(int run) { optionsUsed = run; }
+
+const std::vector<std::string>& microsoftIncludeDirs() { return msIncludeDirs; }
+
+int microsoftVersion(int* buildNumber) {
+  if (buildNumber != nullptr) *buildNumber = 0;
+  if (msVersion != 0) return msVersion;
+  // The version of the run-time library of the headers: _MSC_VER is 1900 + the minor version for
+  // the versions 14.x (Visual Studio 2015 to 2022), and the build number is that of the compiler
+  for (const std::string& d : msIncludeDirs) {
+    std::ifstream in((d + "/crtversion.h").c_str());
+    if (!in) continue;
+    int major = 0, minor = -1, build = 0;
+    for (std::string line; std::getline(in, line);) {
+      std::istringstream words(line);
+      std::string define, name;
+      long value = 0;
+      if (!(words >> define >> name >> value) || define != "#define") continue;
+      if (name == "_VC_CRT_MAJOR_VERSION") major = (int)value;
+      if (name == "_VC_CRT_MINOR_VERSION") minor = (int)value;
+      if (name == "_VC_CRT_BUILD_VERSION") build = (int)value;
+    }
+    if (major == 14 && minor >= 0) {
+      if (buildNumber != nullptr) *buildNumber = build;
+      return 1900 + minor;
+    }
+  }
+  return 1920;  // Visual Studio 2019 16.0
+}
 
 CrossReferences& current() {
   if (currentXref == nullptr) currentXref = new CrossReferences();
@@ -691,8 +776,21 @@ void splitCommandLine(int argc, char* argv[], std::vector<std::string>& frontEnd
   // Options of the compiler that take a separate argument
   static const char* withArg[] = {"-I", "-D", "-U", "-include", "-isystem", "-o", "-x", "-imacros", "-iquote",
                                    "-rose:verbose", "-rose:o", "-rose:output"};
+  bool msvc = false;
+  std::string msvcDir;
+  int msvcVersion = 0;
   for (int i = 1; i < argc; ++i) {
     std::string a = argv[i];
+    // Visual C++ and its headers
+    if (a == "--msvc" || a.compare(0, 7, "--msvc=") == 0) {
+      msvc = true;
+      msvcDir = a.size() > 7 ? a.substr(7) : "";
+      continue;
+    }
+    if (a.compare(0, 15, "--msvc-version=") == 0) {
+      msvcVersion = std::atoi(a.c_str() + 15);
+      continue;
+    }
     if (!a.empty() && a[0] == '-') {
       frontEndArgs.push_back(a);
       int n = (a == "-edg_parameter:" || a == "--edg_parameter:") ? 2 : 0;
@@ -715,6 +813,15 @@ void splitCommandLine(int argc, char* argv[], std::vector<std::string>& frontEnd
     } else {
       toolArgs.push_back(a);
     }
+  }
+  if (msvc || msvcVersion != 0) {
+    std::vector<std::string> dirs = microsoftIncludeDirs(msvcDir);
+    if (dirs.empty()) {
+      std::fprintf(stderr, "%s: warning: %s\n", argc > 0 ? argv[0] : "",
+                   msvcDir.empty() ? "--msvc: the INCLUDE environment variable is not set"
+                                   : ("--msvc=" + msvcDir + ": no include folder there").c_str());
+    }
+    setMicrosoftMode(dirs, msvcVersion);
   }
 }
 

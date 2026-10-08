@@ -179,10 +179,27 @@ be changed too, with a note.  The uses of the name that the front end did not re
 that the preprocessor skips, macro definitions, members of template parameters, or templates
 that are not instantiated in the fallback modes) are listed and not changed.
 
+With `--msvc`, the tools parse the code as Visual C++ does, with its headers instead of GCC's
+(`RoseRefactor::setMicrosoftMode`): EDG's Microsoft mode (`--microsoft`, with the `_MSC_VER` and
+build number of the headers' `crtversion.h`, or `--msvc-version=`) and its `win64` target
+configuration (the data model and class layout of Visual C++ for x64; its table of predefined
+macros, `edg-base/lib_win64`, is empty: EDG defines those of Visual C++, and edg2sage adds `_MT`
+and `_CPPUNWIND`), with the folders of the `INCLUDE` environment variable (`--msvc`) or those of
+a portable Visual C++ (`--msvc=<folder>`: `include`, `ucrt/include`, `sdk/include`) as the
+system include directories instead of GCC's.  `-std=c++NN` becomes EDG's `--ms_c++NN`
+(`/std:c++NN`).  The first run of the front end has two-phase name lookup (`--no_ms_permissive`,
+cl's `/permissive-`), which it needs to parse the bodies of templates where they are defined;
+the next ones parse as cl.exe does by default.  On Linux, the Visual C++ library and C run-time
+headers can be used, but not the Windows SDK's, which include each other with names whose case
+does not match the files'.  Tested with the headers of Visual Studio 2019 16.0 (`_MSC_VER` 1920),
+on Linux and under Wine, where cl.exe 19.20 compiles the changed code with and without
+`/permissive-`.
+
 `tests/tools/` has the tests of the tools (run by `make check`): each test runs tools on copies
 of its input files, compares the results with the expected files, and checks that the programs
 build and print the same as before (or, for code that only Visual C++ compiles, that they
-build after the changes).
+build after the changes).  The tests with the headers of Visual C++ (`tests/tools/msvc-headers`)
+run when `MSVC_DIR` is the folder of a portable Visual C++.
 
 ## Windows
 

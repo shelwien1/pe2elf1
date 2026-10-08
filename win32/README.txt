@@ -151,6 +151,39 @@ seen by the front end.
       member templates, members of class templates and functions whose
       address is taken are not converted.
 
+Parsing with the headers of Visual C++
+--------------------------------------
+
+By default, the front end parses code as MinGW-w64 GCC does, with the GCC
+headers in include\edg.  With --msvc, the refactoring tools parse it as Visual
+C++ does instead: in the front end's Microsoft mode (the language, extensions
+and predefined macros of Visual C++, such as _MSC_VER, _WIN64 and _MSVC_LANG,
+and its data model and class layout for x64), with the headers of Visual C++
+and of the Windows SDK:
+
+  rose-ren --msvc file.cpp name       the headers of the folders in the INCLUDE
+                                      environment variable (as for cl.exe: set
+                                      in a Visual Studio developer command
+                                      prompt, or by vcvars64.bat)
+  rose-ren --msvc=C:\VC2019 file.cpp name
+                                      the headers of a portable Visual C++ in
+                                      C:\VC2019: its include, ucrt\include and
+                                      sdk\include folders (and atlmfc\include)
+
+The same options work with rose-using and rose-m2g.  The version of Visual C++
+(_MSC_VER and _MSC_FULL_VER) is taken from its headers (crtversion.h);
+--msvc-version=<_MSC_VER> sets another.  -std=c++17 and -std=c++20 select
+/std:c++17 and /std:c++20 (/std:c++latest before Visual C++ 19.29); the default
+is /std:c++14, as for cl.exe.  _MT and _CPPUNWIND are defined, as cl.exe
+defines them with /EHsc; for the macros of other cl.exe options, use -D
+(-D_DLL for /MD, for example).
+
+The tools first parse the code with two-phase name lookup (/permissive-), so
+that the bodies of all templates are parsed; code that cl.exe compiles only
+without /permissive- (the names of dependent base classes that rose-using is
+for) is then parsed as cl.exe parses it by default, with a note: the bodies
+of templates are then only parsed where they are instantiated.
+
 The SDK
 -------
 

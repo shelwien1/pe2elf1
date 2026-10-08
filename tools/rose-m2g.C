@@ -20,8 +20,9 @@
 // where it is.  Calls become calls of the global function: obj.method(x) -> method(&obj, x),
 // ptr->method(x) -> method(ptr, x), and method(x) in member functions -> method(this, x).
 //
-// The options are those of the compiler (-I, -D, -std=...), and --dry-run (print the changed
-// files instead of writing them).  Not converted: virtual and static member functions,
+// The options are those of the compiler (-I, -D, -std=...), --dry-run (print the changed files
+// instead of writing them), and --msvc[=<folder>] and --msvc-version=<_MSC_VER> (parse as Visual
+// C++ does, with its headers; see rose-ren).  Not converted: virtual and static member functions,
 // operators, member function templates, members of class templates, and functions whose
 // address is taken (&Class::method).  The uses of the name that the front end did not resolve
 // (in code that the preprocessor skips, for example) are listed, and not changed.
@@ -46,7 +47,8 @@ namespace {
 const char* usage =
     "usage: rose-m2g [options] source.cpp Class::method\n"
     "Turns the member function into a global function with an explicit This parameter.\n"
-    "options: the compiler's (-I, -D, -std=...), --dry-run\n";
+    "options: the compiler's (-I, -D, -std=...), --dry-run,\n"
+    "         --msvc[=<Visual C++ folder>] (Visual C++ and its headers), --msvc-version=<_MSC_VER>\n";
 
 std::string displayName(const std::string& file) {
   char buf[4096];
@@ -781,8 +783,9 @@ int main(int argc, char* argv[]) {
     return 1;
   }
   if (frontEndOptionsUsed() > 0) {
-    std::cerr << "rose-m2g: note: parsed as " << (frontEndOptionsUsed() == 1 ? "GCC" : "Visual C++")
-              << " does: templates are only parsed where they are instantiated\n";
+    std::cerr << "rose-m2g: note: parsed as "
+              << (microsoftMode() ? "Visual C++ does without /permissive-" : frontEndOptionsUsed() == 1 ? "GCC does" : "Visual C++ does")
+              << ": templates are only parsed where they are instantiated\n";
   }
   return convert(crossReferences(), className, method, dryRun);
 }

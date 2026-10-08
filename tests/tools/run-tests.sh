@@ -12,6 +12,10 @@
 # The programs are built ($CXX, default g++) and run before and after the commands, and must
 # print the same; a program that does not compile before (as for rose-using) must compile
 # after.  Windows tools (bin/*.exe) are run with $RUN (default: wine).
+#
+# The tests whose directory has a file "msvc" use the headers of Visual C++ ($MSVC in the run
+# file is --msvc=$MSVC_DIR): they run only when MSVC_DIR is the folder of a portable Visual C++
+# (with include, ucrt/include and sdk/include).
 set -u
 update=false
 if [ "${1:-}" = "--update" ]; then
@@ -31,6 +35,14 @@ REN="$run $bin/rose-ren$exe"
 USING="$run $bin/rose-using$exe"
 M2G="$run $bin/rose-m2g$exe"
 cxx=${CXX:-g++}
+MSVC=
+if [ -n "${MSVC_DIR:-}" ]; then
+  if [ -n "$exe" ]; then
+    MSVC="--msvc=$(winepath -w "$MSVC_DIR" 2>/dev/null)"
+  else
+    MSVC="--msvc=$MSVC_DIR"
+  fi
+fi
 if [ $# -gt 0 ]; then
   tests="$*"
 else
@@ -55,7 +67,13 @@ programs() {
 
 pass=0
 fail=0
+skip=0
 for t in $tests; do
+  if [ -f "$here/$t/msvc" ] && [ -z "$MSVC" ]; then
+    echo "SKIP  $t (MSVC_DIR is not set)"
+    skip=$((skip + 1))
+    continue
+  fi
   d=$work/$t
   mkdir -p "$d"
   cp -R "$here/$t/input/." "$d/"
@@ -126,5 +144,5 @@ for t in $tests; do
     fail=$((fail + 1))
   fi
 done
-echo "$pass passed, $fail failed"
+echo "$pass passed, $fail failed$([ $skip = 0 ] || echo ", $skip skipped")"
 [ $fail = 0 ]

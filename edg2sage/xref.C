@@ -472,9 +472,14 @@ int xrefRuns() { return RR::impl::frontEndRuns(); }
 
 void xrefRunAccepted(int run) { RR::impl::setFrontEndOptionsUsed(run); }
 
-// The options for the EDG front end of the next run (called by edgCommandLine())
-void xrefOptions(std::vector<std::string>& args, int run) {
-  for (const std::string& o : RR::impl::frontEndOptions(run)) args.push_back(o);
+// The options for the EDG front end of the next run (called by edgCommandLine()); those about
+// templates are only for C++
+void xrefOptions(std::vector<std::string>& args, int run, bool cplusplus) {
+  static const std::set<std::string> cplusplusOnly = {"--no_defer_parse_function_templates", "--no_dep_name",
+                                                      "--no_parse_templates", "--no_ms_permissive"};
+  for (const std::string& o : RR::impl::frontEndOptions(run)) {
+    if (cplusplus || !cplusplusOnly.count(o)) args.push_back(o);
+  }
   listingFile.clear();
   pending.clear();
   records.clear();
@@ -489,8 +494,10 @@ void xrefOptions(std::vector<std::string>& args, int run) {
   args.push_back(listingFile);
   // The templates that are used are instantiated, so that the references in their bodies are
   // recorded too
-  args.push_back("--instantiate");
-  args.push_back("used");
+  if (cplusplus) {
+    args.push_back("--instantiate");
+    args.push_back("used");
+  }
   edg2sage_xref_hook = onReference;
 }
 

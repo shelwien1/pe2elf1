@@ -9,6 +9,10 @@
 // The options are those of the compiler (-I, -D, -std=..., ...), and:
 //   --dry-run   show the changes without writing the files
 //   --force     rename even where the new name may clash or another entity shares a reference
+//   --msvc      parse as Visual C++ does, with its headers (those of the INCLUDE environment
+//               variable) instead of GCC's; --msvc=<folder>: the headers of a portable Visual C++
+//               in that folder (include, ucrt\include, sdk\include); --msvc-version=<_MSC_VER>
+//               (the default comes from the headers)
 //
 // Renaming changes the source files in place: the source file and the headers it includes,
 // except system headers.  The positions of the names come from the EDG front end's
@@ -39,7 +43,8 @@ namespace {
 const char* usage =
     "usage: rose-ren [options] source.cpp name                list the entities called name\n"
     "       rose-ren [options] source.cpp name[:index] new    rename one of them to new\n"
-    "options: the compiler's (-I, -D, -std=...), --dry-run, --force\n";
+    "options: the compiler's (-I, -D, -std=...), --dry-run, --force,\n"
+    "         --msvc[=<Visual C++ folder>] (Visual C++ and its headers), --msvc-version=<_MSC_VER>\n";
 
 // A renamable item: an entity with the entities declared at the same positions (a template and
 // its instances)
@@ -379,8 +384,9 @@ int main(int argc, char* argv[]) {
     return 1;
   }
   if (frontEndOptionsUsed() > 0) {
-    std::cerr << "rose-ren: note: parsed as " << (frontEndOptionsUsed() == 1 ? "GCC" : "Visual C++")
-              << " does: templates are only parsed where they are instantiated\n";
+    std::cerr << "rose-ren: note: parsed as "
+              << (microsoftMode() ? "Visual C++ does without /permissive-" : frontEndOptionsUsed() == 1 ? "GCC does" : "Visual C++ does")
+              << ": templates are only parsed where they are instantiated\n";
   }
   const CrossReferences& xr = crossReferences();
   if (xr.empty()) {

@@ -335,7 +335,7 @@ std::string absolutePath(const std::string& path);
 // the options of RoseRefactor::setFrontEndOptions() and its alternatives), the EDG options for a
 // run, and the reading of the cross-reference listing at the end of back_end()
 int xrefRuns();
-void xrefOptions(std::vector<std::string>& args, int run);
+void xrefOptions(std::vector<std::string>& args, int run, bool cplusplus);
 void xrefRunAccepted(int run);
 void xrefCollect();
 bool xrefBuildsAst();
