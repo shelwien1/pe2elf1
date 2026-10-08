@@ -496,7 +496,16 @@ struct Decoder {
 
 // table transforms; .eh_frame_hdr needs the untransformed .eh_frame in `img`
 static bool plainRange(const std::vector<Region>& R, uint64_t off, uint64_t len, uint64_t n);
-static void tableTransform(uint8_t* p, const Region& r, bool fwd, const std::vector<Region>& R, const uint8_t* img, uint64_t n) {
+static tables::CodeMap codeMap(const std::vector<Region>& R, const uint8_t* img) {
+  tables::CodeMap cm;
+  cm.img = img;
+  for (auto& r : R) if (r.type == R_CODE) cm.spans.push_back({r.va, r.off, r.size});
+  std::stable_sort(cm.spans.begin(), cm.spans.end(), [](const tables::CodeSpan& a, const tables::CodeSpan& b) { return a.va < b.va; });
+  return cm;
+}
+
+static void tableTransform(uint8_t* p, const Region& r, bool fwd, const std::vector<Region>& R, const uint8_t* img, uint64_t n,
+                           const tables::CodeMap& cm) {
   switch (r.type) {
     case R_PDATA: tables::pdata(p, (size_t)r.size, fwd); break;
     case R_EHHDR: {
@@ -515,7 +524,9 @@ static void tableTransform(uint8_t* p, const Region& r, bool fwd, const std::vec
       break;
     case R_RELA: tables::rela(p, (size_t)r.size, fwd); break;
     case R_RELOC: tables::reloc(p, (size_t)r.size, fwd); break;
-    case R_EHFRAME: tables::ehframe(p, (size_t)r.size, r.va, fwd); break;
+    case R_EHFRAME:
+      tables::ehframe(p, (size_t)r.size, r.va, fwd, r.par.size() == 1 ? &cm : nullptr, r.par.size() == 1 ? r.par[0] : 0);
+      break;
     default: break;
   }
 }
@@ -571,7 +582,8 @@ static void encode(const Buf& src, Buf& out, Stats* st, std::vector<Buf>* dump) 
   std::vector<Region> R = analyze::run(src.data(), src.size(), true);
   Buf in = src;
   for (auto& r : R) if (r.type == R_RELA) relaSlots(in.data(), in.size(), r, R, true);
-  for (auto& r : R) if (r.type != R_CODE) tableTransform(&in[(size_t)r.off], r, true, R, src.data(), src.size());
+  tables::CodeMap cm = codeMap(R, src.data());
+  for (auto& r : R) if (r.type != R_CODE) tableTransform(&in[(size_t)r.off], r, true, R, src.data(), src.size(), cm);
 
   Labels B, L;
   for (auto& r : R) if (r.type == R_CODE) collectStarts(&in[(size_t)r.off], (size_t)r.size, r.va, B);
@@ -695,17 +707,19 @@ static bool decode(const Buf& in, Buf& out) {
   if (!D.take(len)) return false;
   if (len) memcpy(&out[(size_t)pos], s, len);
   for (int k = 0; k < NSTREAM; k++) if (Dc.S[k].p != Dc.S[k].e) return false;
-  // inverse order of dependencies: tables, .eh_frame_hdr (needs .eh_frame),
-  // RELATIVE slots, .gnu.hash (needs .dynsym/.dynstr in plain data)
+  // inverse order of dependencies: tables (.eh_frame needs the code),
+  // .eh_frame_hdr (needs .eh_frame), RELATIVE slots, .gnu.hash (needs
+  // .dynsym/.dynstr in plain data)
+  tables::CodeMap cm = codeMap(R, out.data());
   for (auto& x : R)
     if (x.type != R_CODE && x.type != R_EHHDR && x.type != R_GNUHASH)
-      tableTransform(&out[(size_t)x.off], x, false, R, out.data(), n);
+      tableTransform(&out[(size_t)x.off], x, false, R, out.data(), n, cm);
   for (auto& x : R)
-    if (x.type == R_EHHDR) tableTransform(&out[(size_t)x.off], x, false, R, out.data(), n);
+    if (x.type == R_EHHDR) tableTransform(&out[(size_t)x.off], x, false, R, out.data(), n, cm);
   for (size_t k = R.size(); k-- > 0;)
     if (R[k].type == R_RELA) relaSlots(out.data(), out.size(), R[k], R, false);
   for (auto& x : R)
-    if (x.type == R_GNUHASH) tableTransform(&out[(size_t)x.off], x, false, R, out.data(), n);
+    if (x.type == R_GNUHASH) tableTransform(&out[(size_t)x.off], x, false, R, out.data(), n, cm);
   return true;
 }
 

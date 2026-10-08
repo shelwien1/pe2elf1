@@ -31,6 +31,7 @@ struct Region {
   //   .eh_frame_hdr  index of the image's .eh_frame region
   //   Elf64_Rela     (va, file offset, size) of each PT_LOAD segment
   //   .gnu.hash      file offset and size of .dynsym and .dynstr
+  //   .eh_frame      virtual address bias of the image's code regions
   std::vector<uint64_t> par;
 };
 
@@ -170,7 +171,11 @@ static uint64_t parseELF(Ctx& C, uint64_t base, uint64_t vbias) {
         }
         continue;
       }
-      if (!strcmp(nm, ".eh_frame")) { C.add(R_EHFRAME, base + off, size, addr); continue; }
+      if (!strcmp(nm, ".eh_frame")) {
+        C.add(R_EHFRAME, base + off, size, addr);
+        if (!C.R.empty() && C.R.back().type == R_EHFRAME) C.R.back().par.assign(1, vbias);
+        continue;
+      }
       if (!strcmp(nm, ".eh_frame_hdr") && size >= 12) {
         const uint8_t* h = p + off;
         if (h[0] == 1 && h[2] == 0x03 && h[3] == 0x3B) {

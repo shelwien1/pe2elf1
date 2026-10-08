@@ -11,6 +11,7 @@
 #include <vector>
 #include <utility>
 #include <algorithm>
+#include "x64dec.h"
 
 namespace tables {
 
@@ -103,7 +104,7 @@ static void reloc(uint8_t* p, size_t n, bool fwd) {
 // Only 4-byte pointer encodings (udata4/sdata4, absolute or pcrel) are
 // transformed; everything else is left as is.
 
-struct Cie { uint32_t off; uint8_t renc, lenc, hasz; };
+struct Cie { uint32_t off; uint8_t renc, lenc, hasz, caf1; };
 
 static inline bool uleb(const uint8_t* p, size_t n, size_t& i, uint64_t& v) {
   v = 0;
@@ -141,7 +142,9 @@ static bool parseCie(const uint8_t* p, size_t end, size_t i, Cie& c) {
   i++;
   if (ver >= 4) i += 2;
   uint64_t v;
-  if (!uleb(p, end, i, v) || !uleb(p, end, i, v)) return false;
+  if (!uleb(p, end, i, v)) return false;
+  c.caf1 = v == 1;  // code alignment factor 1: advances are in bytes
+  if (!uleb(p, end, i, v)) return false;
   if (ver == 1) i++;
   else if (!uleb(p, end, i, v)) return false;
   c.renc = 0; c.lenc = 0xFF; c.hasz = 0;
@@ -165,7 +168,177 @@ static bool parseCie(const uint8_t* p, size_t end, size_t i, Cie& c) {
   return true;
 }
 
-static void ehframe(uint8_t* p, size_t n, uint64_t va, bool fwd) {
+
+//----------------------------------------------------------------------------
+// Code access for unwind tables: the decoded image and its code regions
+
+struct CodeSpan { uint64_t va, off, size; };
+
+struct CodeMap {
+  const uint8_t* img = nullptr;
+  std::vector<CodeSpan> spans;  // sorted by va
+  // pointer to the code at va and the number of code bytes from there
+  const uint8_t* at(uint64_t va, uint64_t& avail) const {
+    size_t lo = 0, hi = spans.size();
+    while (lo < hi) {
+      size_t mid = (lo + hi) / 2;
+      if (spans[mid].va + spans[mid].size <= va) lo = mid + 1; else hi = mid;
+    }
+    if (lo == spans.size() || va < spans[lo].va) return nullptr;
+    avail = spans[lo].size - (va - spans[lo].va);
+    return img + spans[lo].off + (va - spans[lo].va);
+  }
+};
+
+// instructions that change the CFA rule: they write rsp, set up rbp from
+// rsp, or return
+static inline bool stackEvent(const uint8_t* p, const x64::Insn& I) {
+  if (I.trunc || I.enc != x64::ENC_LEGACY) return false;
+  unsigned op = I.op;
+  if (op >= 0x50 && op <= 0x5F) return true;
+  switch (op) {
+    case 0x68: case 0x6A: case 0x8F: case 0x9C: case 0x9D: case 0xC2: case 0xC3: case 0xC9: case 0xCA: case 0xCB:
+      return true;
+    default: break;
+  }
+  if (!I.hasmodrm) return false;
+  unsigned m = I.modrm, mod = m >> 6, reg = (m >> 3) & 7, rm = m & 7;
+  unsigned rex = I.prex != x64::NOPOS ? p[I.prex] : 0;
+  if (op == 0xFF && reg == 6) return true;  // push r/m
+  if (mod == 3 && rm == 4 && !(rex & 1)) {  // rsp as r/m destination
+    if (op == 0x81 || op == 0x83) return reg != 7;  // not cmp
+    if (op == 0x01 || op == 0x09 || op == 0x21 || op == 0x29 || op == 0x31 || op == 0x89 || op == 0xC7) return true;
+  }
+  if (reg == 4 && !(rex & 4) && (op == 0x03 || op == 0x0B || op == 0x23 || op == 0x2B || op == 0x33 || op == 0x8B || op == 0x8D))
+    return true;  // rsp as reg destination
+  if (op == 0x89 && m == 0xE5 && !(rex & 5)) return true;  // mov rbp, rsp
+  if (op == 0x8B && m == 0xEC && !(rex & 5)) return true;  // mov rbp, rsp
+  if (op == 0x8D && reg == 5 && !(rex & 4)) return true;   // lea rbp, [...]
+  return false;
+}
+
+// instruction boundaries of a function, with "stack event ends here" flags
+struct FuncCode {
+  std::vector<uint64_t> b;   // boundary offsets from the function start, ascending
+  std::vector<uint32_t> ev;  // ev[k] = number of event boundaries among b[0..k-1]
+  void build(const uint8_t* code, uint64_t avail, uint64_t len) {
+    b.clear(); ev.clear();
+    if (!code) return;
+    if (len > avail) len = avail;
+    uint64_t i = 0;
+    uint32_t ne = 0;
+    b.push_back(0); ev.push_back(0);
+    while (i < len) {
+      x64::Insn I;
+      x64::decode(code + i, (size_t)std::min<uint64_t>(avail - i, 64), I);
+      bool e = stackEvent(code + i, I);
+      i += I.len;
+      ev.push_back(ne);
+      if (e) ne++;
+      b.push_back(i);
+    }
+    ev.push_back(ne);  // ev has b.size() + 1 entries
+  }
+  bool isEvent(size_t k) const { return ev[k + 1] > ev[k]; }
+};
+
+// Location advance from loc by d (0..maxd): the targets are ranked event
+// ends first, then other instruction boundaries, then other addresses.
+static uint64_t advRank(const FuncCode& F, uint64_t loc, uint64_t maxd, uint64_t d) {
+  uint64_t hi = loc + maxd, t = loc + d;
+  size_t k0 = std::lower_bound(F.b.begin(), F.b.end(), loc) - F.b.begin();
+  size_t k1 = std::upper_bound(F.b.begin(), F.b.end(), hi) - F.b.begin();
+  size_t kt = std::lower_bound(F.b.begin(), F.b.end(), t) - F.b.begin();
+  uint64_t nE = F.ev[k1] - F.ev[k0], nB = k1 - k0;
+  if (kt < k1 && F.b[kt] == t) {
+    uint64_t eBelow = F.ev[kt] - F.ev[k0];
+    if (F.isEvent(kt)) return eBelow;
+    return nE + (kt - k0 - eBelow);
+  }
+  return nB + (t - loc) - (kt - k0);
+}
+
+static uint64_t advUnrank(const FuncCode& F, uint64_t loc, uint64_t maxd, uint64_t c) {
+  uint64_t hi = loc + maxd;
+  size_t k0 = std::lower_bound(F.b.begin(), F.b.end(), loc) - F.b.begin();
+  size_t k1 = std::upper_bound(F.b.begin(), F.b.end(), hi) - F.b.begin();
+  uint64_t nE = F.ev[k1] - F.ev[k0], nB = k1 - k0;
+  if (c < nB) {
+    bool wantE = c < nE;
+    uint64_t want = wantE ? c : c - nE;  // index among events / non-events in the window
+    // smallest k in [k0,k1) of the wanted kind with `want` of that kind before it
+    size_t lo = k0, h = k1;
+    while (lo < h) {
+      size_t mid = (lo + h) / 2;
+      uint64_t before = wantE ? F.ev[mid + 1] - F.ev[k0] : (mid + 1 - k0) - (F.ev[mid + 1] - F.ev[k0]);
+      if (before <= want) lo = mid + 1; else h = mid;
+    }
+    return F.b[lo] - loc;
+  }
+  uint64_t t = loc + (c - nB);
+  for (size_t k = k0; k < k1 && F.b[k] <= t; k++) t++;
+  return t - loc;
+}
+
+// Walk a CFA program; advance operands are replaced by their rank.
+static void cfaProgram(uint8_t* p, size_t i, size_t end, const FuncCode& F, bool fwd) {
+  uint64_t loc = 0, v;
+  while (i < end) {
+    uint8_t op = p[i++];
+    uint64_t d, maxd;
+    size_t at = i, sz;
+    switch (op >> 6) {
+      case 1: {  // advance_loc: 6-bit delta in the opcode
+        d = op & 0x3F;
+        uint64_t x = fwd ? advRank(F, loc, 63, d) : advUnrank(F, loc, 63, d);
+        if (x > 63) return;
+        p[i - 1] = (uint8_t)(0x40 | x);
+        loc += fwd ? d : x;
+        continue;
+      }
+      case 2: if (!uleb(p, end, i, v)) return; continue;  // offset
+      case 3: continue;                                      // restore
+      default: break;
+    }
+    switch (op) {
+      case 0x00: case 0x0A: case 0x0B: case 0x2D: continue;  // nop, remember/restore_state, window_save
+      case 0x02: sz = 1; maxd = 0xFF; break;                 // advance_loc1/2/4
+      case 0x03: sz = 2; maxd = 0xFFFF; break;
+      case 0x04: sz = 4; maxd = 0xFFFFFFFF; break;
+      case 0x05: case 0x09: case 0x0C: case 0x14: case 0x2F:  // two uleb
+        if (!uleb(p, end, i, v) || !uleb(p, end, i, v)) return;
+        continue;
+      case 0x06: case 0x07: case 0x08: case 0x0D: case 0x0E: case 0x13: case 0x2E:  // one uleb/sleb
+        if (!uleb(p, end, i, v)) return;
+        continue;
+      case 0x11: case 0x12: case 0x15:  // uleb, sleb
+        if (!uleb(p, end, i, v) || !uleb(p, end, i, v)) return;
+        continue;
+      case 0x0F:  // def_cfa_expression: block
+        if (!uleb(p, end, i, v) || v > end - i) return;
+        i += (size_t)v;
+        continue;
+      case 0x10: case 0x16:  // expression: uleb reg, block
+        if (!uleb(p, end, i, v) || !uleb(p, end, i, v) || v > end - i) return;
+        i += (size_t)v;
+        continue;
+      default:
+        return;  // set_loc, unknown: stop
+    }
+    if (at + sz > end) return;
+    d = 0;
+    for (size_t k = 0; k < sz; k++) d |= (uint64_t)p[at + k] << (8 * k);
+    uint64_t x = fwd ? advRank(F, loc, maxd, d) : advUnrank(F, loc, maxd, d);
+    if (x > maxd) return;
+    for (size_t k = 0; k < sz; k++) p[at + k] = (uint8_t)(x >> (8 * k));
+    loc += fwd ? d : x;
+    i = at + sz;
+  }
+}
+
+// cm: code of the image (may be null), vbias: added to pc values to find it
+static void ehframe(uint8_t* p, size_t n, uint64_t va, bool fwd, const CodeMap* cm, uint64_t vbias) {
+  FuncCode F;
   std::vector<Cie> cies;
   size_t i = 0;
   uint32_t prevEnd = 0, prevLsda = 0;
@@ -209,7 +382,25 @@ static void ehframe(uint8_t* p, size_t n, uint64_t va, bool fwd) {
       if (fwd) { absb = v + pcrel; s32(p + j, absb - prevEnd); }
       else { absb = v + prevEnd; s32(p + j, absb - pcrel); }
       prevEnd = absb + range;
+      uint64_t pcva = (c->renc & 0x0F) == 0x0B && (c->renc & 0x70) == 0x10
+                          ? va + j + (uint64_t)(int64_t)(int32_t)(absb - pcrel) : (uint64_t)absb;
       j += 8;
+      // CFA program: advances ranked against the function's instructions
+      size_t prog = j;
+      bool progOk = true;
+      if (c->hasz) {
+        uint64_t al;
+        if (!uleb(p, end, prog, al) || al > end - prog) progOk = false;
+        else prog += (size_t)al;
+      }
+      if (progOk && cm && c->caf1) {
+        uint64_t avail = 0;
+        const uint8_t* code = cm->at(vbias + pcva, avail);
+        if (code) {
+          F.build(code, avail, range);
+          cfaProgram(p, prog, end, F, fwd);
+        }
+      }
       if (c->hasz && c->lenc != 0xFF && enc4(c->lenc)) {
         uint64_t al;
         size_t k = j;
