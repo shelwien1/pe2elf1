@@ -32,18 +32,19 @@ enum StreamId {
   S_DATA,   // everything outside code regions
   S_OP,     // prefixes, opcode, ModRM, SIB, imm8, disp8, imm16
   S_J8,     // rel8 branch targets: rank among nearby labels
-  S_JMP,    // rel32 jmp/jcc targets: label distance, 0 = escape
+  S_JMP,    // rel32 jmp targets: label distance (1 byte), 0/255 = escape
+  S_JCC,    // rel32 jcc targets: same coding
   S_CALL,   // rel32 call targets: label number, 0 = escape
   S_RIP,    // RIP-relative disp32: absolute address
   S_DISP,   // disp32
   S_IMM32,  // imm32
   S_IMM64,  // imm64, moffs64
-  S_ESC,    // rel32 branch targets that are not labels: absolute address
+  S_ESC,    // escaped rel32 targets: absolute address or long label distance
   NSTREAM
 };
 
 // order of streams in the output file
-static const uint8_t kOrder[NSTREAM] = {S_ESC, S_IMM64, S_IMM32, S_DISP, S_RIP, S_CALL, S_JMP, S_J8, S_OP, S_DATA};
+static const uint8_t kOrder[NSTREAM] = {S_ESC, S_IMM64, S_IMM32, S_DISP, S_RIP, S_CALL, S_JMP, S_JCC, S_J8, S_OP, S_DATA};
 
 enum { kAlign = 16, kVersion = 1 };
 enum { FL_LABELS = 1 };
@@ -146,10 +147,11 @@ struct InStream {
 // nothing: the first instruction of a code region and the first non-padding
 // instruction after an unconditional control transfer.
 // Branch targets are coded through the sorted label set:
-//   jmp/jcc rel32  zigzag(label distance from the next instruction) + 1
-//   call rel32     label number + 1
+//   jmp/jcc rel32  z = zigzag(label distance from the next instruction) + 1,
+//                  one byte if z < 255, else 255 and z in S_ESC
+//   call rel32     label number + 1, big-endian 32-bit
 //   rel8           rank among the 256 possible targets, labels first
-// with 0 as escape for targets that are not labels (absolute, in S_ESC).
+// A code of 0 means the target is not a label; its address is in S_ESC.
 
 enum { kMark = 0xD6 };
 
@@ -334,13 +336,22 @@ struct Encoder {
           case x64::F_J8:
             S[S_J8].push_back(lab ? j8Encode(*L, next, (uint8_t)v) : (uint8_t)v);
             break;
-          case x64::F_JMP: case x64::F_JCC: case x64::F_CALL: {
-            Buf& st = S[c == x64::F_CALL ? S_CALL : S_JMP];
+          case x64::F_CALL:
+            branchTarget(c, v, next, t);
+            if (!lab) putBE32(S[S_CALL], (uint32_t)t);
+            else if (!L->find(t, r)) { putBE32(S[S_CALL], 0); putBE32(S[S_ESC], (uint32_t)t); }
+            else putBE32(S[S_CALL], (uint32_t)(r + 1));
+            break;
+          case x64::F_JMP: case x64::F_JCC: {
+            Buf& st = S[c == x64::F_JMP ? S_JMP : S_JCC];
             branchTarget(c, v, next, t);
             if (!lab) putBE32(st, (uint32_t)t);
-            else if (!L->find(t, r)) { putBE32(st, 0); putBE32(S[S_ESC], (uint32_t)t); }
-            else if (c == x64::F_CALL) putBE32(st, (uint32_t)(r + 1));
-            else putBE32(st, zigzag((int64_t)r - (int64_t)L->lower(next)) + 1);
+            else if (!L->find(t, r)) { st.push_back(0); putBE32(S[S_ESC], (uint32_t)t); }
+            else {
+              uint32_t z = zigzag((int64_t)r - (int64_t)L->lower(next)) + 1;
+              if (z < 255) st.push_back((uint8_t)z);
+              else { st.push_back(255); putBE32(S[S_ESC], z); }
+            }
             break;
           }
           case x64::F_RIP: putBE32(S[S_RIP], (uint32_t)(v + next)); break;
@@ -386,11 +397,19 @@ struct Decoder {
   const Labels* L;
   unsigned flags;
 
+  bool escaped(uint32_t& x) {
+    const uint8_t* s = S[S_ESC].p;
+    if (!S[S_ESC].take(4)) return false;
+    x = getBE32(s);
+    return true;
+  }
+
+  // y: call label number + 1, or jmp/jcc z code; 0 = absolute target in S_ESC
   bool target(uint32_t y, bool call, uint64_t next, uint64_t& v) {
     if (y == 0) {
-      const uint8_t* s = S[S_ESC].p;
-      if (!S[S_ESC].take(4)) return false;
-      v = (uint32_t)(getBE32(s) - next);
+      uint32_t a;
+      if (!escaped(a)) return false;
+      v = (uint32_t)(a - next);
       return true;
     }
     int64_t r = call ? (int64_t)y - 1 : (int64_t)L->lower(next) + unzigzag(y - 1);
@@ -427,13 +446,26 @@ struct Decoder {
             if (!S[S_J8].take(1)) return false;
             v = lab ? j8Decode(*L, next, s[0]) : s[0];
             break;
-          case x64::F_JMP: case x64::F_JCC: case x64::F_CALL:
-            st = &S[c == x64::F_CALL ? S_CALL : S_JMP];
-            s = st->p;
-            if (!st->take(4)) return false;
+          case x64::F_CALL:
+            s = S[S_CALL].p;
+            if (!S[S_CALL].take(4)) return false;
             if (!lab) v = (uint32_t)(getBE32(s) - next);
-            else if (!target(getBE32(s), c == x64::F_CALL, next, v)) return false;
+            else if (!target(getBE32(s), true, next, v)) return false;
             break;
+          case x64::F_JMP: case x64::F_JCC: {
+            st = &S[c == x64::F_JMP ? S_JMP : S_JCC];
+            s = st->p;
+            if (!lab) {
+              if (!st->take(4)) return false;
+              v = (uint32_t)(getBE32(s) - next);
+              break;
+            }
+            if (!st->take(1)) return false;
+            uint32_t z = s[0];
+            if (z == 255 && !escaped(z)) return false;
+            if (!target(z, false, next, v)) return false;
+            break;
+          }
           case x64::F_RIP:
             s = S[S_RIP].p;
             if (!S[S_RIP].take(4)) return false;
@@ -667,7 +699,7 @@ static bool decode(const Buf& in, Buf& out) {
 
 //----------------------------------------------------------------------------
 
-static const char* kStreamName[NSTREAM] = {"data", "op", "j8", "jmp", "call", "rip", "disp32", "imm32", "imm64", "esc"};
+static const char* kStreamName[NSTREAM] = {"data", "op", "j8", "jmp", "jcc", "call", "rip", "disp32", "imm32", "imm64", "esc"};
 static const char* kRegionName[R_NTYPES] = {"code", "pdata", "eh_frame_hdr", "rela", "reloc", "eh_frame"};
 
 static int usage() {
