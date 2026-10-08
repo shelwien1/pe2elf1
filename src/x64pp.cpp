@@ -6,10 +6,11 @@
 // Code sections of PE32+ and ELF64 images are parsed into instructions.
 // Opcode bytes (prefixes, opcode, ModRM, SIB) plus the small operands go to
 // one stream; wide operands are split into separate streams by kind, with
-// branch/call/RIP-relative targets converted to absolute form.  Jump targets
-// are coded as instruction indices, which the decoder recovers by parsing
-// the opcode stream first.  Unwind and relocation tables get delta coding.
-// Everything else is copied.  See README.md for the format and the numbers.
+// RIP-relative targets converted to absolute form.  Branch targets are coded
+// through a set of labels that the decoder recovers by parsing the opcode
+// stream first.  Unwind, relocation and hash tables are delta coded or
+// predicted from the code and from each other.  Everything else is copied.
+// See README.md for the format and the numbers.
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
