@@ -57,7 +57,18 @@ struct Insn {
   uint16_t op;       // map<<8 | opcode byte
   uint8_t modrm;     // valid if hasmodrm
   uint8_t hasmodrm;
+  uint8_t forcereg;  // ModRM.mod is ignored (mov cr/dr): operands are registers
+  uint8_t enc;       // ENC_LEGACY / ENC_VEX2 / ENC_VEX3 / ENC_EVEX / ENC_REX2
+  // byte positions inside the instruction, NOPOS if absent
+  uint8_t prex;      // effective REX prefix
+  uint8_t pvex;      // first payload byte of VEX/EVEX/REX2
+  uint8_t popc;      // opcode byte
+  uint8_t pmodrm;
+  uint8_t psib;
 };
+
+enum { NOPOS = 0xFF };
+enum { ENC_LEGACY = 0, ENC_VEX2, ENC_VEX3, ENC_EVEX, ENC_REX2 };
 
 // map0 table: low nibble = ImmKind, 0x10 = ModRM, 0x20 = prefix, 0x40 = special
 enum { T_M = 0x10, T_P = 0x20, T_S = 0x40 };
@@ -115,16 +126,18 @@ static inline void decode(const uint8_t* p, size_t avail, Insn& I) {
   size_t i = 0;
   unsigned p66 = 0, p67 = 0, rexw = 0, npfx = 0;
   unsigned imm = I_NONE, hasm = 0, map = 0, op = 0, forcereg = 0;
-  I.nfield = 0; I.trunc = 0; I.hasmodrm = 0; I.modrm = 0;
+  I.nfield = 0; I.trunc = 0; I.hasmodrm = 0; I.modrm = 0; I.forcereg = 0; I.enc = ENC_LEGACY;
+  I.prex = I.pvex = I.pmodrm = I.psib = NOPOS;
 
   #define NEED(k) if (i + (k) > avail) goto truncated
   for (;;) {
     NEED(1);
     unsigned b = p[i];
     if (npfx < 14 && (map0[b] & T_P)) {
-      if ((b & 0xF0) == 0x40) rexw = b & 8;
+      if ((b & 0xF0) == 0x40) { rexw = b & 8; I.prex = (uint8_t)i; }
       else {
         rexw = 0;  // REX must be the last prefix
+        I.prex = NOPOS;
         if (b == 0x66) p66 = 1;
         if (b == 0x67) p67 = 1;
       }
@@ -133,6 +146,7 @@ static inline void decode(const uint8_t* p, size_t avail, Insn& I) {
     }
     break;
   }
+  I.popc = (uint8_t)i;
   op = p[i++];
   {
     unsigned t = map0[op];
@@ -142,10 +156,12 @@ static inline void decode(const uint8_t* p, size_t avail, Insn& I) {
     } else if (t & T_S) {
       if (op == 0x0F) {
         NEED(1);
+        I.popc = (uint8_t)i;
         op = p[i++];
         if (op == 0x38 || op == 0x3A) {
           map = (op == 0x38) ? 2 : 3;
           NEED(1);
+          I.popc = (uint8_t)i;
           op = p[i++];
           hasm = 1; imm = (map == 3) ? I_B : I_NONE;
         } else {
@@ -158,9 +174,11 @@ static inline void decode(const uint8_t* p, size_t avail, Insn& I) {
       } else if (op == 0xC4 || op == 0xC5) {
         // VEX
         unsigned mm;
-        if (op == 0xC4) { NEED(2); mm = p[i] & 31; i += 2; }
-        else            { NEED(1); mm = 1; i += 1; }
+        I.pvex = (uint8_t)i;
+        if (op == 0xC4) { NEED(2); mm = p[i] & 31; i += 2; I.enc = ENC_VEX3; }
+        else            { NEED(1); mm = 1; i += 1; I.enc = ENC_VEX2; }
         NEED(1);
+        I.popc = (uint8_t)i;
         unsigned o = p[i++];
         map = mm; op = o;
         if (mm == 1) { hasm = (o != 0x77); imm = vex_map1_imm(o) ? I_B : I_NONE; }
@@ -170,8 +188,10 @@ static inline void decode(const uint8_t* p, size_t avail, Insn& I) {
         // EVEX
         NEED(3);
         unsigned mm = p[i] & 7;
+        I.pvex = (uint8_t)i; I.enc = ENC_EVEX;
         i += 3;
         NEED(1);
+        I.popc = (uint8_t)i;
         unsigned o = p[i++];
         map = mm; op = o;
         hasm = 1;
@@ -187,8 +207,10 @@ static inline void decode(const uint8_t* p, size_t avail, Insn& I) {
         // 0xD5: REX2 (APX)
         NEED(2);
         unsigned pl = p[i];
+        I.pvex = (uint8_t)i; I.enc = ENC_REX2;
         i += 1;
         rexw = pl & 8;
+        I.popc = (uint8_t)i;
         unsigned o = p[i++];
         if (pl & 0x80) {
           map = 1; op = o;
@@ -218,13 +240,15 @@ static inline void decode(const uint8_t* p, size_t avail, Insn& I) {
     unsigned dsz = 0, dcls = F_NONE;
     if (hasm) {
       NEED(1);
+      I.pmodrm = (uint8_t)i;
       unsigned m = p[i++];
-      I.modrm = (uint8_t)m; I.hasmodrm = 1;
+      I.modrm = (uint8_t)m; I.hasmodrm = 1; I.forcereg = (uint8_t)forcereg;
       unsigned mod = m >> 6, rm = m & 7;
       if (forcereg) mod = 3;
       if (mod != 3) {
         if (rm == 4) {
           NEED(1);
+          I.psib = (uint8_t)i;
           unsigned sib = p[i++];
           if (mod == 0 && (sib & 7) == 5) { dsz = 4; dcls = F_DABS; }
         } else if (mod == 0 && rm == 5) {
@@ -291,6 +315,8 @@ truncated:
   I.nstruct = (uint8_t)(avail < 255 ? avail : 255);
   I.len = I.nstruct;
   I.op = 0;
+  I.hasmodrm = 0;
+  I.prex = I.pvex = I.popc = I.pmodrm = I.psib = NOPOS;
 }
 
 }  // namespace x64

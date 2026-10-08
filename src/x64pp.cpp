@@ -31,14 +31,14 @@ typedef std::vector<uint8_t> Buf;
 enum StreamId {
   S_DATA,   // everything outside code regions
   S_OP,     // prefixes, opcode, ModRM, SIB, imm8, disp8, imm16
-  S_J8,     // rel8 branch targets: rank among nearby instruction starts
-  S_JMP,    // rel32 jmp/jcc targets: instruction index + 1, 0 = escape
-  S_CALL,   // rel32 call targets: absolute address
+  S_J8,     // rel8 branch targets: rank among nearby labels
+  S_JMP,    // rel32 jmp/jcc targets: label distance, 0 = escape
+  S_CALL,   // rel32 call targets: label number, 0 = escape
   S_RIP,    // RIP-relative disp32: absolute address
   S_DISP,   // disp32
   S_IMM32,  // imm32
   S_IMM64,  // imm64, moffs64
-  S_ESC,    // rel32 jmp/jcc targets that are not instruction starts
+  S_ESC,    // rel32 branch targets that are not labels: absolute address
   NSTREAM
 };
 
@@ -46,7 +46,7 @@ enum StreamId {
 static const uint8_t kOrder[NSTREAM] = {S_DATA, S_ESC, S_IMM64, S_IMM32, S_DISP, S_RIP, S_CALL, S_JMP, S_OP, S_J8};
 
 enum { kAlign = 16, kVersion = 1 };
-enum { FL_JMPIDX = 1, FL_J8RANK = 2 };
+enum { FL_LABELS = 1 };
 static const uint8_t kMagic[4] = {'x', '6', '4', 'p'};
 
 //----------------------------------------------------------------------------
@@ -137,47 +137,93 @@ struct InStream {
 };
 
 //----------------------------------------------------------------------------
-// Instruction starts and branch target coding
+// Labels
+//
+// A label is an instruction start that branches may target.  Explicit labels
+// are announced in the opcode stream by the byte kMark (0xD6, an invalid
+// opcode in 64-bit mode); a genuine 0xD6 instruction is written as
+// kMark kMark and never gets an explicit label.  Implicit labels cost
+// nothing: the first instruction of a code region and the first non-padding
+// instruction after an unconditional control transfer.
+// Branch targets are coded through the sorted label set:
+//   jmp/jcc rel32  zigzag(label distance from the next instruction) + 1
+//   call rel32     label number + 1
+//   rel8           rank among the 256 possible targets, labels first
+// with 0 as escape for targets that are not labels (absolute, in S_ESC).
 
-struct Bounds {
+enum { kMark = 0xD6 };
+
+struct Labels {
   std::vector<uint64_t> va;  // sorted, unique
   size_t lower(uint64_t t) const { return std::lower_bound(va.begin(), va.end(), t) - va.begin(); }
+  bool find(uint64_t t, size_t& r) const {
+    r = lower(t);
+    return r < va.size() && va[r] == t;
+  }
   void finish() {
     std::sort(va.begin(), va.end());
     va.erase(std::unique(va.begin(), va.end()), va.end());
   }
 };
 
+static inline bool isPadding(const x64::Insn& I) {
+  return !I.trunc && (I.op == 0x90 || I.op == 0xCC || I.op == 0x11F);  // nop, int3, nop r/m
+}
+
+static inline bool isBarrier(const x64::Insn& I) {
+  if (I.trunc) return false;
+  switch (I.op) {
+    case 0xC2: case 0xC3: case 0xE9: case 0xEB: case 0xF4: case 0xCC: case 0x10B:  // ret jmp hlt int3 ud2
+      return true;
+    case 0xFF: {
+      unsigned reg = (I.modrm >> 3) & 7;  // jmp r/m, jmp far
+      return reg == 4 || reg == 5;
+    }
+    default:
+      return false;
+  }
+}
+
+struct ImplicitLabels {
+  bool after = true;  // region start counts as "after a transfer"
+  bool step(const x64::Insn& I) {
+    bool lab = after && !isPadding(I);
+    if (lab) after = false;
+    if (isBarrier(I)) after = true;
+    return lab;
+  }
+};
+
 static inline bool inlineField(unsigned c) { return c == x64::F_D8 || c == x64::F_I8 || c == x64::F_I16; }
 
 static inline uint32_t zigzag(int64_t d) { return (uint32_t)((uint64_t)d << 1 ^ (uint64_t)(d >> 63)); }
+static inline int64_t unzigzag(uint32_t z) { return (int64_t)(z >> 1) ^ -(int64_t)(z & 1); }
 
-// rel8 targets: the 256 addresses next-128..next+127 are ranked, instruction
-// starts first (ordered by zigzag of the instruction distance from `next`),
-// then the other addresses in increasing order.  The code is the rank.
+// rel8 targets: the 256 addresses next-128..next+127 are ranked, labels
+// first (by zigzag of the label distance from `next`), then the other
+// addresses in increasing order.  The code is the rank.
 struct J8Win {
-  size_t b0, b1, rn;  // starts in the window are [b0,b1); rn = first start >= next
+  size_t b0, b1, rn;  // labels in the window are [b0,b1); rn = first label >= next
   uint64_t lo;
   bool ok;
-  J8Win(const Bounds& B, uint64_t next) {
+  J8Win(const Labels& L, uint64_t next) {
     ok = next >= 128 && next <= UINT64_MAX - 128;
     b0 = b1 = rn = 0;
     lo = next - 128;
     if (!ok) return;
-    b0 = B.lower(lo);
-    b1 = B.lower(next + 128);
-    rn = B.lower(next);
+    b0 = L.lower(lo);
+    b1 = L.lower(next + 128);
+    rn = L.lower(next);
   }
 };
 
-static uint8_t j8Encode(const Bounds& B, uint64_t next, uint8_t rel) {
-  J8Win w(B, next);
+static uint8_t j8Encode(const Labels& L, uint64_t next, uint8_t rel) {
+  J8Win w(L, next);
   if (!w.ok) return rel;
   uint64_t t = next + (uint64_t)(int64_t)(int8_t)rel;
-  size_t r = B.lower(t);
-  size_t nb = w.b1 - w.b0;
-  if (r < w.b1 && B.va[r] == t) {
-    // count window starts with a smaller key
+  size_t r;
+  if (L.find(t, r)) {
+    // count labels in the window with a smaller key
     int64_t d = (int64_t)r - (int64_t)w.rn;
     int64_t dmin = (int64_t)w.b0 - (int64_t)w.rn, dmax = (int64_t)w.b1 - 1 - (int64_t)w.rn;
     uint32_t z = zigzag(d);
@@ -186,11 +232,11 @@ static uint8_t j8Encode(const Bounds& B, uint64_t next, uint8_t rel) {
     int64_t a = std::max(dmin, lo), b = std::min(dmax, hi);
     return (uint8_t)(b >= a ? b - a + 1 : 0);
   }
-  return (uint8_t)(nb + (t - w.lo) - (r - w.b0));
+  return (uint8_t)((w.b1 - w.b0) + (t - w.lo) - (r - w.b0));
 }
 
-static uint8_t j8Decode(const Bounds& B, uint64_t next, uint8_t code) {
-  J8Win w(B, next);
+static uint8_t j8Decode(const Labels& L, uint64_t next, uint8_t code) {
+  J8Win w(L, next);
   if (!w.ok) return code;
   size_t nb = w.b1 - w.b0;
   uint64_t t;
@@ -203,10 +249,10 @@ static uint8_t j8Decode(const Bounds& B, uint64_t next, uint8_t code) {
       if (d < dmin || d > dmax) continue;
       if (cnt++ == code) break;
     }
-    t = B.va[(size_t)((int64_t)w.rn + d)];
+    t = L.va[(size_t)((int64_t)w.rn + d)];
   } else {
     t = w.lo + (code - nb);
-    for (size_t k = w.b0; k < w.b1 && B.va[k] <= t; k++) t++;
+    for (size_t k = w.b0; k < w.b1 && L.va[k] <= t; k++) t++;
   }
   return (uint8_t)(t - next);
 }
@@ -214,51 +260,89 @@ static uint8_t j8Decode(const Bounds& B, uint64_t next, uint8_t code) {
 //----------------------------------------------------------------------------
 // Code regions
 
-static void collectBounds(const uint8_t* p, size_t n, uint64_t va, Bounds& B) {
+static inline uint64_t fieldValue(const uint8_t* q, unsigned sz) {
+  uint64_t v = 0;
+  for (unsigned j = 0; j < sz; j++) v |= (uint64_t)q[j] << (8 * j);
+  return v;
+}
+
+static inline bool branchTarget(unsigned c, uint64_t v, uint64_t next, uint64_t& t) {
+  if (c == x64::F_J8) t = next + (uint64_t)(int64_t)(int8_t)v;
+  else if (c == x64::F_JMP || c == x64::F_JCC || c == x64::F_CALL) t = next + (uint64_t)(int64_t)(int32_t)v;
+  else return false;
+  return true;
+}
+
+// encoder: instruction starts that may become explicit labels
+static void collectStarts(const uint8_t* p, size_t n, uint64_t va, Labels& B) {
   size_t i = 0;
   while (i < n) {
     x64::Insn I;
     x64::decode(p + i, n - i, I);
-    B.va.push_back(va + i);
+    if (p[i] != kMark) B.va.push_back(va + i);
+    i += I.len;
+  }
+}
+
+// encoder: label set = branch targets that are instruction starts + implicit labels
+static void collectLabels(const uint8_t* p, size_t n, uint64_t va, const Labels& B, Labels& L) {
+  ImplicitLabels imp;
+  size_t i = 0;
+  while (i < n) {
+    x64::Insn I;
+    x64::decode(p + i, n - i, I);
+    if (imp.step(I)) L.va.push_back(va + i);
+    const uint8_t* q = p + i + I.nstruct;
+    uint64_t next = va + i + I.len, t;
+    size_t r;
+    for (unsigned k = 0; k < I.nfield; k++) {
+      unsigned c = I.fclass[k], sz = I.fsize[k];
+      if (branchTarget(c, fieldValue(q, sz), next, t) && B.find(t, r)) L.va.push_back(t);
+      q += sz;
+    }
     i += I.len;
   }
 }
 
 struct Encoder {
   Buf S[NSTREAM];
-  const Bounds* B;
+  const Labels* L;
   unsigned flags;
 
   void code(const uint8_t* p, size_t n, uint64_t va) {
     size_t i = 0;
     Buf& op = S[S_OP];
+    ImplicitLabels imp;
+    bool lab = flags & FL_LABELS;
     while (i < n) {
       x64::Insn I;
       x64::decode(p + i, n - i, I);
+      size_t r;
+      if (lab && !imp.step(I) && L->find(va + i, r)) op.push_back(kMark);
+      if (lab && p[i] == kMark) op.push_back(kMark);
       op.insert(op.end(), p + i, p + i + I.nstruct);
       const uint8_t* q = p + i + I.nstruct;
       uint64_t next = va + i + I.len;
       for (unsigned k = 0; k < I.nfield; k++) {
         unsigned c = I.fclass[k], sz = I.fsize[k];
-        uint64_t v = 0;
-        for (unsigned j = 0; j < sz; j++) v |= (uint64_t)q[j] << (8 * j);
+        uint64_t v = fieldValue(q, sz), t;
         q += sz;
         switch (c) {
           case x64::F_D8: case x64::F_I8: case x64::F_I16:
             putLE(op, v, sz);
             break;
           case x64::F_J8:
-            S[S_J8].push_back((flags & FL_J8RANK) ? j8Encode(*B, next, (uint8_t)v) : (uint8_t)v);
+            S[S_J8].push_back(lab ? j8Encode(*L, next, (uint8_t)v) : (uint8_t)v);
             break;
-          case x64::F_JMP: case x64::F_JCC:
-            if (flags & FL_JMPIDX) {
-              uint64_t t = next + (uint64_t)(int64_t)(int32_t)v;
-              size_t r = B->lower(t);
-              if (r < B->va.size() && B->va[r] == t) putBE32(S[S_JMP], (uint32_t)(r + 1));
-              else { putBE32(S[S_JMP], 0); putBE32(S[S_ESC], (uint32_t)t); }
-            } else putBE32(S[S_JMP], (uint32_t)(v + next));
+          case x64::F_JMP: case x64::F_JCC: case x64::F_CALL: {
+            Buf& st = S[c == x64::F_CALL ? S_CALL : S_JMP];
+            branchTarget(c, v, next, t);
+            if (!lab) putBE32(st, (uint32_t)t);
+            else if (!L->find(t, r)) { putBE32(st, 0); putBE32(S[S_ESC], (uint32_t)t); }
+            else if (c == x64::F_CALL) putBE32(st, (uint32_t)(r + 1));
+            else putBE32(st, zigzag((int64_t)r - (int64_t)L->lower(next)) + 1);
             break;
-          case x64::F_CALL: putBE32(S[S_CALL], (uint32_t)(v + next)); break;
+          }
           case x64::F_RIP: putBE32(S[S_RIP], (uint32_t)(v + next)); break;
           case x64::F_D32: case x64::F_DABS: putBE32(S[S_DISP], (uint32_t)v); break;
           case x64::F_I32: putBE32(S[S_IMM32], (uint32_t)v); break;
@@ -270,16 +354,28 @@ struct Encoder {
   }
 };
 
-// decoding pass 1: instruction starts from the opcode stream alone
-static bool collectBoundsOp(InStream& op, size_t n, uint64_t va, Bounds& B) {
+// decoder: consume an optional label marker / escape at an instruction start
+static inline bool readMark(InStream& op) {
+  if (op.p < op.e && op.p[0] == kMark) {
+    bool escape = op.p + 1 < op.e && op.p[1] == kMark;
+    op.p++;
+    return !escape;
+  }
+  return false;
+}
+
+// decoding pass 1: labels from the opcode stream alone
+static bool collectLabelsOp(InStream& op, size_t n, uint64_t va, Labels& L) {
+  ImplicitLabels imp;
   size_t i = 0;
   while (i < n) {
+    bool marked = readMark(op);
     x64::Insn I;
     x64::decode(op.p, n - i, I);
     size_t adv = I.nstruct;
     for (unsigned k = 0; k < I.nfield; k++) if (inlineField(I.fclass[k])) adv += I.fsize[k];
     if (!op.take(adv)) return false;
-    B.va.push_back(va + i);
+    if (imp.step(I) || marked) L.va.push_back(va + i);
     i += I.len;
   }
   return true;
@@ -287,13 +383,28 @@ static bool collectBoundsOp(InStream& op, size_t n, uint64_t va, Bounds& B) {
 
 struct Decoder {
   InStream S[NSTREAM];
-  const Bounds* B;
+  const Labels* L;
   unsigned flags;
+
+  bool target(uint32_t y, bool call, uint64_t next, uint64_t& v) {
+    if (y == 0) {
+      const uint8_t* s = S[S_ESC].p;
+      if (!S[S_ESC].take(4)) return false;
+      v = (uint32_t)(getBE32(s) - next);
+      return true;
+    }
+    int64_t r = call ? (int64_t)y - 1 : (int64_t)L->lower(next) + unzigzag(y - 1);
+    if (r < 0 || r >= (int64_t)L->va.size()) return false;
+    v = (uint32_t)(L->va[(size_t)r] - next);
+    return true;
+  }
 
   bool code(uint8_t* out, size_t n, uint64_t va) {
     size_t i = 0;
     InStream& op = S[S_OP];
+    bool lab = flags & FL_LABELS;
     while (i < n) {
+      if (lab) readMark(op);
       x64::Insn I;
       x64::decode(op.p, n - i, I);
       const uint8_t* s = op.p;
@@ -304,50 +415,40 @@ struct Decoder {
       for (unsigned k = 0; k < I.nfield; k++) {
         unsigned c = I.fclass[k], sz = I.fsize[k];
         uint64_t v = 0;
+        InStream* st;
         switch (c) {
           case x64::F_D8: case x64::F_I8: case x64::F_I16:
             s = op.p;
             if (!op.take(sz)) return false;
-            for (unsigned j = 0; j < sz; j++) v |= (uint64_t)s[j] << (8 * j);
+            v = fieldValue(s, sz);
             break;
           case x64::F_J8:
             s = S[S_J8].p;
             if (!S[S_J8].take(1)) return false;
-            v = (flags & FL_J8RANK) ? j8Decode(*B, next, s[0]) : s[0];
+            v = lab ? j8Decode(*L, next, s[0]) : s[0];
             break;
-          case x64::F_JMP: case x64::F_JCC: {
-            s = S[S_JMP].p;
-            if (!S[S_JMP].take(4)) return false;
-            uint32_t y = getBE32(s);
-            if (!(flags & FL_JMPIDX)) v = (uint32_t)(y - next);
-            else if (y == 0) {
-              s = S[S_ESC].p;
-              if (!S[S_ESC].take(4)) return false;
-              v = (uint32_t)(getBE32(s) - next);
-            } else {
-              if (y - 1 >= B->va.size()) return false;
-              v = (uint32_t)(B->va[y - 1] - next);
-            }
+          case x64::F_JMP: case x64::F_JCC: case x64::F_CALL:
+            st = &S[c == x64::F_CALL ? S_CALL : S_JMP];
+            s = st->p;
+            if (!st->take(4)) return false;
+            if (!lab) v = (uint32_t)(getBE32(s) - next);
+            else if (!target(getBE32(s), c == x64::F_CALL, next, v)) return false;
             break;
-          }
-          case x64::F_CALL: case x64::F_RIP: {
-            InStream& st = S[c == x64::F_CALL ? S_CALL : S_RIP];
-            s = st.p;
-            if (!st.take(4)) return false;
+          case x64::F_RIP:
+            s = S[S_RIP].p;
+            if (!S[S_RIP].take(4)) return false;
             v = (uint32_t)(getBE32(s) - next);
             break;
-          }
-          case x64::F_D32: case x64::F_DABS: case x64::F_I32: {
-            InStream& st = S[c == x64::F_I32 ? S_IMM32 : S_DISP];
-            s = st.p;
-            if (!st.take(4)) return false;
+          case x64::F_D32: case x64::F_DABS: case x64::F_I32:
+            st = &S[c == x64::F_I32 ? S_IMM32 : S_DISP];
+            s = st->p;
+            if (!st->take(4)) return false;
             v = getBE32(s);
             break;
-          }
           default:  // F_I64
             s = S[S_IMM64].p;
             if (!S[S_IMM64].take(sz)) return false;
-            for (unsigned j = 0; j < sz; j++) v |= (uint64_t)s[j] << (8 * j);
+            v = fieldValue(s, sz);
             break;
         }
         for (unsigned j = 0; j < sz; j++) q[j] = (uint8_t)(v >> (8 * j));
@@ -385,14 +486,17 @@ static void encode(const Buf& src, Buf& out, Stats* st, std::vector<Buf>* dump) 
   Buf in = src;
   for (auto& r : R) if (r.type != R_CODE) tableTransform(&in[(size_t)r.off], r, true);
 
-  Bounds B;
-  for (auto& r : R) if (r.type == R_CODE) collectBounds(&in[(size_t)r.off], (size_t)r.size, r.va, B);
+  Labels B, L;
+  for (auto& r : R) if (r.type == R_CODE) collectStarts(&in[(size_t)r.off], (size_t)r.size, r.va, B);
   B.finish();
-  unsigned flags = FL_J8RANK;
-  if (B.va.size() < 0xFFFFFFFFu) flags |= FL_JMPIDX;
+  for (auto& r : R) if (r.type == R_CODE) collectLabels(&in[(size_t)r.off], (size_t)r.size, r.va, B, L);
+  L.finish();
+  B.va.clear();
+  B.va.shrink_to_fit();
+  unsigned flags = L.va.size() < 0x7FFFFFFF ? FL_LABELS : 0;
 
   Encoder E;
-  E.B = &B;
+  E.L = &L;
   E.flags = flags;
   uint64_t pos = 0;
   Buf& D = E.S[S_DATA];
@@ -469,13 +573,15 @@ static bool decode(const Buf& in, Buf& out) {
   }
   if (r.p != r.e) return false;
 
-  // pass 1: instruction starts
-  Bounds B;
-  InStream op = Dc.S[S_OP];
-  for (auto& x : R)
-    if (x.type == R_CODE && !collectBoundsOp(op, (size_t)x.size, x.va, B)) return false;
-  B.finish();
-  Dc.B = &B;
+  // pass 1: labels
+  Labels L;
+  if (flags & FL_LABELS) {
+    InStream op = Dc.S[S_OP];
+    for (auto& x : R)
+      if (x.type == R_CODE && !collectLabelsOp(op, (size_t)x.size, x.va, L)) return false;
+    L.finish();
+  }
+  Dc.L = &L;
   Dc.flags = flags;
 
   // pass 2: rebuild the image
