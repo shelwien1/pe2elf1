@@ -9,6 +9,8 @@
 #include <stddef.h>
 #include <string.h>
 #include <vector>
+#include <utility>
+#include <algorithm>
 
 namespace tables {
 
@@ -38,14 +40,22 @@ static void pdata(uint8_t* p, size_t n, bool fwd) {
 }
 
 //----------------------------------------------------------------------------
-// .eh_frame_hdr search table: pairs { initial_location, fde_address } sorted;
-// both columns delta coded
-static void ehhdr(uint8_t* p, size_t n, bool fwd) {
+// .eh_frame_hdr search table: pairs { initial_location, fde_address } (both
+// relative to the start of .eh_frame_hdr), sorted by location.  Linkers build
+// it from .eh_frame, so it is predicted from the FDE list (`pred`, same
+// order) and only the differences are stored.  Without a prediction of the
+// right length both columns are delta coded instead.
+typedef std::vector<std::pair<uint32_t, uint32_t> > HdrPred;
+
+static void ehhdr(uint8_t* p, size_t n, bool fwd, const HdrPred& pred) {
+  bool usePred = pred.size() == n / 8;
   uint32_t pl = 0, pf = 0;
-  for (size_t i = 0; i + 8 <= n; i += 8) {
+  for (size_t i = 0, k = 0; i + 8 <= n; i += 8, k++) {
     uint32_t l = g32(p + i), f = g32(p + i + 4);
-    if (fwd) { s32(p + i, l - pl); s32(p + i + 4, f - pf); pl = l; pf = f; }
-    else { l += pl; f += pf; s32(p + i, l); s32(p + i + 4, f); pl = l; pf = f; }
+    if (usePred) { pl = pred[k].first; pf = pred[k].second; }
+    if (fwd) { s32(p + i, l - pl); s32(p + i + 4, f - pf); }
+    else { l += pl; f += pf; s32(p + i, l); s32(p + i + 4, f); }
+    if (!usePred) { pl = l; pf = f; }
   }
 }
 
@@ -226,6 +236,44 @@ static void ehframe(uint8_t* p, size_t n, uint64_t va, bool fwd) {
     }
     i = end;
   }
+}
+
+// Prediction of the .eh_frame_hdr table at virtual address hdrva from the
+// (untransformed) .eh_frame at va: FDEs sorted by initial location.
+static void ehhdrPredict(const uint8_t* p, size_t n, uint64_t va, uint64_t hdrva, HdrPred& out) {
+  struct F { uint64_t pc, fva; };
+  std::vector<F> fd;
+  std::vector<Cie> cies;
+  size_t i = 0;
+  while (i + 8 <= n) {
+    uint32_t len = g32(p + i);
+    if (len == 0 || len == 0xFFFFFFFFu || len > n - i - 4) break;
+    size_t idf = i + 4, end = idf + len;
+    uint32_t id = g32(p + idf);
+    if (id == 0) {
+      Cie c;
+      c.off = (uint32_t)i;
+      if (parseCie(p, end, idf + 4, c)) cies.push_back(c);
+    } else {
+      uint32_t cieOff = (uint32_t)idf - id;
+      size_t lo = 0, hi = cies.size();
+      while (lo < hi) {
+        size_t mid = (lo + hi) / 2;
+        if (cies[mid].off < cieOff) lo = mid + 1; else hi = mid;
+      }
+      size_t j = idf + 4;
+      if (lo < cies.size() && cies[lo].off == cieOff && enc4(cies[lo].renc) && j + 4 <= end) {
+        uint8_t enc = cies[lo].renc;
+        uint64_t v = (enc & 0x0F) == 0x0B ? (uint64_t)(int64_t)(int32_t)g32(p + j) : g32(p + j);
+        uint64_t pc = ((enc & 0x70) == 0x10 ? va + j : 0) + v;
+        fd.push_back({pc, va + i});
+      }
+    }
+    i = end;
+  }
+  std::stable_sort(fd.begin(), fd.end(), [](const F& a, const F& b) { return a.pc < b.pc; });
+  out.clear();
+  for (auto& f : fd) out.push_back({(uint32_t)(f.pc - hdrva), (uint32_t)(f.fva - hdrva)});
 }
 
 }  // namespace tables

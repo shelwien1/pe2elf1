@@ -21,11 +21,18 @@ enum RegionType : uint8_t {
   R_NTYPES
 };
 
+struct Seg { uint64_t va, off, size; };  // loadable segment: file offset of a VA range
+
 struct Region {
   uint64_t off, size;
-  uint64_t va;  // virtual address of the first byte (code, .eh_frame)
+  uint64_t va;   // virtual address of the first byte (code, .eh_frame, .eh_frame_hdr)
+  uint64_t aux;  // .eh_frame_hdr: index of its .eh_frame region, or NOAUX
+  uint32_t img;  // image number (analysis only)
   uint8_t type;
+  std::vector<Seg> map;  // Elf64_Rela: the image's PT_LOAD segments
 };
+
+enum : uint64_t { NOAUX = ~(uint64_t)0 };
 
 namespace analyze {
 
@@ -37,10 +44,11 @@ struct Ctx {
   const uint8_t* b;
   uint64_t n;
   std::vector<Region>& R;
+  uint32_t img;
   void add(uint8_t type, uint64_t off, uint64_t size, uint64_t va) {
     if (off >= n || size == 0) return;
     if (size > n - off) size = n - off;
-    R.push_back({off, size, va, type});
+    R.push_back({off, size, va, NOAUX, img, type, {}});
   }
 };
 
@@ -104,6 +112,17 @@ static uint64_t parseELF(Ctx& C, uint64_t base, uint64_t vbias) {
   uint64_t avail = n - base;
   uint64_t shoff = g64(p + 0x28);
   uint32_t shentsize = g16(p + 0x3A), shnum = g16(p + 0x3C), shstrndx = g16(p + 0x3E);
+  uint64_t phoff = g64(p + 0x20);
+  uint32_t phentsize = g16(p + 0x36), phnum = g16(p + 0x38);
+  bool hasPh = phoff && phnum && phentsize >= 56 && phoff < avail && (uint64_t)phentsize * phnum <= avail - phoff;
+  std::vector<Seg> segs;
+  if (hasPh) {
+    for (uint32_t k = 0; k < phnum; k++) {
+      const uint8_t* s = p + phoff + (uint64_t)k * phentsize;
+      uint64_t off = g64(s + 8), size = g64(s + 32);
+      if (g32(s) == 1 && off < avail && size) segs.push_back({g64(s + 16), base + off, std::min(size, avail - off)});
+    }
+  }
   size_t before = C.R.size();
   uint64_t imgEnd = 64;
   if (shoff && shnum && shentsize >= 64 && shoff < avail && (uint64_t)shentsize * shnum <= avail - shoff) {
@@ -125,23 +144,25 @@ static uint64_t parseELF(Ctx& C, uint64_t base, uint64_t vbias) {
       const char* nm = "";
       if (strtab && name < strsize && memchr(strtab + name, 0, strsize - name)) nm = (const char*)strtab + name;
       if (flags & 4) { C.add(R_CODE, base + off, size, vbias + addr); continue; }  // SHF_EXECINSTR
-      if (type == 4 && entsize == 24) { C.add(R_RELA, base + off, size / 24 * 24, 0); continue; }
+      if (type == 4 && entsize == 24) {
+        C.add(R_RELA, base + off, size / 24 * 24, 0);
+        if (!C.R.empty() && C.R.back().type == R_RELA) C.R.back().map = segs;
+        continue;
+      }
       if (!strcmp(nm, ".eh_frame")) { C.add(R_EHFRAME, base + off, size, addr); continue; }
       if (!strcmp(nm, ".eh_frame_hdr") && size >= 12) {
         const uint8_t* h = p + off;
         if (h[0] == 1 && h[2] == 0x03 && h[3] == 0x3B) {
           uint64_t tsz = (uint64_t)g32(h + 8) * 8;
           if (tsz > size - 12) tsz = (size - 12) / 8 * 8;
-          C.add(R_EHHDR, base + off + 12, tsz, 0);
+          C.add(R_EHHDR, base + off + 12, tsz, addr + 12);
         }
       }
     }
   }
   if (C.R.size() == before) {
     // no usable section headers: executable PT_LOAD segments
-    uint64_t phoff = g64(p + 0x20);
-    uint32_t phentsize = g16(p + 0x36), phnum = g16(p + 0x38);
-    if (phoff && phnum && phentsize >= 56 && phoff < avail && (uint64_t)phentsize * phnum <= avail - phoff) {
+    if (hasPh) {
       for (uint32_t k = 0; k < phnum; k++) {
         const uint8_t* s = p + phoff + (uint64_t)k * phentsize;
         uint64_t off = g64(s + 8), size = g64(s + 32);
@@ -159,10 +180,11 @@ static uint64_t parseELF(Ctx& C, uint64_t base, uint64_t vbias) {
 // indices of different images never collide.
 static std::vector<Region> run(const uint8_t* b, uint64_t n, bool scan) {
   std::vector<Region> R;
-  Ctx C{b, n, R};
+  Ctx C{b, n, R, 0};
   uint64_t pos = 0, nimg = 0;
   while (pos + 64 <= n) {
     uint64_t vbias = nimg << 32, len = 0;
+    C.img = (uint32_t)nimg;
     if (b[pos] == 'M' && b[pos + 1] == 'Z') len = parsePE(C, pos, vbias);
     else if (b[pos] == 0x7F && b[pos + 1] == 'E' && b[pos + 2] == 'L' && b[pos + 3] == 'F') len = parseELF(C, pos, vbias);
     if (len) {
@@ -191,6 +213,12 @@ static std::vector<Region> run(const uint8_t* b, uint64_t n, bool scan) {
     }
     out.push_back(r);
     end = r.off + r.size;
+  }
+  // .eh_frame_hdr tables are predicted from the image's .eh_frame
+  for (auto& h : out) {
+    if (h.type != R_EHHDR) continue;
+    for (size_t k = 0; k < out.size(); k++)
+      if (out[k].type == R_EHFRAME && out[k].img == h.img) { h.aux = k; break; }
   }
   return out;
 }
