@@ -222,6 +222,7 @@ struct FuncCode {
     ev.push_back(ne);  // ev has b.size() + 1 entries
   }
   bool isEvent(size_t k) const { return ev[k + 1] > ev[k]; }
+
 };
 
 // Location advance from loc by d (0..maxd): the targets are ranked event
@@ -402,6 +403,115 @@ static void pdata(uint8_t* p, size_t n, bool fwd, const CodeMap* cm, uint64_t vb
     }
     pe = b; pu = c;
   }
+}
+
+// PE UNWIND_INFO: the unwind codes are generated from the prolog the way
+// the MSVC toolchain does it, and XORed with the actual codes.
+//  - push r            UWOP_PUSH_NONVOL
+//  - sub rsp, n        UWOP_ALLOC_SMALL / UWOP_ALLOC_LARGE (also mov eax, n;
+//                      call __chkstk; sub rsp, rax)
+//  - mov [rsp+d], r    UWOP_SAVE_NONVOL for nonvolatile r, offset relative to
+//                      the final rsp; saves made before the last allocation
+//                      are listed first, at the prolog end, latest first
+//  - movaps [rsp+d], x UWOP_SAVE_XMM128 likewise
+//  - lea r, [rsp+d]    UWOP_SET_FPREG, frame register/offset in the header
+// Codes are listed from the last instruction back.
+
+struct PEvent { uint8_t end, kind, reg; uint32_t val; uint64_t sp; };  // kind 1 push 2 alloc 3 save 4 xmm 5 frame
+
+static inline bool nonvolatile(unsigned r) { return r == 3 || r == 5 || r == 6 || r == 7 || r >= 12; }
+
+static void prologEvents(const uint8_t* code, uint64_t avail, std::vector<PEvent>& ev) {
+  ev.clear();
+  if (!code) return;
+  uint64_t lim = std::min<uint64_t>(avail, 255), i = 0, sp = 0;
+  uint64_t eaxImm = 0;
+  while (i < lim) {
+    x64::Insn I;
+    x64::decode(code + i, (size_t)std::min<uint64_t>(avail - i, 64), I);
+    const uint8_t* q = code + i;
+    i += I.len;
+    if (I.trunc || I.enc != x64::ENC_LEGACY || i > lim) break;
+    unsigned op = I.op, rex = I.prex != x64::NOPOS ? q[I.prex] : 0;
+    if (op == 0xC3 || op == 0xC2 || op == 0xE9 || op == 0xEB || (op >= 0x70 && op <= 0x7F) || (op >= 0x180 && op <= 0x18F)) break;
+    PEvent e{(uint8_t)i, 0, 0, 0, 0};
+    if (op >= 0x50 && op <= 0x57) { e.kind = 1; e.reg = (uint8_t)((op & 7) | (rex & 1) << 3); sp += 8; }
+    else if (op == 0xB8 && !(rex & 1)) eaxImm = g32(q + I.nstruct);
+    else if (I.hasmodrm) {
+      unsigned m = I.modrm, mod = m >> 6, reg = ((m >> 3) & 7) | (rex & 4) << 1, rm = m & 7;
+      bool rspMem = mod != 3 && rm == 4 && I.psib != x64::NOPOS && (q[I.psib] & 7) == 4 && !(rex & 1);
+      int64_t disp = 0;
+      if (rspMem && I.nfield && (I.fclass[0] == x64::F_D8 || I.fclass[0] == x64::F_D32))
+        disp = I.fclass[0] == x64::F_D8 ? (int8_t)q[I.nstruct] : (int32_t)g32(q + I.nstruct);
+      if ((op == 0x81 || op == 0x83) && mod == 3 && rm == 4 && ((m >> 3) & 7) == 5 && !(rex & 1)) {
+        e.kind = 2;
+        e.val = op == 0x83 ? (uint32_t)(int32_t)(int8_t)q[I.len - 1] : g32(q + I.len - 4);
+        sp += e.val;
+      } else if (((op == 0x2B && m == 0xE0) || (op == 0x29 && m == 0xC4)) && (rex & 8) && !(rex & 5)) {
+        e.kind = 2; e.val = (uint32_t)eaxImm; sp += e.val;  // sub rsp, rax after __chkstk
+      } else if (op == 0x89 && rspMem && (rex & 8) && nonvolatile(reg) && disp >= 0) {
+        e.kind = 3; e.reg = (uint8_t)reg; e.val = (uint32_t)disp;
+      } else if ((op == 0x129 || op == 0x17F) && rspMem && reg >= 6 && disp >= 0) {
+        e.kind = 4; e.reg = (uint8_t)reg; e.val = (uint32_t)disp;
+      } else if (op == 0x8D && rspMem && (rex & 8) && disp >= 0) {
+        e.kind = 5; e.reg = (uint8_t)reg; e.val = (uint32_t)disp;
+      }
+    }
+    if (e.kind) { e.sp = sp; ev.push_back(e); }
+  }
+}
+
+static bool unwindInfo(uint8_t* u, size_t avail, const std::vector<PEvent>& ev, bool fwd) {
+  if (avail < 4 || ((u[0] & 7) != 1 && (u[0] & 7) != 2)) return false;
+  unsigned cnt = u[2];
+  if (4 + 2 * (size_t)((cnt + 1) & ~1u) > avail) return false;
+  uint8_t psize = ev.empty() ? 0 : ev.back().end;
+  u[1] ^= psize;
+  uint8_t size = fwd ? (uint8_t)(u[1] ^ psize) : u[1];
+  // the prolog as far as SizeOfProlog; saves made before the last
+  // allocation are recorded at the end of that allocation
+  size_t ne = 0;
+  uint64_t spf = 0;
+  uint8_t lastAlloc = size;
+  while (ne < ev.size() && ev[ne].end <= size) {
+    if (ev[ne].kind <= 2) lastAlloc = ev[ne].end;
+    spf = ev[ne++].sp;
+  }
+  std::vector<uint16_t> pred;
+  uint8_t frame = 0;
+  auto save = [&](const PEvent& e, uint8_t off) {
+    uint64_t rel = e.val + (spf - e.sp), sc = e.kind == 4 ? 16 : 8;
+    uint8_t op = e.kind == 4 ? 8 : 4;
+    if (rel / sc <= 0xFFFF) {
+      pred.push_back((uint16_t)(off | (unsigned)(op | e.reg << 4) << 8));
+      pred.push_back((uint16_t)(rel / sc));
+    } else {
+      pred.push_back((uint16_t)(off | (unsigned)((op + 1) | e.reg << 4) << 8));
+      pred.push_back((uint16_t)rel);
+      pred.push_back((uint16_t)(rel >> 16));
+    }
+  };
+  for (size_t k = ne; k-- > 0;)
+    if ((ev[k].kind == 3 || ev[k].kind == 4) && ev[k].sp != spf) save(ev[k], lastAlloc);
+  for (size_t k = ne; k-- > 0;) {
+    const PEvent& e = ev[k];
+    switch (e.kind) {
+      case 1: pred.push_back((uint16_t)(e.end | (unsigned)(e.reg << 4) << 8)); break;
+      case 2:
+        if (e.val >= 8 && e.val <= 128) pred.push_back((uint16_t)(e.end | (unsigned)(2 | ((e.val - 8) / 8) << 4) << 8));
+        else if (e.val <= 512 * 1024 - 8) { pred.push_back((uint16_t)(e.end | 1u << 8)); pred.push_back((uint16_t)(e.val / 8)); }
+        else { pred.push_back((uint16_t)(e.end | 0x11u << 8)); pred.push_back((uint16_t)e.val); pred.push_back((uint16_t)(e.val >> 16)); }
+        break;
+      case 3: case 4: if (e.sp == spf) save(e, e.end); break;
+      case 5:
+        pred.push_back((uint16_t)(e.end | 3u << 8));
+        frame = (uint8_t)(e.reg | (e.val / 16) << 4);
+        break;
+    }
+  }
+  u[3] ^= frame;
+  for (unsigned k = 0; k < cnt && k < pred.size(); k++) s16(u + 4 + 2 * k, (uint16_t)(g16(u + 4 + 2 * k) ^ pred[k]));
+  return true;
 }
 
 // cm: code of the image (may be null), vbias: added to pc values to find it

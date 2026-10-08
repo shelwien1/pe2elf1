@@ -508,7 +508,7 @@ static void tableTransform(uint8_t* p, const Region& r, bool fwd, const std::vec
                            const tables::CodeMap& cm) {
   switch (r.type) {
     case R_PDATA:
-      tables::pdata(p, (size_t)r.size, fwd, r.par.size() == 1 ? &cm : nullptr, r.par.size() == 1 ? r.par[0] : 0);
+      tables::pdata(p, (size_t)r.size, fwd, r.par.empty() ? nullptr : &cm, r.par.empty() ? 0 : r.par[0]);
       break;
     case R_EHHDR: {
       tables::HdrPred pred;
@@ -570,6 +570,48 @@ static void relaSlots(uint8_t* img, uint64_t n, const Region& r, const std::vect
   }
 }
 
+// PE unwind data: each UNWIND_INFO referenced by the (untransformed)
+// exception directory `pd`, if it lies in plain data, is transformed once,
+// with the prolog of the first function using it.  Undone in reverse order.
+static void unwindInfos(uint8_t* img, uint64_t n, const uint8_t* pd, const Region& r, const std::vector<Region>& R,
+                        const tables::CodeMap& cm, bool fwd) {
+  if (r.par.empty()) return;
+  uint64_t vbias = r.par[0];
+  struct U { uint64_t off; uint32_t begin; };
+  std::vector<U> list;
+  std::vector<uint32_t> seen;
+  for (size_t i = 0; i + 12 <= r.size; i += 12) {
+    uint32_t begin = tables::g32(pd + i), uw = tables::g32(pd + i + 8);
+    for (size_t m = 1; m + 3 <= r.par.size(); m += 3) {
+      uint64_t sva = r.par[m], soff = r.par[m + 1], ssize = r.par[m + 2];
+      if (uw < sva || uw - sva >= ssize) continue;
+      uint64_t off = soff + (uw - sva);
+      if (ssize - (uw - sva) >= 4 && off + 4 <= n) list.push_back({off, begin});
+      break;
+    }
+  }
+  // unique structures, first use wins
+  std::vector<size_t> idx(list.size());
+  for (size_t k = 0; k < idx.size(); k++) idx[k] = k;
+  std::stable_sort(idx.begin(), idx.end(), [&](size_t a, size_t b) { return list[a].off < list[b].off; });
+  std::vector<char> keep(list.size(), 0);
+  for (size_t k = 0; k < idx.size(); k++)
+    if (k == 0 || list[idx[k]].off != list[idx[k - 1]].off) keep[idx[k]] = 1;
+  (void)seen;
+  std::vector<tables::PEvent> ev;
+  for (size_t j = 0; j < list.size(); j++) {
+    size_t k = fwd ? j : list.size() - 1 - j;
+    if (!keep[k]) continue;
+    uint8_t* u = img + list[k].off;
+    size_t len = 4 + 2 * (size_t)((u[2] + 1) & ~1u);
+    if (list[k].off + len > n || !plainData(R, list[k].off, len)) continue;
+    uint64_t avail = 0;
+    const uint8_t* code = cm.at(vbias + list[k].begin, avail);
+    tables::prologEvents(code, code ? avail : 0, ev);
+    tables::unwindInfo(u, len, ev, fwd);
+  }
+}
+
 static inline bool hasVA(uint8_t type) { return type == R_CODE || type == R_EHFRAME || type == R_EHHDR; }
 
 //----------------------------------------------------------------------------
@@ -585,6 +627,7 @@ static void encode(const Buf& src, Buf& out, Stats* st, std::vector<Buf>* dump) 
   Buf in = src;
   for (auto& r : R) if (r.type == R_RELA) relaSlots(in.data(), in.size(), r, R, true);
   tables::CodeMap cm = codeMap(R, src.data());
+  for (auto& r : R) if (r.type == R_PDATA) unwindInfos(in.data(), in.size(), &src[(size_t)r.off], r, R, cm, true);
   for (auto& r : R) if (r.type != R_CODE) tableTransform(&in[(size_t)r.off], r, true, R, src.data(), src.size(), cm);
 
   Labels B, L;
@@ -718,6 +761,8 @@ static bool decode(const Buf& in, Buf& out) {
       tableTransform(&out[(size_t)x.off], x, false, R, out.data(), n, cm);
   for (auto& x : R)
     if (x.type == R_EHHDR) tableTransform(&out[(size_t)x.off], x, false, R, out.data(), n, cm);
+  for (size_t k = R.size(); k-- > 0;)
+    if (R[k].type == R_PDATA) unwindInfos(out.data(), out.size(), &out[(size_t)R[k].off], R[k], R, cm, false);
   for (size_t k = R.size(); k-- > 0;)
     if (R[k].type == R_RELA) relaSlots(out.data(), out.size(), R[k], R, false);
   for (auto& x : R)

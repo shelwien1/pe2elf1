@@ -31,8 +31,9 @@ struct Region {
   //   .eh_frame_hdr  index of the image's .eh_frame region
   //   Elf64_Rela     (va, file offset, size) of each PT_LOAD segment
   //   .gnu.hash      file offset and size of .dynsym and .dynstr
-  //   .eh_frame, PE exception directory: virtual address bias of the
-  //                  image's code regions
+  //   .eh_frame      virtual address bias of the image's code regions
+  //   PE exception directory: the bias, then (rva, file offset, size) of
+  //                  each section, to find the UNWIND_INFO structures
   std::vector<uint64_t> par;
 };
 
@@ -97,7 +98,19 @@ static uint64_t parsePE(Ctx& C, uint64_t base, uint64_t vbias) {
       uint32_t rva = g32(dd + 3 * 8), size = g32(dd + 3 * 8 + 4);
       if (size && rva2off(rva, size, off)) {
         C.add(R_PDATA, off, size / 12 * 12, 0);
-        if (!C.R.empty() && C.R.back().type == R_PDATA) C.R.back().par.assign(1, vbias);
+        if (!C.R.empty() && C.R.back().type == R_PDATA) {
+          // vbias, then (rva, file offset, size) of each section for the unwind data
+          std::vector<uint64_t>& par = C.R.back().par;
+          par.assign(1, vbias);
+          const uint8_t* sec = s0;
+          for (uint32_t k = 0; k < nsec; k++, sec += 40) {
+            uint32_t va = g32(sec + 12), rsize = g32(sec + 16), roff = g32(sec + 20);
+            if (!rsize || base + roff >= n) continue;
+            par.push_back(va);
+            par.push_back(base + roff);
+            par.push_back(std::min<uint64_t>(rsize, n - base - roff));
+          }
+        }
       }
     }
     if (ndir > 5) {
