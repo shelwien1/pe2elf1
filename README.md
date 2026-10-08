@@ -254,16 +254,16 @@ one with `dotGenerator`, changes a copy of a third (code that only Visual C++ co
 the programs built from the translated code print the same as those built from the originals,
 and that the changed program compiles and prints what it should.
 
-`make ... source-package` makes `build-win/rose-2.18.0-win64-src.7z`, from which the translators
-are built on Windows with MinGW-w64 GCC and `mingw32-make` alone (`win32/source/BUILD.txt`).
-It contains the files that the Windows build compiles and includes, among them those that the
-build generates (so neither ROSETTA, flex, bison nor a shell is needed); the parts of Boost that
-ROSE uses (the headers, selected with Boost's `bcp` tool, and the sources of the few compiled
-parts that the translators link); the package's run-time files; and a Makefile
-(`win32/source/Makefile`) whose recipes only run the compiler and `ar`, with the compiler options
-in response files.  Built from it under Wine with MSYS2's `mingw32-make` 4.4.1 and GCC 16.2
-(1.5 hours with `-j4`), the translators pass `test.bat` and the tests in `tests/`.  Making it
-needs the Boost source tree, with `bcp` built in it, and 7-Zip (`apt install 7zip`):
+`make ... source-package` makes `build-win/rose-2.18.0-win64-src.7z`, from which `rose.dll`,
+`rose.lib` and the programs are built on Windows with MinGW-w64 GCC and `mingw32-make` alone
+(`win32/source/BUILD.txt`).  It contains the files that the Windows build compiles and includes,
+among them those that the build generates (so neither ROSETTA, flex, bison nor a shell is
+needed); the parts of Boost that ROSE uses (the headers, selected with Boost's `bcp` tool, and
+the sources of the few compiled parts that ROSE links); the files of the package that are not
+built (the run-time files, and the SDK's headers, `rose.mk` and examples); and a Makefile
+(`win32/source/Makefile`) whose recipes only run the compiler, `ar` and `rose-exports` (which
+runs `nm`), with the compiler options in response files.  Making it needs the Boost source
+tree, with `bcp` built in it, and 7-Zip (`apt install 7zip`):
 
 ```
 (cd boost_1_83_0 && ./bootstrap.sh && ./b2 tools/bcp)
