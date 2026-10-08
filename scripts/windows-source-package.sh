@@ -2,9 +2,9 @@
 # Assembles the source package of the Windows build (run by "make source-package"): the sources
 # that the Windows build compiles and every file they include (taken from the dependency files
 # of the build), including the files the build generated; the parts of Boost that ROSE uses
-# (selected with Boost's bcp tool); the run-time files of the binary package; and
-# win32/source/Makefile, with which mingw32-make builds the translators on Windows from these
-# files alone.
+# (selected with Boost's bcp tool); the files of the binary package that are not built (the
+# run-time files and the SDK's headers, rose.mk and examples); and win32/source/Makefile, with
+# which mingw32-make builds rose.dll and the programs on Windows from these files alone.
 #
 # usage: scripts/windows-source-package.sh <variables file written by the Makefile>
 set -eu
@@ -41,9 +41,9 @@ mkdir -p "$OUT/src"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
-# The run-time files of the binary package (all but the programs)
+# The files of the binary package that are not built (all but bin/ and lib/)
 cp -R "$PKG_DIR/." "$OUT/"
-rm -rf "$OUT/bin"
+rm -rf "$OUT/bin" "$OUT/lib"
 
 # Where a file used by the build goes in the package
 dest_of() {
@@ -73,9 +73,11 @@ for o in $LIB_OBJS $TOOL_OBJS; do
   echo "$(dest_of "$s")" >> "$tmp/srcs.$(group_of "$o")"
 done
 
-# Every file the objects were compiled from (non-system headers included)
+# Every file the objects were compiled from (non-system headers included), and the program that
+# lists the exports of rose.dll
 for o in $LIB_OBJS $TOOL_OBJS; do cat "${o%.o}.d"; done | tr ' \\' '\n\n' | sed -n 's/:$//; /./p' |
   grep -v '\.o$' | sort -u > "$tmp/files"
+echo win32/build/rose-exports.C >> "$tmp/files"
 while read -r f; do
   d=$(dest_of "$f")
   [ -n "$d" ] || exit 1
@@ -99,7 +101,7 @@ cp "$BOOST_SRC/LICENSE_1_0.txt" "$OUT/src/boost/"
 rewrite() {
   printf ' %s ' "$1" | tr '\n' ' ' | sed -e "s| $OPT | \$(OPT) |" -e "s|$GEN|src/gen|g" \
     -e "s|-isystem $BOOST_INC |-isystem src/boost |g" \
-    -e 's#\(-I\|-include \)\(rose\|edg\|edg2sage\|win32\|tools\)\([/ ]\)#\1src/\2\3#g' \
+    -e 's#\(-I\|-include \)\(rose\|edg\|edg2sage\|refactor\|win32\|tools\)\([/ ]\)#\1src/\2\3#g' \
     -e 's/  */ /g; s/^ //; s/ $//'
 }
 ROSE=$(rewrite "$ROSE_FLAGS")
@@ -109,7 +111,8 @@ groups=
   echo "# group is compiled with (passed to the compiler in obj/<group>.rsp)"
   for g in rose rose_lp64 rose_winapi rose_boostpath edg edg2sage tools; do
     case $g in
-      rose|tools) flags=$ROSE ;;
+      rose) flags=$ROSE ;;
+      tools) flags="$ROSE -Isrc/refactor" ;;
       rose_lp64) flags="$ROSE -fpermissive" ;;
       rose_winapi) flags="$ROSE -include src/win32/windows_api.h" ;;
       rose_boostpath) flags="$ROSE -DROSE_BOOST_PATH='\"\"'" ;;
