@@ -6,6 +6,7 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <sstream>
 
 using namespace edg2sage;
 
@@ -72,6 +73,7 @@ void back_end(void) {
     mlog[Sawyer::Message::ERROR] << "unsupported construct: " << u.what << "\n";
     translationErrors++;
   }
+  xrefCollect();
   translator = nullptr;
 }
 
@@ -101,6 +103,13 @@ std::vector<std::string> edgCommandLine(int argc, char* argv[]) {
   if (!base.empty()) {
     out.push_back("--edg_base");
     out.push_back(base);
+  }
+  // Options of refactoring tools (RoseRefactor.h), and the cross-reference listing
+  xrefOptions(out);
+  // EDG2SAGE_EDG_OPTIONS: more EDG options, separated by spaces (for debugging)
+  if (const char* extra = std::getenv("EDG2SAGE_EDG_OPTIONS")) {
+    std::istringstream words(extra);
+    for (std::string w; words >> w;) out.push_back(w);
   }
   for (int i = 1; i < argc; ++i) {
     std::string a = argv[i];

@@ -331,6 +331,11 @@ bool isNumericLiteral(const std::string& text);
 // Helper: normalizes a path to an absolute path without "." and ".." components
 std::string absolutePath(const std::string& path);
 
+// Cross-references for refactoring tools (xref.C): the EDG options for the next front end run,
+// and the reading of the cross-reference listing at the end of back_end()
+void xrefOptions(std::vector<std::string>& args);
+void xrefCollect();
+
 }  // namespace edg2sage
 
 #endif

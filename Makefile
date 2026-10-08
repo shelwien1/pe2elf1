@@ -23,6 +23,7 @@
 ROSE_SRC := rose
 EDG_SRC  := edg
 CONN_SRC := edg2sage
+REFACTOR_SRC := refactor
 TOOL_SRC := tools
 B        := build
 
@@ -151,7 +152,7 @@ EDG_CXXFLAGS := -x c++ -std=c++14 $(OPT) $(TARGET_CXXFLAGS) -fno-rtti -w
 # Top-level targets
 ################################################################################
 
-TOOLS := identityTranslator dotGenerator
+TOOLS := identityTranslator dotGenerator rose-ren rose-using
 ifdef WINDOWS
 EXE := .exe
 # A static library: a DLL cannot export more than 65535 symbols.
@@ -419,6 +420,17 @@ $(OBJ)/edg/%.o: $(EDG_SRC)/src/%.c $(EDG_CONFIG)
 	@mkdir -p $(@D)
 	$(Q)$(CXX) $(EDG_CXXFLAGS) $(EDG_CPPFLAGS) -MMD -MP -c $< -o $@
 
+# EDG sources that are compiled from copies with the changes in edg2sage/patches/<name>.sed:
+# symbol_ref.c calls a hook of edg2sage for each record of the cross-reference listing.
+EDG_PATCHED := symbol_ref.c
+$(GEN)/edg-patched/%.c: $(EDG_SRC)/src/%.c $(CONN_SRC)/patches/%.c.sed win32/patch-source.sh
+	$(call msg,PATCH,$@)
+	$(Q)sh win32/patch-source.sh $< $(CONN_SRC)/patches/$*.c.sed $@
+$(patsubst %.c,$(OBJ)/edg/%.o,$(EDG_PATCHED)): $(OBJ)/edg/%.o: $(GEN)/edg-patched/%.c $(EDG_CONFIG)
+	$(call msg,CXX,$<)
+	@mkdir -p $(@D)
+	$(Q)$(CXX) $(EDG_CXXFLAGS) $(EDG_CPPFLAGS) -MMD -MP -c $< -o $@
+
 # EDG's table of predefined macros, scraped from the backend compilers (EDG's own script)
 $(B)/edg-base/lib/predefined_macros.txt: $(EDG_SRC)/util/make_predef_macro_table
 	@mkdir -p $(@D)
@@ -434,14 +446,26 @@ $(CONN_OBJS): | $(LIB_PREREQS) $(EDG_ERR_HEADERS)
 $(OBJ)/edg2sage/%.o: $(CONN_SRC)/%.C $(EDG_CONFIG)
 	$(call msg,CXX,$<)
 	@mkdir -p $(@D)
-	$(Q)$(CXX) $(ROSE_CXXFLAGS) $(ROSE_CPPFLAGS) -I$(CONN_SRC) $(EDG_CPPFLAGS) \
+	$(Q)$(CXX) $(ROSE_CXXFLAGS) $(ROSE_CPPFLAGS) -I$(CONN_SRC) -I$(REFACTOR_SRC) $(EDG_CPPFLAGS) \
 	  -DEDG2SAGE_EDG_BASE='"$(abspath $(B))/edg-base"' -MMD -MP -c $< -o $@
 
 ################################################################################
 # Link librose and the tools
 ################################################################################
 
-ALL_LIB_OBJS := $(ROSE_UTIL_OBJS) $(ROSE_LIB_OBJS) $(ROSE_GEN_OBJS) $(EDG_OBJS) $(CONN_OBJS)
+################################################################################
+# RoseRefactor: support for refactoring tools (cross-references, source edits)
+################################################################################
+
+REFACTOR_SRCS := $(wildcard $(REFACTOR_SRC)/*.C)
+REFACTOR_OBJS := $(patsubst $(REFACTOR_SRC)/%.C,$(OBJ)/refactor/%.o,$(REFACTOR_SRCS))
+$(REFACTOR_OBJS): | $(LIB_PREREQS)
+$(OBJ)/refactor/%.o: $(REFACTOR_SRC)/%.C
+	$(call msg,CXX,$<)
+	@mkdir -p $(@D)
+	$(Q)$(CXX) $(ROSE_CXXFLAGS) $(ROSE_CPPFLAGS) -MMD -MP -c $< -o $@
+
+ALL_LIB_OBJS := $(ROSE_UTIL_OBJS) $(ROSE_LIB_OBJS) $(ROSE_GEN_OBJS) $(EDG_OBJS) $(CONN_OBJS) $(REFACTOR_OBJS)
 
 # ROSE_BOOST_PATH (the Boost installation, shown by --version) is defined for utility_functions.C
 # only: elsewhere ROSE adds "$(ROSE_BOOST_PATH)/include" to the include paths of EDG and of the
@@ -463,7 +487,7 @@ endif
 $(OBJ)/tools/%.o: $(TOOL_SRC)/%.C | $(LIB_PREREQS)
 	$(call msg,CXX,$<)
 	@mkdir -p $(@D)
-	$(Q)$(CXX) $(ROSE_CXXFLAGS) $(ROSE_CPPFLAGS) -MMD -MP -c $< -o $@
+	$(Q)$(CXX) $(ROSE_CXXFLAGS) $(ROSE_CPPFLAGS) -I$(REFACTOR_SRC) -MMD -MP -c $< -o $@
 
 # Keep the tool objects so that `make check` after `make all` does not
 # recompile them.

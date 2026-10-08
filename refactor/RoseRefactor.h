@@ -1,0 +1,247 @@
+// RoseRefactor: support for source-to-source refactoring tools built on ROSE and EDG.
+//
+// The tools parse a translation unit with ROSE's frontend() and then change the original
+// source text (rather than unparsing the AST), so that formatting, comments and macros are kept:
+//
+// * Cross-references: every reference to every named entity (variables, functions, classes,
+//   members, namespaces, typedefs, enumerators, parameters, template parameters, ...), with the
+//   exact position of the name, as recorded by the EDG front end; and, for each entity, its
+//   kind, qualified name, type, enclosing class, access, base classes, overridden functions.
+// * Source files and edits: line/column positions (as EDG counts them) to text, scanning of
+//   C++ tokens, and a set of replacements applied to the files.
+//
+//   RoseRefactor::recordCrossReferences();
+//   SgProject* project = frontend(argc, argv);
+//   const RoseRefactor::CrossReferences& xref = RoseRefactor::crossReferences();
+//   for (const RoseRefactor::Entity* e : xref.named("count")) ...
+#ifndef ROSE_REFACTOR_H
+#define ROSE_REFACTOR_H
+
+#include <cstdint>
+#include <map>
+#include <memory>
+#include <string>
+#include <vector>
+
+namespace RoseRefactor {
+
+// ---------------------------------------------------------------------------------------------
+// Positions
+// ---------------------------------------------------------------------------------------------
+
+// A position in a source file.  Lines and columns count from 1; a column counts characters (a
+// UTF-8 multibyte character is one column), as EDG does.
+struct Position {
+  std::string file;  // as EDG names the file (usually absolute)
+  int line = 0;
+  int column = 0;
+
+  Position() = default;
+  Position(const std::string& f, int l, int c) : file(f), line(l), column(c) {}
+  bool valid() const { return line > 0; }
+  bool operator==(const Position& o) const { return line == o.line && column == o.column && file == o.file; }
+  bool operator!=(const Position& o) const { return !(*this == o); }
+  bool operator<(const Position& o) const;
+  std::string str() const;  // "file:line:column"
+};
+
+// ---------------------------------------------------------------------------------------------
+// Cross-references
+// ---------------------------------------------------------------------------------------------
+
+enum class Kind {
+  Namespace, Class, Struct, Union, Enum, Enumerator, Typedef, Variable, Parameter, Field,
+  StaticDataMember, Function, MemberFunction, Constructor, Destructor, ClassTemplate,
+  FunctionTemplate, VariableTemplate, Concept, TemplateParameter, Label, Macro, Other
+};
+const char* kindName(Kind k);  // "variable", "member function", ...
+
+enum class Access { None, Public, Protected, Private };
+const char* accessName(Access a);  // "public", ... ("" for None)
+
+// A reference to an entity at a position: what EDG's cross-reference listing records.
+struct Reference {
+  Position pos;            // the position of the entity's name
+  char code = 'R';         // 'd' declaration, 'D' definition, 't'/'T' declaration/definition by
+                           // template instantiation, 'U' use, 'M' modification, 'C' use and
+                           // modification, 'A' address taken, 'R' other reference, 'E' error
+  bool inSystemHeader = false;
+  unsigned order = 0;      // the position of the reference in the translation unit (in the order
+                           // in which the front end processes the text)
+  bool isDeclaration() const { return code == 'd' || code == 'D' || code == 't' || code == 'T'; }
+  bool isDefinition() const { return code == 'D' || code == 'T'; }
+};
+
+struct BaseClass {
+  std::uint64_t entity = 0;   // the base class (an entity of kind Class, Struct or Union)
+  Access access = Access::None;
+  bool isVirtual = false;
+  Position start, end;        // the base specifier in the source ("public Base<T>"), if known
+};
+
+typedef std::uint64_t EntityId;
+
+struct Entity {
+  EntityId id = 0;                  // unique within one translation unit
+  std::string name;                 // the name as declared (unqualified)
+  std::string qualifiedName;        // with the enclosing namespaces and classes ("ns::A::f")
+  Kind kind = Kind::Other;
+  std::string type;                 // the type as C++ text, for variables, functions, typedefs, ...
+  EntityId parent = 0;              // the class (or namespace) the entity is a member of
+  Access access = Access::None;     // for class members
+  bool isStatic = false;            // static member
+  bool isVirtual = false;
+  bool isPureVirtual = false;
+  bool isConst = false;             // const member function
+  bool isImplicit = false;          // declared by the compiler
+  bool isTemplateInstance = false;  // instance of a template, or member of a class template instance
+  bool isInTemplate = false;        // member of a class template (not of an instance)
+  bool isLocal = false;             // declared in a function
+  std::vector<BaseClass> bases;     // classes: the direct base classes, in declaration order
+  std::vector<EntityId> overrides;  // virtual member functions: the functions they override
+  std::vector<Reference> references;  // in source order
+
+  bool isMember() const;            // of a class
+  bool isType() const;              // class, struct, union, enum, typedef, class template, type template parameter
+  // The first declaration (or definition) outside system headers, in the order of the
+  // translation unit; an invalid position if none
+  Position declaration() const;
+  // Whether the front end recorded a declaration of the entity (entities without one are names
+  // that depend on template parameters, in templates, or implicit declarations)
+  bool isDeclared() const;
+  bool declaredInSystemHeader() const;  // all its declarations are in system headers
+};
+
+class CrossReferences {
+public:
+  CrossReferences();
+  ~CrossReferences();
+  CrossReferences(const CrossReferences&) = delete;
+  CrossReferences& operator=(const CrossReferences&) = delete;
+
+  bool empty() const { return entities_.empty(); }
+  const std::map<EntityId, Entity>& entities() const { return entities_; }
+  const Entity* entity(EntityId id) const;
+  // The entities with this (unqualified) name
+  std::vector<const Entity*> named(const std::string& name) const;
+  // The entities referenced at exactly this position
+  std::vector<const Entity*> at(const Position& pos) const;
+  // The entities declared at the same positions as e (a template and its instances, a member of
+  // a class template and the corresponding members of the instances), e included
+  std::vector<const Entity*> sameDeclaration(const Entity& e) const;
+  // Whether class b is a base (direct or indirect) of class d
+  bool isBaseOf(EntityId b, EntityId d) const;
+  // The direct base of class d through which b is a base of d (or 0)
+  const BaseClass* directBaseLeadingTo(EntityId d, EntityId b) const;
+
+  // Used by the front end
+  Entity& add(EntityId id);
+  void finish();  // sorts the references and builds the indexes
+  void clear();
+
+private:
+  std::map<EntityId, Entity> entities_;
+  std::multimap<std::string, EntityId> byName_;
+  std::multimap<Position, EntityId> byPosition_;
+  std::multimap<Position, EntityId> byDeclaration_;
+};
+
+// Makes the next frontend() calls record cross-references (in the EDG front end)
+void recordCrossReferences(bool on = true);
+// More options for the EDG front end in the next frontend() calls, e.g. "--no_dep_name"
+void setFrontEndOptions(const std::vector<std::string>& options);
+// The cross-references of the last C or C++ file parsed by frontend() (empty if not recorded)
+const CrossReferences& crossReferences();
+
+// ---------------------------------------------------------------------------------------------
+// Source text
+// ---------------------------------------------------------------------------------------------
+
+// The text of a source file, with conversions between positions and offsets
+class SourceText {
+public:
+  explicit SourceText(const std::string& file);  // reads the file (empty if it cannot be read)
+  bool ok() const { return ok_; }
+  const std::string& file() const { return file_; }
+  const std::string& text() const { return text_; }
+  // Byte offset of a position (std::string::npos if outside the file)
+  std::size_t offset(int line, int column) const;
+  std::size_t offset(const Position& p) const { return offset(p.line, p.column); }
+  Position position(std::size_t offset) const;
+  std::string line(int line) const;  // without the line terminator
+  int lineCount() const { return (int)lineStart_.size(); }
+  // The identifier (or keyword) that starts at an offset ("" if none)
+  std::string identifierAt(std::size_t offset) const;
+  // The offset of the end of the comment or white space starting at offset (offset if none)
+  std::size_t skipSpace(std::size_t offset) const;
+  // The offset just after the last token before offset, skipping white space and comments
+  std::size_t skipSpaceBackward(std::size_t offset) const;
+  // The offset of the bracket matching the one at offset ("(", "[", "{" or "<" forward; ")",
+  // "]", "}" or ">" backward), skipping comments, string and character literals (npos if none)
+  std::size_t matching(std::size_t offset) const;
+  // The offset of the next occurrence of the character c at offset or later, outside comments,
+  // literals and nested brackets (npos if none)
+  std::size_t find(char c, std::size_t offset) const;
+  // The line terminator used in the file ("\n" or "\r\n")
+  const char* newline() const { return crlf_ ? "\r\n" : "\n"; }
+  // The white space at the start of a line
+  std::string indentation(int line) const;
+
+private:
+  std::string file_;
+  std::string text_;
+  std::vector<std::size_t> lineStart_;
+  bool ok_ = false;
+  bool crlf_ = false;
+};
+
+// Replacements of text in source files, applied all at once
+class Edits {
+public:
+  // Replaces the text between two offsets of a file (end == start: inserts)
+  void replace(const std::string& file, std::size_t start, std::size_t end, const std::string& text);
+  void insert(const std::string& file, std::size_t at, const std::string& text) { replace(file, at, at, text); }
+  bool empty() const { return edits_.empty(); }
+  // Overlapping replacements (other than insertions at the same offset), as "file:offset" strings
+  std::vector<std::string> conflicts() const;
+  // The new text of a file
+  std::string apply(const std::string& file, const std::string& text) const;
+  // The files that are changed
+  std::vector<std::string> files() const;
+  // Writes the changed files; returns false (and describes the problem in *error) if one fails
+  bool write(std::string* error = nullptr) const;
+
+private:
+  struct Edit {
+    std::size_t start, end;
+    std::string text;
+    unsigned order;
+  };
+  std::map<std::string, std::vector<Edit>> edits_;
+  unsigned count_ = 0;
+};
+
+// The source text of each file, read once
+SourceText& sourceText(const std::string& file);
+
+// Where a name is written for a reference at a position: the byte offset of the name in the
+// file, if the name is written at the position or, when the position is the invocation of a
+// function-like macro, written once in the macro's arguments.  Otherwise std::string::npos:
+// either the reference is not written with the name (an implicit constructor call, for example),
+// or the name is in the definition of a macro, whose name is then stored in *macro.
+std::size_t nameOffset(const CrossReferences& xr, const Position& pos, const std::string& name,
+                       std::string* macro = nullptr);
+
+// ---------------------------------------------------------------------------------------------
+// Command lines of the tools
+// ---------------------------------------------------------------------------------------------
+
+// Splits a tool's command line ("tool [options] source.cpp args...") into the command line for
+// frontend() (the program name, the options and the source files) and the other arguments.
+// Source files are recognized by their extension (.c .cc .cpp .cxx .c++ .C .h .hh .hpp .hxx).
+void splitCommandLine(int argc, char* argv[], std::vector<std::string>& frontEndArgs,
+                      std::vector<std::string>& toolArgs);
+
+}  // namespace RoseRefactor
+
+#endif
