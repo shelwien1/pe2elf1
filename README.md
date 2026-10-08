@@ -39,7 +39,7 @@ The same Makefile cross-compiles ROSE for Windows with MinGW-w64, as `rose.dll` 
 | `refactor/` | `RoseRefactor.h`: the API of the refactoring tools (cross-references, source text, edits), part of librose |
 | `tools/` | the programs linked against librose: `identityTranslator` and `dotGenerator` (ROSE's examples), `rose-ren`, `rose-using`, `rose-m2g` |
 | `tests/` | test programs and `run-tests.sh` (used by `make check`); `tests/tools/`: the tests of the refactoring tools |
-| `doc/` | `edg-options.md`: the options of the EDG front end, and their use with ROSE |
+| `doc/` | `edg-options.md`: the options of the EDG front end, and their use with ROSE; `llm-refactoring-tools.md`: proposed refactoring tools for LLM agents |
 | `win32/` | portability layer for the Windows build (MinGW-w64); the Windows package's `README.txt`, `test.bat` and examples; the SDK's `rose.mk` and examples Makefile (`sdk/`); the program that lists the exports of `rose.dll` (`build/`); the Makefile of the source package (`source/`) |
 | `linux/` | the Linux binary release's `README.txt`, `test.sh`, C example and third-party notes; the SDK's `rose.mk` and examples Makefile (`sdk/`) |
 | `scripts/vendor-sources.sh` | regenerates `rose/` and `edg/` from full checkouts |
@@ -210,6 +210,10 @@ of its input files, compares the results with the expected files, and checks tha
 build and print the same as before (or, for code that only Visual C++ compiles, that they
 build after the changes).  The tests with the headers of Visual C++ (`tests/tools/msvc-headers`)
 run when `MSVC_DIR` is the folder of a portable Visual C++.
+
+[doc/llm-refactoring-tools.md](doc/llm-refactoring-tools.md) proposes more tools on the same API,
+for refactoring by LLM agents, with examples from a set of text-based tools that an agent wrote to
+clean up decompiled code.
 
 ## Windows
 
