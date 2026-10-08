@@ -39,6 +39,7 @@ The same Makefile cross-compiles ROSE for Windows with MinGW-w64, as `rose.dll` 
 | `refactor/` | `RoseRefactor.h`: the API of the refactoring tools (cross-references, source text, edits), part of librose |
 | `tools/` | the programs linked against librose: `identityTranslator` and `dotGenerator` (ROSE's examples), `rose-ren`, `rose-using`, `rose-m2g` |
 | `tests/` | test programs and `run-tests.sh` (used by `make check`); `tests/tools/`: the tests of the refactoring tools |
+| `doc/` | `edg-options.md`: the options of the EDG front end, and their use with ROSE |
 | `win32/` | portability layer for the Windows build (MinGW-w64); the Windows package's `README.txt`, `test.bat` and examples; the SDK's `rose.mk` and examples Makefile (`sdk/`); the program that lists the exports of `rose.dll` (`build/`); the Makefile of the source package (`source/`) |
 | `linux/` | the Linux binary release's `README.txt`, `test.sh`, C example and third-party notes; the SDK's `rose.mk` and examples Makefile (`sdk/`) |
 | `scripts/vendor-sources.sh` | regenerates `rose/` and `edg/` from full checkouts |
@@ -139,7 +140,8 @@ is a member template) are reproduced from their source text in the same way.
 
 Constructs that cannot be translated are reported as warnings (set `EDG2SAGE_DEBUG=1` for more
 diagnostics) and skipped.  EDG options can be passed through ROSE with `--edg:<option>`, e.g.
-`--edg:il_display` to dump the IL.
+`--edg:il_display` to dump the IL; [doc/edg-options.md](doc/edg-options.md) lists the options
+of the front end, with what ROSE passes and notes on their use here.
 
 ## Refactoring tools
 
