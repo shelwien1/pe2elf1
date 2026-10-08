@@ -499,7 +499,11 @@ static bool plainRange(const std::vector<Region>& R, uint64_t off, uint64_t len,
 static tables::CodeMap codeMap(const std::vector<Region>& R, const uint8_t* img) {
   tables::CodeMap cm;
   cm.img = img;
-  for (auto& r : R) if (r.type == R_CODE) cm.spans.push_back({r.va, r.off, r.size});
+  for (auto& r : R)
+    if (r.type == R_CODE) {
+      cm.spans.push_back({r.va, r.off, r.size});
+      cm.codeBytes += r.size;
+    }
   std::stable_sort(cm.spans.begin(), cm.spans.end(), [](const tables::CodeSpan& a, const tables::CodeSpan& b) { return a.va < b.va; });
   return cm;
 }
@@ -599,6 +603,7 @@ static void unwindInfos(uint8_t* img, uint64_t n, const uint8_t* pd, const Regio
     if (k == 0 || list[idx[k]].off != list[idx[k - 1]].off) keep[idx[k]] = 1;
   (void)seen;
   std::vector<tables::PEvent> ev;
+  cm.reset();
   for (size_t j = 0; j < list.size(); j++) {
     size_t k = fwd ? j : list.size() - 1 - j;
     if (!keep[k]) continue;
@@ -607,7 +612,7 @@ static void unwindInfos(uint8_t* img, uint64_t n, const uint8_t* pd, const Regio
     if (list[k].off + len > n || !plainData(R, list[k].off, len)) continue;
     uint64_t avail = 0;
     const uint8_t* code = cm.at(vbias + list[k].begin, avail);
-    tables::prologEvents(code, code ? avail : 0, ev);
+    tables::prologEvents(cm, code, code ? avail : 0, ev);
     tables::unwindInfo(u, len, ev, fwd);
   }
 }

@@ -159,6 +159,19 @@ struct CodeSpan { uint64_t va, off, size; };
 struct CodeMap {
   const uint8_t* img = nullptr;
   std::vector<CodeSpan> spans;  // sorted by va
+  // Work limit for the code scans of one table, so crafted tables can't make
+  // them quadratic.  Reset at the start of every table transform (in the
+  // same places on both sides); when it runs out, predictions stop.
+  uint64_t codeBytes = 0;
+  mutable uint64_t budget = 0;
+  void reset() const { budget = 64 * codeBytes + (16u << 20); }
+  // decode the instruction at c (avail bytes); false when out of budget
+  bool step(const uint8_t* c, uint64_t avail, x64::Insn& I) const {
+    if (!budget) return false;
+    x64::decode(c, (size_t)std::min<uint64_t>(avail, 64), I);
+    budget = budget > I.len ? budget - I.len : 0;
+    return true;
+  }
   // pointer to the code at va and the number of code bytes from there
   const uint8_t* at(uint64_t va, uint64_t& avail) const {
     size_t lo = 0, hi = spans.size();
@@ -203,7 +216,7 @@ static inline bool stackEvent(const uint8_t* p, const x64::Insn& I) {
 struct FuncCode {
   std::vector<uint64_t> b;   // boundary offsets from the function start, ascending
   std::vector<uint32_t> ev;  // ev[k] = number of event boundaries among b[0..k-1]
-  void build(const uint8_t* code, uint64_t avail, uint64_t len) {
+  void build(const CodeMap& cm, const uint8_t* code, uint64_t avail, uint64_t len) {
     b.clear(); ev.clear();
     if (!code) return;
     if (len > avail) len = avail;
@@ -212,7 +225,7 @@ struct FuncCode {
     b.push_back(0); ev.push_back(0);
     while (i < len) {
       x64::Insn I;
-      x64::decode(code + i, (size_t)std::min<uint64_t>(avail - i, 64), I);
+      if (!cm.step(code + i, avail - i, I)) break;
       bool e = stackEvent(code + i, I);
       i += I.len;
       ev.push_back(ne);
@@ -258,9 +271,15 @@ static uint64_t advUnrank(const FuncCode& F, uint64_t loc, uint64_t maxd, uint64
     }
     return F.b[lo] - loc;
   }
-  uint64_t t = loc + (c - nB);
-  for (size_t k = k0; k < k1 && F.b[k] <= t; k++) t++;
-  return t - loc;
+  // the (c - nB)-th address in the window that is not a boundary: skip the m
+  // boundaries with at most that many non-boundaries below them
+  uint64_t want = c - nB;
+  size_t lo = k0, h = k1;
+  while (lo < h) {
+    size_t mid = (lo + h) / 2;
+    if ((F.b[mid] - loc) - (mid - k0) <= want) lo = mid + 1; else h = mid;
+  }
+  return want + (lo - k0);
 }
 
 // Walk a CFA program; advance operands are replaced by their rank.
@@ -330,8 +349,7 @@ static uint32_t padAt(const CodeMap* cm, uint64_t va) {
   uint32_t n = 0;
   while (c && n < avail && n < 4096) {
     x64::Insn I;
-    x64::decode(c + n, (size_t)std::min<uint64_t>(avail - n, 64), I);
-    if (!isPad(I)) break;
+    if (!cm->step(c + n, avail - n, I) || !isPad(I)) break;
     n += I.len;
   }
   return n;
@@ -350,18 +368,18 @@ static uint32_t funcLenAt(const CodeMap* cm, uint64_t va) {
   const uint8_t* c = cm ? cm->at(va, avail) : nullptr;
   if (!c) return 0;
   bool cet = isEndbr64(c, avail);
-  uint64_t lim = std::min<uint64_t>(avail, 1 << 20), i = 0;
+  uint64_t lim = std::min<uint64_t>(avail, 1 << 16), i = 0;
   bool endish = false;
   while (i < lim) {
     if (endish && cet && isEndbr64(c + i, avail - i)) return (uint32_t)i;
     x64::Insn I;
-    x64::decode(c + i, (size_t)std::min<uint64_t>(avail - i, 64), I);
+    if (!cm->step(c + i, avail - i, I)) return 0;
     if (endish && isPad(I)) {
       if (!cet) return (uint32_t)i;
       uint64_t j = i;
       while (j < lim) {  // skip the padding run
         x64::Insn J;
-        x64::decode(c + j, (size_t)std::min<uint64_t>(avail - j, 64), J);
+        if (!cm->step(c + j, avail - j, J)) return 0;
         if (!isPad(J)) break;
         j += J.len;
       }
@@ -389,6 +407,7 @@ static uint32_t funcLenAt(const CodeMap* cm, uint64_t va) {
 // (cm, vbias: the image's code, RVA + vbias is its virtual address)
 static void pdata(uint8_t* p, size_t n, bool fwd, const CodeMap* cm, uint64_t vbias) {
   uint32_t pe = 0, pu = 0;
+  if (cm) cm->reset();
   for (size_t i = 0; i + 12 <= n; i += 12) {
     uint32_t a = g32(p + i), b = g32(p + i + 4), c = g32(p + i + 8);
     uint32_t gap = cm && pe ? padAt(cm, vbias + pe) : 0;
@@ -421,14 +440,14 @@ struct PEvent { uint8_t end, kind, reg; uint32_t val; uint64_t sp; };  // kind 1
 
 static inline bool nonvolatile(unsigned r) { return r == 3 || r == 5 || r == 6 || r == 7 || r >= 12; }
 
-static void prologEvents(const uint8_t* code, uint64_t avail, std::vector<PEvent>& ev) {
+static void prologEvents(const CodeMap& cm, const uint8_t* code, uint64_t avail, std::vector<PEvent>& ev) {
   ev.clear();
   if (!code) return;
   uint64_t lim = std::min<uint64_t>(avail, 255), i = 0, sp = 0;
   uint64_t eaxImm = 0;
   while (i < lim) {
     x64::Insn I;
-    x64::decode(code + i, (size_t)std::min<uint64_t>(avail - i, 64), I);
+    if (!cm.step(code + i, avail - i, I)) break;
     const uint8_t* q = code + i;
     i += I.len;
     if (I.trunc || I.enc != x64::ENC_LEGACY || i > lim) break;
@@ -517,6 +536,7 @@ static bool unwindInfo(uint8_t* u, size_t avail, const std::vector<PEvent>& ev, 
 // cm: code of the image (may be null), vbias: added to pc values to find it
 static void ehframe(uint8_t* p, size_t n, uint64_t va, bool fwd, const CodeMap* cm, uint64_t vbias) {
   FuncCode F;
+  if (cm) cm->reset();
   std::vector<Cie> cies;
   size_t i = 0;
   uint32_t prevEnd = 0, prevLsda = 0;
@@ -583,7 +603,7 @@ static void ehframe(uint8_t* p, size_t n, uint64_t va, bool fwd, const CodeMap* 
         uint64_t avail = 0;
         const uint8_t* code = cm->at(vbias + pcva, avail);
         if (code) {
-          F.build(code, avail, range);
+          F.build(*cm, code, avail, range);
           cfaProgram(p, prog, end, F, fwd);
         }
       }
