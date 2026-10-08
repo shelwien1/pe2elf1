@@ -336,12 +336,75 @@ static void cfaProgram(uint8_t* p, size_t i, size_t end, const FuncCode& F, bool
   }
 }
 
+static inline bool isPad(const x64::Insn& I) {
+  return !I.trunc && (I.op == 0x90 || I.op == 0xCC || I.op == 0x11F);
+}
+
+// bytes of padding (nop / int3) at va
+static uint32_t padAt(const CodeMap* cm, uint64_t va) {
+  uint64_t avail = 0;
+  const uint8_t* c = cm ? cm->at(va, avail) : nullptr;
+  uint32_t n = 0;
+  while (c && n < avail && n < 4096) {
+    x64::Insn I;
+    x64::decode(c + n, (size_t)std::min<uint64_t>(avail - n, 64), I);
+    if (!isPad(I)) break;
+    n += I.len;
+  }
+  return n;
+}
+
+static inline bool isEndbr64(const uint8_t* c, uint64_t avail) {
+  return avail >= 4 && c[0] == 0xF3 && c[1] == 0x0F && c[2] == 0x1E && c[3] == 0xFA;
+}
+
+// predicted function length: up to the first ret / jmp / call / ud2 / hlt
+// followed by padding or by the end of the code region.  If the function
+// starts with endbr64, the next one must too: padding inside the function
+// (aligned jump targets) is skipped.
+static uint32_t funcLenAt(const CodeMap* cm, uint64_t va) {
+  uint64_t avail = 0;
+  const uint8_t* c = cm ? cm->at(va, avail) : nullptr;
+  if (!c) return 0;
+  bool cet = isEndbr64(c, avail);
+  uint64_t lim = std::min<uint64_t>(avail, 1 << 20), i = 0;
+  bool endish = false;
+  while (i < lim) {
+    if (endish && cet && isEndbr64(c + i, avail - i)) return (uint32_t)i;
+    x64::Insn I;
+    x64::decode(c + i, (size_t)std::min<uint64_t>(avail - i, 64), I);
+    if (endish && isPad(I)) {
+      if (!cet) return (uint32_t)i;
+      uint64_t j = i;
+      while (j < lim) {  // skip the padding run
+        x64::Insn J;
+        x64::decode(c + j, (size_t)std::min<uint64_t>(avail - j, 64), J);
+        if (!isPad(J)) break;
+        j += J.len;
+      }
+      if (isEndbr64(c + j, avail - j)) return (uint32_t)i;
+      i = j;
+      endish = false;
+      continue;
+    }
+    endish = false;
+    if (!I.trunc) {
+      unsigned op = I.op, reg = (I.modrm >> 3) & 7;
+      endish = op == 0xC3 || op == 0xC2 || op == 0xE9 || op == 0xEB || op == 0xE8 || op == 0xF4 || op == 0x10B ||
+               (op == 0xFF && I.hasmodrm && reg >= 2 && reg <= 5);
+    }
+    i += I.len;
+  }
+  return endish && i == avail ? (uint32_t)i : 0;
+}
+
 // cm: code of the image (may be null), vbias: added to pc values to find it
 static void ehframe(uint8_t* p, size_t n, uint64_t va, bool fwd, const CodeMap* cm, uint64_t vbias) {
   FuncCode F;
   std::vector<Cie> cies;
   size_t i = 0;
   uint32_t prevEnd = 0, prevLsda = 0;
+  uint64_t prevEnd64 = 0;
   while (i + 8 <= n) {
     uint32_t len = g32(p + i);
     if (len == 0 || len == 0xFFFFFFFFu || len > n - i - 4) break;
@@ -378,12 +441,19 @@ static void ehframe(uint8_t* p, size_t n, uint64_t va, bool fwd, const CodeMap* 
     if (c && enc4(c->renc) && j + 8 <= end) {
       uint32_t fva = (uint32_t)(va + j);
       uint32_t pcrel = (c->renc & 0x70) == 0x10 ? fva : 0;
+      // pc_begin: gap after the previous FDE, minus the padding found there
+      uint32_t gap = cm && prevEnd64 ? padAt(cm, vbias + prevEnd64) : 0;
       uint32_t v = g32(p + j), range = g32(p + j + 4), absb;
-      if (fwd) { absb = v + pcrel; s32(p + j, absb - prevEnd); }
-      else { absb = v + prevEnd; s32(p + j, absb - pcrel); }
-      prevEnd = absb + range;
+      if (fwd) { absb = v + pcrel; s32(p + j, absb - prevEnd - gap); }
+      else { absb = v + prevEnd + gap; s32(p + j, absb - pcrel); }
       uint64_t pcva = (c->renc & 0x0F) == 0x0B && (c->renc & 0x70) == 0x10
                           ? va + j + (uint64_t)(int64_t)(int32_t)(absb - pcrel) : (uint64_t)absb;
+      // pc_range: minus the predicted function length
+      uint32_t plen = cm ? funcLenAt(cm, vbias + pcva) : 0;
+      if (fwd) s32(p + j + 4, range - plen);
+      else { range += plen; s32(p + j + 4, range); }
+      prevEnd = absb + range;
+      prevEnd64 = pcva + range;
       j += 8;
       // CFA program: advances ranked against the function's instructions
       size_t prog = j;
