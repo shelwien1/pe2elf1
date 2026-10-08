@@ -507,7 +507,9 @@ static tables::CodeMap codeMap(const std::vector<Region>& R, const uint8_t* img)
 static void tableTransform(uint8_t* p, const Region& r, bool fwd, const std::vector<Region>& R, const uint8_t* img, uint64_t n,
                            const tables::CodeMap& cm) {
   switch (r.type) {
-    case R_PDATA: tables::pdata(p, (size_t)r.size, fwd); break;
+    case R_PDATA:
+      tables::pdata(p, (size_t)r.size, fwd, r.par.size() == 1 ? &cm : nullptr, r.par.size() == 1 ? r.par[0] : 0);
+      break;
     case R_EHHDR: {
       tables::HdrPred pred;
       if (r.par.size() == 1 && r.par[0] < R.size() && R[(size_t)r.par[0]].type == R_EHFRAME) {

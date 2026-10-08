@@ -31,7 +31,8 @@ struct Region {
   //   .eh_frame_hdr  index of the image's .eh_frame region
   //   Elf64_Rela     (va, file offset, size) of each PT_LOAD segment
   //   .gnu.hash      file offset and size of .dynsym and .dynstr
-  //   .eh_frame      virtual address bias of the image's code regions
+  //   .eh_frame, PE exception directory: virtual address bias of the
+  //                  image's code regions
   std::vector<uint64_t> par;
 };
 
@@ -94,7 +95,10 @@ static uint64_t parsePE(Ctx& C, uint64_t base, uint64_t vbias) {
     uint64_t off;
     if (ndir > 3) {
       uint32_t rva = g32(dd + 3 * 8), size = g32(dd + 3 * 8 + 4);
-      if (size && rva2off(rva, size, off)) C.add(R_PDATA, off, size / 12 * 12, 0);
+      if (size && rva2off(rva, size, off)) {
+        C.add(R_PDATA, off, size / 12 * 12, 0);
+        if (!C.R.empty() && C.R.back().type == R_PDATA) C.R.back().par.assign(1, vbias);
+      }
     }
     if (ndir > 5) {
       uint32_t rva = g32(dd + 5 * 8), size = g32(dd + 5 * 8 + 4);

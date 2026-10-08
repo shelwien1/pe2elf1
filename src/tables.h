@@ -23,24 +23,6 @@ static inline uint16_t g16(const uint8_t* p) { return (uint16_t)(p[0] | p[1] << 
 static inline void s16(uint8_t* p, uint32_t v) { p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); }
 
 //----------------------------------------------------------------------------
-// PE exception directory: RUNTIME_FUNCTION { begin, end, unwind } (RVAs)
-// begin -> begin - previous end, end -> end - begin, unwind -> delta
-static void pdata(uint8_t* p, size_t n, bool fwd) {
-  uint32_t pe = 0, pu = 0;
-  for (size_t i = 0; i + 12 <= n; i += 12) {
-    uint32_t a = g32(p + i), b = g32(p + i + 4), c = g32(p + i + 8);
-    if (fwd) {
-      s32(p + i, a - pe); s32(p + i + 4, b - a); s32(p + i + 8, c - pu);
-      pe = b; pu = c;
-    } else {
-      a += pe; b += a; c += pu;
-      s32(p + i, a); s32(p + i + 4, b); s32(p + i + 8, c);
-      pe = b; pu = c;
-    }
-  }
-}
-
-//----------------------------------------------------------------------------
 // .eh_frame_hdr search table: pairs { initial_location, fde_address } (both
 // relative to the start of .eh_frame_hdr), sorted by location.  Linkers build
 // it from .eh_frame, so it is predicted from the FDE list (`pred`, same
@@ -396,6 +378,30 @@ static uint32_t funcLenAt(const CodeMap* cm, uint64_t va) {
     i += I.len;
   }
   return endish && i == avail ? (uint32_t)i : 0;
+}
+
+//----------------------------------------------------------------------------
+// PE exception directory: RUNTIME_FUNCTION { begin, end, unwind } (RVAs)
+//   begin  -> begin - previous end - padding found there
+//   end    -> end - begin - predicted function length
+//   unwind -> delta to the previous unwind RVA
+// (cm, vbias: the image's code, RVA + vbias is its virtual address)
+static void pdata(uint8_t* p, size_t n, bool fwd, const CodeMap* cm, uint64_t vbias) {
+  uint32_t pe = 0, pu = 0;
+  for (size_t i = 0; i + 12 <= n; i += 12) {
+    uint32_t a = g32(p + i), b = g32(p + i + 4), c = g32(p + i + 8);
+    uint32_t gap = cm && pe ? padAt(cm, vbias + pe) : 0;
+    if (fwd) {
+      uint32_t len = cm ? funcLenAt(cm, vbias + a) : 0;
+      s32(p + i, a - pe - gap); s32(p + i + 4, b - a - len); s32(p + i + 8, c - pu);
+    } else {
+      a += pe + gap;
+      uint32_t len = cm ? funcLenAt(cm, vbias + a) : 0;
+      b += a + len; c += pu;
+      s32(p + i, a); s32(p + i + 4, b); s32(p + i + 8, c);
+    }
+    pe = b; pu = c;
+  }
 }
 
 // cm: code of the image (may be null), vbias: added to pc values to find it
