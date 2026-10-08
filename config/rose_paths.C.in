@@ -8,11 +8,15 @@
 #include <windows.h>
 
 // The Windows build is relocatable: the installation prefix is the parent of the directory
-// that contains the executable (<prefix>\bin\<translator>.exe), and the EDG configuration and
-// the system headers are found relative to it (<prefix>\edg-base, <prefix>\include\edg).
+// that contains the library (<prefix>\bin\rose.dll, or the program if it is linked statically),
+// and the EDG configuration and the system headers are found relative to it
+// (<prefix>\edg-base, <prefix>\include\edg).
 static std::string executablePrefix() {
   std::string path(32768, '\0');
-  DWORD n = GetModuleFileNameA(NULL, &path[0], (DWORD)path.size());
+  HMODULE module = NULL;
+  GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                     (LPCSTR)&executablePrefix, &module);
+  DWORD n = GetModuleFileNameA(module, &path[0], (DWORD)path.size());
   path.resize(n < path.size() ? n : 0);
   for (int i = 0; i < 2; ++i) {
     std::string::size_type slash = path.find_last_of("\\/");

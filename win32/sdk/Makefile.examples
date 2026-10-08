@@ -1,0 +1,18 @@
+# Builds the example programs with the ROSE SDK and MinGW-w64 GCC: in this folder,
+#
+#   mingw32-make -j4
+#
+# Then copy the programs to ..\..\bin (next to rose.dll), or add ..\..\bin to the PATH.
+# identityTranslator.C and dotGenerator.C are ROSE's example translators; rose-ren.C,
+# rose-using.C and rose-m2g.C are the refactoring tools (they use RoseRefactor.h).
+include ../../rose.mk
+
+PROGRAMS := $(patsubst %.C,%.exe,$(wildcard *.C))
+
+all: $(PROGRAMS)
+
+%.exe: %.o
+	$(CXX) $(ROSE_LDFLAGS) -o $@ $< $(ROSE_LIBS)
+
+%.o: %.C
+	$(CXX) -O2 $(ROSE_CXXFLAGS) -c $< -o $@

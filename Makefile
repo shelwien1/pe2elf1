@@ -494,12 +494,35 @@ $(OBJ)/tools/%.o: $(TOOL_SRC)/%.C | $(LIB_PREREQS)
 .SECONDARY: $(addprefix $(OBJ)/tools/,$(addsuffix .o,$(TOOLS)))
 
 ifdef WINDOWS
-# Self-contained executables (no MinGW run-time DLLs needed), with a 64 MB stack (reserved
-# address space) for the deep recursion in EDG and ROSE, like the 8 MB default on Linux and more
-$(B)/bin/%.exe: $(OBJ)/tools/%.o $(LIBROSE)
+# The library of the Windows build is rose.dll, with the import library rose.lib (for MinGW-w64
+# GCC), linked from librose.a.  A DLL cannot export more than 65535 names, and librose defines
+# more: rose.def (written by win32/build/rose-exports.C) lists ROSE's API.  The C and C++
+# run-time libraries are linked statically into the DLL and into each program (no MinGW DLLs are
+# needed).
+ROSE_DLL := $(B)/bin/rose.dll
+ROSE_IMPLIB := $(B)/lib/rose.lib
+ROSE_DEF := $(B)/lib/rose.def
+$(HOST_BIN)/rose-exports: win32/build/rose-exports.C
+	$(call msg,HOSTCXX,$<)
+	@mkdir -p $(@D)
+	$(Q)$(HOST_CXX) -O1 -o $@ $<
+$(ROSE_DEF): $(LIBROSE) $(HOST_BIN)/rose-exports
+	$(call msg,EXPORTS,$@)
+	$(Q)$(HOST_BIN)/rose-exports $(TARGET)-nm $(LIBROSE) $@
+$(ROSE_DLL): $(LIBROSE) $(ROSE_DEF)
 	$(call msg,LINK,$@)
 	@mkdir -p $(@D)
-	$(Q)$(CXX) -static -pthread -Wl,--stack,67108864 -o $@ $< $(LIBROSE) $(BOOST_LDFLAGS) $(BOOST_LIBS) $(SYS_LIBS)
+	$(Q)$(CXX) -shared -static -pthread -o $@ $(ROSE_DEF) -Wl,--out-implib,$(ROSE_IMPLIB) \
+	  -Wl,--whole-archive $(LIBROSE) -Wl,--no-whole-archive $(BOOST_LDFLAGS) $(BOOST_LIBS) $(SYS_LIBS)
+$(ROSE_IMPLIB): $(ROSE_DLL) ;
+all: $(ROSE_DLL)
+
+# The programs use rose.dll; they have a 64 MB stack (reserved address space) for the deep
+# recursion in EDG and ROSE, like the 8 MB default on Linux and more
+$(B)/bin/%.exe: $(OBJ)/tools/%.o $(ROSE_IMPLIB)
+	$(call msg,LINK,$@)
+	@mkdir -p $(@D)
+	$(Q)$(CXX) -static -pthread -Wl,--stack,67108864 -o $@ $< $(ROSE_IMPLIB) $(SYS_LIBS)
 else
 $(B)/bin/%: $(OBJ)/tools/%.o $(LIBROSE)
 	$(call msg,LINK,$@)
@@ -517,18 +540,30 @@ check: all
 	@CXX="$(HOST_CXX)" sh tests/tools/run-tests.sh $(B)/bin
 
 ################################################################################
-# Windows package: the translators with EDG's configuration and the system headers they parse
-# with, as a relocatable zip file (<prefix>\bin, <prefix>\edg-base, <prefix>\include\edg)
+# Windows package: the programs and rose.dll with EDG's configuration and the system headers the
+# front end parses with, and the SDK (rose.lib, the headers, rose.mk, examples), as a relocatable
+# 7z file (<prefix>\bin, <prefix>\lib, <prefix>\include, <prefix>\edg-base, ...)
 ################################################################################
 
 PACKAGE := rose-$(ROSE_VERSION)-win64
 PKG_DIR := $(B)/package/$(PACKAGE)
+define SDK_VARS
+PKG_DIR='$(PKG_DIR)'
+GEN='$(GEN)'
+BOOST_INC='$(BOOST_ROOT)/include'
+CXX='$(CXX)'
+OPT='$(OPT)'
+FLAGS='$(ROSE_CXXFLAGS) $(ROSE_CPPFLAGS) -I$(REFACTOR_SRC)'
+TOOL_SRC='$(TOOL_SRC)'
+TOOL_OBJS='$(addprefix $(OBJ)/tools/,$(addsuffix .o,$(TOOLS)))'
+endef
 ifdef WINDOWS
 package: all
-	$(call msg,PACKAGE,$(B)/$(PACKAGE).zip)
-	$(Q)rm -rf $(B)/package $(B)/$(PACKAGE).zip
-	$(Q)mkdir -p $(PKG_DIR)/bin $(PKG_DIR)/edg-base/lib $(PKG_DIR)/include $(PKG_DIR)/licenses
-	$(Q)cp $(TOOL_PROGS) $(PKG_DIR)/bin/ && $(TARGET)-strip $(PKG_DIR)/bin/*.exe
+	$(call msg,PACKAGE,$(B)/$(PACKAGE).7z)
+	$(Q)rm -rf $(B)/package $(B)/$(PACKAGE).7z
+	$(Q)mkdir -p $(PKG_DIR)/bin $(PKG_DIR)/lib $(PKG_DIR)/edg-base/lib $(PKG_DIR)/include $(PKG_DIR)/licenses
+	$(Q)cp $(TOOL_PROGS) $(ROSE_DLL) $(PKG_DIR)/bin/ && $(TARGET)-strip $(PKG_DIR)/bin/*.exe $(PKG_DIR)/bin/rose.dll
+	$(Q)cp $(ROSE_IMPLIB) $(PKG_DIR)/lib/
 	$(Q)cp $(B)/edg-base/lib/predefined_macros.txt $(PKG_DIR)/edg-base/lib/
 	$(Q)cp -R $(B)/include/edg $(PKG_DIR)/include/ && rm $(PKG_DIR)/include/edg/stamp
 	$(Q)cp -R win32/examples $(PKG_DIR)/
@@ -538,7 +573,9 @@ package: all
 	$(Q)cp win32/THIRD-PARTY.txt $(PKG_DIR)/licenses/
 	$(Q)for f in /usr/share/doc/mingw-w64-common/copyright:MinGW-w64 /usr/share/doc/gcc-mingw-w64-base/copyright:GCC; do \
 	  [ -f "$${f%%:*}" ] && cp "$${f%%:*}" "$(PKG_DIR)/licenses/$${f##*:}-copyright.txt"; done; true
-	$(Q)cd $(B)/package && zip -qr9 ../$(PACKAGE).zip $(PACKAGE)
+	$(file >$(B)/sdk.vars,$(SDK_VARS))
+	$(Q)sh scripts/windows-sdk.sh $(B)/sdk.vars
+	$(Q)cd $(B)/package && 7z a -t7z -mx=9 -ms=on -mmt=1 ../$(PACKAGE).7z $(PACKAGE) > /dev/null
 else
 package:
 	@echo "make package: only for the Windows build (CXX=x86_64-w64-mingw32-g++-posix ...)"; false
@@ -546,9 +583,10 @@ endif
 
 ################################################################################
 # Windows source package: what the Windows build compiles (with the files it generates, and the
-# parts of Boost that ROSE uses) and the package's run-time files, with a Makefile with which
-# mingw32-make builds the translators on Windows (win32/source/), as a 7z file.  BOOST_SRC is
-# the Boost source tree that BOOST_ROOT was built from, with Boost's bcp tool (./b2 tools/bcp).
+# parts of Boost that ROSE uses) and the files of the package that are not built, with a
+# Makefile with which mingw32-make builds rose.dll and the programs on Windows (win32/source/),
+# as a 7z file.  BOOST_SRC is the Boost source tree that BOOST_ROOT was built from, with Boost's
+# bcp tool (./b2 tools/bcp).
 ################################################################################
 
 SRC_PACKAGE := rose-$(ROSE_VERSION)-win64-src
@@ -568,7 +606,7 @@ LIB_OBJS='$(ALL_LIB_OBJS)'
 TOOL_OBJS='$(addprefix $(OBJ)/tools/,$(addsuffix .o,$(TOOLS)))'
 ROSE_FLAGS='$(ROSE_CXXFLAGS) $(ROSE_CPPFLAGS)'
 EDG_FLAGS='$(EDG_CXXFLAGS) $(EDG_CPPFLAGS)'
-CONN_FLAGS='$(ROSE_CXXFLAGS) $(ROSE_CPPFLAGS) -I$(CONN_SRC) $(EDG_CPPFLAGS)'
+CONN_FLAGS='$(ROSE_CXXFLAGS) $(ROSE_CPPFLAGS) -I$(CONN_SRC) -I$(REFACTOR_SRC) $(EDG_CPPFLAGS)'
 LP64_OBJS='$(WIN32_LP64_OBJS)'
 API_OBJS='$(patsubst %.C,$(OBJ)/rose/%.o,$(WIN32_API_SRCS))'
 endef
