@@ -1,19 +1,22 @@
 #!/bin/sh
 # Maps the system include directories of the backend compilers to directories under a
-# staging directory, for a relocatable ROSE (the Windows build) that ships the headers
-# it parses with.
+# staging directory, for a relocatable ROSE (the Windows build, and the Linux build with
+# RELOCATABLE=1) that ships the headers it parses with.
 #
-# usage: scripts/stage-sys-includes.sh [--copy] DEST CXX-DIR... [-- C-DIR...]
+# usage: scripts/stage-sys-includes.sh [--copy [--files LIST]] DEST CXX-DIR... [-- C-DIR...]
 #
 # Each directory that is not inside another of the given directories becomes DEST/sysN
 # (N counting from 0 in order of appearance); a directory inside another one keeps its
 # place in that directory's copy.  The names relative to DEST are printed in the order
 # of the arguments as a C initializer list ("sys0/c++", "sys0", ...), one line for the
 # C++ and one for the C directories.  With --copy, the directory trees are also copied
-# into DEST (following symbolic links).
+# into DEST (following symbolic links); with --files, only the files named in LIST (one
+# absolute path per line).
 set -eu
 copy=false
+files=
 if [ "$1" = "--copy" ]; then copy=true; shift; fi
+if [ "$1" = "--files" ]; then files=$2; shift 2; fi
 dest=$1
 shift
 
@@ -60,7 +63,11 @@ for arg in "$@"; do
     if $copy; then
       rm -rf "$dest/sys$found"
       mkdir -p "$dest/sys$found"
-      cp -RL "$r/." "$dest/sys$found/"
+      if [ -n "$files" ]; then
+        sed -n "s|^$r/||p" "$files" | (cd "$r" && tar -chf - -T -) | (cd "$dest/sys$found" && tar -xf -)
+      else
+        cp -RL "$r/." "$dest/sys$found/"
+      fi
     fi
   fi
   list="$list\"sys$found${d#"$r"}\", "

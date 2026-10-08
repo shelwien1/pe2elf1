@@ -24,6 +24,25 @@ static std::string executablePrefix() {
   }
   return path;
 }
+#else
+#include <dlfcn.h>
+#include <stdlib.h>
+
+// The installation prefix is the parent of the directory that contains librose.so
+// (<prefix>/lib/librose.so, also in the build tree): the Linux binary release (RELOCATABLE=1) is
+// relocatable, and finds the EDG configuration and the system headers relative to it.
+static std::string libraryPrefix() {
+  Dl_info info;
+  if (dladdr((void*)&libraryPrefix, &info) == 0 || info.dli_fname == NULL) return "@BUILD_DIR@";
+  char* real = realpath(info.dli_fname, NULL);
+  std::string path = real != NULL ? real : info.dli_fname;
+  free(real);
+  for (int i = 0; i < 2; ++i) {
+    std::string::size_type slash = path.find_last_of('/');
+    path = slash == std::string::npos ? std::string(".") : path.substr(0, slash);
+  }
+  return path;
+}
 #endif
 
 const std::string ROSE_GFORTRAN_PATH          = "";
@@ -32,7 +51,7 @@ const std::string ROSE_AUTOMAKE_TOP_BUILDDIR  = "@BUILD_DIR@";
 #ifdef _WIN32
 const std::string ROSE_AUTOMAKE_PREFIX        = executablePrefix();
 #else
-const std::string ROSE_AUTOMAKE_PREFIX        = "@BUILD_DIR@";
+const std::string ROSE_AUTOMAKE_PREFIX        = libraryPrefix();
 #endif
 const std::string ROSE_AUTOMAKE_DATADIR       = "/*deprecated*/";
 const std::string ROSE_AUTOMAKE_BINDIR        = "/*deprecated*/";

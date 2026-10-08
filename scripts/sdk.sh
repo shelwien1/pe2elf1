@@ -1,5 +1,5 @@
 #!/bin/sh
-# Adds the SDK to the Windows package (run by "make package"):
+# Adds the SDK to the binary package, Windows or Linux (run by "make package"):
 #   include/rose/   the headers that programs using ROSE include: those that the tools include
 #                   (rose.h, RoseRefactor.h and what they include, taken from the dependency
 #                   files of the tools), and the parts of Boost that they include
@@ -8,8 +8,9 @@
 #                   (for gcc -iprefix <package>/include/rose/ @<package>/include/rose/rose.rsp)
 #   rose.mk         the compiler and linker options, for Makefiles
 #   examples/tools/ the tools' sources, with a Makefile that builds them with the SDK
+# (rose.mk and the Makefile of the examples are in $SDK_FILES: win32/sdk or linux/sdk)
 #
-# usage: scripts/windows-sdk.sh <variables file written by the Makefile>
+# usage: scripts/sdk.sh <variables file written by the Makefile>
 set -eu
 . "$1"
 inc=$PKG_DIR/include/rose
@@ -37,7 +38,7 @@ while read -r f; do
   esac
   d=$(dest_of "$f")
   if [ -z "$d" ]; then
-    echo "windows-sdk.sh: $f is outside the source tree and the generated files" >&2
+    echo "sdk.sh: $f is outside the source tree and the generated files" >&2
     exit 1
   fi
   mkdir -p "$inc/$(dirname "$d")"
@@ -48,7 +49,7 @@ done < "$tmp/files"
 for o in $TOOL_OBJS; do
   src=$TOOL_SRC/$(basename "${o%.o}").C
   $CXX $FLAGS -M "$src" > "$tmp/deps"
-  tr ' \\' '\n\n' < "$tmp/deps" | sed -n "s|^$BOOST_INC/||p" >> "$tmp/boost"
+  tr ' \\' '\n\n' < "$tmp/deps" | sed -n "s|^$BOOST_INC/\(boost/\)|\1|p" >> "$tmp/boost"
 done
 sort -u "$tmp/boost" | while read -r f; do
   mkdir -p "$inc/$(dirname "$f")"
@@ -86,7 +87,7 @@ done
 grep -q '^-iwithprefixbefore \.$' "$inc/rose.rsp" || echo "-iwithprefixbefore ." >> "$inc/rose.rsp"
 
 # rose.mk and the examples
-cp win32/sdk/rose.mk "$PKG_DIR/rose.mk"
+cp "$SDK_FILES/rose.mk" "$PKG_DIR/rose.mk"
 mkdir -p "$PKG_DIR/examples/tools"
 for o in $TOOL_OBJS; do cp "$TOOL_SRC/$(basename "${o%.o}").C" "$PKG_DIR/examples/tools/"; done
-cp win32/sdk/Makefile.examples "$PKG_DIR/examples/tools/Makefile"
+cp "$SDK_FILES/Makefile.examples" "$PKG_DIR/examples/tools/Makefile"

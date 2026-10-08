@@ -1,0 +1,23 @@
+# Builds the example programs with the ROSE SDK and g++: in this folder,
+#
+#   make -j4
+#
+# The programs find librose.so in ../../lib.  identityTranslator.C and dotGenerator.C are ROSE's
+# example translators; rose-ren.C, rose-using.C and rose-m2g.C are the refactoring tools (they
+# use RoseRefactor.h).
+include ../../rose.mk
+
+PROGRAMS := $(patsubst %.C,%,$(wildcard *.C))
+
+all: $(PROGRAMS)
+.SECONDARY: $(PROGRAMS:=.o)
+.PHONY: all clean
+
+%: %.o
+	$(CXX) $(ROSE_LDFLAGS) -o $@ $< $(ROSE_LIBS)
+
+%.o: %.C
+	$(CXX) -O2 $(ROSE_CXXFLAGS) -c $< -o $@
+
+clean:
+	rm -f $(PROGRAMS) $(PROGRAMS:=.o)

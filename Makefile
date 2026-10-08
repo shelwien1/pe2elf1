@@ -9,6 +9,10 @@
 #   make B=build-win CXX=x86_64-w64-mingw32-g++-posix BOOST_ROOT=<boost> -j$(nproc)
 #   make B=build-win CXX=x86_64-w64-mingw32-g++-posix BOOST_ROOT=<boost> package
 #
+# Linux binary release (relocatable; Boost built with scripts/build-boost-linux.sh, see README.md):
+#   make B=build-linux RELOCATABLE=1 BOOST_ROOT=<boost> -j$(nproc)
+#   make B=build-linux RELOCATABLE=1 BOOST_ROOT=<boost> package
+#
 # Sources:
 #   rose/      subset of ROSE 2.18.0     https://github.com/llnl/rose      (BSD-3)
 #   edg/       EDG C/C++ front end 7.0   https://github.com/edgcpp/compiler (Apache-2.0 WITH LLVM-exception)
@@ -42,6 +46,13 @@ TARGET := $(shell $(CXX) -dumpmachine)
 ifneq ($(findstring mingw,$(TARGET)),)
 WINDOWS := 1
 endif
+# A relocatable build finds the EDG configuration and the system headers that it parses with
+# relative to the library (<prefix>/bin/rose.dll, <prefix>/lib/librose.so), and ships copies of
+# those headers (<prefix>/include/edg): the Windows build, and the Linux build with RELOCATABLE=1
+# (the binary release), which also links the C++ run-time library and Boost into librose.so.
+ifdef WINDOWS
+RELOCATABLE := 1
+endif
 
 # Programs that run during the build (ROSETTA's IR generator, EDG's error table generator) are
 # compiled with HOST_CXX, and with the host's Boost (HOST_BOOST_ROOT) when cross-compiling.
@@ -61,7 +72,7 @@ BOOST_ROOT ?=
 HOST_BOOST_ROOT ?= $(if $(CROSS),,$(BOOST_ROOT))
 ifneq ($(BOOST_ROOT),)
 BOOST_CPPFLAGS := -isystem $(BOOST_ROOT)/include
-BOOST_LDFLAGS  := -L$(BOOST_ROOT)/lib $(if $(WINDOWS),,-Wl$(COMMA)-rpath$(COMMA)$(BOOST_ROOT)/lib)
+BOOST_LDFLAGS  := -L$(BOOST_ROOT)/lib $(if $(RELOCATABLE),,-Wl$(COMMA)-rpath$(COMMA)$(BOOST_ROOT)/lib)
 endif
 ifneq ($(HOST_BOOST_ROOT),)
 HOST_BOOST_CPPFLAGS := -isystem $(HOST_BOOST_ROOT)/include
@@ -79,13 +90,15 @@ endif
 
 # The backend compilers: they compile the unparsed code, and the build takes their version,
 # predefined macros and system include directories from them.  The translators run them as
-# BACKEND_CC_COMMAND and BACKEND_CXX_COMMAND (the Windows build runs gcc and g++ from the PATH).
+# BACKEND_CC_COMMAND and BACKEND_CXX_COMMAND (a relocatable build runs gcc and g++ from the PATH).
 ifdef WINDOWS
 BACKEND_CC  ?= $(subst g++,gcc,$(CXX))
-BACKEND_CC_COMMAND  ?= gcc
-BACKEND_CXX_COMMAND ?= g++
 else
 BACKEND_CC  ?= gcc
+endif
+ifdef RELOCATABLE
+BACKEND_CC_COMMAND  ?= gcc
+BACKEND_CXX_COMMAND ?= g++
 endif
 BACKEND_CXX ?= $(CXX)
 ifndef BACKEND_CC_COMMAND
@@ -159,6 +172,20 @@ EXE := .exe
 LIBROSE := $(B)/lib/librose.a
 else
 LIBROSE := $(B)/lib/librose.so
+ifdef RELOCATABLE
+# The binary release runs on other Linux systems: the C++ run-time library and Boost (static
+# libraries with position-independent code) are linked into librose.so, their names hidden, and
+# the C++ run-time library into each program, which finds librose.so in ../lib.  libgcc_s and
+# the C library are the system's: linux/compat.c lets the binaries run with versions of the C
+# library down to 2.34.
+LIBROSE_LDFLAGS := -static-libstdc++ -Wl,--exclude-libs,ALL
+TOOL_LDFLAGS := -static-libstdc++ -Wl,-rpath,'$$ORIGIN/../lib'
+TOOL_LIBS :=
+GLIBC_COMPAT := $(OBJ)/linux/compat.o
+else
+TOOL_LDFLAGS := -Wl,-rpath,$(abspath $(B))/lib
+TOOL_LIBS = $(BOOST_LDFLAGS) $(BOOST_LIBS)
+endif
 endif
 TOOL_PROGS := $(patsubst %,$(B)/bin/%$(EXE),$(TOOLS))
 
@@ -184,18 +211,30 @@ sys_inc_dirs = $(shell echo | $(1) -x$(2) -E -v - 2>&1 | sed -n '/^$(HASH)includ
                  sed -n 's/^ \(.*\)/\1/p')
 CXX_SYS_INC_DIRS := $(call sys_inc_dirs,$(BACKEND_CXX),c++)
 C_SYS_INC_DIRS   := $(call sys_inc_dirs,$(BACKEND_CC),c)
-# ... as C initializer lists ("dir1", "dir2", ...).  The Windows build ships copies of them under
-# $(B)/include/edg (relative names are relative to <prefix>/include/edg).
-ifdef WINDOWS
+# ... as C initializer lists ("dir1", "dir2", ...).  A relocatable build ships copies of them
+# under $(B)/include/edg (relative names are relative to <prefix>/include/edg): on Linux, only the
+# headers of the C and C++ libraries, the compiler and the kernel, not those of the other libraries
+# installed in /usr/include (scripts/linux-toolchain-headers.sh), which the front end still
+# finds there, after the copies.
+ifdef RELOCATABLE
 SYS_INCLUDES_STAMP := $(B)/include/edg/stamp
 stage_sys_includes = sh scripts/stage-sys-includes.sh $(1) $(B)/include/edg $(CXX_SYS_INC_DIRS) -- $(C_SYS_INC_DIRS)
 CXX_INCLUDE_DIRS := $(shell $(call stage_sys_includes) | sed -n 1p)
 C_INCLUDE_DIRS   := $(shell $(call stage_sys_includes) | sed -n 2p)
 all: $(SYS_INCLUDES_STAMP)
+ifdef WINDOWS
 $(SYS_INCLUDES_STAMP): scripts/stage-sys-includes.sh
 	$(call msg,STAGE,$(@D))
 	$(Q)$(call stage_sys_includes,--copy) > /dev/null
 	$(Q)touch $@
+else
+$(SYS_INCLUDES_STAMP): scripts/stage-sys-includes.sh scripts/linux-toolchain-headers.sh
+	$(call msg,STAGE,$(@D))
+	@mkdir -p $(@D)
+	$(Q)sh scripts/linux-toolchain-headers.sh $(CXX_SYS_INC_DIRS) $(C_SYS_INC_DIRS) > $(B)/sys-include-files.txt
+	$(Q)$(call stage_sys_includes,--copy --files $(B)/sys-include-files.txt) > /dev/null
+	$(Q)touch $@
+endif
 else
 c_string_list = $(subst $(SPACE),$(COMMA) ,$(strip $(patsubst %,"%",$(1))))
 CXX_INCLUDE_DIRS := $(call c_string_list,$(CXX_SYS_INC_DIRS))
@@ -453,7 +492,7 @@ $(OBJ)/edg2sage/%.o: $(CONN_SRC)/%.C $(EDG_CONFIG)
 	$(call msg,CXX,$<)
 	@mkdir -p $(@D)
 	$(Q)$(CXX) $(ROSE_CXXFLAGS) $(ROSE_CPPFLAGS) -I$(CONN_SRC) -I$(REFACTOR_SRC) $(EDG_CPPFLAGS) \
-	  -DEDG2SAGE_EDG_BASE='"$(abspath $(B))/edg-base"' -MMD -MP -c $< -o $@
+	  $(if $(RELOCATABLE),,-DEDG2SAGE_EDG_BASE='"$(abspath $(B))/edg-base"') -MMD -MP -c $< -o $@
 
 ################################################################################
 # Link librose and the tools
@@ -484,10 +523,16 @@ $(LIBROSE): $(ALL_LIB_OBJS)
 	@mkdir -p $(@D)
 	$(Q)rm -f $@ && $(AR) rcs $@ $^
 else
-$(LIBROSE): $(ALL_LIB_OBJS)
+ifdef GLIBC_COMPAT
+$(GLIBC_COMPAT): linux/compat.c
+	$(call msg,CC,$<)
+	@mkdir -p $(@D)
+	$(Q)$(CC) -std=c11 -O2 -fPIC -Wall -c $< -o $@
+endif
+$(LIBROSE): $(ALL_LIB_OBJS) $(GLIBC_COMPAT)
 	$(call msg,LINK,$@)
 	@mkdir -p $(@D)
-	$(Q)$(CXX) -shared -pthread -o $@ $^ $(BOOST_LDFLAGS) $(BOOST_LIBS) $(SYS_LIBS)
+	$(Q)$(CXX) -shared -pthread $(LIBROSE_LDFLAGS) -o $@ $^ $(BOOST_LDFLAGS) $(BOOST_LIBS) $(SYS_LIBS)
 endif
 
 $(OBJ)/tools/%.o: $(TOOL_SRC)/%.C | $(LIB_PREREQS)
@@ -530,10 +575,10 @@ $(B)/bin/%.exe: $(OBJ)/tools/%.o $(ROSE_IMPLIB)
 	@mkdir -p $(@D)
 	$(Q)$(CXX) -static -pthread -Wl,--stack,67108864 -o $@ $< $(ROSE_IMPLIB) $(SYS_LIBS)
 else
-$(B)/bin/%: $(OBJ)/tools/%.o $(LIBROSE)
+$(B)/bin/%: $(OBJ)/tools/%.o $(LIBROSE) $(GLIBC_COMPAT)
 	$(call msg,LINK,$@)
 	@mkdir -p $(@D)
-	$(Q)$(CXX) -pthread -o $@ $< -L$(B)/lib -lrose -Wl,-rpath,$(abspath $(B))/lib $(BOOST_LDFLAGS) $(BOOST_LIBS) $(SYS_LIBS)
+	$(Q)$(CXX) -pthread $(TOOL_LDFLAGS) -o $@ $< $(GLIBC_COMPAT) -L$(B)/lib -lrose $(TOOL_LIBS) $(SYS_LIBS)
 endif
 
 ################################################################################
@@ -546,12 +591,13 @@ check: all
 	@CXX="$(HOST_CXX)" sh tests/tools/run-tests.sh $(B)/bin
 
 ################################################################################
-# Windows package: the programs and rose.dll with EDG's configuration and the system headers the
-# front end parses with, and the SDK (rose.lib, the headers, rose.mk, examples), as a relocatable
-# 7z file (<prefix>\bin, <prefix>\lib, <prefix>\include, <prefix>\edg-base, ...)
+# Binary package: the programs and the library with EDG's configuration and the system headers
+# the front end parses with, and the SDK (the headers, rose.mk, examples), relocatable.  Windows:
+# rose.dll and rose.lib, as a 7z file (<prefix>\bin, <prefix>\lib, <prefix>\include, ...).
+# Linux (RELOCATABLE=1): librose.so, as a tar.xz file (<prefix>/bin, <prefix>/lib, ...).
 ################################################################################
 
-PACKAGE := rose-$(ROSE_VERSION)-win64
+PACKAGE := rose-$(ROSE_VERSION)-$(if $(WINDOWS),win64,linux64)
 PKG_DIR := $(B)/package/$(PACKAGE)
 define SDK_VARS
 PKG_DIR='$(PKG_DIR)'
@@ -562,6 +608,7 @@ OPT='$(OPT)'
 FLAGS='$(ROSE_CXXFLAGS) $(ROSE_CPPFLAGS) -I$(REFACTOR_SRC)'
 TOOL_SRC='$(TOOL_SRC)'
 TOOL_OBJS='$(addprefix $(OBJ)/tools/,$(addsuffix .o,$(TOOLS)))'
+SDK_FILES='$(if $(WINDOWS),win32,linux)/sdk'
 endef
 ifdef WINDOWS
 package: all
@@ -581,11 +628,33 @@ package: all
 	$(Q)for f in /usr/share/doc/mingw-w64-common/copyright:MinGW-w64 /usr/share/doc/gcc-mingw-w64-base/copyright:GCC; do \
 	  [ -f "$${f%%:*}" ] && cp "$${f%%:*}" "$(PKG_DIR)/licenses/$${f##*:}-copyright.txt"; done; true
 	$(file >$(B)/sdk.vars,$(SDK_VARS))
-	$(Q)sh scripts/windows-sdk.sh $(B)/sdk.vars
+	$(Q)sh scripts/sdk.sh $(B)/sdk.vars
 	$(Q)cd $(B)/package && 7z a -t7z -mx=9 -ms=on -mmt=1 ../$(PACKAGE).7z $(PACKAGE) > /dev/null
+else ifdef RELOCATABLE
+package: all
+	$(call msg,PACKAGE,$(B)/$(PACKAGE).tar.xz)
+	$(Q)rm -rf $(B)/package $(B)/$(PACKAGE).tar.xz
+	$(Q)mkdir -p $(PKG_DIR)/bin $(PKG_DIR)/lib $(PKG_DIR)/edg-base/lib $(PKG_DIR)/edg-base/lib_win64 \
+	  $(PKG_DIR)/include $(PKG_DIR)/examples $(PKG_DIR)/licenses
+	$(Q)cp $(TOOL_PROGS) $(PKG_DIR)/bin/ && strip $(PKG_DIR)/bin/*
+	$(Q)cp $(LIBROSE) $(PKG_DIR)/lib/ && strip --strip-unneeded $(PKG_DIR)/lib/librose.so
+	$(Q)cp $(B)/edg-base/lib/predefined_macros.txt $(PKG_DIR)/edg-base/lib/
+	$(Q)cp $(B)/edg-base/lib_win64/predefined_macros.txt $(PKG_DIR)/edg-base/lib_win64/
+	$(Q)cp -R $(B)/include/edg $(PKG_DIR)/include/ && rm $(PKG_DIR)/include/edg/stamp
+	$(Q)cp linux/examples/hello.c win32/examples/shapes.cpp win32/examples/refactor.cpp $(PKG_DIR)/examples/
+	$(Q)cp linux/README.txt linux/test.sh $(PKG_DIR)/ && chmod +x $(PKG_DIR)/test.sh
+	$(Q)cp $(ROSE_SRC)/LICENSE $(PKG_DIR)/licenses/ROSE-LICENSE.txt
+	$(Q)cp $(EDG_SRC)/LICENSE.txt $(PKG_DIR)/licenses/EDG-LICENSE.txt
+	$(Q)cp linux/THIRD-PARTY.txt $(PKG_DIR)/licenses/
+	$(Q)for f in gcc-$(word 1,$(CXX_VER))-base:GCC libc6-dev:glibc linux-libc-dev:Linux libcrypt-dev:libxcrypt; do \
+	  [ -f "/usr/share/doc/$${f%%:*}/copyright" ] && \
+	  cp "/usr/share/doc/$${f%%:*}/copyright" "$(PKG_DIR)/licenses/$${f##*:}-copyright.txt"; done; true
+	$(file >$(B)/sdk.vars,$(SDK_VARS))
+	$(Q)sh scripts/sdk.sh $(B)/sdk.vars
+	$(Q)cd $(B)/package && XZ_OPT=-9e tar --owner=0 --group=0 -cJf ../$(PACKAGE).tar.xz $(PACKAGE)
 else
 package:
-	@echo "make package: only for the Windows build (CXX=x86_64-w64-mingw32-g++-posix ...)"; false
+	@echo "make package: for the Windows build (CXX=x86_64-w64-mingw32-g++-posix ...) or a relocatable Linux build (RELOCATABLE=1)"; false
 endif
 
 ################################################################################

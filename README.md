@@ -24,7 +24,8 @@ C++ finds and GCC and Clang do not) and `rose-m2g` (turns a member function into
 function with an explicit `This` parameter).
 
 The same Makefile cross-compiles ROSE for Windows with MinGW-w64, as `rose.dll` with an SDK (see
-[Windows](#windows)).
+[Windows](#windows)), and makes a relocatable Linux binary release with the same contents (see
+[Linux binary release](#linux-binary-release)).
 
 ## Layout
 
@@ -39,8 +40,9 @@ The same Makefile cross-compiles ROSE for Windows with MinGW-w64, as `rose.dll` 
 | `tools/` | the programs linked against librose: `identityTranslator` and `dotGenerator` (ROSE's examples), `rose-ren`, `rose-using`, `rose-m2g` |
 | `tests/` | test programs and `run-tests.sh` (used by `make check`); `tests/tools/`: the tests of the refactoring tools |
 | `win32/` | portability layer for the Windows build (MinGW-w64); the Windows package's `README.txt`, `test.bat` and examples; the SDK's `rose.mk` and examples Makefile (`sdk/`); the program that lists the exports of `rose.dll` (`build/`); the Makefile of the source package (`source/`) |
+| `linux/` | the Linux binary release's `README.txt`, `test.sh`, C example and third-party notes; the SDK's `rose.mk` and examples Makefile (`sdk/`) |
 | `scripts/vendor-sources.sh` | regenerates `rose/` and `edg/` from full checkouts |
-| `scripts/build-boost-mingw.sh`, `scripts/stage-sys-includes.sh`, `scripts/windows-sdk.sh`, `scripts/windows-source-package.sh` | Windows build helpers |
+| `scripts/build-boost-mingw.sh`, `scripts/build-boost-linux.sh`, `scripts/stage-sys-includes.sh`, `scripts/linux-toolchain-headers.sh`, `scripts/sdk.sh`, `scripts/windows-source-package.sh` | helpers of the Windows build and of the binary packages |
 
 ## Requirements
 
@@ -101,14 +103,20 @@ standard library) are translated.  ROSE's own compile tests, translated with
 
 | Tests | Programs | Unparsed into code that compiles |
 |-------|---------:|---------------------------------:|
-| `C_tests` | 833 | 800 (96.0%) |
+| `C_tests` | 833 | 801 (96.2%) |
 | `C99_tests` | 18 | 18 |
 | `C11_tests` | 32 | 32 |
 | `Cxx_tests` | 2,449 | 2,428 (99.1%) |
 | `Cxx11_tests` | 1,016 | 988 (97.2%) |
 | `Cxx14_tests` | 31 | 31 |
 | `Cxx17_tests` | 61 | 57 |
-| all | 4,440 | 4,354 (98.1%) |
+| all | 4,440 | 4,355 (98.1%) |
+
+C and C++ in the GNU dialects (GCC's defaults and `-std=gnu*`) are parsed in EDG's GNU modes,
+and the ISO dialects (`-std=c*`, `-std=c++*`) as GCC parses them, with `__STRICT_ANSI__`, so
+that the system headers declare the POSIX and GNU functions as for GCC.  (ROSE asks EDG for its
+plain C mode, and gives the language version also for the GNU dialects, which EDG then
+emulates as the ISO ones; `edgCommandLine()` passes `--gcc` and `--no_strict_gnu` instead.)
 
 Most of the remaining failures are tests that ROSE itself lists as failing
 (`TESTCODE_CURRENTLY_FAILING` in their `Makefile.am`), a few that EDG rejects (they contain
@@ -232,7 +240,7 @@ Windows build differs from the Linux build:
   those that the programs include (from their dependency files, with the parts of Boost that
   they include), and its compiler options (`include/rose/rose.rsp`) are those the programs are
   compiled with, with the include directories relative to `include/rose` (`gcc -iprefix`), by
-  `scripts/windows-sdk.sh`.  Built from the SDK under Wine with MSYS2's GCC 16.2 and
+  `scripts/sdk.sh`.  Built from the SDK under Wine with MSYS2's GCC 16.2 and
   `mingw32-make`, the programs pass the tests of the refactoring tools.
 * The backend compiler is MinGW-w64 GCC: the predefined macros and system include directories
   are taken from the cross compiler, and the headers are copied into the package
@@ -309,6 +317,44 @@ written for ELF targets or for a 64-bit `long` (the original programs do not ass
 Windows either; the script only checks that GCC parses the tests), and two have a flexible array
 member in an otherwise empty structure, which GCC 16 accepts and EDG, emulating the GCC 13 that
 the package was built with, rejects.
+
+## Linux binary release
+
+`make ... RELOCATABLE=1 package` makes `rose-2.18.0-linux64.tar.xz`, the Linux equivalent of the
+Windows package: the programs and `lib/librose.so`, EDG's configuration, the system headers that
+the front end parses with, the SDK (`include/rose`, `rose.mk`, the programs' sources in
+`examples/tools`), examples and `test.sh`, a self test (see `linux/README.txt`).  It is built
+from a static Boost with position-independent code (`scripts/build-boost-linux.sh`):
+
+```
+scripts/build-boost-linux.sh boost_1_83_0 $HOME/boost-linux-pic   # from an unpacked Boost release
+make B=build-linux RELOCATABLE=1 BOOST_ROOT=$HOME/boost-linux-pic -j$(nproc)
+make B=build-linux RELOCATABLE=1 BOOST_ROOT=$HOME/boost-linux-pic package   # build-linux/rose-2.18.0-linux64.tar.xz
+```
+
+With `RELOCATABLE=1`, as in the Windows build:
+
+* The system headers are copied into `include/edg` and named relative to it in the
+  configuration, and `librose.so` finds them, and `edg-base`, relative to its own location
+  (`rose_paths.C` computes the installation prefix with `dladdr`; ROSE's `roseInstallPrefix()`
+  uses it).  Only the headers of the C and C++ libraries, of GCC and of Linux are copied: the
+  files of the packages that own them (`scripts/linux-toolchain-headers.sh`, with dpkg); the
+  front end finds the headers of other libraries in `/usr/include`, after those.  The backend
+  compilers are `gcc` and `g++` from the PATH.
+* libstdc++ and Boost are linked statically into `librose.so`, their names hidden
+  (`--exclude-libs`), and libstdc++ into each program, which finds `librose.so` through its run
+  path (`$ORIGIN/../lib`).  The binaries use only the system's C library and libgcc_s, and
+  `linux/compat.c` lets them run with versions older than those they were built with: the C
+  library 2.34 (instead of 2.39) and the libgcc_s of GCC 4.3 (instead of 13), by defining the few
+  functions that need later versions (the C23 `__isoc23_strtol`, `__isoc23_sscanf`, ... that
+  glibc 2.38's headers substitute for `strtol` and `sscanf`, `arc4random`, and the `_Float16`
+  conversions of GCC 12).
+
+Built on Ubuntu 24.04 (glibc 2.39, GCC 13.3), the package passes `test.sh`, the tests in
+`tests/` and those in `tests/tools/` (including those with the Visual C++ headers), also with the
+programs built from the SDK, when it is unpacked elsewhere and the build tree removed; and the
+same in a Debian 12 chroot (glibc 2.36, GCC 12.2), where GCC 12 compiles the translated code and
+the programs of the SDK.
 
 ## Provenance and licenses
 

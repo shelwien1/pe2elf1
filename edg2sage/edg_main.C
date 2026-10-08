@@ -92,7 +92,9 @@ std::string edgBaseDirectory() {
 #elif defined(EDG2SAGE_EDG_BASE)
   return EDG2SAGE_EDG_BASE;
 #else
-  return "";
+  // A relocatable Linux build: <prefix>/edg-base, next to <prefix>/lib/librose.so
+  std::string prefix;
+  return roseInstallPrefix(prefix) ? prefix + "/edg-base" : "";
 #endif
 }
 
@@ -121,13 +123,18 @@ std::vector<std::string> edgCommandLine(int argc, char* argv[], int run) {
     out.insert(out.end(), {"-D_MT=1", "-D_CPPUNWIND=1"});
   }
   // Options of refactoring tools (RoseRefactor.h), and the cross-reference listing
-  bool cplusplus = true;
+  bool cplusplus = true, strictAnsi = false;
   for (int i = 1; i < argc; ++i) {
     if (std::strcmp(argv[i], "--gcc") == 0 || std::strcmp(argv[i], "--c") == 0 ||
         std::strcmp(argv[i], "-DROSE_LANGUAGE_MODE=0") == 0) {
       cplusplus = false;
     }
+    if (std::strcmp(argv[i], "-D__STRICT_ANSI__=1") == 0) strictAnsi = true;
   }
+  // In GNU mode, EDG emulates -std=c* or -std=c++* (defining __STRICT_ANSI__) when the language
+  // version is given (--c99, --c++17), unless told otherwise: ROSE gives the version also for the
+  // GNU dialects
+  if (!msvc && !strictAnsi) out.push_back("--no_strict_gnu");
   std::size_t toolOptions = out.size();
   xrefOptions(out, run, cplusplus);
   // Visual C++ parses the bodies of templates where they are defined only with /permissive-
@@ -167,6 +174,10 @@ std::vector<std::string> edgCommandLine(int argc, char* argv[], int run) {
       if (a == "--c11") a = "--ms_c11";
       if (a == "--c17" || a == "--c18" || a == "--c23") a = "--ms_c17";
     }
+    // C in a GNU dialect (gcc's default and -std=gnu*) is EDG's GNU C mode, as C++ in a GNU
+    // dialect is its GNU C++ mode (--g++): ROSE asks for C mode, and defines __STRICT_ANSI__ for
+    // the ISO dialects (-std=c* and -std=c++*), which the system headers rely on
+    if (!msvc && a == "--c" && !strictAnsi) a = "--gcc";
     // EDG only needs declarations of the template specializations that are used.
     if (a == "--auto_instantiation" || a == "-tused" || a == "-tlocal" || a == "-tall") continue;
     out.push_back(a);
