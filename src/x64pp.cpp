@@ -493,18 +493,24 @@ struct Decoder {
 };
 
 // table transforms; .eh_frame_hdr needs the untransformed .eh_frame in `img`
-static void tableTransform(uint8_t* p, const Region& r, bool fwd, const std::vector<Region>& R, const uint8_t* img) {
+static bool plainRange(const std::vector<Region>& R, uint64_t off, uint64_t len, uint64_t n);
+static void tableTransform(uint8_t* p, const Region& r, bool fwd, const std::vector<Region>& R, const uint8_t* img, uint64_t n) {
   switch (r.type) {
     case R_PDATA: tables::pdata(p, (size_t)r.size, fwd); break;
     case R_EHHDR: {
       tables::HdrPred pred;
-      if (r.aux < R.size() && R[(size_t)r.aux].type == R_EHFRAME) {
-        const Region& e = R[(size_t)r.aux];
+      if (r.par.size() == 1 && r.par[0] < R.size() && R[(size_t)r.par[0]].type == R_EHFRAME) {
+        const Region& e = R[(size_t)r.par[0]];
         tables::ehhdrPredict(img + e.off, (size_t)e.size, e.va, r.va - 12, pred);
       }
       tables::ehhdr(p, (size_t)r.size, fwd, pred);
       break;
     }
+    case R_GNUHASH:
+      // .dynsym and .dynstr must be plain data, so both sides see the original bytes
+      if (r.par.size() == 4 && plainRange(R, r.par[0], r.par[1], n) && plainRange(R, r.par[2], r.par[3], n))
+        tables::gnuhash(p, (size_t)r.size, img + r.par[0], r.par[1], img + r.par[2], r.par[3]);
+      break;
     case R_RELA: tables::rela(p, (size_t)r.size, fwd); break;
     case R_RELOC: tables::reloc(p, (size_t)r.size, fwd); break;
     case R_EHFRAME: tables::ehframe(p, (size_t)r.size, r.va, fwd); break;
@@ -525,6 +531,10 @@ static bool plainData(const std::vector<Region>& R, uint64_t off, uint64_t len) 
   return lo == R.size() || R[lo].off >= off + len;
 }
 
+static bool plainRange(const std::vector<Region>& R, uint64_t off, uint64_t len, uint64_t n) {
+  return off <= n && len <= n - off && plainData(R, off, len);
+}
+
 static void relaSlots(uint8_t* img, uint64_t n, const Region& r, const std::vector<Region>& R, bool fwd) {
   const uint8_t* t = img + r.off;
   size_t cnt = (size_t)(r.size / 24);
@@ -533,10 +543,11 @@ static void relaSlots(uint8_t* img, uint64_t n, const Region& r, const std::vect
     uint64_t va = tables::g64(t + 24 * e), info = tables::g64(t + 24 * e + 8), add = tables::g64(t + 24 * e + 16);
     uint32_t type = (uint32_t)info;
     if (type != 8 && type != 37) continue;
-    for (const Seg& sg : r.map) {
-      if (va < sg.va || va - sg.va >= sg.size || sg.size - (va - sg.va) < 8) continue;
-      uint64_t off = sg.off + (va - sg.va);
-      if (off > n - 8 || !plainData(R, off, 8)) break;
+    for (size_t m = 0; m + 3 <= r.par.size(); m += 3) {
+      uint64_t sva = r.par[m], soff = r.par[m + 1], ssize = r.par[m + 2];
+      if (va < sva || va - sva >= ssize || ssize - (va - sva) < 8) continue;
+      uint64_t off = soff + (va - sva);
+      if (n < 8 || off > n - 8 || !plainData(R, off, 8)) break;
       uint64_t v = tables::g64(img + off);
       tables::s64(img + off, fwd ? v - add : v + add);
       break;
@@ -558,7 +569,7 @@ static void encode(const Buf& src, Buf& out, Stats* st, std::vector<Buf>* dump) 
   std::vector<Region> R = analyze::run(src.data(), src.size(), true);
   Buf in = src;
   for (auto& r : R) if (r.type == R_RELA) relaSlots(in.data(), in.size(), r, R, true);
-  for (auto& r : R) if (r.type != R_CODE) tableTransform(&in[(size_t)r.off], r, true, R, src.data());
+  for (auto& r : R) if (r.type != R_CODE) tableTransform(&in[(size_t)r.off], r, true, R, src.data(), src.size());
 
   Labels B, L;
   for (auto& r : R) if (r.type == R_CODE) collectStarts(&in[(size_t)r.off], (size_t)r.size, r.va, B);
@@ -594,11 +605,8 @@ static void encode(const Buf& src, Buf& out, Stats* st, std::vector<Buf>* dump) 
     putVar(out, r.off - prev);
     putVar(out, r.size);
     if (hasVA(r.type)) { putVar(out, r.va - pva); pva = r.va; }
-    if (r.type == R_EHHDR) putVar(out, r.aux + 1);
-    if (r.type == R_RELA) {
-      putVar(out, r.map.size());
-      for (const Seg& sg : r.map) { putVar(out, sg.va); putVar(out, sg.off); putVar(out, sg.size); }
-    }
+    putVar(out, r.par.size());
+    for (uint64_t x : r.par) putVar(out, x);
     prev = r.off + r.size;
   }
   for (int k = 0; k < NSTREAM; k++) putVar(out, E.S[k].size());
@@ -631,13 +639,10 @@ static bool decode(const Buf& in, Buf& out) {
     x.size = r.var();
     x.va = 0;
     if (hasVA(x.type)) { x.va = pva + r.var(); pva = x.va; }
-    x.aux = x.type == R_EHHDR ? r.var() - 1 : NOAUX;
-    if (x.type == R_RELA) {
-      uint64_t ns = r.var();
-      if (ns > (uint64_t)(r.e - r.p)) return false;
-      x.map.resize((size_t)ns);
-      for (Seg& sg : x.map) { sg.va = r.var(); sg.off = r.var(); sg.size = r.var(); }
-    }
+    uint64_t np = r.var();
+    if (np > (uint64_t)(r.e - r.p)) return false;
+    x.par.resize((size_t)np);
+    for (uint64_t& v : x.par) v = r.var();
     if (!r.ok || x.type >= R_NTYPES || prev > n || gap > n - prev || x.size > n - prev - gap) return false;
     x.off = prev + gap;
     prev = x.off + x.size;
@@ -688,19 +693,24 @@ static bool decode(const Buf& in, Buf& out) {
   if (!D.take(len)) return false;
   if (len) memcpy(&out[(size_t)pos], s, len);
   for (int k = 0; k < NSTREAM; k++) if (Dc.S[k].p != Dc.S[k].e) return false;
+  // inverse order of dependencies: tables, .eh_frame_hdr (needs .eh_frame),
+  // RELATIVE slots, .gnu.hash (needs .dynsym/.dynstr in plain data)
   for (auto& x : R)
-    if (x.type != R_CODE && x.type != R_EHHDR) tableTransform(&out[(size_t)x.off], x, false, R, out.data());
+    if (x.type != R_CODE && x.type != R_EHHDR && x.type != R_GNUHASH)
+      tableTransform(&out[(size_t)x.off], x, false, R, out.data(), n);
   for (auto& x : R)
-    if (x.type == R_EHHDR) tableTransform(&out[(size_t)x.off], x, false, R, out.data());
+    if (x.type == R_EHHDR) tableTransform(&out[(size_t)x.off], x, false, R, out.data(), n);
   for (size_t k = R.size(); k-- > 0;)
     if (R[k].type == R_RELA) relaSlots(out.data(), out.size(), R[k], R, false);
+  for (auto& x : R)
+    if (x.type == R_GNUHASH) tableTransform(&out[(size_t)x.off], x, false, R, out.data(), n);
   return true;
 }
 
 //----------------------------------------------------------------------------
 
 static const char* kStreamName[NSTREAM] = {"data", "op", "j8", "jmp", "jcc", "call", "rip", "disp32", "imm32", "imm64", "esc"};
-static const char* kRegionName[R_NTYPES] = {"code", "pdata", "eh_frame_hdr", "rela", "reloc", "eh_frame"};
+static const char* kRegionName[R_NTYPES] = {"code", "pdata", "eh_frame_hdr", "rela", "reloc", "eh_frame", "gnu.hash"};
 
 static int usage() {
   fprintf(stderr,

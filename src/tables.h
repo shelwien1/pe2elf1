@@ -276,4 +276,38 @@ static void ehhdrPredict(const uint8_t* p, size_t n, uint64_t va, uint64_t hdrva
   for (auto& f : fd) out.push_back({(uint32_t)(f.pc - hdrva), (uint32_t)(f.fva - hdrva)});
 }
 
+//----------------------------------------------------------------------------
+// .gnu.hash: bloom filter, buckets and chains follow from the names of the
+// hashed .dynsym entries, so the table is XORed with its recomputation
+// (XOR: forward and inverse are the same).  The 16-byte header stays.
+static void gnuhash(uint8_t* p, size_t n, const uint8_t* sym, uint64_t symsize, const uint8_t* str, uint64_t strsize) {
+  if (n < 16) return;
+  uint32_t nb = g32(p), symoff = g32(p + 4), bsz = g32(p + 8), shift = g32(p + 12);
+  uint64_t nsym = symsize / 24;
+  if (nb == 0 || bsz == 0 || symoff > nsym) return;
+  uint64_t bloomEnd = 16 + 8ull * bsz, buckEnd = bloomEnd + 4ull * nb, chainEnd = buckEnd + 4ull * (nsym - symoff);
+  if (chainEnd > n) return;
+  std::vector<uint32_t> h((size_t)(nsym - symoff));
+  for (uint64_t i = symoff; i < nsym; i++) {
+    uint32_t name = g32(sym + 24 * i), x = 5381;
+    for (uint64_t k = name; k < strsize && str[k]; k++) x = x * 33 + str[k];
+    h[(size_t)(i - symoff)] = x;
+  }
+  std::vector<uint64_t> bloom(bsz, 0);
+  std::vector<uint32_t> buck(nb, 0);
+  for (size_t j = 0; j < h.size(); j++) {
+    uint32_t x = h[j];
+    bloom[(x / 64) % bsz] |= (uint64_t)1 << (x % 64) | (uint64_t)1 << ((x >> (shift & 31)) % 64);
+    uint32_t b = x % nb;
+    if (!buck[b]) buck[b] = (uint32_t)(symoff + j);
+  }
+  for (uint32_t k = 0; k < bsz; k++) s64(p + 16 + 8 * k, g64(p + 16 + 8 * k) ^ bloom[k]);
+  for (uint32_t k = 0; k < nb; k++) s32(p + bloomEnd + 4 * k, g32(p + bloomEnd + 4 * k) ^ buck[k]);
+  for (size_t j = 0; j < h.size(); j++) {
+    bool last = j + 1 == h.size() || h[j + 1] % nb != h[j] % nb;
+    uint32_t c = (h[j] & ~1u) | (last ? 1u : 0u);
+    s32(p + buckEnd + 4 * j, g32(p + buckEnd + 4 * j) ^ c);
+  }
+}
+
 }  // namespace tables

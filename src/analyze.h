@@ -18,21 +18,21 @@ enum RegionType : uint8_t {
   R_RELA,      // Elf64_Rela array
   R_RELOC,     // PE base relocation blocks
   R_EHFRAME,   // .eh_frame
+  R_GNUHASH,   // .gnu.hash
   R_NTYPES
 };
-
-struct Seg { uint64_t va, off, size; };  // loadable segment: file offset of a VA range
 
 struct Region {
   uint64_t off, size;
   uint64_t va;   // virtual address of the first byte (code, .eh_frame, .eh_frame_hdr)
-  uint64_t aux;  // .eh_frame_hdr: index of its .eh_frame region, or NOAUX
   uint32_t img;  // image number (analysis only)
   uint8_t type;
-  std::vector<Seg> map;  // Elf64_Rela: the image's PT_LOAD segments
+  // type specific parameters, stored in the container:
+  //   .eh_frame_hdr  index of the image's .eh_frame region
+  //   Elf64_Rela     (va, file offset, size) of each PT_LOAD segment
+  //   .gnu.hash      file offset and size of .dynsym and .dynstr
+  std::vector<uint64_t> par;
 };
-
-enum : uint64_t { NOAUX = ~(uint64_t)0 };
 
 namespace analyze {
 
@@ -48,7 +48,7 @@ struct Ctx {
   void add(uint8_t type, uint64_t off, uint64_t size, uint64_t va) {
     if (off >= n || size == 0) return;
     if (size > n - off) size = n - off;
-    R.push_back({off, size, va, NOAUX, img, type, {}});
+    R.push_back({off, size, va, img, type, {}});
   }
 };
 
@@ -115,12 +115,15 @@ static uint64_t parseELF(Ctx& C, uint64_t base, uint64_t vbias) {
   uint64_t phoff = g64(p + 0x20);
   uint32_t phentsize = g16(p + 0x36), phnum = g16(p + 0x38);
   bool hasPh = phoff && phnum && phentsize >= 56 && phoff < avail && (uint64_t)phentsize * phnum <= avail - phoff;
-  std::vector<Seg> segs;
+  std::vector<uint64_t> segs;  // PT_LOAD (va, file offset, size) triples
   if (hasPh) {
     for (uint32_t k = 0; k < phnum; k++) {
       const uint8_t* s = p + phoff + (uint64_t)k * phentsize;
       uint64_t off = g64(s + 8), size = g64(s + 32);
-      if (g32(s) == 1 && off < avail && size) segs.push_back({g64(s + 16), base + off, std::min(size, avail - off)});
+      if (g32(s) != 1 || off >= avail || !size) continue;
+      segs.push_back(g64(s + 16));
+      segs.push_back(base + off);
+      segs.push_back(std::min(size, avail - off));
     }
   }
   size_t before = C.R.size();
@@ -146,7 +149,25 @@ static uint64_t parseELF(Ctx& C, uint64_t base, uint64_t vbias) {
       if (flags & 4) { C.add(R_CODE, base + off, size, vbias + addr); continue; }  // SHF_EXECINSTR
       if (type == 4 && entsize == 24) {
         C.add(R_RELA, base + off, size / 24 * 24, 0);
-        if (!C.R.empty() && C.R.back().type == R_RELA) C.R.back().map = segs;
+        if (!C.R.empty() && C.R.back().type == R_RELA) C.R.back().par = segs;
+        continue;
+      }
+      if (type == 0x6FFFFFF6 && size >= 16) {  // SHT_GNU_HASH -> .dynsym -> .dynstr
+        uint32_t link = g32(s + 40);
+        if (link < shnum) {
+          const uint8_t* ds = p + shoff + (uint64_t)link * shentsize;
+          uint32_t slink = g32(ds + 40);
+          uint64_t dsoff = g64(ds + 24), dssize = g64(ds + 32);
+          if (g32(ds + 4) == 11 && slink < shnum && dsoff < avail && dssize <= avail - dsoff) {
+            const uint8_t* ss = p + shoff + (uint64_t)slink * shentsize;
+            uint64_t stroff = g64(ss + 24), strsize = g64(ss + 32);
+            if (stroff < avail && strsize <= avail - stroff) {
+              C.add(R_GNUHASH, base + off, size, 0);
+              if (!C.R.empty() && C.R.back().type == R_GNUHASH)
+                C.R.back().par = {base + dsoff, dssize, base + stroff, strsize};
+            }
+          }
+        }
         continue;
       }
       if (!strcmp(nm, ".eh_frame")) { C.add(R_EHFRAME, base + off, size, addr); continue; }
@@ -218,7 +239,7 @@ static std::vector<Region> run(const uint8_t* b, uint64_t n, bool scan) {
   for (auto& h : out) {
     if (h.type != R_EHHDR) continue;
     for (size_t k = 0; k < out.size(); k++)
-      if (out[k].type == R_EHFRAME && out[k].img == h.img) { h.aux = k; break; }
+      if (out[k].type == R_EHFRAME && out[k].img == h.img) { h.par.assign(1, k); break; }
   }
   return out;
 }
