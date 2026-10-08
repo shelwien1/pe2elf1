@@ -542,7 +542,11 @@ void describe(RR::Entity& e, int symbolKind, char* il, an_il_entry_kind iek) {
       a_constant_ptr c = (a_constant_ptr)il;
       sc = &c->source_corresp;
       e.type = typeText(c->type);
-      if (e.kind == RR::Kind::Other) e.kind = RR::Kind::Enumerator;
+      if (c->kind == ck_template_param) {
+        e.kind = RR::Kind::TemplateParameter;  // (a non-type template parameter)
+      } else if (e.kind == RR::Kind::Other) {
+        e.kind = RR::Kind::Enumerator;
+      }
       break;
     }
     case iek_namespace: {

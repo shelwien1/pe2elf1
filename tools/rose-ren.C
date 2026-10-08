@@ -111,13 +111,22 @@ bool isIdentifier(const std::string& s) {
   return true;
 }
 
+// Whether e is a constructor or destructor, or a constructor template (a member function template
+// with the name of its class)
+bool isConstructorOrDestructor(const CrossReferences& xr, const Entity& e) {
+  if (e.kind == Kind::Constructor || e.kind == Kind::Destructor) return true;
+  if (e.kind != Kind::FunctionTemplate || e.scope.kind != Scope::Kind::Class) return false;
+  const Entity* c = xr.entity(e.scope.id);
+  return c != nullptr && c->name == e.name;
+}
+
 // The entities called name that are declared outside system headers, grouped
 std::vector<Item> itemsNamed(const CrossReferences& xr, const std::string& name) {
   std::vector<Item> items;
   std::set<EntityId> done;
   for (const Entity* e : xr.named(name)) {
     // (constructors and destructors are renamed with their class)
-    if (done.count(e->id) || e->isImplicit || e->kind == Kind::Constructor || e->kind == Kind::Destructor) continue;
+    if (done.count(e->id) || e->isImplicit || isConstructorOrDestructor(xr, *e)) continue;
     std::vector<const Entity*> group = xr.sameDeclaration(*e);
     for (const Entity* g : group) done.insert(g->id);
     Item item;
@@ -279,13 +288,16 @@ private:
         return true;
     }
   }
-  // Member name lookup in class cls: its members, or else those found in its base classes
+  // Member name lookup in class cls: its members (its own name included: the injected class
+  // name), or else those found in its base classes
   void inClass(EntityId cls, const Entity& e, LookupKind kind, std::vector<const Entity*>& found,
                std::set<EntityId>& seen) {
     if (!seen.insert(cls).second) return;
     std::size_t n = found.size();
     for (const Entity* c : candidates_) {
-      if (considered(*c, e, kind) && c->scope.kind == Scope::Kind::Class && c->scope.id == cls) found.push_back(c);
+      if (considered(*c, e, kind) && ((c->scope.kind == Scope::Kind::Class && c->scope.id == cls) || c->id == cls)) {
+        found.push_back(c);
+      }
     }
     if (found.size() > n) return;
     if (const Entity* ce = xr_.entity(cls)) {
@@ -569,7 +581,10 @@ int rename(const CrossReferences& xr, const std::vector<Item>& items, const std:
   if (!classes.empty()) {
     for (const auto& kv : xr.entities()) {
       const Entity& g = kv.second;
-      if ((g.kind == Kind::Constructor || g.kind == Kind::Destructor) && classes.count(g.parent)) targets.insert(&g);
+      if (isConstructorOrDestructor(xr, g) &&
+          (classes.count(g.parent) || (g.scope.kind == Scope::Kind::Class && classes.count(g.scope.id)))) {
+        targets.insert(&g);
+      }
     }
   }
 

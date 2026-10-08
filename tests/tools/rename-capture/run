@@ -26,7 +26,7 @@ $REN main.cpp px x
 $REN main.cpp done counter
 $REN tags.c origin point
 # Refused (more.cpp): function templates, template parameters, anonymous unions, the scopes of
-# for and if statements, a member named as its class
+# for and if statements, a member named as its class, the name of a base class
 ! $REN more.cpp total maximum
 ! $REN more.cpp maximum total
 ! $REN more.cpp sum T
@@ -36,7 +36,11 @@ $REN tags.c origin point
 ! $REN more.cpp step i
 ! $REN more.cpp add j
 ! $REN more.cpp d:1 c
-! $REN more.cpp value Counter
-# Renamed (more.cpp): the same names in other scopes
+! $REN more.cpp value:0 Counter
+! $REN more.cpp Box shapes
+! $REN more.cpp n N
+# Renamed (more.cpp): the same names in other scopes, a class template with its constructor
+# template
 $REN more.cpp total sum
 $REN more.cpp step j
+$REN more.cpp Holder Keeper

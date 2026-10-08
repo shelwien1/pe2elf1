@@ -28,9 +28,21 @@ int loops() {
 // A member may not have the name of its class
 struct Counter { int value = 4; int count() const { return value; } };
 
+// The name of a class is declared in its scope, so in those of the classes derived from it too
+namespace shapes { struct Unit { int size = 1; }; }
+namespace lib { template <class T> struct Box { T value = 2; }; }
+struct Crate : lib::Box<int> { shapes::Unit unit; int weight() const { return value + unit.size; } };
+
+// A non-type template parameter
+template <int N> struct Grid { int cells(int n) const { return N * n; } };
+
+// A constructor template is renamed with its class
+template <class T> struct Holder { template <class U> Holder(U u) : held(T(u)) {} T held; };
+
 int main() {
   int total = maximum(1, 2);
   Value v{0, {5}};
   std::printf("%d %d %d %d %d\n", total, twice(3), v.get(), loops(), Counter().count());
+  std::printf("%d %d %d\n", Crate().weight(), Grid<3>().cells(2), Holder<int>(2.5).held);
   return 0;
 }
