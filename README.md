@@ -498,6 +498,8 @@ turning absolute values into small, repeating numbers.
   corruptions aimed at the header where the table list is, and a unit test
   of `src/tdelta.h` (3,000 random buffers with embedded tables round-trip;
   random table lists are rejected or applied without memory errors).
+* Layout padding: 600 more fuzzing iterations with ASan/UBSan, as above
+  but each encoding with a random `-lN` (0 to 63 blocks).
 * Decoder instruction lengths checked against objdump on all code sections
   of the test files.
 * `src/lzma.hpp` against liblzma 5.4.5: byte-identical output in about
