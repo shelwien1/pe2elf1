@@ -1205,4 +1205,221 @@ static void gnuhash(uint8_t* p, size_t n, const uint8_t* sym, uint64_t symsize, 
   }
 }
 
+//----------------------------------------------------------------------------
+// .gcc_except_table: the call-site records of each LSDA (found through the
+// FDEs of the untransformed .eh_frame) are ranked against the function's
+// code: the start among (end of the previous record, call starts after it),
+// the end among call ends, the landing pad among (0, instruction starts
+// after the previous landing pad).  GCC writes one record per call, clang
+// one per range between calls; both become mostly 0 and 1.  Each rank is
+// written as a ULEB128 of the original field's length, so the table stays
+// in place; that needs minimal ULEB128 fields and LSDAs that don't overlap,
+// which lsdaUsable checks.
+
+struct LsdaRef { uint64_t pc, range, off; };  // function, LSDA offset in the table
+
+// LSDAs of the functions in .eh_frame (p, n at va) that lie in the table at
+// tva (tn bytes), in FDE order, each once
+static void lsdaRefs(const uint8_t* p, size_t n, uint64_t va, uint64_t tva, uint64_t tn, std::vector<LsdaRef>& out) {
+  out.clear();
+  std::vector<Cie> cies;
+  std::vector<uint64_t> seen;
+  size_t i = 0;
+  while (i + 8 <= n) {
+    uint32_t len = g32(p + i);
+    if (len == 0 || len == 0xFFFFFFFFu || len > n - i - 4) break;
+    size_t idf = i + 4, end = idf + len;
+    uint32_t id = g32(p + idf);
+    if (id == 0) {
+      Cie c;
+      c.off = (uint32_t)i;
+      if (parseCie(p, end, idf + 4, c)) cies.push_back(c);
+      i = end;
+      continue;
+    }
+    uint32_t cieOff = (uint32_t)idf - id;
+    size_t lo = 0, hi = cies.size();
+    while (lo < hi) {
+      size_t mid = (lo + hi) / 2;
+      if (cies[mid].off < cieOff) lo = mid + 1; else hi = mid;
+    }
+    size_t j = idf + 4;
+    if (lo < cies.size() && cies[lo].off == cieOff) {
+      const Cie& c = cies[lo];
+      if (c.hasz && enc4(c.renc) && c.lenc != 0xFF && enc4(c.lenc) && j + 8 <= end) {
+        uint64_t v = (c.renc & 0x0F) == 0x0B ? (uint64_t)(int64_t)(int32_t)g32(p + j) : g32(p + j);
+        uint64_t pc = ((c.renc & 0x70) == 0x10 ? va + j : 0) + v, range = g32(p + j + 4);
+        size_t k = j + 8;
+        uint64_t al;
+        if (uleb(p, end, k, al) && al == 4 && k + 4 <= end) {
+          uint64_t w = (c.lenc & 0x0F) == 0x0B ? (uint64_t)(int64_t)(int32_t)g32(p + k) : g32(p + k);
+          uint64_t l = ((c.lenc & 0x70) == 0x10 ? va + k : 0) + w;
+          if (w && l >= tva && l - tva < tn && std::find(seen.begin(), seen.end(), l) == seen.end()) {
+            seen.push_back(l);
+            out.push_back({pc, range, l - tva});
+          }
+        }
+      }
+    }
+    i = end;
+  }
+}
+
+// ULEB128 field at p[i] (end e): value, length
+static inline bool ulebField(const uint8_t* p, size_t e, size_t i, uint64_t& v, size_t& len) {
+  size_t k = i;
+  if (!uleb(p, e, k, v) || k - i > 5) return false;
+  len = k - i;
+  return true;
+}
+static inline size_t ulebLen(uint64_t v) { size_t n = 1; while (v >= 0x80) { v >>= 7; n++; } return n; }
+static inline void ulebPut(uint8_t* p, uint64_t v, size_t len) {  // padded to len bytes
+  for (size_t k = 0; k < len; k++) { p[k] = (uint8_t)((v & 0x7F) | (k + 1 < len ? 0x80 : 0)); v >>= 7; }
+}
+
+// Ranking within the values whose minimal ULEB128 has len bytes: first the
+// candidates, a[k] - base for k in [k0, k1) after an optional `first`, all
+// ascending; then the other values, ascending.
+struct LsdaRank {
+  uint64_t lo, hi;      // value range of the field length
+  bool f;               // `first` is a candidate
+  uint64_t first, base;
+  const uint64_t* a;    // candidates a[0..na) (positions; value = a[k] - base)
+  size_t na;
+  LsdaRank(size_t len, bool hasFirst, uint64_t fv, const std::vector<uint64_t>& v, uint64_t from, uint64_t b) {
+    lo = len == 1 ? 0 : (uint64_t)1 << (7 * (len - 1));
+    hi = (uint64_t)1 << (7 * len);
+    base = b;
+    f = hasFirst && fv >= lo && fv < hi;
+    first = fv;
+    // positions > from (values > from - base) inside [lo, hi), and above first
+    uint64_t pmin = std::max<uint64_t>(from + 1, lo + base);
+    if (f) pmin = std::max<uint64_t>(pmin, first + base + 1);
+    const uint64_t* b0 = std::lower_bound(v.data(), v.data() + v.size(), pmin);
+    const uint64_t* b1 = hi + base < hi ? v.data() + v.size() : std::lower_bound(b0, v.data() + v.size(), hi + base);
+    a = b0;
+    na = (size_t)(b1 - b0);
+  }
+  size_t ncand() const { return (f ? 1 : 0) + na; }
+  uint64_t below(uint64_t x) const {  // candidates < x
+    return (f && first < x ? 1 : 0) + (uint64_t)(std::lower_bound(a, a + na, x + base) - a);
+  }
+  uint64_t rank(uint64_t x) const {
+    if (f && x == first) return 0;
+    const uint64_t* q = std::lower_bound(a, a + na, x + base);
+    if (q < a + na && *q == x + base) return (f ? 1 : 0) + (uint64_t)(q - a);
+    return ncand() + (x - lo) - below(x);
+  }
+  uint64_t unrank(uint64_t r) const {
+    if (f && r == 0) return first;
+    if (r < ncand()) return a[r - (f ? 1 : 0)] - base;
+    uint64_t t = r - ncand(), c = 0;
+    for (;;) {  // smallest x with (x - lo) - candidates below x == t, x no candidate
+      uint64_t x = lo + t + c;
+      uint64_t c2 = below(x + 1);
+      if (c2 == c) return x;
+      c = c2;
+    }
+  }
+};
+
+// call starts and ends; block starts after an unconditional transfer (where
+// landing pads go: they are never fallen into)
+struct CallInfo { std::vector<uint64_t> after, cstart, cend; };
+
+static void callInfo(const CodeMap& cm, const uint8_t* code, uint64_t avail, uint64_t len, CallInfo& ci) {
+  ci.after.clear(); ci.cstart.clear(); ci.cend.clear();
+  if (!code) return;
+  if (len > avail) len = avail;
+  uint64_t i = 0;
+  bool barrier = false;
+  while (i < len) {
+    x64::Insn I;
+    if (!cm.step(code + i, avail - i, I)) break;
+    bool call = !I.trunc && I.enc == x64::ENC_LEGACY &&
+                (I.op == 0xE8 || (I.op == 0xFF && I.hasmodrm && ((I.modrm >> 3) & 7) == 2));
+    if (barrier && !isPad(I)) { ci.after.push_back(i); barrier = false; }
+    if (call) ci.cstart.push_back(i);
+    i += I.len;
+    if (call) ci.cend.push_back(i);
+    if (I.trunc) continue;
+    unsigned reg = (I.modrm >> 3) & 7;
+    if (I.op == 0xC3 || I.op == 0xC2 || I.op == 0xE9 || I.op == 0xEB || I.op == 0x10B || I.op == 0xF4 ||
+        (I.op == 0xFF && I.hasmodrm && (reg == 4 || reg == 5)))
+      barrier = true;
+  }
+}
+
+// call-site table of the LSDA at p[o] (n bytes in all): [cs, ce), or false
+static bool lsdaCalls(const uint8_t* p, size_t n, size_t o, size_t& cs, size_t& ce) {
+  if (o + 3 > n || p[o] != 0xFF) return false;  // LPStart must be the function start
+  size_t i = o + 1;
+  uint8_t tt = p[i++];
+  uint64_t v;
+  if (tt != 0xFF && !uleb(p, n, i, v)) return false;
+  if (i >= n || p[i++] != 0x01) return false;  // ULEB128 call sites
+  if (!uleb(p, n, i, v) || v > n - i) return false;
+  cs = i;
+  ce = i + (size_t)v;
+  return true;
+}
+
+// can the file's LSDAs be transformed: every call-site field minimal, no
+// two of them overlapping
+static bool lsdaUsable(const uint8_t* p, size_t n, const std::vector<LsdaRef>& refs) {
+  std::vector<std::pair<size_t, size_t> > ext;
+  for (auto& r : refs) {
+    size_t i, e;
+    if (!lsdaCalls(p, n, (size_t)r.off, i, e)) continue;
+    ext.push_back({(size_t)r.off, e});
+    while (i < e) {
+      for (int f = 0; f < 4 && i < e; f++) {
+        uint64_t v;
+        size_t len;
+        if (!ulebField(p, e, i, v, len)) return true;  // the walk stops here on both sides
+        if (f < 3 && len != ulebLen(v)) return false;
+        i += len;
+      }
+    }
+  }
+  std::sort(ext.begin(), ext.end());
+  for (size_t k = 1; k < ext.size(); k++)
+    if (ext[k].first < ext[k - 1].second) return false;
+  return true;
+}
+
+static void lsdaTable(uint8_t* p, size_t n, const std::vector<LsdaRef>& refs, const CodeMap& cm, uint64_t vbias, bool fwd) {
+  cm.reset();
+  CallInfo ci;
+  for (const LsdaRef& r : refs) {
+    size_t i, e;
+    if (!lsdaCalls(p, n, (size_t)r.off, i, e)) continue;
+    uint64_t avail = 0;
+    const uint8_t* code = cm.at(vbias + r.pc, avail);
+    callInfo(cm, code, code ? avail : 0, r.range, ci);
+    uint64_t prevEnd = 0, prevLp = 0;
+    while (i < e) {
+      uint64_t s = 0, l = 0;
+      for (int f = 0; f < 4 && i < e; f++) {
+        uint64_t v;
+        size_t len;
+        if (!ulebField(p, e, i, v, len)) { i = e; break; }
+        if (f < 3) {
+          LsdaRank rk = f == 0 ? LsdaRank(len, true, prevEnd, ci.cstart, prevEnd, 0)
+                      : f == 1 ? LsdaRank(len, false, 0, ci.cend, s, s)
+                               : LsdaRank(len, true, 0, ci.after, prevLp, 0);
+          uint64_t x = fwd ? rk.rank(v) : rk.unrank(v);
+          if (x >= ((uint64_t)1 << (7 * len))) { i = e; break; }  // corrupt: leave the rest
+          ulebPut(p + i, x, len);
+          uint64_t orig = fwd ? v : x;
+          if (f == 0) s = orig;
+          else if (f == 1) { l = orig; prevEnd = s + l; }
+          else if (orig) prevLp = orig;
+        }
+        i += len;
+      }
+    }
+  }
+}
+
 }  // namespace tables

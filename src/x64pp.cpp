@@ -8,9 +8,10 @@
 // one stream; wide operands are split into separate streams by kind, with
 // RIP-relative targets converted to absolute form.  Branch targets are coded
 // through a set of labels that the decoder recovers by parsing the opcode
-// stream first.  Unwind, relocation and hash tables are delta coded or
-// predicted from the code and from each other.  Everything else is copied.
-// See README.md for the format and the numbers.
+// stream first.  Unwind, exception, relocation and hash tables are delta
+// coded or predicted from the code and from each other.  Everything else is
+// copied.  Some codings are options chosen per file (-o, or -a: compress the
+// candidates with liblzma).  See README.md for the format and the numbers.
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -893,6 +894,15 @@ static void tableTransform(uint8_t* p, const Region& r, bool fwd, const std::vec
       break;
     case R_RELA: tables::rela(p, (size_t)r.size, fwd); break;
     case R_RELOC: tables::reloc(p, (size_t)r.size, fwd); break;
+    case R_EXCEPT:  // par: the .eh_frame region, LSDAs transformed
+      if (r.par.size() == 2 && r.par[1] && r.par[0] < R.size() && R[(size_t)r.par[0]].type == R_EHFRAME &&
+          !R[(size_t)r.par[0]].par.empty()) {
+        const Region& e = R[(size_t)r.par[0]];
+        std::vector<tables::LsdaRef> refs;
+        tables::lsdaRefs(img + e.off, (size_t)e.size, e.va, r.va, r.size, refs);
+        tables::lsdaTable(p, (size_t)r.size, refs, cm, e.par[0], fwd);
+      }
+      break;
     case R_EHFRAME:  // par: image VA bias, CFA prediction style
       tables::ehframe(p, (size_t)r.size, r.va, fwd, r.par.size() == 2 ? &cm : nullptr, r.par.size() == 2 ? r.par[0] : 0,
                       r.par.size() == 2 && r.par[1] <= tables::CFA_LLVM ? (int)r.par[1] : tables::CFA_RANK);
@@ -979,7 +989,7 @@ static void unwindInfos(uint8_t* img, uint64_t n, const uint8_t* pd, const Regio
   }
 }
 
-static inline bool hasVA(uint8_t type) { return type == R_CODE || type == R_EHFRAME || type == R_EHHDR; }
+static inline bool hasVA(uint8_t type) { return type == R_CODE || type == R_EHFRAME || type == R_EHHDR || type == R_EXCEPT; }
 
 //----------------------------------------------------------------------------
 // Container
@@ -1014,6 +1024,18 @@ static void encode(const Buf& src, Buf& out, unsigned opts, Stats* st, std::vect
       if (nz < best) { best = nz; bs = style; }
     }
     r.par[1] = bs;
+  }
+  // .gcc_except_table: only if every LSDA allows it
+  for (auto& r : R) {
+    if (r.type != R_EXCEPT || r.par.size() != 1) continue;
+    bool ok = r.par[0] < R.size() && R[(size_t)r.par[0]].type == R_EHFRAME;
+    if (ok) {
+      const Region& e = R[(size_t)r.par[0]];
+      std::vector<tables::LsdaRef> refs;
+      tables::lsdaRefs(&src[(size_t)e.off], (size_t)e.size, e.va, r.va, r.size, refs);
+      ok = !refs.empty() && tables::lsdaUsable(&src[(size_t)r.off], (size_t)r.size, refs);
+    }
+    r.par.push_back(ok);
   }
   for (auto& r : R) if (r.type != R_CODE) tableTransform(&in[(size_t)r.off], r, true, R, src.data(), src.size(), cm);
 
@@ -1211,14 +1233,14 @@ static bool decode(const Buf& in, Buf& out) {
   if (len) memcpy(&out[(size_t)pos], s, len);
   for (int k = 0; k < NSTREAM; k++) if (Dc.S[k].p != Dc.S[k].e) return false;
   // inverse order of dependencies: tables (.eh_frame needs the code),
-  // .eh_frame_hdr (needs .eh_frame), RELATIVE slots, .gnu.hash (needs
-  // .dynsym/.dynstr in plain data)
+  // .eh_frame_hdr and .gcc_except_table (need .eh_frame), RELATIVE slots,
+  // .gnu.hash (needs .dynsym/.dynstr in plain data)
   tables::CodeMap cm = codeMap(R, out.data());
   for (auto& x : R)
-    if (x.type != R_CODE && x.type != R_EHHDR && x.type != R_GNUHASH)
+    if (x.type != R_CODE && x.type != R_EHHDR && x.type != R_GNUHASH && x.type != R_EXCEPT)
       tableTransform(&out[(size_t)x.off], x, false, R, out.data(), n, cm);
   for (auto& x : R)
-    if (x.type == R_EHHDR) tableTransform(&out[(size_t)x.off], x, false, R, out.data(), n, cm);
+    if (x.type == R_EHHDR || x.type == R_EXCEPT) tableTransform(&out[(size_t)x.off], x, false, R, out.data(), n, cm);
   for (size_t k = R.size(); k-- > 0;)
     if (R[k].type == R_PDATA) unwindInfos(out.data(), out.size(), &out[(size_t)R[k].off], R[k], R, cm, false);
   for (size_t k = R.size(); k-- > 0;)
@@ -1351,7 +1373,7 @@ struct OptionSearch {
 //----------------------------------------------------------------------------
 
 static const char* kStreamName[NSTREAM] = {"data", "op", "j8", "jmp", "jcc", "call", "rip", "disp32", "imm32", "imm64", "esc", "inl"};
-static const char* kRegionName[R_NTYPES] = {"code", "pdata", "eh_frame_hdr", "rela", "reloc", "eh_frame", "gnu.hash"};
+static const char* kRegionName[R_NTYPES] = {"code", "pdata", "eh_frame_hdr", "rela", "reloc", "eh_frame", "gnu.hash", "except_table"};
 
 static int usage() {
   fprintf(stderr,

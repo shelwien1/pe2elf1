@@ -21,25 +21,25 @@ better than compressing them separately.
 
 Tuning set (all transforms were developed on these files):
 
-| file | size | xz | xz --x86 | x64flt3 | x64pp |
-|---|---:|---:|---:|---:|---:|
-| elf_bash | 1,446,024 | 583,788 | 545,568 | 503,832 | 396,188 |
-| elf_gdb | 8,920,528 | 3,002,788 | 2,723,940 | 2,629,292 | 2,174,424 |
-| elf_libpython.so | 9,061,000 | 2,108,448 | 2,001,140 | 1,897,780 | 1,555,692 |
-| elf_python | 8,020,928 | 2,118,392 | 1,993,560 | 1,900,992 | 1,645,156 |
-| elf_rg (Rust) | 5,257,872 | 1,371,532 | 1,354,044 | 1,274,616 | 978,988 |
-| elf_vim | 4,130,640 | 1,751,720 | 1,650,220 | 1,513,020 | 1,197,028 |
-| elf_xz | 89,008 | 31,216 | 29,280 | 28,488 | 24,196 |
-| pe_7za.dll | 413,184 | 164,940 | 156,212 | 155,424 | 135,392 |
-| pe_7za.exe | 1,323,520 | 492,476 | 451,920 | 447,572 | 387,452 |
-| pe_msvcp140.dll | 585,384 | 148,616 | 140,380 | 134,428 | 117,232 |
-| pe_mtrand.pyd | 633,344 | 151,536 | 146,240 | 137,948 | 115,832 |
-| pe_npcore.pyd | 4,160,512 | 969,912 | 932,712 | 895,996 | 764,056 |
-| pe_rg.exe (Rust) | 5,407,744 | 1,450,748 | 1,359,536 | 1,304,228 | 1,143,472 |
-| pe_t64.exe | 108,032 | 44,692 | 42,728 | 42,492 | 37,500 |
-| pe_x64flt3.exe | 56,832 | 19,172 | 18,652 | 18,232 | 15,664 |
-| **total** | 49,614,552 | 14,409,976 | 13,546,132 | 12,884,340 | **10,688,272** |
-| vs xz | | | -5.99% | -10.59% | **-25.83%** |
+| file | size | xz | xz --x86 | x64flt3 | x64pp | x64pp -a |
+|---|---:|---:|---:|---:|---:|---:|
+| elf_bash | 1,446,024 | 583,788 | 545,568 | 503,832 | 390,384 | 390,384 |
+| elf_gdb | 8,920,528 | 3,002,788 | 2,723,940 | 2,629,292 | 2,124,772 | 2,123,940 |
+| elf_libpython.so | 9,061,000 | 2,108,448 | 2,001,140 | 1,897,780 | 1,538,108 | 1,536,816 |
+| elf_python | 8,020,928 | 2,118,392 | 1,993,560 | 1,900,992 | 1,632,880 | 1,632,880 |
+| elf_rg (Rust) | 5,257,872 | 1,371,532 | 1,354,044 | 1,274,616 | 957,060 | 951,588 |
+| elf_vim | 4,130,640 | 1,751,720 | 1,650,220 | 1,513,020 | 1,184,532 | 1,184,244 |
+| elf_xz | 89,008 | 31,216 | 29,280 | 28,488 | 23,980 | 23,852 |
+| pe_7za.dll | 413,184 | 164,940 | 156,212 | 155,424 | 135,528 | 134,512 |
+| pe_7za.exe | 1,323,520 | 492,476 | 451,920 | 447,572 | 387,292 | 384,880 |
+| pe_msvcp140.dll | 585,384 | 148,616 | 140,380 | 134,428 | 117,400 | 116,812 |
+| pe_mtrand.pyd | 633,344 | 151,536 | 146,240 | 137,948 | 115,876 | 113,092 |
+| pe_npcore.pyd | 4,160,512 | 969,912 | 932,712 | 895,996 | 761,740 | 758,436 |
+| pe_rg.exe (Rust) | 5,407,744 | 1,450,748 | 1,359,536 | 1,304,228 | 1,144,496 | 1,143,188 |
+| pe_t64.exe | 108,032 | 44,692 | 42,728 | 42,492 | 37,452 | 37,256 |
+| pe_x64flt3.exe | 56,832 | 19,172 | 18,652 | 18,232 | 15,768 | 15,516 |
+| **total** | 49,614,552 | 14,409,976 | 13,546,132 | 12,884,340 | **10,567,268** | **10,547,396** |
+| vs xz | | | -5.99% | -10.59% | **-26.67%** | **-26.80%** |
 
 Held-out set (not looked at during development):
 
@@ -58,29 +58,30 @@ Held-out set (not looked at during development):
 | **total** | 185,140,664 | 38,314,172 | 36,731,736 | 34,528,112 | **28,140,812** |
 | vs xz | | | -4.13% | -9.88% | **-26.55%** |
 
-Target file: the cmix compressor (ELF, gcc, many unrolled AVX2 loops), on
-which the last round of tuning was done:
+Target file: the cmix compressor (ELF, clang 17, many unrolled AVX2 loops),
+on which the last round of tuning was done:
 
-| file | size | xz | xz --x86 | x64flt3 | x64pp |
-|---|---:|---:|---:|---:|---:|
-| cmix | 454,912 | 170,672 | 164,072 | 161,028 | **135,036** |
-| vs xz | | | -3.87% | -5.65% | **-20.88%** |
+| file | size | xz | xz --x86 | x64flt3 | x64pp | x64pp -a |
+|---|---:|---:|---:|---:|---:|---:|
+| cmix | 454,912 | 170,672 | 164,072 | 161,028 | 133,868 | **130,340** |
+| vs xz | | | -3.87% | -5.65% | -21.56% | **-23.63%** |
 
 With xz's default preset (`-6`) the tuning set gives 14,397,548 / 13,547,052
-/ 12,884,832 / 10,697,468 (-25.70%).
+/ 12,884,832 / 10,625,976 (-26.20%) without `-a`.
 
 Sources: ELF files from Ubuntu 24.04 packages, PE files from the numpy 2.1.3
 win_amd64 wheel, pip 24.2 (launchers), ripgrep 14.1.1 and 7-Zip 24.08
 (x64 "extra" package), plus x64flt3.exe itself.
 
-Speed (one core of a cloud VM): 25-30 MB/s forward without verification,
-50-70 MB/s inverse (libLLVM, 124 MB: 4.9 s and 2.2 s); memory about 4.5x
-the input size. The forward transform
-verifies itself by default, which costs one inverse pass. `tools/bench.py`
-reproduces the tables:
+Speed (one core of a cloud VM): 20-25 MB/s forward without verification,
+40-50 MB/s inverse (libLLVM, 124 MB: 5.7 s and 2.9 s); memory about 4.5x
+the input size. The forward transform verifies itself by default, which
+costs one inverse pass. `-a` compresses 30-90 candidates: 4 s for cmix,
+10 s for the 1.3 MB pe_7za.exe, about a minute for the 9 MB gdb on 4 cores.
+`tools/bench.py` reproduces the tables:
 
 ```
-python3 tools/bench.py --x64flt3 path/to/x64flt3 FILES_OR_DIRS...
+python3 tools/bench.py --x64flt3 path/to/x64flt3 --opt= --opt=-a FILES_OR_DIRS...
 ```
 
 ## Usage
@@ -129,7 +130,8 @@ Regions are recorded for:
   `SHF_EXECINSTR`, or executable `PT_LOAD` segments when there are no
   section headers), with their virtual addresses;
 * tables: PE exception directory and base relocations, ELF `.eh_frame`,
-  `.eh_frame_hdr`, `.gnu.hash` and `Elf64_Rela` sections.
+  `.eh_frame_hdr`, `.gcc_except_table`, `.gnu.hash` and `Elf64_Rela`
+  sections.
 
 The region list goes into the output header, so the decoder never parses
 executable headers: malformed or truncated executables round-trip like any
@@ -223,6 +225,15 @@ image (code is decoded before tables are restored):
   fewest nonzero bytes. 60-95% of the CFA programs become all zero (bash
   90%, gdb 70%, python 60%, the LLVM-built rg and cmix 95% and 89%), which
   saves 0.6-1.1% of the output of ELF files.
+* `.gcc_except_table` (C++ and Rust exception tables): the call-site
+  records of each LSDA, found through the FDEs, are coded against the
+  function's code: the start among (end of the previous record, call starts
+  after it), the end among call ends, the landing pad among (none, block
+  starts after a jump or return). GCC writes one record per call,
+  clang/rustc one per range between calls; both become mostly 0 and 1. The
+  ranks are written as ULEB128s of the original lengths, so the table stays
+  in place. This saves 1.2% on gdb, 1.7% on rg and 3% on cmake, whose
+  exception tables are 8% of its xz output.
 * `.eh_frame_hdr`: the search table is the sorted FDE list of `.eh_frame`;
   it is predicted from it and only differences are stored (exact in every
   file tested).
@@ -264,7 +275,7 @@ until nothing helps; once from the default and once from no options, since
 the options interact. That is typically 30-90 combinations: 4 s for cmix,
 under a minute for a 9 MB executable. `-aa` compresses all 1024.
 
-On cmix the search picks `drumfW`: -2.7% against the default. `m` and `d`
+On cmix the search picks `drum`: -2.6% against the default. `m` and `d`
 do most of it. Its unrolled AVX2 loops repeat the same instructions with
 every displacement shifted by a constant, which breaks LZMA's matches in
 the opcode stream (disp8 inline) and in the disp32 stream; with the
@@ -284,9 +295,11 @@ but such a choice says little about other files.
 varint original size
 varint region count, per region:
     type(1) varint gap-to-previous-region varint size
-    [varint VA delta]     code, .eh_frame, .eh_frame_hdr
+    [varint VA delta]     code, .eh_frame, .eh_frame_hdr, .gcc_except_table
     varint n, n x varint  parameters: .eh_frame_hdr -> its .eh_frame,
-                          .eh_frame/.pdata -> image VA bias (+ section map),
+                          .eh_frame -> image VA bias, CFA style (0 rank only,
+                          1 GCC, 2 LLVM), .pdata -> VA bias + section map,
+                          .gcc_except_table -> its .eh_frame, transformed?
                           Elf64_Rela -> PT_LOAD map, .gnu.hash -> .dynsym/.dynstr
 varint dictionary size n; if n > 0:
     32-byte bitmap of the code bytes
@@ -348,7 +361,7 @@ turning absolute values into small, repeating numbers.
 * Round trip on all files above, truncated and corrupted executables,
   random data, an empty file, and a tar of several executables.
 * Every option and several combinations round-trip on all test files.
-* Fuzzing with ASan/UBSan (5,700 iterations, the last 2,100 with random
+* Fuzzing with ASan/UBSan (8,300 iterations, 4,700 of them with random
   options): mutated executables through the forward transform, which must
   round-trip, and corrupted streams through the inverse, which must fail
   cleanly. This found a hang: on a damaged stream that ends unaligned the

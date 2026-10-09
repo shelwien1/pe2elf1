@@ -19,19 +19,23 @@ enum RegionType : uint8_t {
   R_RELOC,     // PE base relocation blocks
   R_EHFRAME,   // .eh_frame
   R_GNUHASH,   // .gnu.hash
+  R_EXCEPT,    // .gcc_except_table
   R_NTYPES
 };
 
 struct Region {
   uint64_t off, size;
-  uint64_t va;   // virtual address of the first byte (code, .eh_frame, .eh_frame_hdr)
+  uint64_t va;   // virtual address of the first byte (code, .eh_frame, .eh_frame_hdr, .gcc_except_table)
   uint32_t img;  // image number (analysis only)
   uint8_t type;
   // type specific parameters, stored in the container:
   //   .eh_frame_hdr  index of the image's .eh_frame region
   //   Elf64_Rela     (va, file offset, size) of each PT_LOAD segment
   //   .gnu.hash      file offset and size of .dynsym and .dynstr
-  //   .eh_frame      virtual address bias of the image's code regions
+  //   .eh_frame      virtual address bias of the image's code regions, CFA
+  //                  prediction style (set by the encoder)
+  //   .gcc_except_table  index of the image's .eh_frame region, whether the
+  //                  LSDAs are transformed (set by the encoder)
   //   PE exception directory: the bias, then (rva, file offset, size) of
   //                  each section, to find the UNWIND_INFO structures
   std::vector<uint64_t> par;
@@ -193,6 +197,10 @@ static uint64_t parseELF(Ctx& C, uint64_t base, uint64_t vbias) {
         if (!C.R.empty() && C.R.back().type == R_EHFRAME) C.R.back().par.assign(1, vbias);
         continue;
       }
+      if (!strcmp(nm, ".gcc_except_table")) {
+        C.add(R_EXCEPT, base + off, size, addr);
+        continue;
+      }
       if (!strcmp(nm, ".eh_frame_hdr") && size >= 12) {
         const uint8_t* h = p + off;
         if (h[0] == 1 && h[2] == 0x03 && h[3] == 0x3B) {
@@ -257,9 +265,9 @@ static std::vector<Region> run(const uint8_t* b, uint64_t n, bool scan) {
     out.push_back(r);
     end = r.off + r.size;
   }
-  // .eh_frame_hdr tables are predicted from the image's .eh_frame
+  // .eh_frame_hdr tables and LSDAs are found through the image's .eh_frame
   for (auto& h : out) {
-    if (h.type != R_EHHDR) continue;
+    if (h.type != R_EHHDR && h.type != R_EXCEPT) continue;
     for (size_t k = 0; k < out.size(); k++)
       if (out[k].type == R_EHFRAME && out[k].img == h.img) { h.par.assign(1, k); break; }
   }
