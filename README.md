@@ -119,6 +119,73 @@ any C++11 compiler on the single file. Tested with gcc 13, clang 18 and
 mingw-w64 13 (the Windows binary was run under Wine and produces
 byte-identical output, with and without `-a`); MSVC untested.
 
+## del_eh: dropping unwind tables and relocations
+
+`del_eh` is a separate utility for executables that never throw a C++
+exception or unwind otherwise. It zeroes or deletes their unwind and
+exception tables, and optionally relocations, so that they compress better.
+Where the size of a program counts, as for the Hutter Prize decompressor,
+this is free: cmix's tables cost 8.6 KB of its xz size, 2.9 KB after x64pp.
+
+```
+del_eh [options] input output
+  -e       exception and unwind tables (the default): ELF .eh_frame,
+           .eh_frame_hdr, .gcc_except_table, .debug_frame, PT_GNU_EH_FRAME;
+           PE exception directory (.pdata), .xdata
+  -r       relocations: ELF relocation sections that are not loaded
+           (.rela.dyn/.rela.plt are kept); PE base relocations (.reloc),
+           the image then always loads at its preferred base
+  -s NAME  also the section NAME (no checks)
+  -d       delete the bytes where the layout allows it, zero the rest
+           (default: zero everything, keeping the layout)
+  -f       remove base relocations from a DLL too
+  -v       list what is done
+```
+
+* Zeroing keeps the file layout, and the zeros compress to almost nothing.
+  `PT_GNU_EH_FRAME` becomes `PT_NULL`; the PE exception and base relocation
+  directories are cleared.
+* `-d` on ELF: tables at the end of a loaded segment are cut off it, and the
+  later file contents move back by whole 4 KB pages, the most that keeps
+  every segment's file offset congruent with its address (cmix: 32 KB
+  smaller, a small program usually not at all); sections outside segments
+  go entirely. On PE the section data goes: the section becomes
+  uninitialized (zero-filled, the address layout stays), or disappears with
+  its header if it is the last one. Deleting gains little over zeroing
+  after compression, but the file gets smaller.
+* ELF relocations: a PIE needs `.rela.dyn` at run time (its
+  `R_X86_64_RELATIVE` entries fix the pointers for the load address), so
+  only relocation sections that are not loaded (from `--emit-relocs`) are
+  removed; link with `-no-pie` to avoid the RELATIVE relocations.
+* PE relocations: an EXE without `.reloc` is marked
+  `IMAGE_FILE_RELOCS_STRIPPED` and loses `DYNAMIC_BASE`/`HIGH_ENTROPY_VA`,
+  so Windows maps it at its preferred base (no ASLR). DLLs need `-f`.
+* The program runs as before as long as nothing is thrown. A throw then ends
+  in `std::terminate`: no catch, no destructors.
+
+| file | size | xz | x64pp | x64pp -a |
+|---|---:|---:|---:|---:|
+| cmix | 454,912 | 170,672 | 133,640 | 130,052 |
+| cmix, `del_eh` | 454,912 | 162,088 | 130,756 | 127,188 |
+| cmix, `del_eh -d` | 422,144 | 162,032 | 130,720 | 127,128 |
+| hello_eh (gcc) | 18,872 | 5,016 | 4,556 | 4,504 |
+| hello_eh, `del_eh -d` | 18,872 | 4,472 | 4,256 | 4,216 |
+| hello_eh.exe (mingw, `-s`) | 169,984 | 62,928 | 49,896 | 49,740 |
+| hello_eh.exe, `del_eh -e -r -d` | 150,016 | 57,244 | 46,692 | 46,524 |
+
+cmix itself was checked on the paths that need no model memory (usage,
+`-h`, error messages): same output and exit codes before and after.
+`make del_eh` builds it (`make` builds both tools, `make del_eh.exe` the
+Windows version). `make test-del-eh` builds the test target
+`tests/hello_eh.cpp` (try blocks, destructors, std::string and
+std::vector; an empty argument takes the throwing path) as gcc PIE,
+`-no-pie`, `--emit-relocs`, clang and lld-linked binaries, and with mingw-w64 (with and
+without symbols) if wine is there; it checks that every output still runs,
+that the throw is caught before and ends the program after, that the
+inputs stay unchanged and that x64pp round-trips the outputs.
+`del_eh` was also fuzzed with 3,000 mutated ELF and PE files under
+ASan/UBSan.
+
 ## How it works
 
 Sources: `src/x64dec.h` (instruction decoder), `src/analyze.h` (finding code

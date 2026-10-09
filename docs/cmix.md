@@ -531,7 +531,7 @@ size counts), these parts have known costs in plain xz:
 | usage text | 738 |
 | runtime and pipeline messages | ~780 |
 | assert and `__PRETTY_FUNCTION__` strings (`-DNDEBUG` also removes the checks) | 549 |
-| `.eh_frame` + `.eh_frame_hdr` + `.gcc_except_table` (8.5 KB in plain xz; feasible only if no exceptions are relied on) | 2.9 KB after x64pp |
+| `.eh_frame` + `.eh_frame_hdr` + `.gcc_except_table` (8.5 KB in plain xz; feasible only if no exceptions are relied on; `del_eh` does it on the binary: -8.6 KB xz, -2.9 KB after x64pp) | 2.9 KB after x64pp |
 | `.dynstr` names of iostream and string functions (fewer libstdc++ facilities) | part of 1.3 KB |
 
 Options that the no-argument enwik9 decompression never uses (`--save-*`,

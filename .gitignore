@@ -1,3 +1,8 @@
 /x64pp
 /x64pp.exe
+/del_eh
+/del_eh.exe
+/hello_eh
+/hello_eh.exe
+/tests/out/
 *.o
