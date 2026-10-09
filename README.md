@@ -94,15 +94,17 @@ python3 tools/bench.py --x64flt3 path/to/x64flt3 --opt= --opt=-a FILES_OR_DIRS..
 ## Usage
 
 ```
-x64pp c [-v] [-n] [-oLIST | -a | -aa] input output   forward transform
+x64pp c [-v] [-n] [-oLIST | -a | -aa] [-lN] input output   forward transform
 x64pp d input output                                inverse transform
 x64pp s [-oLIST] input prefix                       write each stream to prefix.<name> (analysis)
   -v   print progress and statistics while working
   -n   don't verify the forward transform by decoding it
   -o   coding options, see "Coding options" (default: -oiut; -o alone: none)
   -a   choose the options for this file by compressing the candidates
-       like xz -9e
-  -aa  same, trying all combinations (for small files)
+       like xz -9e, then the best of 8 stream layouts for them
+  -aa  same, trying all combinations (for small files) and 16 layouts
+  -l   N blocks of 16 zero bytes in front of the streams (fixed layout,
+       no layout search)
   input/output may be - for stdin/stdout
 ```
 
@@ -383,6 +385,12 @@ until nothing helps; once from the default and once from no options, since
 the options interact. That is typically 30-110 combinations: 7 s for cmix,
 about a minute for a 9 MB executable. `-aa` compresses all 2048.
 
+Because of the layout sensitivity described below, `-a` finally encodes the
+chosen options with 1 to 7 blocks of 16 zero bytes in front of the streams
+(15 with `-aa`) and keeps the smallest of these layouts and the unpadded
+one. The streams stay aligned to 16 and unchanged; only LZMA's view of the
+file shifts. `-lN` sets such a layout directly.
+
 On cmix the search picks `drumtW`: -2.7% against the default. `m` and `d`
 do most of it. Its unrolled AVX2 loops repeat the same instructions with
 every displacement shifted by a constant, which breaks LZMA's matches in
@@ -421,11 +429,13 @@ varint dictionary size n; if n > 0:
                               of the previous table, type = 1 << record size
                               | kept columns
 varint stream sizes (12)
+[varint n, padding to 16, n x 16 zero bytes]  layout (flag 1024, from -a or -l)
 streams, each starting at a multiple of 16
 ```
 
 Flags: 1 labels, 2 `d`, 4 `i`, 8 `e`, 16 `r`, 32 `u`, 64 `m`, 128/256 `f`/`p`
-(stream order), 512 `t`. The 12th stream holds the inline operands with `m`.
+(stream order), 512 `t`, 1024 layout padding. The 12th stream holds the
+inline operands with `m`.
 
 ## Things that did not help
 

@@ -75,7 +75,8 @@ enum {
   FL_ORD1 = 128,  // stream order: kOrder[flags >> 7 & 3]
   FL_ORD2 = 256,
   FL_TDELTA = 512, // tables of fixed-size records in the data stream delta coded
-  FL_OPTIONS = FL_DDELTA | FL_DINL | FL_D8DELTA | FL_RIPLAB | FL_VEXP | FL_INLSEP | FL_ORD1 | FL_ORD2 | FL_TDELTA
+  FL_OPTIONS = FL_DDELTA | FL_DINL | FL_D8DELTA | FL_RIPLAB | FL_VEXP | FL_INLSEP | FL_ORD1 | FL_ORD2 | FL_TDELTA,
+  FL_PAD = 1024    // blocks of 16 zero bytes before the first stream (chosen by -a)
 };
 // encoder-only choices, not stored: dictionary escape weight kDictWeight[opts >> 16 & 3]
 enum { OPT_W1 = 1 << 16, OPT_W2 = 1 << 17 };
@@ -1054,7 +1055,8 @@ static std::string regionList(const std::vector<Region>& R) {
   return s.empty() ? "none" : s;
 }
 
-static void encode(const Buf& src, Buf& out, unsigned opts, std::vector<Buf>* dump, Log* lg = nullptr) {
+static void encode(const Buf& src, Buf& out, unsigned opts, std::vector<Buf>* dump, Log* lg = nullptr,
+                   unsigned pad = 0) {
   Log quiet;
   Log& log = lg ? *lg : quiet;  // quiet.on is false
   std::vector<Region> R = analyze::run(src.data(), src.size(), true);
@@ -1111,7 +1113,7 @@ static void encode(const Buf& src, Buf& out, unsigned opts, std::vector<Buf>* du
   B.va.clear();
   B.va.shrink_to_fit();
   log.msg("branch targets: %zu labels", L.va.size());
-  unsigned flags = (L.va.size() < 0x7FFFFFFF ? FL_LABELS : 0) | (opts & FL_OPTIONS);
+  unsigned flags = (L.va.size() < 0x7FFFFFFF ? FL_LABELS : 0) | (opts & FL_OPTIONS) | (pad ? FL_PAD : 0);
   std::vector<uint32_t> ripTab;
   if (flags & FL_RIPLAB) {
     for (auto& r : R) if (r.type == R_CODE) collectRip(&in[(size_t)r.off], (size_t)r.size, r.va, ripTab);
@@ -1193,6 +1195,11 @@ static void encode(const Buf& src, Buf& out, unsigned opts, std::vector<Buf>* du
     }
   }
   for (int k = 0; k < NSTREAM; k++) putVar(out, E.S[k].size());
+  if (pad) {  // a different layout for LZMA, the same streams
+    putVar(out, pad);
+    while (out.size() % kAlign) out.push_back(0);
+    out.resize(out.size() + (size_t)kAlign * pad, 0);
+  }
   const uint8_t* order = kOrder[flags >> 7 & 3];
   for (int j = 0; j < NSTREAM; j++) {
     const Buf& s = E.S[order[j]];
@@ -1215,7 +1222,7 @@ static bool decode(const Buf& in, Buf& out, Log* lg = nullptr) {
   for (int k = 0; k < 4; k++) if (r.byte() != kMagic[k]) return false;
   if (r.byte() != kVersion) return false;
   uint64_t flags = r.var();
-  if (!r.ok || flags & ~(uint64_t)(FL_LABELS | FL_OPTIONS)) return false;
+  if (!r.ok || flags & ~(uint64_t)(FL_LABELS | FL_OPTIONS | FL_PAD)) return false;
   uint64_t n = r.var();
   uint64_t nr = r.var();
   if (!r.ok || nr > (uint64_t)(r.e - r.p) || n > SIZE_MAX - 64) return false;
@@ -1288,6 +1295,13 @@ static bool decode(const Buf& in, Buf& out, Log* lg = nullptr) {
   uint64_t sz[NSTREAM];
   for (int k = 0; k < NSTREAM; k++) sz[k] = r.var();
   if (!r.ok) return false;
+  if (flags & FL_PAD) {  // zero blocks before the first stream
+    uint64_t np = r.var();
+    if (!r.ok || !np || np > (uint64_t)(r.e - r.p) / kAlign) return false;
+    while (r.ok && (r.p - in.data()) % kAlign) r.byte();
+    for (uint64_t i = 0; i < np * kAlign; i++)
+      if (r.byte() != 0 || !r.ok) return false;
+  }
   Buf pad[NSTREAM];
   Decoder Dc;
   const uint8_t* order = kOrder[flags >> 7 & 3];
@@ -1453,7 +1467,35 @@ struct OptionSearch {
     return UINT64_MAX;
   }
 
-  unsigned run(unsigned start, bool all) {
+  // LZMA's output size reacts chaotically to small layout changes: the
+  // chosen options are also encoded with 1..n-1 blocks of 16 zero bytes in
+  // front of the streams, and the smallest layout is kept
+  unsigned pad = 0;
+  void padSearch(unsigned opts, unsigned n) {
+    std::vector<uint64_t> res(n, UINT64_MAX);
+    res[0] = size(opts);
+    std::atomic<size_t> next(1), finished(0);
+    if (verbose) vlog.msg("layout search: %u paddings", n - 1);
+    auto work = [&]() {
+      for (size_t k; (k = next++) < n;) {
+        auto t = std::chrono::steady_clock::now();
+        Buf tmp;
+        encode(in, tmp, opts, nullptr, nullptr, (unsigned)k);
+        res[k] = lzmaSize(tmp);
+        if (verbose)
+          vlog.msg("  [%*zu/%u] pad %3zu bytes  %10llu  (%.1f s)", (int)std::to_string(n - 1).size(), (size_t)++finished,
+                   n - 1, (size_t)kAlign * k, (unsigned long long)res[k],
+                   std::chrono::duration<double>(std::chrono::steady_clock::now() - t).count());
+      }
+    };
+    std::vector<std::thread> pool;
+    for (unsigned j = 1; j < threads && j + 1 < n; j++) pool.emplace_back(work);
+    work();
+    for (auto& t : pool) t.join();
+    for (unsigned k = 1; k < n; k++) if (res[k] < res[pad]) pad = k;
+  }
+
+  unsigned run(unsigned start, bool all, bool layouts) {
     if (verbose) vlog.msg("option search%s, %u threads", all ? " over all combinations" : "", threads);
     if (all) {
       std::vector<unsigned> sets;
@@ -1481,6 +1523,7 @@ struct OptionSearch {
     }
     unsigned best = start;
     for (auto& x : seen) if (x.second < size(best)) best = x.first;
+    if (layouts) padSearch(best, all ? 16 : 8);
     return best;
   }
 };
@@ -1491,7 +1534,7 @@ struct OptionSearch {
 static int usage() {
   fprintf(stderr,
           "x64pp - x86-64 executable preprocessor for xz/LZMA\n"
-          "usage: x64pp c [-v] [-n] [-oLIST | -a | -aa] input output   forward transform\n"
+          "usage: x64pp c [-v] [-n] [-oLIST | -a | -aa] [-lN] input output   forward transform\n"
           "       x64pp d input output                         inverse transform\n"
           "       x64pp s [-oLIST] input prefix                write each stream to prefix.<name>\n"
           "  -v  print progress and statistics while working\n"
@@ -1508,7 +1551,9 @@ static int usage() {
           "        w, W  smaller opcode dictionary (w: more entries, W: fewer, wW: fewest)\n"
 
           "  -a  choose the options that compress best with xz -9e:\n"
-          "      toggled one at a time while that helps; -aa tries all combinations\n"
+          "      toggled one at a time while that helps; -aa tries all combinations;\n"
+          "      then 8 (-aa: 16) stream layouts for the chosen options\n"
+          "  -l  N blocks of 16 zero bytes in front of the streams (instead of the layout search)\n"
           "  input/output may be - for stdin/stdout\n");
   return 1;
 }
@@ -1519,12 +1564,18 @@ int main(int argc, char** argv) {
   bool verbose = false, verify = true;
   int search = 0;
   unsigned opts = kDefaultOptions;
+  long layout = -1;  // -l
   int a = 2;
   for (; a < argc && argv[a][0] == '-' && argv[a][1]; a++) {
     if (!strcmp(argv[a], "-v")) verbose = true;
     else if (!strcmp(argv[a], "-n")) verify = false;
     else if (!strcmp(argv[a], "-a")) search = 1;
     else if (!strcmp(argv[a], "-aa")) search = 2;
+    else if (argv[a][1] == 'l') {
+      char* e;
+      layout = strtol(argv[a] + 2, &e, 10);
+      if (*e || e == argv[a] + 2 || layout < 0 || layout > 65535) return usage();
+    }
     else if (argv[a][1] == 'o') {
       opts = 0;
       for (const char* o = argv[a] + 2; *o; o++) {
@@ -1548,13 +1599,16 @@ int main(int argc, char** argv) {
     return 0;
   }
   std::vector<Buf> dump;
+  unsigned pad = layout > 0 ? (unsigned)layout : 0;
   if (search && mode == 'c') {
     OptionSearch os(in, verbose);
-    opts = os.run(opts, search == 2);
-    vlog.msg("chosen: %s (%zu combinations, %u threads)", optString(opts).c_str(), os.seen.size(), os.threads);
+    opts = os.run(opts, search == 2, layout < 0);
+    if (layout < 0) pad = os.pad;
+    vlog.msg("chosen: %s, padding %u bytes (%zu combinations, %u threads)", optString(opts).c_str(), kAlign * pad,
+             os.seen.size(), os.threads);
   }
   vlog.msg("encoding with options %s", optString(opts).c_str());
-  encode(in, out, opts, mode == 's' ? &dump : nullptr, &vlog);
+  encode(in, out, opts, mode == 's' ? &dump : nullptr, &vlog, pad);
   if (verify) {
     vlog.msg("verifying");
     Buf chk;
