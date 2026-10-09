@@ -26,6 +26,7 @@
 #include "x64dec.h"
 #include "tables.h"
 #include "analyze.h"
+#include "tdelta.h"
 
 #ifdef _WIN32
 #include <io.h>
@@ -70,13 +71,14 @@ enum {
   FL_INLSEP = 64, // imm8/disp8/imm16 in their own stream
   FL_ORD1 = 128,  // stream order: kOrder[flags >> 7 & 3]
   FL_ORD2 = 256,
-  FL_OPTIONS = FL_DDELTA | FL_DINL | FL_D8DELTA | FL_RIPLAB | FL_VEXP | FL_INLSEP | FL_ORD1 | FL_ORD2
+  FL_TDELTA = 512, // tables of fixed-size records in the data stream delta coded
+  FL_OPTIONS = FL_DDELTA | FL_DINL | FL_D8DELTA | FL_RIPLAB | FL_VEXP | FL_INLSEP | FL_ORD1 | FL_ORD2 | FL_TDELTA
 };
 // encoder-only choices, not stored: dictionary escape weight kDictWeight[opts >> 16 & 3]
 enum { OPT_W1 = 1 << 16, OPT_W2 = 1 << 17 };
 static const unsigned kDictWeight[4] = {4, 2, 8, 16};
 // without -o or -a: the set that did best on average on the test files
-enum { kDefaultOptions = FL_DINL | FL_VEXP };
+enum { kDefaultOptions = FL_DINL | FL_VEXP | FL_TDELTA };
 static const uint8_t kMagic[4] = {'x', '6', '4', 'p'};
 
 //----------------------------------------------------------------------------
@@ -996,8 +998,8 @@ static inline bool hasVA(uint8_t type) { return type == R_CODE || type == R_EHFR
 struct Stats {
   uint64_t ssize[NSTREAM];
   size_t nregion[R_NTYPES];
-  size_t ndict;
-  uint64_t ninsn, ncoded;
+  size_t ndict, ntab;
+  uint64_t ninsn, ncoded, tabbytes;
 };
 
 static void encode(const Buf& src, Buf& out, unsigned opts, Stats* st, std::vector<Buf>* dump) {
@@ -1070,6 +1072,8 @@ static void encode(const Buf& src, Buf& out, unsigned opts, Stats* st, std::vect
     pos = r.off + r.size;
   }
   D.insert(D.end(), in.begin() + pos, in.end());
+  std::vector<tdelta::Table> dtab;
+  if (flags & FL_TDELTA) tdelta::encode(D, dtab);
 
   out.clear();
   out.insert(out.end(), kMagic, kMagic + 4);
@@ -1106,6 +1110,16 @@ static void encode(const Buf& src, Buf& out, unsigned opts, Stats* st, std::vect
     uint32_t prev = 0;
     for (uint32_t t : ripTab) { putVar(out, t - prev); prev = t; }
   }
+  if (flags & FL_TDELTA) {  // data stream tables: gap to the previous one, type, rows
+    putVar(out, dtab.size());
+    uint64_t end = 0;
+    for (auto& t : dtab) {
+      putVar(out, t.off - end);
+      putVar(out, t.type);
+      putVar(out, t.rows);
+      end = t.off + (uint64_t)tdelta::typeN(t.type) * t.rows;
+    }
+  }
   for (int k = 0; k < NSTREAM; k++) putVar(out, E.S[k].size());
   const uint8_t* order = kOrder[flags >> 7 & 3];
   for (int j = 0; j < NSTREAM; j++) {
@@ -1120,6 +1134,8 @@ static void encode(const Buf& src, Buf& out, unsigned opts, Stats* st, std::vect
     st->ndict = dict.size();
     st->ninsn = E.ninsn;
     st->ncoded = E.ncoded;
+    st->ntab = dtab.size();
+    for (auto& t : dtab) st->tabbytes += (uint64_t)tdelta::typeN(t.type) * t.rows;
   }
   if (dump) for (int k = 0; k < NSTREAM; k++) dump->push_back(E.S[k]);
 }
@@ -1182,6 +1198,23 @@ static bool decode(const Buf& in, Buf& out) {
       ripTab[k] = (uint32_t)t;
     }
   }
+  std::vector<tdelta::Table> dtab;
+  if (flags & FL_TDELTA) {
+    uint64_t nt = r.var();
+    if (!r.ok || nt > (uint64_t)(r.e - r.p)) return false;
+    dtab.resize((size_t)nt);
+    uint64_t end = 0;
+    for (auto& t : dtab) {
+      uint64_t gap = r.var(), type = r.var(), rows = r.var();
+      if (!r.ok || gap > n || type >> (tdelta::kMaxN + 1) || rows > n || rows > 0xFFFFFFFFu) return false;
+      t.off = end + gap;
+      t.type = (uint32_t)type;
+      t.rows = (uint32_t)rows;
+      int w = tdelta::typeN(t.type);
+      if (w < 1 || t.off > n) return false;
+      end = t.off + (uint64_t)w * rows;
+    }
+  }
   uint64_t sz[NSTREAM];
   for (int k = 0; k < NSTREAM; k++) sz[k] = r.var();
   if (!r.ok) return false;
@@ -1199,6 +1232,7 @@ static bool decode(const Buf& in, Buf& out) {
     r.p += sz[k];
   }
   if (r.p != r.e) return false;
+  if (!tdelta::decode(pad[S_DATA].data(), sz[S_DATA], dtab)) return false;
 
   // pass 1: labels
   Labels L;
@@ -1273,9 +1307,9 @@ static uint64_t lzmaSize(const Buf& b) {
   return pos;
 }
 
-static const char kOptLetter[] = "dierumfpwW";
-static const unsigned kOptFlag[] = {FL_DDELTA, FL_DINL, FL_D8DELTA, FL_RIPLAB, FL_VEXP, FL_INLSEP, FL_ORD1, FL_ORD2, OPT_W1, OPT_W2};
-enum { NOPT = 10 };
+static const char kOptLetter[] = "dierumtfpwW";
+static const unsigned kOptFlag[] = {FL_DDELTA, FL_DINL, FL_D8DELTA, FL_RIPLAB, FL_VEXP, FL_INLSEP, FL_TDELTA, FL_ORD1, FL_ORD2, OPT_W1, OPT_W2};
+enum { NOPT = 11 };
 
 static std::string optString(unsigned opts) {
   std::string s;
@@ -1385,6 +1419,7 @@ static int usage() {
           "        r  RIP-relative targets through a sorted table of targets\n"
           "        u  VEX prefix bits reordered (AVX code)\n"
           "        m  imm8/disp8/imm16 in their own stream instead of the opcode stream\n"
+          "        t  tables of fixed-size records in data delta coded\n"
           "        f, p  stream order: data first (f), opcodes first (p), opcodes last (fp)\n"
           "        w, W  smaller opcode dictionary (w: more entries, W: fewer, wW: fewest)\n"
 
@@ -1443,6 +1478,7 @@ int main(int argc, char** argv) {
       if (st.nregion[k]) fprintf(stderr, "  region %-12s x%zu\n", kRegionName[k], st.nregion[k]);
     fprintf(stderr, "  instructions %llu, %zu dictionary codes cover %.1f%%\n", (unsigned long long)st.ninsn, st.ndict,
             st.ninsn ? 100.0 * (double)st.ncoded / (double)st.ninsn : 0.0);
+    if (st.ntab) fprintf(stderr, "  data tables %zu, %llu bytes\n", st.ntab, (unsigned long long)st.tabbytes);
     for (int k = 0; k < NSTREAM; k++)
       fprintf(stderr, "  stream %-7s %10llu\n", kStreamName[k], (unsigned long long)st.ssize[k]);
   }

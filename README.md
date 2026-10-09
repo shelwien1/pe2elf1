@@ -99,7 +99,7 @@ x64pp d input output                                inverse transform
 x64pp s [-oLIST] input prefix                       write each stream to prefix.<name> (analysis)
   -v   print statistics
   -n   don't verify the forward transform by decoding it
-  -o   coding options, see "Coding options" (default: -oiu; -o alone: none)
+  -o   coding options, see "Coding options" (default: -oiut; -o alone: none)
   -a   choose the options for this file by compressing the candidates
        like xz -9e
   -aa  same, trying all combinations (for small files)
@@ -256,7 +256,41 @@ image (code is decoded before tables are restored):
   ones; 79-98% of them become all zero.
 * PE base relocations: page RVA delta, entries delta coded within a block.
 
-### 5. Coding options
+### 5. Numeric tables in data (option `t`)
+
+Data sections hold many tables of fixed-size records whose fields grow
+steadily: sorted offsets and RVAs, sizes, Unicode and other lookup tables,
+fixed-point curves, lazy-binding GOT slots, SIMD index vectors. LZMA codes
+each record as new literals. Option `t` finds such tables in the data stream
+and replaces each record by its difference from the previous one. The
+method and its detection are those of the table filter in Bulat Ziganshin's
+`delta` (FreeArc):
+
+* a scan in 32-byte lines notes, for each byte, the distance to the previous
+  byte with the same high nibble; a distance of 1-30 that recurs (12 times in
+  two lines for sizes up to 4, 24 times in two groups of four lines for the
+  others) suggests records of that size;
+* four records are checked quickly (their second bytes differ by at most 8),
+  then the table boundaries are searched: the 16-bit value at the start of
+  each record has to move monotonically in steps below a third of its size
+  (a sixth above 4095), with turns allowed after runs of at least four;
+* a table is kept if its useful rows times sqrt(record size) exceed
+  30 + 4 log2 of the distance from the previous table (the descriptor cost);
+* records are subtracted little-endian, the borrow carried between adjacent
+  bytes; in records other than 2, 4 or 8 bytes, byte columns that change in
+  fewer than a quarter of the rows are left as they are and moved in front
+  of the table.
+
+The decoder only reads the list of tables (gap, record size and kept
+columns, rows) from the header, so the detection can change without
+affecting the format. The cost model uses fixed-point arithmetic, so the
+choice does not depend on the floating-point library. On the tuning set
+`t` saves 1.35%: msvcp140 3.5%, the Rust files 2.3-2.4%, the Python files
+1.8-1.9%, 7-Zip and gdb 0.9-1.8%, and nothing is lost elsewhere. The same
+filter applied to the other streams changes the total by at most 0.04% and
+hurts some files, so it is limited to the data stream.
+
+### 6. Coding options
 
 Some codings help one kind of code and hurt another, so they are options,
 stored as header flags:
@@ -269,16 +303,17 @@ stored as header flags:
 | `r` | RIP-relative targets through a table of the file's distinct targets: each reference is the move from the previous one's table index | cmix -0.1% |
 | `u` | the VEX byte holding vvvv, L and pp is reordered so pp and L come first; LZMA's literal context (top 3 bits of the previous byte) then predicts the opcode | cmix -0.2%, small either way elsewhere |
 | `m` | imm8/disp8/imm16 in their own stream instead of the opcode stream | cmix -1.4%, Rust and 7-Zip -0.3% to -0.6%; other C and C++ +0.9% |
+| `t` | tables of fixed-size records in the data stream delta coded (section 5) | tuning set -1.35%, up to -3.5%; no file worse |
 | `f`, `p` | stream order: data first, opcodes first, or (both) opcodes last | up to ±0.3% |
 | `w`, `W` | opcode dictionary size (escape weight 2, 8, both: 16 instead of 4); not stored, the dictionary is | ±0.2% |
 
-The default `iu` was the best fixed set on average. `-a` finds the best set
+The default `iut` was the best fixed set on average. `-a` finds the best set
 for a file: every option is toggled, the candidates are encoded and
 compressed in parallel (the number of threads limited so that the LZMA
 encoders stay within about 3 GB), the best change is kept, and this repeats
 until nothing helps; once from the default and once from no options, since
 the options interact. That is typically 30-90 combinations: 4 s for cmix,
-under a minute for a 9 MB executable. `-aa` compresses all 1024.
+under a minute for a 9 MB executable. `-aa` compresses all 2048.
 
 On cmix the search picks `drum`: -2.6% against the default. `m` and `d`
 do most of it. Its unrolled AVX2 loops repeat the same instructions with
@@ -310,12 +345,16 @@ varint dictionary size n; if n > 0:
     32-byte bitmap of the code bytes
     n x (length(1) skeleton), sorted, paired with the code bytes in order
 [varint n, n x varint delta]  sorted RIP target table (option r)
+[varint n, n x (varint gap, varint type, varint rows)]
+                              data stream tables (option t): gap from the end
+                              of the previous table, type = 1 << record size
+                              | kept columns
 varint stream sizes (12)
 streams, each starting at a multiple of 16
 ```
 
 Flags: 1 labels, 2 `d`, 4 `i`, 8 `e`, 16 `r`, 32 `u`, 64 `m`, 128/256 `f`/`p`
-(stream order). The 12th stream holds the inline operands with `m`.
+(stream order), 512 `t`. The 12th stream holds the inline operands with `m`.
 
 ## Things that did not help
 
@@ -353,6 +392,8 @@ the back end the answer was mostly "no":
 | call targets as label distances, like jumps | worse on every file |
 | opcode dictionary codes for pairs of consecutive skeletons | +0.6% to +0.8% on cmix |
 | RIP target table as BE32 values, or references as absolute table indices | worse than the varint deltas of `r` |
+| table delta (option `t`) on the code streams too (rip, disp32, imm32, esc, ...) | at most -0.04% on the tuning set; elf_rg -0.5%, pe_mtrand +0.6% |
+| table detection thresholds, quick-check step, descriptor cost weight retuned | within ±0.04% of the original parameters, some files worse |
 
 LZMA does best with register allocation left inside ModRM and with the
 compiler's instruction order: identical source compiles to identical bytes,
@@ -371,6 +412,10 @@ turning absolute values into small, repeating numbers.
   round-trip, and corrupted streams through the inverse, which must fail
   cleanly. This found a hang: on a damaged stream that ends unaligned the
   padding loop between streams never finished (fixed).
+* Option `t`: 400 more fuzzing iterations with ASan/UBSan, half of the
+  corruptions aimed at the header where the table list is, and a unit test
+  of `src/tdelta.h` (3,000 random buffers with embedded tables round-trip;
+  random table lists are rejected or applied without memory errors).
 * Decoder instruction lengths checked against objdump on all code sections
   of the test files.
 * `src/lzma.hpp` against liblzma 5.4.5: byte-identical output in about
