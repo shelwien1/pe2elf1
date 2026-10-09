@@ -97,7 +97,7 @@ python3 tools/bench.py --x64flt3 path/to/x64flt3 --opt= --opt=-a FILES_OR_DIRS..
 x64pp c [-v] [-n] [-oLIST | -a | -aa] input output   forward transform
 x64pp d input output                                inverse transform
 x64pp s [-oLIST] input prefix                       write each stream to prefix.<name> (analysis)
-  -v   print statistics
+  -v   print progress and statistics while working
   -n   don't verify the forward transform by decoding it
   -o   coding options, see "Coding options" (default: -oiut; -o alone: none)
   -a   choose the options for this file by compressing the candidates

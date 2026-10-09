@@ -21,6 +21,9 @@
 #include <string>
 #include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <cstdarg>
+#include <mutex>
 #include <thread>
 #include "lzma.hpp"
 #include "x64dec.h"
@@ -80,6 +83,42 @@ static const unsigned kDictWeight[4] = {4, 2, 8, 16};
 // without -o or -a: the set that did best on average on the test files
 enum { kDefaultOptions = FL_DINL | FL_VEXP | FL_TDELTA };
 static const uint8_t kMagic[4] = {'x', '6', '4', 'p'};
+
+//----------------------------------------------------------------------------
+// -v: progress on stderr while the work goes on, each line with the time
+// since the start; long loops report every 10% once a second has passed
+
+struct Log {
+  bool on = false;
+  std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now(), last = t0;
+  std::mutex mu;
+  const char* what = "";  // current long stage (begin/step)
+  uint64_t total = 0, next = 0;
+
+  void msg(const char* fmt, ...) {
+    if (!on) return;
+    std::lock_guard<std::mutex> g(mu);
+    last = std::chrono::steady_clock::now();
+    fprintf(stderr, "[%7.2fs] ", std::chrono::duration<double>(last - t0).count());
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+    fputc('\n', stderr);
+    fflush(stderr);
+  }
+  void begin(const char* w, uint64_t n) {
+    what = w;
+    total = n;
+    next = n / 10;
+  }
+  void step(uint64_t done) {
+    if (!on || done < next || !total) return;
+    next = done + total / 10;
+    if (std::chrono::steady_clock::now() - last >= std::chrono::seconds(1)) msg("%s %d%%", what, (int)(100 * done / total));
+  }
+};
+static Log vlog;
 
 //----------------------------------------------------------------------------
 // I/O helpers
@@ -566,6 +605,8 @@ struct Encoder {
   int64_t ripPrev = 0;
   unsigned flags;
   uint64_t ninsn = 0, ncoded = 0;
+  Log* lg = nullptr;  // progress (final encode with -v)
+  uint64_t done = 0;  // code bytes of earlier regions
 
   void code(const uint8_t* p, size_t n, uint64_t va) {
     size_t i = 0;
@@ -576,6 +617,7 @@ struct Encoder {
     bool lab = flags & FL_LABELS, ddelta = flags & FL_DDELTA, d8delta = flags & FL_D8DELTA;
     Buf& inl = flags & FL_INLSEP ? S[S_INL] : op;
     while (i < n) {
+      if (lg) lg->step(done + i);
       x64::Insn I;
       x64::decode(p + i, n - i, I);
       int dc = D->find(p + i, I);
@@ -721,6 +763,8 @@ struct Decoder {
   const std::vector<uint32_t>* ripTab;  // FL_RIPLAB
   int64_t ripPrev = 0;
   unsigned flags;
+  Log* lg = nullptr;
+  uint64_t done = 0;
 
   bool escaped(uint32_t& x) {
     const uint8_t* s = S[S_ESC].p;
@@ -751,6 +795,7 @@ struct Decoder {
     bool lab = flags & FL_LABELS, ddelta = flags & FL_DDELTA, d8delta = flags & FL_D8DELTA;
     InStream& inl = flags & FL_INLSEP ? S[S_INL] : op;
     while (i < n) {
+      if (lg) lg->step(done + i);
       x64::Insn I;
       InsnSrc src;
       if (!readInsn(op, *D, n - i, I, src)) return false;
@@ -995,15 +1040,27 @@ static inline bool hasVA(uint8_t type) { return type == R_CODE || type == R_EHFR
 //----------------------------------------------------------------------------
 // Container
 
-struct Stats {
-  uint64_t ssize[NSTREAM];
-  size_t nregion[R_NTYPES];
-  size_t ndict, ntab;
-  uint64_t ninsn, ncoded, tabbytes;
-};
+static const char* kStreamName[NSTREAM] = {"data", "op", "j8", "jmp", "jcc", "call", "rip", "disp32", "imm32", "imm64", "esc", "inl"};
+static const char* kRegionName[R_NTYPES] = {"code", "pdata", "eh_frame_hdr", "rela", "reloc", "eh_frame", "gnu.hash", "except_table"};
 
-static void encode(const Buf& src, Buf& out, unsigned opts, Stats* st, std::vector<Buf>* dump) {
+// "code x5, eh_frame x1, ..." for -v
+static std::string regionList(const std::vector<Region>& R) {
+  std::string s;
+  for (int k = 0; k < R_NTYPES; k++) {
+    size_t n = 0;
+    for (auto& r : R) n += r.type == k;
+    if (n) s += (s.empty() ? "" : ", ") + std::string(kRegionName[k]) + " x" + std::to_string(n);
+  }
+  return s.empty() ? "none" : s;
+}
+
+static void encode(const Buf& src, Buf& out, unsigned opts, std::vector<Buf>* dump, Log* lg = nullptr) {
+  Log quiet;
+  Log& log = lg ? *lg : quiet;  // quiet.on is false
   std::vector<Region> R = analyze::run(src.data(), src.size(), true);
+  uint64_t ncode = 0;
+  for (auto& r : R) if (r.type == R_CODE) ncode += r.size;
+  log.msg("regions: %s (%llu bytes of code)", regionList(R).c_str(), (unsigned long long)ncode);
   Buf in = src;
   for (auto& r : R) if (r.type == R_RELA) relaSlots(in.data(), in.size(), r, R, true);
   tables::CodeMap cm = codeMap(R, src.data());
@@ -1039,10 +1096,13 @@ static void encode(const Buf& src, Buf& out, unsigned opts, Stats* st, std::vect
     r.par.push_back(ok);
   }
   for (auto& r : R) if (r.type != R_CODE) tableTransform(&in[(size_t)r.off], r, true, R, src.data(), src.size(), cm);
+  if (R.size() > (size_t)std::count_if(R.begin(), R.end(), [](const Region& r) { return r.type == R_CODE; }))
+    log.msg("tables transformed");
 
   OpDict dict;
   dict.dinl = opts & FL_DINL;
   buildDict(R, in.data(), kDictWeight[opts >> 16 & 3], dict);
+  log.msg("opcode dictionary: %zu codes", dict.size());
   Labels B, L;
   for (auto& r : R) if (r.type == R_CODE) collectStarts(&in[(size_t)r.off], (size_t)r.size, r.va, dict, B);
   B.finish();
@@ -1050,12 +1110,14 @@ static void encode(const Buf& src, Buf& out, unsigned opts, Stats* st, std::vect
   L.finish();
   B.va.clear();
   B.va.shrink_to_fit();
+  log.msg("branch targets: %zu labels", L.va.size());
   unsigned flags = (L.va.size() < 0x7FFFFFFF ? FL_LABELS : 0) | (opts & FL_OPTIONS);
   std::vector<uint32_t> ripTab;
   if (flags & FL_RIPLAB) {
     for (auto& r : R) if (r.type == R_CODE) collectRip(&in[(size_t)r.off], (size_t)r.size, r.va, ripTab);
     std::sort(ripTab.begin(), ripTab.end());
     ripTab.erase(std::unique(ripTab.begin(), ripTab.end()), ripTab.end());
+    log.msg("RIP-relative targets: %zu", ripTab.size());
   }
 
   Encoder E;
@@ -1063,17 +1125,27 @@ static void encode(const Buf& src, Buf& out, unsigned opts, Stats* st, std::vect
   E.D = &dict;
   E.ripTab = &ripTab;
   E.flags = flags;
+  if (lg && lg->on) E.lg = lg;
+  log.begin("encoding code", ncode);
   uint64_t pos = 0;
   Buf& D = E.S[S_DATA];
   for (auto& r : R) {
     if (r.type != R_CODE) continue;
     D.insert(D.end(), in.begin() + pos, in.begin() + r.off);
     E.code(&in[(size_t)r.off], (size_t)r.size, r.va);
+    E.done += r.size;
     pos = r.off + r.size;
   }
   D.insert(D.end(), in.begin() + pos, in.end());
+  log.msg("code: %llu instructions, %llu (%.1f%%) as dictionary codes", (unsigned long long)E.ninsn,
+          (unsigned long long)E.ncoded, E.ninsn ? 100.0 * (double)E.ncoded / (double)E.ninsn : 0.0);
   std::vector<tdelta::Table> dtab;
-  if (flags & FL_TDELTA) tdelta::encode(D, dtab);
+  if (flags & FL_TDELTA) {
+    tdelta::encode(D, dtab);
+    uint64_t tb = 0;
+    for (auto& t : dtab) tb += (uint64_t)tdelta::typeN(t.type) * t.rows;
+    log.msg("data tables: %zu, %llu bytes", dtab.size(), (unsigned long long)tb);
+  }
 
   out.clear();
   out.insert(out.end(), kMagic, kMagic + 4);
@@ -1127,20 +1199,18 @@ static void encode(const Buf& src, Buf& out, unsigned opts, Stats* st, std::vect
     while (out.size() % kAlign) out.push_back(0);
     out.insert(out.end(), s.begin(), s.end());
   }
-  if (st) {
-    memset(st, 0, sizeof *st);
-    for (int k = 0; k < NSTREAM; k++) st->ssize[k] = E.S[k].size();
-    for (auto& r : R) st->nregion[r.type]++;
-    st->ndict = dict.size();
-    st->ninsn = E.ninsn;
-    st->ncoded = E.ncoded;
-    st->ntab = dtab.size();
-    for (auto& t : dtab) st->tabbytes += (uint64_t)tdelta::typeN(t.type) * t.rows;
+  if (log.on) {
+    std::string ss;
+    for (int k = 0; k < NSTREAM; k++)
+      if (E.S[k].size()) ss += (ss.empty() ? "" : ", ") + std::string(kStreamName[k]) + " " + std::to_string(E.S[k].size());
+    log.msg("output %zu bytes; streams: %s", out.size(), ss.c_str());
   }
   if (dump) for (int k = 0; k < NSTREAM; k++) dump->push_back(E.S[k]);
 }
 
-static bool decode(const Buf& in, Buf& out) {
+static bool decode(const Buf& in, Buf& out, Log* lg = nullptr) {
+  Log quiet;
+  Log& log = lg ? *lg : quiet;
   Reader r{in.data(), in.data() + in.size(), true};
   for (int k = 0; k < 4; k++) if (r.byte() != kMagic[k]) return false;
   if (r.byte() != kVersion) return false;
@@ -1233,6 +1303,10 @@ static bool decode(const Buf& in, Buf& out) {
   }
   if (r.p != r.e) return false;
   if (!tdelta::decode(pad[S_DATA].data(), sz[S_DATA], dtab)) return false;
+  uint64_t ncode = 0;
+  for (auto& x : R) if (x.type == R_CODE) ncode += x.size;
+  log.msg("decode: %llu bytes, regions: %s, %zu dictionary codes%s", (unsigned long long)n, regionList(R).c_str(),
+          dict.size(), dtab.empty() ? "" : (", " + std::to_string(dtab.size()) + " data tables").c_str());
 
   // pass 1: labels
   Labels L;
@@ -1241,6 +1315,7 @@ static bool decode(const Buf& in, Buf& out) {
     for (auto& x : R)
       if (x.type == R_CODE && !collectLabelsOp(op, dict, flags & FL_INLSEP, (size_t)x.size, x.va, L)) return false;
     L.finish();
+    log.msg("decode: %zu labels", L.va.size());
   }
   Dc.L = &L;
   Dc.D = &dict;
@@ -1249,6 +1324,8 @@ static bool decode(const Buf& in, Buf& out) {
 
   // pass 2: rebuild the image
   out.assign((size_t)n, 0);
+  if (lg && lg->on) Dc.lg = lg;
+  log.begin("decode: code", ncode);
   uint64_t pos = 0;
   InStream& D = Dc.S[S_DATA];
   for (auto& x : R) {
@@ -1258,6 +1335,7 @@ static bool decode(const Buf& in, Buf& out) {
     if (!D.take(len)) return false;
     if (len) memcpy(&out[(size_t)pos], s, len);
     if (!Dc.code(&out[(size_t)x.off], (size_t)x.size, x.va)) return false;
+    Dc.done += x.size;
     pos = x.off + x.size;
   }
   size_t len = (size_t)(n - pos);
@@ -1265,6 +1343,7 @@ static bool decode(const Buf& in, Buf& out) {
   if (!D.take(len)) return false;
   if (len) memcpy(&out[(size_t)pos], s, len);
   for (int k = 0; k < NSTREAM; k++) if (Dc.S[k].p != Dc.S[k].e) return false;
+  log.msg("decode: code done, restoring the tables");
   // inverse order of dependencies: tables (.eh_frame needs the code),
   // .eh_frame_hdr and .gcc_except_table (need .eh_frame), RELATIVE slots,
   // .gnu.hash (needs .dynsym/.dynstr in plain data)
@@ -1280,6 +1359,7 @@ static bool decode(const Buf& in, Buf& out) {
     if (R[k].type == R_RELA) relaSlots(out.data(), out.size(), R[k], R, false);
   for (auto& x : R)
     if (x.type == R_GNUHASH) tableTransform(&out[(size_t)x.off], x, false, R, out.data(), n, cm);
+  log.msg("decode: done");
   return true;
 }
 
@@ -1348,22 +1428,25 @@ struct OptionSearch {
       if (!known) todo.push_back(o);
     }
     std::vector<uint64_t> res(todo.size());
-    std::atomic<size_t> next(0);
+    std::atomic<size_t> next(0), finished(0);
+    if (verbose && todo.size() > 1) vlog.msg("search: %zu candidates", todo.size());
     auto work = [&]() {
       for (size_t k; (k = next++) < todo.size();) {
+        auto t = std::chrono::steady_clock::now();
         Buf tmp;
-        encode(in, tmp, todo[k], nullptr, nullptr);
+        encode(in, tmp, todo[k], nullptr);
         res[k] = lzmaSize(tmp);
+        if (verbose)
+          vlog.msg("  [%*zu/%zu] options %-10s %10llu  (%.1f s)", (int)std::to_string(todo.size()).size(),
+                   (size_t)++finished, todo.size(), optString(todo[k]).c_str(), (unsigned long long)res[k],
+                   std::chrono::duration<double>(std::chrono::steady_clock::now() - t).count());
       }
     };
     std::vector<std::thread> pool;
     for (unsigned j = 1; j < threads && j < todo.size(); j++) pool.emplace_back(work);
     work();
     for (auto& t : pool) t.join();
-    for (size_t k = 0; k < todo.size(); k++) {
-      seen.push_back({todo[k], res[k]});
-      if (verbose) fprintf(stderr, "  options %-10s %10llu\n", optString(todo[k]).c_str(), (unsigned long long)res[k]);
-    }
+    for (size_t k = 0; k < todo.size(); k++) seen.push_back({todo[k], res[k]});
   }
   uint64_t size(unsigned o) const {
     for (auto& x : seen) if (x.first == o) return x.second;
@@ -1371,6 +1454,7 @@ struct OptionSearch {
   }
 
   unsigned run(unsigned start, bool all) {
+    if (verbose) vlog.msg("option search%s, %u threads", all ? " over all combinations" : "", threads);
     if (all) {
       std::vector<unsigned> sets;
       for (unsigned m = 0; m < (1u << NOPT); m++) {
@@ -1381,6 +1465,7 @@ struct OptionSearch {
       eval(sets);
     } else {
       for (unsigned cur : {start, 0u}) {
+        if (verbose) vlog.msg("search from %s", optString(cur).c_str());
         eval({cur});
         for (;;) {
           std::vector<unsigned> sets;
@@ -1390,6 +1475,7 @@ struct OptionSearch {
           for (unsigned o : sets) if (size(o) < size(b)) b = o;
           if (b == cur) break;
           cur = b;
+          if (verbose) vlog.msg("better: %s %llu", optString(cur).c_str(), (unsigned long long)size(cur));
         }
       }
     }
@@ -1401,8 +1487,6 @@ struct OptionSearch {
 
 //----------------------------------------------------------------------------
 
-static const char* kStreamName[NSTREAM] = {"data", "op", "j8", "jmp", "jcc", "call", "rip", "disp32", "imm32", "imm64", "esc", "inl"};
-static const char* kRegionName[R_NTYPES] = {"code", "pdata", "eh_frame_hdr", "rela", "reloc", "eh_frame", "gnu.hash", "except_table"};
 
 static int usage() {
   fprintf(stderr,
@@ -1410,7 +1494,7 @@ static int usage() {
           "usage: x64pp c [-v] [-n] [-oLIST | -a | -aa] input output   forward transform\n"
           "       x64pp d input output                         inverse transform\n"
           "       x64pp s [-oLIST] input prefix                write each stream to prefix.<name>\n"
-          "  -v  print statistics\n"
+          "  -v  print progress and statistics while working\n"
           "  -n  don't verify the forward transform by decoding it\n"
           "  -o  coding options, any of:\n"
           "        d  disp32 as delta from the previous one with the same base register\n"
@@ -1453,42 +1537,38 @@ int main(int argc, char** argv) {
   if (argc - a != 2 || (mode != 'c' && mode != 'd' && mode != 's')) return usage();
   const char* iname = argv[a];
   const char* oname = argv[a + 1];
+  vlog.on = verbose;
   Buf in, out;
   if (!readFile(iname, in)) { fprintf(stderr, "x64pp: can't read %s\n", iname); return 2; }
+  vlog.msg("read %s: %zu bytes", iname, in.size());
   if (mode == 'd') {
-    if (!decode(in, out)) { fprintf(stderr, "x64pp: %s: not a valid x64pp stream\n", iname); return 4; }
+    if (!decode(in, out, &vlog)) { fprintf(stderr, "x64pp: %s: not a valid x64pp stream\n", iname); return 4; }
     if (!writeFile(oname, out)) { fprintf(stderr, "x64pp: can't write %s\n", oname); return 3; }
+    vlog.msg("wrote %s: %zu bytes", oname, out.size());
     return 0;
   }
-  Stats st;
   std::vector<Buf> dump;
   if (search && mode == 'c') {
     OptionSearch os(in, verbose);
     opts = os.run(opts, search == 2);
-    if (verbose) fprintf(stderr, "  chosen: %s (%zu combinations, %u threads)\n", optString(opts).c_str(), os.seen.size(), os.threads);
+    vlog.msg("chosen: %s (%zu combinations, %u threads)", optString(opts).c_str(), os.seen.size(), os.threads);
   }
-  encode(in, out, opts, &st, mode == 's' ? &dump : nullptr);
+  vlog.msg("encoding with options %s", optString(opts).c_str());
+  encode(in, out, opts, mode == 's' ? &dump : nullptr, &vlog);
   if (verify) {
+    vlog.msg("verifying");
     Buf chk;
-    if (!decode(out, chk) || chk != in) { fprintf(stderr, "x64pp: internal error: verification failed\n"); return 4; }
-  }
-  if (verbose) {
-    fprintf(stderr, "%s: %zu -> %zu\n", iname, in.size(), out.size());
-    for (int k = 0; k < R_NTYPES; k++)
-      if (st.nregion[k]) fprintf(stderr, "  region %-12s x%zu\n", kRegionName[k], st.nregion[k]);
-    fprintf(stderr, "  instructions %llu, %zu dictionary codes cover %.1f%%\n", (unsigned long long)st.ninsn, st.ndict,
-            st.ninsn ? 100.0 * (double)st.ncoded / (double)st.ninsn : 0.0);
-    if (st.ntab) fprintf(stderr, "  data tables %zu, %llu bytes\n", st.ntab, (unsigned long long)st.tabbytes);
-    for (int k = 0; k < NSTREAM; k++)
-      fprintf(stderr, "  stream %-7s %10llu\n", kStreamName[k], (unsigned long long)st.ssize[k]);
+    if (!decode(out, chk, &vlog) || chk != in) { fprintf(stderr, "x64pp: internal error: verification failed\n"); return 4; }
   }
   if (mode == 's') {
     for (int k = 0; k < NSTREAM; k++) {
       std::string nm = std::string(oname) + "." + kStreamName[k];
       if (!writeFile(nm.c_str(), dump[k])) { fprintf(stderr, "x64pp: can't write %s\n", nm.c_str()); return 3; }
     }
+    vlog.msg("wrote the streams to %s.*", oname);
     return 0;
   }
   if (!writeFile(oname, out)) { fprintf(stderr, "x64pp: can't write %s\n", oname); return 3; }
+  vlog.msg("wrote %s: %zu -> %zu bytes", oname, in.size(), out.size());
   return 0;
 }
