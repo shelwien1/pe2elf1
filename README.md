@@ -285,8 +285,9 @@ The decoder only reads the list of tables (gap, record size and kept
 columns, rows) from the header, so the detection can change without
 affecting the format. The cost model uses fixed-point arithmetic, so the
 choice does not depend on the floating-point library. On the held-out set
-`t` saves 1.1% (libllvm 1.5%, npgen 1.1%). On the tuning set it saves 1.35%: msvcp140 3.5%, the Rust files 2.3-2.4%, the Python files
-1.8-1.9%, 7-Zip and gdb 0.9-1.8%, and nothing is lost elsewhere. The same
+`t` saves 1.1% (libllvm 1.5%, npgen 1.1%). On the tuning set it saves
+1.35%: msvcp140 3.5%, the Rust files 2.3-2.4%, the Python files 1.8-1.9%,
+7-Zip and gdb 0.9-1.8%, and nothing is lost elsewhere. The same
 filter applied to the other streams changes the total by at most 0.04% and
 hurts some files, so it is limited to the data stream.
 
