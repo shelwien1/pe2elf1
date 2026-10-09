@@ -69,6 +69,9 @@ on which the last round of tuning was done:
 | cmix | 454,912 | 170,672 | 164,072 | 161,028 | 133,868 | **130,340** |
 | vs xz | | | -3.87% | -5.65% | -21.56% | **-23.63%** |
 
+[docs/cmix.md](docs/cmix.md) describes this file's layout, its code and data
+types, what each part costs, and what could still be gained.
+
 With xz's default preset (`-6`) the tuning set gives 14,397,548 / 13,547,052
 / 12,884,832 / 10,583,584 (-26.49%) without `-a`.
 
