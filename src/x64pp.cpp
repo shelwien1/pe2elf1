@@ -11,7 +11,8 @@
 // stream first.  Unwind, exception, relocation and hash tables are delta
 // coded or predicted from the code and from each other.  Everything else is
 // copied.  Some codings are options chosen per file (-o, or -a: compress the
-// candidates with liblzma).  See README.md for the format and the numbers.
+// candidates with the LZMA encoder of lzma.hpp).  See README.md for the format
+// and the numbers.
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -19,6 +20,9 @@
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <atomic>
+#include <thread>
+#include "lzma.hpp"
 #include "x64dec.h"
 #include "tables.h"
 #include "analyze.h"
@@ -26,11 +30,6 @@
 #ifdef _WIN32
 #include <io.h>
 #include <fcntl.h>
-#endif
-#ifdef X64PP_LZMA
-#include <lzma.h>
-#include <atomic>
-#include <thread>
 #endif
 
 typedef std::vector<uint8_t> Buf;
@@ -1254,7 +1253,6 @@ static bool decode(const Buf& in, Buf& out) {
 // Option search (-a): every combination of the coding options is encoded and
 // compressed like xz -9e; the smallest wins.
 
-#ifdef X64PP_LZMA
 // LZMA2 with xz -9e settings, the dictionary shrunk to the data (which saves
 // memory and does not change the result)
 static void lzmaOptions(size_t n, lzma_options_lzma& o) {
@@ -1274,7 +1272,6 @@ static uint64_t lzmaSize(const Buf& b) {
   if (lzma_raw_buffer_encode(f, nullptr, b.data(), b.size(), out.data(), &pos, cap) != LZMA_OK) return UINT64_MAX;
   return pos;
 }
-#endif
 
 static const char kOptLetter[] = "dierumfpwW";
 static const unsigned kOptFlag[] = {FL_DDELTA, FL_DINL, FL_D8DELTA, FL_RIPLAB, FL_VEXP, FL_INLSEP, FL_ORD1, FL_ORD2, OPT_W1, OPT_W2};
@@ -1286,7 +1283,6 @@ static std::string optString(unsigned opts) {
   return s.empty() ? "-" : s;
 }
 
-#ifdef X64PP_LZMA
 // Option search.  -a: every option is toggled (all in parallel) and the best
 // change kept, until no toggle helps; once from the given options and once
 // from none, since the interactions leave local optima.  -aa: all
@@ -1368,7 +1364,6 @@ struct OptionSearch {
     return best;
   }
 };
-#endif
 
 //----------------------------------------------------------------------------
 
@@ -1393,15 +1388,9 @@ static int usage() {
           "        f, p  stream order: data first (f), opcodes first (p), opcodes last (fp)\n"
           "        w, W  smaller opcode dictionary (w: more entries, W: fewer, wW: fewest)\n"
 
-          "  -a  choose the options that compress best with xz -9e%s:\n"
+          "  -a  choose the options that compress best with xz -9e:\n"
           "      toggled one at a time while that helps; -aa tries all combinations\n"
-          "  input/output may be - for stdin/stdout\n",
-#ifdef X64PP_LZMA
-          ""
-#else
-          " (not available: built without liblzma)"
-#endif
-  );
+          "  input/output may be - for stdin/stdout\n");
   return 1;
 }
 
@@ -1426,9 +1415,6 @@ int main(int argc, char** argv) {
       }
     } else return usage();
   }
-#ifndef X64PP_LZMA
-  if (search) { fprintf(stderr, "x64pp: -a needs a build with liblzma\n"); return 1; }
-#endif
   if (argc - a != 2 || (mode != 'c' && mode != 'd' && mode != 's')) return usage();
   const char* iname = argv[a];
   const char* oname = argv[a + 1];
@@ -1441,13 +1427,11 @@ int main(int argc, char** argv) {
   }
   Stats st;
   std::vector<Buf> dump;
-#ifdef X64PP_LZMA
   if (search && mode == 'c') {
     OptionSearch os(in, verbose);
     opts = os.run(opts, search == 2);
     if (verbose) fprintf(stderr, "  chosen: %s (%zu combinations, %u threads)\n", optString(opts).c_str(), os.seen.size(), os.threads);
   }
-#endif
   encode(in, out, opts, &st, mode == 's' ? &dump : nullptr);
   if (verify) {
     Buf chk;

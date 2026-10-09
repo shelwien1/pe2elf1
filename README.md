@@ -13,8 +13,8 @@ On the test sets below the xz output is 27% smaller than plain `xz -9e`,
 22-24% smaller than `xz --x86`, and 18-19% smaller than with
 [x64flt3](https://nishi.dreamhosters.com/u/x64flt3_v1.7z). `x64pp c -a`
 also chooses among coding variants per file, by compressing the candidates
-with liblzma; that adds 0.2% on these sets and 2.6% on cmix, a target with
-many unrolled AVX2 loops.
+with its built-in LZMA encoder; that adds 0.2% on these sets and 2.6% on
+cmix, a target with many unrolled AVX2 loops.
 
 ## Results
 
@@ -101,7 +101,7 @@ x64pp s [-oLIST] input prefix                       write each stream to prefix.
   -n   don't verify the forward transform by decoding it
   -o   coding options, see "Coding options" (default: -oiu; -o alone: none)
   -a   choose the options for this file by compressing the candidates
-       with liblzma like xz -9e (needs a build with liblzma)
+       like xz -9e
   -aa  same, trying all combinations (for small files)
   input/output may be - for stdin/stdout
 ```
@@ -111,12 +111,10 @@ unchanged apart from a 32-byte header. The encoder decodes its own output
 and compares it with the input before writing anything (skip with `-n`).
 The decoder needs no options: they are stored in the header.
 
-Build: `make`, or `g++ -O2 -o x64pp src/x64pp.cpp` (C++11, no
-dependencies). `make` links liblzma when pkg-config finds it, which enables
-`-a`; by hand that is `g++ -O2 -DX64PP_LZMA -o x64pp src/x64pp.cpp -llzma`.
-Windows: `make x64pp.exe` with mingw-w64, adding `LZMA_WIN=dir` for `-a`,
-where `dir` holds `include/lzma.h` and `lib/liblzma.a` for mingw-w64 (for
-example the `mingw64` tree of the MSYS2 package `mingw-w64-x86_64-xz`); or
+Build: `make`, or `g++ -O2 -pthread -o x64pp src/x64pp.cpp` (C++11, no
+dependencies). The LZMA encoder that `-a` uses is `src/lzma.hpp`, a
+single-header port of the liblzma 5.8.1 encoder (0BSD) whose output is
+byte-identical to liblzma's. Windows: `make x64pp.exe` with mingw-w64, or
 any C++11 compiler on the single file. Tested with gcc 13, clang 18 and
 mingw-w64 13 (the Windows binary was run under Wine and produces
 byte-identical output, with and without `-a`); MSVC untested.
@@ -378,4 +376,5 @@ turning absolute values into small, repeating numbers.
 
 ## License
 
-MIT, see LICENSE.
+MIT, see LICENSE. `src/lzma.hpp` is derived from liblzma (XZ Utils) by
+Igor Pavlov and Lasse Collin and keeps its 0BSD license.
