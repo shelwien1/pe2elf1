@@ -9,8 +9,8 @@ x64pp c program.exe program.x64pp && xz -9e program.x64pp
 xz -d program.x64pp.xz && x64pp d program.x64pp program.exe
 ```
 
-On the test sets below the xz output is 24-25% smaller than plain `xz -9e`,
-19-22% smaller than `xz --x86`, and 15-17% smaller than with
+On the test sets below the xz output is 26-27% smaller than plain `xz -9e`,
+21-23% smaller than `xz --x86`, and 17-19% smaller than with
 [x64flt3](https://nishi.dreamhosters.com/u/x64flt3_v1.7z).
 
 ## Results
@@ -23,50 +23,58 @@ Tuning set (all transforms were developed on these files):
 
 | file | size | xz | xz --x86 | x64flt3 | x64pp |
 |---|---:|---:|---:|---:|---:|
-| elf_bash | 1,446,024 | 583,788 | 545,568 | 503,832 | 410,708 |
-| elf_gdb | 8,920,528 | 3,002,788 | 2,723,940 | 2,629,292 | 2,229,804 |
-| elf_libpython.so | 9,061,000 | 2,108,448 | 2,001,140 | 1,897,780 | 1,584,944 |
-| elf_python | 8,020,928 | 2,118,392 | 1,993,560 | 1,900,992 | 1,674,596 |
-| elf_rg (Rust) | 5,257,872 | 1,371,532 | 1,354,044 | 1,274,616 | 996,700 |
-| elf_vim | 4,130,640 | 1,751,720 | 1,650,220 | 1,513,020 | 1,237,880 |
-| elf_xz | 89,008 | 31,216 | 29,280 | 28,488 | 24,952 |
-| pe_7za.dll | 413,184 | 164,940 | 156,212 | 155,424 | 137,968 |
-| pe_7za.exe | 1,323,520 | 492,476 | 451,920 | 447,572 | 394,936 |
-| pe_msvcp140.dll | 585,384 | 148,616 | 140,380 | 134,428 | 118,264 |
-| pe_mtrand.pyd | 633,344 | 151,536 | 146,240 | 137,948 | 117,116 |
-| pe_npcore.pyd | 4,160,512 | 969,912 | 932,712 | 895,996 | 771,380 |
-| pe_rg.exe (Rust) | 5,407,744 | 1,450,748 | 1,359,536 | 1,304,228 | 1,159,784 |
-| pe_t64.exe | 108,032 | 44,692 | 42,728 | 42,492 | 38,132 |
-| pe_x64flt3.exe | 56,832 | 19,172 | 18,652 | 18,232 | 16,084 |
-| **total** | 49,614,552 | 14,409,976 | 13,546,132 | 12,884,340 | **10,913,248** |
-| vs xz | | | -5.99% | -10.59% | **-24.27%** |
+| elf_bash | 1,446,024 | 583,788 | 545,568 | 503,832 | 396,188 |
+| elf_gdb | 8,920,528 | 3,002,788 | 2,723,940 | 2,629,292 | 2,174,424 |
+| elf_libpython.so | 9,061,000 | 2,108,448 | 2,001,140 | 1,897,780 | 1,555,692 |
+| elf_python | 8,020,928 | 2,118,392 | 1,993,560 | 1,900,992 | 1,645,156 |
+| elf_rg (Rust) | 5,257,872 | 1,371,532 | 1,354,044 | 1,274,616 | 978,988 |
+| elf_vim | 4,130,640 | 1,751,720 | 1,650,220 | 1,513,020 | 1,197,028 |
+| elf_xz | 89,008 | 31,216 | 29,280 | 28,488 | 24,196 |
+| pe_7za.dll | 413,184 | 164,940 | 156,212 | 155,424 | 135,392 |
+| pe_7za.exe | 1,323,520 | 492,476 | 451,920 | 447,572 | 387,452 |
+| pe_msvcp140.dll | 585,384 | 148,616 | 140,380 | 134,428 | 117,232 |
+| pe_mtrand.pyd | 633,344 | 151,536 | 146,240 | 137,948 | 115,832 |
+| pe_npcore.pyd | 4,160,512 | 969,912 | 932,712 | 895,996 | 764,056 |
+| pe_rg.exe (Rust) | 5,407,744 | 1,450,748 | 1,359,536 | 1,304,228 | 1,143,472 |
+| pe_t64.exe | 108,032 | 44,692 | 42,728 | 42,492 | 37,500 |
+| pe_x64flt3.exe | 56,832 | 19,172 | 18,652 | 18,232 | 15,664 |
+| **total** | 49,614,552 | 14,409,976 | 13,546,132 | 12,884,340 | **10,688,272** |
+| vs xz | | | -5.99% | -10.59% | **-25.83%** |
 
 Held-out set (not looked at during development):
 
 | file | size | xz | xz --x86 | x64flt3 | x64pp |
 |---|---:|---:|---:|---:|---:|
-| elf_cmake | 11,796,472 | 3,349,772 | 2,919,212 | 2,728,136 | 2,186,144 |
-| elf_gitlfs_go (Go) | 11,516,960 | 3,513,356 | 3,334,632 | 3,204,572 | 3,000,240 |
-| elf_libllvm17.so | 123,671,544 | 22,926,564 | 22,282,464 | 21,042,852 | 16,919,488 |
-| elf_php | 5,784,016 | 1,744,236 | 1,650,460 | 1,550,880 | 1,262,288 |
-| elf_shim_go (Go) | 8,799,192 | 2,613,004 | 2,482,980 | 2,376,876 | 2,231,700 |
-| pe_7zxa.dll | 216,064 | 88,576 | 85,472 | 84,892 | 75,560 |
-| pe_npgen.pyd | 748,032 | 197,924 | 191,432 | 180,156 | 152,288 |
-| pe_npsimd.pyd (AVX) | 2,236,928 | 262,060 | 241,492 | 176,024 | 100,896 |
-| pe_openblas_mingw.dll | 20,269,568 | 3,575,148 | 3,501,848 | 3,142,108 | 2,706,760 |
-| pe_w64.exe | 101,888 | 43,532 | 41,744 | 41,616 | 37,384 |
-| **total** | 185,140,664 | 38,314,172 | 36,731,736 | 34,528,112 | **28,672,748** |
-| vs xz | | | -4.13% | -9.88% | **-25.16%** |
+| elf_cmake | 11,796,472 | 3,349,772 | 2,919,212 | 2,728,136 | 2,123,712 |
+| elf_gitlfs_go (Go) | 11,516,960 | 3,513,356 | 3,334,632 | 3,204,572 | 2,953,512 |
+| elf_libllvm17.so | 123,671,544 | 22,926,564 | 22,282,464 | 21,042,852 | 16,629,108 |
+| elf_php | 5,784,016 | 1,744,236 | 1,650,460 | 1,550,880 | 1,236,240 |
+| elf_shim_go (Go) | 8,799,192 | 2,613,004 | 2,482,980 | 2,376,876 | 2,197,188 |
+| pe_7zxa.dll | 216,064 | 88,576 | 85,472 | 84,892 | 74,320 |
+| pe_npgen.pyd | 748,032 | 197,924 | 191,432 | 180,156 | 150,312 |
+| pe_npsimd.pyd (AVX) | 2,236,928 | 262,060 | 241,492 | 176,024 | 98,176 |
+| pe_openblas_mingw.dll | 20,269,568 | 3,575,148 | 3,501,848 | 3,142,108 | 2,641,436 |
+| pe_w64.exe | 101,888 | 43,532 | 41,744 | 41,616 | 36,808 |
+| **total** | 185,140,664 | 38,314,172 | 36,731,736 | 34,528,112 | **28,140,812** |
+| vs xz | | | -4.13% | -9.88% | **-26.55%** |
+
+Target file: the cmix compressor (ELF, gcc, many unrolled AVX2 loops), on
+which the last round of tuning was done:
+
+| file | size | xz | xz --x86 | x64flt3 | x64pp |
+|---|---:|---:|---:|---:|---:|
+| cmix | 454,912 | 170,672 | 164,072 | 161,028 | **135,036** |
+| vs xz | | | -3.87% | -5.65% | **-20.88%** |
 
 With xz's default preset (`-6`) the tuning set gives 14,397,548 / 13,547,052
-/ 12,884,832 / 10,923,232 (-24.13%; measured before the last 1 KB of tuning).
+/ 12,884,832 / 10,697,468 (-25.70%).
 
 Sources: ELF files from Ubuntu 24.04 packages, PE files from the numpy 2.1.3
 win_amd64 wheel, pip 24.2 (launchers), ripgrep 14.1.1 and 7-Zip 24.08
 (x64 "extra" package), plus x64flt3.exe itself.
 
 Speed (one core of a cloud VM): 25-30 MB/s forward without verification,
-50-70 MB/s inverse (libLLVM, 124 MB: 4.9 s and 2.4 s); memory about 4.5x
+50-70 MB/s inverse (libLLVM, 124 MB: 4.9 s and 2.2 s); memory about 4.5x
 the input size. The forward transform
 verifies itself by default, which costs one inverse pass. `tools/bench.py`
 reproduces the tables:
@@ -130,7 +138,7 @@ the opcode stream alone and know where every operand goes.
 
 | stream | contents |
 |---|---|
-| op | structural bytes, label markers, plus imm8, disp8, imm16 in place |
+| op | structural bytes or dictionary codes, label markers, plus imm8, disp8, imm16 in place |
 | j8 | rel8 branch targets |
 | jmp, jcc | rel32 `jmp` / `jcc` targets |
 | call | rel32 `call` targets |
@@ -147,14 +155,28 @@ position context lines up with 4-byte records. For RIP-relative targets the
 gives the same absolute value. Keeping imm8/disp8/imm16 next to their
 opcode and moving the 32-bit fields out was the best split measured.
 
+Opcode dictionary: the most frequent skeletons (structural bytes, 2 to 15
+of them) get one-byte codes. The code bytes are the bytes that least often
+start an instruction in this file: opcodes invalid in 64-bit mode, x87,
+string and port I/O instructions, segment prefixes and whatever else the
+compiler rarely emits. The k-th most frequent skeleton is paired with the
+k-th rarest byte while the bytes saved exceed four times the number of
+instructions that then have to be escaped; an instruction that starts with
+a code byte and has no code of its own is written as `D6 D6` followed by
+the instruction. Codes and skeletons are then paired in sorted order, so the
+header stores only a bitmap and a sorted list. The test files get 160-200
+entries, which cover 26-70% of their instructions (mostly 30-55%) and save
+1.5-2% of the output. `x64pp c -v` prints the numbers.
+
 ### 3. Branch targets as labels
 
 An instruction start that a `jmp`/`jcc`/`call`/rel8 branch targets is a
 label. Labels are marked in the op stream with 0xD6, an invalid opcode in
-64-bit mode; a genuine 0xD6 instruction is written as `D6 D6` and never gets
-an explicit label. The first non-padding instruction after `ret`, `jmp`,
-`ud2`, `hlt` or `int3` is an implicit label and needs no marker. The decoder
-collects all labels in a first pass over the op stream, then:
+64-bit mode; escaped instructions (`D6 D6` prefix, see above; a genuine
+0xD6 becomes `D6 D6 D6`) are never explicit labels. The first non-padding
+instruction after `ret`, `jmp`, `ud2`, `hlt` or `int3` is an implicit label
+and needs no marker. The decoder collects all labels in a first pass over
+the op stream, then:
 
 * `jmp`/`jcc` rel32: z = zigzag(label distance from the next instruction)+1
   in one byte if z < 255; otherwise 255, and the absolute label number in
@@ -200,7 +222,7 @@ image (code is decoded before tables are restored):
 ### Format
 
 ```
-"x64p" version(1) flags(1)
+"x64p" version(2) flags(1)
 varint original size
 varint region count, per region:
     type(1) varint gap-to-previous-region varint size
@@ -208,6 +230,9 @@ varint region count, per region:
     varint n, n x varint  parameters: .eh_frame_hdr -> its .eh_frame,
                           .eh_frame/.pdata -> image VA bias (+ section map),
                           Elf64_Rela -> PT_LOAD map, .gnu.hash -> .dynsym/.dynstr
+varint dictionary size n; if n > 0:
+    32-byte bitmap of the code bytes
+    n x (length(1) skeleton), sorted, paired with the code bytes in order
 varint stream sizes (11)
 streams, each starting at a multiple of 16
 ```
@@ -238,6 +263,14 @@ the back end the answer was mostly "no":
 | 3-byte instead of 4-byte index fields | +0.3% |
 | disp32, imm32 or rel8 kept in the op stream | +0.3% to +1.3% |
 | imm8/disp8/imm16 in separate streams | +0.5% (so they stay inline) |
+| opcode dictionary: two-byte codes for more skeletons / `0F xx` second tier | +0.6% to +4% / +0.1% on cmix |
+| opcode dictionary: entries including the leading imm8/disp8 | -0.1% on the tuning set, +0.07% on cmix |
+| opcode dictionary: codes paired with skeletons by frequency rank, stored as (code, skeleton) pairs | +0.3% on cmix |
+| VEX payload bits reordered (pp, L before vvvv) for better literal contexts | -0.18% on cmix, ±0.01% tuning set, +0.04% on AVX files |
+| disp32 as delta from the previous disp32 with the same base register (if within 64 instructions) | -0.9% on cmix, +0.3% tuning set |
+| same, only for VEX instructions | -0.5% on cmix, +0.2% on AVX files |
+| disp32 predicted by stride in periodic code (unrolled loops detected from the skeletons) | -0.3% on cmix, +0.05% tuning set |
+| RIP-relative targets as data labels (sorted target table + label distance) | -10% of the cmix rip stream, +1.6% to +9% of it elsewhere |
 
 LZMA does best with register allocation left inside ModRM and with the
 compiler's instruction order: identical source compiles to identical bytes,
@@ -250,7 +283,7 @@ turning absolute values into small, repeating numbers.
 
 * Round trip on all files above, truncated and corrupted executables,
   random data, an empty file, and a tar of several executables.
-* Fuzzing with ASan/UBSan (2,400 iterations): mutated executables through
+* Fuzzing with ASan/UBSan (3,600 iterations): mutated executables through
   the forward transform, which must round-trip, and corrupted streams
   through the inverse, which must fail cleanly.
 * Decoder instruction lengths checked against objdump on all code sections

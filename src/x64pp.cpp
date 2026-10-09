@@ -47,7 +47,7 @@ enum StreamId {
 // order of streams in the output file
 static const uint8_t kOrder[NSTREAM] = {S_ESC, S_IMM64, S_IMM32, S_DISP, S_RIP, S_CALL, S_JMP, S_JCC, S_J8, S_OP, S_DATA};
 
-enum { kAlign = 16, kVersion = 1 };
+enum { kAlign = 16, kVersion = 2 };
 enum { FL_LABELS = 1 };
 static const uint8_t kMagic[4] = {'x', '6', '4', 'p'};
 
@@ -156,6 +156,141 @@ struct InStream {
 // A code of 0 means the target is not a label; its address is in S_ESC.
 
 enum { kMark = 0xD6 };
+
+//----------------------------------------------------------------------------
+// Opcode dictionary: the most frequent instruction skeletons (structural
+// bytes) of the file get one-byte codes.  The code bytes are the rarest
+// first bytes of instructions in the file.  An instruction that starts with
+// a code byte or with kMark, and has no code itself, is escaped: kMark kMark,
+// then the instruction as is (so a genuine 0xD6 becomes D6 D6 D6).  Escaped
+// instructions never get a label marker, so kMark kMark is unambiguous.
+
+enum { kMaxSkel = 15 };
+
+// a skeleton as a fixed-size key: the bytes, zero filled, length in byte 15
+struct Skel {
+  uint64_t a, b;  // b != 0 for every skeleton (length >= 2)
+  bool operator==(const Skel& o) const { return a == o.a && b == o.b; }
+  bool operator<(const Skel& o) const { return str() < o.str(); }
+  size_t len() const { return (size_t)(b >> 56); }
+  std::string str() const {
+    uint8_t t[16];
+    memcpy(t, &a, 8);
+    memcpy(t + 8, &b, 8);
+    return std::string((const char*)t, len());
+  }
+  static Skel of(const uint8_t* p, size_t n) {
+    uint8_t t[16] = {};
+    memcpy(t, p, n);
+    t[15] = (uint8_t)n;
+    Skel s;
+    memcpy(&s.a, t, 8);
+    memcpy(&s.b, t + 8, 8);
+    return s;
+  }
+};
+
+// open addressing map Skel -> uint64_t
+struct SkelMap {
+  std::vector<Skel> key;
+  std::vector<uint64_t> val;
+  size_t used = 0;
+  SkelMap() : key(256, Skel{0, 0}), val(256, 0) {}
+  size_t home(const Skel& s) const {
+    uint64_t h = (s.a ^ (s.b * 0x9E3779B97F4A7C15ull)) * 0xBF58476D1CE4E5B9ull;
+    return (size_t)(h ^ h >> 29) & (key.size() - 1);
+  }
+  const uint64_t* find(const Skel& s) const {
+    for (size_t i = home(s);; i = (i + 1) & (key.size() - 1)) {
+      if (key[i] == s) return &val[i];
+      if (!key[i].b) return nullptr;
+    }
+  }
+  uint64_t& operator[](const Skel& s) {
+    if (2 * (used + 1) > key.size()) grow();
+    size_t i = home(s);
+    for (; key[i].b && !(key[i] == s); i = (i + 1) & (key.size() - 1)) {}
+    if (!key[i].b) { key[i] = s; val[i] = 0; used++; }
+    return val[i];
+  }
+  void grow() {
+    std::vector<Skel> k(key.size() * 2, Skel{0, 0});
+    std::vector<uint64_t> v(k.size(), 0);
+    k.swap(key);
+    v.swap(val);
+    used = 0;
+    for (size_t i = 0; i < k.size(); i++) if (k[i].b) (*this)[k[i]] = v[i];
+  }
+};
+
+struct OpDict {
+  bool isCode[256] = {};
+  std::string entry[256];   // code -> skeleton
+  std::string padded[256];  // skeleton + zeros for the decoder
+  SkelMap code;             // skeleton -> code, encoder only
+  size_t n = 0;
+  size_t size() const { return n; }
+  void add(uint8_t c, const std::string& sk) {
+    isCode[c] = true;
+    entry[c] = sk;
+    padded[c] = sk + std::string(64, '\0');
+    code[Skel::of((const uint8_t*)sk.data(), sk.size())] = c;
+    n++;
+  }
+  // encoder: code for the instruction at p, or -1
+  int find(const uint8_t* p, const x64::Insn& I) const {
+    if (I.trunc || I.nstruct < 2 || I.nstruct > kMaxSkel || !n) return -1;
+    const uint64_t* v = code.find(Skel::of(p, I.nstruct));
+    return v ? (int)*v : -1;
+  }
+  bool escaped(const uint8_t* p, const x64::Insn& I) const {
+    return (p[0] == kMark || isCode[p[0]]) && find(p, I) < 0;
+  }
+};
+
+// Pairs the k-th most frequent skeleton with the k-th rarest first byte for
+// as long as that saves more bytes than the escapes and the entry cost.
+static void buildDict(const std::vector<Region>& R, const uint8_t* img, OpDict& D) {
+  SkelMap cnt;
+  uint64_t first[256] = {};
+  for (auto& r : R) {
+    if (r.type != R_CODE) continue;
+    const uint8_t* p = img + r.off;
+    size_t n = (size_t)r.size, i = 0;
+    while (i < n) {
+      x64::Insn I;
+      x64::decode(p + i, n - i, I);
+      first[p[i]]++;
+      if (!I.trunc && I.nstruct >= 2 && I.nstruct <= kMaxSkel) cnt[Skel::of(p + i, I.nstruct)]++;
+      i += I.len;
+    }
+  }
+  std::vector<std::pair<uint64_t, Skel> > byCount;
+  for (size_t i = 0; i < cnt.key.size(); i++)
+    if (cnt.key[i].b) byCount.push_back({cnt.val[i], cnt.key[i]});
+  std::sort(byCount.begin(), byCount.end(), [](const std::pair<uint64_t, Skel>& a, const std::pair<uint64_t, Skel>& b) {
+    return a.first != b.first ? a.first > b.first : a.second < b.second;
+  });
+  std::vector<std::pair<uint64_t, int> > rare;
+  for (int b = 0; b < 256; b++) if (b != kMark) rare.push_back({first[b], b});
+  std::sort(rare.begin(), rare.end());
+  size_t k = 0;
+  for (; k < byCount.size() && k < rare.size(); k++) {
+    uint64_t len = byCount[k].second.len(), saved = byCount[k].first * (len - 1);
+    if (saved <= 4 * rare[k].first + len + 2) break;
+  }
+  // which code goes with which skeleton hardly matters; a canonical pairing
+  // (both sorted) lets the container store a code bitmap and a sorted list
+  std::vector<std::string> sk;
+  std::vector<uint8_t> codes;
+  for (size_t j = 0; j < k; j++) {
+    sk.push_back(byCount[j].second.str());
+    codes.push_back((uint8_t)rare[j].second);
+  }
+  std::sort(sk.begin(), sk.end());
+  std::sort(codes.begin(), codes.end());
+  for (size_t j = 0; j < k; j++) D.add(codes[j], sk[j]);
+}
 
 struct Labels {
   std::vector<uint64_t> va;  // sorted, unique
@@ -278,12 +413,12 @@ static inline bool branchTarget(unsigned c, uint64_t v, uint64_t next, uint64_t&
 }
 
 // encoder: instruction starts that may become explicit labels
-static void collectStarts(const uint8_t* p, size_t n, uint64_t va, Labels& B) {
+static void collectStarts(const uint8_t* p, size_t n, uint64_t va, const OpDict& D, Labels& B) {
   size_t i = 0;
   while (i < n) {
     x64::Insn I;
     x64::decode(p + i, n - i, I);
-    if (p[i] != kMark) B.va.push_back(va + i);
+    if (!D.escaped(p + i, I)) B.va.push_back(va + i);
     i += I.len;
   }
 }
@@ -311,7 +446,9 @@ static void collectLabels(const uint8_t* p, size_t n, uint64_t va, const Labels&
 struct Encoder {
   Buf S[NSTREAM];
   const Labels* L;
+  const OpDict* D;
   unsigned flags;
+  uint64_t ninsn = 0, ncoded = 0;
 
   void code(const uint8_t* p, size_t n, uint64_t va) {
     size_t i = 0;
@@ -321,10 +458,18 @@ struct Encoder {
     while (i < n) {
       x64::Insn I;
       x64::decode(p + i, n - i, I);
+      int dc = D->find(p + i, I);
+      bool esc = dc < 0 && (p[i] == kMark || D->isCode[p[i]]);
+      // an escaped instruction is never a target (collectStarts), but its
+      // address may still be a label from an overlapping region
       size_t r;
-      if (lab && !imp.step(I) && L->find(va + i, r)) op.push_back(kMark);
-      if (lab && p[i] == kMark) op.push_back(kMark);
-      op.insert(op.end(), p + i, p + i + I.nstruct);
+      if (lab && !imp.step(I) && !esc && L->find(va + i, r)) op.push_back(kMark);
+      ninsn++;
+      if (dc >= 0) { op.push_back((uint8_t)dc); ncoded++; }
+      else {
+        if (esc) { op.push_back(kMark); op.push_back(kMark); }
+        op.insert(op.end(), p + i, p + i + I.nstruct);
+      }
       const uint8_t* q = p + i + I.nstruct;
       uint64_t next = va + i + I.len;
       for (unsigned k = 0; k < I.nfield; k++) {
@@ -367,25 +512,36 @@ struct Encoder {
   }
 };
 
-// decoder: consume an optional label marker / escape at an instruction start
-static inline bool readMark(InStream& op) {
+// decoder: the structural bytes of the next instruction, at sp (in the
+// opcode stream or in a dictionary entry); `marked` = label marker seen
+static bool readInsn(InStream& op, const OpDict& D, size_t avail, x64::Insn& I, const uint8_t*& sp, bool& marked) {
+  marked = false;
+  bool literal = false;
   if (op.p < op.e && op.p[0] == kMark) {
-    bool escape = op.p + 1 < op.e && op.p[1] == kMark;
-    op.p++;
-    return !escape;
+    if (op.p + 1 < op.e && op.p[1] == kMark) { op.p += 2; literal = true; }
+    else { op.p++; marked = true; }
   }
-  return false;
+  if (!literal && op.p < op.e && D.isCode[op.p[0]]) {
+    uint8_t c = *op.p++;
+    sp = (const uint8_t*)D.padded[c].data();
+    x64::decode(sp, avail, I);
+    return !I.trunc && I.nstruct == D.entry[c].size();
+  }
+  sp = op.p;
+  x64::decode(sp, avail, I);
+  return op.take(I.nstruct);
 }
 
 // decoding pass 1: labels from the opcode stream alone
-static bool collectLabelsOp(InStream& op, size_t n, uint64_t va, Labels& L) {
+static bool collectLabelsOp(InStream& op, const OpDict& D, size_t n, uint64_t va, Labels& L) {
   ImplicitLabels imp;
   size_t i = 0;
   while (i < n) {
-    bool marked = readMark(op);
     x64::Insn I;
-    x64::decode(op.p, n - i, I);
-    size_t adv = I.nstruct;
+    const uint8_t* sp;
+    bool marked;
+    if (!readInsn(op, D, n - i, I, sp, marked)) return false;
+    size_t adv = 0;
     for (unsigned k = 0; k < I.nfield; k++) if (inlineField(I.fclass[k])) adv += I.fsize[k];
     if (!op.take(adv)) return false;
     if (imp.step(I) || marked) L.va.push_back(va + i);
@@ -397,6 +553,7 @@ static bool collectLabelsOp(InStream& op, size_t n, uint64_t va, Labels& L) {
 struct Decoder {
   InStream S[NSTREAM];
   const Labels* L;
+  const OpDict* D;
   unsigned flags;
 
   bool escaped(uint32_t& x) {
@@ -425,11 +582,10 @@ struct Decoder {
     InStream& op = S[S_OP];
     bool lab = flags & FL_LABELS;
     while (i < n) {
-      if (lab) readMark(op);
       x64::Insn I;
-      x64::decode(op.p, n - i, I);
-      const uint8_t* s = op.p;
-      if (!op.take(I.nstruct)) return false;
+      const uint8_t* s;
+      bool marked;
+      if (!readInsn(op, *D, n - i, I, s, marked)) return false;
       memcpy(out + i, s, I.nstruct);
       uint8_t* q = out + i + I.nstruct;
       uint64_t next = va + i + I.len;
@@ -624,6 +780,8 @@ static inline bool hasVA(uint8_t type) { return type == R_CODE || type == R_EHFR
 struct Stats {
   uint64_t ssize[NSTREAM];
   size_t nregion[R_NTYPES];
+  size_t ndict;
+  uint64_t ninsn, ncoded;
 };
 
 static void encode(const Buf& src, Buf& out, Stats* st, std::vector<Buf>* dump) {
@@ -634,8 +792,10 @@ static void encode(const Buf& src, Buf& out, Stats* st, std::vector<Buf>* dump) 
   for (auto& r : R) if (r.type == R_PDATA) unwindInfos(in.data(), in.size(), &src[(size_t)r.off], r, R, cm, true);
   for (auto& r : R) if (r.type != R_CODE) tableTransform(&in[(size_t)r.off], r, true, R, src.data(), src.size(), cm);
 
+  OpDict dict;
+  buildDict(R, in.data(), dict);
   Labels B, L;
-  for (auto& r : R) if (r.type == R_CODE) collectStarts(&in[(size_t)r.off], (size_t)r.size, r.va, B);
+  for (auto& r : R) if (r.type == R_CODE) collectStarts(&in[(size_t)r.off], (size_t)r.size, r.va, dict, B);
   B.finish();
   for (auto& r : R) if (r.type == R_CODE) collectLabels(&in[(size_t)r.off], (size_t)r.size, r.va, B, L);
   L.finish();
@@ -645,6 +805,7 @@ static void encode(const Buf& src, Buf& out, Stats* st, std::vector<Buf>* dump) 
 
   Encoder E;
   E.L = &L;
+  E.D = &dict;
   E.flags = flags;
   uint64_t pos = 0;
   Buf& D = E.S[S_DATA];
@@ -672,6 +833,20 @@ static void encode(const Buf& src, Buf& out, Stats* st, std::vector<Buf>* dump) 
     for (uint64_t x : r.par) putVar(out, x);
     prev = r.off + r.size;
   }
+  // opcode dictionary: code bitmap, then the skeletons in code order (sorted)
+  putVar(out, dict.size());
+  if (dict.size()) {
+    for (int c = 0; c < 256; c += 8) {
+      uint8_t m = 0;
+      for (int j = 0; j < 8; j++) m |= (uint8_t)(dict.isCode[c + j] << j);
+      out.push_back(m);
+    }
+    for (int c = 0; c < 256; c++)
+      if (dict.isCode[c]) {
+        out.push_back((uint8_t)dict.entry[c].size());
+        out.insert(out.end(), dict.entry[c].begin(), dict.entry[c].end());
+      }
+  }
   for (int k = 0; k < NSTREAM; k++) putVar(out, E.S[k].size());
   for (int j = 0; j < NSTREAM; j++) {
     const Buf& s = E.S[kOrder[j]];
@@ -682,6 +857,9 @@ static void encode(const Buf& src, Buf& out, Stats* st, std::vector<Buf>* dump) 
     memset(st, 0, sizeof *st);
     for (int k = 0; k < NSTREAM; k++) st->ssize[k] = E.S[k].size();
     for (auto& r : R) st->nregion[r.type]++;
+    st->ndict = dict.size();
+    st->ninsn = E.ninsn;
+    st->ncoded = E.ncoded;
   }
   if (dump) for (int k = 0; k < NSTREAM; k++) dump->push_back(E.S[k]);
 }
@@ -710,6 +888,25 @@ static bool decode(const Buf& in, Buf& out) {
     x.off = prev + gap;
     prev = x.off + x.size;
   }
+  OpDict dict;
+  uint64_t nd = r.var();
+  if (!r.ok || nd > 255) return false;
+  if (nd) {
+    uint8_t bm[32];
+    for (int j = 0; j < 32; j++) bm[j] = r.byte();
+    std::string last;
+    for (int c = 0; c < 256; c++) {
+      if (!(bm[c >> 3] >> (c & 7) & 1)) continue;
+      size_t len = r.byte();
+      if (!r.ok || c == kMark || len < 2 || len > kMaxSkel || len > (size_t)(r.e - r.p)) return false;
+      std::string sk((const char*)r.p, len);
+      r.p += len;
+      if (dict.size() && sk <= last) return false;
+      dict.add((uint8_t)c, sk);
+      last = sk;
+    }
+    if (dict.size() != nd) return false;
+  }
   uint64_t sz[NSTREAM];
   for (int k = 0; k < NSTREAM; k++) sz[k] = r.var();
   if (!r.ok) return false;
@@ -732,10 +929,11 @@ static bool decode(const Buf& in, Buf& out) {
   if (flags & FL_LABELS) {
     InStream op = Dc.S[S_OP];
     for (auto& x : R)
-      if (x.type == R_CODE && !collectLabelsOp(op, (size_t)x.size, x.va, L)) return false;
+      if (x.type == R_CODE && !collectLabelsOp(op, dict, (size_t)x.size, x.va, L)) return false;
     L.finish();
   }
   Dc.L = &L;
+  Dc.D = &dict;
   Dc.flags = flags;
 
   // pass 2: rebuild the image
@@ -822,6 +1020,8 @@ int main(int argc, char** argv) {
     fprintf(stderr, "%s: %zu -> %zu\n", iname, in.size(), out.size());
     for (int k = 0; k < R_NTYPES; k++)
       if (st.nregion[k]) fprintf(stderr, "  region %-12s x%zu\n", kRegionName[k], st.nregion[k]);
+    fprintf(stderr, "  instructions %llu, %zu dictionary codes cover %.1f%%\n", (unsigned long long)st.ninsn, st.ndict,
+            st.ninsn ? 100.0 * (double)st.ncoded / (double)st.ninsn : 0.0);
     for (int k = 0; k < NSTREAM; k++)
       fprintf(stderr, "  stream %-7s %10llu\n", kStreamName[k], (unsigned long long)st.ssize[k]);
   }
