@@ -373,6 +373,13 @@ turning absolute values into small, repeating numbers.
   padding loop between streams never finished (fixed).
 * Decoder instruction lengths checked against objdump on all code sections
   of the test files.
+* `src/lzma.hpp` against liblzma 5.4.5: byte-identical output in about
+  23,000 encodings (presets 0-9 and 9e, LZMA1 and LZMA2, every match finder,
+  both modes, lc/lp/pb, nice_len, depth, dictionary sizes, preset
+  dictionaries, output buffers one byte too small; real, random,
+  repetitive and chunk-boundary-sized inputs), half of them under
+  ASan/UBSan. `-a` evaluates the same candidate sizes and picks the same
+  options on every test file as the liblzma build did.
 
 ## License
 
