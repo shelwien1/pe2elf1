@@ -9,9 +9,12 @@ x64pp c program.exe program.x64pp && xz -9e program.x64pp
 xz -d program.x64pp.xz && x64pp d program.x64pp program.exe
 ```
 
-On the test sets below the xz output is 26-27% smaller than plain `xz -9e`,
-21-23% smaller than `xz --x86`, and 17-19% smaller than with
-[x64flt3](https://nishi.dreamhosters.com/u/x64flt3_v1.7z).
+On the test sets below the xz output is 27% smaller than plain `xz -9e`,
+22-24% smaller than `xz --x86`, and 18-19% smaller than with
+[x64flt3](https://nishi.dreamhosters.com/u/x64flt3_v1.7z). `x64pp c -a`
+also chooses among coding variants per file, by compressing the candidates
+with liblzma; that adds 0.2% on these sets and 2.6% on cmix, a target with
+many unrolled AVX2 loops.
 
 ## Results
 
@@ -43,20 +46,20 @@ Tuning set (all transforms were developed on these files):
 
 Held-out set (not looked at during development):
 
-| file | size | xz | xz --x86 | x64flt3 | x64pp |
-|---|---:|---:|---:|---:|---:|
-| elf_cmake | 11,796,472 | 3,349,772 | 2,919,212 | 2,728,136 | 2,123,712 |
-| elf_gitlfs_go (Go) | 11,516,960 | 3,513,356 | 3,334,632 | 3,204,572 | 2,953,512 |
-| elf_libllvm17.so | 123,671,544 | 22,926,564 | 22,282,464 | 21,042,852 | 16,629,108 |
-| elf_php | 5,784,016 | 1,744,236 | 1,650,460 | 1,550,880 | 1,236,240 |
-| elf_shim_go (Go) | 8,799,192 | 2,613,004 | 2,482,980 | 2,376,876 | 2,197,188 |
-| pe_7zxa.dll | 216,064 | 88,576 | 85,472 | 84,892 | 74,320 |
-| pe_npgen.pyd | 748,032 | 197,924 | 191,432 | 180,156 | 150,312 |
-| pe_npsimd.pyd (AVX) | 2,236,928 | 262,060 | 241,492 | 176,024 | 98,176 |
-| pe_openblas_mingw.dll | 20,269,568 | 3,575,148 | 3,501,848 | 3,142,108 | 2,641,436 |
-| pe_w64.exe | 101,888 | 43,532 | 41,744 | 41,616 | 36,808 |
-| **total** | 185,140,664 | 38,314,172 | 36,731,736 | 34,528,112 | **28,140,812** |
-| vs xz | | | -4.13% | -9.88% | **-26.55%** |
+| file | size | xz | xz --x86 | x64flt3 | x64pp | x64pp -a |
+|---|---:|---:|---:|---:|---:|---:|
+| elf_cmake | 11,796,472 | 3,349,772 | 2,919,212 | 2,728,136 | 2,040,736 | 2,038,672 |
+| elf_gitlfs_go (Go) | 11,516,960 | 3,513,356 | 3,334,632 | 3,204,572 | 2,958,692 | 2,951,068 |
+| elf_libllvm17.so | 123,671,544 | 22,926,564 | 22,282,464 | 21,042,852 | 16,550,992 | 16,537,160 |
+| elf_php | 5,784,016 | 1,744,236 | 1,650,460 | 1,550,880 | 1,219,040 | 1,219,040 |
+| elf_shim_go (Go) | 8,799,192 | 2,613,004 | 2,482,980 | 2,376,876 | 2,202,128 | 2,192,176 |
+| pe_7zxa.dll | 216,064 | 88,576 | 85,472 | 84,892 | 74,316 | 73,592 |
+| pe_npgen.pyd | 748,032 | 197,924 | 191,432 | 180,156 | 150,120 | 147,028 |
+| pe_npsimd.pyd (AVX) | 2,236,928 | 262,060 | 241,492 | 176,024 | 98,396 | 95,924 |
+| pe_openblas_mingw.dll | 20,269,568 | 3,575,148 | 3,501,848 | 3,142,108 | 2,635,232 | 2,609,488 |
+| pe_w64.exe | 101,888 | 43,532 | 41,744 | 41,616 | 36,748 | 36,584 |
+| **total** | 185,140,664 | 38,314,172 | 36,731,736 | 34,528,112 | **27,966,400** | **27,900,732** |
+| vs xz | | | -4.13% | -9.88% | **-27.01%** | **-27.18%** |
 
 Target file: the cmix compressor (ELF, clang 17, many unrolled AVX2 loops),
 on which the last round of tuning was done:
@@ -67,7 +70,7 @@ on which the last round of tuning was done:
 | vs xz | | | -3.87% | -5.65% | -21.56% | **-23.63%** |
 
 With xz's default preset (`-6`) the tuning set gives 14,397,548 / 13,547,052
-/ 12,884,832 / 10,625,976 (-26.20%) without `-a`.
+/ 12,884,832 / 10,583,584 (-26.49%) without `-a`.
 
 Sources: ELF files from Ubuntu 24.04 packages, PE files from the numpy 2.1.3
 win_amd64 wheel, pip 24.2 (launchers), ripgrep 14.1.1 and 7-Zip 24.08
@@ -77,7 +80,8 @@ Speed (one core of a cloud VM): 20-25 MB/s forward without verification,
 40-50 MB/s inverse (libLLVM, 124 MB: 5.7 s and 2.9 s); memory about 4.5x
 the input size. The forward transform verifies itself by default, which
 costs one inverse pass. `-a` compresses 30-90 candidates: 4 s for cmix,
-10 s for the 1.3 MB pe_7za.exe, about a minute for the 9 MB gdb on 4 cores.
+10 s for the 1.3 MB pe_7za.exe, about a minute for the 9 MB gdb on 4 cores,
+tens of minutes for libLLVM (memory limits it to 2 threads there).
 `tools/bench.py` reproduces the tables:
 
 ```
