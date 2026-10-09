@@ -9,11 +9,11 @@ x64pp c program.exe program.x64pp && xz -9e program.x64pp
 xz -d program.x64pp.xz && x64pp d program.x64pp program.exe
 ```
 
-On the test sets below the xz output is 27% smaller than plain `xz -9e`,
-22-24% smaller than `xz --x86`, and 18-19% smaller than with
+On the test sets below the xz output is 28% smaller than plain `xz -9e`,
+23-25% smaller than `xz --x86`, and 19-20% smaller than with
 [x64flt3](https://nishi.dreamhosters.com/u/x64flt3_v1.7z). `x64pp c -a`
 also chooses among coding variants per file, by compressing the candidates
-with its built-in LZMA encoder; that adds 0.2% on these sets and 2.6% on
+with its built-in LZMA encoder; that adds 0.2% on these sets and 2.7% on
 cmix, a target with many unrolled AVX2 loops.
 
 ## Results
@@ -26,54 +26,54 @@ Tuning set (all transforms were developed on these files):
 
 | file | size | xz | xz --x86 | x64flt3 | x64pp | x64pp -a |
 |---|---:|---:|---:|---:|---:|---:|
-| elf_bash | 1,446,024 | 583,788 | 545,568 | 503,832 | 390,384 | 390,384 |
-| elf_gdb | 8,920,528 | 3,002,788 | 2,723,940 | 2,629,292 | 2,124,772 | 2,123,940 |
-| elf_libpython.so | 9,061,000 | 2,108,448 | 2,001,140 | 1,897,780 | 1,538,108 | 1,536,816 |
-| elf_python | 8,020,928 | 2,118,392 | 1,993,560 | 1,900,992 | 1,632,880 | 1,632,880 |
-| elf_rg (Rust) | 5,257,872 | 1,371,532 | 1,354,044 | 1,274,616 | 957,060 | 951,588 |
-| elf_vim | 4,130,640 | 1,751,720 | 1,650,220 | 1,513,020 | 1,184,532 | 1,184,244 |
-| elf_xz | 89,008 | 31,216 | 29,280 | 28,488 | 23,980 | 23,852 |
-| pe_7za.dll | 413,184 | 164,940 | 156,212 | 155,424 | 135,528 | 134,512 |
-| pe_7za.exe | 1,323,520 | 492,476 | 451,920 | 447,572 | 387,292 | 384,880 |
-| pe_msvcp140.dll | 585,384 | 148,616 | 140,380 | 134,428 | 117,400 | 116,812 |
-| pe_mtrand.pyd | 633,344 | 151,536 | 146,240 | 137,948 | 115,876 | 113,092 |
-| pe_npcore.pyd | 4,160,512 | 969,912 | 932,712 | 895,996 | 761,740 | 758,436 |
-| pe_rg.exe (Rust) | 5,407,744 | 1,450,748 | 1,359,536 | 1,304,228 | 1,144,496 | 1,143,188 |
-| pe_t64.exe | 108,032 | 44,692 | 42,728 | 42,492 | 37,452 | 37,256 |
-| pe_x64flt3.exe | 56,832 | 19,172 | 18,652 | 18,232 | 15,768 | 15,516 |
-| **total** | 49,614,552 | 14,409,976 | 13,546,132 | 12,884,340 | **10,567,268** | **10,547,396** |
-| vs xz | | | -5.99% | -10.59% | **-26.67%** | **-26.80%** |
+| elf_bash | 1,446,024 | 583,788 | 545,568 | 503,832 | 390,332 | 390,324 |
+| elf_gdb | 8,920,528 | 3,002,788 | 2,723,940 | 2,629,292 | 2,106,360 | 2,104,344 |
+| elf_libpython.so | 9,061,000 | 2,108,448 | 2,001,140 | 1,897,780 | 1,508,740 | 1,506,864 |
+| elf_python | 8,020,928 | 2,118,392 | 1,993,560 | 1,900,992 | 1,602,784 | 1,602,784 |
+| elf_rg (Rust) | 5,257,872 | 1,371,532 | 1,354,044 | 1,274,616 | 934,652 | 928,936 |
+| elf_vim | 4,130,640 | 1,751,720 | 1,650,220 | 1,513,020 | 1,183,428 | 1,183,428 |
+| elf_xz | 89,008 | 31,216 | 29,280 | 28,488 | 23,860 | 23,776 |
+| pe_7za.dll | 413,184 | 164,940 | 156,212 | 155,424 | 134,240 | 133,236 |
+| pe_7za.exe | 1,323,520 | 492,476 | 451,920 | 447,572 | 380,376 | 377,716 |
+| pe_msvcp140.dll | 585,384 | 148,616 | 140,380 | 134,428 | 113,252 | 112,656 |
+| pe_mtrand.pyd | 633,344 | 151,536 | 146,240 | 137,948 | 113,820 | 110,856 |
+| pe_npcore.pyd | 4,160,512 | 969,912 | 932,712 | 895,996 | 761,684 | 758,328 |
+| pe_rg.exe (Rust) | 5,407,744 | 1,450,748 | 1,359,536 | 1,304,228 | 1,116,648 | 1,115,232 |
+| pe_t64.exe | 108,032 | 44,692 | 42,728 | 42,492 | 37,148 | 37,044 |
+| pe_x64flt3.exe | 56,832 | 19,172 | 18,652 | 18,232 | 15,736 | 15,516 |
+| **total** | 49,614,552 | 14,409,976 | 13,546,132 | 12,884,340 | **10,423,060** | **10,401,040** |
+| vs xz | | | -5.99% | -10.59% | **-27.67%** | **-27.82%** |
 
 Held-out set (not looked at during development):
 
 | file | size | xz | xz --x86 | x64flt3 | x64pp | x64pp -a |
 |---|---:|---:|---:|---:|---:|---:|
-| elf_cmake | 11,796,472 | 3,349,772 | 2,919,212 | 2,728,136 | 2,040,736 | 2,038,672 |
-| elf_gitlfs_go (Go) | 11,516,960 | 3,513,356 | 3,334,632 | 3,204,572 | 2,958,692 | 2,951,068 |
-| elf_libllvm17.so | 123,671,544 | 22,926,564 | 22,282,464 | 21,042,852 | 16,550,992 | 16,537,160 |
-| elf_php | 5,784,016 | 1,744,236 | 1,650,460 | 1,550,880 | 1,219,040 | 1,219,040 |
-| elf_shim_go (Go) | 8,799,192 | 2,613,004 | 2,482,980 | 2,376,876 | 2,202,128 | 2,192,176 |
-| pe_7zxa.dll | 216,064 | 88,576 | 85,472 | 84,892 | 74,316 | 73,592 |
-| pe_npgen.pyd | 748,032 | 197,924 | 191,432 | 180,156 | 150,120 | 147,028 |
-| pe_npsimd.pyd (AVX) | 2,236,928 | 262,060 | 241,492 | 176,024 | 98,396 | 95,924 |
-| pe_openblas_mingw.dll | 20,269,568 | 3,575,148 | 3,501,848 | 3,142,108 | 2,635,232 | 2,609,488 |
-| pe_w64.exe | 101,888 | 43,532 | 41,744 | 41,616 | 36,748 | 36,584 |
-| **total** | 185,140,664 | 38,314,172 | 36,731,736 | 34,528,112 | **27,966,400** | **27,900,732** |
-| vs xz | | | -4.13% | -9.88% | **-27.01%** | **-27.18%** |
+| elf_cmake | 11,796,472 | 3,349,772 | 2,919,212 | 2,728,136 | 2,038,616 | 2,035,980 |
+| elf_gitlfs_go (Go) | 11,516,960 | 3,513,356 | 3,334,632 | 3,204,572 | 2,932,176 | 2,925,052 |
+| elf_libllvm17.so | 123,671,544 | 22,926,564 | 22,282,464 | 21,042,852 | 16,302,680 | 16,288,824 |
+| elf_php | 5,784,016 | 1,744,236 | 1,650,460 | 1,550,880 | 1,219,520 | 1,217,828 |
+| elf_shim_go (Go) | 8,799,192 | 2,613,004 | 2,482,980 | 2,376,876 | 2,183,176 | 2,176,404 |
+| pe_7zxa.dll | 216,064 | 88,576 | 85,472 | 84,892 | 74,148 | 73,348 |
+| pe_npgen.pyd | 748,032 | 197,924 | 191,432 | 180,156 | 148,432 | 144,888 |
+| pe_npsimd.pyd (AVX) | 2,236,928 | 262,060 | 241,492 | 176,024 | 99,488 | 96,156 |
+| pe_openblas_mingw.dll | 20,269,568 | 3,575,148 | 3,501,848 | 3,142,108 | 2,621,244 | 2,596,888 |
+| pe_w64.exe | 101,888 | 43,532 | 41,744 | 41,616 | 36,360 | 36,312 |
+| **total** | 185,140,664 | 38,314,172 | 36,731,736 | 34,528,112 | **27,655,840** | **27,591,680** |
+| vs xz | | | -4.13% | -9.88% | **-27.82%** | **-27.99%** |
 
 Target file: the cmix compressor (ELF, clang 17, many unrolled AVX2 loops),
 on which the last round of tuning was done:
 
 | file | size | xz | xz --x86 | x64flt3 | x64pp | x64pp -a |
 |---|---:|---:|---:|---:|---:|---:|
-| cmix | 454,912 | 170,672 | 164,072 | 161,028 | 133,868 | **130,340** |
-| vs xz | | | -3.87% | -5.65% | -21.56% | **-23.63%** |
+| cmix | 454,912 | 170,672 | 164,072 | 161,028 | 133,640 | **130,052** |
+| vs xz | | | -3.87% | -5.65% | -21.70% | **-23.80%** |
 
 [docs/cmix.md](docs/cmix.md) describes this file's layout, its code and data
 types, what each part costs, and what could still be gained.
 
 With xz's default preset (`-6`) the tuning set gives 14,397,548 / 13,547,052
-/ 12,884,832 / 10,583,584 (-26.49%) without `-a`.
+/ 12,884,832 / 10,440,960 (-27.48%) without `-a`.
 
 Sources: ELF files from Ubuntu 24.04 packages, PE files from the numpy 2.1.3
 win_amd64 wheel, pip 24.2 (launchers), ripgrep 14.1.1 and 7-Zip 24.08
@@ -284,8 +284,8 @@ method and its detection are those of the table filter in Bulat Ziganshin's
 The decoder only reads the list of tables (gap, record size and kept
 columns, rows) from the header, so the detection can change without
 affecting the format. The cost model uses fixed-point arithmetic, so the
-choice does not depend on the floating-point library. On the tuning set
-`t` saves 1.35%: msvcp140 3.5%, the Rust files 2.3-2.4%, the Python files
+choice does not depend on the floating-point library. On the held-out set
+`t` saves 1.1% (libllvm 1.5%, npgen 1.1%). On the tuning set it saves 1.35%: msvcp140 3.5%, the Rust files 2.3-2.4%, the Python files
 1.8-1.9%, 7-Zip and gdb 0.9-1.8%, and nothing is lost elsewhere. The same
 filter applied to the other streams changes the total by at most 0.04% and
 hurts some files, so it is limited to the data stream.
@@ -312,10 +312,10 @@ for a file: every option is toggled, the candidates are encoded and
 compressed in parallel (the number of threads limited so that the LZMA
 encoders stay within about 3 GB), the best change is kept, and this repeats
 until nothing helps; once from the default and once from no options, since
-the options interact. That is typically 30-90 combinations: 4 s for cmix,
-under a minute for a 9 MB executable. `-aa` compresses all 2048.
+the options interact. That is typically 30-110 combinations: 7 s for cmix,
+about a minute for a 9 MB executable. `-aa` compresses all 2048.
 
-On cmix the search picks `drum`: -2.6% against the default. `m` and `d`
+On cmix the search picks `drumtW`: -2.7% against the default. `m` and `d`
 do most of it. Its unrolled AVX2 loops repeat the same instructions with
 every displacement shifted by a constant, which breaks LZMA's matches in
 the opcode stream (disp8 inline) and in the disp32 stream; with the
@@ -324,9 +324,12 @@ repeats exactly.
 
 One caveat: xz's output size reacts chaotically to small layout changes.
 Inserting 1-7 bytes into the cmix output's 2.5 KB header, with all streams
-unchanged, moves the compressed size by up to 0.4%. Option differences of
-that size are partly luck: `-a` keeps what is best for the file at hand,
-but such a choice says little about other files.
+unchanged, moves the compressed size by up to 0.4%. Some files are far more
+sensitive: shifting the streams of pe_npsimd.pyd by multiples of 16 bytes
+spreads its size over 2.9% (pe_npgen.pyd 0.5%), and the one header byte of
+an empty `t` table list alone costs it 1% in the held-out table. Option
+differences of that size are partly luck: `-a` keeps what is best for the
+file at hand, but such a choice says little about other files.
 
 ### Format
 
