@@ -86,23 +86,32 @@ python3 tools/bench.py --x64flt3 path/to/x64flt3 FILES_OR_DIRS...
 ## Usage
 
 ```
-x64pp c [-v] [-n] input output   forward transform
-x64pp d input output             inverse transform
-x64pp s input prefix             write each stream to prefix.<name> (analysis)
-  -v  print statistics
-  -n  don't verify the forward transform by decoding it
+x64pp c [-v] [-n] [-oLIST | -a | -aa] input output   forward transform
+x64pp d input output                                inverse transform
+x64pp s [-oLIST] input prefix                       write each stream to prefix.<name> (analysis)
+  -v   print statistics
+  -n   don't verify the forward transform by decoding it
+  -o   coding options, see "Coding options" (default: -oiu; -o alone: none)
+  -a   choose the options for this file by compressing the candidates
+       with liblzma like xz -9e (needs a build with liblzma)
+  -aa  same, trying all combinations (for small files)
   input/output may be - for stdin/stdout
 ```
 
 Any input is accepted. Files without recognized x86-64 code pass through
 unchanged apart from a 32-byte header. The encoder decodes its own output
 and compares it with the input before writing anything (skip with `-n`).
+The decoder needs no options: they are stored in the header.
 
 Build: `make`, or `g++ -O2 -o x64pp src/x64pp.cpp` (C++11, no
-dependencies). Windows: `make x64pp.exe` with mingw-w64, or any C++11
-compiler on the single file. Tested with gcc 13, clang 18 and mingw-w64 13
-(the Windows binary was run under Wine and produces byte-identical output);
-MSVC untested.
+dependencies). `make` links liblzma when pkg-config finds it, which enables
+`-a`; by hand that is `g++ -O2 -DX64PP_LZMA -o x64pp src/x64pp.cpp -llzma`.
+Windows: `make x64pp.exe` with mingw-w64, adding `LZMA_WIN=dir` for `-a`,
+where `dir` holds `include/lzma.h` and `lib/liblzma.a` for mingw-w64 (for
+example the `mingw64` tree of the MSYS2 package `mingw-w64-x86_64-xz`); or
+any C++11 compiler on the single file. Tested with gcc 13, clang 18 and
+mingw-w64 13 (the Windows binary was run under Wine and produces
+byte-identical output, with and without `-a`); MSVC untested.
 
 ## How it works
 
@@ -199,9 +208,21 @@ image (code is decoded before tables are restored):
   code. `pc_range` loses the predicted function length: up to the first
   `ret`/`jmp`/`call`/`ud2` followed by padding (and, for functions starting
   with `endbr64`, by the next `endbr64`). The LSDA pointer is delta coded.
-  In the CFA program every `advance_loc` target is replaced by its rank among
-  the ends of stack-changing instructions of the function (push/pop, rsp
-  arithmetic, frame setup, `leave`, `ret`), so most become 0..3.
+  The CFA program is predicted from the function's code: a simulator walks
+  the instructions (pushes, rsp arithmetic, frame pointer setup, `leave`,
+  pops, returns and tail jumps, stack realignment) and proposes each next
+  CFA instruction the way GCC or LLVM lays them out: where register saves go
+  (after each push, or all after the prologue), `remember_state` /
+  `restore_state` around epilogues in the middle of a function (GCC) or an
+  explicit offset after them (LLVM), shrink-wrapped prologues, the block
+  after padding. Each actual instruction is XORed with the proposal and the
+  simulator then follows the actual one, so a miss costs only locally.
+  `advance_loc` operands are first replaced by their rank among the ends of
+  stack-changing instructions (0..3 for most), proposal and actual alike.
+  The encoder picks GCC, LLVM or rank-only per file by which leaves the
+  fewest nonzero bytes. 60-95% of the CFA programs become all zero (bash
+  90%, gdb 70%, python 60%, the LLVM-built rg and cmix 95% and 89%), which
+  saves 0.6-1.1% of the output of ELF files.
 * `.eh_frame_hdr`: the search table is the sorted FDE list of `.eh_frame`;
   it is predicted from it and only differences are stored (exact in every
   file tested).
@@ -219,10 +240,47 @@ image (code is decoded before tables are restored):
   ones; 79-98% of them become all zero.
 * PE base relocations: page RVA delta, entries delta coded within a block.
 
+### 5. Coding options
+
+Some codings help one kind of code and hurt another, so they are options,
+stored as header flags:
+
+| option | coding | where it helped |
+|---|---|---|
+| `d` | disp32 with a base register as the difference from the previous disp32 with the same base, if that was at most 64 instructions back with no unconditional jump or return between | unrolled loops: cmix -1.0%, pe_mtrand -2.1%; most other files lose 0.3-1% |
+| `e` | disp8 likewise, mod 256 (shares the history with `d`) | cmix -0.1% on top of `d` |
+| `i` | opcode dictionary entries include the imm8/disp8/imm16 that follow the skeleton (`48 8B 45 F8` is one entry) | gcc-built ELF files -0.1% to -0.6%; cmix and Rust lose a little |
+| `r` | RIP-relative targets through a table of the file's distinct targets: each reference is the move from the previous one's table index | cmix -0.1% |
+| `u` | the VEX byte holding vvvv, L and pp is reordered so pp and L come first; LZMA's literal context (top 3 bits of the previous byte) then predicts the opcode | cmix -0.2%, small either way elsewhere |
+| `m` | imm8/disp8/imm16 in their own stream instead of the opcode stream | cmix -1.4%, Rust and 7-Zip -0.3% to -0.6%; other C and C++ +0.9% |
+| `f`, `p` | stream order: data first, opcodes first, or (both) opcodes last | up to ±0.3% |
+| `w`, `W` | opcode dictionary size (escape weight 2, 8, both: 16 instead of 4); not stored, the dictionary is | ±0.2% |
+
+The default `iu` was the best fixed set on average. `-a` finds the best set
+for a file: every option is toggled, the candidates are encoded and
+compressed in parallel (the number of threads limited so that the LZMA
+encoders stay within about 3 GB), the best change is kept, and this repeats
+until nothing helps; once from the default and once from no options, since
+the options interact. That is typically 30-90 combinations: 4 s for cmix,
+under a minute for a 9 MB executable. `-aa` compresses all 1024.
+
+On cmix the search picks `drumfW`: -2.7% against the default. `m` and `d`
+do most of it. Its unrolled AVX2 loops repeat the same instructions with
+every displacement shifted by a constant, which breaks LZMA's matches in
+the opcode stream (disp8 inline) and in the disp32 stream; with the
+operands moved out and the displacements delta coded, each iteration
+repeats exactly.
+
+One caveat: xz's output size reacts chaotically to small layout changes.
+Inserting 1-7 bytes into the cmix output's 2.5 KB header, with all streams
+unchanged, moves the compressed size by up to 0.4%. Option differences of
+that size are partly luck: `-a` keeps what is best for the file at hand,
+but such a choice says little about other files.
+
 ### Format
 
 ```
-"x64p" version(2) flags(1)
+"x64p" version(3) varint flags
 varint original size
 varint region count, per region:
     type(1) varint gap-to-previous-region varint size
@@ -233,9 +291,13 @@ varint region count, per region:
 varint dictionary size n; if n > 0:
     32-byte bitmap of the code bytes
     n x (length(1) skeleton), sorted, paired with the code bytes in order
-varint stream sizes (11)
+[varint n, n x varint delta]  sorted RIP target table (option r)
+varint stream sizes (12)
 streams, each starting at a multiple of 16
 ```
+
+Flags: 1 labels, 2 `d`, 4 `i`, 8 `e`, 16 `r`, 32 `u`, 64 `m`, 128/256 `f`/`p`
+(stream order). The 12th stream holds the inline operands with `m`.
 
 ## Things that did not help
 
@@ -262,15 +324,17 @@ the back end the answer was mostly "no":
 | RELA addend delta, offset big-endian, info delta | -0.04% to +0.4% |
 | 3-byte instead of 4-byte index fields | +0.3% |
 | disp32, imm32 or rel8 kept in the op stream | +0.3% to +1.3% |
-| imm8/disp8/imm16 in separate streams | +0.5% (so they stay inline) |
+| imm8/disp8/imm16 in separate streams | +0.5% on average (option `m`: helps some files) |
 | opcode dictionary: two-byte codes for more skeletons / `0F xx` second tier | +0.6% to +4% / +0.1% on cmix |
-| opcode dictionary: entries including the leading imm8/disp8 | -0.1% on the tuning set, +0.07% on cmix |
 | opcode dictionary: codes paired with skeletons by frequency rank, stored as (code, skeleton) pairs | +0.3% on cmix |
-| VEX payload bits reordered (pp, L before vvvv) for better literal contexts | -0.18% on cmix, ±0.01% tuning set, +0.04% on AVX files |
-| disp32 as delta from the previous disp32 with the same base register (if within 64 instructions) | -0.9% on cmix, +0.3% tuning set |
-| same, only for VEX instructions | -0.5% on cmix, +0.2% on AVX files |
+| disp32 delta (option `d`) only for VEX instructions | -0.5% on cmix, +0.2% on AVX files |
+| disp32 delta only after K new offsets in a row on the same base | half the gain on cmix |
 | disp32 predicted by stride in periodic code (unrolled loops detected from the skeletons) | -0.3% on cmix, +0.05% tuning set |
-| RIP-relative targets as data labels (sorted target table + label distance) | -10% of the cmix rip stream, +1.6% to +9% of it elsewhere |
+| raw or delta disp32 chosen per straight-line segment by counting previously seen values, or per file by an LZ estimate | the estimates did not track xz |
+| VEX payload byte 1 rotated as well (map bits first) | no better than `u` |
+| call targets as label distances, like jumps | worse on every file |
+| opcode dictionary codes for pairs of consecutive skeletons | +0.6% to +0.8% on cmix |
+| RIP target table as BE32 values, or references as absolute table indices | worse than the varint deltas of `r` |
 
 LZMA does best with register allocation left inside ModRM and with the
 compiler's instruction order: identical source compiles to identical bytes,
@@ -283,9 +347,12 @@ turning absolute values into small, repeating numbers.
 
 * Round trip on all files above, truncated and corrupted executables,
   random data, an empty file, and a tar of several executables.
-* Fuzzing with ASan/UBSan (3,600 iterations): mutated executables through
-  the forward transform, which must round-trip, and corrupted streams
-  through the inverse, which must fail cleanly.
+* Every option and several combinations round-trip on all test files.
+* Fuzzing with ASan/UBSan (5,700 iterations, the last 2,100 with random
+  options): mutated executables through the forward transform, which must
+  round-trip, and corrupted streams through the inverse, which must fail
+  cleanly. This found a hang: on a damaged stream that ends unaligned the
+  padding loop between streams never finished (fixed).
 * Decoder instruction lengths checked against objdump on all code sections
   of the test files.
 

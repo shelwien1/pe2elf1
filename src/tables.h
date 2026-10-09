@@ -86,7 +86,7 @@ static void reloc(uint8_t* p, size_t n, bool fwd) {
 // Only 4-byte pointer encodings (udata4/sdata4, absolute or pcrel) are
 // transformed; everything else is left as is.
 
-struct Cie { uint32_t off; uint8_t renc, lenc, hasz, caf1; };
+struct Cie { uint32_t off; uint8_t renc, lenc, hasz, caf1, daf8; };
 
 static inline bool uleb(const uint8_t* p, size_t n, size_t& i, uint64_t& v) {
   v = 0;
@@ -127,6 +127,7 @@ static bool parseCie(const uint8_t* p, size_t end, size_t i, Cie& c) {
   if (!uleb(p, end, i, v)) return false;
   c.caf1 = v == 1;  // code alignment factor 1: advances are in bytes
   if (!uleb(p, end, i, v)) return false;
+  c.daf8 = v == 0x78;  // data alignment factor -8 (sleb): offsets in 8-byte units
   if (ver == 1) i++;
   else if (!uleb(p, end, i, v)) return false;
   c.renc = 0; c.lenc = 0xFF; c.hasz = 0;
@@ -282,60 +283,553 @@ static uint64_t advUnrank(const FuncCode& F, uint64_t loc, uint64_t maxd, uint64
   return want + (lo - k0);
 }
 
-// Walk a CFA program; advance operands are replaced by their rank.
-static void cfaProgram(uint8_t* p, size_t i, size_t end, const FuncCode& F, bool fwd) {
-  uint64_t loc = 0, v;
-  while (i < end) {
-    uint8_t op = p[i++];
-    uint64_t d, maxd;
-    size_t at = i, sz;
-    switch (op >> 6) {
-      case 1: {  // advance_loc: 6-bit delta in the opcode
-        d = op & 0x3F;
-        uint64_t x = fwd ? advRank(F, loc, 63, d) : advUnrank(F, loc, 63, d);
-        if (x > 63) return;
-        p[i - 1] = (uint8_t)(0x40 | x);
-        loc += fwd ? d : x;
-        continue;
+// CFA program prediction.  A predictor walks the function's code alongside
+// the CFA program and proposes each next CFA instruction: an advance to the
+// end of the next instruction that moves the stack or the frame pointer,
+// then the rule changes and register saves GCC (style 1) or LLVM (style 2)
+// emit there.  Each actual instruction, its advance operand ranked
+// (advRank), is XORed with the proposal, ranked the same way; the predictor
+// then follows the actual instruction, so a wrong guess only costs locally.
+// Style 0 proposes nothing: advances are just ranked.
+enum { CFA_RANK = 0, CFA_GCC = 1, CFA_LLVM = 2 };
+
+static const uint8_t kDwarfGpr[16] = {0, 2, 1, 3, 7, 6, 4, 5, 8, 9, 10, 11, 12, 13, 14, 15};
+
+struct CfaInsn {
+  uint8_t b[16];
+  uint8_t n = 0;
+  void put(uint8_t x) { if (n < sizeof b) b[n++] = x; }
+  void uleb(uint64_t v) {
+    do { uint8_t x = v & 0x7F; v >>= 7; put(v ? x | 0x80 : x); } while (v);
+  }
+  bool operator==(const CfaInsn& o) const { return n == o.n && !memcmp(b, o.b, n); }
+};
+
+static CfaInsn cfaOp(uint8_t op) { CfaInsn c; c.put(op); return c; }
+static CfaInsn cfaOp(uint8_t op, uint64_t a) { CfaInsn c; c.put(op); c.uleb(a); return c; }
+static CfaInsn cfaOp(uint8_t op, uint64_t a, uint64_t b) { CfaInsn c; c.put(op); c.uleb(a); c.uleb(b); return c; }
+static CfaInsn cfaOffset(unsigned reg, uint64_t k) {
+  if (reg < 64) { CfaInsn c; c.put((uint8_t)(0x80 | reg)); c.uleb(k); return c; }
+  return cfaOp(0x05, reg, k);
+}
+static CfaInsn cfaAdvance(uint64_t d) {
+  CfaInsn c;
+  if (d < 64) c.put((uint8_t)(0x40 | d));
+  else if (d < 0x100) { c.put(0x02); c.put((uint8_t)d); }
+  else if (d < 0x10000) { c.put(0x03); c.put((uint8_t)d); c.put((uint8_t)(d >> 8)); }
+  else { c.put(0x04); for (int k = 0; k < 4; k++) c.put((uint8_t)(d >> (8 * k))); }
+  return c;
+}
+
+// length of the CFA instruction at p (n bytes there); 0 if it does not fit.
+// Unknown opcodes count as one byte.
+static size_t cfaInsnLen(const uint8_t* p, size_t n) {
+  if (!n) return 0;
+  uint8_t op = p[0];
+  size_t i = 1;
+  uint64_t v;
+  switch (op >> 6) {
+    case 1: case 3: return 1;
+    case 2: return uleb(p, n, i, v) ? i : 0;
+    default: break;
+  }
+  switch (op) {
+    case 0x02: return n >= 2 ? 2 : 0;
+    case 0x03: return n >= 3 ? 3 : 0;
+    case 0x04: return n >= 5 ? 5 : 0;
+    case 0x05: case 0x09: case 0x0C: case 0x11: case 0x12: case 0x14: case 0x15: case 0x2F:
+      return uleb(p, n, i, v) && uleb(p, n, i, v) ? i : 0;
+    case 0x06: case 0x07: case 0x08: case 0x0D: case 0x0E: case 0x13: case 0x2E:
+      return uleb(p, n, i, v) ? i : 0;
+    case 0x0F:
+      if (!uleb(p, n, i, v) || v > n - i) return 0;
+      return i + (size_t)v;
+    case 0x10: case 0x16:
+      if (!uleb(p, n, i, v) || !uleb(p, n, i, v) || v > n - i) return 0;
+      return i + (size_t)v;
+    default: return 1;
+  }
+}
+
+// advance operand of a complete CFA instruction: size and limit
+static inline bool cfaAdvanceField(const uint8_t* p, size_t len, size_t& at, size_t& sz, uint64_t& maxd) {
+  uint8_t op = p[0];
+  if (op >> 6 == 1) { at = 0; sz = 0; maxd = 63; return len == 1; }
+  if (op == 0x02) { at = 1; sz = 1; maxd = 0xFF; return len == 2; }
+  if (op == 0x03) { at = 1; sz = 2; maxd = 0xFFFF; return len == 3; }
+  if (op == 0x04) { at = 1; sz = 4; maxd = 0xFFFFFFFF; return len == 5; }
+  return false;
+}
+static inline uint64_t cfaGetAdv(const uint8_t* p, size_t at, size_t sz) {
+  if (!sz) return p[0] & 0x3F;
+  uint64_t d = 0;
+  for (size_t k = 0; k < sz; k++) d |= (uint64_t)p[at + k] << (8 * k);
+  return d;
+}
+static inline void cfaSetAdv(uint8_t* p, size_t at, size_t sz, uint64_t d) {
+  if (!sz) { p[0] = (uint8_t)(0x40 | d); return; }
+  for (size_t k = 0; k < sz; k++) p[at + k] = (uint8_t)(d >> (8 * k));
+}
+
+// frame state after a prologue: inherited by a split-off cold part
+struct CfaFrame {
+  bool valid = false;
+  unsigned cfaReg = 7;
+  int64_t sp = 8, bp = -1;
+  std::vector<std::pair<unsigned, int64_t> > saved;
+};
+
+struct CfaPredictor {
+  const uint8_t* code = nullptr;
+  const FuncCode* F = nullptr;
+  int style = CFA_RANK;
+  size_t k = 0;  // next instruction (index into F->b) to simulate
+  struct Op { uint64_t pos; CfaInsn c; };
+  std::vector<Op> ops;  // proposals not yet seen, by position
+  size_t opi = 0;
+  // machine state after the simulated instructions
+  int64_t sp = 8, bp = -1;  // CFA - rsp (< 0: unknown); CFA - rbp while rbp is the frame pointer
+  unsigned cfaReg = 7;
+  int phase = 0;            // 0 prologue, 1 body, 2 epilogue
+  bool epiChanged = false, epiMore = false;
+  int64_t bodySp = 8, bodyBp = -1;
+  unsigned bodyCfaReg = 7;
+  std::vector<std::pair<unsigned, int64_t> > queued;  // saves waiting for the end of the prologue
+  std::vector<std::pair<unsigned, int64_t> > saved;   // all saves, in push order
+  bool shrink = false;  // prologue not at the entry (shrink-wrapped): epilogues restore registers
+  uint64_t lastProEnd = 0;  // end of the last prologue instruction
+  uint64_t proStart = 0;    // start of the (shrink-wrapped) prologue
+  bool restoredAtLeave = false;
+  bool dead = false;
+  static bool calleeSaved(unsigned dr) { return dr == 3 || dr == 6 || dr >= 12; }
+
+  CfaFrame body0;  // state at the end of the prologue
+  void init(const uint8_t* c, const FuncCode& f, int st) { code = c; F = &f; style = st; }
+  // start inside the frame of the previous function (GCC's .cold parts):
+  // its CFA rule and saves, the saves in register order
+  void inherit(const CfaFrame& fr) {
+    phase = 1;
+    cfaReg = fr.cfaReg; sp = fr.sp; bp = fr.bp; saved = fr.saved;
+    if (cfaReg == 6) emit(0, cfaOp(0x0C, 6, (uint64_t)bp));
+    else if (sp != 8) emit(0, cfaOp(0x0E, (uint64_t)sp));
+    std::vector<std::pair<unsigned, int64_t> > regs = saved;
+    std::sort(regs.begin(), regs.end());
+    for (auto& r : regs) emit(0, cfaOffset(r.first, (uint64_t)r.second / 8));
+  }
+  // first instruction is part of a prologue (or there is none)
+  bool startsWithPrologue() const {
+    if (F->b.size() < 2) return true;
+    int64_t x;
+    Eff e = effect(0, x);
+    return e == E_PUSH || e == E_ENDBR || e == E_FPSET || (e == E_SPADD && x > 0);
+  }
+  uint64_t end() const { return F->b.empty() ? 0 : F->b.back(); }
+
+  enum Eff { E_NONE, E_PAD, E_FLOW, E_PUSH, E_POP, E_SPADD, E_FPSET, E_SPFROMBP, E_LEAVE, E_RET, E_JMPOUT, E_ENDBR,
+             E_SPALIGN, E_RBPWRITE, E_JMPIND, E_UNKNOWN };
+  // effect of instruction idx, cached; x: register (push/pop), sp change
+  // (E_SPADD) or rbp displacement (E_SPFROMBP, E_FPSET)
+  mutable std::vector<std::pair<int8_t, int64_t> > effCache;
+  Eff effect(size_t idx, int64_t& x) const {
+    if (effCache.empty()) effCache.assign(F->b.size(), std::make_pair((int8_t)-1, (int64_t)0));
+    if (effCache[idx].first < 0) {
+      Eff e = decodeEffect(idx, effCache[idx].second);
+      effCache[idx].first = (int8_t)e;
+    }
+    x = effCache[idx].second;
+    return (Eff)effCache[idx].first;
+  }
+  Eff decodeEffect(size_t idx, int64_t& x) const {
+    uint64_t at = F->b[idx], nx = F->b[idx + 1];
+    const uint8_t* q = code + at;
+    x64::Insn I;
+    x64::decode(q, (size_t)(nx - at), I);
+    x = 0;
+    if (I.trunc) return E_UNKNOWN;
+    if (I.enc != x64::ENC_LEGACY) return E_NONE;
+    unsigned op = I.op, rex = I.prex != x64::NOPOS ? q[I.prex] : 0;
+    unsigned m = I.modrm, mod = m >> 6, reg = (m >> 3) & 7, rm = m & 7;
+    auto imm = [&]() -> int64_t {
+      const uint8_t* f = q + I.nstruct;
+      int64_t v = 0;
+      for (unsigned j = 0; j < I.nfield; j++) {
+        unsigned sz = I.fsize[j];
+        if (I.fclass[j] == x64::F_I8) v = (int8_t)f[0];
+        else if (I.fclass[j] == x64::F_I32) { int32_t t; memcpy(&t, f, 4); v = t; }
+        else if (I.fclass[j] == x64::F_I16) { int16_t t; memcpy(&t, f, 2); v = t; }
+        f += sz;
       }
-      case 2: if (!uleb(p, end, i, v)) return; continue;  // offset
-      case 3: continue;                                      // restore
+      return v;
+    };
+    auto disp = [&]() -> int64_t {
+      const uint8_t* f = q + I.nstruct;
+      for (unsigned j = 0; j < I.nfield; j++) {
+        if (I.fclass[j] == x64::F_D8) return (int8_t)f[0];
+        if (I.fclass[j] == x64::F_D32) { int32_t t; memcpy(&t, f, 4); return t; }
+        f += I.fsize[j];
+      }
+      return 0;
+    };
+    if (op == 0x90 || op == 0x11F || op == 0xCC) return E_PAD;
+    if (op >= 0x50 && op <= 0x57) { x = (op & 7) | (rex & 1) << 3; return E_PUSH; }
+    if (op >= 0x58 && op <= 0x5F) { x = (op & 7) | (rex & 1) << 3; return E_POP; }
+    switch (op) {
+      case 0x68: case 0x6A: case 0x9C: x = 8; return E_SPADD;
+      case 0x9D: x = -8; return E_SPADD;
+      case 0x8F: if (I.hasmodrm && reg == 0) { x = -8; return E_SPADD; } break;
+      case 0xC9: return E_LEAVE;
+      case 0xC2: case 0xC3: return E_RET;
+      case 0xE9: case 0xEB: {
+        int64_t t = (int64_t)nx + imm();
+        const uint8_t* f = q + I.nstruct;
+        int64_t rel = op == 0xEB ? (int8_t)f[0] : 0;
+        if (op == 0xE9) { int32_t r; memcpy(&r, f, 4); rel = r; }
+        t = (int64_t)nx + rel;
+        return t < 0 || (uint64_t)t >= end() ? E_JMPOUT : E_FLOW;
+      }
       default: break;
     }
-    switch (op) {
-      case 0x00: case 0x0A: case 0x0B: case 0x2D: continue;  // nop, remember/restore_state, window_save
-      case 0x02: sz = 1; maxd = 0xFF; break;                 // advance_loc1/2/4
-      case 0x03: sz = 2; maxd = 0xFFFF; break;
-      case 0x04: sz = 4; maxd = 0xFFFFFFFF; break;
-      case 0x05: case 0x09: case 0x0C: case 0x14: case 0x2F:  // two uleb
-        if (!uleb(p, end, i, v) || !uleb(p, end, i, v)) return;
-        continue;
-      case 0x06: case 0x07: case 0x08: case 0x0D: case 0x0E: case 0x13: case 0x2E:  // one uleb/sleb
-        if (!uleb(p, end, i, v)) return;
-        continue;
-      case 0x11: case 0x12: case 0x15:  // uleb, sleb
-        if (!uleb(p, end, i, v) || !uleb(p, end, i, v)) return;
-        continue;
-      case 0x0F:  // def_cfa_expression: block
-        if (!uleb(p, end, i, v) || v > end - i) return;
-        i += (size_t)v;
-        continue;
-      case 0x10: case 0x16:  // expression: uleb reg, block
-        if (!uleb(p, end, i, v) || !uleb(p, end, i, v) || v > end - i) return;
-        i += (size_t)v;
-        continue;
-      default:
-        return;  // set_loc, unknown: stop
+    if (op == 0x11E && I.nstruct == 4 && q[0] == 0xF3 && m == 0xFA) return E_ENDBR;
+    for (unsigned j = 0; j < I.nfield; j++) {
+      unsigned c = I.fclass[j];
+      if (c == x64::F_J8 || c == x64::F_JCC || c == x64::F_CALL || c == x64::F_JMP) return E_FLOW;
     }
-    if (at + sz > end) return;
-    d = 0;
-    for (size_t k = 0; k < sz; k++) d |= (uint64_t)p[at + k] << (8 * k);
-    uint64_t x = fwd ? advRank(F, loc, maxd, d) : advUnrank(F, loc, maxd, d);
-    if (x > maxd) return;
-    for (size_t k = 0; k < sz; k++) p[at + k] = (uint8_t)(x >> (8 * k));
-    loc += fwd ? d : x;
-    i = at + sz;
+    if (!I.hasmodrm) return E_NONE;
+    if (op == 0xFF && reg == 6) { x = 8; return E_SPADD; }
+    if (op == 0xFF && reg == 4) return E_JMPIND;  // switch, or a tail call at the end of an epilogue
+    if (op == 0xFF && (reg == 2 || reg == 3 || reg == 5)) return E_FLOW;
+    bool w = rex & 8;
+    if (mod == 3 && rm == 4 && !(rex & 1)) {  // rsp as r/m destination
+      if ((op == 0x81 || op == 0x83) && w && reg == 5) { x = imm(); return E_SPADD; }   // sub rsp, imm
+      if ((op == 0x81 || op == 0x83) && w && reg == 0) { x = -imm(); return E_SPADD; }  // add rsp, imm
+      if ((op == 0x81 || op == 0x83) && reg == 7) return E_NONE;                        // cmp
+      if ((op == 0x81 || op == 0x83) && w && reg == 4) return E_SPALIGN;                // and rsp, imm
+      if (op == 0x89 && reg == 5 && !(rex & 4) && w) return E_SPFROMBP;                 // mov rsp, rbp
+    }
+    if (op == 0x89 && m == 0xE5 && !(rex & 5) && w) return E_FPSET;  // mov rbp, rsp
+    if (op == 0x8B && m == 0xEC && !(rex & 5) && w) return E_FPSET;
+    if (op == 0x8B && m == 0xE5 && !(rex & 5) && w) return E_SPFROMBP;  // mov rsp, rbp
+    if (op == 0x8D && reg == 4 && !(rex & 4) && mod != 3) {  // lea rsp, [...]
+      if (rm == 4 && I.psib != x64::NOPOS && q[I.psib] == 0x24 && !(rex & 3)) { x = -disp(); return E_SPADD; }
+      if (rm == 5 && mod != 0 && !(rex & 1)) { x = disp(); return E_SPFROMBP; }
+      return E_UNKNOWN;
+    }
+    if (op == 0x8D && reg == 5 && !(rex & 4)) {  // lea rbp: frame pointer at rsp + d, or rbp as a plain register
+      if (mod != 3 && rm == 4 && I.psib != x64::NOPOS && q[I.psib] == 0x24 && !(rex & 3) && w) { x = disp(); return E_FPSET; }
+      return E_RBPWRITE;
+    }
+    if (stackEvent(q, I)) return E_UNKNOWN;  // writes rsp some other way
+    return E_NONE;
   }
+
+  void emit(uint64_t pos, const CfaInsn& c) { ops.push_back({pos, c}); }
+  void flushQueued(uint64_t pos) {
+    if (style == CFA_GCC) for (auto& s : queued) emit(pos, cfaOffset(s.first, (uint64_t)s.second / 8));
+    else for (size_t j = queued.size(); j-- > 0;) emit(pos, cfaOffset(queued[j].first, (uint64_t)queued[j].second / 8));
+    queued.clear();
+  }
+  bool isPrologue(Eff e) const { return e == E_PUSH || e == E_FPSET || e == E_ENDBR || (e == E_SPADD); }
+  // more prologue instructions (push, sub rsp, frame setup) follow at idx
+  // before any branch?  Compilers interleave argument moves with them.
+  bool prologueAhead(size_t idx) const {
+    for (size_t j = idx; j + 1 < F->b.size() && j < idx + 8; j++) {
+      int64_t x;
+      Eff e = effect(j, x);
+      if (e == E_PUSH || e == E_FPSET || (e == E_SPADD && x > 0)) return true;
+      if (e != E_NONE && e != E_RBPWRITE) return false;
+    }
+    return false;
+  }
+  // does an epilogue start at instruction idx: only stack restoring
+  // instructions up to a return or tail jump?  more = code follows it
+  bool epilogueAt(size_t idx, bool& more) {
+    for (size_t j = idx; j + 1 < F->b.size() && j < idx + 24; j++) {
+      int64_t x;
+      Eff e = effect(j, x);
+      if (e == E_RET || e == E_JMPOUT || e == E_JMPIND) {
+        uint64_t nb = padEnd(j);
+        more = nb < end() && !entryBlock(nb);
+        return true;
+      }
+      if (e == E_POP || e == E_LEAVE || e == E_SPFROMBP || (e == E_SPADD && x < 0) || e == E_NONE || e == E_RBPWRITE) continue;
+      return false;
+    }
+    return false;
+  }
+  void cfaChange(uint64_t pos, const CfaInsn& c) {
+    if (phase == 2 && !epiChanged) {
+      epiChanged = true;
+      if (style == CFA_GCC && epiMore) emit(pos, cfaOp(0x0A));  // remember_state
+    }
+    emit(pos, c);
+  }
+  // jumps inside the function: (target, source), sorted
+  std::vector<std::pair<uint64_t, uint64_t> > jumps;
+  bool jumpsBuilt = false;
+  void buildJumps() {
+    jumpsBuilt = true;
+    for (size_t j = 0; j + 1 < F->b.size(); j++) {
+      uint64_t at = F->b[j], nx = F->b[j + 1];
+      x64::Insn I;
+      x64::decode(code + at, (size_t)(nx - at), I);
+      const uint8_t* f = code + at + I.nstruct;
+      for (unsigned t = 0; t < I.nfield; t++) {
+        unsigned c = I.fclass[t];
+        int64_t rel = 0;
+        bool br = true;
+        if (c == x64::F_J8) rel = (int8_t)f[0];
+        else if (c == x64::F_JMP || c == x64::F_JCC) { int32_t r; memcpy(&r, f, 4); rel = r; }
+        else br = false;
+        if (br) {
+          int64_t tg = (int64_t)nx + rel;
+          if (tg >= 0 && (uint64_t)tg < end()) jumps.push_back({(uint64_t)tg, at});
+        }
+        f += I.fsize[t];
+      }
+    }
+    std::sort(jumps.begin(), jumps.end());
+  }
+  // is the block at pos reached only from before the (shrink-wrapped) prologue?
+  bool entryBlock(uint64_t pos) {
+    if (!shrink) return false;
+    if (!jumpsBuilt) buildJumps();
+    auto it = std::lower_bound(jumps.begin(), jumps.end(), std::make_pair(pos, (uint64_t)0));
+    bool any = false;
+    for (; it != jumps.end() && it->first == pos; ++it) {
+      if (it->second >= proStart) return false;
+      any = true;
+    }
+    return any;
+  }
+  uint64_t padEnd(size_t idx) const {  // end of the padding after instruction idx
+    uint64_t nx = F->b[idx + 1];
+    for (size_t j = idx + 1; j + 1 < F->b.size(); j++) {
+      int64_t y;
+      if (effect(j, y) != E_PAD) break;
+      nx = F->b[j + 1];
+    }
+    return nx;
+  }
+  // simulate one instruction; false at the end
+  bool step() {
+    if (dead || style == CFA_RANK || k + 1 >= F->b.size()) return false;
+    size_t idx = k++;
+    uint64_t at = F->b[idx], nx = F->b[idx + 1];
+    int64_t x;
+    Eff e = effect(idx, x);
+    if (e == E_UNKNOWN) { dead = true; return false; }
+    if (phase == 1 && e == E_PUSH && calleeSaved(kDwarfGpr[x & 15])) {  // shrink-wrapped prologue
+      phase = 0;
+      shrink = true;
+      proStart = at;
+    }
+    if (phase == 0 && !isPrologue(e)) {
+      // GCC writes queued saves before any other instruction, LLVM after
+      // the whole prologue
+      if (style == CFA_GCC) flushQueued(at);
+      if (!(e == E_NONE && prologueAhead(idx + 1))) {
+        if (style != CFA_GCC) flushQueued(lastProEnd);
+        phase = 1;
+        if (!body0.valid && sp >= 0 && (cfaReg == 6 || sp != 8)) {
+          body0.valid = true;
+          body0.cfaReg = cfaReg; body0.sp = sp; body0.bp = bp; body0.saved = saved;
+        }
+      }
+    }
+    if (phase == 0 && isPrologue(e)) lastProEnd = nx;
+    if (phase == 1) {
+      bool more;
+      if ((e == E_POP || e == E_LEAVE || e == E_SPFROMBP || (e == E_SPADD && x < 0)) && epilogueAt(idx, more)) {
+        phase = 2;
+        epiChanged = false;
+        epiMore = more;
+        restoredAtLeave = false;
+        bodySp = sp; bodyBp = bp; bodyCfaReg = cfaReg;
+      }
+    }
+    switch (e) {
+      case E_PUSH: {
+        if (sp < 0) break;
+        sp += 8;
+        unsigned dr = kDwarfGpr[x & 15];
+        if (cfaReg == 7) cfaChange(nx, cfaOp(0x0E, (uint64_t)sp));
+        bool calleeSaved = dr == 3 || dr == 6 || dr >= 12;  // else a stack adjustment (push rax)
+        if (phase == 0 && calleeSaved) {
+          saved.push_back({dr, sp});
+          if (style == CFA_GCC && cfaReg == 7) emit(nx, cfaOffset(dr, (uint64_t)sp / 8));
+          else if (style == CFA_LLVM && dr == 6 && idx + 2 < F->b.size() && [&] { int64_t y; return effect(idx + 1, y) == E_FPSET; }())
+            emit(nx, cfaOffset(6, (uint64_t)sp / 8));
+          else queued.push_back({dr, sp});
+        }
+        break;
+      }
+      case E_SPADD:
+        if (sp < 0) break;
+        sp += x;
+        if (cfaReg == 7) cfaChange(nx, cfaOp(0x0E, (uint64_t)sp));
+        break;
+      case E_SPALIGN:
+        if (cfaReg == 7) { dead = true; return false; }
+        sp = -1;
+        break;
+      case E_RBPWRITE:
+        if (bp >= 0 && cfaReg == 6) { dead = true; return false; }
+        bp = -1;
+        break;
+      case E_POP:
+        if (sp < 0) { dead = true; return false; }
+        sp -= 8;
+        if ((x & 15) == 5 && cfaReg == 6) {  // pop rbp: CFA back on rsp
+          bp = -1;
+          cfaReg = 7;
+          cfaChange(nx, cfaOp(0x0C, 7, (uint64_t)sp));
+        } else {
+          if ((x & 15) == 5) bp = -1;
+          if (cfaReg == 7) cfaChange(nx, cfaOp(0x0E, (uint64_t)sp));
+        }
+        break;
+      case E_FPSET:
+        if (sp < 0) { dead = true; return false; }
+        bp = sp - x;
+        cfaReg = 6;
+        if (x) emit(nx, cfaOp(0x0C, 6, (uint64_t)bp));
+        else emit(nx, cfaOp(0x0D, 6));
+        break;
+      case E_SPFROMBP:
+        if (bp < 0) { dead = true; return false; }
+        sp = bp - x;
+        if (cfaReg == 7) cfaChange(nx, cfaOp(0x0E, (uint64_t)sp));
+        break;
+      case E_LEAVE:
+        if (bp < 0) { dead = true; return false; }
+        sp = bp - 8;
+        bp = -1;
+        cfaReg = 7;
+        if (style == CFA_GCC && phase == 2 && shrink && !epiMore && !restoredAtLeave) {
+          for (auto& sv : saved) emit(nx, cfaOp((uint8_t)(0xC0 | sv.first)));
+          restoredAtLeave = true;
+        }
+        cfaChange(nx, cfaOp(0x0C, 7, (uint64_t)sp));
+        break;
+      case E_JMPIND:
+        if (phase != 2) break;
+        // fall through
+      case E_RET: case E_JMPOUT:
+        if (phase == 2) {
+          // the next block starts after the alignment padding
+          nx = padEnd(idx);
+          if (style == CFA_GCC && nx < end() && entryBlock(nx) && !restoredAtLeave) {
+            // reached only from before the prologue: back to the entry rule
+            std::vector<unsigned> regs;
+            for (auto& sv : saved) regs.push_back(sv.first);
+            std::sort(regs.begin(), regs.end());
+            for (unsigned r : regs) emit(nx, cfaOp((uint8_t)(0xC0 | r)));
+            sp = 8; bp = -1; cfaReg = 7;
+            phase = 1;
+            break;
+          }
+          if (epiChanged && nx < end()) {
+            if (style == CFA_GCC) emit(nx, cfaOp(0x0B));  // restore_state
+            else if (bodyCfaReg == 7) emit(nx, cfaOp(0x0E, (uint64_t)bodySp));
+            else emit(nx, cfaOp(0x0C, 6, (uint64_t)bodyBp));
+          }
+          sp = bodySp; bp = bodyBp; cfaReg = bodyCfaReg;
+          phase = 1;
+        }
+        break;
+      default: break;
+    }
+    return true;
+  }
+  // the next instruction expected at location loc
+  CfaInsn predict(uint64_t loc) {
+    for (;;) {
+      while (opi < ops.size() && ops[opi].pos < loc) opi++;
+      if (opi < ops.size()) break;
+      ops.clear();
+      opi = 0;
+      if (!step()) return cfaOp(0x00);
+    }
+    if (ops[opi].pos > loc) return cfaAdvance(ops[opi].pos - loc);
+    return ops[opi].c;
+  }
+  // follow the actual (complete) instruction a at loc; loc moves on advances
+  void observe(const uint8_t* a, size_t len, uint64_t& loc) {
+    size_t at, sz;
+    uint64_t maxd;
+    if (cfaAdvanceField(a, len, at, sz, maxd)) { loc += cfaGetAdv(a, at, sz); return; }
+    if (a[0] == 0x00 || style == CFA_RANK) return;
+    CfaInsn c;
+    for (size_t j = 0; j < len && j < sizeof c.b; j++) c.put(a[j]);
+    for (size_t j = opi; j < ops.size() && ops[j].pos == loc; j++)
+      if (ops[j].c == c) { ops.erase(ops.begin() + (long)j); return; }
+    // unexpected: follow its rule change
+    size_t i = 1;
+    uint64_t r, o;
+    if (a[0] == 0x0E && uleb(a, len, i, o)) { if (cfaReg == 7) sp = (int64_t)o; }
+    else if (a[0] == 0x0C && uleb(a, len, i, r) && uleb(a, len, i, o)) {
+      cfaReg = (unsigned)r;
+      if (r == 7) sp = (int64_t)o;
+      else if (r == 6) bp = (int64_t)o;
+    } else if (a[0] == 0x0D && uleb(a, len, i, r)) {
+      cfaReg = (unsigned)r;
+      if (r == 6) bp = sp;
+    }
+  }
+};
+
+// ranked form of an instruction (advance operand replaced by its rank)
+static void cfaRanked(const FuncCode& F, uint64_t loc, uint8_t* b, size_t len) {
+  size_t at, sz;
+  uint64_t maxd;
+  if (!cfaAdvanceField(b, len, at, sz, maxd)) return;
+  cfaSetAdv(b, at, sz, advRank(F, loc, maxd, cfaGetAdv(b, at, sz)));
+}
+
+// Transform a CFA program in place: each instruction becomes its ranked form
+// XOR the ranked proposal (zero padded).
+// frame: in, the previous function's frame (for an unaligned start without a
+// prologue); out, this function's
+static void cfaProgram(uint8_t* p, size_t i, size_t end, const FuncCode& F, const uint8_t* code, int style, bool fwd,
+                       CfaFrame& frame, bool unaligned) {
+  CfaPredictor pr;
+  pr.init(code, F, style);
+  if (style == CFA_GCC && unaligned && frame.valid && !pr.startsWithPrologue()) pr.inherit(frame);
+  uint64_t loc = 0;
+  uint8_t a[64];
+  while (i < end) {
+    CfaInsn pc = pr.predict(loc);
+    size_t pl = cfaInsnLen(pc.b, pc.n);
+    cfaRanked(F, loc, pc.b, pl);
+    size_t len;
+    if (fwd) {
+      len = cfaInsnLen(p + i, end - i);
+      if (!len) len = end - i;
+      size_t take = std::min(len, sizeof a);
+      memcpy(a, p + i, take);
+      if (len <= sizeof a) cfaRanked(F, loc, p + i, len);
+      for (size_t t = 0; t < len && t < pc.n; t++) p[i + t] ^= pc.b[t];
+      if (len <= sizeof a) pr.observe(a, len, loc);
+    } else {
+      len = 0;
+      size_t t = 0;
+      while (!len && i + t < end) {
+        if (t < pc.n) p[i + t] ^= pc.b[t];
+        t++;
+        len = cfaInsnLen(p + i, t);
+      }
+      if (!len) len = end - i;
+      if (len <= sizeof a) {
+        size_t at, sz;
+        uint64_t maxd;
+        if (cfaAdvanceField(p + i, len, at, sz, maxd)) cfaSetAdv(p + i, at, sz, advUnrank(F, loc, maxd, cfaGetAdv(p + i, at, sz)));
+        memcpy(a, p + i, len);
+        pr.observe(a, len, loc);
+      }
+    }
+    i += len;
+  }
+  frame = pr.body0;
 }
 
 static inline bool isPad(const x64::Insn& I) {
@@ -534,8 +1028,9 @@ static bool unwindInfo(uint8_t* u, size_t avail, const std::vector<PEvent>& ev, 
 }
 
 // cm: code of the image (may be null), vbias: added to pc values to find it
-static void ehframe(uint8_t* p, size_t n, uint64_t va, bool fwd, const CodeMap* cm, uint64_t vbias) {
+static void ehframe(uint8_t* p, size_t n, uint64_t va, bool fwd, const CodeMap* cm, uint64_t vbias, int style) {
   FuncCode F;
+  CfaFrame frame;  // of the previous FDE
   if (cm) cm->reset();
   std::vector<Cie> cies;
   size_t i = 0;
@@ -599,14 +1094,17 @@ static void ehframe(uint8_t* p, size_t n, uint64_t va, bool fwd, const CodeMap* 
         if (!uleb(p, end, prog, al) || al > end - prog) progOk = false;
         else prog += (size_t)al;
       }
+      bool ran = false;
       if (progOk && cm && c->caf1) {
         uint64_t avail = 0;
         const uint8_t* code = cm->at(vbias + pcva, avail);
         if (code) {
           F.build(*cm, code, avail, range);
-          cfaProgram(p, prog, end, F, fwd);
+          cfaProgram(p, prog, end, F, code, c->daf8 && style <= CFA_LLVM ? style : CFA_RANK, fwd, frame, pcva & 15);
+          ran = true;
         }
       }
+      if (!ran) frame.valid = false;
       if (c->hasz && c->lenc != 0xFF && enc4(c->lenc)) {
         uint64_t al;
         size_t k = j;

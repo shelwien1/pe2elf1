@@ -26,6 +26,11 @@
 #include <io.h>
 #include <fcntl.h>
 #endif
+#ifdef X64PP_LZMA
+#include <lzma.h>
+#include <atomic>
+#include <thread>
+#endif
 
 typedef std::vector<uint8_t> Buf;
 
@@ -41,14 +46,37 @@ enum StreamId {
   S_IMM32,  // imm32
   S_IMM64,  // imm64, moffs64
   S_ESC,    // escaped rel32 targets: absolute address or label number
+  S_INL,    // imm8, disp8, imm16 with FL_INLSEP (else they stay in S_OP)
   NSTREAM
 };
 
 // order of streams in the output file
-static const uint8_t kOrder[NSTREAM] = {S_ESC, S_IMM64, S_IMM32, S_DISP, S_RIP, S_CALL, S_JMP, S_JCC, S_J8, S_OP, S_DATA};
+static const uint8_t kOrder[4][NSTREAM] = {
+    {S_ESC, S_IMM64, S_IMM32, S_DISP, S_RIP, S_CALL, S_JMP, S_JCC, S_J8, S_INL, S_OP, S_DATA},
+    {S_DATA, S_ESC, S_IMM64, S_IMM32, S_DISP, S_RIP, S_CALL, S_JMP, S_JCC, S_J8, S_INL, S_OP},
+    {S_OP, S_ESC, S_IMM64, S_IMM32, S_DISP, S_RIP, S_CALL, S_JMP, S_JCC, S_J8, S_INL, S_DATA},
+    {S_ESC, S_IMM64, S_IMM32, S_DISP, S_RIP, S_CALL, S_JMP, S_JCC, S_J8, S_INL, S_DATA, S_OP}};
 
-enum { kAlign = 16, kVersion = 2 };
-enum { FL_LABELS = 1 };
+enum { kAlign = 16, kVersion = 3 };
+// header flags; FL_LABELS is decided by the encoder, the others are coding
+// options chosen per file (see main)
+enum {
+  FL_LABELS = 1,  // branch targets coded through labels
+  FL_DDELTA = 2,  // disp32 as delta from the previous disp32 with the same base
+  FL_DINL = 4,    // dictionary entries include the leading imm8/disp8/imm16
+  FL_D8DELTA = 8, // disp8 too, mod 256 (disp8 and disp32 share the history)
+  FL_RIPLAB = 16, // RIP-relative targets as moves in a sorted table of targets
+  FL_VEXP = 32,   // VEX payload bits reordered: pp, L ahead of vvvv
+  FL_INLSEP = 64, // imm8/disp8/imm16 in their own stream
+  FL_ORD1 = 128,  // stream order: kOrder[flags >> 7 & 3]
+  FL_ORD2 = 256,
+  FL_OPTIONS = FL_DDELTA | FL_DINL | FL_D8DELTA | FL_RIPLAB | FL_VEXP | FL_INLSEP | FL_ORD1 | FL_ORD2
+};
+// encoder-only choices, not stored: dictionary escape weight kDictWeight[opts >> 16 & 3]
+enum { OPT_W1 = 1 << 16, OPT_W2 = 1 << 17 };
+static const unsigned kDictWeight[4] = {4, 2, 8, 16};
+// without -o or -a: the set that did best on average on the test files
+enum { kDefaultOptions = FL_DINL | FL_VEXP };
 static const uint8_t kMagic[4] = {'x', '6', '4', 'p'};
 
 //----------------------------------------------------------------------------
@@ -223,7 +251,17 @@ struct SkelMap {
   }
 };
 
+static inline bool inlineField(unsigned c) { return c == x64::F_D8 || c == x64::F_I8 || c == x64::F_I16; }
+
+// bytes of the inline operands that directly follow the structural bytes
+static inline size_t leadInline(const x64::Insn& I) {
+  size_t n = 0;
+  for (unsigned k = 0; k < I.nfield && inlineField(I.fclass[k]); k++) n += I.fsize[k];
+  return n;
+}
+
 struct OpDict {
+  bool dinl = false;        // FL_DINL: entries are skeleton + leading inline operands
   bool isCode[256] = {};
   std::string entry[256];   // code -> skeleton
   std::string padded[256];  // skeleton + zeros for the decoder
@@ -237,10 +275,16 @@ struct OpDict {
     code[Skel::of((const uint8_t*)sk.data(), sk.size())] = c;
     n++;
   }
+  // length of the dictionary key of an instruction, 0 if it can't have one
+  size_t keyLen(const x64::Insn& I) const {
+    size_t k = I.nstruct + (dinl ? leadInline(I) : 0);
+    return I.trunc || I.nstruct < 2 || k > kMaxSkel ? 0 : k;
+  }
   // encoder: code for the instruction at p, or -1
   int find(const uint8_t* p, const x64::Insn& I) const {
-    if (I.trunc || I.nstruct < 2 || I.nstruct > kMaxSkel || !n) return -1;
-    const uint64_t* v = code.find(Skel::of(p, I.nstruct));
+    size_t k = n ? keyLen(I) : 0;
+    if (!k) return -1;
+    const uint64_t* v = code.find(Skel::of(p, k));
     return v ? (int)*v : -1;
   }
   bool escaped(const uint8_t* p, const x64::Insn& I) const {
@@ -250,7 +294,7 @@ struct OpDict {
 
 // Pairs the k-th most frequent skeleton with the k-th rarest first byte for
 // as long as that saves more bytes than the escapes and the entry cost.
-static void buildDict(const std::vector<Region>& R, const uint8_t* img, OpDict& D) {
+static void buildDict(const std::vector<Region>& R, const uint8_t* img, unsigned weight, OpDict& D) {
   SkelMap cnt;
   uint64_t first[256] = {};
   for (auto& r : R) {
@@ -261,7 +305,7 @@ static void buildDict(const std::vector<Region>& R, const uint8_t* img, OpDict& 
       x64::Insn I;
       x64::decode(p + i, n - i, I);
       first[p[i]]++;
-      if (!I.trunc && I.nstruct >= 2 && I.nstruct <= kMaxSkel) cnt[Skel::of(p + i, I.nstruct)]++;
+      if (size_t k = D.keyLen(I)) cnt[Skel::of(p + i, k)]++;
       i += I.len;
     }
   }
@@ -277,7 +321,7 @@ static void buildDict(const std::vector<Region>& R, const uint8_t* img, OpDict& 
   size_t k = 0;
   for (; k < byCount.size() && k < rare.size(); k++) {
     uint64_t len = byCount[k].second.len(), saved = byCount[k].first * (len - 1);
-    if (saved <= 4 * rare[k].first + len + 2) break;
+    if (saved <= weight * rare[k].first + len + 2) break;
   }
   // which code goes with which skeleton hardly matters; a canonical pairing
   // (both sorted) lets the container store a code bitmap and a sorted list
@@ -332,8 +376,6 @@ struct ImplicitLabels {
     return lab;
   }
 };
-
-static inline bool inlineField(unsigned c) { return c == x64::F_D8 || c == x64::F_I8 || c == x64::F_I16; }
 
 static inline uint32_t zigzag(int64_t d) { return (uint32_t)((uint64_t)d << 1 ^ (uint64_t)(d >> 63)); }
 static inline int64_t unzigzag(uint32_t z) { return (int64_t)(z >> 1) ^ -(int64_t)(z & 1); }
@@ -443,10 +485,83 @@ static void collectLabels(const uint8_t* p, size_t n, uint64_t va, const Labels&
   }
 }
 
+// FL_VEXP: in the VEX byte holding vvvv, L and pp (the only payload byte of
+// VEX2, the second of VEX3) pp and L move to the top, where LZMA's literal
+// context (the top 3 bits of the previous byte) then predicts the opcode.
+// Instruction lengths don't depend on that byte.
+static inline int vexPermPos(const x64::Insn& I) {
+  if (I.trunc || I.pvex == x64::NOPOS) return -1;
+  if (I.enc == x64::ENC_VEX2) return I.pvex;
+  if (I.enc == x64::ENC_VEX3) return I.pvex + 1;
+  return -1;
+}
+static inline uint8_t vexPerm(uint8_t b) {
+  return (uint8_t)((b & 3) << 6 | (b >> 2 & 1) << 5 | (b >> 3 & 0x10) | (b >> 3 & 15));
+}
+static inline uint8_t vexUnperm(uint8_t c) {
+  return (uint8_t)((c & 0x10) << 3 | (c & 15) << 3 | (c >> 5 & 1) << 2 | c >> 6);
+}
+
+// FL_RIPLAB: the distinct RIP-relative targets of the file, sorted, are a
+// table in the header; each reference is coded as the move from the previous
+// reference's table index: zigzag in one byte, or 255 and the index in S_ESC.
+
+// FL_DDELTA: a disp32 with base register b is coded as the difference from
+// the previous disp32 with base b, if that one is at most kDWin instructions
+// back in the same straight-line segment.  Unrolled loops then repeat
+// exactly; elsewhere the absolute offsets usually repeat better.
+enum { kDWin = 64 };
+
+static unsigned baseReg(const uint8_t* sk, const x64::Insn& I) {
+  unsigned b = I.modrm & 7, ext = 0;
+  if (b == 4 && I.psib != x64::NOPOS) b = sk[I.psib] & 7;
+  if (I.prex != x64::NOPOS) ext = sk[I.prex] & 1;
+  else if ((I.enc == x64::ENC_VEX3 || I.enc == x64::ENC_EVEX) && I.pvex != x64::NOPOS) ext = !(sk[I.pvex] & 0x20);
+  return b | ext << 3;
+}
+
+struct DispHist {
+  uint32_t last[16];
+  uint64_t at[16];
+  uint64_t idx;
+  void reset() {
+    memset(last, 0, sizeof last);
+    memset(at, 0, sizeof at);
+    idx = 1;
+  }
+  // reference for the next disp32 with base b; false = code it as is
+  bool ref(unsigned b, uint32_t& v) const {
+    v = last[b];
+    return at[b] && idx - at[b] <= kDWin;
+  }
+  void put(unsigned b, uint32_t v) { last[b] = v; at[b] = idx; }
+  void step(const x64::Insn& I) {
+    idx++;
+    if (isBarrier(I)) memset(at, 0, sizeof at);
+  }
+};
+
+// encoder: RIP-relative targets (FL_RIPLAB)
+static void collectRip(const uint8_t* p, size_t n, uint64_t va, std::vector<uint32_t>& T) {
+  size_t i = 0;
+  while (i < n) {
+    x64::Insn I;
+    x64::decode(p + i, n - i, I);
+    const uint8_t* q = p + i + I.nstruct;
+    for (unsigned k = 0; k < I.nfield; k++) {
+      if (I.fclass[k] == x64::F_RIP) T.push_back((uint32_t)(fieldValue(q, 4) + va + i + I.len));
+      q += I.fsize[k];
+    }
+    i += I.len;
+  }
+}
+
 struct Encoder {
   Buf S[NSTREAM];
   const Labels* L;
   const OpDict* D;
+  const std::vector<uint32_t>* ripTab;  // FL_RIPLAB
+  int64_t ripPrev = 0;
   unsigned flags;
   uint64_t ninsn = 0, ncoded = 0;
 
@@ -454,21 +569,31 @@ struct Encoder {
     size_t i = 0;
     Buf& op = S[S_OP];
     ImplicitLabels imp;
-    bool lab = flags & FL_LABELS;
+    DispHist dh;
+    dh.reset();
+    bool lab = flags & FL_LABELS, ddelta = flags & FL_DDELTA, d8delta = flags & FL_D8DELTA;
+    Buf& inl = flags & FL_INLSEP ? S[S_INL] : op;
     while (i < n) {
       x64::Insn I;
       x64::decode(p + i, n - i, I);
       int dc = D->find(p + i, I);
+      size_t iskip = 0;  // inline operand bytes that are part of the dictionary entry
       bool esc = dc < 0 && (p[i] == kMark || D->isCode[p[i]]);
       // an escaped instruction is never a target (collectStarts), but its
       // address may still be a label from an overlapping region
       size_t r;
       if (lab && !imp.step(I) && !esc && L->find(va + i, r)) op.push_back(kMark);
       ninsn++;
-      if (dc >= 0) { op.push_back((uint8_t)dc); ncoded++; }
-      else {
+      if (dc >= 0) {
+        op.push_back((uint8_t)dc);
+        ncoded++;
+        if (D->dinl) iskip = leadInline(I);
+      } else {
         if (esc) { op.push_back(kMark); op.push_back(kMark); }
+        size_t o0 = op.size();
         op.insert(op.end(), p + i, p + i + I.nstruct);
+        int vp = flags & FL_VEXP ? vexPermPos(I) : -1;
+        if (vp >= 0) op[o0 + vp] = vexPerm(op[o0 + vp]);
       }
       const uint8_t* q = p + i + I.nstruct;
       uint64_t next = va + i + I.len;
@@ -478,7 +603,15 @@ struct Encoder {
         q += sz;
         switch (c) {
           case x64::F_D8: case x64::F_I8: case x64::F_I16:
-            putLE(op, v, sz);
+            if (c == x64::F_D8 && d8delta) {
+              unsigned b = baseReg(p + i, I);
+              uint32_t ref = 0;
+              if (!dh.ref(b, ref)) ref = 0;
+              dh.put(b, (uint32_t)(int32_t)(int8_t)v);
+              v = (uint8_t)(v - ref);
+            }
+            if (iskip) iskip -= sz;
+            else putLE(inl, v, sz);
             break;
           case x64::F_J8:
             S[S_J8].push_back(lab ? j8Encode(*L, next, (uint8_t)v) : (uint8_t)v);
@@ -501,50 +634,79 @@ struct Encoder {
             }
             break;
           }
-          case x64::F_RIP: putBE32(S[S_RIP], (uint32_t)(v + next)); break;
-          case x64::F_D32: case x64::F_DABS: putBE32(S[S_DISP], (uint32_t)v); break;
+          case x64::F_RIP: {
+            uint32_t a = (uint32_t)(v + next);
+            if (!(flags & FL_RIPLAB)) { putBE32(S[S_RIP], a); break; }
+            int64_t x = std::lower_bound(ripTab->begin(), ripTab->end(), a) - ripTab->begin();
+            uint32_t z = zigzag(x - ripPrev);
+            if (z < 255) S[S_RIP].push_back((uint8_t)z);
+            else { S[S_RIP].push_back(255); putBE32(S[S_ESC], (uint32_t)x); }
+            ripPrev = x;
+            break;
+          }
+          case x64::F_D32: {
+            uint32_t ref = 0;
+            if (ddelta || d8delta) {
+              unsigned b = baseReg(p + i, I);
+              if (!dh.ref(b, ref) || !ddelta) ref = 0;
+              dh.put(b, (uint32_t)v);
+            }
+            putBE32(S[S_DISP], (uint32_t)v - ref);
+            break;
+          }
+          case x64::F_DABS: putBE32(S[S_DISP], (uint32_t)v); break;
           case x64::F_I32: putBE32(S[S_IMM32], (uint32_t)v); break;
           default: putLE(S[S_IMM64], v, sz); break;  // F_I64
         }
       }
+      dh.step(I);
       i += I.len;
     }
   }
 };
 
-// decoder: the structural bytes of the next instruction, at sp (in the
-// opcode stream or in a dictionary entry); `marked` = label marker seen
-static bool readInsn(InStream& op, const OpDict& D, size_t avail, x64::Insn& I, const uint8_t*& sp, bool& marked) {
-  marked = false;
+// decoder: where the structural bytes of the next instruction are
+struct InsnSrc {
+  const uint8_t* sp;  // in the opcode stream or in a dictionary entry
+  bool marked;        // label marker seen
+  bool dict;          // from the dictionary
+  size_t held;        // inline operand bytes that follow sp in the entry (FL_DINL)
+};
+
+static bool readInsn(InStream& op, const OpDict& D, size_t avail, x64::Insn& I, InsnSrc& src) {
+  src.marked = src.dict = false;
+  src.held = 0;
   bool literal = false;
   if (op.p < op.e && op.p[0] == kMark) {
     if (op.p + 1 < op.e && op.p[1] == kMark) { op.p += 2; literal = true; }
-    else { op.p++; marked = true; }
+    else { op.p++; src.marked = true; }
   }
   if (!literal && op.p < op.e && D.isCode[op.p[0]]) {
     uint8_t c = *op.p++;
-    sp = (const uint8_t*)D.padded[c].data();
-    x64::decode(sp, avail, I);
-    return !I.trunc && I.nstruct == D.entry[c].size();
+    src.sp = (const uint8_t*)D.padded[c].data();
+    src.dict = true;
+    x64::decode(src.sp, avail, I);
+    if (D.keyLen(I) != D.entry[c].size()) return false;
+    src.held = D.entry[c].size() - I.nstruct;
+    return true;
   }
-  sp = op.p;
-  x64::decode(sp, avail, I);
+  src.sp = op.p;
+  x64::decode(src.sp, avail, I);
   return op.take(I.nstruct);
 }
 
 // decoding pass 1: labels from the opcode stream alone
-static bool collectLabelsOp(InStream& op, const OpDict& D, size_t n, uint64_t va, Labels& L) {
+static bool collectLabelsOp(InStream& op, const OpDict& D, bool inlsep, size_t n, uint64_t va, Labels& L) {
   ImplicitLabels imp;
   size_t i = 0;
   while (i < n) {
     x64::Insn I;
-    const uint8_t* sp;
-    bool marked;
-    if (!readInsn(op, D, n - i, I, sp, marked)) return false;
+    InsnSrc src;
+    if (!readInsn(op, D, n - i, I, src)) return false;
     size_t adv = 0;
     for (unsigned k = 0; k < I.nfield; k++) if (inlineField(I.fclass[k])) adv += I.fsize[k];
-    if (!op.take(adv)) return false;
-    if (imp.step(I) || marked) L.va.push_back(va + i);
+    if (!inlsep && !op.take(adv - src.held)) return false;
+    if (imp.step(I) || src.marked) L.va.push_back(va + i);
     i += I.len;
   }
   return true;
@@ -554,6 +716,8 @@ struct Decoder {
   InStream S[NSTREAM];
   const Labels* L;
   const OpDict* D;
+  const std::vector<uint32_t>* ripTab;  // FL_RIPLAB
+  int64_t ripPrev = 0;
   unsigned flags;
 
   bool escaped(uint32_t& x) {
@@ -580,13 +744,20 @@ struct Decoder {
   bool code(uint8_t* out, size_t n, uint64_t va) {
     size_t i = 0;
     InStream& op = S[S_OP];
-    bool lab = flags & FL_LABELS;
+    DispHist dh;
+    dh.reset();
+    bool lab = flags & FL_LABELS, ddelta = flags & FL_DDELTA, d8delta = flags & FL_D8DELTA;
+    InStream& inl = flags & FL_INLSEP ? S[S_INL] : op;
     while (i < n) {
       x64::Insn I;
-      const uint8_t* s;
-      bool marked;
-      if (!readInsn(op, *D, n - i, I, s, marked)) return false;
+      InsnSrc src;
+      if (!readInsn(op, *D, n - i, I, src)) return false;
+      const uint8_t* s = src.sp;
       memcpy(out + i, s, I.nstruct);
+      int vp = flags & FL_VEXP && !src.dict ? vexPermPos(I) : -1;
+      if (vp >= 0) out[i + vp] = vexUnperm(out[i + vp]);
+      size_t held = src.held;
+      const uint8_t* hp = s + I.nstruct;  // inline operands held by the dictionary entry
       uint8_t* q = out + i + I.nstruct;
       uint64_t next = va + i + I.len;
       for (unsigned k = 0; k < I.nfield; k++) {
@@ -594,11 +765,25 @@ struct Decoder {
         uint64_t v = 0;
         InStream* st;
         switch (c) {
-          case x64::F_D8: case x64::F_I8: case x64::F_I16:
-            s = op.p;
-            if (!op.take(sz)) return false;
-            v = fieldValue(s, sz);
+          case x64::F_D8: case x64::F_I8: case x64::F_I16: {
+            bool inEntry = held != 0;  // leading fields, exactly `held` bytes (readInsn)
+            if (inEntry) {
+              v = fieldValue(hp, sz);
+              hp += sz;
+              held -= sz;
+            } else {
+              s = inl.p;
+              if (!inl.take(sz)) return false;
+              v = fieldValue(s, sz);
+            }
+            if (c == x64::F_D8 && d8delta) {
+              unsigned b = baseReg(out + i, I);
+              uint32_t ref;
+              if (dh.ref(b, ref) && !inEntry) v = (uint8_t)(v + ref);
+              dh.put(b, (uint32_t)(int32_t)(int8_t)v);
+            }
             break;
+          }
           case x64::F_J8:
             s = S[S_J8].p;
             if (!S[S_J8].take(1)) return false;
@@ -626,6 +811,20 @@ struct Decoder {
             break;
           }
           case x64::F_RIP:
+            if (flags & FL_RIPLAB) {
+              s = S[S_RIP].p;
+              if (!S[S_RIP].take(1)) return false;
+              int64_t x;
+              uint32_t e;
+              if (s[0] == 255) {
+                if (!escaped(e)) return false;
+                x = e;
+              } else x = ripPrev + unzigzag(s[0]);
+              if (x < 0 || x >= (int64_t)ripTab->size()) return false;
+              ripPrev = x;
+              v = (uint32_t)((*ripTab)[(size_t)x] - next);
+              break;
+            }
             s = S[S_RIP].p;
             if (!S[S_RIP].take(4)) return false;
             v = (uint32_t)(getBE32(s) - next);
@@ -635,6 +834,12 @@ struct Decoder {
             s = st->p;
             if (!st->take(4)) return false;
             v = getBE32(s);
+            if (c == x64::F_D32 && (ddelta || d8delta)) {
+              unsigned b = baseReg(out + i, I);
+              uint32_t ref;
+              if (dh.ref(b, ref) && ddelta) v = (uint32_t)(v + ref);
+              dh.put(b, (uint32_t)v);
+            }
             break;
           default:  // F_I64
             s = S[S_IMM64].p;
@@ -645,6 +850,7 @@ struct Decoder {
         for (unsigned j = 0; j < sz; j++) q[j] = (uint8_t)(v >> (8 * j));
         q += sz;
       }
+      dh.step(I);
       i += I.len;
     }
     return true;
@@ -687,8 +893,9 @@ static void tableTransform(uint8_t* p, const Region& r, bool fwd, const std::vec
       break;
     case R_RELA: tables::rela(p, (size_t)r.size, fwd); break;
     case R_RELOC: tables::reloc(p, (size_t)r.size, fwd); break;
-    case R_EHFRAME:
-      tables::ehframe(p, (size_t)r.size, r.va, fwd, r.par.size() == 1 ? &cm : nullptr, r.par.size() == 1 ? r.par[0] : 0);
+    case R_EHFRAME:  // par: image VA bias, CFA prediction style
+      tables::ehframe(p, (size_t)r.size, r.va, fwd, r.par.size() == 2 ? &cm : nullptr, r.par.size() == 2 ? r.par[0] : 0,
+                      r.par.size() == 2 && r.par[1] <= tables::CFA_LLVM ? (int)r.par[1] : tables::CFA_RANK);
       break;
     default: break;
   }
@@ -784,16 +991,35 @@ struct Stats {
   uint64_t ninsn, ncoded;
 };
 
-static void encode(const Buf& src, Buf& out, Stats* st, std::vector<Buf>* dump) {
+static void encode(const Buf& src, Buf& out, unsigned opts, Stats* st, std::vector<Buf>* dump) {
   std::vector<Region> R = analyze::run(src.data(), src.size(), true);
   Buf in = src;
   for (auto& r : R) if (r.type == R_RELA) relaSlots(in.data(), in.size(), r, R, true);
   tables::CodeMap cm = codeMap(R, src.data());
   for (auto& r : R) if (r.type == R_PDATA) unwindInfos(in.data(), in.size(), &src[(size_t)r.off], r, R, cm, true);
+  // .eh_frame: the CFA prediction style that leaves the fewest nonzero bytes
+  for (auto& r : R) {
+    if (r.type != R_EHFRAME || r.par.size() != 1) continue;
+    uint64_t best = UINT64_MAX;
+    unsigned bs = 0;
+    r.par.push_back(0);
+    Region sample = r;  // the first 64 KB
+    sample.size = std::min<uint64_t>(r.size, 1 << 16);
+    for (unsigned style = tables::CFA_RANK; style <= tables::CFA_LLVM; style++) {
+      Buf t(in.begin() + sample.off, in.begin() + sample.off + sample.size);
+      sample.par[1] = style;
+      tableTransform(t.data(), sample, true, R, src.data(), src.size(), cm);
+      uint64_t nz = 0;
+      for (uint8_t b : t) nz += b != 0;
+      if (nz < best) { best = nz; bs = style; }
+    }
+    r.par[1] = bs;
+  }
   for (auto& r : R) if (r.type != R_CODE) tableTransform(&in[(size_t)r.off], r, true, R, src.data(), src.size(), cm);
 
   OpDict dict;
-  buildDict(R, in.data(), dict);
+  dict.dinl = opts & FL_DINL;
+  buildDict(R, in.data(), kDictWeight[opts >> 16 & 3], dict);
   Labels B, L;
   for (auto& r : R) if (r.type == R_CODE) collectStarts(&in[(size_t)r.off], (size_t)r.size, r.va, dict, B);
   B.finish();
@@ -801,11 +1027,18 @@ static void encode(const Buf& src, Buf& out, Stats* st, std::vector<Buf>* dump) 
   L.finish();
   B.va.clear();
   B.va.shrink_to_fit();
-  unsigned flags = L.va.size() < 0x7FFFFFFF ? FL_LABELS : 0;
+  unsigned flags = (L.va.size() < 0x7FFFFFFF ? FL_LABELS : 0) | (opts & FL_OPTIONS);
+  std::vector<uint32_t> ripTab;
+  if (flags & FL_RIPLAB) {
+    for (auto& r : R) if (r.type == R_CODE) collectRip(&in[(size_t)r.off], (size_t)r.size, r.va, ripTab);
+    std::sort(ripTab.begin(), ripTab.end());
+    ripTab.erase(std::unique(ripTab.begin(), ripTab.end()), ripTab.end());
+  }
 
   Encoder E;
   E.L = &L;
   E.D = &dict;
+  E.ripTab = &ripTab;
   E.flags = flags;
   uint64_t pos = 0;
   Buf& D = E.S[S_DATA];
@@ -820,7 +1053,7 @@ static void encode(const Buf& src, Buf& out, Stats* st, std::vector<Buf>* dump) 
   out.clear();
   out.insert(out.end(), kMagic, kMagic + 4);
   out.push_back(kVersion);
-  out.push_back((uint8_t)flags);
+  putVar(out, flags);
   putVar(out, in.size());
   putVar(out, R.size());
   uint64_t prev = 0, pva = 0;
@@ -847,9 +1080,15 @@ static void encode(const Buf& src, Buf& out, Stats* st, std::vector<Buf>* dump) 
         out.insert(out.end(), dict.entry[c].begin(), dict.entry[c].end());
       }
   }
+  if (flags & FL_RIPLAB) {  // RIP target table, delta coded
+    putVar(out, ripTab.size());
+    uint32_t prev = 0;
+    for (uint32_t t : ripTab) { putVar(out, t - prev); prev = t; }
+  }
   for (int k = 0; k < NSTREAM; k++) putVar(out, E.S[k].size());
+  const uint8_t* order = kOrder[flags >> 7 & 3];
   for (int j = 0; j < NSTREAM; j++) {
-    const Buf& s = E.S[kOrder[j]];
+    const Buf& s = E.S[order[j]];
     while (out.size() % kAlign) out.push_back(0);
     out.insert(out.end(), s.begin(), s.end());
   }
@@ -868,7 +1107,8 @@ static bool decode(const Buf& in, Buf& out) {
   Reader r{in.data(), in.data() + in.size(), true};
   for (int k = 0; k < 4; k++) if (r.byte() != kMagic[k]) return false;
   if (r.byte() != kVersion) return false;
-  unsigned flags = r.byte();
+  uint64_t flags = r.var();
+  if (!r.ok || flags & ~(uint64_t)(FL_LABELS | FL_OPTIONS)) return false;
   uint64_t n = r.var();
   uint64_t nr = r.var();
   if (!r.ok || nr > (uint64_t)(r.e - r.p) || n > SIZE_MAX - 64) return false;
@@ -889,6 +1129,7 @@ static bool decode(const Buf& in, Buf& out) {
     prev = x.off + x.size;
   }
   OpDict dict;
+  dict.dinl = flags & FL_DINL;
   uint64_t nd = r.var();
   if (!r.ok || nd > 255) return false;
   if (nd) {
@@ -907,14 +1148,28 @@ static bool decode(const Buf& in, Buf& out) {
     }
     if (dict.size() != nd) return false;
   }
+  std::vector<uint32_t> ripTab;
+  if (flags & FL_RIPLAB) {
+    uint64_t nt = r.var();
+    if (!r.ok || nt > (uint64_t)(r.e - r.p)) return false;
+    ripTab.resize((size_t)nt);
+    uint64_t t = 0;
+    for (size_t k = 0; k < ripTab.size(); k++) {
+      uint64_t d = r.var();
+      if (!r.ok || (k && !d) || d > 0xFFFFFFFFu - t) return false;
+      t += d;
+      ripTab[k] = (uint32_t)t;
+    }
+  }
   uint64_t sz[NSTREAM];
   for (int k = 0; k < NSTREAM; k++) sz[k] = r.var();
   if (!r.ok) return false;
   Buf pad[NSTREAM];
   Decoder Dc;
+  const uint8_t* order = kOrder[flags >> 7 & 3];
   for (int j = 0; j < NSTREAM; j++) {
-    int k = kOrder[j];
-    while ((r.p - in.data()) % kAlign) r.byte();
+    int k = order[j];
+    while (r.ok && (r.p - in.data()) % kAlign) r.byte();
     if (!r.ok || sz[k] > (uint64_t)(r.e - r.p)) return false;
     pad[k].assign((size_t)sz[k] + 64, 0);
     if (sz[k]) memcpy(pad[k].data(), r.p, (size_t)sz[k]);
@@ -929,12 +1184,13 @@ static bool decode(const Buf& in, Buf& out) {
   if (flags & FL_LABELS) {
     InStream op = Dc.S[S_OP];
     for (auto& x : R)
-      if (x.type == R_CODE && !collectLabelsOp(op, dict, (size_t)x.size, x.va, L)) return false;
+      if (x.type == R_CODE && !collectLabelsOp(op, dict, flags & FL_INLSEP, (size_t)x.size, x.va, L)) return false;
     L.finish();
   }
   Dc.L = &L;
   Dc.D = &dict;
-  Dc.flags = flags;
+  Dc.ripTab = &ripTab;
+  Dc.flags = (unsigned)flags;
 
   // pass 2: rebuild the image
   out.assign((size_t)n, 0);
@@ -973,19 +1229,157 @@ static bool decode(const Buf& in, Buf& out) {
 }
 
 //----------------------------------------------------------------------------
+// Option search (-a): every combination of the coding options is encoded and
+// compressed like xz -9e; the smallest wins.
 
-static const char* kStreamName[NSTREAM] = {"data", "op", "j8", "jmp", "jcc", "call", "rip", "disp32", "imm32", "imm64", "esc"};
+#ifdef X64PP_LZMA
+// LZMA2 with xz -9e settings, the dictionary shrunk to the data (which saves
+// memory and does not change the result)
+static void lzmaOptions(size_t n, lzma_options_lzma& o) {
+  lzma_lzma_preset(&o, 9 | LZMA_PRESET_EXTREME);
+  uint32_t d = 1 << 12;
+  while (d < n && d < o.dict_size) d <<= 1;
+  o.dict_size = d;
+}
+
+// raw LZMA2 size of b
+static uint64_t lzmaSize(const Buf& b) {
+  lzma_options_lzma o;
+  lzmaOptions(b.size(), o);
+  lzma_filter f[2] = {{LZMA_FILTER_LZMA2, &o}, {LZMA_VLI_UNKNOWN, nullptr}};
+  size_t cap = b.size() + b.size() / 16 + 4096, pos = 0;
+  Buf out(cap);
+  if (lzma_raw_buffer_encode(f, nullptr, b.data(), b.size(), out.data(), &pos, cap) != LZMA_OK) return UINT64_MAX;
+  return pos;
+}
+#endif
+
+static const char kOptLetter[] = "dierumfpwW";
+static const unsigned kOptFlag[] = {FL_DDELTA, FL_DINL, FL_D8DELTA, FL_RIPLAB, FL_VEXP, FL_INLSEP, FL_ORD1, FL_ORD2, OPT_W1, OPT_W2};
+enum { NOPT = 10 };
+
+static std::string optString(unsigned opts) {
+  std::string s;
+  for (int k = 0; k < NOPT; k++) if (opts & kOptFlag[k]) s += kOptLetter[k];
+  return s.empty() ? "-" : s;
+}
+
+#ifdef X64PP_LZMA
+// Option search.  -a: every option is toggled (all in parallel) and the best
+// change kept, until no toggle helps; once from the given options and once
+// from none, since the interactions leave local optima.  -aa: all
+// combinations.  Each combination is encoded and compressed once.
+struct OptionSearch {
+  const Buf& in;
+  bool verbose;
+  unsigned threads;
+  std::vector<std::pair<unsigned, uint64_t> > seen;
+
+  OptionSearch(const Buf& b, bool v) : in(b), verbose(v) {
+    // memory per job: LZMA encoder plus about three copies of the data
+    lzma_options_lzma o;
+    lzmaOptions(in.size() + in.size() / 4, o);
+    lzma_filter f[2] = {{LZMA_FILTER_LZMA2, &o}, {LZMA_VLI_UNKNOWN, nullptr}};
+    uint64_t job = lzma_raw_encoder_memusage(f) + 3 * (uint64_t)in.size() + (16 << 20);
+    uint64_t budget = (uint64_t)3 << 30;
+    threads = std::max(1u, std::min(std::thread::hardware_concurrency(), 8u));
+    while (threads > 1 && threads * job > budget) threads--;
+  }
+
+  // sizes of the given option sets (memoized)
+  void eval(std::vector<unsigned> sets) {
+    std::vector<unsigned> todo;
+    for (unsigned o : sets) {
+      bool known = false;
+      for (auto& x : seen) known |= x.first == o;
+      for (unsigned t : todo) known |= t == o;
+      if (!known) todo.push_back(o);
+    }
+    std::vector<uint64_t> res(todo.size());
+    std::atomic<size_t> next(0);
+    auto work = [&]() {
+      for (size_t k; (k = next++) < todo.size();) {
+        Buf tmp;
+        encode(in, tmp, todo[k], nullptr, nullptr);
+        res[k] = lzmaSize(tmp);
+      }
+    };
+    std::vector<std::thread> pool;
+    for (unsigned j = 1; j < threads && j < todo.size(); j++) pool.emplace_back(work);
+    work();
+    for (auto& t : pool) t.join();
+    for (size_t k = 0; k < todo.size(); k++) {
+      seen.push_back({todo[k], res[k]});
+      if (verbose) fprintf(stderr, "  options %-10s %10llu\n", optString(todo[k]).c_str(), (unsigned long long)res[k]);
+    }
+  }
+  uint64_t size(unsigned o) const {
+    for (auto& x : seen) if (x.first == o) return x.second;
+    return UINT64_MAX;
+  }
+
+  unsigned run(unsigned start, bool all) {
+    if (all) {
+      std::vector<unsigned> sets;
+      for (unsigned m = 0; m < (1u << NOPT); m++) {
+        unsigned o = 0;
+        for (int k = 0; k < NOPT; k++) if (m >> k & 1) o |= kOptFlag[k];
+        sets.push_back(o);
+      }
+      eval(sets);
+    } else {
+      for (unsigned cur : {start, 0u}) {
+        eval({cur});
+        for (;;) {
+          std::vector<unsigned> sets;
+          for (int k = 0; k < NOPT; k++) sets.push_back(cur ^ kOptFlag[k]);
+          eval(sets);
+          unsigned b = cur;
+          for (unsigned o : sets) if (size(o) < size(b)) b = o;
+          if (b == cur) break;
+          cur = b;
+        }
+      }
+    }
+    unsigned best = start;
+    for (auto& x : seen) if (x.second < size(best)) best = x.first;
+    return best;
+  }
+};
+#endif
+
+//----------------------------------------------------------------------------
+
+static const char* kStreamName[NSTREAM] = {"data", "op", "j8", "jmp", "jcc", "call", "rip", "disp32", "imm32", "imm64", "esc", "inl"};
 static const char* kRegionName[R_NTYPES] = {"code", "pdata", "eh_frame_hdr", "rela", "reloc", "eh_frame", "gnu.hash"};
 
 static int usage() {
   fprintf(stderr,
           "x64pp - x86-64 executable preprocessor for xz/LZMA\n"
-          "usage: x64pp c [-v] [-n] input output   forward transform\n"
-          "       x64pp d input output             inverse transform\n"
-          "       x64pp s input prefix             write each stream to prefix.<name>\n"
+          "usage: x64pp c [-v] [-n] [-oLIST | -a | -aa] input output   forward transform\n"
+          "       x64pp d input output                         inverse transform\n"
+          "       x64pp s [-oLIST] input prefix                write each stream to prefix.<name>\n"
           "  -v  print statistics\n"
           "  -n  don't verify the forward transform by decoding it\n"
-          "  input/output may be - for stdin/stdout\n");
+          "  -o  coding options, any of:\n"
+          "        d  disp32 as delta from the previous one with the same base register\n"
+          "        e  disp8 likewise (helps unrolled loops)\n"
+          "        i  opcode dictionary entries include imm8/disp8/imm16\n"
+          "        r  RIP-relative targets through a sorted table of targets\n"
+          "        u  VEX prefix bits reordered (AVX code)\n"
+          "        m  imm8/disp8/imm16 in their own stream instead of the opcode stream\n"
+          "        f, p  stream order: data first (f), opcodes first (p), opcodes last (fp)\n"
+          "        w, W  smaller opcode dictionary (w: more entries, W: fewer, wW: fewest)\n"
+
+          "  -a  choose the options that compress best with xz -9e%s:\n"
+          "      toggled one at a time while that helps; -aa tries all combinations\n"
+          "  input/output may be - for stdin/stdout\n",
+#ifdef X64PP_LZMA
+          ""
+#else
+          " (not available: built without liblzma)"
+#endif
+  );
   return 1;
 }
 
@@ -993,12 +1387,26 @@ int main(int argc, char** argv) {
   if (argc < 4 || argv[1][1]) return usage();
   char mode = argv[1][0];
   bool verbose = false, verify = true;
+  int search = 0;
+  unsigned opts = kDefaultOptions;
   int a = 2;
   for (; a < argc && argv[a][0] == '-' && argv[a][1]; a++) {
     if (!strcmp(argv[a], "-v")) verbose = true;
     else if (!strcmp(argv[a], "-n")) verify = false;
-    else return usage();
+    else if (!strcmp(argv[a], "-a")) search = 1;
+    else if (!strcmp(argv[a], "-aa")) search = 2;
+    else if (argv[a][1] == 'o') {
+      opts = 0;
+      for (const char* o = argv[a] + 2; *o; o++) {
+        const char* k = strchr(kOptLetter, *o);
+        if (!k || !*k) return usage();
+        opts |= kOptFlag[k - kOptLetter];
+      }
+    } else return usage();
   }
+#ifndef X64PP_LZMA
+  if (search) { fprintf(stderr, "x64pp: -a needs a build with liblzma\n"); return 1; }
+#endif
   if (argc - a != 2 || (mode != 'c' && mode != 'd' && mode != 's')) return usage();
   const char* iname = argv[a];
   const char* oname = argv[a + 1];
@@ -1011,7 +1419,14 @@ int main(int argc, char** argv) {
   }
   Stats st;
   std::vector<Buf> dump;
-  encode(in, out, &st, mode == 's' ? &dump : nullptr);
+#ifdef X64PP_LZMA
+  if (search && mode == 'c') {
+    OptionSearch os(in, verbose);
+    opts = os.run(opts, search == 2);
+    if (verbose) fprintf(stderr, "  chosen: %s (%zu combinations, %u threads)\n", optString(opts).c_str(), os.seen.size(), os.threads);
+  }
+#endif
+  encode(in, out, opts, &st, mode == 's' ? &dump : nullptr);
   if (verify) {
     Buf chk;
     if (!decode(out, chk) || chk != in) { fprintf(stderr, "x64pp: internal error: verification failed\n"); return 4; }
