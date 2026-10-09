@@ -223,7 +223,7 @@ Operands:
   Plain LZMA loses its match at every changed displacement. x64pp's `d`
   (disp32 as a delta per base register) and `m` (imm8/disp8 out of the
   opcode stream) turn the iterations into exact repeats. That is most of the
-  2.6% `-a` gains over the default.
+  2.7% `-a` gains over the default.
 * **Unrolled initializers.** 0x5BEB0 zeroes an array of 56-byte structs
   with four stores per element: 453 instructions, 13 distinct skeletons, and
   442 disp32 values in arithmetic progression.

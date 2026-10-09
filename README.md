@@ -26,23 +26,23 @@ Tuning set (all transforms were developed on these files):
 
 | file | size | xz | xz --x86 | x64flt3 | x64pp | x64pp -a |
 |---|---:|---:|---:|---:|---:|---:|
-| elf_bash | 1,446,024 | 583,788 | 545,568 | 503,832 | 390,332 | 390,324 |
+| elf_bash | 1,446,024 | 583,788 | 545,568 | 503,832 | 390,332 | 390,308 |
 | elf_gdb | 8,920,528 | 3,002,788 | 2,723,940 | 2,629,292 | 2,106,360 | 2,104,344 |
 | elf_libpython.so | 9,061,000 | 2,108,448 | 2,001,140 | 1,897,780 | 1,508,740 | 1,506,864 |
 | elf_python | 8,020,928 | 2,118,392 | 1,993,560 | 1,900,992 | 1,602,784 | 1,602,784 |
-| elf_rg (Rust) | 5,257,872 | 1,371,532 | 1,354,044 | 1,274,616 | 934,652 | 928,936 |
-| elf_vim | 4,130,640 | 1,751,720 | 1,650,220 | 1,513,020 | 1,183,428 | 1,183,428 |
-| elf_xz | 89,008 | 31,216 | 29,280 | 28,488 | 23,860 | 23,776 |
+| elf_rg (Rust) | 5,257,872 | 1,371,532 | 1,354,044 | 1,274,616 | 934,652 | 928,844 |
+| elf_vim | 4,130,640 | 1,751,720 | 1,650,220 | 1,513,020 | 1,183,428 | 1,183,288 |
+| elf_xz | 89,008 | 31,216 | 29,280 | 28,488 | 23,860 | 23,764 |
 | pe_7za.dll | 413,184 | 164,940 | 156,212 | 155,424 | 134,240 | 133,236 |
 | pe_7za.exe | 1,323,520 | 492,476 | 451,920 | 447,572 | 380,376 | 377,716 |
 | pe_msvcp140.dll | 585,384 | 148,616 | 140,380 | 134,428 | 113,252 | 112,656 |
-| pe_mtrand.pyd | 633,344 | 151,536 | 146,240 | 137,948 | 113,820 | 110,856 |
-| pe_npcore.pyd | 4,160,512 | 969,912 | 932,712 | 895,996 | 761,684 | 758,328 |
-| pe_rg.exe (Rust) | 5,407,744 | 1,450,748 | 1,359,536 | 1,304,228 | 1,116,648 | 1,115,232 |
-| pe_t64.exe | 108,032 | 44,692 | 42,728 | 42,492 | 37,148 | 37,044 |
-| pe_x64flt3.exe | 56,832 | 19,172 | 18,652 | 18,232 | 15,736 | 15,516 |
-| **total** | 49,614,552 | 14,409,976 | 13,546,132 | 12,884,340 | **10,423,060** | **10,401,040** |
-| vs xz | | | -5.99% | -10.59% | **-27.67%** | **-27.82%** |
+| pe_mtrand.pyd | 633,344 | 151,536 | 146,240 | 137,948 | 113,820 | 110,828 |
+| pe_npcore.pyd | 4,160,512 | 969,912 | 932,712 | 895,996 | 761,684 | 758,200 |
+| pe_rg.exe (Rust) | 5,407,744 | 1,450,748 | 1,359,536 | 1,304,228 | 1,116,648 | 1,114,936 |
+| pe_t64.exe | 108,032 | 44,692 | 42,728 | 42,492 | 37,148 | 37,012 |
+| pe_x64flt3.exe | 56,832 | 19,172 | 18,652 | 18,232 | 15,736 | 15,512 |
+| **total** | 49,614,552 | 14,409,976 | 13,546,132 | 12,884,340 | **10,423,060** | **10,400,292** |
+| vs xz | | | -5.99% | -10.59% | **-27.67%** | **-27.83%** |
 
 Held-out set (not looked at during development):
 
@@ -52,13 +52,13 @@ Held-out set (not looked at during development):
 | elf_gitlfs_go (Go) | 11,516,960 | 3,513,356 | 3,334,632 | 3,204,572 | 2,932,176 | 2,925,052 |
 | elf_libllvm17.so | 123,671,544 | 22,926,564 | 22,282,464 | 21,042,852 | 16,302,680 | 16,288,824 |
 | elf_php | 5,784,016 | 1,744,236 | 1,650,460 | 1,550,880 | 1,219,520 | 1,217,828 |
-| elf_shim_go (Go) | 8,799,192 | 2,613,004 | 2,482,980 | 2,376,876 | 2,183,176 | 2,176,404 |
+| elf_shim_go (Go) | 8,799,192 | 2,613,004 | 2,482,980 | 2,376,876 | 2,183,176 | 2,175,848 |
 | pe_7zxa.dll | 216,064 | 88,576 | 85,472 | 84,892 | 74,148 | 73,348 |
-| pe_npgen.pyd | 748,032 | 197,924 | 191,432 | 180,156 | 148,432 | 144,888 |
+| pe_npgen.pyd | 748,032 | 197,924 | 191,432 | 180,156 | 148,432 | 144,688 |
 | pe_npsimd.pyd (AVX) | 2,236,928 | 262,060 | 241,492 | 176,024 | 99,488 | 96,156 |
 | pe_openblas_mingw.dll | 20,269,568 | 3,575,148 | 3,501,848 | 3,142,108 | 2,621,244 | 2,596,888 |
 | pe_w64.exe | 101,888 | 43,532 | 41,744 | 41,616 | 36,360 | 36,312 |
-| **total** | 185,140,664 | 38,314,172 | 36,731,736 | 34,528,112 | **27,655,840** | **27,591,680** |
+| **total** | 185,140,664 | 38,314,172 | 36,731,736 | 34,528,112 | **27,655,840** | **27,590,924** |
 | vs xz | | | -4.13% | -9.88% | **-27.82%** | **-27.99%** |
 
 Target file: the cmix compressor (ELF, clang 17, many unrolled AVX2 loops),
@@ -66,8 +66,8 @@ on which the last round of tuning was done:
 
 | file | size | xz | xz --x86 | x64flt3 | x64pp | x64pp -a |
 |---|---:|---:|---:|---:|---:|---:|
-| cmix | 454,912 | 170,672 | 164,072 | 161,028 | 133,640 | **130,052** |
-| vs xz | | | -3.87% | -5.65% | -21.70% | **-23.80%** |
+| cmix | 454,912 | 170,672 | 164,072 | 161,028 | 133,640 | **130,000** |
+| vs xz | | | -3.87% | -5.65% | -21.70% | **-23.83%** |
 
 [docs/cmix.md](docs/cmix.md) describes this file's layout, its code and data
 types, what each part costs, and what could still be gained.
@@ -82,9 +82,10 @@ win_amd64 wheel, pip 24.2 (launchers), ripgrep 14.1.1 and 7-Zip 24.08
 Speed (one core of a cloud VM): 20-25 MB/s forward without verification,
 40-50 MB/s inverse (libLLVM, 124 MB: 5.7 s and 2.9 s); memory about 4.5x
 the input size. The forward transform verifies itself by default, which
-costs one inverse pass. `-a` compresses 30-90 candidates: 4 s for cmix,
-10 s for the 1.3 MB pe_7za.exe, about a minute for the 9 MB gdb on 4 cores,
-tens of minutes for libLLVM (memory limits it to 2 threads there).
+costs one inverse pass. `-a` compresses 30-110 candidates and 7 layouts:
+7 s for cmix, 12 s for the 1.3 MB pe_7za.exe, 1.5 minutes for the 9 MB gdb
+on 4 cores, tens of minutes for libLLVM (memory limits it to 2 threads
+there).
 `tools/bench.py` reproduces the tables:
 
 ```
@@ -167,26 +168,25 @@ del_eh [options] input output
 
 | file | size | xz | x64pp | x64pp -a |
 |---|---:|---:|---:|---:|
-| cmix | 454,912 | 170,672 | 133,640 | 130,052 |
-| cmix, `del_eh` | 454,912 | 162,088 | 130,756 | 127,188 |
-| cmix, `del_eh -d` | 422,144 | 162,032 | 130,720 | 127,128 |
+| cmix | 454,912 | 170,672 | 133,640 | 130,000 |
+| cmix, `del_eh` | 454,912 | 162,088 | 130,756 | 127,176 |
+| cmix, `del_eh -d` | 422,144 | 162,032 | 130,720 | 127,068 |
 | hello_eh (gcc) | 18,872 | 5,016 | 4,556 | 4,504 |
 | hello_eh, `del_eh -d` | 18,872 | 4,472 | 4,256 | 4,216 |
-| hello_eh.exe (mingw, `-s`) | 169,984 | 62,928 | 49,896 | 49,740 |
-| hello_eh.exe, `del_eh -e -r -d` | 150,016 | 57,244 | 46,692 | 46,524 |
+| hello_eh.exe (mingw, `-s`) | 169,984 | 62,928 | 49,896 | 49,732 |
+| hello_eh.exe, `del_eh -e -r -d` | 150,016 | 57,244 | 46,692 | 46,516 |
 
-cmix itself was checked on the paths that need no model memory (usage,
-`-h`, error messages): same output and exit codes before and after.
-`make del_eh` builds it (`make` builds both tools, `make del_eh.exe` the
-Windows version). `make test-del-eh` builds the test target
-`tests/hello_eh.cpp` (try blocks, destructors, std::string and
-std::vector; an empty argument takes the throwing path) as gcc PIE,
-`-no-pie`, `--emit-relocs`, clang and lld-linked binaries, and with mingw-w64 (with and
-without symbols) if wine is there; it checks that every output still runs,
-that the throw is caught before and ends the program after, that the
-inputs stay unchanged and that x64pp round-trips the outputs.
-`del_eh` was also fuzzed with 3,000 mutated ELF and PE files under
-ASan/UBSan.
+cmix itself was checked on the paths that need no model memory (usage, `-h`,
+error messages): same output and exit codes before and after. `make del_eh`
+builds it (`make` builds both tools, `make del_eh.exe` the Windows version).
+`make test-del-eh` builds the test target `tests/hello_eh.cpp` (try blocks,
+destructors, std::string and std::vector; an empty argument takes the
+throwing path) as gcc PIE, `-no-pie`, `--emit-relocs`, clang and lld-linked
+binaries, and with mingw-w64 (with and without symbols) if wine is there; it
+checks that every output still runs, that the throw is caught before and
+ends the program after, that the inputs stay unchanged and that x64pp
+round-trips the outputs. `del_eh` was also fuzzed with 3,000 mutated ELF and
+PE files under ASan/UBSan.
 
 ## How it works
 
@@ -383,7 +383,8 @@ compressed in parallel (the number of threads limited so that the LZMA
 encoders stay within about 3 GB), the best change is kept, and this repeats
 until nothing helps; once from the default and once from no options, since
 the options interact. That is typically 30-110 combinations: 7 s for cmix,
-about a minute for a 9 MB executable. `-aa` compresses all 2048.
+1.5 minutes for a 9 MB executable, with the layout search below. `-aa`
+compresses all 2048.
 
 Because of the layout sensitivity described below, `-a` finally encodes the
 chosen options with 1 to 7 blocks of 16 zero bytes in front of the streams
