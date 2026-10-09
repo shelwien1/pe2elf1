@@ -394,6 +394,7 @@ the back end the answer was mostly "no":
 | RIP target table as BE32 values, or references as absolute table indices | worse than the varint deltas of `r` |
 | table delta (option `t`) on the code streams too (rip, disp32, imm32, esc, ...) | at most -0.04% on the tuning set; elf_rg -0.5%, pe_mtrand +0.6% |
 | table detection thresholds, quick-check step, descriptor cost weight retuned | within ±0.04% of the original parameters, some files worse |
+| a separator byte before every instruction in the opcode stream (as in durilca's code stream) | +2.6% to +4.2% |
 
 LZMA does best with register allocation left inside ModRM and with the
 compiler's instruction order: identical source compiles to identical bytes,

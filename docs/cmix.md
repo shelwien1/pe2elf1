@@ -466,12 +466,18 @@ for cmix; "measured" means the saving was measured on the plain file.
 | `.eh_frame` FDE fields | 1,146 | `length` from the predicted CFA program; `pc_begin` as an index into the sorted function starts (call targets and previous ends), which handles out-of-order FDEs; `pc_range` to the next start in address order | 0.5-0.8 KB |
 | `.dynstr` | 1,293 | built-in dictionary of common libc/libm/libstdc++ symbol and version names | 0.5-0.8 KB |
 | `.rela.dyn` addends | 534 | addend as (string index, offset from the string's end) or function label index, delta from the previous one; raw otherwise | ~0.3 KB |
-| arithmetic sequences and monotone tables in `.rodata` | | runs of ≥8 dwords/qwords with a constant step, and monotone byte tables, stored as residuals against the step | 0.36 KB (measured) |
+| arithmetic sequences and monotone tables in `.rodata` | | runs of ≥8 dwords/qwords with a constant step, and monotone byte tables, stored as residuals against the step | 0.36 KB (measured); done since by option `t`, see below |
 | x64pp header | 1,347 | dictionary against a built-in default list of common skeletons; `.rodata` RIP targets predicted from item starts (strings after a NUL, aligned constants) | 0.3-0.5 KB |
 | English strings | ~4.8 KB in context | word substitution with a built-in English dictionary | 0.3-0.6 KB, uncertain |
 | jump tables | 215 | entries as label numbers | <0.1 KB (code pointers in data gave at most -0.1% on the corpus) |
 
-Together these come to roughly 2.5-4 KB, or 2-3% of the output. The
+Together these come to roughly 2.5-4 KB, or 2-3% of the output.
+
+Update: option `t` (delta coding of numeric tables in the data stream,
+after the table filter of FreeArc's `delta`) now covers the arithmetic
+sequences in a general form. On cmix it finds 4 tables (2,140 bytes: the
+monotone byte table, the index vectors and `.got.plt`), and `-a`, which
+now picks `drumtW`, gives 130,003 bytes instead of 130,292. The
 metadata, `.eh_frame` and relocation transforms would help every
 dynamically linked ELF file. The `.dynstr` and English dictionaries make
 x64pp larger and only help files that use those libraries or that language.
