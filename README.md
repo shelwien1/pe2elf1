@@ -389,7 +389,12 @@ Because of the layout sensitivity described below, `-a` finally encodes the
 chosen options with 1 to 7 blocks of 16 zero bytes in front of the streams
 (15 with `-aa`) and keeps the smallest of these layouts and the unpadded
 one. The streams stay aligned to 16 and unchanged; only LZMA's view of the
-file shifts. `-lN` sets such a layout directly.
+file shifts. `-lN` sets such a layout directly. This gains little: 12 of
+the 24 test files below (without libLLVM and OpenBLAS) took a padding,
+0.01% in total (pe_npgen.pyd -0.14%, pe_t64.exe -0.08%, elf_xz -0.05%,
+cmix -0.04%), for 7 more compressions. Where the unpadded layout stays
+best, the option search had already picked, among nearly equal option
+sets, the one that happens to fall best without padding.
 
 On cmix the search picks `drumtW`: -2.7% against the default. `m` and `d`
 do most of it. Its unrolled AVX2 loops repeat the same instructions with
@@ -399,13 +404,14 @@ operands moved out and the displacements delta coded, each iteration
 repeats exactly.
 
 One caveat: xz's output size reacts chaotically to small layout changes.
-Inserting 1-7 bytes into the cmix output's 2.5 KB header, with all streams
-unchanged, moves the compressed size by up to 0.4%. Some files are far more
-sensitive: shifting the streams of pe_npsimd.pyd by multiples of 16 bytes
-spreads its size over 2.9% (pe_npgen.pyd 0.5%), and the one header byte of
-an empty `t` table list alone costs it 1% in the held-out table. Option
-differences of that size are partly luck: `-a` keeps what is best for the
-file at hand, but such a choice says little about other files.
+Shifting the contents of the cmix output's 2.5 KB header by 1-15 bytes, or
+its streams by 16-112 bytes, with the streams unchanged, moves the
+compressed size by -0.04% to +0.09%. Some files are far more sensitive:
+shifting the streams of pe_npsimd.pyd by multiples of 16 bytes spreads its
+size over 2.9% (pe_npgen.pyd 0.5%), and the one header byte of an empty `t`
+table list alone costs it 1% in the held-out table. Option differences of
+that size are partly luck: `-a` keeps what is best for the file at hand, but
+such a choice says little about other files.
 
 ### Format
 
@@ -476,6 +482,8 @@ the back end the answer was mostly "no":
 | table delta (option `t`) on the code streams too (rip, disp32, imm32, esc, ...) | at most -0.04% on the tuning set; elf_rg -0.5%, pe_mtrand +0.6% |
 | table detection thresholds, quick-check step, descriptor cost weight retuned | within ±0.04% of the original parameters, some files worse |
 | a separator byte before every instruction in the opcode stream (as in durilca's code stream) | +2.6% to +4.2% |
+| layout search (`-a`) with zero blocks in front of each stream instead of once (greedy, 84 compressions instead of 7) | cmix -0.07% instead of -0.04%; in front of the large streams every padding lost |
+| layout search by shifting the header contents 1-15 bytes instead | cmix -0.01% at best |
 
 LZMA does best with register allocation left inside ModRM and with the
 compiler's instruction order: identical source compiles to identical bytes,

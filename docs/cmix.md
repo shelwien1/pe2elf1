@@ -473,14 +473,15 @@ for cmix; "measured" means the saving was measured on the plain file.
 
 Together these come to roughly 2.5-4 KB, or 2-3% of the output.
 
-Update: option `t` (delta coding of numeric tables in the data stream,
-after the table filter of FreeArc's `delta`) now covers the arithmetic
-sequences in a general form. On cmix it finds 4 tables (2,140 bytes: the
-monotone byte table, the index vectors and `.got.plt`), and `-a`, which
-now picks `drumtW`, gives 130,003 bytes instead of 130,292. The
-metadata, `.eh_frame` and relocation transforms would help every
-dynamically linked ELF file. The `.dynstr` and English dictionaries make
-x64pp larger and only help files that use those libraries or that language.
+Update: option `t` (delta coding of numeric tables in the data stream, after
+the table filter of FreeArc's `delta`) now covers the arithmetic sequences
+in a general form. On cmix it finds 4 tables (2,140 bytes: the monotone byte
+table, the index vectors and `.got.plt`), and `-a`, which now picks
+`drumtW`, gives 130,003 bytes instead of 130,292 (129,950 with the layout
+search that `-a` now ends with, 112 zero bytes in front of the streams). The
+metadata, `.eh_frame` and relocation transforms would help every dynamically
+linked ELF file. The `.dynstr` and English dictionaries make x64pp larger
+and only help files that use those libraries or that language.
 
 ### 5.2 Code
 
@@ -543,10 +544,12 @@ things worse.
 
 ### 5.4 Measurement caveat
 
-xz reacts chaotically to small layout changes. Inserting a few bytes into
-the x64pp header moves the cmix output by up to 0.4%, which is about 0.5 KB.
-Estimated or measured gains below about 0.5 KB should be confirmed on
-several layouts or files before they count.
+xz reacts chaotically to small layout changes. Shifting the contents of
+the x64pp header by 1-15 bytes, or the streams by 16-112 bytes, moves the
+cmix output by -0.04% to +0.09%, a spread of about 170 bytes; with an
+earlier version of the streams, inserting a few header bytes moved it by
+up to 0.4% (0.5 KB). Estimated or measured gains below a few hundred bytes
+should be confirmed on several layouts or files before they count.
 
 ## Appendix: how the numbers were measured
 
