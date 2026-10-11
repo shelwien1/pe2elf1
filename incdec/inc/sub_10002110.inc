@@ -18,7 +18,7 @@ static VBN_ENTRY char __sub_10002110(char *a1)
   LOBYTE(v1) = 0;
   v2 = strlen(a1) + 1;
   v3 = v2 - 1;
-  if ( (_BYTE)v2 != 1 )
+  if ( (_BYTE)v2 != (_BYTE)(1))
     goto LABEL_5;
   while ( v3 )
   {

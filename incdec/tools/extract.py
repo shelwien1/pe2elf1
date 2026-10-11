@@ -141,6 +141,119 @@ def mask_shift_counts(line):
         out.append(line[i:m.end()]); out.append(' (' + term + ' & 31)'); i = start + len(term)
 
 
+BYTE_CAST = re.compile(r'^\(\s*(?:_BYTE|unsigned __int8)\s*\)')
+
+
+BYTE8 = {'char': True, '__int8': True, 'signed char': True, 'int8': True,
+         '_BYTE': False, 'unsigned __int8': False, 'unsigned char': False, 'uint8': False, 'BYTE': False}
+
+
+def operand_type(expr, types):
+    """The C type of a comparison operand, when it is simple enough to know:
+    a cast, `*p`, `*p++`, `p[i]`, or a variable -- from this body's declarations
+    and the global types.  None otherwise."""
+    e = expr.strip()
+    while e.startswith('(') and e.endswith(')') and balanced(e[1:-1]):
+        e = e[1:-1].strip()
+    m = re.match(r'^\(\s*([A-Za-z_][\w\s]*?)\s*\)\s*(?![\s\-+*/%&|^<>=])', e)
+    if m and not re.match(r'^\(\s*[A-Za-z_][\w\s]*\*', e):
+        return m.group(1).strip()
+    m = re.match(r'^\*\s*\(\s*([A-Za-z_][\w\s]*?)\s*\*\s*\)', e)          # *(_BYTE *)p
+    if m:
+        return m.group(1).strip()
+    m = re.match(r'^\*\s*(?:\+\+|--)?\s*([A-Za-z_]\w*)\s*(?:\+\+|--)?$', e)
+    if m and m.group(1) in types and types[m.group(1)].rstrip().endswith('*'):
+        return types[m.group(1)].rstrip()[:-1].strip()
+    m = re.match(r'^([A-Za-z_]\w*)\s*\[[^\]]*\]$', e)
+    if m and m.group(1) in types:
+        t = types[m.group(1)].strip()
+        return t[:-1].strip() if t.endswith('*') else re.sub(r'\[.*$', '', t).strip()
+    m = re.match(r'^([A-Za-z_]\w*)$', e)
+    if m and m.group(1) in types and '[' not in types[m.group(1)] and not types[m.group(1)].endswith('*'):
+        return types[m.group(1)].strip()
+    return None
+
+
+def balanced(t):
+    d = 0
+    for c in t:
+        d += c in '(['
+        d -= c in ')]'
+        if d < 0:
+            return False
+    return d == 0
+
+
+def byte_compares(line, types=None):
+    """`(_BYTE)a == b` -> `(_BYTE)a == (_BYTE)(b)`, and the mirror image.
+
+    Hex-Rays prints an 8-bit `cmp al, byte [mem]` as `(_BYTE)v7 == buf_3[i]`
+    and means an 8-bit comparison.  C++ promotes both sides to int first, and
+    with buf_3 declared `char` (signed) the two disagree for every byte above
+    0x7F -- text compresses correctly, binary data does not.  Narrowing the
+    other operand is exactly what the instruction does.
+    """
+    lit = literal_spans(line)
+    code_end = len(line)
+    for m in re.finditer(r'//', line):
+        if not any(a <= m.start() < b for a, b in lit):
+            code_end = m.start()
+            break
+    stops_left = ('&&', '||', '?', ':', ',', '(', '=', 'return', ';', '{')
+    out, pos = line, 0
+    for m in list(re.finditer(r'(?<![=!<>])(==|!=)(?!=)', line[:code_end]))[::-1]:
+        if any(a <= m.start() < b for a, b in lit):
+            continue
+        # left operand
+        i, depth = m.start() - 1, 0
+        while i >= 0:
+            c = out[i]
+            if c in ')]':
+                depth += 1
+            elif c in '([':
+                if depth == 0:
+                    break
+                depth -= 1
+            elif depth == 0 and (out[i:i + 2] in ('&&', '||') or c in '?:,;{' or
+                                 (c == '=' and out[i - 1:i] not in '=!<>' and out[i + 1:i + 2] != '=')):
+                break
+            i -= 1
+        ls, le = i + 1, m.start()
+        # right operand
+        j, depth = m.end(), 0
+        while j < code_end:
+            c = out[j]
+            if c in '([':
+                depth += 1
+            elif c in ')]':
+                if depth == 0:
+                    break
+                depth -= 1
+            elif depth == 0 and (out[j:j + 2] in ('&&', '||') or c in '?:,;'):
+                break
+            j += 1
+        rs, re_ = m.end(), j
+        left, right = out[ls:le].strip(), out[rs:re_].strip()
+        if not left or not right:
+            continue
+        lb, rb = bool(BYTE_CAST.match(left)), bool(BYTE_CAST.match(right))
+        if lb == rb:
+            # Neither (or both) cast: compare 8-bit operands of different
+            # signedness (`*v54 == *v53`, char * against _BYTE *) as bytes too.
+            if types is None or lb:
+                continue
+            lt, rt = operand_type(left, types), operand_type(right, types)
+            if lt in BYTE8 and rt in BYTE8 and BYTE8[lt] != BYTE8[rt]:
+                out = out[:rs] + ' (_BYTE)(' + right + ')' + out[re_:]
+                out = out[:ls] + ('' if out[ls - 1:ls] in ' (' else ' ') + '(_BYTE)(' + left + ') ' + out[le:]
+            continue
+        if lb:
+            out = out[:rs] + ' (_BYTE)(' + right + ')' + out[re_:]
+        else:
+            out = out[:ls] + ('' if out[ls - 1:ls] in ' (' else ' ') + '(_BYTE)(' + left + ') ' + out[le:]
+    return out
+
+
 PTR_LOCAL = re.compile(r'^\s*([A-Za-z_][\w\s]*?\*)\s*(\w+)\s*;')
 
 
@@ -354,7 +467,7 @@ def globals_type(name, body_comments):
         m = re.match(r'// ([0-9A-F]+): using guessed type (.*?)\b' + re.escape(name) + r'(\[[^\]]*\])?;$', l)
         if m:
             return m.group(2).strip(), m.group(3) or ''
-    va, kind, size, ty = SYMS[name]
+    va, kind, size, ty = SYMS.get(name) or (0, 'D', None, {'dword': 'int', 'word': '__int16', 'byte': 'char', 'unk': 'char', 'off': 'void *', 'asc': 'char', 'stru': 'char', 'qword': '__int64'}[name.split('_')[0]])
     ty = re.sub(r'\s*\[(name|guessed|string|disasm|ordered)\]$', '', ty)
     m = re.match(r'^(.*?)((?:\[[^\]]*\])*)$', ty)
     return m.group(1).strip(), m.group(2)
@@ -502,6 +615,7 @@ def emit(name, accepted):
             full = drop_args(full, callee, set(cc['drop']), len(hexrays_params(BY_NAME[callee])))
 
     refs, defines = [], []
+    gtypes = {}
     # functions
     called = sorted(set(re.findall(r'\bsub_[0-9A-F]{8}\b', full)))
     for callee in called:
@@ -536,9 +650,18 @@ def emit(name, accepted):
                         f"{callee_decl(callee, cc, '__' + callee)}\n#endif")
             defines.append((callee, f'__{callee}'))
 
-    # globals
-    for g in sorted(SYMS, key=len, reverse=True):
-        va_g, kind, size, ty = SYMS[g]
+    # globals: vbn.txt, plus auto-named ones Hex-Rays used in this body under a
+    # different name than in the data declarations (dword_1000D560 is
+    # Data_size____10u_n_0 there): the address is in the name.
+    syms = dict(SYMS)
+    for g in set(re.findall(r'\b(?:dword|word|byte|unk|off|asc|stru|qword)_[0-9A-F]{8}\b', full)):
+        if g not in syms:
+            pre = g.split('_')[0]
+            syms[g] = (int(g.split('_')[1], 16), 'D', None,
+                       {'dword': 'int', 'word': '__int16', 'byte': 'char', 'unk': 'char', 'off': 'void *',
+                        'asc': 'char', 'stru': 'char', 'qword': '__int64'}[pre] + ' [name]')
+    for g in sorted(syms, key=len, reverse=True):
+        va_g, kind, size, ty = syms[g]
         if kind != 'D':
             continue
         uses = [m for m in re.finditer(r'(?<![\w.>])' + re.escape(g) + r'\b', full)
@@ -557,12 +680,22 @@ def emit(name, accepted):
             # out as parallel arrays: j[6 * n]); an extent g++ believes lets it
             # assume the index is in range.  Run every array to the image's end.
             dims = f'[{(0x14000000 - va_g) // max(1, esz)}]'
+        if g not in local_names:
+            gtypes[g] = base + dims
         alias = f'__{name}_{g}' if IDENT_OK.match(g) else f'__{name}_g{g}'
         refs.append(f"typedef {base} t{alias}{dims};\n"
                     f"static t{alias} &{alias} = *(t{alias} *)0x{va_g:08X};")
         defines.append((g, alias))
 
     code_only = '\n'.join(re.sub(r'//.*$', '', l) for l in full.split('\n'))
+    # 8-bit comparisons, with the types of locals, parameters and globals known
+    types = dict(gtypes)
+    for l in decls + reg_lines + frame_lines + params:
+        mm = re.match(r'^\s*([A-Za-z_][\w\s\*]*?[\s\*])\s*\(?&?\s*([A-Za-z_]\w*)\)?\s*(\[[^\]]*\])?', l.split('//')[0].split('=')[0])
+        if mm:
+            types[mm.group(2)] = mm.group(1).strip() + (mm.group(3) or '')
+    full = '\n'.join(byte_compares(l, types) for l in full.split('\n'))
+
     for s in re.findall(r'"(?:[^"\\]|\\.)*"', code_only):
         print(f'warning: {name}: string literal {s[:40]} lives in dummy.so, not in the image; '
               f'a DOS call cannot take it', file=sys.stderr)
