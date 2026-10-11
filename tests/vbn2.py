@@ -10,8 +10,8 @@
    and the compressed stream's md5 must be the one vbn2.md5 records (--record
    writes vbn2.md5 instead of checking it).
 
-vbn2 is built from ../vbn2.cpp with `g++ -m32 -O2` unless --exe names a
-binary; --cxx gives another compiler command (for example "clang++ -m32 -O3").
+vbn2 is built from ../vbn2.cpp with `g++ -O2` unless --exe names a binary;
+--cxx gives another compiler command (for example "clang++ -m32 -O3").
 """
 import concurrent.futures
 import hashlib
@@ -101,7 +101,7 @@ def main():
     args = sys.argv[1:]
     record = '--record' in args
     exe = args[args.index('--exe') + 1] if '--exe' in args else None
-    cxx = args[args.index('--cxx') + 1] if '--cxx' in args else 'g++ -m32 -O2'
+    cxx = args[args.index('--cxx') + 1] if '--cxx' in args else 'g++ -O2'
     work = tempfile.mkdtemp(prefix='vbn2test.', dir=HERE)
     try:
         if exe:

@@ -23,7 +23,7 @@ compressing one file into a plain stream. It needs neither `vbn.exe` nor the
 shim:
 
 ```sh
-make vbn2                    # g++ -m32 -O2 -o vbn2 vbn2.cpp
+make vbn2                    # g++ -O2 -o vbn2 vbn2.cpp (-m32 works too)
 ./vbn2 c input.txt out.vbn2  # 222682 bytes: the size, then VBN's code for input.txt
 ./vbn2 d out.vbn2 input.out  # input.txt again
 ```
@@ -35,11 +35,12 @@ make         # pe2elf32/pe2elf32, then vbn and libvbnshim.so, and vbn2
 make test    # or ./test.sh
 ```
 
-The shim and `vbn2` are compiled `-m32`, so building them needs the 32-bit
-dev files (Debian/Ubuntu: `gcc-multilib`, `g++-multilib`). The converter is
-a native host tool. `vbn` and `libvbnshim.so` are committed, and `make`
-rebuilds them byte-identically. `vbn2` is built from the committed
-`vbn2.cpp`.
+The shim is compiled `-m32`, so building it needs the 32-bit dev files
+(Debian/Ubuntu: `gcc-multilib`). The converter is a native host tool. `vbn`
+and `libvbnshim.so` are committed, and `make` rebuilds them byte-identically.
+`vbn2` is built from the committed `vbn2.cpp`, for the host; it builds as a
+32-bit program too (`-m32`, with `g++-multilib`), and writes the same
+streams either way.
 
 `test.sh` checks that:
 
@@ -207,9 +208,15 @@ scripts of another decompilation (the `tools.zip` kit): `unify_types.py`
 sanitizer runs below. The rewrite after that is by hand, each step held to
 the gate.
 
-The context tree keeps node addresses in its 32-bit slots and tells a node
-from a leaf (a negated position) by the sign, so `vbn2` is an i386 program
-(`-m32`), and `main` checks that the tree lies below `0x80000000`.
+VBN kept node addresses in the context tree's 32-bit slots, and told a
+node from a leaf (a negated position) by the sign. `vbn2` keeps the nodes in
+an arena instead and numbers them: node *n* is the slot pair
+`tree[2n]`, `tree[2n+1]`. A window registers at most 0x198000 positions,
+each making at most one node, and the tree starts over when the window
+slides, so the arena is 0x198001 nodes (12.75 MiB), allocated statically, and
+its slots stay 32 bits wide at any pointer size. Everything else that holds
+an address is a native pointer; `vbn2` builds and runs as x86-64 and as
+i386, and both write the same streams.
 
 `tests/vbn2.py` is the gate every change to `vbn2.cpp` has to pass:
 
@@ -223,7 +230,8 @@ from a leaf (a negated position) by the sign, so `vbn2` is an i386 program
   once the check against VBN had passed.
 
 `tests/vbn2.py --cxx "clang++ -m32 -O3"` builds with another compiler or
-options; every change so far has passed with `g++` at `-O0`, `-O2`, `-O3`
-and `-Os`, with `clang++` at `-O0` and `-O2`, and under AddressSanitizer
-and UndefinedBehaviorSanitizer (`--exe` runs the gate on a binary built
-elsewhere).
+options (`--exe` runs the gate on a binary built elsewhere). Every change so
+far has passed with `g++` at `-O0`, `-O2`, `-O3` and `-Os` and `clang++` at
+`-O0` and `-O2` (as i386 until `vbn2` built for x86-64, as x86-64 since,
+with `-m32` builds alongside), and under AddressSanitizer and
+UndefinedBehaviorSanitizer.

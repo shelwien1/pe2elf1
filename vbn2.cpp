@@ -1,6 +1,6 @@
 // vbn2.cpp: VBN 1.001's compressor, standalone, on one file.
 //
-//   g++ -m32 -O2 -o vbn2 vbn2.cpp
+//   g++ -O2 -o vbn2 vbn2.cpp   (or -m32)
 //   ./vbn2 c input output      compress
 //   ./vbn2 d input output      decompress
 //
@@ -15,10 +15,9 @@
 // each (incdec/README.md), and tools/mkvbn2.py there made them a standalone
 // program.  This file started as that program; it has been cut down to the
 // coder and written out by hand since, each function headed by the vbn.exe
-// function it is.  vbn2 is i386 code: the context tree keeps node addresses
-// in 32-bit slots.
+// function it is.
 
-#define _FILE_OFFSET_BITS 64        // stat() on i386 fails on 64-bit inode numbers otherwise
+#define _FILE_OFFSET_BITS 64        // stat() with -m32 fails on 64-bit inode numbers otherwise
 #include <cerrno>
 #include <csetjmp>
 #include <cstdint>
@@ -27,10 +26,6 @@
 #include <cstring>
 #include <sys/stat.h>
 #include <utility>
-
-#if !defined(__i386__)
-#error "vbn2.cpp is i386 code: build it with g++ -m32"
-#endif
 
 // ===========================================================================
 // Bits.
@@ -49,9 +44,7 @@ static inline void flip_bit(void *buf, uint32_t n)
 
 // ===========================================================================
 // vbn's globals, each with storage of its own.  The comment after a name gives
-// the address vbn.exe kept it at.  Sizes are what the code reaches.  The tree
-// code tells a node (an address) from a leaf (a position, negated) by its
-// sign, so the tree has to sit below 0x80000000, which main() checks.
+// the address vbn.exe kept it at.  Sizes are what the code reaches.
 // ===========================================================================
 // The direction, and the mode.
 static int32_t encoding;                          // 0x1000D4C4 1 compressing, 0 decompressing
@@ -71,13 +64,16 @@ static int8_t next_byte[256];                     // 0x1001620C per byte: the by
 static int8_t next_byte2[256];                    // 0x1001630C per byte: the byte that came two after it last
 
 // The context tree: a binary tree over the data read backwards from each
-// position, one bit per level.  A slot holding a value > 0 points to a node
-// (two slots); a value <= 0 is a leaf, minus the position it registers.  A
-// node's two slots differ in bit 2 of their address: the code finds one's
-// sibling with `^ 4`.
-alignas(8) static int32_t tree[2 + 2 * 0x198000]; // 0x101AE6F0 the root, then the nodes
-static int32_t *node_next;                        // 0x10016430 the next free node
-static int32_t tree_nodes;                        // 0x1000CA4C nodes in use
+// position, one bit per level.  Its nodes live in an arena, numbered in the
+// order they were made: node n is the two slots tree[2n] and tree[2n+1], and
+// node 0 is the root.  A slot holding a value > 0 points to the node of that
+// number; a value <= 0 is a leaf, minus the position it registers.  A window
+// registers at most 0x198000 positions, each making at most one node, and the
+// tree starts over when the window slides: the arena holds 0x198001 nodes.
+// (vbn.exe kept nodes' addresses in the slots, and the next node's address
+// at 0x10016430, always node tree_nodes.)
+static int32_t tree[2 * (1 + 0x198000)];          // 0x101AE6F0 the arena, 12.75 MiB
+static int32_t tree_nodes;                        // 0x1000CA4C nodes in use, the root too: the next one made
 static int32_t tree_updates;                      // 0x10016434 counts changes to the tree
 static int32_t registered[0x33000 / 4];           // 0x10E6E6F0 a bit per position in the window: in the tree
 
@@ -226,11 +222,11 @@ static int32_t len_model_add(int32_t len)
   return old;
 }
 
-// other_slot: the other slot of the node `slot` is in.  Nodes are 8-byte
-// aligned, so the two differ in bit 2 of their address.
+// other_slot: the other slot of the node `slot` is in.  (vbn.exe flips bit 2
+// of the slot's address.)
 static inline int32_t *other_slot(int32_t *slot)
 {
-  return (int32_t *)((uintptr_t)slot ^ 4);
+  return tree + ((slot - tree) ^ 1);
 }
 
 // descend: from the root, down the context tree along the data before bit
@@ -251,7 +247,7 @@ static int32_t *descend(uint32_t pos, int32_t *at)
         *at = left - k;
         return slot;
       }
-      node = (int32_t *)(uintptr_t)*slot;
+      node = &tree[2 * *slot];
     }
   }
   *at = left;
@@ -277,10 +273,9 @@ static void tree_add(uint32_t pos, int32_t *slot, int32_t leaf, uint32_t at, boo
   } else if (leaf <= 0) {
     if (flip)
       flip_bit(registered, pos >> 3);
-    node_next[0] = node_next[1] = -(int32_t)pos;
-    *slot = (int32_t)(uintptr_t)node_next;
-    node_next += 2;
-    tree_nodes++;
+    int32_t n = tree_nodes++;
+    tree[2 * n] = tree[2 * n + 1] = -(int32_t)pos;
+    *slot = n;
     if (*other_slot(slot) > 0)
       tree_updates++;
   }
@@ -312,12 +307,12 @@ static void tree_insert(uint32_t count, uint32_t bitpos)
 }
 
 // walk_cands (vbn.exe 0x10006CB0; 0x10006E31 when excluding): add the leaves
-// of a subtree to the candidates, left to right, as {weight, leaf} pairs.  A
-// node's right leaf counts only when its left child is a node (vbn compares
-// that slot with the node's address: a node's children are made after it, at
-// higher addresses).  Excluding, a leaf that predicts excluded_byte is
-// skipped.  In vbn.exe the walks are assembly with a register interface (EBX
-// node, ESI weight, ECX output cursor, EDI how many pairs may still be
+// of node n's subtree to the candidates, left to right, as {weight, leaf}
+// pairs.  A node's right leaf counts only when its left child is a node (vbn
+// compares that slot with the node's address, here with its number: a node's
+// children are made after it).  Excluding, a leaf that predicts excluded_byte
+// is skipped.  In vbn.exe the walks are assembly with a register interface
+// (EBX node, ESI weight, ECX output cursor, EDI how many pairs may still be
 // written; ECX and EDI come back); here the caller passes a Walk.  When no
 // more pairs may be written, the search ends (walk_exit).
 struct Walk {
@@ -343,15 +338,16 @@ static void walk_emit(int32_t leaf, Walk *w)
   if (--w->left == 0)
     walk_exit();
 }
-static void walk_cands(int32_t *node, Walk *w)
+static void walk_cands(int32_t n, Walk *w)
 {
+  int32_t *node = &tree[2 * n];
   if (node[0] > 0)
-    walk_cands((int32_t *)(uintptr_t)node[0], w);
+    walk_cands(node[0], w);
   else
     walk_emit(node[0], w);
   if (node[1] > 0)
-    walk_cands((int32_t *)(uintptr_t)node[1], w);
-  else if (node[0] > (int32_t)(uintptr_t)node)    // cmp eax,[eax]; jle
+    walk_cands(node[1], w);
+  else if (node[0] > n)                           // cmp eax,[eax]; jle
     walk_emit(node[1], w);
 }
 
@@ -835,7 +831,7 @@ static __attribute__((noinline)) void search(bool excluding)
         goto found;
       }
       path++;
-      node = (int32_t *)(uintptr_t)leaf;
+      node = &tree[2 * *slot];
     }
   }
   slot = node;                                    // out of data
@@ -873,7 +869,7 @@ found:
       if (weight_shift)
         weight <<= weight_shift-- >> 1;
       Walk w = { &cands[2 * n_cands], max_cands - n_cands, weight, excluding };
-      walk_cands((int32_t *)(uintptr_t)other, &w);
+      walk_cands(other, &w);
       n_cands = (w.out - cands) / 2;
     } else if (!(excluding && predicts_excluded(other))) {
       cands[2 * n_cands] = (search_depth - search_avg) << weight_shift;
@@ -1063,7 +1059,6 @@ static void coder_run(uint32_t size)
     read_input(code_buf, 2 * n < 0x2010 ? 2 * n : 0x2010);
   memset(registered, 0, sizeof registered);
   tree[0] = tree[1] = 0;
-  node_next = &tree[2];
   tree_nodes = 1;
   tree_updates = 1;
   window_pos = 0;
@@ -1081,7 +1076,6 @@ static void coder_run(uint32_t size)
     memmove(registered, (int8_t *)registered + 0xCC00, 0x26400);
     memset((int8_t *)registered + 0x26400, 0, 0xCC00);
     tree[0] = tree[1] = 0;
-    node_next = &tree[2];
     tree_nodes = 1;
     window_pos = 8 * 0x132000;
     tree_rebuild();
@@ -1164,11 +1158,6 @@ int main(int argc, char **argv)
     vbn_fail("cannot write", vbn_out_name);
 
   max_cands = 95;                               // MAX mode (`vbn u`; `b` is 55, `B` 31)
-
-  if ((int32_t)(uintptr_t)(tree + sizeof tree / sizeof *tree) < 0) {   // see vbn's globals
-    errno = 0;
-    vbn_fail("cannot run:", "vbn's tree lies above 0x80000000");
-  }
   coder_run(vbn_size);
 
   errno = 0;
