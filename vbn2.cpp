@@ -15,8 +15,7 @@
 // each (incdec/README.md), and tools/mkvbn2.py there made them a standalone
 // program.  This file started as that program and has been cut down to the
 // coder since.  vbn2 is i386 code: the decompiled bodies keep pointers in
-// 32-bit integers and reach VBN's data at its own addresses, which vbn2 maps
-// where vbn.exe had it (0x10000000).
+// 32-bit integers.
 
 #define _FILE_OFFSET_BITS 64        // stat() on i386 fails on 64-bit inode numbers otherwise
 #include <cerrno>
@@ -27,9 +26,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
-#include <sys/mman.h>
 #include <sys/stat.h>
-#include <ucontext.h>
 #include <unistd.h>
 
 #if !defined(__i386__)
@@ -115,118 +112,91 @@ template <class T, class V> static inline T _InterlockedExchange(T *p, V v)
 { T o = *p; *p = (T)v; return o; }
 
 // ===========================================================================
-// vbn's memory.  vbn.exe is one flat 64 MB image at 0x10000000: code, data,
-// BSS, and (in the original) its heap and stack.  The decompiled bodies reach
-// every global at its address, store addresses in 32-bit integers, and tell a
-// tree node (an address) from a leaf (a position, negated) by its sign, so the
-// image is mapped where it was.  Its initialized data is embedded below; the
-// rest starts out zero, as vbn's startup code left it.
+// vbn's globals: the objects vbn.exe kept in its data and BSS, each with
+// storage of its own now.  Names are IDA's (Hex-Rays named many after a string
+// it saw at the address, which says nothing about the object); the comment
+// gives the address and what the code uses it for.  Sizes are what the code
+// reaches.  The tree code tells a node (an address) from a leaf (a position,
+// negated) by its sign, so these have to sit below 0x80000000, which main()
+// checks.
 // ===========================================================================
-static const uint32_t IMAGE_BASE = 0x10000000, IMAGE_SIZE = 0x4000000;
-static const uint32_t DATA_START = 0x1000A08C;         // .vbn's initialized data, to 0x1000D400
-extern const uint8_t image_data[];                // filled in at the end of the file
-extern const uint32_t image_data_size;
-
-#ifndef MAP_FIXED_NOREPLACE
-#define MAP_FIXED_NOREPLACE 0x100000
-#endif
-static void image_map()
-{
-  void *p = mmap((void *)IMAGE_BASE, IMAGE_SIZE, PROT_READ | PROT_WRITE,
-                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
-  if (p != (void *)IMAGE_BASE) {
-    fprintf(stderr, "vbn2: cannot map vbn's memory at %#x: %s\n", IMAGE_BASE, strerror(errno));
-    exit(127);
-  }
-  memcpy((void *)DATA_START, image_data, image_data_size);
-}
-
-// ===========================================================================
-// vbn's globals: each at its address in vbn's image, under the name IDA gave
-// it (Hex-Rays names many after a string it found there, which says nothing
-// about the object).  An array is declared to the end of the image: that is
-// how far the decompiled code may index it.
-// ===========================================================================
-static int8_t (&aVbnVer1001)[67067632] = *(int8_t (*)[67067632])0x1000A110;
-static int32_t (&src_3)[16764860] = *(int32_t (*)[16764860])0x1000C110;
-static int32_t (&Data_size____10u_n)[16764321] = *(int32_t (*)[16764321])0x1000C97C;
-static int32_t &dword_1000CA4C = *(int32_t *)0x1000CA4C;
-static int32_t (&dword_1000CA54)[16764267] = *(int32_t (*)[16764267])0x1000CA54;
-static int32_t &n55 = *(int32_t *)0x1000D4B0;
-static int32_t &dword_1000D4C4 = *(int32_t *)0x1000D4C4;
-static int32_t (&dword_1000D558)[16763562] = *(int32_t (*)[16763562])0x1000D558;
-static int32_t (&dword_1000D55C)[16763561] = *(int32_t (*)[16763561])0x1000D55C;
-static int32_t (&dword_1000D560)[16763560] = *(int32_t (*)[16763560])0x1000D560;
-static int32_t (&dword_1000D850)[16763372] = *(int32_t (*)[16763372])0x1000D850;
-static int32_t (&buf__0)[16762088] = *(int32_t (*)[16762088])0x1000EC60;
-static int32_t (&dword_1000F058)[16761834] = *(int32_t (*)[16761834])0x1000F058;
-static int32_t (&dword_1000F060)[16761832] = *(int32_t (*)[16761832])0x1000F060;
-static int32_t (&i_5)[16761320] = *(int32_t (*)[16761320])0x1000F860;
-static int32_t (&dword_1000F864)[16761319] = *(int32_t (*)[16761319])0x1000F864;
-static int32_t (&dword_10010060)[16760808] = *(int32_t (*)[16760808])0x10010060;
-static uint32_t &i_ = *(uint32_t *)0x10010460;
-static int32_t (&dword_10010464)[16760551] = *(int32_t (*)[16760551])0x10010464;
-static int32_t (&i_4)[16760040] = *(int32_t (*)[16760040])0x10010C60;
-static int32_t (&buf_6)[16759677] = *(int32_t (*)[16759677])0x1001120C;
-static int32_t (&buf_7)[16758653] = *(int32_t (*)[16758653])0x1001220C;
-static int8_t (&buf_3)[67018228] = *(int8_t (*)[67018228])0x1001620C;
-static int8_t (&buf_4)[67017972] = *(int8_t (*)[67017972])0x1001630C;
-static int32_t &n0x7FFFFFFF = *(int32_t *)0x1001640C;
-static int32_t &dword_10016410 = *(int32_t *)0x10016410;
-static int32_t &n0x7FFFFFFF_1 = *(int32_t *)0x10016414;
-static int32_t &n362 = *(int32_t *)0x10016418;
-static int8_t *&buf = *(int8_t **)0x1001641C;
-static int32_t &n362_0 = *(int32_t *)0x10016420;
-static int8_t *&buf_1 = *(int8_t **)0x10016424;
-static int32_t &n362_1 = *(int32_t *)0x10016428;
-static int8_t *&buf_0 = *(int8_t **)0x1001642C;
-static int32_t &dword_10016430 = *(int32_t *)0x10016430;
-static int32_t &dword_10016434 = *(int32_t *)0x10016434;
-static int32_t &dword_10016438 = *(int32_t *)0x10016438;
-static int32_t &dst_4 = *(int32_t *)0x1001643C;
-static int8_t *&src_4 = *(int8_t **)0x10016440;
-static int32_t &n13369344 = *(int32_t *)0x10016444;
-static int32_t &n4_0 = *(int32_t *)0x10016448;
-static int32_t &n8_2 = *(int32_t *)0x1001644C;
-static int32_t &n2_1 = *(int32_t *)0x10016450;
-static int32_t &dword_10016454 = *(int32_t *)0x10016454;
-static int32_t &dword_1001645C = *(int32_t *)0x1001645C;
-static int32_t &n0x7FFFFFFF_2 = *(int32_t *)0x10016460;
-static int32_t &n8_1 = *(int32_t *)0x10016468;
-static uint32_t &n8 = *(uint32_t *)0x1001646C;
-static int32_t &n8_3 = *(int32_t *)0x10016470;
-static int32_t &n8_0 = *(int32_t *)0x1001647C;
-static int32_t &dst_0 = *(int32_t *)0x10016480;
-static int32_t &dst_1 = *(int32_t *)0x10016484;
-static int32_t &dword_10016488 = *(int32_t *)0x10016488;
-static int32_t &n4 = *(int32_t *)0x1001648C;
-static int32_t &n2_0 = *(int32_t *)0x10016490;
-static int32_t &dword_10016494 = *(int32_t *)0x10016494;
-static int32_t &n0x4000 = *(int32_t *)0x10016498;
-static int32_t &n0x2000 = *(int32_t *)0x1001649C;
-static int32_t &n0xFFE = *(int32_t *)0x100164A0;
-static int32_t &n0x384 = *(int32_t *)0x100164A4;
-static int32_t &dword_100164A8 = *(int32_t *)0x100164A8;
-static int32_t &dword_100164AC = *(int32_t *)0x100164AC;
-static int32_t &dword_100164B0 = *(int32_t *)0x100164B0;
-static int32_t &dword_100164B4 = *(int32_t *)0x100164B4;
-static int32_t &dword_100164B8 = *(int32_t *)0x100164B8;
-static uint32_t &n2048 = *(uint32_t *)0x100164BC;
-static uint32_t &n256 = *(uint32_t *)0x100164C0;
-static int32_t &dword_100164C4 = *(int32_t *)0x100164C4;
-static int32_t &dword_100164C8 = *(int32_t *)0x100164C8;
-static int8_t (&byte_100166EF)[67016977] = *(int8_t (*)[67016977])0x100166EF;
-static int8_t (&dst_3)[67016976] = *(int8_t (*)[67016976])0x100166F0;
-static int32_t (&dword_100167F0)[16754180] = *(int32_t (*)[16754180])0x100167F0;
-static int32_t (&src_5)[16649796] = *(int32_t (*)[16649796])0x1007C6F0;
-static int8_t (&dst_5)[65763600] = *(int8_t (*)[65763600])0x101486F0;
-static int32_t (&dst)[16336452] = *(int32_t (*)[16336452])0x101AE6F0;
-static int32_t &dword_101AE6F4 = *(int32_t *)0x101AE6F4;
-static int32_t (&dword_101AE6F8)[16336450] = *(int32_t (*)[16336450])0x101AE6F8;
-static int32_t &buf_ = *(int32_t *)0x10E6E6F0;
-static int32_t (&src_6)[12981060] = *(int32_t (*)[12981060])0x10E7B2F0;
-static int32_t (&buf_5)[12954948] = *(int32_t (*)[12954948])0x10E94AF0;
-static int8_t (&buf_2)[51669264] = *(int8_t (*)[51669264])0x10EB96F0;
+static int8_t aVbnVer1001[0x2010];               // 0x1000A110 the code buffer (vbn reused its banner's bytes)
+static const int32_t Data_size____10u_n[23] = {  // 0x1000C97C the length model's initial counts
+  2662, 633, 321, 185, 77, 40, 24, 22, 18, 15, 13, 10, 7, 5, 3, 3, 2, 2, 2, 1, 1, 1, 1 };
+static int32_t dword_1000CA4C;                   // 0x1000CA4C nodes in the context tree
+static const int32_t dword_1000CA54[3] = { 10, 6, 4 };   // 0x1000CA54 by mode (n55 >> 5)
+static int32_t n55;                              // 0x1000D4B0 candidates the search may return
+static int32_t dword_1000D4C4;                   // 0x1000D4C4 compressing (1) or decompressing (0)
+static int32_t dword_1000D558[2 * 95];           // 0x1000D558 the candidates: n55 pairs
+static int32_t dword_1000D850[1284];             // 0x1000D850 the search's path through the tree
+static int32_t buf__0[256];                      // 0x1000EC60 per byte: its pair in dword_1000F060, or 0
+// 0x1000F060 the candidates' bytes: pairs.  Loops over it start one pair
+// before it (and step before they read), so that pair is storage too.
+static int32_t F060_space[2 + 2 * 256];
+static int32_t *const dword_1000F060 = F060_space + 2;
+static int32_t i_5[2 * 256];                     // 0x1000F860 the length model: {count, length} pairs
+static int32_t dword_10010060[256];              // 0x10010060 per byte: its pair in i_
+// 0x10010460 the literal model: {count, byte} pairs, sorted.  Its bubble
+// steps read one pair past either end before their bound check stops them;
+// vbn had other tables there, the padding holds zeros.
+static uint32_t i_space[2 + 2 * 256 + 2];
+static uint32_t *const i_ = i_space + 2;
+static int32_t i_4[363];                         // 0x10010C60 a ring (buf)
+static int32_t buf_6[1024];                      // 0x1001120C a ring (buf_0)
+static int32_t buf_7[4096];                      // 0x1001220C the length model's history (buf_1)
+static int8_t buf_3[256];                        // 0x1001620C per byte: the byte that followed it
+static int8_t buf_4[256];                        // 0x1001630C per byte: the byte that followed it, one further
+static int32_t n0x7FFFFFFF;                      // 0x1001640C the coder's interval: low
+static int32_t dword_10016410;                   // 0x10016410 ... high
+static int32_t n0x7FFFFFFF_1;                    // 0x10016414 ... bits pending
+static int32_t n362;                             // 0x10016418 ring positions
+static int8_t *buf;                              // 0x1001641C
+static int32_t n362_0;                           // 0x10016420
+static int8_t *buf_1;                            // 0x10016424
+static int32_t n362_1;                           // 0x10016428
+static int8_t *buf_0;                            // 0x1001642C
+static int32_t dword_10016430;                   // 0x10016430 the next free tree node
+static int32_t dword_10016434;                   // 0x10016434
+static int32_t dword_10016438;                   // 0x10016438
+static int32_t dst_4;                            // 0x1001643C the end of the data in the window
+static int8_t *src_4;                            // 0x10016440 decompressing: the data not written yet
+static int32_t n13369344;                        // 0x10016444 the window's end, in bits
+static int32_t n4_0;                             // 0x10016448
+static int32_t n8_2;                             // 0x1001644C
+static int32_t n2_1;                             // 0x10016450 candidates found
+static int32_t dword_10016454;                   // 0x10016454
+static int32_t dword_1001645C;                   // 0x1001645C
+static int32_t n0x7FFFFFFF_2;                    // 0x10016460 decompressing: the code read so far
+static int32_t n8_1;                             // 0x10016468 the data coded, in bits
+static uint32_t n8;                              // 0x1001646C the position in the window, in bits
+static int32_t n8_3;                             // 0x10016470
+static int32_t n8_0;                             // 0x1001647C the last search's result: depth,
+static int32_t dst_0;                            // 0x10016480 ... slot,
+static int32_t dst_1;                            // 0x10016484 ... and what the slot held
+static int32_t dword_10016488;                   // 0x10016488
+static int32_t n4;                               // 0x1001648C
+static int32_t n2_0;                             // 0x10016490
+static int32_t dword_10016494;                   // 0x10016494
+static int32_t n0x4000;                          // 0x10016498
+static int32_t n0x2000;                          // 0x1001649C
+static int32_t n0xFFE;                           // 0x100164A0
+static int32_t n0x384;                           // 0x100164A4
+static int32_t dword_100164A8;                   // 0x100164A8
+static int32_t dword_100164AC;                   // 0x100164AC
+static int32_t dword_100164B0;                   // 0x100164B0 the previous byte
+static int32_t dword_100164B4;                   // 0x100164B4 the byte before it
+static int32_t dword_100164B8;                   // 0x100164B8
+static uint32_t n2048;                           // 0x100164BC the literal model's total
+static uint32_t n256;                            // 0x100164C0 the length model's total
+static int32_t dword_100164C4;                   // 0x100164C4
+static int32_t dword_100164C8;                   // 0x100164C8
+// The window: 0x198000 bytes of data, at 0x100166F0.  The code reads up to two
+// bytes before its start, where vbn had zeros.
+static int8_t window_space[16 + 0x198000];
+static int8_t *const dst_3 = window_space + 16;
+static int32_t dst[2 + 2 * 0x198000];            // 0x101AE6F0 the context tree: the root, then the nodes
+static int32_t buf_[0x33000 / 4];                // 0x10E6E6F0 a bit per position of the window: registered
+static int8_t buf_2[0x10000];                    // 0x10EB96F0 per two bytes of context: a count
 
 // ===========================================================================
 // vbn's C runtime: the one function the coder still calls.
@@ -390,12 +360,12 @@ static uint32_t __sub_10005251(uint32_t a1, int32_t n8)
     uint32_t thr = (uint32_t)(31 - __builtin_clz((uint32_t)dword_1000CA4C + 32)) << 6;
     if (depth > thr) {
       if (leaf <= 0 && pos + (uint32_t)leaf >= 0x800) {
-        _bittestandcomplement(((void *)&buf_), (int32_t)(pos >> 3));
+        _bittestandcomplement(((void *)::buf_), (int32_t)(pos >> 3));
         *slot = -(int32_t)((pos >> 3) << 3);
         dword_10016434++;
       }
     } else if (leaf <= 0) {
-      _bittestandcomplement(((void *)&buf_), (int32_t)(pos >> 3));
+      _bittestandcomplement(((void *)::buf_), (int32_t)(pos >> 3));
       int32_t v = -(int32_t)((pos >> 3) << 3);
       int32_t *node = (int32_t *)(uintptr_t)dword_10016430;
       node[0] = v;
@@ -908,7 +878,7 @@ static int32_t __sub_100064C0(int32_t a1, uint32_t *p_n0x10000, uint32_t n8)
     v5 = n2 - n2_0;
     n2_0 += v5;
     n256 = 256;
-    i = &i_;
+    i = ::i_;
     n2048 = ::n2048;
     do
     {
@@ -1090,7 +1060,7 @@ LABEL_52:
       *v36 = (uint32_t)*v36 >> 1;
     }
     v38 = v86;
-    v39 = (uint32_t *)dword_1000F058;
+    v39 = (uint32_t *)(::dword_1000F060 - 2);
     n2_2 = ::n2_1;
     if ( (uint32_t)n0x384 < 0x6C9 )
     {
@@ -1160,9 +1130,9 @@ LABEL_52:
   }
   n0x10000 = *p_n0x10000;
   if ( dword_1000D4C4 )
-    v91 = __sub_100061F4(::n2048, (uint32_t *)p_n0x10000, (uint8_t)dst_3[n8 >> 3], &i_);
+    v91 = __sub_100061F4(::n2048, (uint32_t *)p_n0x10000, (uint8_t)dst_3[n8 >> 3], ::i_);
   else
-    v91 = __sub_100061F4(::n2048, (uint32_t *)p_n0x10000, -1, &i_);
+    v91 = __sub_100061F4(::n2048, (uint32_t *)p_n0x10000, -1, ::i_);
   v58 = (*p_n0x10000 - n0x10000) << 8;
   n0x384 = (v58 + (n0x384 << 8) - n0x384) >> 8;
   v58 *= 2;
@@ -1237,7 +1207,7 @@ LABEL_52:
     {
       do
       {
-        if ( i_1 <= &i_ )
+        if ( i_1 <= ::i_ )
           break;
         *i_1 = v68;
         *v66 = v67;
@@ -1276,7 +1246,7 @@ LABEL_52:
       {
         do
         {
-          if ( i_2 >= i_4 )
+          if ( i_2 >= (int32_t *)::i_ + 2 * 256 )
             break;
           *v74 = v77;
           *i_2 = v76;
@@ -1328,7 +1298,7 @@ static int32_t __sub_10005C50(uint32_t *p_n0x10000, uint32_t *a2, uint32_t n8)
     i_5[0] = 5 * i_5[0] / (v5 + (v5 >> 4));
     ::n256 += i_5[0];
     n255 = 255;
-    v6 = &dst_3[-dword_1000D55C[0] >> 3];
+    v6 = &dst_3[-(::dword_1000D558 + 1)[0] >> 3];
     v75 = v6;
     dword_1001645C = (int32_t)&dst_3[n8 >> 3];
     if ( (dword_1001645C - (uint32_t)v6) < 0xFF )
@@ -1336,7 +1306,7 @@ static int32_t __sub_10005C50(uint32_t *p_n0x10000, uint32_t *a2, uint32_t n8)
     if ( dst_4 - dword_1001645C < n255 )
       n255 = dst_4 - dword_1001645C;
     v7 = (uint8_t)*v6;
-    dword_1000D55C[0] = v7;
+    (::dword_1000D558 + 1)[0] = v7;
     if ( (uint8_t)v7 == (uint8_t)(buf_3[dword_100164B0]))
     {
       n2 = 1;
@@ -1345,7 +1315,7 @@ static int32_t __sub_10005C50(uint32_t *p_n0x10000, uint32_t *a2, uint32_t n8)
     }
     v8 = 0;
     v9 = dword_1000F060;
-    v10 = dword_1000D560;
+    v10 = (::dword_1000D558 + 2);
     BYTE1(v6) = n2_1;
     LOBYTE(v6) = 1;
     if ( (uint8_t)n2_1 > 1u )
@@ -1440,16 +1410,16 @@ LABEL_33:
         _BitScanReverse(&v24, v22 + 1);
         v25 = (v23 >> (v24 & 31)) + v23;
         *(uint32_t *)buf__0[0] = v25;
-        LOBYTE(dword_100164C8) = dword_1000D55C[0];
-        if ( buf_2[dword_1000D55C[0]] )
+        LOBYTE(dword_100164C8) = (::dword_1000D558 + 1)[0];
+        if ( buf_2[(::dword_1000D558 + 1)[0]] )
         {
-          if ( (uint8_t)buf_2[dword_1000D55C[0]] > 1u )
+          if ( (uint8_t)buf_2[(::dword_1000D558 + 1)[0]] > 1u )
           {
-            if ( (uint8_t)buf_2[dword_1000D55C[0]] > 2u )
+            if ( (uint8_t)buf_2[(::dword_1000D558 + 1)[0]] > 2u )
             {
-              if ( (uint8_t)buf_2[dword_1000D55C[0]] > 3u )
+              if ( (uint8_t)buf_2[(::dword_1000D558 + 1)[0]] > 3u )
               {
-                if ( (uint8_t)buf_2[dword_1000D55C[0]] > 5u )
+                if ( (uint8_t)buf_2[(::dword_1000D558 + 1)[0]] > 5u )
                 {
                   v29 = v25 >> 2;
                 }
@@ -1500,14 +1470,14 @@ LABEL_33:
                                             / (((uint32_t)(dword_100164A8 + 1935 - n0x384) >> 3) + 1)) << ((v32 & 0x1F) & 31))
           / v8;
       v34 = v70;
-      v35 = dword_1000F058;
+      v35 = (::dword_1000F060 - 2);
       do
       {
         v35 += 2;
         v36 = n4 + ((v33 * (uint64_t)(uint32_t)*v35) >> (v32 & 31));
         ::n256 += v36;
         v37 = v35[1];
-        v38 = (uint32_t *)(8 * v37 + 268499040);
+        v38 = (uint32_t *)&::i_5[2 * v37];
         buf__0[v37] -= (int32_t)v35;
         v39 = i_5[2 * v37];
         *v35 = v39;
@@ -1568,7 +1538,7 @@ LABEL_76:
     else
     {
       n256_1 = ::n256;
-      v41 = (uint32_t *)(8 * n255 + 268499048);
+      v41 = (uint32_t *)&::i_5[2 * n255 + 2];
       v42 = 255 - n255;
       do
       {
@@ -1813,7 +1783,7 @@ LABEL_21:
     && dword_10016438 < (uint32_t)dword_10016454
     && (uint8_t)dst_3[(uint32_t)-dst_1 >> 3] != dword_10016488 )
   {
-    dword_1000D55C[0] = dst_1;
+    (::dword_1000D558 + 1)[0] = dst_1;
     v21 = (dword_10016454 - dword_10016438) << (n4_0-- & 31);
     ++n2_1;
     dword_1000D558[0] = v21;
@@ -1834,7 +1804,7 @@ LABEL_21:
         v25 <<= (v26 & 31) >> 1;
       }
       {   // the walk returns its cursor in ECX, which Hex-Rays could not see (v27)
-        VbnWalk w = { (uint8_t *)(8 * n2_1 + 268490072), n55 - n2_1, (int32_t)(uintptr_t)dst_3, (int32_t)v25 };
+        VbnWalk w = { (uint8_t *)&::dword_1000D558[2 * n2_1], n55 - n2_1, (int32_t)(uintptr_t)dst_3, (int32_t)v25 };
         vbn_walk2_entry((int32_t *)(uintptr_t)v23, &w);
         n2_1 = ((uintptr_t)w.out - (uintptr_t)dword_1000D558) >> 3;
       }
@@ -1846,7 +1816,7 @@ LABEL_21:
       {
         v24 = n2_1;
         dword_1000D558[2 * n2_1] = (dword_10016454 - dword_10016438) << (n4_0 & 31);
-        dword_1000D55C[2 * v24] = v23;
+        (::dword_1000D558 + 1)[2 * v24] = v23;
         n2_1 = v24 + 1;
         if ( v24 + 1 == n55 )
           __pe_sub_10006E22();
@@ -1999,7 +1969,7 @@ LABEL_20:
   }
   if ( dst_1 <= 0 && dword_10016438 < (uint32_t)dword_10016454 )
   {
-    dword_1000D55C[0] = dst_1;
+    (::dword_1000D558 + 1)[0] = dst_1;
     v21 = (dword_10016454 - dword_10016438) << (n4_0-- & 31);
     ++n2_1;
     dword_1000D558[0] = v21;
@@ -2020,7 +1990,7 @@ LABEL_20:
         v25 <<= (v26 & 31) >> 1;
       }
       {   // the walk returns its cursor in ECX, which Hex-Rays could not see (v27)
-        VbnWalk w = { (uint8_t *)(8 * n2_1 + 268490072), n55 - n2_1, 4, (int32_t)v25 };
+        VbnWalk w = { (uint8_t *)&::dword_1000D558[2 * n2_1], n55 - n2_1, 4, (int32_t)v25 };
         vbn_walk1_entry((int32_t *)(uintptr_t)v23, &w);
         n2_1 = ((uintptr_t)w.out - (uintptr_t)dword_1000D558) >> 3;
       }
@@ -2030,7 +2000,7 @@ LABEL_20:
     {
       v24 = n2_1;
       dword_1000D558[2 * n2_1] = (dword_10016454 - dword_10016438) << (n4_0 & 31);
-      dword_1000D55C[2 * v24] = (int32_t)v23;
+      (::dword_1000D558 + 1)[2 * v24] = (int32_t)v23;
       n2_1 = v24 + 1;
       if ( v24 + 1 == n55 )
         __pe_sub_10006E22();
@@ -2088,12 +2058,12 @@ static int32_t __sub_10004924(int32_t n0x10000)
   {
     __sub_100012A8((int8_t *)aVbnVer1001, // "                                                \nvbn ver.1...."
       0x2000u);
-    __sub_100048F0(4, (void *)src_3, (void *)aVbnVer1001);        // "                                                \nvbn ver.1...."
+    __sub_100048F0(4, (void *)((int32_t *)(::aVbnVer1001 + 0x2000)), (void *)aVbnVer1001);        // "                                                \nvbn ver.1...."
     __sub_1000490B(2048, (void *)&aVbnVer1001[16]);       // "                                                \nvbn ver.1...."
   }
   else
   {
-    __sub_100048F0(4, (void *)src_3, (void *)aVbnVer1001);        // "                                                \nvbn ver.1...."
+    __sub_100048F0(4, (void *)((int32_t *)(::aVbnVer1001 + 0x2000)), (void *)aVbnVer1001);        // "                                                \nvbn ver.1...."
     __sub_10000D0E(&aVbnVer1001[16], 0x2000u);// "                                                \nvbn ver.1...."
   }
   return n0x10000 - 0x10000;
@@ -2146,18 +2116,18 @@ static uint32_t __sub_100056C4(uint32_t *a4, int32_t n0x198000, uint32_t n8)
       dword_100164C4 = (uint32_t)dword_1000D558[2 * n2_1 - 2] >> 2;
     if ( (uint32_t)n2_1 >= 2 )
     {
-      _Data_size____10u_n = dword_1000D560;
+      _Data_size____10u_n = (::dword_1000D558 + 2);
       v8 = n2_1 - 1;
       v9 = dword_1000D558[0];
       do
       {
         if ( v9 != *_Data_size____10u_n )
           break;
-        dst = dword_1000D55C[0];
-        if ( dword_1000D55C[0] >= _Data_size____10u_n[1] )
+        dst = (::dword_1000D558 + 1)[0];
+        if ( (::dword_1000D558 + 1)[0] >= _Data_size____10u_n[1] )
         {
-          dst = _InterlockedExchange(_Data_size____10u_n + 1, dword_1000D55C[0]);
-          dword_1000D55C[0] = dst;
+          dst = _InterlockedExchange(_Data_size____10u_n + 1, (::dword_1000D558 + 1)[0]);
+          (::dword_1000D558 + 1)[0] = dst;
         }
         _Data_size____10u_n += 2;
         --v8;
@@ -2186,14 +2156,14 @@ static uint32_t __sub_100056C4(uint32_t *a4, int32_t n0x198000, uint32_t n8)
       {
         if ( dst_1 <= 0 && dst_1 + n8 >= 0x800 )
         {
-          _bittestandcomplement(&buf_, n8 >> 3);
+          _bittestandcomplement(::buf_, n8 >> 3);
           *(uint32_t *)dst_0 = -8 * (n8 >> 3);
           ++dword_10016434;
         }
       }
       else if ( dst_1 <= 0 )
       {
-        _bittestandcomplement(&buf_, n8 >> 3);
+        _bittestandcomplement(::buf_, n8 >> 3);
         v12 = -8 * (n8 >> 3);
         v13 = dword_10016430;
         *(uint32_t *)dword_10016430 = v12;
@@ -2212,10 +2182,10 @@ static uint32_t __sub_100056C4(uint32_t *a4, int32_t n0x198000, uint32_t n8)
         ++v19;
       }
     }
-    v15 = (uint8_t)byte_100166EF[n8 >> 3];
+    v15 = (uint8_t)(::dst_3 - 1)[n8 >> 3];
     dword_100164B0 = v15;
     if ( n8 >> 3 != 1 )
-      v15 = (uint8_t)byte_100166EF[(n8 >> 3) - 1];
+      v15 = (uint8_t)(::dst_3 - 1)[(n8 >> 3) - 1];
     dword_100164B4 = v15;
     if ( p_n0x10000 >= 0x10000 )
     {
@@ -2254,7 +2224,7 @@ static uint32_t __sub_100050F8(void)
     pos += 8;
     if (pos >= n8)
       return pos;
-    if (!_bittest(((const void *)&buf_), (int32_t)(pos >> 3)))
+    if (!_bittest(((const void *)::buf_), (int32_t)(pos >> 3)))
       continue;
     const uint8_t *p = ((const uint8_t *)dst_3) + (pos >> 3) - 1;     // EDI
     int32_t at = (int32_t)pos;                          // ESI
@@ -2328,15 +2298,15 @@ static void __sub_10004A5F(uint32_t n0x198000)
     n2048 = 2048;
     for ( i = 0; i < 0x100; ++i )
     {
-      *(&i_ + 2 * i) = 8;
-      dword_10010464[2 * i] = i;
-      dword_10010060[i] = 8 * i + 268502112;
+      *(::i_ + 2 * i) = 8;
+      ((int32_t *)::i_ + 1)[2 * i] = i;
+      dword_10010060[i] = (int32_t)(uintptr_t)(::i_ + 2 * i);
     }
     n256 = 256;
     for ( i = 0; i < 0x100; ++i )
     {
       i_5[2 * i] = 1;
-      dword_1000F864[2 * i] = i;
+      (::i_5 + 1)[2 * i] = i;
     }
     __sub_100091DC(buf, 0xFFu, 0x5ACu);
     __sub_100091DC(buf_0, 0xFFu, 0x1000u);
@@ -2364,21 +2334,13 @@ static void __sub_10004A5F(uint32_t n0x198000)
     dword_100164A8 = 0;
     if ( n0x198000 <= 0x198000 )
     {
-      if ( dword_1000D4C4 || dword_1000CA4C )
-      {
-        n13369344 = 8 * n0x198000;
-        dst_4 = (int32_t)&::dst_3[n0x198000];
-      }
-      else
-      {
-        n13369344 = 8 * (n0x198000 + 256);
-        dst_4 = (int32_t)dword_100167F0 + n0x198000;
-      }
+      n13369344 = 8 * n0x198000;
+      dst_4 = (int32_t)&::dst_3[n0x198000];
     }
     else
     {
       n13369344 = 13369344;
-      dst_4 = (int32_t)::dst;
+      dst_4 = (int32_t)(uintptr_t)(::dst_3 + 0x198000);   // the window's end (vbn kept the tree right after it)
     }
     if ( dword_1000D4C4 )
     {
@@ -2398,11 +2360,11 @@ static void __sub_10004A5F(uint32_t n0x198000)
         aVbnVer1001, // "                                                \nvbn ver.1...."
         (uint32_t)n13369344 >> 2);
     }
-    __sub_1000490B(52224, (void *)&buf_);
-    dword_101AE6F4 = 0;
+    __sub_1000490B(52224, (void *)::buf_);
+    ::dst[1] = 0;
     ::dst[0] = 0;
     n8 = 0;
-    dword_10016430 = (int32_t)dword_101AE6F8;
+    dword_10016430 = (int32_t)(uintptr_t)(::dst + 2);
     dword_1000CA4C = 1;
     dword_10016494 = 1;
     dword_10016434 = 1;
@@ -2428,25 +2390,25 @@ static void __sub_10004A5F(uint32_t n0x198000)
       {
         __sub_100012A8((int8_t *)src_4, 0x66000u);
       }
-      else if ( src_4 < (int8_t *)src_5 )
+      else if ( src_4 < (int8_t *)(::dst_3 + 0x66000) )
       {
-        __sub_100012A8((int8_t *)src_4, (int8_t *)src_5 - src_4);
+        __sub_100012A8((int8_t *)src_4, (int8_t *)(::dst_3 + 0x66000) - src_4);
       }
     }
     src_4 -= 417792;
     if ( src_4 < ::dst_3 || (int32_t)src_4 < 0 )
       src_4 = ::dst_3;
-    __sub_100048F0(313344, (void *)src_5, (void *)::dst_3);
-    __sub_100048F0(39168, (void *)src_6, (void *)&buf_);
-    __sub_1000490B(13056, (void *)buf_5);
-    dword_101AE6F4 = 0;
+    __sub_100048F0(313344, (void *)(::dst_3 + 0x66000), (void *)::dst_3);
+    __sub_100048F0(39168, (void *)(::buf_ + 0xCC00 / 4), (void *)::buf_);
+    __sub_1000490B(13056, (void *)(::buf_ + 0x26400 / 4));
+    ::dst[1] = 0;
     ::dst[0] = 0;
-    dword_10016430 = (int32_t)dword_101AE6F8;
+    dword_10016430 = (int32_t)(uintptr_t)(::dst + 2);
     dword_1000CA4C = 1;
     n8 = 10027008;
     __sub_100050F8();
     if ( dword_1000D4C4 )
-      __sub_10000D0E((int8_t *)dst_5, 0x66000u);
+      __sub_10000D0E((int8_t *)(::dst_3 + 0x132000), 0x66000u);
     v12 = (uint32_t)n8_1 >> 3;
     if ( n0x198000 - ((uint32_t)n8_1 >> 3) < 0x66000 )
     {
@@ -2468,18 +2430,11 @@ static void __sub_10004A5F(uint32_t n0x198000)
 // main: vbn2 c|d input output.  A compressed stream is the input's size (4
 // bytes, little-endian) and then vbn's code for it, in vbn's MAX mode (`u`):
 // the archive around it -- header, title, volumes -- is gone.  The coder is
-// vbn's, run once, as vbn ran it for an archive; it runs on a stack inside
-// vbn's memory, as in the port, so every address it handles is an image
-// address.
+// vbn's, run once, as vbn ran it for an archive.
 // ===========================================================================
-static const uint32_t STACK_TOP = 0x13D00000, STACK_SIZE = 0x500000;   // down to the heap's end
 static const uint32_t MAX_SIZE = 0x1FFFFFFF;    // the coder counts the data in bits, in 32 bits
 
 static uint32_t vbn_size;
-static void vbn_main()
-{
-  __sub_10004A5F(vbn_size);
-}
 
 static void vbn_fail(const char *what, const char *name)
 {
@@ -2535,20 +2490,14 @@ int main(int argc, char **argv)
   if (vbn_compressing && fwrite(header, 1, 4, vbn_out) != 4)
     vbn_fail("cannot write", vbn_out_name);
 
-  image_map();
   dword_1000D4C4 = vbn_compressing;              // the direction
   n55 = 95;                                      // MAX mode (`u`; `b` is 55, `B` 31)
-  if (!vbn_compressing)
-    dword_1000CA4C = 1;                          // as in vbn's second run (see sub_10004A5F)
 
-  ucontext_t back, run;
-  getcontext(&run);
-  run.uc_stack.ss_sp = (void *)(STACK_TOP - STACK_SIZE);
-  run.uc_stack.ss_size = STACK_SIZE;
-  run.uc_link = &back;
-  makecontext(&run, vbn_main, 0);
-  if (swapcontext(&back, &run) < 0)
-    vbn_fail("cannot run", "the coder");
+  if ((int32_t)(uintptr_t)(dst + sizeof dst / sizeof *dst) < 0) {   // see vbn's globals
+    errno = 0;
+    vbn_fail("cannot run:", "vbn's tree lies above 0x80000000");
+  }
+  __sub_10004A5F(vbn_size);
 
   errno = 0;
   if (!vbn_compressing && vbn_out_left)
@@ -2562,363 +2511,3 @@ int main(int argc, char **argv)
   return 0;
 }
 
-// vbn's initialized data, 0x1000A08C..0x1000D400 (vbn.exe's .vbn section, from file
-// offset 0xA88C): its messages and tables, and the C runtime's variables.
-const uint8_t image_data[] =
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\0004\000"
-  "\000\000\000\360\000\000\020\003\020\000\015\012NULL code pointer called\015\012$\015\012Not eno"
-  "ugh memory\015\012$\015\012Bad stack size parameter\015\012$\015\012Stack Overflow\015\012$\000"
-  "\000\000                                                \012vbn ver.1.001 (freeeware)           "
-  "                                       \012Usage: vbn <command> <[path\\]archive_name>[\"context"
-  "_name] [<[path\\]mask>] [...]\012Command:\012   b       -Backup files to archive with recurse su"
-  "bdirectories\012Note: command \"b\" has 3 modifications : \"B\" FAST, \"b\" NORMAL, \"u\" MAX.\012"
-  "   bf      -Backup only files to archive without recurse subdirectories\012bN | bfN   -Where N i"
-  "s size (Kb) of Volumes (enable multiple Volumes)\012   r[PSW]  -Restore files from archive\012  "
-  " l[PSW]  -List archive contents    Note: PSW -password (len<17) can be absent\012   p[PSW]  -Err"
-  "or Protection  *.vbn->*.acp\012   c[PSW]  -Error Correction\012   d[PSW]  -Deprotection of archi"
-  "ve  *.acp->*.vbn\012EXAMPLES:\012vbn b win c:\\win  -packing of the catalogue WIN with subdirect"
-  "ories\012vbn B360 d:\\awin c:\\win\\*.* -FAST packing in multivolume archive (360 Kb.)\012vbn r "
-  "d:\\awin e:\\win3    -in catalogue WIN3 copy c:\\win\\*.* with subdirectories\012vbn uf53pKUK wr"
-  "c c:\\win\\*.rc -MAX.packing of only files *.rc from catalogue WIN\012in multivolume archive (53"
-  "Kb) with setting of protection mode with password=KUK\012vbn lKUK  wrc -contents of wrc.\?\?p   "
-  " Note: After r-operation wrc.\?\?p->wrc.\?\?b\012vbn rKUK  wrc -restore all data from wrc.\?\?p "
-  "in the current catalogue\012vbn pALmA wrc -setting of protection mode with password=ALmA  wrc.\?"
-  "\?b->wrc.\?\?p\012vbn cALmA wrc -testing and correcting of archive wrc.\?\?p\012vbn dALmA wrc -d"
-  "eprotected wrc.\?\?p->wrc.\?\?b\012                   Press any key to continue ......\000"
-  "\012                        \"TRAINABLE CHANNEL\" - MODE:\012\"TRAINABLE CHANNEL\" - compression"
-  " of another portion of information taking into\012account all earlier compressed information -co"
-  "ntext. For example: you transmit\012by modem a corrected version of the text transmitted yesterd"
-  "ay. In this case\012it's possible to expect 100-time compression, in other words, only the lates"
-  "t\012information was transmitted. Besides, there's a possibility to maximize\012compression of t"
-  "he data of a certain type. For example, create a context from\012the files *.txt and use this tx"
-  "t-context to compress txt-files. In addition,\012such an approach ensures additional data protec"
-  "tion against non-authorised\012access -it's impossible in principle without knowledge of the who"
-  "le background\012data being decoded. In unpacking the context should be the same as in packing.\012"
-  "The context file is renewed each time it is used. For example: you packed the\012text of an agre"
-  "ement using the context, the context file was renewed and can't\012be used to unpack the receive"
-  "d archive but the receiving party (in our example\012\"office\") has a yesterday's context ident"
-  "ical to yours up to the latest\012packing, that is why the transmitted archive in the office wil"
-  "l be unpacked\012and the context file will be renewed and identical to yours. If you want to\012"
-  "ban renewal of the context file set it in Read_Only.\012                        EXAMPLE:\012vbn "
-  "b john\"office.jon john.txt - John transmitted to the office a renewed text\012vbn r john\"john."
-  "ofs            - the office unpacked the transmitted text.\012In the given example the name of t"
-  "he context file is convenient to be\012interpreted as address, for John it has the name \"office"
-  ".jon\" and in the\012office the name \"john.ofs\".\012                   Press any key to contin"
-  "ue ......\000\012                        AGREEMENTS:\012vbn - does not have a possibility to add"
-  "/take out one or several files\012      in/out of the archive - only all the data.\012- files wi"
-  "th attributes: hidden, system, read_only are placed to archive too\012- Commands: l,p,c,d can be"
-  " used in the \"TRAINABLE CHANNEL\"-mode\012- sizes of the compressed data are not limited, but t"
-  "he maximum separate file\012  size is 64 Mb.\012- maximum number of files in the archive is 4096"
-  ".\012- maximum size of the title is 256 Kb (PATH(s)\\NAME(s).EXT(s)\\ATTRIBUTE(s)).\012- If ther"
-  "e is not enough disk space multivolume archive is created\012  automatically!  (1 Kb == 1024 byt"
-  "es)\012- name of the first volume *.00b...second *.01b...eleventh *.0ab...last *.vbn\012- unpack"
-  "ing begins with *.00b\012- for EP-mode (Errors Protection) names *.\?\?b are renamed *.\?\?p\012"
-  "- for EP-mode always \"multivolume archive\" mode is set (by default size of\012  volume is 13 M"
-  "b, if nothing else or more than 13 Mb is set)\012                        TECHNICAL REQUIREMENTS:"
-  "\012For work of vbn the following technical means are necessary:\012recommended - Pentium-133 RA"
-  "M 16 Mb;  minimum - i486SX-33 RAM 16 Mb;\012Operational systems are: MS-DOS 6.+,DOS session in W"
-  "IN_95 & OS/2 & WIN_NT-4.0\012  - minimum size of swapping 8 Mb;    maximum not less than 16 Mb;\012"
-  "  - size DPMI must be 16 Mb (sometimes it is sufficient to have 15 Mb)\012Note: Usage of archive"
-  "s in the background mode under WINDOWS is effective.\012      It can be recommended for computer"
-  "s with 20 Mb RAM and more.\012                   Press any key to continue ......\000"
-  "\015For the vbn-algorithm it's necessary to have 1550 Kbytes of FREE RAM (Cnv+Ext),\012or if fre"
-  "e memory is less, the program can be executed under WINDOWS_95, OS/2\012WIN_NT-4.0, as the progr"
-  "am uses its swapping, that results in dramatic slower\012packing/unpacking in big sizes of data "
-  "(with 3Mb free RAM, slowing down takes\012place with 100 Kb (or more) of nonpacked data).\012\012"
-  "===================================================================\012\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000123456789012345\000\000\000\000\000"
-  "\000\000\000\000'\000\000\000\000\000\000\000\001\000"
-  "\000\000\000\000\000\000\001\000\000\000Too many files. Wait the next version please...\000"
-  "Not enough memory\000\012Too many volumes.\000Invalid path\000"
-  "\\\000Too many files.\012Compress only 4096 files.\000"
-  "..\000.\000File %s is too large\012\000ERROR: CAN'T CHANGE DIR\000"
-  "*.*\000Can't create directory\000\000\000\000\000"
-  "Invalid associative model (context error) !!!\000"
-  ".vbn\000%s\000\012Archive volume is not found, input path: \000"
-  "Error archive file\000For decompressing use vbn 1.%02d.\012\000"
-  "Read error\000Process aborted\000CAN'T CREATE FILE\000"
-  "Disk full!\000\012Disk full, input new path: \000"
-  "\\\000Title more than 256 Kb\012\000Write error\000"
-  "\000Nothing do\000.00b\000.00p\000.acp\000Required associative model (context) of data...\000"
-  "This archive was created with using associative model (context).\000"
-  "\012Archive size is too big. vbn Protect can not be made.\000"
-  ".vbn\000Archive size is too big. vbn Protect can not be made.\000"
-  "You don't need compress.\012\000\012The file(s) is (are) too small.\012\000"
-  "%c\000Compress \000( FAST_mode ) :\000( NORMAL_mode ) :\000"
-  "( MAX_mode ) :\000%s \000\\\000Invalid associative model (context error) !!!\000"
-  "\012This archive was created without using associative model (context).\012For creating new asso"
-  "ciative model point out name of creating context.\012\000"
-  "Decompress \000  %s\012\000These is error in volume %s or in previous volume\012\000"
-  "Error archive file\000This archive is protected.\000"
-  ".00p\000.acp\000%s\000\012Archive volume is not found, input path: \000"
-  "Data can not be restore\000Required associative model (context) of data...\000"
-  "This archive was created with using associative model (context).\000"
-  "For decompressing use vbn 1.%02d.\012\000bytes     mm:dd:yy  hh:mm  ahrs\012\000"
-  "Size        Date    Time   Attr  Name\000Contents of archive  %s.vbn:\012\000"
-  "  %02d:%02d  \000%02d:%02d:%02d\000%-8d  \000a\000"
-  ".\000h\000r\000s  \000.  \000%s\\\000%s\012\000\012Total ... %d bytes ( %d file(s) )\012\000"
-  "vbn Protect running...\000.vbn\000%s\000\012Archive volume is not found, input path: \000"
-  "\\\000Error archive file\000\012Archive size is too big. vbn Protect can not be made.\000"
-  "Protect error\000Write error\000vbn Deprotect running...\000"
-  ".acp\000Data can not be restore\000vbn Correct running...\000"
-  "Context is saved.\000\000\000Maximal permissible size of block error ......... = %-9u bytes.\012"
-  "\000Maximal permissible quantity of stochastic errors = %-9u bits.\012\000"
-  "Invalid password !!\000Found Error !!!  %u bits corrected !!!\012\000"
-  "Error not found.\000\000\000f\012\000\000y\002\000"
-  "\000A\001\000\000\271\000\000\000M\000\000\000(\000"
-  "\000\000\030\000\000\000\026\000\000\000\022\000"
-  "\000\000\017\000\000\000\015\000\000\000\012\000"
-  "\000\000\007\000\000\000\005\000\000\000\003\000"
-  "\000\000\003\000\000\000\002\000\000\000\002\000"
-  "\000\000\002\000\000\000\001\000\000\000\001\000"
-  "\000\000\001\000\000\000\001\000\000\000 Data size= %-10u\012\000"
-  "vbn.EXE CRC Error !!!\000Code size= %u  Ratio = %u%% or %u.%05d bpc \000"
-  " Time = %d sec.            \012\000\000\000\000\000"
-  "\000\000\000\000\000\000\012\000\000\000\006\000"
-  "\000\000\004\000\000\000Passed... %-10u bytes\015\000"
-  "\000$\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\001\000"
-  "\000\?\023\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\?\023\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\320p\000"
-  "\000+\000\000\000\322p\000\000+\000\000\000\324p\000"
-  "\000+\000\000\000\326p\000\000+\000\000\000\330p\000"
-  "\000+\000\000\000\332p\000\000+\000\000\000\334p\000"
-  "\000+\000\000\000\336p\000\000+\000\000\000\340p\000"
-  "\000+\000\000\000q\002\000\000p\000\033\000>&\000"
-  "\000x\000\000\000\000\000\000\000\000\200\000\000"
-  "\000\000\000\000\000\000\000\000Floating point not loaded\000"
-  "\000\000i\000\000\000b\000\000\000o\000\000\000d\000"
-  "\000\000u\000\000\000x\000\000\000p\000\000\000X\000"
-  "\000\000s\000\000\000c\000\000\000e\000\000\000E\000"
-  "\000\000f\000\000\000g\000\000\000G\000\000\000[\000"
-  "\000\000n\000\000\000%\000\000\000\000\000\000\000"
-  "\336t\000\020wu\000\020\245u\000\020\323u\000\020\367u\000"
-  "\020\001v\000\020\001v\000\020\001v\000\020<v\000"
-  "\020\253v\000\020-w\000\020-w\000\020-w\000\020-w\000"
-  "\020-w\000\020Aw\000\020rw\000\020Xx\000\020fx\000"
-  "\020\000(null)\0000\0000x\0000X\000Floating point not loaded\000"
-  "\000\000-\000\000\000+\000\000\000 \000\000\000#\000"
-  "\000\0000\000\000\000*\000\000\000\000\000\000\000"
-  "`{\000\020\203{\000\020\212{\000\020\221{\000\020\230{\000"
-  "\020\237{\000\020\363\200\000\020l\000\000\000h\000"
-  "\000\000L\000\000\000N\000\000\000F\000\000\000i|\000"
-  "\020p|\000\020w|\000\020~|\000\020\205|\000\020s\000"
-  "\000\000%\000\000\000c\000\000\000d\000\000\000i\000"
-  "\000\000b\000\000\000o\000\000\000u\000\000\000p\000"
-  "\000\000X\000\000\000x\000\000\000f\000\000\000e\000"
-  "\000\000E\000\000\000g\000\000\000G\000\000\000n\000"
-  "\000\000\265|\000\020\022}\000\020\030}\000\020=}\000"
-  "\020=}\000\020\177}\000\020\210}\000\020\240}\000"
-  "\020\276}\000\020\356}\000\020\363}\000\020H\177\000"
-  "\020H\177\000\020H\177\000\020H\177\000\020H\177\000"
-  "\020\215\177\000\020 \000+\000-\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000@\030\030\030\010\010"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000         (((((                  H\020\020\020\020\020\020\020"
-  "\020\020\020\020\020\020\020\020\204\204\204\204\204\204\204\204\204\204\020\020\020\020\020\020"
-  "\020\201\201\201\201\201\201\001\001\001\001\001\001\001\001\001\001\001\001\001\001\001\001\001"
-  "\001\001\001\020\020\020\020\020\020\202\202\202\202\202\202\002\002\002\002\002\002\002\002\002"
-  "\002\002\002\002\002\002\002\002\002\002\002\020\020\020\020 \000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\007\000\000\000\000"
-  ":\\\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000PATH\000 \\\000\\\000:\000.\000"
-  "..\000\000\000\000\000\000\037\000;\000Z\000x\000"
-  "\227\000\265\000\324\000\363\000\021\0010\001N\001m\001\000"
-  "\000$\317\000\020\000\000\000\000$\317\000\020\012Heap is corrupted\012a\222\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\001\001\000"
-  "\000\000\000\000\000\001\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\002\001\000"
-  "\000\001\000\000\000\001\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\006\001\000"
-  "\000\002\000\000\000\001\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\200\001\000"
-  "\000\003\000\000\000\001\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\002\001\000"
-  "\000\004\000\000\000\001\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000P\224\000"
-  "\020\002\000\000\000\202\000\000\000\200\000\000"
-  "\000\001\000\000\000\201\000\000\000\342\224\000"
-  "\020\356\224\000\020\356\224\000\020\373\224\000"
-  "\020R\225\000\020\015\012Stack Overflow\015\012$\000"
-  "\035\237\000\020L\237\000\020v\237\000\020r\224\000"
-  "\020\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-  "\000\000\000\000\000\000\000\000\000\000\000\000\000";
-const uint32_t image_data_size = sizeof image_data - 1;     // 13172 bytes
