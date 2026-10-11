@@ -2,16 +2,8 @@
 // Hex-Rays: int __usercall sub_10004924@<eax>( int a1@<edx>, int count@<ebx>, char *p_j@<edi>, char *_Data_size____10u_n@<esi>, int n0x10000)
 // real convention: cdecl; register parameters dropped: int a1, int count, char *p_j, char *_Data_size____10u_n
 
-#ifndef __PE_DECL___sub_10000D0E
-#define __PE_DECL___sub_10000D0E
-typedef unsigned int t_sub_10000D0E(void *, unsigned int);
-static t_sub_10000D0E &__sub_10000D0E = *(t_sub_10000D0E *)0x10000D0E;
-#endif
-#ifndef __PE_DECL___sub_100012A8
-#define __PE_DECL___sub_100012A8
-typedef char t_sub_100012A8(void *, unsigned int);
-static t_sub_100012A8 &__sub_100012A8 = *(t_sub_100012A8 *)0x100012A8;
-#endif
+static inline unsigned int __fwd_sub_10004924_sub_10000D0E(void *a0, unsigned int a1) { return __sub_10000D0E((char *)a0, a1); }
+static inline char __fwd_sub_10004924_sub_100012A8(void *a0, unsigned int a1) { return __sub_100012A8((char *)a0, a1); }
 static inline void __fwd_sub_10004924_sub_100048F0(int a0, void *a1, void *a2) { __sub_100048F0(a0, (const void *)a1, (void *)a2); }
 static inline int __fwd_sub_10004924_sub_1000490B(int a0, void *a1) { return __sub_1000490B(a0, (void *)a1); }
 typedef int t__sub_10004924_dword_1000D4C4;
@@ -20,8 +12,8 @@ typedef char t__sub_10004924_aVbnVer1001[67067632];
 static t__sub_10004924_aVbnVer1001 &__sub_10004924_aVbnVer1001 = *(t__sub_10004924_aVbnVer1001 *)0x1000A110;
 typedef int t__sub_10004924_src_3[16764860];
 static t__sub_10004924_src_3 &__sub_10004924_src_3 = *(t__sub_10004924_src_3 *)0x1000C110;
-#define sub_10000D0E __sub_10000D0E
-#define sub_100012A8 __sub_100012A8
+#define sub_10000D0E __fwd_sub_10004924_sub_10000D0E
+#define sub_100012A8 __fwd_sub_10004924_sub_100012A8
 #define sub_100048F0 __fwd_sub_10004924_sub_100048F0
 #define sub_1000490B __fwd_sub_10004924_sub_1000490B
 #define dword_1000D4C4 __sub_10004924_dword_1000D4C4

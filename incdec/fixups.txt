@@ -4,3 +4,12 @@ sub_100056C4	sub_1000703B(v6, 0);\n      sub_10005989(::dst);	vbn_restartable((v
 sub_100056C4	sub_1000703B(v6, 0);\n      sub_100053E2(::dst);	vbn_restartable((void *)0x100053E2, (int)(uintptr_t)::dst);   // sub_1000703B(0); sub_100053E2(dst): see head.cpp
 sub_100056C4	sub_100079DA(aPassed10uBytes);	sub_100079DA(aPassed10uBytes, ((unsigned int)(::n8_1 - n8_3) >> 3) + v19);
 sub_100006FA	v5 = sub_100079DA(aFileSIsTooLarg);	v5 = sub_100079DA(aFileSIsTooLarg, (char *)i + 30);   // push i+1Eh: the name
+sub_10001DAB	v13 = v10 - 1;	v13 = -1;   // dec ecx: the open's mode (ECX = 0) survives the call
+sub_10001DAB	v18 = v16 - 1;	v18 = -1;   // dec ecx: the open's mode (ECX = 0) survives the call
+sub_10001DAB	v24 = v22 - 1;	v24 = -1;   // dec ecx: the open's mode (ECX = 0) survives the call
+sub_10001DAB	sub_100079DA(aForDecompressi);	sub_100079DA(aForDecompressi, (unsigned __int8)::n2);
+sub_10002017	sub_10008439();	sub_10008439((char *)&src_0, dst);   // push dst; push offset src_0: rename(src_0, dst)
+sub_10000D0E	sub_100072C5(aS);	sub_100072C5(aS, dst);
+sub_10000D0E	sub_100079DA(aForDecompressi);	sub_100079DA(aForDecompressi, (unsigned __int8)::n2);
+sub_100012A8	sub_100072C5(aS);	sub_100072C5(aS, dst);
+sub_100012A8	::n13369312_1 < (signed int)::n13369312	(int)::n13369312_1 < (signed int)::n13369312   /* jge: signed */
