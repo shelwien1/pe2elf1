@@ -185,15 +185,24 @@ to the coder since and is maintained by hand:
   output writer are plain file I/O;
 - everything else is gone: the archive code, the file table and title, the
   directory scan, volumes, the DOS layer, the console output, the
-  associative ("context) model;
-- integer types are `<cstdint>`'s, the per-function views of VBN's globals are
-  one block of declarations, and the call forwarders are inlined (tools from
-  the `tools.zip` toolkit did part of this; see below).
+  associative ("context") model, and VBN's memory image at `0x10000000`;
+- VBN's globals are ordinary C++ objects in one commented block, named for
+  what they hold, each with the address `vbn.exe` kept it at; each function
+  is named for what it does, with its `vbn.exe` address;
+- integer types are `<cstdint>`'s throughout;
+- the parts the decompiler rendered worst are rewritten by hand: the context
+  tree search (`search_tree` and `search_excluding` are one function, and
+  their eight-way unrolled descents, carry and overflow arithmetic in
+  Hex-Rays' output, one loop), the subtree walks, `code_window` and
+  `coder_run`;
+- it compiles without a warning under `g++` and `clang++` `-Wall -Wextra`.
 
-The decompiled bodies still address VBN's globals at their original
-addresses and keep addresses in 32-bit integers, so `vbn2` is an i386
-program that maps VBN's 64 MB of memory at `0x10000000`, with VBN's
-initialized data embedded in the source.
+The coder's models and its arithmetic coder (`code_symbol`, `code_literal`,
+`code_match`) are still close to the decompiler's output: numbered locals,
+`goto`s, 64-bit arithmetic done in halves. The code keeps addresses in 32-bit
+integers, so `vbn2` is an i386 program (`-m32`); and the context tree tells a
+node (an address) from a leaf (a negated position) by its sign, so `main`
+checks that the tree lies below `0x80000000`.
 
 `tests/vbn2.py` is the gate every change to `vbn2.cpp` has to pass:
 

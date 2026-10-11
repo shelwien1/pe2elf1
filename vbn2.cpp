@@ -20,14 +20,12 @@
 #define _FILE_OFFSET_BITS 64        // stat() on i386 fails on 64-bit inode numbers otherwise
 #include <cerrno>
 #include <csetjmp>
-#include <cstdarg>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <ctime>
 #include <sys/stat.h>
-#include <unistd.h>
+#include <utility>
 
 #if !defined(__i386__)
 #error "vbn2.cpp is i386 code: build it with g++ -m32"
@@ -51,342 +49,272 @@ typedef uint32_t __attribute__((may_alias)) alias_uint32;
 #define LODWORD(x)    DWORDn(x, 0)
 #define HIDWORD(x)    DWORDn(x, sizeof(x) / 4 - 1)
 
-// A forward, byte-at-a-time copy (rep movsb), overlapping or not.
-static inline void *qmemcpy(void *dst, const void *src, uint32_t n)
-{
-  uint8_t *d = (uint8_t *)dst;
-  const uint8_t *s = (const uint8_t *)src;
-  while (n--)
-    *d++ = *s++;
-  return dst;
-}
-
 // count * size does not overflow T (unsigned)
 template <class T> static inline bool is_mul_ok(T count, T size)
 {
   return count == 0 || size == 0 || count <= T(-1) / size;
 }
 
-// The flags of x + y, computed at the wider operand's size, as x86 sets them.
-template <class T> static inline int8_t sign_of(T x)
-{
-  if (sizeof(T) == 1) return (int8_t)x < 0;
-  if (sizeof(T) == 2) return (int16_t)x < 0;
-  if (sizeof(T) == 4) return (int32_t)x < 0;
-  return (int64_t)x < 0;
-}
-template <class T, class U> static inline int8_t __CFADD__(T x, U y)
-{
-  uint32_t n = sizeof(T) > sizeof(U) ? sizeof(T) : sizeof(U);
-  if (n == 1) return (uint8_t)x > (uint8_t)(x + y);
-  if (n == 2) return (uint16_t)x > (uint16_t)(x + y);
-  if (n == 4) return (uint32_t)x > (uint32_t)(x + y);
-  return (uint64_t)x > (uint64_t)(x + y);
-}
-template <class T, class U> static inline int8_t __OFADD__(T x, U y)
-{
-  // overflow: both operands have one sign and the sum the other
-  if (sizeof(T) < sizeof(U)) {
-    U x2 = x;
-    int8_t sx = sign_of(x2);
-    return ((1 ^ sx) ^ sign_of(y)) & (sx ^ sign_of(U(x2 + y)));
-  }
-  T y2 = y;
-  int8_t sx = sign_of(x);
-  return ((1 ^ sx) ^ sign_of(y2)) & (sx ^ sign_of(T(x + y2)));
-}
-
 // Intrinsics, with the x86 semantics the decompiler assumed.  bsr leaves its
 // destination unchanged for a zero source, as the CPU does.
 static inline uint8_t _BitScanReverse(uint32_t *idx, uint32_t v)
 { if (!v) return 0; *idx = 31 - __builtin_clz(v); return 1; }
-static inline uint8_t _BitScanReverse(int32_t *idx, uint32_t v)
-{ return _BitScanReverse((uint32_t *)idx, v); }
 // bt/btc with a memory operand address a bit string: the offset is signed and
 // may run past the first dword.
 static inline uint8_t _bittest(const void *base, int32_t bit)
 { return (((const uint8_t *)base)[bit >> 3] >> (bit & 7)) & 1; }
 static inline uint8_t _bittestandcomplement(void *base, int32_t bit)
 { uint8_t *p = (uint8_t *)base + (bit >> 3), m = 1 << (bit & 7), o = *p & m; *p ^= m; return o != 0; }
-template <class T, class V> static inline T _InterlockedExchange(T *p, V v)
-{ T o = *p; *p = (T)v; return o; }
 
 // ===========================================================================
-// vbn's globals: the objects vbn.exe kept in its data and BSS, each with
-// storage of its own now.  Names are IDA's (Hex-Rays named many after a string
-// it saw at the address, which says nothing about the object); the comment
-// gives the address and what the code uses it for.  Sizes are what the code
-// reaches.  The tree code tells a node (an address) from a leaf (a position,
-// negated) by its sign, so these have to sit below 0x80000000, which main()
-// checks.
+// vbn's globals, each with storage of its own.  The comment after a name gives
+// the address vbn.exe kept it at.  Sizes are what the code reaches.  The tree
+// code tells a node (an address) from a leaf (a position, negated) by its
+// sign, so the tree has to sit below 0x80000000, which main() checks.
 // ===========================================================================
-static int8_t aVbnVer1001[0x2010];               // 0x1000A110 the code buffer (vbn reused its banner's bytes)
-static const int32_t Data_size____10u_n[23] = {  // 0x1000C97C the length model's initial counts
-  2662, 633, 321, 185, 77, 40, 24, 22, 18, 15, 13, 10, 7, 5, 3, 3, 2, 2, 2, 1, 1, 1, 1 };
-static int32_t dword_1000CA4C;                   // 0x1000CA4C nodes in the context tree
-static const int32_t dword_1000CA54[3] = { 10, 6, 4 };   // 0x1000CA54 by mode (n55 >> 5)
-static int32_t n55;                              // 0x1000D4B0 candidates the search may return
-static int32_t dword_1000D4C4;                   // 0x1000D4C4 compressing (1) or decompressing (0)
-static int32_t dword_1000D558[2 * 95];           // 0x1000D558 the candidates: n55 pairs
-static int32_t dword_1000D850[1284];             // 0x1000D850 the search's path through the tree
-static int32_t buf__0[256];                      // 0x1000EC60 per byte: its pair in dword_1000F060, or 0
-// 0x1000F060 the candidates' bytes: pairs.  Loops over it start one pair
-// before it (and step before they read), so that pair is storage too.
-static int32_t F060_space[2 + 2 * 256];
-static int32_t *const dword_1000F060 = F060_space + 2;
-static int32_t i_5[2 * 256];                     // 0x1000F860 the length model: {count, length} pairs
-static int32_t dword_10010060[256];              // 0x10010060 per byte: its pair in i_
-// 0x10010460 the literal model: {count, byte} pairs, sorted.  Its bubble
-// steps read one pair past either end before their bound check stops them;
-// vbn had other tables there, the padding holds zeros.
-static uint32_t i_space[2 + 2 * 256 + 2];
-static uint32_t *const i_ = i_space + 2;
-static int32_t i_4[363];                         // 0x10010C60 a ring (buf)
-static int32_t buf_6[1024];                      // 0x1001120C a ring (buf_0)
-static int32_t buf_7[4096];                      // 0x1001220C the length model's history (buf_1)
-static int8_t buf_3[256];                        // 0x1001620C per byte: the byte that followed it
-static int8_t buf_4[256];                        // 0x1001630C per byte: the byte that followed it, one further
-static int32_t n0x7FFFFFFF;                      // 0x1001640C the coder's interval: low
-static int32_t dword_10016410;                   // 0x10016410 ... high
-static int32_t n0x7FFFFFFF_1;                    // 0x10016414 ... bits pending
-static int32_t n362;                             // 0x10016418 ring positions
-static int8_t *buf;                              // 0x1001641C
-static int32_t n362_0;                           // 0x10016420
-static int8_t *buf_1;                            // 0x10016424
-static int32_t n362_1;                           // 0x10016428
-static int8_t *buf_0;                            // 0x1001642C
-static int32_t dword_10016430;                   // 0x10016430 the next free tree node
-static int32_t dword_10016434;                   // 0x10016434
-static int32_t dword_10016438;                   // 0x10016438
-static int32_t dst_4;                            // 0x1001643C the end of the data in the window
-static int8_t *src_4;                            // 0x10016440 decompressing: the data not written yet
-static int32_t n13369344;                        // 0x10016444 the window's end, in bits
-static int32_t n4_0;                             // 0x10016448
-static int32_t n8_2;                             // 0x1001644C
-static int32_t n2_1;                             // 0x10016450 candidates found
-static int32_t dword_10016454;                   // 0x10016454
-static int32_t dword_1001645C;                   // 0x1001645C
-static int32_t n0x7FFFFFFF_2;                    // 0x10016460 decompressing: the code read so far
-static int32_t n8_1;                             // 0x10016468 the data coded, in bits
-static uint32_t n8;                              // 0x1001646C the position in the window, in bits
-static int32_t n8_3;                             // 0x10016470
-static int32_t n8_0;                             // 0x1001647C the last search's result: depth,
-static int32_t dst_0;                            // 0x10016480 ... slot,
-static int32_t dst_1;                            // 0x10016484 ... and what the slot held
-static int32_t dword_10016488;                   // 0x10016488
-static int32_t n4;                               // 0x1001648C
-static int32_t n2_0;                             // 0x10016490
-static int32_t dword_10016494;                   // 0x10016494
-static int32_t n0x4000;                          // 0x10016498
-static int32_t n0x2000;                          // 0x1001649C
-static int32_t n0xFFE;                           // 0x100164A0
-static int32_t n0x384;                           // 0x100164A4
-static int32_t dword_100164A8;                   // 0x100164A8
-static int32_t dword_100164AC;                   // 0x100164AC
-static int32_t dword_100164B0;                   // 0x100164B0 the previous byte
-static int32_t dword_100164B4;                   // 0x100164B4 the byte before it
-static int32_t dword_100164B8;                   // 0x100164B8
-static uint32_t n2048;                           // 0x100164BC the literal model's total
-static uint32_t n256;                            // 0x100164C0 the length model's total
-static int32_t dword_100164C4;                   // 0x100164C4
-static int32_t dword_100164C8;                   // 0x100164C8
-// The window: 0x198000 bytes of data, at 0x100166F0.  The code reads up to two
-// bytes before its start, where vbn had zeros.
+// The direction, and the mode.
+static int32_t encoding;                          // 0x1000D4C4 1 compressing, 0 decompressing
+static int32_t max_cands;                         // 0x1000D4B0 how many candidates a search returns: 95 (MAX)
+static const int32_t mode_shift[3] = { 10, 6, 4 }; // 0x1000CA54 by mode, max_cands >> 5
+
+// The data: a window of 0x198000 bytes (at 0x100166F0) that slides by
+// 0x66000.  The code reads up to two bytes before its start, where vbn had
+// zeros.  Positions are bit positions, 8 per byte.
 static int8_t window_space[16 + 0x198000];
-static int8_t *const dst_3 = window_space + 16;
-static int32_t dst[2 + 2 * 0x198000];            // 0x101AE6F0 the context tree: the root, then the nodes
-static int32_t buf_[0x33000 / 4];                // 0x10E6E6F0 a bit per position of the window: registered
-static int8_t buf_2[0x10000];                    // 0x10EB96F0 per two bytes of context: a count
+static int8_t *const window = window_space + 16;
+static uint32_t window_pos;                       // 0x1001646C where coding is, in bits
+static int32_t window_bits;                       // 0x10016444 where the data in the window ends, in bits
+static int32_t data_end;                          // 0x1001643C ... and as an address
+static int32_t cur_ptr;                           // 0x1001645C the byte being coded
+static uint32_t total_bits;                       // 0x10016468 the data coded before the window, in bits
+static int32_t prev_byte;                         // 0x100164B0 the byte before the one being coded
+static int32_t prev_byte2;                        // 0x100164B4 ... and the one before that
+static int8_t next_byte[256];                     // 0x1001620C per byte: the byte that followed it last
+static int8_t next_byte2[256];                    // 0x1001630C per byte: the byte that came two after it last
+
+// The context tree: a binary tree over the data read backwards from each
+// position, one bit per level.  A slot holding a value > 0 points to a node
+// (two slots); a value <= 0 is a leaf, minus the position it registers.  A
+// node's two slots differ in bit 2 of their address: the code finds one's
+// sibling with `^ 4`.
+alignas(8) static int32_t tree[2 + 2 * 0x198000]; // 0x101AE6F0 the root, then the nodes
+static int32_t node_next;                         // 0x10016430 the next free node (an address)
+static int32_t tree_nodes;                        // 0x1000CA4C nodes in use
+static int32_t tree_updates;                      // 0x10016434 counts changes to the tree
+static int32_t registered[0x33000 / 4];           // 0x10E6E6F0 a bit per position in the window: in the tree
+
+// The search: from the position being coded, down the tree, collecting
+// earlier positions with the same context -- the candidates -- and a
+// weight for each.
+static int32_t cands[2 * 95];                     // 0x1000D558 {weight, -position} pairs
+static int32_t n_cands;                           // 0x10016450 how many
+static int32_t search_pos;                        // 0x1001644C where the search starts, in bits
+static int32_t search_path[1284];                 // 0x1000D850 the nodes the descent went through
+static int32_t search_depth;                      // 0x10016454 the depth the walk back up has reached
+static int32_t search_avg;                        // 0x10016438 the depth a candidate has to beat
+static int32_t search_gain;                       // 0x1001648C how far the last search beat it
+static int32_t weight_shift;                      // 0x10016448 the next candidate's weight shift (4 down to 0)
+static int32_t cand_floor;                        // 0x100164C4 a quarter of the weakest candidate's weight
+static int32_t excluded_byte;                     // 0x10016488 the byte a failed match predicted, or -1
+static int32_t found_at;                          // 0x1001647C where the last descent stopped: the bit position,
+static int32_t found_slot;                        // 0x10016480 ... the slot,
+static int32_t found_leaf;                        // 0x10016484 ... and what the slot held
+
+// Candidates grouped by the value they predict: a match length in
+// code_match, a byte in code_literal.  Loops over the groups start one pair
+// before them (and step before they read), so that pair is storage too.
+static int32_t group_slot[256];                   // 0x1000EC60 per value: its {weight, value} pair in groups, or 0
+static int32_t groups_space[2 + 2 * 256];
+static int32_t *const groups = groups_space + 2;
+
+// The match length model: a count for each length 0..255 (0: no match),
+// following the last 4096 lengths coded.
+static int32_t len_model[2 * 256];                // 0x1000F860 {count, length} pairs
+static uint32_t len_total;                        // 0x100164C0 the sum of the counts
+static const int32_t len_init_counts[23] = {     // 0x1000C97C the counts lengths 0..22 start with
+  2662, 633, 321, 185, 77, 40, 24, 22, 18, 15, 13, 10, 7, 5, 3, 3, 2, 2, 2, 1, 1, 1, 1 };
+static int32_t len_ring[4096];                    // 0x1001220C the last 4096 lengths
+static int32_t len_ring_pos;                      // 0x10016420
+static int32_t len_avg;                           // 0x100164A8 the average length coded, x128
+
+// The literal model: a count for each byte, kept sorted by count; the last
+// 363 literals add 16 to theirs.  Its re-sorting steps read one pair past
+// either end before their bound check stops them, so those pairs are
+// storage too (vbn had other tables there).
+static uint32_t lit_model_space[2 + 2 * 256 + 2];
+static uint32_t *const lit_model = lit_model_space + 2;
+static int32_t lit_slot[256];                     // 0x10010060 per byte: its pair in lit_model
+static uint32_t lit_total;                        // 0x100164BC the sum of the counts
+static int32_t lit_inc;                           // 0x10016490 what every count gets added (1..1024, by lit_cost8)
+static int32_t lit_resort;                        // 0x10016494 literals until the model is sorted again
+static int32_t lit_ring1[363];                    // 0x10010C60 the last 363 literals
+static int32_t lit_ring1_pos;                     // 0x10016418
+static int32_t lit_ring2[1024];                   // 0x1001120C the last 1024 literals, with the byte before each
+static int32_t lit_ring2_pos;                     // 0x10016428
+static int8_t ctx_count[0x10000];                 // 0x10EB96F0 per byte pair: its count in lit_ring2
+static int32_t ctx16;                             // 0x100164C8 the byte before and the byte coded, as a pair
+static int32_t literal_run;                       // 0x100164AC literals in a row whose pair was known
+static int32_t lit_threshold;                     // 0x100164B8 set by code_literal, weighs code_match's model
+static int32_t lit_cost8;                         // 0x100164A4 the bits a literal costs, x256, averaged over
+static int32_t lit_cost9;                         // 0x100164A0 ... 2^8, 2^9, 2^10 and 2^11 literals
+static int32_t lit_cost10;                        // 0x1001649C
+static int32_t lit_cost11;                        // 0x10016498
+
+// The arithmetic coder.
+static int8_t code_buf[0x2010];                   // 0x1000A110 8 KB of code, and 16 bytes more (vbn reused its banner)
+static int32_t code_low;                          // 0x1001640C the interval
+static int32_t code_high;                         // 0x10016410
+static int32_t code_pending;                      // 0x10016414 bits of the interval not settled yet
+static int32_t code_value;                        // 0x10016460 decompressing: the code read so far
 
 // ===========================================================================
-// vbn's C runtime: the one function the coder still calls.
+// The search's early exit.  vbn.exe's 0x1000703B records where the next call
+// returns to, and its 0x10006E22 returns from that call at once, from however
+// deep in the search: setjmp and longjmp, run_search() and search_exit().
+// The walks end the search through walk_exit when the candidates are full.
 // ===========================================================================
-#define __PE_DECL___sub_100091DC
-static int8_t *__sub_100091DC(void *buf, uint8_t c, uint32_t n)   // memset
+static jmp_buf search_jmp;
+[[noreturn]] static void search_exit(void) { longjmp(search_jmp, 1); }
+[[noreturn]] static void walk_exit(void)
 {
-  memset(buf, c, n);
-  return (int8_t *)buf;
+  n_cands = max_cands;
+  longjmp(search_jmp, 1);
 }
-
-// ===========================================================================
-// The compressor's early exit.  sub_1000703B records where the next call
-// returns to, and sub_10006E22 returns from that call at once, from however
-// deep in the search: setjmp and longjmp.  vbn_restartable(fn, arg) is the
-// pair of calls sub_100056C4 makes; the tree walkers end the search through
-// vbn_walk_exit when their output is full (n2_1 = n55, then the exit).
-// ===========================================================================
-static jmp_buf early_exit;
-template <class F> static __attribute__((noinline)) void vbn_restartable(F fn, int32_t arg)
-{
-  if (!setjmp(early_exit))
-    fn((int32_t *)(uintptr_t)arg);
-}
-#define __PE_DECL___pe_sub_10006E22
-[[noreturn]] static void __pe_sub_10006E22(void) { longjmp(early_exit, 1); }
-[[noreturn]] static void vbn_walk_exit(void)
-{
-  n2_1 = n55;
-  longjmp(early_exit, 1);
-}
-struct VbnWalk { uint8_t *out; int32_t left; int32_t aux; int32_t value; };   // ECX EDI EDX ESI
-
 
 // ===========================================================================
 // vbn's functions: the ones plain `u` and `r` run, callees first.
 // ===========================================================================
 
-// sub_100048F0 @ 0x100048F0 -- hand-written (incdec.md §4.1): copy a1 dwords src -> dst.
-// `rep movsd`: forward, a dword at a time.  Hex-Rays printed qmemcpy, a byte
-// copy, which differs from this when the ranges overlap by less than 4 bytes.
-static void __sub_100048F0(int32_t a1, void *src, void *dst)
-{
-  uint32_t *d = (uint32_t *)dst;
-  const uint32_t *s = (const uint32_t *)src;
-  for (uint32_t n = (uint32_t)a1; n; n--)
-    *d++ = *s++;
-}
-
-// sub_1000490B @ 0x1000490B -- generated by tools/extract.py from vbn.exe.c lines 5088..5092
-// Hex-Rays: int __stdcall sub_1000490B(int a1, void *buf)
-// real convention: stdcall, ret 8
-
-static int32_t __sub_1000490B(int32_t a1, void *buf)
-{
-  memset(buf, 0, 4 * a1);
-  return 0;
-}
-
-// sub_10004993 @ 0x10004993 -- generated by tools/extract.py from vbn.exe.c lines 5130..5176
-// Hex-Rays: unsigned int __stdcall sub_10004993(unsigned int a1)
-// real convention: stdcall, ret 4
-
-static uint32_t __sub_10004993(uint32_t a1)
+// code_flush (vbn.exe 0x10004993): end the code.  Writes into code_buf, from
+// bit `a1` on, the shortest tail -- a 0 and then 1s, or a 1 and then 0s --
+// that keeps every continuation inside the interval, resets the interval, and
+// returns the bit position after the tail.
+static uint32_t code_flush(uint32_t a1)
 {
   int32_t v7, v8;
   uint32_t v5, v6;
 
-  v7 = n0x7FFFFFFF_1;
+  v7 = code_pending;
   v6 = 1;
   v5 = 1;
-  n0x7FFFFFFF = (int32_t)((uint32_t)n0x7FFFFFFF << 1);   // shl: wraps
-  dword_10016410 = (int32_t)((uint32_t)dword_10016410 << 1);   // shl: wraps
+  code_low = (int32_t)((uint32_t)code_low << 1);   // shl: wraps
+  code_high = (int32_t)((uint32_t)code_high << 1);   // shl: wraps
   while ( v7-- )
   {
     ++v5;
-    if ( n0x7FFFFFFF >= 0 )
+    if ( code_low >= 0 )
       break;
-    n0x7FFFFFFF = (int32_t)((uint32_t)n0x7FFFFFFF << 1);   // shl: wraps
+    code_low = (int32_t)((uint32_t)code_low << 1);   // shl: wraps
   }
-  v8 = n0x7FFFFFFF_1;
+  v8 = code_pending;
   while ( v8-- )
   {
     ++v6;
-    if ( dword_10016410 < 0 )
+    if ( code_high < 0 )
       break;
-    dword_10016410 = (int32_t)((uint32_t)dword_10016410 << 1);   // shl: wraps
+    code_high = (int32_t)((uint32_t)code_high << 1);   // shl: wraps
   }
-  n0x7FFFFFFF = 0x7FFFFFFF;
+  code_low = 0x7FFFFFFF;
   if ( v5 > v6 )
   {
     v5 = v6;
-    n0x7FFFFFFF = 0x80000000;
+    code_low = 0x80000000;
   }
   while ( v5-- )
   {
-    if ( n0x7FFFFFFF < 0 )
+    if ( code_low < 0 )
       _bittestandcomplement(
-        (int32_t *)aVbnVer1001,          // "                                                \nvbn ver.1...."
+        (int32_t *)code_buf,
         a1);
     ++a1;
-    n0x7FFFFFFF = (int32_t)((uint32_t)n0x7FFFFFFF << 1);   // shl: wraps
-    --n0x7FFFFFFF_1;
+    code_low = (int32_t)((uint32_t)code_low << 1);   // shl: wraps
+    --code_pending;
   }
-  n0x7FFFFFFF = 0;
-  dword_10016410 = -1;
+  code_low = 0;
+  code_high = -1;
   return a1;
 }
 
-// sub_100050B0 @ 0x100050B0 -- generated by tools/extract.py from vbn.exe.c lines 5478..5495
-// Hex-Rays: int __stdcall sub_100050B0(int j)
-// real convention: stdcall, ret 4
-
-static int32_t __sub_100050B0(int32_t j)
+// len_model_add (vbn.exe 0x100050B0): count a length in the length model.
+// Its count goes up by 5 and the count of the length coded 4096 lengths ago
+// (from len_ring) down by 5; until the ring is full, len_total grows by 5
+// instead.  Returns that old length, or -1.
+static int32_t len_model_add(int32_t len)
 {
-  int32_t n362, *v2, result;
+  int32_t pos, *v2, result;
 
-  LOWORD(i_5[2 * j]) += 5;
-  n362 = n362_0;
-  n362_0 = ((uint16_t)n362_0 + 1) & 0xFFF;
-  v2 = (int32_t *)&buf_1[4 * n362];
+  LOWORD(len_model[2 * len]) += 5;
+  pos = len_ring_pos;
+  len_ring_pos = ((uint16_t)len_ring_pos + 1) & 0xFFF;
+  v2 = &len_ring[pos];
   result = *v2;
-  *v2 = j;
+  *v2 = len;
   if ( result >= 0 )
-    LOWORD(i_5[2 * result]) -= 5;
+    LOWORD(len_model[2 * result]) -= 5;
   else
-    n256 += 5;
+    len_total += 5;
   return result;
 }
 
-// sub_10005251 @ 0x10005251 -- hand-written (incdec.md §4.1): update the context tree.
-// Assembly that keeps the bit position in EBP after `mov ebp,esi`; Hex-Rays
-// still read EBP as the frame pointer (&savedregs).  What it does (vbn.asm):
+// tree_insert (vbn.exe 0x10005251): register positions in the context tree.
+// In vbn.exe it is assembly that keeps the bit position in EBP, which
+// Hex-Rays read as the frame pointer (&savedregs); this is written from it.
 //
-// For iters = min(bsr(a1 + a1/2 + 1) + 1, a1) positions pos = n8, n8+8, ...:
-//  - find a slot: the first time, the one the previous search left in the
-//    globals n8_0/dst_0/dst_1 (bit position, slot address, slot value); after
-//    that, descend from the root `dst` reading the data bits backwards from
-//    byte pos/8-1 (bit 1 -> child [0], bit 0 -> child [1]) to the first slot
+// For iters = min(bsr(count + count/2 + 1) + 1, count) positions pos = bitpos,
+// bitpos+8, ...:
+//  - find a slot: the first time, the one the last search left in found_at,
+//    found_slot and found_leaf (bit position, slot address, slot value); after
+//    that, descend from the root reading the data bits backwards from byte
+//    pos/8-1 (bit 1 -> child [0], bit 0 -> child [1]) to the first slot
 //    holding a value <= 0, or to node[0] of the last node when the bits run out;
 //  - depth = pos - (bit position where the descent stopped); then
-//      depth <= 64*bsr(nodes+32):  an empty leaf becomes a new node from the
-//          allocator at dword_10016430, both children -8*(pos/8); the sibling
-//          slot being a node bumps dword_10016434;
+//      depth <= 64*bsr(tree_nodes+32): an empty leaf becomes a new node from
+//          node_next, both children -8*(pos/8); the sibling slot being a node
+//          bumps tree_updates;
 //      deeper: a leaf older than 0x800 is refreshed to -8*(pos/8);
-//    either way bit pos/8 of the bitmap buf_ is toggled.
-// Returns 0 (EAX after the count runs out); stdcall, ret 8.
-
-static uint32_t __sub_10005251(uint32_t a1, int32_t n8)
+//    either way bit pos/8 of `registered` is toggled.
+static void tree_insert(uint32_t count, int32_t bitpos)
 {
-  uint32_t t = a1 + (a1 >> 1) + 1, iters = t ? 31 - __builtin_clz(t) : 0;
+  uint32_t t = count + (count >> 1) + 1, iters = t ? 31 - __builtin_clz(t) : 0;
   iters += 1;
-  if (iters > a1)
-    iters = a1;
-  uint32_t pos = (uint32_t)n8;                         // EBP
-  uint32_t at = (uint32_t)n8_0;                  // ESI
-  int32_t *slot = (int32_t *)(uintptr_t)dst_0;   // EBX
-  int32_t leaf = dst_1;                          // EDX
+  if (iters > count)
+    iters = count;
+  uint32_t pos = (uint32_t)bitpos;                         // EBP
+  uint32_t at = (uint32_t)found_at;                  // ESI
+  int32_t *slot = (int32_t *)(uintptr_t)found_slot;   // EBX
+  int32_t leaf = found_leaf;                          // EDX
   for (;;) {
     uint32_t depth = pos - at;
-    uint32_t thr = (uint32_t)(31 - __builtin_clz((uint32_t)dword_1000CA4C + 32)) << 6;
+    uint32_t thr = (uint32_t)(31 - __builtin_clz((uint32_t)tree_nodes + 32)) << 6;
     if (depth > thr) {
       if (leaf <= 0 && pos + (uint32_t)leaf >= 0x800) {
-        _bittestandcomplement(((void *)::buf_), (int32_t)(pos >> 3));
+        _bittestandcomplement(((void *)::registered), (int32_t)(pos >> 3));
         *slot = -(int32_t)((pos >> 3) << 3);
-        dword_10016434++;
+        tree_updates++;
       }
     } else if (leaf <= 0) {
-      _bittestandcomplement(((void *)::buf_), (int32_t)(pos >> 3));
+      _bittestandcomplement(((void *)::registered), (int32_t)(pos >> 3));
       int32_t v = -(int32_t)((pos >> 3) << 3);
-      int32_t *node = (int32_t *)(uintptr_t)dword_10016430;
+      int32_t *node = (int32_t *)(uintptr_t)node_next;
       node[0] = v;
       node[1] = v;
       *slot = (int32_t)(uintptr_t)node;
-      dword_10016430 += 8;
-      dword_1000CA4C++;
+      node_next += 8;
+      tree_nodes++;
       slot = (int32_t *)((uintptr_t)slot ^ 4);
       if (*slot > 0)
-        dword_10016434++;
+        tree_updates++;
     }
     if (--iters == 0)
-      return 0;
+      return;
     pos += 8;
     // descend from the root
-    int32_t *node = ((int32_t *)dst);
+    int32_t *node = ((int32_t *)tree);
     at = pos;
     slot = node;
     if (at == 0)
       continue;                                        // or esi,esi; je (leaf unchanged)
-    const uint8_t *p = ((const uint8_t *)dst_3) + (pos >> 3) - 1;
+    const uint8_t *p = ((const uint8_t *)window) + (pos >> 3) - 1;
     uint8_t al = *p;
     for (;;) {
       int32_t k, found = 0;
@@ -417,141 +345,110 @@ static uint32_t __sub_10005251(uint32_t a1, int32_t n8)
   }
 }
 
-// sub_10006E22 @ 0x10006E22 -- the longjmp half of the compressor's early exit
-// (mov esp,[10016474]; mov ebp,[10016478]; ret 4): __pe_sub_10006E22, above.
+// walk_cands (vbn.exe 0x10006CB0; 0x10006E31 when excluding): add the leaves
+// of a subtree to the candidates, left to right, as {weight, leaf} pairs.  A
+// node's right leaf counts only when its left child is a node (vbn compares
+// that slot with the node's address: a node's children are made after it, at
+// higher addresses).  Excluding, a leaf that predicts excluded_byte is
+// skipped.  In vbn.exe the walks are assembly with a register interface (EBX
+// node, ESI weight, ECX output cursor, EDI how many pairs may still be
+// written; ECX and EDI come back); here the caller passes a Walk.  When no
+// more pairs may be written, the search ends (walk_exit).
+struct Walk { int32_t *out; int32_t left; int32_t weight; bool excluding; };
 
-// sub_10006CB0 @ 0x10006CB0 -- in-order walk of a context subtree, emitting its
-// leaves.  In vbn.exe it is assembly with a register interface (EBX node, EDX
-// offset of the right child, ESI value, ECX output cursor, EDI how many pairs
-// may still be written; ECX and EDI come back); here its two callers pass a
-// VbnWalk.  A field <= 0 is a leaf, > 0 a child.  emit(v) writes {value, v}
-// (v at +aux) and advances by 8; when the count runs out the search ends
-// through vbn_walk_exit.
-static inline void walk1_emit(int32_t v, VbnWalk *w)
+// Whether the byte at the position of `leaf`, the byte it predicts, is
+// excluded_byte.
+static inline bool predicts_excluded(int32_t leaf)
 {
-  *(int32_t *)w->out = w->value;
-  *(int32_t *)(w->out + w->aux) = v;
-  w->out += 8;
+  return (uint8_t)window[(uint32_t)-leaf >> 3] == excluded_byte;
+}
+static void walk_emit(int32_t leaf, Walk *w)
+{
+  w->out[1] = leaf;
+  if (w->excluding && predicts_excluded(leaf))
+    return;
+  w->out[0] = w->weight;
+  w->out += 2;
   if (--w->left == 0)
-    vbn_walk_exit();
+    walk_exit();
 }
-static void walk1(int32_t *node, VbnWalk *w)
+static void walk_cands(int32_t *node, Walk *w)
 {
-  int32_t l = node[0];
-  if (l > 0)
-    walk1((int32_t *)(uintptr_t)l, w);
+  if (node[0] > 0)
+    walk_cands((int32_t *)(uintptr_t)node[0], w);
   else
-    walk1_emit(l, w);
-  int32_t r = *(int32_t *)((uint8_t *)node + w->aux);
-  if (r > 0)
-    walk1((int32_t *)(uintptr_t)r, w);
+    walk_emit(node[0], w);
+  if (node[1] > 0)
+    walk_cands((int32_t *)(uintptr_t)node[1], w);
   else if (node[0] > (int32_t)(uintptr_t)node)    // cmp eax,[eax]; jle
-    walk1_emit(r, w);
-}
-static void vbn_walk1_entry(int32_t *node, VbnWalk *w)
-{
-  walk1(node, w);
+    walk_emit(node[1], w);
 }
 
-// sub_10006E31 @ 0x10006E31 -- the same walk as sub_10006CB0 with a different
-// emit, the right child always at +4, and `aux` a byte table instead of an
-// offset:
-//   emit(v): [out+4] = v; if table[(-v) >> 3] != dword_10016488 then
-//            [out] = value, advance by 8, and end the search when the count runs out.
-
-static inline void walk2_emit(int32_t v, VbnWalk *w)
-{
-  *(int32_t *)(w->out + 4) = v;
-  uint32_t t = (0u - (uint32_t)v) >> 3;                   // neg ebx; shr ebx,3
-  if ((uint32_t)((uint8_t *)(uintptr_t)w->aux)[t] != (uint32_t)dword_10016488) {
-    *(int32_t *)w->out = w->value;
-    w->out += 8;
-    if (--w->left == 0)
-      vbn_walk_exit();
-  }
-}
-static void walk2(int32_t *node, VbnWalk *w)
-{
-  int32_t l = node[0];
-  if (l > 0)
-    walk2((int32_t *)(uintptr_t)l, w);
-  else
-    walk2_emit(l, w);
-  int32_t r = node[1];
-  if (r > 0)
-    walk2((int32_t *)(uintptr_t)r, w);
-  else if (node[0] > (int32_t)(uintptr_t)node)    // cmp eax,[eax]; jle
-    walk2_emit(r, w);
-}
-static void vbn_walk2_entry(int32_t *node, VbnWalk *w)
-{
-  walk2(node, w);
-}
-
-// sub_100061F4 @ 0x100061F4 -- generated by tools/extract.py from vbn.exe.c lines 7101..7428
-// Hex-Rays: int __stdcall sub_100061F4(unsigned int a1, unsigned int *a2, int a3, _DWORD *i_1)
-// real convention: stdcall, ret 16
-
-
-static int32_t __sub_100061F4(uint32_t a1, uint32_t *a2, int32_t a3, uint32_t *i_1)
+// code_symbol (vbn.exe 0x100061F4): code one symbol with a frequency list of
+// {count, symbol} pairs whose counts sum to `total`.  Compressing (symbol >= 0),
+// the interval narrows to the symbol's share and the bits it settles go to
+// code_buf at *code_pos; decompressing (symbol < 0), the symbol is the one
+// whose share holds the code read so far.  Returns the symbol, and moves
+// *code_pos past the bits.
+static int32_t code_symbol(uint32_t total, uint32_t *code_pos, int32_t symbol, uint32_t *model)
 {
   bool v18, v31;
-  int32_t n0x7FFFFFFF, v24, n32, v27, v28, n0x7FFFFFFF_2;
-  uint32_t v4, *i, v6, v8, n0x7FFFFFFF_1, v11, v12, v13, v14, v15, v16, v17, v19, v20, v22, *i_3,
+  int32_t nbits, v24, n32, v27, v28, low;
+  uint32_t v4, *i, v6, v8, value, v11, v12, v13, v14, v15, v16, v17, v19, v20, v22, *i_3,
            v25, v29, *i_2, v34;
   uint64_t v7, v21;
   uint32_t v35; // [esp+14h] [ebp-4h]  high - low, which wraps
 
-  v34 = *a2;
-  v35 = (uint32_t)dword_10016410 - (uint32_t)::n0x7FFFFFFF;
-  if ( 2 * a1 > (uint32_t)dword_10016410 - (uint32_t)::n0x7FFFFFFF )
+  v34 = *code_pos;
+  v35 = (uint32_t)code_high - (uint32_t)::code_low;
+  if ( 2 * total > (uint32_t)code_high - (uint32_t)::code_low )
   {
-    v34 = __sub_10004993(*a2);
+    v34 = code_flush(*code_pos);
     v35 = -1;
   }
-  if ( a3 >= 0 )
+  if ( symbol >= 0 )
   {
     v4 = 0;
-    for ( i = i_1; a3 != i[1]; i += 16 )
+    for ( i = model; (uint32_t)symbol != i[1]; i += 16 )
     {
       v4 += *i;
-      if ( a3 == i[3] )
+      if ( (uint32_t)symbol == i[3] )
       {
         i += 2;
         break;
       }
       v4 += i[2];
-      if ( a3 == i[5] )
+      if ( (uint32_t)symbol == i[5] )
       {
         i += 4;
         break;
       }
       v4 += i[4];
-      if ( a3 == i[7] )
+      if ( (uint32_t)symbol == i[7] )
       {
         i += 6;
         break;
       }
       v4 += i[6];
-      if ( a3 == i[9] )
+      if ( (uint32_t)symbol == i[9] )
       {
         i += 8;
         break;
       }
       v4 += i[8];
-      if ( a3 == i[11] )
+      if ( (uint32_t)symbol == i[11] )
       {
         i += 10;
         break;
       }
       v4 += i[10];
-      if ( a3 == i[13] )
+      if ( (uint32_t)symbol == i[13] )
       {
         i += 12;
         break;
       }
       v4 += i[12];
-      if ( a3 == i[15] )
+      if ( (uint32_t)symbol == i[15] )
       {
         i += 14;
         break;
@@ -562,26 +459,26 @@ static int32_t __sub_100061F4(uint32_t a1, uint32_t *a2, int32_t a3, uint32_t *i
     i_2 = i;
     HIDWORD(v7) = *i + v4;
     LODWORD(v7) = v35 + 1;
-    if ( v35 == -1 )
+    if ( v35 == (uint32_t)(-1) )
     {
-      if ( HIDWORD(v7) == a1 )
+      if ( HIDWORD(v7) == total )
         goto LABEL_25;
     }
     else
     {
       v7 = HIDWORD(v7) * (uint64_t)(uint32_t)v7;
     }
-    LODWORD(v7) = v7 / a1;
+    LODWORD(v7) = v7 / total;
 LABEL_25:
-    dword_10016410 = ::n0x7FFFFFFF + v7 - 1;
+    code_high = ::code_low + v7 - 1;
     LODWORD(v7) = v35 + 1;
-    if ( v35 == -1 )
+    if ( v35 == (uint32_t)(-1) )
     {
       HIDWORD(v7) = v6;
-      if ( v6 == a1 )
+      if ( v6 == total )
       {
 LABEL_29:
-        ::n0x7FFFFFFF += v7;
+        ::code_low += v7;
         goto LABEL_76;
       }
     }
@@ -589,75 +486,75 @@ LABEL_29:
     {
       v7 = v6 * (uint64_t)(uint32_t)v7;
     }
-    LODWORD(v7) = v7 / a1;
+    LODWORD(v7) = v7 / total;
     goto LABEL_29;
   }
-  v8 = ::n0x7FFFFFFF_1 + v34;
-  n0x7FFFFFFF = 33 - ::n0x7FFFFFFF_1;
-  n0x7FFFFFFF_1 = ::n0x7FFFFFFF_2;
-  while ( --n0x7FFFFFFF )
+  v8 = ::code_pending + v34;
+  nbits = 33 - ::code_pending;
+  value = ::code_value;
+  while ( --nbits )
   {
-    n0x7FFFFFFF_1 += _bittest(
-                       (int32_t *)aVbnVer1001,// "                                                \nvbn ver.1...."
-                       v8) + n0x7FFFFFFF_1;
+    value += _bittest(
+                       (int32_t *)code_buf,
+                       v8) + value;
     v11 = v8 + 1;
-    if ( !--n0x7FFFFFFF )
+    if ( !--nbits )
       break;
-    n0x7FFFFFFF_1 += _bittest(
-                       (int32_t *)aVbnVer1001,// "                                                \nvbn ver.1...."
-                       v11) + n0x7FFFFFFF_1;
+    value += _bittest(
+                       (int32_t *)code_buf,
+                       v11) + value;
     v12 = v11 + 1;
-    if ( !--n0x7FFFFFFF )
+    if ( !--nbits )
       break;
-    n0x7FFFFFFF_1 += _bittest(
-                       (int32_t *)aVbnVer1001,// "                                                \nvbn ver.1...."
-                       v12) + n0x7FFFFFFF_1;
+    value += _bittest(
+                       (int32_t *)code_buf,
+                       v12) + value;
     v13 = v12 + 1;
-    if ( !--n0x7FFFFFFF )
+    if ( !--nbits )
       break;
-    n0x7FFFFFFF_1 += _bittest(
-                       (int32_t *)aVbnVer1001,// "                                                \nvbn ver.1...."
-                       v13) + n0x7FFFFFFF_1;
+    value += _bittest(
+                       (int32_t *)code_buf,
+                       v13) + value;
     v14 = v13 + 1;
-    if ( !--n0x7FFFFFFF )
+    if ( !--nbits )
       break;
-    n0x7FFFFFFF_1 += _bittest(
-                       (int32_t *)aVbnVer1001,// "                                                \nvbn ver.1...."
-                       v14) + n0x7FFFFFFF_1;
+    value += _bittest(
+                       (int32_t *)code_buf,
+                       v14) + value;
     v15 = v14 + 1;
-    if ( !--n0x7FFFFFFF )
+    if ( !--nbits )
       break;
-    n0x7FFFFFFF_1 += _bittest(
-                       (int32_t *)aVbnVer1001,// "                                                \nvbn ver.1...."
-                       v15) + n0x7FFFFFFF_1;
+    value += _bittest(
+                       (int32_t *)code_buf,
+                       v15) + value;
     v16 = v15 + 1;
-    if ( !--n0x7FFFFFFF )
+    if ( !--nbits )
       break;
-    n0x7FFFFFFF_1 += _bittest(
-                       (int32_t *)aVbnVer1001,// "                                                \nvbn ver.1...."
-                       v16) + n0x7FFFFFFF_1;
+    value += _bittest(
+                       (int32_t *)code_buf,
+                       v16) + value;
     v17 = v16 + 1;
-    if ( !--n0x7FFFFFFF )
+    if ( !--nbits )
       break;
-    n0x7FFFFFFF_1 += _bittest(
-                       (int32_t *)aVbnVer1001,// "                                                \nvbn ver.1...."
-                       v17) + n0x7FFFFFFF_1;
+    value += _bittest(
+                       (int32_t *)code_buf,
+                       v17) + value;
     v8 = v17 + 1;
   }
-  ::n0x7FFFFFFF_2 = n0x7FFFFFFF_1;
-  ::n0x7FFFFFFF_1 = n0x7FFFFFFF;
-  v18 = n0x7FFFFFFF_1 < ::n0x7FFFFFFF;
-  v19 = n0x7FFFFFFF_1 - ::n0x7FFFFFFF;
+  ::code_value = value;
+  ::code_pending = nbits;
+  v18 = value < (uint32_t)::code_low;
+  v19 = value - ::code_low;
   v20 = v19 + 1;
-  if ( v19 == -1 )
+  if ( v19 == (uint32_t)(-1) )
   {
-    HIDWORD(v21) = a1;
+    HIDWORD(v21) = total;
     v22 = v18 + 1;
     v18 = v20 < v22;
     LODWORD(v21) = v20 - v22;
     if ( !v18 )
     {
-      if ( v35 != -1 )
+      if ( v35 != (uint32_t)(-1) )
       {
         LODWORD(v21) = v21 / (v35 + 1);
         goto LABEL_50;
@@ -666,19 +563,19 @@ LABEL_29:
     }
 LABEL_45:
     --HIDWORD(v21);
-    if ( v35 != -1 )
+    if ( v35 != (uint32_t)(-1) )
     {
       LODWORD(v21) = v21 / (v35 + 1);
       goto LABEL_50;
     }
     goto LABEL_44;
   }
-  v21 = a1 * (uint64_t)v20;
+  v21 = total * (uint64_t)v20;
   v18 = (uint32_t)v21 < (uint32_t)(HIDWORD(v21) != 0) + 1;
   LODWORD(v21) = v21 - ((HIDWORD(v21) != 0) + 1);
   if ( v18 )
     goto LABEL_45;
-  if ( v35 == -1 )
+  if ( v35 == (uint32_t)(-1) )
   {
 LABEL_44:
     LODWORD(v21) = HIDWORD(v21);
@@ -686,7 +583,7 @@ LABEL_44:
   }
   LODWORD(v21) = v21 / (v35 + 1);
 LABEL_50:
-  i_3 = i_1;
+  i_3 = model;
   HIDWORD(v21) = 0;
   while ( 1 )
   {
@@ -740,132 +637,132 @@ LABEL_50:
   i_2 = i_3;
   v24 = HIDWORD(v21);
   LODWORD(v21) = v35 + 1;
-  if ( v35 == -1 )
+  if ( v35 == (uint32_t)(-1) )
   {
-    if ( HIDWORD(v21) == a1 )
+    if ( HIDWORD(v21) == total )
       goto LABEL_71;
   }
   else
   {
     v21 = HIDWORD(v21) * (uint64_t)(uint32_t)v21;
   }
-  LODWORD(v21) = v21 / a1;
+  LODWORD(v21) = v21 / total;
 LABEL_71:
-  dword_10016410 = ::n0x7FFFFFFF + v21 - 1;
+  code_high = ::code_low + v21 - 1;
   v25 = v24 - *i_3;
   LODWORD(v21) = v35 + 1;
-  if ( v35 != -1 )
+  if ( v35 != (uint32_t)(-1) )
   {
     v21 = v25 * (uint64_t)(uint32_t)v21;
 LABEL_74:
-    LODWORD(v21) = v21 / a1;
+    LODWORD(v21) = v21 / total;
   }
   else
   {
     HIDWORD(v21) = v25;
-    if ( v25 != a1 )
+    if ( v25 != total )
       goto LABEL_74;
   }
-  ::n0x7FFFFFFF += v21;
+  ::code_low += v21;
 LABEL_76:
   n32 = 32;
-  v27 = dword_10016410;
-  v28 = ::n0x7FFFFFFF ^ dword_10016410;
-  if ( (::n0x7FFFFFFF ^ dword_10016410) >= 0 )
+  v27 = code_high;
+  v28 = ::code_low ^ code_high;
+  if ( (::code_low ^ code_high) >= 0 )
   {
     v29 = v34;
-    n0x7FFFFFFF_2 = ::n0x7FFFFFFF;
+    low = ::code_low;
     do
     {
-      if ( n0x7FFFFFFF_2 < 0 )
+      if ( low < 0 )
         _bittestandcomplement(
-          (int32_t *)aVbnVer1001,        // "                                                \nvbn ver.1...."
+          (int32_t *)code_buf,
           v29);
       --n32;
       ++v29;
-      n0x7FFFFFFF_2 = (int32_t)((uint32_t)n0x7FFFFFFF_2 << 1);   // shl/rcl: wrap
+      low = (int32_t)((uint32_t)low << 1);   // shl/rcl: wrap
       v27 = (int32_t)((uint32_t)v27 << 1 | 1);
       v31 = (v28 & 0x40000000) != 0;
       v28 = (int32_t)((uint32_t)v28 << 1);
     }
     while ( !v31 );
     v34 = v29;
-    ::n0x7FFFFFFF = n0x7FFFFFFF_2;
-    dword_10016410 = v27;
+    ::code_low = low;
+    code_high = v27;
   }
-  ::n0x7FFFFFFF_1 = n32;
-  *a2 = v34;
+  ::code_pending = n32;
+  *code_pos = v34;
   return i_2[1];
 }
 
-// sub_100064C0 @ 0x100064C0 -- generated by tools/extract.py from vbn.exe.c lines 7435..7978
-// Hex-Rays: int __stdcall sub_100064C0(int a1, unsigned int *p_n0x10000, unsigned int n8)
-// real convention: stdcall, ret 12
-
-
-static int32_t __sub_100064C0(int32_t a1, uint32_t *p_n0x10000, uint32_t n8)
+// code_literal (vbn.exe 0x100064C0): code the byte at bitpos as a literal.  The
+// literal model's counts are mixed with the candidates' predictions (grouped
+// by the byte they predict); `excluded` is a byte a failed match already ruled
+// out, or -1.  Afterwards the literal model, the rings and the cost averages
+// adapt.  Returns the byte (decompressing: also stores it in the window).
+static int32_t code_literal(int32_t excluded, uint32_t *code_pos, uint32_t bitpos)
 {
-  int16_t n2_1;
-  int32_t n2, v5, n256, *v9, v10, *v11, v12, v14, *v15, *v16, v18, v20, v21, v22, v28, *v34, v35,
+  int16_t cnt;
+  int32_t n2, v5, k256, *v9, v10, *v11, v12, v14, *v15, *v16, v18, v20, v21, v22, v28, *v34, v35,
           *v36, v37, n2_2, v41, v42, *v43, v44, v45, v46, v49, v50, v51, v52, v53, *v54, v55,
-          v56, v57, *v60, v61, n362, v64, n362_3, v72, n363, *v74, *i_2, v76, v78, v79, result,
-          n362_1, n362_2, v84, v85, v89, v90, v91;
+          v56, v57, *v60, v61, rpos, v64, n362_3, v72, n363, *v74, *i_2, v76, v78, v79, result,
+          rpos1, n362_2, v84, v85, v89, v90, v91;
   int8_t v33, v38, *v63, *v83;
-  uint32_t v3, *i, n2048, v13, *v19, v23, v25, v26, v27, v29, v30, v31, v32, *v39, *v47, v48,
+  uint32_t v3, *i, lit_sum, v13, *v19, v23, v25, v26, v27, v29, v30, v31, v32, *v39, *v47, v48,
            v58, v59, *i_1, *v66, v67, v68, v69, v70, v77, v86, n0x10000, n2048_1;
   uint64_t v24;
 
-  dword_100164C4 = (uint32_t)dword_100164C4 >> 1;
-  _BitScanReverse(&v3, ((uint32_t)n0x384 >> 3) + 1);
-  dword_100164B8 = ((uint32_t)n4 >> 4)
+  cand_floor = (uint32_t)cand_floor >> 1;
+  _BitScanReverse(&v3, ((uint32_t)lit_cost8 >> 3) + 1);
+  lit_threshold = ((uint32_t)search_gain >> 4)
                  + 54
-                 - (((uint32_t)n0x4000 >> 11)
+                 - (((uint32_t)lit_cost11 >> 11)
                   + 1)
-                 - (((uint32_t)n0x2000 >> 10)
+                 - (((uint32_t)lit_cost10 >> 10)
                   + 1)
-                 - (((uint32_t)n0xFFE >> 9)
+                 - (((uint32_t)lit_cost9 >> 9)
                   + 1)
-                 - (((uint32_t)n0x384 >> 8)
+                 - (((uint32_t)lit_cost8 >> 8)
                   + 1)
                  - v3
-                 - ((((uint32_t)n0x4000 >> 11) + 1) >> 1)
-                 - ((((uint32_t)n0x2000 >> 10) + 1) >> 1)
-                 - ((((uint32_t)n0xFFE >> 9) + 1) >> 1)
-                 - ((((uint32_t)n0x384 >> 8) + 1) >> 1);
-  if ( dword_100164B8 <= 0 )
+                 - ((((uint32_t)lit_cost11 >> 11) + 1) >> 1)
+                 - ((((uint32_t)lit_cost10 >> 10) + 1) >> 1)
+                 - ((((uint32_t)lit_cost9 >> 9) + 1) >> 1)
+                 - ((((uint32_t)lit_cost8 >> 8) + 1) >> 1);
+  if ( lit_threshold <= 0 )
   {
-    dword_100164B8 = 0;
-    if ( n4 <= 4 )
+    lit_threshold = 0;
+    if ( search_gain <= 4 )
     {
-      ::n2_1 = 0;
-      n0xFFE = 4096;
-      n0x2000 = 0x2000;
-      n0x4000 = 0x4000;
+      ::n_cands = 0;
+      lit_cost9 = 4096;
+      lit_cost10 = 0x2000;
+      lit_cost11 = 0x4000;
     }
   }
   n2 = 1;
-  if ( (uint32_t)n0x384 >= 0x2EC )
+  if ( (uint32_t)lit_cost8 >= 0x2EC )
   {
     n2 = 2;
-    if ( (uint32_t)n0x384 >= 0x37F )
+    if ( (uint32_t)lit_cost8 >= 0x37F )
     {
       n2 = 4;
-      if ( (uint32_t)n0x384 >= 0x489 )
+      if ( (uint32_t)lit_cost8 >= 0x489 )
       {
         n2 = 8;
-        if ( (uint32_t)n0x384 >= 0x56F )
+        if ( (uint32_t)lit_cost8 >= 0x56F )
         {
           n2 = 16;
-          if ( (uint32_t)n0x384 >= 0x63F )
+          if ( (uint32_t)lit_cost8 >= 0x63F )
           {
             n2 = 32;
-            if ( (uint32_t)n0x384 >= 0x70F )
+            if ( (uint32_t)lit_cost8 >= 0x70F )
             {
               n2 = 128;
-              n0xFFE = 4096;
-              n0x2000 = 0x2000;
-              n0x4000 = 0x4000;
-              if ( (uint32_t)n0x384 >= 0x75C )
+              lit_cost9 = 4096;
+              lit_cost10 = 0x2000;
+              lit_cost11 = 0x4000;
+              if ( (uint32_t)lit_cost8 >= 0x75C )
                 n2 = 1024;
             }
           }
@@ -873,42 +770,42 @@ static int32_t __sub_100064C0(int32_t a1, uint32_t *p_n0x10000, uint32_t n8)
       }
     }
   }
-  if ( n2_0 != n2 )
+  if ( lit_inc != n2 )
   {
-    v5 = n2 - n2_0;
-    n2_0 += v5;
-    n256 = 256;
-    i = ::i_;
-    n2048 = ::n2048;
+    v5 = n2 - lit_inc;
+    lit_inc += v5;
+    k256 = 256;
+    i = ::lit_model;
+    lit_sum = ::lit_total;
     do
     {
-      n2048 += v5;
+      lit_sum += v5;
       *i += v5;
       i += 2;
-      --n256;
+      --k256;
     }
-    while ( n256 );
-    ::n2048 = n2048;
+    while ( k256 );
+    ::lit_total = lit_sum;
   }
-  if ( a1 < 0 || (v9 = (int32_t *)dword_10010060[a1], v10 = *v9, *v9 = 0, v89 = v10, ::n2048 -= v10, a1 != dword_10016488) )
+  if ( excluded < 0 || (v9 = (int32_t *)lit_slot[excluded], v10 = *v9, *v9 = 0, v89 = v10, ::lit_total -= v10, excluded != excluded_byte) )
   {
-    if ( dword_10016488 >= 0 )
+    if ( excluded_byte >= 0 )
     {
-      v11 = (int32_t *)dword_10010060[dword_10016488];
+      v11 = (int32_t *)lit_slot[excluded_byte];
       v12 = *v11;
       *v11 = 0;
       v90 = v12;
-      ::n2048 -= v12;
+      ::lit_total -= v12;
     }
   }
   v13 = 0;
   v86 = 0;
-  if ( ::n2_1 )
+  if ( ::n_cands )
   {
     v14 = 0;
-    v15 = dword_1000F060;
-    v16 = dword_1000D558;
-    n2_1 = ::n2_1;
+    v15 = groups;
+    v16 = cands;
+    cnt = ::n_cands;
     do
     {
       while ( 1 )
@@ -916,39 +813,39 @@ static int32_t __sub_100064C0(int32_t a1, uint32_t *p_n0x10000, uint32_t n8)
         while ( 1 )
         {
           v18 = *((uint8_t *)v16 + 4);
-          if ( v18 != a1 )
+          if ( v18 != excluded )
             break;
           v16 += 2;
-          ++HIBYTE(n2_1);
-          LOBYTE(n2_1) = n2_1 - 1;
-          if ( !(uint8_t)n2_1 )
+          ++HIBYTE(cnt);
+          LOBYTE(cnt) = cnt - 1;
+          if ( !(uint8_t)cnt )
             goto LABEL_52;
         }
-        v19 = (uint32_t *)buf__0[v18];
+        v19 = (uint32_t *)group_slot[v18];
         if ( !v19 )
           break;
-        v20 = *v16 - dword_100164C4;
+        v20 = *v16 - cand_floor;
         *v19 += v20;
         v14 += v20;
         v16 += 2;
-        LOBYTE(n2_1) = n2_1 - 1;
-        if ( !(uint8_t)n2_1 )
+        LOBYTE(cnt) = cnt - 1;
+        if ( !(uint8_t)cnt )
           goto LABEL_52;
       }
-      buf__0[v18] = (int32_t)v15;
-      LOBYTE(dword_100164C8) = v18;
+      group_slot[v18] = (int32_t)v15;
+      LOBYTE(ctx16) = v18;
       v15[1] = v18;
-      if ( (uint32_t)n4 < 0x13 )
+      if ( (uint32_t)search_gain < 0x13 )
       {
-        if ( buf_2[dword_100164C8] )
+        if ( ctx_count[ctx16] )
         {
-          if ( (uint8_t)buf_2[dword_100164C8] > 1u )
+          if ( (uint8_t)ctx_count[ctx16] > 1u )
           {
-            if ( (uint8_t)buf_2[dword_100164C8] > 2u )
+            if ( (uint8_t)ctx_count[ctx16] > 2u )
             {
-              if ( (uint8_t)buf_2[dword_100164C8] > 3u )
+              if ( (uint8_t)ctx_count[ctx16] > 3u )
               {
-                if ( (uint8_t)buf_2[dword_100164C8] > 6u )
+                if ( (uint8_t)ctx_count[ctx16] > 6u )
                   v21 = 8 * *v16;
                 else
                   v21 = 5 * *v16;
@@ -973,15 +870,15 @@ static int32_t __sub_100064C0(int32_t a1, uint32_t *p_n0x10000, uint32_t n8)
           v21 = (uint32_t)*v16 >> 3;
         }
       }
-      else if ( buf_2[dword_100164C8] )
+      else if ( ctx_count[ctx16] )
       {
-        if ( (uint8_t)buf_2[dword_100164C8] > 1u )
+        if ( (uint8_t)ctx_count[ctx16] > 1u )
         {
-          if ( (uint8_t)buf_2[dword_100164C8] > 2u )
+          if ( (uint8_t)ctx_count[ctx16] > 2u )
           {
-            if ( (uint8_t)buf_2[dword_100164C8] > 3u )
+            if ( (uint8_t)ctx_count[ctx16] > 3u )
             {
-              if ( (uint8_t)buf_2[dword_100164C8] > 4u )
+              if ( (uint8_t)ctx_count[ctx16] > 4u )
                 v21 = *v16 + *v16 + ((uint32_t)*v16 >> 1);
               else
                 v21 = 2 * *v16;
@@ -1005,36 +902,36 @@ static int32_t __sub_100064C0(int32_t a1, uint32_t *p_n0x10000, uint32_t n8)
       {
         v21 = (uint32_t)*v16 >> 4;
       }
-      v22 = *v16 + v21 - dword_100164C4;
+      v22 = *v16 + v21 - cand_floor;
       *v15 = v22;
       v14 += v22;
       v15 += 2;
       v16 += 2;
-      LOBYTE(n2_1) = n2_1 - 1;
+      LOBYTE(cnt) = cnt - 1;
     }
-    while ( (uint8_t)n2_1 );
+    while ( (uint8_t)cnt );
 LABEL_52:
     v85 = v14;
-    v13 = (uint32_t)((int8_t *)v15 - (int8_t *)dword_1000F060) >> 3;
+    v13 = (uint32_t)((int8_t *)v15 - (int8_t *)groups) >> 3;
     v86 = v13;
-    if ( HIBYTE(n2_1) )
-      --::n2_1;
+    if ( HIBYTE(cnt) )
+      --::n_cands;
   }
   if ( v13 )
   {
-    v23 = ::n2_1 * v85;
-    v24 = ::n2048
-        * (uint64_t)((::n2_1 - v86) * ((3 * dword_100164B8 + 5 * (((uint32_t)n4 >> 2) + n4)) >> 3));
-    if ( is_mul_ok(::n2048, (::n2_1 - v86) * ((3 * dword_100164B8 + 5 * (((uint32_t)n4 >> 2) + n4)) >> 3)) )
+    v23 = ::n_cands * v85;
+    v24 = ::lit_total
+        * (uint64_t)((::n_cands - v86) * ((3 * lit_threshold + 5 * (((uint32_t)search_gain >> 2) + search_gain)) >> 3));
+    if ( is_mul_ok(::lit_total, (::n_cands - v86) * ((3 * lit_threshold + 5 * (((uint32_t)search_gain >> 2) + search_gain)) >> 3)) )
       v25 = (uint32_t)v24 >> 3;
     else
       v25 = v24 >> 3;
-    n2048_1 = ::n2048;
-    v26 = v25 >> (dword_1000CA54[(uint32_t)n55 >> 5] & 31);
+    n2048_1 = ::lit_total;
+    v26 = v25 >> (mode_shift[(uint32_t)max_cands >> 5] & 31);
     v27 = v25 - v26;
-    v28 = ((uint32_t)(48 - dword_100164B8) >> 3) - 4;
+    v28 = ((uint32_t)(48 - lit_threshold) >> 3) - 4;
     if ( v28 < 0 )
-      v29 = v26 << ((4 - ((uint32_t)(48 - dword_100164B8) >> 3)) & 31);
+      v29 = v26 << ((4 - ((uint32_t)(48 - lit_threshold) >> 3)) & 31);
     else
       v29 = v26 >> (v28 & 31);
     v30 = v29 + v27;
@@ -1042,44 +939,44 @@ LABEL_52:
     _BitScanReverse(&v31, v30);
     _BitScanReverse(&v32, v23);
     v33 = 31 - v31 + v32;
-    ::n2_1 = ((uint64_t)v30 << ((v33 & 0x1F) & 31)) / v23;
-    if ( buf__0[(uint8_t)buf_3[dword_100164B0]] )
+    ::n_cands = ((uint64_t)v30 << ((v33 & 0x1F) & 31)) / v23;
+    if ( group_slot[(uint8_t)next_byte[prev_byte]] )
     {
-      v34 = (int32_t *)buf__0[(uint8_t)buf_3[dword_100164B0]];
+      v34 = (int32_t *)group_slot[(uint8_t)next_byte[prev_byte]];
       v35 = *v34;
       *v34 *= 8;
       *v34 -= v35;
       *v34 = (uint32_t)*v34 >> 2;
     }
-    if ( buf__0[(uint8_t)buf_4[dword_100164B4]] )
+    if ( group_slot[(uint8_t)next_byte2[prev_byte2]] )
     {
-      v36 = (int32_t *)buf__0[(uint8_t)buf_4[dword_100164B4]];
+      v36 = (int32_t *)group_slot[(uint8_t)next_byte2[prev_byte2]];
       v37 = *v36;
       *v36 *= 2;
       *v36 += v37;
       *v36 = (uint32_t)*v36 >> 1;
     }
     v38 = v86;
-    v39 = (uint32_t *)(::dword_1000F060 - 2);
-    n2_2 = ::n2_1;
-    if ( (uint32_t)n0x384 < 0x6C9 )
+    v39 = (uint32_t *)(::groups - 2);
+    n2_2 = ::n_cands;
+    if ( (uint32_t)lit_cost8 < 0x6C9 )
     {
-      if ( dword_100164AC )
+      if ( literal_run )
       {
         do
         {
           v39 += 2;
           v52 = ((uint32_t)n2_2 * (uint64_t)*v39) >> (v33 & 31);
-          ::n2048 += v52;
+          ::lit_total += v52;
           v53 = v39[1];
-          LOBYTE(dword_100164C8) = v53;
-          v54 = (int32_t *)dword_10010060[v53];
-          buf__0[v53] -= (int32_t)v39;
+          LOBYTE(ctx16) = v53;
+          v54 = (int32_t *)lit_slot[v53];
+          group_slot[v53] -= (int32_t)v39;
           v55 = *v54;
           *v39 = *v54;
           v56 = v55 + v52;
-          v57 = (uint8_t)buf_2[dword_100164C8] << 6;
-          ::n2048 += v57;
+          v57 = (uint8_t)ctx_count[ctx16] << 6;
+          ::lit_total += v57;
           *v54 = v57 + v56;
           --v38;
         }
@@ -1091,19 +988,19 @@ LABEL_52:
         {
           v39 += 2;
           v45 = ((uint32_t)n2_2 * (uint64_t)*v39) >> (v33 & 31);
-          ::n2048 += v45;
+          ::lit_total += v45;
           v46 = v39[1];
-          LOBYTE(dword_100164C8) = v46;
-          v47 = (uint32_t *)dword_10010060[v46];
-          buf__0[v46] -= (int32_t)v39;
+          LOBYTE(ctx16) = v46;
+          v47 = (uint32_t *)lit_slot[v46];
+          group_slot[v46] -= (int32_t)v39;
           v48 = *v47;
           *v39 = *v47;
           v49 = v48 + v45;
           v48 >>= 2;
           v50 = v48 + v49;
-          ::n2048 += v48;
-          v51 = (uint8_t)buf_2[dword_100164C8] << 6;
-          ::n2048 += v51;
+          ::lit_total += v48;
+          v51 = (uint8_t)ctx_count[ctx16] << 6;
+          ::lit_total += v51;
           *v47 = v51 + v50;
           --v38;
         }
@@ -1116,10 +1013,10 @@ LABEL_52:
       {
         v39 += 2;
         v41 = ((uint32_t)n2_2 * (uint64_t)*v39) >> (v33 & 31);
-        ::n2048 += v41;
+        ::lit_total += v41;
         v42 = v39[1];
-        v43 = (int32_t *)dword_10010060[v42];
-        buf__0[v42] -= (int32_t)v39;
+        v43 = (int32_t *)lit_slot[v42];
+        group_slot[v42] -= (int32_t)v39;
         v44 = *v43;
         *v39 = *v43;
         *v43 = v44 + v41;
@@ -1128,77 +1025,77 @@ LABEL_52:
       while ( v38 );
     }
   }
-  n0x10000 = *p_n0x10000;
-  if ( dword_1000D4C4 )
-    v91 = __sub_100061F4(::n2048, (uint32_t *)p_n0x10000, (uint8_t)dst_3[n8 >> 3], ::i_);
+  n0x10000 = *code_pos;
+  if ( encoding )
+    v91 = code_symbol(::lit_total, (uint32_t *)code_pos, (uint8_t)window[bitpos >> 3], ::lit_model);
   else
-    v91 = __sub_100061F4(::n2048, (uint32_t *)p_n0x10000, -1, ::i_);
-  v58 = (*p_n0x10000 - n0x10000) << 8;
-  n0x384 = (v58 + (n0x384 << 8) - n0x384) >> 8;
+    v91 = code_symbol(::lit_total, (uint32_t *)code_pos, -1, ::lit_model);
+  v58 = (*code_pos - n0x10000) << 8;
+  lit_cost8 = (v58 + (lit_cost8 << 8) - lit_cost8) >> 8;
   v58 *= 2;
-  n0xFFE = (v58 + (n0xFFE << 9) - n0xFFE) >> 9;
+  lit_cost9 = (v58 + (lit_cost9 << 9) - lit_cost9) >> 9;
   v58 *= 2;
-  n0x2000 = (v58 + (n0x2000 << 10) - n0x2000) >> 10;
-  n0x4000 = (2 * v58 + (n0x4000 << 11) - n0x4000) >> 11;
+  lit_cost10 = (v58 + (lit_cost10 << 10) - lit_cost10) >> 10;
+  lit_cost11 = (2 * v58 + (lit_cost11 << 11) - lit_cost11) >> 11;
   v59 = v86;
   if ( v86 )
   {
-    v60 = dword_1000F060;
-    ::n2048 = n2048_1;
+    v60 = groups;
+    ::lit_total = n2048_1;
     do
     {
-      *(uint32_t *)dword_10010060[v60[1]] = *v60;
+      *(uint32_t *)lit_slot[v60[1]] = *v60;
       v60 += 2;
       --v59;
     }
     while ( v59 );
   }
-  if ( a1 < 0 || (*(uint32_t *)dword_10010060[a1] = v89, ::n2048 += v89, a1 != dword_10016488) )
+  if ( excluded < 0 || (*(uint32_t *)lit_slot[excluded] = v89, ::lit_total += v89, excluded != excluded_byte) )
   {
-    if ( dword_10016488 >= 0 )
+    if ( excluded_byte >= 0 )
     {
-      *(uint32_t *)dword_10010060[dword_10016488] = v90;
-      ::n2048 += v90;
+      *(uint32_t *)lit_slot[excluded_byte] = v90;
+      ::lit_total += v90;
     }
   }
-  v61 = dword_100164C8;
+  v61 = ctx16;
   LOBYTE(v61) = v91;
-  dst_3[n8 >> 3] = v91;
-  if ( buf_2[v61] != -1 )
+  window[bitpos >> 3] = v91;
+  if ( ctx_count[v61] != -1 )
   {
-    ++dword_100164AC;
-    if ( !buf_2[v61] )
-      dword_100164AC = 0;
-    ++buf_2[v61];
+    ++literal_run;
+    if ( !ctx_count[v61] )
+      literal_run = 0;
+    ++ctx_count[v61];
   }
-  n362 = ::n362_1;
-  ::n362_1 = ((uint16_t)::n362_1 + 1) & 0x3FF;
-  v63 = &buf_0[4 * n362];
+  rpos = ::lit_ring2_pos;
+  ::lit_ring2_pos = ((uint16_t)::lit_ring2_pos + 1) & 0x3FF;
+  v63 = (int8_t *)&lit_ring2[rpos];
   v64 = *(uint32_t *)v63;
   *(uint32_t *)v63 = v61;
-  if ( v64 >= 0 && buf_2[v64] )
-    --buf_2[v64];
-  if ( --dword_10016494 )
+  if ( v64 >= 0 && ctx_count[v64] )
+    --ctx_count[v64];
+  if ( --lit_resort )
   {
     result = v91;
-    *(uint32_t *)dword_10010060[v91] += 16;
-    n362_1 = ::n362;
-    n362_2 = ::n362 + 1;
-    if ( ::n362 == 362 )
+    *(uint32_t *)lit_slot[v91] += 16;
+    rpos1 = ::lit_ring1_pos;
+    n362_2 = ::lit_ring1_pos + 1;
+    if ( ::lit_ring1_pos == 362 )
       n362_2 = 0;
-    ::n362 = n362_2;
-    v83 = &buf[4 * n362_1];
+    ::lit_ring1_pos = n362_2;
+    v83 = (int8_t *)&lit_ring1[rpos1];
     v84 = *(uint32_t *)v83;
     *(uint32_t *)v83 = v91;
     if ( v84 < 0 )
-      ::n2048 += 16;
+      ::lit_total += 16;
     else
-      *(uint32_t *)dword_10010060[v84] -= 16;
+      *(uint32_t *)lit_slot[v84] -= 16;
   }
   else
   {
-    dword_10016494 = (uint8_t)(BYTE1(n0x384) + 1);
-    i_1 = (uint32_t *)dword_10010060[v91];
+    lit_resort = (uint8_t)(BYTE1(lit_cost8) + 1);
+    i_1 = (uint32_t *)lit_slot[v91];
     *i_1 += 16;
     v66 = i_1 - 2;
     v67 = *i_1;
@@ -1207,7 +1104,7 @@ LABEL_52:
     {
       do
       {
-        if ( i_1 <= ::i_ )
+        if ( i_1 <= ::lit_model )
           break;
         *i_1 = v68;
         *v66 = v67;
@@ -1215,8 +1112,8 @@ LABEL_52:
         v70 = v66[1];
         i_1[1] = v70;
         v66[1] = v69;
-        dword_10010060[v70] = (int32_t)i_1;
-        dword_10010060[v69] = (int32_t)v66;
+        lit_slot[v70] = (int32_t)i_1;
+        lit_slot[v69] = (int32_t)v66;
         i_1 -= 2;
         v66 -= 2;
         v67 = *i_1;
@@ -1224,29 +1121,29 @@ LABEL_52:
       }
       while ( *i_1 > *v66 );
     }
-    n362_3 = ::n362;
-    v72 = *(uint32_t *)&buf[4 * ::n362];
-    *(uint32_t *)&buf[4 * ::n362] = v91;
+    n362_3 = ::lit_ring1_pos;
+    v72 = *(uint32_t *)&lit_ring1[::lit_ring1_pos];
+    *(uint32_t *)&lit_ring1[::lit_ring1_pos] = v91;
     n363 = n362_3 + 1;
     if ( n363 == 363 )
       n363 = 0;
-    ::n362 = n363;
+    ::lit_ring1_pos = n363;
     if ( v72 < 0 )
     {
-      ::n2048 += 16;
+      ::lit_total += 16;
     }
     else
     {
-      v74 = (int32_t *)dword_10010060[v72];
+      v74 = (int32_t *)lit_slot[v72];
       *v74 -= 16;
       i_2 = v74 + 2;
       v76 = *v74;
       v77 = v74[2];
-      if ( *v74 < v77 )
+      if ( (uint32_t)(*v74) < v77 )
       {
         do
         {
-          if ( i_2 >= (int32_t *)::i_ + 2 * 256 )
+          if ( i_2 >= (int32_t *)::lit_model + 2 * 256 )
             break;
           *v74 = v77;
           *i_2 = v76;
@@ -1254,14 +1151,14 @@ LABEL_52:
           v79 = i_2[1];
           v74[1] = v79;
           i_2[1] = v78;
-          dword_10010060[v79] = (int32_t)v74;
-          dword_10010060[v78] = (int32_t)i_2;
+          lit_slot[v79] = (int32_t)v74;
+          lit_slot[v78] = (int32_t)i_2;
           v74 += 2;
           i_2 += 2;
           v76 = *v74;
           v77 = *i_2;
         }
-        while ( *v74 < (uint32_t)*i_2 );
+        while ( (uint32_t)(*v74) < (uint32_t)*i_2 );
       }
     }
     return v91;
@@ -1269,63 +1166,63 @@ LABEL_52:
   return result;
 }
 
-// sub_10005C50 @ 0x10005C50 -- generated by tools/extract.py from vbn.exe.c lines 6645..7077
-// Hex-Rays: int __stdcall sub_10005C50(unsigned int *p_n0x10000, _DWORD *a2, unsigned int n8)
-// real convention: stdcall, ret 12
-
-
-static int32_t __sub_10005C50(uint32_t *p_n0x10000, uint32_t *a2, uint32_t n8)
+// code_match (vbn.exe 0x10005C50): code how many bytes at bitpos match the best
+// candidate -- 0..255, 0 being no match -- with the length model, boosted by
+// the candidates grouped by their own match lengths.  On a mismatch,
+// *excluded gets the byte the candidate predicted (else -1).  Returns the
+// length (decompressing: also copies the matched bytes into the window).
+static int32_t code_match(uint32_t *code_pos, int32_t *excluded, uint32_t bitpos)
 {
   bool v13;
   int32_t v3, result, v7, *v9, *v10, v18, v19, *v35, v36, v37, v39, v46, n255_7, v48, v52, v56,
-          n255_4, v58, v62, *v64, n362, v67, *v69, v73, n2, v77;
+          n255_4, v58, v62, *v64, rpos, v67, *v69, v73, n2, v77;
   int8_t *v6, *v11, *v12, *v15, n255_2, v32, v34, *v44, *v49, *v54, *v59, *v66, *v68, *v75;
   uint32_t v5, v8, n255_1, *v17, *v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31,
-           v33, *v38, n256_1, *v41, v42, n255_6, n255_8, n255_3, n255_5, v63, v70, n255, n256,
+           v33, *v38, n256_1, *v41, v42, n255_6, n255_8, n255_3, n255_5, v63, v70, n255, len_sum0,
            n256_2;
   uint8_t *v43, *v51, *v53, *v61;
 
   v3 = 0;
-  if ( n8 >> 3 )
-    BYTE1(v3) = dst_3[(n8 >> 3) - 1];
-  dword_100164C8 = v3;
-  if ( n2_1 )
+  if ( bitpos >> 3 )
+    BYTE1(v3) = window[(bitpos >> 3) - 1];
+  ctx16 = v3;
+  if ( n_cands )
   {
-    v73 = i_5[0];
-    ::n256 -= i_5[0];
-    v5 = 9 * dword_100164AC + n4 + ((uint32_t)dword_100164B8 >> 2) + 1;
+    v73 = len_model[0];
+    ::len_total -= len_model[0];
+    v5 = 9 * literal_run + search_gain + ((uint32_t)lit_threshold >> 2) + 1;
     n2 = 0;
-    i_5[0] = 5 * i_5[0] / (v5 + (v5 >> 4));
-    ::n256 += i_5[0];
+    len_model[0] = 5 * len_model[0] / (v5 + (v5 >> 4));
+    ::len_total += len_model[0];
     n255 = 255;
-    v6 = &dst_3[-(::dword_1000D558 + 1)[0] >> 3];
+    v6 = &window[-(::cands + 1)[0] >> 3];
     v75 = v6;
-    dword_1001645C = (int32_t)&dst_3[n8 >> 3];
-    if ( (dword_1001645C - (uint32_t)v6) < 0xFF )
-      n255 = dword_1001645C - (uint32_t)v6;
-    if ( dst_4 - dword_1001645C < n255 )
-      n255 = dst_4 - dword_1001645C;
+    cur_ptr = (int32_t)&window[bitpos >> 3];
+    if ( (cur_ptr - (uint32_t)v6) < 0xFF )
+      n255 = cur_ptr - (uint32_t)v6;
+    if ( (uint32_t)(data_end - cur_ptr) < n255 )
+      n255 = data_end - cur_ptr;
     v7 = (uint8_t)*v6;
-    (::dword_1000D558 + 1)[0] = v7;
-    if ( (uint8_t)v7 == (uint8_t)(buf_3[dword_100164B0]))
+    (::cands + 1)[0] = v7;
+    if ( (uint8_t)v7 == (uint8_t)(next_byte[prev_byte]))
     {
       n2 = 1;
-      if ( (uint8_t)v7 == (uint8_t)(buf_3[dword_100164B4]))
+      if ( (uint8_t)v7 == (uint8_t)(next_byte[prev_byte2]))
         n2 = 2;
     }
     v8 = 0;
-    v9 = dword_1000F060;
-    v10 = (::dword_1000D558 + 2);
-    BYTE1(v6) = n2_1;
+    v9 = groups;
+    v10 = (::cands + 2);
+    BYTE1(v6) = n_cands;
     LOBYTE(v6) = 1;
-    if ( (uint8_t)n2_1 > 1u )
+    if ( (uint8_t)n_cands > 1u )
     {
       do
       {
         while ( 1 )
         {
           v11 = v75;
-          v12 = &dst_3[(uint32_t)-v10[1] >> 3];
+          v12 = &window[(uint32_t)-v10[1] >> 3];
           v13 = *v12 == *v75;
           LOBYTE(v11) = *v12;
           v10[1] = (int32_t)v11;
@@ -1336,8 +1233,8 @@ static int32_t __sub_10005C50(uint32_t *p_n0x10000, uint32_t *a2, uint32_t n8)
             v68 = v6;
             n255_1 = n255;
             v15 = v75;
-            if ( v75 <= v12 && n255 > dword_1001645C - (int32_t)v12 )
-              n255_1 = dword_1001645C - (uint32_t)v12;
+            if ( v75 <= v12 && n255 > (uint32_t)(cur_ptr - (int32_t)v12) )
+              n255_1 = cur_ptr - (uint32_t)v12;
             n255_2 = n255_1;
             do
             {
@@ -1367,10 +1264,10 @@ static int32_t __sub_10005C50(uint32_t *p_n0x10000, uint32_t *a2, uint32_t n8)
             v6 = v68;
             v10 = v69;
           }
-          v17 = (uint32_t *)buf__0[n255_1];
+          v17 = (uint32_t *)group_slot[n255_1];
           if ( !v17 )
             break;
-          v18 = *v10 - dword_100164C4;
+          v18 = *v10 - cand_floor;
           *v17 += v18;
           v8 += v18;
           v10 += 2;
@@ -1378,10 +1275,10 @@ static int32_t __sub_10005C50(uint32_t *p_n0x10000, uint32_t *a2, uint32_t n8)
           if ( (uint8_t)(uintptr_t)v6 >= BYTE1(v6) )
             goto LABEL_33;
         }
-        buf__0[n255_1] = (int32_t)v9;
+        group_slot[n255_1] = (int32_t)v9;
         v9[1] = n255_1;
         LOBYTE(n255_1) = BYTE1(v6) - (uint8_t)(uintptr_t)v6;
-        v19 = *v10 + (n255_1 >> 1) - dword_100164C4;
+        v19 = *v10 + (n255_1 >> 1) - cand_floor;
         *v9 = v19;
         v8 += v19;
         v9 += 2;
@@ -1391,35 +1288,35 @@ static int32_t __sub_10005C50(uint32_t *p_n0x10000, uint32_t *a2, uint32_t n8)
       while ( (uint8_t)(uintptr_t)v6 < BYTE1(v6) );
     }
 LABEL_33:
-    v70 = (uint32_t)((int8_t *)v9 - (int8_t *)dword_1000F060) >> 3;
+    v70 = (uint32_t)((int8_t *)v9 - (int8_t *)groups) >> 3;
     if ( v70 )
     {
-      v20 = (uint32_t *)buf__0[0];
-      if ( buf__0[0] )
+      v20 = (uint32_t *)group_slot[0];
+      if ( group_slot[0] )
       {
-        _BitScanReverse(&v21, ((uint32_t)(48 - dword_100164B8) >> 3) + 1);
-        v22 = (uint32_t)dword_100164A8 >> (v21 & 31);
-        v23 = *(uint32_t *)buf__0[0];
+        _BitScanReverse(&v21, ((uint32_t)(48 - lit_threshold) >> 3) + 1);
+        v22 = (uint32_t)len_avg >> (v21 & 31);
+        v23 = *(uint32_t *)group_slot[0];
         if ( n2 )
         {
-          v22 = dword_100164A8;
+          v22 = len_avg;
           v23 = ((3 * v23) >> 2) + 1;
           if ( n2 != 1 )
             v23 = ((7 * v23) >> 3) + 1;
         }
         _BitScanReverse(&v24, v22 + 1);
         v25 = (v23 >> (v24 & 31)) + v23;
-        *(uint32_t *)buf__0[0] = v25;
-        LOBYTE(dword_100164C8) = (::dword_1000D558 + 1)[0];
-        if ( buf_2[(::dword_1000D558 + 1)[0]] )
+        *(uint32_t *)group_slot[0] = v25;
+        LOBYTE(ctx16) = (::cands + 1)[0];
+        if ( ctx_count[(::cands + 1)[0]] )
         {
-          if ( (uint8_t)buf_2[(::dword_1000D558 + 1)[0]] > 1u )
+          if ( (uint8_t)ctx_count[(::cands + 1)[0]] > 1u )
           {
-            if ( (uint8_t)buf_2[(::dword_1000D558 + 1)[0]] > 2u )
+            if ( (uint8_t)ctx_count[(::cands + 1)[0]] > 2u )
             {
-              if ( (uint8_t)buf_2[(::dword_1000D558 + 1)[0]] > 3u )
+              if ( (uint8_t)ctx_count[(::cands + 1)[0]] > 3u )
               {
-                if ( (uint8_t)buf_2[(::dword_1000D558 + 1)[0]] > 5u )
+                if ( (uint8_t)ctx_count[(::cands + 1)[0]] > 5u )
                 {
                   v29 = v25 >> 2;
                 }
@@ -1455,31 +1352,31 @@ LABEL_33:
           *v20 += v25 >> 9;
         }
       }
-      n256 = ::n256;
-      v30 = 4 * ::n256;
-      if ( (uint32_t)n0x384 < 0x44C )
+      len_sum0 = ::len_total;
+      v30 = 4 * ::len_total;
+      if ( (uint32_t)lit_cost8 < 0x44C )
       {
-        v30 = 6 * ::n256;
-        if ( (uint32_t)n0x384 < 0x384 )
-          v30 = 9 * ::n256;
+        v30 = 6 * ::len_total;
+        if ( (uint32_t)lit_cost8 < 0x384 )
+          v30 = 9 * ::len_total;
       }
       _BitScanReverse(&v31, v8);
       v32 = v31 + 6;
-      v33 = ((uint64_t)(uint32_t)((n2_1 + 4 * n4 + ((uint32_t)n0x384 >> 6))
+      v33 = ((uint64_t)(uint32_t)((n_cands + 4 * search_gain + ((uint32_t)lit_cost8 >> 6))
                                             * (uint64_t)v30
-                                            / (((uint32_t)(dword_100164A8 + 1935 - n0x384) >> 3) + 1)) << ((v32 & 0x1F) & 31))
+                                            / (((uint32_t)(len_avg + 1935 - lit_cost8) >> 3) + 1)) << ((v32 & 0x1F) & 31))
           / v8;
       v34 = v70;
-      v35 = (::dword_1000F060 - 2);
+      v35 = (::groups - 2);
       do
       {
         v35 += 2;
-        v36 = n4 + ((v33 * (uint64_t)(uint32_t)*v35) >> (v32 & 31));
-        ::n256 += v36;
+        v36 = search_gain + ((v33 * (uint64_t)(uint32_t)*v35) >> (v32 & 31));
+        ::len_total += v36;
         v37 = v35[1];
-        v38 = (uint32_t *)&::i_5[2 * v37];
-        buf__0[v37] -= (int32_t)v35;
-        v39 = i_5[2 * v37];
+        v38 = (uint32_t *)&::len_model[2 * v37];
+        group_slot[v37] -= (int32_t)v35;
+        v39 = len_model[2 * v37];
         *v35 = v39;
         *v38 = v39 + v36;
         --v34;
@@ -1488,9 +1385,9 @@ LABEL_33:
     }
     if ( n255 >= 0xFF )
     {
-      if ( dword_1000D4C4 )
+      if ( encoding )
       {
-        v53 = (uint8_t *)dword_1001645C;
+        v53 = (uint8_t *)cur_ptr;
         v54 = v75;
         n255_3 = n255;
         v56 = 0;
@@ -1500,24 +1397,24 @@ LABEL_33:
           ++v54;
           if ( !--n255_3 )
           {
-            *a2 = -1;
+            *excluded = -1;
             n255_4 = n255;
             goto LABEL_76;
           }
         }
         LOBYTE(v56) = *v54;
-        *a2 = v56;
+        *excluded = v56;
         n255_4 = n255 - n255_3;
 LABEL_76:
-        v77 = __sub_100061F4(::n256, (uint32_t *)p_n0x10000, n255_4, (uint32_t *)i_5);
+        v77 = code_symbol(::len_total, (uint32_t *)code_pos, n255_4, (uint32_t *)len_model);
       }
       else
       {
-        v58 = __sub_100061F4(::n256, (uint32_t *)p_n0x10000, -1, (uint32_t *)i_5);
+        v58 = code_symbol(::len_total, (uint32_t *)code_pos, -1, (uint32_t *)len_model);
         v77 = v58;
         v59 = v75;
         n255_5 = n255;
-        v61 = (uint8_t *)dword_1001645C;
+        v61 = (uint8_t *)cur_ptr;
         v62 = 0;
         while ( 1 )
         {
@@ -1528,17 +1425,17 @@ LABEL_76:
           ++v59;
           if ( !--n255_5 )
           {
-            *a2 = -1;
+            *excluded = -1;
             goto LABEL_82;
           }
         }
-        *a2 = v62;
+        *excluded = v62;
       }
     }
     else
     {
-      n256_1 = ::n256;
-      v41 = (uint32_t *)&::i_5[2 * n255 + 2];
+      n256_1 = ::len_total;
+      v41 = (uint32_t *)&::len_model[2 * n255 + 2];
       v42 = 255 - n255;
       do
       {
@@ -1548,9 +1445,9 @@ LABEL_76:
       }
       while ( v42 );
       n256_2 = n256_1;
-      if ( dword_1000D4C4 )
+      if ( encoding )
       {
-        v43 = (uint8_t *)dword_1001645C;
+        v43 = (uint8_t *)cur_ptr;
         v44 = v75;
         n255_6 = n255;
         v46 = 0;
@@ -1560,24 +1457,24 @@ LABEL_76:
           ++v44;
           if ( !--n255_6 )
           {
-            *a2 = -1;
+            *excluded = -1;
             n255_7 = n255;
             goto LABEL_64;
           }
         }
         LOBYTE(v46) = *v44;
-        *a2 = v46;
+        *excluded = v46;
         n255_7 = n255 - n255_6;
 LABEL_64:
-        v77 = __sub_100061F4(n256_2, (uint32_t *)p_n0x10000, n255_7, (uint32_t *)i_5);
+        v77 = code_symbol(n256_2, (uint32_t *)code_pos, n255_7, (uint32_t *)len_model);
       }
       else
       {
-        v48 = __sub_100061F4(n256_1, (uint32_t *)p_n0x10000, -1, (uint32_t *)i_5);
+        v48 = code_symbol(n256_1, (uint32_t *)code_pos, -1, (uint32_t *)len_model);
         v77 = v48;
         v49 = v75;
         n255_8 = n255;
-        v51 = (uint8_t *)dword_1001645C;
+        v51 = (uint8_t *)cur_ptr;
         v52 = 0;
         while ( 1 )
         {
@@ -1588,647 +1485,300 @@ LABEL_64:
           ++v49;
           if ( !--n255_8 )
           {
-            *a2 = -1;
+            *excluded = -1;
             goto LABEL_82;
           }
         }
-        *a2 = v52;
+        *excluded = v52;
       }
     }
 LABEL_82:
-    dword_100164A8 = (uint32_t)((v77 << 7) + 63 * dword_100164A8) >> 6;
+    len_avg = (uint32_t)((v77 << 7) + 63 * len_avg) >> 6;
     v63 = v70;
     if ( v70 )
     {
-      v64 = dword_1000F060;
-      ::n256 = n256;
+      v64 = groups;
+      ::len_total = len_sum0;
       do
       {
-        i_5[2 * v64[1]] = *v64;
+        len_model[2 * v64[1]] = *v64;
         v64 += 2;
         --v63;
       }
       while ( v63 );
     }
-    ::n256 -= i_5[0];
-    ::n256 += v73;
-    i_5[0] = v73;
+    ::len_total -= len_model[0];
+    ::len_total += v73;
+    len_model[0] = v73;
     result = v77;
-    LOWORD(i_5[2 * v77]) += 5;
-    n362 = n362_0;
-    n362_0 = ((uint16_t)n362_0 + 1) & 0xFFF;
-    v66 = &buf_1[4 * n362];
+    LOWORD(len_model[2 * v77]) += 5;
+    rpos = len_ring_pos;
+    len_ring_pos = ((uint16_t)len_ring_pos + 1) & 0xFFF;
+    v66 = (int8_t *)&len_ring[rpos];
     v67 = *(uint32_t *)v66;
     *(uint32_t *)v66 = v77;
     if ( v67 < 0 )
     {
-      ::n256 += 5;
+      ::len_total += 5;
       return v77;
     }
     else
     {
-      LOWORD(i_5[2 * v67]) -= 5;
+      LOWORD(len_model[2 * v67]) -= 5;
     }
   }
   else
   {
-    *a2 = -1;
-    n4 = 0;
-    dword_100164AC = 0;
-    dword_100164A8 = 0;
+    *excluded = -1;
+    search_gain = 0;
+    literal_run = 0;
+    len_avg = 0;
     return 0;
   }
   return result;
 }
 
-// sub_100053E2 @ 0x100053E2 -- generated by tools/extract.py from vbn.exe.c lines 6034..6235
-// Hex-Rays: int __stdcall sub_100053E2(int *dst_2)
-// real convention: stdcall, ret 4
-
-static int32_t __sub_100053E2(int32_t *dst_2)
+// search (vbn.exe 0x10005989, search_tree; 0x100053E2, search_excluding):
+// find the candidates for search_pos, the earlier positions with the same
+// context.  The descent goes down the context tree from its root along the
+// data before search_pos, read backwards a bit at a time (a 1 bit takes slot
+// 0, a 0 bit slot 1), recording the slots in search_path, to the first slot
+// that holds a leaf -- or, when the data runs out first, to slot 0 of the
+// node reached -- and keeps where it stopped in found_at, found_slot and
+// found_leaf.  Hex-Rays printed it unrolled, eight bits to a byte, as carry
+// and overflow arithmetic (see tree_rebuild).  Then the search walks back up:
+// at each level above search_avg, the other slot's leaves become candidates
+// (walk_cands), weighted by how far the level is above it.  max_cands
+// candidates end the search at once (search_exit, walk_exit).  search_tree
+// gives up after the descent when lit_cost9 is above 0xFFE; search_excluding
+// (`excluding`: after a failed match) skips the candidates that predict
+// excluded_byte.
+static void search(bool excluding)
 {
-  bool v5, v18;
-  int32_t *v2, n8, dst, dst_1, v10, v13, v16, v21, result, v23, v24, v25, *v29;
-  int8_t v4, v6, v9, v11, v12, v14, v15, v17;
-  uint32_t v19, v20, v26;
+  // search_pos >= 0.  search_excluding tests search_pos < 0 for no data
+  // rather than == 0; it only runs after a match, at a position > 0.
+  int32_t *path = search_path, *node = tree, *slot, leaf;
+  int32_t bitpos = search_pos;
+  const uint8_t *p = (const uint8_t *)&window[(uint32_t)bitpos >> 3];
+  for (; bitpos > 0; bitpos -= 8)
+  {
+    uint8_t byte = *--p;
+    for (int32_t k = 1; k <= 8; k++, byte <<= 1)
+    {
+      slot = &node[1 - (byte >> 7)];
+      *path = (int32_t)(uintptr_t)slot;
+      leaf = *slot;
+      if ( leaf <= 0 )
+      {
+        bitpos -= k;
+        goto found;
+      }
+      path++;
+      node = (int32_t *)(uintptr_t)leaf;
+    }
+  }
+  slot = node;                                    // out of data
+  leaf = node[0];
+  *path = (int32_t)(uintptr_t)node;
+found:
+  found_at = bitpos;
+  found_slot = (int32_t)(uintptr_t)slot;
+  found_leaf = leaf;
+  // When the other slot holds the same leaf, as a new node's two do, the walk
+  // starts a level higher.
+  if ( leaf == *(int32_t *)((uintptr_t)slot ^ 4) && path != search_path )
+    path--;
 
-  v2 = dword_1000D850;
-  n8 = n8_2;
-  n8_0 = (int32_t)&dst_3[(uint32_t)n8_2 >> 3];
-  v4 = *(uint8_t *)--n8_0;
-  if ( n8_2 < 0 )
+  uint32_t depth = path - search_path + 1;
+  search_depth = depth;
+  search_gain = 0;
+  if ( !excluding && (uint32_t)lit_cost9 > 0xFFE )
+    search_exit();
+  if ( (int32_t)depth > search_avg )
   {
-LABEL_20:
-    dst_1 = *dst_2;
-    dst = (int32_t)dst_2;
-    *v2 = (int32_t)dst_2;
+    uint32_t nbits;
+    _BitScanReverse(&nbits, tree_nodes + 7 * tree_updates);
+    search_gain = 16 * (depth - search_avg) / nbits;
+    search_avg = ((depth >> 3) + depth + 2 * search_avg) >> 2;
   }
-  else
+  if ( leaf <= 0
+    && (uint32_t)search_avg < (uint32_t)search_depth
+    && !(excluding && predicts_excluded(leaf)) )
   {
-    while ( 1 )
+    cands[0] = (search_depth - search_avg) << weight_shift--;
+    cands[1] = leaf;
+    n_cands++;
+  }
+  while ( (uint32_t)search_depth > (uint32_t)search_avg )
+  {
+    int32_t other = *(int32_t *)(uintptr_t)(*path-- ^ 4);
+    if ( other > 0 )
     {
-      v5 = __CFADD__(v4, v4);
-      v6 = 2 * v4;
-      dst = (int32_t)&dst_2[-v5 + 1];
-      *v2 = dst;
-      dst_1 = *(uint32_t *)dst;
-      if ( (dst_1 < 0) ^ __OFADD__(v5, -v5) | (dst_1 == 0) )
-      {
-        --n8;
-        goto LABEL_21;
-      }
-      ++v2;
-      v5 = __CFADD__(v6, v6);
-      v9 = 2 * v6;
-      dst = dst_1 - 4 * v5 + 4;
-      *v2 = dst;
-      v10 = *(uint32_t *)dst;
-      if ( (v10 < 0) ^ __OFADD__(v5, -v5) | (v10 == 0) )
-      {
-        n8 -= 2;
-        dst_1 = *(uint32_t *)dst;
-        goto LABEL_21;
-      }
-      ++v2;
-      v5 = __CFADD__(v9, v9);
-      v11 = 2 * v9;
-      dst = v10 - 4 * v5 + 4;
-      *v2 = dst;
-      dst_1 = *(uint32_t *)dst;
-      if ( (dst_1 < 0) ^ __OFADD__(v5, -v5) | (dst_1 == 0) )
-      {
-        n8 -= 3;
-        goto LABEL_21;
-      }
-      ++v2;
-      v5 = __CFADD__(v11, v11);
-      v12 = 2 * v11;
-      dst = dst_1 - 4 * v5 + 4;
-      *v2 = dst;
-      v13 = *(uint32_t *)dst;
-      if ( (v13 < 0) ^ __OFADD__(v5, -v5) | (v13 == 0) )
-      {
-        n8 -= 4;
-        dst_1 = *(uint32_t *)dst;
-        goto LABEL_21;
-      }
-      ++v2;
-      v5 = __CFADD__(v12, v12);
-      v14 = 2 * v12;
-      dst = v13 - 4 * v5 + 4;
-      *v2 = dst;
-      dst_1 = *(uint32_t *)dst;
-      if ( (dst_1 < 0) ^ __OFADD__(v5, -v5) | (dst_1 == 0) )
-      {
-        n8 -= 5;
-        goto LABEL_21;
-      }
-      ++v2;
-      v5 = __CFADD__(v14, v14);
-      v15 = 2 * v14;
-      dst = dst_1 - 4 * v5 + 4;
-      *v2 = dst;
-      v16 = *(uint32_t *)dst;
-      if ( (v16 < 0) ^ __OFADD__(v5, -v5) | (v16 == 0) )
-      {
-        n8 -= 6;
-        dst_1 = *(uint32_t *)dst;
-        goto LABEL_21;
-      }
-      ++v2;
-      v5 = __CFADD__(v15, v15);
-      v17 = 2 * v15;
-      dst = v16 - 4 * v5 + 4;
-      *v2 = dst;
-      dst_1 = *(uint32_t *)dst;
-      if ( (dst_1 < 0) ^ __OFADD__(v5, -v5) | (dst_1 == 0) )
-      {
-        n8 -= 7;
-        goto LABEL_21;
-      }
-      ++v2;
-      dst = dst_1 - 4 * __CFADD__(v17, v17) + 4;
-      *v2 = dst;
-      dst_2 = *(int32_t **)dst;
-      if ( ((int32_t)dst_2 < 0) ^ __OFADD__(__CFADD__(v17, v17), -__CFADD__(v17, v17)) | (dst_2 == nullptr) )
-        break;
-      ++v2;
-      v4 = *(uint8_t *)--n8_0;
-      v18 = n8 <= 8;
-      n8 -= 8;
-      if ( v18 )
-        goto LABEL_20;
+      int32_t weight = search_depth - search_avg;
+      if ( weight_shift )
+        weight <<= weight_shift-- >> 1;
+      Walk w = { &cands[2 * n_cands], max_cands - n_cands, weight, excluding };
+      walk_cands((int32_t *)(uintptr_t)other, &w);
+      n_cands = (w.out - cands) / 2;
     }
-    n8 -= 8;
-    dst_1 = *(uint32_t *)dst;
-  }
-LABEL_21:
-  dst_0 = dst;
-  if ( dst_1 == *(uint32_t *)(dst ^ 4) && v2 != dword_1000D850 )
-    --v2;
-  v29 = v2;
-  v19 = ((uint32_t)((int8_t *)v2 - (int8_t *)dword_1000D850) >> 2) + 1;
-  dword_10016454 = v19;
-  n8_0 = n8;
-  ::dst_1 = dst_1;
-  n4 = 0;
-  if ( (int32_t)v19 > dword_10016438 )
-  {
-    _BitScanReverse(&v20, dword_1000CA4C + 7 * dword_10016434);
-    n4 = 16 * (v19 - dword_10016438) / v20;
-    dword_10016438 = ((v19 >> 3) + v19 + 2 * dword_10016438) >> 2;
-    dst_1 = ::dst_1;
-  }
-  if ( dst_1 <= 0
-    && dword_10016438 < (uint32_t)dword_10016454
-    && (uint8_t)dst_3[(uint32_t)-dst_1 >> 3] != dword_10016488 )
-  {
-    (::dword_1000D558 + 1)[0] = dst_1;
-    v21 = (dword_10016454 - dword_10016438) << (n4_0-- & 31);
-    ++n2_1;
-    dword_1000D558[0] = v21;
-  }
-  while ( 1 )
-  {
-    result = dword_10016454;
-    if ( dword_10016454 <= (uint32_t)dword_10016438 )
-      break;
-    v23 = *(uint32_t *)(*v29-- ^ 4);
-    if ( v23 > 0 )
+    else if ( !(excluding && predicts_excluded(other)) )
     {
-      v25 = dword_10016454 - dword_10016438;
-      v26 = n4_0;
-      if ( n4_0 )
-      {
-        --n4_0;
-        v25 <<= (v26 & 31) >> 1;
-      }
-      {   // the walk returns its cursor in ECX, which Hex-Rays could not see (v27)
-        VbnWalk w = { (uint8_t *)&::dword_1000D558[2 * n2_1], n55 - n2_1, (int32_t)(uintptr_t)dst_3, (int32_t)v25 };
-        vbn_walk2_entry((int32_t *)(uintptr_t)v23, &w);
-        n2_1 = ((uintptr_t)w.out - (uintptr_t)dword_1000D558) >> 3;
-      }
-      --dword_10016454;
+      cands[2 * n_cands] = (search_depth - search_avg) << weight_shift;
+      cands[2 * n_cands + 1] = other;
+      if ( ++n_cands == max_cands )
+        search_exit();
     }
-    else
-    {
-      if ( (uint8_t)dst_3[(uint32_t)-v23 >> 3] != (uint8_t)(dword_10016488))
-      {
-        v24 = n2_1;
-        dword_1000D558[2 * n2_1] = (dword_10016454 - dword_10016438) << (n4_0 & 31);
-        (::dword_1000D558 + 1)[2 * v24] = v23;
-        n2_1 = v24 + 1;
-        if ( v24 + 1 == n55 )
-          __pe_sub_10006E22();
-      }
-      --dword_10016454;
-    }
+    search_depth--;
   }
-  return result;
 }
 
-// sub_10005989 @ 0x10005989 -- generated by tools/extract.py from vbn.exe.c lines 6423..6622
-// Hex-Rays: int __stdcall sub_10005989(int *dst_2)
-// real convention: stdcall, ret 4
-
-static int32_t __sub_10005989(int32_t *dst_2)
+// run_search: the search, however it ends.  Not inlined, so that code_window's
+// locals stay out of what longjmp returns to.
+static __attribute__((noinline)) void run_search(bool excluding)
 {
-  bool v5, v18;
-  int32_t *v2, n8, dst, dst_1, v10, v13, v16, v21, result, v24, v25, *v30;
-  int8_t v4, v6, v9, v11, v12, v14, v15, v17;
-  uint32_t v19, v20, **v23, v26;
-
-  v2 = dword_1000D850;
-  n8 = n8_2;
-  n8_0 = (int32_t)&dst_3[(uint32_t)n8_2 >> 3];
-  v4 = *(uint8_t *)--n8_0;
-  if ( n8_2 )
-  {
-    while ( 1 )
-    {
-      v5 = __CFADD__(v4, v4);
-      v6 = 2 * v4;
-      dst = (int32_t)&dst_2[-v5 + 1];
-      *v2 = dst;
-      dst_1 = *(uint32_t *)dst;
-      if ( (dst_1 < 0) ^ __OFADD__(v5, -v5) | (dst_1 == 0) )
-      {
-        --n8;
-        goto LABEL_20;
-      }
-      ++v2;
-      v5 = __CFADD__(v6, v6);
-      v9 = 2 * v6;
-      dst = dst_1 - 4 * v5 + 4;
-      *v2 = dst;
-      v10 = *(uint32_t *)dst;
-      if ( (v10 < 0) ^ __OFADD__(v5, -v5) | (v10 == 0) )
-      {
-        n8 -= 2;
-        dst_1 = *(uint32_t *)dst;
-        goto LABEL_20;
-      }
-      ++v2;
-      v5 = __CFADD__(v9, v9);
-      v11 = 2 * v9;
-      dst = v10 - 4 * v5 + 4;
-      *v2 = dst;
-      dst_1 = *(uint32_t *)dst;
-      if ( (dst_1 < 0) ^ __OFADD__(v5, -v5) | (dst_1 == 0) )
-      {
-        n8 -= 3;
-        goto LABEL_20;
-      }
-      ++v2;
-      v5 = __CFADD__(v11, v11);
-      v12 = 2 * v11;
-      dst = dst_1 - 4 * v5 + 4;
-      *v2 = dst;
-      v13 = *(uint32_t *)dst;
-      if ( (v13 < 0) ^ __OFADD__(v5, -v5) | (v13 == 0) )
-      {
-        n8 -= 4;
-        dst_1 = *(uint32_t *)dst;
-        goto LABEL_20;
-      }
-      ++v2;
-      v5 = __CFADD__(v12, v12);
-      v14 = 2 * v12;
-      dst = v13 - 4 * v5 + 4;
-      *v2 = dst;
-      dst_1 = *(uint32_t *)dst;
-      if ( (dst_1 < 0) ^ __OFADD__(v5, -v5) | (dst_1 == 0) )
-      {
-        n8 -= 5;
-        goto LABEL_20;
-      }
-      ++v2;
-      v5 = __CFADD__(v14, v14);
-      v15 = 2 * v14;
-      dst = dst_1 - 4 * v5 + 4;
-      *v2 = dst;
-      v16 = *(uint32_t *)dst;
-      if ( (v16 < 0) ^ __OFADD__(v5, -v5) | (v16 == 0) )
-      {
-        n8 -= 6;
-        dst_1 = *(uint32_t *)dst;
-        goto LABEL_20;
-      }
-      ++v2;
-      v5 = __CFADD__(v15, v15);
-      v17 = 2 * v15;
-      dst = v16 - 4 * v5 + 4;
-      *v2 = dst;
-      dst_1 = *(uint32_t *)dst;
-      if ( (dst_1 < 0) ^ __OFADD__(v5, -v5) | (dst_1 == 0) )
-      {
-        n8 -= 7;
-        goto LABEL_20;
-      }
-      ++v2;
-      dst = dst_1 - 4 * __CFADD__(v17, v17) + 4;
-      *v2 = dst;
-      dst_2 = *(int32_t **)dst;
-      if ( ((int32_t)dst_2 < 0) ^ __OFADD__(__CFADD__(v17, v17), -__CFADD__(v17, v17)) | (dst_2 == nullptr) )
-        break;
-      ++v2;
-      v4 = *(uint8_t *)--n8_0;
-      v18 = n8 <= 8;
-      n8 -= 8;
-      if ( v18 )
-        goto LABEL_11;
-    }
-    n8 -= 8;
-    dst_1 = *(uint32_t *)dst;
-  }
-  else
-  {
-LABEL_11:
-    dst_1 = *dst_2;
-    dst = (int32_t)dst_2;
-    *v2 = (int32_t)dst_2;
-  }
-LABEL_20:
-  dst_0 = dst;
-  if ( dst_1 == *(uint32_t *)(dst ^ 4) && v2 != dword_1000D850 )
-    --v2;
-  v30 = v2;
-  v19 = ((uint32_t)((int8_t *)v2 - (int8_t *)dword_1000D850) >> 2) + 1;
-  dword_10016454 = v19;
-  n8_0 = n8;
-  ::dst_1 = dst_1;
-  n4 = 0;
-  if ( (uint32_t)n0xFFE > 0xFFE )
-    __pe_sub_10006E22();
-  if ( (int32_t)v19 > dword_10016438 )
-  {
-    _BitScanReverse(&v20, dword_1000CA4C + 7 * dword_10016434);
-    n4 = 16 * (v19 - dword_10016438) / v20;
-    dword_10016438 = ((v19 >> 3) + v19 + 2 * dword_10016438) >> 2;
-    dst_1 = ::dst_1;
-  }
-  if ( dst_1 <= 0 && dword_10016438 < (uint32_t)dword_10016454 )
-  {
-    (::dword_1000D558 + 1)[0] = dst_1;
-    v21 = (dword_10016454 - dword_10016438) << (n4_0-- & 31);
-    ++n2_1;
-    dword_1000D558[0] = v21;
-  }
-  while ( 1 )
-  {
-    result = dword_10016454;
-    if ( dword_10016454 <= (uint32_t)dword_10016438 )
-      break;
-    v23 = *(uint32_t ***)(*v30-- ^ 4);
-    if ( (int32_t)v23 > 0 )
-    {
-      v25 = dword_10016454 - dword_10016438;
-      v26 = n4_0;
-      if ( n4_0 )
-      {
-        --n4_0;
-        v25 <<= (v26 & 31) >> 1;
-      }
-      {   // the walk returns its cursor in ECX, which Hex-Rays could not see (v27)
-        VbnWalk w = { (uint8_t *)&::dword_1000D558[2 * n2_1], n55 - n2_1, 4, (int32_t)v25 };
-        vbn_walk1_entry((int32_t *)(uintptr_t)v23, &w);
-        n2_1 = ((uintptr_t)w.out - (uintptr_t)dword_1000D558) >> 3;
-      }
-      --dword_10016454;
-    }
-    else
-    {
-      v24 = n2_1;
-      dword_1000D558[2 * n2_1] = (dword_10016454 - dword_10016438) << (n4_0 & 31);
-      (::dword_1000D558 + 1)[2 * v24] = (int32_t)v23;
-      n2_1 = v24 + 1;
-      if ( v24 + 1 == n55 )
-        __pe_sub_10006E22();
-      --dword_10016454;
-    }
-  }
-  return result;
+  if (!setjmp(search_jmp))
+    search(excluding);
 }
 
-// sub_10000D0E @ 0x10000D0E -- read the coder's input.  In vbn this was the
-// input reader: the data (the archive's title, then each file) when
-// compressing, the archive's volumes when decompressing.  vbn2 reads one file:
-// the data when compressing, the code after the stream's size when
-// decompressing.  A short read leaves the rest of the buffer as it was, as
-// vbn's did at the end of its data.
+// read_input (vbn.exe 0x10000D0E): read the coder's input -- the data when
+// compressing, the code (after the stream's size) when decompressing.  vbn's
+// reader read the archive's title and then each file, or the archive's
+// volumes.  A short read leaves the rest of the buffer as it was, as vbn's did
+// at the end of its data.
 static FILE *vbn_in, *vbn_out;
 static const char *vbn_in_name, *vbn_out_name;
-static int32_t vbn_compressing;
 static uint32_t vbn_out_left;           // decompressing: the bytes of data still to write
 [[noreturn]] static void vbn_fail(const char *what, const char *name);
 
-static uint32_t __sub_10000D0E(int8_t *dst, uint32_t count)
+static void read_input(int8_t *to, uint32_t count)
 {
-  uint32_t n = fread(dst, 1, count, vbn_in);
-  if (n < count && ferror(vbn_in))
+  if (fread(to, 1, count, vbn_in) < count && ferror(vbn_in))
     vbn_fail("cannot read", vbn_in_name);
-  return (uint32_t)n;
 }
 
-// sub_100012A8 @ 0x100012A8 -- write the coder's output: the code when
+// write_output (vbn.exe 0x100012A8): write the coder's output -- the code when
 // compressing, the data when decompressing.  vbn's writer split it into
-// archive volumes, or into the title and the files; it stopped at the end of
-// the last file, so the data written never runs past the stream's size.
-static int8_t __sub_100012A8(int8_t *src, uint32_t count)
+// archive volumes, or into the title and the files, and stopped at the end of
+// the last file: the data written never runs past the stream's size.
+static void write_output(int8_t *src, uint32_t count)
 {
-  if (!vbn_compressing) {
+  if (!encoding) {
     if (count > vbn_out_left)
       count = vbn_out_left;
     vbn_out_left -= count;
   }
   if (fwrite(src, 1, count, vbn_out) != count)
     vbn_fail("cannot write", vbn_out_name);
-  return 0;
 }
 
-// sub_10004924 @ 0x10004924 -- generated by tools/extract.py from vbn.exe.c lines 5095..5123
-// Hex-Rays: int __usercall sub_10004924@<eax>( int a1@<edx>, int count@<ebx>, char *p_j@<edi>, char *_Data_size____10u_n@<esi>, int n0x10000)
-// real convention: cdecl; register parameters dropped: int a1, int count, char *p_j, char *_Data_size____10u_n
-
-
-static int32_t __sub_10004924(int32_t n0x10000)
+// code_buffer_io (vbn.exe 0x10004924): 8 KB of code are done.  Compressing,
+// write them out and move the 16 bytes after them to the start; decompressing,
+// move those 16 bytes to the start and read the next 8 KB after them.
+// Returns the bit position, 8 KB back.
+static uint32_t code_buffer_io(uint32_t code_pos)
 {
-
-  if ( dword_1000D4C4 )
+  if ( encoding )
   {
-    __sub_100012A8((int8_t *)aVbnVer1001, // "                                                \nvbn ver.1...."
-      0x2000u);
-    __sub_100048F0(4, (void *)((int32_t *)(::aVbnVer1001 + 0x2000)), (void *)aVbnVer1001);        // "                                                \nvbn ver.1...."
-    __sub_1000490B(2048, (void *)&aVbnVer1001[16]);       // "                                                \nvbn ver.1...."
+    write_output(code_buf, 0x2000);
+    memcpy(code_buf, code_buf + 0x2000, 16);
+    memset(code_buf + 16, 0, 0x2000);
   }
   else
   {
-    __sub_100048F0(4, (void *)((int32_t *)(::aVbnVer1001 + 0x2000)), (void *)aVbnVer1001);        // "                                                \nvbn ver.1...."
-    __sub_10000D0E(&aVbnVer1001[16], 0x2000u);// "                                                \nvbn ver.1...."
+    memcpy(code_buf, code_buf + 0x2000, 16);
+    read_input(code_buf + 16, 0x2000);
   }
-  return n0x10000 - 0x10000;
+  return code_pos - 0x10000;
 }
 
-// sub_100056C4 @ 0x100056C4 -- generated by tools/extract.py from vbn.exe.c lines 6256..6393
-// Hex-Rays: unsigned int __userpurge sub_100056C4@<eax>( int dst@<ebx>, char *p_j@<edi>, int *_Data_size____10u_n@<esi>, unsigned int *a4, int n0x198000, unsigned int n8)
-// real convention: stdcall, ret 12; register parameters dropped: int dst, char *p_j, int *_Data_size____10u_n
-
-
-static uint32_t __sub_100056C4(uint32_t *a4, int32_t n0x198000, uint32_t n8)
+// code_window (vbn.exe 0x100056C4): code the window from bitpos to its end.  At
+// each position: search for candidates (excluding the byte a failed match
+// predicted) and code a match length; on a match, register some of its
+// positions in the tree and skip it, else code a literal and register the
+// position.  Every 8 KB of code goes through code_buffer_io.  Returns the bit
+// position reached.
+static uint32_t code_window(uint32_t *code_pos_p, uint32_t bitpos)
 {
-  int32_t dst = 0;   // @<ebx> in Hex-Rays; regflow shows no caller sets it
-  int32_t * _Data_size____10u_n = 0;   // @<esi> in Hex-Rays; regflow shows no caller sets it
-  uint32_t p_n0x10000, v18, n8_1;
-  int32_t v19, v21;
-  uint32_t v7;
-  int32_t v8;
-  int32_t v9;
-  int8_t v10;
-  uint32_t v11;
-  uint32_t v12;
-  int32_t v13;
-  int8_t v14;
-  int32_t v15;
-
-  n8_1 = n8;
-  p_n0x10000 = *a4;
-  v19 = 0;
-  v21 = -1;
-  while ( n8 < n13369344 )
+  uint32_t code_pos = *code_pos_p, start = bitpos;
+  int32_t excluded = -1;
+  while ( bitpos < (uint32_t)window_bits )
   {
-    dword_10016488 = v21;
-    n8_2 = n8;
-    dword_10016454 = 0;
-    n2_1 = 0;
-    dword_100164C4 = 0;
-    n4_0 = 4;
-    _BitScanReverse(&v7, dword_10016434 + 4);
-    dword_10016438 = (276 * v7) >> 9;
-    if ( v21 < 0 )
+    excluded_byte = excluded;
+    search_pos = bitpos;
+    search_depth = 0;
+    n_cands = 0;
+    cand_floor = 0;
+    weight_shift = 4;
+    uint32_t nbits;
+    _BitScanReverse(&nbits, tree_updates + 4);
+    search_avg = (276 * nbits) >> 9;
+    run_search(excluded >= 0);
+    if ( n_cands > 1 )
+      cand_floor = (uint32_t)cands[2 * n_cands - 2] >> 2;
+    // Of the candidates with the top weight, the latest goes first.
+    for ( int32_t *cand = cands + 2, n = n_cands - 1; n > 0 && cand[0] == cands[0]; cand += 2, n-- )
+      if ( cands[1] >= cand[1] )
+        std::swap(cands[1], cand[1]);
+
+    uint32_t len = code_match(&code_pos, &excluded, bitpos);
+    if ( len )
     {
-      vbn_restartable(__sub_10005989, (int32_t)(uintptr_t)::dst);   // sub_1000703B(0); sub_10005989(dst): see vbn_restartable
+      next_byte[prev_byte] = window[bitpos >> 3];
+      next_byte2[prev_byte2] = window[bitpos >> 3];
+      if ( excluded >= 0 || (uint32_t)search_gain < 0x2A )
+        tree_insert(len, bitpos);
+      bitpos += 8 * len;
     }
     else
     {
-      vbn_restartable(__sub_100053E2, (int32_t)(uintptr_t)::dst);   // sub_1000703B(0); sub_100053E2(dst): see vbn_restartable
+      int8_t byte = code_literal(excluded, &code_pos, bitpos);
+      next_byte[prev_byte] = byte;
+      next_byte2[prev_byte2] = byte;
+      tree_insert(1, bitpos);                     // vbn has this one inline
+      excluded = -1;
+      bitpos += 8;
     }
-    if ( n2_1 > 1 )
-      dword_100164C4 = (uint32_t)dword_1000D558[2 * n2_1 - 2] >> 2;
-    if ( (uint32_t)n2_1 >= 2 )
-    {
-      _Data_size____10u_n = (::dword_1000D558 + 2);
-      v8 = n2_1 - 1;
-      v9 = dword_1000D558[0];
-      do
-      {
-        if ( v9 != *_Data_size____10u_n )
-          break;
-        dst = (::dword_1000D558 + 1)[0];
-        if ( (::dword_1000D558 + 1)[0] >= _Data_size____10u_n[1] )
-        {
-          dst = _InterlockedExchange(_Data_size____10u_n + 1, (::dword_1000D558 + 1)[0]);
-          (::dword_1000D558 + 1)[0] = dst;
-        }
-        _Data_size____10u_n += 2;
-        --v8;
-      }
-      while ( v8 );
-    }
-    v18 = __sub_10005C50(&p_n0x10000, (uint32_t *)&v21, n8);
-    if ( v18 )
-    {
-      v14 = dst_3[n8 >> 3];
-      buf_3[dword_100164B0] = v14;
-      buf_4[dword_100164B4] = v14;
-      if ( v21 >= 0 || (uint32_t)n4 < 0x2A )
-        __sub_10005251(v18, n8);
-      v19 += v18;
-      n8 += 8 * v18;
-    }
-    else
-    {
-      v10 = __sub_100064C0(v21, &p_n0x10000, n8);
-      buf_3[dword_100164B0] = v10;
-      buf_4[dword_100164B4] = v10;
-      dst = dst_0;
-      _BitScanReverse(&v11, dword_1000CA4C + 32);
-      if ( n8 - n8_0 > v11 << 6 )
-      {
-        if ( dst_1 <= 0 && dst_1 + n8 >= 0x800 )
-        {
-          _bittestandcomplement(::buf_, n8 >> 3);
-          *(uint32_t *)dst_0 = -8 * (n8 >> 3);
-          ++dword_10016434;
-        }
-      }
-      else if ( dst_1 <= 0 )
-      {
-        _bittestandcomplement(::buf_, n8 >> 3);
-        v12 = -8 * (n8 >> 3);
-        v13 = dword_10016430;
-        *(uint32_t *)dword_10016430 = v12;
-        *(uint32_t *)(v13 + 4) = v12;
-        *(uint32_t *)dst = v13;
-        dword_10016430 += 8;
-        ++dword_1000CA4C;
-        dst ^= 4u;
-        if ( *(int32_t *)dst > 0 )
-          ++dword_10016434;
-      }
-      v21 = -1;
-      if ( n8 < n13369344 )
-      {
-        n8 += 8;
-        ++v19;
-      }
-    }
-    v15 = (uint8_t)(::dst_3 - 1)[n8 >> 3];
-    dword_100164B0 = v15;
-    if ( n8 >> 3 != 1 )
-      v15 = (uint8_t)(::dst_3 - 1)[(n8 >> 3) - 1];
-    dword_100164B4 = v15;
-    if ( p_n0x10000 >= 0x10000 )
-    {
-      p_n0x10000 = __sub_10004924(p_n0x10000);
-    }
+    int32_t at = bitpos >> 3;
+    prev_byte = (uint8_t)window[at - 1];
+    prev_byte2 = at == 1 ? prev_byte : (uint8_t)window[at - 2];
+    if ( code_pos >= 0x10000 )
+      code_pos = code_buffer_io(code_pos);
   }
-  *a4 = p_n0x10000;
-  ::n8_1 += 8 * v19;
-  return n8;
+  *code_pos_p = code_pos;
+  total_bits += bitpos - start;
+  return bitpos;
 }
 
-// sub_100050F8 @ 0x100050F8 -- hand-written (incdec.md §4.1): re-register the
-// context tree's positions after the input window slides (sub_10004A5F).
-// Hex-Rays prints the eight-way unrolled descent as carry/overflow arithmetic:
-// per bit, `add cl,cl; sbb r,r; adc r,[node+r*4+4]; jle`.  sbb leaves CF (the
-// bit) alone, so adc loads [node] for a 1 bit and [node+4] for a 0 bit, carries
-// the bit back out and never overflows: jle is a plain `child <= 0`.  It is the
-// descent of sub_10005251:
+// tree_rebuild (vbn.exe 0x100050F8): register the window's positions in an
+// empty tree again, after the window slid.  Hex-Rays printed its eight-way
+// unrolled descent as carry/overflow arithmetic: per bit, `add cl,cl; sbb r,r;
+// adc r,[node+r*4+4]; jle`.  sbb leaves CF (the bit) alone, so adc loads
+// [node] for a 1 bit and [node+4] for a 0 bit, carries the bit back out and
+// never overflows: jle is a plain `child <= 0`.  It is tree_insert's descent:
 //
-// For every position pos = 8, 16, ... below n8 whose bit pos/8 is set in the
-// bitmap buf_:
-//  - descend from the root `dst` reading the data bits backwards from byte
-//    pos/8-1 (bit 1 -> child [0], bit 0 -> child [1]) to the first slot
-//    holding a value <= 0, or to node[0] of the last node when the bits run out;
+// For every position pos = 8, 16, ... below window_pos whose bit pos/8 is set
+// in `registered`:
+//  - descend from the root reading the data bits backwards from byte pos/8-1
+//    (bit 1 -> child [0], bit 0 -> child [1]) to the first slot holding a
+//    value <= 0, or to node[0] of the last node when the bits run out;
 //  - depth = pos - (bit position where the descent stopped); then
-//      depth <= 64*bsr(nodes+32):  an empty leaf becomes a new node from the
-//          allocator at dword_10016430, both children -pos; the sibling slot
-//          being a node bumps dword_10016434;
+//      depth <= 64*bsr(tree_nodes+32): an empty leaf becomes a new node from
+//          node_next, both children -pos; the sibling slot being a node bumps
+//          tree_updates;
 //      deeper: a leaf older than 0x800 is refreshed to -pos, and bumps it too.
-// Returns the first position >= n8 (EAX); cdecl, no arguments.
-
-static uint32_t __sub_100050F8(void)
+// Returns the first position >= window_pos.
+static uint32_t tree_rebuild(void)
 {
   uint32_t pos = 0;                                     // EAX
   for (;;) {
     pos += 8;
-    if (pos >= n8)
+    if (pos >= window_pos)
       return pos;
-    if (!_bittest(((const void *)::buf_), (int32_t)(pos >> 3)))
+    if (!_bittest(((const void *)::registered), (int32_t)(pos >> 3)))
       continue;
-    const uint8_t *p = ((const uint8_t *)dst_3) + (pos >> 3) - 1;     // EDI
+    const uint8_t *p = ((const uint8_t *)window) + (pos >> 3) - 1;     // EDI
     int32_t at = (int32_t)pos;                          // ESI
-    int32_t *node = ((int32_t *)dst), *slot;                  // EBX/EDX alternate in the asm
+    int32_t *node = ((int32_t *)tree), *slot;                  // EBX/EDX alternate in the asm
     int32_t leaf;
     uint8_t cl = *p;
     for (;;) {
@@ -2258,172 +1808,120 @@ static uint32_t __sub_100050F8(void)
       }
     }
     uint32_t depth = pos - (uint32_t)at;
-    uint32_t thr = (uint32_t)(31 - __builtin_clz((uint32_t)dword_1000CA4C + 32)) << 6;
+    uint32_t thr = (uint32_t)(31 - __builtin_clz((uint32_t)tree_nodes + 32)) << 6;
     if (depth > thr) {
       if (leaf <= 0 && pos + (uint32_t)leaf >= 0x800) {
         *slot = -(int32_t)pos;
-        dword_10016434++;
+        tree_updates++;
       }
     } else if (leaf <= 0) {
-      int32_t *n = (int32_t *)(uintptr_t)dword_10016430;
+      int32_t *n = (int32_t *)(uintptr_t)node_next;
       n[0] = -(int32_t)pos;
       n[1] = -(int32_t)pos;
       *slot = (int32_t)(uintptr_t)n;
-      dword_10016430 += 8;
-      dword_1000CA4C++;
+      node_next += 8;
+      tree_nodes++;
       slot = (int32_t *)((uintptr_t)slot ^ 4);
       if (*slot > 0)
-        dword_10016434++;
+        tree_updates++;
     }
   }
 }
 
-// sub_10004A5F @ 0x10004A5F -- generated by tools/extract.py from vbn.exe.c lines 5182..5421
-// Hex-Rays: unsigned int __usercall sub_10004A5F@<eax>( int k@<ecx>, int dst@<ebx>, char *p_j@<edi>, int *_Data_size____10u_n@<esi>, unsigned int n0x198000)
-// real convention: cdecl; register parameters dropped: int k, int dst, char *p_j, int *_Data_size____10u_n
-
-
-static void __sub_10004A5F(uint32_t n0x198000)
+// coder_run (vbn.exe 0x10004A5F): compress or decompress `size` bytes, as
+// `encoding` says.  It sets up the models, codes the window, and slides it by
+// 0x66000 bytes -- re-registering the positions it keeps -- until all the data
+// is coded; then it ends the code.  The data comes from read_input and goes to
+// write_output.
+static void coder_run(uint32_t size)
 {
-  int32_t _Code_size___u__Ratio____u___or__u__05d_bpc___1;
-  uint32_t i;
-  uint32_t p_ja[23];
-  int32_t j;
-  uint32_t v12;
+  // The models.
+  lit_total = 2048;
+  for ( uint32_t i = 0; i < 256; i++ )
+  {
+    lit_model[2 * i] = 8;
+    lit_model[2 * i + 1] = i;
+    lit_slot[i] = (int32_t)(uintptr_t)&lit_model[2 * i];
+  }
+  len_total = 256;
+  for ( uint32_t i = 0; i < 256; i++ )
+  {
+    len_model[2 * i] = 1;
+    len_model[2 * i + 1] = i;
+  }
+  memset(lit_ring1, 0xFF, sizeof lit_ring1);
+  memset(lit_ring2, 0xFF, sizeof lit_ring2);
+  memset(len_ring, 0xFF, sizeof len_ring);
+  memset(ctx_count, 0, sizeof ctx_count);
+  lit_ring1_pos = lit_ring2_pos = len_ring_pos = 0;
+  for ( int32_t len = 0; len < 23; len++ )
+    for ( int32_t n = len_init_counts[len]; n; n-- )
+      len_model_add(len);
+  memset(group_slot, 0, sizeof group_slot);
+  lit_cost8 = 1280;
+  lit_cost9 = 3072;
+  lit_cost10 = 7168;
+  lit_cost11 = 0x4000;
+  len_avg = 0;
+  lit_resort = 1;
+  lit_inc = 8;
+  memset(next_byte, 0, sizeof next_byte);
+  memset(next_byte2, 0, sizeof next_byte2);
+  prev_byte = prev_byte2 = literal_run = lit_threshold = 0;
 
-  buf = (int8_t *)i_4;
-  buf_0 = (int8_t *)buf_6;
-  buf_1 = (int8_t *)buf_7;
+  // The coder, the first window and the tree.
+  code_low = code_pending = 0;
+  code_high = -1;
+  total_bits = 0;
+  uint32_t n = size < 0x198000 ? size : 0x198000;
+  window_bits = 8 * n;
+  data_end = (int32_t)(uintptr_t)&window[n];
+  if ( encoding )
   {
-    n2048 = 2048;
-    for ( i = 0; i < 0x100; ++i )
-    {
-      *(::i_ + 2 * i) = 8;
-      ((int32_t *)::i_ + 1)[2 * i] = i;
-      dword_10010060[i] = (int32_t)(uintptr_t)(::i_ + 2 * i);
-    }
-    n256 = 256;
-    for ( i = 0; i < 0x100; ++i )
-    {
-      i_5[2 * i] = 1;
-      (::i_5 + 1)[2 * i] = i;
-    }
-    __sub_100091DC(buf, 0xFFu, 0x5ACu);
-    __sub_100091DC(buf_0, 0xFFu, 0x1000u);
-    __sub_100091DC(buf_1, 0xFFu, 0x4000u);
-    n362_0 = __sub_1000490B(0x4000, (void *)buf_2);
-    n362_1 = n362_0;
-    n362 = n362_0;
-    qmemcpy(
-      p_ja,
-      Data_size____10u_n,                       // "f\n"
-      sizeof(p_ja));                            // " Data size= %-10u\n"
-    for ( j = 0; j < 23; ++j )
-    {
-      for ( i = p_ja[j]; i; --i )
-        __sub_100050B0(j);
-    }
-    dword_10016410 = -1;
-    n0x7FFFFFFF = __sub_1000490B(256, (void *)buf__0);
-    n0x7FFFFFFF_1 = n0x7FFFFFFF;
-    n8_1 = n0x7FFFFFFF;
-    n0x384 = 1280;
-    n0xFFE = 3072;
-    n0x2000 = 7168;
-    n0x4000 = 0x4000;
-    dword_100164A8 = 0;
-    if ( n0x198000 <= 0x198000 )
-    {
-      n13369344 = 8 * n0x198000;
-      dst_4 = (int32_t)&::dst_3[n0x198000];
-    }
-    else
-    {
-      n13369344 = 13369344;
-      dst_4 = (int32_t)(uintptr_t)(::dst_3 + 0x198000);   // the window's end (vbn kept the tree right after it)
-    }
-    if ( dword_1000D4C4 )
-    {
-      __sub_10000D0E((int8_t *)// " Data size= %-10u\n"
-        ::dst_3, (uint32_t)n13369344 >> 3);
-      __sub_1000490B(2052, (void *)aVbnVer1001);          // "                                                \nvbn ver.1...."
-    }
-    else if ( (uint32_t)n13369344 >> 2 >= 0x2010 )
-    {
-      __sub_10000D0E((int8_t *)// " Data size= %-10u\n"
-        aVbnVer1001, // "                                                \nvbn ver.1...."
-        0x2010u);
-    }
-    else
-    {
-      __sub_10000D0E((int8_t *)// " Data size= %-10u\n"
-        aVbnVer1001, // "                                                \nvbn ver.1...."
-        (uint32_t)n13369344 >> 2);
-    }
-    __sub_1000490B(52224, (void *)::buf_);
-    ::dst[1] = 0;
-    ::dst[0] = 0;
-    n8 = 0;
-    dword_10016430 = (int32_t)(uintptr_t)(::dst + 2);
-    dword_1000CA4C = 1;
-    dword_10016494 = 1;
-    dword_10016434 = 1;
-    n2_0 = 8;
-    dword_100164B0 = __sub_1000490B(64, (void *)buf_3);
-    dword_100164B4 = dword_100164B0;
-    dword_100164AC = dword_100164B0;
-    dword_100164B8 = dword_100164B0;
-    __sub_1000490B(64, (void *)buf_4);
+    read_input(window, n);
+    memset(code_buf, 0, sizeof code_buf);
   }
-  n8_3 = n8;
-  src_4 = &::dst_3[n8 >> 3];
-  _Code_size___u__Ratio____u___or__u__05d_bpc___1 = 0;
-  while ( 1 )
-  {
-    if ( n8 != n13369344 )
-      n8 = __sub_100056C4((uint32_t *)&_Code_size___u__Ratio____u___or__u__05d_bpc___1, n0x198000, n8);
-    if ( (uint32_t)n8_1 >> 3 >= n0x198000 )
-      break;
-    if ( !dword_1000D4C4 )
-    {
-      if ( src_4 == ::dst_3 )
-      {
-        __sub_100012A8((int8_t *)src_4, 0x66000u);
-      }
-      else if ( src_4 < (int8_t *)(::dst_3 + 0x66000) )
-      {
-        __sub_100012A8((int8_t *)src_4, (int8_t *)(::dst_3 + 0x66000) - src_4);
-      }
-    }
-    src_4 -= 417792;
-    if ( src_4 < ::dst_3 || (int32_t)src_4 < 0 )
-      src_4 = ::dst_3;
-    __sub_100048F0(313344, (void *)(::dst_3 + 0x66000), (void *)::dst_3);
-    __sub_100048F0(39168, (void *)(::buf_ + 0xCC00 / 4), (void *)::buf_);
-    __sub_1000490B(13056, (void *)(::buf_ + 0x26400 / 4));
-    ::dst[1] = 0;
-    ::dst[0] = 0;
-    dword_10016430 = (int32_t)(uintptr_t)(::dst + 2);
-    dword_1000CA4C = 1;
-    n8 = 10027008;
-    __sub_100050F8();
-    if ( dword_1000D4C4 )
-      __sub_10000D0E((int8_t *)(::dst_3 + 0x132000), 0x66000u);
-    v12 = (uint32_t)n8_1 >> 3;
-    if ( n0x198000 - ((uint32_t)n8_1 >> 3) < 0x66000 )
-    {
-      n13369344 = n0x198000 + 1253376 - v12;
-      dst_4 = (int32_t)&::dst_3[n0x198000 + 1253376 - v12];
-      n13369344 *= 8;
-    }
-  }
-  _Code_size___u__Ratio____u___or__u__05d_bpc___1 = __sub_10004993(_Code_size___u__Ratio____u___or__u__05d_bpc___1);
-  if ( dword_1000D4C4 )
-    __sub_100012A8((int8_t *)aVbnVer1001, // "                                                \nvbn ver.1...."
-      ((_Code_size___u__Ratio____u___or__u__05d_bpc___1 & 7) != 0)
-    + ((uint32_t)_Code_size___u__Ratio____u___or__u__05d_bpc___1 >> 3));
   else
-    __sub_100012A8((int8_t *)src_4, &::dst_3[n8 >> 3] - src_4);
+    read_input(code_buf, 2 * n < 0x2010 ? 2 * n : 0x2010);
+  memset(registered, 0, sizeof registered);
+  tree[0] = tree[1] = 0;
+  node_next = (int32_t)(uintptr_t)&tree[2];
+  tree_nodes = 1;
+  tree_updates = 1;
+  window_pos = 0;
+
+  uint32_t code_pos = 0;
+  for ( ;; )
+  {
+    if ( window_pos != (uint32_t)window_bits )
+      window_pos = code_window(&code_pos, window_pos);
+    if ( total_bits >> 3 >= size )
+      break;
+    // Slide the window by 0x66000 bytes, writing them out when decompressing.
+    if ( !encoding )
+      write_output(window, 0x66000);
+    memmove(window, window + 0x66000, 0x132000);
+    memmove(registered, (int8_t *)registered + 0xCC00, 0x26400);
+    memset((int8_t *)registered + 0x26400, 0, 0xCC00);
+    tree[0] = tree[1] = 0;
+    node_next = (int32_t)(uintptr_t)&tree[2];
+    tree_nodes = 1;
+    window_pos = 8 * 0x132000;
+    tree_rebuild();
+    if ( encoding )
+      read_input(window + 0x132000, 0x66000);
+    uint32_t left = size - (total_bits >> 3);
+    if ( left < 0x66000 )
+    {
+      window_bits = 8 * (0x132000 + left);
+      data_end = (int32_t)(uintptr_t)&window[0x132000 + left];
+    }
+  }
+  code_pos = code_flush(code_pos);
+  if ( encoding )
+    write_output(code_buf, (code_pos + 7) >> 3);
+  else
+    write_output(window, window_pos >> 3);
 }
 
 // ===========================================================================
@@ -2433,8 +1931,6 @@ static void __sub_10004A5F(uint32_t n0x198000)
 // vbn's, run once, as vbn ran it for an archive.
 // ===========================================================================
 static const uint32_t MAX_SIZE = 0x1FFFFFFF;    // the coder counts the data in bits, in 32 bits
-
-static uint32_t vbn_size;
 
 static void vbn_fail(const char *what, const char *name)
 {
@@ -2454,7 +1950,7 @@ int main(int argc, char **argv)
                     "       vbn2 d input output   decompress\n");
     return 1;
   }
-  vbn_compressing = argv[1][0] == 'c';
+  encoding = argv[1][0] == 'c';                 // 1 compressing, 0 decompressing
   vbn_in_name = argv[2];
   vbn_out_name = argv[3];
   struct stat in_st, out_st;
@@ -2467,7 +1963,8 @@ int main(int argc, char **argv)
   }
 
   uint8_t header[4];
-  if (vbn_compressing) {
+  uint32_t vbn_size;
+  if (encoding) {
     if (!S_ISREG(in_st.st_mode) || in_st.st_size > (int64_t)MAX_SIZE) {
       errno = 0;
       vbn_fail(S_ISREG(in_st.st_mode) ? "input is too large (512 MB at most):" : "not a regular file:", vbn_in_name);
@@ -2487,20 +1984,19 @@ int main(int argc, char **argv)
   vbn_out = fopen(vbn_out_name, "wb");
   if (!vbn_out)
     vbn_fail("cannot create", vbn_out_name);
-  if (vbn_compressing && fwrite(header, 1, 4, vbn_out) != 4)
+  if (encoding && fwrite(header, 1, 4, vbn_out) != 4)
     vbn_fail("cannot write", vbn_out_name);
 
-  dword_1000D4C4 = vbn_compressing;              // the direction
-  n55 = 95;                                      // MAX mode (`u`; `b` is 55, `B` 31)
+  max_cands = 95;                               // MAX mode (`vbn u`; `b` is 55, `B` 31)
 
-  if ((int32_t)(uintptr_t)(dst + sizeof dst / sizeof *dst) < 0) {   // see vbn's globals
+  if ((int32_t)(uintptr_t)(tree + sizeof tree / sizeof *tree) < 0) {   // see vbn's globals
     errno = 0;
     vbn_fail("cannot run:", "vbn's tree lies above 0x80000000");
   }
-  __sub_10004A5F(vbn_size);
+  coder_run(vbn_size);
 
   errno = 0;
-  if (!vbn_compressing && vbn_out_left)
+  if (!encoding && vbn_out_left)
     vbn_fail("not a vbn2 stream (data missing):", vbn_in_name);
   if (fclose(vbn_out) != 0) {
     vbn_out = NULL;                               // closed, if not written
