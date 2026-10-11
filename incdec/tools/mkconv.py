@@ -33,8 +33,8 @@ MANUAL = {
     # __thiscall in Hex-Rays, but ECX is never read: getdisk().
     '100088EA': ('cdecl', 'int|', 'getdisk; the `this` is an artefact'),
     # Bannerless entry points: one `jmp` each into malloc / free.
-    '10007138': ('cdecl', 'void *|unsigned int size', 'jmp sub_10009264 (malloc)'),
-    '10008658': ('cdecl', 'void|void *p', 'jmp sub_100092F4 (free)'),
+    '10007138': ('cdecl', '_DWORD|_DWORD size', 'jmp sub_10009264 (malloc); Hex-Rays types'),
+    '10008658': ('cdecl', '_DWORD|_DWORD p', 'jmp sub_100092F4 (free); Hex-Rays types'),
     # Register interfaces (override/ has the C and the thunks).
     '10006CB0': ('regs', None, 'tree walk: in EBX node, EDX right-child offset, ESI value, ECX cursor, EDI count; out ECX, EDI'),
     '10006E31': ('regs', None, 'tree walk: in EBX node, EDX byte table, ESI value, ECX cursor, EDI count; out ECX, EDI'),

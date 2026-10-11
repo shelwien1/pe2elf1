@@ -26,7 +26,9 @@ make -s -C .. pe2elf32/pe2elf32 libvbnshim.so
 
 g++ -m32 -O2 -g -std=c++17 -fPIC -shared -mgeneral-regs-only \
     -fpermissive -Wno-narrowing -Wno-write-strings -w \
-    -fno-strict-aliasing -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
+    -fno-strict-aliasing -fno-tree-loop-distribute-patterns \
+    -fwrapv -fno-delete-null-pointer-checks \
+    -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
     -Wl,-soname,dummy.so -o dummy.so dummy.cpp
 ../pe2elf32/pe2elf32 ../vbn.exe vbn.elf --shim-soname libvbnshim.so --inject=dummy.so >/dev/null
 cp ../libvbnshim.so .

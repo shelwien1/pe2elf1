@@ -549,16 +549,21 @@ def emit(name, accepted):
             continue                                     # only the local of the same name
         base, dims = globals_type(g, tail)
         esz = type_size(base)
-        if not dims and re.search((r'::\s*' if g in local_names else r'(?<![\w.>])') + re.escape(g) + r'\s*\[', full):
+        if not dims and '*' not in base and re.search(
+                (r'::\s*' if g in local_names else r'(?<![\w.>])') + re.escape(g) + r'\s*\[', full):
             dims = '[]'
-        if dims == '[]' or '[]' in dims:
-            dims = f'[{sym_extent(g, esz)}]'
+        if dims:
+            # Whatever extent Hex-Rays guessed, bodies index past it (records laid
+            # out as parallel arrays: j[6 * n]); an extent g++ believes lets it
+            # assume the index is in range.  Run every array to the image's end.
+            dims = f'[{(0x14000000 - va_g) // max(1, esz)}]'
         alias = f'__{name}_{g}' if IDENT_OK.match(g) else f'__{name}_g{g}'
         refs.append(f"typedef {base} t{alias}{dims};\n"
                     f"static t{alias} &{alias} = *(t{alias} *)0x{va_g:08X};")
         defines.append((g, alias))
 
-    for s in re.findall(r'"(?:[^"\\]|\\.)*"', full):
+    code_only = '\n'.join(re.sub(r'//.*$', '', l) for l in full.split('\n'))
+    for s in re.findall(r'"(?:[^"\\]|\\.)*"', code_only):
         print(f'warning: {name}: string literal {s[:40]} lives in dummy.so, not in the image; '
               f'a DOS call cannot take it', file=sys.stderr)
 

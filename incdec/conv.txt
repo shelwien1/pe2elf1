@@ -73,7 +73,7 @@
 1000706D	sub_1000706D	cdecl	0	-	int|	regflow: no register inputs
 1000708D	sub_1000708D	cdecl	0	0,1,2	void|char a4	regflow: no register inputs
 10007096	sub_10007096	cdecl	0	-	void|const char *dst_2	regflow: no register inputs
-10007138	sub_10007138	cdecl	0	-	void *|unsigned int size	jmp sub_10009264 (malloc)
+10007138	sub_10007138	cdecl	0	-	_DWORD|_DWORD size	jmp sub_10009264 (malloc); Hex-Rays types
 10007172	sub_10007172	cdecl	0	-	int|int a1	regflow live-in: edx
 10007214	sub_10007214	cdecl	0	-	BOOL|char *p_n10	regflow: no register inputs
 10007260	sub_10007260	cdecl	0	-	char *|char *dst, const char *src	regflow: no register inputs
@@ -109,7 +109,7 @@
 1000862D	sub_1000862D	cdecl	0	-	void|	regflow: no register inputs
 10008635	sub_10008635	cdecl	0	0	int|char a2	regflow live-in: eax
 1000864D	sub_1000864D	cdecl	0	0	int|	regflow live-in: eax
-10008658	sub_10008658	cdecl	0	-	void|void *p	jmp sub_100092F4 (free)
+10008658	sub_10008658	cdecl	0	-	_DWORD|_DWORD p	jmp sub_100092F4 (free); Hex-Rays types
 10008660	sub_10008660	cdecl	0	-	unsigned int *|unsigned int j, int n4096, unsigned int n0x18, int (__cdecl *sub_10000458)(unsigned int, unsigned int)	regflow: no register inputs
 10008800	sub_10008800	stdcall	12	-	int|int *a1, int *a2, int a3	regflow: no register inputs
 1000882A	sub_1000882A	stdcall	12	-	char|char *j, char *ja, int a3	regflow: no register inputs

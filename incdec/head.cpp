@@ -99,6 +99,18 @@ extern "C" __attribute__((naked, used, visibility("hidden"))) int vbn_restartabl
     "ret\n");
 }
 
+// The tree walkers' exit (0x10006E16, which falls into sub_10006E22): the
+// output buffer is full, so n2_1 = n55 and the search returns early.  Jumping
+// to 0x10006E22 reaches the original or its moved copy alike.
+extern "C" __attribute__((naked, used, visibility("hidden"))) void vbn_walk_exit(void)
+{
+  __asm__ volatile(
+    "movl 0x1000D4B0, %eax\n"     // n55
+    "movl %eax, 0x10016450\n"     // n2_1
+    "movl $0x10006E22, %eax\n"
+    "jmp *%eax\n");
+}
+
 // ---------------------------------------------------------------------------
 // Probe registry (§7.1).  The counter is 8-aligned: a lock cmpxchg8b that
 // straddles a cache line becomes a bus lock the kernel traps.
