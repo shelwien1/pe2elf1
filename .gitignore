@@ -1,6 +1,9 @@
 # Converter binary (vbn and libvbnshim.so are committed build outputs)
 pe2elf32/pe2elf32
 
+# vbn2 is built from the committed vbn2.cpp (make vbn2)
+/vbn2
+
 # test.sh scratch directories
 test.*/
 

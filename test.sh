@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
-# test.sh - end-to-end check of the pe2elf32 port of vbn.exe.
+# test.sh - end-to-end check of the pe2elf32 port of vbn.exe, and of vbn2.
 #
 #   1. ./vbn u archive input.txt  -> archive.vbn is $EXPECT bytes
 #   2. ./vbn r archive            -> run in an empty directory, input.txt comes
 #                                    back byte-exact, with its date and time
-#   3. if wine and i686-w64-mingw32-gcc are installed: the original vbn.exe,
+#   3. ./vbn2 u archive input.txt -> vbn2, the standalone C++ build of `u` and
+#                                    `r`, writes the same archive, and the same
+#                                    output (the elapsed time aside)
+#   4. ./vbn2 r archive           -> restores it as in 2
+#   5. if wine and i686-w64-mingw32-gcc are installed: the original vbn.exe,
 #      with vbnshim.dll built from the same shim.c, writes a byte-identical
 #      archive.  Skipped otherwise.
 #
@@ -66,7 +70,39 @@ else
   ok "vbn r archive: input.txt restored byte-exact, mtime $STAMP"
 fi
 
-# 3. Reference: the original PE and the shim's Windows build, under Wine.
+# 3. vbn2 compresses: alone in its directory, no shim beside it.
+mkdir "$work/u2" "$work/r2"
+cp vbn2 input.txt "$work/u2/"
+touch -d "$STAMP" "$work/u2/input.txt"
+( cd "$work/u2" && ./vbn2 u archive input.txt ) > "$work/u2.log" 2>&1
+rc=$?
+masked() { tr '\r' '\n' < "$1" | sed -E 's/Time = [0-9]+ sec\./Time = N sec./'; }
+if [ "$rc" -ne 0 ]; then
+  fail "vbn2 u exited $rc" "$work/u2.log"
+elif ! cmp -s "$work/u/archive.vbn" "$work/u2/archive.vbn"; then
+  fail "vbn2's archive.vbn ($(stat -c %s "$work/u2/archive.vbn" 2>/dev/null || echo 0) bytes) differs from vbn's"
+elif [ "$(masked "$work/u.log")" != "$(masked "$work/u2.log")" ]; then
+  fail "vbn2 u printed something else than vbn u"
+else
+  ok "vbn2 u archive input.txt: the same archive.vbn as vbn's, the same output"
+fi
+
+# 4. vbn2 restores.
+cp vbn2 "$work/r2/"
+cp "$work/u2/archive.vbn" "$work/r2/" 2>/dev/null
+( cd "$work/r2" && ./vbn2 r archive ) > "$work/r2.log" 2>&1
+rc=$?
+if [ "$rc" -ne 0 ]; then
+  fail "vbn2 r exited $rc" "$work/r2.log"
+elif ! cmp -s input.txt "$work/r2/input.txt"; then
+  fail "input.txt restored by vbn2 differs from the original"
+elif [ "$(date -r "$work/r2/input.txt" '+%Y-%m-%d %H:%M')" != "$STAMP" ]; then
+  fail "input.txt restored by vbn2 has mtime $(date -r "$work/r2/input.txt" '+%Y-%m-%d %H:%M'), expected $STAMP"
+else
+  ok "vbn2 r archive: input.txt restored byte-exact, mtime $STAMP"
+fi
+
+# 5. Reference: the original PE and the shim's Windows build, under Wine.
 if command -v wine >/dev/null && command -v i686-w64-mingw32-gcc >/dev/null; then
   mkdir "$work/w"
   cp vbn.exe input.txt "$work/w/"

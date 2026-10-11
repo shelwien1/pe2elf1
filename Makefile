@@ -1,12 +1,13 @@
-# vbn.exe -> vbn (i386 ELF, via pe2elf32) + libvbnshim.so (DOS-service shim).
+# vbn.exe -> vbn (i386 ELF, via pe2elf32) + libvbnshim.so (DOS-service shim),
+# and vbn2, vbn's `u` and `r` as standalone C++.
 #
-# The shim is built -m32, which needs the 32-bit dev headers and libraries
-# (Debian/Ubuntu: gcc-multilib).  Running vbn needs only the i386 glibc
-# runtime (/lib/ld-linux.so.2).
+# The shim and vbn2 are built -m32, which needs the 32-bit dev headers and
+# libraries (Debian/Ubuntu: gcc-multilib, g++-multilib).  Running vbn or vbn2
+# needs only the i386 glibc runtime (/lib/ld-linux.so.2).
 
 PE2ELF32 = pe2elf32/pe2elf32
 
-all: vbn libvbnshim.so
+all: vbn libvbnshim.so vbn2
 
 # Host tool: it only emits ELF32 bytes, so it is built natively.
 $(PE2ELF32): pe2elf32/pe2elf32.cpp $(wildcard pe2elf32/*.hpp)
@@ -20,10 +21,15 @@ vbn: vbn.exe $(PE2ELF32)
 libvbnshim.so: shim.c
 	$(CC) -m32 -O2 -Wall -Wextra -shared -fPIC -o $@ shim.c
 
+# vbn2.cpp is generated (incdec/tools/mkvbn2.py) from the decompiled functions
+# in incdec/; it needs neither vbn.exe nor the shim, at build or at run time.
+vbn2: vbn2.cpp
+	$(CXX) -m32 -O2 -o $@ vbn2.cpp
+
 test: all
 	./test.sh
 
 clean:
-	rm -f $(PE2ELF32) vbn libvbnshim.so
+	rm -f $(PE2ELF32) vbn libvbnshim.so vbn2
 
 .PHONY: all test clean

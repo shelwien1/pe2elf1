@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# test.sh [--baseline]: the incdec gate (incdec.md §9) for vbn.
+# test.sh [--baseline | --exe PATH]: the incdec gate (incdec.md §9) for vbn.
 #
 # For each corpus entry: `vbn u archive <file>` in a fresh directory holding
 # only that file -- for a directory, its tree and `vbn u archive *.*` -- then
@@ -12,21 +12,28 @@
 # Then each command in errors.txt runs in an empty directory; its stdout and
 # exit code have to match the reference.
 # --baseline writes the references with the un-injected port (../vbn).
+# --exe PATH runs the gate on another build of vbn, such as ../vbn2.
 #
 # The binaries run from their own directory, so that a `*.*` scan sees only
 # the input.  The inputs' mtimes are pinned: VBN stores them in the archive.
 set -u
+BASELINE=0; EXE=; [ "${1:-}" = --baseline ] && BASELINE=1
+if [ "${1:-}" = --exe ]; then
+  [ -n "${2:-}" ] && [ -f "$2" ] && [ -x "$2" ] || { echo "usage: $0 [--baseline | --exe PATH]"; exit 1; }
+  EXE=$(cd "$(dirname "$2")" && pwd)/$(basename "$2")
+fi
 cd "$(dirname "$0")"
 export TZ=UTC
 STAMP='1980-01-01 00:13'
 CORPUS="../input.txt corpus/mixed.bin corpus/rep.bin ../vbn.exe corpus/big.bin corpus/tree"
-BASELINE=0; [ "${1:-}" = --baseline ] && BASELINE=1
 
 [ -f corpus/tree/sub/deep/d.exe ] || python3 tools/mkcorpus.py corpus
 if [ $BASELINE = 0 ] && [ ! -d ref ]; then "$0" --baseline || exit 1; fi
 if [ $BASELINE = 1 ]; then
   make -s -C .. vbn libvbnshim.so || exit 1
   RUN=$(cd .. && pwd)/vbn; NEED="../vbn ../libvbnshim.so"; mkdir -p ref
+elif [ -n "$EXE" ]; then
+  RUN=$EXE; NEED=$EXE
 else
   RUN=$PWD/vbn.elf; NEED="vbn.elf libvbnshim.so dummy.so"
 fi
@@ -106,7 +113,7 @@ done < errors.txt
 fail=0; for p in "${pids[@]}"; do wait "$p" || fail=1; done
 for src in $CORPUS; do cat "$work/$(basename "$src").res"; done
 cat "$work"/err*.res
-if [ $BASELINE = 0 ]; then
+if [ $BASELINE = 0 ] && [ -z "$EXE" ]; then
   cat "$work"/*.probes 2>/dev/null | awk '{c[$1]+=$2} END{for(k in c) printf "%s %d\n", k, c[k]}' | sort > probes.txt
   echo "probes: $(awk '$2>0' probes.txt | wc -l) of $(wc -l < probes.txt) moved functions were called (probes.txt)"
   zero=$(awk '$2==0{print $1}' probes.txt | tr '\n' ' ')
