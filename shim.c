@@ -1,6 +1,11 @@
 /* System-call shim only. VBN's compressor, archive logic and CRT remain x86 bytes. */
 /* gcc -O2 -shared -fPIC -o libvbnshim.so shim.c */
+/* pe2elf32 (i386 ELF): gcc -m32 -O2 -shared -fPIC -o libvbnshim.so shim.c */
 #define _GNU_SOURCE
+#ifndef _WIN32
+/* On i386, plain stat()/readdir() fail with EOVERFLOW on 64-bit inode numbers. */
+#define _FILE_OFFSET_BITS 64
+#endif
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -255,6 +260,17 @@ __declspec(dllexport) __attribute__((force_align_arg_pointer)) void __cdecl vbn_
  Registers r={frame[7],frame[4],frame[6],frame[5],frame[1],frame[0],frame[8]};dispatch(&r);
  frame[7]=r.a;frame[4]=r.b;frame[6]=r.c;frame[5]=r.d;frame[1]=r.si;frame[0]=r.di;frame[8]=r.flags;
 }
+#elif defined(__i386__)
+/* pe2elf32 ELF: the image stays 32-bit in a 32-bit process, so the .shim thunks reach this through the IAT, as on Windows. */
+__attribute__((visibility("default"),force_align_arg_pointer)) void vbn_interrupt(uint32_t *frame){
+ Registers r={frame[7],frame[4],frame[6],frame[5],frame[1],frame[0],frame[8]};dispatch(&r);
+ frame[7]=r.a;frame[4]=r.b;frame[6]=r.c;frame[5]=r.d;frame[1]=r.si;frame[0]=r.di;frame[8]=r.flags;
+}
+/* Nothing is dispatched from signals here; a fault is only reported. */
+static void handler(int sig,siginfo_t *info,void *context){
+ ucontext_t *c=context;greg_t *g=c->uc_mcontext.gregs;uint32_t pc=(uint32_t)g[REG_EIP];
+ fprintf(stderr,"VBN shim: signal %d at %08x (offset %x), SP=%08x, address %p\n",sig,pc,pc-base,(uint32_t)g[REG_ESP],info->si_addr);_exit(126);
+}
 #else
 static void handler(int sig,siginfo_t *info,void *context){
  (void)info;ucontext_t *c=context;greg_t *g=c->uc_mcontext.gregs;uint32_t pc=(uint32_t)g[REG_RIP];
@@ -304,6 +320,20 @@ __declspec(dllexport) void __stdcall vbn_start(uint32_t image){
  NT_TIB *tib;__asm__ volatile("movl %%fs:0x18,%0":"=r"(tib));tib->StackBase=(void *)(uintptr_t)sp;tib->StackLimit=(void *)(uintptr_t)(sp-0x100000);tib->ExceptionList=(struct _EXCEPTION_REGISTRATION_RECORD *)(uintptr_t)0xffffffffu;
  __asm__ volatile("movl %0,%%eax;movl %1,%%esp;jmp *%%eax"::"r"(pc),"r"(sp):"eax","memory");__builtin_unreachable();
 }
+#elif defined(__i386__)
+/* The PE entry point gets no argc/argv, but glibc passes them to shared-object constructors. */
+static int saved_argc;static const char **saved_argv;
+__attribute__((constructor)) static void save_args(int argc,char **argv,char **envp){(void)envp;saved_argc=argc;saved_argv=(const char **)argv;}
+__attribute__((visibility("default"),stdcall,noreturn,force_align_arg_pointer)) void vbn_start(uint32_t image){
+ static const char *name[]={"vbn",NULL};if(!saved_argc){saved_argv=name;saved_argc=1;}initialize(image,saved_argc,saved_argv);
+ uint32_t pc=base+0x3ff0000,sp=base+0x3d00000;
+ __asm__ volatile("movl %0,%%eax;movl %1,%%esp;jmp *%%eax"::"r"(pc),"r"(sp):"eax","memory");__builtin_unreachable();
+}
+/* pe2elf32's startup trampoline calls this before the PE entry point; vbn.exe has no TLS directory. */
+__attribute__((visibility("default"),stdcall)) void shim_register_tls(void *info){(void)info;}
+/* pe2elf32 binds imports to <dll>_<function>: vbnshim.dll!vbn_start -> vbnshim_vbn_start. */
+extern __typeof(vbn_start) vbnshim_vbn_start __attribute__((alias("vbn_start"),visibility("default"),noreturn));
+extern __typeof(vbn_interrupt) vbnshim_vbn_interrupt __attribute__((alias("vbn_interrupt"),visibility("default")));
 #else
 __attribute__((visibility("default"),noreturn)) void vbn_start(uint64_t *initial_stack,uint32_t image){
  int argc=(int)*initial_stack;const char **argv=(const char **)(initial_stack+1);initialize(image,argc,argv);
