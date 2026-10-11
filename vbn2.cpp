@@ -49,16 +49,9 @@ typedef uint32_t __attribute__((may_alias)) alias_uint32;
 #define LODWORD(x)    DWORDn(x, 0)
 #define HIDWORD(x)    DWORDn(x, sizeof(x) / 4 - 1)
 
-// count * size does not overflow T (unsigned)
-template <class T> static inline bool is_mul_ok(T count, T size)
-{
-  return count == 0 || size == 0 || count <= T(-1) / size;
-}
-
-// Intrinsics, with the x86 semantics the decompiler assumed.  bsr leaves its
-// destination unchanged for a zero source, as the CPU does.
-static inline uint8_t _BitScanReverse(uint32_t *idx, uint32_t v)
-{ if (!v) return 0; *idx = 31 - __builtin_clz(v); return 1; }
+// bsr: the index of v's highest set bit.  v is never 0 where vbn2 asks.
+static inline uint32_t top_bit(uint32_t v) { return 31 - __builtin_clz(v); }
+// Intrinsics, with the x86 semantics the decompiler assumed.
 // bt/btc with a memory operand address a bit string: the offset is signed and
 // may run past the first dword.
 static inline uint8_t _bittest(const void *base, int32_t bit)
@@ -84,8 +77,7 @@ static int8_t window_space[16 + 0x198000];
 static int8_t *const window = window_space + 16;
 static uint32_t window_pos;                       // 0x1001646C where coding is, in bits
 static int32_t window_bits;                       // 0x10016444 where the data in the window ends, in bits
-static int32_t data_end;                          // 0x1001643C ... and as an address
-static int32_t cur_ptr;                           // 0x1001645C the byte being coded
+static int8_t *data_end;                          // 0x1001643C ... and as an address
 static uint32_t total_bits;                       // 0x10016468 the data coded before the window, in bits
 static int32_t prev_byte;                         // 0x100164B0 the byte before the one being coded
 static int32_t prev_byte2;                        // 0x100164B4 ... and the one before that
@@ -121,15 +113,13 @@ static int32_t found_slot;                        // 0x10016480 ... the slot,
 static int32_t found_leaf;                        // 0x10016484 ... and what the slot held
 
 // Candidates grouped by the value they predict: a match length in
-// code_match, a byte in code_literal.  Loops over the groups start one pair
-// before them (and step before they read), so that pair is storage too.
-static int32_t group_slot[256];                   // 0x1000EC60 per value: its {weight, value} pair in groups, or 0
-static int32_t groups_space[2 + 2 * 256];
-static int32_t *const groups = groups_space + 2;
+// code_match, a byte in code_literal.
+static uint32_t *group_slot[256];                 // 0x1000EC60 per value: its {weight, value} pair in groups, or null
+static uint32_t groups[2 * 256];                  // 0x1000F05C
 
 // The match length model: a count for each length 0..255 (0: no match),
 // following the last 4096 lengths coded.
-static int32_t len_model[2 * 256];                // 0x1000F860 {count, length} pairs
+static uint32_t len_model[2 * 256];               // 0x1000F860 {count, length} pairs, by length
 static uint32_t len_total;                        // 0x100164C0 the sum of the counts
 static const int32_t len_init_counts[23] = {     // 0x1000C97C the counts lengths 0..22 start with
   2662, 633, 321, 185, 77, 40, 24, 22, 18, 15, 13, 10, 7, 5, 3, 3, 2, 2, 2, 1, 1, 1, 1 };
@@ -137,13 +127,10 @@ static int32_t len_ring[4096];                    // 0x1001220C the last 4096 le
 static int32_t len_ring_pos;                      // 0x10016420
 static int32_t len_avg;                           // 0x100164A8 the average length coded, x128
 
-// The literal model: a count for each byte, kept sorted by count; the last
-// 363 literals add 16 to theirs.  Its re-sorting steps read one pair past
-// either end before their bound check stops them, so those pairs are
-// storage too (vbn had other tables there).
-static uint32_t lit_model_space[2 + 2 * 256 + 2];
-static uint32_t *const lit_model = lit_model_space + 2;
-static int32_t lit_slot[256];                     // 0x10010060 per byte: its pair in lit_model
+// The literal model: a count for each byte, kept sorted by count, largest
+// first; the last 363 literals add 16 to theirs.
+static uint32_t lit_model[2 * 256];               // 0x1000F860 + 0x800 {count, byte} pairs
+static uint32_t *lit_slot[256];                   // 0x10010060 per byte: its pair in lit_model
 static uint32_t lit_total;                        // 0x100164BC the sum of the counts
 static int32_t lit_inc;                           // 0x10016490 what every count gets added (1..1024, by lit_cost8)
 static int32_t lit_resort;                        // 0x10016494 literals until the model is sorted again
@@ -155,10 +142,10 @@ static int8_t ctx_count[0x10000];                 // 0x10EB96F0 per byte pair: i
 static int32_t ctx16;                             // 0x100164C8 the byte before and the byte coded, as a pair
 static int32_t literal_run;                       // 0x100164AC literals in a row whose pair was known
 static int32_t lit_threshold;                     // 0x100164B8 set by code_literal, weighs code_match's model
-static int32_t lit_cost8;                         // 0x100164A4 the bits a literal costs, x256, averaged over
-static int32_t lit_cost9;                         // 0x100164A0 ... 2^8, 2^9, 2^10 and 2^11 literals
-static int32_t lit_cost10;                        // 0x1001649C
-static int32_t lit_cost11;                        // 0x10016498
+static int32_t lit_cost8;                         // 0x100164A4 the bits a literal costs, x2^8, over about 2^8 literals;
+static int32_t lit_cost9;                         // 0x100164A0 ... x2^9 over 2^9,
+static int32_t lit_cost10;                        // 0x1001649C ... x2^10 over 2^10,
+static int32_t lit_cost11;                        // 0x10016498 ... and x2^11 over 2^11
 
 // The arithmetic coder.
 static int8_t code_buf[0x2010];                   // 0x1000A110 8 KB of code, and 16 bytes more (vbn reused its banner)
@@ -186,74 +173,73 @@ static jmp_buf search_jmp;
 // ===========================================================================
 
 // code_flush (vbn.exe 0x10004993): end the code.  Writes into code_buf, from
-// bit `a1` on, the shortest tail -- a 0 and then 1s, or a 1 and then 0s --
+// bit `pos` on, the shortest tail -- a 0 and then 1s, or a 1 and then 0s --
 // that keeps every continuation inside the interval, resets the interval, and
-// returns the bit position after the tail.
-static uint32_t code_flush(uint32_t a1)
+// returns the bit position after the tail.  low's top bit is 0 and high's is
+// 1: a 0 and then 1s stays above low once its 1s outlast the 1s after low's
+// top bit, and a 1 and then 0s stays below high once its 0s outlast the 0s
+// after high's.  Neither run is counted past code_pending bits.
+static uint32_t code_flush(uint32_t pos)
 {
-  int32_t v7, v8;
-  uint32_t v5, v6;
-
-  v7 = code_pending;
-  v6 = 1;
-  v5 = 1;
-  code_low = (int32_t)((uint32_t)code_low << 1);   // shl: wraps
-  code_high = (int32_t)((uint32_t)code_high << 1);   // shl: wraps
-  while ( v7-- )
+  uint32_t low = (uint32_t)code_low << 1, high = (uint32_t)code_high << 1;
+  uint32_t n_low = 1, n_high = 1;
+  for ( int32_t k = code_pending; k > 0; k-- )
   {
-    ++v5;
-    if ( code_low >= 0 )
+    n_low++;
+    if ( (int32_t)low >= 0 )
       break;
-    code_low = (int32_t)((uint32_t)code_low << 1);   // shl: wraps
+    low <<= 1;
   }
-  v8 = code_pending;
-  while ( v8-- )
+  for ( int32_t k = code_pending; k > 0; k-- )
   {
-    ++v6;
-    if ( code_high < 0 )
+    n_high++;
+    if ( (int32_t)high < 0 )
       break;
-    code_high = (int32_t)((uint32_t)code_high << 1);   // shl: wraps
+    high <<= 1;
   }
-  code_low = 0x7FFFFFFF;
-  if ( v5 > v6 )
+  uint32_t tail = 0x7FFFFFFF, n = n_low;
+  if ( n_low > n_high )
   {
-    v5 = v6;
-    code_low = 0x80000000;
+    tail = 0x80000000;
+    n = n_high;
   }
-  while ( v5-- )
+  for ( ; n; n-- )
   {
-    if ( code_low < 0 )
-      _bittestandcomplement(
-        (int32_t *)code_buf,
-        a1);
-    ++a1;
-    code_low = (int32_t)((uint32_t)code_low << 1);   // shl: wraps
-    --code_pending;
+    if ( (int32_t)tail < 0 )
+      _bittestandcomplement(code_buf, pos);
+    pos++;
+    tail <<= 1;
+    code_pending--;
   }
   code_low = 0;
   code_high = -1;
-  return a1;
+  return pos;
+}
+
+// ring_put: put v in a ring of n values at *pos, and return the value it
+// replaces -- the one put n values ago, or -1.
+static int32_t ring_put(int32_t *ring, int32_t *pos, int32_t n, int32_t v)
+{
+  int32_t old = ring[*pos];
+  ring[*pos] = v;
+  *pos = *pos + 1 == n ? 0 : *pos + 1;
+  return old;
 }
 
 // len_model_add (vbn.exe 0x100050B0): count a length in the length model.
 // Its count goes up by 5 and the count of the length coded 4096 lengths ago
 // (from len_ring) down by 5; until the ring is full, len_total grows by 5
-// instead.  Returns that old length, or -1.
+// instead.  The counts are added to and taken from in their low 16 bits only
+// (`add word ptr`).  Returns that old length, or -1.
 static int32_t len_model_add(int32_t len)
 {
-  int32_t pos, *v2, result;
-
   LOWORD(len_model[2 * len]) += 5;
-  pos = len_ring_pos;
-  len_ring_pos = ((uint16_t)len_ring_pos + 1) & 0xFFF;
-  v2 = &len_ring[pos];
-  result = *v2;
-  *v2 = len;
-  if ( result >= 0 )
-    LOWORD(len_model[2 * result]) -= 5;
+  int32_t old = ring_put(len_ring, &len_ring_pos, 4096, len);
+  if ( old >= 0 )
+    LOWORD(len_model[2 * old]) -= 5;
   else
     len_total += 5;
-  return result;
+  return old;
 }
 
 // tree_insert (vbn.exe 0x10005251): register positions in the context tree.
@@ -275,8 +261,7 @@ static int32_t len_model_add(int32_t len)
 //    either way bit pos/8 of `registered` is toggled.
 static void tree_insert(uint32_t count, int32_t bitpos)
 {
-  uint32_t t = count + (count >> 1) + 1, iters = t ? 31 - __builtin_clz(t) : 0;
-  iters += 1;
+  uint32_t iters = top_bit(count + (count >> 1) + 1) + 1;
   if (iters > count)
     iters = count;
   uint32_t pos = (uint32_t)bitpos;                         // EBP
@@ -285,7 +270,7 @@ static void tree_insert(uint32_t count, int32_t bitpos)
   int32_t leaf = found_leaf;                          // EDX
   for (;;) {
     uint32_t depth = pos - at;
-    uint32_t thr = (uint32_t)(31 - __builtin_clz((uint32_t)tree_nodes + 32)) << 6;
+    uint32_t thr = top_bit(tree_nodes + 32) << 6;
     if (depth > thr) {
       if (leaf <= 0 && pos + (uint32_t)leaf >= 0x800) {
         _bittestandcomplement(((void *)::registered), (int32_t)(pos >> 3));
@@ -390,309 +375,114 @@ static void walk_cands(int32_t *node, Walk *w)
 // code_buf at *code_pos; decompressing (symbol < 0), the symbol is the one
 // whose share holds the code read so far.  Returns the symbol, and moves
 // *code_pos past the bits.
+//
+// The interval is [code_low, code_high]; its size, high - low + 1, is 2^32
+// after code_flush, which vbn.exe's 32-bit arithmetic treats as a case of its
+// own and a 64-bit size does not need to.  Decompressing, code_value holds
+// the 32 bits of code that line up with code_low; the ones past code_pending
+// arrive with the next symbol.
 static int32_t code_symbol(uint32_t total, uint32_t *code_pos, int32_t symbol, uint32_t *model)
 {
-  bool v18, v31;
-  int32_t nbits, v24, n32, v27, v28, low;
-  uint32_t v4, *i, v6, v8, value, v11, v12, v13, v14, v15, v16, v17, v19, v20, v22, *i_3,
-           v25, v29, *i_2, v34;
-  uint64_t v7, v21;
-  uint32_t v35; // [esp+14h] [ebp-4h]  high - low, which wraps
-
-  v34 = *code_pos;
-  v35 = (uint32_t)code_high - (uint32_t)::code_low;
-  if ( 2 * total > (uint32_t)code_high - (uint32_t)::code_low )
+  uint32_t pos = *code_pos;
+  uint32_t range = (uint32_t)code_high - (uint32_t)code_low;
+  if ( 2 * total > range )
   {
-    v34 = code_flush(*code_pos);
-    v35 = -1;
+    pos = code_flush(pos);
+    range = 0xFFFFFFFF;
   }
+  uint64_t size = (uint64_t)range + 1;
+  uint32_t *entry, below = 0;                     // the symbol's pair, the counts before it
   if ( symbol >= 0 )
   {
-    v4 = 0;
-    for ( i = model; (uint32_t)symbol != i[1]; i += 16 )
-    {
-      v4 += *i;
-      if ( (uint32_t)symbol == i[3] )
-      {
-        i += 2;
-        break;
-      }
-      v4 += i[2];
-      if ( (uint32_t)symbol == i[5] )
-      {
-        i += 4;
-        break;
-      }
-      v4 += i[4];
-      if ( (uint32_t)symbol == i[7] )
-      {
-        i += 6;
-        break;
-      }
-      v4 += i[6];
-      if ( (uint32_t)symbol == i[9] )
-      {
-        i += 8;
-        break;
-      }
-      v4 += i[8];
-      if ( (uint32_t)symbol == i[11] )
-      {
-        i += 10;
-        break;
-      }
-      v4 += i[10];
-      if ( (uint32_t)symbol == i[13] )
-      {
-        i += 12;
-        break;
-      }
-      v4 += i[12];
-      if ( (uint32_t)symbol == i[15] )
-      {
-        i += 14;
-        break;
-      }
-      v4 += i[14];
-    }
-    v6 = v4;
-    i_2 = i;
-    HIDWORD(v7) = *i + v4;
-    LODWORD(v7) = v35 + 1;
-    if ( v35 == (uint32_t)(-1) )
-    {
-      if ( HIDWORD(v7) == total )
-        goto LABEL_25;
-    }
-    else
-    {
-      v7 = HIDWORD(v7) * (uint64_t)(uint32_t)v7;
-    }
-    LODWORD(v7) = v7 / total;
-LABEL_25:
-    code_high = ::code_low + v7 - 1;
-    LODWORD(v7) = v35 + 1;
-    if ( v35 == (uint32_t)(-1) )
-    {
-      HIDWORD(v7) = v6;
-      if ( v6 == total )
-      {
-LABEL_29:
-        ::code_low += v7;
-        goto LABEL_76;
-      }
-    }
-    else
-    {
-      v7 = v6 * (uint64_t)(uint32_t)v7;
-    }
-    LODWORD(v7) = v7 / total;
-    goto LABEL_29;
-  }
-  v8 = ::code_pending + v34;
-  nbits = 33 - ::code_pending;
-  value = ::code_value;
-  while ( --nbits )
-  {
-    value += _bittest(
-                       (int32_t *)code_buf,
-                       v8) + value;
-    v11 = v8 + 1;
-    if ( !--nbits )
-      break;
-    value += _bittest(
-                       (int32_t *)code_buf,
-                       v11) + value;
-    v12 = v11 + 1;
-    if ( !--nbits )
-      break;
-    value += _bittest(
-                       (int32_t *)code_buf,
-                       v12) + value;
-    v13 = v12 + 1;
-    if ( !--nbits )
-      break;
-    value += _bittest(
-                       (int32_t *)code_buf,
-                       v13) + value;
-    v14 = v13 + 1;
-    if ( !--nbits )
-      break;
-    value += _bittest(
-                       (int32_t *)code_buf,
-                       v14) + value;
-    v15 = v14 + 1;
-    if ( !--nbits )
-      break;
-    value += _bittest(
-                       (int32_t *)code_buf,
-                       v15) + value;
-    v16 = v15 + 1;
-    if ( !--nbits )
-      break;
-    value += _bittest(
-                       (int32_t *)code_buf,
-                       v16) + value;
-    v17 = v16 + 1;
-    if ( !--nbits )
-      break;
-    value += _bittest(
-                       (int32_t *)code_buf,
-                       v17) + value;
-    v8 = v17 + 1;
-  }
-  ::code_value = value;
-  ::code_pending = nbits;
-  v18 = value < (uint32_t)::code_low;
-  v19 = value - ::code_low;
-  v20 = v19 + 1;
-  if ( v19 == (uint32_t)(-1) )
-  {
-    HIDWORD(v21) = total;
-    v22 = v18 + 1;
-    v18 = v20 < v22;
-    LODWORD(v21) = v20 - v22;
-    if ( !v18 )
-    {
-      if ( v35 != (uint32_t)(-1) )
-      {
-        LODWORD(v21) = v21 / (v35 + 1);
-        goto LABEL_50;
-      }
-      goto LABEL_44;
-    }
-LABEL_45:
-    --HIDWORD(v21);
-    if ( v35 != (uint32_t)(-1) )
-    {
-      LODWORD(v21) = v21 / (v35 + 1);
-      goto LABEL_50;
-    }
-    goto LABEL_44;
-  }
-  v21 = total * (uint64_t)v20;
-  v18 = (uint32_t)v21 < (uint32_t)(HIDWORD(v21) != 0) + 1;
-  LODWORD(v21) = v21 - ((HIDWORD(v21) != 0) + 1);
-  if ( v18 )
-    goto LABEL_45;
-  if ( v35 == (uint32_t)(-1) )
-  {
-LABEL_44:
-    LODWORD(v21) = HIDWORD(v21);
-    goto LABEL_50;
-  }
-  LODWORD(v21) = v21 / (v35 + 1);
-LABEL_50:
-  i_3 = model;
-  HIDWORD(v21) = 0;
-  while ( 1 )
-  {
-    HIDWORD(v21) += *i_3;
-    if ( HIDWORD(v21) > (uint32_t)v21 )
-      break;
-    HIDWORD(v21) += i_3[2];
-    if ( HIDWORD(v21) > (uint32_t)v21 )
-    {
-      i_3 += 2;
-      break;
-    }
-    HIDWORD(v21) += i_3[4];
-    if ( HIDWORD(v21) > (uint32_t)v21 )
-    {
-      i_3 += 4;
-      break;
-    }
-    HIDWORD(v21) += i_3[6];
-    if ( HIDWORD(v21) > (uint32_t)v21 )
-    {
-      i_3 += 6;
-      break;
-    }
-    HIDWORD(v21) += i_3[8];
-    if ( HIDWORD(v21) > (uint32_t)v21 )
-    {
-      i_3 += 8;
-      break;
-    }
-    HIDWORD(v21) += i_3[10];
-    if ( HIDWORD(v21) > (uint32_t)v21 )
-    {
-      i_3 += 10;
-      break;
-    }
-    HIDWORD(v21) += i_3[12];
-    if ( HIDWORD(v21) > (uint32_t)v21 )
-    {
-      i_3 += 12;
-      break;
-    }
-    HIDWORD(v21) += i_3[14];
-    if ( HIDWORD(v21) > (uint32_t)v21 )
-    {
-      i_3 += 14;
-      break;
-    }
-    i_3 += 16;
-  }
-  i_2 = i_3;
-  v24 = HIDWORD(v21);
-  LODWORD(v21) = v35 + 1;
-  if ( v35 == (uint32_t)(-1) )
-  {
-    if ( HIDWORD(v21) == total )
-      goto LABEL_71;
+    for ( entry = model; entry[1] != (uint32_t)symbol; entry += 2 )
+      below += entry[0];
   }
   else
   {
-    v21 = HIDWORD(v21) * (uint64_t)(uint32_t)v21;
+    uint32_t value = code_value, at = pos + code_pending;
+    for ( int32_t n = 32 - code_pending; n > 0; n-- )
+      value = 2 * value + _bittest(code_buf, at++);
+    code_value = value;
+    code_pending = 0;
+    // The count the code points at: (value - low + 1) * total - 1, over the
+    // size.  vbn subtracts the 1 with `sbb eax,1` straight after the `mul`,
+    // so the mul's carry -- the product needing 64 bits -- comes off too
+    // (and with a product of total << 32, the borrow of value - low).
+    uint32_t offset = value - (uint32_t)code_low;
+    uint64_t t;
+    if ( offset + 1 == 0 )
+      t = ((uint64_t)total << 32) - 1 - (value < (uint32_t)code_low);
+    else
+    {
+      t = (uint64_t)total * (offset + 1);
+      t -= 1 + (t >> 32 != 0);
+    }
+    uint32_t target = (uint32_t)(t / size);
+    for ( entry = model; below + entry[0] <= target; entry += 2 )
+      below += entry[0];
   }
-  LODWORD(v21) = v21 / total;
-LABEL_71:
-  code_high = ::code_low + v21 - 1;
-  v25 = v24 - *i_3;
-  LODWORD(v21) = v35 + 1;
-  if ( v35 != (uint32_t)(-1) )
+  uint32_t above = below + entry[0];
+  code_high = (uint32_t)code_low + (uint32_t)(above * size / total) - 1;
+  code_low = (uint32_t)code_low + (uint32_t)(below * size / total);
+
+  // Shift out the leading bits low and high agree on, into code_buf (a 1 is
+  // written by toggling a 0; vbn toggles them decompressing too).
+  int32_t pending = 32;
+  uint32_t low = code_low, high = code_high, agree = low ^ high;
+  if ( (int32_t)agree >= 0 )
   {
-    v21 = v25 * (uint64_t)(uint32_t)v21;
-LABEL_74:
-    LODWORD(v21) = v21 / total;
-  }
-  else
-  {
-    HIDWORD(v21) = v25;
-    if ( v25 != total )
-      goto LABEL_74;
-  }
-  ::code_low += v21;
-LABEL_76:
-  n32 = 32;
-  v27 = code_high;
-  v28 = ::code_low ^ code_high;
-  if ( (::code_low ^ code_high) >= 0 )
-  {
-    v29 = v34;
-    low = ::code_low;
     do
     {
-      if ( low < 0 )
-        _bittestandcomplement(
-          (int32_t *)code_buf,
-          v29);
-      --n32;
-      ++v29;
-      low = (int32_t)((uint32_t)low << 1);   // shl/rcl: wrap
-      v27 = (int32_t)((uint32_t)v27 << 1 | 1);
-      v31 = (v28 & 0x40000000) != 0;
-      v28 = (int32_t)((uint32_t)v28 << 1);
+      if ( (int32_t)low < 0 )
+        _bittestandcomplement(code_buf, pos);
+      pending--;
+      pos++;
+      low <<= 1;
+      high = high << 1 | 1;
+      agree <<= 1;
     }
-    while ( !v31 );
-    v34 = v29;
-    ::code_low = low;
-    code_high = v27;
+    while ( (int32_t)agree >= 0 );
+    code_low = low;
+    code_high = high;
   }
-  ::code_pending = n32;
-  *code_pos = v34;
-  return i_2[1];
+  code_pending = pending;
+  *code_pos = pos;
+  return entry[1];
+}
+
+// pair_bonus: what the first candidate for a byte, of weight w, gets added,
+// by how often the pair (byte before, byte) came up in the last 1024
+// literals (`seen`, at most 255).
+static uint32_t pair_bonus(uint32_t w, uint32_t seen)
+{
+  if ( (uint32_t)search_gain < 0x13 )
+    switch ( seen )
+    {
+      case 0: return w >> 3;
+      case 1: return 2 * w;
+      case 2: return 3 * w;
+      case 3: return 4 * w;
+      case 4: case 5: case 6: return 5 * w;
+      default: return 8 * w;
+    }
+  switch ( seen )
+  {
+    case 0: return w >> 4;
+    case 1: return w >> 1;
+    case 2: return w;
+    case 3: return w + (w >> 1);
+    case 4: return 2 * w;
+    default: return 2 * w + (w >> 1);
+  }
+}
+
+// lit_swap: swap two pairs of the literal model, and the slots that find them.
+static void lit_swap(uint32_t *a, uint32_t *b)
+{
+  std::swap(a[0], b[0]);
+  std::swap(a[1], b[1]);
+  lit_slot[a[1]] = a;
+  lit_slot[b[1]] = b;
 }
 
 // code_literal (vbn.exe 0x100064C0): code the byte at bitpos as a literal.  The
@@ -702,468 +492,205 @@ LABEL_76:
 // adapt.  Returns the byte (decompressing: also stores it in the window).
 static int32_t code_literal(int32_t excluded, uint32_t *code_pos, uint32_t bitpos)
 {
-  int16_t cnt;
-  int32_t n2, v5, k256, *v9, v10, *v11, v12, v14, *v15, *v16, v18, v20, v21, v22, v28, *v34, v35,
-          *v36, v37, n2_2, v41, v42, *v43, v44, v45, v46, v49, v50, v51, v52, v53, *v54, v55,
-          v56, v57, *v60, v61, rpos, v64, n362_3, v72, n363, *v74, *i_2, v76, v78, v79, result,
-          rpos1, n362_2, v84, v85, v89, v90, v91;
-  int8_t v33, v38, *v63, *v83;
-  uint32_t v3, *i, lit_sum, v13, *v19, v23, v25, v26, v27, v29, v30, v31, v32, *v39, *v47, v48,
-           v58, v59, *i_1, *v66, v67, v68, v69, v70, v77, v86, n0x10000, n2048_1;
-  uint64_t v24;
-
   cand_floor = (uint32_t)cand_floor >> 1;
-  _BitScanReverse(&v3, ((uint32_t)lit_cost8 >> 3) + 1);
-  lit_threshold = ((uint32_t)search_gain >> 4)
-                 + 54
-                 - (((uint32_t)lit_cost11 >> 11)
-                  + 1)
-                 - (((uint32_t)lit_cost10 >> 10)
-                  + 1)
-                 - (((uint32_t)lit_cost9 >> 9)
-                  + 1)
-                 - (((uint32_t)lit_cost8 >> 8)
-                  + 1)
-                 - v3
-                 - ((((uint32_t)lit_cost11 >> 11) + 1) >> 1)
-                 - ((((uint32_t)lit_cost10 >> 10) + 1) >> 1)
-                 - ((((uint32_t)lit_cost9 >> 9) + 1) >> 1)
-                 - ((((uint32_t)lit_cost8 >> 8) + 1) >> 1);
+
+  // lit_threshold, how much the candidates count for: less the more bits
+  // literals have been costing, by each average (1.5 a bit) and by the log
+  // of lit_cost8.  At 0, with a search that gained little, the candidates are
+  // dropped and the long averages start over.
+  auto cost = [](int32_t c, int32_t k) { uint32_t b = ((uint32_t)c >> k) + 1; return b + (b >> 1); };
+  lit_threshold = ((uint32_t)search_gain >> 4) + 54 - top_bit(((uint32_t)lit_cost8 >> 3) + 1)
+                - cost(lit_cost8, 8) - cost(lit_cost9, 9) - cost(lit_cost10, 10) - cost(lit_cost11, 11);
   if ( lit_threshold <= 0 )
   {
     lit_threshold = 0;
     if ( search_gain <= 4 )
     {
-      ::n_cands = 0;
+      n_cands = 0;
       lit_cost9 = 4096;
       lit_cost10 = 0x2000;
       lit_cost11 = 0x4000;
     }
   }
-  n2 = 1;
-  if ( (uint32_t)lit_cost8 >= 0x2EC )
+
+  // lit_inc, what every count in the literal model gets added: the more
+  // literals cost, the flatter the model.  From about 7 bits on, the long
+  // averages start over.
+  uint32_t c8 = lit_cost8;
+  int32_t inc = c8 < 0x2EC ? 1 : c8 < 0x37F ? 2 : c8 < 0x489 ? 4 : c8 < 0x56F ? 8
+              : c8 < 0x63F ? 16 : c8 < 0x70F ? 32 : c8 < 0x75C ? 128 : 1024;
+  if ( c8 >= 0x70F )
   {
-    n2 = 2;
-    if ( (uint32_t)lit_cost8 >= 0x37F )
-    {
-      n2 = 4;
-      if ( (uint32_t)lit_cost8 >= 0x489 )
-      {
-        n2 = 8;
-        if ( (uint32_t)lit_cost8 >= 0x56F )
-        {
-          n2 = 16;
-          if ( (uint32_t)lit_cost8 >= 0x63F )
-          {
-            n2 = 32;
-            if ( (uint32_t)lit_cost8 >= 0x70F )
-            {
-              n2 = 128;
-              lit_cost9 = 4096;
-              lit_cost10 = 0x2000;
-              lit_cost11 = 0x4000;
-              if ( (uint32_t)lit_cost8 >= 0x75C )
-                n2 = 1024;
-            }
-          }
-        }
-      }
-    }
+    lit_cost9 = 4096;
+    lit_cost10 = 0x2000;
+    lit_cost11 = 0x4000;
   }
-  if ( lit_inc != n2 )
+  if ( lit_inc != inc )
   {
-    v5 = n2 - lit_inc;
-    lit_inc += v5;
-    k256 = 256;
-    i = ::lit_model;
-    lit_sum = ::lit_total;
-    do
-    {
-      lit_sum += v5;
-      *i += v5;
-      i += 2;
-      --k256;
-    }
-    while ( k256 );
-    ::lit_total = lit_sum;
+    for ( int32_t b = 0; b < 256; b++ )
+      lit_model[2 * b] += inc - lit_inc;
+    lit_total += 256 * (inc - lit_inc);
+    lit_inc = inc;
   }
-  if ( excluded < 0 || (v9 = (int32_t *)lit_slot[excluded], v10 = *v9, *v9 = 0, v89 = v10, ::lit_total -= v10, excluded != excluded_byte) )
+
+  // The bytes ruled out -- `excluded`, and excluded_byte, which the search
+  // left out -- leave the model while this one is coded.
+  uint32_t kept = 0, kept_byte = 0;
+  bool exclude_byte = excluded_byte >= 0 && excluded_byte != excluded;
+  if ( excluded >= 0 )
   {
-    if ( excluded_byte >= 0 )
-    {
-      v11 = (int32_t *)lit_slot[excluded_byte];
-      v12 = *v11;
-      *v11 = 0;
-      v90 = v12;
-      ::lit_total -= v12;
-    }
+    kept = *lit_slot[excluded];
+    *lit_slot[excluded] = 0;
+    lit_total -= kept;
   }
-  v13 = 0;
-  v86 = 0;
-  if ( ::n_cands )
+  if ( exclude_byte )
   {
-    v14 = 0;
-    v15 = groups;
-    v16 = cands;
-    cnt = ::n_cands;
-    do
+    kept_byte = *lit_slot[excluded_byte];
+    *lit_slot[excluded_byte] = 0;
+    lit_total -= kept_byte;
+  }
+
+  // The candidates, grouped by the byte they predict, each group a pair
+  // {weight, byte}; none for `excluded` (and then n_cands counts one less,
+  // however many there were).  A group weighs its candidates' weights over
+  // cand_floor, and its first one's pair_bonus.
+  uint32_t n_groups = 0, sum = 0, *group = groups;
+  if ( n_cands )
+  {
+    bool skipped = false;
+    for ( int32_t *cand = cands; cand < cands + 2 * (uint8_t)n_cands; cand += 2 )
     {
-      while ( 1 )
+      int32_t b = (uint8_t)cand[1];
+      if ( b == excluded )
       {
-        while ( 1 )
-        {
-          v18 = *((uint8_t *)v16 + 4);
-          if ( v18 != excluded )
-            break;
-          v16 += 2;
-          ++HIBYTE(cnt);
-          LOBYTE(cnt) = cnt - 1;
-          if ( !(uint8_t)cnt )
-            goto LABEL_52;
-        }
-        v19 = (uint32_t *)group_slot[v18];
-        if ( !v19 )
-          break;
-        v20 = *v16 - cand_floor;
-        *v19 += v20;
-        v14 += v20;
-        v16 += 2;
-        LOBYTE(cnt) = cnt - 1;
-        if ( !(uint8_t)cnt )
-          goto LABEL_52;
+        skipped = true;
+        continue;
       }
-      group_slot[v18] = (int32_t)v15;
-      LOBYTE(ctx16) = v18;
-      v15[1] = v18;
-      if ( (uint32_t)search_gain < 0x13 )
-      {
-        if ( ctx_count[ctx16] )
-        {
-          if ( (uint8_t)ctx_count[ctx16] > 1u )
-          {
-            if ( (uint8_t)ctx_count[ctx16] > 2u )
-            {
-              if ( (uint8_t)ctx_count[ctx16] > 3u )
-              {
-                if ( (uint8_t)ctx_count[ctx16] > 6u )
-                  v21 = 8 * *v16;
-                else
-                  v21 = 5 * *v16;
-              }
-              else
-              {
-                v21 = 4 * *v16;
-              }
-            }
-            else
-            {
-              v21 = 3 * *v16;
-            }
-          }
-          else
-          {
-            v21 = 2 * *v16;
-          }
-        }
-        else
-        {
-          v21 = (uint32_t)*v16 >> 3;
-        }
-      }
-      else if ( ctx_count[ctx16] )
-      {
-        if ( (uint8_t)ctx_count[ctx16] > 1u )
-        {
-          if ( (uint8_t)ctx_count[ctx16] > 2u )
-          {
-            if ( (uint8_t)ctx_count[ctx16] > 3u )
-            {
-              if ( (uint8_t)ctx_count[ctx16] > 4u )
-                v21 = *v16 + *v16 + ((uint32_t)*v16 >> 1);
-              else
-                v21 = 2 * *v16;
-            }
-            else
-            {
-              v21 = *v16 + ((uint32_t)*v16 >> 1);
-            }
-          }
-          else
-          {
-            v21 = *v16;
-          }
-        }
-        else
-        {
-          v21 = (uint32_t)*v16 >> 1;
-        }
-      }
+      uint32_t w = (uint32_t)cand[0] - cand_floor;
+      if ( group_slot[b] )
+        *group_slot[b] += w;
       else
       {
-        v21 = (uint32_t)*v16 >> 4;
+        group_slot[b] = group;
+        LOBYTE(ctx16) = b;
+        w += pair_bonus(cand[0], (uint8_t)ctx_count[ctx16]);
+        group[0] = w;
+        group[1] = b;
+        group += 2;
       }
-      v22 = *v16 + v21 - cand_floor;
-      *v15 = v22;
-      v14 += v22;
-      v15 += 2;
-      v16 += 2;
-      LOBYTE(cnt) = cnt - 1;
+      sum += w;
     }
-    while ( (uint8_t)cnt );
-LABEL_52:
-    v85 = v14;
-    v13 = (uint32_t)((int8_t *)v15 - (int8_t *)groups) >> 3;
-    v86 = v13;
-    if ( HIBYTE(cnt) )
-      --::n_cands;
+    n_groups = (group - groups) / 2;
+    if ( skipped )
+      n_cands--;
   }
-  if ( v13 )
+
+  // The groups join the literal model for now, their weights scaled so that
+  // together they make about `share` counts: more with lit_total, with the
+  // candidates that agree with another, with lit_threshold and with the
+  // search's gain.  The byte next_byte predicts weighs 7/4 more, next_byte2's
+  // 3/2.  While literals cost less than about 6.8 bits, a byte's count also
+  // gets 64 for each time its pair came up lately, and while no pair is known
+  // (literal_run 0), a quarter of itself.  The groups keep the counts they
+  // replace.
+  uint32_t saved_total = 0;
+  if ( n_groups )
   {
-    v23 = ::n_cands * v85;
-    v24 = ::lit_total
-        * (uint64_t)((::n_cands - v86) * ((3 * lit_threshold + 5 * (((uint32_t)search_gain >> 2) + search_gain)) >> 3));
-    if ( is_mul_ok(::lit_total, (::n_cands - v86) * ((3 * lit_threshold + 5 * (((uint32_t)search_gain >> 2) + search_gain)) >> 3)) )
-      v25 = (uint32_t)v24 >> 3;
-    else
-      v25 = v24 >> 3;
-    n2048_1 = ::lit_total;
-    v26 = v25 >> (mode_shift[(uint32_t)max_cands >> 5] & 31);
-    v27 = v25 - v26;
-    v28 = ((uint32_t)(48 - lit_threshold) >> 3) - 4;
-    if ( v28 < 0 )
-      v29 = v26 << ((4 - ((uint32_t)(48 - lit_threshold) >> 3)) & 31);
-    else
-      v29 = v26 >> (v28 & 31);
-    v30 = v29 + v27;
-    v31 = v29;   // bsr edx,eax: EDX holds v29, and bsr leaves it there when v30 == 0
-    _BitScanReverse(&v31, v30);
-    _BitScanReverse(&v32, v23);
-    v33 = 31 - v31 + v32;
-    ::n_cands = ((uint64_t)v30 << ((v33 & 0x1F) & 31)) / v23;
-    if ( group_slot[(uint8_t)next_byte[prev_byte]] )
+    uint32_t all = n_cands * sum;
+    uint32_t x = (n_cands - n_groups) * ((3 * lit_threshold + 5 * (((uint32_t)search_gain >> 2) + search_gain)) >> 3);
+    uint32_t base = ((uint64_t)lit_total * x) >> 3;
+    saved_total = lit_total;
+    uint32_t part = base >> mode_shift[(uint32_t)max_cands >> 5];
+    uint32_t t = (uint32_t)(48 - lit_threshold) >> 3;
+    int32_t up = t - 4;
+    uint32_t moved = up < 0 ? part << ((4 - t) & 31) : part >> (up & 31);
+    uint32_t share = moved + (base - part);
+    uint32_t top = share ? top_bit(share) : moved;   // bsr edx,eax leaves EDX, `moved`, when share == 0
+    uint32_t shift = 31 - top + top_bit(all);         // shld/shrd: the count is mod 32
+    uint32_t scale = ((uint64_t)share << (shift & 31)) / all;
+    if ( uint32_t *g = group_slot[(uint8_t)next_byte[prev_byte]] )
+      *g = (7 * *g) >> 2;
+    if ( uint32_t *g = group_slot[(uint8_t)next_byte2[prev_byte2]] )
+      *g = (3 * *g) >> 1;
+    for ( uint32_t *g = groups; g < group; g += 2 )
     {
-      v34 = (int32_t *)group_slot[(uint8_t)next_byte[prev_byte]];
-      v35 = *v34;
-      *v34 *= 8;
-      *v34 -= v35;
-      *v34 = (uint32_t)*v34 >> 2;
-    }
-    if ( group_slot[(uint8_t)next_byte2[prev_byte2]] )
-    {
-      v36 = (int32_t *)group_slot[(uint8_t)next_byte2[prev_byte2]];
-      v37 = *v36;
-      *v36 *= 2;
-      *v36 += v37;
-      *v36 = (uint32_t)*v36 >> 1;
-    }
-    v38 = v86;
-    v39 = (uint32_t *)(::groups - 2);
-    n2_2 = ::n_cands;
-    if ( (uint32_t)lit_cost8 < 0x6C9 )
-    {
-      if ( literal_run )
+      uint32_t add = ((uint64_t)scale * g[0]) >> (shift & 31);
+      uint32_t *count = lit_slot[g[1]], old = *count;
+      group_slot[g[1]] = nullptr;
+      g[0] = old;
+      if ( (uint32_t)lit_cost8 < 0x6C9 )
       {
-        do
-        {
-          v39 += 2;
-          v52 = ((uint32_t)n2_2 * (uint64_t)*v39) >> (v33 & 31);
-          ::lit_total += v52;
-          v53 = v39[1];
-          LOBYTE(ctx16) = v53;
-          v54 = (int32_t *)lit_slot[v53];
-          group_slot[v53] -= (int32_t)v39;
-          v55 = *v54;
-          *v39 = *v54;
-          v56 = v55 + v52;
-          v57 = (uint8_t)ctx_count[ctx16] << 6;
-          ::lit_total += v57;
-          *v54 = v57 + v56;
-          --v38;
-        }
-        while ( v38 );
+        LOBYTE(ctx16) = g[1];
+        if ( !literal_run )
+          add += old >> 2;
+        add += (uint8_t)ctx_count[ctx16] << 6;
       }
-      else
-      {
-        do
-        {
-          v39 += 2;
-          v45 = ((uint32_t)n2_2 * (uint64_t)*v39) >> (v33 & 31);
-          ::lit_total += v45;
-          v46 = v39[1];
-          LOBYTE(ctx16) = v46;
-          v47 = (uint32_t *)lit_slot[v46];
-          group_slot[v46] -= (int32_t)v39;
-          v48 = *v47;
-          *v39 = *v47;
-          v49 = v48 + v45;
-          v48 >>= 2;
-          v50 = v48 + v49;
-          ::lit_total += v48;
-          v51 = (uint8_t)ctx_count[ctx16] << 6;
-          ::lit_total += v51;
-          *v47 = v51 + v50;
-          --v38;
-        }
-        while ( v38 );
-      }
-    }
-    else
-    {
-      do
-      {
-        v39 += 2;
-        v41 = ((uint32_t)n2_2 * (uint64_t)*v39) >> (v33 & 31);
-        ::lit_total += v41;
-        v42 = v39[1];
-        v43 = (int32_t *)lit_slot[v42];
-        group_slot[v42] -= (int32_t)v39;
-        v44 = *v43;
-        *v39 = *v43;
-        *v43 = v44 + v41;
-        --v38;
-      }
-      while ( v38 );
+      *count = old + add;
+      lit_total += add;
     }
   }
-  n0x10000 = *code_pos;
-  if ( encoding )
-    v91 = code_symbol(::lit_total, (uint32_t *)code_pos, (uint8_t)window[bitpos >> 3], ::lit_model);
-  else
-    v91 = code_symbol(::lit_total, (uint32_t *)code_pos, -1, ::lit_model);
-  v58 = (*code_pos - n0x10000) << 8;
-  lit_cost8 = (v58 + (lit_cost8 << 8) - lit_cost8) >> 8;
-  v58 *= 2;
-  lit_cost9 = (v58 + (lit_cost9 << 9) - lit_cost9) >> 9;
-  v58 *= 2;
-  lit_cost10 = (v58 + (lit_cost10 << 10) - lit_cost10) >> 10;
-  lit_cost11 = (2 * v58 + (lit_cost11 << 11) - lit_cost11) >> 11;
-  v59 = v86;
-  if ( v86 )
+
+  uint32_t start = *code_pos;
+  int32_t byte = code_symbol(lit_total, code_pos, encoding ? (uint8_t)window[bitpos >> 3] : -1, lit_model);
+  uint32_t bits = *code_pos - start;
+  lit_cost8 = ((bits << 8) + ((uint32_t)lit_cost8 << 8) - lit_cost8) >> 8;
+  lit_cost9 = ((bits << 9) + ((uint32_t)lit_cost9 << 9) - lit_cost9) >> 9;
+  lit_cost10 = ((bits << 10) + ((uint32_t)lit_cost10 << 10) - lit_cost10) >> 10;
+  lit_cost11 = ((bits << 11) + ((uint32_t)lit_cost11 << 11) - lit_cost11) >> 11;
+
+  // The model as it was.
+  if ( n_groups )
   {
-    v60 = groups;
-    ::lit_total = n2048_1;
-    do
-    {
-      *(uint32_t *)lit_slot[v60[1]] = *v60;
-      v60 += 2;
-      --v59;
-    }
-    while ( v59 );
+    lit_total = saved_total;
+    for ( uint32_t *g = groups; g < group; g += 2 )
+      *lit_slot[g[1]] = g[0];
   }
-  if ( excluded < 0 || (*(uint32_t *)lit_slot[excluded] = v89, ::lit_total += v89, excluded != excluded_byte) )
+  if ( excluded >= 0 )
   {
-    if ( excluded_byte >= 0 )
-    {
-      *(uint32_t *)lit_slot[excluded_byte] = v90;
-      ::lit_total += v90;
-    }
+    *lit_slot[excluded] = kept;
+    lit_total += kept;
   }
-  v61 = ctx16;
-  LOBYTE(v61) = v91;
-  window[bitpos >> 3] = v91;
-  if ( ctx_count[v61] != -1 )
+  if ( exclude_byte )
   {
-    ++literal_run;
-    if ( !ctx_count[v61] )
-      literal_run = 0;
-    ++ctx_count[v61];
+    *lit_slot[excluded_byte] = kept_byte;
+    lit_total += kept_byte;
   }
-  rpos = ::lit_ring2_pos;
-  ::lit_ring2_pos = ((uint16_t)::lit_ring2_pos + 1) & 0x3FF;
-  v63 = (int8_t *)&lit_ring2[rpos];
-  v64 = *(uint32_t *)v63;
-  *(uint32_t *)v63 = v61;
-  if ( v64 >= 0 && ctx_count[v64] )
-    --ctx_count[v64];
-  if ( --lit_resort )
+
+  // The pair (byte before, byte) counts once more while it is in lit_ring2,
+  // up to 255; literal_run counts the literals in a row whose pair had come
+  // up before.
+  int32_t pair = (ctx16 & ~0xFF) | byte;
+  window[bitpos >> 3] = byte;
+  if ( ctx_count[pair] != -1 )
   {
-    result = v91;
-    *(uint32_t *)lit_slot[v91] += 16;
-    rpos1 = ::lit_ring1_pos;
-    n362_2 = ::lit_ring1_pos + 1;
-    if ( ::lit_ring1_pos == 362 )
-      n362_2 = 0;
-    ::lit_ring1_pos = n362_2;
-    v83 = (int8_t *)&lit_ring1[rpos1];
-    v84 = *(uint32_t *)v83;
-    *(uint32_t *)v83 = v91;
-    if ( v84 < 0 )
-      ::lit_total += 16;
-    else
-      *(uint32_t *)lit_slot[v84] -= 16;
+    literal_run = ctx_count[pair] ? literal_run + 1 : 0;
+    ctx_count[pair]++;
   }
+  int32_t old = ring_put(lit_ring2, &lit_ring2_pos, 1024, pair);
+  if ( old >= 0 && ctx_count[old] )
+    ctx_count[old]--;
+
+  // The byte counts 16 more while it is in lit_ring1.  Every lit_resort
+  // literals, the two counts that changed move to their places in the order.
+  *lit_slot[byte] += 16;
+  bool resort = --lit_resort == 0;
+  if ( resort )
+  {
+    lit_resort = (uint8_t)(((uint32_t)lit_cost8 >> 8) + 1);
+    for ( uint32_t *p = lit_slot[byte]; p > lit_model && p[0] > p[-2]; p -= 2 )
+      lit_swap(p, p - 2);
+  }
+  old = ring_put(lit_ring1, &lit_ring1_pos, 363, byte);
+  if ( old < 0 )
+    lit_total += 16;
   else
   {
-    lit_resort = (uint8_t)(BYTE1(lit_cost8) + 1);
-    i_1 = (uint32_t *)lit_slot[v91];
-    *i_1 += 16;
-    v66 = i_1 - 2;
-    v67 = *i_1;
-    v68 = *(i_1 - 2);
-    if ( *i_1 > v68 )
-    {
-      do
-      {
-        if ( i_1 <= ::lit_model )
-          break;
-        *i_1 = v68;
-        *v66 = v67;
-        v69 = i_1[1];
-        v70 = v66[1];
-        i_1[1] = v70;
-        v66[1] = v69;
-        lit_slot[v70] = (int32_t)i_1;
-        lit_slot[v69] = (int32_t)v66;
-        i_1 -= 2;
-        v66 -= 2;
-        v67 = *i_1;
-        v68 = *v66;
-      }
-      while ( *i_1 > *v66 );
-    }
-    n362_3 = ::lit_ring1_pos;
-    v72 = *(uint32_t *)&lit_ring1[::lit_ring1_pos];
-    *(uint32_t *)&lit_ring1[::lit_ring1_pos] = v91;
-    n363 = n362_3 + 1;
-    if ( n363 == 363 )
-      n363 = 0;
-    ::lit_ring1_pos = n363;
-    if ( v72 < 0 )
-    {
-      ::lit_total += 16;
-    }
-    else
-    {
-      v74 = (int32_t *)lit_slot[v72];
-      *v74 -= 16;
-      i_2 = v74 + 2;
-      v76 = *v74;
-      v77 = v74[2];
-      if ( (uint32_t)(*v74) < v77 )
-      {
-        do
-        {
-          if ( i_2 >= (int32_t *)::lit_model + 2 * 256 )
-            break;
-          *v74 = v77;
-          *i_2 = v76;
-          v78 = v74[1];
-          v79 = i_2[1];
-          v74[1] = v79;
-          i_2[1] = v78;
-          lit_slot[v79] = (int32_t)v74;
-          lit_slot[v78] = (int32_t)i_2;
-          v74 += 2;
-          i_2 += 2;
-          v76 = *v74;
-          v77 = *i_2;
-        }
-        while ( (uint32_t)(*v74) < (uint32_t)*i_2 );
-      }
-    }
-    return v91;
+    *lit_slot[old] -= 16;
+    if ( resort )
+      for ( uint32_t *p = lit_slot[old]; p + 2 < lit_model + 2 * 256 && p[0] < p[2]; p += 2 )
+        lit_swap(p, p + 2);
   }
-  return result;
+  return byte;
 }
 
 // code_match (vbn.exe 0x10005C50): code how many bytes at bitpos match the best
@@ -1173,361 +700,9 @@ LABEL_52:
 // length (decompressing: also copies the matched bytes into the window).
 static int32_t code_match(uint32_t *code_pos, int32_t *excluded, uint32_t bitpos)
 {
-  bool v13;
-  int32_t v3, result, v7, *v9, *v10, v18, v19, *v35, v36, v37, v39, v46, n255_7, v48, v52, v56,
-          n255_4, v58, v62, *v64, rpos, v67, *v69, v73, n2, v77;
-  int8_t *v6, *v11, *v12, *v15, n255_2, v32, v34, *v44, *v49, *v54, *v59, *v66, *v68, *v75;
-  uint32_t v5, v8, n255_1, *v17, *v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31,
-           v33, *v38, n256_1, *v41, v42, n255_6, n255_8, n255_3, n255_5, v63, v70, n255, len_sum0,
-           n256_2;
-  uint8_t *v43, *v51, *v53, *v61;
-
-  v3 = 0;
-  if ( bitpos >> 3 )
-    BYTE1(v3) = window[(bitpos >> 3) - 1];
-  ctx16 = v3;
-  if ( n_cands )
-  {
-    v73 = len_model[0];
-    ::len_total -= len_model[0];
-    v5 = 9 * literal_run + search_gain + ((uint32_t)lit_threshold >> 2) + 1;
-    n2 = 0;
-    len_model[0] = 5 * len_model[0] / (v5 + (v5 >> 4));
-    ::len_total += len_model[0];
-    n255 = 255;
-    v6 = &window[-(::cands + 1)[0] >> 3];
-    v75 = v6;
-    cur_ptr = (int32_t)&window[bitpos >> 3];
-    if ( (cur_ptr - (uint32_t)v6) < 0xFF )
-      n255 = cur_ptr - (uint32_t)v6;
-    if ( (uint32_t)(data_end - cur_ptr) < n255 )
-      n255 = data_end - cur_ptr;
-    v7 = (uint8_t)*v6;
-    (::cands + 1)[0] = v7;
-    if ( (uint8_t)v7 == (uint8_t)(next_byte[prev_byte]))
-    {
-      n2 = 1;
-      if ( (uint8_t)v7 == (uint8_t)(next_byte[prev_byte2]))
-        n2 = 2;
-    }
-    v8 = 0;
-    v9 = groups;
-    v10 = (::cands + 2);
-    BYTE1(v6) = n_cands;
-    LOBYTE(v6) = 1;
-    if ( (uint8_t)n_cands > 1u )
-    {
-      do
-      {
-        while ( 1 )
-        {
-          v11 = v75;
-          v12 = &window[(uint32_t)-v10[1] >> 3];
-          v13 = *v12 == *v75;
-          LOBYTE(v11) = *v12;
-          v10[1] = (int32_t)v11;
-          n255_1 = 0;
-          if ( v13 )
-          {
-            v69 = v10;
-            v68 = v6;
-            n255_1 = n255;
-            v15 = v75;
-            if ( v75 <= v12 && n255 > (uint32_t)(cur_ptr - (int32_t)v12) )
-              n255_1 = cur_ptr - (uint32_t)v12;
-            n255_2 = n255_1;
-            do
-            {
-              if ( !--n255_2 )
-                break;
-              if ( v15[1] != v12[1] )
-                break;
-              if ( !--n255_2 )
-                break;
-              if ( v15[2] != v12[2] )
-                break;
-              if ( !--n255_2 )
-                break;
-              if ( v15[3] != v12[3] )
-                break;
-              if ( !--n255_2 )
-                break;
-              if ( v15[4] != v12[4] )
-                break;
-              if ( !--n255_2 )
-                break;
-              v12 += 5;
-              v15 += 5;
-            }
-            while ( *v15 == *v12 );
-            LOBYTE(n255_1) = n255_1 - n255_2;
-            v6 = v68;
-            v10 = v69;
-          }
-          v17 = (uint32_t *)group_slot[n255_1];
-          if ( !v17 )
-            break;
-          v18 = *v10 - cand_floor;
-          *v17 += v18;
-          v8 += v18;
-          v10 += 2;
-          LOBYTE(v6) = (uint8_t)(uintptr_t)v6 + 1;
-          if ( (uint8_t)(uintptr_t)v6 >= BYTE1(v6) )
-            goto LABEL_33;
-        }
-        group_slot[n255_1] = (int32_t)v9;
-        v9[1] = n255_1;
-        LOBYTE(n255_1) = BYTE1(v6) - (uint8_t)(uintptr_t)v6;
-        v19 = *v10 + (n255_1 >> 1) - cand_floor;
-        *v9 = v19;
-        v8 += v19;
-        v9 += 2;
-        v10 += 2;
-        LOBYTE(v6) = (uint8_t)(uintptr_t)v6 + 1;
-      }
-      while ( (uint8_t)(uintptr_t)v6 < BYTE1(v6) );
-    }
-LABEL_33:
-    v70 = (uint32_t)((int8_t *)v9 - (int8_t *)groups) >> 3;
-    if ( v70 )
-    {
-      v20 = (uint32_t *)group_slot[0];
-      if ( group_slot[0] )
-      {
-        _BitScanReverse(&v21, ((uint32_t)(48 - lit_threshold) >> 3) + 1);
-        v22 = (uint32_t)len_avg >> (v21 & 31);
-        v23 = *(uint32_t *)group_slot[0];
-        if ( n2 )
-        {
-          v22 = len_avg;
-          v23 = ((3 * v23) >> 2) + 1;
-          if ( n2 != 1 )
-            v23 = ((7 * v23) >> 3) + 1;
-        }
-        _BitScanReverse(&v24, v22 + 1);
-        v25 = (v23 >> (v24 & 31)) + v23;
-        *(uint32_t *)group_slot[0] = v25;
-        LOBYTE(ctx16) = (::cands + 1)[0];
-        if ( ctx_count[(::cands + 1)[0]] )
-        {
-          if ( (uint8_t)ctx_count[(::cands + 1)[0]] > 1u )
-          {
-            if ( (uint8_t)ctx_count[(::cands + 1)[0]] > 2u )
-            {
-              if ( (uint8_t)ctx_count[(::cands + 1)[0]] > 3u )
-              {
-                if ( (uint8_t)ctx_count[(::cands + 1)[0]] > 5u )
-                {
-                  v29 = v25 >> 2;
-                }
-                else
-                {
-                  v28 = v25 >> 3;
-                  *v20 -= v28;
-                  v29 = v28 >> 1;
-                }
-                *v20 -= v29;
-              }
-              else
-              {
-                v27 = v25 >> 3;
-                *v20 -= v27;
-                *v20 -= v27 >> 1;
-              }
-            }
-            else
-            {
-              v26 = v25 >> 3;
-              *v20 -= v26;
-              *v20 -= v26 >> 2;
-            }
-          }
-          else
-          {
-            *v20 -= v25 >> 5;
-          }
-        }
-        else
-        {
-          *v20 += v25 >> 9;
-        }
-      }
-      len_sum0 = ::len_total;
-      v30 = 4 * ::len_total;
-      if ( (uint32_t)lit_cost8 < 0x44C )
-      {
-        v30 = 6 * ::len_total;
-        if ( (uint32_t)lit_cost8 < 0x384 )
-          v30 = 9 * ::len_total;
-      }
-      _BitScanReverse(&v31, v8);
-      v32 = v31 + 6;
-      v33 = ((uint64_t)(uint32_t)((n_cands + 4 * search_gain + ((uint32_t)lit_cost8 >> 6))
-                                            * (uint64_t)v30
-                                            / (((uint32_t)(len_avg + 1935 - lit_cost8) >> 3) + 1)) << ((v32 & 0x1F) & 31))
-          / v8;
-      v34 = v70;
-      v35 = (::groups - 2);
-      do
-      {
-        v35 += 2;
-        v36 = search_gain + ((v33 * (uint64_t)(uint32_t)*v35) >> (v32 & 31));
-        ::len_total += v36;
-        v37 = v35[1];
-        v38 = (uint32_t *)&::len_model[2 * v37];
-        group_slot[v37] -= (int32_t)v35;
-        v39 = len_model[2 * v37];
-        *v35 = v39;
-        *v38 = v39 + v36;
-        --v34;
-      }
-      while ( v34 );
-    }
-    if ( n255 >= 0xFF )
-    {
-      if ( encoding )
-      {
-        v53 = (uint8_t *)cur_ptr;
-        v54 = v75;
-        n255_3 = n255;
-        v56 = 0;
-        while ((uint8_t)(*v54) == (uint8_t)(*v53))
-        {
-          ++v53;
-          ++v54;
-          if ( !--n255_3 )
-          {
-            *excluded = -1;
-            n255_4 = n255;
-            goto LABEL_76;
-          }
-        }
-        LOBYTE(v56) = *v54;
-        *excluded = v56;
-        n255_4 = n255 - n255_3;
-LABEL_76:
-        v77 = code_symbol(::len_total, (uint32_t *)code_pos, n255_4, (uint32_t *)len_model);
-      }
-      else
-      {
-        v58 = code_symbol(::len_total, (uint32_t *)code_pos, -1, (uint32_t *)len_model);
-        v77 = v58;
-        v59 = v75;
-        n255_5 = n255;
-        v61 = (uint8_t *)cur_ptr;
-        v62 = 0;
-        while ( 1 )
-        {
-          LOBYTE(v62) = *v59;
-          if ( --v58 < 0 )
-            break;
-          *v61++ = v62;
-          ++v59;
-          if ( !--n255_5 )
-          {
-            *excluded = -1;
-            goto LABEL_82;
-          }
-        }
-        *excluded = v62;
-      }
-    }
-    else
-    {
-      n256_1 = ::len_total;
-      v41 = (uint32_t *)&::len_model[2 * n255 + 2];
-      v42 = 255 - n255;
-      do
-      {
-        n256_1 -= *v41;
-        v41 += 2;
-        --v42;
-      }
-      while ( v42 );
-      n256_2 = n256_1;
-      if ( encoding )
-      {
-        v43 = (uint8_t *)cur_ptr;
-        v44 = v75;
-        n255_6 = n255;
-        v46 = 0;
-        while ((uint8_t)(*v44) == (uint8_t)(*v43))
-        {
-          ++v43;
-          ++v44;
-          if ( !--n255_6 )
-          {
-            *excluded = -1;
-            n255_7 = n255;
-            goto LABEL_64;
-          }
-        }
-        LOBYTE(v46) = *v44;
-        *excluded = v46;
-        n255_7 = n255 - n255_6;
-LABEL_64:
-        v77 = code_symbol(n256_2, (uint32_t *)code_pos, n255_7, (uint32_t *)len_model);
-      }
-      else
-      {
-        v48 = code_symbol(n256_1, (uint32_t *)code_pos, -1, (uint32_t *)len_model);
-        v77 = v48;
-        v49 = v75;
-        n255_8 = n255;
-        v51 = (uint8_t *)cur_ptr;
-        v52 = 0;
-        while ( 1 )
-        {
-          LOBYTE(v52) = *v49;
-          if ( --v48 < 0 )
-            break;
-          *v51++ = v52;
-          ++v49;
-          if ( !--n255_8 )
-          {
-            *excluded = -1;
-            goto LABEL_82;
-          }
-        }
-        *excluded = v52;
-      }
-    }
-LABEL_82:
-    len_avg = (uint32_t)((v77 << 7) + 63 * len_avg) >> 6;
-    v63 = v70;
-    if ( v70 )
-    {
-      v64 = groups;
-      ::len_total = len_sum0;
-      do
-      {
-        len_model[2 * v64[1]] = *v64;
-        v64 += 2;
-        --v63;
-      }
-      while ( v63 );
-    }
-    ::len_total -= len_model[0];
-    ::len_total += v73;
-    len_model[0] = v73;
-    result = v77;
-    LOWORD(len_model[2 * v77]) += 5;
-    rpos = len_ring_pos;
-    len_ring_pos = ((uint16_t)len_ring_pos + 1) & 0xFFF;
-    v66 = (int8_t *)&len_ring[rpos];
-    v67 = *(uint32_t *)v66;
-    *(uint32_t *)v66 = v77;
-    if ( v67 < 0 )
-    {
-      ::len_total += 5;
-      return v77;
-    }
-    else
-    {
-      LOWORD(len_model[2 * v67]) -= 5;
-    }
-  }
-  else
+  uint32_t at = bitpos >> 3;
+  ctx16 = at ? (uint8_t)window[at - 1] << 8 : 0;
+  if ( !n_cands )
   {
     *excluded = -1;
     search_gain = 0;
@@ -1535,7 +710,144 @@ LABEL_82:
     len_avg = 0;
     return 0;
   }
-  return result;
+
+  // Length 0, no match, counts for less while literals do well.
+  uint32_t count0 = len_model[0];
+  len_total -= count0;
+  uint32_t k = 9 * literal_run + search_gain + ((uint32_t)lit_threshold >> 2) + 1;
+  len_model[0] = 5 * count0 / (k + (k >> 4));
+  len_total += len_model[0];
+
+  // The best candidate's match: at most 255 bytes, its distance, and what is
+  // left of the data.  From here on, a candidate holds the byte it predicts.
+  int8_t *cur = &window[at], *match = &window[-cands[1] >> 3];
+  uint32_t max_len = 255;
+  if ( (uint32_t)(cur - match) < 0xFF )
+    max_len = cur - match;
+  if ( (uint32_t)(data_end - cur) < max_len )
+    max_len = data_end - cur;
+  cands[1] = (uint8_t)*match;
+  int32_t agree = 0;                              // it is next_byte's byte (1), next_byte's twice (2)
+  if ( (uint8_t)*match == (uint8_t)next_byte[prev_byte] )
+    agree = (uint8_t)*match == (uint8_t)next_byte[prev_byte2] ? 2 : 1;
+
+  // The other candidates, grouped by how many bytes they agree with the best
+  // one's on (0: not the first), each group a pair {weight, length}.  A group
+  // weighs its candidates' weights over cand_floor, and a bonus for its first
+  // one's rank.
+  uint32_t sum = 0, *group = groups, n = (uint8_t)n_cands;
+  for ( uint32_t i = 1; i < n; i++ )
+  {
+    int32_t *cand = &cands[2 * i];
+    int8_t *data = &window[(uint32_t)-cand[1] >> 3];
+    cand[1] = (uint8_t)*data;
+    uint32_t len = 0;
+    if ( *data == *match )
+    {
+      uint32_t most = max_len;
+      if ( match <= data && max_len > (uint32_t)(cur - data) )
+        most = cur - data;
+      for ( len = 1; len < most && data[len] == match[len]; len++ )
+        ;
+    }
+    uint32_t w = (uint32_t)cand[0] - cand_floor;
+    if ( group_slot[len] )
+      *group_slot[len] += w;
+    else
+    {
+      group_slot[len] = group;
+      w += (n - i) >> 1;
+      group[0] = w;
+      group[1] = len;
+      group += 2;
+    }
+    sum += w;
+  }
+
+  // The groups join the length model for now, scaled to it; the groups keep
+  // the counts they replace.  The no-match group is weighed first: by
+  // len_avg against lit_threshold, less when next_byte agrees with the best
+  // candidate, and by how often its byte came up lately -- ctx_count indexed
+  // by the byte alone, as vbn does.
+  uint32_t saved_total = 0;
+  if ( group != groups )
+  {
+    if ( uint32_t *g0 = group_slot[0] )
+    {
+      uint32_t avg = (uint32_t)len_avg >> top_bit(((uint32_t)(48 - lit_threshold) >> 3) + 1);
+      uint32_t w = *g0;
+      if ( agree )
+      {
+        avg = len_avg;
+        w = ((3 * w) >> 2) + 1;
+        if ( agree != 1 )
+          w = ((7 * w) >> 3) + 1;
+      }
+      w += w >> top_bit(avg + 1);
+      *g0 = w;
+      LOBYTE(ctx16) = cands[1];
+      uint8_t seen = ctx_count[cands[1]];
+      if ( seen == 0 )
+        *g0 += w >> 9;
+      else if ( seen == 1 )
+        *g0 -= w >> 5;
+      else if ( seen == 2 )
+        *g0 -= (w >> 3) + (w >> 3 >> 2);
+      else if ( seen <= 5 )
+        *g0 -= (w >> 3) + (w >> 3 >> 1);
+      else
+        *g0 -= w >> 2;
+    }
+    saved_total = len_total;
+    uint32_t weight = 4 * len_total;
+    if ( (uint32_t)lit_cost8 < 0x44C )
+      weight = (uint32_t)lit_cost8 < 0x384 ? 9 * len_total : 6 * len_total;
+    uint32_t shift = top_bit(sum) + 6;               // shld/shrd: the count is mod 32
+    uint32_t share = (uint64_t)(n_cands + 4 * search_gain + ((uint32_t)lit_cost8 >> 6)) * weight
+                   / (((uint32_t)(len_avg + 1935 - lit_cost8) >> 3) + 1);
+    uint32_t scale = ((uint64_t)share << (shift & 31)) / sum;
+    for ( uint32_t *g = groups; g < group; g += 2 )
+    {
+      uint32_t add = search_gain + ((scale * (uint64_t)g[0]) >> (shift & 31));
+      len_total += add;
+      group_slot[g[1]] = nullptr;
+      uint32_t old = len_model[2 * g[1]];
+      g[0] = old;
+      len_model[2 * g[1]] = old + add;
+    }
+  }
+
+  // The length: up to max_len, so the longer ones leave the total.
+  uint32_t total = len_total;
+  for ( uint32_t l = max_len + 1; l < 256; l++ )
+    total -= len_model[2 * l];
+  int32_t len;
+  if ( encoding )
+  {
+    for ( len = 0; (uint32_t)len < max_len && cur[len] == match[len]; len++ )
+      ;
+    code_symbol(total, code_pos, len, len_model);
+  }
+  else
+  {
+    len = code_symbol(total, code_pos, -1, len_model);
+    for ( int32_t j = 0; j < len; j++ )
+      cur[j] = match[j];
+  }
+  *excluded = (uint32_t)len < max_len ? (uint8_t)match[len] : -1;
+  len_avg = (uint32_t)((len << 7) + 63 * len_avg) >> 6;
+
+  // The model as it was, and the length counted.
+  if ( group != groups )
+  {
+    len_total = saved_total;
+    for ( uint32_t *g = groups; g < group; g += 2 )
+      len_model[2 * g[1]] = g[0];
+  }
+  len_total = len_total - len_model[0] + count0;
+  len_model[0] = count0;
+  len_model_add(len);
+  return len;
 }
 
 // search (vbn.exe 0x10005989, search_tree; 0x100053E2, search_excluding):
@@ -1553,7 +865,7 @@ LABEL_82:
 // gives up after the descent when lit_cost9 is above 0xFFE; search_excluding
 // (`excluding`: after a failed match) skips the candidates that predict
 // excluded_byte.
-static void search(bool excluding)
+static __attribute__((noinline)) void search(bool excluding)
 {
   // search_pos >= 0.  search_excluding tests search_pos < 0 for no data
   // rather than == 0; it only runs after a match, at a position > 0.
@@ -1596,9 +908,7 @@ found:
     search_exit();
   if ( (int32_t)depth > search_avg )
   {
-    uint32_t nbits;
-    _BitScanReverse(&nbits, tree_nodes + 7 * tree_updates);
-    search_gain = 16 * (depth - search_avg) / nbits;
+    search_gain = 16 * (depth - search_avg) / top_bit(tree_nodes + 7 * tree_updates);
     search_avg = ((depth >> 3) + depth + 2 * search_avg) >> 2;
   }
   if ( leaf <= 0
@@ -1709,9 +1019,7 @@ static uint32_t code_window(uint32_t *code_pos_p, uint32_t bitpos)
     n_cands = 0;
     cand_floor = 0;
     weight_shift = 4;
-    uint32_t nbits;
-    _BitScanReverse(&nbits, tree_updates + 4);
-    search_avg = (276 * nbits) >> 9;
+    search_avg = (276 * top_bit(tree_updates + 4)) >> 9;
     run_search(excluded >= 0);
     if ( n_cands > 1 )
       cand_floor = (uint32_t)cands[2 * n_cands - 2] >> 2;
@@ -1808,7 +1116,7 @@ static uint32_t tree_rebuild(void)
       }
     }
     uint32_t depth = pos - (uint32_t)at;
-    uint32_t thr = (uint32_t)(31 - __builtin_clz((uint32_t)tree_nodes + 32)) << 6;
+    uint32_t thr = top_bit(tree_nodes + 32) << 6;
     if (depth > thr) {
       if (leaf <= 0 && pos + (uint32_t)leaf >= 0x800) {
         *slot = -(int32_t)pos;
@@ -1841,7 +1149,7 @@ static void coder_run(uint32_t size)
   {
     lit_model[2 * i] = 8;
     lit_model[2 * i + 1] = i;
-    lit_slot[i] = (int32_t)(uintptr_t)&lit_model[2 * i];
+    lit_slot[i] = &lit_model[2 * i];
   }
   len_total = 256;
   for ( uint32_t i = 0; i < 256; i++ )
@@ -1875,7 +1183,7 @@ static void coder_run(uint32_t size)
   total_bits = 0;
   uint32_t n = size < 0x198000 ? size : 0x198000;
   window_bits = 8 * n;
-  data_end = (int32_t)(uintptr_t)&window[n];
+  data_end = &window[n];
   if ( encoding )
   {
     read_input(window, n);
@@ -1914,7 +1222,7 @@ static void coder_run(uint32_t size)
     if ( left < 0x66000 )
     {
       window_bits = 8 * (0x132000 + left);
-      data_end = (int32_t)(uintptr_t)&window[0x132000 + left];
+      data_end = &window[0x132000 + left];
     }
   }
   code_pos = code_flush(code_pos);

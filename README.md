@@ -190,19 +190,18 @@ to the coder since and is maintained by hand:
   what they hold, each with the address `vbn.exe` kept it at; each function
   is named for what it does, with its `vbn.exe` address;
 - integer types are `<cstdint>`'s throughout;
-- the parts the decompiler rendered worst are rewritten by hand: the context
-  tree search (`search_tree` and `search_excluding` are one function, and
-  their eight-way unrolled descents, carry and overflow arithmetic in
-  Hex-Rays' output, one loop), the subtree walks, `code_window` and
-  `coder_run`;
+- the bodies are rewritten by hand from the decompiler's output (and from
+  `vbn.exe`'s assembly where Hex-Rays' reading needed checking): the
+  arithmetic coder, the literal and match-length models, the context tree's
+  search (`search_tree` and `search_excluding` are one function), the
+  subtree walks, the window loop; every quirk of VBN's that the code
+  depends on is kept, and commented;
 - it compiles without a warning under `g++` and `clang++` `-Wall -Wextra`.
 
-The coder's models and its arithmetic coder (`code_symbol`, `code_literal`,
-`code_match`) are still close to the decompiler's output: numbered locals,
-`goto`s, 64-bit arithmetic done in halves. The code keeps addresses in 32-bit
-integers, so `vbn2` is an i386 program (`-m32`); and the context tree tells a
-node (an address) from a leaf (a negated position) by its sign, so `main`
-checks that the tree lies below `0x80000000`.
+The code keeps addresses in 32-bit integers, so `vbn2` is an i386 program
+(`-m32`); and the context tree tells a node (an address) from a leaf (a
+negated position) by its sign, so `main` checks that the tree lies below
+`0x80000000`.
 
 `tests/vbn2.py` is the gate every change to `vbn2.cpp` has to pass:
 
