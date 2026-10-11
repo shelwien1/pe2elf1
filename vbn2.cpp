@@ -268,7 +268,7 @@ struct VbnWalk { uint8_t *out; int32_t left; int32_t aux; int32_t value; };   //
 // sub_100048F0 @ 0x100048F0 -- hand-written (incdec.md §4.1): copy a1 dwords src -> dst.
 // `rep movsd`: forward, a dword at a time.  Hex-Rays printed qmemcpy, a byte
 // copy, which differs from this when the ranges overlap by less than 4 bytes.
-static __attribute__((stdcall)) void __sub_100048F0(int32_t a1, void *src, void *dst)
+static void __sub_100048F0(int32_t a1, void *src, void *dst)
 {
   uint32_t *d = (uint32_t *)dst;
   const uint32_t *s = (const uint32_t *)src;
@@ -280,7 +280,7 @@ static __attribute__((stdcall)) void __sub_100048F0(int32_t a1, void *src, void 
 // Hex-Rays: int __stdcall sub_1000490B(int a1, void *buf)
 // real convention: stdcall, ret 8
 
-static __attribute__((stdcall)) int32_t __sub_1000490B(int32_t a1, void *buf)
+static int32_t __sub_1000490B(int32_t a1, void *buf)
 {
   memset(buf, 0, 4 * a1);
   return 0;
@@ -290,12 +290,10 @@ static __attribute__((stdcall)) int32_t __sub_1000490B(int32_t a1, void *buf)
 // Hex-Rays: unsigned int __stdcall sub_10004993(unsigned int a1)
 // real convention: stdcall, ret 4
 
-static __attribute__((stdcall)) uint32_t __sub_10004993(uint32_t a1)
+static uint32_t __sub_10004993(uint32_t a1)
 {
-  uint32_t v5; // [esp+0h] [ebp-Ch]
-  uint32_t v6; // [esp+4h] [ebp-8h]
-  int32_t v7; // [esp+8h] [ebp-4h]
-  int32_t v8; // [esp+8h] [ebp-4h]
+  int32_t v7, v8;
+  uint32_t v5, v6;
 
   v7 = n0x7FFFFFFF_1;
   v6 = 1;
@@ -342,11 +340,9 @@ static __attribute__((stdcall)) uint32_t __sub_10004993(uint32_t a1)
 // Hex-Rays: int __stdcall sub_100050B0(int j)
 // real convention: stdcall, ret 4
 
-static __attribute__((stdcall)) int32_t __sub_100050B0(int32_t j)
+static int32_t __sub_100050B0(int32_t j)
 {
-  int32_t n362; // edx
-  int32_t *v2; // edx
-  int32_t result; // eax
+  int32_t n362, *v2, result;
 
   LOWORD(i_5[2 * j]) += 5;
   n362 = n362_0;
@@ -379,7 +375,7 @@ static __attribute__((stdcall)) int32_t __sub_100050B0(int32_t j)
 //    either way bit pos/8 of the bitmap buf_ is toggled.
 // Returns 0 (EAX after the count runs out); stdcall, ret 8.
 
-static __attribute__((stdcall)) uint32_t __sub_10005251(uint32_t a1, int32_t n8)
+static uint32_t __sub_10005251(uint32_t a1, int32_t n8)
 {
   uint32_t t = a1 + (a1 >> 1) + 1, iters = t ? 31 - __builtin_clz(t) : 0;
   iters += 1;
@@ -527,38 +523,13 @@ static void vbn_walk2_entry(int32_t *node, VbnWalk *w)
 // real convention: stdcall, ret 16
 
 
-static __attribute__((stdcall)) int32_t __sub_100061F4(uint32_t a1, uint32_t *a2, int32_t a3, uint32_t *i_1)
+static int32_t __sub_100061F4(uint32_t a1, uint32_t *a2, int32_t a3, uint32_t *i_1)
 {
-  uint32_t v4; // edx
-  uint32_t *i; // edi
-  uint32_t v6; // ebx
-  uint64_t v7; // rax
-  uint32_t v8; // eax
-  int32_t n0x7FFFFFFF; // ecx
-  uint32_t n0x7FFFFFFF_1; // edx
-  uint32_t v11; // eax
-  uint32_t v12; // eax
-  uint32_t v13; // eax
-  uint32_t v14; // eax
-  uint32_t v15; // eax
-  uint32_t v16; // eax
-  uint32_t v17; // eax
-  bool v18; // cf
-  uint32_t v19; // edx
-  uint32_t v20; // eax
-  uint64_t v21; // rax
-  uint32_t v22; // ett
-  uint32_t *i_3; // esi
-  int32_t v24; // ebx
-  uint32_t v25; // ebx
-  int32_t n32; // ebx
-  int32_t v27; // edi
-  int32_t v28; // edx
-  uint32_t v29; // eax
-  int32_t n0x7FFFFFFF_2; // esi
-  bool v31; // sf
-  uint32_t *i_2; // [esp+Ch] [ebp-Ch]
-  uint32_t v34; // [esp+10h] [ebp-8h]
+  bool v18, v31;
+  int32_t n0x7FFFFFFF, v24, n32, v27, v28, n0x7FFFFFFF_2;
+  uint32_t v4, *i, v6, v8, n0x7FFFFFFF_1, v11, v12, v13, v14, v15, v16, v17, v19, v20, v22, *i_3,
+           v25, v29, *i_2, v34;
+  uint64_t v7, v21;
   uint32_t v35; // [esp+14h] [ebp-4h]  high - low, which wraps
 
   v34 = *a2;
@@ -718,7 +689,7 @@ LABEL_29:
     {
       if ( v35 != -1 )
       {
-        LODWORD(v21) = v21 / (uint32_t)(v35 + 1);
+        LODWORD(v21) = v21 / (v35 + 1);
         goto LABEL_50;
       }
       goto LABEL_44;
@@ -727,7 +698,7 @@ LABEL_45:
     --HIDWORD(v21);
     if ( v35 != -1 )
     {
-      LODWORD(v21) = v21 / (uint32_t)(v35 + 1);
+      LODWORD(v21) = v21 / (v35 + 1);
       goto LABEL_50;
     }
     goto LABEL_44;
@@ -743,7 +714,7 @@ LABEL_44:
     LODWORD(v21) = HIDWORD(v21);
     goto LABEL_50;
   }
-  LODWORD(v21) = v21 / (uint32_t)(v35 + 1);
+  LODWORD(v21) = v21 / (v35 + 1);
 LABEL_50:
   i_3 = i_1;
   HIDWORD(v21) = 0;
@@ -818,12 +789,13 @@ LABEL_71:
     v21 = v25 * (uint64_t)(uint32_t)v21;
 LABEL_74:
     LODWORD(v21) = v21 / a1;
-    goto LABEL_75;
   }
-  HIDWORD(v21) = v25;
-  if ( v25 != a1 )
-    goto LABEL_74;
-LABEL_75:
+  else
+  {
+    HIDWORD(v21) = v25;
+    if ( v25 != a1 )
+      goto LABEL_74;
+  }
   ::n0x7FFFFFFF += v21;
 LABEL_76:
   n32 = 32;
@@ -861,97 +833,17 @@ LABEL_76:
 // real convention: stdcall, ret 12
 
 
-static __attribute__((stdcall)) int32_t __sub_100064C0(int32_t a1, uint32_t *p_n0x10000, uint32_t n8)
+static int32_t __sub_100064C0(int32_t a1, uint32_t *p_n0x10000, uint32_t n8)
 {
-  uint32_t v3; // edi
-  int32_t n2; // eax
-  int32_t v5; // eax
-  int32_t n256; // ecx
-  uint32_t *i; // esi
-  uint32_t n2048; // edx
-  int32_t *v9; // edi
-  int32_t v10; // ebx
-  int32_t *v11; // edi
-  int32_t v12; // ebx
-  uint32_t v13; // edx
-  int32_t v14; // ebx
-  int32_t *v15; // edx
-  int32_t *v16; // edi
-  int16_t n2_1; // cx
-  int32_t v18; // eax
-  uint32_t *v19; // esi
-  int32_t v20; // eax
-  int32_t v21; // eax
-  int32_t v22; // eax
-  uint32_t v23; // ebx
-  uint64_t v24; // rax
-  uint32_t v25; // eax
-  uint32_t v26; // edx
-  uint32_t v27; // eax
-  int32_t v28; // ecx
-  uint32_t v29; // edx
-  uint32_t v30; // eax
-  uint32_t v31; // edx
-  uint32_t v32; // ecx
-  int8_t v33; // cl
-  int32_t *v34; // eax
-  int32_t v35; // ebx
-  int32_t *v36; // eax
-  int32_t v37; // ebx
-  int8_t v38; // ch
-  uint32_t *v39; // esi
-  int32_t n2_2; // ebx
-  int32_t v41; // eax
-  int32_t v42; // edx
-  int32_t *v43; // edi
-  int32_t v44; // edx
-  int32_t v45; // eax
-  int32_t v46; // edx
-  uint32_t *v47; // edi
-  uint32_t v48; // edx
-  int32_t v49; // eax
-  int32_t v50; // eax
-  int32_t v51; // edx
-  int32_t v52; // eax
-  int32_t v53; // edx
-  int32_t *v54; // edi
-  int32_t v55; // edx
-  int32_t v56; // eax
-  int32_t v57; // edx
-  uint32_t v58; // eax
-  uint32_t v59; // ecx
-  int32_t *v60; // esi
-  int32_t v61; // eax
-  int32_t n362; // edx
-  int8_t *v63; // edx
-  int32_t v64; // ecx
-  uint32_t *i_1; // esi
-  uint32_t *v66; // edi
-  uint32_t v67; // eax
-  uint32_t v68; // edx
-  uint32_t v69; // eax
-  uint32_t v70; // edx
-  int32_t n362_3; // edx
-  int32_t v72; // eax
-  int32_t n363; // edx
-  int32_t *v74; // esi
-  int32_t *i_2; // edi
-  int32_t v76; // eax
-  uint32_t v77; // edx
-  int32_t v78; // eax
-  int32_t v79; // edx
-  int32_t result; // eax
-  int32_t n362_1; // edx
-  int32_t n362_2; // ecx
-  int8_t *v83; // edx
-  int32_t v84; // ecx
-  int32_t v85; // [esp+Ch] [ebp-1Ch]
-  uint32_t v86; // [esp+10h] [ebp-18h]
-  uint32_t n0x10000; // [esp+14h] [ebp-14h]
-  uint32_t n2048_1; // [esp+18h] [ebp-10h]
-  int32_t v89; // [esp+1Ch] [ebp-Ch]
-  int32_t v90; // [esp+20h] [ebp-8h]
-  int32_t v91; // [esp+24h] [ebp-4h]
+  int16_t n2_1;
+  int32_t n2, v5, n256, *v9, v10, *v11, v12, v14, *v15, *v16, v18, v20, v21, v22, v28, *v34, v35,
+          *v36, v37, n2_2, v41, v42, *v43, v44, v45, v46, v49, v50, v51, v52, v53, *v54, v55,
+          v56, v57, *v60, v61, n362, v64, n362_3, v72, n363, *v74, *i_2, v76, v78, v79, result,
+          n362_1, n362_2, v84, v85, v89, v90, v91;
+  int8_t v33, v38, *v63, *v83;
+  uint32_t v3, *i, n2048, v13, *v19, v23, v25, v26, v27, v29, v30, v31, v32, *v39, *v47, v48,
+           v58, v59, *i_1, *v66, v67, v68, v69, v70, v77, v86, n0x10000, n2048_1;
+  uint64_t v24;
 
   dword_100164C4 = (uint32_t)dword_100164C4 >> 1;
   _BitScanReverse(&v3, ((uint32_t)n0x384 >> 3) + 1);
@@ -1268,9 +1160,9 @@ LABEL_52:
   }
   n0x10000 = *p_n0x10000;
   if ( dword_1000D4C4 )
-    v91 = __sub_100061F4(::n2048, (uint32_t *)p_n0x10000, (uint8_t)dst_3[n8 >> 3], (uint32_t *)&i_);
+    v91 = __sub_100061F4(::n2048, (uint32_t *)p_n0x10000, (uint8_t)dst_3[n8 >> 3], &i_);
   else
-    v91 = __sub_100061F4(::n2048, (uint32_t *)p_n0x10000, -1, (uint32_t *)&i_);
+    v91 = __sub_100061F4(::n2048, (uint32_t *)p_n0x10000, -1, &i_);
   v58 = (*p_n0x10000 - n0x10000) << 8;
   n0x384 = (v58 + (n0x384 << 8) - n0x384) >> 8;
   v58 *= 2;
@@ -1412,83 +1304,16 @@ LABEL_52:
 // real convention: stdcall, ret 12
 
 
-static __attribute__((stdcall)) int32_t __sub_10005C50(uint32_t *p_n0x10000, uint32_t *a2, uint32_t n8)
+static int32_t __sub_10005C50(uint32_t *p_n0x10000, uint32_t *a2, uint32_t n8)
 {
-  int32_t v3; // eax
-  int32_t result; // eax
-  uint32_t v5; // edx
-  int8_t *v6; // ecx
-  int32_t v7; // eax
-  uint32_t v8; // ebx
-  int32_t *v9; // edx
-  int32_t *v10; // edi
-  int8_t *v11; // eax
-  int8_t *v12; // esi
-  bool v13; // zf
-  uint32_t n255_1; // eax
-  int8_t *v15; // edi
-  int8_t n255_2; // cl
-  uint32_t *v17; // esi
-  int32_t v18; // eax
-  int32_t v19; // eax
-  uint32_t *v20; // eax
-  uint32_t v21; // ecx
-  uint32_t v22; // esi
-  uint32_t v23; // edx
-  uint32_t v24; // ecx
-  uint32_t v25; // edx
-  uint32_t v26; // edx
-  uint32_t v27; // edx
-  uint32_t v28; // edx
-  uint32_t v29; // edx
-  uint32_t v30; // eax
-  uint32_t v31; // ecx
-  int8_t v32; // cl
-  uint32_t v33; // ebx
-  int8_t v34; // ch
-  int32_t *v35; // esi
-  int32_t v36; // eax
-  int32_t v37; // edx
-  uint32_t *v38; // edi
-  int32_t v39; // edx
-  uint32_t n256_1; // edx
-  uint32_t *v41; // esi
-  uint32_t v42; // ecx
-  uint8_t *v43; // edx
-  int8_t *v44; // edi
-  uint32_t n255_6; // eax
-  int32_t v46; // ecx
-  int32_t n255_7; // eax
-  int32_t v48; // eax
-  int8_t *v49; // edi
-  uint32_t n255_8; // ebx
-  uint8_t *v51; // edx
-  int32_t v52; // ecx
-  uint8_t *v53; // edx
-  int8_t *v54; // edi
-  uint32_t n255_3; // eax
-  int32_t v56; // ecx
-  int32_t n255_4; // eax
-  int32_t v58; // eax
-  int8_t *v59; // edi
-  uint32_t n255_5; // ebx
-  uint8_t *v61; // edx
-  int32_t v62; // ecx
-  uint32_t v63; // ecx
-  int32_t *v64; // esi
-  int32_t n362; // edx
-  int8_t *v66; // edx
-  int32_t v67; // ecx
-  int8_t *v68; // [esp-8h] [ebp-38h]
-  int32_t *v69; // [esp-4h] [ebp-34h]
-  uint32_t v70; // [esp+Ch] [ebp-24h]
-  uint32_t n255; // [esp+10h] [ebp-20h]
-  uint32_t n256; // [esp+14h] [ebp-1Ch]
-  int32_t v73; // [esp+18h] [ebp-18h]
-  int32_t n2; // [esp+1Ch] [ebp-14h]
-  int8_t *v75; // [esp+20h] [ebp-10h]
-  uint32_t n256_2; // [esp+28h] [ebp-8h]
-  int32_t v77; // [esp+2Ch] [ebp-4h]
+  bool v13;
+  int32_t v3, result, v7, *v9, *v10, v18, v19, *v35, v36, v37, v39, v46, n255_7, v48, v52, v56,
+          n255_4, v58, v62, *v64, n362, v67, *v69, v73, n2, v77;
+  int8_t *v6, *v11, *v12, *v15, n255_2, v32, v34, *v44, *v49, *v54, *v59, *v66, *v68, *v75;
+  uint32_t v5, v8, n255_1, *v17, *v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31,
+           v33, *v38, n256_1, *v41, v42, n255_6, n255_8, n255_3, n255_5, v63, v70, n255, n256,
+           n256_2;
+  uint8_t *v43, *v51, *v53, *v61;
 
   v3 = 0;
   if ( n8 >> 3 )
@@ -1506,7 +1331,7 @@ static __attribute__((stdcall)) int32_t __sub_10005C50(uint32_t *p_n0x10000, uin
     v6 = &dst_3[-dword_1000D55C[0] >> 3];
     v75 = v6;
     dword_1001645C = (int32_t)&dst_3[n8 >> 3];
-    if ( (uint32_t)(dword_1001645C - (uint32_t)v6) < 0xFF )
+    if ( (dword_1001645C - (uint32_t)v6) < 0xFF )
       n255 = dword_1001645C - (uint32_t)v6;
     if ( dst_4 - dword_1001645C < n255 )
       n255 = dst_4 - dword_1001645C;
@@ -1850,34 +1675,12 @@ LABEL_82:
 // Hex-Rays: int __stdcall sub_100053E2(int *dst_2)
 // real convention: stdcall, ret 4
 
-static __attribute__((stdcall)) int32_t __sub_100053E2(int32_t *dst_2)
+static int32_t __sub_100053E2(int32_t *dst_2)
 {
-  int32_t *v2; // esi
-  int32_t n8; // edi
-  int8_t v4; // al
-  bool v5; // cf
-  int8_t v6; // al
-  int32_t dst; // edx
-  int32_t dst_1; // ecx
-  int8_t v9; // al
-  int32_t v10; // ebx
-  int8_t v11; // al
-  int8_t v12; // al
-  int32_t v13; // ebx
-  int8_t v14; // al
-  int8_t v15; // al
-  int32_t v16; // ebx
-  int8_t v17; // al
-  bool v18; // cc
-  uint32_t v19; // esi
-  uint32_t v20; // ebx
-  int32_t v21; // eax
-  int32_t result; // eax
-  int32_t v23; // edx
-  int32_t v24; // ecx
-  int32_t v25; // esi
-  uint32_t v26; // ecx
-  int32_t *v29; // [esp+Ch] [ebp-4h]
+  bool v5, v18;
+  int32_t *v2, n8, dst, dst_1, v10, v13, v16, v21, result, v23, v24, v25, *v29;
+  int8_t v4, v6, v9, v11, v12, v14, v15, v17;
+  uint32_t v19, v20, v26;
 
   v2 = dword_1000D850;
   n8 = n8_2;
@@ -2033,7 +1836,7 @@ LABEL_21:
       {   // the walk returns its cursor in ECX, which Hex-Rays could not see (v27)
         VbnWalk w = { (uint8_t *)(8 * n2_1 + 268490072), n55 - n2_1, (int32_t)(uintptr_t)dst_3, (int32_t)v25 };
         vbn_walk2_entry((int32_t *)(uintptr_t)v23, &w);
-        n2_1 = (uint32_t)((uintptr_t)w.out - (uintptr_t)dword_1000D558) >> 3;
+        n2_1 = ((uintptr_t)w.out - (uintptr_t)dword_1000D558) >> 3;
       }
       --dword_10016454;
     }
@@ -2058,34 +1861,12 @@ LABEL_21:
 // Hex-Rays: int __stdcall sub_10005989(int *dst_2)
 // real convention: stdcall, ret 4
 
-static __attribute__((stdcall)) int32_t __sub_10005989(int32_t *dst_2)
+static int32_t __sub_10005989(int32_t *dst_2)
 {
-  int32_t *v2; // esi
-  int32_t n8; // edi
-  int8_t v4; // al
-  bool v5; // cf
-  int8_t v6; // al
-  int32_t dst; // edx
-  int32_t dst_1; // ecx
-  int8_t v9; // al
-  int32_t v10; // ebx
-  int8_t v11; // al
-  int8_t v12; // al
-  int32_t v13; // ebx
-  int8_t v14; // al
-  int8_t v15; // al
-  int32_t v16; // ebx
-  int8_t v17; // al
-  bool v18; // cc
-  uint32_t v19; // esi
-  uint32_t v20; // ebx
-  int32_t v21; // eax
-  int32_t result; // eax
-  uint32_t **v23; // edx
-  int32_t v24; // ecx
-  int32_t v25; // esi
-  uint32_t v26; // ecx
-  int32_t *v30; // [esp+Ch] [ebp-4h]
+  bool v5, v18;
+  int32_t *v2, n8, dst, dst_1, v10, v13, v16, v21, result, v24, v25, *v30;
+  int8_t v4, v6, v9, v11, v12, v14, v15, v17;
+  uint32_t v19, v20, **v23, v26;
 
   v2 = dword_1000D850;
   n8 = n8_2;
@@ -2241,7 +2022,7 @@ LABEL_20:
       {   // the walk returns its cursor in ECX, which Hex-Rays could not see (v27)
         VbnWalk w = { (uint8_t *)(8 * n2_1 + 268490072), n55 - n2_1, 4, (int32_t)v25 };
         vbn_walk1_entry((int32_t *)(uintptr_t)v23, &w);
-        n2_1 = (uint32_t)((uintptr_t)w.out - (uintptr_t)dword_1000D558) >> 3;
+        n2_1 = ((uintptr_t)w.out - (uintptr_t)dword_1000D558) >> 3;
       }
       --dword_10016454;
     }
@@ -2313,7 +2094,7 @@ static int32_t __sub_10004924(int32_t n0x10000)
   else
   {
     __sub_100048F0(4, (void *)src_3, (void *)aVbnVer1001);        // "                                                \nvbn ver.1...."
-    __sub_10000D0E((int8_t *)&aVbnVer1001[16], 0x2000u);// "                                                \nvbn ver.1...."
+    __sub_10000D0E(&aVbnVer1001[16], 0x2000u);// "                                                \nvbn ver.1...."
   }
   return n0x10000 - 0x10000;
 }
@@ -2323,25 +2104,21 @@ static int32_t __sub_10004924(int32_t n0x10000)
 // real convention: stdcall, ret 12; register parameters dropped: int dst, char *p_j, int *_Data_size____10u_n
 
 
-static __attribute__((stdcall)) uint32_t __sub_100056C4(uint32_t *a4, int32_t n0x198000, uint32_t n8)
+static uint32_t __sub_100056C4(uint32_t *a4, int32_t n0x198000, uint32_t n8)
 {
   int32_t dst = 0;   // @<ebx> in Hex-Rays; regflow shows no caller sets it
   int32_t * _Data_size____10u_n = 0;   // @<esi> in Hex-Rays; regflow shows no caller sets it
-  alignas(16) uint8_t __frame[36];   // the original frame, ebp-0x14..ebp+0x0
-  uint32_t &p_n0x10000 = *(uint32_t *)(__frame + 0);
-  uint32_t &v18 = *(uint32_t *)(__frame + 4);
-  int32_t &v19 = *(int32_t *)(__frame + 8);
-  uint32_t &n8_1 = *(uint32_t *)(__frame + 12);
-  int32_t &v21 = *(int32_t *)(__frame + 16);
-  uint32_t v7; // eax
-  int32_t v8; // ecx
-  int32_t v9; // eax
-  int8_t v10; // al
-  uint32_t v11; // ecx
-  uint32_t v12; // eax
-  int32_t v13; // ecx
-  int8_t v14; // al
-  int32_t v15; // edx
+  uint32_t p_n0x10000, v18, n8_1;
+  int32_t v19, v21;
+  uint32_t v7;
+  int32_t v8;
+  int32_t v9;
+  int8_t v10;
+  uint32_t v11;
+  uint32_t v12;
+  int32_t v13;
+  int8_t v14;
+  int32_t v15;
 
   n8_1 = n8;
   p_n0x10000 = *a4;
@@ -2387,7 +2164,7 @@ static __attribute__((stdcall)) uint32_t __sub_100056C4(uint32_t *a4, int32_t n0
       }
       while ( v8 );
     }
-    v18 = __sub_10005C50((uint32_t *)&p_n0x10000, (uint32_t *)&v21, n8);
+    v18 = __sub_10005C50(&p_n0x10000, (uint32_t *)&v21, n8);
     if ( v18 )
     {
       v14 = dst_3[n8 >> 3];
@@ -2400,7 +2177,7 @@ static __attribute__((stdcall)) uint32_t __sub_100056C4(uint32_t *a4, int32_t n0
     }
     else
     {
-      v10 = __sub_100064C0(v21, (uint32_t *)&p_n0x10000, n8);
+      v10 = __sub_100064C0(v21, &p_n0x10000, n8);
       buf_3[dword_100164B0] = v10;
       buf_4[dword_100164B4] = v10;
       dst = dst_0;
@@ -2538,12 +2315,11 @@ static uint32_t __sub_100050F8(void)
 
 static void __sub_10004A5F(uint32_t n0x198000)
 {
-  alignas(16) uint8_t __frame[148];   // the original frame, ebp-0x84..ebp+0x0
-  int32_t &_Code_size___u__Ratio____u___or__u__05d_bpc___1 = *(int32_t *)(__frame + 16);
-  uint32_t &i = *(uint32_t *)(__frame + 20);
-  uint32_t (&p_ja)[23] = *(uint32_t (*)[23])(__frame + 28);
-  int32_t &j = *(int32_t *)(__frame + 120);
-  uint32_t v12; // ecx
+  int32_t _Code_size___u__Ratio____u___or__u__05d_bpc___1;
+  uint32_t i;
+  uint32_t p_ja[23];
+  int32_t j;
+  uint32_t v12;
 
   buf = (int8_t *)i_4;
   buf_0 = (int8_t *)buf_6;
@@ -2643,7 +2419,7 @@ static void __sub_10004A5F(uint32_t n0x198000)
   while ( 1 )
   {
     if ( n8 != n13369344 )
-      n8 = __sub_100056C4((uint32_t *)(uint32_t *)&_Code_size___u__Ratio____u___or__u__05d_bpc___1, n0x198000, n8);
+      n8 = __sub_100056C4((uint32_t *)&_Code_size___u__Ratio____u___or__u__05d_bpc___1, n0x198000, n8);
     if ( (uint32_t)n8_1 >> 3 >= n0x198000 )
       break;
     if ( !dword_1000D4C4 )
@@ -2767,7 +2543,7 @@ int main(int argc, char **argv)
 
   ucontext_t back, run;
   getcontext(&run);
-  run.uc_stack.ss_sp = (void *)(uintptr_t)(STACK_TOP - STACK_SIZE);
+  run.uc_stack.ss_sp = (void *)(STACK_TOP - STACK_SIZE);
   run.uc_stack.ss_size = STACK_SIZE;
   run.uc_link = &back;
   makecontext(&run, vbn_main, 0);
