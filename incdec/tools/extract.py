@@ -123,7 +123,9 @@ def mask_shift_counts(line):
                 if depth == 0:
                     break
                 depth -= 1
-            elif depth == 0 and c in '<>=!&^|?:,;':
+            elif depth == 0 and c in ';,':
+                break                            # always ends the count (`<< n4_0--;`)
+            elif depth == 0 and c in '<>=!&^|?:':
                 if c == ':' and (line[j:j + 2] == '::' or (j and line[j - 1] == ':')):
                     j += 1
                     continue
@@ -376,6 +378,9 @@ def rewrite_calls(text, name, keep_fn):
     """Rewrite every call `name(a, b, ...)` as `name(<keep_fn(args)>)`."""
     out, pos = [], 0
     lit = literal_spans(text)
+    for c in re.finditer(r'//[^\n]*', text):          # comments, unless inside a literal
+        if not any(a <= c.start() < b for a, b in lit):
+            lit.append((c.start(), c.end()))
     for m in re.finditer(r'(?<![\w.>])' + re.escape(name) + r'\s*\(', text):
         if m.start() < pos or any(a <= m.start() < b for a, b in lit):
             continue
@@ -532,7 +537,7 @@ def emit(name, accepted):
     for p, reg in hparams:
         t, n, ext = split_decl(p)
         if n is None:
-            mm = re.search(r'(\S+)$', p)
+            mm = re.search(r'([^\s\*&]+)$', p)
             if mm and not IDENT_OK.match(mm.group(1)):
                 bad_names.add(mm.group(1))
     for l in rest:
@@ -596,6 +601,10 @@ def emit(name, accepted):
             reg_lines.append(f"  {t} {n}{ext} = 0;   // @<{reg}> in Hex-Rays; regflow shows no caller sets it")
             local_names.add(n)
 
+    # Hex-Rays previews the string behind every global it names; for the help
+    # text that is a 2 KB comment.  Keep a readable prefix.
+    stmts = [re.sub(r'(//\s*".{60}).{20,}$', r'\1..."', l) for l in stmts]
+
     # line transforms
     stmts = launder_pointer_counters(stmts)
     stmts = [mask_shift_counts(sign_negative_divisors(fix_hex_escapes(l))) for l in stmts]
@@ -625,7 +634,9 @@ def emit(name, accepted):
         cc = CONV.get(callee)
         if cc is None:
             sys.exit(f'{name}: no conv.txt entry for {callee}')
-        if callee in accepted and cc['conv'] not in ('regs',):
+        # asm-convention callees (the early exit) are always entered through
+        # their PE address, which reaches the moved copy through its patch.
+        if callee in accepted and cc['conv'] not in ('regs', 'asm'):
             fwd = f'__fwd_{name}_{callee}'
             args, casts = [], []
             for k, p in enumerate(cc['params']):
@@ -646,9 +657,12 @@ def emit(name, accepted):
         else:
             if cc['conv'] == 'regs':
                 sys.exit(f'{name}: calls {callee}, which has a register interface; needs an override')
-            refs.append(f"#ifndef __PE_DECL___{callee}\n#define __PE_DECL___{callee}\n"
-                        f"{callee_decl(callee, cc, '__' + callee)}\n#endif")
-            defines.append((callee, f'__{callee}'))
+            # A moved asm-convention callee's own name is its naked copy, so the
+            # PE-address reference to it needs another one.
+            alias = ('__pe_' if cc['conv'] == 'asm' else '__') + callee
+            refs.append(f"#ifndef __PE_DECL_{alias}\n#define __PE_DECL_{alias}\n"
+                        f"{callee_decl(callee, cc, alias)}\n#endif")
+            defines.append((callee, alias))
 
     # globals: vbn.txt, plus auto-named ones Hex-Rays used in this body under a
     # different name than in the data declarations (dword_1000D560 is

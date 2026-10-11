@@ -8,12 +8,13 @@ cd "$(dirname "$0")"
 n=$1
 python3 tools/extract.py "$n" || exit 1
 grep -qx "$n" accepted.txt || echo "$n" >> accepted.txt
+python3 tools/order.py || exit 1
 if ./build.sh && ./test.sh; then
   tar Jcf backup accepted.txt inc override fixups.txt head.cpp 2>/dev/null
   echo "GREEN $n: probe $(awk -v k="__$n" '$1==k{print $2}' probes.txt)"
   exit 0
 fi
 sed -i "/^$n\$/d" accepted.txt
-./build.sh > /dev/null 2>&1
+python3 tools/order.py && ./build.sh > /dev/null 2>&1
 echo "RED $n (left out of accepted.txt; inc/$n.inc kept for inspection)"
 exit 1

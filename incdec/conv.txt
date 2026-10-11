@@ -60,7 +60,7 @@
 100050F8	sub_100050F8	cdecl	0	-	unsigned int|	regflow: no register inputs
 10005251	sub_10005251	stdcall	8	-	unsigned int|unsigned int a1, int n8	regflow: no register inputs
 100053E2	sub_100053E2	stdcall	4	-	int|int *dst_2	regflow: no register inputs
-100056C4	sub_100056C4	cdecl	0	0,1,2	unsigned int|unsigned int *a4, int n0x198000, unsigned int n8	regflow: no register inputs
+100056C4	sub_100056C4	stdcall	12	0,1,2	unsigned int|unsigned int *a4, int n0x198000, unsigned int n8	regflow: no register inputs
 10005989	sub_10005989	stdcall	4	-	int|int *dst_2	regflow: no register inputs
 10005C50	sub_10005C50	stdcall	12	-	int|unsigned int *p_n0x10000, _DWORD *a2, unsigned int n8	regflow: no register inputs
 100061F4	sub_100061F4	stdcall	16	-	int|unsigned int a1, unsigned int *a2, int a3, _DWORD *i_1	regflow: no register inputs

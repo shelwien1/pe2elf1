@@ -60,8 +60,27 @@ def parse(sig, name):
     return ret, params
 
 
+def linear_rets():
+    """`ret N` forms in each function's own address range.  regflow follows
+    paths and can give up inside a loop-heavy body before reaching any ret
+    (sub_100056C4: none found, and it is `ret 0Ch`), so N comes from here."""
+    from common import disassemble
+    funcs = sorted(f['addr'] for f in load_funcs() if f['addr'] >= CODE_LO)
+    import bisect
+    out = {}
+    for va, text in disassemble():
+        if va >= 0x14000000:
+            continue
+        k = bisect.bisect_right(funcs, va) - 1
+        m = re.match(r'(?:ret|lret)\s*(\$0x[0-9a-f]+)?', text.split('\t')[-1])
+        if k >= 0 and m:
+            out.setdefault(funcs[k], set()).add(int(m.group(1)[1:], 16) if m.group(1) else 0)
+    return out
+
+
 if __name__ == '__main__':
     funcs = load_funcs()
+    lrets = linear_rets()
     starts = {f['addr'] for f in funcs}
     rows = []
     for f in funcs:
@@ -71,7 +90,7 @@ if __name__ == '__main__':
         key = '%08X' % a
         ret, params = parse(f['sig'], f['name'])
         r = analyze(a, starts)
-        pop = max(r['rets']) if r['rets'] else 0
+        pop = max(lrets[a]) if a in lrets else (max(r['rets']) if r['rets'] else 0)
         drop = [i for i, (_, reg) in enumerate(params) if reg]
         stack = [p for p, reg in params if not reg]
         conv = 'stdcall' if pop else 'cdecl'
