@@ -24,6 +24,7 @@ static VBN_ENTRY int __sub_100020E5(void)
   int result; // eax
 
   v0 = 0;
+  result = 0;   // no files: the asm returns the caller's EAX, which on the one path here (u, nothing to do) is 0 from sub_10002017's chdir back
   v1 = &dword_10EA16F4;
   while ( v0 < n4096 )
   {

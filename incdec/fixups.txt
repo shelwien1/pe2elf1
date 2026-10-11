@@ -40,3 +40,10 @@ sub_10002160	v121 = a4 + 1;	v121 = (_DWORD *)(a4 + 1);
 sub_10000C41	sub_1000862D();	v7 = sub_1000862D((char *)v15);   // push offset var_10: mkdir(v15), result in EAX
 sub_10000458	v5 = memcmp(&v8[v2], &v9[v7], strlen(&v9[v7]) + 1) != 0;	{ int c = memcmp(&v8[v2], &v9[v7], strlen(&v9[v7]) + 1); v5 = (c > 0) - (c < 0); }   // repe cmpsb; sbb eax,eax; sbb eax,-1: -1/0/1
 sub_10000458	v5 = memcmp(*(const void **)(a1 + 4), *(const void **)(a2 + 4), strlen(v9) + 1) != 0;	{ int c = memcmp(*(const void **)(a1 + 4), *(const void **)(a2 + 4), strlen(v9) + 1); v5 = (c > 0) - (c < 0); }   // -1/0/1, as above
+sub_100006FA	v4 = (char *)i + 30;	v4 = (_BYTE *)i + 30;   // v4 is _BYTE *: lea esi,[i+1Eh]
+sub_10002160	sub_10008658(dword_1000D428);	sub_10008658((_DWORD)dword_1000D428);   // free(): a void * global into _DWORD
+sub_1000055F	strcpy(dst, "\\");	strcpy(dst, ::src);   // mov eax, offset src: the image's "\\", which Hex-Rays inlined
+sub_100064C0	_BitScanReverse(&v31, v30);	v31 = v29;   // bsr edx,eax: EDX holds v29, and bsr leaves it there when v30 == 0\n    _BitScanReverse(&v31, v30);
+sub_100020E5	v0 = 0;	v0 = 0;\n  result = 0;   // no files: the asm returns the caller's EAX, which on the one path here (u, nothing to do) is 0 from sub_10002017's chdir back
+sub_1000128F	return v1;	return 0;   // pop eax: the 0 pushed for exit(), which does not return
+sub_100018D0	return v9;	return n13369312_4;   // pop eax: the pointer just pushed for free()

@@ -424,6 +424,7 @@ LABEL_52:
     else
       v29 = v26 >> (v28 & 31);
     v30 = v29 + v27;
+    v31 = v29;   // bsr edx,eax: EDX holds v29, and bsr leaves it there when v30 == 0
     _BitScanReverse(&v31, v30);
     _BitScanReverse(&v32, v23);
     v33 = 31 - v31 + v32;

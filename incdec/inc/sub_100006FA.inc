@@ -108,7 +108,7 @@ static t__sub_100006FA_j &__sub_100006FA_j = *(t__sub_100006FA_j *)0x10EA16F0;
 #define _ __sub_100006FA__
 #define j __sub_100006FA_j
 static VBN_ENTRY int __sub_100006FA(int *a1, char *src_2, int a3);
-static inline int __fwd_sub_100006FA_sub_100006FA(void *a0, void *a1, int a2) { return __sub_100006FA((int *)a0, (const char *)a1, a2); }
+static inline int __fwd_sub_100006FA_sub_100006FA(void *a0, void *a1, int a2) { return __sub_100006FA((int *)a0, (char *)a1, a2); }
 
 PROBE_DECL(__sub_100006FA)
 static VBN_ENTRY int __sub_100006FA(int *a1, char *src_2, int a3)
@@ -168,7 +168,7 @@ static VBN_ENTRY int __sub_100006FA(int *a1, char *src_2, int a3)
     }
     if ( (*((_BYTE *)i + 21) & 0x10) != 0 )
     {
-      v4 = (char *)i + 30;
+      v4 = (_BYTE *)i + 30;   // v4 is _BYTE *: lea esi,[i+1Eh]
       v5 = 0;
       src_1 = (char *)i + 30;
       v6 = strlen(asc_1000C1E5) + 1;            // "."
@@ -207,7 +207,7 @@ static VBN_ENTRY int __sub_100006FA(int *a1, char *src_2, int a3)
     }
     else if ( *(unsigned int *)((char *)i + 26) <= 0x4000000 )
     {
-      v13 = sub_10007138(strlen((const char *)i + 30) + 1);
+      v13 = sub_10007138(strlen((char *)i + 30) + 1);
       dword_10EA16F4[6 * n4096] = v13;
       if ( !v13 )
       {
@@ -215,7 +215,7 @@ static VBN_ENTRY int __sub_100006FA(int *a1, char *src_2, int a3)
         sub_10007214(aNotEnoughMemor);          // "Not enough memory"
         sub_1000128F();
       }
-      strcpy((char *)dword_10EA16F4[6 * n4096], (const char *)i + 30);
+      strcpy((char *)dword_10EA16F4[6 * n4096], (char *)i + 30);
       ::i_1[6 * n4096] = *(int *)((char *)i + 26);
       v14 = sub_10007138(strlen(src_2) + 1);
       j[6 * n4096] = v14;

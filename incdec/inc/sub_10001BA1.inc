@@ -3,7 +3,7 @@
 // real convention: cdecl; register parameters dropped: int a1, int a2, int p_j, char *n13369312
 
 static inline int __fwd_sub_10001BA1_sub_10000458(unsigned int a0, unsigned int a1) { return __sub_10000458(a0, a1); }
-static inline int __fwd_sub_10001BA1_sub_100006FA(void *a0, void *a1, int a2) { return __sub_100006FA((int *)a0, (const char *)a1, a2); }
+static inline int __fwd_sub_10001BA1_sub_100006FA(void *a0, void *a1, int a2) { return __sub_100006FA((int *)a0, (char *)a1, a2); }
 static inline int __fwd_sub_10001BA1_sub_1000128F(void) { return __sub_1000128F(); }
 static inline char * __fwd_sub_10001BA1_sub_10001AE2(void *a0, int a1, void *a2, int a3) { return __sub_10001AE2((char *)a0, a1, (char *)a2, a3); }
 static inline int __fwd_sub_10001BA1_sub_10001B38(void *a0) { return __sub_10001B38((char *)a0); }
@@ -115,7 +115,7 @@ static VBN_ENTRY unsigned int __sub_10001BA1(void)
   sub_10008660((unsigned int)j, ::n4096, 0x18u, sub_10000458);
   n262139 = 0;
   n4096 = 0;
-  v6 = (const char **)dword_10EA16F4;
+  v6 = (char **)dword_10EA16F4;
   while ( n4096 < ::n4096 )
   {
     n262139 += strlen(*v6) + strlen(*(v6 - 1)) + 1 + 8;
@@ -145,10 +145,10 @@ static VBN_ENTRY unsigned int __sub_10001BA1(void)
     n4096_2 = n4096_1;
     if ( n4096_1 >= ::n4096 )
       break;
-    strcpy((char *)(n13369312_0 + n13369312_4), (const char *)*(i - 4));
-    n13369312_0 += strlen((const char *)*(i - 4)) + 1;
-    strcpy((char *)(n13369312_0 + n13369312_4), (const char *)*(i - 3));
-    n13369312_0 += strlen((const char *)*(i - 3));
+    strcpy((char *)(n13369312_0 + n13369312_4), (char *)*(i - 4));
+    n13369312_0 += strlen((char *)*(i - 4)) + 1;
+    strcpy((char *)(n13369312_0 + n13369312_4), (char *)*(i - 3));
+    n13369312_0 += strlen((char *)*(i - 3));
     *(_DWORD *)(n13369312_4 + n13369312_0) = *(i - 2) << 8;
     n13369312_0 += 4;
     *(_DWORD *)(n13369312_4 + n13369312_0) = *i;

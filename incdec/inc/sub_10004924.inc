@@ -4,7 +4,7 @@
 
 static inline unsigned int __fwd_sub_10004924_sub_10000D0E(void *a0, unsigned int a1) { return __sub_10000D0E((char *)a0, a1); }
 static inline char __fwd_sub_10004924_sub_100012A8(void *a0, unsigned int a1) { return __sub_100012A8((char *)a0, a1); }
-static inline void __fwd_sub_10004924_sub_100048F0(int a0, void *a1, void *a2) { __sub_100048F0(a0, (const void *)a1, (void *)a2); }
+static inline void __fwd_sub_10004924_sub_100048F0(int a0, void *a1, void *a2) { __sub_100048F0(a0, (void *)a1, (void *)a2); }
 static inline int __fwd_sub_10004924_sub_1000490B(int a0, void *a1) { return __sub_1000490B(a0, (void *)a1); }
 typedef int t__sub_10004924_dword_1000D4C4;
 static t__sub_10004924_dword_1000D4C4 &__sub_10004924_dword_1000D4C4 = *(t__sub_10004924_dword_1000D4C4 *)0x1000D4C4;

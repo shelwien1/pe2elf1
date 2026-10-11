@@ -7,8 +7,8 @@ static inline int __fwd_sub_10000D0E_sub_100002FA(char a0, int a1) { return __su
 static inline int __fwd_sub_10000D0E_sub_10000313(int a0, int a1, int a2) { return __sub_10000313(a0, a1, a2); }
 static inline int __fwd_sub_10000D0E_sub_1000034D(int a0) { return __sub_1000034D(a0); }
 static inline char __fwd_sub_10000D0E_sub_100003ED(void *a0, unsigned int a1) { return __sub_100003ED((_BYTE *)a0, a1); }
-static inline int __fwd_sub_10000D0E_sub_1000055F(void *a0, void *a1, void *a2, void *a3, void *a4) { return __sub_1000055F((const char *)a0, (char *)a1, (_BYTE *)a2, (_BYTE *)a3, (_DWORD *)a4); }
-static inline char __fwd_sub_10000D0E_sub_10000C41(void *a0, int a1) { return __sub_10000C41((const char *)a0, a1); }
+static inline int __fwd_sub_10000D0E_sub_1000055F(void *a0, void *a1, void *a2, void *a3, void *a4) { return __sub_1000055F((char *)a0, (char *)a1, (_BYTE *)a2, (_BYTE *)a3, (_DWORD *)a4); }
+static inline char __fwd_sub_10000D0E_sub_10000C41(void *a0, int a1) { return __sub_10000C41((char *)a0, a1); }
 static inline int __fwd_sub_10000D0E_sub_1000128F(void) { return __sub_1000128F(); }
 static inline char * __fwd_sub_10000D0E_sub_10001AE2(void *a0, int a1, void *a2, int a3) { return __sub_10001AE2((char *)a0, a1, (char *)a2, a3); }
 static inline int __fwd_sub_10000D0E_sub_10001B38(void *a0) { return __sub_10001B38((char *)a0); }
@@ -101,7 +101,7 @@ typedef char t__sub_10000D0E_aReadError[67058997];
 static t__sub_10000D0E_aReadError &__sub_10000D0E_aReadError = *(t__sub_10000D0E_aReadError *)0x1000C2CB;
 typedef int t__sub_10000D0E_n4096_0;
 static t__sub_10000D0E_n4096_0 &__sub_10000D0E_n4096_0 = *(t__sub_10000D0E_n4096_0 *)0x1000D2A0;
-typedef _BYTE t__sub_10000D0E_src__1;
+typedef char t__sub_10000D0E_src__1;
 static t__sub_10000D0E_src__1 &__sub_10000D0E_src__1 = *(t__sub_10000D0E_src__1 *)0x1000D2B0;
 typedef int t__sub_10000D0E_n4096;
 static t__sub_10000D0E_n4096 &__sub_10000D0E_n4096 = *(t__sub_10000D0E_n4096 *)0x1000C120;
@@ -216,7 +216,7 @@ static VBN_ENTRY unsigned int __sub_10000D0E(char *dst_1, unsigned int count)
 
   if ( !dword_1000C148 && dst_6 )
   {
-    qmemcpy(dst_1, (const void *)(dst_6 + 4 * dword_1000D410 + 270198515), count);
+    qmemcpy(dst_1, (void *)(dst_6 + 4 * dword_1000D410 + 270198515), count);
     if ( dword_1000D410 )
     {
       dword_1000D418 = *(_DWORD *)(dst_6 + 270198515);
@@ -255,7 +255,7 @@ LABEL_48:
     else
     {
       v21 = dword_1000D298 + n13369312_4;
-      qmemcpy(dst_1, (const void *)(dword_1000D298 + n13369312_4), count_1);
+      qmemcpy(dst_1, (void *)(dword_1000D298 + n13369312_4), count_1);
       a4 = (char *)(v21 + count_1);
       a3 = &dst_1[count_1];
       a2 = 0;
@@ -291,9 +291,9 @@ LABEL_48:
     ++n4096_0;
     v16 = 4 * (unsigned __int8)byte_10EA16EC[24 * n4096_0];
     sub_10001AE2(dst, *(_DWORD *)(v16 + dword_1000D42C), *(char **)((char *)dword_1000D428 + v16), *(_DWORD *)(v16 + dword_1000D438));
-    sub_10000C41((const char *)dword_10EA16D8[6 * n4096_0], 1);
+    sub_10000C41((char *)dword_10EA16D8[6 * n4096_0], 1);
     dword_1000D354 = sub_100002FA(0, dword_10EA16DC[6 * n4096_0]);
-    sub_10000C41((const char *)dword_10EA16D8[6 * n4096_0], 0);
+    sub_10000C41((char *)dword_10EA16D8[6 * n4096_0], 0);
 LABEL_32:
     sub_10001B38(dst);
     if ( n4096_0 == -2 )
@@ -364,7 +364,7 @@ LABEL_32:
     {
 LABEL_21:
       LOBYTE(v9) = 0;
-      count_2 = strlen((const char *)v10 + 30) + 1;
+      count_2 = strlen((char *)v10 + 30) + 1;
       qmemcpy(src_0, (char *)v10 + 30, count_2);
       a4 = (char *)v10 + count_2 + 30;
       a3 = &src_0[count_2];

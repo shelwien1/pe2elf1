@@ -4,7 +4,7 @@
 
 #ifndef __PE_DECL___pe_sub_10006E22
 #define __PE_DECL___pe_sub_10006E22
-typedef __attribute__((stdcall)) void t_sub_10006E22(int);
+typedef __attribute__((stdcall)) void t_sub_10006E22(void);
 static t_sub_10006E22 &__pe_sub_10006E22 = *(t_sub_10006E22 *)0x10006E22;
 #endif
 typedef int t__sub_10005989_dword_1000CA4C;
@@ -215,7 +215,7 @@ LABEL_20:
   ::dst_1 = dst_1;
   n4 = 0;
   if ( (unsigned int)n0xFFE > 0xFFE )
-    sub_10006E22(v28);
+    sub_10006E22();
   if ( (int)v19 > dword_10016438 )
   {
     _BitScanReverse(&v20, dword_1000CA4C + 7 * dword_10016434);
@@ -259,7 +259,7 @@ LABEL_20:
       dword_1000D55C[2 * v24] = (int)v23;
       n2_1 = v24 + 1;
       if ( v24 + 1 == n55 )
-        sub_10006E22(v29);
+        sub_10006E22();
       --dword_10016454;
     }
   }

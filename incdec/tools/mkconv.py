@@ -43,7 +43,9 @@ MANUAL = {
     '10006E31': ('regs', None, 'tree walk: in EBX node, EDX byte table, ESI value, ECX cursor, EDI count; out ECX, EDI'),
     # The compressor's early exit (head.cpp, vbn_restartable).
     '1000703B': ('asm', 'void|int a2', 'records ESP/EBP for sub_10006E22; ret 4'),
-    '10006E22': ('asm', 'void|int a1', 'restores ESP/EBP recorded by sub_1000703B; ret 4'),
+    # Its callers push nothing (`call sub_10006E22` alone): it never returns to
+    # them, and the `ret 4` pops the argument of the call sub_1000703B recorded.
+    '10006E22': ('asm', 'void|', 'restores ESP/EBP recorded by sub_1000703B; ret 4; callers push nothing', [0]),
 }
 EXTRA = {0x10007138: 'sub_10007138', 0x10008658: 'sub_10008658'}
 

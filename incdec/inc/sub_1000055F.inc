@@ -113,7 +113,7 @@ static VBN_ENTRY int __sub_1000055F(char *dst_4, char *dst_3, _BYTE *a6, _BYTE *
   }
   else
   {
-    strcpy(dst, "\\");
+    strcpy(dst, ::src);   // mov eax, offset src: the image's "\\", which Hex-Rays inlined
     sub_10007260(dst, dst_1);
   }
   sub_10008BB1((int)dst, v18, &v19, a6, a7);

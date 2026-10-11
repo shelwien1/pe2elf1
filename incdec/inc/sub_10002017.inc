@@ -46,7 +46,7 @@ typedef int t__sub_10002017_dword_1000D4C4;
 static t__sub_10002017_dword_1000D4C4 &__sub_10002017_dword_1000D4C4 = *(t__sub_10002017_dword_1000D4C4 *)0x1000D4C4;
 typedef char t__sub_10002017_aVbn_0[67058679];
 static t__sub_10002017_aVbn_0 &__sub_10002017_aVbn_0 = *(t__sub_10002017_aVbn_0 *)0x1000C409;
-typedef _BYTE t__sub_10002017_src__1;
+typedef char t__sub_10002017_src__1;
 static t__sub_10002017_src__1 &__sub_10002017_src__1 = *(t__sub_10002017_src__1 *)0x1000D2B0;
 typedef char t__sub_10002017_src_0[67054604];
 static t__sub_10002017_src_0 &__sub_10002017_src_0 = *(t__sub_10002017_src_0 *)0x1000D3F4;

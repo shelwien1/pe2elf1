@@ -4,7 +4,7 @@
 
 #ifndef __PE_DECL___pe_sub_10006E22
 #define __PE_DECL___pe_sub_10006E22
-typedef __attribute__((stdcall)) void t_sub_10006E22(int);
+typedef __attribute__((stdcall)) void t_sub_10006E22(void);
 static t_sub_10006E22 &__pe_sub_10006E22 = *(t_sub_10006E22 *)0x10006E22;
 #endif
 typedef int t__sub_100053E2_dword_1000CA4C;
@@ -260,7 +260,7 @@ LABEL_21:
         dword_1000D55C[2 * v24] = v23;
         n2_1 = v24 + 1;
         if ( v24 + 1 == n55 )
-          sub_10006E22(v28);
+          sub_10006E22();
       }
       --dword_10016454;
     }

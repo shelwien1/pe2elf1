@@ -18,6 +18,8 @@ the image, so every function can be checked on its own.
   stdout is identical.
 - Every moved function's probe fires (the table below).
 - `fail.txt` is empty.
+- The generated C++ compiles with g++'s default diagnostics and nothing
+  suppressed (no `-fpermissive`, no `-w`): no errors, no warnings.
 
 The code that is still original is the C runtime (from `0x1000704C` on) and
 the functions only other commands use (`list.txt`).
@@ -194,7 +196,7 @@ not a gate.
 
    `override/<name>.inc`, if it exists, is used instead (15 functions).
    `fixups.txt` holds exact-text corrections, applied before everything
-   else (42 lines, 12 functions).
+   else (49 lines, 17 functions).
 3. **Build and gate.** `tools/order.py` sorts `accepted.txt` callee-first and
    regenerates every `.inc`. `build.sh` compiles `dummy.so`, and `test.sh`
    runs the gate. Green: the step keeps the function and snapshots the
@@ -280,6 +282,39 @@ not a gate.
 - *Fake parameters.* A function's own Hex-Rays signature can be wrong at
   its call sites too. `getdisk` was printed as `__thiscall`, and Hex-Rays
   passed it a bogus `this`.
+- *Uninitialized values.* `g++ -Wall` flags 15 reads of variables that
+  may be uninitialized. Each one was checked against the asm:
+  - *A real divergence, latent.* `bsr` leaves its destination unchanged
+    when the source is 0 (and so does `head.cpp`'s `_BitScanReverse`). In
+    `sub_100064C0` the asm's EDX holds `v29` at that point, while the C++
+    variable was never set. The source is 0 whenever `n2_1 == v86`, and the
+    result feeds later shifts. Fixed: `v31 = v29;` before the `bsr`.
+  - *A real divergence, in the exit status.* `sub_100020E5` returned an
+    uninitialized value when the file table was empty, and that value
+    becomes the exit status: `main` returns it, and the shim's startup stub
+    is `call main; push eax; call exit`. The asm returns the caller's EAX,
+    which is 0 on the one path that gets there (`u` with nothing to do).
+  - *Wrong but harmless.* Two return values Hex-Rays read from stack slots,
+    where the asm returns a popped register: `sub_1000128F` (unreachable
+    after `exit`) and `sub_100018D0` (unused).
+  - *A fictitious argument.* Hex-Rays gave the early exit's longjmp half,
+    `sub_10006E22`, an argument its callers never push. Three call sites
+    read an uninitialized local to pass it. `conv.txt` now gives it no
+    parameter.
+  - *False positives (the other 8).* Each is a `bsr` whose source is a
+    counter plus a constant or a divisor used right after, or `v90`, which
+    `sub_100064C0` saves and restores under the same condition.
+- *C++ is not MSVC's C.* incdec.md §8.1 builds with `-fpermissive`. That
+  turned 53 errors into warnings, which `-w` then hid. They are fixed where
+  they come from:
+  - `const` is dropped from casts and forwarders, as it already was from
+    declarations;
+  - a pointer cast to a byte or a word (`(char)v1`: Hex-Rays taking the low
+    byte of a register) goes through `uintptr_t`;
+  - the global `src__1`, which Hex-Rays declared as one `_BYTE`, is the
+    archive's base name and is typed `char`;
+  - three one-off sites are fixups. One of them replaces a `"\\"` literal
+    with the image's own string, which Hex-Rays had inlined.
 - *Compiler assumptions.* The flags `-fwrapv`,
   `-fno-delete-null-pointer-checks` and `-fno-tree-loop-distribute-patterns`
   are needed. The last one keeps g++ from turning `rep movsd` loops back

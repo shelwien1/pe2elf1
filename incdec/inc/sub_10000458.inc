@@ -17,7 +17,7 @@ static VBN_ENTRY int __sub_10000458(unsigned int a1, unsigned int a2)
   BOOL v5; // edx
 
   v8 = *(_BYTE **)(a1 + 4);
-  v9 = *(const char **)(a2 + 4);
+  v9 = *(char **)(a2 + 4);
   v2 = 0;
   v7 = 0;
   while ( 1 )
@@ -48,7 +48,7 @@ static VBN_ENTRY int __sub_10000458(unsigned int a1, unsigned int a2)
       return -1;
     if ( *v9 == 71 && *v8 != 71 )
       return 1;
-    { int c = memcmp(*(const void **)(a1 + 4), *(const void **)(a2 + 4), strlen(v9) + 1); v5 = (c > 0) - (c < 0); }   // -1/0/1, as above
+    { int c = memcmp(*(void **)(a1 + 4), *(void **)(a2 + 4), strlen(v9) + 1); v5 = (c > 0) - (c < 0); }   // -1/0/1, as above
   }
   if ( v5 )
     return v5;

@@ -8,8 +8,8 @@ static inline int __fwd_sub_100012A8_sub_10000330(int a0, int a1, int a2) { retu
 static inline int __fwd_sub_100012A8_sub_1000034D(int a0) { return __sub_1000034D(a0); }
 static inline int __fwd_sub_100012A8_sub_10000369(int a0, int a1) { return __sub_10000369(a0, a1); }
 static inline char __fwd_sub_100012A8_sub_100003ED(void *a0, unsigned int a1) { return __sub_100003ED((_BYTE *)a0, a1); }
-static inline int __fwd_sub_100012A8_sub_1000055F(void *a0, void *a1, void *a2, void *a3, void *a4) { return __sub_1000055F((const char *)a0, (char *)a1, (_BYTE *)a2, (_BYTE *)a3, (_DWORD *)a4); }
-static inline char __fwd_sub_100012A8_sub_10000C41(void *a0, int a1) { return __sub_10000C41((const char *)a0, a1); }
+static inline int __fwd_sub_100012A8_sub_1000055F(void *a0, void *a1, void *a2, void *a3, void *a4) { return __sub_1000055F((char *)a0, (char *)a1, (_BYTE *)a2, (_BYTE *)a3, (_DWORD *)a4); }
+static inline char __fwd_sub_100012A8_sub_10000C41(void *a0, int a1) { return __sub_10000C41((char *)a0, a1); }
 static inline int __fwd_sub_100012A8_sub_1000128F(void) { return __sub_1000128F(); }
 static inline int __fwd_sub_100012A8_sub_100018D0(unsigned int a0) { return __sub_100018D0(a0); }
 static inline char * __fwd_sub_100012A8_sub_10001AE2(void *a0, int a1, void *a2, int a3) { return __sub_10001AE2((char *)a0, a1, (char *)a2, a3); }
@@ -115,7 +115,7 @@ typedef unsigned int t__sub_100012A8_n13369312;
 static t__sub_100012A8_n13369312 &__sub_100012A8_n13369312 = *(t__sub_100012A8_n13369312 *)0x1000D43C;
 typedef int t__sub_100012A8_n4096_1;
 static t__sub_100012A8_n4096_1 &__sub_100012A8_n4096_1 = *(t__sub_100012A8_n4096_1 *)0x1000D2A4;
-typedef _BYTE t__sub_100012A8_src__1;
+typedef char t__sub_100012A8_src__1;
 static t__sub_100012A8_src__1 &__sub_100012A8_src__1 = *(t__sub_100012A8_src__1 *)0x1000D2B0;
 typedef int t__sub_100012A8_n4096;
 static t__sub_100012A8_n4096 &__sub_100012A8_n4096 = *(t__sub_100012A8_n4096 *)0x1000C120;
@@ -317,9 +317,9 @@ static VBN_ENTRY char __sub_100012A8(char *src, unsigned int counta)
         if ( dword_1000C13C )
           sub_10001AE2(dst, dword_1000D350, i_3, dword_1000D404);
         ++::n4096_1;
-        sub_10000C41((const char *)dword_10EA16D8[6 * ::n4096_1], 1);
+        sub_10000C41((char *)dword_10EA16D8[6 * ::n4096_1], 1);
         dword_1000D358 = sub_100002E0(dword_10EA16DC[6 * ::n4096_1]);
-        sub_10000C41((const char *)dword_10EA16D8[6 * ::n4096_1], 0);
+        sub_10000C41((char *)dword_10EA16D8[6 * ::n4096_1], 0);
         if ( dword_1000D358 == -1 )
         {
           sub_10007214(aCanTCreateFile);        // "CAN'T CREATE FILE"
@@ -380,7 +380,7 @@ static VBN_ENTRY char __sub_100012A8(char *src, unsigned int counta)
         {
           if ( dword_1000C13C )
             sub_10001AE2(dst, dword_1000D350, i_3, dword_1000D404);
-          sub_10000C41((const char *)dword_10EA16D8[6 * ::n4096_1], 1);
+          sub_10000C41((char *)dword_10EA16D8[6 * ::n4096_1], 1);
           _Data_size____10u_n = (char *)sub_100002FA(2, dword_10EA16DC[6 * ::n4096_1]);
           count = (int)&dword_10EA16E8[6 * ::n4096_1];
           v20 = dword_1000D4B4;
@@ -401,10 +401,10 @@ static VBN_ENTRY char __sub_100012A8(char *src, unsigned int counta)
           LOWORD(dword_1000D4CC) = dword_1000D4B4;
           LOWORD(v24) = dword_1000D4B8;
           LOWORD(dword_1000D4C8) = dword_1000D4B8;
-          v25 = sub_1000911D((__int16)_Data_size____10u_n, dword_1000D4CC, dword_1000D4C8);
+          v25 = sub_1000911D((__int16)(uintptr_t)_Data_size____10u_n, dword_1000D4CC, dword_1000D4C8);
           sub_1000034D((int)_Data_size____10u_n);
           sub_10000369(dword_10EA16E4[6 * ::n4096_1], dword_10EA16DC[6 * ::n4096_1]);
-          n13369312 = sub_10000C41((const char *)dword_10EA16D8[6 * ::n4096_1], 0);
+          n13369312 = sub_10000C41((char *)dword_10EA16D8[6 * ::n4096_1], 0);
           if ( dword_1000C13C )
           {
             sub_10001B38(dst);

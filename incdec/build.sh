@@ -24,8 +24,12 @@ make -s -C .. pe2elf32/pe2elf32 libvbnshim.so
   echo '}'
 } > dummy.cpp
 
+# Plain C++17 with g++'s default diagnostics, none suppressed: incdec.md
+# §8.1's -fpermissive, -Wno-narrowing and -Wno-write-strings are not needed,
+# because extract.py rewrites what they excused (const casts, pointer-to-byte
+# casts, ...).  The -f flags stop g++ assuming what Hex-Rays code does not
+# guarantee (README.md, "Compiler assumptions").
 g++ -m32 -O2 -g -std=c++17 -fPIC -shared -mgeneral-regs-only \
-    -fpermissive -Wno-narrowing -Wno-write-strings -w \
     -fno-strict-aliasing -fno-tree-loop-distribute-patterns \
     -fwrapv -fno-delete-null-pointer-checks \
     -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \

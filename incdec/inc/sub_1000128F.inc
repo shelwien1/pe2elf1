@@ -29,7 +29,7 @@ static VBN_ENTRY int __sub_1000128F(void)
   sub_10007214(aProcessAborted);                // "Process aborted"
   sub_100020E5();
   sub_10007172(0);
-  return v1;
+  return 0;   // pop eax: the 0 pushed for exit(), which does not return
 }
 #undef sub_100020E5
 #undef sub_10007172

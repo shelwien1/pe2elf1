@@ -41,7 +41,7 @@ typedef int t__sub_10001DAB_dword_1000D410;
 static t__sub_10001DAB_dword_1000D410 &__sub_10001DAB_dword_1000D410 = *(t__sub_10001DAB_dword_1000D410 *)0x1000D410;
 typedef int t__sub_10001DAB_n13369312_0;
 static t__sub_10001DAB_n13369312_0 &__sub_10001DAB_n13369312_0 = *(t__sub_10001DAB_n13369312_0 *)0x1000D4C0;
-typedef _BYTE t__sub_10001DAB_src__1;
+typedef char t__sub_10001DAB_src__1;
 static t__sub_10001DAB_src__1 &__sub_10001DAB_src__1 = *(t__sub_10001DAB_src__1 *)0x1000D2B0;
 typedef int t__sub_10001DAB_n4096;
 static t__sub_10001DAB_n4096 &__sub_10001DAB_n4096 = *(t__sub_10001DAB_n4096 *)0x1000C120;

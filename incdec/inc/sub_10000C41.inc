@@ -56,7 +56,7 @@ static VBN_ENTRY char __sub_10000C41(char *i_1, int a2)
     {
       do
       {
-        i_2 = (char)i_1;
+        i_2 = (char)(uintptr_t)i_1;
         if ( !i_1[v2] )
           return i_2;
         v6 = 0;

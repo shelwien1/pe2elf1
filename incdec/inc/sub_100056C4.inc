@@ -4,15 +4,8 @@
 
 static inline int __fwd_sub_100056C4_sub_10004924(int a0) { return __sub_10004924(a0); }
 static inline unsigned int __fwd_sub_100056C4_sub_10005251(unsigned int a0, int a1) { return __sub_10005251(a0, a1); }
-static inline int __fwd_sub_100056C4_sub_100053E2(void *a0) { return __sub_100053E2((int *)a0); }
-static inline int __fwd_sub_100056C4_sub_10005989(void *a0) { return __sub_10005989((int *)a0); }
 static inline int __fwd_sub_100056C4_sub_10005C50(void *a0, void *a1, unsigned int a2) { return __sub_10005C50((unsigned int *)a0, (_DWORD *)a1, a2); }
 static inline int __fwd_sub_100056C4_sub_100064C0(int a0, void *a1, unsigned int a2) { return __sub_100064C0(a0, (unsigned int *)a1, a2); }
-#ifndef __PE_DECL___pe_sub_1000703B
-#define __PE_DECL___pe_sub_1000703B
-typedef __attribute__((stdcall)) void t_sub_1000703B(int);
-static t_sub_1000703B &__pe_sub_1000703B = *(t_sub_1000703B *)0x1000703B;
-#endif
 #ifndef __PE_DECL___sub_100079DA
 #define __PE_DECL___sub_100079DA
 typedef int t_sub_100079DA(void *, ...);
@@ -82,11 +75,8 @@ typedef int t__sub_100056C4_n4;
 static t__sub_100056C4_n4 &__sub_100056C4_n4 = *(t__sub_100056C4_n4 *)0x1001648C;
 #define sub_10004924 __fwd_sub_100056C4_sub_10004924
 #define sub_10005251 __fwd_sub_100056C4_sub_10005251
-#define sub_100053E2 __fwd_sub_100056C4_sub_100053E2
-#define sub_10005989 __fwd_sub_100056C4_sub_10005989
 #define sub_10005C50 __fwd_sub_100056C4_sub_10005C50
 #define sub_100064C0 __fwd_sub_100056C4_sub_100064C0
-#define sub_1000703B __pe_sub_1000703B
 #define sub_100079DA __sub_100079DA
 #define Data_size____10u_n_0 __sub_100056C4_Data_size____10u_n_0
 #define aPassed10uBytes __sub_100056C4_aPassed10uBytes
@@ -258,11 +248,8 @@ static __attribute__((stdcall)) VBN_ENTRY unsigned int __sub_100056C4(unsigned i
 }
 #undef sub_10004924
 #undef sub_10005251
-#undef sub_100053E2
-#undef sub_10005989
 #undef sub_10005C50
 #undef sub_100064C0
-#undef sub_1000703B
 #undef sub_100079DA
 #undef Data_size____10u_n_0
 #undef aPassed10uBytes

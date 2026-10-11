@@ -66,7 +66,7 @@
 100061F4	sub_100061F4	stdcall	16	-	int|unsigned int a1, unsigned int *a2, int a3, _DWORD *i_1	regflow: no register inputs
 100064C0	sub_100064C0	stdcall	12	-	int|int a1, unsigned int *p_n0x10000, unsigned int n8	regflow: no register inputs
 10006CB0	sub_10006CB0	regs	0	0,1,2,3,4	_DWORD *|	tree walk: in EBX node, EDX right-child offset, ESI value, ECX cursor, EDI count; out ECX, EDI
-10006E22	sub_10006E22	asm	4	-	void|int a1	restores ESP/EBP recorded by sub_1000703B; ret 4
+10006E22	sub_10006E22	asm	4	0	void|	restores ESP/EBP recorded by sub_1000703B; ret 4; callers push nothing
 10006E31	sub_10006E31	regs	0	0,1,2,3,4	int *|	tree walk: in EBX node, EDX byte table, ESI value, ECX cursor, EDI count; out ECX, EDI
 1000703B	sub_1000703B	asm	4	0	void|int a2	records ESP/EBP for sub_10006E22; ret 4
 10007052	sub_10007052	cdecl	0	-	int|	regflow: no register inputs

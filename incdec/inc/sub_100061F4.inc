@@ -152,49 +152,49 @@ LABEL_29:
   while ( --n0x7FFFFFFF )
   {
     n0x7FFFFFFF_1 += _bittest(
-                       (const signed __int32 *)aVbnVer1001,// "                                                \nvbn ver.1...."
+                       (signed __int32 *)aVbnVer1001,// "                                                \nvbn ver.1...."
                        v8) + n0x7FFFFFFF_1;
     v11 = v8 + 1;
     if ( !--n0x7FFFFFFF )
       break;
     n0x7FFFFFFF_1 += _bittest(
-                       (const signed __int32 *)aVbnVer1001,// "                                                \nvbn ver.1...."
+                       (signed __int32 *)aVbnVer1001,// "                                                \nvbn ver.1...."
                        v11) + n0x7FFFFFFF_1;
     v12 = v11 + 1;
     if ( !--n0x7FFFFFFF )
       break;
     n0x7FFFFFFF_1 += _bittest(
-                       (const signed __int32 *)aVbnVer1001,// "                                                \nvbn ver.1...."
+                       (signed __int32 *)aVbnVer1001,// "                                                \nvbn ver.1...."
                        v12) + n0x7FFFFFFF_1;
     v13 = v12 + 1;
     if ( !--n0x7FFFFFFF )
       break;
     n0x7FFFFFFF_1 += _bittest(
-                       (const signed __int32 *)aVbnVer1001,// "                                                \nvbn ver.1...."
+                       (signed __int32 *)aVbnVer1001,// "                                                \nvbn ver.1...."
                        v13) + n0x7FFFFFFF_1;
     v14 = v13 + 1;
     if ( !--n0x7FFFFFFF )
       break;
     n0x7FFFFFFF_1 += _bittest(
-                       (const signed __int32 *)aVbnVer1001,// "                                                \nvbn ver.1...."
+                       (signed __int32 *)aVbnVer1001,// "                                                \nvbn ver.1...."
                        v14) + n0x7FFFFFFF_1;
     v15 = v14 + 1;
     if ( !--n0x7FFFFFFF )
       break;
     n0x7FFFFFFF_1 += _bittest(
-                       (const signed __int32 *)aVbnVer1001,// "                                                \nvbn ver.1...."
+                       (signed __int32 *)aVbnVer1001,// "                                                \nvbn ver.1...."
                        v15) + n0x7FFFFFFF_1;
     v16 = v15 + 1;
     if ( !--n0x7FFFFFFF )
       break;
     n0x7FFFFFFF_1 += _bittest(
-                       (const signed __int32 *)aVbnVer1001,// "                                                \nvbn ver.1...."
+                       (signed __int32 *)aVbnVer1001,// "                                                \nvbn ver.1...."
                        v16) + n0x7FFFFFFF_1;
     v17 = v16 + 1;
     if ( !--n0x7FFFFFFF )
       break;
     n0x7FFFFFFF_1 += _bittest(
-                       (const signed __int32 *)aVbnVer1001,// "                                                \nvbn ver.1...."
+                       (signed __int32 *)aVbnVer1001,// "                                                \nvbn ver.1...."
                        v17) + n0x7FFFFFFF_1;
     v8 = v17 + 1;
   }

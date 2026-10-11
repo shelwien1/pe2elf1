@@ -186,6 +186,23 @@ def balanced(t):
     return d == 0
 
 
+SMALL_INT = (r'(?:unsigned\s+__int8|signed\s+__int8|__int8|unsigned\s+__int16|__int16|_BYTE|_WORD|'
+             r'unsigned\s+char|signed\s+char|char|unsigned\s+short|short|uint8|int8|uint16|int16)')
+NARROW_CAST = re.compile(r'\((' + SMALL_INT + r')\)\s*([A-Za-z_]\w*)\b(?!\s*(?:\[|\(|->|\.|\+\+|--))')
+
+
+def narrow_pointer_casts(line, types):
+    """`(char)v1` with v1 a pointer: Hex-Rays' way of taking the low byte of the
+    register that holds it (AL after `mov eax, esi`).  C++ will not cast a pointer
+    to a narrower integer directly; going through uintptr_t is the same bits."""
+    def repl(m):
+        t = types.get(m.group(2), '')
+        if '*' in t or '[' in t:
+            return f'({m.group(1)})(uintptr_t){m.group(2)}'
+        return m.group(0)
+    return sub_code(NARROW_CAST, repl, line)
+
+
 def byte_compares(line, types=None):
     """`(_BYTE)a == b` -> `(_BYTE)a == (_BYTE)(b)`, and the mirror image.
 
@@ -452,21 +469,25 @@ def relax(ty):
     return ty
 
 
+CONST = re.compile(r'\bconst\s+')
+
+
 def forwarder(name, callee, cc):
     """A moved callee is called through an inline forwarder whose pointer
-    parameters are void *, for the reason relax() gives."""
+    parameters are void *, for the reason relax() gives.  Its casts drop const,
+    as the callee's moved definition does."""
     args, casts = [], []
     for k, p in enumerate(cc['params']):
         if p.strip() == '...':
             sys.exit(f'{name}: forwarder for variadic {callee}')
-        t, n, ext = split_decl(p)
-        t = t + ext if n else p
+        t, n, ext = split_decl(CONST.sub('', p))
+        t = t + ext if n else CONST.sub('', p)
         a = f'a{k}'
         if '*' in t and '(' not in t:
             args.append(f'void *{a}'); casts.append(f'({t}){a}')
         else:
             args.append(f'{t} {a}'); casts.append(a)
-    ret = cc['ret']
+    ret = CONST.sub('', cc['ret'])
     call = f'__{callee}({", ".join(casts)})'
     return (f"static inline {ret} __fwd_{name}_{callee}({', '.join(args) or 'void'}) "
             f"{{ {'' if ret == 'void' else 'return '}{call}; }}")
@@ -485,9 +506,20 @@ def callee_decl(callee, c, alias):
             f"static t_{callee} &{alias} = *(t_{callee} *)0x{c['va']:08X};")
 
 
+# Globals whose Hex-Rays type contradicts every use of them.
+GLOBAL_TYPES = {
+    # The archive's base name.  Hex-Rays declared one _BYTE; the code takes its
+    # address for strlen/strcpy/strcat (repne scasb, rep movsb), and C++ will
+    # not pass an unsigned char * for a char *.
+    'src__1': ('char', ''),
+}
+
+
 def globals_type(name, body_comments):
     """(base type, dims) for a global, per incdec.md §6.1: this body's own guessed
     type first, then the data declaration."""
+    if name in GLOBAL_TYPES:
+        return GLOBAL_TYPES[name]
     for l in body_comments:
         m = re.match(r'// ([0-9A-F]+): using guessed type (.*?)\b' + re.escape(name) + r'(\[[^\]]*\])?;$', l)
         if m:
@@ -522,6 +554,12 @@ def code_spans(line):
         spans.append((pos, a))
         pos = b
     return spans
+
+
+def code_end(line):
+    """Where the code of one line ends: its // comment, if any."""
+    spans = code_spans(line)
+    return spans[-1][1] if spans else 0
 
 
 def sub_code(pat, repl, line):
@@ -656,6 +694,10 @@ def emit(name, accepted):
     # line transforms
     stmts = launder_pointer_counters(stmts)
     stmts = [mask_shift_counts(sign_negative_divisors(fix_hex_escapes(l))) for l in stmts]
+    # const goes everywhere it is code: the declarations lose it below, and a
+    # `(const char *)` cast assigned to one of them, or passed to a moved
+    # callee (whose parameters lose it too), is an error in C++.
+    stmts = [sub_code(CONST, '', l) for l in stmts]
     decls = [re.sub(r'^(\s*)const\s+', r'\1', l) for l in decls]
     frame_lines = [re.sub(r'\bconst\s+', '', l) for l in frame_lines]
     reg_lines = [re.sub(r'\bconst\s+', '', l) for l in reg_lines]
@@ -674,7 +716,9 @@ def emit(name, accepted):
     refs, defines = [], []
     gtypes = {}
     # functions
-    called = sorted(set(re.findall(r'\bsub_[0-9A-F]{8}\b', full)))
+    # names in comments (Hex-Rays' and fixups' notes) are not calls
+    called = sorted(set(re.findall(r'\bsub_[0-9A-F]{8}\b',
+                                   '\n'.join(l[:code_end(l)] for l in full.split('\n')))))
     self_fwd = None
     for callee in called:
         cc = CONV.get(callee)
@@ -753,7 +797,7 @@ def emit(name, accepted):
         mm = re.match(r'^\s*([A-Za-z_][\w\s\*]*?[\s\*])\s*\(?&?\s*([A-Za-z_]\w*)\)?\s*(\[[^\]]*\])?', l.split('//')[0].split('=')[0])
         if mm:
             types[mm.group(2)] = mm.group(1).strip() + (mm.group(3) or '')
-    full = '\n'.join(byte_compares(l, types) for l in full.split('\n'))
+    full = '\n'.join(narrow_pointer_casts(byte_compares(l, types), types) for l in full.split('\n'))
 
     for s in re.findall(r'"(?:[^"\\]|\\.)*"', code_only):
         print(f'warning: {name}: string literal {s[:40]} lives in dummy.so, not in the image; '

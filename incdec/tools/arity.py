@@ -6,8 +6,8 @@ extract.py: the call sites match the prototype, and the arguments the asm
 pushes are simply not passed (mkdir, sub_1000862D, had none).  For every
 `call sub_X` in the listing of each moved function, count the pushes since
 the previous call or stack cleanup and compare them with conv.txt.  The count
-is a heuristic (a push that saves a register is counted too); it is printed,
-not enforced.  Variadic callees are skipped: fixups.txt handles them.
+is a heuristic (the prologue's register saves are skipped, any other push
+counts); it is printed, not enforced.  Variadic callees are skipped: fixups.txt handles them.
 """
 import os
 import re
@@ -55,7 +55,12 @@ def main():
     seen = {}
     for fn, insns in bodies(set(accepted)).items():
         pushes = 0
-        for op, args in insns:
+        k = 0                                   # skip the prologue's register saves
+        while k < len(insns) and (insns[k][0] == 'enter' or (insns[k][0] == 'push' and insns[k][1] in
+                                  ('ebp', 'ebx', 'esi', 'edi')) or insns[k] == ('mov', 'ebp, esp')
+                                  or (insns[k][0] == 'sub' and insns[k][1].startswith('esp'))):
+            k += 1
+        for op, args in insns[k:]:
             if op == 'push' and args not in ('ds', 'es', 'ebp'):
                 pushes += 1
             elif op == 'call':

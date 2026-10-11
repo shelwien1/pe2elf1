@@ -249,21 +249,21 @@ static __attribute__((stdcall)) VBN_ENTRY int __sub_10005C50(unsigned int *p_n0x
           *v17 += v18;
           v8 += v18;
           v10 += 2;
-          LOBYTE(v6) = (_BYTE)v6 + 1;
-          if ( (unsigned __int8)v6 >= BYTE1(v6) )
+          LOBYTE(v6) = (_BYTE)(uintptr_t)v6 + 1;
+          if ( (unsigned __int8)(uintptr_t)v6 >= BYTE1(v6) )
             goto LABEL_33;
         }
         buf__0[n255_1] = (int)v9;
         v9[1] = n255_1;
-        LOBYTE(n255_1) = BYTE1(v6) - (_BYTE)v6;
+        LOBYTE(n255_1) = BYTE1(v6) - (_BYTE)(uintptr_t)v6;
         v19 = *v10 + (n255_1 >> 1) - dword_100164C4;
         *v9 = v19;
         v8 += v19;
         v9 += 2;
         v10 += 2;
-        LOBYTE(v6) = (_BYTE)v6 + 1;
+        LOBYTE(v6) = (_BYTE)(uintptr_t)v6 + 1;
       }
-      while ( (unsigned __int8)v6 < BYTE1(v6) );
+      while ( (unsigned __int8)(uintptr_t)v6 < BYTE1(v6) );
     }
 LABEL_33:
     v70 = (unsigned int)((char *)v9 - (char *)dword_1000F060) >> 3;

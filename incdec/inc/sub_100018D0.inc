@@ -72,7 +72,7 @@ static VBN_ENTRY int __sub_100018D0(unsigned int n13369312)
   n4096 = 0;
   while ( n13369312_1 < n13369312 )
   {
-    v2 = strlen((const char *)(n13369312_1 + n13369312_4)) + 1;
+    v2 = strlen((char *)(n13369312_1 + n13369312_4)) + 1;
     v3 = sub_10007138(v2);
     j[6 * n4096] = v3;
     if ( !v3 )
@@ -80,9 +80,9 @@ static VBN_ENTRY int __sub_100018D0(unsigned int n13369312)
       sub_10007214(aNotEnoughMemor);            // "Not enough memory"
       sub_1000128F();
     }
-    strcpy((char *)j[6 * n4096], (const char *)(n13369312_1 + n13369312_4));
+    strcpy((char *)j[6 * n4096], (char *)(n13369312_1 + n13369312_4));
     v4 = v2 + n13369312_1;
-    v5 = strlen((const char *)(v4 + n13369312_4)) + 1;
+    v5 = strlen((char *)(v4 + n13369312_4)) + 1;
     v6 = sub_10007138(v5);
     dword_10EA16F4[6 * n4096] = v6;
     if ( !v6 )
@@ -90,7 +90,7 @@ static VBN_ENTRY int __sub_100018D0(unsigned int n13369312)
       sub_10007214(aNotEnoughMemor);            // "Not enough memory"
       sub_1000128F();
     }
-    strcpy((char *)dword_10EA16F4[6 * n4096], (const char *)(v4 + n13369312_4));
+    strcpy((char *)dword_10EA16F4[6 * n4096], (char *)(v4 + n13369312_4));
     v7 = v5 - 1 + v4;
     i_1[6 * n4096] = *(_DWORD *)(n13369312_4 + v7) >> 8;
     v7 += 4;
@@ -112,7 +112,7 @@ static VBN_ENTRY int __sub_100018D0(unsigned int n13369312)
     ++n4096;
   }
   sub_10008658(n13369312_4);
-  return v9;
+  return n13369312_4;   // pop eax: the pointer just pushed for free()
 }
 #undef sub_1000128F
 #undef sub_10007138

@@ -10,14 +10,14 @@ static inline int __fwd_sub_10002160_sub_1000034D(int a0) { return __sub_1000034
 typedef char t_sub_10000387(void *, void *);
 static t_sub_10000387 &__sub_10000387 = *(t_sub_10000387 *)0x10000387;
 #endif
-static inline int __fwd_sub_10002160_sub_1000055F(void *a0, void *a1, void *a2, void *a3, void *a4) { return __sub_1000055F((const char *)a0, (char *)a1, (_BYTE *)a2, (_BYTE *)a3, (_DWORD *)a4); }
+static inline int __fwd_sub_10002160_sub_1000055F(void *a0, void *a1, void *a2, void *a3, void *a4) { return __sub_1000055F((char *)a0, (char *)a1, (_BYTE *)a2, (_BYTE *)a3, (_DWORD *)a4); }
 static inline int __fwd_sub_10002160_sub_1000128F(void) { return __sub_1000128F(); }
 static inline char * __fwd_sub_10002160_sub_10001AE2(void *a0, int a1, void *a2, int a3) { return __sub_10001AE2((char *)a0, a1, (char *)a2, a3); }
 static inline int __fwd_sub_10002160_sub_10001B38(void *a0) { return __sub_10001B38((char *)a0); }
 static inline unsigned int __fwd_sub_10002160_sub_10001BA1(void) { return __sub_10001BA1(); }
 static inline unsigned int __fwd_sub_10002160_sub_10001DAB(int a0) { return __sub_10001DAB(a0); }
 static inline int __fwd_sub_10002160_sub_10002017(void) { return __sub_10002017(); }
-static inline char __fwd_sub_10002160_sub_10002110(void *a0) { return __sub_10002110((const char *)a0); }
+static inline char __fwd_sub_10002160_sub_10002110(void *a0) { return __sub_10002110((char *)a0); }
 #ifndef __PE_DECL___sub_10003243
 #define __PE_DECL___sub_10003243
 typedef BOOL t_sub_10003243(void);
@@ -220,7 +220,7 @@ typedef char t__sub_10002160_a00p_0[67058190];
 static t__sub_10002160_a00p_0 &__sub_10002160_a00p_0 = *(t__sub_10002160_a00p_0 *)0x1000C5F2;
 typedef char t__sub_10002160_aAcp_0[67058185];
 static t__sub_10002160_aAcp_0 &__sub_10002160_aAcp_0 = *(t__sub_10002160_aAcp_0 *)0x1000C5F7;
-typedef _BYTE t__sub_10002160_src__1;
+typedef char t__sub_10002160_src__1;
 static t__sub_10002160_src__1 &__sub_10002160_src__1 = *(t__sub_10002160_src__1 *)0x1000D2B0;
 typedef int t__sub_10002160_n4096;
 static t__sub_10002160_n4096 &__sub_10002160_n4096 = *(t__sub_10002160_n4096 *)0x1000C120;
@@ -755,7 +755,7 @@ LABEL_101:
                 (v68 = v67) != nullptr) )       // ".acp"
           {
             LOBYTE(v67) = 0;
-            count_3 = strlen((const char *)v68 + 30) + 1;
+            count_3 = strlen((char *)v68 + 30) + 1;
             qmemcpy(src_0, (char *)v68 + 30, count_3);
             n13369312 = (int *)((char *)v68 + count_3 + 30);
             p_j = &src_0[count_3];
@@ -891,7 +891,7 @@ LABEL_101:
           sub_100079DA(aS_3);                   // "s  "
         else
           sub_100079DA(asc_1000C76B);           // ".  "
-        v128 = (const char *)*(i_1 - 2);
+        v128 = (char *)*(i_1 - 2);
         v82 = strlen(v128) + 1;
         p_j = (char *)&v128[v82];
         if ( v82 != 1 )
@@ -1003,7 +1003,7 @@ LABEL_187:
     v95 = strlen(aVbnVer1001) + 1;              // "                                                \nvbn ver.1...."
     sub_100079DA((char *)(v95 + 268476688));
     sub_10008537();
-    v96 = (char *)(strlen((const char *)(v95 + 268476688)) + 1 + v95 + 268476688);
+    v96 = (char *)(strlen((char *)(v95 + 268476688)) + 1 + v95 + 268476688);
     sub_100079DA(v96);
     sub_10008537();
     return sub_100079DA(&v96[strlen(v96) + 1]);
@@ -1066,14 +1066,14 @@ LABEL_187:
           strcpy(
             __sub_10002160_g123456789012345,                    // "123456789012345"
             _123456789012345_5);
-          v21 = (const char *)(n2_1 + *v121);
+          v21 = (char *)(n2_1 + *v121);
           v22 = strlen(v21) + 1;
           p_j = (char *)&v21[v22];
           n2_1 += v22 - 1;
         }
       }
     }
-    v12 = (const char **)a4[1];
+    v12 = (char **)a4[1];
     n2_2 = n2_1;
     if ( *((_BYTE *)v12 + n2_1) )
       goto LABEL_187;
@@ -1085,14 +1085,14 @@ LABEL_187:
   if ( dword_1000C14C && (int)::n13369312_1 > 0 )
   {
     n13369312_2 = sub_100043FC(::n13369312_1);
-    v12 = (const char **)sub_1000446F(n13369312_2);
+    v12 = (char **)sub_1000446F(n13369312_2);
     if ( v12 )
     {
       ::n13369312_1 = n13369312_2;
     }
     else
     {
-      v12 = (const char **)sub_10007214(aArchiveSizeIsT_0);// "Archive size is too big. vbn Protect can not be made."
+      v12 = (char **)sub_10007214(aArchiveSizeIsT_0);// "Archive size is too big. vbn Protect can not be made."
       n2_2 = n2_3;
       dword_1000C14C = 0;
     }
@@ -1134,8 +1134,8 @@ LABEL_187:
     **(_BYTE **)(v30 + dword_1000D434) = 0;
     **(_BYTE **)(v30 + dword_1000D430) = 0;
     **(_BYTE **)((char *)dword_1000D428 + v30) = 0;
-    *(_DWORD *)(v30 + dword_1000D42C) = sub_1000055F((const char *)n13369312[v30 / 4], *(char **)((char *)dword_1000D428 + v30), *(_BYTE **)(v30 + dword_1000D430), *(_BYTE **)(v30 + dword_1000D434), (_DWORD *)(dword_1000D438 + v30));
-    sub_10007260(*(char **)(v30 + dword_1000D430), *(const char **)(v30 + dword_1000D434));
+    *(_DWORD *)(v30 + dword_1000D42C) = sub_1000055F((char *)n13369312[v30 / 4], *(char **)((char *)dword_1000D428 + v30), *(_BYTE **)(v30 + dword_1000D430), *(_BYTE **)(v30 + dword_1000D434), (_DWORD *)(dword_1000D438 + v30));
+    sub_10007260(*(char **)(v30 + dword_1000D430), *(char **)(v30 + dword_1000D434));
     v30 += 4;
     ++v108;
   }
@@ -1189,7 +1189,7 @@ LABEL_187:
     v40 += 4;
     ++v109;
   }
-  sub_10008658(dword_1000D428);
+  sub_10008658((_DWORD)dword_1000D428);   // free(): a void * global into _DWORD
   sub_10008658(dword_1000D430);
   sub_10008658(dword_1000D434);
   sub_10008658(dword_1000D42C);

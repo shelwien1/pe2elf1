@@ -15,7 +15,7 @@ typedef int t_sub_10003D20(void *);
 static t_sub_10003D20 &__sub_10003D20 = *(t_sub_10003D20 *)0x10003D20;
 #endif
 static inline int __fwd_sub_10004A5F_sub_1000426D(int a0, void *a1) { return __sub_1000426D(a0, (_BYTE *)a1); }
-static inline void __fwd_sub_10004A5F_sub_100048F0(int a0, void *a1, void *a2) { __sub_100048F0(a0, (const void *)a1, (void *)a2); }
+static inline void __fwd_sub_10004A5F_sub_100048F0(int a0, void *a1, void *a2) { __sub_100048F0(a0, (void *)a1, (void *)a2); }
 static inline int __fwd_sub_10004A5F_sub_1000490B(int a0, void *a1) { return __sub_1000490B(a0, (void *)a1); }
 static inline unsigned int __fwd_sub_10004A5F_sub_10004993(unsigned int a0) { return __sub_10004993(a0); }
 static inline int __fwd_sub_10004A5F_sub_100050B0(int a0) { return __sub_100050B0(a0); }

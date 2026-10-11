@@ -27,12 +27,12 @@ static VBN_ENTRY char __sub_10002110(char *a1)
     {
       src_2 = (int)(v1 + 1);
       a1[v3] = 0;
-      LOBYTE(v1) = (_BYTE)a1 + v3;
-      return (char)v1;
+      LOBYTE(v1) = (_BYTE)(uintptr_t)a1 + v3;
+      return (char)(uintptr_t)v1;
     }
 LABEL_5:
     --v3;
   }
-  return (char)v1;
+  return (char)(uintptr_t)v1;
 }
 #undef src_2

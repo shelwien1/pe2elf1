@@ -2,7 +2,7 @@
 // Hex-Rays: char *__usercall sub_10001AE2@<eax>( int a1@<edx>, int a2@<ecx>, int a3@<edi>, char *a4@<esi>, char *dst, int a6, char *i_1, int a8)
 // real convention: cdecl; register parameters dropped: int a1, int a2, int a3, char *a4
 
-static inline char __fwd_sub_10001AE2_sub_10000C41(void *a0, int a1) { return __sub_10000C41((const char *)a0, a1); }
+static inline char __fwd_sub_10001AE2_sub_10000C41(void *a0, int a1) { return __sub_10000C41((char *)a0, a1); }
 #ifndef __PE_DECL___sub_10008850
 #define __PE_DECL___sub_10008850
 typedef char * t_sub_10008850(void *, unsigned __int16);
