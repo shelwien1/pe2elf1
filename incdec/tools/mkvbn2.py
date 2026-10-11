@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""mkvbn2.py: write ../vbn2.cpp, vbn's plain `u` and `r` as one standalone
-C++ file, from what incdec moved.
+"""mkvbn2.py: write vbn2/vbn_ur.cpp, vbn's plain `u` and `r` as one
+standalone C++ file, from what incdec moved.  ../vbn2.cpp began as this file
+and is maintained by hand since (vbn2 c|d).
 
   vbn2/head.cpp      the native layer: types, vbn's memory, DOS, the C runtime
   inc/<name>.inc     each moved function, in accepted.txt's order (callees
@@ -20,7 +21,7 @@ import re
 import sys
 from common import ROOT, DATA_LO, section_bytes
 
-OUT = os.path.normpath(os.path.join(ROOT, '..', 'vbn2.cpp'))
+OUT = os.path.join(ROOT, 'vbn2', 'vbn_ur.cpp')
 V2 = os.path.join(ROOT, 'vbn2')
 
 

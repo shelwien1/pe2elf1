@@ -20,9 +20,11 @@ the image, so every function can be checked on its own.
 - `fail.txt` is empty.
 - The generated C++ compiles with g++'s default diagnostics and nothing
   suppressed (no `-fpermissive`, no `-w`): no errors, no warnings.
-- `../vbn2.cpp`, generated from the same bodies, implements plain `u` and
-  `r` as a standalone program: no `vbn.exe`, no pe2elf32, no shim. It passes
-  the same gate ([Standalone](#standalone-vbn2cpp)).
+- `vbn2/vbn_ur.cpp`, generated from the same bodies, implements plain `u`
+  and `r` as a standalone program: no `vbn.exe`, no pe2elf32, no shim. It
+  passes the same gate ([Standalone](#standalone-vbn2vbn_urcpp)).
+  `../vbn2.cpp`, VBN's compressor on its own (`vbn2 c|d`), started as that
+  file.
 
 The code that is still original is the C runtime (from `0x1000704C` on) and
 the functions only other commands use (`list.txt`).
@@ -34,9 +36,9 @@ the functions only other commands use (`list.txt`).
 ./xcheck.sh           # other commands, original port vs moved build (not a gate)
 python3 tools/mklist.py   # list.txt: the scope, traced with gdb
 python3 tools/arity.py    # conv.txt's parameter counts vs the pushes at each call site
-python3 tools/mkvbn2.py   # ../vbn2.cpp: the moved functions as a standalone program
-./test.sh --exe ../vbn2   # the gate, on another build (here: vbn2)
-./vbn2/xcheck.sh      # more u/r sequences, ../vbn vs ../vbn2 (not a gate)
+python3 tools/mkvbn2.py   # vbn2/vbn_ur.cpp: the moved functions as a standalone program
+./test.sh --exe vbn2/vbn_ur   # the gate, on another build (here: vbn_ur)
+./vbn2/xcheck.sh      # more u/r sequences, ../vbn vs vbn_ur (not a gate)
 ```
 
 You need what the parent directory needs (`gcc-multilib`, the i386 glibc),
@@ -334,7 +336,8 @@ not a gate.
   `-fwrapv`, `-fno-delete-null-pointer-checks` and
   `-fno-tree-loop-distribute-patterns`, which let Hex-Rays' C keep x86's view
   of memory and arithmetic on paths the gate does not run. The gate's paths
-  no longer need them: `../vbn2.cpp` is built and tested without any of them.
+  no longer need them: `vbn2/vbn_ur.cpp` is built and tested without any of
+  them.
 
 **The DOS calls.**
 
@@ -354,17 +357,19 @@ not a gate.
   the fault locator (it names the module and symbol of a crash) is armed on
   the first probe hit.
 
-## Standalone: `../vbn2.cpp`
+## Standalone: `vbn2/vbn_ur.cpp`
 
 `tools/mkvbn2.py` assembles the moved functions into one C++ file,
-`../vbn2.cpp`, that implements plain `u` and `r` by itself. Nothing of vbn.exe
+`vbn2/vbn_ur.cpp`, that implements plain `u` and `r` by itself. (It is
+generated, not committed. `../vbn2.cpp` began as this file and is VBN's
+compressor alone now, `vbn2 c|d`; see `../README.md`.) Nothing of vbn.exe
 runs: no pe2elf32 conversion, no shim, and none of vbn's machine code.
 
 ```sh
-python3 tools/mkvbn2.py               # ../vbn2.cpp (about 8500 lines)
-g++ -m32 -O2 -o ../vbn2 ../vbn2.cpp   # or: make -C .. vbn2
-../vbn2 u archive input.txt           # or masks, *.* recursing into subdirectories
-../vbn2 r archive
+python3 tools/mkvbn2.py                         # vbn2/vbn_ur.cpp (about 8500 lines)
+g++ -m32 -O2 -o vbn2/vbn_ur vbn2/vbn_ur.cpp
+vbn2/vbn_ur u archive input.txt                 # or masks, *.* recursing into subdirectories
+vbn2/vbn_ur r archive
 ```
 
 The file has four parts:
@@ -421,8 +426,8 @@ The file has four parts:
 
 What was checked:
 
-- The gate passes on vbn2 (`./test.sh --exe ../vbn2`), on all of its runs.
-- `vbn2/xcheck.sh` runs 13 more sequences with `../vbn` and with `../vbn2`.
+- The gate passes on vbn_ur (`./test.sh --exe vbn2/vbn_ur`), on all of its runs.
+- `vbn2/xcheck.sh` runs 13 more sequences with `../vbn` and with `vbn_ur`.
   Output, exit codes and resulting files (mtimes included) are the same:
   - several files, masks, and a mask in a subdirectory;
   - names in another case;
@@ -434,14 +439,13 @@ What was checked:
   clang++ 18 at `-O2`, all pass the gate. Under `-fsanitize=undefined` the
   gate passes too, and the only reports are misaligned loads and stores:
   vbn's archive structures are packed, and x86 allows them.
-- `../test.sh` checks vbn2's `u` and `r` on `input.txt` against vbn's.
-- Under strace, vbn2 opens nothing but libc, its working directory,
+- Under strace, vbn_ur opens nothing but libc, its working directory,
   `/etc/localtime`, its inputs and its archive.
 - It runs about 15% slower than vbn's machine code. For `big.bin`, `u` and
   `r` each take 5.4 s against 4.7 s.
 
-vbn2 implements nothing else. The other commands (`b`/`B`, `l`, `p`/`c`/`d`,
-volumes, contexts) need the 25 out-of-scope functions, and vbn2 prints its
+vbn_ur implements nothing else. The other commands (`b`/`B`, `l`, `p`/`c`/`d`,
+volumes, contexts) need the 25 out-of-scope functions, and vbn_ur prints its
 usage for them. Its DOS layer is the shim's, so the shim's rules apply: the
 start directory is the root, and only 8.3 names fit.
 
@@ -464,9 +468,9 @@ start directory is the root, and only 8.3 names fit.
     addresses;
   - it reaches DOS through the shim.
 
-  `../vbn2.cpp` replaces the C runtime and DOS with native code, and keeps
+  `vbn2/vbn_ur.cpp` replaces the C runtime and DOS with native code, and keeps
   the globals at their addresses in a mapping of its own. The out-of-scope
-  functions are not in it. vbn2 is i386 code for the same reason vbn is:
+  functions are not in it. vbn_ur is i386 code for the same reason vbn is:
   the bodies keep addresses in 32-bit integers.
 - **Readability.** The bodies are Hex-Rays text plus mechanical rewrites,
   not cleaned-up source. Variable names are Hex-Rays', many of them taken
@@ -488,6 +492,6 @@ start directory is the root, and only 8.3 names fit.
 | `funcs.txt`, `vbn.txt` | Function banners and the symbol table (`tools/mkfuncs.py`, `tools/mksyms.py`) |
 | `list.txt`, `fail.txt` | Tracking files (§3 step 9) |
 | `build.sh`, `test.sh`, `step.sh`, `xcheck.sh` | Build, gate, one iteration, cross-check |
-| `vbn2/` | `../vbn2.cpp`'s own parts: `head.cpp` (native memory, DOS and C runtime), `override/` (its 11 bodies), `tail.cpp` (`main`), `xcheck.sh` (vbn vs vbn2) |
+| `vbn2/` | `vbn_ur.cpp`'s own parts: `head.cpp` (native memory, DOS and C runtime), `override/` (its 11 bodies), `tail.cpp` (`main`), `xcheck.sh` (vbn vs vbn_ur) |
 | `errors.txt` | The user-error commands the gate runs |
-| `tools/` | The generators above, plus `extract.py`, `order.py`, `regflow.py`, `mkasm.py` (`vbn.asm`), `mkcorpus.py`, `mklist.py`, `arity.py`, `mkvbn2.py` (`../vbn2.cpp`) |
+| `tools/` | The generators above, plus `extract.py`, `order.py`, `regflow.py`, `mkasm.py` (`vbn.asm`), `mkcorpus.py`, `mklist.py`, `arity.py`, `mkvbn2.py` (`vbn2/vbn_ur.cpp`) |

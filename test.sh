@@ -4,10 +4,11 @@
 #   1. ./vbn u archive input.txt  -> archive.vbn is $EXPECT bytes
 #   2. ./vbn r archive            -> run in an empty directory, input.txt comes
 #                                    back byte-exact, with its date and time
-#   3. ./vbn2 u archive input.txt -> vbn2, the standalone C++ build of `u` and
-#                                    `r`, writes the same archive, and the same
-#                                    output (the elapsed time aside)
-#   4. ./vbn2 r archive           -> restores it as in 2
+#   3. vbn2 against vbn: the archive of step 1 without its 3-byte header,
+#      preceded by the size of what it codes (the archive's title and
+#      input.txt), is a vbn2 stream; ./vbn2 d decodes it to the title and
+#      input.txt, and ./vbn2 c encodes that back to the same bytes
+#   4. ./vbn2 c input.txt, then ./vbn2 d -> input.txt back, byte-exact
 #   5. if wine and i686-w64-mingw32-gcc are installed: the original vbn.exe,
 #      with vbnshim.dll built from the same shim.c, writes a byte-identical
 #      archive.  Skipped otherwise.
@@ -70,36 +71,38 @@ else
   ok "vbn r archive: input.txt restored byte-exact, mtime $STAMP"
 fi
 
-# 3. vbn2 compresses: alone in its directory, no shim beside it.
-mkdir "$work/u2" "$work/r2"
-cp vbn2 input.txt "$work/u2/"
-touch -d "$STAMP" "$work/u2/input.txt"
-( cd "$work/u2" && ./vbn2 u archive input.txt ) > "$work/u2.log" 2>&1
+# 3. vbn2 against vbn.  An archive is a 3-byte header (the title's size in
+#    18 bits, flags, mode) and then vbn's code for the title and the data.
+mkdir "$work/c2"
+read -r b0 b1 b2 < <(od -An -tu1 -N3 "$work/u/archive.vbn")
+h=$((b0 | b1 << 8 | b2 << 16))
+title=$(( (h & 0x7FFF) | ((h & 0x70000) >> 1) ))
+n=$((title + $(stat -c %s input.txt)))
+{ printf "$(printf '\\x%02x\\x%02x\\x%02x\\x%02x' $((n & 255)) $((n >> 8 & 255)) $((n >> 16 & 255)) $((n >> 24 & 255)))"
+  tail -c +4 "$work/u/archive.vbn"; } > "$work/c2/from-vbn"
+./vbn2 d "$work/c2/from-vbn" "$work/c2/decoded" > "$work/c2.log" 2>&1 \
+  && ./vbn2 c "$work/c2/decoded" "$work/c2/again" >> "$work/c2.log" 2>&1
 rc=$?
-masked() { tr '\r' '\n' < "$1" | sed -E 's/Time = [0-9]+ sec\./Time = N sec./'; }
 if [ "$rc" -ne 0 ]; then
-  fail "vbn2 u exited $rc" "$work/u2.log"
-elif ! cmp -s "$work/u/archive.vbn" "$work/u2/archive.vbn"; then
-  fail "vbn2's archive.vbn ($(stat -c %s "$work/u2/archive.vbn" 2>/dev/null || echo 0) bytes) differs from vbn's"
-elif [ "$(masked "$work/u.log")" != "$(masked "$work/u2.log")" ]; then
-  fail "vbn2 u printed something else than vbn u"
+  fail "vbn2 exited $rc" "$work/c2.log"
+elif ! tail -c +$((title + 1)) "$work/c2/decoded" | cmp -s - input.txt; then
+  fail "vbn2 d did not decode vbn's code to its title and input.txt"
+elif ! cmp -s "$work/c2/from-vbn" "$work/c2/again"; then
+  fail "vbn2 c did not encode vbn's data as vbn does"
 else
-  ok "vbn2 u archive input.txt: the same archive.vbn as vbn's, the same output"
+  ok "vbn2 d decodes vbn's code (title $title bytes + input.txt), vbn2 c re-encodes it byte for byte"
 fi
 
-# 4. vbn2 restores.
-cp vbn2 "$work/r2/"
-cp "$work/u2/archive.vbn" "$work/r2/" 2>/dev/null
-( cd "$work/r2" && ./vbn2 r archive ) > "$work/r2.log" 2>&1
+# 4. vbn2 on input.txt alone.
+./vbn2 c input.txt "$work/c2/input.vbn2" > "$work/c2.log" 2>&1 \
+  && ./vbn2 d "$work/c2/input.vbn2" "$work/c2/input.back" >> "$work/c2.log" 2>&1
 rc=$?
 if [ "$rc" -ne 0 ]; then
-  fail "vbn2 r exited $rc" "$work/r2.log"
-elif ! cmp -s input.txt "$work/r2/input.txt"; then
-  fail "input.txt restored by vbn2 differs from the original"
-elif [ "$(date -r "$work/r2/input.txt" '+%Y-%m-%d %H:%M')" != "$STAMP" ]; then
-  fail "input.txt restored by vbn2 has mtime $(date -r "$work/r2/input.txt" '+%Y-%m-%d %H:%M'), expected $STAMP"
+  fail "vbn2 exited $rc" "$work/c2.log"
+elif ! cmp -s input.txt "$work/c2/input.back"; then
+  fail "vbn2 d did not give input.txt back"
 else
-  ok "vbn2 r archive: input.txt restored byte-exact, mtime $STAMP"
+  ok "vbn2 c input.txt: $(stat -c %s "$work/c2/input.vbn2") bytes; vbn2 d gives it back byte-exact"
 fi
 
 # 5. Reference: the original PE and the shim's Windows build, under Wine.

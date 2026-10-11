@@ -21,14 +21,14 @@ static void vbn_main()
 int main(int argc, char **argv)
 {
   if (argc < 3 || (strcmp(argv[1], "u") && strcmp(argv[1], "r"))) {
-    printf("vbn2: VBN 1.001's u and r commands\n"
-           "Usage: vbn2 u <[path/]archive> <[path/]file|mask> [...]   compress into archive.vbn (MAX mode)\n"
-           "       vbn2 r <[path/]archive>                            restore into the current directory\n");
+    printf("vbn_ur: VBN 1.001's u and r commands\n"
+           "Usage: vbn_ur u <[path/]archive> <[path/]file|mask> [...]   compress into archive.vbn (MAX mode)\n"
+           "       vbn_ur r <[path/]archive>                            restore into the current directory\n");
     return 1;
   }
   image_map();
   if (!getcwd(dos_root, sizeof dos_root)) {
-    perror("vbn2: getcwd");
+    perror("vbn_ur: getcwd");
     return 127;
   }
   dos_cwd[0] = 0;
@@ -42,7 +42,7 @@ int main(int argc, char **argv)
   for (int i = 0; i < argc; i++) {
     size_t n = strlen(argv[i]) + 1;
     if (cur + n >= ARGS_END) {
-      fprintf(stderr, "vbn2: arguments too long\n");
+      fprintf(stderr, "vbn_ur: arguments too long\n");
       return 127;
     }
     av[i] = cur;
@@ -64,7 +64,7 @@ int main(int argc, char **argv)
   run.uc_link = &back;
   makecontext(&run, vbn_main, 0);
   if (swapcontext(&back, &run) < 0) {
-    perror("vbn2: swapcontext");
+    perror("vbn_ur: swapcontext");
     return 127;
   }
   fflush(stdout);

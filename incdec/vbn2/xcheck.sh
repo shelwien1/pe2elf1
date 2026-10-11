@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# xcheck.sh: `u` and `r` beyond the gate, vbn (the port) against vbn2.
+# xcheck.sh: `u` and `r` beyond the gate, vbn (the port) against vbn_ur
+# (tools/mkvbn2.py's standalone build of the moved functions).
 #
-# test.sh --exe ../vbn2 is the gate; this runs sequences it does not: several
+# test.sh --exe vbn2/vbn_ur is the gate; this runs sequences it does not: several
 # files and masks, a mask in a subdirectory, names in another case, restoring
 # over existing files (vbn asks; stdin is empty), an empty file, a damaged
-# archive, restoring into another directory.  Each sequence runs with ../vbn and with ../vbn2 in identical trees;
+# archive, restoring into another directory.  Each sequence runs with ../vbn
+# and with vbn_ur in identical trees;
 # stdout (the Time line masked), the exit codes and every file left behind
 # (contents, and mtimes but the archive's) have to match.  `!cmd` is a shell
 # command run in the tree between the two programs' commands.
@@ -13,16 +15,16 @@ cd "$(dirname "$0")/.."
 export TZ=UTC
 STAMP='1980-01-01 00:13'
 [ -f corpus/mixed.bin ] || python3 tools/mkcorpus.py corpus
-[ -x ../vbn2 ] || { echo "missing ../vbn2 (g++ -m32 -O2 -o vbn2 vbn2.cpp)"; exit 1; }
+python3 tools/mkvbn2.py > /dev/null && g++ -m32 -O2 -o vbn2/vbn_ur vbn2/vbn_ur.cpp || exit 1
 make -s -C .. vbn libvbnshim.so || exit 1
 
 W=$(mktemp -d ./work.XXXXXX); W=$(cd "$W" && pwd)
 trap 'rm -rf "$W"' EXIT
 
-setup() {   # setup <dir> vbn|vbn2: a tree to work in, the program beside it in <dir>.bin
+setup() {   # setup <dir> vbn|vbn_ur: a tree to work in, the program beside it in <dir>.bin
   mkdir -p "$1/sub/deep" "$1.bin"
   if [ "$2" = vbn ]; then cp ../vbn ../libvbnshim.so "$1.bin/"; cp ../vbn "$1.bin/X"
-  else cp ../vbn2 "$1.bin/X"; fi
+  else cp vbn2/vbn_ur "$1.bin/X"; fi
   cp ../input.txt "$1/a.txt"; cp corpus/rep.bin "$1/b.bin"
   head -c 30000 corpus/mixed.bin > "$1/sub/c.dat"; head -c 9000 ../vbn.exe > "$1/sub/deep/d.exe"
   find "$1" -type f -exec touch -d "$STAMP" {} +
@@ -49,7 +51,7 @@ SEQS=(
 fail=0
 for s in "${SEQS[@]}"; do
   name=${s%%:*}; IFS='|' read -ra cmds <<< "${s#*:}"
-  for e in vbn vbn2; do
+  for e in vbn vbn_ur; do
     d="$W/$name.$e"; setup "$d" $e
     for c in "${cmds[@]}"; do
       echo "## $c"
@@ -59,12 +61,12 @@ for s in "${SEQS[@]}"; do
        case "${p,,}" in ./arc.*) t=-;; *) t=$(date -r "$p" '+%Y-%m-%d %H:%M');; esac
        echo "$p $(md5sum < "$p" | cut -c1-32) $t"; done) > "$d.files"
   done
-  if cmp -s "$W/$name.vbn.out" "$W/$name.vbn2.out" && cmp -s "$W/$name.vbn.files" "$W/$name.vbn2.files"; then
+  if cmp -s "$W/$name.vbn.out" "$W/$name.vbn_ur.out" && cmp -s "$W/$name.vbn.files" "$W/$name.vbn_ur.files"; then
     echo "same  $name ($(grep -c . "$W/$name.vbn.out") lines of output, $(wc -l < "$W/$name.vbn.files") files)"
   else
     echo "DIFF  $name"; fail=1
-    diff "$W/$name.vbn.out" "$W/$name.vbn2.out" | head -10
-    diff "$W/$name.vbn.files" "$W/$name.vbn2.files" | head -10
+    diff "$W/$name.vbn.out" "$W/$name.vbn_ur.out" | head -10
+    diff "$W/$name.vbn.files" "$W/$name.vbn_ur.files" | head -10
   fi
 done
 [ $fail = 0 ] && echo SAME || echo DIFFERENT

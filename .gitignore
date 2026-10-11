@@ -12,3 +12,6 @@ test.*/
 *.vbp
 *.[0-9][0-9a-z]b
 *.[0-9][0-9a-z]p
+
+# tests/vbn2.py's scratch directories
+tests/vbn2test.*/
