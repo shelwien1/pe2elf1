@@ -1,38 +1,91 @@
 # The compression algorithm of `vbn2.cpp`
 
-`vbn2.cpp` implements the compressor of **ACB 2.00c**, George M. Buyanovsky's
-*Associative Coder of Buyanovsky* (1997), in its MAX mode. VBN 1.001 is ACB
-2.00c under another name (see [Identification](#identification)). The method
-is Buyanovsky's **associative coding**.
+## What it is
 
-The past is kept as a dictionary of contexts sorted backwards, held here as a
-binary trie over the bits that precede each position. At every position the
-coder looks up the current context and collects the earlier positions whose
-contexts agree with it for at least an adaptive number of bits (the
-*associative set*), each weighted by how far it agrees. Then it codes, with an
-adaptive arithmetic coder:
+**An LZP coder: LZ77 with the match position predicted instead of sent.** In
+the classification Fenwick gave the 1994–96 newcomers (block sorting, LZP,
+ACB), this coder is of LZP's kind, *Shannon type-1 symbol ranking*:
 
-- how many bytes of the coming data the best candidate's continuation
-  predicts correctly (a match length, 0..255), with the length
-  probabilities shaped by where the other candidates part ways with the best
-  one;
-- when that length is 0, a literal byte, from an order-0 model mixed with the
-  bytes the candidates predict, minus the bytes already ruled out.
+- **Prediction.** It finds the earlier position whose preceding context
+  matches the current one longest, and predicts that the data continues as it
+  did there.
+- **Coding.** It codes how many of the next bytes that prediction gets right,
+  a match length 0..255 (a run of correct predictions). When the prediction
+  fails at once, it codes the byte itself, with the failed prediction
+  excluded.
+- **No offsets.** No position, offset or dictionary reference is ever
+  transmitted; the decoder repeats the search.
 
-The match source is never transmitted. Both sides find the same candidates in
-the same tree, so the decoder knows which earlier position the length refers
-to. In that respect it is LZ77 with the offset replaced by a deterministic,
-context-driven choice (LZP, Bloom 1996, does the same with a hash of a
-fixed-order context). ACB generalises it to a variable-order, weighted set of
-contexts, and the literal coding borrows PPM's mixing and exclusion.
+Two things are taken further than in Bloom's LZP:
 
-On `book1` of the Calgary corpus (`input.txt`), 768,771 bytes become 222,682
-(2.32 bits per byte; `bzip2 -9`: 232,598, `xz -9e`: 261,376, `gzip -9`:
-312,285), at about 0.25 MB/s, symmetric.
+- **The context search is context sorting.** LZP hashes a fixed-order
+  context. Here the longest match comes from a binary trie over the bits that
+  precede each position: the history's contexts in sorted order, as in the
+  Burrows–Wheeler transform or Yokoo's context-sorting compressor. The
+  context order is unbounded and found per position.
+- **The final coder is a PPM-style blend.** The match length and the literal
+  are coded arithmetically, with probabilities blended from up to 95
+  neighbouring contexts in that order, each weighted by how many bits of
+  context it shares with the current one. Order-0 and order-1 statistics are
+  blended in too, and failed predictions are excluded, as PPM excludes.
+
+So, although it descends from LZ77 through LZP, it is neither an
+LZ77/LZ78/LZFG dictionary coder nor PPM:
+
+- **Not a dictionary coder.** Nothing in the code refers back into the
+  history: no offsets, no phrase indices, no trie nodes (LZFG codes
+  references into a trie of earlier phrases; here the trie only serves the
+  prediction, and the decoder keeps its own copy).
+- **Not PPM proper.** It has no escapes and no context orders in the code.
+  Bytes the prediction gets right go as one length. Only the bytes it misses
+  are coded one by one, from a PPM-like blended distribution.
+
+The program it comes from is ACB 2.00c, George Buyanovsky's *Associative
+Coder of Buyanovsky* (1997); VBN 1.001 is ACB renamed (see
+[Provenance](#provenance)). Descriptions of earlier ACB versions have the
+coder say which neighbouring context continues best, as well as how far:
+Fenwick calls that "phrase ranking". ACB 2.00c always follows the
+best-matching context and codes only how far, which is LZP; the neighbours
+only shape the probabilities.
+
+## How well it does, and where that comes from
+
+`book1` of the Calgary corpus (`input.txt`, 768,771 bytes):
+
+| | bytes | bits/byte |
+|---|---|---|
+| **vbn2** (ACB 2.00c, MAX mode) | **222,682** | **2.32** |
+| ACB 1.29b, as published (Fenwick 1997) | | 2.32 |
+| LZP4, Bloom's best LZP (PPM-style literals), as published | | 2.35 |
+| PPMd var. H, order 6 (7-Zip) | ≈ 209,800 | 2.18 |
+| `bzip2 -9` (block sorting) | 232,598 | 2.42 |
+| `xz -9e` (LZ77 + context-coded literals) | 261,376 | 2.72 |
+| `gzip -9` (LZ77) | 312,285 | 3.25 |
+| vbn2, best context only: plain unbounded-order LZP, order-0 literals | 418,430 | 4.35 |
+| vbn2, no context blending for literals | 297,337 | 3.09 |
+
+The last two rows are vbn2 with parts of the final coder switched off, still
+decodable. Without the blend, the LZP skeleton alone does worse than `gzip`.
+The blend is what makes it a PPM-class compressor: within a few percent of
+PPMd and ahead of block sorting.
+
+Measured inside vbn2 on `book1`:
+- the prediction is right for the first byte 37% of the time;
+- runs average 2.2 bytes;
+- the best match averages 5.3 bytes of context;
+- 63% of the code is spent on literals (3.4 bits each), 37% on the lengths.
+
+On `vbn.exe.c`, a 371 KB decompiled C file with long repeats:
+- runs average 7.8 bytes;
+- lengths take half the code;
+- vbn2 makes 41,623 bytes, against 40,396 for PPMd order 16 and 46,011 for
+  `bzip2 -9`.
 
 ## Contents
 
-- [Identification](#identification)
+- [What it is](#what-it-is)
+- [How well it does, and where that comes from](#how-well-it-does-and-where-that-comes-from)
+- [Provenance](#provenance)
 - [The stream](#the-stream)
 - [The coding loop](#the-coding-loop)
 - [The window](#the-window)
@@ -46,53 +99,20 @@ On `book1` of the Calgary corpus (`input.txt`), 768,771 bytes become 222,682
 - [Relation to the published ACB descriptions](#relation-to-the-published-acb-descriptions)
 - [Sources](#sources)
 
-## Identification
+## Provenance
 
-`vbn.exe`'s 32-bit image is the protected-mode image of `ACB.EXE` from the
-ACB 2.00c distribution (Internet Archive item `acb-ver-2.00c`, `ACB.EXE`
-71,849 bytes, md5 `277af97270a9394a833879e6b4f26821`), rebased from 0 to
-`0x10000000`. Comparing the two byte for byte over 53,912 bytes gives:
+VBN 1.001 is ACB 2.00c under another name. `vbn.exe`'s image is that of
+`ACB.EXE` 2.00c (Internet Archive item `acb-ver-2.00c`), rebased by
+0x10000000. Apart from the rebase, they differ only in:
+- the DOS calls the PE repackaging redirects;
+- the program's name in the strings;
+- the replaced banner and blanked shareware registration text;
+- a disabled self-check of that banner.
 
-| | bytes |
-|---|---|
-| identical | 51,170 |
-| differ only in an absolute address's top byte (the rebase: `0x10` vs `0x00`) | 1,788 |
-| differ otherwise, in 75 runs | 954 |
-
-The 954 are, in full:
-
-- 41 DOS `int 21h` call sites, which the PE repackaging redirects to
-  `vbnshim.dll`;
-- the program's name in its strings, `ACB`/`acb` → `vbn`;
-- the banner `Associative Coder of Buyanovsky / ACB ver.2.00c (Shareware)
-  Copyright(C) 1994-97 George Buyanovsky 04.25.1997`, replaced by `vbn
-  ver.1.001 (freeeware)`, and the shareware registration text, blanked;
-- one instruction pair in `coder_run`: before coding, ACB checksums the
-  first 1,505 bytes of its banner and help text and stops with "ACB.EXE CRC
-  Error !!!" if they changed. In VBN the comparison's constant is changed and
-  its `je` made a `jmp`, so the check always passes. (The coder then reuses
-  that banner's memory as its code buffer.)
-
-Every function `vbn2.cpp` was decompiled from (`code_symbol`, `code_flush`,
-`code_literal`, `code_match`, the two searches, the walks, `tree_insert`,
-`tree_rebuild`, `code_window`, `coder_run`, `code_buffer_io`,
-`len_model_add`) is in `ACB.EXE` byte for byte, apart from the rebase and
-that disabled check (vbn2 has no check). VBN's help text is ACB 2.00c's
-(which is also its `README.TXT`) with the name changed: the "TRAINABLE
-CHANNEL" mode, B/b/u for FAST/NORMAL/MAX, `*.acp` for error-protected
-archives, the 64 MB file, 4096-file and 256 KB title limits, Pentium-133 with
-16 MB. The README also gives the window: "When the length of the channel
-background reaches 1671 Kb, the size of the context file stabilizes"; that is
-0x198000 = 1,671,168 bytes.
-
-The lineage shows in Buyanovsky's own published code as well. The C program
-accompanying his 1994 article "Associative coding" (*Monitor* 8/94: `ac.c`,
-"Demonstration of the data compression stream algorithm by the associative
-coding method", dated 08.08.1994) contains `WriteEnd`, which is `code_flush`
-statement for statement; `CodAH_D`, whose decoder reads bits and
-renormalises as `code_symbol` does; `Stk` and `InitTabAH`, the ring buffers
-and adaptive frequency tables behind the literal and length models; and
-`LoadLst`, the "funnel of analogies" that the candidate search grew out of.
+Every function vbn2 was decompiled from is in `ACB.EXE` unchanged. The
+arithmetic coder and the adaptive frequency tables go back further, to the
+program Buyanovsky published with his 1994 article "Associative coding"
+(`WriteEnd` there is `code_flush` here).
 
 ## The stream
 
@@ -414,22 +434,20 @@ code:
 - **ACB 2.00c (1997), this code.** It keeps the weighted associative set but
   changes the rest:
   - a binary trie over context bits replaces the sorted array;
-  - no rank is coded: the best-weighted context is the match source, and
-    the other members of the set shape the length and literal
-    probabilities instead;
+  - no rank is coded: the best-weighted context is the match source (the
+    coder becomes LZP), and the other members of the set shape the length
+    and literal probabilities instead;
   - the 1.6 MB window serves both the archiver and its "trainable channel"
     (priming the coder with earlier data).
 
-Close relatives:
-
-- **LZP** (Bloom, 1996), which also predicts a match position from the
-  context and codes only its length, but with a single fixed-order hashed
-  context;
-- **PPM**, for mixing context predictions into the literal model, and for
-  exclusion;
-- **BWT and context sorting**, for the sorted backwards contexts;
-- **DMC**, under which Buyanovsky himself said ACB "can be classified", for a
-  context structure that grows one step each time a state recurs.
+Fenwick (1997) put ACB together with block sorting and Bloom's LZP in one
+class, symbol ranking, after Shannon's 1951 prediction experiments. A
+predictor ranks what may come next from the context, and the coder codes how
+the actual data relates to that ranking. ACB 2.00c's coder is the simplest,
+type-1 form: is the top prediction right, and for how many bytes. The rest of
+the ranking is kept for the probabilities. (Buyanovsky himself said ACB "can
+be classified" under DMC, whose models also grow a step each time a context
+recurs, as the trie here does.)
 
 ## Sources
 
@@ -446,3 +464,17 @@ Close relatives:
   compression*, MSc thesis, Montana State University, 1999,
   <https://scholarworks.montana.edu/items/bab4ae38-1145-4f77-ba3e-276537dae077>.
 - C. Bloom, "LZP: a new data compression algorithm", *DCC* 1996.
+- P. M. Fenwick, "Symbol ranking text compressors: review and
+  implementation", 1997,
+  <https://www.cs.auckland.ac.nz/~peter-f/FTPfiles/1997%20Sym%20Rank%20Compression.pdf>:
+  block sorting, LZP and ACB as symbol-ranking compressors; LZP as "a direct
+  implementation of a 'Shannon type 1' compressor"; the published ACB 1.29b
+  and LZP results quoted above.
+- P. M. Fenwick, "Symbol Ranking Text Compression with Shannon Recodings",
+  *J.UCS* 3(2), 1997, 70–85,
+  <https://www.jucs.org/jucs_3_2/symbol_ranking_text_compression.html>.
+- H. Yokoo, M. Takahashi, "Data compression by context sorting", *IEICE
+  Trans. Fundamentals* E79-A(5), 1996: prediction from the neighbours of the
+  current context in sorted order, kept in a binary tree.
+- J. G. Cleary, W. J. Teahan, I. H. Witten, "Unbounded length contexts for
+  PPM", *The Computer Journal* 40(2/3), 1997 (PPM*).

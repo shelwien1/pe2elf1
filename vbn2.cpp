@@ -10,8 +10,12 @@
 // for the data VBN puts in an archive (its file table, then the files), vbn2 c
 // writes exactly the code that follows the archive's 3-byte header.
 //
-// VBN 1.001 is ACB 2.00c, George Buyanovsky's Associative Coder of Buyanovsky
-// (1997), renamed: ALGORITHM.md describes the algorithm and the evidence.
+// The algorithm is an LZP-type predictive coder: the match source is
+// predicted from the longest earlier match of the current context, found
+// among the history's sorted contexts, and only match lengths and literals
+// are coded, with PPM-style blended probabilities.  VBN 1.001 is ACB 2.00c,
+// George Buyanovsky's Associative Coder of Buyanovsky (1997), renamed.  See
+// ALGORITHM.md.
 //
 // The functions are VBN's own, decompiled from vbn.exe: incdec/ moved the ones
 // plain `vbn u` and `vbn r` run out of the program one at a time and verified

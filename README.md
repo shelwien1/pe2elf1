@@ -17,9 +17,12 @@ original x86 bytes. Only the DOS services are reimplemented.
 `DT_RUNPATH=$ORIGIN`. Running needs only the i386 glibc runtime
 (`/lib/ld-linux.so.2`; Debian/Ubuntu: `libc6-i386`).
 
-VBN 1.001 turns out to be ACB 2.00c, George Buyanovsky's *Associative Coder
-of Buyanovsky* (1997), renamed; [ALGORITHM.md](ALGORITHM.md) describes its
-compression algorithm and gives the evidence.
+VBN's compressor is an LZP-type predictive coder. The match source is
+predicted from the longest earlier match of the current context, found among
+the history's sorted contexts, and only match lengths and literals are coded,
+with PPM-style blended probabilities. VBN 1.001 turns out to be ACB 2.00c,
+George Buyanovsky's *Associative Coder of Buyanovsky* (1997), renamed.
+[ALGORITHM.md](ALGORITHM.md) describes the algorithm.
 
 `vbn2` is VBN's compressor on its own: the coder, decompiled from `vbn.exe`
 into standalone C++ (`vbn2.cpp`, [below](#vbn2-vbns-compressor-standalone-vbn2cpp)),
@@ -67,7 +70,7 @@ streams either way.
 | `pe2elf32/` | The converter, copied unmodified from [shelwien1/pe2elf](https://github.com/shelwien1/pe2elf/tree/claude/pe2elf32-implementation-zr219x) at `fe2cb91` |
 | `vbn`, `libvbnshim.so` | Build outputs |
 | `vbn2.cpp` | VBN's compressor as one standalone C++ file (`vbn2 c\|d input output`) |
-| `ALGORITHM.md` | The compression algorithm (ACB 2.00c's associative coding), and how VBN was identified |
+| `ALGORITHM.md` | The compression algorithm: LZP-type prediction over sorted contexts, PPM-style blending (ACB 2.00c) |
 | `tests/` | `vbn2`'s gate (`tests/vbn2.py`), its inputs and reference streams |
 | `input.txt` | Test input: `book1` from the Calgary corpus |
 | `test.sh` | The end-to-end test above |
