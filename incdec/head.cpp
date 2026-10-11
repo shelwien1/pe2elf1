@@ -29,6 +29,10 @@ typedef unsigned long  DWORD;
 typedef long           LONG;
 typedef int            BOOL;
 #include "defs.h"
+// MSVC's calling-convention keywords, which Hex-Rays prints in function
+// pointer types (qsort's comparator parameter).
+#define __cdecl    __attribute__((cdecl))
+#define __stdcall  __attribute__((stdcall))
 
 // Intrinsics the bodies use, with the x86 semantics the decompiler assumed.
 // bsr leaves its destination unchanged for a zero source (as the CPU does).

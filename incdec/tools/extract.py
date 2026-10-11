@@ -452,6 +452,26 @@ def relax(ty):
     return ty
 
 
+def forwarder(name, callee, cc):
+    """A moved callee is called through an inline forwarder whose pointer
+    parameters are void *, for the reason relax() gives."""
+    args, casts = [], []
+    for k, p in enumerate(cc['params']):
+        if p.strip() == '...':
+            sys.exit(f'{name}: forwarder for variadic {callee}')
+        t, n, ext = split_decl(p)
+        t = t + ext if n else p
+        a = f'a{k}'
+        if '*' in t and '(' not in t:
+            args.append(f'void *{a}'); casts.append(f'({t}){a}')
+        else:
+            args.append(f'{t} {a}'); casts.append(a)
+    ret = cc['ret']
+    call = f'__{callee}({", ".join(casts)})'
+    return (f"static inline {ret} __fwd_{name}_{callee}({', '.join(args) or 'void'}) "
+            f"{{ {'' if ret == 'void' else 'return '}{call}; }}")
+
+
 def callee_decl(callee, c, alias):
     ret = c['ret']
     params = []
@@ -488,17 +508,45 @@ def sym_extent(name, esz):
 IDENT_OK = re.compile(r'^[A-Za-z_]\w*$')
 
 
+def code_spans(line):
+    """(start, end) of the parts of one line that are code: outside string and
+    character literals, and before a // comment."""
+    spans, pos = [], 0
+    for a, b in literal_spans(line) + [(len(line), len(line))]:
+        if a < pos:
+            continue
+        c = line.find('//', pos, a)
+        if c >= 0:
+            spans.append((pos, c))
+            break
+        spans.append((pos, a))
+        pos = b
+    return spans
+
+
+def sub_code(pat, repl, line):
+    """pat.sub(repl, ...) applied to the code of one line only."""
+    out, pos = [], 0
+    for a, b in code_spans(line):
+        out += [line[pos:a], pat.sub(repl, line[a:b])]
+        pos = b
+    return ''.join(out) + line[pos:]
+
+
 def sanitize_names(lines, names):
-    """Hex-Rays names some variables after strings (`_Data_size__%_10u_n`)."""
-    text = '\n'.join(lines)
+    """Hex-Rays names some variables after strings (`_Data_size__%_10u_n`, and
+    `.` for a pointer into "."): rename them where they are code, as whole
+    tokens (`.` is also member access, `...` a parameter list)."""
     for bad in sorted(names, key=len, reverse=True):
+        text = '\n'.join(lines)
         good = re.sub(r'\W', '_', bad)
         if good[0].isdigit():
             good = '_' + good
         while re.search(r'\b' + re.escape(good) + r'\b', text):
             good += '_'
-        text = text.replace(bad, good)
-    return text.split('\n')
+        pat = re.compile(r'(?<![\w.])' + re.escape(bad) + r'(?![\w.])')
+        lines = [sub_code(pat, good, l) for l in lines]
+    return lines
 
 
 def emit(name, accepted):
@@ -627,33 +675,21 @@ def emit(name, accepted):
     gtypes = {}
     # functions
     called = sorted(set(re.findall(r'\bsub_[0-9A-F]{8}\b', full)))
+    self_fwd = None
     for callee in called:
-        if callee == name:
-            defines.append((callee, f'__{name}'))
-            continue
         cc = CONV.get(callee)
         if cc is None:
             sys.exit(f'{name}: no conv.txt entry for {callee}')
+        if callee == name:
+            # a recursive call: the same forwarder, after a forward declaration
+            self_fwd = forwarder(name, callee, cc)
+            defines.append((callee, f'__fwd_{name}_{callee}'))
+            continue
         # asm-convention callees (the early exit) are always entered through
         # their PE address, which reaches the moved copy through its patch.
         if callee in accepted and cc['conv'] not in ('regs', 'asm'):
-            fwd = f'__fwd_{name}_{callee}'
-            args, casts = [], []
-            for k, p in enumerate(cc['params']):
-                if p.strip() == '...':
-                    sys.exit(f'{name}: forwarder for variadic {callee}')
-                t, n, ext = split_decl(p)
-                t = t + ext if n else p
-                a = f'a{k}'
-                if '*' in t and '(' not in t:
-                    args.append(f'void *{a}'); casts.append(f'({t}){a}')
-                else:
-                    args.append(f'{t} {a}'); casts.append(a)
-            ret = cc['ret']
-            call = f'__{callee}({", ".join(casts)})'
-            refs.append(f"static inline {ret} {fwd}({', '.join(args) or 'void'}) "
-                        f"{{ {'' if ret == 'void' else 'return '}{call}; }}")
-            defines.append((callee, fwd))
+            refs.append(forwarder(name, callee, cc))
+            defines.append((callee, f'__fwd_{name}_{callee}'))
         else:
             if cc['conv'] == 'regs':
                 sys.exit(f'{name}: calls {callee}, which has a register interface; needs an override')
@@ -685,6 +721,8 @@ def emit(name, accepted):
         if g in local_names and not re.search(r'::\s*' + re.escape(g) + r'\b', full):
             continue                                     # only the local of the same name
         base, dims = globals_type(g, tail)
+        if base == '_UNKNOWN' and not dims:
+            dims = '[]'          # bytes at an address: its bare name is that address
         esz = type_size(base)
         if not dims and '*' not in base and re.search(
                 (r'::\s*' if g in local_names else r'(?<![\w.>])') + re.escape(g) + r'\s*\[', full):
@@ -726,8 +764,10 @@ def emit(name, accepted):
            '']
     out += refs
     out += [f'#define {a} {b}' for a, b in defines]
-    out += ['', f'PROBE_DECL(__{name})',
-            f"static {ATTR[c['conv']]}VBN_ENTRY {ret} __{name}({', '.join(params) or 'void'})", '{',
+    proto = f"static {ATTR[c['conv']]}VBN_ENTRY {ret} __{name}({', '.join(params) or 'void'})"
+    if self_fwd:
+        out += [proto + ';', self_fwd]
+    out += ['', f'PROBE_DECL(__{name})', proto, '{',
             f'  PROBE_HIT(__{name});']
     out += reg_lines + frame_lines
     out += full.split('\n')

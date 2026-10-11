@@ -3,3 +3,4 @@ sub_10005989	sub_10006CB0(4, (_DWORD *)(8 * n2_1 + 268490072), v23, n55 - n2_1, 
 sub_100056C4	sub_1000703B(v6, 0);\n      sub_10005989(::dst);	vbn_restartable((void *)0x10005989, (int)(uintptr_t)::dst);   // sub_1000703B(0); sub_10005989(dst): see head.cpp
 sub_100056C4	sub_1000703B(v6, 0);\n      sub_100053E2(::dst);	vbn_restartable((void *)0x100053E2, (int)(uintptr_t)::dst);   // sub_1000703B(0); sub_100053E2(dst): see head.cpp
 sub_100056C4	sub_100079DA(aPassed10uBytes);	sub_100079DA(aPassed10uBytes, ((unsigned int)(::n8_1 - n8_3) >> 3) + v19);
+sub_100006FA	v5 = sub_100079DA(aFileSIsTooLarg);	v5 = sub_100079DA(aFileSIsTooLarg, (char *)i + 30);   // push i+1Eh: the name
