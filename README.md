@@ -129,3 +129,14 @@ These are in the shim's shared code, so the Windows build behaves the same:
 
 VBN itself refuses inputs that are too small ("The file(s) is (are) too
 small.").
+
+## Decompiling `u` and `r` (`incdec/`)
+
+`incdec/` moves vbn's own code for the plain `u` and `r` commands out of the
+image and into C++, following `incdec/incdec.md`:
+
+- 43 functions, taken from the Hex-Rays output;
+- each one is patched in at its original address, then checked by an
+  end-to-end gate (archives and restores byte-identical to this port's).
+
+See [incdec/README.md](incdec/README.md).
