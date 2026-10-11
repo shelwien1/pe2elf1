@@ -115,7 +115,7 @@
 1000882A	sub_1000882A	stdcall	12	-	char|char *j, char *ja, int a3	regflow: no register inputs
 10008850	sub_10008850	cdecl	0	0,1,2,3,4	char *|char *dst_2, unsigned __int16 count_1	regflow: no register inputs
 100088D0	sub_100088D0	cdecl	0	-	int|int a1	regflow: no register inputs
-100088EA	sub_100088EA	cdecl	0	-	int|	getdisk; the `this` is an artefact
+100088EA	sub_100088EA	cdecl	0	0	int|	getdisk; the `this` is an artefact
 10008931	sub_10008931	cdecl	0	-	char|char *src, _BYTE *a2, char *src_1	regflow: no register inputs
 10008A7E	sub_10008A7E	cdecl	0	-	int|int i_5, _BYTE *a2, _BYTE *a3, _BYTE *a4, _BYTE *a5	regflow: no register inputs
 10008BB1	sub_10008BB1	cdecl	0	-	int|int i, _BYTE *a2, _BYTE *a3, _BYTE *a4, _BYTE *a5	regflow: no register inputs
