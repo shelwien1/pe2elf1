@@ -106,7 +106,7 @@
 10008537	sub_10008537	cdecl	0	-	int|	regflow: no register inputs
 100085EF	sub_100085EF	cdecl	0	0,1,2,3	int|__int16 a5	regflow: no register inputs
 10008617	sub_10008617	cdecl	0	0,1	int|int a3	regflow: no register inputs
-1000862D	sub_1000862D	cdecl	0	-	void|	regflow: no register inputs
+1000862D	sub_1000862D	cdecl	0	-	int|char *path	mkdir: chdir's tail reads the path at [esp+4]
 10008635	sub_10008635	cdecl	0	0	int|char a2	regflow live-in: eax
 1000864D	sub_1000864D	cdecl	0	0	int|	regflow live-in: eax
 10008658	sub_10008658	cdecl	0	-	_DWORD|_DWORD p	jmp sub_100092F4 (free); Hex-Rays types

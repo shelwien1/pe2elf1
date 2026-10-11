@@ -732,12 +732,19 @@ def emit(name, accepted):
             # out as parallel arrays: j[6 * n]); an extent g++ believes lets it
             # assume the index is in range.  Run every array to the image's end.
             dims = f'[{(0x14000000 - va_g) // max(1, esz)}]'
-        if g not in local_names:
-            gtypes[g] = base + dims
         alias = f'__{name}_{g}' if IDENT_OK.match(g) else f'__{name}_g{g}'
         refs.append(f"typedef {base} t{alias}{dims};\n"
                     f"static t{alias} &{alias} = *(t{alias} *)0x{va_g:08X};")
-        defines.append((g, alias))
+        if IDENT_OK.match(g):
+            defines.append((g, alias))
+        else:
+            # Hex-Rays named it after its string ("123456789012345"), which
+            # no macro can be called: rename its uses in the code instead.
+            pat = re.compile(r'(?<![\w.])' + re.escape(g) + r'(?![\w.])')
+            full = '\n'.join(sub_code(pat, alias, l) for l in full.split('\n'))
+            g = alias
+        if g not in local_names:
+            gtypes[g] = base + dims
 
     code_only = '\n'.join(re.sub(r'//.*$', '', l) for l in full.split('\n'))
     # 8-bit comparisons, with the types of locals, parameters and globals known

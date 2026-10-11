@@ -19,6 +19,7 @@ deps = {}
 for n in acc:
     ovr = os.path.join(ROOT, 'override', n + '.inc')
     text = open(ovr).read() if os.path.exists(ovr) else '\n'.join(src[funcs[n]['start'] - 1:funcs[n]['end']])
+    text = re.sub(r'//[^\n]*', '', text)          # names in comments are not calls
     deps[n] = {d for d in re.findall(r'\bsub_[0-9A-F]{8}\b', text) if d in acc and d != n}
 out, done = [], set()
 def visit(n, stack=()):

@@ -1,0 +1,5 @@
+# Commands the gate (test.sh) also runs, each in an empty directory: user errors
+# that plain `u` and `r` have to handle.  stdout and the exit code are compared
+# with the reference; tools/mklist.py traces them with the corpus.
+r archive
+u archive nosuch.txt

@@ -2,11 +2,7 @@
 // Hex-Rays: char __cdecl sub_100003ED(_BYTE *src, unsigned int n0xAB)
 // real convention: cdecl
 
-#ifndef __PE_DECL___sub_1000128F
-#define __PE_DECL___sub_1000128F
-typedef int t_sub_1000128F(void);
-static t_sub_1000128F &__sub_1000128F = *(t_sub_1000128F *)0x1000128F;
-#endif
+static inline int __fwd_sub_100003ED_sub_1000128F(void) { return __sub_1000128F(); }
 #ifndef __PE_DECL___sub_10007214
 #define __PE_DECL___sub_10007214
 typedef BOOL t_sub_10007214(void *);
@@ -14,7 +10,7 @@ static t_sub_10007214 &__sub_10007214 = *(t_sub_10007214 *)0x10007214;
 #endif
 typedef char t__sub_100003ED_p_n10[67059306];
 static t__sub_100003ED_p_n10 &__sub_100003ED_p_n10 = *(t__sub_100003ED_p_n10 *)0x1000C196;
-#define sub_1000128F __sub_1000128F
+#define sub_1000128F __fwd_sub_100003ED_sub_1000128F
 #define sub_10007214 __sub_10007214
 #define p_n10 __sub_100003ED_p_n10
 

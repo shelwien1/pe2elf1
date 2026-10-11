@@ -32,6 +32,9 @@ MANUAL = {
     '10008439': ('cdecl', 'int|char *a1, char *a2', 'rename: mov edi,[ebp+0Ch], edx=[ebp+8]'),
     # __thiscall in Hex-Rays, but ECX is never read: getdisk().
     '100088EA': ('cdecl', 'int|', 'getdisk; the `this` is an artefact', [0]),
+    # mkdir: `mov ah,39h` and a jump into chdir's tail (sub_10008617), which
+    # passes [esp+4] in EDX and returns EAX; Hex-Rays gave it neither.
+    '1000862D': ('cdecl', 'int|char *path', 'mkdir: chdir\'s tail reads the path at [esp+4]'),
     # Bannerless entry points: one `jmp` each into malloc / free.
     '10007138': ('cdecl', '_DWORD|_DWORD size', 'jmp sub_10009264 (malloc); Hex-Rays types'),
     '10008658': ('cdecl', '_DWORD|_DWORD p', 'jmp sub_100092F4 (free); Hex-Rays types'),

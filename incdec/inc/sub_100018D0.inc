@@ -2,11 +2,7 @@
 // Hex-Rays: int __cdecl sub_100018D0(unsigned int n13369312)
 // real convention: cdecl
 
-#ifndef __PE_DECL___sub_1000128F
-#define __PE_DECL___sub_1000128F
-typedef int t_sub_1000128F(void);
-static t_sub_1000128F &__sub_1000128F = *(t_sub_1000128F *)0x1000128F;
-#endif
+static inline int __fwd_sub_100018D0_sub_1000128F(void) { return __sub_1000128F(); }
 #ifndef __PE_DECL___sub_10007138
 #define __PE_DECL___sub_10007138
 typedef _DWORD t_sub_10007138(_DWORD);
@@ -42,7 +38,7 @@ typedef int t__sub_100018D0_i_0[12941888];
 static t__sub_100018D0_i_0 &__sub_100018D0_i_0 = *(t__sub_100018D0_i_0 *)0x10EA1700;
 typedef int t__sub_100018D0_j[12941892];
 static t__sub_100018D0_j &__sub_100018D0_j = *(t__sub_100018D0_j *)0x10EA16F0;
-#define sub_1000128F __sub_1000128F
+#define sub_1000128F __fwd_sub_100018D0_sub_1000128F
 #define sub_10007138 __sub_10007138
 #define sub_10007214 __sub_10007214
 #define sub_10008658 __sub_10008658

@@ -5,11 +5,7 @@
 static inline int __fwd_sub_10001DAB_sub_100002FA(char a0, int a1) { return __sub_100002FA(a0, a1); }
 static inline int __fwd_sub_10001DAB_sub_10000313(int a0, int a1, int a2) { return __sub_10000313(a0, a1, a2); }
 static inline int __fwd_sub_10001DAB_sub_1000034D(int a0) { return __sub_1000034D(a0); }
-#ifndef __PE_DECL___sub_1000128F
-#define __PE_DECL___sub_1000128F
-typedef int t_sub_1000128F(void);
-static t_sub_1000128F &__sub_1000128F = *(t_sub_1000128F *)0x1000128F;
-#endif
+static inline int __fwd_sub_10001DAB_sub_1000128F(void) { return __sub_1000128F(); }
 static inline char * __fwd_sub_10001DAB_sub_10001AE2(void *a0, int a1, void *a2, int a3) { return __sub_10001AE2((char *)a0, a1, (char *)a2, a3); }
 static inline int __fwd_sub_10001DAB_sub_10001B38(void *a0) { return __sub_10001B38((char *)a0); }
 #ifndef __PE_DECL___sub_10007214
@@ -70,7 +66,7 @@ static t__sub_10001DAB_n2 &__sub_10001DAB_n2 = *(t__sub_10001DAB_n2 *)0x1000C150
 #define sub_100002FA __fwd_sub_10001DAB_sub_100002FA
 #define sub_10000313 __fwd_sub_10001DAB_sub_10000313
 #define sub_1000034D __fwd_sub_10001DAB_sub_1000034D
-#define sub_1000128F __sub_1000128F
+#define sub_1000128F __fwd_sub_10001DAB_sub_1000128F
 #define sub_10001AE2 __fwd_sub_10001DAB_sub_10001AE2
 #define sub_10001B38 __fwd_sub_10001DAB_sub_10001B38
 #define sub_10007214 __sub_10007214

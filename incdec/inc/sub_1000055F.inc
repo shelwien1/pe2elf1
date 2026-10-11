@@ -2,11 +2,7 @@
 // Hex-Rays: int __usercall sub_1000055F@<eax>( void *a1@<ecx>, char *a2@<edi>, char *a3@<esi>, const char *dst_4, char *dst_3, _BYTE *a6, _BYTE *a7, _DWORD *a8)
 // real convention: cdecl; register parameters dropped: void *a1, char *a2, char *a3
 
-#ifndef __PE_DECL___sub_1000128F
-#define __PE_DECL___sub_1000128F
-typedef int t_sub_1000128F(void);
-static t_sub_1000128F &__sub_1000128F = *(t_sub_1000128F *)0x1000128F;
-#endif
+static inline int __fwd_sub_1000055F_sub_1000128F(void) { return __sub_1000128F(); }
 static inline int __fwd_sub_1000055F_sub_10001B38(void *a0) { return __sub_10001B38((char *)a0); }
 #ifndef __PE_DECL___sub_10007214
 #define __PE_DECL___sub_10007214
@@ -42,7 +38,7 @@ typedef char t__sub_1000055F_aInvalidPath[67059287];
 static t__sub_1000055F_aInvalidPath &__sub_1000055F_aInvalidPath = *(t__sub_1000055F_aInvalidPath *)0x1000C1A9;
 typedef char t__sub_1000055F_src[67059274];
 static t__sub_1000055F_src &__sub_1000055F_src = *(t__sub_1000055F_src *)0x1000C1B6;
-#define sub_1000128F __sub_1000128F
+#define sub_1000128F __fwd_sub_1000055F_sub_1000128F
 #define sub_10001B38 __fwd_sub_1000055F_sub_10001B38
 #define sub_10007214 __sub_10007214
 #define sub_10007260 __sub_10007260

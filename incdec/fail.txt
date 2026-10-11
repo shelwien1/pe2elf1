@@ -1,0 +1,3 @@
+# <name>  <short reason / symptom>  -- incdec.md §3 step 9: functions attempted that
+# crash or give wrong output for a reason not yet found.  None: every function in
+# scope (list.txt) is moved and the gate passes.

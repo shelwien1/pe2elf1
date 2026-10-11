@@ -10,11 +10,7 @@ static inline int __fwd_sub_100012A8_sub_10000369(int a0, int a1) { return __sub
 static inline char __fwd_sub_100012A8_sub_100003ED(void *a0, unsigned int a1) { return __sub_100003ED((_BYTE *)a0, a1); }
 static inline int __fwd_sub_100012A8_sub_1000055F(void *a0, void *a1, void *a2, void *a3, void *a4) { return __sub_1000055F((const char *)a0, (char *)a1, (_BYTE *)a2, (_BYTE *)a3, (_DWORD *)a4); }
 static inline char __fwd_sub_100012A8_sub_10000C41(void *a0, int a1) { return __sub_10000C41((const char *)a0, a1); }
-#ifndef __PE_DECL___sub_1000128F
-#define __PE_DECL___sub_1000128F
-typedef int t_sub_1000128F(void);
-static t_sub_1000128F &__sub_1000128F = *(t_sub_1000128F *)0x1000128F;
-#endif
+static inline int __fwd_sub_100012A8_sub_1000128F(void) { return __sub_1000128F(); }
 static inline int __fwd_sub_100012A8_sub_100018D0(unsigned int a0) { return __sub_100018D0(a0); }
 static inline char * __fwd_sub_100012A8_sub_10001AE2(void *a0, int a1, void *a2, int a3) { return __sub_10001AE2((char *)a0, a1, (char *)a2, a3); }
 static inline int __fwd_sub_100012A8_sub_10001B38(void *a0) { return __sub_10001B38((char *)a0); }
@@ -145,7 +141,7 @@ static t__sub_100012A8_aS &__sub_100012A8_aS = *(t__sub_100012A8_aS *)0x1000C267
 #define sub_100003ED __fwd_sub_100012A8_sub_100003ED
 #define sub_1000055F __fwd_sub_100012A8_sub_1000055F
 #define sub_10000C41 __fwd_sub_100012A8_sub_10000C41
-#define sub_1000128F __sub_1000128F
+#define sub_1000128F __fwd_sub_100012A8_sub_1000128F
 #define sub_100018D0 __fwd_sub_100012A8_sub_100018D0
 #define sub_10001AE2 __fwd_sub_100012A8_sub_10001AE2
 #define sub_10001B38 __fwd_sub_100012A8_sub_10001B38

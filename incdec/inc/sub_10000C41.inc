@@ -2,11 +2,7 @@
 // Hex-Rays: char __cdecl sub_10000C41(const char *i_1, int a2)
 // real convention: cdecl
 
-#ifndef __PE_DECL___sub_1000128F
-#define __PE_DECL___sub_1000128F
-typedef int t_sub_1000128F(void);
-static t_sub_1000128F &__sub_1000128F = *(t_sub_1000128F *)0x1000128F;
-#endif
+static inline int __fwd_sub_10000C41_sub_1000128F(void) { return __sub_1000128F(); }
 #ifndef __PE_DECL___sub_10007214
 #define __PE_DECL___sub_10007214
 typedef BOOL t_sub_10007214(void *);
@@ -19,14 +15,14 @@ static t_sub_10008617 &__sub_10008617 = *(t_sub_10008617 *)0x10008617;
 #endif
 #ifndef __PE_DECL___sub_1000862D
 #define __PE_DECL___sub_1000862D
-typedef void t_sub_1000862D(void);
+typedef int t_sub_1000862D(void *);
 static t_sub_1000862D &__sub_1000862D = *(t_sub_1000862D *)0x1000862D;
 #endif
 typedef char t__sub_10000C41_aCanTCreateDire[67059175];
 static t__sub_10000C41_aCanTCreateDire &__sub_10000C41_aCanTCreateDire = *(t__sub_10000C41_aCanTCreateDire *)0x1000C219;
 typedef char t__sub_10000C41_asc_1000C1E2[67059230];
 static t__sub_10000C41_asc_1000C1E2 &__sub_10000C41_asc_1000C1E2 = *(t__sub_10000C41_asc_1000C1E2 *)0x1000C1E2;
-#define sub_1000128F __sub_1000128F
+#define sub_1000128F __fwd_sub_10000C41_sub_1000128F
 #define sub_10007214 __sub_10007214
 #define sub_10008617 __sub_10008617
 #define sub_1000862D __sub_1000862D
@@ -77,7 +73,7 @@ static VBN_ENTRY char __sub_10000C41(char *i_1, int a2)
         v15[v6] = 0;
       }
       while ( !sub_10008617((int)v15) );
-      sub_1000862D();
+      v7 = sub_1000862D((char *)v15);   // push offset var_10: mkdir(v15), result in EAX
       if ( v7 )
         break;
       if ( sub_10008617((int)v15) )

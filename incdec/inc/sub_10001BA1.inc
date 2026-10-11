@@ -2,17 +2,9 @@
 // Hex-Rays: unsigned int __usercall sub_10001BA1@<eax>(int a1@<edx>, int a2@<ecx>, int p_j@<edi>, char *n13369312@<esi>)
 // real convention: cdecl; register parameters dropped: int a1, int a2, int p_j, char *n13369312
 
-#ifndef __PE_DECL___sub_10000458
-#define __PE_DECL___sub_10000458
-typedef int t_sub_10000458(unsigned int, unsigned int);
-static t_sub_10000458 &__sub_10000458 = *(t_sub_10000458 *)0x10000458;
-#endif
+static inline int __fwd_sub_10001BA1_sub_10000458(unsigned int a0, unsigned int a1) { return __sub_10000458(a0, a1); }
 static inline int __fwd_sub_10001BA1_sub_100006FA(void *a0, void *a1, int a2) { return __sub_100006FA((int *)a0, (const char *)a1, a2); }
-#ifndef __PE_DECL___sub_1000128F
-#define __PE_DECL___sub_1000128F
-typedef int t_sub_1000128F(void);
-static t_sub_1000128F &__sub_1000128F = *(t_sub_1000128F *)0x1000128F;
-#endif
+static inline int __fwd_sub_10001BA1_sub_1000128F(void) { return __sub_1000128F(); }
 static inline char * __fwd_sub_10001BA1_sub_10001AE2(void *a0, int a1, void *a2, int a3) { return __sub_10001AE2((char *)a0, a1, (char *)a2, a3); }
 static inline int __fwd_sub_10001BA1_sub_10001B38(void *a0) { return __sub_10001B38((char *)a0); }
 #ifndef __PE_DECL___sub_10007138
@@ -67,9 +59,9 @@ typedef int t__sub_10001BA1_i_0[12941888];
 static t__sub_10001BA1_i_0 &__sub_10001BA1_i_0 = *(t__sub_10001BA1_i_0 *)0x10EA1700;
 typedef int t__sub_10001BA1_j[12941892];
 static t__sub_10001BA1_j &__sub_10001BA1_j = *(t__sub_10001BA1_j *)0x10EA16F0;
-#define sub_10000458 __sub_10000458
+#define sub_10000458 __fwd_sub_10001BA1_sub_10000458
 #define sub_100006FA __fwd_sub_10001BA1_sub_100006FA
-#define sub_1000128F __sub_1000128F
+#define sub_1000128F __fwd_sub_10001BA1_sub_1000128F
 #define sub_10001AE2 __fwd_sub_10001BA1_sub_10001AE2
 #define sub_10001B38 __fwd_sub_10001BA1_sub_10001B38
 #define sub_10007138 __sub_10007138
