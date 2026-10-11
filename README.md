@@ -198,10 +198,18 @@ to the coder since and is maintained by hand:
   depends on is kept, and commented;
 - it compiles without a warning under `g++` and `clang++` `-Wall -Wextra`.
 
-The code keeps addresses in 32-bit integers, so `vbn2` is an i386 program
-(`-m32`); and the context tree tells a node (an address) from a leaf (a
-negated position) by its sign, so `main` checks that the tree lies below
-`0x80000000`.
+The first, mechanical passes over the decompiled bodies used the refactoring
+scripts of another decompilation (the `tools.zip` kit): `unify_types.py`
+(`<cstdint>` names), `unshim.py` (call forwarders), `unused.py`, `decast.py`,
+`compact_locals.py`, `degoto.py`, `explicitcmp.py` and `rename.py`; its
+`collect_globals.py`, `prune_unreachable.py`, `name_raw_addrs.py` and
+`deblob.py`/`unbss.py` were followed by hand, and its ASan runs became the
+sanitizer runs below. The rewrite after that is by hand, each step held to
+the gate.
+
+The context tree keeps node addresses in its 32-bit slots and tells a node
+from a leaf (a negated position) by the sign, so `vbn2` is an i386 program
+(`-m32`), and `main` checks that the tree lies below `0x80000000`.
 
 `tests/vbn2.py` is the gate every change to `vbn2.cpp` has to pass:
 
@@ -213,3 +221,9 @@ negated position) by its sign, so `main` checks that the tree lies below
   data, the corpus) must round-trip, and each compressed stream must match
   the digest in `tests/vbn2.md5`, recorded from the first `c|d` version
   once the check against VBN had passed.
+
+`tests/vbn2.py --cxx "clang++ -m32 -O3"` builds with another compiler or
+options; every change so far has passed with `g++` at `-O0`, `-O2`, `-O3`
+and `-Os`, with `clang++` at `-O0` and `-O2`, and under AddressSanitizer
+and UndefinedBehaviorSanitizer (`--exe` runs the gate on a binary built
+elsewhere).
