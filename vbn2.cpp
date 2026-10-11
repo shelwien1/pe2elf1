@@ -10,6 +10,9 @@
 // for the data VBN puts in an archive (its file table, then the files), vbn2 c
 // writes exactly the code that follows the archive's 3-byte header.
 //
+// VBN 1.001 is ACB 2.00c, George Buyanovsky's Associative Coder of Buyanovsky
+// (1997), renamed: ALGORITHM.md describes the algorithm and the evidence.
+//
 // The functions are VBN's own, decompiled from vbn.exe: incdec/ moved the ones
 // plain `vbn u` and `vbn r` run out of the program one at a time and verified
 // each (incdec/README.md), and tools/mkvbn2.py there made them a standalone
@@ -97,7 +100,7 @@ static int32_t found_leaf;                        // 0x10016484 ... and what the
 // Candidates grouped by the value they predict: a match length in
 // code_match, a byte in code_literal.
 static uint32_t *group_slot[256];                 // 0x1000EC60 per value: its {weight, value} pair in groups, or null
-static uint32_t groups[2 * 256];                  // 0x1000F05C
+static uint32_t groups[2 * 256];                  // 0x1000F060
 
 // The match length model: a count for each length 0..255 (0: no match),
 // following the last 4096 lengths coded.
@@ -112,7 +115,7 @@ static int32_t len_avg;                           // 0x100164A8 the average leng
 
 // The literal model: a count for each byte, kept sorted by count, largest
 // first; the last 363 literals add 16 to theirs.
-static uint32_t lit_model[2 * 256];               // 0x1000F860 + 0x800 {count, byte} pairs
+static uint32_t lit_model[2 * 256];               // 0x10010460 {count, byte} pairs
 static uint32_t *lit_slot[256];                   // 0x10010060 per byte: its pair in lit_model
 static uint32_t lit_total;                        // 0x100164BC the sum of the counts
 static int32_t lit_inc;                           // 0x10016490 what every count gets added (1..1024, by lit_cost8)
