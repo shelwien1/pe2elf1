@@ -274,11 +274,11 @@ static VBN_ENTRY int __sub_100006FA(int *a1, char *src_2, int a3)
       v28 = &i_0[6 * n4096];
       v29 = *v28;
       BYTE1(v29) = BYTE1(*v28) & 0xC3;
-      *v28 = v29 | (((dword_1000D4B4 << 23 >> 28) & 0xF) << 10);
-      i_0[6 * n4096] = i_0[6 * n4096] & 0xFFF83FFF | (((dword_1000D4B4 << 27 >> 27) & 0x1F) << 14);
+      *v28 = v29 | (((dword_1000D4B4 >> 5) & 0xF) << 10);
+      i_0[6 * n4096] = i_0[6 * n4096] & 0xFFF83FFF | ((dword_1000D4B4 & 0x1F) << 14);
       i_0[6 * n4096] = i_0[6 * n4096] & 0xFF07FFFF | ((((__int16)dword_1000D4B8 >> 11) & 0x1F) << 19);
       v5 = (int)&i_0[6 * n4096];
-      v6 = *(_DWORD *)v5 & 0xC0FFFFFF | (((dword_1000D4B8 << 21 >> 26) & 0x3F) << 24);
+      v6 = *(_DWORD *)v5 & 0xC0FFFFFF | (((dword_1000D4B8 >> 5) & 0x3F) << 24);
       *(_DWORD *)v5 = v6;
       LOBYTE(v6) = a3;
       byte_10EA1704[24 * n4096++] = a3;

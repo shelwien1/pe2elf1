@@ -54,11 +54,11 @@ static __attribute__((stdcall)) VBN_ENTRY int __sub_100061F4(unsigned int a1, un
   bool v31; // sf
   _DWORD *i_2; // [esp+Ch] [ebp-Ch]
   unsigned int v34; // [esp+10h] [ebp-8h]
-  int v35; // [esp+14h] [ebp-4h]
+  unsigned int v35; // [esp+14h] [ebp-4h]  high - low, which wraps
 
   v34 = *a2;
-  v35 = dword_10016410 - ::n0x7FFFFFFF;
-  if ( 2 * a1 > dword_10016410 - ::n0x7FFFFFFF )
+  v35 = (unsigned int)dword_10016410 - (unsigned int)::n0x7FFFFFFF;
+  if ( 2 * a1 > (unsigned int)dword_10016410 - (unsigned int)::n0x7FFFFFFF )
   {
     v34 = sub_10004993(*a2);
     v35 = -1;
@@ -336,10 +336,10 @@ LABEL_76:
           v29);
       --n32;
       ++v29;
-      n0x7FFFFFFF_2 *= 2;
-      v27 = 2 * v27 + 1;
+      n0x7FFFFFFF_2 = (int)((unsigned int)n0x7FFFFFFF_2 << 1);   // shl/rcl: wrap
+      v27 = (int)((unsigned int)v27 << 1 | 1);
       v31 = (v28 & 0x40000000) != 0;
-      v28 *= 2;
+      v28 = (int)((unsigned int)v28 << 1);
     }
     while ( !v31 );
     v34 = v29;

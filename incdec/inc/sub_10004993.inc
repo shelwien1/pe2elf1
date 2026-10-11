@@ -27,14 +27,14 @@ static __attribute__((stdcall)) VBN_ENTRY unsigned int __sub_10004993(unsigned i
   v7 = n0x7FFFFFFF_1;
   v6 = 1;
   v5 = 1;
-  n0x7FFFFFFF *= 2;
-  dword_10016410 *= 2;
+  n0x7FFFFFFF = (int)((unsigned int)n0x7FFFFFFF << 1);   // shl: wraps
+  dword_10016410 = (int)((unsigned int)dword_10016410 << 1);   // shl: wraps
   while ( v7-- )
   {
     ++v5;
     if ( n0x7FFFFFFF >= 0 )
       break;
-    n0x7FFFFFFF *= 2;
+    n0x7FFFFFFF = (int)((unsigned int)n0x7FFFFFFF << 1);   // shl: wraps
   }
   v8 = n0x7FFFFFFF_1;
   while ( v8-- )
@@ -42,7 +42,7 @@ static __attribute__((stdcall)) VBN_ENTRY unsigned int __sub_10004993(unsigned i
     ++v6;
     if ( dword_10016410 < 0 )
       break;
-    dword_10016410 *= 2;
+    dword_10016410 = (int)((unsigned int)dword_10016410 << 1);   // shl: wraps
   }
   n0x7FFFFFFF = 0x7FFFFFFF;
   if ( v5 > v6 )
@@ -57,7 +57,7 @@ static __attribute__((stdcall)) VBN_ENTRY unsigned int __sub_10004993(unsigned i
         (signed __int32 *)aVbnVer1001,          // "                                                \nvbn ver.1...."
         a1);
     ++a1;
-    n0x7FFFFFFF *= 2;
+    n0x7FFFFFFF = (int)((unsigned int)n0x7FFFFFFF << 1);   // shl: wraps
     --n0x7FFFFFFF_1;
   }
   n0x7FFFFFFF = 0;
