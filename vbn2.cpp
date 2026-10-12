@@ -28,7 +28,10 @@
 // globals; filehandle, the files they read and write; and Progress, the
 // progress line on stderr.  They have no constructors or destructors: Init
 // sets each one up, and Quit gives back what Init took (a file, the Codec's
-// memory).  main opens the files and runs one Codec.
+// memory).  main opens the files and runs one Codec.  Two templates are parts
+// of the Codec: Average, a moving average in fixed point (the literal costs,
+// the average match length), and Ring, the last N values put in (the rings of
+// recent lengths and literals).
 
 #include <cstdint>
 #include <cstdio>
@@ -379,6 +382,53 @@ struct ArithCoder {
 };
 
 // ===========================================================================
+// Average: an exponential moving average, in fixed point -- x2^SCALE -- that
+// moves 1/2^RATE of the way to each value added, rounding down, and so
+// averages over about the last 2^RATE values.
+// ===========================================================================
+template <int SCALE, int RATE = SCALE>
+struct Average {
+  uint32_t v;                                     // the average, x2^SCALE
+
+  // Init: start at x.
+  void Init(uint32_t x) { v = x << SCALE; }
+
+  // add: move toward x.
+  void add(uint32_t x) { v = ((x << SCALE) + (v << RATE) - v) >> RATE; }
+
+  // The average's whole part.
+  uint32_t whole() const { return v >> SCALE; }
+
+  operator uint32_t() const { return v; }
+};
+
+// ===========================================================================
+// Ring: the last N values put in; -1 where none was put yet.
+// ===========================================================================
+template <int32_t N>
+struct Ring {
+  int32_t v[N];
+  int32_t pos;                                    // where the next one goes
+
+  // Init: empty.
+  void Init()
+  {
+    memset(v, 0xFF, sizeof v);
+    pos = 0;
+  }
+
+  // put: put x in, and return the value it replaces -- the one put N values
+  // ago, or -1.
+  int32_t put(int32_t x)
+  {
+    int32_t old = v[pos];
+    v[pos] = x;
+    pos = pos + 1 == N ? 0 : pos + 1;
+    return old;
+  }
+};
+
+// ===========================================================================
 // Codec: VBN's coder, which compresses or decompresses one stream.  It codes
 // the data a window at a time.  At each position it searches the context tree
 // for earlier positions with the same context, the candidates, and codes how
@@ -519,9 +569,8 @@ struct Codec {
   // match), following the last LEN_RING lengths coded.
   uint32_t len_model[2 * 256];                    // 0x1000F860 {count, length} pairs, by length
   uint32_t len_total;                             // 0x100164C0 the sum of the counts
-  int32_t len_ring[LEN_RING];                     // 0x1001220C the last LEN_RING lengths
-  int32_t len_ring_pos;                           // 0x10016420
-  int32_t len_avg;                                // 0x100164A8 the average length coded, x128
+  Ring<LEN_RING> len_ring;                        // 0x1001220C the last LEN_RING lengths (position: 0x10016420)
+  Average<7, LEN_AVG_RATE> len_avg;               // 0x100164A8 the average length coded, x128
 
   // The literal model: a count for each byte, kept sorted by count, largest
   // first; the last LIT_RING1 literals add LIT_RECENT to theirs.
@@ -530,18 +579,16 @@ struct Codec {
   uint32_t lit_total;                             // 0x100164BC the sum of the counts
   int32_t lit_inc;                                // 0x10016490 what every count gets added (1..1024, by lit_cost8)
   int32_t lit_resort;                             // 0x10016494 literals until the model is sorted again
-  int32_t lit_ring1[LIT_RING1];                   // 0x10010C60 the last LIT_RING1 literals
-  int32_t lit_ring1_pos;                          // 0x10016418
-  int32_t lit_ring2[LIT_RING2];                   // 0x1001120C the last LIT_RING2 literals, with the byte before each
-  int32_t lit_ring2_pos;                          // 0x10016428
+  Ring<LIT_RING1> lit_ring1;                      // 0x10010C60 the last LIT_RING1 literals (position: 0x10016418)
+  Ring<LIT_RING2> lit_ring2;                      // 0x1001120C the last LIT_RING2 literals, with the byte before each (0x10016428)
   int8_t ctx_count[0x10000];                      // 0x10EB96F0 per byte pair: its count in lit_ring2
   int32_t ctx16;                                  // 0x100164C8 the byte before and the byte coded, as a pair
   int32_t literal_run;                            // 0x100164AC literals in a row whose pair was known
   int32_t lit_threshold;                          // 0x100164B8 set by code_literal, weighs code_match's model
-  int32_t lit_cost8;                              // 0x100164A4 the bits a literal costs, x2^8, over about 2^8 literals;
-  int32_t lit_cost9;                              // 0x100164A0 ... x2^9 over 2^9,
-  int32_t lit_cost10;                             // 0x1001649C ... x2^10 over 2^10,
-  int32_t lit_cost11;                             // 0x10016498 ... and x2^11 over 2^11
+  Average<8> lit_cost8;                           // 0x100164A4 the bits a literal costs, x2^8, over about 2^8 literals;
+  Average<9> lit_cost9;                           // 0x100164A0 ... x2^9 over 2^9,
+  Average<10> lit_cost10;                         // 0x1001649C ... x2^10 over 2^10,
+  Average<11> lit_cost11;                         // 0x10016498 ... and x2^11 over 2^11
 
   // vbn's functions, the ones plain `u` and `r` run, callees first; each is
   // described where it is defined, below the struct.
@@ -564,17 +611,6 @@ struct Codec {
   // add_low16: add d to the low 16 bits of x only (`add word ptr`).
   static void add_low16(uint32_t &x, int32_t d) { x = (x & 0xFFFF0000) | (uint16_t)(x + d); }
 
-  // ring_put: put v in a ring at pos, and return the value it replaces --
-  // the one put as many values ago as the ring holds, or -1.
-  template <int32_t N>
-  static int32_t ring_put(int32_t (&ring)[N], int32_t &pos, int32_t v)
-  {
-    int32_t old = ring[pos];
-    ring[pos] = v;
-    pos = pos + 1 == N ? 0 : pos + 1;
-    return old;
-  }
-
   // The context tree's nodes in use, in bytes.
   uint32_t tree_size() const { return (uint32_t)(tree_nodes * sizeof tree[0] * 2); }
 
@@ -595,7 +631,7 @@ struct Codec {
 void Codec::len_model_add(int32_t len)
 {
   add_low16(len_model[2 * len], LEN_STEP);
-  int32_t old = ring_put(len_ring, len_ring_pos, len);
+  int32_t old = len_ring.put(len);
   if (old >= 0)
     add_low16(len_model[2 * old], -LEN_STEP);
   else
@@ -783,16 +819,20 @@ int32_t Codec::code_literal(int32_t excluded, uint32_t bitpos)
   // literals have been costing, by each average (1.5 a bit) and by the log
   // of lit_cost8.  At 0, with a search that gained little, the candidates are
   // dropped and the long averages start over.
-  auto cost = [](int32_t c, int32_t k) { uint32_t b = ((uint32_t)c >> k) + 1; return b + (b >> 1); };
-  lit_threshold = ((uint32_t)search_gain >> 4) + THRESHOLD_BASE - top_bit(((uint32_t)lit_cost8 >> 3) + 1)
-                  - cost(lit_cost8, 8) - cost(lit_cost9, 9) - cost(lit_cost10, 10) - cost(lit_cost11, 11);
+  auto cost = [](uint32_t whole) { uint32_t b = whole + 1; return b + (b >> 1); };
+  auto restart = [this] {
+    lit_cost9.Init(RESTART_BITS);
+    lit_cost10.Init(RESTART_BITS);
+    lit_cost11.Init(RESTART_BITS);
+  };
+  lit_threshold = ((uint32_t)search_gain >> 4) + THRESHOLD_BASE - top_bit((lit_cost8 >> 3) + 1)
+                  - cost(lit_cost8.whole()) - cost(lit_cost9.whole()) - cost(lit_cost10.whole())
+                  - cost(lit_cost11.whole());
   if (lit_threshold <= 0) {
     lit_threshold = 0;
     if (search_gain <= DROP_GAIN) {
       n_cands = 0;
-      lit_cost9 = RESTART_BITS << 9;
-      lit_cost10 = RESTART_BITS << 10;
-      lit_cost11 = RESTART_BITS << 11;
+      restart();
     }
   }
 
@@ -805,11 +845,8 @@ int32_t Codec::code_literal(int32_t excluded, uint32_t bitpos)
   for (uint32_t i = 0; i < 7; i++)
     k += c8 >= steps[i];                          // the steps rise: k is the first one above c8
   int32_t inc = incs[k];
-  if (c8 >= RESTART_COST8) {
-    lit_cost9 = RESTART_BITS << 9;
-    lit_cost10 = RESTART_BITS << 10;
-    lit_cost11 = RESTART_BITS << 11;
-  }
+  if (c8 >= RESTART_COST8)
+    restart();
   if (lit_inc != inc) {
     for (int32_t b = 0; b < 256; b++)
       lit_model[2 * b] += inc - lit_inc;
@@ -898,7 +935,7 @@ int32_t Codec::code_literal(int32_t excluded, uint32_t bitpos)
       uint32_t *count = lit_slot[g[1]], old = *count;
       group_slot[g[1]] = nullptr;
       g[0] = old;
-      if ((uint32_t)lit_cost8 < PAIR_COST8) {
+      if (lit_cost8 < PAIR_COST8) {
         ctx16 = (ctx16 & ~0xFF) | g[1];
         if (!literal_run)
           add += old >> NO_RUN_SHIFT;
@@ -917,10 +954,10 @@ int32_t Codec::code_literal(int32_t excluded, uint32_t bitpos)
   } else
     byte = decode_symbol(lit_total, lit_model);
   uint32_t bits = ac.bits() - start;
-  lit_cost8 = ((bits << 8) + ((uint32_t)lit_cost8 << 8) - lit_cost8) >> 8;
-  lit_cost9 = ((bits << 9) + ((uint32_t)lit_cost9 << 9) - lit_cost9) >> 9;
-  lit_cost10 = ((bits << 10) + ((uint32_t)lit_cost10 << 10) - lit_cost10) >> 10;
-  lit_cost11 = ((bits << 11) + ((uint32_t)lit_cost11 << 11) - lit_cost11) >> 11;
+  lit_cost8.add(bits);
+  lit_cost9.add(bits);
+  lit_cost10.add(bits);
+  lit_cost11.add(bits);
 
   // The model as it was.
   if (n_groups) {
@@ -946,7 +983,7 @@ int32_t Codec::code_literal(int32_t excluded, uint32_t bitpos)
     literal_run = ctx_count[pair] ? literal_run + 1 : 0;
     ctx_count[pair]++;
   }
-  int32_t old = ring_put(lit_ring2, lit_ring2_pos, pair);
+  int32_t old = lit_ring2.put(pair);
   if (old >= 0 && ctx_count[old])
     ctx_count[old]--;
 
@@ -956,11 +993,11 @@ int32_t Codec::code_literal(int32_t excluded, uint32_t bitpos)
   *lit_slot[byte] += LIT_RECENT;
   bool resort = --lit_resort == 0;
   if (resort) {
-    lit_resort = (uint8_t)(((uint32_t)lit_cost8 >> 8) + 1);
+    lit_resort = (uint8_t)(lit_cost8.whole() + 1);
     for (uint32_t *p = lit_slot[byte]; p > lit_model && p[0] > p[-2]; p -= 2)
       lit_swap(p, p - 2);
   }
-  old = ring_put(lit_ring1, lit_ring1_pos, byte);
+  old = lit_ring1.put(byte);
   if (old < 0)
     lit_total += LIT_RECENT;
   else {
@@ -985,7 +1022,7 @@ int32_t Codec::code_match(int32_t *excluded, uint32_t bitpos)
     *excluded = -1;
     search_gain = 0;
     literal_run = 0;
-    len_avg = 0;
+    len_avg.Init(0);
     return 0;
   }
 
@@ -1047,7 +1084,7 @@ int32_t Codec::code_match(int32_t *excluded, uint32_t bitpos)
   uint32_t saved_total = 0;
   if (group != groups) {
     if (uint32_t *g0 = group_slot[0]) {
-      uint32_t avg = (uint32_t)len_avg >> top_bit(((uint32_t)(THRESHOLD_TOP - lit_threshold) >> 3) + 1);
+      uint32_t avg = len_avg >> top_bit(((uint32_t)(THRESHOLD_TOP - lit_threshold) >> 3) + 1);
       uint32_t w = *g0;
       if (agree) {
         avg = len_avg;
@@ -1072,10 +1109,10 @@ int32_t Codec::code_match(int32_t *excluded, uint32_t bitpos)
     // LEN_COST8_MID / 2^8 (about 4.3 bits), 9 below LEN_COST8_LOW / 2^8 (about
     // 3.5).
     static constexpr uint8_t times[3] = { 4, 6, 9 };
-    uint32_t weight = times[((uint32_t)lit_cost8 < LEN_COST8_MID) + ((uint32_t)lit_cost8 < LEN_COST8_LOW)] * len_total;
+    uint32_t weight = times[(lit_cost8 < LEN_COST8_MID) + (lit_cost8 < LEN_COST8_LOW)] * len_total;
     uint32_t shift = top_bit(sum) + SCALE_BITS;      // shld/shrd: the count is mod 32
-    uint32_t share = (uint64_t)(n_cands + CONF_GAIN * search_gain + ((uint32_t)lit_cost8 >> 6)) * weight
-                     / (((uint32_t)(len_avg + CONF_BIAS - lit_cost8) >> 3) + 1);
+    uint32_t share = (uint64_t)(n_cands + CONF_GAIN * search_gain + (lit_cost8 >> 6)) * weight
+                     / (((len_avg + CONF_BIAS - lit_cost8) >> 3) + 1);
     uint32_t scale = ((uint64_t)share << (shift & 31)) / sum;
     for (uint32_t *g = groups; g < group; g += 2) {
       uint32_t add = search_gain + ((scale * (uint64_t)g[0]) >> (shift & 31));
@@ -1102,7 +1139,7 @@ int32_t Codec::code_match(int32_t *excluded, uint32_t bitpos)
       cur[j] = match[j];
   }
   *excluded = (uint32_t)len < max_len ? (uint8_t)match[len] : -1;
-  len_avg = (uint32_t)((len << 7) + ((1 << LEN_AVG_RATE) - 1) * len_avg) >> LEN_AVG_RATE;
+  len_avg.add(len);
 
   // The model as it was, and the length counted.
   if (group != groups) {
@@ -1176,7 +1213,7 @@ found:
   uint32_t depth = path - search_path + 1;
   int32_t search_depth = depth;                   // the depth the walk back up has reached
   search_gain = 0;
-  if (!excluding && (uint32_t)lit_cost9 > GIVE_UP_COST9)
+  if (!excluding && lit_cost9 > GIVE_UP_COST9)
     return;
   if ((int32_t)depth > search_avg) {
     search_gain = GAIN_MUL * (depth - search_avg) / top_bit(tree_nodes + GAIN_UPDATES * tree_updates);
@@ -1302,11 +1339,10 @@ bool Codec::Init(bool encoding)
     len_model[2 * i] = LEN_START;
     len_model[2 * i + 1] = i;
   }
-  memset(lit_ring1, 0xFF, sizeof lit_ring1);
-  memset(lit_ring2, 0xFF, sizeof lit_ring2);
-  memset(len_ring, 0xFF, sizeof len_ring);
+  lit_ring1.Init();
+  lit_ring2.Init();
+  len_ring.Init();
   memset(ctx_count, 0, sizeof ctx_count);
-  lit_ring1_pos = lit_ring2_pos = len_ring_pos = 0;
   static constexpr int32_t len_init_counts[23] = { // 0x1000C97C the counts lengths 0..22 start with
     2662, 633, 321, 185, 77, 40, 24, 22, 18, 15, 13, 10, 7, 5, 3, 3, 2, 2, 2, 1, 1, 1, 1
   };
@@ -1314,11 +1350,11 @@ bool Codec::Init(bool encoding)
     for (int32_t n = len_init_counts[len]; n; n--)
       len_model_add(len);
   memset(group_slot, 0, sizeof group_slot);
-  lit_cost8 = COST8_START << 8;
-  lit_cost9 = COST9_START << 9;
-  lit_cost10 = COST10_START << 10;
-  lit_cost11 = COST11_START << 11;
-  len_avg = 0;
+  lit_cost8.Init(COST8_START);
+  lit_cost9.Init(COST9_START);
+  lit_cost10.Init(COST10_START);
+  lit_cost11.Init(COST11_START);
+  len_avg.Init(0);
   lit_resort = 1;
   lit_inc = LIT_START;
   memset(next_byte, 0, sizeof next_byte);

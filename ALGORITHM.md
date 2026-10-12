@@ -306,7 +306,9 @@ search finds frequent bytes first.
   cost in bits plus one, the two counts that just changed bubble into place.
 
 **Costs.** `lit_cost8` … `lit_cost11` are the bits a literal takes, ×2^N,
-averaged over about 2^N literals (N = 8…11). They drive most of the
+averaged over about 2^N literals (N = 8…11). They are exponential moving
+averages: each literal moves each one 1/2^N of the way to its cost, the bits
+the arithmetic coder put out while coding it. They drive most of the
 adaptivity:
 - `lit_threshold`, how much the candidates count for, is `54 + gain/16 −
   log2(lit_cost8/8 + 1) − Σ 1.5·(average bits + 1)` over the four averages,

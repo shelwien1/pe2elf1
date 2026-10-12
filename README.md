@@ -227,7 +227,10 @@ to the coder since and is maintained by hand:
   what they hold, each with the address `vbn.exe` kept it at, and its
   functions are their methods, named for what they do, with their `vbn.exe`
   addresses. The search's early exit, a setjmp/longjmp pair in `vbn.exe`, is
-  plain returns, and the variables only the search uses are its locals;
+  plain returns, and the variables only the search uses are its locals. Two
+  templates are parts of the `Codec`: `Average`, a moving average in fixed
+  point (the four literal costs and the average match length), and `Ring`,
+  the last N values put in (the rings of recent lengths and literals);
 - the structs have no constructors or destructors. An explicit `Init` sets
   each one up, and `Quit` gives back what `Init` took: `filehandle::Quit`
   closes the file, and `Codec::Quit` frees the window's arrays;
