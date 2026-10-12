@@ -101,11 +101,12 @@ private:
 };
 
 // ===========================================================================
-// ArithCoder: VBN's arithmetic coder.  A symbol is coded with a frequency
-// list, {count, symbol} pairs: the interval [low, high] narrows to the
-// symbol's share of it, and the leading bits low and high come to agree on
-// are the code.  The code goes through an 8 KB buffer, written out to a file
-// (compressing) or filled from it (decompressing).
+// ArithCoder: VBN's arithmetic coder.  It codes a symbol as a share of the
+// interval [low, high] -- `count` of `total`, after `below` -- which the
+// model works out (Codec::encode_symbol, decode_symbol); the leading bits low
+// and high come to agree on are the code.  The code goes through an 8 KB
+// buffer, written out to a file (compressing) or filled from it
+// (decompressing).
 // ===========================================================================
 class ArithCoder
 {
@@ -128,10 +129,46 @@ public:
       file->read(buf, count < sizeof buf ? count : sizeof buf);
   }
 
-  // Compressing: code `symbol` with the frequency list `model`, whose counts
-  // sum to `total`.  Decompressing: the symbol the code holds.
-  void encode(uint32_t total, int32_t symbol, const uint32_t *model) { code(total, symbol, model); }
-  int32_t decode(uint32_t total, const uint32_t *model) { return code(total, -1, model); }
+  // encode, decode_target, decode (vbn.exe 0x100061F4, code_symbol, the
+  // coder's half).  Compressing: narrow the interval to a symbol's share,
+  // `count` of `total` after `below`, and put the bits it settles in buf.
+  void encode(uint32_t below, uint32_t count, uint32_t total)
+  {
+    uint64_t size = make_room(total);
+    narrow(below, below + count, total, size);
+  }
+
+  // Decompressing: the count the code points at, out of `total`, for the
+  // model to find the symbol whose share holds it; value holds the 32 bits of
+  // code that line up with low, and the ones past `pending` arrive now.
+  uint32_t decode_target(uint32_t total)
+  {
+    uint64_t size = make_room(total);
+    uint32_t v = value, at = pos + pending;
+    for (int32_t n = 32 - pending; n > 0; n--)
+      v = 2 * v + get_bit(buf, at++);
+    value = v;
+    pending = 0;
+    // (value - low + 1) * total - 1, over the size.  vbn subtracts the 1 with
+    // `sbb eax,1` straight after the `mul`, so the mul's carry -- the product
+    // needing 64 bits -- comes off too (and with a product of total << 32,
+    // the borrow of value - low).
+    uint32_t offset = v - low;
+    uint64_t t;
+    if (offset + 1 == 0)
+      t = ((uint64_t)total << 32) - 1 - (v < low);
+    else {
+      t = (uint64_t)total * (offset + 1);
+      t -= 1 + (t >> 32 != 0);
+    }
+    return (uint32_t)(t / size);
+  }
+
+  // ... and then narrow the interval to that symbol's share, as encode does.
+  void decode(uint32_t below, uint32_t count, uint32_t total)
+  {
+    narrow(below, below + count, total, (uint64_t)(high - low) + 1);
+  }
 
   // The bit position in the buffer the code has reached.
   uint32_t bits() const { return pos; }
@@ -213,52 +250,25 @@ private:
     high = 0xFFFFFFFF;
   }
 
-  // code (vbn.exe 0x100061F4): code one symbol with a frequency list of
-  // {count, symbol} pairs whose counts sum to `total`.  Compressing (symbol >=
-  // 0), the interval narrows to the symbol's share and the bits it settles go
-  // to buf; decompressing (symbol < 0), the symbol is the one whose share
-  // holds the code read so far.  Returns the symbol.
-  //
-  // The interval's size, high - low + 1, is 2^32 after flush(), which
-  // vbn.exe's 32-bit arithmetic treats as a case of its own and a 64-bit size
-  // does not need to.  Decompressing, value holds the 32 bits of code that
-  // line up with low; the ones past `pending` arrive with the next symbol.
-  int32_t code(uint32_t total, int32_t symbol, const uint32_t *model)
+  // make_room: before a symbol, end the code (flush) and start again on the
+  // whole interval if it is narrower than twice the total.  Returns the
+  // interval's size, high - low + 1: 2^32 after flush(), which vbn.exe's
+  // 32-bit arithmetic treats as a case of its own and a 64-bit size does not
+  // need to.
+  uint64_t make_room(uint32_t total)
   {
     uint32_t range = high - low;
     if (2 * total > range) {
       flush();
       range = 0xFFFFFFFF;
     }
-    uint64_t size = (uint64_t)range + 1;
-    const uint32_t *entry;                        // the symbol's pair
-    uint32_t below = 0;                           // the counts before it
-    if (symbol >= 0) {
-      for (entry = model; entry[1] != (uint32_t)symbol; entry += 2)
-        below += entry[0];
-    } else {
-      uint32_t v = value, at = pos + pending;
-      for (int32_t n = 32 - pending; n > 0; n--)
-        v = 2 * v + get_bit(buf, at++);
-      value = v;
-      pending = 0;
-      // The count the code points at: (value - low + 1) * total - 1, over the
-      // size.  vbn subtracts the 1 with `sbb eax,1` straight after the `mul`,
-      // so the mul's carry -- the product needing 64 bits -- comes off too
-      // (and with a product of total << 32, the borrow of value - low).
-      uint32_t offset = v - low;
-      uint64_t t;
-      if (offset + 1 == 0)
-        t = ((uint64_t)total << 32) - 1 - (v < low);
-      else {
-        t = (uint64_t)total * (offset + 1);
-        t -= 1 + (t >> 32 != 0);
-      }
-      uint32_t target = (uint32_t)(t / size);
-      for (entry = model; below + entry[0] <= target; entry += 2)
-        below += entry[0];
-    }
-    uint32_t above = below + entry[0];
+    return (uint64_t)range + 1;
+  }
+
+  // narrow: narrow the interval, of `size`, to the share from `below` up to
+  // `above` of `total`.
+  void narrow(uint32_t below, uint32_t above, uint32_t total, uint64_t size)
+  {
     high = low + (uint32_t)(above * size / total) - 1;
     low = low + (uint32_t)(below * size / total);
 
@@ -280,7 +290,6 @@ private:
     high = hi;
     pending = left;
     pos = at;
-    return entry[1];
   }
 };
 
@@ -469,6 +478,8 @@ private:
   bool walk_cands(int32_t n, Walk &w);
   static uint32_t pair_bonus(uint32_t w, uint32_t seen, bool gained);
   void lit_swap(uint32_t *a, uint32_t *b);
+  void encode_symbol(uint32_t total, int32_t symbol, const uint32_t *list);
+  int32_t decode_symbol(uint32_t total, const uint32_t *list);
   int32_t code_literal(int32_t excluded, uint32_t bitpos);
   int32_t code_match(int32_t *excluded, uint32_t bitpos);
   void search(uint32_t pos, bool excluding);
@@ -656,6 +667,31 @@ void Codec::lit_swap(uint32_t *a, uint32_t *b)
   lit_slot[b[1]] = b;
 }
 
+// encode_symbol, decode_symbol (vbn.exe 0x100061F4, code_symbol, the model's
+// half): code a symbol with a frequency list -- {count, symbol} pairs whose
+// counts sum to `total` -- through the ArithCoder.  The symbol's share is its
+// count, after the counts before its pair; decompressing, the symbol is the
+// one whose share holds the count the code points at.  The list is searched
+// from its start, so the likely symbols come first: the literal model keeps
+// its list sorted by count, the length model's is in length order.
+void Codec::encode_symbol(uint32_t total, int32_t symbol, const uint32_t *list)
+{
+  uint32_t below = 0;
+  const uint32_t *entry = list;
+  for (; entry[1] != (uint32_t)symbol; entry += 2)
+    below += entry[0];
+  ac.encode(below, entry[0], total);
+}
+int32_t Codec::decode_symbol(uint32_t total, const uint32_t *list)
+{
+  uint32_t target = ac.decode_target(total), below = 0;
+  const uint32_t *entry = list;
+  for (; below + entry[0] <= target; entry += 2)
+    below += entry[0];
+  ac.decode(below, entry[0], total);
+  return entry[1];
+}
+
 // code_literal (vbn.exe 0x100064C0): code the byte at bitpos as a literal.  The
 // literal model's counts are mixed with the candidates' predictions (grouped
 // by the byte they predict); `excluded` is a byte a failed match already ruled
@@ -799,9 +835,9 @@ int32_t Codec::code_literal(int32_t excluded, uint32_t bitpos)
   int32_t byte;
   if (encoding) {
     byte = (uint8_t)window[bitpos >> 3];
-    ac.encode(lit_total, byte, lit_model);
+    encode_symbol(lit_total, byte, lit_model);
   } else
-    byte = ac.decode(lit_total, lit_model);
+    byte = decode_symbol(lit_total, lit_model);
   uint32_t bits = ac.bits() - start;
   lit_cost8 = ((bits << 8) + ((uint32_t)lit_cost8 << 8) - lit_cost8) >> 8;
   lit_cost9 = ((bits << 9) + ((uint32_t)lit_cost9 << 9) - lit_cost9) >> 9;
@@ -981,9 +1017,9 @@ int32_t Codec::code_match(int32_t *excluded, uint32_t bitpos)
   if (encoding) {
     for (len = 0; (uint32_t)len < max_len && cur[len] == match[len]; len++)
       ;
-    ac.encode(total, len, len_model);
+    encode_symbol(total, len, len_model);
   } else {
-    len = ac.decode(total, len_model);
+    len = decode_symbol(total, len_model);
     for (int32_t j = 0; j < len; j++)
       cur[j] = match[j];
   }

@@ -203,9 +203,12 @@ to the coder since and is maintained by hand:
   directory scan, volumes, the DOS layer, the console output, the
   associative ("context") model, and VBN's memory image at `0x10000000`;
 - nothing is global: the state is in three classes. `ArithCoder` is the
-  arithmetic coder, with its methods inline. `Codec` is the coder around it:
-  the window, the context tree and its search, and the literal and
-  match-length models. `filehandle` is a file read or written. VBN's globals
+  arithmetic coder, with its methods inline; it codes a symbol as a share of
+  its interval (a count, the counts below it, a total) and knows nothing of
+  the models. `Codec` is the coder around it: the window, the context tree
+  and its search, and the literal and match-length models, which look a
+  symbol's share up in their frequency lists (`encode_symbol`,
+  `decode_symbol`). `filehandle` is a file read or written. VBN's globals
   are members of these classes, named for what they hold, each with the
   address `vbn.exe` kept it at, and its functions are their methods, named
   for what they do, with their `vbn.exe` addresses. The search's early exit,

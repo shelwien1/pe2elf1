@@ -346,8 +346,11 @@ updated, and the model takes its +16.
 
 ## The arithmetic coder
 
-`ArithCoder` is an arithmetic coder over frequency lists of `{count,
-symbol}` pairs.
+`ArithCoder` codes a symbol as a share of its interval: its count, after the
+counts *below* it, out of a total. The models keep their statistics as
+frequency lists of `{count, symbol}` pairs and look a symbol's share up in
+them (`Codec::encode_symbol` and `decode_symbol`); the coder sees only the
+three numbers. In `vbn.exe` both halves are one function, `code_symbol`.
 
 - **Interval.** 32-bit `low` and `high`. A symbol whose list entries before it
   sum to *below*, and *above* with its own count, narrows the interval to
@@ -365,11 +368,14 @@ symbol}` pairs.
   1994.
 - **Decoding.** `value` holds the 32 bits of code that line up with
   `low`; each symbol first reads the bits that renormalisation shifted out.
-  The count the code points at is `((value − low + 1)·total − 1)/size`, and
-  the symbol is the first whose cumulative count exceeds it.
-- **Lists.** The literal model is sorted by count; the length model is in
-  length order, which favours short lengths, and its tail above the maximum
-  is cut off by lowering the total.
+  The coder works out the count the code points at,
+  `((value − low + 1)·total − 1)/size` (`decode_target`); the model finds the
+  first symbol whose cumulative count exceeds it, and the coder narrows the
+  interval to that symbol's share as the encoder did (`decode`).
+- **Lists.** The models search their lists from the start. The literal
+  model is sorted by count; the length model is in length order, which
+  favours short lengths, and its tail above the maximum is cut off by
+  lowering the total.
 
 ## Constants
 
