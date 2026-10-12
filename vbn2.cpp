@@ -25,16 +25,13 @@
 // function it is.  Nothing is global: the state is in three classes --
 // ArithCoder, the arithmetic coder; Codec, the coder around it (the window,
 // the context tree and its search, and the models), whose members are vbn's
-// globals; and Files, the files they read and write -- and main runs one
+// globals; and filehandle, the files they read and write -- and main runs one
 // Codec.
 
-#define _FILE_OFFSET_BITS 64        // stat() with -m32 fails on 64-bit inode numbers otherwise
-#include <cerrno>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <sys/stat.h>
 #include <utility>
 
 // ===========================================================================
@@ -58,77 +55,69 @@ static inline void xor_bit(void *buf, uint32_t n, uint32_t bit)
 }
 
 // ===========================================================================
-// Files: the input and the output.  The coder reads its input -- the data
-// when compressing, the code (after the stream's size) when decompressing --
-// and writes its output, the code or the data, through them.
+// filehandle: a file, open for reading (mode 0) or for writing (mode 1); it
+// is 0 if it did not open.  The coder reads the data or the code from one and
+// writes the code or the data to another.
 // ===========================================================================
-class Files
+class filehandle
 {
 public:
-  const char *const in_name, *const out_name;
-  FILE *in = nullptr, *out = nullptr;
-  uint32_t data_left = 0;                         // decompressing: the bytes of data still to write
+  filehandle(const char *name, uint32_t mode) : file(fopen(name, mode ? "wb" : "rb")) {}
+  filehandle(const filehandle &) = delete;
+  filehandle &operator=(const filehandle &) = delete;
+  ~filehandle() { close(); }
+  operator FILE *() const { return file; }
 
-  Files(const char *in_name, const char *out_name) : in_name(in_name), out_name(out_name) {}
+  // read (vbn.exe 0x10000D0E): read up to `count` bytes, and return how many
+  // came.  vbn's reader read the archive's title and then each file, or the
+  // archive's volumes.  A short read leaves the rest of the buffer as it was,
+  // as vbn's did at the end of its data.
+  uint32_t read(void *to, uint32_t count) { return (uint32_t)fread(to, 1, count, file); }
 
-  // Say what failed (and errno, if set), remove the output, and exit.
-  [[noreturn]] void fail(const char *what, const char *name)
+  // write (vbn.exe 0x100012A8): vbn's writer split the code into archive
+  // volumes, or the data into the title and the files.
+  void write(const void *from, uint32_t count) { fwrite(from, 1, count, file); }
+
+  // The size of a file being read, or -1 if it cannot be told.
+  int64_t size()
   {
-    fprintf(stderr, "vbn2: %s %s%s%s\n", what, name, errno ? ": " : "", errno ? strerror(errno) : "");
-    if (out) {
-      fclose(out);
-      remove(out_name);
-    }
-    exit(1);
+    int64_t n = fseek(file, 0, SEEK_END) == 0 ? ftell(file) : -1;
+    rewind(file);
+    return n;
   }
 
-  // read (vbn.exe 0x10000D0E): read the coder's input.  vbn's reader read the
-  // archive's title and then each file, or the archive's volumes.  A short
-  // read leaves the rest of the buffer as it was, as vbn's did at the end of
-  // its data.
-  void read(int8_t *to, uint32_t count)
-  {
-    if (fread(to, 1, count, in) < count && ferror(in))
-      fail("cannot read", in_name);
-  }
+  // Whether everything written got there.
+  bool written() { return fflush(file) == 0 && !ferror(file); }
 
-  // write_code, write_data (vbn.exe 0x100012A8): write the coder's output,
-  // the code or the data.  vbn's writer split the code into archive volumes,
-  // or the data into the title and the files, and stopped at the end of the
-  // last file: the data written never runs past the stream's size.
-  void write_code(const int8_t *from, uint32_t count) { write(from, count); }
-  void write_data(const int8_t *from, uint32_t count)
+  void close()
   {
-    if (count > data_left)
-      count = data_left;
-    data_left -= count;
-    write(from, count);
+    if (file)
+      fclose(file);
+    file = nullptr;
   }
 
 private:
-  void write(const int8_t *from, uint32_t count)
-  {
-    if (fwrite(from, 1, count, out) != count)
-      fail("cannot write", out_name);
-  }
+  FILE *file;
 };
 
 // ===========================================================================
 // ArithCoder: VBN's arithmetic coder.  A symbol is coded with a frequency
 // list, {count, symbol} pairs: the interval [low, high] narrows to the
 // symbol's share of it, and the leading bits low and high come to agree on
-// are the code.  The code goes through an 8 KB buffer, which Files writes out
-// (compressing) or fills (decompressing).
+// are the code.  The code goes through an 8 KB buffer, written out to a file
+// (compressing) or filled from it (decompressing).
 // ===========================================================================
 class ArithCoder
 {
 public:
-  ArithCoder(Files &files, bool encoding) : files(files), encoding(encoding) {}
+  ArithCoder(bool encoding) : encoding(encoding) {}
 
-  // Start: the whole interval, at the start of an empty buffer --
-  // decompressing, filled with up to `count` bytes of code.
-  void start(uint32_t count)
+  // Start: the whole interval, at the start of an empty buffer -- the code
+  // goes to `code`, or, decompressing, comes from it, up to `count` bytes
+  // first.
+  void start(filehandle &code, uint32_t count)
   {
+    file = &code;
     low = 0;
     high = 0xFFFFFFFF;
     pending = 0;
@@ -136,7 +125,7 @@ public:
     pos = 0;
     memset(buf, 0, sizeof buf);
     if (!encoding)
-      files.read(buf, count < sizeof buf ? count : sizeof buf);
+      file->read(buf, count < sizeof buf ? count : sizeof buf);
   }
 
   // Compressing: code `symbol` with the frequency list `model`, whose counts
@@ -156,12 +145,12 @@ public:
     if (pos < 8 * BLOCK)
       return;
     if (encoding) {
-      files.write_code(buf, BLOCK);
+      file->write(buf, BLOCK);
       memcpy(buf, buf + BLOCK, 16);
       memset(buf + 16, 0, BLOCK);
     } else {
       memcpy(buf, buf + BLOCK, 16);
-      files.read(buf + 16, BLOCK);
+      file->read(buf + 16, BLOCK);
     }
     pos -= 8 * BLOCK;
   }
@@ -171,14 +160,14 @@ public:
   {
     flush();
     if (encoding)
-      files.write_code(buf, (pos + 7) >> 3);
+      file->write(buf, (pos + 7) >> 3);
   }
 
 private:
   static constexpr uint32_t BLOCK = 0x2000;       // the code goes out and comes in 8 KB at a time
 
-  Files &files;
   const bool encoding;
+  filehandle *file;                               // where the code goes, or comes from
   uint32_t low, high;                             // 0x1001640C, 0x10016410 the interval
   int32_t pending;                                // 0x10016414 bits of the interval not settled yet
   uint32_t value;                                 // 0x10016460 decompressing: the code read so far
@@ -308,7 +297,7 @@ class Codec
 public:
   static constexpr uint32_t MAX_SIZE = 0x1FFFFFFF; // the most data: the coder counts it in bits, in 32 bits
 
-  Codec(Files &files, bool encoding) noexcept : files(files), encoding(encoding), ac(files, encoding) {}
+  Codec(bool encoding) noexcept : encoding(encoding), ac(encoding) {}
   Codec(const Codec &) = delete;                  // it points into itself
   Codec &operator=(const Codec &) = delete;
 
@@ -318,7 +307,8 @@ public:
   static void *operator new(size_t size) noexcept { return malloc(size); }
   static void operator delete(void *p) noexcept { free(p); }
 
-  void run(uint32_t size);
+  void init();
+  bool processfile(filehandle &in, filehandle &out);
 
 private:
   // A walk over a subtree's leaves (walk_cands).
@@ -328,8 +318,6 @@ private:
     int32_t weight;                               // the weight the leaves get
     bool excluding;                               // whether the leaves that predict excluded_byte are skipped
   };
-
-  Files &files;
 
   // The direction, and the mode.
   const bool encoding;                            // 0x1000D4C4 compressing, or decompressing
@@ -1105,13 +1093,9 @@ void Codec::tree_rebuild()
     }
 }
 
-// run (vbn.exe 0x10004A5F): compress or decompress `size` bytes.
-// It sets up the models, codes the window, and slides it by SLIDE bytes --
-// re-registering the positions it keeps -- until all the data is coded; then
-// it ends the code.  The data and the code come from Files and go to it.
-void Codec::run(uint32_t size)
+// init (part of vbn.exe 0x10004A5F): the models as they start.
+void Codec::init()
 {
-  // The models.
   lit_total = 2048;
   for (uint32_t i = 0; i < 256; i++) {
     lit_model[2 * i] = 8;
@@ -1145,14 +1129,44 @@ void Codec::run(uint32_t size)
   memset(next_byte, 0, sizeof next_byte);
   memset(next_byte2, 0, sizeof next_byte2);
   prev_byte = prev_byte2 = literal_run = lit_threshold = 0;
+}
+
+// processfile (the rest of vbn.exe 0x10004A5F): compress the data in `in`
+// into a stream in `out`, or decompress the stream in `in` into the data in
+// `out`.  A stream is the data's size, 4 bytes little-endian, and then the
+// code.  The coder codes the window, and slides it by SLIDE bytes --
+// re-registering the positions it keeps -- until all the data is coded; then
+// it ends the code.  Returns false if the input cannot be coded (data of more
+// than MAX_SIZE bytes, or whose size cannot be told; a stream shorter than 4
+// bytes, or with a size over MAX_SIZE) or the output was not all written.
+bool Codec::processfile(filehandle &in, filehandle &out)
+{
+  uint8_t header[4];
+  uint32_t size;
+  if (encoding) {
+    int64_t n = in.size();
+    if (n < 0 || n > MAX_SIZE)
+      return false;
+    size = (uint32_t)n;
+    for (int32_t i = 0; i < 4; i++)
+      header[i] = (uint8_t)(size >> 8 * i);
+    out.write(header, 4);
+  } else {
+    if (in.read(header, 4) != 4)
+      return false;
+    size = header[0] | header[1] << 8 | header[2] << 16 | (uint32_t)header[3] << 24;
+    if (size > MAX_SIZE)
+      return false;
+  }
+  filehandle &data = encoding ? in : out, &code = encoding ? out : in;
 
   // The first window, the coder and the tree.
   total_bits = 0;
   uint32_t n = size < WINDOW ? size : WINDOW;
   window_bits = 8 * n;
   if (encoding)
-    files.read(window, n);
-  ac.start(2 * n);
+    data.read(window, n);
+  ac.start(code, 2 * n);
   memset(registered, 0, sizeof registered);
   tree[0] = tree[1] = 0;
   tree_nodes = 1;
@@ -1166,7 +1180,7 @@ void Codec::run(uint32_t size)
       break;
     // Slide the window by SLIDE bytes, writing them out when decompressing.
     if (!encoding)
-      files.write_data(window, SLIDE);
+      data.write(window, SLIDE);
     memmove(window, window + SLIDE, KEEP);
     memmove(registered, (int8_t *)registered + SLIDE / 8, KEEP / 8);
     memset((int8_t *)registered + KEEP / 8, 0, SLIDE / 8);
@@ -1175,82 +1189,48 @@ void Codec::run(uint32_t size)
     window_pos = 8 * KEEP;
     tree_rebuild();
     if (encoding)
-      files.read(window + KEEP, SLIDE);
+      data.read(window + KEEP, SLIDE);
     uint32_t left = size - (total_bits >> 3);
     if (left < SLIDE)
       window_bits = 8 * (KEEP + left);
   }
   ac.finish();
   if (!encoding)
-    files.write_data(window, window_pos >> 3);
+    data.write(window, window_pos >> 3);
+  return out.written();
 }
 
 // ===========================================================================
-// main: vbn2 c|d input output.  A compressed stream is the input's size (4
-// bytes, little-endian) and then vbn's code for it, in vbn's MAX mode (`u`):
-// the archive around it -- header, title, volumes -- is gone.  The coder is
-// vbn's, run once, as vbn ran it for an archive.
+// main: vbn2 c|d in out.  A compressed stream is the input's size (4 bytes,
+// little-endian) and then vbn's code for it, in vbn's MAX mode (`u`): the
+// archive around it -- header, title, volumes -- is gone.  The coder is vbn's,
+// run once, as vbn ran it for an archive.  It exits with 1 for the usage, 2
+// if the input does not open, 3 if the output does not, 4 without memory for
+// the coder, 5 if processfile fails.
 // ===========================================================================
 int main(int argc, char **argv)
 {
-  if (argc != 4 || (strcmp(argv[1], "c") && strcmp(argv[1], "d"))) {
-    fprintf(stderr, "vbn2: VBN 1.001's compressor (MAX mode) on one file\n"
-                    "Usage: vbn2 c input output   compress\n"
-                    "       vbn2 d input output   decompress\n");
+  if (argc < 4) {
+    fprintf(stderr, "usage: %s c|d in out\n", argv[0]);
     return 1;
   }
-  bool encoding = argv[1][0] == 'c';             // compressing, or decompressing
-  Files files(argv[2], argv[3]);
-  struct stat in_st, out_st;
-  files.in = fopen(files.in_name, "rb");
-  if (!files.in || fstat(fileno(files.in), &in_st) < 0)
-    files.fail("cannot open", files.in_name);
-  if (stat(files.out_name, &out_st) == 0 && out_st.st_dev == in_st.st_dev && out_st.st_ino == in_st.st_ino) {
-    errno = 0;
-    files.fail("input and output are the same file:", files.in_name);
-  }
+  uint32_t f_DEC = argv[1][0] == 'd';
 
-  uint8_t header[4];
-  uint32_t size;
-  if (encoding) {
-    if (!S_ISREG(in_st.st_mode) || in_st.st_size > (int64_t)Codec::MAX_SIZE) {
-      errno = 0;
-      files.fail(S_ISREG(in_st.st_mode) ? "input is too large (512 MB at most):" : "not a regular file:", files.in_name);
-    }
-    size = (uint32_t)in_st.st_size;
-    for (int32_t i = 0; i < 4; i++)
-      header[i] = (uint8_t)(size >> 8 * i);
-  } else {
-    errno = 0;
-    if (fread(header, 1, 4, files.in) != 4)
-      files.fail(ferror(files.in) ? "cannot read" : "not a vbn2 stream (too short):", files.in_name);
-    size = header[0] | header[1] << 8 | header[2] << 16 | (uint32_t)header[3] << 24;
-    if (size > Codec::MAX_SIZE)
-      files.fail("not a vbn2 stream (bad size):", files.in_name);
-    files.data_left = size;
-  }
-  files.out = fopen(files.out_name, "wb");
-  if (!files.out)
-    files.fail("cannot create", files.out_name);
-  if (encoding && fwrite(header, 1, 4, files.out) != 4)
-    files.fail("cannot write", files.out_name);
+  filehandle f(argv[2], 0);
+  if (f == 0)
+    return 2;
+  filehandle g(argv[3], 1);
+  if (g == 0)
+    return 3;
 
-  Codec *codec = new Codec(files, encoding);
-  if (!codec) {
-    errno = 0;
-    files.fail("cannot allocate", "memory");
-  }
-  codec->run(size);
-  delete codec;
+  Codec *C = new Codec(f_DEC == 0);               // about 15 MB
+  if (C == 0)
+    return 4;
+  C->init();
+  int rc = C->processfile(f, g) ? 0 : 5;
+  delete C;
 
-  errno = 0;
-  if (!encoding && files.data_left)
-    files.fail("not a vbn2 stream (data missing):", files.in_name);
-  if (fclose(files.out) != 0) {
-    files.out = nullptr;                          // closed, if not written
-    remove(files.out_name);
-    files.fail("cannot write", files.out_name);
-  }
-  fclose(files.in);
-  return 0;
+  g.close();
+  f.close();
+  return rc;
 }

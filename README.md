@@ -178,6 +178,12 @@ See [incdec/README.md](incdec/README.md).
 ./vbn2 d input output      # decompress
 ```
 
+It exits with 0 when done, 1 for the usage, 2 if the input does not open, 3
+if the output does not, 4 without memory for the coder, and 5 if the input
+cannot be coded (more than 512 MB of data, or a size it cannot tell, as of a
+pipe; a stream shorter than 4 bytes, or with a size over 512 MB) or the
+output was not all written.
+
 A `vbn2` stream is the input's size (4 bytes, little-endian) followed by the
 code VBN writes for it in its MAX mode (`vbn u`). The archive around that code
 is gone: header, file table, volumes, and the directory handling that fills
@@ -190,15 +196,16 @@ the archive's 3-byte header; `vbn2 d` decodes such a stream back.
 `vbn.exe` (its C runtime, and DOS as the shim served it). It has been cut down
 to the coder since and is maintained by hand:
 
-- `main` reads one file and writes one, and the coder's input reader and
-  output writer are plain file I/O;
+- `main` opens one file to read and one to write, and has the coder process
+  the one into the other; the coder's input reader and output writer are
+  plain file I/O;
 - everything else is gone: the archive code, the file table and title, the
   directory scan, volumes, the DOS layer, the console output, the
   associative ("context") model, and VBN's memory image at `0x10000000`;
 - nothing is global: the state is in three classes. `ArithCoder` is the
   arithmetic coder, with its methods inline. `Codec` is the coder around it:
   the window, the context tree and its search, and the literal and
-  match-length models. `Files` is the input and the output. VBN's globals
+  match-length models. `filehandle` is a file read or written. VBN's globals
   are members of these classes, named for what they hold, each with the
   address `vbn.exe` kept it at, and its functions are their methods, named
   for what they do, with their `vbn.exe` addresses. The search's early exit,
