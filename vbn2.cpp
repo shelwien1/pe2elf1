@@ -22,16 +22,17 @@
 // each (incdec/README.md), and tools/mkvbn2.py there made them a standalone
 // program.  This file started as that program; it has been cut down to the
 // coder and written out by hand since, each function headed by the vbn.exe
-// function it is.  Nothing is global: the state is in three classes --
+// function it is.  Nothing is global: the state is in four classes --
 // ArithCoder, the arithmetic coder; Codec, the coder around it (the window,
 // the context tree and its search, and the models), whose members are vbn's
-// globals; and filehandle, the files they read and write -- and main runs one
-// Codec.
+// globals; filehandle, the files they read and write; and Progress, the
+// progress line on stderr -- and main runs one Codec.
 
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <utility>
 
 // ===========================================================================
@@ -101,6 +102,89 @@ private:
 };
 
 // ===========================================================================
+// Progress: how far the coding has got, on stderr, as ppmd shows it.  A line
+// every half second at most, each over the last: the data's bytes coded so
+// far > the stream's bytes they took, the share of the data that is, the
+// speed, and the size of the context tree; and once all is coded, a last line
+// with the time it took.
+// ===========================================================================
+#ifdef _WIN32
+// Windows' performance counter, from kernel32, declared here rather than
+// through <windows.h>.
+extern "C" __declspec(dllimport) int __stdcall QueryPerformanceCounter(long long *count);
+extern "C" __declspec(dllimport) int __stdcall QueryPerformanceFrequency(long long *frequency);
+#endif
+
+class Progress
+{
+public:
+  Progress(bool encoding) : tag(encoding ? "enc" : "dec") {}
+
+  // Start the clock, for `size` bytes of data.
+  void start(uint32_t size)
+  {
+    total = size;
+    next = STEP;
+    t_start = t_last = now();
+  }
+
+  // Whether the coding has reached the next look at the clock, with `done`
+  // bytes of data coded: one every STEP bytes.
+  bool due(uint32_t done) const { return done >= next; }
+
+  // The look: a line, if INTERVAL has passed since the last -- `done` bytes
+  // coded into `code` bytes of stream, with a context tree of `tree` bytes.
+  void update(uint32_t done, uint32_t code, uint32_t tree)
+  {
+    next = done + STEP;
+    double t = now();
+    if (t - t_last < INTERVAL)
+      return;
+    t_last = t;
+    fprintf(stderr, "\r[%s] %u > %u  %5.1f%%  %5.2f MB/s  %5.2fM tree", tag, done, code, 100.0 * done / total,
+      done / (t - t_start) / MB, tree / MB);
+    fflush(stderr);
+  }
+
+  // The last line: all the data coded, into `code` bytes of stream.
+  void finish(uint32_t code, uint32_t tree)
+  {
+    fprintf(stderr, "\r[%s] %u > %u  100.0%%  done in %.2fs  %5.2fM tree    \n", tag, total, code, now() - t_start,
+      tree / MB);
+    fflush(stderr);
+  }
+
+private:
+  static constexpr uint32_t STEP = 0x10000;       // a look at the clock every 64 KB of data,
+  static constexpr double INTERVAL = 0.5;         //   and a line every half second at most
+  static constexpr double MB = 1 << 20;
+
+  const char *const tag;                          // "enc" compressing, "dec" decompressing
+  uint32_t total;                                 // the data's size
+  uint32_t next;                                  // the data's bytes coded at the next look
+  double t_start, t_last;                         // when the coding started, and the last line
+
+  // The time, in seconds from some point: Windows' performance counter;
+  // elsewhere the POSIX monotonic clock, or failing that the C library's
+  // clock() -- the processor time on POSIX, close enough for vbn2.
+  static double now()
+  {
+#if defined(_WIN32)
+    long long count, frequency;
+    QueryPerformanceCounter(&count);
+    QueryPerformanceFrequency(&frequency);
+    return (double)count / (double)frequency;
+#elif defined(CLOCK_MONOTONIC)
+    timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return (double)t.tv_sec + (double)t.tv_nsec * 1e-9;
+#else
+    return (double)clock() / CLOCKS_PER_SEC;
+#endif
+  }
+};
+
+// ===========================================================================
 // ArithCoder: VBN's arithmetic coder.  It codes a symbol as a share of the
 // interval [low, high] -- `count` of `total`, after `below` -- which the
 // model works out (Codec::encode_symbol, decode_symbol); the leading bits low
@@ -124,6 +208,7 @@ public:
     pending = 0;
     value = 0;
     pos = 0;
+    base = 0;
     memset(buf, 0, sizeof buf);
     if (!encoding)
       file->read(buf, count < sizeof buf ? count : sizeof buf);
@@ -173,6 +258,9 @@ public:
   // The bit position in the buffer the code has reached.
   uint32_t bits() const { return pos; }
 
+  // The code's bytes so far.
+  uint32_t bytes() const { return base + ((pos + 7) >> 3); }
+
   // next_block (vbn.exe 0x10004924): once 8 KB of code are done --
   // compressing, write them out and move the SPILL bytes after them to the
   // start; decompressing, move those bytes to the start and read the next 8 KB
@@ -190,6 +278,7 @@ public:
       file->read(buf + SPILL, BLOCK);
     }
     pos -= 8 * BLOCK;
+    base += BLOCK;
   }
 
   // The end: end the code and, compressing, write what is left of it.
@@ -210,6 +299,7 @@ private:
   int32_t pending;                                // 0x10016414 bits of the interval not settled yet
   uint32_t value;                                 // 0x10016460 decompressing: the code read so far
   uint32_t pos;                                   // the bit position in buf the code has reached
+  uint32_t base;                                  // where buf starts in the code, in bytes
   int8_t buf[BLOCK + SPILL];                      // 0x1000A110 8 KB of code, and SPILL bytes more (vbn reused its banner)
 
   // flush (vbn.exe 0x10004993): end the code.  Writes into buf, from bit
@@ -306,8 +396,9 @@ class Codec
 {
 public:
   static constexpr uint32_t MAX_SIZE = 0x1FFFFFFF; // the most data: the coder counts it in bits, in 32 bits
+  static constexpr uint32_t HEADER = 4;           // a stream's header: the data's size, little-endian
 
-  Codec(bool encoding) noexcept : encoding(encoding), ac(encoding) {}
+  Codec(bool encoding) noexcept : encoding(encoding), ac(encoding), progress(encoding) {}
   Codec(const Codec &) = delete;                  // it points into itself
   Codec &operator=(const Codec &) = delete;
 
@@ -397,6 +488,7 @@ private:
   const bool encoding;                            // 0x1000D4C4 compressing, or decompressing
 
   ArithCoder ac;
+  Progress progress;
 
   // The data: a window of WINDOW bytes that slides by SLIDE.  Positions are
   // bit positions, 8 per byte.
@@ -499,6 +591,9 @@ private:
     pos = pos + 1 == N ? 0 : pos + 1;
     return old;
   }
+
+  // The context tree's nodes in use, in bytes.
+  uint32_t tree_size() const { return (uint32_t)(tree_nodes * sizeof tree[0] * 2); }
 
   // other_slot: the other slot of the node `slot` is in.  (vbn.exe flips bit
   // 2 of the slot's address.)
@@ -1136,8 +1231,9 @@ found:
 // each position: search for candidates (excluding the byte a failed match
 // predicted) and code a match length; on a match, register some of its
 // positions in the tree and skip it, else code a literal and register the
-// position.  Every 8 KB of code goes in or out (ArithCoder::next_block).
-// Returns the bit position reached.
+// position.  Every 8 KB of code goes in or out (ArithCoder::next_block), and
+// every 64 KB of data, the progress line may be redrawn (Progress).  Returns
+// the bit position reached.
 uint32_t Codec::code_window(uint32_t bitpos)
 {
   uint32_t start = bitpos;
@@ -1170,6 +1266,9 @@ uint32_t Codec::code_window(uint32_t bitpos)
     prev_byte = (uint8_t)window[at - 1];
     prev_byte2 = at == 1 ? prev_byte : (uint8_t)window[at - 2];
     ac.next_block();
+    uint32_t done = (total_bits + bitpos - start) >> 3;
+    if (progress.due(done))
+      progress.update(done, HEADER + ac.bytes(), tree_size());
   }
   total_bits += bitpos - start;
   return bitpos;
@@ -1235,29 +1334,32 @@ void Codec::init()
 // `out`.  A stream is the data's size, 4 bytes little-endian, and then the
 // code.  The coder codes the window, and slides it by SLIDE bytes --
 // re-registering the positions it keeps -- until all the data is coded; then
-// it ends the code.  Returns false if the input cannot be coded (data of more
-// than MAX_SIZE bytes, or whose size cannot be told; a stream shorter than 4
-// bytes, or with a size over MAX_SIZE) or the output was not all written.
+// it ends the code.  Its progress goes to stderr: a line redrawn as it goes,
+// and a last one when done.  Returns false if the input cannot be coded (data
+// of more than MAX_SIZE bytes, or whose size cannot be told; a stream shorter
+// than 4 bytes, or with a size over MAX_SIZE) or the output was not all
+// written.
 bool Codec::processfile(filehandle &in, filehandle &out)
 {
-  uint8_t header[4];
+  uint8_t header[HEADER];
   uint32_t size;
   if (encoding) {
     int64_t n = in.size();
     if (n < 0 || n > MAX_SIZE)
       return false;
     size = (uint32_t)n;
-    for (int32_t i = 0; i < 4; i++)
+    for (uint32_t i = 0; i < HEADER; i++)
       header[i] = (uint8_t)(size >> 8 * i);
-    out.write(header, 4);
+    out.write(header, HEADER);
   } else {
-    if (in.read(header, 4) != 4)
+    if (in.read(header, HEADER) != HEADER)
       return false;
     size = header[0] | header[1] << 8 | header[2] << 16 | (uint32_t)header[3] << 24;
     if (size > MAX_SIZE)
       return false;
   }
   filehandle &data = encoding ? in : out, &code = encoding ? out : in;
+  progress.start(size);
 
   // The first window, the coder and the tree.
   total_bits = 0;
@@ -1296,6 +1398,7 @@ bool Codec::processfile(filehandle &in, filehandle &out)
   ac.finish();
   if (!encoding)
     data.write(window, window_pos >> 3);
+  progress.finish(HEADER + ac.bytes(), tree_size());
   return out.written();
 }
 

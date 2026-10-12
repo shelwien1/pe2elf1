@@ -184,6 +184,20 @@ cannot be coded (more than 512 MB of data, or a size it cannot tell, as of a
 pipe; a stream shorter than 4 bytes, or with a size over 512 MB) or the
 output was not all written.
 
+While it codes, it shows its progress on stderr, as `ppmd` does: a line
+redrawn at most every half second, and a last one when done.
+
+```
+[enc] 458761 > 138991   59.7%   0.31 MB/s   3.26M tree
+[enc] 768771 > 222682  100.0%  done in 2.88s   5.43M tree
+```
+
+That is the data's bytes coded so far, the stream's bytes they took (with
+the 4-byte size), the share of the data, the speed, and the context tree's
+nodes in use (8 bytes each). Decompressing (`[dec]`), the lines give the same
+counts at the same points. The clock is Windows' performance counter, else
+POSIX's `clock_gettime(CLOCK_MONOTONIC)`, else C's `clock()`.
+
 A `vbn2` stream is the input's size (4 bytes, little-endian) followed by the
 code VBN writes for it in its MAX mode (`vbn u`). The archive around that code
 is gone: header, file table, volumes, and the directory handling that fills
@@ -202,18 +216,18 @@ to the coder since and is maintained by hand:
 - everything else is gone: the archive code, the file table and title, the
   directory scan, volumes, the DOS layer, the console output, the
   associative ("context") model, and VBN's memory image at `0x10000000`;
-- nothing is global: the state is in three classes. `ArithCoder` is the
+- nothing is global: the state is in four classes. `ArithCoder` is the
   arithmetic coder, with its methods inline; it codes a symbol as a share of
   its interval (a count, the counts below it, a total) and knows nothing of
   the models. `Codec` is the coder around it: the window, the context tree
   and its search, and the literal and match-length models, which look a
   symbol's share up in their frequency lists (`encode_symbol`,
-  `decode_symbol`). `filehandle` is a file read or written. VBN's globals
-  are members of these classes, named for what they hold, each with the
-  address `vbn.exe` kept it at, and its functions are their methods, named
-  for what they do, with their `vbn.exe` addresses. The search's early exit,
-  a setjmp/longjmp pair in `vbn.exe`, is plain returns, and the variables
-  only the search uses are its locals;
+  `decode_symbol`). `filehandle` is a file read or written, and `Progress`
+  the progress line. VBN's globals are members of these classes, named for
+  what they hold, each with the address `vbn.exe` kept it at, and its
+  functions are their methods, named for what they do, with their `vbn.exe`
+  addresses. The search's early exit, a setjmp/longjmp pair in `vbn.exe`, is
+  plain returns, and the variables only the search uses are its locals;
 - the model's parameters -- thresholds, ring sizes, starting values, weights
   -- are named constants, together at the top of `Codec` (ALGORITHM.md's
   table of constants gives each one's name);
