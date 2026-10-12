@@ -31,9 +31,10 @@
 // progress line on stderr.  They have no constructors or destructors: Init
 // sets each one up, and Quit gives back what was taken (a file, the Codec's
 // memory).  main takes the parameters, opens the files and runs one Codec.
-// Two templates are parts of the Codec: Average, a moving average in fixed
-// point (the literal costs, the average match length), and Ring, the last N
-// values put in (the rings of recent lengths and literals).
+// The Codec's models are structs of their own in it, LengthModel and
+// LiteralModel, and two templates are parts of it: Average, a moving average
+// in fixed point (the literal costs, the average match length), and Ring, the
+// last N values put in (the rings of recent lengths and literals).
 
 // Files over 2 GB on 32-bit POSIX systems: a 64-bit off_t for fopen, fseeko
 // and ftello.  (Windows has _fseeki64 and _ftelli64.)
@@ -532,7 +533,7 @@ struct Codec {
   static constexpr int32_t LEN_START = 1;         // every length's count, at first
   static constexpr int32_t LEN_STEP = 5;          // what a length coded adds to its count, for the next LEN_RING lengths
   static constexpr int32_t LEN_RING = 4096;
-  static constexpr int32_t LEN_AVG_RATE = 6;      // len_avg moves 1/2^LEN_AVG_RATE of the way to each length (x128)
+  static constexpr int32_t LEN_AVG_RATE = 6;      // len_model.avg moves 1/2^LEN_AVG_RATE of the way to each length (x128)
   static constexpr int32_t NOMATCH_RUN = 9;       // length 0 counts NOMATCH_MUL/(k + k/16) of itself, k being
   static constexpr int32_t NOMATCH_MUL = 5;       //   NOMATCH_RUN * literal_run + search_gain + lit_threshold/4 + 1
   static constexpr int32_t AGREE_QUARTERS = 3;    // the no-match group weighs 3/4 (+1) when next_byte predicts the match,
@@ -542,9 +543,9 @@ struct Codec {
   static constexpr int32_t LEN_COST8_LOW = 0x384; //   (4.3 bits), 9 below this (3.5 bits)
   static constexpr int32_t SCALE_BITS = 6;        // the length groups' scale keeps this many bits more than their sum
   static constexpr int32_t CONF_GAIN = 4;         // their share: (n_cands + CONF_GAIN * search_gain + lit_cost8/64)
-  static constexpr int32_t CONF_BIAS = 1935;      //   * weight / ((len_avg + CONF_BIAS - lit_cost8)/8 + 1)
+  static constexpr int32_t CONF_BIAS = 1935;      //   * weight / ((len_model.avg + CONF_BIAS - lit_cost8)/8 + 1)
   // The literal model.
-  static constexpr int32_t LIT_START = 8;         // every byte's count, and lit_inc, at first
+  static constexpr int32_t LIT_START = 8;         // every byte's count, and lit_model.inc, at first
   static constexpr int32_t LIT_RECENT = 16;       // what a literal adds to its byte's count, for the next LIT_RING1 literals
   static constexpr int32_t LIT_RING1 = 363;
   static constexpr int32_t LIT_RING2 = 1024;      // the literals whose pairs ctx_count counts
@@ -557,7 +558,7 @@ struct Codec {
   static constexpr int32_t DROP_GAIN = 4;         //   or, dropping the candidates, at lit_threshold 0 after a gain this small
   static constexpr int32_t THRESHOLD_BASE = 54;   // lit_threshold: THRESHOLD_BASE + gain/16 - the costs (see code_literal)
   static constexpr int32_t THRESHOLD_TOP = 48;    // (THRESHOLD_TOP - lit_threshold)/8 steps: the byte groups' share doubles
-  static constexpr int32_t BLEND_PIVOT = 4;       //   per step below BLEND_PIVOT, halves per step above; len_avg too counts them
+  static constexpr int32_t BLEND_PIVOT = 4;       //   per step below BLEND_PIVOT, halves per step above; len_model.avg too counts them
   static constexpr int32_t BLEND_THRESHOLD = 3;   // the byte groups' share grows with BLEND_THRESHOLD * lit_threshold
   static constexpr int32_t BLEND_GAIN = 5;        //   + BLEND_GAIN * 5/4 search_gain, in eighths
   static constexpr int32_t PAIR_GAIN = 0x13;      // pair_bonus's second row, from this search gain on
@@ -630,20 +631,41 @@ struct Codec {
   uint32_t groups[2 * 256];                       // 0x1000F060
 
   // The match length model: a count for each length 0..MAX_LEN (0: no
-  // match), following the last LEN_RING lengths coded.
-  uint32_t len_model[2 * 256];                    // 0x1000F860 {count, length} pairs, by length
-  uint32_t len_total;                             // 0x100164C0 the sum of the counts
-  Ring<LEN_RING> len_ring;                        // 0x1001220C the last LEN_RING lengths (position: 0x10016420)
-  Average<7, LEN_AVG_RATE> len_avg;               // 0x100164A8 the average length coded, x128
+  // match), following the last LEN_RING lengths coded, and their average.
+  struct LengthModel {
+    uint32_t list[2 * 256];                       // 0x1000F860 {count, length} pairs, by length
+    uint32_t total;                               // 0x100164C0 the sum of the counts
+    Ring<LEN_RING> ring;                          // 0x1001220C the last LEN_RING lengths (position: 0x10016420)
+    Average<7, LEN_AVG_RATE> avg;                 // 0x100164A8 the average length coded, x128
+
+    void Init();
+    void add(int32_t len);
+  };
+  LengthModel len_model;
 
   // The literal model: a count for each byte, kept sorted by count, largest
-  // first; the last LIT_RING1 literals add LIT_RECENT to theirs.
-  uint32_t lit_model[2 * 256];                    // 0x10010460 {count, byte} pairs
-  uint32_t *lit_slot[256];                        // 0x10010060 per byte: its pair in lit_model
-  uint32_t lit_total;                             // 0x100164BC the sum of the counts
-  int32_t lit_inc;                                // 0x10016490 what every count gets added (1..1024, by lit_cost8)
-  int32_t lit_resort;                             // 0x10016494 literals until the model is sorted again
-  Ring<LIT_RING1> lit_ring1;                      // 0x10010C60 the last LIT_RING1 literals (position: 0x10016418)
+  // first, with what every count gets added; the last LIT_RING1 literals add
+  // LIT_RECENT to theirs.
+  struct LiteralModel {
+    uint32_t list[2 * 256];                       // 0x10010460 {count, byte} pairs
+    uint32_t *slot[256];                          // 0x10010060 per byte: its pair in list
+    uint32_t total;                               // 0x100164BC the sum of the counts
+    int32_t inc;                                  // 0x10016490 what every count gets added (1..1024, by lit_cost8)
+    int32_t resort;                               // 0x10016494 literals until the list is sorted again
+    Ring<LIT_RING1> ring;                         // 0x10010C60 the last LIT_RING1 literals (position: 0x10016418)
+
+    void Init();
+    void set_inc(int32_t to);
+    uint32_t take_out(int32_t byte);
+    void put_back(int32_t byte, uint32_t count);
+    void add(int32_t byte, int32_t resort_after);
+    void swap(uint32_t *a, uint32_t *b);
+  };
+  LiteralModel lit_model;
+
+  // Besides the models: the pairs (byte before, byte) of the last LIT_RING2
+  // literals, counted, which both consult; and what literals have been
+  // costing, which most of the coder adapts to.
   Ring<LIT_RING2> lit_ring2;                      // 0x1001120C the last LIT_RING2 literals, with the byte before each (0x10016428)
   int8_t ctx_count[0x10000];                      // 0x10EB96F0 per byte pair: its count in lit_ring2
   int32_t ctx16;                                  // 0x100164C8 the byte before and the byte coded, as a pair
@@ -660,14 +682,12 @@ struct Codec {
 
   // vbn's functions, the ones plain `u` and `r` run, callees first; each is
   // described where it is defined, below the struct.
-  void len_model_add(int32_t len);
   int32_t *descend(uint32_t pos, int32_t *at);
   void tree_add(uint32_t pos, int32_t *slot, int32_t leaf, uint32_t at, bool flip);
   void tree_insert(uint32_t count, uint32_t bitpos);
   bool walk_emit(int32_t leaf, Walk &w);
   bool walk_cands(int32_t n, Walk &w);
   static uint32_t pair_bonus(uint32_t w, uint32_t seen, bool gained);
-  void lit_swap(uint32_t *a, uint32_t *b);
   void encode_symbol(uint32_t total, int32_t symbol, const uint32_t *list);
   int32_t decode_symbol(uint32_t total, const uint32_t *list);
   int32_t code_literal(int32_t excluded, uint32_t bitpos);
@@ -691,19 +711,38 @@ struct Codec {
   bool predicts_excluded(int32_t leaf) const { return (uint8_t)window[(uint32_t)-leaf >> 3] == excluded_byte; }
 };
 
-// len_model_add (vbn.exe 0x100050B0): count a length in the length model.
-// Its count goes up by LEN_STEP and the count of the length coded LEN_RING
-// lengths ago (from len_ring) down by LEN_STEP; until the ring is full,
-// len_total grows by LEN_STEP instead.  The counts are added to and taken from in their low 16 bits only
-// (`add word ptr`).
-void Codec::len_model_add(int32_t len)
+// LengthModel::Init (part of vbn.exe 0x10004A5F): every count LEN_START and
+// the ring empty; then the lengths of a prior, counted as if coded.
+void Codec::LengthModel::Init()
 {
-  add_low16(len_model[2 * len], LEN_STEP);
-  int32_t old = len_ring.put(len);
+  total = 256 * LEN_START;
+  for (uint32_t i = 0; i < 256; i++) {
+    list[2 * i] = LEN_START;
+    list[2 * i + 1] = i;
+  }
+  ring.Init();
+  static constexpr int32_t prior[23] = {          // 0x1000C97C how many of each length 0..22
+    2662, 633, 321, 185, 77, 40, 24, 22, 18, 15, 13, 10, 7, 5, 3, 3, 2, 2, 2, 1, 1, 1, 1
+  };
+  for (int32_t len = 0; len < 23; len++)
+    for (int32_t n = prior[len]; n; n--)
+      add(len);
+  avg.Init(0);
+}
+
+// LengthModel::add (vbn.exe 0x100050B0): count a length.  Its count goes up
+// by LEN_STEP and the count of the length coded LEN_RING lengths ago (from
+// the ring) down by LEN_STEP; until the ring is full, the total grows by
+// LEN_STEP instead.  The counts are added to and taken from in their low 16
+// bits only (`add word ptr`).
+void Codec::LengthModel::add(int32_t len)
+{
+  add_low16(list[2 * len], LEN_STEP);
+  int32_t old = ring.put(len);
   if (old >= 0)
-    add_low16(len_model[2 * old], -LEN_STEP);
+    add_low16(list[2 * old], -LEN_STEP);
   else
-    len_total += LEN_STEP;
+    total += LEN_STEP;
 }
 
 // descend: from the root, down the context tree along the data before bit
@@ -842,13 +881,80 @@ uint32_t Codec::pair_bonus(uint32_t w, uint32_t seen, bool gained)
   return (bonus[gained][seen < 7 ? seen : 7] * w) >> 4;
 }
 
-// lit_swap: swap two pairs of the literal model, and the slots that find them.
-void Codec::lit_swap(uint32_t *a, uint32_t *b)
+// LiteralModel::Init (part of vbn.exe 0x10004A5F): every count LIT_START, in
+// the bytes' order, and the ring empty.
+void Codec::LiteralModel::Init()
+{
+  total = 256 * LIT_START;
+  for (uint32_t i = 0; i < 256; i++) {
+    list[2 * i] = LIT_START;
+    list[2 * i + 1] = i;
+    slot[i] = &list[2 * i];
+  }
+  ring.Init();
+  inc = LIT_START;
+  resort = 1;
+}
+
+// LiteralModel::set_inc: what every count gets added, `to` from now on.
+inline void Codec::LiteralModel::set_inc(int32_t to)
+{
+  if (inc != to) {
+    for (int32_t b = 0; b < 256; b++)
+      list[2 * b] += to - inc;
+    total += 256 * (to - inc);
+    inc = to;
+  }
+}
+
+// LiteralModel::take_out: a byte leaves the model, for one literal: its count
+// is 0 and the total less.  Returns the count, for put_back.
+inline uint32_t Codec::LiteralModel::take_out(int32_t byte)
+{
+  uint32_t count = *slot[byte];
+  *slot[byte] = 0;
+  total -= count;
+  return count;
+}
+
+// LiteralModel::put_back: ... and comes back.
+inline void Codec::LiteralModel::put_back(int32_t byte, uint32_t count)
+{
+  *slot[byte] = count;
+  total += count;
+}
+
+// LiteralModel::add: count a literal.  Its byte counts LIT_RECENT more while
+// it is in the ring.  Every `resort` literals -- then resort_after from now
+// -- the two counts that changed move to their places in the order.
+inline void Codec::LiteralModel::add(int32_t byte, int32_t resort_after)
+{
+  *slot[byte] += LIT_RECENT;
+  bool sort = --resort == 0;
+  if (sort) {
+    resort = resort_after;
+    for (uint32_t *p = slot[byte]; p > list && p[0] > p[-2]; p -= 2)
+      swap(p, p - 2);
+  }
+  int32_t old = ring.put(byte);
+  if (old < 0)
+    total += LIT_RECENT;
+  else {
+    *slot[old] -= LIT_RECENT;
+    if (sort)
+      for (uint32_t *p = slot[old]; p + 2 < list + 2 * 256 && p[0] < p[2]; p += 2)
+        swap(p, p + 2);
+  }
+}
+
+// LiteralModel::swap: swap two pairs of the list, and the slots that find
+// them.
+void Codec::LiteralModel::swap(uint32_t *a, uint32_t *b)
 {
   std::swap(a[0], b[0]);
   std::swap(a[1], b[1]);
-  lit_slot[a[1]] = a;
-  lit_slot[b[1]] = b;
+  slot[a[1]] = a;
+  slot[b[1]] = b;
 }
 
 // encode_symbol, decode_symbol (vbn.exe 0x100061F4, code_symbol, the model's
@@ -906,7 +1012,7 @@ int32_t Codec::code_literal(int32_t excluded, uint32_t bitpos)
     }
   }
 
-  // lit_inc, what every count in the literal model gets added: the more
+  // lit_model.inc, what every count in the literal model gets added: the more
   // literals cost, the flatter the model.  From about 7 bits on, the long
   // averages start over.
   static constexpr uint32_t steps[7] = { 0x2EC, 0x37F, 0x489, 0x56F, 0x63F, 0x70F, 0x75C };
@@ -917,27 +1023,13 @@ int32_t Codec::code_literal(int32_t excluded, uint32_t bitpos)
   int32_t inc = incs[k];
   if (c8 >= RESTART_COST8)
     restart();
-  if (lit_inc != inc) {
-    for (int32_t b = 0; b < 256; b++)
-      lit_model[2 * b] += inc - lit_inc;
-    lit_total += 256 * (inc - lit_inc);
-    lit_inc = inc;
-  }
+  lit_model.set_inc(inc);
 
   // The bytes ruled out -- `excluded`, and excluded_byte, which the search
   // left out -- leave the model while this one is coded.
-  uint32_t kept = 0, kept_byte = 0;
   bool exclude_byte = excluded_byte >= 0 && excluded_byte != excluded;
-  if (excluded >= 0) {
-    kept = *lit_slot[excluded];
-    *lit_slot[excluded] = 0;
-    lit_total -= kept;
-  }
-  if (exclude_byte) {
-    kept_byte = *lit_slot[excluded_byte];
-    *lit_slot[excluded_byte] = 0;
-    lit_total -= kept_byte;
-  }
+  uint32_t kept = excluded >= 0 ? lit_model.take_out(excluded) : 0;
+  uint32_t kept_byte = exclude_byte ? lit_model.take_out(excluded_byte) : 0;
 
   // The candidates, grouped by the byte they predict, each group a pair
   // {weight, byte}; none for `excluded` (and then n_cands counts one less,
@@ -974,8 +1066,8 @@ int32_t Codec::code_literal(int32_t excluded, uint32_t bitpos)
   }
 
   // The groups join the literal model for now, their weights scaled so that
-  // together they make about `share` counts: more with lit_total, with the
-  // candidates that agree with another, with lit_threshold and with the
+  // together they make about `share` counts: more with lit_model.total, with
+  // the candidates that agree with another, with lit_threshold and with the
   // search's gain.  The byte next_byte predicts weighs 7/4 more, next_byte2's
   // 3/2.  While literals cost less than about 6.8 bits, a byte's count also
   // gets 64 for each time its pair came up lately, and while no pair is known
@@ -985,8 +1077,8 @@ int32_t Codec::code_literal(int32_t excluded, uint32_t bitpos)
   if (n_groups) {
     uint32_t all = n_cands * sum;
     uint32_t x = (n_cands - n_groups) * ((BLEND_THRESHOLD * lit_threshold + BLEND_GAIN * (((uint32_t)search_gain >> 2) + search_gain)) >> 3);
-    uint32_t base = ((uint64_t)lit_total * x) >> 3;
-    saved_total = lit_total;
+    uint32_t base = ((uint64_t)lit_model.total * x) >> 3;
+    saved_total = lit_model.total;
     static constexpr int32_t mode_shift[3] = { 10, 6, 4 }; // 0x1000CA54 by mode, max_cands >> 5
     uint32_t part = base >> mode_shift[(uint32_t)max_cands >> 5];
     uint32_t t = (uint32_t)(THRESHOLD_TOP - lit_threshold) >> 3;
@@ -1002,7 +1094,7 @@ int32_t Codec::code_literal(int32_t excluded, uint32_t bitpos)
       *g = (NEXT2_HALVES * *g) >> 1;
     for (uint32_t *g = groups; g < group; g += 2) {
       uint32_t add = ((uint64_t)scale * g[0]) >> (shift & 31);
-      uint32_t *count = lit_slot[g[1]], old = *count;
+      uint32_t *count = lit_model.slot[g[1]], old = *count;
       group_slot[g[1]] = nullptr;
       g[0] = old;
       if (lit_cost8 < PAIR_COST8) {
@@ -1012,7 +1104,7 @@ int32_t Codec::code_literal(int32_t excluded, uint32_t bitpos)
         add += (uint8_t)ctx_count[ctx16] << PAIR_COUNT_SHIFT;
       }
       *count = old + add;
-      lit_total += add;
+      lit_model.total += add;
     }
   }
 
@@ -1020,9 +1112,9 @@ int32_t Codec::code_literal(int32_t excluded, uint32_t bitpos)
   int32_t byte;
   if (encoding) {
     byte = (uint8_t)window[bitpos >> 3];
-    encode_symbol(lit_total, byte, lit_model);
+    encode_symbol(lit_model.total, byte, lit_model.list);
   } else
-    byte = decode_symbol(lit_total, lit_model);
+    byte = decode_symbol(lit_model.total, lit_model.list);
   uint32_t bits = ac.bits() - start;
   lit_cost8.add(bits);
   lit_cost9.add(bits);
@@ -1031,18 +1123,14 @@ int32_t Codec::code_literal(int32_t excluded, uint32_t bitpos)
 
   // The model as it was.
   if (n_groups) {
-    lit_total = saved_total;
+    lit_model.total = saved_total;
     for (uint32_t *g = groups; g < group; g += 2)
-      *lit_slot[g[1]] = g[0];
+      *lit_model.slot[g[1]] = g[0];
   }
-  if (excluded >= 0) {
-    *lit_slot[excluded] = kept;
-    lit_total += kept;
-  }
-  if (exclude_byte) {
-    *lit_slot[excluded_byte] = kept_byte;
-    lit_total += kept_byte;
-  }
+  if (excluded >= 0)
+    lit_model.put_back(excluded, kept);
+  if (exclude_byte)
+    lit_model.put_back(excluded_byte, kept_byte);
 
   // The pair (byte before, byte) counts once more while it is in lit_ring2,
   // up to 255; literal_run counts the literals in a row whose pair had come
@@ -1057,25 +1145,9 @@ int32_t Codec::code_literal(int32_t excluded, uint32_t bitpos)
   if (old >= 0 && ctx_count[old])
     ctx_count[old]--;
 
-  // The byte counts LIT_RECENT more while it is in lit_ring1.  Every
-  // lit_resort literals, the two counts that changed move to their places in
-  // the order.
-  *lit_slot[byte] += LIT_RECENT;
-  bool resort = --lit_resort == 0;
-  if (resort) {
-    lit_resort = (uint8_t)(lit_cost8.whole() + 1);
-    for (uint32_t *p = lit_slot[byte]; p > lit_model && p[0] > p[-2]; p -= 2)
-      lit_swap(p, p - 2);
-  }
-  old = lit_ring1.put(byte);
-  if (old < 0)
-    lit_total += LIT_RECENT;
-  else {
-    *lit_slot[old] -= LIT_RECENT;
-    if (resort)
-      for (uint32_t *p = lit_slot[old]; p + 2 < lit_model + 2 * 256 && p[0] < p[2]; p += 2)
-        lit_swap(p, p + 2);
-  }
+  // The byte counts in the literal model, which is sorted again after about
+  // as many literals as one costs bits.
+  lit_model.add(byte, (uint8_t)(lit_cost8.whole() + 1));
   return byte;
 }
 
@@ -1092,7 +1164,7 @@ int32_t Codec::code_match(int32_t *excluded, uint32_t bitpos)
     *excluded = -1;
     search_gain = 0;
     literal_run = 0;
-    len_avg.Init(0);
+    len_model.avg.Init(0);
     return 0;
   }
 
@@ -1101,13 +1173,13 @@ int32_t Codec::code_match(int32_t *excluded, uint32_t bitpos)
   // coded unless a candidate's group adds to it.  vbn's parameters keep that
   // (and processfile fails if a stream would need it); with other
   // parameters, the count stays at least 1.
-  uint32_t count0 = len_model[0];
-  len_total -= count0;
+  uint32_t count0 = len_model.list[0];
+  len_model.total -= count0;
   uint64_t k = (NOMATCH_RUN * literal_run + search_gain + ((uint32_t)lit_threshold >> 2) + 1) & count_mask;
   uint64_t d = (k + (k >> 4)) & count_mask;       // vbn's 32 bits can make it 0 (and vbn divides by 0)
-  len_model[0] = d ? (uint32_t)(NOMATCH_MUL * count0 / d) : 0;
-  len_model[0] += len_model[0] == 0 && !vbn_exact;
-  len_total += len_model[0];
+  len_model.list[0] = d ? (uint32_t)(NOMATCH_MUL * count0 / d) : 0;
+  len_model.list[0] += len_model.list[0] == 0 && !vbn_exact;
+  len_model.total += len_model.list[0];
 
   // The best candidate's match: at most MAX_LEN bytes, its distance, and what
   // is left of the data.  From here on, a candidate holds the byte it predicts.
@@ -1154,16 +1226,16 @@ int32_t Codec::code_match(int32_t *excluded, uint32_t bitpos)
 
   // The groups join the length model for now, scaled to it; the groups keep
   // the counts they replace.  The no-match group is weighed first: by
-  // len_avg against lit_threshold, less when next_byte agrees with the best
-  // candidate, and by how often its byte came up lately -- ctx_count indexed
-  // by the byte alone, as vbn does.
+  // len_model.avg against lit_threshold, less when next_byte agrees with the
+  // best candidate, and by how often its byte came up lately -- ctx_count
+  // indexed by the byte alone, as vbn does.
   uint32_t saved_total = 0;
   if (group != groups) {
     if (uint32_t *g0 = group_slot[0]) {
-      uint32_t avg = len_avg >> top_bit(((uint32_t)(THRESHOLD_TOP - lit_threshold) >> 3) + 1);
+      uint32_t avg = len_model.avg >> top_bit(((uint32_t)(THRESHOLD_TOP - lit_threshold) >> 3) + 1);
       uint32_t w = *g0;
       if (agree) {
-        avg = len_avg;
+        avg = len_model.avg;
         w = ((AGREE_QUARTERS * w) >> 2) + 1;
         if (agree != 1)
           w = ((AGREE2_EIGHTHS * w) >> 3) + 1;
@@ -1180,53 +1252,53 @@ int32_t Codec::code_match(int32_t *excluded, uint32_t bitpos)
       uint32_t step = (mul[s] * (w >> pre[s])) >> 2;
       *g0 = seen ? w - step : w + step;
     }
-    saved_total = len_total;
+    saved_total = len_model.total;
     // The model weighs 4 times its total, 6 once literals cost less than
     // LEN_COST8_MID / 2^8 (about 4.3 bits), 9 below LEN_COST8_LOW / 2^8 (about
     // 3.5).
     static constexpr uint8_t times[3] = { 4, 6, 9 };
-    uint32_t weight = times[(lit_cost8 < LEN_COST8_MID) + (lit_cost8 < LEN_COST8_LOW)] * len_total;
+    uint32_t weight = times[(lit_cost8 < LEN_COST8_MID) + (lit_cost8 < LEN_COST8_LOW)] * len_model.total;
     uint32_t shift = top_bit(sum) + SCALE_BITS;      // shld/shrd: the count is mod 32
     uint32_t share = (uint64_t)(n_cands + CONF_GAIN * search_gain + (lit_cost8 >> 6)) * weight
-                     / (((len_avg + CONF_BIAS - lit_cost8) >> 3) + 1);
+                     / (((len_model.avg + CONF_BIAS - lit_cost8) >> 3) + 1);
     uint32_t scale = ((uint64_t)share << (shift & 31)) / sum;
     for (uint32_t *g = groups; g < group; g += 2) {
       uint32_t add = search_gain + ((scale * (uint64_t)g[0]) >> (shift & 31));
-      len_total += add;
+      len_model.total += add;
       group_slot[g[1]] = nullptr;
-      uint32_t old = len_model[2 * g[1]];
+      uint32_t old = len_model.list[2 * g[1]];
       g[0] = old;
-      len_model[2 * g[1]] = old + add;
+      len_model.list[2 * g[1]] = old + add;
     }
   }
 
   // The length: up to max_len, so the longer ones leave the total.
-  uint32_t total = len_total;
+  uint32_t total = len_model.total;
   for (uint32_t l = max_len + 1; l < 256; l++)
-    total -= len_model[2 * l];
+    total -= len_model.list[2 * l];
   int32_t len;
   if (encoding) {
     for (len = 0; (uint32_t)len < max_len && cur[len] == match[len]; len++)
       ;
-    uncodable |= len_model[2 * len] == 0;         // only length 0 can have no count (above)
-    encode_symbol(total, len, len_model);
+    uncodable |= len_model.list[2 * len] == 0;         // only length 0 can have no count (above)
+    encode_symbol(total, len, len_model.list);
   } else {
-    len = decode_symbol(total, len_model);
+    len = decode_symbol(total, len_model.list);
     for (int32_t j = 0; j < len; j++)
       cur[j] = match[j];
   }
   *excluded = (uint32_t)len < max_len ? (uint8_t)match[len] : -1;
-  len_avg.add(len);
+  len_model.avg.add(len);
 
   // The model as it was, and the length counted.
   if (group != groups) {
-    len_total = saved_total;
+    len_model.total = saved_total;
     for (uint32_t *g = groups; g < group; g += 2)
-      len_model[2 * g[1]] = g[0];
+      len_model.list[2 * g[1]] = g[0];
   }
-  len_total = len_total - len_model[0] + count0;
-  len_model[0] = count0;
-  len_model_add(len);
+  len_model.total = len_model.total - len_model.list[0] + count0;
+  len_model.list[0] = count0;
+  len_model.add(len);
   return len;
 }
 
@@ -1438,35 +1510,15 @@ bool Codec::Init(bool encoding, uint32_t order, uint32_t window_kb, uint32_t kee
   ac.Init(encoding);
   progress.Init(encoding);
 
-  lit_total = 256 * LIT_START;
-  for (uint32_t i = 0; i < 256; i++) {
-    lit_model[2 * i] = LIT_START;
-    lit_model[2 * i + 1] = i;
-    lit_slot[i] = &lit_model[2 * i];
-  }
-  len_total = 256 * LEN_START;
-  for (uint32_t i = 0; i < 256; i++) {
-    len_model[2 * i] = LEN_START;
-    len_model[2 * i + 1] = i;
-  }
-  lit_ring1.Init();
+  len_model.Init();
+  lit_model.Init();
   lit_ring2.Init();
-  len_ring.Init();
   memset(ctx_count, 0, sizeof ctx_count);
-  static constexpr int32_t len_init_counts[23] = { // 0x1000C97C the counts lengths 0..22 start with
-    2662, 633, 321, 185, 77, 40, 24, 22, 18, 15, 13, 10, 7, 5, 3, 3, 2, 2, 2, 1, 1, 1, 1
-  };
-  for (int32_t len = 0; len < 23; len++)
-    for (int32_t n = len_init_counts[len]; n; n--)
-      len_model_add(len);
   memset(group_slot, 0, sizeof group_slot);
   lit_cost8.Init(COST8_START);
   lit_cost9.Init(COST9_START);
   lit_cost10.Init(COST10_START);
   lit_cost11.Init(COST11_START);
-  len_avg.Init(0);
-  lit_resort = 1;
-  lit_inc = LIT_START;
   memset(next_byte, 0, sizeof next_byte);
   memset(next_byte2, 0, sizeof next_byte2);
   prev_byte = prev_byte2 = lit_threshold = 0;

@@ -274,14 +274,15 @@ source.
 that followed the best candidate's position.
 
 - With no candidates, nothing is coded: a literal follows, and the
-  confidence trackers (`search_gain`, `literal_run`, `len_avg`) reset.
+  confidence trackers (`search_gain`, `literal_run`, `len_model.avg`) reset.
 - **The maximum** is `min(255, the candidate's distance, bytes left)`, and
   lengths above it are removed from the model for this symbol.
-- **The length model** has a count for each length 0..255. Each coded length
-  adds 5 to its count for the next 4096 lengths (a ring of the last 4096
-  lengths; the adds are 16-bit). Before any data the ring holds a prior of
-  4,048 synthetic lengths, 2,662 of them length 0, then 633 of length 1, 321
-  of 2, … one each of lengths 19–22. Every count also starts at 1.
+- **The length model** (`LengthModel`, the Codec's `len_model`) has a count
+  for each length 0..255. Each coded length adds 5 to its count for the next
+  4096 lengths (a ring of the last 4096 lengths; the adds are 16-bit). Before
+  any data the ring holds a prior of 4,048 synthetic lengths, 2,662 of them
+  length 0, then 633 of length 1, 321 of 2, … one each of lengths 19–22.
+  Every count also starts at 1.
 - **No match is made less likely when literals are going well.** For this
   symbol, the count of length 0 is scaled by `5/(k + k/16)`, with
   `k = 9·literal_run + search_gain + lit_threshold/4 + 1`. That can round
@@ -298,19 +299,19 @@ that followed the best candidate's position.
   otherwise 0. Votes are grouped by length; a group weighs its candidates'
   weights above `cand_floor`, plus (*n* − *i*)/2 for its first member, *i*
   being that member's rank among the *n* candidates. The group for length 0
-  is reweighed: by `len_avg` against `lit_threshold`, down (×3/4, ×21/32)
+  is reweighed: by `len_model.avg` against `lit_threshold`, down (×3/4, ×21/32)
   when the best candidate's byte is what `next_byte` (below) predicts, and by
   `ctx_count` of that byte, a pair count indexed by the byte alone (a quirk):
   +1/512 at 0, then −1/32, −5/32, −3/16 (3 to 5) and −1/4 (6 or more). Each
   group's weight, scaled to 4, 6 or 9 times the model's total (more as
   literals get cheaper: `lit_cost8` below 0x44C, below 0x384) and to a
   confidence term (`n_cands + 4·search_gain + lit_cost8/64` over a term in
-  `len_avg` and `lit_cost8`), plus `search_gain`, is added to its length's
+  `len_model.avg` and `lit_cost8`), plus `search_gain`, is added to its length's
   count for this one symbol. A length where other candidates part ways with the best one
   becomes more likely.
 - The length is coded, the model restored, and the length counted
-  (`len_model_add`). `len_avg`, the average length ×128, follows with weight
-  1/64.
+  (`LengthModel::add`). `len_model.avg`, the average length ×128, follows
+  with weight 1/64.
 
 The encoder finds the length by comparing; the decoder decodes it and copies
 that many bytes from the candidate's position. If the length is below the
@@ -320,17 +321,18 @@ maximum, the byte the candidate had there is the excluded byte.
 
 `code_literal` codes the byte at a position where the match length was 0.
 
-**The literal model** is 256 counts, kept sorted by count (largest first) with
-an index from byte to entry (`lit_slot`), so the arithmetic coder's linear
-search finds frequent bytes first.
+**The literal model** (`LiteralModel`, the Codec's `lit_model`) is 256
+counts, kept sorted by count (largest first) with an index from byte to entry
+(`lit_model.slot`), so the arithmetic coder's linear search finds frequent
+bytes first.
 
 - Each literal adds 16 to its byte's count for the next 363 literals (a
   ring).
-- Every count also carries a uniform increment `lit_inc` that grows as
+- Every count also carries a uniform increment `lit_model.inc` that grows as
   literals get expensive (1, 2, 4, 8, 16, 32, 128, 1024 as `lit_cost8` passes
   0x2EC, 0x37F, 0x489, 0x56F, 0x63F, 0x70F, 0x75C, about 2.9 to 7.4 bits a
   literal). Hard data gets a flatter model.
-- Sorting is lazy: every `lit_resort` literals, about the average literal
+- Sorting is lazy: every `lit_model.resort` literals, about the average literal
   cost in bits plus one, the two counts that just changed bubble into place.
 
 **Costs.** `lit_cost8` … `lit_cost11` are the bits a literal takes, ×2^N,
@@ -430,13 +432,13 @@ The names are those of `vbn2.cpp`'s `Codec`, which keeps them together.
 | a match's positions registered | search gain < 0x2A, or after an exclusion | `INSERT_GAIN` |
 | match length | 0..255 (0 = none) | `MAX_LEN` |
 | length model | 256 counts from 1, +5 per length, over the last 4096 lengths | `LEN_START`, `LEN_STEP`, `LEN_RING` |
-| `len_avg` | ×128, following each length by 1/64 | `LEN_AVG_RATE` |
+| `len_model.avg` | ×128, following each length by 1/64 | `LEN_AVG_RATE` |
 | length 0's count | ×5/(k + k/16), k = 9·`literal_run` + gain + `lit_threshold`/4 + 1 | `NOMATCH_MUL`, `NOMATCH_RUN` |
 | no-match group, `next_byte` agreeing | ×3/4 + 1, and ×7/8 + 1 when twice | `AGREE_QUARTERS`, `AGREE2_EIGHTHS` |
 | a length group's rank bonus | (n − i)/2 | `RANK_SHIFT` |
 | length groups' weight | 4, 6 or 9 × total as `lit_cost8` < 0x44C, < 0x384 | `LEN_COST8_MID`, `LEN_COST8_LOW` |
-| length groups' share | (n + 4·gain + `lit_cost8`/64)·weight / ((`len_avg` + 1935 − `lit_cost8`)/8 + 1), scaled with 6 bits to spare | `CONF_GAIN`, `CONF_BIAS`, `SCALE_BITS` |
-| literal model | 256 counts, +16 per literal over the last 363, plus `lit_inc` (1..1024, from 8) | `LIT_RECENT`, `LIT_RING1`, `LIT_START` |
+| length groups' share | (n + 4·gain + `lit_cost8`/64)·weight / ((`len_model.avg` + 1935 − `lit_cost8`)/8 + 1), scaled with 6 bits to spare | `CONF_GAIN`, `CONF_BIAS`, `SCALE_BITS` |
+| literal model | 256 counts, +16 per literal over the last 363, plus `lit_model.inc` (1..1024, from 8) | `LIT_RECENT`, `LIT_RING1`, `LIT_START` |
 | pair counts | `ctx_count[256·prev + byte]` over the last 1024 literals, ≤ 255 | `LIT_RING2` |
 | pair bonus's second row | search gain ≥ 0x13 | `PAIR_GAIN` |
 | pair counts in the literal model | below `lit_cost8` 0x6C9 (6.8 bits): +64 per pair seen, and +¼ of the count while `literal_run` is 0 | `PAIR_COST8`, `PAIR_COUNT_SHIFT`, `NO_RUN_SHIFT` |

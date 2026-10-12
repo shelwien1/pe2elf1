@@ -254,9 +254,9 @@ to the coder since and is maintained by hand:
   arithmetic coder, with its methods inline; it codes a symbol as a share of
   its interval (a count, the counts below it, a total) and knows nothing of
   the models. `Codec` is the coder around it: the window, the context tree
-  and its search, and the literal and match-length models, which look a
-  symbol's share up in their frequency lists (`encode_symbol`,
-  `decode_symbol`). `filehandle` is a file read or written, and `Progress`
+  and its search, and the literal and match-length models (`LiteralModel`
+  and `LengthModel`, structs of their own in it), which look a symbol's share
+  up in their frequency lists (`encode_symbol`, `decode_symbol`). `filehandle` is a file read or written, and `Progress`
   the progress line. VBN's globals are members of these structs, named for
   what they hold, each with the address `vbn.exe` kept it at, and its
   functions are their methods, named for what they do, with their `vbn.exe`
