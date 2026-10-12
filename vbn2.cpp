@@ -440,30 +440,6 @@ private:
     return old;
   }
 
-  // common_prefix: how many bytes a and b agree on, up to `most` (all of
-  // them data already coded), 8 at a time while 8 are left: the first byte
-  // that differs is the lowest set byte of the two words' xor (the highest,
-  // big-endian).  vbn compares a byte at a time, and the branch that ends the
-  // agreement mispredicts.
-  static uint32_t common_prefix(const int8_t *a, const int8_t *b, uint32_t most)
-  {
-    uint32_t len = 0;
-    for (; len + 8 <= most; len += 8) {
-      uint64_t x, y;
-      memcpy(&x, a + len, 8);
-      memcpy(&y, b + len, 8);
-      if (x != y)
-#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-        return len + (__builtin_clzll(x ^ y) >> 3);
-#else
-        return len + (__builtin_ctzll(x ^ y) >> 3);
-#endif
-    }
-    while (len < most && a[len] == b[len])
-      len++;
-    return len;
-  }
-
   // other_slot: the other slot of the node `slot` is in.  (vbn.exe flips bit
   // 2 of the slot's address.)
   int32_t *other_slot(int32_t *slot) { return tree + ((slot - tree) ^ 1); }
@@ -878,9 +854,14 @@ int32_t Codec::code_match(int32_t *excluded, uint32_t bitpos)
     int32_t *cand = &cands[2 * i];
     int8_t *data = &window[(uint32_t)-cand[1] >> 3];
     cand[1] = (uint8_t)*data;
-    // It agrees up to max_len at most, and, later than the best one, up to cur.
-    uint32_t most = match <= data && max_len > (uint32_t)(cur - data) ? (uint32_t)(cur - data) : max_len;
-    uint32_t len = common_prefix(data, match, most);
+    uint32_t len = 0;
+    if (*data == *match) {
+      uint32_t most = max_len;
+      if (match <= data && max_len > (uint32_t)(cur - data))
+        most = cur - data;
+      for (len = 1; len < most && data[len] == match[len]; len++)
+        ;
+    }
     uint32_t w = (uint32_t)cand[0] - cand_floor;
     if (group_slot[len])
       *group_slot[len] += w;
