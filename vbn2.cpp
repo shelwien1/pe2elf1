@@ -22,11 +22,13 @@
 // each (incdec/README.md), and tools/mkvbn2.py there made them a standalone
 // program.  This file started as that program; it has been cut down to the
 // coder and written out by hand since, each function headed by the vbn.exe
-// function it is.  Nothing is global: the state is in four classes --
+// function it is.  Nothing is global: the state is in four structs --
 // ArithCoder, the arithmetic coder; Codec, the coder around it (the window,
 // the context tree and its search, and the models), whose members are vbn's
 // globals; filehandle, the files they read and write; and Progress, the
-// progress line on stderr -- and main runs one Codec.
+// progress line on stderr.  They have no constructors or destructors: Init
+// sets each one up, and Quit gives back what Init took (a file, the Codec's
+// memory).  main opens the files and runs one Codec.
 
 #include <cstdint>
 #include <cstdio>
@@ -56,18 +58,14 @@ static inline void xor_bit(void *buf, uint32_t n, uint32_t bit)
 }
 
 // ===========================================================================
-// filehandle: a file, open for reading (mode 0) or for writing (mode 1); it
-// is 0 if it did not open.  The coder reads the data or the code from one and
-// writes the code or the data to another.  close() closes it, and exit()
-// any left open: a destructor would give main cleanups for exceptions to run,
-// which need the C++ runtime (libstdc++), and vbn2 throws none.
+// filehandle: a file, opened for reading (mode 0) or for writing (mode 1) by
+// Init, and closed by Quit; it is 0 if it did not open.  The coder reads the
+// data or the code from one and writes the code or the data to another.
 // ===========================================================================
-class filehandle
-{
-public:
-  filehandle(const char *name, uint32_t mode) : file(fopen(name, mode ? "wb" : "rb")) {}
-  filehandle(const filehandle &) = delete;
-  filehandle &operator=(const filehandle &) = delete;
+struct filehandle {
+  // Init: open the file `name`.
+  void Init(const char *name, uint32_t mode) { file = fopen(name, mode ? "wb" : "rb"); }
+
   operator FILE *() const { return file; }
 
   // read (vbn.exe 0x10000D0E): read up to `count` bytes, and return how many
@@ -91,14 +89,14 @@ public:
   // Whether everything written got there.
   bool written() { return fflush(file) == 0 && !ferror(file); }
 
-  void close()
+  // Quit: close the file.
+  void Quit()
   {
     if (file)
       fclose(file);
     file = nullptr;
   }
 
-private:
   FILE *file;
 };
 
@@ -116,10 +114,9 @@ extern "C" __declspec(dllimport) int __stdcall QueryPerformanceCounter(long long
 extern "C" __declspec(dllimport) int __stdcall QueryPerformanceFrequency(long long *frequency);
 #endif
 
-class Progress
-{
-public:
-  Progress(bool encoding) : tag(encoding ? "enc" : "dec") {}
+struct Progress {
+  // Init: for compressing, or decompressing.
+  void Init(bool encoding) { tag = encoding ? "enc" : "dec"; }
 
   // Start the clock, for `size` bytes of data.
   void start(uint32_t size)
@@ -155,12 +152,11 @@ public:
     fflush(stderr);
   }
 
-private:
   static constexpr uint32_t STEP = 0x10000;       // a look at the clock every 64 KB of data,
   static constexpr double INTERVAL = 0.5;         //   and a line every half second at most
   static constexpr double MB = 1 << 20;
 
-  const char *const tag;                          // "enc" compressing, "dec" decompressing
+  const char *tag;                                // "enc" compressing, "dec" decompressing
   uint32_t total;                                 // the data's size
   uint32_t next;                                  // the data's bytes coded at the next look
   double t_start, t_last;                         // when the coding started, and the last line
@@ -193,10 +189,9 @@ private:
 // buffer, written out to a file (compressing) or filled from it
 // (decompressing).
 // ===========================================================================
-class ArithCoder
-{
-public:
-  ArithCoder(bool encoding) : encoding(encoding) {}
+struct ArithCoder {
+  // Init: for compressing, or decompressing.
+  void Init(bool encoding) { this->encoding = encoding; }
 
   // Start: the whole interval, at the start of an empty buffer -- the code
   // goes to `code`, or, decompressing, comes from it, up to `count` bytes
@@ -290,11 +285,10 @@ public:
       file->write(buf, (pos + 7) >> 3);
   }
 
-private:
   static constexpr uint32_t BLOCK = 0x2000;       // the code goes out and comes in 8 KB at a time
   static constexpr uint32_t SPILL = 16;           // how far a position's code can run past a block: 2 symbols, 64 bits each
 
-  const bool encoding;
+  bool encoding;                                  // compressing, or decompressing
   filehandle *file;                               // where the code goes, or comes from
   uint32_t low, high;                             // 0x1001640C, 0x10016410 the interval
   int32_t pending;                                // 0x10016414 bits of the interval not settled yet
@@ -393,26 +387,14 @@ private:
 // ArithCoder.  Its members are vbn's globals, with the address vbn.exe kept
 // each at after its name; sizes are what the code reaches.
 // ===========================================================================
-class Codec
-{
-public:
+struct Codec {
   static constexpr uint32_t MAX_SIZE = 0x1FFFFFFF; // the most data: the coder counts it in bits, in 32 bits
   static constexpr uint32_t HEADER = 4;           // a stream's header: the data's size, little-endian
 
-  Codec(bool encoding) noexcept : encoding(encoding), ac(encoding), progress(encoding) {}
-  Codec(const Codec &) = delete;                  // it points into itself
-  Codec &operator=(const Codec &) = delete;
-
-  // A Codec takes about 15 MB, from the heap: new gets it from malloc, and
-  // gives null if there is not that much.  (The global operator new would
-  // bring in libstdc++, which vbn2 does not otherwise use.)
-  static void *operator new(size_t size) noexcept { return malloc(size); }
-  static void operator delete(void *p) noexcept { free(p); }
-
-  void init();
+  bool Init(bool encoding);
+  void Quit();
   bool processfile(filehandle &in, filehandle &out);
 
-private:
   // A walk over a subtree's leaves (walk_cands).
   struct Walk {
     int32_t *out;                                 // where the next pair goes
@@ -486,14 +468,14 @@ private:
   static constexpr int32_t NO_RUN_SHIFT = 2;      //   and while no pair is known (literal_run 0), a quarter of its count
 
   // The direction.
-  const bool encoding;                            // 0x1000D4C4 compressing, or decompressing
+  bool encoding;                                  // 0x1000D4C4 compressing, or decompressing
 
   ArithCoder ac;
   Progress progress;
 
   // The data: a window of WINDOW bytes that slides by SLIDE.  Positions are
   // bit positions, 8 per byte.
-  int8_t window[WINDOW];                          // 0x100166F0
+  int8_t *window;                                 // 0x100166F0 WINDOW bytes, from the heap
   uint32_t window_pos;                            // 0x1001646C where coding is, in bits
   int32_t window_bits;                            // 0x10016444 where the data in the window ends, in bits (as an address: 0x1001643C)
   uint32_t total_bits;                            // 0x10016468 the data coded so far, in bits
@@ -511,10 +493,10 @@ private:
   // tree starts over when the window slides: the arena holds WINDOW + 1 nodes.
   // (vbn.exe kept nodes' addresses in the slots, and the next node's address
   // at 0x10016430, always node tree_nodes.)
-  int32_t tree[2 * (1 + WINDOW)];                 // 0x101AE6F0 the arena, 12.75 MiB
+  int32_t *tree;                                  // 0x101AE6F0 the arena, 2 * (1 + WINDOW) slots (12.75 MiB), from the heap
   int32_t tree_nodes;                             // 0x1000CA4C nodes in use, the root too: the next one made
   int32_t tree_updates;                           // 0x10016434 counts changes to the tree
-  int32_t registered[WINDOW / 32];                // 0x10E6E6F0 a bit per position in the window: in the tree
+  int32_t *registered;                            // 0x10E6E6F0 a bit per position in the window, WINDOW bits from the heap: in the tree
 
   // The search: from the position being coded, down the tree, collecting
   // earlier positions with the same context -- the candidates -- and a
@@ -562,7 +544,7 @@ private:
   int32_t lit_cost11;                             // 0x10016498 ... and x2^11 over 2^11
 
   // vbn's functions, the ones plain `u` and `r` run, callees first; each is
-  // described where it is defined, below the class.
+  // described where it is defined, below the struct.
   void len_model_add(int32_t len);
   int32_t *descend(uint32_t pos, int32_t *at);
   void tree_add(uint32_t pos, int32_t *slot, int32_t leaf, uint32_t at, bool flip);
@@ -1292,9 +1274,23 @@ void Codec::tree_rebuild()
     }
 }
 
-// init (part of vbn.exe 0x10004A5F): the models as they start.
-void Codec::init()
+// Init (part of vbn.exe 0x10004A5F): the coder as it starts, compressing or
+// decompressing.  It takes what is sized by the window -- the window, the
+// tree's arena and the registered bits, about 15 MB -- from the heap (false
+// if there is not that much), and starts the models.
+bool Codec::Init(bool encoding)
 {
+  window = (int8_t *)malloc(WINDOW);
+  tree = (int32_t *)malloc(2 * (1 + WINDOW) * sizeof *tree);
+  registered = (int32_t *)malloc(WINDOW / 8);
+  if (window == nullptr || tree == nullptr || registered == nullptr) {
+    Quit();
+    return false;
+  }
+  this->encoding = encoding;
+  ac.Init(encoding);
+  progress.Init(encoding);
+
   lit_total = 256 * LIT_START;
   for (uint32_t i = 0; i < 256; i++) {
     lit_model[2 * i] = LIT_START;
@@ -1328,6 +1324,18 @@ void Codec::init()
   memset(next_byte, 0, sizeof next_byte);
   memset(next_byte2, 0, sizeof next_byte2);
   prev_byte = prev_byte2 = literal_run = lit_threshold = 0;
+  return true;
+}
+
+// Quit: give the window, the arena and the registered bits back.
+void Codec::Quit()
+{
+  free(window);
+  free(tree);
+  free(registered);
+  window = nullptr;
+  tree = nullptr;
+  registered = nullptr;
 }
 
 // processfile (the rest of vbn.exe 0x10004A5F): compress the data in `in`
@@ -1369,7 +1377,7 @@ bool Codec::processfile(filehandle &in, filehandle &out)
   if (encoding)
     data.read(window, n);
   ac.start(code, FIRST_CODE * n);
-  memset(registered, 0, sizeof registered);
+  memset(registered, 0, WINDOW / 8);
   tree[0] = tree[1] = 0;
   tree_nodes = 1;
   tree_updates = 1;
@@ -1419,21 +1427,21 @@ int main(int argc, char **argv)
   }
   uint32_t f_DEC = argv[1][0] == 'd';
 
-  filehandle f(argv[2], 0);
+  filehandle f, g;
+  f.Init(argv[2], 0);
   if (f == 0)
     return 2;
-  filehandle g(argv[3], 1);
+  g.Init(argv[3], 1);
   if (g == 0)
     return 3;
 
-  Codec *C = new Codec(f_DEC == 0);               // about 15 MB
-  if (C == 0)
+  Codec C;                                        // about 105 KB, on the stack
+  if (!C.Init(f_DEC == 0))                        // and about 15 MB from the heap
     return 4;
-  C->init();
-  int rc = C->processfile(f, g) ? 0 : 5;
-  delete C;
+  int rc = C.processfile(f, g) ? 0 : 5;
+  C.Quit();
 
-  g.close();
-  f.close();
+  g.Quit();
+  f.Quit();
   return rc;
 }
