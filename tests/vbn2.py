@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
 """tests/vbn2.py [--record] [--exe PATH] [--cxx CMD]: the gate for vbn2.cpp.
 
-1. vbn2 against vbn itself.  For each corpus entry, `vbn u` (the pe2elf32
-   port, ../vbn) writes an archive: a 3-byte header, then vbn's code for the
-   archive's title followed by the data.  That code, preceded by the size of
-   what it codes, is a vbn2 stream.  vbn2 d must decode it to the title and
-   the data, and vbn2 c must encode that back to the same bytes.
+1. vbn2 against vbn itself.  For each corpus entry and each of vbn's modes
+   -- `vbn u` (MAX: 95 candidates, vbn2's default), `vbn b` (NORMAL: 55) and
+   `vbn B` (FAST: 31) -- the pe2elf32 port (../vbn) writes an archive: a
+   3-byte header, then vbn's code for the archive's title followed by the
+   data.  That code, preceded by vbn2's header for it -- the size of what it
+   codes, and in the modes but MAX the parameters, with the mode's candidates
+   -- is a vbn2 stream.  vbn2 d must decode it to the title and the data, and
+   vbn2 c (given the candidates) must encode that back to the same bytes.
 2. Every input of mkinputs.py: vbn2 c, then vbn2 d must give the input back,
    and the compressed stream's md5 must be the one vbn2.md5 records (--record
    writes vbn2.md5 instead of checking it).
+3. The same for PARAM_INPUTS with each of PARAMS, vbn2's other parameters:
+   windows that slide every few bytes, slides that keep nothing or nearly
+   everything, a short order, the fewest candidates, a larger window.
 
 vbn2 is built from ../vbn2.cpp with `g++ -O2` unless --exe names a binary;
 --cxx gives another compiler command (for example "clang++ -m32 -O3").
@@ -27,6 +33,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 STAMP = 315533580                     # 1980-01-01 00:13 UTC, as ../test.sh pins it
 ENTRIES = ['input.txt', 'mixed.bin', 'rep.bin', 'vbn.exe', 'big.bin', 'tree']
+MODES = {'u': 95, 'b': 55, 'B': 31}   # vbn's command, and the candidates its mode searches for
+PARAMS = [('0', '16'), ('0', '64', '0'), ('0', '1', '99'), ('4',), ('0', '1632', '75', '2'), ('6', '4096', '50', '31')]
+PARAM_INPUTS = ['input.txt', 'rand', 'rep.bin', 'zeros', 'bytes', 'text-1000', 'text-0']
 
 
 def run(args, cwd=None):
@@ -40,9 +49,10 @@ def source(entry):
     return os.path.join(REPO, 'incdec', 'corpus', entry)
 
 
-def against_vbn(exe, work, entry):
-    """Step 1 for one entry: None, or what went wrong."""
-    d = os.path.join(work, 'vbn-' + entry)
+def against_vbn(exe, work, entry, mode):
+    """Step 1 for one entry and mode: None, or what went wrong."""
+    cands = MODES[mode]
+    d = os.path.join(work, 'vbn%d-%s' % (cands, entry))
     src = source(entry)
     if os.path.isdir(src):
         shutil.copytree(src, d)
@@ -56,14 +66,19 @@ def against_vbn(exe, work, entry):
         for f in files:
             os.utime(os.path.join(top, f), (STAMP, STAMP))
             size += os.path.getsize(os.path.join(top, f))
-    rc, out = run([os.path.join(REPO, 'vbn'), 'u', 'archive', arg], cwd=d)
+    rc, out = run([os.path.join(REPO, 'vbn'), mode, 'archive', arg], cwd=d)
     if rc or not os.path.exists(os.path.join(d, 'archive.vbn')):
-        return 'vbn u failed: ' + out[-200:]
+        return 'vbn %s failed: %s' % (mode, out[-200:])
     arc = open(os.path.join(d, 'archive.vbn'), 'rb').read()
     h = arc[0] | arc[1] << 8 | arc[2] << 16
     title = (h & 0x7FFF) | ((h & 0x70000) >> 1)
-    stream = struct.pack('<I', title + size) + arc[3:]
-    s, t, s2 = (os.path.join(work, entry + x) for x in ('.from-vbn', '.decoded', '.again'))
+    params = [] if cands == 95 else ['0', '1632', '75', str(cands)]
+    if params:   # the size with the top bit set; vbn's window and slide, the candidates, order 0
+        header = struct.pack('<IIIBB', (title + size) | 0x80000000, 0x198000, 0x132000, cands, 0)
+    else:
+        header = struct.pack('<I', title + size)
+    stream = header + arc[3:]
+    s, t, s2 = (os.path.join(work, '%s.%d%s' % (entry, cands, x)) for x in ('.from-vbn', '.decoded', '.again'))
     open(s, 'wb').write(stream)
     rc, out = run([exe, 'd', s, t])
     if rc:
@@ -73,7 +88,7 @@ def against_vbn(exe, work, entry):
         return 'vbn2 d wrote %d bytes, not %d' % (len(data), title + size)
     if not os.path.isdir(src) and data[title:] != open(src, 'rb').read():
         return 'vbn2 d decoded other data'
-    rc, out = run([exe, 'c', t, s2])
+    rc, out = run([exe, 'c', t, s2] + params)
     if rc:
         return 'vbn2 c failed: ' + out
     if open(s2, 'rb').read() != stream:
@@ -81,11 +96,16 @@ def against_vbn(exe, work, entry):
     return None
 
 
-def round_trip(exe, work, inputs, name):
-    """Step 2 for one input: (md5 of the stream or None, what went wrong or None)."""
+def key(name, params):
+    """An input's name in vbn2.md5, with the parameters it was compressed with."""
+    return name + ('@' + '-'.join(params) if params else '')
+
+
+def round_trip(exe, work, inputs, name, params=()):
+    """Steps 2 and 3 for one input: (md5 of the stream or None, what went wrong or None)."""
     x = os.path.join(inputs, name)
-    s, y = os.path.join(work, name + '.vbn2'), os.path.join(work, name + '.back')
-    rc, out = run([exe, 'c', x, s])
+    s, y = os.path.join(work, key(name, params) + '.vbn2'), os.path.join(work, key(name, params) + '.back')
+    rc, out = run([exe, 'c', x, s] + list(params))
     if rc:
         return None, 'vbn2 c failed: ' + out
     digest = hashlib.md5(open(s, 'rb').read()).hexdigest()
@@ -126,29 +146,34 @@ def main():
                 digest, name = line.split()
                 refs[name] = digest
         fail = 0
+        runs = [(n, ()) for n in names] + [(n, p) for p in PARAMS for n in PARAM_INPUTS]
         with concurrent.futures.ThreadPoolExecutor(os.cpu_count() or 4) as ex:
-            vj = {e: ex.submit(against_vbn, exe, work, e) for e in ENTRIES}
-            rj = {n: ex.submit(round_trip, exe, work, inputs, n) for n in names}
-            for e in ENTRIES:
-                why = vj[e].result()
-                print('%s vbn %s%s' % ('FAIL' if why else 'ok  ', e, ': ' + why if why else ''))
-                fail += why is not None
-            digests, bad = {}, 0
-            for n in names:
-                digest, why = rj[n].result()
-                digests[n] = digest
-                if not why and not record and refs.get(n) != digest:
-                    why = 'stream %s, reference %s' % (digest, refs.get(n, 'none'))
+            vj = {(e, m): ex.submit(against_vbn, exe, work, e, m) for m in MODES for e in ENTRIES}
+            rj = {r: ex.submit(round_trip, exe, work, inputs, *r) for r in runs}
+            for m in MODES:
+                for e in ENTRIES:
+                    why = vj[(e, m)].result()
+                    print('%s vbn %s %s%s' % ('FAIL' if why else 'ok  ', m, e, ': ' + why if why else ''))
+                    fail += why is not None
+            digests, bad, bad_params = {}, 0, 0
+            for r in runs:
+                k = key(*r)
+                digest, why = rj[r].result()
+                digests[k] = digest
+                if not why and not record and refs.get(k) != digest:
+                    why = 'stream %s, reference %s' % (digest, refs.get(k, 'none'))
                 if why:
-                    print('FAIL %s: %s' % (n, why))
-                    bad += 1
-            fail += bad
-        print('%d of %d inputs round-trip%s' % (len(names) - bad, len(names),
-                                               '' if record else ' with the recorded streams'))
+                    print('FAIL %s: %s' % (k, why))
+                    bad += not r[1]
+                    bad_params += bool(r[1])
+            fail += bad + bad_params
+        n_params = len(runs) - len(names)
+        print('%d of %d inputs round-trip%s; %d of %d with other parameters' % (
+            len(names) - bad, len(names), '' if record else ' with the recorded streams', n_params - bad_params, n_params))
         if record:
             with open(os.path.join(HERE, 'vbn2.md5'), 'w') as f:
-                for n in names:
-                    f.write('%s  %s\n' % (digests[n], n))
+                for r in runs:
+                    f.write('%s  %s\n' % (digests[key(*r)], key(*r)))
             print('wrote vbn2.md5')
         print('PASS' if not fail else 'FAIL')
         return 1 if fail else 0

@@ -167,6 +167,18 @@ bytes that leave. The context tree is then rebuilt from scratch: every kept
 position whose bit in `registered` is set (positions the coder had
 registered) is inserted again, oldest first (`tree_rebuild`).
 
+In `vbn2` the window and the slide are parameters, VBN's by default: a window
+of 1 to 262,143 KB (bit positions must fit in 31 bits), and a slide that keeps
+0 to 99 % of it (VBN's: 75 %). The memory follows the window: the window
+itself, the context tree's arena (8 bytes per position) and a bit per
+position, about 9.1 bytes per byte of window (15 MB for VBN's). Nothing else
+grows, and the arena cannot run out: one position makes at most one node, so
+a window never needs more nodes than it has positions. There is nothing like
+PPMd's restart when its memory is full. The slide is this coder's form of
+PPMd's restore: keep the recent part of the history and rebuild the tree from
+it (PPMd's `reset_perc`, 75 % here). The statistics (the length and literal
+models, the costs) carry over.
+
 ## The context tree
 
 **Contexts.** The context of a position *p* is the data before *p*, read
@@ -194,8 +206,13 @@ position, a younger one is kept.
 So each path through the trie remembers its most recent occurrence, and the
 trie grows one bit along a context each time that context recurs, within a
 depth limit that grows with the tree: 1,280 bits (160 bytes) once it has
-2^20 nodes. One position makes at most one node, and the tree starts over when the
-window slides, so 0x198001 nodes (12.75 MiB) always suffice. `tree_updates`
+2^20 nodes, and at most 1,728 bits (216 bytes) in the largest window `vbn2`
+allows. That is the closest thing to PPMd's order: VBN has no fixed one.
+`vbn2`'s `order` parameter can cap it: with order *n*, nodes stop at
+8*n* − 1 bits, so the leaves tell contexts apart by at most *n* bytes (VBN's
+order 0 is no cap). One position makes at most one node, and the tree starts
+over when the window slides, so window + 1 nodes always suffice: 0x198001
+(12.75 MiB) for VBN's window. `tree_updates`
 counts the changes (nodes made beside an existing node, leaves renewed); the
 search's thresholds grow with its logarithm.
 
@@ -234,7 +251,9 @@ finds the candidates for the current position.
 5. **Limits.** The search stops as soon as it has `max_cands` candidates: 95
    in MAX mode (`u`), 55 in NORMAL (`b`), 31 in FAST (`B`). `max_cands` is
    the only mode setting the coder sees; it also picks the literal mixing's
-   `mode_shift` (4, 6, 10).
+   `mode_shift` (4, 6, 10). In `vbn2` it is a parameter, 2 to 95. With 31, 55
+   or 95, and VBN's window and slide, `vbn2` writes exactly the code that
+   `vbn B`, `vbn b` and `vbn u` write.
 6. **Exclusion.** After a match failed on byte *x*, candidates predicting *x*
    (the byte at their position) are left out of the set.
 7. **Giving up.** Without an exclusion, if literals have been costing more
@@ -263,7 +282,14 @@ that followed the best candidate's position.
   of 2, … one each of lengths 19–22. Every count also starts at 1.
 - **No match is made less likely when literals are going well.** For this
   symbol, the count of length 0 is scaled by `5/(k + k/16)`, with
-  `k = 9·literal_run + search_gain + lit_threshold/4 + 1`.
+  `k = 9·literal_run + search_gain + lit_threshold/4 + 1`. That can round
+  to 0. No match can then be coded only if a candidate's vote puts weight on
+  length 0, and if no match comes all the same, VBN writes a stream that does
+  not decode. It is no rare count. Runs of bytes reach it thousands of times
+  (`tests/mkinputs.py`'s `bytes` and `zeros` do), though they have never
+  needed no match there. With VBN's parameters `vbn2` codes as VBN does, and
+  rather than write such a stream it stops with an error. With other
+  parameters the count stays at least 1.
 - **The other candidates vote.** Each other candidate is compared with the
   best one: if its predicted byte equals the best one's, its vote is the
   number of bytes their continuations agree on (capped as the match is),
@@ -385,13 +411,15 @@ The names are those of `vbn2.cpp`'s `Codec`, which keeps them together.
 
 | What | Value | Name |
 |---|---|---|
-| window, slide, kept | 0x198000, 0x66000, 0x132000 bytes | `WINDOW`, `SLIDE`, `KEEP` |
+| window, slide, kept (VBN's; parameters in `vbn2`) | 0x198000, 0x66000, 0x132000 bytes (1632 KB, 75 % kept) | `WINDOW`, `KEEP_PERCENT`, `VBN_KEEP` |
+| window in `vbn2` | 1 .. 262,143 KB: bit positions in 31 bits | `MAX_WINDOW` |
+| order in `vbn2` | 0 (VBN's: no cap) .. 255 bytes | `ORDER`, `MAX_ORDER` |
 | data per stream | ≤ 0x1FFFFFFF bytes (512 MB): positions count bits, in 32 bits | `MAX_SIZE` |
-| context tree | ≤ 0x198001 nodes of two 32-bit slots | |
+| context tree | ≤ window + 1 nodes of two 32-bit slots (0x198001) | |
 | node-making depth limit | 64·log2(nodes + 32) bits | `GROW_SHIFT`, `GROW_BIAS` |
 | leaf renewal age (deep slots) | 0x800 bits (256 bytes) | `RENEW_AGE` |
-| descent path | ≤ 1284 slots | `PATH_SLOTS` |
-| candidates (MAX/NORMAL/FAST) | 95 / 55 / 31 | `max_cands` |
+| descent path | ≤ 1284 slots in VBN's window, ≤ 1732 in the largest | `PATH_SLOTS` |
+| candidates (MAX/NORMAL/FAST) | 95 / 55 / 31; in `vbn2` 2 .. 95 | `MAX_CANDS`, `NORMAL_CANDS`, `FAST_CANDS`, `MIN_CANDS` |
 | candidate threshold *K*, initial | 276·log2(tree_updates + 4)/512 bits | `AVG_START`, `AVG_BIAS` |
 | first candidate's weight | (depth − *K*) << 4 | `WEIGHT_SHIFT` |
 | search gain | 16·(depth − *K*)/log2(nodes + 7·tree_updates) | `GAIN_MUL`, `GAIN_UPDATES` |

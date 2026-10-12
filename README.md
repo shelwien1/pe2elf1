@@ -33,6 +33,7 @@ shim:
 make vbn2                    # g++ -O2 -o vbn2 vbn2.cpp (-m32 works too)
 ./vbn2 c input.txt out.vbn2  # 222682 bytes: the size, then VBN's code for input.txt
 ./vbn2 d out.vbn2 input.out  # input.txt again
+./vbn2 c big out 0 65536     # ppmd-style parameters: order, window in KB (here 64 MB), keep %, candidates
 ```
 
 ## Build and test
@@ -174,15 +175,34 @@ See [incdec/README.md](incdec/README.md).
 ## vbn2: VBN's compressor, standalone (`vbn2.cpp`)
 
 ```sh
-./vbn2 c input output      # compress
-./vbn2 d input output      # decompress
+./vbn2 c input output [order [window_KB [keep_% [candidates]]]]   # compress
+./vbn2 d input output                                            # decompress
 ```
 
-It exits with 0 when done, 1 for the usage, 2 if the input does not open, 3
-if the output does not, 4 without memory for the coder, and 5 if the input
-cannot be coded (more than 512 MB of data, or a size it cannot tell, as of a
-pipe; a stream shorter than 4 bytes, or with a size over 512 MB) or the
-output was not all written.
+The parameters are positional, in `ppmd`'s order (a leading `-` is allowed),
+and default to VBN's. Decompressing, the stream has them.
+
+| Parameter | VBN's | Range | |
+|---|---|---|---|
+| `order` | 0 | 0..255 bytes | caps the contexts the tree tells apart; 0 caps nothing (the tree's own limit, 160 bytes for VBN's window) |
+| `window_KB` | 1632 | 1..262143 | the history; memory is about 9.1 bytes per byte of it (15 MB for VBN's, 2.3 GB at most) |
+| `keep_%` | 75 | 0..99 | what a slide keeps of the window, as PPMd's `reset_perc`; 0 starts each window afresh |
+| `candidates` | 95 | 2..95 | VBN's modes: 95 MAX (`vbn u`), 55 NORMAL (`vbn b`), 31 FAST (`vbn B`) |
+
+The context tree has a node per position at most, so it cannot run out of
+memory as PPMd's model can: the window fixes the memory, and sliding it is
+the restore (see ALGORITHM.md, "The window"). On a 5.3 MB mix of text and
+binaries, for example, VBN's settings give 803,658 bytes; a 4096 KB window
+(37 MB of memory), 650,993; keeping 99 % instead of 75 %, 716,796, but six
+times slower; and `16 8192 90 55`, 666,000 bytes in half the time of VBN's.
+Orders below 8 cost: 816,252 bytes at 8, 912,525 at 4.
+
+It exits with 0 when done, 1 for the usage or parameters out of range, 2 if
+the input does not open, 3 if the output does not, 4 without memory for the
+window, and 5 if the input cannot be coded (more than 512 MB of data, or a
+size it cannot tell, as of a pipe; a stream shorter than its header, or with
+a size or parameters out of range; data VBN's own parameters cannot code, see
+ALGORITHM.md) or the output was not all written.
 
 While it codes, it shows its progress on stderr, as `ppmd` does: a line
 redrawn at most every half second, and a last one when done.
@@ -198,12 +218,17 @@ nodes in use (8 bytes each). Decompressing (`[dec]`), the lines give the same
 counts at the same points. The clock is Windows' performance counter, else
 POSIX's `clock_gettime(CLOCK_MONOTONIC)`, else C's `clock()`.
 
-A `vbn2` stream is the input's size (4 bytes, little-endian) followed by the
-code VBN writes for it in its MAX mode (`vbn u`). The archive around that code
-is gone: header, file table, volumes, and the directory handling that fills
-them. The code is VBN's, bit for bit. Give `vbn2 c` the data VBN codes for an
-archive (its file table, then the files) and it writes exactly what follows
-the archive's 3-byte header; `vbn2 d` decodes such a stream back.
+A `vbn2` stream with VBN's parameters is the input's size (4 bytes,
+little-endian) followed by the code VBN writes for it in its MAX mode (`vbn
+u`). The archive around that code is gone: header, file table, volumes, and
+the directory handling that fills them. The code is VBN's, bit for bit. Give
+`vbn2 c` the data VBN codes for an archive (its file table, then the files)
+and it writes exactly what follows the archive's 3-byte header; `vbn2 d`
+decodes such a stream back. With other parameters, the size's top bit is set
+and 10 bytes follow it: the window and what a slide keeps, in bytes (4 bytes
+each, little-endian), the candidates and the order (a byte each). With 55
+or 31 candidates and VBN's window and slide, the code is again VBN's, as `vbn
+b` and `vbn B` write it.
 
 `vbn2.cpp` began as `incdec/tools/mkvbn2.py`'s standalone `u`/`r` program: the
 43 functions incdec moved, plus native replacements for what they called in
@@ -232,8 +257,9 @@ to the coder since and is maintained by hand:
   point (the four literal costs and the average match length), and `Ring`,
   the last N values put in (the rings of recent lengths and literals);
 - the structs have no constructors or destructors. An explicit `Init` sets
-  each one up, and `Quit` gives back what `Init` took: `filehandle::Quit`
-  closes the file, and `Codec::Quit` frees the window's arrays;
+  each one up, and `Quit` gives back what was taken: `filehandle::Quit`
+  closes the file, and `Codec::Quit` frees the window's arrays, which
+  `processfile` takes once the stream's parameters give the window's size;
 - the model's parameters -- thresholds, ring sizes, starting values, weights
   -- are named constants, together at the top of `Codec` (ALGORITHM.md's
   table of constants gives each one's name);
@@ -258,27 +284,33 @@ the gate.
 VBN kept node addresses in the context tree's 32-bit slots, and told a
 node from a leaf (a negated position) by the sign. `vbn2` keeps the nodes in
 an arena instead and numbers them: node *n* is the slot pair
-`tree[2n]`, `tree[2n+1]`. A window registers at most 0x198000 positions,
+`tree[2n]`, `tree[2n+1]`. A window registers at most one position per byte,
 each making at most one node, and the tree starts over when the window
-slides, so the arena is 0x198001 nodes (12.75 MiB), and its slots stay 32
-bits wide at any pointer size. Everything else that holds an address is a
-native pointer; `vbn2` builds and runs as x86-64 and as i386, and both write
-the same streams. `Codec::Init` takes what is sized by the window -- the
-window, the arena and a bit per position, about 15 MB -- from the heap with
-`malloc`; the rest of the `Codec`, about 105 KB, is a local in `main`. With
-no `new` and no destructors (a destructor would give `main` cleanups for
-exceptions, which need the C++ runtime), `vbn2` uses only the C library.
+slides, so the arena is window + 1 nodes (0x198001, 12.75 MiB, for VBN's
+window), and its slots stay 32 bits wide at any pointer size. Everything
+else that holds an address is a native pointer; `vbn2` builds and runs as
+x86-64 and as i386, and both write the same streams. `processfile` takes
+what is sized by the window -- the window, the arena and a bit per position,
+about 9.1 bytes per byte of window -- from the heap with `malloc`; the rest
+of the `Codec`, about 105 KB, is a local in `main`. With no `new` and no
+destructors (a destructor would give `main` cleanups for exceptions, which
+need the C++ runtime), `vbn2` uses only the C library.
 
 `tests/vbn2.py` is the gate every change to `vbn2.cpp` has to pass:
 
-- against VBN itself: for each corpus entry, `vbn u` writes an archive, and
-  its code, with a size in front, must decode with `vbn2 d` to the title and
-  the data and re-encode with `vbn2 c` to the same bytes;
+- against VBN itself: for each corpus entry, `vbn u`, `vbn b` and `vbn B`
+  write archives, and their code, with `vbn2`'s header in front (with 95, 55
+  or 31 candidates), must decode with `vbn2 d` to the title and the data and
+  re-encode with `vbn2 c` to the same bytes;
 - 40 inputs (`tests/mkinputs.py`: every small size from 0 bytes up, cuts
   around the coder's 0x198000-byte window and its slides, zeros, random
   data, the corpus) must round-trip, and each compressed stream must match
   the digest in `tests/vbn2.md5`, recorded from the first `c|d` version
-  once the check against VBN had passed.
+  once the check against VBN had passed;
+- 7 of them, with each of 6 other parameter sets (windows that slide every
+  few bytes, slides that keep nothing or nearly everything, a short order,
+  2 candidates, a larger window), must round-trip with the streams
+  `tests/vbn2.md5` records for them.
 
 `tests/vbn2.py --cxx "clang++ -m32 -O3"` builds with another compiler or
 options (`--exe` runs the gate on a binary built elsewhere). Every change so

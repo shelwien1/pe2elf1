@@ -1,14 +1,16 @@
 // vbn2.cpp: VBN 1.001's compressor, standalone, on one file.
 //
 //   g++ -O2 -o vbn2 vbn2.cpp   (or -m32)
-//   ./vbn2 c input output      compress
-//   ./vbn2 d input output      decompress
+//   ./vbn2 c input output [order [window_KB [keep_% [candidates]]]]
+//   ./vbn2 d input output
 //
 // A compressed stream is the input's size (4 bytes, little-endian) followed by
 // the code VBN writes for it in its MAX mode (`vbn u`): VBN's archive around it
 // -- header, file table, volumes -- is gone.  The code is VBN's, bit for bit:
 // for the data VBN puts in an archive (its file table, then the files), vbn2 c
-// writes exactly the code that follows the archive's 3-byte header.
+// writes exactly the code that follows the archive's 3-byte header.  The
+// parameters, as ppmd's, default to VBN's (see main); others follow the size
+// in the stream (see Codec::HEADER).
 //
 // The algorithm is an LZP-type predictive coder: the match source is
 // predicted from the longest earlier match of the current context, found
@@ -27,11 +29,11 @@
 // the context tree and its search, and the models), whose members are vbn's
 // globals; filehandle, the files they read and write; and Progress, the
 // progress line on stderr.  They have no constructors or destructors: Init
-// sets each one up, and Quit gives back what Init took (a file, the Codec's
-// memory).  main opens the files and runs one Codec.  Two templates are parts
-// of the Codec: Average, a moving average in fixed point (the literal costs,
-// the average match length), and Ring, the last N values put in (the rings of
-// recent lengths and literals).
+// sets each one up, and Quit gives back what was taken (a file, the Codec's
+// memory).  main takes the parameters, opens the files and runs one Codec.
+// Two templates are parts of the Codec: Average, a moving average in fixed
+// point (the literal costs, the average match length), and Ring, the last N
+// values put in (the rings of recent lengths and literals).
 
 #include <cstdint>
 #include <cstdio>
@@ -44,7 +46,7 @@
 // Bits.
 // ===========================================================================
 // bsr: the index of v's highest set bit.  v is never 0 where vbn2 asks.
-static inline uint32_t top_bit(uint32_t v) { return 31 - __builtin_clz(v); }
+static constexpr uint32_t top_bit(uint32_t v) { return 31 - __builtin_clz(v); }
 // bt and btc on a bit string: bit n of buf.
 static inline uint32_t get_bit(const void *buf, uint32_t n)
 {
@@ -59,6 +61,13 @@ static inline void xor_bit(void *buf, uint32_t n, uint32_t bit)
 {
   ((uint8_t *)buf)[n >> 3] ^= bit << (n & 7);
 }
+// A 32-bit value in 4 bytes, little-endian.
+static inline void put32(uint8_t *p, uint32_t v)
+{
+  for (int32_t i = 0; i < 4; i++)
+    p[i] = (uint8_t)(v >> 8 * i);
+}
+static inline uint32_t get32(const uint8_t *p) { return p[0] | p[1] << 8 | p[2] << 16 | (uint32_t)p[3] << 24; }
 
 // ===========================================================================
 // filehandle: a file, opened for reading (mode 0) or for writing (mode 1) by
@@ -439,11 +448,27 @@ struct Ring {
 // ===========================================================================
 struct Codec {
   static constexpr uint32_t MAX_SIZE = 0x1FFFFFFF; // the most data: the coder counts it in bits, in 32 bits
-  static constexpr uint32_t HEADER = 4;           // a stream's header: the data's size, little-endian
+  // A stream's header: the data's size, 4 bytes little-endian, with the top
+  // bit set if the parameters follow, in PARAMS bytes; vbn's are left out.
+  static constexpr uint32_t HEADER = 4;
+  static constexpr uint32_t WITH_PARAMS = 0x80000000;
+  static constexpr uint32_t PARAMS = 10;          // window_size, keep_size (4 bytes each), max_cands, order (1 each)
+  // The parameters: vbn's, and their range.
+  static constexpr uint32_t ORDER = 0;            // the contexts' length, in bytes: 0 is no limit but the tree's (vbn's)
+  static constexpr uint32_t MAX_ORDER = 255;
+  static constexpr uint32_t WINDOW = 0x198000;    // the window, in bytes: vbn's is 1632 KB ...
+  static constexpr uint32_t MAX_WINDOW = 0xFFFFC00; //   ... and at most 262143 KB, so that a bit position fits in 31 bits
+  static constexpr uint32_t KEEP_PERCENT = 75;    // what a slide keeps, in percent of the window: vbn's 0x132000 bytes
+  static constexpr uint32_t MAX_KEEP_PERCENT = 99;
+  static constexpr uint32_t VBN_KEEP = (uint32_t)((uint64_t)WINDOW * KEEP_PERCENT / 100); // 0x132000
+  static constexpr int32_t MAX_CANDS = 95;        // the candidates a search returns: vbn's MAX mode's ...
+  static constexpr int32_t NORMAL_CANDS = 55;     //   ... its NORMAL mode's,
+  static constexpr int32_t FAST_CANDS = 31;       //   ... its FAST mode's, ...
+  static constexpr int32_t MIN_CANDS = 2;         //   ... and at least the first and one from a walk (see search)
 
-  bool Init(bool encoding);
+  bool Init(bool encoding, uint32_t order, uint32_t window_kb, uint32_t keep_percent, uint32_t cands);
   void Quit();
-  bool processfile(filehandle &in, filehandle &out);
+  int32_t processfile(filehandle &in, filehandle &out);
 
   // A walk over a subtree's leaves (walk_cands).
   struct Walk {
@@ -456,18 +481,17 @@ struct Codec {
   // The parameters: the constants in vbn.exe's code, named.  The streams
   // depend on every one of them.
   //
-  // The window and the code.
-  static constexpr uint32_t WINDOW = 0x198000;    // the data's window, in bytes
-  static constexpr uint32_t SLIDE = 0x66000;      // what it slides by
-  static constexpr uint32_t KEEP = WINDOW - SLIDE; // what a slide keeps
+  // The code.
   static constexpr int32_t FIRST_CODE = 2;        // decompressing, the first read: up to 2 bytes of code per byte of data
   // The context tree.
   static constexpr int32_t GROW_BIAS = 32;        // leaves become nodes within bsr(tree_nodes + GROW_BIAS) << GROW_SHIFT
   static constexpr int32_t GROW_SHIFT = 6;        //   bits of the root: 64 levels more for each doubling of the nodes
   static constexpr int32_t RENEW_AGE = 0x800;     // deeper, a leaf more than this many bits old (256 bytes) is renewed
-  static constexpr int32_t PATH_SLOTS = 1284;     // the most slots a descent goes through
+  // The most slots a descent goes through: one more than the deepest node's
+  // depth, bsr(MAX_WINDOW + 1 + GROW_BIAS) << GROW_SHIFT -- 1732 (vbn's, for
+  // its window: 1284).
+  static constexpr int32_t PATH_SLOTS = (top_bit(MAX_WINDOW + 1 + GROW_BIAS) << GROW_SHIFT) + 4;
   // The search.
-  static constexpr int32_t max_cands = 95;        // 0x1000D4B0 how many candidates a search returns: 95 (MAX)
   static constexpr int32_t AVG_START = 276;       // the depth to beat starts at AVG_START/512 (0.54) of
   static constexpr int32_t AVG_BIAS = 4;          //   bsr(tree_updates + AVG_BIAS)
   static constexpr int32_t WEIGHT_SHIFT = 4;      // the first candidate weighs (depth - depth to beat) << WEIGHT_SHIFT
@@ -517,15 +541,24 @@ struct Codec {
   static constexpr int32_t PAIR_COUNT_SHIFT = 6;  //   64 for each recent occurrence of its pair,
   static constexpr int32_t NO_RUN_SHIFT = 2;      //   and while no pair is known (literal_run 0), a quarter of its count
 
-  // The direction.
+  // The direction, and the parameters.
   bool encoding;                                  // 0x1000D4C4 compressing, or decompressing
+  uint32_t order;                                 // the contexts' length, in bytes (0: no limit but the tree's)
+  uint32_t depth_limit;                           // ... the deepest a node goes: 8 * order - 1 bits, or no limit
+  uint32_t window_size;                           // the window, in bytes
+  uint32_t keep_size;                             // what a slide keeps, in bytes, ...
+  uint32_t slide_size;                            // ... and what it slides by
+  int32_t max_cands;                              // 0x1000D4B0 how many candidates a search returns
+  bool vbn_exact;                                 // the parameters are vbn's, in one of its modes: code as vbn does
+  bool uncodable;                                 // compressing: a length had no count, so the stream would not decode
+  uint32_t header_size;                           // the stream's header: HEADER, or HEADER + PARAMS
 
   ArithCoder ac;
   Progress progress;
 
-  // The data: a window of WINDOW bytes that slides by SLIDE.  Positions are
-  // bit positions, 8 per byte.
-  int8_t *window;                                 // 0x100166F0 WINDOW bytes, from the heap
+  // The data: a window of window_size bytes that slides by slide_size.
+  // Positions are bit positions, 8 per byte.
+  int8_t *window;                                 // 0x100166F0 window_size bytes, from the heap
   uint32_t window_pos;                            // 0x1001646C where coding is, in bits
   int32_t window_bits;                            // 0x10016444 where the data in the window ends, in bits (as an address: 0x1001643C)
   uint32_t total_bits;                            // 0x10016468 the data coded so far, in bits
@@ -539,19 +572,20 @@ struct Codec {
   // order they were made: node n is the two slots tree[2n] and tree[2n+1], and
   // node 0 is the root.  A slot holding a value > 0 points to the node of that
   // number; a value <= 0 is a leaf, minus the position it registers.  A window
-  // registers at most WINDOW positions, each making at most one node, and the
-  // tree starts over when the window slides: the arena holds WINDOW + 1 nodes.
+  // registers at most window_size positions, each making at most one node,
+  // and the tree starts over when the window slides: the arena holds
+  // window_size + 1 nodes.
   // (vbn.exe kept nodes' addresses in the slots, and the next node's address
   // at 0x10016430, always node tree_nodes.)
-  int32_t *tree;                                  // 0x101AE6F0 the arena, 2 * (1 + WINDOW) slots (12.75 MiB), from the heap
+  int32_t *tree;                                  // 0x101AE6F0 the arena, 2 * (1 + window_size) slots, from the heap
   int32_t tree_nodes;                             // 0x1000CA4C nodes in use, the root too: the next one made
-  int32_t tree_updates;                           // 0x10016434 counts changes to the tree
-  int32_t *registered;                            // 0x10E6E6F0 a bit per position in the window, WINDOW bits from the heap: in the tree
+  uint32_t tree_updates;                          // 0x10016434 counts changes to the tree
+  int32_t *registered;                            // 0x10E6E6F0 a bit per position in the window, from the heap: in the tree
 
   // The search: from the position being coded, down the tree, collecting
   // earlier positions with the same context -- the candidates -- and a
   // weight for each.
-  int32_t cands[2 * max_cands];                   // 0x1000D558 {weight, -position} pairs
+  int32_t cands[2 * MAX_CANDS];                   // 0x1000D558 {weight, -position} pairs
   int32_t n_cands;                                // 0x10016450 how many
   int32_t search_gain;                            // 0x1001648C how far the last search's depth beat the average
   int32_t cand_floor;                             // 0x100164C4 a quarter of the weakest candidate's weight
@@ -589,6 +623,10 @@ struct Codec {
   Average<9> lit_cost9;                           // 0x100164A0 ... x2^9 over 2^9,
   Average<10> lit_cost10;                         // 0x1001649C ... x2^10 over 2^10,
   Average<11> lit_cost11;                         // 0x10016498 ... and x2^11 over 2^11
+
+  // vbn2's own: the parameters, and the memory the window needs.
+  bool set_params(uint32_t order, uint32_t window, uint32_t keep, uint32_t cands);
+  bool take_memory();
 
   // vbn's functions, the ones plain `u` and `r` run, callees first; each is
   // described where it is defined, below the struct.
@@ -666,13 +704,15 @@ int32_t *Codec::descend(uint32_t pos, int32_t *at)
 // tree_add: register position pos (a bit position, whole bytes) at the slot
 // a descent stopped at, `at` holding the bit position it stopped at and
 // `leaf` what the slot held.  Within bsr(tree_nodes + GROW_BIAS) << GROW_SHIFT
-// bits of the root, an empty leaf becomes a node of two leaves for pos, and a
-// node in the other slot counts as a change; deeper, only a leaf more than
-// RENEW_AGE bits old is renewed to pos, which counts as a change too.  tree_insert also
-// flips the position's bit in `registered`.
+// bits of the root (and depth_limit, by the order), an empty leaf becomes a
+// node of two leaves for pos, and a node in the other slot counts as a
+// change; deeper, only a leaf more than RENEW_AGE bits old is renewed to pos,
+// which counts as a change too.  tree_insert also flips the position's bit in
+// `registered`.
 void Codec::tree_add(uint32_t pos, int32_t *slot, int32_t leaf, uint32_t at, bool flip)
 {
-  if (pos - at > top_bit(tree_nodes + GROW_BIAS) << GROW_SHIFT) {
+  uint32_t limit = top_bit(tree_nodes + GROW_BIAS) << GROW_SHIFT;
+  if (pos - at > (limit < depth_limit ? limit : depth_limit)) {
     if (leaf <= 0 && pos + (uint32_t)leaf >= RENEW_AGE) {
       if (flip)
         flip_bit(registered, pos >> 3);
@@ -761,7 +801,7 @@ bool Codec::walk_cands(int32_t n, Walk &w)
 // the search has `gained` 0x13 or more.  The rows are vbn's multiples -- w/8,
 // 2w, 3w, 4w, 5w (seen 4..6), 8w (7 on); w/16, w/2, w, 3w/2, 2w, 5w/2 (5 on)
 // -- and round as vbn's do: w + (w >> 1) is (24 * w) >> 4.  vbn picks them
-// with a chain of compares.  A weight is below 2^15 (a depth of at most 1284,
+// with a chain of compares.  A weight is below 2^15 (a depth below PATH_SLOTS,
 // shifted by at most 4), so the product fits in 32 bits.
 uint32_t Codec::pair_bonus(uint32_t w, uint32_t seen, bool gained)
 {
@@ -1026,11 +1066,16 @@ int32_t Codec::code_match(int32_t *excluded, uint32_t bitpos)
     return 0;
   }
 
-  // Length 0, no match, counts for less while literals do well.
+  // Length 0, no match, counts for less while literals do well -- down to 0
+  // in vbn, when its count is low and k high, and then no match cannot be
+  // coded unless a candidate's group adds to it.  vbn's parameters keep that
+  // (and processfile fails if a stream would need it); with other
+  // parameters, the count stays at least 1.
   uint32_t count0 = len_model[0];
   len_total -= count0;
   uint32_t k = NOMATCH_RUN * literal_run + search_gain + ((uint32_t)lit_threshold >> 2) + 1;
   len_model[0] = NOMATCH_MUL * count0 / (k + (k >> 4));
+  len_model[0] += len_model[0] == 0 && !vbn_exact;
   len_total += len_model[0];
 
   // The best candidate's match: at most MAX_LEN bytes, its distance, and what
@@ -1132,6 +1177,7 @@ int32_t Codec::code_match(int32_t *excluded, uint32_t bitpos)
   if (encoding) {
     for (len = 0; (uint32_t)len < max_len && cur[len] == match[len]; len++)
       ;
+    uncodable |= len_model[2 * len] == 0;         // only length 0 can have no count (above)
     encode_symbol(total, len, len_model);
   } else {
     len = decode_symbol(total, len_model);
@@ -1288,7 +1334,7 @@ uint32_t Codec::code_window(uint32_t bitpos)
     ac.next_block();
     uint32_t done = (total_bits + bitpos - start) >> 3;
     if (progress.due(done))
-      progress.update(done, HEADER + ac.bytes(), tree_size());
+      progress.update(done, header_size + ac.bytes(), tree_size());
   }
   total_bits += bitpos - start;
   return bitpos;
@@ -1311,19 +1357,52 @@ void Codec::tree_rebuild()
     }
 }
 
-// Init (part of vbn.exe 0x10004A5F): the coder as it starts, compressing or
-// decompressing.  It takes what is sized by the window -- the window, the
-// tree's arena and the registered bits, about 15 MB -- from the heap (false
-// if there is not that much), and starts the models.
-bool Codec::Init(bool encoding)
+// set_params: the parameters -- the order, the window and what a slide keeps
+// (in bytes), and the candidates -- or false if they are out of range: the
+// window in whole KB, what a slide keeps in whole multiples of 8 bytes
+// (registered moves a byte of bits at a time), and the slide not empty.
+bool Codec::set_params(uint32_t order, uint32_t window, uint32_t keep, uint32_t cands)
 {
-  window = (int8_t *)malloc(WINDOW);
-  tree = (int32_t *)malloc(2 * (1 + WINDOW) * sizeof *tree);
-  registered = (int32_t *)malloc(WINDOW / 8);
-  if (window == nullptr || tree == nullptr || registered == nullptr) {
-    Quit();
+  if (order > MAX_ORDER || window < 1024 || window > MAX_WINDOW || window % 1024 || keep >= window || keep % 8
+      || cands < MIN_CANDS || cands > MAX_CANDS)
     return false;
-  }
+  this->order = order;
+  depth_limit = order ? 8 * order - 1 : ~0u;      // nodes to 8 * order - 1 bits: leaves to order bytes
+  vbn_exact = order == ORDER && window == WINDOW && keep == VBN_KEEP
+              && (cands == MAX_CANDS || cands == NORMAL_CANDS || cands == FAST_CANDS);
+  window_size = window;
+  keep_size = keep;
+  slide_size = window - keep;
+  max_cands = cands;
+  return true;
+}
+
+// take_memory: what is sized by the window -- the window, the tree's arena
+// and the registered bits, about 9 bytes per byte of window (15 MB for
+// vbn's) -- from the heap, or false if there is not that much.
+bool Codec::take_memory()
+{
+  window = (int8_t *)malloc(window_size);
+  tree = (int32_t *)malloc(2 * ((size_t)window_size + 1) * sizeof *tree);
+  registered = (int32_t *)malloc(window_size / 8);
+  return window != nullptr && tree != nullptr && registered != nullptr;
+}
+
+// Init (part of vbn.exe 0x10004A5F): the coder as it starts, compressing or
+// decompressing, and the models.  Compressing, the parameters: the contexts'
+// length (`order` bytes, 0 for no limit), a window of window_kb KB, of which
+// a slide keeps keep_percent %, and `cands` candidates a search -- false if
+// they are out of range.  Decompressing, the stream's header has them.  The
+// memory comes in processfile, once the window's size is known.
+bool Codec::Init(bool encoding, uint32_t order, uint32_t window_kb, uint32_t keep_percent, uint32_t cands)
+{
+  window = nullptr;
+  tree = nullptr;
+  registered = nullptr;
+  uint32_t bytes = window_kb << 10;
+  if (window_kb > MAX_WINDOW >> 10 || keep_percent > MAX_KEEP_PERCENT
+      || !set_params(order, bytes, (uint32_t)((uint64_t)bytes * keep_percent / 100) & ~7u, cands))
+    return false;
   this->encoding = encoding;
   ac.Init(encoding);
   progress.Init(encoding);
@@ -1376,44 +1455,64 @@ void Codec::Quit()
 
 // processfile (the rest of vbn.exe 0x10004A5F): compress the data in `in`
 // into a stream in `out`, or decompress the stream in `in` into the data in
-// `out`.  A stream is the data's size, 4 bytes little-endian, and then the
-// code.  The coder codes the window, and slides it by SLIDE bytes --
-// re-registering the positions it keeps -- until all the data is coded; then
-// it ends the code.  Its progress goes to stderr: a line redrawn as it goes,
-// and a last one when done.  Returns false if the input cannot be coded (data
-// of more than MAX_SIZE bytes, or whose size cannot be told; a stream shorter
-// than 4 bytes, or with a size over MAX_SIZE) or the output was not all
-// written.
-bool Codec::processfile(filehandle &in, filehandle &out)
+// `out`.  A stream is a header -- the data's size, and the parameters unless
+// they are vbn's (see HEADER) -- and then the code.  With the parameters
+// known, processfile takes the memory the window needs; the coder codes the
+// window, and slides it by slide_size bytes -- re-registering the positions
+// it keeps -- until all the data is coded; then it ends the code.  Its
+// progress goes to stderr: a line redrawn as it goes, and a last one when
+// done.  Returns 0 when done; 4 without the memory; 5 if the input cannot be
+// coded (data of more than MAX_SIZE bytes, or whose size cannot be told; a
+// stream shorter than its header, or whose size or parameters are out of
+// range; with vbn's parameters, data its length model cannot code: see
+// code_match) or the output was not all written.
+int32_t Codec::processfile(filehandle &in, filehandle &out)
 {
-  uint8_t header[HEADER];
+  uint8_t header[HEADER + PARAMS];
   uint32_t size;
   if (encoding) {
     int64_t n = in.size();
     if (n < 0 || n > MAX_SIZE)
-      return false;
+      return 5;
     size = (uint32_t)n;
-    for (uint32_t i = 0; i < HEADER; i++)
-      header[i] = (uint8_t)(size >> 8 * i);
-    out.write(header, HEADER);
+    bool vbn = order == ORDER && window_size == WINDOW && keep_size == VBN_KEEP && max_cands == MAX_CANDS;
+    header_size = vbn ? HEADER : HEADER + PARAMS;
+    put32(header, size | (vbn ? 0 : WITH_PARAMS));
+    put32(header + HEADER, window_size);
+    put32(header + HEADER + 4, keep_size);
+    header[HEADER + 8] = (uint8_t)max_cands;
+    header[HEADER + 9] = (uint8_t)order;
+    out.write(header, header_size);
   } else {
     if (in.read(header, HEADER) != HEADER)
-      return false;
-    size = header[0] | header[1] << 8 | header[2] << 16 | (uint32_t)header[3] << 24;
+      return 5;
+    uint32_t word = get32(header);
+    size = word & ~WITH_PARAMS;
     if (size > MAX_SIZE)
-      return false;
+      return 5;
+    header_size = HEADER;
+    if (!(word & WITH_PARAMS))
+      set_params(ORDER, WINDOW, VBN_KEEP, MAX_CANDS);
+    else if (in.read(header + HEADER, PARAMS) != PARAMS
+             || !set_params(header[HEADER + 9], get32(header + HEADER), get32(header + HEADER + 4), header[HEADER + 8]))
+      return 5;
+    else
+      header_size += PARAMS;
   }
+  if (!take_memory())
+    return 4;
   filehandle &data = encoding ? in : out, &code = encoding ? out : in;
   progress.start(size);
+  uncodable = false;
 
   // The first window, the coder and the tree.
   total_bits = 0;
-  uint32_t n = size < WINDOW ? size : WINDOW;
+  uint32_t n = size < window_size ? size : window_size;
   window_bits = 8 * n;
   if (encoding)
     data.read(window, n);
-  ac.start(code, FIRST_CODE * n);
-  memset(registered, 0, WINDOW / 8);
+  ac.start(code, FIRST_CODE * size);
+  memset(registered, 0, window_size / 8);
   tree[0] = tree[1] = 0;
   tree_nodes = 1;
   tree_updates = 1;
@@ -1424,44 +1523,68 @@ bool Codec::processfile(filehandle &in, filehandle &out)
       window_pos = code_window(window_pos);
     if (total_bits >> 3 >= size)
       break;
-    // Slide the window by SLIDE bytes, writing them out when decompressing.
+    // Slide the window by slide_size bytes, writing them out when
+    // decompressing.
     if (!encoding)
-      data.write(window, SLIDE);
-    memmove(window, window + SLIDE, KEEP);
-    memmove(registered, (int8_t *)registered + SLIDE / 8, KEEP / 8);
-    memset((int8_t *)registered + KEEP / 8, 0, SLIDE / 8);
+      data.write(window, slide_size);
+    memmove(window, window + slide_size, keep_size);
+    memmove(registered, (int8_t *)registered + slide_size / 8, keep_size / 8);
+    memset((int8_t *)registered + keep_size / 8, 0, slide_size / 8);
     tree[0] = tree[1] = 0;
     tree_nodes = 1;
-    window_pos = 8 * KEEP;
+    window_pos = 8 * keep_size;
     tree_rebuild();
     if (encoding)
-      data.read(window + KEEP, SLIDE);
+      data.read(window + keep_size, slide_size);
     uint32_t left = size - (total_bits >> 3);
-    if (left < SLIDE)
-      window_bits = 8 * (KEEP + left);
+    if (left < slide_size)
+      window_bits = 8 * (keep_size + left);
   }
   ac.finish();
   if (!encoding)
     data.write(window, window_pos >> 3);
-  progress.finish(HEADER + ac.bytes(), tree_size());
-  return out.written();
+  progress.finish(header_size + ac.bytes(), tree_size());
+  if (uncodable) {
+    fprintf(stderr, "vbn2: vbn's length model gave no match a count of 0 where the data needed it, so the stream would\n"
+                    "not decode.  Parameters other than vbn's avoid that; order 255 models as vbn's order 0 does.\n");
+    return 5;
+  }
+  return out.written() ? 0 : 5;
 }
 
 // ===========================================================================
-// main: vbn2 c|d in out.  A compressed stream is the input's size (4 bytes,
-// little-endian) and then vbn's code for it, in vbn's MAX mode (`u`): the
-// archive around it -- header, title, volumes -- is gone.  The coder is vbn's,
-// run once, as vbn ran it for an archive.  It exits with 1 for the usage, 2
-// if the input does not open, 3 if the output does not, 4 without memory for
-// the coder, 5 if processfile fails.
+// main: vbn2 c|d in out [order [window_KB [keep_% [candidates]]]], the
+// parameters in ppmd's way: the contexts' length in bytes (vbn's: 0, no limit
+// but the tree's), the window in KB (vbn's: 1632; it takes about 9 bytes of
+// memory per byte), the share of it a slide keeps (vbn's: 75%) and the
+// candidates a search returns (vbn's MAX mode: 95; NORMAL: 55, FAST: 31).
+// Decompressing, the stream has them.  With vbn's parameters, a stream is the
+// input's size (4 bytes, little-endian) and then vbn's code for it, in the
+// mode `u` writes: the archive around it -- header, title, volumes -- is
+// gone.  The coder is vbn's, run once, as vbn ran it for an archive.  It exits
+// with 1 for the usage (or parameters out of range), 2 if the input does not
+// open, 3 if the output does not, 4 without memory for the window, 5 if
+// processfile fails.
 // ===========================================================================
 int main(int argc, char **argv)
 {
   if (argc < 4) {
-    fprintf(stderr, "usage: %s c|d in out\n", argv[0]);
+    fprintf(stderr, "usage: %s c|d in out [order [window_KB [keep_%% [candidates]]]]\n", argv[0]);
     return 1;
   }
   uint32_t f_DEC = argv[1][0] == 'd';
+  uint32_t args[4] = { Codec::ORDER, Codec::WINDOW >> 10, Codec::KEEP_PERCENT, Codec::MAX_CANDS };
+  for (int32_t i = 0; f_DEC == 0 && i < 4 && 4 + i < argc; i++) {
+    const char *p = argv[4 + i];
+    args[i] = atoi(p + (p[0] == '-'));
+  }
+
+  Codec C;                                        // about 105 KB, on the stack
+  if (!C.Init(f_DEC == 0, args[0], args[1], args[2], args[3])) {
+    fprintf(stderr, "%s: order 0..%u, window 1..%u KB, keep 0..%u%%, candidates %d..%d\n", argv[0], Codec::MAX_ORDER,
+      Codec::MAX_WINDOW >> 10, Codec::MAX_KEEP_PERCENT, Codec::MIN_CANDS, Codec::MAX_CANDS);
+    return 1;
+  }
 
   filehandle f, g;
   f.Init(argv[2], 0);
@@ -1470,11 +1593,7 @@ int main(int argc, char **argv)
   g.Init(argv[3], 1);
   if (g == 0)
     return 3;
-
-  Codec C;                                        // about 105 KB, on the stack
-  if (!C.Init(f_DEC == 0))                        // and about 15 MB from the heap
-    return 4;
-  int rc = C.processfile(f, g) ? 0 : 5;
+  int rc = C.processfile(f, g);                   // which takes about 9 bytes per byte of window from the heap
   C.Quit();
 
   g.Quit();
