@@ -51,6 +51,11 @@ static inline void flip_bit(void *buf, uint32_t n)
 {
   ((uint8_t *)buf)[n >> 3] ^= 1 << (n & 7);
 }
+// ... and flip it if `bit` (0 or 1) is set, without a branch on it.
+static inline void xor_bit(void *buf, uint32_t n, uint32_t bit)
+{
+  ((uint8_t *)buf)[n >> 3] ^= bit << (n & 7);
+}
 
 // ===========================================================================
 // Files: the input and the output.  The coder reads its input -- the data
@@ -209,8 +214,7 @@ private:
       n = n_high;
     }
     for (; n; n--) {
-      if ((int32_t)tail < 0)
-        flip_bit(buf, pos);
+      xor_bit(buf, pos, tail >> 31);
       pos++;
       tail <<= 1;
       pending--;
@@ -269,14 +273,14 @@ private:
     low = low + (uint32_t)(below * size / total);
 
     // Shift out the leading bits low and high agree on, into buf (a 1 is
-    // written by toggling a 0).  vbn toggles them when decompressing too,
-    // which does no harm: they lie before the 32 bits value holds when it is
-    // next used.  flush()'s tail is the same.
+    // written by toggling a 0, with no branch on the bit: the code's bits are
+    // as good as random).  vbn toggles them when decompressing too, which
+    // does no harm: they lie before the 32 bits value holds when it is next
+    // used.  flush()'s tail is the same.
     uint32_t lo = low, hi = high, at = pos;
     int32_t left = 32;
     for (uint32_t agree = lo ^ hi; (int32_t)agree >= 0; agree <<= 1) {
-      if ((int32_t)lo < 0)
-        flip_bit(buf, at);
+      xor_bit(buf, at, lo >> 31);
       left--;
       at++;
       lo <<= 1;
@@ -414,7 +418,7 @@ private:
   void tree_insert(uint32_t count, uint32_t bitpos);
   bool walk_emit(int32_t leaf, Walk &w);
   bool walk_cands(int32_t n, Walk &w);
-  uint32_t pair_bonus(uint32_t w, uint32_t seen) const;
+  static uint32_t pair_bonus(uint32_t w, uint32_t seen, bool gained);
   void lit_swap(uint32_t *a, uint32_t *b);
   int32_t code_literal(int32_t excluded, uint32_t bitpos);
   int32_t code_match(int32_t *excluded, uint32_t bitpos);
@@ -434,6 +438,30 @@ private:
     ring[pos] = v;
     pos = pos + 1 == N ? 0 : pos + 1;
     return old;
+  }
+
+  // common_prefix: how many bytes a and b agree on, up to `most` (all of
+  // them data already coded), 8 at a time while 8 are left: the first byte
+  // that differs is the lowest set byte of the two words' xor (the highest,
+  // big-endian).  vbn compares a byte at a time, and the branch that ends the
+  // agreement mispredicts.
+  static uint32_t common_prefix(const int8_t *a, const int8_t *b, uint32_t most)
+  {
+    uint32_t len = 0;
+    for (; len + 8 <= most; len += 8) {
+      uint64_t x, y;
+      memcpy(&x, a + len, 8);
+      memcpy(&y, b + len, 8);
+      if (x != y)
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+        return len + (__builtin_clzll(x ^ y) >> 3);
+#else
+        return len + (__builtin_ctzll(x ^ y) >> 3);
+#endif
+    }
+    while (len < most && a[len] == b[len])
+      len++;
+    return len;
   }
 
   // other_slot: the other slot of the node `slot` is in.  (vbn.exe flips bit
@@ -546,6 +574,15 @@ void Codec::tree_insert(uint32_t count, uint32_t bitpos)
 // (EBX node, ESI weight, ECX output cursor, EDI how many pairs may still be
 // written; ECX and EDI come back); here the caller passes a Walk.  Returns
 // false once no more pairs may be written: the search is over.
+//
+// The walk's tests, node or leaf, follow the tree's shape and are the coder's
+// worst-predicted branches, but they stay.  A walk without them -- a stack
+// pushed and popped by arithmetic -- waits at every step for the node before
+// it, while the branching walk guesses ahead and fetches the next nodes in
+// the meantime: it ran a third to a half slower.  A jump through a table of
+// the four shapes a node can have mispredicts as often as the tests, and was
+// no faster.  What helps is to fetch the right child, wanted only after the
+// left subtree, while that is walked.
 bool Codec::walk_emit(int32_t leaf, Walk &w)
 {
   w.out[1] = leaf;
@@ -558,6 +595,7 @@ bool Codec::walk_emit(int32_t leaf, Walk &w)
 bool Codec::walk_cands(int32_t n, Walk &w)
 {
   const int32_t *node = &tree[2 * n];
+  __builtin_prefetch(&tree[2 * (node[1] & -(node[1] > 0))]); // a leaf fetches the root, at hand
   if (!(node[0] > 0 ? walk_cands(node[0], w) : walk_emit(node[0], w)))
     return false;
   if (node[1] > 0)
@@ -569,19 +607,19 @@ bool Codec::walk_cands(int32_t n, Walk &w)
 
 // pair_bonus: what the first candidate for a byte, of weight w, gets added,
 // by how often the pair (byte before, byte) came up in the last 1024
-// literals (`seen`, at most 255): bonus * w / 16, from the first row while
-// the search gained less than 0x13.  The rows are vbn's multiples -- w/8,
+// literals (`seen`, at most 255): bonus * w / 16, from the second row once
+// the search has `gained` 0x13 or more.  The rows are vbn's multiples -- w/8,
 // 2w, 3w, 4w, 5w (seen 4..6), 8w (7 on); w/16, w/2, w, 3w/2, 2w, 5w/2 (5 on)
 // -- and round as vbn's do: w + (w >> 1) is (24 * w) >> 4.  vbn picks them
 // with a chain of compares.  A weight is below 2^15 (a depth of at most 1284,
 // shifted by at most 4), so the product fits in 32 bits.
-uint32_t Codec::pair_bonus(uint32_t w, uint32_t seen) const
+uint32_t Codec::pair_bonus(uint32_t w, uint32_t seen, bool gained)
 {
   static constexpr uint8_t bonus[2][8] = {
     { 2, 32, 48, 64, 80, 80, 80, 128 },           // search_gain < 0x13
     { 1, 8, 16, 24, 32, 40, 40, 40 },             // search_gain >= 0x13
   };
-  return (bonus[(uint32_t)search_gain >= 0x13][seen < 7 ? seen : 7] * w) >> 4;
+  return (bonus[gained][seen < 7 ? seen : 7] * w) >> 4;
 }
 
 // lit_swap: swap two pairs of the literal model, and the slots that find them.
@@ -659,27 +697,30 @@ int32_t Codec::code_literal(int32_t excluded, uint32_t bitpos)
   // {weight, byte}; none for `excluded` (and then n_cands counts one less,
   // however many there were).  A group weighs its candidates' weights over
   // cand_floor, and its first one's pair_bonus.
+  //
+  // The loop does not branch on the candidates, whose bytes it cannot
+  // predict: each one adds its weight to its byte's group or, if it is the
+  // byte's first, to a new group at `group`, which only then moves on; every
+  // one computes a pair_bonus, which only a first one keeps; an excluded one
+  // adds 0 and leaves its byte without a group.  (vbn sets ctx16's low byte
+  // to each new group's byte; nothing reads it before it is set again.)
   uint32_t n_groups = 0, sum = 0, *group = groups;
   if (n_cands) {
-    bool skipped = false;
-    for (int32_t *cand = cands; cand < cands + 2 * (uint8_t)n_cands; cand += 2) {
-      int32_t b = (uint8_t)cand[1];
-      if (b == excluded) {
-        skipped = true;
-        continue;
-      }
-      uint32_t w = (uint32_t)cand[0] - cand_floor;
-      if (group_slot[b])
-        *group_slot[b] += w;
-      else {
-        group_slot[b] = group;
-        ctx16 = (ctx16 & ~0xFF) | b;
-        w += pair_bonus(cand[0], (uint8_t)ctx_count[ctx16]);
-        group[0] = w;
-        group[1] = b;
-        group += 2;
-      }
+    const int32_t *end = cands + 2 * (uint8_t)n_cands;
+    uint32_t floor = cand_floor, before = ctx16 & ~0xFF, skipped = 0;
+    bool gained = (uint32_t)search_gain >= 0x13;
+    for (const int32_t *cand = cands; cand < end; cand += 2) {
+      uint32_t b = (uint8_t)cand[1], skip = b == (uint32_t)excluded;
+      uint32_t *g = group_slot[b], *t = g ? g : group;
+      uint32_t fresh = !g & !skip;
+      uint32_t w = (uint32_t)cand[0] - floor + (pair_bonus(cand[0], (uint8_t)ctx_count[before | b], gained) & -fresh);
+      w &= skip - 1;
+      t[0] = (t[0] & -(uint32_t)(g != nullptr)) + w; // read either way: `g ? t[0] : 0` branches
+      t[1] = b;
+      group_slot[b] = skip ? g : t;
+      group += 2 * fresh;
       sum += w;
+      skipped |= skip;
     }
     n_groups = (group - groups) / 2;
     if (skipped)
@@ -837,14 +878,9 @@ int32_t Codec::code_match(int32_t *excluded, uint32_t bitpos)
     int32_t *cand = &cands[2 * i];
     int8_t *data = &window[(uint32_t)-cand[1] >> 3];
     cand[1] = (uint8_t)*data;
-    uint32_t len = 0;
-    if (*data == *match) {
-      uint32_t most = max_len;
-      if (match <= data && max_len > (uint32_t)(cur - data))
-        most = cur - data;
-      for (len = 1; len < most && data[len] == match[len]; len++)
-        ;
-    }
+    // It agrees up to max_len at most, and, later than the best one, up to cur.
+    uint32_t most = match <= data && max_len > (uint32_t)(cur - data) ? (uint32_t)(cur - data) : max_len;
+    uint32_t len = common_prefix(data, match, most);
     uint32_t w = (uint32_t)cand[0] - cand_floor;
     if (group_slot[len])
       *group_slot[len] += w;
