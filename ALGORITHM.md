@@ -214,7 +214,9 @@ order 0 is no cap). One position makes at most one node, and the tree starts
 over when the window slides, so window + 1 nodes always suffice: 0x198001
 (12.75 MiB) for VBN's window. `tree_updates`
 counts the changes (nodes made beside an existing node, leaves renewed); the
-search's thresholds grow with its logarithm.
+search's thresholds grow with its logarithm. VBN keeps it in 32 bits, and
+`7·tree_updates` wraps after some 600 million changes. `vbn2` keeps that
+for data within 512 MB, and counts in 64 bits beyond.
 
 **What gets registered.** A literal registers its position. A match of *L*
 bytes registers its first `min(bsr(1.5·L + 1) + 1, L)` positions, a few,
@@ -414,7 +416,7 @@ The names are those of `vbn2.cpp`'s `Codec`, which keeps them together.
 | window, slide, kept (VBN's; parameters in `vbn2`) | 0x198000, 0x66000, 0x132000 bytes (1632 KB, 75 % kept) | `WINDOW`, `KEEP_PERCENT`, `VBN_KEEP` |
 | window in `vbn2` | 1 .. 262,143 KB: bit positions in 31 bits | `MAX_WINDOW` |
 | order in `vbn2` | 0 (VBN's: no cap) .. 255 bytes | `ORDER`, `MAX_ORDER` |
-| data per stream | ≤ 0x1FFFFFFF bytes (512 MB): positions count bits, in 32 bits | `MAX_SIZE` |
+| data per stream | VBN: ≤ 0x1FFFFFFF bytes (512 MB), counted in bits, in 32 bits; `vbn2`: a file's size, counted in 64 bits | `VBN_MAX_SIZE`, `MAX_SIZE` |
 | context tree | ≤ window + 1 nodes of two 32-bit slots (0x198001) | |
 | node-making depth limit | 64·log2(nodes + 32) bits | `GROW_SHIFT`, `GROW_BIAS` |
 | leaf renewal age (deep slots) | 0x800 bits (256 bytes) | `RENEW_AGE` |

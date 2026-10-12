@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tests/vbn2.py [--record] [--exe PATH] [--cxx CMD]: the gate for vbn2.cpp.
+"""tests/vbn2.py [--record] [--big] [--exe PATH] [--cxx CMD]: the gate for vbn2.cpp.
 
 1. vbn2 against vbn itself.  For each corpus entry and each of vbn's modes
    -- `vbn u` (MAX: 95 candidates, vbn2's default), `vbn b` (NORMAL: 55) and
@@ -15,6 +15,10 @@
 3. The same for PARAM_INPUTS with each of PARAMS, vbn2's other parameters:
    windows that slide every few bytes, slides that keep nothing or nearly
    everything, a short order, the fewest candidates, a larger window.
+4. With --big: zeros of 0x1FFFFFFF and 0x20000000 bytes, vbn's 512 MB and a
+   byte more, must round-trip, the first with vbn's 4-byte size and the
+   second with the 64-bit one.  (About 30 seconds, and 512 MB of disk for a
+   while: the inputs are sparse files, but not the output.)
 
 vbn2 is built from ../vbn2.cpp with `g++ -O2` unless --exe names a binary;
 --cxx gives another compiler command (for example "clang++ -m32 -O3").
@@ -36,6 +40,7 @@ ENTRIES = ['input.txt', 'mixed.bin', 'rep.bin', 'vbn.exe', 'big.bin', 'tree']
 MODES = {'u': 95, 'b': 55, 'B': 31}   # vbn's command, and the candidates its mode searches for
 PARAMS = [('0', '16'), ('0', '64', '0'), ('0', '1', '99'), ('4',), ('0', '1632', '75', '2'), ('6', '4096', '50', '31')]
 PARAM_INPUTS = ['input.txt', 'rand', 'rep.bin', 'zeros', 'bytes', 'text-1000', 'text-0']
+VBN_MAX_SIZE = 0x1FFFFFFF             # vbn's most data, and the most a 4-byte size in a stream holds
 
 
 def run(args, cwd=None):
@@ -117,9 +122,39 @@ def round_trip(exe, work, inputs, name, params=()):
     return digest, None
 
 
+def big_round_trip(exe, work, size):
+    """Step 4 for one size: None, or what went wrong."""
+    x, s, y = (os.path.join(work, 'big-%d%s' % (size, e)) for e in ('', '.vbn2', '.back'))
+    with open(x, 'wb') as f:
+        f.truncate(size)                  # zeros, sparse
+    try:
+        rc, out = run([exe, 'c', x, s])
+        if rc:
+            return 'vbn2 c failed: ' + out[-200:]
+        want = struct.pack('<I', size) if size <= VBN_MAX_SIZE else struct.pack('<IQ', 0x40000000, size)
+        head = open(s, 'rb').read(len(want))
+        if head != want:
+            return 'header %s, not %s' % (head.hex(), want.hex())
+        rc, out = run([exe, 'd', s, y])
+        if rc:
+            return 'vbn2 d failed: ' + out[-200:]
+        if os.path.getsize(y) != size:
+            return 'vbn2 d wrote %d bytes' % os.path.getsize(y)
+        with open(y, 'rb') as f:
+            for chunk in iter(lambda: f.read(1 << 24), b''):
+                if chunk.strip(b'\0'):
+                    return 'vbn2 d gave back other data'
+        return None
+    finally:
+        for f in (x, s, y):
+            if os.path.exists(f):
+                os.remove(f)
+
+
 def main():
     args = sys.argv[1:]
     record = '--record' in args
+    big = '--big' in args
     exe = args[args.index('--exe') + 1] if '--exe' in args else None
     cxx = args[args.index('--cxx') + 1] if '--cxx' in args else 'g++ -O2'
     work = tempfile.mkdtemp(prefix='vbn2test.', dir=HERE)
@@ -170,6 +205,10 @@ def main():
         n_params = len(runs) - len(names)
         print('%d of %d inputs round-trip%s; %d of %d with other parameters' % (
             len(names) - bad, len(names), '' if record else ' with the recorded streams', n_params - bad_params, n_params))
+        for size in ((VBN_MAX_SIZE, VBN_MAX_SIZE + 1) if big else ()):
+            why = big_round_trip(exe, work, size)
+            print('%s %d bytes of zeros%s' % ('FAIL' if why else 'ok  ', size, ': ' + why if why else ''))
+            fail += why is not None
         if record:
             with open(os.path.join(HERE, 'vbn2.md5'), 'w') as f:
                 for r in runs:

@@ -10,7 +10,7 @@
 // for the data VBN puts in an archive (its file table, then the files), vbn2 c
 // writes exactly the code that follows the archive's 3-byte header.  The
 // parameters, as ppmd's, default to VBN's (see main); others follow the size
-// in the stream (see Codec::HEADER).
+// in the stream, as does a size over VBN's 512 MB (see Codec::HEADER).
 //
 // The algorithm is an LZP-type predictive coder: the match source is
 // predicted from the longest earlier match of the current context, found
@@ -35,6 +35,10 @@
 // point (the literal costs, the average match length), and Ring, the last N
 // values put in (the rings of recent lengths and literals).
 
+// Files over 2 GB on 32-bit POSIX systems: a 64-bit off_t for fopen, fseeko
+// and ftello.  (Windows has _fseeki64 and _ftelli64.)
+#define _FILE_OFFSET_BITS 64
+
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -47,6 +51,7 @@
 // ===========================================================================
 // bsr: the index of v's highest set bit.  v is never 0 where vbn2 asks.
 static constexpr uint32_t top_bit(uint32_t v) { return 31 - __builtin_clz(v); }
+static inline uint32_t top_bit64(uint64_t v) { return 63 - __builtin_clzll(v); }
 // bt and btc on a bit string: bit n of buf.
 static inline uint32_t get_bit(const void *buf, uint32_t n)
 {
@@ -68,6 +73,13 @@ static inline void put32(uint8_t *p, uint32_t v)
     p[i] = (uint8_t)(v >> 8 * i);
 }
 static inline uint32_t get32(const uint8_t *p) { return p[0] | p[1] << 8 | p[2] << 16 | (uint32_t)p[3] << 24; }
+// ... and a 64-bit one in 8.
+static inline void put64(uint8_t *p, uint64_t v)
+{
+  put32(p, (uint32_t)v);
+  put32(p + 4, (uint32_t)(v >> 32));
+}
+static inline uint64_t get64(const uint8_t *p) { return get32(p) | (uint64_t)get32(p + 4) << 32; }
 
 // ===========================================================================
 // filehandle: a file, opened for reading (mode 0) or for writing (mode 1) by
@@ -90,10 +102,15 @@ struct filehandle {
   // volumes, or the data into the title and the files.
   void write(const void *from, uint32_t count) { fwrite(from, 1, count, file); }
 
-  // The size of a file being read, or -1 if it cannot be told.
+  // The size of a file being read, or -1 if it cannot be told.  (ftell's
+  // long has 32 bits on Windows, and on 32-bit systems.)
   int64_t size()
   {
-    int64_t n = fseek(file, 0, SEEK_END) == 0 ? ftell(file) : -1;
+#ifdef _WIN32
+    int64_t n = _fseeki64(file, 0, SEEK_END) == 0 ? _ftelli64(file) : -1;
+#else
+    int64_t n = fseeko(file, 0, SEEK_END) == 0 ? (int64_t)ftello(file) : -1;
+#endif
     rewind(file);
     return n;
   }
@@ -131,7 +148,7 @@ struct Progress {
   void Init(bool encoding) { tag = encoding ? "enc" : "dec"; }
 
   // Start the clock, for `size` bytes of data.
-  void start(uint32_t size)
+  void start(uint64_t size)
   {
     total = size;
     next = STEP;
@@ -140,26 +157,28 @@ struct Progress {
 
   // Whether the coding has reached the next look at the clock, with `done`
   // bytes of data coded: one every STEP bytes.
-  bool due(uint32_t done) const { return done >= next; }
+  bool due(uint64_t done) const { return done >= next; }
 
   // The look: a line, if INTERVAL has passed since the last -- `done` bytes
   // coded into `code` bytes of stream, with a context tree of `tree` bytes.
-  void update(uint32_t done, uint32_t code, uint32_t tree)
+  void update(uint64_t done, uint64_t code, uint32_t tree)
   {
     next = done + STEP;
     double t = now();
     if (t - t_last < INTERVAL)
       return;
     t_last = t;
-    fprintf(stderr, "\r[%s] %u > %u  %5.1f%%  %5.2f MB/s  %5.2fM tree", tag, done, code, 100.0 * done / total,
+    fprintf(stderr, "\r[%s] %llu > %llu  %5.1f%%  %5.2f MB/s  %5.2fM tree", tag, (unsigned long long)done,
+      (unsigned long long)code, 100.0 * done / total,
       done / (t - t_start) / MB, tree / MB);
     fflush(stderr);
   }
 
   // The last line: all the data coded, into `code` bytes of stream.
-  void finish(uint32_t code, uint32_t tree)
+  void finish(uint64_t code, uint32_t tree)
   {
-    fprintf(stderr, "\r[%s] %u > %u  100.0%%  done in %.2fs  %5.2fM tree    \n", tag, total, code, now() - t_start,
+    fprintf(stderr, "\r[%s] %llu > %llu  100.0%%  done in %.2fs  %5.2fM tree    \n", tag, (unsigned long long)total,
+      (unsigned long long)code, now() - t_start,
       tree / MB);
     fflush(stderr);
   }
@@ -169,8 +188,8 @@ struct Progress {
   static constexpr double MB = 1 << 20;
 
   const char *tag;                                // "enc" compressing, "dec" decompressing
-  uint32_t total;                                 // the data's size
-  uint32_t next;                                  // the data's bytes coded at the next look
+  uint64_t total;                                 // the data's size
+  uint64_t next;                                  // the data's bytes coded at the next look
   double t_start, t_last;                         // when the coding started, and the last line
 
   // The time, in seconds from some point: Windows' performance counter;
@@ -208,7 +227,7 @@ struct ArithCoder {
   // Start: the whole interval, at the start of an empty buffer -- the code
   // goes to `code`, or, decompressing, comes from it, up to `count` bytes
   // first.
-  void start(filehandle &code, uint32_t count)
+  void start(filehandle &code, uint64_t count)
   {
     file = &code;
     low = 0;
@@ -219,7 +238,7 @@ struct ArithCoder {
     base = 0;
     memset(buf, 0, sizeof buf);
     if (!encoding)
-      file->read(buf, count < sizeof buf ? count : sizeof buf);
+      file->read(buf, count < sizeof buf ? (uint32_t)count : sizeof buf);
   }
 
   // encode, decode_target, decode (vbn.exe 0x100061F4, code_symbol, the
@@ -267,7 +286,7 @@ struct ArithCoder {
   uint32_t bits() const { return pos; }
 
   // The code's bytes so far.
-  uint32_t bytes() const { return base + ((pos + 7) >> 3); }
+  uint64_t bytes() const { return base + ((pos + 7) >> 3); }
 
   // next_block (vbn.exe 0x10004924): once 8 KB of code are done --
   // compressing, write them out and move the SPILL bytes after them to the
@@ -306,7 +325,7 @@ struct ArithCoder {
   int32_t pending;                                // 0x10016414 bits of the interval not settled yet
   uint32_t value;                                 // 0x10016460 decompressing: the code read so far
   uint32_t pos;                                   // the bit position in buf the code has reached
-  uint32_t base;                                  // where buf starts in the code, in bytes
+  uint64_t base;                                  // where buf starts in the code, in bytes
   int8_t buf[BLOCK + SPILL];                      // 0x1000A110 8 KB of code, and SPILL bytes more (vbn reused its banner)
 
   // flush (vbn.exe 0x10004993): end the code.  Writes into buf, from bit
@@ -447,10 +466,17 @@ struct Ring {
 // each at after its name; sizes are what the code reaches.
 // ===========================================================================
 struct Codec {
-  static constexpr uint32_t MAX_SIZE = 0x1FFFFFFF; // the most data: the coder counts it in bits, in 32 bits
-  // A stream's header: the data's size, 4 bytes little-endian, with the top
-  // bit set if the parameters follow, in PARAMS bytes; vbn's are left out.
+  // The most data: as much as a file can hold.  vbn counted it in bits, in
+  // 32 bits, so it took at most VBN_MAX_SIZE bytes (512 MB).
+  static constexpr uint64_t MAX_SIZE = 0x7FFFFFFFFFFFFFFF;
+  static constexpr uint32_t VBN_MAX_SIZE = 0x1FFFFFFF;
+  // A stream's header: the data's size, 4 bytes little-endian; over
+  // VBN_MAX_SIZE, bit 30 instead, and the size follows in 8 bytes.  Bit 31
+  // set, the parameters follow (after the size), in PARAMS bytes; vbn's are
+  // left out.
   static constexpr uint32_t HEADER = 4;
+  static constexpr uint32_t WITH_SIZE64 = 0x40000000;
+  static constexpr uint32_t SIZE64 = 8;
   static constexpr uint32_t WITH_PARAMS = 0x80000000;
   static constexpr uint32_t PARAMS = 10;          // window_size, keep_size (4 bytes each), max_cands, order (1 each)
   // The parameters: vbn's, and their range.
@@ -551,7 +577,11 @@ struct Codec {
   int32_t max_cands;                              // 0x1000D4B0 how many candidates a search returns
   bool vbn_exact;                                 // the parameters are vbn's, in one of its modes: code as vbn does
   bool uncodable;                                 // compressing: a length had no count, so the stream would not decode
-  uint32_t header_size;                           // the stream's header: HEADER, or HEADER + PARAMS
+  uint32_t header_size;                           // the stream's header: HEADER, and SIZE64 and PARAMS if they follow
+  // vbn kept tree_updates and literal_run in 32 bits, and its arithmetic on
+  // them wraps.  Data within VBN_MAX_SIZE keeps that, so its streams are
+  // vbn's; beyond, it is 64 bits and does not wrap.
+  uint64_t count_mask;                            // 0xFFFFFFFF within VBN_MAX_SIZE, else all 1s
 
   ArithCoder ac;
   Progress progress;
@@ -561,7 +591,7 @@ struct Codec {
   int8_t *window;                                 // 0x100166F0 window_size bytes, from the heap
   uint32_t window_pos;                            // 0x1001646C where coding is, in bits
   int32_t window_bits;                            // 0x10016444 where the data in the window ends, in bits (as an address: 0x1001643C)
-  uint32_t total_bits;                            // 0x10016468 the data coded so far, in bits
+  uint64_t total_bytes;                           // 0x10016468 the data coded so far, in bytes (vbn: in bits, in 32 bits)
   int32_t prev_byte;                              // 0x100164B0 the byte before the one being coded
   int32_t prev_byte2;                             // 0x100164B4 ... and the one before that
   int8_t next_byte[256];                          // 0x1001620C per byte: the byte that followed it last
@@ -579,7 +609,7 @@ struct Codec {
   // at 0x10016430, always node tree_nodes.)
   int32_t *tree;                                  // 0x101AE6F0 the arena, 2 * (1 + window_size) slots, from the heap
   int32_t tree_nodes;                             // 0x1000CA4C nodes in use, the root too: the next one made
-  uint32_t tree_updates;                          // 0x10016434 counts changes to the tree
+  uint64_t tree_updates;                          // 0x10016434 counts changes to the tree
   int32_t *registered;                            // 0x10E6E6F0 a bit per position in the window, from the heap: in the tree
 
   // The search: from the position being coded, down the tree, collecting
@@ -617,7 +647,7 @@ struct Codec {
   Ring<LIT_RING2> lit_ring2;                      // 0x1001120C the last LIT_RING2 literals, with the byte before each (0x10016428)
   int8_t ctx_count[0x10000];                      // 0x10EB96F0 per byte pair: its count in lit_ring2
   int32_t ctx16;                                  // 0x100164C8 the byte before and the byte coded, as a pair
-  int32_t literal_run;                            // 0x100164AC literals in a row whose pair was known
+  uint64_t literal_run;                           // 0x100164AC literals in a row whose pair was known
   int32_t lit_threshold;                          // 0x100164B8 set by code_literal, weighs code_match's model
   Average<8> lit_cost8;                           // 0x100164A4 the bits a literal costs, x2^8, over about 2^8 literals;
   Average<9> lit_cost9;                           // 0x100164A0 ... x2^9 over 2^9,
@@ -1073,8 +1103,9 @@ int32_t Codec::code_match(int32_t *excluded, uint32_t bitpos)
   // parameters, the count stays at least 1.
   uint32_t count0 = len_model[0];
   len_total -= count0;
-  uint32_t k = NOMATCH_RUN * literal_run + search_gain + ((uint32_t)lit_threshold >> 2) + 1;
-  len_model[0] = NOMATCH_MUL * count0 / (k + (k >> 4));
+  uint64_t k = (NOMATCH_RUN * literal_run + search_gain + ((uint32_t)lit_threshold >> 2) + 1) & count_mask;
+  uint64_t d = (k + (k >> 4)) & count_mask;       // vbn's 32 bits can make it 0 (and vbn divides by 0)
+  len_model[0] = d ? (uint32_t)(NOMATCH_MUL * count0 / d) : 0;
   len_model[0] += len_model[0] == 0 && !vbn_exact;
   len_total += len_model[0];
 
@@ -1221,7 +1252,7 @@ int32_t Codec::code_match(int32_t *excluded, uint32_t bitpos)
 void Codec::search(uint32_t pos, bool excluding)
 {
   int32_t *search_path[PATH_SLOTS];               // the slots the descent went through
-  int32_t search_avg = (AVG_START * top_bit(tree_updates + AVG_BIAS)) >> 9; // the depth a candidate has to beat
+  int32_t search_avg = (AVG_START * top_bit64((tree_updates + AVG_BIAS) & count_mask)) >> 9; // the depth to beat
   int32_t weight_shift = WEIGHT_SHIFT;            // the next candidate's weight shift (down to 0)
   n_cands = 0;
 
@@ -1262,7 +1293,7 @@ found:
   if (!excluding && lit_cost9 > GIVE_UP_COST9)
     return;
   if ((int32_t)depth > search_avg) {
-    search_gain = GAIN_MUL * (depth - search_avg) / top_bit(tree_nodes + GAIN_UPDATES * tree_updates);
+    search_gain = GAIN_MUL * (depth - search_avg) / top_bit64((tree_nodes + GAIN_UPDATES * tree_updates) & count_mask);
     search_avg = ((depth >> 3) + depth + 2 * search_avg) >> 2;
   }
   if (leaf <= 0
@@ -1332,11 +1363,11 @@ uint32_t Codec::code_window(uint32_t bitpos)
     prev_byte = (uint8_t)window[at - 1];
     prev_byte2 = at == 1 ? prev_byte : (uint8_t)window[at - 2];
     ac.next_block();
-    uint32_t done = (total_bits + bitpos - start) >> 3;
+    uint64_t done = total_bytes + ((bitpos - start) >> 3);
     if (progress.due(done))
       progress.update(done, header_size + ac.bytes(), tree_size());
   }
-  total_bits += bitpos - start;
+  total_bytes += (bitpos - start) >> 3;
   return bitpos;
 }
 
@@ -1438,7 +1469,8 @@ bool Codec::Init(bool encoding, uint32_t order, uint32_t window_kb, uint32_t kee
   lit_inc = LIT_START;
   memset(next_byte, 0, sizeof next_byte);
   memset(next_byte2, 0, sizeof next_byte2);
-  prev_byte = prev_byte2 = literal_run = lit_threshold = 0;
+  prev_byte = prev_byte2 = lit_threshold = 0;
+  literal_run = 0;
   return true;
 }
 
@@ -1462,43 +1494,59 @@ void Codec::Quit()
 // it keeps -- until all the data is coded; then it ends the code.  Its
 // progress goes to stderr: a line redrawn as it goes, and a last one when
 // done.  Returns 0 when done; 4 without the memory; 5 if the input cannot be
-// coded (data of more than MAX_SIZE bytes, or whose size cannot be told; a
-// stream shorter than its header, or whose size or parameters are out of
-// range; with vbn's parameters, data its length model cannot code: see
-// code_match) or the output was not all written.
+// coded (data whose size cannot be told, as of a pipe; a stream shorter than
+// its header, or whose size or parameters are out of range; with vbn's
+// parameters, data its length model cannot code: see code_match) or the
+// output was not all written.
 int32_t Codec::processfile(filehandle &in, filehandle &out)
 {
-  uint8_t header[HEADER + PARAMS];
-  uint32_t size;
+  uint8_t header[HEADER + SIZE64 + PARAMS], *p = header + HEADER;
+  uint64_t size;
   if (encoding) {
     int64_t n = in.size();
-    if (n < 0 || n > MAX_SIZE)
+    if (n < 0)
       return 5;
-    size = (uint32_t)n;
+    size = (uint64_t)n;
     bool vbn = order == ORDER && window_size == WINDOW && keep_size == VBN_KEEP && max_cands == MAX_CANDS;
-    header_size = vbn ? HEADER : HEADER + PARAMS;
-    put32(header, size | (vbn ? 0 : WITH_PARAMS));
-    put32(header + HEADER, window_size);
-    put32(header + HEADER + 4, keep_size);
-    header[HEADER + 8] = (uint8_t)max_cands;
-    header[HEADER + 9] = (uint8_t)order;
+    bool big = size > VBN_MAX_SIZE;
+    put32(header, (big ? WITH_SIZE64 : (uint32_t)size) | (vbn ? 0 : WITH_PARAMS));
+    if (big) {
+      put64(p, size);
+      p += SIZE64;
+    }
+    if (!vbn) {
+      put32(p, window_size);
+      put32(p + 4, keep_size);
+      p[8] = (uint8_t)max_cands;
+      p[9] = (uint8_t)order;
+      p += PARAMS;
+    }
+    header_size = p - header;
     out.write(header, header_size);
   } else {
     if (in.read(header, HEADER) != HEADER)
       return 5;
     uint32_t word = get32(header);
-    size = word & ~WITH_PARAMS;
-    if (size > MAX_SIZE)
-      return 5;
-    header_size = HEADER;
+    size = word & VBN_MAX_SIZE;
+    if (word & ~(VBN_MAX_SIZE | WITH_SIZE64 | WITH_PARAMS))
+      return 5;                                   // bit 29
+    if (word & WITH_SIZE64) {
+      if (size || in.read(p, SIZE64) != SIZE64)
+        return 5;
+      size = get64(p);
+      if (size <= VBN_MAX_SIZE || size > MAX_SIZE)
+        return 5;
+      p += SIZE64;
+    }
     if (!(word & WITH_PARAMS))
       set_params(ORDER, WINDOW, VBN_KEEP, MAX_CANDS);
-    else if (in.read(header + HEADER, PARAMS) != PARAMS
-             || !set_params(header[HEADER + 9], get32(header + HEADER), get32(header + HEADER + 4), header[HEADER + 8]))
+    else if (in.read(p, PARAMS) != PARAMS || !set_params(p[9], get32(p), get32(p + 4), p[8]))
       return 5;
     else
-      header_size += PARAMS;
+      p += PARAMS;
+    header_size = p - header;
   }
+  count_mask = size <= VBN_MAX_SIZE ? 0xFFFFFFFF : ~(uint64_t)0;
   if (!take_memory())
     return 4;
   filehandle &data = encoding ? in : out, &code = encoding ? out : in;
@@ -1506,8 +1554,8 @@ int32_t Codec::processfile(filehandle &in, filehandle &out)
   uncodable = false;
 
   // The first window, the coder and the tree.
-  total_bits = 0;
-  uint32_t n = size < window_size ? size : window_size;
+  total_bytes = 0;
+  uint32_t n = size < window_size ? (uint32_t)size : window_size;
   window_bits = 8 * n;
   if (encoding)
     data.read(window, n);
@@ -1521,7 +1569,7 @@ int32_t Codec::processfile(filehandle &in, filehandle &out)
   for (;;) {
     if (window_pos != (uint32_t)window_bits)
       window_pos = code_window(window_pos);
-    if (total_bits >> 3 >= size)
+    if (total_bytes >= size)
       break;
     // Slide the window by slide_size bytes, writing them out when
     // decompressing.
@@ -1536,9 +1584,9 @@ int32_t Codec::processfile(filehandle &in, filehandle &out)
     tree_rebuild();
     if (encoding)
       data.read(window + keep_size, slide_size);
-    uint32_t left = size - (total_bits >> 3);
+    uint64_t left = size - total_bytes;
     if (left < slide_size)
-      window_bits = 8 * (keep_size + left);
+      window_bits = 8 * (keep_size + (uint32_t)left);
   }
   ac.finish();
   if (!encoding)

@@ -199,10 +199,17 @@ Orders below 8 cost: 816,252 bytes at 8, 912,525 at 4.
 
 It exits with 0 when done, 1 for the usage or parameters out of range, 2 if
 the input does not open, 3 if the output does not, 4 without memory for the
-window, and 5 if the input cannot be coded (more than 512 MB of data, or a
-size it cannot tell, as of a pipe; a stream shorter than its header, or with
-a size or parameters out of range; data VBN's own parameters cannot code, see
-ALGORITHM.md) or the output was not all written.
+window, and 5 if the input cannot be coded (a size it cannot tell, as of a
+pipe; a stream shorter than its header, or with a size or parameters out of
+range; data VBN's own parameters cannot code, see ALGORITHM.md) or the
+output was not all written.
+
+There is no limit on the data's size but the file system's: `vbn2` counts it
+in 64 bits. VBN counted it in bits, in 32 bits, and so took at most 512 MB
+(0x1FFFFFFF bytes). Its model keeps two counts that never reset,
+`tree_updates` and `literal_run`, also in 32 bits, and its arithmetic on them
+wraps. `vbn2` keeps that for data within 512 MB, so those streams are VBN's;
+beyond, it counts in 64 bits, without wrapping.
 
 While it codes, it shows its progress on stderr, as `ppmd` does: a line
 redrawn at most every half second, and a last one when done.
@@ -224,9 +231,11 @@ u`). The archive around that code is gone: header, file table, volumes, and
 the directory handling that fills them. The code is VBN's, bit for bit. Give
 `vbn2 c` the data VBN codes for an archive (its file table, then the files)
 and it writes exactly what follows the archive's 3-byte header; `vbn2 d`
-decodes such a stream back. With other parameters, the size's top bit is set
-and 10 bytes follow it: the window and what a slide keeps, in bytes (4 bytes
-each, little-endian), the candidates and the order (a byte each). With 55
+decodes such a stream back. Over 512 MB, the size's bit 30 is set instead
+and the size follows in 8 bytes. With other parameters, the size's top bit is
+set and 10 bytes follow it (and the 8-byte size): the window and what a slide
+keeps, in bytes (4 bytes each, little-endian), the candidates and the order (a
+byte each). With 55
 or 31 candidates and VBN's window and slide, the code is again VBN's, as `vbn
 b` and `vbn B` write it.
 
@@ -310,7 +319,9 @@ need the C++ runtime), `vbn2` uses only the C library.
 - 7 of them, with each of 6 other parameter sets (windows that slide every
   few bytes, slides that keep nothing or nearly everything, a short order,
   2 candidates, a larger window), must round-trip with the streams
-  `tests/vbn2.md5` records for them.
+  `tests/vbn2.md5` records for them;
+- with `--big`, zeros of 0x1FFFFFFF and 0x20000000 bytes (VBN's 512 MB, and
+  a byte more) must round-trip, with the 4-byte size and with the 64-bit one.
 
 `tests/vbn2.py --cxx "clang++ -m32 -O3"` builds with another compiler or
 options (`--exe` runs the gate on a binary built elsewhere). Every change so
