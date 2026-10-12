@@ -569,28 +569,19 @@ bool Codec::walk_cands(int32_t n, Walk &w)
 
 // pair_bonus: what the first candidate for a byte, of weight w, gets added,
 // by how often the pair (byte before, byte) came up in the last 1024
-// literals (`seen`, at most 255).
+// literals (`seen`, at most 255): bonus * w / 16, from the first row while
+// the search gained less than 0x13.  The rows are vbn's multiples -- w/8,
+// 2w, 3w, 4w, 5w (seen 4..6), 8w (7 on); w/16, w/2, w, 3w/2, 2w, 5w/2 (5 on)
+// -- and round as vbn's do: w + (w >> 1) is (24 * w) >> 4.  vbn picks them
+// with a chain of compares.  A weight is below 2^15 (a depth of at most 1284,
+// shifted by at most 4), so the product fits in 32 bits.
 uint32_t Codec::pair_bonus(uint32_t w, uint32_t seen) const
 {
-  if ((uint32_t)search_gain < 0x13)
-    switch (seen) {
-      case 0: return w >> 3;
-      case 1: return 2 * w;
-      case 2: return 3 * w;
-      case 3: return 4 * w;
-      case 4:
-      case 5:
-      case 6: return 5 * w;
-      default: return 8 * w;
-    }
-  switch (seen) {
-    case 0: return w >> 4;
-    case 1: return w >> 1;
-    case 2: return w;
-    case 3: return w + (w >> 1);
-    case 4: return 2 * w;
-    default: return 2 * w + (w >> 1);
-  }
+  static constexpr uint8_t bonus[2][8] = {
+    { 2, 32, 48, 64, 80, 80, 80, 128 },           // search_gain < 0x13
+    { 1, 8, 16, 24, 32, 40, 40, 40 },             // search_gain >= 0x13
+  };
+  return (bonus[(uint32_t)search_gain >= 0x13][seen < 7 ? seen : 7] * w) >> 4;
 }
 
 // lit_swap: swap two pairs of the literal model, and the slots that find them.
@@ -634,8 +625,8 @@ int32_t Codec::code_literal(int32_t excluded, uint32_t bitpos)
   static constexpr uint32_t steps[7] = { 0x2EC, 0x37F, 0x489, 0x56F, 0x63F, 0x70F, 0x75C };
   static constexpr int32_t incs[8] = { 1, 2, 4, 8, 16, 32, 128, 1024 };
   uint32_t c8 = lit_cost8, k = 0;
-  while (k < 7 && c8 >= steps[k])
-    k++;
+  for (uint32_t i = 0; i < 7; i++)
+    k += c8 >= steps[i];                          // the steps rise: k is the first one above c8
   int32_t inc = incs[k];
   if (c8 >= 0x70F) {
     lit_cost9 = 4096;
@@ -884,24 +875,22 @@ int32_t Codec::code_match(int32_t *excluded, uint32_t bitpos)
           w = ((7 * w) >> 3) + 1;
       }
       w += w >> top_bit(avg + 1);
-      *g0 = w;
       ctx16 = (ctx16 & ~0xFF) | cands[1];
-      uint8_t seen = ctx_count[cands[1]];
-      if (seen == 0)
-        *g0 += w >> 9;
-      else if (seen == 1)
-        *g0 -= w >> 5;
-      else if (seen == 2)
-        *g0 -= (w >> 3) + (w >> 3 >> 2);
-      else if (seen <= 5)
-        *g0 -= (w >> 3) + (w >> 3 >> 1);
-      else
-        *g0 -= w >> 2;
+      // Its byte never came up lately: w gains w/512.  Once, twice, 3..5
+      // times, 6 on: w loses w/32, 5w/32, 3w/16, w/4.  Each step is
+      // (mul * (w >> pre)) >> 2, rounding as vbn's chain of compares does:
+      // its 5w/32 is (w >> 3) + (w >> 5), which is (5 * (w >> 3)) >> 2.  The
+      // product fits in 32 bits for any w.
+      static constexpr uint8_t mul[8] = { 1, 1, 5, 6, 6, 6, 1, 1 }, pre[8] = { 7, 3, 3, 3, 3, 3, 0, 0 };
+      uint32_t seen = (uint8_t)ctx_count[cands[1]], s = seen < 7 ? seen : 7;
+      uint32_t step = (mul[s] * (w >> pre[s])) >> 2;
+      *g0 = seen ? w - step : w + step;
     }
     saved_total = len_total;
-    uint32_t weight = 4 * len_total;
-    if ((uint32_t)lit_cost8 < 0x44C)
-      weight = (uint32_t)lit_cost8 < 0x384 ? 9 * len_total : 6 * len_total;
+    // The model weighs 4 times its total, 6 once literals cost less than
+    // 0x44C / 2^8 (about 4.3 bits), 9 below 0x384 / 2^8 (about 3.5).
+    static constexpr uint8_t times[3] = { 4, 6, 9 };
+    uint32_t weight = times[((uint32_t)lit_cost8 < 0x44C) + ((uint32_t)lit_cost8 < 0x384)] * len_total;
     uint32_t shift = top_bit(sum) + 6;               // shld/shrd: the count is mod 32
     uint32_t share = (uint64_t)(n_cands + 4 * search_gain + ((uint32_t)lit_cost8 >> 6)) * weight
                      / (((uint32_t)(len_avg + 1935 - lit_cost8) >> 3) + 1);

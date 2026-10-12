@@ -272,12 +272,13 @@ that followed the best candidate's position.
   being that member's rank among the *n* candidates. The group for length 0
   is reweighed: by `len_avg` against `lit_threshold`, down (×3/4, ×21/32)
   when the best candidate's byte is what `next_byte` (below) predicts, and by
-  `ctx_count` of that byte, a pair count indexed by the byte alone (a quirk).
-  Each group's
-  weight, scaled to the size of the model and to a confidence term
-  (`n_cands + 4·search_gain + lit_cost8/64` over a term in `len_avg` and
-  `lit_cost8`), plus `search_gain`, is added to its length's count for this
-  one symbol. A length where other candidates part ways with the best one
+  `ctx_count` of that byte, a pair count indexed by the byte alone (a quirk):
+  +1/512 at 0, then −1/32, −5/32, −3/16 (3 to 5) and −1/4 (6 or more). Each
+  group's weight, scaled to 4, 6 or 9 times the model's total (more as
+  literals get cheaper: `lit_cost8` below 0x44C, below 0x384) and to a
+  confidence term (`n_cands + 4·search_gain + lit_cost8/64` over a term in
+  `len_avg` and `lit_cost8`), plus `search_gain`, is added to its length's
+  count for this one symbol. A length where other candidates part ways with the best one
   becomes more likely.
 - The length is coded, the model restored, and the length counted
   (`len_model_add`). `len_avg`, the average length ×128, follows with weight
@@ -322,7 +323,9 @@ position; the votes are grouped by byte.
 - A group weighs its candidates' weights above `cand_floor`, plus a bonus for
   its first member from how often the pair *(byte before, this byte)* came up
   among the last 1024 literals (`ctx_count`) and from the search's gain
-  (`pair_bonus`).
+  (`pair_bonus`): the member's weight times 1/8, 2, 3, 4, 5 (4 to 6 times)
+  or 8 (7 or more), or after a search that gained 0x13 or more, 1/16, 1/2,
+  1, 3/2, 2 or 5/2 (5 or more).
 - Groups for the bytes the last-successor tables predict are boosted: ×7/4
   for `next_byte[previous byte]`, the byte that followed the previous byte
   last time, and ×3/2 for `next_byte2[byte two back]`, the byte that came two
