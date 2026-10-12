@@ -373,20 +373,42 @@ symbol}` pairs.
 
 ## Constants
 
-| What | Value |
-|---|---|
-| window, slide, kept | 0x198000, 0x66000, 0x132000 bytes |
-| context tree | ≤ 0x198001 nodes of two 32-bit slots |
-| node-making depth limit | 64·log2(nodes + 32) bits |
-| leaf renewal age (deep slots) | 0x800 bits (256 bytes) |
-| candidates (MAX/NORMAL/FAST) | 95 / 55 / 31 |
-| candidate threshold *K*, initial | 276·log2(tree_updates + 4)/512 bits |
-| match length | 0..255 (0 = none) |
-| length model | 256 counts, +5 per length, over the last 4096 lengths |
-| literal model | 256 counts, +16 per literal over the last 363, plus `lit_inc` (1..1024) |
-| pair counts | `ctx_count[256·prev + byte]` over the last 1024 literals, ≤ 255 |
-| literal cost averages | 4, over ~256/512/1024/2048 literals |
-| arithmetic coder | 32-bit interval, bitwise output, 8 KB code buffer, flush when range < 2·total |
+The names are those of `vbn2.cpp`'s `Codec`, which keeps them together.
+
+| What | Value | Name |
+|---|---|---|
+| window, slide, kept | 0x198000, 0x66000, 0x132000 bytes | `WINDOW`, `SLIDE`, `KEEP` |
+| data per stream | ≤ 0x1FFFFFFF bytes (512 MB): positions count bits, in 32 bits | `MAX_SIZE` |
+| context tree | ≤ 0x198001 nodes of two 32-bit slots | |
+| node-making depth limit | 64·log2(nodes + 32) bits | `GROW_SHIFT`, `GROW_BIAS` |
+| leaf renewal age (deep slots) | 0x800 bits (256 bytes) | `RENEW_AGE` |
+| descent path | ≤ 1284 slots | `PATH_SLOTS` |
+| candidates (MAX/NORMAL/FAST) | 95 / 55 / 31 | `max_cands` |
+| candidate threshold *K*, initial | 276·log2(tree_updates + 4)/512 bits | `AVG_START`, `AVG_BIAS` |
+| first candidate's weight | (depth − *K*) << 4 | `WEIGHT_SHIFT` |
+| search gain | 16·(depth − *K*)/log2(nodes + 7·tree_updates) | `GAIN_MUL`, `GAIN_UPDATES` |
+| no search (without an exclusion) | `lit_cost9` > 0xFFE (8 bits) | `GIVE_UP_COST9` |
+| candidate floor | weakest weight / 4, / 8 for a literal | `FLOOR_SHIFT`, `LIT_FLOOR_SHIFT` |
+| a match's positions registered | search gain < 0x2A, or after an exclusion | `INSERT_GAIN` |
+| match length | 0..255 (0 = none) | `MAX_LEN` |
+| length model | 256 counts from 1, +5 per length, over the last 4096 lengths | `LEN_START`, `LEN_STEP`, `LEN_RING` |
+| `len_avg` | ×128, following each length by 1/64 | `LEN_AVG_RATE` |
+| length 0's count | ×5/(k + k/16), k = 9·`literal_run` + gain + `lit_threshold`/4 + 1 | `NOMATCH_MUL`, `NOMATCH_RUN` |
+| no-match group, `next_byte` agreeing | ×3/4 + 1, and ×7/8 + 1 when twice | `AGREE_QUARTERS`, `AGREE2_EIGHTHS` |
+| a length group's rank bonus | (n − i)/2 | `RANK_SHIFT` |
+| length groups' weight | 4, 6 or 9 × total as `lit_cost8` < 0x44C, < 0x384 | `LEN_COST8_MID`, `LEN_COST8_LOW` |
+| length groups' share | (n + 4·gain + `lit_cost8`/64)·weight / ((`len_avg` + 1935 − `lit_cost8`)/8 + 1), scaled with 6 bits to spare | `CONF_GAIN`, `CONF_BIAS`, `SCALE_BITS` |
+| literal model | 256 counts, +16 per literal over the last 363, plus `lit_inc` (1..1024, from 8) | `LIT_RECENT`, `LIT_RING1`, `LIT_START` |
+| pair counts | `ctx_count[256·prev + byte]` over the last 1024 literals, ≤ 255 | `LIT_RING2` |
+| pair bonus's second row | search gain ≥ 0x13 | `PAIR_GAIN` |
+| pair counts in the literal model | below `lit_cost8` 0x6C9 (6.8 bits): +64 per pair seen, and +¼ of the count while `literal_run` is 0 | `PAIR_COST8`, `PAIR_COUNT_SHIFT`, `NO_RUN_SHIFT` |
+| successor boosts | ×7/4 for `next_byte`'s byte, ×3/2 for `next_byte2`'s | `NEXT_QUARTERS`, `NEXT2_HALVES` |
+| byte groups' share | grows with (3·`lit_threshold` + 5·1.25·gain)/8, and ×2 per step of (48 − `lit_threshold`)/8 below 4 (÷2 above) | `BLEND_THRESHOLD`, `BLEND_GAIN`, `THRESHOLD_TOP`, `BLEND_PIVOT` |
+| `lit_threshold` | 54 + gain/16 − log2(`lit_cost8`/8 + 1) − the costs | `THRESHOLD_BASE` |
+| literal cost averages | 4, over ~256/512/1024/2048 literals, from 5, 6, 7, 8 bits | `COST8_START` … `COST11_START` |
+| long averages restart | at 8 bits, once `lit_cost8` ≥ 0x70F (7.1 bits), or at `lit_threshold` 0 after a gain ≤ 4 (dropping the candidates) | `RESTART_BITS`, `RESTART_COST8`, `DROP_GAIN` |
+| arithmetic coder | 32-bit interval, bitwise output, 8 KB code buffer + 16 bytes, flush when range < 2·total | `BLOCK`, `SPILL` |
+| decoder's first read | up to 2 bytes of code per byte of the first window | `FIRST_CODE` |
 
 ## Quirks kept for bit-exactness
 

@@ -211,6 +211,9 @@ to the coder since and is maintained by hand:
   for what they do, with their `vbn.exe` addresses. The search's early exit,
   a setjmp/longjmp pair in `vbn.exe`, is plain returns, and the variables
   only the search uses are its locals;
+- the model's parameters -- thresholds, ring sizes, starting values, weights
+  -- are named constants, together at the top of `Codec` (ALGORITHM.md's
+  table of constants gives each one's name);
 - integer types are `<cstdint>`'s throughout;
 - the bodies are rewritten by hand from the decompiler's output (and from
   `vbn.exe`'s assembly where Hex-Rays' reading needed checking): the
