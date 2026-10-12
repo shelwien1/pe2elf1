@@ -112,7 +112,7 @@ VBN 1.001 is ACB 2.00c under another name. `vbn.exe`'s image is that of
 Every function vbn2 was decompiled from is in `ACB.EXE` unchanged. The
 arithmetic coder and the adaptive frequency tables go back further, to the
 program Buyanovsky published with his 1994 article "Associative coding"
-(`WriteEnd` there is `code_flush` here).
+(`WriteEnd` there is `ArithCoder::flush` here).
 
 ## The stream
 
@@ -155,8 +155,8 @@ search and from the literal coding. A length of 0 says the very first byte
 differs from the best candidate's prediction, and the literal that follows is
 coded with that byte excluded.
 
-Every 8 KB of code goes to the output (`code_buffer_io`), and the window
-slides when it is full.
+Every 8 KB of code goes to the output (`ArithCoder::next_block`), and the
+window slides when it is full.
 
 ## The window
 
@@ -343,7 +343,7 @@ updated, and the model takes its +16.
 
 ## The arithmetic coder
 
-`code_symbol` is an arithmetic coder over frequency lists of `{count,
+`ArithCoder` is an arithmetic coder over frequency lists of `{count,
 symbol}` pairs.
 
 - **Interval.** 32-bit `low` and `high`. A symbol whose list entries before it
@@ -352,16 +352,15 @@ symbol}` pairs.
   `size = high − low + 1` (up to 2^32) and the products in 64 bits.
 - **Renormalisation.** The leading bits that `low` and `high` agree on are
   shifted out into the code buffer one at a time (written by toggling bits of
-  a zeroed buffer). `code_pending`, 32 minus the bits last shifted out, tells
-  the decoder how many fresh bits to read next and bounds `code_flush`'s
-  tail.
+  a zeroed buffer). `pending`, 32 minus the bits last shifted out, tells the
+  decoder how many fresh bits to read next and bounds `flush`'s tail.
 - **No carry, no underflow handling.** When the interval gets narrower than
-  twice the total (`2·total > high − low`), the code is ended: `code_flush`
+  twice the total (`2·total > high − low`), the code is ended: `flush`
   writes the shortest tail that keeps every continuation inside the interval
   (`0111…` or `1000…`), and coding starts afresh on the full interval. The
   same happens once at the end of the data. This is Buyanovsky's `WriteEnd` of
   1994.
-- **Decoding.** `code_value` holds the 32 bits of code that line up with
+- **Decoding.** `value` holds the 32 bits of code that line up with
   `low`; each symbol first reads the bits that renormalisation shifted out.
   The count the code points at is `((value − low + 1)·total − 1)/size`, and
   the symbol is the first whose cumulative count exceeds it.
@@ -407,7 +406,7 @@ that looks unintended. These are commented in the source.
   count that can exceed 31).
 - **Bits toggled when decoding.** The renormalisation and the flush tail
   toggle buffer bits in the decoder too. It does no harm, since those bits
-  lie before the 32 bits `code_value` holds when it is next used.
+  lie before the 32 bits `value` holds when it is next used.
 
 ## Relation to the published ACB descriptions
 
