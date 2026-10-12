@@ -258,8 +258,9 @@ slides, so the arena is 0x198001 nodes (12.75 MiB), an array in the `Codec`,
 and its slots stay 32 bits wide at any pointer size. Everything else that
 holds an address is a native pointer; `vbn2` builds and runs as x86-64 and
 as i386, and both write the same streams. `main` takes the `Codec`, about
-15 MB, from the heap through `malloc` (its own `operator new`), so `vbn2`
-uses only the C library.
+15 MB, from the heap through `malloc` (its own `operator new`), and
+`filehandle` has no destructor (one would give `main` cleanups for
+exceptions, which need the C++ runtime), so `vbn2` uses only the C library.
 
 `tests/vbn2.py` is the gate every change to `vbn2.cpp` has to pass:
 

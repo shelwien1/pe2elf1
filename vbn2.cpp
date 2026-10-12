@@ -58,7 +58,9 @@ static inline void xor_bit(void *buf, uint32_t n, uint32_t bit)
 // ===========================================================================
 // filehandle: a file, open for reading (mode 0) or for writing (mode 1); it
 // is 0 if it did not open.  The coder reads the data or the code from one and
-// writes the code or the data to another.
+// writes the code or the data to another.  close() closes it, and exit()
+// any left open: a destructor would give main cleanups for exceptions to run,
+// which need the C++ runtime (libstdc++), and vbn2 throws none.
 // ===========================================================================
 class filehandle
 {
@@ -66,7 +68,6 @@ public:
   filehandle(const char *name, uint32_t mode) : file(fopen(name, mode ? "wb" : "rb")) {}
   filehandle(const filehandle &) = delete;
   filehandle &operator=(const filehandle &) = delete;
-  ~filehandle() { close(); }
   operator FILE *() const { return file; }
 
   // read (vbn.exe 0x10000D0E): read up to `count` bytes, and return how many
