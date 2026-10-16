@@ -40,7 +40,10 @@ static void SetUnRef (PPicture pRef) {
     pRef->uiSpatialId = -1;
     pRef->iSpsId = -1;
     pRef->bIsComplete = false;
-    pRef->iRefCount = 0;
+    // iRefCount is left alone: it counts the picture's pending output in the
+    // reordering buffer, and clearing it here (e.g. on an IDR or MMCO while the
+    // picture still waits for output) let PrefetchPic() hand out the buffer and
+    // the next decoded picture overwrite it before it was output.
 
     if (pRef->eSliceType == I_SLICE) {
       return;
@@ -48,10 +51,7 @@ static void SetUnRef (PPicture pRef) {
     int32_t lists = pRef->eSliceType == P_SLICE ? 1 : 2;
     for (int32_t i = 0; i < MAX_DPB_COUNT; ++i) {
       for (int32_t list = 0; list < lists; ++list) {
-        if (pRef->pRefPic[list][i] != NULL) {
-          pRef->pRefPic[list][i]->iRefCount = 0;
-          pRef->pRefPic[list][i] = NULL;
-        }
+        pRef->pRefPic[list][i] = NULL;
       }
     }
   }
