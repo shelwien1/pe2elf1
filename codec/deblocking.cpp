@@ -1140,8 +1140,9 @@ void WelsDeblockingMb (PDqLayer pCurDqLayer, PDeblockingFilter  pFilter, int32_t
     } else {
       * (uint32_t*)nBS[1][0] = 0;
     }
-    //SKIP MB_16x16 or others
-    if (IS_SKIP (iCurMbType)) {
+    //P_Skip: one MV and no residual, so no internal edge is filtered. Not so for
+    //B_Skip: its direct prediction may give each 8x8 block a different MV.
+    if (IS_SKIP (iCurMbType) && !bBSlice) {
       * (uint32_t*)nBS[0][1] = * (uint32_t*)nBS[0][2] = * (uint32_t*)nBS[0][3] =
                                  * (uint32_t*)nBS[1][1] = * (uint32_t*)nBS[1][2] = * (uint32_t*)nBS[1][3] = 0;
     } else {
