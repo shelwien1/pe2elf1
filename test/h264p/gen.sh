@@ -3,7 +3,8 @@
 # committed, so this does not need to be run). They cover coding tools that
 # matter to h264p but not to h264dec, which decodes none of them: interlace
 # (MBAFF, field pictures), 4:2:2, 4:4:4, monochrome, high bit depth, lossless,
-# I_PCM, cabac_zero_words, filler data, FMO, SP slices and data partitioning.
+# I_PCM, cabac_zero_words, filler data, FMO, SP and SI slices and data
+# partitioning.
 #
 # x264_*.264: ffmpeg 6.1 with libx264, from frames 810-841 of
 #             test/002/01.h264 scaled to 320x192; the interlaced source has
@@ -112,6 +113,8 @@ for t in 0 1 2 3 4 5 6; do
 done
 jm sp          cif -p ProfileIDC=88 -p SymbolMode=0 -p NumberBFrames=0 -p SPPicturePeriodicity=2 \
                    -p QPSPSlice=28 -p QPSP2Slice=27
+jm si          cif -p ProfileIDC=88 -p SymbolMode=0 -p NumberBFrames=0 -p SPPicturePeriodicity=2 \
+                   -p SI_FRAMES=1 -p QPSPSlice=28 -p QPSP2Slice=27
 jm dp          cif -p ProfileIDC=88 -p SymbolMode=0 -p NumberBFrames=0 -p PartitionMode=1
 jm mono        cif -p ProfileIDC=100 -p YUVFormat=0 $B
 jm mono_cavlc  cif -p ProfileIDC=100 -p YUVFormat=0 -p SymbolMode=0 $B
