@@ -37,7 +37,11 @@ for s in "$@"; do
       echo "SKIP $s (no reference md5 and no ffmpeg)"
       continue
     fi
-    ref=$(ffmpeg -v error -i "$s" -fps_mode passthrough -f rawvideo -pix_fmt yuv420p - | md5sum | cut -c1-32)
+    ref=$(ffmpeg -v error -i "$s" -fps_mode passthrough -f rawvideo -pix_fmt yuv420p - 2>/dev/null | md5sum | cut -c1-32)
+    if [ "$ref" = d41d8cd98f00b204e9800998ecf8427e ]; then  # md5 of nothing
+      echo "SKIP $s (ffmpeg cannot decode it)"
+      continue
+    fi
   fi
   # fd 3 carries the YUV to md5sum; the decoder's own messages go to the log.
   got=$("$dec" "$s" /dev/fd/3 3>&1 >"$log" 2>&1 | md5sum | cut -c1-32)
