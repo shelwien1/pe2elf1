@@ -525,7 +525,7 @@ int decompress(const char* in_name, const char* out_name, const Options& opt) {
       if (buf.size() > (1 << 22)) flush();
     }
     if (const Row* extra = in.peek()) extra->fail("rows after eof");
-  } catch (const TsvError& e) {
+  } catch (const std::exception& e) {  // TsvError, or an inconsistency only found when writing
     fprintf(stderr, "h264p: %s: %s\n", in_name, e.what());
     return 1;
   }

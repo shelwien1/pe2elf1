@@ -136,6 +136,7 @@ class SliceCoder {
     return v;
   }
   int te(int v, int range) {
+    if (W && (v < 0 || v > range)) fail("value " + std::to_string(v) + " out of range");
     if (range == 1) return !u(1, !v);
     return ue(v, range);
   }
