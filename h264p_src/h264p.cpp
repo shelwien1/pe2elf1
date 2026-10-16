@@ -73,7 +73,7 @@ std::vector<uint8_t> escape(const std::vector<uint8_t>& r) {
   return e;
 }
 
-bool parsed_type(int type) { return type == 1 || type == 5 || type == 6 || type == 7 || type == 8 || type == 9 || type == 10 || type == 11; }
+bool parsed_type(int type) { return (type >= 5 && type <= 12) || type == 1; }
 
 // Parses the RBSP of a NAL unit into rows; parameter sets are stored in the
 // context. Throws ParseError.
@@ -98,6 +98,9 @@ void read_nal(int type, int ref_idc, const std::vector<uint8_t>& rbsp, Context& 
       break;
     case 9:
       code_aud(s);
+      break;
+    case 12:
+      code_filler(s);
       break;
     case 10:
     case 11:
@@ -140,6 +143,9 @@ void write_syntax(int type, int ref_idc, Context& ctx, RowReader& in, BitWriter&
       break;
     case 9:
       code_aud(s);
+      break;
+    case 12:
+      code_filler(s);
       break;
     case 10:
     case 11:

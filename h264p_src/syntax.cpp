@@ -20,6 +20,15 @@ void Syn::begin(const char* name) {
   field_ = 1;
 }
 
+int64_t Syn::vval(int64_t v, int64_t lo, int64_t hi) {
+  if (!W) {
+    check(v, lo, hi);
+    out_->add(v);
+    return v;
+  }
+  return check(row_->num(field_++), lo, hi);
+}
+
 void Syn::end() {
   if (!W) {
     out_->end();
@@ -303,6 +312,20 @@ void code_sei(Syn& s) {
 }
 
 void code_aud(Syn& s) { s.u("primary_pic_type", 3); }
+
+void code_filler(Syn& s) {
+  s.begin("ff_bytes");  // the number of ff_byte
+  int64_t n = 0;
+  if (!s.W)
+    while (s.br->size() - s.br->pos() >= 8 && s.br->peek(8) == 0xFF) {
+      s.br->skip(8);
+      n++;
+    }
+  n = s.vval(n, 0, 1 << 30);
+  if (s.W)
+    for (int64_t i = 0; i < n; i++) s.bw->put(0xFF, 8);
+  s.end();
+}
 
 static void ref_pic_list_modification(Syn& s, const char* name) {
   s.begin(name);  // ref_pic_list_modification_flag, then the operations

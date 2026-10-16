@@ -3,7 +3,7 @@
 # committed, so this does not need to be run). They cover coding tools that
 # matter to h264p but not to h264dec, which decodes none of them: interlace
 # (MBAFF, field pictures), 4:2:2, 4:4:4, monochrome, high bit depth, lossless,
-# I_PCM, cabac_zero_words, FMO, SP slices and data partitioning.
+# I_PCM, cabac_zero_words, filler data, FMO, SP slices and data partitioning.
 #
 # x264_*.264: ffmpeg 6.1 with libx264, from frames 810-841 of
 #             test/002/01.h264 scaled to 320x192; the interlaced source has
@@ -63,6 +63,7 @@ x264 444_8x8        prog -preset slow -crf 20 -pix_fmt yuv444p -x264-params bfra
 x264 444_10_cavlc   prog $B -pix_fmt yuv444p10le -x264-params cabac=0
 x264 gray           prog $B -pix_fmt gray -x264-params bframes=3
 x264 gray_cavlc     prog $B -pix_fmt gray -x264-params cabac=0
+x264 filler         prog -preset fast -b:v 600k -frames:v 4 -x264-params nal-hrd=cbr:vbv-maxrate=600:vbv-bufsize=300:filler=1
 x264 lossless       prog -preset fast -qp 0 -frames:v 3 -x264-params bframes=1
 x264 lossless_444_cavlc prog -preset fast -qp 0 -frames:v 3 -pix_fmt yuv444p -x264-params cabac=0
 noise() {

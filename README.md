@@ -84,8 +84,8 @@ from its rows and compares; a NAL unit it cannot reproduce is stored in hex,
 verbatim. That happens to
 
 - NAL unit types other than slices (1, 5), SEI (6), SPS (7), PPS (8), access
-  unit delimiters (9), end of sequence and stream (10, 11): for example data
-  partitions (2-4), SVC and MVC (14, 15, 20) and filler data (12)
+  unit delimiters (9), end of sequence and stream (10, 11) and filler data
+  (12): data partitions (2-4), SVC and MVC (14, 15, 20) and the rest
 - NAL units with syntax errors or referring to a missing parameter set
 - emulation prevention bytes the standard would not insert
 
@@ -118,9 +118,9 @@ Rows of the stream, in stream order:
     czw    N               N cabac_zero_words
     eof    N               N 0x00 bytes after the last NAL unit
 
-The rows of SPS, PPS, SEI, AUD and slice headers are named after their syntax
-elements in the standard (7.3) and come in bitstream order, one row per
-syntax element, except for these groups:
+The rows of SPS, PPS, SEI, AUD, filler data and slice headers are named after
+their syntax elements in the standard (7.3) and come in bitstream order, one
+row per syntax element, except for these groups:
 
     constraint_set_flags              constraint_set0..5_flag, reserved_zero_2bits: 8 bits
     seq_scaling_list, pic_scaling_list   present flag, the delta_scale values
@@ -129,6 +129,7 @@ syntax element, except for these groups:
     run_length_minus1, slice_group_id all of them
     slice_group_rect                  top_left bottom_right
     sei_message                       payloadType payloadSize payload (hex)
+    ff_bytes                          the number of ff_byte of filler data
     ref_pic_list_modification_l0/l1   flag, then each modification_of_pic_nums_idc
                                       with its argument, ending with 3
     pred_weight_l0/l1                 one row per reference index: luma_weight_flag

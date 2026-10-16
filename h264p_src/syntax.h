@@ -50,6 +50,9 @@ class Syn {
   int64_t vff();                    // SEI payloadType/payloadSize coding
   std::string vhex(size_t nbytes);  // bytes in hex
   void end();
+  // a value that is not coded as such: reading, v goes to the row; writing,
+  // the value of the row is returned
+  int64_t vval(int64_t v, int64_t lo, int64_t hi);
 
   // more_rbsp_data() when reading; when writing, whether the next row is
   // named `next`
@@ -119,6 +122,7 @@ void code_sps(Syn& s, Sps& sps);
 void code_pps(Syn& s, Pps& pps, const ParamSets& ps);
 void code_sei(Syn& s);
 void code_aud(Syn& s);
+void code_filler(Syn& s);
 void code_slice_header(Syn& s, SliceHeader& h, const ParamSets& ps);
 
 }  // namespace h264p
