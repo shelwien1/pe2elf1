@@ -32,7 +32,6 @@ struct Options {
 
 struct Stats {
   long nals = 0, parsed = 0, raw = 0, trail = 0;
-  std::map<int, long> raw_by_type;
   std::map<std::string, long> reasons;
 };
 
@@ -430,7 +429,6 @@ int compress(const char* in_name, const char* out_name, const Options& opt) {
       out.add(to_hex(&data[p + 1], e - p - 1));
       out.end();
       st.raw++;
-      st.raw_by_type[type]++;
       st.reasons[why]++;
       if (opt.verbose && parsed_type(type))
         fprintf(stderr, "h264p: NAL unit %ld (type %d) stored verbatim: %s\n", st.nals - 1, type, why.c_str());
