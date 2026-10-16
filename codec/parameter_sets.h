@@ -58,7 +58,7 @@ typedef struct TagSps {
 
   int32_t       iOffsetForTopToBottomField;
   int32_t       iNumRefFramesInPocCycle;
-  int8_t        iOffsetForRefFrame[256];
+  int32_t       iOffsetForRefFrame[256];
   int32_t       iNumRefFrames;
 
   SPosOffset    sFrameCrop;

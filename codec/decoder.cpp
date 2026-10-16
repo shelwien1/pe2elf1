@@ -324,6 +324,8 @@ void WelsDecoderDefaults (PWelsDecoderContext pCtx, SLogContext* pLogCtx) {
   pCtx->iFeedbackNalRefIdc = -1; //initialize
   pCtx->pLastDecPicInfo->iPrevPicOrderCntMsb = 0;
   pCtx->pLastDecPicInfo->iPrevPicOrderCntLsb = 0;
+  pCtx->pLastDecPicInfo->iPrevFrameNumOffset = 0;
+  pCtx->pLastDecPicInfo->iPrevPocFrameNum = 0;
 
 }
 
@@ -353,6 +355,8 @@ void WelsDecoderSpsPpsDefaults (SWelsDecoderSpsPpsCTX& sSpsPpsCtx) {
 void WelsDecoderLastDecPicInfoDefaults (SWelsLastDecPicInfo& sLastDecPicInfo) {
   sLastDecPicInfo.iPrevPicOrderCntMsb = 0;
   sLastDecPicInfo.iPrevPicOrderCntLsb = 0;
+  sLastDecPicInfo.iPrevFrameNumOffset = 0;
+  sLastDecPicInfo.iPrevPocFrameNum = 0;
   sLastDecPicInfo.pPreviousDecodedPictureInDpb = NULL;
   sLastDecPicInfo.iPrevFrameNum = -1;
   sLastDecPicInfo.bLastHasMmco5 = false;

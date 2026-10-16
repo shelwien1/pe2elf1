@@ -236,6 +236,8 @@ typedef struct tagSWelsLastDecPicInfo {
   SSliceHeader      sLastSliceHeader;
   int32_t           iPrevPicOrderCntMsb;
   int32_t           iPrevPicOrderCntLsb;
+  int32_t           iPrevFrameNumOffset; // FrameNumOffset and frame_num of the previous picture,
+  int32_t           iPrevPocFrameNum;    // for pic_order_cnt_type 1 and 2
   PPicture          pPreviousDecodedPictureInDpb; //pointer to previously decoded picture in DPB for error concealment
   int32_t           iPrevFrameNum;// frame number of previous frame well decoded for non-truncated mode yet
   bool              bLastHasMmco5;

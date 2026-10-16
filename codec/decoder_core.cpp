@@ -523,6 +523,8 @@ int32_t ParseDecRefPicMarking (PWelsDecoderContext pCtx, PBitStringAux pBs, PSli
 
           pCtx->pLastDecPicInfo->iPrevPicOrderCntLsb = 0;
           pCtx->pLastDecPicInfo->iPrevPicOrderCntMsb = 0;
+          pCtx->pLastDecPicInfo->iPrevFrameNumOffset = 0;
+          pCtx->pLastDecPicInfo->iPrevPocFrameNum = 0;
           pSh->iPicOrderCntLsb = 0;
           if (pCtx->pSliceHeader)
             pCtx->pSliceHeader->iPicOrderCntLsb = 0;
@@ -1075,6 +1077,43 @@ int32_t ParseSliceHeaderSyntaxs (PWelsDecoderContext pCtx, PBitStringAux pBs, co
       WELS_READ_VERIFY (BsGetSe (pBs, &iCode)); //delta_pic_order_cnt[ 1 ]
       pSliceHead->iDeltaPicOrderCnt[1] = iCode;
     }
+  }
+  if (pSps->uiPocType == 1 || pSps->uiPocType == 2) {
+    // POC of a frame for pic_order_cnt_type 1 (8.2.1.2) and 2 (8.2.1.3)
+    PWelsLastDecPicInfo pLast = pCtx->pLastDecPicInfo;
+    const bool kbIdr = pSliceHead->bIdrFlag
+                       || kpCurNal->sNalHeaderExt.sNalUnitHeader.eNalUnitType == NAL_UNIT_CODED_SLICE_IDR;
+    const bool kbRef = kpCurNal->sNalHeaderExt.sNalUnitHeader.uiNalRefIdc != 0;
+    int32_t iFrameNumOffset = 0;
+    if (!kbIdr) {
+      iFrameNumOffset = pLast->iPrevFrameNumOffset;
+      if (pLast->iPrevPocFrameNum > pSliceHead->iFrameNum)
+        iFrameNumOffset += 1 << pSps->uiLog2MaxFrameNum;
+    }
+    if (pSps->uiPocType == 1) {
+      const int32_t kiCycleLen = pSps->iNumRefFramesInPocCycle;
+      int32_t iAbsFrameNum = kiCycleLen != 0 ? iFrameNumOffset + pSliceHead->iFrameNum : 0;
+      if (!kbRef && iAbsFrameNum > 0)
+        iAbsFrameNum--;
+      int32_t iExpectedPoc = 0;
+      if (iAbsFrameNum > 0) {
+        int32_t iExpectedDeltaPerCycle = 0;
+        for (int32_t i = 0; i < kiCycleLen; i++)
+          iExpectedDeltaPerCycle += pSps->iOffsetForRefFrame[i];
+        iExpectedPoc = (iAbsFrameNum - 1) / kiCycleLen * iExpectedDeltaPerCycle;
+        for (int32_t i = 0; i <= (iAbsFrameNum - 1) % kiCycleLen; i++)
+          iExpectedPoc += pSps->iOffsetForRefFrame[i];
+      }
+      if (!kbRef)
+        iExpectedPoc += pSps->iOffsetForNonRefPic;
+      const int32_t kiTopPoc = iExpectedPoc + pSliceHead->iDeltaPicOrderCnt[0];
+      const int32_t kiBottomPoc = kiTopPoc + pSps->iOffsetForTopToBottomField + pSliceHead->iDeltaPicOrderCnt[1];
+      pSliceHead->iPicOrderCntLsb = WELS_MIN (kiTopPoc, kiBottomPoc);
+    } else {
+      pSliceHead->iPicOrderCntLsb = kbIdr ? 0 : 2 * (iFrameNumOffset + pSliceHead->iFrameNum) - (kbRef ? 0 : 1);
+    }
+    pLast->iPrevFrameNumOffset = iFrameNumOffset;
+    pLast->iPrevPocFrameNum = pSliceHead->iFrameNum;
   }
   pSliceHead->iRedundantPicCnt = 0;
   if (pPps->bRedundantPicCntPresentFlag) {
