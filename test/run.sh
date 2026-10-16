@@ -3,12 +3,14 @@
 #
 # usage: test/run.sh [DECODER] [STREAM...]
 #
-# DECODER defaults to ./h264dec, STREAMs to test/002/*.h264.  The MD5 of the
-# decoded YUV is compared with the reference stored in md5.txt next to the
-# stream.  A stream without a stored reference is compared with ffmpeg's
-# decode of it instead (needs ffmpeg), so any file can be checked.
+# DECODER defaults to ./h264dec, STREAMs to the provided test streams
+# (test/002/*.h264) plus the generated ones covering more coding tools
+# (test/gen/*.264, see gen.sh there).  The MD5 of the decoded YUV is compared
+# with the reference stored in md5.txt next to the stream.  A stream without a
+# stored reference is compared with ffmpeg's decode of it instead (needs
+# ffmpeg), so any file can be checked.
 #
-# The references in test/002/md5.txt were made with
+# The references in md5.txt were made with
 #   ffmpeg -i X.h264 -fps_mode passthrough -f rawvideo -pix_fmt yuv420p - | md5sum
 # and the JM reference decoder (ldecod) produces identical output for all.
 #
@@ -17,7 +19,7 @@
 dec=${1:-./h264dec}
 shift
 here=$(dirname "$0")
-[ $# -eq 0 ] && set -- "$here"/002/*.h264
+[ $# -eq 0 ] && set -- "$here"/002/*.h264 "$here"/gen/*.264
 
 if [ ! -x "$dec" ]; then
   echo "decoder '$dec' not found, run make first" >&2
