@@ -870,6 +870,7 @@ int32_t ParseInterBMotionInfoCabac (PWelsDecoderContext pCtx, PWelsNeighAvail pN
     const int32_t ref0Count = WELS_MIN (pSliceHeader->uiRefCount[LIST_0], pCtx->sRefPic.uiRefCount[LIST_0]);
     bool has_direct_called = false;
     SubMbType directSubMbType = 0;
+    int8_t ref_idx_list[LIST_A][4] = { {REF_NOT_IN_LIST, REF_NOT_IN_LIST}, { REF_NOT_IN_LIST, REF_NOT_IN_LIST } };
     for (int32_t i = 0; i < 4; i++) {
       WELS_READ_VERIFY (ParseBSubMBTypeCabac (pCtx, pNeighAvail, uiSubMbType));
       if (uiSubMbType >= 13) { //invalid sub_mb_type
@@ -931,15 +932,18 @@ int32_t ParseInterBMotionInfoCabac (PWelsDecoderContext pCtx, PWelsNeighAvail pN
           }
           Update8x8RefIdx (pCurDqLayer, iIdx8, LIST_0, iRef[LIST_0]);
           Update8x8RefIdx (pCurDqLayer, iIdx8, LIST_1, iRef[LIST_1]);
-          UpdateP8x8RefCacheIdxCabac (pRefIndex, iIdx8, LIST_0, iRef[LIST_0]);
-          UpdateP8x8RefCacheIdxCabac (pRefIndex, iIdx8, LIST_1, iRef[LIST_1]);
+          // The ref cache is filled in sub-macroblock order by the mv loop
+          // below. Filling it here already would make a later direct
+          // sub-macroblock available as top-right neighbour (C) in the mv
+          // prediction of an earlier non-direct one.
+          ref_idx_list[LIST_0][i] = iRef[LIST_0];
+          ref_idx_list[LIST_1][i] = iRef[LIST_1];
           FillTemporalDirect8x8Mv (pCurDqLayer, iIdx8, pSubPartCount[i], pPartW[i], directSubMbType, iRef, mvColoc, pMotionVector,
                                    pMvdCache);
         }
       }
     }
     //ref no-direct
-    int8_t ref_idx_list[LIST_A][4] = { {REF_NOT_IN_LIST, REF_NOT_IN_LIST}, { REF_NOT_IN_LIST, REF_NOT_IN_LIST } };
     for (int32_t listIdx = LIST_0; listIdx < LIST_A; ++listIdx) {
       for (int32_t i = 0; i < 4; i++) {
         int16_t iIdx8 = i << 2;
@@ -980,9 +984,6 @@ int32_t ParseInterBMotionInfoCabac (PWelsDecoderContext pCtx, PWelsNeighAvail pN
         int16_t iIdx8 = i << 2;
 
         uint32_t subMbType = pCurDqLayer->pSubMbType[iMbXy][i];
-        if (IS_DIRECT (subMbType) && !pSliceHeader->iDirectSpatialMvPredFlag)
-          continue;
-
         int8_t iref = ref_idx_list[listIdx][i];
         UpdateP8x8RefCacheIdxCabac (pRefIndex, iIdx8, listIdx, iref);
 
