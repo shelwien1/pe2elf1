@@ -284,19 +284,81 @@ bool convert_nal(int type, int ref_idc, const uint8_t* p, size_t n, Context& ctx
   }
 }
 
-std::vector<uint8_t> read_file(const char* name) {
-  FILE* f = strcmp(name, "-") ? fopen(name, "rb") : stdin;
-  if (!f) {
-    fprintf(stderr, "h264p: cannot open %s: %s\n", name, strerror(errno));
-    exit(1);
+// Splits an Annex B byte stream into NAL units while reading it.
+class AnnexBReader {
+ public:
+  explicit AnnexBReader(FILE* f) : f_(f) {}
+
+  // The next NAL unit: the 0x00 bytes before its start code (zero_byte, and
+  // the trailing_zero_8bits of the previous NAL unit), and its bytes up to
+  // the zero bytes before the next start code. False at the end.
+  bool next(size_t& zeros, std::vector<uint8_t>& nal) {
+    if (done_) return false;
+    size_t k;
+    if (!started_) {
+      if (!find(k)) {  // no start code at all
+        junk_.swap(buf_);
+        done_ = true;
+        return false;
+      }
+      size_t j = k;
+      while (j > 0 && buf_[j - 1] == 0) j--;
+      junk_.assign(buf_.begin(), buf_.begin() + j);
+      zeros_ = k - j;
+      started_ = true;
+      head_ = scan_ = k + 3;
+    }
+    bool last = !find(k);
+    if (last) k = buf_.size();
+    size_t e = k;
+    while (e > head_ && buf_[e - 1] == 0) e--;
+    nal.assign(buf_.begin() + head_, buf_.begin() + e);
+    zeros = zeros_;
+    if (last) {
+      eof_zeros_ = k - e;
+      done_ = true;
+    } else {
+      zeros_ = k - e;
+      head_ = scan_ = k + 3;
+    }
+    return true;
   }
-  std::vector<uint8_t> data;
-  uint8_t buf[1 << 16];
-  size_t n;
-  while ((n = fread(buf, 1, sizeof buf, f)) > 0) data.insert(data.end(), buf, buf + n);
-  if (f != stdin) fclose(f);
-  return data;
-}
+  // bytes before the first start code (all bytes if there is none)
+  const std::vector<uint8_t>& junk() const { return junk_; }
+  // 0x00 bytes after the last NAL unit
+  size_t eof_zeros() const { return eof_zeros_; }
+  bool error() const { return ferror(f_) != 0; }
+
+ private:
+  // the next start code at or after scan_, reading as much as needed
+  bool find(size_t& k) {
+    for (;;) {
+      for (size_t i = scan_; i + 2 < buf_.size(); i++)
+        if (buf_[i + 2] == 1 && !buf_[i + 1] && !buf_[i]) {
+          k = i;
+          return true;
+        }
+      scan_ = buf_.size() > 2 ? buf_.size() - 2 : 0;
+      if (scan_ < head_) scan_ = head_;
+      // drop what was returned before reading more
+      buf_.erase(buf_.begin(), buf_.begin() + head_);
+      scan_ -= head_;
+      head_ = 0;
+      size_t old = buf_.size();
+      buf_.resize(old + (1 << 20));
+      size_t n = fread(&buf_[old], 1, 1 << 20, f_);
+      buf_.resize(old + n);
+      if (!n) return false;
+    }
+  }
+
+  FILE* f_;
+  std::vector<uint8_t> buf_, junk_;
+  size_t head_ = 0;  // start of the current NAL unit in buf_
+  size_t scan_ = 0;  // where to look for the next start code
+  size_t zeros_ = 0, eof_zeros_ = 0;
+  bool started_ = false, done_ = false;
+};
 
 FILE* open_out(const char* name) {
   FILE* f = strcmp(name, "-") ? fopen(name, "wb") : stdout;
@@ -310,7 +372,11 @@ FILE* open_out(const char* name) {
 void put(FILE* f, const std::string& s) { fwrite(s.data(), 1, s.size(), f); }
 
 int compress(const char* in_name, const char* out_name, const Options& opt) {
-  std::vector<uint8_t> data = read_file(in_name);
+  FILE* fi = strcmp(in_name, "-") ? fopen(in_name, "rb") : stdin;
+  if (!fi) {
+    fprintf(stderr, "h264p: cannot open %s: %s\n", in_name, strerror(errno));
+    return 1;
+  }
   FILE* f = open_out(out_name);
   Context ctx;
   Stats st;
@@ -319,37 +385,19 @@ int compress(const char* in_name, const char* out_name, const Options& opt) {
   out.add(kVersion);
   out.end();
 
-  // start code positions
-  std::vector<size_t> sc;
-  size_t len = data.size();
-  for (size_t i = 0; i + 2 < len; i++)
-    if (data[i] == 0 && data[i + 1] == 0 && data[i + 2] == 1) {
-      sc.push_back(i);
-      i += 2;
+  AnnexBReader rd(fi);
+  std::vector<uint8_t> nal;
+  size_t zeros;
+  bool first = true;
+  while (rd.next(zeros, nal)) {
+    if (first && !rd.junk().empty()) {
+      out.begin("junk");
+      out.add(to_hex(rd.junk().data(), rd.junk().size()));
+      out.end();
     }
-  size_t junk_end = len, eof_zeros = 0;
-  if (!sc.empty()) {
-    junk_end = sc[0];
-    while (junk_end > 0 && data[junk_end - 1] == 0) junk_end--;
-  }
-  if (junk_end > 0) {
-    out.begin("junk");
-    out.add(to_hex(data.data(), junk_end));
-    out.end();
-  }
-  size_t prev_end = junk_end;
-  for (size_t k = 0; k < sc.size(); k++) {
-    size_t zeros = sc[k] - prev_end;
-    size_t p = sc[k] + 3, e;
-    if (k + 1 < sc.size()) {
-      e = sc[k + 1];
-      while (e > p && data[e - 1] == 0) e--;
-    } else {
-      e = len;
-      while (e > p && data[e - 1] == 0) e--;
-      eof_zeros = len - e;
-    }
-    prev_end = e;
+    first = false;
+    const uint8_t* data = nal.data();
+    size_t p = 0, e = nal.size();
     st.nals++;
     if (e == p || (data[p] & 0x80)) {  // empty, or forbidden_zero_bit set
       out.begin("nalx");
@@ -390,8 +438,17 @@ int compress(const char* in_name, const char* out_name, const Options& opt) {
       out.truncate(0);
     }
   }
-  if (sc.empty()) eof_zeros = 0;
-  out.row("eof", (int64_t)eof_zeros);
+  if (first && !rd.junk().empty()) {  // no start code
+    out.begin("junk");
+    out.add(to_hex(rd.junk().data(), rd.junk().size()));
+    out.end();
+  }
+  if (rd.error()) {
+    fprintf(stderr, "h264p: read error\n");
+    return 1;
+  }
+  if (fi != stdin) fclose(fi);
+  out.row("eof", (int64_t)rd.eof_zeros());
   put(f, out.text());
   if (ferror(f) || (f != stdout && fclose(f))) {
     fprintf(stderr, "h264p: write error\n");
