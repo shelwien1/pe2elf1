@@ -1581,6 +1581,10 @@ int32_t ParseInterBInfo (PWelsDecoderContext pCtx, int16_t iMvArray[LIST_A][30][
           }
           Update8x8RefIdx (pCurDqLayer, iIdx8, LIST_0, iRef[LIST_0]);
           Update8x8RefIdx (pCurDqLayer, iIdx8, LIST_1, iRef[LIST_1]);
+          // the mv loop below copies these into the ref cache, which the mv
+          // prediction of the following non-direct sub-blocks reads
+          ref_idx_list[LIST_0][i] = iRef[LIST_0];
+          ref_idx_list[LIST_1][i] = iRef[LIST_1];
           FillTemporalDirect8x8Mv (pCurDqLayer, iIdx8, pSubPartCount[i], pPartW[i], directSubMbType, iRef, mvColoc, iMvArray,
                                    NULL);
         }
