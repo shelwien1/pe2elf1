@@ -212,19 +212,8 @@ int32_t WelsInitBSliceRefList (PWelsDecoderContext pCtx, int32_t iPoc) {
       pLTCurrPocList0[iLTCurrPocCount++] = ppShoreRefList[i];
     }
   }
-  if (pCtx->sRefPic.uiLongRefCount[LIST_0] > 1) {
-    //long sorts in increasing order
-    PPicture pTemp;
-    for (int32_t i = 0; i < pCtx->sRefPic.uiLongRefCount[LIST_0]; ++i) {
-      for (int32_t j = i + 1; j < pCtx->sRefPic.uiLongRefCount[LIST_0]; ++j) {
-        if (ppLongRefList[j]->iFramePoc < ppLongRefList[i]->iFramePoc) {
-          pTemp = ppLongRefList[i];
-          ppLongRefList[i] = ppLongRefList[j];
-          ppLongRefList[j] = pTemp;
-        }
-      }
-    }
-  }
+  // the long term references follow in ascending LongTermPicNum order, which
+  // is the order AddLongTermToList() keeps ppLongRefList in
   int32_t iCurrPocCount = iLSCurrPocCount + iLTCurrPocCount;
   int32_t iCount = 0;
   //LIST_0
@@ -308,6 +297,15 @@ int32_t WelsInitBSliceRefList (PWelsDecoderContext pCtx, int32_t iPoc) {
     pCtx->sRefPic.pRefList[LIST_1][iCount++] = ppLongRefList[i];
   }
   pCtx->sRefPic.uiRefCount[LIST_1] = iCount;
+
+  // 8.2.4.2.3: when RefPicList1 has more than one entry and is identical to
+  // RefPicList0, its first two entries are switched
+  if (iCount > 1 && pCtx->sRefPic.uiRefCount[LIST_0] == iCount
+      && !memcmp (pCtx->sRefPic.pRefList[LIST_0], pCtx->sRefPic.pRefList[LIST_1], iCount * sizeof (PPicture))) {
+    PPicture pTemp = pCtx->sRefPic.pRefList[LIST_1][0];
+    pCtx->sRefPic.pRefList[LIST_1][0] = pCtx->sRefPic.pRefList[LIST_1][1];
+    pCtx->sRefPic.pRefList[LIST_1][1] = pTemp;
+  }
   return ERR_NONE;
 }
 
