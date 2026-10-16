@@ -84,9 +84,11 @@ class BitReader {
 class BitWriter {
  public:
   void bit(int b) {
-    if ((n_ & 7) == 0) buf_.push_back(0);
-    if (b) buf_.back() |= 0x80 >> (n_ & 7);
-    n_++;
+    cur_ = (uint8_t)(cur_ << 1 | b);
+    if ((++n_ & 7) == 0) {
+      buf_.push_back(cur_);
+      cur_ = 0;
+    }
   }
   void put(uint64_t v, int n) {
     for (int i = n - 1; i >= 0; i--) bit((int)((v >> i) & 1));
@@ -103,17 +105,35 @@ class BitWriter {
     while (n_ & 7) bit(0);
   }
   size_t pos() const { return n_; }
-  int at(size_t i) const { return (buf_[i >> 3] >> (7 - (i & 7))) & 1; }
-  void truncate(size_t nbits) {
-    n_ = nbits;
-    buf_.resize((nbits + 7) / 8);
-    if (nbits & 7) buf_.back() &= (uint8_t)(0xFF << (8 - (nbits & 7)));
+  int at(size_t i) const {
+    if (i >> 3 < buf_.size()) return (buf_[i >> 3] >> (7 - (i & 7))) & 1;
+    return (cur_ >> ((n_ & 7) - 1 - (i & 7))) & 1;
   }
-  const std::vector<uint8_t>& data() const { return buf_; }
-  std::vector<uint8_t>& data() { return buf_; }
+  void truncate(size_t nbits) {
+    if (nbits >= n_) return;
+    if (nbits >> 3 == buf_.size())  // within the incomplete byte
+      cur_ = (uint8_t)(cur_ >> ((n_ & 7) - (nbits & 7)));
+    else
+      cur_ = (nbits & 7) ? (uint8_t)(buf_[nbits >> 3] >> (8 - (nbits & 7))) : 0;
+    buf_.resize(nbits >> 3);
+    n_ = nbits;
+  }
+  // whole bytes, the last one padded with zero bits
+  const std::vector<uint8_t>& data() {
+    if (n_ & 7) {
+      std::vector<uint8_t> v(buf_);
+      v.push_back((uint8_t)(cur_ << (8 - (n_ & 7))));
+      padded_.swap(v);
+      return padded_;
+    }
+    return buf_;
+  }
+  // appends whole bytes; the bit position must be byte aligned
+  void append(size_t n, uint8_t value) { buf_.insert(buf_.end(), n, value), n_ += 8 * n; }
 
  private:
-  std::vector<uint8_t> buf_;
+  std::vector<uint8_t> buf_, padded_;  // complete bytes
+  uint8_t cur_ = 0;                    // the bits of the incomplete byte
   size_t n_ = 0;
 };
 

@@ -117,11 +117,9 @@ void read_nal(int type, int ref_idc, const std::vector<uint8_t>& rbsp, Context& 
   }
 }
 
-// Writes the RBSP of a NAL unit from rows: the syntax, the
-// rbsp_trailing_bits (or what the "trail" row says instead) and the
-// cabac_zero_words of a "czw" row. Throws TsvError.
-std::vector<uint8_t> write_nal(int type, int ref_idc, Context& ctx, RowReader& in) {
-  BitWriter bw;
+// Writes the syntax of a NAL unit from rows, up to and including the
+// rbsp_stop_one_bit. Throws TsvError.
+void write_syntax(int type, int ref_idc, Context& ctx, RowReader& in, BitWriter& bw) {
   Syn s(&in, &bw);
   bool trailing = true;
   switch (type) {
@@ -161,6 +159,11 @@ std::vector<uint8_t> write_nal(int type, int ref_idc, Context& ctx, RowReader& i
       throw TsvError("NAL unit type " + std::to_string(type) + " needs a hex row");
   }
   if (trailing) bw.bit(1);  // rbsp_stop_one_bit
+}
+
+// The rest of the RBSP: alignment zero bits, or what a "trail" row says
+// instead, and the cabac_zero_words of a "czw" row.
+void write_trailer(RowReader& in, BitWriter& bw) {
   const Row* r = in.peek();
   if (r && r->is("trail")) {
     const Row& t = in.take();
@@ -184,8 +187,14 @@ std::vector<uint8_t> write_nal(int type, int ref_idc, Context& ctx, RowReader& i
     if (t.size() != 2) t.fail("expected 1 value");
     int64_t n = t.num(1);
     if (n < 1 || n > (1 << 26)) t.fail("bad count");
-    bw.data().insert(bw.data().end(), 2 * (size_t)n, 0);
+    bw.append(2 * (size_t)n, 0);
   }
+}
+
+std::vector<uint8_t> write_nal(int type, int ref_idc, Context& ctx, RowReader& in) {
+  BitWriter bw;
+  write_syntax(type, ref_idc, ctx, in, bw);
+  write_trailer(in, bw);
   return bw.data();
 }
 
@@ -227,23 +236,23 @@ bool convert_nal(int type, int ref_idc, const uint8_t* p, size_t n, Context& ctx
   try {
     std::string text = out.text().substr(start);
     RowReader in(text.data(), text.size());
-    Context copy = ctx;
-    std::vector<uint8_t> o = write_nal(type, ref_idc, copy, in);
+    BitWriter bw;
+    write_syntax(type, ref_idc, ctx, in, bw);
     if (!in.at_end()) throw TsvError("rows left over");
-    if (o == rbsp) return true;
+    BitWriter o = bw;
+    o.align_zero();
+    if (o.data() == rbsp) return true;
     // the end differs: cabac_zero_words, or trailing bits that are not
     // the standard ones (e.g. from another CABAC flushing procedure)
     size_t zeros = 0;
     while (zeros < rbsp.size() && rbsp[rbsp.size() - 1 - zeros] == 0) zeros++;
     size_t czw = zeros / 2;
     std::vector<uint8_t> r(rbsp.begin(), rbsp.end() - 2 * czw);
-    if (o != r) {
-      // our bits up to and including the stop bit
-      size_t pbits = o.size() * 8;
-      while (pbits > 0 && !get_bit(o, pbits - 1)) pbits--;
-      if (type == 10 || type == 11) pbits = 0;
-      size_t rbits = r.size() * 8, d = 0;
-      while (d < pbits && d < rbits && get_bit(o, d) == get_bit(r, d)) d++;
+    RowWriter tail;
+    if (o.data() != r) {
+      // compare our bits up to and including the stop bit
+      size_t pbits = bw.pos(), rbits = r.size() * 8, d = 0;
+      while (d < pbits && d < rbits && bw.at(d) == get_bit(r, d)) d++;
       if (pbits - d > 64 || rbits - d > 4096) {
         why = "re-encoding differs at bit " + std::to_string(d) + " of " + std::to_string(rbits);
         out.truncate(start);
@@ -251,22 +260,22 @@ bool convert_nal(int type, int ref_idc, const uint8_t* p, size_t n, Context& ctx
       }
       std::string bits;
       for (size_t i = d; i < rbits; i++) bits += (char)('0' + get_bit(r, i));
-      out.begin("trail");
-      out.add((int64_t)(pbits - d));
-      out.add(bits.empty() ? std::string("-") : bits);
-      out.end();
+      tail.begin("trail");
+      tail.add((int64_t)(pbits - d));
+      tail.add(bits.empty() ? std::string("-") : bits);
+      tail.end();
       trail = true;
     }
-    if (czw) out.row("czw", (int64_t)czw);
-    text = out.text().substr(start);
-    RowReader in2(text.data(), text.size());
-    Context copy2 = ctx;
-    o = write_nal(type, ref_idc, copy2, in2);
-    if (o != rbsp || !in2.at_end()) {
+    if (czw) tail.row("czw", (int64_t)czw);
+    // check the rows as the restoring will use them
+    RowReader in2(tail.text().data(), tail.text().size());
+    write_trailer(in2, bw);
+    if (bw.data() != rbsp || !in2.at_end()) {
       why = "re-encoding differs";
       out.truncate(start);
       return false;
     }
+    out.text() += tail.text();
     return true;
   } catch (const std::exception& e) {
     why = std::string("re-encoding failed: ") + e.what();

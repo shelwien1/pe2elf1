@@ -95,8 +95,8 @@ monochrome, 4:2:0, 4:2:2 and 4:4:4, also with separate colour planes; bit
 depths up to 14; lossless coding, I_PCM; FMO and arbitrary slice order;
 redundant pictures; scaling matrices.
 
-Speed is about 0.6 MB of H.264 per second for `c` and 1.2 MB/s for `d`; the
-TSV file is 10-20 times as large as the stream.
+Speed is about 1 MB of H.264 per second for `c` and 2 MB/s for `d`; the TSV
+file is 10-20 times as large as the stream.
 
 ### TSV format
 

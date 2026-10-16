@@ -17,11 +17,46 @@ bool Row::absent(size_t i) const {
 int64_t Row::num(size_t i) const {
   if (i >= size()) fail("missing field " + std::to_string(i));
   const char* f = field(i);
+  // short decimal numbers directly, the rest with strtoll
+  const char* p = f + (*f == '-');
+  int64_t v = 0;
+  int n = 0;
+  while (*p >= '0' && *p <= '9' && n < 18) v = v * 10 + (*p++ - '0'), n++;
+  if (n && !*p) return *f == '-' ? -v : v;
   char* end;
   errno = 0;
-  long long v = strtoll(f, &end, 10);
+  long long x = strtoll(f, &end, 10);
   if (end == f || *end || errno) fail(std::string("not a number: '") + f + "'");
-  return v;
+  return x;
+}
+
+static RowKind classify(const char* n) {
+  switch (n[0]) {
+    case 'm':
+      if (!strcmp(n, "mb")) return kMbRow;
+      if (!strcmp(n, "mvd0")) return kMvd0Row;
+      if (!strcmp(n, "mvd1")) return kMvd1Row;
+      break;
+    case 'r':
+      if (!strcmp(n, "res")) return kResRow;
+      if (!strcmp(n, "ref0")) return kRef0Row;
+      if (!strcmp(n, "ref1")) return kRef1Row;
+      break;
+    case 's':
+      if (!strcmp(n, "skip")) return kSkipRow;
+      if (!strcmp(n, "sub")) return kSubRow;
+      break;
+    case 'i':
+      if (!strcmp(n, "ipm")) return kIpmRow;
+      break;
+    case 'f':
+      if (!strcmp(n, "fld")) return kFldRow;
+      break;
+    case 'p':
+      if (!strcmp(n, "pcm")) return kPcmRow;
+      break;
+  }
+  return kOtherRow;
 }
 
 void Row::fail(const std::string& msg) const {
@@ -76,6 +111,7 @@ const Row* RowReader::peek() {
         next_.off.push_back((uint32_t)i + 1);
       }
     next_.lineno = lineno_;
+    next_.kind = classify(l.c_str());
     have_next_ = true;
   }
   return &next_;

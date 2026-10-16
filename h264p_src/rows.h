@@ -42,10 +42,15 @@ class RowWriter {
   std::string s_;
 };
 
+// Names of the rows of the slice data, classified when a row is read.
+enum RowKind { kOtherRow, kMbRow, kSkipRow, kResRow, kIpmRow, kSubRow, kRef0Row, kRef1Row, kMvd0Row,
+               kMvd1Row, kFldRow, kPcmRow };
+
 struct Row {
   std::string line;            // the line with tabs replaced by NULs
   std::vector<uint32_t> off;   // start of each field
   long lineno = 0;
+  RowKind kind = kOtherRow;
 
   size_t size() const { return off.size(); }
   const char* field(size_t i) const { return line.c_str() + off[i]; }

@@ -14,10 +14,10 @@ namespace {
 
 const int kAbsent = INT_MIN;
 
-// One coded block of coefficients (TSV row "res").
+// One coded block of coefficients (TSV row "res"), in MbRec::coef.
 struct Block {
   int cat, idx;
-  std::vector<int> c;
+  size_t off, len;
 };
 
 // The syntax elements of one coded macroblock, in the form of the TSV rows
@@ -30,10 +30,25 @@ struct MbRec {
   int pcm_align = 0;
   std::vector<int> pcm, ipm, sub, ref[2], mvd[2];
   std::vector<Block> res;
+  std::vector<int> coef;
   // writing: read positions and the line of the "mb" row
   size_t ipm_i = 0, sub_i = 0, ref_i[2] = {0, 0}, mvd_i[2] = {0, 0}, res_i = 0;
   unsigned used = 0;  // fields of the "mb" row used
   long line = 0;
+
+  // keeps the allocated memory
+  void clear() {
+    type = 0;
+    t8x8 = cpred = cbp = field = -1;
+    qpd = kAbsent;
+    has_pcm = false;
+    pcm_align = 0;
+    for (std::vector<int>* v : {&pcm, &ipm, &sub, &ref[0], &ref[1], &mvd[0], &mvd[1], &coef}) v->clear();
+    res.clear();
+    ipm_i = sub_i = ref_i[0] = ref_i[1] = mvd_i[0] = mvd_i[1] = res_i = 0;
+    used = 0;
+    line = 0;
+  }
 };
 
 enum { kUseT8x8 = 1, kUseCpred = 2, kUseCbp = 4, kUseQpd = 8 };
@@ -253,6 +268,7 @@ class SliceCoder {
   const MbState* above_ = nullptr; // macroblock of the left and above pair
   int pair_field_ = 0;             // MBAFF: field decoding mode of the pair
   MbRec* rec_ = nullptr;
+  MbRec mbrec_;  // reused for every macroblock
   int last_qpd_ = 0;
   CabacCtx ctx_[kNumCtx];
   CabacDecoder dec_;
@@ -519,7 +535,8 @@ void SliceCoder::read_loop() {
     skipped = 0;
   };
   auto coded_mb = [&]() {
-    MbRec r;
+    MbRec& r = mbrec_;
+    r.clear();
     if (mbaff_ && (!(addr & 1) || prev_skipped)) {
       r.field = mb_field_decoding_flag(0);
       set_field(r.field);
@@ -568,9 +585,9 @@ void SliceCoder::write_loop() {
   bool intra = stype_ == kI || stype_ == kSI;
   int addr = h_.first_mb * (1 + mbaff_);
   bool prev_skipped = false;
-  auto peek_is = [&](const char* n) {
+  auto peek_is = [&](RowKind k) {
     const Row* r = in_->peek();
-    return r && r->is(n);
+    return r && r->kind == k;
   };
   auto take_skip = [&]() {
     const Row& r = in_->take();
@@ -581,7 +598,8 @@ void SliceCoder::write_loop() {
     return (int)n;
   };
   auto coded_mb = [&]() {
-    MbRec r;
+    MbRec& r = mbrec_;
+    r.clear();
     read_mb_rows(r);
     rec_ = &r;
     if (mbaff_ && (!(addr & 1) || prev_skipped))
@@ -595,7 +613,7 @@ void SliceCoder::write_loop() {
     if (!cabac_) {
       if (!intra) {
         int run = 0;
-        while (peek_is("skip")) run += take_skip();
+        while (peek_is(kSkipRow)) run += take_skip();
         bw_->ue((uint32_t)run);
         for (int k = 0; k < run; k++) {
           start_mb(addr);
@@ -603,16 +621,16 @@ void SliceCoder::write_loop() {
           addr = next_mb(addr);
         }
         prev_skipped = run > 0;
-        if (run && !peek_is("mb")) break;
+        if (run && !peek_is(kMbRow)) break;
       }
-      if (!peek_is("mb")) fail("expected a macroblock");
+      if (!peek_is(kMbRow)) fail("expected a macroblock");
       start_mb(addr);
       coded_mb();
-      if (!peek_is("mb") && !peek_is("skip")) break;
+      if (!peek_is(kMbRow) && !peek_is(kSkipRow)) break;
     } else {
-      if (!skip_left && peek_is("skip")) skip_left = take_skip();
+      if (!skip_left && peek_is(kSkipRow)) skip_left = take_skip();
       bool skip = skip_left > 0;
-      if (!skip && !peek_is("mb")) fail("expected a macroblock");
+      if (!skip && !peek_is(kMbRow)) fail("expected a macroblock");
       start_mb(addr);
       if (!intra) mb_skip_flag(skip);
       if (skip) {
@@ -622,7 +640,7 @@ void SliceCoder::write_loop() {
         coded_mb();
       }
       prev_skipped = skip;
-      bool end = !skip_left && !peek_is("mb") && !peek_is("skip");
+      bool end = !skip_left && !peek_is(kMbRow) && !peek_is(kSkipRow);
       if (!mbaff_ || (addr & 1))
         term(end);
       else if (end)
@@ -674,7 +692,7 @@ void SliceCoder::write_mb_rows(const MbRec& r) {
     o.begin("res");
     o.add(b.cat);
     o.add(b.idx);
-    for (int x : b.c) o.add(x);
+    for (size_t i = 0; i < b.len; i++) o.add(r.coef[b.off + i]);
     o.end();
   }
 }
@@ -702,40 +720,55 @@ void SliceCoder::read_mb_rows(MbRec& r) {
   r.qpd = m.absent(5) ? kAbsent : to_int(m, 5);
   if (r.t8x8 < -1 || r.cpred < -1 || r.cbp < -1) m.fail("negative value");
   while (const Row* p = in_->peek()) {
-    if (p->is("fld")) {
-      const Row& row = in_->take();
-      if (r.field >= 0) row.fail("duplicate row");
-      if (row.size() != 2) row.fail("expected 1 value");
-      r.field = to_int(row, 1);
-      if (r.field < 0) row.fail("bad value");
-    } else if (p->is("pcm")) {
-      const Row& row = in_->take();
-      if (r.has_pcm) row.fail("duplicate row");
-      r.has_pcm = true;
-      r.pcm_align = to_int(row, 1);
-      for (size_t i = 2; i < row.size(); i++) r.pcm.push_back(to_int(row, i));
-    } else if (p->is("ipm")) {
-      get_list(in_->take(), r.ipm);
-    } else if (p->is("sub")) {
-      get_list(in_->take(), r.sub);
-    } else if (p->is("ref0")) {
-      get_list(in_->take(), r.ref[0]);
-    } else if (p->is("ref1")) {
-      get_list(in_->take(), r.ref[1]);
-    } else if (p->is("mvd0")) {
-      get_list(in_->take(), r.mvd[0]);
-    } else if (p->is("mvd1")) {
-      get_list(in_->take(), r.mvd[1]);
-    } else if (p->is("res")) {
-      const Row& row = in_->take();
-      Block b;
-      b.cat = to_int(row, 1);
-      b.idx = to_int(row, 2);
-      for (size_t i = 3; i < row.size(); i++) b.c.push_back(to_int(row, i));
-      if (b.c.empty() || !b.c.back()) row.fail("coefficients must end with a nonzero one");
-      r.res.push_back(std::move(b));
-    } else {
-      break;
+    switch (p->kind) {
+      case kFldRow: {
+        const Row& row = in_->take();
+        if (r.field >= 0) row.fail("duplicate row");
+        if (row.size() != 2) row.fail("expected 1 value");
+        r.field = to_int(row, 1);
+        if (r.field < 0) row.fail("bad value");
+        break;
+      }
+      case kPcmRow: {
+        const Row& row = in_->take();
+        if (r.has_pcm) row.fail("duplicate row");
+        r.has_pcm = true;
+        r.pcm_align = to_int(row, 1);
+        for (size_t i = 2; i < row.size(); i++) r.pcm.push_back(to_int(row, i));
+        break;
+      }
+      case kIpmRow:
+        get_list(in_->take(), r.ipm);
+        break;
+      case kSubRow:
+        get_list(in_->take(), r.sub);
+        break;
+      case kRef0Row:
+        get_list(in_->take(), r.ref[0]);
+        break;
+      case kRef1Row:
+        get_list(in_->take(), r.ref[1]);
+        break;
+      case kMvd0Row:
+        get_list(in_->take(), r.mvd[0]);
+        break;
+      case kMvd1Row:
+        get_list(in_->take(), r.mvd[1]);
+        break;
+      case kResRow: {
+        const Row& row = in_->take();
+        Block b;
+        b.cat = to_int(row, 1);
+        b.idx = to_int(row, 2);
+        b.off = r.coef.size();
+        for (size_t i = 3; i < row.size(); i++) r.coef.push_back(to_int(row, i));
+        b.len = r.coef.size() - b.off;
+        if (!b.len || !r.coef.back()) row.fail("coefficients must end with a nonzero one");
+        r.res.push_back(b);
+        break;
+      }
+      default:
+        return;
     }
   }
 }
@@ -959,8 +992,8 @@ void SliceCoder::fetch(MbRec& r, int cat, int idx, int* c, int n) {
   for (int i = 0; i < n; i++) c[i] = 0;
   if (r.res_i < r.res.size() && r.res[r.res_i].cat == cat && r.res[r.res_i].idx == idx) {
     const Block& b = r.res[r.res_i++];
-    if ((int)b.c.size() > n) fail("too many coefficients in a res row");
-    for (size_t i = 0; i < b.c.size(); i++) c[i] = b.c[i];
+    if ((int)b.len > n) fail("too many coefficients in a res row");
+    for (size_t i = 0; i < b.len; i++) c[i] = r.coef[b.off + i];
   }
 }
 
@@ -968,7 +1001,8 @@ void SliceCoder::store(MbRec& r, int cat, int idx, const int* c, int n) {
   int last = n - 1;
   while (last >= 0 && !c[last]) last--;
   if (last < 0) return;
-  r.res.push_back(Block{cat, idx, std::vector<int>(c, c + last + 1)});
+  r.res.push_back(Block{cat, idx, r.coef.size(), (size_t)last + 1});
+  r.coef.insert(r.coef.end(), c, c + last + 1);
 }
 
 int SliceCoder::block(MbRec& r, int cat, int idx, int* c, int n, int ctx) {
