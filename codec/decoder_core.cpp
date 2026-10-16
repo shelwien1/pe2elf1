@@ -1058,7 +1058,8 @@ int32_t ParseSliceHeaderSyntaxs (PWelsDecoderContext pCtx, PBitStringAux pBs, co
       pocMsb = pCtx->pLastDecPicInfo->iPrevPicOrderCntMsb;
     pSliceHead->iPicOrderCntLsb = pocMsb + pocLsb;
 
-    if (pPps->bPicOrderPresentFlag && !pSliceHead->bFieldPicFlag) {
+    // the POC of a frame is Min (TopFieldOrderCnt, BottomFieldOrderCnt)
+    if (pPps->bPicOrderPresentFlag && !pSliceHead->bFieldPicFlag && pSliceHead->iDeltaPicOrderCntBottom < 0) {
       pSliceHead->iPicOrderCntLsb += pSliceHead->iDeltaPicOrderCntBottom;
     }
 
