@@ -58,6 +58,7 @@ Index h
  h_comp: comp, 1!1
  h_tv: tv, 1!1111111111111
  h_oth: oth, 1!11111
+ h_tq: tq, 1!111111111111
 
 Index s
  s_kind: kind, 1!111

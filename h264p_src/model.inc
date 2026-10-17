@@ -34,7 +34,7 @@ struct H_skp_v { int st, a3, b3, col, c9, cd, run, cnt, eq, lf, af, td, en, sm, 
 struct H_mbt_v { int st, ca, cb, cc, nsk, en, td, sm, tm, tb, dh, bd, qc; };
 struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg, tp, em, pq; };
 struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm, pr, dr, pq; };
-struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, zd, cq; };
+struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, zd, cq, tq; };
 struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac; };
 struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn, pq; };
 struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz, pq; };
@@ -506,6 +506,7 @@ struct Model {
   bool pdn_ = false;                             // no col vector
   int tmv_[2] = {};                              // its vector by template matching (Recon::tm_search)
   bool tmn_ = true;                              // none
+  int tmq_ = 0;                                  // its miss (Recon::tm_search)
 
   Recon rec_;  // the pictures, reconstructed
   // x264's AQ (AqFit): the line of the current picture; 16 log2 energy of
@@ -1414,11 +1415,11 @@ struct Model {
         if (nbs[j].ref == ref) cand[nc][0] = nbs[j].mv[0], cand[nc][1] = nbs[j].mv[1], nc++;
       if (!pdn_) cand[nc][0] = col_->mv[list][y * 4 + x][0], cand[nc][1] = col_->mv[list][y * 4 + x][1], nc++;
       cand[nc][0] = cand[nc][1] = 0, nc++;
-      tmn_ = !rec_.tm_search(list, ref, x * 4, y * 4, w * 4, h * 4, tmv_, false, cand, nc, nullptr, kTmLambda);
+      tmn_ = !rec_.tm_search(list, ref, x * 4, y * 4, w * 4, h * 4, tmv_, false, cand, nc, &tmq_, kTmLambda);
     } else if (!tmn_) {
       // the horizontal component known
       tmv_[0] = mvp_[0] + mvx_;
-      tmn_ = !rec_.tm_search(list, ref, x * 4, y * 4, w * 4, h * 4, tmv_, true, nullptr, 0, nullptr, kTmLambda);
+      tmn_ = !rec_.tm_search(list, ref, x * 4, y * 4, w * 4, h * 4, tmv_, true, nullptr, 0, &tmq_, kTmLambda);
     }
     int dv = tmn_ ? 0 : tmv_[comp] - mvp_[comp];
     const MbInfo* a = info(sc_->nb4(x - 1, y, ia));
@@ -1441,6 +1442,7 @@ struct Model {
     // the mvd were the vector zero; col's mvd
     D.zd = tc_clamp(sq2(-mvp_[comp]), 0, 12);
     D.cq = col_ && col_->cls < CL_INXN ? 1 + std::min<int>(col_->mvq[list][y * 4 + x][comp], 8) : 0;
+    D.tq = tmn_ ? 0 : 1 + tc_clamp(tc_qlog(tmq_), 0, 11);
     tcx X;
     H_mvs_make(D, X);
     u32 sc = (u32)(sgn3(-mvp_[comp]) * 81 + sgn3(dv) * 27 + sgn3(pdv_[comp]) * 9 + sgn3(va) * 3 + sgn3(vb));
