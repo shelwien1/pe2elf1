@@ -6,14 +6,14 @@
     ipm.idx, not MOD/; ../mk.sh regenerates both.
 
     `_A`-`_E`, `_H` are the six counters, `_S` and `_F` the two APMs, `_W` and
-    `_W2` the two mixers (selected by index m and by index d) and `_WF` the
+    `_W2` the two mixers (selected by index m and by index w) and `_WF` the
     one that mixes them, `_MT` and `_WM` the mantissa plane and its mixer,
     `_G` the sign counters.  Each is H_ipm_ND (or H_ipm_MND) rows deep per
     context: where a decision sits among the family's nodes is context
     without being a variable.  */
 
 void H_ipm_make( const H_ipm_v & D, tcx & X ) {
-  int a, b, c, d, e, h, s, f, m, t, n, g;
+  int a, b, c, d, e, h, s, f, m, w, t, n, g;
   int k8 = D.k8, ma = D.ma, mb = D.mb, mp = D.mp, blk = D.blk, pv = D.pv, col = D.col, dm = D.dm, ds = D.ds, pm = D.pm, pr = D.pr, dr = D.dr;
   (void) k8;  (void) ma;  (void) mb;  (void) mp;  (void) blk;  (void) pv;  (void) col;  (void) dm;  (void) ds;  (void) pm;  (void) pr;  (void) dr;
 
@@ -60,12 +60,18 @@ void H_ipm_make( const H_ipm_v & D, tcx & X ) {
   m = 0;
   m = m*3 + ((mb>8+(1-1))+(mb>9+(1-1)));
 
+  w = 0;
+  w = w*3 + ((k8>0+(1-1))+(k8>1+(1-1)));
+  w = w*10 + H_ipm_w_mp[__min(9,__max(0,mp-(1-1)))];
+  w = w*10 + H_ipm_w_dm[__min(9,__max(0,dm-(1-1)))];
+  w = w*10 + H_ipm_w_ds[__min(9,__max(0,ds-(1-1)))];
+
   t = 0;
 
   n = 0;
 
   g = 0;
-  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.s = s;  X.f = f;  X.m = m;  X.t = t;
+  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.s = s;  X.f = f;  X.m = m;  X.w = w;  X.t = t;
   X.n = n;  X.g = g;
 }
 

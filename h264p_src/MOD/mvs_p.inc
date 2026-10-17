@@ -6,14 +6,14 @@
     mvs.idx, not MOD/; ../mk.sh regenerates both.
 
     `_A`-`_E`, `_H` are the six counters, `_S` and `_F` the two APMs, `_W` and
-    `_W2` the two mixers (selected by index m and by index d) and `_WF` the
+    `_W2` the two mixers (selected by index m and by index w) and `_WF` the
     one that mixes them, `_MT` and `_WM` the mantissa plane and its mixer,
     `_G` the sign counters.  Each is H_mvs_ND (or H_mvs_MND) rows deep per
     context: where a decision sits among the family's nodes is context
     without being a variable.  */
 
 void H_mvs_make( const H_mvs_v & D, tcx & X ) {
-  int a, b, c, d, e, h, s, f, m, t, n, g;
+  int a, b, c, d, e, h, s, f, m, w, t, n, g;
   int kind = D.kind, comp = D.comp, lst = D.lst, ma = D.ma, mb = D.mb, oth = D.oth, ps = D.ps, rf = D.rf, pi = D.pi, nr = D.nr, pd = D.pd, sp = D.sp, tv = D.tv, zd = D.zd, cq = D.cq;
   (void) kind;  (void) comp;  (void) lst;  (void) ma;  (void) mb;  (void) oth;  (void) ps;  (void) rf;  (void) pi;  (void) nr;  (void) pd;  (void) sp;  (void) tv;  (void) zd;  (void) cq;
 
@@ -72,6 +72,12 @@ void H_mvs_make( const H_mvs_v & D, tcx & X ) {
   m = m*4 + H_mvs_m_kind[__min(3,__max(0,kind-(1-1)))];
   m = m*6 + H_mvs_m_pd[__min(5,__max(0,pd-(1-1)))];
 
+  w = 0;
+  w = w*4 + H_mvs_w_kind[__min(3,__max(0,kind-(1-1)))];
+  w = w*9 + H_mvs_w_pd[__min(8,__max(0,pd-(1-1)))];
+  w = w*8 + H_mvs_w_ma[__min(7,__max(0,ma-(1-1)))];
+  w = w*4 + H_mvs_w_nr[__min(3,__max(0,nr-(1-1)))];
+
   t = 0;
   t = t*4 + H_mvs_t_kind[__min(3,__max(0,kind-(1-1)))];
   t = t*2 + ((comp>0+(1-1)));
@@ -81,7 +87,7 @@ void H_mvs_make( const H_mvs_v & D, tcx & X ) {
 
   g = 0;
   g = g*4 + H_mvs_g_kind[__min(3,__max(0,kind-(1-1)))];
-  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.s = s;  X.f = f;  X.m = m;  X.t = t;
+  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.s = s;  X.f = f;  X.m = m;  X.w = w;  X.t = t;
   X.n = n;  X.g = g;
 }
 

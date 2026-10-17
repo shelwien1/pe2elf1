@@ -6,14 +6,14 @@
     skp.idx, not MOD/; ../mk.sh regenerates both.
 
     `_A`-`_E`, `_H` are the six counters, `_S` and `_F` the two APMs, `_W` and
-    `_W2` the two mixers (selected by index m and by index d) and `_WF` the
+    `_W2` the two mixers (selected by index m and by index w) and `_WF` the
     one that mixes them, `_MT` and `_WM` the mantissa plane and its mixer,
     `_G` the sign counters.  Each is H_skp_ND (or H_skp_MND) rows deep per
     context: where a decision sits among the family's nodes is context
     without being a variable.  */
 
 void H_skp_make( const H_skp_v & D, tcx & X ) {
-  int a, b, c, d, e, h, s, f, m, t, n, g;
+  int a, b, c, d, e, h, s, f, m, w, t, n, g;
   int st = D.st, a3 = D.a3, b3 = D.b3, col = D.col, c9 = D.c9, cd = D.cd, run = D.run, cnt = D.cnt, eq = D.eq, lf = D.lf, af = D.af, td = D.td, en = D.en, sm = D.sm, tm = D.tm, tb = D.tb, bd = D.bd;
   (void) st;  (void) a3;  (void) b3;  (void) col;  (void) c9;  (void) cd;  (void) run;  (void) cnt;  (void) eq;  (void) lf;  (void) af;  (void) td;  (void) en;  (void) sm;  (void) tm;  (void) tb;  (void) bd;
 
@@ -72,12 +72,18 @@ void H_skp_make( const H_skp_v & D, tcx & X ) {
   m = m*3 + ((col>0+(1-1))+(col>1+(1-1)));
   m = m*5 + H_skp_m_td[__min(4,__max(0,td-(1-1)))];
 
+  w = 0;
+  w = w*10 + H_skp_w_st[__min(9,__max(0,st-(1-1)))];
+  w = w*3 + ((a3>0+(1-1))+(a3>1+(1-1)));
+  w = w*3 + ((b3>0+(1-1))+(b3>1+(1-1)));
+  w = w*17 + H_skp_w_td[__min(16,__max(0,td-(1-1)))];
+
   t = 0;
 
   n = 0;
 
   g = 0;
-  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.s = s;  X.f = f;  X.m = m;  X.t = t;
+  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.s = s;  X.f = f;  X.m = m;  X.w = w;  X.t = t;
   X.n = n;  X.g = g;
 }
 

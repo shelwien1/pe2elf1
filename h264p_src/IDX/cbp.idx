@@ -59,6 +59,11 @@ Index f
 Index m
  m_inc: inc, 1!000
 
+Index w
+ w_inc: inc, 1!111
+ w_em: em, 1!1111111111111111
+ w_cls: cls, 1!11111111
+
 Index t
  t_st: st, 1!0
 

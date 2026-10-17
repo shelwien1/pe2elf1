@@ -27,6 +27,10 @@ static const byte H_ipm_h_ds[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 static const byte H_ipm_s_pr[8+1]={ 0,1,2,3,4,5,6,7,8 };
 
 
+static const byte H_ipm_w_mp[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
+static const byte H_ipm_w_dm[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
+static const byte H_ipm_w_ds[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
+
 
 static const int H_ipm_rA = (228+0) * (1);
 static const int H_ipm_rB = (17+0) * (1);
@@ -77,6 +81,7 @@ static const long long H_ipm_m_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 3); /
 static const long long H_ipm_n_Volume = tc_vmul(1, 1); // 1
 static const long long H_ipm_s_Volume = tc_vmul(tc_vmul(1, 3), 9); // 27
 static const long long H_ipm_t_Volume = tc_vmul(1, 1); // 1
+static const long long H_ipm_w_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 10), 10), 10); // 3000
 
 struct H_ipm_T { 
 #undef USE_NEW
@@ -98,8 +103,8 @@ struct H_ipm_T {
   u8 H_ipm_WC[tc_rows(H_ipm_m_Volume, H_ipm_hM) * H_ipm_ND];
   i32 H_ipm_WM[tc_rows(H_ipm_n_Volume, H_ipm_hN) * H_ipm_MND * 3];
   u8 H_ipm_WMC[tc_rows(H_ipm_n_Volume, H_ipm_hN) * H_ipm_MND];
-  i32 H_ipm_W2[tc_rows(H_ipm_d_Volume, H_ipm_hD) * H_ipm_ND * TC_MIXN];
-  u8 H_ipm_W2C[tc_rows(H_ipm_d_Volume, H_ipm_hD) * H_ipm_ND];
+  i32 H_ipm_W2[H_ipm_w_Volume * H_ipm_ND * TC_MIXN];
+  u8 H_ipm_W2C[H_ipm_w_Volume * H_ipm_ND];
   i32 H_ipm_WF[H_ipm_ND * 3];
   u8 H_ipm_WFC[H_ipm_ND];
   cm_cnt H_ipm_G[H_ipm_g_Volume * H_ipm_NG];
@@ -122,8 +127,8 @@ struct H_ipm_T {
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_ipm_m_Volume, H_ipm_hM) * H_ipm_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H_ipm_n_Volume, H_ipm_hN) * H_ipm_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_ipm_n_Volume, H_ipm_hN) * H_ipm_MND)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H_ipm_d_Volume, H_ipm_hD) * H_ipm_ND * TC_MIXN)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_ipm_d_Volume, H_ipm_hD) * H_ipm_ND)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_ipm_w_Volume * H_ipm_ND * TC_MIXN)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(H_ipm_w_Volume * H_ipm_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_ipm_ND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_ipm_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H_ipm_g_Volume * H_ipm_NG);

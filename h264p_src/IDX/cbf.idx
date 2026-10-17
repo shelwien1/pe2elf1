@@ -69,6 +69,12 @@ Index m
  m_cat: cat, 1!1111000000000
  m_kn: kn, 1!1
 
+Index w
+ w_cat: cat, 1!1111111111111
+ w_nc: nc, 1!11111
+ w_md: md, 1!0110000000000100100
+ w_kn: kn, 1!1
+
 Index t
  t_cat: cat, 1!1111111111111
 

@@ -6,14 +6,14 @@
     qpd.idx, not MOD/; ../mk.sh regenerates both.
 
     `_A`-`_E`, `_H` are the six counters, `_S` and `_F` the two APMs, `_W` and
-    `_W2` the two mixers (selected by index m and by index d) and `_WF` the
+    `_W2` the two mixers (selected by index m and by index w) and `_WF` the
     one that mixes them, `_MT` and `_WM` the mantissa plane and its mixer,
     `_G` the sign counters.  Each is H_qpd_ND (or H_qpd_MND) rows deep per
     context: where a decision sits among the family's nodes is context
     without being a variable.  */
 
 void H_qpd_make( const H_qpd_v & D, tcx & X ) {
-  int a, b, c, d, e, h, s, f, m, t, n, g;
+  int a, b, c, d, e, h, s, f, m, w, t, n, g;
   int lnz = D.lnz, pc = D.pc, cc = D.cc, cls = D.cls, dc = D.dc, db = D.db, lz = D.lz, st = D.st, ae = D.ae, aq = D.aq, ac = D.ac;
   (void) lnz;  (void) pc;  (void) cc;  (void) cls;  (void) dc;  (void) db;  (void) lz;  (void) st;  (void) ae;  (void) aq;  (void) ac;
 
@@ -58,13 +58,18 @@ void H_qpd_make( const H_qpd_v & D, tcx & X ) {
   m = m*2 + ((lnz>0+(1-1)));
   m = m*14 + H_qpd_m_aq[__min(13,__max(0,aq-(1-1)))];
 
+  w = 0;
+  w = w*10 + H_qpd_w_st[__min(9,__max(0,st-(1-1)))];
+  w = w*14 + H_qpd_w_aq[__min(13,__max(0,aq-(1-1)))];
+  w = w*14 + H_qpd_w_ac[__min(13,__max(0,ac-(1-1)))];
+
   t = 0;
 
   n = 0;
 
   g = 0;
   g = g*5 + H_qpd_g_lz[__min(6,__max(0,lz-(1-1)))];
-  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.s = s;  X.f = f;  X.m = m;  X.t = t;
+  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.s = s;  X.f = f;  X.m = m;  X.w = w;  X.t = t;
   X.n = n;  X.g = g;
 }
 

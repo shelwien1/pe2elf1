@@ -61,6 +61,12 @@ Index m
  m_pos: pos, 1!100100001
  m_rem: rem, 1!1110000000
 
+Index w
+ w_cg: cg, 1!1011000000000
+ w_rem: rem, 1!0101100110
+ w_zl: zl, 1!0111100101
+ w_em: em, 1!1111111111111111
+
 Index t
  t_cg: cg, 1!0
 

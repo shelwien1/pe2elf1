@@ -33,7 +33,7 @@ static u64 tc_syms[32];
 static int tc_stage, tc_verbose;
 //  The context indices of one value: what idx2inc.pl's MakeIndex builds
 struct tcx {
-  int a, b, c, d, e, h, s, f, m, t, n, g;
+  int a, b, c, d, e, h, s, f, m, w, t, n, g;
 };
 
 //  The direction is a template parameter, f_DEC as in Rangecoder: 0
@@ -63,7 +63,7 @@ template <int f_DEC> struct tc_fam {
   int prp;          // an outside prediction of P(0) for the mixers, -1 for none
   const int *prpa;  // or one per node
   sz ba, bb, bc, bd, be, bh;
-  u32 bs, bf, bm, bt, bn, bg;
+  u32 bs, bf, bm, bw2, bt, bn, bg;
   int rA, rB, rC, rD, rE, rH, rT, rG;
   int mwA, mwB, mwC, mwD, mwE, mwH, mwT, mwG;
   int rS1, rS2;
@@ -71,7 +71,7 @@ template <int f_DEC> struct tc_fam {
   int bw;
   int ng;
   int nd, nm;
-  void wire(cm_cnt *a, sz va, cm_cnt *b, sz vb, cm_cnt *c, sz vc, cm_cnt *d, sz vd, cm_cnt *e, sz ve, cm_cnt *h, sz vh, cm_cnt *t, sz vt, i16 *s, u8 *sc, sz vs, i16 *s2, u8 *sc2, sz vf, i32 *w, sz vm, cm_cnt *g, sz vg, sz vgi, i32 *wm, sz vn, u8 *wc, u8 *wmc, i32 *w2, u8 *w2c, i32 *wf, u8 *wfc, int ra, int rb, int rc_, int rd, int re, int rh, int rt, int rg, int mwa, int mwb, int mwc, int mwd, int mwe, int mwh, int mwtt, int mwg, int rs1, int rs2, int lrate, int mbt, int lrm2, int mbm2, int bwt, int qqs, int qqf, int ndp, int nmp, int ha, int hb, int hd, int he, int hh, int hs, int hf, int hm, int ht, int hn) {
+  void wire(cm_cnt *a, sz va, cm_cnt *b, sz vb, cm_cnt *c, sz vc, cm_cnt *d, sz vd, cm_cnt *e, sz ve, cm_cnt *h, sz vh, cm_cnt *t, sz vt, i16 *s, u8 *sc, sz vs, i16 *s2, u8 *sc2, sz vf, i32 *w, sz vm, cm_cnt *g, sz vg, sz vgi, i32 *wm, sz vn, u8 *wc, u8 *wmc, i32 *w2, u8 *w2c, sz vw, i32 *wf, u8 *wfc, int ra, int rb, int rc_, int rd, int re, int rh, int rt, int rg, int mwa, int mwb, int mwc, int mwd, int mwe, int mwh, int mwtt, int mwg, int rs1, int rs2, int lrate, int mbt, int lrm2, int mbm2, int bwt, int qqs, int qqf, int ndp, int nmp, int ha, int hb, int hd, int he, int hh, int hs, int hf, int hm, int ht, int hn) {
     A = a;
     B = b;
     C = c;
@@ -119,7 +119,8 @@ template <int f_DEC> struct tc_fam {
       ap.init(S, sc, ks * nd, qqs);
       ap2.init(S2, sc2, kf * nd, qqf);
       mx.init(W, wc, km * nd);
-      mx2.init(w2, w2c, kd * nd);
+      tc_ifits("mixer 2", vw, (sz)nd * TC_MIXN);
+      mx2.init(w2, w2c, vw * nd);
       mxf.init(wf, wfc, nd);
       mxm.init(wm, wmc, kn * nm);
     }
@@ -159,6 +160,7 @@ template <int f_DEC> struct tc_fam {
     bs = (hS ? tc_hrow((u32)x.s, hS) : (u32)x.s) * nd;
     bf = (hF ? tc_hrow((u32)x.f, hF) : (u32)x.f) * nd;
     bm = (hM ? tc_hrow((u32)x.m, hM) : (u32)x.m) * nd;
+    bw2 = (u32)x.w * nd;
     bt = (hT ? tc_hrow((u32)x.t, hT) : (u32)x.t) * nm;
     bn = (hN ? tc_hrow((u32)x.n, hN) : (u32)x.n) * nm;
     bg = (u32)x.g;
@@ -200,7 +202,7 @@ template <int f_DEC> struct tc_fam {
       mx2.set(i, mx.x[i]);
     {
       mxf.set(0, cm_stretch(mx.mix(bm + (u32)node)));
-      mxf.set(1, cm_stretch(mx2.mix((u32)(bd + (sz)node))));
+      mxf.set(1, cm_stretch(mx2.mix(bw2 + (u32)node)));
       mxf.set(2, 256);
       int pm = mxf.mix((u32)node);
       int pf = ap2.pp(pm, bf + (u32)node);

@@ -6,14 +6,14 @@
     cbf.idx, not MOD/; ../mk.sh regenerates both.
 
     `_A`-`_E`, `_H` are the six counters, `_S` and `_F` the two APMs, `_W` and
-    `_W2` the two mixers (selected by index m and by index d) and `_WF` the
+    `_W2` the two mixers (selected by index m and by index w) and `_WF` the
     one that mixes them, `_MT` and `_WM` the mantissa plane and its mixer,
     `_G` the sign counters.  Each is H_cbf_ND (or H_cbf_MND) rows deep per
     context: where a decision sits among the family's nodes is context
     without being a variable.  */
 
 void H_cbf_make( const H_cbf_v & D, tcx & X ) {
-  int a, b, c, d, e, h, s, f, m, t, n, g;
+  int a, b, c, d, e, h, s, f, m, w, t, n, g;
   int cat = D.cat, na = D.na, nb = D.nb, intra = D.intra, q6 = D.q6, np = D.np, pos = D.pos, crcb = D.crcb, col = D.col, nc = D.nc, kn = D.kn, md = D.md, en = D.en, pg = D.pg, em = D.em, pz = D.pz, tn = D.tn;
   (void) cat;  (void) na;  (void) nb;  (void) intra;  (void) q6;  (void) np;  (void) pos;  (void) crcb;  (void) col;  (void) nc;  (void) kn;  (void) md;  (void) en;  (void) pg;  (void) em;  (void) pz;  (void) tn;
 
@@ -70,6 +70,12 @@ void H_cbf_make( const H_cbf_v & D, tcx & X ) {
   m = m*5 + H_cbf_m_cat[__min(13,__max(0,cat-(1-1)))];
   m = m*2 + ((kn>0+(1-1)));
 
+  w = 0;
+  w = w*14 + H_cbf_w_cat[__min(13,__max(0,cat-(1-1)))];
+  w = w*6 + H_cbf_w_nc[__min(5,__max(0,nc-(1-1)))];
+  w = w*5 + H_cbf_w_md[__min(19,__max(0,md-(1-1)))];
+  w = w*2 + ((kn>0+(1-1)));
+
   t = 0;
   t = t*14 + H_cbf_t_cat[__min(13,__max(0,cat-(1-1)))];
 
@@ -77,7 +83,7 @@ void H_cbf_make( const H_cbf_v & D, tcx & X ) {
   n = n*14 + H_cbf_n_cat[__min(13,__max(0,cat-(1-1)))];
 
   g = 0;
-  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.s = s;  X.f = f;  X.m = m;  X.t = t;
+  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.s = s;  X.f = f;  X.m = m;  X.w = w;  X.t = t;
   X.n = n;  X.g = g;
 }
 

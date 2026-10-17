@@ -6,18 +6,18 @@
     mbt.idx, not MOD/; ../mk.sh regenerates both.
 
     `_A`-`_E`, `_H` are the six counters, `_S` and `_F` the two APMs, `_W` and
-    `_W2` the two mixers (selected by index m and by index d) and `_WF` the
+    `_W2` the two mixers (selected by index m and by index w) and `_WF` the
     one that mixes them, `_MT` and `_WM` the mantissa plane and its mixer,
     `_G` the sign counters.  Each is %M%ND (or %M%MND) rows deep per
     context: where a decision sits among the family's nodes is context
     without being a variable.  */
 
 void %M%make( const %M%v & D, tcx & X ) {
-  int a, b, c, d, e, h, s, f, m, t, n, g;
+  int a, b, c, d, e, h, s, f, m, w, t, n, g;
   int st = D.st, ca = D.ca, cb = D.cb, cc = D.cc, nsk = D.nsk, en = D.en, td = D.td, sm = D.sm, tm = D.tm, tb = D.tb, dh = D.dh, bd = D.bd;
   (void) st;  (void) ca;  (void) cb;  (void) cc;  (void) nsk;  (void) en;  (void) td;  (void) sm;  (void) tm;  (void) tb;  (void) dh;  (void) bd;
-  MakeIndex a,b,c,d,e,h,s,f,m,t,n,g
-  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.s = s;  X.f = f;  X.m = m;  X.t = t;
+  MakeIndex a,b,c,d,e,h,s,f,m,w,t,n,g
+  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.s = s;  X.f = f;  X.m = m;  X.w = w;  X.t = t;
   X.n = n;  X.g = g;
 }
 
@@ -36,8 +36,8 @@ Table( i32,    %M%W, tc_rows(%M%m_Volume, %M%hM) * %M%ND * TC_MIXN );
 Table( u8,     %M%WC, tc_rows(%M%m_Volume, %M%hM) * %M%ND );
 Table( i32,    %M%WM, tc_rows(%M%n_Volume, %M%hN) * %M%MND * 3 );
 Table( u8,     %M%WMC, tc_rows(%M%n_Volume, %M%hN) * %M%MND );
-Table( i32,    %M%W2, tc_rows(%M%d_Volume, %M%hD) * %M%ND * TC_MIXN );
-Table( u8,     %M%W2C, tc_rows(%M%d_Volume, %M%hD) * %M%ND );
+Table( i32,    %M%W2, %M%w_Volume * %M%ND * TC_MIXN );
+Table( u8,     %M%W2C, %M%w_Volume * %M%ND );
 Table( i32,    %M%WF, %M%ND * 3 );
 Table( u8,     %M%WFC, %M%ND );
 Table( cm_cnt, %M%G, %M%g_Volume * %M%NG );

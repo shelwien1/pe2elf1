@@ -6,14 +6,14 @@
     lvl.idx, not MOD/; ../mk.sh regenerates both.
 
     `_A`-`_E`, `_H` are the six counters, `_S` and `_F` the two APMs, `_W` and
-    `_W2` the two mixers (selected by index m and by index d) and `_WF` the
+    `_W2` the two mixers (selected by index m and by index w) and `_WF` the
     one that mixes them, `_MT` and `_WM` the mantissa plane and its mixer,
     `_G` the sign counters.  Each is H_lvl_ND (or H_lvl_MND) rows deep per
     context: where a decision sits among the family's nodes is context
     without being a variable.  */
 
 void H_lvl_make( const H_lvl_v & D, tcx & X ) {
-  int a, b, c, d, e, h, s, f, m, t, n, g;
+  int a, b, c, d, e, h, s, f, m, w, t, n, g;
   int cg = D.cg, g1 = D.g1, e1 = D.e1, nc = D.nc, pos = D.pos, sa = D.sa, sb = D.sb, q6 = D.q6, tot = D.tot, md = D.md, pm = D.pm, pg = D.pg, em = D.em, pe = D.pe, pl = D.pl, tz = D.tz;
   (void) cg;  (void) g1;  (void) e1;  (void) nc;  (void) pos;  (void) sa;  (void) sb;  (void) q6;  (void) tot;  (void) md;  (void) pm;  (void) pg;  (void) em;  (void) pe;  (void) pl;  (void) tz;
 
@@ -66,6 +66,12 @@ void H_lvl_make( const H_lvl_v & D, tcx & X ) {
   m = 0;
   m = m*2 + ((g1>0+(1-1)));
 
+  w = 0;
+  w = w*14 + H_lvl_w_cg[__min(13,__max(0,cg-(1-1)))];
+  w = w*5 + H_lvl_w_g1[__min(4,__max(0,g1-(1-1)))];
+  w = w*20 + H_lvl_w_md[__min(19,__max(0,md-(1-1)))];
+  w = w*3 + ((pg>3+(1-1))+(pg>15+(1-1)));
+
   t = 0;
   t = t*14 + H_lvl_t_cg[__min(13,__max(0,cg-(1-1)))];
 
@@ -73,7 +79,7 @@ void H_lvl_make( const H_lvl_v & D, tcx & X ) {
   n = n*14 + H_lvl_n_cg[__min(13,__max(0,cg-(1-1)))];
 
   g = 0;
-  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.s = s;  X.f = f;  X.m = m;  X.t = t;
+  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.s = s;  X.f = f;  X.m = m;  X.w = w;  X.t = t;
   X.n = n;  X.g = g;
 }
 

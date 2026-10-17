@@ -32,6 +32,9 @@ static const byte H_skp_s_tb[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
 static const byte H_skp_s_bd[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
 
 
+static const byte H_skp_w_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
+static const byte H_skp_w_td[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
+
 
 static const int H_skp_rA = (64+0) * (1);
 static const int H_skp_rB = (2+0) * (1);
@@ -82,6 +85,7 @@ static const long long H_skp_m_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 3), 5); /
 static const long long H_skp_n_Volume = tc_vmul(1, 1); // 1
 static const long long H_skp_s_Volume = tc_vmul(tc_vmul(tc_vmul(1, 10), 17), 17); // 2890
 static const long long H_skp_t_Volume = tc_vmul(1, 1); // 1
+static const long long H_skp_w_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 3), 3), 17); // 1530
 
 struct H_skp_T { 
 #undef USE_NEW
@@ -103,8 +107,8 @@ struct H_skp_T {
   u8 H_skp_WC[tc_rows(H_skp_m_Volume, H_skp_hM) * H_skp_ND];
   i32 H_skp_WM[tc_rows(H_skp_n_Volume, H_skp_hN) * H_skp_MND * 3];
   u8 H_skp_WMC[tc_rows(H_skp_n_Volume, H_skp_hN) * H_skp_MND];
-  i32 H_skp_W2[tc_rows(H_skp_d_Volume, H_skp_hD) * H_skp_ND * TC_MIXN];
-  u8 H_skp_W2C[tc_rows(H_skp_d_Volume, H_skp_hD) * H_skp_ND];
+  i32 H_skp_W2[H_skp_w_Volume * H_skp_ND * TC_MIXN];
+  u8 H_skp_W2C[H_skp_w_Volume * H_skp_ND];
   i32 H_skp_WF[H_skp_ND * 3];
   u8 H_skp_WFC[H_skp_ND];
   cm_cnt H_skp_G[H_skp_g_Volume * H_skp_NG];
@@ -127,8 +131,8 @@ struct H_skp_T {
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_skp_m_Volume, H_skp_hM) * H_skp_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H_skp_n_Volume, H_skp_hN) * H_skp_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_skp_n_Volume, H_skp_hN) * H_skp_MND)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H_skp_d_Volume, H_skp_hD) * H_skp_ND * TC_MIXN)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_skp_d_Volume, H_skp_hD) * H_skp_ND)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_skp_w_Volume * H_skp_ND * TC_MIXN)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(H_skp_w_Volume * H_skp_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_skp_ND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_skp_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H_skp_g_Volume * H_skp_NG);

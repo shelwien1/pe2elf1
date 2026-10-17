@@ -28,6 +28,8 @@ static const byte H_nal_s_fld[31+1]={ 0,1,1,2,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4,4,
 
 static const byte H_nal_t_fld[31+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31 };
 
+static const byte H_nal_w_fld[31+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31 };
+
 
 static const int H_nal_rA = (192+0) * (1);
 static const int H_nal_rB = (0+0) * (1);
@@ -78,6 +80,7 @@ static const long long H_nal_m_Volume = tc_vmul(1, 4); // 4
 static const long long H_nal_n_Volume = tc_vmul(1, 32); // 32
 static const long long H_nal_s_Volume = tc_vmul(1, 5); // 5
 static const long long H_nal_t_Volume = tc_vmul(1, 32); // 32
+static const long long H_nal_w_Volume = tc_vmul(1, 32); // 32
 
 struct H_nal_T { 
 #undef USE_NEW
@@ -99,8 +102,8 @@ struct H_nal_T {
   u8 H_nal_WC[tc_rows(H_nal_m_Volume, H_nal_hM) * H_nal_ND];
   i32 H_nal_WM[tc_rows(H_nal_n_Volume, H_nal_hN) * H_nal_MND * 3];
   u8 H_nal_WMC[tc_rows(H_nal_n_Volume, H_nal_hN) * H_nal_MND];
-  i32 H_nal_W2[tc_rows(H_nal_d_Volume, H_nal_hD) * H_nal_ND * TC_MIXN];
-  u8 H_nal_W2C[tc_rows(H_nal_d_Volume, H_nal_hD) * H_nal_ND];
+  i32 H_nal_W2[H_nal_w_Volume * H_nal_ND * TC_MIXN];
+  u8 H_nal_W2C[H_nal_w_Volume * H_nal_ND];
   i32 H_nal_WF[H_nal_ND * 3];
   u8 H_nal_WFC[H_nal_ND];
   cm_cnt H_nal_G[H_nal_g_Volume * H_nal_NG];
@@ -123,8 +126,8 @@ struct H_nal_T {
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_nal_m_Volume, H_nal_hM) * H_nal_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H_nal_n_Volume, H_nal_hN) * H_nal_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_nal_n_Volume, H_nal_hN) * H_nal_MND)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H_nal_d_Volume, H_nal_hD) * H_nal_ND * TC_MIXN)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_nal_d_Volume, H_nal_hD) * H_nal_ND)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_nal_w_Volume * H_nal_ND * TC_MIXN)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(H_nal_w_Volume * H_nal_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_nal_ND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_nal_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H_nal_g_Volume * H_nal_NG);

@@ -6,14 +6,14 @@
     sgn.idx, not MOD/; ../mk.sh regenerates both.
 
     `_A`-`_E`, `_H` are the six counters, `_S` and `_F` the two APMs, `_W` and
-    `_W2` the two mixers (selected by index m and by index d) and `_WF` the
+    `_W2` the two mixers (selected by index m and by index w) and `_WF` the
     one that mixes them, `_MT` and `_WM` the mantissa plane and its mixer,
     `_G` the sign counters.  Each is H_sgn_ND (or H_sgn_MND) rows deep per
     context: where a decision sits among the family's nodes is context
     without being a variable.  */
 
 void H_sgn_make( const H_sgn_v & D, tcx & X ) {
-  int a, b, c, d, e, h, s, f, m, t, n, g;
+  int a, b, c, d, e, h, s, f, m, w, t, n, g;
   int cg = D.cg, pos = D.pos, sa = D.sa, sb = D.sb, scb = D.scb, mag = D.mag, md = D.md, pp = D.pp, mg = D.mg, ez = D.ez, ts = D.ts;
   (void) cg;  (void) pos;  (void) sa;  (void) sb;  (void) scb;  (void) mag;  (void) md;  (void) pp;  (void) mg;  (void) ez;  (void) ts;
 
@@ -59,12 +59,17 @@ void H_sgn_make( const H_sgn_v & D, tcx & X ) {
   m = m*14 + H_sgn_m_cg[__min(13,__max(0,cg-(1-1)))];
   m = m*3 + ((pp>0+(1-1))+(pp>1+(1-1)));
 
+  w = 0;
+  w = w*14 + H_sgn_w_cg[__min(13,__max(0,cg-(1-1)))];
+  w = w*3 + ((pp>0+(1-1))+(pp>1+(1-1)));
+  w = w*16 + H_sgn_w_mg[__min(15,__max(0,mg-(1-1)))];
+
   t = 0;
 
   n = 0;
 
   g = 0;
-  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.s = s;  X.f = f;  X.m = m;  X.t = t;
+  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.s = s;  X.f = f;  X.m = m;  X.w = w;  X.t = t;
   X.n = n;  X.g = g;
 }
 

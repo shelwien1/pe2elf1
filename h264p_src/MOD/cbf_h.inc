@@ -39,6 +39,10 @@ static const byte H_cbf_s_cat[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
 static const byte H_cbf_t_cat[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
+static const byte H_cbf_w_cat[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
+static const byte H_cbf_w_nc[5+1]={ 0,1,2,3,4,5 };
+static const byte H_cbf_w_md[19+1]={ 0,0,1,2,2,2,2,2,2,2,2,2,2,2,3,3,3,4,4,4 };
+
 
 static const int H_cbf_rA = (64+0) * (1);
 static const int H_cbf_rB = (16+0) * (1);
@@ -89,6 +93,7 @@ static const long long H_cbf_m_Volume = tc_vmul(tc_vmul(1, 5), 2); // 10
 static const long long H_cbf_n_Volume = tc_vmul(1, 14); // 14
 static const long long H_cbf_s_Volume = tc_vmul(tc_vmul(1, 14), 2); // 28
 static const long long H_cbf_t_Volume = tc_vmul(1, 14); // 14
+static const long long H_cbf_w_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 6), 5), 2); // 840
 
 struct H_cbf_T { 
 #undef USE_NEW
@@ -110,8 +115,8 @@ struct H_cbf_T {
   u8 H_cbf_WC[tc_rows(H_cbf_m_Volume, H_cbf_hM) * H_cbf_ND];
   i32 H_cbf_WM[tc_rows(H_cbf_n_Volume, H_cbf_hN) * H_cbf_MND * 3];
   u8 H_cbf_WMC[tc_rows(H_cbf_n_Volume, H_cbf_hN) * H_cbf_MND];
-  i32 H_cbf_W2[tc_rows(H_cbf_d_Volume, H_cbf_hD) * H_cbf_ND * TC_MIXN];
-  u8 H_cbf_W2C[tc_rows(H_cbf_d_Volume, H_cbf_hD) * H_cbf_ND];
+  i32 H_cbf_W2[H_cbf_w_Volume * H_cbf_ND * TC_MIXN];
+  u8 H_cbf_W2C[H_cbf_w_Volume * H_cbf_ND];
   i32 H_cbf_WF[H_cbf_ND * 3];
   u8 H_cbf_WFC[H_cbf_ND];
   cm_cnt H_cbf_G[H_cbf_g_Volume * H_cbf_NG];
@@ -134,8 +139,8 @@ struct H_cbf_T {
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_cbf_m_Volume, H_cbf_hM) * H_cbf_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H_cbf_n_Volume, H_cbf_hN) * H_cbf_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_cbf_n_Volume, H_cbf_hN) * H_cbf_MND)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H_cbf_d_Volume, H_cbf_hD) * H_cbf_ND * TC_MIXN)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_cbf_d_Volume, H_cbf_hD) * H_cbf_ND)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_cbf_w_Volume * H_cbf_ND * TC_MIXN)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(H_cbf_w_Volume * H_cbf_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_cbf_ND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_cbf_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H_cbf_g_Volume * H_cbf_NG);

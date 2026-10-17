@@ -6,14 +6,14 @@
     sig.idx, not MOD/; ../mk.sh regenerates both.
 
     `_A`-`_E`, `_H` are the six counters, `_S` and `_F` the two APMs, `_W` and
-    `_W2` the two mixers (selected by index m and by index d) and `_WF` the
+    `_W2` the two mixers (selected by index m and by index w) and `_WF` the
     one that mixes them, `_MT` and `_WM` the mantissa plane and its mixer,
     `_G` the sign counters.  Each is H_sig_ND (or H_sig_MND) rows deep per
     context: where a decision sits among the family's nodes is context
     without being a variable.  */
 
 void H_sig_make( const H_sig_v & D, tcx & X ) {
-  int a, b, c, d, e, h, s, f, m, t, n, g;
+  int a, b, c, d, e, h, s, f, m, w, t, n, g;
   int cg = D.cg, pos = D.pos, rem = D.rem, zl = D.zl, md = D.md, nc = D.nc, fld = D.fld, q6 = D.q6, pg = D.pg, em = D.em, pe = D.pe, ps = D.ps, tz = D.tz;
   (void) cg;  (void) pos;  (void) rem;  (void) zl;  (void) md;  (void) nc;  (void) fld;  (void) q6;  (void) pg;  (void) em;  (void) pe;  (void) ps;  (void) tz;
 
@@ -66,12 +66,18 @@ void H_sig_make( const H_sig_v & D, tcx & X ) {
   m = m*4 + H_sig_m_pos[__min(9,__max(0,pos-(1-1)))];
   m = m*4 + H_sig_m_rem[__min(10,__max(0,rem-(1-1)))];
 
+  w = 0;
+  w = w*4 + H_sig_w_cg[__min(13,__max(0,cg-(1-1)))];
+  w = w*6 + H_sig_w_rem[__min(10,__max(0,rem-(1-1)))];
+  w = w*7 + H_sig_w_zl[__min(10,__max(0,zl-(1-1)))];
+  w = w*17 + H_sig_w_em[__min(16,__max(0,em-(1-1)))];
+
   t = 0;
 
   n = 0;
 
   g = 0;
-  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.s = s;  X.f = f;  X.m = m;  X.t = t;
+  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.s = s;  X.f = f;  X.m = m;  X.w = w;  X.t = t;
   X.n = n;  X.g = g;
 }
 

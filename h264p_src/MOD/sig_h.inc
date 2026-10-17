@@ -40,6 +40,11 @@ static const byte H_sig_s_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 static const byte H_sig_s_pe[15+1]={ 0,0,1,2,2,2,2,3,3,3,3,3,3,4,4,4 };
 
 
+static const byte H_sig_w_cg[13+1]={ 0,1,1,2,3,3,3,3,3,3,3,3,3,3 };
+static const byte H_sig_w_rem[10+1]={ 0,0,1,1,2,3,3,3,4,5,5 };
+static const byte H_sig_w_zl[10+1]={ 0,0,1,2,3,4,4,4,5,5,6 };
+static const byte H_sig_w_em[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
+
 
 static const int H_sig_rA = (140+0) * (1);
 static const int H_sig_rB = (8+0) * (1);
@@ -90,6 +95,7 @@ static const long long H_sig_m_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 4), 4); 
 static const long long H_sig_n_Volume = tc_vmul(1, 1); // 1
 static const long long H_sig_s_Volume = tc_vmul(tc_vmul(1, 14), 5); // 70
 static const long long H_sig_t_Volume = tc_vmul(1, 1); // 1
+static const long long H_sig_w_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 6), 7), 17); // 2856
 
 struct H_sig_T { 
 #undef USE_NEW
@@ -111,8 +117,8 @@ struct H_sig_T {
   u8 H_sig_WC[tc_rows(H_sig_m_Volume, H_sig_hM) * H_sig_ND];
   i32 H_sig_WM[tc_rows(H_sig_n_Volume, H_sig_hN) * H_sig_MND * 3];
   u8 H_sig_WMC[tc_rows(H_sig_n_Volume, H_sig_hN) * H_sig_MND];
-  i32 H_sig_W2[tc_rows(H_sig_d_Volume, H_sig_hD) * H_sig_ND * TC_MIXN];
-  u8 H_sig_W2C[tc_rows(H_sig_d_Volume, H_sig_hD) * H_sig_ND];
+  i32 H_sig_W2[H_sig_w_Volume * H_sig_ND * TC_MIXN];
+  u8 H_sig_W2C[H_sig_w_Volume * H_sig_ND];
   i32 H_sig_WF[H_sig_ND * 3];
   u8 H_sig_WFC[H_sig_ND];
   cm_cnt H_sig_G[H_sig_g_Volume * H_sig_NG];
@@ -135,8 +141,8 @@ struct H_sig_T {
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_sig_m_Volume, H_sig_hM) * H_sig_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H_sig_n_Volume, H_sig_hN) * H_sig_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_sig_n_Volume, H_sig_hN) * H_sig_MND)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H_sig_d_Volume, H_sig_hD) * H_sig_ND * TC_MIXN)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_sig_d_Volume, H_sig_hD) * H_sig_ND)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_sig_w_Volume * H_sig_ND * TC_MIXN)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(H_sig_w_Volume * H_sig_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_sig_ND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_sig_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H_sig_g_Volume * H_sig_NG);

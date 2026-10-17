@@ -21,6 +21,8 @@ static const byte H_pcm_h_dp[6+1]={ 0,1,2,3,4,5,6 };
 
 static const byte H_pcm_t_dp[6+1]={ 0,1,2,3,4,5,6 };
 
+static const byte H_pcm_w_dp[6+1]={ 0,1,2,3,4,5,6 };
+
 
 static const int H_pcm_rA = (64+0) * (1);
 static const int H_pcm_rB = (16+0) * (1);
@@ -71,6 +73,7 @@ static const long long H_pcm_m_Volume = tc_vmul(1, 3); // 3
 static const long long H_pcm_n_Volume = tc_vmul(1, 3); // 3
 static const long long H_pcm_s_Volume = tc_vmul(1, 3); // 3
 static const long long H_pcm_t_Volume = tc_vmul(tc_vmul(1, 3), 7); // 21
+static const long long H_pcm_w_Volume = tc_vmul(1, 7); // 7
 
 struct H_pcm_T { 
 #undef USE_NEW
@@ -92,8 +95,8 @@ struct H_pcm_T {
   u8 H_pcm_WC[tc_rows(H_pcm_m_Volume, H_pcm_hM) * H_pcm_ND];
   i32 H_pcm_WM[tc_rows(H_pcm_n_Volume, H_pcm_hN) * H_pcm_MND * 3];
   u8 H_pcm_WMC[tc_rows(H_pcm_n_Volume, H_pcm_hN) * H_pcm_MND];
-  i32 H_pcm_W2[tc_rows(H_pcm_d_Volume, H_pcm_hD) * H_pcm_ND * TC_MIXN];
-  u8 H_pcm_W2C[tc_rows(H_pcm_d_Volume, H_pcm_hD) * H_pcm_ND];
+  i32 H_pcm_W2[H_pcm_w_Volume * H_pcm_ND * TC_MIXN];
+  u8 H_pcm_W2C[H_pcm_w_Volume * H_pcm_ND];
   i32 H_pcm_WF[H_pcm_ND * 3];
   u8 H_pcm_WFC[H_pcm_ND];
   cm_cnt H_pcm_G[H_pcm_g_Volume * H_pcm_NG];
@@ -116,8 +119,8 @@ struct H_pcm_T {
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_pcm_m_Volume, H_pcm_hM) * H_pcm_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H_pcm_n_Volume, H_pcm_hN) * H_pcm_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_pcm_n_Volume, H_pcm_hN) * H_pcm_MND)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H_pcm_d_Volume, H_pcm_hD) * H_pcm_ND * TC_MIXN)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_pcm_d_Volume, H_pcm_hD) * H_pcm_ND)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_pcm_w_Volume * H_pcm_ND * TC_MIXN)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(H_pcm_w_Volume * H_pcm_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_pcm_ND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_pcm_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H_pcm_g_Volume * H_pcm_NG);

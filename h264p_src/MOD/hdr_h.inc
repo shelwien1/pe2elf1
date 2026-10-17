@@ -22,6 +22,7 @@ static const byte H_hdr_h_sty[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 
 
 
+
 static const int H_hdr_rA = (128+0) * (1);
 static const int H_hdr_rB = (0+0) * (1);
 static const int H_hdr_rC = (0+0) * (1);
@@ -71,6 +72,7 @@ static const long long H_hdr_m_Volume = 1; // 1
 static const long long H_hdr_n_Volume = tc_vmul(1, (1<<8)); // 256
 static const long long H_hdr_s_Volume = tc_vmul(1, (1<<8)); // 256
 static const long long H_hdr_t_Volume = tc_vmul(1, (1<<8)); // 256
+static const long long H_hdr_w_Volume = tc_vmul(1, (1<<8)); // 256
 
 struct H_hdr_T { 
 #undef USE_NEW
@@ -92,8 +94,8 @@ struct H_hdr_T {
   u8 H_hdr_WC[tc_rows(H_hdr_m_Volume, H_hdr_hM) * H_hdr_ND];
   i32 H_hdr_WM[tc_rows(H_hdr_n_Volume, H_hdr_hN) * H_hdr_MND * 3];
   u8 H_hdr_WMC[tc_rows(H_hdr_n_Volume, H_hdr_hN) * H_hdr_MND];
-  i32 H_hdr_W2[tc_rows(H_hdr_d_Volume, H_hdr_hD) * H_hdr_ND * TC_MIXN];
-  u8 H_hdr_W2C[tc_rows(H_hdr_d_Volume, H_hdr_hD) * H_hdr_ND];
+  i32 H_hdr_W2[H_hdr_w_Volume * H_hdr_ND * TC_MIXN];
+  u8 H_hdr_W2C[H_hdr_w_Volume * H_hdr_ND];
   i32 H_hdr_WF[H_hdr_ND * 3];
   u8 H_hdr_WFC[H_hdr_ND];
   cm_cnt H_hdr_G[H_hdr_g_Volume * H_hdr_NG];
@@ -116,8 +118,8 @@ struct H_hdr_T {
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_hdr_m_Volume, H_hdr_hM) * H_hdr_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H_hdr_n_Volume, H_hdr_hN) * H_hdr_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_hdr_n_Volume, H_hdr_hN) * H_hdr_MND)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H_hdr_d_Volume, H_hdr_hD) * H_hdr_ND * TC_MIXN)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_hdr_d_Volume, H_hdr_hD) * H_hdr_ND)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_hdr_w_Volume * H_hdr_ND * TC_MIXN)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(H_hdr_w_Volume * H_hdr_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_hdr_ND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_hdr_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H_hdr_g_Volume * H_hdr_NG);
