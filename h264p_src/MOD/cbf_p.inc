@@ -61,7 +61,7 @@ void H_cbf_make( const H_cbf_v & D, tcx & X ) {
   s = 0;
   s = s*14 + H_cbf_s_cat[__min(13,__max(0,cat-(1-1)))];
   s = s*2 + ((kn>0+(1-1)));
-  s = s*13 + H_cbf_s_pq[__min(12,__max(0,pq-(1-1)))];
+  s = s*25 + H_cbf_s_pq[__min(24,__max(0,pq-(1-1)))];
 
   f = 0;
   f = f*14 + H_cbf_f_cat[__min(13,__max(0,cat-(1-1)))];

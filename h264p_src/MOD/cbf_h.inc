@@ -35,7 +35,7 @@ static const byte H_cbf_m_cat[13+1]={ 0,1,2,3,4,4,4,4,4,4,4,4,4,4 };
 static const byte H_cbf_n_cat[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
 static const byte H_cbf_s_cat[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
-static const byte H_cbf_s_pq[12+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12 };
+static const byte H_cbf_s_pq[24+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24 };
 
 static const byte H_cbf_t_cat[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
@@ -91,7 +91,7 @@ static const long long H_cbf_g_Volume = tc_vmul(1, 1); // 1
 static const long long H_cbf_h_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 17), 10), 9); // 21420
 static const long long H_cbf_m_Volume = tc_vmul(tc_vmul(1, 5), 2); // 10
 static const long long H_cbf_n_Volume = tc_vmul(1, 14); // 14
-static const long long H_cbf_s_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 2), 13); // 364
+static const long long H_cbf_s_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 2), 25); // 700
 static const long long H_cbf_t_Volume = tc_vmul(1, 14); // 14
 static const long long H_cbf_w_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 6), 5), 2); // 840
 

@@ -1719,7 +1719,13 @@ struct Model {
     tc_stage = STG_CBF;
     H_cbf_v D = {};
     D.pz = pok ? 1 + std::min(pnz, 15) : 0;
-    int pq = pok ? pxq_ : 0;
+    // how far to trust it: how far the macroblock's luma decoded so far is
+    // from the proxy (13-24), else how well its vector matched (1-12)
+    int pq = 0;
+    if (pok) {
+      int pa = rec_.proxy_acc();
+      pq = pa >= 0 ? 13 + tc_clamp(tc_qlog(pa), 0, 11) : pxq_;
+    }
     D.pq = pq;
     D.tn = tok ? 1 + std::min(tnz, 4) : 0;
     D.cat = cat;

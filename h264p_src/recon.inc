@@ -1673,6 +1673,23 @@ struct Recon {
     prx_ok = true;
     return true;
   }
+  // how far the luma of the current macroblock decoded so far is from the
+  // proxy: 4 x the mean absolute difference; -1 none decoded or no proxy
+  int proxy_acc() const {
+    if (!active || !prx_ok) return -1;
+    int w = cur->w, mx = mb_addr % cur->mbw * 16, my = mb_addr / cur->mbw * 16, sum = 0, cnt = 0;
+    const uint8_t* Y = cur->y.data() + my * w + mx;
+    auto add = [&](int x0, int y0, int n) {
+      for (int y = y0; y < y0 + n; y++)
+        for (int x = x0; x < x0 + n; x++) sum += abs(Y[y * w + x] - prx_y[y * 16 + x]);
+      cnt += n * n;
+    };
+    for (int b = 0; b < 16; b++)
+      if (mb_done4 >> b & 1) add(blk_x(b) * 4, blk_y(b) * 4, 4);
+    for (int b8 = 0; b8 < 4; b8++)
+      if (mb_done8 >> b8 & 1) add((b8 & 1) * 8, (b8 >> 1) * 8, 8);
+    return cnt ? sum * 4 / cnt : -1;
+  }
   const RPic* proxy_pic() const {
     const RPic* P = nlist[0] > 0 && list[0][0] ? list[0][0] : !dpb.empty() ? dpb.back().get() : nullptr;
     return P && P->w == cur->w && P->h == cur->h ? P : nullptr;

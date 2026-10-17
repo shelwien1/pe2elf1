@@ -45,7 +45,7 @@ void H_sig_make( const H_sig_v & D, tcx & X ) {
   e = e*64 + H_sig_e_pos[__min(63,__max(0,pos-(1-1)))];
   e = e*8 + H_sig_e_ps[__min(7,__max(0,ps-(1-1)))];
   e = e*5 + H_sig_e_tz[__min(4,__max(0,tz-(1-1)))];
-  e = e*13 + H_sig_e_pq[__min(12,__max(0,pq-(1-1)))];
+  e = e*25 + H_sig_e_pq[__min(24,__max(0,pq-(1-1)))];
 
   h = 0;
   h = h*5 + H_sig_h_cg[__min(13,__max(0,cg-(1-1)))];
