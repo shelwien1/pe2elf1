@@ -38,7 +38,7 @@ struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, z
 struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac; };
 struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn, pq; };
 struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz, pq, hb; };
-struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe, pl, tz, pq; };
+struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe, pl, tz, pq, lh; };
 struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md, pp, mg, ez, ts, pq; };
 struct H_pcm_v { int pl, dp, pd, pd2; };
 
@@ -1830,7 +1830,7 @@ struct Model {
     // the magnitudes, from the last coefficient back
     tc_stage = STG_LVL;
     int mag[64];
-    int g1 = 0, e1 = 0;
+    int g1 = 0, e1 = 0, lhist = 0;  // lhist: the last levels coded less 1 (up to 3), two bits each
     H_lvl_v L = {cat, 0, 0, nc, 0, 0, 0, q, tc_qlog(cnt), md, 0, pg, em, 0};
     L.pq = pq;
     int abs_base = kAbsBase[cat];
@@ -1853,6 +1853,8 @@ struct Model {
       int a = cm_int(f_lvl.code(X, ENC ? abs(c[k]) - 1 : 0), 1 << 24);
       mag[k] = a + 1;
       L.pm = std::min(a + 1, 4);
+      lhist = (lhist * 4 + std::min(a, 3)) & 63;
+      L.lh = 1 + lhist;
       if (a)
         g1++;
       else
