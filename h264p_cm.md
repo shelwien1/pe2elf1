@@ -146,7 +146,9 @@ There are also real differences from JPEG:
 - **CABAC is a much stronger baseline than Huffman.** JPEG recompressors
   gain 20-25%. CABAC already adapts per syntax element with neighbour
   contexts. The single contexts measured below save between 1% and 18% of
-  an element's bits.
+  an element's bits. But CABAC forgets: it starts over at every slice
+  (every picture here), and that alone costs it 2.2% of the stream
+  (section 3.4).
 - **About twenty kinds of values instead of one alphabet.** The mixer
   selection has to start with the element and bin. I, P and B pictures have
   very different statistics.
@@ -295,6 +297,16 @@ it.
 - **Priors:** CABAC's initialization (m, n) at the slice QP gives every
   context a sensible starting probability. A model starting at p = 0.5 pays
   for that on short streams.
+- **Memory:** CABAC restarts its contexts at every slice, from the tables at
+  the slice QP; in these streams that is every picture. Its own contexts and
+  state machine, carried over instead from the previous slice of the same
+  type, spend 2.6% less on the context-coded bins: 0.63 Mbit, 2.2% of the
+  stream (00: 4.4% of its context-coded bits, 01: 1.2%, 03: 3.3%, 04: 1.0%;
+  02 has one slice of each type). Most of it is in
+  last_significant_coeff_flag (0.13 Mbit, −6.6%), mb_type (−2.8%),
+  coded_block_flag (−2.9%), mvd (−2.5%) and mb_qp_delta (−2.4%). Any model
+  that keeps its statistics gets this. The experiments of appendix A never
+  reset either, so their gains come on top of it.
 - **Speed:** CABAC codes about 15.5 bins per stream byte. Skip and
   end_of_slice flags are a third of the bins but 9.5% of the bits, so model
   them cheaply.
@@ -316,9 +328,9 @@ own, with no mixing unless stated.
   identical AUDs): use "same row in the previous NAL of this type" as
   context, or a match model.
 - x264's version SEI (user data unregistered: a UUID, then the version and
-  the options as text) is 667 bytes in 02, 2.4% of that stream, coded as
-  is. The TSV has it in hex: decode it and use a text model. zlib alone
-  takes its text to 432 bytes.
+  the options as text) is 667 bytes in 02, 2.4% of that stream, and 747 in
+  04, coded as is. The TSV has it in hex: decode it and use a text model.
+  zlib alone takes its text to 432 bytes.
 - Slice header fields:
   - context: the same field in the previous slice header of the same slice
     type and nal_ref_idc;
@@ -367,7 +379,9 @@ own, with no mixing unless stated.
     and boundary 4×4 modes), and chroma and luma cbp (from the neighbours'
     cbp).
 - **Measured:** classes of A and B: −8.5% against an order-0 model per slice
-  type. Adding col: −7.6%, worse (dilution).
+  type. Adding col: −7.6%, worse (dilution). Adding the length of the skip
+  run before the MB: −7.7%, worse too; the classes of A and B already tell
+  it.
 
 **transform_size_8x8_flag (X), 0.3%.**
 
@@ -591,6 +605,9 @@ In B slices, direct sub-MBs go together with direct neighbours.
   saves 12.8% of the luma 4×4 sign bits, and 15.6% together with the signs
   of A and B (00: −16.6%, 01: −12.4%, 03: −27.4%, 04: −22.0%). 8×8,
   Intra16x16 and chroma blocks can be done the same way (not measured).
+- The trailing ones (CAVLC's: up to three ±1 at the end of a block) have
+  60% of the luma 4×4 signs and compress like the others: 0.91 bits per
+  sign with the signs of A and B, 0.85 with the prediction as well.
 
 **Per block type:**
 
@@ -649,6 +666,10 @@ Outside the slice data, the NAL framing (start codes, zero bytes and NAL
 header bytes: 26,625 bytes) and the emulation prevention bytes (4,469
 bytes) are 0.86% of the stream. h264p regenerates them, and the only
 framing value in the TSV, Z, is 1 in every `nal` row of these streams.
+x264's own Annex B output in `test/gen` has the zero_byte exactly where
+B.1.2 requires it: before SPS, PPS and the first NAL unit of an access unit
+(all 5,178 NAL units of its 33 x264 streams). There Z follows from the NAL
+type and the access unit boundaries.
 
 **x264's habits (no exception in these streams):**
 
@@ -671,12 +692,13 @@ CABAC and trellis, x264 doesn't apply it to 8×8 transforms (1 exception in
 32,212). A model can keep the score of the 8×8 so far: while it is under 4,
 more coefficients must follow.
 
-**Options.** x264's version SEI lists its options. It is present in 02 and
-in the x264 streams of `test/gen`, but not in 00, 01, 03 or 04. In 02's,
-`analyse=0x3:0x113` rules out sub-8×8 partitions, and `decimate=1` turns on
-the rule above. `8x8dct`, `bframes`, `b_pyramid`, `direct`, `weightp` and
-`trellis` say what else can occur. Without the SEI, a model learns the same
-from the stream.
+**Options.** x264's version SEI lists its options. It is present in 02, 04
+and the x264 streams of `test/gen`, but not in 00, 01 or 03. In 02's and
+04's, `analyse` (0x3:0x113, 0x1:0x111) rules out sub-8×8 partitions, and
+`decimate=1` turns on the rule above. `8x8dct` (0 in 04's: 04 has no 8×8
+transform), `bframes`, `b_pyramid`, `direct`, `weightp` and `trellis` say
+what else can occur. Without the SEI, a model learns the same from the
+stream.
 
 **Total:** about 0.41 Mbit of CABAC and header bits, 1.4% of the stream,
 are spent on values these rules determine. CABAC pays 1.29 bits for each
@@ -764,9 +786,10 @@ In moving camera video like 04 there is nothing to find.
    whole chain with `h264p d` and `cmp`.
 2. **Reproduce CABAC first:** CABAC's binarization and contexts with the
    model's counters, element by element. The result should land near the
-   stream size. With the simple counters of appendix A, the skip flags
-   cost 2.51 Mbit against CABAC's 2.59. A large miss means the parsing or
-   the neighbour state is wrong.
+   stream size, a little below it because the model doesn't restart at each
+   slice (section 3.4). With the simple counters of appendix A, the skip
+   flags cost 2.51 Mbit against CABAC's 2.59. A large miss means the
+   parsing or the neighbour state is wrong.
 3. **Add contexts element by element**, and measure each element against
    the table in section 1. The experiments in appendix A were made with
    `tools/ctxexp.py`, which parses the TSV, keeps the per-picture state and
@@ -776,9 +799,16 @@ In moving camera video like 04 there is nothing to find.
    but keep everything lossless on all of `test/002`, `test/gen` and
    `test/h264p` (CAVLC, interlaced, 4:2:2, 4:4:4, high bit depth, PCM, FMO).
 
+h264p itself is a good host for the model. `SliceCoder` already walks the
+syntax in both directions, for CAVLC and for CABAC, with the neighbour state
+a model needs (`MbState`, `nb_loc`). A third backend that codes the same
+values with the model would leave the TSV as a view for debugging: the
+compressed file could decode straight to H.264.
+
 ### Order of work
 
-1. The rules of section 6 (1.4% of the stream).
+1. Statistics kept across slices (2.2% of the stream, section 3.4) and the
+   rules of section 6 (1.4%).
 2. Coefficients (43.6%): signs from A/B and Cb, Cr given Cb, nC and the
    count so far, same-position neighbours.
 3. Skip and mb_type (19.8%): temporal and C/D contexts, and the neighbours'
@@ -793,8 +823,9 @@ In moving camera video like 04 there is nothing to find.
 
 The best single context of each element in appendix A saves 0.93 Mbit
 in total, 3.3% of the slice data, before any mixing, and 1.15 Mbit (4.0%)
-with the two that need a decoder in the loop. They leave out mb_type, cbp,
-chroma AC, the 8×8 and Intra16x16 blocks and motion vector reconstruction.
+with the two that need a decoder in the loop, on top of the 0.63 Mbit from
+not restarting at each slice. They leave out mb_type, cbp, chroma AC, the
+8×8 and Intra16x16 blocks and motion vector reconstruction.
 
 ## Appendix A: single-context experiments
 
@@ -827,6 +858,7 @@ The experiments use these simplifications:
 | mb_type (6-bit tree) | 7,445,082 | slice type | 2,813,104 | |
 | | | + classes of A, B | 2,574,117 | −8.5% |
 | | | + class of col | 2,599,495 | −7.6% |
+| | | classes of A, B + length of the skip run before the MB | 2,595,419 | −7.7% |
 | intra modes | 2,011,675 | CABAC: flag, rem bins | 1,799,758 | |
 | | | actual mode \| modes of A, B | 1,623,770 | −9.8% |
 | | | + previous block's mode | 1,640,590 | −8.8% |
@@ -867,15 +899,17 @@ The gains vary with content. For the skip flags with all contexts, they were
 −11.6%, −3.7%, −5.2% and −17.1%. On 02, which has only two pictures, larger
 context sets lose to the learning cost; mixing avoids that.
 
-## Appendix B: how sections 6 and 7 and the decoder rows were measured
+## Appendix B: how the other figures were measured
 
-The CABAC bits come from the same instrumented decoder as section 1. It
-also costed each macroblock and each residual block, and tagged the bins
-whose value a rule gives. Python scripts walked the TSV files to check the
-rules and find repeated macroblocks and blocks, and compared the decoded
-macroblocks from h264dec's output by 64-bit hashes of their samples. A rule
-counts as holding when it had no exception in the five streams; for x264's
-habits that says nothing about other encoders.
+The CABAC bits come from the same instrumented decoder as section 1. It also
+costed each macroblock and each residual block, and tagged the bins whose
+value a rule gives. For section 3.4 it costed every context-coded bin a
+second time, with context states that are carried over from the previous
+slice of the same type instead of initialized. Python scripts walked the TSV
+files to check the rules and find repeated macroblocks and blocks, and
+compared the decoded macroblocks from h264dec's output by 64-bit hashes of
+their samples. A rule counts as holding when it had no exception in the five
+streams; for x264's habits that says nothing about other encoders.
 
 The "decoder" experiments used a copy of h264dec with two probes. One
 writes the gradient histogram around each Intra4x4/8x8 block just before
