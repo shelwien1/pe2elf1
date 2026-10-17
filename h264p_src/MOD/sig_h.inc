@@ -37,6 +37,17 @@ static const byte H_sig_h_rem[10+1]={ 0,0,1,2,3,4,5,6,6,7,8 };
 static const byte H_sig_h_tz[4+1]={ 0,1,2,3,4 };
 static const byte H_sig_h_h3[14+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14 };
 
+static const byte H_sig_i_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
+static const byte H_sig_i_pos[63+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63 };
+static const byte H_sig_i_pr[7+1]={ 0,1,2,3,4,5,6,7 };
+static const byte H_sig_i_ps[7+1]={ 0,1,2,3,4,5,6,7 };
+
+static const byte H_sig_j_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
+static const byte H_sig_j_pos[63+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63 };
+static const byte H_sig_j_ft[8+1]={ 0,1,2,3,4,5,6,7,8 };
+static const byte H_sig_j_h3[14+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14 };
+static const byte H_sig_j_nc[5+1]={ 0,1,2,3,4,5 };
+
 static const byte H_sig_m_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 static const byte H_sig_m_pos[9+1]={ 0,1,1,1,2,2,2,2,2,3 };
 static const byte H_sig_m_rem[10+1]={ 0,1,2,3,3,3,3,3,3,3,3 };
@@ -58,6 +69,8 @@ static const int H_sig_rB = (8+0) * (1);
 static const int H_sig_rC = (64+0) * (1);
 static const int H_sig_rE = (64+0) * (1);
 static const int H_sig_rH = (64+0) * (1);
+static const int H_sig_rI = (64+0) * (1);
+static const int H_sig_rJ = (64+0) * (1);
 static const int H_sig_rD = (255+0) * (1);
 static const int H_sig_rT = (55+0) * (1);
 static const int H_sig_rG = (90+0) * (1);
@@ -71,6 +84,8 @@ static const int H_sig_mwB = (0+0) * (1);
 static const int H_sig_mwC = (0+0) * (1);
 static const int H_sig_mwE = (0+0) * (1);
 static const int H_sig_mwH = (2+0) * (1);
+static const int H_sig_mwI = (0+0) * (1);
+static const int H_sig_mwJ = (0+0) * (1);
 static const int H_sig_mwD = (0+0) * (1);
 static const int H_sig_mwT = (0+0) * (1);
 static const int H_sig_mwG = (0+0) * (1);
@@ -82,6 +97,8 @@ static const int H_sig_hA = (24+0) * (1);
 static const int H_sig_hB = (24+0) * (1);
 static const int H_sig_hE = (24+0) * (1);
 static const int H_sig_hH = (24+0) * (1);
+static const int H_sig_hI = (24+0) * (1);
+static const int H_sig_hJ = (24+0) * (1);
 static const int H_sig_hD = (24+0) * (1);
 static const int H_sig_hS = (24+0) * (1);
 static const int H_sig_hF = (24+0) * (1);
@@ -98,6 +115,8 @@ static const long long H_sig_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(
 static const long long H_sig_f_Volume = tc_vmul(tc_vmul(1, 3), 6); // 18
 static const long long H_sig_g_Volume = tc_vmul(1, 1); // 1
 static const long long H_sig_h_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 5), 64), 8), 9), 5), 15); // 1728000
+static const long long H_sig_i_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 64), 8), 8); // 57344
+static const long long H_sig_j_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 64), 9), 15), 6); // 725760
 static const long long H_sig_m_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 4), 4); // 224
 static const long long H_sig_n_Volume = tc_vmul(1, 1); // 1
 static const long long H_sig_s_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 5), 8); // 560
@@ -115,6 +134,8 @@ struct H_sig_T {
   cm_cnt2 H_sig_D[tc_rows(H_sig_d_Volume, H_sig_hD) * H_sig_ND];
   cm_cnt2 H_sig_E[tc_rows(H_sig_e_Volume, H_sig_hE) * H_sig_ND];
   cm_cnt2 H_sig_H[tc_rows(H_sig_h_Volume, H_sig_hH) * H_sig_ND];
+  cm_cnt2 H_sig_I[tc_rows(H_sig_i_Volume, H_sig_hI) * H_sig_ND];
+  cm_cnt2 H_sig_J[tc_rows(H_sig_j_Volume, H_sig_hJ) * H_sig_ND];
   cm_cnt H_sig_MT[tc_rows(H_sig_t_Volume, H_sig_hT) * H_sig_MND];
   i16 H_sig_S[tc_rows(H_sig_s_Volume, H_sig_hS) * H_sig_ND * H_sig_qs];
   u8 H_sig_SC[tc_rows(H_sig_s_Volume, H_sig_hS) * H_sig_ND * H_sig_qs];
@@ -141,6 +162,8 @@ struct H_sig_T {
                               + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H_sig_d_Volume, H_sig_hD) * H_sig_ND)
                               + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H_sig_e_Volume, H_sig_hE) * H_sig_ND)
                               + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H_sig_h_Volume, H_sig_hH) * H_sig_ND)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H_sig_i_Volume, H_sig_hI) * H_sig_ND)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H_sig_j_Volume, H_sig_hJ) * H_sig_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(tc_rows(H_sig_t_Volume, H_sig_hT) * H_sig_MND)
                               + (unsigned long long)sizeof(i16) * (unsigned long long)(tc_rows(H_sig_s_Volume, H_sig_hS) * H_sig_ND * H_sig_qs)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_sig_s_Volume, H_sig_hS) * H_sig_ND * H_sig_qs)

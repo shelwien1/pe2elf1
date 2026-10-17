@@ -5,7 +5,7 @@
     lines lifted out into the struct in MOD/mvs_h.inc.  Edit this file and
     mvs.idx, not MOD/; ../mk.sh regenerates both.
 
-    `_A`-`_E`, `_H` are the six counters, `_S` and `_F` the two APMs, `_W` and
+    `_A`-`_E`, `_H`-`_J` are the eight counters, `_S` and `_F` the two APMs, `_W` and
     `_W2` the two mixers (selected by index m and by index w) and `_WF` the
     one that mixes them, `_MT` and `_WM` the mantissa plane and its mixer,
     `_G` the sign counters.  Each is H_mvs_ND (or H_mvs_MND) rows deep per
@@ -13,7 +13,7 @@
     without being a variable.  */
 
 void H_mvs_make( const H_mvs_v & D, tcx & X ) {
-  int a, b, c, d, e, h, s, f, m, w, t, n, g;
+  int a, b, c, d, e, h, i, j, s, f, m, w, t, n, g;
   int kind = D.kind, comp = D.comp, lst = D.lst, ma = D.ma, mb = D.mb, oth = D.oth, ps = D.ps, rf = D.rf, pi = D.pi, nr = D.nr, pd = D.pd, sp = D.sp, tv = D.tv, zd = D.zd, cq = D.cq, tq = D.tq;
   (void) kind;  (void) comp;  (void) lst;  (void) ma;  (void) mb;  (void) oth;  (void) ps;  (void) rf;  (void) pi;  (void) nr;  (void) pd;  (void) sp;  (void) tv;  (void) zd;  (void) cq;  (void) tq;
 
@@ -59,6 +59,20 @@ void H_mvs_make( const H_mvs_v & D, tcx & X ) {
   h = h*6 + H_mvs_h_oth[__min(5,__max(0,oth-(1-1)))];
   h = h*13 + H_mvs_h_tq[__min(12,__max(0,tq-(1-1)))];
 
+  i = 0;
+  i = i*4 + H_mvs_i_kind[__min(3,__max(0,kind-(1-1)))];
+  i = i*2 + ((comp>0+(1-1)));
+  i = i*14 + H_mvs_i_tv[__min(13,__max(0,tv-(1-1)))];
+  i = i*13 + H_mvs_i_tq[__min(12,__max(0,tq-(1-1)))];
+  i = i*13 + H_mvs_i_zd[__min(12,__max(0,zd-(1-1)))];
+
+  j = 0;
+  j = j*4 + H_mvs_j_kind[__min(3,__max(0,kind-(1-1)))];
+  j = j*2 + ((comp>0+(1-1)));
+  j = j*8 + H_mvs_j_ma[__min(7,__max(0,ma-(1-1)))];
+  j = j*8 + H_mvs_j_mb[__min(7,__max(0,mb-(1-1)))];
+  j = j*10 + H_mvs_j_cq[__min(9,__max(0,cq-(1-1)))];
+
   s = 0;
   s = s*4 + H_mvs_s_kind[__min(3,__max(0,kind-(1-1)))];
   s = s*2 + ((comp>0+(1-1)));
@@ -89,7 +103,7 @@ void H_mvs_make( const H_mvs_v & D, tcx & X ) {
 
   g = 0;
   g = g*4 + H_mvs_g_kind[__min(3,__max(0,kind-(1-1)))];
-  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.s = s;  X.f = f;  X.m = m;  X.w = w;  X.t = t;
+  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.i = i;  X.j = j;  X.s = s;  X.f = f;  X.m = m;  X.w = w;  X.t = t;
   X.n = n;  X.g = g;
 }
 

@@ -5,7 +5,7 @@
     lines lifted out into the struct in MOD/qpd_h.inc.  Edit this file and
     qpd.idx, not MOD/; ../mk.sh regenerates both.
 
-    `_A`-`_E`, `_H` are the six counters, `_S` and `_F` the two APMs, `_W` and
+    `_A`-`_E`, `_H`-`_J` are the eight counters, `_S` and `_F` the two APMs, `_W` and
     `_W2` the two mixers (selected by index m and by index w) and `_WF` the
     one that mixes them, `_MT` and `_WM` the mantissa plane and its mixer,
     `_G` the sign counters.  Each is H_qpd_ND (or H_qpd_MND) rows deep per
@@ -13,7 +13,7 @@
     without being a variable.  */
 
 void H_qpd_make( const H_qpd_v & D, tcx & X ) {
-  int a, b, c, d, e, h, s, f, m, w, t, n, g;
+  int a, b, c, d, e, h, i, j, s, f, m, w, t, n, g;
   int lnz = D.lnz, pc = D.pc, cc = D.cc, cls = D.cls, dc = D.dc, db = D.db, lz = D.lz, st = D.st, ae = D.ae, aq = D.aq, ac = D.ac;
   (void) lnz;  (void) pc;  (void) cc;  (void) cls;  (void) dc;  (void) db;  (void) lz;  (void) st;  (void) ae;  (void) aq;  (void) ac;
 
@@ -47,6 +47,17 @@ void H_qpd_make( const H_qpd_v & D, tcx & X ) {
   h = h*9 + H_qpd_h_dc[__min(8,__max(0,dc-(1-1)))];
   h = h*5 + H_qpd_h_pc[__min(4,__max(0,pc-(1-1)))];
 
+  i = 0;
+  i = i*14 + H_qpd_i_aq[__min(13,__max(0,aq-(1-1)))];
+  i = i*14 + H_qpd_i_ac[__min(13,__max(0,ac-(1-1)))];
+  i = i*9 + H_qpd_i_cls[__min(8,__max(0,cls-(1-1)))];
+
+  j = 0;
+  j = j*10 + H_qpd_j_st[__min(9,__max(0,st-(1-1)))];
+  j = j*9 + H_qpd_j_dc[__min(8,__max(0,dc-(1-1)))];
+  j = j*9 + H_qpd_j_db[__min(8,__max(0,db-(1-1)))];
+  j = j*2 + ((lnz>0+(1-1)));
+
   s = 0;
   s = s*14 + H_qpd_s_aq[__min(13,__max(0,aq-(1-1)))];
 
@@ -68,7 +79,7 @@ void H_qpd_make( const H_qpd_v & D, tcx & X ) {
 
   g = 0;
   g = g*5 + H_qpd_g_lz[__min(6,__max(0,lz-(1-1)))];
-  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.s = s;  X.f = f;  X.m = m;  X.w = w;  X.t = t;
+  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.i = i;  X.j = j;  X.s = s;  X.f = f;  X.m = m;  X.w = w;  X.t = t;
   X.n = n;  X.g = g;
 }
 

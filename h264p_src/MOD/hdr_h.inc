@@ -18,6 +18,10 @@ static const byte H_hdr_g_pos[3+1]={ 0,1,2,3 };
 static const byte H_hdr_h_sty[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 
 
+static const byte H_hdr_j_fld[3+1]={ 0,1,2,3 };
+static const byte H_hdr_j_p2[7+1]={ 0,1,2,3,4,5,6,7 };
+
+
 
 
 
@@ -28,6 +32,8 @@ static const int H_hdr_rB = (0+0) * (1);
 static const int H_hdr_rC = (0+0) * (1);
 static const int H_hdr_rE = (0+0) * (1);
 static const int H_hdr_rH = (64+0) * (1);
+static const int H_hdr_rI = (64+0) * (1);
+static const int H_hdr_rJ = (64+0) * (1);
 static const int H_hdr_rD = (255+0) * (1);
 static const int H_hdr_rT = (32+0) * (1);
 static const int H_hdr_rG = (90+0) * (1);
@@ -41,6 +47,8 @@ static const int H_hdr_mwB = (4+0) * (1);
 static const int H_hdr_mwC = (0+0) * (1);
 static const int H_hdr_mwE = (0+0) * (1);
 static const int H_hdr_mwH = (0+0) * (1);
+static const int H_hdr_mwI = (0+0) * (1);
+static const int H_hdr_mwJ = (0+0) * (1);
 static const int H_hdr_mwD = (12+0) * (1);
 static const int H_hdr_mwT = (0+0) * (1);
 static const int H_hdr_mwG = (0+0) * (1);
@@ -52,6 +60,8 @@ static const int H_hdr_hA = (24+0) * (1);
 static const int H_hdr_hB = (24+0) * (1);
 static const int H_hdr_hE = (24+0) * (1);
 static const int H_hdr_hH = (24+0) * (1);
+static const int H_hdr_hI = (24+0) * (1);
+static const int H_hdr_hJ = (24+0) * (1);
 static const int H_hdr_hD = (24+0) * (1);
 static const int H_hdr_hS = (24+0) * (1);
 static const int H_hdr_hF = (24+0) * (1);
@@ -68,6 +78,8 @@ static const long long H_hdr_e_Volume = tc_vmul(tc_vmul(1, (1<<4)), 4); // 64
 static const long long H_hdr_f_Volume = tc_vmul(1, (1<<8)); // 256
 static const long long H_hdr_g_Volume = tc_vmul(tc_vmul(1, 8), 4); // 32
 static const long long H_hdr_h_Volume = tc_vmul(tc_vmul(1, (1<<6)), 10); // 640
+static const long long H_hdr_i_Volume = tc_vmul(1, (1<<8)); // 256
+static const long long H_hdr_j_Volume = tc_vmul(tc_vmul(1, 4), 8); // 32
 static const long long H_hdr_m_Volume = 1; // 1
 static const long long H_hdr_n_Volume = tc_vmul(1, (1<<8)); // 256
 static const long long H_hdr_s_Volume = tc_vmul(1, (1<<8)); // 256
@@ -85,6 +97,8 @@ struct H_hdr_T {
   cm_cnt2 H_hdr_D[tc_rows(H_hdr_d_Volume, H_hdr_hD) * H_hdr_ND];
   cm_cnt2 H_hdr_E[tc_rows(H_hdr_e_Volume, H_hdr_hE) * H_hdr_ND];
   cm_cnt2 H_hdr_H[tc_rows(H_hdr_h_Volume, H_hdr_hH) * H_hdr_ND];
+  cm_cnt2 H_hdr_I[tc_rows(H_hdr_i_Volume, H_hdr_hI) * H_hdr_ND];
+  cm_cnt2 H_hdr_J[tc_rows(H_hdr_j_Volume, H_hdr_hJ) * H_hdr_ND];
   cm_cnt H_hdr_MT[tc_rows(H_hdr_t_Volume, H_hdr_hT) * H_hdr_MND];
   i16 H_hdr_S[tc_rows(H_hdr_s_Volume, H_hdr_hS) * H_hdr_ND * H_hdr_qs];
   u8 H_hdr_SC[tc_rows(H_hdr_s_Volume, H_hdr_hS) * H_hdr_ND * H_hdr_qs];
@@ -111,6 +125,8 @@ struct H_hdr_T {
                               + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H_hdr_d_Volume, H_hdr_hD) * H_hdr_ND)
                               + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H_hdr_e_Volume, H_hdr_hE) * H_hdr_ND)
                               + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H_hdr_h_Volume, H_hdr_hH) * H_hdr_ND)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H_hdr_i_Volume, H_hdr_hI) * H_hdr_ND)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H_hdr_j_Volume, H_hdr_hJ) * H_hdr_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(tc_rows(H_hdr_t_Volume, H_hdr_hT) * H_hdr_MND)
                               + (unsigned long long)sizeof(i16) * (unsigned long long)(tc_rows(H_hdr_s_Volume, H_hdr_hS) * H_hdr_ND * H_hdr_qs)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_hdr_s_Volume, H_hdr_hS) * H_hdr_ND * H_hdr_qs)
