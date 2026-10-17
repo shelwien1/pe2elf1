@@ -41,7 +41,7 @@ static const byte H_nal_s_fld[31+1]={ 0,1,1,2,3,3,3,3,3,3,4,4,4,4,4,4,5,5,5,5,5,
 
 static const byte H_nal_t_fld[31+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31 };
 
-static const byte H_nal_w_fld[31+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31 };
+static const byte H_nal_w_fld[31+1]={ 0,0,1,2,2,2,3,3,4,5,5,5,6,6,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7 };
 
 
 static const int H_nal_rA = (192+0) * (1);
@@ -109,7 +109,7 @@ static const long long H_nal_m_Volume = tc_vmul(1, 4); // 4
 static const long long H_nal_n_Volume = tc_vmul(1, 32); // 32
 static const long long H_nal_s_Volume = tc_vmul(1, 6); // 6
 static const long long H_nal_t_Volume = tc_vmul(1, 32); // 32
-static const long long H_nal_w_Volume = tc_vmul(1, 32); // 32
+static const long long H_nal_w_Volume = tc_vmul(1, 8); // 8
 
 struct H_nal_T { 
 #undef USE_NEW

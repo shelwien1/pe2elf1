@@ -29,7 +29,7 @@ Index b
 Index c
  c_lz: lz, 1!111111
  c_st: st, 1!111111111
- c_db: db, 1!11100110
+ c_db: db, 1!11110110
 
 Index d
  d_st: st, 1!111111111

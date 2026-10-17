@@ -45,7 +45,6 @@ static const byte H_ipm_s_pq[12+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12 };
 
 
 static const byte H_ipm_w_mp[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H_ipm_w_dm[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 static const byte H_ipm_w_ds[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 
 
@@ -114,7 +113,7 @@ static const long long H_ipm_m_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 1); /
 static const long long H_ipm_n_Volume = tc_vmul(1, 1); // 1
 static const long long H_ipm_s_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 9), 13); // 351
 static const long long H_ipm_t_Volume = tc_vmul(1, 1); // 1
-static const long long H_ipm_w_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 10), 10), 10); // 3000
+static const long long H_ipm_w_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 10), 2), 10); // 600
 
 struct H_ipm_T { 
 #undef USE_NEW

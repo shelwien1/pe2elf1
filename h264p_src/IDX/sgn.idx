@@ -108,7 +108,7 @@ Number rC, 1, 0!00000011
 Number rE, 1, 0!01000000
 Number rH, 1, 0!01000000
 Number rI, 1, 0!01000000
-Number rJ, 1, 0!01000000
+Number rJ, 1, 0!11100000
 Number rK, 1, 0!01000000
 Number rL, 1, 0!01000000
 Number rD, 1, 0!01101111

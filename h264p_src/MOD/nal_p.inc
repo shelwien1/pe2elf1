@@ -68,7 +68,7 @@ void H_nal_make( const H_nal_v & D, tcx & X ) {
   m = m*4 + H_nal_m_fld[__min(31,__max(0,fld-(1-1)))];
 
   w = 0;
-  w = w*32 + H_nal_w_fld[__min(31,__max(0,fld-(1-1)))];
+  w = w*8 + H_nal_w_fld[__min(31,__max(0,fld-(1-1)))];
 
   t = 0;
   t = t*32 + H_nal_t_fld[__min(31,__max(0,fld-(1-1)))];
