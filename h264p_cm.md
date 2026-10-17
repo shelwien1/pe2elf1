@@ -839,9 +839,14 @@ skp, mbt, cbp, ipm, mvs, qpd, cbf, sig, lvl, sgn, pcm) are oggcomp's
 (A-E, H-L, one index each, each counter with an adaptive-rate and a fast
 fixed-rate probability), an APM (index s), three mixers selected by indices m, w and
 s, a final mixer and a second APM (index f); where CABAC codes the element,
-the probability of CABAC's own context state is one more mixer input. Coefficients are coded count first (the number of nonzero
-coefficients, then the significance of each position knowing how many are
-left, the levels backwards, the signs).
+the probability of CABAC's own context state is one more mixer input.
+Where the model has a guess at a number (a hint: a level, a count, an mvd,
+a QP delta), each decision of the number's cascade also sees what the
+hint's own cascade decides there while the two agree, or which side of the
+hint the number went, through counters of its own. Coefficients are coded
+count first (the number of nonzero coefficients, then the significance of
+each position knowing how many are left, the levels backwards, the
+signs).
 
 **A decoder in the loop** (recon.inc): the model reconstructs the pictures
 of 8-bit 4:2:0 frame streams without scaling matrices (POC, reference
@@ -856,17 +861,23 @@ their gain on test/002:
 | texture of the prediction; sign prediction (the first signs searched for the best continuity of the block with its surroundings, section 7) | coefficients, cbp | 75 KB* |
 | maps of the last picture (energy, change), DIMD | most | 44 KB* |
 | skip prediction: how its luma continues the samples above and left (edge miss), how its motion predicts them (template matching), in B slices how far its two predictions are apart; the best template match | skip, mb_type | 36 KB |
+| the intra estimate's reference block matched by the macroblocks above, left and above right whole (a 16-sample template, where a vector to code does better with 2), and searched again before each later luma block of an Intra4x4/8x8 macroblock (the blocks decoded added to the template) and before the chroma (against the luma, decoded by then) | count, significance, levels, signs | 18 KB |
 | motion vector by template matching search, the vector zero, col's mvd | mvd | 17 KB |
+| hints: the intra estimate's level and count, the template match's mvd, the adaptive quantization line's QP delta | levels, count, mvd, qp delta | 13 KB |
 | edge miss of the prediction, edge-projected level estimates | coefficients | 13 KB* |
-| x264's adaptive quantization: a per-picture line of QP against log2 energy, from the energy of the macroblock's prediction | qp delta | 11 KB |
-| the best intra mode in the reference | intra modes | 4 KB |
+| the sign of mb_qp_delta by the line's delta, and by whether the magnitude is the line's | qp delta | 12 KB |
+| x264's adaptive quantization: a per-picture line of QP against log2 energy, from the energy of the macroblock's prediction (of an intra macroblock's proxy, on a line of its own) | qp delta | 12 KB |
 | how far to trust the intra estimate: the template match of its vector, then how far the luma decoded so far is from it | coefficients, intra modes | 9 KB |
+| the best intra mode in the reference | intra modes | 4 KB |
+| P pictures: the coefficients of the block the vector points at in the reference (a copy of the last picture's), moved and still blocks apart; for cbp, the 4x4 blocks with coefficients under it | coefficients, cbp | 2 KB |
+| ref_idx: the reference (of the first eight) the template matches best | ref_idx | 1 KB |
 
 Without the decoder: the significance of the eight positions before (12 KB
-with the frequencies left of and above), the last levels and signs coded
-in the block and the higher-frequency levels (4 KB), a second, fast
-probability in each counter (12 KB), a third mixer (4 KB) and counters
-seven to ten (19 KB; four to six were 16 KB).
+with the frequencies left of and above; the same position in the blocks to
+the left and above, 1 KB), the last levels and signs coded in the block and
+the higher-frequency levels (4 KB), a second, fast probability in each
+counter (12 KB), a third mixer (4 KB) and counters seven to ten (19 KB;
+four to six were 16 KB).
 
 \* measured when added, with four counters and before the later contexts.
 
@@ -874,29 +885,37 @@ seven to ten (19 KB; four to six were 16 KB).
 
 | element | CABAC | model | |
 |---|---:|---:|---:|
-| skip, end | 336,175 | 225,593 | −32.9% |
-| mb_type | 365,120 | 265,314 | −27.3% |
-| cbp, transform_size_8x8_flag | 216,100 | 155,411 | −28.1% |
-| intra modes | 299,858 | 240,100 | −19.9% |
-| sub_mb_type, ref_idx, mvd | 504,865 | 426,907 | −15.4% |
-| mb_qp_delta | 271,297 | 208,836 | −23.0% |
-| coded_block_flag, significance (count, significance) | 910,721 | 726,942 | −20.2% |
-| levels | 302,611 | 233,687 | −22.8% |
-| signs | 329,382 | 189,720 | −42.4% |
-| all | 3,603,993 | 2,679,553 | −25.6% |
+| skip, end | 336,175 | 225,095 | −33.0% |
+| mb_type | 365,120 | 265,275 | −27.3% |
+| cbp, transform_size_8x8_flag | 216,100 | 154,648 | −28.4% |
+| intra modes | 299,858 | 239,457 | −20.1% |
+| sub_mb_type, ref_idx, mvd | 504,865 | 423,528 | −16.1% |
+| mb_qp_delta | 271,297 | 194,381 | −28.4% |
+| coded_block_flag, significance (count, significance) | 910,721 | 715,773 | −21.4% |
+| levels | 302,611 | 221,491 | −26.8% |
+| signs | 329,382 | 183,762 | −44.2% |
+| macroblock syntax | 3,536,129 | 2,623,410 | −25.8% |
+| whole streams (H.264 against compressed) | 3,603,993 | 2,630,454 | −27.0% |
 
-The model tables take 209 MB.
+The model tables take 168 MB.
 
 **Tried, no gain:** the CABAC-style significance/last binarization instead
-of the count; neighbours' same-position significance; the mirrored list 0
-vector for list 1 mvds; template matching per reference for ref_idx; a
-motion split guess from template matching for mb_type; the second
-reference's agreement for P skip; averaging the intra proxy over two
-references; the proxy's best Intra16x16 and chroma modes; bi-prediction
-disagreement per block for B residuals; the MB-tree residual at the
-motion-compensated macroblock; the reference's QP where a block's motion
-points; histories of skip flags and mb_qp_delta; a final mixer selected
-by context; longer significance histories (12, hashed).
+of the count; the mirrored list 0 vector for list 1 mvds (as a context, and
+as where list 1's search starts); a motion split guess from template
+matching for mb_type, and the spread of the neighbours' vectors (better on
+test/002, as much worse on the other test streams); the second reference's
+agreement for P skip, and the skip flags of the last picture where the
+skip vector points; the intra proxy from the best of several references,
+or averaged over two; its brightness corrected by the samples around; its
+best mode with the decoder's edges (the proxy's own surroundings do much
+better); a wider search for it; thicker templates for the other searches;
+the proxy's best Intra16x16 and chroma modes; bi-prediction disagreement
+per block for B residuals; the neighbours' distance from the adaptive
+quantization line; the reference's QP where a block's motion points;
+richer contexts for the mantissa (better on test/002, worse on the rest);
+edge-projected levels, or the levels of the block the vector points at, as
+hints for inter blocks; histories of skip flags and mb_qp_delta; a final
+mixer selected by context; longer significance histories (12, hashed).
 
 ## Appendix A: single-context experiments
 
