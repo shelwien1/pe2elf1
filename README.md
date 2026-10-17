@@ -95,7 +95,7 @@ A NAL unit that does not come out the same is stored verbatim, as in the TSV
 file (below); a CRC-32 at the end checks the whole stream.
 
 The model is binary context mixing, after oggcomp (Ogg Vorbis): each value
-is a sequence of binary decisions, each predicted by eight adaptive counters
+is a sequence of binary decisions, each predicted by ten adaptive counters
 under different contexts (each with a slow and a fast probability), an
 APM, three mixers (and a fourth that mixes them) and a second APM, all selected by the decision's place in the value; where
 the stream is CABAC, the probability CABAC's own context state gives a bin
@@ -136,17 +136,17 @@ On the test streams (`-v` shows where the bits go):
 
 | stream | H.264 | compressed | |
 |---|---:|---:|---:|
-| 00 | 815,140 | 595,467 | 73.1% |
-| 01 | 1,095,103 | 840,828 | 76.8% |
-| 02 | 28,143 | 26,681 | 94.8% |
-| 03 | 1,181,369 | 821,385 | 69.5% |
-| 04 | 484,238 | 400,155 | 82.6% |
+| 00 | 815,140 | 594,286 | 72.9% |
+| 01 | 1,095,103 | 839,458 | 76.7% |
+| 02 | 28,143 | 26,688 | 94.8% |
+| 03 | 1,181,369 | 819,522 | 69.4% |
+| 04 | 484,238 | 399,599 | 82.5% |
 
-The macroblock syntax alone takes 74.5% of what its CABAC coding takes
-(from 3,603,993 to 2,684,516 bytes over these streams; `h264p_cm.md`
+The macroblock syntax alone takes 74.3% of what its CABAC coding takes
+(from 3,603,993 to 2,679,553 bytes over these streams; `h264p_cm.md`
 section 9 has the figures by syntax element). Speed is around
 0.06-0.1 MB of H.264 per second both ways, and the model tables take about
-280 MB.
+210 MB.
 
 ### TSV
 

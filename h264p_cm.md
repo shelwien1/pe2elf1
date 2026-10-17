@@ -835,8 +835,8 @@ sections 3-8 with these changes and additions.
 **Structure.** The model codes the syntax straight from `SliceCoder`, no
 TSV in between (section 8's "third backend"). Thirteen families (nal, hdr,
 skp, mbt, cbp, ipm, mvs, qpd, cbf, sig, lvl, sgn, pcm) are oggcomp's
-`tc_fam`, declared in IDX: each decision is predicted by eight counters
-(A-E, H-J, one index each, each counter with an adaptive-rate and a fast
+`tc_fam`, declared in IDX: each decision is predicted by ten counters
+(A-E, H-L, one index each, each counter with an adaptive-rate and a fast
 fixed-rate probability), an APM (index s), three mixers selected by indices m, w and
 s, a final mixer and a second APM (index f); where CABAC codes the element,
 the probability of CABAC's own context state is one more mixer input. Coefficients are coded count first (the number of nonzero
@@ -866,7 +866,7 @@ Without the decoder: the significance of the eight positions before (12 KB
 with the frequencies left of and above), the last levels and signs coded
 in the block and the higher-frequency levels (4 KB), a second, fast
 probability in each counter (12 KB), a third mixer (4 KB) and counters
-seven and eight (15 KB; four to six were 16 KB).
+seven to ten (19 KB; four to six were 16 KB).
 
 \* measured when added, with four counters and before the later contexts.
 
@@ -874,18 +874,18 @@ seven and eight (15 KB; four to six were 16 KB).
 
 | element | CABAC | model | |
 |---|---:|---:|---:|
-| skip, end | 336,175 | 226,595 | −32.6% |
-| mb_type | 365,120 | 265,695 | −27.2% |
-| cbp, transform_size_8x8_flag | 216,100 | 155,713 | −27.9% |
-| intra modes | 299,858 | 241,256 | −19.5% |
-| sub_mb_type, ref_idx, mvd | 504,865 | 427,247 | −15.4% |
-| mb_qp_delta | 271,297 | 208,826 | −23.0% |
-| coded_block_flag, significance (count, significance) | 910,721 | 727,426 | −20.1% |
-| levels | 302,611 | 234,137 | −22.6% |
-| signs | 329,382 | 190,540 | −42.2% |
-| all | 3,603,993 | 2,684,516 | −25.5% |
+| skip, end | 336,175 | 225,593 | −32.9% |
+| mb_type | 365,120 | 265,314 | −27.3% |
+| cbp, transform_size_8x8_flag | 216,100 | 155,411 | −28.1% |
+| intra modes | 299,858 | 240,100 | −19.9% |
+| sub_mb_type, ref_idx, mvd | 504,865 | 426,907 | −15.4% |
+| mb_qp_delta | 271,297 | 208,836 | −23.0% |
+| coded_block_flag, significance (count, significance) | 910,721 | 726,942 | −20.2% |
+| levels | 302,611 | 233,687 | −22.8% |
+| signs | 329,382 | 189,720 | −42.4% |
+| all | 3,603,993 | 2,679,553 | −25.6% |
 
-The model tables take 277 MB.
+The model tables take 209 MB.
 
 **Tried, no gain:** the CABAC-style significance/last binarization instead
 of the count; neighbours' same-position significance; the mirrored list 0
