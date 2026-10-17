@@ -712,8 +712,13 @@ struct Model {
       mv_pskip();
     int tm = rec_.tm_miss(mi_->rf, mi_->mv);
     tm_ = tm < 0 ? 0 : 1 + tc_clamp(tc_qlog(tm), 0, 15);
-    // B: how far apart the two predictions of the skip motion are
-    int bd = sc_->stype_ == kB ? rec_.bi_diff(mi_->rf, mi_->mv) : -1;
+    // B: how far apart the two predictions of the skip motion are; P: how
+    // far the skip vector is from the best template match's
+    int bd = -1;
+    if (sc_->stype_ == kB)
+      bd = rec_.bi_diff(mi_->rf, mi_->mv);
+    else if (tmb_ok_)
+      bd = abs(tmb_[0] - mi_->mv[0][0][0]) + abs(tmb_[1] - mi_->mv[0][0][1]);
     bd_ = bd < 0 ? 0 : 1 + tc_clamp(tc_qlog(bd), 0, 15);
     int ms = rec_.skip_miss(mi_->rf, mi_->mv);
     memset(mi_->mv, 0, sizeof mi_->mv);
