@@ -451,6 +451,7 @@ struct Recon {
     res.m4 = 0;
     res.m8 = res.mdc = res.mcdc = res.mcac[0] = res.mcac[1] = 0;
     mb_prepared = mb_dc = false;
+    skip_in = false;
     mb_done4 = 0;
     mb_done8 = 0;
     mb_cdone[0] = mb_cdone[1] = 0;
@@ -904,6 +905,10 @@ struct Recon {
   int8_t mb_rf[2][4];
   int16_t mb_mv[2][16][2];
   bool mb_prepared = false, mb_dc = false;
+  // skip_miss put the prediction by this motion in the picture
+  bool skip_in = false;
+  int8_t skip_rf[2][4];
+  int16_t skip_mv[2][16][2];
   uint16_t mb_done4 = 0;  // 4x4 blocks (luma4x4BlkIdx) done
   uint8_t mb_done8 = 0;
   int mb_dcr[16];         // Intra16x16 DC, scaled (raster)
@@ -935,8 +940,9 @@ struct Recon {
     D.intra = cls >= 6;
     if (cls == 8) return;
     if (cls < 6) {
-      inter(addr, mb_rf, mb_mv, cur->y.data() + my * w + mx, cur->u.data() + my / 2 * cw + mx / 2,
-            cur->v.data() + my / 2 * cw + mx / 2);
+      if (!skip_in || memcmp(skip_rf, mb_rf, sizeof skip_rf) || memcmp(skip_mv, mb_mv, sizeof skip_mv))
+        inter(addr, mb_rf, mb_mv, cur->y.data() + my * w + mx, cur->u.data() + my / 2 * cw + mx / 2,
+              cur->v.data() + my / 2 * cw + mx / 2);
       return;
     }
     if (cls == 7) pred16(addr, i16m);
@@ -1508,6 +1514,9 @@ struct Recon {
     int w = cur->w, cw = w / 2, mx = mb_addr % cur->mbw * 16, my = mb_addr / cur->mbw * 16;
     inter(mb_addr, rf, mv, cur->y.data() + my * w + mx, cur->u.data() + my / 2 * cw + mx / 2,
           cur->v.data() + my / 2 * cw + mx / 2);
+    skip_in = true;
+    memcpy(skip_rf, rf, sizeof skip_rf);
+    memcpy(skip_mv, mv, sizeof skip_mv);
     return miss(0, 0, 0, 16);
   }
   // Template matching: the decoded samples above (2 rows) and to the left
@@ -1562,22 +1571,32 @@ struct Recon {
     bool left = bx == 0 && x0 > 0 && db[mb_addr - 1].slice >= 0;
     const RPic* ref = r >= 0 && r < nlist[l] ? list[l][r] : nullptr;
     if ((!top && !left) || !ref) return false;
-    auto cost = [&](int vx, int vy) {
-      uint8_t p[16 * 16];
-      int s = 0;
-      if (top) {
-        mc_luma(ref, x0, y0 - TM_T, bw, TM_T, vx, vy, p);
-        const uint8_t* q = cur->y.data() + (y0 - TM_T) * w + x0;
-        for (int j = 0; j < TM_T; j++)
-          for (int i = 0; i < bw; i++) s += abs(q[j * w + i] - p[j * 16 + i]);
-      }
-      if (left) {
-        mc_luma(ref, x0 - TM_T, y0, TM_T, bh, vx, vy, p);
-        const uint8_t* q = cur->y.data() + y0 * w + x0 - TM_T;
-        for (int j = 0; j < bh; j++)
-          for (int i = 0; i < TM_T; i++) s += abs(q[j * w + i] - p[j * 16 + i]);
+    // the samples of a rectangle of the current picture against the
+    // reference displaced by (vx, vy): bilinear between whole samples (not
+    // the six taps of the prediction; fast)
+    const uint8_t *R = ref->y.data(), *Y = cur->y.data();
+    int W = ref->w, H = ref->h;
+    auto sad = [&](int xs, int ys, int rw, int rh, int vx, int vy) {
+      int ix = xs + (vx >> 2), iy = ys + (vy >> 2), fx = vx & 3, fy = vy & 3, s = 0;
+      int wa = (4 - fx) * (4 - fy), wb = fx * (4 - fy), wc = (4 - fx) * fy, wd = fx * fy;
+      bool inside = ix >= 0 && iy >= 0 && ix + rw < W && iy + rh < H;
+      for (int j = 0; j < rh; j++) {
+        const uint8_t* q = Y + (ys + j) * w + xs;
+        if (inside) {
+          const uint8_t *a = R + (iy + j) * W + ix, *c = a + W;
+          for (int i = 0; i < rw; i++) s += abs(q[i] - ((wa * a[i] + wb * a[i + 1] + wc * c[i] + wd * c[i + 1] + 8) >> 4));
+        } else {
+          const uint8_t *a = R + clip3(0, H - 1, iy + j) * W, *c = R + clip3(0, H - 1, iy + j + 1) * W;
+          for (int i = 0; i < rw; i++) {
+            int x1 = clip3(0, W - 1, ix + i), x2 = clip3(0, W - 1, ix + i + 1);
+            s += abs(q[i] - ((wa * a[x1] + wb * a[x2] + wc * c[x1] + wd * c[x2] + 8) >> 4));
+          }
+        }
       }
       return s;
+    };
+    auto cost = [&](int vx, int vy) {
+      return (top ? sad(x0, y0 - TM_T, bw, TM_T, vx, vy) : 0) + (left ? sad(x0 - TM_T, y0, TM_T, bh, vx, vy) : 0);
     };
     int vx = mv[0], vy = mv[1], best = cost(vx, vy);
     // other places to start from
@@ -1586,10 +1605,22 @@ struct Recon {
       int c = cost(cand[k][0], cand[k][1]);
       if (c < best) best = c, vx = cand[k][0], vy = cand[k][1];
     }
-    for (int step = 4; step >= 1; step >>= 1) {
-      int cx = vx, cy = vy, rr = step == 4 ? 2 : 1;
-      for (int dy = -rr; dy <= rr; dy++)
-        for (int dx = -rr; dx <= rr; dx++) {
+    // a small diamond in whole samples while it finds better (up to 4
+    // steps), then the 8 halves and quarters around
+    static const int kD[4][2] = {{0, -1}, {-1, 0}, {1, 0}, {0, 1}};
+    for (int it = 0; it < 4 && best; it++) {
+      int cx = vx, cy = vy;
+      for (int k = 0; k < 4; k++) {
+        if (only_y && kD[k][0]) continue;
+        int c = cost(cx + kD[k][0] * 4, cy + kD[k][1] * 4);
+        if (c < best) best = c, vx = cx + kD[k][0] * 4, vy = cy + kD[k][1] * 4;
+      }
+      if (vx == cx && vy == cy) break;
+    }
+    for (int step = 2; step >= 1 && best; step >>= 1) {
+      int cx = vx, cy = vy;
+      for (int dy = -1; dy <= 1; dy++)
+        for (int dx = -1; dx <= 1; dx++) {
           if ((!dx && !dy) || (only_y && dx)) continue;
           int c = cost(cx + dx * step, cy + dy * step);
           if (c < best) best = c, vx = cx + dx * step, vy = cy + dy * step;
