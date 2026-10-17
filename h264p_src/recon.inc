@@ -1614,7 +1614,7 @@ struct Recon {
   // only; false where none of it is decoded.
   static constexpr int TM_T = 2;
   bool tm_search(int l, int r, int bx, int by, int bw, int bh, int* mv, bool only_y, const int (*cand)[2] = nullptr,
-                 int ncand = 0, int* miss = nullptr, int lambda = 0) const {
+                 int ncand = 0, int* miss = nullptr, int lambda = 0, int finest = 1) const {
     if (!active) return false;
     int mbw = cur->mbw, x0 = mb_addr % mbw * 16 + bx, y0 = mb_addr / mbw * 16 + by, w = cur->w;
     bool top = by == 0 && y0 > 0 && db[mb_addr - mbw].slice >= 0;
@@ -1669,7 +1669,7 @@ struct Recon {
       }
       if (vx == cx && vy == cy) break;
     }
-    for (int step = 2; step >= 1 && best; step >>= 1) {
+    for (int step = 2; step >= finest && best; step >>= 1) {
       int cx = vx, cy = vy;
       for (int dy = -1; dy <= 1; dy++)
         for (int dx = -1; dx <= 1; dx++) {

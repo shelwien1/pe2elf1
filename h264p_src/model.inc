@@ -710,7 +710,7 @@ struct Model {
     for (int j = 0; j < 3; j++)
       if (nbs[j].ref == 0) cand[nc][0] = nbs[j].mv[0], cand[nc][1] = nbs[j].mv[1], nc++;
     cand[nc][0] = cand[nc][1] = 0, nc++;
-    return rec_.tm_search(l, 0, 0, 0, 16, 16, mv, false, cand, nc, &miss);
+    return rec_.tm_search(l, 0, 0, 0, 16, 16, mv, false, cand, nc, &miss, 0, 2);
   }
   int skip_miss() {
     tm_ = tb_ = dh_ = bd_ = 0;
