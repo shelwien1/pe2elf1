@@ -2,3 +2,4 @@
 /_obj_linux/
 *.yuv
 /h264p
+__pycache__/
