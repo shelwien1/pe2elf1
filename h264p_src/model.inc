@@ -193,6 +193,13 @@ struct AqFit {
   }
 };
 
+// 16 x the quantizer's step of a QP (0.625 x 2^(qp/6))
+static INLINE int qstep16(int qp) {
+  static const int k[6] = {10, 11, 13, 14, 16, 18};
+  int q = qp < 0 ? 0 : qp;
+  return k[q % 6] << (q / 6);
+}
+
 // 16 x x264's lambda of a QP (x264_lambda_tab: 2^(qp/6 - 2), at least 1)
 static INLINE int x264_lam16(int qp) {
   static const int k16[6] = {16, 18, 20, 23, 25, 29};
@@ -1052,7 +1059,7 @@ struct Model {
         if (nz >= 0) D.col = 3 + nz;
       }
       int pt = mi_->cls == CL_INXN ? -1 : rec_.pred_texture(0, (b8 & 1) * 8, (b8 >> 1) * 8, 8);
-      D.pg = pt < 0 ? 0 : 1 + tc_clamp(tc_qlog(pt), 0, 15);
+      D.pg = pt < 0 ? 0 : 1 + tc_clamp(tc_qlog((int64_t)pt * 16 / qstep16(mi_->qp - qp_off_)), 0, 15);
       int ms = mi_->cls == CL_INXN ? -1 : rec_.edge_miss(0, (b8 & 1) * 8, (b8 >> 1) * 8, 8);
       D.em = ms < 0 ? 0 : 1 + tc_clamp(tc_qlog(ms), 0, 15);
       // intra: the levels the proxy picture would need in the block's modes
@@ -1904,11 +1911,15 @@ struct Model {
     int pt = g.kind == 0 ? rec_.pred_texture(g.plane, 0, 0, g.plane ? 8 : 16)
              : g.kind == 2 ? rec_.pred_texture(g.plane, g.x * 4, g.y * 4, 4)
                            : rec_.pred_texture(g.plane, g.x * 4, g.y * 4, g.kind == 3 ? 8 : 4);
-    int pg = pt < 0 ? 0 : 1 + tc_clamp(tc_qlog(pt), 0, 15);
-    // and how far it is from continuing its surroundings
+    // (for the count and the significance, against the quantizer's step)
+    int pga = pt < 0 ? 0 : 1 + tc_clamp(tc_qlog(pt), 0, 15);
+    int qs = qstep16(mi_->qp - qp_off_);
+    int pg = pt < 0 ? 0 : 1 + tc_clamp(tc_qlog((int64_t)pt * 16 / qs), 0, 15);
+    // and how far it is from continuing its surroundings (against the
+    // step too)
     int ms = g.kind == 0 ? rec_.edge_miss(g.plane, 0, 0, g.plane ? 8 : 16)
              : rec_.edge_miss(g.plane, g.x * 4, g.y * 4, g.kind == 3 ? 8 : 4);
-    int em = ms < 0 ? 0 : 1 + tc_clamp(tc_qlog(ms), 0, 15);
+    int em = ms < 0 ? 0 : 1 + tc_clamp(tc_qlog((int64_t)ms * 256 / qs), 0, 15);
     // an intra block: what its levels would be were the source what the
     // reference shows (Recon::proxy_levels), by scan position
     int plv[64];
@@ -2115,7 +2126,7 @@ struct Model {
     tc_stage = STG_LVL;
     int mag[64];
     int g1 = 0, e1 = 0, lhist = 0, lsum = 0, esum = 0;  // lhist: the last levels coded less 1 (up to 3), two bits each
-    H_lvl_v L = {cat, 0, 0, nc, 0, 0, 0, q, tc_qlog(cnt), md, 0, pg, em, 0};
+    H_lvl_v L = {cat, 0, 0, nc, 0, 0, 0, q, tc_qlog(cnt), md, 0, pga, em, 0};
     L.pq = pq;
     int abs_base = kAbsBase[cat];
     for (int k = 0; k < TC_NODE; k++) pr[k] = -1;
