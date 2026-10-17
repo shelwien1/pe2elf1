@@ -110,7 +110,7 @@ Index g
  g_oth: oth, 1!0
 
 Number rA, 1, 0!11111101
-Number rB, 1, 0!00000010
+Number rB, 1, 0!00000000
 Number rC, 1, 0!01000000
 Number rE, 1, 0!00000110
 Number rH, 1, 0!01000000

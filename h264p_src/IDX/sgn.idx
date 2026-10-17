@@ -91,7 +91,7 @@ Index g
  g_cg: cg, 1!0
 
 Number rA, 1, 0!11101011
-Number rB, 1, 0!00010000
+Number rB, 1, 0!11001101
 Number rC, 1, 0!00000011
 Number rE, 1, 0!01000000
 Number rH, 1, 0!01000000

@@ -76,7 +76,7 @@ Number rH, 1, 0!01000000
 Number rI, 1, 0!01000000
 Number rJ, 1, 0!01000000
 Number rD, 1, 0!11111111
-Number rT, 1, 0!00100000
+Number rT, 1, 0!00100100
 Number rG, 1, 0!01011010
 Number rS1, 1, 0!00110
 Number rS2, 1, 0!00110

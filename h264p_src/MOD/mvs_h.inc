@@ -59,7 +59,7 @@ static const byte H_mvs_w_nr[3+1]={ 0,1,2,3 };
 
 
 static const int H_mvs_rA = (253+0) * (1);
-static const int H_mvs_rB = (2+0) * (1);
+static const int H_mvs_rB = (0+0) * (1);
 static const int H_mvs_rC = (64+0) * (1);
 static const int H_mvs_rE = (6+0) * (1);
 static const int H_mvs_rH = (64+0) * (1);

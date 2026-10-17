@@ -21,7 +21,7 @@ Index a
 Index b
  b_st: st, 1!111111111
  b_cc: cc, 1!11111111
- b_nsk: nsk, 1!1011
+ b_nsk: nsk, 1!0000
  b_td: td, 1!1111111111111111
 
 Index c
@@ -44,7 +44,7 @@ Index h
  h_st: st, 1!010000000
  h_dh: dh, 1!111111111
  h_tb: tb, 1!1111111111111111
- h_nsk: nsk, 1!0111
+ h_nsk: nsk, 1!1101
  h_bd: bd, 1!1111111111111111
 
 Index i
@@ -104,7 +104,7 @@ Number lrm, 1, 0!01100
 Number mbm, 1, 0!00000000
 Number mwA, 1, 0!00010000
 Number mwB, 1, 0!00000001
-Number mwC, 1, 0!00000000
+Number mwC, 1, 0!00100000
 Number mwE, 1, 0!00000000
 Number mwH, 1, 0!00000000
 Number mwI, 1, 0!00000000
@@ -112,7 +112,7 @@ Number mwJ, 1, 0!00000000
 Number mwD, 1, 0!00000000
 Number mwT, 1, 0!00000000
 Number mwG, 1, 0!00000000
-Number bw, 1, 0!01000
+Number bw, 1, 0!01100
 Number qs, 1, 3!0010000
 Number qf, 1, 3!0010110
 Number mb, 1, 0!00010110
