@@ -33,7 +33,7 @@ struct H_hdr_v { int tag, fld, p1, p2, pos, p1r, sty; };
 struct H_skp_v { int st, a3, b3, col, c9, cd, run, cnt, eq, lf, af, td, en, sm, tm, tb, bd, qc; };
 struct H_mbt_v { int st, ca, cb, cc, nsk, en, td, sm, tm, tb, dh, bd, qc; };
 struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg, tp, em, pq; };
-struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm, pr, dr, pq, mh; };
+struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm, pr, dr, pq, mh, mc; };
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, zd, cq, tq; };
 struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac; };
 struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn, pq, ch; };
@@ -1107,6 +1107,19 @@ struct Model {
     D.blk = blk;
     D.pv = prev_mode_;
     D.col = col_ && col_->cls == CL_INXN ? col_->modes[y * 4 + x] : 9;
+    // the mode of the block above right, where decoded already (10 none)
+    D.mc = 10;
+    {
+      int tx = x + (k8 ? 2 : 1), ty = y - 1;
+      bool ok = ty < 0 || tx <= 3;
+      if (ok && ty >= 0) ok = (k8 ? (ty >> 1) * 2 + (tx >> 1) : (ty >> 1) * 8 + (tx >> 1) * 4 + (ty & 1) * 2 + (tx & 1)) < blk;
+      if (ok) {
+        int ic;
+        bool d2 = false;
+        const MbState* nc = sc_->nb4(tx, ty, ic);
+        D.mc = nb_mode(nc, ic, d2);
+      }
+    }
     int strength;
     D.dm = rec_.dimd(addr_, x * 4, y * 4, k8 ? 8 : 4, strength);
     D.ds = strength ? 1 + tc_clamp(tc_qlog(strength) - 6, 0, 8) : 0;
@@ -1175,6 +1188,7 @@ struct Model {
     D.dm = rec_.dimd(addr_, 0, 0, 16, strength);
     D.ds = strength ? 1 + tc_clamp(tc_qlog(strength) - 6, 0, 8) : 0;
     D.pm = 9;
+    D.mc = 10;
     D.pr = D.dr = 8;
     tcx X;
     H_ipm_make(D, X);
