@@ -505,6 +505,9 @@ struct Model {
   const MbCol* col_ = nullptr;
   int sub_[4] = {};
   int pmv_[2] = {};  // proxy_mv()
+  int prx_v_[2] = {};       // the proxy's vector (quarter samples), as searched again (block)
+  int prx_blk_ = 0;         // the luma block it was last searched for
+  bool prx_chroma_ = false;  // and whether for the chroma
   int pxq_ = 0;      // proxy_mv(): how well its vector matches the samples around (1 + tc_qlog, 0 not known)
   bool pmv_ok_ = false;
   std::vector<int16_t> pxv_;  // the vectors of the current picture's proxies (INT16_MIN none)
@@ -633,6 +636,8 @@ struct Model {
     sm_ = tm_ = tb_ = dh_ = bd_ = 0;
     tmb_ok_ = false;
     pmv_ok_ = false;
+    prx_chroma_ = false;
+    prx_blk_ = 0;
     mb_open_ = true;
     cnt_++;
   }
@@ -972,6 +977,8 @@ struct Model {
       pxv_[addr_ * 2 + 1] = (int16_t)tc_clamp(p[1], -32767, 32767);
     }
     rec_.proxy_build(p);
+    prx_v_[0] = p[0];
+    prx_v_[1] = p[1];
     pmv_[0] = (p[0] + 2) >> 2;
     pmv_[1] = (p[1] + 2) >> 2;
   }
@@ -1814,6 +1821,26 @@ struct Model {
     if (mi_->cls >= CL_INXN && mi_->cls != CL_PCM && sc_->chroma_ == 1) {
       proxy_mv();
       int qp = mi_->qp - qp_off_;
+      // the proxy again: before the chroma against the luma, decoded by
+      // then (that alone), before each later luma block of an Intra4x4/8x8
+      // macroblock with the blocks decoded so far added to the template
+      if ((int)pxv_.size() == size_ * 2 && pxv_[addr_ * 2] != INT16_MIN) {
+        int inner = 0;
+        if (g.plane && !prx_chroma_) {
+          prx_chroma_ = true;
+          rec_.luma_finish(qp, mi_->t8);
+          inner = 1;
+        } else if (!g.plane && mi_->cls == CL_INXN && (cat == 2 || cat == 5) && idx > prx_blk_) {
+          prx_blk_ = idx;
+          inner = 2;
+        }
+        int p[2] = {prx_v_[0], prx_v_[1]};
+        if (inner && rec_.tm_search(-1, 0, 0, 0, 16, 16, p, false, nullptr, 0, nullptr, 0, 1, inner)) {
+          rec_.proxy_build(p);
+          prx_v_[0] = p[0];
+          prx_v_[1] = p[1];
+        }
+      }
       if (g.kind == 0)
         pok = rec_.proxy_dc(g.plane, g.plane ? rec_.chroma_qp_of(g.plane - 1, qp) : qp, plv);
       else

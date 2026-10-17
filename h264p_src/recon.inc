@@ -1004,6 +1004,19 @@ struct Recon {
       if (mb_t8 && !(mb_done8 >> blk & 1)) add8(blk, qp);
     }
   }
+  // the luma of the macroblock, all of it (its coefficients coded; t8
+  // known by then, where mb_t8 may be from before)
+  void luma_finish(int qp, int t8) {
+    if (!active || !mb_prepared || mb_cls == 8) return;
+    if (mb_cls == 6) luma_ready(t8 ? 3 : 15, qp);
+    if (t8) {
+      for (int b8 = 0; b8 < 4; b8++)
+        if (!(mb_done8 >> b8 & 1)) add8(b8, qp);
+    } else {
+      for (int b = 0; b < 16; b++)
+        if (!(mb_done4 >> b & 1)) add4b(b, qp);
+    }
+  }
   // chroma: the DC of a component (2x2 Hadamard), scaled
   void dcc(int c, int qpc) {
     mb_cdc[c] = true;
@@ -1100,14 +1113,7 @@ struct Recon {
       for (int i = 0; i < 64; i++) U[(i >> 3) * cw + (i & 7)] = (uint8_t)pcm_s[256 + i];
       for (int i = 0; i < 64; i++) V[(i >> 3) * cw + (i & 7)] = (uint8_t)pcm_s[320 + i];
     } else {
-      if (cls == 6) luma_ready(t8 ? 3 : 15, qp);
-      if (t8) {
-        for (int b8 = 0; b8 < 4; b8++)
-          if (!(mb_done8 >> b8 & 1)) add8(b8, qp);
-      } else {
-        for (int b = 0; b < 16; b++)
-          if (!(mb_done4 >> b & 1)) add4b(b, qp);
-      }
+      luma_finish(qp, t8);
       // the chroma blocks left
       for (int c = 0; c < 2; c++)
         for (int b = 0; b < 4; b++)
@@ -1626,16 +1632,24 @@ struct Recon {
   // mean absolute difference there. l < 0: on proxy_pic, with 16 rows and
   // columns and the block above right too (the proxy wants the content to
   // match, a vector to code wants a thin template). The template outside the
-  // macroblock only; false where none of it is decoded.
+  // macroblock only, but for inner 1: the block itself, decoded, alone; 2:
+  // and the blocks of the macroblock decoded so far. False where none of it
+  // is decoded.
   static constexpr int TM_T = 2, TM_TP = 16;
   bool tm_search(int l, int r, int bx, int by, int bw, int bh, int* mv, bool only_y, const int (*cand)[2] = nullptr,
-                 int ncand = 0, int* miss = nullptr, int lambda = 0, int finest = 1) const {
+                 int ncand = 0, int* miss = nullptr, int lambda = 0, int finest = 1, int inner = 0) const {
     if (!active) return false;
     int mbw = cur->mbw, x0 = mb_addr % mbw * 16 + bx, y0 = mb_addr / mbw * 16 + by, w = cur->w;
     bool top = by == 0 && y0 > 0 && db[mb_addr - mbw].slice >= 0;
     bool left = bx == 0 && x0 > 0 && db[mb_addr - 1].slice >= 0;
     const RPic* ref = l < 0 ? proxy_pic() : r >= 0 && r < nlist[l] ? list[l][r] : nullptr;
-    if ((!top && !left) || !ref) return false;
+    if (inner == 1) top = left = false;
+    int ninner = inner == 1 ? bw * bh : 0;
+    if (inner == 2) {
+      for (int b = 0; b < 16; b++) ninner += (mb_done4 >> b & 1) * 16;
+      for (int b8 = 0; b8 < 4; b8++) ninner += (mb_done8 >> b8 & 1) * 64;
+    }
+    if ((!top && !left && !ninner) || !ref) return false;
     // the samples of a rectangle of the current picture against the
     // reference displaced by (vx, vy): bilinear between whole samples (not
     // the six taps of the prediction; fast)
@@ -1663,9 +1677,19 @@ struct Recon {
     const int px = mv[0], py = mv[1];
     const int T = l < 0 ? TM_TP : TM_T;
     bool tr = l < 0 && top && x0 + bw + T <= w && mb_addr % mbw + 1 < mbw && db[mb_addr - mbw + 1].slice >= 0;
+    auto inner_sad = [&](int vx, int vy) {
+      if (inner == 1) return sad(x0, y0, bw, bh, vx, vy);
+      int s = 0;
+      for (int b = 0; b < 16; b++)
+        if (mb_done4 >> b & 1) s += sad(x0 + blk_x(b) * 4, y0 + blk_y(b) * 4, 4, 4, vx, vy);
+      for (int b8 = 0; b8 < 4; b8++)
+        if (mb_done8 >> b8 & 1) s += sad(x0 + (b8 & 1) * 8, y0 + (b8 >> 1) * 8, 8, 8, vx, vy);
+      return s;
+    };
     auto cost = [&](int vx, int vy) {
       return (top ? sad(x0, y0 - T, bw, T, vx, vy) : 0) + (left ? sad(x0 - T, y0, T, bh, vx, vy) : 0) +
-             (tr ? sad(x0 + bw, y0 - T, T, T, vx, vy) : 0) + lambda * (abs(vx - px) + abs(vy - py));
+             (tr ? sad(x0 + bw, y0 - T, T, T, vx, vy) : 0) + (ninner ? inner_sad(vx, vy) : 0) +
+             lambda * (abs(vx - px) + abs(vy - py));
     };
     int vx = mv[0], vy = mv[1], best = cost(vx, vy);
     // other places to start from
@@ -1697,7 +1721,7 @@ struct Recon {
     }
     mv[0] = vx;
     mv[1] = vy;
-    if (miss) *miss = best * 4 / ((top ? T * bw : 0) + (left ? T * bh : 0) + (tr ? T * T : 0));
+    if (miss) *miss = best * 4 / ((top ? T * bw : 0) + (left ? T * bh : 0) + (tr ? T * T : 0) + ninner);
     return true;
   }
   // The intra mode that would predict the block best in the last picture:
