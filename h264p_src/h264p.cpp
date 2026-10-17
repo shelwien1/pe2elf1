@@ -1,11 +1,17 @@
 // h264p: dumps the syntax of an H.264 Annex B stream to a TSV file with the
 // entropy coding removed (c), and restores the identical stream from it (d).
+// This is the only module: the other sources are included here.
 #include <algorithm>
 #include <cerrno>
+#include <climits>
+#include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <map>
+#include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -14,10 +20,13 @@
 #include <io.h>
 #endif
 
-#include "bits.h"
-#include "rows.h"
-#include "slice.h"
-#include "syntax.h"
+#include "bits.inc"
+#include "rows.inc"
+#include "tables.inc"
+#include "cabac.inc"
+#include "cavlc.inc"
+#include "syntax.inc"
+#include "slice.inc"
 
 using namespace h264p;
 

@@ -241,7 +241,7 @@ by POC also makes the real temporal neighbours available, such as the
 co-located MB in the list-1 reference that temporal direct uses.
 
 **Neighbours:** A, B, C, D at MB level and at 4×4 level (6.4.11 and 6.4.12,
-with table 6-4 for MBAFF; `nb_loc` in `h264p_src/slice.cpp` implements it).
+with table 6-4 for MBAFF; `nb_loc` in `h264p_src/slice.inc` implements it).
 Unlike CABAC, the model may use MBs of other slices of the same picture: its
 decoder knows them.
 

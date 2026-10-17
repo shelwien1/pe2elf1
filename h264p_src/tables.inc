@@ -6,9 +6,30 @@
 // (codec/decoder_data_tables.cpp): every code word they decode was collected.
 // The 4:2:2 chroma DC tables and the 8x8 significance map context tables
 // are from the H.264 specification (tables 9-5, 9-9b and 9-43).
-#include "tables.h"
 
 namespace h264p {
+
+extern const int8_t kCabacInit[460][4][2];
+extern const int8_t kCabacInit444[564][4][2];  // ctxIdx 460..1023
+extern const uint8_t kRangeLps[64][4];
+extern const uint8_t kTransIdx[64][2];
+
+// {code, length}; length 0 = no such code
+extern const uint16_t kCoeffToken[5][17 * 4][2];
+extern const uint16_t kCoeffTokenChromaDc422[9 * 4][2];
+extern const uint8_t kTotalZeros[15][16][2];
+extern const uint8_t kTotalZerosChromaDc420[3][4][2];
+extern const uint8_t kTotalZerosChromaDc422[7][8][2];
+extern const uint8_t kRunBefore[7][15][2];
+
+extern const uint8_t kSig8x8Frame[64];
+extern const uint8_t kSig8x8Field[64];
+extern const uint8_t kLast8x8[64];
+
+extern const uint8_t kCbpIntra[48];
+extern const uint8_t kCbpInter[48];
+extern const uint8_t kCbpIntraMono[16];
+extern const uint8_t kCbpInterMono[16];
 
 #define CTX_NA 0  // context not used in I slices
 
@@ -490,6 +511,7 @@ const int8_t kCabacInit[460][4][2] = {
   {{29, 36}, {55, 34}, {66, 27}, {31, 38}},
   {{14, 67}, {42, 62}, {47, 57}, {20, 64}},
 };
+#undef CTX_NA
 
 // Tables 9-24 to 9-33, continued (ctxIdx 460..1023, 4:4:4 only): (m, n) for I slices and
 // cabac_init_idc 0..2

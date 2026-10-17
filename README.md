@@ -15,6 +15,10 @@ Linux (gcc or clang):
 
 Windows (MinGW): `g.bat`, as before, for h264dec, `gp.bat` for h264p.
 
+h264p is a single module: `h264p_src/h264p.cpp` includes the rest of its
+sources (`*.inc`), so `g++ -O2 -std=c++11 h264p_src/h264p.cpp -o h264p`
+builds it too.
+
 ## Test
 
     make test

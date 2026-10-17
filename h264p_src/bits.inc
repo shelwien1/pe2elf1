@@ -1,12 +1,4 @@
 // Bit-level reading and writing of RBSP data (emulation prevention removed).
-#ifndef H264P_BITS_H
-#define H264P_BITS_H
-
-#include <cstddef>
-#include <cstdint>
-#include <stdexcept>
-#include <string>
-#include <vector>
 
 namespace h264p {
 
@@ -138,5 +130,3 @@ class BitWriter {
 };
 
 }  // namespace h264p
-
-#endif
