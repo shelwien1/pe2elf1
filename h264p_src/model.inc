@@ -33,7 +33,7 @@ struct H_hdr_v { int tag, fld, p1, p2, pos, p1r, sty; };
 struct H_skp_v { int st, a3, b3, col, c9, cd, run, cnt, eq, lf, af, td, en, sm, tm, tb, bd; };
 struct H_mbt_v { int st, ca, cb, cc, nsk, en, td, sm, tm, tb, dh, bd; };
 struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg, tp, em, pq; };
-struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm; };
+struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm, pr, dr; };
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, zd, cq; };
 struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac; };
 struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn; };
@@ -1078,6 +1078,10 @@ struct Model {
     proxy_mv();
     int pm = k8 ? rec_.proxy_mode(x >> 1, y >> 1, 8, pmv_[0], pmv_[1]) : rec_.proxy_mode(x, y, 4, pmv_[0], pmv_[1]);
     D.pm = pm < 0 ? 9 : pm;
+    // the remainder (rem_intra4x4_pred_mode) the proxy's and DIMD's modes
+    // would have, 8 none or the most probable mode
+    D.pr = D.pm < 9 && D.pm != mpm ? D.pm - (D.pm > mpm) : 8;
+    D.dr = D.dm < 9 && D.dm != mpm ? D.dm - (D.dm > mpm) : 8;
     tcx X;
     H_ipm_make(D, X);
     f_ipm.select(X);
@@ -1133,6 +1137,7 @@ struct Model {
     D.dm = rec_.dimd(addr_, 0, 0, 16, strength);
     D.ds = strength ? 1 + tc_clamp(tc_qlog(strength) - 6, 0, 8) : 0;
     D.pm = 9;
+    D.pr = D.dr = 8;
     tcx X;
     H_ipm_make(D, X);
     f_ipm.select(X);
