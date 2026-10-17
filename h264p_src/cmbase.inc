@@ -42,6 +42,7 @@ typedef uint64_t u64;
 typedef int64_t i64;
 typedef size_t sz;
 typedef u8 byte;
+typedef u16 word;  // idx2inc.pl's maps of variables with more than 256 values
 typedef u32 uint;
 typedef u64 qword;
 

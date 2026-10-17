@@ -37,7 +37,7 @@ struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm, pr, dr, pq; };
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, zd, cq, tq; };
 struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac; };
 struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn, pq; };
-struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz, pq; };
+struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz, pq, hb; };
 struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe, pl, tz, pq; };
 struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md, pp, mg, ez, ts, pq; };
 struct H_pcm_v { int pl, dp, pd, pd2; };
@@ -1806,6 +1806,14 @@ struct Model {
         S.zl = tc_qlog(n - i - rem);
         S.pe = spok && i < 4 ? sp.estimate(i) : 0;
         S.ps = pok ? 1 + std::min(abs(q4(i)), 6) : 0;
+        // the last two positions' significance (4 at the start)
+        {
+          // the significance of the last eight positions (and where the
+          // block starts)
+          int h = 1;
+          for (int k = 1; k <= 8 && k <= i; k++) h = h * 2 + sig[i - k];
+          S.hb = h - 1;
+        }
         S.tz = tok ? 1 + std::min(abs(tcf(i)), 3) : 0;
         tcx Y;
         H_sig_make(S, Y);
