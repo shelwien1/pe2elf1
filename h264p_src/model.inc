@@ -1645,7 +1645,8 @@ struct Model {
     if (mi_->cls == CL_INXN && (g.plane == 0 || sc_->chroma_ == 3)) return mi_->modes[g.y * 4 + g.x];
     if (mi_->cls == CL_I16 && (g.plane == 0 || sc_->chroma_ == 3)) return 9 + mi_->i16m;
     if (mi_->cls >= CL_INXN) return 13 + mi_->cpred;
-    int x = g.kind == 2 ? g.x * 2 : g.x, y = g.kind == 2 ? g.y * 2 : g.y;
+    // a chroma block's luma 4x4 block: 4:2:0 halves both ways, 4:2:2 the width
+    int x = g.kind == 2 ? g.x * 2 : g.x, y = g.kind == 2 ? (sc_->chroma_ == 2 ? g.y : g.y * 2) : g.y;
     if (g.kind == 0) x = y = 0;
     int m = abs(mi_->mvd[0][y * 4 + x][0]) + abs(mi_->mvd[0][y * 4 + x][1]) + abs(mi_->mvd[1][y * 4 + x][0]) +
             abs(mi_->mvd[1][y * 4 + x][1]);
