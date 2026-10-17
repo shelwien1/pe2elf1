@@ -32,8 +32,8 @@ struct H_nal_v { int fld, ctx, p1, p2; };
 struct H_hdr_v { int tag, fld, p1, p2, pos, p1r, sty; };
 struct H_skp_v { int st, a3, b3, col, c9, cd, run, cnt, eq, lf, af, td, en, sm, tm; };
 struct H_mbt_v { int st, ca, cb, cc, nsk, en, td, sm, tm; };
-struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg; };
-struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds; };
+struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg, tp, em; };
+struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm; };
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv; };
 struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac; };
 struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em; };
@@ -485,6 +485,7 @@ struct Model {
   MbInfo* mi_ = nullptr;
   const MbCol* col_ = nullptr;
   int sub_[4] = {};
+  int pmv_[2] = {};  // Recon::proxy_mode's displacement for the macroblock
   int sm_ = 0, tm_ = 0;  // skip_miss() of the macroblock, its template matching miss
   int prev_mode_ = 9, mvx_ = 0;
   int parts_ = 0, subshape_[4] = {};  // partitions of the macroblock: 16x16, 16x8, 8x16, 8x8; sub-macroblock shapes
@@ -870,10 +871,18 @@ struct Model {
   }
   // the prediction of the macroblock, once all of it is known
   void prepare() { rec_.prepare(mi_->cls, mi_->i16m, mi_->modes, mi_->cpred, mi_->t8, mi_->rf, mi_->mv); }
+  // how well the motion of an inter macroblock predicts the decoded samples
+  // around it (1 + tc_qlog of Recon::tm_miss; 0 not known, intra)
+  int tm_pred() const {
+    if (mi_->cls >= CL_INXN || !rec_.active) return 0;
+    int ms = rec_.tm_miss(mi_->rf, mi_->mv);
+    return ms < 0 ? 0 : 1 + tc_clamp(tc_qlog(ms), 0, 15);
+  }
   int cbp(int v) {
     prepare();
     tc_stage = STG_CBP;
     H_cbp_v D;
+    D.tp = tm_pred();
     D.cls = mi_->cls;
     D.q6 = q6();
     D.st = st_;
@@ -886,6 +895,8 @@ struct Model {
       D.col = col_ ? 1 + (col_->cbp >> b8 & 1) : 0;
       int pt = mi_->cls == CL_INXN ? -1 : rec_.pred_texture(0, (b8 & 1) * 8, (b8 >> 1) * 8, 8);
       D.pg = pt < 0 ? 0 : 1 + tc_clamp(tc_qlog(pt), 0, 15);
+      int ms = mi_->cls == CL_INXN ? -1 : rec_.edge_miss(0, (b8 & 1) * 8, (b8 >> 1) * 8, 8);
+      D.em = ms < 0 ? 0 : 1 + tc_clamp(tc_qlog(ms), 0, 15);
       luma |= cbp_bit(D, b8, ENC && (v >> b8 & 1), cab0(73 + D.inc)) << b8;
     }
     int c = 0;
@@ -893,6 +904,9 @@ struct Model {
       int pt = rec_.pred_texture(1, 0, 0, 8);
       if (pt >= 0) pt += rec_.pred_texture(2, 0, 0, 8);
       D.pg = pt < 0 ? 0 : 1 + tc_clamp(tc_qlog(pt), 0, 15);
+      int ms = rec_.edge_miss(1, 0, 0, 8);
+      if (ms >= 0) ms += std::max(0, rec_.edge_miss(2, 0, 0, 8));
+      D.em = ms < 0 ? 0 : 1 + tc_clamp(tc_qlog(ms), 0, 15);
       D.inc = sc_->cbp_chroma_inc(0);
       D.pc = popc4(luma);
       D.col = col_ ? 1 + (col_->cbp >> 4 != 0) : 0;
@@ -963,6 +977,15 @@ struct Model {
     int strength;
     D.dm = rec_.dimd(addr_, x * 4, y * 4, k8 ? 8 : 4, strength);
     D.ds = strength ? 1 + tc_clamp(tc_qlog(strength) - 6, 0, 8) : 0;
+    if (blk == 0) {
+      // where the neighbours' motion puts the macroblock in the reference
+      int p[2] = {0, 0};
+      if (sc_->stype_ != kI && sc_->stype_ != kSI) mv_pred(0, 0, 0, 4, 4, 0, p);
+      pmv_[0] = (p[0] + 2) >> 2;
+      pmv_[1] = (p[1] + 2) >> 2;
+    }
+    int pm = k8 ? rec_.proxy_mode(x >> 1, y >> 1, 8, pmv_[0], pmv_[1]) : rec_.proxy_mode(x, y, 4, pmv_[0], pmv_[1]);
+    D.pm = pm < 0 ? 9 : pm;
     tcx X;
     H_ipm_make(D, X);
     f_ipm.select(X);
@@ -1017,6 +1040,7 @@ struct Model {
     int strength;
     D.dm = rec_.dimd(addr_, 0, 0, 16, strength);
     D.ds = strength ? 1 + tc_clamp(tc_qlog(strength) - 6, 0, 8) : 0;
+    D.pm = 9;
     tcx X;
     H_ipm_make(D, X);
     f_ipm.select(X);

@@ -32,13 +32,14 @@ Index c
 
 Index d
  d_inc: inc, 1!111
- d_en: en, 1!11111111111111
+ d_em: em, 1!1111111111111111
  d_cls: cls, 1!11111111
 
 Index e
  e_inc: inc, 1!101
  e_pg: pg, 1!1111111111111111
  e_cls: cls, 1!11111111
+ e_tp: tp, 1!1111111111111111
 
 Index h
  h_inc: inc, 1!101
@@ -48,7 +49,7 @@ Index h
 
 Index s
  s_inc: inc, 1!111
- s_td: td, 1!1111111111111111
+ s_tp: tp, 1!1111111111111111
 
 Index f
  f_cls: cls, 1!00100100

@@ -680,28 +680,29 @@ struct Recon {
     for (int i = 0; i < n; i++) e[1 + i] = top ? Y[(y0 - 1) * w + x0 + i] : 128;
     for (int i = 0; i < n; i++) e[1 + n + i] = tr ? Y[(y0 - 1) * w + x0 + n + i] : e[n];
     for (int i = 0; i < n; i++) e[1 + 2 * n + i] = left ? Y[(y0 + i) * w + x0 - 1] : 128;
-    if (n == 8) {
-      // reference sample filtering (8.3.2.2.1)
-      int f[25];
-      for (int i = 0; i < 25; i++) f[i] = e[i];
-      if (top) {
-        f[1] = tl ? (e[0] + 2 * e[1] + e[2] + 2) >> 2 : (3 * e[1] + e[2] + 2) >> 2;
-        for (int x = 1; x < 15; x++) f[1 + x] = (e[x] + 2 * e[1 + x] + e[2 + x] + 2) >> 2;
-        f[16] = (e[15] + 3 * e[16] + 2) >> 2;
-      }
-      if (tl) {
-        if (!top || !left)
-          f[0] = top ? (3 * e[0] + e[1] + 2) >> 2 : left ? (3 * e[0] + e[17] + 2) >> 2 : e[0];
-        else
-          f[0] = (e[1] + 2 * e[0] + e[17] + 2) >> 2;
-      }
-      if (left) {
-        f[17] = tl ? (e[0] + 2 * e[17] + e[18] + 2) >> 2 : (3 * e[17] + e[18] + 2) >> 2;
-        for (int y = 1; y < 7; y++) f[17 + y] = (e[16 + y] + 2 * e[17 + y] + e[18 + y] + 2) >> 2;
-        f[24] = (e[23] + 3 * e[24] + 2) >> 2;
-      }
-      for (int i = 0; i < 25; i++) e[i] = f[i];
+    if (n == 8) filter8(e, top, left, tl);
+  }
+  // reference sample filtering (8.3.2.2.1)
+  static void filter8(int* e, bool top, bool left, bool tl) {
+    int f[25];
+    for (int i = 0; i < 25; i++) f[i] = e[i];
+    if (top) {
+      f[1] = tl ? (e[0] + 2 * e[1] + e[2] + 2) >> 2 : (3 * e[1] + e[2] + 2) >> 2;
+      for (int x = 1; x < 15; x++) f[1 + x] = (e[x] + 2 * e[1 + x] + e[2 + x] + 2) >> 2;
+      f[16] = (e[15] + 3 * e[16] + 2) >> 2;
     }
+    if (tl) {
+      if (!top || !left)
+        f[0] = top ? (3 * e[0] + e[1] + 2) >> 2 : left ? (3 * e[0] + e[17] + 2) >> 2 : e[0];
+      else
+        f[0] = (e[1] + 2 * e[0] + e[17] + 2) >> 2;
+    }
+    if (left) {
+      f[17] = tl ? (e[0] + 2 * e[17] + e[18] + 2) >> 2 : (3 * e[17] + e[18] + 2) >> 2;
+      for (int y = 1; y < 7; y++) f[17 + y] = (e[16 + y] + 2 * e[17 + y] + e[18 + y] + 2) >> 2;
+      f[24] = (e[23] + 3 * e[24] + 2) >> 2;
+    }
+    for (int i = 0; i < 25; i++) e[i] = f[i];
   }
 
   void pred16(int addr, int mode) {
@@ -1589,6 +1590,38 @@ struct Recon {
     mv[0] = vx;
     mv[1] = vy;
     return true;
+  }
+  // The intra mode that would predict the block best in the last picture:
+  // the luma block of n x n at (bx, by) blocks of the current macroblock in
+  // list 0's first reference (else the last reference decoded), predicted
+  // from that picture's samples around it by each mode, the one that misses
+  // least (sum of absolute differences); -1 no picture
+  int proxy_mode(int bx, int by, int n, int dx, int dy) const {
+    if (!active) return -1;
+    const RPic* P = nlist[0] > 0 && list[0][0] ? list[0][0] : !dpb.empty() ? dpb.back().get() : nullptr;
+    if (!P || P->w != cur->w || P->h != cur->h) return -1;
+    int w = P->w, x0 = mb_addr % cur->mbw * 16 + bx * n, y0 = mb_addr / cur->mbw * 16 + by * n;
+    x0 = clip3(0, w - n, x0 + dx);
+    y0 = clip3(0, P->h - n, y0 + dy);
+    const uint8_t* Y = P->y.data();
+    bool top = y0 > 0, left = x0 > 0, tl = top && left, tr = top && x0 + 2 * n <= w;
+    int e[25];
+    e[0] = tl ? Y[(y0 - 1) * w + x0 - 1] : 128;
+    for (int i = 0; i < n; i++) e[1 + i] = top ? Y[(y0 - 1) * w + x0 + i] : 128;
+    for (int i = 0; i < n; i++) e[1 + n + i] = tr ? Y[(y0 - 1) * w + x0 + n + i] : e[n];
+    for (int i = 0; i < n; i++) e[1 + 2 * n + i] = left ? Y[(y0 + i) * w + x0 - 1] : 128;
+    if (n == 8) filter8(e, top, left, tl);
+    int best = -1, bsad = 1 << 30;
+    uint8_t d[64];
+    for (int m = 0; m < 9; m++) {
+      if (((m == 0 || m == 3 || m == 7) && !top) || ((m == 1 || m == 8) && !left) || ((m >= 4 && m <= 6) && !tl)) continue;
+      pred_nxn(d, 8, n, m, e, top, left);
+      int sad = 0;
+      for (int y = 0; y < n; y++)
+        for (int x = 0; x < n; x++) sad += abs(d[y * 8 + x] - Y[(y0 + y) * w + x0 + x]);
+      if (sad < bsad) bsad = sad, best = m;
+    }
+    return best;
   }
   int pred_texture(int c, int x, int y, int n) const {
     if (!active || !mb_prepared || mb_cls == 8) return -1;

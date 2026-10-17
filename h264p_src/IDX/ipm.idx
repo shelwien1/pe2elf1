@@ -39,18 +39,18 @@ Index d
 
 Index e
  e_k8: k8, 1!11
- e_dm: dm, 1!111111111
- e_ma: ma, 1!1111111111
+ e_pm: pm, 1!111111111
+ e_mp: mp, 1!111111111
 
 Index h
  h_k8: k8, 1!11
  h_dm: dm, 1!111111111
- h_mb: mb, 1!1111111111
+ h_pm: pm, 1!111111111
  h_ds: ds, 1!111111111
 
 Index s
  s_k8: k8, 1!11
- s_dm: dm, 1!111111111
+ s_pm: pm, 1!111111111
 
 Index f
  f_k8: k8, 1!11
