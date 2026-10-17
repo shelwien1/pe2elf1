@@ -5,7 +5,7 @@
     lines lifted out into the struct in MOD/sig_h.inc.  Edit this file and
     sig.idx, not MOD/; ../mk.sh regenerates both.
 
-    `_A`-`_D` are the four counters, `_S` and `_F` the two APMs, `_W` and
+    `_A`-`_E`, `_H` are the six counters, `_S` and `_F` the two APMs, `_W` and
     `_W2` the two mixers (selected by index m and by index d) and `_WF` the
     one that mixes them, `_MT` and `_WM` the mantissa plane and its mixer,
     `_G` the sign counters.  Each is H_sig_ND (or H_sig_MND) rows deep per
@@ -13,7 +13,7 @@
     without being a variable.  */
 
 void H_sig_make( const H_sig_v & D, tcx & X ) {
-  int a, b, c, d, s, f, m, t, n, g;
+  int a, b, c, d, e, h, s, f, m, t, n, g;
   int cg = D.cg, pos = D.pos, rem = D.rem, zl = D.zl, md = D.md, nc = D.nc, fld = D.fld, q6 = D.q6, pg = D.pg, em = D.em, pe = D.pe;
   (void) cg;  (void) pos;  (void) rem;  (void) zl;  (void) md;  (void) nc;  (void) fld;  (void) q6;  (void) pg;  (void) em;  (void) pe;
 
@@ -40,6 +40,17 @@ void H_sig_make( const H_sig_v & D, tcx & X ) {
   d = d*7 + H_sig_d_zl[__min(10,__max(0,zl-(1-1)))];
   d = d*17 + H_sig_d_em[__min(16,__max(0,em-(1-1)))];
 
+  e = 0;
+  e = e*14 + H_sig_e_cg[__min(13,__max(0,cg-(1-1)))];
+  e = e*64 + H_sig_e_pos[__min(63,__max(0,pos-(1-1)))];
+  e = e*17 + H_sig_e_em[__min(16,__max(0,em-(1-1)))];
+
+  h = 0;
+  h = h*14 + H_sig_h_cg[__min(13,__max(0,cg-(1-1)))];
+  h = h*64 + H_sig_h_pos[__min(63,__max(0,pos-(1-1)))];
+  h = h*6 + H_sig_h_nc[__min(5,__max(0,nc-(1-1)))];
+  h = h*9 + H_sig_h_rem[__min(10,__max(0,rem-(1-1)))];
+
   s = 0;
   s = s*14 + H_sig_s_cg[__min(13,__max(0,cg-(1-1)))];
   s = s*16 + H_sig_s_pe[__min(15,__max(0,pe-(1-1)))];
@@ -58,7 +69,7 @@ void H_sig_make( const H_sig_v & D, tcx & X ) {
   n = 0;
 
   g = 0;
-  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.s = s;  X.f = f;  X.m = m;  X.t = t;
+  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.s = s;  X.f = f;  X.m = m;  X.t = t;
   X.n = n;  X.g = g;
 }
 

@@ -5,7 +5,7 @@
     lines lifted out into the struct in MOD/nal_h.inc.  Edit this file and
     nal.idx, not MOD/; ../mk.sh regenerates both.
 
-    `_A`-`_D` are the four counters, `_S` and `_F` the two APMs, `_W` and
+    `_A`-`_E`, `_H` are the six counters, `_S` and `_F` the two APMs, `_W` and
     `_W2` the two mixers (selected by index m and by index d) and `_WF` the
     one that mixes them, `_MT` and `_WM` the mantissa plane and its mixer,
     `_G` the sign counters.  Each is H_nal_ND (or H_nal_MND) rows deep per
@@ -13,7 +13,7 @@
     without being a variable.  */
 
 void H_nal_make( const H_nal_v & D, tcx & X ) {
-  int a, b, c, d, s, f, m, t, n, g;
+  int a, b, c, d, e, h, s, f, m, t, n, g;
   int fld = D.fld, ctx = D.ctx, p1 = D.p1, p2 = D.p2;
   (void) fld;  (void) ctx;  (void) p1;  (void) p2;
 
@@ -33,6 +33,14 @@ void H_nal_make( const H_nal_v & D, tcx & X ) {
   d = 0;
   d = d*32 + H_nal_d_fld[__min(31,__max(0,fld-(1-1)))];
 
+  e = 0;
+  e = e*6 + H_nal_e_fld[__min(31,__max(0,fld-(1-1)))];
+  e = e*4 + H_nal_e_p2[__min(3,__max(0,p2-(1-1)))];
+
+  h = 0;
+  h = h*6 + H_nal_h_fld[__min(31,__max(0,fld-(1-1)))];
+  h = h*3 + ((ctx>6+(1-1))+(ctx>8+(1-1)));
+
   s = 0;
   s = s*5 + H_nal_s_fld[__min(31,__max(0,fld-(1-1)))];
 
@@ -51,7 +59,7 @@ void H_nal_make( const H_nal_v & D, tcx & X ) {
   g = 0;
   g = g*32 + H_nal_g_fld[__min(31,__max(0,fld-(1-1)))];
   g = g*4 + H_nal_g_ctx[__min(3,__max(0,ctx-(1-1)))];
-  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.s = s;  X.f = f;  X.m = m;  X.t = t;
+  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.s = s;  X.f = f;  X.m = m;  X.t = t;
   X.n = n;  X.g = g;
 }
 

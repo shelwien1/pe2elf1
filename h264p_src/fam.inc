@@ -1,8 +1,8 @@
 // A model family (oggcomp's tc_fam, balrogg-P-hash tc_fam.inc): the integer
 // coder every IDX family is. A value is a cascade of binary decisions --
 // zero? one? two? then the length of the rest in unary and its bits below
-// the top one -- and each decision is predicted from four counters (tables
-// A, B, C, D under four contexts), an APM, a mixer and a second APM, all
+// the top one -- and each decision is predicted from six counters (tables
+// A-E, H under six contexts), an APM, two mixers and a second APM, all
 // indexed by the decision's node in the cascade. Decisions outside the
 // cascade use bit() with nodes of their own, and the sign of a value has its
 // own counters (G). prp, when set, is one more prediction for the mixer.
@@ -12,7 +12,7 @@
 
 namespace h264p {
 
-constexpr int TC_MIXN = 7;
+constexpr int TC_MIXN = 9;
 constexpr int TC_NODE = 29;
 constexpr int TC_MNODE = 169;
 constexpr int TC_NBMAX = 62;
@@ -33,7 +33,7 @@ static u64 tc_syms[32];
 static int tc_stage, tc_verbose;
 //  The context indices of one value: what idx2inc.pl's MakeIndex builds
 struct tcx {
-  int a, b, c, d, s, f, m, t, n, g;
+  int a, b, c, d, e, h, s, f, m, t, n, g;
 };
 
 //  The direction is a template parameter, f_DEC as in Rangecoder: 0
@@ -52,8 +52,8 @@ template <int f_DEC> static INLINE int tc_bit(int p, int bit) {
 }
 template <int f_DEC> struct tc_fam {
   static constexpr int ENC = (f_DEC == 0);
-  int hA, hB, hD, hS, hF, hM, hT, hN;
-  cm_cnt *A, *B, *C, *D, *G, *T;
+  int hA, hB, hD, hE, hH, hS, hF, hM, hT, hN;
+  cm_cnt *A, *B, *C, *D, *E, *H, *G, *T;
   i16 *S, *S2;
   i32 *W;
   cm_apm ap, ap2;
@@ -62,20 +62,22 @@ template <int f_DEC> struct tc_fam {
   cm_mix<3> mxm;
   int prp;          // an outside prediction of P(0) for the mixers, -1 for none
   const int *prpa;  // or one per node
-  sz ba, bb, bc, bd;
+  sz ba, bb, bc, bd, be, bh;
   u32 bs, bf, bm, bt, bn, bg;
-  int rA, rB, rC, rD, rT, rG;
-  int mwA, mwB, mwC, mwD, mwT, mwG;
+  int rA, rB, rC, rD, rE, rH, rT, rG;
+  int mwA, mwB, mwC, mwD, mwE, mwH, mwT, mwG;
   int rS1, rS2;
   int lr, mb, lrm, mbm;
   int bw;
   int ng;
   int nd, nm;
-  void wire(cm_cnt *a, sz va, cm_cnt *b, sz vb, cm_cnt *c, sz vc, cm_cnt *d, sz vd, cm_cnt *t, sz vt, i16 *s, u8 *sc, sz vs, i16 *s2, u8 *sc2, sz vf, i32 *w, sz vm, cm_cnt *g, sz vg, sz vgi, i32 *wm, sz vn, u8 *wc, u8 *wmc, i32 *w2, u8 *w2c, i32 *wf, u8 *wfc, int ra, int rb, int rc_, int rd, int rt, int rg, int mwa, int mwb, int mwc, int mwd, int mwtt, int mwg, int rs1, int rs2, int lrate, int mbt, int lrm2, int mbm2, int bwt, int qqs, int qqf, int ndp, int nmp, int ha, int hb, int hd, int hs, int hf, int hm, int ht, int hn) {
+  void wire(cm_cnt *a, sz va, cm_cnt *b, sz vb, cm_cnt *c, sz vc, cm_cnt *d, sz vd, cm_cnt *e, sz ve, cm_cnt *h, sz vh, cm_cnt *t, sz vt, i16 *s, u8 *sc, sz vs, i16 *s2, u8 *sc2, sz vf, i32 *w, sz vm, cm_cnt *g, sz vg, sz vgi, i32 *wm, sz vn, u8 *wc, u8 *wmc, i32 *w2, u8 *w2c, i32 *wf, u8 *wfc, int ra, int rb, int rc_, int rd, int re, int rh, int rt, int rg, int mwa, int mwb, int mwc, int mwd, int mwe, int mwh, int mwtt, int mwg, int rs1, int rs2, int lrate, int mbt, int lrm2, int mbm2, int bwt, int qqs, int qqf, int ndp, int nmp, int ha, int hb, int hd, int he, int hh, int hs, int hf, int hm, int ht, int hn) {
     A = a;
     B = b;
     C = c;
     D = d;
+    E = e;
+    H = h;
     T = t;
     S = s;
     S2 = s2;
@@ -89,6 +91,8 @@ template <int f_DEC> struct tc_fam {
     hA = va > ((sz)1 << tc_hbits(ha)) ? tc_hbits(ha) : 0;
     hB = vb > ((sz)1 << tc_hbits(hb)) ? tc_hbits(hb) : 0;
     hD = vd > ((sz)1 << tc_hbits(hd)) ? tc_hbits(hd) : 0;
+    hE = ve > ((sz)1 << tc_hbits(he)) ? tc_hbits(he) : 0;
+    hH = vh > ((sz)1 << tc_hbits(hh)) ? tc_hbits(hh) : 0;
     hS = vs > ((sz)1 << tc_hbits(hs)) ? tc_hbits(hs) : 0;
     hF = vf > ((sz)1 << tc_hbits(hf)) ? tc_hbits(hf) : 0;
     hM = vm > ((sz)1 << tc_hbits(hm)) ? tc_hbits(hm) : 0;
@@ -96,12 +100,15 @@ template <int f_DEC> struct tc_fam {
     hN = vn > ((sz)1 << tc_hbits(hn)) ? tc_hbits(hn) : 0;
     {
       sz ka = tc_rows((long long)va, ha), kb = tc_rows((long long)vb, hb), kd = tc_rows((long long)vd, hd);
+      sz ke = tc_rows((long long)ve, he), kh = tc_rows((long long)vh, hh);
       sz ks = tc_rows((long long)vs, hs), kf = tc_rows((long long)vf, hf), km = tc_rows((long long)vm, hm);
       sz kt = tc_rows((long long)vt, ht), kn = tc_rows((long long)vn, hn);
       tc_vfits("counter A", ka, nd);
       tc_vfits("counter B", kb, nd);
       tc_vfits("counter C", vc, nd);
       tc_vfits("counter D", kd, nd);
+      tc_vfits("counter E", ke, nd);
+      tc_vfits("counter H", kh, nd);
       tc_vfits("counter T", kt, nm);
       if(G)
         tc_vfits("counter G", vg, vgi);
@@ -120,12 +127,16 @@ template <int f_DEC> struct tc_fam {
     rB = tc_clamp(rb, 1, CM_TMAX);
     rC = tc_clamp(rc_, 1, CM_TMAX);
     rD = tc_clamp(rd, 1, CM_TMAX);
+    rE = tc_clamp(re, 1, CM_TMAX);
+    rH = tc_clamp(rh, 1, CM_TMAX);
     rT = tc_clamp(rt, 1, CM_TMAX);
     rG = tc_clamp(rg, 1, CM_TMAX);
     mwA = tc_clamp(mwa * 64, 0, CM_CONE / 4);
     mwB = tc_clamp(mwb * 64, 0, CM_CONE / 4);
     mwC = tc_clamp(mwc * 64, 0, CM_CONE / 4);
     mwD = tc_clamp(mwd * 64, 0, CM_CONE / 4);
+    mwE = tc_clamp(mwe * 64, 0, CM_CONE / 4);
+    mwH = tc_clamp(mwh * 64, 0, CM_CONE / 4);
     mwT = tc_clamp(mwtt * 64, 0, CM_CONE / 4);
     mwG = tc_clamp(mwg * 64, 0, CM_CONE / 4);
     rS1 = cm_apm::limit(tc_clamp(rs1, 1, 15));
@@ -143,6 +154,8 @@ template <int f_DEC> struct tc_fam {
     bb = (sz)(hB ? tc_hrow((u32)x.b, hB) : (u32)x.b) * nd;
     bc = (sz)x.c * nd;
     bd = (sz)(hD ? tc_hrow((u32)x.d, hD) : (u32)x.d) * nd;
+    be = (sz)(hE ? tc_hrow((u32)x.e, hE) : (u32)x.e) * nd;
+    bh = (sz)(hH ? tc_hrow((u32)x.h, hH) : (u32)x.h) * nd;
     bs = (hS ? tc_hrow((u32)x.s, hS) : (u32)x.s) * nd;
     bf = (hF ? tc_hrow((u32)x.f, hF) : (u32)x.f) * nd;
     bm = (hM ? tc_hrow((u32)x.m, hM) : (u32)x.m) * nd;
@@ -153,6 +166,8 @@ template <int f_DEC> struct tc_fam {
     __builtin_prefetch(B + bb);
     __builtin_prefetch(C + bc);
     __builtin_prefetch(D + bd);
+    __builtin_prefetch(E + be);
+    __builtin_prefetch(H + bh);
     __builtin_prefetch(ap.t + (sz)bs * (u32)ap.q);
     __builtin_prefetch(ap.c + (sz)bs * (u32)ap.q);
     __builtin_prefetch(mx.w + (sz)bm * TC_MIXN);
@@ -165,6 +180,8 @@ template <int f_DEC> struct tc_fam {
     cm_cnt c = B[bb + node];
     cm_cnt e = C[bc + node];
     cm_cnt f = D[bd + node];
+    cm_cnt g = E[be + node];
+    cm_cnt h = H[bh + node];
     int pa = a.P();
     int p1 = ap.pp(pa, bs + (u32)node);
     if(p1 > CM_PONE - 1)
@@ -173,10 +190,12 @@ template <int f_DEC> struct tc_fam {
     mx.set(1, cm_stretch(c.P()));
     mx.set(2, cm_stretch(e.P()));
     mx.set(3, cm_stretch(f.P()));
-    mx.set(4, cm_stretch(pa));
+    mx.set(4, cm_stretch(g.P()));
+    mx.set(5, cm_stretch(h.P()));
+    mx.set(6, cm_stretch(pa));
     int pp = prpa ? prpa[node] : prp;
-    mx.set(5, pp >= 0 ? cm_stretch(pp) : 0);
-    mx.set(6, 256);
+    mx.set(7, pp >= 0 ? cm_stretch(pp) : 0);
+    mx.set(8, 256);
     for(int i = 0; i < TC_MIXN; i++)
       mx2.set(i, mx.x[i]);
     {
@@ -201,6 +220,10 @@ template <int f_DEC> struct tc_fam {
     C[bc + node] = e;
     f.upd(b, rD, mwD);
     D[bd + node] = f;
+    g.upd(b, rE, mwE);
+    E[be + node] = g;
+    h.upd(b, rH, mwH);
+    H[bh + node] = h;
     return b;
   }
   INLINE int bitm(int node, int b) {

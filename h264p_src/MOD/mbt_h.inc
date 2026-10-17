@@ -14,8 +14,18 @@ static const byte H_mbt_c_cc[8+1]={ 0,1,2,3,4,5,6,7,8 };
 
 static const byte H_mbt_d_en[14+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14 };
 
+static const byte H_mbt_e_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
+static const byte H_mbt_e_ca[8+1]={ 0,1,2,3,4,5,6,7,8 };
+static const byte H_mbt_e_td[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
+static const byte H_mbt_e_en[14+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14 };
+
 static const byte H_mbt_f_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 
+
+static const byte H_mbt_h_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
+static const byte H_mbt_h_cb[8+1]={ 0,1,2,3,4,5,6,7,8 };
+static const byte H_mbt_h_cc[8+1]={ 0,1,2,3,4,5,6,7,8 };
+static const byte H_mbt_h_nsk[4+1]={ 0,1,1,2,3 };
 
 static const byte H_mbt_m_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 
@@ -26,6 +36,8 @@ static const byte H_mbt_m_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 static const int H_mbt_rA = (64+0) * (1);
 static const int H_mbt_rB = (16+0) * (1);
 static const int H_mbt_rC = (253+0) * (1);
+static const int H_mbt_rE = (64+0) * (1);
+static const int H_mbt_rH = (64+0) * (1);
 static const int H_mbt_rD = (239+0) * (1);
 static const int H_mbt_rT = (55+0) * (1);
 static const int H_mbt_rG = (90+0) * (1);
@@ -37,6 +49,8 @@ static const int H_mbt_mbm = (0+0) * (1);
 static const int H_mbt_mwA = (0+0) * (1);
 static const int H_mbt_mwB = (1+0) * (1);
 static const int H_mbt_mwC = (0+0) * (1);
+static const int H_mbt_mwE = (0+0) * (1);
+static const int H_mbt_mwH = (0+0) * (1);
 static const int H_mbt_mwD = (0+0) * (1);
 static const int H_mbt_mwT = (0+0) * (1);
 static const int H_mbt_mwG = (0+0) * (1);
@@ -46,6 +60,8 @@ static const int H_mbt_qf = (16+3) * (1);
 static const int H_mbt_mb = (5+0) * (1);
 static const int H_mbt_hA = (24+0) * (1);
 static const int H_mbt_hB = (24+0) * (1);
+static const int H_mbt_hE = (24+0) * (1);
+static const int H_mbt_hH = (24+0) * (1);
 static const int H_mbt_hD = (24+0) * (1);
 static const int H_mbt_hS = (24+0) * (1);
 static const int H_mbt_hF = (24+0) * (1);
@@ -58,8 +74,10 @@ static const long long H_mbt_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 10), 9), 9); 
 static const long long H_mbt_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 9), 4), 17); // 6120
 static const long long H_mbt_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 10), 7), 9); // 630
 static const long long H_mbt_d_Volume = tc_vmul(tc_vmul(1, 1), 15); // 15
+static const long long H_mbt_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 9), 17), 15); // 22950
 static const long long H_mbt_f_Volume = tc_vmul(tc_vmul(1, 10), 3); // 30
 static const long long H_mbt_g_Volume = tc_vmul(1, 1); // 1
+static const long long H_mbt_h_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 9), 9), 4); // 3240
 static const long long H_mbt_m_Volume = tc_vmul(1, 10); // 10
 static const long long H_mbt_n_Volume = tc_vmul(1, 1); // 1
 static const long long H_mbt_s_Volume = tc_vmul(1, 1); // 1
@@ -74,6 +92,8 @@ struct H_mbt_T {
   cm_cnt H_mbt_B[tc_rows(H_mbt_b_Volume, H_mbt_hB) * H_mbt_ND];
   cm_cnt H_mbt_C[H_mbt_c_Volume * H_mbt_ND];
   cm_cnt H_mbt_D[tc_rows(H_mbt_d_Volume, H_mbt_hD) * H_mbt_ND];
+  cm_cnt H_mbt_E[tc_rows(H_mbt_e_Volume, H_mbt_hE) * H_mbt_ND];
+  cm_cnt H_mbt_H[tc_rows(H_mbt_h_Volume, H_mbt_hH) * H_mbt_ND];
   cm_cnt H_mbt_MT[tc_rows(H_mbt_t_Volume, H_mbt_hT) * H_mbt_MND];
   i16 H_mbt_S[tc_rows(H_mbt_s_Volume, H_mbt_hS) * H_mbt_ND * H_mbt_qs];
   u8 H_mbt_SC[tc_rows(H_mbt_s_Volume, H_mbt_hS) * H_mbt_ND * H_mbt_qs];
@@ -96,6 +116,8 @@ struct H_mbt_T {
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(tc_rows(H_mbt_b_Volume, H_mbt_hB) * H_mbt_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H_mbt_c_Volume * H_mbt_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(tc_rows(H_mbt_d_Volume, H_mbt_hD) * H_mbt_ND)
+                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(tc_rows(H_mbt_e_Volume, H_mbt_hE) * H_mbt_ND)
+                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(tc_rows(H_mbt_h_Volume, H_mbt_hH) * H_mbt_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(tc_rows(H_mbt_t_Volume, H_mbt_hT) * H_mbt_MND)
                               + (unsigned long long)sizeof(i16) * (unsigned long long)(tc_rows(H_mbt_s_Volume, H_mbt_hS) * H_mbt_ND * H_mbt_qs)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_mbt_s_Volume, H_mbt_hS) * H_mbt_ND * H_mbt_qs)

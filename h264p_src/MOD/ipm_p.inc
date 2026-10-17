@@ -5,7 +5,7 @@
     lines lifted out into the struct in MOD/ipm_h.inc.  Edit this file and
     ipm.idx, not MOD/; ../mk.sh regenerates both.
 
-    `_A`-`_D` are the four counters, `_S` and `_F` the two APMs, `_W` and
+    `_A`-`_E`, `_H` are the six counters, `_S` and `_F` the two APMs, `_W` and
     `_W2` the two mixers (selected by index m and by index d) and `_WF` the
     one that mixes them, `_MT` and `_WM` the mantissa plane and its mixer,
     `_G` the sign counters.  Each is H_ipm_ND (or H_ipm_MND) rows deep per
@@ -13,7 +13,7 @@
     without being a variable.  */
 
 void H_ipm_make( const H_ipm_v & D, tcx & X ) {
-  int a, b, c, d, s, f, m, t, n, g;
+  int a, b, c, d, e, h, s, f, m, t, n, g;
   int k8 = D.k8, ma = D.ma, mb = D.mb, mp = D.mp, blk = D.blk, pv = D.pv, col = D.col, dm = D.dm, ds = D.ds;
   (void) k8;  (void) ma;  (void) mb;  (void) mp;  (void) blk;  (void) pv;  (void) col;  (void) dm;  (void) ds;
 
@@ -38,6 +38,17 @@ void H_ipm_make( const H_ipm_v & D, tcx & X ) {
   d = d*10 + H_ipm_d_dm[__min(9,__max(0,dm-(1-1)))];
   d = d*10 + H_ipm_d_ds[__min(9,__max(0,ds-(1-1)))];
 
+  e = 0;
+  e = e*3 + ((k8>0+(1-1))+(k8>1+(1-1)));
+  e = e*10 + H_ipm_e_dm[__min(9,__max(0,dm-(1-1)))];
+  e = e*11 + H_ipm_e_ma[__min(10,__max(0,ma-(1-1)))];
+
+  h = 0;
+  h = h*3 + ((k8>0+(1-1))+(k8>1+(1-1)));
+  h = h*10 + H_ipm_h_dm[__min(9,__max(0,dm-(1-1)))];
+  h = h*11 + H_ipm_h_mb[__min(10,__max(0,mb-(1-1)))];
+  h = h*10 + H_ipm_h_ds[__min(9,__max(0,ds-(1-1)))];
+
   s = 0;
   s = s*3 + ((k8>0+(1-1))+(k8>1+(1-1)));
   s = s*10 + H_ipm_s_dm[__min(9,__max(0,dm-(1-1)))];
@@ -54,7 +65,7 @@ void H_ipm_make( const H_ipm_v & D, tcx & X ) {
   n = 0;
 
   g = 0;
-  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.s = s;  X.f = f;  X.m = m;  X.t = t;
+  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.s = s;  X.f = f;  X.m = m;  X.t = t;
   X.n = n;  X.g = g;
 }
 

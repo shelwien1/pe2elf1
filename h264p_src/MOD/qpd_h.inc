@@ -11,9 +11,16 @@ static const byte H_qpd_c_db[8+1]={ 0,1,2,3,4,5,6,7,8 };
 
 static const byte H_qpd_d_ae[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
+static const byte H_qpd_e_ae[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
+static const byte H_qpd_e_cls[8+1]={ 0,1,2,3,4,5,6,7,8 };
+
 static const byte H_qpd_f_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 
 static const byte H_qpd_g_lz[6+1]={ 0,1,2,3,4,5,6 };
+
+static const byte H_qpd_h_ae[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
+static const byte H_qpd_h_dc[8+1]={ 0,1,2,3,4,5,6,7,8 };
+static const byte H_qpd_h_pc[4+1]={ 0,1,2,3,4 };
 
 static const byte H_qpd_m_ae[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
@@ -25,6 +32,8 @@ static const byte H_qpd_s_ae[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 static const int H_qpd_rA = (64+0) * (1);
 static const int H_qpd_rB = (16+0) * (1);
 static const int H_qpd_rC = (64+0) * (1);
+static const int H_qpd_rE = (64+0) * (1);
+static const int H_qpd_rH = (64+0) * (1);
 static const int H_qpd_rD = (255+0) * (1);
 static const int H_qpd_rT = (55+0) * (1);
 static const int H_qpd_rG = (90+0) * (1);
@@ -36,6 +45,8 @@ static const int H_qpd_mbm = (0+0) * (1);
 static const int H_qpd_mwA = (0+0) * (1);
 static const int H_qpd_mwB = (0+0) * (1);
 static const int H_qpd_mwC = (0+0) * (1);
+static const int H_qpd_mwE = (0+0) * (1);
+static const int H_qpd_mwH = (0+0) * (1);
 static const int H_qpd_mwD = (0+0) * (1);
 static const int H_qpd_mwT = (0+0) * (1);
 static const int H_qpd_mwG = (0+0) * (1);
@@ -45,6 +56,8 @@ static const int H_qpd_qf = (56+3) * (1);
 static const int H_qpd_mb = (5+0) * (1);
 static const int H_qpd_hA = (24+0) * (1);
 static const int H_qpd_hB = (24+0) * (1);
+static const int H_qpd_hE = (24+0) * (1);
+static const int H_qpd_hH = (24+0) * (1);
 static const int H_qpd_hD = (24+0) * (1);
 static const int H_qpd_hS = (24+0) * (1);
 static const int H_qpd_hF = (24+0) * (1);
@@ -57,8 +70,10 @@ static const long long H_qpd_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 5
 static const long long H_qpd_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 9), 14); // 126
 static const long long H_qpd_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 7), 10), 9); // 630
 static const long long H_qpd_d_Volume = tc_vmul(tc_vmul(1, 2), 14); // 28
+static const long long H_qpd_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 14), 9); // 252
 static const long long H_qpd_f_Volume = tc_vmul(1, 10); // 10
 static const long long H_qpd_g_Volume = tc_vmul(1, 7); // 7
+static const long long H_qpd_h_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 9), 5); // 630
 static const long long H_qpd_m_Volume = tc_vmul(tc_vmul(1, 2), 14); // 28
 static const long long H_qpd_n_Volume = tc_vmul(1, 1); // 1
 static const long long H_qpd_s_Volume = tc_vmul(tc_vmul(1, 2), 14); // 28
@@ -73,6 +88,8 @@ struct H_qpd_T {
   cm_cnt H_qpd_B[tc_rows(H_qpd_b_Volume, H_qpd_hB) * H_qpd_ND];
   cm_cnt H_qpd_C[H_qpd_c_Volume * H_qpd_ND];
   cm_cnt H_qpd_D[tc_rows(H_qpd_d_Volume, H_qpd_hD) * H_qpd_ND];
+  cm_cnt H_qpd_E[tc_rows(H_qpd_e_Volume, H_qpd_hE) * H_qpd_ND];
+  cm_cnt H_qpd_H[tc_rows(H_qpd_h_Volume, H_qpd_hH) * H_qpd_ND];
   cm_cnt H_qpd_MT[tc_rows(H_qpd_t_Volume, H_qpd_hT) * H_qpd_MND];
   i16 H_qpd_S[tc_rows(H_qpd_s_Volume, H_qpd_hS) * H_qpd_ND * H_qpd_qs];
   u8 H_qpd_SC[tc_rows(H_qpd_s_Volume, H_qpd_hS) * H_qpd_ND * H_qpd_qs];
@@ -95,6 +112,8 @@ struct H_qpd_T {
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(tc_rows(H_qpd_b_Volume, H_qpd_hB) * H_qpd_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H_qpd_c_Volume * H_qpd_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(tc_rows(H_qpd_d_Volume, H_qpd_hD) * H_qpd_ND)
+                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(tc_rows(H_qpd_e_Volume, H_qpd_hE) * H_qpd_ND)
+                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(tc_rows(H_qpd_h_Volume, H_qpd_hH) * H_qpd_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(tc_rows(H_qpd_t_Volume, H_qpd_hT) * H_qpd_MND)
                               + (unsigned long long)sizeof(i16) * (unsigned long long)(tc_rows(H_qpd_s_Volume, H_qpd_hS) * H_qpd_ND * H_qpd_qs)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_qpd_s_Volume, H_qpd_hS) * H_qpd_ND * H_qpd_qs)

@@ -8,8 +8,13 @@ static const byte H_pcm_b_pd2[7+1]={ 0,1,2,3,4,5,6,7 };
 
 static const byte H_pcm_d_dp[6+1]={ 0,1,2,3,4,5,6 };
 
+static const byte H_pcm_e_pd[15+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
+static const byte H_pcm_e_pd2[7+1]={ 0,1,2,3,4,5,6,7 };
+
 
 static const byte H_pcm_g_pd[3+1]={ 0,1,2,3 };
+
+static const byte H_pcm_h_dp[6+1]={ 0,1,2,3,4,5,6 };
 
 
 
@@ -20,6 +25,8 @@ static const byte H_pcm_t_dp[6+1]={ 0,1,2,3,4,5,6 };
 static const int H_pcm_rA = (64+0) * (1);
 static const int H_pcm_rB = (16+0) * (1);
 static const int H_pcm_rC = (64+0) * (1);
+static const int H_pcm_rE = (64+0) * (1);
+static const int H_pcm_rH = (64+0) * (1);
 static const int H_pcm_rD = (255+0) * (1);
 static const int H_pcm_rT = (55+0) * (1);
 static const int H_pcm_rG = (90+0) * (1);
@@ -31,6 +38,8 @@ static const int H_pcm_mbm = (0+0) * (1);
 static const int H_pcm_mwA = (0+0) * (1);
 static const int H_pcm_mwB = (0+0) * (1);
 static const int H_pcm_mwC = (0+0) * (1);
+static const int H_pcm_mwE = (0+0) * (1);
+static const int H_pcm_mwH = (0+0) * (1);
 static const int H_pcm_mwD = (0+0) * (1);
 static const int H_pcm_mwT = (0+0) * (1);
 static const int H_pcm_mwG = (0+0) * (1);
@@ -40,6 +49,8 @@ static const int H_pcm_qf = (16+3) * (1);
 static const int H_pcm_mb = (5+0) * (1);
 static const int H_pcm_hA = (24+0) * (1);
 static const int H_pcm_hB = (24+0) * (1);
+static const int H_pcm_hE = (24+0) * (1);
+static const int H_pcm_hH = (24+0) * (1);
 static const int H_pcm_hD = (24+0) * (1);
 static const int H_pcm_hS = (24+0) * (1);
 static const int H_pcm_hF = (24+0) * (1);
@@ -52,8 +63,10 @@ static const long long H_pcm_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 7), 16); 
 static const long long H_pcm_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 8), 8); // 192
 static const long long H_pcm_c_Volume = tc_vmul(1, 3); // 3
 static const long long H_pcm_d_Volume = tc_vmul(1, 7); // 7
+static const long long H_pcm_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 16), 8); // 384
 static const long long H_pcm_f_Volume = tc_vmul(1, 3); // 3
 static const long long H_pcm_g_Volume = tc_vmul(tc_vmul(1, 3), 4); // 12
+static const long long H_pcm_h_Volume = tc_vmul(tc_vmul(1, 3), 7); // 21
 static const long long H_pcm_m_Volume = tc_vmul(1, 3); // 3
 static const long long H_pcm_n_Volume = tc_vmul(1, 3); // 3
 static const long long H_pcm_s_Volume = tc_vmul(1, 3); // 3
@@ -68,6 +81,8 @@ struct H_pcm_T {
   cm_cnt H_pcm_B[tc_rows(H_pcm_b_Volume, H_pcm_hB) * H_pcm_ND];
   cm_cnt H_pcm_C[H_pcm_c_Volume * H_pcm_ND];
   cm_cnt H_pcm_D[tc_rows(H_pcm_d_Volume, H_pcm_hD) * H_pcm_ND];
+  cm_cnt H_pcm_E[tc_rows(H_pcm_e_Volume, H_pcm_hE) * H_pcm_ND];
+  cm_cnt H_pcm_H[tc_rows(H_pcm_h_Volume, H_pcm_hH) * H_pcm_ND];
   cm_cnt H_pcm_MT[tc_rows(H_pcm_t_Volume, H_pcm_hT) * H_pcm_MND];
   i16 H_pcm_S[tc_rows(H_pcm_s_Volume, H_pcm_hS) * H_pcm_ND * H_pcm_qs];
   u8 H_pcm_SC[tc_rows(H_pcm_s_Volume, H_pcm_hS) * H_pcm_ND * H_pcm_qs];
@@ -90,6 +105,8 @@ struct H_pcm_T {
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(tc_rows(H_pcm_b_Volume, H_pcm_hB) * H_pcm_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H_pcm_c_Volume * H_pcm_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(tc_rows(H_pcm_d_Volume, H_pcm_hD) * H_pcm_ND)
+                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(tc_rows(H_pcm_e_Volume, H_pcm_hE) * H_pcm_ND)
+                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(tc_rows(H_pcm_h_Volume, H_pcm_hH) * H_pcm_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(tc_rows(H_pcm_t_Volume, H_pcm_hT) * H_pcm_MND)
                               + (unsigned long long)sizeof(i16) * (unsigned long long)(tc_rows(H_pcm_s_Volume, H_pcm_hS) * H_pcm_ND * H_pcm_qs)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_pcm_s_Volume, H_pcm_hS) * H_pcm_ND * H_pcm_qs)

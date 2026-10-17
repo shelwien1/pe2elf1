@@ -5,7 +5,7 @@
     lines lifted out into the struct in MOD/hdr_h.inc.  Edit this file and
     hdr.idx, not MOD/; ../mk.sh regenerates both.
 
-    `_A`-`_D` are the four counters, `_S` and `_F` the two APMs, `_W` and
+    `_A`-`_E`, `_H` are the six counters, `_S` and `_F` the two APMs, `_W` and
     `_W2` the two mixers (selected by index m and by index d) and `_WF` the
     one that mixes them, `_MT` and `_WM` the mantissa plane and its mixer,
     `_G` the sign counters.  Each is H_hdr_ND (or H_hdr_MND) rows deep per
@@ -13,7 +13,7 @@
     without being a variable.  */
 
 void H_hdr_make( const H_hdr_v & D, tcx & X ) {
-  int a, b, c, d, s, f, m, t, n, g;
+  int a, b, c, d, e, h, s, f, m, t, n, g;
   int tag = D.tag, fld = D.fld, p1 = D.p1, p2 = D.p2, pos = D.pos, p1r = D.p1r, sty = D.sty;
   (void) tag;  (void) fld;  (void) p1;  (void) p2;  (void) pos;  (void) p1r;  (void) sty;
 
@@ -36,6 +36,14 @@ void H_hdr_make( const H_hdr_v & D, tcx & X ) {
   d = d*16 + H_hdr_d_p1[__min(15,__max(0,p1-(1-1)))];
   d = d*8 + H_hdr_d_p2[__min(7,__max(0,p2-(1-1)))];
 
+  e = 0;
+  e = (e<<6) + (((((tag)>>6)&1)<<5) + ((tag)&31)); // 01011111
+  e = e*4 + H_hdr_e_pos[__min(3,__max(0,pos-(1-1)))];
+
+  h = 0;
+  h = (h<<6) + (((((tag)>>6)&1)<<5) + ((tag)&31)); // 01011111
+  h = h*10 + H_hdr_h_sty[__min(9,__max(0,sty-(1-1)))];
+
   s = 0;
   s = (s<<8) + (((tag)&255)); // 11111111
 
@@ -53,7 +61,7 @@ void H_hdr_make( const H_hdr_v & D, tcx & X ) {
   g = 0;
   g = g*8 + H_hdr_g_p1[__min(7,__max(0,p1-(1-1)))];
   g = g*4 + H_hdr_g_pos[__min(3,__max(0,pos-(1-1)))];
-  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.s = s;  X.f = f;  X.m = m;  X.t = t;
+  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.s = s;  X.f = f;  X.m = m;  X.t = t;
   X.n = n;  X.g = g;
 }
 

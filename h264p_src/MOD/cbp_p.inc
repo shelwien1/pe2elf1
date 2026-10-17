@@ -5,7 +5,7 @@
     lines lifted out into the struct in MOD/cbp_h.inc.  Edit this file and
     cbp.idx, not MOD/; ../mk.sh regenerates both.
 
-    `_A`-`_D` are the four counters, `_S` and `_F` the two APMs, `_W` and
+    `_A`-`_E`, `_H` are the six counters, `_S` and `_F` the two APMs, `_W` and
     `_W2` the two mixers (selected by index m and by index d) and `_WF` the
     one that mixes them, `_MT` and `_WM` the mantissa plane and its mixer,
     `_G` the sign counters.  Each is H_cbp_ND (or H_cbp_MND) rows deep per
@@ -13,7 +13,7 @@
     without being a variable.  */
 
 void H_cbp_make( const H_cbp_v & D, tcx & X ) {
-  int a, b, c, d, s, f, m, t, n, g;
+  int a, b, c, d, e, h, s, f, m, t, n, g;
   int inc = D.inc, pc = D.pc, cls = D.cls, col = D.col, q6 = D.q6, st = D.st, en = D.en, td = D.td, pg = D.pg;
   (void) inc;  (void) pc;  (void) cls;  (void) col;  (void) q6;  (void) st;  (void) en;  (void) td;  (void) pg;
 
@@ -39,6 +39,17 @@ void H_cbp_make( const H_cbp_v & D, tcx & X ) {
   d = d*15 + H_cbp_d_en[__min(14,__max(0,en-(1-1)))];
   d = d*9 + H_cbp_d_cls[__min(8,__max(0,cls-(1-1)))];
 
+  e = 0;
+  e = e*3 + ((inc>0+(1-1))+(inc>2+(1-1)));
+  e = e*17 + H_cbp_e_pg[__min(16,__max(0,pg-(1-1)))];
+  e = e*9 + H_cbp_e_cls[__min(8,__max(0,cls-(1-1)))];
+
+  h = 0;
+  h = h*3 + ((inc>0+(1-1))+(inc>2+(1-1)));
+  h = h*17 + H_cbp_h_td[__min(16,__max(0,td-(1-1)))];
+  h = h*15 + H_cbp_h_en[__min(14,__max(0,en-(1-1)))];
+  h = h*9 + H_cbp_h_q6[__min(8,__max(0,q6-(1-1)))];
+
   s = 0;
   s = s*4 + H_cbp_s_inc[__min(3,__max(0,inc-(1-1)))];
   s = s*17 + H_cbp_s_td[__min(16,__max(0,td-(1-1)))];
@@ -53,7 +64,7 @@ void H_cbp_make( const H_cbp_v & D, tcx & X ) {
   n = 0;
 
   g = 0;
-  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.s = s;  X.f = f;  X.m = m;  X.t = t;
+  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.s = s;  X.f = f;  X.m = m;  X.t = t;
   X.n = n;  X.g = g;
 }
 

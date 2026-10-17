@@ -44,6 +44,18 @@ Index d
  d_kn: kn, 1!1
  d_pg: pg, 1!1111111111111111
 
+Index e
+ e_cat: cat, 1!1111111111111
+ e_na: na, 1!111111111
+ e_nb: nb, 1!111111111
+ e_em: em, 1!1111111111111111
+
+Index h
+ h_cat: cat, 1!1111111111111
+ h_pg: pg, 1!1111111111111111
+ h_md: md, 1!1111001101110111100
+ h_q6: q6, 1!11111111
+
 Index s
  s_cat: cat, 1!1111111111111
  s_kn: kn, 1!1
@@ -68,6 +80,8 @@ Index g
 Number rA, 1, 0!01000000
 Number rB, 1, 0!00010000
 Number rC, 1, 0!01000000
+Number rE, 1, 0!01000000
+Number rH, 1, 0!01000000
 Number rD, 1, 0!11111111
 Number rT, 1, 0!00110111
 Number rG, 1, 0!01011010
@@ -79,6 +93,8 @@ Number mbm, 1, 0!00000000
 Number mwA, 1, 0!00000000
 Number mwB, 1, 0!00000000
 Number mwC, 1, 0!00000000
+Number mwE, 1, 0!00000000
+Number mwH, 1, 0!00000000
 Number mwD, 1, 0!00000000
 Number mwT, 1, 0!00000000
 Number mwG, 1, 0!00000000
@@ -92,6 +108,8 @@ Number mb, 1, 0!10000010
 #  them.  31 is "never hashed".  Frozen: left live these only grow.
 ! Number hA, 1, 0!11000
 ! Number hB, 1, 0!11000
+! Number hE, 1, 0!11000
+! Number hH, 1, 0!11000
 ! Number hD, 1, 0!11000
 ! Number hS, 1, 0!11000
 ! Number hF, 1, 0!11000
