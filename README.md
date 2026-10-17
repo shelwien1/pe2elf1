@@ -96,8 +96,8 @@ file (below); a CRC-32 at the end checks the whole stream.
 
 The model is binary context mixing, after oggcomp (Ogg Vorbis): each value
 is a sequence of binary decisions, each predicted by six adaptive counters
-under different contexts, an APM, three mixers (and a fourth that mixes
-them) and a second APM, all selected by the decision's place in the value; where
+under different contexts (each with a slow and a fast probability), an
+APM, three mixers (and a fourth that mixes them) and a second APM, all selected by the decision's place in the value; where
 the stream is CABAC, the probability CABAC's own context state gives a bin
 is one more input. The contexts and the parameters of each group of syntax
 elements (a family) are declared in `h264p_src/IDX/*.idx` and turned into
@@ -127,23 +127,26 @@ decision:
   predicted as the ones that make the block continue the decoded samples
   around it best; for intra blocks, the block in the reference stands in
   for the source, and its difference to the prediction, transformed and
-  quantized as an encoder would, estimates the levels.
+  quantized as an encoder would, estimates the levels (trusted as far as
+  the reference matched the samples around and the blocks decoded).
+  Besides the decoder's view, the significance of a position sees that of
+  the eight before it, and the levels and signs the ones coded before.
 
 On the test streams (`-v` shows where the bits go):
 
 | stream | H.264 | compressed | |
 |---|---:|---:|---:|
-| 00 | 815,140 | 607,629 | 74.5% |
-| 01 | 1,095,103 | 871,786 | 79.6% |
-| 02 | 28,143 | 26,747 | 95.0% |
-| 03 | 1,181,369 | 837,406 | 70.9% |
-| 04 | 484,238 | 406,145 | 83.9% |
+| 00 | 815,140 | 599,443 | 73.5% |
+| 01 | 1,095,103 | 851,626 | 77.8% |
+| 02 | 28,143 | 26,693 | 94.8% |
+| 03 | 1,181,369 | 828,538 | 70.1% |
+| 04 | 484,238 | 402,980 | 83.2% |
 
-The macroblock syntax alone takes 76.3% of what its CABAC coding takes
-(from 3,603,993 to 2,749,713 bytes over these streams; `h264p_cm.md`
+The macroblock syntax alone takes 75.2% of what its CABAC coding takes
+(from 3,603,993 to 2,709,280 bytes over these streams; `h264p_cm.md`
 section 9 has the figures by syntax element). Speed is around
 0.06-0.1 MB of H.264 per second both ways, and the model tables take about
-70 MB.
+185 MB.
 
 ### TSV
 

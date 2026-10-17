@@ -836,10 +836,10 @@ sections 3-8 with these changes and additions.
 TSV in between (section 8's "third backend"). Thirteen families (nal, hdr,
 skp, mbt, cbp, ipm, mvs, qpd, cbf, sig, lvl, sgn, pcm) are oggcomp's
 `tc_fam`, declared in IDX: each decision is predicted by six counters (A-E,
-H, one index each), an APM (index s), three mixers selected by indices m,
-w and s, a final mixer and a second APM (index f); where CABAC codes the
-element, the probability of CABAC's own context state is one more mixer
-input. Coefficients are coded count first (the number of nonzero
+H, one index each, each counter with an adaptive-rate and a fast fixed-rate
+probability), an APM (index s), three mixers selected by indices m, w and
+s, a final mixer and a second APM (index f); where CABAC codes the element,
+the probability of CABAC's own context state is one more mixer input. Coefficients are coded count first (the number of nonzero
 coefficients, then the significance of each position knowing how many are
 left, the levels backwards, the signs).
 
@@ -860,6 +860,12 @@ their gain on test/002:
 | edge miss of the prediction, edge-projected level estimates | coefficients | 13 KB* |
 | x264's adaptive quantization: a per-picture line of QP against log2 energy, from the energy of the macroblock's prediction | qp delta | 11 KB |
 | the best intra mode in the reference | intra modes | 4 KB |
+| how far to trust the intra estimate: the template match of its vector, then how far the luma decoded so far is from it | coefficients, intra modes | 9 KB |
+
+Without the decoder: the significance of the eight positions before (12 KB
+with the frequencies left of and above), the last levels and signs coded
+in the block and the higher-frequency levels (4 KB), a second, fast
+probability in each counter (12 KB) and a third mixer (4 KB).
 
 \* measured when added, with four counters and before the later contexts.
 
@@ -867,16 +873,16 @@ their gain on test/002:
 
 | element | CABAC | model | |
 |---|---:|---:|---:|
-| skip, end | 336,175 | 228,193 | −32.1% |
-| mb_type | 365,120 | 271,407 | −25.7% |
-| cbp, transform_size_8x8_flag | 216,100 | 157,234 | −27.2% |
-| intra modes | 299,858 | 244,657 | −18.4% |
-| sub_mb_type, ref_idx, mvd | 504,865 | 431,961 | −14.4% |
-| mb_qp_delta | 271,297 | 209,948 | −22.6% |
-| coded_block_flag, significance (count, significance) | 910,721 | 755,894 | −17.0% |
-| levels | 302,611 | 242,860 | −19.7% |
-| signs | 329,382 | 200,359 | −39.2% |
-| all | 3,603,993 | 2,749,713 | −23.7% |
+| skip, end | 336,175 | 226,998 | −32.5% |
+| mb_type | 365,120 | 269,857 | −26.1% |
+| cbp, transform_size_8x8_flag | 216,100 | 156,509 | −27.6% |
+| intra modes | 299,858 | 242,259 | −19.2% |
+| sub_mb_type, ref_idx, mvd | 504,865 | 427,761 | −15.3% |
+| mb_qp_delta | 271,297 | 209,133 | −22.9% |
+| coded_block_flag, significance (count, significance) | 910,721 | 736,963 | −19.1% |
+| levels | 302,611 | 236,842 | −21.7% |
+| signs | 329,382 | 195,861 | −40.5% |
+| all | 3,603,993 | 2,709,280 | −24.8% |
 
 **Tried, no gain:** the CABAC-style significance/last binarization instead
 of the count; neighbours' same-position significance; the mirrored list 0
@@ -885,7 +891,9 @@ motion split guess from template matching for mb_type; the second
 reference's agreement for P skip; averaging the intra proxy over two
 references; the proxy's best Intra16x16 and chroma modes; bi-prediction
 disagreement per block for B residuals; the MB-tree residual at the
-motion-compensated macroblock.
+motion-compensated macroblock; the reference's QP where a block's motion
+points; histories of skip flags and mb_qp_delta; a final mixer selected
+by context; longer significance histories (12, hashed).
 
 ## Appendix A: single-context experiments
 
