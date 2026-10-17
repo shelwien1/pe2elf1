@@ -28,11 +28,11 @@ static const byte H_ipm_s_pm[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 
 
 
-static const int H_ipm_rA = (210+0) * (1);
+static const int H_ipm_rA = (228+0) * (1);
 static const int H_ipm_rB = (17+0) * (1);
 static const int H_ipm_rC = (0+0) * (1);
 static const int H_ipm_rE = (64+0) * (1);
-static const int H_ipm_rH = (64+0) * (1);
+static const int H_ipm_rH = (96+0) * (1);
 static const int H_ipm_rD = (255+0) * (1);
 static const int H_ipm_rT = (55+0) * (1);
 static const int H_ipm_rG = (90+0) * (1);

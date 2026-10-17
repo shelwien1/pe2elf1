@@ -23,7 +23,7 @@ Index a
  a_ma: ma, 1!1111000
  a_mb: mb, 1!1111100
  a_oth: oth, 1!11111
- a_sp: sp, 1!11111111
+ a_sp: sp, 1!11110011
 
 Index b
  b_kind: kind, 1!111
@@ -31,7 +31,7 @@ Index b
  b_lst: lst, 1!1
  b_ps: ps, 1!111
  b_rf: rf, 1!111
- b_pi: pi, 1!111
+ b_pi: pi, 1!000
 
 Index c
  c_kind: kind, 1!111
@@ -48,7 +48,7 @@ Index d
 
 Index e
  e_kind: kind, 1!011
- e_comp: comp, 1!1
+ e_comp: comp, 1!0
  e_tv: tv, 1!1111111111111
  e_sp: sp, 1!11111111
 
@@ -85,23 +85,23 @@ Index g
  g_ma: ma, 1!0
  g_oth: oth, 1!0
 
-Number rA, 1, 0!01000000
+Number rA, 1, 0!11111101
 Number rB, 1, 0!00000010
 Number rC, 1, 0!01000000
-Number rE, 1, 0!01000000
+Number rE, 1, 0!00000110
 Number rH, 1, 0!01000000
 Number rD, 1, 0!11111111
 Number rT, 1, 0!00110111
 Number rG, 1, 0!01011010
 Number rS1, 1, 0!00110
-Number rS2, 1, 0!00110
+Number rS2, 1, 0!00100
 Number lr, 1, 0!01100
 Number lrm, 1, 0!01100
 Number mbm, 1, 0!00000000
-Number mwA, 1, 0!00000000
+Number mwA, 1, 0!00001000
 Number mwB, 1, 0!00001000
 Number mwC, 1, 0!10111000
-Number mwE, 1, 0!00000000
+Number mwE, 1, 0!10010010
 Number mwH, 1, 0!00000000
 Number mwD, 1, 0!00000000
 Number mwT, 1, 0!00000000

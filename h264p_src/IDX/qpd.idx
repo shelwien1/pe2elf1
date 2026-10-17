@@ -19,7 +19,7 @@ Index a
  a_lnz: lnz, 1!1
  a_pc: pc, 1!1111
  a_cc: cc, 1!11
- a_cls: cls, 1!11111111
+ a_cls: cls, 1!00111000
 
 Index b
  b_dc: dc, 1!11111111
@@ -37,12 +37,12 @@ Index d
  d_ac: ac, 1!1111111111111
 
 Index e
- e_lnz: lnz, 1!1
+ e_lnz: lnz, 1!0
  e_aq: aq, 1!1111111111111
  e_cls: cls, 1!11111111
 
 Index h
- h_ae: ae, 1!1111111111111
+ h_ae: ae, 1!0000001000001
  h_dc: dc, 1!11111111
  h_pc: pc, 1!1111
 
@@ -64,9 +64,9 @@ Index n
  n_lnz: lnz, 1!0
 
 Index g
- g_lz: lz, 1!111111
+ g_lz: lz, 1!101101
 
-Number rA, 1, 0!01000000
+Number rA, 1, 0!01000001
 Number rB, 1, 0!00010000
 Number rC, 1, 0!01000000
 Number rE, 1, 0!01000000
@@ -83,7 +83,7 @@ Number mwA, 1, 0!00000000
 Number mwB, 1, 0!00000000
 Number mwC, 1, 0!00000000
 Number mwE, 1, 0!00000000
-Number mwH, 1, 0!00000000
+Number mwH, 1, 0!00000100
 Number mwD, 1, 0!00000000
 Number mwT, 1, 0!00000000
 Number mwG, 1, 0!00000000

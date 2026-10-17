@@ -15,7 +15,7 @@ Const 0
 
 Index a
  a_inc: inc, 1!101
- a_pc: pc, 1!1111
+ a_pc: pc, 1!1101
  a_cls: cls, 1!11111111
  a_st: st, 1!111111111
 

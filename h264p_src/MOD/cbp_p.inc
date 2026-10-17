@@ -19,7 +19,7 @@ void H_cbp_make( const H_cbp_v & D, tcx & X ) {
 
   a = 0;
   a = a*3 + ((inc>0+(1-1))+(inc>2+(1-1)));
-  a = a*5 + H_cbp_a_pc[__min(4,__max(0,pc-(1-1)))];
+  a = a*4 + H_cbp_a_pc[__min(4,__max(0,pc-(1-1)))];
   a = a*9 + H_cbp_a_cls[__min(8,__max(0,cls-(1-1)))];
   a = a*10 + H_cbp_a_st[__min(9,__max(0,st-(1-1)))];
 

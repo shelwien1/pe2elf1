@@ -19,7 +19,7 @@ void H_cbf_make( const H_cbf_v & D, tcx & X ) {
 
   a = 0;
   a = a*14 + H_cbf_a_cat[__min(13,__max(0,cat-(1-1)))];
-  a = a*10 + H_cbf_a_na[__min(9,__max(0,na-(1-1)))];
+  a = a*6 + H_cbf_a_na[__min(9,__max(0,na-(1-1)))];
   a = a*10 + H_cbf_a_nb[__min(9,__max(0,nb-(1-1)))];
   a = a*2 + ((intra>0+(1-1)));
 
@@ -41,7 +41,7 @@ void H_cbf_make( const H_cbf_v & D, tcx & X ) {
   d = 0;
   d = d*14 + H_cbf_d_cat[__min(13,__max(0,cat-(1-1)))];
   d = d*6 + H_cbf_d_nc[__min(5,__max(0,nc-(1-1)))];
-  d = d*14 + H_cbf_d_md[__min(19,__max(0,md-(1-1)))];
+  d = d*5 + H_cbf_d_md[__min(19,__max(0,md-(1-1)))];
   d = d*2 + ((kn>0+(1-1)));
   d = d*17 + H_cbf_d_pg[__min(16,__max(0,pg-(1-1)))];
 
@@ -66,7 +66,7 @@ void H_cbf_make( const H_cbf_v & D, tcx & X ) {
   f = f*2 + ((intra>0+(1-1)));
 
   m = 0;
-  m = m*4 + H_cbf_m_cat[__min(13,__max(0,cat-(1-1)))];
+  m = m*5 + H_cbf_m_cat[__min(13,__max(0,cat-(1-1)))];
   m = m*2 + ((kn>0+(1-1)));
 
   t = 0;

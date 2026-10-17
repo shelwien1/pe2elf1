@@ -21,7 +21,7 @@ void H_qpd_make( const H_qpd_v & D, tcx & X ) {
   a = a*2 + ((lnz>0+(1-1)));
   a = a*5 + H_qpd_a_pc[__min(4,__max(0,pc-(1-1)))];
   a = a*3 + ((cc>0+(1-1))+(cc>1+(1-1)));
-  a = a*9 + H_qpd_a_cls[__min(8,__max(0,cls-(1-1)))];
+  a = a*4 + H_qpd_a_cls[__min(8,__max(0,cls-(1-1)))];
 
   b = 0;
   b = b*9 + H_qpd_b_dc[__min(8,__max(0,dc-(1-1)))];
@@ -39,12 +39,11 @@ void H_qpd_make( const H_qpd_v & D, tcx & X ) {
   d = d*14 + H_qpd_d_ac[__min(13,__max(0,ac-(1-1)))];
 
   e = 0;
-  e = e*2 + ((lnz>0+(1-1)));
   e = e*14 + H_qpd_e_aq[__min(13,__max(0,aq-(1-1)))];
   e = e*9 + H_qpd_e_cls[__min(8,__max(0,cls-(1-1)))];
 
   h = 0;
-  h = h*14 + H_qpd_h_ae[__min(13,__max(0,ae-(1-1)))];
+  h = h*3 + ((ae>6+(1-1))+(ae>12+(1-1)));
   h = h*9 + H_qpd_h_dc[__min(8,__max(0,dc-(1-1)))];
   h = h*5 + H_qpd_h_pc[__min(4,__max(0,pc-(1-1)))];
 
@@ -64,7 +63,7 @@ void H_qpd_make( const H_qpd_v & D, tcx & X ) {
   n = 0;
 
   g = 0;
-  g = g*7 + H_qpd_g_lz[__min(6,__max(0,lz-(1-1)))];
+  g = g*5 + H_qpd_g_lz[__min(6,__max(0,lz-(1-1)))];
   X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.s = s;  X.f = f;  X.m = m;  X.t = t;
   X.n = n;  X.g = g;
 }

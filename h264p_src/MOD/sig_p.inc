@@ -24,7 +24,7 @@ void H_sig_make( const H_sig_v & D, tcx & X ) {
 
   b = 0;
   b = b*14 + H_sig_b_cg[__min(13,__max(0,cg-(1-1)))];
-  b = b*40 + H_sig_b_pos[__min(63,__max(0,pos-(1-1)))];
+  b = b*39 + H_sig_b_pos[__min(63,__max(0,pos-(1-1)))];
   b = b*16 + H_sig_b_md[__min(19,__max(0,md-(1-1)))];
   b = b*2 + ((fld>0+(1-1)));
 
@@ -35,7 +35,7 @@ void H_sig_make( const H_sig_v & D, tcx & X ) {
   c = c*17 + H_sig_c_pg[__min(16,__max(0,pg-(1-1)))];
 
   d = 0;
-  d = d*14 + H_sig_d_cg[__min(13,__max(0,cg-(1-1)))];
+  d = d*4 + H_sig_d_cg[__min(13,__max(0,cg-(1-1)))];
   d = d*6 + H_sig_d_rem[__min(10,__max(0,rem-(1-1)))];
   d = d*7 + H_sig_d_zl[__min(10,__max(0,zl-(1-1)))];
   d = d*17 + H_sig_d_em[__min(16,__max(0,em-(1-1)))];
@@ -46,17 +46,17 @@ void H_sig_make( const H_sig_v & D, tcx & X ) {
   e = e*4 + H_sig_e_ps[__min(3,__max(0,ps-(1-1)))];
 
   h = 0;
-  h = h*14 + H_sig_h_cg[__min(13,__max(0,cg-(1-1)))];
+  h = h*5 + H_sig_h_cg[__min(13,__max(0,cg-(1-1)))];
   h = h*64 + H_sig_h_pos[__min(63,__max(0,pos-(1-1)))];
   h = h*4 + H_sig_h_ps[__min(3,__max(0,ps-(1-1)))];
   h = h*9 + H_sig_h_rem[__min(10,__max(0,rem-(1-1)))];
 
   s = 0;
   s = s*14 + H_sig_s_cg[__min(13,__max(0,cg-(1-1)))];
-  s = s*16 + H_sig_s_pe[__min(15,__max(0,pe-(1-1)))];
+  s = s*5 + H_sig_s_pe[__min(15,__max(0,pe-(1-1)))];
 
   f = 0;
-  f = f*4 + H_sig_f_cg[__min(13,__max(0,cg-(1-1)))];
+  f = f*3 + ((cg>0+(1-1))+(cg>1+(1-1)));
   f = f*6 + H_sig_f_nc[__min(5,__max(0,nc-(1-1)))];
 
   m = 0;

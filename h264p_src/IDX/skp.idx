@@ -29,13 +29,13 @@ Index a
 
 Index b
  b_st: st, 1!111111111
- b_a3: a3, 1!00
+ b_a3: a3, 1!11
  b_b3: b3, 1!11
  b_cd: cd, 1!10
  b_cnt: cnt, 1!111111111111111
 
 Index c
- c_st: st, 1!111111111
+ c_st: st, 1!010000000
  c_col: col, 1!11
  c_c9: c9, 1!100101111
  c_run: run, 1!001100011
@@ -67,7 +67,7 @@ Index f
  f_b3: b3, 1!11
 
 Index m
- m_st: st, 1!111111111
+ m_st: st, 1!010000000
  m_col: col, 1!11
  m_td: td, 1!1111
 
@@ -83,12 +83,12 @@ Index g
 Number rA, 1, 0!01000000
 Number rB, 1, 0!00000010
 Number rC, 1, 0!01000000
-Number rE, 1, 0!01000000
-Number rH, 1, 0!01000000
+Number rE, 1, 0!00100011
+Number rH, 1, 0!11110000
 Number rD, 1, 0!00010000
 Number rT, 1, 0!00110111
 Number rG, 1, 0!01011010
-Number rS1, 1, 0!00110
+Number rS1, 1, 0!00011
 Number rS2, 1, 0!00110
 Number lr, 1, 0!01100
 Number lrm, 1, 0!01100

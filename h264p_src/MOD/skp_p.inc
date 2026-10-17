@@ -28,12 +28,13 @@ void H_skp_make( const H_skp_v & D, tcx & X ) {
 
   b = 0;
   b = b*10 + H_skp_b_st[__min(9,__max(0,st-(1-1)))];
+  b = b*3 + ((a3>0+(1-1))+(a3>1+(1-1)));
   b = b*3 + ((b3>0+(1-1))+(b3>1+(1-1)));
   b = b*2 + ((cd>0+(1-1)));
   b = b*16 + H_skp_b_cnt[__min(15,__max(0,cnt-(1-1)))];
 
   c = 0;
-  c = c*10 + H_skp_c_st[__min(9,__max(0,st-(1-1)))];
+  c = c*2 + ((st>1+(1-1)));
   c = c*3 + ((col>0+(1-1))+(col>1+(1-1)));
   c = c*7 + H_skp_c_c9[__min(9,__max(0,c9-(1-1)))];
   c = c*5 + H_skp_c_run[__min(9,__max(0,run-(1-1)))];
@@ -65,7 +66,7 @@ void H_skp_make( const H_skp_v & D, tcx & X ) {
   f = f*3 + ((b3>0+(1-1))+(b3>1+(1-1)));
 
   m = 0;
-  m = m*10 + H_skp_m_st[__min(9,__max(0,st-(1-1)))];
+  m = m*2 + ((st>1+(1-1)));
   m = m*3 + ((col>0+(1-1))+(col>1+(1-1)));
   m = m*5 + H_skp_m_td[__min(4,__max(0,td-(1-1)))];
 

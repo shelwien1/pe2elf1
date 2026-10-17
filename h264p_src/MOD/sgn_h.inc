@@ -17,7 +17,6 @@ static const byte H_sgn_d_mg[15+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
 static const byte H_sgn_e_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 static const byte H_sgn_e_mg[15+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
 
-static const byte H_sgn_f_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
 
 static const byte H_sgn_h_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
@@ -30,9 +29,9 @@ static const byte H_sgn_m_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
 
 
-static const int H_sgn_rA = (64+0) * (1);
+static const int H_sgn_rA = (235+0) * (1);
 static const int H_sgn_rB = (16+0) * (1);
-static const int H_sgn_rC = (2+0) * (1);
+static const int H_sgn_rC = (3+0) * (1);
 static const int H_sgn_rE = (64+0) * (1);
 static const int H_sgn_rH = (64+0) * (1);
 static const int H_sgn_rD = (111+0) * (1);
@@ -51,7 +50,7 @@ static const int H_sgn_mwH = (0+0) * (1);
 static const int H_sgn_mwD = (0+0) * (1);
 static const int H_sgn_mwT = (0+0) * (1);
 static const int H_sgn_mwG = (0+0) * (1);
-static const int H_sgn_bw = (11+0) * (1);
+static const int H_sgn_bw = (14+0) * (1);
 static const int H_sgn_qs = (16+3) * (1);
 static const int H_sgn_qf = (122+3) * (1);
 static const int H_sgn_mb = (168+0) * (1);
@@ -71,8 +70,8 @@ static const long long H_sgn_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 
 static const long long H_sgn_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 4), 4); // 224
 static const long long H_sgn_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 1), 9); // 126
 static const long long H_sgn_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 3), 16); // 672
-static const long long H_sgn_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 3), 16), 1); // 672
-static const long long H_sgn_f_Volume = tc_vmul(1, 14); // 14
+static const long long H_sgn_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 1), 16), 1); // 224
+static const long long H_sgn_f_Volume = tc_vmul(1, 3); // 3
 static const long long H_sgn_g_Volume = tc_vmul(1, 1); // 1
 static const long long H_sgn_h_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 4), 4), 3); // 672
 static const long long H_sgn_m_Volume = tc_vmul(tc_vmul(1, 14), 3); // 42

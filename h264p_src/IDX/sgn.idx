@@ -38,7 +38,7 @@ Index d
 
 Index e
  e_cg: cg, 1!1111111111111
- e_pp: pp, 1!11
+ e_pp: pp, 1!00
  e_mg: mg, 1!111111111111111
  e_mag: mag, 1!00
 
@@ -53,7 +53,7 @@ Index s
  s_pp: pp, 1!11
 
 Index f
- f_cg: cg, 1!1111111111111
+ f_cg: cg, 1!0011000000000
 
 Index m
  m_cg: cg, 1!1111111111111
@@ -68,9 +68,9 @@ Index n
 Index g
  g_cg: cg, 1!0
 
-Number rA, 1, 0!01000000
+Number rA, 1, 0!11101011
 Number rB, 1, 0!00010000
-Number rC, 1, 0!00000010
+Number rC, 1, 0!00000011
 Number rE, 1, 0!01000000
 Number rH, 1, 0!01000000
 Number rD, 1, 0!01101111
@@ -89,7 +89,7 @@ Number mwH, 1, 0!00000000
 Number mwD, 1, 0!00000000
 Number mwT, 1, 0!00000000
 Number mwG, 1, 0!00000000
-Number bw, 1, 0!01011
+Number bw, 1, 0!01110
 Number qs, 1, 3!0010000
 Number qf, 1, 3!1111010
 Number mb, 1, 0!10101000

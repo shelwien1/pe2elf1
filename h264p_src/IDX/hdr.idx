@@ -19,20 +19,20 @@ Index a
  a_sty: sty, 1!111111111
 
 Index b
- b_tag: tag, &11111111
+ b_tag: tag, &00101111
  b_p1r: p1r, &00001111
 
 Index c
  c_tag: tag, &11111111
- c_fld: fld, 1!111111111111111
+ c_fld: fld, 1!100101110000000
 
 Index d
  d_tag: tag, &11111111
- d_p1: p1, 1!111111111111111
+ d_p1: p1, 1!111001010010011
  d_p2: p2, 1!1111111
 
 Index e
- e_tag: tag, &01011111
+ e_tag: tag, &01001110
  e_pos: pos, 1!111
 
 Index h
@@ -76,7 +76,7 @@ Number mwB, 1, 0!00000000
 Number mwC, 1, 0!00000000
 Number mwE, 1, 0!00000000
 Number mwH, 1, 0!00000000
-Number mwD, 1, 0!00000000
+Number mwD, 1, 0!10000000
 Number mwT, 1, 0!00000000
 Number mwG, 1, 0!00000000
 Number bw, 1, 0!01000

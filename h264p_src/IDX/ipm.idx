@@ -70,11 +70,11 @@ Index n
 Index g
  g_k8: k8, 1!0
 
-Number rA, 1, 0!11010010
+Number rA, 1, 0!11100100
 Number rB, 1, 0!00010001
 Number rC, 1, 0!00000000
 Number rE, 1, 0!01000000
-Number rH, 1, 0!01000000
+Number rH, 1, 0!01100000
 Number rD, 1, 0!11111111
 Number rT, 1, 0!00110111
 Number rG, 1, 0!01011010
