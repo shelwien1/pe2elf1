@@ -14,8 +14,8 @@
 
 void H_mbt_make( const H_mbt_v & D, tcx & X ) {
   int a, b, c, d, e, h, s, f, m, w, t, n, g;
-  int st = D.st, ca = D.ca, cb = D.cb, cc = D.cc, nsk = D.nsk, en = D.en, td = D.td, sm = D.sm, tm = D.tm, tb = D.tb, dh = D.dh, bd = D.bd;
-  (void) st;  (void) ca;  (void) cb;  (void) cc;  (void) nsk;  (void) en;  (void) td;  (void) sm;  (void) tm;  (void) tb;  (void) dh;  (void) bd;
+  int st = D.st, ca = D.ca, cb = D.cb, cc = D.cc, nsk = D.nsk, en = D.en, td = D.td, sm = D.sm, tm = D.tm, tb = D.tb, dh = D.dh, bd = D.bd, qc = D.qc;
+  (void) st;  (void) ca;  (void) cb;  (void) cc;  (void) nsk;  (void) en;  (void) td;  (void) sm;  (void) tm;  (void) tb;  (void) dh;  (void) bd;  (void) qc;
 
   a = 0;
   a = a*2 + ((st>3+(1-1)));
@@ -60,6 +60,7 @@ void H_mbt_make( const H_mbt_v & D, tcx & X ) {
   f = 0;
   f = f*10 + H_mbt_f_st[__min(9,__max(0,st-(1-1)))];
   f = f*3 + ((ca>5+(1-1))+(ca>6+(1-1)));
+  f = f*18 + H_mbt_f_qc[__min(17,__max(0,qc-(1-1)))];
 
   m = 0;
   m = m*10 + H_mbt_m_st[__min(9,__max(0,st-(1-1)))];

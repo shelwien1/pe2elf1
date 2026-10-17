@@ -30,8 +30,8 @@ constexpr int H_pcm_ND = TC_NODE, H_pcm_MND = TC_MNODE, H_pcm_NG = 3;
 
 struct H_nal_v { int fld, ctx, p1, p2; };
 struct H_hdr_v { int tag, fld, p1, p2, pos, p1r, sty; };
-struct H_skp_v { int st, a3, b3, col, c9, cd, run, cnt, eq, lf, af, td, en, sm, tm, tb, bd; };
-struct H_mbt_v { int st, ca, cb, cc, nsk, en, td, sm, tm, tb, dh, bd; };
+struct H_skp_v { int st, a3, b3, col, c9, cd, run, cnt, eq, lf, af, td, en, sm, tm, tb, bd, qc; };
+struct H_mbt_v { int st, ca, cb, cc, nsk, en, td, sm, tm, tb, dh, bd, qc; };
 struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg, tp, em, pq; };
 struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm, pr, dr; };
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, zd, cq; };
@@ -674,6 +674,7 @@ struct Model {
     D.td = map_td();
     D.en = map_en();
     D.sm = D.tm = 0;
+    D.qc = tc_clamp(qp_pred_ / 3, 0, 17);
   }
   // how well the prediction of the macroblock were it skipped continues
   // the samples above and to the left (1 + tc_qlog of Recon::skip_miss, 0
@@ -847,6 +848,7 @@ struct Model {
     D.tb = tb_;
     D.dh = dh_;
     D.bd = bd_;
+    D.qc = tc_clamp(qp_pred_ / 3, 0, 17);
     tcx X;
     H_mbt_make(D, X);
     f_mbt.select(X);

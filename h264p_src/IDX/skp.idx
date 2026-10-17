@@ -67,6 +67,7 @@ Index s
 Index f
  f_a3: a3, 1!11
  f_b3: b3, 1!11
+ f_qc: qc, 1!11111111111111111
 
 Index m
  m_st: st, 1!010000000
