@@ -104,7 +104,9 @@ struct H_nal_T {
   u8 H_nal_WMC[tc_rows(H_nal_n_Volume, H_nal_hN) * H_nal_MND];
   i32 H_nal_W2[H_nal_w_Volume * H_nal_ND * TC_MIXN];
   u8 H_nal_W2C[H_nal_w_Volume * H_nal_ND];
-  i32 H_nal_WF[H_nal_ND * 3];
+  i32 H_nal_W3[tc_rows(H_nal_s_Volume, H_nal_hS) * H_nal_ND * TC_MIXN];
+  u8 H_nal_W3C[tc_rows(H_nal_s_Volume, H_nal_hS) * H_nal_ND];
+  i32 H_nal_WF[H_nal_ND * 4];
   u8 H_nal_WFC[H_nal_ND];
   cm_cnt H_nal_G[H_nal_g_Volume * H_nal_NG];
   
@@ -128,7 +130,9 @@ struct H_nal_T {
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_nal_n_Volume, H_nal_hN) * H_nal_MND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_nal_w_Volume * H_nal_ND * TC_MIXN)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_nal_w_Volume * H_nal_ND)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_nal_ND * 3)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H_nal_s_Volume, H_nal_hS) * H_nal_ND * TC_MIXN)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_nal_s_Volume, H_nal_hS) * H_nal_ND)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_nal_ND * 4)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_nal_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H_nal_g_Volume * H_nal_NG);
   void H_nal_Init( void ) {

@@ -117,7 +117,9 @@ struct H_lvl_T {
   u8 H_lvl_WMC[tc_rows(H_lvl_n_Volume, H_lvl_hN) * H_lvl_MND];
   i32 H_lvl_W2[H_lvl_w_Volume * H_lvl_ND * TC_MIXN];
   u8 H_lvl_W2C[H_lvl_w_Volume * H_lvl_ND];
-  i32 H_lvl_WF[H_lvl_ND * 3];
+  i32 H_lvl_W3[tc_rows(H_lvl_s_Volume, H_lvl_hS) * H_lvl_ND * TC_MIXN];
+  u8 H_lvl_W3C[tc_rows(H_lvl_s_Volume, H_lvl_hS) * H_lvl_ND];
+  i32 H_lvl_WF[H_lvl_ND * 4];
   u8 H_lvl_WFC[H_lvl_ND];
   cm_cnt H_lvl_G[H_lvl_g_Volume * H_lvl_NG];
   
@@ -141,7 +143,9 @@ struct H_lvl_T {
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_lvl_n_Volume, H_lvl_hN) * H_lvl_MND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_lvl_w_Volume * H_lvl_ND * TC_MIXN)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_lvl_w_Volume * H_lvl_ND)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_lvl_ND * 3)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H_lvl_s_Volume, H_lvl_hS) * H_lvl_ND * TC_MIXN)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_lvl_s_Volume, H_lvl_hS) * H_lvl_ND)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_lvl_ND * 4)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_lvl_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H_lvl_g_Volume * H_lvl_NG);
   void H_lvl_Init( void ) {

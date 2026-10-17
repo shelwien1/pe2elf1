@@ -109,7 +109,9 @@ struct H_cbp_T {
   u8 H_cbp_WMC[tc_rows(H_cbp_n_Volume, H_cbp_hN) * H_cbp_MND];
   i32 H_cbp_W2[H_cbp_w_Volume * H_cbp_ND * TC_MIXN];
   u8 H_cbp_W2C[H_cbp_w_Volume * H_cbp_ND];
-  i32 H_cbp_WF[H_cbp_ND * 3];
+  i32 H_cbp_W3[tc_rows(H_cbp_s_Volume, H_cbp_hS) * H_cbp_ND * TC_MIXN];
+  u8 H_cbp_W3C[tc_rows(H_cbp_s_Volume, H_cbp_hS) * H_cbp_ND];
+  i32 H_cbp_WF[H_cbp_ND * 4];
   u8 H_cbp_WFC[H_cbp_ND];
   cm_cnt H_cbp_G[H_cbp_g_Volume * H_cbp_NG];
   
@@ -133,7 +135,9 @@ struct H_cbp_T {
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_cbp_n_Volume, H_cbp_hN) * H_cbp_MND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_cbp_w_Volume * H_cbp_ND * TC_MIXN)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_cbp_w_Volume * H_cbp_ND)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_cbp_ND * 3)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H_cbp_s_Volume, H_cbp_hS) * H_cbp_ND * TC_MIXN)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_cbp_s_Volume, H_cbp_hS) * H_cbp_ND)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_cbp_ND * 4)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_cbp_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H_cbp_g_Volume * H_cbp_NG);
   void H_cbp_Init( void ) {
