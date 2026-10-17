@@ -4,8 +4,7 @@
 namespace h264p {
 
 // Header syntax: each syntax element, or group of elements, is one named row.
-class Syn {
- public:
+struct Syn {
   Syn(BitReader* br, RowWriter* out) : W(false), br(br), bw(nullptr), out_(out), in_(nullptr) {}
   Syn(RowReader* in, BitWriter* bw) : W(true), br(nullptr), bw(bw), out_(nullptr), in_(in) {}
 
@@ -34,24 +33,128 @@ class Syn {
   }
 
   // a row with several values
-  void begin(const char* name);
-  int64_t vu(int n);
-  int64_t vue(int64_t lo, int64_t hi);
-  int64_t vse(int64_t lo, int64_t hi);
-  int64_t vff();                    // SEI payloadType/payloadSize coding
-  std::string vhex(size_t nbytes);  // bytes in hex
-  void end();
+  void begin(const char* name) {
+    if (!W) {
+      out_->begin(name);
+      return;
+    }
+    const Row* r = in_->peek();
+    if (!r) throw TsvError(std::string("unexpected end of file, expected ") + name);
+    if (!r->is(name)) r->fail(std::string("expected ") + name);
+    row_ = &in_->take();
+    field_ = 1;
+  }
+
+  int64_t vu(int n) {
+    if (!W) {
+      int64_t v = br->u(n);
+      out_->add(v);
+      return v;
+    }
+    int64_t v = check(row_->num(field_++), 0, ((int64_t)1 << n) - 1);
+    bw->put((uint64_t)v, n);
+    return v;
+  }
+
+  int64_t vue(int64_t lo, int64_t hi) {
+    if (!W) {
+      int64_t v = check(br->ue(), lo, hi);
+      out_->add(v);
+      return v;
+    }
+    int64_t v = check(row_->num(field_++), lo, hi);
+    bw->ue((uint64_t)v);
+    return v;
+  }
+
+  int64_t vse(int64_t lo, int64_t hi) {
+    if (!W) {
+      int64_t v = check(br->se(), lo, hi);
+      out_->add(v);
+      return v;
+    }
+    int64_t v = check(row_->num(field_++), lo, hi);
+    bw->se(v);
+    return v;
+  }
+
+  // SEI payloadType/payloadSize coding
+  int64_t vff() {
+    if (!W) {
+      int64_t v = 0;
+      uint32_t b;
+      while ((b = br->u(8)) == 255)
+        if ((v += 255) > (1 << 24)) fail("invalid SEI message header");
+      v += b;
+      out_->add(v);
+      return v;
+    }
+    int64_t v = check(row_->num(field_++), 0, 1 << 24);
+    for (int64_t x = v;; x -= 255) {
+      bw->put(x < 255 ? x : 255, 8);
+      if (x < 255) break;
+    }
+    return v;
+  }
+
+  // bytes in hex
+  std::string vhex(size_t nbytes) {
+    if (!W) {
+      std::vector<uint8_t> b(nbytes);
+      for (auto& x : b) x = (uint8_t)br->u(8);
+      std::string h = to_hex(b.data(), b.size());
+      out_->add(h);
+      return h;
+    }
+    if (field_ >= row_->size()) {
+      if (nbytes) row_->fail("missing data");
+      return std::string();
+    }
+    std::vector<uint8_t> b = from_hex(*row_, field_);
+    if (b.size() != nbytes) row_->fail("wrong data length");
+    std::string h = row_->field(field_++);
+    for (uint8_t x : b) bw->put(x, 8);
+    return h;
+  }
+
+  void end() {
+    if (!W) {
+      out_->end();
+      return;
+    }
+    if (field_ != row_->size()) row_->fail("too many values");
+  }
+
   // a value that is not coded as such: reading, v goes to the row; writing,
   // the value of the row is returned
-  int64_t vval(int64_t v, int64_t lo, int64_t hi);
+  int64_t vval(int64_t v, int64_t lo, int64_t hi) {
+    if (!W) {
+      check(v, lo, hi);
+      out_->add(v);
+      return v;
+    }
+    return check(row_->num(field_++), lo, hi);
+  }
 
   // more_rbsp_data() when reading; when writing, whether the next row is
   // named `next`
-  bool more_data(const char* next);
-  [[noreturn]] void fail(const std::string& msg);
+  bool more_data(const char* next) {
+    if (!W) return br->more_rbsp_data();
+    const Row* r = in_->peek();
+    return r && r->is(next);
+  }
 
- private:
-  int64_t check(int64_t v, int64_t lo, int64_t hi);
+  [[noreturn]] void fail(const std::string& msg) {
+    if (!W) throw ParseError(msg);
+    if (row_) row_->fail(msg);
+    throw TsvError(msg);
+  }
+
+  int64_t check(int64_t v, int64_t lo, int64_t hi) {
+    if (v < lo || v > hi) fail("value " + std::to_string(v) + " out of range");
+    return v;
+  }
+
   RowWriter* out_;
   RowReader* in_;
   const Row* row_ = nullptr;
@@ -120,122 +223,6 @@ void code_slice_header(Syn& s, SliceHeader& h, const ParamSets& ps);
 const int64_t kU32 = 0xFFFFFFFE;  // largest ue(v) value
 const int64_t kS32 = 0x7FFFFFFF;  // largest se(v) magnitude
 const int kMaxMbs = 1 << 20;      // largest picture size in macroblocks accepted
-
-void Syn::begin(const char* name) {
-  if (!W) {
-    out_->begin(name);
-    return;
-  }
-  const Row* r = in_->peek();
-  if (!r) throw TsvError(std::string("unexpected end of file, expected ") + name);
-  if (!r->is(name)) r->fail(std::string("expected ") + name);
-  row_ = &in_->take();
-  field_ = 1;
-}
-
-int64_t Syn::vval(int64_t v, int64_t lo, int64_t hi) {
-  if (!W) {
-    check(v, lo, hi);
-    out_->add(v);
-    return v;
-  }
-  return check(row_->num(field_++), lo, hi);
-}
-
-void Syn::end() {
-  if (!W) {
-    out_->end();
-    return;
-  }
-  if (field_ != row_->size()) row_->fail("too many values");
-}
-
-int64_t Syn::check(int64_t v, int64_t lo, int64_t hi) {
-  if (v < lo || v > hi) fail("value " + std::to_string(v) + " out of range");
-  return v;
-}
-
-int64_t Syn::vu(int n) {
-  if (!W) {
-    int64_t v = br->u(n);
-    out_->add(v);
-    return v;
-  }
-  int64_t v = check(row_->num(field_++), 0, ((int64_t)1 << n) - 1);
-  bw->put((uint64_t)v, n);
-  return v;
-}
-
-int64_t Syn::vue(int64_t lo, int64_t hi) {
-  if (!W) {
-    int64_t v = check(br->ue(), lo, hi);
-    out_->add(v);
-    return v;
-  }
-  int64_t v = check(row_->num(field_++), lo, hi);
-  bw->ue((uint64_t)v);
-  return v;
-}
-
-int64_t Syn::vse(int64_t lo, int64_t hi) {
-  if (!W) {
-    int64_t v = check(br->se(), lo, hi);
-    out_->add(v);
-    return v;
-  }
-  int64_t v = check(row_->num(field_++), lo, hi);
-  bw->se(v);
-  return v;
-}
-
-int64_t Syn::vff() {
-  if (!W) {
-    int64_t v = 0;
-    uint32_t b;
-    while ((b = br->u(8)) == 255)
-      if ((v += 255) > (1 << 24)) fail("invalid SEI message header");
-    v += b;
-    out_->add(v);
-    return v;
-  }
-  int64_t v = check(row_->num(field_++), 0, 1 << 24);
-  for (int64_t x = v;; x -= 255) {
-    bw->put(x < 255 ? x : 255, 8);
-    if (x < 255) break;
-  }
-  return v;
-}
-
-std::string Syn::vhex(size_t nbytes) {
-  if (!W) {
-    std::vector<uint8_t> b(nbytes);
-    for (auto& x : b) x = (uint8_t)br->u(8);
-    std::string h = to_hex(b.data(), b.size());
-    out_->add(h);
-    return h;
-  }
-  if (field_ >= row_->size()) {
-    if (nbytes) row_->fail("missing data");
-    return std::string();
-  }
-  std::vector<uint8_t> b = from_hex(*row_, field_);
-  if (b.size() != nbytes) row_->fail("wrong data length");
-  std::string h = row_->field(field_++);
-  for (uint8_t x : b) bw->put(x, 8);
-  return h;
-}
-
-bool Syn::more_data(const char* next) {
-  if (!W) return br->more_rbsp_data();
-  const Row* r = in_->peek();
-  return r && r->is(next);
-}
-
-void Syn::fail(const std::string& msg) {
-  if (!W) throw ParseError(msg);
-  if (row_) row_->fail(msg);
-  throw TsvError(msg);
-}
 
 // ---------------------------------------------------------------------------
 

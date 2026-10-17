@@ -13,15 +13,30 @@ const int kNumCtx = 1024;
 // model: 0 for I and SI slices, else cabac_init_idc + 1
 void cabac_init_contexts(CabacCtx* ctx, int slice_qp, int model);
 
-class CabacDecoder {
- public:
+struct CabacDecoder {
   void init(BitReader* br) {
     br_ = br;
     range_ = 510;
     offset_ = br->u(9);
     if (offset_ >= 510) throw ParseError("invalid CABAC data");
   }
-  int decision(CabacCtx& c);
+  int decision(CabacCtx& c) {
+    uint32_t lps = kRangeLps[c.state][(range_ >> 6) & 3];
+    range_ -= lps;
+    int bin;
+    if (offset_ >= range_) {
+      bin = !c.mps;
+      offset_ -= range_;
+      range_ = lps;
+      if (c.state == 0) c.mps = (uint8_t)(1 - c.mps);
+      c.state = kTransIdx[c.state][0];
+    } else {
+      bin = c.mps;
+      c.state = kTransIdx[c.state][1];
+    }
+    renorm();
+    return bin;
+  }
   int bypass() {
     offset_ = (offset_ << 1) | br_->bit();
     if (offset_ >= range_) {
@@ -37,7 +52,6 @@ class CabacDecoder {
     return 0;
   }
 
- private:
   void renorm() {
     while (range_ < 256) {
       range_ <<= 1;
@@ -48,8 +62,7 @@ class CabacDecoder {
   uint32_t range_ = 0, offset_ = 0;
 };
 
-class CabacEncoder {
- public:
+struct CabacEncoder {
   void init(BitWriter* bw) {
     bw_ = bw;
     low_ = 0;
@@ -57,7 +70,19 @@ class CabacEncoder {
     outstanding_ = 0;
     first_ = true;
   }
-  void decision(CabacCtx& c, int bin);
+  void decision(CabacCtx& c, int bin) {
+    uint32_t lps = kRangeLps[c.state][(range_ >> 6) & 3];
+    range_ -= lps;
+    if (bin != c.mps) {
+      low_ += range_;
+      range_ = lps;
+      if (c.state == 0) c.mps = (uint8_t)(1 - c.mps);
+      c.state = kTransIdx[c.state][0];
+    } else {
+      c.state = kTransIdx[c.state][1];
+    }
+    renorm();
+  }
   void bypass(int bin) {
     low_ <<= 1;
     if (bin) low_ += range_;
@@ -86,7 +111,6 @@ class CabacEncoder {
     }
   }
 
- private:
   void renorm() {
     while (range_ < 256) {
       if (low_ < 256) {
@@ -130,38 +154,6 @@ void cabac_init_contexts(CabacCtx* ctx, int slice_qp, int model) {
       ctx[i].mps = 1;
     }
   }
-}
-
-int CabacDecoder::decision(CabacCtx& c) {
-  uint32_t lps = kRangeLps[c.state][(range_ >> 6) & 3];
-  range_ -= lps;
-  int bin;
-  if (offset_ >= range_) {
-    bin = !c.mps;
-    offset_ -= range_;
-    range_ = lps;
-    if (c.state == 0) c.mps = (uint8_t)(1 - c.mps);
-    c.state = kTransIdx[c.state][0];
-  } else {
-    bin = c.mps;
-    c.state = kTransIdx[c.state][1];
-  }
-  renorm();
-  return bin;
-}
-
-void CabacEncoder::decision(CabacCtx& c, int bin) {
-  uint32_t lps = kRangeLps[c.state][(range_ >> 6) & 3];
-  range_ -= lps;
-  if (bin != c.mps) {
-    low_ += range_;
-    range_ = lps;
-    if (c.state == 0) c.mps = (uint8_t)(1 - c.mps);
-    c.state = kTransIdx[c.state][0];
-  } else {
-    c.state = kTransIdx[c.state][1];
-  }
-  renorm();
 }
 
 }  // namespace h264p

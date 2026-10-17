@@ -13,8 +13,7 @@ struct TsvError : std::runtime_error {
   explicit TsvError(const std::string& s) : std::runtime_error(s) {}
 };
 
-class BitReader {
- public:
+struct BitReader {
   BitReader(const uint8_t* data, size_t size) : data_(data), nbits_(size * 8), pos_(0) {
     // position of the last 1 bit, the rbsp_stop_one_bit
     last_one_ = -1;
@@ -67,14 +66,12 @@ class BitReader {
     return (k & 1) ? (int64_t)(k / 2) + 1 : -(int64_t)(k / 2);
   }
 
- private:
   const uint8_t* data_;
   size_t nbits_, pos_;
   int64_t last_one_;
 };
 
-class BitWriter {
- public:
+struct BitWriter {
   void bit(int b) {
     cur_ = (uint8_t)(cur_ << 1 | b);
     if ((++n_ & 7) == 0) {
@@ -123,7 +120,6 @@ class BitWriter {
   // appends whole bytes; the bit position must be byte aligned
   void append(size_t n, uint8_t value) { buf_.insert(buf_.end(), n, value), n_ += 8 * n; }
 
- private:
   std::vector<uint8_t> buf_, padded_;  // complete bytes
   uint8_t cur_ = 0;                    // the bits of the incomplete byte
   size_t n_ = 0;

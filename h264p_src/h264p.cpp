@@ -89,8 +89,7 @@ bool starts_picture(int type, const uint8_t* payload, size_t n) {
 // padding starting with frame 0 at the last SPS or x264 SEI, or to no
 // padding, if that predicted all bits since, else to the hypothesis that
 // predicted the longest run of the latest bits.
-class PadDetector {
- public:
+struct PadDetector {
   PadDetector() {
     for (int64_t& l : last_) l = -1;
   }
@@ -128,7 +127,6 @@ class PadDetector {
     return f < 0 ? f + 32 : f;
   }
 
- private:
   static const int kOff = 32;
   int predict(int p) const { return 0x35a4e4f5u >> (((uint64_t)pic_ + p) & 31) & 1; }
 
@@ -407,8 +405,7 @@ bool convert_nal(int type, int ref_idc, const uint8_t* p, size_t n, Context& ctx
 }
 
 // Splits an Annex B byte stream into NAL units while reading it.
-class AnnexBReader {
- public:
+struct AnnexBReader {
   explicit AnnexBReader(FILE* f) : f_(f) {}
 
   // The next NAL unit: the 0x00 bytes before its start code (zero_byte, and
@@ -451,7 +448,6 @@ class AnnexBReader {
   size_t eof_zeros() const { return eof_zeros_; }
   bool error() const { return ferror(f_) != 0; }
 
- private:
   // the next start code at or after scan_, reading as much as needed
   bool find(size_t& k) {
     for (;;) {

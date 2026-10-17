@@ -113,187 +113,6 @@ const int kAbsBase[14] = {227, 237, 247, 257, 266, 426, 952, 962, 972, 708, 982,
 // ctxBlockCat of the DC, AC, 4x4 and 8x8 blocks of Y, Cb and Cr (4:4:4)
 const int kCatDc[3] = {0, 6, 10}, kCatAc[3] = {1, 7, 11}, kCat4x4[3] = {2, 8, 12}, kCat8x8[3] = {5, 9, 13};
 
-class SliceCoder {
- public:
-  SliceCoder(const SliceHeader& h, MbStore& store, BitReader* br, RowWriter* out, RowReader* in, BitWriter* bw)
-      : W(bw != nullptr), h_(h), sps_(*h.sps), pps_(*h.pps), store_(store), br_(br), bw_(bw), out_(out), in_(in) {}
-  void run();
-
- private:
-  // --- errors
-  [[noreturn]] void fail(const std::string& msg) {
-    if (!W) throw ParseError(msg);
-    throw TsvError("line " + std::to_string(rec_ ? rec_->line : in_->lineno()) + ": " + msg);
-  }
-
-  // --- CAVLC primitives
-  int u(int n, int v) {
-    if (!W) return (int)br_->u(n);
-    if (v < 0 || v >= (1 << n)) fail("value " + std::to_string(v) + " out of range");
-    bw_->put((uint32_t)v, n);
-    return v;
-  }
-  int ue(int v, int hi) {
-    if (!W) {
-      uint32_t x = br_->ue();
-      if (x > (uint32_t)hi) fail("value out of range");
-      return (int)x;
-    }
-    if (v < 0 || v > hi) fail("value " + std::to_string(v) + " out of range");
-    bw_->ue((uint32_t)v);
-    return v;
-  }
-  int se(int v, int lim) {
-    if (!W) {
-      int64_t x = br_->se();
-      if (x < -lim || x > lim) fail("value out of range");
-      return (int)x;
-    }
-    if (v < -lim || v > lim) fail("value " + std::to_string(v) + " out of range");
-    bw_->se(v);
-    return v;
-  }
-  int te(int v, int range) {
-    if (W && (v < 0 || v > range)) fail("value " + std::to_string(v) + " out of range");
-    if (range == 1) return !u(1, !v);
-    return ue(v, range);
-  }
-
-  // --- CABAC primitives
-  int bin(int ctx, int v) {
-    if (!W) return dec_.decision(ctx_[ctx]);
-    enc_.decision(ctx_[ctx], v);
-    return v;
-  }
-  int bypass(int v) {
-    if (!W) return dec_.bypass();
-    enc_.bypass(v);
-    return v;
-  }
-  int term(int v) {
-    if (!W) return dec_.terminate();
-    enc_.terminate(v);
-    return v;
-  }
-  int exp_golomb_bypass(int k, int v);
-
-  // --- values of the TSV rows
-  int next(std::vector<int>& q, size_t& i, const char* what) {
-    if (!W) return 0;
-    if (i >= q.size()) fail(std::string("missing ") + what + " value");
-    return q[i++];
-  }
-  void keep(std::vector<int>& q, int v) {
-    if (!W) q.push_back(v);
-  }
-  int field(int& f, unsigned use, const char* what) {
-    if (!W) return 0;
-    if (f == kAbsent || (use != kUseQpd && f < 0)) fail(std::string("missing ") + what);
-    rec_->used |= use;
-    return f;
-  }
-
-  // --- neighbours
-  const MbState* avail(int addr) const {
-    return store_.mbs[addr].slice == slice_id_ ? &store_.mbs[addr] : nullptr;
-  }
-  // macroblock containing the sample (xN, yN) relative to the current
-  // macroblock, maxW x maxH samples (6.4.12), and the sample position in it;
-  // xN or yN may be -1 (neighbours A and B only)
-  const MbState* nb_loc(int xN, int yN, int maxW, int maxH, int& xW, int& yW) const;
-  // macroblock and 4x4 block containing the luma 4x4 block (x, y) of the
-  // current macroblock, x or y may be -1
-  const MbState* nb4(int x, int y, int& idx) const {
-    int xW, yW;
-    const MbState* n = nb_loc(x < 0 ? -1 : 4 * x, y < 0 ? -1 : 4 * y, 16, 16, xW, yW);
-    idx = (yW >> 2) * 4 + (xW >> 2);
-    return n;
-  }
-  // the same for chroma 4x4 blocks (2 wide, ch_h_ high)
-  const MbState* nbc(int x, int y, int& idx) const {
-    int xW, yW;
-    const MbState* n = nb_loc(x < 0 ? -1 : 4 * x, y < 0 ? -1 : 4 * y, 8, 4 * ch_h_, xW, yW);
-    idx = (yW >> 2) * 2 + (xW >> 2);
-    return n;
-  }
-  bool field_mb() const { return field_ || cur_->field; }
-
-  // --- slice data
-  void read_loop();
-  void write_loop();
-  void start_mb(int addr);
-  void set_skip();
-  void set_field(int f);
-  void update_nb();
-  int next_mb(int addr) const;
-  void read_mb_rows(MbRec& r);
-  void write_mb_rows(const MbRec& r);
-
-  // --- macroblock layer
-  void macroblock(MbRec& r);
-  void pcm_samples(MbRec& r);
-  void mb_pred_inter(MbRec& r, int ptype, int btype);
-  void sub_mb_pred(MbRec& r, int ptype, bool& no_sub_lt8);
-  void code_ref(MbRec& r, int list, const Part& p, bool coded);
-  void code_mvd(MbRec& r, int list, const Part& p);
-  void residual(MbRec& r, int cbp, int t8);
-  void residual_luma(MbRec& r, int plane, int cbp, int t8);
-  int block(MbRec& r, int cat, int idx, int* c, int n, int ctx);
-  void fetch(MbRec& r, int cat, int idx, int* c, int n);
-  void store(MbRec& r, int cat, int idx, const int* c, int n);
-
-  // --- syntax elements
-  int mb_skip_flag(int v);
-  int mb_field_decoding_flag(int v);
-  int mb_type(int v);
-  int mb_type_i(int v, int off, bool islice);
-  int sub_mb_type(int v);
-  int ref_idx(int list, int x, int y, int v);
-  int mvd(int list, int comp, int x, int y, int v);
-  int intra_pred_mode(int v);
-  int intra_chroma_pred_mode(int v);
-  int coded_block_pattern(int v, bool intra_nxn);
-  int transform_size_8x8_flag(int v);
-  int mb_qp_delta(int v);
-  int cabac_residual(int cat, int* c, int n, int cbf_inc);
-  int nc_luma(int plane, int x, int y) const;
-  int nc_chroma(int comp, int x, int y) const;
-  int cbf_inc_luma(int plane, int x, int y) const;
-  int cbf_inc_8x8(int plane, int b8) const;
-  int cbf_inc_dc(int comp) const;
-  int cbf_inc_chroma_ac(int comp, int x, int y) const;
-
-  const bool W;
-  const SliceHeader& h_;
-  const Sps& sps_;
-  const Pps& pps_;
-  MbStore& store_;
-  BitReader* br_;
-  BitWriter* bw_;
-  RowWriter* out_;
-  RowReader* in_;
-
-  bool cabac_ = false, field_ = false, mbaff_ = false;
-  int stype_ = 0, chroma_ = 1, ch_h_ = 2, ch_blocks_ = 4;
-  int width_ = 0, size_ = 0;
-  int num_ref_[2] = {0, 0};
-  uint32_t slice_id_ = 0;
-  std::vector<uint8_t> group_;  // mbToSliceGroupMap, empty without FMO
-  int cur_addr_ = 0;
-  MbState* cur_ = nullptr;
-  const MbState* mb_a_ = nullptr;  // macroblocks A and B (6.4.10.1)
-  const MbState* mb_b_ = nullptr;
-  const MbState* left_ = nullptr;  // left and above macroblock, or top
-  const MbState* above_ = nullptr; // macroblock of the left and above pair
-  int pair_field_ = 0;             // MBAFF: field decoding mode of the pair
-  MbRec* rec_ = nullptr;
-  MbRec mbrec_;  // reused for every macroblock
-  int last_qpd_ = 0;
-  CabacCtx ctx_[kNumCtx];
-  CabacDecoder dec_;
-  CabacEncoder enc_;
-};
-
 // ---------------------------------------------------------------------------
 // slice group map (8.2.2)
 
@@ -392,285 +211,6 @@ std::vector<uint8_t> slice_group_map(const SliceHeader& h, int width, int size) 
 }
 
 // ---------------------------------------------------------------------------
-
-void SliceCoder::run() {
-  stype_ = h_.type();
-  cabac_ = pps_.entropy_coding_mode_flag;
-  field_ = h_.field_pic_flag;
-  chroma_ = sps_.chroma_array_type();
-  ch_h_ = chroma_ == 2 ? 4 : 2;
-  ch_blocks_ = chroma_ == 2 ? 8 : 4;
-  mbaff_ = sps_.mb_adaptive_frame_field_flag && !h_.field_pic_flag;
-  if (h_.nal_unit_type != 1 && h_.nal_unit_type != 5) fail("unsupported NAL unit type");
-  width_ = sps_.width_mbs;
-  size_ = width_ * (sps_.frame_height_mbs() / (1 + field_));
-  num_ref_[0] = h_.num_ref_idx_active[0];
-  num_ref_[1] = h_.num_ref_idx_active[1];
-  if (pps_.num_slice_groups > 1) group_ = slice_group_map(h_, width_, size_);
-  if ((int)store_.mbs.size() < size_) store_.mbs.resize(size_, MbState());
-  slice_id_ = ++store_.slices;
-  if (h_.first_mb * (1 + mbaff_) >= size_) fail("first_mb_in_slice out of range");
-
-  if (cabac_) {
-    if (!W) {
-      while (!br_->byte_aligned())
-        if (!br_->bit()) fail("cabac_alignment_one_bit is 0");
-    } else {
-      while (bw_->pos() & 7) bw_->bit(1);
-    }
-    int qp = pps_.pic_init_qp + h_.slice_qp_delta;
-    cabac_init_contexts(ctx_, qp, stype_ == kI || stype_ == kSI ? 0 : h_.cabac_init_idc + 1);
-    if (!W)
-      dec_.init(br_);
-    else
-      enc_.init(bw_);
-  }
-  if (!W)
-    read_loop();
-  else
-    write_loop();
-  if (!cabac_) {
-    if (!W) {
-      // the rbsp_stop_one_bit
-      if (!br_->bit()) fail("missing rbsp_stop_one_bit");
-    } else {
-      bw_->bit(1);
-    }
-  }
-}
-
-int SliceCoder::next_mb(int addr) const {
-  if (group_.empty()) return addr + 1;
-  int i = addr + 1;
-  while (i < size_ && group_[i] != group_[addr]) i++;
-  return i;
-}
-
-void SliceCoder::start_mb(int addr) {
-  if (addr >= size_) fail("too many macroblocks in the slice");
-  cur_addr_ = addr;
-  if (mbaff_) {
-    if (!(addr & 1)) {
-      // a new pair: neighbouring pairs (6.4.10), and the inferred field
-      // decoding mode until mb_field_decoding_flag is decoded (7.4.4)
-      int pair = addr / 2;
-      left_ = pair % width_ ? avail(2 * (pair - 1)) : nullptr;
-      above_ = pair >= width_ ? avail(2 * (pair - width_)) : nullptr;
-      pair_field_ = left_ ? left_->field : above_ ? above_->field : 0;
-    }
-  } else {
-    left_ = addr % width_ ? avail(addr - 1) : nullptr;
-    above_ = addr >= width_ ? avail(addr - width_) : nullptr;
-  }
-  cur_ = &store_.mbs[addr];
-  memset(cur_, 0, sizeof *cur_);
-  cur_->slice = slice_id_;
-  cur_->field = (uint8_t)(mbaff_ && pair_field_);
-  update_nb();
-}
-
-void SliceCoder::update_nb() {
-  int xW, yW;
-  mb_a_ = nb_loc(-1, 0, 16, 16, xW, yW);
-  mb_b_ = nb_loc(0, -1, 16, 16, xW, yW);
-}
-
-void SliceCoder::set_skip() {
-  cur_->skip = 1;
-  cur_->direct16 = stype_ == kB;
-  last_qpd_ = 0;
-}
-
-// mb_field_decoding_flag decoded for the pair
-void SliceCoder::set_field(int f) {
-  pair_field_ = f;
-  cur_->field = (uint8_t)f;
-  if (cur_addr_ & 1) (cur_ - 1)->field = (uint8_t)f;  // skipped top macroblock
-  update_nb();
-}
-
-// 6.4.12; for MBAFF frames table 6-4 (neighbours A and B only)
-const MbState* SliceCoder::nb_loc(int xN, int yN, int maxW, int maxH, int& xW, int& yW) const {
-  if (xN >= 0 && yN >= 0) {
-    xW = xN;
-    yW = yN;
-    return cur_;
-  }
-  if (!mbaff_) {
-    xW = xN < 0 ? xN + maxW : xN;
-    yW = yN < 0 ? yN + maxH : yN;
-    return xN < 0 ? left_ : above_;
-  }
-  bool top = !(cur_addr_ & 1), curf = cur_->field;
-  const MbState* n;
-  int yM;
-  if (xN < 0) {  // 0 <= yN < maxH
-    if (!left_) return nullptr;
-    const MbState* a = left_;  // top macroblock of the left pair, a + 1 its bottom one
-    if (!curf) {
-      if (!a->field) {
-        n = top ? a : a + 1;
-        yM = yN;
-      } else {
-        n = (yN & 1) ? a + 1 : a;
-        yM = top ? yN >> 1 : (yN + maxH) >> 1;
-      }
-    } else if (!a->field) {
-      int y = (yN << 1) + !top;
-      n = y < maxH ? a : a + 1;
-      yM = y < maxH ? y : y - maxH;
-    } else {
-      n = top ? a : a + 1;
-      yM = yN;
-    }
-    xW = xN + maxW;
-  } else {  // yN < 0, 0 <= xN < maxW
-    if (!curf && !top) {
-      n = cur_ - 1;  // top macroblock of the same pair
-      yM = yN;
-    } else {
-      if (!above_) return nullptr;
-      if (curf && top && above_->field) {
-        n = above_;
-        yM = yN;
-      } else {
-        n = above_ + 1;
-        yM = curf && top ? 2 * yN : yN;
-      }
-    }
-    xW = xN;
-  }
-  yW = yM < 0 ? yM + maxH : yM;
-  return n;
-}
-
-void SliceCoder::read_loop() {
-  bool intra = stype_ == kI || stype_ == kSI;
-  int addr = h_.first_mb * (1 + mbaff_);
-  int skipped = 0;
-  bool prev_skipped = false;
-  auto flush_skip = [&]() {
-    if (skipped) out_->row("skip", skipped);
-    skipped = 0;
-  };
-  auto coded_mb = [&]() {
-    MbRec& r = mbrec_;
-    r.clear();
-    if (mbaff_ && (!(addr & 1) || prev_skipped)) {
-      r.field = mb_field_decoding_flag(0);
-      set_field(r.field);
-    }
-    macroblock(r);
-    write_mb_rows(r);
-  };
-  for (;;) {
-    if (!cabac_) {
-      if (!intra) {
-        uint32_t run = br_->ue();
-        if (run > (uint32_t)size_) fail("mb_skip_run too large");
-        for (uint32_t k = 0; k < run; k++) {
-          start_mb(addr);
-          set_skip();
-          addr = next_mb(addr);
-        }
-        prev_skipped = run > 0;
-        if (run) {
-          out_->row("skip", run);
-          if (!br_->more_rbsp_data()) break;
-        }
-      }
-      start_mb(addr);
-      coded_mb();
-      if (!br_->more_rbsp_data()) break;
-    } else {
-      start_mb(addr);
-      bool skip = !intra && mb_skip_flag(0);
-      if (skip) {
-        set_skip();
-        skipped++;
-      } else {
-        flush_skip();
-        coded_mb();
-      }
-      prev_skipped = skip;
-      if ((!mbaff_ || (addr & 1)) && term(0)) break;
-    }
-    addr = next_mb(addr);
-  }
-  flush_skip();
-}
-
-void SliceCoder::write_loop() {
-  bool intra = stype_ == kI || stype_ == kSI;
-  int addr = h_.first_mb * (1 + mbaff_);
-  bool prev_skipped = false;
-  auto peek_is = [&](RowKind k) {
-    const Row* r = in_->peek();
-    return r && r->kind == k;
-  };
-  auto take_skip = [&]() {
-    const Row& r = in_->take();
-    if (intra) r.fail("skipped macroblocks in an intra slice");
-    if (r.size() != 2) r.fail("expected 1 value");
-    int64_t n = r.num(1);
-    if (n < 1 || n > size_) r.fail("bad skip count");
-    return (int)n;
-  };
-  auto coded_mb = [&]() {
-    MbRec& r = mbrec_;
-    r.clear();
-    read_mb_rows(r);
-    rec_ = &r;
-    if (mbaff_ && (!(addr & 1) || prev_skipped))
-      set_field(mb_field_decoding_flag(r.field));
-    else if (r.field >= 0)
-      fail("fld row for a macroblock without mb_field_decoding_flag");
-    macroblock(r);
-  };
-  int skip_left = 0;
-  for (;;) {
-    if (!cabac_) {
-      if (!intra) {
-        int run = 0;
-        while (peek_is(kSkipRow)) run += take_skip();
-        bw_->ue((uint32_t)run);
-        for (int k = 0; k < run; k++) {
-          start_mb(addr);
-          set_skip();
-          addr = next_mb(addr);
-        }
-        prev_skipped = run > 0;
-        if (run && !peek_is(kMbRow)) break;
-      }
-      if (!peek_is(kMbRow)) fail("expected a macroblock");
-      start_mb(addr);
-      coded_mb();
-      if (!peek_is(kMbRow) && !peek_is(kSkipRow)) break;
-    } else {
-      if (!skip_left && peek_is(kSkipRow)) skip_left = take_skip();
-      bool skip = skip_left > 0;
-      if (!skip && !peek_is(kMbRow)) fail("expected a macroblock");
-      start_mb(addr);
-      if (!intra) mb_skip_flag(skip);
-      if (skip) {
-        set_skip();
-        skip_left--;
-      } else {
-        coded_mb();
-      }
-      prev_skipped = skip;
-      bool end = !skip_left && !peek_is(kMbRow) && !peek_is(kSkipRow);
-      if (!mbaff_ || (addr & 1))
-        term(end);
-      else if (end)
-        fail("the slice ends with half a macroblock pair");
-      if (end) break;
-    }
-    addr = next_mb(addr);
-  }
-}
-
-// ---------------------------------------------------------------------------
 // rows of a macroblock
 
 void put_list(RowWriter& o, const char* name, const std::vector<int>& v) {
@@ -678,42 +218,6 @@ void put_list(RowWriter& o, const char* name, const std::vector<int>& v) {
   o.begin(name);
   for (int x : v) o.add(x);
   o.end();
-}
-
-void SliceCoder::write_mb_rows(const MbRec& r) {
-  RowWriter& o = *out_;
-  o.begin("mb");
-  o.add(r.type);
-  for (int f : {r.t8x8, r.cpred, r.cbp})
-    if (f < 0)
-      o.add_absent();
-    else
-      o.add(f);
-  if (r.qpd == kAbsent)
-    o.add_absent();
-  else
-    o.add(r.qpd);
-  o.end();
-  if (r.field >= 0) o.row("fld", r.field);
-  if (r.has_pcm) {
-    o.begin("pcm");
-    o.add(r.pcm_align);
-    for (int x : r.pcm) o.add(x);
-    o.end();
-  }
-  put_list(o, "ipm", r.ipm);
-  put_list(o, "sub", r.sub);
-  put_list(o, "ref0", r.ref[0]);
-  put_list(o, "ref1", r.ref[1]);
-  put_list(o, "mvd0", r.mvd[0]);
-  put_list(o, "mvd1", r.mvd[1]);
-  for (const Block& b : r.res) {
-    o.begin("res");
-    o.add(b.cat);
-    o.add(b.idx);
-    for (size_t i = 0; i < b.len; i++) o.add(r.coef[b.off + i]);
-    o.end();
-  }
 }
 
 static int to_int(const Row& row, size_t i) {
@@ -728,760 +232,1204 @@ static void get_list(const Row& row, std::vector<int>& v, size_t from = 1) {
   if (v.empty()) row.fail("no values");
 }
 
-void SliceCoder::read_mb_rows(MbRec& r) {
-  const Row& m = in_->take();
-  if (m.size() != 6) m.fail("expected 5 values");
-  r.line = m.lineno;
-  r.type = to_int(m, 1);
-  r.t8x8 = m.absent(2) ? -1 : to_int(m, 2);
-  r.cpred = m.absent(3) ? -1 : to_int(m, 3);
-  r.cbp = m.absent(4) ? -1 : to_int(m, 4);
-  r.qpd = m.absent(5) ? kAbsent : to_int(m, 5);
-  if (r.t8x8 < -1 || r.cpred < -1 || r.cbp < -1) m.fail("negative value");
-  while (const Row* p = in_->peek()) {
-    switch (p->kind) {
-      case kFldRow: {
-        const Row& row = in_->take();
-        if (r.field >= 0) row.fail("duplicate row");
-        if (row.size() != 2) row.fail("expected 1 value");
-        r.field = to_int(row, 1);
-        if (r.field < 0) row.fail("bad value");
-        break;
-      }
-      case kPcmRow: {
-        const Row& row = in_->take();
-        if (r.has_pcm) row.fail("duplicate row");
-        r.has_pcm = true;
-        r.pcm_align = to_int(row, 1);
-        for (size_t i = 2; i < row.size(); i++) r.pcm.push_back(to_int(row, i));
-        break;
-      }
-      case kIpmRow:
-        get_list(in_->take(), r.ipm);
-        break;
-      case kSubRow:
-        get_list(in_->take(), r.sub);
-        break;
-      case kRef0Row:
-        get_list(in_->take(), r.ref[0]);
-        break;
-      case kRef1Row:
-        get_list(in_->take(), r.ref[1]);
-        break;
-      case kMvd0Row:
-        get_list(in_->take(), r.mvd[0]);
-        break;
-      case kMvd1Row:
-        get_list(in_->take(), r.mvd[1]);
-        break;
-      case kResRow: {
-        const Row& row = in_->take();
-        Block b;
-        b.cat = to_int(row, 1);
-        b.idx = to_int(row, 2);
-        b.off = r.coef.size();
-        for (size_t i = 3; i < row.size(); i++) r.coef.push_back(to_int(row, i));
-        b.len = r.coef.size() - b.off;
-        if (!b.len || !r.coef.back()) row.fail("coefficients must end with a nonzero one");
-        r.res.push_back(b);
-        break;
-      }
-      default:
-        return;
-    }
-  }
-}
-
 // ---------------------------------------------------------------------------
-// macroblock layer (7.3.5)
 
-void SliceCoder::macroblock(MbRec& r) {
-  rec_ = &r;
-  MbState& m = *cur_;
-  int t = mb_type(r.type);
-  r.type = t;
-  int itype = -1, ptype = -1, btype = -1;  // intra type in I slice numbering
-  bool si = false;
-  switch (stype_) {
-    case kI:
-      itype = t;
-      break;
-    case kSI:
-      if (t == 0)
-        si = true;
-      else
-        itype = t - 1;
-      break;
-    case kB:
-      if (t < 23)
-        btype = t;
-      else
-        itype = t - 23;
-      break;
-    default:
-      if (t < 5)
-        ptype = t;
-      else
-        itype = t - 5;
-  }
-  m.intra = itype >= 0 || si;
-  m.si = si;
-  if (itype == 25) {  // I_PCM
-    m.pcm = 1;
-    m.cbp = 0x2f;
-    memset(m.nz, 16, sizeof m.nz);
-    memset(m.cbf_dc, 1, sizeof m.cbf_dc);
-    pcm_samples(r);
-    last_qpd_ = 0;
-    rec_ = nullptr;
-    return;
-  }
-  m.i16 = itype >= 1;
-  m.inxn = itype == 0;
-  m.direct16 = btype == 0;
-  bool no_sub_lt8 = true;
-  int t8 = 0;
-  if (ptype == 3 || ptype == 4 || btype == 22) {
-    sub_mb_pred(r, ptype, no_sub_lt8);
-  } else if (m.intra) {
-    if (pps_.transform_8x8_mode_flag && m.inxn) r.t8x8 = t8 = transform_size_8x8_flag(field(r.t8x8, kUseT8x8, "transform_size_8x8_flag"));
-    if (m.inxn || si) {
-      for (int i = 0; i < (t8 ? 4 : 16); i++) keep(r.ipm, intra_pred_mode(next(r.ipm, r.ipm_i, "ipm")));
-    }
-    if (chroma_ == 1 || chroma_ == 2) {
-      r.cpred = intra_chroma_pred_mode(field(r.cpred, kUseCpred, "intra_chroma_pred_mode"));
-      m.cpred = (uint8_t)r.cpred;
-    }
-  } else {
-    mb_pred_inter(r, ptype, btype);
-  }
-  int cbp;
-  if (!m.i16) {
-    r.cbp = cbp = coded_block_pattern(field(r.cbp, kUseCbp, "coded_block_pattern"), m.inxn || si);
-    if ((cbp & 15) && pps_.transform_8x8_mode_flag && !m.inxn && no_sub_lt8 &&
-        (btype != 0 || sps_.direct_8x8_inference_flag))
-      r.t8x8 = t8 = transform_size_8x8_flag(field(r.t8x8, kUseT8x8, "transform_size_8x8_flag"));
-  } else {
-    cbp = ((itype - 1) / 12 ? 15 : 0) | ((itype - 1) / 4 % 3) << 4;
-  }
-  m.cbp = (uint8_t)cbp;
-  m.t8x8 = (uint8_t)t8;
-  int qpd = 0;
-  if (cbp || m.i16) {
-    r.qpd = qpd = mb_qp_delta(field(r.qpd, kUseQpd, "mb_qp_delta"));
-    residual(r, cbp, t8);
-  }
-  last_qpd_ = qpd;
-  if (W) {
-    if (r.ipm_i != r.ipm.size() || r.sub_i != r.sub.size() || r.ref_i[0] != r.ref[0].size() ||
-        r.ref_i[1] != r.ref[1].size() || r.mvd_i[0] != r.mvd[0].size() || r.mvd_i[1] != r.mvd[1].size())
-      fail("too many values for this macroblock");
-    if (r.res_i != r.res.size()) fail("res row for a block that is not coded");
-    if (r.has_pcm) fail("pcm row for a macroblock that is not I_PCM");
-    if ((r.t8x8 >= 0 && !(r.used & kUseT8x8)) || (r.cpred >= 0 && !(r.used & kUseCpred)) ||
-        (r.cbp >= 0 && !(r.used & kUseCbp)) || (r.qpd != kAbsent && !(r.used & kUseQpd)))
-      fail("value for a syntax element that is not coded");
-  }
-  rec_ = nullptr;
-}
+struct SliceCoder {
+  SliceCoder(const SliceHeader& h, MbStore& store, BitReader* br, RowWriter* out, RowReader* in, BitWriter* bw)
+      : W(bw != nullptr), h_(h), sps_(*h.sps), pps_(*h.pps), store_(store), br_(br), bw_(bw), out_(out), in_(in) {}
 
-void SliceCoder::pcm_samples(MbRec& r) {
-  int nc = chroma_ ? 2 * (16 / (chroma_ == 3 ? 1 : 2)) * (16 / (chroma_ == 1 ? 2 : 1)) : 0;
-  int n = 256 + nc;
-  // the alignment bits relative to x264's, whose last one is its padding bit
-  int nb = (8 - (int)((W ? bw_->pos() : br_->pos()) & 7)) & 7;
-  int pad = cabac_ && nb ? h_.pad : 0;
-  if (!W) {
-    r.has_pcm = true;
-    r.pcm_align = (int)br_->u(nb) ^ pad;
-    r.pcm.resize(n);
-    for (int i = 0; i < n; i++) r.pcm[i] = (int)br_->u(i < 256 ? sps_.bit_depth_luma : sps_.bit_depth_chroma);
-  } else {
-    if (!r.has_pcm) fail("missing pcm row");
-    if ((int)r.pcm.size() != n) fail("wrong number of PCM samples");
-    if (r.pcm_align < 0 || r.pcm_align >= (1 << nb)) fail("bad pcm alignment bits");
-    bw_->put((uint32_t)(r.pcm_align ^ pad), nb);
-    for (int i = 0; i < n; i++) {
-      int depth = i < 256 ? sps_.bit_depth_luma : sps_.bit_depth_chroma;
-      if (r.pcm[i] < 0 || r.pcm[i] >= (1 << depth)) fail("PCM sample out of range");
-      bw_->put((uint32_t)r.pcm[i], depth);
+  void run() {
+    stype_ = h_.type();
+    cabac_ = pps_.entropy_coding_mode_flag;
+    field_ = h_.field_pic_flag;
+    chroma_ = sps_.chroma_array_type();
+    ch_h_ = chroma_ == 2 ? 4 : 2;
+    ch_blocks_ = chroma_ == 2 ? 8 : 4;
+    mbaff_ = sps_.mb_adaptive_frame_field_flag && !h_.field_pic_flag;
+    if (h_.nal_unit_type != 1 && h_.nal_unit_type != 5) fail("unsupported NAL unit type");
+    width_ = sps_.width_mbs;
+    size_ = width_ * (sps_.frame_height_mbs() / (1 + field_));
+    num_ref_[0] = h_.num_ref_idx_active[0];
+    num_ref_[1] = h_.num_ref_idx_active[1];
+    if (pps_.num_slice_groups > 1) group_ = slice_group_map(h_, width_, size_);
+    if ((int)store_.mbs.size() < size_) store_.mbs.resize(size_, MbState());
+    slice_id_ = ++store_.slices;
+    if (h_.first_mb * (1 + mbaff_) >= size_) fail("first_mb_in_slice out of range");
+
+    if (cabac_) {
+      if (!W) {
+        while (!br_->byte_aligned())
+          if (!br_->bit()) fail("cabac_alignment_one_bit is 0");
+      } else {
+        while (bw_->pos() & 7) bw_->bit(1);
+      }
+      int qp = pps_.pic_init_qp + h_.slice_qp_delta;
+      cabac_init_contexts(ctx_, qp, stype_ == kI || stype_ == kSI ? 0 : h_.cabac_init_idc + 1);
+      if (!W)
+        dec_.init(br_);
+      else
+        enc_.init(bw_);
     }
-    r.has_pcm = false;  // used
-    if (r.ipm.size() || r.sub.size() || r.ref[0].size() || r.ref[1].size() || r.mvd[0].size() ||
-        r.mvd[1].size() || r.res.size() || r.t8x8 >= 0 || r.cpred >= 0 || r.cbp >= 0 || r.qpd != kAbsent)
-      fail("values for syntax elements that are not coded in I_PCM");
-  }
-  if (cabac_) {
     if (!W)
-      dec_.init(br_);
+      read_loop();
     else
-      enc_.init(bw_);
-  }
-}
-
-void SliceCoder::code_ref(MbRec& r, int list, const Part& p, bool coded) {
-  int v = 0;
-  if (coded) {
-    v = ref_idx(list, p.x, p.y, next(r.ref[list], r.ref_i[list], list ? "ref1" : "ref0"));
-    keep(r.ref[list], v);
-  }
-  for (int y = p.y; y < p.y + p.h; y += 2)
-    for (int x = p.x; x < p.x + p.w; x += 2) cur_->ref[list][(y >> 1) * 2 + (x >> 1)] = (int8_t)v;
-}
-
-void SliceCoder::code_mvd(MbRec& r, int list, const Part& p) {
-  const char* what = list ? "mvd1" : "mvd0";
-  int mx = mvd(list, 0, p.x, p.y, next(r.mvd[list], r.mvd_i[list], what));
-  keep(r.mvd[list], mx);
-  int my = mvd(list, 1, p.x, p.y, next(r.mvd[list], r.mvd_i[list], what));
-  keep(r.mvd[list], my);
-  uint8_t ax = (uint8_t)std::min(abs(mx), 127), ay = (uint8_t)std::min(abs(my), 127);
-  for (int y = p.y; y < p.y + p.h; y++)
-    for (int x = p.x; x < p.x + p.w; x++) {
-      cur_->mvd[list][y * 4 + x][0] = ax;
-      cur_->mvd[list][y * 4 + x][1] = ay;
-    }
-}
-
-void SliceCoder::mb_pred_inter(MbRec& r, int ptype, int btype) {
-  const Part* parts;
-  int n, pred[2];
-  if (ptype >= 0) {
-    n = ptype ? 2 : 1;
-    parts = ptype == 0 ? kParts16x16 : ptype == 1 ? kParts16x8 : kParts8x16;
-    pred[0] = pred[1] = 1;
-  } else if (btype == 0) {
-    return;  // B_Direct_16x16
-  } else if (btype <= 3) {
-    n = 1;
-    parts = kParts16x16;
-    pred[0] = btype;
-  } else {
-    n = 2;
-    parts = btype & 1 ? kParts8x16 : kParts16x8;
-    pred[0] = kBPartPred[(btype - 4) / 2][0];
-    pred[1] = kBPartPred[(btype - 4) / 2][1];
-  }
-  for (int l = 0; l < 2; l++)
-    for (int i = 0; i < n; i++)
-      if (pred[i] & (1 << l)) code_ref(r, l, parts[i], num_ref_[l] > 1 || cur_->field);
-  for (int l = 0; l < 2; l++)
-    for (int i = 0; i < n; i++)
-      if (pred[i] & (1 << l)) code_mvd(r, l, parts[i]);
-}
-
-void SliceCoder::sub_mb_pred(MbRec& r, int ptype, bool& no_sub_lt8) {
-  int sub[4];
-  for (int i = 0; i < 4; i++) {
-    sub[i] = sub_mb_type(next(r.sub, r.sub_i, "sub"));
-    keep(r.sub, sub[i]);
-  }
-  bool b = stype_ == kB;
-  auto pred = [&](int i) { return b ? kBSubPred[sub[i]] : 1; };
-  auto shape = [&](int i) { return b ? kBSubShape[sub[i]] : sub[i]; };
-  for (int l = 0; l < 2; l++)
-    for (int i = 0; i < 4; i++)
-      if (pred(i) & (1 << l)) {
-        Part p = {(i & 1) * 2, (i >> 1) * 2, 2, 2};
-        code_ref(r, l, p, (num_ref_[l] > 1 || cur_->field) && ptype != 4);
+      write_loop();
+    if (!cabac_) {
+      if (!W) {
+        // the rbsp_stop_one_bit
+        if (!br_->bit()) fail("missing rbsp_stop_one_bit");
+      } else {
+        bw_->bit(1);
       }
-  for (int l = 0; l < 2; l++)
-    for (int i = 0; i < 4; i++)
-      if (pred(i) & (1 << l)) {
-        int s = shape(i);
-        for (int j = 0; j < kNumSubParts[s]; j++) {
-          Part p = kSubParts[s][j];
-          p.x += (i & 1) * 2;
-          p.y += (i >> 1) * 2;
-          code_mvd(r, l, p);
+    }
+  }
+
+  // --- errors
+  [[noreturn]] void fail(const std::string& msg) {
+    if (!W) throw ParseError(msg);
+    throw TsvError("line " + std::to_string(rec_ ? rec_->line : in_->lineno()) + ": " + msg);
+  }
+
+  // --- CAVLC primitives
+  int u(int n, int v) {
+    if (!W) return (int)br_->u(n);
+    if (v < 0 || v >= (1 << n)) fail("value " + std::to_string(v) + " out of range");
+    bw_->put((uint32_t)v, n);
+    return v;
+  }
+  int ue(int v, int hi) {
+    if (!W) {
+      uint32_t x = br_->ue();
+      if (x > (uint32_t)hi) fail("value out of range");
+      return (int)x;
+    }
+    if (v < 0 || v > hi) fail("value " + std::to_string(v) + " out of range");
+    bw_->ue((uint32_t)v);
+    return v;
+  }
+  int se(int v, int lim) {
+    if (!W) {
+      int64_t x = br_->se();
+      if (x < -lim || x > lim) fail("value out of range");
+      return (int)x;
+    }
+    if (v < -lim || v > lim) fail("value " + std::to_string(v) + " out of range");
+    bw_->se(v);
+    return v;
+  }
+  int te(int v, int range) {
+    if (W && (v < 0 || v > range)) fail("value " + std::to_string(v) + " out of range");
+    if (range == 1) return !u(1, !v);
+    return ue(v, range);
+  }
+
+  // --- CABAC primitives
+  int bin(int ctx, int v) {
+    if (!W) return dec_.decision(ctx_[ctx]);
+    enc_.decision(ctx_[ctx], v);
+    return v;
+  }
+  int bypass(int v) {
+    if (!W) return dec_.bypass();
+    enc_.bypass(v);
+    return v;
+  }
+  int term(int v) {
+    if (!W) return dec_.terminate();
+    enc_.terminate(v);
+    return v;
+  }
+
+  int exp_golomb_bypass(int k, int v) {
+    int x = 0;
+    while (bypass(W ? v - x >= (1 << k) : 0)) {
+      x += 1 << k;
+      if (++k > 28) fail("invalid Exp-Golomb suffix");
+    }
+    while (k--) x += bypass(W ? ((v - x) >> k) & 1 : 0) << k;
+    return x;
+  }
+
+  // --- values of the TSV rows
+  int next(std::vector<int>& q, size_t& i, const char* what) {
+    if (!W) return 0;
+    if (i >= q.size()) fail(std::string("missing ") + what + " value");
+    return q[i++];
+  }
+  void keep(std::vector<int>& q, int v) {
+    if (!W) q.push_back(v);
+  }
+  int field(int& f, unsigned use, const char* what) {
+    if (!W) return 0;
+    if (f == kAbsent || (use != kUseQpd && f < 0)) fail(std::string("missing ") + what);
+    rec_->used |= use;
+    return f;
+  }
+
+  // --- neighbours
+  const MbState* avail(int addr) const {
+    return store_.mbs[addr].slice == slice_id_ ? &store_.mbs[addr] : nullptr;
+  }
+
+  // macroblock containing the sample (xN, yN) relative to the current
+  // macroblock, maxW x maxH samples (6.4.12; for MBAFF frames table 6-4), and
+  // the sample position in it; xN or yN may be -1 (neighbours A and B only)
+  const MbState* nb_loc(int xN, int yN, int maxW, int maxH, int& xW, int& yW) const {
+    if (xN >= 0 && yN >= 0) {
+      xW = xN;
+      yW = yN;
+      return cur_;
+    }
+    if (!mbaff_) {
+      xW = xN < 0 ? xN + maxW : xN;
+      yW = yN < 0 ? yN + maxH : yN;
+      return xN < 0 ? left_ : above_;
+    }
+    bool top = !(cur_addr_ & 1), curf = cur_->field;
+    const MbState* n;
+    int yM;
+    if (xN < 0) {  // 0 <= yN < maxH
+      if (!left_) return nullptr;
+      const MbState* a = left_;  // top macroblock of the left pair, a + 1 its bottom one
+      if (!curf) {
+        if (!a->field) {
+          n = top ? a : a + 1;
+          yM = yN;
+        } else {
+          n = (yN & 1) ? a + 1 : a;
+          yM = top ? yN >> 1 : (yN + maxH) >> 1;
+        }
+      } else if (!a->field) {
+        int y = (yN << 1) + !top;
+        n = y < maxH ? a : a + 1;
+        yM = y < maxH ? y : y - maxH;
+      } else {
+        n = top ? a : a + 1;
+        yM = yN;
+      }
+      xW = xN + maxW;
+    } else {  // yN < 0, 0 <= xN < maxW
+      if (!curf && !top) {
+        n = cur_ - 1;  // top macroblock of the same pair
+        yM = yN;
+      } else {
+        if (!above_) return nullptr;
+        if (curf && top && above_->field) {
+          n = above_;
+          yM = yN;
+        } else {
+          n = above_ + 1;
+          yM = curf && top ? 2 * yN : yN;
         }
       }
-  for (int i = 0; i < 4; i++) {
-    if (b && sub[i] == 0) {
-      if (!sps_.direct_8x8_inference_flag) no_sub_lt8 = false;
-    } else if (kNumSubParts[shape(i)] > 1) {
-      no_sub_lt8 = false;
+      xW = xN;
     }
+    yW = yM < 0 ? yM + maxH : yM;
+    return n;
   }
-}
 
-// ---------------------------------------------------------------------------
-// residual (7.3.5.3)
-
-void SliceCoder::fetch(MbRec& r, int cat, int idx, int* c, int n) {
-  for (int i = 0; i < n; i++) c[i] = 0;
-  if (r.res_i < r.res.size() && r.res[r.res_i].cat == cat && r.res[r.res_i].idx == idx) {
-    const Block& b = r.res[r.res_i++];
-    if ((int)b.len > n) fail("too many coefficients in a res row");
-    for (size_t i = 0; i < b.len; i++) c[i] = r.coef[b.off + i];
-  }
-}
-
-void SliceCoder::store(MbRec& r, int cat, int idx, const int* c, int n) {
-  int last = n - 1;
-  while (last >= 0 && !c[last]) last--;
-  if (last < 0) return;
-  r.res.push_back(Block{cat, idx, r.coef.size(), (size_t)last + 1});
-  r.coef.insert(r.coef.end(), c, c + last + 1);
-}
-
-int SliceCoder::block(MbRec& r, int cat, int idx, int* c, int n, int ctx) {
-  if (W) fetch(r, cat, idx, c, n);
-  int k;
-  if (cabac_)
-    k = cabac_residual(cat, c, n, ctx);
-  else if (W)
-    k = cavlc_write_block(*bw_, ctx, n, c);
-  else
-    k = cavlc_read_block(*br_, ctx, n, c);
-  if (!W) store(r, cat, idx, c, n);
-  return k;
-}
-
-void SliceCoder::residual(MbRec& r, int cbp, int t8) {
-  MbState& m = *cur_;
-  residual_luma(r, 0, cbp, t8);
-  if (chroma_ == 3) {  // Cb and Cr coded like luma
-    residual_luma(r, 1, cbp, t8);
-    residual_luma(r, 2, cbp, t8);
-  } else if (chroma_) {
-    int c[16];
-    if (cbp >> 4) {
-      for (int comp = 0; comp < 2; comp++) {
-        block(r, 3, comp, c, ch_blocks_, cabac_ ? cbf_inc_dc(1 + comp) : chroma_ == 1 ? -1 : -2);
-        m.cbf_dc[1 + comp] = count_nonzero(c, ch_blocks_) != 0;
-      }
-    }
-    if ((cbp >> 4) == 2) {
-      for (int comp = 0; comp < 2; comp++)
-        for (int b = 0; b < ch_blocks_; b++) {
-          int x = b & 1, y = b >> 1;
-          int ctx = cabac_ ? cbf_inc_chroma_ac(comp, x, y) : nc_chroma(comp, x, y);
-          m.nz[1 + comp][y * 2 + x] = (uint8_t)block(r, 4, comp * ch_blocks_ + b, c, 15, ctx);
-        }
-    }
-  }
-}
-
-// residual_luma(): the blocks of Y, or of Cb or Cr with 4:4:4
-void SliceCoder::residual_luma(MbRec& r, int plane, int cbp, int t8) {
-  MbState& m = *cur_;
-  uint8_t* nz = m.nz[plane];
-  int c[64];
-  if (m.i16) {
-    block(r, kCatDc[plane], 0, c, 16, cabac_ ? cbf_inc_dc(plane) : nc_luma(plane, 0, 0));
-    m.cbf_dc[plane] = count_nonzero(c, 16) != 0;
-  }
-  for (int b8 = 0; b8 < 4; b8++) {
-    if (!(cbp & (1 << b8))) continue;
-    int x0 = (b8 & 1) * 2, y0 = (b8 >> 1) * 2;
-    if (t8 && cabac_) {
-      // coded_block_flag only with 4:4:4
-      block(r, kCat8x8[plane], b8, c, 64, chroma_ == 3 ? cbf_inc_8x8(plane, b8) : -1);
-      nz[y0 * 4 + x0] = nz[y0 * 4 + x0 + 1] = nz[y0 * 4 + x0 + 4] = nz[y0 * 4 + x0 + 5] = (uint8_t)count_nonzero(c, 64);
-    } else if (t8) {
-      // CAVLC: four 4x4 blocks with interleaved coefficients
-      if (W) fetch(r, kCat8x8[plane], b8, c, 64);
-      for (int b4 = 0; b4 < 4; b4++) {
-        int c4[16];
-        for (int i = 0; i < 16; i++) c4[i] = c[4 * i + b4];
-        int x = x0 + (b4 & 1), y = y0 + (b4 >> 1);
-        int nc = nc_luma(plane, x, y);
-        int tc = W ? cavlc_write_block(*bw_, nc, 16, c4) : cavlc_read_block(*br_, nc, 16, c4);
-        if (!W)
-          for (int i = 0; i < 16; i++) c[4 * i + b4] = c4[i];
-        nz[y * 4 + x] = (uint8_t)tc;
-      }
-      if (!W) store(r, kCat8x8[plane], b8, c, 64);
-    } else {
-      for (int b4 = 0; b4 < 4; b4++) {
-        int blk = b8 * 4 + b4, x = blk_x(blk), y = blk_y(blk);
-        int ctx = cabac_ ? cbf_inc_luma(plane, x, y) : nc_luma(plane, x, y);
-        nz[y * 4 + x] = (uint8_t)(m.i16 ? block(r, kCatAc[plane], blk, c, 15, ctx)
-                                        : block(r, kCat4x4[plane], blk, c, 16, ctx));
-      }
-    }
-  }
-}
-
-// CAVLC nC (9.2.1)
-int SliceCoder::nc_luma(int plane, int x, int y) const {
-  int ia, ib;
-  const MbState* a = nb4(x - 1, y, ia);
-  const MbState* b = nb4(x, y - 1, ib);
-  if (a && b) return (a->nz[plane][ia] + b->nz[plane][ib] + 1) >> 1;
-  if (a) return a->nz[plane][ia];
-  if (b) return b->nz[plane][ib];
-  return 0;
-}
-
-int SliceCoder::nc_chroma(int comp, int x, int y) const {
-  int ia, ib;
-  const MbState* a = nbc(x - 1, y, ia);
-  const MbState* b = nbc(x, y - 1, ib);
-  if (a && b) return (a->nz[1 + comp][ia] + b->nz[1 + comp][ib] + 1) >> 1;
-  if (a) return a->nz[1 + comp][ia];
-  if (b) return b->nz[1 + comp][ib];
-  return 0;
-}
-
-// coded_block_flag ctxIdxInc (9.3.3.1.1.9)
-int SliceCoder::cbf_inc_luma(int plane, int x, int y) const {
-  int inc = 0;
-  for (int k = 0; k < 2; k++) {
-    int i;
-    const MbState* n = k ? nb4(x, y - 1, i) : nb4(x - 1, y, i);
-    int cond;
-    if (!n)
-      cond = cur_->intra;
-    else if (n->pcm)
-      cond = 1;
-    else if (!((n->cbp >> ((i >> 3) * 2 + ((i & 3) >> 1))) & 1))
-      cond = 0;
-    else  // of the 4x4 block, or of the 8x8 block when transform_size_8x8_flag
-      cond = n->nz[plane][i] != 0;
-    inc += cond << k;
-  }
-  return inc;
-}
-
-// coded_block_flag of an 8x8 block (4:4:4 only)
-int SliceCoder::cbf_inc_8x8(int plane, int b8) const {
-  int inc = 0;
-  for (int k = 0; k < 2; k++) {
+  // macroblock and 4x4 block containing the luma 4x4 block (x, y) of the
+  // current macroblock, x or y may be -1
+  const MbState* nb4(int x, int y, int& idx) const {
     int xW, yW;
-    const MbState* n = nb_loc((b8 & 1) * 8 - !k, (b8 >> 1) * 8 - k, 16, 16, xW, yW);
-    int cond;
-    if (!n)
-      cond = cur_->intra;
-    else if (n->pcm)
-      cond = 1;
-    else if (!((n->cbp >> ((yW >> 3) * 2 + (xW >> 3))) & 1) || !n->t8x8)
-      cond = 0;
-    else
-      cond = n->nz[plane][(yW >> 2) * 4 + (xW >> 2)] != 0;
-    inc += cond << k;
+    const MbState* n = nb_loc(x < 0 ? -1 : 4 * x, y < 0 ? -1 : 4 * y, 16, 16, xW, yW);
+    idx = (yW >> 2) * 4 + (xW >> 2);
+    return n;
   }
-  return inc;
-}
-
-int SliceCoder::cbf_inc_dc(int comp) const {
-  int inc = 0;
-  for (int k = 0; k < 2; k++) {
-    const MbState* n = k ? mb_b_ : mb_a_;
-    int cond;
-    if (!n)
-      cond = cur_->intra;
-    else if (n->pcm)
-      cond = 1;
-    else if (comp == 0 || chroma_ == 3)
-      cond = n->i16 && n->cbf_dc[comp];
-    else
-      cond = (n->cbp >> 4) && n->cbf_dc[comp];
-    inc += cond << k;
+  // the same for chroma 4x4 blocks (2 wide, ch_h_ high)
+  const MbState* nbc(int x, int y, int& idx) const {
+    int xW, yW;
+    const MbState* n = nb_loc(x < 0 ? -1 : 4 * x, y < 0 ? -1 : 4 * y, 8, 4 * ch_h_, xW, yW);
+    idx = (yW >> 2) * 2 + (xW >> 2);
+    return n;
   }
-  return inc;
-}
+  bool field_mb() const { return field_ || cur_->field; }
 
-int SliceCoder::cbf_inc_chroma_ac(int comp, int x, int y) const {
-  int inc = 0;
-  for (int k = 0; k < 2; k++) {
-    int i;
-    const MbState* n = k ? nbc(x, y - 1, i) : nbc(x - 1, y, i);
-    int cond;
-    if (!n)
-      cond = cur_->intra;
-    else if (n->pcm)
-      cond = 1;
-    else
-      cond = (n->cbp >> 4) == 2 && n->nz[1 + comp][i] != 0;
-    inc += cond << k;
-  }
-  return inc;
-}
-
-int SliceCoder::exp_golomb_bypass(int k, int v) {
-  int x = 0;
-  while (bypass(W ? v - x >= (1 << k) : 0)) {
-    x += 1 << k;
-    if (++k > 28) fail("invalid Exp-Golomb suffix");
-  }
-  while (k--) x += bypass(W ? ((v - x) >> k) & 1 : 0) << k;
-  return x;
-}
-
-// residual_block_cabac (7.3.5.3.3); cbf_inc < 0: no coded_block_flag
-int SliceCoder::cabac_residual(int cat, int* c, int n, int cbf_inc) {
-  if (!W)
-    for (int i = 0; i < n; i++) c[i] = 0;
-  int nonzero = W ? count_nonzero(c, n) : 0;
-  if (cbf_inc >= 0) {
-    if (!bin(kCbfBase[cat] + cbf_inc, nonzero != 0)) {
-      for (int i = 0; i < n; i++) c[i] = 0;
-      return 0;
+  // --- slice data
+  void read_loop() {
+    bool intra = stype_ == kI || stype_ == kSI;
+    int addr = h_.first_mb * (1 + mbaff_);
+    int skipped = 0;
+    bool prev_skipped = false;
+    auto flush_skip = [&]() {
+      if (skipped) out_->row("skip", skipped);
+      skipped = 0;
+    };
+    auto coded_mb = [&]() {
+      MbRec& r = mbrec_;
+      r.clear();
+      if (mbaff_ && (!(addr & 1) || prev_skipped)) {
+        r.field = mb_field_decoding_flag(0);
+        set_field(r.field);
+      }
+      macroblock(r);
+      write_mb_rows(r);
+    };
+    for (;;) {
+      if (!cabac_) {
+        if (!intra) {
+          uint32_t run = br_->ue();
+          if (run > (uint32_t)size_) fail("mb_skip_run too large");
+          for (uint32_t k = 0; k < run; k++) {
+            start_mb(addr);
+            set_skip();
+            addr = next_mb(addr);
+          }
+          prev_skipped = run > 0;
+          if (run) {
+            out_->row("skip", run);
+            if (!br_->more_rbsp_data()) break;
+          }
+        }
+        start_mb(addr);
+        coded_mb();
+        if (!br_->more_rbsp_data()) break;
+      } else {
+        start_mb(addr);
+        bool skip = !intra && mb_skip_flag(0);
+        if (skip) {
+          set_skip();
+          skipped++;
+        } else {
+          flush_skip();
+          coded_mb();
+        }
+        prev_skipped = skip;
+        if ((!mbaff_ || (addr & 1)) && term(0)) break;
+      }
+      addr = next_mb(addr);
     }
-  } else if (W && !nonzero) {
-    fail("8x8 block without coefficients cannot be coded with CABAC");
+    flush_skip();
   }
-  int last = n - 1;
-  if (W)
-    while (!c[last]) last--;
-  int sig_base = kSigBase[field_mb()][cat], last_base = kLastBase[field_mb()][cat], abs_base = kAbsBase[cat];
-  bool b8x8 = cat == 5 || cat == 9 || cat == 13;
-  int numc8x8 = chroma_ == 2 ? 2 : 1;
-  bool sig[64];
-  int i;
-  for (i = 0; i < n - 1; i++) {
-    int inc_sig, inc_last;
-    if (cat == 3) {
-      inc_sig = inc_last = std::min(i / numc8x8, 2);
-    } else if (b8x8) {
-      inc_sig = field_mb() ? kSig8x8Field[i] : kSig8x8Frame[i];
-      inc_last = kLast8x8[i];
+
+  void write_loop() {
+    bool intra = stype_ == kI || stype_ == kSI;
+    int addr = h_.first_mb * (1 + mbaff_);
+    bool prev_skipped = false;
+    auto peek_is = [&](RowKind k) {
+      const Row* r = in_->peek();
+      return r && r->kind == k;
+    };
+    auto take_skip = [&]() {
+      const Row& r = in_->take();
+      if (intra) r.fail("skipped macroblocks in an intra slice");
+      if (r.size() != 2) r.fail("expected 1 value");
+      int64_t n = r.num(1);
+      if (n < 1 || n > size_) r.fail("bad skip count");
+      return (int)n;
+    };
+    auto coded_mb = [&]() {
+      MbRec& r = mbrec_;
+      r.clear();
+      read_mb_rows(r);
+      rec_ = &r;
+      if (mbaff_ && (!(addr & 1) || prev_skipped))
+        set_field(mb_field_decoding_flag(r.field));
+      else if (r.field >= 0)
+        fail("fld row for a macroblock without mb_field_decoding_flag");
+      macroblock(r);
+    };
+    int skip_left = 0;
+    for (;;) {
+      if (!cabac_) {
+        if (!intra) {
+          int run = 0;
+          while (peek_is(kSkipRow)) run += take_skip();
+          bw_->ue((uint32_t)run);
+          for (int k = 0; k < run; k++) {
+            start_mb(addr);
+            set_skip();
+            addr = next_mb(addr);
+          }
+          prev_skipped = run > 0;
+          if (run && !peek_is(kMbRow)) break;
+        }
+        if (!peek_is(kMbRow)) fail("expected a macroblock");
+        start_mb(addr);
+        coded_mb();
+        if (!peek_is(kMbRow) && !peek_is(kSkipRow)) break;
+      } else {
+        if (!skip_left && peek_is(kSkipRow)) skip_left = take_skip();
+        bool skip = skip_left > 0;
+        if (!skip && !peek_is(kMbRow)) fail("expected a macroblock");
+        start_mb(addr);
+        if (!intra) mb_skip_flag(skip);
+        if (skip) {
+          set_skip();
+          skip_left--;
+        } else {
+          coded_mb();
+        }
+        prev_skipped = skip;
+        bool end = !skip_left && !peek_is(kMbRow) && !peek_is(kSkipRow);
+        if (!mbaff_ || (addr & 1))
+          term(end);
+        else if (end)
+          fail("the slice ends with half a macroblock pair");
+        if (end) break;
+      }
+      addr = next_mb(addr);
+    }
+  }
+
+  void start_mb(int addr) {
+    if (addr >= size_) fail("too many macroblocks in the slice");
+    cur_addr_ = addr;
+    if (mbaff_) {
+      if (!(addr & 1)) {
+        // a new pair: neighbouring pairs (6.4.10), and the inferred field
+        // decoding mode until mb_field_decoding_flag is decoded (7.4.4)
+        int pair = addr / 2;
+        left_ = pair % width_ ? avail(2 * (pair - 1)) : nullptr;
+        above_ = pair >= width_ ? avail(2 * (pair - width_)) : nullptr;
+        pair_field_ = left_ ? left_->field : above_ ? above_->field : 0;
+      }
     } else {
-      inc_sig = inc_last = i;
+      left_ = addr % width_ ? avail(addr - 1) : nullptr;
+      above_ = addr >= width_ ? avail(addr - width_) : nullptr;
     }
-    sig[i] = bin(sig_base + inc_sig, W ? c[i] != 0 : 0);
-    if (sig[i] && bin(last_base + inc_last, W ? i == last : 0)) break;
+    cur_ = &store_.mbs[addr];
+    memset(cur_, 0, sizeof *cur_);
+    cur_->slice = slice_id_;
+    cur_->field = (uint8_t)(mbaff_ && pair_field_);
+    update_nb();
   }
-  if (i == n - 1) sig[i] = true;  // no last flag: the last coefficient is significant
-  int eq1 = 0, gt1 = 0, count = 0;
-  for (; i >= 0; i--) {
-    if (!sig[i]) {
-      c[i] = 0;
-      continue;
+
+  void set_skip() {
+    cur_->skip = 1;
+    cur_->direct16 = stype_ == kB;
+    last_qpd_ = 0;
+  }
+
+  // mb_field_decoding_flag decoded for the pair
+  void set_field(int f) {
+    pair_field_ = f;
+    cur_->field = (uint8_t)f;
+    if (cur_addr_ & 1) (cur_ - 1)->field = (uint8_t)f;  // skipped top macroblock
+    update_nb();
+  }
+
+  void update_nb() {
+    int xW, yW;
+    mb_a_ = nb_loc(-1, 0, 16, 16, xW, yW);
+    mb_b_ = nb_loc(0, -1, 16, 16, xW, yW);
+  }
+
+  int next_mb(int addr) const {
+    if (group_.empty()) return addr + 1;
+    int i = addr + 1;
+    while (i < size_ && group_[i] != group_[addr]) i++;
+    return i;
+  }
+
+  void read_mb_rows(MbRec& r) {
+    const Row& m = in_->take();
+    if (m.size() != 6) m.fail("expected 5 values");
+    r.line = m.lineno;
+    r.type = to_int(m, 1);
+    r.t8x8 = m.absent(2) ? -1 : to_int(m, 2);
+    r.cpred = m.absent(3) ? -1 : to_int(m, 3);
+    r.cbp = m.absent(4) ? -1 : to_int(m, 4);
+    r.qpd = m.absent(5) ? kAbsent : to_int(m, 5);
+    if (r.t8x8 < -1 || r.cpred < -1 || r.cbp < -1) m.fail("negative value");
+    while (const Row* p = in_->peek()) {
+      switch (p->kind) {
+        case kFldRow: {
+          const Row& row = in_->take();
+          if (r.field >= 0) row.fail("duplicate row");
+          if (row.size() != 2) row.fail("expected 1 value");
+          r.field = to_int(row, 1);
+          if (r.field < 0) row.fail("bad value");
+          break;
+        }
+        case kPcmRow: {
+          const Row& row = in_->take();
+          if (r.has_pcm) row.fail("duplicate row");
+          r.has_pcm = true;
+          r.pcm_align = to_int(row, 1);
+          for (size_t i = 2; i < row.size(); i++) r.pcm.push_back(to_int(row, i));
+          break;
+        }
+        case kIpmRow:
+          get_list(in_->take(), r.ipm);
+          break;
+        case kSubRow:
+          get_list(in_->take(), r.sub);
+          break;
+        case kRef0Row:
+          get_list(in_->take(), r.ref[0]);
+          break;
+        case kRef1Row:
+          get_list(in_->take(), r.ref[1]);
+          break;
+        case kMvd0Row:
+          get_list(in_->take(), r.mvd[0]);
+          break;
+        case kMvd1Row:
+          get_list(in_->take(), r.mvd[1]);
+          break;
+        case kResRow: {
+          const Row& row = in_->take();
+          Block b;
+          b.cat = to_int(row, 1);
+          b.idx = to_int(row, 2);
+          b.off = r.coef.size();
+          for (size_t i = 3; i < row.size(); i++) r.coef.push_back(to_int(row, i));
+          b.len = r.coef.size() - b.off;
+          if (!b.len || !r.coef.back()) row.fail("coefficients must end with a nonzero one");
+          r.res.push_back(b);
+          break;
+        }
+        default:
+          return;
+      }
     }
-    int a = W ? abs(c[i]) - 1 : 0;
-    int v = bin(abs_base + (gt1 ? 0 : std::min(4, 1 + eq1)), a > 0);
-    if (v) {
-      int ctx = abs_base + 5 + std::min(4 - (cat == 3), gt1);
-      while (v < 14 && bin(ctx, a > v)) v++;
-      if (v == 14) v += exp_golomb_bypass(0, a - 14);
-    }
-    int s = bypass(W ? c[i] < 0 : 0);
-    c[i] = s ? -(v + 1) : v + 1;
-    if (v == 0)
-      eq1++;
+  }
+
+  void write_mb_rows(const MbRec& r) {
+    RowWriter& o = *out_;
+    o.begin("mb");
+    o.add(r.type);
+    for (int f : {r.t8x8, r.cpred, r.cbp})
+      if (f < 0)
+        o.add_absent();
+      else
+        o.add(f);
+    if (r.qpd == kAbsent)
+      o.add_absent();
     else
-      gt1++;
-    count++;
-  }
-  return count;
-}
-
-// ---------------------------------------------------------------------------
-// syntax elements
-
-int SliceCoder::mb_skip_flag(int v) {
-  int inc = (mb_a_ && !mb_a_->skip) + (mb_b_ && !mb_b_->skip);
-  return bin((stype_ == kB ? 24 : 11) + inc, v);
-}
-
-int SliceCoder::mb_field_decoding_flag(int v) {
-  if (W && (v < 0 || v > 1)) fail("missing or bad mb_field_decoding_flag (fld row)");
-  if (!cabac_) return u(1, v);
-  return bin(70 + (left_ && left_->field) + (above_ && above_->field), v);
-}
-
-int SliceCoder::mb_type(int v) {
-  if (!cabac_) return ue(v, stype_ == kI ? 25 : stype_ == kSI ? 26 : stype_ == kB ? 48 : 30);
-  switch (stype_) {
-    case kI:
-      return mb_type_i(v, 3, true);
-    case kSI: {
-      if (W && (v < 0 || v > 26)) fail("mb_type out of range");
-      int inc = (mb_a_ && !mb_a_->si) + (mb_b_ && !mb_b_->si);
-      if (!bin(inc, v != 0)) return 0;
-      return 1 + mb_type_i(v - 1, 3, true);
+      o.add(r.qpd);
+    o.end();
+    if (r.field >= 0) o.row("fld", r.field);
+    if (r.has_pcm) {
+      o.begin("pcm");
+      o.add(r.pcm_align);
+      for (int x : r.pcm) o.add(x);
+      o.end();
     }
-    case kB: {
-      if (W && (v < 0 || v > 48)) fail("mb_type out of range");
-      int inc = (mb_a_ && !mb_a_->direct16) + (mb_b_ && !mb_b_->direct16);
-      if (!bin(27 + inc, v != 0)) return 0;
-      if (!bin(30, v >= 3)) return 1 + bin(32, v == 2);
-      int bits = v <= 10 ? v - 3 : v == 11 ? 14 : v == 22 ? 15 : v >= 23 ? 13 : (v + 4) >> 1;
-      int x = bin(31, bits >> 3 & 1) << 3;
-      x |= bin(32, bits >> 2 & 1) << 2;
-      x |= bin(32, bits >> 1 & 1) << 1;
-      x |= bin(32, bits & 1);
-      if (x < 8) return x + 3;
-      if (x == 13) return 23 + mb_type_i(v - 23, 32, false);
-      if (x == 14) return 11;
-      if (x == 15) return 22;
-      return ((x << 1) | bin(32, (v + 4) & 1)) - 4;
-    }
-    default: {
-      if (W && (v < 0 || v > 30)) fail("mb_type out of range");
-      if (W && v == 4) fail("P_8x8ref0 cannot be coded with CABAC");
-      if (bin(14, v >= 5)) return 5 + mb_type_i(v - 5, 17, false);
-      int b1 = bin(15, v == 1 || v == 2);
-      int b2 = bin(b1 ? 17 : 16, v == 1 || v == 3);
-      return b1 ? (b2 ? 1 : 2) : (b2 ? 3 : 0);
+    put_list(o, "ipm", r.ipm);
+    put_list(o, "sub", r.sub);
+    put_list(o, "ref0", r.ref[0]);
+    put_list(o, "ref1", r.ref[1]);
+    put_list(o, "mvd0", r.mvd[0]);
+    put_list(o, "mvd1", r.mvd[1]);
+    for (const Block& b : r.res) {
+      o.begin("res");
+      o.add(b.cat);
+      o.add(b.idx);
+      for (size_t i = 0; i < b.len; i++) o.add(r.coef[b.off + i]);
+      o.end();
     }
   }
-}
 
-// mb_type of an intra macroblock, I slice numbering: I slices (ctxIdxOffset
-// 3) or the suffix in P (17) and B (32) slices
-int SliceCoder::mb_type_i(int v, int off, bool islice) {
-  if (W && (v < 0 || v > 25)) fail("mb_type out of range");
-  int ctx0 = islice ? off + (mb_a_ && !mb_a_->inxn) + (mb_b_ && !mb_b_->inxn) : off;
-  if (!bin(ctx0, v != 0)) return 0;
-  if (term(v == 25)) return 25;
-  int x = v - 1;
-  int luma = bin(off + (islice ? 3 : 1), x / 12);
-  int c = x / 4 % 3;
-  int chroma = bin(off + (islice ? 4 : 2), c != 0);
-  if (chroma) chroma += bin(off + (islice ? 5 : 2), c == 2);
-  int p = bin(off + (islice ? 6 : 3), x % 4 >> 1) << 1;
-  p |= bin(off + (islice ? 7 : 3), x & 1);
-  return 1 + p + 4 * chroma + 12 * luma;
-}
+  // --- macroblock layer (7.3.5)
+  void macroblock(MbRec& r) {
+    rec_ = &r;
+    MbState& m = *cur_;
+    int t = mb_type(r.type);
+    r.type = t;
+    int itype = -1, ptype = -1, btype = -1;  // intra type in I slice numbering
+    bool si = false;
+    switch (stype_) {
+      case kI:
+        itype = t;
+        break;
+      case kSI:
+        if (t == 0)
+          si = true;
+        else
+          itype = t - 1;
+        break;
+      case kB:
+        if (t < 23)
+          btype = t;
+        else
+          itype = t - 23;
+        break;
+      default:
+        if (t < 5)
+          ptype = t;
+        else
+          itype = t - 5;
+    }
+    m.intra = itype >= 0 || si;
+    m.si = si;
+    if (itype == 25) {  // I_PCM
+      m.pcm = 1;
+      m.cbp = 0x2f;
+      memset(m.nz, 16, sizeof m.nz);
+      memset(m.cbf_dc, 1, sizeof m.cbf_dc);
+      pcm_samples(r);
+      last_qpd_ = 0;
+      rec_ = nullptr;
+      return;
+    }
+    m.i16 = itype >= 1;
+    m.inxn = itype == 0;
+    m.direct16 = btype == 0;
+    bool no_sub_lt8 = true;
+    int t8 = 0;
+    if (ptype == 3 || ptype == 4 || btype == 22) {
+      sub_mb_pred(r, ptype, no_sub_lt8);
+    } else if (m.intra) {
+      if (pps_.transform_8x8_mode_flag && m.inxn)
+        r.t8x8 = t8 = transform_size_8x8_flag(field(r.t8x8, kUseT8x8, "transform_size_8x8_flag"));
+      if (m.inxn || si) {
+        for (int i = 0; i < (t8 ? 4 : 16); i++) keep(r.ipm, intra_pred_mode(next(r.ipm, r.ipm_i, "ipm")));
+      }
+      if (chroma_ == 1 || chroma_ == 2) {
+        r.cpred = intra_chroma_pred_mode(field(r.cpred, kUseCpred, "intra_chroma_pred_mode"));
+        m.cpred = (uint8_t)r.cpred;
+      }
+    } else {
+      mb_pred_inter(r, ptype, btype);
+    }
+    int cbp;
+    if (!m.i16) {
+      r.cbp = cbp = coded_block_pattern(field(r.cbp, kUseCbp, "coded_block_pattern"), m.inxn || si);
+      if ((cbp & 15) && pps_.transform_8x8_mode_flag && !m.inxn && no_sub_lt8 &&
+          (btype != 0 || sps_.direct_8x8_inference_flag))
+        r.t8x8 = t8 = transform_size_8x8_flag(field(r.t8x8, kUseT8x8, "transform_size_8x8_flag"));
+    } else {
+      cbp = ((itype - 1) / 12 ? 15 : 0) | ((itype - 1) / 4 % 3) << 4;
+    }
+    m.cbp = (uint8_t)cbp;
+    m.t8x8 = (uint8_t)t8;
+    int qpd = 0;
+    if (cbp || m.i16) {
+      r.qpd = qpd = mb_qp_delta(field(r.qpd, kUseQpd, "mb_qp_delta"));
+      residual(r, cbp, t8);
+    }
+    last_qpd_ = qpd;
+    if (W) {
+      if (r.ipm_i != r.ipm.size() || r.sub_i != r.sub.size() || r.ref_i[0] != r.ref[0].size() ||
+          r.ref_i[1] != r.ref[1].size() || r.mvd_i[0] != r.mvd[0].size() || r.mvd_i[1] != r.mvd[1].size())
+        fail("too many values for this macroblock");
+      if (r.res_i != r.res.size()) fail("res row for a block that is not coded");
+      if (r.has_pcm) fail("pcm row for a macroblock that is not I_PCM");
+      if ((r.t8x8 >= 0 && !(r.used & kUseT8x8)) || (r.cpred >= 0 && !(r.used & kUseCpred)) ||
+          (r.cbp >= 0 && !(r.used & kUseCbp)) || (r.qpd != kAbsent && !(r.used & kUseQpd)))
+        fail("value for a syntax element that is not coded");
+    }
+    rec_ = nullptr;
+  }
 
-int SliceCoder::sub_mb_type(int v) {
-  bool b = stype_ == kB;
-  if (!cabac_) return ue(v, b ? 12 : 3);
-  if (W && (v < 0 || v > (b ? 12 : 3))) fail("sub_mb_type out of range");
-  if (!b) {
-    if (bin(21, v == 0)) return 0;
-    if (!bin(22, v >= 2)) return 1;
-    return bin(23, v == 2) ? 2 : 3;
+  void pcm_samples(MbRec& r) {
+    int nc = chroma_ ? 2 * (16 / (chroma_ == 3 ? 1 : 2)) * (16 / (chroma_ == 1 ? 2 : 1)) : 0;
+    int n = 256 + nc;
+    // the alignment bits relative to x264's, whose last one is its padding bit
+    int nb = (8 - (int)((W ? bw_->pos() : br_->pos()) & 7)) & 7;
+    int pad = cabac_ && nb ? h_.pad : 0;
+    if (!W) {
+      r.has_pcm = true;
+      r.pcm_align = (int)br_->u(nb) ^ pad;
+      r.pcm.resize(n);
+      for (int i = 0; i < n; i++) r.pcm[i] = (int)br_->u(i < 256 ? sps_.bit_depth_luma : sps_.bit_depth_chroma);
+    } else {
+      if (!r.has_pcm) fail("missing pcm row");
+      if ((int)r.pcm.size() != n) fail("wrong number of PCM samples");
+      if (r.pcm_align < 0 || r.pcm_align >= (1 << nb)) fail("bad pcm alignment bits");
+      bw_->put((uint32_t)(r.pcm_align ^ pad), nb);
+      for (int i = 0; i < n; i++) {
+        int depth = i < 256 ? sps_.bit_depth_luma : sps_.bit_depth_chroma;
+        if (r.pcm[i] < 0 || r.pcm[i] >= (1 << depth)) fail("PCM sample out of range");
+        bw_->put((uint32_t)r.pcm[i], depth);
+      }
+      r.has_pcm = false;  // used
+      if (r.ipm.size() || r.sub.size() || r.ref[0].size() || r.ref[1].size() || r.mvd[0].size() ||
+          r.mvd[1].size() || r.res.size() || r.t8x8 >= 0 || r.cpred >= 0 || r.cbp >= 0 || r.qpd != kAbsent)
+        fail("values for syntax elements that are not coded in I_PCM");
+    }
+    if (cabac_) {
+      if (!W)
+        dec_.init(br_);
+      else
+        enc_.init(bw_);
+    }
   }
-  if (!bin(36, v != 0)) return 0;
-  if (!bin(37, v >= 3)) return 1 + bin(39, v == 2);
-  if (bin(38, v >= 7)) {
-    if (bin(39, v >= 11)) return 11 + bin(39, v == 12);
-    int x = bin(39, (v - 7) >> 1 & 1) << 1;
-    return 7 + (x | bin(39, (v - 7) & 1));
-  }
-  int x = bin(39, (v - 3) >> 1 & 1) << 1;
-  return 3 + (x | bin(39, (v - 3) & 1));
-}
 
-int SliceCoder::ref_idx(int list, int x, int y, int v) {
-  int range = num_ref_[list] * (1 + cur_->field) - 1;  // field macroblocks of MBAFF frames: twice
-  if (!cabac_) return te(v, range);
-  if (W && (v < 0 || v > range)) fail("ref_idx out of range");
-  int inc = 0;
-  for (int k = 0; k < 2; k++) {
-    int i;
-    const MbState* n = k ? nb4(x, y - 1, i) : nb4(x - 1, y, i);
-    // refIdxZeroFlagN: a field neighbour of a frame macroblock refers to fields
-    if (n && n->ref[list][(i >> 3) * 2 + ((i & 3) >> 1)] > (!cur_->field && n->field)) inc += 1 + k;
+  void mb_pred_inter(MbRec& r, int ptype, int btype) {
+    const Part* parts;
+    int n, pred[2];
+    if (ptype >= 0) {
+      n = ptype ? 2 : 1;
+      parts = ptype == 0 ? kParts16x16 : ptype == 1 ? kParts16x8 : kParts8x16;
+      pred[0] = pred[1] = 1;
+    } else if (btype == 0) {
+      return;  // B_Direct_16x16
+    } else if (btype <= 3) {
+      n = 1;
+      parts = kParts16x16;
+      pred[0] = btype;
+    } else {
+      n = 2;
+      parts = btype & 1 ? kParts8x16 : kParts16x8;
+      pred[0] = kBPartPred[(btype - 4) / 2][0];
+      pred[1] = kBPartPred[(btype - 4) / 2][1];
+    }
+    for (int l = 0; l < 2; l++)
+      for (int i = 0; i < n; i++)
+        if (pred[i] & (1 << l)) code_ref(r, l, parts[i], num_ref_[l] > 1 || cur_->field);
+    for (int l = 0; l < 2; l++)
+      for (int i = 0; i < n; i++)
+        if (pred[i] & (1 << l)) code_mvd(r, l, parts[i]);
   }
-  int n = 0;
-  while (bin(54 + inc, n < v)) {
-    inc = n ? 5 : 4;
-    if (++n > range) fail("ref_idx out of range");
-  }
-  return n;
-}
 
-int SliceCoder::mvd(int list, int comp, int x, int y, int v) {
-  const int lim = 1 << 24;
-  if (!cabac_) return se(v, lim);
-  if (W && (v < -lim || v > lim)) fail("mvd out of range");
-  int ia, ib;
-  const MbState* a = nb4(x - 1, y, ia);
-  const MbState* b = nb4(x, y - 1, ib);
-  int sum = 0;
-  for (int k = 0; k < 2; k++) {
-    const MbState* n = k ? b : a;
-    if (!n) continue;
-    int m = n->mvd[list][k ? ib : ia][comp];
-    // vertical components of frame and field macroblocks of MBAFF frames
-    if (comp && !cur_->field && n->field) m *= 2;
-    if (comp && cur_->field && !n->field) m /= 2;
-    sum += m;
+  void sub_mb_pred(MbRec& r, int ptype, bool& no_sub_lt8) {
+    int sub[4];
+    for (int i = 0; i < 4; i++) {
+      sub[i] = sub_mb_type(next(r.sub, r.sub_i, "sub"));
+      keep(r.sub, sub[i]);
+    }
+    bool b = stype_ == kB;
+    auto pred = [&](int i) { return b ? kBSubPred[sub[i]] : 1; };
+    auto shape = [&](int i) { return b ? kBSubShape[sub[i]] : sub[i]; };
+    for (int l = 0; l < 2; l++)
+      for (int i = 0; i < 4; i++)
+        if (pred(i) & (1 << l)) {
+          Part p = {(i & 1) * 2, (i >> 1) * 2, 2, 2};
+          code_ref(r, l, p, (num_ref_[l] > 1 || cur_->field) && ptype != 4);
+        }
+    for (int l = 0; l < 2; l++)
+      for (int i = 0; i < 4; i++)
+        if (pred(i) & (1 << l)) {
+          int s = shape(i);
+          for (int j = 0; j < kNumSubParts[s]; j++) {
+            Part p = kSubParts[s][j];
+            p.x += (i & 1) * 2;
+            p.y += (i >> 1) * 2;
+            code_mvd(r, l, p);
+          }
+        }
+    for (int i = 0; i < 4; i++) {
+      if (b && sub[i] == 0) {
+        if (!sps_.direct_8x8_inference_flag) no_sub_lt8 = false;
+      } else if (kNumSubParts[shape(i)] > 1) {
+        no_sub_lt8 = false;
+      }
+    }
   }
-  int base = comp ? 47 : 40;
-  int av = abs(v);
-  if (!bin(base + (sum < 3 ? 0 : sum > 32 ? 2 : 1), av > 0)) return 0;
-  int n = 1, ctx = base + 3;
-  while (n < 9 && bin(ctx, av > n)) {
-    if (n < 4) ctx++;
-    n++;
-  }
-  if (n >= 9) n += exp_golomb_bypass(3, av - 9);
-  if (n > lim) fail("mvd out of range");
-  return bypass(v < 0) ? -n : n;
-}
 
-int SliceCoder::intra_pred_mode(int v) {
-  if (W && (v < -1 || v > 7)) fail("intra prediction mode out of range");
-  if (!cabac_) {
-    if (u(1, v < 0)) return -1;
-    return u(3, v);
+  void code_ref(MbRec& r, int list, const Part& p, bool coded) {
+    int v = 0;
+    if (coded) {
+      v = ref_idx(list, p.x, p.y, next(r.ref[list], r.ref_i[list], list ? "ref1" : "ref0"));
+      keep(r.ref[list], v);
+    }
+    for (int y = p.y; y < p.y + p.h; y += 2)
+      for (int x = p.x; x < p.x + p.w; x += 2) cur_->ref[list][(y >> 1) * 2 + (x >> 1)] = (int8_t)v;
   }
-  if (bin(68, v < 0)) return -1;
-  int r = bin(69, v & 1);
-  r |= bin(69, v >> 1 & 1) << 1;
-  r |= bin(69, v >> 2 & 1) << 2;
-  return r;
-}
 
-int SliceCoder::intra_chroma_pred_mode(int v) {
-  if (!cabac_) return ue(v, 3);
-  if (W && (v < 0 || v > 3)) fail("intra_chroma_pred_mode out of range");
-  auto cond = [](const MbState* n) { return n && n->intra && !n->pcm && n->cpred != 0; };
-  if (!bin(64 + cond(mb_a_) + cond(mb_b_), v > 0)) return 0;
-  if (!bin(67, v > 1)) return 1;
-  return bin(67, v > 2) ? 3 : 2;
-}
-
-int SliceCoder::coded_block_pattern(int v, bool intra_nxn) {
-  bool has_chroma = chroma_ == 1 || chroma_ == 2;
-  if (W && (v < 0 || (v & 15) > 15 || (v >> 4) > (has_chroma ? 2 : 0))) fail("coded_block_pattern out of range");
-  if (!cabac_) {
-    const uint8_t* tab = has_chroma ? (intra_nxn ? kCbpIntra : kCbpInter) : (intra_nxn ? kCbpIntraMono : kCbpInterMono);
-    int n = has_chroma ? 48 : 16;
-    int code = 0;
-    if (W)
-      while (tab[code] != v) code++;
-    return tab[ue(code, n - 1)];
+  void code_mvd(MbRec& r, int list, const Part& p) {
+    const char* what = list ? "mvd1" : "mvd0";
+    int mx = mvd(list, 0, p.x, p.y, next(r.mvd[list], r.mvd_i[list], what));
+    keep(r.mvd[list], mx);
+    int my = mvd(list, 1, p.x, p.y, next(r.mvd[list], r.mvd_i[list], what));
+    keep(r.mvd[list], my);
+    uint8_t ax = (uint8_t)std::min(abs(mx), 127), ay = (uint8_t)std::min(abs(my), 127);
+    for (int y = p.y; y < p.y + p.h; y++)
+      for (int x = p.x; x < p.x + p.w; x++) {
+        cur_->mvd[list][y * 4 + x][0] = ax;
+        cur_->mvd[list][y * 4 + x][1] = ay;
+      }
   }
-  int luma = 0;
-  for (int b8 = 0; b8 < 4; b8++) {
+
+  // residual (7.3.5.3)
+  void residual(MbRec& r, int cbp, int t8) {
+    MbState& m = *cur_;
+    residual_luma(r, 0, cbp, t8);
+    if (chroma_ == 3) {  // Cb and Cr coded like luma
+      residual_luma(r, 1, cbp, t8);
+      residual_luma(r, 2, cbp, t8);
+    } else if (chroma_) {
+      int c[16];
+      if (cbp >> 4) {
+        for (int comp = 0; comp < 2; comp++) {
+          block(r, 3, comp, c, ch_blocks_, cabac_ ? cbf_inc_dc(1 + comp) : chroma_ == 1 ? -1 : -2);
+          m.cbf_dc[1 + comp] = count_nonzero(c, ch_blocks_) != 0;
+        }
+      }
+      if ((cbp >> 4) == 2) {
+        for (int comp = 0; comp < 2; comp++)
+          for (int b = 0; b < ch_blocks_; b++) {
+            int x = b & 1, y = b >> 1;
+            int ctx = cabac_ ? cbf_inc_chroma_ac(comp, x, y) : nc_chroma(comp, x, y);
+            m.nz[1 + comp][y * 2 + x] = (uint8_t)block(r, 4, comp * ch_blocks_ + b, c, 15, ctx);
+          }
+      }
+    }
+  }
+
+  // residual_luma(): the blocks of Y, or of Cb or Cr with 4:4:4
+  void residual_luma(MbRec& r, int plane, int cbp, int t8) {
+    MbState& m = *cur_;
+    uint8_t* nz = m.nz[plane];
+    int c[64];
+    if (m.i16) {
+      block(r, kCatDc[plane], 0, c, 16, cabac_ ? cbf_inc_dc(plane) : nc_luma(plane, 0, 0));
+      m.cbf_dc[plane] = count_nonzero(c, 16) != 0;
+    }
+    for (int b8 = 0; b8 < 4; b8++) {
+      if (!(cbp & (1 << b8))) continue;
+      int x0 = (b8 & 1) * 2, y0 = (b8 >> 1) * 2;
+      if (t8 && cabac_) {
+        // coded_block_flag only with 4:4:4
+        block(r, kCat8x8[plane], b8, c, 64, chroma_ == 3 ? cbf_inc_8x8(plane, b8) : -1);
+        nz[y0 * 4 + x0] = nz[y0 * 4 + x0 + 1] = nz[y0 * 4 + x0 + 4] = nz[y0 * 4 + x0 + 5] =
+            (uint8_t)count_nonzero(c, 64);
+      } else if (t8) {
+        // CAVLC: four 4x4 blocks with interleaved coefficients
+        if (W) fetch(r, kCat8x8[plane], b8, c, 64);
+        for (int b4 = 0; b4 < 4; b4++) {
+          int c4[16];
+          for (int i = 0; i < 16; i++) c4[i] = c[4 * i + b4];
+          int x = x0 + (b4 & 1), y = y0 + (b4 >> 1);
+          int nc = nc_luma(plane, x, y);
+          int tc = W ? cavlc_write_block(*bw_, nc, 16, c4) : cavlc_read_block(*br_, nc, 16, c4);
+          if (!W)
+            for (int i = 0; i < 16; i++) c[4 * i + b4] = c4[i];
+          nz[y * 4 + x] = (uint8_t)tc;
+        }
+        if (!W) store(r, kCat8x8[plane], b8, c, 64);
+      } else {
+        for (int b4 = 0; b4 < 4; b4++) {
+          int blk = b8 * 4 + b4, x = blk_x(blk), y = blk_y(blk);
+          int ctx = cabac_ ? cbf_inc_luma(plane, x, y) : nc_luma(plane, x, y);
+          nz[y * 4 + x] = (uint8_t)(m.i16 ? block(r, kCatAc[plane], blk, c, 15, ctx)
+                                          : block(r, kCat4x4[plane], blk, c, 16, ctx));
+        }
+      }
+    }
+  }
+
+  int block(MbRec& r, int cat, int idx, int* c, int n, int ctx) {
+    if (W) fetch(r, cat, idx, c, n);
+    int k;
+    if (cabac_)
+      k = cabac_residual(cat, c, n, ctx);
+    else if (W)
+      k = cavlc_write_block(*bw_, ctx, n, c);
+    else
+      k = cavlc_read_block(*br_, ctx, n, c);
+    if (!W) store(r, cat, idx, c, n);
+    return k;
+  }
+
+  void fetch(MbRec& r, int cat, int idx, int* c, int n) {
+    for (int i = 0; i < n; i++) c[i] = 0;
+    if (r.res_i < r.res.size() && r.res[r.res_i].cat == cat && r.res[r.res_i].idx == idx) {
+      const Block& b = r.res[r.res_i++];
+      if ((int)b.len > n) fail("too many coefficients in a res row");
+      for (size_t i = 0; i < b.len; i++) c[i] = r.coef[b.off + i];
+    }
+  }
+
+  void store(MbRec& r, int cat, int idx, const int* c, int n) {
+    int last = n - 1;
+    while (last >= 0 && !c[last]) last--;
+    if (last < 0) return;
+    r.res.push_back(Block{cat, idx, r.coef.size(), (size_t)last + 1});
+    r.coef.insert(r.coef.end(), c, c + last + 1);
+  }
+
+  // --- syntax elements
+  int mb_skip_flag(int v) {
+    int inc = (mb_a_ && !mb_a_->skip) + (mb_b_ && !mb_b_->skip);
+    return bin((stype_ == kB ? 24 : 11) + inc, v);
+  }
+
+  int mb_field_decoding_flag(int v) {
+    if (W && (v < 0 || v > 1)) fail("missing or bad mb_field_decoding_flag (fld row)");
+    if (!cabac_) return u(1, v);
+    return bin(70 + (left_ && left_->field) + (above_ && above_->field), v);
+  }
+
+  int mb_type(int v) {
+    if (!cabac_) return ue(v, stype_ == kI ? 25 : stype_ == kSI ? 26 : stype_ == kB ? 48 : 30);
+    switch (stype_) {
+      case kI:
+        return mb_type_i(v, 3, true);
+      case kSI: {
+        if (W && (v < 0 || v > 26)) fail("mb_type out of range");
+        int inc = (mb_a_ && !mb_a_->si) + (mb_b_ && !mb_b_->si);
+        if (!bin(inc, v != 0)) return 0;
+        return 1 + mb_type_i(v - 1, 3, true);
+      }
+      case kB: {
+        if (W && (v < 0 || v > 48)) fail("mb_type out of range");
+        int inc = (mb_a_ && !mb_a_->direct16) + (mb_b_ && !mb_b_->direct16);
+        if (!bin(27 + inc, v != 0)) return 0;
+        if (!bin(30, v >= 3)) return 1 + bin(32, v == 2);
+        int bits = v <= 10 ? v - 3 : v == 11 ? 14 : v == 22 ? 15 : v >= 23 ? 13 : (v + 4) >> 1;
+        int x = bin(31, bits >> 3 & 1) << 3;
+        x |= bin(32, bits >> 2 & 1) << 2;
+        x |= bin(32, bits >> 1 & 1) << 1;
+        x |= bin(32, bits & 1);
+        if (x < 8) return x + 3;
+        if (x == 13) return 23 + mb_type_i(v - 23, 32, false);
+        if (x == 14) return 11;
+        if (x == 15) return 22;
+        return ((x << 1) | bin(32, (v + 4) & 1)) - 4;
+      }
+      default: {
+        if (W && (v < 0 || v > 30)) fail("mb_type out of range");
+        if (W && v == 4) fail("P_8x8ref0 cannot be coded with CABAC");
+        if (bin(14, v >= 5)) return 5 + mb_type_i(v - 5, 17, false);
+        int b1 = bin(15, v == 1 || v == 2);
+        int b2 = bin(b1 ? 17 : 16, v == 1 || v == 3);
+        return b1 ? (b2 ? 1 : 2) : (b2 ? 3 : 0);
+      }
+    }
+  }
+
+  // mb_type of an intra macroblock, I slice numbering: I slices (ctxIdxOffset
+  // 3) or the suffix in P (17) and B (32) slices
+  int mb_type_i(int v, int off, bool islice) {
+    if (W && (v < 0 || v > 25)) fail("mb_type out of range");
+    int ctx0 = islice ? off + (mb_a_ && !mb_a_->inxn) + (mb_b_ && !mb_b_->inxn) : off;
+    if (!bin(ctx0, v != 0)) return 0;
+    if (term(v == 25)) return 25;
+    int x = v - 1;
+    int luma = bin(off + (islice ? 3 : 1), x / 12);
+    int c = x / 4 % 3;
+    int chroma = bin(off + (islice ? 4 : 2), c != 0);
+    if (chroma) chroma += bin(off + (islice ? 5 : 2), c == 2);
+    int p = bin(off + (islice ? 6 : 3), x % 4 >> 1) << 1;
+    p |= bin(off + (islice ? 7 : 3), x & 1);
+    return 1 + p + 4 * chroma + 12 * luma;
+  }
+
+  int sub_mb_type(int v) {
+    bool b = stype_ == kB;
+    if (!cabac_) return ue(v, b ? 12 : 3);
+    if (W && (v < 0 || v > (b ? 12 : 3))) fail("sub_mb_type out of range");
+    if (!b) {
+      if (bin(21, v == 0)) return 0;
+      if (!bin(22, v >= 2)) return 1;
+      return bin(23, v == 2) ? 2 : 3;
+    }
+    if (!bin(36, v != 0)) return 0;
+    if (!bin(37, v >= 3)) return 1 + bin(39, v == 2);
+    if (bin(38, v >= 7)) {
+      if (bin(39, v >= 11)) return 11 + bin(39, v == 12);
+      int x = bin(39, (v - 7) >> 1 & 1) << 1;
+      return 7 + (x | bin(39, (v - 7) & 1));
+    }
+    int x = bin(39, (v - 3) >> 1 & 1) << 1;
+    return 3 + (x | bin(39, (v - 3) & 1));
+  }
+
+  int ref_idx(int list, int x, int y, int v) {
+    int range = num_ref_[list] * (1 + cur_->field) - 1;  // field macroblocks of MBAFF frames: twice
+    if (!cabac_) return te(v, range);
+    if (W && (v < 0 || v > range)) fail("ref_idx out of range");
     int inc = 0;
     for (int k = 0; k < 2; k++) {
-      int x = (b8 & 1) * 8 - !k, y = (b8 >> 1) * 8 - k, xW, yW;
-      const MbState* n = nb_loc(x, y, 16, 16, xW, yW);
-      int b8n = (yW >> 3) * 2 + (xW >> 3);
-      int cbp = n == cur_ ? luma : n ? n->cbp : 0;
-      if (n && !(n != cur_ && n->pcm) && !(cbp >> b8n & 1)) inc += 1 + k;
+      int i;
+      const MbState* n = k ? nb4(x, y - 1, i) : nb4(x - 1, y, i);
+      // refIdxZeroFlagN: a field neighbour of a frame macroblock refers to fields
+      if (n && n->ref[list][(i >> 3) * 2 + ((i & 3) >> 1)] > (!cur_->field && n->field)) inc += 1 + k;
     }
-    luma |= bin(73 + inc, v >> b8 & 1) << b8;
+    int n = 0;
+    while (bin(54 + inc, n < v)) {
+      inc = n ? 5 : 4;
+      if (++n > range) fail("ref_idx out of range");
+    }
+    return n;
   }
-  if (!has_chroma) return luma;
-  int a = mb_a_ && (mb_a_->cbp >> 4) != 0;
-  int b = mb_b_ && (mb_b_->cbp >> 4) != 0;
-  int c = 0;
-  if (bin(77 + a + 2 * b, (v >> 4) != 0)) {
-    a = mb_a_ && (mb_a_->cbp >> 4) == 2;
-    b = mb_b_ && (mb_b_->cbp >> 4) == 2;
-    c = 1 + bin(81 + a + 2 * b, (v >> 4) == 2);
-  }
-  return luma | c << 4;
-}
 
-int SliceCoder::transform_size_8x8_flag(int v) {
-  if (!cabac_) return u(1, v);
-  if (W && (v < 0 || v > 1)) fail("transform_size_8x8_flag out of range");
-  return bin(399 + (mb_a_ && mb_a_->t8x8) + (mb_b_ && mb_b_->t8x8), v);
-}
-
-int SliceCoder::mb_qp_delta(int v) {
-  const int lim = 128;
-  if (!cabac_) return se(v, lim);
-  if (W && (v < -lim || v > lim)) fail("mb_qp_delta out of range");
-  int k = v > 0 ? 2 * v - 1 : -2 * v;
-  int n = 0, ctx = 60 + (last_qpd_ != 0);
-  while (bin(ctx, n < k)) {
-    ctx = n ? 63 : 62;
-    if (++n > 2 * lim) fail("mb_qp_delta out of range");
+  int mvd(int list, int comp, int x, int y, int v) {
+    const int lim = 1 << 24;
+    if (!cabac_) return se(v, lim);
+    if (W && (v < -lim || v > lim)) fail("mvd out of range");
+    int ia, ib;
+    const MbState* a = nb4(x - 1, y, ia);
+    const MbState* b = nb4(x, y - 1, ib);
+    int sum = 0;
+    for (int k = 0; k < 2; k++) {
+      const MbState* n = k ? b : a;
+      if (!n) continue;
+      int m = n->mvd[list][k ? ib : ia][comp];
+      // vertical components of frame and field macroblocks of MBAFF frames
+      if (comp && !cur_->field && n->field) m *= 2;
+      if (comp && cur_->field && !n->field) m /= 2;
+      sum += m;
+    }
+    int base = comp ? 47 : 40;
+    int av = abs(v);
+    if (!bin(base + (sum < 3 ? 0 : sum > 32 ? 2 : 1), av > 0)) return 0;
+    int n = 1, ctx = base + 3;
+    while (n < 9 && bin(ctx, av > n)) {
+      if (n < 4) ctx++;
+      n++;
+    }
+    if (n >= 9) n += exp_golomb_bypass(3, av - 9);
+    if (n > lim) fail("mvd out of range");
+    return bypass(v < 0) ? -n : n;
   }
-  return n & 1 ? (n + 1) / 2 : -(n / 2);
-}
+
+  int intra_pred_mode(int v) {
+    if (W && (v < -1 || v > 7)) fail("intra prediction mode out of range");
+    if (!cabac_) {
+      if (u(1, v < 0)) return -1;
+      return u(3, v);
+    }
+    if (bin(68, v < 0)) return -1;
+    int r = bin(69, v & 1);
+    r |= bin(69, v >> 1 & 1) << 1;
+    r |= bin(69, v >> 2 & 1) << 2;
+    return r;
+  }
+
+  int intra_chroma_pred_mode(int v) {
+    if (!cabac_) return ue(v, 3);
+    if (W && (v < 0 || v > 3)) fail("intra_chroma_pred_mode out of range");
+    auto cond = [](const MbState* n) { return n && n->intra && !n->pcm && n->cpred != 0; };
+    if (!bin(64 + cond(mb_a_) + cond(mb_b_), v > 0)) return 0;
+    if (!bin(67, v > 1)) return 1;
+    return bin(67, v > 2) ? 3 : 2;
+  }
+
+  int coded_block_pattern(int v, bool intra_nxn) {
+    bool has_chroma = chroma_ == 1 || chroma_ == 2;
+    if (W && (v < 0 || (v & 15) > 15 || (v >> 4) > (has_chroma ? 2 : 0))) fail("coded_block_pattern out of range");
+    if (!cabac_) {
+      const uint8_t* tab =
+          has_chroma ? (intra_nxn ? kCbpIntra : kCbpInter) : (intra_nxn ? kCbpIntraMono : kCbpInterMono);
+      int n = has_chroma ? 48 : 16;
+      int code = 0;
+      if (W)
+        while (tab[code] != v) code++;
+      return tab[ue(code, n - 1)];
+    }
+    int luma = 0;
+    for (int b8 = 0; b8 < 4; b8++) {
+      int inc = 0;
+      for (int k = 0; k < 2; k++) {
+        int x = (b8 & 1) * 8 - !k, y = (b8 >> 1) * 8 - k, xW, yW;
+        const MbState* n = nb_loc(x, y, 16, 16, xW, yW);
+        int b8n = (yW >> 3) * 2 + (xW >> 3);
+        int cbp = n == cur_ ? luma : n ? n->cbp : 0;
+        if (n && !(n != cur_ && n->pcm) && !(cbp >> b8n & 1)) inc += 1 + k;
+      }
+      luma |= bin(73 + inc, v >> b8 & 1) << b8;
+    }
+    if (!has_chroma) return luma;
+    int a = mb_a_ && (mb_a_->cbp >> 4) != 0;
+    int b = mb_b_ && (mb_b_->cbp >> 4) != 0;
+    int c = 0;
+    if (bin(77 + a + 2 * b, (v >> 4) != 0)) {
+      a = mb_a_ && (mb_a_->cbp >> 4) == 2;
+      b = mb_b_ && (mb_b_->cbp >> 4) == 2;
+      c = 1 + bin(81 + a + 2 * b, (v >> 4) == 2);
+    }
+    return luma | c << 4;
+  }
+
+  int transform_size_8x8_flag(int v) {
+    if (!cabac_) return u(1, v);
+    if (W && (v < 0 || v > 1)) fail("transform_size_8x8_flag out of range");
+    return bin(399 + (mb_a_ && mb_a_->t8x8) + (mb_b_ && mb_b_->t8x8), v);
+  }
+
+  int mb_qp_delta(int v) {
+    const int lim = 128;
+    if (!cabac_) return se(v, lim);
+    if (W && (v < -lim || v > lim)) fail("mb_qp_delta out of range");
+    int k = v > 0 ? 2 * v - 1 : -2 * v;
+    int n = 0, ctx = 60 + (last_qpd_ != 0);
+    while (bin(ctx, n < k)) {
+      ctx = n ? 63 : 62;
+      if (++n > 2 * lim) fail("mb_qp_delta out of range");
+    }
+    return n & 1 ? (n + 1) / 2 : -(n / 2);
+  }
+
+  // residual_block_cabac (7.3.5.3.3); cbf_inc < 0: no coded_block_flag
+  int cabac_residual(int cat, int* c, int n, int cbf_inc) {
+    if (!W)
+      for (int i = 0; i < n; i++) c[i] = 0;
+    int nonzero = W ? count_nonzero(c, n) : 0;
+    if (cbf_inc >= 0) {
+      if (!bin(kCbfBase[cat] + cbf_inc, nonzero != 0)) {
+        for (int i = 0; i < n; i++) c[i] = 0;
+        return 0;
+      }
+    } else if (W && !nonzero) {
+      fail("8x8 block without coefficients cannot be coded with CABAC");
+    }
+    int last = n - 1;
+    if (W)
+      while (!c[last]) last--;
+    int sig_base = kSigBase[field_mb()][cat], last_base = kLastBase[field_mb()][cat], abs_base = kAbsBase[cat];
+    bool b8x8 = cat == 5 || cat == 9 || cat == 13;
+    int numc8x8 = chroma_ == 2 ? 2 : 1;
+    bool sig[64];
+    int i;
+    for (i = 0; i < n - 1; i++) {
+      int inc_sig, inc_last;
+      if (cat == 3) {
+        inc_sig = inc_last = std::min(i / numc8x8, 2);
+      } else if (b8x8) {
+        inc_sig = field_mb() ? kSig8x8Field[i] : kSig8x8Frame[i];
+        inc_last = kLast8x8[i];
+      } else {
+        inc_sig = inc_last = i;
+      }
+      sig[i] = bin(sig_base + inc_sig, W ? c[i] != 0 : 0);
+      if (sig[i] && bin(last_base + inc_last, W ? i == last : 0)) break;
+    }
+    if (i == n - 1) sig[i] = true;  // no last flag: the last coefficient is significant
+    int eq1 = 0, gt1 = 0, count = 0;
+    for (; i >= 0; i--) {
+      if (!sig[i]) {
+        c[i] = 0;
+        continue;
+      }
+      int a = W ? abs(c[i]) - 1 : 0;
+      int v = bin(abs_base + (gt1 ? 0 : std::min(4, 1 + eq1)), a > 0);
+      if (v) {
+        int ctx = abs_base + 5 + std::min(4 - (cat == 3), gt1);
+        while (v < 14 && bin(ctx, a > v)) v++;
+        if (v == 14) v += exp_golomb_bypass(0, a - 14);
+      }
+      int s = bypass(W ? c[i] < 0 : 0);
+      c[i] = s ? -(v + 1) : v + 1;
+      if (v == 0)
+        eq1++;
+      else
+        gt1++;
+      count++;
+    }
+    return count;
+  }
+
+  // CAVLC nC (9.2.1)
+  int nc_luma(int plane, int x, int y) const {
+    int ia, ib;
+    const MbState* a = nb4(x - 1, y, ia);
+    const MbState* b = nb4(x, y - 1, ib);
+    if (a && b) return (a->nz[plane][ia] + b->nz[plane][ib] + 1) >> 1;
+    if (a) return a->nz[plane][ia];
+    if (b) return b->nz[plane][ib];
+    return 0;
+  }
+
+  int nc_chroma(int comp, int x, int y) const {
+    int ia, ib;
+    const MbState* a = nbc(x - 1, y, ia);
+    const MbState* b = nbc(x, y - 1, ib);
+    if (a && b) return (a->nz[1 + comp][ia] + b->nz[1 + comp][ib] + 1) >> 1;
+    if (a) return a->nz[1 + comp][ia];
+    if (b) return b->nz[1 + comp][ib];
+    return 0;
+  }
+
+  // coded_block_flag ctxIdxInc (9.3.3.1.1.9)
+  int cbf_inc_luma(int plane, int x, int y) const {
+    int inc = 0;
+    for (int k = 0; k < 2; k++) {
+      int i;
+      const MbState* n = k ? nb4(x, y - 1, i) : nb4(x - 1, y, i);
+      int cond;
+      if (!n)
+        cond = cur_->intra;
+      else if (n->pcm)
+        cond = 1;
+      else if (!((n->cbp >> ((i >> 3) * 2 + ((i & 3) >> 1))) & 1))
+        cond = 0;
+      else  // of the 4x4 block, or of the 8x8 block when transform_size_8x8_flag
+        cond = n->nz[plane][i] != 0;
+      inc += cond << k;
+    }
+    return inc;
+  }
+
+  // coded_block_flag of an 8x8 block (4:4:4 only)
+  int cbf_inc_8x8(int plane, int b8) const {
+    int inc = 0;
+    for (int k = 0; k < 2; k++) {
+      int xW, yW;
+      const MbState* n = nb_loc((b8 & 1) * 8 - !k, (b8 >> 1) * 8 - k, 16, 16, xW, yW);
+      int cond;
+      if (!n)
+        cond = cur_->intra;
+      else if (n->pcm)
+        cond = 1;
+      else if (!((n->cbp >> ((yW >> 3) * 2 + (xW >> 3))) & 1) || !n->t8x8)
+        cond = 0;
+      else
+        cond = n->nz[plane][(yW >> 2) * 4 + (xW >> 2)] != 0;
+      inc += cond << k;
+    }
+    return inc;
+  }
+
+  int cbf_inc_dc(int comp) const {
+    int inc = 0;
+    for (int k = 0; k < 2; k++) {
+      const MbState* n = k ? mb_b_ : mb_a_;
+      int cond;
+      if (!n)
+        cond = cur_->intra;
+      else if (n->pcm)
+        cond = 1;
+      else if (comp == 0 || chroma_ == 3)
+        cond = n->i16 && n->cbf_dc[comp];
+      else
+        cond = (n->cbp >> 4) && n->cbf_dc[comp];
+      inc += cond << k;
+    }
+    return inc;
+  }
+
+  int cbf_inc_chroma_ac(int comp, int x, int y) const {
+    int inc = 0;
+    for (int k = 0; k < 2; k++) {
+      int i;
+      const MbState* n = k ? nbc(x, y - 1, i) : nbc(x - 1, y, i);
+      int cond;
+      if (!n)
+        cond = cur_->intra;
+      else if (n->pcm)
+        cond = 1;
+      else
+        cond = (n->cbp >> 4) == 2 && n->nz[1 + comp][i] != 0;
+      inc += cond << k;
+    }
+    return inc;
+  }
+
+  const bool W;
+  const SliceHeader& h_;
+  const Sps& sps_;
+  const Pps& pps_;
+  MbStore& store_;
+  BitReader* br_;
+  BitWriter* bw_;
+  RowWriter* out_;
+  RowReader* in_;
+
+  bool cabac_ = false, field_ = false, mbaff_ = false;
+  int stype_ = 0, chroma_ = 1, ch_h_ = 2, ch_blocks_ = 4;
+  int width_ = 0, size_ = 0;
+  int num_ref_[2] = {0, 0};
+  uint32_t slice_id_ = 0;
+  std::vector<uint8_t> group_;  // mbToSliceGroupMap, empty without FMO
+  int cur_addr_ = 0;
+  MbState* cur_ = nullptr;
+  const MbState* mb_a_ = nullptr;  // macroblocks A and B (6.4.10.1)
+  const MbState* mb_b_ = nullptr;
+  const MbState* left_ = nullptr;  // left and above macroblock, or top
+  const MbState* above_ = nullptr; // macroblock of the left and above pair
+  int pair_field_ = 0;             // MBAFF: field decoding mode of the pair
+  MbRec* rec_ = nullptr;
+  MbRec mbrec_;  // reused for every macroblock
+  int last_qpd_ = 0;
+  CabacCtx ctx_[kNumCtx];
+  CabacDecoder dec_;
+  CabacEncoder enc_;
+};
 
 }  // namespace
 

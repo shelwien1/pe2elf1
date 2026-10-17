@@ -2,8 +2,7 @@
 
 namespace h264p {
 
-class RowWriter {
- public:
+struct RowWriter {
   void begin(const char* name) { s_ += name; }
   void add(int64_t v) {
     char tmp[24];
@@ -29,7 +28,6 @@ class RowWriter {
   size_t size() const { return s_.size(); }
   void truncate(size_t n) { s_.resize(n); }
 
- private:
   std::string s_;
 };
 
@@ -46,63 +44,36 @@ struct Row {
   size_t size() const { return off.size(); }
   const char* field(size_t i) const { return line.c_str() + off[i]; }
   const char* name() const { return field(0); }
-  bool is(const char* n) const;
-  bool absent(size_t i) const;     // the field is "-"
-  int64_t num(size_t i) const;     // throws TsvError
-  [[noreturn]] void fail(const std::string& msg) const;
+  bool is(const char* n) const { return strcmp(name(), n) == 0; }
+
+  // the field is "-"
+  bool absent(size_t i) const {
+    if (i >= size()) fail("missing field " + std::to_string(i));
+    const char* f = field(i);
+    return f[0] == '-' && f[1] == 0;
+  }
+
+  // throws TsvError
+  int64_t num(size_t i) const {
+    if (i >= size()) fail("missing field " + std::to_string(i));
+    const char* f = field(i);
+    // short decimal numbers directly, the rest with strtoll
+    const char* p = f + (*f == '-');
+    int64_t v = 0;
+    int n = 0;
+    while (*p >= '0' && *p <= '9' && n < 18) v = v * 10 + (*p++ - '0'), n++;
+    if (n && !*p) return *f == '-' ? -v : v;
+    char* end;
+    errno = 0;
+    long long x = strtoll(f, &end, 10);
+    if (end == f || *end || errno) fail(std::string("not a number: '") + f + "'");
+    return x;
+  }
+
+  [[noreturn]] void fail(const std::string& msg) const {
+    throw TsvError("line " + std::to_string(lineno) + " (" + name() + "): " + msg);
+  }
 };
-
-class RowReader {
- public:
-  explicit RowReader(FILE* f) : f_(f) {}
-  RowReader(const char* text, size_t len) : f_(nullptr) { buf_.assign(text, len); }
-  // the next row without consuming it, or nullptr at the end
-  const Row* peek();
-  // the next row; throws at the end
-  const Row& take();
-  bool at_end() { return peek() == nullptr; }
-  long lineno() const { return lineno_; }
-
- private:
-  bool fill();
-  bool read_line(std::string& out);
-
-  FILE* f_;
-  std::string buf_;
-  size_t bpos_ = 0;
-  bool eof_ = false;
-  long lineno_ = 0;
-  Row next_, cur_;
-  bool have_next_ = false;
-};
-
-std::string to_hex(const uint8_t* p, size_t n);
-// throws TsvError
-std::vector<uint8_t> from_hex(const Row& r, size_t field);
-
-bool Row::is(const char* n) const { return strcmp(name(), n) == 0; }
-
-bool Row::absent(size_t i) const {
-  if (i >= size()) fail("missing field " + std::to_string(i));
-  const char* f = field(i);
-  return f[0] == '-' && f[1] == 0;
-}
-
-int64_t Row::num(size_t i) const {
-  if (i >= size()) fail("missing field " + std::to_string(i));
-  const char* f = field(i);
-  // short decimal numbers directly, the rest with strtoll
-  const char* p = f + (*f == '-');
-  int64_t v = 0;
-  int n = 0;
-  while (*p >= '0' && *p <= '9' && n < 18) v = v * 10 + (*p++ - '0'), n++;
-  if (n && !*p) return *f == '-' ? -v : v;
-  char* end;
-  errno = 0;
-  long long x = strtoll(f, &end, 10);
-  if (end == f || *end || errno) fail(std::string("not a number: '") + f + "'");
-  return x;
-}
 
 static RowKind classify(const char* n) {
   switch (n[0]) {
@@ -133,70 +104,88 @@ static RowKind classify(const char* n) {
   return kOtherRow;
 }
 
-void Row::fail(const std::string& msg) const {
-  throw TsvError("line " + std::to_string(lineno) + " (" + name() + "): " + msg);
-}
+struct RowReader {
+  explicit RowReader(FILE* f) : f_(f) {}
+  RowReader(const char* text, size_t len) : f_(nullptr) { buf_.assign(text, len); }
 
-bool RowReader::fill() {
-  if (!f_ || eof_) return false;
-  if (bpos_ > 0) {
-    buf_.erase(0, bpos_);
-    bpos_ = 0;
-  }
-  size_t old = buf_.size();
-  buf_.resize(old + (1 << 20));
-  size_t n = fread(&buf_[old], 1, 1 << 20, f_);
-  buf_.resize(old + n);
-  if (n == 0) eof_ = true;
-  return n > 0;
-}
-
-bool RowReader::read_line(std::string& out) {
-  for (;;) {
-    size_t nl = buf_.find('\n', bpos_);
-    if (nl != std::string::npos) {
-      out.assign(buf_, bpos_, nl - bpos_);
-      bpos_ = nl + 1;
-      return true;
+  // the next row without consuming it, or nullptr at the end
+  const Row* peek() {
+    while (!have_next_) {
+      if (!read_line(next_.line)) return nullptr;
+      lineno_++;
+      std::string& l = next_.line;
+      if (!l.empty() && l.back() == '\r') l.pop_back();
+      if (l.empty() || l[0] == '#') continue;  // blank lines and comments
+      next_.off.clear();
+      next_.off.push_back(0);
+      for (size_t i = 0; i < l.size(); i++)
+        if (l[i] == '\t') {
+          l[i] = 0;
+          next_.off.push_back((uint32_t)i + 1);
+        }
+      next_.lineno = lineno_;
+      next_.kind = classify(l.c_str());
+      have_next_ = true;
     }
-    if (!fill()) {
-      if (bpos_ < buf_.size()) {  // last line without a newline
-        out.assign(buf_, bpos_, std::string::npos);
-        bpos_ = buf_.size();
+    return &next_;
+  }
+
+  // the next row; throws at the end
+  const Row& take() {
+    if (!peek()) throw TsvError("unexpected end of file");
+    std::swap(cur_, next_);
+    have_next_ = false;
+    return cur_;
+  }
+
+  bool at_end() { return peek() == nullptr; }
+  long lineno() const { return lineno_; }
+
+  bool fill() {
+    if (!f_ || eof_) return false;
+    if (bpos_ > 0) {
+      buf_.erase(0, bpos_);
+      bpos_ = 0;
+    }
+    size_t old = buf_.size();
+    buf_.resize(old + (1 << 20));
+    size_t n = fread(&buf_[old], 1, 1 << 20, f_);
+    buf_.resize(old + n);
+    if (n == 0) eof_ = true;
+    return n > 0;
+  }
+
+  bool read_line(std::string& out) {
+    for (;;) {
+      size_t nl = buf_.find('\n', bpos_);
+      if (nl != std::string::npos) {
+        out.assign(buf_, bpos_, nl - bpos_);
+        bpos_ = nl + 1;
         return true;
       }
-      return false;
+      if (!fill()) {
+        if (bpos_ < buf_.size()) {  // last line without a newline
+          out.assign(buf_, bpos_, std::string::npos);
+          bpos_ = buf_.size();
+          return true;
+        }
+        return false;
+      }
     }
   }
-}
 
-const Row* RowReader::peek() {
-  while (!have_next_) {
-    if (!read_line(next_.line)) return nullptr;
-    lineno_++;
-    std::string& l = next_.line;
-    if (!l.empty() && l.back() == '\r') l.pop_back();
-    if (l.empty() || l[0] == '#') continue;  // blank lines and comments
-    next_.off.clear();
-    next_.off.push_back(0);
-    for (size_t i = 0; i < l.size(); i++)
-      if (l[i] == '\t') {
-        l[i] = 0;
-        next_.off.push_back((uint32_t)i + 1);
-      }
-    next_.lineno = lineno_;
-    next_.kind = classify(l.c_str());
-    have_next_ = true;
-  }
-  return &next_;
-}
+  FILE* f_;
+  std::string buf_;
+  size_t bpos_ = 0;
+  bool eof_ = false;
+  long lineno_ = 0;
+  Row next_, cur_;
+  bool have_next_ = false;
+};
 
-const Row& RowReader::take() {
-  if (!peek()) throw TsvError("unexpected end of file");
-  std::swap(cur_, next_);
-  have_next_ = false;
-  return cur_;
-}
+std::string to_hex(const uint8_t* p, size_t n);
+// throws TsvError
+std::vector<uint8_t> from_hex(const Row& r, size_t field);
 
 std::string to_hex(const uint8_t* p, size_t n) {
   static const char d[] = "0123456789abcdef";
