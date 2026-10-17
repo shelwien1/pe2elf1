@@ -42,6 +42,16 @@ static const byte H_mvs_j_ma[7+1]={ 0,1,2,3,4,5,6,7 };
 static const byte H_mvs_j_mb[7+1]={ 0,1,2,3,4,5,6,7 };
 static const byte H_mvs_j_cq[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 
+static const byte H_mvs_k_kind[3+1]={ 0,1,2,3 };
+static const byte H_mvs_k_pd[8+1]={ 0,1,2,3,4,5,6,7,8 };
+static const byte H_mvs_k_sp[8+1]={ 0,1,2,3,4,5,6,7,8 };
+static const byte H_mvs_k_ps[3+1]={ 0,1,2,3 };
+
+static const byte H_mvs_l_kind[3+1]={ 0,1,2,3 };
+static const byte H_mvs_l_oth[5+1]={ 0,1,2,3,4,5 };
+static const byte H_mvs_l_tv[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
+static const byte H_mvs_l_rf[3+1]={ 0,1,2,3 };
+
 static const byte H_mvs_m_kind[3+1]={ 0,1,2,3 };
 static const byte H_mvs_m_pd[5+1]={ 0,1,2,3,4,5 };
 
@@ -65,6 +75,8 @@ static const int H_mvs_rE = (6+0) * (1);
 static const int H_mvs_rH = (64+0) * (1);
 static const int H_mvs_rI = (64+0) * (1);
 static const int H_mvs_rJ = (64+0) * (1);
+static const int H_mvs_rK = (64+0) * (1);
+static const int H_mvs_rL = (64+0) * (1);
 static const int H_mvs_rD = (255+0) * (1);
 static const int H_mvs_rT = (55+0) * (1);
 static const int H_mvs_rG = (72+0) * (1);
@@ -80,6 +92,8 @@ static const int H_mvs_mwE = (146+0) * (1);
 static const int H_mvs_mwH = (1+0) * (1);
 static const int H_mvs_mwI = (0+0) * (1);
 static const int H_mvs_mwJ = (0+0) * (1);
+static const int H_mvs_mwK = (0+0) * (1);
+static const int H_mvs_mwL = (0+0) * (1);
 static const int H_mvs_mwD = (0+0) * (1);
 static const int H_mvs_mwT = (0+0) * (1);
 static const int H_mvs_mwG = (0+0) * (1);
@@ -93,6 +107,8 @@ static const int H_mvs_hE = (24+0) * (1);
 static const int H_mvs_hH = (24+0) * (1);
 static const int H_mvs_hI = (24+0) * (1);
 static const int H_mvs_hJ = (24+0) * (1);
+static const int H_mvs_hK = (24+0) * (1);
+static const int H_mvs_hL = (24+0) * (1);
 static const int H_mvs_hD = (24+0) * (1);
 static const int H_mvs_hS = (24+0) * (1);
 static const int H_mvs_hF = (24+0) * (1);
@@ -111,6 +127,8 @@ static const long long H_mvs_g_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 1), 1); /
 static const long long H_mvs_h_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 2), 14), 6), 13); // 6552
 static const long long H_mvs_i_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 14), 13), 13); // 18928
 static const long long H_mvs_j_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 8), 8), 10); // 5120
+static const long long H_mvs_k_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 9), 9), 4); // 2592
+static const long long H_mvs_l_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 6), 14), 4); // 2688
 static const long long H_mvs_m_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 1), 6); // 24
 static const long long H_mvs_n_Volume = tc_vmul(1, 4); // 4
 static const long long H_mvs_s_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 14); // 112
@@ -130,6 +148,8 @@ struct H_mvs_T {
   cm_cnt2 H_mvs_H[tc_rows(H_mvs_h_Volume, H_mvs_hH) * H_mvs_ND];
   cm_cnt2 H_mvs_I[tc_rows(H_mvs_i_Volume, H_mvs_hI) * H_mvs_ND];
   cm_cnt2 H_mvs_J[tc_rows(H_mvs_j_Volume, H_mvs_hJ) * H_mvs_ND];
+  cm_cnt2 H_mvs_K[tc_rows(H_mvs_k_Volume, H_mvs_hK) * H_mvs_ND];
+  cm_cnt2 H_mvs_L[tc_rows(H_mvs_l_Volume, H_mvs_hL) * H_mvs_ND];
   cm_cnt H_mvs_MT[tc_rows(H_mvs_t_Volume, H_mvs_hT) * H_mvs_MND];
   i16 H_mvs_S[tc_rows(H_mvs_s_Volume, H_mvs_hS) * H_mvs_ND * H_mvs_qs];
   u8 H_mvs_SC[tc_rows(H_mvs_s_Volume, H_mvs_hS) * H_mvs_ND * H_mvs_qs];
@@ -158,6 +178,8 @@ struct H_mvs_T {
                               + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H_mvs_h_Volume, H_mvs_hH) * H_mvs_ND)
                               + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H_mvs_i_Volume, H_mvs_hI) * H_mvs_ND)
                               + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H_mvs_j_Volume, H_mvs_hJ) * H_mvs_ND)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H_mvs_k_Volume, H_mvs_hK) * H_mvs_ND)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H_mvs_l_Volume, H_mvs_hL) * H_mvs_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(tc_rows(H_mvs_t_Volume, H_mvs_hT) * H_mvs_MND)
                               + (unsigned long long)sizeof(i16) * (unsigned long long)(tc_rows(H_mvs_s_Volume, H_mvs_hS) * H_mvs_ND * H_mvs_qs)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_mvs_s_Volume, H_mvs_hS) * H_mvs_ND * H_mvs_qs)

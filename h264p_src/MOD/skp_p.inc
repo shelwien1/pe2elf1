@@ -5,7 +5,7 @@
     lines lifted out into the struct in MOD/skp_h.inc.  Edit this file and
     skp.idx, not MOD/; ../mk.sh regenerates both.
 
-    `_A`-`_E`, `_H`-`_J` are the eight counters, `_S` and `_F` the two APMs, `_W` and
+    `_A`-`_E`, `_H`-`_L` are the ten counters, `_S` and `_F` the two APMs, `_W` and
     `_W2` the two mixers (selected by index m and by index w) and `_WF` the
     one that mixes them, `_MT` and `_WM` the mantissa plane and its mixer,
     `_G` the sign counters.  Each is H_skp_ND (or H_skp_MND) rows deep per
@@ -13,7 +13,7 @@
     without being a variable.  */
 
 void H_skp_make( const H_skp_v & D, tcx & X ) {
-  int a, b, c, d, e, h, i, j, s, f, m, w, t, n, g;
+  int a, b, c, d, e, h, i, j, k, l, s, f, m, w, t, n, g;
   int st = D.st, a3 = D.a3, b3 = D.b3, col = D.col, c9 = D.c9, cd = D.cd, run = D.run, cnt = D.cnt, eq = D.eq, lf = D.lf, af = D.af, td = D.td, en = D.en, sm = D.sm, tm = D.tm, tb = D.tb, bd = D.bd, qc = D.qc;
   (void) st;  (void) a3;  (void) b3;  (void) col;  (void) c9;  (void) cd;  (void) run;  (void) cnt;  (void) eq;  (void) lf;  (void) af;  (void) td;  (void) en;  (void) sm;  (void) tm;  (void) tb;  (void) bd;  (void) qc;
 
@@ -70,6 +70,18 @@ void H_skp_make( const H_skp_v & D, tcx & X ) {
   j = j*10 + H_skp_j_c9[__min(9,__max(0,c9-(1-1)))];
   j = j*18 + H_skp_j_qc[__min(17,__max(0,qc-(1-1)))];
 
+  k = 0;
+  k = k*10 + H_skp_k_st[__min(9,__max(0,st-(1-1)))];
+  k = k*17 + H_skp_k_td[__min(16,__max(0,td-(1-1)))];
+  k = k*17 + H_skp_k_tm[__min(16,__max(0,tm-(1-1)))];
+  k = k*3 + ((b3>0+(1-1))+(b3>1+(1-1)));
+
+  l = 0;
+  l = l*10 + H_skp_l_st[__min(9,__max(0,st-(1-1)))];
+  l = l*17 + H_skp_l_bd[__min(16,__max(0,bd-(1-1)))];
+  l = l*3 + ((col>0+(1-1))+(col>1+(1-1)));
+  l = l*3 + ((cd>0+(1-1))+(cd>1+(1-1)));
+
   s = 0;
   s = s*10 + H_skp_s_st[__min(9,__max(0,st-(1-1)))];
   s = s*17 + H_skp_s_tb[__min(16,__max(0,tb-(1-1)))];
@@ -96,7 +108,7 @@ void H_skp_make( const H_skp_v & D, tcx & X ) {
   n = 0;
 
   g = 0;
-  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.i = i;  X.j = j;  X.s = s;  X.f = f;  X.m = m;  X.w = w;  X.t = t;
+  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.i = i;  X.j = j;  X.k = k;  X.l = l;  X.s = s;  X.f = f;  X.m = m;  X.w = w;  X.t = t;
   X.n = n;  X.g = g;
 }
 

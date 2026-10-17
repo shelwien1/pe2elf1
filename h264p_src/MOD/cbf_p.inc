@@ -5,7 +5,7 @@
     lines lifted out into the struct in MOD/cbf_h.inc.  Edit this file and
     cbf.idx, not MOD/; ../mk.sh regenerates both.
 
-    `_A`-`_E`, `_H`-`_J` are the eight counters, `_S` and `_F` the two APMs, `_W` and
+    `_A`-`_E`, `_H`-`_L` are the ten counters, `_S` and `_F` the two APMs, `_W` and
     `_W2` the two mixers (selected by index m and by index w) and `_WF` the
     one that mixes them, `_MT` and `_WM` the mantissa plane and its mixer,
     `_G` the sign counters.  Each is H_cbf_ND (or H_cbf_MND) rows deep per
@@ -13,7 +13,7 @@
     without being a variable.  */
 
 void H_cbf_make( const H_cbf_v & D, tcx & X ) {
-  int a, b, c, d, e, h, i, j, s, f, m, w, t, n, g;
+  int a, b, c, d, e, h, i, j, k, l, s, f, m, w, t, n, g;
   int cat = D.cat, na = D.na, nb = D.nb, intra = D.intra, q6 = D.q6, np = D.np, pos = D.pos, crcb = D.crcb, col = D.col, nc = D.nc, kn = D.kn, md = D.md, en = D.en, pg = D.pg, em = D.em, pz = D.pz, tn = D.tn, pq = D.pq, ch = D.ch;
   (void) cat;  (void) na;  (void) nb;  (void) intra;  (void) q6;  (void) np;  (void) pos;  (void) crcb;  (void) col;  (void) nc;  (void) kn;  (void) md;  (void) en;  (void) pg;  (void) em;  (void) pz;  (void) tn;  (void) pq;  (void) ch;
 
@@ -71,6 +71,18 @@ void H_cbf_make( const H_cbf_v & D, tcx & X ) {
   j = j*17 + H_cbf_j_pg[__min(16,__max(0,pg-(1-1)))];
   j = j*10 + H_cbf_j_na[__min(9,__max(0,na-(1-1)))];
 
+  k = 0;
+  k = k*14 + H_cbf_k_cat[__min(13,__max(0,cat-(1-1)))];
+  k = k*10 + H_cbf_k_na[__min(9,__max(0,na-(1-1)))];
+  k = k*10 + H_cbf_k_nb[__min(9,__max(0,nb-(1-1)))];
+  k = k*17 + H_cbf_k_pz[__min(16,__max(0,pz-(1-1)))];
+
+  l = 0;
+  l = l*14 + H_cbf_l_cat[__min(13,__max(0,cat-(1-1)))];
+  l = l*3 + ((col>0+(1-1))+(col>1+(1-1)));
+  l = l*4 + H_cbf_l_np[__min(3,__max(0,np-(1-1)))];
+  l = l*20 + H_cbf_l_md[__min(19,__max(0,md-(1-1)))];
+
   s = 0;
   s = s*14 + H_cbf_s_cat[__min(13,__max(0,cat-(1-1)))];
   s = s*2 + ((kn>0+(1-1)));
@@ -97,7 +109,7 @@ void H_cbf_make( const H_cbf_v & D, tcx & X ) {
   n = n*14 + H_cbf_n_cat[__min(13,__max(0,cat-(1-1)))];
 
   g = 0;
-  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.i = i;  X.j = j;  X.s = s;  X.f = f;  X.m = m;  X.w = w;  X.t = t;
+  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.i = i;  X.j = j;  X.k = k;  X.l = l;  X.s = s;  X.f = f;  X.m = m;  X.w = w;  X.t = t;
   X.n = n;  X.g = g;
 }
 

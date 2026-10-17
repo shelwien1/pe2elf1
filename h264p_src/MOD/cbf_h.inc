@@ -41,6 +41,15 @@ static const byte H_cbf_j_em[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
 static const byte H_cbf_j_pg[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
 static const byte H_cbf_j_na[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 
+static const byte H_cbf_k_cat[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
+static const byte H_cbf_k_na[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
+static const byte H_cbf_k_nb[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
+static const byte H_cbf_k_pz[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
+
+static const byte H_cbf_l_cat[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
+static const byte H_cbf_l_np[3+1]={ 0,1,2,3 };
+static const byte H_cbf_l_md[19+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19 };
+
 static const byte H_cbf_m_cat[13+1]={ 0,1,2,3,4,4,4,4,4,4,4,4,4,4 };
 
 static const byte H_cbf_n_cat[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
@@ -62,6 +71,8 @@ static const int H_cbf_rE = (64+0) * (1);
 static const int H_cbf_rH = (64+0) * (1);
 static const int H_cbf_rI = (64+0) * (1);
 static const int H_cbf_rJ = (64+0) * (1);
+static const int H_cbf_rK = (64+0) * (1);
+static const int H_cbf_rL = (64+0) * (1);
 static const int H_cbf_rD = (242+0) * (1);
 static const int H_cbf_rT = (55+0) * (1);
 static const int H_cbf_rG = (90+0) * (1);
@@ -77,6 +88,8 @@ static const int H_cbf_mwE = (0+0) * (1);
 static const int H_cbf_mwH = (0+0) * (1);
 static const int H_cbf_mwI = (0+0) * (1);
 static const int H_cbf_mwJ = (0+0) * (1);
+static const int H_cbf_mwK = (0+0) * (1);
+static const int H_cbf_mwL = (0+0) * (1);
 static const int H_cbf_mwD = (200+0) * (1);
 static const int H_cbf_mwT = (8+0) * (1);
 static const int H_cbf_mwG = (0+0) * (1);
@@ -90,6 +103,8 @@ static const int H_cbf_hE = (24+0) * (1);
 static const int H_cbf_hH = (24+0) * (1);
 static const int H_cbf_hI = (24+0) * (1);
 static const int H_cbf_hJ = (24+0) * (1);
+static const int H_cbf_hK = (24+0) * (1);
+static const int H_cbf_hL = (24+0) * (1);
 static const int H_cbf_hD = (24+0) * (1);
 static const int H_cbf_hS = (24+0) * (1);
 static const int H_cbf_hF = (24+0) * (1);
@@ -108,6 +123,8 @@ static const long long H_cbf_g_Volume = tc_vmul(1, 1); // 1
 static const long long H_cbf_h_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 17), 10), 9); // 21420
 static const long long H_cbf_i_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 17), 25), 4); // 23800
 static const long long H_cbf_j_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 17), 17), 10); // 40460
+static const long long H_cbf_k_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 10), 10), 17); // 23800
+static const long long H_cbf_l_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 3), 4), 20); // 3360
 static const long long H_cbf_m_Volume = tc_vmul(tc_vmul(1, 5), 2); // 10
 static const long long H_cbf_n_Volume = tc_vmul(1, 14); // 14
 static const long long H_cbf_s_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 2), 25); // 700
@@ -127,6 +144,8 @@ struct H_cbf_T {
   cm_cnt2 H_cbf_H[tc_rows(H_cbf_h_Volume, H_cbf_hH) * H_cbf_ND];
   cm_cnt2 H_cbf_I[tc_rows(H_cbf_i_Volume, H_cbf_hI) * H_cbf_ND];
   cm_cnt2 H_cbf_J[tc_rows(H_cbf_j_Volume, H_cbf_hJ) * H_cbf_ND];
+  cm_cnt2 H_cbf_K[tc_rows(H_cbf_k_Volume, H_cbf_hK) * H_cbf_ND];
+  cm_cnt2 H_cbf_L[tc_rows(H_cbf_l_Volume, H_cbf_hL) * H_cbf_ND];
   cm_cnt H_cbf_MT[tc_rows(H_cbf_t_Volume, H_cbf_hT) * H_cbf_MND];
   i16 H_cbf_S[tc_rows(H_cbf_s_Volume, H_cbf_hS) * H_cbf_ND * H_cbf_qs];
   u8 H_cbf_SC[tc_rows(H_cbf_s_Volume, H_cbf_hS) * H_cbf_ND * H_cbf_qs];
@@ -155,6 +174,8 @@ struct H_cbf_T {
                               + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H_cbf_h_Volume, H_cbf_hH) * H_cbf_ND)
                               + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H_cbf_i_Volume, H_cbf_hI) * H_cbf_ND)
                               + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H_cbf_j_Volume, H_cbf_hJ) * H_cbf_ND)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H_cbf_k_Volume, H_cbf_hK) * H_cbf_ND)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H_cbf_l_Volume, H_cbf_hL) * H_cbf_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(tc_rows(H_cbf_t_Volume, H_cbf_hT) * H_cbf_MND)
                               + (unsigned long long)sizeof(i16) * (unsigned long long)(tc_rows(H_cbf_s_Volume, H_cbf_hS) * H_cbf_ND * H_cbf_qs)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_cbf_s_Volume, H_cbf_hS) * H_cbf_ND * H_cbf_qs)

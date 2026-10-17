@@ -5,7 +5,7 @@
     lines lifted out into the struct in MOD/qpd_h.inc.  Edit this file and
     qpd.idx, not MOD/; ../mk.sh regenerates both.
 
-    `_A`-`_E`, `_H`-`_J` are the eight counters, `_S` and `_F` the two APMs, `_W` and
+    `_A`-`_E`, `_H`-`_L` are the ten counters, `_S` and `_F` the two APMs, `_W` and
     `_W2` the two mixers (selected by index m and by index w) and `_WF` the
     one that mixes them, `_MT` and `_WM` the mantissa plane and its mixer,
     `_G` the sign counters.  Each is %M%ND (or %M%MND) rows deep per
@@ -13,11 +13,11 @@
     without being a variable.  */
 
 void %M%make( const %M%v & D, tcx & X ) {
-  int a, b, c, d, e, h, i, j, s, f, m, w, t, n, g;
+  int a, b, c, d, e, h, i, j, k, l, s, f, m, w, t, n, g;
   int lnz = D.lnz, pc = D.pc, cc = D.cc, cls = D.cls, dc = D.dc, db = D.db, lz = D.lz, st = D.st, ae = D.ae, aq = D.aq, ac = D.ac;
   (void) lnz;  (void) pc;  (void) cc;  (void) cls;  (void) dc;  (void) db;  (void) lz;  (void) st;  (void) ae;  (void) aq;  (void) ac;
-  MakeIndex a,b,c,d,e,h,i,j,s,f,m,w,t,n,g
-  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.i = i;  X.j = j;  X.s = s;  X.f = f;  X.m = m;  X.w = w;  X.t = t;
+  MakeIndex a,b,c,d,e,h,i,j,k,l,s,f,m,w,t,n,g
+  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.i = i;  X.j = j;  X.k = k;  X.l = l;  X.s = s;  X.f = f;  X.m = m;  X.w = w;  X.t = t;
   X.n = n;  X.g = g;
 }
 
@@ -29,6 +29,8 @@ Table( cm_cnt2, %M%E, tc_rows(%M%e_Volume, %M%hE) * %M%ND );
 Table( cm_cnt2, %M%H, tc_rows(%M%h_Volume, %M%hH) * %M%ND );
 Table( cm_cnt2, %M%I, tc_rows(%M%i_Volume, %M%hI) * %M%ND );
 Table( cm_cnt2, %M%J, tc_rows(%M%j_Volume, %M%hJ) * %M%ND );
+Table( cm_cnt2, %M%K, tc_rows(%M%k_Volume, %M%hK) * %M%ND );
+Table( cm_cnt2, %M%L, tc_rows(%M%l_Volume, %M%hL) * %M%ND );
 Table( cm_cnt, %M%MT, tc_rows(%M%t_Volume, %M%hT) * %M%MND );
 Table( i16,    %M%S, tc_rows(%M%s_Volume, %M%hS) * %M%ND * %M%qs );
 Table( u8,     %M%SC, tc_rows(%M%s_Volume, %M%hS) * %M%ND * %M%qs );

@@ -5,7 +5,7 @@
     lines lifted out into the struct in MOD/sgn_h.inc.  Edit this file and
     sgn.idx, not MOD/; ../mk.sh regenerates both.
 
-    `_A`-`_E`, `_H`-`_J` are the eight counters, `_S` and `_F` the two APMs, `_W` and
+    `_A`-`_E`, `_H`-`_L` are the ten counters, `_S` and `_F` the two APMs, `_W` and
     `_W2` the two mixers (selected by index m and by index w) and `_WF` the
     one that mixes them, `_MT` and `_WM` the mantissa plane and its mixer,
     `_G` the sign counters.  Each is %M%ND (or %M%MND) rows deep per
@@ -13,11 +13,11 @@
     without being a variable.  */
 
 void %M%make( const %M%v & D, tcx & X ) {
-  int a, b, c, d, e, h, i, j, s, f, m, w, t, n, g;
+  int a, b, c, d, e, h, i, j, k, l, s, f, m, w, t, n, g;
   int cg = D.cg, pos = D.pos, sa = D.sa, sb = D.sb, scb = D.scb, mag = D.mag, md = D.md, pp = D.pp, mg = D.mg, ez = D.ez, ts = D.ts, pq = D.pq, gh = D.gh, se = D.se;
   (void) cg;  (void) pos;  (void) sa;  (void) sb;  (void) scb;  (void) mag;  (void) md;  (void) pp;  (void) mg;  (void) ez;  (void) ts;  (void) pq;  (void) gh;  (void) se;
-  MakeIndex a,b,c,d,e,h,i,j,s,f,m,w,t,n,g
-  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.i = i;  X.j = j;  X.s = s;  X.f = f;  X.m = m;  X.w = w;  X.t = t;
+  MakeIndex a,b,c,d,e,h,i,j,k,l,s,f,m,w,t,n,g
+  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.i = i;  X.j = j;  X.k = k;  X.l = l;  X.s = s;  X.f = f;  X.m = m;  X.w = w;  X.t = t;
   X.n = n;  X.g = g;
 }
 
@@ -29,6 +29,8 @@ Table( cm_cnt2, %M%E, tc_rows(%M%e_Volume, %M%hE) * %M%ND );
 Table( cm_cnt2, %M%H, tc_rows(%M%h_Volume, %M%hH) * %M%ND );
 Table( cm_cnt2, %M%I, tc_rows(%M%i_Volume, %M%hI) * %M%ND );
 Table( cm_cnt2, %M%J, tc_rows(%M%j_Volume, %M%hJ) * %M%ND );
+Table( cm_cnt2, %M%K, tc_rows(%M%k_Volume, %M%hK) * %M%ND );
+Table( cm_cnt2, %M%L, tc_rows(%M%l_Volume, %M%hL) * %M%ND );
 Table( cm_cnt, %M%MT, tc_rows(%M%t_Volume, %M%hT) * %M%MND );
 Table( i16,    %M%S, tc_rows(%M%s_Volume, %M%hS) * %M%ND * %M%qs );
 Table( u8,     %M%SC, tc_rows(%M%s_Volume, %M%hS) * %M%ND * %M%qs );

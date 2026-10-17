@@ -60,6 +60,18 @@ Index j
  j_em: em, 1!1111111111111111
  j_st: st, 1!111111111
 
+Index k
+ k_inc: inc, 1!111
+ k_pg: pg, 1!1111111111111111
+ k_col: col, 1!11
+ k_cls: cls, 1!11111111
+
+Index l
+ l_inc: inc, 1!111
+ l_pc: pc, 1!1111
+ l_en: en, 1!11111111111111
+ l_q6: q6, 1!11111111
+
 Index s
  s_inc: inc, 1!111
  s_tp: tp, 1!1111111111111111
@@ -92,6 +104,8 @@ Number rE, 1, 0!01000000
 Number rH, 1, 0!01000000
 Number rI, 1, 0!01000000
 Number rJ, 1, 0!01000000
+Number rK, 1, 0!01000000
+Number rL, 1, 0!01000000
 Number rD, 1, 0!11111111
 Number rT, 1, 0!00110111
 Number rG, 1, 0!01011010
@@ -107,6 +121,8 @@ Number mwE, 1, 0!00000000
 Number mwH, 1, 0!00000000
 Number mwI, 1, 0!00000000
 Number mwJ, 1, 0!00000000
+Number mwK, 1, 0!00000000
+Number mwL, 1, 0!00000000
 Number mwD, 1, 0!00010010
 Number mwT, 1, 0!00000000
 Number mwG, 1, 0!00000000
@@ -124,6 +140,8 @@ Number mb, 1, 0!00000101
 ! Number hH, 1, 0!11000
 ! Number hI, 1, 0!11000
 ! Number hJ, 1, 0!11000
+! Number hK, 1, 0!11000
+! Number hL, 1, 0!11000
 ! Number hD, 1, 0!11000
 ! Number hS, 1, 0!11000
 ! Number hF, 1, 0!11000

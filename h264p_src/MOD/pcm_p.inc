@@ -5,7 +5,7 @@
     lines lifted out into the struct in MOD/pcm_h.inc.  Edit this file and
     pcm.idx, not MOD/; ../mk.sh regenerates both.
 
-    `_A`-`_E`, `_H`-`_J` are the eight counters, `_S` and `_F` the two APMs, `_W` and
+    `_A`-`_E`, `_H`-`_L` are the ten counters, `_S` and `_F` the two APMs, `_W` and
     `_W2` the two mixers (selected by index m and by index w) and `_WF` the
     one that mixes them, `_MT` and `_WM` the mantissa plane and its mixer,
     `_G` the sign counters.  Each is H_pcm_ND (or H_pcm_MND) rows deep per
@@ -13,7 +13,7 @@
     without being a variable.  */
 
 void H_pcm_make( const H_pcm_v & D, tcx & X ) {
-  int a, b, c, d, e, h, i, j, s, f, m, w, t, n, g;
+  int a, b, c, d, e, h, i, j, k, l, s, f, m, w, t, n, g;
   int pl = D.pl, dp = D.dp, pd = D.pd, pd2 = D.pd2;
   (void) pl;  (void) dp;  (void) pd;  (void) pd2;
 
@@ -51,6 +51,15 @@ void H_pcm_make( const H_pcm_v & D, tcx & X ) {
   j = j*7 + H_pcm_j_dp[__min(6,__max(0,dp-(1-1)))];
   j = j*8 + H_pcm_j_pd2[__min(7,__max(0,pd2-(1-1)))];
 
+  k = 0;
+  k = k*3 + ((pl>0+(1-1))+(pl>1+(1-1)));
+  k = k*8 + H_pcm_k_pd2[__min(7,__max(0,pd2-(1-1)))];
+
+  l = 0;
+  l = l*3 + ((pl>0+(1-1))+(pl>1+(1-1)));
+  l = l*16 + H_pcm_l_pd[__min(15,__max(0,pd-(1-1)))];
+  l = l*7 + H_pcm_l_dp[__min(6,__max(0,dp-(1-1)))];
+
   s = 0;
   s = s*3 + ((pl>0+(1-1))+(pl>1+(1-1)));
 
@@ -73,7 +82,7 @@ void H_pcm_make( const H_pcm_v & D, tcx & X ) {
   g = 0;
   g = g*3 + ((pl>0+(1-1))+(pl>1+(1-1)));
   g = g*4 + H_pcm_g_pd[__min(3,__max(0,pd-(1-1)))];
-  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.i = i;  X.j = j;  X.s = s;  X.f = f;  X.m = m;  X.w = w;  X.t = t;
+  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.i = i;  X.j = j;  X.k = k;  X.l = l;  X.s = s;  X.f = f;  X.m = m;  X.w = w;  X.t = t;
   X.n = n;  X.g = g;
 }
 
