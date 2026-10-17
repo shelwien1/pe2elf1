@@ -14,8 +14,8 @@
 
 void H_mvs_make( const H_mvs_v & D, tcx & X ) {
   int a, b, c, d, e, h, s, f, m, t, n, g;
-  int kind = D.kind, comp = D.comp, lst = D.lst, ma = D.ma, mb = D.mb, oth = D.oth, ps = D.ps, rf = D.rf, pi = D.pi, nr = D.nr, pd = D.pd, sp = D.sp;
-  (void) kind;  (void) comp;  (void) lst;  (void) ma;  (void) mb;  (void) oth;  (void) ps;  (void) rf;  (void) pi;  (void) nr;  (void) pd;  (void) sp;
+  int kind = D.kind, comp = D.comp, lst = D.lst, ma = D.ma, mb = D.mb, oth = D.oth, ps = D.ps, rf = D.rf, pi = D.pi, nr = D.nr, pd = D.pd, sp = D.sp, tv = D.tv;
+  (void) kind;  (void) comp;  (void) lst;  (void) ma;  (void) mb;  (void) oth;  (void) ps;  (void) rf;  (void) pi;  (void) nr;  (void) pd;  (void) sp;  (void) tv;
 
   a = 0;
   a = a*3 + ((kind>1+(1-1))+(kind>2+(1-1)));
@@ -48,19 +48,19 @@ void H_mvs_make( const H_mvs_v & D, tcx & X ) {
   e = 0;
   e = e*3 + ((kind>1+(1-1))+(kind>2+(1-1)));
   e = e*2 + ((comp>0+(1-1)));
+  e = e*14 + H_mvs_e_tv[__min(13,__max(0,tv-(1-1)))];
   e = e*9 + H_mvs_e_sp[__min(8,__max(0,sp-(1-1)))];
-  e = e*5 + H_mvs_e_ma[__min(7,__max(0,ma-(1-1)))];
 
   h = 0;
   h = h*3 + ((kind>1+(1-1))+(kind>2+(1-1)));
   h = h*2 + ((comp>0+(1-1)));
-  h = h*7 + H_mvs_h_pd[__min(8,__max(0,pd-(1-1)))];
+  h = h*14 + H_mvs_h_tv[__min(13,__max(0,tv-(1-1)))];
   h = h*6 + H_mvs_h_oth[__min(5,__max(0,oth-(1-1)))];
 
   s = 0;
   s = s*4 + H_mvs_s_kind[__min(3,__max(0,kind-(1-1)))];
   s = s*2 + ((comp>0+(1-1)));
-  s = s*5 + H_mvs_s_pd[__min(8,__max(0,pd-(1-1)))];
+  s = s*14 + H_mvs_s_tv[__min(13,__max(0,tv-(1-1)))];
 
   f = 0;
   f = f*4 + H_mvs_f_kind[__min(3,__max(0,kind-(1-1)))];

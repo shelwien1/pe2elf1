@@ -20,7 +20,7 @@ constexpr int H_skp_ND = 3, H_skp_MND = 1, H_skp_NG = 1;
 constexpr int H_mbt_ND = 29, H_mbt_MND = 1, H_mbt_NG = 1;
 constexpr int H_cbp_ND = 7, H_cbp_MND = 1, H_cbp_NG = 1;
 constexpr int H_ipm_ND = 19, H_ipm_MND = 1, H_ipm_NG = 1;
-constexpr int H_mvs_ND = TC_NODE, H_mvs_MND = TC_MNODE, H_mvs_NG = 27;
+constexpr int H_mvs_ND = TC_NODE, H_mvs_MND = TC_MNODE, H_mvs_NG = 81;
 constexpr int H_qpd_ND = TC_NODE, H_qpd_MND = TC_MNODE, H_qpd_NG = 1;
 constexpr int H_cbf_ND = TC_NODE, H_cbf_MND = TC_MNODE, H_cbf_NG = 1;
 constexpr int H_sig_ND = 1, H_sig_MND = 1, H_sig_NG = 1;
@@ -34,7 +34,7 @@ struct H_skp_v { int st, a3, b3, col, c9, cd, run, cnt, eq, lf, af, td, en, sm, 
 struct H_mbt_v { int st, ca, cb, cc, nsk, en, td, sm, tm; };
 struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg; };
 struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds; };
-struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp; };
+struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv; };
 struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac; };
 struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em; };
 struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe; };
@@ -490,6 +490,8 @@ struct Model {
   int parts_ = 0, subshape_[4] = {};  // partitions of the macroblock: 16x16, 16x8, 8x16, 8x8; sub-macroblock shapes
   int mvp_[2] = {}, sp_[2] = {}, pdv_[2] = {};  // the current partition: mvp, spread of the neighbours, col - mvp
   bool pdn_ = false;                             // no col vector
+  int tmv_[2] = {};                              // its vector by template matching (Recon::tm_search)
+  bool tmn_ = true;                              // none
 
   Recon rec_;  // the pictures, reconstructed
   // x264's AQ (AqFit): the line of the current picture; 16 log2 energy of
@@ -1233,6 +1235,7 @@ struct Model {
     D.nr = sc_->num_ref_[list] - 1;
     D.pd = col_ && col_->cls < CL_INXN ? 1 + col_->ref[list][b8] : 0;
     D.sp = 0;
+    D.tv = 0;
     tcx X;
     H_mvs_make(D, X);
     int pr[TC_NODE];
@@ -1265,7 +1268,22 @@ struct Model {
       pdn_ = !col_ || col_->rf[list][b8] < 0;
       if (!pdn_)
         for (int k = 0; k < 2; k++) pdv_[k] = col_->mv[list][y * 4 + x][k] - mvp_[k];
+      tmv_[0] = mvp_[0];
+      tmv_[1] = mvp_[1];
+      // starting from mvp, the neighbours' vectors on the same reference,
+      // col's, zero
+      int cand[5][2], nc = 0;
+      for (int j = 0; j < 3; j++)
+        if (nbs[j].ref == ref) cand[nc][0] = nbs[j].mv[0], cand[nc][1] = nbs[j].mv[1], nc++;
+      if (!pdn_) cand[nc][0] = col_->mv[list][y * 4 + x][0], cand[nc][1] = col_->mv[list][y * 4 + x][1], nc++;
+      cand[nc][0] = cand[nc][1] = 0, nc++;
+      tmn_ = !rec_.tm_search(list, ref, x * 4, y * 4, w * 4, h * 4, tmv_, false, cand, nc);
+    } else if (!tmn_) {
+      // the horizontal component known
+      tmv_[0] = mvp_[0] + mvx_;
+      tmn_ = !rec_.tm_search(list, ref, x * 4, y * 4, w * 4, h * 4, tmv_, true);
     }
+    int dv = tmn_ ? 0 : tmv_[comp] - mvp_[comp];
     const MbInfo* a = info(sc_->nb4(x - 1, y, ia));
     const MbInfo* b = info(sc_->nb4(x, y - 1, ib));
     int va = a ? a->mvd[list][ia][comp] : 0, vb = b ? b->mvd[list][ib][comp] : 0;
@@ -1282,9 +1300,10 @@ struct Model {
     D.nr = sc_->num_ref_[list] - 1;
     D.pd = pdn_ ? 0 : 1 + tc_qlog(pdv_[comp]);
     D.sp = sp_[comp] < 0 ? 0 : 1 + tc_qlog(sp_[comp]);
+    D.tv = tmn_ ? 0 : 1 + tc_clamp(sq2(dv), 0, 12);
     tcx X;
     H_mvs_make(D, X);
-    u32 sc = (u32)(sgn3(pdv_[comp]) * 9 + sgn3(va) * 3 + sgn3(vb));
+    u32 sc = (u32)(sgn3(dv) * 27 + sgn3(pdv_[comp]) * 9 + sgn3(va) * 3 + sgn3(vb));
     tc_stage = STG_MVD;
     tc_syms[STG_MVD]++;
     int pr[TC_NODE];

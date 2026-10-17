@@ -1537,6 +1537,59 @@ struct Recon {
     }
     return cnt ? sum * 4 / cnt : -1;
   }
+  // Template matching motion search for the luma block (bx, by, bw, bh)
+  // of the current macroblock, on reference r of list l: from mv (quarter
+  // samples), the vector whose prediction of the decoded samples above (2
+  // rows) and to the left (2 columns) of the block misses least: whole
+  // samples within 2, then halves, then quarters (only_y: the vertical
+  // component only). The template outside the macroblock only; false where
+  // none of it is decoded.
+  static constexpr int TM_T = 2;
+  bool tm_search(int l, int r, int bx, int by, int bw, int bh, int* mv, bool only_y, const int (*cand)[2] = nullptr,
+                 int ncand = 0) const {
+    if (!active) return false;
+    int mbw = cur->mbw, x0 = mb_addr % mbw * 16 + bx, y0 = mb_addr / mbw * 16 + by, w = cur->w;
+    bool top = by == 0 && y0 > 0 && db[mb_addr - mbw].slice >= 0;
+    bool left = bx == 0 && x0 > 0 && db[mb_addr - 1].slice >= 0;
+    const RPic* ref = r >= 0 && r < nlist[l] ? list[l][r] : nullptr;
+    if ((!top && !left) || !ref) return false;
+    auto cost = [&](int vx, int vy) {
+      uint8_t p[16 * 16];
+      int s = 0;
+      if (top) {
+        mc_luma(ref, x0, y0 - TM_T, bw, TM_T, vx, vy, p);
+        const uint8_t* q = cur->y.data() + (y0 - TM_T) * w + x0;
+        for (int j = 0; j < TM_T; j++)
+          for (int i = 0; i < bw; i++) s += abs(q[j * w + i] - p[j * 16 + i]);
+      }
+      if (left) {
+        mc_luma(ref, x0 - TM_T, y0, TM_T, bh, vx, vy, p);
+        const uint8_t* q = cur->y.data() + y0 * w + x0 - TM_T;
+        for (int j = 0; j < bh; j++)
+          for (int i = 0; i < TM_T; i++) s += abs(q[j * w + i] - p[j * 16 + i]);
+      }
+      return s;
+    };
+    int vx = mv[0], vy = mv[1], best = cost(vx, vy);
+    // other places to start from
+    for (int k = 0; k < ncand; k++) {
+      if (cand[k][0] == vx && cand[k][1] == vy) continue;
+      int c = cost(cand[k][0], cand[k][1]);
+      if (c < best) best = c, vx = cand[k][0], vy = cand[k][1];
+    }
+    for (int step = 4; step >= 1; step >>= 1) {
+      int cx = vx, cy = vy, rr = step == 4 ? 2 : 1;
+      for (int dy = -rr; dy <= rr; dy++)
+        for (int dx = -rr; dx <= rr; dx++) {
+          if ((!dx && !dy) || (only_y && dx)) continue;
+          int c = cost(cx + dx * step, cy + dy * step);
+          if (c < best) best = c, vx = cx + dx * step, vy = cy + dy * step;
+        }
+    }
+    mv[0] = vx;
+    mv[1] = vy;
+    return true;
+  }
   int pred_texture(int c, int x, int y, int n) const {
     if (!active || !mb_prepared || mb_cls == 8) return -1;
     int w = c ? cur->w / 2 : cur->w, m = c ? 8 : 16;

@@ -49,19 +49,19 @@ Index d
 Index e
  e_kind: kind, 1!011
  e_comp: comp, 1!1
+ e_tv: tv, 1!1111111111111
  e_sp: sp, 1!11111111
- e_ma: ma, 1!1111000
 
 Index h
  h_kind: kind, 1!011
  h_comp: comp, 1!1
- h_pd: pd, 1!11101101
+ h_tv: tv, 1!1111111111111
  h_oth: oth, 1!11111
 
 Index s
  s_kind: kind, 1!111
  s_comp: comp, 1!1
- s_pd: pd, 1!10100011
+ s_tv: tv, 1!1111111111111
 
 Index f
  f_kind: kind, 1!111
