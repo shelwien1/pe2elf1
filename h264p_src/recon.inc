@@ -1491,6 +1491,52 @@ struct Recon {
     }
     return e;
   }
+  // The prediction of the current macroblock were it skipped (rf, mv: the
+  // motion of P_Skip or B_Skip), put in the picture where its own will go:
+  // how well its luma continues the decoded samples above and to the left,
+  // as edge_miss
+  int skip_miss(const int8_t rf[2][4], const int16_t mv[2][16][2]) {
+    if (!active || mb_prepared) return -1;
+    int w = cur->w, cw = w / 2, mx = mb_addr % cur->mbw * 16, my = mb_addr / cur->mbw * 16;
+    inter(mb_addr, rf, mv, cur->y.data() + my * w + mx, cur->u.data() + my / 2 * cw + mx / 2,
+          cur->v.data() + my / 2 * cw + mx / 2);
+    return miss(0, 0, 0, 16);
+  }
+  // Template matching: the decoded samples above (2 rows) and to the left
+  // (2 columns) of the current macroblock against their prediction by the
+  // motion (rf, mv) of its blocks next to them, without weights: 4 x the
+  // mean absolute difference (-1 none)
+  int tm_miss(const int8_t rf[2][4], const int16_t mv[2][16][2]) const {
+    if (!active) return -1;
+    int mbw = cur->mbw, mx = mb_addr % mbw * 16, my = mb_addr / mbw * 16, w = cur->w;
+    bool top = my > 0 && db[mb_addr - mbw].slice >= 0;
+    bool left = mx > 0 && db[mb_addr - 1].slice >= 0;
+    int sum = 0, cnt = 0;
+    uint8_t p[2][64];
+    for (int side = 0; side < 2; side++) {
+      if (side == 0 ? !top : !left) continue;
+      for (int k = 0; k < 4; k++) {
+        int b = side == 0 ? k : k * 4, b8 = (b >> 3) * 2 + ((b & 3) >> 1);
+        int x = side == 0 ? mx + k * 4 : mx - 2, y = side == 0 ? my - 2 : my + k * 4;
+        int bw = side == 0 ? 4 : 2, bh = side == 0 ? 2 : 4, n = 0;
+        for (int l = 0; l < 2; l++) {
+          int r = rf[l][b8];
+          if (r < 0) continue;
+          const RPic* ref = r < nlist[l] ? list[l][r] : nullptr;
+          mc_luma(ref ? ref : cur.get(), x, y, bw, bh, mv[l][b][0], mv[l][b][1], p[n++]);
+        }
+        if (!n) continue;
+        const uint8_t* q = cur->y.data() + y * w + x;
+        for (int j = 0; j < bh; j++)
+          for (int i = 0; i < bw; i++) {
+            int v = n == 2 ? (p[0][j * 16 + i] + p[1][j * 16 + i] + 1) >> 1 : p[0][j * 16 + i];
+            sum += abs(q[j * w + i] - v);
+            cnt++;
+          }
+      }
+    }
+    return cnt ? sum * 4 / cnt : -1;
+  }
   int pred_texture(int c, int x, int y, int n) const {
     if (!active || !mb_prepared || mb_cls == 8) return -1;
     int w = c ? cur->w / 2 : cur->w, m = c ? 8 : 16;
@@ -1512,6 +1558,9 @@ struct Recon {
   // there, times scale; avail[e] false where those are not decoded.
   bool sign_edges(int plane, int x, int y, int n, int64_t scale, int64_t* target, bool* avail) const {
     if (!active || !mb_prepared || mb_cls == 8) return false;
+    return edges(plane, x, y, n, scale, target, avail);
+  }
+  bool edges(int plane, int x, int y, int n, int64_t scale, int64_t* target, bool* avail) const {
     int mbw = cur->mbw, mx = mb_addr % mbw, my = mb_addr / mbw;
     int w = plane ? cur->w / 2 : cur->w, m = plane ? 8 : 16;
     bool top = y > 0 ? true : my > 0 && db[mb_addr - mbw].slice >= 0;
@@ -1547,9 +1596,13 @@ struct Recon {
   // top and left edge samples of |2 R1 - R2 - P|, in quarter samples; -1
   // not known.
   int edge_miss(int c, int x, int y, int n) const {
+    if (!active || !mb_prepared || mb_cls == 8) return -1;
+    return miss(c, x, y, n);
+  }
+  int miss(int c, int x, int y, int n) const {
     int64_t t[32];
     bool av[32];
-    if (!sign_edges(c, x, y, n, 4, t, av)) return -1;
+    if (!edges(c, x, y, n, 4, t, av)) return -1;
     int64_t sum = 0;
     int cnt = 0;
     for (int e = 0; e < 2 * n; e++)

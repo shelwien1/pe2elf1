@@ -30,8 +30,8 @@ constexpr int H_pcm_ND = TC_NODE, H_pcm_MND = TC_MNODE, H_pcm_NG = 3;
 
 struct H_nal_v { int fld, ctx, p1, p2; };
 struct H_hdr_v { int tag, fld, p1, p2, pos, p1r, sty; };
-struct H_skp_v { int st, a3, b3, col, c9, cd, run, cnt, eq, lf, af, td, en; };
-struct H_mbt_v { int st, ca, cb, cc, nsk, en, td; };
+struct H_skp_v { int st, a3, b3, col, c9, cd, run, cnt, eq, lf, af, td, en, sm, tm; };
+struct H_mbt_v { int st, ca, cb, cc, nsk, en, td, sm, tm; };
 struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg; };
 struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds; };
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp; };
@@ -485,6 +485,7 @@ struct Model {
   MbInfo* mi_ = nullptr;
   const MbCol* col_ = nullptr;
   int sub_[4] = {};
+  int sm_ = 0, tm_ = 0;  // skip_miss() of the macroblock, its template matching miss
   int prev_mode_ = 9, mvx_ = 0;
   int parts_ = 0, subshape_[4] = {};  // partitions of the macroblock: 16x16, 16x8, 8x16, 8x8; sub-macroblock shapes
   int mvp_[2] = {}, sp_[2] = {}, pdv_[2] = {};  // the current partition: mvp, spread of the neighbours, col - mvp
@@ -593,6 +594,7 @@ struct Model {
     rec_.mb_start(addr_);
     qpd_coded_ = false;
     prev_mode_ = 9;
+    sm_ = tm_ = 0;
     mb_open_ = true;
     cnt_++;
   }
@@ -657,6 +659,25 @@ struct Model {
     D.af = mbaff_ && sc_->above_ ? 1 + sc_->above_->field : 0;
     D.td = map_td();
     D.en = map_en();
+    D.sm = D.tm = 0;
+  }
+  // how well the prediction of the macroblock were it skipped continues
+  // the samples above and to the left (1 + tc_qlog of Recon::skip_miss, 0
+  // not known)
+  int skip_miss() {
+    tm_ = 0;
+    if (!rec_.active) return 0;
+    if (sc_->stype_ == kB)
+      mv_direct(15);
+    else
+      mv_pskip();
+    int tm = rec_.tm_miss(mi_->rf, mi_->mv);
+    tm_ = tm < 0 ? 0 : 1 + tc_clamp(tc_qlog(tm), 0, 15);
+    int ms = rec_.skip_miss(mi_->rf, mi_->mv);
+    memset(mi_->mv, 0, sizeof mi_->mv);
+    memset(mi_->rf, -1, sizeof mi_->rf);
+    parts_ = 0;
+    return ms < 0 ? 0 : 1 + tc_clamp(tc_qlog(ms), 0, 15);
   }
   // the last picture decoded at the current macroblock: how much it changed
   // (1 + tc_qlog, 0 not known), its energy (log2 classes, 0 not known)
@@ -677,6 +698,8 @@ struct Model {
     tc_stage = STG_SKIP;
     H_skp_v D;
     skp_vars(D);
+    D.sm = sm_ = skip_miss();
+    D.tm = tm_;
     const MbState* a = sc_->mb_a_;
     const MbState* b = sc_->mb_b_;
     int ctx = (sc_->stype_ == kB ? 24 : 11) + (a && !a->skip) + (b && !b->skip);
@@ -781,6 +804,8 @@ struct Model {
     D.nsk = (a && a->skip) + (b && b->skip) + (c && c->skip) + (d && d->skip);
     D.en = map_en();
     D.td = map_td();
+    D.sm = sm_;
+    D.tm = tm_;
     tcx X;
     H_mbt_make(D, X);
     f_mbt.select(X);
