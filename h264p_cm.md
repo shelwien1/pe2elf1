@@ -137,9 +137,12 @@ There are also real differences from JPEG:
 
 - **The residual is a prediction error.** The encoder has already predicted
   each block from its neighbours (intra prediction) or from other pictures
-  (motion compensation). DC and edge continuity, Lepton's best tricks, have
-  little left to work with. Correlations between neighbouring blocks remain,
-  though, notably in the signs (section 4.8).
+  (motion compensation), so DC and edge continuity, Lepton's best tricks,
+  have less to work with. They still give the signs away: once a block's
+  magnitudes are known, the sign combination whose reconstruction continues
+  the decoded samples around the block best is right for 68% of the signs
+  it predicts (section 4.8). Correlations between neighbouring blocks remain
+  too.
 - **CABAC is a much stronger baseline than Huffman.** JPEG recompressors
   gain 20-25%. CABAC already adapts per syntax element with neighbour
   contexts. The single contexts measured below save between 1% and 18% of
@@ -273,6 +276,14 @@ it.
 - **Context maps:** hashed contexts with bit histories, as in paq8, plus
   direct counter tables for small contexts. The CABAC context of each bin is
   a good first input.
+- **Indirect contexts:** as in paq8, map a context to what followed it the
+  last few times (say, the last two modes chosen after this pair of
+  neighbour modes) and use that history as a further context.
+- **A decoder in the loop:** reconstructing the pictures while the values
+  are decoded gives contexts from the samples: the edge directions around an
+  intra block (section 4.4), the signs of a block's coefficients (section
+  4.8) and the pixel matches of section 7. The first two see the current
+  picture as intra prediction does, before deblocking.
 - **Mixer:** weight sets selected by element × bin index, and per element a
   small context: scan position for significance, gt1/eq1 counts for levels,
   the mvd magnitude class. Use two layers with several selectors, as in
@@ -293,7 +304,7 @@ it.
 For each element: what CABAC uses (the baseline to reproduce first), then
 what to add. "Measured" figures come from the single-context experiments in
 appendix A, over all five streams. They show what one context adds on its
-own, with no mixing.
+own, with no mixing unless stated.
 
 ### 4.1 Stream and header rows
 
@@ -304,6 +315,10 @@ own, with no mixing.
 - SPS, PPS and AUD repeat (01 has 37 copies of its SPS and 1,072
   identical AUDs): use "same row in the previous NAL of this type" as
   context, or a match model.
+- x264's version SEI (user data unregistered: a UUID, then the version and
+  the options as text) is 667 bytes in 02, 2.4% of that stream, coded as
+  is. The TSV has it in hex: decode it and use a text model. zlib alone
+  takes its text to 432 bytes.
 - Slice header fields:
   - context: the same field in the previous slice header of the same slice
     type and nal_ref_idc;
@@ -317,14 +332,18 @@ own, with no mixing.
 ### 4.2 Skip (`skip N`)
 
 - **Baseline:** convert runs to per-MB flags. CABAC uses ctxIdxInc =
-  (A available and coded) + (B available and coded).
+  (A available and coded) + (B available and coded). Coding the run
+  lengths as numbers instead would lose the contexts of each MB's position
+  (col, the 3×3 count), which make the gains below.
 - **Add:**
   - co-located skip;
   - the number of skipped MBs in the 3×3 co-located window;
   - C and D (above right, above left), which are already coded;
   - the length of the current run;
   - slice QP and pyramid level;
-  - for B pictures, the co-located MB in the list-1 reference.
+  - for B pictures, the co-located MB in the list-1 reference;
+  - with a decoder in the loop, how much the area changed between the two
+    previous pictures (not measured).
 - **Measured:** A and B as three states (unavailable, skipped, coded): −1.5%.
   Adding col: −6.8%. Adding the 3×3 count: −8.3% (00: −29%, 03: −1.3%).
 - **End of slice:** there is no row; the slice ends where the next `nal`
@@ -395,7 +414,7 @@ tree give each MB its own QP, which makes this element expensive.
   - this MB's class and cbp, which come before Q;
   - slice type and slice QP.
 - **Measured:** col QP: −1.3%. Col and above: −1.6%. Cbp and class: −2.8%.
-  The previous delta's value: −0.1%.
+  The previous delta's value: −0.1%; the last nonzero delta's: −0.7%.
 - **Open question:** the remaining structure is the adaptive-quant offset
   field, which comes from source variance. The best proxies are probably the
   residual energy and the intra modes of the MB. Coding Q after the
@@ -433,6 +452,23 @@ Then code the actual mode with contexts:
 **Measured:** the actual mode with (mode A, mode B) as context: −9.8%
 (03: −15.7%) against the TSV's flag/rem with CABAC's contexts.
 
+**With a decoder in the loop**, the decoded samples around the block show
+which way its edges run. Make a histogram of the gradient directions there,
+as DIMD in JVET's ECM does: a 3×3 Sobel along the second row above and the
+second column to the left, as far as they are decoded, each gradient voting
+for the nearest of the eight directional modes with weight |Gx| + |Gy|. The
+strongest direction and the total gradient strength (DC is likely where it
+is low) are the contexts.
+
+**Measured:** the MPM, the strongest direction and the strength as one
+context: −14.5% against CABAC, −5.2% against the modes of A and B. Mixed in
+a logistic mixer with the modes of A and B and with the two strongest
+directions: −19.0%, where mixing two contexts without the samples (the modes
+of A and B, and those with the previous block's mode) gets −11.6%. Mixer
+against mixer, the samples are worth −9.0% on 00, −7.1% on 01, −10.6% on 03
+and −6.1% on 04. The same should work for the Intra16x16 and chroma modes
+(not measured).
+
 ### 4.5 sub (sub_mb_type), 0.1%
 
 Use the previous sub types in the MB and the neighbours' partition shapes.
@@ -444,8 +480,10 @@ In B slices, direct sub-MBs go together with direct neighbours.
   neighbours in MBAFF); the other bins fixed.
 - **Add:** the actual refs of A, B and C, the previous partition's ref in
   the MB, the other list's ref, the co-located ref, and
-  num_ref_idx_active. With x264's weightp, the list contains duplicates of
-  the same picture with other weights.
+  num_ref_idx_active. With several references, a binarization that asks
+  "same as A?" and "same as B?" first may fit better than truncated unary
+  (not measured). With x264's weightp, the list contains duplicates of the
+  same picture with other weights.
 
 ### 4.7 mvd0, mvd1, 12.7%
 
@@ -469,7 +507,9 @@ In B slices, direct sub-MBs go together with direct neighbours.
 - **The next step is motion vector reconstruction.** The mvd is the
   innovation over the spatial prediction mvp, which is the median or
   directional rule of 8.4.1.3, plus P_Skip and B direct. That is why
-  co-located mvd doesn't help. With mv = mvp + mvd reconstructed, the
+  co-located mvd doesn't help, and why the neighbours' mvds serve as
+  contexts (magnitudes, signs) but not as a predictor to subtract, such as
+  their median. With mv = mvp + mvd reconstructed, the
   co-located and neighbouring *vectors* give a predicted mvd (mv_col − mvp)
   to use as context, and the quarter-pel phase of mvp can condition the low
   bits. h264p's walker only keeps |mvd| for CABAC, so this needs a good part
@@ -492,7 +532,10 @@ In B slices, direct sub-MBs go together with direct neighbours.
     the fourth block is certain after three empty ones;
   - for chroma DC, Cr given Cb, plus the chroma cbp value. In these
     streams every chroma cbp of 1 has a nonzero DC block, and every 2 a
-    nonzero AC block.
+    nonzero AC block;
+  - with a decoder in the loop, the gradients of the block's prediction:
+    edges in a motion-compensated block turn small motion errors into
+    residual (not measured).
 - **Measured:** counts of A and B: −1.2%. Adding intra and QP/6: −1.4%. Cr
   chroma DC given Cb: **−18.3%**.
 
@@ -531,6 +574,23 @@ In B slices, direct sub-MBs go together with direct neighbours.
   gradient the prediction missed. The two chroma residuals of a region are
   correlated through its colour. Signs are a tenth of the stream and CABAC
   doesn't model them at all, so even simple contexts recover part of that.
+- **With a decoder in the loop, predict them.** Code a block's magnitudes
+  first, then its signs. The decoder knows the block's prediction and the
+  decoded samples above and to the left of it. Take the first six nonzero
+  coefficients in scan order (the other signs go first, at 1 bit each), try
+  their 64 sign combinations, and score each by how well the reconstructed
+  block continues its surroundings: Σ|2R₁ − R₂ − X| along the top and left
+  edges, where R₁ and R₂ are the two decoded rows or columns next to the
+  block and X its own edge samples (the cost of ECM's sign prediction).
+  Then code whether each of these signs agrees with the cheapest
+  combination, with the coefficient's rank and the cost margin (the
+  cheapest combination with this sign flipped, minus the cheapest) as
+  context.
+- **Measured:** the cheapest combination has the right sign for 68% of the
+  1.42 million signs it covers (90% of the signs of CAT 2 blocks). That
+  saves 12.8% of the luma 4×4 sign bits, and 15.6% together with the signs
+  of A and B (00: −16.6%, 01: −12.4%, 03: −27.4%, 04: −22.0%). 8×8,
+  Intra16x16 and chroma blocks can be done the same way (not measured).
 
 **Per block type:**
 
@@ -558,7 +618,8 @@ decoder can buffer a macroblock, or a picture, before writing rows.
 - **Within a macroblock:** the bitstream order (mb_type, prediction, cbp,
   the transform flag of inter MBs, QP, residual) lets cbp use the motion and
   QP use the cbp. Moving Q after the residual would trade the QP as a
-  residual context for the residual as a QP context.
+  residual context for the residual as a QP context. Sign prediction
+  (section 4.8) codes a block's signs after its magnitudes.
 - **Per picture, in two passes:** code the side information of all MBs
   first, then the residual. The residual contexts can then use the modes and
   motion of all eight neighbours, not only the causal ones.
@@ -653,6 +714,19 @@ input over whole MBs catches these. Candidates are the previous MB, the
 co-located MB of the previous picture of the same type, and the co-located
 MB of the previous I picture.
 
+**Residual blocks.** Counted by blocks, repeats are everywhere: 64-95% of
+the nonzero blocks of 00, 01, 03 and 04 equal one of the last 256 distinct
+blocks of their category, and they hold 27-71% of the coefficient bits. But
+most of them have one or two coefficients, which take few values and cost
+little to code anyway. Blocks with five or more coefficients repeat one of
+the last 256 in 0.9-1.6% of cases (03: 13%). In 01 a quarter of them repeat
+a block further back, and half of those are its caption, at the same
+position in an earlier keyframe, which the macroblock match above already
+finds. As a substitution, with a match flag per block and the rank in an
+Elias-gamma code, a block dictionary costs more than it saves: it loses 1.0%
+of the coefficient bits on 00, 8.3% on 03 and 8.4% on 04, and gains 0.2% on
+01.
+
 **Decoded pixels.** h264dec decoded each stream. Every macroblock (16×16
 luma and both 8×8 chroma blocks) was compared, by 64-bit hashes, with three
 candidates: the co-located MB of the previous picture in decoding order, the
@@ -713,20 +787,26 @@ In moving camera video like 04 there is nothing to find.
    reconstruction.
 5. Intra modes (8.5%): actual modes of A and B.
 6. mb_qp_delta (7.7%) and cbp (5.8%).
-7. A decoder in the loop, for content like 03 (section 7).
+7. A decoder in the loop (section 3.4): sign prediction and the edge
+   directions of intra blocks, 0.22 Mbit (0.75%) more as single contexts,
+   and the pixel matches of section 7 for content like 03.
 
 The best single context of each element in appendix A saves 0.93 Mbit
-in total, 3.3% of the slice data, before any mixing. They leave out
-mb_type, cbp, chroma AC, the 8×8 and Intra16x16 blocks and motion vector
-reconstruction.
+in total, 3.3% of the slice data, before any mixing, and 1.15 Mbit (4.0%)
+with the two that need a decoder in the loop. They leave out mb_type, cbp,
+chroma AC, the 8×8 and Intra16x16 blocks and motion vector reconstruction.
 
 ## Appendix A: single-context experiments
 
 `tools/ctxexp.py` on the five TSV files, with each stream starting from
-empty statistics. Every variant codes the same binary decisions with one
-adaptive probability per context. The update is p += (bit − p)/(n + 1.5),
-with the count n capped at 255, and there is no mixing. The first variant of
-each element is the baseline; changes are relative to it.
+empty statistics. Every variant codes the same values as binary decisions,
+with one adaptive probability per context. The update is
+p += (bit − p)/(n + 1.5), with the count n capped at 255, and there is no
+mixing, except in the rows marked "mix": they mix the predictions of their
+contexts in the logistic domain, with one weight set per tree node and
+transform size (learning rate 0.02). The rows marked "decoder" use the
+decoded samples (appendix B). The first variant of each element is the
+baseline; changes are relative to it.
 
 The experiments use these simplifications:
 
@@ -750,11 +830,15 @@ The experiments use these simplifications:
 | intra modes | 2,011,675 | CABAC: flag, rem bins | 1,799,758 | |
 | | | actual mode \| modes of A, B | 1,623,770 | −9.8% |
 | | | + previous block's mode | 1,640,590 | −8.8% |
+| | | decoder: actual mode \| MPM, strongest gradient direction, gradient strength | 1,538,893 | −14.5% |
+| | | decoder, mix of: modes of A, B; the context above; the two strongest directions and the strength | 1,458,566 | −19.0% |
+| | | mix of: modes of A, B; modes of A, B and previous block's mode | 1,590,331 | −11.6% |
 | mb_qp_delta (unary bins) | 3,564,756 | CABAC: previous delta ≠ 0 | 2,010,315 | |
 | | | + QP of col − QP_pred | 1,983,929 | −1.3% |
 | | | + QP of B − QP_pred | 1,978,407 | −1.6% |
 | | | CABAC + cbp, class | 1,954,551 | −2.8% |
 | | | previous delta (−3..3) instead of ≠ 0 | 2,009,078 | −0.1% |
+| | | CABAC + last nonzero delta (−3..3) | 1,995,655 | −0.7% |
 | coded_block_flag, luma 4×4 | 1,220,368 | CABAC: flags of A, B | 1,097,707 | |
 | | | counts of A, B | 1,085,011 | −1.2% |
 | | | + intra, QP/6 | 1,082,072 | −1.4% |
@@ -765,6 +849,8 @@ The experiments use these simplifications:
 | | | + nC, position | 1,695,992 | −1.2% |
 | signs, luma 4×4 | 1,630,887 | none (bypass) | 1,630,887 | |
 | | | signs at the same position in A, B | 1,508,517 | −7.5% |
+| | | decoder: sign of the best-continuing combination; rank, cost margin | 1,421,657 | −12.8% |
+| | | + signs at the same position in A, B | 1,377,024 | −15.6% |
 | coded_block_flag, chroma DC | 611,888 | CABAC: flags of A, B | 523,907 | |
 | | | + Cb's flag for Cr | 428,274 | −18.3% |
 | signs, chroma DC | 466,819 | none (bypass) | 466,819 | |
@@ -781,13 +867,23 @@ The gains vary with content. For the skip flags with all contexts, they were
 −11.6%, −3.7%, −5.2% and −17.1%. On 02, which has only two pictures, larger
 context sets lose to the learning cost; mixing avoids that.
 
-## Appendix B: how sections 6 and 7 were measured
+## Appendix B: how sections 6 and 7 and the decoder rows were measured
 
 The CABAC bits come from the same instrumented decoder as section 1. It
-also costed each macroblock and tagged the bins whose value a rule gives.
-Python scripts walked the TSV files to check the rules and find repeated
-macroblocks, and compared the decoded macroblocks from h264dec's output by
-64-bit hashes of their samples.
-Neither the instrumented decoder nor these scripts is in the repository.
-A rule counts as holding when it had no exception in the five streams; for
-x264's habits that says nothing about other encoders.
+also costed each macroblock and each residual block, and tagged the bins
+whose value a rule gives. Python scripts walked the TSV files to check the
+rules and find repeated macroblocks and blocks, and compared the decoded
+macroblocks from h264dec's output by 64-bit hashes of their samples. A rule
+counts as holding when it had no exception in the five streams; for x264's
+habits that says nothing about other encoders.
+
+The "decoder" experiments used a copy of h264dec with two probes. One
+writes the gradient histogram around each Intra4x4/8x8 block just before
+the block is predicted. The other writes the predicted signs of each
+nonzero luma 4×4 block (Intra4x4 MBs, and inter MBs without the 8×8
+transform) just before its residual is added. At those points the current
+picture is decoded up to the block and not yet deblocked, as a decoder in
+the loop would have it. The probes left the decoded output unchanged (same
+MD5), and their blocks matched the TSV's one for one.
+
+None of these tools is in the repository.
