@@ -66,15 +66,14 @@ void H_skp_make( const H_skp_v & D, tcx & X ) {
 
   j = 0;
   j = j*10 + H_skp_j_st[__min(9,__max(0,st-(1-1)))];
-  j = j*17 + H_skp_j_tb[__min(16,__max(0,tb-(1-1)))];
+  j = j*13 + H_skp_j_tb[__min(16,__max(0,tb-(1-1)))];
   j = j*10 + H_skp_j_c9[__min(9,__max(0,c9-(1-1)))];
   j = j*18 + H_skp_j_qc[__min(17,__max(0,qc-(1-1)))];
 
   k = 0;
-  k = k*10 + H_skp_k_st[__min(9,__max(0,st-(1-1)))];
   k = k*17 + H_skp_k_td[__min(16,__max(0,td-(1-1)))];
   k = k*17 + H_skp_k_tm[__min(16,__max(0,tm-(1-1)))];
-  k = k*3 + ((b3>0+(1-1))+(b3>1+(1-1)));
+  k = k*2 + ((b3>0+(1-1)));
 
   l = 0;
   l = l*10 + H_skp_l_st[__min(9,__max(0,st-(1-1)))];
@@ -92,7 +91,6 @@ void H_skp_make( const H_skp_v & D, tcx & X ) {
   f = f*18 + H_skp_f_qc[__min(17,__max(0,qc-(1-1)))];
 
   m = 0;
-  m = m*2 + ((st>1+(1-1)));
   m = m*2 + ((col>1+(1-1)));
   m = m*5 + H_skp_m_td[__min(4,__max(0,td-(1-1)))];
 

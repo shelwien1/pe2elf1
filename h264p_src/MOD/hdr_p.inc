@@ -57,7 +57,7 @@ void H_hdr_make( const H_hdr_v & D, tcx & X ) {
   k = k*16 + H_hdr_k_fld[__min(15,__max(0,fld-(1-1)))];
 
   l = 0;
-  l = (l<<8) + (((tag)&255)); // 11111111
+  l = (l<<4) + (((((tag)>>6)&1)<<3) + ((((tag)>>4)&1)<<2) + ((((tag)>>2)&1)<<1) + ((tag)&1)); // 01010101
   l = l*4 + H_hdr_l_pos[__min(3,__max(0,pos-(1-1)))];
 
   s = 0;

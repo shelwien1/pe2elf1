@@ -28,11 +28,10 @@ static const byte H_skp_i_sm[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
 static const byte H_skp_i_en[14+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14 };
 
 static const byte H_skp_j_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H_skp_j_tb[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
+static const byte H_skp_j_tb[16+1]={ 0,1,2,3,3,4,5,5,5,6,7,7,8,9,10,11,12 };
 static const byte H_skp_j_c9[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 static const byte H_skp_j_qc[17+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17 };
 
-static const byte H_skp_k_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 static const byte H_skp_k_td[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
 static const byte H_skp_k_tm[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
 
@@ -109,10 +108,10 @@ static const long long H_skp_f_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 3), 18); 
 static const long long H_skp_g_Volume = tc_vmul(1, 1); // 1
 static const long long H_skp_h_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 17), 17), 17); // 49130
 static const long long H_skp_i_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 17), 15), 3); // 765
-static const long long H_skp_j_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 17), 10), 18); // 30600
-static const long long H_skp_k_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 17), 17), 3); // 8670
+static const long long H_skp_j_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 13), 10), 18); // 23400
+static const long long H_skp_k_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 17), 17), 2); // 578
 static const long long H_skp_l_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 17), 1), 3); // 510
-static const long long H_skp_m_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 5); // 20
+static const long long H_skp_m_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 2), 5); // 10
 static const long long H_skp_n_Volume = tc_vmul(1, 1); // 1
 static const long long H_skp_s_Volume = tc_vmul(tc_vmul(tc_vmul(1, 10), 17), 7); // 1190
 static const long long H_skp_t_Volume = tc_vmul(1, 1); // 1

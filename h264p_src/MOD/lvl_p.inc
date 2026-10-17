@@ -39,7 +39,6 @@ void H_lvl_make( const H_lvl_v & D, tcx & X ) {
 
   d = 0;
   d = d*14 + H_lvl_d_cg[__min(13,__max(0,cg-(1-1)))];
-  d = d*5 + H_lvl_d_g1[__min(4,__max(0,g1-(1-1)))];
   d = d*20 + H_lvl_d_md[__min(19,__max(0,md-(1-1)))];
   d = d*3 + ((pg>3+(1-1))+(pg>15+(1-1)));
   d = d*6 + H_lvl_d_lt[__min(7,__max(0,lt-(1-1)))];

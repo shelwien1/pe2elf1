@@ -17,7 +17,7 @@ Const 0
 Index a
  a_st: st, 1!000100000
  a_ca: ca, 1!11100000
- a_cb: cb, 1!11111111
+ a_cb: cb, 1!10000110
  a_en: en, 1!11111111111111
 
 Index b

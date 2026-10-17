@@ -56,7 +56,6 @@ void H_sgn_make( const H_sgn_v & D, tcx & X ) {
   i = i*14 + H_sgn_i_cg[__min(13,__max(0,cg-(1-1)))];
   i = i*6 + H_sgn_i_ez[__min(5,__max(0,ez-(1-1)))];
   i = i*8 + H_sgn_i_se[__min(7,__max(0,se-(1-1)))];
-  i = i*3 + ((mag>0+(1-1))+(mag>1+(1-1)));
 
   j = 0;
   j = j*14 + H_sgn_j_cg[__min(13,__max(0,cg-(1-1)))];

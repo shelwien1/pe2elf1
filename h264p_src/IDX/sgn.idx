@@ -56,7 +56,7 @@ Index i
  i_cg: cg, 1!1111111111111
  i_ez: ez, 1!11111
  i_se: se, 1!1111111
- i_mag: mag, 1!11
+ i_mag: mag, 1!00
 
 Index j
  j_cg: cg, 1!1111111111111

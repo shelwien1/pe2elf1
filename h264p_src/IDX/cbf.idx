@@ -50,7 +50,7 @@ Index d
 
 Index e
  e_cat: cat, 1!1111111111111
- e_pz: pz, 1!1111111111111111
+ e_pz: pz, 1!1011100000000000
  e_na: na, 1!111111111
  e_nb: nb, 1!111111111
  e_tn: tn, 1!1111111111
@@ -81,8 +81,8 @@ Index k
 
 Index l
  l_cat: cat, 1!1111111111111
- l_col: col, 1!11
- l_np: np, 1!111
+ l_col: col, 1!01
+ l_np: np, 1!000
  l_md: md, 1!1111111111111111111
 
 Index s
@@ -119,7 +119,7 @@ Number rC, 1, 0!01000000
 Number rE, 1, 0!01000000
 Number rH, 1, 0!01000000
 Number rI, 1, 0!01000000
-Number rJ, 1, 0!01000000
+Number rJ, 1, 0!11000111
 Number rK, 1, 0!01000000
 Number rL, 1, 0!01000000
 Number rD, 1, 0!11110010
@@ -135,7 +135,7 @@ Number mwB, 1, 0!00000000
 Number mwC, 1, 0!00000000
 Number mwE, 1, 0!00010010
 Number mwH, 1, 0!00000000
-Number mwI, 1, 0!00000000
+Number mwI, 1, 0!00100100
 Number mwJ, 1, 0!00000000
 Number mwK, 1, 0!00000000
 Number mwL, 1, 0!00000000

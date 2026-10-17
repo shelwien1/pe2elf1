@@ -21,7 +21,7 @@ void H_mbt_make( const H_mbt_v & D, tcx & X ) {
   a = 0;
   a = a*2 + ((st>3+(1-1)));
   a = a*4 + H_mbt_a_ca[__min(8,__max(0,ca-(1-1)))];
-  a = a*9 + H_mbt_a_cb[__min(8,__max(0,cb-(1-1)))];
+  a = a*4 + H_mbt_a_cb[__min(8,__max(0,cb-(1-1)))];
   a = a*15 + H_mbt_a_en[__min(14,__max(0,en-(1-1)))];
 
   b = 0;

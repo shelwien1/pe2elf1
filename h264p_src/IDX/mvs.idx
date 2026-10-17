@@ -57,7 +57,7 @@ Index e
  e_sp: sp, 1!11111111
 
 Index h
- h_kind: kind, 1!011
+ h_kind: kind, 1!010
  h_comp: comp, 1!1
  h_tv: tv, 1!1111111111111
  h_oth: oth, 1!11111
@@ -74,7 +74,7 @@ Index j
  j_kind: kind, 1!101
  j_comp: comp, 1!1
  j_ma: ma, 1!1111111
- j_mb: mb, 1!1111111
+ j_mb: mb, 1!0100100
  j_cq: cq, 1!111111111
 
 Index k
@@ -136,7 +136,7 @@ Number rJ, 1, 0!01000000
 Number rK, 1, 0!11001010
 Number rL, 1, 0!01000000
 Number rD, 1, 0!11111111
-Number rT, 1, 0!00110111
+Number rT, 1, 0!00011110
 Number rG, 1, 0!01001000
 Number rS1, 1, 0!01000
 Number rS2, 1, 0!00100
