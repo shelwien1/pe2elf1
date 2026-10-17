@@ -1566,15 +1566,19 @@ struct Model {
     int em = ms < 0 ? 0 : 1 + tc_clamp(tc_qlog(ms), 0, 15);
     // an intra block: what its levels would be were the source what the
     // reference shows (Recon::proxy_levels), by scan position
-    int plv[16];
+    int plv[64];
     bool pok = false;
-    if (mi_->cls >= CL_INXN && mi_->cls != CL_PCM && (g.kind == 1 || g.kind == 2) && sc_->chroma_ == 1) {
+    if (mi_->cls >= CL_INXN && mi_->cls != CL_PCM && sc_->chroma_ == 1) {
       proxy_mv();
       int qp = mi_->qp - qp_off_;
-      pok = rec_.proxy_levels(g.kind == 2 ? g.plane : 0, g.x * 4, g.y * 4,
-                              g.kind == 2 ? rec_.chroma_qp_of(g.plane - 1, qp) : qp, pmv_[0], pmv_[1], plv);
+      if (g.kind == 0)
+        pok = rec_.proxy_dc(g.plane, g.plane ? rec_.chroma_qp_of(g.plane - 1, qp) : qp, pmv_[0], pmv_[1], plv);
+      else
+        pok = rec_.proxy_levels(g.kind == 2 ? g.plane : 0, g.x * 4, g.y * 4,
+                                g.kind == 2 ? rec_.chroma_qp_of(g.plane - 1, qp) : qp, pmv_[0], pmv_[1], plv,
+                                g.kind == 3 ? 8 : 4);
     }
-    auto est = [&](int j) { return plv[std::min(j + g.off, 15)]; };
+    auto est = [&](int j) { return plv[std::min(j + g.off, g.kind == 3 ? 63 : g.kind == 0 && g.plane ? 3 : 15)]; };
     int pnz = 0;
     if (pok)
       for (int j = 0; j < n; j++) pnz += est(j) != 0;

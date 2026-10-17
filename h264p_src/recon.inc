@@ -1657,11 +1657,42 @@ struct Recon {
       lv[k] = W[p] < 0 ? -q : q;
     }
   }
-  // The levels of a 4x4 block were the source what the proxy picture
-  // shows (proxy_pic, displaced by dx, dy luma samples): the proxy less the
-  // prediction in the picture, through fquant4 at qp. plane 0 luma, 1 and 2
-  // chroma; x, y in its samples of the current macroblock. false: no proxy.
-  bool proxy_levels(int plane, int x, int y, int qp, int dx, int dy, int* lv) const {
+  // the same for an 8x8 block (x264's dct8)
+  static void fquant8(const int* r, int qp, bool intra, int* lv) {
+    static const int mf[6][6] = {{13107, 11428, 20972, 12222, 16777, 15481}, {11916, 10826, 19174, 11058, 14980, 14290},
+                                 {10082, 8943, 15978, 9675, 12710, 11985},   {9362, 8228, 14913, 8931, 11984, 11259},
+                                 {8192, 7346, 13159, 7740, 10486, 9777},     {7282, 6428, 11570, 6830, 9118, 8640}};
+    int t[64], W[64];
+    auto dct8 = [](const int* x, int xs, int* d, int ds) {
+      int s07 = x[0] + x[7 * xs], s16 = x[xs] + x[6 * xs], s25 = x[2 * xs] + x[5 * xs], s34 = x[3 * xs] + x[4 * xs];
+      int a0 = s07 + s34, a1 = s16 + s25, a2 = s07 - s34, a3 = s16 - s25;
+      int d07 = x[0] - x[7 * xs], d16 = x[xs] - x[6 * xs], d25 = x[2 * xs] - x[5 * xs], d34 = x[3 * xs] - x[4 * xs];
+      int a4 = d16 + d25 + (d07 + (d07 >> 1)), a5 = d07 - d34 - (d25 + (d25 >> 1));
+      int a6 = d07 + d34 - (d16 + (d16 >> 1)), a7 = d16 - d25 + (d34 + (d34 >> 1));
+      d[0] = a0 + a1;
+      d[ds] = a4 + (a7 >> 2);
+      d[2 * ds] = a2 + (a3 >> 1);
+      d[3 * ds] = a5 + (a6 >> 2);
+      d[4 * ds] = a0 - a1;
+      d[5 * ds] = a6 - (a5 >> 2);
+      d[6 * ds] = (a2 >> 1) - a3;
+      d[7 * ds] = (a4 >> 2) - a7;
+    };
+    for (int i = 0; i < 8; i++) dct8(r + i * 8, 1, t + i * 8, 1);
+    for (int j = 0; j < 8; j++) dct8(t + j, 8, W + j, 8);
+    int qb = 16 + qp / 6, f = (1 << qb) / (intra ? 3 : 6);
+    for (int k = 0; k < 64; k++) {
+      int p = kZz8[k];
+      int q = (int)(((int64_t)abs(W[p]) * mf[qp % 6][norm8_class(p >> 3, p & 7)] + f) >> qb);
+      lv[k] = W[p] < 0 ? -q : q;
+    }
+  }
+  // The levels of a block of n x n (4, 8) were the source what the proxy
+  // picture shows (proxy_pic, displaced by dx, dy luma samples): the proxy
+  // less the prediction in the picture, through fquant4 or fquant8 at qp.
+  // plane 0 luma, 1 and 2 chroma; x, y in its samples of the current
+  // macroblock. false: no proxy.
+  bool proxy_levels(int plane, int x, int y, int qp, int dx, int dy, int* lv, int n = 4) const {
     if (!active) return false;
     const RPic* P = proxy_pic();
     if (!P) return false;
@@ -1674,11 +1705,73 @@ struct Recon {
     const std::vector<uint8_t>& cp = plane == 0 ? cur->y : plane == 1 ? cur->u : cur->v;
     const std::vector<uint8_t>& pp = plane == 0 ? P->y : plane == 1 ? P->u : P->v;
     const uint8_t* C = cp.data() + my * w + mx;
-    const uint8_t* Q = pp.data() + clip3(0, h - 4, my + dy) * w + clip3(0, w - 4, mx + dx);
-    int r[16];
-    for (int j = 0; j < 4; j++)
-      for (int i = 0; i < 4; i++) r[j * 4 + i] = Q[j * w + i] - C[j * w + i];
-    fquant4(r, qp, true, lv);
+    const uint8_t* Q = pp.data() + clip3(0, h - n, my + dy) * w + clip3(0, w - n, mx + dx);
+    int r[64];
+    for (int j = 0; j < n; j++)
+      for (int i = 0; i < n; i++) r[j * n + i] = Q[j * w + i] - C[j * w + i];
+    if (n == 8)
+      fquant8(r, qp, true, lv);
+    else
+      fquant4(r, qp, true, lv);
+    return true;
+  }
+  // and for the DC blocks: Intra16x16's (plane 0: 16 levels in zigzag
+  // order) and chroma's (planes 1, 2: 4 levels)
+  bool proxy_dc(int plane, int qp, int dx, int dy, int* lv) const {
+    if (!active) return false;
+    const RPic* P = proxy_pic();
+    if (!P) return false;
+    int w = plane ? cur->w / 2 : cur->w, h = plane ? cur->h / 2 : cur->h, m = plane ? 8 : 16, nb = m / 4;
+    int mx = mb_addr % cur->mbw * m, my = mb_addr / cur->mbw * m;
+    if (plane) {
+      dx = dx >= 0 ? dx / 2 : -((1 - dx) / 2);
+      dy = dy >= 0 ? dy / 2 : -((1 - dy) / 2);
+    }
+    const std::vector<uint8_t>& cp = plane == 0 ? cur->y : plane == 1 ? cur->u : cur->v;
+    const std::vector<uint8_t>& pp = plane == 0 ? P->y : plane == 1 ? P->u : P->v;
+    const uint8_t* C = cp.data() + my * w + mx;
+    const uint8_t* Q = pp.data() + clip3(0, h - m, my + dy) * w + clip3(0, w - m, mx + dx);
+    // the DC of each 4x4 block's transform: the sum of its residual
+    int d[16], f[16];
+    for (int by = 0; by < nb; by++)
+      for (int bx = 0; bx < nb; bx++) {
+        int sum = 0;
+        for (int j = 0; j < 4; j++)
+          for (int i = 0; i < 4; i++) sum += Q[(by * 4 + j) * w + bx * 4 + i] - C[(by * 4 + j) * w + bx * 4 + i];
+        d[by * nb + bx] = sum;
+      }
+    static const int mf0[6] = {13107, 11916, 10082, 9362, 8192, 7282};
+    int qb = 15 + qp / 6, F = (1 << qb) / 3;
+    if (nb == 2) {
+      f[0] = d[0] + d[1] + d[2] + d[3];
+      f[1] = d[0] - d[1] + d[2] - d[3];
+      f[2] = d[0] + d[1] - d[2] - d[3];
+      f[3] = d[0] - d[1] - d[2] + d[3];
+      for (int k = 0; k < 4; k++) {
+        int q = (int)(((int64_t)abs(f[k]) * mf0[qp % 6] + 2 * F) >> (qb + 1));
+        lv[k] = f[k] < 0 ? -q : q;
+      }
+      return true;
+    }
+    int t[16];
+    for (int i = 0; i < 4; i++) {
+      const int* x = d + i * 4;
+      t[i * 4] = x[0] + x[1] + x[2] + x[3];
+      t[i * 4 + 1] = x[0] + x[1] - x[2] - x[3];
+      t[i * 4 + 2] = x[0] - x[1] - x[2] + x[3];
+      t[i * 4 + 3] = x[0] - x[1] + x[2] - x[3];
+    }
+    for (int j = 0; j < 4; j++) {
+      f[j] = (t[j] + t[4 + j] + t[8 + j] + t[12 + j]) / 2;
+      f[4 + j] = (t[j] + t[4 + j] - t[8 + j] - t[12 + j]) / 2;
+      f[8 + j] = (t[j] - t[4 + j] - t[8 + j] + t[12 + j]) / 2;
+      f[12 + j] = (t[j] - t[4 + j] + t[8 + j] - t[12 + j]) / 2;
+    }
+    for (int k = 0; k < 16; k++) {
+      int v = f[kZz4[k]];
+      int q = (int)(((int64_t)abs(v) * mf0[qp % 6] + 2 * F) >> (qb + 1));
+      lv[k] = v < 0 ? -q : q;
+    }
     return true;
   }
   int pred_texture(int c, int x, int y, int n) const {
