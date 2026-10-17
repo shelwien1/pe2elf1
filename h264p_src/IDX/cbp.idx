@@ -7,7 +7,10 @@
 #  transform_size_8x8_flag (6). inc is CABAC's ctxIdxInc of the decision, pc
 #  the luma bits set so far, cls the class of the macroblock, col the
 #  decision's value in the same macroblock of the previous picture of the
-#  type (0 none), q6 QP/6, st the slice type.
+#  type (1 + the value, 0 none; for a luma block of an inter macroblock of
+#  a P picture on its first reference, 3 + the 4x4 blocks with
+#  coefficients under where its vector puts it there, 8 + where the vector
+#  moves it), q6 QP/6, st the slice type.
 
 Prefix H_cbp
 Debug 1
@@ -21,13 +24,13 @@ Index a
 
 Index b
  b_inc: inc, 1!111
- b_col: col, 1!11
+ b_col: col, 1!111111111111
  b_q6: q6, 1!11111111
  b_pq: pq, 1!110001
 
 Index c
  c_cls: cls, 1!11111111
- c_col: col, 1!11
+ c_col: col, 1!111111111111
  c_pc: pc, 1!1010
  c_pg: pg, 1!1111111111111111
 
@@ -63,7 +66,7 @@ Index j
 Index k
  k_inc: inc, 1!111
  k_pg: pg, 1!1111111111111111
- k_col: col, 1!11
+ k_col: col, 1!111111111111
  k_cls: cls, 1!11111111
 
 Index l

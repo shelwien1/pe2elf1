@@ -997,6 +997,12 @@ struct Model {
       D.inc = sc_->cbp_luma_inc(b8, luma);
       D.pc = popc4(luma);
       D.col = col_ ? 1 + (col_->cbp >> b8 & 1) : 0;
+      {
+        // or the 4x4 blocks with coefficients under where its vector puts it
+        // (3 + where it moves it)
+        int nz = mc_nz((b8 & 1) * 2, (b8 >> 1) * 2);
+        if (nz >= 0) D.col = 3 + nz;
+      }
       int pt = mi_->cls == CL_INXN ? -1 : rec_.pred_texture(0, (b8 & 1) * 8, (b8 >> 1) * 8, 8);
       D.pg = pt < 0 ? 0 : 1 + tc_clamp(tc_qlog(pt), 0, 15);
       int ms = mi_->cls == CL_INXN ? -1 : rec_.edge_miss(0, (b8 & 1) * 8, (b8 >> 1) * 8, 8);
@@ -1513,6 +1519,49 @@ struct Model {
     return v;
   }
 
+  // The block of the last picture of the kind, as it was when the picture
+  // began, that the vector of the current macroblock's block of n x n
+  // samples at (x, y) (4x4 blocks) points at, for an inter macroblock of a P
+  // picture on its first reference (that picture, mostly): the macroblock
+  // there, and (bx, by) the block's place in it (4x4 blocks, the top left
+  // one of an 8x8 block); moved, the vector moves it; nullptr none.
+  const MbCol* mc_col(int x, int y, int n, int& bx, int& by, int& moved) const {
+    if ((int)hprev_.size() != size_ || (sc_->stype_ != kP && sc_->stype_ != kSP) || mi_->cls >= CL_INXN || mbaff_)
+      return nullptr;
+    if (mi_->rf[0][(y >> 1) * 2 + (x >> 1)] != 0) return nullptr;
+    const int16_t* v = mi_->mv[0][y * 4 + x];
+    int still = abs(v[0]) <= 1 && abs(v[1]) <= 1;
+    int px = addr_ % width_ * 16 + x * 4 + (still ? 0 : (int)div_floor(v[0] + 2, 4)) + n / 2;
+    int py = addr_ / width_ * 16 + y * 4 + (still ? 0 : (int)div_floor(v[1] + 2, 4)) + n / 2;
+    px = tc_clamp(px, 0, width_ * 16 - 1);
+    py = tc_clamp(py, 0, size_ / width_ * 16 - 1);
+    const MbCol& c = hprev_[(py >> 4) * width_ + (px >> 4)];
+    if (!c.valid) return nullptr;
+    moved = !still;
+    bx = (px & 15) >> 2;
+    by = (py & 15) >> 2;
+    if (n == 8) bx &= 2, by &= 2;
+    return &c;
+  }
+  // the 4x4 luma blocks with coefficients, of the last picture of the kind,
+  // under where the vector of the current macroblock's 8x8 block at (x, y)
+  // (4x4 blocks) puts it, as mc_col: 0-4 still, 5-9 moved; -1 none
+  int mc_nz(int x, int y) const {
+    if ((int)hprev_.size() != size_ || (sc_->stype_ != kP && sc_->stype_ != kSP) || mi_->cls >= CL_INXN || mbaff_)
+      return -1;
+    if (mi_->rf[0][(y >> 1) * 2 + (x >> 1)] != 0) return -1;
+    const int16_t* v = mi_->mv[0][y * 4 + x];
+    int still = abs(v[0]) <= 1 && abs(v[1]) <= 1, nz = 0, h = size_ / width_ * 16;
+    int px = addr_ % width_ * 16 + x * 4 + (still ? 0 : (int)div_floor(v[0] + 2, 4)) + 2;
+    int py = addr_ / width_ * 16 + y * 4 + (still ? 0 : (int)div_floor(v[1] + 2, 4)) + 2;
+    for (int k = 0; k < 4; k++) {
+      int qx = tc_clamp(px + (k & 1) * 4, 0, width_ * 16 - 1), qy = tc_clamp(py + (k >> 1) * 4, 0, h - 1);
+      const MbCol& c = hprev_[(qy >> 4) * width_ + (qx >> 4)];
+      if (!c.valid) return -1;
+      nz += c.nzm[0] >> (((qy & 15) >> 2) * 4 + ((qx & 15) >> 2)) & 1;
+    }
+    return nz + 5 * !still;
+  }
   // the macroblock the current one's content was at in its reference, by
   // its mean vector (intra: the proxy's)
   int mc_addr() {
@@ -1770,30 +1819,11 @@ struct Model {
     // a luma block of a P picture on its first reference: the coefficients,
     // by scan position, of the block its vector points at in the last
     // picture of the kind (that reference); tmv: the vector moves it
-    bool tok = false;
     int tmv = 0, tbx = 0, tby = 0;
-    const MbCol* tcol = nullptr;
-    if ((int)hprev_.size() == size_ && (sc_->stype_ == kP || sc_->stype_ == kSP) && mi_->cls < CL_INXN &&
-        g.plane == 0 && (g.kind == 1 || g.kind == 2 || g.kind == 3) && !mbaff_) {
-      int b8 = (g.y >> 1) * 2 + (g.x >> 1), n4 = g.kind == 3 ? 8 : 4;
-      const int16_t* v = mi_->mv[0][g.y * 4 + g.x];
-      if (mi_->rf[0][b8] == 0) {
-        int still = abs(v[0]) <= 1 && abs(v[1]) <= 1;
-        int px = addr_ % width_ * 16 + g.x * 4 + (still ? 0 : (int)div_floor(v[0] + 2, 4)) + n4 / 2;
-        int py = addr_ / width_ * 16 + g.y * 4 + (still ? 0 : (int)div_floor(v[1] + 2, 4)) + n4 / 2;
-        px = tc_clamp(px, 0, width_ * 16 - 1);
-        py = tc_clamp(py, 0, size_ / width_ * 16 - 1);
-        const MbCol& c = hprev_[(py >> 4) * width_ + (px >> 4)];
-        if (c.valid && c.cls < CL_INXN) {
-          tcol = &c;
-          tok = true;
-          tmv = !still;
-          tbx = (px & 15) >> 2;
-          tby = (py & 15) >> 2;
-          if (n4 == 8) tbx &= 2, tby &= 2;
-        }
-      }
-    }
+    const MbCol* tcol = g.plane == 0 && (g.kind == 1 || g.kind == 2 || g.kind == 3)
+                            ? mc_col(g.x, g.y, g.kind == 3 ? 8 : 4, tbx, tby, tmv) : nullptr;
+    if (tcol && tcol->cls >= CL_INXN) tcol = nullptr;
+    bool tok = tcol != nullptr;
     auto tcf = [&](int j) {
       int k = j + g.off;
       if (g.kind == 3) {
