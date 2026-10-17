@@ -97,9 +97,9 @@ Index g
  g_lz: lz, 1!101101
  g_aq: aq, 1!1111111111111
 
-Number rA, 1, 0!01000001
+Number rA, 1, 0!10000000
 Number rB, 1, 0!00010000
-Number rC, 1, 0!01000000
+Number rC, 1, 0!01010010
 Number rE, 1, 0!01000000
 Number rH, 1, 0!01000000
 Number rI, 1, 0!01000000

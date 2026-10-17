@@ -61,7 +61,7 @@ void H_cbp_make( const H_cbp_v & D, tcx & X ) {
   j = 0;
   j = j*4 + H_cbp_j_inc[__min(3,__max(0,inc-(1-1)))];
   j = j*17 + H_cbp_j_tp[__min(16,__max(0,tp-(1-1)))];
-  j = j*17 + H_cbp_j_em[__min(16,__max(0,em-(1-1)))];
+  j = j*6 + H_cbp_j_em[__min(16,__max(0,em-(1-1)))];
   j = j*10 + H_cbp_j_st[__min(9,__max(0,st-(1-1)))];
 
   k = 0;

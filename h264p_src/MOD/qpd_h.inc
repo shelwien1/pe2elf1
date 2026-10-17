@@ -50,9 +50,9 @@ static const byte H_qpd_w_aq[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 static const byte H_qpd_w_ac[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
 
-static const int H_qpd_rA = (65+0) * (1);
+static const int H_qpd_rA = (128+0) * (1);
 static const int H_qpd_rB = (16+0) * (1);
-static const int H_qpd_rC = (64+0) * (1);
+static const int H_qpd_rC = (82+0) * (1);
 static const int H_qpd_rE = (64+0) * (1);
 static const int H_qpd_rH = (64+0) * (1);
 static const int H_qpd_rI = (64+0) * (1);

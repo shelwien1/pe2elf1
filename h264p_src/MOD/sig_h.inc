@@ -43,7 +43,7 @@ static const byte H_sig_i_pr[7+1]={ 0,1,2,3,4,5,6,7 };
 static const byte H_sig_i_ps[7+1]={ 0,1,2,3,4,5,6,7 };
 
 static const byte H_sig_j_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
-static const byte H_sig_j_pos[63+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63 };
+static const byte H_sig_j_pos[63+1]={ 0,0,0,0,0,0,0,1,1,1,2,3,4,4,4,4,4,5,5,5,5,5,5,6,7,8,8,8,8,9,10,11,12,12,12,12,12,12,13,14,14,15,16,17,17,18,18,19,19,19,20,20,21,22,22,22,23,24,25,26,26,26,27,27 };
 static const byte H_sig_j_ft[8+1]={ 0,1,2,3,4,5,6,7,8 };
 static const byte H_sig_j_h3[14+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14 };
 static const byte H_sig_j_nc[5+1]={ 0,1,2,3,4,5 };
@@ -65,7 +65,6 @@ static const byte H_sig_m_pos[9+1]={ 0,1,1,1,2,2,2,2,2,3 };
 static const byte H_sig_m_rem[10+1]={ 0,1,2,3,3,3,3,3,3,3,3 };
 
 
-static const byte H_sig_s_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 static const byte H_sig_s_pe[15+1]={ 0,0,1,2,2,2,2,3,3,3,3,3,3,4,4,4 };
 static const byte H_sig_s_pr[7+1]={ 0,1,2,3,4,5,6,7 };
 
@@ -80,7 +79,7 @@ static const int H_sig_rA = (236+0) * (1);
 static const int H_sig_rB = (8+0) * (1);
 static const int H_sig_rC = (64+0) * (1);
 static const int H_sig_rE = (64+0) * (1);
-static const int H_sig_rH = (64+0) * (1);
+static const int H_sig_rH = (224+0) * (1);
 static const int H_sig_rI = (64+0) * (1);
 static const int H_sig_rJ = (64+0) * (1);
 static const int H_sig_rK = (64+0) * (1);
@@ -134,12 +133,12 @@ static const long long H_sig_f_Volume = tc_vmul(tc_vmul(1, 3), 6); // 18
 static const long long H_sig_g_Volume = tc_vmul(1, 1); // 1
 static const long long H_sig_h_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 5), 64), 8), 9), 9), 15); // 3110400
 static const long long H_sig_i_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 64), 8), 8); // 57344
-static const long long H_sig_j_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 64), 9), 15), 6); // 725760
+static const long long H_sig_j_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 28), 9), 15), 6); // 317520
 static const long long H_sig_k_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 64), 11), 15), 9); // 1330560
 static const long long H_sig_l_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 64), 16), 8), 9); // 1032192
 static const long long H_sig_m_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 4), 4); // 224
 static const long long H_sig_n_Volume = tc_vmul(1, 1); // 1
-static const long long H_sig_s_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 5), 8); // 560
+static const long long H_sig_s_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 5), 8); // 40
 static const long long H_sig_t_Volume = tc_vmul(1, 1); // 1
 static const long long H_sig_w_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 6), 7), 17); // 2856
 

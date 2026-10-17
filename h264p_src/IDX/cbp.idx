@@ -60,7 +60,7 @@ Index i
 Index j
  j_inc: inc, 1!111
  j_tp: tp, 1!1111111111111111
- j_em: em, 1!1111111111111111
+ j_em: em, 1!0100010101001000
  j_st: st, 1!111111111
 
 Index k
@@ -107,7 +107,7 @@ Number rE, 1, 0!01000000
 Number rH, 1, 0!01000000
 Number rI, 1, 0!01000000
 Number rJ, 1, 0!01000000
-Number rK, 1, 0!01000000
+Number rK, 1, 0!11100000
 Number rL, 1, 0!01000000
 Number rD, 1, 0!11111111
 Number rT, 1, 0!00110111

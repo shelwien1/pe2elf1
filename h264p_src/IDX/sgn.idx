@@ -111,7 +111,7 @@ Number rH, 1, 0!01000000
 Number rI, 1, 0!01000000
 Number rJ, 1, 0!11100000
 Number rK, 1, 0!01000000
-Number rL, 1, 0!01000000
+Number rL, 1, 0!11101011
 Number rD, 1, 0!01101111
 Number rT, 1, 0!00110111
 Number rG, 1, 0!01011010
@@ -120,22 +120,22 @@ Number rS2, 1, 0!00110
 Number lr, 1, 0!01100
 Number lrm, 1, 0!01100
 Number mbm, 1, 0!00000000
-Number mwA, 1, 0!00000001
+Number mwA, 1, 0!00011101
 Number mwB, 1, 0!00000000
 Number mwC, 1, 0!00000000
 Number mwE, 1, 0!00000000
-Number mwH, 1, 0!00000000
+Number mwH, 1, 0!00100000
 Number mwI, 1, 0!00000000
 Number mwJ, 1, 0!00000000
 Number mwK, 1, 0!00000000
 Number mwL, 1, 0!00000000
-Number mwD, 1, 0!00000000
+Number mwD, 1, 0!00011111
 Number mwT, 1, 0!00000000
 Number mwG, 1, 0!00000000
 Number bw, 1, 0!01110
 Number qs, 1, 3!0000000
 Number qf, 1, 3!1111010
-Number mb, 1, 0!10101000
+Number mb, 1, 0!10100000
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
 #  direct, one that does not is hashed into 2^h rows and contexts share
