@@ -820,9 +820,9 @@ struct Recon {
     if (need_b) {
       int j0 = need_j ? -2 : 0, j1 = need_j ? h + 3 : h + 1;
       for (int j = j0; j < j1; j++)
-        for (int i = 0; i < w + 1; i++) b1[j + 2][i] = T6(g + j * gs + i, 1);
+        for (int i = 0; i < w; i++) b1[j + 2][i] = T6(g + j * gs + i, 1);
       for (int j = 0; j < h + 1; j++)
-        for (int i = 0; i < w + 1; i++) bb[j][i] = clip1((b1[j + 2][i] + 16) >> 5);
+        for (int i = 0; i < w; i++) bb[j][i] = clip1((b1[j + 2][i] + 16) >> 5);
     }
     if (need_h)
       for (int j = 0; j < h; j++)
