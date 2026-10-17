@@ -1519,6 +1519,35 @@ struct Recon {
     memcpy(skip_mv, mv, sizeof skip_mv);
     return miss(0, 0, 0, 16);
   }
+  // the sample at (x, y) of ref displaced by (vx, vy) quarter samples,
+  // bilinear (as tm_search's)
+  static int bil(const RPic* R, int x, int y, int vx, int vy) {
+    int ix = x + (vx >> 2), iy = y + (vy >> 2), fx = vx & 3, fy = vy & 3, W = R->w, H = R->h;
+    const uint8_t *a = R->y.data() + clip3(0, H - 1, iy) * W, *c = R->y.data() + clip3(0, H - 1, iy + 1) * W;
+    int x1 = clip3(0, W - 1, ix), x2 = clip3(0, W - 1, ix + 1);
+    return ((4 - fx) * (4 - fy) * a[x1] + fx * (4 - fy) * a[x2] + (4 - fx) * fy * c[x1] + fx * fy * c[x2] + 8) >> 4;
+  }
+  // How well the average of list 0's first reference by v0 and list 1's by
+  // v1 predicts the decoded samples above (2 rows) and to the left (2
+  // columns) of the macroblock: 4 x the mean absolute difference; -1 none
+  int tm_bi(const int* v0, const int* v1) const {
+    if (!active || nlist[0] < 1 || nlist[1] < 1 || !list[0][0] || !list[1][0]) return -1;
+    int mbw = cur->mbw, x0 = mb_addr % mbw * 16, y0 = mb_addr / mbw * 16, w = cur->w, sum = 0, cnt = 0;
+    bool top = y0 > 0 && db[mb_addr - mbw].slice >= 0, left = x0 > 0 && db[mb_addr - 1].slice >= 0;
+    const RPic *R0 = list[0][0], *R1 = list[1][0];
+    auto px = [&](int x, int y) {
+      int p = (bil(R0, x, y, v0[0], v0[1]) + bil(R1, x, y, v1[0], v1[1]) + 1) >> 1;
+      sum += abs(cur->y[(size_t)y * w + x] - p);
+      cnt++;
+    };
+    if (top)
+      for (int j = 1; j <= 2; j++)
+        for (int i = 0; i < 16; i++) px(x0 + i, y0 - j);
+    if (left)
+      for (int j = 0; j < 16; j++)
+        for (int i = 1; i <= 2; i++) px(x0 - i, y0 + j);
+    return cnt ? sum * 4 / cnt : -1;
+  }
   // How far apart the two predictions of a bi-predicted macroblock (rf,
   // mv) are: 4 x the mean absolute difference of their luma, from the
   // blocks of equal motion (8x8); -1 not bi-predicted anywhere

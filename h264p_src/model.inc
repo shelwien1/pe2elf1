@@ -721,7 +721,12 @@ struct Model {
     tmb_ok_ = tm_best(0, tmb_, m0);
     if (tmb_ok_) tb_ = 1 + tc_clamp(tc_qlog(m0), 0, 15);
     int v1[2];
-    if (tmb_ok_ && sc_->stype_ == kB && tm_best(1, v1, m1)) dh_ = m0 * 4 < m1 * 3 ? 1 : m1 * 4 < m0 * 3 ? 2 : 3;
+    if (tmb_ok_ && sc_->stype_ == kB && tm_best(1, v1, m1)) {
+      dh_ = m0 * 4 < m1 * 3 ? 1 : m1 * 4 < m0 * 3 ? 2 : 3;
+      // and whether their average does better still (bi-prediction)
+      int mb = rec_.tm_bi(tmb_, v1), mn = std::min(m0, m1);
+      if (mb >= 0) dh_ += 3 * (mb * 4 < mn * 3 ? 1 : mb > mn ? 2 : 0);
+    }
     if (sc_->stype_ == kB)
       mv_direct(15);
     else
