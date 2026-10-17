@@ -20,7 +20,7 @@ constexpr int H_skp_ND = 3, H_skp_MND = 1, H_skp_NG = 1;
 constexpr int H_mbt_ND = 29, H_mbt_MND = 1, H_mbt_NG = 1;
 constexpr int H_cbp_ND = 7, H_cbp_MND = 1, H_cbp_NG = 1;
 constexpr int H_ipm_ND = 19, H_ipm_MND = 1, H_ipm_NG = 1;
-constexpr int H_mvs_ND = TC_NODE, H_mvs_MND = TC_MNODE, H_mvs_NG = 81;
+constexpr int H_mvs_ND = TC_NODE, H_mvs_MND = TC_MNODE, H_mvs_NG = 243;
 constexpr int H_qpd_ND = TC_NODE, H_qpd_MND = TC_MNODE, H_qpd_NG = 1;
 constexpr int H_cbf_ND = TC_NODE, H_cbf_MND = TC_MNODE, H_cbf_NG = 1;
 constexpr int H_sig_ND = 1, H_sig_MND = 1, H_sig_NG = 1;
@@ -34,7 +34,7 @@ struct H_skp_v { int st, a3, b3, col, c9, cd, run, cnt, eq, lf, af, td, en, sm, 
 struct H_mbt_v { int st, ca, cb, cc, nsk, en, td, sm, tm, tb, dh, bd; };
 struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg, tp, em, pq; };
 struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm; };
-struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv; };
+struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, zd, cq; };
 struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac; };
 struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn; };
 struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz; };
@@ -1417,9 +1417,12 @@ struct Model {
     D.pd = pdn_ ? 0 : 1 + tc_qlog(pdv_[comp]);
     D.sp = sp_[comp] < 0 ? 0 : 1 + tc_qlog(sp_[comp]);
     D.tv = tmn_ ? 0 : 1 + tc_clamp(sq2(dv), 0, 12);
+    // the mvd were the vector zero; col's mvd
+    D.zd = tc_clamp(sq2(-mvp_[comp]), 0, 12);
+    D.cq = col_ && col_->cls < CL_INXN ? 1 + std::min<int>(col_->mvq[list][y * 4 + x][comp], 8) : 0;
     tcx X;
     H_mvs_make(D, X);
-    u32 sc = (u32)(sgn3(dv) * 27 + sgn3(pdv_[comp]) * 9 + sgn3(va) * 3 + sgn3(vb));
+    u32 sc = (u32)(sgn3(-mvp_[comp]) * 81 + sgn3(dv) * 27 + sgn3(pdv_[comp]) * 9 + sgn3(va) * 3 + sgn3(vb));
     tc_stage = STG_MVD;
     tc_syms[STG_MVD]++;
     int pr[TC_NODE];

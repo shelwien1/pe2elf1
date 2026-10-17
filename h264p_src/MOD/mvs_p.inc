@@ -14,8 +14,8 @@
 
 void H_mvs_make( const H_mvs_v & D, tcx & X ) {
   int a, b, c, d, e, h, s, f, m, t, n, g;
-  int kind = D.kind, comp = D.comp, lst = D.lst, ma = D.ma, mb = D.mb, oth = D.oth, ps = D.ps, rf = D.rf, pi = D.pi, nr = D.nr, pd = D.pd, sp = D.sp, tv = D.tv;
-  (void) kind;  (void) comp;  (void) lst;  (void) ma;  (void) mb;  (void) oth;  (void) ps;  (void) rf;  (void) pi;  (void) nr;  (void) pd;  (void) sp;  (void) tv;
+  int kind = D.kind, comp = D.comp, lst = D.lst, ma = D.ma, mb = D.mb, oth = D.oth, ps = D.ps, rf = D.rf, pi = D.pi, nr = D.nr, pd = D.pd, sp = D.sp, tv = D.tv, zd = D.zd, cq = D.cq;
+  (void) kind;  (void) comp;  (void) lst;  (void) ma;  (void) mb;  (void) oth;  (void) ps;  (void) rf;  (void) pi;  (void) nr;  (void) pd;  (void) sp;  (void) tv;  (void) zd;  (void) cq;
 
   a = 0;
   a = a*3 + ((kind>1+(1-1))+(kind>2+(1-1)));
@@ -31,12 +31,14 @@ void H_mvs_make( const H_mvs_v & D, tcx & X ) {
   b = b*2 + ((lst>0+(1-1)));
   b = b*4 + H_mvs_b_ps[__min(3,__max(0,ps-(1-1)))];
   b = b*4 + H_mvs_b_rf[__min(3,__max(0,rf-(1-1)))];
+  b = b*13 + H_mvs_b_zd[__min(12,__max(0,zd-(1-1)))];
 
   c = 0;
   c = c*4 + H_mvs_c_kind[__min(3,__max(0,kind-(1-1)))];
   c = c*2 + ((comp>0+(1-1)));
   c = c*7 + H_mvs_c_pd[__min(8,__max(0,pd-(1-1)))];
   c = c*9 + H_mvs_c_sp[__min(8,__max(0,sp-(1-1)))];
+  c = c*13 + H_mvs_c_zd[__min(12,__max(0,zd-(1-1)))];
 
   d = 0;
   d = d*4 + H_mvs_d_kind[__min(3,__max(0,kind-(1-1)))];
@@ -64,6 +66,7 @@ void H_mvs_make( const H_mvs_v & D, tcx & X ) {
   f = f*4 + H_mvs_f_kind[__min(3,__max(0,kind-(1-1)))];
   f = f*2 + ((comp>0+(1-1)));
   f = f*9 + H_mvs_f_sp[__min(8,__max(0,sp-(1-1)))];
+  f = f*10 + H_mvs_f_cq[__min(9,__max(0,cq-(1-1)))];
 
   m = 0;
   m = m*4 + H_mvs_m_kind[__min(3,__max(0,kind-(1-1)))];
