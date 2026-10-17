@@ -19,7 +19,7 @@ Index a
  a_lnz: lnz, 1!1
  a_pc: pc, 1!1111
  a_cc: cc, 1!11
- a_cls: cls, 1!00111000
+ a_cls: cls, 1!00000100
 
 Index b
  b_dc: dc, 1!11111111
@@ -80,7 +80,7 @@ Number rD, 1, 0!11111111
 Number rT, 1, 0!00110111
 Number rG, 1, 0!01011010
 Number rS1, 1, 0!00110
-Number rS2, 1, 0!00110
+Number rS2, 1, 0!00101
 Number lr, 1, 0!01100
 Number lrm, 1, 0!01100
 Number mbm, 1, 0!00000000

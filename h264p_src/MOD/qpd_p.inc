@@ -21,7 +21,7 @@ void H_qpd_make( const H_qpd_v & D, tcx & X ) {
   a = a*2 + ((lnz>0+(1-1)));
   a = a*5 + H_qpd_a_pc[__min(4,__max(0,pc-(1-1)))];
   a = a*3 + ((cc>0+(1-1))+(cc>1+(1-1)));
-  a = a*4 + H_qpd_a_cls[__min(8,__max(0,cls-(1-1)))];
+  a = a*2 + ((cls>5+(1-1)));
 
   b = 0;
   b = b*9 + H_qpd_b_dc[__min(8,__max(0,dc-(1-1)))];

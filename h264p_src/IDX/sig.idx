@@ -93,14 +93,14 @@ Number mwA, 1, 0!00000000
 Number mwB, 1, 0!00000000
 Number mwC, 1, 0!00000000
 Number mwE, 1, 0!00000000
-Number mwH, 1, 0!00000000
+Number mwH, 1, 0!00000010
 Number mwD, 1, 0!00000000
 Number mwT, 1, 0!00000000
 Number mwG, 1, 0!00000000
 Number bw, 1, 0!10000
 Number qs, 1, 3!0000000
 Number qf, 1, 3!0010000
-Number mb, 1, 0!00000101
+Number mb, 1, 0!01110000
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
 #  direct, one that does not is hashed into 2^h rows and contexts share

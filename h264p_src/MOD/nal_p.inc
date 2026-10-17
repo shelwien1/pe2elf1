@@ -39,7 +39,7 @@ void H_nal_make( const H_nal_v & D, tcx & X ) {
 
   h = 0;
   h = h*6 + H_nal_h_fld[__min(31,__max(0,fld-(1-1)))];
-  h = h*3 + ((ctx>6+(1-1))+(ctx>8+(1-1)));
+  h = h*3 + ((ctx>6+(1-1))+(ctx>7+(1-1)));
 
   s = 0;
   s = s*5 + H_nal_s_fld[__min(31,__max(0,fld-(1-1)))];

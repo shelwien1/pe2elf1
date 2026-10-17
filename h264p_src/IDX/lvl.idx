@@ -37,7 +37,7 @@ Index d
  d_pg: pg, 1!0001000000000001
 
 Index e
- e_cg: cg, 1!1111111111111
+ e_cg: cg, 1!0000000000000
  e_g1: g1, 1!1111
  e_e1: e1, 1!1111
  e_pl: pl, 1!11111111111
@@ -52,7 +52,7 @@ Index h
 
 Index s
  s_cg: cg, 1!0001000000000
- s_g1: g1, 1!1111
+ s_g1: g1, 1!1001
  s_pm: pm, 1!1111
  s_em: em, 1!1111111111111111
 
@@ -86,7 +86,7 @@ Number rH, 1, 0!01000000
 Number rD, 1, 0!11111111
 Number rT, 1, 0!10110001
 Number rG, 1, 0!01011010
-Number rS1, 1, 0!00100
+Number rS1, 1, 0!01000
 Number rS2, 1, 0!00110
 Number lr, 1, 0!01100
 Number lrm, 1, 0!01100

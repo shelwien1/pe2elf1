@@ -101,8 +101,8 @@ Number rE, 1, 0!00000110
 Number rH, 1, 0!01000000
 Number rD, 1, 0!11111111
 Number rT, 1, 0!00110111
-Number rG, 1, 0!01011010
-Number rS1, 1, 0!00110
+Number rG, 1, 0!01001000
+Number rS1, 1, 0!01000
 Number rS2, 1, 0!00100
 Number lr, 1, 0!01100
 Number lrm, 1, 0!01100

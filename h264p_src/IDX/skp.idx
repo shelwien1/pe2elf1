@@ -91,9 +91,9 @@ Index g
 Number rA, 1, 0!01000000
 Number rB, 1, 0!00000010
 Number rC, 1, 0!01000000
-Number rE, 1, 0!00100011
+Number rE, 1, 0!11111011
 Number rH, 1, 0!11110000
-Number rD, 1, 0!00010000
+Number rD, 1, 0!01100001
 Number rT, 1, 0!00110111
 Number rG, 1, 0!01011010
 Number rS1, 1, 0!00011
@@ -110,7 +110,7 @@ Number mwD, 1, 0!00000000
 Number mwT, 1, 0!00000000
 Number mwG, 1, 0!00000000
 Number bw, 1, 0!01000
-Number qs, 1, 3!0010000
+Number qs, 1, 3!0010100
 Number qf, 1, 3!1000111
 Number mb, 1, 0!01000100
 

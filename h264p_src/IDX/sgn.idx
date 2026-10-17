@@ -28,7 +28,7 @@ Index b
 
 Index c
  c_cg: cg, 1!1111111111111
- c_mag: mag, 1!00
+ c_mag: mag, 1!10
  c_md: md, 1!1100110000010101100
 
 Index d
@@ -58,7 +58,7 @@ Index f
 
 Index m
  m_cg: cg, 1!1111111111111
- m_pp: pp, 1!11
+ m_pp: pp, 1!00
 
 Index w
  w_cg: cg, 1!1111111111111
