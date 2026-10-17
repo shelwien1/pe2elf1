@@ -902,13 +902,7 @@ struct SliceCoder {
     int range = num_ref_[list] * (1 + cur_->field) - 1;  // field macroblocks of MBAFF frames: twice
     if (!cabac_) return te(v, range);
     if (W && (v < 0 || v > range)) fail("ref_idx out of range");
-    int inc = 0;
-    for (int k = 0; k < 2; k++) {
-      int i;
-      const MbState* n = k ? nb4(x, y - 1, i) : nb4(x - 1, y, i);
-      // refIdxZeroFlagN: a field neighbour of a frame macroblock refers to fields
-      if (n && n->ref[list][(i >> 3) * 2 + ((i & 3) >> 1)] > (!cur_->field && n->field)) inc += 1 + k;
-    }
+    int inc = ref_inc(list, x, y);
     int n = 0;
     while (bin(54 + inc, n < v)) {
       inc = n ? 5 : 4;
@@ -917,10 +911,20 @@ struct SliceCoder {
     return n;
   }
 
-  int mvd(int list, int comp, int x, int y, int v) {
-    const int lim = 1 << 24;
-    if (!cabac_) return se(v, lim);
-    if (W && (v < -lim || v > lim)) fail("mvd out of range");
+  // ctxIdxInc of the first bin of ref_idx_lX of the partition at the 4x4 block (x, y)
+  int ref_inc(int list, int x, int y) const {
+    int inc = 0;
+    for (int k = 0; k < 2; k++) {
+      int i;
+      const MbState* n = k ? nb4(x, y - 1, i) : nb4(x - 1, y, i);
+      // refIdxZeroFlagN: a field neighbour of a frame macroblock refers to fields
+      if (n && n->ref[list][(i >> 3) * 2 + ((i & 3) >> 1)] > (!cur_->field && n->field)) inc += 1 + k;
+    }
+    return inc;
+  }
+
+  // ctxIdxInc of the first bin of mvd_lX[comp] of the partition at the 4x4 block (x, y)
+  int mvd_inc(int list, int comp, int x, int y) const {
     int ia, ib;
     const MbState* a = nb4(x - 1, y, ia);
     const MbState* b = nb4(x, y - 1, ib);
@@ -934,9 +938,16 @@ struct SliceCoder {
       if (comp && cur_->field && !n->field) m /= 2;
       sum += m;
     }
+    return sum < 3 ? 0 : sum > 32 ? 2 : 1;
+  }
+
+  int mvd(int list, int comp, int x, int y, int v) {
+    const int lim = 1 << 24;
+    if (!cabac_) return se(v, lim);
+    if (W && (v < -lim || v > lim)) fail("mvd out of range");
     int base = comp ? 47 : 40;
     int av = abs(v);
-    if (!bin(base + (sum < 3 ? 0 : sum > 32 ? 2 : 1), av > 0)) return 0;
+    if (!bin(base + mvd_inc(list, comp, x, y), av > 0)) return 0;
     int n = 1, ctx = base + 3;
     while (n < 9 && bin(ctx, av > n)) {
       if (n < 4) ctx++;

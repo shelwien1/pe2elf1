@@ -60,7 +60,8 @@ template <int f_DEC> struct tc_fam {
   cm_mix<TC_MIXN> mx, mx2;
   cm_mix<3> mxf;
   cm_mix<3> mxm;
-  int prp;
+  int prp;          // an outside prediction of P(0) for the mixers, -1 for none
+  const int *prpa;  // or one per node
   sz ba, bb, bc, bd;
   u32 bs, bf, bm, bt, bn, bg;
   int rA, rB, rC, rD, rT, rG;
@@ -135,6 +136,7 @@ template <int f_DEC> struct tc_fam {
     mbm = tc_clamp(mbm2, 0, 255);
     bw = tc_clamp(bwt, 0, 16);
     prp = -1;
+    prpa = nullptr;
   }
   INLINE void select(const tcx &x) {
     ba = (sz)(hA ? tc_hrow((u32)x.a, hA) : (u32)x.a) * nd;
@@ -172,7 +174,8 @@ template <int f_DEC> struct tc_fam {
     mx.set(2, cm_stretch(e.P()));
     mx.set(3, cm_stretch(f.P()));
     mx.set(4, cm_stretch(pa));
-    mx.set(5, prp >= 0 ? cm_stretch(prp) : 0);
+    int pp = prpa ? prpa[node] : prp;
+    mx.set(5, pp >= 0 ? cm_stretch(pp) : 0);
     mx.set(6, 256);
     for(int i = 0; i < TC_MIXN; i++)
       mx2.set(i, mx.x[i]);
@@ -202,7 +205,7 @@ template <int f_DEC> struct tc_fam {
   }
   INLINE int bitm(int node, int b) {
     cm_cnt t = T[bt + node];
-    if(prp < 0) {
+    if(prp < 0 || prpa) {
       b = tc_bit<f_DEC>(t.P(), b);
       t.upd(b, rT, mwT);
       T[bt + node] = t;

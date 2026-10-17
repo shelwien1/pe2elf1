@@ -140,6 +140,13 @@ static INLINE int popc4(int v) { return (v & 1) + (v >> 1 & 1) + (v >> 2 & 1) + 
 // nC as a class
 static INLINE int nc_class(int nc) { return nc < 3 ? nc : nc < 5 ? 3 : nc < 9 ? 4 : 5; }
 
+// P(LPS) of the CABAC context states, 12 bits
+static int cab_lps[64];
+static void cab_tables() {
+  for (int i = 0; i < 64; i++)
+    cab_lps[i] = tc_clamp((int)(0.5 * pow(0.01875 / 0.5, i / 63.0) * CM_PONE + 0.5), 1, CM_PONE - 1);
+}
+
 template <int f_DEC>
 struct Model {
   static constexpr int ENC = f_DEC == 0;
@@ -162,6 +169,7 @@ struct Model {
 
   void init() {
     cm_tables();
+    cab_tables();
 #define H_MAP(F) (t_##F = tc_table<H_##F##_T>(), t_##F->H_##F##_Init(), H_WIRE(F))
     H_MAP(nal);
     H_MAP(hdr);
@@ -310,6 +318,18 @@ struct Model {
   bool pdn_ = false;                             // no col vector
 
   int idx(const MbState* n) const { return (int)(n - mbs_); }
+  // CABAC's probability of a bin in the walk's current state, as the outside
+  // prediction of one of the model's decisions: of the bin being 0 (cab0) or
+  // 1 (cab1). -1 without CABAC.
+  int cab0(int ctx) const {
+    if (!sc_->cabac_) return -1;
+    const CabacCtx& c = sc_->ctx_[ctx];
+    return c.mps ? cab_lps[c.state] : CM_PONE - cab_lps[c.state];
+  }
+  int cab1(int ctx) const {
+    int p = cab0(ctx);
+    return p < 0 ? -1 : CM_PONE - p;
+  }
   const MbInfo* info(const MbState* n) const { return n ? &info_[idx(n)] : nullptr; }
   int cls_of(const MbState* n) const { return n ? info_[idx(n)].cls : (int)CL_NONE; }
   int q6() const { return mi_->qp / 6; }
@@ -423,11 +443,12 @@ struct Model {
     D.lf = mbaff_ && sc_->left_ ? 1 + sc_->left_->field : 0;
     D.af = mbaff_ && sc_->above_ ? 1 + sc_->above_->field : 0;
   }
-  int skp_bit(const H_skp_v& D, int node, int v) {
+  int skp_bit(const H_skp_v& D, int node, int v, int pr = -1) {
     tcx X;
     H_skp_make(D, X);
     f_skp.select(X);
     tc_syms[STG_SKIP]++;
+    f_skp.prp = pr;
     return f_skp.bit(node, v);
   }
   int skip(int v) {
@@ -435,7 +456,10 @@ struct Model {
     tc_stage = STG_SKIP;
     H_skp_v D;
     skp_vars(D);
-    v = skp_bit(D, 0, ENC && v);
+    const MbState* a = sc_->mb_a_;
+    const MbState* b = sc_->mb_b_;
+    int ctx = (sc_->stype_ == kB ? 24 : 11) + (a && !a->skip) + (b && !b->skip);
+    v = skp_bit(D, 0, ENC && v, cab0(ctx));
     if (v) {
       mi_->skip = 1;
       mi_->cls = CL_SKIP;
@@ -461,7 +485,8 @@ struct Model {
     H_skp_v D;
     skp_vars(D);
     D.col = col_ ? 1 + col_->field : 0;
-    return skp_bit(D, 2, ENC && v);
+    int ctx = 70 + (sc_->left_ && sc_->left_->field) + (sc_->above_ && sc_->above_->field);
+    return skp_bit(D, 2, ENC && v, cab0(ctx));
   }
   void mb_begin() {
     if (!mb_open_) begin_mb();
@@ -494,18 +519,30 @@ struct Model {
     }
     return it == 0 ? CL_INXN : it == 25 ? CL_PCM : CL_I16;
   }
-  int mbt_bit(int node, int v) { return f_mbt.bit(node, v); }
+  int mbt_bit(int node, int v, int pr = -1) {
+    f_mbt.prp = pr;
+    return f_mbt.bit(node, v);
+  }
   // an intra mb_type in I slice numbering
   int mbt_intra(int it) {
-    if (mbt_bit(21, ENC && it == 0)) return 0;
+    int st = sc_->stype_;
+    bool islice = st == kI || st == kSI;
+    int off = islice ? 3 : st == kB ? 32 : 17;
+    int ctx0 = off;
+    if (islice) {
+      const MbState* a = sc_->mb_a_;
+      const MbState* b = sc_->mb_b_;
+      ctx0 += (a && !a->inxn) + (b && !b->inxn);
+    }
+    if (mbt_bit(21, ENC && it == 0, cab1(ctx0))) return 0;
     if (mbt_bit(22, ENC && it == 25)) return 25;
     int x = ENC ? it - 1 : 0;
-    int luma = mbt_bit(23, ENC && x / 12);
+    int luma = mbt_bit(23, ENC && x / 12, cab0(off + (islice ? 3 : 1)));
     int c = x / 4 % 3;
-    int chroma = mbt_bit(24, ENC && c != 0);
-    if (chroma) chroma += mbt_bit(25, ENC && c == 2);
-    int p1 = mbt_bit(26, ENC && (x & 2));
-    int p0 = mbt_bit(27 + p1, ENC && (x & 1));
+    int chroma = mbt_bit(24, ENC && c != 0, cab0(off + (islice ? 4 : 2)));
+    if (chroma) chroma += mbt_bit(25, ENC && c == 2, cab0(off + (islice ? 5 : 2)));
+    int p1 = mbt_bit(26, ENC && (x & 2), cab0(off + (islice ? 6 : 3)));
+    int p0 = mbt_bit(27 + p1, ENC && (x & 1), cab0(off + (islice ? 7 : 3)));
     mi_->i16m = (uint8_t)(p1 * 2 + p0);
     return 1 + p1 * 2 + p0 + 4 * chroma + 12 * luma;
   }
@@ -525,6 +562,7 @@ struct Model {
     H_mbt_make(D, X);
     f_mbt.select(X);
     int stype = sc_->stype_;
+    f_mbt.prp = -1;
     switch (stype) {
       case kI:
         t = mbt_intra(t);
@@ -535,7 +573,7 @@ struct Model {
       case kB:
         if (mbt_bit(1, ENC && t >= 23)) {
           t = 23 + mbt_intra(t - 23);
-        } else if (mbt_bit(6, ENC && t == 0)) {
+        } else if (mbt_bit(6, ENC && t == 0, cab1(27 + (a && !a->direct16) + (b && !b->direct16)))) {
           t = 0;
         } else if (mbt_bit(7, ENC && t <= 3)) {
           t = mbt_bit(8, ENC && t == 1) ? 1 : mbt_bit(9, ENC && t == 3) ? 3 : 2;
@@ -553,7 +591,7 @@ struct Model {
         }
         break;
       default:
-        if (mbt_bit(1, ENC && t >= 5))
+        if (mbt_bit(1, ENC && t >= 5, cab0(14)))
           t = 5 + mbt_intra(t - 5);
         else if (mbt_bit(2, ENC && t == 0))
           t = 0;
@@ -573,10 +611,11 @@ struct Model {
   }
 
   // --- coded_block_pattern and transform_size_8x8_flag: the cbp family
-  int cbp_bit(H_cbp_v& D, int node, int v) {
+  int cbp_bit(H_cbp_v& D, int node, int v, int pr) {
     tcx X;
     H_cbp_make(D, X);
     f_cbp.select(X);
+    f_cbp.prp = pr;
     return f_cbp.bit(node, v);
   }
   int cbp(int v) {
@@ -590,17 +629,17 @@ struct Model {
       D.inc = sc_->cbp_luma_inc(b8, luma);
       D.pc = popc4(luma);
       D.col = col_ ? 1 + (col_->cbp >> b8 & 1) : 0;
-      luma |= cbp_bit(D, b8, ENC && (v >> b8 & 1)) << b8;
+      luma |= cbp_bit(D, b8, ENC && (v >> b8 & 1), cab0(73 + D.inc)) << b8;
     }
     int c = 0;
     if (sc_->chroma_ == 1 || sc_->chroma_ == 2) {
       D.inc = sc_->cbp_chroma_inc(0);
       D.pc = popc4(luma);
       D.col = col_ ? 1 + (col_->cbp >> 4 != 0) : 0;
-      if (cbp_bit(D, 4, ENC && (v >> 4) != 0)) {
+      if (cbp_bit(D, 4, ENC && (v >> 4) != 0, cab0(77 + D.inc))) {
         D.inc = sc_->cbp_chroma_inc(1);
         D.col = col_ ? 1 + (col_->cbp >> 4 == 2) : 0;
-        c = 1 + cbp_bit(D, 5, ENC && (v >> 4) == 2);
+        c = 1 + cbp_bit(D, 5, ENC && (v >> 4) == 2, cab0(81 + D.inc));
       }
     }
     tc_syms[STG_CBP]++;
@@ -619,7 +658,7 @@ struct Model {
     D.q6 = q6();
     D.st = st_;
     tc_syms[STG_CBP]++;
-    v = cbp_bit(D, 6, ENC && v);
+    v = cbp_bit(D, 6, ENC && v, cab0(399 + D.inc));
     mi_->t8 = (uint8_t)v;
     return v;
   }
@@ -662,7 +701,9 @@ struct Model {
     H_ipm_make(D, X);
     f_ipm.select(X);
     int r = -1;
+    f_ipm.prp = cab0(68);
     if (!f_ipm.bit(0, ENC && v < 0)) {
+      f_ipm.prp = cab0(69);
       int b2 = f_ipm.bit(1, ENC && (v >> 2 & 1));
       int b1 = f_ipm.bit(2 + b2, ENC && (v >> 1 & 1));
       int b0 = f_ipm.bit(4 + 2 * b2 + b1, ENC && (v & 1));
@@ -711,7 +752,12 @@ struct Model {
     H_ipm_make(D, X);
     f_ipm.select(X);
     int r = 0;
-    if (f_ipm.bit(16, ENC && v > 0)) r = f_ipm.bit(17, ENC && v > 1) ? 2 + f_ipm.bit(18, ENC && v > 2) : 1;
+    auto cond = [](const MbState* n) { return n && n->intra && !n->pcm && n->cpred != 0; };
+    f_ipm.prp = cab0(64 + cond(sc_->mb_a_) + cond(sc_->mb_b_));
+    if (f_ipm.bit(16, ENC && v > 0)) {
+      f_ipm.prp = cab0(67);
+      r = f_ipm.bit(17, ENC && v > 1) ? 2 + f_ipm.bit(18, ENC && v > 2) : 1;
+    }
     mi_->cpred = (uint8_t)r;
     tc_syms[STG_IPM]++;
     return r;
@@ -725,6 +771,8 @@ struct Model {
     tcx X;
     H_mvs_make(D, X);
     f_mvs.select(X);
+    f_mvs.prp = -1;
+    f_mvs.prpa = nullptr;
     int node = 1;
     for (int k = b ? 3 : 1; k >= 0; k--) node = node * 2 + f_mvs.bit(node, ENC && (v >> k & 1));
     int r = node - (b ? 16 : 4);
@@ -887,7 +935,16 @@ struct Model {
     D.sp = 0;
     tcx X;
     H_mvs_make(D, X);
+    int pr[TC_NODE];
+    for (int k = 0; k < TC_NODE; k++) pr[k] = -1;
+    pr[0] = cab0(54 + sc_->ref_inc(list, x, y));
+    pr[1] = cab0(58);
+    pr[2] = cab0(59);
+    if (pr[0] >= 0)
+      for (int k = 0; k < 3; k++) pr[k] = CM_PONE - pr[k];
+    f_mvs.prpa = pr;
     v = cm_int(f_mvs.code(X, ENC ? v : 0), 64);
+    f_mvs.prpa = nullptr;
     for (int yy = y; yy < y + h; yy += 2)
       for (int xx = x; xx < x + w; xx += 2) mi_->ref[list][(yy >> 1) * 2 + (xx >> 1)] = (int8_t)v;
     tc_syms[STG_MVS]++;
@@ -930,7 +987,15 @@ struct Model {
     u32 sc = (u32)(sgn3(pdv_[comp]) * 9 + sgn3(va) * 3 + sgn3(vb));
     tc_stage = STG_MVD;
     tc_syms[STG_MVD]++;
+    int pr[TC_NODE];
+    for (int k = 0; k < TC_NODE; k++) pr[k] = -1;
+    int base = comp ? 47 : 40;
+    pr[0] = cab1(base + sc_->mvd_inc(list, comp, x, y));
+    pr[1] = cab1(base + 3);
+    pr[2] = cab1(base + 4);
+    f_mvs.prpa = pr;
     v = cm_int(f_mvs.code(X, ENC ? abs(v) : 0), 1 << 30) * (ENC && v < 0 ? -1 : 1);
+    f_mvs.prpa = nullptr;
     if (v) {
       tc_stage = STG_MVSG;
       tc_syms[STG_MVSG]++;
@@ -964,7 +1029,12 @@ struct Model {
     D.st = st_;
     tcx X;
     H_qpd_make(D, X);
+    int pr[TC_NODE];
+    for (int k = 0; k < TC_NODE; k++) pr[k] = -1;
+    pr[0] = cab1(60 + (sc_->last_qpd_ != 0));
+    f_qpd.prpa = pr;
     v = cm_int(f_qpd.codes(X, ENC ? v : 0, 0), 1 << 20);
+    f_qpd.prpa = nullptr;
     int qp = ((qp_pred_ + v + 52 + 2 * qp_off_) % (52 + qp_off_) + (52 + qp_off_)) % (52 + qp_off_) - qp_off_;
     qp_pred_ = qp;
     mi_->qp = (uint8_t)(qp + qp_off_);
@@ -1129,7 +1199,18 @@ struct Model {
     D.md = md;
     tcx X;
     H_cbf_make(D, X);
+    int pr[TC_NODE];
+    for (int k = 0; k < TC_NODE; k++) pr[k] = -1;
+    if (!coded && sc_->cabac_) {
+      int inc = g.kind == 0 ? sc_->cbf_inc_dc(g.plane)
+                : g.kind == 2 ? sc_->cbf_inc_chroma_ac(g.plane - 1, g.x, g.y)
+                : g.kind == 3 ? sc_->cbf_inc_8x8(g.plane, idx)
+                              : sc_->cbf_inc_luma(g.plane, g.x, g.y);
+      pr[0] = cab1(kCbfBase[cat] + inc);
+    }
+    f_cbf.prpa = pr;
     int total = cm_int(f_cbf.code(X, ENC ? count_nonzero(c, n) - coded : 0), n) + coded;
+    f_cbf.prpa = nullptr;
     if (total > n) cm_fail("corrupt stream: %d coefficients in a block of %d", total, n);
     tc_syms[STG_CBF]++;
     if (!total) {
@@ -1144,6 +1225,8 @@ struct Model {
     bool sig[64];
     int rem = total, last = 0, cnt = total;
     H_sig_v S = {cat, 0, 0, 0, md, nc, fld, q};
+    int sig_base = kSigBase[fld][cat], numc8x8 = sc_->chroma_ == 2 ? 2 : 1;
+    bool b8x8 = cat == 5 || cat == 9 || cat == 13;
     for (int i = 0; rem; i++) {
       if (n - i == rem) {
         sig[i] = true;
@@ -1154,6 +1237,7 @@ struct Model {
         tcx Y;
         H_sig_make(S, Y);
         f_sig.select(Y);
+        f_sig.prp = cab0(sig_base + (cat == 3 ? std::min(i / numc8x8, 2) : b8x8 ? (fld ? kSig8x8Field[i] : kSig8x8Frame[i]) : i));
         sig[i] = f_sig.bit(0, ENC && c[i] != 0);
         tc_syms[STG_SIG]++;
       }
@@ -1167,10 +1251,15 @@ struct Model {
     int mag[64];
     int g1 = 0, e1 = 0;
     H_lvl_v L = {cat, 0, 0, nc, 0, 0, 0, q, tc_qlog(cnt), md, 0};
+    int abs_base = kAbsBase[cat];
+    for (int k = 0; k < TC_NODE; k++) pr[k] = -1;
+    f_lvl.prpa = pr;
     for (int k = last; k >= 0; k--) {
       if (!sig[k]) continue;
       L.g1 = g1;
       L.e1 = e1;
+      pr[0] = cab1(abs_base + (g1 ? 0 : std::min(4, 1 + e1)));
+      pr[1] = pr[2] = cab1(abs_base + 5 + std::min(4 - (cat == 3), g1));
       L.pos = tc_qlog(k);
       L.sa = na.m ? std::min(abs(coef_at(na.m, g, na.i, k)), 3) : 0;
       L.sb = nb.m ? std::min(abs(coef_at(nb.m, g, nb.i, k)), 3) : 0;
@@ -1185,6 +1274,7 @@ struct Model {
         e1++;
       tc_syms[STG_LVL]++;
     }
+    f_lvl.prpa = nullptr;
     // the signs
     tc_stage = STG_SGN;
     H_sgn_v G = {cat, 0, 0, 0, 3, 0, md};
