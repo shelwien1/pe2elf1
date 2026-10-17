@@ -44,7 +44,7 @@ void H_sgn_make( const H_sgn_v & D, tcx & X ) {
   h = 0;
   h = h*14 + H_sgn_h_cg[__min(13,__max(0,cg-(1-1)))];
   h = h*4 + H_sgn_h_pos[__min(3,__max(0,pos-(1-1)))];
-  h = h*4 + H_sgn_h_ez[__min(3,__max(0,ez-(1-1)))];
+  h = h*6 + H_sgn_h_ez[__min(5,__max(0,ez-(1-1)))];
   h = h*3 + ((pp>0+(1-1))+(pp>1+(1-1)));
 
   s = 0;

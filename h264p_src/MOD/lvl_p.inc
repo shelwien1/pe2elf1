@@ -45,12 +45,12 @@ void H_lvl_make( const H_lvl_v & D, tcx & X ) {
   e = e*14 + H_lvl_e_cg[__min(13,__max(0,cg-(1-1)))];
   e = e*5 + H_lvl_e_g1[__min(4,__max(0,g1-(1-1)))];
   e = e*5 + H_lvl_e_e1[__min(4,__max(0,e1-(1-1)))];
-  e = e*5 + H_lvl_e_pl[__min(4,__max(0,pl-(1-1)))];
+  e = e*12 + H_lvl_e_pl[__min(11,__max(0,pl-(1-1)))];
 
   h = 0;
   h = h*14 + H_lvl_h_cg[__min(13,__max(0,cg-(1-1)))];
   h = h*6 + H_lvl_h_pos[__min(5,__max(0,pos-(1-1)))];
-  h = h*5 + H_lvl_h_pl[__min(4,__max(0,pl-(1-1)))];
+  h = h*12 + H_lvl_h_pl[__min(11,__max(0,pl-(1-1)))];
   h = h*16 + H_lvl_h_pe[__min(15,__max(0,pe-(1-1)))];
 
   s = 0;

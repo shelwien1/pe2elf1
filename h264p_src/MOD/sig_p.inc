@@ -43,12 +43,12 @@ void H_sig_make( const H_sig_v & D, tcx & X ) {
   e = 0;
   e = e*14 + H_sig_e_cg[__min(13,__max(0,cg-(1-1)))];
   e = e*64 + H_sig_e_pos[__min(63,__max(0,pos-(1-1)))];
-  e = e*4 + H_sig_e_ps[__min(3,__max(0,ps-(1-1)))];
+  e = e*8 + H_sig_e_ps[__min(7,__max(0,ps-(1-1)))];
 
   h = 0;
   h = h*5 + H_sig_h_cg[__min(13,__max(0,cg-(1-1)))];
   h = h*64 + H_sig_h_pos[__min(63,__max(0,pos-(1-1)))];
-  h = h*4 + H_sig_h_ps[__min(3,__max(0,ps-(1-1)))];
+  h = h*8 + H_sig_h_ps[__min(7,__max(0,ps-(1-1)))];
   h = h*9 + H_sig_h_rem[__min(10,__max(0,rem-(1-1)))];
 
   s = 0;

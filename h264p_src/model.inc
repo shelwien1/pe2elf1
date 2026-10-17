@@ -991,10 +991,10 @@ struct Model {
           if (!rec_.proxy_dc(pl, qc, lv)) break;
           pdc = std::max(pdc, 0);
           pac = std::max(pac, 0);
-          for (int k = 0; k < 4; k++) pdc += lv[k] != 0;
+          for (int k = 0; k < 4; k++) pdc += abs(lv[k]) >= 3;
           for (int b = 0; b < 4; b++) {
             rec_.proxy_levels(pl, (b & 1) * 4, (b >> 1) * 4, qc, lv);
-            for (int k = 1; k < 16; k++) pac += lv[k] != 0;
+            for (int k = 1; k < 16; k++) pac += abs(lv[k]) >= 3;
           }
         }
       }
@@ -1654,7 +1654,12 @@ struct Model {
         pok = rec_.proxy_levels(g.kind == 2 ? g.plane : 0, g.x * 4, g.y * 4,
                                 g.kind == 2 ? rec_.chroma_qp_of(g.plane - 1, qp) : qp, plv, g.kind == 3 ? 8 : 4);
     }
-    auto est = [&](int j) { return plv[std::min(j + g.off, g.kind == 3 ? 63 : g.kind == 0 && g.plane ? 3 : 15)]; };
+    // in quarters (q4), and as the level an encoder would code
+    auto q4 = [&](int j) { return plv[std::min(j + g.off, g.kind == 3 ? 63 : g.kind == 0 && g.plane ? 3 : 15)]; };
+    auto est = [&](int j) {
+      int a = (3 * abs(q4(j)) + 4) / 12;
+      return q4(j) < 0 ? -a : a;
+    };
     int pnz = 0;
     if (pok)
       for (int j = 0; j < n; j++) pnz += est(j) != 0;
@@ -1735,7 +1740,7 @@ struct Model {
         S.rem = tc_qlog(rem);
         S.zl = tc_qlog(n - i - rem);
         S.pe = spok && i < 4 ? sp.estimate(i) : 0;
-        S.ps = pok ? 1 + std::min(abs(est(i)), 2) : 0;
+        S.ps = pok ? 1 + std::min(abs(q4(i)), 6) : 0;
         tcx Y;
         H_sig_make(S, Y);
         f_sig.select(Y);
@@ -1764,7 +1769,7 @@ struct Model {
       pr[1] = pr[2] = cab1(abs_base + 5 + std::min(4 - (cat == 3), g1));
       L.pos = tc_qlog(k);
       L.pe = spok && k < 4 ? sp.estimate(k) : 0;
-      L.pl = pok ? 1 + std::min(abs(est(k)), 3) : 0;
+      L.pl = pok ? 1 + std::min(abs(q4(k)) / 2, 10) : 0;
       L.sa = na.m ? std::min(abs(coef_at(na.m, g, na.i, k)), 3) : 0;
       L.sb = nb.m ? std::min(abs(coef_at(nb.m, g, nb.i, k)), 3) : 0;
       tcx X;
@@ -1800,7 +1805,7 @@ struct Model {
         G.scb = sgn3(coef_at(mi_, gb, g.kind == 2 ? g.y * 2 + g.x : g.y * 4 + g.x, k));
       }
       G.mag = std::min(mag[k], 3) - 1;
-      G.ez = pok ? 1 + sgn3(est(k)) : 0;
+      G.ez = pok ? (q4(k) ? (q4(k) > 0 ? 2 : 3) + 2 * (abs(q4(k)) >= 4) : 1) : 0;
       tcx X;
       H_sgn_make(G, X);
       f_sgn.select(X);

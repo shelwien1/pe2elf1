@@ -1679,10 +1679,10 @@ struct Recon {
     for (int y = 0; y < n; y++)
       for (int x = 0; x < n; x++) r[y * n + x] = Y[(y0 + y) * w + x0 + x] - d[y * 8 + x];
     if (n == 8)
-      fquant8(r, qp, true, lv);
+      fquant8(r, qp, lv);
     else
-      fquant4(r, qp, true, lv);
-    for (int k = 0; k < n * n; k++) cnt += lv[k] != 0;
+      fquant4(r, qp, lv);
+    for (int k = 0; k < n * n; k++) cnt += abs(lv[k]) >= 3;
     return cnt;
   }
   int proxy_mode(int bx, int by, int n, int dx, int dy) const {
@@ -1712,10 +1712,10 @@ struct Recon {
     }
     return best;
   }
-  // The forward 4x4 transform and quantization of residual r (raster), as
-  // an encoder rounding with 1/3 (intra) or 1/6 would: the levels in
-  // zigzag order
-  static void fquant4(const int* r, int qp, bool intra, int* lv) {
+  // The forward 4x4 transform and quantization of residual r (raster): the
+  // levels in zigzag order, in quarters, not rounded (an encoder rounding
+  // intra levels up from 2/3 would code (3 |q| + 4) / 12)
+  static void fquant4(const int* r, int qp, int* lv) {
     static const int mf[6][3] = {{13107, 5243, 8066}, {11916, 4660, 7490}, {10082, 4194, 6554},
                                  {9362, 3647, 5825},  {8192, 3355, 5243},  {7282, 2893, 4559}};
     int t[16], W[16];
@@ -1734,16 +1734,16 @@ struct Recon {
       W[8 + j] = a - b;
       W[12 + j] = d - 2 * c;
     }
-    int qb = 15 + qp / 6, f = (1 << qb) / (intra ? 3 : 6);
+    int qb = 13 + qp / 6;
     for (int k = 0; k < 16; k++) {
       int p = kZz4[k], y = p >> 2, x = p & 3;
       int m = mf[qp % 6][(x & 1) && (y & 1) ? 1 : !(x & 1) && !(y & 1) ? 0 : 2];
-      int q = (int)(((int64_t)abs(W[p]) * m + f) >> qb);
+      int q = (int)(((int64_t)abs(W[p]) * m) >> qb);
       lv[k] = W[p] < 0 ? -q : q;
     }
   }
   // the same for an 8x8 block (x264's dct8)
-  static void fquant8(const int* r, int qp, bool intra, int* lv) {
+  static void fquant8(const int* r, int qp, int* lv) {
     static const int mf[6][6] = {{13107, 11428, 20972, 12222, 16777, 15481}, {11916, 10826, 19174, 11058, 14980, 14290},
                                  {10082, 8943, 15978, 9675, 12710, 11985},   {9362, 8228, 14913, 8931, 11984, 11259},
                                  {8192, 7346, 13159, 7740, 10486, 9777},     {7282, 6428, 11570, 6830, 9118, 8640}};
@@ -1765,10 +1765,10 @@ struct Recon {
     };
     for (int i = 0; i < 8; i++) dct8(r + i * 8, 1, t + i * 8, 1);
     for (int j = 0; j < 8; j++) dct8(t + j, 8, W + j, 8);
-    int qb = 16 + qp / 6, f = (1 << qb) / (intra ? 3 : 6);
+    int qb = 14 + qp / 6;
     for (int k = 0; k < 64; k++) {
       int p = kZz8[k];
-      int q = (int)(((int64_t)abs(W[p]) * mf[qp % 6][norm8_class(p >> 3, p & 7)] + f) >> qb);
+      int q = (int)(((int64_t)abs(W[p]) * mf[qp % 6][norm8_class(p >> 3, p & 7)]) >> qb);
       lv[k] = W[p] < 0 ? -q : q;
     }
   }
@@ -1787,9 +1787,9 @@ struct Recon {
     for (int j = 0; j < n; j++)
       for (int i = 0; i < n; i++) r[j * n + i] = Q[j * m + i] - C[j * w + i];
     if (n == 8)
-      fquant8(r, qp, true, lv);
+      fquant8(r, qp, lv);
     else
-      fquant4(r, qp, true, lv);
+      fquant4(r, qp, lv);
     return true;
   }
   // and for the DC blocks: Intra16x16's (plane 0: 16 levels in zigzag
@@ -1811,14 +1811,14 @@ struct Recon {
         d[by * nb + bx] = sum;
       }
     static const int mf0[6] = {13107, 11916, 10082, 9362, 8192, 7282};
-    int qb = 15 + qp / 6, F = (1 << qb) / 3;
+    int qb = 15 + qp / 6;
     if (nb == 2) {
       f[0] = d[0] + d[1] + d[2] + d[3];
       f[1] = d[0] - d[1] + d[2] - d[3];
       f[2] = d[0] + d[1] - d[2] - d[3];
       f[3] = d[0] - d[1] - d[2] + d[3];
       for (int k = 0; k < 4; k++) {
-        int q = (int)(((int64_t)abs(f[k]) * mf0[qp % 6] + 2 * F) >> (qb + 1));
+        int q = (int)(((int64_t)abs(f[k]) * mf0[qp % 6]) >> (qb - 1));
         lv[k] = f[k] < 0 ? -q : q;
       }
       return true;
@@ -1839,7 +1839,7 @@ struct Recon {
     }
     for (int k = 0; k < 16; k++) {
       int v = f[kZz4[k]];
-      int q = (int)(((int64_t)abs(v) * mf0[qp % 6] + 2 * F) >> (qb + 1));
+      int q = (int)(((int64_t)abs(v) * mf0[qp % 6]) >> (qb - 1));
       lv[k] = v < 0 ? -q : q;
     }
     return true;
