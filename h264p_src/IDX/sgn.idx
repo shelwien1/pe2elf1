@@ -47,6 +47,7 @@ Index h
  h_pos: pos, 1!111
  h_ez: ez, 1!11111
  h_pp: pp, 1!11
+ h_ts: ts, 1!111
 
 Index s
  s_cg: cg, 1!0100000000000

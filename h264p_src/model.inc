@@ -36,10 +36,10 @@ struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg, tp, em, pq; };
 struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm; };
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv; };
 struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac; };
-struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz; };
-struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps; };
-struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe, pl; };
-struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md, pp, mg, ez; };
+struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn; };
+struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz; };
+struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe, pl, tz; };
+struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md, pp, mg, ez, ts; };
 struct H_pcm_v { int pl, dp, pd, pd2; };
 
 #include "MOD/nal_h.inc"
@@ -127,6 +127,7 @@ struct MbCol {
   int16_t mv[2][16][2];
   uint16_t nzm[3];        // 4x4 blocks with coefficients
   uint8_t dcm;            // DC blocks with coefficients
+  int8_t coef[16][16];    // luma coefficients, as MbInfo's
 };
 
 static INLINE int cm_int(i64 v, i64 lim) {
@@ -633,6 +634,7 @@ struct Model {
       for (int b = 0; b < 16; b++) c.nzm[p] |= (uint16_t)((s.nz[p][b] != 0) << b);
     }
     c.dcm = (uint8_t)(s.cbf_dc[0] | s.cbf_dc[1] << 1 | s.cbf_dc[2] << 2);
+    memcpy(c.coef, mi_->coef[0], sizeof c.coef);
     mb_open_ = false;
     rec_.mb_end(addr_, mi_->cls, mi_->i16m, mi_->modes, mi_->cpred, mi_->t8, mi_->qp - qp_off_, mi_->rf, mi_->mv, s.nz[0]);
     if (rec_.active && (int)aq_x_.size() == size_) {
@@ -1663,10 +1665,31 @@ struct Model {
     int pnz = 0;
     if (pok)
       for (int j = 0; j < n; j++) pnz += est(j) != 0;
+    // a still luma block of a P picture: the same block's coefficients in
+    // the last picture of the kind (its reference), by scan position
+    bool tok = false;
+    if (col_ && (sc_->stype_ == kP || sc_->stype_ == kSP) && mi_->cls < CL_INXN && g.plane == 0 &&
+        (g.kind == 1 || g.kind == 2 || g.kind == 3)) {
+      int b8 = (g.y >> 1) * 2 + (g.x >> 1);
+      const int16_t* v = mi_->mv[0][g.y * 4 + g.x];
+      tok = mi_->rf[0][b8] == 0 && abs(v[0]) <= 1 && abs(v[1]) <= 1 && col_->cls < CL_INXN;
+    }
+    auto tcf = [&](int j) {
+      int k = j + g.off;
+      if (g.kind == 3) {
+        int q = k & 3, x = g.x + (q & 1), y = g.y + (q >> 1);
+        return (int)col_->coef[y * 4 + x][k >> 2];
+      }
+      return (int)col_->coef[g.y * 4 + g.x][k];
+    };
+    int tnz = 0;
+    if (tok)
+      for (int j = 0; j < n; j++) tnz += tcf(j) != 0;
     // the number of nonzero coefficients
     tc_stage = STG_CBF;
     H_cbf_v D = {};
     D.pz = pok ? 1 + std::min(pnz, 4) : 0;
+    D.tn = tok ? 1 + std::min(tnz, 4) : 0;
     D.cat = cat;
     D.na = nb_count(na, g);
     D.nb = nb_count(nb, g);
@@ -1741,6 +1764,7 @@ struct Model {
         S.zl = tc_qlog(n - i - rem);
         S.pe = spok && i < 4 ? sp.estimate(i) : 0;
         S.ps = pok ? 1 + std::min(abs(q4(i)), 6) : 0;
+        S.tz = tok ? 1 + std::min(abs(tcf(i)), 3) : 0;
         tcx Y;
         H_sig_make(S, Y);
         f_sig.select(Y);
@@ -1770,6 +1794,7 @@ struct Model {
       L.pos = tc_qlog(k);
       L.pe = spok && k < 4 ? sp.estimate(k) : 0;
       L.pl = pok ? 1 + std::min(abs(q4(k)) / 2, 10) : 0;
+      L.tz = tok ? 1 + std::min(abs(tcf(k)), 3) : 0;
       L.sa = na.m ? std::min(abs(coef_at(na.m, g, na.i, k)), 3) : 0;
       L.sb = nb.m ? std::min(abs(coef_at(nb.m, g, nb.i, k)), 3) : 0;
       tcx X;
@@ -1806,6 +1831,7 @@ struct Model {
       }
       G.mag = std::min(mag[k], 3) - 1;
       G.ez = pok ? (q4(k) ? (q4(k) > 0 ? 2 : 3) + 2 * (abs(q4(k)) >= 4) : 1) : 0;
+      G.ts = tok ? 1 + sgn3(tcf(k)) : 0;
       tcx X;
       H_sgn_make(G, X);
       f_sgn.select(X);
