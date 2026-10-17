@@ -92,12 +92,12 @@ struct H_sgn_T {
 #define USE_NEW 0
 
 
-  cm_cnt H_sgn_A[tc_rows(H_sgn_a_Volume, H_sgn_hA) * H_sgn_ND];
-  cm_cnt H_sgn_B[tc_rows(H_sgn_b_Volume, H_sgn_hB) * H_sgn_ND];
-  cm_cnt H_sgn_C[H_sgn_c_Volume * H_sgn_ND];
-  cm_cnt H_sgn_D[tc_rows(H_sgn_d_Volume, H_sgn_hD) * H_sgn_ND];
-  cm_cnt H_sgn_E[tc_rows(H_sgn_e_Volume, H_sgn_hE) * H_sgn_ND];
-  cm_cnt H_sgn_H[tc_rows(H_sgn_h_Volume, H_sgn_hH) * H_sgn_ND];
+  cm_cnt2 H_sgn_A[tc_rows(H_sgn_a_Volume, H_sgn_hA) * H_sgn_ND];
+  cm_cnt2 H_sgn_B[tc_rows(H_sgn_b_Volume, H_sgn_hB) * H_sgn_ND];
+  cm_cnt2 H_sgn_C[H_sgn_c_Volume * H_sgn_ND];
+  cm_cnt2 H_sgn_D[tc_rows(H_sgn_d_Volume, H_sgn_hD) * H_sgn_ND];
+  cm_cnt2 H_sgn_E[tc_rows(H_sgn_e_Volume, H_sgn_hE) * H_sgn_ND];
+  cm_cnt2 H_sgn_H[tc_rows(H_sgn_h_Volume, H_sgn_hH) * H_sgn_ND];
   cm_cnt H_sgn_MT[tc_rows(H_sgn_t_Volume, H_sgn_hT) * H_sgn_MND];
   i16 H_sgn_S[tc_rows(H_sgn_s_Volume, H_sgn_hS) * H_sgn_ND * H_sgn_qs];
   u8 H_sgn_SC[tc_rows(H_sgn_s_Volume, H_sgn_hS) * H_sgn_ND * H_sgn_qs];
@@ -118,12 +118,12 @@ struct H_sgn_T {
   /* Total bytes this module's Table() members occupy -- a constant here, since
    * Const mode has already folded every count. */
   static constexpr unsigned long long H_sgn_Size = 0
-                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(tc_rows(H_sgn_a_Volume, H_sgn_hA) * H_sgn_ND)
-                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(tc_rows(H_sgn_b_Volume, H_sgn_hB) * H_sgn_ND)
-                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H_sgn_c_Volume * H_sgn_ND)
-                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(tc_rows(H_sgn_d_Volume, H_sgn_hD) * H_sgn_ND)
-                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(tc_rows(H_sgn_e_Volume, H_sgn_hE) * H_sgn_ND)
-                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(tc_rows(H_sgn_h_Volume, H_sgn_hH) * H_sgn_ND)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H_sgn_a_Volume, H_sgn_hA) * H_sgn_ND)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H_sgn_b_Volume, H_sgn_hB) * H_sgn_ND)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(H_sgn_c_Volume * H_sgn_ND)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H_sgn_d_Volume, H_sgn_hD) * H_sgn_ND)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H_sgn_e_Volume, H_sgn_hE) * H_sgn_ND)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H_sgn_h_Volume, H_sgn_hH) * H_sgn_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(tc_rows(H_sgn_t_Volume, H_sgn_hT) * H_sgn_MND)
                               + (unsigned long long)sizeof(i16) * (unsigned long long)(tc_rows(H_sgn_s_Volume, H_sgn_hS) * H_sgn_ND * H_sgn_qs)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_sgn_s_Volume, H_sgn_hS) * H_sgn_ND * H_sgn_qs)

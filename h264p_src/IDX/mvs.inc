@@ -21,12 +21,12 @@ void %M%make( const %M%v & D, tcx & X ) {
   X.n = n;  X.g = g;
 }
 
-Table( cm_cnt, %M%A, tc_rows(%M%a_Volume, %M%hA) * %M%ND );
-Table( cm_cnt, %M%B, tc_rows(%M%b_Volume, %M%hB) * %M%ND );
-Table( cm_cnt, %M%C, %M%c_Volume * %M%ND );
-Table( cm_cnt, %M%D, tc_rows(%M%d_Volume, %M%hD) * %M%ND );
-Table( cm_cnt, %M%E, tc_rows(%M%e_Volume, %M%hE) * %M%ND );
-Table( cm_cnt, %M%H, tc_rows(%M%h_Volume, %M%hH) * %M%ND );
+Table( cm_cnt2, %M%A, tc_rows(%M%a_Volume, %M%hA) * %M%ND );
+Table( cm_cnt2, %M%B, tc_rows(%M%b_Volume, %M%hB) * %M%ND );
+Table( cm_cnt2, %M%C, %M%c_Volume * %M%ND );
+Table( cm_cnt2, %M%D, tc_rows(%M%d_Volume, %M%hD) * %M%ND );
+Table( cm_cnt2, %M%E, tc_rows(%M%e_Volume, %M%hE) * %M%ND );
+Table( cm_cnt2, %M%H, tc_rows(%M%h_Volume, %M%hH) * %M%ND );
 Table( cm_cnt, %M%MT, tc_rows(%M%t_Volume, %M%hT) * %M%MND );
 Table( i16,    %M%S, tc_rows(%M%s_Volume, %M%hS) * %M%ND * %M%qs );
 Table( u8,     %M%SC, tc_rows(%M%s_Volume, %M%hS) * %M%ND * %M%qs );

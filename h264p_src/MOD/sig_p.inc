@@ -26,7 +26,6 @@ void H_sig_make( const H_sig_v & D, tcx & X ) {
   b = b*14 + H_sig_b_cg[__min(13,__max(0,cg-(1-1)))];
   b = b*39 + H_sig_b_pos[__min(63,__max(0,pos-(1-1)))];
   b = b*16 + H_sig_b_md[__min(19,__max(0,md-(1-1)))];
-  b = b*2 + ((fld>0+(1-1)));
   b = b*511 + H_sig_b_hb[__min(510,__max(0,hb-(1-1)))];
 
   c = 0;

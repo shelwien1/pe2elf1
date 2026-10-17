@@ -12,7 +12,7 @@
 
 namespace h264p {
 
-constexpr int TC_MIXN = 9;
+constexpr int TC_MIXN = 15;
 constexpr int TC_NODE = 29;
 constexpr int TC_MNODE = 169;
 constexpr int TC_NBMAX = 62;
@@ -53,7 +53,8 @@ template <int f_DEC> static INLINE int tc_bit(int p, int bit) {
 template <int f_DEC> struct tc_fam {
   static constexpr int ENC = (f_DEC == 0);
   int hA, hB, hD, hE, hH, hS, hF, hM, hT, hN;
-  cm_cnt *A, *B, *C, *D, *E, *H, *G, *T;
+  cm_cnt2 *A, *B, *C, *D, *E, *H;
+  cm_cnt *G, *T;
   i16 *S, *S2;
   i32 *W;
   cm_apm ap, ap2;
@@ -71,7 +72,7 @@ template <int f_DEC> struct tc_fam {
   int bw;
   int ng;
   int nd, nm;
-  void wire(cm_cnt *a, sz va, cm_cnt *b, sz vb, cm_cnt *c, sz vc, cm_cnt *d, sz vd, cm_cnt *e, sz ve, cm_cnt *h, sz vh, cm_cnt *t, sz vt, i16 *s, u8 *sc, sz vs, i16 *s2, u8 *sc2, sz vf, i32 *w, sz vm, cm_cnt *g, sz vg, sz vgi, i32 *wm, sz vn, u8 *wc, u8 *wmc, i32 *w2, u8 *w2c, sz vw, i32 *w3, u8 *w3c, i32 *wf, u8 *wfc, int ra, int rb, int rc_, int rd, int re, int rh, int rt, int rg, int mwa, int mwb, int mwc, int mwd, int mwe, int mwh, int mwtt, int mwg, int rs1, int rs2, int lrate, int mbt, int lrm2, int mbm2, int bwt, int qqs, int qqf, int ndp, int nmp, int ha, int hb, int hd, int he, int hh, int hs, int hf, int hm, int ht, int hn) {
+  void wire(cm_cnt2 *a, sz va, cm_cnt2 *b, sz vb, cm_cnt2 *c, sz vc, cm_cnt2 *d, sz vd, cm_cnt2 *e, sz ve, cm_cnt2 *h, sz vh, cm_cnt *t, sz vt, i16 *s, u8 *sc, sz vs, i16 *s2, u8 *sc2, sz vf, i32 *w, sz vm, cm_cnt *g, sz vg, sz vgi, i32 *wm, sz vn, u8 *wc, u8 *wmc, i32 *w2, u8 *w2c, sz vw, i32 *w3, u8 *w3c, i32 *wf, u8 *wfc, int ra, int rb, int rc_, int rd, int re, int rh, int rt, int rg, int mwa, int mwb, int mwc, int mwd, int mwe, int mwh, int mwtt, int mwg, int rs1, int rs2, int lrate, int mbt, int lrm2, int mbm2, int bwt, int qqs, int qqf, int ndp, int nmp, int ha, int hb, int hd, int he, int hh, int hs, int hf, int hm, int ht, int hn) {
     A = a;
     B = b;
     C = c;
@@ -179,12 +180,12 @@ template <int f_DEC> struct tc_fam {
     __builtin_prefetch(ap2.c + (sz)bf * (u32)ap2.q);
   }
   INLINE int bit(int node, int b) {
-    cm_cnt a = A[ba + node];
-    cm_cnt c = B[bb + node];
-    cm_cnt e = C[bc + node];
-    cm_cnt f = D[bd + node];
-    cm_cnt g = E[be + node];
-    cm_cnt h = H[bh + node];
+    cm_cnt2 a = A[ba + node];
+    cm_cnt2 c = B[bb + node];
+    cm_cnt2 e = C[bc + node];
+    cm_cnt2 f = D[bd + node];
+    cm_cnt2 g = E[be + node];
+    cm_cnt2 h = H[bh + node];
     int pa = a.P();
     int p1 = ap.pp(pa, bs + (u32)node);
     if(p1 > CM_PONE - 1)
@@ -199,6 +200,12 @@ template <int f_DEC> struct tc_fam {
     int pp = prpa ? prpa[node] : prp;
     mx.set(7, pp >= 0 ? cm_stretch(pp) : 0);
     mx.set(8, 256);
+    mx.set(9, cm_stretch(a.Q()));
+    mx.set(10, cm_stretch(c.Q()));
+    mx.set(11, cm_stretch(e.Q()));
+    mx.set(12, cm_stretch(f.Q()));
+    mx.set(13, cm_stretch(g.Q()));
+    mx.set(14, cm_stretch(h.Q()));
     for(int i = 0; i < TC_MIXN; i++)
       mx2.set(i, mx.x[i]), mx3.set(i, mx.x[i]);
     {
