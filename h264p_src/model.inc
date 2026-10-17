@@ -33,7 +33,7 @@ struct H_hdr_v { int tag, fld, p1, p2, pos, p1r, sty; };
 struct H_skp_v { int st, a3, b3, col, c9, cd, run, cnt, eq, lf, af, td, en, sm, tm, tb, bd, qc; };
 struct H_mbt_v { int st, ca, cb, cc, nsk, en, td, sm, tm, tb, dh, bd, qc; };
 struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg, tp, em, pq; };
-struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm, pr, dr, pq; };
+struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm, pr, dr, pq, mh; };
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, zd, cq, tq; };
 struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac; };
 struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn, pq, ch; };
@@ -508,6 +508,7 @@ struct Model {
   bool pmv_ok_ = false;
   std::vector<int16_t> pxv_;  // the vectors of the current picture's proxies (INT16_MIN none)
   int sm_ = 0, tm_ = 0;  // skip_miss() of the macroblock, its template matching miss
+  int mph_ = 1;          // ipm(): the macroblock's most-probable-mode flags so far, after a 1
   int cnth_ = 0;         // block(): the counts of the last two blocks, two bits each
   int tb_ = 0, dh_ = 0;  // skip_miss(): the best template match on list 0, the better list (B)
   int bd_ = 0;           // skip_miss(): the skip motion's two predictions apart (B)
@@ -1110,6 +1111,7 @@ struct Model {
     // the remainder (rem_intra4x4_pred_mode) the proxy's and DIMD's modes
     // would have, 8 none or the most probable mode
     D.pq = pxq_;
+    D.mh = blk ? mph_ & 15 : 16;  // the last most-probable-mode flags of the macroblock
     D.pr = D.pm < 9 && D.pm != mpm ? D.pm - (D.pm > mpm) : 8;
     D.dr = D.dm < 9 && D.dm != mpm ? D.dm - (D.dm > mpm) : 8;
     tcx X;
@@ -1125,6 +1127,7 @@ struct Model {
       r = b2 * 4 + b1 * 2 + b0;
     }
     int mode = r < 0 ? mpm : r < mpm ? r : r + 1;
+    mph_ = (blk ? mph_ : 1) * 2 + (r < 0);
     if (k8)
       mi_->modes[y * 4 + x] = mi_->modes[y * 4 + x + 1] = mi_->modes[y * 4 + x + 4] = mi_->modes[y * 4 + x + 5] =
           (uint8_t)mode;
