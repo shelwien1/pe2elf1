@@ -21,12 +21,13 @@ constexpr int H_mbt_ND = 29, H_mbt_MND = 1, H_mbt_NG = 1;
 constexpr int H_cbp_ND = 7, H_cbp_MND = 1, H_cbp_NG = 1;
 constexpr int H_ipm_ND = 19, H_ipm_MND = 1, H_ipm_NG = 1;
 constexpr int H_mvs_ND = TC_NODE, H_mvs_MND = TC_MNODE, H_mvs_NG = 1;
-constexpr int H_qpd_ND = TC_NODE, H_qpd_MND = TC_MNODE, H_qpd_NG = 4;
+constexpr int H_qpd_ND = TC_NODE, H_qpd_MND = TC_MNODE, H_qpd_NG = 1;
 constexpr int H_cbf_ND = TC_NODE, H_cbf_MND = TC_MNODE, H_cbf_NG = 1;
 constexpr int H_sig_ND = 1, H_sig_MND = 1, H_sig_NG = 1;
 constexpr int H_lvl_ND = TC_NODE, H_lvl_MND = TC_MNODE, H_lvl_NG = 1;
 constexpr int H_sgn_ND = 1, H_sgn_MND = 1, H_sgn_NG = 1;
 constexpr int H_mvg_ND = 1, H_mvg_MND = 1, H_mvg_NG = 1;
+constexpr int H_qpg_ND = 1, H_qpg_MND = 1, H_qpg_NG = 1;
 constexpr int H_pcm_ND = TC_NODE, H_pcm_MND = TC_MNODE, H_pcm_NG = 3;
 
 struct H_nal_v { int fld, ctx, p1, p2; };
@@ -42,6 +43,7 @@ struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz, pq, 
 struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe, pl, tz, pq, lh, lt, ls; };
 struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md, pp, mg, ez, ts, pq, gh, se; };
 struct H_mvg_v { int comp, lst, ts, zs, ds, sa, sb, mag, tq, ox, ns; };
+struct H_qpg_v { int as, cs, bs, ls, rs, mag, cls, st; };
 struct H_pcm_v { int pl, dp, pd, pd2; };
 
 #include "MOD/nal_h.inc"
@@ -57,6 +59,7 @@ struct H_pcm_v { int pl, dp, pd, pd2; };
 #include "MOD/lvl_h.inc"
 #include "MOD/sgn_h.inc"
 #include "MOD/mvg_h.inc"
+#include "MOD/qpg_h.inc"
 #include "MOD/pcm_h.inc"
 
 #include "MOD/nal_p.inc"
@@ -72,6 +75,7 @@ struct H_pcm_v { int pl, dp, pd, pd2; };
 #include "MOD/lvl_p.inc"
 #include "MOD/sgn_p.inc"
 #include "MOD/mvg_p.inc"
+#include "MOD/qpg_p.inc"
 #include "MOD/pcm_p.inc"
 
 // A family's tables, mapped: zero is every table's starting state, and a
@@ -375,7 +379,7 @@ struct Model {
   static constexpr int ENC = f_DEC == 0;
   static Rangecoder<f_DEC> rc;
 
-  tc_fam<f_DEC> f_nal, f_hdr, f_skp, f_mbt, f_cbp, f_ipm, f_mvs, f_qpd, f_cbf, f_sig, f_lvl, f_sgn, f_mvg, f_pcm;
+  tc_fam<f_DEC> f_nal, f_hdr, f_skp, f_mbt, f_cbp, f_ipm, f_mvs, f_qpd, f_cbf, f_sig, f_lvl, f_sgn, f_mvg, f_qpg, f_pcm;
   H_nal_T* t_nal;
   H_hdr_T* t_hdr;
   H_skp_T* t_skp;
@@ -389,6 +393,7 @@ struct Model {
   H_lvl_T* t_lvl;
   H_sgn_T* t_sgn;
   H_mvg_T* t_mvg;
+  H_qpg_T* t_qpg;
   H_pcm_T* t_pcm;
 
   void init() {
@@ -407,6 +412,7 @@ struct Model {
     H_MAP(lvl);
     H_MAP(sgn);
     H_MAP(mvg);
+    H_MAP(qpg);
     H_MAP(pcm);
 #undef H_MAP
     raw_mx_.init(raw_w_, raw_wc_, 256);
@@ -414,7 +420,7 @@ struct Model {
   u64 table_bytes() const {
     return (u64)t_nal->H_nal_Size + t_hdr->H_hdr_Size + t_skp->H_skp_Size + t_mbt->H_mbt_Size + t_cbp->H_cbp_Size +
            t_ipm->H_ipm_Size + t_mvs->H_mvs_Size + t_qpd->H_qpd_Size + t_cbf->H_cbf_Size + t_sig->H_sig_Size +
-           t_lvl->H_lvl_Size + t_sgn->H_sgn_Size + t_mvg->H_mvg_Size + t_pcm->H_pcm_Size;
+           t_lvl->H_lvl_Size + t_sgn->H_sgn_Size + t_mvg->H_mvg_Size + t_qpg->H_qpg_Size + t_pcm->H_pcm_Size;
   }
 
   // ------------------------------------------------------------------------
@@ -1794,10 +1800,28 @@ struct Model {
     f_qpd.prpa = pr;
     f_qpd.hint = aqd == INT_MIN ? -1 : abs(aqd);
     {
-      // the sign, knowing whether the magnitude is the line's
       int m = cm_int(f_qpd.code(X, ENC ? abs(v) : 0), 1 << 20);
-      int sc = aqd == INT_MIN ? 0 : m == abs(aqd) ? 1 : m < abs(aqd) ? 2 : 3;
-      v = m && f_qpd.sign((u32)sc, ENC && v < 0) ? -m : m;
+      bool neg = ENC && v < 0;
+      v = m;
+      if (m) {
+        // the sign (the qpg family), knowing the magnitude: on which side of
+        // the line's delta, col's and B's it puts the QP
+        auto rel = [&](int d) { return sgn3(d) * 3 + (m == abs(d) ? 0 : m < abs(d) ? 1 : 2); };
+        H_qpg_v G = {};
+        G.as = aqd == INT_MIN ? 9 : rel(aqd);
+        G.cs = col_ ? rel(col_->qp - qp_off_ - qp_pred_) : 9;
+        G.bs = b ? rel(b->qp - qp_off_ - qp_pred_) : 9;
+        G.ls = has_lz_ ? sgn3(lz_) : 0;
+        G.rs = D.ac ? sgn3(D.ac - 7) : 3;
+        G.mag = std::min(tc_qlog(m), 7);
+        G.cls = mi_->cls;
+        G.st = st_;
+        tcx Y;
+        H_qpg_make(G, Y);
+        f_qpg.select(Y);
+        f_qpg.prp = -1;
+        v = f_qpg.bit(0, neg) ? -m : m;
+      }
     }
     f_qpd.hint = -1;
     f_qpd.prpa = nullptr;

@@ -29,7 +29,7 @@ cd "$here"
 
 CXX=${CXX:-g++}
 CXXFLAGS=${CXXFLAGS:--O2}
-FAMS="nal hdr skp mbt cbp ipm mvs qpd cbf sig lvl sgn mvg pcm"
+FAMS="nal hdr skp mbt cbp ipm mvs qpd cbf sig lvl sgn mvg qpg pcm"
 
 cleanup() {
   for f in $FAMS; do
