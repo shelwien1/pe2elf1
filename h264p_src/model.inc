@@ -699,7 +699,7 @@ struct Model {
   int skip(int v) {
     begin_mb();
     tc_stage = STG_SKIP;
-    H_skp_v D;
+    H_skp_v D = {};
     skp_vars(D);
     D.sm = sm_ = skip_miss();
     D.tm = tm_;
@@ -723,13 +723,13 @@ struct Model {
   int end(int v, bool certain) {
     if (certain) return 1;  // nothing follows in the picture
     tc_stage = STG_SKIP;
-    H_skp_v D;
+    H_skp_v D = {};
     skp_vars(D);
     return skp_bit(D, 1, ENC && v);
   }
   int field(int v) {
     tc_stage = STG_SKIP;
-    H_skp_v D;
+    H_skp_v D = {};
     skp_vars(D);
     D.col = col_ ? 1 + col_->field : 0;
     int ctx = 70 + (sc_->left_ && sc_->left_->field) + (sc_->above_ && sc_->above_->field);
@@ -799,7 +799,7 @@ struct Model {
     const MbInfo* d = near_info(-1, -1);
     const MbState* a = sc_->mb_a_;
     const MbState* b = sc_->mb_b_;
-    H_mbt_v D;
+    H_mbt_v D = {};
     D.st = st_;
     D.ca = cls_of(a);
     D.cb = cls_of(b);
@@ -881,7 +881,7 @@ struct Model {
   int cbp(int v) {
     prepare();
     tc_stage = STG_CBP;
-    H_cbp_v D;
+    H_cbp_v D = {};
     D.tp = tm_pred();
     D.cls = mi_->cls;
     D.q6 = q6();
@@ -924,7 +924,7 @@ struct Model {
     tc_stage = STG_CBP;
     const MbState* a = sc_->mb_a_;
     const MbState* b = sc_->mb_b_;
-    H_cbp_v D;
+    H_cbp_v D = {};
     D.inc = (a && a->t8x8) + (b && b->t8x8);
     D.pc = popc4(mi_->cbp & 15);
     D.cls = mi_->cls;
@@ -966,7 +966,7 @@ struct Model {
     bool dc = false;
     int ma = nb_mode(na, ia, dc), mb = nb_mode(nb, ib, dc);
     int mpm = dc ? 2 : std::min(ma > 8 ? 2 : ma, mb > 8 ? 2 : mb);
-    H_ipm_v D;
+    H_ipm_v D = {};
     D.k8 = k8;
     D.ma = ma;
     D.mb = mb;
@@ -1029,7 +1029,7 @@ struct Model {
   }
   int cpred(int v) {
     tc_stage = STG_IPM;
-    H_ipm_v D;
+    H_ipm_v D = {};
     D.k8 = 2;
     D.ma = nb_cpred(sc_->mb_a_);
     D.mb = nb_cpred(sc_->mb_b_);
@@ -1246,7 +1246,7 @@ struct Model {
     int ia, ib, b8 = (y >> 1) * 2 + (x >> 1);
     const MbInfo* a = info(sc_->nb4(x - 1, y, ia));
     const MbInfo* b = info(sc_->nb4(x, y - 1, ib));
-    H_mvs_v D;
+    H_mvs_v D = {};
     D.kind = 2;
     D.comp = 0;
     D.lst = list;
@@ -1311,7 +1311,7 @@ struct Model {
     const MbInfo* a = info(sc_->nb4(x - 1, y, ia));
     const MbInfo* b = info(sc_->nb4(x, y - 1, ib));
     int va = a ? a->mvd[list][ia][comp] : 0, vb = b ? b->mvd[list][ib][comp] : 0;
-    H_mvs_v D;
+    H_mvs_v D = {};
     D.kind = 3;
     D.comp = comp;
     D.lst = list;
@@ -1363,7 +1363,7 @@ struct Model {
     tc_stage = STG_QPD;
     aq_xp_ = -1;
     const MbInfo* b = info(sc_->mb_b_);
-    H_qpd_v D;
+    H_qpd_v D = {};
     D.lnz = last_qpd_ != 0;
     D.pc = popc4(mi_->cbp & 15);
     D.cc = mi_->cbp >> 4;
@@ -1559,7 +1559,7 @@ struct Model {
     int em = ms < 0 ? 0 : 1 + tc_clamp(tc_qlog(ms), 0, 15);
     // the number of nonzero coefficients
     tc_stage = STG_CBF;
-    H_cbf_v D;
+    H_cbf_v D = {};
     D.cat = cat;
     D.na = nb_count(na, g);
     D.nb = nb_count(nb, g);
