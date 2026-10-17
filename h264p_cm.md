@@ -34,8 +34,9 @@ not macroblocks.
 ### Where CABAC spends its bits
 
 These figures come from h264p's CABAC decoder. Each bin was costed at
-−log2 p from its context state just before decoding, and each bypass bin at
-1 bit. The total comes within 0.2% of the actual size of the slice data.
+−log2 p from its context state just before decoding, each bypass bin at 1
+bit, and the terminating bins (end_of_slice_flag, I_PCM) by estimate. The
+total comes within 0.2% of the actual size of the slice data.
 Slice data is 98.3% of these streams and slice headers 0.66%. Over all five
 streams:
 
@@ -146,8 +147,8 @@ There are also real differences from JPEG:
 - **About twenty kinds of values instead of one alphabet.** The mixer
   selection has to start with the element and bin. I, P and B pictures have
   very different statistics.
-- **A time axis.** For skips, types and QP, the same macroblock in the
-  previous picture is often the best neighbour.
+- **A time axis.** The same macroblock in the previous picture is a strong
+  neighbour, for the skip flags above all (section 4.2).
 
 ## 3. Model structure
 
@@ -164,7 +165,7 @@ values, lowercase hex, tabs and `\n`. So the decoder can regenerate the text
 from the values. `h264p d` also accepts comments, blank lines and CRLF;
 input that isn't h264p's own output needs an escape to a generic model.
 
-**What the model must track to know which values come next:**
+**What the model must track to know which slice data values come next:**
 
 - **SPS:** `chroma_format_idc` (with `separate_colour_plane_flag`, giving
   ChromaArrayType), bit depths (PCM sample size, QP range), picture size in
@@ -184,13 +185,13 @@ left to a fallback.
 **The rows of a coded macroblock and what is implied:**
 
 - `mb T X C P Q`: mb_type, then four fields whose presence is implied by T
-  and the state. X (transform_size_8x8_flag) is present for I_NxN with
-  transform_8x8_mode, or for an inter MB with luma cbp and no partition
-  smaller than 8×8 (direct partitions count as 8×8 only with
-  direct_8x8_inference_flag). C (intra_chroma_pred_mode) is present for intra MBs with 4:2:0
-  or 4:2:2. P (cbp) is present unless the MB is Intra16x16 or PCM. Q
-  (mb_qp_delta) is present if cbp ≠ 0 or the MB is Intra16x16. Never code a
-  `-`.
+  and the state. X (transform_size_8x8_flag) needs transform_8x8_mode_flag;
+  then it is present for I_NxN, and for an inter MB with luma cbp and no
+  partition smaller than 8×8 (direct partitions count as 8×8 only with
+  direct_8x8_inference_flag). C (intra_chroma_pred_mode) is present for
+  intra MBs other than I_PCM, with 4:2:0 or 4:2:2. P (cbp) is present unless
+  the MB is Intra16x16 or I_PCM. Q (mb_qp_delta) is present if cbp ≠ 0 or the
+  MB is Intra16x16. Never code a `-`.
 - `fld`: present where MBAFF codes the flag (top MB of a pair, or the bottom
   one after a skipped top).
 - `ipm`: 16 values, or 4 with X = 1.
@@ -212,11 +213,12 @@ left to a fallback.
 
 With CABAC (except in 4:4:4), an 8×8-transformed block whose cbp bit is
 set always has a row, because CABAC has no coded_block_flag for it. With
-CAVLC it may not. Otherwise the TSV of a CAVLC stream looks like that of a CABAC stream;
-only the baseline is about 10-15% weaker.
+CAVLC it may not. Otherwise the TSV of a CAVLC stream looks like that of a
+CABAC stream; only the baseline is about 10-15% weaker.
 
-Header rows (SPS, PPS, SEI, slice headers) are 0.7% of the bits and need
-little modelling. Their presence is conditional on earlier values too.
+Header rows (SPS, PPS, SEI, AUD and slice headers) are 0.8% of the stream
+and need little modelling. Their presence is conditional on earlier values
+too.
 
 ### 3.2 State
 
@@ -238,9 +240,9 @@ uses the last P, a reference B the last reference B). Keeping the pictures
 by POC also makes the real temporal neighbours available, such as the
 co-located MB in the list-1 reference that temporal direct uses.
 
-**Neighbours:** A, B, C, D at MB level and at 4×4 level (6.4.11, with the
-MBAFF table 6-4; `nb_loc` in `h264p_src/slice.cpp` implements it). Unlike
-CABAC, the model may use MBs of other slices of the same picture: its
+**Neighbours:** A, B, C, D at MB level and at 4×4 level (6.4.11 and 6.4.12,
+with table 6-4 for MBAFF; `nb_loc` in `h264p_src/slice.cpp` implements it).
+Unlike CABAC, the model may use MBs of other slices of the same picture: its
 decoder knows them.
 
 ### 3.3 Binarization
@@ -296,10 +298,12 @@ own, with no mixing.
 ### 4.1 Stream and header rows
 
 - `nal Z REF TYPE`: Z (the zero bytes before the start code) depends on the
-  NAL type and its position in the access unit. TYPE and REF follow the GOP structure. An order-2
-  context over NAL types plus a match model covers them.
-- SPS, PPS and SEI repeat (01 has 37 copies of its SPS): use "same row in
-  the previous NAL of this type" as context, or a match model.
+  NAL type and its position in the access unit. TYPE and REF follow the GOP
+  structure. An order-2 context over NAL types plus a match model covers
+  them.
+- SPS, PPS and AUD repeat (01 has 37 copies of its SPS and 1,072
+  identical AUDs): use "same row in the previous NAL of this type" as
+  context, or a match model.
 - Slice header fields:
   - context: the same field in the previous slice header of the same slice
     type and nal_ref_idc;
@@ -455,7 +459,7 @@ In B slices, direct sub-MBs go together with direct neighbours.
   - the other component of the partition (Y after X);
   - partition size and shape, ref_idx and list;
   - for bi-predicted partitions, the other list's mvd;
-  - QP (the encoder's λ shrinks motion at high QP);
+  - QP (the encoder's λ grows with QP and favours small mvd);
   - for the signs: the signs of A and B and of the other component.
 - **Measured:**
   - finer |A| and |B|: −0.7%;
@@ -486,8 +490,9 @@ In B slices, direct sub-MBs go together with direct neighbours.
     In these streams x264 never sets a cbp bit for an empty 8×8 (271,116
     bits checked; Intra16x16, whose luma cbp is all or nothing, aside), so
     the fourth block is certain after three empty ones;
-  - for chroma DC, Cr given Cb, plus the chroma cbp value. Every chroma
-    cbp of 1 has a nonzero DC block, and every 2 a nonzero AC block.
+  - for chroma DC, Cr given Cb, plus the chroma cbp value. In these
+    streams every chroma cbp of 1 has a nonzero DC block, and every 2 a
+    nonzero AC block.
 - **Measured:** counts of A and B: −1.2%. Adding intra and QP/6: −1.4%. Cr
   chroma DC given Cb: **−18.3%**.
 
@@ -551,9 +556,9 @@ The model may code the values in any order its decoder can follow. The
 decoder can buffer a macroblock, or a picture, before writing rows.
 
 - **Within a macroblock:** the bitstream order (mb_type, prediction, cbp,
-  transform flag, QP, residual) lets cbp use the motion and QP use the cbp.
-  Moving Q after the residual would trade the QP as a residual context for
-  the residual as a QP context.
+  the transform flag of inter MBs, QP, residual) lets cbp use the motion and
+  QP use the cbp. Moving Q after the residual would trade the QP as a
+  residual context for the residual as a QP context.
 - **Per picture, in two passes:** code the side information of all MBs
   first, then the residual. The residual contexts can then use the modes and
   motion of all eight neighbours, not only the causal ones.
@@ -564,22 +569,23 @@ decoder can buffer a macroblock, or a picture, before writing rows.
 Some values in the TSV follow from earlier ones: the standard requires
 them, or x264 never does otherwise. A model should compute the first kind,
 and give the second kind a probability close to 1 while keeping an escape
-for other encoders. CABAC pays for all of them, because its contexts don't
-know the rules. The figures below are measured on 00-04.
+for other encoders. The stream pays for all of them: CABAC's contexts don't
+know the rules, and header fields are coded in full. The figures below are
+measured on 00-04.
 
-**Required by the standard (true for any stream):**
+**Required by the standard:**
 
 | value | follows from | CABAC/header bits |
 |---|---|---:|
 | end_of_slice_flag | the slice's macroblock count: one decision per slice ("ends at the last MB of the picture") instead of one per MB | 97,896 |
 | skip flags after the last coded MB | a "last coded MB of the slice" decision, when the slice runs to the end of the picture (3,732 slices, 1.55 million MBs) | 60,471 |
-| frame_num | 0 at an IDR picture, else the frame_num of the previous reference picture + 1, mod MaxFrameNum (held in all 4,101 pictures) | 16,404 |
-| first_mb_in_slice | 0 for the first slice of a picture, else where the previous slice ended | 4,101 |
-| intra 4×4/8×8 modes on the picture border | modes that need missing samples aren't allowed (8.3.1.2): DC only in the corner; horizontal, DC or horizontal-up on the top edge; vertical, DC, diagonal down-left or vertical-left on the left edge (11,779 blocks, no exception) | at most 8,191 |
+| frame_num | 0 at an IDR picture, else the frame_num of the previous reference picture + 1, mod MaxFrameNum (held in all 4,101 pictures). It doesn't hold with frame_num gaps or after an MMCO 5, and both fields of a frame share it | 16,404 |
+| first_mb_in_slice | 0 for the first slice of a picture, else where the previous slice ended; not with FMO or arbitrary slice order | 4,101 |
+| intra 4×4/8×8 modes on the picture border | modes that need missing samples aren't allowed (8.3.1.2, 8.3.2.2): DC only in the corner; horizontal, DC or horizontal-up on the top edge; vertical, DC, diagonal down-left or vertical-left on the left edge (11,779 blocks, no exception) | at most 8,191 |
 | Intra16x16 and chroma modes on the border | likewise 1 or 2 of the 4 modes (14,331 and 18,977 MBs) | |
 
 Outside the slice data, the NAL framing (start codes, zero bytes and NAL
-header bytes: 26,620 bytes) and the emulation prevention bytes (4,469
+header bytes: 26,625 bytes) and the emulation prevention bytes (4,469
 bytes) are 0.86% of the stream. h264p regenerates them, and the only
 framing value in the TSV, Z, is 1 in every `nal` row of these streams.
 
@@ -599,22 +605,22 @@ transforms) whose coefficients score under 4. It also zeroes the AC of an
 inter chroma plane scoring under 7. For each coefficient of magnitude 1,
 the score adds 3, 2, 2, 1, 1, 1 or 0 by the number of zeros before it (back
 to the previous nonzero coefficient); any larger level makes it 9. No coded
-inter 8×8
-block (139,832) or chroma plane (3,724) breaks the rule. With CABAC and
-trellis, x264 doesn't apply it to 8×8 transforms (1 exception in 32,212). A
-model can keep the score of the 8×8 so far: while it is under 4, more
-coefficients must follow.
+inter 8×8 block (139,832) or chroma plane (3,724) breaks the rule. With
+CABAC and trellis, x264 doesn't apply it to 8×8 transforms (1 exception in
+32,212). A model can keep the score of the 8×8 so far: while it is under 4,
+more coefficients must follow.
 
 **Options.** x264's version SEI lists its options. It is present in 02 and
-the `test/gen` streams, but not in 00, 01, 03 or 04. `analyse=0x3:0x113`
-rules out sub-8×8 partitions, and `decimate=1` turns on the rule above.
-`8x8dct`, `bframes`, `b_pyramid`, `direct`, `weightp` and `trellis` say
-what else can occur. Without the SEI, a model learns the same from the
-stream.
+in the x264 streams of `test/gen`, but not in 00, 01, 03 or 04. In 02's,
+`analyse=0x3:0x113` rules out sub-8×8 partitions, and `decimate=1` turns on
+the rule above. `8x8dct`, `bframes`, `b_pyramid`, `direct`, `weightp` and
+`trellis` say what else can occur. Without the SEI, a model learns the same
+from the stream.
 
 **Total:** about 0.41 Mbit of CABAC and header bits, 1.4% of the stream,
-are spent on values these rules determine. CABAC pays 1.29 bits for each implied
-4th luma flag and 4.32 bits for each implied last Intra16x16 AC flag.
+are spent on values these rules determine. CABAC pays 1.29 bits for each
+implied 4th luma flag and 4.32 bits for each implied last Intra16x16 AC
+flag.
 
 ## 7. Duplicates
 
@@ -625,7 +631,8 @@ once the model compares a NAL unit with the previous one of its type.
 
 **Whole pictures.** 146 pictures are entirely skipped (99 in 00, 47 in
 01). CABAC codes them in 11,675 bits, plus their headers. 20 decoded frames
-equal the frame before them. x264 codes a repeated frame as all-skip, so
+equal the frame before them, and 19 of them are all-skip pictures (the
+20th has one coded MB). x264 codes a repeated frame as skips, so
 whole-frame dedup only saves those skip flags: one decision per picture
 instead of one per MB.
 
@@ -633,24 +640,25 @@ instead of one per MB.
 exactly (all rows, same absolute QP). Most of them are cheap, 8.8 bits on
 average:
 
-| the coded MB repeats | MBs | bits | share of MB bits |
+| the coded MB repeats | MBs | bits | share of coded-MB bits |
 |---|---:|---:|---:|
 | the previous coded MB | 305,683 | 1,029,798 | 3.8% |
 | the co-located MB of the previous picture of the same type | 50,536 | 233,558 | 0.9% |
 | any earlier MB, for MBs over 30 bits | 6,545 | 443,451 | 1.6% |
 
-The expensive repeats are mostly 01's caption, whose MBs come back
-unchanged in each of its 36 keyframes: 240,701 bits are at the same
-position more than 8 pictures back. A match input over whole MBs catches
-these. Candidates are the previous MB, the co-located MB of the previous
-picture of the same type, and the co-located MB of the previous I picture.
+Half of the expensive repeats are 01's caption, whose MBs come back
+unchanged in its keyframes: 617 intra MBs (219,295 bits) repeat an MB of an
+earlier keyframe at the same position, mostly in MB rows 14-16. A match
+input over whole MBs catches these. Candidates are the previous MB, the
+co-located MB of the previous picture of the same type, and the co-located
+MB of the previous I picture.
 
 **Decoded pixels.** h264dec decoded each stream. Every macroblock (16×16
-luma and both 8×8 chroma blocks) was compared exactly with three
-candidates: the co-located MB of the previous picture in decoding order,
-the co-located MBs of all older pictures, and all earlier MBs anywhere.
-These are the CABAC bits spent on coded (not skipped) MBs whose pixels
-already existed:
+luma and both 8×8 chroma blocks) was compared, by 64-bit hashes, with three
+candidates: the co-located MB of the previous picture in decoding order, the
+co-located MBs of all older pictures, and all earlier MBs anywhere. These
+are the CABAC bits spent on coded (not skipped) MBs whose pixels already
+existed:
 
 | stream | content | co-located, previous picture | co-located, older picture | elsewhere | of these, flat MBs | share of coded-MB bits |
 |---|---|---:|---:|---:|---:|---:|
@@ -660,10 +668,10 @@ already existed:
 | 04 | street footage, caption bar | 3,727 | 1,608 | 1,334 | 3,393 | 0.2% |
 
 In 03, 43% of the coded-MB bits go to macroblocks whose pixels the decoder
-already had, 2.6 Mbit of them to flat dark blocks whose colour was already
-there. x264 didn't copy them; the source may lie outside its reference
-pictures, or the MB is intra. A recompressor can, but only with a decoder
-in the loop. It needs the prediction (intra from the reconstructed
+already had, 2.6 Mbit of them to flat dark blocks (luma 16-31) whose colour
+was already there. x264 didn't copy them; the source may lie outside its
+reference pictures, or the MB is intra. A recompressor can, but only with a
+decoder in the loop. It needs the prediction (intra from the reconstructed
 neighbours, inter from the reference pictures) to turn "this MB will look
 like block X" into predicted coefficients, by transforming and quantizing
 X − prediction at the MB's QP. That is JpegModel's adv_pred with whole
@@ -696,7 +704,7 @@ In moving camera video like 04 there is nothing to find.
 
 ### Order of work
 
-1. The rules of section 6: 1.4% of the stream, from exact rules.
+1. The rules of section 6 (1.4% of the stream).
 2. Coefficients (43.6%): signs from A/B and Cb, Cr given Cb, nC and the
    count so far, same-position neighbours.
 3. Skip and mb_type (19.8%): temporal and C/D contexts, and the neighbours'
@@ -778,7 +786,8 @@ context sets lose to the learning cost; mixing avoids that.
 The CABAC bits come from the same instrumented decoder as section 1. It
 also costed each macroblock and tagged the bins whose value a rule gives.
 Python scripts walked the TSV files to check the rules and find repeated
-macroblocks, and compared the decoded macroblocks from h264dec's output.
+macroblocks, and compared the decoded macroblocks from h264dec's output by
+64-bit hashes of their samples.
 Neither the instrumented decoder nor these scripts is in the repository.
 A rule counts as holding when it had no exception in the five streams; for
 x264's habits that says nothing about other encoders.
