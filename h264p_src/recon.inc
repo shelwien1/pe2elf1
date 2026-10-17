@@ -1470,6 +1470,27 @@ struct Recon {
   // The texture of the prediction of a block of n x n samples at (x, y) of
   // the current macroblock in plane c (0 luma): the sum of the absolute
   // differences between neighbouring samples; -1 not known.
+  // x264's AQ energy (ac_energy_mb) of macroblock addr of the current
+  // picture: the luma 16x16 and the two chroma 8x8 variances, summed
+  int64_t ac_energy(int addr) const {
+    int w = cur->w, cw = w / 2, mx = addr % cur->mbw * 16, my = addr / cur->mbw * 16;
+    int64_t e = 0;
+    {
+      const uint8_t* p = cur->y.data() + my * w + mx;
+      int64_t s1 = 0, s2 = 0;
+      for (int y = 0; y < 16; y++)
+        for (int x = 0; x < 16; x++) s1 += p[y * w + x], s2 += p[y * w + x] * p[y * w + x];
+      e += s2 - (s1 * s1 >> 8);
+    }
+    for (int c = 0; c < 2; c++) {
+      const uint8_t* p = (c ? cur->v.data() : cur->u.data()) + my / 2 * cw + mx / 2;
+      int64_t s1 = 0, s2 = 0;
+      for (int y = 0; y < 8; y++)
+        for (int x = 0; x < 8; x++) s1 += p[y * cw + x], s2 += p[y * cw + x] * p[y * cw + x];
+      e += s2 - (s1 * s1 >> 6);
+    }
+    return e;
+  }
   int pred_texture(int c, int x, int y, int n) const {
     if (!active || !mb_prepared || mb_cls == 8) return -1;
     int w = c ? cur->w / 2 : cur->w, m = c ? 8 : 16;

@@ -35,7 +35,7 @@ struct H_mbt_v { int st, ca, cb, cc, nsk, en, td; };
 struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg; };
 struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds; };
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp; };
-struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae; };
+struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac; };
 struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em; };
 struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe; };
 struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe; };
@@ -139,6 +139,44 @@ static INLINE int sgn3(int v) { return v > 0 ? 1 : v < 0 ? 2 : 0; }
 static INLINE int popc4(int v) { return (v & 1) + (v >> 1 & 1) + (v >> 2 & 1) + (v >> 3 & 1); }
 // nC as a class
 static INLINE int nc_class(int nc) { return nc < 3 ? nc : nc < 5 ? 3 : nc < 9 ? 4 : 5; }
+// 16 log2 v, the fraction linear (integers only: the model must come out the
+// same everywhere)
+static INLINE int lg16(i64 v) {
+  if (v < 1) v = 1;
+  int n = 0;
+  while (v >> (n + 1)) n++;
+  return 16 * n + (int)(n >= 4 ? (v >> (n - 4)) & 15 : (v << (4 - n)) & 15);
+}
+// a / b rounded down, b > 0
+static INLINE i64 div_floor(i64 a, i64 b) { return a >= 0 ? a / b : -((-a + b - 1) / b); }
+
+// x264's adaptive quantization: in a picture the QP of a macroblock is the
+// picture's plus a multiple of log2 of the macroblock's energy (and, in a
+// reference picture, MB-tree's offset). A least-squares line of QP against
+// 16 log2 energy, through the macroblocks of the picture that coded
+// mb_qp_delta (the energy of their reconstruction), predicts the QP of the
+// next from the energy of its prediction.
+struct AqFit {
+  i64 n = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;
+  void clear() { n = sx = sy = sxx = sxy = 0; }
+  void add(int x, int q) {
+    n++;
+    sx += x;
+    sy += q;
+    sxx += (i64)x * x;
+    sxy += (i64)x * q;
+  }
+  // 16 x the QP of energy x on the line; false while there is none
+  bool predict(int x, int& q16) const {
+    if (n < 9) return false;
+    i64 den = n * sxx - sx * sx;
+    if (den <= 0) return false;
+    i64 b = (n * sxy - sx * sy) * 4096 / den;  // QP per unit of x, x 4096
+    b = b < 0 ? 0 : b > 768 ? 768 : b;
+    q16 = (int)((16 * sy + 16 * b * ((i64)x * n - sx) / 4096) / n);
+    return true;
+  }
+};
 
 // P(LPS) of the CABAC context states, 12 bits: 2048 * (0.01875 / 0.5)^(s / 63)
 static const int cab_lps[64] = {
@@ -453,6 +491,31 @@ struct Model {
   bool pdn_ = false;                             // no col vector
 
   Recon rec_;  // the pictures, reconstructed
+  // x264's AQ (AqFit): the line of the current picture; 16 log2 energy of
+  // the macroblocks of the current and the last picture (-1 not known); the
+  // QP of the current picture's that coded mb_qp_delta (-1 other); per kind
+  // of picture, how far the QP of the last one's was from its line (16ths,
+  // INT16_MIN not known)
+  AqFit aq_fit_, aq_fitp_;
+  int aq_xp_ = -1;  // 16 log2 energy of the current macroblock's prediction (inter)
+  std::vector<int16_t> aq_x_, aq_xl_, aq_q_, aq_res_[30];
+  int aq_key_ = -1;
+  void aq_picture() {
+    if (aq_key_ >= 0) {
+      std::vector<int16_t>& r = aq_res_[aq_key_];
+      r.assign(aq_q_.size(), INT16_MIN);
+      for (size_t a = 0; a < aq_q_.size(); a++) {
+        int q16;
+        if (aq_q_[a] >= 0 && aq_fit_.predict(aq_x_[a], q16)) r[a] = (int16_t)tc_clamp(16 * aq_q_[a] - q16, -32767, 32767);
+      }
+    }
+    aq_xl_.swap(aq_x_);
+    aq_x_.assign(size_, -1);
+    aq_q_.assign(size_, -1);
+    aq_fit_.clear();
+    aq_fitp_.clear();
+    aq_key_ = key_;
+  }
   int idx(const MbState* n) const { return (int)(n - mbs_); }
   // CABAC's probability of a bin in the walk's current state, as the outside
   // prediction of one of the model's decisions: of the bin being 0 (cab0) or
@@ -513,6 +576,7 @@ struct Model {
     prev_cnt_ = slice_cnt_[key_];
     mb_open_ = false;
     rec_.slice_begin(h);
+    if (h.first_mb == 0) aq_picture();
   }
   void slice_end() { slice_cnt_[key_] = cnt_; }
 
@@ -558,6 +622,15 @@ struct Model {
     c.dcm = (uint8_t)(s.cbf_dc[0] | s.cbf_dc[1] << 1 | s.cbf_dc[2] << 2);
     mb_open_ = false;
     rec_.mb_end(addr_, mi_->cls, mi_->i16m, mi_->modes, mi_->cpred, mi_->t8, mi_->qp - qp_off_, mi_->rf, mi_->mv, s.nz[0]);
+    if (rec_.active && (int)aq_x_.size() == size_) {
+      int x = lg16(rec_.ac_energy(addr_));
+      aq_x_[addr_] = (int16_t)x;
+      if (qpd_coded_) {
+        aq_fit_.add(x, mi_->qp - qp_off_);
+        if (aq_xp_ >= 0) aq_fitp_.add(aq_xp_, mi_->qp - qp_off_);
+        aq_q_[addr_] = (int16_t)(mi_->qp - qp_off_);
+      }
+    }
   }
 
   // --- skip, end of slice, field decoding flag: the skp family
@@ -1220,6 +1293,7 @@ struct Model {
   int qpd(int v) {
     prepare();
     tc_stage = STG_QPD;
+    aq_xp_ = -1;
     const MbInfo* b = info(sc_->mb_b_);
     H_qpd_v D;
     D.lnz = last_qpd_ != 0;
@@ -1237,6 +1311,29 @@ struct Model {
     if (maps_ok()) {
       int e0 = qp_src_ >= 0 ? rec_.energy[qp_src_] : rec_.energy_mean;
       D.ae = 7 + tc_clamp((rec_.energy[addr_] - e0 + 2 * (rec_.energy[addr_] > e0) - 2 * (rec_.energy[addr_] < e0)) / 4, -6, 6);
+    }
+    // and the QP its line gives the energy of the prediction (inter) or of
+    // the last picture there, less the predicted QP; how far the last
+    // picture of the kind was from its line there
+    D.aq = D.ac = 0;
+    if (rec_.active && (int)aq_x_.size() == size_) {
+      // intra: the mean of the last picture's there and the left and upper
+      // neighbours'
+      int x = -1, xs = 0, xn = 0;
+      if ((int)aq_xl_.size() == size_ && aq_xl_[addr_] >= 0) xs += aq_xl_[addr_], xn++;
+      if (addr_ % width_ && aq_x_[addr_ - 1] >= 0) xs += aq_x_[addr_ - 1], xn++;
+      if (addr_ >= width_ && aq_x_[addr_ - width_] >= 0) xs += aq_x_[addr_ - width_], xn++;
+      if (xn) x = xs / xn;
+      int q16;
+      bool ok = false;
+      if (mi_->cls < 6) {
+        aq_xp_ = lg16(rec_.ac_energy(addr_));
+        ok = aq_fitp_.predict(aq_xp_, q16);
+        if (!ok) x = aq_xp_;
+      }
+      if (ok || (x >= 0 && aq_fit_.predict(x, q16))) D.aq = 7 + tc_clamp((int)div_floor(q16 - 16 * qp_pred_ + 8, 16), -6, 6);
+      if ((int)aq_res_[key_].size() == size_ && aq_res_[key_][addr_] != INT16_MIN)
+        D.ac = 7 + tc_clamp((int)div_floor(aq_res_[key_][addr_] + 4, 8), -6, 6);
     }
     tcx X;
     H_qpd_make(D, X);

@@ -22,8 +22,8 @@ Index a
  a_cls: cls, 1!11111111
 
 Index b
- b_lnz: lnz, 1!0
  b_dc: dc, 1!11111111
+ b_aq: aq, 1!1111111111111
  b_ae: ae, 1!1111111111111
 
 Index c
@@ -32,12 +32,13 @@ Index c
  c_db: db, 1!11111111
 
 Index d
- d_lnz: lnz, 1!1
- d_ae: ae, 1!1111111111111
+ d_st: st, 1!111111111
+ d_aq: aq, 1!1111111111111
+ d_ac: ac, 1!1111111111111
 
 Index e
  e_lnz: lnz, 1!1
- e_ae: ae, 1!1111111111111
+ e_aq: aq, 1!1111111111111
  e_cls: cls, 1!11111111
 
 Index h
@@ -47,14 +48,14 @@ Index h
 
 Index s
  s_lnz: lnz, 1!1
- s_ae: ae, 1!1111111111111
+ s_aq: aq, 1!1111111111111
 
 Index f
  f_st: st, 1!111111111
 
 Index m
  m_lnz: lnz, 1!1
- m_ae: ae, 1!1111111111111
+ m_aq: aq, 1!1111111111111
 
 Index t
  t_lnz: lnz, 1!0
