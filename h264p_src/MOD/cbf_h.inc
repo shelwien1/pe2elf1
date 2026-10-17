@@ -44,7 +44,7 @@ static const byte H_cbf_w_md[19+1]={ 0,0,1,2,2,2,2,2,2,2,2,2,2,2,3,3,3,4,4,4 };
 
 
 static const int H_cbf_rA = (64+0) * (1);
-static const int H_cbf_rB = (16+0) * (1);
+static const int H_cbf_rB = (90+0) * (1);
 static const int H_cbf_rC = (64+0) * (1);
 static const int H_cbf_rE = (64+0) * (1);
 static const int H_cbf_rH = (64+0) * (1);

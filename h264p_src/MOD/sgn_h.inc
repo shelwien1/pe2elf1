@@ -82,7 +82,7 @@ static const long long H_sgn_m_Volume = tc_vmul(tc_vmul(1, 14), 1); // 14
 static const long long H_sgn_n_Volume = tc_vmul(1, 1); // 1
 static const long long H_sgn_s_Volume = tc_vmul(tc_vmul(1, 2), 3); // 6
 static const long long H_sgn_t_Volume = tc_vmul(1, 1); // 1
-static const long long H_sgn_w_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 3), 16); // 672
+static const long long H_sgn_w_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 1), 16); // 224
 
 struct H_sgn_T { 
 #undef USE_NEW

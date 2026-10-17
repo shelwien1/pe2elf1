@@ -4,7 +4,7 @@ static const byte H_hdr_a_p1[7+1]={ 0,1,2,3,4,5,6,7 };
 static const byte H_hdr_a_sty[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 
 
-static const byte H_hdr_c_fld[15+1]={ 0,1,1,1,2,2,3,4,5,5,5,5,5,5,5,5 };
+static const byte H_hdr_c_fld[15+1]={ 0,1,1,1,2,2,3,4,5,5,6,6,6,6,6,6 };
 
 static const byte H_hdr_d_p1[15+1]={ 0,1,2,3,3,3,4,4,5,5,5,6,6,6,7,8 };
 static const byte H_hdr_d_p2[7+1]={ 0,1,2,3,4,5,6,7 };
@@ -29,7 +29,7 @@ static const int H_hdr_rC = (0+0) * (1);
 static const int H_hdr_rE = (64+0) * (1);
 static const int H_hdr_rH = (64+0) * (1);
 static const int H_hdr_rD = (255+0) * (1);
-static const int H_hdr_rT = (55+0) * (1);
+static const int H_hdr_rT = (32+0) * (1);
 static const int H_hdr_rG = (90+0) * (1);
 static const int H_hdr_rS1 = (6+0) * (1);
 static const int H_hdr_rS2 = (6+0) * (1);
@@ -37,11 +37,11 @@ static const int H_hdr_lr = (12+0) * (1);
 static const int H_hdr_lrm = (12+0) * (1);
 static const int H_hdr_mbm = (0+0) * (1);
 static const int H_hdr_mwA = (0+0) * (1);
-static const int H_hdr_mwB = (0+0) * (1);
+static const int H_hdr_mwB = (4+0) * (1);
 static const int H_hdr_mwC = (0+0) * (1);
 static const int H_hdr_mwE = (0+0) * (1);
 static const int H_hdr_mwH = (0+0) * (1);
-static const int H_hdr_mwD = (128+0) * (1);
+static const int H_hdr_mwD = (12+0) * (1);
 static const int H_hdr_mwT = (0+0) * (1);
 static const int H_hdr_mwG = (0+0) * (1);
 static const int H_hdr_bw = (8+0) * (1);
@@ -62,7 +62,7 @@ static const int H_hdr_hN = (24+0) * (1);
 
 static const long long H_hdr_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, (1<<6)), 4), 8), 10); // 20480
 static const long long H_hdr_b_Volume = tc_vmul(tc_vmul(1, (1<<5)), (1<<4)); // 512
-static const long long H_hdr_c_Volume = tc_vmul(tc_vmul(1, (1<<8)), 6); // 1536
+static const long long H_hdr_c_Volume = tc_vmul(tc_vmul(1, (1<<8)), 7); // 1792
 static const long long H_hdr_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<8)), 9), 8); // 18432
 static const long long H_hdr_e_Volume = tc_vmul(tc_vmul(1, (1<<4)), 4); // 64
 static const long long H_hdr_f_Volume = tc_vmul(1, (1<<8)); // 256
@@ -72,7 +72,7 @@ static const long long H_hdr_m_Volume = 1; // 1
 static const long long H_hdr_n_Volume = tc_vmul(1, (1<<8)); // 256
 static const long long H_hdr_s_Volume = tc_vmul(1, (1<<8)); // 256
 static const long long H_hdr_t_Volume = tc_vmul(1, (1<<8)); // 256
-static const long long H_hdr_w_Volume = tc_vmul(1, (1<<8)); // 256
+static const long long H_hdr_w_Volume = tc_vmul(1, (1<<5)); // 32
 
 struct H_hdr_T { 
 #undef USE_NEW

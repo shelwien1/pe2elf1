@@ -2,7 +2,7 @@
 static const byte H_lvl_a_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 static const byte H_lvl_a_g1[4+1]={ 0,1,2,3,4 };
 static const byte H_lvl_a_e1[4+1]={ 0,1,2,3,4 };
-static const byte H_lvl_a_nc[5+1]={ 0,1,2,3,4,5 };
+static const byte H_lvl_a_nc[5+1]={ 0,1,2,3,3,4 };
 
 static const byte H_lvl_b_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 static const byte H_lvl_b_pe[15+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
@@ -81,7 +81,7 @@ static const int H_lvl_hT = (24+0) * (1);
 static const int H_lvl_hN = (24+0) * (1);
 
 
-static const long long H_lvl_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 5), 5), 6); // 2100
+static const long long H_lvl_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 5), 5), 5); // 1750
 static const long long H_lvl_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 16), 6), 8); // 10752
 static const long long H_lvl_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 4), 4), 6); // 1344
 static const long long H_lvl_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 5), 20), 3); // 4200

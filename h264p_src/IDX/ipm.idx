@@ -35,7 +35,7 @@ Index d
  d_k8: k8, 1!11
  d_mp: mp, 1!111111111
  d_dm: dm, 1!111111111
- d_ds: ds, 1!111111111
+ d_ds: ds, 1!000010010
 
 Index e
  e_k8: k8, 1!11
@@ -45,7 +45,7 @@ Index e
 Index h
  h_k8: k8, 1!11
  h_pr: pr, 1!11111111
- h_dr: dr, 1!11111111
+ h_dr: dr, 1!00000000
  h_ds: ds, 1!111111111
 
 Index s

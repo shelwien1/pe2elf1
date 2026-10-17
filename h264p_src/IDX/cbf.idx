@@ -85,7 +85,7 @@ Index g
  g_cat: cat, 1!0
 
 Number rA, 1, 0!01000000
-Number rB, 1, 0!00010000
+Number rB, 1, 0!01011010
 Number rC, 1, 0!01000000
 Number rE, 1, 0!01000000
 Number rH, 1, 0!01000000

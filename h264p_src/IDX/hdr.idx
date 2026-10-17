@@ -24,7 +24,7 @@ Index b
 
 Index c
  c_tag: tag, &11111111
- c_fld: fld, 1!100101110000000
+ c_fld: fld, 1!100101110100000
 
 Index d
  d_tag: tag, &11111111
@@ -49,7 +49,7 @@ Index m
  m_tag: tag, &00000000
 
 Index w
- w_tag: tag, &11111111
+ w_tag: tag, &00101111
 
 Index t
  t_tag: tag, &11111111
@@ -67,7 +67,7 @@ Number rC, 1, 0!00000000
 Number rE, 1, 0!01000000
 Number rH, 1, 0!01000000
 Number rD, 1, 0!11111111
-Number rT, 1, 0!00110111
+Number rT, 1, 0!00100000
 Number rG, 1, 0!01011010
 Number rS1, 1, 0!00110
 Number rS2, 1, 0!00110
@@ -75,11 +75,11 @@ Number lr, 1, 0!01100
 Number lrm, 1, 0!01100
 Number mbm, 1, 0!00000000
 Number mwA, 1, 0!00000000
-Number mwB, 1, 0!00000000
+Number mwB, 1, 0!00000100
 Number mwC, 1, 0!00000000
 Number mwE, 1, 0!00000000
 Number mwH, 1, 0!00000000
-Number mwD, 1, 0!10000000
+Number mwD, 1, 0!00001100
 Number mwT, 1, 0!00000000
 Number mwG, 1, 0!00000000
 Number bw, 1, 0!01000

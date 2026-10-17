@@ -31,7 +31,7 @@ void H_skp_make( const H_skp_v & D, tcx & X ) {
   b = b*3 + ((a3>0+(1-1))+(a3>1+(1-1)));
   b = b*3 + ((b3>0+(1-1))+(b3>1+(1-1)));
   b = b*2 + ((cd>0+(1-1)));
-  b = b*16 + H_skp_b_cnt[__min(15,__max(0,cnt-(1-1)))];
+  b = b*7 + H_skp_b_cnt[__min(15,__max(0,cnt-(1-1)))];
 
   c = 0;
   c = c*2 + ((st>1+(1-1)));

@@ -32,7 +32,7 @@ Index b
  b_a3: a3, 1!11
  b_b3: b3, 1!11
  b_cd: cd, 1!10
- b_cnt: cnt, 1!111111111111111
+ b_cnt: cnt, 1!000000101110011
 
 Index c
  c_st: st, 1!010000000
@@ -112,7 +112,7 @@ Number mwT, 1, 0!00000000
 Number mwG, 1, 0!00000000
 Number bw, 1, 0!01000
 Number qs, 1, 3!0010100
-Number qf, 1, 3!1000111
+Number qf, 1, 3!1000000
 Number mb, 1, 0!01000100
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is

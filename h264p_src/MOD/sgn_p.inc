@@ -61,7 +61,6 @@ void H_sgn_make( const H_sgn_v & D, tcx & X ) {
 
   w = 0;
   w = w*14 + H_sgn_w_cg[__min(13,__max(0,cg-(1-1)))];
-  w = w*3 + ((pp>0+(1-1))+(pp>1+(1-1)));
   w = w*16 + H_sgn_w_mg[__min(15,__max(0,mg-(1-1)))];
 
   t = 0;
