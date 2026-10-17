@@ -96,7 +96,9 @@ depths up to 14; lossless coding, I_PCM; FMO and arbitrary slice order;
 redundant pictures; scaling matrices.
 
 Speed is about 1 MB of H.264 per second for `c` and 2 MB/s for `d`; the TSV
-file is 10-20 times as large as the stream.
+file is 10-20 times as large as the stream. `h264p_cm.md` is about
+compressing it with context mixing: where CABAC spends its bits, and
+contexts for each field (`tools/ctxexp.py` tries them out).
 
 ### TSV format
 

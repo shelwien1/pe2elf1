@@ -1,0 +1,655 @@
+# Compressing h264p dumps with context mixing
+
+`h264p c` turns an H.264 stream into rows of syntax element values, and
+`h264p d` turns the rows back into the identical stream. A compressor for
+the TSV files is therefore an H.264 recompressor, and its model has the same
+job as paq8's JpegModel: follow the syntax, keep the decoded state of the
+neighbouring blocks and predict each value from it.
+
+This note covers three things:
+
+- what such a model has to track;
+- which contexts are worth trying for each field of the TSV;
+- where the bits are, measured on the x264 streams `test/002/00-04.h264`
+  (3.6 MB, CABAC, 4:2:0, progressive).
+
+## 1. What to beat
+
+The baseline is the CABAC-coded stream, not a general-purpose compressor run
+on the TSV:
+
+| | MBs | pictures | H.264 | TSV | TSV, xz -9e | TSV, bzip2 -9 |
+|---|---|---|---:|---:|---:|---:|
+| 00 | 60×34 | 1867 | 815,140 | 11,630,192 | 1,200,428 | 1,157,014 |
+| 01 | 30×54 | 1072 | 1,095,103 | 15,092,142 | 1,641,224 | 1,681,585 |
+| 02 | 16×18 | 2 | 28,143 | 299,502 | 45,220 | 42,510 |
+| 03 | 45×80 | 907 | 1,181,369 | 20,691,032 | 1,654,508 | 1,543,530 |
+| 04 | 29×57 | 253 | 484,238 | 6,953,351 | 808,132 | 754,802 |
+| all | | 4101 | 3,603,993 | 54,666,219 | 5,349,512 | 5,179,441 |
+
+General-purpose compressors end up 44-48% above CABAC: they see digits,
+not macroblocks.
+
+### Where CABAC spends its bits
+
+These figures come from h264p's CABAC decoder. Each bin was costed at
+−log2 p from its context state just before decoding, and each bypass bin at
+1 bit. The total comes within 0.2% of the actual size of the slice data.
+Slice data is 98.3% of these streams and slice headers 0.66%. Over all five
+streams:
+
+| syntax element | share of bits | bits/bin |
+|---|---:|---:|
+| **residual** | **43.6%** | |
+| significant_coeff_flag | 11.9% | 0.74 |
+| coeff_sign_flag (bypass) | 9.3% | 1 |
+| coded_block_flag | 7.2% | 0.82 |
+| last_significant_coeff_flag | 6.7% | 0.73 |
+| coeff_abs_level_minus1, first bin | 5.2% | 0.56 |
+| coeff_abs_level_minus1, other bins | 3.3% | 0.85 |
+| **macroblock type** | **19.8%** | |
+| mb_type | 10.3% | 0.53 |
+| mb_skip_flag | 9.2% | 0.29 |
+| end_of_slice_flag | 0.3% | 0.01 |
+| **motion** | **14.3%** | |
+| mvd, context-coded bins | 7.9% | 0.64 |
+| mvd, bypass bins (suffix, sign) | 4.8% | 1 |
+| ref_idx | 1.4% | 0.73 |
+| sub_mb_type | 0.1% | 0.44 |
+| **intra prediction** | **8.5%** | |
+| prev_intra_pred_mode_flag | 3.2% | 0.83 |
+| rem_intra_pred_mode | 3.2% | 0.95 |
+| intra_chroma_pred_mode | 2.2% | 0.74 |
+| **mb_qp_delta** | **7.7%** | 0.61 |
+| **coded_block_pattern** (luma 3.8%, chroma 2.0%) | **5.8%** | 0.39 |
+| transform_size_8x8_flag | 0.3% | 0.61 |
+
+By picture type, P pictures take 60% of the bits, B pictures 23% and
+I pictures 17%. 78% of the macroblocks in P pictures are skipped, and 93% in
+B pictures.
+
+The residual is under half of the bits, where in a JPEG file the
+coefficients are nearly everything. The macroblock side information
+(types, skips, motion, intra modes, QP) matters as much. 14% of the bits are
+bypass bins coded at exactly 1 bit (signs, mvd suffixes): whatever a model
+predicts there is pure gain.
+
+The residual by block type (bits include the coded_block_flag of the blocks
+that turned out empty):
+
+| block (ctxBlockCat) | nonzero blocks | coefficients | share of bits | bits/coefficient |
+|---|---:|---:|---:|---:|
+| luma 4×4 (2) | 613,605 | 1,577,944 | 26.6% | 4.8 |
+| chroma DC (3) | 378,961 | 466,819 | 6.4% | 3.9 |
+| luma 8×8 (5) | 121,963 | 288,702 | 4.7% | 4.7 |
+| Intra16x16 DC (0) | 59,733 | 152,889 | 2.9% | 5.3 |
+| chroma AC (4) | 55,411 | 95,763 | 1.9% | 5.5 |
+| Intra16x16 AC (1) | 24,933 | 52,943 | 1.0% | 5.6 |
+
+These are low-rate streams (about 440 bytes per picture in 00). At higher
+rates the residual share grows.
+
+## 2. JpegModel, packJPG, Lepton, and what is different here
+
+paq8's JpegModel compresses baseline JPEG without transforming it. It
+decodes the Huffman codes while the scan is being coded, so for every bit it
+knows the component, the block, the zigzag position and the bits of the
+current code so far. Its contexts are hashes of those, combined with values
+already decoded:
+
+- the previous coefficients of the block, and the sum of their magnitudes;
+- the coefficients at the same position in the blocks to the left and
+  above, and predictions of the current coefficient from those blocks;
+- the run/size of the previous code;
+- the quantizer.
+
+Small contexts such as the zigzag position and the code length so far select
+the mixer weight sets, and an APM chain refines the result.
+
+packJPG and Lepton decode the coefficients first and code them with their
+own binarization. Lepton codes the number of nonzero coefficients of a block
+first, from the counts of the neighbouring blocks. Then it codes each
+coefficient's magnitude class, mantissa bits and sign. The contexts include
+the remaining count and the neighbours' magnitudes at the same position, and
+the edge row/column and the DC are predicted from the pixels of the
+neighbouring blocks.
+
+An h264p model sits between the two. Like packJPG and Lepton, it gets values
+whose entropy coding is already undone, so it chooses its own binarization.
+Like JpegModel, it has to follow the syntax to know what each value is and
+where its neighbours are. The concepts map like this:
+
+| JpegModel | h264p TSV model |
+|---|---|
+| headers: SOF (size, sampling), DQT, DHT | SPS, PPS and slice header rows (section 3.1) |
+| MCU position, component | macroblock address, block index, ctxBlockCat |
+| zigzag index, (u, v) | scan position, mapped to (u, v) with the standard's frame or field scan |
+| bits of the Huffman code so far | bin index in our own binarization |
+| previous coefficients, sum of magnitudes | levels and nonzero count so far, last position |
+| same position in the left/above block | same position in the 4×4/8×8 neighbours A and B (6.4.11) |
+| quantization table | QP, scaling matrices |
+| — | previous pictures: co-located macroblocks and blocks |
+| — | side information: 56% of the bits |
+
+There are also real differences from JPEG:
+
+- **The residual is a prediction error.** The encoder has already predicted
+  each block from its neighbours (intra prediction) or from other pictures
+  (motion compensation). DC and edge continuity, Lepton's best tricks, have
+  little left to work with. Correlations between neighbouring blocks remain,
+  though, notably in the signs (section 4.8).
+- **CABAC is a much stronger baseline than Huffman.** JPEG recompressors
+  gain 20-25%. CABAC already adapts per syntax element with neighbour
+  contexts. The single contexts measured below save between 1% and 18% of
+  an element's bits.
+- **About twenty kinds of values instead of one alphabet.** The mixer
+  selection has to start with the element and bin. I, P and B pictures have
+  very different statistics.
+- **A time axis.** For skips, types and QP, the same macroblock in the
+  previous picture is often the best neighbour.
+
+## 3. Model structure
+
+### 3.1 From rows to values
+
+Parse the rows into values and model the values, not the text. Decimal
+digits are a poor binarization: "-1", "1" and "12" share no structure a
+bitwise model can use. A paq-style byte model with field-aware contexts
+(row name, field index, previous fields) works on the text as a quick
+prototype, but parsing is what pays.
+
+h264p writes the TSV deterministically: decimal integers, `-` for absent
+values, lowercase hex, tabs and `\n`. So the decoder can regenerate the text
+from the values. `h264p d` also accepts comments, blank lines and CRLF;
+input that isn't h264p's own output needs an escape to a generic model.
+
+**What the model must track to know which values come next:**
+
+- **SPS:** `chroma_format_idc` (with `separate_colour_plane_flag`, giving
+  ChromaArrayType), bit depths (PCM sample size, QP range), picture size in
+  MBs, `frame_mbs_only_flag`, `mb_adaptive_frame_field_flag`,
+  `direct_8x8_inference_flag`.
+- **PPS:** `transform_8x8_mode_flag`, the default `num_ref_idx_l0/l1`,
+  `constrained_intra_pred_flag`, `pic_init_qp`, `entropy_coding_mode_flag`
+  and the slice group map.
+- **Slice header:** `first_mb_in_slice`, `slice_type`, `field_pic_flag`,
+  `num_ref_idx_active_override`, `slice_qp_delta` and
+  `direct_spatial_mv_pred_flag`.
+
+The macroblock address follows from `first_mb_in_slice` (×2 with MBAFF), the
+`skip N` rows and the `mb` rows. FMO changes the next address; it can be
+left to a fallback.
+
+**The rows of a coded macroblock and what is implied:**
+
+- `mb T X C P Q`: mb_type, then four fields whose presence is implied by T
+  and the state. X (transform_size_8x8_flag) is present for I_NxN with
+  transform_8x8_mode, or for an inter MB with luma cbp and no partition
+  smaller than 8×8 (direct partitions count as 8×8 only with
+  direct_8x8_inference_flag). C (intra_chroma_pred_mode) is present for intra MBs with 4:2:0
+  or 4:2:2. P (cbp) is present unless the MB is Intra16x16 or PCM. Q
+  (mb_qp_delta) is present if cbp ≠ 0 or the MB is Intra16x16. Never code a
+  `-`.
+- `fld`: present where MBAFF codes the flag (top MB of a pair, or the bottom
+  one after a skipped top).
+- `ipm`: 16 values, or 4 with X = 1.
+- `sub`: 4 values.
+- `ref0`/`ref1`: one value per partition using the list, only when
+  num_ref_idx_active > 1 (or for a field MB in MBAFF). P_8x8ref0 has none.
+- `mvd0`/`mvd1`: X/Y pairs per partition or sub-partition, none for direct.
+- `res`: rows in coding order:
+  1. Intra16x16 DC;
+  2. the luma blocks of each 8×8 with its cbp bit set;
+  3. Cb and Cr likewise for 4:4:4;
+  4. chroma DC (Cb, Cr) if chroma cbp ≥ 1;
+  5. chroma AC (Cb blocks, then Cr) if chroma cbp = 2.
+
+  Only nonzero blocks have a row, so the model codes a "present" flag for
+  every block the cbp allows. Each row holds coefficients in scan order up to
+  the last nonzero one. The AC blocks (CAT 1, 4, 7, 11) start at scan
+  position 1.
+
+With CABAC (except in 4:4:4), an 8×8-transformed block whose cbp bit is
+set always has a row, because CABAC has no coded_block_flag for it. With
+CAVLC it may not. Otherwise the TSV of a CAVLC stream looks like that of a CABAC stream;
+only the baseline is about 10-15% weaker.
+
+Header rows (SPS, PPS, SEI, slice headers) are 0.7% of the bits and need
+little modelling. Their presence is conditional on earlier values too.
+
+### 3.2 State
+
+**For each macroblock of the current picture, keep:**
+
+- skip, class (skip, direct, 16×16, 16×8, 8×16, 8×8, I_NxN, I16, PCM), and
+  the full mb_type and sub_mb_types;
+- field flag, QP, cbp, transform 8×8;
+- the 16 intra 4×4/8×8 modes (actual modes, not the TSV's MPM-relative form)
+  and the chroma mode;
+- ref_idx[2][4] and mvd[2][16][2] as signed values;
+- nonzero counts per 4×4 block for Y, Cb and Cr, the coefficients of each
+  4×4/8×8 block, and the chroma DC values.
+
+**For temporal contexts, keep the same arrays for previous pictures.** In
+the experiments below, "col" is the MB at the same address in the previous
+picture with the same slice type and the same nal_ref_idc ≠ 0 status (P
+uses the last P, a reference B the last reference B). Keeping the pictures
+by POC also makes the real temporal neighbours available, such as the
+co-located MB in the list-1 reference that temporal direct uses.
+
+**Neighbours:** A, B, C, D at MB level and at 4×4 level (6.4.11, with the
+MBAFF table 6-4; `nb_loc` in `h264p_src/slice.cpp` implements it). Unlike
+CABAC, the model may use MBs of other slices of the same picture: its
+decoder knows them.
+
+### 3.3 Binarization
+
+| value | binarization |
+|---|---|
+| skip runs | one flag per MB, as CABAC (mb_skip_flag) |
+| end of slice | one flag per MB; certain at the last MB of the picture |
+| mb_type | a tree: intra? → partition shape → prediction lists per partition; for intra, I_NxN / I16 / PCM, then I16's prediction mode, chroma cbp and luma cbp (0 or 15), which mb_type encodes |
+| X, flags | one bin |
+| C | truncated unary 0-3 |
+| P | four luma bits in 8×8 order, then chroma 0/1/2 as two bins |
+| Q, mvd components | zero flag, sign, magnitude: unary for small values, then exponent (unary) and mantissa bits |
+| ipm | "mode = MPM" flag, then the mode (or rem) |
+| sub | P: tree over 0-3; B: direct? → lists → shape |
+| ref_idx | truncated unary |
+| coefficient block | present flag, then CABAC-style significance/last map and levels in reverse scan order, or count first (below) |
+
+Count first: code the number of nonzero coefficients (CAVLC's TotalCoeff,
+Lepton's num_nonzeros) with the neighbours' counts as context. Then code the
+positions with "nonzeros remaining" as context, and the levels after that.
+CABAC's significance map approximates this with position and last flags.
+Both are worth trying, and the count is a good context for everything after
+it.
+
+### 3.4 Components
+
+- **Context maps:** hashed contexts with bit histories, as in paq8, plus
+  direct counter tables for small contexts. The CABAC context of each bin is
+  a good first input.
+- **Mixer:** weight sets selected by element × bin index, and per element a
+  small context: scan position for significance, gt1/eq1 counts for levels,
+  the mvd magnitude class. Use two layers with several selectors, as in
+  paq8px.
+- **APM:** an APM/SSE stage indexed by element, bin and one strong context.
+- **Counters:** statistics shift at scene cuts and between picture types.
+  Separate the contexts by slice type (and nal_ref_idc), and mix fast and
+  slow counters.
+- **Priors:** CABAC's initialization (m, n) at the slice QP gives every
+  context a sensible starting probability. A model starting at p = 0.5 pays
+  for that on short streams.
+- **Speed:** CABAC codes about 15.5 bins per stream byte. Skip and
+  end_of_slice flags are a third of the bins but 9.5% of the bits, so model
+  them cheaply.
+
+## 4. Contexts by field
+
+For each element: what CABAC uses (the baseline to reproduce first), then
+what to add. "Measured" figures come from the single-context experiments in
+the appendix, over all five streams. They show what one context adds on its
+own, with no mixing.
+
+### 4.1 Stream and header rows
+
+- `nal Z REF TYPE`: Z (the zero bytes before the start code) depends on the
+  NAL type and its position in the access unit. TYPE and REF follow the GOP structure. An order-2
+  context over NAL types plus a match model covers them.
+- SPS, PPS and SEI repeat (01 has 37 copies of its SPS): use "same row in
+  the previous NAL of this type" as context, or a match model.
+- Slice header fields:
+  - context: the same field in the previous slice header of the same slice
+    type and nal_ref_idc;
+  - frame_num increases by 1 after each reference picture;
+  - pic_order_cnt_lsb follows the GOP/pyramid pattern;
+  - slice_qp_delta depends on the slice type and the rate control;
+  - pred_weight rows repeat their structure from picture to picture.
+- `x264_padding`, `trail`, `czw`, `junk`, `hex`, `eof` are rare: code them
+  literally.
+
+### 4.2 Skip (`skip N`)
+
+- **Baseline:** convert runs to per-MB flags. CABAC uses ctxIdxInc =
+  (A available and coded) + (B available and coded).
+- **Add:**
+  - co-located skip;
+  - the number of skipped MBs in the 3×3 co-located window;
+  - C and D (above right, above left), which are already coded;
+  - the length of the current run;
+  - slice QP and pyramid level;
+  - for B pictures, the co-located MB in the list-1 reference.
+- **Measured:** A and B as three states (unavailable, skipped, coded): −1.5%.
+  Adding col: −6.8%. Adding the 3×3 count: −8.3% (00: −29%, 03: −1.3%).
+- **End of slice:** there is no row; the slice ends where the next `nal`
+  row starts. Code an "end" flag after each MB. It is certain at the last MB
+  of a picture, and slice sizes are regular otherwise. CABAC spends 0.3% of
+  the bits on it.
+
+### 4.3 The mb row
+
+**mb_type (T), 10.3% of the bits.**
+
+- **CABAC:** only the first bin uses neighbours. In I slices: A/B not I_NxN.
+  In B slices: A/B not skip or direct. In P slices: nothing. The other bins
+  have fixed contexts.
+- **Add:**
+  - the classes of A, B, C and D;
+  - the co-located class (as a separate input; as a single context it diluted
+    the A/B context);
+  - the number of skipped neighbours, QP, pyramid level.
+  - For I16, its parts: the prediction mode (from the neighbours' I16 modes
+    and boundary 4×4 modes), and chroma and luma cbp (from the neighbours'
+    cbp).
+- **Measured:** classes of A and B: −8.5% against an order-0 model per slice
+  type. Adding col: −7.6%, worse (dilution).
+
+**transform_size_8x8_flag (X), 0.3%.**
+
+- **CABAC:** the A/B flags.
+- **Add:** class, luma cbp (for inter MBs it comes after cbp), QP and
+  co-located flag.
+
+**intra_chroma_pred_mode (C), 2.2%.**
+
+- **CABAC:** first bin from A/B (intra, not PCM, mode ≠ 0); the rest fixed.
+- **Add:**
+  - the actual modes of A and B;
+  - the luma prediction. Note the numbering differs: chroma uses 0 DC,
+    1 horizontal, 2 vertical, 3 plane, while I16 uses 0 vertical,
+    1 horizontal, 2 DC, 3 plane. For I_NxN, use the dominant direction of
+    the 4×4 modes.
+  - the co-located mode.
+
+**coded_block_pattern (P), 5.8%.**
+
+- **CABAC:** each luma bit from the bits of the 8×8 blocks to the left and
+  above (inside the MB or in A/B); chroma from A/B chroma cbp ≠ 0, then = 2.
+- **Add:**
+  - the MB's own prediction, which the syntax codes before cbp: partition,
+    ref_idx, and the mvd magnitudes of each 8×8 (zero motion in a static
+    area makes a zero cbp likely);
+  - the nonzero counts of the adjacent neighbour blocks rather than one cbp
+    bit, the co-located cbp, QP, the intra modes, and the bits already set.
+  - For chroma: luma popcount, chroma mode, co-located chroma cbp.
+
+**mb_qp_delta (Q), 7.7%.** x264's adaptive quantization and macroblock
+tree give each MB its own QP, which makes this element expensive.
+
+- **CABAC:** the first bin from "previous MB in decoding order had a nonzero
+  delta"; the other bins fixed.
+- **The delta is relative to QP_pred**, the QP of the previous MB in decoding
+  order. An MB without a delta (skipped, or cbp = 0) inherits QP_pred. So a
+  delta after a run of such MBs covers several MBs' worth of adaptive-quant
+  variation.
+- **Add:**
+  - the QP of A, B and col relative to QP_pred (the QP field is smooth in
+    space and time, the delta isn't);
+  - the distance to the last MB that coded a delta;
+  - this MB's class and cbp, which come before Q;
+  - slice type and slice QP.
+- **Measured:** col QP: −1.3%. Col and above: −1.6%. Cbp and class: −2.8%.
+  The previous delta's value: −0.1%.
+- **Open question:** the remaining structure is the adaptive-quant offset
+  field, which comes from source variance. The best proxies are probably the
+  residual energy and the intra modes of the MB. Coding Q after the
+  residual, which section 5 allows, would make the residual usable as
+  context.
+
+**fld (MBAFF).**
+
+- **CABAC:** the flags of the left and above pairs.
+- **Add:** the co-located pair's flag, and the neighbours' vertical motion.
+
+### 4.4 ipm (intra 4×4/8×8 modes), 6.3%
+
+CABAC uses one context for the flag and one for all three rem bits, so this
+is nearly unmodelled. The TSV value is relative to the MPM =
+min(mode A, mode B) (8.3.1.1), so reconstruct the actual modes:
+
+- A neighbour that isn't available (or is inter with
+  constrained_intra_pred) makes the MPM DC (2).
+- A neighbour MB that isn't I_NxN (I16, PCM, inter, skipped) counts as DC.
+- For a 4×4 block, an I8x8 neighbour gives the mode of its 8×8 block. For
+  an 8×8 block, an I4x4 neighbour gives its 4×4 block 1 (left) or 2 (above)
+  of the adjacent 8×8 block (8.3.2.1).
+
+Then code the actual mode with contexts:
+
+- the actual modes of A and B (I16 neighbours' real modes are worth more
+  than the forced DC);
+- the previous block's mode and the block index;
+- 4×4 versus 8×8, co-located modes, QP;
+- the geometry of the nine directions: 0 vertical, 1 horizontal, 2 DC,
+  3 diagonal down-left, 4 diagonal down-right, 5 vertical-right,
+  6 horizontal-down, 7 vertical-left, 8 horizontal-up.
+
+**Measured:** the actual mode with (mode A, mode B) as context: −9.8%
+(03: −15.7%) against the TSV's flag/rem with CABAC's contexts.
+
+### 4.5 sub (sub_mb_type), 0.1%
+
+Use the previous sub types in the MB and the neighbours' partition shapes.
+In B slices, direct sub-MBs go together with direct neighbours.
+
+### 4.6 ref0, ref1 (ref_idx), 1.4%
+
+- **CABAC:** first bin from A/B ref_idx > 0 (adjusted for field/frame
+  neighbours in MBAFF); the other bins fixed.
+- **Add:** the actual refs of A, B and C, the previous partition's ref in
+  the MB, the other list's ref, the co-located ref, and
+  num_ref_idx_active. With x264's weightp, the list contains duplicates of
+  the same picture with other weights.
+
+### 4.7 mvd0, mvd1, 12.7%
+
+- **CABAC:**
+  - first bin from the sum of |mvd| of A and B: < 3, 3-32, > 32;
+  - prefix bins 1-8 by index;
+  - UEG3 suffix and sign in bypass;
+  - separate contexts for X and Y.
+- **Add:**
+  - |mvd| of A and B separately, in finer classes;
+  - the other component of the partition (Y after X);
+  - partition size and shape, ref_idx and list;
+  - for bi-predicted partitions, the other list's mvd;
+  - QP (the encoder's λ shrinks motion at high QP);
+  - for the signs: the signs of A and B and of the other component.
+- **Measured:**
+  - finer |A| and |B|: −0.7%;
+  - adding the other component: −1.4%;
+  - adding the co-located mvd: −1.0%, worse;
+  - signs: −5.2% of the sign bits.
+- **The next step is motion vector reconstruction.** The mvd is the
+  innovation over the spatial prediction mvp, which is the median or
+  directional rule of 8.4.1.3, plus P_Skip and B direct. That is why
+  co-located mvd doesn't help. With mv = mvp + mvd reconstructed, the
+  co-located and neighbouring *vectors* give a predicted mvd (mv_col − mvp)
+  to use as context, and the quarter-pel phase of mvp can condition the low
+  bits. h264p's walker only keeps |mvd| for CABAC, so this needs a good part
+  of a decoder's motion vector prediction. It is the obvious target for the
+  largest side-information element.
+
+### 4.8 res (coefficients), 43.6%
+
+**Present flag (coded_block_flag), 7.2%.**
+
+- **CABAC:** the flags of blocks A and B. An unavailable neighbour counts as
+  1 for an intra MB and 0 for an inter MB; a skipped neighbour, or one with
+  its cbp bit off, counts as 0.
+- **Add:**
+  - nonzero counts of A and B;
+  - intra/inter, QP, the block's intra mode, the mvd of its partition;
+  - the number of nonzero blocks so far in the 8×8 and the position in it.
+    In these streams x264 never sets a cbp bit for an empty 8×8 (271,116
+    bits checked; Intra16x16, whose luma cbp is all or nothing, aside), so
+    the fourth block is certain after three empty ones;
+  - for chroma DC, Cr given Cb, plus the chroma cbp value. Every chroma
+    cbp of 1 has a nonzero DC block, and every 2 a nonzero AC block.
+- **Measured:** counts of A and B: −1.2%. Adding intra and QP/6: −1.4%. Cr
+  chroma DC given Cb: **−18.3%**.
+
+**Significance map, 18.6% (sig 11.9% + last 6.7%).**
+
+- **CABAC:** scan position for 4×4 blocks; for 8×8 blocks, the standard's
+  position maps (frame or field); per ctxBlockCat.
+- **Add:**
+  - nC = (nA + nB + 1) / 2 as in CAVLC;
+  - the number of significant coefficients so far, or the number remaining
+    with count first;
+  - the same-position coefficients of A and B;
+  - the block's intra mode (directional prediction leaves directional
+    residual spectra) or its partition and motion;
+  - (u, v) from the scan table instead of the scan index for cross-category
+    sharing.
+- **Measured (luma 4×4):** position and nC: −1.9%. Adding the count so far:
+  −2.7%.
+
+**Levels, 8.6%.**
+
+- **CABAC:** first bin from the number of earlier levels > 1 and = 1 (coded
+  in reverse scan order); then unary to 14 with an Exp-Golomb bypass suffix.
+- **Add:** nC and position, the same-position magnitudes of A and B, the
+  sum of magnitudes so far (JpegModel's ssum), QP.
+- **Measured (luma 4×4):** nC and position: −1.2%.
+
+**Signs, 9.3% (bypass in CABAC).**
+
+- **Add:**
+  - the signs at the same scan position in A and B, and the scan position;
+  - for Cr, the sign of Cb at the same position.
+- **Measured:** luma 4×4 signs: **−7.5%** (00: −11.6%, 04: −17.1%). Chroma
+  DC signs of Cr given Cb: **−15.8%**.
+- Low-frequency prediction errors are spatially coherent, for example a
+  gradient the prediction missed. The two chroma residuals of a region are
+  correlated through its colour. Signs are a tenth of the stream and CABAC
+  doesn't model them at all, so even simple contexts recover part of that.
+
+**Per block type:**
+
+- **Intra16x16 DC (CAT 0):** the Hadamard transform of the 16 DC values. Use
+  the I16 DC blocks of A and B at the same positions, and the I16 prediction
+  mode.
+- **Luma 8×8 (CAT 5):** CABAC's position maps as the base. Use the same
+  position in the neighbouring 8×8 blocks.
+- **Chroma AC (CAT 4):** Cr given Cb for the same block, plus the luma
+  energy of the MB.
+- **4:4:4 (CAT 6-13):** Cb and Cr given the luma block at the same position,
+  since all three planes show the same edges.
+
+### 4.9 pcm
+
+pcm rows are rare: x264 uses I_PCM only where it is cheaper, such as noise
+at QP 0. An image model with left and above samples is enough. The A field
+is 0 in x264 streams (`x264_padding`).
+
+## 5. Coding order
+
+The model may code the values in any order its decoder can follow. The
+decoder can buffer a macroblock, or a picture, before writing rows.
+
+- **Within a macroblock:** the bitstream order (mb_type, prediction, cbp,
+  transform flag, QP, residual) lets cbp use the motion and QP use the cbp.
+  Moving Q after the residual would trade the QP as a residual context for
+  the residual as a QP context.
+- **Per picture, in two passes:** code the side information of all MBs
+  first, then the residual. The residual contexts can then use the modes and
+  motion of all eight neighbours, not only the causal ones.
+- **Across slices:** neighbours in other slices are usable (section 3.2).
+
+## 6. Method
+
+1. **Parse** the TSV into values, regenerate it, and compare: the text must
+   come back identical, or the input goes to the escape path. Check the
+   whole chain with `h264p d` and `cmp`.
+2. **Reproduce CABAC first:** CABAC's binarization and contexts with the
+   model's counters, element by element. The result should land near the
+   stream size. With the simple counters of the appendix, the skip flags
+   cost 2.51 Mbit against CABAC's 2.59. A large miss means the parsing or
+   the neighbour state is wrong.
+3. **Add contexts element by element**, and measure each element against
+   the table in section 1. The experiments in the appendix were made with
+   `tools/ctxexp.py`, which parses the TSV, keeps the per-picture state and
+   codes chosen decisions under several context sets. It is a starting point
+   for trying more.
+4. **Test on all the test streams.** Tune for progressive 4:2:0 8-bit x264,
+   but keep everything lossless on all of `test/002`, `test/gen` and
+   `test/h264p` (CAVLC, interlaced, 4:2:2, 4:4:4, high bit depth, PCM, FMO).
+
+### Order of work
+
+1. Coefficients (43.6%): signs from A/B and Cb, Cr given Cb, nC and the
+   count so far, same-position neighbours.
+2. Skip and mb_type (19.8%): temporal and C/D contexts, and the neighbours'
+   classes.
+3. mvd (12.7%): neighbour magnitudes and signs, then motion vector
+   reconstruction.
+4. Intra modes (8.5%): actual modes of A and B.
+5. mb_qp_delta (7.7%) and cbp (5.8%).
+
+The best single context of each element in the appendix saves 0.93 Mbit
+in total, 3.3% of the slice data, before any mixing. They leave out
+mb_type, cbp, chroma AC, the 8×8 and Intra16x16 blocks and motion vector
+reconstruction.
+
+## Appendix: single-context experiments
+
+`tools/ctxexp.py` on the five TSV files, with each stream starting from
+empty statistics. Every variant codes the same binary decisions with one
+adaptive probability per context. The update is p += (bit − p)/(n + 1.5),
+with the count n capped at 255, and there is no mixing. The first variant of
+each element is the baseline; changes are relative to it.
+
+The experiments use these simplifications:
+
+- neighbours across slice boundaries are allowed (these streams have one
+  slice per picture);
+- "col" is the MB at the same address in the previous picture of the same
+  slice type and reference status;
+- residual experiments cover luma 4×4 blocks (CAT 1 and 2) and chroma DC;
+- mvd is coded as zero flag, unary to 8 and an Exp-Golomb escape, not as
+  CABAC's UEG3.
+
+| element | decisions | context | bits | change |
+|---|---:|---|---:|---:|
+| skip flag | 9,035,778 | CABAC: A, B coded | 2,510,505 | |
+| | | A, B (unavailable/skipped/coded) | 2,472,517 | −1.5% |
+| | | + col | 2,339,929 | −6.8% |
+| | | + skipped count in col 3×3 | 2,302,598 | −8.3% |
+| mb_type (6-bit tree) | 7,445,082 | slice type | 2,813,104 | |
+| | | + classes of A, B | 2,574,117 | −8.5% |
+| | | + class of col | 2,599,495 | −7.6% |
+| intra modes | 2,011,675 | CABAC: flag, rem bins | 1,799,758 | |
+| | | actual mode \| modes of A, B | 1,623,770 | −9.8% |
+| | | + previous block's mode | 1,640,590 | −8.8% |
+| mb_qp_delta (unary bins) | 3,564,756 | CABAC: previous delta ≠ 0 | 2,010,315 | |
+| | | + QP of col − QP_pred | 1,983,929 | −1.3% |
+| | | + QP of B − QP_pred | 1,978,407 | −1.6% |
+| | | CABAC + cbp, class | 1,954,551 | −2.8% |
+| | | previous delta (−3..3) instead of ≠ 0 | 2,009,078 | −0.1% |
+| coded_block_flag, luma 4×4 | 1,220,368 | CABAC: flags of A, B | 1,097,707 | |
+| | | counts of A, B | 1,085,011 | −1.2% |
+| | | + intra, QP/6 | 1,082,072 | −1.4% |
+| sig/last, luma 4×4 | 4,272,001 | CABAC: position | 3,453,856 | |
+| | | + nC | 3,388,279 | −1.9% |
+| | | + count so far | 3,361,084 | −2.7% |
+| levels, luma 4×4 | 2,477,696 | CABAC: gt1/eq1 counts | 1,717,081 | |
+| | | + nC, position | 1,695,992 | −1.2% |
+| signs, luma 4×4 | 1,630,887 | none (bypass) | 1,630,887 | |
+| | | signs at the same position in A, B | 1,508,517 | −7.5% |
+| coded_block_flag, chroma DC | 611,888 | CABAC: flags of A, B | 523,907 | |
+| | | + Cb's flag for Cr | 428,274 | −18.3% |
+| signs, chroma DC | 466,819 | none (bypass) | 466,819 | |
+| | | Cr: Cb's sign at the same position | 393,146 | −15.8% |
+| mvd | 3,654,514 | CABAC: \|A\| + \|B\| class | 3,367,988 | |
+| | | \|A\|, \|B\| separately | 3,344,483 | −0.7% |
+| | | + other component | 3,322,203 | −1.4% |
+| | | + col | 3,333,190 | −1.0% |
+| signs, mvd | 458,508 | none (bypass) | 458,508 | |
+| | | signs of A, B, other component | 434,585 | −5.2% |
+
+The gains vary with content. For the skip flags with all contexts, they were
+−29% on 00, −10% on 01, −1.3% on 03 and −6.6% on 04. For the luma signs:
+−11.6%, −3.7%, −5.2% and −17.1%. On 02, which has only two pictures, larger
+context sets lose to the learning cost; mixing avoids that.
