@@ -1,7 +1,6 @@
 
-static const byte H_mvs_a_kind[3+1]={ 0,1,2,3 };
-static const byte H_mvs_a_ma[7+1]={ 0,1,2,3,4,5,6,7 };
-static const byte H_mvs_a_mb[7+1]={ 0,1,2,3,4,5,6,7 };
+static const byte H_mvs_a_ma[7+1]={ 0,1,2,3,4,4,4,4 };
+static const byte H_mvs_a_mb[7+1]={ 0,1,2,3,4,5,5,5 };
 static const byte H_mvs_a_oth[5+1]={ 0,1,2,3,4,5 };
 static const byte H_mvs_a_sp[8+1]={ 0,1,2,3,4,5,6,7,8 };
 
@@ -11,7 +10,7 @@ static const byte H_mvs_b_rf[3+1]={ 0,1,2,3 };
 static const byte H_mvs_b_pi[3+1]={ 0,1,2,3 };
 
 static const byte H_mvs_c_kind[3+1]={ 0,1,2,3 };
-static const byte H_mvs_c_pd[8+1]={ 0,1,2,3,4,5,6,7,8 };
+static const byte H_mvs_c_pd[8+1]={ 0,1,2,3,3,4,5,5,6 };
 static const byte H_mvs_c_sp[8+1]={ 0,1,2,3,4,5,6,7,8 };
 
 static const byte H_mvs_d_kind[3+1]={ 0,1,2,3 };
@@ -30,13 +29,13 @@ static const byte H_mvs_m_pd[5+1]={ 0,1,2,3,4,5 };
 static const byte H_mvs_n_kind[3+1]={ 0,1,2,3 };
 
 static const byte H_mvs_s_kind[3+1]={ 0,1,2,3 };
-static const byte H_mvs_s_pd[8+1]={ 0,1,2,3,4,5,6,7,8 };
+static const byte H_mvs_s_pd[8+1]={ 0,1,1,2,2,2,2,3,4 };
 
 static const byte H_mvs_t_kind[3+1]={ 0,1,2,3 };
 
 
 static const int H_mvs_rA = (64+0) * (1);
-static const int H_mvs_rB = (16+0) * (1);
+static const int H_mvs_rB = (2+0) * (1);
 static const int H_mvs_rC = (64+0) * (1);
 static const int H_mvs_rD = (255+0) * (1);
 static const int H_mvs_rT = (55+0) * (1);
@@ -47,15 +46,15 @@ static const int H_mvs_lr = (12+0) * (1);
 static const int H_mvs_lrm = (12+0) * (1);
 static const int H_mvs_mbm = (0+0) * (1);
 static const int H_mvs_mwA = (0+0) * (1);
-static const int H_mvs_mwB = (0+0) * (1);
-static const int H_mvs_mwC = (0+0) * (1);
+static const int H_mvs_mwB = (8+0) * (1);
+static const int H_mvs_mwC = (184+0) * (1);
 static const int H_mvs_mwD = (0+0) * (1);
 static const int H_mvs_mwT = (0+0) * (1);
 static const int H_mvs_mwG = (0+0) * (1);
-static const int H_mvs_bw = (8+0) * (1);
+static const int H_mvs_bw = (12+0) * (1);
 static const int H_mvs_qs = (16+3) * (1);
 static const int H_mvs_qf = (16+3) * (1);
-static const int H_mvs_mb = (5+0) * (1);
+static const int H_mvs_mb = (108+0) * (1);
 static const int H_mvs_hA = (24+0) * (1);
 static const int H_mvs_hB = (24+0) * (1);
 static const int H_mvs_hD = (24+0) * (1);
@@ -66,15 +65,15 @@ static const int H_mvs_hT = (24+0) * (1);
 static const int H_mvs_hN = (24+0) * (1);
 
 
-static const long long H_mvs_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 8), 8), 6), 9); // 27648
+static const long long H_mvs_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 2), 5), 6), 6), 9); // 9720
 static const long long H_mvs_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 2), 4), 4), 4); // 1024
-static const long long H_mvs_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 9), 9); // 648
-static const long long H_mvs_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 9), 8), 4); // 2304
+static const long long H_mvs_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 7), 9); // 504
+static const long long H_mvs_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 1), 9), 8), 4); // 1152
 static const long long H_mvs_f_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 9); // 72
 static const long long H_mvs_g_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 1), 1); // 4
-static const long long H_mvs_m_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 6); // 48
+static const long long H_mvs_m_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 1), 6); // 24
 static const long long H_mvs_n_Volume = tc_vmul(1, 4); // 4
-static const long long H_mvs_s_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 9); // 72
+static const long long H_mvs_s_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 5); // 40
 static const long long H_mvs_t_Volume = tc_vmul(tc_vmul(1, 4), 2); // 8
 
 struct H_mvs_T { 

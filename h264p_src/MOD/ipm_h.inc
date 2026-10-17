@@ -21,9 +21,9 @@ static const byte H_ipm_s_dm[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 
 
 
-static const int H_ipm_rA = (64+0) * (1);
-static const int H_ipm_rB = (16+0) * (1);
-static const int H_ipm_rC = (64+0) * (1);
+static const int H_ipm_rA = (210+0) * (1);
+static const int H_ipm_rB = (17+0) * (1);
+static const int H_ipm_rC = (0+0) * (1);
 static const int H_ipm_rD = (255+0) * (1);
 static const int H_ipm_rT = (55+0) * (1);
 static const int H_ipm_rG = (90+0) * (1);
@@ -33,9 +33,9 @@ static const int H_ipm_lr = (12+0) * (1);
 static const int H_ipm_lrm = (12+0) * (1);
 static const int H_ipm_mbm = (0+0) * (1);
 static const int H_ipm_mwA = (0+0) * (1);
-static const int H_ipm_mwB = (0+0) * (1);
+static const int H_ipm_mwB = (10+0) * (1);
 static const int H_ipm_mwC = (0+0) * (1);
-static const int H_ipm_mwD = (0+0) * (1);
+static const int H_ipm_mwD = (224+0) * (1);
 static const int H_ipm_mwT = (0+0) * (1);
 static const int H_ipm_mwG = (0+0) * (1);
 static const int H_ipm_bw = (8+0) * (1);
@@ -58,7 +58,7 @@ static const long long H_ipm_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 10), 10);
 static const long long H_ipm_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 10), 10), 10); // 3000
 static const long long H_ipm_f_Volume = tc_vmul(tc_vmul(1, 3), 10); // 30
 static const long long H_ipm_g_Volume = tc_vmul(1, 1); // 1
-static const long long H_ipm_m_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 3), 3); // 27
+static const long long H_ipm_m_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 3); // 3
 static const long long H_ipm_n_Volume = tc_vmul(1, 1); // 1
 static const long long H_ipm_s_Volume = tc_vmul(tc_vmul(1, 3), 10); // 30
 static const long long H_ipm_t_Volume = tc_vmul(1, 1); // 1

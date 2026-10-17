@@ -5,53 +5,51 @@ static const byte H_lvl_a_e1[4+1]={ 0,1,2,3,4 };
 static const byte H_lvl_a_nc[5+1]={ 0,1,2,3,4,5 };
 
 static const byte H_lvl_b_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
-static const byte H_lvl_b_pm[4+1]={ 0,1,2,3,4 };
+static const byte H_lvl_b_pe[15+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
 static const byte H_lvl_b_pos[5+1]={ 0,1,2,3,4,5 };
 static const byte H_lvl_b_tot[7+1]={ 0,1,2,3,4,5,6,7 };
 
 static const byte H_lvl_c_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 static const byte H_lvl_c_sa[3+1]={ 0,1,2,3 };
 static const byte H_lvl_c_sb[3+1]={ 0,1,2,3 };
-static const byte H_lvl_c_q6[8+1]={ 0,1,2,3,4,5,6,7,8 };
+static const byte H_lvl_c_q6[8+1]={ 0,0,1,2,3,4,5,5,5 };
 
 static const byte H_lvl_d_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 static const byte H_lvl_d_g1[4+1]={ 0,1,2,3,4 };
 static const byte H_lvl_d_md[19+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19 };
 static const byte H_lvl_d_pg[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
 
-static const byte H_lvl_f_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
 
-static const byte H_lvl_m_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
 static const byte H_lvl_n_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
-static const byte H_lvl_s_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 static const byte H_lvl_s_g1[4+1]={ 0,1,2,3,4 };
 static const byte H_lvl_s_pm[4+1]={ 0,1,2,3,4 };
+static const byte H_lvl_s_em[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
 
 static const byte H_lvl_t_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
 
-static const int H_lvl_rA = (64+0) * (1);
+static const int H_lvl_rA = (244+0) * (1);
 static const int H_lvl_rB = (16+0) * (1);
 static const int H_lvl_rC = (64+0) * (1);
 static const int H_lvl_rD = (255+0) * (1);
-static const int H_lvl_rT = (55+0) * (1);
+static const int H_lvl_rT = (177+0) * (1);
 static const int H_lvl_rG = (90+0) * (1);
-static const int H_lvl_rS1 = (6+0) * (1);
+static const int H_lvl_rS1 = (4+0) * (1);
 static const int H_lvl_rS2 = (6+0) * (1);
 static const int H_lvl_lr = (12+0) * (1);
 static const int H_lvl_lrm = (12+0) * (1);
 static const int H_lvl_mbm = (0+0) * (1);
 static const int H_lvl_mwA = (0+0) * (1);
-static const int H_lvl_mwB = (0+0) * (1);
+static const int H_lvl_mwB = (6+0) * (1);
 static const int H_lvl_mwC = (0+0) * (1);
-static const int H_lvl_mwD = (0+0) * (1);
-static const int H_lvl_mwT = (0+0) * (1);
+static const int H_lvl_mwD = (1+0) * (1);
+static const int H_lvl_mwT = (32+0) * (1);
 static const int H_lvl_mwG = (0+0) * (1);
-static const int H_lvl_bw = (8+0) * (1);
-static const int H_lvl_qs = (16+3) * (1);
+static const int H_lvl_bw = (16+0) * (1);
+static const int H_lvl_qs = (20+3) * (1);
 static const int H_lvl_qf = (16+3) * (1);
 static const int H_lvl_mb = (5+0) * (1);
 static const int H_lvl_hA = (24+0) * (1);
@@ -65,14 +63,14 @@ static const int H_lvl_hN = (24+0) * (1);
 
 
 static const long long H_lvl_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 5), 5), 6); // 2100
-static const long long H_lvl_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 5), 6), 8); // 3360
-static const long long H_lvl_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 4), 4), 9); // 2016
+static const long long H_lvl_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 16), 6), 8); // 10752
+static const long long H_lvl_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 4), 4), 6); // 1344
 static const long long H_lvl_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 5), 20), 17); // 23800
-static const long long H_lvl_f_Volume = tc_vmul(1, 14); // 14
+static const long long H_lvl_f_Volume = tc_vmul(1, 1); // 1
 static const long long H_lvl_g_Volume = tc_vmul(1, 1); // 1
-static const long long H_lvl_m_Volume = tc_vmul(tc_vmul(1, 14), 2); // 28
+static const long long H_lvl_m_Volume = tc_vmul(tc_vmul(1, 1), 1); // 1
 static const long long H_lvl_n_Volume = tc_vmul(1, 14); // 14
-static const long long H_lvl_s_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 5), 5); // 350
+static const long long H_lvl_s_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 5), 5), 17); // 850
 static const long long H_lvl_t_Volume = tc_vmul(1, 14); // 14
 
 struct H_lvl_T { 

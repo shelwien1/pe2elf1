@@ -36,9 +36,9 @@ struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg; };
 struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds; };
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp; };
 struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae; };
-struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg; };
-struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg; };
-struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg; };
+struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em; };
+struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe; };
+struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe; };
 struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md, pp, mg; };
 struct H_pcm_v { int pl, dp, pd, pd2; };
 
@@ -260,6 +260,23 @@ struct SignPred {
   void decide(int j, int negative) {
     fixed_mask |= 1 << j;
     if (negative) fixed_val |= 1 << j;
+  }
+  // the level of the coefficient at scan position k the edges ask for: what
+  // is left of the targets projected onto its basis, as a class (1 +
+  // tc_qlog of half levels, 0 nothing)
+  int estimate(int k) const {
+    int r = raster(k);
+    int64_t num = 0, den = 0;
+    for (int e = 0; e < ne; e++)
+      if (avail[e]) {
+        int b = basis(r, e);
+        num += (target[e] - base[e]) * b;
+        den += b * b;
+      }
+    int64_t l1 = level(k, 1);
+    if (!den || !l1) return 0;
+    int64_t m2 = (num < 0 ? -num : num) * 2 / den / l1;
+    return m2 ? 1 + std::min(tc_qlog(m2), 14) : 0;
   }
 };
 constexpr int SignPred::kT4[4][4];
@@ -1371,6 +1388,10 @@ struct Model {
              : g.kind == 2 ? rec_.pred_texture(g.plane, g.x * 4, g.y * 4, 4)
                            : rec_.pred_texture(g.plane, g.x * 4, g.y * 4, g.kind == 3 ? 8 : 4);
     int pg = pt < 0 ? 0 : 1 + tc_clamp(tc_qlog(pt), 0, 15);
+    // and how far it is from continuing its surroundings
+    int ms = g.kind == 0 ? rec_.edge_miss(g.plane, 0, 0, g.plane ? 8 : 16)
+             : rec_.edge_miss(g.plane, g.x * 4, g.y * 4, g.kind == 3 ? 8 : 4);
+    int em = ms < 0 ? 0 : 1 + tc_clamp(tc_qlog(ms), 0, 15);
     // the number of nonzero coefficients
     tc_stage = STG_CBF;
     H_cbf_v D;
@@ -1402,6 +1423,7 @@ struct Model {
     D.md = md;
     D.en = map_en();
     D.pg = pg;
+    D.em = em;
     tcx X;
     H_cbf_make(D, X);
     int pr[TC_NODE];
@@ -1425,13 +1447,17 @@ struct Model {
       if (cat == 4 && sc_->chroma_ == 1) rec_.chroma_add(idx >> 2 & 1, idx & 3, mi_->qp - qp_off_);
       return;
     }
+    // what the samples around the block ask of it (sign prediction, below,
+    // and the level estimates)
+    SignPred sp;
+    bool spok = cat <= 5 && (cat != 3 || sc_->chroma_ == 1) && sp.init(rec_, g, cat, mi_->qp - qp_off_, idx);
     // where they are: per position, whether the coefficient is nonzero,
     // knowing how many are still to come
     tc_stage = STG_SIG;
     bool fld = sc_->field_mb();
     bool sig[64];
     int rem = total, last = 0, cnt = total;
-    H_sig_v S = {cat, 0, 0, 0, md, nc, fld, q, pg};
+    H_sig_v S = {cat, 0, 0, 0, md, nc, fld, q, pg, em, 0};
     int sig_base = kSigBase[fld][cat], numc8x8 = sc_->chroma_ == 2 ? 2 : 1;
     bool b8x8 = cat == 5 || cat == 9 || cat == 13;
     for (int i = 0; rem; i++) {
@@ -1441,6 +1467,7 @@ struct Model {
         S.pos = i;
         S.rem = tc_qlog(rem);
         S.zl = tc_qlog(n - i - rem);
+        S.pe = spok && i < 4 ? sp.estimate(i) : 0;
         tcx Y;
         H_sig_make(S, Y);
         f_sig.select(Y);
@@ -1457,7 +1484,7 @@ struct Model {
     tc_stage = STG_LVL;
     int mag[64];
     int g1 = 0, e1 = 0;
-    H_lvl_v L = {cat, 0, 0, nc, 0, 0, 0, q, tc_qlog(cnt), md, 0, pg};
+    H_lvl_v L = {cat, 0, 0, nc, 0, 0, 0, q, tc_qlog(cnt), md, 0, pg, em, 0};
     int abs_base = kAbsBase[cat];
     for (int k = 0; k < TC_NODE; k++) pr[k] = -1;
     f_lvl.prpa = pr;
@@ -1468,6 +1495,7 @@ struct Model {
       pr[0] = cab1(abs_base + (g1 ? 0 : std::min(4, 1 + e1)));
       pr[1] = pr[2] = cab1(abs_base + 5 + std::min(4 - (cat == 3), g1));
       L.pos = tc_qlog(k);
+      L.pe = spok && k < 4 ? sp.estimate(k) : 0;
       L.sa = na.m ? std::min(abs(coef_at(na.m, g, na.i, k)), 3) : 0;
       L.sb = nb.m ? std::min(abs(coef_at(nb.m, g, nb.i, k)), 3) : 0;
       tcx X;
@@ -1490,8 +1518,7 @@ struct Model {
     // coefficients in scan order are coded after the others, each with the
     // sign that makes the block continue its surroundings best
     int npred = 0, pk[6];
-    SignPred sp;
-    if ((cat <= 5 && (cat != 3 || sc_->chroma_ == 1)) && sp.init(rec_, g, cat, mi_->qp - qp_off_, idx))
+    if (spok)
       for (int k = 0; k <= last && npred < 6; k++)
         if (sig[k]) pk[npred++] = k;
     auto code_sign = [&](int k) {

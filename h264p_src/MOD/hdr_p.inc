@@ -18,7 +18,7 @@ void H_hdr_make( const H_hdr_v & D, tcx & X ) {
   (void) tag;  (void) fld;  (void) p1;  (void) p2;  (void) pos;  (void) p1r;  (void) sty;
 
   a = 0;
-  a = (a<<8) + (((tag)&255)); // 11111111
+  a = (a<<6) + (((((tag)>>6)&1)<<5) + ((tag)&31)); // 01011111
   a = a*4 + H_hdr_a_fld[__min(3,__max(0,fld-(1-1)))];
   a = a*8 + H_hdr_a_p1[__min(7,__max(0,p1-(1-1)))];
   a = a*10 + H_hdr_a_sty[__min(9,__max(0,sty-(1-1)))];
@@ -43,7 +43,6 @@ void H_hdr_make( const H_hdr_v & D, tcx & X ) {
   f = (f<<8) + (((tag)&255)); // 11111111
 
   m = 0;
-  m = (m<<8) + (((tag)&255)); // 11111111
 
   t = 0;
   t = (t<<8) + (((tag)&255)); // 11111111

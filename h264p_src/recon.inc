@@ -1520,6 +1520,21 @@ struct Recon {
     int r = kZz8[k], ls = 16 * kNorm8[m][norm8_class(r >> 3, r & 7)];
     return qp >= 36 ? ((int64_t)c * ls) << (q6 - 6) : ((int64_t)c * ls + (1 << (5 - q6))) >> (6 - q6);
   }
+
+  // How far the prediction of a block of n x n samples at (x, y) of plane c
+  // is from continuing the decoded samples around it: the mean over its
+  // top and left edge samples of |2 R1 - R2 - P|, in quarter samples; -1
+  // not known.
+  int edge_miss(int c, int x, int y, int n) const {
+    int64_t t[32];
+    bool av[32];
+    if (!sign_edges(c, x, y, n, 4, t, av)) return -1;
+    int64_t sum = 0;
+    int cnt = 0;
+    for (int e = 0; e < 2 * n; e++)
+      if (av[e]) sum += t[e] < 0 ? -t[e] : t[e], cnt++;
+    return cnt ? (int)(sum / cnt) : -1;
+  }
 };
 
 }  // namespace h264p

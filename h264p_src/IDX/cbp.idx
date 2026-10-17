@@ -14,7 +14,7 @@ Debug 1
 Const 0
 
 Index a
- a_inc: inc, 1!111
+ a_inc: inc, 1!101
  a_pc: pc, 1!1111
  a_cls: cls, 1!11111111
  a_st: st, 1!111111111
@@ -27,7 +27,7 @@ Index b
 Index c
  c_cls: cls, 1!11111111
  c_col: col, 1!11
- c_pc: pc, 1!1111
+ c_pc: pc, 1!1010
  c_pg: pg, 1!1111111111111111
 
 Index d
@@ -40,10 +40,10 @@ Index s
  s_td: td, 1!1111111111111111
 
 Index f
- f_cls: cls, 1!11111111
+ f_cls: cls, 1!00100100
 
 Index m
- m_inc: inc, 1!111
+ m_inc: inc, 1!000
 
 Index t
  t_st: st, 1!0
@@ -55,25 +55,25 @@ Index g
  g_st: st, 1!0
 
 Number rA, 1, 0!01000000
-Number rB, 1, 0!00010000
+Number rB, 1, 0!11110101
 Number rC, 1, 0!01000000
 Number rD, 1, 0!11111111
 Number rT, 1, 0!00110111
 Number rG, 1, 0!01011010
-Number rS1, 1, 0!00110
-Number rS2, 1, 0!00110
+Number rS1, 1, 0!00000
+Number rS2, 1, 0!00000
 Number lr, 1, 0!01100
 Number lrm, 1, 0!01100
 Number mbm, 1, 0!00000000
 Number mwA, 1, 0!00000000
 Number mwB, 1, 0!00000000
 Number mwC, 1, 0!00000000
-Number mwD, 1, 0!00000000
+Number mwD, 1, 0!00010010
 Number mwT, 1, 0!00000000
 Number mwG, 1, 0!00000000
-Number bw, 1, 0!01000
+Number bw, 1, 0!01110
 Number qs, 1, 3!0010000
-Number qf, 1, 3!0010000
+Number qf, 1, 3!0000100
 Number mb, 1, 0!00000101
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is

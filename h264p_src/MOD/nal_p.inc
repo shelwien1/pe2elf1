@@ -18,9 +18,8 @@ void H_nal_make( const H_nal_v & D, tcx & X ) {
   (void) fld;  (void) ctx;  (void) p1;  (void) p2;
 
   a = 0;
-  a = a*32 + H_nal_a_fld[__min(31,__max(0,fld-(1-1)))];
+  a = a*6 + H_nal_a_fld[__min(31,__max(0,fld-(1-1)))];
   a = a*16 + H_nal_a_ctx[__min(15,__max(0,ctx-(1-1)))];
-  a = a*16 + H_nal_a_p1[__min(15,__max(0,p1-(1-1)))];
 
   b = 0;
   b = b*32 + H_nal_b_fld[__min(31,__max(0,fld-(1-1)))];
@@ -29,19 +28,19 @@ void H_nal_make( const H_nal_v & D, tcx & X ) {
 
   c = 0;
   c = c*32 + H_nal_c_fld[__min(31,__max(0,fld-(1-1)))];
-  c = c*32 + H_nal_c_ctx[__min(31,__max(0,ctx-(1-1)))];
+  c = c*3 + ((ctx>6+(1-1))+(ctx>8+(1-1)));
 
   d = 0;
   d = d*32 + H_nal_d_fld[__min(31,__max(0,fld-(1-1)))];
 
   s = 0;
-  s = s*32 + H_nal_s_fld[__min(31,__max(0,fld-(1-1)))];
+  s = s*5 + H_nal_s_fld[__min(31,__max(0,fld-(1-1)))];
 
   f = 0;
   f = f*32 + H_nal_f_fld[__min(31,__max(0,fld-(1-1)))];
 
   m = 0;
-  m = m*32 + H_nal_m_fld[__min(31,__max(0,fld-(1-1)))];
+  m = m*4 + H_nal_m_fld[__min(31,__max(0,fld-(1-1)))];
 
   t = 0;
   t = t*32 + H_nal_t_fld[__min(31,__max(0,fld-(1-1)))];

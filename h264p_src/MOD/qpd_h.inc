@@ -41,7 +41,7 @@ static const int H_qpd_mwT = (0+0) * (1);
 static const int H_qpd_mwG = (0+0) * (1);
 static const int H_qpd_bw = (8+0) * (1);
 static const int H_qpd_qs = (16+3) * (1);
-static const int H_qpd_qf = (16+3) * (1);
+static const int H_qpd_qf = (56+3) * (1);
 static const int H_qpd_mb = (5+0) * (1);
 static const int H_qpd_hA = (24+0) * (1);
 static const int H_qpd_hB = (24+0) * (1);
@@ -54,7 +54,7 @@ static const int H_qpd_hN = (24+0) * (1);
 
 
 static const long long H_qpd_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 5), 3), 9); // 270
-static const long long H_qpd_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 9), 14); // 252
+static const long long H_qpd_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 9), 14); // 126
 static const long long H_qpd_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 7), 10), 9); // 630
 static const long long H_qpd_d_Volume = tc_vmul(tc_vmul(1, 2), 14); // 28
 static const long long H_qpd_f_Volume = tc_vmul(1, 10); // 10

@@ -28,6 +28,7 @@ Index b
  b_pos: pos, 1!111
  b_crcb: crcb, 1!11
  b_kn: kn, 1!1
+ b_em: em, 1!1111111111111111
 
 Index c
  c_cat: cat, 1!1111111111111
@@ -39,7 +40,7 @@ Index c
 Index d
  d_cat: cat, 1!1111111111111
  d_nc: nc, 1!11111
- d_md: md, 1!1111111111111111111
+ d_md: md, 1!1111001101110111100
  d_kn: kn, 1!1
  d_pg: pg, 1!1111111111111111
 
@@ -52,7 +53,7 @@ Index f
  f_intra: intra, 1!1
 
 Index m
- m_cat: cat, 1!1111111111111
+ m_cat: cat, 1!1110000000000
  m_kn: kn, 1!1
 
 Index t
@@ -81,10 +82,10 @@ Number mwC, 1, 0!00000000
 Number mwD, 1, 0!00000000
 Number mwT, 1, 0!00000000
 Number mwG, 1, 0!00000000
-Number bw, 1, 0!01000
+Number bw, 1, 0!10000
 Number qs, 1, 3!0010000
 Number qf, 1, 3!0010000
-Number mb, 1, 0!00000101
+Number mb, 1, 0!10000010
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
 #  direct, one that does not is hashed into 2^h rows and contexts share
