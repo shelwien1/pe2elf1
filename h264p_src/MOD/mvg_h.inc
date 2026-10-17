@@ -138,8 +138,8 @@ struct H_mvg_T {
   u8 H_mvg_W2C[H_mvg_w_Volume * H_mvg_ND];
   i32 H_mvg_W3[tc_rows(H_mvg_s_Volume, H_mvg_hS) * H_mvg_ND * TC_MIXN];
   u8 H_mvg_W3C[tc_rows(H_mvg_s_Volume, H_mvg_hS) * H_mvg_ND];
-  i32 H_mvg_WF[H_mvg_ND * 4];
-  u8 H_mvg_WFC[H_mvg_ND];
+  i32 H_mvg_WF[H_mvg_ND * 5 * 4];
+  u8 H_mvg_WFC[H_mvg_ND * 5];
   cm_cnt H_mvg_G[H_mvg_g_Volume * H_mvg_NG];
   
   /* Total bytes this module's Table() members occupy -- a constant here, since
@@ -168,8 +168,8 @@ struct H_mvg_T {
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_mvg_w_Volume * H_mvg_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H_mvg_s_Volume, H_mvg_hS) * H_mvg_ND * TC_MIXN)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_mvg_s_Volume, H_mvg_hS) * H_mvg_ND)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_mvg_ND * 4)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(H_mvg_ND)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_mvg_ND * 5 * 4)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(H_mvg_ND * 5)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H_mvg_g_Volume * H_mvg_NG);
   void H_mvg_Init( void ) {
   

@@ -140,8 +140,8 @@ struct H_qpg_T {
   u8 H_qpg_W2C[H_qpg_w_Volume * H_qpg_ND];
   i32 H_qpg_W3[tc_rows(H_qpg_s_Volume, H_qpg_hS) * H_qpg_ND * TC_MIXN];
   u8 H_qpg_W3C[tc_rows(H_qpg_s_Volume, H_qpg_hS) * H_qpg_ND];
-  i32 H_qpg_WF[H_qpg_ND * 4];
-  u8 H_qpg_WFC[H_qpg_ND];
+  i32 H_qpg_WF[H_qpg_ND * 5 * 4];
+  u8 H_qpg_WFC[H_qpg_ND * 5];
   cm_cnt H_qpg_G[H_qpg_g_Volume * H_qpg_NG];
   
   /* Total bytes this module's Table() members occupy -- a constant here, since
@@ -170,8 +170,8 @@ struct H_qpg_T {
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_qpg_w_Volume * H_qpg_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H_qpg_s_Volume, H_qpg_hS) * H_qpg_ND * TC_MIXN)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_qpg_s_Volume, H_qpg_hS) * H_qpg_ND)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_qpg_ND * 4)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(H_qpg_ND)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_qpg_ND * 5 * 4)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(H_qpg_ND * 5)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H_qpg_g_Volume * H_qpg_NG);
   void H_qpg_Init( void ) {
   

@@ -5,10 +5,11 @@
     lines lifted out into the struct in MOD/cbf_h.inc.  Edit this file and
     cbf.idx, not MOD/; ../mk.sh regenerates both.
 
-    `_A`-`_E`, `_H`-`_L` are the ten counters, `_S` and `_F` the two APMs, `_W` and
-    `_W2` the two mixers (selected by index m and by index w) and `_WF` the
-    one that mixes them, `_MT` and `_WM` the mantissa plane and its mixer,
-    `_G` the sign counters.  Each is H_cbf_ND (or H_cbf_MND) rows deep per
+    `_A`-`_E`, `_H`-`_L` are the ten counters, `_S` and `_F` the two APMs,
+    `_W`, `_W2` and `_W3` the three mixers (selected by indices m, w and s)
+    and `_WF` the one that mixes them (by node and the state of code()'s
+    hint), `_MT` and `_WM` the mantissa plane and its mixer, `_G` the sign
+    counters.  Each is H_cbf_ND (or H_cbf_MND) rows deep per
     context: where a decision sits among the family's nodes is context
     without being a variable.  */
 

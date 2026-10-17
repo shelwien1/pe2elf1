@@ -146,8 +146,8 @@ struct H_ipm_T {
   u8 H_ipm_W2C[H_ipm_w_Volume * H_ipm_ND];
   i32 H_ipm_W3[tc_rows(H_ipm_s_Volume, H_ipm_hS) * H_ipm_ND * TC_MIXN];
   u8 H_ipm_W3C[tc_rows(H_ipm_s_Volume, H_ipm_hS) * H_ipm_ND];
-  i32 H_ipm_WF[H_ipm_ND * 4];
-  u8 H_ipm_WFC[H_ipm_ND];
+  i32 H_ipm_WF[H_ipm_ND * 5 * 4];
+  u8 H_ipm_WFC[H_ipm_ND * 5];
   cm_cnt H_ipm_G[H_ipm_g_Volume * H_ipm_NG];
   
   /* Total bytes this module's Table() members occupy -- a constant here, since
@@ -176,8 +176,8 @@ struct H_ipm_T {
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_ipm_w_Volume * H_ipm_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H_ipm_s_Volume, H_ipm_hS) * H_ipm_ND * TC_MIXN)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_ipm_s_Volume, H_ipm_hS) * H_ipm_ND)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_ipm_ND * 4)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(H_ipm_ND)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_ipm_ND * 5 * 4)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(H_ipm_ND * 5)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H_ipm_g_Volume * H_ipm_NG);
   void H_ipm_Init( void ) {
   

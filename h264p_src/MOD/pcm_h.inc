@@ -129,8 +129,8 @@ struct H_pcm_T {
   u8 H_pcm_W2C[H_pcm_w_Volume * H_pcm_ND];
   i32 H_pcm_W3[tc_rows(H_pcm_s_Volume, H_pcm_hS) * H_pcm_ND * TC_MIXN];
   u8 H_pcm_W3C[tc_rows(H_pcm_s_Volume, H_pcm_hS) * H_pcm_ND];
-  i32 H_pcm_WF[H_pcm_ND * 4];
-  u8 H_pcm_WFC[H_pcm_ND];
+  i32 H_pcm_WF[H_pcm_ND * 5 * 4];
+  u8 H_pcm_WFC[H_pcm_ND * 5];
   cm_cnt H_pcm_G[H_pcm_g_Volume * H_pcm_NG];
   
   /* Total bytes this module's Table() members occupy -- a constant here, since
@@ -159,8 +159,8 @@ struct H_pcm_T {
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_pcm_w_Volume * H_pcm_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H_pcm_s_Volume, H_pcm_hS) * H_pcm_ND * TC_MIXN)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_pcm_s_Volume, H_pcm_hS) * H_pcm_ND)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_pcm_ND * 4)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(H_pcm_ND)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_pcm_ND * 5 * 4)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(H_pcm_ND * 5)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H_pcm_g_Volume * H_pcm_NG);
   void H_pcm_Init( void ) {
   

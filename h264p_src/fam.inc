@@ -148,7 +148,7 @@ template <int f_DEC> struct tc_fam {
       tc_ifits("mixer 2", vw, (sz)nd * TC_MIXN);
       mx2.init(w2, w2c, vw * nd);
       mx3.init(w3, w3c, ks * nd);
-      mxf.init(wf, wfc, nd);
+      mxf.init(wf, wfc, nd * 5);
       mxm.init(wm, wmc, kn * nm);
     }
     rA = tc_clamp(ra, 1, CM_TMAX);
@@ -273,7 +273,7 @@ template <int f_DEC> struct tc_fam {
       mxf.set(1, cm_stretch(mx2.mix(bw2 + (u32)node)));
       mxf.set(2, cm_stretch(mx3.mix(bs + (u32)node)));
       mxf.set(3, 256);
-      int pm = mxf.mix((u32)node);
+      int pm = mxf.mix((u32)node * 5 + (u32)hs);  // by node and hint state
       int pf = ap2.pp(pm, bf + (u32)node);
       pf = (bw * pm + (16 - bw) * pf + 8) >> 4;
       b = tc_bit<f_DEC>(pf < 1 ? 1 : pf > CM_PONE - 1 ? CM_PONE - 1 : pf, b);

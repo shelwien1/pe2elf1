@@ -146,8 +146,8 @@ struct H_skp_T {
   u8 H_skp_W2C[H_skp_w_Volume * H_skp_ND];
   i32 H_skp_W3[tc_rows(H_skp_s_Volume, H_skp_hS) * H_skp_ND * TC_MIXN];
   u8 H_skp_W3C[tc_rows(H_skp_s_Volume, H_skp_hS) * H_skp_ND];
-  i32 H_skp_WF[H_skp_ND * 4];
-  u8 H_skp_WFC[H_skp_ND];
+  i32 H_skp_WF[H_skp_ND * 5 * 4];
+  u8 H_skp_WFC[H_skp_ND * 5];
   cm_cnt H_skp_G[H_skp_g_Volume * H_skp_NG];
   
   /* Total bytes this module's Table() members occupy -- a constant here, since
@@ -176,8 +176,8 @@ struct H_skp_T {
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_skp_w_Volume * H_skp_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H_skp_s_Volume, H_skp_hS) * H_skp_ND * TC_MIXN)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_skp_s_Volume, H_skp_hS) * H_skp_ND)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_skp_ND * 4)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(H_skp_ND)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_skp_ND * 5 * 4)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(H_skp_ND * 5)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H_skp_g_Volume * H_skp_NG);
   void H_skp_Init( void ) {
   

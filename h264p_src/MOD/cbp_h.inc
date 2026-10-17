@@ -153,8 +153,8 @@ struct H_cbp_T {
   u8 H_cbp_W2C[H_cbp_w_Volume * H_cbp_ND];
   i32 H_cbp_W3[tc_rows(H_cbp_s_Volume, H_cbp_hS) * H_cbp_ND * TC_MIXN];
   u8 H_cbp_W3C[tc_rows(H_cbp_s_Volume, H_cbp_hS) * H_cbp_ND];
-  i32 H_cbp_WF[H_cbp_ND * 4];
-  u8 H_cbp_WFC[H_cbp_ND];
+  i32 H_cbp_WF[H_cbp_ND * 5 * 4];
+  u8 H_cbp_WFC[H_cbp_ND * 5];
   cm_cnt H_cbp_G[H_cbp_g_Volume * H_cbp_NG];
   
   /* Total bytes this module's Table() members occupy -- a constant here, since
@@ -183,8 +183,8 @@ struct H_cbp_T {
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_cbp_w_Volume * H_cbp_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H_cbp_s_Volume, H_cbp_hS) * H_cbp_ND * TC_MIXN)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_cbp_s_Volume, H_cbp_hS) * H_cbp_ND)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_cbp_ND * 4)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(H_cbp_ND)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_cbp_ND * 5 * 4)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(H_cbp_ND * 5)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H_cbp_g_Volume * H_cbp_NG);
   void H_cbp_Init( void ) {
   
