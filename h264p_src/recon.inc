@@ -1519,6 +1519,27 @@ struct Recon {
     memcpy(skip_mv, mv, sizeof skip_mv);
     return miss(0, 0, 0, 16);
   }
+  // How far apart the two predictions of a bi-predicted macroblock (rf,
+  // mv) are: 4 x the mean absolute difference of their luma, from the
+  // blocks of equal motion (8x8); -1 not bi-predicted anywhere
+  int bi_diff(const int8_t rf[2][4], const int16_t mv[2][16][2]) const {
+    if (!active) return -1;
+    int mx = mb_addr % cur->mbw * 16, my = mb_addr / cur->mbw * 16, sum = 0, cnt = 0;
+    uint8_t p[2][16 * 8];
+    for (int b8 = 0; b8 < 4; b8++) {
+      if (rf[0][b8] < 0 || rf[1][b8] < 0) continue;
+      int x = (b8 & 1) * 8, y = (b8 >> 1) * 8, b = (y / 4) * 4 + x / 4;
+      for (int l = 0; l < 2; l++) {
+        int r = rf[l][b8];
+        const RPic* ref = r < nlist[l] ? list[l][r] : nullptr;
+        mc_luma(ref ? ref : cur.get(), mx + x, my + y, 8, 8, mv[l][b][0], mv[l][b][1], p[l]);
+      }
+      for (int j = 0; j < 8; j++)
+        for (int i = 0; i < 8; i++) sum += abs(p[0][j * 16 + i] - p[1][j * 16 + i]);
+      cnt += 64;
+    }
+    return cnt ? sum * 4 / cnt : -1;
+  }
   // Template matching: the decoded samples above (2 rows) and to the left
   // (2 columns) of the current macroblock against their prediction by the
   // motion (rf, mv) of its blocks next to them, without weights: 4 x the

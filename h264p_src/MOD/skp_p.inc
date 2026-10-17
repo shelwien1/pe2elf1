@@ -14,8 +14,8 @@
 
 void H_skp_make( const H_skp_v & D, tcx & X ) {
   int a, b, c, d, e, h, s, f, m, t, n, g;
-  int st = D.st, a3 = D.a3, b3 = D.b3, col = D.col, c9 = D.c9, cd = D.cd, run = D.run, cnt = D.cnt, eq = D.eq, lf = D.lf, af = D.af, td = D.td, en = D.en, sm = D.sm, tm = D.tm, tb = D.tb;
-  (void) st;  (void) a3;  (void) b3;  (void) col;  (void) c9;  (void) cd;  (void) run;  (void) cnt;  (void) eq;  (void) lf;  (void) af;  (void) td;  (void) en;  (void) sm;  (void) tm;  (void) tb;
+  int st = D.st, a3 = D.a3, b3 = D.b3, col = D.col, c9 = D.c9, cd = D.cd, run = D.run, cnt = D.cnt, eq = D.eq, lf = D.lf, af = D.af, td = D.td, en = D.en, sm = D.sm, tm = D.tm, tb = D.tb, bd = D.bd;
+  (void) st;  (void) a3;  (void) b3;  (void) col;  (void) c9;  (void) cd;  (void) run;  (void) cnt;  (void) eq;  (void) lf;  (void) af;  (void) td;  (void) en;  (void) sm;  (void) tm;  (void) tb;  (void) bd;
 
   a = 0;
   a = a*10 + H_skp_a_st[__min(9,__max(0,st-(1-1)))];
@@ -56,10 +56,12 @@ void H_skp_make( const H_skp_v & D, tcx & X ) {
   h = h*10 + H_skp_h_st[__min(9,__max(0,st-(1-1)))];
   h = h*17 + H_skp_h_tm[__min(16,__max(0,tm-(1-1)))];
   h = h*17 + H_skp_h_sm[__min(16,__max(0,sm-(1-1)))];
+  h = h*17 + H_skp_h_bd[__min(16,__max(0,bd-(1-1)))];
 
   s = 0;
   s = s*10 + H_skp_s_st[__min(9,__max(0,st-(1-1)))];
   s = s*17 + H_skp_s_tb[__min(16,__max(0,tb-(1-1)))];
+  s = s*17 + H_skp_s_bd[__min(16,__max(0,bd-(1-1)))];
 
   f = 0;
   f = f*3 + ((a3>0+(1-1))+(a3>1+(1-1)));

@@ -30,8 +30,8 @@ constexpr int H_pcm_ND = TC_NODE, H_pcm_MND = TC_MNODE, H_pcm_NG = 3;
 
 struct H_nal_v { int fld, ctx, p1, p2; };
 struct H_hdr_v { int tag, fld, p1, p2, pos, p1r, sty; };
-struct H_skp_v { int st, a3, b3, col, c9, cd, run, cnt, eq, lf, af, td, en, sm, tm, tb; };
-struct H_mbt_v { int st, ca, cb, cc, nsk, en, td, sm, tm, tb, dh; };
+struct H_skp_v { int st, a3, b3, col, c9, cd, run, cnt, eq, lf, af, td, en, sm, tm, tb, bd; };
+struct H_mbt_v { int st, ca, cb, cc, nsk, en, td, sm, tm, tb, dh, bd; };
 struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg, tp, em, pq; };
 struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm; };
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv; };
@@ -491,6 +491,7 @@ struct Model {
   std::vector<int16_t> pxv_;  // the vectors of the current picture's proxies (INT16_MIN none)
   int sm_ = 0, tm_ = 0;  // skip_miss() of the macroblock, its template matching miss
   int tb_ = 0, dh_ = 0;  // skip_miss(): the best template match on list 0, the better list (B)
+  int bd_ = 0;           // skip_miss(): the skip motion's two predictions apart (B)
   int tmb_[2] = {};      // that vector
   bool tmb_ok_ = false;
   int prev_mode_ = 9, mvx_ = 0;
@@ -604,7 +605,7 @@ struct Model {
     rec_.mb_start(addr_);
     qpd_coded_ = false;
     prev_mode_ = 9;
-    sm_ = tm_ = tb_ = dh_ = 0;
+    sm_ = tm_ = tb_ = dh_ = bd_ = 0;
     tmb_ok_ = false;
     pmv_ok_ = false;
     mb_open_ = true;
@@ -690,7 +691,7 @@ struct Model {
     return rec_.tm_search(l, 0, 0, 0, 16, 16, mv, false, cand, nc, &miss);
   }
   int skip_miss() {
-    tm_ = tb_ = dh_ = 0;
+    tm_ = tb_ = dh_ = bd_ = 0;
     if (!rec_.active) return 0;
     // how well the reference can predict the samples around at best (list
     // 0), and which list does it better
@@ -705,6 +706,9 @@ struct Model {
       mv_pskip();
     int tm = rec_.tm_miss(mi_->rf, mi_->mv);
     tm_ = tm < 0 ? 0 : 1 + tc_clamp(tc_qlog(tm), 0, 15);
+    // B: how far apart the two predictions of the skip motion are
+    int bd = sc_->stype_ == kB ? rec_.bi_diff(mi_->rf, mi_->mv) : -1;
+    bd_ = bd < 0 ? 0 : 1 + tc_clamp(tc_qlog(bd), 0, 15);
     int ms = rec_.skip_miss(mi_->rf, mi_->mv);
     memset(mi_->mv, 0, sizeof mi_->mv);
     memset(mi_->rf, -1, sizeof mi_->rf);
@@ -733,6 +737,7 @@ struct Model {
     D.sm = sm_ = skip_miss();
     D.tm = tm_;
     D.tb = tb_;
+    D.bd = bd_;
     const MbState* a = sc_->mb_a_;
     const MbState* b = sc_->mb_b_;
     int ctx = (sc_->stype_ == kB ? 24 : 11) + (a && !a->skip) + (b && !b->skip);
@@ -841,6 +846,7 @@ struct Model {
     D.tm = tm_;
     D.tb = tb_;
     D.dh = dh_;
+    D.bd = bd_;
     tcx X;
     H_mbt_make(D, X);
     f_mbt.select(X);
