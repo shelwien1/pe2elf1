@@ -36,10 +36,10 @@ struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg, tp, em; };
 struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm; };
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv; };
 struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac; };
-struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em; };
-struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe; };
-struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe; };
-struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md, pp, mg; };
+struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz; };
+struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps; };
+struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe, pl; };
+struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md, pp, mg, ez; };
 struct H_pcm_v { int pl, dp, pd, pd2; };
 
 #include "MOD/nal_h.inc"
@@ -485,7 +485,8 @@ struct Model {
   MbInfo* mi_ = nullptr;
   const MbCol* col_ = nullptr;
   int sub_[4] = {};
-  int pmv_[2] = {};  // Recon::proxy_mode's displacement for the macroblock
+  int pmv_[2] = {};  // proxy_mv()
+  bool pmv_ok_ = false;
   int sm_ = 0, tm_ = 0;  // skip_miss() of the macroblock, its template matching miss
   int prev_mode_ = 9, mvx_ = 0;
   int parts_ = 0, subshape_[4] = {};  // partitions of the macroblock: 16x16, 16x8, 8x16, 8x8; sub-macroblock shapes
@@ -598,6 +599,7 @@ struct Model {
     qpd_coded_ = false;
     prev_mode_ = 9;
     sm_ = tm_ = 0;
+    pmv_ok_ = false;
     mb_open_ = true;
     cnt_++;
   }
@@ -871,6 +873,17 @@ struct Model {
   }
   // the prediction of the macroblock, once all of it is known
   void prepare() { rec_.prepare(mi_->cls, mi_->i16m, mi_->modes, mi_->cpred, mi_->t8, mi_->rf, mi_->mv); }
+  // where the neighbours' motion puts the macroblock in the reference
+  // (whole samples), for an intra macroblock's proxy (Recon::proxy_mode,
+  // proxy_levels)
+  void proxy_mv() {
+    if (pmv_ok_) return;
+    pmv_ok_ = true;
+    int p[2] = {0, 0};
+    if (sc_->stype_ != kI && sc_->stype_ != kSI) mv_pred(0, 0, 0, 4, 4, 0, p);
+    pmv_[0] = (p[0] + 2) >> 2;
+    pmv_[1] = (p[1] + 2) >> 2;
+  }
   // how well the motion of an inter macroblock predicts the decoded samples
   // around it (1 + tc_qlog of Recon::tm_miss; 0 not known, intra)
   int tm_pred() const {
@@ -977,13 +990,7 @@ struct Model {
     int strength;
     D.dm = rec_.dimd(addr_, x * 4, y * 4, k8 ? 8 : 4, strength);
     D.ds = strength ? 1 + tc_clamp(tc_qlog(strength) - 6, 0, 8) : 0;
-    if (blk == 0) {
-      // where the neighbours' motion puts the macroblock in the reference
-      int p[2] = {0, 0};
-      if (sc_->stype_ != kI && sc_->stype_ != kSI) mv_pred(0, 0, 0, 4, 4, 0, p);
-      pmv_[0] = (p[0] + 2) >> 2;
-      pmv_[1] = (p[1] + 2) >> 2;
-    }
+    proxy_mv();
     int pm = k8 ? rec_.proxy_mode(x >> 1, y >> 1, 8, pmv_[0], pmv_[1]) : rec_.proxy_mode(x, y, 4, pmv_[0], pmv_[1]);
     D.pm = pm < 0 ? 9 : pm;
     tcx X;
@@ -1557,9 +1564,24 @@ struct Model {
     int ms = g.kind == 0 ? rec_.edge_miss(g.plane, 0, 0, g.plane ? 8 : 16)
              : rec_.edge_miss(g.plane, g.x * 4, g.y * 4, g.kind == 3 ? 8 : 4);
     int em = ms < 0 ? 0 : 1 + tc_clamp(tc_qlog(ms), 0, 15);
+    // an intra block: what its levels would be were the source what the
+    // reference shows (Recon::proxy_levels), by scan position
+    int plv[16];
+    bool pok = false;
+    if (mi_->cls >= CL_INXN && mi_->cls != CL_PCM && (g.kind == 1 || g.kind == 2) && sc_->chroma_ == 1) {
+      proxy_mv();
+      int qp = mi_->qp - qp_off_;
+      pok = rec_.proxy_levels(g.kind == 2 ? g.plane : 0, g.x * 4, g.y * 4,
+                              g.kind == 2 ? rec_.chroma_qp_of(g.plane - 1, qp) : qp, pmv_[0], pmv_[1], plv);
+    }
+    auto est = [&](int j) { return plv[std::min(j + g.off, 15)]; };
+    int pnz = 0;
+    if (pok)
+      for (int j = 0; j < n; j++) pnz += est(j) != 0;
     // the number of nonzero coefficients
     tc_stage = STG_CBF;
     H_cbf_v D = {};
+    D.pz = pok ? 1 + std::min(pnz, 4) : 0;
     D.cat = cat;
     D.na = nb_count(na, g);
     D.nb = nb_count(nb, g);
@@ -1633,6 +1655,7 @@ struct Model {
         S.rem = tc_qlog(rem);
         S.zl = tc_qlog(n - i - rem);
         S.pe = spok && i < 4 ? sp.estimate(i) : 0;
+        S.ps = pok ? 1 + std::min(abs(est(i)), 2) : 0;
         tcx Y;
         H_sig_make(S, Y);
         f_sig.select(Y);
@@ -1661,6 +1684,7 @@ struct Model {
       pr[1] = pr[2] = cab1(abs_base + 5 + std::min(4 - (cat == 3), g1));
       L.pos = tc_qlog(k);
       L.pe = spok && k < 4 ? sp.estimate(k) : 0;
+      L.pl = pok ? 1 + std::min(abs(est(k)), 3) : 0;
       L.sa = na.m ? std::min(abs(coef_at(na.m, g, na.i, k)), 3) : 0;
       L.sb = nb.m ? std::min(abs(coef_at(nb.m, g, nb.i, k)), 3) : 0;
       tcx X;
@@ -1696,6 +1720,7 @@ struct Model {
         G.scb = sgn3(coef_at(mi_, gb, g.kind == 2 ? g.y * 2 + g.x : g.y * 4 + g.x, k));
       }
       G.mag = std::min(mag[k], 3) - 1;
+      G.ez = pok ? 1 + sgn3(est(k)) : 0;
       tcx X;
       H_sgn_make(G, X);
       f_sgn.select(X);

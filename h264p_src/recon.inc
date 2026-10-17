@@ -1596,10 +1596,14 @@ struct Recon {
   // list 0's first reference (else the last reference decoded), predicted
   // from that picture's samples around it by each mode, the one that misses
   // least (sum of absolute differences); -1 no picture
+  const RPic* proxy_pic() const {
+    const RPic* P = nlist[0] > 0 && list[0][0] ? list[0][0] : !dpb.empty() ? dpb.back().get() : nullptr;
+    return P && P->w == cur->w && P->h == cur->h ? P : nullptr;
+  }
   int proxy_mode(int bx, int by, int n, int dx, int dy) const {
     if (!active) return -1;
-    const RPic* P = nlist[0] > 0 && list[0][0] ? list[0][0] : !dpb.empty() ? dpb.back().get() : nullptr;
-    if (!P || P->w != cur->w || P->h != cur->h) return -1;
+    const RPic* P = proxy_pic();
+    if (!P) return -1;
     int w = P->w, x0 = mb_addr % cur->mbw * 16 + bx * n, y0 = mb_addr / cur->mbw * 16 + by * n;
     x0 = clip3(0, w - n, x0 + dx);
     y0 = clip3(0, P->h - n, y0 + dy);
@@ -1622,6 +1626,60 @@ struct Recon {
       if (sad < bsad) bsad = sad, best = m;
     }
     return best;
+  }
+  // The forward 4x4 transform and quantization of residual r (raster), as
+  // an encoder rounding with 1/3 (intra) or 1/6 would: the levels in
+  // zigzag order
+  static void fquant4(const int* r, int qp, bool intra, int* lv) {
+    static const int mf[6][3] = {{13107, 5243, 8066}, {11916, 4660, 7490}, {10082, 4194, 6554},
+                                 {9362, 3647, 5825},  {8192, 3355, 5243},  {7282, 2893, 4559}};
+    int t[16], W[16];
+    for (int i = 0; i < 4; i++) {
+      const int* x = r + i * 4;
+      int a = x[0] + x[3], b = x[1] + x[2], c = x[1] - x[2], d = x[0] - x[3];
+      t[i * 4] = a + b;
+      t[i * 4 + 1] = 2 * d + c;
+      t[i * 4 + 2] = a - b;
+      t[i * 4 + 3] = d - 2 * c;
+    }
+    for (int j = 0; j < 4; j++) {
+      int a = t[j] + t[12 + j], b = t[4 + j] + t[8 + j], c = t[4 + j] - t[8 + j], d = t[j] - t[12 + j];
+      W[j] = a + b;
+      W[4 + j] = 2 * d + c;
+      W[8 + j] = a - b;
+      W[12 + j] = d - 2 * c;
+    }
+    int qb = 15 + qp / 6, f = (1 << qb) / (intra ? 3 : 6);
+    for (int k = 0; k < 16; k++) {
+      int p = kZz4[k], y = p >> 2, x = p & 3;
+      int m = mf[qp % 6][(x & 1) && (y & 1) ? 1 : !(x & 1) && !(y & 1) ? 0 : 2];
+      int q = (int)(((int64_t)abs(W[p]) * m + f) >> qb);
+      lv[k] = W[p] < 0 ? -q : q;
+    }
+  }
+  // The levels of a 4x4 block were the source what the proxy picture
+  // shows (proxy_pic, displaced by dx, dy luma samples): the proxy less the
+  // prediction in the picture, through fquant4 at qp. plane 0 luma, 1 and 2
+  // chroma; x, y in its samples of the current macroblock. false: no proxy.
+  bool proxy_levels(int plane, int x, int y, int qp, int dx, int dy, int* lv) const {
+    if (!active) return false;
+    const RPic* P = proxy_pic();
+    if (!P) return false;
+    int w = plane ? cur->w / 2 : cur->w, h = plane ? cur->h / 2 : cur->h, m = plane ? 8 : 16;
+    int mx = mb_addr % cur->mbw * m + x, my = mb_addr / cur->mbw * m + y;
+    if (plane) {
+      dx = dx >= 0 ? dx / 2 : -((1 - dx) / 2);
+      dy = dy >= 0 ? dy / 2 : -((1 - dy) / 2);
+    }
+    const std::vector<uint8_t>& cp = plane == 0 ? cur->y : plane == 1 ? cur->u : cur->v;
+    const std::vector<uint8_t>& pp = plane == 0 ? P->y : plane == 1 ? P->u : P->v;
+    const uint8_t* C = cp.data() + my * w + mx;
+    const uint8_t* Q = pp.data() + clip3(0, h - 4, my + dy) * w + clip3(0, w - 4, mx + dx);
+    int r[16];
+    for (int j = 0; j < 4; j++)
+      for (int i = 0; i < 4; i++) r[j * 4 + i] = Q[j * w + i] - C[j * w + i];
+    fquant4(r, qp, true, lv);
+    return true;
   }
   int pred_texture(int c, int x, int y, int n) const {
     if (!active || !mb_prepared || mb_cls == 8) return -1;
