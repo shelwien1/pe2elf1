@@ -49,7 +49,7 @@ void H_skp_make( const H_skp_v & D, tcx & X ) {
   e = 0;
   e = e*10 + H_skp_e_st[__min(9,__max(0,st-(1-1)))];
   e = e*17 + H_skp_e_td[__min(16,__max(0,td-(1-1)))];
-  e = e*15 + H_skp_e_en[__min(14,__max(0,en-(1-1)))];
+  e = e*5 + H_skp_e_en[__min(14,__max(0,en-(1-1)))];
   e = e*17 + H_skp_e_sm[__min(16,__max(0,sm-(1-1)))];
 
   h = 0;

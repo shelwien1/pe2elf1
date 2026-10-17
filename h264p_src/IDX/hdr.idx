@@ -64,7 +64,7 @@ Index g
 Number rA, 1, 0!10000000
 Number rB, 1, 0!00000000
 Number rC, 1, 0!00000000
-Number rE, 1, 0!01000000
+Number rE, 1, 0!00000000
 Number rH, 1, 0!01000000
 Number rD, 1, 0!11111111
 Number rT, 1, 0!00100000
@@ -84,7 +84,7 @@ Number mwT, 1, 0!00000000
 Number mwG, 1, 0!00000000
 Number bw, 1, 0!01000
 Number qs, 1, 3!0010000
-Number qf, 1, 3!0010000
+Number qf, 1, 3!0010001
 Number mb, 1, 0!11100010
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is

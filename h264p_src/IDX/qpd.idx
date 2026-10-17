@@ -23,7 +23,7 @@ Index a
 
 Index b
  b_dc: dc, 1!11111111
- b_aq: aq, 1!1111111111111
+ b_aq: aq, 1!1000100001000
  b_ae: ae, 1!1111111111111
 
 Index c
@@ -89,7 +89,7 @@ Number mwB, 1, 0!00000000
 Number mwC, 1, 0!00000000
 Number mwE, 1, 0!00000000
 Number mwH, 1, 0!00000100
-Number mwD, 1, 0!00000000
+Number mwD, 1, 0!00010000
 Number mwT, 1, 0!00000000
 Number mwG, 1, 0!00000000
 Number bw, 1, 0!01000

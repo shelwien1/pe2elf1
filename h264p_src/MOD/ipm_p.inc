@@ -58,7 +58,6 @@ void H_ipm_make( const H_ipm_v & D, tcx & X ) {
   f = f*9 + H_ipm_f_dr[__min(8,__max(0,dr-(1-1)))];
 
   m = 0;
-  m = m*3 + ((mb>8+(1-1))+(mb>9+(1-1)));
 
   w = 0;
   w = w*3 + ((k8>0+(1-1))+(k8>1+(1-1)));

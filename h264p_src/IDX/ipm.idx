@@ -61,7 +61,7 @@ Index f
 Index m
  m_k8: k8, 1!00
  m_ma: ma, 1!0000000000
- m_mb: mb, 1!0000000011
+ m_mb: mb, 1!0000000000
 
 Index w
  w_k8: k8, 1!11

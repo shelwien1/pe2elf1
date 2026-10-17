@@ -51,7 +51,7 @@ static const byte H_sig_w_zl[10+1]={ 0,0,1,2,3,4,4,4,5,5,6 };
 static const byte H_sig_w_em[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
 
 
-static const int H_sig_rA = (140+0) * (1);
+static const int H_sig_rA = (236+0) * (1);
 static const int H_sig_rB = (8+0) * (1);
 static const int H_sig_rC = (64+0) * (1);
 static const int H_sig_rE = (64+0) * (1);
