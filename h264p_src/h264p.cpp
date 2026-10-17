@@ -1,5 +1,6 @@
 // h264p: dumps the syntax of an H.264 Annex B stream to a TSV file with the
 // entropy coding removed (c), and restores the identical stream from it (d).
+#include <algorithm>
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
@@ -31,15 +32,111 @@ struct Options {
 };
 
 struct Stats {
-  long nals = 0, parsed = 0, raw = 0, trail = 0;
+  long nals = 0, parsed = 0, raw = 0, trail = 0, pad = 0;
   std::map<std::string, long> reasons;
+};
+
+// x264 ends its CABAC data in its own way: after the rbsp_stop_one_bit and
+// the alignment zero bits, it sets the last bit of the byte to bit
+// (frame & 31) of 0x35a4e4f5, frame being the number of the picture in
+// coding order from the start of the encoding, and it does the same before
+// the samples of I_PCM macroblocks. An "x264_padding N" row says that the
+// slices that follow do that, the next one being in frame N; restoring then
+// writes these bits by default.
+struct X264Padding {
+  bool on = false;
+  bool hold = false;  // set by the row: the next slice is in frame `frame`
+  int64_t frame = 0;  // the frame of the last slice
+
+  // the padding bit of the next slice, which starts a picture or not
+  int bit(bool newpic) const {
+    if (!on) return 0;
+    uint64_t f = (uint64_t)frame + (newpic && !hold);
+    return 0x35a4e4f5u >> (f & 31) & 1;
+  }
+  void set(int64_t n) { on = true, hold = true, frame = n; }
+  void next_slice(bool newpic) {
+    frame += newpic && !hold;
+    hold = false;
+  }
 };
 
 // State shared by all NAL units of a stream.
 struct Context {
   ParamSets ps;
   MbStore mbs;
+  X264Padding pad;
 };
+
+// A slice with first_mb_in_slice 0, whose first bit is 1, starts a picture.
+bool starts_picture(int type, const uint8_t* payload, size_t n) {
+  return (type == 1 || type == 5) && n && (payload[0] & 0x80);
+}
+
+// Decides when compress writes x264_padding rows, from the padding bits it
+// observes: keeps the current hypothesis (no padding, or x264's padding in
+// one of the 32 phases of the frame number relative to the picture count)
+// while it predicts the observed bits. Otherwise it switches to x264's
+// padding starting with frame 0 at the last SPS or x264 SEI, or to no
+// padding, if that predicted all bits since, else to the hypothesis that
+// predicted the longest run of the latest bits.
+class PadDetector {
+ public:
+  PadDetector() {
+    for (int64_t& l : last_) l = -1;
+  }
+  // a slice NAL unit, which starts a picture or not
+  void slice(bool newpic) { pic_ += newpic; }
+  // an SPS or x264's version SEI: the next picture may start an encoding
+  void restart() {
+    pref_ = (int)(-(uint64_t)(pic_ + 1) & 31);
+    since_ = n_;
+  }
+  // the padding bit observed in the current slice; true when the
+  // hypothesis changes
+  bool observe(int bit) {
+    for (int p = 0; p < 32; p++)
+      if (predict(p) != bit) last_[p] = n_;
+    if (bit) last_[kOff] = n_;
+    if (last_[cur_] != n_++) return false;
+    int best = pref_;
+    if (last_[pref_] >= since_) {
+      if (last_[kOff] < since_) {
+        best = kOff;
+      } else {
+        if (last_[kOff] < last_[best]) best = kOff;
+        for (int p = 0; p < 32; p++)
+          if (last_[p] < last_[best]) best = p;
+      }
+    }
+    cur_ = best;
+    return true;
+  }
+  // the value of the x264_padding row for the current slice, -1 for none
+  int64_t frame() const {
+    if (cur_ == kOff) return -1;
+    int64_t f = pic_ + cur_;
+    return f < 0 ? f + 32 : f;
+  }
+
+ private:
+  static const int kOff = 32;
+  int predict(int p) const { return 0x35a4e4f5u >> (((uint64_t)pic_ + p) & 31) & 1; }
+
+  int64_t pic_ = -1;  // pictures so far, the first one being 0
+  int64_t n_ = 0;     // observations so far
+  int64_t last_[33];  // the last observation each hypothesis mispredicted
+  int cur_ = kOff;
+  int pref_ = 0;       // the phase that makes the picture after the restart frame 0
+  int64_t since_ = 0;  // the first observation after the restart
+};
+
+// x264's version SEI: user_data_unregistered with its UUID
+bool is_x264_sei(const uint8_t* p, size_t n) {
+  static const uint8_t uuid[16] = {0xdc, 0x45, 0xe9, 0xbd, 0xe6, 0xd9, 0x48, 0xb7,
+                                   0x96, 0x2c, 0xd8, 0x20, 0xd9, 0x23, 0xee, 0xef};
+  return std::search(p, p + n, uuid, uuid + 16) != p + n;
+}
 
 std::vector<uint8_t> unescape(const uint8_t* p, size_t n) {
   std::vector<uint8_t> r;
@@ -111,6 +208,7 @@ void read_nal(int type, int ref_idc, const std::vector<uint8_t>& rbsp, Context& 
       h.nal_unit_type = type;
       h.nal_ref_idc = ref_idc;
       code_slice_header(s, h, ctx.ps);
+      h.pad = ctx.pad.bit(h.first_mb == 0);
       read_slice_data(h, ctx.mbs, br, out);
       break;
     }
@@ -120,8 +218,9 @@ void read_nal(int type, int ref_idc, const std::vector<uint8_t>& rbsp, Context& 
 }
 
 // Writes the syntax of a NAL unit from rows, up to and including the
-// rbsp_stop_one_bit. Throws TsvError.
-void write_syntax(int type, int ref_idc, Context& ctx, RowReader& in, BitWriter& bw) {
+// rbsp_stop_one_bit. Returns x264's padding bit for the end of CABAC slice
+// data, else -1. Throws TsvError.
+int write_syntax(int type, int ref_idc, Context& ctx, RowReader& in, BitWriter& bw) {
   Syn s(&in, &bw);
   bool trailing = true;
   switch (type) {
@@ -156,19 +255,23 @@ void write_syntax(int type, int ref_idc, Context& ctx, RowReader& in, BitWriter&
       h.nal_unit_type = type;
       h.nal_ref_idc = ref_idc;
       code_slice_header(s, h, ctx.ps);
-      write_slice_data(h, ctx.mbs, in, bw);
-      trailing = false;  // written with the slice data
-      break;
+      h.pad = ctx.pad.bit(h.first_mb == 0);
+      write_slice_data(h, ctx.mbs, in, bw);  // with the stop bit
+      return h.pps->entropy_coding_mode_flag ? h.pad : -1;
     }
     default:
       throw TsvError("NAL unit type " + std::to_string(type) + " needs a hex row");
   }
   if (trailing) bw.bit(1);  // rbsp_stop_one_bit
+  return -1;
 }
 
-// The rest of the RBSP: alignment zero bits, or what a "trail" row says
+// The alignment zero bits, the last one being x264's padding bit if pad is 1.
+void align(BitWriter& bw, int pad) { bw.put(pad > 0, (8 - (int)(bw.pos() & 7)) & 7); }
+
+// The rest of the RBSP: the alignment bits, or what a "trail" row says
 // instead, and the cabac_zero_words of a "czw" row.
-void write_trailer(RowReader& in, BitWriter& bw) {
+void write_trailer(RowReader& in, BitWriter& bw, int pad) {
   const Row* r = in.peek();
   if (r && r->is("trail")) {
     const Row& t = in.take();
@@ -184,7 +287,7 @@ void write_trailer(RowReader& in, BitWriter& bw) {
       }
     if (bw.pos() & 7) t.fail("does not end on a byte boundary");
   } else {
-    bw.align_zero();
+    align(bw, pad);
   }
   r = in.peek();
   if (r && r->is("czw")) {
@@ -198,8 +301,8 @@ void write_trailer(RowReader& in, BitWriter& bw) {
 
 std::vector<uint8_t> write_nal(int type, int ref_idc, Context& ctx, RowReader& in) {
   BitWriter bw;
-  write_syntax(type, ref_idc, ctx, in, bw);
-  write_trailer(in, bw);
+  int pad = write_syntax(type, ref_idc, ctx, in, bw);
+  write_trailer(in, bw, pad);
   return bw.data();
 }
 
@@ -216,11 +319,13 @@ void update_params(int type, const std::vector<uint8_t>& rbsp, Context& ctx) {
 int get_bit(const std::vector<uint8_t>& v, size_t i) { return v[i >> 3] >> (7 - (i & 7)) & 1; }
 
 // Converts the payload of one NAL unit (after the header byte) to rows, or
-// returns false when it has to be stored verbatim.
+// returns false when it has to be stored verbatim. obs is the bit where x264
+// puts its padding bit in a CABAC slice, -1 if there is none.
 bool convert_nal(int type, int ref_idc, const uint8_t* p, size_t n, Context& ctx, RowWriter& out,
-                 std::string& why, bool& trail) {
+                 std::string& why, bool& trail, int& obs) {
   std::vector<uint8_t> rbsp = unescape(p, n);
   trail = false;
+  obs = -1;
   if (!parsed_type(type)) {
     why = "NAL unit type " + std::to_string(type);
     return false;
@@ -242,13 +347,16 @@ bool convert_nal(int type, int ref_idc, const uint8_t* p, size_t n, Context& ctx
     std::string text = out.text().substr(start);
     RowReader in(text.data(), text.size());
     BitWriter bw;
-    write_syntax(type, ref_idc, ctx, in, bw);
+    int pad = write_syntax(type, ref_idc, ctx, in, bw);
     if (!in.at_end()) throw TsvError("rows left over");
+    size_t pbits = bw.pos();
+    // the last bit of the byte with the stop bit, unless it is the stop bit
+    if (pad >= 0 && (pbits & 7) && (pbits - 1) / 8 < rbsp.size()) obs = rbsp[(pbits - 1) / 8] & 1;
     BitWriter o = bw;
-    o.align_zero();
+    align(o, pad);
     if (o.data() == rbsp) return true;
     // the end differs: cabac_zero_words, or trailing bits that are not
-    // the standard ones (e.g. from another CABAC flushing procedure)
+    // the expected ones (e.g. from yet another CABAC flushing procedure)
     size_t zeros = 0;
     while (zeros < rbsp.size() && rbsp[rbsp.size() - 1 - zeros] == 0) zeros++;
     size_t czw = zeros / 2;
@@ -256,7 +364,7 @@ bool convert_nal(int type, int ref_idc, const uint8_t* p, size_t n, Context& ctx
     RowWriter tail;
     if (o.data() != r) {
       // compare our bits up to and including the stop bit
-      size_t pbits = bw.pos(), rbits = r.size() * 8, d = 0;
+      size_t rbits = r.size() * 8, d = 0;
       while (d < pbits && d < rbits && bw.at(d) == get_bit(r, d)) d++;
       if (pbits - d > 64 || rbits - d > 4096) {
         why = "re-encoding differs at bit " + std::to_string(d) + " of " + std::to_string(rbits);
@@ -274,7 +382,7 @@ bool convert_nal(int type, int ref_idc, const uint8_t* p, size_t n, Context& ctx
     if (czw) tail.row("czw", (int64_t)czw);
     // check the rows as the restoring will use them
     RowReader in2(tail.text().data(), tail.text().size());
-    write_trailer(in2, bw);
+    write_trailer(in2, bw, pad);
     if (bw.data() != rbsp || !in2.at_end()) {
       why = "re-encoding differs";
       out.truncate(start);
@@ -384,6 +492,7 @@ int compress(const char* in_name, const char* out_name, const Options& opt) {
   }
   FILE* f = open_out(out_name);
   Context ctx;
+  PadDetector det;
   Stats st;
   RowWriter out;
   out.begin(kMagic);
@@ -414,19 +523,48 @@ int compress(const char* in_name, const char* out_name, const Options& opt) {
       continue;
     }
     int ref_idc = data[p] >> 5 & 3, type = data[p] & 31;
-    out.begin("nal");
-    out.add((int64_t)zeros);
-    out.add(ref_idc);
-    out.add(type);
-    out.end();
+    const uint8_t* payload = &data[p + 1];
+    size_t len = e - p - 1;
+    bool newpic = starts_picture(type, payload, len);
+    if (type == 1 || type == 5) det.slice(newpic);
+    if (type == 7 || (type == 6 && is_x264_sei(payload, len))) det.restart();
+    size_t mark = out.size();
+    auto nal_row = [&]() {
+      out.begin("nal");
+      out.add((int64_t)zeros);
+      out.add(ref_idc);
+      out.add(type);
+      out.end();
+    };
+    nal_row();
     std::string why;
     bool trail;
-    if (convert_nal(type, ref_idc, &data[p + 1], e - p - 1, ctx, out, why, trail)) {
+    int obs;
+    bool ok = convert_nal(type, ref_idc, payload, len, ctx, out, why, trail, obs);
+    if (ok && obs >= 0 && det.observe(obs)) {
+      // once more, after an x264_padding row that predicts the bit
+      out.truncate(mark);
+      int64_t frame = det.frame();
+      out.begin("x264_padding");
+      if (frame < 0) {
+        out.add_absent();
+        ctx.pad.on = false;
+      } else {
+        out.add(frame);
+        ctx.pad.set(frame);
+      }
+      out.end();
+      st.pad++;
+      nal_row();
+      ok = convert_nal(type, ref_idc, payload, len, ctx, out, why, trail, obs);
+    }
+    if (type == 1 || type == 5) ctx.pad.next_slice(newpic);
+    if (ok) {
       st.parsed++;
       st.trail += trail;
     } else {
       out.begin("hex");
-      out.add(to_hex(&data[p + 1], e - p - 1));
+      out.add(to_hex(payload, len));
       out.end();
       st.raw++;
       st.reasons[why]++;
@@ -461,6 +599,7 @@ int compress(const char* in_name, const char* out_name, const Options& opt) {
   if (opt.verbose) {
     fprintf(stderr, "%ld NAL units: %ld converted (%ld with irregular trailing bits), %ld stored verbatim\n",
             st.nals, st.parsed, st.trail, st.raw);
+    if (st.pad) fprintf(stderr, "%ld x264_padding rows\n", st.pad);
     for (auto& r : st.reasons) fprintf(stderr, "  verbatim: %ld x %s\n", r.second, r.first.c_str());
   }
   return 0;
@@ -508,6 +647,7 @@ int decompress(const char* in_name, const char* out_name, const Options& opt) {
           int64_t ref_idc = r.num(2), type = r.num(3);
           if (ref_idc < 0 || ref_idc > 3 || type < 0 || type > 31) r.fail("bad NAL unit header");
           buf.push_back((uint8_t)(ref_idc << 5 | type));
+          size_t start = buf.size();
           const Row* p = in.peek();
           if (p && p->is("hex")) {
             std::vector<uint8_t> b = from_hex(in.take(), 1);
@@ -517,6 +657,17 @@ int decompress(const char* in_name, const char* out_name, const Options& opt) {
             std::vector<uint8_t> e = escape(write_nal((int)type, (int)ref_idc, ctx, in));
             buf.insert(buf.end(), e.begin(), e.end());
           }
+          if (type == 1 || type == 5)
+            ctx.pad.next_slice(starts_picture((int)type, buf.data() + start, buf.size() - start));
+        }
+      } else if (r.is("x264_padding")) {
+        if (r.size() != 2) r.fail("expected 1 value");
+        if (r.absent(1)) {
+          ctx.pad.on = false;
+        } else {
+          int64_t frame = r.num(1);
+          if (frame < 0 || frame > INT32_MAX) r.fail("bad frame number");
+          ctx.pad.set(frame);
         }
       } else if (r.is("eof")) {
         int64_t n = r.num(1);

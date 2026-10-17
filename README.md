@@ -111,12 +111,26 @@ Rows of the stream, in stream order:
                            its rows follow
     nalx   Z HEX           a NAL unit with forbidden_zero_bit set, or empty
     hex    HEX             the NAL unit after its header byte, verbatim
-    trail  N BITS          the trailing bits are not the standard ones: the
+    trail  N BITS          the trailing bits are not the expected ones: the
                            last N bits written, up to the rbsp_stop_one_bit,
-                           are replaced by BITS (x264 sets a pseudo-random bit
-                           after the CABAC stop bit, for example)
+                           are replaced by BITS
     czw    N               N cabac_zero_words
+    x264_padding N         before a nal row: the slices from there on end
+                           their CABAC data with x264's padding bit (below),
+                           that slice being in frame N; - for no padding bit
     eof    N               N 0x00 bytes after the last NAL unit
+
+x264 does not end its CABAC data quite like the standard: it sets the last
+bit of the byte with the rbsp_stop_one_bit, after the alignment zero bits, to
+bit (frame & 31) of 0x35a4e4f5, frame being the number of the picture in
+coding order from the start of the encoding. It does the same with the
+pcm_alignment_zero_bits before I_PCM samples. `c` recognizes the pattern in
+the bits it sees and writes an x264_padding row where it starts or its phase
+changes (in a stream cut from a longer one, or a concatenation); the frame
+number then goes up with every slice that has first_mb_in_slice 0. These bits
+are expected from then on, so trail rows and nonzero pcm alignment values are
+only needed for bits that differ: an x264 stream from the start of the
+encoding gets one x264_padding row and none of those.
 
 The rows of SPS, PPS, SEI, AUD, filler data and slice headers are named after
 their syntax elements in the standard (7.3) and come in bitstream order, one
@@ -148,8 +162,9 @@ decoding order:
                             intra_chroma_pred_mode C, coded_block_pattern P,
                             mb_qp_delta Q
     fld   F                 mb_field_decoding_flag (MBAFF), where coded
-    pcm   A S...            I_PCM: value of the pcm_alignment_zero_bits (not 0 in
-                            some x264 streams), samples: 256 Y, then Cb, Cr
+    pcm   A S...            I_PCM: the pcm_alignment_zero_bits as a number, XOR
+                            x264's padding bit in the last one if expected,
+                            and the samples: 256 Y, then Cb, Cr
     ipm   M...              Intra 4x4 or 8x8 prediction modes: -1 for
                             prev_intra_pred_mode_flag, else rem_intra_pred_mode
     sub   S S S S           sub_mb_type

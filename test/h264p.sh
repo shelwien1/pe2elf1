@@ -4,14 +4,14 @@
 #
 # usage: test/h264p.sh [H264P] [STREAM...]
 #
-# H264P defaults to ./h264p, STREAMs to all streams under test/.  The dump is
-# made with -s, so a stream also fails when one of its NAL units of a
-# supported type could only be stored verbatim.
+# H264P defaults to ./h264p, STREAMs to all streams under test/ and a
+# concatenation of some of them.  The dump is made with -s, so a stream also
+# fails when one of its NAL units of a supported type could only be stored
+# verbatim.
 
 bin=${1:-./h264p}
 shift
 here=$(dirname "$0")
-[ $# -eq 0 ] && set -- "$here"/002/*.h264 "$here"/gen/*.264 "$here"/h264p/*.264
 
 if [ ! -x "$bin" ]; then
   echo "h264p '$bin' not found, run make first" >&2
@@ -20,6 +20,13 @@ fi
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
+
+if [ $# -eq 0 ]; then
+  # and a concatenation, in which x264's padding bits change phase and stop
+  cat "$here"/gen/x264_base.264 "$here"/gen/jm_hier_b.264 "$here"/002/02.h264 "$here"/gen/x264_slices4.264 \
+    > "$tmp/concat.264"
+  set -- "$here"/002/*.h264 "$here"/gen/*.264 "$here"/h264p/*.264 "$tmp/concat.264"
+fi
 
 pass=0
 fail=0

@@ -114,6 +114,7 @@ struct SliceHeader {
   int slice_group_change_cycle = 0;
   std::shared_ptr<const Sps> sps;
   std::shared_ptr<const Pps> pps;
+  int pad = 0;  // x264's padding bit after CABAC flushes (x264_padding row), not coded
 
   int type() const { return slice_type % 5; }
 };

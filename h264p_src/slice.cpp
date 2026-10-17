@@ -870,18 +870,19 @@ void SliceCoder::macroblock(MbRec& r) {
 void SliceCoder::pcm_samples(MbRec& r) {
   int nc = chroma_ ? 2 * (16 / (chroma_ == 3 ? 1 : 2)) * (16 / (chroma_ == 1 ? 2 : 1)) : 0;
   int n = 256 + nc;
+  // the alignment bits relative to x264's, whose last one is its padding bit
+  int nb = (8 - (int)((W ? bw_->pos() : br_->pos()) & 7)) & 7;
+  int pad = cabac_ && nb ? h_.pad : 0;
   if (!W) {
     r.has_pcm = true;
-    int nb = (8 - (int)(br_->pos() & 7)) & 7;
-    r.pcm_align = (int)br_->u(nb);
+    r.pcm_align = (int)br_->u(nb) ^ pad;
     r.pcm.resize(n);
     for (int i = 0; i < n; i++) r.pcm[i] = (int)br_->u(i < 256 ? sps_.bit_depth_luma : sps_.bit_depth_chroma);
   } else {
     if (!r.has_pcm) fail("missing pcm row");
     if ((int)r.pcm.size() != n) fail("wrong number of PCM samples");
-    int nb = (8 - (int)(bw_->pos() & 7)) & 7;
     if (r.pcm_align < 0 || r.pcm_align >= (1 << nb)) fail("bad pcm alignment bits");
-    bw_->put((uint32_t)r.pcm_align, nb);
+    bw_->put((uint32_t)(r.pcm_align ^ pad), nb);
     for (int i = 0; i < n; i++) {
       int depth = i < 256 ? sps_.bit_depth_luma : sps_.bit_depth_chroma;
       if (r.pcm[i] < 0 || r.pcm[i] >= (1 << depth)) fail("PCM sample out of range");
