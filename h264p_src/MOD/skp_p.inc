@@ -78,7 +78,6 @@ void H_skp_make( const H_skp_v & D, tcx & X ) {
   l = 0;
   l = l*10 + H_skp_l_st[__min(9,__max(0,st-(1-1)))];
   l = l*17 + H_skp_l_bd[__min(16,__max(0,bd-(1-1)))];
-  l = l*3 + ((col>0+(1-1))+(col>1+(1-1)));
   l = l*3 + ((cd>0+(1-1))+(cd>1+(1-1)));
 
   s = 0;

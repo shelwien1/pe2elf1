@@ -80,7 +80,7 @@ Index k
 Index l
  l_st: st, 1!111111111
  l_bd: bd, 1!1111111111111111
- l_col: col, 1!11
+ l_col: col, 1!00
  l_cd: cd, 1!11
 
 Index s
@@ -121,7 +121,7 @@ Number rH, 1, 0!11110000
 Number rI, 1, 0!01000000
 Number rJ, 1, 0!11111000
 Number rK, 1, 0!01000000
-Number rL, 1, 0!01000000
+Number rL, 1, 0!11110110
 Number rD, 1, 0!01100001
 Number rT, 1, 0!00110111
 Number rG, 1, 0!01011010
