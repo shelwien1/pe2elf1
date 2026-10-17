@@ -41,12 +41,14 @@ Index e
 
 Index h
  h_st: st, 1!111111111
- h_cb: cb, 1!11111111
- h_cc: cc, 1!11111111
+ h_dh: dh, 1!111
+ h_tb: tb, 1!1111111111111111
  h_nsk: nsk, 1!1011
 
 Index s
- s_st: st, 1!000000000
+ s_st: st, 1!111111111
+ s_tb: tb, 1!1111111111111111
+ s_dh: dh, 1!111
 
 Index f
  f_st: st, 1!111111111

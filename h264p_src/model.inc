@@ -30,9 +30,9 @@ constexpr int H_pcm_ND = TC_NODE, H_pcm_MND = TC_MNODE, H_pcm_NG = 3;
 
 struct H_nal_v { int fld, ctx, p1, p2; };
 struct H_hdr_v { int tag, fld, p1, p2, pos, p1r, sty; };
-struct H_skp_v { int st, a3, b3, col, c9, cd, run, cnt, eq, lf, af, td, en, sm, tm; };
-struct H_mbt_v { int st, ca, cb, cc, nsk, en, td, sm, tm; };
-struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg, tp, em; };
+struct H_skp_v { int st, a3, b3, col, c9, cd, run, cnt, eq, lf, af, td, en, sm, tm, tb; };
+struct H_mbt_v { int st, ca, cb, cc, nsk, en, td, sm, tm, tb, dh; };
+struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg, tp, em, pq; };
 struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm; };
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv; };
 struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac; };
@@ -488,6 +488,9 @@ struct Model {
   int pmv_[2] = {};  // proxy_mv()
   bool pmv_ok_ = false;
   int sm_ = 0, tm_ = 0;  // skip_miss() of the macroblock, its template matching miss
+  int tb_ = 0, dh_ = 0;  // skip_miss(): the best template match on list 0, the better list (B)
+  int tmb_[2] = {};      // that vector
+  bool tmb_ok_ = false;
   int prev_mode_ = 9, mvx_ = 0;
   int parts_ = 0, subshape_[4] = {};  // partitions of the macroblock: 16x16, 16x8, 8x16, 8x8; sub-macroblock shapes
   int mvp_[2] = {}, sp_[2] = {}, pdv_[2] = {};  // the current partition: mvp, spread of the neighbours, col - mvp
@@ -598,7 +601,8 @@ struct Model {
     rec_.mb_start(addr_);
     qpd_coded_ = false;
     prev_mode_ = 9;
-    sm_ = tm_ = 0;
+    sm_ = tm_ = tb_ = dh_ = 0;
+    tmb_ok_ = false;
     pmv_ok_ = false;
     mb_open_ = true;
     cnt_++;
@@ -669,9 +673,28 @@ struct Model {
   // how well the prediction of the macroblock were it skipped continues
   // the samples above and to the left (1 + tc_qlog of Recon::skip_miss, 0
   // not known)
+  // the best vector for the macroblock by template matching on list l's
+  // first reference (from mvp, the neighbours' vectors, zero): false none;
+  // miss as Recon::tm_search's
+  bool tm_best(int l, int* mv, int& miss) const {
+    MvN nbs[3];
+    mv_pred(l, 0, 0, 4, 4, 0, mv, nbs);
+    int cand[4][2], nc = 0;
+    for (int j = 0; j < 3; j++)
+      if (nbs[j].ref == 0) cand[nc][0] = nbs[j].mv[0], cand[nc][1] = nbs[j].mv[1], nc++;
+    cand[nc][0] = cand[nc][1] = 0, nc++;
+    return rec_.tm_search(l, 0, 0, 0, 16, 16, mv, false, cand, nc, &miss);
+  }
   int skip_miss() {
-    tm_ = 0;
+    tm_ = tb_ = dh_ = 0;
     if (!rec_.active) return 0;
+    // how well the reference can predict the samples around at best (list
+    // 0), and which list does it better
+    int m0, m1;
+    tmb_ok_ = tm_best(0, tmb_, m0);
+    if (tmb_ok_) tb_ = 1 + tc_clamp(tc_qlog(m0), 0, 15);
+    int v1[2];
+    if (tmb_ok_ && sc_->stype_ == kB && tm_best(1, v1, m1)) dh_ = m0 * 4 < m1 * 3 ? 1 : m1 * 4 < m0 * 3 ? 2 : 3;
     if (sc_->stype_ == kB)
       mv_direct(15);
     else
@@ -705,6 +728,7 @@ struct Model {
     skp_vars(D);
     D.sm = sm_ = skip_miss();
     D.tm = tm_;
+    D.tb = tb_;
     const MbState* a = sc_->mb_a_;
     const MbState* b = sc_->mb_b_;
     int ctx = (sc_->stype_ == kB ? 24 : 11) + (a && !a->skip) + (b && !b->skip);
@@ -811,6 +835,8 @@ struct Model {
     D.td = map_td();
     D.sm = sm_;
     D.tm = tm_;
+    D.tb = tb_;
+    D.dh = dh_;
     tcx X;
     H_mbt_make(D, X);
     f_mbt.select(X);
@@ -879,18 +905,11 @@ struct Model {
   void proxy_mv() {
     if (pmv_ok_) return;
     pmv_ok_ = true;
-    int p[2] = {0, 0};
-    if (sc_->stype_ != kI && sc_->stype_ != kSI) {
-      MvN nbs[3];
-      mv_pred(0, 0, 0, 4, 4, 0, p, nbs);
-      // refined by template matching, from there, the neighbours' vectors, zero
-      int cand[4][2], nc = 0;
-      for (int j = 0; j < 3; j++)
-        if (nbs[j].ref == 0) cand[nc][0] = nbs[j].mv[0], cand[nc][1] = nbs[j].mv[1], nc++;
-      cand[nc][0] = cand[nc][1] = 0, nc++;
-      int t[2] = {p[0], p[1]};
-      if (rec_.tm_search(0, 0, 0, 0, 16, 16, t, false, cand, nc)) p[0] = t[0], p[1] = t[1];
-    }
+    int p[2] = {0, 0}, miss;
+    if (tmb_ok_)
+      p[0] = tmb_[0], p[1] = tmb_[1];
+    else if (sc_->stype_ != kI && sc_->stype_ != kSI && !tm_best(0, p, miss))
+      mv_pred(0, 0, 0, 4, 4, 0, p);
     rec_.proxy_build(p);
     pmv_[0] = (p[0] + 2) >> 2;
     pmv_[1] = (p[1] + 2) >> 2;
@@ -921,6 +940,20 @@ struct Model {
       D.pg = pt < 0 ? 0 : 1 + tc_clamp(tc_qlog(pt), 0, 15);
       int ms = mi_->cls == CL_INXN ? -1 : rec_.edge_miss(0, (b8 & 1) * 8, (b8 >> 1) * 8, 8);
       D.em = ms < 0 ? 0 : 1 + tc_clamp(tc_qlog(ms), 0, 15);
+      // intra: the levels the proxy picture would need in the block's modes
+      D.pq = 0;
+      if (mi_->cls == CL_INXN) {
+        proxy_mv();
+        int qp = mi_->qp - qp_off_, nz = 0, bx = (b8 & 1) * 2, by = (b8 >> 1) * 2;
+        if (mi_->t8)
+          nz = rec_.proxy_nz(b8 & 1, b8 >> 1, 8, mi_->modes[by * 4 + bx], qp, pmv_[0], pmv_[1]);
+        else
+          for (int k = 0; k < 4 && nz >= 0; k++) {
+            int x = bx + (k & 1), y = by + (k >> 1), z = rec_.proxy_nz(x, y, 4, mi_->modes[y * 4 + x], qp, pmv_[0], pmv_[1]);
+            nz = z < 0 ? -1 : nz + z;
+          }
+        D.pq = nz < 0 ? 0 : 1 + std::min(nz, 5);
+      }
       luma |= cbp_bit(D, b8, ENC && (v >> b8 & 1), cab0(73 + D.inc)) << b8;
     }
     int c = 0;
@@ -934,9 +967,28 @@ struct Model {
       D.inc = sc_->cbp_chroma_inc(0);
       D.pc = popc4(luma);
       D.col = col_ ? 1 + (col_->cbp >> 4 != 0) : 0;
+      // intra: the chroma levels of the proxy, DC and AC
+      int pdc = -1, pac = -1;
+      if (mi_->cls >= CL_INXN && sc_->chroma_ == 1) {
+        proxy_mv();
+        int qp = mi_->qp - qp_off_, lv[16];
+        for (int pl = 1; pl <= 2; pl++) {
+          int qc = rec_.chroma_qp_of(pl - 1, qp);
+          if (!rec_.proxy_dc(pl, qc, lv)) break;
+          pdc = std::max(pdc, 0);
+          pac = std::max(pac, 0);
+          for (int k = 0; k < 4; k++) pdc += lv[k] != 0;
+          for (int b = 0; b < 4; b++) {
+            rec_.proxy_levels(pl, (b & 1) * 4, (b >> 1) * 4, qc, lv);
+            for (int k = 1; k < 16; k++) pac += lv[k] != 0;
+          }
+        }
+      }
+      D.pq = pdc < 0 ? 0 : 1 + std::min(pdc + pac, 5);
       if (cbp_bit(D, 4, ENC && (v >> 4) != 0, cab0(77 + D.inc))) {
         D.inc = sc_->cbp_chroma_inc(1);
         D.col = col_ ? 1 + (col_->cbp >> 4 == 2) : 0;
+        D.pq = pac < 0 ? 0 : 1 + std::min(pac, 5);
         c = 1 + cbp_bit(D, 5, ENC && (v >> 4) == 2, cab0(81 + D.inc));
       }
     }

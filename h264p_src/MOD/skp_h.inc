@@ -29,6 +29,7 @@ static const byte H_skp_m_td[4+1]={ 0,1,2,3,4 };
 
 
 static const byte H_skp_s_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
+static const byte H_skp_s_tb[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
 
 
 
@@ -79,7 +80,7 @@ static const long long H_skp_g_Volume = tc_vmul(1, 1); // 1
 static const long long H_skp_h_Volume = tc_vmul(tc_vmul(tc_vmul(1, 10), 17), 17); // 2890
 static const long long H_skp_m_Volume = tc_vmul(tc_vmul(tc_vmul(1, 10), 3), 5); // 150
 static const long long H_skp_n_Volume = tc_vmul(1, 1); // 1
-static const long long H_skp_s_Volume = tc_vmul(tc_vmul(1, 10), 3); // 30
+static const long long H_skp_s_Volume = tc_vmul(tc_vmul(1, 10), 17); // 170
 static const long long H_skp_t_Volume = tc_vmul(1, 1); // 1
 
 struct H_skp_T { 

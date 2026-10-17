@@ -23,6 +23,7 @@ Index b
  b_inc: inc, 1!111
  b_col: col, 1!11
  b_q6: q6, 1!11111111
+ b_pq: pq, 1!111111
 
 Index c
  c_cls: cls, 1!11111111
@@ -50,6 +51,7 @@ Index h
 Index s
  s_inc: inc, 1!111
  s_tp: tp, 1!1111111111111111
+ s_pq: pq, 1!111111
 
 Index f
  f_cls: cls, 1!00100100

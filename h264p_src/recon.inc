@@ -1550,11 +1550,12 @@ struct Recon {
   // samples), the vector whose prediction of the decoded samples above (2
   // rows) and to the left (2 columns) of the block misses least: whole
   // samples within 2, then halves, then quarters (only_y: the vertical
-  // component only). The template outside the macroblock only; false where
-  // none of it is decoded.
+  // component only), cand the other vectors to start from; miss, 4 x the
+  // mean absolute difference there. The template outside the macroblock
+  // only; false where none of it is decoded.
   static constexpr int TM_T = 2;
   bool tm_search(int l, int r, int bx, int by, int bw, int bh, int* mv, bool only_y, const int (*cand)[2] = nullptr,
-                 int ncand = 0) const {
+                 int ncand = 0, int* miss = nullptr) const {
     if (!active) return false;
     int mbw = cur->mbw, x0 = mb_addr % mbw * 16 + bx, y0 = mb_addr / mbw * 16 + by, w = cur->w;
     bool top = by == 0 && y0 > 0 && db[mb_addr - mbw].slice >= 0;
@@ -1596,6 +1597,7 @@ struct Recon {
     }
     mv[0] = vx;
     mv[1] = vy;
+    if (miss) *miss = best * 4 / ((top ? 2 * bw : 0) + (left ? 2 * bh : 0));
     return true;
   }
   // The intra mode that would predict the block best in the last picture:
@@ -1620,6 +1622,37 @@ struct Recon {
   const RPic* proxy_pic() const {
     const RPic* P = nlist[0] > 0 && list[0][0] ? list[0][0] : !dpb.empty() ? dpb.back().get() : nullptr;
     return P && P->w == cur->w && P->h == cur->h ? P : nullptr;
+  }
+  // The nonzero levels an encoder would have for the luma block of n x n at
+  // (bx, by) blocks of the current macroblock in intra mode m were the
+  // source and its surroundings the proxy picture there (displaced by dx,
+  // dy); -1 no picture
+  int proxy_nz(int bx, int by, int n, int m, int qp, int dx, int dy) const {
+    if (!active) return -1;
+    const RPic* P = proxy_pic();
+    if (!P) return -1;
+    int w = P->w, x0 = mb_addr % cur->mbw * 16 + bx * n, y0 = mb_addr / cur->mbw * 16 + by * n;
+    x0 = clip3(0, w - n, x0 + dx);
+    y0 = clip3(0, P->h - n, y0 + dy);
+    const uint8_t* Y = P->y.data();
+    bool top = y0 > 0, left = x0 > 0, tl = top && left, tr = top && x0 + 2 * n <= w;
+    int e[25];
+    e[0] = tl ? Y[(y0 - 1) * w + x0 - 1] : 128;
+    for (int i = 0; i < n; i++) e[1 + i] = top ? Y[(y0 - 1) * w + x0 + i] : 128;
+    for (int i = 0; i < n; i++) e[1 + n + i] = tr ? Y[(y0 - 1) * w + x0 + n + i] : e[n];
+    for (int i = 0; i < n; i++) e[1 + 2 * n + i] = left ? Y[(y0 + i) * w + x0 - 1] : 128;
+    if (n == 8) filter8(e, top, left, tl);
+    uint8_t d[64];
+    pred_nxn(d, 8, n, m, e, top, left);
+    int r[64], lv[64], cnt = 0;
+    for (int y = 0; y < n; y++)
+      for (int x = 0; x < n; x++) r[y * n + x] = Y[(y0 + y) * w + x0 + x] - d[y * 8 + x];
+    if (n == 8)
+      fquant8(r, qp, true, lv);
+    else
+      fquant4(r, qp, true, lv);
+    for (int k = 0; k < n * n; k++) cnt += lv[k] != 0;
+    return cnt;
   }
   int proxy_mode(int bx, int by, int n, int dx, int dy) const {
     if (!active) return -1;
