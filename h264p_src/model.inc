@@ -487,6 +487,7 @@ struct Model {
   int sub_[4] = {};
   int pmv_[2] = {};  // proxy_mv()
   bool pmv_ok_ = false;
+  std::vector<int16_t> pxv_;  // the vectors of the current picture's proxies (INT16_MIN none)
   int sm_ = 0, tm_ = 0;  // skip_miss() of the macroblock, its template matching miss
   int tb_ = 0, dh_ = 0;  // skip_miss(): the best template match on list 0, the better list (B)
   int tmb_[2] = {};      // that vector
@@ -523,6 +524,7 @@ struct Model {
     aq_fit_.clear();
     aq_fitp_.clear();
     aq_key_ = key_;
+    pxv_.assign(size_ * 2, INT16_MIN);
   }
   int idx(const MbState* n) const { return (int)(n - mbs_); }
   // CABAC's probability of a bin in the walk's current state, as the outside
@@ -910,6 +912,18 @@ struct Model {
       p[0] = tmb_[0], p[1] = tmb_[1];
     else if (sc_->stype_ != kI && sc_->stype_ != kSI && !tm_best(0, p, miss))
       mv_pred(0, 0, 0, 4, 4, 0, p);
+    // and the neighbours' proxies' vectors, zero
+    if ((int)pxv_.size() == size_ * 2) {
+      int cand[4][2], nc = 0;
+      const int nb[3] = {mb_near(-1, 0), mb_near(0, -1), mb_near(1, -1)};
+      for (int j = 0; j < 3; j++)
+        if (nb[j] >= 0 && info_[nb[j]].pic == pic_ && pxv_[nb[j] * 2] != INT16_MIN)
+          cand[nc][0] = pxv_[nb[j] * 2], cand[nc][1] = pxv_[nb[j] * 2 + 1], nc++;
+      cand[nc][0] = cand[nc][1] = 0, nc++;
+      rec_.tm_search(-1, 0, 0, 0, 16, 16, p, false, cand, nc);
+      pxv_[addr_ * 2] = (int16_t)tc_clamp(p[0], -32767, 32767);
+      pxv_[addr_ * 2 + 1] = (int16_t)tc_clamp(p[1], -32767, 32767);
+    }
     rec_.proxy_build(p);
     pmv_[0] = (p[0] + 2) >> 2;
     pmv_[1] = (p[1] + 2) >> 2;

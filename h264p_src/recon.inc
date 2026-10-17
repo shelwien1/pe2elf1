@@ -1560,7 +1560,7 @@ struct Recon {
   // rows) and to the left (2 columns) of the block misses least: whole
   // samples within 2, then halves, then quarters (only_y: the vertical
   // component only), cand the other vectors to start from; miss, 4 x the
-  // mean absolute difference there. The template outside the macroblock
+  // mean absolute difference there. l < 0: on proxy_pic. The template outside the macroblock
   // only; false where none of it is decoded.
   static constexpr int TM_T = 2;
   bool tm_search(int l, int r, int bx, int by, int bw, int bh, int* mv, bool only_y, const int (*cand)[2] = nullptr,
@@ -1569,7 +1569,7 @@ struct Recon {
     int mbw = cur->mbw, x0 = mb_addr % mbw * 16 + bx, y0 = mb_addr / mbw * 16 + by, w = cur->w;
     bool top = by == 0 && y0 > 0 && db[mb_addr - mbw].slice >= 0;
     bool left = bx == 0 && x0 > 0 && db[mb_addr - 1].slice >= 0;
-    const RPic* ref = r >= 0 && r < nlist[l] ? list[l][r] : nullptr;
+    const RPic* ref = l < 0 ? proxy_pic() : r >= 0 && r < nlist[l] ? list[l][r] : nullptr;
     if ((!top && !left) || !ref) return false;
     // the samples of a rectangle of the current picture against the
     // reference displaced by (vx, vy): bilinear between whole samples (not
