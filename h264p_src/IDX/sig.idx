@@ -6,7 +6,9 @@
 #  the coefficient at each scan position is nonzero, until none remain. cg
 #  is the block's ctxBlockCat, pos the scan position, rem the nonzero
 #  coefficients still to come and zl the zero ones (tc_qlog), tot all
-#  nonzero ones (tc_qlog), nc CAVLC's nC (class), fld field scan, q6 QP/6.
+#  nonzero ones (tc_qlog), nc CAVLC's nC (class), fld field scan, q6 QP/6,
+#  tz the magnitude at the position in the block of the cbf family's tn (1 +
+#  up to 3; 5 + where the vector moves it; 0 none).
 
 Prefix H_sig
 Debug 1
@@ -41,7 +43,7 @@ Index e
  e_cg: cg, 1!1111111111111
  e_pos: pos, 1!111111111111111111111111111111111111111111111111111111111111111
  e_ps: ps, 1!1111111
- e_tz: tz, 1!1111
+ e_tz: tz, 1!11111111
  e_pq: pq, 1!111111111111111111111111
  e_pr: pr, 1!1111111
 
@@ -50,7 +52,7 @@ Index h
  h_pos: pos, 1!111111111111111111111111111111111111111111111111111111111111111
  h_ps: ps, 1!1111111
  h_rem: rem, 1!0111111011
- h_tz: tz, 1!1111
+ h_tz: tz, 1!11111111
  h_h3: h3, 1!11111111111111
 
 Index i

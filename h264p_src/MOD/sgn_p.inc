@@ -48,7 +48,7 @@ void H_sgn_make( const H_sgn_v & D, tcx & X ) {
   h = h*4 + H_sgn_h_pos[__min(3,__max(0,pos-(1-1)))];
   h = h*6 + H_sgn_h_ez[__min(5,__max(0,ez-(1-1)))];
   h = h*3 + ((pp>0+(1-1))+(pp>1+(1-1)));
-  h = h*4 + H_sgn_h_ts[__min(3,__max(0,ts-(1-1)))];
+  h = h*7 + H_sgn_h_ts[__min(6,__max(0,ts-(1-1)))];
   h = h*25 + H_sgn_h_pq[__min(24,__max(0,pq-(1-1)))];
 
   i = 0;
@@ -73,7 +73,7 @@ void H_sgn_make( const H_sgn_v & D, tcx & X ) {
   l = 0;
   l = l*14 + H_sgn_l_cg[__min(13,__max(0,cg-(1-1)))];
   l = l*4 + H_sgn_l_pos[__min(3,__max(0,pos-(1-1)))];
-  l = l*4 + H_sgn_l_ts[__min(3,__max(0,ts-(1-1)))];
+  l = l*7 + H_sgn_l_ts[__min(6,__max(0,ts-(1-1)))];
   l = l*9 + H_sgn_l_gh[__min(8,__max(0,gh-(1-1)))];
 
   s = 0;

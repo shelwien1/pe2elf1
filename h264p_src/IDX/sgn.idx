@@ -9,7 +9,8 @@
 #  (as the other residual families); for the signs predicted from the samples
 #  around the block (luma), pp the predicted sign (1 positive, 2 negative, 0
 #  not predicted) and mg how much worse the other sign fits (1 + tc_qlog of
-#  quarter samples).
+#  quarter samples); ts the sign at the position in the block of the cbf
+#  family's tn (1 + sgn3; 4 + where the vector moves it; 0 none).
 
 Prefix H_sgn
 Debug 1
@@ -48,7 +49,7 @@ Index h
  h_pos: pos, 1!111
  h_ez: ez, 1!11111
  h_pp: pp, 1!11
- h_ts: ts, 1!111
+ h_ts: ts, 1!111111
  h_pq: pq, 1!111111111111111111111111
 
 Index i
@@ -73,7 +74,7 @@ Index k
 Index l
  l_cg: cg, 1!1111111111111
  l_pos: pos, 1!111
- l_ts: ts, 1!111
+ l_ts: ts, 1!111111
  l_gh: gh, 1!11111111
 
 Index s

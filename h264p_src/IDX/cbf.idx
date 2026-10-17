@@ -10,7 +10,10 @@
 #  block (for chroma: in the macroblock), pos the block's place in its 8x8
 #  block, crcb for a Cr block the Cb block (0 none, 1 zero, 2 not), col the
 #  same block in the previous picture of the type (2 none), nc CAVLC's nC
-#  (class).
+#  (class), tn for a luma block of a P picture on its first reference the
+#  nonzero coefficients of the block its vector points at in the last
+#  picture of the type (1 + up to 4; 6 + where the vector moves it; 0
+#  none).
 
 Prefix H_cbf
 Debug 1
@@ -50,7 +53,7 @@ Index e
  e_pz: pz, 1!1111111111111111
  e_na: na, 1!111111111
  e_nb: nb, 1!111111111
- e_tn: tn, 1!11111
+ e_tn: tn, 1!1111111111
 
 Index h
  h_cat: cat, 1!1111111111111

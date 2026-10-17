@@ -6,7 +6,8 @@
 #  ctxBlockCat, g1/e1 the levels coded so far above 1 and equal to 1, nc the
 #  block's nC (class), pos the scan position (class), sa/sb the magnitude at
 #  the same position in the blocks A and B (class, 0 zero or none), q6 QP/6,
-#  tot the nonzero coefficients of the block (class).
+#  tot the nonzero coefficients of the block (class), tz as the sig
+#  family's.
 
 Prefix H_lvl
 Debug 1
@@ -43,7 +44,7 @@ Index e
  e_g1: g1, 1!1111
  e_e1: e1, 1!1111
  e_pl: pl, 1!11111111111
- e_tz: tz, 1!1111
+ e_tz: tz, 1!11111111
  e_pq: pq, 1!111111111111111111111111
 
 Index h
@@ -51,7 +52,7 @@ Index h
  h_pos: pos, 1!11111
  h_pl: pl, 1!11111111111
  h_pe: pe, 1!111111111111111
- h_tz: tz, 1!1111
+ h_tz: tz, 1!11111111
 
 Index i
  i_cg: cg, 1!1111111111111

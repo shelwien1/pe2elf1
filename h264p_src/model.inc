@@ -488,6 +488,7 @@ struct Model {
   std::vector<MbInfo> info_;
   std::vector<MbCol> hist_[30];
   MbCol* hcur_ = nullptr;  // hist_ of the current slice's kind
+  std::vector<MbCol> hprev_;  // and as it was when the picture began
   uint32_t pic_ = 1;       // pictures so far
   int st_ = 0, key_ = 0;   // slice type x reference; st_ x frame/top/bottom field
   int width_ = 1, size_ = 0;
@@ -602,6 +603,7 @@ struct Model {
     if ((int)info_.size() < size_) info_.resize(size_);
     if ((int)hist_[key_].size() < size_) hist_[key_].resize(size_);
     hcur_ = hist_[key_].data();
+    if (h.first_mb == 0) hprev_.assign(hcur_, hcur_ + size_);
     qp_off_ = 6 * (sc.sps_.bit_depth_luma - 8);
     qp_pred_ = sc.pps_.pic_init_qp + h.slice_qp_delta;
     last_qpd_ = 0;
@@ -1765,22 +1767,40 @@ struct Model {
     int pnz = 0;
     if (pok)
       for (int j = 0; j < n; j++) pnz += est(j) != 0;
-    // a still luma block of a P picture: the same block's coefficients in
-    // the last picture of the kind (its reference), by scan position
+    // a luma block of a P picture on its first reference: the coefficients,
+    // by scan position, of the block its vector points at in the last
+    // picture of the kind (that reference); tmv: the vector moves it
     bool tok = false;
-    if (col_ && (sc_->stype_ == kP || sc_->stype_ == kSP) && mi_->cls < CL_INXN && g.plane == 0 &&
-        (g.kind == 1 || g.kind == 2 || g.kind == 3)) {
-      int b8 = (g.y >> 1) * 2 + (g.x >> 1);
+    int tmv = 0, tbx = 0, tby = 0;
+    const MbCol* tcol = nullptr;
+    if ((int)hprev_.size() == size_ && (sc_->stype_ == kP || sc_->stype_ == kSP) && mi_->cls < CL_INXN &&
+        g.plane == 0 && (g.kind == 1 || g.kind == 2 || g.kind == 3) && !mbaff_) {
+      int b8 = (g.y >> 1) * 2 + (g.x >> 1), n4 = g.kind == 3 ? 8 : 4;
       const int16_t* v = mi_->mv[0][g.y * 4 + g.x];
-      tok = mi_->rf[0][b8] == 0 && abs(v[0]) <= 1 && abs(v[1]) <= 1 && col_->cls < CL_INXN;
+      if (mi_->rf[0][b8] == 0) {
+        int still = abs(v[0]) <= 1 && abs(v[1]) <= 1;
+        int px = addr_ % width_ * 16 + g.x * 4 + (still ? 0 : (int)div_floor(v[0] + 2, 4)) + n4 / 2;
+        int py = addr_ / width_ * 16 + g.y * 4 + (still ? 0 : (int)div_floor(v[1] + 2, 4)) + n4 / 2;
+        px = tc_clamp(px, 0, width_ * 16 - 1);
+        py = tc_clamp(py, 0, size_ / width_ * 16 - 1);
+        const MbCol& c = hprev_[(py >> 4) * width_ + (px >> 4)];
+        if (c.valid && c.cls < CL_INXN) {
+          tcol = &c;
+          tok = true;
+          tmv = !still;
+          tbx = (px & 15) >> 2;
+          tby = (py & 15) >> 2;
+          if (n4 == 8) tbx &= 2, tby &= 2;
+        }
+      }
     }
     auto tcf = [&](int j) {
       int k = j + g.off;
       if (g.kind == 3) {
-        int q = k & 3, x = g.x + (q & 1), y = g.y + (q >> 1);
-        return (int)col_->coef[y * 4 + x][k >> 2];
+        int q = k & 3, x = tbx + (q & 1), y = tby + (q >> 1);
+        return (int)tcol->coef[y * 4 + x][k >> 2];
       }
-      return (int)col_->coef[g.y * 4 + g.x][k];
+      return (int)tcol->coef[tby * 4 + tbx][k];
     };
     int tnz = 0;
     if (tok)
@@ -1798,7 +1818,7 @@ struct Model {
       pq = pa >= 0 ? 13 + tc_clamp(tc_qlog(pa), 0, 11) : pxq_;
     }
     D.pq = pq;
-    D.tn = tok ? 1 + std::min(tnz, 4) : 0;
+    D.tn = tok ? 1 + 5 * tmv + std::min(tnz, 4) : 0;
     D.cat = cat;
     D.na = nb_count(na, g);
     D.nb = nb_count(nb, g);
@@ -1908,7 +1928,7 @@ struct Model {
           for (int k = 1; k <= 3 && k <= i; k++) h3 = h3 * 2 + sig[i - k];
           S.h3 = h3 - 1;
         }
-        S.tz = tok ? 1 + std::min(abs(tcf(i)), 3) : 0;
+        S.tz = tok ? 1 + 4 * tmv + std::min(abs(tcf(i)), 3) : 0;
         tcx Y;
         H_sig_make(S, Y);
         f_sig.select(Y);
@@ -1954,7 +1974,7 @@ struct Model {
         if (fy + 1 < N && (N != 2 || r + N < n + g.off)) lv(r + N);
         L.lt = cnt ? 1 + std::min(sum, 6) : 0;
       }
-      L.tz = tok ? 1 + std::min(abs(tcf(k)), 3) : 0;
+      L.tz = tok ? 1 + 4 * tmv + std::min(abs(tcf(k)), 3) : 0;
       L.sa = na.m ? std::min(abs(coef_at(na.m, g, na.i, k)), 3) : 0;
       L.sb = nb.m ? std::min(abs(coef_at(nb.m, g, nb.i, k)), 3) : 0;
       tcx X;
@@ -1998,7 +2018,7 @@ struct Model {
       }
       G.mag = std::min(mag[k], 3) - 1;
       G.ez = pok ? (q4(k) ? (q4(k) > 0 ? 2 : 3) + 2 * (abs(q4(k)) >= 4) : 1) : 0;
-      G.ts = tok ? 1 + sgn3(tcf(k)) : 0;
+      G.ts = tok ? 1 + 3 * tmv + sgn3(tcf(k)) : 0;
       G.gh = ghist % 9;
       // intra: how often the estimate's signs were right in the block
       G.se = pok ? 4 + tc_clamp(sagree, -3, 3) : 0;
