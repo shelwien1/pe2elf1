@@ -33,7 +33,7 @@ struct H_hdr_v { int tag, fld, p1, p2, pos, p1r, sty; };
 struct H_skp_v { int st, a3, b3, col, c9, cd, run, cnt, eq, lf, af, td, en, sm, tm, tb, bd, qc; };
 struct H_mbt_v { int st, ca, cb, cc, nsk, en, td, sm, tm, tb, dh, bd, qc; };
 struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg, tp, em, pq; };
-struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm, pr, dr; };
+struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm, pr, dr, pq; };
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, zd, cq; };
 struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac; };
 struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn, pq; };
@@ -1095,6 +1095,7 @@ struct Model {
     D.pm = pm < 0 ? 9 : pm;
     // the remainder (rem_intra4x4_pred_mode) the proxy's and DIMD's modes
     // would have, 8 none or the most probable mode
+    D.pq = pxq_;
     D.pr = D.pm < 9 && D.pm != mpm ? D.pm - (D.pm > mpm) : 8;
     D.dr = D.dm < 9 && D.dm != mpm ? D.dm - (D.dm > mpm) : 8;
     tcx X;
