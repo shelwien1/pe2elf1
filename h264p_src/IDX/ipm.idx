@@ -10,7 +10,13 @@
 #  block, pv the previous block's mode (9 none), col the same block in the
 #  previous picture of the type (9 none); dm the strongest edge direction
 #  next to the macroblock at the block's place (DIMD, 9 none) and ds the
-#  strength of the edges (0 none).
+#  strength of the edges (0 none); pm the mode that predicts the block best
+#  in the proxy (9 none), mg how much worse the most probable mode does there
+#  (1 + tc_qlog of halves of x264's lambda), pr the best mode but the most
+#  probable one as a remainder (8 none) and rg how much better than the
+#  next it does, dr DIMD's mode as a remainder, pq how well the proxy
+#  matched, mh the last most-probable-mode flags of the macroblock, mc the
+#  mode of the block above right.
 
 Prefix H_ipm
 Debug 1
@@ -43,12 +49,14 @@ Index e
  e_k8: k8, 1!11
  e_pm: pm, 1!111111111
  e_mp: mp, 1!111111111
+ e_mg: mg, 1!111111111111
 
 Index h
  h_k8: k8, 1!11
  h_pr: pr, 1!11111111
  h_dr: dr, 1!00000000
  h_ds: ds, 1!111111111
+ h_rg: rg, 1!111111111111
 
 Index i
  i_k8: k8, 1!11
@@ -78,6 +86,7 @@ Index s
  s_k8: k8, 1!11
  s_pr: pr, 1!11111111
  s_pq: pq, 1!111111111111
+ s_mg: mg, 1!111111111111
 
 Index f
  f_k8: k8, 1!00
@@ -87,6 +96,7 @@ Index m
  m_k8: k8, 1!00
  m_ma: ma, 1!0000000000
  m_mb: mb, 1!0000000000
+ m_mg: mg, 1!111111111111
 
 Index w
  w_k8: k8, 1!11

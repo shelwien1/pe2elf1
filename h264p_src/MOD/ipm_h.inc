@@ -15,12 +15,14 @@ static const byte H_ipm_d_dm[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 
 static const byte H_ipm_e_pm[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 static const byte H_ipm_e_mp[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
+static const byte H_ipm_e_mg[12+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12 };
 
 static const byte H_ipm_f_dr[8+1]={ 0,1,2,3,4,5,6,7,8 };
 
 
 static const byte H_ipm_h_pr[8+1]={ 0,1,2,3,4,5,6,7,8 };
 static const byte H_ipm_h_ds[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
+static const byte H_ipm_h_rg[12+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12 };
 
 static const byte H_ipm_i_pm[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 static const byte H_ipm_i_dm[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
@@ -38,10 +40,12 @@ static const byte H_ipm_l_mc[10+1]={ 0,1,2,3,4,5,6,7,8,9,10 };
 static const byte H_ipm_l_ma[10+1]={ 0,1,2,3,4,5,6,7,8,9,10 };
 static const byte H_ipm_l_dm[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 
+static const byte H_ipm_m_mg[12+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12 };
 
 
 static const byte H_ipm_s_pr[8+1]={ 0,1,2,3,4,5,6,7,8 };
 static const byte H_ipm_s_pq[12+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12 };
+static const byte H_ipm_s_mg[12+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12 };
 
 
 static const byte H_ipm_w_mp[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
@@ -101,17 +105,17 @@ static const long long H_ipm_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 1
 static const long long H_ipm_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 10), 10), 17); // 5100
 static const long long H_ipm_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 10), 10); // 300
 static const long long H_ipm_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 10), 10), 3); // 900
-static const long long H_ipm_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 10), 10); // 300
+static const long long H_ipm_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 10), 10), 13); // 3900
 static const long long H_ipm_f_Volume = tc_vmul(tc_vmul(1, 1), 9); // 9
 static const long long H_ipm_g_Volume = tc_vmul(1, 1); // 1
-static const long long H_ipm_h_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 9), 1), 10); // 270
+static const long long H_ipm_h_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 9), 1), 10), 13); // 3510
 static const long long H_ipm_i_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 10), 10), 11); // 3300
 static const long long H_ipm_j_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 17), 9), 11); // 5049
 static const long long H_ipm_k_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 10), 10), 10); // 3000
 static const long long H_ipm_l_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 11), 11), 10); // 3630
-static const long long H_ipm_m_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 1); // 1
+static const long long H_ipm_m_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 1), 13); // 13
 static const long long H_ipm_n_Volume = tc_vmul(1, 1); // 1
-static const long long H_ipm_s_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 9), 13); // 351
+static const long long H_ipm_s_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 9), 13), 13); // 4563
 static const long long H_ipm_t_Volume = tc_vmul(1, 1); // 1
 static const long long H_ipm_w_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 10), 2), 10); // 600
 

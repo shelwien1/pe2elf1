@@ -33,7 +33,7 @@ struct H_hdr_v { int tag, fld, p1, p2, pos, p1r, sty; };
 struct H_skp_v { int st, a3, b3, col, c9, cd, run, cnt, eq, lf, af, td, en, sm, tm, tb, bd, qc; };
 struct H_mbt_v { int st, ca, cb, cc, nsk, en, td, sm, tm, tb, dh, bd, qc; };
 struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg, tp, em, pq; };
-struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm, pr, dr, pq, mh, mc; };
+struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm, pr, dr, pq, mh, mc, mg, rg; };
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, zd, cq, tq; };
 struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac; };
 struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn, pq, ch; };
@@ -1141,13 +1141,36 @@ struct Model {
     D.dm = rec_.dimd(addr_, x * 4, y * 4, k8 ? 8 : 4, strength);
     D.ds = strength ? 1 + tc_clamp(tc_qlog(strength) - 6, 0, 8) : 0;
     proxy_mv();
-    int pm = k8 ? rec_.proxy_mode(x >> 1, y >> 1, 8, pmv_[0], pmv_[1]) : rec_.proxy_mode(x, y, 4, pmv_[0], pmv_[1]);
+    int sads[9];
+    int pm = k8 ? rec_.proxy_mode(x >> 1, y >> 1, 8, pmv_[0], pmv_[1], sads)
+                : rec_.proxy_mode(x, y, 4, pmv_[0], pmv_[1], sads);
     D.pm = pm < 0 ? 9 : pm;
-    // the remainder (rem_intra4x4_pred_mode) the proxy's and DIMD's modes
-    // would have, 8 none or the most probable mode
+    // how much worse the most probable mode does there, in halves of x264's
+    // lambda (x264_lambda_tab, 2^(qp/6 - 2)) of the predicted QP: an encoder
+    // takes it unless another mode saves more than its three bits
+    static const int k16[6] = {16, 18, 20, 23, 25, 29};
+    int q = std::max(0, qp_pred_), lam16 = std::max(16, (k16[q % 6] << (q / 6)) >> 2);
+    D.mg = 0;
+    if (pm >= 0 && sads[mpm] < INT_MAX) D.mg = 1 + tc_clamp(tc_qlog((sads[mpm] - sads[pm]) * 32 / lam16), 0, 11);
     D.pq = pxq_;
     D.mh = blk ? mph_ & 15 : 16;  // the last most-probable-mode flags of the macroblock
-    D.pr = D.pm < 9 && D.pm != mpm ? D.pm - (D.pm > mpm) : 8;
+    // for the remainder (rem_intra4x4_pred_mode): the proxy's best of the
+    // modes but the most probable one (8 none), and by how much it beats the
+    // next; DIMD's mode as a remainder (8 none or the most probable mode)
+    D.pr = 8;
+    D.rg = 0;
+    if (pm >= 0) {
+      int b1 = -1, b2 = -1;
+      for (int m = 0; m < 9; m++)
+        if (m != mpm && sads[m] < INT_MAX) {
+          if (b1 < 0 || sads[m] < sads[b1])
+            b2 = b1, b1 = m;
+          else if (b2 < 0 || sads[m] < sads[b2])
+            b2 = m;
+        }
+      if (b1 >= 0) D.pr = b1 - (b1 > mpm);
+      if (b2 >= 0) D.rg = 1 + tc_clamp(tc_qlog((sads[b2] - sads[b1]) * 32 / lam16), 0, 11);
+    }
     D.dr = D.dm < 9 && D.dm != mpm ? D.dm - (D.dm > mpm) : 8;
     tcx X;
     H_ipm_make(D, X);

@@ -1803,7 +1803,7 @@ struct Recon {
     for (int k = 0; k < n * n; k++) cnt += abs(lv[k]) >= 3;
     return cnt;
   }
-  int proxy_mode(int bx, int by, int n, int dx, int dy) const {
+  int proxy_mode(int bx, int by, int n, int dx, int dy, int* sads = nullptr) const {
     if (!active) return -1;
     const RPic* P = proxy_pic();
     if (!P) return -1;
@@ -1821,11 +1821,31 @@ struct Recon {
     int best = -1, bsad = 1 << 30;
     uint8_t d[64];
     for (int m = 0; m < 9; m++) {
+      if (sads) sads[m] = INT_MAX;
       if (((m == 0 || m == 3 || m == 7) && !top) || ((m == 1 || m == 8) && !left) || ((m >= 4 && m <= 6) && !tl)) continue;
       pred_nxn(d, 8, n, m, e, top, left);
+      // the sum of the absolute Hadamard transformed differences, by 4x4
+      // (x264's measure), halved
       int sad = 0;
-      for (int y = 0; y < n; y++)
-        for (int x = 0; x < n; x++) sad += abs(d[y * 8 + x] - Y[(y0 + y) * w + x0 + x]);
+      {
+        for (int by4 = 0; by4 < n; by4 += 4)
+          for (int bx4 = 0; bx4 < n; bx4 += 4) {
+            int t[16];
+            for (int y = 0; y < 4; y++)
+              for (int x = 0; x < 4; x++) t[y * 4 + x] = Y[(y0 + by4 + y) * w + x0 + bx4 + x] - d[(by4 + y) * 8 + bx4 + x];
+            for (int y = 0; y < 4; y++) {
+              int* r = t + y * 4;
+              int a0 = r[0] + r[1], a1 = r[0] - r[1], a2 = r[2] + r[3], a3 = r[2] - r[3];
+              r[0] = a0 + a2, r[1] = a1 + a3, r[2] = a0 - a2, r[3] = a1 - a3;
+            }
+            for (int x = 0; x < 4; x++) {
+              int a0 = t[x] + t[4 + x], a1 = t[x] - t[4 + x], a2 = t[8 + x] + t[12 + x], a3 = t[8 + x] - t[12 + x];
+              sad += abs(a0 + a2) + abs(a1 + a3) + abs(a0 - a2) + abs(a1 - a3);
+            }
+          }
+        sad = (sad + 1) >> 1;
+      }
+      if (sads) sads[m] = sad;
       if (sad < bsad) bsad = sad, best = m;
     }
     return best;
