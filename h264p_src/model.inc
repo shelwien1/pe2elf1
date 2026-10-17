@@ -36,7 +36,7 @@ struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg, tp, em, pq; };
 struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm, pr, dr, pq; };
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, zd, cq, tq; };
 struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac; };
-struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn, pq; };
+struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn, pq, ch; };
 struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz, pq, hb; };
 struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe, pl, tz, pq, lh; };
 struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md, pp, mg, ez, ts, pq, gh; };
@@ -496,6 +496,7 @@ struct Model {
   bool pmv_ok_ = false;
   std::vector<int16_t> pxv_;  // the vectors of the current picture's proxies (INT16_MIN none)
   int sm_ = 0, tm_ = 0;  // skip_miss() of the macroblock, its template matching miss
+  int cnth_ = 0;         // block(): the counts of the last two blocks, two bits each
   int tb_ = 0, dh_ = 0;  // skip_miss(): the best template match on list 0, the better list (B)
   int bd_ = 0;           // skip_miss(): the skip motion's two predictions apart (B)
   int tmb_[2] = {};      // that vector
@@ -1722,6 +1723,7 @@ struct Model {
     tc_stage = STG_CBF;
     H_cbf_v D = {};
     D.pz = pok ? 1 + std::min(pnz, 15) : 0;
+    D.ch = cnth_ & 15;  // the counts of the last two blocks coded (up to 3 each)
     // how far to trust it: how far the macroblock's luma decoded so far is
     // from the proxy (13-24), else how well its vector matched (1-12)
     int pq = 0;
@@ -1773,6 +1775,7 @@ struct Model {
     }
     f_cbf.prpa = pr;
     int total = cm_int(f_cbf.code(X, ENC ? count_nonzero(c, n) - coded : 0), n) + coded;
+    cnth_ = (cnth_ * 4 + std::min(total, 3)) & 15;
     f_cbf.prpa = nullptr;
     if (total > n) cm_fail("corrupt stream: %d coefficients in a block of %d", total, n);
     tc_syms[STG_CBF]++;

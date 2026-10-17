@@ -36,6 +36,7 @@ Index c
  c_col: col, 1!11
  c_kn: kn, 1!1
  c_en: en, 1!11111111111111
+ c_ch: ch, 1!111111111111111
 
 Index d
  d_cat: cat, 1!1111111111111
