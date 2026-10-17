@@ -83,6 +83,10 @@ struct H_mbt_T {
   u8 H_mbt_WC[tc_rows(H_mbt_m_Volume, H_mbt_hM) * H_mbt_ND];
   i32 H_mbt_WM[tc_rows(H_mbt_n_Volume, H_mbt_hN) * H_mbt_MND * 3];
   u8 H_mbt_WMC[tc_rows(H_mbt_n_Volume, H_mbt_hN) * H_mbt_MND];
+  i32 H_mbt_W2[tc_rows(H_mbt_d_Volume, H_mbt_hD) * H_mbt_ND * TC_MIXN];
+  u8 H_mbt_W2C[tc_rows(H_mbt_d_Volume, H_mbt_hD) * H_mbt_ND];
+  i32 H_mbt_WF[H_mbt_ND * 3];
+  u8 H_mbt_WFC[H_mbt_ND];
   cm_cnt H_mbt_G[H_mbt_g_Volume * H_mbt_NG];
   
   /* Total bytes this module's Table() members occupy -- a constant here, since
@@ -101,6 +105,10 @@ struct H_mbt_T {
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_mbt_m_Volume, H_mbt_hM) * H_mbt_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H_mbt_n_Volume, H_mbt_hN) * H_mbt_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_mbt_n_Volume, H_mbt_hN) * H_mbt_MND)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H_mbt_d_Volume, H_mbt_hD) * H_mbt_ND * TC_MIXN)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_mbt_d_Volume, H_mbt_hD) * H_mbt_ND)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_mbt_ND * 3)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(H_mbt_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H_mbt_g_Volume * H_mbt_NG);
   void H_mbt_Init( void ) {
   

@@ -95,6 +95,10 @@ struct H_mvs_T {
   u8 H_mvs_WC[tc_rows(H_mvs_m_Volume, H_mvs_hM) * H_mvs_ND];
   i32 H_mvs_WM[tc_rows(H_mvs_n_Volume, H_mvs_hN) * H_mvs_MND * 3];
   u8 H_mvs_WMC[tc_rows(H_mvs_n_Volume, H_mvs_hN) * H_mvs_MND];
+  i32 H_mvs_W2[tc_rows(H_mvs_d_Volume, H_mvs_hD) * H_mvs_ND * TC_MIXN];
+  u8 H_mvs_W2C[tc_rows(H_mvs_d_Volume, H_mvs_hD) * H_mvs_ND];
+  i32 H_mvs_WF[H_mvs_ND * 3];
+  u8 H_mvs_WFC[H_mvs_ND];
   cm_cnt H_mvs_G[H_mvs_g_Volume * H_mvs_NG];
   
   /* Total bytes this module's Table() members occupy -- a constant here, since
@@ -113,6 +117,10 @@ struct H_mvs_T {
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_mvs_m_Volume, H_mvs_hM) * H_mvs_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H_mvs_n_Volume, H_mvs_hN) * H_mvs_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_mvs_n_Volume, H_mvs_hN) * H_mvs_MND)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H_mvs_d_Volume, H_mvs_hD) * H_mvs_ND * TC_MIXN)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_mvs_d_Volume, H_mvs_hD) * H_mvs_ND)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_mvs_ND * 3)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(H_mvs_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H_mvs_g_Volume * H_mvs_NG);
   void H_mvs_Init( void ) {
   

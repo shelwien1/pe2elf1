@@ -78,6 +78,10 @@ struct H_hdr_T {
   u8 H_hdr_WC[tc_rows(H_hdr_m_Volume, H_hdr_hM) * H_hdr_ND];
   i32 H_hdr_WM[tc_rows(H_hdr_n_Volume, H_hdr_hN) * H_hdr_MND * 3];
   u8 H_hdr_WMC[tc_rows(H_hdr_n_Volume, H_hdr_hN) * H_hdr_MND];
+  i32 H_hdr_W2[tc_rows(H_hdr_d_Volume, H_hdr_hD) * H_hdr_ND * TC_MIXN];
+  u8 H_hdr_W2C[tc_rows(H_hdr_d_Volume, H_hdr_hD) * H_hdr_ND];
+  i32 H_hdr_WF[H_hdr_ND * 3];
+  u8 H_hdr_WFC[H_hdr_ND];
   cm_cnt H_hdr_G[H_hdr_g_Volume * H_hdr_NG];
   
   /* Total bytes this module's Table() members occupy -- a constant here, since
@@ -96,6 +100,10 @@ struct H_hdr_T {
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_hdr_m_Volume, H_hdr_hM) * H_hdr_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H_hdr_n_Volume, H_hdr_hN) * H_hdr_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_hdr_n_Volume, H_hdr_hN) * H_hdr_MND)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H_hdr_d_Volume, H_hdr_hD) * H_hdr_ND * TC_MIXN)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_hdr_d_Volume, H_hdr_hD) * H_hdr_ND)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_hdr_ND * 3)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(H_hdr_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H_hdr_g_Volume * H_hdr_NG);
   void H_hdr_Init( void ) {
   

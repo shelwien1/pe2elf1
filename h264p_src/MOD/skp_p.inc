@@ -5,11 +5,12 @@
     lines lifted out into the struct in MOD/skp_h.inc.  Edit this file and
     skp.idx, not MOD/; ../mk.sh regenerates both.
 
-    `_A`-`_D` are the four counters, `_S` and `_F` the two APMs, `_W` the
-    mixer, `_MT` and `_WM` the mantissa plane and its mixer, `_G` the sign
-    counters.  Each is H_skp_ND (or H_skp_MND) rows deep per context: where a
-    decision sits among the family's nodes is context without being a
-    variable.  */
+    `_A`-`_D` are the four counters, `_S` and `_F` the two APMs, `_W` and
+    `_W2` the two mixers (selected by index m and by index d) and `_WF` the
+    one that mixes them, `_MT` and `_WM` the mantissa plane and its mixer,
+    `_G` the sign counters.  Each is H_skp_ND (or H_skp_MND) rows deep per
+    context: where a decision sits among the family's nodes is context
+    without being a variable.  */
 
 void H_skp_make( const H_skp_v & D, tcx & X ) {
   int a, b, c, d, s, f, m, t, n, g;

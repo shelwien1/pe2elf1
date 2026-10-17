@@ -57,7 +57,8 @@ template <int f_DEC> struct tc_fam {
   i16 *S, *S2;
   i32 *W;
   cm_apm ap, ap2;
-  cm_mix<TC_MIXN> mx;
+  cm_mix<TC_MIXN> mx, mx2;
+  cm_mix<3> mxf;
   cm_mix<3> mxm;
   int prp;
   sz ba, bb, bc, bd;
@@ -69,7 +70,7 @@ template <int f_DEC> struct tc_fam {
   int bw;
   int ng;
   int nd, nm;
-  void wire(cm_cnt *a, sz va, cm_cnt *b, sz vb, cm_cnt *c, sz vc, cm_cnt *d, sz vd, cm_cnt *t, sz vt, i16 *s, u8 *sc, sz vs, i16 *s2, u8 *sc2, sz vf, i32 *w, sz vm, cm_cnt *g, sz vg, sz vgi, i32 *wm, sz vn, u8 *wc, u8 *wmc, int ra, int rb, int rc_, int rd, int rt, int rg, int mwa, int mwb, int mwc, int mwd, int mwtt, int mwg, int rs1, int rs2, int lrate, int mbt, int lrm2, int mbm2, int bwt, int qqs, int qqf, int ndp, int nmp, int ha, int hb, int hd, int hs, int hf, int hm, int ht, int hn) {
+  void wire(cm_cnt *a, sz va, cm_cnt *b, sz vb, cm_cnt *c, sz vc, cm_cnt *d, sz vd, cm_cnt *t, sz vt, i16 *s, u8 *sc, sz vs, i16 *s2, u8 *sc2, sz vf, i32 *w, sz vm, cm_cnt *g, sz vg, sz vgi, i32 *wm, sz vn, u8 *wc, u8 *wmc, i32 *w2, u8 *w2c, i32 *wf, u8 *wfc, int ra, int rb, int rc_, int rd, int rt, int rg, int mwa, int mwb, int mwc, int mwd, int mwtt, int mwg, int rs1, int rs2, int lrate, int mbt, int lrm2, int mbm2, int bwt, int qqs, int qqf, int ndp, int nmp, int ha, int hb, int hd, int hs, int hf, int hm, int ht, int hn) {
     A = a;
     B = b;
     C = c;
@@ -110,6 +111,8 @@ template <int f_DEC> struct tc_fam {
       ap.init(S, sc, ks * nd, qqs);
       ap2.init(S2, sc2, kf * nd, qqf);
       mx.init(W, wc, km * nd);
+      mx2.init(w2, w2c, kd * nd);
+      mxf.init(wf, wfc, nd);
       mxm.init(wm, wmc, kn * nm);
     }
     rA = tc_clamp(ra, 1, CM_TMAX);
@@ -171,13 +174,20 @@ template <int f_DEC> struct tc_fam {
     mx.set(4, cm_stretch(pa));
     mx.set(5, prp >= 0 ? cm_stretch(prp) : 0);
     mx.set(6, 256);
+    for(int i = 0; i < TC_MIXN; i++)
+      mx2.set(i, mx.x[i]);
     {
-      int pm = mx.mix(bm + (u32)node);
+      mxf.set(0, cm_stretch(mx.mix(bm + (u32)node)));
+      mxf.set(1, cm_stretch(mx2.mix((u32)(bd + (sz)node))));
+      mxf.set(2, 256);
+      int pm = mxf.mix((u32)node);
       int pf = ap2.pp(pm, bf + (u32)node);
       pf = (bw * pm + (16 - bw) * pf + 8) >> 4;
       b = tc_bit<f_DEC>(pf < 1 ? 1 : pf > CM_PONE - 1 ? CM_PONE - 1 : pf, b);
     }
     mx.upd(b, lr, mb);
+    mx2.upd(b, lr, mb);
+    mxf.upd(b, lr, mb);
     ap.upd(b, rS1);
     ap2.upd(b, rS2);
     a.upd(b, rA, mwA);

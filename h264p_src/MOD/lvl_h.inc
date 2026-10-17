@@ -92,6 +92,10 @@ struct H_lvl_T {
   u8 H_lvl_WC[tc_rows(H_lvl_m_Volume, H_lvl_hM) * H_lvl_ND];
   i32 H_lvl_WM[tc_rows(H_lvl_n_Volume, H_lvl_hN) * H_lvl_MND * 3];
   u8 H_lvl_WMC[tc_rows(H_lvl_n_Volume, H_lvl_hN) * H_lvl_MND];
+  i32 H_lvl_W2[tc_rows(H_lvl_d_Volume, H_lvl_hD) * H_lvl_ND * TC_MIXN];
+  u8 H_lvl_W2C[tc_rows(H_lvl_d_Volume, H_lvl_hD) * H_lvl_ND];
+  i32 H_lvl_WF[H_lvl_ND * 3];
+  u8 H_lvl_WFC[H_lvl_ND];
   cm_cnt H_lvl_G[H_lvl_g_Volume * H_lvl_NG];
   
   /* Total bytes this module's Table() members occupy -- a constant here, since
@@ -110,6 +114,10 @@ struct H_lvl_T {
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_lvl_m_Volume, H_lvl_hM) * H_lvl_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H_lvl_n_Volume, H_lvl_hN) * H_lvl_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_lvl_n_Volume, H_lvl_hN) * H_lvl_MND)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H_lvl_d_Volume, H_lvl_hD) * H_lvl_ND * TC_MIXN)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H_lvl_d_Volume, H_lvl_hD) * H_lvl_ND)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_lvl_ND * 3)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(H_lvl_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H_lvl_g_Volume * H_lvl_NG);
   void H_lvl_Init( void ) {
   

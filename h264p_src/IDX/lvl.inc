@@ -5,11 +5,12 @@
     lines lifted out into the struct in MOD/lvl_h.inc.  Edit this file and
     lvl.idx, not MOD/; ../mk.sh regenerates both.
 
-    `_A`-`_D` are the four counters, `_S` and `_F` the two APMs, `_W` the
-    mixer, `_MT` and `_WM` the mantissa plane and its mixer, `_G` the sign
-    counters.  Each is %M%ND (or %M%MND) rows deep per context: where a
-    decision sits among the family's nodes is context without being a
-    variable.  */
+    `_A`-`_D` are the four counters, `_S` and `_F` the two APMs, `_W` and
+    `_W2` the two mixers (selected by index m and by index d) and `_WF` the
+    one that mixes them, `_MT` and `_WM` the mantissa plane and its mixer,
+    `_G` the sign counters.  Each is %M%ND (or %M%MND) rows deep per
+    context: where a decision sits among the family's nodes is context
+    without being a variable.  */
 
 void %M%make( const %M%v & D, tcx & X ) {
   int a, b, c, d, s, f, m, t, n, g;
@@ -33,4 +34,8 @@ Table( i32,    %M%W, tc_rows(%M%m_Volume, %M%hM) * %M%ND * TC_MIXN );
 Table( u8,     %M%WC, tc_rows(%M%m_Volume, %M%hM) * %M%ND );
 Table( i32,    %M%WM, tc_rows(%M%n_Volume, %M%hN) * %M%MND * 3 );
 Table( u8,     %M%WMC, tc_rows(%M%n_Volume, %M%hN) * %M%MND );
+Table( i32,    %M%W2, tc_rows(%M%d_Volume, %M%hD) * %M%ND * TC_MIXN );
+Table( u8,     %M%W2C, tc_rows(%M%d_Volume, %M%hD) * %M%ND );
+Table( i32,    %M%WF, %M%ND * 3 );
+Table( u8,     %M%WFC, %M%ND );
 Table( cm_cnt, %M%G, %M%g_Volume * %M%NG );
