@@ -3,7 +3,7 @@
 #  MOD/mvs_p.inc from this file and mvs.inc.
 #
 #  Motion: sub_mb_type (kind 0 P, 1 B, as a binary tree), ref_idx (kind 2) and
-#  the components of mvd (kind 3; the sign has its own counters). comp is the
+#  the components of mvd (kind 3; the sign is the mvg family's). comp is the
 #  component, lst the list, ma/mb the magnitudes of the components of A and
 #  B (classes), oth the class of the other component already coded, ps the
 #  partition size (0 16x16 .. 3 4x4), rf the ref_idx of the partition (or of

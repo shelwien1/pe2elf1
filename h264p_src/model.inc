@@ -20,12 +20,13 @@ constexpr int H_skp_ND = 3, H_skp_MND = 1, H_skp_NG = 1;
 constexpr int H_mbt_ND = 29, H_mbt_MND = 1, H_mbt_NG = 1;
 constexpr int H_cbp_ND = 7, H_cbp_MND = 1, H_cbp_NG = 1;
 constexpr int H_ipm_ND = 19, H_ipm_MND = 1, H_ipm_NG = 1;
-constexpr int H_mvs_ND = TC_NODE, H_mvs_MND = TC_MNODE, H_mvs_NG = 243;
+constexpr int H_mvs_ND = TC_NODE, H_mvs_MND = TC_MNODE, H_mvs_NG = 1;
 constexpr int H_qpd_ND = TC_NODE, H_qpd_MND = TC_MNODE, H_qpd_NG = 4;
 constexpr int H_cbf_ND = TC_NODE, H_cbf_MND = TC_MNODE, H_cbf_NG = 1;
 constexpr int H_sig_ND = 1, H_sig_MND = 1, H_sig_NG = 1;
 constexpr int H_lvl_ND = TC_NODE, H_lvl_MND = TC_MNODE, H_lvl_NG = 1;
 constexpr int H_sgn_ND = 1, H_sgn_MND = 1, H_sgn_NG = 1;
+constexpr int H_mvg_ND = 1, H_mvg_MND = 1, H_mvg_NG = 1;
 constexpr int H_pcm_ND = TC_NODE, H_pcm_MND = TC_MNODE, H_pcm_NG = 3;
 
 struct H_nal_v { int fld, ctx, p1, p2; };
@@ -40,6 +41,7 @@ struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en,
 struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz, pq, hb, ft, h3, pr, sn; };
 struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe, pl, tz, pq, lh, lt, ls; };
 struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md, pp, mg, ez, ts, pq, gh, se; };
+struct H_mvg_v { int comp, lst, ts, zs, ds, sa, sb, mag, tq, ox, ns; };
 struct H_pcm_v { int pl, dp, pd, pd2; };
 
 #include "MOD/nal_h.inc"
@@ -54,6 +56,7 @@ struct H_pcm_v { int pl, dp, pd, pd2; };
 #include "MOD/sig_h.inc"
 #include "MOD/lvl_h.inc"
 #include "MOD/sgn_h.inc"
+#include "MOD/mvg_h.inc"
 #include "MOD/pcm_h.inc"
 
 #include "MOD/nal_p.inc"
@@ -68,6 +71,7 @@ struct H_pcm_v { int pl, dp, pd, pd2; };
 #include "MOD/sig_p.inc"
 #include "MOD/lvl_p.inc"
 #include "MOD/sgn_p.inc"
+#include "MOD/mvg_p.inc"
 #include "MOD/pcm_p.inc"
 
 // A family's tables, mapped: zero is every table's starting state, and a
@@ -371,7 +375,7 @@ struct Model {
   static constexpr int ENC = f_DEC == 0;
   static Rangecoder<f_DEC> rc;
 
-  tc_fam<f_DEC> f_nal, f_hdr, f_skp, f_mbt, f_cbp, f_ipm, f_mvs, f_qpd, f_cbf, f_sig, f_lvl, f_sgn, f_pcm;
+  tc_fam<f_DEC> f_nal, f_hdr, f_skp, f_mbt, f_cbp, f_ipm, f_mvs, f_qpd, f_cbf, f_sig, f_lvl, f_sgn, f_mvg, f_pcm;
   H_nal_T* t_nal;
   H_hdr_T* t_hdr;
   H_skp_T* t_skp;
@@ -384,6 +388,7 @@ struct Model {
   H_sig_T* t_sig;
   H_lvl_T* t_lvl;
   H_sgn_T* t_sgn;
+  H_mvg_T* t_mvg;
   H_pcm_T* t_pcm;
 
   void init() {
@@ -401,6 +406,7 @@ struct Model {
     H_MAP(sig);
     H_MAP(lvl);
     H_MAP(sgn);
+    H_MAP(mvg);
     H_MAP(pcm);
 #undef H_MAP
     raw_mx_.init(raw_w_, raw_wc_, 256);
@@ -408,7 +414,7 @@ struct Model {
   u64 table_bytes() const {
     return (u64)t_nal->H_nal_Size + t_hdr->H_hdr_Size + t_skp->H_skp_Size + t_mbt->H_mbt_Size + t_cbp->H_cbp_Size +
            t_ipm->H_ipm_Size + t_mvs->H_mvs_Size + t_qpd->H_qpd_Size + t_cbf->H_cbf_Size + t_sig->H_sig_Size +
-           t_lvl->H_lvl_Size + t_sgn->H_sgn_Size + t_pcm->H_pcm_Size;
+           t_lvl->H_lvl_Size + t_sgn->H_sgn_Size + t_mvg->H_mvg_Size + t_pcm->H_pcm_Size;
   }
 
   // ------------------------------------------------------------------------
@@ -550,6 +556,7 @@ struct Model {
   int prev_mode_ = 9, mvx_ = 0;
   int parts_ = 0, subshape_[4] = {};  // partitions of the macroblock: 16x16, 16x8, 8x16, 8x8; sub-macroblock shapes
   int mvp_[2] = {}, sp_[2] = {}, pdv_[2] = {};  // the current partition: mvp, spread of the neighbours, col - mvp
+  int ns_[2] = {};  // and the signs of the neighbours' vectors less mvp, summed
   bool pdn_ = false;                             // no col vector
   int tmv_[2] = {};                              // its vector by template matching (Recon::tm_search)
   bool tmn_ = true;                              // none
@@ -1553,8 +1560,12 @@ struct Model {
       mv_pred(list, x, y, w, h, ref, mvp_, nbs);
       for (int k = 0; k < 2; k++) {
         sp_[k] = -1;
+        ns_[k] = 0;
         for (int j = 0; j < 3; j++)
-          if (nbs[j].ref >= 0) sp_[k] = std::max(sp_[k], abs(nbs[j].mv[k] - mvp_[k]));
+          if (nbs[j].ref >= 0) {
+            sp_[k] = std::max(sp_[k], abs(nbs[j].mv[k] - mvp_[k]));
+            ns_[k] += (nbs[j].mv[k] > mvp_[k]) - (nbs[j].mv[k] < mvp_[k]);
+          }
         pdv_[k] = 0;
       }
       pdn_ = !col_ || col_->rf[list][b8] < 0;
@@ -1599,7 +1610,6 @@ struct Model {
     D.tq = tmn_ ? 0 : 1 + tc_clamp(tc_qlog(tmq_), 0, 11);
     tcx X;
     H_mvs_make(D, X);
-    u32 sc = (u32)(sgn3(-mvp_[comp]) * 81 + sgn3(dv) * 27 + sgn3(pdv_[comp]) * 9 + sgn3(va) * 3 + sgn3(vb));
     tc_stage = STG_MVD;
     tc_syms[STG_MVD]++;
     int pr[TC_NODE];
@@ -1616,7 +1626,29 @@ struct Model {
     if (v) {
       tc_stage = STG_MVSG;
       tc_syms[STG_MVSG]++;
-      if (f_mvs.sign(sc, v < 0)) v = -abs(v);
+      {
+        // the sign (the mvg family), knowing the magnitude: whether it is
+        // the template match's, the zero vector's, col's
+        int m = abs(v);
+        auto rel = [&](int d) { return sgn3(d) * 3 + (m == abs(d) ? 0 : m < abs(d) ? 1 : 2); };
+        H_mvg_v G = {};
+        G.comp = comp;
+        G.lst = list;
+        G.ts = tmn_ ? 9 : rel(dv);
+        G.zs = rel(-mvp_[comp]);
+        G.ds = pdn_ ? 9 : rel(pdv_[comp]);
+        G.sa = sgn3(va);
+        G.sb = sgn3(vb);
+        G.mag = std::min(tc_qlog(m), 7);
+        G.tq = D.tq;
+        G.ox = comp ? sgn3(mvx_) : 3;
+        G.ns = 3 + ns_[comp];
+        tcx Y;
+        H_mvg_make(G, Y);
+        f_mvg.select(Y);
+        f_mvg.prp = -1;
+        if (f_mvg.bit(0, ENC && v < 0)) v = -m;
+      }
     }
     if (!comp) {
       mvx_ = v;
