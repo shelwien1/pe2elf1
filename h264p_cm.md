@@ -827,6 +827,66 @@ with the two that need a decoder in the loop, on top of the 0.63 Mbit from
 not restarting at each slice. They leave out mb_type, cbp, chroma AC, the
 8×8 and Intra16x16 blocks and motion vector reconstruction.
 
+## 9. As implemented
+
+`h264p c` and `d` (h264p_src/model.inc, recon.inc, fam.inc, IDX/) follow
+sections 3-8 with these changes and additions.
+
+**Structure.** The model codes the syntax straight from `SliceCoder`, no
+TSV in between (section 8's "third backend"). Thirteen families (nal, hdr,
+skp, mbt, cbp, ipm, mvs, qpd, cbf, sig, lvl, sgn, pcm) are oggcomp's
+`tc_fam`, declared in IDX: each decision is predicted by six counters (A-E,
+H, one index each), an APM (index s), three mixers selected by indices m,
+w and s, a final mixer and a second APM (index f); where CABAC codes the
+element, the probability of CABAC's own context state is one more mixer
+input. Coefficients are coded count first (the number of nonzero
+coefficients, then the significance of each position knowing how many are
+left, the levels backwards, the signs).
+
+**A decoder in the loop** (recon.inc): the model reconstructs the pictures
+of 8-bit 4:2:0 frame streams without scaling matrices (POC, reference
+lists and marking, weighted prediction, quarter-sample motion compensation,
+intra prediction, dequantization and transforms, deblocking), block by
+block as the residual arrives. Contexts from the samples, in the order of
+their gain on test/002:
+
+| context | element | gain |
+|---|---|---:|
+| intra residual estimated from the reference: the block where the neighbours' motion (refined by template matching) puts the macroblock, less the prediction, transformed and quantized, in quarter levels | count, significance, levels, signs, intra cbp | 88 KB |
+| texture of the prediction; sign prediction (the first signs searched for the best continuity of the block with its surroundings, section 7) | coefficients, cbp | 75 KB* |
+| maps of the last picture (energy, change), DIMD | most | 44 KB* |
+| skip prediction: how its luma continues the samples above and left (edge miss), how its motion predicts them (template matching), in B slices how far its two predictions are apart; the best template match | skip, mb_type | 36 KB |
+| motion vector by template matching search, the vector zero, col's mvd | mvd | 17 KB |
+| edge miss of the prediction, edge-projected level estimates | coefficients | 13 KB* |
+| x264's adaptive quantization: a per-picture line of QP against log2 energy, from the energy of the macroblock's prediction | qp delta | 11 KB |
+| the best intra mode in the reference | intra modes | 4 KB |
+
+\* measured when added, with four counters and before the later contexts.
+
+**Results** (test/002, against the CABAC cost of each element):
+
+| element | CABAC | model | |
+|---|---:|---:|---:|
+| skip, end | 336,175 | 228,193 | −32.1% |
+| mb_type | 365,120 | 271,407 | −25.7% |
+| cbp, transform_size_8x8_flag | 216,100 | 157,234 | −27.2% |
+| intra modes | 299,858 | 244,657 | −18.4% |
+| sub_mb_type, ref_idx, mvd | 504,865 | 431,961 | −14.4% |
+| mb_qp_delta | 271,297 | 209,948 | −22.6% |
+| coded_block_flag, significance (count, significance) | 910,721 | 755,894 | −17.0% |
+| levels | 302,611 | 242,860 | −19.7% |
+| signs | 329,382 | 200,359 | −39.2% |
+| all | 3,603,993 | 2,749,713 | −23.7% |
+
+**Tried, no gain:** the CABAC-style significance/last binarization instead
+of the count; neighbours' same-position significance; the mirrored list 0
+vector for list 1 mvds; template matching per reference for ref_idx; a
+motion split guess from template matching for mb_type; the second
+reference's agreement for P skip; averaging the intra proxy over two
+references; the proxy's best Intra16x16 and chroma modes; bi-prediction
+disagreement per block for B residuals; the MB-tree residual at the
+motion-compensated macroblock.
+
 ## Appendix A: single-context experiments
 
 `tools/ctxexp.py` on the five TSV files, with each stream starting from

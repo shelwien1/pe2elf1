@@ -96,8 +96,8 @@ file (below); a CRC-32 at the end checks the whole stream.
 
 The model is binary context mixing, after oggcomp (Ogg Vorbis): each value
 is a sequence of binary decisions, each predicted by six adaptive counters
-under different contexts, an APM, two mixers (and a third that mixes them)
-and a second APM, all selected by the decision's place in the value; where
+under different contexts, an APM, three mixers (and a fourth that mixes
+them) and a second APM, all selected by the decision's place in the value; where
 the stream is CABAC, the probability CABAC's own context state gives a bin
 is one more input. The contexts and the parameters of each group of syntax
 elements (a family) are declared in `h264p_src/IDX/*.idx` and turned into
@@ -133,16 +133,17 @@ On the test streams (`-v` shows where the bits go):
 
 | stream | H.264 | compressed | |
 |---|---:|---:|---:|
-| 00 | 815,140 | 609,003 | 74.7% |
-| 01 | 1,095,103 | 876,227 | 80.0% |
-| 02 | 28,143 | 26,815 | 95.3% |
-| 03 | 1,181,369 | 839,729 | 71.1% |
-| 04 | 484,238 | 406,868 | 84.0% |
+| 00 | 815,140 | 607,629 | 74.5% |
+| 01 | 1,095,103 | 871,786 | 79.6% |
+| 02 | 28,143 | 26,747 | 95.0% |
+| 03 | 1,181,369 | 837,406 | 70.9% |
+| 04 | 484,238 | 406,145 | 83.9% |
 
-The macroblock syntax alone takes 76.5% of what its CABAC coding takes
-(from 3,603,993 to 2,758,642 bytes over these streams). Speed is around
+The macroblock syntax alone takes 76.3% of what its CABAC coding takes
+(from 3,603,993 to 2,749,713 bytes over these streams; `h264p_cm.md`
+section 9 has the figures by syntax element). Speed is around
 0.06-0.1 MB of H.264 per second both ways, and the model tables take about
-150 MB.
+70 MB.
 
 ### TSV
 
