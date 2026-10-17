@@ -38,7 +38,7 @@ struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, z
 struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac; };
 struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn, pq, ch; };
 struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz, pq, hb, ft; };
-struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe, pl, tz, pq, lh; };
+struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe, pl, tz, pq, lh, lt; };
 struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md, pp, mg, ez, ts, pq, gh; };
 struct H_pcm_v { int pl, dp, pd, pd2; };
 
@@ -1806,7 +1806,7 @@ struct Model {
     // knowing how many are still to come
     tc_stage = STG_SIG;
     bool fld = sc_->field_mb();
-    bool sig[64];
+    bool sig[64] = {};
     int rem = total, last = 0, cnt = total;
     H_sig_v S = {cat, 0, 0, 0, md, nc, fld, q, pg, em, 0};
     S.pq = pq;
@@ -1873,6 +1873,19 @@ struct Model {
       L.pos = tc_qlog(k);
       L.pe = spok && k < 4 ? sp.estimate(k) : 0;
       L.pl = pok ? 1 + std::min(abs(q4(k)) / 2, 10) : 0;
+      {
+        // the levels right of and below it (higher frequencies, coded already)
+        int N = g.kind == 3 ? 8 : g.kind == 0 && g.plane ? 2 : 4, kk = k + g.off;
+        int r = N == 8 ? kZz8[kk] : N == 4 ? kZz4[kk] : kk, fx = r % N, fy = r / N, sum = 0, cnt = 0;
+        auto lv = [&](int rr) {
+          int j = (N == 8 ? kInv8[rr] : N == 4 ? kInv4[rr] : rr) - g.off;
+          if (j > k && j <= last && sig[j]) sum += mag[j];  // none significant beyond last
+          cnt += j > k && j < n;
+        };
+        if (fx + 1 < N) lv(r + 1);
+        if (fy + 1 < N && (N != 2 || r + N < n + g.off)) lv(r + N);
+        L.lt = cnt ? 1 + std::min(sum, 6) : 0;
+      }
       L.tz = tok ? 1 + std::min(abs(tcf(k)), 3) : 0;
       L.sa = na.m ? std::min(abs(coef_at(na.m, g, na.i, k)), 3) : 0;
       L.sb = nb.m ? std::min(abs(coef_at(nb.m, g, nb.i, k)), 3) : 0;
