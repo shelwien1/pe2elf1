@@ -3,6 +3,7 @@ static const byte H_sgn_a_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 static const byte H_sgn_a_pos[3+1]={ 0,1,2,3 };
 static const byte H_sgn_a_sa[3+1]={ 0,1,2,3 };
 static const byte H_sgn_a_sb[3+1]={ 0,1,2,3 };
+static const byte H_sgn_a_gh[8+1]={ 0,1,2,3,4,5,6,7,8 };
 
 static const byte H_sgn_b_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 static const byte H_sgn_b_scb[3+1]={ 0,1,2,3 };
@@ -71,7 +72,7 @@ static const int H_sgn_hT = (24+0) * (1);
 static const int H_sgn_hN = (24+0) * (1);
 
 
-static const long long H_sgn_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 4), 4), 4); // 896
+static const long long H_sgn_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 4), 4), 4), 9); // 8064
 static const long long H_sgn_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 4), 4); // 224
 static const long long H_sgn_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 2), 9); // 252
 static const long long H_sgn_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 3), 16); // 672

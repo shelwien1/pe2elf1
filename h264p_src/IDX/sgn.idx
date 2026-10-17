@@ -20,6 +20,7 @@ Index a
  a_pos: pos, 1!111
  a_sa: sa, 1!111
  a_sb: sb, 1!111
+ a_gh: gh, 1!11111111
 
 Index b
  b_cg: cg, 1!1111111111111

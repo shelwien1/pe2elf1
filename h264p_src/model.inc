@@ -39,7 +39,7 @@ struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac; };
 struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn, pq; };
 struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz, pq, hb; };
 struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe, pl, tz, pq, lh; };
-struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md, pp, mg, ez, ts, pq; };
+struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md, pp, mg, ez, ts, pq, gh; };
 struct H_pcm_v { int pl, dp, pd, pd2; };
 
 #include "MOD/nal_h.inc"
@@ -1874,6 +1874,7 @@ struct Model {
     if (spok)
       for (int k = 0; k <= last && npred < 6; k++)
         if (sig[k]) pk[npred++] = k;
+    int ghist = 0;  // the last two signs coded in the block (0 none, 1 +, 2 -)
     auto code_sign = [&](int k) {
       G.pos = k == 0 ? 0 : k < 3 ? 1 : k < 6 ? 2 : 3;
       G.sa = na.m ? sgn3(coef_at(na.m, g, na.i, k)) : 3;
@@ -1886,10 +1887,12 @@ struct Model {
       G.mag = std::min(mag[k], 3) - 1;
       G.ez = pok ? (q4(k) ? (q4(k) > 0 ? 2 : 3) + 2 * (abs(q4(k)) >= 4) : 1) : 0;
       G.ts = tok ? 1 + sgn3(tcf(k)) : 0;
+      G.gh = ghist % 9;
       tcx X;
       H_sgn_make(G, X);
       f_sgn.select(X);
       int sg = f_sgn.bit(0, ENC && c[k] < 0);
+      ghist = ghist % 3 * 3 + 1 + sg;
       c[k] = sg ? -mag[k] : mag[k];
       tc_syms[STG_SGN]++;
       return sg;

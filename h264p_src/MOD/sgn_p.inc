@@ -14,14 +14,15 @@
 
 void H_sgn_make( const H_sgn_v & D, tcx & X ) {
   int a, b, c, d, e, h, s, f, m, w, t, n, g;
-  int cg = D.cg, pos = D.pos, sa = D.sa, sb = D.sb, scb = D.scb, mag = D.mag, md = D.md, pp = D.pp, mg = D.mg, ez = D.ez, ts = D.ts, pq = D.pq;
-  (void) cg;  (void) pos;  (void) sa;  (void) sb;  (void) scb;  (void) mag;  (void) md;  (void) pp;  (void) mg;  (void) ez;  (void) ts;  (void) pq;
+  int cg = D.cg, pos = D.pos, sa = D.sa, sb = D.sb, scb = D.scb, mag = D.mag, md = D.md, pp = D.pp, mg = D.mg, ez = D.ez, ts = D.ts, pq = D.pq, gh = D.gh;
+  (void) cg;  (void) pos;  (void) sa;  (void) sb;  (void) scb;  (void) mag;  (void) md;  (void) pp;  (void) mg;  (void) ez;  (void) ts;  (void) pq;  (void) gh;
 
   a = 0;
   a = a*14 + H_sgn_a_cg[__min(13,__max(0,cg-(1-1)))];
   a = a*4 + H_sgn_a_pos[__min(3,__max(0,pos-(1-1)))];
   a = a*4 + H_sgn_a_sa[__min(3,__max(0,sa-(1-1)))];
   a = a*4 + H_sgn_a_sb[__min(3,__max(0,sb-(1-1)))];
+  a = a*9 + H_sgn_a_gh[__min(8,__max(0,gh-(1-1)))];
 
   b = 0;
   b = b*14 + H_sgn_b_cg[__min(13,__max(0,cg-(1-1)))];
