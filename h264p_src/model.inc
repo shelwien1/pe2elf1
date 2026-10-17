@@ -528,8 +528,9 @@ struct Model {
   // QP of the current picture's that coded mb_qp_delta (-1 other); per kind
   // of picture, how far the QP of the last one's was from its line (16ths,
   // INT16_MIN not known)
-  AqFit aq_fit_, aq_fitp_;
+  AqFit aq_fit_, aq_fitp_, aq_fitx_;
   int aq_xp_ = -1;  // 16 log2 energy of the current macroblock's prediction (inter)
+  bool aq_xi_ = false;  // or of its proxy (intra; aq_fitx_)
   std::vector<int16_t> aq_x_, aq_xl_, aq_q_, aq_res_[30];
   int aq_key_ = -1;
   void aq_picture() {
@@ -546,6 +547,7 @@ struct Model {
     aq_q_.assign(size_, -1);
     aq_fit_.clear();
     aq_fitp_.clear();
+    aq_fitx_.clear();
     aq_key_ = key_;
     pxv_.assign(size_ * 2, INT16_MIN);
   }
@@ -664,7 +666,7 @@ struct Model {
       aq_x_[addr_] = (int16_t)x;
       if (qpd_coded_) {
         aq_fit_.add(x, mi_->qp - qp_off_);
-        if (aq_xp_ >= 0) aq_fitp_.add(aq_xp_, mi_->qp - qp_off_);
+        if (aq_xp_ >= 0) (aq_xi_ ? aq_fitx_ : aq_fitp_).add(aq_xp_, mi_->qp - qp_off_);
         aq_q_[addr_] = (int16_t)(mi_->qp - qp_off_);
       }
     }
@@ -1509,12 +1511,32 @@ struct Model {
     return v;
   }
 
+  // the macroblock the current one's content was at in its reference, by
+  // its mean vector (intra: the proxy's)
+  int mc_addr() {
+    int sx = 0, sy = 0;
+    if (mi_->cls < CL_INXN) {
+      for (int b = 0; b < 16; b++) {
+        int l = mi_->rf[0][(b >> 3) * 2 + ((b & 3) >> 1)] >= 0 ? 0 : 1;
+        sx += mi_->mv[l][b][0];
+        sy += mi_->mv[l][b][1];
+      }
+      sx = (int)div_floor(sx + 512, 1024);
+      sy = (int)div_floor(sy + 512, 1024);
+    } else if (pmv_ok_) {
+      sx = (int)div_floor(pmv_[0] + 8, 16);
+      sy = (int)div_floor(pmv_[1] + 8, 16);
+    }
+    int x = tc_clamp(addr_ % width_ + sx, 0, width_ - 1), y = tc_clamp(addr_ / width_ + sy, 0, size_ / width_ - 1);
+    return y * width_ + x;
+  }
   // --- mb_qp_delta: the qpd family. The QP of the macroblock follows.
   static int qp_class(int d) { return 4 + tc_clamp(d, -3, 3); }
   int qpd(int v) {
     prepare();
     tc_stage = STG_QPD;
     aq_xp_ = -1;
+    aq_xi_ = false;
     const MbInfo* b = info(sc_->mb_b_);
     H_qpd_v D = {};
     D.lnz = last_qpd_ != 0;
@@ -1551,10 +1573,20 @@ struct Model {
         aq_xp_ = lg16(rec_.ac_energy(addr_));
         ok = aq_fitp_.predict(aq_xp_, q16);
         if (!ok) x = aq_xp_;
+      } else if (mi_->cls != CL_PCM && sc_->chroma_ == 1) {
+        // intra: the energy of its proxy, a reference's block
+        proxy_mv();
+        int64_t e = rec_.proxy_energy();
+        if (e >= 0) {
+          aq_xp_ = lg16(e);
+          aq_xi_ = true;
+          ok = aq_fitx_.predict(aq_xp_, q16) || aq_fitp_.predict(aq_xp_, q16);
+        }
       }
       if (ok || (x >= 0 && aq_fit_.predict(x, q16))) D.aq = 7 + tc_clamp((int)div_floor(q16 - 16 * qp_pred_ + 8, 16), -6, 6);
-      if ((int)aq_res_[key_].size() == size_ && aq_res_[key_][addr_] != INT16_MIN)
-        D.ac = 7 + tc_clamp((int)div_floor(aq_res_[key_][addr_] + 4, 8), -6, 6);
+      int ma = mc_addr();
+      if ((int)aq_res_[key_].size() == size_ && aq_res_[key_][ma] != INT16_MIN)
+        D.ac = 7 + tc_clamp((int)div_floor(aq_res_[key_][ma] + 4, 8), -6, 6);
     }
     tcx X;
     H_qpd_make(D, X);

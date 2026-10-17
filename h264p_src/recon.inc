@@ -1505,6 +1505,19 @@ struct Recon {
     }
     return e;
   }
+  // the same of the proxy of the current macroblock (proxy_build); -1 none
+  int64_t proxy_energy() const {
+    if (!active || !prx_ok) return -1;
+    int64_t e = 0, s1 = 0, s2 = 0;
+    for (int i = 0; i < 256; i++) s1 += prx_y[i], s2 += prx_y[i] * prx_y[i];
+    e += s2 - (s1 * s1 >> 8);
+    for (int c = 0; c < 2; c++) {
+      s1 = s2 = 0;
+      for (int i = 0; i < 64; i++) s1 += prx_c[c][i], s2 += prx_c[c][i] * prx_c[c][i];
+      e += s2 - (s1 * s1 >> 6);
+    }
+    return e;
+  }
   // The prediction of the current macroblock were it skipped (rf, mv: the
   // motion of P_Skip or B_Skip), put in the picture where its own will go:
   // how well its luma continues the decoded samples above and to the left,
