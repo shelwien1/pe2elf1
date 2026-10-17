@@ -1,0 +1,55 @@
+/*  The template IDX/idx2inc.pl reads alongside cbp.idx: the cbp
+    family's index builder and the tables its indices address.  Copied
+    through into MOD/cbp_p.inc with `H_cbp_` replaced by the prefix,
+    `MakeIndex` by the statements that build the indices, and the Table()
+    lines lifted out into the struct in MOD/cbp_h.inc.  Edit this file and
+    cbp.idx, not MOD/; ../mk.sh regenerates both.
+
+    `_A`-`_D` are the four counters, `_S` and `_F` the two APMs, `_W` the
+    mixer, `_MT` and `_WM` the mantissa plane and its mixer, `_G` the sign
+    counters.  Each is H_cbp_ND (or H_cbp_MND) rows deep per context: where a
+    decision sits among the family's nodes is context without being a
+    variable.  */
+
+void H_cbp_make( const H_cbp_v & D, tcx & X ) {
+  int a, b, c, d, s, f, m, t, n, g;
+  int inc = D.inc, pc = D.pc, cls = D.cls, col = D.col, q6 = D.q6, st = D.st;
+  (void) inc;  (void) pc;  (void) cls;  (void) col;  (void) q6;  (void) st;
+
+  a = 0;
+  a = a*4 + H_cbp_a_inc[__min(3,__max(0,inc-(1-1)))];
+  a = a*5 + H_cbp_a_pc[__min(4,__max(0,pc-(1-1)))];
+  a = a*9 + H_cbp_a_cls[__min(8,__max(0,cls-(1-1)))];
+  a = a*10 + H_cbp_a_st[__min(9,__max(0,st-(1-1)))];
+
+  b = 0;
+  b = b*4 + H_cbp_b_inc[__min(3,__max(0,inc-(1-1)))];
+  b = b*3 + ((col>0+(1-1))+(col>1+(1-1)));
+  b = b*9 + H_cbp_b_q6[__min(8,__max(0,q6-(1-1)))];
+
+  c = 0;
+  c = c*9 + H_cbp_c_cls[__min(8,__max(0,cls-(1-1)))];
+  c = c*3 + ((col>0+(1-1))+(col>1+(1-1)));
+  c = c*5 + H_cbp_c_pc[__min(4,__max(0,pc-(1-1)))];
+
+  d = 0;
+  d = d*4 + H_cbp_d_inc[__min(3,__max(0,inc-(1-1)))];
+
+  s = 0;
+  s = s*4 + H_cbp_s_inc[__min(3,__max(0,inc-(1-1)))];
+
+  f = 0;
+  f = f*9 + H_cbp_f_cls[__min(8,__max(0,cls-(1-1)))];
+
+  m = 0;
+  m = m*4 + H_cbp_m_inc[__min(3,__max(0,inc-(1-1)))];
+
+  t = 0;
+
+  n = 0;
+
+  g = 0;
+  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.s = s;  X.f = f;  X.m = m;  X.t = t;
+  X.n = n;  X.g = g;
+}
+

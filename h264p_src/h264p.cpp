@@ -1,6 +1,8 @@
-// h264p: dumps the syntax of an H.264 Annex B stream to a TSV file with the
-// entropy coding removed (c), and restores the identical stream from it (d).
-// This is the only module: the other sources are included here.
+// h264p: a lossless compressor of H.264 Annex B streams (c, d): the syntax
+// of the stream, with the entropy coding removed, is coded with a context
+// mixing model (model.inc) and coded back by the decompressor. The same
+// syntax can be dumped to a TSV file (t) and the identical stream restored
+// from it (r). This is the only module: the other sources are included here.
 #include <algorithm>
 #include <cerrno>
 #include <climits>
@@ -11,6 +13,7 @@
 #include <cstring>
 #include <map>
 #include <memory>
+#include <new>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -25,15 +28,27 @@
 #include "tables.inc"
 #include "cabac.inc"
 #include "cavlc.inc"
+#include "chan.inc"
 #include "syntax.inc"
 #include "slice.inc"
+#include "tsv.inc"
+#include "log.inc"
+#include "cmbase.inc"
+#include "rcio.inc"
+#include "rc.inc"
+#include "cm.inc"
+#include "mapping.inc"
+#include "fam.inc"
+#include "model.inc"
 
 using namespace h264p;
 
 namespace {
 
-const char kMagic[] = "h264p";
+const char kMagic[] = "h264p";  // TSV files
 const int kVersion = 1;
+const char kCmMagic[] = "h264c";  // compressed streams, followed by the version byte
+const int kCmVersion = 1;
 
 struct Options {
   bool verbose = false;
@@ -178,11 +193,11 @@ std::vector<uint8_t> escape(const std::vector<uint8_t>& r) {
 
 bool parsed_type(int type) { return (type >= 5 && type <= 12) || type == 1; }
 
-// Parses the RBSP of a NAL unit into rows; parameter sets are stored in the
-// context. Throws ParseError.
-void read_nal(int type, int ref_idc, const std::vector<uint8_t>& rbsp, Context& ctx, RowWriter& out) {
+// Parses the RBSP of a NAL unit, handing the values to a channel; parameter
+// sets are stored in the context. Throws ParseError.
+void read_nal(int type, int ref_idc, const std::vector<uint8_t>& rbsp, Context& ctx, Chan& ch) {
   BitReader br(rbsp.data(), rbsp.size());
-  Syn s(&br, &out);
+  Syn s(&br, &ch);
   switch (type) {
     case 7: {
       auto sps = std::make_shared<Sps>();
@@ -216,7 +231,7 @@ void read_nal(int type, int ref_idc, const std::vector<uint8_t>& rbsp, Context& 
       h.nal_ref_idc = ref_idc;
       code_slice_header(s, h, ctx.ps);
       h.pad = ctx.pad.bit(h.first_mb == 0);
-      read_slice_data(h, ctx.mbs, br, out);
+      read_slice_data(h, ctx.mbs, br, ch);
       break;
     }
     default:
@@ -224,11 +239,11 @@ void read_nal(int type, int ref_idc, const std::vector<uint8_t>& rbsp, Context& 
   }
 }
 
-// Writes the syntax of a NAL unit from rows, up to and including the
-// rbsp_stop_one_bit. Returns x264's padding bit for the end of CABAC slice
-// data, else -1. Throws TsvError.
-int write_syntax(int type, int ref_idc, Context& ctx, RowReader& in, BitWriter& bw) {
-  Syn s(&in, &bw);
+// Writes the syntax of a NAL unit with the values of a channel, up to and
+// including the rbsp_stop_one_bit. Returns x264's padding bit for the end
+// of CABAC slice data, else -1. Throws what the channel throws.
+int write_syntax(int type, int ref_idc, Context& ctx, Chan& ch, BitWriter& bw) {
+  Syn s(&ch, &bw);
   bool trailing = true;
   switch (type) {
     case 7: {
@@ -263,7 +278,7 @@ int write_syntax(int type, int ref_idc, Context& ctx, RowReader& in, BitWriter& 
       h.nal_ref_idc = ref_idc;
       code_slice_header(s, h, ctx.ps);
       h.pad = ctx.pad.bit(h.first_mb == 0);
-      write_slice_data(h, ctx.mbs, in, bw);  // with the stop bit
+      write_slice_data(h, ctx.mbs, ch, bw);  // with the stop bit
       return h.pps->entropy_coding_mode_flag ? h.pad : -1;
     }
     default:
@@ -276,25 +291,89 @@ int write_syntax(int type, int ref_idc, Context& ctx, RowReader& in, BitWriter& 
 // The alignment zero bits, the last one being x264's padding bit if pad is 1.
 void align(BitWriter& bw, int pad) { bw.put(pad > 0, (8 - (int)(bw.pos() & 7)) & 7); }
 
-// The rest of the RBSP: the alignment bits, or what a "trail" row says
-// instead, and the cabac_zero_words of a "czw" row.
+// How the RBSP of a NAL unit ends after the rbsp_stop_one_bit, when not with
+// the expected alignment bits (e.g. from yet another CABAC flushing
+// procedure): the last `drop` bits written are replaced by `bits`. Then come
+// the cabac_zero_words.
+struct Trailer {
+  bool irregular = false;
+  int64_t drop = 0;
+  std::string bits;  // of '0' and '1'
+  int64_t czw = 0;
+};
+
+// The rest of the RBSP after the rbsp_stop_one_bit, as the trailer says.
+void apply_trailer(const Trailer& t, BitWriter& bw, int pad) {
+  if (t.irregular) {
+    bw.truncate(bw.pos() - (size_t)t.drop);
+    for (char c : t.bits) bw.bit(c - '0');
+  } else {
+    align(bw, pad);
+  }
+  bw.append(2 * (size_t)t.czw, 0);
+}
+
+int get_bit(const std::vector<uint8_t>& v, size_t i) { return v[i >> 3] >> (7 - (i & 7)) & 1; }
+
+// Compares the RBSP written up to and including the stop bit (bw; pad as
+// write_syntax returned it) with the original one, and finds the trailer
+// that makes them equal. False when there is none. obs is the bit where x264
+// puts its padding bit in a CABAC slice, -1 if there is none.
+bool find_trailer(const BitWriter& bw, int pad, const std::vector<uint8_t>& rbsp, Trailer& t, std::string& why,
+                  int& obs) {
+  t = Trailer();
+  size_t pbits = bw.pos();
+  // the last bit of the byte with the stop bit, unless it is the stop bit
+  obs = -1;
+  if (pad >= 0 && (pbits & 7) && (pbits - 1) / 8 < rbsp.size()) obs = rbsp[(pbits - 1) / 8] & 1;
+  BitWriter o = bw;
+  align(o, pad);
+  if (o.data() == rbsp) return true;
+  // the end differs: cabac_zero_words, or trailing bits that are not the
+  // expected ones
+  size_t zeros = 0;
+  while (zeros < rbsp.size() && rbsp[rbsp.size() - 1 - zeros] == 0) zeros++;
+  t.czw = (int64_t)(zeros / 2);
+  std::vector<uint8_t> r(rbsp.begin(), rbsp.end() - 2 * (size_t)t.czw);
+  if (o.data() != r) {
+    // compare our bits up to and including the stop bit
+    size_t rbits = r.size() * 8, d = 0;
+    while (d < pbits && d < rbits && bw.at(d) == get_bit(r, d)) d++;
+    if (pbits - d > 64 || rbits - d > 4096) {
+      why = "re-encoding differs at bit " + std::to_string(d) + " of " + std::to_string(rbits);
+      return false;
+    }
+    t.irregular = true;
+    t.drop = (int64_t)(pbits - d);
+    for (size_t i = d; i < rbits; i++) t.bits += (char)('0' + get_bit(r, i));
+  }
+  BitWriter chk = bw;
+  apply_trailer(t, chk, pad);
+  if (chk.data() != rbsp) {
+    why = "re-encoding differs";
+    return false;
+  }
+  return true;
+}
+
+// The trailer of a NAL unit from its "trail" and "czw" rows, if any, applied.
 void write_trailer(RowReader& in, BitWriter& bw, int pad) {
+  Trailer tr;
   const Row* r = in.peek();
   if (r && r->is("trail")) {
     const Row& t = in.take();
     if (t.size() != 3) t.fail("expected 2 values");
     int64_t drop = t.num(1);
     if (drop < 0 || (size_t)drop > bw.pos()) t.fail("bad bit count");
-    bw.truncate(bw.pos() - (size_t)drop);
     const char* bits = t.field(2);
     if (strcmp(bits, "-") != 0)
       for (const char* p = bits; *p; p++) {
         if (*p != '0' && *p != '1') t.fail("bad bit string");
-        bw.bit(*p - '0');
+        tr.bits += *p;
       }
-    if (bw.pos() & 7) t.fail("does not end on a byte boundary");
-  } else {
-    align(bw, pad);
+    if ((bw.pos() - (size_t)drop + tr.bits.size()) & 7) t.fail("does not end on a byte boundary");
+    tr.irregular = true;
+    tr.drop = drop;
   }
   r = in.peek();
   if (r && r->is("czw")) {
@@ -302,13 +381,15 @@ void write_trailer(RowReader& in, BitWriter& bw, int pad) {
     if (t.size() != 2) t.fail("expected 1 value");
     int64_t n = t.num(1);
     if (n < 1 || n > (1 << 26)) t.fail("bad count");
-    bw.append(2 * (size_t)n, 0);
+    tr.czw = n;
   }
+  apply_trailer(tr, bw, pad);
 }
 
 std::vector<uint8_t> write_nal(int type, int ref_idc, Context& ctx, RowReader& in) {
   BitWriter bw;
-  int pad = write_syntax(type, ref_idc, ctx, in, bw);
+  TsvChan ch(&in);
+  int pad = write_syntax(type, ref_idc, ctx, ch, bw);
   write_trailer(in, bw, pad);
   return bw.data();
 }
@@ -317,17 +398,14 @@ std::vector<uint8_t> write_nal(int type, int ref_idc, Context& ctx, RowReader& i
 void update_params(int type, const std::vector<uint8_t>& rbsp, Context& ctx) {
   if (type != 7 && type != 8) return;
   try {
-    RowWriter dummy;
-    read_nal(type, 0, rbsp, ctx, dummy);
+    LogChan ch;
+    read_nal(type, 0, rbsp, ctx, ch);
   } catch (const ParseError&) {
   }
 }
 
-int get_bit(const std::vector<uint8_t>& v, size_t i) { return v[i >> 3] >> (7 - (i & 7)) & 1; }
-
 // Converts the payload of one NAL unit (after the header byte) to rows, or
-// returns false when it has to be stored verbatim. obs is the bit where x264
-// puts its padding bit in a CABAC slice, -1 if there is none.
+// returns false when it has to be stored verbatim. obs: see find_trailer.
 bool convert_nal(int type, int ref_idc, const uint8_t* p, size_t n, Context& ctx, RowWriter& out,
                  std::string& why, bool& trail, int& obs) {
   std::vector<uint8_t> rbsp = unescape(p, n);
@@ -344,7 +422,8 @@ bool convert_nal(int type, int ref_idc, const uint8_t* p, size_t n, Context& ctx
   }
   size_t start = out.size();
   try {
-    read_nal(type, ref_idc, rbsp, ctx, out);
+    TsvChan ch(&out);
+    read_nal(type, ref_idc, rbsp, ctx, ch);
   } catch (const ParseError& e) {
     why = e.what();
     out.truncate(start);
@@ -354,52 +433,61 @@ bool convert_nal(int type, int ref_idc, const uint8_t* p, size_t n, Context& ctx
     std::string text = out.text().substr(start);
     RowReader in(text.data(), text.size());
     BitWriter bw;
-    int pad = write_syntax(type, ref_idc, ctx, in, bw);
+    TsvChan ch(&in);
+    int pad = write_syntax(type, ref_idc, ctx, ch, bw);
     if (!in.at_end()) throw TsvError("rows left over");
-    size_t pbits = bw.pos();
-    // the last bit of the byte with the stop bit, unless it is the stop bit
-    if (pad >= 0 && (pbits & 7) && (pbits - 1) / 8 < rbsp.size()) obs = rbsp[(pbits - 1) / 8] & 1;
-    BitWriter o = bw;
-    align(o, pad);
-    if (o.data() == rbsp) return true;
-    // the end differs: cabac_zero_words, or trailing bits that are not
-    // the expected ones (e.g. from yet another CABAC flushing procedure)
-    size_t zeros = 0;
-    while (zeros < rbsp.size() && rbsp[rbsp.size() - 1 - zeros] == 0) zeros++;
-    size_t czw = zeros / 2;
-    std::vector<uint8_t> r(rbsp.begin(), rbsp.end() - 2 * czw);
-    RowWriter tail;
-    if (o.data() != r) {
-      // compare our bits up to and including the stop bit
-      size_t rbits = r.size() * 8, d = 0;
-      while (d < pbits && d < rbits && bw.at(d) == get_bit(r, d)) d++;
-      if (pbits - d > 64 || rbits - d > 4096) {
-        why = "re-encoding differs at bit " + std::to_string(d) + " of " + std::to_string(rbits);
-        out.truncate(start);
-        return false;
-      }
-      std::string bits;
-      for (size_t i = d; i < rbits; i++) bits += (char)('0' + get_bit(r, i));
-      tail.begin("trail");
-      tail.add((int64_t)(pbits - d));
-      tail.add(bits.empty() ? std::string("-") : bits);
-      tail.end();
-      trail = true;
-    }
-    if (czw) tail.row("czw", (int64_t)czw);
-    // check the rows as the restoring will use them
-    RowReader in2(tail.text().data(), tail.text().size());
-    write_trailer(in2, bw, pad);
-    if (bw.data() != rbsp || !in2.at_end()) {
-      why = "re-encoding differs";
+    Trailer t;
+    if (!find_trailer(bw, pad, rbsp, t, why, obs)) {
       out.truncate(start);
       return false;
     }
-    out.text() += tail.text();
+    if (t.irregular) {
+      out.begin("trail");
+      out.add(t.drop);
+      out.add(t.bits.empty() ? std::string("-") : t.bits);
+      out.end();
+      trail = true;
+    }
+    if (t.czw) out.row("czw", t.czw);
     return true;
   } catch (const std::exception& e) {
     why = std::string("re-encoding failed: ") + e.what();
     out.truncate(start);
+    return false;
+  }
+}
+
+// The compressor's dry run of the payload of a NAL unit: parses it into the
+// log, writes it back from the log and finds how it ends. False when it has
+// to be stored verbatim. obs: see find_trailer.
+bool dry_run(int type, int ref_idc, const uint8_t* p, size_t n, Context& ctx, LogChan& log, Trailer& t,
+             std::string& why, int& obs) {
+  std::vector<uint8_t> rbsp = unescape(p, n);
+  obs = -1;
+  if (!parsed_type(type)) {
+    why = "NAL unit type " + std::to_string(type);
+    return false;
+  }
+  if (escape(rbsp) != std::vector<uint8_t>(p, p + n)) {
+    why = "irregular emulation prevention";
+    update_params(type, rbsp, ctx);
+    return false;
+  }
+  log.clear();
+  try {
+    read_nal(type, ref_idc, rbsp, ctx, log);
+  } catch (const ParseError& e) {
+    why = e.what();
+    return false;
+  }
+  try {
+    log.rewind();
+    BitWriter bw;
+    int pad = write_syntax(type, ref_idc, ctx, log, bw);
+    if (!log.at_end()) throw TsvError("values left over");
+    return find_trailer(bw, pad, rbsp, t, why, obs);
+  } catch (const std::exception& e) {
+    why = std::string("re-encoding failed: ") + e.what();
     return false;
   }
 }
@@ -489,7 +577,7 @@ FILE* open_out(const char* name) {
 
 void put(FILE* f, const std::string& s) { fwrite(s.data(), 1, s.size(), f); }
 
-int compress(const char* in_name, const char* out_name, const Options& opt) {
+int tsv_dump(const char* in_name, const char* out_name, const Options& opt) {
   FILE* fi = strcmp(in_name, "-") ? fopen(in_name, "rb") : stdin;
   if (!fi) {
     fprintf(stderr, "h264p: cannot open %s: %s\n", in_name, strerror(errno));
@@ -610,7 +698,7 @@ int compress(const char* in_name, const char* out_name, const Options& opt) {
   return 0;
 }
 
-int decompress(const char* in_name, const char* out_name, const Options& opt) {
+int tsv_restore(const char* in_name, const char* out_name, const Options& opt) {
   FILE* fi = strcmp(in_name, "-") ? fopen(in_name, "rb") : stdin;
   if (!fi) {
     fprintf(stderr, "h264p: cannot open %s: %s\n", in_name, strerror(errno));
@@ -699,21 +787,324 @@ int decompress(const char* in_name, const char* out_name, const Options& opt) {
   return 0;
 }
 
+// CRC-32 (IEEE) of the stream, coded at the end of a compressed one
+struct Crc32 {
+  Crc32() {
+    for (uint32_t i = 0; i < 256; i++) {
+      uint32_t x = i;
+      for (int k = 0; k < 8; k++) x = x & 1 ? 0xEDB88320u ^ (x >> 1) : x >> 1;
+      t[i] = x;
+    }
+  }
+  void add(const uint8_t* p, size_t n) {
+    for (size_t i = 0; i < n; i++) c = t[(c ^ p[i]) & 255] ^ (c >> 8);
+  }
+  void add(const std::vector<uint8_t>& v) { add(v.data(), v.size()); }
+  void zeros(size_t n) {
+    for (size_t i = 0; i < n; i++) c = t[c & 255] ^ (c >> 8);
+  }
+  uint32_t value() const { return ~c; }
+  uint32_t t[256];
+  uint32_t c = 0xFFFFFFFFu;
+};
+
+void cm_report(u64 in_bytes, u64 out_bytes, u64 tables) {
+  double tot = 0;
+  for (int i = 0; i < STG_N; i++) tot += tc_bits[i];
+  fprintf(stderr, "%" PRIu64 " -> %" PRIu64 " bytes (%.2f%%), %" PRIu64 " MB of model tables\n", in_bytes, out_bytes,
+          in_bytes ? 100.0 * out_bytes / in_bytes : 0.0, tables >> 20);
+  for (int i = 0; i < STG_N; i++) {
+    if (!tc_syms[i]) continue;
+    fprintf(stderr, "  %-13s %11.0f bytes %6.2f%%  %10" PRIu64 " decisions or values, %.3f bits each\n", kStage[i],
+            tc_bits[i] / 8, tot > 0 ? 100.0 * tc_bits[i] / tot : 0.0, tc_syms[i], tc_bits[i] / (double)tc_syms[i]);
+  }
+}
+
+// The compressed stream: the magic and version, then one range coded run of
+// decisions. The bytes before the first start code (junk), then for each
+// NAL unit: that there is one (F_MORE), its type, nal_ref_idc and the zero
+// bytes before its start code, a change of x264's padding bits (slices),
+// whether it is stored verbatim (a type the walk knows); then its syntax
+// through the model and the trailer, or its length and bytes. At the end,
+// the zero bytes after the last NAL unit and the CRC-32 of the stream.
+int compress(const char* in_name, const char* out_name, const Options& opt) {
+  FILE* fi = strcmp(in_name, "-") ? fopen(in_name, "rb") : stdin;
+  if (!fi) {
+    fprintf(stderr, "h264p: cannot open %s: %s\n", in_name, strerror(errno));
+    return 1;
+  }
+  FILE* fo = open_out(out_name);
+  fwrite(kCmMagic, 1, sizeof kCmMagic - 1, fo);
+  fputc(kCmVersion, fo);
+  u64 in_bytes = 0, out_bytes = sizeof kCmMagic;
+  std::unique_ptr<Model<0>> mp(new Model<0>());
+  Model<0>& m = *mp;
+  auto& rc = Model<0>::rc;
+  Stats st;
+  try {
+    m.init();
+    tc_verbose = opt.verbose;
+    rc.rc_Init();
+    auto flush = [&]() {
+      fwrite(rc.buf.data(), 1, rc.buf.size(), fo);
+      out_bytes += rc.buf.size();
+      rc.buf.clear();
+    };
+    Context ctx;
+    PadDetector det;
+    LogChan log;
+    Crc32 crc;
+    AnnexBReader rd(fi);
+    std::vector<uint8_t> nal;
+    size_t zeros;
+    bool more = rd.next(zeros, nal);
+    const std::vector<uint8_t>& junk = rd.junk();
+    m.nal(F_JUNK, 0, (i64)junk.size());
+    for (uint8_t b : junk) m.raw(b);
+    crc.add(junk);
+    in_bytes += junk.size();
+    int prev_type = 0;
+    for (; more; more = rd.next(zeros, nal)) {
+      static const uint8_t sc[3] = {0, 0, 1};
+      crc.zeros(zeros);
+      crc.add(sc, 3);
+      crc.add(nal);
+      in_bytes += zeros + 3 + nal.size();
+      st.nals++;
+      m.nal(F_MORE, 0, 1);
+      if (nal.empty() || (nal[0] & 0x80)) {  // empty, or forbidden_zero_bit set
+        m.nal(F_TYPE, prev_type, 32);
+        m.nal(F_ZEROS, 32, (i64)zeros);
+        m.nal(F_LEN, 32, (i64)nal.size());
+        for (uint8_t b : nal) m.raw(b);
+        st.raw++;
+        st.reasons["empty or forbidden_zero_bit"]++;
+        continue;
+      }
+      int ref_idc = nal[0] >> 5 & 3, type = nal[0] & 31;
+      m.nal(F_TYPE, prev_type, type);
+      m.nal(F_REF, type, ref_idc);
+      m.nal(F_ZEROS, type, (i64)zeros);
+      prev_type = type;
+      const uint8_t* payload = &nal[1];
+      size_t len = nal.size() - 1;
+      bool slice = type == 1 || type == 5;
+      bool newpic = starts_picture(type, payload, len);
+      if (slice) det.slice(newpic);
+      if (type == 7 || (type == 6 && is_x264_sei(payload, len))) det.restart();
+      Trailer t;
+      std::string why;
+      int obs;
+      bool ok = dry_run(type, ref_idc, payload, len, ctx, log, t, why, obs);
+      bool padchg = false;
+      if (ok && obs >= 0 && det.observe(obs)) {
+        // once more, with padding bits that predict this one
+        padchg = true;
+        int64_t frame = det.frame();
+        if (frame < 0)
+          ctx.pad.on = false;
+        else
+          ctx.pad.set(frame);
+        st.pad++;
+        ok = dry_run(type, ref_idc, payload, len, ctx, log, t, why, obs);
+      }
+      if (slice) {
+        m.nal(F_PADCHG, 0, padchg);
+        if (padchg) {
+          m.nal(F_PADON, 0, ctx.pad.on);
+          if (ctx.pad.on) m.nal(F_PADFRAME, 0, ctx.pad.frame);
+        }
+      }
+      if (parsed_type(type)) m.nal(F_VERB, type, !ok);
+      if (ok) {
+        log.rewind();
+        ModelChan<0> ch(m, &log);
+        m.nal_begin(type, ref_idc);
+        BitWriter bw;
+        write_syntax(type, ref_idc, ctx, ch, bw);
+        if (!log.at_end()) cm_fail("internal: values left over");
+        m.nal(F_TRAIL, type, t.irregular);
+        if (t.irregular) {
+          m.nal(F_DROP, 0, t.drop);
+          m.nal(F_NBITS, 0, (i64)t.bits.size());
+          for (char c : t.bits) m.nal(F_TBIT, 0, c - '0');
+        }
+        m.nal(F_CZW, type, t.czw);
+        st.parsed++;
+        st.trail += t.irregular;
+      } else {
+        m.nal(F_LEN, type, (i64)len);
+        for (size_t i = 0; i < len; i++) m.raw(payload[i]);
+        st.raw++;
+        st.reasons[why]++;
+        if (opt.verbose && parsed_type(type))
+          fprintf(stderr, "h264p: NAL unit %ld (type %d) stored verbatim: %s\n", st.nals - 1, type, why.c_str());
+        if (opt.strict && parsed_type(type)) {
+          fprintf(stderr, "h264p: NAL unit %ld (type %d) cannot be converted: %s\n", st.nals - 1, type, why.c_str());
+          return 1;
+        }
+      }
+      if (slice) ctx.pad.next_slice(newpic);
+      if (rc.buf.size() > (1 << 20)) flush();
+    }
+    if (rd.error()) {
+      fprintf(stderr, "h264p: read error\n");
+      return 1;
+    }
+    if (fi != stdin) fclose(fi);
+    m.nal(F_MORE, 0, 0);
+    m.nal(F_EOFZ, 0, (i64)rd.eof_zeros());
+    crc.zeros(rd.eof_zeros());
+    in_bytes += rd.eof_zeros();
+    m.nal(F_CRC, 0, crc.value());
+    rc.rc_Quit();
+    flush();
+  } catch (const CmError& e) {
+    fprintf(stderr, "h264p: %s: %s\n", in_name, e.what());
+    return 1;
+  }
+  if (ferror(fo) || (fo != stdout && fclose(fo))) {
+    fprintf(stderr, "h264p: write error\n");
+    return 1;
+  }
+  if (opt.verbose) {
+    fprintf(stderr, "%ld NAL units: %ld coded (%ld with irregular trailing bits), %ld stored verbatim\n", st.nals,
+            st.parsed, st.trail, st.raw);
+    if (st.pad) fprintf(stderr, "%ld changes of x264's padding bits\n", st.pad);
+    for (auto& r : st.reasons) fprintf(stderr, "  verbatim: %ld x %s\n", r.second, r.first.c_str());
+    cm_report(in_bytes, out_bytes, m.table_bytes());
+  }
+  return 0;
+}
+
+// a count coded in a compressed stream
+size_t cm_count(i64 v, i64 lim) {
+  if (v < 0 || v > lim) cm_fail("corrupt stream: a count of %" PRId64, v);
+  return (size_t)v;
+}
+
+int decompress(const char* in_name, const char* out_name, const Options& opt) {
+  FILE* fi = strcmp(in_name, "-") ? fopen(in_name, "rb") : stdin;
+  if (!fi) {
+    fprintf(stderr, "h264p: cannot open %s: %s\n", in_name, strerror(errno));
+    return 1;
+  }
+  char head[sizeof kCmMagic];
+  if (fread(head, 1, sizeof head, fi) != sizeof head || memcmp(head, kCmMagic, sizeof kCmMagic - 1)) {
+    fprintf(stderr, "h264p: %s: not a stream h264p compressed\n", in_name);
+    return 1;
+  }
+  if (head[sizeof kCmMagic - 1] != kCmVersion) {
+    fprintf(stderr, "h264p: %s: compressed by version %d, this is version %d\n", in_name,
+            (int)(uint8_t)head[sizeof kCmMagic - 1], kCmVersion);
+    return 1;
+  }
+  FILE* fo = open_out(out_name);
+  std::unique_ptr<Model<1>> mp(new Model<1>());
+  Model<1>& m = *mp;
+  auto& rc = Model<1>::rc;
+  std::vector<uint8_t> buf;
+  Crc32 crc;
+  long nals = 0;
+  auto flush = [&]() {
+    crc.add(buf);
+    fwrite(buf.data(), 1, buf.size(), fo);
+    buf.clear();
+  };
+  try {
+    m.init();
+    tc_verbose = opt.verbose;
+    rc.f = fi;
+    rc.rc_Init();
+    Context ctx;
+    for (size_t n = cm_count(m.nal(F_JUNK, 0, 0), (i64)1 << 40); n; n--) buf.push_back((uint8_t)m.raw(0));
+    int prev_type = 0;
+    while (m.nal(F_MORE, 0, 0)) {
+      nals++;
+      int type = (int)cm_count(m.nal(F_TYPE, prev_type, 0), 32);
+      if (type == 32) {
+        buf.insert(buf.end(), cm_count(m.nal(F_ZEROS, 32, 0), 1 << 30), 0);
+        buf.push_back(0);
+        buf.push_back(0);
+        buf.push_back(1);
+        for (size_t n = cm_count(m.nal(F_LEN, 32, 0), (i64)1 << 40); n; n--) buf.push_back((uint8_t)m.raw(0));
+        continue;
+      }
+      int ref_idc = (int)cm_count(m.nal(F_REF, type, 0), 3);
+      buf.insert(buf.end(), cm_count(m.nal(F_ZEROS, type, 0), 1 << 30), 0);
+      buf.push_back(0);
+      buf.push_back(0);
+      buf.push_back(1);
+      buf.push_back((uint8_t)(ref_idc << 5 | type));
+      prev_type = type;
+      size_t start = buf.size();
+      bool slice = type == 1 || type == 5;
+      if (slice && m.nal(F_PADCHG, 0, 0)) {
+        if (m.nal(F_PADON, 0, 0))
+          ctx.pad.set((int64_t)cm_count(m.nal(F_PADFRAME, 0, 0), INT32_MAX));
+        else
+          ctx.pad.on = false;
+      }
+      if (!parsed_type(type) || m.nal(F_VERB, type, 0)) {
+        std::vector<uint8_t> b(cm_count(m.nal(F_LEN, type, 0), (i64)1 << 40));
+        for (auto& x : b) x = (uint8_t)m.raw(0);
+        buf.insert(buf.end(), b.begin(), b.end());
+        update_params(type, unescape(b.data(), b.size()), ctx);
+      } else {
+        ModelChan<1> ch(m, nullptr);
+        m.nal_begin(type, ref_idc);
+        BitWriter bw;
+        int pad = write_syntax(type, ref_idc, ctx, ch, bw);
+        Trailer t;
+        t.irregular = m.nal(F_TRAIL, type, 0) != 0;
+        if (t.irregular) {
+          t.drop = (int64_t)cm_count(m.nal(F_DROP, 0, 0), (i64)bw.pos());
+          t.bits.resize(cm_count(m.nal(F_NBITS, 0, 0), 1 << 16));
+          for (auto& c : t.bits) c = (char)('0' + cm_count(m.nal(F_TBIT, 0, 0), 1));
+          if ((bw.pos() - (size_t)t.drop + t.bits.size()) & 7) cm_fail("corrupt stream: trailing bits");
+        }
+        t.czw = (int64_t)cm_count(m.nal(F_CZW, type, 0), 1 << 26);
+        apply_trailer(t, bw, pad);
+        std::vector<uint8_t> e = escape(bw.data());
+        buf.insert(buf.end(), e.begin(), e.end());
+      }
+      if (slice) ctx.pad.next_slice(starts_picture(type, buf.data() + start, buf.size() - start));
+      if (buf.size() > (1 << 22)) flush();
+    }
+    buf.insert(buf.end(), cm_count(m.nal(F_EOFZ, 0, 0), 1 << 30), 0);
+    flush();
+    if (m.nal(F_CRC, 0, 0) != crc.value()) cm_fail("CRC mismatch: the stream did not decompress correctly");
+  } catch (const std::exception& e) {  // CmError, TsvError
+    flush();
+    fprintf(stderr, "h264p: %s: %s\n", in_name, e.what());
+    return 1;
+  }
+  if (fi != stdin) fclose(fi);
+  if (ferror(fo) || (fo != stdout && fclose(fo))) {
+    fprintf(stderr, "h264p: write error\n");
+    return 1;
+  }
+  if (opt.verbose) fprintf(stderr, "%ld NAL units\n", nals);
+  return 0;
+}
+
 void usage() {
   fprintf(stderr,
-          "usage: h264p c|d [options] input output\n"
-          "  c  dump an H.264 Annex B stream to a TSV file\n"
-          "  d  restore the stream from the TSV file\n"
+          "usage: h264p c|d|t|r [options] input output\n"
+          "  c  compress an H.264 Annex B stream\n"
+          "  d  decompress it\n"
+          "  t  dump the stream's syntax to a TSV file\n"
+          "  r  restore the stream from the TSV file\n"
           "options:\n"
           "  -v  print statistics\n"
-          "  -s  strict: fail if a NAL unit of a supported type has to be stored verbatim\n"
+          "  -s  strict (c, t): fail if a NAL unit of a supported type has to be stored verbatim\n"
           "input and output can be - for stdin and stdout\n");
 }
 
 }  // namespace
 
 int main(int argc, char** argv) {
-  if (argc < 2 || (strcmp(argv[1], "c") && strcmp(argv[1], "d"))) {
+  if (argc < 2 || !argv[1][0] || argv[1][1] || !strchr("cdtr", argv[1][0])) {
     usage();
     return 2;
   }
@@ -743,5 +1134,14 @@ int main(int argc, char** argv) {
     usage();
     return 2;
   }
-  return argv[1][0] == 'c' ? compress(files[0], files[1], opt) : decompress(files[0], files[1], opt);
+  switch (argv[1][0]) {
+    case 'c':
+      return compress(files[0], files[1], opt);
+    case 'd':
+      return decompress(files[0], files[1], opt);
+    case 't':
+      return tsv_dump(files[0], files[1], opt);
+    default:
+      return tsv_restore(files[0], files[1], opt);
+  }
 }

@@ -3,8 +3,10 @@
 - `h264dec`: H.264 decoder: the OpenH264 decoder and its console front end
   (upstream commit 0819f288 from 2022, C code only, flattened into `codec/`),
   with fixes that make it decode correctly.
-- `h264p`: dumps the syntax of an H.264 stream to a TSV file with the entropy
-  coding removed, and restores the identical stream from it (`h264p_src/`).
+- `h264p`: a lossless compressor of H.264 streams: it removes the entropy
+  coding and codes the syntax again with a context mixing model. The same
+  syntax can be dumped to a TSV file, from which the identical stream is
+  restored (`h264p_src/`).
 
 ## Build
 
@@ -16,7 +18,7 @@ Linux (gcc or clang):
 Windows (MinGW): `g.bat`, as before, for h264dec, `gp.bat` for h264p.
 
 h264p is a single module: `h264p_src/h264p.cpp` includes the rest of its
-sources (`*.inc`), so `g++ -O2 -std=c++11 h264p_src/h264p.cpp -o h264p`
+sources (`*.inc`), so `g++ -O2 -std=c++11 -fwrapv h264p_src/h264p.cpp -o h264p`
 builds it too.
 
 ## Test
@@ -73,17 +75,55 @@ type-puns its motion vector arrays.
 
 ## h264p
 
-    ./h264p c [options] input.264 output.tsv    # dump
-    ./h264p d [options] input.tsv output.264    # restore
+    ./h264p c [options] input.264 output.h264c   # compress
+    ./h264p d [options] input.h264c output.264   # decompress
+    ./h264p t [options] input.264 output.tsv     # dump the syntax
+    ./h264p r [options] input.tsv output.264     # restore from the dump
 
-`-v` prints statistics, `-s` makes `c` fail when a NAL unit of a supported
-type has to be stored verbatim. Input and output can be `-` (stdin, stdout).
+`-v` prints statistics, `-s` makes `c` and `t` fail when a NAL unit of a
+supported type has to be stored verbatim. Input and output can be `-`
+(stdin, stdout).
+
+### Compression
+
+`c` parses each NAL unit, writes it back from the values it parsed to see
+that the NAL unit comes out the same, and then codes the values with the
+model: the macroblock syntax (skip flags, mb_type, intra modes, motion,
+coded_block_pattern, mb_qp_delta, the coefficients) and the header syntax,
+each with contexts from the neighbouring macroblocks of the picture and the
+co-located macroblock of the last picture of the same kind. `d` decodes the
+values and codes them with CAVLC or CABAC as the stream did. A NAL unit that
+does not come out the same is stored verbatim, as in the TSV file (below);
+a CRC-32 at the end checks the whole stream.
+
+The model is binary context mixing, after oggcomp (Ogg Vorbis): each value
+is a sequence of binary decisions, each predicted by four adaptive counters
+under different contexts, an APM, a mixer and a second APM, all selected by
+the decision's place in the value. The contexts and the parameters of each
+group of syntax elements (a family) are declared in `h264p_src/IDX/*.idx`
+and turned into code in `h264p_src/MOD/` (see `h264p_src/mk.sh`), where
+they can also be tuned. `h264p_cm.md` is the design.
+
+On the test streams (`-v` shows where the bits go):
+
+| stream | H.264 | compressed | |
+|---|---:|---:|---:|
+| 00 | 815,140 | 677,848 | 83.2% |
+| 01 | 1,095,103 | 1,012,030 | 92.4% |
+| 02 | 28,143 | 27,247 | 96.8% |
+| 03 | 1,181,369 | 957,724 | 81.1% |
+| 04 | 484,238 | 443,747 | 91.6% |
+
+Speed is about 0.3 MB of H.264 per second both ways; the model tables take
+about 20 MB.
+
+### TSV
 
 The TSV file holds the values of the syntax elements, with the CAVLC, CABAC
 and Exp-Golomb coding undone: a macroblock's coefficients are numbers, not
-coeff_token, level_prefix etc. or CABAC bins. `d` codes the values again,
+coeff_token, level_prefix etc. or CABAC bins. `r` codes the values again,
 with CAVLC or CABAC as the picture parameter set says, and the stream comes
-out byte for byte as it was. To guarantee that, `c` restores each NAL unit
+out byte for byte as it was. To guarantee that, `t` restores each NAL unit
 from its rows and compares; a NAL unit it cannot reproduce is stored in hex,
 verbatim. That happens to
 
@@ -99,12 +139,12 @@ monochrome, 4:2:0, 4:2:2 and 4:4:4, also with separate colour planes; bit
 depths up to 14; lossless coding, I_PCM; FMO and arbitrary slice order;
 redundant pictures; scaling matrices.
 
-Speed is about 1 MB of H.264 per second for `c` and 2 MB/s for `d`; the TSV
+Speed is about 1 MB of H.264 per second for `t` and 2 MB/s for `r`; the TSV
 file is 10-20 times as large as the stream. `h264p_cm.md` is about
 compressing it with context mixing: where CABAC spends its bits, and
 contexts for each field (`tools/ctxexp.py` tries them out).
 
-### TSV format
+#### TSV format
 
 One row per line: a name and tab-separated values. Absent values are `-`.
 Rows of the stream, in stream order:
@@ -130,7 +170,7 @@ x264 does not end its CABAC data quite like the standard: it sets the last
 bit of the byte with the rbsp_stop_one_bit, after the alignment zero bits, to
 bit (frame & 31) of 0x35a4e4f5, frame being the number of the picture in
 coding order from the start of the encoding. It does the same with the
-pcm_alignment_zero_bits before I_PCM samples. `c` recognizes the pattern in
+pcm_alignment_zero_bits before I_PCM samples. `t` recognizes the pattern in
 the bits it sees and writes an x264_padding row where it starts or its phase
 changes (in a stream cut from a longer one, or a concatenation); the frame
 number then goes up with every slice that has first_mb_in_slice 0. These bits
@@ -210,9 +250,10 @@ list 1, so no ref_idx_l1):
 
 ### Verification
 
-`test/h264p.sh` round-trips every test stream with `-s`, so all their NAL
-units are converted (except the data partitions of `test/h264p/jm_dp.264`).
+`test/h264p.sh` round-trips every test stream both ways, `c` and `d`, `t` and
+`r`, with `-s`, so all their NAL units are converted (except the data
+partitions of `test/h264p/jm_dp.264`).
 The streams in `test/h264p` cover what the others don't (see `gen.sh` there).
 The dumped values of all test streams were also compared, macroblock by
 macroblock, with the syntax elements traced by the JM reference decoder, and
-`c` and `d` were fuzzed with corrupted streams and TSV files.
+`t` and `r` were fuzzed with corrupted streams and TSV files.

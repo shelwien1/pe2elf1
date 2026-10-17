@@ -29,7 +29,7 @@ $(OBJDIR)/%.o: codec/%.cpp | $(OBJDIR)
 	$(CXX) $(CPPFLAGS) -Icodec $(CXXFLAGS) -fno-strict-aliasing -pthread -MMD -MP -c $< -o $@
 
 $(OBJDIR)/h264p/%.o: h264p_src/%.cpp | $(OBJDIR)/h264p
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -std=c++11 -MMD -MP -c $< -o $@
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -std=c++11 -fwrapv -MMD -MP -c $< -o $@
 
 $(OBJDIR) $(OBJDIR)/h264p:
 	mkdir -p $@

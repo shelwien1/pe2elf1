@@ -22,54 +22,12 @@ struct MbStore {
   uint32_t slices = 0;
 };
 
-// Parses the slice data following the slice header into rows, or writes it
-// from rows. The slice data ends with the rbsp_stop_one_bit (written by the
-// CABAC flush, or explicitly for CAVLC).
-void read_slice_data(const SliceHeader& h, MbStore& store, BitReader& br, RowWriter& out);
-void write_slice_data(const SliceHeader& h, MbStore& store, RowReader& in, BitWriter& bw);
-
-namespace {
-
-const int kAbsent = INT_MIN;
-
-// One coded block of coefficients (TSV row "res"), in MbRec::coef.
-struct Block {
-  int cat, idx;
-  size_t off, len;
-};
-
-// The syntax elements of one coded macroblock, in the form of the TSV rows
-// "mb", "fld", "pcm", "ipm", "sub", "ref0", "ref1", "mvd0", "mvd1" and "res".
-struct MbRec {
-  int type = 0;
-  int t8x8 = -1, cpred = -1, cbp = -1, qpd = kAbsent;
-  int field = -1;  // mb_field_decoding_flag when coded (row "fld")
-  bool has_pcm = false;
-  int pcm_align = 0;
-  std::vector<int> pcm, ipm, sub, ref[2], mvd[2];
-  std::vector<Block> res;
-  std::vector<int> coef;
-  // writing: read positions and the line of the "mb" row
-  size_t ipm_i = 0, sub_i = 0, ref_i[2] = {0, 0}, mvd_i[2] = {0, 0}, res_i = 0;
-  unsigned used = 0;  // fields of the "mb" row used
-  long line = 0;
-
-  // keeps the allocated memory
-  void clear() {
-    type = 0;
-    t8x8 = cpred = cbp = field = -1;
-    qpd = kAbsent;
-    has_pcm = false;
-    pcm_align = 0;
-    for (std::vector<int>* v : {&pcm, &ipm, &sub, &ref[0], &ref[1], &mvd[0], &mvd[1], &coef}) v->clear();
-    res.clear();
-    ipm_i = sub_i = ref_i[0] = ref_i[1] = mvd_i[0] = mvd_i[1] = res_i = 0;
-    used = 0;
-    line = 0;
-  }
-};
-
-enum { kUseT8x8 = 1, kUseCpred = 2, kUseCbp = 4, kUseQpd = 8 };
+// Parses the slice data following the slice header, handing the values to
+// a channel, or writes it with the values of a channel. The slice data ends
+// with the rbsp_stop_one_bit (written by the CABAC flush, or explicitly for
+// CAVLC).
+void read_slice_data(const SliceHeader& h, MbStore& store, BitReader& br, Chan& ch);
+void write_slice_data(const SliceHeader& h, MbStore& store, Chan& ch, BitWriter& bw);
 
 // 4x4 block position (in 4x4 units) of luma4x4BlkIdx
 inline int blk_x(int b) { return (b & 1) | ((b >> 1) & 2); }
@@ -211,32 +169,10 @@ std::vector<uint8_t> slice_group_map(const SliceHeader& h, int width, int size) 
 }
 
 // ---------------------------------------------------------------------------
-// rows of a macroblock
-
-void put_list(RowWriter& o, const char* name, const std::vector<int>& v) {
-  if (v.empty()) return;
-  o.begin(name);
-  for (int x : v) o.add(x);
-  o.end();
-}
-
-static int to_int(const Row& row, size_t i) {
-  int64_t v = row.num(i);
-  if (v < INT_MIN + 1 || v > INT_MAX) row.fail("value out of range");
-  return (int)v;
-}
-
-static void get_list(const Row& row, std::vector<int>& v, size_t from = 1) {
-  if (!v.empty()) row.fail("duplicate row");
-  for (size_t i = from; i < row.size(); i++) v.push_back(to_int(row, i));
-  if (v.empty()) row.fail("no values");
-}
-
-// ---------------------------------------------------------------------------
 
 struct SliceCoder {
-  SliceCoder(const SliceHeader& h, MbStore& store, BitReader* br, RowWriter* out, RowReader* in, BitWriter* bw)
-      : W(bw != nullptr), h_(h), sps_(*h.sps), pps_(*h.pps), store_(store), br_(br), bw_(bw), out_(out), in_(in) {}
+  SliceCoder(const SliceHeader& h, MbStore& store, BitReader* br, BitWriter* bw, Chan& ch)
+      : W(bw != nullptr), h_(h), sps_(*h.sps), pps_(*h.pps), store_(store), br_(br), bw_(bw), ch_(&ch) {}
 
   void run() {
     stype_ = h_.type();
@@ -270,10 +206,9 @@ struct SliceCoder {
       else
         enc_.init(bw_);
     }
-    if (!W)
-      read_loop();
-    else
-      write_loop();
+    ch_->slice_begin(*this);
+    loop();
+    ch_->slice_end();
     if (!cabac_) {
       if (!W) {
         // the rbsp_stop_one_bit
@@ -287,7 +222,8 @@ struct SliceCoder {
   // --- errors
   [[noreturn]] void fail(const std::string& msg) {
     if (!W) throw ParseError(msg);
-    throw TsvError("line " + std::to_string(rec_ ? rec_->line : in_->lineno()) + ": " + msg);
+    ch_->fail(msg);
+    throw TsvError(msg);  // not reached
   }
 
   // --- CAVLC primitives
@@ -348,22 +284,6 @@ struct SliceCoder {
     }
     while (k--) x += bypass(W ? ((v - x) >> k) & 1 : 0) << k;
     return x;
-  }
-
-  // --- values of the TSV rows
-  int next(std::vector<int>& q, size_t& i, const char* what) {
-    if (!W) return 0;
-    if (i >= q.size()) fail(std::string("missing ") + what + " value");
-    return q[i++];
-  }
-  void keep(std::vector<int>& q, int v) {
-    if (!W) q.push_back(v);
-  }
-  int field(int& f, unsigned use, const char* what) {
-    if (!W) return 0;
-    if (f == kAbsent || (use != kUseQpd && f < 0)) fail(std::string("missing ") + what);
-    rec_->used |= use;
-    return f;
   }
 
   // --- neighbours
@@ -431,14 +351,14 @@ struct SliceCoder {
   // macroblock and 4x4 block containing the luma 4x4 block (x, y) of the
   // current macroblock, x or y may be -1
   const MbState* nb4(int x, int y, int& idx) const {
-    int xW, yW;
+    int xW = 0, yW = 0;
     const MbState* n = nb_loc(x < 0 ? -1 : 4 * x, y < 0 ? -1 : 4 * y, 16, 16, xW, yW);
     idx = (yW >> 2) * 4 + (xW >> 2);
     return n;
   }
   // the same for chroma 4x4 blocks (2 wide, ch_h_ high)
   const MbState* nbc(int x, int y, int& idx) const {
-    int xW, yW;
+    int xW = 0, yW = 0;
     const MbState* n = nb_loc(x < 0 ? -1 : 4 * x, y < 0 ? -1 : 4 * y, 8, 4 * ch_h_, xW, yW);
     idx = (yW >> 2) * 2 + (xW >> 2);
     return n;
@@ -446,130 +366,90 @@ struct SliceCoder {
   bool field_mb() const { return field_ || cur_->field; }
 
   // --- slice data
-  void read_loop() {
+  //
+  // A macroblock at a time: whether it is skipped, the macroblock, and
+  // whether the slice ends after it. With CAVLC, the skipped macroblocks
+  // are runs (mb_skip_run) before the coded ones: parsing, a run is read
+  // before the first macroblock and after each coded one that is not the
+  // last; writing, the skipped macroblocks are counted and their run is
+  // written before the next coded one, or at the end.
+  void loop() {
     bool intra = stype_ == kI || stype_ == kSI;
     int addr = h_.first_mb * (1 + mbaff_);
-    int skipped = 0;
     bool prev_skipped = false;
-    auto flush_skip = [&]() {
-      if (skipped) out_->row("skip", skipped);
-      skipped = 0;
-    };
-    auto coded_mb = [&]() {
-      MbRec& r = mbrec_;
-      r.clear();
-      if (mbaff_ && (!(addr & 1) || prev_skipped)) {
-        r.field = mb_field_decoding_flag(0);
-        set_field(r.field);
-      }
-      macroblock(r);
-      write_mb_rows(r);
-    };
+    bool expect_run = !cabac_ && !intra;  // parsing CAVLC: a mb_skip_run comes next
+    int run = 0;  // CAVLC: skipped macroblocks left in the run (parsing), not written yet (writing)
     for (;;) {
-      if (!cabac_) {
-        if (!intra) {
-          uint32_t run = br_->ue();
-          if (run > (uint32_t)size_) fail("mb_skip_run too large");
-          for (uint32_t k = 0; k < run; k++) {
-            start_mb(addr);
-            set_skip();
-            addr = next_mb(addr);
-          }
-          prev_skipped = run > 0;
-          if (run) {
-            out_->row("skip", run);
-            if (!br_->more_rbsp_data()) break;
-          }
-        }
-        start_mb(addr);
-        coded_mb();
-        if (!br_->more_rbsp_data()) break;
-      } else {
-        start_mb(addr);
-        bool skip = !intra && mb_skip_flag(0);
-        if (skip) {
-          set_skip();
-          skipped++;
+      start_mb(addr);
+      bool skip = false;
+      if (!intra) {
+        if (W) {
+          skip = ch_->skip(0) != 0;
+          if (cabac_)
+            mb_skip_flag(skip);
+          else if (skip)
+            run++;
         } else {
-          flush_skip();
-          coded_mb();
+          if (cabac_) {
+            skip = mb_skip_flag(0);
+          } else {
+            if (expect_run) {
+              uint32_t r = br_->ue();
+              if (r > (uint32_t)size_) fail("mb_skip_run too large");
+              run = (int)r;
+              expect_run = false;
+            }
+            skip = run > 0;
+            run -= skip;
+          }
+          ch_->skip(skip);
         }
-        prev_skipped = skip;
-        if ((!mbaff_ || (addr & 1)) && term(0)) break;
       }
-      addr = next_mb(addr);
-    }
-    flush_skip();
-  }
-
-  void write_loop() {
-    bool intra = stype_ == kI || stype_ == kSI;
-    int addr = h_.first_mb * (1 + mbaff_);
-    bool prev_skipped = false;
-    auto peek_is = [&](RowKind k) {
-      const Row* r = in_->peek();
-      return r && r->kind == k;
-    };
-    auto take_skip = [&]() {
-      const Row& r = in_->take();
-      if (intra) r.fail("skipped macroblocks in an intra slice");
-      if (r.size() != 2) r.fail("expected 1 value");
-      int64_t n = r.num(1);
-      if (n < 1 || n > size_) r.fail("bad skip count");
-      return (int)n;
-    };
-    auto coded_mb = [&]() {
-      MbRec& r = mbrec_;
-      r.clear();
-      read_mb_rows(r);
-      rec_ = &r;
-      if (mbaff_ && (!(addr & 1) || prev_skipped))
-        set_field(mb_field_decoding_flag(r.field));
-      else if (r.field >= 0)
-        fail("fld row for a macroblock without mb_field_decoding_flag");
-      macroblock(r);
-    };
-    int skip_left = 0;
-    for (;;) {
-      if (!cabac_) {
-        if (!intra) {
-          int run = 0;
-          while (peek_is(kSkipRow)) run += take_skip();
+      if (skip) {
+        set_skip();
+      } else {
+        if (W && !cabac_ && !intra) {
           bw_->ue((uint32_t)run);
-          for (int k = 0; k < run; k++) {
-            start_mb(addr);
-            set_skip();
-            addr = next_mb(addr);
-          }
-          prev_skipped = run > 0;
-          if (run && !peek_is(kMbRow)) break;
+          run = 0;
         }
-        if (!peek_is(kMbRow)) fail("expected a macroblock");
-        start_mb(addr);
-        coded_mb();
-        if (!peek_is(kMbRow) && !peek_is(kSkipRow)) break;
-      } else {
-        if (!skip_left && peek_is(kSkipRow)) skip_left = take_skip();
-        bool skip = skip_left > 0;
-        if (!skip && !peek_is(kMbRow)) fail("expected a macroblock");
-        start_mb(addr);
-        if (!intra) mb_skip_flag(skip);
-        if (skip) {
-          set_skip();
-          skip_left--;
+        coded_mb(addr, prev_skipped);
+      }
+      prev_skipped = skip;
+      // end of the slice: with CABAC after each macroblock (pair, MBAFF),
+      // with CAVLC where the data ends
+      if (!cabac_ || !mbaff_ || (addr & 1)) {
+        bool certain = next_mb(addr) >= size_;
+        bool end;
+        if (W) {
+          end = ch_->end(0, certain) != 0;
+          if (cabac_)
+            term(end);
+          else if (end && run)
+            bw_->ue((uint32_t)run);
         } else {
-          coded_mb();
+          if (cabac_) {
+            end = term(0);
+          } else {
+            end = skip && run ? false : !br_->more_rbsp_data();
+            if (!end && !skip && !intra) expect_run = true;
+          }
+          ch_->end(end, certain);
         }
-        prev_skipped = skip;
-        bool end = !skip_left && !peek_is(kMbRow) && !peek_is(kSkipRow);
-        if (!mbaff_ || (addr & 1))
-          term(end);
-        else if (end)
-          fail("the slice ends with half a macroblock pair");
         if (end) break;
       }
       addr = next_mb(addr);
     }
+  }
+
+  void coded_mb(int addr, bool prev_skipped) {
+    ch_->mb_begin();
+    if (mbaff_ && (!(addr & 1) || prev_skipped)) {
+      int f = mb_field_decoding_flag(W ? ch_->field(0) : 0);
+      if (!W) ch_->field(f);
+      set_field(f);
+    }
+    macroblock();
+    ch_->mb_end();
   }
 
   void start_mb(int addr) {
@@ -622,112 +502,49 @@ struct SliceCoder {
     return i;
   }
 
-  void read_mb_rows(MbRec& r) {
-    const Row& m = in_->take();
-    if (m.size() != 6) m.fail("expected 5 values");
-    r.line = m.lineno;
-    r.type = to_int(m, 1);
-    r.t8x8 = m.absent(2) ? -1 : to_int(m, 2);
-    r.cpred = m.absent(3) ? -1 : to_int(m, 3);
-    r.cbp = m.absent(4) ? -1 : to_int(m, 4);
-    r.qpd = m.absent(5) ? kAbsent : to_int(m, 5);
-    if (r.t8x8 < -1 || r.cpred < -1 || r.cbp < -1) m.fail("negative value");
-    while (const Row* p = in_->peek()) {
-      switch (p->kind) {
-        case kFldRow: {
-          const Row& row = in_->take();
-          if (r.field >= 0) row.fail("duplicate row");
-          if (row.size() != 2) row.fail("expected 1 value");
-          r.field = to_int(row, 1);
-          if (r.field < 0) row.fail("bad value");
-          break;
-        }
-        case kPcmRow: {
-          const Row& row = in_->take();
-          if (r.has_pcm) row.fail("duplicate row");
-          r.has_pcm = true;
-          r.pcm_align = to_int(row, 1);
-          for (size_t i = 2; i < row.size(); i++) r.pcm.push_back(to_int(row, i));
-          break;
-        }
-        case kIpmRow:
-          get_list(in_->take(), r.ipm);
-          break;
-        case kSubRow:
-          get_list(in_->take(), r.sub);
-          break;
-        case kRef0Row:
-          get_list(in_->take(), r.ref[0]);
-          break;
-        case kRef1Row:
-          get_list(in_->take(), r.ref[1]);
-          break;
-        case kMvd0Row:
-          get_list(in_->take(), r.mvd[0]);
-          break;
-        case kMvd1Row:
-          get_list(in_->take(), r.mvd[1]);
-          break;
-        case kResRow: {
-          const Row& row = in_->take();
-          Block b;
-          b.cat = to_int(row, 1);
-          b.idx = to_int(row, 2);
-          b.off = r.coef.size();
-          for (size_t i = 3; i < row.size(); i++) r.coef.push_back(to_int(row, i));
-          b.len = r.coef.size() - b.off;
-          if (!b.len || !r.coef.back()) row.fail("coefficients must end with a nonzero one");
-          r.res.push_back(b);
-          break;
-        }
-        default:
-          return;
-      }
-    }
-  }
-
-  void write_mb_rows(const MbRec& r) {
-    RowWriter& o = *out_;
-    o.begin("mb");
-    o.add(r.type);
-    for (int f : {r.t8x8, r.cpred, r.cbp})
-      if (f < 0)
-        o.add_absent();
-      else
-        o.add(f);
-    if (r.qpd == kAbsent)
-      o.add_absent();
-    else
-      o.add(r.qpd);
-    o.end();
-    if (r.field >= 0) o.row("fld", r.field);
-    if (r.has_pcm) {
-      o.begin("pcm");
-      o.add(r.pcm_align);
-      for (int x : r.pcm) o.add(x);
-      o.end();
-    }
-    put_list(o, "ipm", r.ipm);
-    put_list(o, "sub", r.sub);
-    put_list(o, "ref0", r.ref[0]);
-    put_list(o, "ref1", r.ref[1]);
-    put_list(o, "mvd0", r.mvd[0]);
-    put_list(o, "mvd1", r.mvd[1]);
-    for (const Block& b : r.res) {
-      o.begin("res");
-      o.add(b.cat);
-      o.add(b.idx);
-      for (size_t i = 0; i < b.len; i++) o.add(r.coef[b.off + i]);
-      o.end();
-    }
-  }
-
   // --- macroblock layer (7.3.5)
-  void macroblock(MbRec& r) {
-    rec_ = &r;
+  //
+  // Each syntax element goes through the channel: parsing, after it is
+  // read; writing, before it is written.
+  int mb_type_v() {
+    int v = mb_type(W ? ch_->mb_type(0) : 0);
+    if (!W) ch_->mb_type(v);
+    return v;
+  }
+  int t8x8_v() {
+    int v = transform_size_8x8_flag(W ? ch_->t8x8(0) : 0);
+    if (!W) ch_->t8x8(v);
+    return v;
+  }
+  int ipm_v(int blk) {
+    int v = intra_pred_mode(W ? ch_->ipm(blk, 0) : 0);
+    if (!W) ch_->ipm(blk, v);
+    return v;
+  }
+  int cpred_v() {
+    int v = intra_chroma_pred_mode(W ? ch_->cpred(0) : 0);
+    if (!W) ch_->cpred(v);
+    return v;
+  }
+  int sub_v(int i) {
+    int v = sub_mb_type(W ? ch_->sub(i, 0) : 0);
+    if (!W) ch_->sub(i, v);
+    return v;
+  }
+  int cbp_v(bool intra_nxn) {
+    int v = coded_block_pattern(W ? ch_->cbp(0) : 0, intra_nxn);
+    if (!W) ch_->cbp(v);
+    return v;
+  }
+  int qpd_v() {
+    int v = mb_qp_delta(W ? ch_->qpd(0) : 0);
+    if (!W) ch_->qpd(v);
+    return v;
+  }
+
+  void macroblock() {
     MbState& m = *cur_;
-    int t = mb_type(r.type);
-    r.type = t;
+    int t = mb_type_v();
     int itype = -1, ptype = -1, btype = -1;  // intra type in I slice numbering
     bool si = false;
     switch (stype_) {
@@ -759,9 +576,8 @@ struct SliceCoder {
       m.cbp = 0x2f;
       memset(m.nz, 16, sizeof m.nz);
       memset(m.cbf_dc, 1, sizeof m.cbf_dc);
-      pcm_samples(r);
+      pcm_samples();
       last_qpd_ = 0;
-      rec_ = nullptr;
       return;
     }
     m.i16 = itype >= 1;
@@ -770,26 +586,22 @@ struct SliceCoder {
     bool no_sub_lt8 = true;
     int t8 = 0;
     if (ptype == 3 || ptype == 4 || btype == 22) {
-      sub_mb_pred(r, ptype, no_sub_lt8);
+      sub_mb_pred(ptype, no_sub_lt8);
     } else if (m.intra) {
-      if (pps_.transform_8x8_mode_flag && m.inxn)
-        r.t8x8 = t8 = transform_size_8x8_flag(field(r.t8x8, kUseT8x8, "transform_size_8x8_flag"));
+      if (pps_.transform_8x8_mode_flag && m.inxn) t8 = t8x8_v();
       if (m.inxn || si) {
-        for (int i = 0; i < (t8 ? 4 : 16); i++) keep(r.ipm, intra_pred_mode(next(r.ipm, r.ipm_i, "ipm")));
+        for (int i = 0; i < (t8 ? 4 : 16); i++) ipm_v(i);
       }
-      if (chroma_ == 1 || chroma_ == 2) {
-        r.cpred = intra_chroma_pred_mode(field(r.cpred, kUseCpred, "intra_chroma_pred_mode"));
-        m.cpred = (uint8_t)r.cpred;
-      }
+      if (chroma_ == 1 || chroma_ == 2) m.cpred = (uint8_t)cpred_v();
     } else {
-      mb_pred_inter(r, ptype, btype);
+      mb_pred_inter(ptype, btype);
     }
     int cbp;
     if (!m.i16) {
-      r.cbp = cbp = coded_block_pattern(field(r.cbp, kUseCbp, "coded_block_pattern"), m.inxn || si);
+      cbp = cbp_v(m.inxn || si);
       if ((cbp & 15) && pps_.transform_8x8_mode_flag && !m.inxn && no_sub_lt8 &&
           (btype != 0 || sps_.direct_8x8_inference_flag))
-        r.t8x8 = t8 = transform_size_8x8_flag(field(r.t8x8, kUseT8x8, "transform_size_8x8_flag"));
+        t8 = t8x8_v();
     } else {
       cbp = ((itype - 1) / 12 ? 15 : 0) | ((itype - 1) / 4 % 3) << 4;
     }
@@ -797,48 +609,33 @@ struct SliceCoder {
     m.t8x8 = (uint8_t)t8;
     int qpd = 0;
     if (cbp || m.i16) {
-      r.qpd = qpd = mb_qp_delta(field(r.qpd, kUseQpd, "mb_qp_delta"));
-      residual(r, cbp, t8);
+      qpd = qpd_v();
+      residual(cbp, t8);
     }
     last_qpd_ = qpd;
-    if (W) {
-      if (r.ipm_i != r.ipm.size() || r.sub_i != r.sub.size() || r.ref_i[0] != r.ref[0].size() ||
-          r.ref_i[1] != r.ref[1].size() || r.mvd_i[0] != r.mvd[0].size() || r.mvd_i[1] != r.mvd[1].size())
-        fail("too many values for this macroblock");
-      if (r.res_i != r.res.size()) fail("res row for a block that is not coded");
-      if (r.has_pcm) fail("pcm row for a macroblock that is not I_PCM");
-      if ((r.t8x8 >= 0 && !(r.used & kUseT8x8)) || (r.cpred >= 0 && !(r.used & kUseCpred)) ||
-          (r.cbp >= 0 && !(r.used & kUseCbp)) || (r.qpd != kAbsent && !(r.used & kUseQpd)))
-        fail("value for a syntax element that is not coded");
-    }
-    rec_ = nullptr;
   }
 
-  void pcm_samples(MbRec& r) {
+  void pcm_samples() {
     int nc = chroma_ ? 2 * (16 / (chroma_ == 3 ? 1 : 2)) * (16 / (chroma_ == 1 ? 2 : 1)) : 0;
     int n = 256 + nc;
     // the alignment bits relative to x264's, whose last one is its padding bit
     int nb = (8 - (int)((W ? bw_->pos() : br_->pos()) & 7)) & 7;
     int pad = cabac_ && nb ? h_.pad : 0;
+    int align = 0;
+    pcm_.resize(n);
     if (!W) {
-      r.has_pcm = true;
-      r.pcm_align = (int)br_->u(nb) ^ pad;
-      r.pcm.resize(n);
-      for (int i = 0; i < n; i++) r.pcm[i] = (int)br_->u(i < 256 ? sps_.bit_depth_luma : sps_.bit_depth_chroma);
+      align = (int)br_->u(nb) ^ pad;
+      for (int i = 0; i < n; i++) pcm_[i] = (int)br_->u(i < 256 ? sps_.bit_depth_luma : sps_.bit_depth_chroma);
+      ch_->pcm(align, nb, pcm_.data(), n);
     } else {
-      if (!r.has_pcm) fail("missing pcm row");
-      if ((int)r.pcm.size() != n) fail("wrong number of PCM samples");
-      if (r.pcm_align < 0 || r.pcm_align >= (1 << nb)) fail("bad pcm alignment bits");
-      bw_->put((uint32_t)(r.pcm_align ^ pad), nb);
+      ch_->pcm(align, nb, pcm_.data(), n);
+      if (align < 0 || align >= (1 << nb)) fail("bad pcm alignment bits");
+      bw_->put((uint32_t)(align ^ pad), nb);
       for (int i = 0; i < n; i++) {
         int depth = i < 256 ? sps_.bit_depth_luma : sps_.bit_depth_chroma;
-        if (r.pcm[i] < 0 || r.pcm[i] >= (1 << depth)) fail("PCM sample out of range");
-        bw_->put((uint32_t)r.pcm[i], depth);
+        if (pcm_[i] < 0 || pcm_[i] >= (1 << depth)) fail("PCM sample out of range");
+        bw_->put((uint32_t)pcm_[i], depth);
       }
-      r.has_pcm = false;  // used
-      if (r.ipm.size() || r.sub.size() || r.ref[0].size() || r.ref[1].size() || r.mvd[0].size() ||
-          r.mvd[1].size() || r.res.size() || r.t8x8 >= 0 || r.cpred >= 0 || r.cbp >= 0 || r.qpd != kAbsent)
-        fail("values for syntax elements that are not coded in I_PCM");
     }
     if (cabac_) {
       if (!W)
@@ -848,7 +645,7 @@ struct SliceCoder {
     }
   }
 
-  void mb_pred_inter(MbRec& r, int ptype, int btype) {
+  void mb_pred_inter(int ptype, int btype) {
     const Part* parts;
     int n, pred[2];
     if (ptype >= 0) {
@@ -869,18 +666,15 @@ struct SliceCoder {
     }
     for (int l = 0; l < 2; l++)
       for (int i = 0; i < n; i++)
-        if (pred[i] & (1 << l)) code_ref(r, l, parts[i], num_ref_[l] > 1 || cur_->field);
+        if (pred[i] & (1 << l)) code_ref(l, parts[i], num_ref_[l] > 1 || cur_->field);
     for (int l = 0; l < 2; l++)
       for (int i = 0; i < n; i++)
-        if (pred[i] & (1 << l)) code_mvd(r, l, parts[i]);
+        if (pred[i] & (1 << l)) code_mvd(l, parts[i]);
   }
 
-  void sub_mb_pred(MbRec& r, int ptype, bool& no_sub_lt8) {
+  void sub_mb_pred(int ptype, bool& no_sub_lt8) {
     int sub[4];
-    for (int i = 0; i < 4; i++) {
-      sub[i] = sub_mb_type(next(r.sub, r.sub_i, "sub"));
-      keep(r.sub, sub[i]);
-    }
+    for (int i = 0; i < 4; i++) sub[i] = sub_v(i);
     bool b = stype_ == kB;
     auto pred = [&](int i) { return b ? kBSubPred[sub[i]] : 1; };
     auto shape = [&](int i) { return b ? kBSubShape[sub[i]] : sub[i]; };
@@ -888,7 +682,7 @@ struct SliceCoder {
       for (int i = 0; i < 4; i++)
         if (pred(i) & (1 << l)) {
           Part p = {(i & 1) * 2, (i >> 1) * 2, 2, 2};
-          code_ref(r, l, p, (num_ref_[l] > 1 || cur_->field) && ptype != 4);
+          code_ref(l, p, (num_ref_[l] > 1 || cur_->field) && ptype != 4);
         }
     for (int l = 0; l < 2; l++)
       for (int i = 0; i < 4; i++)
@@ -898,7 +692,7 @@ struct SliceCoder {
             Part p = kSubParts[s][j];
             p.x += (i & 1) * 2;
             p.y += (i >> 1) * 2;
-            code_mvd(r, l, p);
+            code_mvd(l, p);
           }
         }
     for (int i = 0; i < 4; i++) {
@@ -910,22 +704,21 @@ struct SliceCoder {
     }
   }
 
-  void code_ref(MbRec& r, int list, const Part& p, bool coded) {
+  void code_ref(int list, const Part& p, bool coded) {
     int v = 0;
     if (coded) {
-      v = ref_idx(list, p.x, p.y, next(r.ref[list], r.ref_i[list], list ? "ref1" : "ref0"));
-      keep(r.ref[list], v);
+      v = ref_idx(list, p.x, p.y, W ? ch_->ref(list, p.x, p.y, p.w, p.h, 0) : 0);
+      if (!W) ch_->ref(list, p.x, p.y, p.w, p.h, v);
     }
     for (int y = p.y; y < p.y + p.h; y += 2)
       for (int x = p.x; x < p.x + p.w; x += 2) cur_->ref[list][(y >> 1) * 2 + (x >> 1)] = (int8_t)v;
   }
 
-  void code_mvd(MbRec& r, int list, const Part& p) {
-    const char* what = list ? "mvd1" : "mvd0";
-    int mx = mvd(list, 0, p.x, p.y, next(r.mvd[list], r.mvd_i[list], what));
-    keep(r.mvd[list], mx);
-    int my = mvd(list, 1, p.x, p.y, next(r.mvd[list], r.mvd_i[list], what));
-    keep(r.mvd[list], my);
+  void code_mvd(int list, const Part& p) {
+    int mx = mvd(list, 0, p.x, p.y, W ? ch_->mvd(list, 0, p.x, p.y, p.w, p.h, 0) : 0);
+    if (!W) ch_->mvd(list, 0, p.x, p.y, p.w, p.h, mx);
+    int my = mvd(list, 1, p.x, p.y, W ? ch_->mvd(list, 1, p.x, p.y, p.w, p.h, 0) : 0);
+    if (!W) ch_->mvd(list, 1, p.x, p.y, p.w, p.h, my);
     uint8_t ax = (uint8_t)std::min(abs(mx), 127), ay = (uint8_t)std::min(abs(my), 127);
     for (int y = p.y; y < p.y + p.h; y++)
       for (int x = p.x; x < p.x + p.w; x++) {
@@ -935,17 +728,17 @@ struct SliceCoder {
   }
 
   // residual (7.3.5.3)
-  void residual(MbRec& r, int cbp, int t8) {
+  void residual(int cbp, int t8) {
     MbState& m = *cur_;
-    residual_luma(r, 0, cbp, t8);
+    residual_luma(0, cbp, t8);
     if (chroma_ == 3) {  // Cb and Cr coded like luma
-      residual_luma(r, 1, cbp, t8);
-      residual_luma(r, 2, cbp, t8);
+      residual_luma(1, cbp, t8);
+      residual_luma(2, cbp, t8);
     } else if (chroma_) {
       int c[16];
       if (cbp >> 4) {
         for (int comp = 0; comp < 2; comp++) {
-          block(r, 3, comp, c, ch_blocks_, cabac_ ? cbf_inc_dc(1 + comp) : chroma_ == 1 ? -1 : -2);
+          block(3, comp, c, ch_blocks_, cabac_ ? cbf_inc_dc(1 + comp) : chroma_ == 1 ? -1 : -2);
           m.cbf_dc[1 + comp] = count_nonzero(c, ch_blocks_) != 0;
         }
       }
@@ -954,19 +747,19 @@ struct SliceCoder {
           for (int b = 0; b < ch_blocks_; b++) {
             int x = b & 1, y = b >> 1;
             int ctx = cabac_ ? cbf_inc_chroma_ac(comp, x, y) : nc_chroma(comp, x, y);
-            m.nz[1 + comp][y * 2 + x] = (uint8_t)block(r, 4, comp * ch_blocks_ + b, c, 15, ctx);
+            m.nz[1 + comp][y * 2 + x] = (uint8_t)block(4, comp * ch_blocks_ + b, c, 15, ctx);
           }
       }
     }
   }
 
   // residual_luma(): the blocks of Y, or of Cb or Cr with 4:4:4
-  void residual_luma(MbRec& r, int plane, int cbp, int t8) {
+  void residual_luma(int plane, int cbp, int t8) {
     MbState& m = *cur_;
     uint8_t* nz = m.nz[plane];
     int c[64];
     if (m.i16) {
-      block(r, kCatDc[plane], 0, c, 16, cabac_ ? cbf_inc_dc(plane) : nc_luma(plane, 0, 0));
+      block(kCatDc[plane], 0, c, 16, cabac_ ? cbf_inc_dc(plane) : nc_luma(plane, 0, 0));
       m.cbf_dc[plane] = count_nonzero(c, 16) != 0;
     }
     for (int b8 = 0; b8 < 4; b8++) {
@@ -974,12 +767,12 @@ struct SliceCoder {
       int x0 = (b8 & 1) * 2, y0 = (b8 >> 1) * 2;
       if (t8 && cabac_) {
         // coded_block_flag only with 4:4:4
-        block(r, kCat8x8[plane], b8, c, 64, chroma_ == 3 ? cbf_inc_8x8(plane, b8) : -1);
+        block(kCat8x8[plane], b8, c, 64, chroma_ == 3 ? cbf_inc_8x8(plane, b8) : -1);
         nz[y0 * 4 + x0] = nz[y0 * 4 + x0 + 1] = nz[y0 * 4 + x0 + 4] = nz[y0 * 4 + x0 + 5] =
             (uint8_t)count_nonzero(c, 64);
       } else if (t8) {
         // CAVLC: four 4x4 blocks with interleaved coefficients
-        if (W) fetch(r, kCat8x8[plane], b8, c, 64);
+        if (W) ch_->block(kCat8x8[plane], b8, c, 64, false);
         for (int b4 = 0; b4 < 4; b4++) {
           int c4[16];
           for (int i = 0; i < 16; i++) c4[i] = c[4 * i + b4];
@@ -990,20 +783,23 @@ struct SliceCoder {
             for (int i = 0; i < 16; i++) c[4 * i + b4] = c4[i];
           nz[y * 4 + x] = (uint8_t)tc;
         }
-        if (!W) store(r, kCat8x8[plane], b8, c, 64);
+        if (!W) ch_->block(kCat8x8[plane], b8, c, 64, false);
       } else {
         for (int b4 = 0; b4 < 4; b4++) {
           int blk = b8 * 4 + b4, x = blk_x(blk), y = blk_y(blk);
           int ctx = cabac_ ? cbf_inc_luma(plane, x, y) : nc_luma(plane, x, y);
-          nz[y * 4 + x] = (uint8_t)(m.i16 ? block(r, kCatAc[plane], blk, c, 15, ctx)
-                                          : block(r, kCat4x4[plane], blk, c, 16, ctx));
+          nz[y * 4 + x] = (uint8_t)(m.i16 ? block(kCatAc[plane], blk, c, 15, ctx)
+                                          : block(kCat4x4[plane], blk, c, 16, ctx));
         }
       }
     }
   }
 
-  int block(MbRec& r, int cat, int idx, int* c, int n, int ctx) {
-    if (W) fetch(r, cat, idx, c, n);
+  // a block of coefficients; ctx is the coded_block_flag ctxIdxInc with
+  // CABAC (-1: no coded_block_flag), nC with CAVLC
+  int block(int cat, int idx, int* c, int n, int ctx) {
+    bool coded = cabac_ && ctx < 0;
+    if (W) ch_->block(cat, idx, c, n, coded);
     int k;
     if (cabac_)
       k = cabac_residual(cat, c, n, ctx);
@@ -1011,25 +807,8 @@ struct SliceCoder {
       k = cavlc_write_block(*bw_, ctx, n, c);
     else
       k = cavlc_read_block(*br_, ctx, n, c);
-    if (!W) store(r, cat, idx, c, n);
+    if (!W) ch_->block(cat, idx, c, n, coded);
     return k;
-  }
-
-  void fetch(MbRec& r, int cat, int idx, int* c, int n) {
-    for (int i = 0; i < n; i++) c[i] = 0;
-    if (r.res_i < r.res.size() && r.res[r.res_i].cat == cat && r.res[r.res_i].idx == idx) {
-      const Block& b = r.res[r.res_i++];
-      if ((int)b.len > n) fail("too many coefficients in a res row");
-      for (size_t i = 0; i < b.len; i++) c[i] = r.coef[b.off + i];
-    }
-  }
-
-  void store(MbRec& r, int cat, int idx, const int* c, int n) {
-    int last = n - 1;
-    while (last >= 0 && !c[last]) last--;
-    if (last < 0) return;
-    r.res.push_back(Block{cat, idx, r.coef.size(), (size_t)last + 1});
-    r.coef.insert(r.coef.end(), c, c + last + 1);
   }
 
   // --- syntax elements
@@ -1203,27 +982,30 @@ struct SliceCoder {
       return tab[ue(code, n - 1)];
     }
     int luma = 0;
-    for (int b8 = 0; b8 < 4; b8++) {
-      int inc = 0;
-      for (int k = 0; k < 2; k++) {
-        int x = (b8 & 1) * 8 - !k, y = (b8 >> 1) * 8 - k, xW, yW;
-        const MbState* n = nb_loc(x, y, 16, 16, xW, yW);
-        int b8n = (yW >> 3) * 2 + (xW >> 3);
-        int cbp = n == cur_ ? luma : n ? n->cbp : 0;
-        if (n && !(n != cur_ && n->pcm) && !(cbp >> b8n & 1)) inc += 1 + k;
-      }
-      luma |= bin(73 + inc, v >> b8 & 1) << b8;
-    }
+    for (int b8 = 0; b8 < 4; b8++) luma |= bin(73 + cbp_luma_inc(b8, luma), v >> b8 & 1) << b8;
     if (!has_chroma) return luma;
-    int a = mb_a_ && (mb_a_->cbp >> 4) != 0;
-    int b = mb_b_ && (mb_b_->cbp >> 4) != 0;
     int c = 0;
-    if (bin(77 + a + 2 * b, (v >> 4) != 0)) {
-      a = mb_a_ && (mb_a_->cbp >> 4) == 2;
-      b = mb_b_ && (mb_b_->cbp >> 4) == 2;
-      c = 1 + bin(81 + a + 2 * b, (v >> 4) == 2);
-    }
+    if (bin(77 + cbp_chroma_inc(0), (v >> 4) != 0)) c = 1 + bin(81 + cbp_chroma_inc(1), (v >> 4) == 2);
     return luma | c << 4;
+  }
+
+  // ctxIdxInc of the luma bit of the 8x8 block b8 of coded_block_pattern,
+  // luma having the bits of the blocks before it (9.3.3.1.1.4)
+  int cbp_luma_inc(int b8, int luma) const {
+    int inc = 0;
+    for (int k = 0; k < 2; k++) {
+      int x = (b8 & 1) * 8 - !k, y = (b8 >> 1) * 8 - k, xW, yW;
+      const MbState* n = nb_loc(x, y, 16, 16, xW, yW);
+      int b8n = (yW >> 3) * 2 + (xW >> 3);
+      int cbp = n == cur_ ? luma : n ? n->cbp : 0;
+      if (n && !(n != cur_ && n->pcm) && !(cbp >> b8n & 1)) inc += 1 + k;
+    }
+    return inc;
+  }
+
+  // ctxIdxInc of the first (bin 0: chroma not 0) or second chroma bin (1: chroma 2)
+  int cbp_chroma_inc(int bin) const {
+    return (mb_a_ && (mb_a_->cbp >> 4) > bin) + 2 * (mb_b_ && (mb_b_->cbp >> 4) > bin);
   }
 
   int transform_size_8x8_flag(int v) {
@@ -1407,8 +1189,7 @@ struct SliceCoder {
   MbStore& store_;
   BitReader* br_;
   BitWriter* bw_;
-  RowWriter* out_;
-  RowReader* in_;
+  Chan* ch_;
 
   bool cabac_ = false, field_ = false, mbaff_ = false;
   int stype_ = 0, chroma_ = 1, ch_h_ = 2, ch_blocks_ = 4;
@@ -1423,22 +1204,19 @@ struct SliceCoder {
   const MbState* left_ = nullptr;  // left and above macroblock, or top
   const MbState* above_ = nullptr; // macroblock of the left and above pair
   int pair_field_ = 0;             // MBAFF: field decoding mode of the pair
-  MbRec* rec_ = nullptr;
-  MbRec mbrec_;  // reused for every macroblock
+  std::vector<int> pcm_;
   int last_qpd_ = 0;
   CabacCtx ctx_[kNumCtx];
   CabacDecoder dec_;
   CabacEncoder enc_;
 };
 
-}  // namespace
-
-void read_slice_data(const SliceHeader& h, MbStore& store, BitReader& br, RowWriter& out) {
-  SliceCoder(h, store, &br, &out, nullptr, nullptr).run();
+void read_slice_data(const SliceHeader& h, MbStore& store, BitReader& br, Chan& ch) {
+  SliceCoder(h, store, &br, nullptr, ch).run();
 }
 
-void write_slice_data(const SliceHeader& h, MbStore& store, RowReader& in, BitWriter& bw) {
-  SliceCoder(h, store, nullptr, nullptr, &in, &bw).run();
+void write_slice_data(const SliceHeader& h, MbStore& store, Chan& ch, BitWriter& bw) {
+  SliceCoder(h, store, nullptr, &bw, ch).run();
 }
 
 }  // namespace h264p

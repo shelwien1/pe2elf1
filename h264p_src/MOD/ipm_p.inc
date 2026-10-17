@@ -1,0 +1,58 @@
+/*  The template IDX/idx2inc.pl reads alongside ipm.idx: the ipm
+    family's index builder and the tables its indices address.  Copied
+    through into MOD/ipm_p.inc with `H_ipm_` replaced by the prefix,
+    `MakeIndex` by the statements that build the indices, and the Table()
+    lines lifted out into the struct in MOD/ipm_h.inc.  Edit this file and
+    ipm.idx, not MOD/; ../mk.sh regenerates both.
+
+    `_A`-`_D` are the four counters, `_S` and `_F` the two APMs, `_W` the
+    mixer, `_MT` and `_WM` the mantissa plane and its mixer, `_G` the sign
+    counters.  Each is H_ipm_ND (or H_ipm_MND) rows deep per context: where a
+    decision sits among the family's nodes is context without being a
+    variable.  */
+
+void H_ipm_make( const H_ipm_v & D, tcx & X ) {
+  int a, b, c, d, s, f, m, t, n, g;
+  int k8 = D.k8, ma = D.ma, mb = D.mb, mp = D.mp, blk = D.blk, pv = D.pv, col = D.col;
+  (void) k8;  (void) ma;  (void) mb;  (void) mp;  (void) blk;  (void) pv;  (void) col;
+
+  a = 0;
+  a = a*3 + ((k8>0+(1-1))+(k8>1+(1-1)));
+  a = a*11 + H_ipm_a_ma[__min(10,__max(0,ma-(1-1)))];
+  a = a*11 + H_ipm_a_mb[__min(10,__max(0,mb-(1-1)))];
+
+  b = 0;
+  b = b*3 + ((k8>0+(1-1))+(k8>1+(1-1)));
+  b = b*10 + H_ipm_b_mp[__min(9,__max(0,mp-(1-1)))];
+  b = b*10 + H_ipm_b_pv[__min(9,__max(0,pv-(1-1)))];
+
+  c = 0;
+  c = c*3 + ((k8>0+(1-1))+(k8>1+(1-1)));
+  c = c*10 + H_ipm_c_mp[__min(9,__max(0,mp-(1-1)))];
+  c = c*10 + H_ipm_c_col[__min(9,__max(0,col-(1-1)))];
+
+  d = 0;
+  d = d*3 + ((k8>0+(1-1))+(k8>1+(1-1)));
+  d = d*10 + H_ipm_d_mp[__min(9,__max(0,mp-(1-1)))];
+
+  s = 0;
+  s = s*3 + ((k8>0+(1-1))+(k8>1+(1-1)));
+  s = s*10 + H_ipm_s_mp[__min(9,__max(0,mp-(1-1)))];
+
+  f = 0;
+  f = f*3 + ((k8>0+(1-1))+(k8>1+(1-1)));
+
+  m = 0;
+  m = m*3 + ((k8>0+(1-1))+(k8>1+(1-1)));
+  m = m*3 + ((ma>8+(1-1))+(ma>9+(1-1)));
+  m = m*3 + ((mb>8+(1-1))+(mb>9+(1-1)));
+
+  t = 0;
+
+  n = 0;
+
+  g = 0;
+  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.s = s;  X.f = f;  X.m = m;  X.t = t;
+  X.n = n;  X.g = g;
+}
+

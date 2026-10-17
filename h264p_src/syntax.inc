@@ -1,18 +1,20 @@
-// Symmetric coding of syntax elements: the same code parses a bitstream into
-// TSV rows (reading) and writes a bitstream from TSV rows (writing).
+// Symmetric coding of syntax elements: the same code parses a bitstream,
+// handing the values to a channel (chan.inc), and writes a bitstream from
+// the values a channel gives.
 
 namespace h264p {
 
-// Header syntax: each syntax element, or group of elements, is one named row.
+// Header syntax: each syntax element, or group of elements, is one named
+// group of values (a TSV row).
 struct Syn {
-  Syn(BitReader* br, RowWriter* out) : W(false), br(br), bw(nullptr), out_(out), in_(nullptr) {}
-  Syn(RowReader* in, BitWriter* bw) : W(true), br(nullptr), bw(bw), out_(nullptr), in_(in) {}
+  Syn(BitReader* br, Chan* ch) : W(false), br(br), bw(nullptr), ch_(ch) {}
+  Syn(Chan* ch, BitWriter* bw) : W(true), br(nullptr), bw(bw), ch_(ch) {}
 
   const bool W;  // writing a bitstream
   BitReader* const br;
   BitWriter* const bw;
 
-  // one row with one value
+  // a group with one value
   int64_t u(const char* name, int n) {
     begin(name);
     int64_t v = vu(n);
@@ -32,26 +34,16 @@ struct Syn {
     return v;
   }
 
-  // a row with several values
-  void begin(const char* name) {
-    if (!W) {
-      out_->begin(name);
-      return;
-    }
-    const Row* r = in_->peek();
-    if (!r) throw TsvError(std::string("unexpected end of file, expected ") + name);
-    if (!r->is(name)) r->fail(std::string("expected ") + name);
-    row_ = &in_->take();
-    field_ = 1;
-  }
+  // a group with several values
+  void begin(const char* name) { ch_->hbegin(name); }
 
   int64_t vu(int n) {
     if (!W) {
       int64_t v = br->u(n);
-      out_->add(v);
+      ch_->hval(v);
       return v;
     }
-    int64_t v = check(row_->num(field_++), 0, ((int64_t)1 << n) - 1);
+    int64_t v = check(ch_->hval(0), 0, ((int64_t)1 << n) - 1);
     bw->put((uint64_t)v, n);
     return v;
   }
@@ -59,10 +51,10 @@ struct Syn {
   int64_t vue(int64_t lo, int64_t hi) {
     if (!W) {
       int64_t v = check(br->ue(), lo, hi);
-      out_->add(v);
+      ch_->hval(v);
       return v;
     }
-    int64_t v = check(row_->num(field_++), lo, hi);
+    int64_t v = check(ch_->hval(0), lo, hi);
     bw->ue((uint64_t)v);
     return v;
   }
@@ -70,10 +62,10 @@ struct Syn {
   int64_t vse(int64_t lo, int64_t hi) {
     if (!W) {
       int64_t v = check(br->se(), lo, hi);
-      out_->add(v);
+      ch_->hval(v);
       return v;
     }
-    int64_t v = check(row_->num(field_++), lo, hi);
+    int64_t v = check(ch_->hval(0), lo, hi);
     bw->se(v);
     return v;
   }
@@ -86,10 +78,10 @@ struct Syn {
       while ((b = br->u(8)) == 255)
         if ((v += 255) > (1 << 24)) fail("invalid SEI message header");
       v += b;
-      out_->add(v);
+      ch_->hval(v);
       return v;
     }
-    int64_t v = check(row_->num(field_++), 0, 1 << 24);
+    int64_t v = check(ch_->hval(0), 0, 1 << 24);
     for (int64_t x = v;; x -= 255) {
       bw->put(x < 255 ? x : 255, 8);
       if (x < 255) break;
@@ -97,57 +89,43 @@ struct Syn {
     return v;
   }
 
-  // bytes in hex
-  std::string vhex(size_t nbytes) {
+  // bytes
+  void vbytes(size_t nbytes) {
+    std::vector<uint8_t> b(nbytes);
     if (!W) {
-      std::vector<uint8_t> b(nbytes);
       for (auto& x : b) x = (uint8_t)br->u(8);
-      std::string h = to_hex(b.data(), b.size());
-      out_->add(h);
-      return h;
-    }
-    if (field_ >= row_->size()) {
-      if (nbytes) row_->fail("missing data");
-      return std::string();
-    }
-    std::vector<uint8_t> b = from_hex(*row_, field_);
-    if (b.size() != nbytes) row_->fail("wrong data length");
-    std::string h = row_->field(field_++);
-    for (uint8_t x : b) bw->put(x, 8);
-    return h;
-  }
-
-  void end() {
-    if (!W) {
-      out_->end();
+      ch_->hbytes(b);
       return;
     }
-    if (field_ != row_->size()) row_->fail("too many values");
+    ch_->hbytes(b);
+    if (b.size() != nbytes) fail("wrong data length");
+    for (uint8_t x : b) bw->put(x, 8);
   }
 
-  // a value that is not coded as such: reading, v goes to the row; writing,
-  // the value of the row is returned
+  void end() { ch_->hend(); }
+
+  // a value that is not coded as such: parsing, v goes to the channel;
+  // writing, the value of the channel is returned
   int64_t vval(int64_t v, int64_t lo, int64_t hi) {
     if (!W) {
       check(v, lo, hi);
-      out_->add(v);
+      ch_->hval(v);
       return v;
     }
-    return check(row_->num(field_++), lo, hi);
+    return check(ch_->hval(0), lo, hi);
   }
 
-  // more_rbsp_data() when reading; when writing, whether the next row is
-  // named `next`
+  // more_rbsp_data() when parsing; when writing, what the channel says (for
+  // TSV rows, whether the next row is named `next`)
   bool more_data(const char* next) {
-    if (!W) return br->more_rbsp_data();
-    const Row* r = in_->peek();
-    return r && r->is(next);
+    if (!W) return ch_->hmore(next, br->more_rbsp_data());
+    return ch_->hmore(next, false);
   }
 
   [[noreturn]] void fail(const std::string& msg) {
     if (!W) throw ParseError(msg);
-    if (row_) row_->fail(msg);
-    throw TsvError(msg);
+    ch_->fail(msg);
+    throw TsvError(msg);  // not reached
   }
 
   int64_t check(int64_t v, int64_t lo, int64_t hi) {
@@ -155,10 +133,7 @@ struct Syn {
     return v;
   }
 
-  RowWriter* out_;
-  RowReader* in_;
-  const Row* row_ = nullptr;
-  size_t field_ = 0;
+  Chan* ch_;
 };
 
 struct Sps {
@@ -406,7 +381,7 @@ void code_sei(Syn& s) {
     s.vff();
     int64_t size = s.vff();
     if (!s.W && (uint64_t)size * 8 > s.br->size() - s.br->pos()) s.fail("SEI payload past the end");
-    s.vhex((size_t)size);
+    s.vbytes((size_t)size);
     s.end();
   } while (s.more_data("sei_message"));
 }

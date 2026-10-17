@@ -1,0 +1,100 @@
+#  h264p's mvs family: its context indices and its tunable parameters.
+#  IDX/IDX-FORMAT.md is the format; ../mk.sh regenerates MOD/mvs_h.inc and
+#  MOD/mvs_p.inc from this file and mvs.inc.
+#
+#  Motion: sub_mb_type (kind 0 P, 1 B, as a binary tree), ref_idx (kind 2) and
+#  the components of mvd (kind 3; the sign has its own counters). comp is the
+#  component, lst the list, ma/mb the magnitudes of the components of A and
+#  B (classes), oth the class of the other component already coded, ps the
+#  partition size (0 16x16 .. 3 4x4), rf the ref_idx of the partition (or of
+#  A for ref_idx), pi the partition's place in the macroblock, nr the
+#  references of the list, col the same partition in the previous picture of
+#  the type.
+
+Prefix H_mvs
+Debug 1
+Const 0
+
+Index a
+ a_kind: kind, 1!111
+ a_comp: comp, 1!1
+ a_ma: ma, 1!1111111
+ a_mb: mb, 1!1111111
+ a_oth: oth, 1!11111
+
+Index b
+ b_kind: kind, 1!111
+ b_comp: comp, 1!1
+ b_lst: lst, 1!1
+ b_ps: ps, 1!111
+ b_rf: rf, 1!111
+ b_pi: pi, 1!111
+
+Index c
+ c_kind: kind, 1!111
+ c_comp: comp, 1!1
+ c_col: col, 1!1111111
+ c_nr: nr, 1!111
+
+Index d
+ d_kind: kind, 1!111
+ d_comp: comp, 1!1
+
+Index s
+ s_kind: kind, 1!111
+ s_comp: comp, 1!1
+
+Index f
+ f_kind: kind, 1!111
+ f_comp: comp, 1!1
+ f_oth: oth, 1!011
+
+Index m
+ m_kind: kind, 1!111
+ m_comp: comp, 1!1
+
+Index t
+ t_kind: kind, 1!111
+ t_comp: comp, 1!1
+
+Index n
+ n_kind: kind, 1!111
+
+Index g
+ g_kind: kind, 1!111
+ g_ma: ma, 1!0
+ g_oth: oth, 1!0
+
+Number rA, 1, 0!01000000
+Number rB, 1, 0!00010000
+Number rC, 1, 0!01000000
+Number rD, 1, 0!11111111
+Number rT, 1, 0!00110111
+Number rG, 1, 0!01011010
+Number rS1, 1, 0!00110
+Number rS2, 1, 0!00110
+Number lr, 1, 0!01100
+Number lrm, 1, 0!01100
+Number mbm, 1, 0!00000000
+Number mwA, 1, 0!00000000
+Number mwB, 1, 0!00000000
+Number mwC, 1, 0!00000000
+Number mwD, 1, 0!00000000
+Number mwT, 1, 0!00000000
+Number mwG, 1, 0!00000000
+Number bw, 1, 0!01000
+Number qs, 1, 3!0010000
+Number qf, 1, 3!0010000
+Number mb, 1, 0!00000101
+
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
+#  direct, one that does not is hashed into 2^h rows and contexts share
+#  them.  31 is "never hashed".  Frozen: left live these only grow.
+! Number hA, 1, 0!11000
+! Number hB, 1, 0!11000
+! Number hD, 1, 0!11000
+! Number hS, 1, 0!11000
+! Number hF, 1, 0!11000
+! Number hM, 1, 0!11000
+! Number hT, 1, 0!11000
+! Number hN, 1, 0!11000

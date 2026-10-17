@@ -1,0 +1,69 @@
+/*  The template IDX/idx2inc.pl reads alongside mvs.idx: the mvs
+    family's index builder and the tables its indices address.  Copied
+    through into MOD/mvs_p.inc with `H_mvs_` replaced by the prefix,
+    `MakeIndex` by the statements that build the indices, and the Table()
+    lines lifted out into the struct in MOD/mvs_h.inc.  Edit this file and
+    mvs.idx, not MOD/; ../mk.sh regenerates both.
+
+    `_A`-`_D` are the four counters, `_S` and `_F` the two APMs, `_W` the
+    mixer, `_MT` and `_WM` the mantissa plane and its mixer, `_G` the sign
+    counters.  Each is H_mvs_ND (or H_mvs_MND) rows deep per context: where a
+    decision sits among the family's nodes is context without being a
+    variable.  */
+
+void H_mvs_make( const H_mvs_v & D, tcx & X ) {
+  int a, b, c, d, s, f, m, t, n, g;
+  int kind = D.kind, comp = D.comp, lst = D.lst, ma = D.ma, mb = D.mb, oth = D.oth, ps = D.ps, rf = D.rf, pi = D.pi, nr = D.nr, col = D.col;
+  (void) kind;  (void) comp;  (void) lst;  (void) ma;  (void) mb;  (void) oth;  (void) ps;  (void) rf;  (void) pi;  (void) nr;  (void) col;
+
+  a = 0;
+  a = a*4 + H_mvs_a_kind[__min(3,__max(0,kind-(1-1)))];
+  a = a*2 + ((comp>0+(1-1)));
+  a = a*8 + H_mvs_a_ma[__min(7,__max(0,ma-(1-1)))];
+  a = a*8 + H_mvs_a_mb[__min(7,__max(0,mb-(1-1)))];
+  a = a*6 + H_mvs_a_oth[__min(5,__max(0,oth-(1-1)))];
+
+  b = 0;
+  b = b*4 + H_mvs_b_kind[__min(3,__max(0,kind-(1-1)))];
+  b = b*2 + ((comp>0+(1-1)));
+  b = b*2 + ((lst>0+(1-1)));
+  b = b*4 + H_mvs_b_ps[__min(3,__max(0,ps-(1-1)))];
+  b = b*4 + H_mvs_b_rf[__min(3,__max(0,rf-(1-1)))];
+  b = b*4 + H_mvs_b_pi[__min(3,__max(0,pi-(1-1)))];
+
+  c = 0;
+  c = c*4 + H_mvs_c_kind[__min(3,__max(0,kind-(1-1)))];
+  c = c*2 + ((comp>0+(1-1)));
+  c = c*8 + H_mvs_c_col[__min(7,__max(0,col-(1-1)))];
+  c = c*4 + H_mvs_c_nr[__min(3,__max(0,nr-(1-1)))];
+
+  d = 0;
+  d = d*4 + H_mvs_d_kind[__min(3,__max(0,kind-(1-1)))];
+  d = d*2 + ((comp>0+(1-1)));
+
+  s = 0;
+  s = s*4 + H_mvs_s_kind[__min(3,__max(0,kind-(1-1)))];
+  s = s*2 + ((comp>0+(1-1)));
+
+  f = 0;
+  f = f*4 + H_mvs_f_kind[__min(3,__max(0,kind-(1-1)))];
+  f = f*2 + ((comp>0+(1-1)));
+  f = f*3 + ((oth>1+(1-1))+(oth>2+(1-1)));
+
+  m = 0;
+  m = m*4 + H_mvs_m_kind[__min(3,__max(0,kind-(1-1)))];
+  m = m*2 + ((comp>0+(1-1)));
+
+  t = 0;
+  t = t*4 + H_mvs_t_kind[__min(3,__max(0,kind-(1-1)))];
+  t = t*2 + ((comp>0+(1-1)));
+
+  n = 0;
+  n = n*4 + H_mvs_n_kind[__min(3,__max(0,kind-(1-1)))];
+
+  g = 0;
+  g = g*4 + H_mvs_g_kind[__min(3,__max(0,kind-(1-1)))];
+  X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.s = s;  X.f = f;  X.m = m;  X.t = t;
+  X.n = n;  X.g = g;
+}
+

@@ -1,0 +1,13 @@
+nal TC_NODE TC_MNODE 32 fld ctx p1 p2
+hdr TC_NODE TC_MNODE 256 tag fld p1 p2 pos p1r sty
+skp 3 1 1 st a3 b3 col c9 cd run cnt eq lf af
+mbt 29 1 1 st ca cb cc nsk
+cbp 7 1 1 inc pc cls col q6 st
+ipm 19 1 1 k8 ma mb mp blk pv col
+mvs TC_NODE TC_MNODE 27 kind comp lst ma mb oth ps rf pi nr col
+qpd TC_NODE TC_MNODE 1 lnz pc cc cls dc db lz st
+cbf 1 1 1 cat na nb intra q6 np pos crcb col
+sig 2 1 1 cg pos nc cnt fld q6
+lvl TC_NODE TC_MNODE 1 cg g1 e1 nc pos sa sb q6 tot
+sgn 1 1 1 cg pos sa sb scb mag
+pcm TC_NODE TC_MNODE 3 pl dp pd pd2
