@@ -38,8 +38,8 @@ struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, z
 struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac; };
 struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn, pq, ch; };
 struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz, pq, hb, ft, h3, pr; };
-struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe, pl, tz, pq, lh, lt; };
-struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md, pp, mg, ez, ts, pq, gh; };
+struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe, pl, tz, pq, lh, lt, ls; };
+struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md, pp, mg, ez, ts, pq, gh, se; };
 struct H_pcm_v { int pl, dp, pd, pd2; };
 
 #include "MOD/nal_h.inc"
@@ -1873,7 +1873,7 @@ struct Model {
     // the magnitudes, from the last coefficient back
     tc_stage = STG_LVL;
     int mag[64];
-    int g1 = 0, e1 = 0, lhist = 0;  // lhist: the last levels coded less 1 (up to 3), two bits each
+    int g1 = 0, e1 = 0, lhist = 0, lsum = 0, esum = 0;  // lhist: the last levels coded less 1 (up to 3), two bits each
     H_lvl_v L = {cat, 0, 0, nc, 0, 0, 0, q, tc_qlog(cnt), md, 0, pg, em, 0};
     L.pq = pq;
     int abs_base = kAbsBase[cat];
@@ -1888,6 +1888,8 @@ struct Model {
       L.pos = tc_qlog(k);
       L.pe = spok && k < 4 ? sp.estimate(k) : 0;
       L.pl = pok ? 1 + std::min(abs(q4(k)) / 2, 10) : 0;
+      // intra: the levels so far against the estimate's there
+      L.ls = pok ? 7 + tc_clamp(lsum - esum, -6, 6) : 0;
       {
         // the levels right of and below it (higher frequencies, coded already)
         int N = g.kind == 3 ? 8 : g.kind == 0 && g.plane ? 2 : 4, kk = k + g.off;
@@ -1908,6 +1910,8 @@ struct Model {
       H_lvl_make(L, X);
       int a = cm_int(f_lvl.code(X, ENC ? abs(c[k]) - 1 : 0), 1 << 24);
       mag[k] = a + 1;
+      lsum += a + 1;
+      if (pok) esum += abs(est(k));
       L.pm = std::min(a + 1, 4);
       lhist = (lhist * 4 + std::min(a, 3)) & 63;
       L.lh = 1 + lhist;
@@ -1931,6 +1935,7 @@ struct Model {
       for (int k = 0; k <= last && npred < 6; k++)
         if (sig[k]) pk[npred++] = k;
     int ghist = 0;  // the last two signs coded in the block (0 none, 1 +, 2 -)
+    int sagree = 0;  // the signs the intra estimate got right less those it got wrong
     auto code_sign = [&](int k) {
       G.pos = k == 0 ? 0 : k < 3 ? 1 : k < 6 ? 2 : 3;
       G.sa = na.m ? sgn3(coef_at(na.m, g, na.i, k)) : 3;
@@ -1944,11 +1949,14 @@ struct Model {
       G.ez = pok ? (q4(k) ? (q4(k) > 0 ? 2 : 3) + 2 * (abs(q4(k)) >= 4) : 1) : 0;
       G.ts = tok ? 1 + sgn3(tcf(k)) : 0;
       G.gh = ghist % 9;
+      // intra: how often the estimate's signs were right in the block
+      G.se = pok ? 4 + tc_clamp(sagree, -3, 3) : 0;
       tcx X;
       H_sgn_make(G, X);
       f_sgn.select(X);
       int sg = f_sgn.bit(0, ENC && c[k] < 0);
       ghist = ghist % 3 * 3 + 1 + sg;
+      if (pok && q4(k)) sagree += (q4(k) < 0) == (sg != 0) ? 1 : -1;
       c[k] = sg ? -mag[k] : mag[k];
       tc_syms[STG_SGN]++;
       return sg;

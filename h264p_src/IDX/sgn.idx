@@ -54,6 +54,7 @@ Index h
 Index s
  s_cg: cg, 1!0100000000000
  s_pp: pp, 1!11
+ s_se: se, 1!1111111
 
 Index f
  f_cg: cg, 1!0011100000000
