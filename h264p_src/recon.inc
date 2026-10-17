@@ -1655,15 +1655,19 @@ struct Recon {
     // the six taps of the prediction; fast)
     const uint8_t *R = ref->y.data(), *Y = cur->y.data();
     int W = ref->w, H = ref->h;
-    auto sad = [&](int xs, int ys, int rw, int rh, int vx, int vy) {
+    // (stopping once it reaches budget)
+    auto sad = [&](int xs, int ys, int rw, int rh, int vx, int vy, int budget) {
       int ix = xs + (vx >> 2), iy = ys + (vy >> 2), fx = vx & 3, fy = vy & 3, s = 0;
       int wa = (4 - fx) * (4 - fy), wb = fx * (4 - fy), wc = (4 - fx) * fy, wd = fx * fy;
       bool inside = ix >= 0 && iy >= 0 && ix + rw < W && iy + rh < H;
-      for (int j = 0; j < rh; j++) {
+      for (int j = 0; j < rh && s < budget; j++) {
         const uint8_t* q = Y + (ys + j) * w + xs;
         if (inside) {
           const uint8_t *a = R + (iy + j) * W + ix, *c = a + W;
-          for (int i = 0; i < rw; i++) s += abs(q[i] - ((wa * a[i] + wb * a[i + 1] + wc * c[i] + wd * c[i + 1] + 8) >> 4));
+          if (!(fx | fy))
+            for (int i = 0; i < rw; i++) s += abs(q[i] - a[i]);
+          else
+            for (int i = 0; i < rw; i++) s += abs(q[i] - ((wa * a[i] + wb * a[i + 1] + wc * c[i] + wd * c[i + 1] + 8) >> 4));
         } else {
           const uint8_t *a = R + clip3(0, H - 1, iy + j) * W, *c = R + clip3(0, H - 1, iy + j + 1) * W;
           for (int i = 0; i < rw; i++) {
@@ -1677,25 +1681,29 @@ struct Recon {
     const int px = mv[0], py = mv[1];
     const int T = l < 0 ? TM_TP : TM_T;
     bool tr = l < 0 && top && x0 + bw + T <= w && mb_addr % mbw + 1 < mbw && db[mb_addr - mbw + 1].slice >= 0;
-    auto inner_sad = [&](int vx, int vy) {
-      if (inner == 1) return sad(x0, y0, bw, bh, vx, vy);
+    auto inner_sad = [&](int vx, int vy, int budget) {
+      if (inner == 1) return sad(x0, y0, bw, bh, vx, vy, budget);
       int s = 0;
-      for (int b = 0; b < 16; b++)
-        if (mb_done4 >> b & 1) s += sad(x0 + blk_x(b) * 4, y0 + blk_y(b) * 4, 4, 4, vx, vy);
-      for (int b8 = 0; b8 < 4; b8++)
-        if (mb_done8 >> b8 & 1) s += sad(x0 + (b8 & 1) * 8, y0 + (b8 >> 1) * 8, 8, 8, vx, vy);
+      for (int b = 0; b < 16 && s < budget; b++)
+        if (mb_done4 >> b & 1) s += sad(x0 + blk_x(b) * 4, y0 + blk_y(b) * 4, 4, 4, vx, vy, budget - s);
+      for (int b8 = 0; b8 < 4 && s < budget; b8++)
+        if (mb_done8 >> b8 & 1) s += sad(x0 + (b8 & 1) * 8, y0 + (b8 >> 1) * 8, 8, 8, vx, vy, budget - s);
       return s;
     };
-    auto cost = [&](int vx, int vy) {
-      return (top ? sad(x0, y0 - T, bw, T, vx, vy) : 0) + (left ? sad(x0 - T, y0, T, bh, vx, vy) : 0) +
-             (tr ? sad(x0 + bw, y0 - T, T, T, vx, vy) : 0) + (ninner ? inner_sad(vx, vy) : 0) +
-             lambda * (abs(vx - px) + abs(vy - py));
+    // the cost of a vector, or something not below bound once it is not
+    auto cost = [&](int vx, int vy, int bound = INT_MAX) {
+      int c = lambda * (abs(vx - px) + abs(vy - py));
+      if (top && c < bound) c += sad(x0, y0 - T, bw, T, vx, vy, bound - c);
+      if (left && c < bound) c += sad(x0 - T, y0, T, bh, vx, vy, bound - c);
+      if (tr && c < bound) c += sad(x0 + bw, y0 - T, T, T, vx, vy, bound - c);
+      if (ninner && c < bound) c += inner_sad(vx, vy, bound - c);
+      return c;
     };
     int vx = mv[0], vy = mv[1], best = cost(vx, vy);
     // other places to start from
     for (int k = 0; k < ncand; k++) {
       if (cand[k][0] == vx && cand[k][1] == vy) continue;
-      int c = cost(cand[k][0], cand[k][1]);
+      int c = cost(cand[k][0], cand[k][1], best);
       if (c < best) best = c, vx = cand[k][0], vy = cand[k][1];
     }
     // a small diamond in whole samples while it finds better (up to 4
@@ -1705,7 +1713,7 @@ struct Recon {
       int cx = vx, cy = vy;
       for (int k = 0; k < 4; k++) {
         if (only_y && kD[k][0]) continue;
-        int c = cost(cx + kD[k][0] * 4, cy + kD[k][1] * 4);
+        int c = cost(cx + kD[k][0] * 4, cy + kD[k][1] * 4, best);
         if (c < best) best = c, vx = cx + kD[k][0] * 4, vy = cy + kD[k][1] * 4;
       }
       if (vx == cx && vy == cy) break;
@@ -1715,7 +1723,7 @@ struct Recon {
       for (int dy = -1; dy <= 1; dy++)
         for (int dx = -1; dx <= 1; dx++) {
           if ((!dx && !dy) || (only_y && dx)) continue;
-          int c = cost(cx + dx * step, cy + dy * step);
+          int c = cost(cx + dx * step, cy + dy * step, best);
           if (c < best) best = c, vx = cx + dx * step, vy = cy + dy * step;
         }
     }
