@@ -37,7 +37,7 @@ struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm, pr, dr, pq, mh; }
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, zd, cq, tq; };
 struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac; };
 struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn, pq, ch; };
-struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz, pq, hb, ft, h3; };
+struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz, pq, hb, ft, h3, pr; };
 struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe, pl, tz, pq, lh, lt; };
 struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md, pp, mg, ez, ts, pq, gh; };
 struct H_pcm_v { int pl, dp, pd, pd2; };
@@ -1824,6 +1824,14 @@ struct Model {
         S.zl = tc_qlog(n - i - rem);
         S.pe = spok && i < 4 ? sp.estimate(i) : 0;
         S.ps = pok ? 1 + std::min(abs(q4(i)), 6) : 0;
+        // the estimate's levels from here on, against the coefficients left
+        if (pok) {
+          int er = 0;
+          for (int j = i; j < n; j++) er += est(j) != 0;
+          S.pr = 1 + 3 + tc_clamp(er - rem, -3, 3);
+        } else {
+          S.pr = 0;
+        }
         // the last two positions' significance (4 at the start)
         {
           // the frequencies left of and above it, where coded already (0

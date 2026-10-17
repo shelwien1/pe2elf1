@@ -14,8 +14,8 @@
 
 void H_sig_make( const H_sig_v & D, tcx & X ) {
   int a, b, c, d, e, h, s, f, m, w, t, n, g;
-  int cg = D.cg, pos = D.pos, rem = D.rem, zl = D.zl, md = D.md, nc = D.nc, fld = D.fld, q6 = D.q6, pg = D.pg, em = D.em, pe = D.pe, ps = D.ps, tz = D.tz, pq = D.pq, hb = D.hb, ft = D.ft, h3 = D.h3;
-  (void) cg;  (void) pos;  (void) rem;  (void) zl;  (void) md;  (void) nc;  (void) fld;  (void) q6;  (void) pg;  (void) em;  (void) pe;  (void) ps;  (void) tz;  (void) pq;  (void) hb;  (void) ft;  (void) h3;
+  int cg = D.cg, pos = D.pos, rem = D.rem, zl = D.zl, md = D.md, nc = D.nc, fld = D.fld, q6 = D.q6, pg = D.pg, em = D.em, pe = D.pe, ps = D.ps, tz = D.tz, pq = D.pq, hb = D.hb, ft = D.ft, h3 = D.h3, pr = D.pr;
+  (void) cg;  (void) pos;  (void) rem;  (void) zl;  (void) md;  (void) nc;  (void) fld;  (void) q6;  (void) pg;  (void) em;  (void) pe;  (void) ps;  (void) tz;  (void) pq;  (void) hb;  (void) ft;  (void) h3;  (void) pr;
 
   a = 0;
   a = a*14 + H_sig_a_cg[__min(13,__max(0,cg-(1-1)))];
@@ -48,6 +48,7 @@ void H_sig_make( const H_sig_v & D, tcx & X ) {
   e = e*8 + H_sig_e_ps[__min(7,__max(0,ps-(1-1)))];
   e = e*5 + H_sig_e_tz[__min(4,__max(0,tz-(1-1)))];
   e = e*25 + H_sig_e_pq[__min(24,__max(0,pq-(1-1)))];
+  e = e*8 + H_sig_e_pr[__min(7,__max(0,pr-(1-1)))];
 
   h = 0;
   h = h*5 + H_sig_h_cg[__min(13,__max(0,cg-(1-1)))];
@@ -60,6 +61,7 @@ void H_sig_make( const H_sig_v & D, tcx & X ) {
   s = 0;
   s = s*14 + H_sig_s_cg[__min(13,__max(0,cg-(1-1)))];
   s = s*5 + H_sig_s_pe[__min(15,__max(0,pe-(1-1)))];
+  s = s*8 + H_sig_s_pr[__min(7,__max(0,pr-(1-1)))];
 
   f = 0;
   f = f*3 + ((cg>0+(1-1))+(cg>1+(1-1)));
