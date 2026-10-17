@@ -37,7 +37,7 @@ struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm, pr, dr, pq; };
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, zd, cq, tq; };
 struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac; };
 struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn, pq, ch; };
-struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz, pq, hb; };
+struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz, pq, hb, ft; };
 struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe, pl, tz, pq, lh; };
 struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md, pp, mg, ez, ts, pq, gh; };
 struct H_pcm_v { int pl, dp, pd, pd2; };
@@ -326,6 +326,18 @@ constexpr int SignPred::kT8[8][8];
 // motion search weighs the mvd too (a fixed weight did better than its
 // lambda by QP)
 constexpr int kTmLambda = 2;
+// the scan positions of the raster positions of 4x4 and 8x8 blocks (kZz4, kZz8 inverted)
+struct ZzInv {
+  uint8_t v4[16], v8[64];
+  ZzInv() {
+    for (int k = 0; k < 16; k++) v4[kZz4[k]] = (uint8_t)k;
+    for (int k = 0; k < 64; k++) v8[kZz8[k]] = (uint8_t)k;
+  }
+};
+static const ZzInv kZzInv;
+static const uint8_t* const kInv4 = kZzInv.v4;
+static const uint8_t* const kInv8 = kZzInv.v8;
+
 template <int f_DEC>
 struct Model {
   static constexpr int ENC = f_DEC == 0;
@@ -1810,6 +1822,19 @@ struct Model {
         S.pe = spok && i < 4 ? sp.estimate(i) : 0;
         S.ps = pok ? 1 + std::min(abs(q4(i)), 6) : 0;
         // the last two positions' significance (4 at the start)
+        {
+          // the frequencies left of and above it, where coded already (0
+          // not, 1 zero, 2 not zero)
+          int N = g.kind == 3 ? 8 : g.kind == 0 && g.plane ? 2 : 4, k = i + g.off;
+          int r = N == 8 ? kZz8[k] : N == 4 ? kZz4[k] : k, fx = r % N, fy = r / N, fl = 0, fa = 0;
+          auto known = [&](int rr) {
+            int kk = N == 8 ? kInv8[rr] : N == 4 ? kInv4[rr] : rr, jj = kk - g.off;
+            return jj >= 0 && jj < i ? 1 + sig[jj] : 0;
+          };
+          if (fx) fl = known(r - 1);
+          if (fy) fa = known(r - N);
+          S.ft = fl * 3 + fa;
+        }
         {
           // the significance of the last eight positions (and where the
           // block starts)
