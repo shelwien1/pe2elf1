@@ -833,8 +833,8 @@ not restarting at each slice. They leave out mb_type, cbp, chroma AC, the
 sections 3-8 with these changes and additions.
 
 **Structure.** The model codes the syntax straight from `SliceCoder`, no
-TSV in between (section 8's "third backend"). Thirteen families (nal, hdr,
-skp, mbt, cbp, ipm, mvs, qpd, cbf, sig, lvl, sgn, pcm) are oggcomp's
+TSV in between (section 8's "third backend"). Fifteen families (nal, hdr,
+skp, mbt, cbp, ipm, mvs, qpd, cbf, sig, lvl, sgn, mvg, qpg, pcm) are oggcomp's
 `tc_fam`, declared in IDX: each decision is predicted by ten counters
 (A-E, H-L, one index each, each counter with an adaptive-rate and a fast
 fixed-rate probability), an APM (index s), three mixers selected by indices m, w and
@@ -843,7 +843,10 @@ the probability of CABAC's own context state is one more mixer input.
 Where the model has a guess at a number (a hint: a level, a count, an mvd,
 a QP delta), each decision of the number's cascade also sees what the
 hint's own cascade decides there while the two agree, or which side of the
-hint the number went, through counters of its own. Coefficients are coded
+hint the number went, through counters of its own (and the final mixer is
+selected by that state too). The signs of mvd and mb_qp_delta are
+decisions of families of their own (mvg, qpg), coded once the magnitude is
+known. Coefficients are coded
 count first (the number of nonzero coefficients, then the significance of
 each position knowing how many are left, the levels backwards, the
 signs).
@@ -865,8 +868,11 @@ their gain on test/002:
 | motion vector by template matching search, the vector zero, col's mvd | mvd | 17 KB |
 | hints: the intra estimate's level and count, the template match's mvd, the adaptive quantization line's QP delta | levels, count, mvd, qp delta | 13 KB |
 | edge miss of the prediction, edge-projected level estimates | coefficients | 13 KB* |
-| the sign of mb_qp_delta by the line's delta, and by whether the magnitude is the line's | qp delta | 12 KB |
-| x264's adaptive quantization: a per-picture line of QP against log2 energy, from the energy of the macroblock's prediction (of an intra macroblock's proxy, on a line of its own) | qp delta | 12 KB |
+| the sign of mb_qp_delta (its own family, mixed) by the line's delta, col's and B's QP, against the magnitude | qp delta | 16 KB |
+| x264's adaptive quantization: a per-picture line of QP against log2 energy, from the energy of the macroblock's prediction (of an intra macroblock's proxy, on a line of its own); a picture's first macroblocks on the last picture's slope | qp delta | 13 KB |
+| intra modes ranked in the proxy by SATD: how much worse the most probable mode does, in x264's lambda; the best other mode and its lead; the best Intra16x16 and chroma modes | intra modes, mb_type | 9 KB |
+| the sign of mvd (its own family, mixed) by the template match's vector, the zero vector's, col's, against the magnitude; the neighbours' vectors' signs | mvd signs | 5 KB |
+| the texture of the prediction and its edge miss against the quantizer's step | count, significance, cbp | 3 KB |
 | how far to trust the intra estimate: the template match of its vector, then how far the luma decoded so far is from it | coefficients, intra modes | 9 KB |
 | the best intra mode in the reference | intra modes | 4 KB |
 | P pictures: the coefficients of the block the vector points at in the reference (a copy of the last picture's), moved and still blocks apart; for cbp, the 4x4 blocks with coefficients under it | coefficients, cbp | 2 KB |
@@ -885,19 +891,19 @@ four to six were 16 KB).
 
 | element | CABAC | model | |
 |---|---:|---:|---:|
-| skip, end | 336,175 | 225,095 | −33.0% |
-| mb_type | 365,120 | 265,275 | −27.3% |
-| cbp, transform_size_8x8_flag | 216,100 | 154,648 | −28.4% |
-| intra modes | 299,858 | 239,457 | −20.1% |
-| sub_mb_type, ref_idx, mvd | 504,865 | 423,528 | −16.1% |
-| mb_qp_delta | 271,297 | 194,381 | −28.4% |
-| coded_block_flag, significance (count, significance) | 910,721 | 715,773 | −21.4% |
-| levels | 302,611 | 221,491 | −26.8% |
-| signs | 329,382 | 183,762 | −44.2% |
-| macroblock syntax | 3,536,129 | 2,623,410 | −25.8% |
-| whole streams (H.264 against compressed) | 3,603,993 | 2,630,454 | −27.0% |
+| skip, end | 336,175 | 224,808 | −33.1% |
+| mb_type | 365,120 | 263,561 | −27.8% |
+| cbp, transform_size_8x8_flag | 216,100 | 153,842 | −28.8% |
+| intra modes | 299,858 | 232,625 | −22.4% |
+| sub_mb_type, ref_idx, mvd | 504,865 | 418,485 | −17.1% |
+| mb_qp_delta | 271,297 | 188,999 | −30.3% |
+| coded_block_flag, significance (count, significance) | 910,721 | 711,253 | −21.9% |
+| levels | 302,611 | 220,824 | −27.0% |
+| signs | 329,382 | 183,616 | −44.3% |
+| macroblock syntax | 3,536,129 | 2,598,013 | −26.5% |
+| whole streams (H.264 against compressed) | 3,603,993 | 2,605,055 | −27.7% |
 
-The model tables take 168 MB.
+The model tables take 170 MB.
 
 **Tried, no gain:** the CABAC-style significance/last binarization instead
 of the count; the mirrored list 0 vector for list 1 mvds (as a context, and
@@ -909,13 +915,18 @@ skip vector points; the intra proxy from the best of several references,
 or averaged over two; its brightness corrected by the samples around; its
 best mode with the decoder's edges (the proxy's own surroundings do much
 better); a wider search for it; thicker templates for the other searches;
-the proxy's best Intra16x16 and chroma modes; bi-prediction disagreement
-per block for B residuals; the neighbours' distance from the adaptive
+bi-prediction disagreement per block for B residuals; the neighbours'
+distance from the adaptive
 quantization line; the reference's QP where a block's motion points;
 richer contexts for the mantissa (better on test/002, worse on the rest);
 edge-projected levels, or the levels of the block the vector points at, as
 hints for inter blocks; histories of skip flags and mb_qp_delta; a final
-mixer selected by context; longer significance histories (12, hashed).
+mixer selected by context (by the hint's state it helps); longer
+significance histories (12, hashed); for mb_type and
+transform_size_8x8_flag, the proxy's summed best Intra4x4, Intra8x8 and
+Intra16x16 costs (little for their size); the template match's quantized
+difference from the skip prediction for P skip; the misses of skip and
+mb_type against the quantizer's step; CAVLC's nC as the count's hint.
 
 ## Appendix A: single-context experiments
 
