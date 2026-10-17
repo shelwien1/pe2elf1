@@ -6,12 +6,14 @@ static const byte H_mbt_a_cb[8+1]={ 0,1,2,3,4,5,6,7,8 };
 static const byte H_mbt_b_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 static const byte H_mbt_b_cc[8+1]={ 0,1,2,3,4,5,6,7,8 };
 static const byte H_mbt_b_nsk[4+1]={ 0,1,2,3,4 };
+static const byte H_mbt_b_td[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
 
 static const byte H_mbt_c_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 static const byte H_mbt_c_ca[8+1]={ 0,1,2,3,4,5,6,7,8 };
 static const byte H_mbt_c_cc[8+1]={ 0,1,2,3,4,5,6,7,8 };
 
 static const byte H_mbt_d_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
+static const byte H_mbt_d_en[14+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14 };
 
 static const byte H_mbt_f_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 
@@ -55,9 +57,9 @@ static const int H_mbt_hN = (24+0) * (1);
 
 
 static const long long H_mbt_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 10), 9), 9); // 810
-static const long long H_mbt_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 10), 9), 5); // 450
+static const long long H_mbt_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 9), 5), 17); // 7650
 static const long long H_mbt_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 10), 9), 9); // 810
-static const long long H_mbt_d_Volume = tc_vmul(1, 10); // 10
+static const long long H_mbt_d_Volume = tc_vmul(tc_vmul(1, 10), 15); // 150
 static const long long H_mbt_f_Volume = tc_vmul(tc_vmul(1, 10), 3); // 30
 static const long long H_mbt_g_Volume = tc_vmul(1, 1); // 1
 static const long long H_mbt_m_Volume = tc_vmul(1, 10); // 10

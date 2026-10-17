@@ -14,8 +14,8 @@
 
 void H_ipm_make( const H_ipm_v & D, tcx & X ) {
   int a, b, c, d, s, f, m, t, n, g;
-  int k8 = D.k8, ma = D.ma, mb = D.mb, mp = D.mp, blk = D.blk, pv = D.pv, col = D.col;
-  (void) k8;  (void) ma;  (void) mb;  (void) mp;  (void) blk;  (void) pv;  (void) col;
+  int k8 = D.k8, ma = D.ma, mb = D.mb, mp = D.mp, blk = D.blk, pv = D.pv, col = D.col, dm = D.dm, ds = D.ds;
+  (void) k8;  (void) ma;  (void) mb;  (void) mp;  (void) blk;  (void) pv;  (void) col;  (void) dm;  (void) ds;
 
   a = 0;
   a = a*3 + ((k8>0+(1-1))+(k8>1+(1-1)));
@@ -35,13 +35,16 @@ void H_ipm_make( const H_ipm_v & D, tcx & X ) {
   d = 0;
   d = d*3 + ((k8>0+(1-1))+(k8>1+(1-1)));
   d = d*10 + H_ipm_d_mp[__min(9,__max(0,mp-(1-1)))];
+  d = d*10 + H_ipm_d_dm[__min(9,__max(0,dm-(1-1)))];
+  d = d*10 + H_ipm_d_ds[__min(9,__max(0,ds-(1-1)))];
 
   s = 0;
   s = s*3 + ((k8>0+(1-1))+(k8>1+(1-1)));
-  s = s*10 + H_ipm_s_mp[__min(9,__max(0,mp-(1-1)))];
+  s = s*10 + H_ipm_s_dm[__min(9,__max(0,dm-(1-1)))];
 
   f = 0;
   f = f*3 + ((k8>0+(1-1))+(k8>1+(1-1)));
+  f = f*10 + H_ipm_f_dm[__min(9,__max(0,dm-(1-1)))];
 
   m = 0;
   m = m*3 + ((k8>0+(1-1))+(k8>1+(1-1)));

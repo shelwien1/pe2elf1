@@ -14,8 +14,8 @@
 
 void H_skp_make( const H_skp_v & D, tcx & X ) {
   int a, b, c, d, s, f, m, t, n, g;
-  int st = D.st, a3 = D.a3, b3 = D.b3, col = D.col, c9 = D.c9, cd = D.cd, run = D.run, cnt = D.cnt, eq = D.eq, lf = D.lf, af = D.af;
-  (void) st;  (void) a3;  (void) b3;  (void) col;  (void) c9;  (void) cd;  (void) run;  (void) cnt;  (void) eq;  (void) lf;  (void) af;
+  int st = D.st, a3 = D.a3, b3 = D.b3, col = D.col, c9 = D.c9, cd = D.cd, run = D.run, cnt = D.cnt, eq = D.eq, lf = D.lf, af = D.af, td = D.td, en = D.en;
+  (void) st;  (void) a3;  (void) b3;  (void) col;  (void) c9;  (void) cd;  (void) run;  (void) cnt;  (void) eq;  (void) lf;  (void) af;  (void) td;  (void) en;
 
   a = 0;
   a = a*10 + H_skp_a_st[__min(9,__max(0,st-(1-1)))];
@@ -39,11 +39,13 @@ void H_skp_make( const H_skp_v & D, tcx & X ) {
   c = c*3 + ((col>0+(1-1))+(col>1+(1-1)));
   c = c*10 + H_skp_c_c9[__min(9,__max(0,c9-(1-1)))];
   c = c*10 + H_skp_c_run[__min(9,__max(0,run-(1-1)))];
+  c = c*15 + H_skp_c_en[__min(14,__max(0,en-(1-1)))];
 
   d = 0;
   d = d*10 + H_skp_d_st[__min(9,__max(0,st-(1-1)))];
   d = d*3 + ((a3>0+(1-1))+(a3>1+(1-1)));
   d = d*3 + ((b3>0+(1-1))+(b3>1+(1-1)));
+  d = d*17 + H_skp_d_td[__min(16,__max(0,td-(1-1)))];
 
   s = 0;
   s = s*10 + H_skp_s_st[__min(9,__max(0,st-(1-1)))];
@@ -56,6 +58,7 @@ void H_skp_make( const H_skp_v & D, tcx & X ) {
   m = 0;
   m = m*10 + H_skp_m_st[__min(9,__max(0,st-(1-1)))];
   m = m*3 + ((col>0+(1-1))+(col>1+(1-1)));
+  m = m*5 + H_skp_m_td[__min(4,__max(0,td-(1-1)))];
 
   t = 0;
 

@@ -39,6 +39,7 @@
 #include "cm.inc"
 #include "mapping.inc"
 #include "fam.inc"
+#include "recon.inc"
 #include "model.inc"
 
 using namespace h264p;

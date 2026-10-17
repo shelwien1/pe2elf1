@@ -6,7 +6,10 @@
 #  context); pc the luma bits of the coded_block_pattern, cc its chroma part,
 #  cls the class; dc and db the QP of the same macroblock in the previous
 #  picture of the type and of macroblock B, relative to the predicted QP
-#  (4 equal); lz the last nonzero delta (3 for none); st the slice type.
+#  (4 equal); lz the last nonzero delta (3 for none); st the slice type; ae
+#  the delta adaptive quantization would give, from the energy of the
+#  macroblock in the last picture decoded against that of the one that set
+#  the predicted QP (7 none).
 
 Prefix H_qpd
 Debug 1
@@ -21,23 +24,27 @@ Index a
 Index b
  b_lnz: lnz, 1!1
  b_dc: dc, 1!11111111
- b_db: db, 1!11111111
+ b_ae: ae, 1!1111111111111
 
 Index c
  c_lz: lz, 1!111111
  c_st: st, 1!111111111
+ c_db: db, 1!11111111
 
 Index d
  d_lnz: lnz, 1!1
+ d_ae: ae, 1!1111111111111
 
 Index s
  s_lnz: lnz, 1!1
+ s_ae: ae, 1!1111111111111
 
 Index f
  f_st: st, 1!111111111
 
 Index m
  m_lnz: lnz, 1!1
+ m_ae: ae, 1!1111111111111
 
 Index t
  t_lnz: lnz, 1!0

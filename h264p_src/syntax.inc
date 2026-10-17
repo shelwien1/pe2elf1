@@ -145,6 +145,10 @@ struct Sps {
   int poc_type = 0, log2_max_poc_lsb = 4, delta_pic_order_always_zero_flag = 0;
   int width_mbs = 0, height_map_units = 0;
   int frame_mbs_only_flag = 1, mb_adaptive_frame_field_flag = 0, direct_8x8_inference_flag = 0;
+  // for decoding the pictures (model.inc)
+  int max_num_ref_frames = 0, transform_bypass = 0, scaling_matrix = 0;
+  int64_t offset_for_non_ref_pic = 0, offset_for_top_to_bottom_field = 0;
+  std::vector<int64_t> offset_for_ref_frame;
 
   int chroma_array_type() const { return separate_colour_plane_flag ? 0 : chroma_format_idc; }
   int frame_height_mbs() const { return (2 - frame_mbs_only_flag) * height_map_units; }
@@ -163,6 +167,7 @@ struct Pps {
   int deblocking_filter_control_present_flag = 0, constrained_intra_pred_flag = 0;
   int redundant_pic_cnt_present_flag = 0;
   int transform_8x8_mode_flag = 0;
+  int chroma_qp_index_offset = 0, second_chroma_qp_index_offset = 0, scaling_matrix = 0;
 };
 
 struct ParamSets {
@@ -181,6 +186,14 @@ struct SliceHeader {
   int cabac_init_idc = 0;
   int slice_qp_delta = 0;
   int slice_group_change_cycle = 0;
+  // for decoding the pictures (model.inc)
+  int poc_lsb = 0, long_term_reference_flag = 0, mmco5 = 0;
+  int64_t delta_poc_bottom = 0, delta_poc[2] = {0, 0};
+  std::vector<std::pair<int, int64_t>> rplm[2];  // modification_of_pic_nums_idc and its argument
+  std::vector<std::vector<int64_t>> mmco;        // memory_management_control_operation and its arguments
+  int luma_log2_wd = 0, chroma_log2_wd = 0;
+  std::vector<int> wt[2];  // per reference: luma weight, offset, Cb weight, offset, Cr weight, offset; empty: none
+  int disable_deblocking = 0, alpha_offset = 0, beta_offset = 0;
   std::shared_ptr<const Sps> sps;
   std::shared_ptr<const Pps> pps;
   int pad = 0;  // x264's padding bit after CABAC flushes (x264_padding row), not coded
@@ -194,6 +207,8 @@ void code_sei(Syn& s);
 void code_aud(Syn& s);
 void code_filler(Syn& s);
 void code_slice_header(Syn& s, SliceHeader& h, const ParamSets& ps);
+
+static int64_t tc_clamp64(int64_t v, int64_t lo, int64_t hi) { return v < lo ? lo : v > hi ? hi : v; }
 
 const int64_t kU32 = 0xFFFFFFFE;  // largest ue(v) value
 const int64_t kS32 = 0x7FFFFFFF;  // largest se(v) magnitude
@@ -287,8 +302,8 @@ void code_sps(Syn& s, Sps& p) {
     if (p.chroma_format_idc == 3) p.separate_colour_plane_flag = (int)s.u("separate_colour_plane_flag", 1);
     p.bit_depth_luma = 8 + (int)s.ue("bit_depth_luma_minus8", 0, 6);
     p.bit_depth_chroma = 8 + (int)s.ue("bit_depth_chroma_minus8", 0, 6);
-    s.u("qpprime_y_zero_transform_bypass_flag", 1);
-    if (s.u("seq_scaling_matrix_present_flag", 1))
+    p.transform_bypass = (int)s.u("qpprime_y_zero_transform_bypass_flag", 1);
+    if ((p.scaling_matrix = (int)s.u("seq_scaling_matrix_present_flag", 1)))
       for (int i = 0; i < (p.chroma_format_idc != 3 ? 8 : 12); i++)
         scaling_list(s, "seq_scaling_list", i < 6 ? 16 : 64);
   }
@@ -298,14 +313,14 @@ void code_sps(Syn& s, Sps& p) {
     p.log2_max_poc_lsb = 4 + (int)s.ue("log2_max_pic_order_cnt_lsb_minus4", 0, 12);
   } else if (p.poc_type == 1) {
     p.delta_pic_order_always_zero_flag = (int)s.u("delta_pic_order_always_zero_flag", 1);
-    s.se("offset_for_non_ref_pic", -kS32, kS32);
-    s.se("offset_for_top_to_bottom_field", -kS32, kS32);
+    p.offset_for_non_ref_pic = s.se("offset_for_non_ref_pic", -kS32, kS32);
+    p.offset_for_top_to_bottom_field = s.se("offset_for_top_to_bottom_field", -kS32, kS32);
     int n = (int)s.ue("num_ref_frames_in_pic_order_cnt_cycle", 0, 255);
     s.begin("offset_for_ref_frame");
-    for (int i = 0; i < n; i++) s.vse(-kS32, kS32);
+    for (int i = 0; i < n; i++) p.offset_for_ref_frame.push_back(s.vse(-kS32, kS32));
     s.end();
   }
-  s.ue("max_num_ref_frames", 0, kU32);
+  p.max_num_ref_frames = (int)std::min<int64_t>(s.ue("max_num_ref_frames", 0, kU32), 1 << 16);
   s.u("gaps_in_frame_num_value_allowed_flag", 1);
   p.width_mbs = 1 + (int)s.ue("pic_width_in_mbs_minus1", 0, 4095);
   p.height_map_units = 1 + (int)s.ue("pic_height_in_map_units_minus1", 0, 4095);
@@ -359,19 +374,19 @@ void code_pps(Syn& s, Pps& p, const ParamSets& ps) {
   p.weighted_bipred_idc = (int)s.u("weighted_bipred_idc", 2);
   p.pic_init_qp = 26 + (int)s.se("pic_init_qp_minus26", -128, 127);
   s.se("pic_init_qs_minus26", -kS32, kS32);
-  s.se("chroma_qp_index_offset", -kS32, kS32);
+  p.chroma_qp_index_offset = p.second_chroma_qp_index_offset = (int)tc_clamp64(s.se("chroma_qp_index_offset", -kS32, kS32), -12, 12);
   p.deblocking_filter_control_present_flag = (int)s.u("deblocking_filter_control_present_flag", 1);
   p.constrained_intra_pred_flag = (int)s.u("constrained_intra_pred_flag", 1);
   p.redundant_pic_cnt_present_flag = (int)s.u("redundant_pic_cnt_present_flag", 1);
   if (s.more_data("transform_8x8_mode_flag")) {
     p.transform_8x8_mode_flag = (int)s.u("transform_8x8_mode_flag", 1);
-    if (s.u("pic_scaling_matrix_present_flag", 1)) {
+    if ((p.scaling_matrix = (int)s.u("pic_scaling_matrix_present_flag", 1))) {
       const Sps* sps = ps.sps[p.sps_id].get();
       if (!sps) s.fail("PPS refers to a missing SPS");
       int n = 6 + (sps->chroma_format_idc != 3 ? 2 : 6) * p.transform_8x8_mode_flag;
       for (int i = 0; i < n; i++) scaling_list(s, "pic_scaling_list", i < 6 ? 16 : 64);
     }
-    s.se("second_chroma_qp_index_offset", -kS32, kS32);
+    p.second_chroma_qp_index_offset = (int)tc_clamp64(s.se("second_chroma_qp_index_offset", -kS32, kS32), -12, 12);
   }
 }
 
@@ -402,13 +417,13 @@ void code_filler(Syn& s) {
   s.end();
 }
 
-static void ref_pic_list_modification(Syn& s, const char* name) {
+static void ref_pic_list_modification(Syn& s, const char* name, std::vector<std::pair<int, int64_t>>& ops) {
   s.begin(name);  // ref_pic_list_modification_flag, then the operations
   if (s.vu(1)) {
     for (int n = 0;; n++) {
       int idc = (int)s.vue(0, 3);
       if (idc == 3) break;
-      s.vue(0, kU32);  // abs_diff_pic_num_minus1 or long_term_pic_num
+      ops.push_back(std::make_pair(idc, s.vue(0, kU32)));  // abs_diff_pic_num_minus1 or long_term_pic_num
       if (n > 64) s.fail("too many reference list modifications");
     }
   }
@@ -434,14 +449,14 @@ void code_slice_header(Syn& s, SliceHeader& h, const ParamSets& ps) {
   }
   if (h.nal_unit_type == 5) s.ue("idr_pic_id", 0, kU32);
   if (sps.poc_type == 0) {
-    s.u("pic_order_cnt_lsb", sps.log2_max_poc_lsb);
+    h.poc_lsb = (int)s.u("pic_order_cnt_lsb", sps.log2_max_poc_lsb);
     if (pps.bottom_field_pic_order_in_frame_present_flag && !h.field_pic_flag)
-      s.se("delta_pic_order_cnt_bottom", -kS32, kS32);
+      h.delta_poc_bottom = s.se("delta_pic_order_cnt_bottom", -kS32, kS32);
   }
   if (sps.poc_type == 1 && !sps.delta_pic_order_always_zero_flag) {
-    s.se("delta_pic_order_cnt_0", -kS32, kS32);
+    h.delta_poc[0] = s.se("delta_pic_order_cnt_0", -kS32, kS32);
     if (pps.bottom_field_pic_order_in_frame_present_flag && !h.field_pic_flag)
-      s.se("delta_pic_order_cnt_1", -kS32, kS32);
+      h.delta_poc[1] = s.se("delta_pic_order_cnt_1", -kS32, kS32);
   }
   if (pps.redundant_pic_cnt_present_flag) s.ue("redundant_pic_cnt", 0, kU32);
   if (t == kB) h.direct_spatial_mv_pred_flag = (int)s.u("direct_spatial_mv_pred_flag", 1);
@@ -454,40 +469,45 @@ void code_slice_header(Syn& s, SliceHeader& h, const ParamSets& ps) {
       if (t == kB) h.num_ref_idx_active[1] = 1 + (int)s.ue("num_ref_idx_l1_active_minus1", 0, 31);
     }
   }
-  if (t != kI && t != kSI) ref_pic_list_modification(s, "ref_pic_list_modification_l0");
-  if (t == kB) ref_pic_list_modification(s, "ref_pic_list_modification_l1");
+  if (t != kI && t != kSI) ref_pic_list_modification(s, "ref_pic_list_modification_l0", h.rplm[0]);
+  if (t == kB) ref_pic_list_modification(s, "ref_pic_list_modification_l1", h.rplm[1]);
   if ((pps.weighted_pred_flag && (t == kP || t == kSP)) || (pps.weighted_bipred_idc == 1 && t == kB)) {
-    s.ue("luma_log2_weight_denom", 0, 7);
+    h.luma_log2_wd = (int)s.ue("luma_log2_weight_denom", 0, 7);
     int chroma = sps.chroma_array_type() != 0;
-    if (chroma) s.ue("chroma_log2_weight_denom", 0, 7);
+    if (chroma) h.chroma_log2_wd = (int)s.ue("chroma_log2_weight_denom", 0, 7);
     for (int l = 0; l < (t == kB ? 2 : 1); l++)
       for (int i = 0; i < h.num_ref_idx_active[l]; i++) {
         // luma_weight_lX_flag [luma_weight luma_offset]
         // chroma_weight_lX_flag [cb_weight cb_offset cr_weight cr_offset]
+        int w[6] = {1 << h.luma_log2_wd, 0, 1 << h.chroma_log2_wd, 0, 1 << h.chroma_log2_wd, 0};
         s.begin(l ? "pred_weight_l1" : "pred_weight_l0");
         if (s.vu(1)) {
-          s.vse(-128, 127);
-          s.vse(-128, 127);
+          w[0] = (int)s.vse(-128, 127);
+          w[1] = (int)s.vse(-128, 127);
         }
         if (chroma && s.vu(1))
-          for (int j = 0; j < 4; j++) s.vse(-128, 127);
+          for (int j = 0; j < 4; j++) w[2 + j] = (int)s.vse(-128, 127);
         s.end();
+        h.wt[l].insert(h.wt[l].end(), w, w + 6);
       }
   }
   if (h.nal_ref_idc) {
     if (h.nal_unit_type == 5) {
       s.u("no_output_of_prior_pics_flag", 1);
-      s.u("long_term_reference_flag", 1);
+      h.long_term_reference_flag = (int)s.u("long_term_reference_flag", 1);
     } else if (s.u("adaptive_ref_pic_marking_mode_flag", 1)) {
       for (int n = 0;; n++) {
+        std::vector<int64_t> op(1);
         s.begin("mmco");  // memory_management_control_operation and its arguments
-        int op = (int)s.vue(0, 6);
-        if (op == 1 || op == 3) s.vue(0, kU32);  // difference_of_pic_nums_minus1
-        if (op == 2) s.vue(0, kU32);             // long_term_pic_num
-        if (op == 3 || op == 6) s.vue(0, kU32);  // long_term_frame_idx
-        if (op == 4) s.vue(0, kU32);             // max_long_term_frame_idx_plus1
+        op[0] = s.vue(0, 6);
+        if (op[0] == 1 || op[0] == 3) op.push_back(s.vue(0, kU32));  // difference_of_pic_nums_minus1
+        if (op[0] == 2) op.push_back(s.vue(0, kU32));                // long_term_pic_num
+        if (op[0] == 3 || op[0] == 6) op.push_back(s.vue(0, kU32));  // long_term_frame_idx
+        if (op[0] == 4) op.push_back(s.vue(0, kU32));                // max_long_term_frame_idx_plus1
         s.end();
-        if (op == 0) break;
+        if (op[0] == 0) break;
+        h.mmco5 |= op[0] == 5;
+        h.mmco.push_back(op);
         if (n > 66) s.fail("too many memory management operations");
       }
     }
@@ -499,9 +519,10 @@ void code_slice_header(Syn& s, SliceHeader& h, const ParamSets& ps) {
     s.se("slice_qs_delta", -kS32, kS32);
   }
   if (pps.deblocking_filter_control_present_flag) {
-    if (s.ue("disable_deblocking_filter_idc", 0, kU32) != 1) {
-      s.se("slice_alpha_c0_offset_div2", -kS32, kS32);
-      s.se("slice_beta_offset_div2", -kS32, kS32);
+    h.disable_deblocking = (int)std::min<int64_t>(s.ue("disable_deblocking_filter_idc", 0, kU32), 3);
+    if (h.disable_deblocking != 1) {
+      h.alpha_offset = 2 * (int)tc_clamp64(s.se("slice_alpha_c0_offset_div2", -kS32, kS32), -6, 6);
+      h.beta_offset = 2 * (int)tc_clamp64(s.se("slice_beta_offset_div2", -kS32, kS32), -6, 6);
     }
   }
   if (pps.num_slice_groups > 1 && pps.slice_group_map_type >= 3 && pps.slice_group_map_type <= 5) {

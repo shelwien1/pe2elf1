@@ -30,13 +30,13 @@ constexpr int H_pcm_ND = TC_NODE, H_pcm_MND = TC_MNODE, H_pcm_NG = 3;
 
 struct H_nal_v { int fld, ctx, p1, p2; };
 struct H_hdr_v { int tag, fld, p1, p2, pos, p1r, sty; };
-struct H_skp_v { int st, a3, b3, col, c9, cd, run, cnt, eq, lf, af; };
-struct H_mbt_v { int st, ca, cb, cc, nsk; };
-struct H_cbp_v { int inc, pc, cls, col, q6, st; };
-struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col; };
+struct H_skp_v { int st, a3, b3, col, c9, cd, run, cnt, eq, lf, af, td, en; };
+struct H_mbt_v { int st, ca, cb, cc, nsk, en, td; };
+struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td; };
+struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds; };
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp; };
-struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st; };
-struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md; };
+struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae; };
+struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en; };
 struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6; };
 struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm; };
 struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md; };
@@ -140,12 +140,13 @@ static INLINE int popc4(int v) { return (v & 1) + (v >> 1 & 1) + (v >> 2 & 1) + 
 // nC as a class
 static INLINE int nc_class(int nc) { return nc < 3 ? nc : nc < 5 ? 3 : nc < 9 ? 4 : 5; }
 
-// P(LPS) of the CABAC context states, 12 bits
-static int cab_lps[64];
-static void cab_tables() {
-  for (int i = 0; i < 64; i++)
-    cab_lps[i] = tc_clamp((int)(0.5 * pow(0.01875 / 0.5, i / 63.0) * CM_PONE + 0.5), 1, CM_PONE - 1);
-}
+// P(LPS) of the CABAC context states, 12 bits: 2048 * (0.01875 / 0.5)^(s / 63)
+static const int cab_lps[64] = {
+    2048, 1944, 1845, 1752, 1663, 1578, 1498, 1422, 1350, 1281, 1216, 1154, 1096, 1040, 987, 937,
+    890, 844, 802, 761, 722, 685, 651, 618, 586, 557, 528, 501, 476, 452, 429, 407,
+    386, 367, 348, 330, 314, 298, 283, 268, 255, 242, 229, 218, 207, 196, 186, 177,
+    168, 159, 151, 144, 136, 129, 123, 117, 111, 105, 100, 95, 90, 85, 81, 77,
+};
 
 template <int f_DEC>
 struct Model {
@@ -169,7 +170,6 @@ struct Model {
 
   void init() {
     cm_tables();
-    cab_tables();
 #define H_MAP(F) (t_##F = tc_table<H_##F##_T>(), t_##F->H_##F##_Init(), H_WIRE(F))
     H_MAP(nal);
     H_MAP(hdr);
@@ -304,6 +304,7 @@ struct Model {
   bool mbaff_ = false;
   int qp_off_ = 0, qp_pred_ = 26;
   int last_qpd_ = 0, lz_ = 0;  // the last mb_qp_delta, the last nonzero one
+  int qp_src_ = -1;            // the macroblock that coded it
   bool has_lz_ = false, qpd_coded_ = false;
   int run_ = 0, cnt_ = 0, prev_cnt_ = 0;  // skipped before, macroblocks in the slice so far, in the last one
   int slice_cnt_[30] = {};
@@ -317,6 +318,7 @@ struct Model {
   int mvp_[2] = {}, sp_[2] = {}, pdv_[2] = {};  // the current partition: mvp, spread of the neighbours, col - mvp
   bool pdn_ = false;                             // no col vector
 
+  Recon rec_;  // the pictures, reconstructed
   int idx(const MbState* n) const { return (int)(n - mbs_); }
   // CABAC's probability of a bin in the walk's current state, as the outside
   // prediction of one of the model's decisions: of the bin being 0 (cab0) or
@@ -372,9 +374,11 @@ struct Model {
     qp_pred_ = sc.pps_.pic_init_qp + h.slice_qp_delta;
     last_qpd_ = 0;
     has_lz_ = false;
+    qp_src_ = -1;
     run_ = cnt_ = 0;
     prev_cnt_ = slice_cnt_[key_];
     mb_open_ = false;
+    rec_.slice_begin(h);
   }
   void slice_end() { slice_cnt_[key_] = cnt_; }
 
@@ -388,6 +392,7 @@ struct Model {
     memset(mi_->rf, -1, sizeof mi_->rf);
     col_ = hcur_[addr_].valid ? &hcur_[addr_] : nullptr;
     parts_ = 0;
+    rec_.mb_start(addr_);
     qpd_coded_ = false;
     prev_mode_ = 9;
     mb_open_ = true;
@@ -418,6 +423,7 @@ struct Model {
     }
     c.dcm = (uint8_t)(s.cbf_dc[0] | s.cbf_dc[1] << 1 | s.cbf_dc[2] << 2);
     mb_open_ = false;
+    rec_.mb_end(addr_, mi_->cls, mi_->i16m, mi_->modes, mi_->cpred, mi_->t8, mi_->qp - qp_off_, mi_->rf, mi_->mv, s.nz[0]);
   }
 
   // --- skip, end of slice, field decoding flag: the skp family
@@ -442,7 +448,15 @@ struct Model {
     D.eq = !prev_cnt_ || cnt_ > prev_cnt_ ? 2 : cnt_ == prev_cnt_;
     D.lf = mbaff_ && sc_->left_ ? 1 + sc_->left_->field : 0;
     D.af = mbaff_ && sc_->above_ ? 1 + sc_->above_->field : 0;
+    D.td = map_td();
+    D.en = map_en();
   }
+  // the last picture decoded at the current macroblock: how much it changed
+  // (1 + tc_qlog, 0 not known), its energy (log2 classes, 0 not known)
+  int map_td() const { return maps_ok() && rec_.change[addr_] >= 0 ? 1 + tc_qlog(rec_.change[addr_]) : 0; }
+  int map_en() const { return maps_ok() ? 1 + tc_clamp(rec_.energy[addr_] / 4 - 4, 0, 13) : 0; }
+  // the maps of the last picture decoded fit the current one
+  bool maps_ok() const { return rec_.maps_w == width_ && rec_.maps_w * rec_.maps_h == size_ && !mbaff_; }
   int skp_bit(const H_skp_v& D, int node, int v, int pr = -1) {
     tcx X;
     H_skp_make(D, X);
@@ -558,6 +572,8 @@ struct Model {
     D.cb = cls_of(b);
     D.cc = col_ ? col_->cls : (int)CL_NONE;
     D.nsk = (a && a->skip) + (b && b->skip) + (c && c->skip) + (d && d->skip);
+    D.en = map_en();
+    D.td = map_td();
     tcx X;
     H_mbt_make(D, X);
     f_mbt.select(X);
@@ -624,6 +640,8 @@ struct Model {
     D.cls = mi_->cls;
     D.q6 = q6();
     D.st = st_;
+    D.en = map_en();
+    D.td = map_td();
     int luma = 0;
     for (int b8 = 0; b8 < 4; b8++) {
       D.inc = sc_->cbp_luma_inc(b8, luma);
@@ -657,6 +675,8 @@ struct Model {
     D.col = col_ ? 1 + col_->t8 : 0;
     D.q6 = q6();
     D.st = st_;
+    D.en = map_en();
+    D.td = map_td();
     tc_syms[STG_CBP]++;
     v = cbp_bit(D, 6, ENC && v, cab0(399 + D.inc));
     mi_->t8 = (uint8_t)v;
@@ -697,6 +717,9 @@ struct Model {
     D.blk = blk;
     D.pv = prev_mode_;
     D.col = col_ && col_->cls == CL_INXN ? col_->modes[y * 4 + x] : 9;
+    int strength;
+    D.dm = rec_.dimd(addr_, x * 4, y * 4, k8 ? 8 : 4, strength);
+    D.ds = strength ? 1 + tc_clamp(tc_qlog(strength) - 6, 0, 8) : 0;
     tcx X;
     H_ipm_make(D, X);
     f_ipm.select(X);
@@ -748,6 +771,9 @@ struct Model {
     D.blk = 0;
     D.pv = 9;
     D.col = col_ && col_->cls >= CL_INXN && col_->cls != CL_PCM ? col_->cpred : 9;
+    int strength;
+    D.dm = rec_.dimd(addr_, 0, 0, 16, strength);
+    D.ds = strength ? 1 + tc_clamp(tc_qlog(strength) - 6, 0, 8) : 0;
     tcx X;
     H_ipm_make(D, X);
     f_ipm.select(X);
@@ -897,6 +923,10 @@ struct Model {
   // Temporal direct is taken for spatial.
   static int minpos(int a, int b) { return a >= 0 && b >= 0 ? std::min(a, b) : std::max(a, b); }
   void mv_direct(int mask) {
+    if (!sc_->h_.direct_spatial_mv_pred_flag) {
+      mv_temporal(mask);
+      return;
+    }
     int saved = parts_, ref[2], mv[2][2] = {{0, 0}, {0, 0}};
     parts_ = 0;
     for (int l = 0; l < 2; l++) {
@@ -908,11 +938,40 @@ struct Model {
     if (zero) ref[0] = ref[1] = 0;
     for (int l = 0; l < 2; l++)
       if (!zero && ref[l] >= 0) mv_pred(l, 0, 0, 4, 4, ref[l], mv[l]);
+    bool lt = rec_.col_long_term();
     for (int b8 = 0; b8 < 4; b8++)
       if (mask >> b8 & 1)
-        for (int l = 0; l < 2; l++)
-          if (ref[l] >= 0) set_mv(l, (b8 & 1) * 2, (b8 >> 1) * 2, 2, 2, ref[l], mv[l]);
+        for (int k = 0; k < 4; k++) {
+          int x = (b8 & 1) * 2 + (k & 1), y = (b8 >> 1) * 2 + (k >> 1), cr, cm[2];
+          int64_t pid;
+          // colZeroFlag: the colocated block is still
+          bool still = !zero && !lt && rec_.colocated(addr_, y * 4 + x, cr, cm, pid) && cr == 0 && abs(cm[0]) <= 1 &&
+                       abs(cm[1]) <= 1;
+          for (int l = 0; l < 2; l++) {
+            if (ref[l] < 0) continue;
+            int z[2] = {0, 0};
+            set_mv(l, x, y, 1, 1, ref[l], still && ref[l] == 0 ? z : mv[l]);
+          }
+        }
     parts_ = saved;
+  }
+  // temporal direct (8.4.1.2.3)
+  void mv_temporal(int mask) {
+    for (int b8 = 0; b8 < 4; b8++)
+      if (mask >> b8 & 1)
+        for (int k = 0; k < 4; k++) {
+          int x = (b8 & 1) * 2 + (k & 1), y = (b8 >> 1) * 2 + (k >> 1), cr, cm[2] = {0, 0}, r0 = 0;
+          int64_t pid;
+          if (rec_.colocated(addr_, y * 4 + x, cr, cm, pid))
+            r0 = rec_.map_col(pid);
+          else
+            cm[0] = cm[1] = 0;
+          int dsf = rec_.dist_scale(r0);
+          int m0[2] = {(dsf * cm[0] + 128) >> 8, (dsf * cm[1] + 128) >> 8};
+          int m1[2] = {m0[0] - cm[0], m0[1] - cm[1]};
+          set_mv(0, x, y, 1, 1, r0, m0);
+          set_mv(1, x, y, 1, 1, 0, m1);
+        }
   }
   static int part_size(int w, int h) { return w * h == 16 ? 0 : w * h == 8 ? 1 : w * h == 4 ? 2 : 3; }
   int ref(int list, int x, int y, int w, int h, int v) {
@@ -1027,6 +1086,14 @@ struct Model {
     D.db = b ? qp_class(b->qp - qp_off_ - qp_pred_) : 0;
     D.lz = has_lz_ ? 3 + tc_clamp(tc_sq(lz_), -3, 3) : 3;
     D.st = st_;
+    // x264's adaptive quantization: the QP follows the energy of the
+    // macroblock, which the last picture shows; the change since the one
+    // that set the predicted QP
+    D.ae = 0;
+    if (maps_ok()) {
+      int e0 = qp_src_ >= 0 ? rec_.energy[qp_src_] : rec_.energy_mean;
+      D.ae = 7 + tc_clamp((rec_.energy[addr_] - e0 + 2 * (rec_.energy[addr_] > e0) - 2 * (rec_.energy[addr_] < e0)) / 4, -6, 6);
+    }
     tcx X;
     H_qpd_make(D, X);
     int pr[TC_NODE];
@@ -1037,6 +1104,7 @@ struct Model {
     f_qpd.prpa = nullptr;
     int qp = ((qp_pred_ + v + 52 + 2 * qp_off_) % (52 + qp_off_) + (52 + qp_off_)) % (52 + qp_off_) - qp_off_;
     qp_pred_ = qp;
+    qp_src_ = addr_;
     mi_->qp = (uint8_t)(qp + qp_off_);
     last_qpd_ = v;
     if (v) {
@@ -1197,6 +1265,7 @@ struct Model {
     D.nc = nc;
     D.kn = coded;
     D.md = md;
+    D.en = map_en();
     tcx X;
     H_cbf_make(D, X);
     int pr[TC_NODE];
@@ -1302,6 +1371,7 @@ struct Model {
     }
     for (int k = last + 1; k < n; k++) c[k] = 0;
     store_coef(g, c, n);
+    rec_.coef(cat, idx, c, n);
   }
 
   // --- I_PCM: the alignment bits, and the samples as differences to the
@@ -1334,6 +1404,7 @@ struct Model {
     }
     if (i != n) cm_fail("internal: I_PCM sample count");
     mi_->cbp = 0x2f;
+    for (int k = 0; k < n && k < 384; k++) rec_.pcm_s[k] = s[k];
   }
 };
 
