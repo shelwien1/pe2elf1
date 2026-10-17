@@ -5,7 +5,11 @@
 #  The sign of a nonzero coefficient. cg is the ctxBlockCat, pos the scan
 #  position (class), sa/sb the sign at the same position in the blocks A and
 #  B (0 zero, 1 positive, 2 negative, 3 none), scb for Cr DC the sign of Cb
-#  at the same position, mag the magnitude (class).
+#  at the same position, mag the magnitude (class), md the block's prediction
+#  (as the other residual families); for the signs predicted from the samples
+#  around the block (luma), pp the predicted sign (1 positive, 2 negative, 0
+#  not predicted) and mg how much worse the other sign fits (1 + tc_qlog of
+#  quarter samples).
 
 Prefix H_sgn
 Debug 1
@@ -29,15 +33,19 @@ Index c
 
 Index d
  d_cg: cg, 1!1111111111111
+ d_pp: pp, 1!11
+ d_mg: mg, 1!111111111111111
 
 Index s
  s_cg: cg, 1!1111111111111
+ s_pp: pp, 1!11
 
 Index f
  f_cg: cg, 1!1111111111111
 
 Index m
  m_cg: cg, 1!1111111111111
+ m_pp: pp, 1!11
 
 Index t
  t_cg: cg, 1!0

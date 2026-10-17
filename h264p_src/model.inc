@@ -32,14 +32,14 @@ struct H_nal_v { int fld, ctx, p1, p2; };
 struct H_hdr_v { int tag, fld, p1, p2, pos, p1r, sty; };
 struct H_skp_v { int st, a3, b3, col, c9, cd, run, cnt, eq, lf, af, td, en; };
 struct H_mbt_v { int st, ca, cb, cc, nsk, en, td; };
-struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td; };
+struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg; };
 struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds; };
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp; };
 struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae; };
-struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en; };
-struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6; };
-struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm; };
-struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md; };
+struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg; };
+struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg; };
+struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg; };
+struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md, pp, mg; };
 struct H_pcm_v { int pl, dp, pd, pd2; };
 
 #include "MOD/nal_h.inc"
@@ -147,6 +147,123 @@ static const int cab_lps[64] = {
     386, 367, 348, 330, 314, 298, 283, 268, 255, 242, 229, 218, 207, 196, 186, 177,
     168, 159, 151, 144, 136, 129, 123, 117, 111, 105, 100, 95, 90, 85, 81, 77,
 };
+
+// Sign prediction for a luma block: the cost of each combination of the
+// signs of up to six coefficients is how far the block's reconstruction,
+// along its top row and left column, is from continuing the two decoded rows
+// and columns beyond them. The inverse transform is taken as linear (with
+// its basis times 2 for 4x4 blocks, times 8 for 8x8 ones), so a combination
+// is the sum of the prediction and the coefficients' contributions.
+struct SignPred {
+  static constexpr int kT4[4][4] = {{2, 2, 2, 2}, {2, 1, -1, -2}, {2, -2, -2, 2}, {1, -2, 2, -1}};
+  static constexpr int kT8[8][8] = {{8, 8, 8, 8, 8, 8, 8, 8},       {12, 10, 6, 3, -3, -6, -10, -12},
+                                    {8, 4, -4, -8, -8, -4, 4, 8},   {10, -3, -12, -6, 6, 12, 3, -10},
+                                    {8, -8, -8, 8, 8, -8, -8, 8},   {6, -12, 3, 10, -10, -3, 12, -6},
+                                    {4, -8, 8, -4, -4, 8, -8, 4},   {3, -6, 10, -12, 12, -10, 6, -3}};
+  int n = 4, off = 0, qp = 0, ne = 8, nc = 0;
+  bool b8 = false;
+  int dc = 0;  // 1 chroma DC (2x2, over the 8x8 block), 2 Intra16x16 DC (4x4, over the 16x16 one)
+  int64_t scale = 256, target[32], base[32], contrib[6][32], cost[64];
+  bool avail[32];
+  int fixed_mask = 0, fixed_val = 0;
+  // the basis at edge sample e of the coefficient at raster position r;
+  // for DC blocks, the Hadamard pattern of the 4x4 block e is in
+  int basis(int r, int e) const {
+    int x = e < n ? e : 0, y = e < n ? 0 : e - n;
+    if (dc == 1) {
+      int b = (y >> 2) * 2 + (x >> 2);
+      static const int kH2[4][4] = {{1, 1, 1, 1}, {1, -1, 1, -1}, {1, 1, -1, -1}, {1, -1, -1, 1}};
+      return kH2[b][r];
+    }
+    if (dc == 2) {
+      static const int kH4[4][4] = {{1, 1, 1, 1}, {1, 1, -1, -1}, {1, -1, -1, 1}, {1, -1, 1, -1}};
+      return kH4[y >> 2][r >> 2] * kH4[r & 3][x >> 2];
+    }
+    int u = b8 ? r >> 3 : r >> 2, v = b8 ? r & 7 : r & 3;
+    return b8 ? kT8[u][y] * kT8[v][x] : kT4[u][y] * kT4[v][x];
+  }
+  template <class R, class Geo>
+  bool init(R& rec, const Geo& g, int cat, int q, int blk) {
+    b8 = cat == 5;
+    dc = cat == 3 ? 1 : cat == 0 ? 2 : 0;
+    n = b8 || dc == 1 ? 8 : dc == 2 ? 16 : 4;
+    ne = 2 * n;
+    scale = b8 ? 4096 : 256;
+    off = cat == 1 || cat == 4;
+    qp = cat == 4 || cat == 3 ? rec.chroma_qp_of(g.plane - 1, q) : q;
+    if ((cat == 4 || cat == 3) != (g.plane != 0) ||
+        !rec.sign_edges(g.plane, dc ? 0 : g.x * 4, dc ? 0 : g.y * 4, n, scale, target, avail))
+      return false;
+    for (int e = 0; e < ne; e++) base[e] = 0;
+    if (cat == 1 || cat == 4) {  // the DC of an Intra16x16 or chroma block is known
+      int dc = cat == 1 ? rec.dc16_at(q, blk) : rec.dcc_at(g.plane - 1, g.y * 2 + g.x, q);
+      for (int e = 0; e < ne; e++) base[e] += (int64_t)dc * 4;
+    }
+    nc = 0;
+    fixed_mask = fixed_val = 0;
+    return true;
+  }
+  int raster(int k) const { return dc == 1 ? k : b8 ? kZz8[k + off] : kZz4[k + off]; }
+  // a coefficient's contribution to the samples, positive, times scale
+  int64_t level(int k, int m) const {
+    if (!dc) return Recon::dequant1(m, k + off, qp, b8);
+    int ls = 16 * kNorm4[qp % 6][0];
+    // chroma DC: ((f ls) << qp/6) >> 5; Intra16x16: (f ls) << qp/6 >> 6; and x4 for the basis
+    return dc == 1 ? ((int64_t)m * ls << (qp / 6)) / 8 : ((int64_t)m * ls << (qp / 6)) / 16;
+  }
+  // a coefficient whose sign is known
+  void add(int k, int c) {
+    int64_t d = level(k, abs(c)) * (c < 0 ? -1 : 1);
+    for (int e = 0; e < ne; e++) base[e] += d * basis(raster(k), e);
+  }
+  // one whose sign is predicted, positive
+  void cand(int k, int m) {
+    int64_t d = level(k, m);
+    for (int e = 0; e < ne; e++) contrib[nc][e] = d * basis(raster(k), e);
+    nc++;
+  }
+  void costs() {
+    int64_t x[32];
+    for (int e = 0; e < ne; e++) {
+      x[e] = base[e];
+      for (int j = 0; j < nc; j++) x[e] += contrib[j][e];
+    }
+    int mask = 0;
+    for (int i = 0; i < (1 << nc); i++) {
+      if (i) {  // Gray code: one sign flips
+        int j = __builtin_ctz((unsigned)i);
+        int64_t sgn = mask >> j & 1 ? 2 : -2;
+        mask ^= 1 << j;
+        for (int e = 0; e < ne; e++) x[e] += sgn * contrib[j][e];
+      }
+      int64_t cst = 0;
+      for (int e = 0; e < ne; e++)
+        if (avail[e]) cst += x[e] > target[e] ? x[e] - target[e] : target[e] - x[e];
+      cost[mask] = cst;
+    }
+  }
+  // the predicted sign (1 negative) of candidate j, given the ones decided,
+  // and how much worse the other one is (quarter samples)
+  int predict(int j, int& margin) const {
+    int64_t c0 = INT64_MAX, c1 = INT64_MAX;
+    for (int m = 0; m < (1 << nc); m++) {
+      if ((m & fixed_mask) != fixed_val) continue;
+      if (m >> j & 1)
+        c1 = std::min(c1, cost[m]);
+      else
+        c0 = std::min(c0, cost[m]);
+    }
+    int64_t d = (c0 > c1 ? c0 - c1 : c1 - c0) * 4 / scale;
+    margin = (int)std::min<int64_t>(d, 1 << 20);
+    return c1 < c0;
+  }
+  void decide(int j, int negative) {
+    fixed_mask |= 1 << j;
+    if (negative) fixed_val |= 1 << j;
+  }
+};
+constexpr int SignPred::kT4[4][4];
+constexpr int SignPred::kT8[8][8];
 
 template <int f_DEC>
 struct Model {
@@ -634,7 +751,10 @@ struct Model {
     f_cbp.prp = pr;
     return f_cbp.bit(node, v);
   }
+  // the prediction of the macroblock, once all of it is known
+  void prepare() { rec_.prepare(mi_->cls, mi_->i16m, mi_->modes, mi_->cpred, mi_->t8, mi_->rf, mi_->mv); }
   int cbp(int v) {
+    prepare();
     tc_stage = STG_CBP;
     H_cbp_v D;
     D.cls = mi_->cls;
@@ -647,10 +767,15 @@ struct Model {
       D.inc = sc_->cbp_luma_inc(b8, luma);
       D.pc = popc4(luma);
       D.col = col_ ? 1 + (col_->cbp >> b8 & 1) : 0;
+      int pt = mi_->cls == CL_INXN ? -1 : rec_.pred_texture(0, (b8 & 1) * 8, (b8 >> 1) * 8, 8);
+      D.pg = pt < 0 ? 0 : 1 + tc_clamp(tc_qlog(pt), 0, 15);
       luma |= cbp_bit(D, b8, ENC && (v >> b8 & 1), cab0(73 + D.inc)) << b8;
     }
     int c = 0;
     if (sc_->chroma_ == 1 || sc_->chroma_ == 2) {
+      int pt = rec_.pred_texture(1, 0, 0, 8);
+      if (pt >= 0) pt += rec_.pred_texture(2, 0, 0, 8);
+      D.pg = pt < 0 ? 0 : 1 + tc_clamp(tc_qlog(pt), 0, 15);
       D.inc = sc_->cbp_chroma_inc(0);
       D.pc = popc4(luma);
       D.col = col_ ? 1 + (col_->cbp >> 4 != 0) : 0;
@@ -677,6 +802,7 @@ struct Model {
     D.st = st_;
     D.en = map_en();
     D.td = map_td();
+    D.pg = 0;
     tc_syms[STG_CBP]++;
     v = cbp_bit(D, 6, ENC && v, cab0(399 + D.inc));
     mi_->t8 = (uint8_t)v;
@@ -1075,6 +1201,7 @@ struct Model {
   // --- mb_qp_delta: the qpd family. The QP of the macroblock follows.
   static int qp_class(int d) { return 4 + tc_clamp(d, -3, 3); }
   int qpd(int v) {
+    prepare();
     tc_stage = STG_QPD;
     const MbInfo* b = info(sc_->mb_b_);
     H_qpd_v D;
@@ -1231,11 +1358,19 @@ struct Model {
     return 17 + (m > 0) + (m > 8);
   }
   void block(int cat, int idx, int* c, int n, bool coded) {
+    prepare();
+    if (cat == 2 || cat == 5) rec_.luma_ready(idx, mi_->qp - qp_off_);
+    if (cat == 4 && sc_->chroma_ == 1) rec_.chroma_ready(idx >> 2 & 1, idx & 3, mi_->qp - qp_off_);
     Geo g = geo(cat, idx);
     const MbState& cur = *sc_->cur_;
     Nb na = nb_block(g, 0), nb = nb_block(g, 1);
     int q = q6();
     int nc = nc_class(block_nc(g)), md = block_mode(g);
+    // the texture of the block's prediction
+    int pt = g.kind == 0 ? rec_.pred_texture(g.plane, 0, 0, g.plane ? 8 : 16)
+             : g.kind == 2 ? rec_.pred_texture(g.plane, g.x * 4, g.y * 4, 4)
+                           : rec_.pred_texture(g.plane, g.x * 4, g.y * 4, g.kind == 3 ? 8 : 4);
+    int pg = pt < 0 ? 0 : 1 + tc_clamp(tc_qlog(pt), 0, 15);
     // the number of nonzero coefficients
     tc_stage = STG_CBF;
     H_cbf_v D;
@@ -1266,6 +1401,7 @@ struct Model {
     D.kn = coded;
     D.md = md;
     D.en = map_en();
+    D.pg = pg;
     tcx X;
     H_cbf_make(D, X);
     int pr[TC_NODE];
@@ -1285,6 +1421,8 @@ struct Model {
     if (!total) {
       for (int i = 0; i < n; i++) c[i] = 0;
       store_coef(g, c, n);
+      rec_.luma_add(cat, idx, mi_->qp - qp_off_);
+      if (cat == 4 && sc_->chroma_ == 1) rec_.chroma_add(idx >> 2 & 1, idx & 3, mi_->qp - qp_off_);
       return;
     }
     // where they are: per position, whether the coefficient is nonzero,
@@ -1293,7 +1431,7 @@ struct Model {
     bool fld = sc_->field_mb();
     bool sig[64];
     int rem = total, last = 0, cnt = total;
-    H_sig_v S = {cat, 0, 0, 0, md, nc, fld, q};
+    H_sig_v S = {cat, 0, 0, 0, md, nc, fld, q, pg};
     int sig_base = kSigBase[fld][cat], numc8x8 = sc_->chroma_ == 2 ? 2 : 1;
     bool b8x8 = cat == 5 || cat == 9 || cat == 13;
     for (int i = 0; rem; i++) {
@@ -1319,7 +1457,7 @@ struct Model {
     tc_stage = STG_LVL;
     int mag[64];
     int g1 = 0, e1 = 0;
-    H_lvl_v L = {cat, 0, 0, nc, 0, 0, 0, q, tc_qlog(cnt), md, 0};
+    H_lvl_v L = {cat, 0, 0, nc, 0, 0, 0, q, tc_qlog(cnt), md, 0, pg};
     int abs_base = kAbsBase[cat];
     for (int k = 0; k < TC_NODE; k++) pr[k] = -1;
     f_lvl.prpa = pr;
@@ -1346,13 +1484,17 @@ struct Model {
     f_lvl.prpa = nullptr;
     // the signs
     tc_stage = STG_SGN;
-    H_sgn_v G = {cat, 0, 0, 0, 3, 0, md};
+    H_sgn_v G = {cat, 0, 0, 0, 3, 0, md, 0, 0};
     bool cr = g.plane == 2;
-    for (int k = last; k >= 0; k--) {
-      if (!sig[k]) {
-        if (!ENC) c[k] = 0;
-        continue;
-      }
+    // sign prediction (luma blocks): the signs of the first nonzero
+    // coefficients in scan order are coded after the others, each with the
+    // sign that makes the block continue its surroundings best
+    int npred = 0, pk[6];
+    SignPred sp;
+    if ((cat <= 5 && (cat != 3 || sc_->chroma_ == 1)) && sp.init(rec_, g, cat, mi_->qp - qp_off_, idx))
+      for (int k = 0; k <= last && npred < 6; k++)
+        if (sig[k]) pk[npred++] = k;
+    auto code_sign = [&](int k) {
       G.pos = k == 0 ? 0 : k < 3 ? 1 : k < 6 ? 2 : 3;
       G.sa = na.m ? sgn3(coef_at(na.m, g, na.i, k)) : 3;
       G.sb = nb.m ? sgn3(coef_at(nb.m, g, nb.i, k)) : 3;
@@ -1365,13 +1507,39 @@ struct Model {
       tcx X;
       H_sgn_make(G, X);
       f_sgn.select(X);
-      int s = f_sgn.bit(0, ENC && c[k] < 0);
-      c[k] = s ? -mag[k] : mag[k];
+      int sg = f_sgn.bit(0, ENC && c[k] < 0);
+      c[k] = sg ? -mag[k] : mag[k];
       tc_syms[STG_SGN]++;
+      return sg;
+    };
+    for (int k = last; k >= 0; k--) {
+      if (!sig[k]) {
+        if (!ENC) c[k] = 0;
+        continue;
+      }
+      bool predicted = false;
+      for (int j = 0; j < npred; j++) predicted |= pk[j] == k;
+      if (!predicted) {
+        code_sign(k);
+        if (npred) sp.add(k, c[k]);
+      }
+    }
+    if (npred) {
+      for (int j = 0; j < npred; j++) sp.cand(pk[j], mag[pk[j]]);
+      sp.costs();
+      for (int j = 0; j < npred; j++) {
+        int margin, pred = sp.predict(j, margin);
+        G.pp = 1 + pred;
+        G.mg = 1 + tc_clamp(tc_qlog(margin), 0, 14);
+        sp.decide(j, code_sign(pk[j]));
+      }
+      G.pp = G.mg = 0;
     }
     for (int k = last + 1; k < n; k++) c[k] = 0;
     store_coef(g, c, n);
     rec_.coef(cat, idx, c, n);
+    rec_.luma_add(cat, idx, mi_->qp - qp_off_);
+    if (cat == 4 && sc_->chroma_ == 1) rec_.chroma_add(idx >> 2 & 1, idx & 3, mi_->qp - qp_off_);
   }
 
   // --- I_PCM: the alignment bits, and the samples as differences to the

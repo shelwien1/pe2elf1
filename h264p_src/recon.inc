@@ -449,6 +449,11 @@ struct Recon {
     mb_addr = addr;
     res.m4 = 0;
     res.m8 = res.mdc = res.mcdc = res.mcac[0] = res.mcac[1] = 0;
+    mb_prepared = mb_dc = false;
+    mb_done4 = 0;
+    mb_done8 = 0;
+    mb_cdone[0] = mb_cdone[1] = 0;
+    mb_cdc[0] = mb_cdc[1] = false;
   }
   void coef(int cat, int idx, const int* c, int n) {
     switch (cat) {
@@ -884,20 +889,190 @@ struct Recon {
     idct4_add(p, stride, d);
   }
 
-  // A macroblock, coded or skipped: cls as the model's classes, modes the
-  // Intra4x4/8x8 modes (raster), rf/mv the motion (refIdx -1 none), nz the
+  // The macroblock being reconstructed: what its prediction needs, from
+  // prepare() on, and which of its luma blocks are done.
+  int mb_cls = 0, mb_i16m = 0, mb_cpred = 0, mb_t8 = 0;
+  const uint8_t* mb_modes = nullptr;
+  int8_t mb_rf[2][4];
+  int16_t mb_mv[2][16][2];
+  bool mb_prepared = false, mb_dc = false;
+  uint16_t mb_done4 = 0;  // 4x4 blocks (luma4x4BlkIdx) done
+  uint8_t mb_done8 = 0;
+  int mb_dcr[16];         // Intra16x16 DC, scaled (raster)
+  uint8_t mb_cdone[2];    // chroma blocks done, per component
+  bool mb_cdc[2];         // their DC scaled
+  int mb_dcc[2][4];
+
+  uint8_t* luma_at(int x, int y) const {
+    return cur->y.data() + ((mb_addr / cur->mbw) * 16 + y) * cur->w + (mb_addr % cur->mbw) * 16 + x;
+  }
+
+  // The prediction of the macroblock, as soon as its type, intra modes and
+  // motion are known: inter and Intra16x16 luma and the chroma go to the
+  // picture now, Intra4x4/8x8 luma block by block (luma_ready).
+  void prepare(int cls, int i16m, const uint8_t* modes, int cpred, int t8, const int8_t rf[2][4],
+               const int16_t mv[2][16][2]) {
+    if (!active || mb_prepared) return;
+    mb_prepared = true;
+    mb_cls = cls;
+    mb_i16m = i16m;
+    mb_modes = modes;
+    mb_cpred = cpred;
+    mb_t8 = t8;
+    memcpy(mb_rf, rf, sizeof mb_rf);
+    memcpy(mb_mv, mv, sizeof mb_mv);
+    int addr = mb_addr, w = cur->w, cw = w / 2, mx = addr % cur->mbw * 16, my = addr / cur->mbw * 16;
+    DbMb& D = db[addr];
+    D.slice = slice_no;
+    D.intra = cls >= 6;
+    if (cls == 8) return;
+    if (cls < 6) {
+      inter(addr, mb_rf, mb_mv, cur->y.data() + my * w + mx, cur->u.data() + my / 2 * cw + mx / 2,
+            cur->v.data() + my / 2 * cw + mx / 2);
+      return;
+    }
+    if (cls == 7) pred16(addr, i16m);
+    pred_chroma(addr, cpred);
+  }
+
+  // an Intra4x4 (Intra8x8: blk the 8x8 block) block about to be coded: the
+  // ones before it reconstructed, its prediction in the picture
+  void luma_ready(int blk, int qp) {
+    if (!active || mb_cls != 6) return;
+    if (mb_t8) {
+      for (int b8 = 0; b8 <= blk; b8++) {
+        if (mb_done8 >> b8 & 1) continue;
+        intra8(b8);
+        if (b8 == blk) return;
+        add8(b8, qp);
+      }
+    } else {
+      for (int b = 0; b <= blk; b++) {
+        if (mb_done4 >> b & 1) continue;
+        intra4(b);
+        if (b == blk) return;
+        add4b(b, qp);
+      }
+    }
+  }
+  void intra4(int b) {
+    int bx = blk_x(b), by = blk_y(b), e[17];
+    bool top, left;
+    luma_edge(mb_addr, 4, bx, by, e, top, left);
+    pred_nxn(luma_at(bx * 4, by * 4), cur->w, 4, mb_modes[by * 4 + bx], e, top, left);
+  }
+  void intra8(int b8) {
+    int bx = b8 & 1, by = b8 >> 1, e[25];
+    bool top, left;
+    luma_edge(mb_addr, 8, bx, by, e, top, left);
+    pred_nxn(luma_at(bx * 8, by * 8), cur->w, 8, mb_modes[by * 8 + bx * 2], e, top, left);
+  }
+  // the residual of a luma block, its prediction being in the picture
+  void add4b(int b, int qp) {
+    if (mb_cls == 7 && !mb_dc) dc16(qp);
+    add4(luma_at(blk_x(b) * 4, blk_y(b) * 4), cur->w, b, qp, mb_cls == 7 ? &mb_dcr[blk_y(b) * 4 + blk_x(b)] : nullptr);
+    mb_done4 |= (uint16_t)(1 << b);
+  }
+  void add8(int b8, int qp) {
+    if (res.m8 >> b8 & 1) {
+      int d[64];
+      dequant8(res.y8[b8], d, qp);
+      idct8_add(luma_at((b8 & 1) * 8, (b8 >> 1) * 8), cur->w, d);
+    }
+    mb_done8 |= (uint8_t)(1 << b8);
+  }
+  // a luma block's coefficients are known (cat as the walk's, blk its index)
+  void luma_add(int cat, int blk, int qp) {
+    if (!active || !mb_prepared || mb_cls == 8) return;
+    if (cat == 1 || cat == 2) {
+      if (!mb_t8 && !(mb_done4 >> blk & 1)) add4b(blk, qp);
+    } else if (cat == 5) {
+      if (mb_t8 && !(mb_done8 >> blk & 1)) add8(blk, qp);
+    }
+  }
+  // chroma: the DC of a component (2x2 Hadamard), scaled
+  void dcc(int c, int qpc) {
+    mb_cdc[c] = true;
+    for (int b = 0; b < 4; b++) mb_dcc[c][b] = 0;
+    if (!(res.mcdc >> c & 1)) return;
+    int* x = res.cdc[c];
+    int f[4] = {x[0] + x[1] + x[2] + x[3], x[0] - x[1] + x[2] - x[3], x[0] + x[1] - x[2] - x[3], x[0] - x[1] - x[2] + x[3]};
+    int ls = 16 * kNorm4[qpc % 6][0], q6 = qpc / 6;
+    for (int b = 0; b < 4; b++) mb_dcc[c][b] = ((f[b] * ls) << q6) >> 5;
+  }
+  int chroma_qp_of(int c, int qp) const { return chroma_qp(qp, cqp_off[c]); }
+  uint8_t* chroma_at(int c, int x, int y) const {
+    int cw = cur->w / 2;
+    return (c ? cur->v.data() : cur->u.data()) + ((mb_addr / cur->mbw) * 8 + y) * cw + (mb_addr % cur->mbw) * 8 + x;
+  }
+  // the residual of chroma block b of component c
+  void addc(int c, int b, int qp) {
+    int qpc = chroma_qp_of(c, qp);
+    if (!mb_cdc[c]) dcc(c, qpc);
+    mb_cdone[c] |= (uint8_t)(1 << b);
+    if (!(res.mcac[c] >> b & 1) && !mb_dcc[c][b]) return;
+    int d[16];
+    if (res.mcac[c] >> b & 1)
+      dequant4(res.cac[c][b], d, qpc, 1);
+    else
+      for (int i = 0; i < 16; i++) d[i] = 0;
+    d[0] = mb_dcc[c][b];
+    idct4_add(chroma_at(c, (b & 1) * 4, (b >> 1) * 4), cur->w / 2, d);
+  }
+  // a chroma AC block about to be coded: the ones before it done
+  void chroma_ready(int c, int b, int qp) {
+    if (!active || !mb_prepared || mb_cls == 8) return;
+    for (int k = 0; k < b; k++)
+      if (!(mb_cdone[c] >> k & 1)) addc(c, k, qp);
+  }
+  void chroma_add(int c, int b, int qp) {
+    if (!active || !mb_prepared || mb_cls == 8) return;
+    if (!(mb_cdone[c] >> b & 1)) addc(c, b, qp);
+  }
+  int dcc_at(int c, int b, int qp) {
+    if (!mb_cdc[c]) dcc(c, chroma_qp_of(c, qp));
+    return mb_dcc[c][b];
+  }
+
+  // the inverse Hadamard of the Intra16x16 DC (8.5.10), then their scaling
+  void dc16(int qp) {
+    mb_dc = true;
+    for (int i = 0; i < 16; i++) mb_dcr[i] = 0;
+    if (!res.mdc) return;
+    int c[16], f[16];
+    for (int k = 0; k < 16; k++) c[kZz4[k]] = res.dc[k];
+    for (int i = 0; i < 4; i++) {
+      int a = c[i * 4], b = c[i * 4 + 1], cc = c[i * 4 + 2], d = c[i * 4 + 3];
+      f[i * 4] = a + b + cc + d;
+      f[i * 4 + 1] = a + b - cc - d;
+      f[i * 4 + 2] = a - b - cc + d;
+      f[i * 4 + 3] = a - b + cc - d;
+    }
+    for (int j = 0; j < 4; j++) {
+      int a = f[j], b = f[4 + j], cc = f[8 + j], d = f[12 + j];
+      c[j] = a + b + cc + d;
+      c[4 + j] = a + b - cc - d;
+      c[8 + j] = a - b - cc + d;
+      c[12 + j] = a - b + cc - d;
+    }
+    int ls = 16 * kNorm4[qp % 6][0], q6 = qp / 6;
+    for (int i = 0; i < 16; i++) mb_dcr[i] = qp >= 36 ? (c[i] * ls) << (q6 - 6) : (c[i] * ls + (1 << (5 - q6))) >> (6 - q6);
+  }
+
+  // The macroblock is coded or skipped: what is left of it (the luma blocks
+  // without coefficients, the chroma residual, I_PCM samples), and what
+  // deblocking and the direct prediction of later pictures need. nz: the
   // walk's coefficient counts.
   void mb_end(int addr, int cls, int i16m, const uint8_t* modes, int cpred, int t8, int qp, const int8_t rf[2][4],
               const int16_t mv[2][16][2], const uint8_t nz[16]) {
     if (!active) return;
+    prepare(cls, i16m, modes, cpred, t8, rf, mv);
     int w = cur->w, cw = w / 2, mx = addr % cur->mbw * 16, my = addr / cur->mbw * 16;
     uint8_t* Y = cur->y.data() + my * w + mx;
     uint8_t* U = cur->u.data() + my / 2 * cw + mx / 2;
     uint8_t* V = cur->v.data() + my / 2 * cw + mx / 2;
     bool intra = cls >= 6, pcm = cls == 8;
     DbMb& D = db[addr];
-    D.slice = slice_no;
-    D.intra = intra;
     D.pcm = pcm;
     D.t8 = (uint8_t)t8;
     D.qp = (uint8_t)qp;
@@ -906,103 +1081,23 @@ struct Recon {
     D.beta_off = (int8_t)beta_off;
     D.cqp[0] = (int8_t)cqp_off[0];
     D.cqp[1] = (int8_t)cqp_off[1];
-    int qpc[2] = {chroma_qp(qp, cqp_off[0]), chroma_qp(qp, cqp_off[1])};
     if (pcm) {
       for (int i = 0; i < 256; i++) Y[(i >> 4) * w + (i & 15)] = (uint8_t)pcm_s[i];
       for (int i = 0; i < 64; i++) U[(i >> 3) * cw + (i & 7)] = (uint8_t)pcm_s[256 + i];
       for (int i = 0; i < 64; i++) V[(i >> 3) * cw + (i & 7)] = (uint8_t)pcm_s[320 + i];
-    } else if (intra) {
-      if (cls == 7) {
-        pred16(addr, i16m);
-        int dcr[16] = {};
-        if (res.mdc) {
-          // inverse Hadamard of the DC (8.5.10), then their scaling
-          int c[16], f[16];
-          for (int k = 0; k < 16; k++) c[kZz4[k]] = res.dc[k];
-          for (int i = 0; i < 4; i++) {
-            int a = c[i * 4], b = c[i * 4 + 1], cc = c[i * 4 + 2], d = c[i * 4 + 3];
-            f[i * 4] = a + b + cc + d;
-            f[i * 4 + 1] = a + b - cc - d;
-            f[i * 4 + 2] = a - b - cc + d;
-            f[i * 4 + 3] = a - b + cc - d;
-          }
-          for (int j = 0; j < 4; j++) {
-            int a = f[j], b = f[4 + j], cc = f[8 + j], d = f[12 + j];
-            c[j] = a + b + cc + d;
-            c[4 + j] = a + b - cc - d;
-            c[8 + j] = a - b - cc + d;
-            c[12 + j] = a - b + cc - d;
-          }
-          int ls = 16 * kNorm4[qp % 6][0], q6 = qp / 6;
-          for (int i = 0; i < 16; i++) dcr[i] = qp >= 36 ? (c[i] * ls) << (q6 - 6) : (c[i] * ls + (1 << (5 - q6))) >> (6 - q6);
-        }
-        for (int b = 0; b < 16; b++) {
-          int bx = blk_x(b), by = blk_y(b);
-          add4(Y + by * 4 * w + bx * 4, w, b, qp, &dcr[by * 4 + bx]);
-        }
-      } else if (t8) {
-        for (int b8 = 0; b8 < 4; b8++) {
-          int bx = b8 & 1, by = b8 >> 1, e[25];
-          bool top, left;
-          luma_edge(addr, 8, bx, by, e, top, left);
-          uint8_t* p = Y + by * 8 * w + bx * 8;
-          pred_nxn(p, w, 8, modes[by * 8 + bx * 2], e, top, left);
-          if (res.m8 >> b8 & 1) {
-            int d[64];
-            dequant8(res.y8[b8], d, qp);
-            idct8_add(p, w, d);
-          }
-        }
-      } else {
-        for (int b = 0; b < 16; b++) {
-          int bx = blk_x(b), by = blk_y(b), e[17];
-          bool top, left;
-          luma_edge(addr, 4, bx, by, e, top, left);
-          uint8_t* p = Y + by * 4 * w + bx * 4;
-          pred_nxn(p, w, 4, modes[by * 4 + bx], e, top, left);
-          add4(p, w, b, qp, nullptr);
-        }
-      }
-      pred_chroma(addr, cpred);
     } else {
-      inter(addr, rf, mv, Y, U, V);
+      if (cls == 6) luma_ready(t8 ? 3 : 15, qp);
       if (t8) {
         for (int b8 = 0; b8 < 4; b8++)
-          if (res.m8 >> b8 & 1) {
-            int d[64];
-            dequant8(res.y8[b8], d, qp);
-            idct8_add(Y + (b8 >> 1) * 8 * w + (b8 & 1) * 8, w, d);
-          }
+          if (!(mb_done8 >> b8 & 1)) add8(b8, qp);
       } else {
-        for (int b = 0; b < 16; b++) add4(Y + blk_y(b) * 4 * w + blk_x(b) * 4, w, b, qp, nullptr);
+        for (int b = 0; b < 16; b++)
+          if (!(mb_done4 >> b & 1)) add4b(b, qp);
       }
-    }
-    if (!pcm) {
-      // chroma residual: the DC of each component (2x2 Hadamard), then the blocks
-      for (int c = 0; c < 2; c++) {
-        uint8_t* P = c ? V : U;
-        int dcc[4] = {0, 0, 0, 0};
-        if (res.mcdc >> c & 1) {
-          int* x = res.cdc[c];
-          int f0 = x[0] + x[1] + x[2] + x[3], f1 = x[0] - x[1] + x[2] - x[3];
-          int f2 = x[0] + x[1] - x[2] - x[3], f3 = x[0] - x[1] - x[2] + x[3];
-          int ls = 16 * kNorm4[qpc[c] % 6][0], q6 = qpc[c] / 6;
-          dcc[0] = ((f0 * ls) << q6) >> 5;
-          dcc[1] = ((f1 * ls) << q6) >> 5;
-          dcc[2] = ((f2 * ls) << q6) >> 5;
-          dcc[3] = ((f3 * ls) << q6) >> 5;
-        }
-        for (int b = 0; b < 4; b++) {
-          if (!(res.mcac[c] >> b & 1) && !dcc[b]) continue;
-          int d[16];
-          if (res.mcac[c] >> b & 1)
-            dequant4(res.cac[c][b], d, qpc[c], 1);
-          else
-            for (int i = 0; i < 16; i++) d[i] = 0;
-          d[0] = dcc[b];
-          idct4_add(P + (b >> 1) * 4 * cw + (b & 1) * 4, cw, d);
-        }
-      }
+      // the chroma blocks left
+      for (int c = 0; c < 2; c++)
+        for (int b = 0; b < 4; b++)
+          if (!(mb_cdone[c] >> b & 1)) addc(c, b, qp);
     }
     // for deblocking, and for the direct prediction of later pictures
     for (int b = 0; b < 16; b++) D.nz[b] = nz[b] != 0;
@@ -1370,6 +1465,60 @@ struct Recon {
     for (int k = 1; k < 9; k++)
       if (hist[k] > hist[best]) best = k;
     return best;
+  }
+
+  // The texture of the prediction of a block of n x n samples at (x, y) of
+  // the current macroblock in plane c (0 luma): the sum of the absolute
+  // differences between neighbouring samples; -1 not known.
+  int pred_texture(int c, int x, int y, int n) const {
+    if (!active || !mb_prepared || mb_cls == 8) return -1;
+    int w = c ? cur->w / 2 : cur->w, m = c ? 8 : 16;
+    const uint8_t* p = (c == 0 ? cur->y.data() : c == 1 ? cur->u.data() : cur->v.data()) +
+                       ((mb_addr / cur->mbw) * m + y) * w + (mb_addr % cur->mbw) * m + x;
+    int g = 0;
+    for (int j = 0; j < n; j++)
+      for (int i = 0; i < n; i++) {
+        if (i + 1 < n) g += abs(p[j * w + i + 1] - p[j * w + i]);
+        if (j + 1 < n) g += abs(p[(j + 1) * w + i] - p[j * w + i]);
+      }
+    return g;
+  }
+
+  // For sign prediction: the samples next to the luma block of n x n at (x,
+  // y) of the current macroblock, its prediction being in the picture: per
+  // edge sample e (n above, then n to the left) the linear extrapolation of
+  // the two decoded rows or columns beyond the edge less the prediction
+  // there, times scale; avail[e] false where those are not decoded.
+  bool sign_edges(int plane, int x, int y, int n, int64_t scale, int64_t* target, bool* avail) const {
+    if (!active || !mb_prepared || mb_cls == 8) return false;
+    int mbw = cur->mbw, mx = mb_addr % mbw, my = mb_addr / mbw;
+    int w = plane ? cur->w / 2 : cur->w, m = plane ? 8 : 16;
+    bool top = y > 0 ? true : my > 0 && db[mb_addr - mbw].slice >= 0;
+    bool left = x > 0 ? true : mx > 0 && db[mb_addr - 1].slice >= 0;
+    if (!top && !left) return false;
+    const uint8_t* p = (plane == 0 ? cur->y.data() : plane == 1 ? cur->u.data() : cur->v.data()) + (my * m + y) * w + mx * m + x;
+    for (int i = 0; i < n; i++) {
+      avail[i] = top;
+      target[i] = top ? (2 * p[-w + i] - p[-2 * w + i] - p[i]) * scale : 0;
+      avail[n + i] = left;
+      target[n + i] = left ? (2 * p[i * w - 1] - p[i * w - 2] - p[i * w]) * scale : 0;
+    }
+    return true;
+  }
+  int dc16_at(int qp, int blk) {
+    if (!mb_dc) dc16(qp);
+    return mb_dcr[blk_y(blk) * 4 + blk_x(blk)];
+  }
+  // a coefficient, dequantized: c at scan position k of a 4x4 or 8x8 block
+  static int64_t dequant1(int c, int k, int qp, bool b8) {
+    int q6 = qp / 6, m = qp % 6;
+    if (!b8) {
+      int r = kZz4[k], y = r >> 2, x = r & 3;
+      int ls = 16 * kNorm4[m][(x & 1) && (y & 1) ? 1 : !(x & 1) && !(y & 1) ? 0 : 2];
+      return qp >= 24 ? ((int64_t)c * ls) << (q6 - 4) : ((int64_t)c * ls + (1 << (3 - q6))) >> (4 - q6);
+    }
+    int r = kZz8[k], ls = 16 * kNorm8[m][norm8_class(r >> 3, r & 7)];
+    return qp >= 36 ? ((int64_t)c * ls) << (q6 - 6) : ((int64_t)c * ls + (1 << (5 - q6))) >> (6 - q6);
   }
 };
 

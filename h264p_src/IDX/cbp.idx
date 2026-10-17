@@ -28,6 +28,7 @@ Index c
  c_cls: cls, 1!11111111
  c_col: col, 1!11
  c_pc: pc, 1!1111
+ c_pg: pg, 1!1111111111111111
 
 Index d
  d_inc: inc, 1!111
