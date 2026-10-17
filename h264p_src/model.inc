@@ -36,10 +36,10 @@ struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg, tp, em, pq; };
 struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm, pr, dr; };
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, zd, cq; };
 struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac; };
-struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn; };
-struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz; };
-struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe, pl, tz; };
-struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md, pp, mg, ez, ts; };
+struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn, pq; };
+struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz, pq; };
+struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe, pl, tz, pq; };
+struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md, pp, mg, ez, ts, pq; };
 struct H_pcm_v { int pl, dp, pd, pd2; };
 
 #include "MOD/nal_h.inc"
@@ -492,6 +492,7 @@ struct Model {
   const MbCol* col_ = nullptr;
   int sub_[4] = {};
   int pmv_[2] = {};  // proxy_mv()
+  int pxq_ = 0;      // proxy_mv(): how well its vector matches the samples around (1 + tc_qlog, 0 not known)
   bool pmv_ok_ = false;
   std::vector<int16_t> pxv_;  // the vectors of the current picture's proxies (INT16_MIN none)
   int sm_ = 0, tm_ = 0;  // skip_miss() of the macroblock, its template matching miss
@@ -927,6 +928,7 @@ struct Model {
   void proxy_mv() {
     if (pmv_ok_) return;
     pmv_ok_ = true;
+    pxq_ = 0;
     int p[2] = {0, 0}, miss;
     if (tmb_ok_)
       p[0] = tmb_[0], p[1] = tmb_[1];
@@ -940,7 +942,8 @@ struct Model {
         if (nb[j] >= 0 && info_[nb[j]].pic == pic_ && pxv_[nb[j] * 2] != INT16_MIN)
           cand[nc][0] = pxv_[nb[j] * 2], cand[nc][1] = pxv_[nb[j] * 2 + 1], nc++;
       cand[nc][0] = cand[nc][1] = 0, nc++;
-      rec_.tm_search(-1, 0, 0, 0, 16, 16, p, false, cand, nc);
+      int miss;
+      if (rec_.tm_search(-1, 0, 0, 0, 16, 16, p, false, cand, nc, &miss)) pxq_ = 1 + tc_clamp(tc_qlog(miss), 0, 11);
       pxv_[addr_ * 2] = (int16_t)tc_clamp(p[0], -32767, 32767);
       pxv_[addr_ * 2 + 1] = (int16_t)tc_clamp(p[1], -32767, 32767);
     }
@@ -1716,6 +1719,8 @@ struct Model {
     tc_stage = STG_CBF;
     H_cbf_v D = {};
     D.pz = pok ? 1 + std::min(pnz, 15) : 0;
+    int pq = pok ? pxq_ : 0;
+    D.pq = pq;
     D.tn = tok ? 1 + std::min(tnz, 4) : 0;
     D.cat = cat;
     D.na = nb_count(na, g);
@@ -1780,6 +1785,7 @@ struct Model {
     bool sig[64];
     int rem = total, last = 0, cnt = total;
     H_sig_v S = {cat, 0, 0, 0, md, nc, fld, q, pg, em, 0};
+    S.pq = pq;
     int sig_base = kSigBase[fld][cat], numc8x8 = sc_->chroma_ == 2 ? 2 : 1;
     bool b8x8 = cat == 5 || cat == 9 || cat == 13;
     for (int i = 0; rem; i++) {
@@ -1809,6 +1815,7 @@ struct Model {
     int mag[64];
     int g1 = 0, e1 = 0;
     H_lvl_v L = {cat, 0, 0, nc, 0, 0, 0, q, tc_qlog(cnt), md, 0, pg, em, 0};
+    L.pq = pq;
     int abs_base = kAbsBase[cat];
     for (int k = 0; k < TC_NODE; k++) pr[k] = -1;
     f_lvl.prpa = pr;
@@ -1839,6 +1846,7 @@ struct Model {
     // the signs
     tc_stage = STG_SGN;
     H_sgn_v G = {cat, 0, 0, 0, 3, 0, md, 0, 0};
+    G.pq = pq;
     bool cr = g.plane == 2;
     // sign prediction (luma blocks): the signs of the first nonzero
     // coefficients in scan order are coded after the others, each with the
