@@ -89,33 +89,60 @@ supported type has to be stored verbatim. Input and output can be `-`
 `c` parses each NAL unit, writes it back from the values it parsed to see
 that the NAL unit comes out the same, and then codes the values with the
 model: the macroblock syntax (skip flags, mb_type, intra modes, motion,
-coded_block_pattern, mb_qp_delta, the coefficients) and the header syntax,
-each with contexts from the neighbouring macroblocks of the picture and the
-co-located macroblock of the last picture of the same kind. `d` decodes the
-values and codes them with CAVLC or CABAC as the stream did. A NAL unit that
-does not come out the same is stored verbatim, as in the TSV file (below);
-a CRC-32 at the end checks the whole stream.
+coded_block_pattern, mb_qp_delta, the coefficients) and the header syntax.
+`d` decodes the values and codes them with CAVLC or CABAC as the stream did.
+A NAL unit that does not come out the same is stored verbatim, as in the TSV
+file (below); a CRC-32 at the end checks the whole stream.
 
 The model is binary context mixing, after oggcomp (Ogg Vorbis): each value
-is a sequence of binary decisions, each predicted by four adaptive counters
-under different contexts, an APM, a mixer and a second APM, all selected by
-the decision's place in the value. The contexts and the parameters of each
-group of syntax elements (a family) are declared in `h264p_src/IDX/*.idx`
-and turned into code in `h264p_src/MOD/` (see `h264p_src/mk.sh`), where
-they can also be tuned. `h264p_cm.md` is the design.
+is a sequence of binary decisions, each predicted by six adaptive counters
+under different contexts, an APM, two mixers (and a third that mixes them)
+and a second APM, all selected by the decision's place in the value; where
+the stream is CABAC, the probability CABAC's own context state gives a bin
+is one more input. The contexts and the parameters of each group of syntax
+elements (a family) are declared in `h264p_src/IDX/*.idx` and turned into
+code in `h264p_src/MOD/` (see `h264p_src/mk.sh`), where they can also be
+tuned. `h264p_cm.md` is the design.
+
+Most of the contexts come from the pictures: the model decodes them as it
+goes (`recon.inc`, for 8-bit 4:2:0 frame streams without scaling matrices,
+which covers x264's defaults; it matched ffmpeg's output bit for bit on the
+parts of the test streams compared), and looks at the samples before each
+decision:
+
+- mb_qp_delta: x264's adaptive quantization sets a macroblock's QP from
+  log2 of its energy, so a line of QP against energy fitted to the
+  picture's macroblocks so far predicts the QP from the energy of the
+  macroblock's motion-compensated prediction.
+- skip and mb_type: how well the prediction the macroblock would have if
+  skipped continues the decoded samples above and to the left of it, how
+  well that motion predicts those samples themselves (template matching),
+  and in B slices how far apart its two predictions are.
+- motion: the vector a template matching search finds for the partition,
+  as a guess at the mvd.
+- intra modes: the gradients around the block (DIMD), and the mode that
+  predicts the block best in the reference.
+- coefficients: the texture of the prediction and how far it is from
+  continuing its surroundings; the signs of the first coefficients are
+  predicted as the ones that make the block continue the decoded samples
+  around it best; for intra blocks, the block in the reference stands in
+  for the source, and its difference to the prediction, transformed and
+  quantized as an encoder would, estimates the levels.
 
 On the test streams (`-v` shows where the bits go):
 
 | stream | H.264 | compressed | |
 |---|---:|---:|---:|
-| 00 | 815,140 | 677,848 | 83.2% |
-| 01 | 1,095,103 | 1,012,030 | 92.4% |
-| 02 | 28,143 | 27,247 | 96.8% |
-| 03 | 1,181,369 | 957,724 | 81.1% |
-| 04 | 484,238 | 443,747 | 91.6% |
+| 00 | 815,140 | 609,003 | 74.7% |
+| 01 | 1,095,103 | 876,227 | 80.0% |
+| 02 | 28,143 | 26,815 | 95.3% |
+| 03 | 1,181,369 | 839,729 | 71.1% |
+| 04 | 484,238 | 406,868 | 84.0% |
 
-Speed is about 0.3 MB of H.264 per second both ways; the model tables take
-about 20 MB.
+The macroblock syntax alone takes 76.5% of what its CABAC coding takes
+(from 3,603,993 to 2,758,642 bytes over these streams). Speed is around
+0.06-0.1 MB of H.264 per second both ways, and the model tables take about
+150 MB.
 
 ### TSV
 
