@@ -80,7 +80,7 @@ void H_ipm_make( const H_ipm_v & D, tcx & X ) {
   s = s*3 + ((k8>0+(1-1))+(k8>1+(1-1)));
   s = s*9 + H_ipm_s_pr[__min(8,__max(0,pr-(1-1)))];
   s = s*13 + H_ipm_s_pq[__min(12,__max(0,pq-(1-1)))];
-  s = s*13 + H_ipm_s_mg[__min(12,__max(0,mg-(1-1)))];
+  s = s*3 + ((mg>3+(1-1))+(mg>6+(1-1)));
 
   f = 0;
   f = f*9 + H_ipm_f_dr[__min(8,__max(0,dr-(1-1)))];

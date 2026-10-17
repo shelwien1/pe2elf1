@@ -31,7 +31,7 @@ constexpr int H_pcm_ND = TC_NODE, H_pcm_MND = TC_MNODE, H_pcm_NG = 3;
 struct H_nal_v { int fld, ctx, p1, p2; };
 struct H_hdr_v { int tag, fld, p1, p2, pos, p1r, sty; };
 struct H_skp_v { int st, a3, b3, col, c9, cd, run, cnt, eq, lf, af, td, en, sm, tm, tb, bd, qc; };
-struct H_mbt_v { int st, ca, cb, cc, nsk, en, td, sm, tm, tb, dh, bd, qc; };
+struct H_mbt_v { int st, ca, cb, cc, nsk, en, td, sm, tm, tb, dh, bd, qc, im, ig; };
 struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg, tp, em, pq; };
 struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm, pr, dr, pq, mh, mc, mg, rg; };
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, zd, cq, tq; };
@@ -178,6 +178,13 @@ struct AqFit {
     return true;
   }
 };
+
+// 16 x x264's lambda of a QP (x264_lambda_tab: 2^(qp/6 - 2), at least 1)
+static INLINE int x264_lam16(int qp) {
+  static const int k16[6] = {16, 18, 20, 23, 25, 29};
+  int q = qp < 0 ? 0 : qp;
+  return std::max(16, (k16[q % 6] << (q / 6)) >> 2);
+}
 
 // P(LPS) of the CABAC context states, 12 bits: 2048 * (0.01875 / 0.5)^(s / 63)
 static const int cab_lps[64] = {
@@ -505,6 +512,7 @@ struct Model {
   const MbCol* col_ = nullptr;
   int sub_[4] = {};
   int pmv_[2] = {};  // proxy_mv()
+  H_mbt_v* mbt_d_ = nullptr;  // mb_type's contexts while it is coded
   int prx_v_[2] = {};       // the proxy's vector (quarter samples), as searched again (block)
   int prx_blk_ = 0;         // the luma block it was last searched for
   bool prx_chroma_ = false;  // and whether for the chroma
@@ -859,6 +867,23 @@ struct Model {
     }
     if (mbt_bit(21, ENC && it == 0, cab1(ctx0))) return 0;
     if (mbt_bit(22, ENC && it == 25)) return 25;
+    if (sc_->chroma_ == 1 && mbt_d_) {
+      // Intra16x16: the mode that does best in the proxy, and by how much
+      // it beats the next
+      proxy_mv();
+      int costs[4];
+      int m = rec_.proxy_i16mode(pmv_[0], pmv_[1], costs);
+      if (m >= 0) {
+        int c2 = INT_MAX;
+        for (int k = 0; k < 4; k++)
+          if (k != m) c2 = std::min(c2, costs[k]);
+        mbt_d_->im = 1 + m;
+        mbt_d_->ig = c2 == INT_MAX ? 0 : 1 + tc_clamp(tc_qlog((c2 - costs[m]) * 32 / x264_lam16(qp_pred_)), 0, 11);
+        tcx X;
+        H_mbt_make(*mbt_d_, X);
+        f_mbt.select(X);
+      }
+    }
     int x = ENC ? it - 1 : 0;
     int luma = mbt_bit(23, ENC && x / 12, cab0(off + (islice ? 3 : 1)));
     int c = x / 4 % 3;
@@ -892,6 +917,7 @@ struct Model {
     tcx X;
     H_mbt_make(D, X);
     f_mbt.select(X);
+    mbt_d_ = &D;
     int stype = sc_->stype_;
     f_mbt.prp = -1;
     switch (stype) {
@@ -931,6 +957,7 @@ struct Model {
         else
           t = mbt_bit(4, ENC && t == 2) ? 2 : 1;
     }
+    mbt_d_ = nullptr;
     mi_->cls = (uint8_t)class_of(stype, t);
     if (stype == kB)
       parts_ = t <= 3 ? 0 : t == 22 ? 3 : t < 22 ? 2 - (t & 1) : 0;
@@ -1146,10 +1173,9 @@ struct Model {
                 : rec_.proxy_mode(x, y, 4, pmv_[0], pmv_[1], sads);
     D.pm = pm < 0 ? 9 : pm;
     // how much worse the most probable mode does there, in halves of x264's
-    // lambda (x264_lambda_tab, 2^(qp/6 - 2)) of the predicted QP: an encoder
-    // takes it unless another mode saves more than its three bits
-    static const int k16[6] = {16, 18, 20, 23, 25, 29};
-    int q = std::max(0, qp_pred_), lam16 = std::max(16, (k16[q % 6] << (q / 6)) >> 2);
+    // lambda of the predicted QP: an encoder takes it unless another mode
+    // saves more than its three bits
+    int lam16 = x264_lam16(qp_pred_);
     D.mg = 0;
     if (pm >= 0 && sads[mpm] < INT_MAX) D.mg = 1 + tc_clamp(tc_qlog((sads[mpm] - sads[pm]) * 32 / lam16), 0, 11);
     D.pq = pxq_;
@@ -1230,6 +1256,18 @@ struct Model {
     D.pm = 9;
     D.mc = 10;
     D.pr = D.dr = 8;
+    if (sc_->chroma_ == 1) {
+      // the chroma mode that does best in the proxy, and how much worse DC
+      // (the cheapest to code) does
+      proxy_mv();
+      int costs[4];
+      int pc = rec_.proxy_cmode(pmv_[0], pmv_[1], costs);
+      if (pc >= 0) {
+        D.pm = pc;
+        int c0 = costs[0] < INT_MAX ? costs[0] : costs[pc];
+        D.mg = 1 + tc_clamp(tc_qlog((c0 - costs[pc]) * 32 / x264_lam16(qp_pred_)), 0, 11);
+      }
+    }
     tcx X;
     H_ipm_make(D, X);
     f_ipm.select(X);

@@ -6,7 +6,9 @@
 #  tree. st is the slice type and reference status, ca/cb/cc the classes of
 #  macroblocks A, B and of the same one in the previous picture of the type
 #  (0 none, 1 skip, 2 direct, 3 16x16, 4 16x8/8x16, 5 8x8, 6 I_NxN, 7 I16,
-#  8 PCM), nsk the skipped ones of A, B, C and D.
+#  8 PCM), nsk the skipped ones of A, B, C and D; for Intra16x16 (from its
+#  coded_block_pattern on), im 1 + the mode that does best in the proxy (0
+#  none) and ig by how much it beats the next.
 
 Prefix H_mbt
 Debug 1
@@ -28,6 +30,8 @@ Index c
  c_st: st, 1!000000000
  c_ca: ca, 1!10111100
  c_cc: cc, 1!11111111
+ c_im: im, 1!1111
+ c_ig: ig, 1!111111111111
 
 Index d
  d_st: st, 1!111111111
@@ -80,6 +84,7 @@ Index f
  f_st: st, 1!111111111
  f_ca: ca, 1!00000110
  f_qc: qc, 1!11111111111111111
+ f_im: im, 1!1111
 
 Index m
  m_st: st, 1!111111111

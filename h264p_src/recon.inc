@@ -724,6 +724,11 @@ struct Recon {
       T[i] = aB ? d[-w + i] : 128;
       L[i] = aA ? d[i * w - 1] : 128;
     }
+    pred_l16(d, w, mode, T, L, Q, aA, aB);
+  }
+  // the Intra16x16 prediction from the samples above (T), to the left (L)
+  // and above left (Q)
+  static void pred_l16(uint8_t* d, int stride, int mode, const int* T, const int* L, int Q, bool aA, bool aB) {
     if (mode == 3) {
       int H = 0, V = 0;
       for (int i = 0; i < 8; i++) {
@@ -732,7 +737,7 @@ struct Recon {
       }
       int a = 16 * (L[15] + T[15]), b = (5 * H + 32) >> 6, c = (5 * V + 32) >> 6;
       for (int y = 0; y < 16; y++)
-        for (int x = 0; x < 16; x++) d[y * w + x] = (uint8_t)clip1((a + b * (x - 7) + c * (y - 7) + 16) >> 5);
+        for (int x = 0; x < 16; x++) d[y * stride + x] = (uint8_t)clip1((a + b * (x - 7) + c * (y - 7) + 16) >> 5);
       return;
     }
     int dc = 128;
@@ -742,7 +747,35 @@ struct Recon {
       dc = aA && aB ? (st + sl + 16) >> 5 : aA ? (sl + 8) >> 4 : aB ? (st + 8) >> 4 : 128;
     }
     for (int y = 0; y < 16; y++)
-      for (int x = 0; x < 16; x++) d[y * w + x] = (uint8_t)(mode == 0 ? T[x] : mode == 1 ? L[y] : dc);
+      for (int x = 0; x < 16; x++) d[y * stride + x] = (uint8_t)(mode == 0 ? T[x] : mode == 1 ? L[y] : dc);
+  }
+  // The Intra16x16 mode (0 vertical, 1 horizontal, 2 DC, 3 plane) that
+  // predicts the macroblock best in the proxy picture displaced by (dx, dy)
+  // whole samples, from that picture's samples around it, by SATD; costs
+  // gets each mode's (INT_MAX not possible); -1 no picture
+  int proxy_i16mode(int dx, int dy, int* costs) const {
+    if (!active) return -1;
+    const RPic* P = proxy_pic();
+    if (!P) return -1;
+    int w = P->w;
+    int x0 = clip3(0, w - 16, mb_addr % cur->mbw * 16 + dx), y0 = clip3(0, P->h - 16, mb_addr / cur->mbw * 16 + dy);
+    bool aA = x0 > 0, aB = y0 > 0;
+    const uint8_t* s = P->y.data() + y0 * w + x0;
+    int T[16], L[16], Q = aA && aB ? s[-w - 1] : 128;
+    for (int i = 0; i < 16; i++) {
+      T[i] = aB ? s[-w + i] : 128;
+      L[i] = aA ? s[i * w - 1] : 128;
+    }
+    int best = -1;
+    for (int m = 0; m < 4; m++) {
+      costs[m] = INT_MAX;
+      if ((m == 0 && !aB) || (m == 1 && !aA) || (m == 3 && !(aA && aB))) continue;
+      uint8_t d[256];
+      pred_l16(d, 16, m, T, L, Q, aA, aB);
+      costs[m] = satd_nxn(s, w, d, 16, 16);
+      if (best < 0 || costs[m] < costs[best]) best = m;
+    }
+    return best;
   }
 
   void pred_chroma(int addr, int mode) {
@@ -756,35 +789,97 @@ struct Recon {
         T[i] = aB ? d[-cw + i] : 128;
         L[i] = aA ? d[i * cw - 1] : 128;
       }
-      if (mode == 0) {  // DC, per 4x4 block
-        for (int b = 0; b < 4; b++) {
-          int xo = (b & 1) * 4, yo = (b >> 1) * 4, st = 0, sl = 0;
-          for (int i = 0; i < 4; i++) st += T[xo + i], sl += L[yo + i];
-          int v;
-          if (xo == yo)
-            v = aA && aB ? (st + sl + 4) >> 3 : aA ? (sl + 2) >> 2 : aB ? (st + 2) >> 2 : 128;
-          else if (yo == 0)
-            v = aB ? (st + 2) >> 2 : aA ? (sl + 2) >> 2 : 128;
-          else
-            v = aA ? (sl + 2) >> 2 : aB ? (st + 2) >> 2 : 128;
-          for (int y = 0; y < 4; y++)
-            for (int x = 0; x < 4; x++) d[(yo + y) * cw + xo + x] = (uint8_t)v;
-        }
-      } else if (mode == 3) {
-        int H = 0, V = 0;
-        for (int i = 0; i < 4; i++) {
-          H += (i + 1) * (T[4 + i] - (i == 3 ? Q : T[2 - i]));
-          V += (i + 1) * (L[4 + i] - (i == 3 ? Q : L[2 - i]));
-        }
-        int a = 16 * (L[7] + T[7]), b = (34 * H + 32) >> 6, cc = (34 * V + 32) >> 6;
-        for (int y = 0; y < 8; y++)
-          for (int x = 0; x < 8; x++) d[y * cw + x] = (uint8_t)clip1((a + b * (x - 3) + cc * (y - 3) + 16) >> 5);
-      } else {
-        for (int y = 0; y < 8; y++)
-          for (int x = 0; x < 8; x++) d[y * cw + x] = (uint8_t)(mode == 1 ? L[y] : T[x]);
-      }
+      pred_c8(d, cw, mode, T, L, Q, aA, aB);
     }
   }
+  // the chroma prediction of an 8x8 block (4:2:0) from the samples above
+  // (T), to the left (L) and above left (Q)
+  static void pred_c8(uint8_t* d, int stride, int mode, const int* T, const int* L, int Q, bool aA, bool aB) {
+    if (mode == 0) {  // DC, per 4x4 block
+      for (int b = 0; b < 4; b++) {
+        int xo = (b & 1) * 4, yo = (b >> 1) * 4, st = 0, sl = 0;
+        for (int i = 0; i < 4; i++) st += T[xo + i], sl += L[yo + i];
+        int v;
+        if (xo == yo)
+          v = aA && aB ? (st + sl + 4) >> 3 : aA ? (sl + 2) >> 2 : aB ? (st + 2) >> 2 : 128;
+        else if (yo == 0)
+          v = aB ? (st + 2) >> 2 : aA ? (sl + 2) >> 2 : 128;
+        else
+          v = aA ? (sl + 2) >> 2 : aB ? (st + 2) >> 2 : 128;
+        for (int y = 0; y < 4; y++)
+          for (int x = 0; x < 4; x++) d[(yo + y) * stride + xo + x] = (uint8_t)v;
+      }
+    } else if (mode == 3) {
+      int H = 0, V = 0;
+      for (int i = 0; i < 4; i++) {
+        H += (i + 1) * (T[4 + i] - (i == 3 ? Q : T[2 - i]));
+        V += (i + 1) * (L[4 + i] - (i == 3 ? Q : L[2 - i]));
+      }
+      int a = 16 * (L[7] + T[7]), b = (34 * H + 32) >> 6, cc = (34 * V + 32) >> 6;
+      for (int y = 0; y < 8; y++)
+        for (int x = 0; x < 8; x++) d[y * stride + x] = (uint8_t)clip1((a + b * (x - 3) + cc * (y - 3) + 16) >> 5);
+    } else {
+      for (int y = 0; y < 8; y++)
+        for (int x = 0; x < 8; x++) d[y * stride + x] = (uint8_t)(mode == 1 ? L[y] : T[x]);
+    }
+  }
+  // x264's SATD of an n x n block (n a multiple of 4) against a prediction
+  // (strides sa, sb), by 4x4, halved
+  static int satd_nxn(const uint8_t* a, int sa, const uint8_t* b, int sb, int n) {
+    int s = 0;
+    for (int by4 = 0; by4 < n; by4 += 4)
+      for (int bx4 = 0; bx4 < n; bx4 += 4) {
+        int t[16];
+        for (int y = 0; y < 4; y++)
+          for (int x = 0; x < 4; x++) t[y * 4 + x] = a[(by4 + y) * sa + bx4 + x] - b[(by4 + y) * sb + bx4 + x];
+        for (int y = 0; y < 4; y++) {
+          int* r = t + y * 4;
+          int a0 = r[0] + r[1], a1 = r[0] - r[1], a2 = r[2] + r[3], a3 = r[2] - r[3];
+          r[0] = a0 + a2, r[1] = a1 + a3, r[2] = a0 - a2, r[3] = a1 - a3;
+        }
+        for (int x = 0; x < 4; x++) {
+          int a0 = t[x] + t[4 + x], a1 = t[x] - t[4 + x], a2 = t[8 + x] + t[12 + x], a3 = t[8 + x] - t[12 + x];
+          s += abs(a0 + a2) + abs(a1 + a3) + abs(a0 - a2) + abs(a1 - a3);
+        }
+      }
+    return (s + 1) >> 1;
+  }
+  // The chroma mode (0 DC, 1 horizontal, 2 vertical, 3 plane) that predicts
+  // the chroma of the macroblock best in the proxy picture displaced by
+  // (dx, dy) whole luma samples, from that picture's samples around it,
+  // by SATD over both components; costs gets each mode's; -1 no picture
+  int proxy_cmode(int dx, int dy, int* costs) const {
+    if (!active) return -1;
+    const RPic* P = proxy_pic();
+    if (!P) return -1;
+    int cw = P->w / 2, ch = P->h / 2;
+    int x0 = clip3(0, cw - 8, mb_addr % cur->mbw * 8 + div2(dx)), y0 = clip3(0, ch - 8, mb_addr / cur->mbw * 8 + div2(dy));
+    bool aA = x0 > 0, aB = y0 > 0;
+    for (int m = 0; m < 4; m++) costs[m] = 0;
+    for (int c = 0; c < 2; c++) {
+      const uint8_t* s = (c ? P->v.data() : P->u.data()) + y0 * cw + x0;
+      int T[8], L[8], Q = aA && aB ? s[-cw - 1] : 128;
+      for (int i = 0; i < 8; i++) {
+        T[i] = aB ? s[-cw + i] : 128;
+        L[i] = aA ? s[i * cw - 1] : 128;
+      }
+      for (int m = 0; m < 4; m++) {
+        if ((m == 1 && !aA) || (m == 2 && !aB) || (m == 3 && !(aA && aB))) {
+          costs[m] = INT_MAX;
+          continue;
+        }
+        if (costs[m] == INT_MAX) continue;
+        uint8_t d[64];
+        pred_c8(d, 8, m, T, L, Q, aA, aB);
+        costs[m] += satd_nxn(s, cw, d, 8, 8);
+      }
+    }
+    int best = -1;
+    for (int m = 0; m < 4; m++)
+      if (costs[m] < INT_MAX && (best < 0 || costs[m] < costs[best])) best = m;
+    return best;
+  }
+  static int div2(int v) { return v >= 0 ? v >> 1 : -((-v) >> 1); }
 
   // --- inter prediction (8.4.2.2): a block of w x h luma samples at (x, y)
   // of ref, displaced by mv (quarter samples), into o (stride 16)
