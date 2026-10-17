@@ -89,6 +89,7 @@ void H_qpd_make( const H_qpd_v & D, tcx & X ) {
 
   g = 0;
   g = g*5 + H_qpd_g_lz[__min(6,__max(0,lz-(1-1)))];
+  g = g*14 + H_qpd_g_aq[__min(13,__max(0,aq-(1-1)))];
   X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.e = e;  X.h = h;  X.i = i;  X.j = j;  X.k = k;  X.l = l;  X.s = s;  X.f = f;  X.m = m;  X.w = w;  X.t = t;
   X.n = n;  X.g = g;
 }

@@ -21,7 +21,7 @@ constexpr int H_mbt_ND = 29, H_mbt_MND = 1, H_mbt_NG = 1;
 constexpr int H_cbp_ND = 7, H_cbp_MND = 1, H_cbp_NG = 1;
 constexpr int H_ipm_ND = 19, H_ipm_MND = 1, H_ipm_NG = 1;
 constexpr int H_mvs_ND = TC_NODE, H_mvs_MND = TC_MNODE, H_mvs_NG = 243;
-constexpr int H_qpd_ND = TC_NODE, H_qpd_MND = TC_MNODE, H_qpd_NG = 1;
+constexpr int H_qpd_ND = TC_NODE, H_qpd_MND = TC_MNODE, H_qpd_NG = 4;
 constexpr int H_cbf_ND = TC_NODE, H_cbf_MND = TC_MNODE, H_cbf_NG = 1;
 constexpr int H_sig_ND = 1, H_sig_MND = 1, H_sig_NG = 1;
 constexpr int H_lvl_ND = TC_NODE, H_lvl_MND = TC_MNODE, H_lvl_NG = 1;
@@ -1500,7 +1500,9 @@ struct Model {
     pr[1] = cab1(base + 3);
     pr[2] = cab1(base + 4);
     f_mvs.prpa = pr;
+    f_mvs.hint = tmn_ ? -1 : abs(dv);  // the template match's
     v = cm_int(f_mvs.code(X, ENC ? abs(v) : 0), 1 << 30) * (ENC && v < 0 ? -1 : 1);
+    f_mvs.hint = -1;
     f_mvs.prpa = nullptr;
     if (v) {
       tc_stage = STG_MVSG;
@@ -1610,6 +1612,7 @@ struct Model {
     // the last picture there, less the predicted QP; how far the last
     // picture of the kind was from its line there
     D.aq = D.ac = 0;
+    int aqd = INT_MIN;  // the change the line asks for
     if (rec_.active && (int)aq_x_.size() == size_) {
       // intra: the mean of the last picture's there and the left and upper
       // neighbours'
@@ -1634,7 +1637,10 @@ struct Model {
           ok = aq_fitx_.predict(aq_xp_, q16) || aq_fitp_.predict(aq_xp_, q16);
         }
       }
-      if (ok || (x >= 0 && aq_fit_.predict(x, q16))) D.aq = 7 + tc_clamp((int)div_floor(q16 - 16 * qp_pred_ + 8, 16), -6, 6);
+      if (ok || (x >= 0 && aq_fit_.predict(x, q16))) {
+        aqd = (int)div_floor(q16 - 16 * qp_pred_ + 8, 16);
+        D.aq = 7 + tc_clamp(aqd, -6, 6);
+      }
       int ma = mc_addr();
       if ((int)aq_res_[key_].size() == size_ && aq_res_[key_][ma] != INT16_MIN)
         D.ac = 7 + tc_clamp((int)div_floor(aq_res_[key_][ma] + 4, 8), -6, 6);
@@ -1645,7 +1651,14 @@ struct Model {
     for (int k = 0; k < TC_NODE; k++) pr[k] = -1;
     pr[0] = cab1(60 + (sc_->last_qpd_ != 0));
     f_qpd.prpa = pr;
-    v = cm_int(f_qpd.codes(X, ENC ? v : 0, 0), 1 << 20);
+    f_qpd.hint = aqd == INT_MIN ? -1 : abs(aqd);
+    {
+      // the sign, knowing whether the magnitude is the line's
+      int m = cm_int(f_qpd.code(X, ENC ? abs(v) : 0), 1 << 20);
+      int sc = aqd == INT_MIN ? 0 : m == abs(aqd) ? 1 : m < abs(aqd) ? 2 : 3;
+      v = m && f_qpd.sign((u32)sc, ENC && v < 0) ? -m : m;
+    }
+    f_qpd.hint = -1;
     f_qpd.prpa = nullptr;
     int qp = ((qp_pred_ + v + 52 + 2 * qp_off_) % (52 + qp_off_) + (52 + qp_off_)) % (52 + qp_off_) - qp_off_;
     qp_pred_ = qp;
@@ -1890,7 +1903,10 @@ struct Model {
       pr[0] = cab1(kCbfBase[cat] + inc);
     }
     f_cbf.prpa = pr;
+    // the intra estimate's count, or that of the block under the vector
+    f_cbf.hint = pok ? std::max(pnz - (int)coded, 0) : tok ? std::max(tnz - (int)coded, 0) : -1;
     int total = cm_int(f_cbf.code(X, ENC ? count_nonzero(c, n) - coded : 0), n) + coded;
+    f_cbf.hint = -1;
     cnth_ = (cnth_ * 4 + std::min(total, 3)) & 15;
     f_cbf.prpa = nullptr;
     if (total > n) cm_fail("corrupt stream: %d coefficients in a block of %d", total, n);
@@ -2011,7 +2027,10 @@ struct Model {
       L.sb = nb.m ? std::min(abs(coef_at(nb.m, g, nb.i, k)), 3) : 0;
       tcx X;
       H_lvl_make(L, X);
+      // the intra estimate's level there
+      f_lvl.hint = pok ? std::max(abs(est(k)) - 1, 0) : -1;
       int a = cm_int(f_lvl.code(X, ENC ? abs(c[k]) - 1 : 0), 1 << 24);
+      f_lvl.hint = -1;
       mag[k] = a + 1;
       lsum += a + 1;
       if (pok) esum += abs(est(k));

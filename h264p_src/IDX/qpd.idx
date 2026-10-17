@@ -9,7 +9,11 @@
 #  (4 equal); lz the last nonzero delta (3 for none); st the slice type; ae
 #  the delta adaptive quantization would give, from the energy of the
 #  macroblock in the last picture decoded against that of the one that set
-#  the predicted QP (7 none).
+#  the predicted QP (7 none); aq the delta the line of QP against energy
+#  gives (7 + the delta, 0 none), ac how far the last picture of the kind
+#  was from its line where the macroblock's content was.  The magnitude has
+#  the line's delta as code()'s hint, the sign is under index g by whether
+#  the magnitude is the line's.
 
 Prefix H_qpd
 Debug 1
@@ -91,6 +95,7 @@ Index n
 
 Index g
  g_lz: lz, 1!101101
+ g_aq: aq, 1!1111111111111
 
 Number rA, 1, 0!01000001
 Number rB, 1, 0!00010000

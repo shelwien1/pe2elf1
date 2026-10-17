@@ -1,18 +1,19 @@
 // A model family (oggcomp's tc_fam, balrogg-P-hash tc_fam.inc): the integer
 // coder every IDX family is. A value is a cascade of binary decisions --
 // zero? one? two? then the length of the rest in unary and its bits below
-// the top one -- and each decision is predicted from six counters (tables
-// A-E, H under six contexts), an APM, two mixers and a second APM, all
+// the top one -- and each decision is predicted from ten counters (tables
+// A-E, H-L under ten contexts), an APM, three mixers and a second APM, all
 // indexed by the decision's node in the cascade. Decisions outside the
 // cascade use bit() with nodes of their own, and the sign of a value has its
-// own counters (G). prp, when set, is one more prediction for the mixer.
+// own counters (G). prp, when set, is one more prediction for the mixer;
+// hint, a magnitude the value is expected near, one more set of counters.
 //
 // Changed from oggcomp: no codebook-derived priors (tc_pcur), and errors
 // are exceptions.
 
 namespace h264p {
 
-constexpr int TC_MIXN = 23;
+constexpr int TC_MIXN = 24;
 constexpr int TC_NODE = 13;
 constexpr int TC_MNODE = 169;
 constexpr int TC_NBMAX = 62;
@@ -63,6 +64,16 @@ template <int f_DEC> struct tc_fam {
   cm_mix<3> mxm;
   int prp;          // an outside prediction of P(0) for the mixers, -1 for none
   const int *prpa;  // or one per node
+  //  A magnitude code() expects the value near, -1 none: each decision
+  //  then also sees the hint's own decision there while the value agrees
+  //  with it so far, or which side of it the value went (hs: 0 no hint,
+  //  1/2 the hint decides 0/1, 3 the value is above it, 4 below), through
+  //  counters of its own by the t index and node (Z; ZM for the mantissa).
+  i64 hint;
+  int hs;
+  u32 bz;
+  std::vector<cm_cnt2> Z;
+  std::vector<cm_cnt> ZM;
   sz ba, bb, bc, bd, be, bh, bi, bj, bk, bl;
   u32 bs, bf, bm, bw2, bt, bn, bg;
   int rA, rB, rC, rD, rE, rH, rI, rJ, rK, rL, rT, rG;
@@ -173,7 +184,11 @@ template <int f_DEC> struct tc_fam {
     bw = tc_clamp(bwt, 0, 16);
     prp = -1;
     prpa = nullptr;
+    hint = -1;
+    hs = 0;
+    zrows = tc_rows((long long)vt, ht);
   }
+  sz zrows;
   INLINE void select(const tcx &x) {
     ba = (sz)(hA ? tc_hrow((u32)x.a, hA) : (u32)x.a) * nd;
     bb = (sz)(hB ? tc_hrow((u32)x.b, hB) : (u32)x.b) * nd;
@@ -189,7 +204,8 @@ template <int f_DEC> struct tc_fam {
     bf = (hF ? tc_hrow((u32)x.f, hF) : (u32)x.f) * nd;
     bm = (hM ? tc_hrow((u32)x.m, hM) : (u32)x.m) * nd;
     bw2 = (u32)x.w * nd;
-    bt = (hT ? tc_hrow((u32)x.t, hT) : (u32)x.t) * nm;
+    bz = hT ? tc_hrow((u32)x.t, hT) : (u32)x.t;
+    bt = bz * nm;
     bn = (hN ? tc_hrow((u32)x.n, hN) : (u32)x.n) * nm;
     bg = (u32)x.g;
     __builtin_prefetch(A + ba);
@@ -248,6 +264,8 @@ template <int f_DEC> struct tc_fam {
     mx.set(20, cm_stretch(ck.Q()));
     mx.set(21, cm_stretch(cl.P()));
     mx.set(22, cm_stretch(cl.Q()));
+    cm_cnt2 *zc = hs ? &Z[((sz)bz * nd + (u32)node) * 5 + (u32)hs] : nullptr;
+    mx.set(23, zc ? cm_stretch(zc->P()) : 0);
     for(int i = 0; i < TC_MIXN; i++)
       mx2.set(i, mx.x[i]), mx3.set(i, mx.x[i]);
     {
@@ -286,10 +304,27 @@ template <int f_DEC> struct tc_fam {
     K[bk + node] = ck;
     cl.upd(b, rL, mwL);
     L[bl + node] = cl;
+    if(zc)
+      zc->upd(b, rT, mwT);
     return b;
   }
   INLINE int bitm(int node, int b) {
     cm_cnt t = T[bt + node];
+    if(hs && (prp < 0 || prpa)) {
+      // with the hint's counter, through the mantissa mixer the value
+      // would not use otherwise
+      cm_cnt &z = ZM[((sz)bz * nm + (u32)node) * 5 + (u32)hs];
+      mxm.set(0, cm_stretch(t.P()));
+      mxm.set(1, cm_stretch(z.P()));
+      mxm.set(2, 256);
+      int pm = mxm.mix(bn + (u32)node);
+      b = tc_bit<f_DEC>(pm < 1 ? 1 : pm > CM_PONE - 1 ? CM_PONE - 1 : pm, b);
+      mxm.upd(b, lrm, mbm);
+      t.upd(b, rT, mwT);
+      T[bt + node] = t;
+      z.upd(b, rT, mwT);
+      return b;
+    }
     if(prp < 0 || prpa) {
       b = tc_bit<f_DEC>(t.P(), b);
       t.upd(b, rT, mwT);
@@ -309,17 +344,31 @@ template <int f_DEC> struct tc_fam {
     return b;
   }
   i64 code(const tcx &v, i64 x) {
-    int k, p, nb = 0;
-    u64 u;
+    int k, p, nb = 0, hst = 0, hnb = 0;
+    u64 u, hu = 0;
     select(v);
     if(UNLIKELY(ENC && x < 0))
       cm_fail("internal: a negative magnitude");
-    if(bit(0, ENC && x == 0))
-      return 0;
-    if(bit(1, ENC && x == 1))
-      return 1;
-    if(bit(2, ENC && x == 2))
-      return 2;
+    if(hint >= 0) {
+      // hst: 1 the value agrees with the hint so far, 3 it is above, 4 below
+      hst = 1;
+      if(Z.empty())
+        Z.assign(zrows * (sz)nd * 5, cm_cnt2{}), ZM.assign(zrows * (sz)nm * 5, cm_cnt{});
+      hu = hint >= 3 ? (u64)(hint - 3) + 1 : 0;
+      for(u64 t = hu; t; t >>= 1)
+        hnb++;
+    }
+    for(k = 0; k < 3; k++) {
+      int hb = hint == k;
+      hs = hst == 1 ? 1 + hb : hst;
+      int b = bit(k, ENC && x == k);
+      if(hst == 1 && b != hb)
+        hst = b ? 4 : 3;
+      if(b) {
+        hs = 0;
+        return k;
+      }
+    }
     u = ENC ? (u64)(x - 3) + 1 : 1;
     if(ENC) {
       u64 t = u;
@@ -329,7 +378,12 @@ template <int f_DEC> struct tc_fam {
       }
     }
     for(k = 0;; k++) {
-      if(bit(tc_node_len(k), ENC && nb == k + 1)) {
+      int hb = hnb == k + 1;
+      hs = hst == 1 ? 1 + hb : hst;
+      int b = bit(tc_node_len(k), ENC && nb == k + 1);
+      if(hst == 1 && b != hb)
+        hst = b ? 4 : 3;
+      if(b) {
         nb = k + 1;
         break;
       }
@@ -339,12 +393,17 @@ template <int f_DEC> struct tc_fam {
     {
       u64 pref = 1;
       for(p = 0; p < nb - 1; p++) {
+        int hb = (int)(hu >> (nb - 2 - p) & 1);
+        hs = hst == 1 ? 1 + hb : hst;
         int mb = bitm(tc_node_man(nb, p), ENC && ((u >> (nb - 2 - p)) & 1) != 0);
+        if(hst == 1 && mb != hb)
+          hst = mb > hb ? 3 : 4;
         pref = pref * 2 + (u64)mb;
       }
       if(!ENC)
         u = pref;
     }
+    hs = 0;
     return (i64)(u - 1) + 3;
   }
   //  The sign of a nonzero value, under the g index of the last select()
