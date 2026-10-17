@@ -23,7 +23,7 @@ Index b
  b_inc: inc, 1!111
  b_col: col, 1!11
  b_q6: q6, 1!11111111
- b_pq: pq, 1!111111
+ b_pq: pq, 1!110001
 
 Index c
  c_cls: cls, 1!11111111
@@ -33,7 +33,7 @@ Index c
 
 Index d
  d_inc: inc, 1!111
- d_em: em, 1!1111111111111111
+ d_em: em, 1!1100101101110100
  d_cls: cls, 1!11111111
 
 Index e

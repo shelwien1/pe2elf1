@@ -27,7 +27,7 @@ void H_cbp_make( const H_cbp_v & D, tcx & X ) {
   b = b*4 + H_cbp_b_inc[__min(3,__max(0,inc-(1-1)))];
   b = b*3 + ((col>0+(1-1))+(col>1+(1-1)));
   b = b*9 + H_cbp_b_q6[__min(8,__max(0,q6-(1-1)))];
-  b = b*7 + H_cbp_b_pq[__min(6,__max(0,pq-(1-1)))];
+  b = b*4 + H_cbp_b_pq[__min(6,__max(0,pq-(1-1)))];
 
   c = 0;
   c = c*9 + H_cbp_c_cls[__min(8,__max(0,cls-(1-1)))];
@@ -37,7 +37,7 @@ void H_cbp_make( const H_cbp_v & D, tcx & X ) {
 
   d = 0;
   d = d*4 + H_cbp_d_inc[__min(3,__max(0,inc-(1-1)))];
-  d = d*17 + H_cbp_d_em[__min(16,__max(0,em-(1-1)))];
+  d = d*10 + H_cbp_d_em[__min(16,__max(0,em-(1-1)))];
   d = d*9 + H_cbp_d_cls[__min(8,__max(0,cls-(1-1)))];
 
   e = 0;

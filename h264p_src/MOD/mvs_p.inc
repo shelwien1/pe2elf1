@@ -42,6 +42,7 @@ void H_mvs_make( const H_mvs_v & D, tcx & X ) {
 
   d = 0;
   d = d*4 + H_mvs_d_kind[__min(3,__max(0,kind-(1-1)))];
+  d = d*2 + ((comp>0+(1-1)));
   d = d*9 + H_mvs_d_pd[__min(8,__max(0,pd-(1-1)))];
   d = d*8 + H_mvs_d_ma[__min(7,__max(0,ma-(1-1)))];
   d = d*4 + H_mvs_d_nr[__min(3,__max(0,nr-(1-1)))];
@@ -75,7 +76,7 @@ void H_mvs_make( const H_mvs_v & D, tcx & X ) {
 
   w = 0;
   w = w*4 + H_mvs_w_kind[__min(3,__max(0,kind-(1-1)))];
-  w = w*9 + H_mvs_w_pd[__min(8,__max(0,pd-(1-1)))];
+  w = w*4 + H_mvs_w_pd[__min(8,__max(0,pd-(1-1)))];
   w = w*8 + H_mvs_w_ma[__min(7,__max(0,ma-(1-1)))];
   w = w*4 + H_mvs_w_nr[__min(3,__max(0,nr-(1-1)))];
 

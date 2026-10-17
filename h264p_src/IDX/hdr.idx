@@ -71,7 +71,7 @@ Number rT, 1, 0!00100000
 Number rG, 1, 0!01011010
 Number rS1, 1, 0!00110
 Number rS2, 1, 0!00110
-Number lr, 1, 0!01100
+Number lr, 1, 0!10001
 Number lrm, 1, 0!01100
 Number mbm, 1, 0!00000000
 Number mwA, 1, 0!00000000

@@ -54,7 +54,7 @@ Index s
  s_pq: pq, 1!111111111111
 
 Index f
- f_k8: k8, 1!11
+ f_k8: k8, 1!00
  f_dr: dr, 1!11111111
 
 Index m
@@ -81,7 +81,7 @@ Number rA, 1, 0!11100100
 Number rB, 1, 0!00010001
 Number rC, 1, 0!00000000
 Number rE, 1, 0!01000000
-Number rH, 1, 0!01100000
+Number rH, 1, 0!01000100
 Number rD, 1, 0!11111111
 Number rT, 1, 0!00110111
 Number rG, 1, 0!01011010
