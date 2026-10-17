@@ -2,12 +2,15 @@
 #  IDX/IDX-FORMAT.md is the format; ../mk.sh regenerates MOD/cbf_h.inc and
 #  MOD/cbf_p.inc from this file and cbf.inc.
 #
-#  Whether a block of coefficients has a nonzero one. cat is the block's
-#  ctxBlockCat; na/nb the nonzero coefficients of the blocks A and B (5 for
-#  none), intra the macroblock is intra, q6 QP/6, np the nonzero blocks so far
-#  in its 8x8 block (for chroma: in the macroblock), pos the block's place in
-#  its 8x8 block, crcb for a Cr block the Cb block (0 none, 1 zero, 2 not), col
-#  the same block in the previous picture of the type (2 none).
+#  The number of nonzero coefficients of a block, 0 for none (kn 0), or
+#  less 1 where the block is known to have one (kn 1: CABAC 8x8 blocks
+#  without coded_block_flag). cat is the block's ctxBlockCat; na/nb the
+#  nonzero coefficients of the blocks A and B (9 for none), intra the
+#  macroblock is intra, q6 QP/6, np the nonzero blocks so far in its 8x8
+#  block (for chroma: in the macroblock), pos the block's place in its 8x8
+#  block, crcb for a Cr block the Cb block (0 none, 1 zero, 2 not), col the
+#  same block in the previous picture of the type (2 none), nc CAVLC's nC
+#  (class).
 
 Prefix H_cbf
 Debug 1
@@ -15,8 +18,8 @@ Const 0
 
 Index a
  a_cat: cat, 1!1111111111111
- a_na: na, 1!11111
- a_nb: nb, 1!11111
+ a_na: na, 1!111111111
+ a_nb: nb, 1!111111111
  a_intra: intra, 1!1
 
 Index b
@@ -24,17 +27,23 @@ Index b
  b_np: np, 1!111
  b_pos: pos, 1!111
  b_crcb: crcb, 1!11
+ b_kn: kn, 1!1
 
 Index c
  c_cat: cat, 1!1111111111111
  c_q6: q6, 1!11111111
  c_col: col, 1!11
+ c_kn: kn, 1!1
 
 Index d
  d_cat: cat, 1!1111111111111
+ d_nc: nc, 1!11111
+ d_md: md, 1!1111111111111111111
+ d_kn: kn, 1!1
 
 Index s
  s_cat: cat, 1!1111111111111
+ s_kn: kn, 1!1
 
 Index f
  f_cat: cat, 1!1111111111111
@@ -42,12 +51,13 @@ Index f
 
 Index m
  m_cat: cat, 1!1111111111111
+ m_kn: kn, 1!1
 
 Index t
- t_cat: cat, 1!0
+ t_cat: cat, 1!1111111111111
 
 Index n
- n_cat: cat, 1!0
+ n_cat: cat, 1!1111111111111
 
 Index g
  g_cat: cat, 1!0

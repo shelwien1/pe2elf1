@@ -22,8 +22,8 @@ constexpr int H_cbp_ND = 7, H_cbp_MND = 1, H_cbp_NG = 1;
 constexpr int H_ipm_ND = 19, H_ipm_MND = 1, H_ipm_NG = 1;
 constexpr int H_mvs_ND = TC_NODE, H_mvs_MND = TC_MNODE, H_mvs_NG = 27;
 constexpr int H_qpd_ND = TC_NODE, H_qpd_MND = TC_MNODE, H_qpd_NG = 1;
-constexpr int H_cbf_ND = 1, H_cbf_MND = 1, H_cbf_NG = 1;
-constexpr int H_sig_ND = 2, H_sig_MND = 1, H_sig_NG = 1;
+constexpr int H_cbf_ND = TC_NODE, H_cbf_MND = TC_MNODE, H_cbf_NG = 1;
+constexpr int H_sig_ND = 1, H_sig_MND = 1, H_sig_NG = 1;
 constexpr int H_lvl_ND = TC_NODE, H_lvl_MND = TC_MNODE, H_lvl_NG = 1;
 constexpr int H_sgn_ND = 1, H_sgn_MND = 1, H_sgn_NG = 1;
 constexpr int H_pcm_ND = TC_NODE, H_pcm_MND = TC_MNODE, H_pcm_NG = 3;
@@ -34,12 +34,12 @@ struct H_skp_v { int st, a3, b3, col, c9, cd, run, cnt, eq, lf, af; };
 struct H_mbt_v { int st, ca, cb, cc, nsk; };
 struct H_cbp_v { int inc, pc, cls, col, q6, st; };
 struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col; };
-struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, col; };
+struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp; };
 struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st; };
-struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col; };
-struct H_sig_v { int cg, pos, nc, cnt, fld, q6; };
-struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot; };
-struct H_sgn_v { int cg, pos, sa, sb, scb, mag; };
+struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md; };
+struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6; };
+struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm; };
+struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md; };
 struct H_pcm_v { int pl, dp, pd, pd2; };
 
 #include "MOD/nal_h.inc"
@@ -89,11 +89,11 @@ static T* tc_table() {
              H_##F##_hS, H_##F##_hF, H_##F##_hM, H_##F##_hT, H_##F##_hN)
 
 // where the bits go (-v)
-enum { STG_NAL, STG_HDR, STG_RAW, STG_SKIP, STG_MBT, STG_CBP, STG_IPM, STG_MVS, STG_QPD, STG_CBF, STG_SIG, STG_LVL,
-       STG_SGN, STG_PCM, STG_N };
+enum { STG_NAL, STG_HDR, STG_RAW, STG_SKIP, STG_MBT, STG_CBP, STG_IPM, STG_MVS, STG_MVD, STG_MVSG, STG_QPD, STG_CBF,
+       STG_SIG, STG_LVL, STG_SGN, STG_PCM, STG_N };
 static const char* const kStage[STG_N] = {"NAL units", "headers", "bytes", "skip, end", "mb_type", "cbp, 8x8",
-                                          "intra modes", "motion", "qp delta", "block flags", "significance",
-                                          "levels", "signs", "pcm"};
+                                          "intra modes", "sub, ref", "mvd", "mvd signs", "qp delta", "coeff counts",
+                                          "significance", "levels", "signs", "pcm"};
 
 // the fields of the nal family: the container and what the syntax leaves out
 enum { F_MORE, F_TYPE, F_REF, F_ZEROS, F_VERB, F_LEN, F_PADCHG, F_PADON, F_PADFRAME, F_TRAIL, F_DROP, F_NBITS,
@@ -107,8 +107,10 @@ struct MbInfo {
   uint32_t pic;  // Model::pic_ when it was coded
   uint8_t skip, cls, qp, cbp, t8, cpred, i16m, field;
   uint8_t modes[16];        // Intra4x4/8x8 modes of the 4x4 blocks, raster order (2 for other macroblocks)
-  int8_t ref[2][4];         // ref_idx of the 8x8 blocks
+  int8_t ref[2][4];         // ref_idx of the 8x8 blocks as coded
+  int8_t rf[2][4];          // refIdxLX of the 8x8 blocks, -1 where list X is not used
   int16_t mvd[2][16][2];    // mvd of the 4x4 blocks
+  int16_t mv[2][16][2];     // mvLX of the 4x4 blocks, reconstructed
   int8_t coef[3][16][16];   // coefficients of the 4x4 blocks (Y, Cb, Cr) by scan position, clipped
   int8_t dc[3][16];         // Intra16x16 DC and chroma DC coefficients
 };
@@ -119,7 +121,9 @@ struct MbCol {
   uint8_t valid, skip, cls, qp, cbp, t8, cpred, field;
   uint8_t modes[16];
   int8_t ref[2][4];
+  int8_t rf[2][4];
   uint8_t mvq[2][16][2];  // tc_qlog |mvd|
+  int16_t mv[2][16][2];
   uint16_t nzm[3];        // 4x4 blocks with coefficients
   uint8_t dcm;            // DC blocks with coefficients
 };
@@ -300,6 +304,9 @@ struct Model {
   const MbCol* col_ = nullptr;
   int sub_[4] = {};
   int prev_mode_ = 9, mvx_ = 0;
+  int parts_ = 0, subshape_[4] = {};  // partitions of the macroblock: 16x16, 16x8, 8x16, 8x8; sub-macroblock shapes
+  int mvp_[2] = {}, sp_[2] = {}, pdv_[2] = {};  // the current partition: mvp, spread of the neighbours, col - mvp
+  bool pdn_ = false;                             // no col vector
 
   int idx(const MbState* n) const { return (int)(n - mbs_); }
   const MbInfo* info(const MbState* n) const { return n ? &info_[idx(n)] : nullptr; }
@@ -357,7 +364,9 @@ struct Model {
     mi_->pic = pic_;
     mi_->qp = (uint8_t)(qp_pred_ + qp_off_);
     memset(mi_->modes, 2, sizeof mi_->modes);
+    memset(mi_->rf, -1, sizeof mi_->rf);
     col_ = hcur_[addr_].valid ? &hcur_[addr_] : nullptr;
+    parts_ = 0;
     qpd_coded_ = false;
     prev_mode_ = 9;
     mb_open_ = true;
@@ -377,6 +386,8 @@ struct Model {
     c.field = mi_->field = s.field;
     memcpy(c.modes, mi_->modes, sizeof c.modes);
     memcpy(c.ref, mi_->ref, sizeof c.ref);
+    memcpy(c.rf, mi_->rf, sizeof c.rf);
+    memcpy(c.mv, mi_->mv, sizeof c.mv);
     for (int l = 0; l < 2; l++)
       for (int b = 0; b < 16; b++)
         for (int k = 0; k < 2; k++) c.mvq[l][b][k] = (uint8_t)tc_qlog(mi_->mvd[l][b][k]);
@@ -427,6 +438,10 @@ struct Model {
     if (v) {
       mi_->skip = 1;
       mi_->cls = CL_SKIP;
+      if (sc_->stype_ == kB)
+        mv_direct(15);
+      else
+        mv_pskip();
       last_qpd_ = 0;
       run_++;
       finish_mb();
@@ -547,6 +562,11 @@ struct Model {
           t = mbt_bit(4, ENC && t == 2) ? 2 : 1;
     }
     mi_->cls = (uint8_t)class_of(stype, t);
+    if (stype == kB)
+      parts_ = t <= 3 ? 0 : t == 22 ? 3 : t < 22 ? 2 - (t & 1) : 0;
+    else if (stype == kP || stype == kSP)
+      parts_ = t < 3 ? t : 3;
+    if (stype == kB && t == 0) mv_direct(15);
     tc_syms[STG_MBT]++;
     return t;
   }
@@ -700,7 +720,7 @@ struct Model {
   int sub(int i, int v) {
     tc_stage = STG_MVS;
     bool b = sc_->stype_ == kB;
-    H_mvs_v D = {b, 0, 0, i ? sub_[i - 1] + 1 : 0, 0, 0, 0, 0, i, 0, 0};
+    H_mvs_v D = {b, 0, 0, i ? sub_[i - 1] + 1 : 0, 0, 0, 0, 0, i, 0, 0, 0};
     tcx X;
     H_mvs_make(D, X);
     f_mvs.select(X);
@@ -708,8 +728,142 @@ struct Model {
     for (int k = b ? 3 : 1; k >= 0; k--) node = node * 2 + f_mvs.bit(node, ENC && (v >> k & 1));
     int r = node - (b ? 16 : 4);
     sub_[i] = r;
+    subshape_[i] = b ? kBSubShape[r % 13] : r;
+    if (i == 3 && b) mv_direct((sub_[0] == 0) | (sub_[1] == 0) << 1 | (sub_[2] == 0) << 2 | (sub_[3] == 0) << 3);
     tc_syms[STG_MVS]++;
     return r;
+  }
+
+  // --- motion vectors, reconstructed as the decoder does (8.4.1): what the
+  // mvd is coded against
+  struct MvN {
+    bool avail;  // the partition is there (it may be intra or not use the list)
+    int ref, mv[2];
+  };
+  // the place of the partition with the 4x4 block (x, y) of the current
+  // macroblock in decoding order
+  int part_ord(int x, int y) const {
+    switch (parts_) {
+      case 0:
+        return 0;
+      case 1:
+        return y >> 1;
+      case 2:
+        return x >> 1;
+      default: {
+        int i = (y >> 1) * 2 + (x >> 1), sh = subshape_[i];
+        return 4 * i + (sh == 0 ? 0 : sh == 1 ? y & 1 : sh == 2 ? x & 1 : (y & 1) * 2 + (x & 1));
+      }
+    }
+  }
+  // the motion of the neighbouring 4x4 block (x, y) of the current
+  // macroblock, x in -1..4, y in -1..3, for a partition at place ord
+  // (8.4.1.3.2); approximate at the corners of MBAFF macroblock pairs
+  MvN mv_nb(int list, int x, int y, int ord) const {
+    MvN r = {false, -1, {0, 0}};
+    const MbState* s;
+    const MbInfo* m;
+    int i = 0;
+    if (x >= 0 && y >= 0) {
+      if (x > 3 || part_ord(x, y) > ord) return r;  // not decoded yet
+      s = sc_->cur_;
+      m = mi_;
+      i = y * 4 + x;
+    } else if ((x < 0 && y < 0) || x > 3) {  // D or C, in the macroblock above left or right
+      if (mbaff_ || addr_ < width_) return r;
+      int a = x < 0 ? (addr_ % width_ ? addr_ - width_ - 1 : -1) : (addr_ % width_ < width_ - 1 ? addr_ - width_ + 1 : -1);
+      if (a < 0 || mbs_[a].slice != sc_->slice_id_) return r;
+      s = &mbs_[a];
+      m = &info_[a];
+      i = x < 0 ? 15 : 12;
+    } else {
+      s = sc_->nb4(x, y, i);
+      if (!s) return r;
+      m = &info_[idx(s)];
+    }
+    r.avail = true;
+    int ref = m->rf[list][(i >> 3) * 2 + ((i & 3) >> 1)];
+    if (ref < 0) return r;
+    r.ref = ref;
+    r.mv[0] = m->mv[list][i][0];
+    r.mv[1] = m->mv[list][i][1];
+    if (mbaff_ && s != sc_->cur_) {
+      if (sc_->cur_->field && !s->field) {
+        r.mv[1] /= 2;
+        r.ref *= 2;
+      } else if (!sc_->cur_->field && s->field) {
+        r.mv[1] *= 2;
+        r.ref >>= 1;
+      }
+    }
+    return r;
+  }
+  static int median3(int a, int b, int c) { return a + b + c - std::min(a, std::min(b, c)) - std::max(a, std::max(b, c)); }
+  // the prediction of the motion vector of a partition (8.4.1.3); nbs gets
+  // its neighbours A, B and C
+  void mv_pred(int list, int x, int y, int w, int h, int ref, int* p, MvN* nbs = nullptr) const {
+    int ord = part_ord(x, y);
+    MvN a = mv_nb(list, x - 1, y, ord), b = mv_nb(list, x, y - 1, ord), c = mv_nb(list, x + w, y - 1, ord);
+    if (!c.avail) c = mv_nb(list, x - 1, y - 1, ord);
+    if (nbs) {
+      nbs[0] = a;
+      nbs[1] = b;
+      nbs[2] = c;
+    }
+    const MvN* d = nullptr;
+    if (w == 4 && h == 2)
+      d = y == 0 ? (b.ref == ref ? &b : nullptr) : (a.ref == ref ? &a : nullptr);
+    else if (w == 2 && h == 4)
+      d = x == 0 ? (a.ref == ref ? &a : nullptr) : (c.ref == ref ? &c : nullptr);
+    if (!d) {
+      if (!b.avail && !c.avail && a.avail) b = c = a;
+      int n = (a.ref == ref) + (b.ref == ref) + (c.ref == ref);
+      if (n == 1) d = a.ref == ref ? &a : b.ref == ref ? &b : &c;
+    }
+    if (d) {
+      p[0] = d->mv[0];
+      p[1] = d->mv[1];
+    } else {
+      for (int k = 0; k < 2; k++) p[k] = median3(a.mv[k], b.mv[k], c.mv[k]);
+    }
+  }
+  void set_mv(int list, int x, int y, int w, int h, int ref, const int* p) {
+    for (int yy = y; yy < y + h; yy++)
+      for (int xx = x; xx < x + w; xx++)
+        for (int k = 0; k < 2; k++) mi_->mv[list][yy * 4 + xx][k] = (int16_t)tc_clamp(p[k], -32768, 32767);
+    for (int yy = y; yy < y + h; yy += 2)
+      for (int xx = x; xx < x + w; xx += 2) mi_->rf[list][(yy >> 1) * 2 + (xx >> 1)] = (int8_t)ref;
+  }
+  // P_Skip (8.4.1.1)
+  void mv_pskip() {
+    parts_ = 0;
+    MvN a = mv_nb(0, -1, 0, 0), b = mv_nb(0, 0, -1, 0);
+    int p[2] = {0, 0};
+    if (a.avail && b.avail && !(a.ref == 0 && !a.mv[0] && !a.mv[1]) && !(b.ref == 0 && !b.mv[0] && !b.mv[1]))
+      mv_pred(0, 0, 0, 4, 4, 0, p);
+    set_mv(0, 0, 0, 4, 4, 0, p);
+  }
+  // B direct, spatial (8.4.1.2.2), for the 8x8 blocks of mask; without
+  // colZeroFlag, which needs the motion of the first picture of list 1.
+  // Temporal direct is taken for spatial.
+  static int minpos(int a, int b) { return a >= 0 && b >= 0 ? std::min(a, b) : std::max(a, b); }
+  void mv_direct(int mask) {
+    int saved = parts_, ref[2], mv[2][2] = {{0, 0}, {0, 0}};
+    parts_ = 0;
+    for (int l = 0; l < 2; l++) {
+      MvN a = mv_nb(l, -1, 0, 0), b = mv_nb(l, 0, -1, 0), c = mv_nb(l, 4, -1, 0);
+      if (!c.avail) c = mv_nb(l, -1, -1, 0);
+      ref[l] = minpos(a.ref, minpos(b.ref, c.ref));
+    }
+    bool zero = ref[0] < 0 && ref[1] < 0;
+    if (zero) ref[0] = ref[1] = 0;
+    for (int l = 0; l < 2; l++)
+      if (!zero && ref[l] >= 0) mv_pred(l, 0, 0, 4, 4, ref[l], mv[l]);
+    for (int b8 = 0; b8 < 4; b8++)
+      if (mask >> b8 & 1)
+        for (int l = 0; l < 2; l++)
+          if (ref[l] >= 0) set_mv(l, (b8 & 1) * 2, (b8 >> 1) * 2, 2, 2, ref[l], mv[l]);
+    parts_ = saved;
   }
   static int part_size(int w, int h) { return w * h == 16 ? 0 : w * h == 8 ? 1 : w * h == 4 ? 2 : 3; }
   int ref(int list, int x, int y, int w, int h, int v) {
@@ -728,7 +882,8 @@ struct Model {
     D.rf = b8 ? 1 + mi_->ref[list][b8 - 1] : 0;
     D.pi = b8;
     D.nr = sc_->num_ref_[list] - 1;
-    D.col = col_ && col_->cls < CL_INXN ? 1 + col_->ref[list][b8] : 0;
+    D.pd = col_ && col_->cls < CL_INXN ? 1 + col_->ref[list][b8] : 0;
+    D.sp = 0;
     tcx X;
     H_mvs_make(D, X);
     v = cm_int(f_mvs.code(X, ENC ? v : 0), 64);
@@ -739,7 +894,20 @@ struct Model {
   }
   int mvd(int list, int comp, int x, int y, int w, int h, int v) {
     tc_stage = STG_MVS;
-    int ia, ib, b8 = (y >> 1) * 2 + (x >> 1);
+    int ia, ib, b8 = (y >> 1) * 2 + (x >> 1), ref = sc_->cur_->ref[list][b8];
+    if (!comp) {
+      MvN nbs[3];
+      mv_pred(list, x, y, w, h, ref, mvp_, nbs);
+      for (int k = 0; k < 2; k++) {
+        sp_[k] = -1;
+        for (int j = 0; j < 3; j++)
+          if (nbs[j].ref >= 0) sp_[k] = std::max(sp_[k], abs(nbs[j].mv[k] - mvp_[k]));
+        pdv_[k] = 0;
+      }
+      pdn_ = !col_ || col_->rf[list][b8] < 0;
+      if (!pdn_)
+        for (int k = 0; k < 2; k++) pdv_[k] = col_->mv[list][y * 4 + x][k] - mvp_[k];
+    }
     const MbInfo* a = info(sc_->nb4(x - 1, y, ia));
     const MbInfo* b = info(sc_->nb4(x, y - 1, ib));
     int va = a ? a->mvd[list][ia][comp] : 0, vb = b ? b->mvd[list][ib][comp] : 0;
@@ -751,19 +919,31 @@ struct Model {
     D.mb = tc_qlog(vb);
     D.oth = comp ? tc_qlog(mvx_) : 0;
     D.ps = part_size(w, h);
-    D.rf = sc_->cur_->ref[list][b8];
+    D.rf = ref;
     D.pi = b8;
     D.nr = sc_->num_ref_[list] - 1;
-    D.col = col_ ? col_->mvq[list][y * 4 + x][comp] : 0;
+    D.pd = pdn_ ? 0 : 1 + tc_qlog(pdv_[comp]);
+    D.sp = sp_[comp] < 0 ? 0 : 1 + tc_qlog(sp_[comp]);
     tcx X;
     H_mvs_make(D, X);
-    u32 sc = (u32)(sgn3(va) * 3 + sgn3(vb) + (comp ? 9 * sgn3(mvx_) : 0));
-    v = cm_int(f_mvs.codes(X, ENC ? v : 0, sc), 1 << 30);
-    if (!comp) mvx_ = v;
+    u32 sc = (u32)(sgn3(pdv_[comp]) * 9 + sgn3(va) * 3 + sgn3(vb));
+    tc_stage = STG_MVD;
+    tc_syms[STG_MVD]++;
+    v = cm_int(f_mvs.code(X, ENC ? abs(v) : 0), 1 << 30) * (ENC && v < 0 ? -1 : 1);
+    if (v) {
+      tc_stage = STG_MVSG;
+      tc_syms[STG_MVSG]++;
+      if (f_mvs.sign(sc, v < 0)) v = -abs(v);
+    }
+    if (!comp) {
+      mvx_ = v;
+    } else {
+      int mv[2] = {mvp_[0] + mvx_, mvp_[1] + v};
+      set_mv(list, x, y, w, h, ref, mv);
+    }
     int16_t s = (int16_t)tc_clamp(v, -32767, 32767);
     for (int yy = y; yy < y + h; yy++)
       for (int xx = x; xx < x + w; xx++) mi_->mvd[list][yy * 4 + xx][comp] = s;
-    tc_syms[STG_MVS]++;
     return v;
   }
 
@@ -888,90 +1068,104 @@ struct Model {
       for (int j = 0; j < n; j++) d[j + g.off] = (int8_t)tc_clamp(c[j], -127, 127);
     }
   }
-  // nonzero coefficients of a neighbouring block, 5 for none
+  // nonzero coefficients of a neighbouring block, 9 for none
   int nb_count(const Nb& n, const Geo& g) const {
-    if (!n.s) return 5;
+    if (!n.s) return 9;
     if (g.kind == 0) return n.s->cbf_dc[g.plane];
-    return std::min<int>(n.s->nz[g.plane][n.i], 4);
+    return std::min<int>(n.s->nz[g.plane][n.i], 8);
   }
   int block_nc(const Geo& g) const {
     if (g.kind == 0) return g.plane && sc_->chroma_ != 3 ? 0 : sc_->nc_luma(g.plane, 0, 0);
     if (g.kind == 2) return sc_->nc_chroma(g.plane - 1, g.x, g.y);
     return sc_->nc_luma(g.plane, g.x, g.y);
   }
+  // the prediction of a block: its Intra4x4/8x8 mode (0-8), Intra16x16 (9-12)
+  // or chroma (13-16) mode, or for inter blocks the size of the mvd (17-19)
+  int block_mode(const Geo& g) const {
+    if (mi_->cls == CL_INXN && (g.plane == 0 || sc_->chroma_ == 3)) return mi_->modes[g.y * 4 + g.x];
+    if (mi_->cls == CL_I16 && (g.plane == 0 || sc_->chroma_ == 3)) return 9 + mi_->i16m;
+    if (mi_->cls >= CL_INXN) return 13 + mi_->cpred;
+    int x = g.kind == 2 ? g.x * 2 : g.x, y = g.kind == 2 ? g.y * 2 : g.y;
+    if (g.kind == 0) x = y = 0;
+    int m = abs(mi_->mvd[0][y * 4 + x][0]) + abs(mi_->mvd[0][y * 4 + x][1]) + abs(mi_->mvd[1][y * 4 + x][0]) +
+            abs(mi_->mvd[1][y * 4 + x][1]);
+    return 17 + (m > 0) + (m > 8);
+  }
   void block(int cat, int idx, int* c, int n, bool coded) {
     Geo g = geo(cat, idx);
     const MbState& cur = *sc_->cur_;
     Nb na = nb_block(g, 0), nb = nb_block(g, 1);
     int q = q6();
-    if (!coded) {
-      tc_stage = STG_CBF;
-      H_cbf_v D;
-      D.cat = cat;
-      D.na = nb_count(na, g);
-      D.nb = nb_count(nb, g);
-      D.intra = mi_->cls >= CL_INXN;
-      D.q6 = q;
-      D.np = 0;
-      if (g.kind == 1)
-        for (int b = idx & ~3; b < idx; b++) D.np += cur.nz[g.plane][blk_y(b) * 4 + blk_x(b)] != 0;
-      else if (g.kind == 2)
-        for (int b = idx - idx % sc_->ch_blocks_; b < idx; b++) {
-          int bb = b % sc_->ch_blocks_;
-          D.np += cur.nz[g.plane][(bb >> 1) * 2 + (bb & 1)] != 0;
-        }
-      D.pos = g.pos;
-      D.crcb = 0;
-      if (g.plane == 2 && sc_->chroma_ != 3)
-        D.crcb = 1 + (g.kind == 0 ? cur.cbf_dc[1] : cur.nz[1][g.y * 2 + g.x] != 0);
-      else if (g.plane == 2)
-        D.crcb = 1 + (g.kind == 0 ? cur.cbf_dc[1] : cur.nz[1][g.y * 4 + g.x] != 0);
-      D.col = 2;
-      if (col_) D.col = g.kind == 0 ? col_->dcm >> g.plane & 1 : col_->nzm[g.plane] >> (g.kind == 2 ? g.y * 2 + g.x : g.y * 4 + g.x) & 1;
-      tcx X;
-      H_cbf_make(D, X);
-      f_cbf.select(X);
-      tc_syms[STG_CBF]++;
-      if (!f_cbf.bit(0, ENC && count_nonzero(c, n) != 0)) {
-        for (int i = 0; i < n; i++) c[i] = 0;
-        store_coef(g, c, n);
-        return;
+    int nc = nc_class(block_nc(g)), md = block_mode(g);
+    // the number of nonzero coefficients
+    tc_stage = STG_CBF;
+    H_cbf_v D;
+    D.cat = cat;
+    D.na = nb_count(na, g);
+    D.nb = nb_count(nb, g);
+    D.intra = mi_->cls >= CL_INXN;
+    D.q6 = q;
+    D.np = 0;
+    if (g.kind == 1)
+      for (int b = idx & ~3; b < idx; b++) D.np += cur.nz[g.plane][blk_y(b) * 4 + blk_x(b)] != 0;
+    else if (g.kind == 2)
+      for (int b = idx - idx % sc_->ch_blocks_; b < idx; b++) {
+        int bb = b % sc_->ch_blocks_;
+        D.np += cur.nz[g.plane][(bb >> 1) * 2 + (bb & 1)] != 0;
       }
+    D.pos = g.pos;
+    D.crcb = 0;
+    if (g.plane == 2 && sc_->chroma_ != 3)
+      D.crcb = 1 + (g.kind == 0 ? cur.cbf_dc[1] : cur.nz[1][g.y * 2 + g.x] != 0);
+    else if (g.plane == 2)
+      D.crcb = 1 + (g.kind == 0 ? cur.cbf_dc[1] : cur.nz[1][g.y * 4 + g.x] != 0);
+    D.col = 2;
+    if (col_)
+      D.col = g.kind == 0 ? col_->dcm >> g.plane & 1
+                          : col_->nzm[g.plane] >> (g.kind == 2 ? g.y * 2 + g.x : g.y * 4 + g.x) & 1;
+    D.nc = nc;
+    D.kn = coded;
+    D.md = md;
+    tcx X;
+    H_cbf_make(D, X);
+    int total = cm_int(f_cbf.code(X, ENC ? count_nonzero(c, n) - coded : 0), n) + coded;
+    if (total > n) cm_fail("corrupt stream: %d coefficients in a block of %d", total, n);
+    tc_syms[STG_CBF]++;
+    if (!total) {
+      for (int i = 0; i < n; i++) c[i] = 0;
+      store_coef(g, c, n);
+      return;
     }
-    // the significance map, CABAC's way: per position whether the
-    // coefficient is nonzero, and then whether it is the last one
+    // where they are: per position, whether the coefficient is nonzero,
+    // knowing how many are still to come
     tc_stage = STG_SIG;
-    int nc = nc_class(block_nc(g));
     bool fld = sc_->field_mb();
-    int last = n - 1;
-    if (ENC)
-      while (last > 0 && !c[last]) last--;
     bool sig[64];
-    int cnt = 0, i;
-    H_sig_v S = {cat, 0, nc, 0, fld, q};
-    for (i = 0; i < n - 1; i++) {
-      S.pos = i;
-      S.cnt = cnt;
-      tcx X;
-      H_sig_make(S, X);
-      f_sig.select(X);
-      sig[i] = f_sig.bit(0, ENC && c[i] != 0);
-      tc_syms[STG_SIG]++;
+    int rem = total, last = 0, cnt = total;
+    H_sig_v S = {cat, 0, 0, 0, md, nc, fld, q};
+    for (int i = 0; rem; i++) {
+      if (n - i == rem) {
+        sig[i] = true;
+      } else {
+        S.pos = i;
+        S.rem = tc_qlog(rem);
+        S.zl = tc_qlog(n - i - rem);
+        tcx Y;
+        H_sig_make(S, Y);
+        f_sig.select(Y);
+        sig[i] = f_sig.bit(0, ENC && c[i] != 0);
+        tc_syms[STG_SIG]++;
+      }
       if (sig[i]) {
-        cnt++;
-        if (f_sig.bit(1, ENC && i == last)) break;
+        rem--;
+        last = i;
       }
     }
-    if (i == n - 1) {
-      sig[i] = true;
-      cnt++;
-    }
-    last = i;
     // the magnitudes, from the last coefficient back
     tc_stage = STG_LVL;
     int mag[64];
     int g1 = 0, e1 = 0;
-    H_lvl_v L = {cat, 0, 0, nc, 0, 0, 0, q, tc_qlog(cnt)};
+    H_lvl_v L = {cat, 0, 0, nc, 0, 0, 0, q, tc_qlog(cnt), md, 0};
     for (int k = last; k >= 0; k--) {
       if (!sig[k]) continue;
       L.g1 = g1;
@@ -983,6 +1177,7 @@ struct Model {
       H_lvl_make(L, X);
       int a = cm_int(f_lvl.code(X, ENC ? abs(c[k]) - 1 : 0), 1 << 24);
       mag[k] = a + 1;
+      L.pm = std::min(a + 1, 4);
       if (a)
         g1++;
       else
@@ -991,7 +1186,7 @@ struct Model {
     }
     // the signs
     tc_stage = STG_SGN;
-    H_sgn_v G = {cat, 0, 0, 0, 3, 0};
+    H_sgn_v G = {cat, 0, 0, 0, 3, 0, md};
     bool cr = g.plane == 2;
     for (int k = last; k >= 0; k--) {
       if (!sig[k]) {
@@ -1019,7 +1214,8 @@ struct Model {
   }
 
   // --- I_PCM: the alignment bits, and the samples as differences to the
-  // one to the left (above, in the first column): the pcm family
+  // one to the left (above, in the first column), modulo the bit depth: the
+  // pcm family
   void pcm(int& align, int nb, int* s, int n) {
     align = (int)nal(F_ALIGN, nb, ENC ? align : 0);
     tc_stage = STG_PCM;
@@ -1034,11 +1230,12 @@ struct Model {
         for (int x = 0; x < w; x++, i++) {
           if (i >= n) cm_fail("internal: I_PCM sample count");
           int pred = x ? s[i - 1] : y ? s[i - w] : 1 << (depth - 1);
+          int half = 1 << (depth - 1), mask = (1 << depth) - 1;
           H_pcm_v D = {p, depth - 8, sq2(d1), sq2(d2)};
           tcx X;
           H_pcm_make(D, X);
-          i64 d = f_pcm.codes(X, ENC ? s[i] - pred : 0, (u32)p);
-          s[i] = pred + cm_int(d, 1 << 16);
+          i64 d = f_pcm.codes(X, ENC ? ((s[i] - pred + half) & mask) - half : 0, (u32)p);
+          s[i] = (pred + cm_int(d, 1 << 16)) & mask;
           d2 = d1;
           d1 = d;
           tc_syms[STG_PCM]++;

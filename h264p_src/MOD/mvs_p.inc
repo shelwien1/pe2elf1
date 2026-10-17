@@ -13,8 +13,8 @@
 
 void H_mvs_make( const H_mvs_v & D, tcx & X ) {
   int a, b, c, d, s, f, m, t, n, g;
-  int kind = D.kind, comp = D.comp, lst = D.lst, ma = D.ma, mb = D.mb, oth = D.oth, ps = D.ps, rf = D.rf, pi = D.pi, nr = D.nr, col = D.col;
-  (void) kind;  (void) comp;  (void) lst;  (void) ma;  (void) mb;  (void) oth;  (void) ps;  (void) rf;  (void) pi;  (void) nr;  (void) col;
+  int kind = D.kind, comp = D.comp, lst = D.lst, ma = D.ma, mb = D.mb, oth = D.oth, ps = D.ps, rf = D.rf, pi = D.pi, nr = D.nr, pd = D.pd, sp = D.sp;
+  (void) kind;  (void) comp;  (void) lst;  (void) ma;  (void) mb;  (void) oth;  (void) ps;  (void) rf;  (void) pi;  (void) nr;  (void) pd;  (void) sp;
 
   a = 0;
   a = a*4 + H_mvs_a_kind[__min(3,__max(0,kind-(1-1)))];
@@ -22,6 +22,7 @@ void H_mvs_make( const H_mvs_v & D, tcx & X ) {
   a = a*8 + H_mvs_a_ma[__min(7,__max(0,ma-(1-1)))];
   a = a*8 + H_mvs_a_mb[__min(7,__max(0,mb-(1-1)))];
   a = a*6 + H_mvs_a_oth[__min(5,__max(0,oth-(1-1)))];
+  a = a*9 + H_mvs_a_sp[__min(8,__max(0,sp-(1-1)))];
 
   b = 0;
   b = b*4 + H_mvs_b_kind[__min(3,__max(0,kind-(1-1)))];
@@ -34,25 +35,30 @@ void H_mvs_make( const H_mvs_v & D, tcx & X ) {
   c = 0;
   c = c*4 + H_mvs_c_kind[__min(3,__max(0,kind-(1-1)))];
   c = c*2 + ((comp>0+(1-1)));
-  c = c*8 + H_mvs_c_col[__min(7,__max(0,col-(1-1)))];
-  c = c*4 + H_mvs_c_nr[__min(3,__max(0,nr-(1-1)))];
+  c = c*9 + H_mvs_c_pd[__min(8,__max(0,pd-(1-1)))];
+  c = c*9 + H_mvs_c_sp[__min(8,__max(0,sp-(1-1)))];
 
   d = 0;
   d = d*4 + H_mvs_d_kind[__min(3,__max(0,kind-(1-1)))];
   d = d*2 + ((comp>0+(1-1)));
+  d = d*9 + H_mvs_d_pd[__min(8,__max(0,pd-(1-1)))];
+  d = d*8 + H_mvs_d_ma[__min(7,__max(0,ma-(1-1)))];
+  d = d*4 + H_mvs_d_nr[__min(3,__max(0,nr-(1-1)))];
 
   s = 0;
   s = s*4 + H_mvs_s_kind[__min(3,__max(0,kind-(1-1)))];
   s = s*2 + ((comp>0+(1-1)));
+  s = s*9 + H_mvs_s_pd[__min(8,__max(0,pd-(1-1)))];
 
   f = 0;
   f = f*4 + H_mvs_f_kind[__min(3,__max(0,kind-(1-1)))];
   f = f*2 + ((comp>0+(1-1)));
-  f = f*3 + ((oth>1+(1-1))+(oth>2+(1-1)));
+  f = f*9 + H_mvs_f_sp[__min(8,__max(0,sp-(1-1)))];
 
   m = 0;
   m = m*4 + H_mvs_m_kind[__min(3,__max(0,kind-(1-1)))];
   m = m*2 + ((comp>0+(1-1)));
+  m = m*6 + H_mvs_m_pd[__min(5,__max(0,pd-(1-1)))];
 
   t = 0;
   t = t*4 + H_mvs_t_kind[__min(3,__max(0,kind-(1-1)))];

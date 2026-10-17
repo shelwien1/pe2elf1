@@ -2,11 +2,11 @@
 #  IDX/IDX-FORMAT.md is the format; ../mk.sh regenerates MOD/sig_h.inc and
 #  MOD/sig_p.inc from this file and sig.inc.
 #
-#  The significance map in CABAC's form: significant_coeff_flag (node 0) and
-#  last_significant_coeff_flag (node 1) for each scan position up to the last.
-#  cg is the block's ctxBlockCat, pos the scan position, nc CAVLC's nC of the
-#  block (class), cnt the significant coefficients so far, fld field scan, q6
-#  QP/6.
+#  The significance map, given the number of nonzero coefficients: whether
+#  the coefficient at each scan position is nonzero, until none remain. cg
+#  is the block's ctxBlockCat, pos the scan position, rem the nonzero
+#  coefficients still to come and zl the zero ones (tc_qlog), tot all
+#  nonzero ones (tc_qlog), nc CAVLC's nC (class), fld field scan, q6 QP/6.
 
 Prefix H_sig
 Debug 1
@@ -15,25 +15,27 @@ Const 0
 Index a
  a_cg: cg, 1!1111111111111
  a_pos: pos, 1!111111111111111111111111111111111111111111111111111111111111111
- a_nc: nc, 1!11111
- a_cnt: cnt, 1!111
+ a_rem: rem, 1!1111111111
 
 Index b
  b_cg: cg, 1!1111111111111
  b_pos: pos, 1!111111111111111111111111111111111111111111111111111111111111111
- b_fld: fld, 1!1
+ b_md: md, 1!1111111111111111111
 
 Index c
  c_cg: cg, 1!1111111111111
  c_pos: pos, 1!111111111111111111111111111111111111111111111111111111111111111
  c_q6: q6, 1!11111111
+ c_fld: fld, 1!1
 
 Index d
  d_cg: cg, 1!1111111111111
- d_cnt: cnt, 1!1111111
+ d_rem: rem, 1!1111111111
+ d_zl: zl, 1!1111111111
 
 Index s
  s_cg: cg, 1!1111111111111
+ s_rem: rem, 1!1111111111
 
 Index f
  f_cg: cg, 1!1111111111111
@@ -42,6 +44,7 @@ Index f
 Index m
  m_cg: cg, 1!1111111111111
  m_pos: pos, 1!100100001
+ m_rem: rem, 1!1110000000
 
 Index t
  t_cg: cg, 1!0

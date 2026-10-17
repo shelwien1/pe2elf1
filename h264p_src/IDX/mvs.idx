@@ -8,8 +8,10 @@
 #  B (classes), oth the class of the other component already coded, ps the
 #  partition size (0 16x16 .. 3 4x4), rf the ref_idx of the partition (or of
 #  A for ref_idx), pi the partition's place in the macroblock, nr the
-#  references of the list, col the same partition in the previous picture of
-#  the type.
+#  references of the list; for mvd pd the vector of the same partition in the
+#  previous picture of the type less the predicted vector, sp how far the
+#  vectors of the neighbours A, B, C are from the predicted one (1 + tc_qlog,
+#  0 none), for ref_idx pd the ref_idx in the previous picture.
 
 Prefix H_mvs
 Debug 1
@@ -21,6 +23,7 @@ Index a
  a_ma: ma, 1!1111111
  a_mb: mb, 1!1111111
  a_oth: oth, 1!11111
+ a_sp: sp, 1!11111111
 
 Index b
  b_kind: kind, 1!111
@@ -33,25 +36,30 @@ Index b
 Index c
  c_kind: kind, 1!111
  c_comp: comp, 1!1
- c_col: col, 1!1111111
- c_nr: nr, 1!111
+ c_pd: pd, 1!11111111
+ c_sp: sp, 1!11111111
 
 Index d
  d_kind: kind, 1!111
  d_comp: comp, 1!1
+ d_pd: pd, 1!11111111
+ d_ma: ma, 1!1111111
+ d_nr: nr, 1!111
 
 Index s
  s_kind: kind, 1!111
  s_comp: comp, 1!1
+ s_pd: pd, 1!11111111
 
 Index f
  f_kind: kind, 1!111
  f_comp: comp, 1!1
- f_oth: oth, 1!011
+ f_sp: sp, 1!11111111
 
 Index m
  m_kind: kind, 1!111
  m_comp: comp, 1!1
+ m_pd: pd, 1!11111
 
 Index t
  t_kind: kind, 1!111

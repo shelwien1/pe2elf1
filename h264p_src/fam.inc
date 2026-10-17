@@ -249,20 +249,22 @@ template <int f_DEC> struct tc_fam {
     }
     return (i64)(u - 1) + 3;
   }
+  //  The sign of a nonzero value, under the g index of the last select()
+  //  and sign context sc: 1 negative.
+  int sign(u32 sc, int s) {
+    if(!G)
+      cm_fail("internal: a family with no sign counter coded a sign");
+    cm_cnt g = G[bg * (u32)ng + sc];
+    s = tc_bit<f_DEC>(g.P(), ENC && s);
+    g.upd(s, rG, mwG);
+    G[bg * (u32)ng + sc] = g;
+    return s;
+  }
   i64 codes(const tcx &v, i64 x, u32 sc) {
     i64 m = code(v, ENC ? (x < 0 ? -x : x) : 0);
-    int s;
     if(!m)
       return 0;
-    if(G) {
-      cm_cnt g = G[bg * (u32)ng + sc];
-      s = tc_bit<f_DEC>(g.P(), ENC && x < 0);
-      g.upd(s, rG, mwG);
-      G[bg * (u32)ng + sc] = g;
-    } else {
-      cm_fail("internal: a family with no sign counter coded a sign");
-    }
-    return s ? -m : m;
+    return sign(sc, x < 0) ? -m : m;
   }
 };
 

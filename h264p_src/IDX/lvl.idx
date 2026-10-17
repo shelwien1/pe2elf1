@@ -20,7 +20,7 @@ Index a
 
 Index b
  b_cg: cg, 1!1111111111111
- b_g1: g1, 1!1111
+ b_pm: pm, 1!1111
  b_pos: pos, 1!11111
  b_tot: tot, 1!1111111
 
@@ -33,10 +33,12 @@ Index c
 Index d
  d_cg: cg, 1!1111111111111
  d_g1: g1, 1!1111
+ d_md: md, 1!1111111111111111111
 
 Index s
  s_cg: cg, 1!1111111111111
  s_g1: g1, 1!1111
+ s_pm: pm, 1!1111
 
 Index f
  f_cg: cg, 1!1111111111111
