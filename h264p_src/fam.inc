@@ -13,10 +13,10 @@
 namespace h264p {
 
 constexpr int TC_MIXN = 19;
-constexpr int TC_NODE = 29;
+constexpr int TC_NODE = 13;
 constexpr int TC_MNODE = 169;
 constexpr int TC_NBMAX = 62;
-static INLINE int tc_node_len(int k) { return 3 + (k < 25 ? k : 25); }
+static INLINE int tc_node_len(int k) { return 3 + (k < 9 ? k : 9); }
 static INLINE int tc_node_man(int nb, int p) { return (nb > 12 ? 12 : nb) * 13 + (p > 12 ? 12 : p); }
 static void tc_vfits(const char *what, sz vol, sz nodes) {
   if(!(vol > 0 && vol < ((sz)1 << 31) && nodes > 0))
