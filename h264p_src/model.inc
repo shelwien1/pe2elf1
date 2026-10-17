@@ -321,6 +321,11 @@ struct SignPred {
 constexpr int SignPred::kT4[4][4];
 constexpr int SignPred::kT8[8][8];
 
+// the weight of a quarter sample of vector difference (from mvp) against a
+// sample of template difference in the mvd's template matching: x264's
+// motion search weighs the mvd too (a fixed weight did better than its
+// lambda by QP)
+constexpr int kTmLambda = 2;
 template <int f_DEC>
 struct Model {
   static constexpr int ENC = f_DEC == 0;
@@ -1400,11 +1405,11 @@ struct Model {
         if (nbs[j].ref == ref) cand[nc][0] = nbs[j].mv[0], cand[nc][1] = nbs[j].mv[1], nc++;
       if (!pdn_) cand[nc][0] = col_->mv[list][y * 4 + x][0], cand[nc][1] = col_->mv[list][y * 4 + x][1], nc++;
       cand[nc][0] = cand[nc][1] = 0, nc++;
-      tmn_ = !rec_.tm_search(list, ref, x * 4, y * 4, w * 4, h * 4, tmv_, false, cand, nc);
+      tmn_ = !rec_.tm_search(list, ref, x * 4, y * 4, w * 4, h * 4, tmv_, false, cand, nc, nullptr, kTmLambda);
     } else if (!tmn_) {
       // the horizontal component known
       tmv_[0] = mvp_[0] + mvx_;
-      tmn_ = !rec_.tm_search(list, ref, x * 4, y * 4, w * 4, h * 4, tmv_, true);
+      tmn_ = !rec_.tm_search(list, ref, x * 4, y * 4, w * 4, h * 4, tmv_, true, nullptr, 0, nullptr, kTmLambda);
     }
     int dv = tmn_ ? 0 : tmv_[comp] - mvp_[comp];
     const MbInfo* a = info(sc_->nb4(x - 1, y, ia));
