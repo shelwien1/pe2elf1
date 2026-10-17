@@ -1702,7 +1702,7 @@ struct Model {
     // the number of nonzero coefficients
     tc_stage = STG_CBF;
     H_cbf_v D = {};
-    D.pz = pok ? 1 + std::min(pnz, 4) : 0;
+    D.pz = pok ? 1 + std::min(pnz, 15) : 0;
     D.tn = tok ? 1 + std::min(tnz, 4) : 0;
     D.cat = cat;
     D.na = nb_count(na, g);
