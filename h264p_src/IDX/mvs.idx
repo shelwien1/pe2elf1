@@ -11,7 +11,10 @@
 #  references of the list; for mvd pd the vector of the same partition in the
 #  previous picture of the type less the predicted vector, sp how far the
 #  vectors of the neighbours A, B, C are from the predicted one (1 + tc_qlog,
-#  0 none), for ref_idx pd the ref_idx in the previous picture.
+#  0 none), for ref_idx pd the ref_idx in the previous picture; tv for mvd
+#  the template match's vector less the predicted one (1 + sq2, 0 none),
+#  for ref_idx 1 + the reference it matches best; tq how well it matched
+#  (mvd), how much better than on the first reference (ref_idx).
 
 Prefix H_mvs
 Debug 1

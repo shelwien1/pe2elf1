@@ -1426,6 +1426,26 @@ struct Model {
     D.pd = col_ && col_->cls < CL_INXN ? 1 + col_->ref[list][b8] : 0;
     D.sp = 0;
     D.tv = 0;
+    // the reference the template matches best (of the first eight), and by
+    // how much better than the first
+    if (rec_.active && sc_->num_ref_[list] > 1) {
+      int bm = INT_MAX, m0 = 0, rbest = -1;
+      for (int r = 0; r < std::min(sc_->num_ref_[list], 8); r++) {
+        int p[2], miss, cand[4][2], nc = 0;
+        MvN nbs[3];
+        mv_pred(list, x, y, w, h, r, p, nbs);
+        for (int j = 0; j < 3; j++)
+          if (nbs[j].ref == r) cand[nc][0] = nbs[j].mv[0], cand[nc][1] = nbs[j].mv[1], nc++;
+        cand[nc][0] = cand[nc][1] = 0, nc++;
+        if (!rec_.tm_search(list, r, x * 4, y * 4, w * 4, h * 4, p, false, cand, nc, &miss, kTmLambda)) break;
+        if (!r) m0 = miss;
+        if (miss < bm) bm = miss, rbest = r;
+      }
+      if (rbest >= 0) {
+        D.tv = 1 + rbest;
+        D.tq = 1 + tc_clamp(tc_qlog(m0 - bm), 0, 11);
+      }
+    }
     tcx X;
     H_mvs_make(D, X);
     int pr[TC_NODE];
