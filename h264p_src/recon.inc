@@ -447,6 +447,7 @@ struct Recon {
 
   void mb_start(int addr) {
     mb_addr = addr;
+    prx_ok = false;
     res.m4 = 0;
     res.m8 = res.mdc = res.mcdc = res.mcac[0] = res.mcac[1] = 0;
     mb_prepared = mb_dc = false;
@@ -652,10 +653,16 @@ struct Recon {
 
   // the edge of the luma n x n block at (bx, by) (in units of n) of the
   // macroblock at addr; n 4 or 8. Returns whether the top and left are there.
-  void luma_edge(int addr, int n, int bx, int by, int* e, bool& top, bool& left) {
-    int w = cur->w, mx = addr % cur->mbw * 16, my = addr / cur->mbw * 16;
-    int x0 = mx + bx * n, y0 = my + by * n;
+  void luma_edge(int addr, int n, int bx, int by, int* e, bool& top, bool& left) const {
+    int w = cur->w;
     const uint8_t* Y = cur->y.data();
+    edge_of(addr, n, bx, by, e, top, left, [&](int x, int y) { return (int)Y[y * w + x]; });
+  }
+  // the same from samples at(x, y) (picture coordinates)
+  template <class F>
+  void edge_of(int addr, int n, int bx, int by, int* e, bool& top, bool& left, F at) const {
+    int mx = addr % cur->mbw * 16, my = addr / cur->mbw * 16;
+    int x0 = mx + bx * n, y0 = my + by * n;
     bool aA = intra_avail(addr, nb_mb(addr, -1, 0)), aB = intra_avail(addr, nb_mb(addr, 0, -1));
     bool aC = intra_avail(addr, nb_mb(addr, 1, -1)), aD = intra_avail(addr, nb_mb(addr, -1, -1));
     int per = 16 / n;  // blocks in a row of the macroblock
@@ -676,10 +683,10 @@ struct Recon {
       int nb_i = (ny >> 1) * 8 + (nx >> 1) * 4 + (ny & 1) * 2 + (nx & 1);
       tr = nb_i < cur_i;
     }
-    e[0] = tl ? Y[(y0 - 1) * w + x0 - 1] : 128;
-    for (int i = 0; i < n; i++) e[1 + i] = top ? Y[(y0 - 1) * w + x0 + i] : 128;
-    for (int i = 0; i < n; i++) e[1 + n + i] = tr ? Y[(y0 - 1) * w + x0 + n + i] : e[n];
-    for (int i = 0; i < n; i++) e[1 + 2 * n + i] = left ? Y[(y0 + i) * w + x0 - 1] : 128;
+    e[0] = tl ? at(x0 - 1, y0 - 1) : 128;
+    for (int i = 0; i < n; i++) e[1 + i] = top ? at(x0 + i, y0 - 1) : 128;
+    for (int i = 0; i < n; i++) e[1 + n + i] = tr ? at(x0 + n + i, y0 - 1) : e[n];
+    for (int i = 0; i < n; i++) e[1 + 2 * n + i] = left ? at(x0 - 1, y0 + i) : 128;
     if (n == 8) filter8(e, top, left, tl);
   }
   // reference sample filtering (8.3.2.2.1)
@@ -1596,6 +1603,20 @@ struct Recon {
   // list 0's first reference (else the last reference decoded), predicted
   // from that picture's samples around it by each mode, the one that misses
   // least (sum of absolute differences); -1 no picture
+  // a stand-in for the source of the current (intra) macroblock: its
+  // prediction from proxy_pic by a vector (proxy_build), luma and chroma
+  uint8_t prx_y[256], prx_c[2][64];
+  bool prx_ok = false;
+  bool proxy_build(const int* mv) {
+    prx_ok = false;
+    const RPic* P = active ? proxy_pic() : nullptr;
+    if (!P) return false;
+    int mx = mb_addr % cur->mbw * 16, my = mb_addr / cur->mbw * 16;
+    mc_luma(P, mx, my, 16, 16, mv[0], mv[1], prx_y);
+    for (int c = 0; c < 2; c++) mc_chroma(P, c, mx / 2, my / 2, 8, 8, mv[0], mv[1], prx_c[c]);
+    prx_ok = true;
+    return true;
+  }
   const RPic* proxy_pic() const {
     const RPic* P = nlist[0] > 0 && list[0][0] ? list[0][0] : !dpb.empty() ? dpb.back().get() : nullptr;
     return P && P->w == cur->w && P->h == cur->h ? P : nullptr;
@@ -1687,28 +1708,20 @@ struct Recon {
       lv[k] = W[p] < 0 ? -q : q;
     }
   }
-  // The levels of a block of n x n (4, 8) were the source what the proxy
-  // picture shows (proxy_pic, displaced by dx, dy luma samples): the proxy
-  // less the prediction in the picture, through fquant4 or fquant8 at qp.
-  // plane 0 luma, 1 and 2 chroma; x, y in its samples of the current
-  // macroblock. false: no proxy.
-  bool proxy_levels(int plane, int x, int y, int qp, int dx, int dy, int* lv, int n = 4) const {
-    if (!active) return false;
-    const RPic* P = proxy_pic();
-    if (!P) return false;
-    int w = plane ? cur->w / 2 : cur->w, h = plane ? cur->h / 2 : cur->h, m = plane ? 8 : 16;
+  // The levels of a block of n x n (4, 8) were the source the proxy
+  // (proxy_build): the proxy less the prediction in the picture, through
+  // fquant4 or fquant8 at qp. plane 0 luma, 1 and 2 chroma; x, y in its
+  // samples of the current macroblock. false: no proxy.
+  bool proxy_levels(int plane, int x, int y, int qp, int* lv, int n = 4) const {
+    if (!active || !prx_ok) return false;
+    int w = plane ? cur->w / 2 : cur->w, m = plane ? 8 : 16;
     int mx = mb_addr % cur->mbw * m + x, my = mb_addr / cur->mbw * m + y;
-    if (plane) {
-      dx = dx >= 0 ? dx / 2 : -((1 - dx) / 2);
-      dy = dy >= 0 ? dy / 2 : -((1 - dy) / 2);
-    }
     const std::vector<uint8_t>& cp = plane == 0 ? cur->y : plane == 1 ? cur->u : cur->v;
-    const std::vector<uint8_t>& pp = plane == 0 ? P->y : plane == 1 ? P->u : P->v;
     const uint8_t* C = cp.data() + my * w + mx;
-    const uint8_t* Q = pp.data() + clip3(0, h - n, my + dy) * w + clip3(0, w - n, mx + dx);
+    const uint8_t* Q = (plane ? prx_c[plane - 1] : prx_y) + y * m + x;
     int r[64];
     for (int j = 0; j < n; j++)
-      for (int i = 0; i < n; i++) r[j * n + i] = Q[j * w + i] - C[j * w + i];
+      for (int i = 0; i < n; i++) r[j * n + i] = Q[j * m + i] - C[j * w + i];
     if (n == 8)
       fquant8(r, qp, true, lv);
     else
@@ -1717,27 +1730,20 @@ struct Recon {
   }
   // and for the DC blocks: Intra16x16's (plane 0: 16 levels in zigzag
   // order) and chroma's (planes 1, 2: 4 levels)
-  bool proxy_dc(int plane, int qp, int dx, int dy, int* lv) const {
-    if (!active) return false;
-    const RPic* P = proxy_pic();
-    if (!P) return false;
-    int w = plane ? cur->w / 2 : cur->w, h = plane ? cur->h / 2 : cur->h, m = plane ? 8 : 16, nb = m / 4;
+  bool proxy_dc(int plane, int qp, int* lv) const {
+    if (!active || !prx_ok) return false;
+    int w = plane ? cur->w / 2 : cur->w, m = plane ? 8 : 16, nb = m / 4;
     int mx = mb_addr % cur->mbw * m, my = mb_addr / cur->mbw * m;
-    if (plane) {
-      dx = dx >= 0 ? dx / 2 : -((1 - dx) / 2);
-      dy = dy >= 0 ? dy / 2 : -((1 - dy) / 2);
-    }
     const std::vector<uint8_t>& cp = plane == 0 ? cur->y : plane == 1 ? cur->u : cur->v;
-    const std::vector<uint8_t>& pp = plane == 0 ? P->y : plane == 1 ? P->u : P->v;
     const uint8_t* C = cp.data() + my * w + mx;
-    const uint8_t* Q = pp.data() + clip3(0, h - m, my + dy) * w + clip3(0, w - m, mx + dx);
+    const uint8_t* Q = plane ? prx_c[plane - 1] : prx_y;
     // the DC of each 4x4 block's transform: the sum of its residual
     int d[16], f[16];
     for (int by = 0; by < nb; by++)
       for (int bx = 0; bx < nb; bx++) {
         int sum = 0;
         for (int j = 0; j < 4; j++)
-          for (int i = 0; i < 4; i++) sum += Q[(by * 4 + j) * w + bx * 4 + i] - C[(by * 4 + j) * w + bx * 4 + i];
+          for (int i = 0; i < 4; i++) sum += Q[(by * 4 + j) * m + bx * 4 + i] - C[(by * 4 + j) * w + bx * 4 + i];
         d[by * nb + bx] = sum;
       }
     static const int mf0[6] = {13107, 11916, 10082, 9362, 8192, 7282};

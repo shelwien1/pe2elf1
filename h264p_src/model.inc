@@ -880,7 +880,18 @@ struct Model {
     if (pmv_ok_) return;
     pmv_ok_ = true;
     int p[2] = {0, 0};
-    if (sc_->stype_ != kI && sc_->stype_ != kSI) mv_pred(0, 0, 0, 4, 4, 0, p);
+    if (sc_->stype_ != kI && sc_->stype_ != kSI) {
+      MvN nbs[3];
+      mv_pred(0, 0, 0, 4, 4, 0, p, nbs);
+      // refined by template matching, from there, the neighbours' vectors, zero
+      int cand[4][2], nc = 0;
+      for (int j = 0; j < 3; j++)
+        if (nbs[j].ref == 0) cand[nc][0] = nbs[j].mv[0], cand[nc][1] = nbs[j].mv[1], nc++;
+      cand[nc][0] = cand[nc][1] = 0, nc++;
+      int t[2] = {p[0], p[1]};
+      if (rec_.tm_search(0, 0, 0, 0, 16, 16, t, false, cand, nc)) p[0] = t[0], p[1] = t[1];
+    }
+    rec_.proxy_build(p);
     pmv_[0] = (p[0] + 2) >> 2;
     pmv_[1] = (p[1] + 2) >> 2;
   }
@@ -1572,11 +1583,10 @@ struct Model {
       proxy_mv();
       int qp = mi_->qp - qp_off_;
       if (g.kind == 0)
-        pok = rec_.proxy_dc(g.plane, g.plane ? rec_.chroma_qp_of(g.plane - 1, qp) : qp, pmv_[0], pmv_[1], plv);
+        pok = rec_.proxy_dc(g.plane, g.plane ? rec_.chroma_qp_of(g.plane - 1, qp) : qp, plv);
       else
         pok = rec_.proxy_levels(g.kind == 2 ? g.plane : 0, g.x * 4, g.y * 4,
-                                g.kind == 2 ? rec_.chroma_qp_of(g.plane - 1, qp) : qp, pmv_[0], pmv_[1], plv,
-                                g.kind == 3 ? 8 : 4);
+                                g.kind == 2 ? rec_.chroma_qp_of(g.plane - 1, qp) : qp, plv, g.kind == 3 ? 8 : 4);
     }
     auto est = [&](int j) { return plv[std::min(j + g.off, g.kind == 3 ? 63 : g.kind == 0 && g.plane ? 3 : 15)]; };
     int pnz = 0;
