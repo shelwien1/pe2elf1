@@ -159,7 +159,12 @@ static INLINE i64 div_floor(i64 a, i64 b) { return a >= 0 ? a / b : -((-a + b - 
 // next from the energy of its prediction.
 struct AqFit {
   i64 n = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;
-  void clear() { n = sx = sy = sxx = sxy = 0; }
+  i64 lb = 266;  // the slope the last picture's line ended with (x264's at first)
+  void clear() {
+    i64 b;
+    if (slope(b)) lb = b;
+    n = sx = sy = sxx = sxy = 0;
+  }
   void add(int x, int q) {
     n++;
     sx += x;
@@ -167,13 +172,22 @@ struct AqFit {
     sxx += (i64)x * x;
     sxy += (i64)x * q;
   }
-  // 16 x the QP of energy x on the line; false while there is none
-  bool predict(int x, int& q16) const {
+  // QP per unit of x, x 4096; false while there are too few points for it
+  bool slope(i64& b) const {
     if (n < 9) return false;
     i64 den = n * sxx - sx * sx;
     if (den <= 0) return false;
-    i64 b = (n * sxy - sx * sy) * 4096 / den;  // QP per unit of x, x 4096
+    b = (n * sxy - sx * sy) * 4096 / den;
     b = b < 0 ? 0 : b > 768 ? 768 : b;
+    return true;
+  }
+  // 16 x the QP of energy x on the line (with fewer than 9 points, on the
+  // last picture's slope, x264's 1.0397 per doubling of the energy at
+  // first); false while there is none
+  bool predict(int x, int& q16) const {
+    i64 b;
+    if (!n || (!slope(b) && n >= 9)) return false;
+    if (n < 9) b = lb;
     q16 = (int)((16 * sy + 16 * b * ((i64)x * n - sx) / 4096) / n);
     return true;
   }
