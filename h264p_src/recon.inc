@@ -1623,9 +1623,11 @@ struct Recon {
   // rows) and to the left (2 columns) of the block misses least: whole
   // samples within 2, then halves, then quarters (only_y: the vertical
   // component only), cand the other vectors to start from; miss, 4 x the
-  // mean absolute difference there. l < 0: on proxy_pic. The template outside the macroblock
-  // only; false where none of it is decoded.
-  static constexpr int TM_T = 2;
+  // mean absolute difference there. l < 0: on proxy_pic, with 16 rows and
+  // columns and the block above right too (the proxy wants the content to
+  // match, a vector to code wants a thin template). The template outside the
+  // macroblock only; false where none of it is decoded.
+  static constexpr int TM_T = 2, TM_TP = 16;
   bool tm_search(int l, int r, int bx, int by, int bw, int bh, int* mv, bool only_y, const int (*cand)[2] = nullptr,
                  int ncand = 0, int* miss = nullptr, int lambda = 0, int finest = 1) const {
     if (!active) return false;
@@ -1659,9 +1661,11 @@ struct Recon {
       return s;
     };
     const int px = mv[0], py = mv[1];
+    const int T = l < 0 ? TM_TP : TM_T;
+    bool tr = l < 0 && top && x0 + bw + T <= w && mb_addr % mbw + 1 < mbw && db[mb_addr - mbw + 1].slice >= 0;
     auto cost = [&](int vx, int vy) {
-      return (top ? sad(x0, y0 - TM_T, bw, TM_T, vx, vy) : 0) + (left ? sad(x0 - TM_T, y0, TM_T, bh, vx, vy) : 0) +
-             lambda * (abs(vx - px) + abs(vy - py));
+      return (top ? sad(x0, y0 - T, bw, T, vx, vy) : 0) + (left ? sad(x0 - T, y0, T, bh, vx, vy) : 0) +
+             (tr ? sad(x0 + bw, y0 - T, T, T, vx, vy) : 0) + lambda * (abs(vx - px) + abs(vy - py));
     };
     int vx = mv[0], vy = mv[1], best = cost(vx, vy);
     // other places to start from
@@ -1693,7 +1697,7 @@ struct Recon {
     }
     mv[0] = vx;
     mv[1] = vy;
-    if (miss) *miss = best * 4 / ((top ? 2 * bw : 0) + (left ? 2 * bh : 0));
+    if (miss) *miss = best * 4 / ((top ? T * bw : 0) + (left ? T * bh : 0) + (tr ? T * T : 0));
     return true;
   }
   // The intra mode that would predict the block best in the last picture:
