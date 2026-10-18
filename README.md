@@ -174,15 +174,15 @@ On the test streams (`-v` shows where the bits go):
 
 | stream | H.264 | compressed | |
 |---|---:|---:|---:|
-| 00 | 815,140 | 567,859 | 69.7% |
-| 01 | 1,095,103 | 804,468 | 73.5% |
-| 02 | 28,143 | 26,257 | 93.3% |
-| 03 | 1,181,369 | 776,061 | 65.7% |
-| 04 | 484,238 | 384,050 | 79.3% |
+| 00 | 815,140 | 567,747 | 69.7% |
+| 01 | 1,095,103 | 804,363 | 73.5% |
+| 02 | 28,143 | 26,255 | 93.3% |
+| 03 | 1,181,369 | 775,776 | 65.7% |
+| 04 | 484,238 | 383,976 | 79.3% |
 
 The macroblock syntax takes 72.2% of what its CABAC coding takes (from
-3,536,129 to 2,553,434 bytes over these streams; whole streams go from
-3,603,993 to 2,558,695 bytes; `h264p_cm.md` section 9 has the figures by
+3,536,129 to 2,552,850 bytes over these streams; whole streams go from
+3,603,993 to 2,558,117 bytes; `h264p_cm.md` section 9 has the figures by
 syntax element). Speed is 0.03-0.13 MB of H.264 per second both ways, depending
 on the stream, and the model tables take about 215 MB.
 
@@ -324,5 +324,7 @@ list 1, so no ref_idx_l1):
 partitions of `test/h264p/jm_dp.264`).
 The streams in `test/h264p` cover what the others don't (see `gen.sh` there).
 The dumped values of all test streams were also compared, macroblock by
-macroblock, with the syntax elements traced by the JM reference decoder, and
-`t` and `r` were fuzzed with corrupted streams and TSV files.
+macroblock, with the syntax elements traced by the JM reference decoder;
+`t` and `r` were fuzzed with corrupted streams and TSV files, and `c` and
+`d` (built with ASan and UBSan, which report nothing on the test streams)
+with corrupted streams and compressed files.

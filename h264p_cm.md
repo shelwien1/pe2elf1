@@ -883,6 +883,7 @@ their gain on test/002:
 | how far the mvds of the neighbours were from their template matches' (size; direction for the sign) | mvd, mvd signs | 0.3 KB |
 | for mb_qp_delta, encoders other than x264: the slice's QP; the class of the energy (whose QP is no line of it: flat, then rising); the QP of the picture's last macroblock of the same kind and energy class | qp delta | 4.5 KB |
 | B: the vector temporal direct would give, as the template search's candidate and the temporal context; col's vector scaled by the POC distance it spanned, the neighbours' on other references scaled to the partition's | mvd, mvd signs | 3.9 KB |
+| the template search's second best start | mvd, mvd signs | 0.2 KB |
 | a 4:2:0 chroma block's count by the coefficients of the luma under it; a chroma or Intra16x16 AC block's by its DC (from the DC levels' transform) | count | 1.4 KB |
 | how far to trust the intra estimate: the template match of its vector, then how far the luma decoded so far is from it | coefficients, intra modes | 9 KB |
 | the best intra mode in the reference | intra modes | 4 KB |
@@ -911,16 +912,16 @@ with their defaults (0.6 KB: 02's 667 bytes of it take 84).
 | element | CABAC | model | |
 |---|---:|---:|---:|
 | skip, end | 336,175 | 221,360 | −34.2% |
-| mb_type | 365,120 | 259,488 | −28.9% |
+| mb_type | 365,120 | 259,423 | −28.9% |
 | cbp, transform_size_8x8_flag | 216,100 | 153,448 | −29.0% |
-| intra modes | 299,858 | 232,093 | −22.6% |
-| sub_mb_type, ref_idx, mvd | 504,865 | 404,281 | −19.9% |
+| intra modes | 299,858 | 231,807 | −22.7% |
+| sub_mb_type, ref_idx, mvd | 504,865 | 404,069 | −20.0% |
 | mb_qp_delta | 271,297 | 183,848 | −32.2% |
 | coded_block_flag, significance (count, significance) | 910,721 | 696,892 | −23.5% |
-| levels | 302,611 | 219,831 | −27.4% |
+| levels | 302,611 | 219,810 | −27.4% |
 | signs | 329,382 | 182,193 | −44.7% |
-| macroblock syntax | 3,536,129 | 2,553,434 | −27.8% |
-| whole streams (H.264 against compressed) | 3,603,993 | 2,558,695 | −29.0% |
+| macroblock syntax | 3,536,129 | 2,552,850 | −27.8% |
+| whole streams (H.264 against compressed) | 3,603,993 | 2,558,117 | −29.0% |
 
 The model tables take 215 MB.
 
