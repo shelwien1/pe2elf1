@@ -214,7 +214,7 @@ static int64_t tc_clamp64(int64_t v, int64_t lo, int64_t hi) { return v < lo ? l
 
 const int64_t kU32 = 0xFFFFFFFE;  // largest ue(v) value
 const int64_t kS32 = 0x7FFFFFFF;  // largest se(v) magnitude
-const int kMaxMbs = 1 << 20;      // largest picture size in macroblocks accepted
+const int kMaxMbs = 139264;       // largest picture size in macroblocks accepted (MaxFS of level 6.2)
 
 // ---------------------------------------------------------------------------
 
@@ -413,7 +413,7 @@ void code_filler(Syn& s) {
       s.br->skip(8);
       n++;
     }
-  n = s.vval(n, 0, 1 << 30);
+  n = s.vval(n, 0, 1 << 24);
   if (s.W)
     for (int64_t i = 0; i < n; i++) s.bw->put(0xFF, 8);
   s.end();

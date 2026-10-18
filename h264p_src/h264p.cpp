@@ -18,6 +18,8 @@
 #include <string>
 #include <vector>
 
+#include <sys/stat.h>
+
 #ifdef _WIN32
 #include <fcntl.h>
 #include <io.h>
@@ -338,6 +340,10 @@ bool find_trailer(const BitWriter& bw, int pad, const std::vector<uint8_t>& rbsp
   size_t zeros = 0;
   while (zeros < rbsp.size() && rbsp[rbsp.size() - 1 - zeros] == 0) zeros++;
   t.czw = (int64_t)(zeros / 2);
+  if (t.czw > (1 << 26)) {
+    why = "too many cabac_zero_words";
+    return false;
+  }
   std::vector<uint8_t> r(rbsp.begin(), rbsp.end() - 2 * (size_t)t.czw);
   if (o.data() != r) {
     // compare our bits up to and including the stop bit
@@ -581,6 +587,17 @@ FILE* open_out(const char* name) {
 
 void put(FILE* f, const std::string& s) { fwrite(s.data(), 1, s.size(), f); }
 
+// The exit status of a failed c or t, which leaves no output file behind
+// (only a regular file: the output may be /dev/null).
+int fail_out(FILE* f, const char* name) {
+  if (f != stdout) {
+    fclose(f);
+    struct stat st;
+    if (stat(name, &st) == 0 && S_ISREG(st.st_mode)) remove(name);
+  }
+  return 1;
+}
+
 int tsv_dump(const char* in_name, const char* out_name, const Options& opt) {
   FILE* fi = strcmp(in_name, "-") ? fopen(in_name, "rb") : stdin;
   if (!fi) {
@@ -669,7 +686,7 @@ int tsv_dump(const char* in_name, const char* out_name, const Options& opt) {
         fprintf(stderr, "h264p: NAL unit %ld (type %d) stored verbatim: %s\n", st.nals - 1, type, why.c_str());
       if (opt.strict && parsed_type(type)) {
         fprintf(stderr, "h264p: NAL unit %ld (type %d) cannot be converted: %s\n", st.nals - 1, type, why.c_str());
-        return 1;
+        return fail_out(f, out_name);
       }
     }
     if (out.size() > (1 << 22)) {
@@ -684,7 +701,7 @@ int tsv_dump(const char* in_name, const char* out_name, const Options& opt) {
   }
   if (rd.error()) {
     fprintf(stderr, "h264p: read error\n");
-    return 1;
+    return fail_out(f, out_name);
   }
   if (fi != stdin) fclose(fi);
   out.row("eof", (int64_t)rd.eof_zeros());
@@ -714,8 +731,14 @@ int tsv_restore(const char* in_name, const char* out_name, const Options& opt) {
   std::vector<uint8_t> buf;
   long nals = 0;
   auto flush = [&]() {
-    fwrite(buf.data(), 1, buf.size(), fo);
+    if (!buf.empty()) fwrite(buf.data(), 1, buf.size(), fo);
     buf.clear();
+  };
+  auto put_zeros = [&](int64_t n) {
+    for (; n > 0; n -= 1 << 20) {
+      buf.insert(buf.end(), (size_t)std::min<int64_t>(n, 1 << 20), 0);
+      if (buf.size() > (1 << 22)) flush();
+    }
   };
   try {
     const Row* first = in.peek();
@@ -731,8 +754,8 @@ int tsv_restore(const char* in_name, const char* out_name, const Options& opt) {
       } else if (r.is("nal") || r.is("nalx")) {
         nals++;
         int64_t zeros = r.num(1);
-        if (zeros < 0 || zeros > (1 << 30)) r.fail("bad zero count");
-        buf.insert(buf.end(), (size_t)zeros, 0);
+        if (zeros < 0 || zeros > ((int64_t)1 << 40)) r.fail("bad zero count");
+        put_zeros(zeros);
         buf.push_back(0);
         buf.push_back(0);
         buf.push_back(1);
@@ -768,8 +791,8 @@ int tsv_restore(const char* in_name, const char* out_name, const Options& opt) {
         }
       } else if (r.is("eof")) {
         int64_t n = r.num(1);
-        if (n < 0 || n > (1 << 30)) r.fail("bad zero count");
-        buf.insert(buf.end(), (size_t)n, 0);
+        if (n < 0 || n > ((int64_t)1 << 40)) r.fail("bad zero count");
+        put_zeros(n);
         eof = true;
       } else {
         r.fail("unexpected row");
@@ -850,7 +873,7 @@ int compress(const char* in_name, const char* out_name, const Options& opt) {
     tc_verbose = opt.verbose;
     rc.rc_Init();
     auto flush = [&]() {
-      fwrite(rc.buf.data(), 1, rc.buf.size(), fo);
+      if (!rc.buf.empty()) fwrite(rc.buf.data(), 1, rc.buf.size(), fo);
       out_bytes += rc.buf.size();
       rc.buf.clear();
     };
@@ -890,7 +913,7 @@ int compress(const char* in_name, const char* out_name, const Options& opt) {
       m.nal(F_REF, type, ref_idc);
       m.nal(F_ZEROS, type, (i64)zeros);
       prev_type = type;
-      const uint8_t* payload = &nal[1];
+      const uint8_t* payload = nal.data() + 1;
       size_t len = nal.size() - 1;
       bool slice = type == 1 || type == 5;
       bool newpic = starts_picture(type, payload, len);
@@ -945,7 +968,7 @@ int compress(const char* in_name, const char* out_name, const Options& opt) {
           fprintf(stderr, "h264p: NAL unit %ld (type %d) stored verbatim: %s\n", st.nals - 1, type, why.c_str());
         if (opt.strict && parsed_type(type)) {
           fprintf(stderr, "h264p: NAL unit %ld (type %d) cannot be converted: %s\n", st.nals - 1, type, why.c_str());
-          return 1;
+          return fail_out(fo, out_name);
         }
       }
       if (slice) ctx.pad.next_slice(newpic);
@@ -953,7 +976,7 @@ int compress(const char* in_name, const char* out_name, const Options& opt) {
     }
     if (rd.error()) {
       fprintf(stderr, "h264p: read error\n");
-      return 1;
+      return fail_out(fo, out_name);
     }
     if (fi != stdin) fclose(fi);
     m.nal(F_MORE, 0, 0);
@@ -963,9 +986,9 @@ int compress(const char* in_name, const char* out_name, const Options& opt) {
     m.nal(F_CRC, 0, crc.value() ^ kCrcXor);
     rc.rc_Quit();
     flush();
-  } catch (const CmError& e) {
+  } catch (const std::exception& e) {  // CmError, or no memory for the model
     fprintf(stderr, "h264p: %s: %s\n", in_name, e.what());
-    return 1;
+    return fail_out(fo, out_name);
   }
   if (ferror(fo) || (fo != stdout && fclose(fo))) {
     fprintf(stderr, "h264p: write error\n");
@@ -1012,8 +1035,14 @@ int decompress(const char* in_name, const char* out_name, const Options& opt) {
   long nals = 0;
   auto flush = [&]() {
     crc.add(buf);
-    fwrite(buf.data(), 1, buf.size(), fo);
+    if (!buf.empty()) fwrite(buf.data(), 1, buf.size(), fo);
     buf.clear();
+  };
+  auto put_zeros = [&](size_t n) {
+    for (; n; n -= std::min(n, (size_t)1 << 20)) {
+      buf.insert(buf.end(), std::min(n, (size_t)1 << 20), 0);
+      if (buf.size() > (1 << 22)) flush();
+    }
   };
   try {
     m.init();
@@ -1027,7 +1056,7 @@ int decompress(const char* in_name, const char* out_name, const Options& opt) {
       nals++;
       int type = (int)cm_count(m.nal(F_TYPE, prev_type, 0), 32);
       if (type == 32) {
-        buf.insert(buf.end(), cm_count(m.nal(F_ZEROS, 32, 0), 1 << 30), 0);
+        put_zeros(cm_count(m.nal(F_ZEROS, 32, 0), (i64)1 << 40));
         buf.push_back(0);
         buf.push_back(0);
         buf.push_back(1);
@@ -1035,7 +1064,7 @@ int decompress(const char* in_name, const char* out_name, const Options& opt) {
         continue;
       }
       int ref_idc = (int)cm_count(m.nal(F_REF, type, 0), 3);
-      buf.insert(buf.end(), cm_count(m.nal(F_ZEROS, type, 0), 1 << 30), 0);
+      put_zeros(cm_count(m.nal(F_ZEROS, type, 0), (i64)1 << 40));
       buf.push_back(0);
       buf.push_back(0);
       buf.push_back(1);
@@ -1050,8 +1079,8 @@ int decompress(const char* in_name, const char* out_name, const Options& opt) {
           ctx.pad.on = false;
       }
       if (!parsed_type(type) || m.nal(F_VERB, type, 0)) {
-        std::vector<uint8_t> b(cm_count(m.nal(F_LEN, type, 0), (i64)1 << 40));
-        for (auto& x : b) x = (uint8_t)m.raw(0);
+        std::vector<uint8_t> b;  // grown as the bytes come: the length may be corrupt
+        for (size_t n = cm_count(m.nal(F_LEN, type, 0), (i64)1 << 40); n; n--) b.push_back((uint8_t)m.raw(0));
         buf.insert(buf.end(), b.begin(), b.end());
         update_params(type, unescape(b.data(), b.size()), ctx);
       } else {
@@ -1075,7 +1104,7 @@ int decompress(const char* in_name, const char* out_name, const Options& opt) {
       if (slice) ctx.pad.next_slice(starts_picture(type, buf.data() + start, buf.size() - start));
       if (buf.size() > (1 << 22)) flush();
     }
-    buf.insert(buf.end(), cm_count(m.nal(F_EOFZ, 0, 0), 1 << 30), 0);
+    put_zeros(cm_count(m.nal(F_EOFZ, 0, 0), (i64)1 << 40));
     flush();
     if (m.nal(F_CRC, 0, 0) != (crc.value() ^ kCrcXor)) cm_fail("CRC mismatch: the stream did not decompress correctly");
     // the coder's flush leaves off the last bytes, so the decoder always
@@ -1141,14 +1170,19 @@ int main(int argc, char** argv) {
     usage();
     return 2;
   }
-  switch (argv[1][0]) {
-    case 'c':
-      return compress(files[0], files[1], opt);
-    case 'd':
-      return decompress(files[0], files[1], opt);
-    case 't':
-      return tsv_dump(files[0], files[1], opt);
-    default:
-      return tsv_restore(files[0], files[1], opt);
+  try {
+    switch (argv[1][0]) {
+      case 'c':
+        return compress(files[0], files[1], opt);
+      case 'd':
+        return decompress(files[0], files[1], opt);
+      case 't':
+        return tsv_dump(files[0], files[1], opt);
+      default:
+        return tsv_restore(files[0], files[1], opt);
+    }
+  } catch (const std::exception& e) {  // no memory
+    fprintf(stderr, "h264p: %s\n", e.what());
+    return 1;
   }
 }
