@@ -2025,6 +2025,23 @@ struct Recon {
       fquant4(r, qp, lv);
     return true;
   }
+  // the same of the prediction itself (in the picture, before the
+  // residual): its texture by frequency, in quarter levels
+  bool pred_levels(int plane, int x, int y, int qp, int* lv, int n = 4) const {
+    if (!active || !mb_prepared || mb_cls == 8) return false;
+    int w = plane ? cur->w / 2 : cur->w, m = plane ? 8 : 16;
+    int mx = mb_addr % cur->mbw * m + x, my = mb_addr / cur->mbw * m + y;
+    const std::vector<uint8_t>& cp = plane == 0 ? cur->y : plane == 1 ? cur->u : cur->v;
+    const uint8_t* C = cp.data() + my * w + mx;
+    int r[64];
+    for (int j = 0; j < n; j++)
+      for (int i = 0; i < n; i++) r[j * n + i] = C[j * w + i];
+    if (n == 8)
+      fquant8(r, qp, lv);
+    else
+      fquant4(r, qp, lv);
+    return true;
+  }
   // and for the DC blocks: Intra16x16's (plane 0: 16 levels in zigzag
   // order) and chroma's (planes 1, 2: 4 levels)
   bool proxy_dc(int plane, int qp, int* lv) const {

@@ -11,7 +11,9 @@
 #  up to 3; 5 + where the vector moves it; 0 none), sn whether it is nonzero
 #  in the blocks A and B (3 x A + B: 0 none, 1 zero, 2 not), hv which way
 #  the texture of the block's prediction runs (4 + log2 of its differences
-#  along rows over those along columns, -3 to 3; 0 flat or none).
+#  along rows over those along columns, -3 to 3; 0 flat or none), pf for an
+#  inter block the prediction's own level at the position (its transform
+#  quantized as a residual would be: 1 + tc_qlog of quarter levels, 0 none).
 
 Prefix H_sig
 Debug 1
@@ -86,6 +88,7 @@ Index l
  l_pe: pe, 1!111111111111111
  l_pr: pr, 1!1111111
  l_sn: sn, 1!11111111
+ l_pf: pf, 1!11111111111
 
 Index s
  s_cg: cg, 1!0000000000000
@@ -160,7 +163,7 @@ Number mb, 1, 0!01110000
 ! Number hI, 1, 0!11000
 ! Number hJ, 1, 0!11000
 ! Number hK, 1, 0!10101
-! Number hL, 1, 0!11000
+! Number hL, 1, 0!10101
 ! Number hD, 1, 0!11000
 ! Number hS, 1, 0!11000
 ! Number hF, 1, 0!11000

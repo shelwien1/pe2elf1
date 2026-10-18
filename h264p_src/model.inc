@@ -39,7 +39,7 @@ struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm, pr, dr, pq, mh, m
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, zd, cq, tq, rt; };
 struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac; };
 struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn, pq, ch, ds, hv; };
-struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz, pq, hb, ft, h3, pr, sn, hv; };
+struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz, pq, hb, ft, h3, pr, sn, hv, pf; };
 struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe, pl, tz, pq, lh, lt, ls, hv, fq; };
 struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md, pp, mg, ez, ts, pq, gh, se; };
 struct H_mvg_v { int comp, lst, ts, zs, ds, sa, sb, mag, tq, ox, ns; };
@@ -2205,6 +2205,13 @@ struct Model {
     // and the level estimates)
     SignPred sp;
     bool spok = cat <= 5 && (cat != 3 || sc_->chroma_ == 1) && sp.init(rec_, g, cat, mi_->qp - qp_off_, idx);
+    // the prediction's own levels by position (its texture by frequency):
+    // an inter residual's follow them
+    int pfl[64];
+    bool pfok = mi_->cls < CL_INXN && g.kind != 0 &&
+                rec_.pred_levels(g.plane, g.x * 4, g.y * 4,
+                                 g.plane ? rec_.chroma_qp_of(g.plane - 1, mi_->qp - qp_off_) : mi_->qp - qp_off_, pfl,
+                                 g.kind == 3 ? 8 : 4);
     // where they are: per position, whether the coefficient is nonzero,
     // knowing how many are still to come
     tc_stage = STG_SIG;
@@ -2259,6 +2266,7 @@ struct Model {
         }
         S.tz = tok ? 1 + 4 * tmv + std::min(abs(tcf(i)), 3) : 0;
         S.hv = hv;
+        S.pf = pfok ? 1 + std::min(tc_qlog(abs(pfl[std::min(i + g.off, g.kind == 3 ? 63 : 15)])), 10) : 0;
         // the same position in the blocks A and B (0 none, 1 zero, 2 not)
         S.sn = (na.m ? 1 + (coef_at(na.m, g, na.i, i) != 0) : 0) * 3 + (nb.m ? 1 + (coef_at(nb.m, g, nb.i, i) != 0) : 0);
         tcx Y;
