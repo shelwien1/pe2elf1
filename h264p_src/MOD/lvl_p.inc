@@ -31,7 +31,7 @@ void H_lvl_make( const H_lvl_v & D, tcx & X ) {
   b = b*4 + H_lvl_b_fq[__min(3,__max(0,fq-(1-1)))];
 
   c = 0;
-  c = c*14 + H_lvl_c_cg[__min(13,__max(0,cg-(1-1)))];
+  c = c*5 + H_lvl_c_cg[__min(13,__max(0,cg-(1-1)))];
   c = c*4 + H_lvl_c_sa[__min(3,__max(0,sa-(1-1)))];
   c = c*4 + H_lvl_c_sb[__min(3,__max(0,sb-(1-1)))];
   c = c*6 + H_lvl_c_q6[__min(8,__max(0,q6-(1-1)))];
@@ -53,7 +53,7 @@ void H_lvl_make( const H_lvl_v & D, tcx & X ) {
   h = 0;
   h = h*14 + H_lvl_h_cg[__min(13,__max(0,cg-(1-1)))];
   h = h*6 + H_lvl_h_pos[__min(5,__max(0,pos-(1-1)))];
-  h = h*12 + H_lvl_h_pl[__min(11,__max(0,pl-(1-1)))];
+  h = h*5 + H_lvl_h_pl[__min(11,__max(0,pl-(1-1)))];
   h = h*16 + H_lvl_h_pe[__min(15,__max(0,pe-(1-1)))];
   h = h*9 + H_lvl_h_tz[__min(8,__max(0,tz-(1-1)))];
 

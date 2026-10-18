@@ -142,7 +142,7 @@ Number rE, 1, 0!00000110
 Number rH, 1, 0!01000000
 Number rI, 1, 0!01000000
 Number rJ, 1, 0!01000000
-Number rK, 1, 0!11001010
+Number rK, 1, 0!10101110
 Number rL, 1, 0!01000000
 Number rD, 1, 0!11111111
 Number rT, 1, 0!00011110

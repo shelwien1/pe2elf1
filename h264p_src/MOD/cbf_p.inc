@@ -77,7 +77,6 @@ void H_cbf_make( const H_cbf_v & D, tcx & X ) {
   k = 0;
   k = k*14 + H_cbf_k_cat[__min(13,__max(0,cat-(1-1)))];
   k = k*10 + H_cbf_k_na[__min(9,__max(0,na-(1-1)))];
-  k = k*10 + H_cbf_k_nb[__min(9,__max(0,nb-(1-1)))];
   k = k*17 + H_cbf_k_pz[__min(16,__max(0,pz-(1-1)))];
 
   l = 0;

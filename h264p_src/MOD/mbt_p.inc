@@ -52,7 +52,7 @@ void H_mbt_make( const H_mbt_v & D, tcx & X ) {
   h = h*2 + ((st>1+(1-1)));
   h = h*10 + H_mbt_h_dh[__min(9,__max(0,dh-(1-1)))];
   h = h*17 + H_mbt_h_tb[__min(16,__max(0,tb-(1-1)))];
-  h = h*4 + H_mbt_h_nsk[__min(4,__max(0,nsk-(1-1)))];
+  h = h*2 + ((nsk>3+(1-1)));
   h = h*17 + H_mbt_h_bd[__min(16,__max(0,bd-(1-1)))];
 
   i = 0;
@@ -69,7 +69,7 @@ void H_mbt_make( const H_mbt_v & D, tcx & X ) {
 
   k = 0;
   k = k*10 + H_mbt_k_st[__min(9,__max(0,st-(1-1)))];
-  k = k*17 + H_mbt_k_tm[__min(16,__max(0,tm-(1-1)))];
+  k = k*6 + H_mbt_k_tm[__min(16,__max(0,tm-(1-1)))];
   k = k*5 + H_mbt_k_nsk[__min(4,__max(0,nsk-(1-1)))];
   k = k*9 + H_mbt_k_cc[__min(8,__max(0,cc-(1-1)))];
 

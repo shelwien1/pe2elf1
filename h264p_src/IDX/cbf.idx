@@ -81,7 +81,7 @@ Index j
 Index k
  k_cat: cat, 1!1111111111111
  k_na: na, 1!111111111
- k_nb: nb, 1!111111111
+ k_nb: nb, 1!000000000
  k_pz: pz, 1!1111111111111111
 
 Index l
@@ -148,7 +148,7 @@ Number mwD, 1, 0!11001000
 Number mwT, 1, 0!00001000
 Number mwG, 1, 0!00000000
 Number bw, 1, 0!10000
-Number mt, 1, 0!110
+Number mt, 1, 0!010
 Number qs, 1, 3!0000000
 Number qf, 1, 3!0010000
 Number mb, 1, 0!10000010

@@ -53,7 +53,6 @@ void H_ipm_make( const H_ipm_v & D, tcx & X ) {
   h = h*13 + H_ipm_h_rg[__min(12,__max(0,rg-(1-1)))];
 
   i = 0;
-  i = i*3 + ((k8>0+(1-1))+(k8>1+(1-1)));
   i = i*10 + H_ipm_i_pm[__min(9,__max(0,pm-(1-1)))];
   i = i*4 + H_ipm_i_dm[__min(9,__max(0,dm-(1-1)))];
   i = i*11 + H_ipm_i_ma[__min(10,__max(0,ma-(1-1)))];
