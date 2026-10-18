@@ -50,6 +50,9 @@ const char kMagic[] = "h264p";  // TSV files
 const int kVersion = 1;
 const char kCmMagic[] = "h264c";  // compressed streams, followed by the version byte
 const int kCmVersion = 1;
+// The CRC-32 at the end is coded XORed with this: a decoder fed past the
+// end of its input decodes zeros, and 0 is the CRC-32 of an empty stream.
+const uint32_t kCrcXor = 0x68323634;
 
 struct Options {
   bool verbose = false;
@@ -957,7 +960,7 @@ int compress(const char* in_name, const char* out_name, const Options& opt) {
     m.nal(F_EOFZ, 0, (i64)rd.eof_zeros());
     crc.zeros(rd.eof_zeros());
     in_bytes += rd.eof_zeros();
-    m.nal(F_CRC, 0, crc.value());
+    m.nal(F_CRC, 0, crc.value() ^ kCrcXor);
     rc.rc_Quit();
     flush();
   } catch (const CmError& e) {
@@ -1074,7 +1077,10 @@ int decompress(const char* in_name, const char* out_name, const Options& opt) {
     }
     buf.insert(buf.end(), cm_count(m.nal(F_EOFZ, 0, 0), 1 << 30), 0);
     flush();
-    if (m.nal(F_CRC, 0, 0) != crc.value()) cm_fail("CRC mismatch: the stream did not decompress correctly");
+    if (m.nal(F_CRC, 0, 0) != (crc.value() ^ kCrcXor)) cm_fail("CRC mismatch: the stream did not decompress correctly");
+    // the coder's flush leaves off the last bytes, so the decoder always
+    // reads past the end of a whole stream
+    if (!rc.over) cm_fail("corrupt stream: data after its end");
   } catch (const std::exception& e) {  // CmError, TsvError
     flush();
     fprintf(stderr, "h264p: %s: %s\n", in_name, e.what());
