@@ -16,7 +16,9 @@
 #  none); ds for an inter luma 4x4 block of a P or B slice, 1 + the score
 #  of x264's decimation its 8x8 block still owes after the blocks before it
 #  (4, or 6 for the macroblock's only coded 8x8 block, less theirs; 0 not
-#  applicable); hv as the sig family's.
+#  applicable); hv as the sig family's; ly for a 4:2:0 chroma block the
+#  coefficients of the luma under it (its 8x8 block; for DC the
+#  macroblock's), 1 + tc_qlog (0 luma).
 
 Prefix H_cbf
 Debug 1
@@ -27,6 +29,7 @@ Index a
  a_na: na, 1!110100101
  a_nb: nb, 1!111111111
  a_intra: intra, 1!1
+ a_ly: ly, 1!1111111111
 
 Index b
  b_cat: cat, 1!1111111111111
