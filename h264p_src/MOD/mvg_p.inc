@@ -70,7 +70,7 @@ void H_mvg_make( const H_mvg_v & D, tcx & X ) {
   l = l*3 + ((sb>0+(1-1))+(sb>1+(1-1)));
 
   s = 0;
-  s = s*10 + H_mvg_s_ts[__min(9,__max(0,ts-(1-1)))];
+  s = s*3 + ((ts>5+(1-1))+(ts>7+(1-1)));
   s = s*8 + H_mvg_s_mag[__min(7,__max(0,mag-(1-1)))];
 
   f = 0;

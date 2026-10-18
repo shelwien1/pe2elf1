@@ -103,7 +103,7 @@ static const int H_ipm_hN = (24+0) * (1);
 
 
 static const long long H_ipm_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 11), 11), 11); // 3993
-static const long long H_ipm_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 10), 10), 17); // 1700
+static const long long H_ipm_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 10), 10), 17); // 3400
 static const long long H_ipm_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 10), 10); // 300
 static const long long H_ipm_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 10), 10), 3); // 900
 static const long long H_ipm_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 10), 10), 13); // 3900

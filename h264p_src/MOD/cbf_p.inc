@@ -100,7 +100,7 @@ void H_cbf_make( const H_cbf_v & D, tcx & X ) {
   m = m*2 + ((kn>0+(1-1)));
 
   w = 0;
-  w = w*14 + H_cbf_w_cat[__min(13,__max(0,cat-(1-1)))];
+  w = w*2 + ((cat>0+(1-1)));
   w = w*5 + H_cbf_w_nc[__min(5,__max(0,nc-(1-1)))];
   w = w*5 + H_cbf_w_md[__min(19,__max(0,md-(1-1)))];
   w = w*2 + ((kn>0+(1-1)));

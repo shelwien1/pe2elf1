@@ -25,6 +25,7 @@ void H_ipm_make( const H_ipm_v & D, tcx & X ) {
   a = a*11 + H_ipm_a_mc[__min(10,__max(0,mc-(1-1)))];
 
   b = 0;
+  b = b*2 + ((k8>0+(1-1)));
   b = b*10 + H_ipm_b_mp[__min(9,__max(0,mp-(1-1)))];
   b = b*10 + H_ipm_b_pv[__min(9,__max(0,pv-(1-1)))];
   b = b*17 + H_ipm_b_mh[__min(16,__max(0,mh-(1-1)))];

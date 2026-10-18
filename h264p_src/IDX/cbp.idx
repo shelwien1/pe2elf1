@@ -25,7 +25,7 @@ Index a
 Index b
  b_inc: inc, 1!000
  b_col: col, 1!111111111111
- b_q6: q6, 1!11111111
+ b_q6: q6, 1!10100010
  b_pq: pq, 1!110001
 
 Index c
@@ -71,7 +71,7 @@ Index k
 
 Index l
  l_inc: inc, 1!111
- l_pc: pc, 1!1111
+ l_pc: pc, 1!1100
  l_en: en, 1!10010000001001
  l_q6: q6, 1!11111111
 

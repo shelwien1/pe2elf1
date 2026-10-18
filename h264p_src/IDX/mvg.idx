@@ -72,7 +72,7 @@ Index l
  l_sb: sb, 1!11
 
 Index s
- s_ts: ts, 1!111111111
+ s_ts: ts, 1!000001010
  s_mag: mag, 1!1111111
 
 Index f

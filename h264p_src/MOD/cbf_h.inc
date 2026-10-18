@@ -60,7 +60,6 @@ static const byte H_cbf_s_pq[24+1]={ 0,0,1,2,2,2,2,2,3,4,4,4,4,5,5,5,5,5,5,5,5,6
 
 static const byte H_cbf_t_cat[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
-static const byte H_cbf_w_cat[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 static const byte H_cbf_w_nc[5+1]={ 0,1,2,2,3,4 };
 static const byte H_cbf_w_md[19+1]={ 0,0,1,2,2,2,2,2,2,2,2,2,2,2,3,3,3,4,4,4 };
 
@@ -131,7 +130,7 @@ static const long long H_cbf_m_Volume = tc_vmul(tc_vmul(1, 5), 2); // 10
 static const long long H_cbf_n_Volume = tc_vmul(1, 14); // 14
 static const long long H_cbf_s_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 2), 8); // 224
 static const long long H_cbf_t_Volume = tc_vmul(1, 14); // 14
-static const long long H_cbf_w_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 5), 5), 2); // 700
+static const long long H_cbf_w_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 5), 5), 2); // 100
 
 struct H_cbf_T { 
 #undef USE_NEW

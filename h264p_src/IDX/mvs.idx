@@ -64,7 +64,7 @@ Index e
  e_kind: kind, 1!011
  e_comp: comp, 1!0
  e_tv: tv, 1!1111111111111
- e_sp: sp, 1!11111111
+ e_sp: sp, 1!00000000
  e_rt: rt, 1!11111111111111
 
 Index h
@@ -126,7 +126,7 @@ Index w
  w_comp: comp, 1!0
  w_pd: pd, 1!01000101
  w_ma: ma, 1!1111111
- w_nr: nr, 1!111
+ w_nr: nr, 1!011
 
 Index t
  t_kind: kind, 1!111

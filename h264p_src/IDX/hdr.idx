@@ -38,7 +38,7 @@ Index d
  d_p2: p2, 1!1111111
 
 Index e
- e_tag: tag, &01001110
+ e_tag: tag, &01100100
  e_pos: pos, 1!111
 
 Index h
