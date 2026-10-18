@@ -46,7 +46,7 @@ static const byte H_nal_w_fld[31+1]={ 0,0,1,2,2,2,3,3,4,5,5,5,6,6,7,7,7,7,7,7,7,
 
 static const int H_nal_rA = (192+0) * (1);
 static const int H_nal_rB = (0+0) * (1);
-static const int H_nal_rC = (64+0) * (1);
+static const int H_nal_rC = (32+0) * (1);
 static const int H_nal_rE = (64+0) * (1);
 static const int H_nal_rH = (64+0) * (1);
 static const int H_nal_rI = (64+0) * (1);

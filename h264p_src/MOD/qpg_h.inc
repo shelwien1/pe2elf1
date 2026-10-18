@@ -1,7 +1,6 @@
 
 static const byte H_qpg_a_as[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 static const byte H_qpg_a_mag[7+1]={ 0,1,2,3,4,5,6,7 };
-static const byte H_qpg_a_ss[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 static const byte H_qpg_a_xe[18+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18 };
 static const byte H_qpg_a_lq[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 
@@ -72,7 +71,7 @@ static const int H_qpg_mwE = (0+0) * (1);
 static const int H_qpg_mwH = (32+0) * (1);
 static const int H_qpg_mwI = (0+0) * (1);
 static const int H_qpg_mwJ = (0+0) * (1);
-static const int H_qpg_mwK = (0+0) * (1);
+static const int H_qpg_mwK = (4+0) * (1);
 static const int H_qpg_mwL = (0+0) * (1);
 static const int H_qpg_mwD = (31+0) * (1);
 static const int H_qpg_mwT = (0+0) * (1);
@@ -98,7 +97,7 @@ static const int H_qpg_hT = (24+0) * (1);
 static const int H_qpg_hN = (24+0) * (1);
 
 
-static const long long H_qpg_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 8), 10), 19), 10); // 152000
+static const long long H_qpg_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 8), 2), 19), 10); // 30400
 static const long long H_qpg_b_Volume = tc_vmul(tc_vmul(1, 10), 1); // 10
 static const long long H_qpg_c_Volume = tc_vmul(tc_vmul(1, 10), 10); // 100
 static const long long H_qpg_d_Volume = tc_vmul(tc_vmul(1, 10), 8); // 80

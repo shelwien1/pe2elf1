@@ -71,7 +71,7 @@ void H_mvs_make( const H_mvs_v & D, tcx & X ) {
   i = i*13 + H_mvs_i_zd[__min(12,__max(0,zd-(1-1)))];
 
   j = 0;
-  j = j*3 + ((kind>0+(1-1))+(kind>2+(1-1)));
+  j = j*4 + H_mvs_j_kind[__min(3,__max(0,kind-(1-1)))];
   j = j*2 + ((comp>0+(1-1)));
   j = j*8 + H_mvs_j_ma[__min(7,__max(0,ma-(1-1)))];
   j = j*3 + ((mb>1+(1-1))+(mb>4+(1-1)));

@@ -89,7 +89,7 @@ void H_cbp_make( const H_cbp_v & D, tcx & X ) {
   w = 0;
   w = w*4 + H_cbp_w_inc[__min(3,__max(0,inc-(1-1)))];
   w = w*17 + H_cbp_w_em[__min(16,__max(0,em-(1-1)))];
-  w = w*9 + H_cbp_w_cls[__min(8,__max(0,cls-(1-1)))];
+  w = w*3 + ((cls>2+(1-1))+(cls>5+(1-1)));
 
   t = 0;
 

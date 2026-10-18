@@ -48,7 +48,7 @@ Index c
  c_q6: q6, 1!11111111
  c_col: col, 1!11
  c_kn: kn, 1!1
- c_en: en, 1!11111111111111
+ c_en: en, 1!10011000100010
  c_ch: ch, 1!111111111111111
 
 Index d
@@ -86,7 +86,7 @@ Index j
  j_na: na, 1!111111111
 
 Index k
- k_cat: cat, 1!1111111111111
+ k_cat: cat, 1!1000000000000
  k_na: na, 1!111111111
  k_nb: nb, 1!000000000
  k_pz: pz, 1!1111111111111111
@@ -126,7 +126,7 @@ Index g
  g_cat: cat, 1!0
 
 Number rA, 1, 0!01000000
-Number rB, 1, 0!01011010
+Number rB, 1, 0!11111111
 Number rC, 1, 0!01000000
 Number rE, 1, 0!01000000
 Number rH, 1, 0!01000000

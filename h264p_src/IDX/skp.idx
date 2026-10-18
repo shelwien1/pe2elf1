@@ -32,7 +32,7 @@ Index a
  a_af: af, 1!11
 
 Index b
- b_st: st, 1!111111111
+ b_st: st, 1!000010000
  b_a3: a3, 1!11
  b_b3: b3, 1!11
  b_cd: cd, 1!10
@@ -99,7 +99,7 @@ Index s
 Index f
  f_a3: a3, 1!11
  f_b3: b3, 1!11
- f_qc: qc, 1!11111111111111111
+ f_qc: qc, 1!00000001000000000
 
 Index m
  m_st: st, 1!000000000

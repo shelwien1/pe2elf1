@@ -37,7 +37,7 @@ Index a
 
 Index b
  b_dc: dc, 1!11111111
- b_aq: aq, 1!1000100001000
+ b_aq: aq, 1!1000000000000
  b_ae: ae, 1!1111111111111
  b_lq: lq, 1!1111111111111
 
@@ -67,7 +67,7 @@ Index i
  i_aq: aq, 1!1111111111111
  i_ac: ac, 1!1111111111111
  i_cls: cls, 1!00000110
- i_td: td, 1!1010101010101010
+ i_td: td, 1!1001000001000000
 
 Index j
  j_st: st, 1!111111111
@@ -80,7 +80,7 @@ Index j
 Index k
  k_aq: aq, 1!1111111111111
  k_lnz: lnz, 1!1
- k_pc: pc, 1!1111
+ k_pc: pc, 1!1000
 
 Index l
  l_ac: ac, 1!1111110101110
@@ -115,7 +115,7 @@ Index g
 
 Number rA, 1, 0!10000000
 Number rB, 1, 0!00010000
-Number rC, 1, 0!01010010
+Number rC, 1, 0!01000100
 Number rE, 1, 0!01000000
 Number rH, 1, 0!01000000
 Number rI, 1, 0!01000000

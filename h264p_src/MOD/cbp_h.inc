@@ -53,10 +53,9 @@ static const byte H_cbp_s_pq[6+1]={ 0,1,2,3,4,5,6 };
 
 static const byte H_cbp_w_inc[3+1]={ 0,1,2,3 };
 static const byte H_cbp_w_em[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
-static const byte H_cbp_w_cls[8+1]={ 0,1,2,3,4,5,6,7,8 };
 
 
-static const int H_cbp_rA = (64+0) * (1);
+static const int H_cbp_rA = (235+0) * (1);
 static const int H_cbp_rB = (245+0) * (1);
 static const int H_cbp_rC = (64+0) * (1);
 static const int H_cbp_rE = (64+0) * (1);
@@ -81,7 +80,7 @@ static const int H_cbp_mwH = (0+0) * (1);
 static const int H_cbp_mwI = (0+0) * (1);
 static const int H_cbp_mwJ = (0+0) * (1);
 static const int H_cbp_mwK = (0+0) * (1);
-static const int H_cbp_mwL = (0+0) * (1);
+static const int H_cbp_mwL = (44+0) * (1);
 static const int H_cbp_mwD = (18+0) * (1);
 static const int H_cbp_mwT = (0+0) * (1);
 static const int H_cbp_mwG = (0+0) * (1);
@@ -122,7 +121,7 @@ static const long long H_cbp_m_Volume = tc_vmul(1, 1); // 1
 static const long long H_cbp_n_Volume = tc_vmul(1, 1); // 1
 static const long long H_cbp_s_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 17), 7); // 476
 static const long long H_cbp_t_Volume = tc_vmul(1, 1); // 1
-static const long long H_cbp_w_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 17), 9); // 612
+static const long long H_cbp_w_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 17), 3); // 204
 
 struct H_cbp_T { 
 #undef USE_NEW

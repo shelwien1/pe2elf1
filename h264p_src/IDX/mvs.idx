@@ -82,7 +82,7 @@ Index i
  i_zd: zd, 1!111111111111
 
 Index j
- j_kind: kind, 1!101
+ j_kind: kind, 1!111
  j_comp: comp, 1!1
  j_ma: ma, 1!1111111
  j_mb: mb, 1!0100100
