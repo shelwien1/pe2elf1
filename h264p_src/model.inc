@@ -1583,6 +1583,15 @@ struct Model {
         D.tq = 1 + tc_clamp(tc_qlog(m0 - bm), 0, 11);
       }
     }
+    {
+      // the texture of the first reference at the predicted vector (as for
+      // the mvd)
+      int p[2];
+      MvN nbs[3];
+      mv_pred(list, x, y, w, h, 0, p, nbs);
+      int t = rec_.ref_texture(list, 0, x * 4, y * 4, w * 4, h * 4, p);
+      D.rt = t < 0 ? 0 : 1 + tc_clamp(tc_qlog((int64_t)t * 256 / (w * h * 16) * 16 / qstep16(qp_pred_)), 0, 14);
+    }
     tcx X;
     H_mvs_make(D, X);
     int pr[TC_NODE];
