@@ -541,7 +541,7 @@ struct Recon {
       if (!c[k]) continue;
       int r = kZz4[k], y = r >> 2, x = r & 3;
       int ls = 16 * kNorm4[m][(x & 1) && (y & 1) ? 1 : !(x & 1) && !(y & 1) ? 0 : 2];
-      d[r] = qp >= 24 ? (c[k] * ls) << (q6 - 4) : (c[k] * ls + (1 << (3 - q6))) >> (4 - q6);
+      d[r] = qp >= 24 ? c[k] * ls * (1 << (q6 - 4)) : (c[k] * ls + (1 << (3 - q6))) >> (4 - q6);
     }
   }
   static int norm8_class(int y, int x) {
@@ -558,7 +558,7 @@ struct Recon {
     for (int k = 0; k < 64; k++) {
       if (!c[k]) continue;
       int r = kZz8[k], ls = 16 * kNorm8[m][norm8_class(r >> 3, r & 7)];
-      d[r] = qp >= 36 ? (c[k] * ls) << (q6 - 6) : (c[k] * ls + (1 << (5 - q6))) >> (6 - q6);
+      d[r] = qp >= 36 ? c[k] * ls * (1 << (q6 - 6)) : (c[k] * ls + (1 << (5 - q6))) >> (6 - q6);
     }
   }
 
@@ -1120,7 +1120,7 @@ struct Recon {
     int* x = res.cdc[c];
     int f[4] = {x[0] + x[1] + x[2] + x[3], x[0] - x[1] + x[2] - x[3], x[0] + x[1] - x[2] - x[3], x[0] - x[1] - x[2] + x[3]};
     int ls = 16 * kNorm4[qpc % 6][0], q6 = qpc / 6;
-    for (int b = 0; b < 4; b++) mb_dcc[c][b] = ((f[b] * ls) << q6) >> 5;
+    for (int b = 0; b < 4; b++) mb_dcc[c][b] = (f[b] * ls * (1 << q6)) >> 5;
   }
   int chroma_qp_of(int c, int qp) const { return chroma_qp(qp, cqp_off[c]); }
   uint8_t* chroma_at(int c, int x, int y) const {
@@ -1178,7 +1178,7 @@ struct Recon {
       c[12 + j] = a - b + cc - d;
     }
     int ls = 16 * kNorm4[qp % 6][0], q6 = qp / 6;
-    for (int i = 0; i < 16; i++) mb_dcr[i] = qp >= 36 ? (c[i] * ls) << (q6 - 6) : (c[i] * ls + (1 << (5 - q6))) >> (6 - q6);
+    for (int i = 0; i < 16; i++) mb_dcr[i] = qp >= 36 ? c[i] * ls * (1 << (q6 - 6)) : (c[i] * ls + (1 << (5 - q6))) >> (6 - q6);
   }
 
   // The macroblock is coded or skipped: what is left of it (the luma blocks
@@ -1358,14 +1358,14 @@ struct Recon {
         int tc0 = kTc0[ia][b - 1];
         if (chroma) {
           int tc = tc0 + 1;
-          int d = clip3(-tc, tc, (((q0 - p0) << 2) + (p1 - q1) + 4) >> 3);
+          int d = clip3(-tc, tc, ((q0 - p0) * 4 + (p1 - q1) + 4) >> 3);
           p[-s] = (uint8_t)clip1(p0 + d);
           p[0] = (uint8_t)clip1(q0 - d);
         } else {
           int p2 = p[-3 * s], q2 = p[2 * s];
           int ap = abs(p2 - p0), aq = abs(q2 - q0);
           int tc = tc0 + (ap < beta) + (aq < beta);
-          int d = clip3(-tc, tc, (((q0 - p0) << 2) + (p1 - q1) + 4) >> 3);
+          int d = clip3(-tc, tc, ((q0 - p0) * 4 + (p1 - q1) + 4) >> 3);
           p[-s] = (uint8_t)clip1(p0 + d);
           p[0] = (uint8_t)clip1(q0 - d);
           if (ap < beta) p[-2 * s] = (uint8_t)(p1 + clip3(-tc0, tc0, (p2 + ((p0 + q0 + 1) >> 1) - (p1 << 1)) >> 1));
@@ -2195,10 +2195,10 @@ struct Recon {
     if (!b8) {
       int r = kZz4[k], y = r >> 2, x = r & 3;
       int ls = 16 * kNorm4[m][(x & 1) && (y & 1) ? 1 : !(x & 1) && !(y & 1) ? 0 : 2];
-      return qp >= 24 ? ((int64_t)c * ls) << (q6 - 4) : ((int64_t)c * ls + (1 << (3 - q6))) >> (4 - q6);
+      return qp >= 24 ? (int64_t)c * ls * ((int64_t)1 << (q6 - 4)) : ((int64_t)c * ls + (1 << (3 - q6))) >> (4 - q6);
     }
     int r = kZz8[k], ls = 16 * kNorm8[m][norm8_class(r >> 3, r & 7)];
-    return qp >= 36 ? ((int64_t)c * ls) << (q6 - 6) : ((int64_t)c * ls + (1 << (5 - q6))) >> (6 - q6);
+    return qp >= 36 ? (int64_t)c * ls * ((int64_t)1 << (q6 - 6)) : ((int64_t)c * ls + (1 << (5 - q6))) >> (6 - q6);
   }
 
   // How far the prediction of a block of n x n samples at (x, y) of plane c

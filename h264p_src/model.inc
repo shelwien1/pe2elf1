@@ -1340,7 +1340,15 @@ struct Model {
       if (ok) {
         int ic;
         bool d2 = false;
-        const MbState* nc = sc_->nb4(tx, ty, ic);
+        const MbState* nc;
+        if (ty < 0 && tx > 3) {
+          // in the macroblock above right (nb4 knows only those left and above)
+          int a = mbaff_ || addr_ < width_ || addr_ % width_ == width_ - 1 ? -1 : addr_ - width_ + 1;
+          nc = a >= 0 && mbs_[a].slice == sc_->slice_id_ ? &mbs_[a] : nullptr;
+          ic = 12;
+        } else {
+          nc = sc_->nb4(tx, ty, ic);
+        }
         D.mc = nb_mode(nc, ic, d2);
       }
     }

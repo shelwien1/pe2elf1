@@ -173,9 +173,13 @@ template <int N> struct cm_mix {
       lr += (int)(((i64)mb * lr * cm_mrec[n]) >> 16);
     }
     err = ((bit ? 0 : CM_PONE) - pr) * lr;
+    // (clamped to +-4096, far beyond what data needs: a stream made to drive
+    // a weight on and on must not overflow it)
     CM_UNROLL
-    for(i = 0; i < N; i++)
-      ww[i] += (i32)(((i64)x[i] * err) >> 16);
+    for(i = 0; i < N; i++) {
+      i64 v = (i64)ww[i] + (((i64)x[i] * err) >> 16);
+      ww[i] = (i32)(v < -(1 << 28) ? -(1 << 28) : v > (1 << 28) ? (1 << 28) : v);
+    }
   }
 };
 
