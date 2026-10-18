@@ -3,8 +3,10 @@
 #  MOD/hdr_p.inc from this file and hdr.inc.
 #
 #  Header syntax elements (SPS, PPS, SEI, slice headers), coded as the
-#  difference to the last value of the same element (frame_num and
-#  pic_order_cnt_lsb modulo their range, as they wrap): tag is the element (a
+#  difference to the last value of the same element at the same place in
+#  its group (up to 15) and row in a run of it (up to 15), in the same kind
+#  of slice (frame_num and pic_order_cnt_lsb modulo their range, as they
+#  wrap): tag is the element (a
 #  dense id), fld the value's place in its group, p1/p2 the last two values,
 #  pos how many values in a row the tag has had, p1r the low bits of the last
 #  value, sty the slice type of the current slice, pr whether the slice

@@ -475,7 +475,8 @@ struct Model {
 
   // ------------------------------------------------------------------------
   // header syntax: a value is coded as the difference to the last value of
-  // the same element (tag, place in the group), kept per kind of slice
+  // the same element (tag, place in the group, row in a run of the tag),
+  // kept per kind of slice
   struct HLast {
     i64 v, d1, d2;  // the last value, the last two differences
   };
@@ -489,7 +490,7 @@ struct Model {
   bool is_wrap_ = false;
   int hbits_ = 0;
   void hbits(int n) { hbits_ = n; }
-  HLast hl_[256][4][11] = {};
+  std::map<u32, HLast> hl_;  // by tag, place in the group, row in a run of the tag (up to 15), slice kind
 
   // the start of a NAL unit coded by the walk
   int last_sref_ = 2, prev_sref_ = 2;  // whether the last slice NAL unit, and the one before, were references (2 none)
@@ -514,7 +515,7 @@ struct Model {
   }
   i64 hval(i64 x) {
     tc_stage = STG_HDR;
-    HLast& h = hl_[tag_][fld_ < 3 ? fld_ : 3][sty_];
+    HLast& h = hl_[(u32)tag_ | (u32)(fld_ < 15 ? fld_ : 15) << 8 | (u32)(runpos_ < 15 ? runpos_ : 15) << 12 | (u32)sty_ << 16];
     H_hdr_v D = {tag_, fld_, sq2(h.d1), sq2(h.d2), tc_qlog(runpos_), (int)(h.v & 255), sty_ < 9 ? sty_ : 9, slice_nal_ ? prev_sref_ : 3};
     tcx X;
     H_hdr_make(D, X);
