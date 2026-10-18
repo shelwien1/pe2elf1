@@ -15,8 +15,8 @@
 
 void H_ipm_make( const H_ipm_v & D, tcx & X ) {
   int a, b, c, d, e, h, i, j, k, l, s, f, m, w, t, n, g;
-  int k8 = D.k8, ma = D.ma, mb = D.mb, mp = D.mp, blk = D.blk, pv = D.pv, col = D.col, dm = D.dm, ds = D.ds, pm = D.pm, pr = D.pr, dr = D.dr, pq = D.pq, mh = D.mh, mc = D.mc, mg = D.mg, rg = D.rg;
-  (void) k8;  (void) ma;  (void) mb;  (void) mp;  (void) blk;  (void) pv;  (void) col;  (void) dm;  (void) ds;  (void) pm;  (void) pr;  (void) dr;  (void) pq;  (void) mh;  (void) mc;  (void) mg;  (void) rg;
+  int k8 = D.k8, ma = D.ma, mb = D.mb, mp = D.mp, blk = D.blk, pv = D.pv, col = D.col, dm = D.dm, ds = D.ds, pm = D.pm, pr = D.pr, dr = D.dr, pq = D.pq, mh = D.mh, mc = D.mc, mg = D.mg, rg = D.rg, p2 = D.p2;
+  (void) k8;  (void) ma;  (void) mb;  (void) mp;  (void) blk;  (void) pv;  (void) col;  (void) dm;  (void) ds;  (void) pm;  (void) pr;  (void) dr;  (void) pq;  (void) mh;  (void) mc;  (void) mg;  (void) rg;  (void) p2;
 
   a = 0;
   a = a*3 + ((k8>0+(1-1))+(k8>1+(1-1)));
@@ -62,6 +62,7 @@ void H_ipm_make( const H_ipm_v & D, tcx & X ) {
   j = j*17 + H_ipm_j_mh[__min(16,__max(0,mh-(1-1)))];
   j = j*9 + H_ipm_j_pr[__min(8,__max(0,pr-(1-1)))];
   j = j*11 + H_ipm_j_mb[__min(10,__max(0,mb-(1-1)))];
+  j = j*9 + H_ipm_j_p2[__min(8,__max(0,p2-(1-1)))];
 
   k = 0;
   k = k*3 + ((k8>0+(1-1))+(k8>1+(1-1)));

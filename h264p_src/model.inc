@@ -35,7 +35,7 @@ struct H_hdr_v { int tag, fld, p1, p2, pos, p1r, sty; };
 struct H_skp_v { int st, a3, b3, col, c9, cd, run, cnt, eq, lf, af, td, en, sm, tm, tb, bd, qc, c1, k9, tx; };
 struct H_mbt_v { int st, ca, cb, cc, nsk, en, td, sm, tm, tb, dh, bd, qc, im, ig, c1, tx; };
 struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg, tp, em, pq; };
-struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm, pr, dr, pq, mh, mc, mg, rg; };
+struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm, pr, dr, pq, mh, mc, mg, rg, p2; };
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, zd, cq, tq, rt, ea, eb; };
 struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac, td, sq, xe, lq; };
 struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn, pq, ch, ds, hv; };
@@ -1267,6 +1267,7 @@ struct Model {
     // modes but the most probable one (8 none), and by how much it beats the
     // next; DIMD's mode as a remainder (8 none or the most probable mode)
     D.pr = 8;
+    D.p2 = 8;
     D.rg = 0;
     if (pm >= 0) {
       int b1 = -1, b2 = -1;
@@ -1278,6 +1279,7 @@ struct Model {
             b2 = m;
         }
       if (b1 >= 0) D.pr = b1 - (b1 > mpm);
+      D.p2 = b2 >= 0 ? b2 - (b2 > mpm) : 8;
       if (b2 >= 0) D.rg = 1 + tc_clamp(tc_qlog((sads[b2] - sads[b1]) * 32 / lam16), 0, 11);
     }
     D.dr = D.dm < 9 && D.dm != mpm ? D.dm - (D.dm > mpm) : 8;

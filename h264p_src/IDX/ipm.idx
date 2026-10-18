@@ -14,7 +14,8 @@
 #  in the proxy (9 none), mg how much worse the most probable mode does there
 #  (1 + tc_qlog of halves of x264's lambda), pr the best mode but the most
 #  probable one as a remainder (8 none) and rg how much better than the
-#  next it does, dr DIMD's mode as a remainder, pq how well the proxy
+#  next it does, p2 that next one as a remainder (8 none), dr DIMD's mode
+#  as a remainder, pq how well the proxy
 #  matched, mh the last most-probable-mode flags of the macroblock, mc the
 #  mode of the block above right.
 
@@ -69,6 +70,7 @@ Index j
  j_mh: mh, 1!1111111111111111
  j_pr: pr, 1!11111111
  j_mb: mb, 1!1111111111
+ j_p2: p2, 1!11111111
 
 Index k
  k_k8: k8, 1!11
