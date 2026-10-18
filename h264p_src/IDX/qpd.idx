@@ -15,7 +15,9 @@
 #  macroblock changed between the last two pictures decoded (1 + tc_qlog, 0
 #  not known), for the macroblock tree's lower QP where pictures stay; sq
 #  the slice's QP less the predicted one (7 + that, -6 to 6): an encoder's
-#  QPs keep near the slice's.  The
+#  QPs keep near the slice's; xe the class of the energy the line takes
+#  (1 + log2, up to 18; 0 none), for an encoder whose QP is no line of it
+#  (flat below an energy, then rising).  The
 #  magnitude has the line's delta as code()'s hint; the sign is the qpg
 #  family's.
 
@@ -50,6 +52,7 @@ Index e
  e_aq: aq, 1!1111111111111
  e_cls: cls, 1!11111111
  e_sq: sq, 1!1111111111111
+ e_xe: xe, 1!111111111111111111
 
 Index h
  h_ae: ae, 1!0000001000001

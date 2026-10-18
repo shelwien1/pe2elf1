@@ -15,13 +15,14 @@
 
 void H_qpg_make( const H_qpg_v & D, tcx & X ) {
   int a, b, c, d, e, h, i, j, k, l, s, f, m, w, t, n, g;
-  int as = D.as, cs = D.cs, bs = D.bs, ls = D.ls, rs = D.rs, mag = D.mag, cls = D.cls, st = D.st, ss = D.ss;
-  (void) as;  (void) cs;  (void) bs;  (void) ls;  (void) rs;  (void) mag;  (void) cls;  (void) st;  (void) ss;
+  int as = D.as, cs = D.cs, bs = D.bs, ls = D.ls, rs = D.rs, mag = D.mag, cls = D.cls, st = D.st, ss = D.ss, xe = D.xe;
+  (void) as;  (void) cs;  (void) bs;  (void) ls;  (void) rs;  (void) mag;  (void) cls;  (void) st;  (void) ss;  (void) xe;
 
   a = 0;
   a = a*10 + H_qpg_a_as[__min(9,__max(0,as-(1-1)))];
   a = a*8 + H_qpg_a_mag[__min(7,__max(0,mag-(1-1)))];
   a = a*10 + H_qpg_a_ss[__min(9,__max(0,ss-(1-1)))];
+  a = a*19 + H_qpg_a_xe[__min(18,__max(0,xe-(1-1)))];
 
   b = 0;
   b = b*10 + H_qpg_b_as[__min(9,__max(0,as-(1-1)))];

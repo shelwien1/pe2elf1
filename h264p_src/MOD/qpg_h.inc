@@ -2,6 +2,7 @@
 static const byte H_qpg_a_as[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 static const byte H_qpg_a_mag[7+1]={ 0,1,2,3,4,5,6,7 };
 static const byte H_qpg_a_ss[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
+static const byte H_qpg_a_xe[18+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18 };
 
 static const byte H_qpg_b_as[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 
@@ -96,7 +97,7 @@ static const int H_qpg_hT = (24+0) * (1);
 static const int H_qpg_hN = (24+0) * (1);
 
 
-static const long long H_qpg_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 10), 8), 10); // 800
+static const long long H_qpg_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 8), 10), 19); // 15200
 static const long long H_qpg_b_Volume = tc_vmul(tc_vmul(1, 10), 1); // 10
 static const long long H_qpg_c_Volume = tc_vmul(tc_vmul(1, 10), 10); // 100
 static const long long H_qpg_d_Volume = tc_vmul(tc_vmul(1, 10), 8); // 80
