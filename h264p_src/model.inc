@@ -593,6 +593,7 @@ struct Model {
   MbCol* hcur_ = nullptr;  // hist_ of the current slice's kind
   std::vector<MbCol> hprev_;  // and as it was when the picture began
   uint32_t pic_ = 1;       // pictures so far
+  SliceHeader last_h_;     // the last slice coded (no sps: none yet)
   int st_ = 0, key_ = 0;   // slice type x reference; st_ x frame/top/bottom field
   int width_ = 1, size_ = 0;
   bool mbaff_ = false;
@@ -722,20 +723,35 @@ struct Model {
     return a >= 0 && info_[a].pic == pic_ ? &info_[a] : nullptr;
   }
 
+  // whether slice h begins a picture (7.4.1.2.4): what tells pictures
+  // apart differs from the last slice coded
+  bool new_picture(const SliceHeader& h) const {
+    const SliceHeader& p = last_h_;
+    if (!p.sps || h.sps != p.sps || h.pps != p.pps || h.frame_num != p.frame_num ||
+        h.field_pic_flag != p.field_pic_flag || h.bottom_field_flag != p.bottom_field_flag ||
+        !h.nal_ref_idc != !p.nal_ref_idc || (h.nal_unit_type == 5) != (p.nal_unit_type == 5))
+      return true;
+    if (h.sps->poc_type == 0 && (h.poc_lsb != p.poc_lsb || h.delta_poc_bottom != p.delta_poc_bottom)) return true;
+    if (h.sps->poc_type == 1 && (h.delta_poc[0] != p.delta_poc[0] || h.delta_poc[1] != p.delta_poc[1])) return true;
+    return h.nal_unit_type == 5 && h.idr_pic_id != p.idr_pic_id;
+  }
+
   void slice_begin(SliceCoder& sc) {
     sc_ = &sc;
     mbs_ = sc.store_.mbs.data();
     const SliceHeader& h = sc.h_;
+    bool newpic = new_picture(h);
+    last_h_ = h;
     st_ = h.type() * 2 + (h.nal_ref_idc != 0);
     key_ = st_ * 3 + (h.field_pic_flag ? 1 + h.bottom_field_flag : 0);
-    if (h.first_mb == 0) pic_++;
+    if (newpic) pic_++;
     width_ = sc.width_;
     size_ = sc.size_;
     mbaff_ = sc.mbaff_;
     if ((int)info_.size() < size_) info_.resize(size_);
     if ((int)hist_[key_].size() < size_) hist_[key_].resize(size_);
     hcur_ = hist_[key_].data();
-    if (h.first_mb == 0) hprev_.assign(hcur_, hcur_ + size_);
+    if (newpic) hprev_.assign(hcur_, hcur_ + size_);
     qp_off_ = 6 * (sc.sps_.bit_depth_luma - 8);
     qp_pred_ = slice_qp_ = sc.pps_.pic_init_qp + h.slice_qp_delta;
     last_qpd_ = 0;
@@ -744,8 +760,8 @@ struct Model {
     run_ = cnt_ = 0;
     prev_cnt_ = slice_cnt_[key_];
     mb_open_ = false;
-    rec_.slice_begin(h);
-    if (h.first_mb == 0) {
+    rec_.slice_begin(h, newpic);
+    if (newpic) {
       prev_poc_ = hist_poc_[key_];
       cur_poc_ = hist_poc_[key_] = rec_.active ? rec_.cur->poc : INT_MIN;
       memcpy(col_rpoc_, hist_rpoc_[key_], sizeof col_rpoc_);
@@ -753,8 +769,8 @@ struct Model {
         for (int r = 0; r < 32; r++)
           hist_rpoc_[key_][l][r] = rec_.active && r < rec_.nlist[l] && rec_.list[l][r] ? rec_.list[l][r]->poc : INT_MIN;
     }
-    if (h.first_mb == 0) aq_picture();
-    if (h.first_mb == 0) memset(lq_, 0, sizeof lq_);
+    if (newpic) aq_picture();
+    if (newpic) memset(lq_, 0, sizeof lq_);
   }
   void slice_end() { slice_cnt_[key_] = cnt_; }
 

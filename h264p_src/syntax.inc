@@ -189,6 +189,7 @@ struct SliceHeader {
   int slice_group_change_cycle = 0;
   // for decoding the pictures (model.inc)
   int poc_lsb = 0, long_term_reference_flag = 0, mmco5 = 0;
+  int64_t idr_pic_id = 0;
   int64_t delta_poc_bottom = 0, delta_poc[2] = {0, 0};
   std::vector<std::pair<int, int64_t>> rplm[2];  // modification_of_pic_nums_idc and its argument
   std::vector<std::vector<int64_t>> mmco;        // memory_management_control_operation and its arguments
@@ -448,7 +449,7 @@ void code_slice_header(Syn& s, SliceHeader& h, const ParamSets& ps) {
     h.field_pic_flag = (int)s.u("field_pic_flag", 1);
     if (h.field_pic_flag) h.bottom_field_flag = (int)s.u("bottom_field_flag", 1);
   }
-  if (h.nal_unit_type == 5) s.ue("idr_pic_id", 0, kU32);
+  if (h.nal_unit_type == 5) h.idr_pic_id = s.ue("idr_pic_id", 0, kU32);
   if (sps.poc_type == 0) {
     h.poc_lsb = (int)s.u("pic_order_cnt_lsb", sps.log2_max_poc_lsb);
     if (pps.bottom_field_pic_order_in_frame_present_flag && !h.field_pic_flag)

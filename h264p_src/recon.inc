@@ -1445,10 +1445,10 @@ struct Recon {
            sps.frame_mbs_only_flag && !sps.scaling_matrix && !pps.scaling_matrix && !sps.transform_bypass &&
            (int64_t)sps.width_mbs * sps.frame_height_mbs() <= 36864;  // 4096 x 2304
   }
-  void slice_begin(const SliceHeader& h) {
+  void slice_begin(const SliceHeader& h, bool newpic) {
     const Sps& sps = *h.sps;
     const Pps& pps = *h.pps;
-    if (h.first_mb == 0 || !cur) {
+    if (newpic || !cur || cur->mbw != sps.width_mbs || cur->mbh != sps.frame_height_mbs()) {
       finish_picture();
       if (!supported(sps, pps)) {
         dpb.clear();
