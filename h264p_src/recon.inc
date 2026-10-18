@@ -271,13 +271,19 @@ struct Recon {
     }
     (void)lt_done;
     c->ref = true;
-    // pictures no longer used for reference go
+    // pictures no longer used for reference go, and the oldest beyond the
+    // 15 a conforming stream keeps besides the current one (a stream that
+    // does not conform could make it keep any number)
     std::vector<std::unique_ptr<RPic>> keep;
     for (auto& p : dpb)
       if (p->ref)
         keep.push_back(std::move(p));
       else
         spare.push_back(std::move(p));
+    if (keep.size() > 15) {
+      for (size_t i = 0; i + 15 < keep.size(); i++) spare.push_back(std::move(keep[i]));
+      keep.erase(keep.begin(), keep.end() - 15);
+    }
     dpb.swap(keep);
     if (cur_mmco5) {
       c->frame_num = 0;
