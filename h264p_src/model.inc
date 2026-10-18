@@ -420,6 +420,7 @@ struct Model {
     H_MAP(pcm);
 #undef H_MAP
     raw_mx_.init(raw_w_, raw_wc_, 256);
+    rbuf_.clear();
   }
   u64 table_bytes() const {
     return (u64)t_nal->H_nal_Size + t_hdr->H_hdr_Size + t_skp->H_skp_Size + t_mbt->H_mbt_Size + t_cbp->H_cbp_Size +
@@ -443,32 +444,78 @@ struct Model {
     return x;
   }
 
-  // bytes nothing else models: an order 0 and an order 1 counter mixed by
-  // a weight set the bits of the byte so far select (oggcomp's raw model)
+  // bytes nothing else models: an order 0 and an order 1 counter and a
+  // match model mixed by a weight set the bits of the byte so far select
+  // (oggcomp's raw model and a match): the match finds the last three bytes
+  // in what was coded so far, after a dictionary of the user data x264
+  // writes in an SEI message (its UUID and its options with their defaults)
   cm_cnt raw_o0_[256];
   cm_cnt raw_o1_[256][256];
-  i32 raw_w_[256 * 3];
+  i32 raw_w_[256 * 4];
   u8 raw_wc_[256];
-  cm_mix<3> raw_mx_;
+  cm_mix<4> raw_mx_;
   u32 raw_prev_ = 0;
+  std::vector<u8> rbuf_;           // the dictionary, then the bytes coded
+  std::vector<i32> rhash_;         // by the hash of three bytes, the place after them in rbuf_ (-1 none)
+  size_t rptr_ = 0, rdict_ = 0;    // where the match predicts from; the dictionary's size
+  int rlen_ = 0;                   // the match's length (0 none)
+  cm_cnt raw_mc_[16];              // whether the match's bit is right, by its length
+  static u32 rkey(const u8* p) { return ((u32)p[0] * 0x9E3779B1u ^ (u32)p[1] * 0x85EBCA77u ^ (u32)p[2] * 0xC2B2AE3Du) >> 16; }
+  void raw_init() {
+    static const u8 kUuid[16] = {0xdc, 0x45, 0xe9, 0xbd, 0xe6, 0xd9, 0x48, 0xb7, 0x96, 0x2c, 0xd8, 0x20, 0xd9, 0x23, 0xee, 0xef};
+    static const char kText[] =
+        "x264 - core 164 - H.264/MPEG-4 AVC codec - Copyleft 2003-2024 - http://www.videolan.org/x264.html - options: "
+        "cabac=1 ref=3 deblock=1:0:0 analyse=0x3:0x113 me=hex subme=7 psy=1 psy_rd=1.00:0.00 mixed_ref=1 me_range=16 "
+        "chroma_me=1 trellis=1 8x8dct=1 cqm=0 deadzone=21,11 fast_pskip=1 chroma_qp_offset=-2 threads=8 "
+        "lookahead_threads=1 sliced_threads=0 nr=0 decimate=1 interlaced=0 bluray_compat=0 constrained_intra=0 "
+        "bframes=3 b_pyramid=2 b_adapt=1 b_bias=0 direct=1 weightb=1 open_gop=0 weightp=2 keyint=250 keyint_min=25 "
+        "scenecut=40 intra_refresh=0 rc_lookahead=40 rc=crf mbtree=1 crf=23.0 qcomp=0.60 qpmin=0 qpmax=69 qpstep=4 "
+        "ip_ratio=1.40 aq=1:1.00";
+    rbuf_.assign(kUuid, kUuid + 16);
+    rbuf_.insert(rbuf_.end(), kText, kText + sizeof kText);  // with the terminating zero x264 writes
+    rhash_.assign((size_t)1 << 16, -1);
+    for (size_t i = 3; i <= rbuf_.size(); i++) rhash_[rkey(&rbuf_[i - 3])] = (i32)i;
+    rdict_ = rbuf_.size();
+    rlen_ = 0;
+  }
   u32 raw(u32 b) {
+    if (rbuf_.empty()) raw_init();
     cm_cnt* row = raw_o1_[raw_prev_];
     u32 node = 1;
     tc_stage = STG_RAW;
+    int pbyte = rlen_ && rptr_ < rbuf_.size() ? rbuf_[rptr_] : -1, ml = std::min(rlen_, 15);
     for (int i = 7; i >= 0; i--) {
       cm_cnt c0 = raw_o0_[node], c1 = row[node];
       raw_mx_.set(0, cm_stretch(c0.P()));
       raw_mx_.set(1, c1.t ? cm_stretch(c1.P()) : 0);
       raw_mx_.set(2, 256);
+      // the match's bit, while the byte so far agrees with its
+      int mb = -1;
+      if (pbyte >= 0 && (u32)(pbyte | 256) >> (i + 1) == node) mb = pbyte >> i & 1;
+      int sm = mb < 0 ? 0 : cm_stretch(raw_mc_[ml].P());
+      raw_mx_.set(3, mb < 0 ? 0 : mb ? sm : -sm);
       int bit = tc_bit<f_DEC>(raw_mx_.mix(node), (int)(ENC && ((b >> i) & 1)));
       raw_mx_.upd(bit, 24, 0);
       c0.upd(bit, 250, 0);
       c1.upd(bit, 60, 0);
+      if (mb >= 0) raw_mc_[ml].upd(bit == mb, 250, 0);
       raw_o0_[node] = c0;
       row[node] = c1;
       node = node * 2 + (u32)bit;
     }
     raw_prev_ = node & 255;
+    // the match goes on or ends; then the bytes coded join what it searches
+    if (pbyte >= 0 && (u32)pbyte == (node & 255))
+      rlen_++, rptr_++;
+    else
+      rlen_ = 0;
+    rbuf_.push_back((u8)(node & 255));
+    size_t n = rbuf_.size();
+    if (n - rdict_ >= 3) {
+      u32 k = rkey(&rbuf_[n - 3]);
+      if (!rlen_ && rhash_[k] >= 0) rptr_ = (size_t)rhash_[k], rlen_ = 1;
+      rhash_[k] = (i32)n;
+    }
     tc_syms[STG_RAW]++;
     return node & 255;
   }
