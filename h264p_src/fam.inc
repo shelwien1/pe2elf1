@@ -58,6 +58,184 @@ template <int f_DEC> static INLINE int tc_bit(int p, int bit) {
   Model<f_DEC>::rc.rc_Process((uint)(p << 3), b);
   return (int)b;
 }
+#ifndef H264P_NO_THREADS
+//  The compressor's coding calls, in order, for a thread of their own: the
+//  model and the reconstruction run ahead of the families and the coder,
+//  which take only what was recorded, so the stream is the same. (Not the
+//  decompressor's: what it decodes steers its model.)
+struct TcDefer {
+  enum Op : uint8_t { SEL, BIT, CODE, CODES, SIGN, RAW, END };
+  struct Rec {
+    Op op;
+    bool pa;    // prpa copied
+    int node;   // the node; the sign context
+    i64 val;    // the bit, value or byte
+    int prp;
+    i64 hint;
+    void *obj;  // the family (RAW: the model)
+    tcx x;
+    int prpa[32];
+  };
+  static constexpr size_t N = 4096;  // records in the ring, a power of 2
+  std::unique_ptr<Rec[]> ring{new Rec[N]};
+  void (*exec)(Rec &) = nullptr;       // a record coded
+  void (*pre)(const Rec &) = nullptr;  // the rows it will read, on their way into the cache
+  std::function<void()> idle;          // the coder's thread between batches
+  std::thread th;
+  // (each side's own on lines of their own)
+  alignas(64) std::atomic<size_t> head{0};  // recorded and published by the model
+  alignas(64) std::atomic<size_t> tail{0};  // coded
+  alignas(64) size_t h = 0, room = N;       // the model's next record, and how far it may go
+  alignas(64) std::string err;              // what the coding failed with
+  bool failed = false;
+  // a side with nothing to do sleeps (after a moment's spinning) until the
+  // other has work for it, enough to be worth the waking: the coder for
+  // kWake records, the model for kWake records' room
+  static constexpr size_t kWake = 1024;
+  std::mutex mu;
+  std::condition_variable cv;
+  std::atomic<bool> csleep{false}, msleep{false}, fin{false}, quit{false};
+  std::atomic<size_t> cfrom{0}, mfrom{0};  // where the coder sleeps, the model
+
+  static void spin() {
+    for(int i = 0; i < 16; i++)
+#ifdef H264P_AVX2
+      _mm_pause();
+#else
+      std::atomic_signal_fence(std::memory_order_seq_cst);
+#endif
+  }
+  void wake() {
+    std::lock_guard<std::mutex> lk(mu);
+    cv.notify_all();
+  }
+  INLINE Rec &next() {
+    if(UNLIKELY(h >= room))
+      wait_room();
+    return ring[h & (N - 1)];
+  }
+  void wait_room() {
+    publish();  // (the ring full: enough for the coder, should it sleep)
+    for(int k = 0; k < 16; k++, spin())
+      if(h < (room = tail.load() + N))
+        return;
+    std::unique_lock<std::mutex> lk(mu);
+    mfrom = h;
+    msleep = true;
+    cv.wait(lk, [&] { return tail.load() + N >= h + kWake; });
+    msleep = false;
+    room = tail.load() + N;
+  }
+  INLINE void put() {
+    if((++h & 31) == 0)
+      publish();
+  }
+  void publish() {
+    head.store(h);
+    if(csleep.load() && h - cfrom.load() >= kWake)
+      wake();
+  }
+  void done(size_t t) {
+    tail.store(t);
+    if(msleep.load() && t + N >= mfrom.load() + kWake)
+      wake();
+  }
+  INLINE void sel(void *f, const tcx &x) {
+    Rec &r = next();
+    r.op = SEL, r.obj = f, r.x = x;
+    put();
+  }
+  INLINE void bit(void *f, int node, int b, int pp) {
+    Rec &r = next();
+    r.op = BIT, r.obj = f, r.node = node, r.val = b, r.prp = pp;
+    put();
+  }
+  INLINE void code(void *f, Op op, const tcx &x, i64 v, u32 sc, int prp, const int *prpa, int nd, i64 hint) {
+    Rec &r = next();
+    r.op = op, r.obj = f, r.x = x, r.val = v, r.node = (int)sc, r.prp = prp, r.hint = hint, r.pa = prpa != nullptr;
+    if(prpa)
+      memcpy(r.prpa, prpa, sizeof(int) * (size_t)(nd < 32 ? nd : 32));
+    put();
+  }
+  INLINE void sign(void *f, u32 sc, int s) {
+    Rec &r = next();
+    r.op = SIGN, r.obj = f, r.node = (int)sc, r.val = s;
+    put();
+  }
+  INLINE void raw(void *m, u32 b) {
+    Rec &r = next();
+    r.op = RAW, r.obj = m, r.val = b;
+    put();
+  }
+  void start() {
+    th = std::thread([this] { run(); });
+  }
+  void run() {
+    size_t t = 0;
+    for(int k = 0;; k++) {
+      size_t hh = head.load();
+      if(hh == t) {
+        if(quit.load() || (fin.load() && head.load() == t))
+          return;
+        if(k < 16) {
+          spin();
+          continue;
+        }
+        std::unique_lock<std::mutex> lk(mu);
+        cfrom = t;
+        csleep = true;
+        cv.wait(lk, [&] { return head.load() - t >= kWake || fin.load() || quit.load(); });
+        csleep = false;
+        continue;
+      }
+      k = 0;
+      for(; t < hh; t++) {
+        Rec &r = ring[t & (N - 1)];
+        if(t + 8 < hh)
+          pre(ring[(t + 8) & (N - 1)]);
+        if(r.op == END) {
+          done(t + 1);
+          return;
+        }
+        if(!failed) {
+          try {
+            exec(r);
+          } catch(const std::exception &e) {
+            failed = true;
+            err = e.what();
+          }
+        }
+        if((t & 63) == 63)
+          done(t + 1);
+      }
+      done(t);
+      if(idle && !failed)
+        idle();
+    }
+  }
+  //  The model is done: all of it coded, or what the coding failed with
+  //  thrown
+  void finish() {
+    Rec &r = next();
+    r.op = END;
+    put();
+    publish();
+    fin = true;
+    wake();
+    th.join();
+    if(failed)
+      throw CmError(err);
+  }
+  ~TcDefer() {
+    if(th.joinable()) {  // the model failed: what it recorded is coded, for nothing
+      quit = true;
+      wake();
+      th.join();
+    }
+  }
+};
+#endif
+
 template <int f_DEC> struct tc_fam {
   static constexpr int ENC = (f_DEC == 0);
   int hA, hB, hD, hE, hH, hI, hJ, hK, hL, hS, hF, hM, hT, hN;
@@ -78,6 +256,14 @@ template <int f_DEC> struct tc_fam {
   //  counters of its own by the t index and node (Z; ZM for the mantissa).
   i64 hint;
   int hs;
+  //  what the coding takes (prp, prpa and hint as they were at the call,
+  //  or as recorded)
+  int cprp;
+  const int *cprpa;
+  i64 chint;
+#ifndef H264P_NO_THREADS
+  TcDefer *dq = nullptr;  // the compressor's coder's thread, null none
+#endif
   u32 bz;
   std::vector<cm_cnt2> Z;
   std::vector<cm_cnt> ZM;
@@ -191,14 +377,82 @@ template <int f_DEC> struct tc_fam {
     mbm = tc_clamp(mbm2, 0, 255);
     bw = tc_clamp(bwt, 0, 16);
     mt = tc_clamp(mtr, 0, TC_MTREE);
-    prp = -1;
-    prpa = nullptr;
-    hint = -1;
+    prp = cprp = -1;
+    prpa = cprpa = nullptr;
+    hint = chint = -1;
     hs = 0;
     zrows = tc_rows((long long)vt, ht);
   }
   sz zrows;
+  //  The coding calls of the model: coded at once, or recorded for the
+  //  coder's thread (whose results they know: the values they code)
   INLINE void select(const tcx &x) {
+#ifndef H264P_NO_THREADS
+    if(!f_DEC && dq)
+      return dq->sel(this, x);
+#endif
+    select_x(x);
+  }
+  INLINE int bit(int node, int b) {
+    if(UNLIKELY((unsigned)node >= (unsigned)nd))
+      cm_fail("internal: decision node %d of a family of %d", node, nd);
+#ifndef H264P_NO_THREADS
+    if(!f_DEC && dq)
+      return dq->bit(this, node, b, prpa ? prpa[node] : prp), b;
+#endif
+    cprp = prp, cprpa = prpa;
+    return bit_x(node, b);
+  }
+  i64 code(const tcx &v, i64 x) {
+#ifndef H264P_NO_THREADS
+    if(!f_DEC && dq) {
+      if(UNLIKELY(x < 0))
+        cm_fail("internal: a negative magnitude");
+      return dq->code(this, TcDefer::CODE, v, x, 0, prp, prpa, nd, hint), x;
+    }
+#endif
+    cprp = prp, cprpa = prpa, chint = hint;
+    return code_x(v, x);
+  }
+  i64 codes(const tcx &v, i64 x, u32 sc) {
+#ifndef H264P_NO_THREADS
+    if(!f_DEC && dq)
+      return dq->code(this, TcDefer::CODES, v, x, sc, prp, prpa, nd, hint), x;
+#endif
+    cprp = prp, cprpa = prpa, chint = hint;
+    return codes_x(v, x, sc);
+  }
+  int sign(u32 sc, int s) {
+#ifndef H264P_NO_THREADS
+    if(!f_DEC && dq)
+      return dq->sign(this, sc, s), s;
+#endif
+    return sign_x(sc, s);
+  }
+  //  The rows select() and the first decision will read, on their way
+  //  into the cache (the coder's thread, records ahead)
+  INLINE void pre(const tcx &x) const {
+    CM_PREFETCH(A + (sz)(hA ? tc_hrow((u32)x.a, hA) : (u32)x.a) * nd);
+    CM_PREFETCH(B + (sz)(hB ? tc_hrow((u32)x.b, hB) : (u32)x.b) * nd);
+    CM_PREFETCH(C + (sz)x.c * nd);
+    CM_PREFETCH(D + (sz)(hD ? tc_hrow((u32)x.d, hD) : (u32)x.d) * nd);
+    CM_PREFETCH(E + (sz)(hE ? tc_hrow((u32)x.e, hE) : (u32)x.e) * nd);
+    CM_PREFETCH(H + (sz)(hH ? tc_hrow((u32)x.h, hH) : (u32)x.h) * nd);
+    CM_PREFETCH(I + (sz)(hI ? tc_hrow((u32)x.i, hI) : (u32)x.i) * nd);
+    CM_PREFETCH(J + (sz)(hJ ? tc_hrow((u32)x.j, hJ) : (u32)x.j) * nd);
+    CM_PREFETCH(K + (sz)(hK ? tc_hrow((u32)x.k, hK) : (u32)x.k) * nd);
+    CM_PREFETCH(L + (sz)(hL ? tc_hrow((u32)x.l, hL) : (u32)x.l) * nd);
+    u32 s = (hS ? tc_hrow((u32)x.s, hS) : (u32)x.s) * nd, f = (hF ? tc_hrow((u32)x.f, hF) : (u32)x.f) * nd;
+    u32 m = (hM ? tc_hrow((u32)x.m, hM) : (u32)x.m) * nd;
+    CM_PREFETCH(ap.t + (sz)s * (u32)ap.q);
+    CM_PREFETCH(ap.c + (sz)s * (u32)ap.q);
+    CM_PREFETCH(ap2.t + (sz)f * (u32)ap2.q);
+    CM_PREFETCH(ap2.c + (sz)f * (u32)ap2.q);
+    CM_PREFETCH(mx.w + (sz)m * TC_MIXN);
+    CM_PREFETCH(mx2.w + (sz)((u32)x.w * nd) * TC_MIXN);
+    CM_PREFETCH(mx3.w + (sz)s * TC_MIXN);
+  }
+  INLINE void select_x(const tcx &x) {
     ba = (sz)(hA ? tc_hrow((u32)x.a, hA) : (u32)x.a) * nd;
     bb = (sz)(hB ? tc_hrow((u32)x.b, hB) : (u32)x.b) * nd;
     bc = (sz)x.c * nd;
@@ -248,9 +502,7 @@ template <int f_DEC> struct tc_fam {
     CM_PREFETCH(mx2.c + bw2 + node);
     CM_PREFETCH(mx3.c + bs + node);
   }
-  INLINE int bit(int node, int b) {
-    if(UNLIKELY((unsigned)node >= (unsigned)nd))
-      cm_fail("internal: decision node %d of a family of %d", node, nd);
+  INLINE int bit_x(int node, int b) {
     if(node + 1 < nd)
       fetch(node + 1);
     cm_cnt2 a = A[ba + node];
@@ -274,7 +526,7 @@ template <int f_DEC> struct tc_fam {
     mx.set(4, cm_stretch(g.P()));
     mx.set(5, cm_stretch(h.P()));
     mx.set(6, cm_stretch(pa));
-    int pp = prpa ? prpa[node] : prp;
+    int pp = cprpa ? cprpa[node] : cprp;
     mx.set(7, pp >= 0 ? cm_stretch(pp) : 0);
     mx.set(8, 256);
     mx.set(9, cm_stretch(a.Q()));
@@ -345,7 +597,7 @@ template <int f_DEC> struct tc_fam {
     if(UNLIKELY((unsigned)node >= (unsigned)nm))
       cm_fail("internal: mantissa node %d of a family of %d", node, nm);
     cm_cnt t = T[bt + node];
-    if(hs && (prp < 0 || prpa)) {
+    if(hs && (cprp < 0 || cprpa)) {
       // with the hint's counter, through the mantissa mixer the value
       // would not use otherwise
       cm_cnt &z = ZM[((sz)bz * nm + (u32)node) * 5 + (u32)hs];
@@ -360,14 +612,14 @@ template <int f_DEC> struct tc_fam {
       z.upd(b, rT, mwT);
       return b;
     }
-    if(prp < 0 || prpa) {
+    if(cprp < 0 || cprpa) {
       b = tc_bit<f_DEC>(t.P(), b);
       t.upd(b, rT, mwT);
       T[bt + node] = t;
       return b;
     }
     mxm.set(0, cm_stretch(t.P()));
-    mxm.set(1, cm_stretch(prp));
+    mxm.set(1, cm_stretch(cprp));
     mxm.set(2, 256);
     {
       int pm = mxm.mix(bn + (u32)node);
@@ -378,12 +630,13 @@ template <int f_DEC> struct tc_fam {
     T[bt + node] = t;
     return b;
   }
-  i64 code(const tcx &v, i64 x) {
+  i64 code_x(const tcx &v, i64 x) {
     int k, p, nb = 0, hst = 0, hnb = 0;
     u64 u, hu = 0;
-    select(v);
+    select_x(v);
     if(UNLIKELY(ENC && x < 0))
       cm_fail("internal: a negative magnitude");
+    const i64 hint = chint;
     if(hint >= 0) {
       // hst: 1 the value agrees with the hint so far, 3 it is above, 4 below
       hst = 1;
@@ -396,7 +649,7 @@ template <int f_DEC> struct tc_fam {
     for(k = 0; k < 3; k++) {
       int hb = hint == k;
       hs = hst == 1 ? 1 + hb : hst;
-      int b = bit(k, ENC && x == k);
+      int b = bit_x(k, ENC && x == k);
       if(hst == 1 && b != hb)
         hst = b ? 4 : 3;
       if(b) {
@@ -415,7 +668,7 @@ template <int f_DEC> struct tc_fam {
     for(k = 0;; k++) {
       int hb = hnb == k + 1;
       hs = hst == 1 ? 1 + hb : hst;
-      int b = bit(tc_node_len(k), ENC && nb == k + 1);
+      int b = bit_x(tc_node_len(k), ENC && nb == k + 1);
       if(hst == 1 && b != hb)
         hst = b ? 4 : 3;
       if(b) {
@@ -443,7 +696,7 @@ template <int f_DEC> struct tc_fam {
   }
   //  The sign of a nonzero value, under the g index of the last select()
   //  and sign context sc: 1 negative.
-  int sign(u32 sc, int s) {
+  int sign_x(u32 sc, int s) {
     if(!G)
       cm_fail("internal: a family with no sign counter coded a sign");
     cm_cnt g = G[bg * (u32)ng + sc];
@@ -452,11 +705,11 @@ template <int f_DEC> struct tc_fam {
     G[bg * (u32)ng + sc] = g;
     return s;
   }
-  i64 codes(const tcx &v, i64 x, u32 sc) {
-    i64 m = code(v, ENC ? (x < 0 ? -x : x) : 0);
+  i64 codes_x(const tcx &v, i64 x, u32 sc) {
+    i64 m = code_x(v, ENC ? (x < 0 ? -x : x) : 0);
     if(!m)
       return 0;
-    return sign(sc, x < 0) ? -m : m;
+    return sign_x(sc, x < 0) ? -m : m;
   }
 };
 

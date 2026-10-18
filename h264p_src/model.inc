@@ -381,6 +381,17 @@ struct Model {
   static Rangecoder<f_DEC> rc;
 
   tc_fam<f_DEC> f_nal, f_hdr, f_skp, f_mbt, f_cbp, f_ipm, f_mvs, f_qpd, f_cbf, f_sig, f_lvl, f_sgn, f_mvg, f_qpg, f_pcm;
+#ifndef H264P_NO_THREADS
+  TcDefer* dq_ = nullptr;
+  // (the compressor) the coding calls for the coder's thread q, or (null)
+  // coded at once again
+  void defer(TcDefer* q) {
+    dq_ = q;
+    for (tc_fam<f_DEC>* f : {&f_nal, &f_hdr, &f_skp, &f_mbt, &f_cbp, &f_ipm, &f_mvs, &f_qpd, &f_cbf, &f_sig, &f_lvl,
+                             &f_sgn, &f_mvg, &f_qpg, &f_pcm})
+      f->dq = q;
+  }
+#endif
   H_nal_T* t_nal;
   H_hdr_T* t_hdr;
   H_skp_T* t_skp;
@@ -479,10 +490,16 @@ struct Model {
     rlen_ = 0;
   }
   u32 raw(u32 b) {
+    tc_stage = STG_RAW;
+#ifndef H264P_NO_THREADS
+    if (!f_DEC && dq_) return dq_->raw(this, b), b;
+#endif
+    return raw_x(b);
+  }
+  u32 raw_x(u32 b) {
     if (rbuf_.empty()) raw_init();
     cm_cnt* row = raw_o1_[raw_prev_];
     u32 node = 1;
-    tc_stage = STG_RAW;
     int pbyte = rlen_ && rptr_ < rbuf_.size() ? rbuf_[rptr_] : -1, ml = std::min(rlen_, 15);
     for (int i = 7; i >= 0; i--) {
       cm_cnt c0 = raw_o0_[node], c1 = row[node];
@@ -2735,6 +2752,42 @@ struct Model {
 
 template <int f_DEC>
 Rangecoder<f_DEC> Model<f_DEC>::rc;
+
+#ifndef H264P_NO_THREADS
+// TcDefer's records, coded, and their rows fetched ahead
+static void tc_exec(TcDefer::Rec& r) {
+  if (r.op == TcDefer::RAW) {
+    static_cast<Model<0>*>(r.obj)->raw_x((u32)r.val);
+    return;
+  }
+  tc_fam<0>& f = *static_cast<tc_fam<0>*>(r.obj);
+  switch (r.op) {
+    case TcDefer::SEL:
+      f.select_x(r.x);
+      break;
+    case TcDefer::BIT:
+      f.cprp = r.prp, f.cprpa = nullptr;
+      f.bit_x(r.node, (int)r.val);
+      break;
+    case TcDefer::CODE:
+    case TcDefer::CODES:
+      f.cprp = r.prp, f.cprpa = r.pa ? r.prpa : nullptr, f.chint = r.hint;
+      if (r.op == TcDefer::CODE)
+        f.code_x(r.x, r.val);
+      else
+        f.codes_x(r.x, r.val, (u32)r.node);
+      break;
+    case TcDefer::SIGN:
+      f.sign_x((u32)r.node, (int)r.val);
+      break;
+    default:
+      break;
+  }
+}
+static void tc_pre(const TcDefer::Rec& r) {
+  if (r.op == TcDefer::SEL || r.op == TcDefer::CODE || r.op == TcDefer::CODES) static_cast<const tc_fam<0>*>(r.obj)->pre(r.x);
+}
+#endif
 
 // The channel between the walk and the model. Coding, it takes each value
 // from the log of the dry run and has the model code it; decoding, the

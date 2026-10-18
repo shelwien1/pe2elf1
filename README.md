@@ -18,11 +18,14 @@ Linux (gcc or clang):
 Windows (MinGW): `g.bat`, as before, for h264dec, `gp.bat` for h264p.
 
 h264p is a single module: `h264p_src/h264p.cpp` includes the rest of its
-sources (`*.inc`), so `g++ -O2 -march=x86-64-v3 -std=c++11 -fwrapv
+sources (`*.inc`), so `g++ -O2 -march=x86-64-v3 -std=c++11 -fwrapv -pthread
 h264p_src/h264p.cpp -o h264p` builds it too. Its target is x86-64-v3 (AVX2:
 Haswell, Zen and later), for which its pixel kernels and mixers have SIMD
 code; built for any other target (`make PARCH=`, or without `-march`) it
 uses the plain C++ beside them, which is slower and codes identically.
+Compression runs the context mixing coder in a second thread, beside the
+model; `-DH264P_NO_THREADS` builds it without (for a compiler without
+`std::thread`), also to the same output.
 
 ## Test
 

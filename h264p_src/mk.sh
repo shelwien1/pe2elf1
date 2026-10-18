@@ -64,7 +64,7 @@ generate() {
 }
 
 build() {
-  $CXX $CXXFLAGS $PARCH -std=c++11 -fwrapv -o ../h264p h264p.cpp
+  $CXX $CXXFLAGS $PARCH -std=c++11 -fwrapv -pthread -o ../h264p h264p.cpp
 }
 
 case "${1:-tuning}" in

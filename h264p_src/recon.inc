@@ -1734,10 +1734,9 @@ struct Recon {
               _mm_storel_epi64((__m128i*)(q + (y + 1) * ds), _mm_unpackhi_epi64(v, v));
               return;
             }
-            for (int j = 0; j < 4; j++) {
-              int32_t u = _mm_cvtsi128_si32(_mm_srli_si128(v, 4 * j));
-              memcpy(q + j * ds, &u, 4);
-            }
+            uint8_t t[16];
+            _mm_storeu_si128((__m128i*)t, v);
+            for (int j = 0; j < 4; j++) memcpy(q + j * ds, t + 4 * j, 4);
           };
           // (the bytes of two vectors in pairs times (m0, m1), plus r, >> sh, plus o, clipped)
           auto wsum = [](__m128i x, __m128i y, int m0, int m1, int r, int sh, int o) {
