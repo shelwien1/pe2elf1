@@ -15,8 +15,8 @@
 
 void H_qpd_make( const H_qpd_v & D, tcx & X ) {
   int a, b, c, d, e, h, i, j, k, l, s, f, m, w, t, n, g;
-  int lnz = D.lnz, pc = D.pc, cc = D.cc, cls = D.cls, dc = D.dc, db = D.db, lz = D.lz, st = D.st, ae = D.ae, aq = D.aq, ac = D.ac, td = D.td, sq = D.sq, xe = D.xe;
-  (void) lnz;  (void) pc;  (void) cc;  (void) cls;  (void) dc;  (void) db;  (void) lz;  (void) st;  (void) ae;  (void) aq;  (void) ac;  (void) td;  (void) sq;  (void) xe;
+  int lnz = D.lnz, pc = D.pc, cc = D.cc, cls = D.cls, dc = D.dc, db = D.db, lz = D.lz, st = D.st, ae = D.ae, aq = D.aq, ac = D.ac, td = D.td, sq = D.sq, xe = D.xe, lq = D.lq;
+  (void) lnz;  (void) pc;  (void) cc;  (void) cls;  (void) dc;  (void) db;  (void) lz;  (void) st;  (void) ae;  (void) aq;  (void) ac;  (void) td;  (void) sq;  (void) xe;  (void) lq;
 
   a = 0;
   a = a*2 + ((lnz>0+(1-1)));
@@ -29,6 +29,7 @@ void H_qpd_make( const H_qpd_v & D, tcx & X ) {
   b = b*9 + H_qpd_b_dc[__min(8,__max(0,dc-(1-1)))];
   b = b*4 + H_qpd_b_aq[__min(13,__max(0,aq-(1-1)))];
   b = b*14 + H_qpd_b_ae[__min(13,__max(0,ae-(1-1)))];
+  b = b*14 + H_qpd_b_lq[__min(13,__max(0,lq-(1-1)))];
 
   c = 0;
   c = c*7 + H_qpd_c_lz[__min(6,__max(0,lz-(1-1)))];
@@ -63,6 +64,7 @@ void H_qpd_make( const H_qpd_v & D, tcx & X ) {
   j = j*9 + H_qpd_j_db[__min(8,__max(0,db-(1-1)))];
   j = j*2 + ((lnz>0+(1-1)));
   j = j*9 + H_qpd_j_td[__min(16,__max(0,td-(1-1)))];
+  j = j*14 + H_qpd_j_lq[__min(13,__max(0,lq-(1-1)))];
 
   k = 0;
   k = k*14 + H_qpd_k_aq[__min(13,__max(0,aq-(1-1)))];

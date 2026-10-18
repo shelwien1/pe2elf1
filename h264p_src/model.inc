@@ -37,13 +37,13 @@ struct H_mbt_v { int st, ca, cb, cc, nsk, en, td, sm, tm, tb, dh, bd, qc, im, ig
 struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg, tp, em, pq; };
 struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm, pr, dr, pq, mh, mc, mg, rg; };
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, zd, cq, tq, rt, ea, eb; };
-struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac, td, sq, xe; };
+struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac, td, sq, xe, lq; };
 struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn, pq, ch, ds, hv; };
 struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz, pq, hb, ft, h3, pr, sn, hv, pf; };
 struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe, pl, tz, pq, lh, lt, ls, hv, fq; };
 struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md, pp, mg, ez, ts, pq, gh, se, dm; };
 struct H_mvg_v { int comp, lst, ts, zs, ds, sa, sb, mag, tq, ox, ns, es; };
-struct H_qpg_v { int as, cs, bs, ls, rs, mag, cls, st, ss, xe; };
+struct H_qpg_v { int as, cs, bs, ls, rs, mag, cls, st, ss, xe, lq; };
 struct H_pcm_v { int pl, dp, pd, pd2; };
 
 #include "MOD/nal_h.inc"
@@ -536,6 +536,9 @@ struct Model {
   int width_ = 1, size_ = 0;
   bool mbaff_ = false;
   int qp_off_ = 0, qp_pred_ = 26, slice_qp_ = 26;
+  // 1 + the QP of the picture's last macroblock of each kind (inter,
+  // I_NxN, other) and energy class (qpd's xe), 0 none
+  int lq_[3][19] = {};
   int last_qpd_ = 0, lz_ = 0;  // the last mb_qp_delta, the last nonzero one
   int qp_src_ = -1;            // the macroblock that coded it
   bool has_lz_ = false, qpd_coded_ = false;
@@ -679,6 +682,7 @@ struct Model {
       cur_poc_ = hist_poc_[key_] = rec_.active ? rec_.cur->poc : INT_MIN;
     }
     if (h.first_mb == 0) aq_picture();
+    if (h.first_mb == 0) memset(lq_, 0, sizeof lq_);
   }
   void slice_end() { slice_cnt_[key_] = cnt_; }
 
@@ -1855,6 +1859,10 @@ struct Model {
         }
       }
       D.xe = aq_xp_ < 0 ? 0 : 1 + std::min(aq_xp_ / 16, 17);
+      // the QP of the last macroblock of the class: an encoder's QP is its
+      // rate control's plus what the energy adds
+      int lk = mi_->cls < CL_INXN ? 0 : mi_->cls == CL_INXN ? 1 : 2;
+      if (lq_[lk][D.xe]) D.lq = 7 + tc_clamp(lq_[lk][D.xe] - 1 - qp_pred_, -6, 6);
       if (ok || (x >= 0 && aq_fit_.predict(x, q16))) {
         aqd = (int)div_floor(q16 - 16 * qp_pred_ + 8, 16);
         D.aq = 7 + tc_clamp(aqd, -6, 6);
@@ -1889,6 +1897,7 @@ struct Model {
         G.st = st_;
         G.ss = rel(slice_qp_ - qp_pred_);
         G.xe = D.xe;
+        G.lq = D.lq ? rel(D.lq - 7) : 9;
         tcx Y;
         H_qpg_make(G, Y);
         f_qpg.select(Y);
@@ -1901,6 +1910,7 @@ struct Model {
     int qp = ((qp_pred_ + v + 52 + 2 * qp_off_) % (52 + qp_off_) + (52 + qp_off_)) % (52 + qp_off_) - qp_off_;
     qp_pred_ = qp;
     qp_src_ = addr_;
+    lq_[mi_->cls < CL_INXN ? 0 : mi_->cls == CL_INXN ? 1 : 2][D.xe] = qp + 1;
     mi_->qp = (uint8_t)(qp + qp_off_);
     last_qpd_ = v;
     if (v) {

@@ -11,7 +11,9 @@
 #  picture of the kind was from its line where the macroblock's content
 #  was (sgn3, 3 none), mag the magnitude (tc_qlog), cls the class of the
 #  macroblock, st the slice type and reference status, ss as as for the
-#  slice's QP less the predicted one, xe the qpd family's energy class.
+#  slice's QP less the predicted one, xe the qpd family's energy class, lq
+#  as as for the QP of the last macroblock of the kind and class (qpd's
+#  lq).
 
 Prefix H_qpg
 Debug 1
@@ -22,6 +24,7 @@ Index a
  a_mag: mag, 1!1111111
  a_ss: ss, 1!111111111
  a_xe: xe, 1!111111111111111111
+ a_lq: lq, 1!111111111
 
 Index b
  b_as: as, 1!111111111

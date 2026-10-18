@@ -17,7 +17,10 @@
 #  the slice's QP less the predicted one (7 + that, -6 to 6): an encoder's
 #  QPs keep near the slice's; xe the class of the energy the line takes
 #  (1 + log2, up to 18; 0 none), for an encoder whose QP is no line of it
-#  (flat below an energy, then rising).  The
+#  (flat below an energy, then rising); lq the QP of the picture's last
+#  macroblock of the kind (inter, I_NxN, other) and energy class less the
+#  predicted one (7 + that, -6 to 6; 0 none): the rate control's QP plus
+#  what the class adds.  The
 #  magnitude has the line's delta as code()'s hint; the sign is the qpg
 #  family's.
 
@@ -36,6 +39,7 @@ Index b
  b_dc: dc, 1!11111111
  b_aq: aq, 1!1000100001000
  b_ae: ae, 1!1111111111111
+ b_lq: lq, 1!1111111111111
 
 Index c
  c_lz: lz, 1!111111
@@ -71,6 +75,7 @@ Index j
  j_db: db, 1!11111111
  j_lnz: lnz, 1!1
  j_td: td, 1!1010101010101010
+ j_lq: lq, 1!1111111111111
 
 Index k
  k_aq: aq, 1!1111111111111
