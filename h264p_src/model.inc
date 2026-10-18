@@ -2318,9 +2318,13 @@ struct Model {
       int a = (3 * abs(q4(j)) + 4) / 12;
       return q4(j) < 0 ? -a : a;
     };
-    int pnz = 0;
-    if (pok)
-      for (int j = 0; j < n; j++) pnz += est(j) != 0;
+    // (from each position on)
+    int pnz = 0, esuf[65];
+    esuf[n] = 0;
+    if (pok) {
+      for (int j = n - 1; j >= 0; j--) esuf[j] = esuf[j + 1] + (est(j) != 0);
+      pnz = esuf[0];
+    }
     // a luma block of a P picture on its first reference: the coefficients,
     // by scan position, of the block its vector points at in the last
     // picture of the kind (that reference); tmv: the vector moves it
@@ -2476,13 +2480,7 @@ struct Model {
         S.pe = spok && i < 4 ? sp.estimate(i) : 0;
         S.ps = pok ? 1 + std::min(abs(q4(i)), 6) : 0;
         // the estimate's levels from here on, against the coefficients left
-        if (pok) {
-          int er = 0;
-          for (int j = i; j < n; j++) er += est(j) != 0;
-          S.pr = 1 + 3 + tc_clamp(er - rem, -3, 3);
-        } else {
-          S.pr = 0;
-        }
+        S.pr = pok ? 1 + 3 + tc_clamp(esuf[i] - rem, -3, 3) : 0;
         // the last two positions' significance (4 at the start)
         {
           // the frequencies left of and above it, where coded already (0

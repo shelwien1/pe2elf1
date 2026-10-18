@@ -217,26 +217,42 @@ template <int f_DEC> struct tc_fam {
     bt = bz * nm;
     bn = (hN ? tc_hrow((u32)x.n, hN) : (u32)x.n) * nm;
     bg = (u32)x.g;
-    __builtin_prefetch(A + ba);
-    __builtin_prefetch(B + bb);
-    __builtin_prefetch(C + bc);
-    __builtin_prefetch(D + bd);
-    __builtin_prefetch(E + be);
-    __builtin_prefetch(H + bh);
-    __builtin_prefetch(I + bi);
-    __builtin_prefetch(J + bj);
-    __builtin_prefetch(K + bk);
-    __builtin_prefetch(L + bl);
-    __builtin_prefetch(ap.t + (sz)bs * (u32)ap.q);
-    __builtin_prefetch(ap.c + (sz)bs * (u32)ap.q);
-    __builtin_prefetch(mx.w + (sz)bm * TC_MIXN);
-    __builtin_prefetch(mx.c + bm);
-    __builtin_prefetch(ap2.t + (sz)bf * (u32)ap2.q);
-    __builtin_prefetch(ap2.c + (sz)bf * (u32)ap2.q);
+    fetch(0);
+  }
+  //  The rows a decision of the node reads, on their way into the cache
+  //  (for the first node from select(), for the next while one is coded)
+  INLINE void fetch(int node) {
+    CM_PREFETCH(A + ba + node);
+    CM_PREFETCH(B + bb + node);
+    CM_PREFETCH(C + bc + node);
+    CM_PREFETCH(D + bd + node);
+    CM_PREFETCH(E + be + node);
+    CM_PREFETCH(H + bh + node);
+    CM_PREFETCH(I + bi + node);
+    CM_PREFETCH(J + bj + node);
+    CM_PREFETCH(K + bk + node);
+    CM_PREFETCH(L + bl + node);
+    CM_PREFETCH(ap.t + (sz)(bs + node) * (u32)ap.q);
+    CM_PREFETCH(ap.c + (sz)(bs + node) * (u32)ap.q);
+    CM_PREFETCH(ap2.t + (sz)(bf + node) * (u32)ap2.q);
+    CM_PREFETCH(ap2.c + (sz)(bf + node) * (u32)ap2.q);
+    const i32 *w1 = mx.w + (sz)(bm + node) * TC_MIXN, *w2 = mx2.w + (sz)(bw2 + node) * TC_MIXN;
+    const i32 *w3 = mx3.w + (sz)(bs + node) * TC_MIXN;
+    CM_PREFETCH(w1);
+    CM_PREFETCH(w1 + TC_MIXN - 1);
+    CM_PREFETCH(w2);
+    CM_PREFETCH(w2 + TC_MIXN - 1);
+    CM_PREFETCH(w3);
+    CM_PREFETCH(w3 + TC_MIXN - 1);
+    CM_PREFETCH(mx.c + bm + node);
+    CM_PREFETCH(mx2.c + bw2 + node);
+    CM_PREFETCH(mx3.c + bs + node);
   }
   INLINE int bit(int node, int b) {
     if(UNLIKELY((unsigned)node >= (unsigned)nd))
       cm_fail("internal: decision node %d of a family of %d", node, nd);
+    if(node + 1 < nd)
+      fetch(node + 1);
     cm_cnt2 a = A[ba + node];
     cm_cnt2 c = B[bb + node];
     cm_cnt2 e = C[bc + node];
@@ -277,21 +293,27 @@ template <int f_DEC> struct tc_fam {
     mx.set(22, cm_stretch(cl.Q()));
     cm_cnt2 *zc = hs ? &Z[((sz)bz * nd + (u32)node) * 5 + (u32)hs] : nullptr;
     mx.set(23, zc ? cm_stretch(zc->P()) : 0);
-    for(int i = 0; i < TC_MIXN; i++)
-      mx2.set(i, mx.x[i]), mx3.set(i, mx.x[i]);
+    // (the three mixers' inputs are the same, packed once)
+    cm_x16<TC_MIXN> xp;
+    xp.pack(mx.x);
+#ifdef H264P_AVX2
+    const cm_x16<TC_MIXN> *xq = &xp;
+#else
+    const cm_x16<TC_MIXN> *xq = nullptr;
+#endif
     {
-      mxf.set(0, cm_stretch(mx.mix(bm + (u32)node)));
-      mxf.set(1, cm_stretch(mx2.mix(bw2 + (u32)node)));
-      mxf.set(2, cm_stretch(mx3.mix(bs + (u32)node)));
+      mxf.set(0, cm_stretch(mx.mix(bm + (u32)node, mx.x, xq)));
+      mxf.set(1, cm_stretch(mx2.mix(bw2 + (u32)node, mx.x, xq)));
+      mxf.set(2, cm_stretch(mx3.mix(bs + (u32)node, mx.x, xq)));
       mxf.set(3, 256);
       int pm = mxf.mix((u32)node * 5 + (u32)hs);  // by node and hint state
       int pf = ap2.pp(pm, bf + (u32)node);
       pf = (bw * pm + (16 - bw) * pf + 8) >> 4;
       b = tc_bit<f_DEC>(pf < 1 ? 1 : pf > CM_PONE - 1 ? CM_PONE - 1 : pf, b);
     }
-    mx.upd(b, lr, mb);
-    mx2.upd(b, lr, mb);
-    mx3.upd(b, lr, mb);
+    mx.upd(b, lr, mb, mx.x, xq);
+    mx2.upd(b, lr, mb, mx.x, xq);
+    mx3.upd(b, lr, mb, mx.x, xq);
     mxf.upd(b, lr, mb);
     ap.upd(b, rS1);
     ap2.upd(b, rS2);

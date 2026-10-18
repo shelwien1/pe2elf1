@@ -10,6 +10,9 @@
 # always builds with it.
 
 CXXFLAGS ?= -O3 -DNDEBUG
+# h264p's target: x86-64-v3 (AVX2). PARCH= builds the plain C++ instead, for
+# any target, which codes identically
+PARCH ?= -march=x86-64-v3 -ffp-contract=off
 
 OBJDIR := _obj_linux
 SRCS   := $(wildcard codec/*.cpp)
@@ -23,13 +26,13 @@ h264dec: $(OBJS)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -pthread -o $@ $^ $(LDLIBS)
 
 h264p: $(POBJS)
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+	$(CXX) $(CXXFLAGS) $(PARCH) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 $(OBJDIR)/%.o: codec/%.cpp | $(OBJDIR)
 	$(CXX) $(CPPFLAGS) -Icodec $(CXXFLAGS) -fno-strict-aliasing -pthread -MMD -MP -c $< -o $@
 
 $(OBJDIR)/h264p/%.o: h264p_src/%.cpp | $(OBJDIR)/h264p
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -std=c++11 -fwrapv -MMD -MP -c $< -o $@
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(PARCH) -std=c++11 -fwrapv -MMD -MP -c $< -o $@
 
 $(OBJDIR) $(OBJDIR)/h264p:
 	mkdir -p $@

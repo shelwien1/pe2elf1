@@ -1,6 +1,9 @@
-// The context mixing parts of oggcomp (balrogg-P-hash cm.inc), unchanged but
-// for this comment: adaptive counters (cm_cnt), interpolated APMs (cm_apm)
-// and logistic mixers (cm_mix), on 12-bit probabilities.
+// The context mixing parts of oggcomp (balrogg-P-hash cm.inc): adaptive
+// counters (cm_cnt), interpolated APMs (cm_apm) and logistic mixers
+// (cm_mix), on 12-bit probabilities. Changed: the counters with a second,
+// fast probability (cm_cnt2), and the mixers' sums in AVX2 where the
+// inputs are packed once for the mixers sharing them (cm_x16), to the same
+// results.
 
 namespace h264p {
 
@@ -137,6 +140,25 @@ struct cm_apm {
 #define CM_UNROLL
 #endif
 
+// The inputs of a mixer of N (a multiple of 8) as 16-bit lanes, packed once
+// for the mixers that share them: 16 at a time in the order
+// _mm256_packs_epi32 leaves them (the weights are packed alike), the last 8
+// in a half
+template <int N> struct cm_x16 {
+#ifdef H264P_AVX2
+  __m256i v[N / 16 ? N / 16 : 1];
+  __m128i t;
+  INLINE void pack(const int *x) {
+    for(int i = 0; i + 16 <= N; i += 16)
+      v[i / 16] = _mm256_packs_epi32(_mm256_loadu_si256((const __m256i *)(x + i)), _mm256_loadu_si256((const __m256i *)(x + i + 8)));
+    if(N % 16)
+      t = _mm_packs_epi32(_mm_loadu_si128((const __m128i *)(x + N - 8)), _mm_loadu_si128((const __m128i *)(x + N - 4)));
+  }
+#else
+  INLINE void pack(const int *) {}
+#endif
+};
+
 template <int N> struct cm_mix {
   i32 *__restrict w;
   u8 *__restrict c;
@@ -151,47 +173,53 @@ template <int N> struct cm_mix {
     pr = CM_PHALF;
   }
   INLINE void set(int k, int st) { x[k] = st; }
-#ifdef H264P_SSE2
-  // the inputs (stretched probabilities, within 16 bits) 8 at a time
-  INLINE __m128i x16(int i) const {
-    return _mm_packs_epi32(_mm_loadu_si128((const __m128i *)(x + i)), _mm_loadu_si128((const __m128i *)(x + i + 4)));
-  }
-  static INLINE int hsum(__m128i v) {
-    v = _mm_add_epi32(v, _mm_shuffle_epi32(v, 0x4E));
-    return _mm_cvtsi128_si32(_mm_add_epi32(v, _mm_shuffle_epi32(v, 0xB1)));
-  }
-#endif
-  INLINE int mix(u32 ctx) {
+  INLINE int mix(u32 ctx) { return mix(ctx, x, nullptr); }
+  // with the inputs xi (packed in xp, N a multiple of 8, or null)
+  INLINE int mix(u32 ctx, const int *xi, const cm_x16<N> *xp) {
     i64 s = 0;
     int i;
     ctxn = (int)ctx;
     row = (int)ctx * N;
-#ifdef H264P_SSE2
-    if(N % 8 == 0) {
+#ifdef H264P_AVX2
+    if(xp) {
       // exactly the sum below: each weight (with W0, under 2^29) as hi 2^15
       // + lo, lo in 0..32767, so that both sums of products stay in 32 bits
-      const __m128i w0 = _mm_set1_epi32(W0), m15 = _mm_set1_epi32(0x7FFF);
-      __m128i sh = _mm_setzero_si128(), sl = sh;
-      for(i = 0; i < N; i += 8) {
-        __m128i xx = x16(i);
-        __m128i va = _mm_add_epi32(_mm_loadu_si128((const __m128i *)(w + row + i)), w0);
-        __m128i vb = _mm_add_epi32(_mm_loadu_si128((const __m128i *)(w + row + i + 4)), w0);
-        sh = _mm_add_epi32(sh, _mm_madd_epi16(_mm_packs_epi32(_mm_srai_epi32(va, 15), _mm_srai_epi32(vb, 15)), xx));
-        sl = _mm_add_epi32(sl, _mm_madd_epi16(_mm_packs_epi32(_mm_and_si128(va, m15), _mm_and_si128(vb, m15)), xx));
+      const i32 *ww = w + row;
+      const __m256i w0 = _mm256_set1_epi32(W0), m15 = _mm256_set1_epi32(0x7FFF);
+      __m256i sh = _mm256_setzero_si256(), sl = sh;
+      for(i = 0; i + 16 <= N; i += 16) {
+        __m256i va = _mm256_add_epi32(_mm256_loadu_si256((const __m256i *)(ww + i)), w0);
+        __m256i vb = _mm256_add_epi32(_mm256_loadu_si256((const __m256i *)(ww + i + 8)), w0);
+        sh = _mm256_add_epi32(sh, _mm256_madd_epi16(_mm256_packs_epi32(_mm256_srai_epi32(va, 15), _mm256_srai_epi32(vb, 15)), xp->v[i / 16]));
+        sl = _mm256_add_epi32(sl, _mm256_madd_epi16(_mm256_packs_epi32(_mm256_and_si256(va, m15), _mm256_and_si256(vb, m15)), xp->v[i / 16]));
       }
-      s = (i64)hsum(sh) * 32768 + hsum(sl);
+      __m128i h = _mm_add_epi32(_mm256_castsi256_si128(sh), _mm256_extracti128_si256(sh, 1));
+      __m128i l = _mm_add_epi32(_mm256_castsi256_si128(sl), _mm256_extracti128_si256(sl, 1));
+      if(N % 16) {
+        const __m128i w0h = _mm_set1_epi32(W0), m15h = _mm_set1_epi32(0x7FFF);
+        __m128i va = _mm_add_epi32(_mm_loadu_si128((const __m128i *)(ww + N - 8)), w0h);
+        __m128i vb = _mm_add_epi32(_mm_loadu_si128((const __m128i *)(ww + N - 4)), w0h);
+        h = _mm_add_epi32(h, _mm_madd_epi16(_mm_packs_epi32(_mm_srai_epi32(va, 15), _mm_srai_epi32(vb, 15)), xp->t));
+        l = _mm_add_epi32(l, _mm_madd_epi16(_mm_packs_epi32(_mm_and_si128(va, m15h), _mm_and_si128(vb, m15h)), xp->t));
+      }
+      h = _mm_add_epi32(h, _mm_shuffle_epi32(h, 0x4E));
+      l = _mm_add_epi32(l, _mm_shuffle_epi32(l, 0x4E));
+      s = (i64)_mm_cvtsi128_si32(_mm_add_epi32(h, _mm_shuffle_epi32(h, 0xB1))) * 32768 +
+          _mm_cvtsi128_si32(_mm_add_epi32(l, _mm_shuffle_epi32(l, 0xB1)));
     } else
 #endif
     {
+      (void)xp;
       CM_UNROLL
       for(i = 0; i < N; i++)
-        s += (i64)(w[row + i] + W0) * x[i];
+        s += (i64)(w[row + i] + W0) * xi[i];
     }
     pr = cm_squash((int)(s >> 16));
     pr = pr < 1 ? 1 : pr > CM_PONE - 1 ? CM_PONE - 1 : pr;
     return pr;
   }
-  INLINE void upd(int bit, int lr, int mb) {
+  INLINE void upd(int bit, int lr, int mb) { upd(bit, lr, mb, x, nullptr); }
+  INLINE void upd(int bit, int lr, int mb, const int *xi, const cm_x16<N> *xp) {
     int err, i, n;
     i32 *__restrict ww = w + row;
     if(mb) {
@@ -203,39 +231,51 @@ template <int N> struct cm_mix {
     err = ((bit ? 0 : CM_PONE) - pr) * lr;
     // (clamped to +-4096, far beyond what data needs: a stream made to drive
     // a weight on and on must not overflow it)
-#ifdef H264P_SSE2
-    if(N % 8 == 0) {
+#ifdef H264P_AVX2
+    if(xp) {
       // exactly the loop below: with err = eh 65536 + el, el in 0..65535 (and
       // |err| < 2^26: lr is at most 16383), (x err) >> 16 = x eh + ((x el) >> 16),
       // the latter the signed product's high half: el read as signed is el -
       // 65536 from 32768 on, which takes x 65536 off the product
       const int eh = err >> 16, el = err & 0xFFFF;
-      const __m128i veh = _mm_set1_epi16((short)eh), vel = _mm_set1_epi16((short)el);
-      const __m128i corr = _mm_set1_epi16(el >= 32768 ? -1 : 0);
-      const __m128i wmax = _mm_set1_epi32(1 << 28), wmin = _mm_set1_epi32(-(1 << 28));
-      for(i = 0; i < N; i += 8) {
-        __m128i xx = x16(i);
-        __m128i lh = _mm_add_epi16(_mm_mulhi_epi16(xx, vel), _mm_and_si128(xx, corr));
-        __m128i pl = _mm_mullo_epi16(xx, veh), ph = _mm_mulhi_epi16(xx, veh);
+      const __m256i veh = _mm256_set1_epi16((short)eh), vel = _mm256_set1_epi16((short)el);
+      const __m256i corr = _mm256_set1_epi16(el >= 32768 ? -1 : 0);
+      const __m256i wmax = _mm256_set1_epi32(1 << 28), wmin = _mm256_set1_epi32(-(1 << 28));
+      for(i = 0; i + 16 <= N; i += 16) {
+        // (unpacking the packed lanes puts them back in order)
+        __m256i xx = xp->v[i / 16];
+        __m256i lh = _mm256_add_epi16(_mm256_mulhi_epi16(xx, vel), _mm256_and_si256(xx, corr));
+        __m256i pl = _mm256_mullo_epi16(xx, veh), ph = _mm256_mulhi_epi16(xx, veh);
+        __m256i da = _mm256_add_epi32(_mm256_unpacklo_epi16(pl, ph), _mm256_srai_epi32(_mm256_unpacklo_epi16(lh, lh), 16));
+        __m256i db = _mm256_add_epi32(_mm256_unpackhi_epi16(pl, ph), _mm256_srai_epi32(_mm256_unpackhi_epi16(lh, lh), 16));
+        __m256i wa = _mm256_add_epi32(_mm256_loadu_si256((const __m256i *)(ww + i)), da);
+        __m256i wb = _mm256_add_epi32(_mm256_loadu_si256((const __m256i *)(ww + i + 8)), db);
+        wa = _mm256_max_epi32(_mm256_min_epi32(wa, wmax), wmin);
+        wb = _mm256_max_epi32(_mm256_min_epi32(wb, wmax), wmin);
+        _mm256_storeu_si256((__m256i *)(ww + i), wa);
+        _mm256_storeu_si256((__m256i *)(ww + i + 8), wb);
+      }
+      if(N % 16) {
+        const __m128i veh1 = _mm256_castsi256_si128(veh), vel1 = _mm256_castsi256_si128(vel), corr1 = _mm256_castsi256_si128(corr);
+        __m128i xx = xp->t;
+        __m128i lh = _mm_add_epi16(_mm_mulhi_epi16(xx, vel1), _mm_and_si128(xx, corr1));
+        __m128i pl = _mm_mullo_epi16(xx, veh1), ph = _mm_mulhi_epi16(xx, veh1);
         __m128i da = _mm_add_epi32(_mm_unpacklo_epi16(pl, ph), _mm_srai_epi32(_mm_unpacklo_epi16(lh, lh), 16));
         __m128i db = _mm_add_epi32(_mm_unpackhi_epi16(pl, ph), _mm_srai_epi32(_mm_unpackhi_epi16(lh, lh), 16));
-        __m128i wa = _mm_add_epi32(_mm_loadu_si128((const __m128i *)(ww + i)), da);
-        __m128i wb = _mm_add_epi32(_mm_loadu_si128((const __m128i *)(ww + i + 4)), db);
-        __m128i ga = _mm_cmpgt_epi32(wa, wmax), gb = _mm_cmpgt_epi32(wb, wmax);
-        wa = _mm_or_si128(_mm_and_si128(ga, wmax), _mm_andnot_si128(ga, wa));
-        wb = _mm_or_si128(_mm_and_si128(gb, wmax), _mm_andnot_si128(gb, wb));
-        ga = _mm_cmplt_epi32(wa, wmin), gb = _mm_cmplt_epi32(wb, wmin);
-        wa = _mm_or_si128(_mm_and_si128(ga, wmin), _mm_andnot_si128(ga, wa));
-        wb = _mm_or_si128(_mm_and_si128(gb, wmin), _mm_andnot_si128(gb, wb));
-        _mm_storeu_si128((__m128i *)(ww + i), wa);
-        _mm_storeu_si128((__m128i *)(ww + i + 4), wb);
+        __m128i wa = _mm_add_epi32(_mm_loadu_si128((const __m128i *)(ww + N - 8)), da);
+        __m128i wb = _mm_add_epi32(_mm_loadu_si128((const __m128i *)(ww + N - 4)), db);
+        wa = _mm_max_epi32(_mm_min_epi32(wa, _mm256_castsi256_si128(wmax)), _mm256_castsi256_si128(wmin));
+        wb = _mm_max_epi32(_mm_min_epi32(wb, _mm256_castsi256_si128(wmax)), _mm256_castsi256_si128(wmin));
+        _mm_storeu_si128((__m128i *)(ww + N - 8), wa);
+        _mm_storeu_si128((__m128i *)(ww + N - 4), wb);
       }
       return;
     }
 #endif
+    (void)xp;
     CM_UNROLL
     for(i = 0; i < N; i++) {
-      i64 v = (i64)ww[i] + (((i64)x[i] * err) >> 16);
+      i64 v = (i64)ww[i] + (((i64)xi[i] * err) >> 16);
       ww[i] = (i32)(v < -(1 << 28) ? -(1 << 28) : v > (1 << 28) ? (1 << 28) : v);
     }
   }

@@ -18,8 +18,11 @@ Linux (gcc or clang):
 Windows (MinGW): `g.bat`, as before, for h264dec, `gp.bat` for h264p.
 
 h264p is a single module: `h264p_src/h264p.cpp` includes the rest of its
-sources (`*.inc`), so `g++ -O2 -std=c++11 -fwrapv h264p_src/h264p.cpp -o h264p`
-builds it too.
+sources (`*.inc`), so `g++ -O2 -march=x86-64-v3 -std=c++11 -fwrapv
+h264p_src/h264p.cpp -o h264p` builds it too. Its target is x86-64-v3 (AVX2:
+Haswell, Zen and later), for which its pixel kernels and mixers have SIMD
+code; built for any other target (`make PARCH=`, or without `-march`) it
+uses the plain C++ beside them, which is slower and codes identically.
 
 ## Test
 

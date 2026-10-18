@@ -12,11 +12,12 @@
 #include <cmath>
 #include <cstdarg>
 
-// SSE2 (all of x86-64) for the template matching and the mixers; the plain
-// C++ beside it gives the same results
-#if defined(__SSE2__) || defined(_M_X64) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2)
-#include <emmintrin.h>
-#define H264P_SSE2 1
+// AVX2 (x86-64-v3, what the build targets) for the template matching,
+// motion compensation and the mixers; the plain C++ beside it, for other
+// targets, gives the same results
+#if defined(__AVX2__)
+#include <immintrin.h>
+#define H264P_AVX2 1
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)

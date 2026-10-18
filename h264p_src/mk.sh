@@ -29,6 +29,7 @@ cd "$here"
 
 CXX=${CXX:-g++}
 CXXFLAGS=${CXXFLAGS:--O2}
+PARCH=${PARCH--march=x86-64-v3 -ffp-contract=off}  # as the Makefile's
 FAMS="nal hdr skp mbt cbp ipm mvs qpd cbf sig lvl sgn mvg qpg pcm"
 
 cleanup() {
@@ -63,7 +64,7 @@ generate() {
 }
 
 build() {
-  $CXX $CXXFLAGS -std=c++11 -fwrapv -o ../h264p h264p.cpp
+  $CXX $CXXFLAGS $PARCH -std=c++11 -fwrapv -o ../h264p h264p.cpp
 }
 
 case "${1:-tuning}" in
