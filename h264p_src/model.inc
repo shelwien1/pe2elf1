@@ -36,13 +36,13 @@ struct H_skp_v { int st, a3, b3, col, c9, cd, run, cnt, eq, lf, af, td, en, sm, 
 struct H_mbt_v { int st, ca, cb, cc, nsk, en, td, sm, tm, tb, dh, bd, qc, im, ig, c1, tx; };
 struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg, tp, em, pq; };
 struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm, pr, dr, pq, mh, mc, mg, rg; };
-struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, zd, cq, tq, rt; };
+struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, zd, cq, tq, rt, ea, eb; };
 struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac, td; };
 struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn, pq, ch, ds, hv; };
 struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz, pq, hb, ft, h3, pr, sn, hv, pf; };
 struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe, pl, tz, pq, lh, lt, ls, hv, fq; };
 struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md, pp, mg, ez, ts, pq, gh, se, dm; };
-struct H_mvg_v { int comp, lst, ts, zs, ds, sa, sb, mag, tq, ox, ns; };
+struct H_mvg_v { int comp, lst, ts, zs, ds, sa, sb, mag, tq, ox, ns, es; };
 struct H_qpg_v { int as, cs, bs, ls, rs, mag, cls, st; };
 struct H_pcm_v { int pl, dp, pd, pd2; };
 
@@ -119,6 +119,7 @@ struct MbInfo {
   int8_t ref[2][4];         // ref_idx of the 8x8 blocks as coded
   int8_t rf[2][4];          // refIdxLX of the 8x8 blocks, -1 where list X is not used
   int16_t mvd[2][16][2];    // mvd of the 4x4 blocks
+  int8_t tme[2][16][2];     // the mvd less the template match's (clamped), -128 none
   int16_t mv[2][16][2];     // mvLX of the 4x4 blocks, reconstructed
   int8_t coef[3][16][16];   // coefficients of the 4x4 blocks (Y, Cb, Cr) by scan position, clipped
   int8_t dc[3][16];         // Intra16x16 DC and chroma DC coefficients
@@ -689,6 +690,7 @@ struct Model {
     mi_->qp = (uint8_t)(qp_pred_ + qp_off_);
     memset(mi_->modes, 2, sizeof mi_->modes);
     memset(mi_->rf, -1, sizeof mi_->rf);
+    memset(mi_->tme, -128, sizeof mi_->tme);
     col_ = hcur_[addr_].valid ? &hcur_[addr_] : nullptr;
     // B: the same macroblock in list 1's first reference too
     col1_ = nullptr;
@@ -1648,6 +1650,8 @@ struct Model {
     const MbInfo* a = info(sc_->nb4(x - 1, y, ia));
     const MbInfo* b = info(sc_->nb4(x, y - 1, ib));
     int va = a ? a->mvd[list][ia][comp] : 0, vb = b ? b->mvd[list][ib][comp] : 0;
+    // how far A's and B's mvds were from their template matches'
+    int ea = a ? a->tme[list][ia][comp] : -128, eb = b ? b->tme[list][ib][comp] : -128;
     H_mvs_v D = {};
     D.kind = 3;
     D.comp = comp;
@@ -1666,6 +1670,8 @@ struct Model {
     D.zd = tc_clamp(sq2(-mvp_[comp]), 0, 12);
     D.cq = col_ && col_->cls < CL_INXN ? 1 + std::min<int>(col_->mvq[list][y * 4 + x][comp], 8) : 0;
     D.tq = tmn_ ? 0 : 1 + tc_clamp(tc_qlog(tmq_), 0, 11);
+    D.ea = ea == -128 ? 0 : 1 + std::min(tc_qlog(ea), 5);
+    D.eb = eb == -128 ? 0 : 1 + std::min(tc_qlog(eb), 5);
     // the texture of the reference at the predicted vector across the
     // component (x: the differences along rows), per sample, against the
     // quantizer's step: where it is flat that way, a search for a better
@@ -1709,6 +1715,7 @@ struct Model {
         G.tq = D.tq;
         G.ox = comp ? sgn3(mvx_) : 3;
         G.ns = 3 + ns_[comp];
+        G.es = ea == -128 && eb == -128 ? 3 : sgn3((ea == -128 ? 0 : ea) + (eb == -128 ? 0 : eb));
         tcx Y;
         H_mvg_make(G, Y);
         f_mvg.select(Y);
@@ -1723,8 +1730,9 @@ struct Model {
       set_mv(list, x, y, w, h, ref, mv);
     }
     int16_t s = (int16_t)tc_clamp(v, -32767, 32767);
+    int8_t te = tmn_ ? (int8_t)-128 : (int8_t)tc_clamp(v - dv, -127, 127);
     for (int yy = y; yy < y + h; yy++)
-      for (int xx = x; xx < x + w; xx++) mi_->mvd[list][yy * 4 + xx][comp] = s;
+      for (int xx = x; xx < x + w; xx++) mi_->mvd[list][yy * 4 + xx][comp] = s, mi_->tme[list][yy * 4 + xx][comp] = te;
     return v;
   }
 

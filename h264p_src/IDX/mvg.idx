@@ -10,7 +10,11 @@
 #  same partition in the previous picture of the type less the predicted one
 #  (9 none); sa/sb the signs of the mvd of A and B (sgn3), mag the magnitude
 #  (tc_qlog), tq how well the template matched (0 none), ox for the second
-#  component the sign of the first (sgn3; 3 for the first).
+#  component the sign of the first (sgn3; 3 for the first), ns 3 + how
+#  many of the vectors of A, B and C are above the predicted one in the
+#  component less how many are below, es which way
+#  the mvds of A and B were from their template matches', summed (sgn3; 3
+#  none).
 
 Prefix H_mvg
 Debug 1
@@ -43,6 +47,7 @@ Index e
 Index h
  h_ts: ts, 1!111111111
  h_tq: tq, 1!111111111111
+ h_es: es, 1!111
 
 Index i
  i_ts: ts, 1!111111111

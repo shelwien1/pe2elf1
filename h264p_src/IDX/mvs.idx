@@ -17,7 +17,9 @@
 #  (mvd), how much better than on the first reference (ref_idx); rt the
 #  texture of the reference (for ref_idx, the first) at the predicted
 #  vector (for mvd, across the component), per sample, against the
-#  quantizer's step (1 + tc_qlog, 0 none).
+#  quantizer's step (1 + tc_qlog, 0 none); ea/eb for mvd how far the mvds
+#  of A and B were from their template matches' (1 + tc_qlog up to 5, 0
+#  none).
 
 Prefix H_mvs
 Debug 1
@@ -67,6 +69,8 @@ Index h
  h_tv: tv, 1!1111111111111
  h_oth: oth, 1!11111
  h_tq: tq, 1!111111111111
+ h_ea: ea, 1!111111
+ h_eb: eb, 1!111111
 
 Index i
  i_kind: kind, 1!111
