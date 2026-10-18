@@ -111,7 +111,7 @@ Number lr, 1, 0!01100
 Number lrm, 1, 0!01100
 Number mbm, 1, 0!00000000
 Number mwA, 1, 0!00011101
-Number mwB, 1, 0!00000000
+Number mwB, 1, 0!00010000
 Number mwC, 1, 0!00000000
 Number mwE, 1, 0!00000000
 Number mwH, 1, 0!00100000

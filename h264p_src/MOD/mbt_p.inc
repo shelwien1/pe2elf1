@@ -44,7 +44,7 @@ void H_mbt_make( const H_mbt_v & D, tcx & X ) {
   e = 0;
   e = e*10 + H_mbt_e_st[__min(9,__max(0,st-(1-1)))];
   e = e*9 + H_mbt_e_ca[__min(8,__max(0,ca-(1-1)))];
-  e = e*6 + H_mbt_e_td[__min(16,__max(0,td-(1-1)))];
+  e = e*2 + ((td>8+(1-1)));
   e = e*7 + H_mbt_e_sm[__min(16,__max(0,sm-(1-1)))];
   e = e*15 + H_mbt_e_tx[__min(14,__max(0,tx-(1-1)))];
 

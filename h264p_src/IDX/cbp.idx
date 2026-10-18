@@ -36,7 +36,7 @@ Index c
 
 Index d
  d_inc: inc, 1!111
- d_em: em, 1!1100101101110100
+ d_em: em, 1!1110101101110100
  d_cls: cls, 1!11111111
 
 Index e
@@ -59,7 +59,7 @@ Index i
 
 Index j
  j_inc: inc, 1!111
- j_tp: tp, 1!1111111111111111
+ j_tp: tp, 1!1001000100000000
  j_em: em, 1!0100010101001000
  j_st: st, 1!111111111
 

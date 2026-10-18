@@ -127,7 +127,7 @@ Number rH, 1, 0!11100000
 Number rI, 1, 0!01000000
 Number rJ, 1, 0!01000000
 Number rK, 1, 0!11100000
-Number rL, 1, 0!01000000
+Number rL, 1, 0!01001000
 Number rD, 1, 0!11111111
 Number rT, 1, 0!00110111
 Number rG, 1, 0!01011010
@@ -141,7 +141,7 @@ Number mwB, 1, 0!10000001
 Number mwC, 1, 0!00000000
 Number mwE, 1, 0!00000000
 Number mwH, 1, 0!00000010
-Number mwI, 1, 0!00000000
+Number mwI, 1, 0!00100010
 Number mwJ, 1, 0!00000000
 Number mwK, 1, 0!00000000
 Number mwL, 1, 0!01100000

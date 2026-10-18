@@ -79,7 +79,7 @@ Index i
  i_kind: kind, 1!111
  i_comp: comp, 1!1
  i_tv: tv, 1!1111111111111
- i_tq: tq, 1!111111111111
+ i_tq: tq, 1!010100100100
  i_zd: zd, 1!111111111111
 
 Index j
@@ -153,7 +153,7 @@ Number rG, 1, 0!01001000
 Number rS1, 1, 0!01000
 Number rS2, 1, 0!00100
 Number lr, 1, 0!01100
-Number lrm, 1, 0!01100
+Number lrm, 1, 0!11110
 Number mbm, 1, 0!00000000
 Number mwA, 1, 0!00001000
 Number mwB, 1, 0!00001000
@@ -164,7 +164,7 @@ Number mwI, 1, 0!00000000
 Number mwJ, 1, 0!00000000
 Number mwK, 1, 0!00000000
 Number mwL, 1, 0!00000000
-Number mwD, 1, 0!00000000
+Number mwD, 1, 0!00101110
 Number mwT, 1, 0!00000000
 Number mwG, 1, 0!00000000
 Number bw, 1, 0!01110

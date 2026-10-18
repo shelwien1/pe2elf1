@@ -130,7 +130,7 @@ Number rB, 1, 0!11111111
 Number rC, 1, 0!01000000
 Number rE, 1, 0!01000000
 Number rH, 1, 0!01000000
-Number rI, 1, 0!01000000
+Number rI, 1, 0!11110111
 Number rJ, 1, 0!11000111
 Number rK, 1, 0!01000000
 Number rL, 1, 0!01000000
