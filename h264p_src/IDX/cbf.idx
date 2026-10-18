@@ -19,8 +19,9 @@
 #  applicable); hv as the sig family's; ly for a 4:2:0 chroma block the
 #  coefficients of the luma under it (its 8x8 block; for DC the
 #  macroblock's), 1 + tc_qlog (0 luma); dq for a 4:2:0 chroma AC block
-#  its DC, from the chroma DC levels' 2x2 transform (1 + tc_qlog, 0 not
-#  such a block).
+#  its DC, from the chroma DC levels' 2x2 transform, for an Intra16x16
+#  luma AC block from the luma DC levels' 4x4 one (1 + tc_qlog, 0 not such
+#  a block).
 
 Prefix H_cbf
 Debug 1

@@ -2196,11 +2196,19 @@ struct Model {
       D.ly = 1 + std::min(tc_qlog(n), 9);
     }
     // a 4:2:0 chroma AC block: its DC, from the chroma DC levels' 2x2
-    // transform, 1 + tc_qlog (0 not such a block)
+    // transform; an Intra16x16 luma AC block, from the luma DC levels' 4x4
+    // one (frame scan); 1 + tc_qlog (0 not such a block)
     D.dq = 0;
     if (g.kind == 2 && sc_->chroma_ == 1) {
       const int8_t* d = mi_->dc[g.plane];
       D.dq = 1 + std::min(tc_qlog(d[0] + (g.x ? -d[1] : d[1]) + (g.y ? -d[2] : d[2]) + (g.x ^ g.y ? -d[3] : d[3])), 7);
+    } else if (cat == 1) {
+      static const int kH[4][4] = {{1, 1, 1, 1}, {1, 1, -1, -1}, {1, -1, -1, 1}, {1, -1, 1, -1}};
+      const int8_t* d = mi_->dc[0];
+      int v = 0;
+      for (int k = 0; k < 16; k++)
+        if (d[k]) v += kH[g.y][kZz4[k] >> 2] * d[k] * kH[kZz4[k] & 3][g.x];
+      D.dq = 1 + std::min(tc_qlog(v), 7);
     }
     D.crcb = 0;
     if (g.plane == 2 && sc_->chroma_ != 3)
