@@ -120,7 +120,10 @@ decision:
   its proxy, below; a picture's first macroblocks take the last picture's
   slope); the delta's magnitude and sign follow the line's.  Where the
   picture stays the same from one picture to the next, x264's macroblock
-  tree lowers the QP.
+  tree lowers the QP.  For other encoders: the slice's QP (macroblock QPs
+  keep near it), the class of the energy (whose QP is no line of it), and
+  the QP of the picture's last macroblock of the same kind and energy
+  class (the rate control's QP plus what the class adds).
 - skip and mb_type: how well the prediction the macroblock would have if
   skipped continues the decoded samples above and to the left of it, how
   well that motion predicts those samples themselves (template matching),
@@ -131,18 +134,23 @@ decision:
   as a guess at the mvd (and its sign, once the magnitude is known), and
   how flat the reference is at the predicted vector across each component
   (a search gains nothing where it is), and how far the neighbours' vectors
-  were from their template matches'; for ref_idx, the reference it
-  matches best.
+  were from their template matches'; the search starts from the
+  neighbours' vectors (those on other references scaled by POC distance)
+  and the temporal one: in B slices the vector temporal direct would give,
+  in P col's, scaled by the distance it spanned; for ref_idx, the
+  reference it matches best.
 - intra modes: the gradients around the block (DIMD), and the modes that
   predict the block best in the reference, by x264's measure (SATD): how
   much worse the most probable mode does there, in x264's lambda, tells
-  whether an encoder would have taken it; likewise for the Intra16x16 and
-  chroma modes.
+  whether an encoder would have taken it, and the best two others are
+  likelier than the rest; likewise for the Intra16x16 and chroma modes.
 - coefficients: the texture of the prediction and how far it is from
   continuing its surroundings, against the quantizer's step, and which way
   the texture runs (a motion error leaves a residual of those
   frequencies), and for the significance of inter blocks the prediction's
   own transform; what x264's decimation still requires of an 8x8 block;
+  for a chroma block, the coefficients of the luma under it, and for a
+  chroma or Intra16x16 AC block its DC (from the DC levels);
   the signs of the first coefficients are
   predicted as the ones that make the block continue the decoded samples
   around it best, and for inter blocks the sign of each as that of a small
@@ -162,17 +170,17 @@ On the test streams (`-v` shows where the bits go):
 
 | stream | H.264 | compressed | |
 |---|---:|---:|---:|
-| 00 | 815,140 | 570,255 | 70.0% |
-| 01 | 1,095,103 | 807,951 | 73.8% |
-| 02 | 28,143 | 26,628 | 94.6% |
-| 03 | 1,181,369 | 781,338 | 66.1% |
-| 04 | 484,238 | 387,227 | 80.0% |
+| 00 | 815,140 | 568,487 | 69.7% |
+| 01 | 1,095,103 | 804,990 | 73.5% |
+| 02 | 28,143 | 26,611 | 94.6% |
+| 03 | 1,181,369 | 776,782 | 65.8% |
+| 04 | 484,238 | 384,773 | 79.5% |
 
-The macroblock syntax takes 72.6% of what its CABAC coding takes (from
-3,536,129 to 2,566,415 bytes over these streams; whole streams go from
-3,603,993 to 2,573,399 bytes; `h264p_cm.md` section 9 has the figures by
+The macroblock syntax takes 72.2% of what its CABAC coding takes (from
+3,536,129 to 2,554,662 bytes over these streams; whole streams go from
+3,603,993 to 2,561,643 bytes; `h264p_cm.md` section 9 has the figures by
 syntax element). Speed is 0.03-0.13 MB of H.264 per second both ways, depending
-on the stream, and the model tables take about 220 MB.
+on the stream, and the model tables take about 215 MB.
 
 ### TSV
 

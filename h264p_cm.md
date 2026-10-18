@@ -870,7 +870,7 @@ their gain on test/002:
 | edge miss of the prediction, edge-projected level estimates | coefficients | 13 KB* |
 | the sign of mb_qp_delta (its own family, mixed) by the line's delta, col's and B's QP, against the magnitude | qp delta | 16 KB |
 | x264's adaptive quantization: a per-picture line of QP against log2 energy, from the energy of the macroblock's prediction (of an intra macroblock's proxy, on a line of its own); a picture's first macroblocks on the last picture's slope | qp delta | 13 KB |
-| intra modes ranked in the proxy by SATD: how much worse the most probable mode does, in x264's lambda; the best other mode and its lead; the best Intra16x16 and chroma modes | intra modes, mb_type | 9 KB |
+| intra modes ranked in the proxy by SATD: how much worse the most probable mode does, in x264's lambda; the best two other modes and the lead of the first; the best Intra16x16 and chroma modes | intra modes, mb_type | 9 KB |
 | the sign of mvd (its own family, mixed) by the template match's vector, the zero vector's, col's, against the magnitude; the neighbours' vectors' signs | mvd signs | 5 KB |
 | the texture of the prediction and its edge miss against the quantizer's step | count, significance, cbp | 3 KB |
 | which way the prediction's texture runs (log2 of its differences along rows over those along columns); for inter significance, the prediction's own level at the position | significance, count, levels | 13 KB |
@@ -881,6 +881,9 @@ their gain on test/002:
 | inter signs: the sign each coefficient would have were the residual a small shift of the prediction (the levels of the prediction's gradients), the shift fitted by least squares to the coefficients whose signs are known | signs | 1 KB |
 | for mb_qp_delta, how much the macroblock changed between the last two pictures (where pictures stay, x264's macroblock tree lowers the QP) | qp delta | 0.4 KB |
 | how far the mvds of the neighbours were from their template matches' (size; direction for the sign) | mvd, mvd signs | 0.3 KB |
+| for mb_qp_delta, encoders other than x264: the slice's QP; the class of the energy (whose QP is no line of it: flat, then rising); the QP of the picture's last macroblock of the same kind and energy class | qp delta | 4.5 KB |
+| B: the vector temporal direct would give, as the template search's candidate and the temporal context; col's vector scaled by the POC distance it spanned, the neighbours' on other references scaled to the partition's | mvd, mvd signs | 3.9 KB |
+| a 4:2:0 chroma block's count by the coefficients of the luma under it; a chroma or Intra16x16 AC block's by its DC (from the DC levels' transform) | count | 1.4 KB |
 | how far to trust the intra estimate: the template match of its vector, then how far the luma decoded so far is from it | coefficients, intra modes | 9 KB |
 | the best intra mode in the reference | intra modes | 4 KB |
 | P pictures: the coefficients of the block the vector points at in the reference (a copy of the last picture's), moved and still blocks apart; for cbp, the 4x4 blocks with coefficients under it | coefficients, cbp | 2 KB |
@@ -900,19 +903,19 @@ four to six were 16 KB) and, for the top six mantissa bits of a number
 
 | element | CABAC | model | |
 |---|---:|---:|---:|
-| skip, end | 336,175 | 221,403 | −34.1% |
-| mb_type | 365,120 | 259,860 | −28.8% |
-| cbp, transform_size_8x8_flag | 216,100 | 153,842 | −28.8% |
-| intra modes | 299,858 | 232,536 | −22.5% |
-| sub_mb_type, ref_idx, mvd | 504,865 | 408,627 | −19.1% |
-| mb_qp_delta | 271,297 | 188,521 | −30.5% |
-| coded_block_flag, significance (count, significance) | 910,721 | 699,126 | −23.2% |
-| levels | 302,611 | 220,116 | −27.3% |
-| signs | 329,382 | 182,384 | −44.6% |
-| macroblock syntax | 3,536,129 | 2,566,415 | −27.4% |
-| whole streams (H.264 against compressed) | 3,603,993 | 2,573,399 | −28.6% |
+| skip, end | 336,175 | 221,360 | −34.2% |
+| mb_type | 365,120 | 259,628 | −28.9% |
+| cbp, transform_size_8x8_flag | 216,100 | 153,590 | −28.9% |
+| intra modes | 299,858 | 232,171 | −22.6% |
+| sub_mb_type, ref_idx, mvd | 504,865 | 404,608 | −19.9% |
+| mb_qp_delta | 271,297 | 183,929 | −32.2% |
+| coded_block_flag, significance (count, significance) | 910,721 | 697,224 | −23.4% |
+| levels | 302,611 | 219,885 | −27.3% |
+| signs | 329,382 | 182,267 | −44.7% |
+| macroblock syntax | 3,536,129 | 2,554,662 | −27.8% |
+| whole streams (H.264 against compressed) | 3,603,993 | 2,561,643 | −28.9% |
 
-The model tables take 220 MB.
+The model tables take 215 MB.
 
 **Tried, no gain:** the CABAC-style significance/last binarization instead
 of the count; the mirrored list 0 vector for list 1 mvds (as a context, and
@@ -943,7 +946,14 @@ for the levels; chroma AC decimation; more unary decisions before the
 length for mvd (5 or 8, both worse); the template miss of the macroblock's
 motion for the count; list 1's co-located macroblock in place of the last
 B picture's (better on test/002, worse on the generated streams); twice
-the rows for every hashed table (71 bytes).
+the rows for every hashed table (71 bytes); for skip, the picture's skip
+rate so far; for mvd, a motion field projected from the last picture
+(it seldom finds what col's vector does not), and the same scaled
+candidates for the searches of ref_idx and of skip (79 bytes, slower);
+the run of unchanged QPs and the place in the row for mb_qp_delta; the
+luma under a chroma block for its significance and levels, and Cb's
+count (rather than whether it has one) for Cr's; ranking the intra
+remainder by the proxy (the contexts do better than its 2.9 bits).
 
 ## Appendix A: single-context experiments
 

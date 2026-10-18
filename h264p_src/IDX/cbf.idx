@@ -164,7 +164,7 @@ Number mb, 1, 0!10000010
 #  direct, one that does not is hashed into 2^h rows and contexts share
 #  them.  31 is "never hashed".  Frozen: left live these only grow.
 ! Number hA, 1, 0!11000
-! Number hB, 1, 0!11000
+! Number hB, 1, 0!10001
 ! Number hE, 1, 0!10000
 ! Number hH, 1, 0!10000
 ! Number hI, 1, 0!11000

@@ -156,7 +156,7 @@ Number mb, 1, 0!00000101
 ! Number hE, 1, 0!11000
 ! Number hH, 1, 0!11000
 ! Number hI, 1, 0!11000
-! Number hJ, 1, 0!11000
+! Number hJ, 1, 0!10000
 ! Number hK, 1, 0!11000
 ! Number hL, 1, 0!11000
 ! Number hD, 1, 0!11000
