@@ -548,7 +548,6 @@ struct Model {
   int sub_[4] = {};
   int pmv_[2] = {};  // proxy_mv()
   int tx_ = 0;  // skip_miss: the skip prediction's texture (class)
-  int rt_ = 0;  // mvd: the reference's texture at the predicted vector (class)
   H_mbt_v* mbt_d_ = nullptr;  // mb_type's contexts while it is coded
   int prx_v_[2] = {};       // the proxy's vector (quarter samples), as searched again (block)
   int prx_blk_ = 0;         // the luma block it was last searched for
@@ -1665,14 +1664,14 @@ struct Model {
     D.zd = tc_clamp(sq2(-mvp_[comp]), 0, 12);
     D.cq = col_ && col_->cls < CL_INXN ? 1 + std::min<int>(col_->mvq[list][y * 4 + x][comp], 8) : 0;
     D.tq = tmn_ ? 0 : 1 + tc_clamp(tc_qlog(tmq_), 0, 11);
-    // the texture of the reference at the predicted vector, per sample,
-    // against the quantizer's step: where it is flat, a search for a better
+    // the texture of the reference at the predicted vector across the
+    // component (x: the differences along rows), per sample, against the
+    // quantizer's step: where it is flat that way, a search for a better
     // vector gains nothing
-    if (!comp) {
-      int t = rec_.ref_texture(list, ref, x * 4, y * 4, w * 4, h * 4, mvp_);
-      rt_ = t < 0 ? 0 : 1 + tc_clamp(tc_qlog((int64_t)t * 256 / (w * h * 16) * 16 / qstep16(qp_pred_)), 0, 14);
+    {
+      int t = rec_.ref_texture(list, ref, x * 4, y * 4, w * 4, h * 4, mvp_, comp ? 2 : 1);
+      D.rt = t < 0 ? 0 : 1 + tc_clamp(tc_qlog((int64_t)t * 512 / (w * h * 16) * 16 / qstep16(qp_pred_)), 0, 14);
     }
-    D.rt = rt_;
     tcx X;
     H_mvs_make(D, X);
     tc_stage = STG_MVD;

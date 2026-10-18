@@ -2093,7 +2093,7 @@ struct Recon {
   }
   // the same of reference r of list l displaced by mv (whole samples) at
   // the luma block (bx, by, bw, bh) of the current macroblock; -1 none
-  int ref_texture(int l, int r, int bx, int by, int bw, int bh, const int* mv) const {
+  int ref_texture(int l, int r, int bx, int by, int bw, int bh, const int* mv, int dir = 3) const {
     const RPic* ref = active && r >= 0 && r < nlist[l] ? list[l][r] : nullptr;
     if (!ref) return -1;
     int W = ref->w, H = ref->h;
@@ -2102,7 +2102,8 @@ struct Recon {
     const uint8_t* p = ref->y.data() + y0 * W + x0;
     int g = 0;
     for (int j = 0; j < bh; j++)
-      for (int i = 0; i < bw; i++) g += abs(p[j * W + i + 1] - p[j * W + i]) + abs(p[(j + 1) * W + i] - p[j * W + i]);
+      for (int i = 0; i < bw; i++)
+        g += (dir & 1 ? abs(p[j * W + i + 1] - p[j * W + i]) : 0) + (dir & 2 ? abs(p[(j + 1) * W + i] - p[j * W + i]) : 0);
     return g;
   }
   int pred_texture(int c, int x, int y, int n) const {
