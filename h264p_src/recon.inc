@@ -1124,6 +1124,52 @@ struct Recon {
   // x264's SATD of an n x n block (n a multiple of 4) against a prediction
   // (strides sa, sb), by 4x4, halved
   static int satd_nxn(const uint8_t* a, int sa, const uint8_t* b, int sb, int n) {
+#ifdef H264P_AVX2
+    if (n == 16 || n == 8 || n == 4) {
+      // four rows at a time, the 4x4 blocks side by side in 16-bit lanes: the
+      // transform down by adds across the rows, across by adds of lanes
+      // swapped in pairs and in pairs of pairs (the order and signs of the
+      // coefficients do not change the sum of their magnitudes)
+      __m256i acc = _mm256_setzero_si256();
+      const __m256i one = _mm256_set1_epi16(1);
+      for (int y = 0; y < n; y += 4) {
+        __m256i r[4];
+        for (int j = 0; j < 4; j++) {
+          const uint8_t *p = a + (y + j) * sa, *q = b + (y + j) * sb;
+          if (n == 16) {
+            r[j] = _mm256_sub_epi16(_mm256_cvtepu8_epi16(_mm_loadu_si128((const __m128i*)p)),
+                                    _mm256_cvtepu8_epi16(_mm_loadu_si128((const __m128i*)q)));
+          } else {
+            // (in the low half, the high one zero)
+            __m128i d;
+            if (n == 8) {
+              d = _mm_sub_epi16(_mm_cvtepu8_epi16(_mm_loadl_epi64((const __m128i*)p)), _mm_cvtepu8_epi16(_mm_loadl_epi64((const __m128i*)q)));
+            } else {
+              int32_t u, v;
+              memcpy(&u, p, 4);
+              memcpy(&v, q, 4);
+              d = _mm_sub_epi16(_mm_cvtepu8_epi16(_mm_cvtsi32_si128(u)), _mm_cvtepu8_epi16(_mm_cvtsi32_si128(v)));
+            }
+            r[j] = _mm256_inserti128_si256(_mm256_setzero_si256(), d, 0);
+          }
+        }
+        __m256i a0 = _mm256_add_epi16(r[0], r[1]), a1 = _mm256_sub_epi16(r[0], r[1]);
+        __m256i a2 = _mm256_add_epi16(r[2], r[3]), a3 = _mm256_sub_epi16(r[2], r[3]);
+        __m256i v[4] = {_mm256_add_epi16(a0, a2), _mm256_add_epi16(a1, a3), _mm256_sub_epi16(a0, a2), _mm256_sub_epi16(a1, a3)};
+        for (int j = 0; j < 4; j++) {
+          __m256i x = v[j], t = _mm256_shufflehi_epi16(_mm256_shufflelo_epi16(x, 0xB1), 0xB1);
+          x = _mm256_blend_epi16(_mm256_add_epi16(x, t), _mm256_sub_epi16(x, t), 0xAA);
+          t = _mm256_shufflehi_epi16(_mm256_shufflelo_epi16(x, 0x4E), 0x4E);
+          x = _mm256_blend_epi16(_mm256_add_epi16(x, t), _mm256_sub_epi16(x, t), 0xCC);
+          acc = _mm256_add_epi32(acc, _mm256_madd_epi16(_mm256_abs_epi16(x), one));
+        }
+      }
+      __m128i t = _mm_add_epi32(_mm256_castsi256_si128(acc), _mm256_extracti128_si256(acc, 1));
+      t = _mm_add_epi32(t, _mm_shuffle_epi32(t, 0x4E));
+      int s = _mm_cvtsi128_si32(_mm_add_epi32(t, _mm_shuffle_epi32(t, 0xB1)));
+      return (s + 1) >> 1;
+    }
+#endif
     int s = 0;
     for (int by4 = 0; by4 < n; by4 += 4)
       for (int bx4 = 0; bx4 < n; bx4 += 4) {
@@ -2803,25 +2849,7 @@ struct Recon {
       pred_nxn(d, 8, n, m, e, top, left);
       // the sum of the absolute Hadamard transformed differences, by 4x4
       // (x264's measure), halved
-      int sad = 0;
-      {
-        for (int by4 = 0; by4 < n; by4 += 4)
-          for (int bx4 = 0; bx4 < n; bx4 += 4) {
-            int t[16];
-            for (int y = 0; y < 4; y++)
-              for (int x = 0; x < 4; x++) t[y * 4 + x] = Y[(y0 + by4 + y) * w + x0 + bx4 + x] - d[(by4 + y) * 8 + bx4 + x];
-            for (int y = 0; y < 4; y++) {
-              int* r = t + y * 4;
-              int a0 = r[0] + r[1], a1 = r[0] - r[1], a2 = r[2] + r[3], a3 = r[2] - r[3];
-              r[0] = a0 + a2, r[1] = a1 + a3, r[2] = a0 - a2, r[3] = a1 - a3;
-            }
-            for (int x = 0; x < 4; x++) {
-              int a0 = t[x] + t[4 + x], a1 = t[x] - t[4 + x], a2 = t[8 + x] + t[12 + x], a3 = t[8 + x] - t[12 + x];
-              sad += abs(a0 + a2) + abs(a1 + a3) + abs(a0 - a2) + abs(a1 - a3);
-            }
-          }
-        sad = (sad + 1) >> 1;
-      }
+      int sad = satd_nxn(Y + y0 * w + x0, w, d, 8, n);
       if (sads) sads[m] = sad;
       if (sad < bsad) bsad = sad, best = m;
     }
