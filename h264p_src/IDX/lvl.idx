@@ -7,7 +7,8 @@
 #  block's nC (class), pos the scan position (class), sa/sb the magnitude at
 #  the same position in the blocks A and B (class, 0 zero or none), q6 QP/6,
 #  tot the nonzero coefficients of the block (class), tz as the sig
-#  family's.
+#  family's, hv as the sig family's and fq whether the position is a
+#  horizontal (1) or vertical (2) frequency, or both (3), or DC (0).
 
 Prefix H_lvl
 Debug 1
@@ -24,6 +25,8 @@ Index b
  b_pe: pe, 1!000010010010000
  b_pos: pos, 1!11111
  b_tot: tot, 1!1111111
+ b_hv: hv, 1!1111111
+ b_fq: fq, 1!111
 
 Index c
  c_cg: cg, 1!1111111111111

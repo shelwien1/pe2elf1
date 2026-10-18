@@ -16,7 +16,7 @@
 #  none); ds for an inter luma 4x4 block of a P or B slice, 1 + the score
 #  of x264's decimation its 8x8 block still owes after the blocks before it
 #  (4, or 6 for the macroblock's only coded 8x8 block, less theirs; 0 not
-#  applicable).
+#  applicable); hv as the sig family's.
 
 Prefix H_cbf
 Debug 1
@@ -63,6 +63,7 @@ Index h
  h_pg: pg, 1!1111111111111111
  h_md: md, 1!1100001001110100101
  h_q6: q6, 1!11111111
+ h_hv: hv, 1!1111111
 
 Index i
  i_cat: cat, 1!1111111111111
@@ -157,7 +158,7 @@ Number mb, 1, 0!10000010
 ! Number hA, 1, 0!11000
 ! Number hB, 1, 0!11000
 ! Number hE, 1, 0!10000
-! Number hH, 1, 0!11000
+! Number hH, 1, 0!10000
 ! Number hI, 1, 0!11000
 ! Number hJ, 1, 0!11000
 ! Number hK, 1, 0!11000

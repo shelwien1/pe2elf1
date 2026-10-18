@@ -38,9 +38,9 @@ struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg, tp, em, pq; };
 struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm, pr, dr, pq, mh, mc, mg, rg; };
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, zd, cq, tq, rt; };
 struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac; };
-struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn, pq, ch, ds; };
-struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz, pq, hb, ft, h3, pr, sn; };
-struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe, pl, tz, pq, lh, lt, ls; };
+struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn, pq, ch, ds, hv; };
+struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz, pq, hb, ft, h3, pr, sn, hv; };
+struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe, pl, tz, pq, lh, lt, ls, hv, fq; };
 struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md, pp, mg, ez, ts, pq, gh, se; };
 struct H_mvg_v { int comp, lst, ts, zs, ds, sa, sb, mag, tq, ox, ns; };
 struct H_qpg_v { int as, cs, bs, ls, rs, mag, cls, st; };
@@ -2036,9 +2036,20 @@ struct Model {
     int q = q6();
     int nc = nc_class(block_nc(g)), md = block_mode(g);
     // the texture of the block's prediction
-    int pt = g.kind == 0 ? rec_.pred_texture(g.plane, 0, 0, g.plane ? 8 : 16)
-             : g.kind == 2 ? rec_.pred_texture(g.plane, g.x * 4, g.y * 4, 4)
-                           : rec_.pred_texture(g.plane, g.x * 4, g.y * 4, g.kind == 3 ? 8 : 4);
+    int gxy[2] = {0, 0};
+    int pt = g.kind == 0 ? rec_.pred_texture(g.plane, 0, 0, g.plane ? 8 : 16, gxy)
+             : g.kind == 2 ? rec_.pred_texture(g.plane, g.x * 4, g.y * 4, 4, gxy)
+                           : rec_.pred_texture(g.plane, g.x * 4, g.y * 4, g.kind == 3 ? 8 : 4, gxy);
+    // which way the prediction's texture runs (a motion error along it
+    // leaves a residual of those frequencies): 4 + log2 of the differences
+    // along rows over those along columns, -3 to 3 (0 flat or none)
+    int hv = 0;
+    if (pt > 0) {
+      int a = gxy[0] + 1, b = gxy[1] + 1, l = 0;
+      while (a >= 2 * b && l < 3) a /= 2, l++;
+      while (b >= 2 * a && l > -3) b /= 2, l--;
+      hv = 4 + l;
+    }
     // (for the count and the significance, against the quantizer's step)
     int pga = pt < 0 ? 0 : 1 + tc_clamp(tc_qlog(pt), 0, 15);
     int qs = qstep16(mi_->qp - qp_off_);
@@ -2113,6 +2124,7 @@ struct Model {
     tc_stage = STG_CBF;
     H_cbf_v D = {};
     D.pz = pok ? 1 + std::min(pnz, 15) : 0;
+    D.hv = hv;
     D.ch = cnth_ & 15;  // the counts of the last two blocks coded (up to 3 each)
     // how far to trust it: how far the macroblock's luma decoded so far is
     // from the proxy (13-24), else how well its vector matched (1-12)
@@ -2246,6 +2258,7 @@ struct Model {
           S.h3 = h3 - 1;
         }
         S.tz = tok ? 1 + 4 * tmv + std::min(abs(tcf(i)), 3) : 0;
+        S.hv = hv;
         // the same position in the blocks A and B (0 none, 1 zero, 2 not)
         S.sn = (na.m ? 1 + (coef_at(na.m, g, na.i, i) != 0) : 0) * 3 + (nb.m ? 1 + (coef_at(nb.m, g, nb.i, i) != 0) : 0);
         tcx Y;
@@ -2276,6 +2289,14 @@ struct Model {
       pr[0] = cab1(abs_base + (g1 ? 0 : std::min(4, 1 + e1)));
       pr[1] = pr[2] = cab1(abs_base + 5 + std::min(4 - (cat == 3), g1));
       L.pos = tc_qlog(k);
+      {
+        // the texture's direction, and whether the coefficient is a
+        // horizontal (1) or vertical (2) frequency or both (3) or DC (0)
+        int N = g.kind == 3 ? 8 : g.kind == 0 && g.plane ? 2 : 4, kk = k + g.off;
+        int r = N == 8 ? kZz8[kk] : N == 4 ? kZz4[kk] : kk;
+        L.hv = hv;
+        L.fq = (r % N > 0) + 2 * (r / N > 0);
+      }
       L.pe = spok && k < 4 ? sp.estimate(k) : 0;
       L.pl = pok ? 1 + std::min(abs(q4(k)) / 2, 10) : 0;
       // intra: the levels so far against the estimate's there

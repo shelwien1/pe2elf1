@@ -9,7 +9,9 @@
 #  nonzero ones (tc_qlog), nc CAVLC's nC (class), fld field scan, q6 QP/6,
 #  tz the magnitude at the position in the block of the cbf family's tn (1 +
 #  up to 3; 5 + where the vector moves it; 0 none), sn whether it is nonzero
-#  in the blocks A and B (3 x A + B: 0 none, 1 zero, 2 not).
+#  in the blocks A and B (3 x A + B: 0 none, 1 zero, 2 not), hv which way
+#  the texture of the block's prediction runs (4 + log2 of its differences
+#  along rows over those along columns, -3 to 3; 0 flat or none).
 
 Prefix H_sig
 Debug 1
@@ -61,6 +63,7 @@ Index i
  i_pos: pos, 1!111111111111111111111111111111111111111111111111111111111111111
  i_pr: pr, 1!1111111
  i_ps: ps, 1!1111111
+ i_hv: hv, 1!1111111
 
 Index j
  j_cg: cg, 1!1111111111111
@@ -75,6 +78,7 @@ Index k
  k_rem: rem, 1!1111111111
  k_h3: h3, 1!11111111111111
  k_sn: sn, 1!11111111
+ k_hv: hv, 1!1111111
 
 Index l
  l_cg: cg, 1!1111111111111
@@ -155,7 +159,7 @@ Number mb, 1, 0!01110000
 ! Number hH, 1, 0!10100
 ! Number hI, 1, 0!11000
 ! Number hJ, 1, 0!11000
-! Number hK, 1, 0!11000
+! Number hK, 1, 0!10101
 ! Number hL, 1, 0!11000
 ! Number hD, 1, 0!11000
 ! Number hS, 1, 0!11000

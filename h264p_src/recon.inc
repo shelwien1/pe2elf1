@@ -2106,18 +2106,19 @@ struct Recon {
         g += (dir & 1 ? abs(p[j * W + i + 1] - p[j * W + i]) : 0) + (dir & 2 ? abs(p[(j + 1) * W + i] - p[j * W + i]) : 0);
     return g;
   }
-  int pred_texture(int c, int x, int y, int n) const {
+  int pred_texture(int c, int x, int y, int n, int* gxy = nullptr) const {
     if (!active || !mb_prepared || mb_cls == 8) return -1;
     int w = c ? cur->w / 2 : cur->w, m = c ? 8 : 16;
     const uint8_t* p = (c == 0 ? cur->y.data() : c == 1 ? cur->u.data() : cur->v.data()) +
                        ((mb_addr / cur->mbw) * m + y) * w + (mb_addr % cur->mbw) * m + x;
-    int g = 0;
+    int gx = 0, gy = 0;
     for (int j = 0; j < n; j++)
       for (int i = 0; i < n; i++) {
-        if (i + 1 < n) g += abs(p[j * w + i + 1] - p[j * w + i]);
-        if (j + 1 < n) g += abs(p[(j + 1) * w + i] - p[j * w + i]);
+        if (i + 1 < n) gx += abs(p[j * w + i + 1] - p[j * w + i]);
+        if (j + 1 < n) gy += abs(p[(j + 1) * w + i] - p[j * w + i]);
       }
-    return g;
+    if (gxy) gxy[0] = gx, gxy[1] = gy;
+    return gx + gy;
   }
 
   // For sign prediction: the samples next to the luma block of n x n at (x,

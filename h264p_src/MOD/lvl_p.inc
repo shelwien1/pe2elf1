@@ -15,8 +15,8 @@
 
 void H_lvl_make( const H_lvl_v & D, tcx & X ) {
   int a, b, c, d, e, h, i, j, k, l, s, f, m, w, t, n, g;
-  int cg = D.cg, g1 = D.g1, e1 = D.e1, nc = D.nc, pos = D.pos, sa = D.sa, sb = D.sb, q6 = D.q6, tot = D.tot, md = D.md, pm = D.pm, pg = D.pg, em = D.em, pe = D.pe, pl = D.pl, tz = D.tz, pq = D.pq, lh = D.lh, lt = D.lt, ls = D.ls;
-  (void) cg;  (void) g1;  (void) e1;  (void) nc;  (void) pos;  (void) sa;  (void) sb;  (void) q6;  (void) tot;  (void) md;  (void) pm;  (void) pg;  (void) em;  (void) pe;  (void) pl;  (void) tz;  (void) pq;  (void) lh;  (void) lt;  (void) ls;
+  int cg = D.cg, g1 = D.g1, e1 = D.e1, nc = D.nc, pos = D.pos, sa = D.sa, sb = D.sb, q6 = D.q6, tot = D.tot, md = D.md, pm = D.pm, pg = D.pg, em = D.em, pe = D.pe, pl = D.pl, tz = D.tz, pq = D.pq, lh = D.lh, lt = D.lt, ls = D.ls, hv = D.hv, fq = D.fq;
+  (void) cg;  (void) g1;  (void) e1;  (void) nc;  (void) pos;  (void) sa;  (void) sb;  (void) q6;  (void) tot;  (void) md;  (void) pm;  (void) pg;  (void) em;  (void) pe;  (void) pl;  (void) tz;  (void) pq;  (void) lh;  (void) lt;  (void) ls;  (void) hv;  (void) fq;
 
   a = 0;
   a = a*14 + H_lvl_a_cg[__min(13,__max(0,cg-(1-1)))];
@@ -29,6 +29,8 @@ void H_lvl_make( const H_lvl_v & D, tcx & X ) {
   b = b*4 + H_lvl_b_pe[__min(15,__max(0,pe-(1-1)))];
   b = b*6 + H_lvl_b_pos[__min(5,__max(0,pos-(1-1)))];
   b = b*8 + H_lvl_b_tot[__min(7,__max(0,tot-(1-1)))];
+  b = b*8 + H_lvl_b_hv[__min(7,__max(0,hv-(1-1)))];
+  b = b*4 + H_lvl_b_fq[__min(3,__max(0,fq-(1-1)))];
 
   c = 0;
   c = c*14 + H_lvl_c_cg[__min(13,__max(0,cg-(1-1)))];
