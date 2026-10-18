@@ -556,6 +556,10 @@ struct Recon {
     skip_in = false;
     mb_done4 = 0;
     mb_done8 = 0;
+    if (!++tmm_gen) {
+      memset(tmm, 0, sizeof tmm);
+      tmm_gen = 1;
+    }
     mb_cdone[0] = mb_cdone[1] = 0;
     mb_cdc[0] = mb_cdc[1] = false;
   }
@@ -1856,6 +1860,21 @@ struct Recon {
   // and the blocks of the macroblock decoded so far. False where none of it
   // is decoded.
   static constexpr int TM_T = 2, TM_TP = 16;
+  // The proxy's searches of a macroblock (proxy_mv's, then one per luma
+  // block decoded, then one for the chroma) see the same template outside
+  // the macroblock, and the same blocks inside but for those added since:
+  // what a vector cost, by vector (direct mapped on its low bits), whole
+  // sums only. A new macroblock (mb_start) makes it all stale.
+  struct TmMemo {
+    uint32_t gen;
+    int vx, vy;
+    int outer;       // the template outside the macroblock (-1 not known)
+    int inner;       // the blocks inside: the 4x4 blocks of m4, 8x8 of m8
+    uint16_t m4;
+    uint8_t m8;
+  };
+  mutable TmMemo tmm[1024] = {};
+  uint32_t tmm_gen = 1;
   bool tm_search(int l, int r, int bx, int by, int bw, int bh, int* mv, bool only_y, const int (*cand)[2] = nullptr,
                  int ncand = 0, int* miss = nullptr, int lambda = 0, int finest = 1, int inner = 0,
                  int* alt = nullptr) const {
@@ -1905,9 +1924,63 @@ struct Recon {
         if (mb_done8 >> b8 & 1) s += sad(x0 + (b8 & 1) * 8, y0 + (b8 >> 1) * 8, 8, 8, vx, vy, budget - s);
       return s;
     };
+    auto outer_sad = [&](int vx, int vy, int budget) {
+      int s = 0;
+      if (top) s += sad(x0, y0 - T, bw, T, vx, vy, budget);
+      if (left && s < budget) s += sad(x0 - T, y0, T, bh, vx, vy, budget - s);
+      if (tr && s < budget) s += sad(x0 + bw, y0 - T, T, T, vx, vy, budget - s);
+      return s;
+    };
+    // (the whole sums of the 4x4 blocks of m4 and the 8x8 of m8)
+    auto blocks_sad = [&](int vx, int vy, unsigned m4, unsigned m8) {
+      int s = 0;
+      for (int b = 0; b < 16; b++)
+        if (m4 >> b & 1) s += sad(x0 + blk_x(b) * 4, y0 + blk_y(b) * 4, 4, 4, vx, vy, INT_MAX);
+      for (int b8 = 0; b8 < 4; b8++)
+        if (m8 >> b8 & 1) s += sad(x0 + (b8 & 1) * 8, y0 + (b8 >> 1) * 8, 8, 8, vx, vy, INT_MAX);
+      return s;
+    };
+    const bool memo = l < 0 && bx == 0 && by == 0 && bw == 16 && bh == 16;
     // the cost of a vector, or something not below bound once it is not
     auto cost = [&](int vx, int vy, int bound = INT_MAX) {
       int c = lambda * (abs(vx - px) + abs(vy - py));
+      if (memo) {
+        TmMemo& e = tmm[((unsigned)vx & 31) | ((unsigned)vy & 31) << 5];
+        if (e.gen != tmm_gen || e.vx != vx || e.vy != vy) e = {tmm_gen, vx, vy, -1, 0, 0, 0};
+        if (top || left || tr) {
+          // (the searches for the blocks inside will be back: whole; else
+          // whole only where below bound, as below)
+          if (e.outer < 0 && inner == 2) e.outer = outer_sad(vx, vy, INT_MAX);
+          if (e.outer < 0) {
+            if (c >= bound) return c;
+            int s = outer_sad(vx, vy, bound - c);
+            if (s >= bound - c) return c + s;
+            e.outer = s;
+          }
+          c += e.outer;
+        }
+        if (inner && c < bound) {
+          if (inner == 1) {
+            // the block whole, decoded: what is known of it, and the rest
+            if (e.m4 && e.m8) e.inner = e.m4 = e.m8 = 0;
+            if (e.m8) {
+              e.inner += blocks_sad(vx, vy, 0, ~e.m8 & 15), e.m8 = 15;
+            } else if (e.m4) {
+              e.inner += blocks_sad(vx, vy, ~e.m4 & 0xFFFF, 0), e.m4 = 0xFFFF;
+            } else {
+              int s = sad(x0, y0, 16, 16, vx, vy, bound - c);
+              if (s >= bound - c) return c + s;
+              e.inner = s, e.m4 = 0xFFFF;
+            }
+          } else {
+            if ((e.m4 & ~mb_done4) || (e.m8 & ~mb_done8)) e.inner = e.m4 = e.m8 = 0;
+            e.inner += blocks_sad(vx, vy, mb_done4 & ~e.m4, mb_done8 & ~e.m8);
+            e.m4 = mb_done4, e.m8 = mb_done8;
+          }
+          c += e.inner;
+        }
+        return c;
+      }
       if (top && c < bound) c += sad(x0, y0 - T, bw, T, vx, vy, bound - c);
       if (left && c < bound) c += sad(x0 - T, y0, T, bh, vx, vy, bound - c);
       if (tr && c < bound) c += sad(x0 + bw, y0 - T, T, T, vx, vy, bound - c);
