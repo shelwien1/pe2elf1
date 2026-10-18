@@ -82,6 +82,7 @@ static const int H_skp_mwD = (0+0) * (1);
 static const int H_skp_mwT = (0+0) * (1);
 static const int H_skp_mwG = (0+0) * (1);
 static const int H_skp_bw = (8+0) * (1);
+static const int H_skp_mt = (6+0) * (1);
 static const int H_skp_qs = (20+3) * (1);
 static const int H_skp_qf = (64+3) * (1);
 static const int H_skp_mb = (68+0) * (1);

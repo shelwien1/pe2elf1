@@ -86,6 +86,7 @@ static const int H_cbp_mwD = (18+0) * (1);
 static const int H_cbp_mwT = (0+0) * (1);
 static const int H_cbp_mwG = (0+0) * (1);
 static const int H_cbp_bw = (15+0) * (1);
+static const int H_cbp_mt = (6+0) * (1);
 static const int H_cbp_qs = (22+3) * (1);
 static const int H_cbp_qf = (4+3) * (1);
 static const int H_cbp_mb = (5+0) * (1);

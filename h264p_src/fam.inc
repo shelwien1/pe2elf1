@@ -15,10 +15,17 @@ namespace h264p {
 
 constexpr int TC_MIXN = 24;
 constexpr int TC_NODE = 13;
-constexpr int TC_MNODE = 169;
+constexpr int TC_MTREE = 6;
+constexpr int TC_MPER = (1 << TC_MTREE) - 1 + 13;
+constexpr int TC_MNODE = 13 * TC_MPER;
 constexpr int TC_NBMAX = 62;
 static INLINE int tc_node_len(int k) { return 3 + (k < 9 ? k : 9); }
-static INLINE int tc_node_man(int nb, int p) { return (nb > 12 ? 12 : nb) * 13 + (p > 12 ? 12 : p); }
+//  A mantissa bit's node: by the length, and for the top mt bits (up to
+//  TC_MTREE) by the bits above them (pref, a 1 and those), the rest by
+//  position
+static INLINE int tc_node_man(int nb, int p, u64 pref, int mt) {
+  return (nb > 12 ? 12 : nb) * TC_MPER + (p < mt ? (int)pref - 1 : (1 << TC_MTREE) - 1 + (p > 12 ? 12 : p));
+}
 static void tc_vfits(const char *what, sz vol, sz nodes) {
   if(!(vol > 0 && vol < ((sz)1 << 31) && nodes > 0))
     cm_fail("an IDX family gives the %s an index of %" PRIu64 " rows; a Volume must stay under 2^31", what, (u64)vol);
@@ -81,9 +88,10 @@ template <int f_DEC> struct tc_fam {
   int rS1, rS2;
   int lr, mb, lrm, mbm;
   int bw;
+  int mt;  // the mantissa bits whose nodes have the bits above them
   int ng;
   int nd, nm;
-  void wire(cm_cnt2 *a, sz va, cm_cnt2 *b, sz vb, cm_cnt2 *c, sz vc, cm_cnt2 *d, sz vd, cm_cnt2 *e, sz ve, cm_cnt2 *h, sz vh, cm_cnt2 *i_, sz vi, cm_cnt2 *j_, sz vj, cm_cnt2 *k_, sz vk, cm_cnt2 *l_, sz vl, cm_cnt *t, sz vt, i16 *s, u8 *sc, sz vs, i16 *s2, u8 *sc2, sz vf, i32 *w, sz vm, cm_cnt *g, sz vg, sz vgi, i32 *wm, sz vn, u8 *wc, u8 *wmc, i32 *w2, u8 *w2c, sz vw, i32 *w3, u8 *w3c, i32 *wf, u8 *wfc, int ra, int rb, int rc_, int rd, int re, int rh, int ri, int rj, int rk, int rl, int rt, int rg, int mwa, int mwb, int mwc, int mwd, int mwe, int mwh, int mwi, int mwj, int mwk, int mwl, int mwtt, int mwg, int rs1, int rs2, int lrate, int mbt, int lrm2, int mbm2, int bwt, int qqs, int qqf, int ndp, int nmp, int ha, int hb, int hd, int he, int hh, int hi, int hj, int hk, int hl, int hs, int hf, int hm, int ht, int hn) {
+  void wire(cm_cnt2 *a, sz va, cm_cnt2 *b, sz vb, cm_cnt2 *c, sz vc, cm_cnt2 *d, sz vd, cm_cnt2 *e, sz ve, cm_cnt2 *h, sz vh, cm_cnt2 *i_, sz vi, cm_cnt2 *j_, sz vj, cm_cnt2 *k_, sz vk, cm_cnt2 *l_, sz vl, cm_cnt *t, sz vt, i16 *s, u8 *sc, sz vs, i16 *s2, u8 *sc2, sz vf, i32 *w, sz vm, cm_cnt *g, sz vg, sz vgi, i32 *wm, sz vn, u8 *wc, u8 *wmc, i32 *w2, u8 *w2c, sz vw, i32 *w3, u8 *w3c, i32 *wf, u8 *wfc, int ra, int rb, int rc_, int rd, int re, int rh, int ri, int rj, int rk, int rl, int rt, int rg, int mwa, int mwb, int mwc, int mwd, int mwe, int mwh, int mwi, int mwj, int mwk, int mwl, int mwtt, int mwg, int rs1, int rs2, int lrate, int mbt, int lrm2, int mbm2, int bwt, int mtr, int qqs, int qqf, int ndp, int nmp, int ha, int hb, int hd, int he, int hh, int hi, int hj, int hk, int hl, int hs, int hf, int hm, int ht, int hn) {
     A = a;
     B = b;
     C = c;
@@ -182,6 +190,7 @@ template <int f_DEC> struct tc_fam {
     lrm = tc_clamp(lrm2, 1, 64);
     mbm = tc_clamp(mbm2, 0, 255);
     bw = tc_clamp(bwt, 0, 16);
+    mt = tc_clamp(mtr, 0, TC_MTREE);
     prp = -1;
     prpa = nullptr;
     hint = -1;
@@ -395,7 +404,7 @@ template <int f_DEC> struct tc_fam {
       for(p = 0; p < nb - 1; p++) {
         int hb = (int)(hu >> (nb - 2 - p) & 1);
         hs = hst == 1 ? 1 + hb : hst;
-        int mb = bitm(tc_node_man(nb, p), ENC && ((u >> (nb - 2 - p)) & 1) != 0);
+        int mb = bitm(tc_node_man(nb, p, pref, mt), ENC && ((u >> (nb - 2 - p)) & 1) != 0);
         if(hst == 1 && mb != hb)
           hst = mb > hb ? 3 : 4;
         pref = pref * 2 + (u64)mb;

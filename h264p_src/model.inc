@@ -94,7 +94,7 @@ static T* tc_table() {
              t_##F->H_##F##_W2C, H_##F##_w_Volume, t_##F->H_##F##_W3, t_##F->H_##F##_W3C, t_##F->H_##F##_WF, t_##F->H_##F##_WFC, H_##F##_rA, H_##F##_rB,                    \
              H_##F##_rC, H_##F##_rD, H_##F##_rE, H_##F##_rH, H_##F##_rI, H_##F##_rJ, H_##F##_rK, H_##F##_rL, H_##F##_rT, H_##F##_rG, H_##F##_mwA, H_##F##_mwB, H_##F##_mwC, H_##F##_mwD, H_##F##_mwE, H_##F##_mwH, H_##F##_mwI, H_##F##_mwJ, H_##F##_mwK, H_##F##_mwL,    \
              H_##F##_mwT, H_##F##_mwG, H_##F##_rS1, H_##F##_rS2, H_##F##_lr, H_##F##_mb, H_##F##_lrm, H_##F##_mbm,  \
-             H_##F##_bw, H_##F##_qs, H_##F##_qf, H_##F##_ND, H_##F##_MND, H_##F##_hA, H_##F##_hB, H_##F##_hD, H_##F##_hE, H_##F##_hH, H_##F##_hI, H_##F##_hJ, H_##F##_hK, H_##F##_hL,       \
+             H_##F##_bw, H_##F##_mt, H_##F##_qs, H_##F##_qf, H_##F##_ND, H_##F##_MND, H_##F##_hA, H_##F##_hB, H_##F##_hD, H_##F##_hE, H_##F##_hH, H_##F##_hI, H_##F##_hJ, H_##F##_hK, H_##F##_hL,       \
              H_##F##_hS, H_##F##_hF, H_##F##_hM, H_##F##_hT, H_##F##_hN)
 
 // where the bits go (-v)

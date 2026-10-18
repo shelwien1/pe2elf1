@@ -97,6 +97,7 @@ static const int H_mbt_mwD = (0+0) * (1);
 static const int H_mbt_mwT = (0+0) * (1);
 static const int H_mbt_mwG = (0+0) * (1);
 static const int H_mbt_bw = (12+0) * (1);
+static const int H_mbt_mt = (6+0) * (1);
 static const int H_mbt_qs = (16+3) * (1);
 static const int H_mbt_qf = (22+3) * (1);
 static const int H_mbt_mb = (22+0) * (1);

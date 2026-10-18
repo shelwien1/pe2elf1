@@ -61,6 +61,7 @@ static const int H_hdr_mwD = (12+0) * (1);
 static const int H_hdr_mwT = (0+0) * (1);
 static const int H_hdr_mwG = (0+0) * (1);
 static const int H_hdr_bw = (8+0) * (1);
+static const int H_hdr_mt = (6+0) * (1);
 static const int H_hdr_qs = (20+3) * (1);
 static const int H_hdr_qf = (17+3) * (1);
 static const int H_hdr_mb = (226+0) * (1);

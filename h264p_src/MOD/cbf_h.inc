@@ -95,6 +95,7 @@ static const int H_cbf_mwD = (200+0) * (1);
 static const int H_cbf_mwT = (8+0) * (1);
 static const int H_cbf_mwG = (0+0) * (1);
 static const int H_cbf_bw = (16+0) * (1);
+static const int H_cbf_mt = (6+0) * (1);
 static const int H_cbf_qs = (0+3) * (1);
 static const int H_cbf_qf = (16+3) * (1);
 static const int H_cbf_mb = (130+0) * (1);

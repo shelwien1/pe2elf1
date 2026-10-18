@@ -64,6 +64,7 @@ static const int H_pcm_mwD = (0+0) * (1);
 static const int H_pcm_mwT = (0+0) * (1);
 static const int H_pcm_mwG = (0+0) * (1);
 static const int H_pcm_bw = (8+0) * (1);
+static const int H_pcm_mt = (0+0) * (1);
 static const int H_pcm_qs = (16+3) * (1);
 static const int H_pcm_qf = (16+3) * (1);
 static const int H_pcm_mb = (5+0) * (1);

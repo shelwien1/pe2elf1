@@ -82,6 +82,7 @@ static const int H_qpd_mwD = (16+0) * (1);
 static const int H_qpd_mwT = (0+0) * (1);
 static const int H_qpd_mwG = (0+0) * (1);
 static const int H_qpd_bw = (8+0) * (1);
+static const int H_qpd_mt = (6+0) * (1);
 static const int H_qpd_qs = (16+3) * (1);
 static const int H_qpd_qf = (56+3) * (1);
 static const int H_qpd_mb = (5+0) * (1);

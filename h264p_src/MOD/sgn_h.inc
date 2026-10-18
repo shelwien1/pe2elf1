@@ -87,6 +87,7 @@ static const int H_sgn_mwD = (31+0) * (1);
 static const int H_sgn_mwT = (0+0) * (1);
 static const int H_sgn_mwG = (0+0) * (1);
 static const int H_sgn_bw = (14+0) * (1);
+static const int H_sgn_mt = (6+0) * (1);
 static const int H_sgn_qs = (0+3) * (1);
 static const int H_sgn_qf = (122+3) * (1);
 static const int H_sgn_mb = (160+0) * (1);

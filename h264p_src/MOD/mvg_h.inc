@@ -73,6 +73,7 @@ static const int H_mvg_mwD = (31+0) * (1);
 static const int H_mvg_mwT = (0+0) * (1);
 static const int H_mvg_mwG = (0+0) * (1);
 static const int H_mvg_bw = (14+0) * (1);
+static const int H_mvg_mt = (6+0) * (1);
 static const int H_mvg_qs = (0+3) * (1);
 static const int H_mvg_qf = (122+3) * (1);
 static const int H_mvg_mb = (160+0) * (1);

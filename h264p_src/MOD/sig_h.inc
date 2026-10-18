@@ -104,6 +104,7 @@ static const int H_sig_mwD = (0+0) * (1);
 static const int H_sig_mwT = (0+0) * (1);
 static const int H_sig_mwG = (0+0) * (1);
 static const int H_sig_bw = (16+0) * (1);
+static const int H_sig_mt = (6+0) * (1);
 static const int H_sig_qs = (0+3) * (1);
 static const int H_sig_qf = (16+3) * (1);
 static const int H_sig_mb = (112+0) * (1);

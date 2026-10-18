@@ -96,6 +96,7 @@ static const int H_lvl_mwD = (1+0) * (1);
 static const int H_lvl_mwT = (32+0) * (1);
 static const int H_lvl_mwG = (0+0) * (1);
 static const int H_lvl_bw = (16+0) * (1);
+static const int H_lvl_mt = (0+0) * (1);
 static const int H_lvl_qs = (20+3) * (1);
 static const int H_lvl_qf = (16+3) * (1);
 static const int H_lvl_mb = (5+0) * (1);
