@@ -11,8 +11,11 @@
 #  macroblock in the last picture decoded against that of the one that set
 #  the predicted QP (7 none); aq the delta the line of QP against energy
 #  gives (7 + the delta, 0 none), ac how far the last picture of the kind
-#  was from its line where the macroblock's content was.  The magnitude has
-#  the line's delta as code()'s hint; the sign is the qpg family's.
+#  was from its line where the macroblock's content was; td how much the
+#  macroblock changed between the last two pictures decoded (1 + tc_qlog, 0
+#  not known), for the macroblock tree's lower QP where pictures stay.  The
+#  magnitude has the line's delta as code()'s hint; the sign is the qpg
+#  family's.
 
 Prefix H_qpd
 Debug 1
@@ -53,12 +56,14 @@ Index i
  i_aq: aq, 1!1111111111111
  i_ac: ac, 1!1111111111111
  i_cls: cls, 1!11111111
+ i_td: td, 1!1010101010101010
 
 Index j
  j_st: st, 1!111111111
  j_dc: dc, 1!11111111
  j_db: db, 1!11111111
  j_lnz: lnz, 1!1
+ j_td: td, 1!1010101010101010
 
 Index k
  k_aq: aq, 1!1111111111111
