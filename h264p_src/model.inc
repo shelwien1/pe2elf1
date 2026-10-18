@@ -400,6 +400,8 @@ struct Model {
   void init() {
     cm_tables();
     for (int& p : hist_poc_) p = INT_MIN;
+    std::fill(&hist_rpoc_[0][0][0], &hist_rpoc_[0][0][0] + sizeof hist_rpoc_ / sizeof(int), INT_MIN);
+    std::fill(&col_rpoc_[0][0], &col_rpoc_[0][0] + sizeof col_rpoc_ / sizeof(int), INT_MIN);
 #define H_MAP(F) (t_##F = tc_table<H_##F##_T>(), t_##F->H_##F##_Init(), H_WIRE(F))
     H_MAP(nal);
     H_MAP(hdr);
@@ -642,12 +644,19 @@ struct Model {
   // the last picture of a kind (by its POC) and nearer in time than the
   // last picture of the current kind; nullptr other slices or none
   int hist_poc_[30], prev_poc_ = INT_MIN, cur_poc_ = INT_MIN;
-  const MbCol* phist() const {
-    if (sc_->stype_ != kB || !rec_.active || rec_.nlist[1] < 1 || !rec_.list[1][0]) return nullptr;
+  // the POCs of each kind's last picture's references by list and index
+  // (INT_MIN none), and those of the one before the current picture's
+  int hist_rpoc_[30][2][32], col_rpoc_[2][32];
+  int phist_key() const {
+    if (sc_->stype_ != kB || !rec_.active || rec_.nlist[1] < 1 || !rec_.list[1][0]) return -1;
     int poc = rec_.list[1][0]->poc;
     for (int k = 0; k < 30; k++)
-      if (k != key_ && hist_poc_[k] == poc && (int)hist_[k].size() >= size_) return hist_[k].data();
-    return nullptr;
+      if (k != key_ && hist_poc_[k] == poc && (int)hist_[k].size() >= size_) return k;
+    return -1;
+  }
+  const MbCol* phist() const {
+    int k = phist_key();
+    return k < 0 ? nullptr : hist_[k].data();
   }
   const MbInfo* near_info(int dx, int dy) const {
     int a = mb_near(dx, dy);
@@ -680,6 +689,10 @@ struct Model {
     if (h.first_mb == 0) {
       prev_poc_ = hist_poc_[key_];
       cur_poc_ = hist_poc_[key_] = rec_.active ? rec_.cur->poc : INT_MIN;
+      memcpy(col_rpoc_, hist_rpoc_[key_], sizeof col_rpoc_);
+      for (int l = 0; l < 2; l++)
+        for (int r = 0; r < 32; r++)
+          hist_rpoc_[key_][l][r] = rec_.active && r < rec_.nlist[l] && rec_.list[l][r] ? rec_.list[l][r]->poc : INT_MIN;
     }
     if (h.first_mb == 0) aq_picture();
     if (h.first_mb == 0) memset(lq_, 0, sizeof lq_);
@@ -1630,9 +1643,12 @@ struct Model {
   // none
   bool td_mv(int l, int ref, int x, int y, int* m) const {
     if (sc_->stype_ != kB || !col1_ || col1_->cls >= CL_INXN) return false;
-    int b8 = (y >> 1) * 2 + (x >> 1), cl = col1_->rf[0][b8] >= 0 ? 0 : 1;
-    int td = ref_dist(0, 0) - ref_dist(1, 0), tr = ref_dist(l, ref);
-    if (col1_->rf[cl][b8] < 0 || !td || !tr || !ref_dist(0, 0)) return false;
+    int b8 = (y >> 1) * 2 + (x >> 1), cl = col1_->rf[0][b8] >= 0 ? 0 : 1, cr = col1_->rf[cl][b8];
+    int td = ref_dist(0, 0) - ref_dist(1, 0), tr = ref_dist(l, ref), k1 = phist_key();
+    // over the distance from that picture to its own reference, where known
+    if (cr >= 0 && k1 >= 0 && hist_rpoc_[k1][cl][cr] != INT_MIN && ref_dist(1, 0))
+      td = hist_poc_[k1] - hist_rpoc_[k1][cl][cr];
+    if (cr < 0 || !td || !tr || !ref_dist(0, 0)) return false;
     for (int k = 0; k < 2; k++) m[k] = mv_scale(col1_->mv[cl][y * 4 + x][k], tr, td);
     return true;
   }
@@ -1657,9 +1673,11 @@ struct Model {
       pdn_ = !col_ || col_->rf[list][b8] < 0;
       if (!pdn_) {
         cm[0] = col_->mv[list][y * 4 + x][0], cm[1] = col_->mv[list][y * 4 + x][1];
-        // on a later reference, scaled by its distance against the first's
-        int d0 = ref_dist(list, 0), dr = ref_dist(list, ref);
-        if (ref > 0 && d0 && dr)
+        // scaled by the reference's distance against that of col's own
+        // (where not known, the first reference's)
+        int cr = col_->rf[list][b8], d0 = ref_dist(list, 0), dr = ref_dist(list, ref);
+        if (prev_poc_ != INT_MIN && col_rpoc_[list][cr] != INT_MIN) d0 = prev_poc_ - col_rpoc_[list][cr];
+        if (d0 && dr && d0 != dr)
           for (int k = 0; k < 2; k++) cm[k] = mv_scale(cm[k], dr, d0);
       }
       int cc[2] = {cm[0], cm[1]};

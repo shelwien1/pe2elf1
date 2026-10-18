@@ -9,9 +9,10 @@
 #  partition size (0 16x16 .. 3 4x4), rf the ref_idx of the partition (or of
 #  A for ref_idx), pi the partition's place in the macroblock, nr the
 #  references of the list; for mvd pd the vector of the same partition in the
-#  previous picture of the type (on a later reference, scaled by distance;
-#  in B slices the one temporal direct would give, where list 1's first
-#  reference has one) less the predicted vector, sp how far the
+#  previous picture of the type (scaled by the POC distance of the
+#  partition's reference against that of its own; in B slices the one
+#  temporal direct would give, where list 1's first reference has one)
+#  less the predicted vector, sp how far the
 #  vectors of the neighbours A, B, C are from the predicted one (1 + tc_qlog,
 #  0 none), for ref_idx pd the ref_idx in the previous picture; tv for mvd
 #  the template match's vector less the predicted one (1 + sq2, 0 none),
