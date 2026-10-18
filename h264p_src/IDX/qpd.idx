@@ -13,7 +13,9 @@
 #  gives (7 + the delta, 0 none), ac how far the last picture of the kind
 #  was from its line where the macroblock's content was; td how much the
 #  macroblock changed between the last two pictures decoded (1 + tc_qlog, 0
-#  not known), for the macroblock tree's lower QP where pictures stay.  The
+#  not known), for the macroblock tree's lower QP where pictures stay; sq
+#  the slice's QP less the predicted one (7 + that, -6 to 6): an encoder's
+#  QPs keep near the slice's.  The
 #  magnitude has the line's delta as code()'s hint; the sign is the qpg
 #  family's.
 
@@ -26,6 +28,7 @@ Index a
  a_pc: pc, 1!1111
  a_cc: cc, 1!11
  a_cls: cls, 1!00000100
+ a_sq: sq, 1!1111111111111
 
 Index b
  b_dc: dc, 1!11111111
@@ -46,6 +49,7 @@ Index e
  e_lnz: lnz, 1!0
  e_aq: aq, 1!1111111111111
  e_cls: cls, 1!11111111
+ e_sq: sq, 1!1111111111111
 
 Index h
  h_ae: ae, 1!0000001000001

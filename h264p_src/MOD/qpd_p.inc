@@ -15,14 +15,15 @@
 
 void H_qpd_make( const H_qpd_v & D, tcx & X ) {
   int a, b, c, d, e, h, i, j, k, l, s, f, m, w, t, n, g;
-  int lnz = D.lnz, pc = D.pc, cc = D.cc, cls = D.cls, dc = D.dc, db = D.db, lz = D.lz, st = D.st, ae = D.ae, aq = D.aq, ac = D.ac, td = D.td;
-  (void) lnz;  (void) pc;  (void) cc;  (void) cls;  (void) dc;  (void) db;  (void) lz;  (void) st;  (void) ae;  (void) aq;  (void) ac;  (void) td;
+  int lnz = D.lnz, pc = D.pc, cc = D.cc, cls = D.cls, dc = D.dc, db = D.db, lz = D.lz, st = D.st, ae = D.ae, aq = D.aq, ac = D.ac, td = D.td, sq = D.sq;
+  (void) lnz;  (void) pc;  (void) cc;  (void) cls;  (void) dc;  (void) db;  (void) lz;  (void) st;  (void) ae;  (void) aq;  (void) ac;  (void) td;  (void) sq;
 
   a = 0;
   a = a*2 + ((lnz>0+(1-1)));
   a = a*5 + H_qpd_a_pc[__min(4,__max(0,pc-(1-1)))];
   a = a*3 + ((cc>0+(1-1))+(cc>1+(1-1)));
   a = a*2 + ((cls>5+(1-1)));
+  a = a*14 + H_qpd_a_sq[__min(13,__max(0,sq-(1-1)))];
 
   b = 0;
   b = b*9 + H_qpd_b_dc[__min(8,__max(0,dc-(1-1)))];
@@ -42,6 +43,7 @@ void H_qpd_make( const H_qpd_v & D, tcx & X ) {
   e = 0;
   e = e*14 + H_qpd_e_aq[__min(13,__max(0,aq-(1-1)))];
   e = e*9 + H_qpd_e_cls[__min(8,__max(0,cls-(1-1)))];
+  e = e*14 + H_qpd_e_sq[__min(13,__max(0,sq-(1-1)))];
 
   h = 0;
   h = h*3 + ((ae>6+(1-1))+(ae>12+(1-1)));

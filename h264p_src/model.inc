@@ -37,13 +37,13 @@ struct H_mbt_v { int st, ca, cb, cc, nsk, en, td, sm, tm, tb, dh, bd, qc, im, ig
 struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg, tp, em, pq; };
 struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm, pr, dr, pq, mh, mc, mg, rg; };
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, zd, cq, tq, rt, ea, eb; };
-struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac, td; };
+struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac, td, sq; };
 struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn, pq, ch, ds, hv; };
 struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz, pq, hb, ft, h3, pr, sn, hv, pf; };
 struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe, pl, tz, pq, lh, lt, ls, hv, fq; };
 struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md, pp, mg, ez, ts, pq, gh, se, dm; };
 struct H_mvg_v { int comp, lst, ts, zs, ds, sa, sb, mag, tq, ox, ns, es; };
-struct H_qpg_v { int as, cs, bs, ls, rs, mag, cls, st; };
+struct H_qpg_v { int as, cs, bs, ls, rs, mag, cls, st, ss; };
 struct H_pcm_v { int pl, dp, pd, pd2; };
 
 #include "MOD/nal_h.inc"
@@ -535,7 +535,7 @@ struct Model {
   int st_ = 0, key_ = 0;   // slice type x reference; st_ x frame/top/bottom field
   int width_ = 1, size_ = 0;
   bool mbaff_ = false;
-  int qp_off_ = 0, qp_pred_ = 26;
+  int qp_off_ = 0, qp_pred_ = 26, slice_qp_ = 26;
   int last_qpd_ = 0, lz_ = 0;  // the last mb_qp_delta, the last nonzero one
   int qp_src_ = -1;            // the macroblock that coded it
   bool has_lz_ = false, qpd_coded_ = false;
@@ -666,7 +666,7 @@ struct Model {
     hcur_ = hist_[key_].data();
     if (h.first_mb == 0) hprev_.assign(hcur_, hcur_ + size_);
     qp_off_ = 6 * (sc.sps_.bit_depth_luma - 8);
-    qp_pred_ = sc.pps_.pic_init_qp + h.slice_qp_delta;
+    qp_pred_ = slice_qp_ = sc.pps_.pic_init_qp + h.slice_qp_delta;
     last_qpd_ = 0;
     has_lz_ = false;
     qp_src_ = -1;
@@ -1816,6 +1816,7 @@ struct Model {
     D.lz = has_lz_ ? 3 + tc_clamp(tc_sq(lz_), -3, 3) : 3;
     D.st = st_;
     D.td = map_td();
+    D.sq = 7 + tc_clamp(slice_qp_ - qp_pred_, -6, 6);
     // x264's adaptive quantization: the QP follows the energy of the
     // macroblock, which the last picture shows; the change since the one
     // that set the predicted QP
@@ -1885,6 +1886,7 @@ struct Model {
         G.mag = std::min(tc_qlog(m), 7);
         G.cls = mi_->cls;
         G.st = st_;
+        G.ss = rel(slice_qp_ - qp_pred_);
         tcx Y;
         H_qpg_make(G, Y);
         f_qpg.select(Y);

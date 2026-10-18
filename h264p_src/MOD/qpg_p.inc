@@ -15,12 +15,13 @@
 
 void H_qpg_make( const H_qpg_v & D, tcx & X ) {
   int a, b, c, d, e, h, i, j, k, l, s, f, m, w, t, n, g;
-  int as = D.as, cs = D.cs, bs = D.bs, ls = D.ls, rs = D.rs, mag = D.mag, cls = D.cls, st = D.st;
-  (void) as;  (void) cs;  (void) bs;  (void) ls;  (void) rs;  (void) mag;  (void) cls;  (void) st;
+  int as = D.as, cs = D.cs, bs = D.bs, ls = D.ls, rs = D.rs, mag = D.mag, cls = D.cls, st = D.st, ss = D.ss;
+  (void) as;  (void) cs;  (void) bs;  (void) ls;  (void) rs;  (void) mag;  (void) cls;  (void) st;  (void) ss;
 
   a = 0;
   a = a*10 + H_qpg_a_as[__min(9,__max(0,as-(1-1)))];
   a = a*8 + H_qpg_a_mag[__min(7,__max(0,mag-(1-1)))];
+  a = a*10 + H_qpg_a_ss[__min(9,__max(0,ss-(1-1)))];
 
   b = 0;
   b = b*10 + H_qpg_b_as[__min(9,__max(0,as-(1-1)))];
@@ -36,6 +37,7 @@ void H_qpg_make( const H_qpg_v & D, tcx & X ) {
   e = 0;
   e = e*3 + ((cs>5+(1-1))+(cs>8+(1-1)));
   e = e*4 + H_qpg_e_rs[__min(3,__max(0,rs-(1-1)))];
+  e = e*10 + H_qpg_e_ss[__min(9,__max(0,ss-(1-1)))];
 
   h = 0;
   h = h*10 + H_qpg_h_as[__min(9,__max(0,as-(1-1)))];
