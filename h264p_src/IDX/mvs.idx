@@ -120,7 +120,7 @@ Index m
  m_pd: pd, 1!11111
 
 Index w
- w_kind: kind, 1!111
+ w_kind: kind, 1!000
  w_comp: comp, 1!0
  w_pd: pd, 1!01000101
  w_ma: ma, 1!1111111

@@ -132,7 +132,7 @@ Number mwB, 1, 0!00000110
 Number mwC, 1, 0!00000000
 Number mwE, 1, 0!00000000
 Number mwH, 1, 0!00000000
-Number mwI, 1, 0!00000000
+Number mwI, 1, 0!00000001
 Number mwJ, 1, 0!00000000
 Number mwK, 1, 0!00000000
 Number mwL, 1, 0!00100111

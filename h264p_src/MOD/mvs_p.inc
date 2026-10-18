@@ -107,7 +107,6 @@ void H_mvs_make( const H_mvs_v & D, tcx & X ) {
   m = m*6 + H_mvs_m_pd[__min(5,__max(0,pd-(1-1)))];
 
   w = 0;
-  w = w*4 + H_mvs_w_kind[__min(3,__max(0,kind-(1-1)))];
   w = w*4 + H_mvs_w_pd[__min(8,__max(0,pd-(1-1)))];
   w = w*8 + H_mvs_w_ma[__min(7,__max(0,ma-(1-1)))];
   w = w*4 + H_mvs_w_nr[__min(3,__max(0,nr-(1-1)))];

@@ -44,7 +44,7 @@ void H_mvg_make( const H_mvg_v & D, tcx & X ) {
 
   h = 0;
   h = h*10 + H_mvg_h_ts[__min(9,__max(0,ts-(1-1)))];
-  h = h*13 + H_mvg_h_tq[__min(12,__max(0,tq-(1-1)))];
+  h = h*9 + H_mvg_h_tq[__min(12,__max(0,tq-(1-1)))];
   h = h*4 + H_mvg_h_es[__min(3,__max(0,es-(1-1)))];
 
   i = 0;

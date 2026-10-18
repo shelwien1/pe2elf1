@@ -63,7 +63,6 @@ static const byte H_mvs_s_tv[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
 static const byte H_mvs_t_kind[3+1]={ 0,1,2,3 };
 
-static const byte H_mvs_w_kind[3+1]={ 0,1,2,3 };
 static const byte H_mvs_w_pd[8+1]={ 0,0,1,1,1,1,2,2,3 };
 static const byte H_mvs_w_ma[7+1]={ 0,1,2,3,4,5,6,7 };
 static const byte H_mvs_w_nr[3+1]={ 0,1,2,3 };
@@ -135,7 +134,7 @@ static const long long H_mvs_m_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 1), 6); /
 static const long long H_mvs_n_Volume = tc_vmul(1, 4); // 4
 static const long long H_mvs_s_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 14); // 112
 static const long long H_mvs_t_Volume = tc_vmul(tc_vmul(1, 4), 2); // 8
-static const long long H_mvs_w_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 1), 4), 8), 4); // 512
+static const long long H_mvs_w_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 4), 8), 4); // 128
 
 struct H_mvs_T { 
 #undef USE_NEW
