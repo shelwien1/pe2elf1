@@ -15,14 +15,15 @@
 
 void H_hdr_make( const H_hdr_v & D, tcx & X ) {
   int a, b, c, d, e, h, i, j, k, l, s, f, m, w, t, n, g;
-  int tag = D.tag, fld = D.fld, p1 = D.p1, p2 = D.p2, pos = D.pos, p1r = D.p1r, sty = D.sty;
-  (void) tag;  (void) fld;  (void) p1;  (void) p2;  (void) pos;  (void) p1r;  (void) sty;
+  int tag = D.tag, fld = D.fld, p1 = D.p1, p2 = D.p2, pos = D.pos, p1r = D.p1r, sty = D.sty, pr = D.pr;
+  (void) tag;  (void) fld;  (void) p1;  (void) p2;  (void) pos;  (void) p1r;  (void) sty;  (void) pr;
 
   a = 0;
   a = (a<<6) + (((((tag)>>6)&1)<<5) + ((tag)&31)); // 01011111
   a = a*4 + H_hdr_a_fld[__min(3,__max(0,fld-(1-1)))];
   a = a*8 + H_hdr_a_p1[__min(7,__max(0,p1-(1-1)))];
   a = a*10 + H_hdr_a_sty[__min(9,__max(0,sty-(1-1)))];
+  a = a*4 + H_hdr_a_pr[__min(3,__max(0,pr-(1-1)))];
 
   b = 0;
   b = (b<<5) + (((((tag)>>5)&1)<<4) + ((tag)&15)); // 00101111

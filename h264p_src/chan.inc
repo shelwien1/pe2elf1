@@ -23,6 +23,8 @@ struct Chan {
 
   // --- header syntax: groups of values under the name of a TSV row
   virtual void hbegin(const char* name) = 0;
+  // the next value is a u(n): of n bits (before hval)
+  virtual void hbits(int n) { (void)n; }
   virtual int64_t hval(int64_t v) = 0;
   // bytes; writing, b has the size wanted
   virtual void hbytes(std::vector<uint8_t>& b) = 0;

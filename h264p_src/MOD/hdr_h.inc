@@ -2,6 +2,7 @@
 static const byte H_hdr_a_fld[3+1]={ 0,1,2,3 };
 static const byte H_hdr_a_p1[7+1]={ 0,1,2,3,4,5,6,7 };
 static const byte H_hdr_a_sty[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
+static const byte H_hdr_a_pr[3+1]={ 0,1,2,3 };
 
 
 static const byte H_hdr_c_fld[15+1]={ 0,1,1,1,2,2,3,4,5,5,6,6,6,6,6,6 };
@@ -81,7 +82,7 @@ static const int H_hdr_hT = (24+0) * (1);
 static const int H_hdr_hN = (24+0) * (1);
 
 
-static const long long H_hdr_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, (1<<6)), 4), 8), 10); // 20480
+static const long long H_hdr_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, (1<<6)), 4), 8), 10), 4); // 81920
 static const long long H_hdr_b_Volume = tc_vmul(tc_vmul(1, (1<<5)), (1<<4)); // 512
 static const long long H_hdr_c_Volume = tc_vmul(tc_vmul(1, (1<<8)), 7); // 1792
 static const long long H_hdr_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<8)), 9), 8); // 18432

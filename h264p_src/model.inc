@@ -31,7 +31,7 @@ constexpr int H_qpg_ND = 1, H_qpg_MND = 1, H_qpg_NG = 1;
 constexpr int H_pcm_ND = TC_NODE, H_pcm_MND = TC_MNODE, H_pcm_NG = 3;
 
 struct H_nal_v { int fld, ctx, p1, p2; };
-struct H_hdr_v { int tag, fld, p1, p2, pos, p1r, sty; };
+struct H_hdr_v { int tag, fld, p1, p2, pos, p1r, sty, pr; };
 struct H_skp_v { int st, a3, b3, col, c9, cd, run, cnt, eq, lf, af, td, en, sm, tm, tb, bd, qc, c1, k9, tx; };
 struct H_mbt_v { int st, ca, cb, cc, nsk, en, td, sm, tm, tb, dh, bd, qc, im, ig, c1, tx; };
 struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg, tp, em, pq; };
@@ -484,12 +484,19 @@ struct Model {
   int sty_ = 10, last_sty_ = 10, ref_idc_ = 0;  // slot of the current NAL unit: slice type x reference, 10 none
   bool slice_nal_ = false;
   bool is_slice_type_ = false;
+  // frame_num and pic_order_cnt_lsb wrap: their differences are taken
+  // modulo 2^hbits_ (the bits of the u(n) to come, 0 none)
+  bool is_wrap_ = false;
+  int hbits_ = 0;
+  void hbits(int n) { hbits_ = n; }
   HLast hl_[256][4][11] = {};
 
   // the start of a NAL unit coded by the walk
+  int last_sref_ = 2, prev_sref_ = 2;  // whether the last slice NAL unit, and the one before, were references (2 none)
   void nal_begin(int type, int ref_idc) {
     slice_nal_ = type == 1 || type == 5;
     ref_idc_ = ref_idc;
+    if (slice_nal_) prev_sref_ = last_sref_, last_sref_ = ref_idc != 0;
     sty_ = slice_nal_ ? last_sty_ : 10;
   }
   void hbegin(const char* name) {
@@ -500,6 +507,7 @@ struct Model {
     }
     tag_ = it->second;
     is_slice_type_ = slice_nal_ && it->first == "slice_type";
+    is_wrap_ = it->first == "frame_num" || it->first == "pic_order_cnt_lsb";
     fld_ = 0;
     runpos_ = tag_ == lasttag_ ? runpos_ + 1 : 0;
     lasttag_ = tag_;
@@ -507,11 +515,14 @@ struct Model {
   i64 hval(i64 x) {
     tc_stage = STG_HDR;
     HLast& h = hl_[tag_][fld_ < 3 ? fld_ : 3][sty_];
-    H_hdr_v D = {tag_, fld_, sq2(h.d1), sq2(h.d2), tc_qlog(runpos_), (int)(h.v & 255), sty_ < 9 ? sty_ : 9};
+    H_hdr_v D = {tag_, fld_, sq2(h.d1), sq2(h.d2), tc_qlog(runpos_), (int)(h.v & 255), sty_ < 9 ? sty_ : 9, slice_nal_ ? prev_sref_ : 3};
     tcx X;
     H_hdr_make(D, X);
-    i64 d = f_hdr.codes(X, ENC ? x - h.v : 0, (u32)tag_);
-    x = h.v + d;
+    i64 m = is_wrap_ && hbits_ > 0 && hbits_ < 31 ? (i64)1 << hbits_ : 0, dx = ENC ? x - h.v : 0;
+    hbits_ = 0;
+    if (m && ENC) dx = ((dx % m) + m + m / 2) % m - m / 2;  // into [-m/2, m/2)
+    i64 d = f_hdr.codes(X, dx, (u32)tag_);
+    x = m ? ((h.v + d) % m + m) % m : h.v + d;
     h.d2 = h.d1;
     h.d1 = d;
     h.v = x;
@@ -2648,6 +2659,7 @@ struct ModelChan : Chan {
   ModelChan(Model<f_DEC>& m, LogChan* log) : Chan(true), m_(m), log_(log) {}
 
   void hbegin(const char* name) override { m_.hbegin(name); }
+  void hbits(int n) override { m_.hbits(n); }
   int64_t hval(int64_t) override { return m_.hval(ENC ? log_->hval(0) : 0); }
   void hbytes(std::vector<uint8_t>& b) override {
     if (ENC) log_->hbytes(b);

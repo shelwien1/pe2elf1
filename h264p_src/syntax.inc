@@ -38,6 +38,7 @@ struct Syn {
   void begin(const char* name) { ch_->hbegin(name); }
 
   int64_t vu(int n) {
+    ch_->hbits(n);
     if (!W) {
       int64_t v = br->u(n);
       ch_->hval(v);
