@@ -1618,6 +1618,24 @@ struct Model {
     tc_syms[STG_MVS]++;
     return v;
   }
+  // the distance in POC from the current picture to list l's reference r
+  // (0 not known), and a vector over distance dn scaled to distance dr
+  int ref_dist(int l, int r) const {
+    return rec_.active && r >= 0 && r < rec_.nlist[l] && rec_.list[l][r] ? cur_poc_ - rec_.list[l][r]->poc : 0;
+  }
+  static int mv_scale(int v, int dr, int dn) { return (int)div_floor((int64_t)v * dr * 2 + dn, 2 * dn); }
+  // B: the vector the motion of list 1's first reference's co-located
+  // block (as if it pointed at list 0's first reference) gives the 4x4
+  // block (x, y) on list l's reference ref, as temporal direct does: false
+  // none
+  bool td_mv(int l, int ref, int x, int y, int* m) const {
+    if (sc_->stype_ != kB || !col1_ || col1_->cls >= CL_INXN) return false;
+    int b8 = (y >> 1) * 2 + (x >> 1), cl = col1_->rf[0][b8] >= 0 ? 0 : 1;
+    int td = ref_dist(0, 0) - ref_dist(1, 0), tr = ref_dist(l, ref);
+    if (col1_->rf[cl][b8] < 0 || !td || !tr || !ref_dist(0, 0)) return false;
+    for (int k = 0; k < 2; k++) m[k] = mv_scale(col1_->mv[cl][y * 4 + x][k], tr, td);
+    return true;
+  }
   int mvd(int list, int comp, int x, int y, int w, int h, int v) {
     tc_stage = STG_MVS;
     int ia, ib, b8 = (y >> 1) * 2 + (x >> 1), ref = sc_->cur_->ref[list][b8];
@@ -1634,17 +1652,40 @@ struct Model {
           }
         pdv_[k] = 0;
       }
+      // col's vector; in B slices, temporal direct's where there is one
+      int cm[2];
       pdn_ = !col_ || col_->rf[list][b8] < 0;
+      if (!pdn_) {
+        cm[0] = col_->mv[list][y * 4 + x][0], cm[1] = col_->mv[list][y * 4 + x][1];
+        // on a later reference, scaled by its distance against the first's
+        int d0 = ref_dist(list, 0), dr = ref_dist(list, ref);
+        if (ref > 0 && d0 && dr)
+          for (int k = 0; k < 2; k++) cm[k] = mv_scale(cm[k], dr, d0);
+      }
+      int cc[2] = {cm[0], cm[1]};
+      bool ccok = !pdn_;
+      if (td_mv(list, ref, x, y, cm)) pdn_ = false;
+      else ccok = false;
       if (!pdn_)
-        for (int k = 0; k < 2; k++) pdv_[k] = col_->mv[list][y * 4 + x][k] - mvp_[k];
+        for (int k = 0; k < 2; k++) pdv_[k] = cm[k] - mvp_[k];
       tmv_[0] = mvp_[0];
       tmv_[1] = mvp_[1];
       // starting from mvp, the neighbours' vectors on the same reference,
       // col's, zero
-      int cand[5][2], nc = 0;
+      int cand[8][2], nc = 0;
       for (int j = 0; j < 3; j++)
         if (nbs[j].ref == ref) cand[nc][0] = nbs[j].mv[0], cand[nc][1] = nbs[j].mv[1], nc++;
-      if (!pdn_) cand[nc][0] = col_->mv[list][y * 4 + x][0], cand[nc][1] = col_->mv[list][y * 4 + x][1], nc++;
+      // and those on other references of the list, scaled to this one's
+      // distance
+      for (int j = 0; j < 3; j++) {
+        int dn = ref_dist(list, nbs[j].ref), dr = ref_dist(list, ref);
+        if (nbs[j].ref >= 0 && nbs[j].ref != ref && dn && dr) {
+          for (int k = 0; k < 2; k++) cand[nc][k] = mv_scale(nbs[j].mv[k], dr, dn);
+          nc++;
+        }
+      }
+      if (!pdn_) cand[nc][0] = cm[0], cand[nc][1] = cm[1], nc++;
+      if (ccok) cand[nc][0] = cc[0], cand[nc][1] = cc[1], nc++;  // and col's, temporal direct's taken
       cand[nc][0] = cand[nc][1] = 0, nc++;
       tmn_ = !rec_.tm_search(list, ref, x * 4, y * 4, w * 4, h * 4, tmv_, false, cand, nc, &tmq_, kTmLambda);
     } else if (!tmn_) {

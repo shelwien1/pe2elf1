@@ -6,9 +6,8 @@
 #  component, lst the list; ts the template match's vector less the
 #  predicted one: 3 x its sign (sgn3) + how the magnitude compares with its
 #  (0 equal, 1 less, 2 more), 9 none; zs the same for the vector that would
-#  make the motion zero (minus the predicted one), ds for the vector of the
-#  same partition in the previous picture of the type less the predicted one
-#  (9 none); sa/sb the signs of the mvd of A and B (sgn3), mag the magnitude
+#  make the motion zero (minus the predicted one), ds for the mvs
+#  family's temporal vector (its pd) less the predicted one (9 none); sa/sb the signs of the mvd of A and B (sgn3), mag the magnitude
 #  (tc_qlog), tq how well the template matched (0 none), ox for the second
 #  component the sign of the first (sgn3; 3 for the first), ns 3 + how
 #  many of the vectors of A, B and C are above the predicted one in the
