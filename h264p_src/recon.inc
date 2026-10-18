@@ -42,6 +42,101 @@ const uint8_t kTc0[52][3] = {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 
 
 static INLINE int clip1(int v) { return v < 0 ? 0 : v > 255 ? 255 : v; }
 static INLINE int clip3(int lo, int hi, int v) { return v < lo ? lo : v > hi ? hi : v; }
+
+// The sum of the absolute differences between n x rows samples of q (stride
+// qs) and their bilinear prediction from a (stride as) at (fx, fy) quarter
+// samples: ((4-fx)(4-fy) a + fx(4-fy) a' + (4-fx)fy c + fx fy c' + 8) >> 4, a'
+// and c' right of a and c, c below a. Stops after the row where the sum
+// reaches budget (> 0); a must be readable n + 1 samples wide and rows + 1
+// down.
+static int sad_bil(const uint8_t* q, int qs, const uint8_t* a, int as, int n, int rows, int fx, int fy, int budget) {
+  int s = 0;
+#ifdef H264P_SSE2
+  if (n == 16 || n == 8 || n == 4 || n == 2) {
+    // rows of 4 and 8 in the low lanes, the others zero on both sides
+    auto load = [n](const uint8_t* p) {
+      if (n == 16) return _mm_loadu_si128((const __m128i*)p);
+      if (n == 8) return _mm_loadl_epi64((const __m128i*)p);
+      int32_t v;
+      memcpy(&v, p, 4);
+      return _mm_cvtsi32_si128(v);
+    };
+    const __m128i z = _mm_setzero_si128(), r8 = _mm_set1_epi16(8);
+    const __m128i wa = _mm_set1_epi16((short)((4 - fx) * (4 - fy))), wb = _mm_set1_epi16((short)(fx * (4 - fy)));
+    const __m128i wc = _mm_set1_epi16((short)((4 - fx) * fy)), wd = _mm_set1_epi16((short)(fx * fy));
+    // 8 predicted samples from the bytes of a, a', c, c' in 16-bit lanes
+    auto bil = [&](__m128i x0, __m128i x1, __m128i y0, __m128i y1) {
+      __m128i v = _mm_mullo_epi16(x0, wa);
+      if (fx) v = _mm_add_epi16(v, _mm_mullo_epi16(x1, wb));
+      if (fy) v = _mm_add_epi16(v, _mm_mullo_epi16(y0, wc));
+      if (fx && fy) v = _mm_add_epi16(v, _mm_mullo_epi16(y1, wd));
+      return _mm_srli_epi16(_mm_add_epi16(v, r8), 4);
+    };
+    __m128i acc = z;
+    if (n == 2) {
+      // columns two wide (the left template): four rows at a time, the
+      // pairs of samples of rows j..j+4 as the words of a and a', the rows
+      // below one word on
+      int j = 0;
+      auto ld2 = [](const uint8_t* p) {
+        uint16_t u;
+        memcpy(&u, p, 2);
+        return (short)u;
+      };
+      for (; j + 4 <= rows; j += 4, q += 4 * qs, a += 4 * as) {
+        const uint8_t *a1 = a + as, *a2 = a1 + as, *a3 = a2 + as, *a4 = a3 + as;
+        __m128i p0 = _mm_setr_epi16(ld2(a), ld2(a1), ld2(a2), ld2(a3), ld2(a4), 0, 0, 0);
+        __m128i p1 = _mm_setr_epi16(ld2(a + 1), ld2(a1 + 1), ld2(a2 + 1), ld2(a3 + 1), ld2(a4 + 1), 0, 0, 0);
+        __m128i pq = _mm_setr_epi16(ld2(q), ld2(q + qs), ld2(q + 2 * qs), ld2(q + 3 * qs), 0, 0, 0, 0);
+        __m128i d = p0;
+        if (fx | fy)
+          d = _mm_packus_epi16(bil(_mm_unpacklo_epi8(p0, z), _mm_unpacklo_epi8(p1, z),
+                                   _mm_unpacklo_epi8(_mm_srli_si128(p0, 2), z), _mm_unpacklo_epi8(_mm_srli_si128(p1, 2), z)),
+                               z);
+        else
+          d = _mm_unpacklo_epi64(d, z);  // the fifth row out
+        acc = _mm_add_epi64(acc, _mm_sad_epu8(d, pq));
+        s = _mm_cvtsi128_si32(acc) + _mm_cvtsi128_si32(_mm_unpackhi_epi64(acc, acc));
+        if (s >= budget) return s;
+      }
+      for (; j < rows && s < budget; j++, q += qs, a += as) {
+        const uint8_t* c = a + as;
+        int wa0 = (4 - fx) * (4 - fy), wb0 = fx * (4 - fy), wc0 = (4 - fx) * fy, wd0 = fx * fy;
+        for (int i = 0; i < 2; i++)
+          s += abs(q[i] - ((wa0 * a[i] + wb0 * a[i + 1] + wc0 * c[i] + wd0 * c[i + 1] + 8) >> 4));
+      }
+      return s;
+    }
+    for (int j = 0; j < rows; j++, q += qs, a += as) {
+      __m128i x0 = load(a), d;
+      if (fx | fy) {
+        __m128i x1 = fx ? load(a + 1) : z, y0 = fy ? load(a + as) : z, y1 = fx && fy ? load(a + as + 1) : z;
+        __m128i lo = bil(_mm_unpacklo_epi8(x0, z), _mm_unpacklo_epi8(x1, z), _mm_unpacklo_epi8(y0, z),
+                         _mm_unpacklo_epi8(y1, z));
+        __m128i hi = n == 16 ? bil(_mm_unpackhi_epi8(x0, z), _mm_unpackhi_epi8(x1, z), _mm_unpackhi_epi8(y0, z),
+                                   _mm_unpackhi_epi8(y1, z))
+                             : z;
+        d = _mm_packus_epi16(lo, hi);
+      } else {
+        d = x0;
+      }
+      acc = _mm_add_epi64(acc, _mm_sad_epu8(d, load(q)));
+      s = _mm_cvtsi128_si32(acc) + _mm_cvtsi128_si32(_mm_unpackhi_epi64(acc, acc));
+      if (s >= budget) break;
+    }
+    return s;
+  }
+#endif
+  int wa = (4 - fx) * (4 - fy), wb = fx * (4 - fy), wc = (4 - fx) * fy, wd = fx * fy;
+  for (int j = 0; j < rows && s < budget; j++, q += qs, a += as) {
+    const uint8_t* c = a + as;
+    if (!(fx | fy))
+      for (int i = 0; i < n; i++) s += abs(q[i] - a[i]);
+    else
+      for (int i = 0; i < n; i++) s += abs(q[i] - ((wa * a[i] + wb * a[i + 1] + wc * c[i] + wd * c[i + 1] + 8) >> 4));
+  }
+  return s;
+}
 static int chroma_qp(int qpy, int off) {
   int qpi = clip3(0, 51, qpy + off);
   return qpi < 30 ? qpi : kQpc[qpi - 30];
@@ -916,50 +1011,53 @@ struct Recon {
       return;
     }
 #define T6(p, s) ((p)[-2 * (s)] - 5 * (p)[-(s)] + 20 * (p)[0] + 20 * (p)[s] - 5 * (p)[2 * (s)] + (p)[3 * (s)])
-    int b1[21][17], bb[17][17], hh[16][17], jj[16][16];
-    bool need_j = fx == 2 || fy == 2;
-    bool need_b = fx != 0 || need_j, need_h = fy != 0 && !(fx == 2 && fy == 2 && false);
-    if (need_b) {
+    // the half samples the position takes (8.4.2.2.1), rounded and clipped:
+    // b between two whole samples across (rows 0..h, stride 16), h between
+    // two down (columns 0..w, stride 17), j between four (stride 16)
+    int c = fy * 4 + fx, b1[21][16];
+    uint8_t bb[17 * 16], hh[16 * 17], jj[16 * 16];
+    bool need_b = 0xE0EE >> c & 1, need_h = 0xBBB0 >> c & 1, need_j = 0x4E40 >> c & 1;
+    if (need_b || need_j) {
       int j0 = need_j ? -2 : 0, j1 = need_j ? h + 3 : h + 1;
       for (int j = j0; j < j1; j++)
         for (int i = 0; i < w; i++) b1[j + 2][i] = T6(g + j * gs + i, 1);
-      for (int j = 0; j < h + 1; j++)
-        for (int i = 0; i < w; i++) bb[j][i] = clip1((b1[j + 2][i] + 16) >> 5);
+      if (need_b)
+        for (int j = 0; j < h + 1; j++)
+          for (int i = 0; i < w; i++) bb[j * 16 + i] = (uint8_t)clip1((b1[j + 2][i] + 16) >> 5);
     }
     if (need_h)
       for (int j = 0; j < h; j++)
-        for (int i = 0; i < w + 1; i++) hh[j][i] = clip1((T6(g + j * gs + i, gs) + 16) >> 5);
+        for (int i = 0; i < w + 1; i++) hh[j * 17 + i] = (uint8_t)clip1((T6(g + j * gs + i, gs) + 16) >> 5);
     if (need_j)
       for (int j = 0; j < h; j++)
         for (int i = 0; i < w; i++)
-          jj[j][i] = clip1((b1[j][i] - 5 * b1[j + 1][i] + 20 * b1[j + 2][i] + 20 * b1[j + 3][i] - 5 * b1[j + 4][i] +
-                            b1[j + 5][i] + 512) >> 10);
+          jj[j * 16 + i] = (uint8_t)clip1((b1[j][i] - 5 * b1[j + 1][i] + 20 * b1[j + 2][i] + 20 * b1[j + 3][i] -
+                                           5 * b1[j + 4][i] + b1[j + 5][i] + 512) >> 10);
 #undef T6
-    int c = fy * 4 + fx;
+    // each position the rounded mean of two of them (or of one with itself)
+    const uint8_t *s1, *s2;
+    int t1, t2;
+    switch (c) {
+      case 1: s1 = g, t1 = gs, s2 = bb, t2 = 16; break;
+      case 2: s1 = s2 = bb, t1 = t2 = 16; break;
+      case 3: s1 = bb, t1 = 16, s2 = g + 1, t2 = gs; break;
+      case 4: s1 = g, t1 = gs, s2 = hh, t2 = 17; break;
+      case 5: s1 = bb, t1 = 16, s2 = hh, t2 = 17; break;
+      case 6: s1 = bb, s2 = jj, t1 = t2 = 16; break;
+      case 7: s1 = bb, t1 = 16, s2 = hh + 1, t2 = 17; break;
+      case 8: s1 = s2 = hh, t1 = t2 = 17; break;
+      case 9: s1 = hh, t1 = 17, s2 = jj, t2 = 16; break;
+      case 10: s1 = s2 = jj, t1 = t2 = 16; break;
+      case 11: s1 = jj, t1 = 16, s2 = hh + 1, t2 = 17; break;
+      case 12: s1 = hh, t1 = 17, s2 = g + gs, t2 = gs; break;
+      case 13: s1 = hh, t1 = 17, s2 = bb + 16, t2 = 16; break;
+      case 14: s1 = jj, s2 = bb + 16, t1 = t2 = 16; break;
+      default: s1 = hh + 1, t1 = 17, s2 = bb + 16, t2 = 16; break;
+    }
     for (int j = 0; j < h; j++) {
-      const uint8_t* G0 = g + j * gs;
-      uint8_t* out = o + j * 16;
-      for (int i = 0; i < w; i++) {
-        int v;
-        switch (c) {
-          case 1: v = (G0[i] + bb[j][i] + 1) >> 1; break;
-          case 2: v = bb[j][i]; break;
-          case 3: v = (bb[j][i] + G0[i + 1] + 1) >> 1; break;
-          case 4: v = (G0[i] + hh[j][i] + 1) >> 1; break;
-          case 5: v = (bb[j][i] + hh[j][i] + 1) >> 1; break;
-          case 6: v = (bb[j][i] + jj[j][i] + 1) >> 1; break;
-          case 7: v = (bb[j][i] + hh[j][i + 1] + 1) >> 1; break;
-          case 8: v = hh[j][i]; break;
-          case 9: v = (hh[j][i] + jj[j][i] + 1) >> 1; break;
-          case 10: v = jj[j][i]; break;
-          case 11: v = (jj[j][i] + hh[j][i + 1] + 1) >> 1; break;
-          case 12: v = (hh[j][i] + G0[i + gs] + 1) >> 1; break;
-          case 13: v = (hh[j][i] + bb[j + 1][i] + 1) >> 1; break;
-          case 14: v = (jj[j][i] + bb[j + 1][i] + 1) >> 1; break;
-          default: v = (hh[j][i + 1] + bb[j + 1][i] + 1) >> 1; break;
-        }
-        out[i] = (uint8_t)v;
-      }
+      const uint8_t *__restrict a = s1 + j * t1, *__restrict b = s2 + j * t2;
+      uint8_t* __restrict out = o + j * 16;
+      for (int i = 0; i < w; i++) out[i] = (uint8_t)((a[i] + b[i] + 1) >> 1);
     }
   }
   // chroma: w x h samples at (x, y) of plane c (0 Cb, 1 Cr), mv in eighths
@@ -1700,24 +1798,44 @@ struct Recon {
     bool top = my > 0 && db[mb_addr - mbw].slice >= 0;
     bool left = mx > 0 && db[mb_addr - 1].slice >= 0;
     int sum = 0, cnt = 0;
-    uint8_t p[2][64];
+    uint8_t p[2][256];  // per list, the strip (the row above in 16 x 2, the column left in 2 x 16), stride 16
     for (int side = 0; side < 2; side++) {
       if (side == 0 ? !top : !left) continue;
-      for (int k = 0; k < 4; k++) {
-        int b = side == 0 ? k : k * 4, b8 = (b >> 3) * 2 + ((b & 3) >> 1);
-        int x = side == 0 ? mx + k * 4 : mx - 2, y = side == 0 ? my - 2 : my + k * 4;
-        int bw = side == 0 ? 4 : 2, bh = side == 0 ? 2 : 4, n = 0;
-        for (int l = 0; l < 2; l++) {
-          int r = rf[l][b8];
-          if (r < 0) continue;
+      // the pieces next to the 4x4 blocks 0-3 of the top row (side 0) or
+      // 0, 4, 8, 12 of the left column; per list, each run of pieces on the
+      // same reference with the same vector predicted at once
+      auto blk = [side](int k) { return side == 0 ? k : k * 4; };
+      auto b8 = [](int b) { return (b >> 3) * 2 + ((b & 3) >> 1); };
+      bool use[2][4];
+      for (int l = 0; l < 2; l++)
+        for (int k = 0; k < 4;) {
+          int b = blk(k), r = rf[l][b8(b)], e = k + 1;
+          use[l][k] = r >= 0;
+          if (r < 0) {
+            k++;
+            continue;
+          }
+          for (; e < 4; e++) {
+            int c = blk(e);
+            if (rf[l][b8(c)] != r || mv[l][c][0] != mv[l][b][0] || mv[l][c][1] != mv[l][b][1]) break;
+            use[l][e] = true;
+          }
           const RPic* ref = r < nlist[l] ? list[l][r] : nullptr;
-          mc_luma(ref ? ref : cur.get(), x, y, bw, bh, mv[l][b][0], mv[l][b][1], p[n++]);
+          if (side == 0)
+            mc_luma(ref ? ref : cur.get(), mx + k * 4, my - 2, 4 * (e - k), 2, mv[l][b][0], mv[l][b][1], p[l] + k * 4);
+          else
+            mc_luma(ref ? ref : cur.get(), mx - 2, my + k * 4, 2, 4 * (e - k), mv[l][b][0], mv[l][b][1], p[l] + k * 64);
+          k = e;
         }
+      for (int k = 0; k < 4; k++) {
+        int n = use[0][k] + use[1][k];
         if (!n) continue;
-        const uint8_t* q = cur->y.data() + y * w + x;
+        int x = side == 0 ? mx + k * 4 : mx - 2, y = side == 0 ? my - 2 : my + k * 4, off = side == 0 ? k * 4 : k * 64;
+        int bw = side == 0 ? 4 : 2, bh = side == 0 ? 2 : 4;
+        const uint8_t *q = cur->y.data() + y * w + x, *p0 = (use[0][k] ? p[0] : p[1]) + off, *p1 = p[1] + off;
         for (int j = 0; j < bh; j++)
           for (int i = 0; i < bw; i++) {
-            int v = n == 2 ? (p[0][j * 16 + i] + p[1][j * 16 + i] + 1) >> 1 : p[0][j * 16 + i];
+            int v = n == 2 ? (p0[j * 16 + i] + p1[j * 16 + i] + 1) >> 1 : p0[j * 16 + i];
             sum += abs(q[j * w + i] - v);
             cnt++;
           }
@@ -1761,22 +1879,16 @@ struct Recon {
     // (stopping once it reaches budget)
     auto sad = [&](int xs, int ys, int rw, int rh, int vx, int vy, int budget) {
       int ix = xs + (vx >> 2), iy = ys + (vy >> 2), fx = vx & 3, fy = vy & 3, s = 0;
+      if (ix >= 0 && iy >= 0 && ix + rw < W && iy + rh < H)
+        return sad_bil(Y + ys * w + xs, w, R + iy * W + ix, W, rw, rh, fx, fy, budget);
+      // across the edge: the samples outside are the nearest inside
       int wa = (4 - fx) * (4 - fy), wb = fx * (4 - fy), wc = (4 - fx) * fy, wd = fx * fy;
-      bool inside = ix >= 0 && iy >= 0 && ix + rw < W && iy + rh < H;
       for (int j = 0; j < rh && s < budget; j++) {
         const uint8_t* q = Y + (ys + j) * w + xs;
-        if (inside) {
-          const uint8_t *a = R + (iy + j) * W + ix, *c = a + W;
-          if (!(fx | fy))
-            for (int i = 0; i < rw; i++) s += abs(q[i] - a[i]);
-          else
-            for (int i = 0; i < rw; i++) s += abs(q[i] - ((wa * a[i] + wb * a[i + 1] + wc * c[i] + wd * c[i + 1] + 8) >> 4));
-        } else {
-          const uint8_t *a = R + clip3(0, H - 1, iy + j) * W, *c = R + clip3(0, H - 1, iy + j + 1) * W;
-          for (int i = 0; i < rw; i++) {
-            int x1 = clip3(0, W - 1, ix + i), x2 = clip3(0, W - 1, ix + i + 1);
-            s += abs(q[i] - ((wa * a[x1] + wb * a[x2] + wc * c[x1] + wd * c[x2] + 8) >> 4));
-          }
+        const uint8_t *a = R + clip3(0, H - 1, iy + j) * W, *c = R + clip3(0, H - 1, iy + j + 1) * W;
+        for (int i = 0; i < rw; i++) {
+          int x1 = clip3(0, W - 1, ix + i), x2 = clip3(0, W - 1, ix + i + 1);
+          s += abs(q[i] - ((wa * a[x1] + wb * a[x2] + wc * c[x1] + wd * c[x2] + 8) >> 4));
         }
       }
       return s;

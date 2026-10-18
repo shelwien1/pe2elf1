@@ -151,14 +151,42 @@ template <int N> struct cm_mix {
     pr = CM_PHALF;
   }
   INLINE void set(int k, int st) { x[k] = st; }
+#ifdef H264P_SSE2
+  // the inputs (stretched probabilities, within 16 bits) 8 at a time
+  INLINE __m128i x16(int i) const {
+    return _mm_packs_epi32(_mm_loadu_si128((const __m128i *)(x + i)), _mm_loadu_si128((const __m128i *)(x + i + 4)));
+  }
+  static INLINE int hsum(__m128i v) {
+    v = _mm_add_epi32(v, _mm_shuffle_epi32(v, 0x4E));
+    return _mm_cvtsi128_si32(_mm_add_epi32(v, _mm_shuffle_epi32(v, 0xB1)));
+  }
+#endif
   INLINE int mix(u32 ctx) {
     i64 s = 0;
     int i;
     ctxn = (int)ctx;
     row = (int)ctx * N;
-    CM_UNROLL
-    for(i = 0; i < N; i++)
-      s += (i64)(w[row + i] + W0) * x[i];
+#ifdef H264P_SSE2
+    if(N % 8 == 0) {
+      // exactly the sum below: each weight (with W0, under 2^29) as hi 2^15
+      // + lo, lo in 0..32767, so that both sums of products stay in 32 bits
+      const __m128i w0 = _mm_set1_epi32(W0), m15 = _mm_set1_epi32(0x7FFF);
+      __m128i sh = _mm_setzero_si128(), sl = sh;
+      for(i = 0; i < N; i += 8) {
+        __m128i xx = x16(i);
+        __m128i va = _mm_add_epi32(_mm_loadu_si128((const __m128i *)(w + row + i)), w0);
+        __m128i vb = _mm_add_epi32(_mm_loadu_si128((const __m128i *)(w + row + i + 4)), w0);
+        sh = _mm_add_epi32(sh, _mm_madd_epi16(_mm_packs_epi32(_mm_srai_epi32(va, 15), _mm_srai_epi32(vb, 15)), xx));
+        sl = _mm_add_epi32(sl, _mm_madd_epi16(_mm_packs_epi32(_mm_and_si128(va, m15), _mm_and_si128(vb, m15)), xx));
+      }
+      s = (i64)hsum(sh) * 32768 + hsum(sl);
+    } else
+#endif
+    {
+      CM_UNROLL
+      for(i = 0; i < N; i++)
+        s += (i64)(w[row + i] + W0) * x[i];
+    }
     pr = cm_squash((int)(s >> 16));
     pr = pr < 1 ? 1 : pr > CM_PONE - 1 ? CM_PONE - 1 : pr;
     return pr;
@@ -175,6 +203,36 @@ template <int N> struct cm_mix {
     err = ((bit ? 0 : CM_PONE) - pr) * lr;
     // (clamped to +-4096, far beyond what data needs: a stream made to drive
     // a weight on and on must not overflow it)
+#ifdef H264P_SSE2
+    if(N % 8 == 0) {
+      // exactly the loop below: with err = eh 65536 + el, el in 0..65535 (and
+      // |err| < 2^26: lr is at most 16383), (x err) >> 16 = x eh + ((x el) >> 16),
+      // the latter the signed product's high half: el read as signed is el -
+      // 65536 from 32768 on, which takes x 65536 off the product
+      const int eh = err >> 16, el = err & 0xFFFF;
+      const __m128i veh = _mm_set1_epi16((short)eh), vel = _mm_set1_epi16((short)el);
+      const __m128i corr = _mm_set1_epi16(el >= 32768 ? -1 : 0);
+      const __m128i wmax = _mm_set1_epi32(1 << 28), wmin = _mm_set1_epi32(-(1 << 28));
+      for(i = 0; i < N; i += 8) {
+        __m128i xx = x16(i);
+        __m128i lh = _mm_add_epi16(_mm_mulhi_epi16(xx, vel), _mm_and_si128(xx, corr));
+        __m128i pl = _mm_mullo_epi16(xx, veh), ph = _mm_mulhi_epi16(xx, veh);
+        __m128i da = _mm_add_epi32(_mm_unpacklo_epi16(pl, ph), _mm_srai_epi32(_mm_unpacklo_epi16(lh, lh), 16));
+        __m128i db = _mm_add_epi32(_mm_unpackhi_epi16(pl, ph), _mm_srai_epi32(_mm_unpackhi_epi16(lh, lh), 16));
+        __m128i wa = _mm_add_epi32(_mm_loadu_si128((const __m128i *)(ww + i)), da);
+        __m128i wb = _mm_add_epi32(_mm_loadu_si128((const __m128i *)(ww + i + 4)), db);
+        __m128i ga = _mm_cmpgt_epi32(wa, wmax), gb = _mm_cmpgt_epi32(wb, wmax);
+        wa = _mm_or_si128(_mm_and_si128(ga, wmax), _mm_andnot_si128(ga, wa));
+        wb = _mm_or_si128(_mm_and_si128(gb, wmax), _mm_andnot_si128(gb, wb));
+        ga = _mm_cmplt_epi32(wa, wmin), gb = _mm_cmplt_epi32(wb, wmin);
+        wa = _mm_or_si128(_mm_and_si128(ga, wmin), _mm_andnot_si128(ga, wa));
+        wb = _mm_or_si128(_mm_and_si128(gb, wmin), _mm_andnot_si128(gb, wb));
+        _mm_storeu_si128((__m128i *)(ww + i), wa);
+        _mm_storeu_si128((__m128i *)(ww + i + 4), wb);
+      }
+      return;
+    }
+#endif
     CM_UNROLL
     for(i = 0; i < N; i++) {
       i64 v = (i64)ww[i] + (((i64)x[i] * err) >> 16);

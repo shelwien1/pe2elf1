@@ -12,6 +12,13 @@
 #include <cmath>
 #include <cstdarg>
 
+// SSE2 (all of x86-64) for the template matching and the mixers; the plain
+// C++ beside it gives the same results
+#if defined(__SSE2__) || defined(_M_X64) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2)
+#include <emmintrin.h>
+#define H264P_SSE2 1
+#endif
+
 #if defined(__GNUC__) || defined(__clang__)
 #define INLINE inline __attribute__((__always_inline__))
 #define NOINLINE __attribute__((__noinline__))
