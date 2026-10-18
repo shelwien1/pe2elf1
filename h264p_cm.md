@@ -896,6 +896,13 @@ the higher-frequency levels (4 KB), a second, fast probability in each
 counter (12 KB), a third mixer (4 KB), counters seven to ten (19 KB;
 four to six were 16 KB) and, for the top six mantissa bits of a number
 (but a level's or a PCM sample's), nodes by the bits above them (2 KB).
+In the headers: each value against the last of its element at the same
+place in its group and row in a run of it (pred_weight_l0's per
+reference), frame_num and pic_order_cnt_lsb modulo their range, and
+whether the slice before was a reference for frame_num (1.1 KB; 2.4 KB
+on the 95 streams); the bytes nothing else models (x264's SEI) with a
+match against a built-in dictionary of x264's user data, its options
+with their defaults (0.6 KB: 02's 667 bytes of it take 84).
 
 \* measured when added, with four counters and before the later contexts.
 
@@ -913,7 +920,7 @@ four to six were 16 KB) and, for the top six mantissa bits of a number
 | levels | 302,611 | 219,831 | −27.4% |
 | signs | 329,382 | 182,193 | −44.7% |
 | macroblock syntax | 3,536,129 | 2,553,434 | −27.8% |
-| whole streams (H.264 against compressed) | 3,603,993 | 2,560,422 | −29.0% |
+| whole streams (H.264 against compressed) | 3,603,993 | 2,558,695 | −29.0% |
 
 The model tables take 215 MB.
 

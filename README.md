@@ -101,7 +101,10 @@ APM, three mixers (and a fourth that mixes them) and a second APM, all
 selected by the decision's place in the value; where the stream is CABAC,
 the probability CABAC's own context state gives a bin is one more input.
 Where the model has a guess at a number (a level, a count, an mvd, a QP
-delta), each decision also sees what the guess would decide there. The
+delta), each decision also sees what the guess would decide there. Header
+values are coded against the last of their element (frame_num and the POC
+modulo their range), and the bytes nothing else models, x264's SEI among
+them, with a match against a built-in dictionary of x264's options. The
 contexts and the parameters of each group of syntax elements (a family)
 are declared in `h264p_src/IDX/*.idx` and turned into code in
 `h264p_src/MOD/` (see `h264p_src/mk.sh`), where they can also be tuned.
@@ -171,15 +174,15 @@ On the test streams (`-v` shows where the bits go):
 
 | stream | H.264 | compressed | |
 |---|---:|---:|---:|
-| 00 | 815,140 | 568,293 | 69.7% |
-| 01 | 1,095,103 | 804,802 | 73.5% |
-| 02 | 28,143 | 26,610 | 94.6% |
-| 03 | 1,181,369 | 776,299 | 65.7% |
-| 04 | 484,238 | 384,418 | 79.4% |
+| 00 | 815,140 | 567,859 | 69.7% |
+| 01 | 1,095,103 | 804,468 | 73.5% |
+| 02 | 28,143 | 26,257 | 93.3% |
+| 03 | 1,181,369 | 776,061 | 65.7% |
+| 04 | 484,238 | 384,050 | 79.3% |
 
 The macroblock syntax takes 72.2% of what its CABAC coding takes (from
 3,536,129 to 2,553,434 bytes over these streams; whole streams go from
-3,603,993 to 2,560,422 bytes; `h264p_cm.md` section 9 has the figures by
+3,603,993 to 2,558,695 bytes; `h264p_cm.md` section 9 has the figures by
 syntax element). Speed is 0.03-0.13 MB of H.264 per second both ways, depending
 on the stream, and the model tables take about 215 MB.
 
