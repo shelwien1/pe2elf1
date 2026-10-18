@@ -32,8 +32,8 @@ constexpr int H_pcm_ND = TC_NODE, H_pcm_MND = TC_MNODE, H_pcm_NG = 3;
 
 struct H_nal_v { int fld, ctx, p1, p2; };
 struct H_hdr_v { int tag, fld, p1, p2, pos, p1r, sty; };
-struct H_skp_v { int st, a3, b3, col, c9, cd, run, cnt, eq, lf, af, td, en, sm, tm, tb, bd, qc; };
-struct H_mbt_v { int st, ca, cb, cc, nsk, en, td, sm, tm, tb, dh, bd, qc, im, ig; };
+struct H_skp_v { int st, a3, b3, col, c9, cd, run, cnt, eq, lf, af, td, en, sm, tm, tb, bd, qc, c1, k9; };
+struct H_mbt_v { int st, ca, cb, cc, nsk, en, td, sm, tm, tb, dh, bd, qc, im, ig, c1; };
 struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg, tp, em, pq; };
 struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm, pr, dr, pq, mh, mc, mg, rg; };
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, zd, cq, tq; };
@@ -398,6 +398,7 @@ struct Model {
 
   void init() {
     cm_tables();
+    for (int& p : hist_poc_) p = INT_MIN;
 #define H_MAP(F) (t_##F = tc_table<H_##F##_T>(), t_##F->H_##F##_Init(), H_WIRE(F))
     H_MAP(nal);
     H_MAP(hdr);
@@ -543,6 +544,7 @@ struct Model {
   int addr_ = 0;
   MbInfo* mi_ = nullptr;
   const MbCol* col_ = nullptr;
+  const MbCol* col1_ = nullptr;  // B: the same macroblock in list 1's first reference (phist)
   int sub_[4] = {};
   int pmv_[2] = {};  // proxy_mv()
   H_mbt_v* mbt_d_ = nullptr;  // mb_type's contexts while it is coded
@@ -630,6 +632,17 @@ struct Model {
     return mbaff_ ? ((y >> 1) * width_ + x) * 2 + (y & 1) : y * width_ + x;
   }
   // a macroblock of the current picture, coded already
+  // in a B slice, the history of list 1's first reference, where it is
+  // the last picture of a kind (by its POC) and nearer in time than the
+  // last picture of the current kind; nullptr other slices or none
+  int hist_poc_[30], prev_poc_ = INT_MIN, cur_poc_ = INT_MIN;
+  const MbCol* phist() const {
+    if (sc_->stype_ != kB || !rec_.active || rec_.nlist[1] < 1 || !rec_.list[1][0]) return nullptr;
+    int poc = rec_.list[1][0]->poc;
+    for (int k = 0; k < 30; k++)
+      if (k != key_ && hist_poc_[k] == poc && (int)hist_[k].size() >= size_) return hist_[k].data();
+    return nullptr;
+  }
   const MbInfo* near_info(int dx, int dy) const {
     int a = mb_near(dx, dy);
     return a >= 0 && info_[a].pic == pic_ ? &info_[a] : nullptr;
@@ -658,6 +671,10 @@ struct Model {
     prev_cnt_ = slice_cnt_[key_];
     mb_open_ = false;
     rec_.slice_begin(h);
+    if (h.first_mb == 0) {
+      prev_poc_ = hist_poc_[key_];
+      cur_poc_ = hist_poc_[key_] = rec_.active ? rec_.cur->poc : INT_MIN;
+    }
     if (h.first_mb == 0) aq_picture();
   }
   void slice_end() { slice_cnt_[key_] = cnt_; }
@@ -671,6 +688,9 @@ struct Model {
     memset(mi_->modes, 2, sizeof mi_->modes);
     memset(mi_->rf, -1, sizeof mi_->rf);
     col_ = hcur_[addr_].valid ? &hcur_[addr_] : nullptr;
+    // B: the same macroblock in list 1's first reference too
+    col1_ = nullptr;
+    if (const MbCol* p = phist()) col1_ = p[addr_].valid ? &p[addr_] : nullptr;
     parts_ = 0;
     rec_.mb_start(addr_);
     qpd_coded_ = false;
@@ -735,6 +755,17 @@ struct Model {
         int n = mb_near(dx, dy);
         D.c9 += n >= 0 && hcur_[n].valid && hcur_[n].skip;
       }
+    D.c1 = col1_ ? 2 - col1_->skip : 0;
+    // and the skipped ones around it there (10 none)
+    D.k9 = 10;
+    if (const MbCol* p = phist()) {
+      D.k9 = 0;
+      for (int dy = -1; dy <= 1; dy++)
+        for (int dx = -1; dx <= 1; dx++) {
+          int n = mb_near(dx, dy);
+          D.k9 += n >= 0 && p[n].valid && p[n].skip;
+        }
+    }
     const MbInfo* c = near_info(1, -1);
     const MbInfo* d = near_info(-1, -1);
     D.cd = (c && c->skip) + (d && d->skip);
@@ -939,6 +970,7 @@ struct Model {
     D.ca = cls_of(a);
     D.cb = cls_of(b);
     D.cc = col_ ? col_->cls : (int)CL_NONE;
+    D.c1 = col1_ ? 1 + col1_->cls : 0;
     D.nsk = (a && a->skip) + (b && b->skip) + (c && c->skip) + (d && d->skip);
     D.en = map_en();
     D.td = map_td();

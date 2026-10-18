@@ -8,7 +8,8 @@
 #  (0 none, 1 skip, 2 direct, 3 16x16, 4 16x8/8x16, 5 8x8, 6 I_NxN, 7 I16,
 #  8 PCM), nsk the skipped ones of A, B, C and D; for Intra16x16 (from its
 #  coded_block_pattern on), im 1 + the mode that does best in the proxy (0
-#  none) and ig by how much it beats the next.
+#  none) and ig by how much it beats the next; in B slices, c1 1 + the class
+#  of the same macroblock in list 1's first reference (0 none).
 
 Prefix H_mbt
 Debug 1
@@ -25,6 +26,7 @@ Index b
  b_cc: cc, 1!11111111
  b_nsk: nsk, 1!0000
  b_td: td, 1!1111111111111111
+ b_c1: c1, 1!111111111
 
 Index c
  c_st: st, 1!000000000

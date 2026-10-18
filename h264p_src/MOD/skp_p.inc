@@ -15,8 +15,8 @@
 
 void H_skp_make( const H_skp_v & D, tcx & X ) {
   int a, b, c, d, e, h, i, j, k, l, s, f, m, w, t, n, g;
-  int st = D.st, a3 = D.a3, b3 = D.b3, col = D.col, c9 = D.c9, cd = D.cd, run = D.run, cnt = D.cnt, eq = D.eq, lf = D.lf, af = D.af, td = D.td, en = D.en, sm = D.sm, tm = D.tm, tb = D.tb, bd = D.bd, qc = D.qc;
-  (void) st;  (void) a3;  (void) b3;  (void) col;  (void) c9;  (void) cd;  (void) run;  (void) cnt;  (void) eq;  (void) lf;  (void) af;  (void) td;  (void) en;  (void) sm;  (void) tm;  (void) tb;  (void) bd;  (void) qc;
+  int st = D.st, a3 = D.a3, b3 = D.b3, col = D.col, c9 = D.c9, cd = D.cd, run = D.run, cnt = D.cnt, eq = D.eq, lf = D.lf, af = D.af, td = D.td, en = D.en, sm = D.sm, tm = D.tm, tb = D.tb, bd = D.bd, qc = D.qc, c1 = D.c1, k9 = D.k9;
+  (void) st;  (void) a3;  (void) b3;  (void) col;  (void) c9;  (void) cd;  (void) run;  (void) cnt;  (void) eq;  (void) lf;  (void) af;  (void) td;  (void) en;  (void) sm;  (void) tm;  (void) tb;  (void) bd;  (void) qc;  (void) c1;  (void) k9;
 
   a = 0;
   a = a*10 + H_skp_a_st[__min(9,__max(0,st-(1-1)))];
@@ -33,6 +33,7 @@ void H_skp_make( const H_skp_v & D, tcx & X ) {
   b = b*3 + ((b3>0+(1-1))+(b3>1+(1-1)));
   b = b*2 + ((cd>0+(1-1)));
   b = b*7 + H_skp_b_cnt[__min(15,__max(0,cnt-(1-1)))];
+  b = b*3 + ((c1>0+(1-1))+(c1>1+(1-1)));
 
   c = 0;
   c = c*2 + ((st>1+(1-1)));
@@ -46,6 +47,8 @@ void H_skp_make( const H_skp_v & D, tcx & X ) {
   d = d*3 + ((a3>0+(1-1))+(a3>1+(1-1)));
   d = d*3 + ((b3>0+(1-1))+(b3>1+(1-1)));
   d = d*17 + H_skp_d_td[__min(16,__max(0,td-(1-1)))];
+  d = d*3 + ((c1>0+(1-1))+(c1>1+(1-1)));
+  d = d*11 + H_skp_d_k9[__min(10,__max(0,k9-(1-1)))];
 
   e = 0;
   e = e*10 + H_skp_e_st[__min(9,__max(0,st-(1-1)))];

@@ -11,7 +11,9 @@
 #  and eq how that compares with the previous slice (0 fewer, 1 as many, 2
 #  more); lf/af the field flags of the left and above pairs (0 none); td how
 #  much the macroblock changed between the last two pictures decoded (1 +
-#  tc_qlog, 0 not known).
+#  tc_qlog, 0 not known); in B slices, c1 the same macroblock in list 1's
+#  first reference, where that is the last picture of its kind (0 none, 1
+#  skipped, 2 coded), and k9 the skipped ones in its 3x3 window (10 none).
 
 Prefix H_skp
 Debug 1
@@ -33,6 +35,7 @@ Index b
  b_b3: b3, 1!11
  b_cd: cd, 1!10
  b_cnt: cnt, 1!000000101110011
+ b_c1: c1, 1!11
 
 Index c
  c_st: st, 1!010000000
@@ -46,6 +49,8 @@ Index d
  d_a3: a3, 1!11
  d_b3: b3, 1!11
  d_td: td, 1!1111111111111111
+ d_c1: c1, 1!11
+ d_k9: k9, 1!1111111111
 
 Index e
  e_st: st, 1!111111111

@@ -15,8 +15,8 @@
 
 void H_mbt_make( const H_mbt_v & D, tcx & X ) {
   int a, b, c, d, e, h, i, j, k, l, s, f, m, w, t, n, g;
-  int st = D.st, ca = D.ca, cb = D.cb, cc = D.cc, nsk = D.nsk, en = D.en, td = D.td, sm = D.sm, tm = D.tm, tb = D.tb, dh = D.dh, bd = D.bd, qc = D.qc, im = D.im, ig = D.ig;
-  (void) st;  (void) ca;  (void) cb;  (void) cc;  (void) nsk;  (void) en;  (void) td;  (void) sm;  (void) tm;  (void) tb;  (void) dh;  (void) bd;  (void) qc;  (void) im;  (void) ig;
+  int st = D.st, ca = D.ca, cb = D.cb, cc = D.cc, nsk = D.nsk, en = D.en, td = D.td, sm = D.sm, tm = D.tm, tb = D.tb, dh = D.dh, bd = D.bd, qc = D.qc, im = D.im, ig = D.ig, c1 = D.c1;
+  (void) st;  (void) ca;  (void) cb;  (void) cc;  (void) nsk;  (void) en;  (void) td;  (void) sm;  (void) tm;  (void) tb;  (void) dh;  (void) bd;  (void) qc;  (void) im;  (void) ig;  (void) c1;
 
   a = 0;
   a = a*2 + ((st>3+(1-1)));
@@ -28,6 +28,7 @@ void H_mbt_make( const H_mbt_v & D, tcx & X ) {
   b = b*10 + H_mbt_b_st[__min(9,__max(0,st-(1-1)))];
   b = b*9 + H_mbt_b_cc[__min(8,__max(0,cc-(1-1)))];
   b = b*17 + H_mbt_b_td[__min(16,__max(0,td-(1-1)))];
+  b = b*10 + H_mbt_b_c1[__min(9,__max(0,c1-(1-1)))];
 
   c = 0;
   c = c*6 + H_mbt_c_ca[__min(8,__max(0,ca-(1-1)))];
