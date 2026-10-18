@@ -9,7 +9,8 @@
 #  8 PCM), nsk the skipped ones of A, B, C and D; for Intra16x16 (from its
 #  coded_block_pattern on), im 1 + the mode that does best in the proxy (0
 #  none) and ig by how much it beats the next; in B slices, c1 1 + the class
-#  of the same macroblock in list 1's first reference (0 none).
+#  of the same macroblock in list 1's first reference (0 none); tx the
+#  skip family's.
 
 Prefix H_mbt
 Debug 1
@@ -45,6 +46,7 @@ Index e
  e_ca: ca, 1!11111111
  e_td: td, 1!1100000011000001
  e_sm: sm, 1!1111110000000000
+ e_tx: tx, 1!11111111111111
 
 Index h
  h_st: st, 1!010000000
@@ -145,7 +147,7 @@ Number mb, 1, 0!00010110
 #  them.  31 is "never hashed".  Frozen: left live these only grow.
 ! Number hA, 1, 0!11000
 ! Number hB, 1, 0!11000
-! Number hE, 1, 0!11000
+! Number hE, 1, 0!01111
 ! Number hH, 1, 0!11000
 ! Number hI, 1, 0!11000
 ! Number hJ, 1, 0!11000

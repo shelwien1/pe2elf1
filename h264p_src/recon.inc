@@ -2077,6 +2077,20 @@ struct Recon {
     }
     return true;
   }
+  // the texture of the luma of the current macroblock in the picture (its
+  // prediction, before the residual): the sum of the absolute differences
+  // between neighbouring samples
+  int mb_texture() const {
+    if (!active) return -1;
+    int w = cur->w, g = 0;
+    const uint8_t* p = cur->y.data() + (mb_addr / cur->mbw) * 16 * w + (mb_addr % cur->mbw) * 16;
+    for (int j = 0; j < 16; j++)
+      for (int i = 0; i < 16; i++) {
+        if (i < 15) g += abs(p[j * w + i + 1] - p[j * w + i]);
+        if (j < 15) g += abs(p[(j + 1) * w + i] - p[j * w + i]);
+      }
+    return g;
+  }
   // the same of reference r of list l displaced by mv (whole samples) at
   // the luma block (bx, by, bw, bh) of the current macroblock; -1 none
   int ref_texture(int l, int r, int bx, int by, int bw, int bh, const int* mv) const {
