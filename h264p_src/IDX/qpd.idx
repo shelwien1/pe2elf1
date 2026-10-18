@@ -21,7 +21,8 @@
 #  macroblock of the kind (inter, I_NxN, other) and energy class less the
 #  predicted one (7 + that, -6 to 6; 0 none): the rate control's QP plus
 #  what the class adds; bc B's QP less the predicted one where B is coded
-#  and of the same kind (7 + that, -6 to 6; 0 not).  The
+#  and of the same kind (7 + that, -6 to 6; 0 not), cl the same for col.
+#  The
 #  magnitude has the line's delta as code()'s hint; the sign is the qpg
 #  family's.
 
@@ -88,6 +89,7 @@ Index l
  l_ac: ac, 1!1111110101110
  l_db: db, 1!11111111
  l_st: st, 1!111111111
+ l_cl: cl, 1!1111111111111
 
 Index s
  s_lnz: lnz, 1!0
