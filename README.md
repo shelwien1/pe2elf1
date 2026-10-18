@@ -154,13 +154,14 @@ decision:
   the signs of the first coefficients are
   predicted as the ones that make the block continue the decoded samples
   around it best, and for inter blocks the sign of each as that of a small
-  shift of the prediction, the shift fitted to the signs known so far; for intra blocks, the block in the reference that
-  matches the macroblocks around (searched again as the macroblock
+  shift of the prediction, the shift fitted to the signs known so far; for
+  intra blocks, the block in the reference that matches the macroblocks
+  around (searched from the motion around too, and again as the macroblock
   decodes) stands in for the source, and its difference to the prediction,
   transformed and quantized as an encoder would, estimates the count and
   the levels (trusted as far as the reference matched the samples around
   and the blocks decoded); in P pictures, the coefficients of the block
-  the vector points at in the reference.  Besides the decoder's view, the
+  the vector points at in its reference.  Besides the decoder's view, the
   significance of a position sees that of the eight before it and of the
   same position in the blocks to the left and above, the levels and signs
   the ones coded before, and the top mantissa bits of a number the bits
@@ -170,15 +171,15 @@ On the test streams (`-v` shows where the bits go):
 
 | stream | H.264 | compressed | |
 |---|---:|---:|---:|
-| 00 | 815,140 | 568,487 | 69.7% |
-| 01 | 1,095,103 | 804,990 | 73.5% |
-| 02 | 28,143 | 26,611 | 94.6% |
-| 03 | 1,181,369 | 776,782 | 65.8% |
-| 04 | 484,238 | 384,773 | 79.5% |
+| 00 | 815,140 | 568,293 | 69.7% |
+| 01 | 1,095,103 | 804,802 | 73.5% |
+| 02 | 28,143 | 26,610 | 94.6% |
+| 03 | 1,181,369 | 776,299 | 65.7% |
+| 04 | 484,238 | 384,418 | 79.4% |
 
 The macroblock syntax takes 72.2% of what its CABAC coding takes (from
-3,536,129 to 2,554,662 bytes over these streams; whole streams go from
-3,603,993 to 2,561,643 bytes; `h264p_cm.md` section 9 has the figures by
+3,536,129 to 2,553,434 bytes over these streams; whole streams go from
+3,603,993 to 2,560,422 bytes; `h264p_cm.md` section 9 has the figures by
 syntax element). Speed is 0.03-0.13 MB of H.264 per second both ways, depending
 on the stream, and the model tables take about 215 MB.
 

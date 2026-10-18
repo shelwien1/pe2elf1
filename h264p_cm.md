@@ -864,7 +864,7 @@ their gain on test/002:
 | texture of the prediction; sign prediction (the first signs searched for the best continuity of the block with its surroundings, section 7) | coefficients, cbp | 75 KB* |
 | maps of the last picture (energy, change), DIMD | most | 44 KB* |
 | skip prediction: how its luma continues the samples above and left (edge miss), how its motion predicts them (template matching), in B slices how far its two predictions are apart; the best template match | skip, mb_type | 36 KB |
-| the intra estimate's reference block matched by the macroblocks above, left and above right whole (a 16-sample template, where a vector to code does better with 2), and searched again before each later luma block of an Intra4x4/8x8 macroblock (the blocks decoded added to the template) and before the chroma (against the luma, decoded by then) | count, significance, levels, signs | 18 KB |
+| the intra estimate's reference block matched by the macroblocks above, left and above right whole (a 16-sample template, where a vector to code does better with 2; the search starting from the neighbours' proxies, their vectors and the temporal one), and searched again before each later luma block of an Intra4x4/8x8 macroblock (the blocks decoded added to the template) and before the chroma (against the luma, decoded by then) | count, significance, levels, signs | 18 KB |
 | motion vector by template matching search, the vector zero, col's mvd | mvd | 17 KB |
 | hints: the intra estimate's level and count, the template match's mvd, the adaptive quantization line's QP delta | levels, count, mvd, qp delta | 13 KB |
 | edge miss of the prediction, edge-projected level estimates | coefficients | 13 KB* |
@@ -886,7 +886,7 @@ their gain on test/002:
 | a 4:2:0 chroma block's count by the coefficients of the luma under it; a chroma or Intra16x16 AC block's by its DC (from the DC levels' transform) | count | 1.4 KB |
 | how far to trust the intra estimate: the template match of its vector, then how far the luma decoded so far is from it | coefficients, intra modes | 9 KB |
 | the best intra mode in the reference | intra modes | 4 KB |
-| P pictures: the coefficients of the block the vector points at in the reference (a copy of the last picture's), moved and still blocks apart; for cbp, the 4x4 blocks with coefficients under it | coefficients, cbp | 2 KB |
+| P pictures: the coefficients of the block the vector points at in the reference (as it was: the last picture of a kind, found by POC), moved and still blocks apart; for cbp, the 4x4 blocks with coefficients under it | coefficients, cbp | 2 KB |
 | ref_idx: the reference (of the first eight) the template matches best | ref_idx | 1 KB |
 
 Without the decoder: the significance of the eight positions before (12 KB
@@ -904,16 +904,16 @@ four to six were 16 KB) and, for the top six mantissa bits of a number
 | element | CABAC | model | |
 |---|---:|---:|---:|
 | skip, end | 336,175 | 221,360 | −34.2% |
-| mb_type | 365,120 | 259,628 | −28.9% |
-| cbp, transform_size_8x8_flag | 216,100 | 153,590 | −28.9% |
-| intra modes | 299,858 | 232,171 | −22.6% |
-| sub_mb_type, ref_idx, mvd | 504,865 | 404,608 | −19.9% |
-| mb_qp_delta | 271,297 | 183,929 | −32.2% |
-| coded_block_flag, significance (count, significance) | 910,721 | 697,224 | −23.4% |
-| levels | 302,611 | 219,885 | −27.3% |
-| signs | 329,382 | 182,267 | −44.7% |
-| macroblock syntax | 3,536,129 | 2,554,662 | −27.8% |
-| whole streams (H.264 against compressed) | 3,603,993 | 2,561,643 | −28.9% |
+| mb_type | 365,120 | 259,488 | −28.9% |
+| cbp, transform_size_8x8_flag | 216,100 | 153,448 | −29.0% |
+| intra modes | 299,858 | 232,093 | −22.6% |
+| sub_mb_type, ref_idx, mvd | 504,865 | 404,281 | −19.9% |
+| mb_qp_delta | 271,297 | 183,848 | −32.2% |
+| coded_block_flag, significance (count, significance) | 910,721 | 696,892 | −23.5% |
+| levels | 302,611 | 219,831 | −27.4% |
+| signs | 329,382 | 182,193 | −44.7% |
+| macroblock syntax | 3,536,129 | 2,553,434 | −27.8% |
+| whole streams (H.264 against compressed) | 3,603,993 | 2,560,422 | −29.0% |
 
 The model tables take 215 MB.
 
@@ -953,7 +953,14 @@ candidates for the searches of ref_idx and of skip (79 bytes, slower);
 the run of unchanged QPs and the place in the row for mb_qp_delta; the
 luma under a chroma block for its significance and levels, and Cb's
 count (rather than whether it has one) for Cr's; ranking the intra
-remainder by the proxy (the contexts do better than its 2.9 bits).
+remainder by the proxy (the contexts do better than its 2.9 bits); the
+partition shapes of A and B for mb_type; a bi-predictive template
+search for list 1's vector (x264's comes from its own search); the
+global motion of the last picture as a candidate; the relative
+template miss of the skip motion; for B slices, the block under the
+vector from its reference (the same macroblock of the last B picture
+does better); in the levels, the shift fitted to the signs (signs coded
+with their levels).
 
 ## Appendix A: single-context experiments
 
