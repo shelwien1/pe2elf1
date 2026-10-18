@@ -14,7 +14,9 @@
 #  0 none), for ref_idx pd the ref_idx in the previous picture; tv for mvd
 #  the template match's vector less the predicted one (1 + sq2, 0 none),
 #  for ref_idx 1 + the reference it matches best; tq how well it matched
-#  (mvd), how much better than on the first reference (ref_idx).
+#  (mvd), how much better than on the first reference (ref_idx); rt for mvd
+#  the texture of the reference at the predicted vector, per sample, against
+#  the quantizer's step (1 + tc_qlog, 0 none).
 
 Prefix H_mvs
 Debug 1
@@ -27,6 +29,7 @@ Index a
  a_mb: mb, 1!1111100
  a_oth: oth, 1!11111
  a_sp: sp, 1!11110011
+ a_rt: rt, 1!11111111111111
 
 Index b
  b_kind: kind, 1!111
@@ -55,6 +58,7 @@ Index e
  e_comp: comp, 1!0
  e_tv: tv, 1!1111111111111
  e_sp: sp, 1!11111111
+ e_rt: rt, 1!11111111111111
 
 Index h
  h_kind: kind, 1!010
@@ -163,7 +167,7 @@ Number mb, 1, 0!01101100
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
 #  direct, one that does not is hashed into 2^h rows and contexts share
 #  them.  31 is "never hashed".  Frozen: left live these only grow.
-! Number hA, 1, 0!11000
+! Number hA, 1, 0!10000
 ! Number hB, 1, 0!11000
 ! Number hE, 1, 0!11000
 ! Number hH, 1, 0!11000

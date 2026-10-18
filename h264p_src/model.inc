@@ -36,7 +36,7 @@ struct H_skp_v { int st, a3, b3, col, c9, cd, run, cnt, eq, lf, af, td, en, sm, 
 struct H_mbt_v { int st, ca, cb, cc, nsk, en, td, sm, tm, tb, dh, bd, qc, im, ig, c1; };
 struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg, tp, em, pq; };
 struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm, pr, dr, pq, mh, mc, mg, rg; };
-struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, zd, cq, tq; };
+struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, zd, cq, tq, rt; };
 struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac; };
 struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn, pq, ch, ds; };
 struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz, pq, hb, ft, h3, pr, sn; };
@@ -547,6 +547,7 @@ struct Model {
   const MbCol* col1_ = nullptr;  // B: the same macroblock in list 1's first reference (phist)
   int sub_[4] = {};
   int pmv_[2] = {};  // proxy_mv()
+  int rt_ = 0;  // mvd: the reference's texture at the predicted vector (class)
   H_mbt_v* mbt_d_ = nullptr;  // mb_type's contexts while it is coded
   int prx_v_[2] = {};       // the proxy's vector (quarter samples), as searched again (block)
   int prx_blk_ = 0;         // the luma block it was last searched for
@@ -1646,6 +1647,14 @@ struct Model {
     D.zd = tc_clamp(sq2(-mvp_[comp]), 0, 12);
     D.cq = col_ && col_->cls < CL_INXN ? 1 + std::min<int>(col_->mvq[list][y * 4 + x][comp], 8) : 0;
     D.tq = tmn_ ? 0 : 1 + tc_clamp(tc_qlog(tmq_), 0, 11);
+    // the texture of the reference at the predicted vector, per sample,
+    // against the quantizer's step: where it is flat, a search for a better
+    // vector gains nothing
+    if (!comp) {
+      int t = rec_.ref_texture(list, ref, x * 4, y * 4, w * 4, h * 4, mvp_);
+      rt_ = t < 0 ? 0 : 1 + tc_clamp(tc_qlog((int64_t)t * 256 / (w * h * 16) * 16 / qstep16(qp_pred_)), 0, 14);
+    }
+    D.rt = rt_;
     tcx X;
     H_mvs_make(D, X);
     tc_stage = STG_MVD;
