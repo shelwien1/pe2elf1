@@ -516,6 +516,9 @@ void code_slice_header(Syn& s, SliceHeader& h, const ParamSets& ps) {
   }
   if (pps.entropy_coding_mode_flag && t != kI && t != kSI) h.cabac_init_idc = (int)s.ue("cabac_init_idc", 0, 2);
   h.slice_qp_delta = (int)s.se("slice_qp_delta", -128, 127);
+  // SliceQPY in -QpBdOffsetY..51 (7.4.3), which the model and the reconstruction rely on
+  int qp = pps.pic_init_qp + h.slice_qp_delta;
+  if (qp < -6 * (sps.bit_depth_luma - 8) || qp > 51) s.fail("slice QP out of range");
   if (t == kSP || t == kSI) {
     if (t == kSP) s.u("sp_for_switch_flag", 1);
     s.se("slice_qs_delta", -kS32, kS32);

@@ -205,14 +205,14 @@ struct AqFit {
 // 16 x the quantizer's step of a QP (0.625 x 2^(qp/6))
 static INLINE int qstep16(int qp) {
   static const int k[6] = {10, 11, 13, 14, 16, 18};
-  int q = qp < 0 ? 0 : qp;
+  int q = qp < 0 ? 0 : qp > 51 ? 51 : qp;
   return k[q % 6] << (q / 6);
 }
 
 // 16 x x264's lambda of a QP (x264_lambda_tab: 2^(qp/6 - 2), at least 1)
 static INLINE int x264_lam16(int qp) {
   static const int k16[6] = {16, 18, 20, 23, 25, 29};
-  int q = qp < 0 ? 0 : qp;
+  int q = qp < 0 ? 0 : qp > 51 ? 51 : qp;
   return std::max(16, (k16[q % 6] << (q / 6)) >> 2);
 }
 
