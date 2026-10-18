@@ -195,6 +195,7 @@ struct Recon {
     else
       spare.push_back(std::move(cur));
     active = false;
+    nlist[0] = nlist[1] = 0;  // marking may have dropped the pictures they hold
   }
 
   void mark() {
@@ -1522,7 +1523,7 @@ struct Recon {
     mv[1] = col->mv[((addr * 16 + blk) * 2 + l) * 2 + 1];
     return ref >= 0;
   }
-  bool col_long_term() const { return nlist[1] && list[1][0] && list[1][0]->lt; }
+  bool col_long_term() const { return active && nlist[1] && list[1][0] && list[1][0]->lt; }
   // temporal direct (8.4.1.2.3): the list 0 reference and the scale factor
   int map_col(int64_t pid) const {
     for (int i = 0; i < nlist[0]; i++)
@@ -2144,7 +2145,7 @@ struct Recon {
   // the luma block (bx, by, bw, bh) of the current macroblock; -1 none
   int ref_texture(int l, int r, int bx, int by, int bw, int bh, const int* mv, int dir = 3) const {
     const RPic* ref = active && r >= 0 && r < nlist[l] ? list[l][r] : nullptr;
-    if (!ref) return -1;
+    if (!ref || bw >= ref->w || bh >= ref->h) return -1;  // no room for the block and its gradients
     int W = ref->w, H = ref->h;
     int x0 = clip3(0, W - bw - 1, mb_addr % cur->mbw * 16 + bx + (mv[0] >> 2));
     int y0 = clip3(0, H - bh - 1, mb_addr / cur->mbw * 16 + by + (mv[1] >> 2));
