@@ -36,13 +36,13 @@ struct H_skp_v { int st, a3, b3, col, c9, cd, run, cnt, eq, lf, af, td, en, sm, 
 struct H_mbt_v { int st, ca, cb, cc, nsk, en, td, sm, tm, tb, dh, bd, qc, im, ig, c1, tx; };
 struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg, tp, em, pq; };
 struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm, pr, dr, pq, mh, mc, mg, rg, p2; };
-struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, zd, cq, tq, rt, ea, eb; };
+struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, zd, cq, tq, rt, ea, eb, ta; };
 struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac, td, sq, xe, lq; };
 struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn, pq, ch, ds, hv, ly, dq; };
 struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz, pq, hb, ft, h3, pr, sn, hv, pf; };
 struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe, pl, tz, pq, lh, lt, ls, hv, fq; };
 struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md, pp, mg, ez, ts, pq, gh, se, dm; };
-struct H_mvg_v { int comp, lst, ts, zs, ds, sa, sb, mag, tq, ox, ns, es; };
+struct H_mvg_v { int comp, lst, ts, zs, ds, sa, sb, mag, tq, ox, ns, es, as; };
 struct H_qpg_v { int as, cs, bs, ls, rs, mag, cls, st, ss, xe, lq; };
 struct H_pcm_v { int pl, dp, pd, pd2; };
 
@@ -1744,6 +1744,7 @@ struct Model {
     for (int k = 0; k < 2; k++) m[k] = mv_scale(col1_->mv[cl][y * 4 + x][k], tr, td);
     return true;
   }
+  int talt_[2] = {INT_MIN, 0};  // the template search's runner-up start (INT_MIN none)
   int mvd(int list, int comp, int x, int y, int w, int h, int v) {
     tc_stage = STG_MVS;
     int ia, ib, b8 = (y >> 1) * 2 + (x >> 1), ref = sc_->cur_->ref[list][b8];
@@ -1797,7 +1798,7 @@ struct Model {
       if (!pdn_) cand[nc][0] = cm[0], cand[nc][1] = cm[1], nc++;
       if (ccok) cand[nc][0] = cc[0], cand[nc][1] = cc[1], nc++;  // and col's, temporal direct's taken
       cand[nc][0] = cand[nc][1] = 0, nc++;
-      tmn_ = !rec_.tm_search(list, ref, x * 4, y * 4, w * 4, h * 4, tmv_, false, cand, nc, &tmq_, kTmLambda);
+      tmn_ = !rec_.tm_search(list, ref, x * 4, y * 4, w * 4, h * 4, tmv_, false, cand, nc, &tmq_, kTmLambda, 1, 0, talt_);
     } else if (!tmn_) {
       // the horizontal component known
       tmv_[0] = mvp_[0] + mvx_;
@@ -1827,6 +1828,7 @@ struct Model {
     D.zd = tc_clamp(sq2(-mvp_[comp]), 0, 12);
     D.cq = col_ && col_->cls < CL_INXN ? 1 + std::min<int>(col_->mvq[list][y * 4 + x][comp], 8) : 0;
     D.tq = tmn_ ? 0 : 1 + tc_clamp(tc_qlog(tmq_), 0, 11);
+    D.ta = tmn_ || talt_[0] == INT_MIN ? 0 : 1 + tc_clamp(sq2(talt_[comp] - mvp_[comp]), 0, 12);
     D.ea = ea == -128 ? 0 : 1 + std::min(tc_qlog(ea), 5);
     D.eb = eb == -128 ? 0 : 1 + std::min(tc_qlog(eb), 5);
     // the texture of the reference at the predicted vector across the
@@ -1873,6 +1875,7 @@ struct Model {
         G.ox = comp ? sgn3(mvx_) : 3;
         G.ns = 3 + ns_[comp];
         G.es = ea == -128 && eb == -128 ? 3 : sgn3((ea == -128 ? 0 : ea) + (eb == -128 ? 0 : eb));
+        G.as = tmn_ || talt_[0] == INT_MIN ? 9 : rel(talt_[comp] - mvp_[comp]);
         tcx Y;
         H_mvg_make(G, Y);
         f_mvg.select(Y);

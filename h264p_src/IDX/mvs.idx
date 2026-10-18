@@ -22,7 +22,8 @@
 #  vector (for mvd, across the component), per sample, against the
 #  quantizer's step (1 + tc_qlog, 0 none); ea/eb for mvd how far the mvds
 #  of A and B were from their template matches' (1 + tc_qlog up to 5, 0
-#  none).
+#  none); ta the vector the template search found second best of its
+#  starts, less the predicted one (1 + sq2, 0 none).
 
 Prefix H_mvs
 Debug 1
@@ -81,6 +82,7 @@ Index i
  i_tv: tv, 1!1111111111111
  i_tq: tq, 1!010100100100
  i_zd: zd, 1!111111111111
+ i_ta: ta, 1!1111111111111
 
 Index j
  j_kind: kind, 1!111

@@ -1732,7 +1732,8 @@ struct Recon {
   // is decoded.
   static constexpr int TM_T = 2, TM_TP = 16;
   bool tm_search(int l, int r, int bx, int by, int bw, int bh, int* mv, bool only_y, const int (*cand)[2] = nullptr,
-                 int ncand = 0, int* miss = nullptr, int lambda = 0, int finest = 1, int inner = 0) const {
+                 int ncand = 0, int* miss = nullptr, int lambda = 0, int finest = 1, int inner = 0,
+                 int* alt = nullptr) const {
     if (!active) return false;
     int mbw = cur->mbw, x0 = mb_addr % mbw * 16 + bx, y0 = mb_addr / mbw * 16 + by, w = cur->w;
     bool top = by == 0 && y0 > 0 && db[mb_addr - mbw].slice >= 0;
@@ -1795,12 +1796,20 @@ struct Recon {
       return c;
     };
     int vx = mv[0], vy = mv[1], best = cost(vx, vy);
-    // other places to start from
+    // other places to start from (alt: the best of them but the best, of
+    // the start too; INT_MIN none)
+    int ax = INT_MIN, ay = 0, abest = INT_MAX;
     for (int k = 0; k < ncand; k++) {
       if (cand[k][0] == vx && cand[k][1] == vy) continue;
-      int c = cost(cand[k][0], cand[k][1], best);
-      if (c < best) best = c, vx = cand[k][0], vy = cand[k][1];
+      int c = cost(cand[k][0], cand[k][1], alt ? INT_MAX : best);
+      if (c < best) {
+        if (best < abest) abest = best, ax = vx, ay = vy;
+        best = c, vx = cand[k][0], vy = cand[k][1];
+      } else if (c < abest && (cand[k][0] != vx || cand[k][1] != vy)) {
+        abest = c, ax = cand[k][0], ay = cand[k][1];
+      }
     }
+    if (alt) alt[0] = ax, alt[1] = ay;
     // a small diamond in whole samples while it finds better (up to 4
     // steps), then the 8 halves and quarters around
     static const int kD[4][2] = {{0, -1}, {-1, 0}, {1, 0}, {0, 1}};

@@ -15,8 +15,8 @@
 
 void H_mvg_make( const H_mvg_v & D, tcx & X ) {
   int a, b, c, d, e, h, i, j, k, l, s, f, m, w, t, n, g;
-  int comp = D.comp, lst = D.lst, ts = D.ts, zs = D.zs, ds = D.ds, sa = D.sa, sb = D.sb, mag = D.mag, tq = D.tq, ox = D.ox, ns = D.ns, es = D.es;
-  (void) comp;  (void) lst;  (void) ts;  (void) zs;  (void) ds;  (void) sa;  (void) sb;  (void) mag;  (void) tq;  (void) ox;  (void) ns;  (void) es;
+  int comp = D.comp, lst = D.lst, ts = D.ts, zs = D.zs, ds = D.ds, sa = D.sa, sb = D.sb, mag = D.mag, tq = D.tq, ox = D.ox, ns = D.ns, es = D.es, as = D.as;
+  (void) comp;  (void) lst;  (void) ts;  (void) zs;  (void) ds;  (void) sa;  (void) sb;  (void) mag;  (void) tq;  (void) ox;  (void) ns;  (void) es;  (void) as;
 
   a = 0;
   a = a*2 + ((comp>0+(1-1)));
@@ -31,6 +31,7 @@ void H_mvg_make( const H_mvg_v & D, tcx & X ) {
   c = 0;
   c = c*10 + H_mvg_c_ts[__min(9,__max(0,ts-(1-1)))];
   c = c*9 + H_mvg_c_zs[__min(8,__max(0,zs-(1-1)))];
+  c = c*10 + H_mvg_c_as[__min(9,__max(0,as-(1-1)))];
 
   d = 0;
   d = d*10 + H_mvg_d_ds[__min(9,__max(0,ds-(1-1)))];

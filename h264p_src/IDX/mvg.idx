@@ -13,7 +13,8 @@
 #  many of the vectors of A, B and C are above the predicted one in the
 #  component less how many are below, es which way
 #  the mvds of A and B were from their template matches', summed (sgn3; 3
-#  none).
+#  none), as as ts for the template search's second best start (mvs's
+#  ta).
 
 Prefix H_mvg
 Debug 1
@@ -32,6 +33,7 @@ Index b
 Index c
  c_ts: ts, 1!111111111
  c_zs: zs, 1!11111111
+ c_as: as, 1!111111111
 
 Index d
  d_ds: ds, 1!111111111
