@@ -13,7 +13,7 @@
 #  macroblock, st the slice type and reference status, ss as as for the
 #  slice's QP less the predicted one, xe the qpd family's energy class, lq
 #  as as for the QP of the last macroblock of the kind and class (qpd's
-#  lq).
+#  lq), bk for B's where it is of the kind (qpd's bc).
 
 Prefix H_qpg
 Debug 1
@@ -37,6 +37,7 @@ Index c
 Index d
  d_bs: bs, 1!111111111
  d_mag: mag, 1!1111111
+ d_bk: bk, 1!111111111
 
 Index e
  e_cs: cs, 1!000001001

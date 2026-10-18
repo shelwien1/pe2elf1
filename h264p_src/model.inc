@@ -37,13 +37,13 @@ struct H_mbt_v { int st, ca, cb, cc, nsk, en, td, sm, tm, tb, dh, bd, qc, im, ig
 struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg, tp, em, pq; };
 struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm, pr, dr, pq, mh, mc, mg, rg, p2; };
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, zd, cq, tq, rt, ea, eb, ta; };
-struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac, td, sq, xe, lq; };
+struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac, td, sq, xe, lq, bc; };
 struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn, pq, ch, ds, hv, ly, dq; };
 struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz, pq, hb, ft, h3, pr, sn, hv, pf; };
 struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe, pl, tz, pq, lh, lt, ls, hv, fq; };
 struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md, pp, mg, ez, ts, pq, gh, se, dm; };
 struct H_mvg_v { int comp, lst, ts, zs, ds, sa, sb, mag, tq, ox, ns, es, as; };
-struct H_qpg_v { int as, cs, bs, ls, rs, mag, cls, st, ss, xe, lq; };
+struct H_qpg_v { int as, cs, bs, ls, rs, mag, cls, st, ss, xe, lq, bk; };
 struct H_pcm_v { int pl, dp, pd, pd2; };
 
 #include "MOD/nal_h.inc"
@@ -1983,6 +1983,9 @@ struct Model {
     D.cls = mi_->cls;
     D.dc = col_ ? qp_class(col_->qp - qp_off_ - qp_pred_) : 0;
     D.db = b ? qp_class(b->qp - qp_off_ - qp_pred_) : 0;
+    // and where B is of the same kind (inter, I_NxN, other)
+    auto kind3 = [](int c) { return c < CL_INXN ? 0 : c == CL_INXN ? 1 : 2; };
+    D.bc = b && !b->skip && kind3(b->cls) == kind3(mi_->cls) ? 7 + tc_clamp(b->qp - qp_off_ - qp_pred_, -6, 6) : 0;
     D.lz = has_lz_ ? 3 + tc_clamp(tc_sq(lz_), -3, 3) : 3;
     D.st = st_;
     D.td = map_td();
@@ -2064,6 +2067,7 @@ struct Model {
         G.ss = rel(slice_qp_ - qp_pred_);
         G.xe = D.xe;
         G.lq = D.lq ? rel(D.lq - 7) : 9;
+        G.bk = D.bc ? rel(D.bc - 7) : 9;
         tcx Y;
         H_qpg_make(G, Y);
         f_qpg.select(Y);

@@ -20,7 +20,8 @@
 #  (flat below an energy, then rising); lq the QP of the picture's last
 #  macroblock of the kind (inter, I_NxN, other) and energy class less the
 #  predicted one (7 + that, -6 to 6; 0 none): the rate control's QP plus
-#  what the class adds.  The
+#  what the class adds; bc B's QP less the predicted one where B is coded
+#  and of the same kind (7 + that, -6 to 6; 0 not).  The
 #  magnitude has the line's delta as code()'s hint; the sign is the qpg
 #  family's.
 
@@ -45,6 +46,7 @@ Index c
  c_lz: lz, 1!111111
  c_st: st, 1!111111111
  c_db: db, 1!11110110
+ c_bc: bc, 1!1111111111111
 
 Index d
  d_st: st, 1!111111111
