@@ -51,7 +51,7 @@ void H_qpd_make( const H_qpd_v & D, tcx & X ) {
   i = 0;
   i = i*14 + H_qpd_i_aq[__min(13,__max(0,aq-(1-1)))];
   i = i*14 + H_qpd_i_ac[__min(13,__max(0,ac-(1-1)))];
-  i = i*9 + H_qpd_i_cls[__min(8,__max(0,cls-(1-1)))];
+  i = i*3 + ((cls>5+(1-1))+(cls>6+(1-1)));
   i = i*9 + H_qpd_i_td[__min(16,__max(0,td-(1-1)))];
 
   j = 0;

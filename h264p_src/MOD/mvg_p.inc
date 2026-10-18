@@ -20,7 +20,7 @@ void H_mvg_make( const H_mvg_v & D, tcx & X ) {
 
   a = 0;
   a = a*2 + ((comp>0+(1-1)));
-  a = a*10 + H_mvg_a_ts[__min(9,__max(0,ts-(1-1)))];
+  a = a*3 + ((ts>2+(1-1))+(ts>5+(1-1)));
   a = a*8 + H_mvg_a_mag[__min(7,__max(0,mag-(1-1)))];
 
   b = 0;

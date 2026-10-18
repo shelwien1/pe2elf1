@@ -53,7 +53,7 @@ Index d
  d_kind: kind, 1!111
  d_comp: comp, 1!1
  d_pd: pd, 1!11111111
- d_ma: ma, 1!1111111
+ d_ma: ma, 1!0000000
  d_nr: nr, 1!111
 
 Index e

@@ -1,5 +1,4 @@
 
-static const byte H_mvg_a_ts[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 static const byte H_mvg_a_mag[7+1]={ 0,1,2,3,4,5,6,7 };
 
 static const byte H_mvg_b_zs[8+1]={ 0,1,2,3,4,5,6,7,8 };
@@ -94,7 +93,7 @@ static const int H_mvg_hT = (24+0) * (1);
 static const int H_mvg_hN = (24+0) * (1);
 
 
-static const long long H_mvg_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 10), 8); // 160
+static const long long H_mvg_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 3), 8); // 48
 static const long long H_mvg_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 9), 8), 2); // 144
 static const long long H_mvg_c_Volume = tc_vmul(tc_vmul(1, 10), 9); // 90
 static const long long H_mvg_d_Volume = tc_vmul(tc_vmul(1, 10), 8); // 80

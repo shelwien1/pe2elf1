@@ -120,7 +120,7 @@ Number mbm, 1, 0!00000000
 Number mwA, 1, 0!00000000
 Number mwB, 1, 0!00000000
 Number mwC, 1, 0!00000000
-Number mwE, 1, 0!00000000
+Number mwE, 1, 0!00000100
 Number mwH, 1, 0!00000000
 Number mwI, 1, 0!00000000
 Number mwJ, 1, 0!00000000

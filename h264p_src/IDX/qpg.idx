@@ -33,7 +33,7 @@ Index d
  d_mag: mag, 1!1111111
 
 Index e
- e_cs: cs, 1!111111111
+ e_cs: cs, 1!000001001
  e_rs: rs, 1!111
 
 Index h
@@ -59,7 +59,7 @@ Index k
 Index l
  l_cs: cs, 1!111111111
  l_bs: bs, 1!111111111
- l_ls: ls, 1!11
+ l_ls: ls, 1!10
 
 Index s
  s_as: as, 1!111111111

@@ -63,7 +63,7 @@ void H_sgn_make( const H_sgn_v & D, tcx & X ) {
   j = j*4 + H_sgn_j_sa[__min(3,__max(0,sa-(1-1)))];
   j = j*4 + H_sgn_j_sb[__min(3,__max(0,sb-(1-1)))];
   j = j*9 + H_sgn_j_gh[__min(8,__max(0,gh-(1-1)))];
-  j = j*4 + H_sgn_j_pos[__min(3,__max(0,pos-(1-1)))];
+  j = j*2 + ((pos>0+(1-1)));
 
   k = 0;
   k = k*14 + H_sgn_k_cg[__min(13,__max(0,cg-(1-1)))];

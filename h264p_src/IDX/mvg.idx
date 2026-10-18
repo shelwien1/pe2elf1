@@ -22,7 +22,7 @@ Const 0
 
 Index a
  a_comp: comp, 1!1
- a_ts: ts, 1!111111111
+ a_ts: ts, 1!001001000
  a_mag: mag, 1!1111111
 
 Index b

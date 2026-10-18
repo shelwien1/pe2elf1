@@ -17,7 +17,6 @@ static const byte H_mvs_c_zd[12+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12 };
 
 static const byte H_mvs_d_kind[3+1]={ 0,1,2,3 };
 static const byte H_mvs_d_pd[8+1]={ 0,1,2,3,4,5,6,7,8 };
-static const byte H_mvs_d_ma[7+1]={ 0,1,2,3,4,5,6,7 };
 static const byte H_mvs_d_nr[3+1]={ 0,1,2,3 };
 
 static const byte H_mvs_e_tv[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
@@ -122,7 +121,7 @@ static const int H_mvs_hN = (24+0) * (1);
 static const long long H_mvs_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 2), 5), 6), 6), 7), 15); // 113400
 static const long long H_mvs_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 2), 4), 4), 13); // 3328
 static const long long H_mvs_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 7), 9), 13); // 6552
-static const long long H_mvs_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 9), 8), 4); // 2304
+static const long long H_mvs_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 9), 1), 4); // 288
 static const long long H_mvs_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 1), 14), 9), 15); // 5670
 static const long long H_mvs_f_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 9), 10); // 720
 static const long long H_mvs_g_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 1), 1); // 4

@@ -121,7 +121,7 @@ Index g
 
 Number rA, 1, 0!11101100
 Number rB, 1, 0!00001000
-Number rC, 1, 0!01000000
+Number rC, 1, 0!01110100
 Number rE, 1, 0!11100000
 Number rH, 1, 0!11100000
 Number rI, 1, 0!01000000

@@ -34,7 +34,7 @@ void H_qpg_make( const H_qpg_v & D, tcx & X ) {
   d = d*8 + H_qpg_d_mag[__min(7,__max(0,mag-(1-1)))];
 
   e = 0;
-  e = e*10 + H_qpg_e_cs[__min(9,__max(0,cs-(1-1)))];
+  e = e*3 + ((cs>5+(1-1))+(cs>8+(1-1)));
   e = e*4 + H_qpg_e_rs[__min(3,__max(0,rs-(1-1)))];
 
   h = 0;
@@ -60,7 +60,7 @@ void H_qpg_make( const H_qpg_v & D, tcx & X ) {
   l = 0;
   l = l*10 + H_qpg_l_cs[__min(9,__max(0,cs-(1-1)))];
   l = l*10 + H_qpg_l_bs[__min(9,__max(0,bs-(1-1)))];
-  l = l*3 + ((ls>0+(1-1))+(ls>1+(1-1)));
+  l = l*2 + ((ls>0+(1-1)));
 
   s = 0;
   s = s*10 + H_qpg_s_as[__min(9,__max(0,as-(1-1)))];

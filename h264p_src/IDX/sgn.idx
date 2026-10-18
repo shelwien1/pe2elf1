@@ -69,7 +69,7 @@ Index j
  j_sa: sa, 1!111
  j_sb: sb, 1!111
  j_gh: gh, 1!11111111
- j_pos: pos, 1!111
+ j_pos: pos, 1!100
 
 Index k
  k_cg: cg, 1!1111111111111
@@ -118,7 +118,7 @@ Number rI, 1, 0!01000000
 Number rJ, 1, 0!11100000
 Number rK, 1, 0!11100000
 Number rL, 1, 0!11101011
-Number rD, 1, 0!01101111
+Number rD, 1, 0!11110110
 Number rT, 1, 0!00110111
 Number rG, 1, 0!01011010
 Number rS1, 1, 0!00110
