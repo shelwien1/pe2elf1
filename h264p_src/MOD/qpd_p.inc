@@ -65,7 +65,7 @@ void H_qpd_make( const H_qpd_v & D, tcx & X ) {
   k = k*5 + H_qpd_k_pc[__min(4,__max(0,pc-(1-1)))];
 
   l = 0;
-  l = l*14 + H_qpd_l_ac[__min(13,__max(0,ac-(1-1)))];
+  l = l*11 + H_qpd_l_ac[__min(13,__max(0,ac-(1-1)))];
   l = l*9 + H_qpd_l_db[__min(8,__max(0,db-(1-1)))];
   l = l*10 + H_qpd_l_st[__min(9,__max(0,st-(1-1)))];
 

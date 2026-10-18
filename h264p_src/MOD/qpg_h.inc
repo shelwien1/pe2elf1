@@ -95,7 +95,7 @@ static const int H_qpg_hN = (24+0) * (1);
 
 
 static const long long H_qpg_a_Volume = tc_vmul(tc_vmul(1, 10), 8); // 80
-static const long long H_qpg_b_Volume = tc_vmul(tc_vmul(1, 10), 3); // 30
+static const long long H_qpg_b_Volume = tc_vmul(tc_vmul(1, 10), 1); // 10
 static const long long H_qpg_c_Volume = tc_vmul(tc_vmul(1, 10), 10); // 100
 static const long long H_qpg_d_Volume = tc_vmul(tc_vmul(1, 10), 8); // 80
 static const long long H_qpg_e_Volume = tc_vmul(tc_vmul(1, 10), 4); // 40

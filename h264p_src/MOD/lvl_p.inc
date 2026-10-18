@@ -20,8 +20,6 @@ void H_lvl_make( const H_lvl_v & D, tcx & X ) {
 
   a = 0;
   a = a*14 + H_lvl_a_cg[__min(13,__max(0,cg-(1-1)))];
-  a = a*5 + H_lvl_a_g1[__min(4,__max(0,g1-(1-1)))];
-  a = a*5 + H_lvl_a_e1[__min(4,__max(0,e1-(1-1)))];
   a = a*5 + H_lvl_a_nc[__min(5,__max(0,nc-(1-1)))];
 
   b = 0;
@@ -66,7 +64,6 @@ void H_lvl_make( const H_lvl_v & D, tcx & X ) {
   i = i*5 + H_lvl_i_g1[__min(4,__max(0,g1-(1-1)))];
 
   j = 0;
-  j = j*14 + H_lvl_j_cg[__min(13,__max(0,cg-(1-1)))];
   j = j*8 + H_lvl_j_lt[__min(7,__max(0,lt-(1-1)))];
   j = j*65 + H_lvl_j_lh[__min(64,__max(0,lh-(1-1)))];
   j = j*6 + H_lvl_j_pos[__min(5,__max(0,pos-(1-1)))];

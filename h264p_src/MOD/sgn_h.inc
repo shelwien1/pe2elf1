@@ -56,14 +56,14 @@ static const byte H_sgn_w_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 static const byte H_sgn_w_mg[15+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
 
 
-static const int H_sgn_rA = (235+0) * (1);
+static const int H_sgn_rA = (233+0) * (1);
 static const int H_sgn_rB = (205+0) * (1);
 static const int H_sgn_rC = (3+0) * (1);
 static const int H_sgn_rE = (64+0) * (1);
 static const int H_sgn_rH = (64+0) * (1);
 static const int H_sgn_rI = (64+0) * (1);
 static const int H_sgn_rJ = (224+0) * (1);
-static const int H_sgn_rK = (64+0) * (1);
+static const int H_sgn_rK = (224+0) * (1);
 static const int H_sgn_rL = (235+0) * (1);
 static const int H_sgn_rD = (111+0) * (1);
 static const int H_sgn_rT = (55+0) * (1);

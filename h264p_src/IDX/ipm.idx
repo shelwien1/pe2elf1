@@ -117,10 +117,10 @@ Number rA, 1, 0!11100100
 Number rB, 1, 0!00010001
 Number rC, 1, 0!00000000
 Number rE, 1, 0!01000000
-Number rH, 1, 0!01000100
+Number rH, 1, 0!11000101
 Number rI, 1, 0!01000000
 Number rJ, 1, 0!01000000
-Number rK, 1, 0!01000000
+Number rK, 1, 0!11011100
 Number rL, 1, 0!01000000
 Number rD, 1, 0!11111111
 Number rT, 1, 0!00110111
@@ -135,7 +135,7 @@ Number mwB, 1, 0!00001010
 Number mwC, 1, 0!00000000
 Number mwE, 1, 0!00000000
 Number mwH, 1, 0!00000000
-Number mwI, 1, 0!00000000
+Number mwI, 1, 0!00010110
 Number mwJ, 1, 0!00100000
 Number mwK, 1, 0!00000000
 Number mwL, 1, 0!00000000

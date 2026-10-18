@@ -85,7 +85,7 @@ Index j
 Index k
  k_kind: kind, 1!111
  k_comp: comp, 1!1
- k_pd: pd, 1!11111111
+ k_pd: pd, 1!11110011
  k_sp: sp, 1!01100001
  k_ps: ps, 1!111
 

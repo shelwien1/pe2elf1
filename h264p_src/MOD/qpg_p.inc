@@ -24,7 +24,6 @@ void H_qpg_make( const H_qpg_v & D, tcx & X ) {
 
   b = 0;
   b = b*10 + H_qpg_b_as[__min(9,__max(0,as-(1-1)))];
-  b = b*3 + ((ls>0+(1-1))+(ls>1+(1-1)));
 
   c = 0;
   c = c*10 + H_qpg_c_as[__min(9,__max(0,as-(1-1)))];

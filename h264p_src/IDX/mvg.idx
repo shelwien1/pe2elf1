@@ -114,7 +114,7 @@ Number mwH, 1, 0!00100000
 Number mwI, 1, 0!00000000
 Number mwJ, 1, 0!00000000
 Number mwK, 1, 0!00000000
-Number mwL, 1, 0!00000000
+Number mwL, 1, 0!00000010
 Number mwD, 1, 0!00011111
 Number mwT, 1, 0!00000000
 Number mwG, 1, 0!00000000

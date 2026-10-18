@@ -103,7 +103,7 @@ static const int H_skp_hN = (24+0) * (1);
 
 static const long long H_skp_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 3), 3), 1), 10), 2), 3), 3); // 16200
 static const long long H_skp_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 3), 3), 2), 7), 3); // 3780
-static const long long H_skp_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 3), 7), 2), 15); // 1260
+static const long long H_skp_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 3), 7), 3), 15); // 1890
 static const long long H_skp_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 3), 3), 17), 3), 11); // 50490
 static const long long H_skp_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 17), 5), 17), 15); // 216750
 static const long long H_skp_f_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 3), 18); // 162
@@ -112,7 +112,7 @@ static const long long H_skp_h_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 
 static const long long H_skp_i_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 17), 15), 3); // 765
 static const long long H_skp_j_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 13), 10), 18); // 23400
 static const long long H_skp_k_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 17), 17), 2); // 578
-static const long long H_skp_l_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 17), 1), 3); // 510
+static const long long H_skp_l_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 17), 2), 3); // 1020
 static const long long H_skp_m_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 2), 5); // 10
 static const long long H_skp_n_Volume = tc_vmul(1, 1); // 1
 static const long long H_skp_s_Volume = tc_vmul(tc_vmul(tc_vmul(1, 10), 17), 7); // 1190

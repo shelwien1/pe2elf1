@@ -47,7 +47,7 @@ void H_nal_make( const H_nal_v & D, tcx & X ) {
   i = i*16 + H_nal_i_p1[__min(15,__max(0,p1-(1-1)))];
 
   j = 0;
-  j = j*32 + H_nal_j_fld[__min(31,__max(0,fld-(1-1)))];
+  j = j*6 + H_nal_j_fld[__min(31,__max(0,fld-(1-1)))];
   j = j*4 + H_nal_j_p2[__min(3,__max(0,p2-(1-1)))];
   j = j*16 + H_nal_j_p1[__min(15,__max(0,p1-(1-1)))];
 
@@ -63,7 +63,7 @@ void H_nal_make( const H_nal_v & D, tcx & X ) {
   s = s*6 + H_nal_s_fld[__min(31,__max(0,fld-(1-1)))];
 
   f = 0;
-  f = f*32 + H_nal_f_fld[__min(31,__max(0,fld-(1-1)))];
+  f = f*7 + H_nal_f_fld[__min(31,__max(0,fld-(1-1)))];
 
   m = 0;
   m = m*4 + H_nal_m_fld[__min(31,__max(0,fld-(1-1)))];

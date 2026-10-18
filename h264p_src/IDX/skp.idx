@@ -43,7 +43,7 @@ Index c
  c_st: st, 1!010000000
  c_col: col, 1!11
  c_c9: c9, 1!100101111
- c_run: run, 1!000100000
+ c_run: run, 1!010100000
  c_en: en, 1!11111111111111
 
 Index d
@@ -88,7 +88,7 @@ Index k
 Index l
  l_st: st, 1!111111111
  l_bd: bd, 1!1111111111111111
- l_col: col, 1!00
+ l_col: col, 1!01
  l_cd: cd, 1!11
 
 Index s
