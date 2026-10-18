@@ -1088,11 +1088,36 @@ struct Model {
       mv_pred(0, 0, 0, 4, 4, 0, p);
     // and the neighbours' proxies' vectors, zero
     if ((int)pxv_.size() == size_ * 2) {
-      int cand[4][2], nc = 0;
+      int cand[9][2], nc = 0;
       const int nb[3] = {mb_near(-1, 0), mb_near(0, -1), mb_near(1, -1)};
       for (int j = 0; j < 3; j++)
         if (nb[j] >= 0 && info_[nb[j]].pic == pic_ && pxv_[nb[j] * 2] != INT16_MIN)
           cand[nc][0] = pxv_[nb[j] * 2], cand[nc][1] = pxv_[nb[j] * 2 + 1], nc++;
+      // the neighbours' vectors on list 0, scaled to its first reference's
+      // distance
+      if (sc_->stype_ != kI && sc_->stype_ != kSI) {
+        MvN nbs[3];
+        int mp[2];
+        mv_pred(0, 0, 0, 4, 4, 0, mp, nbs);
+        for (int j = 0; j < 3; j++) {
+          int dn = ref_dist(0, nbs[j].ref), dr = ref_dist(0, 0);
+          if (nbs[j].ref >= 0 && dn && dr) {
+            for (int k = 0; k < 2; k++) cand[nc][k] = mv_scale(nbs[j].mv[k], dr, dn);
+            nc++;
+          }
+        }
+      }
+      // the temporal vector: temporal direct's (B), col's scaled by the
+      // distance it spanned against the first reference's
+      int tv[2];
+      if (td_mv(0, 0, 1, 1, tv)) {
+        cand[nc][0] = tv[0], cand[nc][1] = tv[1], nc++;
+      } else if (col_ && col_->cls < CL_INXN && col_->rf[0][0] >= 0) {
+        int cr = col_->rf[0][0], d0 = ref_dist(0, 0), dr = d0;
+        if (prev_poc_ != INT_MIN && col_rpoc_[0][cr] != INT_MIN) d0 = prev_poc_ - col_rpoc_[0][cr];
+        for (int k = 0; k < 2; k++) cand[nc][k] = d0 && dr && d0 != dr ? mv_scale(col_->mv[0][5][k], dr, d0) : col_->mv[0][5][k];
+        nc++;
+      }
       cand[nc][0] = cand[nc][1] = 0, nc++;
       int miss;
       if (rec_.tm_search(-1, 0, 0, 0, 16, 16, p, false, cand, nc, &miss)) pxq_ = 1 + tc_clamp(tc_qlog(miss), 0, 11);
