@@ -37,7 +37,7 @@ struct H_mbt_v { int st, ca, cb, cc, nsk, en, td, sm, tm, tb, dh, bd, qc, im, ig
 struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg, tp, em, pq; };
 struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm, pr, dr, pq, mh, mc, mg, rg, p2; };
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, zd, cq, tq, rt, ea, eb, ta; };
-struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac, td, sq, xe, lq, bc, cl; };
+struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac, td, sq, xe, lq, bc, cl, kc; };
 struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn, pq, ch, ds, hv, ly, dq; };
 struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz, pq, hb, ft, h3, pr, sn, hv, pf; };
 struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe, pl, tz, pq, lh, lt, ls, hv, fq; };
@@ -1987,6 +1987,10 @@ struct Model {
     auto kind3 = [](int c) { return c < CL_INXN ? 0 : c == CL_INXN ? 1 : 2; };
     D.bc = b && !b->skip && kind3(b->cls) == kind3(mi_->cls) ? 7 + tc_clamp(b->qp - qp_off_ - qp_pred_, -6, 6) : 0;
     D.cl = col_ && !col_->skip && kind3(col_->cls) == kind3(mi_->cls) ? 7 + tc_clamp(col_->qp - qp_off_ - qp_pred_, -6, 6) : 0;
+    {
+      const MbInfo* c = near_info(1, -1);
+      D.kc = c && !c->skip && kind3(c->cls) == kind3(mi_->cls) ? 7 + tc_clamp(c->qp - qp_off_ - qp_pred_, -6, 6) : 0;
+    }
     D.lz = has_lz_ ? 3 + tc_clamp(tc_sq(lz_), -3, 3) : 3;
     D.st = st_;
     D.td = map_td();
