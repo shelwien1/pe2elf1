@@ -41,7 +41,7 @@ struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac; };
 struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn, pq, ch, ds, hv; };
 struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz, pq, hb, ft, h3, pr, sn, hv, pf; };
 struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe, pl, tz, pq, lh, lt, ls, hv, fq; };
-struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md, pp, mg, ez, ts, pq, gh, se; };
+struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md, pp, mg, ez, ts, pq, gh, se, dm; };
 struct H_mvg_v { int comp, lst, ts, zs, ds, sa, sb, mag, tq, ox, ns; };
 struct H_qpg_v { int as, cs, bs, ls, rs, mag, cls, st; };
 struct H_pcm_v { int pl, dp, pd, pd2; };
@@ -547,6 +547,7 @@ struct Model {
   const MbCol* col1_ = nullptr;  // B: the same macroblock in list 1's first reference (phist)
   int sub_[4] = {};
   int pmv_[2] = {};  // proxy_mv()
+  i64 shx_ = 0, shy_ = 0, shd_ = 0;  // block(): the shift fitted to the macroblock's last inter luma block, (x, y) / d
   int tx_ = 0;  // skip_miss: the skip prediction's texture (class)
   H_mbt_v* mbt_d_ = nullptr;  // mb_type's contexts while it is coded
   int prx_v_[2] = {};       // the proxy's vector (quarter samples), as searched again (block)
@@ -699,6 +700,7 @@ struct Model {
     sm_ = tm_ = tb_ = dh_ = bd_ = 0;
     tmb_ok_ = false;
     pmv_ok_ = false;
+    shx_ = shy_ = shd_ = 0;
     prx_chroma_ = false;
     prx_blk_ = 0;
     mb_open_ = true;
@@ -2357,6 +2359,30 @@ struct Model {
       for (int k = 0; k <= last && npred < 6; k++)
         if (sig[k]) pk[npred++] = k;
     int ghist = 0;  // the last two signs coded in the block (0 none, 1 +, 2 -)
+    // an inter luma block: its residual taken for a small shift of its
+    // prediction, the shift fitted (least squares) to the coefficients whose
+    // signs are known so far (from the macroblock's last block before any)
+    // (in integers, the format depending on no floating point)
+    int glx[64], gly[64];
+    bool gok = mi_->cls < CL_INXN && g.plane == 0 && (cat == 2 || cat == 5) &&
+               rec_.pred_grad_levels(0, g.x * 4, g.y * 4, cat == 5 ? 8 : 4, mi_->qp - qp_off_, glx, gly);
+    if (gok)
+      for (int k = 0; k < n; k++) glx[k] = tc_clamp(glx[k], -2047, 2047), gly[k] = tc_clamp(gly[k], -2047, 2047);
+    i64 sxx = 0, sxy = 0, syy = 0, sxc = 0, syc = 0;
+    // the shift fitted so far: (fx, fy) / fd, scaled into 40 bits; fd 0 none
+    auto fit = [&](i64& fx, i64& fy, i64& fd) {
+      i64 det = sxx * syy - sxy * sxy, sum = sxx + syy + 1;
+      if (det > 0 && det > (sum * sum >> 30)) {
+        fx = syy * sxc - sxy * syc, fy = sxx * syc - sxy * sxc, fd = det;
+      } else if (sxx + syy + 2 * sxy > 0) {
+        // one direction only so far: along the gradients seen
+        fx = fy = sxc + syc, fd = sxx + syy + 2 * sxy;
+      } else {
+        fx = fy = fd = 0;
+        return;
+      }
+      while (std::max(std::max(fx < 0 ? -fx : fx, fy < 0 ? -fy : fy), fd) >= ((i64)1 << 40)) fx /= 2, fy /= 2, fd /= 2;
+    };
     int sagree = 0;  // the signs the intra estimate got right less those it got wrong
     auto code_sign = [&](int k) {
       G.pos = k == 0 ? 0 : k < 3 ? 1 : k < 6 ? 2 : 3;
@@ -2373,6 +2399,16 @@ struct Model {
       G.gh = ghist % 9;
       // intra: how often the estimate's signs were right in the block
       G.se = pok ? 4 + tc_clamp(sagree, -3, 3) : 0;
+      // what that shift says of this sign, and how surely (its level
+      // against a quarter of the coefficient's, and against all of it)
+      G.dm = 0;
+      if (gok) {
+        i64 fx, fy, fd;
+        fit(fx, fy, fd);
+        if (!fd) fx = shx_, fy = shy_, fd = shd_;
+        i64 r = fx * glx[k] + fy * gly[k], ra = r < 0 ? -r : r, m = std::min(mag[k], 4096);
+        if (fd && r) G.dm = 1 + (r < 0) + 2 * (ra > fd * m) + 2 * (ra > 4 * fd * m);
+      }
       tcx X;
       H_sgn_make(G, X);
       f_sgn.select(X);
@@ -2380,6 +2416,10 @@ struct Model {
       ghist = ghist % 3 * 3 + 1 + sg;
       if (pok && q4(k)) sagree += (q4(k) < 0) == (sg != 0) ? 1 : -1;
       c[k] = sg ? -mag[k] : mag[k];
+      if (gok) {
+        i64 lx = glx[k], ly = gly[k], cv = tc_clamp(4 * c[k], -4095, 4095);
+        sxx += lx * lx, sxy += lx * ly, syy += ly * ly, sxc += lx * cv, syc += ly * cv;
+      }
       tc_syms[STG_SGN]++;
       return sg;
     };
@@ -2407,6 +2447,12 @@ struct Model {
       G.pp = G.mg = 0;
     }
     for (int k = last + 1; k < n; k++) c[k] = 0;
+    if (gok) {
+      // the shift fitted to the whole block, for the next block's first signs
+      i64 fx, fy, fd;
+      fit(fx, fy, fd);
+      if (fd) shx_ = fx, shy_ = fy, shd_ = fd;
+    }
     store_coef(g, c, n);
     rec_.coef(cat, idx, c, n);
     rec_.luma_add(cat, idx, mi_->qp - qp_off_);

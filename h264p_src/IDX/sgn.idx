@@ -10,7 +10,12 @@
 #  around the block (luma), pp the predicted sign (1 positive, 2 negative, 0
 #  not predicted) and mg how much worse the other sign fits (1 + tc_qlog of
 #  quarter samples); ts the sign at the position in the block of the cbf
-#  family's tn (1 + sgn3; 4 + where the vector moves it; 0 none).
+#  family's tn (1 + sgn3; 4 + where the vector moves it; 0 none); dm for an
+#  inter luma block, the sign its residual would have were it a small shift
+#  of its prediction (the levels of the prediction's gradients), the shift
+#  fitted to the coefficients whose signs are known so far (1 +, 2 -; 2 or 4
+#  more as the level that gives reaches a quarter of the coefficient's, or
+#  all of it; 0 none).
 
 Prefix H_sgn
 Debug 1
@@ -51,6 +56,7 @@ Index h
  h_pp: pp, 1!11
  h_ts: ts, 1!111111
  h_pq: pq, 1!111111111111111111111111
+ h_dm: dm, 1!111111
 
 Index i
  i_cg: cg, 1!1111111111111

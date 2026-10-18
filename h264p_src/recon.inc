@@ -2025,6 +2025,29 @@ struct Recon {
       fquant4(r, qp, lv);
     return true;
   }
+  // the levels of the prediction's horizontal and vertical gradients
+  // (central differences, from the picture around the block too), as
+  // fquant4/fquant8 at qp: what a residual of a small shift of the block
+  // would have, per unit of shift each way
+  bool pred_grad_levels(int plane, int x, int y, int n, int qp, int* lx, int* ly) const {
+    if (!active || !mb_prepared || mb_cls == 8) return false;
+    int w = plane ? cur->w / 2 : cur->w, h = plane ? cur->h / 2 : cur->h, m = plane ? 8 : 16;
+    int mx = mb_addr % cur->mbw * m + x, my = mb_addr / cur->mbw * m + y;
+    const std::vector<uint8_t>& cp = plane == 0 ? cur->y : plane == 1 ? cur->u : cur->v;
+    const uint8_t* C = cp.data();
+    auto at = [&](int i, int j) { return (int)C[clip3(0, h - 1, my + j) * w + clip3(0, w - 1, mx + i)]; };
+    int gx[64], gy[64];
+    for (int j = 0; j < n; j++)
+      for (int i = 0; i < n; i++) {
+        gx[j * n + i] = at(i + 1, j) - at(i - 1, j);
+        gy[j * n + i] = at(i, j + 1) - at(i, j - 1);
+      }
+    if (n == 8)
+      fquant8(gx, qp, lx), fquant8(gy, qp, ly);
+    else
+      fquant4(gx, qp, lx), fquant4(gy, qp, ly);
+    return true;
+  }
   // the same of the prediction itself (in the picture, before the
   // residual): its texture by frequency, in quarter levels
   bool pred_levels(int plane, int x, int y, int qp, int* lv, int n = 4) const {
