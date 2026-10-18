@@ -878,6 +878,9 @@ their gain on test/002:
 | the texture of the skip prediction against the step | skip, mb_type | 3 KB |
 | B: the same macroblock in list 1's reference (skipped, class, the skipped ones around) | skip, mb_type | 4 KB |
 | what x264's decimation still requires of a coded 8x8 block after its first 4x4 blocks | count | 1 KB |
+| inter signs: the sign each coefficient would have were the residual a small shift of the prediction (the levels of the prediction's gradients), the shift fitted by least squares to the coefficients whose signs are known | signs | 1 KB |
+| for mb_qp_delta, how much the macroblock changed between the last two pictures (where pictures stay, x264's macroblock tree lowers the QP) | qp delta | 0.4 KB |
+| how far the mvds of the neighbours were from their template matches' (size; direction for the sign) | mvd, mvd signs | 0.3 KB |
 | how far to trust the intra estimate: the template match of its vector, then how far the luma decoded so far is from it | coefficients, intra modes | 9 KB |
 | the best intra mode in the reference | intra modes | 4 KB |
 | P pictures: the coefficients of the block the vector points at in the reference (a copy of the last picture's), moved and still blocks apart; for cbp, the 4x4 blocks with coefficients under it | coefficients, cbp | 2 KB |
@@ -887,8 +890,9 @@ Without the decoder: the significance of the eight positions before (12 KB
 with the frequencies left of and above; the same position in the blocks to
 the left and above, 1 KB), the last levels and signs coded in the block and
 the higher-frequency levels (4 KB), a second, fast probability in each
-counter (12 KB), a third mixer (4 KB) and counters seven to ten (19 KB;
-four to six were 16 KB).
+counter (12 KB), a third mixer (4 KB), counters seven to ten (19 KB;
+four to six were 16 KB) and, for the top six mantissa bits of a number
+(but a level's or a PCM sample's), nodes by the bits above them (2 KB).
 
 \* measured when added, with four counters and before the later contexts.
 
@@ -900,15 +904,15 @@ four to six were 16 KB).
 | mb_type | 365,120 | 259,860 | −28.8% |
 | cbp, transform_size_8x8_flag | 216,100 | 153,842 | −28.8% |
 | intra modes | 299,858 | 232,536 | −22.5% |
-| sub_mb_type, ref_idx, mvd | 504,865 | 410,353 | −18.7% |
-| mb_qp_delta | 271,297 | 188,952 | −30.4% |
-| coded_block_flag, significance (count, significance) | 910,721 | 699,212 | −23.2% |
+| sub_mb_type, ref_idx, mvd | 504,865 | 408,627 | −19.1% |
+| mb_qp_delta | 271,297 | 188,521 | −30.5% |
+| coded_block_flag, significance (count, significance) | 910,721 | 699,126 | −23.2% |
 | levels | 302,611 | 220,116 | −27.3% |
-| signs | 329,382 | 183,515 | −44.3% |
-| macroblock syntax | 3,536,129 | 2,569,789 | −27.3% |
-| whole streams (H.264 against compressed) | 3,603,993 | 2,576,838 | −28.5% |
+| signs | 329,382 | 182,384 | −44.6% |
+| macroblock syntax | 3,536,129 | 2,566,415 | −27.4% |
+| whole streams (H.264 against compressed) | 3,603,993 | 2,573,399 | −28.6% |
 
-The model tables take 203 MB.
+The model tables take 220 MB.
 
 **Tried, no gain:** the CABAC-style significance/last binarization instead
 of the count; the mirrored list 0 vector for list 1 mvds (as a context, and
@@ -923,7 +927,8 @@ better); a wider search for it; thicker templates for the other searches;
 bi-prediction disagreement per block for B residuals; the neighbours'
 distance from the adaptive
 quantization line; the reference's QP where a block's motion points;
-richer contexts for the mantissa (better on test/002, worse on the rest);
+richer contexts for the mantissa (better on test/002, worse on the rest;
+the bits above a mantissa bit as its node do better);
 edge-projected levels, or the levels of the block the vector points at, as
 hints for inter blocks; histories of skip flags and mb_qp_delta; a final
 mixer selected by context (by the hint's state it helps); longer
@@ -937,7 +942,8 @@ diagonal direction of the prediction's texture; the prediction's own level
 for the levels; chroma AC decimation; more unary decisions before the
 length for mvd (5 or 8, both worse); the template miss of the macroblock's
 motion for the count; list 1's co-located macroblock in place of the last
-B picture's (better on test/002, worse on the generated streams).
+B picture's (better on test/002, worse on the generated streams); twice
+the rows for every hashed table (71 bytes).
 
 ## Appendix A: single-context experiments
 

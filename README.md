@@ -118,7 +118,9 @@ decision:
   picture's macroblocks so far predicts the QP from the energy of the
   macroblock's motion-compensated prediction (for an intra macroblock, of
   its proxy, below; a picture's first macroblocks take the last picture's
-  slope); the delta's magnitude and sign follow the line's.
+  slope); the delta's magnitude and sign follow the line's.  Where the
+  picture stays the same from one picture to the next, x264's macroblock
+  tree lowers the QP.
 - skip and mb_type: how well the prediction the macroblock would have if
   skipped continues the decoded samples above and to the left of it, how
   well that motion predicts those samples themselves (template matching),
@@ -128,7 +130,8 @@ decision:
 - motion: the vector a template matching search finds for the partition,
   as a guess at the mvd (and its sign, once the magnitude is known), and
   how flat the reference is at the predicted vector across each component
-  (a search gains nothing where it is); for ref_idx, the reference it
+  (a search gains nothing where it is), and how far the neighbours' vectors
+  were from their template matches'; for ref_idx, the reference it
   matches best.
 - intra modes: the gradients around the block (DIMD), and the modes that
   predict the block best in the reference, by x264's measure (SATD): how
@@ -142,7 +145,8 @@ decision:
   own transform; what x264's decimation still requires of an 8x8 block;
   the signs of the first coefficients are
   predicted as the ones that make the block continue the decoded samples
-  around it best; for intra blocks, the block in the reference that
+  around it best, and for inter blocks the sign of each as that of a small
+  shift of the prediction, the shift fitted to the signs known so far; for intra blocks, the block in the reference that
   matches the macroblocks around (searched again as the macroblock
   decodes) stands in for the source, and its difference to the prediction,
   transformed and quantized as an encoder would, estimates the count and
@@ -150,24 +154,25 @@ decision:
   and the blocks decoded); in P pictures, the coefficients of the block
   the vector points at in the reference.  Besides the decoder's view, the
   significance of a position sees that of the eight before it and of the
-  same position in the blocks to the left and above, and the levels and
-  signs the ones coded before.
+  same position in the blocks to the left and above, the levels and signs
+  the ones coded before, and the top mantissa bits of a number the bits
+  above them.
 
 On the test streams (`-v` shows where the bits go):
 
 | stream | H.264 | compressed | |
 |---|---:|---:|---:|
-| 00 | 815,140 | 571,811 | 70.1% |
-| 01 | 1,095,103 | 808,283 | 73.8% |
-| 02 | 28,143 | 26,627 | 94.6% |
-| 03 | 1,181,369 | 782,844 | 66.3% |
-| 04 | 484,238 | 387,273 | 80.0% |
+| 00 | 815,140 | 570,255 | 70.0% |
+| 01 | 1,095,103 | 807,951 | 73.8% |
+| 02 | 28,143 | 26,628 | 94.6% |
+| 03 | 1,181,369 | 781,338 | 66.1% |
+| 04 | 484,238 | 387,227 | 80.0% |
 
-The macroblock syntax takes 72.7% of what its CABAC coding takes (from
-3,536,129 to 2,569,789 bytes over these streams; whole streams go from
-3,603,993 to 2,576,838 bytes; `h264p_cm.md` section 9 has the figures by
+The macroblock syntax takes 72.6% of what its CABAC coding takes (from
+3,536,129 to 2,566,415 bytes over these streams; whole streams go from
+3,603,993 to 2,573,399 bytes; `h264p_cm.md` section 9 has the figures by
 syntax element). Speed is 0.03-0.13 MB of H.264 per second both ways, depending
-on the stream, and the model tables take about 200 MB.
+on the stream, and the model tables take about 220 MB.
 
 ### TSV
 
