@@ -6,6 +6,8 @@ same speed (04: 10.5 s): the model is symmetric, and both sides reconstruct the
 pictures. This plan starts from where the time actually goes, answers seven
 questions (allocation, template branches, `restrict`, SIMD lookups, memory
 latency, layout, vectorization), and orders the work by what it buys.
+Section 4 has what has been done since, measured: compression 2.7x and
+decompression 2.25x faster over the corpus, to the same output.
 
 ## 1. Where the time goes
 
@@ -407,3 +409,82 @@ These are estimates from the instruction counts (Amdahl, assuming about 4x
 on the SIMD kernels and 1.4x on the bit-exact CM changes), to be replaced by
 measurements as each step lands. Decompression gets 3.1-3.3: about 2.7x on 04
 and 1.9x on 02.
+
+## 4. Progress
+
+What has landed, measured (wall clock, this machine; its timings vary by
+5-10% from run to run). Every step codes exactly as before it: the output
+of every test stream is the same, and the round trips pass.
+
+| stream | bytes | `c` before | `c` now | `d` before | `d` now |
+|---|---:|---:|---:|---:|---:|
+| 00 (low rate, nearly all skipped) | 815,140 | 26.35 s | 9.89 s | 25.07 s | 11.29 s |
+| 01 | 1,095,103 | 24.13 s | 8.57 s | 23.60 s | 9.90 s |
+| 02 (intra, high rate) | 28,143 | 0.28 s | 0.23 s | 0.27 s | 0.21 s |
+| 03 (much intra) | 1,181,369 | 35.74 s | 13.31 s | 34.28 s | 15.54 s |
+| 04 (P/B) | 484,238 | 11.06 s | 3.95 s | 10.57 s | 4.34 s |
+| 05 | 31,669 | 0.45 s | 0.27 s | 0.41 s | 0.27 s |
+| 06 | 230,978 | 2.01 s | 0.97 s | 2.04 s | 1.24 s |
+| **total** | 3,866,640 | **100.0 s** | **37.2 s (2.7x)** | **96.3 s** | **42.8 s (2.25x)** |
+
+The steps, in order:
+
+- **SIMD template SAD and mixers** (3.1.1, 3.3.5): the bilinear SAD, then
+  the mixers' sums with exactly the results of the 64-bit loops (each weight
+  split into 15-bit halves for `pmaddwd`, the error into 16-bit halves for
+  the update). `tm_miss` predicts its strips in runs of equal motion (3.1.2);
+  `mc_luma` computes the half samples a position needs once. 04: 1.3x.
+- **The intra proxy's searches share their costs** (3.1.4), whole sums only,
+  so each search sees the costs it saw before. 04: 1.1x.
+- **AVX2 as the target** (x86-64-v3; `PARCH=` builds the plain C++, which
+  codes identically). Reference pictures get a padded copy of their luma
+  and that transposed: no clipping near the edges, and the two-sample-wide
+  left templates become two rows of the transposed copy (the six-tap and
+  bilinear interpolations are symmetric). The thin templates' SAD is whole
+  and branch-free, since their vectors change sub-sample position from one
+  evaluation to the next and the branches mispredicted. AVX2 in `mc_luma`,
+  `mc_chroma`, `inter()`'s weighting, `tm_bi`, the texture and energy sums;
+  the three mixers' inputs packed once; the next decision's rows
+  prefetched. 04: 1.5x.
+- **The coder in a second thread** (3.4): the compressor records its
+  families' coding calls in a ring for a thread that codes them (with the
+  rows of the records a few ahead prefetched) and writes the output. 04 and
+  06: 1.2x; intra streams, where the coder is the larger part, little.
+  Decompression cannot: what it decodes steers its model.
+- **Skipped macroblocks** (most of 00): the skip motion derived once, the
+  predictions by each list kept for `bi_diff` and `inter()`, no boundary
+  strengths inside a flat inter macroblock, no residual pass without
+  residual, the model's per-macroblock lookups (place, list 1's history,
+  skipped neighbours) made cheap. 00: 1.35x, 04: 1.15x.
+- **SATD in AVX2** for the intra mode estimates. 03: 1.1x.
+
+What did not pay:
+
+- AVX2 six-tap interpolation took 70% of `mc_luma`'s instructions away but
+  hardly any time: the scalar code ran at a high IPC. (Kept: it costs
+  nothing.)
+- Huge pages for the model tables (`MADV_HUGEPAGE`): a tenth of the page
+  faults, 0.05-0.1 s less a run on small streams, but runs started after
+  other processes had fragmented memory stalled up to 0.7 s in compaction.
+- The searches cut down within the 0.1% budget (3.5): `tm_best` in whole
+  samples, `ref()` on four references in whole samples, the mvd's search
+  and the proxy's in halves, two diamond steps instead of four. On the 96
+  test streams these cost -44 to +931 bytes, but once the searches were
+  vectorized they bought 0-2.5% of CPU time, so the format stays as it is.
+
+Where the time goes now (exclusive, one thread):
+
+- 04: the coder about 25% (in the second thread when compressing), the
+  template search about 18%, then the residual blocks' contexts, motion
+  compensation, the dry run and deblocking, a few percent each.
+- 00: the skipped macroblock's own work, about 2.6 us each over 3.8 M
+  macroblocks: two template searches, the skip prediction and its
+  measures, direct motion, bookkeeping. No one part is above 10%.
+- 03: the intra proxy's search (`proxy_mv`, 16-sample templates) and the
+  coder.
+- 02: the coder, 60%.
+
+What is left in the plan: the coder's arithmetic (3.3.1-4; it is mostly
+compute, about 370 cycles a decision with every row in L1, so table layout
+buys less than thought), the generated index builders (3.2.2), and making
+the model's side parallel (3.4, last paragraph).
