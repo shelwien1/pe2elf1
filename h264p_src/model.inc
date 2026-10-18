@@ -38,7 +38,7 @@ struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg, tp, em, pq; };
 struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm, pr, dr, pq, mh, mc, mg, rg; };
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, zd, cq, tq; };
 struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac; };
-struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn, pq, ch; };
+struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn, pq, ch, ds; };
 struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz, pq, hb, ft, h3, pr, sn; };
 struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe, pl, tz, pq, lh, lt, ls; };
 struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md, pp, mg, ez, ts, pq, gh, se; };
@@ -1939,6 +1939,20 @@ struct Model {
   }
   // the coefficient at scan position j of a block like g's in macroblock
   // m, at 4x4 block i
+  // x264_decimate_score16 of a 4x4 block's levels (scan order): 9 with a
+  // level beyond 1, else by the zeros before each
+  static int decimate_score(const int8_t* c) {
+    static const int ds[16] = {3, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    int k = 15, score = 0;
+    while (k >= 0 && !c[k]) k--;
+    while (k >= 0) {
+      if (abs(c[k--]) > 1) return 9;
+      int run = 0;
+      while (k >= 0 && !c[k]) k--, run++;
+      score += ds[run];
+    }
+    return score;
+  }
   static int coef_at(const MbInfo* m, const Geo& g, int i, int j) {
     if (g.kind == 0) return m->dc[g.plane][j];
     if (g.kind == 3) {
@@ -2097,6 +2111,16 @@ struct Model {
         D.np += cur.nz[g.plane][(bb >> 1) * 2 + (bb & 1)] != 0;
       }
     D.pos = g.pos;
+    // x264's decimation (an inter luma 4x4 block of a P or B slice): an 8x8
+    // block whose 4x4 blocks score under 4 (6 when it is the macroblock's
+    // only one) is zeroed, so a coded one's blocks make that up; what is
+    // still owed, after the blocks before this one
+    D.ds = 0;
+    if (g.kind == 1 && g.plane == 0 && cat == 2 && mi_->cls < CL_INXN && (sc_->stype_ == kP || sc_->stype_ == kB)) {
+      int score = 0, req = popc4(mi_->cbp & 15) == 1 ? 6 : 4;
+      for (int b = idx & ~3; b < idx; b++) score += decimate_score(mi_->coef[0][blk_y(b) * 4 + blk_x(b)]);
+      D.ds = 1 + std::max(0, req - score);
+    }
     D.crcb = 0;
     if (g.plane == 2 && sc_->chroma_ != 3)
       D.crcb = 1 + (g.kind == 0 ? cur.cbf_dc[1] : cur.nz[1][g.y * 2 + g.x] != 0);
