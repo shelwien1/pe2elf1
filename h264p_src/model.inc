@@ -20,7 +20,7 @@ constexpr int H_skp_ND = 3, H_skp_MND = 1, H_skp_NG = 1;
 constexpr int H_mbt_ND = 29, H_mbt_MND = 1, H_mbt_NG = 1;
 constexpr int H_cbp_ND = 7, H_cbp_MND = 1, H_cbp_NG = 1;
 constexpr int H_ipm_ND = 19, H_ipm_MND = 1, H_ipm_NG = 1;
-constexpr int H_mvs_ND = TC_NODE, H_mvs_MND = TC_MNODE, H_mvs_NG = 1;
+constexpr int H_mvs_ND = 16, H_mvs_MND = TC_MNODE, H_mvs_NG = 1;  // sub()'s tree of B sub_mb_type: nodes 1-15
 constexpr int H_qpd_ND = TC_NODE, H_qpd_MND = TC_MNODE, H_qpd_NG = 1;
 constexpr int H_cbf_ND = TC_NODE, H_cbf_MND = TC_MNODE, H_cbf_NG = 1;
 constexpr int H_sig_ND = 1, H_sig_MND = 1, H_sig_NG = 1;

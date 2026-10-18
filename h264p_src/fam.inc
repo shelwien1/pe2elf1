@@ -235,6 +235,8 @@ template <int f_DEC> struct tc_fam {
     __builtin_prefetch(ap2.c + (sz)bf * (u32)ap2.q);
   }
   INLINE int bit(int node, int b) {
+    if(UNLIKELY((unsigned)node >= (unsigned)nd))
+      cm_fail("internal: decision node %d of a family of %d", node, nd);
     cm_cnt2 a = A[ba + node];
     cm_cnt2 c = B[bb + node];
     cm_cnt2 e = C[bc + node];
@@ -318,6 +320,8 @@ template <int f_DEC> struct tc_fam {
     return b;
   }
   INLINE int bitm(int node, int b) {
+    if(UNLIKELY((unsigned)node >= (unsigned)nm))
+      cm_fail("internal: mantissa node %d of a family of %d", node, nm);
     cm_cnt t = T[bt + node];
     if(hs && (prp < 0 || prpa)) {
       // with the hint's counter, through the mantissa mixer the value
