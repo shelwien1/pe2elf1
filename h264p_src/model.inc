@@ -610,6 +610,7 @@ struct Model {
   const MbState* mbs_ = nullptr;  // the walk's macroblock states, for addresses
   std::vector<MbInfo> info_;
   std::vector<MbCol> hist_[30];
+  std::vector<uint8_t> hskip_[30];  // the same's valid && skip, a byte a macroblock (for skp_vars)
   MbCol* hcur_ = nullptr;  // hist_ of the current slice's kind
   std::vector<MbCol> hprev_;  // and as it was when the picture began
   uint32_t pic_ = 1;       // pictures so far
@@ -643,6 +644,9 @@ struct Model {
   bool pmv_ok_ = false;
   std::vector<int16_t> pxv_;  // the vectors of the current picture's proxies (INT16_MIN none)
   int sm_ = 0, tm_ = 0;  // skip_miss() of the macroblock, its template matching miss
+  int16_t smv_[2][16][2];  // skip_miss(): the skip motion (smv_ok_: made)
+  int8_t srf_[2][4];
+  bool smv_ok_ = false;
   int mph_ = 1;          // ipm(): the macroblock's most-probable-mode flags so far, after a 1
   int cnth_ = 0;         // block(): the counts of the last two blocks, two bits each
   int tb_ = 0, dh_ = 0;  // skip_miss(): the best template match on list 0, the better list (B)
@@ -707,18 +711,11 @@ struct Model {
   // the macroblock dx, dy macroblocks away (in MBAFF frames, rows of
   // macroblocks, not of pairs); -1 outside the picture
   int mb_near(int dx, int dy) const {
-    int x, y;
-    if (!mbaff_) {
-      x = addr_ % width_ + dx;
-      y = addr_ / width_ + dy;
-    } else {
-      int p = addr_ >> 1;
-      x = p % width_ + dx;
-      y = (p / width_) * 2 + (addr_ & 1) + dy;
-    }
-    if (x < 0 || x >= width_ || y < 0 || y >= size_ / width_) return -1;
+    int x = mbx_ + dx, y = mby_ + dy;
+    if (x < 0 || x >= width_ || y < 0 || y >= height_) return -1;
     return mbaff_ ? ((y >> 1) * width_ + x) * 2 + (y & 1) : y * width_ + x;
   }
+  int mbx_ = 0, mby_ = 0, height_ = 0;  // the macroblock's place (begin_mb), the picture's height (in macroblocks)
   // a macroblock of the current picture, coded already
   // in a B slice, the history of list 1's first reference, where it is
   // the last picture of a kind (by its POC) and nearer in time than the
@@ -728,7 +725,9 @@ struct Model {
   // (INT_MIN none), and those of the one before the current picture's;
   // frame references only (a field macroblock's ref_idx goes up to 63)
   int hist_rpoc_[30][2][32], col_rpoc_[2][32];
-  int phist_key() const {
+  int phist_key() const { return phk_; }
+  int phk_ = -1;  // phist_key() of the slice (slice_begin)
+  int phist_key_of_slice() const {
     if (sc_->stype_ != kB || !rec_.active || rec_.nlist[1] < 1 || !rec_.list[1][0]) return -1;
     int poc = rec_.list[1][0]->poc;
     for (int k = 0; k < 30; k++)
@@ -770,7 +769,7 @@ struct Model {
     size_ = sc.size_;
     mbaff_ = sc.mbaff_;
     if ((int)info_.size() < size_) info_.resize(size_);
-    if ((int)hist_[key_].size() < size_) hist_[key_].resize(size_);
+    if ((int)hist_[key_].size() < size_) hist_[key_].resize(size_), hskip_[key_].resize(size_);
     hcur_ = hist_[key_].data();
     if (newpic) hprev_.assign(hcur_, hcur_ + size_);
     qp_off_ = 6 * (sc.sps_.bit_depth_luma - 8);
@@ -790,6 +789,7 @@ struct Model {
         for (int r = 0; r < 32; r++)
           hist_rpoc_[key_][l][r] = rec_.active && r < rec_.nlist[l] && rec_.list[l][r] ? rec_.list[l][r]->poc : INT_MIN;
     }
+    phk_ = phist_key_of_slice();
     if (newpic) aq_picture();
     if (newpic) memset(lq_, 0, sizeof lq_);
   }
@@ -797,6 +797,15 @@ struct Model {
 
   void begin_mb() {
     addr_ = sc_->cur_addr_;
+    if (!mbaff_) {
+      mbx_ = addr_ % width_;
+      mby_ = addr_ / width_;
+    } else {
+      int p = addr_ >> 1;
+      mbx_ = p % width_;
+      mby_ = (p / width_) * 2 + (addr_ & 1);
+    }
+    height_ = size_ / width_;
     mi_ = &info_[addr_];
     memset(mi_, 0, sizeof *mi_);
     mi_->pic = pic_;
@@ -815,6 +824,7 @@ struct Model {
     sm_ = tm_ = tb_ = dh_ = bd_ = 0;
     tmb_ok_ = false;
     pmv_ok_ = false;
+    smv_ok_ = false;
     shx_ = shy_ = shd_ = 0;
     prx_chroma_ = false;
     prx_blk_ = 0;
@@ -826,6 +836,7 @@ struct Model {
     const MbState& s = *sc_->cur_;
     MbCol& c = hcur_[addr_];
     c.valid = 1;
+    hskip_[key_][addr_] = mi_->skip != 0;
     c.skip = mi_->skip;
     c.cls = mi_->cls;
     c.qp = mi_->qp;
@@ -837,12 +848,22 @@ struct Model {
     memcpy(c.ref, mi_->ref, sizeof c.ref);
     memcpy(c.rf, mi_->rf, sizeof c.rf);
     memcpy(c.mv, mi_->mv, sizeof c.mv);
-    for (int l = 0; l < 2; l++)
-      for (int b = 0; b < 16; b++)
-        for (int k = 0; k < 2; k++) c.mvq[l][b][k] = (uint8_t)tc_qlog(mi_->mvd[l][b][k]);
+    static const decltype(mi_->mvd) kNoMvd = {};
+    if (!memcmp(mi_->mvd, kNoMvd, sizeof kNoMvd)) {
+      memset(c.mvq, 0, sizeof c.mvq);  // (a skipped macroblock: tc_qlog 0 throughout)
+    } else {
+      for (int l = 0; l < 2; l++)
+        for (int b = 0; b < 16; b++)
+          for (int k = 0; k < 2; k++) c.mvq[l][b][k] = (uint8_t)tc_qlog(mi_->mvd[l][b][k]);
+    }
     for (int p = 0; p < 3; p++) {
+#ifdef H264P_AVX2
+      __m128i z = _mm_cmpeq_epi8(_mm_loadu_si128((const __m128i*)s.nz[p]), _mm_setzero_si128());
+      c.nzm[p] = (uint16_t)~_mm_movemask_epi8(z);
+#else
       c.nzm[p] = 0;
       for (int b = 0; b < 16; b++) c.nzm[p] |= (uint16_t)((s.nz[p][b] != 0) << b);
+#endif
     }
     c.dcm = (uint8_t)(s.cbf_dc[0] | s.cbf_dc[1] << 1 | s.cbf_dc[2] << 2);
     memcpy(c.coef, mi_->coef[0], sizeof c.coef);
@@ -868,20 +889,22 @@ struct Model {
     D.b3 = b ? 2 - b->skip : 0;
     D.col = col_ ? 2 - col_->skip : 0;
     D.c9 = 0;
+    const uint8_t* hs = hskip_[key_].data();
     for (int dy = -1; dy <= 1; dy++)
       for (int dx = -1; dx <= 1; dx++) {
         int n = mb_near(dx, dy);
-        D.c9 += n >= 0 && hcur_[n].valid && hcur_[n].skip;
+        D.c9 += n >= 0 && hs[n];
       }
     D.c1 = col1_ ? 2 - col1_->skip : 0;
     // and the skipped ones around it there (10 none)
     D.k9 = 10;
-    if (const MbCol* p = phist()) {
+    if (phk_ >= 0) {
+      const uint8_t* p = hskip_[phk_].data();
       D.k9 = 0;
       for (int dy = -1; dy <= 1; dy++)
         for (int dx = -1; dx <= 1; dx++) {
           int n = mb_near(dx, dy);
-          D.k9 += n >= 0 && p[n].valid && p[n].skip;
+          D.k9 += n >= 0 && p[n];
         }
     }
     const MbInfo* c = near_info(1, -1);
@@ -931,6 +954,10 @@ struct Model {
       mv_direct(15);
     else
       mv_pskip();
+    // (kept for skip(), should the macroblock be skipped)
+    memcpy(smv_, mi_->mv, sizeof smv_);
+    memcpy(srf_, mi_->rf, sizeof srf_);
+    smv_ok_ = true;
     int tm = rec_.tm_miss(mi_->rf, mi_->mv);
     tm_ = tm < 0 ? 0 : 1 + tc_clamp(tc_qlog(tm), 0, 15);
     // B: how far apart the two predictions of the skip motion are; P: how
@@ -984,10 +1011,15 @@ struct Model {
     if (v) {
       mi_->skip = 1;
       mi_->cls = CL_SKIP;
-      if (sc_->stype_ == kB)
+      if (smv_ok_) {
+        memcpy(mi_->mv, smv_, sizeof smv_);
+        memcpy(mi_->rf, srf_, sizeof srf_);
+        parts_ = 0;
+      } else if (sc_->stype_ == kB) {
         mv_direct(15);
-      else
+      } else {
         mv_pskip();
+      }
       last_qpd_ = 0;
       run_++;
       finish_mb();
