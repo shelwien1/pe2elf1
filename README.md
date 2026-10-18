@@ -122,18 +122,25 @@ decision:
 - skip and mb_type: how well the prediction the macroblock would have if
   skipped continues the decoded samples above and to the left of it, how
   well that motion predicts those samples themselves (template matching),
-  and in B slices how far apart its two predictions are.
+  how flat it is against the quantizer's step, in B slices how far apart
+  its two predictions are and what the same macroblock did in list 1's
+  reference.
 - motion: the vector a template matching search finds for the partition,
-  as a guess at the mvd (and its sign, once the magnitude is known); for
-  ref_idx, the reference it matches best.
+  as a guess at the mvd (and its sign, once the magnitude is known), and
+  how flat the reference is at the predicted vector across each component
+  (a search gains nothing where it is); for ref_idx, the reference it
+  matches best.
 - intra modes: the gradients around the block (DIMD), and the modes that
   predict the block best in the reference, by x264's measure (SATD): how
   much worse the most probable mode does there, in x264's lambda, tells
   whether an encoder would have taken it; likewise for the Intra16x16 and
   chroma modes.
 - coefficients: the texture of the prediction and how far it is from
-  continuing its surroundings, against the quantizer's step; the signs of
-  the first coefficients are
+  continuing its surroundings, against the quantizer's step, and which way
+  the texture runs (a motion error leaves a residual of those
+  frequencies), and for the significance of inter blocks the prediction's
+  own transform; what x264's decimation still requires of an 8x8 block;
+  the signs of the first coefficients are
   predicted as the ones that make the block continue the decoded samples
   around it best; for intra blocks, the block in the reference that
   matches the macroblocks around (searched again as the macroblock
@@ -150,17 +157,17 @@ On the test streams (`-v` shows where the bits go):
 
 | stream | H.264 | compressed | |
 |---|---:|---:|---:|
-| 00 | 815,140 | 579,252 | 71.1% |
-| 01 | 1,095,103 | 811,950 | 74.1% |
-| 02 | 28,143 | 26,663 | 94.7% |
-| 03 | 1,181,369 | 797,079 | 67.5% |
-| 04 | 484,238 | 390,111 | 80.6% |
+| 00 | 815,140 | 571,811 | 70.1% |
+| 01 | 1,095,103 | 808,283 | 73.8% |
+| 02 | 28,143 | 26,627 | 94.6% |
+| 03 | 1,181,369 | 782,844 | 66.3% |
+| 04 | 484,238 | 387,273 | 80.0% |
 
-The macroblock syntax takes 73.5% of what its CABAC coding takes (from
-3,536,129 to 2,598,013 bytes over these streams; whole streams go from
-3,603,993 to 2,605,055 bytes; `h264p_cm.md` section 9 has the figures by
+The macroblock syntax takes 72.7% of what its CABAC coding takes (from
+3,536,129 to 2,569,789 bytes over these streams; whole streams go from
+3,603,993 to 2,576,838 bytes; `h264p_cm.md` section 9 has the figures by
 syntax element). Speed is 0.03-0.13 MB of H.264 per second both ways, depending
-on the stream, and the model tables take about 170 MB.
+on the stream, and the model tables take about 200 MB.
 
 ### TSV
 

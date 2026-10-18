@@ -873,6 +873,11 @@ their gain on test/002:
 | intra modes ranked in the proxy by SATD: how much worse the most probable mode does, in x264's lambda; the best other mode and its lead; the best Intra16x16 and chroma modes | intra modes, mb_type | 9 KB |
 | the sign of mvd (its own family, mixed) by the template match's vector, the zero vector's, col's, against the magnitude; the neighbours' vectors' signs | mvd signs | 5 KB |
 | the texture of the prediction and its edge miss against the quantizer's step | count, significance, cbp | 3 KB |
+| which way the prediction's texture runs (log2 of its differences along rows over those along columns); for inter significance, the prediction's own level at the position | significance, count, levels | 13 KB |
+| the texture of the reference at the predicted vector across the component, against the step (where it is flat, a search gains nothing) | mvd, ref_idx | 8 KB |
+| the texture of the skip prediction against the step | skip, mb_type | 3 KB |
+| B: the same macroblock in list 1's reference (skipped, class, the skipped ones around) | skip, mb_type | 4 KB |
+| what x264's decimation still requires of a coded 8x8 block after its first 4x4 blocks | count | 1 KB |
 | how far to trust the intra estimate: the template match of its vector, then how far the luma decoded so far is from it | coefficients, intra modes | 9 KB |
 | the best intra mode in the reference | intra modes | 4 KB |
 | P pictures: the coefficients of the block the vector points at in the reference (a copy of the last picture's), moved and still blocks apart; for cbp, the 4x4 blocks with coefficients under it | coefficients, cbp | 2 KB |
@@ -891,19 +896,19 @@ four to six were 16 KB).
 
 | element | CABAC | model | |
 |---|---:|---:|---:|
-| skip, end | 336,175 | 224,808 | −33.1% |
-| mb_type | 365,120 | 263,561 | −27.8% |
+| skip, end | 336,175 | 221,403 | −34.1% |
+| mb_type | 365,120 | 259,860 | −28.8% |
 | cbp, transform_size_8x8_flag | 216,100 | 153,842 | −28.8% |
-| intra modes | 299,858 | 232,625 | −22.4% |
-| sub_mb_type, ref_idx, mvd | 504,865 | 418,485 | −17.1% |
-| mb_qp_delta | 271,297 | 188,999 | −30.3% |
-| coded_block_flag, significance (count, significance) | 910,721 | 711,253 | −21.9% |
-| levels | 302,611 | 220,824 | −27.0% |
-| signs | 329,382 | 183,616 | −44.3% |
-| macroblock syntax | 3,536,129 | 2,598,013 | −26.5% |
-| whole streams (H.264 against compressed) | 3,603,993 | 2,605,055 | −27.7% |
+| intra modes | 299,858 | 232,536 | −22.5% |
+| sub_mb_type, ref_idx, mvd | 504,865 | 410,353 | −18.7% |
+| mb_qp_delta | 271,297 | 188,952 | −30.4% |
+| coded_block_flag, significance (count, significance) | 910,721 | 699,212 | −23.2% |
+| levels | 302,611 | 220,116 | −27.3% |
+| signs | 329,382 | 183,515 | −44.3% |
+| macroblock syntax | 3,536,129 | 2,569,789 | −27.3% |
+| whole streams (H.264 against compressed) | 3,603,993 | 2,576,838 | −28.5% |
 
-The model tables take 170 MB.
+The model tables take 203 MB.
 
 **Tried, no gain:** the CABAC-style significance/last binarization instead
 of the count; the mirrored list 0 vector for list 1 mvds (as a context, and
@@ -926,7 +931,13 @@ significance histories (12, hashed); for mb_type and
 transform_size_8x8_flag, the proxy's summed best Intra4x4, Intra8x8 and
 Intra16x16 costs (little for their size); the template match's quantized
 difference from the skip prediction for P skip; the misses of skip and
-mb_type against the quantizer's step; CAVLC's nC as the count's hint.
+mb_type against the quantizer's step; CAVLC's nC as the count's hint;
+the vector's fractional phase and bi-prediction for the residual; the
+diagonal direction of the prediction's texture; the prediction's own level
+for the levels; chroma AC decimation; more unary decisions before the
+length for mvd (5 or 8, both worse); the template miss of the macroblock's
+motion for the count; list 1's co-located macroblock in place of the last
+B picture's (better on test/002, worse on the generated streams).
 
 ## Appendix A: single-context experiments
 
