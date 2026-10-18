@@ -38,7 +38,7 @@ struct H_cbp_v { int inc, pc, cls, col, q6, st, en, td, pg, tp, em, pq; };
 struct H_ipm_v { int k8, ma, mb, mp, blk, pv, col, dm, ds, pm, pr, dr, pq, mh, mc, mg, rg, p2; };
 struct H_mvs_v { int kind, comp, lst, ma, mb, oth, ps, rf, pi, nr, pd, sp, tv, zd, cq, tq, rt, ea, eb; };
 struct H_qpd_v { int lnz, pc, cc, cls, dc, db, lz, st, ae, aq, ac, td, sq, xe, lq; };
-struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn, pq, ch, ds, hv, ly; };
+struct H_cbf_v { int cat, na, nb, intra, q6, np, pos, crcb, col, nc, kn, md, en, pg, em, pz, tn, pq, ch, ds, hv, ly, dq; };
 struct H_sig_v { int cg, pos, rem, zl, md, nc, fld, q6, pg, em, pe, ps, tz, pq, hb, ft, h3, pr, sn, hv, pf; };
 struct H_lvl_v { int cg, g1, e1, nc, pos, sa, sb, q6, tot, md, pm, pg, em, pe, pl, tz, pq, lh, lt, ls, hv, fq; };
 struct H_sgn_v { int cg, pos, sa, sb, scb, mag, md, pp, mg, ez, ts, pq, gh, se, dm; };
@@ -2194,6 +2194,13 @@ struct Model {
       for (int b = 0; b < 16; b++)
         if (g.kind == 0 || ((b & 3) >> 1 == g.x && (b >> 2) >> 1 == g.y)) n += cur.nz[0][b];
       D.ly = 1 + std::min(tc_qlog(n), 9);
+    }
+    // a 4:2:0 chroma AC block: its DC, from the chroma DC levels' 2x2
+    // transform, 1 + tc_qlog (0 not such a block)
+    D.dq = 0;
+    if (g.kind == 2 && sc_->chroma_ == 1) {
+      const int8_t* d = mi_->dc[g.plane];
+      D.dq = 1 + std::min(tc_qlog(d[0] + (g.x ? -d[1] : d[1]) + (g.y ? -d[2] : d[2]) + (g.x ^ g.y ? -d[3] : d[3])), 7);
     }
     D.crcb = 0;
     if (g.plane == 2 && sc_->chroma_ != 3)

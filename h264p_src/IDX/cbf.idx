@@ -18,7 +18,9 @@
 #  (4, or 6 for the macroblock's only coded 8x8 block, less theirs; 0 not
 #  applicable); hv as the sig family's; ly for a 4:2:0 chroma block the
 #  coefficients of the luma under it (its 8x8 block; for DC the
-#  macroblock's), 1 + tc_qlog (0 luma).
+#  macroblock's), 1 + tc_qlog (0 luma); dq for a 4:2:0 chroma AC block
+#  its DC, from the chroma DC levels' 2x2 transform (1 + tc_qlog, 0 not
+#  such a block).
 
 Prefix H_cbf
 Debug 1
@@ -38,6 +40,7 @@ Index b
  b_crcb: crcb, 1!11
  b_kn: kn, 1!1
  b_em: em, 1!1111111111111111
+ b_dq: dq, 1!11111111
 
 Index c
  c_cat: cat, 1!1000000000000

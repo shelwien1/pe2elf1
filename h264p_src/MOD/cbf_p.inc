@@ -15,8 +15,8 @@
 
 void H_cbf_make( const H_cbf_v & D, tcx & X ) {
   int a, b, c, d, e, h, i, j, k, l, s, f, m, w, t, n, g;
-  int cat = D.cat, na = D.na, nb = D.nb, intra = D.intra, q6 = D.q6, np = D.np, pos = D.pos, crcb = D.crcb, col = D.col, nc = D.nc, kn = D.kn, md = D.md, en = D.en, pg = D.pg, em = D.em, pz = D.pz, tn = D.tn, pq = D.pq, ch = D.ch, ds = D.ds, hv = D.hv, ly = D.ly;
-  (void) cat;  (void) na;  (void) nb;  (void) intra;  (void) q6;  (void) np;  (void) pos;  (void) crcb;  (void) col;  (void) nc;  (void) kn;  (void) md;  (void) en;  (void) pg;  (void) em;  (void) pz;  (void) tn;  (void) pq;  (void) ch;  (void) ds;  (void) hv;  (void) ly;
+  int cat = D.cat, na = D.na, nb = D.nb, intra = D.intra, q6 = D.q6, np = D.np, pos = D.pos, crcb = D.crcb, col = D.col, nc = D.nc, kn = D.kn, md = D.md, en = D.en, pg = D.pg, em = D.em, pz = D.pz, tn = D.tn, pq = D.pq, ch = D.ch, ds = D.ds, hv = D.hv, ly = D.ly, dq = D.dq;
+  (void) cat;  (void) na;  (void) nb;  (void) intra;  (void) q6;  (void) np;  (void) pos;  (void) crcb;  (void) col;  (void) nc;  (void) kn;  (void) md;  (void) en;  (void) pg;  (void) em;  (void) pz;  (void) tn;  (void) pq;  (void) ch;  (void) ds;  (void) hv;  (void) ly;  (void) dq;
 
   a = 0;
   a = a*14 + H_cbf_a_cat[__min(13,__max(0,cat-(1-1)))];
@@ -32,6 +32,7 @@ void H_cbf_make( const H_cbf_v & D, tcx & X ) {
   b = b*3 + ((crcb>0+(1-1))+(crcb>1+(1-1)));
   b = b*2 + ((kn>0+(1-1)));
   b = b*17 + H_cbf_b_em[__min(16,__max(0,em-(1-1)))];
+  b = b*9 + H_cbf_b_dq[__min(8,__max(0,dq-(1-1)))];
 
   c = 0;
   c = c*2 + ((cat>0+(1-1)));
