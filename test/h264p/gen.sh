@@ -4,7 +4,7 @@
 # matter to h264p but not to h264dec, which decodes none of them: interlace
 # (MBAFF, field pictures), 4:2:2, 4:4:4, monochrome, high bit depth, lossless,
 # I_PCM, cabac_zero_words, filler data, FMO, SP and SI slices and data
-# partitioning.
+# partitioning; and pictures one macroblock wide or tall.
 #
 # x264_*.264: ffmpeg 6.1 with libx264, from frames 810-841 of
 #             test/002/01.h264 scaled to 320x192; the interlaced source has
@@ -67,6 +67,8 @@ x264 gray_cavlc     prog $B -pix_fmt gray -x264-params cabac=0
 x264 filler         prog -preset fast -b:v 600k -frames:v 4 -x264-params nal-hrd=cbr:vbv-maxrate=600:vbv-bufsize=300:filler=1
 x264 lossless       prog -preset fast -qp 0 -frames:v 3 -x264-params bframes=1
 x264 lossless_444_cavlc prog -preset fast -qp 0 -frames:v 3 -pix_fmt yuv444p -x264-params cabac=0
+x264 16x16          prog $B -vf scale=16:16 -x264-params bframes=3
+x264 96x16          prog $B -vf scale=96:16 -x264-params bframes=3
 noise() {
   name=$1; shift
   ffmpeg -v error -y -f rawvideo -pix_fmt yuv420p -s 64x64 -i "$tmp/noise.yuv" -c:v libx264 -qp 0 "$@" \

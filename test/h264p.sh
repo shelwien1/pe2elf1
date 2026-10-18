@@ -26,7 +26,12 @@ if [ $# -eq 0 ]; then
   # and a concatenation, in which x264's padding bits change phase and stop
   cat "$here"/gen/x264_base.264 "$here"/gen/jm_hier_b.264 "$here"/002/02.h264 "$here"/gen/x264_slices4.264 \
     > "$tmp/concat.264"
-  set -- "$here"/002/*.h264 "$here"/gen/*.264 "$here"/h264p/*.264 "$tmp/concat.264"
+  # and one that changes the picture size, chroma format, bit depth, slice
+  # groups and field coding from stream to stream
+  cat "$here"/gen/x264_base.264 "$here"/h264p/x264_422.264 "$here"/gen/jm_direct_t_noinfer_cavlc.264 \
+    "$here"/h264p/jm_fmo3.264 "$here"/gen/jm_hier_b.264 "$here"/h264p/x264_420_10.264 "$here"/h264p/jm_paff.264 \
+    > "$tmp/mixed.264"
+  set -- "$here"/002/*.h264 "$here"/gen/*.264 "$here"/h264p/*.264 "$tmp/concat.264" "$tmp/mixed.264"
 fi
 
 # round trip: $1 stream, $2/$3 the commands there and back, $4 the

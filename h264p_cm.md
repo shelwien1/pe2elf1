@@ -921,9 +921,9 @@ with their defaults (0.6 KB: 02's 667 bytes of it take 84).
 | levels | 302,611 | 219,810 | −27.4% |
 | signs | 329,382 | 182,207 | −44.7% |
 | macroblock syntax | 3,536,129 | 2,550,876 | −27.9% |
-| whole streams (H.264 against compressed) | 3,603,993 | 2,556,130 | −29.1% |
+| whole streams (H.264 against compressed) | 3,603,993 | 2,556,129 | −29.1% |
 
-The model tables take 215 MB.
+The model tables take 226 MB.
 
 **Tried, no gain:** the CABAC-style significance/last binarization instead
 of the count; the mirrored list 0 vector for list 1 mvds (as a context, and

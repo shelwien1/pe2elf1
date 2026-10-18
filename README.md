@@ -92,7 +92,8 @@ model: the macroblock syntax (skip flags, mb_type, intra modes, motion,
 coded_block_pattern, mb_qp_delta, the coefficients) and the header syntax.
 `d` decodes the values and codes them with CAVLC or CABAC as the stream did.
 A NAL unit that does not come out the same is stored verbatim, as in the TSV
-file (below); a CRC-32 at the end checks the whole stream.
+file (below); a CRC-32 at the end checks the whole stream, and `d` takes
+data after the end of the compressed stream for corruption.
 
 The model is binary context mixing, after oggcomp (Ogg Vorbis): each value
 is a sequence of binary decisions, each predicted by ten adaptive counters
@@ -175,17 +176,17 @@ On the test streams (`-v` shows where the bits go):
 
 | stream | H.264 | compressed | |
 |---|---:|---:|---:|
-| 00 | 815,140 | 567,470 | 69.6% |
+| 00 | 815,140 | 567,469 | 69.6% |
 | 01 | 1,095,103 | 804,089 | 73.4% |
 | 02 | 28,143 | 26,254 | 93.3% |
-| 03 | 1,181,369 | 774,625 | 65.6% |
-| 04 | 484,238 | 383,692 | 79.2% |
+| 03 | 1,181,369 | 774,624 | 65.6% |
+| 04 | 484,238 | 383,693 | 79.2% |
 
 The macroblock syntax takes 72.1% of what its CABAC coding takes (from
 3,536,129 to 2,550,876 bytes over these streams; whole streams go from
-3,603,993 to 2,556,130 bytes; `h264p_cm.md` section 9 has the figures by
+3,603,993 to 2,556,129 bytes; `h264p_cm.md` section 9 has the figures by
 syntax element). Speed is 0.03-0.13 MB of H.264 per second both ways, depending
-on the stream, and the model tables take about 215 MB.
+on the stream, and the model tables take about 226 MB.
 
 ### TSV
 
@@ -322,10 +323,15 @@ list 1, so no ref_idx_l1):
 
 `test/h264p.sh` round-trips every test stream both ways, `c` and `d`, `t` and
 `r`, with `-s`, so all their NAL units are converted (except the data
-partitions of `test/h264p/jm_dp.264`).
+partitions of `test/h264p/jm_dp.264`), and two concatenations: one in which
+x264's padding bits change phase, and one that changes the picture size,
+chroma format, bit depth, slice groups and field coding from stream to
+stream.
 The streams in `test/h264p` cover what the others don't (see `gen.sh` there).
 The dumped values of all test streams were also compared, macroblock by
 macroblock, with the syntax elements traced by the JM reference decoder;
 `t` and `r` were fuzzed with corrupted streams and TSV files, and `c` and
 `d` (built with ASan and UBSan, which report nothing on the test streams)
-with corrupted streams and compressed files.
+with corrupted streams, compressed files and random concatenations of the
+test streams. The tuning and release builds of `h264p_src/mk.sh`, and gcc
+and clang builds at -O2 and -O3, code the test streams identically.
