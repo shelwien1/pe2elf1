@@ -881,7 +881,7 @@ their gain on test/002:
 | inter signs: the sign each coefficient would have were the residual a small shift of the prediction (the levels of the prediction's gradients), the shift fitted by least squares to the coefficients whose signs are known | signs | 1 KB |
 | for mb_qp_delta, how much the macroblock changed between the last two pictures (where pictures stay, x264's macroblock tree lowers the QP) | qp delta | 0.4 KB |
 | how far the mvds of the neighbours were from their template matches' (size; direction for the sign) | mvd, mvd signs | 0.3 KB |
-| for mb_qp_delta, encoders other than x264: the slice's QP; the class of the energy (whose QP is no line of it: flat, then rising); the QP of the picture's last macroblock of the same kind and energy class | qp delta | 4.5 KB |
+| for mb_qp_delta, encoders other than x264: the slice's QP; the class of the energy (whose QP is no line of it: flat, then rising); the QP of the picture's last macroblock of the same kind and energy class, and of B, C and col where they are of the same kind | qp delta | 5.3 KB |
 | B: the vector temporal direct would give, as the template search's candidate and the temporal context; col's vector scaled by the POC distance it spanned, the neighbours' on other references scaled to the partition's | mvd, mvd signs | 3.9 KB |
 | the template search's second best start | mvd, mvd signs | 0.2 KB |
 | a 4:2:0 chroma block's count by the coefficients of the luma under it; a chroma or Intra16x16 AC block's by its DC (from the DC levels' transform) | count | 1.4 KB |
@@ -913,15 +913,15 @@ with their defaults (0.6 KB: 02's 667 bytes of it take 84).
 |---|---:|---:|---:|
 | skip, end | 336,175 | 221,360 | −34.2% |
 | mb_type | 365,120 | 259,423 | −28.9% |
-| cbp, transform_size_8x8_flag | 216,100 | 153,448 | −29.0% |
-| intra modes | 299,858 | 231,807 | −22.7% |
-| sub_mb_type, ref_idx, mvd | 504,865 | 404,069 | −20.0% |
-| mb_qp_delta | 271,297 | 183,848 | −32.2% |
-| coded_block_flag, significance (count, significance) | 910,721 | 696,892 | −23.5% |
+| cbp, transform_size_8x8_flag | 216,100 | 153,399 | −29.0% |
+| intra modes | 299,858 | 231,769 | −22.7% |
+| sub_mb_type, ref_idx, mvd | 504,865 | 403,457 | −20.1% |
+| mb_qp_delta | 271,297 | 182,424 | −32.8% |
+| coded_block_flag, significance (count, significance) | 910,721 | 697,027 | −23.5% |
 | levels | 302,611 | 219,810 | −27.4% |
-| signs | 329,382 | 182,193 | −44.7% |
-| macroblock syntax | 3,536,129 | 2,552,850 | −27.8% |
-| whole streams (H.264 against compressed) | 3,603,993 | 2,558,117 | −29.0% |
+| signs | 329,382 | 182,207 | −44.7% |
+| macroblock syntax | 3,536,129 | 2,550,876 | −27.9% |
+| whole streams (H.264 against compressed) | 3,603,993 | 2,556,130 | −29.1% |
 
 The model tables take 215 MB.
 

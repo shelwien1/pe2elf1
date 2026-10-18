@@ -126,7 +126,8 @@ decision:
   tree lowers the QP.  For other encoders: the slice's QP (macroblock QPs
   keep near it), the class of the energy (whose QP is no line of it), and
   the QP of the picture's last macroblock of the same kind and energy
-  class (the rate control's QP plus what the class adds).
+  class (the rate control's QP plus what the class adds), and of the
+  neighbours and col where they are of the same kind.
 - skip and mb_type: how well the prediction the macroblock would have if
   skipped continues the decoded samples above and to the left of it, how
   well that motion predicts those samples themselves (template matching),
@@ -174,15 +175,15 @@ On the test streams (`-v` shows where the bits go):
 
 | stream | H.264 | compressed | |
 |---|---:|---:|---:|
-| 00 | 815,140 | 567,747 | 69.7% |
-| 01 | 1,095,103 | 804,363 | 73.5% |
-| 02 | 28,143 | 26,255 | 93.3% |
-| 03 | 1,181,369 | 775,776 | 65.7% |
-| 04 | 484,238 | 383,976 | 79.3% |
+| 00 | 815,140 | 567,470 | 69.6% |
+| 01 | 1,095,103 | 804,089 | 73.4% |
+| 02 | 28,143 | 26,254 | 93.3% |
+| 03 | 1,181,369 | 774,625 | 65.6% |
+| 04 | 484,238 | 383,692 | 79.2% |
 
-The macroblock syntax takes 72.2% of what its CABAC coding takes (from
-3,536,129 to 2,552,850 bytes over these streams; whole streams go from
-3,603,993 to 2,558,117 bytes; `h264p_cm.md` section 9 has the figures by
+The macroblock syntax takes 72.1% of what its CABAC coding takes (from
+3,536,129 to 2,550,876 bytes over these streams; whole streams go from
+3,603,993 to 2,556,130 bytes; `h264p_cm.md` section 9 has the figures by
 syntax element). Speed is 0.03-0.13 MB of H.264 per second both ways, depending
 on the stream, and the model tables take about 215 MB.
 
