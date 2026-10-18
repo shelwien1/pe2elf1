@@ -10,9 +10,9 @@
 #  block (for chroma: in the macroblock), pos the block's place in its 8x8
 #  block, crcb for a Cr block the Cb block (0 none, 1 zero, 2 not), col the
 #  same block in the previous picture of the type (2 none), nc CAVLC's nC
-#  (class), tn for a luma block of a P picture on its first reference the
-#  nonzero coefficients of the block its vector points at in the last
-#  picture of the type (1 + up to 4; 6 + where the vector moves it; 0
+#  (class), tn for a luma block of a P picture the nonzero coefficients of
+#  the block its vector points at in its reference, where that is the
+#  last picture of a kind (1 + up to 4; 6 + where the vector moves it; 0
 #  none); ds for an inter luma 4x4 block of a P or B slice, 1 + the score
 #  of x264's decimation its 8x8 block still owes after the blocks before it
 #  (4, or 6 for the macroblock's only coded 8x8 block, less theirs; 0 not

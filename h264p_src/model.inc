@@ -1826,23 +1826,33 @@ struct Model {
     return v;
   }
 
-  // The block of the last picture of the kind, as it was when the picture
-  // began, that the vector of the current macroblock's block of n x n
-  // samples at (x, y) (4x4 blocks) points at, for an inter macroblock of a P
-  // picture on its first reference (that picture, mostly): the macroblock
-  // there, and (bx, by) the block's place in it (4x4 blocks, the top left
-  // one of an 8x8 block); moved, the vector moves it; nullptr none.
+  // the macroblocks, as they were, of the picture list l's reference r is:
+  // the last picture of a kind with its POC; nullptr none
+  const MbCol* ref_hist(int l, int r) const {
+    if (!rec_.active || r < 0 || r >= rec_.nlist[l] || !rec_.list[l][r]) return nullptr;
+    int poc = rec_.list[l][r]->poc;
+    if (poc == prev_poc_ && (int)hprev_.size() == size_) return hprev_.data();
+    for (int k = 0; k < 30; k++)
+      if (k != key_ && hist_poc_[k] == poc && (int)hist_[k].size() >= size_) return hist_[k].data();
+    return nullptr;
+  }
+  // The block of the reference, as it was, that the vector of the current
+  // macroblock's block of n x n samples at (x, y) (4x4 blocks) points at,
+  // for an inter macroblock of a P picture whose reference is the last
+  // picture of a kind: the macroblock there, and (bx, by) the block's place
+  // in it (4x4 blocks, the top left one of an 8x8 block); moved, the vector
+  // moves it; nullptr none.
   const MbCol* mc_col(int x, int y, int n, int& bx, int& by, int& moved) const {
-    if ((int)hprev_.size() != size_ || (sc_->stype_ != kP && sc_->stype_ != kSP) || mi_->cls >= CL_INXN || mbaff_)
-      return nullptr;
-    if (mi_->rf[0][(y >> 1) * 2 + (x >> 1)] != 0) return nullptr;
+    if ((sc_->stype_ != kP && sc_->stype_ != kSP) || mi_->cls >= CL_INXN || mbaff_) return nullptr;
+    const MbCol* hr = ref_hist(0, mi_->rf[0][(y >> 1) * 2 + (x >> 1)]);
+    if (!hr) return nullptr;
     const int16_t* v = mi_->mv[0][y * 4 + x];
     int still = abs(v[0]) <= 1 && abs(v[1]) <= 1;
     int px = addr_ % width_ * 16 + x * 4 + (still ? 0 : (int)div_floor(v[0] + 2, 4)) + n / 2;
     int py = addr_ / width_ * 16 + y * 4 + (still ? 0 : (int)div_floor(v[1] + 2, 4)) + n / 2;
     px = tc_clamp(px, 0, width_ * 16 - 1);
     py = tc_clamp(py, 0, size_ / width_ * 16 - 1);
-    const MbCol& c = hprev_[(py >> 4) * width_ + (px >> 4)];
+    const MbCol& c = hr[(py >> 4) * width_ + (px >> 4)];
     if (!c.valid) return nullptr;
     moved = !still;
     bx = (px & 15) >> 2;
@@ -1850,20 +1860,20 @@ struct Model {
     if (n == 8) bx &= 2, by &= 2;
     return &c;
   }
-  // the 4x4 luma blocks with coefficients, of the last picture of the kind,
-  // under where the vector of the current macroblock's 8x8 block at (x, y)
-  // (4x4 blocks) puts it, as mc_col: 0-4 still, 5-9 moved; -1 none
+  // the 4x4 luma blocks with coefficients, of the reference, under where
+  // the vector of the current macroblock's 8x8 block at (x, y) (4x4 blocks)
+  // puts it, as mc_col: 0-4 still, 5-9 moved; -1 none
   int mc_nz(int x, int y) const {
-    if ((int)hprev_.size() != size_ || (sc_->stype_ != kP && sc_->stype_ != kSP) || mi_->cls >= CL_INXN || mbaff_)
-      return -1;
-    if (mi_->rf[0][(y >> 1) * 2 + (x >> 1)] != 0) return -1;
+    if ((sc_->stype_ != kP && sc_->stype_ != kSP) || mi_->cls >= CL_INXN || mbaff_) return -1;
+    const MbCol* hr = ref_hist(0, mi_->rf[0][(y >> 1) * 2 + (x >> 1)]);
+    if (!hr) return -1;
     const int16_t* v = mi_->mv[0][y * 4 + x];
     int still = abs(v[0]) <= 1 && abs(v[1]) <= 1, nz = 0, h = size_ / width_ * 16;
     int px = addr_ % width_ * 16 + x * 4 + (still ? 0 : (int)div_floor(v[0] + 2, 4)) + 2;
     int py = addr_ / width_ * 16 + y * 4 + (still ? 0 : (int)div_floor(v[1] + 2, 4)) + 2;
     for (int k = 0; k < 4; k++) {
       int qx = tc_clamp(px + (k & 1) * 4, 0, width_ * 16 - 1), qy = tc_clamp(py + (k >> 1) * 4, 0, h - 1);
-      const MbCol& c = hprev_[(qy >> 4) * width_ + (qx >> 4)];
+      const MbCol& c = hr[(qy >> 4) * width_ + (qx >> 4)];
       if (!c.valid) return -1;
       nz += c.nzm[0] >> (((qy & 15) >> 2) * 4 + ((qx & 15) >> 2)) & 1;
     }

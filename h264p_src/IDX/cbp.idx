@@ -8,9 +8,9 @@
 #  the luma bits set so far, cls the class of the macroblock, col the
 #  decision's value in the same macroblock of the previous picture of the
 #  type (1 + the value, 0 none; for a luma block of an inter macroblock of
-#  a P picture on its first reference, 3 + the 4x4 blocks with
-#  coefficients under where its vector puts it there, 8 + where the vector
-#  moves it), q6 QP/6, st the slice type.
+#  a P picture whose reference is the last picture of a kind, 3 + the 4x4
+#  blocks with coefficients under where its vector puts it there, 8 +
+#  where the vector moves it), q6 QP/6, st the slice type.
 
 Prefix H_cbp
 Debug 1
