@@ -505,16 +505,19 @@ struct Model {
     }
     raw_prev_ = node & 255;
     // the match goes on or ends; then the bytes coded join what it searches
+    // (the first 256 MB of them)
     if (pbyte >= 0 && (u32)pbyte == (node & 255))
       rlen_++, rptr_++;
     else
       rlen_ = 0;
-    rbuf_.push_back((u8)(node & 255));
-    size_t n = rbuf_.size();
-    if (n - rdict_ >= 3) {
-      u32 k = rkey(&rbuf_[n - 3]);
-      if (!rlen_ && rhash_[k] >= 0) rptr_ = (size_t)rhash_[k], rlen_ = 1;
-      rhash_[k] = (i32)n;
+    if (rbuf_.size() < ((size_t)1 << 28)) {
+      rbuf_.push_back((u8)(node & 255));
+      size_t n = rbuf_.size();
+      if (n - rdict_ >= 3) {
+        u32 k = rkey(&rbuf_[n - 3]);
+        if (!rlen_ && rhash_[k] >= 0) rptr_ = (size_t)rhash_[k], rlen_ = 1;
+        rhash_[k] = (i32)n;
+      }
     }
     tc_syms[STG_RAW]++;
     return node & 255;
@@ -705,7 +708,8 @@ struct Model {
   // last picture of the current kind; nullptr other slices or none
   int hist_poc_[30], prev_poc_ = INT_MIN, cur_poc_ = INT_MIN;
   // the POCs of each kind's last picture's references by list and index
-  // (INT_MIN none), and those of the one before the current picture's
+  // (INT_MIN none), and those of the one before the current picture's;
+  // frame references only (a field macroblock's ref_idx goes up to 63)
   int hist_rpoc_[30][2][32], col_rpoc_[2][32];
   int phist_key() const {
     if (sc_->stype_ != kB || !rec_.active || rec_.nlist[1] < 1 || !rec_.list[1][0]) return -1;
@@ -1189,7 +1193,7 @@ struct Model {
         cand[nc][0] = tv[0], cand[nc][1] = tv[1], nc++;
       } else if (col_ && col_->cls < CL_INXN && col_->rf[0][0] >= 0) {
         int cr = col_->rf[0][0], d0 = ref_dist(0, 0), dr = d0;
-        if (prev_poc_ != INT_MIN && col_rpoc_[0][cr] != INT_MIN) d0 = prev_poc_ - col_rpoc_[0][cr];
+        if (prev_poc_ != INT_MIN && cr < 32 && col_rpoc_[0][cr] != INT_MIN) d0 = prev_poc_ - col_rpoc_[0][cr];
         for (int k = 0; k < 2; k++) cand[nc][k] = d0 && dr && d0 != dr ? mv_scale(col_->mv[0][5][k], dr, d0) : col_->mv[0][5][k];
         nc++;
       }
@@ -1754,7 +1758,7 @@ struct Model {
     int b8 = (y >> 1) * 2 + (x >> 1), cl = col1_->rf[0][b8] >= 0 ? 0 : 1, cr = col1_->rf[cl][b8];
     int td = ref_dist(0, 0) - ref_dist(1, 0), tr = ref_dist(l, ref), k1 = phist_key();
     // over the distance from that picture to its own reference, where known
-    if (cr >= 0 && k1 >= 0 && hist_rpoc_[k1][cl][cr] != INT_MIN && ref_dist(1, 0))
+    if (cr >= 0 && cr < 32 && k1 >= 0 && hist_rpoc_[k1][cl][cr] != INT_MIN && ref_dist(1, 0))
       td = hist_poc_[k1] - hist_rpoc_[k1][cl][cr];
     if (cr < 0 || !td || !tr || !ref_dist(0, 0)) return false;
     for (int k = 0; k < 2; k++) m[k] = mv_scale(col1_->mv[cl][y * 4 + x][k], tr, td);
@@ -1778,14 +1782,14 @@ struct Model {
         pdv_[k] = 0;
       }
       // col's vector; in B slices, temporal direct's where there is one
-      int cm[2];
+      int cm[2] = {0, 0};
       pdn_ = !col_ || col_->rf[list][b8] < 0;
       if (!pdn_) {
         cm[0] = col_->mv[list][y * 4 + x][0], cm[1] = col_->mv[list][y * 4 + x][1];
         // scaled by the reference's distance against that of col's own
         // (where not known, the first reference's)
         int cr = col_->rf[list][b8], d0 = ref_dist(list, 0), dr = ref_dist(list, ref);
-        if (prev_poc_ != INT_MIN && col_rpoc_[list][cr] != INT_MIN) d0 = prev_poc_ - col_rpoc_[list][cr];
+        if (prev_poc_ != INT_MIN && cr < 32 && col_rpoc_[list][cr] != INT_MIN) d0 = prev_poc_ - col_rpoc_[list][cr];
         if (d0 && dr && d0 != dr)
           for (int k = 0; k < 2; k++) cm[k] = mv_scale(cm[k], dr, d0);
       }
