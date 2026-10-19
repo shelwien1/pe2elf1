@@ -1,38 +1,37 @@
 
-static const byte H1_mvg_a_ox[3+1]={ 0,1,2,3 };
-static const byte H1_mvg_a_ns[6+1]={ 0,1,2,3,4,5,6 };
+static const byte H1_mvg_a_ns[6+1]={ 0,0,1,2,3,4,4 };
 
-static const byte H1_mvg_b_zs[8+1]={ 0,1,2,3,4,5,6,7,8 };
-static const byte H1_mvg_b_mag[7+1]={ 0,1,2,3,4,5,6,7 };
+static const byte H1_mvg_b_zs[8+1]={ 0,0,0,1,2,3,4,5,6 };
+static const byte H1_mvg_b_mag[7+1]={ 0,0,0,0,1,2,3,4 };
 
-static const byte H1_mvg_c_zs[8+1]={ 0,1,2,3,4,5,6,7,8 };
-static const byte H1_mvg_c_ds[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
+static const byte H1_mvg_c_zs[8+1]={ 0,0,0,1,2,3,4,5,6 };
+static const byte H1_mvg_c_ds[9+1]={ 0,0,0,1,1,1,2,3,4,5 };
 
-static const byte H1_mvg_d_ds[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H1_mvg_d_mag[7+1]={ 0,1,2,3,4,5,6,7 };
-
+static const byte H1_mvg_d_ds[9+1]={ 0,0,0,1,2,3,4,5,6,7 };
+static const byte H1_mvg_d_mag[7+1]={ 0,0,1,1,2,2,2,3 };
 
 
 
 
 
-static const int H1_mvg_rA = (224+0) * (1);
-static const int H1_mvg_rB = (205+0) * (1);
-static const int H1_mvg_rC = (64+0) * (1);
-static const int H1_mvg_rD = (111+0) * (1);
-static const int H1_mvg_rT = (55+0) * (1);
-static const int H1_mvg_rG = (90+0) * (1);
-static const int H1_mvg_lr = (12+0) * (1);
-static const int H1_mvg_lrm = (12+0) * (1);
+
+static const int H1_mvg_rA = (228+0) * (1);
+static const int H1_mvg_rB = (255+0) * (1);
+static const int H1_mvg_rC = (254+0) * (1);
+static const int H1_mvg_rD = (255+0) * (1);
+static const int H1_mvg_rT = (0+0) * (1);
+static const int H1_mvg_rG = (0+0) * (1);
+static const int H1_mvg_lr = (15+0) * (1);
+static const int H1_mvg_lrm = (0+0) * (1);
 static const int H1_mvg_mbm = (0+0) * (1);
-static const int H1_mvg_mwA = (0+0) * (1);
-static const int H1_mvg_mwB = (16+0) * (1);
-static const int H1_mvg_mwC = (0+0) * (1);
-static const int H1_mvg_mwD = (31+0) * (1);
+static const int H1_mvg_mwA = (30+0) * (1);
+static const int H1_mvg_mwB = (32+0) * (1);
+static const int H1_mvg_mwC = (18+0) * (1);
+static const int H1_mvg_mwD = (8+0) * (1);
 static const int H1_mvg_mwT = (0+0) * (1);
 static const int H1_mvg_mwG = (0+0) * (1);
-static const int H1_mvg_mt = (6+0) * (1);
-static const int H1_mvg_mb = (160+0) * (1);
+static const int H1_mvg_mt = (0+0) * (1);
+static const int H1_mvg_mb = (72+0) * (1);
 static const int H1_mvg_hA = (24+0) * (1);
 static const int H1_mvg_hB = (24+0) * (1);
 static const int H1_mvg_hC = (24+0) * (1);
@@ -42,10 +41,10 @@ static const int H1_mvg_hT = (24+0) * (1);
 static const int H1_mvg_hN = (24+0) * (1);
 
 
-static const long long H1_mvg_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 4), 7); // 112
-static const long long H1_mvg_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 9), 8), 2); // 144
-static const long long H1_mvg_c_Volume = tc_vmul(tc_vmul(1, 9), 10); // 90
-static const long long H1_mvg_d_Volume = tc_vmul(tc_vmul(1, 10), 8); // 80
+static const long long H1_mvg_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 2), 5); // 40
+static const long long H1_mvg_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 7), 5), 2); // 70
+static const long long H1_mvg_c_Volume = tc_vmul(tc_vmul(1, 7), 6); // 42
+static const long long H1_mvg_d_Volume = tc_vmul(tc_vmul(1, 8), 4); // 32
 static const long long H1_mvg_g_Volume = tc_vmul(1, 1); // 1
 static const long long H1_mvg_m_Volume = 1; // 1
 static const long long H1_mvg_n_Volume = tc_vmul(1, 1); // 1

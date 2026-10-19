@@ -17,24 +17,23 @@ void H1_mbt_make( const H_mbt_v & D, tcx & X ) {
   (void) st;  (void) ca;  (void) cb;  (void) cc;  (void) nsk;  (void) en;  (void) td;  (void) sm;  (void) tm;  (void) tb;  (void) dh;  (void) bd;  (void) qc;  (void) im;  (void) ig;  (void) c1;  (void) tx;
 
   a = 0;
-  a = a*10 + H1_mbt_a_st[__min(9,__max(0,st-(1-1)))];
-  a = a*9 + H1_mbt_a_ca[__min(8,__max(0,ca-(1-1)))];
-  a = a*9 + H1_mbt_a_cb[__min(8,__max(0,cb-(1-1)))];
+  a = a*3 + ((st>1+(1-1))+(st>4+(1-1)));
+  a = a*7 + H1_mbt_a_ca[__min(8,__max(0,ca-(1-1)))];
+  a = a*7 + H1_mbt_a_cb[__min(8,__max(0,cb-(1-1)))];
 
   b = 0;
-  b = b*10 + H1_mbt_b_st[__min(9,__max(0,st-(1-1)))];
-  b = b*9 + H1_mbt_b_cc[__min(8,__max(0,cc-(1-1)))];
+  b = b*4 + H1_mbt_b_st[__min(9,__max(0,st-(1-1)))];
+  b = b*6 + H1_mbt_b_cc[__min(8,__max(0,cc-(1-1)))];
+  b = b*2 + ((nsk>3+(1-1)));
 
   c = 0;
-  c = c*2 + ((st>3+(1-1)));
-  c = c*4 + H1_mbt_c_ca[__min(8,__max(0,ca-(1-1)))];
-  c = c*4 + H1_mbt_c_cb[__min(8,__max(0,cb-(1-1)))];
+  c = c*2 + ((ca>0+(1-1)));
+  c = c*3 + ((cb>0+(1-1))+(cb>5+(1-1)));
 
   d = 0;
-  d = d*10 + H1_mbt_d_st[__min(9,__max(0,st-(1-1)))];
+  d = d*3 + ((st>1+(1-1))+(st>2+(1-1)));
 
   m = 0;
-  m = m*10 + H1_mbt_m_st[__min(9,__max(0,st-(1-1)))];
 
   t = 0;
 

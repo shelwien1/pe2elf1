@@ -20,40 +20,37 @@ void H1_mvs_make( const H_mvs_v & D, tcx & X ) {
   a = a*3 + ((kind>1+(1-1))+(kind>2+(1-1)));
   a = a*2 + ((comp>0+(1-1)));
   a = a*5 + H1_mvs_a_ma[__min(7,__max(0,ma-(1-1)))];
-  a = a*6 + H1_mvs_a_mb[__min(7,__max(0,mb-(1-1)))];
-  a = a*6 + H1_mvs_a_oth[__min(5,__max(0,oth-(1-1)))];
-  a = a*7 + H1_mvs_a_sp[__min(8,__max(0,sp-(1-1)))];
+  a = a*5 + H1_mvs_a_mb[__min(7,__max(0,mb-(1-1)))];
+  a = a*5 + H1_mvs_a_oth[__min(5,__max(0,oth-(1-1)))];
+  a = a*8 + H1_mvs_a_sp[__min(8,__max(0,sp-(1-1)))];
 
   b = 0;
-  b = b*4 + H1_mvs_b_kind[__min(3,__max(0,kind-(1-1)))];
+  b = b*3 + ((kind>1+(1-1))+(kind>2+(1-1)));
   b = b*2 + ((comp>0+(1-1)));
   b = b*2 + ((lst>0+(1-1)));
   b = b*4 + H1_mvs_b_ps[__min(3,__max(0,ps-(1-1)))];
   b = b*4 + H1_mvs_b_rf[__min(3,__max(0,rf-(1-1)))];
-  b = b*13 + H1_mvs_b_zd[__min(12,__max(0,zd-(1-1)))];
+  b = b*8 + H1_mvs_b_zd[__min(12,__max(0,zd-(1-1)))];
 
   c = 0;
-  c = c*3 + ((kind>1+(1-1))+(kind>2+(1-1)));
+  c = c*4 + H1_mvs_c_kind[__min(3,__max(0,kind-(1-1)))];
+  c = c*2 + ((comp>0+(1-1)));
 
   d = 0;
-  d = d*4 + H1_mvs_d_kind[__min(3,__max(0,kind-(1-1)))];
-  d = d*2 + ((comp>0+(1-1)));
-  d = d*9 + H1_mvs_d_pd[__min(8,__max(0,pd-(1-1)))];
+  d = d*2 + ((kind>2+(1-1)));
+  d = d*8 + H1_mvs_d_pd[__min(8,__max(0,pd-(1-1)))];
   d = d*4 + H1_mvs_d_nr[__min(3,__max(0,nr-(1-1)))];
 
   m = 0;
   m = m*4 + H1_mvs_m_kind[__min(3,__max(0,kind-(1-1)))];
-  m = m*6 + H1_mvs_m_pd[__min(5,__max(0,pd-(1-1)))];
 
   t = 0;
-  t = t*4 + H1_mvs_t_kind[__min(3,__max(0,kind-(1-1)))];
+  t = t*2 + ((kind>2+(1-1)));
   t = t*2 + ((comp>0+(1-1)));
 
   n = 0;
-  n = n*4 + H1_mvs_n_kind[__min(3,__max(0,kind-(1-1)))];
 
   g = 0;
-  g = g*4 + H1_mvs_g_kind[__min(3,__max(0,kind-(1-1)))];
   X.c[0] = a;  X.c[1] = b;  X.c[2] = c;  X.c[3] = d;  X.m = m;  X.t = t;
   X.n = n;  X.g = g;
 }

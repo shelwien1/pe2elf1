@@ -33,64 +33,64 @@ Index a
  a_kind: kind, 1!011
  a_comp: comp, 1!1
  a_ma: ma, 1!1111000
- a_mb: mb, 1!1111100
- a_oth: oth, 1!11111
- a_sp: sp, 1!11110011
+ a_mb: mb, 1!1111000
+ a_oth: oth, 1!11101
+ a_sp: sp, 1!11111011
 
 Index b
- b_kind: kind, 1!111
+ b_kind: kind, 1!011
  b_comp: comp, 1!1
  b_lst: lst, 1!1
  b_ps: ps, 1!111
  b_rf: rf, 1!111
- b_zd: zd, 1!111111111111
+ b_zd: zd, 1!101010111001
 
 Index c
- c_kind: kind, 1!011
- c_comp: comp, 1!0
+ c_kind: kind, 1!111
+ c_comp: comp, 1!1
  c_sp: sp, 1!00000000
 
 Index d
- d_kind: kind, 1!111
- d_comp: comp, 1!1
- d_pd: pd, 1!11111111
+ d_kind: kind, 1!001
+ d_comp: comp, 1!0
+ d_pd: pd, 1!11111101
  d_ma: ma, 1!0000000
  d_nr: nr, 1!111
 
 Index m
  m_kind: kind, 1!111
  m_comp: comp, 1!0
- m_pd: pd, 1!11111
+ m_pd: pd, 1!00000
 
 Index t
- t_kind: kind, 1!111
+ t_kind: kind, 1!001
  t_comp: comp, 1!1
 
 Index n
- n_kind: kind, 1!111
+ n_kind: kind, 1!000
 
 Index g
- g_kind: kind, 1!111
+ g_kind: kind, 1!000
  g_ma: ma, 1!0
  g_oth: oth, 1!0
 
-Number rA, 1, 0!11111101
-Number rB, 1, 0!00000000
-Number rC, 1, 0!00000110
+Number rA, 1, 0!11111111
+Number rB, 1, 0!11011101
+Number rC, 1, 0!00000000
 Number rD, 1, 0!11111111
-Number rT, 1, 0!00011110
-Number rG, 1, 0!01001000
-Number lr, 1, 0!01100
-Number lrm, 1, 0!11110
+Number rT, 1, 0!00011100
+Number rG, 1, 0!00000000
+Number lr, 1, 0!01111
+Number lrm, 1, 0!00000
 Number mbm, 1, 0!00000000
-Number mwA, 1, 0!00001000
+Number mwA, 1, 0!01000000
 Number mwB, 1, 0!00001000
-Number mwC, 1, 0!10010010
-Number mwD, 1, 0!00101110
-Number mwT, 1, 0!00000000
+Number mwC, 1, 0!10000000
+Number mwD, 1, 0!00100000
+Number mwT, 1, 0!01000000
 Number mwG, 1, 0!00000000
 Number mt, 1, 0!110
-Number mb, 1, 0!01101100
+Number mb, 1, 0!01000000
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
 #  direct, one that does not is hashed into 2^h rows and contexts share

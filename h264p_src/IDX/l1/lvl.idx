@@ -16,59 +16,59 @@ Const 0
 
 Index a
  a_cg: cg, 1!0000000000000
- a_lt: lt, 1!1111111
- a_lh: lh, 1!1111111111111111111111111111111111111111111111111111111111111111
+ a_lt: lt, 1!0111111
+ a_lh: lh, 1!1111111111111111111111111111111111101111111111011011111111011111
  a_pos: pos, 1!11111
 
 Index b
- b_cg: cg, 1!1111111111111
- b_pos: pos, 1!11111
- b_tot: tot, 1!1111111
- b_fq: fq, 1!111
+ b_cg: cg, 1!1111100000000
+ b_pos: pos, 1!11101
+ b_tot: tot, 1!0111011
+ b_fq: fq, 1!011
 
 Index c
  c_cg: cg, 1!1011100000000
  c_sa: sa, 1!111
  c_sb: sb, 1!111
- c_q6: q6, 1!01111100
- c_lh: lh, 1!1111111111111111111111111111111111111111111111111111111111111111
+ c_q6: q6, 1!11111000
+ c_lh: lh, 1!1111101111111111110111111111111111111101111111111111111010111111
 
 Index d
- d_cg: cg, 1!1111111111111
- d_g1: g1, 1!0000
- d_md: md, 1!1111111111111111111
- d_lt: lt, 1!0111101
+ d_cg: cg, 1!1011100000000
+ d_g1: g1, 1!0001
+ d_md: md, 1!0110000010000101100
+ d_lt: lt, 1!1110101
 
 Index m
- m_cg: cg, 1!0000000000000
+ m_cg: cg, 1!1000000000000
  m_g1: g1, 1!1
 
 Index t
- t_cg: cg, 1!1111111111111
+ t_cg: cg, 1!0000000000000
 
 Index n
- n_cg: cg, 1!1111111111111
+ n_cg: cg, 1!0000000000000
 
 Index g
  g_cg: cg, 1!0
 
-Number rA, 1, 0!11101001
-Number rB, 1, 0!00010000
-Number rC, 1, 0!01000000
+Number rA, 1, 0!11111101
+Number rB, 1, 0!11110010
+Number rC, 1, 0!11111111
 Number rD, 1, 0!11111110
-Number rT, 1, 0!10110001
-Number rG, 1, 0!01011010
+Number rT, 1, 0!10000001
+Number rG, 1, 0!00000000
 Number lr, 1, 0!01111
-Number lrm, 1, 0!01100
+Number lrm, 1, 0!00000
 Number mbm, 1, 0!00000000
-Number mwA, 1, 0!00000000
-Number mwB, 1, 0!00000110
-Number mwC, 1, 0!00000000
-Number mwD, 1, 0!00000001
-Number mwT, 1, 0!00100000
+Number mwA, 1, 0!00111100
+Number mwB, 1, 0!00001000
+Number mwC, 1, 0!00001000
+Number mwD, 1, 0!00111011
+Number mwT, 1, 0!00110001
 Number mwG, 1, 0!00000000
 Number mt, 1, 0!000
-Number mb, 1, 0!00000101
+Number mb, 1, 0!01001101
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
 #  direct, one that does not is hashed into 2^h rows and contexts share

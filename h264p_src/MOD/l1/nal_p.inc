@@ -17,33 +17,29 @@ void H1_nal_make( const H_nal_v & D, tcx & X ) {
   (void) fld;  (void) ctx;  (void) p1;  (void) p2;
 
   a = 0;
-  a = a*6 + H1_nal_a_fld[__min(31,__max(0,fld-(1-1)))];
-  a = a*3 + ((ctx>1+(1-1))+(ctx>8+(1-1)));
+  a = a*7 + H1_nal_a_fld[__min(31,__max(0,fld-(1-1)))];
+  a = a*6 + H1_nal_a_ctx[__min(31,__max(0,ctx-(1-1)))];
 
   b = 0;
-  b = b*32 + H1_nal_b_fld[__min(31,__max(0,fld-(1-1)))];
-  b = b*7 + H1_nal_b_p1[__min(6,__max(0,p1-(1-1)))];
+  b = b*5 + H1_nal_b_fld[__min(31,__max(0,fld-(1-1)))];
+  b = b*3 + ((p1>0+(1-1))+(p1>5+(1-1)));
   b = b*4 + H1_nal_b_p2[__min(3,__max(0,p2-(1-1)))];
 
   c = 0;
-  c = c*32 + H1_nal_c_fld[__min(31,__max(0,fld-(1-1)))];
-  c = c*3 + ((ctx>6+(1-1))+(ctx>8+(1-1)));
+  c = c*5 + H1_nal_c_fld[__min(31,__max(0,fld-(1-1)))];
+  c = c*4 + H1_nal_c_ctx[__min(31,__max(0,ctx-(1-1)))];
 
   d = 0;
-  d = d*32 + H1_nal_d_fld[__min(31,__max(0,fld-(1-1)))];
+  d = d*8 + H1_nal_d_fld[__min(31,__max(0,fld-(1-1)))];
 
   m = 0;
   m = m*4 + H1_nal_m_fld[__min(31,__max(0,fld-(1-1)))];
 
   t = 0;
-  t = t*32 + H1_nal_t_fld[__min(31,__max(0,fld-(1-1)))];
 
   n = 0;
-  n = n*32 + H1_nal_n_fld[__min(31,__max(0,fld-(1-1)))];
 
   g = 0;
-  g = g*32 + H1_nal_g_fld[__min(31,__max(0,fld-(1-1)))];
-  g = g*4 + H1_nal_g_ctx[__min(3,__max(0,ctx-(1-1)))];
   X.c[0] = a;  X.c[1] = b;  X.c[2] = c;  X.c[3] = d;  X.m = m;  X.t = t;
   X.n = n;  X.g = g;
 }

@@ -17,31 +17,31 @@ void H1_sig_make( const H_sig_v & D, tcx & X ) {
   (void) cg;  (void) pos;  (void) rem;  (void) zl;  (void) md;  (void) nc;  (void) fld;  (void) q6;  (void) pg;  (void) em;  (void) pe;  (void) ps;  (void) tz;  (void) pq;  (void) hb;  (void) ft;  (void) h3;  (void) pr;  (void) sn;  (void) hv;  (void) pf;
 
   a = 0;
-  a = a*14 + H1_sig_a_cg[__min(13,__max(0,cg-(1-1)))];
-  a = a*64 + H1_sig_a_pos[__min(63,__max(0,pos-(1-1)))];
+  a = a*6 + H1_sig_a_cg[__min(13,__max(0,cg-(1-1)))];
+  a = a*48 + H1_sig_a_pos[__min(63,__max(0,pos-(1-1)))];
   a = a*7 + H1_sig_a_rem[__min(10,__max(0,rem-(1-1)))];
 
   b = 0;
-  b = b*14 + H1_sig_b_cg[__min(13,__max(0,cg-(1-1)))];
-  b = b*39 + H1_sig_b_pos[__min(63,__max(0,pos-(1-1)))];
+  b = b*5 + H1_sig_b_cg[__min(13,__max(0,cg-(1-1)))];
+  b = b*55 + H1_sig_b_pos[__min(63,__max(0,pos-(1-1)))];
   b = b*16 + H1_sig_b_md[__min(19,__max(0,md-(1-1)))];
-  b = b*511 + H1_sig_b_hb[__min(510,__max(0,hb-(1-1)))];
+  b = b*282 + H1_sig_b_hb[__min(510,__max(0,hb-(1-1)))];
 
   c = 0;
-  c = c*14 + H1_sig_c_cg[__min(13,__max(0,cg-(1-1)))];
-  c = c*64 + H1_sig_c_pos[__min(63,__max(0,pos-(1-1)))];
-  c = c*9 + H1_sig_c_sn[__min(8,__max(0,sn-(1-1)))];
+  c = c*3 + ((cg>0+(1-1))+(cg>4+(1-1)));
+  c = c*29 + H1_sig_c_pos[__min(63,__max(0,pos-(1-1)))];
+  c = c*8 + H1_sig_c_sn[__min(8,__max(0,sn-(1-1)))];
 
   d = 0;
-  d = d*5 + H1_sig_d_cg[__min(13,__max(0,cg-(1-1)))];
-  d = d*64 + H1_sig_d_pos[__min(63,__max(0,pos-(1-1)))];
-  d = d*9 + H1_sig_d_rem[__min(10,__max(0,rem-(1-1)))];
-  d = d*15 + H1_sig_d_h3[__min(14,__max(0,h3-(1-1)))];
+  d = d*6 + H1_sig_d_cg[__min(13,__max(0,cg-(1-1)))];
+  d = d*41 + H1_sig_d_pos[__min(63,__max(0,pos-(1-1)))];
+  d = d*7 + H1_sig_d_rem[__min(10,__max(0,rem-(1-1)))];
+  d = d*12 + H1_sig_d_h3[__min(14,__max(0,h3-(1-1)))];
 
   m = 0;
-  m = m*14 + H1_sig_m_cg[__min(13,__max(0,cg-(1-1)))];
-  m = m*4 + H1_sig_m_pos[__min(9,__max(0,pos-(1-1)))];
-  m = m*4 + H1_sig_m_rem[__min(10,__max(0,rem-(1-1)))];
+  m = m*3 + ((cg>2+(1-1))+(cg>3+(1-1)));
+  m = m*3 + ((pos>0+(1-1))+(pos>5+(1-1)));
+  m = m*5 + H1_sig_m_rem[__min(10,__max(0,rem-(1-1)))];
 
   t = 0;
 

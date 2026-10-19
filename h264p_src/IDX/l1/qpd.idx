@@ -31,27 +31,27 @@ Debug 1
 Const 0
 
 Index a
- a_lnz: lnz, 1!1
- a_pc: pc, 1!1111
+ a_lnz: lnz, 1!0
+ a_pc: pc, 1!1100
  a_cc: cc, 1!11
- a_cls: cls, 1!00000100
- a_sq: sq, 1!1111111111111
+ a_cls: cls, 1!00010100
+ a_sq: sq, 1!0101010101011
 
 Index b
  b_lnz: lnz, 1!0
- b_cls: cls, 1!11111111
- b_sq: sq, 1!1111111111111
+ b_cls: cls, 1!00100010
+ b_sq: sq, 1!0110101010101
 
 Index c
- c_lz: lz, 1!111111
- c_st: st, 1!111111111
- c_db: db, 1!11110110
- c_bc: bc, 1!1111111111111
+ c_lz: lz, 1!001110
+ c_st: st, 1!010000000
+ c_db: db, 1!11100110
+ c_bc: bc, 1!1101001000101
 
 Index d
- d_db: db, 1!11111111
- d_st: st, 1!111111111
- d_cl: cl, 1!1111111111111
+ d_db: db, 1!00000000
+ d_st: st, 1!011010000
+ d_cl: cl, 1!1111111111101
 
 Index m
  m_lnz: lnz, 1!1
@@ -63,25 +63,25 @@ Index n
  n_lnz: lnz, 1!0
 
 Index g
- g_lz: lz, 1!101101
+ g_lz: lz, 1!000000
 
-Number rA, 1, 0!10000000
-Number rB, 1, 0!01000000
-Number rC, 1, 0!01000100
-Number rD, 1, 0!01000000
-Number rT, 1, 0!00110111
-Number rG, 1, 0!01011010
-Number lr, 1, 0!01100
-Number lrm, 1, 0!11100
+Number rA, 1, 0!11111110
+Number rB, 1, 0!11111111
+Number rC, 1, 0!11111111
+Number rD, 1, 0!11111110
+Number rT, 1, 0!00100000
+Number rG, 1, 0!00000000
+Number lr, 1, 0!01111
+Number lrm, 1, 0!00000
 Number mbm, 1, 0!00000000
-Number mwA, 1, 0!00000111
-Number mwB, 1, 0!00000000
-Number mwC, 1, 0!00000000
-Number mwD, 1, 0!00000000
-Number mwT, 1, 0!00000000
+Number mwA, 1, 0!00011111
+Number mwB, 1, 0!00001111
+Number mwC, 1, 0!00000111
+Number mwD, 1, 0!00001000
+Number mwT, 1, 0!00100010
 Number mwG, 1, 0!00000000
-Number mt, 1, 0!110
-Number mb, 1, 0!00000101
+Number mt, 1, 0!010
+Number mb, 1, 0!01000101
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
 #  direct, one that does not is hashed into 2^h rows and contexts share

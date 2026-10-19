@@ -1,39 +1,34 @@
 
-static const byte H1_mbt_a_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H1_mbt_a_ca[8+1]={ 0,1,2,3,4,5,6,7,8 };
-static const byte H1_mbt_a_cb[8+1]={ 0,1,2,3,4,5,6,7,8 };
+static const byte H1_mbt_a_ca[8+1]={ 0,1,2,3,4,4,5,6,6 };
+static const byte H1_mbt_a_cb[8+1]={ 0,1,2,3,4,4,5,6,6 };
 
-static const byte H1_mbt_b_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H1_mbt_b_cc[8+1]={ 0,1,2,3,4,5,6,7,8 };
-
-static const byte H1_mbt_c_ca[8+1]={ 0,1,2,3,3,3,3,3,3 };
-static const byte H1_mbt_c_cb[8+1]={ 0,1,1,1,1,1,2,3,3 };
-
-static const byte H1_mbt_d_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-
-
-static const byte H1_mbt_m_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
+static const byte H1_mbt_b_st[9+1]={ 0,0,1,2,3,3,3,3,3,3 };
+static const byte H1_mbt_b_cc[8+1]={ 0,0,1,2,3,3,4,5,5 };
 
 
 
 
-static const int H1_mbt_rA = (64+0) * (1);
-static const int H1_mbt_rB = (0+0) * (1);
-static const int H1_mbt_rC = (234+0) * (1);
-static const int H1_mbt_rD = (239+0) * (1);
-static const int H1_mbt_rT = (55+0) * (1);
-static const int H1_mbt_rG = (90+0) * (1);
+
+
+
+
+static const int H1_mbt_rA = (254+0) * (1);
+static const int H1_mbt_rB = (246+0) * (1);
+static const int H1_mbt_rC = (0+0) * (1);
+static const int H1_mbt_rD = (251+0) * (1);
+static const int H1_mbt_rT = (0+0) * (1);
+static const int H1_mbt_rG = (0+0) * (1);
 static const int H1_mbt_lr = (12+0) * (1);
-static const int H1_mbt_lrm = (12+0) * (1);
+static const int H1_mbt_lrm = (0+0) * (1);
 static const int H1_mbt_mbm = (0+0) * (1);
-static const int H1_mbt_mwA = (0+0) * (1);
-static const int H1_mbt_mwB = (1+0) * (1);
-static const int H1_mbt_mwC = (16+0) * (1);
-static const int H1_mbt_mwD = (20+0) * (1);
+static const int H1_mbt_mwA = (5+0) * (1);
+static const int H1_mbt_mwB = (15+0) * (1);
+static const int H1_mbt_mwC = (51+0) * (1);
+static const int H1_mbt_mwD = (0+0) * (1);
 static const int H1_mbt_mwT = (0+0) * (1);
 static const int H1_mbt_mwG = (0+0) * (1);
-static const int H1_mbt_mt = (6+0) * (1);
-static const int H1_mbt_mb = (22+0) * (1);
+static const int H1_mbt_mt = (0+0) * (1);
+static const int H1_mbt_mb = (39+0) * (1);
 static const int H1_mbt_hA = (24+0) * (1);
 static const int H1_mbt_hB = (24+0) * (1);
 static const int H1_mbt_hC = (24+0) * (1);
@@ -43,16 +38,16 @@ static const int H1_mbt_hT = (24+0) * (1);
 static const int H1_mbt_hN = (24+0) * (1);
 
 
-static const long long H1_mbt_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 10), 9), 9); // 810
-static const long long H1_mbt_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 10), 9), 1); // 90
-static const long long H1_mbt_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 4), 4); // 32
-static const long long H1_mbt_d_Volume = tc_vmul(1, 10); // 10
+static const long long H1_mbt_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 7), 7); // 147
+static const long long H1_mbt_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 6), 2); // 48
+static const long long H1_mbt_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 2), 3); // 6
+static const long long H1_mbt_d_Volume = tc_vmul(1, 3); // 3
 static const long long H1_mbt_g_Volume = tc_vmul(1, 1); // 1
-static const long long H1_mbt_m_Volume = tc_vmul(1, 10); // 10
+static const long long H1_mbt_m_Volume = tc_vmul(1, 1); // 1
 static const long long H1_mbt_n_Volume = tc_vmul(1, 1); // 1
 static const long long H1_mbt_t_Volume = tc_vmul(1, 1); // 1
 
-#define H1_mbt_USES(X) X(st) X(ca) X(cb) X(cc)
+#define H1_mbt_USES(X) X(st) X(ca) X(cb) X(cc) X(nsk)
 
 struct H1_mbt_T { 
 #undef USE_NEW

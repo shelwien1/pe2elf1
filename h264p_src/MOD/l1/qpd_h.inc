@@ -1,42 +1,37 @@
 
-static const byte H1_qpd_a_pc[4+1]={ 0,1,2,3,4 };
-static const byte H1_qpd_a_sq[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
+static const byte H1_qpd_a_sq[13+1]={ 0,0,1,1,2,2,3,3,4,4,5,5,6,7 };
 
-static const byte H1_qpd_b_cls[8+1]={ 0,1,2,3,4,5,6,7,8 };
-static const byte H1_qpd_b_sq[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
+static const byte H1_qpd_b_sq[13+1]={ 0,0,1,2,2,3,3,4,4,5,5,6,6,7 };
 
-static const byte H1_qpd_c_lz[6+1]={ 0,1,2,3,4,5,6 };
-static const byte H1_qpd_c_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H1_qpd_c_db[8+1]={ 0,1,2,3,4,4,5,6,6 };
-static const byte H1_qpd_c_bc[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
+static const byte H1_qpd_c_lz[6+1]={ 0,0,0,1,2,3,3 };
+static const byte H1_qpd_c_db[8+1]={ 0,1,2,3,3,3,4,5,5 };
+static const byte H1_qpd_c_bc[13+1]={ 0,1,2,2,3,3,3,4,4,4,4,5,5,6 };
 
-static const byte H1_qpd_d_db[8+1]={ 0,1,2,3,4,5,6,7,8 };
-static const byte H1_qpd_d_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H1_qpd_d_cl[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
-
-static const byte H1_qpd_g_lz[6+1]={ 0,1,1,2,3,3,4 };
+static const byte H1_qpd_d_st[9+1]={ 0,0,1,2,2,3,3,3,3,3 };
+static const byte H1_qpd_d_cl[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,11,12 };
 
 
 
 
 
-static const int H1_qpd_rA = (128+0) * (1);
-static const int H1_qpd_rB = (64+0) * (1);
-static const int H1_qpd_rC = (68+0) * (1);
-static const int H1_qpd_rD = (64+0) * (1);
-static const int H1_qpd_rT = (55+0) * (1);
-static const int H1_qpd_rG = (90+0) * (1);
-static const int H1_qpd_lr = (12+0) * (1);
-static const int H1_qpd_lrm = (28+0) * (1);
+
+static const int H1_qpd_rA = (254+0) * (1);
+static const int H1_qpd_rB = (255+0) * (1);
+static const int H1_qpd_rC = (255+0) * (1);
+static const int H1_qpd_rD = (254+0) * (1);
+static const int H1_qpd_rT = (32+0) * (1);
+static const int H1_qpd_rG = (0+0) * (1);
+static const int H1_qpd_lr = (15+0) * (1);
+static const int H1_qpd_lrm = (0+0) * (1);
 static const int H1_qpd_mbm = (0+0) * (1);
-static const int H1_qpd_mwA = (7+0) * (1);
-static const int H1_qpd_mwB = (0+0) * (1);
-static const int H1_qpd_mwC = (0+0) * (1);
-static const int H1_qpd_mwD = (0+0) * (1);
-static const int H1_qpd_mwT = (0+0) * (1);
+static const int H1_qpd_mwA = (31+0) * (1);
+static const int H1_qpd_mwB = (15+0) * (1);
+static const int H1_qpd_mwC = (7+0) * (1);
+static const int H1_qpd_mwD = (8+0) * (1);
+static const int H1_qpd_mwT = (34+0) * (1);
 static const int H1_qpd_mwG = (0+0) * (1);
-static const int H1_qpd_mt = (6+0) * (1);
-static const int H1_qpd_mb = (5+0) * (1);
+static const int H1_qpd_mt = (2+0) * (1);
+static const int H1_qpd_mb = (69+0) * (1);
 static const int H1_qpd_hA = (24+0) * (1);
 static const int H1_qpd_hB = (24+0) * (1);
 static const int H1_qpd_hC = (24+0) * (1);
@@ -46,16 +41,16 @@ static const int H1_qpd_hT = (24+0) * (1);
 static const int H1_qpd_hN = (24+0) * (1);
 
 
-static const long long H1_qpd_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 5), 3), 2), 14); // 840
-static const long long H1_qpd_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 9), 14); // 126
-static const long long H1_qpd_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 7), 10), 7), 14); // 6860
-static const long long H1_qpd_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, 9), 10), 14); // 1260
-static const long long H1_qpd_g_Volume = tc_vmul(1, 5); // 5
+static const long long H1_qpd_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 3), 3), 3), 8); // 216
+static const long long H1_qpd_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 3), 8); // 24
+static const long long H1_qpd_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 6), 7); // 336
+static const long long H1_qpd_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 4), 13); // 52
+static const long long H1_qpd_g_Volume = tc_vmul(1, 1); // 1
 static const long long H1_qpd_m_Volume = tc_vmul(1, 2); // 2
 static const long long H1_qpd_n_Volume = tc_vmul(1, 1); // 1
 static const long long H1_qpd_t_Volume = tc_vmul(1, 1); // 1
 
-#define H1_qpd_USES(X) X(lnz) X(pc) X(cc) X(cls) X(sq) X(lz) X(st) X(db) X(bc) X(cl)
+#define H1_qpd_USES(X) X(pc) X(cc) X(cls) X(sq) X(lz) X(st) X(db) X(bc) X(cl) X(lnz)
 
 struct H1_qpd_T { 
 #undef USE_NEW

@@ -19,26 +19,26 @@ Const 0
 Index a
  a_inc: inc, 1!101
  a_pc: pc, 1!1101
- a_cls: cls, 1!11111111
- a_st: st, 1!111111111
+ a_cls: cls, 1!00110100
+ a_st: st, 1!011100000
 
 Index b
  b_inc: inc, 1!000
- b_col: col, 1!111111111111
- b_q6: q6, 1!10100010
+ b_col: col, 1!110000000000
+ b_q6: q6, 1!00100000
 
 Index c
- c_cls: cls, 1!11111111
- c_col: col, 1!111111111111
+ c_cls: cls, 1!00101100
+ c_col: col, 1!010000000000
  c_pc: pc, 1!1010
 
 Index d
- d_inc: inc, 1!111
- d_pc: pc, 1!1100
- d_q6: q6, 1!11111111
+ d_inc: inc, 1!010
+ d_pc: pc, 1!0100
+ d_q6: q6, 1!11001100
 
 Index m
- m_inc: inc, 1!000
+ m_inc: inc, 1!111
 
 Index t
  t_st: st, 1!0
@@ -49,23 +49,23 @@ Index n
 Index g
  g_st: st, 1!0
 
-Number rA, 1, 0!11101011
-Number rB, 1, 0!11110101
-Number rC, 1, 0!01000000
-Number rD, 1, 0!01000000
-Number rT, 1, 0!00110111
-Number rG, 1, 0!01011010
-Number lr, 1, 0!01111
-Number lrm, 1, 0!01100
+Number rA, 1, 0!11111011
+Number rB, 1, 0!11111111
+Number rC, 1, 0!11111110
+Number rD, 1, 0!00000000
+Number rT, 1, 0!00000000
+Number rG, 1, 0!00000000
+Number lr, 1, 0!01110
+Number lrm, 1, 0!00000
 Number mbm, 1, 0!00000000
 Number mwA, 1, 0!00000000
-Number mwB, 1, 0!00000000
-Number mwC, 1, 0!00000000
-Number mwD, 1, 0!00101100
+Number mwB, 1, 0!00010000
+Number mwC, 1, 0!00100000
+Number mwD, 1, 0!01100100
 Number mwT, 1, 0!00000000
 Number mwG, 1, 0!00000000
-Number mt, 1, 0!110
-Number mb, 1, 0!00000101
+Number mt, 1, 0!000
+Number mb, 1, 0!00011111
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
 #  direct, one that does not is hashed into 2^h rows and contexts share

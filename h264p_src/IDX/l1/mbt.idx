@@ -17,25 +17,25 @@ Debug 1
 Const 0
 
 Index a
- a_st: st, 1!111111111
- a_ca: ca, 1!11111111
- a_cb: cb, 1!11111111
+ a_st: st, 1!010010000
+ a_ca: ca, 1!11110110
+ a_cb: cb, 1!11110110
 
 Index b
- b_st: st, 1!111111111
- b_cc: cc, 1!11111111
- b_nsk: nsk, 1!0000
+ b_st: st, 1!011100000
+ b_cc: cc, 1!01110110
+ b_nsk: nsk, 1!0001
 
 Index c
- c_st: st, 1!000100000
- c_ca: ca, 1!11100000
- c_cb: cb, 1!10000110
+ c_st: st, 1!000000000
+ c_ca: ca, 1!10000000
+ c_cb: cb, 1!10000100
 
 Index d
- d_st: st, 1!111111111
+ d_st: st, 1!011000000
 
 Index m
- m_st: st, 1!111111111
+ m_st: st, 1!000000000
 
 Index t
  t_st: st, 1!0
@@ -46,23 +46,23 @@ Index n
 Index g
  g_st: st, 1!0
 
-Number rA, 1, 0!01000000
-Number rB, 1, 0!00000000
-Number rC, 1, 0!11101010
-Number rD, 1, 0!11101111
-Number rT, 1, 0!00110111
-Number rG, 1, 0!01011010
+Number rA, 1, 0!11111110
+Number rB, 1, 0!11110110
+Number rC, 1, 0!00000000
+Number rD, 1, 0!11111011
+Number rT, 1, 0!00000000
+Number rG, 1, 0!00000000
 Number lr, 1, 0!01100
-Number lrm, 1, 0!01100
+Number lrm, 1, 0!00000
 Number mbm, 1, 0!00000000
-Number mwA, 1, 0!00000000
-Number mwB, 1, 0!00000001
-Number mwC, 1, 0!00010000
-Number mwD, 1, 0!00010100
+Number mwA, 1, 0!00000101
+Number mwB, 1, 0!00001111
+Number mwC, 1, 0!00110011
+Number mwD, 1, 0!00000000
 Number mwT, 1, 0!00000000
 Number mwG, 1, 0!00000000
-Number mt, 1, 0!110
-Number mb, 1, 0!00010110
+Number mt, 1, 0!000
+Number mb, 1, 0!00100111
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
 #  direct, one that does not is hashed into 2^h rows and contexts share

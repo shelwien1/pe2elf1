@@ -1,46 +1,45 @@
 
-static const byte H1_sgn_a_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
+static const byte H1_sgn_a_cg[13+1]={ 0,1,2,3,4,5,5,5,5,5,5,5,5,5 };
 static const byte H1_sgn_a_pos[3+1]={ 0,1,2,3 };
 static const byte H1_sgn_a_sa[3+1]={ 0,1,2,3 };
 static const byte H1_sgn_a_sb[3+1]={ 0,1,2,3 };
-static const byte H1_sgn_a_gh[8+1]={ 0,1,2,3,4,5,6,7,8 };
+static const byte H1_sgn_a_gh[8+1]={ 0,1,2,2,3,4,4,5,6 };
 
-static const byte H1_sgn_b_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
+static const byte H1_sgn_b_cg[13+1]={ 0,0,0,1,2,3,3,3,3,3,3,3,3,3 };
 static const byte H1_sgn_b_scb[3+1]={ 0,1,2,3 };
 static const byte H1_sgn_b_pos[3+1]={ 0,1,2,3 };
 
-static const byte H1_sgn_c_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
-static const byte H1_sgn_c_pos[3+1]={ 0,1,2,3 };
-static const byte H1_sgn_c_gh[8+1]={ 0,1,2,3,4,5,6,7,8 };
+static const byte H1_sgn_c_cg[13+1]={ 0,1,2,3,4,5,5,5,5,5,5,5,5,5 };
+static const byte H1_sgn_c_gh[8+1]={ 0,1,2,3,3,4,5,5,6 };
 
-static const byte H1_sgn_d_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
+static const byte H1_sgn_d_cg[13+1]={ 0,1,2,2,3,4,4,4,4,4,4,4,4,4 };
 static const byte H1_sgn_d_sa[3+1]={ 0,1,2,3 };
 static const byte H1_sgn_d_sb[3+1]={ 0,1,2,3 };
-static const byte H1_sgn_d_gh[8+1]={ 0,1,2,3,4,5,6,7,8 };
+static const byte H1_sgn_d_pos[3+1]={ 0,1,2,3 };
 
 
-static const byte H1_sgn_m_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
+static const byte H1_sgn_m_cg[13+1]={ 0,1,2,3,3,4,4,4,4,4,4,4,4,4 };
 
 
 
 
-static const int H1_sgn_rA = (233+0) * (1);
-static const int H1_sgn_rB = (205+0) * (1);
-static const int H1_sgn_rC = (235+0) * (1);
-static const int H1_sgn_rD = (224+0) * (1);
-static const int H1_sgn_rT = (55+0) * (1);
-static const int H1_sgn_rG = (90+0) * (1);
-static const int H1_sgn_lr = (12+0) * (1);
-static const int H1_sgn_lrm = (12+0) * (1);
+static const int H1_sgn_rA = (255+0) * (1);
+static const int H1_sgn_rB = (194+0) * (1);
+static const int H1_sgn_rC = (127+0) * (1);
+static const int H1_sgn_rD = (255+0) * (1);
+static const int H1_sgn_rT = (0+0) * (1);
+static const int H1_sgn_rG = (0+0) * (1);
+static const int H1_sgn_lr = (13+0) * (1);
+static const int H1_sgn_lrm = (0+0) * (1);
 static const int H1_sgn_mbm = (0+0) * (1);
-static const int H1_sgn_mwA = (29+0) * (1);
-static const int H1_sgn_mwB = (5+0) * (1);
-static const int H1_sgn_mwC = (0+0) * (1);
-static const int H1_sgn_mwD = (0+0) * (1);
+static const int H1_sgn_mwA = (3+0) * (1);
+static const int H1_sgn_mwB = (4+0) * (1);
+static const int H1_sgn_mwC = (16+0) * (1);
+static const int H1_sgn_mwD = (16+0) * (1);
 static const int H1_sgn_mwT = (0+0) * (1);
 static const int H1_sgn_mwG = (0+0) * (1);
-static const int H1_sgn_mt = (6+0) * (1);
-static const int H1_sgn_mb = (160+0) * (1);
+static const int H1_sgn_mt = (0+0) * (1);
+static const int H1_sgn_mb = (128+0) * (1);
 static const int H1_sgn_hA = (24+0) * (1);
 static const int H1_sgn_hB = (24+0) * (1);
 static const int H1_sgn_hC = (24+0) * (1);
@@ -50,12 +49,12 @@ static const int H1_sgn_hT = (24+0) * (1);
 static const int H1_sgn_hN = (24+0) * (1);
 
 
-static const long long H1_sgn_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 4), 4), 4), 9); // 8064
-static const long long H1_sgn_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 4), 4); // 224
-static const long long H1_sgn_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 4), 9); // 504
-static const long long H1_sgn_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 4), 4), 9), 2); // 4032
+static const long long H1_sgn_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 6), 4), 4), 4), 7); // 2688
+static const long long H1_sgn_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 4), 4); // 64
+static const long long H1_sgn_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 6), 2), 7); // 84
+static const long long H1_sgn_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 5), 4), 4), 1), 4); // 320
 static const long long H1_sgn_g_Volume = tc_vmul(1, 1); // 1
-static const long long H1_sgn_m_Volume = tc_vmul(1, 14); // 14
+static const long long H1_sgn_m_Volume = tc_vmul(1, 5); // 5
 static const long long H1_sgn_n_Volume = tc_vmul(1, 1); // 1
 static const long long H1_sgn_t_Volume = tc_vmul(1, 1); // 1
 
