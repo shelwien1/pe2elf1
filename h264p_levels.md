@@ -615,6 +615,41 @@ cd ../.. && ./mk.sh mod && ./mk.sh check 1
   smaller tables), its shape (the `FC_` macros and its templates'
   tables). The bits of the patterns are `opt.pl`'s.
 
+As built, the levels were tuned another way, a family at a time against
+dumps of its decisions:
+
+```sh
+./mk.sh dump 1 dump stream...           # what each family codes, a directory per stream
+./mk.sh famtune 1                       # ../famtune, the families of -1 in the tuning form
+python3 IDX/ftune.py ../famtune dump    # the hill-climb, four families at a time
+cd IDX/l1 && for f in *.idx; do perl ../import.pl $f ../../export.\!\!\! > t && mv t $f; done
+```
+
+- **Why it can.** What a family codes, and what it costs, depends on
+  the family's parameters and on three things they do not change: its
+  decisions, the variables its indices read, and what reaches it from
+  outside (the CABAC states' prediction, the hint's state). A build with
+  `-DH264P_DUMP` writes the three down as it compresses (`fam.inc`): the
+  variables at each `make()` (all of them, `H_USES` forced, so that any
+  index can be tried), each `select()`, each decision with its outside
+  prediction and hint state, a mantissa bit by its place in the number
+  (so that the tree's depth `mt` can change), each sign.
+  `IDX/famtune.cpp` codes one family's dumps again through the same
+  `tc_fam` and prints the size: the model's own for the family, to a
+  thousandth of a byte (checked at `-1` and `-9`, against `-v`'s
+  accounting by family).
+- **What it saves.** `opt.pl` compresses the corpus for each bit it
+  tries, every family's work and the model's around them, to see one
+  family's size change. A trial of `ftune.py` codes that family's
+  decisions alone: at `-1`, 0.01 s (NAL units) to 1 s (skip flags) of
+  CPU, where compressing the tuning corpus takes 4 s. The families do
+  not interact, so they are tuned side by side, and the stream dumps of
+  a trial are coded side by side too.
+- **Its own measure.** `ftune.py` keeps a flip that makes the family's
+  size smaller by any amount (`opt.pl` sees whole bytes of the
+  corpus), and ends a family's climb with a pass that gains less than a
+  byte.
+
 ### 7.6 Getting there
 
 Each step checked on the 96 test streams:
