@@ -4,17 +4,20 @@ The aim: h264p runs in one thread. Several threads are used by running
 several h264p processes side by side, each on a large piece of video
 stream, not by splitting the work of one. Each must do 400-500 KB of
 H.264 per second, compressing and decompressing, and can lose some
-compression for it. The current model stays as level `-9`, the strongest;
-lighter levels become further instances of the model template, as
-compression and decompression already are (`Model<0>`, `Model<1>`).
+compression for it. The model of before stays as level `-9`, the
+strongest; lighter levels are further instances of the model template, as
+compression and decompression are (`Model<0, Lv9>`, `Model<1, Lv9>`).
 
-This document measures where one thread's time goes in the current model,
-what each part buys in compression, and what the lighter levels would
-cost. Everything was measured on the 7 corpus streams (`test/002`, 3.87 MB
-of H.264), single-threaded (the `H264P_NO_THREADS` build), on the 2.1 GHz
-Xeon VM the other documents use (section 9 has how).
+Sections 1-3 measure where one thread's time went in the model that is
+now `-9`, what each part buys in compression, and what lighter levels
+would cost; sections 4-8 planned the levels. They are built: h264p runs in
+one thread, `c -9`, `-7`, `-5`, `-3` and `-1` pick the level, and `-1`
+compresses the corpus at 409 KB/s and decompresses it at 530, 17.4% larger
+than `-9` (section 4). Everything was measured on the 7 corpus streams
+(`test/002`, 3.87 MB of H.264), in one thread, on the 2.1 GHz Xeon VM the
+other documents use (section 9 has how).
 
-## 1. Speed now, in one thread
+## 1. The speed of the model before, in one thread
 
 KB of H.264 per second of CPU time:
 
@@ -165,100 +168,137 @@ Against H.264's own CABAC, `-9` saves 28.9% and k 16.5%.
 
 ## 4. Levels
 
-| level | has | size vs `-9` | `c` KB/s | `d` KB/s | memory |
-|---|---|---:|---:|---:|---:|
-| `-9` | everything (now) | 0 | 87 | 97 | 155 MB |
-| `-7` | no APMs, no template searches (c) | +1.6% | 110 | 122 | |
-| `-5` | the decoder only for maps, textures and edge misses; one mixer, no APMs, no deblocking (f) | +11.6% | 168 | 194 | |
-| `-3` | no decoder; `-9`'s coder without its APMs (h) | +15.9% | 225 | 279 | |
-| `-1` | no decoder; four counters, one mixer, no APMs, no CABAC states (k) | +17.5% | 314 | 415 | 40 MB |
-| `-1`, finished | as k, with section 5 done | about +16% | about 400 | about 500 | |
+As built (the plan, from the prototypes of section 3, in brackets), on the
+corpus in one thread:
 
-Memory is the peak per process on the large streams. `-1`'s
-compressed size and speed by stream (prototype k):
+| level | has | size | vs `-9` | `c` KB/s | `d` KB/s | memory |
+|---|---|---:|---:|---:|---:|---:|
+| `-9` | everything | 2,750,196 | 0 | 93 | 100 | 164 MB |
+| `-7` | no APMs, no template searches (c) | 2,794,747 | +1.62% (+1.6%) | 109 (110) | 122 (122) | 145 MB |
+| `-5` | the decoder only for maps, textures and edge misses, unfiltered; one mixer, no APMs, no CABAC states (f) | 3,068,628 | +11.58% (+11.6%) | 188 (168) | 206 (194) | 95 MB |
+| `-3` | no decoder but its reference lists; `-9`'s coder without its APMs (h) | 3,160,944 | +14.94% (+15.9%) | 257 (225) | 314 (279) | 52 MB |
+| `-1` | no decoder; four counters, one mixer, no APMs, no CABAC states (k) | 3,229,830 | +17.44% (about +16%) | 409 (about 400) | 530 (about 500) | 42 MB |
+
+`-9` codes as the model of sections 1-3, 7 bytes more: each stream's
+header has the level. Memory is the peak resident size, compressing
+stream 03 (decompressing it takes 5-6 MB less). `-1` by stream:
 
 | stream | size vs `-9` | `c` KB/s | `d` KB/s |
 |---|---:|---:|---:|
-| 00 | +15.4% | 256 | 350 |
-| 01 | +21.8% | 347 | 454 |
-| 02 | +1.9% | 299 | 376 |
-| 03 | +19.1% | 294 | 383 |
-| 04 | +12.6% | 342 | 465 |
-| 05 | +10.8% | 427 | 508 |
-| 06 | +10.4% | 592 | 717 |
+| 00 | +15.4% | 327 | 423 |
+| 01 | +21.8% | 451 | 620 |
+| 02 | +1.8% | 319 | 460 |
+| 03 | +19.1% | 378 | 473 |
+| 04 | +12.6% | 506 | 653 |
+| 05 | +10.7% | 546 | 652 |
+| 06 | +10.3% | 762 | 925 |
+| **all** | +17.4% | **409** | **530** |
 
-Only `-1` comes near the target: as prototyped it decompresses the corpus
-at 415 KB/s (350-717 by stream) and compresses it at 314. `-9` and `-1`
-are the two that matter; `-5` and `-3` fill the gap if wanted, and `-7` is
-nearly `-9` at 1.25x. Each level is two more instances to build and test.
+`-1` reaches the target on the corpus: 409 KB/s compressing and 530
+decompressing. Below it are 00 and 03, where macroblocks, not bytes, cost
+(00: 3.8 M macroblocks in 815 KB, 95% skipped), and compressing, 02, 28 KB
+of intra pictures at a high rate (its times, like 05's, are short and vary
+from run to run).
+The other levels fill the range between: `-7` is `-9` at 1.2 times the
+speed for 1.6%, `-5` twice as fast for 11.6%, `-3` nearly three times for
+14.9%.
+`-3` has the decoder's reference lists and pictures' motion without their
+samples (`ReconRefs`, section 6), worth 0.8% to it at 8% of its speed;
+`-1` could have them for the same 0.8% at 9% of its speed, which it has
+not to spare.
 
-## 5. What `-1` still needs (estimates)
+## 5. What `-1` got
 
-The prototype switches parts off but still computes much of what they
-need. In it, compression's time is 40% coder, 37% syntax (parsing 10%, the
-dry run's re-encoding 12%, the model pass's walk with its CABAC coding
-15%) and 22% model contexts; decompression's 52% coder, 28% model contexts
-and 18% syntax.
+The plan's items (estimates, from the prototype), and what came of each:
 
-- **One CABAC encoding when compressing.** The dry run parses each NAL
-  unit and re-encodes it to check that it comes back the same; the model
-  pass encodes it again and drops the result (only its context states are
-  used, for the CABAC-state predictions `-1` does without). With the
-  model pass doing the check instead, the dry run only parses: about −12%
-  of `-1`'s compression time. (A NAL unit that fails the check, rare,
-  would then have the compressor start again with it stored as it is.)
-- **The level's own contexts.** The prototype still builds all 17 row
-  indices of `-9` (indices are 9% of its compression time and 11% of its
-  decompression) and fills every context variable `-9` uses (the model
-  contexts, 22% and 28%). With families of four counters and one mixer
-  selector, about −8% both ways.
-- **A 12-input mixer** instead of 24 inputs of which 12 are zero: about
-  −4%, more decompressing.
-- **Smaller tables.** The prototype maps `-9`'s 226 MB of tables (its
-  peak resident size is 37-41 MB); `-1`'s own tables, sized for its
-  contexts, would miss less, and bound the memory of each process.
-- **Compression back**: `-1`'s four contexts per family chosen for `-1`
-  (the prototype keeps `-9`'s first four), and its parameters tuned by
-  `IDX/opt.pl` for its own configuration: perhaps 1-2% of the 17.5%.
-
-Together: about 400 KB/s compressing and 500 decompressing over the
-corpus. The slowest streams stay slower (00 and 03, where macroblocks,
-not bytes, cost: 00's 256 and 350 KB/s would become about 340 and 410).
-For them, a further model change would help: skipped macroblocks coded as
-runs (as CAVLC's mb_skip_run is), one value per run instead of a decision
-per macroblock (00: 3.6 M skip flags in 58,536 runs), and the model's
-per-macroblock bookkeeping of a run done at once.
+- **One CABAC encoding when compressing** (−12%). Done another way: the
+  dry run still parses each NAL unit and re-encodes it to check that it
+  comes back the same, but the model pass, whose bits are dropped, no
+  longer codes the CABAC bins at a level that reads no CABAC states
+  (`Chan::nobins`): the walk only walks them. The one thing the walk took
+  from its writer, the count of I_PCM alignment bits in a CABAC slice,
+  comes from the dry run's log instead. No restart is needed, and the
+  output is the same: `-1` compresses at 414 KB/s instead of 369 (+12%).
+- **The level's own contexts** (−8%). `-1`'s families are its own (four
+  counters, one mixer, the tables of that shape and nothing else);
+  ReconOff answers every query about pictures as a constant, so the code
+  that needs them folds away at compile time; the variables it does not
+  read are not computed where that costs (the significance loop's
+  neighbour coefficients). The last gave nothing measurable: what cost was
+  gone with the decoder.
+- **A 12-input mixer** (−4%). The mixers take 2 inputs per counter and 4
+  more, in lanes of 8: 16 for four counters, one AVX2 vector, instead of
+  24 (W0 is then 1/16, where the prototype kept 1/24).
+- **Smaller tables.** `-1`'s tables are its own, 39 MB of address space
+  (`-9`'s are 226 MB); it peaks at 42 MB compressing stream 03, 37 MB
+  decompressing.
+- **Compression back** (1-2%). Two families' worth of tries:
+  - six counters a family instead of four (`-9`'s indices e and h, less
+    their decoder variables): 0.22% smaller, 7% slower compressing. Not
+    taken.
+  - the reference lists without the decoder (`ReconRefs`): 0.84% smaller,
+    9% slower. Taken for `-3`, not for `-1` (section 4).
+- **Skip runs** (for 00 and 03): not done; it changes the format of the
+  skip family and the model's bookkeeping, and the corpus reaches the
+  target without.
 
 ## 6. The template
 
-- **`template <int f_DEC, class L> struct Model`**, `L` the level's class
-  (`Lv9`, `Lv1`, ...; section 7): its switches as compile-time constants
-  (`recon`, `search`, `proxy`, `signpred`, `skippx`, `deblock`,
-  `cabpred`) and its families' classes. The prototype's switches
-  (`X_NOREC`, `X_NOSEARCH`, `X_NOPROXY`, `X_NOSIGNP`, `X_NOSKIPPX`,
-  `X_NODEBLOCK`, `X_NOCAB`) become the first; its coder's (`X_CNT`,
-  `X_MIX1`, `X_NOAPM`) become the families' shapes.
-- **The decoder as a member type**: `Recon` for levels with it, a stub
-  without (its queries `constexpr` "not known", `active` false), chosen
-  by `std::conditional`, so that a level without the decoder has none of
-  its code or its pictures. (The build is C++11: no
-  `if constexpr`; the stub's constant answers let the compiler drop the
-  dead branches.)
+As built:
+
+- **`template <int f_DEC, class LV> struct Model`**, `LV` the level's
+  class (`Lv9`, `Lv7`, `Lv5`, `Lv3`, `Lv1` in `lv<L>.inc`): its switches
+  as compile-time constants, `refs` (the reference lists and the
+  pictures' motion), `recon` (the decoder in the loop), `search`,
+  `proxy`, `signpred`, `skippx`, `deblock`, `cabpred`, and its families'
+  classes. The prototype's switches (`X_NOREC`, `X_NOSEARCH`,
+  `X_NOPROXY`, `X_NOSIGNP`, `X_NOSKIPPX`, `X_NODEBLOCK`, `X_NOCAB`) became
+  these; its coder's (`X_CNT`, `X_MIX1`, `X_NOAPM`) the families' shapes.
+- **The decoder as a member type**, by the switches: `Recon`
+  (`ReconT<true>`) for levels with it; `ReconRefs` (`ReconT<false>`), the
+  pictures' motion, POCs and reference lists without their samples, for
+  `refs` alone; `ReconOff` without either, what `Recon` answers while no
+  picture is active, as constants. A query about samples asks `act()`,
+  `PX && active`, which folds to false in the last two, so a level
+  without the decoder has none of its pixel code or its pictures. The
+  searches and the intra proxy are reached through helpers that are a
+  constant "not known" where the level has them not; sign prediction, the
+  skip prediction's pixels and the CABAC states as predictions are gated
+  at their one place each; deblocking is a flag of `Recon`.
 - **The families as `tc_fam<f_DEC, C>`**, `C` the family's class at the
-  level: its shape (counters, mixers, APMs) sizes the family and chooses
-  its code (the counters read and updated in vectors of their number, one
-  mixer without the final one, the APMs compiled out), and its parameters
-  are the class's constants.
-- **The format**: the level is a byte of the header after the version
-  (a new format version); `d` reads it and runs `Model<1, L>`; `c -L`
-  runs `Model<0, L>`. What `-9` codes stays as it is now.
-- **Code size**: two instances per level. `-9`'s are 420 KB (compressing)
-  and 380 KB (decompressing) of the 1.4 MB binary, with 210 KB of the
-  reconstruction's own; a level without the decoder needs much less.
-  Compile time grows with each instance: today's two take about 30 s
-  (`mk.sh`'s `g++ -O2`, one translation unit, this VM).
+  level: an even count of counters up to ten (read and updated four to an
+  AVX2 vector), one mixer or three and the final one, no APM or two; the
+  mixers' inputs two per counter and four more, in lanes of 8.
+- **The coder**, `tc_rc<f_DEC>::rc`, is out of the model: the same for
+  every level.
+- **The format** (version 5): the level is a byte of the header after the
+  version; `d` reads it and runs `Model<1, L>`; `c -L` runs `Model<0, L>`.
+  What `-9` codes is as before, byte for byte after the header.
+- **Code size**: the binary with all five levels is 5.3 MB (the
+  Makefile's `-O3`; 1.4 MB before, with `-9` alone) and compiles in about
+  3 minutes, one translation unit; a level alone (`-DH264P_ONLY=L`, as
+  `mk.sh`'s tuning and check builds have it) in under one.
 
 ## 7. Each level's own IDX and MOD
+
+Built as this section describes, with these differences: `famcfg.inc`
+takes an even count of counters (2 to 10), has their constants as arrays
+(`lim`, `tg`, `hc` the row bits, `kc` the rows) made by an X-macro of the
+shape, and defines every member in every class (0 where the shape has not
+the part), since `tc_fam`'s code names them in the branches the compiler
+drops; counter C has a frozen row limit like the other nine; the tables
+reach `tc_fam`
+through the class's `tables()`, and a `static_assert` checks that the
+template's mixer rows are as wide as the family's inputs. The masks of
+7.3 have a part `refs` beside `rec` (the variables that need only the
+reference lists: skp's `c1` and `k9`, mbt's `c1`, mvs's `rt`).
+`IDX/l7`, `l5`, `l3` and `l1` were cut from `IDX/l9` by a script (each
+level's shape, less the lines of variables its parts cannot make) and
+are each level's own from there. `mk.sh` has `release`, `mod`, `tuning
+L` and `check L`; `./mk.sh tuning 1` has 5,030 tunable bits in 525
+patterns (the cut copy of 7.5 less its decoder lines), and `./mk.sh check
+1` finds the tuning and the shipping build of `-1` coding the corpus
+alike.
 
 Today there is one profile. `IDX/<fam>.idx` and its template
 `IDX/<fam>.inc` are generated into `MOD/<fam>_h.inc` (the parameters,
@@ -603,12 +643,11 @@ Each step checked on the 96 test streams:
 
 ## 8. One thread
 
-- The coder's thread (`TcDefer`), the thread that parses ahead and the
-  finishing thread (deblocking, padding, maps behind the decoding) go;
-  their single-thread paths, built today with `H264P_NO_THREADS`, become
-  the only ones. The output is the same.
-- Memory per process: `-9` peaks at 153-157 MB on the large streams (87
-  MB on 02), `-1` as prototyped at 37-41 MB (25 MB on 02).
+Done: the coder's thread (`TcDefer`), the thread that parsed ahead and the
+finishing thread (deblocking, padding, maps behind the decoding) are gone;
+their single-thread paths, built before with `H264P_NO_THREADS`, are the
+only ones, and the output was the same. Memory per process is in section
+4.
 
 ## 9. How this was measured
 
@@ -625,6 +664,13 @@ Each step checked on the 96 test streams:
   alternating order, the better of the two runs).
 - Decisions counted by a counter in `bit_x` and `bitm`; memory as the
   peak resident size.
+- Sections 4 and 5 (the built levels): CPU time in one thread on one core,
+  each stream compressed and decompressed by every level in turn, twice in
+  alternating order, the better of the two runs; sizes of the shipping
+  build; memory the peak resident size (`wait4`). Every level round-trips
+  the 98 streams of `test/h264p.sh`. The masks of section 7.3 come from
+  coding the corpus with `-9` and each part switched off in turn,
+  recording each context variable's range.
 - Section 7: the tunable bits are what `mk.sh`'s tuning build reports
   for `-9`, and the same count over the lines the cut copy keeps; a
   variable counts as read where a line naming it has a 1 in its pattern;

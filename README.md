@@ -18,18 +18,15 @@ Linux (gcc or clang):
 Windows (MinGW): `g.bat`, as before, for h264dec, `gp.bat` for h264p.
 
 h264p is a single module: `h264p_src/h264p.cpp` includes the rest of its
-sources (`*.inc`), so `g++ -O2 -march=x86-64-v3 -std=c++11 -fwrapv -pthread
+sources (`*.inc`), so `g++ -O2 -march=x86-64-v3 -std=c++11 -fwrapv
 h264p_src/h264p.cpp -o h264p` builds it too. Its target is x86-64-v3 (AVX2:
 Haswell, Zen and later), for which its pixel kernels and mixers have SIMD
 code; built for any other target (`make PARCH=`, or without `-march`) it
 uses the plain C++ beside them, which is slower and codes identically
 (as do builds by GCC and clang).
-Compression runs the context mixing coder in a second thread, beside the
-model, and parses the NAL units ahead of the model in a third; both
-directions finish the reconstructed pictures (deblocking, the padded copies
-of the references, the maps the model reads) in a thread of their own, two
-macroblock rows behind the decoding. `-DH264P_NO_THREADS` builds it without
-(for a compiler without `std::thread`), also to the same output.
+h264p runs in one thread: a long stream is meant to be compressed in
+pieces, one process each (`h264p_levels.md`). `-DH264P_ONLY=L` builds one
+level of its model alone.
 
 ## Test
 
@@ -91,7 +88,9 @@ type-puns its motion vector arrays.
     ./h264p r [options] input.tsv output.264     # restore from the dump
 
 `-v` prints statistics, `-s` makes `c` and `t` fail when a NAL unit of a
-supported type has to be stored verbatim. Input and output can be `-`
+supported type has to be stored verbatim, and `-9`, `-7`, `-5`, `-3`, `-1`
+pick the level of `c`'s model, from the strongest (the default) to the
+fastest; `d` reads the level from the stream. Input and output can be `-`
 (stdin, stdout).
 
 ### Compression
@@ -117,9 +116,11 @@ values are coded against the last of their element (frame_num and the POC
 modulo their range), and the bytes nothing else models, x264's SEI among
 them, with a match against a built-in dictionary of x264's options. The
 contexts and the parameters of each group of syntax elements (a family)
-are declared in `h264p_src/IDX/*.idx` and turned into code in
-`h264p_src/MOD/` (see `h264p_src/mk.sh`), where they can also be tuned.
-`h264p_cm.md` is the design.
+are declared in `h264p_src/IDX/l<L>/*.idx`, a set for each level, and turned
+into code in `h264p_src/MOD/l<L>/` (see `h264p_src/mk.sh`), where they can
+also be tuned, a level at a time. `h264p_cm.md` is the design; this is
+level `-9`, and the lighter levels leave parts of it out
+(`h264p_levels.md`).
 
 Most of the contexts come from the pictures: the model decodes them as it
 goes (`recon.inc`, for 8-bit 4:2:0 frame streams without scaling matrices,
@@ -186,23 +187,30 @@ On the test streams (`-v` shows where the bits go):
 
 | stream | H.264 | compressed | |
 |---|---:|---:|---:|
-| 00 | 815,140 | 567,359 | 69.6% |
-| 01 | 1,095,103 | 804,282 | 73.4% |
-| 02 | 28,143 | 26,252 | 93.3% |
-| 03 | 1,181,369 | 775,208 | 65.6% |
-| 04 | 484,238 | 383,733 | 79.2% |
+| 00 | 815,140 | 567,360 | 69.6% |
+| 01 | 1,095,103 | 804,283 | 73.4% |
+| 02 | 28,143 | 26,253 | 93.3% |
+| 03 | 1,181,369 | 775,209 | 65.6% |
+| 04 | 484,238 | 383,734 | 79.2% |
 
 The macroblock syntax takes 72.1% of what its CABAC coding takes (from
 3,536,129 to 2,551,582 bytes over these streams; whole streams go from
-3,603,993 to 2,556,834 bytes; `h264p_cm.md` section 9 has the figures by
-syntax element). Speed, on a 2.1 GHz Xeon with the x86-64-v3 build, is 0.10-0.25
-MB of H.264 per second compressing (in four threads) and 0.09-0.19 MB/s
-decompressing (in two), depending on the stream (`h264p_speed.md` has the
-figures), and the model tables take about 226 MB. In one thread it does
-87 KB/s compressing and 97 decompressing; `h264p_levels.md` has where that
-time goes by model part, and the lighter model levels that would reach
-400-500 KB/s a thread, with their cost in compression and how each level
-gets its own IDX profile to tune.
+3,603,993 to 2,556,839 bytes; `h264p_cm.md` section 9 has the figures by
+syntax element). That is level `-9`. In one thread, on a 2.1 GHz Xeon with
+the x86-64-v3 build, the levels do on the 7 streams of `test/002` (3.87 MB
+of H.264):
+
+| level | compressed | | `c` KB/s | `d` KB/s | memory |
+|---|---:|---:|---:|---:|---:|
+| `-9` | 2,750,196 | 71.1% | 93 | 100 | 164 MB |
+| `-7` | 2,794,747 | 72.3% | 109 | 122 | 145 MB |
+| `-5` | 3,068,628 | 79.4% | 188 | 206 | 95 MB |
+| `-3` | 3,160,944 | 81.7% | 257 | 314 | 52 MB |
+| `-1` | 3,229,830 | 83.5% | 409 | 530 | 42 MB |
+
+(memory: the peak resident size compressing 03). `h264p_levels.md` has
+what each level leaves out of the model, where the time goes, and how each
+level has its own IDX profile to tune; `h264p_speed.md` how `-9` got here.
 
 ### TSV
 
