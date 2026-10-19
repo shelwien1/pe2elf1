@@ -6,8 +6,9 @@ same speed (04: 10.5 s): the model is symmetric, and both sides reconstruct the
 pictures. This plan starts from where the time actually goes, answers seven
 questions (allocation, template branches, `restrict`, SIMD lookups, memory
 latency, layout, vectorization), and orders the work by what it buys.
-Section 4 has what has been done since, measured: compression 2.9x and
-decompression 2.3x faster over the corpus, to the same output.
+Section 4 has what has been done since, measured: compression 3.2x and
+decompression 2.6x faster over the corpus, to the same output but for a
+cheaper end_of_slice_flag (3 bytes more over the 96 test streams).
 
 ## 1. Where the time goes
 
@@ -414,19 +415,20 @@ and 1.9x on 02.
 
 What has landed, measured (wall clock, this machine, the original build and
 the current one run one after the other; its timings vary by 5-10% from run
-to run and from day to day). Every step codes exactly as before it: the
-output of every test stream is the same, and the round trips pass.
+to run and from day to day). Every step codes exactly as before it (the
+output of every test stream is the same, and the round trips pass) but the
+last, which changes how end_of_slice_flag is coded.
 
 | stream | bytes | `c` before | `c` now | `d` before | `d` now |
 |---|---:|---:|---:|---:|---:|
-| 00 (low rate, nearly all skipped) | 815,140 | 29.15 s | 10.18 s | 27.76 s | 11.96 s |
-| 01 | 1,095,103 | 27.01 s | 8.58 s | 24.81 s | 10.52 s |
-| 02 (intra, high rate) | 28,143 | 0.28 s | 0.29 s | 0.25 s | 0.20 s |
-| 03 (much intra) | 1,181,369 | 37.83 s | 13.49 s | 37.59 s | 15.98 s |
-| 04 (P/B) | 484,238 | 12.03 s | 3.60 s | 10.83 s | 4.41 s |
-| 05 | 31,669 | 0.43 s | 0.26 s | 0.42 s | 0.23 s |
-| 06 | 230,978 | 1.98 s | 0.84 s | 1.95 s | 1.18 s |
-| **total** | 3,866,640 | **108.7 s** | **37.2 s (2.9x)** | **103.6 s** | **44.5 s (2.3x)** |
+| 00 (low rate, nearly all skipped) | 815,140 | 30.95 s | 9.56 s | 30.03 s | 11.20 s |
+| 01 | 1,095,103 | 28.15 s | 8.20 s | 27.54 s | 10.83 s |
+| 02 (intra, high rate) | 28,143 | 0.33 s | 0.24 s | 0.29 s | 0.23 s |
+| 03 (much intra) | 1,181,369 | 40.11 s | 12.44 s | 39.95 s | 15.86 s |
+| 04 (P/B) | 484,238 | 12.28 s | 3.56 s | 12.49 s | 4.45 s |
+| 05 | 31,669 | 0.47 s | 0.28 s | 0.45 s | 0.30 s |
+| 06 | 230,978 | 2.15 s | 1.04 s | 2.15 s | 1.23 s |
+| **total** | 3,866,640 | **114.4 s** | **35.3 s (3.2x)** | **112.9 s** | **44.1 s (2.6x)** |
 
 The steps, in order (the gains on the streams named, paired runs):
 
@@ -493,6 +495,17 @@ The steps, in order (the gains on the streams named, paired runs):
 - **The proxy's distance from the decoded luma** (`proxy_acc`, asked before
   every residual block of an intra macroblock) a masked row at a time. `d`
   of 01: 2.8%.
+- **The compressor parses ahead in a third thread**: a NAL unit's work that
+  needs no model (its parsing, writing it back to see that it comes out
+  the same, the padding detector, 6-8% of the model's thread) runs up to
+  three NAL units ahead on a context of its own; the model's context takes
+  the same parameter sets and padding as it reaches each NAL unit. `c`:
+  4-12%.
+- **end_of_slice_flag by a counter of its own** after a slice of its kind
+  that was the whole picture (there 0 all but for sure); elsewhere the skip
+  family's decision as before. It took a full decision per macroblock, as
+  much time as the skip flag: `d` of 00 5.5%, of 01 4.5%. The 96 test
+  streams take 3 bytes more; the format's version is 2.
 
 What did not pay:
 
@@ -523,8 +536,9 @@ Where the time goes now (decompressing, one thread):
   neighbours' counts, bookkeeping) about 15%, the template searches 8%, the
   predictions and `tm_miss` 10%.
 - 01: the coder about 35%, the template searches 13%.
-- Compressing, the coder's thread waits for the main one: two threads take
-  73-82% of one thread's time on the large streams.
+- Compressing, the coder's thread waits for the model's: with the parsing
+  in a third, the three take about 70% of one thread's time on the large
+  streams.
 
 What is left in the plan: the generated index builders (3.2.2), the rest of
 the coder's arithmetic (3.3; it waits on its rows more than it computes
