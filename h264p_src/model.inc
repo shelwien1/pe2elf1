@@ -410,6 +410,8 @@ struct Model {
 
   void init() {
     cm_tables();
+    // (end_of_slice_flag 0 nearly for sure: as if seen a few times)
+    for (cm_cnt& c : end_c_) c.p = (u16)(CM_CONE - 16), c.t = 8;
     for (int& p : hist_poc_) p = INT_MIN;
     std::fill(&hist_rpoc_[0][0][0], &hist_rpoc_[0][0][0] + sizeof hist_rpoc_ / sizeof(int), INT_MIN);
     std::fill(&col_rpoc_[0][0], &col_rpoc_[0][0] + sizeof col_rpoc_ / sizeof(int), INT_MIN);
@@ -1029,12 +1031,30 @@ struct Model {
     }
     return v;
   }
+  // end_of_slice_flag. After a slice of the kind that was the whole
+  // picture, 0 nearly for sure: an adaptive counter of its own by the kind,
+  // not the skip family's decision (which cost as much as the skip flag's);
+  // else that decision, which knows where slices end
+  cm_cnt end_c_[10];
   int end(int v, bool certain) {
     if (certain) return 1;  // nothing follows in the picture
     tc_stage = STG_SKIP;
+    if (prev_cnt_ == size_) {
+      tc_syms[STG_SKIP]++;
+#ifndef H264P_NO_THREADS
+      if (!f_DEC && dq_) return dq_->flag(this, st_, ENC && v), v;
+#endif
+      return end_x(st_, v);
+    }
     H_skp_v D = {};
     skp_vars(D);
     return skp_bit(D, 1, ENC && v);
+  }
+  int end_x(int ctx, int v) {
+    cm_cnt& c = end_c_[ctx];
+    v = tc_bit<f_DEC>(c.P(), ENC && v);
+    c.upd(v, 1023, 0);
+    return v;
   }
   int field(int v) {
     tc_stage = STG_SKIP;
@@ -2796,6 +2816,10 @@ Rangecoder<f_DEC> Model<f_DEC>::rc;
 static void tc_exec(TcDefer::Rec& r) {
   if (r.op == TcDefer::RAW) {
     static_cast<Model<0>*>(r.obj)->raw_x((u32)r.val);
+    return;
+  }
+  if (r.op == TcDefer::FLAG) {
+    static_cast<Model<0>*>(r.obj)->end_x(r.node, (int)r.val);
     return;
   }
   tc_fam<0>& f = *static_cast<tc_fam<0>*>(r.obj);

@@ -64,7 +64,7 @@ template <int f_DEC> static INLINE int tc_bit(int p, int bit) {
 //  which take only what was recorded, so the stream is the same. (Not the
 //  decompressor's: what it decodes steers its model.)
 struct TcDefer {
-  enum Op : uint8_t { SEL, BIT, CODE, CODES, SIGN, RAW, END };
+  enum Op : uint8_t { SEL, BIT, CODE, CODES, SIGN, RAW, FLAG, END };
   struct Rec {
     Op op;
     bool pa;    // prpa copied
@@ -72,7 +72,7 @@ struct TcDefer {
     i64 val;    // the bit, value or byte
     int prp;
     i64 hint;
-    void *obj;  // the family (RAW: the model)
+    void *obj;  // the family (RAW, FLAG: the model)
     tcx x;
     int prpa[32];
   };
@@ -165,6 +165,11 @@ struct TcDefer {
   INLINE void raw(void *m, u32 b) {
     Rec &r = next();
     r.op = RAW, r.obj = m, r.val = b;
+    put();
+  }
+  INLINE void flag(void *m, int ctx, int b) {  // (the model's end_x)
+    Rec &r = next();
+    r.op = FLAG, r.obj = m, r.node = ctx, r.val = b;
     put();
   }
   void start() {

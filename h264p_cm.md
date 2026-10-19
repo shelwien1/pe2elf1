@@ -846,7 +846,10 @@ hint's own cascade decides there while the two agree, or which side of the
 hint the number went, through counters of its own (and the final mixer is
 selected by that state too). The signs of mvd and mb_qp_delta are
 decisions of families of their own (mvg, qpg), coded once the magnitude is
-known. Coefficients are coded
+known. end_of_slice_flag, after a slice of its kind that was the whole
+picture, is an adaptive counter's of its own by the slice's kind, not a
+decision of the skip family: 0 there all but for sure, it cost as much
+time as the skip flag. Coefficients are coded
 count first (the number of nonzero coefficients, then the significance of
 each position knowing how many are left, the levels backwards, the
 signs).
@@ -911,7 +914,7 @@ with their defaults (0.6 KB: 02's 667 bytes of it take 84).
 
 | element | CABAC | model | |
 |---|---:|---:|---:|
-| skip, end | 336,175 | 221,360 | −34.2% |
+| skip, end | 336,175 | 221,359 | −34.2% |
 | mb_type | 365,120 | 259,423 | −28.9% |
 | cbp, transform_size_8x8_flag | 216,100 | 153,399 | −29.0% |
 | intra modes | 299,858 | 231,769 | −22.7% |
@@ -920,8 +923,8 @@ with their defaults (0.6 KB: 02's 667 bytes of it take 84).
 | coded_block_flag, significance (count, significance) | 910,721 | 697,027 | −23.5% |
 | levels | 302,611 | 219,810 | −27.4% |
 | signs | 329,382 | 182,207 | −44.7% |
-| macroblock syntax | 3,536,129 | 2,550,876 | −27.9% |
-| whole streams (H.264 against compressed) | 3,603,993 | 2,556,129 | −29.1% |
+| macroblock syntax | 3,536,129 | 2,550,875 | −27.9% |
+| whole streams (H.264 against compressed) | 3,603,993 | 2,556,130 | −29.1% |
 
 The model tables take 226 MB.
 
