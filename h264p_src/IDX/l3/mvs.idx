@@ -36,6 +36,7 @@ Index a
  a_mb: mb, 1!1111100
  a_oth: oth, 1!11111
  a_sp: sp, 1!11110011
+ a_rt: rt, 1!11111111111111
 
 Index b
  b_kind: kind, 1!111
@@ -63,6 +64,7 @@ Index e
  e_kind: kind, 1!011
  e_comp: comp, 1!0
  e_sp: sp, 1!00000000
+ e_rt: rt, 1!11111111111111
 
 Index h
  h_kind: kind, 1!010

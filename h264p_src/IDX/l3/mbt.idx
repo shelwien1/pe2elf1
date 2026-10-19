@@ -25,6 +25,7 @@ Index b
  b_st: st, 1!111111111
  b_cc: cc, 1!11111111
  b_nsk: nsk, 1!0000
+ b_c1: c1, 1!111111111
 
 Index c
  c_st: st, 1!000000000

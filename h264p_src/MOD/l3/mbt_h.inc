@@ -4,6 +4,7 @@ static const byte H3_mbt_a_cb[8+1]={ 0,1,1,1,1,1,2,3,3 };
 
 static const byte H3_mbt_b_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 static const byte H3_mbt_b_cc[8+1]={ 0,1,2,3,4,5,6,7,8 };
+static const byte H3_mbt_b_c1[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 
 static const byte H3_mbt_c_ca[8+1]={ 0,1,1,2,3,4,5,5,5 };
 static const byte H3_mbt_c_cc[8+1]={ 0,1,2,3,4,5,6,7,8 };
@@ -84,7 +85,7 @@ static const int H3_mbt_hN = (24+0) * (1);
 
 
 static const long long H3_mbt_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 4), 4); // 32
-static const long long H3_mbt_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 10), 9), 1); // 90
+static const long long H3_mbt_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 9), 1), 10); // 900
 static const long long H3_mbt_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 6), 9); // 54
 static const long long H3_mbt_d_Volume = tc_vmul(1, 10); // 10
 static const long long H3_mbt_e_Volume = tc_vmul(tc_vmul(1, 10), 9); // 90
@@ -100,7 +101,7 @@ static const long long H3_mbt_s_Volume = tc_vmul(1, 10); // 10
 static const long long H3_mbt_t_Volume = tc_vmul(1, 1); // 1
 static const long long H3_mbt_w_Volume = tc_vmul(1, 10); // 10
 
-#define H3_mbt_USES(X) X(st) X(ca) X(cb) X(cc) X(nsk)
+#define H3_mbt_USES(X) X(st) X(ca) X(cb) X(cc) X(c1) X(nsk)
 
 struct H3_mbt_T { 
 #undef USE_NEW

@@ -7,6 +7,7 @@ static const byte H3_skp_b_cnt[15+1]={ 0,0,0,0,0,0,0,1,1,2,3,4,4,4,5,6 };
 static const byte H3_skp_c_c9[9+1]={ 0,1,1,1,2,2,3,4,5,6 };
 
 static const byte H3_skp_d_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
+static const byte H3_skp_d_k9[10+1]={ 0,1,2,3,4,5,6,7,8,9,10 };
 
 static const byte H3_skp_e_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 
@@ -75,9 +76,9 @@ static const int H3_skp_hN = (24+0) * (1);
 
 
 static const long long H3_skp_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 3), 3), 1), 10), 2), 3), 3); // 16200
-static const long long H3_skp_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 3), 3), 2), 7); // 252
+static const long long H3_skp_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 3), 3), 2), 7), 3); // 756
 static const long long H3_skp_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 3), 7), 3); // 126
-static const long long H3_skp_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, 10), 3), 3); // 90
+static const long long H3_skp_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 3), 3), 3), 11); // 2970
 static const long long H3_skp_e_Volume = tc_vmul(1, 10); // 10
 static const long long H3_skp_g_Volume = tc_vmul(1, 1); // 1
 static const long long H3_skp_h_Volume = tc_vmul(1, 10); // 10
@@ -91,7 +92,7 @@ static const long long H3_skp_s_Volume = tc_vmul(1, 10); // 10
 static const long long H3_skp_t_Volume = tc_vmul(1, 1); // 1
 static const long long H3_skp_w_Volume = tc_vmul(tc_vmul(tc_vmul(1, 10), 3), 3); // 90
 
-#define H3_skp_USES(X) X(st) X(a3) X(b3) X(c9) X(eq) X(lf) X(af) X(cd) X(cnt) X(col) X(run) X(qc)
+#define H3_skp_USES(X) X(st) X(a3) X(b3) X(c9) X(eq) X(lf) X(af) X(cd) X(cnt) X(c1) X(col) X(run) X(k9) X(qc)
 
 struct H3_skp_T { 
 #undef USE_NEW

@@ -451,14 +451,17 @@ struct RPic {
     return padded ? yt.data() + (size_t)kPad * stride + kPad : nullptr;
   }
 
-  void alloc(int mw, int mh) {
+  // (px: with the samples; without, the motion alone)
+  void alloc(int mw, int mh, bool px) {
     mbw = mw;
     mbh = mh;
     w = mw * 16;
     h = mh * 16;
-    y.assign((size_t)w * h, 0);
-    u.assign((size_t)w * h / 4, 128);
-    v.assign((size_t)w * h / 4, 128);
+    if (px) {
+      y.assign((size_t)w * h, 0);
+      u.assign((size_t)w * h / 4, 128);
+      v.assign((size_t)w * h / 4, 128);
+    }
     intra.assign((size_t)mw * mh, 1);
     rf.assign((size_t)mw * mh * 8, -1);
     rpid.assign((size_t)mw * mh * 8, -1);
@@ -476,9 +479,17 @@ struct DbMb {
   int16_t mv[2][16][2];
 };
 
-struct Recon {
+// PX: the pictures with their samples, the decoder in the loop (Recon); or
+// (ReconRefs) only the pictures' motion, POCs and reference lists, which
+// direct prediction and the model's reference contexts need: every query
+// about samples then answers "not known", as while no picture is active
+template <bool PX>
+struct ReconT {
   bool on = false;       // the current stream is reconstructed
   bool active = false;   // the current picture is
+  bool mact = false;     // and its motion (and the reference lists) are: active, or PX false
+  // (the pictures' samples: never where PX is false, a constant there)
+  bool act() const { return PX && active; }
   std::vector<std::unique_ptr<RPic>> dpb;  // reference pictures
   std::unique_ptr<RPic> cur;               // the picture being decoded
   std::vector<std::unique_ptr<RPic>> spare;  // pictures to reuse
@@ -658,31 +669,29 @@ struct Recon {
     maps_end();
     if (cur_ref_idc) cur->padded = true;
   }
-  ~Recon() {
-  }
 
   // --- reference picture management (8.2.4, 8.2.5)
   int pic_num(const RPic* p) const { return p->lt ? p->lt_idx : (p->frame_num > cur->frame_num ? p->frame_num - max_frame_num : p->frame_num); }
 
   void finish_picture() {
     if (!cur) return;
-    if (active) fin_end();
+    if (act()) fin_end();
     // checking the reconstruction against a decoder's: H264P_RECDUMP=file
     // gets the pictures, in decoding order, as raw 4:2:0 of whole macroblocks
     static FILE* dump = getenv("H264P_RECDUMP") ? fopen(getenv("H264P_RECDUMP"), "wb") : nullptr;
-    if (dump && active) {
+    if (dump && act()) {
       fwrite(cur->y.data(), 1, cur->y.size(), dump);
       fwrite(cur->u.data(), 1, cur->u.size(), dump);
       fwrite(cur->v.data(), 1, cur->v.size(), dump);
     }
     if (cur_ref_idc) mark();
     if (cur->ref) {
-      if (!cur->padded) cur->pad();
+      if (PX && !cur->padded) cur->pad();
       dpb.push_back(std::move(cur));
     } else {
       spare.push_back(std::move(cur));
     }
-    active = false;
+    active = mact = false;
     nlist[0] = nlist[1] = 0;  // marking may have dropped the pictures they hold
   }
 
@@ -954,7 +963,18 @@ struct Recon {
     return lst;
   }
   void mb_start(int addr) {
-    if (active) {
+    // the motion of the next macroblock's colocated one (direct prediction),
+    // on its way into the cache
+    if (mact && nlist[1] && list[1][0] && addr + 1 < list[1][0]->mbw * list[1][0]->mbh) {
+      const RPic* c = list[1][0];
+      int na = addr + 1;
+      CM_PREFETCH(&c->intra[na]);
+      CM_PREFETCH(&c->rf[(size_t)na * 8]);
+      CM_PREFETCH(&c->rpid[(size_t)na * 8]);
+      CM_PREFETCH(&c->mv[(size_t)na * 64]);
+      CM_PREFETCH(&c->mv[(size_t)na * 64 + 32]);
+    }
+    if (act()) {
       fin_mb(addr, false);
       // what mb_end will write of the macroblock, on its way into the cache
       const char* d = (const char*)&db[addr];
@@ -984,7 +1004,7 @@ struct Recon {
     // zero), on their way into the cache for that one's prediction (rows of
     // 16 and 8 aligned so, each in a line)
     int na = addr + 1;
-    if (active && na < cur->mbw * cur->mbh)
+    if (act() && na < cur->mbw * cur->mbh)
       for (int l = 0; l < 2; l++) {
         const RPic* R = nlist[l] ? list[l][0] : nullptr;
         if (!R || R->mbw != cur->mbw || R->mbh != cur->mbh) continue;
@@ -1280,7 +1300,7 @@ struct Recon {
   // whole samples, from that picture's samples around it, by SATD; costs
   // gets each mode's (INT_MAX not possible); -1 no picture
   int proxy_i16mode(int dx, int dy, int* costs) const {
-    if (!active) return -1;
+    if (!act()) return -1;
     const RPic* P = proxy_pic();
     if (!P) return -1;
     int w = P->w;
@@ -1421,7 +1441,7 @@ struct Recon {
   // (dx, dy) whole luma samples, from that picture's samples around it,
   // by SATD over both components; costs gets each mode's; -1 no picture
   int proxy_cmode(int dx, int dy, int* costs) const {
-    if (!active) return -1;
+    if (!act()) return -1;
     const RPic* P = proxy_pic();
     if (!P) return -1;
     int cw = P->w / 2, ch = P->h / 2;
@@ -1777,7 +1797,7 @@ struct Recon {
   // picture now, Intra4x4/8x8 luma block by block (luma_ready).
   void prepare(int cls, int i16m, const uint8_t* modes, int cpred, int t8, const int8_t rf[2][4],
                const int16_t mv[2][16][2]) {
-    if (!active || mb_prepared) return;
+    if (!act() || mb_prepared) return;
     mb_prepared = true;
     mb_cls = cls;
     mb_i16m = i16m;
@@ -1804,7 +1824,7 @@ struct Recon {
   // an Intra4x4 (Intra8x8: blk the 8x8 block) block about to be coded: the
   // ones before it reconstructed, its prediction in the picture
   void luma_ready(int blk, int qp) {
-    if (!active || mb_cls != 6) return;
+    if (!act() || mb_cls != 6) return;
     if (mb_t8) {
       for (int b8 = 0; b8 <= blk; b8++) {
         if (mb_done8 >> b8 & 1) continue;
@@ -1849,7 +1869,7 @@ struct Recon {
   }
   // a luma block's coefficients are known (cat as the walk's, blk its index)
   void luma_add(int cat, int blk, int qp) {
-    if (!active || !mb_prepared || mb_cls == 8) return;
+    if (!act() || !mb_prepared || mb_cls == 8) return;
     if (cat == 1 || cat == 2) {
       if (!mb_t8 && !(mb_done4 >> blk & 1)) add4b(blk, qp);
     } else if (cat == 5) {
@@ -1859,7 +1879,7 @@ struct Recon {
   // the luma of the macroblock, all of it (its coefficients coded; t8
   // known by then, where mb_t8 may be from before)
   void luma_finish(int qp, int t8) {
-    if (!active || !mb_prepared || mb_cls == 8) return;
+    if (!act() || !mb_prepared || mb_cls == 8) return;
     if (mb_cls == 6) luma_ready(t8 ? 3 : 15, qp);
     if (t8) {
       for (int b8 = 0; b8 < 4; b8++)
@@ -1900,12 +1920,12 @@ struct Recon {
   }
   // a chroma AC block about to be coded: the ones before it done
   void chroma_ready(int c, int b, int qp) {
-    if (!active || !mb_prepared || mb_cls == 8) return;
+    if (!act() || !mb_prepared || mb_cls == 8) return;
     for (int k = 0; k < b; k++)
       if (!(mb_cdone[c] >> k & 1)) addc(c, k, qp);
   }
   void chroma_add(int c, int b, int qp) {
-    if (!active || !mb_prepared || mb_cls == 8) return;
+    if (!act() || !mb_prepared || mb_cls == 8) return;
     if (!(mb_cdone[c] >> b & 1)) addc(c, b, qp);
   }
   int dcc_at(int c, int b, int qp) {
@@ -1942,9 +1962,9 @@ struct Recon {
   // without coefficients, the chroma residual, I_PCM samples), and what
   // deblocking and the direct prediction of later pictures need. nz: the
   // walk's coefficient counts.
-  void mb_end(int addr, int cls, int i16m, const uint8_t* modes, int cpred, int t8, int qp, const int8_t rf[2][4],
-              const int16_t mv[2][16][2], const uint8_t nz[16]) {
-    if (!active) return;
+  // (the samples of the macroblock, and what deblocking needs of it)
+  void mb_pixels(int addr, int cls, int i16m, const uint8_t* modes, int cpred, int t8, int qp, const int8_t rf[2][4],
+                 const int16_t mv[2][16][2], const uint8_t nz[16]) {
     prepare(cls, i16m, modes, cpred, t8, rf, mv);
     int w = cur->w, cw = w / 2, mx = addr % cur->mbw * 16, my = addr / cur->mbw * 16;
     uint8_t* Y = cur->y.data() + my * w + mx;
@@ -1986,19 +2006,28 @@ struct Recon {
         uint8_t any = D.nz[i] | D.nz[i + 1] | D.nz[i + 4] | D.nz[i + 5];
         D.nz[i] = D.nz[i + 1] = D.nz[i + 4] = D.nz[i + 5] = any;
       }
+  }
+  void mb_end(int addr, int cls, int i16m, const uint8_t* modes, int cpred, int t8, int qp, const int8_t rf[2][4],
+              const int16_t mv[2][16][2], const uint8_t nz[16]) {
+    if (!mact) return;
+    bool intra = cls >= 6;
+    if (PX) mb_pixels(addr, cls, i16m, modes, cpred, t8, qp, rf, mv, nz);
+    // for the direct prediction of later pictures (and deblocking)
     cur->intra[addr] = intra;
     for (int l = 0; l < 2; l++) {
       for (int b8 = 0; b8 < 4; b8++) {
         int r = intra ? -1 : rf[l][b8];
         const RPic* rp = r >= 0 && r < nlist[l] ? list[l][r] : nullptr;
-        D.rp[l][b8] = rp ? rp->id : -1;
+        if (PX) db[addr].rp[l][b8] = rp ? rp->id : -1;
         cur->rf[(addr * 4 + b8) * 2 + l] = (int8_t)(rp ? r : -1);
         cur->rpid[(addr * 4 + b8) * 2 + l] = rp ? rp->id : -1;
       }
-      if (intra)
-        memset(D.mv[l], 0, sizeof D.mv[l]);
-      else
-        memcpy(D.mv[l], mv[l], sizeof D.mv[l]);
+      if (PX) {
+        if (intra)
+          memset(db[addr].mv[l], 0, sizeof db[addr].mv[l]);
+        else
+          memcpy(db[addr].mv[l], mv[l], sizeof db[addr].mv[l]);
+      }
     }
     // the picture's vectors: by block, those of both lists in turn
     int16_t* cm = &cur->mv[(size_t)addr * 64];
@@ -2017,7 +2046,7 @@ struct Recon {
         for (int b = 0; b < 16; b++) memcpy(cm + (b * 2 + l) * 2, mv[l][b], 2 * sizeof(int16_t));
 #endif
     }
-    fin_mb(addr, true);
+    if (PX) fin_mb(addr, true);
   }
 
   // The predictions of a macroblock by each list, before the weights (luma
@@ -2566,9 +2595,9 @@ struct Recon {
 
   // --- a slice begins
   static bool supported(const Sps& sps, const Pps& pps) {
-    return sps.chroma_array_type() == 1 && sps.bit_depth_luma == 8 && sps.bit_depth_chroma == 8 &&
-           sps.frame_mbs_only_flag && !sps.scaling_matrix && !pps.scaling_matrix && !sps.transform_bypass &&
-           (int64_t)sps.width_mbs * sps.frame_height_mbs() <= 36864;  // 4096 x 2304
+    return (!PX || (sps.chroma_array_type() == 1 && sps.bit_depth_luma == 8 && sps.bit_depth_chroma == 8 &&
+                    !sps.scaling_matrix && !pps.scaling_matrix && !sps.transform_bypass)) &&
+           sps.frame_mbs_only_flag && (int64_t)sps.width_mbs * sps.frame_height_mbs() <= 36864;  // 4096 x 2304
   }
   void slice_begin(const SliceHeader& h, bool newpic) {
     const Sps& sps = *h.sps;
@@ -2587,7 +2616,8 @@ struct Recon {
       } else {
         cur.reset(new RPic);
       }
-      if (cur->mbw != sps.width_mbs || cur->mbh != sps.frame_height_mbs()) cur->alloc(sps.width_mbs, sps.frame_height_mbs());
+      if (cur->mbw != sps.width_mbs || cur->mbh != sps.frame_height_mbs())
+        cur->alloc(sps.width_mbs, sps.frame_height_mbs(), PX);
       cur->ref = cur->lt = cur->padded = false;
       cur->lt_idx = -1;
       cur->id = next_id++;
@@ -2599,19 +2629,20 @@ struct Recon {
       cur_mmco5 = h.mmco5;
       cur_mmco = h.mmco;
       // (finishing the last picture left db as none)
-      if (db.size() != (size_t)cur->mbw * cur->mbh) db.assign((size_t)cur->mbw * cur->mbh, db_none());
+      if (PX && db.size() != (size_t)cur->mbw * cur->mbh) db.assign((size_t)cur->mbw * cur->mbh, db_none());
       slice_no = 0;
-      active = true;
+      active = PX;
+      mact = true;
       // references of another size are no use
       std::vector<std::unique_ptr<RPic>> keep;
       for (auto& p : dpb)
         if (p->mbw == cur->mbw && p->mbh == cur->mbh) keep.push_back(std::move(p));
       dpb.swap(keep);
-      fin_begin();
+      if (PX) fin_begin();
     } else {
       slice_no++;
     }
-    if (!active) return;
+    if (!mact) return;
     curr_pic_num = h.frame_num;
     stype = h.type();
     disable = h.disable_deblocking;
@@ -2633,7 +2664,7 @@ struct Recon {
   // 1 is not there or the block is intra; else its refIdx and vector, and
   // the picture it refers to
   bool colocated(int addr, int blk, int& ref, int* mv, int64_t& pid) const {
-    const RPic* col = active && nlist[1] ? list[1][0] : nullptr;
+    const RPic* col = mact && nlist[1] ? list[1][0] : nullptr;
     if (!col || addr >= col->mbw * col->mbh || col->intra[addr]) return false;
     if (direct8x8) {
       int x = blk & 3, y = blk >> 2;
@@ -2647,7 +2678,7 @@ struct Recon {
     mv[1] = col->mv[((addr * 16 + blk) * 2 + l) * 2 + 1];
     return ref >= 0;
   }
-  bool col_long_term() const { return active && nlist[1] && list[1][0] && list[1][0]->lt; }
+  bool col_long_term() const { return mact && nlist[1] && list[1][0] && list[1][0]->lt; }
   // temporal direct (8.4.1.2.3): the list 0 reference and the scale factor
   int map_col(int64_t pid) const {
     for (int i = 0; i < nlist[0]; i++)
@@ -2673,7 +2704,7 @@ struct Recon {
   // any; strength gets the sum of the votes.
   int dimd(int addr, int x0, int y0, int n, int& strength) const {
     strength = 0;
-    if (!active) return 9;
+    if (!act()) return 9;
     int mbw = cur->mbw, w = cur->w, mx = addr % mbw, my = addr / mbw;
     const uint8_t* Y = cur->y.data();
     int hist[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
@@ -2769,7 +2800,7 @@ struct Recon {
   }
   // the same of the proxy of the current macroblock (proxy_build); -1 none
   int64_t proxy_energy() const {
-    if (!active || !prx_ok) return -1;
+    if (!act() || !prx_ok) return -1;
     int64_t e = 0, s1 = 0, s2 = 0;
     for (int i = 0; i < 256; i++) s1 += prx_y[i], s2 += prx_y[i] * prx_y[i];
     e += s2 - (s1 * s1 >> 8);
@@ -2785,7 +2816,7 @@ struct Recon {
   // how well its luma continues the decoded samples above and to the left,
   // as edge_miss
   int skip_miss(const int8_t rf[2][4], const int16_t mv[2][16][2]) {
-    if (!active || mb_prepared) return -1;
+    if (!act() || mb_prepared) return -1;
     int w = cur->w, cw = w / 2, mx = mb_addr % cur->mbw * 16, my = mb_addr / cur->mbw * 16;
     inter(mb_addr, rf, mv, cur->y.data() + my * w + mx, cur->u.data() + my / 2 * cw + mx / 2,
           cur->v.data() + my / 2 * cw + mx / 2);
@@ -2798,7 +2829,7 @@ struct Recon {
   // mv) are: 4 x the mean absolute difference of their luma, from the
   // blocks of equal motion (8x8); -1 not bi-predicted anywhere
   int bi_diff(const int8_t rf[2][4], const int16_t mv[2][16][2]) {
-    if (!active) return -1;
+    if (!act()) return -1;
     int mx = mb_addr % cur->mbw * 16, my = mb_addr / cur->mbw * 16, sum = 0, cnt = 0;
     uint8_t p[2][16 * 8];
     // (the macroblock's predictions, which inter() will want next, where
@@ -2847,7 +2878,7 @@ struct Recon {
   // list's prediction alone, where it is used
   int tm_miss(const int8_t rf[2][4], const int16_t mv[2][16][2], int* per = nullptr) const {
     if (per) per[0] = per[1] = -1;
-    if (!active) return -1;
+    if (!act()) return -1;
     int mbw = cur->mbw, mx = mb_addr % mbw * 16, my = mb_addr / mbw * 16, w = cur->w;
     bool top = my > 0 && db[mb_addr - mbw].slice >= 0;
     bool left = mx > 0 && db[mb_addr - 1].slice >= 0;
@@ -3041,7 +3072,7 @@ struct Recon {
   bool tm_search(int l, int r, int bx, int by, int bw, int bh, int* mv, bool only_y, const int (*cand)[2] = nullptr,
                  int ncand = 0, int* miss = nullptr, int lambda = 0, int finest = 1, int inner = 0,
                  int* alt = nullptr) const {
-    if (!active) return false;
+    if (!act()) return false;
     int mbw = cur->mbw, x0 = mb_addr % mbw * 16 + bx, y0 = mb_addr / mbw * 16 + by, w = cur->w;
     bool top = by == 0 && y0 > 0 && db[mb_addr - mbw].slice >= 0;
     bool left = bx == 0 && x0 > 0 && db[mb_addr - 1].slice >= 0;
@@ -3224,7 +3255,7 @@ struct Recon {
   bool prx_ok = false;
   bool proxy_build(const int* mv) {
     prx_ok = false;
-    const RPic* P = active ? proxy_pic() : nullptr;
+    const RPic* P = act() ? proxy_pic() : nullptr;
     if (!P) return false;
     int mx = mb_addr % cur->mbw * 16, my = mb_addr / cur->mbw * 16;
     mc_luma(P, mx, my, 16, 16, mv[0], mv[1], prx_y);
@@ -3235,7 +3266,7 @@ struct Recon {
   // how far the luma of the current macroblock decoded so far is from the
   // proxy: 4 x the mean absolute difference; -1 none decoded or no proxy
   int proxy_acc() const {
-    if (!active || !prx_ok) return -1;
+    if (!act() || !prx_ok) return -1;
     int w = cur->w, mx = mb_addr % cur->mbw * 16, my = mb_addr / cur->mbw * 16, sum = 0, cnt = 0;
     const uint8_t* Y = cur->y.data() + my * w + mx;
 #ifdef H264P_AVX2
@@ -3284,7 +3315,7 @@ struct Recon {
   // source and its surroundings the proxy picture there (displaced by dx,
   // dy); -1 no picture
   int proxy_nz(int bx, int by, int n, int m, int qp, int dx, int dy) const {
-    if (!active) return -1;
+    if (!act()) return -1;
     const RPic* P = proxy_pic();
     if (!P) return -1;
     int w = P->w, x0 = mb_addr % cur->mbw * 16 + bx * n, y0 = mb_addr / cur->mbw * 16 + by * n;
@@ -3311,7 +3342,7 @@ struct Recon {
     return cnt;
   }
   int proxy_mode(int bx, int by, int n, int dx, int dy, int* sads = nullptr) const {
-    if (!active) return -1;
+    if (!act()) return -1;
     const RPic* P = proxy_pic();
     if (!P) return -1;
     int w = P->w, x0 = mb_addr % cur->mbw * 16 + bx * n, y0 = mb_addr / cur->mbw * 16 + by * n;
@@ -3404,7 +3435,7 @@ struct Recon {
   // fquant4 or fquant8 at qp. plane 0 luma, 1 and 2 chroma; x, y in its
   // samples of the current macroblock. false: no proxy.
   bool proxy_levels(int plane, int x, int y, int qp, int* lv, int n = 4) const {
-    if (!active || !prx_ok) return false;
+    if (!act() || !prx_ok) return false;
     int w = plane ? cur->w / 2 : cur->w, m = plane ? 8 : 16;
     int mx = mb_addr % cur->mbw * m + x, my = mb_addr / cur->mbw * m + y;
     const std::vector<uint8_t>& cp = plane == 0 ? cur->y : plane == 1 ? cur->u : cur->v;
@@ -3424,7 +3455,7 @@ struct Recon {
   // fquant4/fquant8 at qp: what a residual of a small shift of the block
   // would have, per unit of shift each way
   bool pred_grad_levels(int plane, int x, int y, int n, int qp, int* lx, int* ly) const {
-    if (!active || !mb_prepared || mb_cls == 8) return false;
+    if (!act() || !mb_prepared || mb_cls == 8) return false;
     int w = plane ? cur->w / 2 : cur->w, h = plane ? cur->h / 2 : cur->h, m = plane ? 8 : 16;
     int mx = mb_addr % cur->mbw * m + x, my = mb_addr / cur->mbw * m + y;
     const std::vector<uint8_t>& cp = plane == 0 ? cur->y : plane == 1 ? cur->u : cur->v;
@@ -3445,7 +3476,7 @@ struct Recon {
   // the same of the prediction itself (in the picture, before the
   // residual): its texture by frequency, in quarter levels
   bool pred_levels(int plane, int x, int y, int qp, int* lv, int n = 4) const {
-    if (!active || !mb_prepared || mb_cls == 8) return false;
+    if (!act() || !mb_prepared || mb_cls == 8) return false;
     int w = plane ? cur->w / 2 : cur->w, m = plane ? 8 : 16;
     int mx = mb_addr % cur->mbw * m + x, my = mb_addr / cur->mbw * m + y;
     const std::vector<uint8_t>& cp = plane == 0 ? cur->y : plane == 1 ? cur->u : cur->v;
@@ -3462,7 +3493,7 @@ struct Recon {
   // and for the DC blocks: Intra16x16's (plane 0: 16 levels in zigzag
   // order) and chroma's (planes 1, 2: 4 levels)
   bool proxy_dc(int plane, int qp, int* lv) const {
-    if (!active || !prx_ok) return false;
+    if (!act() || !prx_ok) return false;
     int w = plane ? cur->w / 2 : cur->w, m = plane ? 8 : 16, nb = m / 4;
     int mx = mb_addr % cur->mbw * m, my = mb_addr / cur->mbw * m;
     const std::vector<uint8_t>& cp = plane == 0 ? cur->y : plane == 1 ? cur->u : cur->v;
@@ -3515,7 +3546,7 @@ struct Recon {
   // prediction, before the residual): the sum of the absolute differences
   // between neighbouring samples
   int mb_texture() const {
-    if (!active) return -1;
+    if (!act()) return -1;
     int w = cur->w, gx, gy;
     grads(cur->y.data() + (mb_addr / cur->mbw) * 16 * w + (mb_addr % cur->mbw) * 16, w, 16, gx, gy);
     return gx + gy;
@@ -3523,7 +3554,7 @@ struct Recon {
   // the same of reference r of list l displaced by mv (whole samples) at
   // the luma block (bx, by, bw, bh) of the current macroblock; -1 none
   int ref_texture(int l, int r, int bx, int by, int bw, int bh, const int* mv, int dir = 3) const {
-    const RPic* ref = active && r >= 0 && r < nlist[l] ? list[l][r] : nullptr;
+    const RPic* ref = act() && r >= 0 && r < nlist[l] ? list[l][r] : nullptr;
     if (!ref || bw >= ref->w || bh >= ref->h) return -1;  // no room for the block and its gradients
     int W = ref->w, H = ref->h;
     int x0 = clip3(0, W - bw - 1, mb_addr % cur->mbw * 16 + bx + (mv[0] >> 2));
@@ -3555,7 +3586,7 @@ struct Recon {
     return g;
   }
   int pred_texture(int c, int x, int y, int n, int* gxy = nullptr) const {
-    if (!active || !mb_prepared || mb_cls == 8) return -1;
+    if (!act() || !mb_prepared || mb_cls == 8) return -1;
     int w = c ? cur->w / 2 : cur->w, m = c ? 8 : 16;
     const uint8_t* p = (c == 0 ? cur->y.data() : c == 1 ? cur->u.data() : cur->v.data()) +
                        ((mb_addr / cur->mbw) * m + y) * w + (mb_addr % cur->mbw) * m + x;
@@ -3571,7 +3602,7 @@ struct Recon {
   // the two decoded rows or columns beyond the edge less the prediction
   // there, times scale; avail[e] false where those are not decoded.
   bool sign_edges(int plane, int x, int y, int n, int64_t scale, int64_t* target, bool* avail) const {
-    if (!active || !mb_prepared || mb_cls == 8) return false;
+    if (!act() || !mb_prepared || mb_cls == 8) return false;
     return edges(plane, x, y, n, scale, target, avail);
   }
   bool edges(int plane, int x, int y, int n, int64_t scale, int64_t* target, bool* avail) const {
@@ -3610,7 +3641,7 @@ struct Recon {
   // top and left edge samples of |2 R1 - R2 - P|, in quarter samples; -1
   // not known.
   int edge_miss(int c, int x, int y, int n) const {
-    if (!active || !mb_prepared || mb_cls == 8) return -1;
+    if (!act() || !mb_prepared || mb_cls == 8) return -1;
     return miss(c, x, y, n);
   }
   int miss(int c, int x, int y, int n) const {
@@ -3671,13 +3702,16 @@ struct Recon {
     return cnt ? (int)(sum / cnt) : -1;
   }
 };
+typedef ReconT<true> Recon;
+typedef ReconT<false> ReconRefs;
 
 // The decoder of a level without one (h264p_levels.md section 6): what
 // Recon answers while no picture is active, every query "not known", but
 // here as constants, so that the model's code that needs the pictures folds
 // away, and the level has none of the pictures.
 struct ReconOff {
-  static constexpr bool active = false;
+  static constexpr bool active = false, mact = false;
+  static constexpr bool act() { return false; }
   RPic* cur = nullptr;
   RPic* list[2][33] = {};
   int nlist[2] = {0, 0};
@@ -3737,5 +3771,6 @@ struct ReconOff {
   bool deblock = true;
 };
 constexpr bool ReconOff::active;
+constexpr bool ReconOff::mact;
 
 }  // namespace h264p

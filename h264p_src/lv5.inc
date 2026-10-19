@@ -158,11 +158,12 @@
 
 struct Lv5 {
   static const int id = 5;  // the header's level byte
-  // the model's parts (h264p_levels.md section 6): the decoder in the loop,
-  // its template searches, the intra proxy, sign prediction, the skip
+  // the model's parts (h264p_levels.md section 6): the decoder in the loop
+  // (or without it the reference lists and the pictures' motion, refs), its
+  // template searches, the intra proxy, sign prediction, the skip
   // prediction's pixels, deblocking (or the contexts see the pictures
   // unfiltered), the CABAC states as predictions
-  static const bool recon = true, search = false, proxy = false, signpred = false, skippx = false, deblock = false,
+  static const bool refs = true, recon = true, search = false, proxy = false, signpred = false, skippx = false, deblock = false,
                     cabpred = false;
   typedef C5_nal nal;
   typedef C5_hdr hdr;
