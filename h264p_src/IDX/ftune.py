@@ -8,7 +8,7 @@ wrote (a directory per stream, a <family>.dump in each).  Each family is
 tuned in a copy of FAMTUNE of its own, its patterns flipped a bit at a
 time, a flip kept when the family codes its dumps smaller (or as small with
 the bit now 0), pattern after pattern in random order, pass after pass
-until a pass gains nothing (or `passes` of them).  The families do not
+until a pass gains less than a byte ($FTUNE_MINPASS; or `passes` of them).  The families do not
 interact, so four are tuned at once, the largest first, each trial a
 process per stream.  Writes the
 winners to export.!!! (mdesc lines, for IDX/import.pl; every pattern of
@@ -20,6 +20,7 @@ from concurrent.futures import ThreadPoolExecutor
 exe, ddir = sys.argv[1], sys.argv[2]
 passes = int(sys.argv[3]) if len(sys.argv) > 3 else 9
 only = sys.argv[4:]
+minpass = float(os.environ.get('FTUNE_MINPASS', '1'))  # a pass that gains less ends the family's climb
 data = bytearray(open(exe, 'rb').read())
 pats = {}  # name: (address, length, offset field)
 for m in re.finditer(rb'!MAP!(.*?)!(.*?)\x00(.*?)\x00', data, re.S):
@@ -70,7 +71,7 @@ def tune(fam):
     start = best = measure()
     say('%s: %d patterns, %d bits, %.1f bytes' % (fam, len(fams[fam]), sum(pats[k][1] for k in fams[fam]), best))
     for p in range(passes):
-        gained = False
+        before = best
         names = sorted(fams[fam])
         random.shuffle(names)
         for k in names:
@@ -95,7 +96,6 @@ def tune(fam):
             if s < best - 1e-6:
                 img[a:a + l] = cur
                 best = s
-                gained = True
                 with lock:
                     data[a:a + l] = cur
                 say('%s %-26s %s  %.1f' % (fam, k, cur.decode(), best))
@@ -105,7 +105,7 @@ def tune(fam):
                     data[a:a + l] = cur
         export()
         say('%s: pass %d done, %.1f bytes (%+.1f)' % (fam, p, best, best - start))
-        if not gained:
+        if best > before - minpass:
             break
     os.remove(mine)
     return fam, start, best
