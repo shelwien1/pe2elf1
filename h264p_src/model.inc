@@ -146,6 +146,15 @@ static T* tc_table() {
 #if H264P_LV(9)
 #include "lv9.inc"
 #endif
+#if H264P_LV(7)
+#include "lv7.inc"
+#endif
+#if H264P_LV(5)
+#include "lv5.inc"
+#endif
+#if H264P_LV(3)
+#include "lv3.inc"
+#endif
 #if H264P_LV(1)
 #include "lv1.inc"
 #endif

@@ -9,7 +9,7 @@
 # concatenation of some of them.  Compression and the dump are run with -s,
 # so a stream also fails when one of its NAL units of a supported type could
 # only be stored verbatim.  Compression is tried at each of the model's
-# levels in LEVELS (default: all of them, "9 1").
+# levels in LEVELS (default: all of them, "9 7 5 3 1").
 
 bin=${1:-./h264p}
 shift
@@ -47,7 +47,7 @@ trip() {
   fi
 }
 
-levels=${LEVELS:-9 1}
+levels=${LEVELS:-9 7 5 3 1}
 pass=0
 fail=0
 total=0

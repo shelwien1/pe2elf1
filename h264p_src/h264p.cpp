@@ -64,12 +64,27 @@ const uint32_t kCrcXor = 0x68323634;
 #else
 #define H264P_L9(X)
 #endif
+#if H264P_LV(7)
+#define H264P_L7(X) X(7)
+#else
+#define H264P_L7(X)
+#endif
+#if H264P_LV(5)
+#define H264P_L5(X) X(5)
+#else
+#define H264P_L5(X)
+#endif
+#if H264P_LV(3)
+#define H264P_L3(X) X(3)
+#else
+#define H264P_L3(X)
+#endif
 #if H264P_LV(1)
 #define H264P_L1(X) X(1)
 #else
 #define H264P_L1(X)
 #endif
-#define H264P_LEVELS(X) H264P_L9(X) H264P_L1(X)
+#define H264P_LEVELS(X) H264P_L9(X) H264P_L7(X) H264P_L5(X) H264P_L3(X) H264P_L1(X)
 #define H264P_FIRST(n) n,
 const int kLevels[] = {H264P_LEVELS(H264P_FIRST)};
 

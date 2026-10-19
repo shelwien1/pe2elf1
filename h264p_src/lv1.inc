@@ -1,8 +1,8 @@
-// lv1.inc -- level -1, the fastest: no decoder in the loop, and in each
-// family four counters and one mixer, no APMs (h264p_levels.md sections 4
-// and 5); its families as IDX/l1 declares them (generated into MOD/l1),
-// each wrapped into its configuration class (famcfg.inc), and the level's
-// class, which Model<f_DEC, Lv1> takes.
+// lv1.inc -- level -1, the fastest: no decoder in the loop, no CABAC states, and in
+// each family four counters and one mixer, no APMs (h264p_levels.md
+// sections 4 and 6). Its families as IDX/l1 declares them (generated into
+// MOD/l1), each wrapped into its configuration class (famcfg.inc), and the
+// level's class, which Model<f_DEC, Lv1> takes.
 #include "MOD/l1/nal_h.inc"
 #include "MOD/l1/hdr_h.inc"
 #include "MOD/l1/skp_h.inc"
@@ -157,7 +157,10 @@
 
 struct Lv1 {
   static const int id = 1;  // the header's level byte
-  // the model's parts (h264p_levels.md section 6): none of the decoder's
+  // the model's parts (h264p_levels.md section 6): the decoder in the loop,
+  // its template searches, the intra proxy, sign prediction, the skip
+  // prediction's pixels, deblocking (or the contexts see the pictures
+  // unfiltered), the CABAC states as predictions
   static const bool recon = false, search = false, proxy = false, signpred = false, skippx = false, deblock = false,
                     cabpred = false;
   typedef C1_nal nal;

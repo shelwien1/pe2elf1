@@ -1,0 +1,134 @@
+#  h264p's lvl family at level -5: its context indices and its tunable
+#  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
+#  MOD/l5/lvl_h.inc and MOD/l5/lvl_p.inc from this file and lvl.inc.
+#
+#  coeff_abs_level_minus1, in reverse scan order as CABAC codes it. cg is the
+#  ctxBlockCat, g1/e1 the levels coded so far above 1 and equal to 1, nc the
+#  block's nC (class), pos the scan position (class), sa/sb the magnitude at
+#  the same position in the blocks A and B (class, 0 zero or none), q6 QP/6,
+#  tot the nonzero coefficients of the block (class), tz as the sig
+#  family's, hv as the sig family's and fq whether the position is a
+#  horizontal (1) or vertical (2) frequency, or both (3), or DC (0).
+
+Prefix H5_lvl
+Debug 1
+Const 0
+
+Index a
+ a_cg: cg, 1!1111111111111
+ a_g1: g1, 1!0000
+ a_e1: e1, 1!0000
+ a_nc: nc, 1!11101
+
+Index b
+ b_cg: cg, 1!1111111111111
+ b_pos: pos, 1!11111
+ b_tot: tot, 1!1111111
+ b_hv: hv, 1!1001100
+ b_fq: fq, 1!111
+
+Index c
+ c_cg: cg, 1!1011100000000
+ c_sa: sa, 1!111
+ c_sb: sb, 1!111
+ c_q6: q6, 1!01111100
+ c_lh: lh, 1!1111111111111111111111111111111111111111111111111111111111111111
+
+Index d
+ d_cg: cg, 1!1111111111111
+ d_g1: g1, 1!0000
+ d_md: md, 1!1111111111111111111
+ d_pg: pg, 1!0001000000000001
+ d_lt: lt, 1!0111101
+
+Index e
+ e_cg: cg, 1!0000000000000
+ e_g1: g1, 1!1111
+ e_e1: e1, 1!1111
+ e_tz: tz, 1!11111111
+
+Index h
+ h_cg: cg, 1!1111111111111
+ h_pos: pos, 1!11111
+ h_tz: tz, 1!11111111
+
+Index i
+ i_cg: cg, 1!1111111111111
+ i_g1: g1, 1!1111
+
+Index j
+ j_cg: cg, 1!0000000000000
+ j_lt: lt, 1!1111111
+ j_lh: lh, 1!1111111111111111111111111111111111111111111111111111111111111111
+ j_pos: pos, 1!11111
+
+Index k
+ k_cg: cg, 1!1111111111111
+ k_pos: pos, 1!11111
+ k_g1: g1, 1!1111
+
+Index l
+ l_cg: cg, 1!1111111111111
+ l_sa: sa, 1!111
+ l_sb: sb, 1!111
+ l_lh: lh, 1!1111111111111111111111111111111111111111111111111111111111111111
+
+Index m
+ m_cg: cg, 1!0000000000000
+ m_g1: g1, 1!1
+
+Index t
+ t_cg: cg, 1!1111111111111
+
+Index n
+ n_cg: cg, 1!1111111111111
+
+Index g
+ g_cg: cg, 1!0
+
+Number rA, 1, 0!11110100
+Number rB, 1, 0!00010000
+Number rC, 1, 0!01000000
+Number rE, 1, 0!01000000
+Number rH, 1, 0!11110011
+Number rI, 1, 0!01000000
+Number rJ, 1, 0!11101001
+Number rK, 1, 0!01000000
+Number rL, 1, 0!01000000
+Number rD, 1, 0!11111110
+Number rT, 1, 0!10110001
+Number rG, 1, 0!01011010
+Number lr, 1, 0!01111
+Number lrm, 1, 0!01100
+Number mbm, 1, 0!00000000
+Number mwA, 1, 0!00000000
+Number mwB, 1, 0!00000110
+Number mwC, 1, 0!00000000
+Number mwE, 1, 0!00000000
+Number mwH, 1, 0!00000000
+Number mwI, 1, 0!00000001
+Number mwJ, 1, 0!00000000
+Number mwK, 1, 0!00000000
+Number mwL, 1, 0!00100111
+Number mwD, 1, 0!00000001
+Number mwT, 1, 0!00100000
+Number mwG, 1, 0!00000000
+Number mt, 1, 0!000
+Number mb, 1, 0!00000101
+
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
+#  direct, one that does not is hashed into 2^h rows and contexts share
+#  them.  31 is "never hashed".  Frozen: left live these only grow.
+! Number hA, 1, 0!11000
+! Number hB, 1, 0!11000
+! Number hC, 1, 0!11000
+! Number hE, 1, 0!11000
+! Number hH, 1, 0!10000
+! Number hI, 1, 0!11000
+! Number hJ, 1, 0!11000
+! Number hK, 1, 0!11000
+! Number hL, 1, 0!11000
+! Number hD, 1, 0!11000
+! Number hM, 1, 0!11000
+! Number hT, 1, 0!11000
+! Number hN, 1, 0!11000

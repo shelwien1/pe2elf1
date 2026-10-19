@@ -1,0 +1,173 @@
+#  h264p's mvs family at level -7: its context indices and its tunable
+#  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
+#  MOD/l7/mvs_h.inc and MOD/l7/mvs_p.inc from this file and mvs.inc.
+#
+#  Motion: sub_mb_type (kind 0 P, 1 B, as a binary tree), ref_idx (kind 2) and
+#  the components of mvd (kind 3; the sign is the mvg family's). comp is the
+#  component, lst the list, ma/mb the magnitudes of the components of A and
+#  B (classes), oth the class of the other component already coded, ps the
+#  partition size (0 16x16 .. 3 4x4), rf the ref_idx of the partition (or of
+#  A for ref_idx), pi the partition's place in the macroblock, nr the
+#  references of the list; for mvd pd the vector of the same partition in the
+#  previous picture of the type (scaled by the POC distance of the
+#  partition's reference against that of its own; in B slices the one
+#  temporal direct would give, where list 1's first reference has one)
+#  less the predicted vector, sp how far the
+#  vectors of the neighbours A, B, C are from the predicted one (1 + tc_qlog,
+#  0 none), for ref_idx pd the ref_idx in the previous picture; tv for mvd
+#  the template match's vector less the predicted one (1 + sq2, 0 none),
+#  for ref_idx 1 + the reference it matches best; tq how well it matched
+#  (mvd), how much better than on the first reference (ref_idx); rt the
+#  texture of the reference (for ref_idx, the first) at the predicted
+#  vector (for mvd, across the component), per sample, against the
+#  quantizer's step (1 + tc_qlog, 0 none); ea/eb for mvd how far the mvds
+#  of A and B were from their template matches' (1 + tc_qlog up to 5, 0
+#  none); ta the vector the template search found second best of its
+#  starts, less the predicted one (1 + sq2, 0 none).
+
+Prefix H7_mvs
+Debug 1
+Const 0
+
+Index a
+ a_kind: kind, 1!011
+ a_comp: comp, 1!1
+ a_ma: ma, 1!1111000
+ a_mb: mb, 1!1111100
+ a_oth: oth, 1!11111
+ a_sp: sp, 1!11110011
+ a_rt: rt, 1!11111111111111
+
+Index b
+ b_kind: kind, 1!111
+ b_comp: comp, 1!1
+ b_lst: lst, 1!1
+ b_ps: ps, 1!111
+ b_rf: rf, 1!111
+ b_zd: zd, 1!111111111111
+
+Index c
+ c_kind: kind, 1!111
+ c_comp: comp, 1!1
+ c_pd: pd, 1!11101101
+ c_sp: sp, 1!11111111
+ c_zd: zd, 1!111111111111
+
+Index d
+ d_kind: kind, 1!111
+ d_comp: comp, 1!1
+ d_pd: pd, 1!11111111
+ d_ma: ma, 1!0000000
+ d_nr: nr, 1!111
+
+Index e
+ e_kind: kind, 1!011
+ e_comp: comp, 1!0
+ e_sp: sp, 1!00000000
+ e_rt: rt, 1!11111111111111
+
+Index h
+ h_kind: kind, 1!010
+ h_comp: comp, 1!1
+ h_oth: oth, 1!11111
+
+Index i
+ i_kind: kind, 1!111
+ i_comp: comp, 1!1
+ i_zd: zd, 1!111111111111
+
+Index j
+ j_kind: kind, 1!111
+ j_comp: comp, 1!1
+ j_ma: ma, 1!1111111
+ j_mb: mb, 1!0100100
+ j_cq: cq, 1!111111111
+
+Index k
+ k_kind: kind, 1!111
+ k_comp: comp, 1!1
+ k_pd: pd, 1!11110011
+ k_sp: sp, 1!01100001
+ k_ps: ps, 1!111
+
+Index l
+ l_kind: kind, 1!111
+ l_comp: comp, 1!1
+ l_oth: oth, 1!11111
+ l_rf: rf, 1!111
+
+Index s
+ s_kind: kind, 1!111
+ s_comp: comp, 1!1
+
+Index m
+ m_kind: kind, 1!111
+ m_comp: comp, 1!0
+ m_pd: pd, 1!11111
+
+Index w
+ w_kind: kind, 1!000
+ w_comp: comp, 1!0
+ w_pd: pd, 1!01000101
+ w_ma: ma, 1!1111111
+ w_nr: nr, 1!011
+
+Index t
+ t_kind: kind, 1!111
+ t_comp: comp, 1!1
+
+Index n
+ n_kind: kind, 1!111
+
+Index g
+ g_kind: kind, 1!111
+ g_ma: ma, 1!0
+ g_oth: oth, 1!0
+
+Number rA, 1, 0!11111101
+Number rB, 1, 0!00000000
+Number rC, 1, 0!01000000
+Number rE, 1, 0!00000110
+Number rH, 1, 0!01000000
+Number rI, 1, 0!01000000
+Number rJ, 1, 0!01000000
+Number rK, 1, 0!10101110
+Number rL, 1, 0!01000000
+Number rD, 1, 0!11111111
+Number rT, 1, 0!00011110
+Number rG, 1, 0!01001000
+Number lr, 1, 0!01100
+Number lrm, 1, 0!11110
+Number mbm, 1, 0!00000000
+Number mwA, 1, 0!00001000
+Number mwB, 1, 0!00001000
+Number mwC, 1, 0!10111000
+Number mwE, 1, 0!10010010
+Number mwH, 1, 0!00000001
+Number mwI, 1, 0!00000000
+Number mwJ, 1, 0!00000000
+Number mwK, 1, 0!00000000
+Number mwL, 1, 0!00000000
+Number mwD, 1, 0!00101110
+Number mwT, 1, 0!00000000
+Number mwG, 1, 0!00000000
+Number mt, 1, 0!110
+Number mb, 1, 0!01101100
+
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
+#  direct, one that does not is hashed into 2^h rows and contexts share
+#  them.  31 is "never hashed".  Frozen: left live these only grow.
+! Number hA, 1, 0!10000
+! Number hB, 1, 0!11000
+! Number hC, 1, 0!11000
+! Number hE, 1, 0!11000
+! Number hH, 1, 0!10000
+! Number hI, 1, 0!11000
+! Number hJ, 1, 0!11000
+! Number hK, 1, 0!11000
+! Number hL, 1, 0!11000
+! Number hD, 1, 0!11000
+! Number hS, 1, 0!11000
+! Number hM, 1, 0!11000
+! Number hT, 1, 0!11000
+! Number hN, 1, 0!11000

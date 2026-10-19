@@ -1,0 +1,125 @@
+#  h264p's qpg family at level -3: its context indices and its tunable
+#  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
+#  MOD/l3/qpg_h.inc and MOD/l3/qpg_p.inc from this file and qpg.inc.
+#
+#  The sign of a nonzero mb_qp_delta, knowing its magnitude. as is the
+#  delta adaptive quantization's line asks for: 3 x its sign (sgn3) + how
+#  the magnitude compares with its (0 equal, 1 less, 2 more), 9 none; cs
+#  the same for the QP of the same macroblock in the previous picture of
+#  the type less the predicted one, bs for macroblock B's (9 none); ls the
+#  sign of the last nonzero delta (sgn3), rs that of how far the last
+#  picture of the kind was from its line where the macroblock's content
+#  was (sgn3, 3 none), mag the magnitude (tc_qlog), cls the class of the
+#  macroblock, st the slice type and reference status, ss as as for the
+#  slice's QP less the predicted one, xe the qpd family's energy class, lq
+#  as as for the QP of the last macroblock of the kind and class (qpd's
+#  lq), bk for B's where it is of the kind (qpd's bc).
+
+Prefix H3_qpg
+Debug 1
+Const 0
+
+Index a
+ a_mag: mag, 1!1111111
+ a_ss: ss, 1!000001000
+
+Index b
+ b_ls: ls, 1!00
+
+Index c
+ c_cs: cs, 1!111111111
+
+Index d
+ d_bs: bs, 1!111111111
+ d_mag: mag, 1!1111111
+ d_bk: bk, 1!111111111
+
+Index e
+ e_cs: cs, 1!000001001
+ e_ss: ss, 1!111111111
+
+Index h
+ h_ls: ls, 1!11
+
+Index i
+ i_cs: cs, 1!111111111
+ i_bs: bs, 1!111111111
+
+Index j
+ j_cls: cls, 1!11111111
+ j_st: st, 1!111111111
+ j_ls: ls, 1!11
+
+Index k
+ k_mag: mag, 1!1111111
+ k_cls: cls, 1!11111111
+
+Index l
+ l_cs: cs, 1!111111111
+ l_bs: bs, 1!111111111
+ l_ls: ls, 1!10
+
+Index s
+ s_mag: mag, 1!1111111
+
+Index m
+
+Index w
+ w_cs: cs, 1!111111111
+
+Index t
+ t_st: st, 1!0
+
+Index n
+ n_st: st, 1!0
+
+Index g
+ g_st: st, 1!0
+
+Number rA, 1, 0!11101011
+Number rB, 1, 0!11001101
+Number rC, 1, 0!00000011
+Number rE, 1, 0!01000000
+Number rH, 1, 0!01000000
+Number rI, 1, 0!01000000
+Number rJ, 1, 0!11100000
+Number rK, 1, 0!01000000
+Number rL, 1, 0!11101011
+Number rD, 1, 0!01101111
+Number rT, 1, 0!00110111
+Number rG, 1, 0!01011010
+Number lr, 1, 0!01100
+Number lrm, 1, 0!01100
+Number mbm, 1, 0!00000000
+Number mwA, 1, 0!00011101
+Number mwB, 1, 0!00000000
+Number mwC, 1, 0!00000000
+Number mwE, 1, 0!00000000
+Number mwH, 1, 0!00100000
+Number mwI, 1, 0!00000000
+Number mwJ, 1, 0!00000000
+Number mwK, 1, 0!00000100
+Number mwL, 1, 0!00000000
+Number mwD, 1, 0!00011111
+Number mwT, 1, 0!00000000
+Number mwG, 1, 0!00000000
+Number mt, 1, 0!110
+Number mb, 1, 0!10100000
+
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
+#  direct, one that does not is hashed into 2^h rows and contexts share
+#  them.  31 is "never hashed".  Frozen: left live these only grow.
+! Number hA, 1, 0!11000
+! Number hB, 1, 0!11000
+! Number hC, 1, 0!11000
+! Number hE, 1, 0!11000
+! Number hH, 1, 0!11000
+! Number hI, 1, 0!11000
+! Number hJ, 1, 0!11000
+! Number hK, 1, 0!11000
+! Number hL, 1, 0!11000
+! Number hD, 1, 0!11000
+! Number hS, 1, 0!11000
+! Number hM, 1, 0!11000
+! Number hT, 1, 0!11000
+! Number hN, 1, 0!11000
