@@ -42,6 +42,21 @@ const uint8_t kTc0[52][3] = {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 
 
 static INLINE int clip1(int v) { return v < 0 ? 0 : v > 255 ? 255 : v; }
 static INLINE int clip3(int lo, int hi, int v) { return v < lo ? lo : v > hi ? hi : v; }
+// the 16 vectors of a list's 4x4 blocks all alike
+static INLINE bool one_mv(const int16_t mv[16][2]) {
+#ifdef H264P_AVX2
+  int32_t f;
+  memcpy(&f, mv[0], 4);
+  __m256i v = _mm256_set1_epi32(f);
+  __m256i a = _mm256_cmpeq_epi32(_mm256_loadu_si256((const __m256i*)mv[0]), v);
+  __m256i b = _mm256_cmpeq_epi32(_mm256_loadu_si256((const __m256i*)mv[8]), v);
+  return _mm256_movemask_epi8(_mm256_and_si256(a, b)) == -1;
+#else
+  for (int b = 1; b < 16; b++)
+    if (mv[b][0] != mv[0][0] || mv[b][1] != mv[0][1]) return false;
+  return true;
+#endif
+}
 
 // The sum of the absolute differences between n x rows samples of q (stride
 // qs) and their bilinear prediction from a (stride as) at (fx, fy) quarter
@@ -1770,56 +1785,65 @@ struct Recon {
     int W = ref->w / 2, H = ref->h / 2;
     const uint8_t* R = c ? ref->v.data() : ref->u.data();
     int xi = x + (mvx >> 3), yi = y + (mvy >> 3), fx = mvx & 7, fy = mvy & 7;
-    if (xi >= 0 && yi >= 0 && xi + w < W && yi + h < H) {
-      const uint8_t* r = R + yi * W + xi;
-      if (!fx && !fy) {
-        copy_rows(o, 8, r, W, w, h);
-        return;
-      }
-      int cA = (8 - fx) * (8 - fy), cB = fx * (8 - fy), cC = (8 - fx) * fy, cD = fx * fy;
-#ifdef H264P_AVX2
-      if (w == 8 || w == 4) {
-        // two rows at a time: the byte pairs (r, r') and (s, s') of a row and
-        // the next through pmaddubsw
-        auto ld = [w](const uint8_t* p0, const uint8_t* p1) {
-          if (w == 8) return _mm_unpacklo_epi64(_mm_loadl_epi64((const __m128i*)p0), _mm_loadl_epi64((const __m128i*)p1));
-          int32_t u0, u1;
-          memcpy(&u0, p0, 4);
-          memcpy(&u1, p1, 4);
-          return _mm_unpacklo_epi32(_mm_cvtsi32_si128(u0), _mm_cvtsi32_si128(u1));
-        };
-        const __m128i wab = _mm_set1_epi16((short)(cA | cB << 8)), wcd = _mm_set1_epi16((short)(cC | cD << 8));
-        const __m128i r32 = _mm_set1_epi16(32);
-        for (int j = 0; j < h; j += 2, r += 2 * W) {
-          __m128i x0 = ld(r, r + W), x1 = ld(r + 1, r + W + 1), y0 = ld(r + W, r + 2 * W), y1 = ld(r + W + 1, r + 2 * W + 1);
-          __m128i lo = _mm_add_epi16(_mm_maddubs_epi16(_mm_unpacklo_epi8(x0, x1), wab), _mm_maddubs_epi16(_mm_unpacklo_epi8(y0, y1), wcd));
-          __m128i hi = _mm_add_epi16(_mm_maddubs_epi16(_mm_unpackhi_epi8(x0, x1), wab), _mm_maddubs_epi16(_mm_unpackhi_epi8(y0, y1), wcd));
-          __m128i v = _mm_packus_epi16(_mm_srli_epi16(_mm_add_epi16(lo, r32), 6), _mm_srli_epi16(_mm_add_epi16(hi, r32), 6));
-          if (w == 8) {
-            _mm_storel_epi64((__m128i*)(o + j * 8), v);
-            _mm_storel_epi64((__m128i*)(o + j * 8 + 8), _mm_unpackhi_epi64(v, v));
-          } else {
-            int32_t u0 = _mm_cvtsi128_si32(v), u1 = _mm_cvtsi128_si32(_mm_srli_si128(v, 4));
-            memcpy(o + j * 8, &u0, 4);
-            memcpy(o + j * 8 + 8, &u1, 4);
-          }
-        }
-        return;
-      }
-#endif
-      for (int j = 0; j < h; j++, r += W)
-        for (int i = 0; i < w; i++)
-          o[j * 8 + i] = (uint8_t)((cA * r[i] + cB * r[i + 1] + cC * r[i + W] + cD * r[i + W + 1] + 32) >> 6);
+    if (!fx && !fy && xi >= 0 && yi >= 0 && xi + w <= W && yi + h <= H) {
+      copy_rows(o, 8, R + yi * W + xi, W, w, h);
       return;
     }
-    for (int j = 0; j < h; j++) {
-      int y0 = clip3(0, H - 1, yi + j), y1 = clip3(0, H - 1, yi + j + 1);
-      for (int i = 0; i < w; i++) {
-        int x0 = clip3(0, W - 1, xi + i), x1 = clip3(0, W - 1, xi + i + 1);
-        int A = R[y0 * W + x0], B = R[y0 * W + x1], C = R[y1 * W + x0], D = R[y1 * W + x1];
-        o[j * 8 + i] = (uint8_t)(((8 - fx) * (8 - fy) * A + fx * (8 - fy) * B + (8 - fx) * fy * C + fx * fy * D + 32) >> 6);
+    const uint8_t* r;
+    int rs = W;
+    uint8_t t[9 * 16];
+    if (xi >= 0 && yi >= 0 && xi + w < W && yi + h < H) {
+      r = R + yi * W + xi;
+    } else {
+      // (out of the plane, or at its last row or column: the samples and
+      // the row and the column after them, those outside the nearest
+      // inside)
+      int cx[9];
+      for (int i = 0; i <= w; i++) cx[i] = clip3(0, W - 1, xi + i);
+      for (int j = 0; j <= h; j++) {
+        const uint8_t* s = R + clip3(0, H - 1, yi + j) * W;
+        for (int i = 0; i <= w; i++) t[j * 16 + i] = s[cx[i]];
       }
+      r = t, rs = 16;
     }
+    if (!fx && !fy) {
+      copy_rows(o, 8, r, rs, w, h);
+      return;
+    }
+    int cA = (8 - fx) * (8 - fy), cB = fx * (8 - fy), cC = (8 - fx) * fy, cD = fx * fy;
+#ifdef H264P_AVX2
+    if (w == 8 || w == 4) {
+      // two rows at a time: the byte pairs (r, r') and (s, s') of a row and
+      // the next through pmaddubsw
+      auto ld = [w](const uint8_t* p0, const uint8_t* p1) {
+        if (w == 8) return _mm_unpacklo_epi64(_mm_loadl_epi64((const __m128i*)p0), _mm_loadl_epi64((const __m128i*)p1));
+        int32_t u0, u1;
+        memcpy(&u0, p0, 4);
+        memcpy(&u1, p1, 4);
+        return _mm_unpacklo_epi32(_mm_cvtsi32_si128(u0), _mm_cvtsi32_si128(u1));
+      };
+      const __m128i wab = _mm_set1_epi16((short)(cA | cB << 8)), wcd = _mm_set1_epi16((short)(cC | cD << 8));
+      const __m128i r32 = _mm_set1_epi16(32);
+      for (int j = 0; j < h; j += 2, r += 2 * rs) {
+        __m128i x0 = ld(r, r + rs), x1 = ld(r + 1, r + rs + 1), y0 = ld(r + rs, r + 2 * rs), y1 = ld(r + rs + 1, r + 2 * rs + 1);
+        __m128i lo = _mm_add_epi16(_mm_maddubs_epi16(_mm_unpacklo_epi8(x0, x1), wab), _mm_maddubs_epi16(_mm_unpacklo_epi8(y0, y1), wcd));
+        __m128i hi = _mm_add_epi16(_mm_maddubs_epi16(_mm_unpackhi_epi8(x0, x1), wab), _mm_maddubs_epi16(_mm_unpackhi_epi8(y0, y1), wcd));
+        __m128i v = _mm_packus_epi16(_mm_srli_epi16(_mm_add_epi16(lo, r32), 6), _mm_srli_epi16(_mm_add_epi16(hi, r32), 6));
+        if (w == 8) {
+          _mm_storel_epi64((__m128i*)(o + j * 8), v);
+          _mm_storel_epi64((__m128i*)(o + j * 8 + 8), _mm_unpackhi_epi64(v, v));
+        } else {
+          int32_t u0 = _mm_cvtsi128_si32(v), u1 = _mm_cvtsi128_si32(_mm_srli_si128(v, 4));
+          memcpy(o + j * 8, &u0, 4);
+          memcpy(o + j * 8 + 8, &u1, 4);
+        }
+      }
+      return;
+    }
+#endif
+    for (int j = 0; j < h; j++, r += rs)
+      for (int i = 0; i < w; i++)
+        o[j * 8 + i] = (uint8_t)((cA * r[i] + cB * r[i + 1] + cC * r[i + rs] + cD * r[i + rs + 1] + 32) >> 6);
   }
   // the residual of the luma 4x4 block blk (luma4x4BlkIdx) added at p
   void add4(uint8_t* p, int stride, int blk, int qp, const int* dcv) {
@@ -2130,9 +2154,7 @@ struct Recon {
       for (int b8 = 0; b8 < 4; b8++) any |= rf[l][b8] >= 0;
       if (!any) continue;
       // in pieces of equal motion: the macroblock, 8x8 blocks, 4x4 blocks
-      bool whole = true;
-      for (int b8 = 1; b8 < 4; b8++) whole &= rf[l][b8] == rf[l][0];
-      for (int b = 1; b < 16; b++) whole &= mv[l][b][0] == mv[l][0][0] && mv[l][b][1] == mv[l][0][1];
+      bool whole = rf[l][1] == rf[l][0] && rf[l][2] == rf[l][0] && rf[l][3] == rf[l][0] && one_mv(mv[l]);
       for (int b8 = 0; b8 < 4; b8++) {
         if (whole && b8) break;
         int r = rf[l][b8];
@@ -2587,10 +2609,8 @@ struct Recon {
       // edge inside it to filter (bS 0 everywhere)
       bool flat = !Q.intra;
       for (int k = 0; k < 16 && flat; k++) flat = !Q.nz[k];
-      for (int l = 0; l < 2 && flat; l++) {
-        flat = Q.rp[l][1] == Q.rp[l][0] && Q.rp[l][2] == Q.rp[l][0] && Q.rp[l][3] == Q.rp[l][0];
-        for (int k = 1; k < 16 && flat; k++) flat = Q.mv[l][k][0] == Q.mv[l][0][0] && Q.mv[l][k][1] == Q.mv[l][0][1];
-      }
+      for (int l = 0; l < 2 && flat; l++)
+        flat = Q.rp[l][1] == Q.rp[l][0] && Q.rp[l][2] == Q.rp[l][0] && Q.rp[l][3] == Q.rp[l][0] && one_mv(Q.mv[l]);
       for (int dir = 0; dir < 2; dir++) {  // vertical edges, then horizontal ones
         int na = dir ? (my ? addr - mbw : -1) : (mx ? addr - 1 : -1);
         bool mb_edge_ok = na >= 0 && db[na].slice >= 0 && (Q.disable == 0 || db[na].slice == Q.slice);
@@ -2888,13 +2908,14 @@ struct Recon {
     // (the macroblock's predictions, which inter() will want next, where
     // they serve: an 8x8 block of one vector a list)
     if (!predicted(mb_addr, rf, mv)) predict(mb_addr, rf, mv);
+    bool uni[2] = {pq_ok && one_mv(mv[0]), pq_ok && one_mv(mv[1])};
     for (int b8 = 0; b8 < 4; b8++) {
       if (rf[0][b8] < 0 || rf[1][b8] < 0) continue;
       int x = (b8 & 1) * 8, y = (b8 >> 1) * 8, b = (y / 4) * 4 + x / 4;
       const uint8_t* q[2];  // the two predictions (stride 16)
       for (int l = 0; l < 2; l++) {
         bool one = pq_ok;
-        for (int k = 1; k < 4 && one; k++) {
+        for (int k = 1; k < 4 && one && !uni[l]; k++) {
           int c = b + (k >> 1) * 4 + (k & 1);
           one = mv[l][c][0] == mv[l][b][0] && mv[l][c][1] == mv[l][b][1];
         }
@@ -2938,40 +2959,58 @@ struct Recon {
     // per list, the strip: the rows above, the columns left transposed (both
     // 2 x 16, stride 16)
     uint8_t p[2][32] = {};
+    // (a list of one reference and one vector throughout predicts either
+    // strip at once)
+    bool uni[2];
+    for (int l = 0; l < 2; l++) uni[l] = rf[l][1] == rf[l][0] && rf[l][2] == rf[l][0] && rf[l][3] == rf[l][0] && one_mv(mv[l]);
     for (int side = 0; side < 2; side++) {
       if (side == 0 ? !top : !left) continue;
       // the pieces next to the 4x4 blocks 0-3 of the top row (side 0) or
       // 0, 4, 8, 12 of the left column; per list, each run of pieces on the
       // same reference with the same vector predicted at once
-      auto blk = [side](int k) { return side == 0 ? k : k * 4; };
-      auto b8 = [](int b) { return (b >> 3) * 2 + ((b & 3) >> 1); };
+      // (the pieces' 4x4 blocks and their 8x8 blocks)
+      static const uint8_t kBlk[2][4] = {{0, 1, 2, 3}, {0, 4, 8, 12}}, kB8[2][4] = {{0, 0, 1, 1}, {0, 0, 2, 2}};
+      const uint8_t *blk = kBlk[side], *b8 = kB8[side];
       bool use[2][4];
-      for (int l = 0; l < 2; l++)
+      // pieces k to e - 1 of list l, on reference r by vector v
+      auto strip = [&](int l, int k, int e, int r, const int16_t* v) {
+        const RPic* ref = r < nlist[l] ? list[l][r] : nullptr;
+        if (!ref) ref = cur.get();
+        int n4 = 4 * (e - k);
+        if (side == 0) {
+          mc_luma(ref, mx + k * 4, my - 2, n4, 2, v[0], v[1], p[l] + k * 4);
+        } else if (!mc_luma_t(ref, mx - 2, my + k * 4, 2, n4, v[0], v[1], p[l] + k * 4)) {
+          // (the current picture has no transposed luma: turned here)
+          uint8_t t[16 * 16];
+          mc_luma(ref, mx - 2, my + k * 4, 2, n4, v[0], v[1], t);
+          for (int j = 0; j < n4; j++) p[l][k * 4 + j] = t[j * 16], p[l][16 + k * 4 + j] = t[j * 16 + 1];
+        }
+      };
+      for (int l = 0; l < 2; l++) {
+        if (uni[l]) {
+          bool u = rf[l][0] >= 0;
+          use[l][0] = use[l][1] = use[l][2] = use[l][3] = u;
+          if (u) strip(l, 0, 4, rf[l][0], mv[l][0]);
+          continue;
+        }
         for (int k = 0; k < 4;) {
-          int b = blk(k), r = rf[l][b8(b)], e = k + 1;
+          int b = blk[k], r = rf[l][b8[k]], e = k + 1;
           use[l][k] = r >= 0;
           if (r < 0) {
             k++;
             continue;
           }
+          uint32_t v, u;
+          memcpy(&v, mv[l][b], 4);
           for (; e < 4; e++) {
-            int c = blk(e);
-            if (rf[l][b8(c)] != r || mv[l][c][0] != mv[l][b][0] || mv[l][c][1] != mv[l][b][1]) break;
+            memcpy(&u, mv[l][blk[e]], 4);
+            if (rf[l][b8[e]] != r || u != v) break;
             use[l][e] = true;
           }
-          const RPic* ref = r < nlist[l] ? list[l][r] : nullptr;
-          if (!ref) ref = cur.get();
-          int n4 = 4 * (e - k);
-          if (side == 0) {
-            mc_luma(ref, mx + k * 4, my - 2, n4, 2, mv[l][b][0], mv[l][b][1], p[l] + k * 4);
-          } else if (!mc_luma_t(ref, mx - 2, my + k * 4, 2, n4, mv[l][b][0], mv[l][b][1], p[l] + k * 4)) {
-            // (the current picture has no transposed luma: turned here)
-            uint8_t t[16 * 16];
-            mc_luma(ref, mx - 2, my + k * 4, 2, n4, mv[l][b][0], mv[l][b][1], t);
-            for (int j = 0; j < n4; j++) p[l][k * 4 + j] = t[j * 16], p[l][16 + k * 4 + j] = t[j * 16 + 1];
-          }
+          strip(l, k, e, r, mv[l][b]);
           k = e;
         }
+      }
       // the decoded samples, alike
       const uint8_t* q = cur->y.data() + (my - 2) * w + mx;
       int qs = w;
@@ -3688,22 +3727,41 @@ struct Recon {
       bool left = x > 0 ? true : mx > 0 && db[mb_addr - 1].slice >= 0;
       if (!top && !left) return -1;
       const uint8_t* p = (c == 0 ? cur->y.data() : c == 1 ? cur->u.data() : cur->v.data()) + (my * m + y) * w + mx * m + x;
-      int64_t sum = 0;
+      // (rows of 8 in the low half, the high half zero: a cast would leave it
+      // undefined, and the sum below adds it in)
+      auto ld = [n](const uint8_t* q) {
+        return n == 16 ? _mm256_cvtepu8_epi16(_mm_loadu_si128((const __m128i*)q))
+                       : _mm256_inserti128_si256(_mm256_setzero_si256(), _mm_cvtepu8_epi16(_mm_loadl_epi64((const __m128i*)q)), 0);
+      };
+      // |2 R1 - R2 - P| in 16-bit lanes, the top's and the left's added
+      __m256i a = _mm256_setzero_si256();
       if (top) {
-        // (rows of 8 in the low half, the high half zero: a cast would leave
-        // it undefined, and the sum below adds it in)
-        auto ld = [n](const uint8_t* q) {
-          return n == 16 ? _mm256_cvtepu8_epi16(_mm_loadu_si128((const __m128i*)q))
-                         : _mm256_inserti128_si256(_mm256_setzero_si256(), _mm_cvtepu8_epi16(_mm_loadl_epi64((const __m128i*)q)), 0);
-        };
         __m256i r1 = ld(p - w), v = _mm256_sub_epi16(_mm256_sub_epi16(_mm256_add_epi16(r1, r1), ld(p - 2 * w)), ld(p));
-        __m256i t = _mm256_madd_epi16(_mm256_abs_epi16(v), _mm256_set1_epi16(1));
-        __m128i u = _mm_add_epi32(_mm256_castsi256_si128(t), _mm256_extracti128_si256(t, 1));
-        u = _mm_add_epi32(u, _mm_shuffle_epi32(u, 0x4E));
-        sum += 4 * (int64_t)_mm_cvtsi128_si32(_mm_add_epi32(u, _mm_shuffle_epi32(u, 0xB1)));
+        a = _mm256_abs_epi16(v);
       }
-      if (left)
-        for (int i = 0; i < n; i++) sum += 4 * abs(2 * p[i * w - 1] - p[i * w - 2] - p[i * w]);
+      if (left) {
+        // the columns as rows: of the samples left of a luma macroblock
+        // gathered already, else here
+        auto col = [n, w](const uint8_t* q) {
+          if (n == 16)
+            return _mm256_cvtepu8_epi16(_mm_setr_epi8(q[0], q[w], q[2 * w], q[3 * w], q[4 * w], q[5 * w], q[6 * w], q[7 * w], q[8 * w],
+                                                      q[9 * w], q[10 * w], q[11 * w], q[12 * w], q[13 * w], q[14 * w], q[15 * w]));
+          __m128i h = _mm_setr_epi8(q[0], q[w], q[2 * w], q[3 * w], q[4 * w], q[5 * w], q[6 * w], q[7 * w], 0, 0, 0, 0, 0, 0, 0, 0);
+          return _mm256_inserti128_si256(_mm256_setzero_si256(), _mm_cvtepu8_epi16(h), 0);
+        };
+        __m256i r2, r1;
+        if (c == 0 && x == 0) {
+          const uint8_t* q = left_strip() + y;
+          r2 = ld(q), r1 = ld(q + 16);
+        } else {
+          r2 = col(p - 2), r1 = col(p - 1);
+        }
+        a = _mm256_add_epi16(a, _mm256_abs_epi16(_mm256_sub_epi16(_mm256_sub_epi16(_mm256_add_epi16(r1, r1), r2), col(p))));
+      }
+      __m256i t = _mm256_madd_epi16(a, _mm256_set1_epi16(1));
+      __m128i u = _mm_add_epi32(_mm256_castsi256_si128(t), _mm256_extracti128_si256(t, 1));
+      u = _mm_add_epi32(u, _mm_shuffle_epi32(u, 0x4E));
+      int64_t sum = 4 * (int64_t)_mm_cvtsi128_si32(_mm_add_epi32(u, _mm_shuffle_epi32(u, 0xB1)));
       return (int)(sum / (n * (top + left)));
     }
 #endif

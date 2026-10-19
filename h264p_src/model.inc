@@ -1676,6 +1676,10 @@ struct Model {
       nbs[1] = b;
       nbs[2] = c;
     }
+    mv_pred(a, b, c, x, y, w, h, ref, p);
+  }
+  // the same from its neighbours A, B and C (C, D where C is not available)
+  static void mv_pred(const MvN& a, MvN b, MvN c, int x, int y, int w, int h, int ref, int* p) {
     const MvN* d = nullptr;
     if (w == 4 && h == 2)
       d = y == 0 ? (b.ref == ref ? &b : nullptr) : (a.ref == ref ? &a : nullptr);
@@ -1694,9 +1698,14 @@ struct Model {
     }
   }
   void set_mv(int list, int x, int y, int w, int h, int ref, const int* p) {
+    int16_t v[2] = {(int16_t)tc_clamp(p[0], -32768, 32767), (int16_t)tc_clamp(p[1], -32768, 32767)};
+    if (w == 4 && h == 4) {
+      for (int b = 0; b < 16; b++) memcpy(mi_->mv[list][b], v, sizeof v);
+      memset(mi_->rf[list], ref, 4);
+      return;
+    }
     for (int yy = y; yy < y + h; yy++)
-      for (int xx = x; xx < x + w; xx++)
-        for (int k = 0; k < 2; k++) mi_->mv[list][yy * 4 + xx][k] = (int16_t)tc_clamp(p[k], -32768, 32767);
+      for (int xx = x; xx < x + w; xx++) memcpy(mi_->mv[list][yy * 4 + xx], v, sizeof v);
     for (int yy = y; yy < y + h; yy += 2)
       for (int xx = x; xx < x + w; xx += 2) mi_->rf[list][(yy >> 1) * 2 + (xx >> 1)] = (int8_t)ref;
   }
@@ -1705,8 +1714,11 @@ struct Model {
     parts_ = 0;
     MvN a = mv_nb(0, -1, 0, 0), b = mv_nb(0, 0, -1, 0);
     int p[2] = {0, 0};
-    if (a.avail && b.avail && !(a.ref == 0 && !a.mv[0] && !a.mv[1]) && !(b.ref == 0 && !b.mv[0] && !b.mv[1]))
-      mv_pred(0, 0, 0, 4, 4, 0, p);
+    if (a.avail && b.avail && !(a.ref == 0 && !a.mv[0] && !a.mv[1]) && !(b.ref == 0 && !b.mv[0] && !b.mv[1])) {
+      MvN c = mv_nb(0, 4, -1, 0);
+      if (!c.avail) c = mv_nb(0, -1, -1, 0);
+      mv_pred(a, b, c, 0, 0, 4, 4, 0, p);
+    }
     set_mv(0, 0, 0, 4, 4, 0, p);
   }
   // B direct, spatial (8.4.1.2.2), for the 8x8 blocks of mask; without
@@ -1720,33 +1732,48 @@ struct Model {
     }
     int saved = parts_, ref[2], mv[2][2] = {{0, 0}, {0, 0}};
     parts_ = 0;
+    MvN nb[2][3];
     for (int l = 0; l < 2; l++) {
-      MvN a = mv_nb(l, -1, 0, 0), b = mv_nb(l, 0, -1, 0), c = mv_nb(l, 4, -1, 0);
+      MvN &a = nb[l][0], &b = nb[l][1], &c = nb[l][2];
+      a = mv_nb(l, -1, 0, 0), b = mv_nb(l, 0, -1, 0), c = mv_nb(l, 4, -1, 0);
       if (!c.avail) c = mv_nb(l, -1, -1, 0);
       ref[l] = minpos(a.ref, minpos(b.ref, c.ref));
     }
     bool zero = ref[0] < 0 && ref[1] < 0;
     if (zero) ref[0] = ref[1] = 0;
+    // (the macroblock's prediction, from the neighbours just found)
     for (int l = 0; l < 2; l++)
-      if (!zero && ref[l] >= 0) mv_pred(l, 0, 0, 4, 4, ref[l], mv[l]);
+      if (!zero && ref[l] >= 0) mv_pred(nb[l][0], nb[l][1], nb[l][2], 0, 0, 4, 4, ref[l], mv[l]);
     bool lt = rec_.col_long_term();
     // (with direct_8x8_inference the four 4x4 blocks of an 8x8 one have the
     // same colocated block: the 8x8 block at once)
     int n = rec_.direct8x8 ? 2 : 1;
-    for (int b8 = 0; b8 < 4; b8++)
-      if (mask >> b8 & 1)
-        for (int k = 0; k < 4; k += 3 * n - 2) {
-          int x = (b8 & 1) * 2 + (k & 1), y = (b8 >> 1) * 2 + (k >> 1), cr, cm[2];
-          int64_t pid;
-          // colZeroFlag: the colocated block is still
-          bool still = !zero && !lt && rec_.colocated(addr_, y * 4 + x, cr, cm, pid) && cr == 0 && abs(cm[0]) <= 1 &&
-                       abs(cm[1]) <= 1;
-          for (int l = 0; l < 2; l++) {
-            if (ref[l] < 0) continue;
-            int z[2] = {0, 0};
-            set_mv(l, x, y, n, n, ref[l], still && ref[l] == 0 ? z : mv[l]);
+    // colZeroFlag, by 4x4 block (bit y * 4 + x): the colocated block is
+    // still, which zeroes the vector of a list on reference 0
+    int still = 0;
+    if (!zero && !lt && (ref[0] == 0 || ref[1] == 0))
+      for (int b8 = 0; b8 < 4; b8++)
+        if (mask >> b8 & 1)
+          for (int k = 0; k < 4; k += 3 * n - 2) {
+            int x = (b8 & 1) * 2 + (k & 1), y = (b8 >> 1) * 2 + (k >> 1), cr, cm[2];
+            int64_t pid;
+            if (rec_.colocated(addr_, y * 4 + x, cr, cm, pid) && cr == 0 && abs(cm[0]) <= 1 && abs(cm[1]) <= 1)
+              still |= (n == 2 ? 0x33 : 1) << (y * 4 + x);
           }
-        }
+    for (int l = 0; l < 2; l++) {
+      if (ref[l] < 0) continue;
+      int z[2] = {0, 0}, s = ref[l] == 0 ? still : 0;
+      if (mask == 15 && (s == 0 || s == 0xFFFF)) {
+        set_mv(l, 0, 0, 4, 4, ref[l], s ? z : mv[l]);
+        continue;
+      }
+      for (int b8 = 0; b8 < 4; b8++)
+        if (mask >> b8 & 1)
+          for (int k = 0; k < 4; k += 3 * n - 2) {
+            int x = (b8 & 1) * 2 + (k & 1), y = (b8 >> 1) * 2 + (k >> 1);
+            set_mv(l, x, y, n, n, ref[l], s >> (y * 4 + x) & 1 ? z : mv[l]);
+          }
+    }
     parts_ = saved;
   }
   // temporal direct (8.4.1.2.3)

@@ -553,6 +553,19 @@ The steps, in order (the gains on the streams named, paired runs):
   read off the skip motion's predictions, each list's alone, which
   `tm_miss` makes anyway. The 96 test streams take 85 bytes more (03 176);
   the format's version is 4. CPU time of `d`: 04 5%, 03 4%, 00 and 01 2%.
+- **Less bookkeeping around each skipped macroblock**: a list with one
+  reference and one vector throughout is found once (a compare of its 16
+  vectors at once) and then predicts `tm_miss`'s strips in one piece each,
+  takes the whole macroblock in `predict()` and `bi_diff()`, and needs no
+  edge checks inside it in the deblocking; spatial direct finds the
+  neighbours once for the reference and the vector both, asks for the
+  colocated block only where a list is on reference 0, and writes a list's
+  16 vectors at once where they are alike; the edge miss takes the left
+  columns already gathered for the searches; chroma at the last row or
+  column of the picture by the zero vector is copied, and the samples out of
+  the picture are gathered once for the interpolation instead of clipped
+  for each sample. 4-10% fewer instructions (00 the most); CPU time of `d`
+  3-7% less on 00, 03 and 01 (the runs vary), 4% on 04; `c` of 00 8%.
 
 What did not pay:
 
