@@ -6,8 +6,8 @@ same speed (04: 10.5 s): the model is symmetric, and both sides reconstruct the
 pictures. This plan starts from where the time actually goes, answers seven
 questions (allocation, template branches, `restrict`, SIMD lookups, memory
 latency, layout, vectorization), and orders the work by what it buys.
-Section 4 has what has been done since, measured: compression 3.2x and
-decompression 2.6x faster over the corpus, to the same output but for a
+Section 4 has what has been done since, measured: compression 3.7x and
+decompression 3.0x faster over the corpus, to the same output but for a
 cheaper end_of_slice_flag and lighter template searches (830 bytes more
 over the 96 test streams, 0.02%).
 
@@ -423,14 +423,14 @@ searches go.
 
 | stream | bytes | `c` before | `c` now | `d` before | `d` now |
 |---|---:|---:|---:|---:|---:|
-| 00 (low rate, nearly all skipped) | 815,140 | 30.95 s | 9.56 s | 30.03 s | 11.20 s |
-| 01 | 1,095,103 | 28.15 s | 8.20 s | 27.54 s | 10.83 s |
-| 02 (intra, high rate) | 28,143 | 0.33 s | 0.24 s | 0.29 s | 0.23 s |
-| 03 (much intra) | 1,181,369 | 40.11 s | 12.44 s | 39.95 s | 15.86 s |
-| 04 (P/B) | 484,238 | 12.28 s | 3.56 s | 12.49 s | 4.45 s |
-| 05 | 31,669 | 0.47 s | 0.28 s | 0.45 s | 0.30 s |
-| 06 | 230,978 | 2.15 s | 1.04 s | 2.15 s | 1.23 s |
-| **total** | 3,866,640 | **114.4 s** | **35.3 s (3.2x)** | **112.9 s** | **44.1 s (2.6x)** |
+| 00 (low rate, nearly all skipped) | 815,140 | 31.92 s | 8.78 s | 32.83 s | 10.74 s |
+| 01 | 1,095,103 | 30.24 s | 9.15 s | 30.83 s | 9.78 s |
+| 02 (intra, high rate) | 28,143 | 0.31 s | 0.26 s | 0.33 s | 0.20 s |
+| 03 (much intra) | 1,181,369 | 43.11 s | 10.47 s | 42.80 s | 14.67 s |
+| 04 (P/B) | 484,238 | 13.93 s | 2.95 s | 12.71 s | 3.86 s |
+| 05 | 31,669 | 0.45 s | 0.28 s | 0.51 s | 0.27 s |
+| 06 | 230,978 | 2.74 s | 0.91 s | 2.17 s | 1.10 s |
+| **total** | 3,866,640 | **122.7 s** | **32.8 s (3.7x)** | **122.2 s** | **40.6 s (3.0x)** |
 
 The steps, in order (the gains on the streams named, paired runs):
 
@@ -522,8 +522,8 @@ The steps, in order (the gains on the streams named, paired runs):
   order or repeated) has what was let go finished and lets go no more, so
   what comes out never depends on timing; built without threads, the same
   rows are finished at the same points. `d` of 00 5%, of 01 4%, of 04 2-4%,
-  of 06 as before; `c` of 00 7% (04's coder thread sets its pace). It
-  costs 6-11% more CPU time, the thread's share included.
+  of 06 as before; `c` of 00 7%, of 04 within the noise. It costs 6-11%
+  more CPU time, the thread's share included.
 - **A macroblock's coefficient rows cleared only where written**: each
   record notes the rows of coefficients it wrote, the next macroblock in
   its place clears those instead of all 816 bytes, the neighbours' and the
@@ -563,16 +563,17 @@ What did not pay:
 - The coder's decision out of line, one copy instead of 35 (a third of the
   binary): no change measured.
 
-Where the time goes now (decompressing, one thread):
+Where the time goes now (decompressing, the decoding's thread):
 
-- 00: the coder about 30% (the skip flag alone 12%), the skipped
-  macroblock's own work (direct motion, motion vector prediction, the
-  neighbours' counts, bookkeeping) about 15%, the template searches 8%, the
-  predictions and `tm_miss` 10%.
-- 01: the coder about 35%, the template searches 13%.
-- Compressing, the coder's thread waits for the model's: with the parsing
-  in a third, the three take about 70% of one thread's time on the large
-  streams.
+- 00: the coder about 30% (the skip flag's decision alone 8%), the
+  model's contexts (direct motion, motion vector prediction, the
+  neighbours' counts, bookkeeping) about 22%, the predictions, misses and
+  the rest of the reconstruction 32%, the template searches 11%.
+- 01: the coder about 35%, the model's contexts 20%, the reconstruction
+  23%, the template searches 15%.
+- Compressing, the model's thread sets the pace: on 00, 03 and 04 it is
+  busy all along, while the coder's takes 45-62% of a core and the parsing
+  and the finishing threads 9-21% each.
 
 What is left in the plan: the generated index builders (3.2.2), the rest of
 the coder's arithmetic (3.3; it waits on its rows more than it computes
