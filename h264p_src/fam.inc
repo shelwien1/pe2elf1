@@ -571,15 +571,20 @@ template <int f_DEC> struct tc_fam {
       p1 = CM_PONE - 1;
     int pp = cprpa ? cprpa[node] : cprp;
     cm_cnt2 *zc = hs ? &Z[((sz)bz * nd + (u32)node) * 5 + (u32)hs] : nullptr;
-    mx.set(20, cm_stretch(p1));
-    mx.set(21, pp >= 0 ? cm_stretch(pp) : 0);
-    mx.set(22, 256);
-    mx.set(23, zc ? cm_stretch(zc->P()) : 0);
+    const int x20 = cm_stretch(p1), x21 = pp >= 0 ? cm_stretch(pp) : 0, x23 = zc ? cm_stretch(zc->P()) : 0;
 #ifdef H264P_AVX2
-    if(cn_v)
-      xp.t = _mm_packs_epi32(xp.t, _mm_loadu_si128((const __m128i *)(mx.x + 20)));
-    else
+    if(cn_v) {
+      xp.t = _mm_packs_epi32(xp.t, _mm_setr_epi32(x20, x21, 256, x23));
+    } else
+#endif
+    {
+      mx.set(20, x20);
+      mx.set(21, x21);
+      mx.set(22, 256);
+      mx.set(23, x23);
       xp.pack(mx.x);
+    }
+#ifdef H264P_AVX2
     const cm_x16<TC_MIXN> *xq = &xp;
 #else
     const cm_x16<TC_MIXN> *xq = nullptr;
