@@ -8,7 +8,8 @@ questions (allocation, template branches, `restrict`, SIMD lookups, memory
 latency, layout, vectorization), and orders the work by what it buys.
 Section 4 has what has been done since, measured: compression 3.2x and
 decompression 2.6x faster over the corpus, to the same output but for a
-cheaper end_of_slice_flag (3 bytes more over the 96 test streams).
+cheaper end_of_slice_flag and lighter template searches (830 bytes more
+over the 96 test streams, 0.02%).
 
 ## 1. Where the time goes
 
@@ -416,8 +417,9 @@ and 1.9x on 02.
 What has landed, measured (wall clock, this machine, the original build and
 the current one run one after the other; its timings vary by 5-10% from run
 to run and from day to day). Every step codes exactly as before it (the
-output of every test stream is the same, and the round trips pass) but the
-last, which changes how end_of_slice_flag is coded.
+output of every test stream is the same, and the round trips pass) but
+two, which change how end_of_slice_flag is coded and how far the template
+searches go.
 
 | stream | bytes | `c` before | `c` now | `d` before | `d` now |
 |---|---:|---:|---:|---:|---:|
@@ -529,6 +531,17 @@ The steps, in order (the gains on the streams named, paired runs):
   history copies the rows written then or before. On 00, 0.5% fewer
   instructions and 8.5% fewer L1 data misses; the time it saves is within
   the noise.
+- **Lighter template searches** (3.5 again: by now the searches took 30%
+  of the compressor's model thread on 04): `ref()` asks which of the first
+  four references (not eight) the template matches best by their
+  candidates alone, `tm_best` (for the skip flag) searches in whole
+  samples, the proxy's first search in halves, and the diamond takes two
+  steps instead of four. The 96 test streams take 827 bytes more (0.018%;
+  03, the most, 0.05%); the format's version is 3. CPU time of `d`: 04 9%,
+  00 5%, 03 4%, 01 3%. Not worth their bytes: the mvd's search in halves
+  (511 bytes for under 0.7% of the instructions), the proxy's searches
+  inside the macroblock in halves (662), `ref()` on two references (469),
+  `tm_best` on its candidates alone (375, 0.11% on 03).
 
 What did not pay:
 
@@ -538,11 +551,9 @@ What did not pay:
 - Huge pages for the model tables (`MADV_HUGEPAGE`): a tenth of the page
   faults, 0.05-0.1 s less a run on small streams, but runs started after
   other processes had fragmented memory stalled up to 0.7 s in compaction.
-- The searches cut down within the 0.1% budget (3.5): `tm_best` in whole
-  samples, `ref()` on four references in whole samples, the mvd's search
-  and the proxy's in halves, two diamond steps instead of four. On the 96
-  test streams these cost -44 to +931 bytes, but once the searches were
-  vectorized they bought 0-2.5% of CPU time, so the format stays as it is.
+- The searches cut down within the 0.1% budget (3.5), when first tried:
+  once the searches were vectorized they bought 0-2.5% of CPU time. (Most
+  were taken later, when everything else had got faster; below.)
 - The template walk's neighbours costed all at once and the best taken
   without a branch, or the thin cost forced inline: no change measured.
 - Counters kept as their difference from 1/2 (no select on a fresh

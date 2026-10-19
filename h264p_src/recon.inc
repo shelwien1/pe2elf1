@@ -3062,8 +3062,9 @@ struct Recon {
   // of the current macroblock, on reference r of list l: from mv (quarter
   // samples), the vector whose prediction of the decoded samples above (2
   // rows) and to the left (2 columns) of the block misses least: whole
-  // samples within 2, then halves, then quarters (only_y: the vertical
-  // component only), cand the other vectors to start from; miss, 4 x the
+  // samples within 2, then halves, then quarters, down to steps of finest
+  // (4: whole samples, 8: none, cand alone; only_y: the vertical component
+  // only), cand the other vectors to start from; miss, 4 x the
   // mean absolute difference there. l < 0: on proxy_pic, with 16 rows and
   // columns and the block above right too (the proxy wants the content to
   // match, a vector to code wants a thin template). The template outside the
@@ -3088,8 +3089,9 @@ struct Recon {
   uint32_t tmm_gen = 1;
   // tm_search's walk from mv (where it leaves the best): the candidates
   // (alt: the best of them but the best, of the start too; INT_MIN none),
-  // a small diamond in whole samples while it finds better (up to 4 steps),
-  // then the 8 halves and quarters around. By cost(vx, vy, bound): a
+  // a small diamond in whole samples while it finds better (up to 2 steps),
+  // then the 8 halves and quarters around, down to steps of finest (4:
+  // whole samples only, 8: the candidates alone). By cost(vx, vy, bound): a
   // vector's cost, or something not below bound once it is not. The best's
   // cost.
   template <class F>
@@ -3113,7 +3115,7 @@ struct Recon {
     if (alt) alt[0] = ax, alt[1] = ay;
     // (back: the step back to where the last came from, known worse)
     static const int kD[4][2] = {{0, -1}, {-1, 0}, {1, 0}, {0, 1}};
-    for (int it = 0, back = -1; it < 4 && best; it++) {
+    for (int it = 0, back = -1; it < 2 && finest <= 4 && best; it++) {
       int cx = vx, cy = vy, to = -1;
       for (int k = 0; k < 4; k++) {
         if ((only_y && kD[k][0]) || k == back) continue;

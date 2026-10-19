@@ -891,7 +891,7 @@ their gain on test/002:
 | how far to trust the intra estimate: the template match of its vector, then how far the luma decoded so far is from it | coefficients, intra modes | 9 KB |
 | the best intra mode in the reference | intra modes | 4 KB |
 | P pictures: the coefficients of the block the vector points at in the reference (as it was: the last picture of a kind, found by POC), moved and still blocks apart; for cbp, the 4x4 blocks with coefficients under it | coefficients, cbp | 2 KB |
-| ref_idx: the reference (of the first eight) the template matches best | ref_idx | 1 KB |
+| ref_idx: the reference (of the first four, by its candidates alone) the template matches best | ref_idx | 1 KB |
 
 Without the decoder: the significance of the eight positions before (12 KB
 with the frequencies left of and above; the same position in the blocks to
@@ -914,17 +914,17 @@ with their defaults (0.6 KB: 02's 667 bytes of it take 84).
 
 | element | CABAC | model | |
 |---|---:|---:|---:|
-| skip, end | 336,175 | 221,359 | −34.2% |
-| mb_type | 365,120 | 259,423 | −28.9% |
-| cbp, transform_size_8x8_flag | 216,100 | 153,399 | −29.0% |
-| intra modes | 299,858 | 231,769 | −22.7% |
-| sub_mb_type, ref_idx, mvd | 504,865 | 403,457 | −20.1% |
-| mb_qp_delta | 271,297 | 182,424 | −32.8% |
-| coded_block_flag, significance (count, significance) | 910,721 | 697,027 | −23.5% |
-| levels | 302,611 | 219,810 | −27.4% |
-| signs | 329,382 | 182,207 | −44.7% |
-| macroblock syntax | 3,536,129 | 2,550,875 | −27.9% |
-| whole streams (H.264 against compressed) | 3,603,993 | 2,556,130 | −29.1% |
+| skip, end | 336,175 | 221,412 | −34.1% |
+| mb_type | 365,120 | 259,362 | −29.0% |
+| cbp, transform_size_8x8_flag | 216,100 | 153,390 | −29.0% |
+| intra modes | 299,858 | 231,869 | −22.7% |
+| sub_mb_type, ref_idx, mvd | 504,865 | 404,213 | −19.9% |
+| mb_qp_delta | 271,297 | 182,415 | −32.8% |
+| coded_block_flag, significance (count, significance) | 910,721 | 696,918 | −23.5% |
+| levels | 302,611 | 219,815 | −27.4% |
+| signs | 329,382 | 182,124 | −44.7% |
+| macroblock syntax | 3,536,129 | 2,551,518 | −27.8% |
+| whole streams (H.264 against compressed) | 3,603,993 | 2,556,763 | −29.1% |
 
 The model tables take 226 MB.
 

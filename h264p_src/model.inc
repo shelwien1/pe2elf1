@@ -943,8 +943,8 @@ struct Model {
   // the samples above and to the left (1 + tc_qlog of Recon::skip_miss, 0
   // not known)
   // the best vector for the macroblock by template matching on list l's
-  // first reference (from mvp, the neighbours' vectors, zero): false none;
-  // miss as Recon::tm_search's
+  // first reference (from mvp, the neighbours' vectors, zero; in whole
+  // samples): false none; miss as Recon::tm_search's
   bool tm_best(int l, int* mv, int& miss) const {
     MvN nbs[3];
     mv_pred(l, 0, 0, 4, 4, 0, mv, nbs);
@@ -952,7 +952,7 @@ struct Model {
     for (int j = 0; j < 3; j++)
       if (nbs[j].ref == 0) cand[nc][0] = nbs[j].mv[0], cand[nc][1] = nbs[j].mv[1], nc++;
     cand[nc][0] = cand[nc][1] = 0, nc++;
-    return rec_.tm_search(l, 0, 0, 0, 16, 16, mv, false, cand, nc, &miss, 0, 2);
+    return rec_.tm_search(l, 0, 0, 0, 16, 16, mv, false, cand, nc, &miss, 0, 4);
   }
   int skip_miss() {
     tm_ = tb_ = dh_ = bd_ = 0;
@@ -1285,7 +1285,7 @@ struct Model {
       }
       cand[nc][0] = cand[nc][1] = 0, nc++;
       int miss;
-      if (rec_.tm_search(-1, 0, 0, 0, 16, 16, p, false, cand, nc, &miss)) pxq_ = 1 + tc_clamp(tc_qlog(miss), 0, 11);
+      if (rec_.tm_search(-1, 0, 0, 0, 16, 16, p, false, cand, nc, &miss, 0, 2)) pxq_ = 1 + tc_clamp(tc_qlog(miss), 0, 11);
       pxv_[addr_ * 2] = (int16_t)tc_clamp(p[0], -32767, 32767);
       pxv_[addr_ * 2 + 1] = (int16_t)tc_clamp(p[1], -32767, 32767);
     }
@@ -1786,18 +1786,18 @@ struct Model {
     D.pd = col_ && col_->cls < CL_INXN ? 1 + col_->ref[list][b8] : 0;
     D.sp = 0;
     D.tv = 0;
-    // the reference the template matches best (of the first eight), and by
-    // how much better than the first
+    // the reference the template matches best (of the first four, by their
+    // candidates alone), and by how much better than the first
     if (rec_.active && sc_->num_ref_[list] > 1) {
       int bm = INT_MAX, m0 = 0, rbest = -1;
-      for (int r = 0; r < std::min(sc_->num_ref_[list], 8); r++) {
+      for (int r = 0; r < std::min(sc_->num_ref_[list], 4); r++) {
         int p[2], miss, cand[4][2], nc = 0;
         MvN nbs[3];
         mv_pred(list, x, y, w, h, r, p, nbs);
         for (int j = 0; j < 3; j++)
           if (nbs[j].ref == r) cand[nc][0] = nbs[j].mv[0], cand[nc][1] = nbs[j].mv[1], nc++;
         cand[nc][0] = cand[nc][1] = 0, nc++;
-        if (!rec_.tm_search(list, r, x * 4, y * 4, w * 4, h * 4, p, false, cand, nc, &miss, kTmLambda)) break;
+        if (!rec_.tm_search(list, r, x * 4, y * 4, w * 4, h * 4, p, false, cand, nc, &miss, kTmLambda, 8)) break;
         if (!r) m0 = miss;
         if (miss < bm) bm = miss, rbest = r;
       }
