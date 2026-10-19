@@ -24,9 +24,11 @@ Haswell, Zen and later), for which its pixel kernels and mixers have SIMD
 code; built for any other target (`make PARCH=`, or without `-march`) it
 uses the plain C++ beside them, which is slower and codes identically.
 Compression runs the context mixing coder in a second thread, beside the
-model, and parses the NAL units ahead of the model in a third;
-`-DH264P_NO_THREADS` builds it without (for a compiler without
-`std::thread`), also to the same output.
+model, and parses the NAL units ahead of the model in a third; both
+directions finish the reconstructed pictures (deblocking, the padded copies
+of the references, the maps the model reads) in a thread of their own, two
+macroblock rows behind the decoding. `-DH264P_NO_THREADS` builds it without
+(for a compiler without `std::thread`), also to the same output.
 
 ## Test
 

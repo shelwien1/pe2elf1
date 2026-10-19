@@ -506,6 +506,22 @@ The steps, in order (the gains on the streams named, paired runs):
   family's decision as before. It took a full decision per macroblock, as
   much time as the skip flag: `d` of 00 5.5%, of 01 4.5%. The 96 test
   streams take 3 bytes more; the format's version is 2.
+- **Pictures finished in a thread of their own, behind the decoding**:
+  deblocking, the maps the model reads and a reference picture's padded and
+  transposed luma (7% of `d` on 00, 4% on 04) take each macroblock row once
+  the decoding has come in order two rows past it (decoding reads the row
+  above its own unfiltered, and deblocking a row changes the one above it).
+  The decoding only publishes how far it has come, and the thread looks
+  about once a row (after a look that found nothing it waits twice as long,
+  after one that found two rows or more half as long): waking it for each
+  row cost more than it saved (a wake-up from one vCPU to another is dear
+  here). At a picture's end the decoding finishes what the thread has not
+  begun. A decoding that leaves the order (slice groups, slices out of
+  order or repeated) has what was let go finished and lets go no more, so
+  what comes out never depends on timing; built without threads, the same
+  rows are finished at the same points. `d` of 00 5%, of 01 4%, of 04 2-4%,
+  of 06 as before; `c` of 00 7% (04's coder thread sets its pace). It
+  costs 6-11% more CPU time, the thread's share included.
 
 What did not pay:
 

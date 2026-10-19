@@ -398,19 +398,29 @@ struct RPic {
   std::vector<uint8_t> yt;
   bool padded = false;
 
-  void pad() {
+  void pad_alloc() {
+    yp.resize((size_t)(w + 2 * kPad) * (h + 2 * kPad));
+    yt.resize(yp.size());
+  }
+  // the padded copy of macroblock rows r0 to r1 - 1 (with the first row
+  // the margin above, with the last the margin below), and those rows
+  // transposed (pad_alloc first)
+  void pad_rows(int r0, int r1) {
     int pw = w + 2 * kPad, ph = h + 2 * kPad;
-    yp.resize((size_t)pw * ph);
-    for (int j = 0; j < ph; j++) {
+    int j0 = r0 ? kPad + r0 * 16 : 0, j1 = r1 < mbh ? kPad + r1 * 16 : ph;
+    for (int j = j0; j < j1; j++) {
       const uint8_t* s = y.data() + (size_t)clip3(0, h - 1, j - kPad) * w;
       uint8_t* d = yp.data() + (size_t)j * pw;
       memset(d, s[0], kPad);
       memcpy(d + kPad, s, w);
       memset(d + kPad + w, s[w - 1], kPad);
     }
-    yt.resize((size_t)pw * ph);
-    for (int j = 0; j < ph; j += 16)
+    for (int j = j0; j < j1; j += 16)
       for (int i = 0; i < pw; i += 16) transpose16(yp.data() + (size_t)j * pw + i, pw, yt.data() + (size_t)i * ph + j, ph);
+  }
+  void pad() {
+    pad_alloc();
+    pad_rows(0, mbh);
     padded = true;
   }
   // the luma as plane, its stride and how far out it may be read (the
@@ -496,13 +506,22 @@ struct Recon {
     while (v >> (n + 1)) n++;
     return 4 * n + (n >= 2 ? (int)(v >> (n - 2) & 3) : n == 1 ? (int)(v & 1) * 2 : 0);
   }
-  void make_maps() {
-    int mbw = cur->mbw, mbh = cur->mbh, w = cur->w, n = mbw * mbh;
-    bool same = maps_w == mbw && maps_h == mbh && (int)means.size() == n * 16;
-    energy.assign(n, 0);
-    change.assign(n, -1);
-    std::vector<int> m(n * 16);
-    for (int a = 0; a < n; a++) {
+  // the current picture's maps as it is finished (by rows), and whether
+  // the last picture's means are of its size (maps_begin)
+  std::vector<int> energy_n, change_n, means_n;
+  bool maps_same = false;
+  void maps_begin() {
+    int n = cur->mbw * cur->mbh;
+    maps_same = maps_w == cur->mbw && maps_h == cur->mbh && (int)means.size() == n * 16;
+    energy_n.resize(n);
+    change_n.assign(n, -1);
+    means_n.resize((size_t)n * 16);
+  }
+  // those of macroblock row row, deblocked
+  void maps_row(int row) {
+    int mbw = cur->mbw, w = cur->w;
+    int* m = means_n.data();
+    for (int a = row * mbw; a < (row + 1) * mbw; a++) {
       const uint8_t* p = cur->y.data() + (a / mbw) * 16 * w + (a % mbw) * 16;
       int64_t s1 = 0, s2 = 0;
 #ifdef H264P_AVX2
@@ -540,19 +559,198 @@ struct Recon {
       }
 #endif
       int64_t ssd = (s2 * 256 - s1 * s1) / 256;  // the sum of squared deviations
-      energy[a] = log2q(ssd + 1);
-      if (same) {
+      energy_n[a] = log2q(ssd + 1);
+      if (maps_same) {
         int d = 0;
         for (int b = 0; b < 16; b++) d += abs(m[a * 16 + b] - means[a * 16 + b]);
-        change[a] = d / 16;
+        change_n[a] = d / 16;
       }
     }
+  }
+  // the picture finished: its maps are the model's
+  void maps_end() {
+    int n = cur->mbw * cur->mbh;
     int64_t sum = 0;
-    for (int a = 0; a < n; a++) sum += energy[a];
+    for (int a = 0; a < n; a++) sum += energy_n[a];
     energy_mean = n ? (int)(sum / n) : 0;
-    means.swap(m);
-    maps_w = mbw;
-    maps_h = mbh;
+    energy.swap(energy_n);
+    change.swap(change_n);
+    means.swap(means_n);
+    maps_w = cur->mbw;
+    maps_h = cur->mbh;
+  }
+
+  // --- finishing the picture as its decoding goes on: deblocking it, then
+  // the maps and (a reference picture's) padded luma of each row done with.
+  // Decoding a macroblock row reads the row above it unfiltered, and
+  // deblocking row j changes rows j - 1 and j: so row j is let go once the
+  // decoding has come in order to row j + 2, and is final once row j + 1 is
+  // deblocked; the rest is finished when the picture ends. A decoding that
+  // leaves the order (slice groups, slices out of order or twice) has what
+  // was let go finished and lets go no more. Where there are threads, one of
+  // its own takes what was let go now and then; the decoding finishes the
+  // rest (what that thread has not begun, the token busy says): what it
+  // makes is the same either way.
+  int fin_next = 0;                // the macroblock next in order
+  bool fin_off = false;            // the decoding left the order
+  int fin_rows = 0, fin_post = 0;  // (busy's) the rows deblocked, and final and finished
+  int fin_db = 0;                  // (busy's) the rows of db made none again for the next picture
+  static DbMb db_none() {
+    DbMb none;
+    memset(&none, 0, sizeof none);
+    none.slice = -1;
+    return none;
+  }
+  void finish_rows(int let, bool all) {
+    int mbw = cur->mbw;
+    while (fin_rows < let) {
+      deblock_row(fin_rows++);
+      // (deblocking reads the row above, decoding two rows down)
+      for (; fin_db < fin_rows - 1; fin_db++) std::fill(&db[fin_db * mbw], &db[fin_db * mbw] + mbw, db_none());
+      for (; fin_post < fin_rows - 1; fin_post++) post_row(fin_post);
+    }
+    if (all) {
+      for (; fin_post < cur->mbh; fin_post++) post_row(fin_post);
+      // (all of it where the decoding left the order: it may have come back)
+      std::fill(db.begin() + (fin_off ? 0 : (size_t)fin_db * mbw), db.end(), db_none());
+    }
+  }
+  void post_row(int row) {
+    maps_row(row);
+    if (cur_ref_idc) cur->pad_rows(row, row + 1);
+  }
+#ifndef H264P_NO_THREADS
+  struct Finisher {
+    std::thread th;
+    std::mutex mu;  // (for the sleeping)
+    std::condition_variable cv;
+    std::atomic<int> let{0};        // the rows let go of the current picture
+    std::atomic<bool> busy{false};  // a side finishing
+    std::atomic<bool> on{false};    // a picture being decoded
+    bool idle = false, quit = false;  // (mu's) the thread waiting for one, to end
+  };
+  std::unique_ptr<Finisher> fin_th;
+  bool fin_tried = false;
+  void fin_take() {
+    for (int k = 0; fin_th->busy.exchange(true); k++)
+#ifdef H264P_AVX2
+      if (k < 4096)
+        _mm_pause();
+      else
+#endif
+        std::this_thread::yield();
+  }
+  void fin_run() {
+    Finisher& F = *fin_th;
+    std::unique_lock<std::mutex> lk(F.mu);
+    // (looking about once a row: twice as long after nothing, half after
+    // two rows or more)
+    int us = 100;
+    while (!F.quit) {
+      if (!F.on.load()) {
+        F.idle = true;
+        F.cv.wait(lk);
+        F.idle = false;
+        continue;
+      }
+      lk.unlock();
+      if (!F.busy.exchange(true)) {
+        int r0 = fin_rows;
+        if (F.on.load()) finish_rows(F.let.load(), false);
+        int n = fin_rows - r0;
+        F.busy.store(false);
+        us = n == 0 ? std::min(us * 2, 2000) : n > 1 ? std::max(us / 2, 50) : us;
+      }
+      lk.lock();
+      if (!F.quit) F.cv.wait_for(lk, std::chrono::microseconds(us));
+    }
+  }
+#endif
+  // (the decoding's side) a picture begins
+  void fin_begin() {
+#ifndef H264P_NO_THREADS
+    if (!fin_tried) {
+      fin_tried = true;
+      if (!getenv("H264P_ONE_THREAD")) {
+        fin_th.reset(new Finisher);
+        try {
+          fin_th->th = std::thread([this] { fin_run(); });
+        } catch (const std::system_error&) {  // no thread to be had: finished here
+          fin_th.reset();
+        }
+      }
+    }
+    if (fin_th) fin_take();
+#endif
+    fin_next = 0;
+    fin_off = false;
+    fin_rows = fin_post = fin_db = 0;
+    maps_begin();
+    if (cur_ref_idc) cur->pad_alloc();
+#ifndef H264P_NO_THREADS
+    if (fin_th) {
+      Finisher& F = *fin_th;
+      F.let.store(0);
+      F.on.store(true);
+      F.busy.store(false);
+      bool wake;
+      {
+        std::lock_guard<std::mutex> lk(F.mu);
+        wake = F.idle;
+      }
+      if (wake) F.cv.notify_one();
+    }
+#endif
+  }
+  void fin_let(int rows) {
+#ifndef H264P_NO_THREADS
+    if (fin_th) return fin_th->let.store(rows);
+#endif
+    finish_rows(rows, false);
+  }
+  // macroblock addr begins (mb_start), ends (mb_end)
+  void fin_mb(int addr, bool end) {
+    if (fin_off) return;
+    if (addr != fin_next) {
+#ifndef H264P_NO_THREADS
+      if (fin_th) {
+        fin_take();
+        finish_rows(fin_th->let.load(), false);
+        fin_th->busy.store(false);
+      }
+#endif
+      fin_off = true;
+      return;
+    }
+    int mbw = cur->mbw;
+    if (end && ++fin_next % mbw == 0 && fin_next >= 2 * mbw) fin_let(fin_next / mbw - 1);
+  }
+  // the picture ends: the rest of it
+  void fin_end() {
+#ifndef H264P_NO_THREADS
+    if (fin_th) fin_take();
+#endif
+    finish_rows(cur->mbh, true);
+    maps_end();
+    if (cur_ref_idc) cur->padded = true;
+#ifndef H264P_NO_THREADS
+    if (fin_th) {
+      fin_th->on.store(false);
+      fin_th->busy.store(false);
+    }
+#endif
+  }
+  ~Recon() {
+#ifndef H264P_NO_THREADS
+    if (fin_th) {
+      {
+        std::lock_guard<std::mutex> lk(fin_th->mu);
+        fin_th->quit = true;
+      }
+      fin_th->cv.notify_one();
+      fin_th->th.join();
+    }
+#endif
   }
 
   // --- reference picture management (8.2.4, 8.2.5)
@@ -560,10 +758,7 @@ struct Recon {
 
   void finish_picture() {
     if (!cur) return;
-    if (active) {
-      deblock();
-      make_maps();
-    }
+    if (active) fin_end();
     // checking the reconstruction against a decoder's: H264P_RECDUMP=file
     // gets the pictures, in decoding order, as raw 4:2:0 of whole macroblocks
     static FILE* dump = getenv("H264P_RECDUMP") ? fopen(getenv("H264P_RECDUMP"), "wb") : nullptr;
@@ -574,7 +769,7 @@ struct Recon {
     }
     if (cur_ref_idc) mark();
     if (cur->ref) {
-      cur->pad();
+      if (!cur->padded) cur->pad();
       dpb.push_back(std::move(cur));
     } else {
       spare.push_back(std::move(cur));
@@ -851,6 +1046,7 @@ struct Recon {
     return lst;
   }
   void mb_start(int addr) {
+    if (active) fin_mb(addr, false);
     mb_addr = addr;
     lst_ok = false;
     prx_ok = false;
@@ -1894,6 +2090,7 @@ struct Recon {
         for (int b = 0; b < 16; b++) memcpy(cm + (b * 2 + l) * 2, mv[l][b], 2 * sizeof(int16_t));
 #endif
     }
+    fin_mb(addr, true);
   }
 
   // The predictions of a macroblock by each list, before the weights (luma
@@ -2369,9 +2566,10 @@ struct Recon {
       }
     }
   }
-  void deblock() {
-    int mbw = cur->mbw, mbh = cur->mbh, w = cur->w, cw = w / 2;
-    for (int addr = 0; addr < mbw * mbh; addr++) {
+  // macroblock row row of the current picture (the rows above it done)
+  void deblock_row(int row) {
+    int mbw = cur->mbw, w = cur->w, cw = w / 2;
+    for (int addr = row * mbw; addr < (row + 1) * mbw; addr++) {
       const DbMb& Q = db[addr];
       if (Q.slice < 0 || Q.disable == 1) continue;
       int mx = addr % mbw, my = addr / mbw;
@@ -2474,10 +2672,8 @@ struct Recon {
       cur_lt_flag = h.long_term_reference_flag;
       cur_mmco5 = h.mmco5;
       cur_mmco = h.mmco;
-      DbMb none;
-      memset(&none, 0, sizeof none);
-      none.slice = -1;
-      db.assign((size_t)cur->mbw * cur->mbh, none);
+      // (finishing the last picture left db as none)
+      if (db.size() != (size_t)cur->mbw * cur->mbh) db.assign((size_t)cur->mbw * cur->mbh, db_none());
       slice_no = 0;
       active = true;
       // references of another size are no use
@@ -2485,6 +2681,7 @@ struct Recon {
       for (auto& p : dpb)
         if (p->mbw == cur->mbw && p->mbh == cur->mbh) keep.push_back(std::move(p));
       dpb.swap(keep);
+      fin_begin();
     } else {
       slice_no++;
     }
