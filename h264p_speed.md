@@ -614,6 +614,10 @@ What did not pay:
   fetch, 9 MB more): `d` of 03 1.6% faster, of 04 as fast, of 00 3% slower.
 - The intra mode estimates' SATDs four 4x4 blocks (or two 8x8) to a
   vector instead of one: 0.1% fewer instructions on 03.
+- Compressing, the context indices built in the coder's thread from
+  the variables recorded with each decision: 8.8% fewer instructions in
+  the model's thread and the same time (those instructions ran in its
+  stalls), 15% more CPU time in the coder's.
 
 Where the time goes now (decompressing, the decoding's thread; sampled,
 the finishing thread's share left out):
