@@ -171,6 +171,70 @@ static INLINE __m256i bil16x2(const uint8_t* a, int as, int fx, int fy) {
                                 _mm256_maddubs_epi16(_mm256_unpackhi_epi8(y0, y1), wcd));
   return _mm256_packus_epi16(_mm256_srli_epi16(_mm256_add_epi16(lo, r8), 4), _mm256_srli_epi16(_mm256_add_epi16(hi, r8), 4));
 }
+// sad_bil of rows of 32 samples, a row at a time (each row's pairs of
+// samples serve as the row above for one and below for the next), checked
+// against budget every 4 rows
+static int sad_bil32(const uint8_t* q, int qs, const uint8_t* a, int as, int rows, int fx, int fy, int budget) {
+  auto ld = [](const uint8_t* p) { return _mm256_loadu_si256((const __m256i*)p); };
+  __m256i acc = _mm256_setzero_si256();
+  int s;
+  if (!(fx | fy)) {
+    for (int j = 0; j < rows; j++, q += qs, a += as) {
+      acc = _mm256_add_epi64(acc, _mm256_sad_epu8(ld(a), ld(q)));
+      if ((j & 3) == 3 && (s = sad_sum(acc)) >= budget) return s;
+    }
+    return sad_sum(acc);
+  }
+  const __m256i wab = kBilW.ab[fx + 4 * fy], wcd = kBilW.cd[fx + 4 * fy], r8 = _mm256_set1_epi16(8);
+  __m256i x0 = ld(a), x1 = ld(a + 1);
+  __m256i plo = _mm256_unpacklo_epi8(x0, x1), phi = _mm256_unpackhi_epi8(x0, x1);
+  for (int j = 0; j < rows; j++, q += qs) {
+    a += as;
+    __m256i y0 = ld(a), y1 = ld(a + 1);
+    __m256i nlo = _mm256_unpacklo_epi8(y0, y1), nhi = _mm256_unpackhi_epi8(y0, y1);
+    __m256i lo = _mm256_add_epi16(_mm256_maddubs_epi16(plo, wab), _mm256_maddubs_epi16(nlo, wcd));
+    __m256i hi = _mm256_add_epi16(_mm256_maddubs_epi16(phi, wab), _mm256_maddubs_epi16(nhi, wcd));
+    __m256i d = _mm256_packus_epi16(_mm256_srli_epi16(_mm256_add_epi16(lo, r8), 4), _mm256_srli_epi16(_mm256_add_epi16(hi, r8), 4));
+    acc = _mm256_add_epi64(acc, _mm256_sad_epu8(d, ld(q)));
+    plo = nlo, phi = nhi;
+    if ((j & 3) == 3 && (s = sad_sum(acc)) >= budget) return s;
+  }
+  return sad_sum(acc);
+}
+#endif
+#ifdef H264P_AVX2
+// sad_bil of a block of n x n (4 or 8), whole: two rows of n at a time
+// (rows of 4 in the low two quarters, of 8 in the halves)
+static INLINE int sad_bil_blk(const uint8_t* q, int qs, const uint8_t* a, int as, int n, int fx, int fy) {
+  const __m128i wab = _mm256_castsi256_si128(kBilW.ab[fx + 4 * fy]), wcd = _mm256_castsi256_si128(kBilW.cd[fx + 4 * fy]);
+  const __m128i r8 = _mm_set1_epi16(8);
+  // (each row's pairs of samples, for it as the row above and below)
+  auto ld = [n](const uint8_t* p) {
+    if (n == 8) return _mm_loadl_epi64((const __m128i*)p);
+    int32_t u;
+    memcpy(&u, p, 4);
+    return _mm_cvtsi32_si128(u);
+  };
+  auto pairs = [&](const uint8_t* p) { return _mm_unpacklo_epi8(ld(p), ld(p + 1)); };
+  __m128i acc = _mm_setzero_si128(), pa = pairs(a);
+  for (int j = 0; j < n; j += 2, q += 2 * qs) {
+    __m128i pb = pairs(a + (j + 1) * as), pc = pairs(a + (j + 2) * as);
+    __m128i lo, hi;
+    if (n == 8) {
+      lo = _mm_add_epi16(_mm_maddubs_epi16(pa, wab), _mm_maddubs_epi16(pb, wcd));
+      hi = _mm_add_epi16(_mm_maddubs_epi16(pb, wab), _mm_maddubs_epi16(pc, wcd));
+    } else {
+      lo = _mm_add_epi16(_mm_maddubs_epi16(_mm_unpacklo_epi64(pa, pb), wab), _mm_maddubs_epi16(_mm_unpacklo_epi64(pb, pc), wcd));
+      hi = _mm_setzero_si128();
+    }
+    __m128i d = _mm_packus_epi16(_mm_srli_epi16(_mm_add_epi16(lo, r8), 4), _mm_srli_epi16(_mm_add_epi16(hi, r8), 4));
+    // (n 4: the upper half is of zeros in both)
+    __m128i t = ld8x2(q, q + qs, n);
+    acc = _mm_add_epi64(acc, _mm_sad_epu8(d, t));
+    pa = pc;
+  }
+  return _mm_cvtsi128_si32(_mm_add_epi64(acc, _mm_unpackhi_epi64(acc, acc)));
+}
 #endif
 // A thin template: two rows of n (16, 8 or 4) samples at q (stride qs; none
 // if null), loaded once for the many places of a search that sad_bil2
@@ -2726,6 +2790,17 @@ struct Recon {
     };
     auto outer_sad = [&](int vx, int vy, int budget) {
       int s = 0;
+#ifdef H264P_AVX2
+      // (the top and the top right as one, rows of 32)
+      if (tr && bw == T) {
+        int ix = x0 + (vx >> 2), iy = y0 - T + (vy >> 2);
+        if (ix >= -pm && iy >= -pm && ix + 2 * T < W + pm && iy + T < H + pm) {
+          s = sad_bil32(Y + (y0 - T) * w + x0, w, RP + iy * ps + ix, ps, T, vx & 3, vy & 3, budget);
+          if (left && s < budget) s += sad_left(vx, vy, budget - s);
+          return s;
+        }
+      }
+#endif
       if (top) s += sad(x0, y0 - T, bw, T, vx, vy, budget);
       if (left && s < budget) s += sad_left(vx, vy, budget - s);
       if (tr && s < budget) s += sad(x0 + bw, y0 - T, T, T, vx, vy, budget - s);
@@ -2734,6 +2809,22 @@ struct Recon {
     // (the whole sums of the 4x4 blocks of m4 and the 8x8 of m8)
     auto blocks_sad = [&](int vx, int vy, unsigned m4, unsigned m8) {
       int s = 0;
+#ifdef H264P_AVX2
+      int ix = x0 + (vx >> 2), iy = y0 + (vy >> 2), fx = vx & 3, fy = vy & 3;
+      if (ix >= -pm && iy >= -pm && ix + 16 < W + pm && iy + 16 < H + pm) {
+        // (the macroblock inside the margins)
+        const uint8_t *q = Y + y0 * w + x0, *a = RP + iy * ps + ix;
+        for (; m4; m4 &= m4 - 1) {
+          int b = __builtin_ctz(m4), ox = blk_x(b) * 4, oy = blk_y(b) * 4;
+          s += sad_bil_blk(q + oy * w + ox, w, a + oy * ps + ox, ps, 4, fx, fy);
+        }
+        for (; m8; m8 &= m8 - 1) {
+          int b8 = __builtin_ctz(m8), ox = (b8 & 1) * 8, oy = (b8 >> 1) * 8;
+          s += sad_bil_blk(q + oy * w + ox, w, a + oy * ps + ox, ps, 8, fx, fy);
+        }
+        return s;
+      }
+#endif
       for (int b = 0; b < 16; b++)
         if (m4 >> b & 1) s += sad(x0 + blk_x(b) * 4, y0 + blk_y(b) * 4, 4, 4, vx, vy, INT_MAX);
       for (int b8 = 0; b8 < 4; b8++)
