@@ -975,77 +975,65 @@ struct Recon {
     const int* T = e + 1;
     const int* L = e + 1 + 2 * n;
     auto P = [&](int x, int y) { return y < 0 ? (x < 0 ? e[0] : T[x]) : L[y]; };
-    int dc = 128;
-    if (mode == 2) {
-      int st = 0, sl = 0;
-      for (int i = 0; i < n; i++) st += T[i], sl += L[i];
-      int sh = n == 4 ? 2 : 3;
-      dc = top && left ? (st + sl + n) >> (sh + 1) : left ? (sl + n / 2) >> sh : top ? (st + n / 2) >> sh : 128;
-    }
-    for (int y = 0; y < n; y++)
-      for (int x = 0; x < n; x++) {
-        int v;
-        switch (mode) {
-          case 0:
-            v = T[x];
-            break;
-          case 1:
-            v = L[y];
-            break;
-          case 2:
-            v = dc;
-            break;
-          case 3:
-            v = x == n - 1 && y == n - 1 ? (T[2 * n - 2] + 3 * T[2 * n - 1] + 2) >> 2
-                                         : (T[x + y] + 2 * T[x + y + 1] + T[x + y + 2] + 2) >> 2;
-            break;
-          case 4:
-            v = x > y ? (P(x - y - 2, -1) + 2 * P(x - y - 1, -1) + P(x - y, -1) + 2) >> 2
-                : x < y ? (P(-1, y - x - 2) + 2 * P(-1, y - x - 1) + P(-1, y - x) + 2) >> 2
-                        : (P(0, -1) + 2 * P(-1, -1) + P(-1, 0) + 2) >> 2;
-            break;
-          case 5: {
-            int z = 2 * x - y;
-            if (z >= 0 && !(z & 1))
-              v = (P(x - (y >> 1) - 1, -1) + P(x - (y >> 1), -1) + 1) >> 1;
-            else if (z >= 0)
-              v = (P(x - (y >> 1) - 2, -1) + 2 * P(x - (y >> 1) - 1, -1) + P(x - (y >> 1), -1) + 2) >> 2;
-            else if (z == -1)
-              v = (P(-1, 0) + 2 * P(-1, -1) + P(0, -1) + 2) >> 2;
-            else
-              v = (P(-1, y - 2 * x - 1) + 2 * P(-1, y - 2 * x - 2) + P(-1, y - 2 * x - 3) + 2) >> 2;
-            break;
-          }
-          case 6: {
-            int z = 2 * y - x;
-            if (z >= 0 && !(z & 1))
-              v = (P(-1, y - (x >> 1) - 1) + P(-1, y - (x >> 1)) + 1) >> 1;
-            else if (z >= 0)
-              v = (P(-1, y - (x >> 1) - 2) + 2 * P(-1, y - (x >> 1) - 1) + P(-1, y - (x >> 1)) + 2) >> 2;
-            else if (z == -1)
-              v = (P(-1, 0) + 2 * P(-1, -1) + P(0, -1) + 2) >> 2;
-            else
-              v = (P(x - 2 * y - 1, -1) + 2 * P(x - 2 * y - 2, -1) + P(x - 2 * y - 3, -1) + 2) >> 2;
-            break;
-          }
-          case 7:
-            v = !(y & 1) ? (T[x + (y >> 1)] + T[x + (y >> 1) + 1] + 1) >> 1
-                         : (T[x + (y >> 1)] + 2 * T[x + (y >> 1) + 1] + T[x + (y >> 1) + 2] + 2) >> 2;
-            break;
-          default: {
-            int z = x + 2 * y, lim = 2 * n - 3;
-            if (z < lim && !(z & 1))
-              v = (L[y + (x >> 1)] + L[y + (x >> 1) + 1] + 1) >> 1;
-            else if (z < lim)
-              v = (L[y + (x >> 1)] + 2 * L[y + (x >> 1) + 1] + L[y + (x >> 1) + 2] + 2) >> 2;
-            else if (z == lim)
-              v = (L[n - 2] + 3 * L[n - 1] + 2) >> 2;
-            else
-              v = L[n - 1];
-          }
-        }
-        d[y * stride + x] = (uint8_t)v;
+    // (by mode, each a loop of its own)
+#define H264P_PRED(EXPR)                                \
+  for (int y = 0; y < n; y++, d += stride)              \
+    for (int x = 0; x < n; x++) d[x] = (uint8_t)(EXPR); \
+  return
+    switch (mode) {
+      case 0:
+        H264P_PRED(T[x]);
+      case 1:
+        H264P_PRED(L[y]);
+      case 2: {
+        int st = 0, sl = 0;
+        for (int i = 0; i < n; i++) st += T[i], sl += L[i];
+        int sh = n == 4 ? 2 : 3;
+        int dc = top && left ? (st + sl + n) >> (sh + 1) : left ? (sl + n / 2) >> sh : top ? (st + n / 2) >> sh : 128;
+        H264P_PRED(dc);
       }
+      case 3:
+        H264P_PRED(x == n - 1 && y == n - 1 ? (T[2 * n - 2] + 3 * T[2 * n - 1] + 2) >> 2
+                                             : (T[x + y] + 2 * T[x + y + 1] + T[x + y + 2] + 2) >> 2);
+      case 4:
+        H264P_PRED(x > y   ? (P(x - y - 2, -1) + 2 * P(x - y - 1, -1) + P(x - y, -1) + 2) >> 2
+                   : x < y ? (P(-1, y - x - 2) + 2 * P(-1, y - x - 1) + P(-1, y - x) + 2) >> 2
+                           : (P(0, -1) + 2 * P(-1, -1) + P(-1, 0) + 2) >> 2);
+      case 5: {
+        auto v5 = [&](int x, int y) {
+          int z = 2 * x - y;
+          if (z >= 0 && !(z & 1)) return (P(x - (y >> 1) - 1, -1) + P(x - (y >> 1), -1) + 1) >> 1;
+          if (z >= 0) return (P(x - (y >> 1) - 2, -1) + 2 * P(x - (y >> 1) - 1, -1) + P(x - (y >> 1), -1) + 2) >> 2;
+          if (z == -1) return (P(-1, 0) + 2 * P(-1, -1) + P(0, -1) + 2) >> 2;
+          return (P(-1, y - 2 * x - 1) + 2 * P(-1, y - 2 * x - 2) + P(-1, y - 2 * x - 3) + 2) >> 2;
+        };
+        H264P_PRED(v5(x, y));
+      }
+      case 6: {
+        auto v6 = [&](int x, int y) {
+          int z = 2 * y - x;
+          if (z >= 0 && !(z & 1)) return (P(-1, y - (x >> 1) - 1) + P(-1, y - (x >> 1)) + 1) >> 1;
+          if (z >= 0) return (P(-1, y - (x >> 1) - 2) + 2 * P(-1, y - (x >> 1) - 1) + P(-1, y - (x >> 1)) + 2) >> 2;
+          if (z == -1) return (P(-1, 0) + 2 * P(-1, -1) + P(0, -1) + 2) >> 2;
+          return (P(x - 2 * y - 1, -1) + 2 * P(x - 2 * y - 2, -1) + P(x - 2 * y - 3, -1) + 2) >> 2;
+        };
+        H264P_PRED(v6(x, y));
+      }
+      case 7:
+        H264P_PRED(!(y & 1) ? (T[x + (y >> 1)] + T[x + (y >> 1) + 1] + 1) >> 1
+                            : (T[x + (y >> 1)] + 2 * T[x + (y >> 1) + 1] + T[x + (y >> 1) + 2] + 2) >> 2);
+      default: {
+        auto v8 = [&](int x, int y) {
+          int z = x + 2 * y, lim = 2 * n - 3;
+          if (z < lim && !(z & 1)) return (L[y + (x >> 1)] + L[y + (x >> 1) + 1] + 1) >> 1;
+          if (z < lim) return (L[y + (x >> 1)] + 2 * L[y + (x >> 1) + 1] + L[y + (x >> 1) + 2] + 2) >> 2;
+          if (z == lim) return (L[n - 2] + 3 * L[n - 1] + 2) >> 2;
+          return L[n - 1];
+        };
+        H264P_PRED(v8(x, y));
+      }
+    }
+#undef H264P_PRED
   }
 
   // the edge of the luma n x n block at (bx, by) (in units of n) of the
