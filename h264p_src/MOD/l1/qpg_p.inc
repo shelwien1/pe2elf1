@@ -17,17 +17,12 @@ void H1_qpg_make( const H_qpg_v & D, tcx & X ) {
   (void) as;  (void) cs;  (void) bs;  (void) ls;  (void) rs;  (void) mag;  (void) cls;  (void) st;  (void) ss;  (void) xe;  (void) lq;  (void) bk;
 
   a = 0;
-  a = a*10 + H1_qpg_a_as[__min(9,__max(0,as-(1-1)))];
   a = a*8 + H1_qpg_a_mag[__min(7,__max(0,mag-(1-1)))];
   a = a*2 + ((ss>5+(1-1)));
-  a = a*19 + H1_qpg_a_xe[__min(18,__max(0,xe-(1-1)))];
-  a = a*10 + H1_qpg_a_lq[__min(9,__max(0,lq-(1-1)))];
 
   b = 0;
-  b = b*10 + H1_qpg_b_as[__min(9,__max(0,as-(1-1)))];
 
   c = 0;
-  c = c*10 + H1_qpg_c_as[__min(9,__max(0,as-(1-1)))];
   c = c*10 + H1_qpg_c_cs[__min(9,__max(0,cs-(1-1)))];
 
   d = 0;
@@ -36,7 +31,6 @@ void H1_qpg_make( const H_qpg_v & D, tcx & X ) {
   d = d*10 + H1_qpg_d_bk[__min(9,__max(0,bk-(1-1)))];
 
   m = 0;
-  m = m*10 + H1_qpg_m_as[__min(9,__max(0,as-(1-1)))];
 
   t = 0;
 

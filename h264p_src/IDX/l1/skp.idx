@@ -37,27 +37,21 @@ Index b
  b_b3: b3, 1!11
  b_cd: cd, 1!10
  b_cnt: cnt, 1!000000101110011
- b_c1: c1, 1!11
 
 Index c
  c_st: st, 1!010000000
  c_col: col, 1!11
  c_c9: c9, 1!100101111
  c_run: run, 1!010100000
- c_en: en, 1!11111111111111
 
 Index d
  d_st: st, 1!111111111
  d_a3: a3, 1!11
  d_b3: b3, 1!11
- d_td: td, 1!1111111111111111
- d_c1: c1, 1!11
- d_k9: k9, 1!1111111111
 
 Index m
  m_st: st, 1!000000000
  m_col: col, 1!01
- m_td: td, 1!1111
 
 Index t
  t_st: st, 1!0

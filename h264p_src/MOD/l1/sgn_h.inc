@@ -13,7 +13,6 @@ static const byte H1_sgn_c_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 static const byte H1_sgn_c_md[19+1]={ 0,1,2,2,2,3,4,4,4,4,4,4,5,5,6,6,7,8,8,8 };
 
 static const byte H1_sgn_d_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
-static const byte H1_sgn_d_mg[15+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
 
 
 static const byte H1_sgn_m_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
@@ -50,13 +49,13 @@ static const int H1_sgn_hN = (24+0) * (1);
 static const long long H1_sgn_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 4), 4), 4), 9); // 8064
 static const long long H1_sgn_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 4), 4); // 224
 static const long long H1_sgn_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 2), 9); // 252
-static const long long H1_sgn_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 3), 16); // 672
+static const long long H1_sgn_d_Volume = tc_vmul(1, 14); // 14
 static const long long H1_sgn_g_Volume = tc_vmul(1, 1); // 1
-static const long long H1_sgn_m_Volume = tc_vmul(tc_vmul(1, 14), 1); // 14
+static const long long H1_sgn_m_Volume = tc_vmul(1, 14); // 14
 static const long long H1_sgn_n_Volume = tc_vmul(1, 1); // 1
 static const long long H1_sgn_t_Volume = tc_vmul(1, 1); // 1
 
-#define H1_sgn_USES(X) X(cg) X(pos) X(sa) X(sb) X(gh) X(scb) X(mag) X(md) X(pp) X(mg)
+#define H1_sgn_USES(X) X(cg) X(pos) X(sa) X(sb) X(gh) X(scb) X(mag) X(md)
 
 struct H1_sgn_T { 
 #undef USE_NEW

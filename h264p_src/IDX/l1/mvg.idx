@@ -22,7 +22,6 @@ Const 0
 
 Index a
  a_comp: comp, 1!1
- a_ts: ts, 1!001001000
  a_mag: mag, 1!1111111
 
 Index b
@@ -31,16 +30,13 @@ Index b
  b_comp: comp, 1!1
 
 Index c
- c_ts: ts, 1!111111111
  c_zs: zs, 1!11111111
- c_as: as, 1!111111111
 
 Index d
  d_ds: ds, 1!111111111
  d_mag: mag, 1!1111111
 
 Index m
- m_ts: ts, 1!111111111
 
 Index t
  t_comp: comp, 1!0

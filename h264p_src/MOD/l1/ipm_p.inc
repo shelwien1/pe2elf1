@@ -36,11 +36,8 @@ void H1_ipm_make( const H_ipm_v & D, tcx & X ) {
   d = 0;
   d = d*3 + ((k8>0+(1-1))+(k8>1+(1-1)));
   d = d*10 + H1_ipm_d_mp[__min(9,__max(0,mp-(1-1)))];
-  d = d*10 + H1_ipm_d_dm[__min(9,__max(0,dm-(1-1)))];
-  d = d*3 + ((ds>4+(1-1))+(ds>7+(1-1)));
 
   m = 0;
-  m = m*13 + H1_ipm_m_mg[__min(12,__max(0,mg-(1-1)))];
 
   t = 0;
 

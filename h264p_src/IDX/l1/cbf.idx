@@ -40,7 +40,6 @@ Index b
  b_pos: pos, 1!111
  b_crcb: crcb, 1!11
  b_kn: kn, 1!1
- b_em: em, 1!1111111111111111
  b_dq: dq, 1!11111111
 
 Index c
@@ -48,7 +47,6 @@ Index c
  c_q6: q6, 1!11111111
  c_col: col, 1!11
  c_kn: kn, 1!1
- c_en: en, 1!10011000100010
  c_ch: ch, 1!111111111111111
 
 Index d
@@ -56,7 +54,6 @@ Index d
  d_nc: nc, 1!11111
  d_md: md, 1!0110000000000100100
  d_kn: kn, 1!1
- d_pg: pg, 1!1111111111111111
 
 Index m
  m_cat: cat, 1!1111000000000

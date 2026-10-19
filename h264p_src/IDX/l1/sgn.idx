@@ -40,12 +40,9 @@ Index c
 
 Index d
  d_cg: cg, 1!1111111111111
- d_pp: pp, 1!11
- d_mg: mg, 1!111111111111111
 
 Index m
  m_cg: cg, 1!1111111111111
- m_pp: pp, 1!00
 
 Index t
  t_cg: cg, 1!0

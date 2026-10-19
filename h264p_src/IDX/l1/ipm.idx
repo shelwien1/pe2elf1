@@ -43,14 +43,11 @@ Index c
 Index d
  d_k8: k8, 1!11
  d_mp: mp, 1!111111111
- d_dm: dm, 1!111111111
- d_ds: ds, 1!000010010
 
 Index m
  m_k8: k8, 1!00
  m_ma: ma, 1!0000000000
  m_mb: mb, 1!0000000000
- m_mg: mg, 1!111111111111
 
 Index t
  t_k8: k8, 1!0

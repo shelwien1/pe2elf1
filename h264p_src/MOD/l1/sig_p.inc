@@ -31,14 +31,12 @@ void H1_sig_make( const H_sig_v & D, tcx & X ) {
   c = c*5 + H1_sig_c_cg[__min(13,__max(0,cg-(1-1)))];
   c = c*64 + H1_sig_c_pos[__min(63,__max(0,pos-(1-1)))];
   c = c*9 + H1_sig_c_q6[__min(8,__max(0,q6-(1-1)))];
-  c = c*17 + H1_sig_c_pg[__min(16,__max(0,pg-(1-1)))];
   c = c*9 + H1_sig_c_ft[__min(8,__max(0,ft-(1-1)))];
 
   d = 0;
   d = d*4 + H1_sig_d_cg[__min(13,__max(0,cg-(1-1)))];
   d = d*6 + H1_sig_d_rem[__min(10,__max(0,rem-(1-1)))];
   d = d*6 + H1_sig_d_zl[__min(10,__max(0,zl-(1-1)))];
-  d = d*17 + H1_sig_d_em[__min(16,__max(0,em-(1-1)))];
   d = d*511 + H1_sig_d_hb[__min(510,__max(0,hb-(1-1)))];
 
   m = 0;

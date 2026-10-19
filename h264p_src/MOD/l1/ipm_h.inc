@@ -11,10 +11,8 @@ static const byte H1_ipm_c_mp[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 static const byte H1_ipm_c_col[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 
 static const byte H1_ipm_d_mp[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H1_ipm_d_dm[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 
 
-static const byte H1_ipm_m_mg[12+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12 };
 
 
 
@@ -48,13 +46,13 @@ static const int H1_ipm_hN = (24+0) * (1);
 static const long long H1_ipm_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 11), 11), 11); // 3993
 static const long long H1_ipm_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 10), 10), 17); // 3400
 static const long long H1_ipm_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 10), 10); // 300
-static const long long H1_ipm_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 10), 10), 3); // 900
+static const long long H1_ipm_d_Volume = tc_vmul(tc_vmul(1, 3), 10); // 30
 static const long long H1_ipm_g_Volume = tc_vmul(1, 1); // 1
-static const long long H1_ipm_m_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 1), 13); // 13
+static const long long H1_ipm_m_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 1); // 1
 static const long long H1_ipm_n_Volume = tc_vmul(1, 1); // 1
 static const long long H1_ipm_t_Volume = tc_vmul(1, 1); // 1
 
-#define H1_ipm_USES(X) X(k8) X(ma) X(mb) X(mc) X(mp) X(pv) X(mh) X(col) X(dm) X(ds) X(mg)
+#define H1_ipm_USES(X) X(k8) X(ma) X(mb) X(mc) X(mp) X(pv) X(mh) X(col)
 
 struct H1_ipm_T { 
 #undef USE_NEW

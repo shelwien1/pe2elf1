@@ -22,10 +22,8 @@ Index a
 
 Index b
  b_cg: cg, 1!1111111111111
- b_pe: pe, 1!000010010010000
  b_pos: pos, 1!11111
  b_tot: tot, 1!1111111
- b_hv: hv, 1!1001100
  b_fq: fq, 1!111
 
 Index c
@@ -39,7 +37,6 @@ Index d
  d_cg: cg, 1!1111111111111
  d_g1: g1, 1!0000
  d_md: md, 1!1111111111111111111
- d_pg: pg, 1!0001000000000001
  d_lt: lt, 1!0111101
 
 Index m

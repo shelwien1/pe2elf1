@@ -39,9 +39,6 @@ Index a
 
 Index b
  b_dc: dc, 1!11111111
- b_aq: aq, 1!1000000000000
- b_ae: ae, 1!1111111111111
- b_lq: lq, 1!1111111111111
 
 Index c
  c_lz: lz, 1!111111
@@ -51,12 +48,9 @@ Index c
 
 Index d
  d_st: st, 1!111111111
- d_aq: aq, 1!1111111111111
- d_ac: ac, 1!1111111111111
 
 Index m
  m_lnz: lnz, 1!1
- m_aq: aq, 1!0000000000000
 
 Index t
  t_lnz: lnz, 1!0
@@ -66,7 +60,6 @@ Index n
 
 Index g
  g_lz: lz, 1!101101
- g_aq: aq, 1!1111111111111
 
 Number rA, 1, 0!10000000
 Number rB, 1, 0!00010000

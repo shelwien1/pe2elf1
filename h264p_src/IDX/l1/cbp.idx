@@ -26,17 +26,14 @@ Index b
  b_inc: inc, 1!000
  b_col: col, 1!111111111111
  b_q6: q6, 1!10100010
- b_pq: pq, 1!110001
 
 Index c
  c_cls: cls, 1!11111111
  c_col: col, 1!111111111111
  c_pc: pc, 1!1010
- c_pg: pg, 1!1111111111111111
 
 Index d
  d_inc: inc, 1!111
- d_em: em, 1!1110101101110100
  d_cls: cls, 1!11111111
 
 Index m

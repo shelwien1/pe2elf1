@@ -46,6 +46,88 @@ struct H_mvg_v { int comp, lst, ts, zs, ds, sa, sb, mag, tq, ox, ns, es, as; };
 struct H_qpg_v { int as, cs, bs, ls, rs, mag, cls, st, ss, xe, lq, bk; };
 struct H_pcm_v { int pl, dp, pd, pd2; };
 
+// --- what each variable needs of the model's parts (h264p_levels.md section
+// 7.3): a bit per field, set where the field is "not known" without the part
+// (found by coding the corpus with each part switched off: a field that
+// varies with the part and not without it). A level must not read what its
+// parts cannot make (Model's static_asserts): such a line goes from its .idx.
+#define H_BIT(V, f) (1ull << offsetof(V, f) / sizeof(int))
+constexpr u64 H_nal_rec = 0;
+constexpr u64 H_nal_search = 0;
+constexpr u64 H_nal_proxy = 0;
+constexpr u64 H_nal_signp = 0;
+constexpr u64 H_nal_skippx = 0;
+constexpr u64 H_hdr_rec = 0;
+constexpr u64 H_hdr_search = 0;
+constexpr u64 H_hdr_proxy = 0;
+constexpr u64 H_hdr_signp = 0;
+constexpr u64 H_hdr_skippx = 0;
+constexpr u64 H_skp_rec = H_BIT(H_skp_v, td) | H_BIT(H_skp_v, en) | H_BIT(H_skp_v, sm) | H_BIT(H_skp_v, tm) | H_BIT(H_skp_v, tb) | H_BIT(H_skp_v, bd) | H_BIT(H_skp_v, c1) | H_BIT(H_skp_v, k9) | H_BIT(H_skp_v, tx);
+constexpr u64 H_skp_search = H_BIT(H_skp_v, tb);
+constexpr u64 H_skp_proxy = 0;
+constexpr u64 H_skp_signp = 0;
+constexpr u64 H_skp_skippx = H_BIT(H_skp_v, sm) | H_BIT(H_skp_v, tm) | H_BIT(H_skp_v, tb) | H_BIT(H_skp_v, bd) | H_BIT(H_skp_v, tx);
+constexpr u64 H_mbt_rec = H_BIT(H_mbt_v, en) | H_BIT(H_mbt_v, td) | H_BIT(H_mbt_v, sm) | H_BIT(H_mbt_v, tm) | H_BIT(H_mbt_v, tb) | H_BIT(H_mbt_v, dh) | H_BIT(H_mbt_v, bd) | H_BIT(H_mbt_v, im) | H_BIT(H_mbt_v, ig) | H_BIT(H_mbt_v, c1) | H_BIT(H_mbt_v, tx);
+constexpr u64 H_mbt_search = H_BIT(H_mbt_v, tb);
+constexpr u64 H_mbt_proxy = H_BIT(H_mbt_v, im) | H_BIT(H_mbt_v, ig);
+constexpr u64 H_mbt_signp = 0;
+constexpr u64 H_mbt_skippx = H_BIT(H_mbt_v, sm) | H_BIT(H_mbt_v, tm) | H_BIT(H_mbt_v, tb) | H_BIT(H_mbt_v, dh) | H_BIT(H_mbt_v, bd) | H_BIT(H_mbt_v, tx);
+constexpr u64 H_cbp_rec = H_BIT(H_cbp_v, en) | H_BIT(H_cbp_v, td) | H_BIT(H_cbp_v, pg) | H_BIT(H_cbp_v, tp) | H_BIT(H_cbp_v, em) | H_BIT(H_cbp_v, pq);
+constexpr u64 H_cbp_search = 0;
+constexpr u64 H_cbp_proxy = H_BIT(H_cbp_v, pq);
+constexpr u64 H_cbp_signp = 0;
+constexpr u64 H_cbp_skippx = 0;
+constexpr u64 H_ipm_rec = H_BIT(H_ipm_v, dm) | H_BIT(H_ipm_v, ds) | H_BIT(H_ipm_v, pm) | H_BIT(H_ipm_v, pr) | H_BIT(H_ipm_v, dr) | H_BIT(H_ipm_v, pq) | H_BIT(H_ipm_v, mg) | H_BIT(H_ipm_v, rg);
+constexpr u64 H_ipm_search = H_BIT(H_ipm_v, pq);
+constexpr u64 H_ipm_proxy = H_BIT(H_ipm_v, pm) | H_BIT(H_ipm_v, pr) | H_BIT(H_ipm_v, mg) | H_BIT(H_ipm_v, rg);
+constexpr u64 H_ipm_signp = 0;
+constexpr u64 H_ipm_skippx = 0;
+constexpr u64 H_mvs_rec = H_BIT(H_mvs_v, tv) | H_BIT(H_mvs_v, tq) | H_BIT(H_mvs_v, rt) | H_BIT(H_mvs_v, ea) | H_BIT(H_mvs_v, eb) | H_BIT(H_mvs_v, ta);
+constexpr u64 H_mvs_search = H_BIT(H_mvs_v, tv) | H_BIT(H_mvs_v, tq) | H_BIT(H_mvs_v, ea) | H_BIT(H_mvs_v, eb) | H_BIT(H_mvs_v, ta);
+constexpr u64 H_mvs_proxy = 0;
+constexpr u64 H_mvs_signp = 0;
+constexpr u64 H_mvs_skippx = 0;
+constexpr u64 H_qpd_rec = H_BIT(H_qpd_v, ae) | H_BIT(H_qpd_v, aq) | H_BIT(H_qpd_v, ac) | H_BIT(H_qpd_v, td) | H_BIT(H_qpd_v, xe) | H_BIT(H_qpd_v, lq);
+constexpr u64 H_qpd_search = 0;
+constexpr u64 H_qpd_proxy = 0;
+constexpr u64 H_qpd_signp = 0;
+constexpr u64 H_qpd_skippx = 0;
+constexpr u64 H_cbf_rec = H_BIT(H_cbf_v, en) | H_BIT(H_cbf_v, pg) | H_BIT(H_cbf_v, em) | H_BIT(H_cbf_v, pz) | H_BIT(H_cbf_v, tn) | H_BIT(H_cbf_v, pq) | H_BIT(H_cbf_v, hv);
+constexpr u64 H_cbf_search = 0;
+constexpr u64 H_cbf_proxy = H_BIT(H_cbf_v, pz) | H_BIT(H_cbf_v, pq);
+constexpr u64 H_cbf_signp = 0;
+constexpr u64 H_cbf_skippx = 0;
+constexpr u64 H_sig_rec = H_BIT(H_sig_v, pg) | H_BIT(H_sig_v, em) | H_BIT(H_sig_v, pe) | H_BIT(H_sig_v, ps) | H_BIT(H_sig_v, tz) | H_BIT(H_sig_v, pq) | H_BIT(H_sig_v, pr) | H_BIT(H_sig_v, hv) | H_BIT(H_sig_v, pf);
+constexpr u64 H_sig_search = 0;
+constexpr u64 H_sig_proxy = H_BIT(H_sig_v, ps) | H_BIT(H_sig_v, pq) | H_BIT(H_sig_v, pr);
+constexpr u64 H_sig_signp = H_BIT(H_sig_v, pe);
+constexpr u64 H_sig_skippx = 0;
+constexpr u64 H_lvl_rec = H_BIT(H_lvl_v, pg) | H_BIT(H_lvl_v, em) | H_BIT(H_lvl_v, pe) | H_BIT(H_lvl_v, pl) | H_BIT(H_lvl_v, tz) | H_BIT(H_lvl_v, pq) | H_BIT(H_lvl_v, ls) | H_BIT(H_lvl_v, hv);
+constexpr u64 H_lvl_search = 0;
+constexpr u64 H_lvl_proxy = H_BIT(H_lvl_v, pl) | H_BIT(H_lvl_v, pq) | H_BIT(H_lvl_v, ls);
+constexpr u64 H_lvl_signp = H_BIT(H_lvl_v, pe);
+constexpr u64 H_lvl_skippx = 0;
+constexpr u64 H_sgn_rec = H_BIT(H_sgn_v, pp) | H_BIT(H_sgn_v, mg) | H_BIT(H_sgn_v, ez) | H_BIT(H_sgn_v, ts) | H_BIT(H_sgn_v, pq) | H_BIT(H_sgn_v, se) | H_BIT(H_sgn_v, dm);
+constexpr u64 H_sgn_search = 0;
+constexpr u64 H_sgn_proxy = H_BIT(H_sgn_v, ez) | H_BIT(H_sgn_v, pq) | H_BIT(H_sgn_v, se);
+constexpr u64 H_sgn_signp = H_BIT(H_sgn_v, pp) | H_BIT(H_sgn_v, mg);
+constexpr u64 H_sgn_skippx = 0;
+constexpr u64 H_mvg_rec = H_BIT(H_mvg_v, ts) | H_BIT(H_mvg_v, tq) | H_BIT(H_mvg_v, es) | H_BIT(H_mvg_v, as);
+constexpr u64 H_mvg_search = H_BIT(H_mvg_v, ts) | H_BIT(H_mvg_v, tq) | H_BIT(H_mvg_v, es) | H_BIT(H_mvg_v, as);
+constexpr u64 H_mvg_proxy = 0;
+constexpr u64 H_mvg_signp = 0;
+constexpr u64 H_mvg_skippx = 0;
+constexpr u64 H_qpg_rec = H_BIT(H_qpg_v, as) | H_BIT(H_qpg_v, rs) | H_BIT(H_qpg_v, xe) | H_BIT(H_qpg_v, lq);
+constexpr u64 H_qpg_search = 0;
+constexpr u64 H_qpg_proxy = 0;
+constexpr u64 H_qpg_signp = 0;
+constexpr u64 H_qpg_skippx = 0;
+constexpr u64 H_pcm_rec = 0;
+constexpr u64 H_pcm_search = 0;
+constexpr u64 H_pcm_proxy = 0;
+constexpr u64 H_pcm_signp = 0;
+constexpr u64 H_pcm_skippx = 0;
+
 // A family's tables, mapped: zero is every table's starting state, and a
 // page costs memory only once the coder reaches it.
 template <class T>
@@ -384,6 +466,27 @@ struct Model {
   typename LV::mvg::T* t_mvg;
   typename LV::qpg::T* t_qpg;
   typename LV::pcm::T* t_pcm;
+  // whether the level's family F reads its variable f: what it reads not is
+  // not computed (where computing it has no other use)
+#define H_USES(F, f) ((LV::F::Uses >> (offsetof(H_##F##_v, f) / sizeof(int))) & 1)
+  // (a level reads no variable its parts cannot make)
+#define H_PARTS(F)                                                                                                       static_assert(LV::recon || !(LV::F::Uses & H_##F##_rec), "a level without the decoder reads a variable of " #F                                                               " that needs it");                                       static_assert(LV::search || !(LV::F::Uses & H_##F##_search),                                                                   "a level without the template searches reads a variable of " #F " that needs them");               static_assert(LV::proxy || !(LV::F::Uses & H_##F##_proxy),                                                                     "a level without the intra proxy reads a variable of " #F " that needs it");                       static_assert(LV::signpred || !(LV::F::Uses & H_##F##_signp),                                                                  "a level without sign prediction reads a variable of " #F " that needs it");                       static_assert(LV::skippx || !(LV::F::Uses & H_##F##_skippx),                                                                   "a level without the skip prediction's pixels reads a variable of " #F " that needs them");
+  H_PARTS(nal)
+  H_PARTS(hdr)
+  H_PARTS(skp)
+  H_PARTS(mbt)
+  H_PARTS(cbp)
+  H_PARTS(ipm)
+  H_PARTS(mvs)
+  H_PARTS(qpd)
+  H_PARTS(cbf)
+  H_PARTS(sig)
+  H_PARTS(lvl)
+  H_PARTS(sgn)
+  H_PARTS(mvg)
+  H_PARTS(qpg)
+  H_PARTS(pcm)
+#undef H_PARTS
 
   void init() {
     cm_tables();
@@ -2609,7 +2712,7 @@ struct Model {
         // the estimate's levels from here on, against the coefficients left
         S.pr = pok ? 1 + 3 + tc_clamp(esuf[i] - rem, -3, 3) : 0;
         // the last two positions' significance (4 at the start)
-        {
+        if (H_USES(sig, ft)) {
           // the frequencies left of and above it, where coded already (0
           // not, 1 zero, 2 not zero)
           int N = g.kind == 3 ? 8 : g.kind == 0 && g.plane ? 2 : 4, k = i + g.off;
@@ -2622,12 +2725,14 @@ struct Model {
           if (fy) fa = known(r - N);
           S.ft = fl * 3 + fa;
         }
-        {
+        if (H_USES(sig, hb)) {
           // the significance of the last eight positions (and where the
           // block starts)
           int h = 1;
           for (int k = 1; k <= 8 && k <= i; k++) h = h * 2 + sig[i - k];
           S.hb = h - 1;
+        }
+        if (H_USES(sig, h3)) {
           // and of the last three
           int h3 = 1;
           for (int k = 1; k <= 3 && k <= i; k++) h3 = h3 * 2 + sig[i - k];
@@ -2637,7 +2742,8 @@ struct Model {
         S.hv = hv;
         S.pf = pfok ? 1 + std::min(tc_qlog(abs(pfl[std::min(i + g.off, g.kind == 3 ? 63 : 15)])), 10) : 0;
         // the same position in the blocks A and B (0 none, 1 zero, 2 not)
-        S.sn = (na.m ? 1 + (coef_at(na.m, g, na.i, i) != 0) : 0) * 3 + (nb.m ? 1 + (coef_at(nb.m, g, nb.i, i) != 0) : 0);
+        if (H_USES(sig, sn))
+          S.sn = (na.m ? 1 + (coef_at(na.m, g, na.i, i) != 0) : 0) * 3 + (nb.m ? 1 + (coef_at(nb.m, g, nb.i, i) != 0) : 0);
         tcx Y;
         LV::sig::make(S, Y);
         f_sig.select(Y);

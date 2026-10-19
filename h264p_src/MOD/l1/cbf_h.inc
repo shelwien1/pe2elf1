@@ -7,17 +7,14 @@ static const byte H1_cbf_a_ly[10+1]={ 0,1,2,3,4,5,6,7,8,9,10 };
 static const byte H1_cbf_b_cat[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 static const byte H1_cbf_b_np[3+1]={ 0,1,2,3 };
 static const byte H1_cbf_b_pos[3+1]={ 0,1,2,3 };
-static const byte H1_cbf_b_em[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
 static const byte H1_cbf_b_dq[8+1]={ 0,1,2,3,4,5,6,7,8 };
 
 static const byte H1_cbf_c_q6[8+1]={ 0,1,2,3,4,5,6,7,8 };
-static const byte H1_cbf_c_en[14+1]={ 0,1,1,1,2,3,3,3,3,4,4,4,4,5,5 };
 static const byte H1_cbf_c_ch[15+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
 
 static const byte H1_cbf_d_cat[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 static const byte H1_cbf_d_nc[5+1]={ 0,1,2,3,4,5 };
 static const byte H1_cbf_d_md[19+1]={ 0,0,1,2,2,2,2,2,2,2,2,2,2,2,3,3,3,4,4,4 };
-static const byte H1_cbf_d_pg[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
 
 
 static const byte H1_cbf_m_cat[13+1]={ 0,1,2,3,4,4,4,4,4,4,4,4,4,4 };
@@ -54,15 +51,15 @@ static const int H1_cbf_hN = (24+0) * (1);
 
 
 static const long long H1_cbf_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 6), 10), 2), 11); // 18480
-static const long long H1_cbf_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 4), 4), 3), 2), 17), 9); // 205632
-static const long long H1_cbf_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 9), 3), 2), 6), 16); // 10368
-static const long long H1_cbf_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 6), 5), 2), 17); // 14280
+static const long long H1_cbf_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 4), 4), 3), 2), 9); // 12096
+static const long long H1_cbf_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 9), 3), 2), 16); // 1728
+static const long long H1_cbf_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 6), 5), 2); // 840
 static const long long H1_cbf_g_Volume = tc_vmul(1, 1); // 1
 static const long long H1_cbf_m_Volume = tc_vmul(tc_vmul(1, 5), 2); // 10
 static const long long H1_cbf_n_Volume = tc_vmul(1, 14); // 14
 static const long long H1_cbf_t_Volume = tc_vmul(1, 14); // 14
 
-#define H1_cbf_USES(X) X(cat) X(na) X(nb) X(intra) X(ly) X(np) X(pos) X(crcb) X(kn) X(em) X(dq) X(q6) X(col) X(en) X(ch) X(nc) X(md) X(pg)
+#define H1_cbf_USES(X) X(cat) X(na) X(nb) X(intra) X(ly) X(np) X(pos) X(crcb) X(kn) X(dq) X(q6) X(col) X(ch) X(nc) X(md)
 
 struct H1_cbf_T { 
 #undef USE_NEW

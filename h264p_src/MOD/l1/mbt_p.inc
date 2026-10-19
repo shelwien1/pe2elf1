@@ -20,28 +20,20 @@ void H1_mbt_make( const H_mbt_v & D, tcx & X ) {
   a = a*2 + ((st>3+(1-1)));
   a = a*4 + H1_mbt_a_ca[__min(8,__max(0,ca-(1-1)))];
   a = a*4 + H1_mbt_a_cb[__min(8,__max(0,cb-(1-1)))];
-  a = a*15 + H1_mbt_a_en[__min(14,__max(0,en-(1-1)))];
 
   b = 0;
   b = b*10 + H1_mbt_b_st[__min(9,__max(0,st-(1-1)))];
   b = b*9 + H1_mbt_b_cc[__min(8,__max(0,cc-(1-1)))];
-  b = b*17 + H1_mbt_b_td[__min(16,__max(0,td-(1-1)))];
-  b = b*10 + H1_mbt_b_c1[__min(9,__max(0,c1-(1-1)))];
 
   c = 0;
   c = c*6 + H1_mbt_c_ca[__min(8,__max(0,ca-(1-1)))];
   c = c*9 + H1_mbt_c_cc[__min(8,__max(0,cc-(1-1)))];
-  c = c*5 + H1_mbt_c_im[__min(4,__max(0,im-(1-1)))];
-  c = c*13 + H1_mbt_c_ig[__min(12,__max(0,ig-(1-1)))];
 
   d = 0;
   d = d*10 + H1_mbt_d_st[__min(9,__max(0,st-(1-1)))];
-  d = d*17 + H1_mbt_d_sm[__min(16,__max(0,sm-(1-1)))];
-  d = d*17 + H1_mbt_d_tm[__min(16,__max(0,tm-(1-1)))];
 
   m = 0;
   m = m*10 + H1_mbt_m_st[__min(9,__max(0,st-(1-1)))];
-  m = m*17 + H1_mbt_m_bd[__min(16,__max(0,bd-(1-1)))];
 
   t = 0;
 
