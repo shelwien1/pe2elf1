@@ -12,7 +12,7 @@ This document measures where one thread's time goes in the current model,
 what each part buys in compression, and what the lighter levels would
 cost. Everything was measured on the 7 corpus streams (`test/002`, 3.87 MB
 of H.264), single-threaded (the `H264P_NO_THREADS` build), on the 2.1 GHz
-Xeon VM the other documents use (section 8 has how).
+Xeon VM the other documents use (section 9 has how).
 
 ## 1. Speed now, in one thread
 
@@ -231,33 +231,377 @@ per-macroblock bookkeeping of a run done at once.
 
 ## 6. The template
 
-- **`template <int f_DEC, int L> struct Model`**, L the level, with a
-  traits struct per level: `Lv<9>`, `Lv<1>`, ... of `constexpr` switches
-  (`recon`, `search`, `proxy`, `signpred`, `skippx`, `deblock`, `cabpred`)
-  and the coder's shape (`counters`, `mixers`, `apms`). The switches of the
-  prototype (`X_NOREC`, `X_NOSEARCH`, `X_NOPROXY`, `X_NOSIGNP`,
-  `X_NOSKIPPX`, `X_NODEBLOCK`, `X_NOCAB`, `X_CNT`, `X_MIX1`, `X_NOAPM`)
-  become these, read at compile time per instance.
+- **`template <int f_DEC, class L> struct Model`**, `L` the level's class
+  (`Lv9`, `Lv1`, ...; section 7): its switches as compile-time constants
+  (`recon`, `search`, `proxy`, `signpred`, `skippx`, `deblock`,
+  `cabpred`) and its families' classes. The prototype's switches
+  (`X_NOREC`, `X_NOSEARCH`, `X_NOPROXY`, `X_NOSIGNP`, `X_NOSKIPPX`,
+  `X_NODEBLOCK`, `X_NOCAB`) become the first; its coder's (`X_CNT`,
+  `X_MIX1`, `X_NOAPM`) become the families' shapes.
 - **The decoder as a member type**: `Recon` for levels with it, a stub
   without (its queries `constexpr` "not known", `active` false), chosen
   by `std::conditional`, so that a level without the decoder has none of
   its code or its pictures. (The build is C++11: no
   `if constexpr`; the stub's constant answers let the compiler drop the
   dead branches.)
-- **The families as `tc_fam<f_DEC, NC, NMIX, NAPM>`**: the counters read
-  and updated in NC / 4 vectors, one mixer without the final one, the APMs
-  compiled out. Each level has its own `IDX/` set (`IDX/l1/*.idx`)
-  generated into its own `MOD/` set, with its own contexts, table sizes and
-  parameters; `mk.sh` and `opt.pl` work per level.
-- **The format**: the level is a byte of the header after the version;
-  `d` reads it and runs `Model<1, L>`; `c -L` runs `Model<0, L>`. `-9`'s
-  output stays as it is now.
+- **The families as `tc_fam<f_DEC, C>`**, `C` the family's class at the
+  level: its shape (counters, mixers, APMs) sizes the family and chooses
+  its code (the counters read and updated in vectors of their number, one
+  mixer without the final one, the APMs compiled out), and its parameters
+  are the class's constants.
+- **The format**: the level is a byte of the header after the version
+  (a new format version); `d` reads it and runs `Model<1, L>`; `c -L`
+  runs `Model<0, L>`. What `-9` codes stays as it is now.
 - **Code size**: two instances per level. `-9`'s are 420 KB (compressing)
   and 380 KB (decompressing) of the 1.4 MB binary, with 210 KB of the
-  reconstruction's own; a level without the decoder needs much less, and
-  compile time grows with each instance.
+  reconstruction's own; a level without the decoder needs much less.
+  Compile time grows with each instance: today's two take about 30 s
+  (`mk.sh`'s `g++ -O2`, one translation unit, this VM).
 
-## 7. One thread
+## 7. Each level's own IDX and MOD
+
+Today there is one profile. `IDX/<fam>.idx` and its template
+`IDX/<fam>.inc` are generated into `MOD/<fam>_h.inc` (the parameters,
+the threshold tables, the Volumes, the tables' struct `H_<fam>_T`) and
+`MOD/<fam>_p.inc` (the index builder `H_<fam>_make`), and `model.inc`
+uses them by name: `H_WIRE(F)` hands 94 of a family's tables, Volumes
+and parameters to `tc_fam::wire()`, which clamps the parameters and
+keeps them in members. Even the shipping build reads them from there as
+it codes.
+
+With levels, each level has its own copy of the IDX sources, generated
+into its own `MOD/`. The constants of each family at each level are
+wrapped into a class, as `config.hpp` wraps the `C0_`, `C1_` and `S0_`
+constants into the bundles `CP_C0`, `CP_C1` and `CP_S0` of
+`Counter<CP>`, and the classes are the template parameters of the
+instances: `tc_fam<f_DEC, C1_skp>`, `Model<f_DEC, Lv1>`. A level's
+profile (its contexts, its tables' rows, its rates, its shape) is then
+edited and tuned without touching another level's, and its shipping
+build has its constants folded into its own code.
+
+### 7.1 Layout, names, generation
+
+| path | what |
+|---|---|
+| `IDX/idx2inc.pl`, `opt.pl`, `import.pl`, `IDX-FORMAT.md` | the tools, shared |
+| `IDX/l9/<fam>.idx`, `<fam>.inc` | `-9`: today's 15 families, moved |
+| `IDX/l1/<fam>.idx`, `<fam>.inc` | `-1`: a copy of `IDX/l9` to start with |
+| `MOD/l9/`, `MOD/l1/` | generated from them, kept in the repository in the shipping form as `MOD/` is now |
+| `famcfg.inc` | the class of one family at one level (7.2) |
+| `lv9.inc`, `lv1.inc` | a level: its `MOD/` headers, its families' classes, its own class (7.4) |
+
+(`l7`, `l5` and `l3` likewise, for the levels between, if they are made.)
+
+**Names.** Each level's `.idx` has the level in its `Prefix`: `Prefix
+H9_skp` in `IDX/l9/skp.idx`, `Prefix H1_skp` in `IDX/l1/skp.idx`. Every
+generated name is then the level's own (`H1_skp_rA`, `H1_skp_a_Volume`,
+`H1_skp_T`, `H1_skp_make`), so all the levels' headers compile into the
+one translation unit h264p is. So is every name `opt.pl` finds in a
+tuning binary and writes into `export.!!!` (`H1_skp_rA_`), and since
+`import.pl` matches an export's lines by `Prefix` and name, an export
+goes back only into the level it came from. This is IDX-FORMAT.md §7's
+"put the family in the `Prefix`", one step further. (A namespace per
+level would keep today's names; but then two levels' patterns and
+exports would have the same names, and an export of `-9`'s tuning would
+import into `IDX/l1` without a word.)
+
+**Shared.** What the levels have in common stays in `model.inc`: each
+family's variables (`struct H_skp_v`), which the model computes and each
+level reads a part of (7.3); the node counts (`H_skp_ND`, `_MND`,
+`_NG`), which follow from the code that numbers the decisions; `tcx`.
+The templates name these directly (`void %M%make( const H_skp_v & D,
+tcx & X )`, `* H_skp_ND` in the `Table()` lines) rather than through
+`%M%`: the one edit to the templates before they are copied.
+
+**Generation.** `mk.sh` loops over the levels as it loops over the
+families now:
+
+- `./mk.sh mod`: every level's `MOD/` in the shipping form (after an
+  edit of `IDX/`, as now);
+- `./mk.sh release`: the shipping binary, all levels;
+- `./mk.sh tuning 1`: `MOD/l1` in the tuning form, and a binary of `-1`
+  alone (7.5);
+- `./mk.sh check 1`, new: the corpus coded by the tuning and by the
+  shipping build of `-1`, compared. Both builds must code identically
+  (IDX-FORMAT.md §1), level by level, and 7.3 adds a way for them not
+  to.
+
+### 7.2 A family's class
+
+`famcfg.inc`, modelled on `config.hpp`, is included once per level and
+family, after the family's generated headers, with the class's name, the
+prefix and the shape defined before it:
+
+```cpp
+#include "MOD/l1/skp_h.inc"
+#include "MOD/l1/skp_p.inc"
+#define FC_NAME C1_skp   // the class
+#define FC_PFX  H1_skp_  // the prefix of the generated names
+#define FC_FAM  skp      // the family: its variables, its node counts
+#define FC_NC   4        // counters: A, B, C, D (10: A-E, H-L)
+#define FC_NMIX 1        // mixers: 1, or 3 and the final one
+#define FC_NAPM 0        // APMs: 0, 1 or 2
+#include "famcfg.inc"
+```
+
+```cpp
+// famcfg.inc
+#define FC_CAT2(a, b) a##b
+#define FC_CAT(a, b)  FC_CAT2(a, b)
+#define FCX(n)        FC_CAT(FC_PFX, n)                // H1_skp_rA
+#define FCF(n)        FC_CAT(FC_CAT(H_, FC_FAM), n)    // H_skp_v, H_skp_ND
+#define FC_USE(f)     | 1ull << offsetof(V, f) / sizeof(int)
+
+struct FC_NAME {
+  typedef FCF(_v) V;                            // the variables, as the model fills them
+  typedef FCX(T) T;                             // the level's tables
+  static INLINE void make(const V& D, tcx& X) { FCX(make)(D, X); }
+  static const int ND = FCF(_ND), MND = FCF(_MND), NG = FCF(_NG);
+  static const int NC = FC_NC, NMIX = FC_NMIX, NAPM = FC_NAPM;
+  static const int NIN = 2 * NC + 4;            // the mixers' inputs: 24 in -9, 12 in -1
+  static const u64 Uses = 0 FCX(USES)(FC_USE);  // the variables the indices read (7.3)
+  static const int lim[NC], tg[NC];             // the counters' limits and targets
+  static const int rT, mwT, mt, rG, mwG;        // the mantissa's counters and tree, the signs'
+  static const int lr, mb, lrm, mbm;            // the mixers' rates
+#if FC_NAPM
+  static const int rS1, rS2, qs, qf, bw;        // the APMs'
+#endif
+  static const int hA, hB, hD, hM, hT, hN;      // a table's rows: 0 direct, else hashed into 2^h
+  static void bind(T* t, tc_tabs& b);           // the tables, in the order tc_fam takes them
+};
+
+#define set const int FC_NAME::
+set lim[FC_NC] = {tc_clamp(FCX(rA), 1, CM_TMAX), tc_clamp(FCX(rB), 1, CM_TMAX),
+                  tc_clamp(FCX(rC), 1, CM_TMAX), tc_clamp(FCX(rD), 1, CM_TMAX)
+#if FC_NC > 4
+                  , tc_clamp(FCX(rE), 1, CM_TMAX)  // ... to rL
+#endif
+};
+set tg[FC_NC] = {tc_clamp(FCX(mwA) * 64, 0, CM_CONE / 4) /* ... */};
+set lr = tc_clamp(FCX(lr), 1, 64);
+set mt = tc_clamp(FCX(mt), 0, TC_MTREE);
+#if FC_NAPM
+set rS1 = cm_apm::limit(tc_clamp(FCX(rS1), 1, 15));
+#endif
+set hA = FCX(a_Volume) > (1LL << tc_hbits(FCX(hA))) ? tc_hbits(FCX(hA)) : 0;
+// ...
+#undef set
+// bind(): t->FCX(A) to t->FCX(D), t->FCX(W), ..., under the same #if's;
+// then, as config.hpp ends, #undef of FCX ... and of FC_NAME to FC_NAPM
+```
+
+- **The formulas are `wire()`'s.** Each clamp is the one
+  `tc_fam::wire()` applies now (IDX-FORMAT.md §5: the consumer clamps);
+  the class is where it moves. `wire()` keeps binding the tables
+  (`f_skp.wire(t_skp)`), and `H_WIRE` goes.
+- **One spelling, two builds.** In the shipping build `FCX(rA)` is a
+  literal. With `tc_clamp` and `cm_apm::limit` made `constexpr` (C++11
+  allows one `return` statement, which `limit` has to be rewritten
+  into), every member is a constant expression, and
+  `tc_fam`'s reads of `C::lim[k]`, `C::lr`, `C::hA` fold into its code:
+  which tables are hashed, the counters' limits and targets, the APMs'
+  widths, the mixers' rates, the node count, all read from the family's
+  members as it codes today. In the tuning build `FCX(rA)` is
+  `H1_skp_rA_.value * (1)`, a read of the object `opt.pl` patches, and
+  the members are set as the program starts, from the patterns as
+  patched. The template argument is a type, the same in both builds, so
+  IDX-FORMAT.md §8's reference parameters (`IDXP`) are not needed. A
+  cut-down copy of the pattern, compiled with g++ 13.3 `-std=c++11 -O2
+  -Wall -Wextra`: a function adding `lim[k] * tg[k]`, `lr` and `hA` is
+  one constant in the shipping form and loads of the class's members in
+  the tuning form, with no warning in either.
+- **Order.** In the tuning build the members are initialized
+  dynamically, in the order of their definitions, as `config.hpp` warns.
+  h264p is one translation unit, the mapping objects come first (in the
+  `MOD/` headers, included before), and in `famcfg.inc` each definition
+  comes after anything it reads.
+- **What may shape code.** Only what is constant in both builds: the
+  node counts, the shape (`NC`, `NMIX`, `NAPM`, `NIN`) and `Uses`. They
+  size `tc_fam`'s members (`cm_mix<C::NIN>`, the counters' vectors, no
+  APM objects in a family without APMs) and choose its code. The rest
+  are values: folded in the shipping build, loaded in the tuning build,
+  which is slower and codes the same.
+- **The tables** stay in the generated struct (`H1_skp_T`: arrays in the
+  shipping build, pointers mapped by `H1_skp_Init()` in the tuning one),
+  mapped by `tc_table<>()` as now. Each level's template
+  (`IDX/l1/skp.inc`) declares the tables of its shape and builds the
+  indices they take (its `MakeIndex` list); `bind()` hands them to
+  `tc_fam` under the same `#if`s as the members, so a template with fewer
+  tables than the shape asks for does not compile.
+- **Per family.** The shape is defined at each include (`famcfg.inc`
+  undefines it at its end, as `config.hpp` does `CP_SSE`), so a level's
+  families can differ: `-1` can keep more counters where the bits are
+  (coefficient counts, significance and mvd are 40% of `-9`'s output)
+  than in its small families.
+
+### 7.3 What a level reads, and what it computes
+
+Today the model fills every variable of a family before the family's
+index builder runs. With levels, the `.idx` decides what is computed.
+`idx2inc.pl` writes one more line into `_h.inc`, the variables the
+family's indices read:
+
+```cpp
+// -1's skp: the copy cut to -1's shape (7.6), its pixel lines gone
+#define H1_skp_USES(X) X(st) X(a3) X(b3) X(c9) X(eq) X(lf) X(af) X(cd) X(cnt) X(c1) X(col) X(run) X(k9)
+```
+
+which the class turns into `Uses`, a bit per field of `V` (above; a name
+that is not a field of `V` does not compile). Every line of h264p's
+`.idx` files reads one variable by name (none uses `ADD`, whose
+expression the generator would have to parse), so the list is exact. A
+variable is in it, in the shipping build, when a line reading it has a 1
+in its pattern (a line of zeros adds nothing to its index, and the
+generator already leaves it out); in the tuning build, when a live line
+reads it, or a frozen one with a 1, since `opt.pl` can set any live bit.
+Both are constants.
+
+The model fills a variable only where the level reads it:
+
+```cpp
+#define H_USES(F, f) ((L::F::Uses >> (offsetof(H_##F##_v, f) / sizeof(int))) & 1)
+
+if (H_USES(skp, c9)) {  // the skipped ones in the 3x3 window
+  D.c9 = 0;
+  ...
+}
+```
+
+- A variable that several families read is made if one of them reads
+  it: the maps' `td` and `en` and the skip prediction's `sm`, `tm`,
+  `tb`, `bd` and `tx`, which skp and mbt both read.
+- Only work whose one product is the variable is skipped. Where it also
+  keeps state for the model, the state must not depend on it:
+  `skip_miss()` keeps the skip motion for `skip()`, which makes it again
+  when `skip_miss()` has not run (`smv_ok_`), so `skip_miss()` can go.
+- The tuning build reads more than the shipping build (its live lines
+  of zeros), so it computes more; the two code the same as long as the
+  skipped work has no other product. That is what `./mk.sh check` tests.
+- The switches are tied to the variables at compile time. Next to each
+  family's `V` is a mask per switch of the fields it feeds (skp: `td`,
+  `en`, `sm`, `tm`, `tb`, `bd` and `tx` need the decoder), and the model
+  asserts them:
+
+  ```cpp
+  static_assert(L::recon || !(L::skp::Uses & H_skp_rec), "a level without the decoder reads a pixel context of skp");
+  ```
+
+  A level without the decoder whose `.idx` reads a pixel context does
+  not compile; the line has to go from its `.idx`, or be frozen at zero.
+  (In the cut-down copy above, adding `tm` to the list stops the build
+  with that message, and a misspelt variable with "`V` has no member
+  named ...".)
+
+For `-9` this changes nothing: its indices read all but 3 of the 228
+variables it fills (`ipm.blk`, `mvs.pi`, `sig.fld`, cheap ones). For
+`-1` it is section 5's "level's own contexts": a context deleted from
+`IDX/l1` is no longer computed by `-1`. A copy cut to `-1`'s shape
+(counters A-D, mixer 1, the mantissa and the signs) still reads 157 of
+the 225 variables `-9` reads, some of them from the pictures (skp's `td`
+and `en`), so `IDX/l1`'s contexts have to be chosen for `-1` before it
+is fast.
+
+### 7.4 A level's class
+
+`lv1.inc` includes `MOD/l1`'s headers (the 15 `_h.inc`, then the 15
+`_p.inc`), makes the 15 families' classes through `famcfg.inc`, and
+then the level's own:
+
+```cpp
+struct Lv1 {
+  static const int id = 1;  // the header's level byte
+  static const bool recon = false, search = false, proxy = false, signpred = false,
+                    skippx = false, deblock = false, cabpred = false;
+  typedef C1_nal nal;
+  typedef C1_hdr hdr;
+  typedef C1_skp skp;
+  // ... to pcm
+};
+```
+
+`Model<f_DEC, L>` reaches all of a level through `L`:
+
+```cpp
+template <int f_DEC, class L>
+struct Model {
+  tc_fam<f_DEC, typename L::skp> f_skp;  // and the other 14
+  typename L::skp::T* t_skp;
+  ...
+  int skp_bit(const H_skp_v& D, int node, int v, int pr = -1) {
+    tcx X;
+    L::skp::make(D, X);
+    f_skp.select(X);
+    ...
+```
+
+Only the running level's tables are mapped (`init()` maps them, as
+now), so a process's memory is its level's (section 4: 40 MB for `-1`
+as prototyped), whatever else the binary holds. One thing moves out of `Model`: the
+range coder, which `tc_bit<f_DEC>()` reaches as `Model<f_DEC>::rc` and
+which is the same for every level, becomes one per direction.
+
+Knobs of the model outside the families that should differ by level
+(the searches' ranges, the pixel contexts' thresholds: constants in the
+code today) can come under IDX the same way: `IDX/l1/lv.idx` (`Prefix
+H1_lv`, numbers only) wrapped into `Lv1`, as `config0.hpp` has the SSE
+cells' bundle beside the counters'.
+
+### 7.5 Tuning one level
+
+```sh
+./mk.sh tuning 1                  # MOD/l1 in the tuning form, a binary of -1 alone
+perl IDX/opt.pl opt.lst ./h264p   # it finds H1_ patterns only
+cd IDX/l1 && for f in *.idx; do perl ../import.pl $f ../../export.\!\!\! > t && mv t $f; done
+cd ../.. && ./mk.sh mod && ./mk.sh check 1
+```
+
+- **One level per tuning binary.** `opt.pl` patches every `!MAP!`
+  pattern it finds and measures `h264p c`. Another level's patterns
+  would cost a run over the corpus per bit and change nothing, and `c`
+  with no level given has to run the level being tuned. A binary of one
+  level compiles no slower than today's.
+- **Cost.** The copy cut to `-1`'s shape has 5,588 tunable bits in 574
+  patterns, `-9` 12,229 in 1,293 (`mk.sh`'s count). A pass of `opt.pl`
+  codes the corpus once per bit, and `-1` codes it 3.6 times as fast: a
+  pass over `-1` costs about an eighth of one over `-9`.
+- **Values from another level.** A copy starts with the values of the
+  level it was copied from. To give a level another's later values,
+  rename the prefix in the export (`sed 's/( H9_/( H1_/' export.!!!`)
+  before importing it; an export made before the move needs the same
+  (`H_` to `H9_`).
+- **By hand, and by `opt.pl`.** A level's structure is edited by hand:
+  its contexts (the `Index` lines), its tables' rows (the frozen
+  `hA`-`hN`, 2^24 rows in `-9`; set lower for `-1`, they are section 5's
+  smaller tables), its shape (the `FC_` macros and its templates'
+  tables). The bits of the patterns are `opt.pl`'s.
+
+### 7.6 Getting there
+
+Each step checked on the 96 test streams:
+
+1. `-9` moved: `IDX/<fam>.*` to `IDX/l9/`, `MOD/` to `MOD/l9/`, `Prefix
+   H_` to `H9_`, the templates naming the shared variables and node
+   counts, `mk.sh` by level. Only names change: the output is the same,
+   byte for byte.
+2. `famcfg.inc`, `lv9.inc`, `tc_fam<f_DEC, C>`, `Model<f_DEC, Lv9>`:
+   `H_WIRE` goes, `wire()` takes the tables alone instead of 94
+   arguments, and the clamps move into the classes. The same output;
+   the shipping build now has the parameters folded (its speed to be
+   measured).
+3. `Uses`, the gates and the asserts: the same output (`-9` reads what
+   it fills).
+4. `cp -r IDX/l9 IDX/l1`, `Prefix H1_`, `lv1.inc` with `-9`'s shape and
+   switches, and the level byte in the header: a second instance, coding
+   as `-9` does but for that byte. This checks the plumbing.
+5. `-1` as section 4 has it: its switches off; `FC_NC 4`, `FC_NMIX 1`,
+   `FC_NAPM 0`, its templates' tables and `MakeIndex` lists cut to
+   match; the `Index` blocks e, h-l, s, f and w and their numbers
+   deleted from `IDX/l1`, and the lines that read pixel variables. To
+   compare with the prototype k: +17.46%, 314 and 415 KB/s.
+6. `-1`'s own: its contexts chosen, its rows, an `opt.pl` run (section
+   5).
+
+## 8. One thread
 
 - The coder's thread (`TcDefer`), the thread that parses ahead and the
   finishing thread (deblocking, padding, maps behind the decoding) go;
@@ -266,7 +610,7 @@ per-macroblock bookkeeping of a run done at once.
 - Memory per process: `-9` peaks at 153-157 MB on the large streams (87
   MB on 02), `-1` as prototyped at 37-41 MB (25 MB on 02).
 
-## 8. How this was measured
+## 9. How this was measured
 
 - Time per part: a sampling profiler (`SIGPROF` every 200 µs) recording
   each sample's call stack through frame pointers, on a build with
@@ -281,3 +625,8 @@ per-macroblock bookkeeping of a run done at once.
   alternating order, the better of the two runs).
 - Decisions counted by a counter in `bit_x` and `bitm`; memory as the
   peak resident size.
+- Section 7: the tunable bits are what `mk.sh`'s tuning build reports
+  for `-9`, and the same count over the lines the cut copy keeps; a
+  variable counts as read where a line naming it has a 1 in its pattern;
+  the compile time is one run of `mk.sh`'s `g++` command for the
+  shipping build.

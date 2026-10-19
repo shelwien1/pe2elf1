@@ -201,7 +201,8 @@ decompressing (in two), depending on the stream (`h264p_speed.md` has the
 figures), and the model tables take about 226 MB. In one thread it does
 87 KB/s compressing and 97 decompressing; `h264p_levels.md` has where that
 time goes by model part, and the lighter model levels that would reach
-400-500 KB/s a thread, with their cost in compression.
+400-500 KB/s a thread, with their cost in compression and how each level
+gets its own IDX profile to tune.
 
 ### TSV
 
