@@ -17,58 +17,56 @@ void H5_ipm_make( const H_ipm_v & D, tcx & X ) {
   (void) k8;  (void) ma;  (void) mb;  (void) mp;  (void) blk;  (void) pv;  (void) col;  (void) dm;  (void) ds;  (void) pm;  (void) pr;  (void) dr;  (void) pq;  (void) mh;  (void) mc;  (void) mg;  (void) rg;  (void) p2;
 
   a = 0;
-  a = a*3 + ((k8>0+(1-1))+(k8>1+(1-1)));
+  a = a*2 + ((k8>0+(1-1)));
   a = a*11 + H5_ipm_a_ma[__min(10,__max(0,ma-(1-1)))];
   a = a*11 + H5_ipm_a_mb[__min(10,__max(0,mb-(1-1)))];
-  a = a*11 + H5_ipm_a_mc[__min(10,__max(0,mc-(1-1)))];
+  a = a*10 + H5_ipm_a_mc[__min(10,__max(0,mc-(1-1)))];
 
   b = 0;
   b = b*2 + ((k8>0+(1-1)));
-  b = b*10 + H5_ipm_b_mp[__min(9,__max(0,mp-(1-1)))];
-  b = b*10 + H5_ipm_b_pv[__min(9,__max(0,pv-(1-1)))];
+  b = b*6 + H5_ipm_b_mp[__min(9,__max(0,mp-(1-1)))];
+  b = b*9 + H5_ipm_b_pv[__min(9,__max(0,pv-(1-1)))];
   b = b*17 + H5_ipm_b_mh[__min(16,__max(0,mh-(1-1)))];
 
   c = 0;
-  c = c*3 + ((k8>0+(1-1))+(k8>1+(1-1)));
-  c = c*10 + H5_ipm_c_mp[__min(9,__max(0,mp-(1-1)))];
+  c = c*8 + H5_ipm_c_mp[__min(9,__max(0,mp-(1-1)))];
   c = c*10 + H5_ipm_c_col[__min(9,__max(0,col-(1-1)))];
 
   d = 0;
-  d = d*3 + ((k8>0+(1-1))+(k8>1+(1-1)));
-  d = d*10 + H5_ipm_d_mp[__min(9,__max(0,mp-(1-1)))];
-  d = d*10 + H5_ipm_d_dm[__min(9,__max(0,dm-(1-1)))];
-  d = d*3 + ((ds>4+(1-1))+(ds>7+(1-1)));
+  d = d*2 + ((k8>0+(1-1)));
+  d = d*8 + H5_ipm_d_mp[__min(9,__max(0,mp-(1-1)))];
+  d = d*8 + H5_ipm_d_dm[__min(9,__max(0,dm-(1-1)))];
+  d = d*4 + H5_ipm_d_ds[__min(9,__max(0,ds-(1-1)))];
 
   e = 0;
-  e = e*3 + ((k8>0+(1-1))+(k8>1+(1-1)));
-  e = e*10 + H5_ipm_e_mp[__min(9,__max(0,mp-(1-1)))];
+  e = e*2 + ((mp>4+(1-1)));
 
   h = 0;
-  h = h*3 + ((k8>0+(1-1))+(k8>1+(1-1)));
-  h = h*10 + H5_ipm_h_ds[__min(9,__max(0,ds-(1-1)))];
+  h = h*9 + H5_ipm_h_dr[__min(8,__max(0,dr-(1-1)))];
+  h = h*4 + H5_ipm_h_ds[__min(9,__max(0,ds-(1-1)))];
 
   i = 0;
   i = i*4 + H5_ipm_i_dm[__min(9,__max(0,dm-(1-1)))];
-  i = i*11 + H5_ipm_i_ma[__min(10,__max(0,ma-(1-1)))];
+  i = i*9 + H5_ipm_i_ma[__min(10,__max(0,ma-(1-1)))];
 
   j = 0;
-  j = j*3 + ((k8>0+(1-1))+(k8>1+(1-1)));
+  j = j*2 + ((k8>0+(1-1)));
   j = j*17 + H5_ipm_j_mh[__min(16,__max(0,mh-(1-1)))];
-  j = j*11 + H5_ipm_j_mb[__min(10,__max(0,mb-(1-1)))];
-  j = j*9 + H5_ipm_j_p2[__min(8,__max(0,p2-(1-1)))];
+  j = j*10 + H5_ipm_j_mb[__min(10,__max(0,mb-(1-1)))];
 
   k = 0;
-  k = k*3 + ((k8>0+(1-1))+(k8>1+(1-1)));
-  k = k*10 + H5_ipm_k_mp[__min(9,__max(0,mp-(1-1)))];
-  k = k*10 + H5_ipm_k_pv[__min(9,__max(0,pv-(1-1)))];
+  k = k*2 + ((mp>5+(1-1)));
+  k = k*6 + H5_ipm_k_pv[__min(9,__max(0,pv-(1-1)))];
 
   l = 0;
-  l = l*3 + ((k8>0+(1-1))+(k8>1+(1-1)));
-  l = l*11 + H5_ipm_l_mc[__min(10,__max(0,mc-(1-1)))];
-  l = l*11 + H5_ipm_l_ma[__min(10,__max(0,ma-(1-1)))];
+  l = l*10 + H5_ipm_l_mc[__min(10,__max(0,mc-(1-1)))];
+  l = l*9 + H5_ipm_l_ma[__min(10,__max(0,ma-(1-1)))];
   l = l*8 + H5_ipm_l_dm[__min(9,__max(0,dm-(1-1)))];
 
   m = 0;
+  m = m*2 + ((k8>0+(1-1)));
+  m = m*2 + ((ma>9+(1-1)));
+  m = m*2 + ((mb>9+(1-1)));
 
   t = 0;
 

@@ -1,73 +1,67 @@
 
-static const byte H5_qpg_a_as[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H5_qpg_a_mag[7+1]={ 0,1,2,3,4,5,6,7 };
-static const byte H5_qpg_a_xe[18+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18 };
-static const byte H5_qpg_a_lq[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-
-static const byte H5_qpg_b_as[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-
-static const byte H5_qpg_c_as[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H5_qpg_c_cs[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-
-static const byte H5_qpg_d_bs[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H5_qpg_d_mag[7+1]={ 0,1,2,3,4,5,6,7 };
-static const byte H5_qpg_d_bk[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-
-static const byte H5_qpg_e_rs[3+1]={ 0,1,2,3 };
-static const byte H5_qpg_e_ss[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
+static const byte H5_qpg_a_mag[7+1]={ 0,0,1,1,2,3,4,4 };
+static const byte H5_qpg_a_ss[9+1]={ 0,0,0,1,2,3,4,4,5,5 };
+static const byte H5_qpg_a_xe[18+1]={ 0,0,0,0,0,0,0,1,1,1,1,1,1,1,2,2,3,3,4 };
+static const byte H5_qpg_a_lq[9+1]={ 0,0,0,1,1,2,3,3,3,3 };
 
 
-static const byte H5_qpg_h_as[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
+static const byte H5_qpg_c_cs[9+1]={ 0,0,0,1,1,2,3,4,4,5 };
+
+static const byte H5_qpg_d_bs[9+1]={ 0,0,0,1,1,2,3,4,5,6 };
+
+static const byte H5_qpg_e_cs[9+1]={ 0,0,0,1,1,1,2,2,3,3 };
+static const byte H5_qpg_e_ss[9+1]={ 0,0,0,1,1,2,3,4,5,5 };
+
+
+static const byte H5_qpg_h_as[9+1]={ 0,0,0,1,1,2,2,2,2,3 };
 static const byte H5_qpg_h_rs[3+1]={ 0,1,2,3 };
 
-static const byte H5_qpg_i_as[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H5_qpg_i_cs[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H5_qpg_i_bs[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
+static const byte H5_qpg_i_as[9+1]={ 0,0,0,0,1,2,3,3,4,5 };
+static const byte H5_qpg_i_cs[9+1]={ 0,0,0,1,2,3,3,3,4,4 };
+static const byte H5_qpg_i_bs[9+1]={ 0,0,0,1,2,2,3,4,5,6 };
 
-static const byte H5_qpg_j_cls[8+1]={ 0,1,2,3,4,5,6,7,8 };
-static const byte H5_qpg_j_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
+static const byte H5_qpg_j_cls[8+1]={ 0,0,0,0,1,1,2,3,3 };
+static const byte H5_qpg_j_st[9+1]={ 0,0,1,2,2,3,3,3,3,3 };
 
-static const byte H5_qpg_k_mag[7+1]={ 0,1,2,3,4,5,6,7 };
-static const byte H5_qpg_k_as[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H5_qpg_k_cls[8+1]={ 0,1,2,3,4,5,6,7,8 };
+static const byte H5_qpg_k_mag[7+1]={ 0,0,1,2,3,3,3,3 };
+static const byte H5_qpg_k_as[9+1]={ 0,0,0,1,2,3,4,5,6,7 };
 
-static const byte H5_qpg_l_cs[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H5_qpg_l_bs[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-
-static const byte H5_qpg_m_as[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
+static const byte H5_qpg_l_cs[9+1]={ 0,0,0,1,2,3,4,5,6,6 };
+static const byte H5_qpg_l_bs[9+1]={ 0,0,0,1,2,3,4,5,5,5 };
 
 
 
 
-static const int H5_qpg_rA = (235+0) * (1);
-static const int H5_qpg_rB = (205+0) * (1);
-static const int H5_qpg_rC = (3+0) * (1);
-static const int H5_qpg_rE = (64+0) * (1);
-static const int H5_qpg_rH = (64+0) * (1);
-static const int H5_qpg_rI = (64+0) * (1);
-static const int H5_qpg_rJ = (224+0) * (1);
-static const int H5_qpg_rK = (64+0) * (1);
-static const int H5_qpg_rL = (235+0) * (1);
-static const int H5_qpg_rD = (111+0) * (1);
-static const int H5_qpg_rT = (55+0) * (1);
-static const int H5_qpg_rG = (90+0) * (1);
-static const int H5_qpg_lr = (12+0) * (1);
-static const int H5_qpg_lrm = (12+0) * (1);
+
+static const int H5_qpg_rA = (232+0) * (1);
+static const int H5_qpg_rB = (122+0) * (1);
+static const int H5_qpg_rC = (241+0) * (1);
+static const int H5_qpg_rE = (65+0) * (1);
+static const int H5_qpg_rH = (255+0) * (1);
+static const int H5_qpg_rI = (254+0) * (1);
+static const int H5_qpg_rJ = (129+0) * (1);
+static const int H5_qpg_rK = (252+0) * (1);
+static const int H5_qpg_rL = (212+0) * (1);
+static const int H5_qpg_rD = (254+0) * (1);
+static const int H5_qpg_rT = (0+0) * (1);
+static const int H5_qpg_rG = (0+0) * (1);
+static const int H5_qpg_lr = (15+0) * (1);
+static const int H5_qpg_lrm = (0+0) * (1);
 static const int H5_qpg_mbm = (0+0) * (1);
-static const int H5_qpg_mwA = (29+0) * (1);
-static const int H5_qpg_mwB = (0+0) * (1);
-static const int H5_qpg_mwC = (0+0) * (1);
-static const int H5_qpg_mwE = (0+0) * (1);
-static const int H5_qpg_mwH = (32+0) * (1);
-static const int H5_qpg_mwI = (0+0) * (1);
-static const int H5_qpg_mwJ = (0+0) * (1);
-static const int H5_qpg_mwK = (4+0) * (1);
-static const int H5_qpg_mwL = (0+0) * (1);
-static const int H5_qpg_mwD = (31+0) * (1);
+static const int H5_qpg_mwA = (0+0) * (1);
+static const int H5_qpg_mwB = (23+0) * (1);
+static const int H5_qpg_mwC = (167+0) * (1);
+static const int H5_qpg_mwE = (8+0) * (1);
+static const int H5_qpg_mwH = (46+0) * (1);
+static const int H5_qpg_mwI = (126+0) * (1);
+static const int H5_qpg_mwJ = (128+0) * (1);
+static const int H5_qpg_mwK = (6+0) * (1);
+static const int H5_qpg_mwL = (124+0) * (1);
+static const int H5_qpg_mwD = (1+0) * (1);
 static const int H5_qpg_mwT = (0+0) * (1);
 static const int H5_qpg_mwG = (0+0) * (1);
-static const int H5_qpg_mt = (6+0) * (1);
-static const int H5_qpg_mb = (160+0) * (1);
+static const int H5_qpg_mt = (0+0) * (1);
+static const int H5_qpg_mb = (130+0) * (1);
 static const int H5_qpg_hA = (24+0) * (1);
 static const int H5_qpg_hB = (24+0) * (1);
 static const int H5_qpg_hC = (24+0) * (1);
@@ -83,22 +77,22 @@ static const int H5_qpg_hT = (24+0) * (1);
 static const int H5_qpg_hN = (24+0) * (1);
 
 
-static const long long H5_qpg_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 8), 2), 19), 10); // 30400
-static const long long H5_qpg_b_Volume = tc_vmul(tc_vmul(1, 10), 1); // 10
-static const long long H5_qpg_c_Volume = tc_vmul(tc_vmul(1, 10), 10); // 100
-static const long long H5_qpg_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, 10), 8), 10); // 800
-static const long long H5_qpg_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 4), 10); // 120
+static const long long H5_qpg_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 5), 6), 5), 4); // 600
+static const long long H5_qpg_b_Volume = tc_vmul(tc_vmul(1, 3), 1); // 3
+static const long long H5_qpg_c_Volume = tc_vmul(tc_vmul(1, 3), 6); // 18
+static const long long H5_qpg_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, 7), 3), 2); // 42
+static const long long H5_qpg_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 6); // 48
 static const long long H5_qpg_g_Volume = tc_vmul(1, 1); // 1
-static const long long H5_qpg_h_Volume = tc_vmul(tc_vmul(tc_vmul(1, 10), 4), 3); // 120
-static const long long H5_qpg_i_Volume = tc_vmul(tc_vmul(tc_vmul(1, 10), 10), 10); // 1000
-static const long long H5_qpg_j_Volume = tc_vmul(tc_vmul(tc_vmul(1, 9), 10), 3); // 270
-static const long long H5_qpg_k_Volume = tc_vmul(tc_vmul(tc_vmul(1, 8), 10), 9); // 720
-static const long long H5_qpg_l_Volume = tc_vmul(tc_vmul(tc_vmul(1, 10), 10), 2); // 200
-static const long long H5_qpg_m_Volume = tc_vmul(1, 10); // 10
+static const long long H5_qpg_h_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 4), 2); // 32
+static const long long H5_qpg_i_Volume = tc_vmul(tc_vmul(tc_vmul(1, 6), 5), 7); // 210
+static const long long H5_qpg_j_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 4), 3); // 48
+static const long long H5_qpg_k_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 8), 3); // 96
+static const long long H5_qpg_l_Volume = tc_vmul(tc_vmul(tc_vmul(1, 7), 6), 1); // 42
+static const long long H5_qpg_m_Volume = tc_vmul(1, 3); // 3
 static const long long H5_qpg_n_Volume = tc_vmul(1, 1); // 1
 static const long long H5_qpg_t_Volume = tc_vmul(1, 1); // 1
 
-#define H5_qpg_USES(X) X(as) X(mag) X(ss) X(xe) X(lq) X(cs) X(bs) X(bk) X(rs) X(ls) X(cls) X(st)
+#define H5_qpg_USES(X) X(mag) X(ss) X(xe) X(lq) X(as) X(cs) X(bs) X(bk) X(rs) X(ls) X(cls) X(st)
 
 struct H5_qpg_T { 
 #undef USE_NEW

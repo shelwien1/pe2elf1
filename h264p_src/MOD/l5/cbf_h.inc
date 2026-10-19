@@ -1,85 +1,79 @@
 
-static const byte H5_cbf_a_cat[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
-static const byte H5_cbf_a_na[9+1]={ 0,1,2,2,3,3,3,4,4,5 };
-static const byte H5_cbf_a_nb[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H5_cbf_a_ly[10+1]={ 0,1,2,3,4,5,6,7,8,9,10 };
+static const byte H5_cbf_a_cat[13+1]={ 0,1,2,2,3,3,3,3,3,3,3,3,3,3 };
+static const byte H5_cbf_a_na[9+1]={ 0,1,1,2,2,2,2,2,3,3 };
+static const byte H5_cbf_a_nb[9+1]={ 0,1,2,2,3,3,4,4,5,5 };
+static const byte H5_cbf_a_ly[10+1]={ 0,1,2,2,3,3,4,5,5,6,6 };
 
-static const byte H5_cbf_b_cat[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
+static const byte H5_cbf_b_cat[13+1]={ 0,1,2,3,4,5,5,5,5,5,5,5,5,5 };
 static const byte H5_cbf_b_np[3+1]={ 0,1,2,3 };
-static const byte H5_cbf_b_pos[3+1]={ 0,1,2,3 };
-static const byte H5_cbf_b_em[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
-static const byte H5_cbf_b_dq[8+1]={ 0,1,2,3,4,5,6,7,8 };
+static const byte H5_cbf_b_em[16+1]={ 0,1,1,1,1,1,2,2,2,3,3,4,4,5,5,5,5 };
+static const byte H5_cbf_b_dq[8+1]={ 0,0,0,1,1,2,3,3,3 };
 
-static const byte H5_cbf_c_q6[8+1]={ 0,1,2,3,4,5,6,7,8 };
-static const byte H5_cbf_c_en[14+1]={ 0,1,1,1,2,3,3,3,3,4,4,4,4,5,5 };
-static const byte H5_cbf_c_ch[15+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
+static const byte H5_cbf_c_cat[13+1]={ 0,1,2,3,4,4,4,4,4,4,4,4,4,4 };
+static const byte H5_cbf_c_en[14+1]={ 0,1,1,2,2,2,2,3,3,3,3,4,4,4,5 };
+static const byte H5_cbf_c_ch[15+1]={ 0,1,2,3,4,5,5,6,7,8,8,9,9,9,9,9 };
 
-static const byte H5_cbf_d_cat[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
-static const byte H5_cbf_d_nc[5+1]={ 0,1,2,3,4,5 };
-static const byte H5_cbf_d_md[19+1]={ 0,0,1,2,2,2,2,2,2,2,2,2,2,2,3,3,3,4,4,4 };
-static const byte H5_cbf_d_pg[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
+static const byte H5_cbf_d_cat[13+1]={ 0,1,2,3,4,4,4,4,4,4,4,4,4,4 };
+static const byte H5_cbf_d_md[19+1]={ 0,1,2,3,4,5,5,5,5,5,5,5,5,5,6,6,6,7,7,8 };
+static const byte H5_cbf_d_pg[16+1]={ 0,0,0,1,1,1,1,2,3,3,4,4,5,5,5,6,6 };
 
-static const byte H5_cbf_e_cat[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
-static const byte H5_cbf_e_na[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H5_cbf_e_nb[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H5_cbf_e_tn[10+1]={ 0,1,2,3,4,5,6,7,8,9,10 };
+static const byte H5_cbf_e_na[9+1]={ 0,1,2,2,2,3,3,3,4,5 };
+static const byte H5_cbf_e_nb[9+1]={ 0,1,1,1,1,2,2,3,3,3 };
+static const byte H5_cbf_e_tn[10+1]={ 0,0,0,0,1,2,2,3,4,4,5 };
 
 
-static const byte H5_cbf_h_cat[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
-static const byte H5_cbf_h_pg[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
-static const byte H5_cbf_h_md[19+1]={ 0,1,2,2,2,2,2,2,3,4,4,5,6,6,7,7,7,8,8,8 };
-static const byte H5_cbf_h_q6[8+1]={ 0,1,2,3,4,5,6,7,8 };
-static const byte H5_cbf_h_hv[7+1]={ 0,1,2,3,4,5,6,7 };
+static const byte H5_cbf_h_cat[13+1]={ 0,1,1,2,3,4,4,4,4,4,4,4,4,4 };
+static const byte H5_cbf_h_pg[16+1]={ 0,0,0,0,1,1,2,2,2,3,3,4,4,5,5,5,6 };
+static const byte H5_cbf_h_md[19+1]={ 0,1,2,2,2,2,2,2,3,3,3,4,5,5,6,6,6,7,8,8 };
+static const byte H5_cbf_h_q6[8+1]={ 0,1,2,3,4,5,6,6,6 };
+static const byte H5_cbf_h_hv[7+1]={ 0,1,1,2,2,2,3,3 };
 
-static const byte H5_cbf_i_cat[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
-static const byte H5_cbf_i_np[3+1]={ 0,1,2,3 };
-static const byte H5_cbf_i_ds[7+1]={ 0,1,2,3,4,5,6,7 };
+static const byte H5_cbf_i_cat[13+1]={ 0,1,2,3,4,5,5,5,5,5,5,5,5,5 };
+static const byte H5_cbf_i_ds[7+1]={ 0,1,2,3,4,5,5,5 };
 
-static const byte H5_cbf_j_cat[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
-static const byte H5_cbf_j_em[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
-static const byte H5_cbf_j_pg[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
-static const byte H5_cbf_j_na[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
+static const byte H5_cbf_j_cat[13+1]={ 0,1,2,3,4,5,5,5,5,5,5,5,5,5 };
+static const byte H5_cbf_j_em[16+1]={ 0,1,2,2,3,3,3,3,4,4,5,5,6,6,6,6,7 };
+static const byte H5_cbf_j_pg[16+1]={ 0,0,1,1,1,2,2,3,4,4,5,5,5,6,6,6,6 };
+static const byte H5_cbf_j_na[9+1]={ 0,1,2,2,3,3,3,4,4,5 };
 
-static const byte H5_cbf_k_na[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 
-static const byte H5_cbf_l_cat[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
-static const byte H5_cbf_l_md[19+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19 };
+static const byte H5_cbf_l_cat[13+1]={ 0,1,1,2,3,4,4,4,4,4,4,4,4,4 };
+static const byte H5_cbf_l_md[19+1]={ 0,0,0,0,0,0,0,0,0,1,2,3,4,5,5,5,5,5,5,5 };
 
 static const byte H5_cbf_m_cat[13+1]={ 0,1,2,3,4,4,4,4,4,4,4,4,4,4 };
 
-static const byte H5_cbf_n_cat[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
-static const byte H5_cbf_t_cat[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
+static const byte H5_cbf_t_cat[13+1]={ 0,1,2,3,4,5,5,5,5,5,5,5,5,5 };
 
 
-static const int H5_cbf_rA = (64+0) * (1);
-static const int H5_cbf_rB = (255+0) * (1);
-static const int H5_cbf_rC = (64+0) * (1);
-static const int H5_cbf_rE = (64+0) * (1);
-static const int H5_cbf_rH = (64+0) * (1);
-static const int H5_cbf_rI = (247+0) * (1);
-static const int H5_cbf_rJ = (199+0) * (1);
-static const int H5_cbf_rK = (64+0) * (1);
-static const int H5_cbf_rL = (64+0) * (1);
-static const int H5_cbf_rD = (242+0) * (1);
-static const int H5_cbf_rT = (55+0) * (1);
-static const int H5_cbf_rG = (90+0) * (1);
+static const int H5_cbf_rA = (255+0) * (1);
+static const int H5_cbf_rB = (254+0) * (1);
+static const int H5_cbf_rC = (255+0) * (1);
+static const int H5_cbf_rE = (255+0) * (1);
+static const int H5_cbf_rH = (254+0) * (1);
+static const int H5_cbf_rI = (254+0) * (1);
+static const int H5_cbf_rJ = (253+0) * (1);
+static const int H5_cbf_rK = (0+0) * (1);
+static const int H5_cbf_rL = (251+0) * (1);
+static const int H5_cbf_rD = (247+0) * (1);
+static const int H5_cbf_rT = (35+0) * (1);
+static const int H5_cbf_rG = (0+0) * (1);
 static const int H5_cbf_lr = (12+0) * (1);
-static const int H5_cbf_lrm = (12+0) * (1);
-static const int H5_cbf_mbm = (0+0) * (1);
-static const int H5_cbf_mwA = (0+0) * (1);
+static const int H5_cbf_lrm = (29+0) * (1);
+static const int H5_cbf_mbm = (6+0) * (1);
+static const int H5_cbf_mwA = (100+0) * (1);
 static const int H5_cbf_mwB = (0+0) * (1);
-static const int H5_cbf_mwC = (0+0) * (1);
-static const int H5_cbf_mwE = (18+0) * (1);
-static const int H5_cbf_mwH = (0+0) * (1);
-static const int H5_cbf_mwI = (36+0) * (1);
-static const int H5_cbf_mwJ = (0+0) * (1);
-static const int H5_cbf_mwK = (0+0) * (1);
-static const int H5_cbf_mwL = (0+0) * (1);
-static const int H5_cbf_mwD = (200+0) * (1);
-static const int H5_cbf_mwT = (8+0) * (1);
+static const int H5_cbf_mwC = (2+0) * (1);
+static const int H5_cbf_mwE = (127+0) * (1);
+static const int H5_cbf_mwH = (8+0) * (1);
+static const int H5_cbf_mwI = (32+0) * (1);
+static const int H5_cbf_mwJ = (33+0) * (1);
+static const int H5_cbf_mwK = (201+0) * (1);
+static const int H5_cbf_mwL = (32+0) * (1);
+static const int H5_cbf_mwD = (64+0) * (1);
+static const int H5_cbf_mwT = (14+0) * (1);
 static const int H5_cbf_mwG = (0+0) * (1);
-static const int H5_cbf_mt = (2+0) * (1);
+static const int H5_cbf_mt = (4+0) * (1);
 static const int H5_cbf_mb = (130+0) * (1);
 static const int H5_cbf_hA = (24+0) * (1);
 static const int H5_cbf_hB = (17+0) * (1);
@@ -96,22 +90,22 @@ static const int H5_cbf_hT = (24+0) * (1);
 static const int H5_cbf_hN = (24+0) * (1);
 
 
-static const long long H5_cbf_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 6), 10), 2), 11); // 18480
-static const long long H5_cbf_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 4), 4), 3), 2), 17), 9); // 205632
-static const long long H5_cbf_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 9), 3), 2), 6), 16); // 10368
-static const long long H5_cbf_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 6), 5), 2), 17); // 14280
-static const long long H5_cbf_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 10), 10), 11); // 15400
+static const long long H5_cbf_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 4), 6), 2), 7); // 1344
+static const long long H5_cbf_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 6), 4), 3), 3), 1), 6), 4); // 5184
+static const long long H5_cbf_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 5), 3), 3), 1), 6), 10); // 2700
+static const long long H5_cbf_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 5), 2), 9), 2), 7); // 1260
+static const long long H5_cbf_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 6), 4), 6); // 432
 static const long long H5_cbf_g_Volume = tc_vmul(1, 1); // 1
-static const long long H5_cbf_h_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 17), 9), 9), 8); // 154224
-static const long long H5_cbf_i_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 4), 8); // 448
-static const long long H5_cbf_j_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 17), 17), 10); // 40460
-static const long long H5_cbf_k_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 10), 1); // 20
-static const long long H5_cbf_l_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 2), 1), 20); // 560
+static const long long H5_cbf_h_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 5), 7), 9), 7), 4); // 8820
+static const long long H5_cbf_i_Volume = tc_vmul(tc_vmul(tc_vmul(1, 6), 2), 6); // 72
+static const long long H5_cbf_j_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 6), 8), 7), 6); // 2016
+static const long long H5_cbf_k_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 1), 1); // 3
+static const long long H5_cbf_l_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 5), 1), 1), 6); // 30
 static const long long H5_cbf_m_Volume = tc_vmul(tc_vmul(1, 5), 2); // 10
-static const long long H5_cbf_n_Volume = tc_vmul(1, 14); // 14
-static const long long H5_cbf_t_Volume = tc_vmul(1, 14); // 14
+static const long long H5_cbf_n_Volume = tc_vmul(1, 2); // 2
+static const long long H5_cbf_t_Volume = tc_vmul(1, 6); // 6
 
-#define H5_cbf_USES(X) X(cat) X(na) X(nb) X(intra) X(ly) X(np) X(pos) X(crcb) X(kn) X(em) X(dq) X(q6) X(col) X(en) X(ch) X(nc) X(md) X(pg) X(tn) X(hv) X(ds)
+#define H5_cbf_USES(X) X(cat) X(na) X(nb) X(intra) X(ly) X(np) X(pos) X(crcb) X(em) X(dq) X(q6) X(col) X(en) X(ch) X(nc) X(md) X(kn) X(pg) X(tn) X(hv) X(ds)
 
 struct H5_cbf_T { 
 #undef USE_NEW

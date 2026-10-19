@@ -13,7 +13,9 @@ until a pass gains less than 0.01% of the family's size, or a byte
 interact, so four are tuned at once, the largest first, each trial a
 process per stream.  Writes the
 winners to export.!!! (mdesc lines, for IDX/import.pl; every pattern of
-the level) and the progress to ftune.log, both in the current directory.
+the level) at each gain, and the progress to ftune.log, both in the
+current directory; with FTUNE_FROM=EXPORT it starts from that export's
+patterns.
 """
 import glob, os, random, re, shutil, subprocess, sys, threading, time
 from concurrent.futures import ThreadPoolExecutor
@@ -26,6 +28,17 @@ data = bytearray(open(exe, 'rb').read())
 pats = {}  # name: (address, length, offset field)
 for m in re.finditer(rb'!MAP!(.*?)!(.*?)\x00(.*?)\x00', data, re.S):
     pats[m.group(1).decode()] = (m.start(3), len(m.group(3)), m.group(2).decode())
+# $FTUNE_FROM: an export to start from (that of a run cut short, say): its patterns go into the binary first
+if os.environ.get('FTUNE_FROM'):
+    n = 0
+    for m in re.finditer(r'mdesc\(\s*(\S+?)\s*,\s*(\S+?)\s*,\s*"([01]*)"\s*\)', open(os.environ['FTUNE_FROM']).read()):
+        k, b = m.group(1), m.group(3).encode()
+        if k in pats and len(b) == pats[k][1]:
+            data[pats[k][0]:pats[k][0] + len(b)] = b
+            n += 1
+    with open(exe, 'r+b') as f:
+        f.write(bytes(data))
+    print('ftune.py: %d patterns from %s' % (n, os.environ['FTUNE_FROM']), file=sys.stderr)
 fams = {}
 for k in pats:
     m = re.match(r'H\d+_([a-z0-9]+)_', k)
@@ -100,6 +113,7 @@ def tune(fam):
                 with lock:
                     data[a:a + l] = cur
                 say('%s %-26s %s  %.1f' % (fam, k, cur.decode(), best))
+                export()  # (a run cut short resumes from here: FTUNE_FROM)
             else:
                 img[a:a + l] = cur  # (ties: the zeros kept)
                 with lock:
