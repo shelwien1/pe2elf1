@@ -602,14 +602,11 @@ struct Recon {
   // decoding has come in order to row j + 2, and is final once row j + 1 is
   // deblocked; the rest is finished when the picture ends. A decoding that
   // leaves the order (slice groups, slices out of order or twice) has what
-  // was let go finished and lets go no more. Where there are threads, one of
-  // its own takes what was let go now and then; the decoding finishes the
-  // rest (what that thread has not begun, the token busy says): what it
-  // makes is the same either way.
+  // was let go finished and lets go no more.
   int fin_next = 0;                // the macroblock next in order
   bool fin_off = false;            // the decoding left the order
-  int fin_rows = 0, fin_post = 0;  // (busy's) the rows deblocked, and final and finished
-  int fin_db = 0;                  // (busy's) the rows of db made none again for the next picture
+  int fin_rows = 0, fin_post = 0;  // the rows deblocked, and final and finished
+  int fin_db = 0;                  // the rows of db made none again for the next picture
   static DbMb db_none() {
     DbMb none;
     memset(&none, 0, sizeof none);
@@ -634,106 +631,21 @@ struct Recon {
     maps_row(row);
     if (cur_ref_idc) cur->pad_rows(row, row + 1);
   }
-#ifndef H264P_NO_THREADS
-  struct Finisher {
-    std::thread th;
-    std::mutex mu;  // (for the sleeping)
-    std::condition_variable cv;
-    std::atomic<int> let{0};        // the rows let go of the current picture
-    std::atomic<bool> busy{false};  // a side finishing
-    std::atomic<bool> on{false};    // a picture being decoded
-    bool idle = false, quit = false;  // (mu's) the thread waiting for one, to end
-  };
-  std::unique_ptr<Finisher> fin_th;
-  bool fin_tried = false;
-  void fin_take() {
-    for (int k = 0; fin_th->busy.exchange(true); k++)
-#ifdef H264P_AVX2
-      if (k < 4096)
-        _mm_pause();
-      else
-#endif
-        std::this_thread::yield();
-  }
-  void fin_run() {
-    Finisher& F = *fin_th;
-    std::unique_lock<std::mutex> lk(F.mu);
-    // (looking about once a row: twice as long after nothing, half after
-    // two rows or more)
-    int us = 100;
-    while (!F.quit) {
-      if (!F.on.load()) {
-        F.idle = true;
-        F.cv.wait(lk);
-        F.idle = false;
-        continue;
-      }
-      lk.unlock();
-      if (!F.busy.exchange(true)) {
-        int r0 = fin_rows;
-        if (F.on.load()) finish_rows(F.let.load(), false);
-        int n = fin_rows - r0;
-        F.busy.store(false);
-        us = n == 0 ? std::min(us * 2, 2000) : n > 1 ? std::max(us / 2, 50) : us;
-      }
-      lk.lock();
-      if (!F.quit) F.cv.wait_for(lk, std::chrono::microseconds(us));
-    }
-  }
-#endif
   // (the decoding's side) a picture begins
   void fin_begin() {
-#ifndef H264P_NO_THREADS
-    if (!fin_tried) {
-      fin_tried = true;
-      if (!getenv("H264P_ONE_THREAD")) {
-        fin_th.reset(new Finisher);
-        try {
-          fin_th->th = std::thread([this] { fin_run(); });
-        } catch (const std::system_error&) {  // no thread to be had: finished here
-          fin_th.reset();
-        }
-      }
-    }
-    if (fin_th) fin_take();
-#endif
     fin_next = 0;
     fin_off = false;
     fin_rows = fin_post = fin_db = 0;
     maps_begin();
     if (cur_ref_idc) cur->pad_alloc();
-#ifndef H264P_NO_THREADS
-    if (fin_th) {
-      Finisher& F = *fin_th;
-      F.let.store(0);
-      F.on.store(true);
-      F.busy.store(false);
-      bool wake;
-      {
-        std::lock_guard<std::mutex> lk(F.mu);
-        wake = F.idle;
-      }
-      if (wake) F.cv.notify_one();
-    }
-#endif
   }
   void fin_let(int rows) {
-#ifndef H264P_NO_THREADS
-    if (fin_th) return fin_th->let.store(rows);
-#endif
     finish_rows(rows, false);
   }
   // macroblock addr begins (mb_start), ends (mb_end)
   void fin_mb(int addr, bool end) {
     if (fin_off) return;
     if (addr != fin_next) {
-#ifndef H264P_NO_THREADS
-      if (fin_th) {
-        fin_take();
-        finish_rows(fin_th->let.load(), false);
-        fin_th->busy.store(false);
-      }
-#endif
       fin_off = true;
       return;
     }
@@ -742,30 +654,11 @@ struct Recon {
   }
   // the picture ends: the rest of it
   void fin_end() {
-#ifndef H264P_NO_THREADS
-    if (fin_th) fin_take();
-#endif
     finish_rows(cur->mbh, true);
     maps_end();
     if (cur_ref_idc) cur->padded = true;
-#ifndef H264P_NO_THREADS
-    if (fin_th) {
-      fin_th->on.store(false);
-      fin_th->busy.store(false);
-    }
-#endif
   }
   ~Recon() {
-#ifndef H264P_NO_THREADS
-    if (fin_th) {
-      {
-        std::lock_guard<std::mutex> lk(fin_th->mu);
-        fin_th->quit = true;
-      }
-      fin_th->cv.notify_one();
-      fin_th->th.join();
-    }
-#endif
   }
 
   // --- reference picture management (8.2.4, 8.2.5)

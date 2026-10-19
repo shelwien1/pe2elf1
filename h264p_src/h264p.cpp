@@ -17,16 +17,6 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
-#ifndef H264P_NO_THREADS  // the compressor codes in a thread of its own (TcDefer), and parses in another
-#include <atomic>
-#include <condition_variable>
-#include <deque>
-#include <exception>
-#include <functional>
-#include <mutex>
-#include <system_error>
-#include <thread>
-#endif
 
 #include <sys/stat.h>
 
@@ -887,32 +877,10 @@ int compress(const char* in_name, const char* out_name, const Options& opt) {
       out_bytes += rc.buf.size();
       rc.buf.clear();
     };
-    bool own = false;  // the coding in a thread of its own, which writes the output as it goes
-#ifndef H264P_NO_THREADS
-    // (but for -v, whose statistics are the model's; H264P_ONE_THREAD in
-    // the environment codes here, as the decompressor does)
-    std::unique_ptr<TcDefer> dq;
-    if (!opt.verbose && !getenv("H264P_ONE_THREAD")) {
-      dq.reset(new TcDefer);
-      dq->exec = tc_exec;
-      dq->pre = tc_pre;
-      dq->idle = [&] {
-        if (rc.buf.size() > (1 << 20)) flush();
-      };
-      try {
-        dq->start();
-        m.defer(dq.get());
-        own = true;
-      } catch (const std::system_error&) {  // no thread to be had: coded here
-        dq.reset();
-      }
-    }
-#endif
     // A NAL unit's work that needs no model (its parsing, and writing it back
-    // to see that it comes out the same) runs ahead of the model, on a
-    // context of its own (cf), in a thread of its own when the coder has
-    // one; the model's context (cb) takes the same parameter sets and
-    // padding as it reaches each NAL unit
+    // to see that it comes out the same) runs before the model's, on a
+    // context of its own (cf); the model's context (cb) takes the same
+    // parameter sets and padding as it reaches each NAL unit
     struct NalItem {
       size_t zeros = 0;
       std::vector<uint8_t> nal;
@@ -1035,82 +1003,16 @@ int compress(const char* in_name, const char* out_name, const Options& opt) {
         }
       }
       if (it.slice) cb.pad.next_slice(it.newpic);
-      if (!own && rc.buf.size() > (1 << 20)) flush();
+      if (rc.buf.size() > (1 << 20)) flush();
       return true;
     };
-    bool ahead = false;  // the parsing in a thread of its own
-#ifndef H264P_NO_THREADS
-    // (three NAL units ahead at most: their values take memory, and the
-    // parsing takes far less time than the model)
-    struct Ahead {
-      std::mutex mu;
-      std::condition_variable cv;
-      std::deque<std::unique_ptr<NalItem>> q;
-      bool done = false, quit = false;
-      std::exception_ptr err;
-      std::thread th;
-      ~Ahead() {
-        if (!th.joinable()) return;
-        {
-          std::lock_guard<std::mutex> lk(mu);
-          quit = true;
-        }
-        cv.notify_all();
-        th.join();
-      }
-    } ah;
-    if (own) {
-      try {
-        ah.th = std::thread([&] {
-          try {
-            for (; more; more = rd.next(zeros, nal)) {
-              std::unique_ptr<NalItem> it(new NalItem);
-              it->zeros = zeros;
-              it->nal.swap(nal);
-              fill(*it);
-              std::unique_lock<std::mutex> lk(ah.mu);
-              ah.cv.wait(lk, [&] { return ah.q.size() < 3 || ah.quit; });
-              if (ah.quit) return;
-              ah.q.push_back(std::move(it));
-              ah.cv.notify_all();
-            }
-          } catch (...) {
-            std::lock_guard<std::mutex> lk(ah.mu);
-            ah.err = std::current_exception();
-          }
-          std::lock_guard<std::mutex> lk(ah.mu);
-          ah.done = true;
-          ah.cv.notify_all();
-        });
-        ahead = true;
-      } catch (const std::system_error&) {  // no thread to be had: parsed here
-      }
+    for (; more; more = rd.next(zeros, nal)) {
+      NalItem it;
+      it.zeros = zeros;
+      it.nal.swap(nal);
+      fill(it);
+      if (!use(it)) return fail_out(fo, out_name);
     }
-    if (ahead) {
-      for (;;) {
-        std::unique_ptr<NalItem> it;
-        {
-          std::unique_lock<std::mutex> lk(ah.mu);
-          ah.cv.wait(lk, [&] { return !ah.q.empty() || ah.done; });
-          if (ah.q.empty()) break;
-          it = std::move(ah.q.front());
-          ah.q.pop_front();
-        }
-        ah.cv.notify_all();
-        if (!use(*it)) return fail_out(fo, out_name);
-      }
-      ah.th.join();
-      if (ah.err) std::rethrow_exception(ah.err);
-    }
-#endif
-    if (!ahead)
-      for (; more; more = rd.next(zeros, nal)) {
-        NalItem it;
-        it.zeros = zeros;
-        it.nal.swap(nal);
-        fill(it);
-        if (!use(it)) return fail_out(fo, out_name);
-      }
     in_bytes += in_nals;
     if (rd.error()) {
       fprintf(stderr, "h264p: read error\n");
@@ -1122,12 +1024,6 @@ int compress(const char* in_name, const char* out_name, const Options& opt) {
     crc.zeros(rd.eof_zeros());
     in_bytes += rd.eof_zeros();
     m.nal(F_CRC, 0, crc.value() ^ kCrcXor);
-#ifndef H264P_NO_THREADS
-    if (dq) {
-      dq->finish();
-      m.defer(nullptr);
-    }
-#endif
     rc.rc_Quit();
     flush();
   } catch (const std::exception& e) {  // CmError, or no memory for the model
