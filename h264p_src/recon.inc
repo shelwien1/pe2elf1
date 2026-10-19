@@ -2109,6 +2109,177 @@ struct Recon {
     }
   }
 
+#ifdef H264P_AVX2
+  // filter() of the 16 lines of a luma edge at once: x[0-7] their samples
+  // p3, p2, p1, p0, q0, q1, q2, q3 (line i in byte i), b[k] the bS of the
+  // lines 4k-4k+3 (0 none), ia and ib the indexes of alpha and beta
+  static void filter_lines16(__m128i* x, const int* b, int ia, int ib) {
+    const int alpha = kAlpha[ia], beta = kBeta[ib];
+    auto w = [](__m128i v) { return _mm256_cvtepu8_epi16(v); };
+    auto n = [](__m256i v) { return _mm_packus_epi16(_mm256_castsi256_si128(v), _mm256_extracti128_si256(v, 1)); };
+    auto tc0 = [&](int k) { return b[k] >= 1 && b[k] <= 3 ? kTc0[ia][b[k] - 1] : 0; };
+    const __m256i P3 = w(x[0]), P2 = w(x[1]), P1 = w(x[2]), P0 = w(x[3]), Q0 = w(x[4]), Q1 = w(x[5]), Q2 = w(x[6]), Q3 = w(x[7]);
+    const __m256i bS = _mm256_setr_epi16(b[0], b[0], b[0], b[0], b[1], b[1], b[1], b[1], b[2], b[2], b[2], b[2], b[3], b[3], b[3], b[3]);
+    const int t0 = tc0(0), t1 = tc0(1), t2 = tc0(2), t3 = tc0(3);
+    const __m256i tc0v = _mm256_setr_epi16(t0, t0, t0, t0, t1, t1, t1, t1, t2, t2, t2, t2, t3, t3, t3, t3);
+    const __m256i av = _mm256_set1_epi16((short)alpha), bv = _mm256_set1_epi16((short)beta), z = _mm256_setzero_si256();
+    auto lt = [](__m256i a, __m256i c) { return _mm256_cmpgt_epi16(c, a); };  // a < c
+    auto clamp = [](__m256i v, __m256i t) { return _mm256_max_epi16(_mm256_min_epi16(v, t), _mm256_sub_epi16(_mm256_setzero_si256(), t)); };
+    const __m256i d0 = _mm256_abs_epi16(_mm256_sub_epi16(P0, Q0));
+    const __m256i fl = _mm256_and_si256(_mm256_and_si256(lt(d0, av), lt(_mm256_abs_epi16(_mm256_sub_epi16(P1, P0)), bv)),
+                                        _mm256_and_si256(lt(_mm256_abs_epi16(_mm256_sub_epi16(Q1, Q0)), bv), _mm256_cmpgt_epi16(bS, z)));
+    if (_mm256_testz_si256(fl, fl)) return;
+    const __m256i apl = lt(_mm256_abs_epi16(_mm256_sub_epi16(P2, P0)), bv), aql = lt(_mm256_abs_epi16(_mm256_sub_epi16(Q2, Q0)), bv);
+    const __m256i strong = _mm256_and_si256(fl, _mm256_cmpeq_epi16(bS, _mm256_set1_epi16(4))), normal = _mm256_andnot_si256(strong, fl);
+    // bS < 4
+    const __m256i tc = _mm256_sub_epi16(_mm256_sub_epi16(tc0v, apl), aql);
+    const __m256i delta = clamp(_mm256_srai_epi16(_mm256_add_epi16(_mm256_add_epi16(_mm256_slli_epi16(_mm256_sub_epi16(Q0, P0), 2),
+                                                                                    _mm256_sub_epi16(P1, Q1)),
+                                                                   _mm256_set1_epi16(4)),
+                                                  3),
+                                tc);
+    const __m256i avg = _mm256_srli_epi16(_mm256_add_epi16(_mm256_add_epi16(P0, Q0), _mm256_set1_epi16(1)), 1);
+    const __m256i np1 = _mm256_add_epi16(P1, clamp(_mm256_srai_epi16(_mm256_sub_epi16(_mm256_add_epi16(P2, avg), _mm256_slli_epi16(P1, 1)), 1), tc0v));
+    const __m256i nq1 = _mm256_add_epi16(Q1, clamp(_mm256_srai_epi16(_mm256_sub_epi16(_mm256_add_epi16(Q2, avg), _mm256_slli_epi16(Q1, 1)), 1), tc0v));
+    // bS 4
+    const __m256i sm = lt(d0, _mm256_set1_epi16((short)((alpha >> 2) + 2)));
+    const __m256i sp = _mm256_and_si256(apl, sm), sq = _mm256_and_si256(aql, sm);
+    const __m256i c2 = _mm256_set1_epi16(2), c4 = _mm256_set1_epi16(4);
+    const __m256i p0q0 = _mm256_add_epi16(P0, Q0);
+    // (p2 + 2p1 + 2p0 + 2q0 + q1 + 4) >> 3, (p2 + p1 + p0 + q0 + 2) >> 2, (2p3 + 3p2 + p1 + p0 + q0 + 4) >> 3, else (2p1 + p0 + q1 + 2) >> 2
+    const __m256i sp0 = _mm256_blendv_epi8(
+        _mm256_srli_epi16(_mm256_add_epi16(_mm256_add_epi16(_mm256_slli_epi16(P1, 1), P0), _mm256_add_epi16(Q1, c2)), 2),
+        _mm256_srli_epi16(_mm256_add_epi16(_mm256_add_epi16(P2, _mm256_slli_epi16(_mm256_add_epi16(P1, p0q0), 1)), _mm256_add_epi16(Q1, c4)), 3), sp);
+    const __m256i sp1 = _mm256_srli_epi16(_mm256_add_epi16(_mm256_add_epi16(P2, P1), _mm256_add_epi16(p0q0, c2)), 2);
+    const __m256i sp2 = _mm256_srli_epi16(
+        _mm256_add_epi16(_mm256_add_epi16(_mm256_slli_epi16(_mm256_add_epi16(P3, P2), 1), _mm256_add_epi16(P2, P1)), _mm256_add_epi16(p0q0, c4)), 3);
+    const __m256i sq0 = _mm256_blendv_epi8(
+        _mm256_srli_epi16(_mm256_add_epi16(_mm256_add_epi16(_mm256_slli_epi16(Q1, 1), Q0), _mm256_add_epi16(P1, c2)), 2),
+        _mm256_srli_epi16(_mm256_add_epi16(_mm256_add_epi16(Q2, _mm256_slli_epi16(_mm256_add_epi16(Q1, p0q0), 1)), _mm256_add_epi16(P1, c4)), 3), sq);
+    const __m256i sq1 = _mm256_srli_epi16(_mm256_add_epi16(_mm256_add_epi16(Q2, Q1), _mm256_add_epi16(p0q0, c2)), 2);
+    const __m256i sq2 = _mm256_srli_epi16(
+        _mm256_add_epi16(_mm256_add_epi16(_mm256_slli_epi16(_mm256_add_epi16(Q3, Q2), 1), _mm256_add_epi16(Q2, Q1)), _mm256_add_epi16(p0q0, c4)), 3);
+    // each line its filter's samples
+    auto pick = [](__m256i v, __m256i m, __m256i f) { return _mm256_blendv_epi8(v, f, m); };
+    __m256i rp0 = pick(pick(P0, normal, _mm256_add_epi16(P0, delta)), strong, sp0);
+    __m256i rq0 = pick(pick(Q0, normal, _mm256_sub_epi16(Q0, delta)), strong, sq0);
+    __m256i rp1 = pick(pick(P1, _mm256_and_si256(normal, apl), np1), _mm256_and_si256(strong, sp), sp1);
+    __m256i rq1 = pick(pick(Q1, _mm256_and_si256(normal, aql), nq1), _mm256_and_si256(strong, sq), sq1);
+    __m256i rp2 = pick(P2, _mm256_and_si256(strong, sp), sp2), rq2 = pick(Q2, _mm256_and_si256(strong, sq), sq2);
+    x[1] = n(rp2), x[2] = n(rp1), x[3] = n(rp0), x[4] = n(rq0), x[5] = n(rq1), x[6] = n(rq2);
+  }
+  // the luma edge at p (as filter(): s across, t along), its 16 lines in
+  // segments of bS b[k]
+  static void filter16(uint8_t* p, int s, int t, const int* b, int qpa, int aoff, int boff) {
+    int ia = clip3(0, 51, qpa + aoff), ib = clip3(0, 51, qpa + boff);
+    if (!kAlpha[ia] || !kBeta[ib]) return;
+    __m128i x[8];
+    if (t == 1) {
+      // across rows: a row of the picture is a sample of each line
+      for (int i = 0; i < 8; i++) x[i] = _mm_loadu_si128((const __m128i*)(p + (i - 4) * s));
+      filter_lines16(x, b, ia, ib);
+      for (int i = 1; i < 7; i++) _mm_storeu_si128((__m128i*)(p + (i - 4) * s), x[i]);
+      return;
+    }
+    // across columns: the 16 rows of 8 samples transposed, and back
+    __m128i r[16], u[8], v[8];
+    for (int j = 0; j < 16; j++) r[j] = _mm_loadl_epi64((const __m128i*)(p - 4 + j * t));
+    for (int k = 0; k < 8; k++) u[k] = _mm_unpacklo_epi8(r[2 * k], r[2 * k + 1]);
+    for (int k = 0; k < 4; k++) v[k] = _mm_unpacklo_epi16(u[2 * k], u[2 * k + 1]), v[4 + k] = _mm_unpackhi_epi16(u[2 * k], u[2 * k + 1]);
+    // (v[h * 4 + g]: columns 4h-4h+3 of rows 4g-4g+3)
+    for (int h = 0; h < 2; h++) {
+      __m128i a = _mm_unpacklo_epi32(v[4 * h], v[4 * h + 1]), c = _mm_unpackhi_epi32(v[4 * h], v[4 * h + 1]);
+      __m128i d = _mm_unpacklo_epi32(v[4 * h + 2], v[4 * h + 3]), e = _mm_unpackhi_epi32(v[4 * h + 2], v[4 * h + 3]);
+      x[4 * h] = _mm_unpacklo_epi64(a, d), x[4 * h + 1] = _mm_unpackhi_epi64(a, d);
+      x[4 * h + 2] = _mm_unpacklo_epi64(c, e), x[4 * h + 3] = _mm_unpackhi_epi64(c, e);
+    }
+    filter_lines16(x, b, ia, ib);
+    for (int k = 0; k < 4; k++) u[k] = _mm_unpacklo_epi8(x[2 * k], x[2 * k + 1]), u[4 + k] = _mm_unpackhi_epi8(x[2 * k], x[2 * k + 1]);
+    // (u[k]: rows 0-7 of columns 2k, 2k + 1; u[4 + k] rows 8-15)
+    for (int h = 0; h < 2; h++) {
+      __m128i a = _mm_unpacklo_epi16(u[4 * h], u[4 * h + 1]), c = _mm_unpackhi_epi16(u[4 * h], u[4 * h + 1]);
+      __m128i d = _mm_unpacklo_epi16(u[4 * h + 2], u[4 * h + 3]), e = _mm_unpackhi_epi16(u[4 * h + 2], u[4 * h + 3]);
+      // (a: rows 8h-8h+3 of columns 0-3, d: of 4-7; c, e: rows 8h+4-8h+7)
+      __m128i r01 = _mm_unpacklo_epi32(a, d), r23 = _mm_unpackhi_epi32(a, d), r45 = _mm_unpacklo_epi32(c, e), r67 = _mm_unpackhi_epi32(c, e);
+      uint8_t* q = p - 4 + 8 * h * t;
+      _mm_storel_epi64((__m128i*)q, r01), _mm_storel_epi64((__m128i*)(q + t), _mm_unpackhi_epi64(r01, r01));
+      _mm_storel_epi64((__m128i*)(q + 2 * t), r23), _mm_storel_epi64((__m128i*)(q + 3 * t), _mm_unpackhi_epi64(r23, r23));
+      _mm_storel_epi64((__m128i*)(q + 4 * t), r45), _mm_storel_epi64((__m128i*)(q + 5 * t), _mm_unpackhi_epi64(r45, r45));
+      _mm_storel_epi64((__m128i*)(q + 6 * t), r67), _mm_storel_epi64((__m128i*)(q + 7 * t), _mm_unpackhi_epi64(r67, r67));
+    }
+  }
+  // filter() of a chroma edge of both planes at once (8 lines each): pu, pv
+  // at q0 of their first line (s across, t along), b[k] the bS of lines
+  // 2k, 2k + 1, qa[c] the plane's qPav
+  static void filter_c16(uint8_t* pu, uint8_t* pv, int s, int t, const int* b, const int* qa, int aoff, int boff) {
+    int ia[2], ib[2];
+    for (int c = 0; c < 2; c++) ia[c] = clip3(0, 51, qa[c] + aoff), ib[c] = clip3(0, 51, qa[c] + boff);
+    if ((!kAlpha[ia[0]] || !kBeta[ib[0]]) && (!kAlpha[ia[1]] || !kBeta[ib[1]])) return;
+    // x[0-3]: p1, p0, q0, q1 of the lines, those of U in bytes 0-7, of V in 8-15
+    __m128i x[4], r[16];
+    if (t == 1) {
+      for (int i = 0; i < 4; i++)
+        x[i] = _mm_unpacklo_epi64(_mm_loadl_epi64((const __m128i*)(pu + (i - 2) * s)), _mm_loadl_epi64((const __m128i*)(pv + (i - 2) * s)));
+    } else {
+      for (int j = 0; j < 16; j++) {
+        int32_t u;
+        memcpy(&u, (j < 8 ? pu : pv) - 2 + (j & 7) * t, 4);
+        r[j] = _mm_cvtsi32_si128(u);
+      }
+      __m128i a[8], g[4];
+      for (int k = 0; k < 8; k++) a[k] = _mm_unpacklo_epi8(r[2 * k], r[2 * k + 1]);
+      for (int k = 0; k < 4; k++) g[k] = _mm_unpacklo_epi16(a[2 * k], a[2 * k + 1]);
+      __m128i lo01 = _mm_unpacklo_epi32(g[0], g[1]), hi01 = _mm_unpackhi_epi32(g[0], g[1]);
+      __m128i lo23 = _mm_unpacklo_epi32(g[2], g[3]), hi23 = _mm_unpackhi_epi32(g[2], g[3]);
+      x[0] = _mm_unpacklo_epi64(lo01, lo23), x[1] = _mm_unpackhi_epi64(lo01, lo23);
+      x[2] = _mm_unpacklo_epi64(hi01, hi23), x[3] = _mm_unpackhi_epi64(hi01, hi23);
+    }
+    auto w = [](__m128i v) { return _mm256_cvtepu8_epi16(v); };
+    auto n = [](__m256i v) { return _mm_packus_epi16(_mm256_castsi256_si128(v), _mm256_extracti128_si256(v, 1)); };
+    const __m256i P1 = w(x[0]), P0 = w(x[1]), Q0 = w(x[2]), Q1 = w(x[3]);
+    short bl[16], al[16], be[16], tl[16];
+    for (int i = 0; i < 16; i++) {
+      int c = i >> 3, k = (i & 7) >> 1;
+      bl[i] = (short)b[k];
+      al[i] = kAlpha[ia[c]], be[i] = kBeta[ib[c]];
+      tl[i] = (short)(b[k] >= 1 && b[k] <= 3 ? kTc0[ia[c]][b[k] - 1] + 1 : 0);
+    }
+    const __m256i bS = _mm256_loadu_si256((const __m256i*)bl), av = _mm256_loadu_si256((const __m256i*)al);
+    const __m256i bv = _mm256_loadu_si256((const __m256i*)be), tc = _mm256_loadu_si256((const __m256i*)tl);
+    auto lt = [](__m256i a, __m256i c) { return _mm256_cmpgt_epi16(c, a); };
+    const __m256i fl = _mm256_and_si256(
+        _mm256_and_si256(lt(_mm256_abs_epi16(_mm256_sub_epi16(P0, Q0)), av), lt(_mm256_abs_epi16(_mm256_sub_epi16(P1, P0)), bv)),
+        _mm256_and_si256(lt(_mm256_abs_epi16(_mm256_sub_epi16(Q1, Q0)), bv), _mm256_cmpgt_epi16(bS, _mm256_setzero_si256())));
+    if (_mm256_testz_si256(fl, fl)) return;
+    const __m256i strong = _mm256_and_si256(fl, _mm256_cmpeq_epi16(bS, _mm256_set1_epi16(4))), normal = _mm256_andnot_si256(strong, fl);
+    __m256i delta = _mm256_srai_epi16(_mm256_add_epi16(_mm256_add_epi16(_mm256_slli_epi16(_mm256_sub_epi16(Q0, P0), 2), _mm256_sub_epi16(P1, Q1)),
+                                                       _mm256_set1_epi16(4)),
+                                      3);
+    delta = _mm256_max_epi16(_mm256_min_epi16(delta, tc), _mm256_sub_epi16(_mm256_setzero_si256(), tc));
+    const __m256i c2 = _mm256_set1_epi16(2);
+    __m256i sp0 = _mm256_srli_epi16(_mm256_add_epi16(_mm256_add_epi16(_mm256_slli_epi16(P1, 1), P0), _mm256_add_epi16(Q1, c2)), 2);
+    __m256i sq0 = _mm256_srli_epi16(_mm256_add_epi16(_mm256_add_epi16(_mm256_slli_epi16(Q1, 1), Q0), _mm256_add_epi16(P1, c2)), 2);
+    __m256i rp0 = _mm256_blendv_epi8(_mm256_blendv_epi8(P0, _mm256_add_epi16(P0, delta), normal), sp0, strong);
+    __m256i rq0 = _mm256_blendv_epi8(_mm256_blendv_epi8(Q0, _mm256_sub_epi16(Q0, delta), normal), sq0, strong);
+    x[1] = n(rp0), x[2] = n(rq0);
+    if (t == 1) {
+      for (int i = 1; i < 3; i++) {
+        _mm_storel_epi64((__m128i*)(pu + (i - 2) * s), x[i]);
+        _mm_storel_epi64((__m128i*)(pv + (i - 2) * s), _mm_unpackhi_epi64(x[i], x[i]));
+      }
+      return;
+    }
+    __m128i a = _mm_unpacklo_epi8(x[0], x[1]), c = _mm_unpackhi_epi8(x[0], x[1]);
+    __m128i d = _mm_unpacklo_epi8(x[2], x[3]), e = _mm_unpackhi_epi8(x[2], x[3]);
+    // (rows 0-3, 4-7 of U and of V, 4 samples each)
+    uint8_t rows[64];
+    _mm_storeu_si128((__m128i*)rows, _mm_unpacklo_epi16(a, d));
+    _mm_storeu_si128((__m128i*)(rows + 16), _mm_unpackhi_epi16(a, d));
+    _mm_storeu_si128((__m128i*)(rows + 32), _mm_unpacklo_epi16(c, e));
+    _mm_storeu_si128((__m128i*)(rows + 48), _mm_unpackhi_epi16(c, e));
+    for (int j = 0; j < 16; j++) memcpy((j < 8 ? pu : pv) - 2 + (j & 7) * t, rows + 4 * j, 4);
+  }
+#endif
   // --- deblocking (8.7) of the current picture
   int bs(int pa, int pb, int bp, int bq, bool mb_edge) const {
     const DbMb& P = db[pa];
@@ -2219,11 +2390,26 @@ struct Recon {
           const DbMb& P = db[pa];
           int qpp = P.pcm ? 0 : P.qp, qpq = Q.pcm ? 0 : Q.qp;
           uint8_t* Yq = cur->y.data() + (my * 16 + (dir ? e * 4 : 0)) * w + mx * 16 + (dir ? 0 : e * 4);
+#ifdef H264P_AVX2
+          filter16(Yq, dir ? w : 1, dir ? 1 : w, b, (qpp + qpq + 1) >> 1, Q.alpha_off, Q.beta_off);
+#else
           for (int k = 0; k < 4; k++)
             if (b[k])
               filter(Yq + (dir ? k * 4 : k * 4 * w), dir ? w : 1, dir ? 1 : w, 4, b[k], (qpp + qpq + 1) >> 1,
                      Q.alpha_off, Q.beta_off, false);
+#endif
           if (e & 1) continue;  // chroma edges at luma edges 0 and 8
+#ifdef H264P_AVX2
+          {
+            int qa[2];
+            uint8_t* Cq[2];
+            for (int c = 0; c < 2; c++) {
+              qa[c] = (chroma_qp(qpp, Q.cqp[c]) + chroma_qp(qpq, Q.cqp[c]) + 1) >> 1;
+              Cq[c] = (c ? cur->v.data() : cur->u.data()) + (my * 8 + (dir ? e * 2 : 0)) * cw + mx * 8 + (dir ? 0 : e * 2);
+            }
+            filter_c16(Cq[0], Cq[1], dir ? cw : 1, dir ? 1 : cw, b, qa, Q.alpha_off, Q.beta_off);
+          }
+#else
           for (int c = 0; c < 2; c++) {
             int cp = chroma_qp(qpp, Q.cqp[c]), cq = chroma_qp(qpq, Q.cqp[c]);
             uint8_t* Cq = (c ? cur->v.data() : cur->u.data()) + (my * 8 + (dir ? e * 2 : 0)) * cw + mx * 8 + (dir ? 0 : e * 2);
@@ -2232,6 +2418,7 @@ struct Recon {
                 filter(Cq + (dir ? k * 2 : k * 2 * cw), dir ? cw : 1, dir ? 1 : cw, 2, b[k], (cp + cq + 1) >> 1,
                        Q.alpha_off, Q.beta_off, true);
           }
+#endif
         }
       }
     }
