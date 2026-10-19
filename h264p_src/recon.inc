@@ -132,16 +132,37 @@ static int sad_bil(const uint8_t* q, int qs, const uint8_t* a, int as, int n, in
 static INLINE __m256i ld16x2(const uint8_t* p0, const uint8_t* p1) {
   return _mm256_inserti128_si256(_mm256_castsi128_si256(_mm_loadu_si128((const __m128i*)p0)), _mm_loadu_si128((const __m128i*)p1), 1);
 }
+// two rows of n (8 or 4) samples (p0, p1): of 8 in the two halves, of 4 in
+// the low two quarters
+static INLINE __m128i ld8x2(const uint8_t* p0, const uint8_t* p1, int n) {
+  if (n == 8) return _mm_unpacklo_epi64(_mm_loadl_epi64((const __m128i*)p0), _mm_loadl_epi64((const __m128i*)p1));
+  int32_t u0, u1;
+  memcpy(&u0, p0, 4);
+  memcpy(&u1, p1, 4);
+  return _mm_unpacklo_epi32(_mm_cvtsi32_si128(u0), _mm_cvtsi32_si128(u1));
+}
 // the sum of the four sums of _mm256_sad_epu8
 static INLINE int sad_sum(__m256i v) {
   __m128i t = _mm_add_epi64(_mm256_castsi256_si128(v), _mm256_extracti128_si256(v, 1));
   return _mm_cvtsi128_si32(_mm_add_epi64(t, _mm_unpackhi_epi64(t, t)));
 }
+// the weights of the bilinear prediction at (fx, fy), by fx + 4 fy, as
+// byte pairs for pmaddubsw: of the two samples above (ab) and below (cd)
+struct BilW {
+  __m256i ab[16], cd[16];
+  BilW() {
+    for (int f = 0; f < 16; f++) {
+      int fx = f & 3, fy = f >> 2;
+      ab[f] = _mm256_set1_epi16((short)((4 - fx) * (4 - fy) | fx * (4 - fy) << 8));
+      cd[f] = _mm256_set1_epi16((short)((4 - fx) * fy | fx * fy << 8));
+    }
+  }
+};
+static const BilW kBilW;
 // two rows of 16 samples from a (stride as) predicted bilinearly at (fx,
 // fy), as sad_bil's, without a branch on the position
 static INLINE __m256i bil16x2(const uint8_t* a, int as, int fx, int fy) {
-  const int wa = (4 - fx) * (4 - fy), wb = fx * (4 - fy), wc = (4 - fx) * fy, wd = fx * fy;
-  const __m256i wab = _mm256_set1_epi16((short)(wa | wb << 8)), wcd = _mm256_set1_epi16((short)(wc | wd << 8));
+  const __m256i wab = kBilW.ab[fx + 4 * fy], wcd = kBilW.cd[fx + 4 * fy];
   const __m256i r8 = _mm256_set1_epi16(8);
   __m256i x0 = ld16x2(a, a + as), x1 = ld16x2(a + 1, a + as + 1), y0 = ld16x2(a + as, a + 2 * as), y1 = ld16x2(a + as + 1, a + 2 * as + 1);
   __m256i lo = _mm256_add_epi16(_mm256_maddubs_epi16(_mm256_unpacklo_epi8(x0, x1), wab),
@@ -151,31 +172,44 @@ static INLINE __m256i bil16x2(const uint8_t* a, int as, int fx, int fy) {
   return _mm256_packus_epi16(_mm256_srli_epi16(_mm256_add_epi16(lo, r8), 4), _mm256_srli_epi16(_mm256_add_epi16(hi, r8), 4));
 }
 #endif
-// sad_bil of two rows of n (16, 8 or 4) samples, whole, and without a
-// branch on the position (fx, fy): for the thin templates, whose vectors
-// change position from one to the next
-static INLINE int sad_bil2(const uint8_t* q, int qs, const uint8_t* a, int as, int n, int fx, int fy) {
+// A thin template: two rows of n (16, 8 or 4) samples at q (stride qs; none
+// if null), loaded once for the many places of a search that sad_bil2
+// matches it against
+struct Tpl2 {
 #ifdef H264P_AVX2
-  if (n == 16) return sad_sum(_mm256_sad_epu8(bil16x2(a, as, fx, fy), ld16x2(q, q + qs)));
-  const int wa = (4 - fx) * (4 - fy), wb = fx * (4 - fy), wc = (4 - fx) * fy, wd = fx * fy;
-  auto ld = [n](const uint8_t* p0, const uint8_t* p1) {
-    if (n == 8) return _mm_unpacklo_epi64(_mm_loadl_epi64((const __m128i*)p0), _mm_loadl_epi64((const __m128i*)p1));
-    int32_t u0, u1;
-    memcpy(&u0, p0, 4);
-    memcpy(&u1, p1, 4);
-    return _mm_unpacklo_epi32(_mm_cvtsi32_si128(u0), _mm_cvtsi32_si128(u1));
-  };
-  const __m128i wab = _mm_set1_epi16((short)(wa | wb << 8)), wcd = _mm_set1_epi16((short)(wc | wd << 8));
+  __m256i v;  // (as sad_bil2 predicts the rows: of 16 in the two halves, else ld8x2's)
+#else
+  const uint8_t* q;
+  int qs;
+#endif
+  int n;
+  Tpl2(const uint8_t* q_, int qs_, int n_) : n(n_) {
+#ifdef H264P_AVX2
+    v = !q_ ? _mm256_setzero_si256() : n == 16 ? ld16x2(q_, q_ + qs_) : _mm256_castsi128_si256(ld8x2(q_, q_ + qs_, n));
+#else
+    q = q_, qs = qs_;
+#endif
+  }
+};
+// sad_bil of a thin template against two rows of t.n samples at a, whole,
+// and without a branch on the position (fx, fy): the vectors of a search
+// change position from one to the next
+static INLINE int sad_bil2(const Tpl2& t, const uint8_t* a, int as, int fx, int fy) {
+#ifdef H264P_AVX2
+  if (t.n == 16) return sad_sum(_mm256_sad_epu8(bil16x2(a, as, fx, fy), t.v));
+  const int n = t.n;
+  const __m128i wab = _mm256_castsi256_si128(kBilW.ab[fx + 4 * fy]), wcd = _mm256_castsi256_si128(kBilW.cd[fx + 4 * fy]);
   const __m128i r8 = _mm_set1_epi16(8);
-  __m128i x0 = ld(a, a + as), x1 = ld(a + 1, a + as + 1), y0 = ld(a + as, a + 2 * as), y1 = ld(a + as + 1, a + 2 * as + 1);
+  __m128i x0 = ld8x2(a, a + as, n), x1 = ld8x2(a + 1, a + as + 1, n), y0 = ld8x2(a + as, a + 2 * as, n),
+          y1 = ld8x2(a + as + 1, a + 2 * as + 1, n);
   __m128i lo = _mm_add_epi16(_mm_maddubs_epi16(_mm_unpacklo_epi8(x0, x1), wab), _mm_maddubs_epi16(_mm_unpacklo_epi8(y0, y1), wcd));
   __m128i hi = _mm_add_epi16(_mm_maddubs_epi16(_mm_unpackhi_epi8(x0, x1), wab), _mm_maddubs_epi16(_mm_unpackhi_epi8(y0, y1), wcd));
   __m128i d = _mm_packus_epi16(_mm_srli_epi16(_mm_add_epi16(lo, r8), 4), _mm_srli_epi16(_mm_add_epi16(hi, r8), 4));
   // (n 4: the upper half is of the zeros beyond both rows, the same in both)
-  __m128i v = _mm_sad_epu8(d, ld(q, q + qs));
+  __m128i v = _mm_sad_epu8(d, _mm256_castsi256_si128(t.v));
   return _mm_cvtsi128_si32(_mm_add_epi64(v, _mm_unpackhi_epi64(v, v)));
 #else
-  return sad_bil(q, qs, a, as, n, 2, fx, fy, INT_MAX);
+  return sad_bil(t.q, t.qs, a, as, t.n, 2, fx, fy, INT_MAX);
 #endif
 }
 
@@ -2577,6 +2611,56 @@ struct Recon {
   };
   mutable TmMemo tmm[1024] = {};
   uint32_t tmm_gen = 1;
+  // tm_search's walk from mv (where it leaves the best): the candidates
+  // (alt: the best of them but the best, of the start too; INT_MIN none),
+  // a small diamond in whole samples while it finds better (up to 4 steps),
+  // then the 8 halves and quarters around. By cost(vx, vy, bound): a
+  // vector's cost, or something not below bound once it is not. The best's
+  // cost.
+  template <class F>
+  static INLINE int tm_walk(const F& cost, int* mv, bool only_y, const int (*cand)[2], int ncand, int finest, int* alt) {
+    int vx = mv[0], vy = mv[1], best = cost(vx, vy, INT_MAX);
+    int ax = INT_MIN, ay = 0, abest = INT_MAX;
+    for (int k = 0; k < ncand; k++) {
+      // (a vector seen already changes nothing)
+      int j = -1;
+      while (++j < k && (cand[j][0] != cand[k][0] || cand[j][1] != cand[k][1])) {
+      }
+      if (j < k || (cand[k][0] == mv[0] && cand[k][1] == mv[1])) continue;
+      int c = cost(cand[k][0], cand[k][1], alt ? INT_MAX : best);
+      if (c < best) {
+        if (best < abest) abest = best, ax = vx, ay = vy;
+        best = c, vx = cand[k][0], vy = cand[k][1];
+      } else if (c < abest) {
+        abest = c, ax = cand[k][0], ay = cand[k][1];
+      }
+    }
+    if (alt) alt[0] = ax, alt[1] = ay;
+    // (back: the step back to where the last came from, known worse)
+    static const int kD[4][2] = {{0, -1}, {-1, 0}, {1, 0}, {0, 1}};
+    for (int it = 0, back = -1; it < 4 && best; it++) {
+      int cx = vx, cy = vy, to = -1;
+      for (int k = 0; k < 4; k++) {
+        if ((only_y && kD[k][0]) || k == back) continue;
+        int c = cost(cx + kD[k][0] * 4, cy + kD[k][1] * 4, best);
+        if (c < best) best = c, vx = cx + kD[k][0] * 4, vy = cy + kD[k][1] * 4, to = k;
+      }
+      if (to < 0) break;
+      back = 3 - to;
+    }
+    for (int step = 2; step >= finest && best; step >>= 1) {
+      int cx = vx, cy = vy;
+      for (int dy = -1; dy <= 1; dy++)
+        for (int dx = -1; dx <= 1; dx++) {
+          if ((!dx && !dy) || (only_y && dx)) continue;
+          int c = cost(cx + dx * step, cy + dy * step, best);
+          if (c < best) best = c, vx = cx + dx * step, vy = cy + dy * step;
+        }
+    }
+    mv[0] = vx;
+    mv[1] = vy;
+    return best;
+  }
   bool tm_search(int l, int r, int bx, int by, int bw, int bh, int* mv, bool only_y, const int (*cand)[2] = nullptr,
                  int ncand = 0, int* miss = nullptr, int lambda = 0, int finest = 1, int inner = 0,
                  int* alt = nullptr) const {
@@ -2620,7 +2704,7 @@ struct Recon {
     bool tr = l < 0 && top && x0 + bw + T <= w && mb_addr % mbw + 1 < mbw && db[mb_addr - mbw + 1].slice >= 0;
     // a thin left template against the transposed reference: two rows of
     // bh (and the template transposed, qt)
-    int pt;
+    int pt = 0;
     const uint8_t* RT = left && T == 2 ? ref->luma_t(pt) : nullptr;
     uint8_t qt[2 * 16];
     if (RT)
@@ -2657,20 +2741,9 @@ struct Recon {
       return s;
     };
     const bool memo = l < 0 && bx == 0 && by == 0 && bw == 16 && bh == 16;
-    // thin templates (but no inner one) inside the margins: whole, both
-    // parts at once
-    const bool thin = T == 2 && !ninner && (!left || RT);
     // the cost of a vector, or something not below bound once it is not
-    auto cost = [&](int vx, int vy, int bound = INT_MAX) {
+    auto cost = [&](int vx, int vy, int bound) {
       int c = lambda * (abs(vx - px) + abs(vy - py));
-      if (thin) {
-        int ix = x0 + (vx >> 2), iy = y0 + (vy >> 2);
-        if (ix - 2 >= -pm && iy - 2 >= -pm && ix + bw < W + pm && iy + bh < H + pm) {
-          if (top) c += sad_bil2(Y + (y0 - 2) * w + x0, w, RP + (iy - 2) * ps + ix, ps, bw, vx & 3, vy & 3);
-          if (left) c += sad_bil2(qt, 16, RT + (ix - 2) * pt + iy, pt, bh, vy & 3, vx & 3);
-          return c;
-        }
-      }
       if (memo) {
         TmMemo& e = tmm[((unsigned)vx & 31) | ((unsigned)vy & 31) << 5];
         if (e.gen != tmm_gen || e.vx != vx || e.vy != vy) e = {tmm_gen, vx, vy, -1, 0, 0, 0};
@@ -2714,44 +2787,27 @@ struct Recon {
       if (ninner && c < bound) c += inner_sad(vx, vy, bound - c);
       return c;
     };
-    int vx = mv[0], vy = mv[1], best = cost(vx, vy);
-    // other places to start from (alt: the best of them but the best, of
-    // the start too; INT_MIN none)
-    int ax = INT_MIN, ay = 0, abest = INT_MAX;
-    for (int k = 0; k < ncand; k++) {
-      if (cand[k][0] == vx && cand[k][1] == vy) continue;
-      int c = cost(cand[k][0], cand[k][1], alt ? INT_MAX : best);
-      if (c < best) {
-        if (best < abest) abest = best, ax = vx, ay = vy;
-        best = c, vx = cand[k][0], vy = cand[k][1];
-      } else if (c < abest && (cand[k][0] != vx || cand[k][1] != vy)) {
-        abest = c, ax = cand[k][0], ay = cand[k][1];
-      }
+    int best;
+    if (T == 2 && !ninner && (!left || RT)) {
+      // thin templates (but no inner one): inside the margins whole, both
+      // parts at once (there the vectors' whole samples in [xl, xh) x [yl,
+      // yh); ot, ol: where the top template is in RP and the left in RT at
+      // the vector 0)
+      const int xl = 2 - pm - x0, xh = W + pm - bw - x0, yl = 2 - pm - y0, yh = H + pm - bh - y0;
+      const int ot = (y0 - 2) * ps + x0, ol = (x0 - 2) * pt + y0;
+      const Tpl2 qa(top ? Y + (y0 - 2) * w + x0 : nullptr, w, bw), ql(left ? qt : nullptr, 16, bh);
+      auto thin = [=, &cost](int vx, int vy, int bound) {
+        int ix = vx >> 2, iy = vy >> 2;
+        if (ix < xl || ix >= xh || iy < yl || iy >= yh) return cost(vx, vy, bound);
+        int c = lambda * (abs(vx - px) + abs(vy - py));
+        if (top) c += sad_bil2(qa, RP + (ot + iy * ps + ix), ps, vx & 3, vy & 3);
+        if (left) c += sad_bil2(ql, RT + (ol + ix * pt + iy), pt, vy & 3, vx & 3);
+        return c;
+      };
+      best = tm_walk(thin, mv, only_y, cand, ncand, finest, alt);
+    } else {
+      best = tm_walk(cost, mv, only_y, cand, ncand, finest, alt);
     }
-    if (alt) alt[0] = ax, alt[1] = ay;
-    // a small diamond in whole samples while it finds better (up to 4
-    // steps), then the 8 halves and quarters around
-    static const int kD[4][2] = {{0, -1}, {-1, 0}, {1, 0}, {0, 1}};
-    for (int it = 0; it < 4 && best; it++) {
-      int cx = vx, cy = vy;
-      for (int k = 0; k < 4; k++) {
-        if (only_y && kD[k][0]) continue;
-        int c = cost(cx + kD[k][0] * 4, cy + kD[k][1] * 4, best);
-        if (c < best) best = c, vx = cx + kD[k][0] * 4, vy = cy + kD[k][1] * 4;
-      }
-      if (vx == cx && vy == cy) break;
-    }
-    for (int step = 2; step >= finest && best; step >>= 1) {
-      int cx = vx, cy = vy;
-      for (int dy = -1; dy <= 1; dy++)
-        for (int dx = -1; dx <= 1; dx++) {
-          if ((!dx && !dy) || (only_y && dx)) continue;
-          int c = cost(cx + dx * step, cy + dy * step, best);
-          if (c < best) best = c, vx = cx + dx * step, vy = cy + dy * step;
-        }
-    }
-    mv[0] = vx;
-    mv[1] = vy;
     if (miss) *miss = best * 4 / ((top ? T * bw : 0) + (left ? T * bh : 0) + (tr ? T * T : 0) + ninner);
     return true;
   }
