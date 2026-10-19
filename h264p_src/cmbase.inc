@@ -26,12 +26,14 @@
 #define LIKELY(x) __builtin_expect(!!(x), 1)
 #define UNLIKELY(x) __builtin_expect(!!(x), 0)
 #define CM_PREFETCH(p) __builtin_prefetch(p)
+#define CM_PREFETCHW(p) __builtin_prefetch(p, 1)
 #else
 #define INLINE inline
 #define NOINLINE
 #define LIKELY(x) (x)
 #define UNLIKELY(x) (x)
 #define CM_PREFETCH(p)
+#define CM_PREFETCHW(p)
 #endif
 
 #ifndef __min

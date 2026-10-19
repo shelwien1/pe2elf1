@@ -542,6 +542,10 @@ The steps, in order (the gains on the streams named, paired runs):
   (511 bytes for under 0.7% of the instructions), the proxy's searches
   inside the macroblock in halves (662), `ref()` on two references (469),
   `tm_best` on its candidates alone (375, 0.11% on 03).
+- **What a macroblock's end writes, prefetched at its start** (its
+  deblocking record, which the finishing thread made none again, and its
+  place in the picture's vectors and references): the stores missed. The
+  decoding thread's CPU time: 1% less on 00, 3% on 03.
 
 What did not pay:
 
@@ -562,6 +566,15 @@ What did not pay:
   or only the next node's APM and mixer rows: no change measured.
 - The coder's decision out of line, one copy instead of 35 (a third of the
   binary): no change measured.
+- Prefetching the next macroblock's histories (its colocated records):
+  no change; the stall moved to the reference prefetches beside them (the
+  fill buffers were full).
+- Huge pages again: twice the memory (the tables backed whole) and stalls
+  on the faults while other processes ran.
+- The bilinear SAD of 16-wide rows reusing each row's interpolation for
+  the row below: more instructions, since most calls stop after two rows.
+- The model's per-macroblock records in a window of a few rows (to stay
+  in L2) instead of the whole picture: no change measured.
 
 Where the time goes now (decompressing, the decoding's thread):
 

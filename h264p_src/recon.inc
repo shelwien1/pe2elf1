@@ -1046,7 +1046,17 @@ struct Recon {
     return lst;
   }
   void mb_start(int addr) {
-    if (active) fin_mb(addr, false);
+    if (active) {
+      fin_mb(addr, false);
+      // what mb_end will write of the macroblock, on its way into the cache
+      const char* d = (const char*)&db[addr];
+      for (int k = 0; k < (int)sizeof(DbMb); k += 64) CM_PREFETCHW(d + k);
+      CM_PREFETCHW(d + sizeof(DbMb) - 1);
+      CM_PREFETCHW(&cur->mv[(size_t)addr * 64]);
+      CM_PREFETCHW(&cur->mv[(size_t)addr * 64 + 32]);
+      CM_PREFETCHW(&cur->rpid[(size_t)addr * 8]);
+      CM_PREFETCHW(&cur->rf[(size_t)addr * 8]);
+    }
     mb_addr = addr;
     lst_ok = false;
     prx_ok = false;
