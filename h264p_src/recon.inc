@@ -837,8 +837,22 @@ struct Recon {
   int pcm_s[384];
   int mb_addr = 0;
 
+  // the two columns of samples left of the current macroblock, decoded,
+  // as two rows of 16 (made at its first use in the macroblock)
+  mutable uint8_t lst[32];
+  mutable bool lst_ok = false;
+  const uint8_t* left_strip() const {
+    if (!lst_ok) {
+      int w = cur->w;
+      const uint8_t* q = cur->y.data() + mb_addr / cur->mbw * 16 * w + mb_addr % cur->mbw * 16;
+      for (int j = 0; j < 16; j++) lst[j] = q[j * w - 2], lst[16 + j] = q[j * w - 1];
+      lst_ok = true;
+    }
+    return lst;
+  }
   void mb_start(int addr) {
     mb_addr = addr;
+    lst_ok = false;
     prx_ok = false;
     res.m4 = 0;
     res.m8 = res.mdc = res.mcdc = res.mcac[0] = res.mcac[1] = 0;
@@ -2490,8 +2504,7 @@ struct Recon {
           cnt += 32;
         }
         if (left) {
-          uint8_t qt[32];
-          for (int j = 0; j < 16; j++) qt[j] = Y[(y0 + j) * w + x0 - 2], qt[16 + j] = Y[(y0 + j) * w + x0 - 1];
+          const uint8_t* qt = left_strip();
           __m256i p = _mm256_avg_epu8(bil16x2(T0 + (ax0 - 2) * pt0 + ay0, pt0, v0[1] & 3, v0[0] & 3),
                                       bil16x2(T1 + (ax1 - 2) * pt1 + ay1, pt1, v1[1] & 3, v1[0] & 3));
           sum += sad_sum(_mm256_sad_epu8(p, ld16x2(qt, qt + 16)));
@@ -2609,11 +2622,7 @@ struct Recon {
       // the decoded samples, alike
       const uint8_t* q = cur->y.data() + (my - 2) * w + mx;
       int qs = w;
-      uint8_t qt[32];
-      if (side == 1) {
-        for (int j = 0; j < 16; j++) qt[j] = q[(j + 2) * w - 2], qt[16 + j] = q[(j + 2) * w - 1];
-        q = qt, qs = 16;
-      }
+      if (side == 1) q = left_strip(), qs = 16;
 #ifdef H264P_AVX2
       {
         // the pieces as 32-bit lanes k and 4 + k: from list 0 where it is
@@ -2772,9 +2781,7 @@ struct Recon {
     // bh (and the template transposed, qt)
     int pt = 0;
     const uint8_t* RT = left && T == 2 ? ref->luma_t(pt) : nullptr;
-    uint8_t qt[2 * 16];
-    if (RT)
-      for (int j = 0; j < bh; j++) qt[j] = Y[(y0 + j) * w + x0 - 2], qt[16 + j] = Y[(y0 + j) * w + x0 - 1];
+    const uint8_t* qt = RT ? left_strip() + by : nullptr;
     auto sad_left = [&](int vx, int vy, int budget) {
       int ix = x0 - T + (vx >> 2), iy = y0 + (vy >> 2);
       if (RT && ix >= -pm && iy >= -pm && ix + T < W + pm && iy + bh < H + pm)
