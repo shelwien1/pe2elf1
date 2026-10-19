@@ -19,58 +19,54 @@ void H3_cbp_make( const H_cbp_v & D, tcx & X ) {
 
   a = 0;
   a = a*3 + ((inc>0+(1-1))+(inc>2+(1-1)));
-  a = a*4 + H3_cbp_a_pc[__min(4,__max(0,pc-(1-1)))];
-  a = a*9 + H3_cbp_a_cls[__min(8,__max(0,cls-(1-1)))];
-  a = a*10 + H3_cbp_a_st[__min(9,__max(0,st-(1-1)))];
+  a = a*5 + H3_cbp_a_pc[__min(4,__max(0,pc-(1-1)))];
+  a = a*4 + H3_cbp_a_cls[__min(8,__max(0,cls-(1-1)))];
+  a = a*4 + H3_cbp_a_st[__min(9,__max(0,st-(1-1)))];
 
   b = 0;
-  b = b*13 + H3_cbp_b_col[__min(12,__max(0,col-(1-1)))];
-  b = b*4 + H3_cbp_b_q6[__min(8,__max(0,q6-(1-1)))];
+  b = b*8 + H3_cbp_b_col[__min(12,__max(0,col-(1-1)))];
+  b = b*2 + ((q6>2+(1-1)));
 
   c = 0;
-  c = c*9 + H3_cbp_c_cls[__min(8,__max(0,cls-(1-1)))];
-  c = c*13 + H3_cbp_c_col[__min(12,__max(0,col-(1-1)))];
-  c = c*3 + ((pc>0+(1-1))+(pc>2+(1-1)));
+  c = c*3 + ((cls>2+(1-1))+(cls>5+(1-1)));
+  c = c*10 + H3_cbp_c_col[__min(12,__max(0,col-(1-1)))];
+  c = c*4 + H3_cbp_c_pc[__min(4,__max(0,pc-(1-1)))];
 
   d = 0;
   d = d*4 + H3_cbp_d_inc[__min(3,__max(0,inc-(1-1)))];
-  d = d*9 + H3_cbp_d_cls[__min(8,__max(0,cls-(1-1)))];
+  d = d*3 + ((cls>3+(1-1))+(cls>4+(1-1)));
 
   e = 0;
-  e = e*3 + ((inc>0+(1-1))+(inc>2+(1-1)));
-  e = e*9 + H3_cbp_e_cls[__min(8,__max(0,cls-(1-1)))];
+  e = e*3 + ((cls>2+(1-1))+(cls>5+(1-1)));
 
   h = 0;
-  h = h*3 + ((inc>0+(1-1))+(inc>2+(1-1)));
-  h = h*9 + H3_cbp_h_q6[__min(8,__max(0,q6-(1-1)))];
+  h = h*2 + ((inc>1+(1-1)));
+  h = h*5 + H3_cbp_h_q6[__min(8,__max(0,q6-(1-1)))];
 
   i = 0;
-  i = i*4 + H3_cbp_i_inc[__min(3,__max(0,inc-(1-1)))];
-  i = i*9 + H3_cbp_i_cls[__min(8,__max(0,cls-(1-1)))];
-  i = i*9 + H3_cbp_i_q6[__min(8,__max(0,q6-(1-1)))];
+  i = i*4 + H3_cbp_i_cls[__min(8,__max(0,cls-(1-1)))];
+  i = i*5 + H3_cbp_i_q6[__min(8,__max(0,q6-(1-1)))];
 
   j = 0;
-  j = j*4 + H3_cbp_j_inc[__min(3,__max(0,inc-(1-1)))];
-  j = j*10 + H3_cbp_j_st[__min(9,__max(0,st-(1-1)))];
 
   k = 0;
   k = k*4 + H3_cbp_k_inc[__min(3,__max(0,inc-(1-1)))];
-  k = k*13 + H3_cbp_k_col[__min(12,__max(0,col-(1-1)))];
-  k = k*9 + H3_cbp_k_cls[__min(8,__max(0,cls-(1-1)))];
+  k = k*9 + H3_cbp_k_col[__min(12,__max(0,col-(1-1)))];
+  k = k*4 + H3_cbp_k_cls[__min(8,__max(0,cls-(1-1)))];
 
   l = 0;
   l = l*4 + H3_cbp_l_inc[__min(3,__max(0,inc-(1-1)))];
-  l = l*3 + ((pc>0+(1-1))+(pc>1+(1-1)));
-  l = l*9 + H3_cbp_l_q6[__min(8,__max(0,q6-(1-1)))];
+  l = l*4 + H3_cbp_l_pc[__min(4,__max(0,pc-(1-1)))];
+  l = l*7 + H3_cbp_l_q6[__min(8,__max(0,q6-(1-1)))];
 
   s = 0;
-  s = s*4 + H3_cbp_s_inc[__min(3,__max(0,inc-(1-1)))];
 
   m = 0;
+  m = m*2 + ((inc>0+(1-1)));
 
   w = 0;
-  w = w*4 + H3_cbp_w_inc[__min(3,__max(0,inc-(1-1)))];
-  w = w*3 + ((cls>2+(1-1))+(cls>5+(1-1)));
+  w = w*3 + ((inc>1+(1-1))+(inc>2+(1-1)));
+  w = w*4 + H3_cbp_w_cls[__min(8,__max(0,cls-(1-1)))];
 
   t = 0;
 

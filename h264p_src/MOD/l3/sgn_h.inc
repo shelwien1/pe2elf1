@@ -1,75 +1,71 @@
 
-static const byte H3_sgn_a_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
+static const byte H3_sgn_a_cg[13+1]={ 0,1,2,3,4,5,5,5,5,5,5,5,5,5 };
 static const byte H3_sgn_a_pos[3+1]={ 0,1,2,3 };
 static const byte H3_sgn_a_sa[3+1]={ 0,1,2,3 };
 static const byte H3_sgn_a_sb[3+1]={ 0,1,2,3 };
-static const byte H3_sgn_a_gh[8+1]={ 0,1,2,3,4,5,6,7,8 };
+static const byte H3_sgn_a_gh[8+1]={ 0,1,2,3,3,4,5,5,6 };
 
-static const byte H3_sgn_b_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
+static const byte H3_sgn_b_cg[13+1]={ 0,1,2,3,4,5,5,5,5,5,5,5,5,5 };
 static const byte H3_sgn_b_scb[3+1]={ 0,1,2,3 };
-static const byte H3_sgn_b_pos[3+1]={ 0,1,2,3 };
 
-static const byte H3_sgn_c_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
-static const byte H3_sgn_c_md[19+1]={ 0,1,2,2,2,3,4,4,4,4,4,4,5,5,6,6,7,8,8,8 };
+static const byte H3_sgn_c_cg[13+1]={ 0,1,1,2,3,3,3,3,3,3,3,3,3,3 };
+static const byte H3_sgn_c_md[19+1]={ 0,1,2,3,4,5,5,6,6,6,6,6,7,7,8,9,10,11,11,12 };
 
-static const byte H3_sgn_d_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
-
-static const byte H3_sgn_e_cg[13+1]={ 0,1,1,2,3,3,3,3,3,3,3,3,3,3 };
+static const byte H3_sgn_d_cg[13+1]={ 0,1,1,1,2,3,3,3,3,3,3,3,3,3 };
 
 
-static const byte H3_sgn_h_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
+
 static const byte H3_sgn_h_pos[3+1]={ 0,1,2,3 };
 
-static const byte H3_sgn_i_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
+static const byte H3_sgn_i_cg[13+1]={ 0,1,2,3,4,5,5,5,5,5,5,5,5,5 };
 
-static const byte H3_sgn_j_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
+static const byte H3_sgn_j_cg[13+1]={ 0,1,2,2,3,4,4,4,4,4,4,4,4,4 };
 static const byte H3_sgn_j_sa[3+1]={ 0,1,2,3 };
 static const byte H3_sgn_j_sb[3+1]={ 0,1,2,3 };
-static const byte H3_sgn_j_gh[8+1]={ 0,1,2,3,4,5,6,7,8 };
+static const byte H3_sgn_j_pos[3+1]={ 0,1,2,3 };
 
-static const byte H3_sgn_k_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
+static const byte H3_sgn_k_cg[13+1]={ 0,1,2,3,4,5,5,5,5,5,5,5,5,5 };
 
-static const byte H3_sgn_l_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
-static const byte H3_sgn_l_pos[3+1]={ 0,1,2,3 };
-static const byte H3_sgn_l_gh[8+1]={ 0,1,2,3,4,5,6,7,8 };
+static const byte H3_sgn_l_cg[13+1]={ 0,0,1,2,3,4,4,4,4,4,4,4,4,4 };
+static const byte H3_sgn_l_gh[8+1]={ 0,1,2,2,3,4,5,5,6 };
 
-static const byte H3_sgn_m_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
-
+static const byte H3_sgn_m_cg[13+1]={ 0,1,2,3,3,4,4,4,4,4,4,4,4,4 };
 
 
 
-static const byte H3_sgn_w_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
+
+static const byte H3_sgn_w_cg[13+1]={ 0,0,0,1,2,3,3,3,3,3,3,3,3,3 };
 
 
-static const int H3_sgn_rA = (233+0) * (1);
-static const int H3_sgn_rB = (205+0) * (1);
-static const int H3_sgn_rC = (3+0) * (1);
-static const int H3_sgn_rE = (64+0) * (1);
-static const int H3_sgn_rH = (64+0) * (1);
-static const int H3_sgn_rI = (64+0) * (1);
-static const int H3_sgn_rJ = (224+0) * (1);
-static const int H3_sgn_rK = (224+0) * (1);
-static const int H3_sgn_rL = (235+0) * (1);
-static const int H3_sgn_rD = (246+0) * (1);
-static const int H3_sgn_rT = (55+0) * (1);
-static const int H3_sgn_rG = (90+0) * (1);
-static const int H3_sgn_lr = (12+0) * (1);
-static const int H3_sgn_lrm = (12+0) * (1);
+static const int H3_sgn_rA = (255+0) * (1);
+static const int H3_sgn_rB = (243+0) * (1);
+static const int H3_sgn_rC = (51+0) * (1);
+static const int H3_sgn_rE = (0+0) * (1);
+static const int H3_sgn_rH = (15+0) * (1);
+static const int H3_sgn_rI = (65+0) * (1);
+static const int H3_sgn_rJ = (250+0) * (1);
+static const int H3_sgn_rK = (255+0) * (1);
+static const int H3_sgn_rL = (97+0) * (1);
+static const int H3_sgn_rD = (255+0) * (1);
+static const int H3_sgn_rT = (0+0) * (1);
+static const int H3_sgn_rG = (0+0) * (1);
+static const int H3_sgn_lr = (14+0) * (1);
+static const int H3_sgn_lrm = (0+0) * (1);
 static const int H3_sgn_mbm = (0+0) * (1);
-static const int H3_sgn_mwA = (29+0) * (1);
+static const int H3_sgn_mwA = (5+0) * (1);
 static const int H3_sgn_mwB = (5+0) * (1);
-static const int H3_sgn_mwC = (0+0) * (1);
-static const int H3_sgn_mwE = (0+0) * (1);
+static const int H3_sgn_mwC = (64+0) * (1);
+static const int H3_sgn_mwE = (121+0) * (1);
 static const int H3_sgn_mwH = (32+0) * (1);
 static const int H3_sgn_mwI = (0+0) * (1);
-static const int H3_sgn_mwJ = (0+0) * (1);
-static const int H3_sgn_mwK = (0+0) * (1);
-static const int H3_sgn_mwL = (0+0) * (1);
-static const int H3_sgn_mwD = (31+0) * (1);
+static const int H3_sgn_mwJ = (16+0) * (1);
+static const int H3_sgn_mwK = (255+0) * (1);
+static const int H3_sgn_mwL = (22+0) * (1);
+static const int H3_sgn_mwD = (254+0) * (1);
 static const int H3_sgn_mwT = (0+0) * (1);
 static const int H3_sgn_mwG = (0+0) * (1);
-static const int H3_sgn_mt = (6+0) * (1);
-static const int H3_sgn_mb = (160+0) * (1);
+static const int H3_sgn_mt = (0+0) * (1);
+static const int H3_sgn_mb = (128+0) * (1);
 static const int H3_sgn_hA = (24+0) * (1);
 static const int H3_sgn_hB = (24+0) * (1);
 static const int H3_sgn_hC = (24+0) * (1);
@@ -86,22 +82,22 @@ static const int H3_sgn_hT = (24+0) * (1);
 static const int H3_sgn_hN = (24+0) * (1);
 
 
-static const long long H3_sgn_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 4), 4), 4), 9); // 8064
-static const long long H3_sgn_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 4), 4); // 224
-static const long long H3_sgn_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 2), 9); // 252
-static const long long H3_sgn_d_Volume = tc_vmul(1, 14); // 14
-static const long long H3_sgn_e_Volume = tc_vmul(tc_vmul(1, 4), 1); // 4
+static const long long H3_sgn_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 6), 4), 4), 4), 7); // 2688
+static const long long H3_sgn_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 6), 4), 2); // 48
+static const long long H3_sgn_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 3), 13); // 156
+static const long long H3_sgn_d_Volume = tc_vmul(1, 4); // 4
+static const long long H3_sgn_e_Volume = tc_vmul(tc_vmul(1, 1), 1); // 1
 static const long long H3_sgn_g_Volume = tc_vmul(1, 1); // 1
-static const long long H3_sgn_h_Volume = tc_vmul(tc_vmul(1, 14), 4); // 56
-static const long long H3_sgn_i_Volume = tc_vmul(tc_vmul(1, 14), 1); // 14
-static const long long H3_sgn_j_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 4), 4), 9), 2); // 4032
-static const long long H3_sgn_k_Volume = tc_vmul(1, 14); // 14
-static const long long H3_sgn_l_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 4), 9); // 504
-static const long long H3_sgn_m_Volume = tc_vmul(1, 14); // 14
+static const long long H3_sgn_h_Volume = tc_vmul(tc_vmul(1, 3), 4); // 12
+static const long long H3_sgn_i_Volume = tc_vmul(tc_vmul(1, 6), 1); // 6
+static const long long H3_sgn_j_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 5), 4), 4), 1), 4); // 320
+static const long long H3_sgn_k_Volume = tc_vmul(1, 6); // 6
+static const long long H3_sgn_l_Volume = tc_vmul(tc_vmul(tc_vmul(1, 5), 2), 7); // 70
+static const long long H3_sgn_m_Volume = tc_vmul(1, 5); // 5
 static const long long H3_sgn_n_Volume = tc_vmul(1, 1); // 1
-static const long long H3_sgn_s_Volume = tc_vmul(1, 2); // 2
+static const long long H3_sgn_s_Volume = tc_vmul(1, 3); // 3
 static const long long H3_sgn_t_Volume = tc_vmul(1, 1); // 1
-static const long long H3_sgn_w_Volume = tc_vmul(1, 14); // 14
+static const long long H3_sgn_w_Volume = tc_vmul(1, 4); // 4
 
 #define H3_sgn_USES(X) X(cg) X(pos) X(sa) X(sb) X(gh) X(scb) X(mag) X(md)
 

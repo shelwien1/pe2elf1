@@ -18,50 +18,46 @@ void H3_qpd_make( const H_qpd_v & D, tcx & X ) {
   (void) lnz;  (void) pc;  (void) cc;  (void) cls;  (void) dc;  (void) db;  (void) lz;  (void) st;  (void) ae;  (void) aq;  (void) ac;  (void) td;  (void) sq;  (void) xe;  (void) lq;  (void) bc;  (void) cl;  (void) kc;
 
   a = 0;
-  a = a*2 + ((lnz>0+(1-1)));
-  a = a*5 + H3_qpd_a_pc[__min(4,__max(0,pc-(1-1)))];
+  a = a*3 + ((pc>0+(1-1))+(pc>1+(1-1)));
   a = a*3 + ((cc>0+(1-1))+(cc>1+(1-1)));
   a = a*2 + ((cls>5+(1-1)));
-  a = a*14 + H3_qpd_a_sq[__min(13,__max(0,sq-(1-1)))];
+  a = a*6 + H3_qpd_a_sq[__min(13,__max(0,sq-(1-1)))];
 
   b = 0;
-  b = b*9 + H3_qpd_b_dc[__min(8,__max(0,dc-(1-1)))];
+  b = b*5 + H3_qpd_b_dc[__min(8,__max(0,dc-(1-1)))];
 
   c = 0;
-  c = c*7 + H3_qpd_c_lz[__min(6,__max(0,lz-(1-1)))];
-  c = c*10 + H3_qpd_c_st[__min(9,__max(0,st-(1-1)))];
+  c = c*3 + ((lz>2+(1-1))+(lz>3+(1-1)));
   c = c*7 + H3_qpd_c_db[__min(8,__max(0,db-(1-1)))];
-  c = c*14 + H3_qpd_c_bc[__min(13,__max(0,bc-(1-1)))];
+  c = c*8 + H3_qpd_c_bc[__min(13,__max(0,bc-(1-1)))];
 
   d = 0;
-  d = d*10 + H3_qpd_d_st[__min(9,__max(0,st-(1-1)))];
 
   e = 0;
-  e = e*9 + H3_qpd_e_cls[__min(8,__max(0,cls-(1-1)))];
-  e = e*14 + H3_qpd_e_sq[__min(13,__max(0,sq-(1-1)))];
+  e = e*4 + H3_qpd_e_cls[__min(8,__max(0,cls-(1-1)))];
+  e = e*10 + H3_qpd_e_sq[__min(13,__max(0,sq-(1-1)))];
 
   h = 0;
-  h = h*9 + H3_qpd_h_dc[__min(8,__max(0,dc-(1-1)))];
-  h = h*5 + H3_qpd_h_pc[__min(4,__max(0,pc-(1-1)))];
+  h = h*6 + H3_qpd_h_dc[__min(8,__max(0,dc-(1-1)))];
+  h = h*3 + ((pc>0+(1-1))+(pc>2+(1-1)));
 
   i = 0;
-  i = i*3 + ((cls>5+(1-1))+(cls>6+(1-1)));
+  i = i*2 + ((cls>6+(1-1)));
 
   j = 0;
-  j = j*10 + H3_qpd_j_st[__min(9,__max(0,st-(1-1)))];
-  j = j*9 + H3_qpd_j_dc[__min(8,__max(0,dc-(1-1)))];
-  j = j*9 + H3_qpd_j_db[__min(8,__max(0,db-(1-1)))];
+  j = j*4 + H3_qpd_j_st[__min(9,__max(0,st-(1-1)))];
+  j = j*7 + H3_qpd_j_dc[__min(8,__max(0,dc-(1-1)))];
+  j = j*6 + H3_qpd_j_db[__min(8,__max(0,db-(1-1)))];
   j = j*2 + ((lnz>0+(1-1)));
 
   k = 0;
-  k = k*2 + ((lnz>0+(1-1)));
-  k = k*2 + ((pc>0+(1-1)));
-  k = k*14 + H3_qpd_k_kc[__min(13,__max(0,kc-(1-1)))];
+  k = k*2 + ((pc>1+(1-1)));
+  k = k*12 + H3_qpd_k_kc[__min(13,__max(0,kc-(1-1)))];
 
   l = 0;
-  l = l*9 + H3_qpd_l_db[__min(8,__max(0,db-(1-1)))];
-  l = l*10 + H3_qpd_l_st[__min(9,__max(0,st-(1-1)))];
-  l = l*14 + H3_qpd_l_cl[__min(13,__max(0,cl-(1-1)))];
+  l = l*2 + ((db>0+(1-1)));
+  l = l*4 + H3_qpd_l_st[__min(9,__max(0,st-(1-1)))];
+  l = l*11 + H3_qpd_l_cl[__min(13,__max(0,cl-(1-1)))];
 
   s = 0;
 
@@ -69,14 +65,13 @@ void H3_qpd_make( const H_qpd_v & D, tcx & X ) {
   m = m*2 + ((lnz>0+(1-1)));
 
   w = 0;
-  w = w*10 + H3_qpd_w_st[__min(9,__max(0,st-(1-1)))];
+  w = w*3 + ((st>1+(1-1))+(st>4+(1-1)));
 
   t = 0;
 
   n = 0;
 
   g = 0;
-  g = g*5 + H3_qpd_g_lz[__min(6,__max(0,lz-(1-1)))];
   X.c[0] = a;  X.c[1] = b;  X.c[2] = c;  X.c[3] = d;  X.c[4] = e;  X.c[5] = h;  X.c[6] = i;  X.c[7] = j;  X.c[8] = k;  X.c[9] = l;  X.s = s;  X.m = m;  X.w = w;  X.t = t;
   X.n = n;  X.g = g;
 }

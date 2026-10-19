@@ -1,29 +1,23 @@
 
 static const byte H3_hdr_a_fld[3+1]={ 0,1,2,3 };
-static const byte H3_hdr_a_p1[7+1]={ 0,1,2,3,4,5,6,7 };
-static const byte H3_hdr_a_sty[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H3_hdr_a_pr[3+1]={ 0,1,2,3 };
+static const byte H3_hdr_a_p1[7+1]={ 0,1,2,2,2,3,4,5 };
+static const byte H3_hdr_a_sty[9+1]={ 0,0,1,2,3,3,3,3,3,3 };
 
 
-static const byte H3_hdr_c_fld[15+1]={ 0,1,1,1,2,2,3,4,5,5,6,6,6,6,6,6 };
+static const byte H3_hdr_c_fld[15+1]={ 0,1,1,2,2,2,3,3,4,4,4,4,4,4,4,5 };
 
-static const byte H3_hdr_d_p1[15+1]={ 0,1,2,3,3,3,4,4,5,5,5,6,6,6,7,8 };
-static const byte H3_hdr_d_p2[7+1]={ 0,1,2,3,4,5,6,7 };
-
-static const byte H3_hdr_e_pos[3+1]={ 0,1,2,3 };
-
-static const byte H3_hdr_g_p1[7+1]={ 0,1,2,3,4,5,6,7 };
-static const byte H3_hdr_g_pos[3+1]={ 0,1,2,3 };
-
-static const byte H3_hdr_h_sty[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
+static const byte H3_hdr_d_p1[15+1]={ 0,1,2,3,3,4,4,4,5,5,6,7,8,9,9,10 };
+static const byte H3_hdr_d_p2[7+1]={ 0,1,2,3,4,4,4,4 };
 
 
-static const byte H3_hdr_j_fld[3+1]={ 0,1,2,3 };
-static const byte H3_hdr_j_p2[7+1]={ 0,1,2,3,4,5,6,7 };
+static const byte H3_hdr_g_p1[7+1]={ 0,1,2,3,4,5,6,6 };
 
-static const byte H3_hdr_k_fld[15+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
+static const byte H3_hdr_h_sty[9+1]={ 0,0,1,2,3,3,3,3,3,3 };
 
-static const byte H3_hdr_l_pos[3+1]={ 0,1,2,3 };
+
+static const byte H3_hdr_j_p2[7+1]={ 0,1,1,2,3,3,3,4 };
+
+static const byte H3_hdr_k_fld[15+1]={ 0,1,2,3,3,4,5,6,7,8,9,10,11,12,13,14 };
 
 
 
@@ -31,35 +25,36 @@ static const byte H3_hdr_l_pos[3+1]={ 0,1,2,3 };
 
 
 
-static const int H3_hdr_rA = (128+0) * (1);
+
+static const int H3_hdr_rA = (131+0) * (1);
 static const int H3_hdr_rB = (0+0) * (1);
 static const int H3_hdr_rC = (0+0) * (1);
 static const int H3_hdr_rE = (0+0) * (1);
-static const int H3_hdr_rH = (64+0) * (1);
-static const int H3_hdr_rI = (64+0) * (1);
-static const int H3_hdr_rJ = (64+0) * (1);
-static const int H3_hdr_rK = (64+0) * (1);
-static const int H3_hdr_rL = (64+0) * (1);
-static const int H3_hdr_rD = (255+0) * (1);
-static const int H3_hdr_rT = (36+0) * (1);
-static const int H3_hdr_rG = (90+0) * (1);
-static const int H3_hdr_lr = (17+0) * (1);
-static const int H3_hdr_lrm = (12+0) * (1);
+static const int H3_hdr_rH = (0+0) * (1);
+static const int H3_hdr_rI = (0+0) * (1);
+static const int H3_hdr_rJ = (242+0) * (1);
+static const int H3_hdr_rK = (198+0) * (1);
+static const int H3_hdr_rL = (195+0) * (1);
+static const int H3_hdr_rD = (249+0) * (1);
+static const int H3_hdr_rT = (2+0) * (1);
+static const int H3_hdr_rG = (8+0) * (1);
+static const int H3_hdr_lr = (18+0) * (1);
+static const int H3_hdr_lrm = (0+0) * (1);
 static const int H3_hdr_mbm = (0+0) * (1);
 static const int H3_hdr_mwA = (0+0) * (1);
-static const int H3_hdr_mwB = (4+0) * (1);
-static const int H3_hdr_mwC = (0+0) * (1);
-static const int H3_hdr_mwE = (0+0) * (1);
-static const int H3_hdr_mwH = (2+0) * (1);
-static const int H3_hdr_mwI = (0+0) * (1);
-static const int H3_hdr_mwJ = (0+0) * (1);
-static const int H3_hdr_mwK = (1+0) * (1);
-static const int H3_hdr_mwL = (0+0) * (1);
-static const int H3_hdr_mwD = (12+0) * (1);
-static const int H3_hdr_mwT = (0+0) * (1);
+static const int H3_hdr_mwB = (6+0) * (1);
+static const int H3_hdr_mwC = (7+0) * (1);
+static const int H3_hdr_mwE = (110+0) * (1);
+static const int H3_hdr_mwH = (8+0) * (1);
+static const int H3_hdr_mwI = (128+0) * (1);
+static const int H3_hdr_mwJ = (12+0) * (1);
+static const int H3_hdr_mwK = (0+0) * (1);
+static const int H3_hdr_mwL = (190+0) * (1);
+static const int H3_hdr_mwD = (5+0) * (1);
+static const int H3_hdr_mwT = (8+0) * (1);
 static const int H3_hdr_mwG = (0+0) * (1);
-static const int H3_hdr_mt = (6+0) * (1);
-static const int H3_hdr_mb = (226+0) * (1);
+static const int H3_hdr_mt = (0+0) * (1);
+static const int H3_hdr_mb = (130+0) * (1);
 static const int H3_hdr_hA = (24+0) * (1);
 static const int H3_hdr_hB = (24+0) * (1);
 static const int H3_hdr_hC = (24+0) * (1);
@@ -76,22 +71,22 @@ static const int H3_hdr_hT = (24+0) * (1);
 static const int H3_hdr_hN = (24+0) * (1);
 
 
-static const long long H3_hdr_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, (1<<6)), 4), 8), 10), 4); // 81920
-static const long long H3_hdr_b_Volume = tc_vmul(tc_vmul(1, (1<<5)), (1<<4)); // 512
-static const long long H3_hdr_c_Volume = tc_vmul(tc_vmul(1, (1<<8)), 7); // 1792
-static const long long H3_hdr_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<8)), 9), 8); // 18432
-static const long long H3_hdr_e_Volume = tc_vmul(tc_vmul(1, (1<<3)), 4); // 32
-static const long long H3_hdr_g_Volume = tc_vmul(tc_vmul(1, 8), 4); // 32
-static const long long H3_hdr_h_Volume = tc_vmul(tc_vmul(1, (1<<6)), 10); // 640
-static const long long H3_hdr_i_Volume = tc_vmul(1, (1<<8)); // 256
-static const long long H3_hdr_j_Volume = tc_vmul(tc_vmul(1, 4), 8); // 32
-static const long long H3_hdr_k_Volume = tc_vmul(tc_vmul(1, (1<<8)), 16); // 4096
-static const long long H3_hdr_l_Volume = tc_vmul(tc_vmul(1, (1<<4)), 4); // 64
+static const long long H3_hdr_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, (1<<5)), 4), 6), 4), 2); // 6144
+static const long long H3_hdr_b_Volume = tc_vmul(tc_vmul(1, (1<<5)), (1<<7)); // 4096
+static const long long H3_hdr_c_Volume = tc_vmul(tc_vmul(1, (1<<7)), 6); // 768
+static const long long H3_hdr_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<7)), 11), 5); // 7040
+static const long long H3_hdr_e_Volume = tc_vmul(1, 2); // 2
+static const long long H3_hdr_g_Volume = tc_vmul(tc_vmul(1, 7), 1); // 7
+static const long long H3_hdr_h_Volume = tc_vmul(tc_vmul(1, (1<<5)), 4); // 128
+static const long long H3_hdr_i_Volume = tc_vmul(1, (1<<3)); // 8
+static const long long H3_hdr_j_Volume = tc_vmul(tc_vmul(1, 2), 5); // 10
+static const long long H3_hdr_k_Volume = tc_vmul(tc_vmul(1, (1<<6)), 15); // 960
+static const long long H3_hdr_l_Volume = tc_vmul(tc_vmul(1, (1<<3)), 3); // 24
 static const long long H3_hdr_m_Volume = 1; // 1
-static const long long H3_hdr_n_Volume = tc_vmul(1, (1<<8)); // 256
-static const long long H3_hdr_s_Volume = tc_vmul(1, (1<<8)); // 256
-static const long long H3_hdr_t_Volume = tc_vmul(1, (1<<8)); // 256
-static const long long H3_hdr_w_Volume = tc_vmul(1, (1<<5)); // 32
+static const long long H3_hdr_n_Volume = 1; // 1
+static const long long H3_hdr_s_Volume = tc_vmul(1, (1<<6)); // 64
+static const long long H3_hdr_t_Volume = tc_vmul(1, (1<<4)); // 16
+static const long long H3_hdr_w_Volume = tc_vmul(1, (1<<7)); // 128
 
 #define H3_hdr_USES(X) X(tag) X(fld) X(p1) X(sty) X(pr) X(p1r) X(p2) X(pos)
 
