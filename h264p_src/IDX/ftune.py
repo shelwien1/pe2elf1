@@ -8,7 +8,8 @@ wrote (a directory per stream, a <family>.dump in each).  Each family is
 tuned in a copy of FAMTUNE of its own, its patterns flipped a bit at a
 time, a flip kept when the family codes its dumps smaller (or as small with
 the bit now 0), pattern after pattern in random order, pass after pass
-until a pass gains less than a byte ($FTUNE_MINPASS; or `passes` of them).  The families do not
+until a pass gains less than 0.01% of the family's size, or a byte
+($FTUNE_MINPASS; or `passes` of them).  The families do not
 interact, so four are tuned at once, the largest first, each trial a
 process per stream.  Writes the
 winners to export.!!! (mdesc lines, for IDX/import.pl; every pattern of
@@ -20,7 +21,7 @@ from concurrent.futures import ThreadPoolExecutor
 exe, ddir = sys.argv[1], sys.argv[2]
 passes = int(sys.argv[3]) if len(sys.argv) > 3 else 9
 only = sys.argv[4:]
-minpass = float(os.environ.get('FTUNE_MINPASS', '1'))  # a pass that gains less ends the family's climb
+minrel = float(os.environ.get('FTUNE_MINPASS', '1e-4'))  # a pass that gains less (of the size; a byte at least) ends a climb
 data = bytearray(open(exe, 'rb').read())
 pats = {}  # name: (address, length, offset field)
 for m in re.finditer(rb'!MAP!(.*?)!(.*?)\x00(.*?)\x00', data, re.S):
@@ -105,7 +106,7 @@ def tune(fam):
                     data[a:a + l] = cur
         export()
         say('%s: pass %d done, %.1f bytes (%+.1f)' % (fam, p, best, best - start))
-        if best > before - minpass:
+        if best > before - max(1.0, minrel * start):
             break
     os.remove(mine)
     return fam, start, best
