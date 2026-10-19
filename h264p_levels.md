@@ -229,13 +229,29 @@ The plan's items (estimates, from the prototype), and what came of each:
 - **A 12-input mixer** (−4%). The mixers take 2 inputs per counter and 4
   more, in lanes of 8: 16 for four counters, one AVX2 vector, instead of
   24 (W0 is then 1/16, where the prototype kept 1/24).
-- **Smaller tables.** `-1`'s tables are its own, 39 MB of address space
+- **Smaller tables.** `-1`'s tables are its own, 34 MB of address space
   (`-9`'s are 226 MB); it peaks at 42 MB compressing stream 03, 37 MB
   decompressing.
-- **Compression back** (1-2%). Two families' worth of tries:
+- **Compression back** (1-2%): 1.1%, from its contexts and its
+  parameters, at about the same speed (test/002: 3,229,830 bytes before,
+  3,193,962 after).
+  - its own four contexts a family. `-1` had kept `-9`'s first four
+    indices (a-d), less their decoder variables. Instead, one of a-d
+    swapped at a time for one of the six `-1` left out (e, h-l: several
+    are syntax contexts, not the decoder's), in every family at once, each
+    family taking its best swap (the families code apart, so their sizes
+    add up), then a second swap from there: twelve families changed, the
+    tuning corpus 0.42% smaller, test/002 0.47% (mvd signs 7.2%, qp delta
+    signs 9.7%). A third round would gain less than the second's 0.04%.
+  - its parameters tuned for its shape (they were `-9`'s, tuned for ten
+    counters, three mixers and two APMs): `IDX/ftune.py` against dumps of
+    the tuning corpus (section 7.5), every family to its last gain but
+    the significance (two passes): the tuning corpus 0.74% smaller
+    (8,644 bytes; skip flags 1.6%, mb_type 1.1%, significance 0.9%, qp
+    delta signs 5.4%), test/002 0.64%, each stream 0.4-0.9%.
   - six counters a family instead of four (`-9`'s indices e and h, less
     their decoder variables): 0.22% smaller, 7% slower compressing. Not
-    taken.
+    taken (tried before the two above).
   - the reference lists without the decoder (`ReconRefs`): 0.84% smaller,
     9% slower. Taken for `-3`, not for `-1` (section 4).
 - **Skip runs** (for 00 and 03): not done; it changes the format of the
