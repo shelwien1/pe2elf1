@@ -22,7 +22,8 @@ sources (`*.inc`), so `g++ -O2 -march=x86-64-v3 -std=c++11 -fwrapv -pthread
 h264p_src/h264p.cpp -o h264p` builds it too. Its target is x86-64-v3 (AVX2:
 Haswell, Zen and later), for which its pixel kernels and mixers have SIMD
 code; built for any other target (`make PARCH=`, or without `-march`) it
-uses the plain C++ beside them, which is slower and codes identically.
+uses the plain C++ beside them, which is slower and codes identically
+(as do builds by GCC and clang).
 Compression runs the context mixing coder in a second thread, beside the
 model, and parses the NAL units ahead of the model in a third; both
 directions finish the reconstructed pictures (deblocking, the padded copies

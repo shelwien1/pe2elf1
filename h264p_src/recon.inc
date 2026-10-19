@@ -249,7 +249,7 @@ struct Tpl2 {
   int n;
   Tpl2(const uint8_t* q_, int qs_, int n_) : n(n_) {
 #ifdef H264P_AVX2
-    v = !q_ ? _mm256_setzero_si256() : n == 16 ? ld16x2(q_, q_ + qs_) : _mm256_castsi128_si256(ld8x2(q_, q_ + qs_, n));
+    v = !q_ ? _mm256_setzero_si256() : n == 16 ? ld16x2(q_, q_ + qs_) : _mm256_inserti128_si256(_mm256_setzero_si256(), ld8x2(q_, q_ + qs_, n), 0);
 #else
     q = q_, qs = qs_;
 #endif
@@ -3735,9 +3735,11 @@ struct Recon {
       const uint8_t* p = (c == 0 ? cur->y.data() : c == 1 ? cur->u.data() : cur->v.data()) + (my * m + y) * w + mx * m + x;
       int64_t sum = 0;
       if (top) {
+        // (rows of 8 in the low half, the high half zero: a cast would leave
+        // it undefined, and the sum below adds it in)
         auto ld = [n](const uint8_t* q) {
           return n == 16 ? _mm256_cvtepu8_epi16(_mm_loadu_si128((const __m128i*)q))
-                         : _mm256_castsi128_si256(_mm_cvtepu8_epi16(_mm_loadl_epi64((const __m128i*)q)));
+                         : _mm256_inserti128_si256(_mm256_setzero_si256(), _mm_cvtepu8_epi16(_mm_loadl_epi64((const __m128i*)q)), 0);
         };
         __m256i r1 = ld(p - w), v = _mm256_sub_epi16(_mm256_sub_epi16(_mm256_add_epi16(r1, r1), ld(p - 2 * w)), ld(p));
         __m256i t = _mm256_madd_epi16(_mm256_abs_epi16(v), _mm256_set1_epi16(1));
