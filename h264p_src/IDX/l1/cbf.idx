@@ -1,0 +1,101 @@
+#  h264p's cbf family at level -1: its context indices and its tunable
+#  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
+#  MOD/l1/cbf_h.inc and MOD/l1/cbf_p.inc from this file and cbf.inc.
+#
+#  The number of nonzero coefficients of a block, 0 for none (kn 0), or
+#  less 1 where the block is known to have one (kn 1: CABAC 8x8 blocks
+#  without coded_block_flag). cat is the block's ctxBlockCat; na/nb the
+#  nonzero coefficients of the blocks A and B (9 for none), intra the
+#  macroblock is intra, q6 QP/6, np the nonzero blocks so far in its 8x8
+#  block (for chroma: in the macroblock), pos the block's place in its 8x8
+#  block, crcb for a Cr block the Cb block (0 none, 1 zero, 2 not), col the
+#  same block in the previous picture of the type (2 none), nc CAVLC's nC
+#  (class), tn for a luma block of a P picture the nonzero coefficients of
+#  the block its vector points at in its reference, where that is the
+#  last picture of a kind (1 + up to 4; 6 + where the vector moves it; 0
+#  none); ds for an inter luma 4x4 block of a P or B slice, 1 + the score
+#  of x264's decimation its 8x8 block still owes after the blocks before it
+#  (4, or 6 for the macroblock's only coded 8x8 block, less theirs; 0 not
+#  applicable); hv as the sig family's; ly for a 4:2:0 chroma block the
+#  coefficients of the luma under it (its 8x8 block; for DC the
+#  macroblock's), 1 + tc_qlog (0 luma); dq for a 4:2:0 chroma AC block
+#  its DC, from the chroma DC levels' 2x2 transform, for an Intra16x16
+#  luma AC block from the luma DC levels' 4x4 one (1 + tc_qlog, 0 not such
+#  a block).
+
+Prefix H1_cbf
+Debug 1
+Const 0
+
+Index a
+ a_cat: cat, 1!1111111111111
+ a_na: na, 1!110100101
+ a_nb: nb, 1!111111111
+ a_intra: intra, 1!1
+ a_ly: ly, 1!1111111111
+
+Index b
+ b_cat: cat, 1!1111111111111
+ b_np: np, 1!111
+ b_pos: pos, 1!111
+ b_crcb: crcb, 1!11
+ b_kn: kn, 1!1
+ b_em: em, 1!1111111111111111
+ b_dq: dq, 1!11111111
+
+Index c
+ c_cat: cat, 1!1000000000000
+ c_q6: q6, 1!11111111
+ c_col: col, 1!11
+ c_kn: kn, 1!1
+ c_en: en, 1!10011000100010
+ c_ch: ch, 1!111111111111111
+
+Index d
+ d_cat: cat, 1!1111111111111
+ d_nc: nc, 1!11111
+ d_md: md, 1!0110000000000100100
+ d_kn: kn, 1!1
+ d_pg: pg, 1!1111111111111111
+
+Index m
+ m_cat: cat, 1!1111000000000
+ m_kn: kn, 1!1
+
+Index t
+ t_cat: cat, 1!1111111111111
+
+Index n
+ n_cat: cat, 1!1111111111111
+
+Index g
+ g_cat: cat, 1!0
+
+Number rA, 1, 0!01000000
+Number rB, 1, 0!11111111
+Number rC, 1, 0!01000000
+Number rD, 1, 0!11110010
+Number rT, 1, 0!00110111
+Number rG, 1, 0!01011010
+Number lr, 1, 0!01100
+Number lrm, 1, 0!01100
+Number mbm, 1, 0!00000000
+Number mwA, 1, 0!00000000
+Number mwB, 1, 0!00000000
+Number mwC, 1, 0!00000000
+Number mwD, 1, 0!11001000
+Number mwT, 1, 0!00001000
+Number mwG, 1, 0!00000000
+Number mt, 1, 0!010
+Number mb, 1, 0!10000010
+
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
+#  direct, one that does not is hashed into 2^h rows and contexts share
+#  them.  31 is "never hashed".  Frozen: left live these only grow.
+! Number hA, 1, 0!11000
+! Number hB, 1, 0!10001
+! Number hC, 1, 0!11000
+! Number hD, 1, 0!11000
+! Number hM, 1, 0!11000
+! Number hT, 1, 0!11000
+! Number hN, 1, 0!11000

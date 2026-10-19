@@ -1,6 +1,6 @@
-#  h264p's nal family: its context indices and its tunable parameters.
-#  IDX/IDX-FORMAT.md is the format; ../mk.sh regenerates MOD/nal_h.inc and
-#  MOD/nal_p.inc from this file and nal.inc.
+#  h264p's nal family at level -9: its context indices and its tunable
+#  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
+#  MOD/l9/nal_h.inc and MOD/l9/nal_p.inc from this file and nal.inc.
 #
 #  NAL unit fields: the field id (fld) is a dense factor and the rest is the
 #  field's own recent history (p1, p2) and a context the coder gives (ctx).

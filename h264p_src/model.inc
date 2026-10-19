@@ -64,6 +64,9 @@ static T* tc_table() {
 #if H264P_LV(9)
 #include "lv9.inc"
 #endif
+#if H264P_LV(1)
+#include "lv1.inc"
+#endif
 
 // where the bits go (-v)
 enum { STG_NAL, STG_HDR, STG_RAW, STG_SKIP, STG_MBT, STG_CBP, STG_IPM, STG_MVS, STG_MVD, STG_MVSG, STG_QPD, STG_CBF,
@@ -384,6 +387,7 @@ struct Model {
 
   void init() {
     cm_tables();
+    rec_.deblock = LV::deblock;
     // (end_of_slice_flag 0 nearly for sure: as if seen a few times)
     for (cm_cnt& c : end_c_) c.p = (u16)(CM_CONE - 16), c.t = 8;
     for (int& p : hist_poc_) p = INT_MIN;
@@ -636,7 +640,33 @@ struct Model {
   bool tmn_ = true;                              // none
   int tmq_ = 0;                                  // its miss (Recon::tm_search)
 
-  Recon rec_;  // the pictures, reconstructed
+  // the pictures, reconstructed: by the decoder, or (a level without one)
+  // as never known
+  typename std::conditional<LV::recon, Recon, ReconOff>::type rec_;
+  // the decoder's parts the level has: its template searches, the intra
+  // proxy (where it has them not, constants "not known")
+  template <class... A>
+  bool tm_search_(A&&... a) const {
+    return LV::search && rec_.tm_search(std::forward<A>(a)...);
+  }
+  template <class... A>
+  bool proxy_build_(A&&... a) {
+    return LV::proxy && rec_.proxy_build(std::forward<A>(a)...);
+  }
+#define H_PROXY(F, R, NONE)                                \
+  template <class... A>                                    \
+  R F##_(A&&... a) const {                                 \
+    return LV::proxy ? rec_.F(std::forward<A>(a)...) : NONE; \
+  }
+  H_PROXY(proxy_nz, int, -1)
+  H_PROXY(proxy_mode, int, -1)
+  H_PROXY(proxy_i16mode, int, -1)
+  H_PROXY(proxy_cmode, int, -1)
+  H_PROXY(proxy_levels, bool, false)
+  H_PROXY(proxy_dc, bool, false)
+  H_PROXY(proxy_energy, int64_t, -1)
+  H_PROXY(proxy_acc, int, -1)
+#undef H_PROXY
   // x264's AQ (AqFit): the line of the current picture; 16 log2 energy of
   // the macroblocks of the current and the last picture (-1 not known); the
   // QP of the current picture's that coded mb_qp_delta (-1 other); per kind
@@ -670,7 +700,7 @@ struct Model {
   // prediction of one of the model's decisions: of the bin being 0 (cab0) or
   // 1 (cab1). -1 without CABAC.
   int cab0(int ctx) const {
-    if (!sc_->cabac_) return -1;
+    if (!LV::cabpred || !sc_->cabac_) return -1;
     const CabacCtx& c = sc_->ctx_[ctx];
     return c.mps ? cab_lps[c.state] : CM_PONE - cab_lps[c.state];
   }
@@ -919,11 +949,11 @@ struct Model {
     for (int j = 0; j < 3; j++)
       if (nbs[j].ref == 0) cand[nc][0] = nbs[j].mv[0], cand[nc][1] = nbs[j].mv[1], nc++;
     cand[nc][0] = cand[nc][1] = 0, nc++;
-    return rec_.tm_search(l, 0, 0, 0, 16, 16, mv, false, cand, nc, &miss, 0, 4);
+    return tm_search_(l, 0, 0, 0, 16, 16, mv, false, cand, nc, &miss, 0, 4);
   }
   int skip_miss() {
     tm_ = tb_ = dh_ = bd_ = 0;
-    if (!rec_.active) return 0;
+    if (!rec_.active || !LV::skippx) return 0;
     // how well the reference can predict the samples around at best (list
     // 0)
     int m0;
@@ -1096,7 +1126,7 @@ struct Model {
       // it beats the next
       proxy_mv();
       int costs[4];
-      int m = rec_.proxy_i16mode(pmv_[0], pmv_[1], costs);
+      int m = proxy_i16mode_(pmv_[0], pmv_[1], costs);
       if (m >= 0) {
         int c2 = INT_MAX;
         for (int k = 0; k < 4; k++)
@@ -1250,11 +1280,11 @@ struct Model {
       }
       cand[nc][0] = cand[nc][1] = 0, nc++;
       int miss;
-      if (rec_.tm_search(-1, 0, 0, 0, 16, 16, p, false, cand, nc, &miss, 0, 2)) pxq_ = 1 + tc_clamp(tc_qlog(miss), 0, 11);
+      if (tm_search_(-1, 0, 0, 0, 16, 16, p, false, cand, nc, &miss, 0, 2)) pxq_ = 1 + tc_clamp(tc_qlog(miss), 0, 11);
       pxv_[addr_ * 2] = (int16_t)tc_clamp(p[0], -32767, 32767);
       pxv_[addr_ * 2 + 1] = (int16_t)tc_clamp(p[1], -32767, 32767);
     }
-    rec_.proxy_build(p);
+    proxy_build_(p);
     prx_v_[0] = p[0];
     prx_v_[1] = p[1];
     pmv_[0] = (p[0] + 2) >> 2;
@@ -1298,10 +1328,10 @@ struct Model {
         proxy_mv();
         int qp = mi_->qp - qp_off_, nz = 0, bx = (b8 & 1) * 2, by = (b8 >> 1) * 2;
         if (mi_->t8)
-          nz = rec_.proxy_nz(b8 & 1, b8 >> 1, 8, mi_->modes[by * 4 + bx], qp, pmv_[0], pmv_[1]);
+          nz = proxy_nz_(b8 & 1, b8 >> 1, 8, mi_->modes[by * 4 + bx], qp, pmv_[0], pmv_[1]);
         else
           for (int k = 0; k < 4 && nz >= 0; k++) {
-            int x = bx + (k & 1), y = by + (k >> 1), z = rec_.proxy_nz(x, y, 4, mi_->modes[y * 4 + x], qp, pmv_[0], pmv_[1]);
+            int x = bx + (k & 1), y = by + (k >> 1), z = proxy_nz_(x, y, 4, mi_->modes[y * 4 + x], qp, pmv_[0], pmv_[1]);
             nz = z < 0 ? -1 : nz + z;
           }
         D.pq = nz < 0 ? 0 : 1 + std::min(nz, 5);
@@ -1326,12 +1356,12 @@ struct Model {
         int qp = mi_->qp - qp_off_, lv[16];
         for (int pl = 1; pl <= 2; pl++) {
           int qc = rec_.chroma_qp_of(pl - 1, qp);
-          if (!rec_.proxy_dc(pl, qc, lv)) break;
+          if (!proxy_dc_(pl, qc, lv)) break;
           pdc = std::max(pdc, 0);
           pac = std::max(pac, 0);
           for (int k = 0; k < 4; k++) pdc += abs(lv[k]) >= 3;
           for (int b = 0; b < 4; b++) {
-            rec_.proxy_levels(pl, (b & 1) * 4, (b >> 1) * 4, qc, lv);
+            proxy_levels_(pl, (b & 1) * 4, (b >> 1) * 4, qc, lv);
             for (int k = 1; k < 16; k++) pac += abs(lv[k]) >= 3;
           }
         }
@@ -1428,8 +1458,8 @@ struct Model {
     D.ds = strength ? 1 + tc_clamp(tc_qlog(strength) - 6, 0, 8) : 0;
     proxy_mv();
     int sads[9];
-    int pm = k8 ? rec_.proxy_mode(x >> 1, y >> 1, 8, pmv_[0], pmv_[1], sads)
-                : rec_.proxy_mode(x, y, 4, pmv_[0], pmv_[1], sads);
+    int pm = k8 ? proxy_mode_(x >> 1, y >> 1, 8, pmv_[0], pmv_[1], sads)
+                : proxy_mode_(x, y, 4, pmv_[0], pmv_[1], sads);
     D.pm = pm < 0 ? 9 : pm;
     // how much worse the most probable mode does there, in halves of x264's
     // lambda of the predicted QP: an encoder takes it unless another mode
@@ -1522,7 +1552,7 @@ struct Model {
       // (the cheapest to code) does
       proxy_mv();
       int costs[4];
-      int pc = rec_.proxy_cmode(pmv_[0], pmv_[1], costs);
+      int pc = proxy_cmode_(pmv_[0], pmv_[1], costs);
       if (pc >= 0) {
         D.pm = pc;
         int c0 = costs[0] < INT_MAX ? costs[0] : costs[pc];
@@ -1789,7 +1819,7 @@ struct Model {
         for (int j = 0; j < 3; j++)
           if (nbs[j].ref == r) cand[nc][0] = nbs[j].mv[0], cand[nc][1] = nbs[j].mv[1], nc++;
         cand[nc][0] = cand[nc][1] = 0, nc++;
-        if (!rec_.tm_search(list, r, x * 4, y * 4, w * 4, h * 4, p, false, cand, nc, &miss, kTmLambda, 8)) break;
+        if (!tm_search_(list, r, x * 4, y * 4, w * 4, h * 4, p, false, cand, nc, &miss, kTmLambda, 8)) break;
         if (!r) m0 = miss;
         if (miss < bm) bm = miss, rbest = r;
       }
@@ -1899,11 +1929,11 @@ struct Model {
       if (!pdn_) cand[nc][0] = cm[0], cand[nc][1] = cm[1], nc++;
       if (ccok) cand[nc][0] = cc[0], cand[nc][1] = cc[1], nc++;  // and col's, temporal direct's taken
       cand[nc][0] = cand[nc][1] = 0, nc++;
-      tmn_ = !rec_.tm_search(list, ref, x * 4, y * 4, w * 4, h * 4, tmv_, false, cand, nc, &tmq_, kTmLambda, 1, 0, talt_);
+      tmn_ = !tm_search_(list, ref, x * 4, y * 4, w * 4, h * 4, tmv_, false, cand, nc, &tmq_, kTmLambda, 1, 0, talt_);
     } else if (!tmn_) {
       // the horizontal component known
       tmv_[0] = mvp_[0] + mvx_;
-      tmn_ = !rec_.tm_search(list, ref, x * 4, y * 4, w * 4, h * 4, tmv_, true, nullptr, 0, &tmq_, kTmLambda);
+      tmn_ = !tm_search_(list, ref, x * 4, y * 4, w * 4, h * 4, tmv_, true, nullptr, 0, &tmq_, kTmLambda);
     }
     int dv = tmn_ ? 0 : tmv_[comp] - mvp_[comp];
     const MbInfo* a = info(sc_->nb4(x - 1, y, ia));
@@ -2126,7 +2156,7 @@ struct Model {
       } else if (mi_->cls != CL_PCM && sc_->chroma_ == 1) {
         // intra: the energy of its proxy, a reference's block
         proxy_mv();
-        int64_t e = rec_.proxy_energy();
+        int64_t e = proxy_energy_();
         if (e >= 0) {
           aq_xp_ = lg16(e);
           aq_xi_ = true;
@@ -2394,16 +2424,16 @@ struct Model {
           inner = 2;
         }
         int p[2] = {prx_v_[0], prx_v_[1]};
-        if (inner && rec_.tm_search(-1, 0, 0, 0, 16, 16, p, false, nullptr, 0, nullptr, 0, 1, inner)) {
-          rec_.proxy_build(p);
+        if (inner && tm_search_(-1, 0, 0, 0, 16, 16, p, false, nullptr, 0, nullptr, 0, 1, inner)) {
+          proxy_build_(p);
           prx_v_[0] = p[0];
           prx_v_[1] = p[1];
         }
       }
       if (g.kind == 0)
-        pok = rec_.proxy_dc(g.plane, g.plane ? rec_.chroma_qp_of(g.plane - 1, qp) : qp, plv);
+        pok = proxy_dc_(g.plane, g.plane ? rec_.chroma_qp_of(g.plane - 1, qp) : qp, plv);
       else
-        pok = rec_.proxy_levels(g.kind == 2 ? g.plane : 0, g.x * 4, g.y * 4,
+        pok = proxy_levels_(g.kind == 2 ? g.plane : 0, g.x * 4, g.y * 4,
                                 g.kind == 2 ? rec_.chroma_qp_of(g.plane - 1, qp) : qp, plv, g.kind == 3 ? 8 : 4);
     }
     // in quarters (q4), and as the level an encoder would code
@@ -2451,7 +2481,7 @@ struct Model {
     // from the proxy (13-24), else how well its vector matched (1-12)
     int pq = 0;
     if (pok) {
-      int pa = rec_.proxy_acc();
+      int pa = proxy_acc_();
       pq = pa >= 0 ? 13 + tc_clamp(tc_qlog(pa), 0, 11) : pxq_;
     }
     D.pq = pq;
@@ -2549,7 +2579,7 @@ struct Model {
     // what the samples around the block ask of it (sign prediction, below,
     // and the level estimates)
     SignPred sp;
-    bool spok = cat <= 5 && (cat != 3 || sc_->chroma_ == 1) && sp.init(rec_, g, cat, mi_->qp - qp_off_, idx);
+    bool spok = LV::signpred && cat <= 5 && (cat != 3 || sc_->chroma_ == 1) && sp.init(rec_, g, cat, mi_->qp - qp_off_, idx);
     // the prediction's own levels by position (its texture by frequency):
     // an inter residual's follow them
     int pfl[64];

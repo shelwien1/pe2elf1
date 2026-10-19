@@ -1,0 +1,86 @@
+#  h264p's sgn family at level -1: its context indices and its tunable
+#  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
+#  MOD/l1/sgn_h.inc and MOD/l1/sgn_p.inc from this file and sgn.inc.
+#
+#  The sign of a nonzero coefficient. cg is the ctxBlockCat, pos the scan
+#  position (class), sa/sb the sign at the same position in the blocks A and
+#  B (0 zero, 1 positive, 2 negative, 3 none), scb for Cr DC the sign of Cb
+#  at the same position, mag the magnitude (class), md the block's prediction
+#  (as the other residual families); for the signs predicted from the samples
+#  around the block (luma), pp the predicted sign (1 positive, 2 negative, 0
+#  not predicted) and mg how much worse the other sign fits (1 + tc_qlog of
+#  quarter samples); ts the sign at the position in the block of the cbf
+#  family's tn (1 + sgn3; 4 + where the vector moves it; 0 none); dm for an
+#  inter luma block, the sign its residual would have were it a small shift
+#  of its prediction (the levels of the prediction's gradients), the shift
+#  fitted to the coefficients whose signs are known so far (1 +, 2 -; 2 or 4
+#  more as the level that gives reaches a quarter of the coefficient's, or
+#  all of it; 0 none).
+
+Prefix H1_sgn
+Debug 1
+Const 0
+
+Index a
+ a_cg: cg, 1!1111111111111
+ a_pos: pos, 1!111
+ a_sa: sa, 1!111
+ a_sb: sb, 1!111
+ a_gh: gh, 1!11111111
+
+Index b
+ b_cg: cg, 1!1111111111111
+ b_scb: scb, 1!111
+ b_pos: pos, 1!111
+
+Index c
+ c_cg: cg, 1!1111111111111
+ c_mag: mag, 1!10
+ c_md: md, 1!1100110000010101100
+
+Index d
+ d_cg: cg, 1!1111111111111
+ d_pp: pp, 1!11
+ d_mg: mg, 1!111111111111111
+
+Index m
+ m_cg: cg, 1!1111111111111
+ m_pp: pp, 1!00
+
+Index t
+ t_cg: cg, 1!0
+
+Index n
+ n_cg: cg, 1!0
+
+Index g
+ g_cg: cg, 1!0
+
+Number rA, 1, 0!11101001
+Number rB, 1, 0!11001101
+Number rC, 1, 0!00000011
+Number rD, 1, 0!11110110
+Number rT, 1, 0!00110111
+Number rG, 1, 0!01011010
+Number lr, 1, 0!01100
+Number lrm, 1, 0!01100
+Number mbm, 1, 0!00000000
+Number mwA, 1, 0!00011101
+Number mwB, 1, 0!00000101
+Number mwC, 1, 0!00000000
+Number mwD, 1, 0!00011111
+Number mwT, 1, 0!00000000
+Number mwG, 1, 0!00000000
+Number mt, 1, 0!110
+Number mb, 1, 0!10100000
+
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
+#  direct, one that does not is hashed into 2^h rows and contexts share
+#  them.  31 is "never hashed".  Frozen: left live these only grow.
+! Number hA, 1, 0!11000
+! Number hB, 1, 0!11000
+! Number hC, 1, 0!11000
+! Number hD, 1, 0!11000
+! Number hM, 1, 0!11000
+! Number hT, 1, 0!11000
+! Number hN, 1, 0!11000

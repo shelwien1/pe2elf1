@@ -1,6 +1,6 @@
-#  h264p's mvs family: its context indices and its tunable parameters.
-#  IDX/IDX-FORMAT.md is the format; ../mk.sh regenerates MOD/mvs_h.inc and
-#  MOD/mvs_p.inc from this file and mvs.inc.
+#  h264p's mvs family at level -9: its context indices and its tunable
+#  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
+#  MOD/l9/mvs_h.inc and MOD/l9/mvs_p.inc from this file and mvs.inc.
 #
 #  Motion: sub_mb_type (kind 0 P, 1 B, as a binary tree), ref_idx (kind 2) and
 #  the components of mvd (kind 3; the sign is the mvg family's). comp is the

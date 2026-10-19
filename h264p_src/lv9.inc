@@ -157,6 +157,12 @@
 
 struct Lv9 {
   static const int id = 9;  // the header's level byte
+  // the model's parts (h264p_levels.md section 6): the decoder in the loop,
+  // its template searches, the intra proxy, sign prediction, the skip
+  // prediction's pixels, deblocking (or the contexts see the pictures
+  // unfiltered), the CABAC states as predictions
+  static const bool recon = true, search = true, proxy = true, signpred = true, skippx = true, deblock = true,
+                    cabpred = true;
   typedef C9_nal nal;
   typedef C9_hdr hdr;
   typedef C9_skp skp;

@@ -1,6 +1,6 @@
-#  h264p's sgn family: its context indices and its tunable parameters.
-#  IDX/IDX-FORMAT.md is the format; ../mk.sh regenerates MOD/sgn_h.inc and
-#  MOD/sgn_p.inc from this file and sgn.inc.
+#  h264p's sgn family at level -9: its context indices and its tunable
+#  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
+#  MOD/l9/sgn_h.inc and MOD/l9/sgn_p.inc from this file and sgn.inc.
 #
 #  The sign of a nonzero coefficient. cg is the ctxBlockCat, pos the scan
 #  position (class), sa/sb the sign at the same position in the blocks A and

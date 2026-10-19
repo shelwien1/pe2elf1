@@ -1,6 +1,6 @@
-#  h264p's skp family: its context indices and its tunable parameters.
-#  IDX/IDX-FORMAT.md is the format; ../mk.sh regenerates MOD/skp_h.inc and
-#  MOD/skp_p.inc from this file and skp.inc.
+#  h264p's skp family at level -9: its context indices and its tunable
+#  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
+#  MOD/l9/skp_h.inc and MOD/l9/skp_p.inc from this file and skp.inc.
 #
 #  Whether a macroblock is skipped (node 0), whether the slice ends after it
 #  (node 1), mb_field_decoding_flag (node 2). st is the slice type and

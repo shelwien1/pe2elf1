@@ -1,6 +1,6 @@
-#  h264p's sig family: its context indices and its tunable parameters.
-#  IDX/IDX-FORMAT.md is the format; ../mk.sh regenerates MOD/sig_h.inc and
-#  MOD/sig_p.inc from this file and sig.inc.
+#  h264p's sig family at level -9: its context indices and its tunable
+#  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
+#  MOD/l9/sig_h.inc and MOD/l9/sig_p.inc from this file and sig.inc.
 #
 #  The significance map, given the number of nonzero coefficients: whether
 #  the coefficient at each scan position is nonzero, until none remain. cg

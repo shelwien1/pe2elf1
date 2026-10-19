@@ -1,6 +1,6 @@
-#  h264p's qpg family: its context indices and its tunable parameters.
-#  IDX/IDX-FORMAT.md is the format; ../mk.sh regenerates MOD/qpg_h.inc and
-#  MOD/qpg_p.inc from this file and qpg.inc.
+#  h264p's qpg family at level -9: its context indices and its tunable
+#  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
+#  MOD/l9/qpg_h.inc and MOD/l9/qpg_p.inc from this file and qpg.inc.
 #
 #  The sign of a nonzero mb_qp_delta, knowing its magnitude. as is the
 #  delta adaptive quantization's line asks for: 3 x its sign (sgn3) + how

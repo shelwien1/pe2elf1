@@ -1,6 +1,6 @@
-#  h264p's mvg family: its context indices and its tunable parameters.
-#  IDX/IDX-FORMAT.md is the format; ../mk.sh regenerates MOD/mvg_h.inc and
-#  MOD/mvg_p.inc from this file and mvg.inc.
+#  h264p's mvg family at level -9: its context indices and its tunable
+#  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
+#  MOD/l9/mvg_h.inc and MOD/l9/mvg_p.inc from this file and mvg.inc.
 #
 #  The sign of a nonzero mvd component, knowing its magnitude. comp is the
 #  component, lst the list; ts the template match's vector less the

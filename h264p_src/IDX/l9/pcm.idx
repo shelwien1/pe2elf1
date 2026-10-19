@@ -1,6 +1,6 @@
-#  h264p's pcm family: its context indices and its tunable parameters.
-#  IDX/IDX-FORMAT.md is the format; ../mk.sh regenerates MOD/pcm_h.inc and
-#  MOD/pcm_p.inc from this file and pcm.inc.
+#  h264p's pcm family at level -9: its context indices and its tunable
+#  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
+#  MOD/l9/pcm_h.inc and MOD/l9/pcm_p.inc from this file and pcm.inc.
 #
 #  I_PCM samples, as the difference to the sample to the left (above, in the
 #  first column). pl is the plane, dp the bit depth above 8, pd/pd2 the last

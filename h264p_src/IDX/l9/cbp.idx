@@ -1,6 +1,6 @@
-#  h264p's cbp family: its context indices and its tunable parameters.
-#  IDX/IDX-FORMAT.md is the format; ../mk.sh regenerates MOD/cbp_h.inc and
-#  MOD/cbp_p.inc from this file and cbp.inc.
+#  h264p's cbp family at level -9: its context indices and its tunable
+#  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
+#  MOD/l9/cbp_h.inc and MOD/l9/cbp_p.inc from this file and cbp.inc.
 #
 #  coded_block_pattern, one decision at a time: the luma bits of the four 8x8
 #  blocks (nodes 0-3), chroma not 0 (4), chroma 2 (5), and

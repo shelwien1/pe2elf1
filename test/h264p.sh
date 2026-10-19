@@ -8,7 +8,8 @@
 # H264P defaults to ./h264p, STREAMs to all streams under test/ and a
 # concatenation of some of them.  Compression and the dump are run with -s,
 # so a stream also fails when one of its NAL units of a supported type could
-# only be stored verbatim.
+# only be stored verbatim.  Compression is tried at each of the model's
+# levels in LEVELS (default: all of them, "9 1").
 
 bin=${1:-./h264p}
 shift
@@ -35,9 +36,9 @@ if [ $# -eq 0 ]; then
 fi
 
 # round trip: $1 stream, $2/$3 the commands there and back, $4 the
-# intermediate file; prints the reason of a failure
+# intermediate file, $5 more options there; prints the reason of a failure
 trip() {
-  if ! "$bin" "$2" -s "$1" "$4" 2> "$tmp/log"; then
+  if ! "$bin" "$2" -s $5 "$1" "$4" 2> "$tmp/log"; then
     echo "$2: $(head -1 "$tmp/log")"
   elif ! "$bin" "$3" "$4" "$tmp/t.264" 2> "$tmp/log"; then
     echo "$3: $(head -1 "$tmp/log")"
@@ -46,25 +47,28 @@ trip() {
   fi
 }
 
+levels=${LEVELS:-9 1}
 pass=0
 fail=0
 total=0
-packed=0
+declare -A packed
 for s in "$@"; do
   [ -f "$s" ] || continue
   why=$(trip "$s" t r "$tmp/t.tsv")
-  [ -z "$why" ] && why=$(trip "$s" c d "$tmp/t.c")
+  sizes=""
+  for l in $levels; do
+    [ -z "$why" ] && why=$(trip "$s" c d "$tmp/t.c" "-$l")
+    [ -z "$why" ] && b=$(wc -c < "$tmp/t.c") && packed[$l]=$((${packed[$l]:-0} + b)) && sizes="$sizes, -$l $b"
+  done
   if [ -n "$why" ]; then
     echo "FAIL $s ($why)"
     fail=$((fail + 1))
   else
     a=$(wc -c < "$s")
-    b=$(wc -c < "$tmp/t.c")
     total=$((total + a))
-    packed=$((packed + b))
-    echo "PASS $s ($(wc -l < "$tmp/t.tsv") rows; $a -> $b bytes)"
+    echo "PASS $s ($(wc -l < "$tmp/t.tsv") rows; $a bytes${sizes})"
     pass=$((pass + 1))
   fi
 done
-echo "passed $pass, failed $fail; compressed $total -> $packed bytes"
+echo "passed $pass, failed $fail; $total bytes compressed:$(for l in $levels; do printf ' -%s %s' $l ${packed[$l]:-0}; done)"
 [ $fail -eq 0 ]

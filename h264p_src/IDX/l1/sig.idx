@@ -1,0 +1,88 @@
+#  h264p's sig family at level -1: its context indices and its tunable
+#  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
+#  MOD/l1/sig_h.inc and MOD/l1/sig_p.inc from this file and sig.inc.
+#
+#  The significance map, given the number of nonzero coefficients: whether
+#  the coefficient at each scan position is nonzero, until none remain. cg
+#  is the block's ctxBlockCat, pos the scan position, rem the nonzero
+#  coefficients still to come and zl the zero ones (tc_qlog), tot all
+#  nonzero ones (tc_qlog), nc CAVLC's nC (class), fld field scan, q6 QP/6,
+#  tz the magnitude at the position in the block of the cbf family's tn (1 +
+#  up to 3; 5 + where the vector moves it; 0 none), sn whether it is nonzero
+#  in the blocks A and B (3 x A + B: 0 none, 1 zero, 2 not), hv which way
+#  the texture of the block's prediction runs (4 + log2 of its differences
+#  along rows over those along columns, -3 to 3; 0 flat or none), pf for an
+#  inter block the prediction's own level at the position (its transform
+#  quantized as a residual would be: 1 + tc_qlog of quarter levels, 0 none).
+
+Prefix H1_sig
+Debug 1
+Const 0
+
+Index a
+ a_cg: cg, 1!1111111111111
+ a_pos: pos, 1!111111111111111111111111111111111111111111111111111111111111111
+ a_rem: rem, 1!0101111100
+
+Index b
+ b_cg: cg, 1!1111111111111
+ b_pos: pos, 1!111110011011110011111111101010111000101110001010011010101010010
+ b_md: md, 1!1111111101110111100
+ b_hb: hb, 1!111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111
+
+Index c
+ c_cg: cg, 1!1101100000000
+ c_pos: pos, 1!111111111111111111111111111111111111111111111111111111111111111
+ c_q6: q6, 1!11111111
+ c_pg: pg, 1!1111111111111111
+ c_ft: ft, 1!11111111
+
+Index d
+ d_cg: cg, 1!1011000000000
+ d_rem: rem, 1!0101100110
+ d_zl: zl, 1!0011101010
+ d_em: em, 1!1111111111111111
+ d_hb: hb, 1!111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111
+
+Index m
+ m_cg: cg, 1!1111111111111
+ m_pos: pos, 1!100100001
+ m_rem: rem, 1!1110000000
+
+Index t
+ t_cg: cg, 1!0
+
+Index n
+ n_cg: cg, 1!0
+
+Index g
+ g_cg: cg, 1!0
+
+Number rA, 1, 0!11101100
+Number rB, 1, 0!00001000
+Number rC, 1, 0!01110100
+Number rD, 1, 0!11111111
+Number rT, 1, 0!00110111
+Number rG, 1, 0!01011010
+Number lr, 1, 0!01100
+Number lrm, 1, 0!01100
+Number mbm, 1, 0!00000000
+Number mwA, 1, 0!00000000
+Number mwB, 1, 0!10000001
+Number mwC, 1, 0!00000000
+Number mwD, 1, 0!00000000
+Number mwT, 1, 0!00000000
+Number mwG, 1, 0!00000000
+Number mt, 1, 0!110
+Number mb, 1, 0!01110000
+
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
+#  direct, one that does not is hashed into 2^h rows and contexts share
+#  them.  31 is "never hashed".  Frozen: left live these only grow.
+! Number hA, 1, 0!11000
+! Number hB, 1, 0!10101
+! Number hC, 1, 0!11000
+! Number hD, 1, 0!11000
+! Number hM, 1, 0!11000
+! Number hT, 1, 0!11000
+! Number hN, 1, 0!11000

@@ -1,6 +1,6 @@
-#  h264p's lvl family: its context indices and its tunable parameters.
-#  IDX/IDX-FORMAT.md is the format; ../mk.sh regenerates MOD/lvl_h.inc and
-#  MOD/lvl_p.inc from this file and lvl.inc.
+#  h264p's lvl family at level -9: its context indices and its tunable
+#  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
+#  MOD/l9/lvl_h.inc and MOD/l9/lvl_p.inc from this file and lvl.inc.
 #
 #  coeff_abs_level_minus1, in reverse scan order as CABAC codes it. cg is the
 #  ctxBlockCat, g1/e1 the levels coded so far above 1 and equal to 1, nc the

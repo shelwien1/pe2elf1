@@ -1,0 +1,80 @@
+#  h264p's hdr family at level -1: its context indices and its tunable
+#  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
+#  MOD/l1/hdr_h.inc and MOD/l1/hdr_p.inc from this file and hdr.inc.
+#
+#  Header syntax elements (SPS, PPS, SEI, slice headers), coded as the
+#  difference to the last value of the same element at the same place in
+#  its group (up to 15) and row in a run of it (up to 15), in the same kind
+#  of slice (frame_num and pic_order_cnt_lsb modulo their range, as they
+#  wrap): tag is the element (a
+#  dense id), fld the value's place in its group, p1/p2 the last two values,
+#  pos how many values in a row the tag has had, p1r the low bits of the last
+#  value, sty the slice type of the current slice, pr whether the slice
+#  before was a reference (frame_num grows after one; 2 none, 3 not in a
+#  slice).
+
+Prefix H1_hdr
+Debug 1
+Const 0
+
+Index a
+ a_tag: tag, &01011111
+ a_fld: fld, 1!111
+ a_p1: p1, 1!1111111
+ a_sty: sty, 1!111111111
+ a_pr: pr, 1!111
+
+Index b
+ b_tag: tag, &00101111
+ b_p1r: p1r, &00001111
+
+Index c
+ c_tag: tag, &11111111
+ c_fld: fld, 1!100101110100000
+
+Index d
+ d_tag: tag, &11111111
+ d_p1: p1, 1!111001010010011
+ d_p2: p2, 1!1111111
+
+Index m
+ m_tag: tag, &00000000
+
+Index t
+ t_tag: tag, &11111111
+
+Index n
+ n_tag: tag, &11111111
+
+Index g
+ g_p1: p1, 1!1111111
+ g_pos: pos, 1!111
+
+Number rA, 1, 0!10000000
+Number rB, 1, 0!00000000
+Number rC, 1, 0!00000000
+Number rD, 1, 0!11111111
+Number rT, 1, 0!00100100
+Number rG, 1, 0!01011010
+Number lr, 1, 0!10001
+Number lrm, 1, 0!01100
+Number mbm, 1, 0!00000000
+Number mwA, 1, 0!00000000
+Number mwB, 1, 0!00000100
+Number mwC, 1, 0!00000000
+Number mwD, 1, 0!00001100
+Number mwT, 1, 0!00000000
+Number mwG, 1, 0!00000000
+Number mt, 1, 0!110
+Number mb, 1, 0!11100010
+
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
+#  direct, one that does not is hashed into 2^h rows and contexts share
+#  them.  31 is "never hashed".  Frozen: left live these only grow.
+! Number hA, 1, 0!11000
+! Number hB, 1, 0!11000
+! Number hC, 1, 0!11000
+! Number hD, 1, 0!11000
+! Number hM, 1, 0!11000
+! Number hT, 1, 0!11000
+! Number hN, 1, 0!11000

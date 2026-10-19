@@ -1,6 +1,6 @@
-#  h264p's ipm family: its context indices and its tunable parameters.
-#  IDX/IDX-FORMAT.md is the format; ../mk.sh regenerates MOD/ipm_h.inc and
-#  MOD/ipm_p.inc from this file and ipm.inc.
+#  h264p's ipm family at level -9: its context indices and its tunable
+#  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
+#  MOD/l9/ipm_h.inc and MOD/l9/ipm_p.inc from this file and ipm.inc.
 #
 #  Intra prediction modes: the actual Intra4x4/8x8 mode as a binary tree (nodes
 #  1-15), intra_chroma_pred_mode in truncated unary (nodes 16-18). k8 is 0

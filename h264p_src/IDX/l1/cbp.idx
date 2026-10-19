@@ -1,0 +1,81 @@
+#  h264p's cbp family at level -1: its context indices and its tunable
+#  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
+#  MOD/l1/cbp_h.inc and MOD/l1/cbp_p.inc from this file and cbp.inc.
+#
+#  coded_block_pattern, one decision at a time: the luma bits of the four 8x8
+#  blocks (nodes 0-3), chroma not 0 (4), chroma 2 (5), and
+#  transform_size_8x8_flag (6). inc is CABAC's ctxIdxInc of the decision, pc
+#  the luma bits set so far, cls the class of the macroblock, col the
+#  decision's value in the same macroblock of the previous picture of the
+#  type (1 + the value, 0 none; for a luma block of an inter macroblock of
+#  a P picture whose reference is the last picture of a kind, 3 + the 4x4
+#  blocks with coefficients under where its vector puts it there, 8 +
+#  where the vector moves it), q6 QP/6, st the slice type.
+
+Prefix H1_cbp
+Debug 1
+Const 0
+
+Index a
+ a_inc: inc, 1!101
+ a_pc: pc, 1!1101
+ a_cls: cls, 1!11111111
+ a_st: st, 1!111111111
+
+Index b
+ b_inc: inc, 1!000
+ b_col: col, 1!111111111111
+ b_q6: q6, 1!10100010
+ b_pq: pq, 1!110001
+
+Index c
+ c_cls: cls, 1!11111111
+ c_col: col, 1!111111111111
+ c_pc: pc, 1!1010
+ c_pg: pg, 1!1111111111111111
+
+Index d
+ d_inc: inc, 1!111
+ d_em: em, 1!1110101101110100
+ d_cls: cls, 1!11111111
+
+Index m
+ m_inc: inc, 1!000
+
+Index t
+ t_st: st, 1!0
+
+Index n
+ n_st: st, 1!0
+
+Index g
+ g_st: st, 1!0
+
+Number rA, 1, 0!11101011
+Number rB, 1, 0!11110101
+Number rC, 1, 0!01000000
+Number rD, 1, 0!11111111
+Number rT, 1, 0!00110111
+Number rG, 1, 0!01011010
+Number lr, 1, 0!01111
+Number lrm, 1, 0!01100
+Number mbm, 1, 0!00000000
+Number mwA, 1, 0!00000000
+Number mwB, 1, 0!00000000
+Number mwC, 1, 0!00000000
+Number mwD, 1, 0!00010010
+Number mwT, 1, 0!00000000
+Number mwG, 1, 0!00000000
+Number mt, 1, 0!110
+Number mb, 1, 0!00000101
+
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
+#  direct, one that does not is hashed into 2^h rows and contexts share
+#  them.  31 is "never hashed".  Frozen: left live these only grow.
+! Number hA, 1, 0!11000
+! Number hB, 1, 0!11000
+! Number hC, 1, 0!11000
+! Number hD, 1, 0!11000
+! Number hM, 1, 0!11000
+! Number hT, 1, 0!11000
+! Number hN, 1, 0!11000

@@ -1,6 +1,6 @@
-#  h264p's mbt family: its context indices and its tunable parameters.
-#  IDX/IDX-FORMAT.md is the format; ../mk.sh regenerates MOD/mbt_h.inc and
-#  MOD/mbt_p.inc from this file and mbt.inc.
+#  h264p's mbt family at level -9: its context indices and its tunable
+#  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
+#  MOD/l9/mbt_h.inc and MOD/l9/mbt_p.inc from this file and mbt.inc.
 #
 #  mb_type as a binary tree over its value, the node being the position in the
 #  tree. st is the slice type and reference status, ca/cb/cc the classes of

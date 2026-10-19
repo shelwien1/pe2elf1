@@ -51,15 +51,32 @@ namespace {
 
 const char kMagic[] = "h264p";  // TSV files
 const int kVersion = 1;
-const char kCmMagic[] = "h264c";  // compressed streams, followed by the version byte
-const int kCmVersion = 4;
+const char kCmMagic[] = "h264c";  // compressed streams, followed by the version and level bytes
+const int kCmVersion = 5;
 // The CRC-32 at the end is coded XORed with this: a decoder fed past the
 // end of its input decodes zeros, and 0 is the CRC-32 of an empty stream.
 const uint32_t kCrcXor = 0x68323634;
 
+// The levels of this build (h264p_levels.md section 4): every level, or the
+// one a tuning build has (mk.sh); c without -L takes the first
+#if H264P_LV(9)
+#define H264P_L9(X) X(9)
+#else
+#define H264P_L9(X)
+#endif
+#if H264P_LV(1)
+#define H264P_L1(X) X(1)
+#else
+#define H264P_L1(X)
+#endif
+#define H264P_LEVELS(X) H264P_L9(X) H264P_L1(X)
+#define H264P_FIRST(n) n,
+const int kLevels[] = {H264P_LEVELS(H264P_FIRST)};
+
 struct Options {
   bool verbose = false;
   bool strict = false;
+  int level = kLevels[0];  // c's model: -L
 };
 
 struct Stats {
@@ -855,7 +872,8 @@ void cm_report(u64 in_bytes, u64 out_bytes, u64 tables) {
 // whether it is stored verbatim (a type the walk knows); then its syntax
 // through the model and the trailer, or its length and bytes. At the end,
 // the zero bytes after the last NAL unit and the CRC-32 of the stream.
-int compress(const char* in_name, const char* out_name, const Options& opt) {
+template <class LV>
+int compress_lv(const char* in_name, const char* out_name, const Options& opt) {
   FILE* fi = strcmp(in_name, "-") ? fopen(in_name, "rb") : stdin;
   if (!fi) {
     fprintf(stderr, "h264p: cannot open %s: %s\n", in_name, strerror(errno));
@@ -864,9 +882,10 @@ int compress(const char* in_name, const char* out_name, const Options& opt) {
   FILE* fo = open_out(out_name);
   fwrite(kCmMagic, 1, sizeof kCmMagic - 1, fo);
   fputc(kCmVersion, fo);
-  u64 in_bytes = 0, out_bytes = sizeof kCmMagic;
-  std::unique_ptr<Model<0, Lv9>> mp(new Model<0, Lv9>());
-  Model<0, Lv9>& m = *mp;
+  fputc(LV::id, fo);
+  u64 in_bytes = 0, out_bytes = sizeof kCmMagic + 1;
+  std::unique_ptr<Model<0, LV>> mp(new Model<0, LV>());
+  Model<0, LV>& m = *mp;
   auto& rc = tc_rc<0>::rc;
   Stats st;
   try {
@@ -974,7 +993,7 @@ int compress(const char* in_name, const char* out_name, const Options& opt) {
       if (it.ok) {
         const Trailer& t = it.t;
         it.log.rewind();
-        ModelChan<0, Lv9> ch(m, &it.log);
+        ModelChan<0, LV> ch(m, &it.log);
         m.nal_begin(type, ref_idc);
         BitWriter bw;
         write_syntax(type, ref_idc, cb, ch, bw);
@@ -1051,25 +1070,11 @@ size_t cm_count(i64 v, i64 lim) {
   return (size_t)v;
 }
 
-int decompress(const char* in_name, const char* out_name, const Options& opt) {
-  FILE* fi = strcmp(in_name, "-") ? fopen(in_name, "rb") : stdin;
-  if (!fi) {
-    fprintf(stderr, "h264p: cannot open %s: %s\n", in_name, strerror(errno));
-    return 1;
-  }
-  char head[sizeof kCmMagic];
-  if (fread(head, 1, sizeof head, fi) != sizeof head || memcmp(head, kCmMagic, sizeof kCmMagic - 1)) {
-    fprintf(stderr, "h264p: %s: not a stream h264p compressed\n", in_name);
-    return 1;
-  }
-  if (head[sizeof kCmMagic - 1] != kCmVersion) {
-    fprintf(stderr, "h264p: %s: compressed by version %d, this is version %d\n", in_name,
-            (int)(uint8_t)head[sizeof kCmMagic - 1], kCmVersion);
-    return 1;
-  }
+template <class LV>
+int decompress_lv(FILE* fi, const char* in_name, const char* out_name, const Options& opt) {
   FILE* fo = open_out(out_name);
-  std::unique_ptr<Model<1, Lv9>> mp(new Model<1, Lv9>());
-  Model<1, Lv9>& m = *mp;
+  std::unique_ptr<Model<1, LV>> mp(new Model<1, LV>());
+  Model<1, LV>& m = *mp;
   auto& rc = tc_rc<1>::rc;
   std::vector<uint8_t> buf;
   Crc32 crc;
@@ -1125,7 +1130,7 @@ int decompress(const char* in_name, const char* out_name, const Options& opt) {
         buf.insert(buf.end(), b.begin(), b.end());
         update_params(type, unescape(b.data(), b.size()), ctx);
       } else {
-        ModelChan<1, Lv9> ch(m, nullptr);
+        ModelChan<1, LV> ch(m, nullptr);
         m.nal_begin(type, ref_idc);
         BitWriter bw;
         int pad = write_syntax(type, ref_idc, ctx, ch, bw);
@@ -1165,6 +1170,46 @@ int decompress(const char* in_name, const char* out_name, const Options& opt) {
   return 0;
 }
 
+int compress(const char* in_name, const char* out_name, const Options& opt) {
+  switch (opt.level) {
+#define H264P_C(n) \
+  case n:          \
+    return compress_lv<Lv##n>(in_name, out_name, opt);
+    H264P_LEVELS(H264P_C)
+#undef H264P_C
+  }
+  fprintf(stderr, "h264p: no level -%d in this build\n", opt.level);
+  return 2;
+}
+
+int decompress(const char* in_name, const char* out_name, const Options& opt) {
+  FILE* fi = strcmp(in_name, "-") ? fopen(in_name, "rb") : stdin;
+  if (!fi) {
+    fprintf(stderr, "h264p: cannot open %s: %s\n", in_name, strerror(errno));
+    return 1;
+  }
+  char head[sizeof kCmMagic + 1];
+  if (fread(head, 1, sizeof kCmMagic, fi) != sizeof kCmMagic || memcmp(head, kCmMagic, sizeof kCmMagic - 1)) {
+    fprintf(stderr, "h264p: %s: not a stream h264p compressed\n", in_name);
+    return 1;
+  }
+  if (head[sizeof kCmMagic - 1] != kCmVersion) {
+    fprintf(stderr, "h264p: %s: compressed by version %d, this is version %d\n", in_name,
+            (int)(uint8_t)head[sizeof kCmMagic - 1], kCmVersion);
+    return 1;
+  }
+  int level = fgetc(fi);
+  switch (level) {
+#define H264P_D(n) \
+  case n:          \
+    return decompress_lv<Lv##n>(fi, in_name, out_name, opt);
+    H264P_LEVELS(H264P_D)
+#undef H264P_D
+  }
+  fprintf(stderr, "h264p: %s: compressed at level -%d, which this build has not\n", in_name, level);
+  return 1;
+}
+
 void usage() {
   fprintf(stderr,
           "usage: h264p c|d|t|r [options] input output\n"
@@ -1175,6 +1220,7 @@ void usage() {
           "options:\n"
           "  -v  print statistics\n"
           "  -s  strict (c, t): fail if a NAL unit of a supported type has to be stored verbatim\n"
+          "  -L  (c) the model's level, 1 (fastest) to 9 (strongest, the default)\n"
           "input and output can be - for stdin and stdout\n");
 }
 
@@ -1198,6 +1244,8 @@ int main(int argc, char** argv) {
           opt.verbose = true;
         else if (*p == 's')
           opt.strict = true;
+        else if (*p >= '1' && *p <= '9')
+          opt.level = *p - '0';
         else {
           usage();
           return 2;

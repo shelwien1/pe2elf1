@@ -1,6 +1,6 @@
-#  h264p's hdr family: its context indices and its tunable parameters.
-#  IDX/IDX-FORMAT.md is the format; ../mk.sh regenerates MOD/hdr_h.inc and
-#  MOD/hdr_p.inc from this file and hdr.inc.
+#  h264p's hdr family at level -9: its context indices and its tunable
+#  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
+#  MOD/l9/hdr_h.inc and MOD/l9/hdr_p.inc from this file and hdr.inc.
 #
 #  Header syntax elements (SPS, PPS, SEI, slice headers), coded as the
 #  difference to the last value of the same element at the same place in

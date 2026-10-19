@@ -1,9 +1,9 @@
 /*  The template IDX/idx2inc.pl reads alongside sig.idx: the sig
     family's index builder and the tables its indices address.  Copied
-    through into MOD/sig_p.inc with `H9_sig_` replaced by the prefix,
+    through into MOD/l9/sig_p.inc with `H9_sig_` replaced by the prefix,
     `MakeIndex` by the statements that build the indices, and the Table()
-    lines lifted out into the struct in MOD/sig_h.inc.  Edit this file and
-    sig.idx, not MOD/; ../mk.sh regenerates both.
+    lines lifted out into the struct in MOD/l9/sig_h.inc.  Edit this file
+    and sig.idx, not MOD/; ../../mk.sh regenerates both.
 
     `_A`-`_E`, `_H`-`_L` are the ten counters, `_S` and `_F` the two APMs,
     `_W`, `_W2` and `_W3` the three mixers (selected by indices m, w and s)

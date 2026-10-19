@@ -2491,8 +2491,11 @@ struct Recon {
       }
     }
   }
-  // macroblock row row of the current picture (the rows above it done)
+  // macroblock row row of the current picture (the rows above it done);
+  // not where the level has the contexts see pictures unfiltered
+  bool deblock = true;
   void deblock_row(int row) {
+    if (!deblock) return;
     int mbw = cur->mbw, w = cur->w, cw = w / 2;
     for (int addr = row * mbw; addr < (row + 1) * mbw; addr++) {
       const DbMb& Q = db[addr];
@@ -3668,5 +3671,71 @@ struct Recon {
     return cnt ? (int)(sum / cnt) : -1;
   }
 };
+
+// The decoder of a level without one (h264p_levels.md section 6): what
+// Recon answers while no picture is active, every query "not known", but
+// here as constants, so that the model's code that needs the pictures folds
+// away, and the level has none of the pictures.
+struct ReconOff {
+  static constexpr bool active = false;
+  RPic* cur = nullptr;
+  RPic* list[2][33] = {};
+  int nlist[2] = {0, 0};
+  bool direct8x8 = true;
+  int maps_w = 0, maps_h = 0, energy_mean = 0;
+  std::vector<int> energy, change;
+  int pcm_s[384];
+  void slice_begin(const SliceHeader&, bool) {}
+  void mb_start(int) {}
+  void mb_end(int, int, int, const uint8_t*, int, int, int, const int8_t[2][4], const int16_t[2][16][2],
+              const uint8_t*) {}
+  void prepare(int, int, const uint8_t*, int, int, const int8_t[2][4], const int16_t[2][16][2]) {}
+  void coef(int, int, const int*, int) {}
+  void luma_add(int, int, int) {}
+  void chroma_add(int, int, int) {}
+  void luma_ready(int, int) {}
+  void chroma_ready(int, int, int) {}
+  void luma_finish(int, int) {}
+  int chroma_qp_of(int, int qp) const { return chroma_qp(qp, 0); }
+  bool colocated(int, int, int&, int*, int64_t&) const { return false; }
+  bool col_long_term() const { return false; }
+  int map_col(int64_t) const { return 0; }
+  int dist_scale(int) const { return 256; }
+  int64_t ac_energy(int) const { return 0; }
+  bool tm_search(int, int, int, int, int, int, int*, bool, const int (*)[2] = nullptr, int = 0, int* = nullptr,
+                 int = 0, int = 1, int = 0, int* = nullptr) const {
+    return false;
+  }
+  int tm_miss(const int8_t[2][4], const int16_t[2][16][2], int* per = nullptr) const {
+    if (per) per[0] = per[1] = -1;
+    return -1;
+  }
+  int skip_miss(const int8_t[2][4], const int16_t[2][16][2]) { return -1; }
+  int bi_diff(const int8_t[2][4], const int16_t[2][16][2]) { return -1; }
+  int mb_texture() const { return -1; }
+  int ref_texture(int, int, int, int, int, int, const int*, int = 3) const { return -1; }
+  int pred_texture(int, int, int, int, int* = nullptr) const { return -1; }
+  int edge_miss(int, int, int, int) const { return -1; }
+  bool pred_levels(int, int, int, int, int*, int = 4) const { return false; }
+  bool pred_grad_levels(int, int, int, int, int, int*, int*) const { return false; }
+  int dimd(int, int, int, int, int& strength) const {
+    strength = 0;
+    return 9;
+  }
+  bool proxy_build(const int*) { return false; }
+  int proxy_nz(int, int, int, int, int, int, int) const { return -1; }
+  int proxy_mode(int, int, int, int, int, int* = nullptr) const { return -1; }
+  int proxy_i16mode(int, int, int*) const { return -1; }
+  int proxy_cmode(int, int, int*) const { return -1; }
+  bool proxy_levels(int, int, int, int, int*, int = 4) const { return false; }
+  bool proxy_dc(int, int, int*) const { return false; }
+  int64_t proxy_energy() const { return -1; }
+  int proxy_acc() const { return -1; }
+  bool sign_edges(int, int, int, int, int64_t, int64_t*, bool*) const { return false; }
+  int dc16_at(int, int) { return 0; }
+  int dcc_at(int, int, int) { return 0; }
+  bool deblock = true;
+};
+constexpr bool ReconOff::active;
 
 }  // namespace h264p

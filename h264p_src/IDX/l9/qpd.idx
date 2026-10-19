@@ -1,6 +1,6 @@
-#  h264p's qpd family: its context indices and its tunable parameters.
-#  IDX/IDX-FORMAT.md is the format; ../mk.sh regenerates MOD/qpd_h.inc and
-#  MOD/qpd_p.inc from this file and qpd.inc.
+#  h264p's qpd family at level -9: its context indices and its tunable
+#  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
+#  MOD/l9/qpd_h.inc and MOD/l9/qpd_p.inc from this file and qpd.inc.
 #
 #  mb_qp_delta. lnz: the previous macroblock had a nonzero delta (CABAC's
 #  context); pc the luma bits of the coded_block_pattern, cc its chroma part,

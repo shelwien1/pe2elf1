@@ -1,6 +1,6 @@
-#  h264p's cbf family: its context indices and its tunable parameters.
-#  IDX/IDX-FORMAT.md is the format; ../mk.sh regenerates MOD/cbf_h.inc and
-#  MOD/cbf_p.inc from this file and cbf.inc.
+#  h264p's cbf family at level -9: its context indices and its tunable
+#  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
+#  MOD/l9/cbf_h.inc and MOD/l9/cbf_p.inc from this file and cbf.inc.
 #
 #  The number of nonzero coefficients of a block, 0 for none (kn 0), or
 #  less 1 where the block is known to have one (kn 1: CABAC 8x8 blocks

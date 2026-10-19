@@ -34,16 +34,12 @@
 #define FC_CNT(X) X(A, a) X(B, b) X(C, c) X(D, d) X(E, e) X(H, h) X(I, i) X(J, j)
 #elif FC_NC == 6
 #define FC_CNT(X) X(A, a) X(B, b) X(C, c) X(D, d) X(E, e) X(H, h)
-#elif FC_NC == 5
-#define FC_CNT(X) X(A, a) X(B, b) X(C, c) X(D, d) X(E, e)
 #elif FC_NC == 4
 #define FC_CNT(X) X(A, a) X(B, b) X(C, c) X(D, d)
-#elif FC_NC == 3
-#define FC_CNT(X) X(A, a) X(B, b) X(C, c)
 #elif FC_NC == 2
 #define FC_CNT(X) X(A, a) X(B, b)
 #else
-#error "famcfg.inc: FC_NC is 2, 3, 4, 5, 6, 8 or 10"
+#error "famcfg.inc: FC_NC is 2, 4, 6, 8 or 10"
 #endif
 #if FC_NMIX != 1 && FC_NMIX != 3
 #error "famcfg.inc: FC_NMIX is 1 or 3"
@@ -72,18 +68,13 @@ struct FC_NAME {
   static const int lr, mb, lrm, mbm;            // the mixers' rates
   static const int hM, hT, hN;                  // mixer 1's, the mantissa's, its mixer's index
   static const sz kM, kT, kN, kG;               // their rows, and the signs'
-#if FC_NMIX > 1 || FC_NAPM
+  // (0 where the shape has not the part, which tc_fam then never reads)
   static const int hS;  // mixer 3's and APM 1's index
   static const sz kS;
-#endif
-#if FC_NMIX > 1
-  static const sz kW;  // mixer 2's rows (its index is direct)
-#endif
-#if FC_NAPM
+  static const sz kW;   // mixer 2's rows (its index is direct)
   static const int hF;  // APM 2's index
   static const sz kF;
-  static const int rS1, rS2, qs, qf, bw;
-#endif
+  static const int rS1, rS2, qs, qf, bw;  // the APMs' rates and widths, and the last one's share
   // the tables, in the order tc_fam takes them
   static void tables(T* t, tc_tabs& b) {
 #define FC_TAB(U, l) b.cnt[i++] = t->FCX(U);
@@ -128,6 +119,8 @@ set hT = FC_HASH(FCX(t_Volume), FCX(hT));
 set hN = FC_HASH(FCX(n_Volume), FCX(hN));
 #if FC_NMIX > 1 || FC_NAPM
 set hS = FC_HASH(FCX(s_Volume), FCX(hS));
+#else
+set hS = 0;
 #endif
 #if FC_NAPM
 set hF = FC_HASH(FCX(f_Volume), FCX(hF));
@@ -136,6 +129,13 @@ set rS2 = cm_apm_limit(tc_clamp(FCX(rS2), 1, 15));
 set qs = FCX(qs);
 set qf = FCX(qf);
 set bw = tc_clamp(FCX(bw), 0, 16);
+#else
+set hF = 0;
+set rS1 = 0;
+set rS2 = 0;
+set qs = 0;
+set qf = 0;
+set bw = 0;
 #endif
 #undef set
 #define set const sz FC_NAME::
@@ -148,12 +148,18 @@ set kN = tc_rows(FCX(n_Volume), FCX(hN));
 set kG = (sz)FCX(g_Volume);
 #if FC_NMIX > 1 || FC_NAPM
 set kS = tc_rows(FCX(s_Volume), FCX(hS));
+#else
+set kS = 0;
 #endif
 #if FC_NMIX > 1
 set kW = (sz)FCX(w_Volume);
+#else
+set kW = 0;
 #endif
 #if FC_NAPM
 set kF = tc_rows(FCX(f_Volume), FCX(hF));
+#else
+set kF = 0;
 #endif
 #undef set
 #undef FC_HASH
