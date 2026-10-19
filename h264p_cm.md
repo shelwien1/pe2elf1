@@ -866,7 +866,7 @@ their gain on test/002:
 | intra residual estimated from the reference: the block where the neighbours' motion (refined by template matching) puts the macroblock, less the prediction, transformed and quantized, in quarter levels | count, significance, levels, signs, intra cbp | 88 KB |
 | texture of the prediction; sign prediction (the first signs searched for the best continuity of the block with its surroundings, section 7) | coefficients, cbp | 75 KB* |
 | maps of the last picture (energy, change), DIMD | most | 44 KB* |
-| skip prediction: how its luma continues the samples above and left (edge miss), how its motion predicts them (template matching), in B slices how far its two predictions are apart; the best template match | skip, mb_type | 36 KB |
+| skip prediction: how its luma continues the samples above and left (edge miss), how its motion predicts them (template matching), in B slices how far its two predictions are apart and which of them (or their average) predicts the samples around better; the best template match | skip, mb_type | 36 KB |
 | the intra estimate's reference block matched by the macroblocks above, left and above right whole (a 16-sample template, where a vector to code does better with 2; the search starting from the neighbours' proxies, their vectors and the temporal one), and searched again before each later luma block of an Intra4x4/8x8 macroblock (the blocks decoded added to the template) and before the chroma (against the luma, decoded by then) | count, significance, levels, signs | 18 KB |
 | motion vector by template matching search, the vector zero, col's mvd | mvd | 17 KB |
 | hints: the intra estimate's level and count, the template match's mvd, the adaptive quantization line's QP delta | levels, count, mvd, qp delta | 13 KB |
@@ -915,7 +915,7 @@ with their defaults (0.6 KB: 02's 667 bytes of it take 84).
 | element | CABAC | model | |
 |---|---:|---:|---:|
 | skip, end | 336,175 | 221,412 | −34.1% |
-| mb_type | 365,120 | 259,362 | −29.0% |
+| mb_type | 365,120 | 259,426 | −28.9% |
 | cbp, transform_size_8x8_flag | 216,100 | 153,390 | −29.0% |
 | intra modes | 299,858 | 231,869 | −22.7% |
 | sub_mb_type, ref_idx, mvd | 504,865 | 404,213 | −19.9% |
@@ -923,8 +923,8 @@ with their defaults (0.6 KB: 02's 667 bytes of it take 84).
 | coded_block_flag, significance (count, significance) | 910,721 | 696,918 | −23.5% |
 | levels | 302,611 | 219,815 | −27.4% |
 | signs | 329,382 | 182,124 | −44.7% |
-| macroblock syntax | 3,536,129 | 2,551,518 | −27.8% |
-| whole streams (H.264 against compressed) | 3,603,993 | 2,556,763 | −29.1% |
+| macroblock syntax | 3,536,129 | 2,551,582 | −27.8% |
+| whole streams (H.264 against compressed) | 3,603,993 | 2,556,834 | −29.1% |
 
 The model tables take 226 MB.
 

@@ -2878,65 +2878,6 @@ struct Recon {
     memcpy(skip_mv, mv, sizeof skip_mv);
     return miss(0, 0, 0, 16);
   }
-  // the sample at (x, y) of ref displaced by (vx, vy) quarter samples,
-  // bilinear (as tm_search's)
-  static int bil(const RPic* R, int x, int y, int vx, int vy) {
-    int ix = x + (vx >> 2), iy = y + (vy >> 2), fx = vx & 3, fy = vy & 3, W = R->w, H = R->h;
-    const uint8_t *a = R->y.data() + clip3(0, H - 1, iy) * W, *c = R->y.data() + clip3(0, H - 1, iy + 1) * W;
-    int x1 = clip3(0, W - 1, ix), x2 = clip3(0, W - 1, ix + 1);
-    return ((4 - fx) * (4 - fy) * a[x1] + fx * (4 - fy) * a[x2] + (4 - fx) * fy * c[x1] + fx * fy * c[x2] + 8) >> 4;
-  }
-  // How well the average of list 0's first reference by v0 and list 1's by
-  // v1 predicts the decoded samples above (2 rows) and to the left (2
-  // columns) of the macroblock: 4 x the mean absolute difference; -1 none
-  int tm_bi(const int* v0, const int* v1) const {
-    if (!active || nlist[0] < 1 || nlist[1] < 1 || !list[0][0] || !list[1][0]) return -1;
-    int mbw = cur->mbw, x0 = mb_addr % mbw * 16, y0 = mb_addr / mbw * 16, w = cur->w, sum = 0, cnt = 0;
-    bool top = y0 > 0 && db[mb_addr - mbw].slice >= 0, left = x0 > 0 && db[mb_addr - 1].slice >= 0;
-    const RPic *R0 = list[0][0], *R1 = list[1][0];
-#ifdef H264P_AVX2
-    {
-      // both templates at once: the rows above on the padded references,
-      // the columns left on the transposed ones, where they are inside
-      int ps0, pm0, ps1, pm1, pt0, pt1;
-      const uint8_t *P0 = R0->luma(ps0, pm0), *P1 = R1->luma(ps1, pm1), *T0 = R0->luma_t(pt0), *T1 = R1->luma_t(pt1);
-      auto in = [&](const RPic* R, const int* v, int pm) {
-        int ix = x0 + (v[0] >> 2), iy = y0 + (v[1] >> 2);
-        return ix - 2 >= -pm && iy - 2 >= -pm && ix + 16 < R->w + pm && iy + 16 < R->h + pm;
-      };
-      if (T0 && T1 && in(R0, v0, pm0) && in(R1, v1, pm1)) {
-        const uint8_t* Y = cur->y.data();
-        int ax0 = x0 + (v0[0] >> 2), ay0 = y0 + (v0[1] >> 2), ax1 = x0 + (v1[0] >> 2), ay1 = y0 + (v1[1] >> 2);
-        if (top) {
-          __m256i p = _mm256_avg_epu8(bil16x2(P0 + (ay0 - 2) * ps0 + ax0, ps0, v0[0] & 3, v0[1] & 3),
-                                      bil16x2(P1 + (ay1 - 2) * ps1 + ax1, ps1, v1[0] & 3, v1[1] & 3));
-          sum += sad_sum(_mm256_sad_epu8(p, ld16x2(Y + (y0 - 2) * w + x0, Y + (y0 - 1) * w + x0)));
-          cnt += 32;
-        }
-        if (left) {
-          const uint8_t* qt = left_strip();
-          __m256i p = _mm256_avg_epu8(bil16x2(T0 + (ax0 - 2) * pt0 + ay0, pt0, v0[1] & 3, v0[0] & 3),
-                                      bil16x2(T1 + (ax1 - 2) * pt1 + ay1, pt1, v1[1] & 3, v1[0] & 3));
-          sum += sad_sum(_mm256_sad_epu8(p, ld16x2(qt, qt + 16)));
-          cnt += 32;
-        }
-        return cnt ? sum * 4 / cnt : -1;
-      }
-    }
-#endif
-    auto px = [&](int x, int y) {
-      int p = (bil(R0, x, y, v0[0], v0[1]) + bil(R1, x, y, v1[0], v1[1]) + 1) >> 1;
-      sum += abs(cur->y[(size_t)y * w + x] - p);
-      cnt++;
-    };
-    if (top)
-      for (int j = 1; j <= 2; j++)
-        for (int i = 0; i < 16; i++) px(x0 + i, y0 - j);
-    if (left)
-      for (int j = 0; j < 16; j++)
-        for (int i = 1; i <= 2; i++) px(x0 - i, y0 + j);
-    return cnt ? sum * 4 / cnt : -1;
-  }
   // How far apart the two predictions of a bi-predicted macroblock (rf,
   // mv) are: 4 x the mean absolute difference of their luma, from the
   // blocks of equal motion (8x8); -1 not bi-predicted anywhere
@@ -2985,13 +2926,15 @@ struct Recon {
   // Template matching: the decoded samples above (2 rows) and to the left
   // (2 columns) of the current macroblock against their prediction by the
   // motion (rf, mv) of its blocks next to them, without weights: 4 x the
-  // mean absolute difference (-1 none)
-  int tm_miss(const int8_t rf[2][4], const int16_t mv[2][16][2]) const {
+  // mean absolute difference (-1 none); per (if given), the same of each
+  // list's prediction alone, where it is used
+  int tm_miss(const int8_t rf[2][4], const int16_t mv[2][16][2], int* per = nullptr) const {
+    if (per) per[0] = per[1] = -1;
     if (!active) return -1;
     int mbw = cur->mbw, mx = mb_addr % mbw * 16, my = mb_addr / mbw * 16, w = cur->w;
     bool top = my > 0 && db[mb_addr - mbw].slice >= 0;
     bool left = mx > 0 && db[mb_addr - 1].slice >= 0;
-    int sum = 0, cnt = 0;
+    int sum = 0, cnt = 0, ls[2] = {0, 0}, lc[2] = {0, 0};
     // per list, the strip: the rows above, the columns left transposed (both
     // 2 x 16, stride 16)
     uint8_t p[2][32] = {};
@@ -3038,19 +2981,27 @@ struct Recon {
         // the pieces as 32-bit lanes k and 4 + k: from list 0 where it is
         // used (else 1), averaged with list 1 where both are, those of
         // neither out
-        int m1[4], m2[4], mu[4];
+        int m1[4], m2[4], mu[4], u1[4];
         for (int k = 0; k < 4; k++) {
           m1[k] = use[0][k] ? 0 : -1;
           m2[k] = use[0][k] && use[1][k] ? -1 : 0;
           mu[k] = use[0][k] || use[1][k] ? -1 : 0;
+          u1[k] = use[1][k] ? -1 : 0;
           cnt += mu[k] & 8;
+          lc[0] += ~m1[k] & 8, lc[1] += u1[k] & 8;
         }
         __m256i P0 = _mm256_loadu_si256((const __m256i*)p[0]), P1 = _mm256_loadu_si256((const __m256i*)p[1]);
-        __m256i a = _mm256_blendv_epi8(P0, P1, _mm256_setr_epi32(m1[0], m1[1], m1[2], m1[3], m1[0], m1[1], m1[2], m1[3]));
+        __m256i M1 = _mm256_setr_epi32(m1[0], m1[1], m1[2], m1[3], m1[0], m1[1], m1[2], m1[3]);
+        __m256i a = _mm256_blendv_epi8(P0, P1, M1);
         __m256i b = _mm256_blendv_epi8(a, P1, _mm256_setr_epi32(m2[0], m2[1], m2[2], m2[3], m2[0], m2[1], m2[2], m2[3]));
         __m256i m = _mm256_setr_epi32(mu[0], mu[1], mu[2], mu[3], mu[0], mu[1], mu[2], mu[3]);
         __m256i v = _mm256_and_si256(_mm256_avg_epu8(a, b), m), d = _mm256_and_si256(ld16x2(q, q + qs), m);
         sum += sad_sum(_mm256_sad_epu8(v, d));
+        if (per) {
+          __m256i U1 = _mm256_setr_epi32(u1[0], u1[1], u1[2], u1[3], u1[0], u1[1], u1[2], u1[3]);
+          ls[0] += sad_sum(_mm256_sad_epu8(_mm256_andnot_si256(M1, P0), _mm256_andnot_si256(M1, d)));
+          ls[1] += sad_sum(_mm256_sad_epu8(_mm256_and_si256(U1, P1), _mm256_and_si256(U1, d)));
+        }
       }
 #else
       for (int k = 0; k < 4; k++) {
@@ -3062,10 +3013,14 @@ struct Recon {
             int v = n == 2 ? (p0[j * 16 + i] + p1[j * 16 + i] + 1) >> 1 : p0[j * 16 + i];
             sum += abs(q[j * qs + k * 4 + i] - v);
             cnt++;
+            for (int l = 0; l < 2; l++)
+              if (use[l][k]) ls[l] += abs(q[j * qs + k * 4 + i] - p[l][j * 16 + k * 4 + i]), lc[l]++;
           }
       }
 #endif
     }
+    if (per)
+      for (int l = 0; l < 2; l++) per[l] = lc[l] ? ls[l] * 4 / lc[l] : -1;
     return cnt ? sum * 4 / cnt : -1;
   }
   // Template matching motion search for the luma block (bx, by, bw, bh)

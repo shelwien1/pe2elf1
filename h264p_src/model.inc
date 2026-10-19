@@ -656,7 +656,7 @@ struct Model {
   bool smv_ok_ = false;
   int mph_ = 1;          // ipm(): the macroblock's most-probable-mode flags so far, after a 1
   int cnth_ = 0;         // block(): the counts of the last two blocks, two bits each
-  int tb_ = 0, dh_ = 0;  // skip_miss(): the best template match on list 0, the better list (B)
+  int tb_ = 0, dh_ = 0;  // skip_miss(): the best template match on list 0, the better list of the skip motion (B)
   int bd_ = 0;           // skip_miss(): the skip motion's two predictions apart (B)
   int tmb_[2] = {};      // that vector
   bool tmb_ok_ = false;
@@ -958,17 +958,10 @@ struct Model {
     tm_ = tb_ = dh_ = bd_ = 0;
     if (!rec_.active) return 0;
     // how well the reference can predict the samples around at best (list
-    // 0), and which list does it better
-    int m0, m1;
+    // 0)
+    int m0;
     tmb_ok_ = tm_best(0, tmb_, m0);
     if (tmb_ok_) tb_ = 1 + tc_clamp(tc_qlog(m0), 0, 15);
-    int v1[2];
-    if (tmb_ok_ && sc_->stype_ == kB && tm_best(1, v1, m1)) {
-      dh_ = m0 * 4 < m1 * 3 ? 1 : m1 * 4 < m0 * 3 ? 2 : 3;
-      // and whether their average does better still (bi-prediction)
-      int mb = rec_.tm_bi(tmb_, v1), mn = std::min(m0, m1);
-      if (mb >= 0) dh_ += 3 * (mb * 4 < mn * 3 ? 1 : mb > mn ? 2 : 0);
-    }
     if (sc_->stype_ == kB)
       mv_direct(15);
     else
@@ -977,8 +970,16 @@ struct Model {
     memcpy(smv_, mi_->mv, sizeof smv_);
     memcpy(srf_, mi_->rf, sizeof srf_);
     smv_ok_ = true;
-    int tm = rec_.tm_miss(mi_->rf, mi_->mv);
+    int per[2];
+    int tm = rec_.tm_miss(mi_->rf, mi_->mv, per);
     tm_ = tm < 0 ? 0 : 1 + tc_clamp(tc_qlog(tm), 0, 15);
+    // B: which list's prediction of the skip motion does that better, and
+    // whether their average does better still
+    if (sc_->stype_ == kB && per[0] >= 0 && per[1] >= 0) {
+      dh_ = per[0] * 4 < per[1] * 3 ? 1 : per[1] * 4 < per[0] * 3 ? 2 : 3;
+      int mn = std::min(per[0], per[1]);
+      dh_ += 3 * (tm * 4 < mn * 3 ? 1 : tm > mn ? 2 : 0);
+    }
     // B: how far apart the two predictions of the skip motion are; P: how
     // far the skip vector is from the best template match's
     int bd = -1;

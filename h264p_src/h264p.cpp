@@ -61,7 +61,7 @@ namespace {
 const char kMagic[] = "h264p";  // TSV files
 const int kVersion = 1;
 const char kCmMagic[] = "h264c";  // compressed streams, followed by the version byte
-const int kCmVersion = 3;
+const int kCmVersion = 4;
 // The CRC-32 at the end is coded XORed with this: a decoder fed past the
 // end of its input decodes zeros, and 0 is the CRC-32 of an empty stream.
 const uint32_t kCrcXor = 0x68323634;

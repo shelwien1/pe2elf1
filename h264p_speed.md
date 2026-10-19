@@ -418,8 +418,8 @@ What has landed, measured (wall clock, this machine, the original build and
 the current one run one after the other; its timings vary by 5-10% from run
 to run and from day to day). Every step codes exactly as before it (the
 output of every test stream is the same, and the round trips pass) but
-two, which change how end_of_slice_flag is coded and how far the template
-searches go.
+three, which change how end_of_slice_flag is coded, how far the template
+searches go and where a B macroblock's list context comes from.
 
 | stream | bytes | `c` before | `c` now | `d` before | `d` now |
 |---|---:|---:|---:|---:|---:|
@@ -546,9 +546,19 @@ The steps, in order (the gains on the streams named, paired runs):
   deblocking record, which the finishing thread made none again, and its
   place in the picture's vectors and references): the stores missed. The
   decoding thread's CPU time: 1% less on 00, 3% on 03.
+- **A B macroblock's list context from its skip motion** (3.5 again):
+  which list predicts the samples around better, and whether the two
+  averaged do better still (a context of mb_type), took a template search
+  on list 1 besides list 0's and the average of the two matches; it is now
+  read off the skip motion's predictions, each list's alone, which
+  `tm_miss` makes anyway. The 96 test streams take 85 bytes more (03 176);
+  the format's version is 4. CPU time of `d`: 04 5%, 03 4%, 00 and 01 2%.
 
 What did not pay:
 
+- `tm_miss`'s strips predicted bilinearly, as the searches predict theirs,
+  instead of by the six-tap filter: no fewer instructions (its cost is in
+  finding the runs of equal motion, not in the filter) and 226 bytes more.
 - AVX2 six-tap interpolation took 70% of `mc_luma`'s instructions away but
   hardly any time: the scalar code ran at a high IPC. (Kept: it costs
   nothing.)
