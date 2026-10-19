@@ -33,7 +33,8 @@ void H1_cbp_make( const H_cbp_v & D, tcx & X ) {
 
   d = 0;
   d = d*4 + H1_cbp_d_inc[__min(3,__max(0,inc-(1-1)))];
-  d = d*9 + H1_cbp_d_cls[__min(8,__max(0,cls-(1-1)))];
+  d = d*3 + ((pc>0+(1-1))+(pc>1+(1-1)));
+  d = d*9 + H1_cbp_d_q6[__min(8,__max(0,q6-(1-1)))];
 
   m = 0;
 

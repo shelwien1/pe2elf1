@@ -21,9 +21,13 @@ void H1_qpg_make( const H_qpg_v & D, tcx & X ) {
   a = a*2 + ((ss>5+(1-1)));
 
   b = 0;
+  b = b*9 + H1_qpg_b_cls[__min(8,__max(0,cls-(1-1)))];
+  b = b*10 + H1_qpg_b_st[__min(9,__max(0,st-(1-1)))];
+  b = b*3 + ((ls>0+(1-1))+(ls>1+(1-1)));
 
   c = 0;
-  c = c*10 + H1_qpg_c_cs[__min(9,__max(0,cs-(1-1)))];
+  c = c*3 + ((cs>5+(1-1))+(cs>8+(1-1)));
+  c = c*10 + H1_qpg_c_ss[__min(9,__max(0,ss-(1-1)))];
 
   d = 0;
   d = d*10 + H1_qpg_d_bs[__min(9,__max(0,bs-(1-1)))];

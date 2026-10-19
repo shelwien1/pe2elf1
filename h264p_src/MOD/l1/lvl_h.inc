@@ -1,6 +1,7 @@
 
-static const byte H1_lvl_a_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
-static const byte H1_lvl_a_nc[5+1]={ 0,1,2,3,3,4 };
+static const byte H1_lvl_a_lt[7+1]={ 0,1,2,3,4,5,6,7 };
+static const byte H1_lvl_a_lh[64+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64 };
+static const byte H1_lvl_a_pos[5+1]={ 0,1,2,3,4,5 };
 
 static const byte H1_lvl_b_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 static const byte H1_lvl_b_pos[5+1]={ 0,1,2,3,4,5 };
@@ -24,7 +25,7 @@ static const byte H1_lvl_n_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 static const byte H1_lvl_t_cg[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
 
-static const int H1_lvl_rA = (244+0) * (1);
+static const int H1_lvl_rA = (233+0) * (1);
 static const int H1_lvl_rB = (16+0) * (1);
 static const int H1_lvl_rC = (64+0) * (1);
 static const int H1_lvl_rD = (254+0) * (1);
@@ -50,7 +51,7 @@ static const int H1_lvl_hT = (24+0) * (1);
 static const int H1_lvl_hN = (24+0) * (1);
 
 
-static const long long H1_lvl_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 1), 1), 5); // 70
+static const long long H1_lvl_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 8), 65), 6); // 3120
 static const long long H1_lvl_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 6), 8), 4); // 2688
 static const long long H1_lvl_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 5), 4), 4), 6), 65); // 31200
 static const long long H1_lvl_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 14), 1), 20), 6); // 1680
@@ -59,7 +60,7 @@ static const long long H1_lvl_m_Volume = tc_vmul(tc_vmul(1, 1), 2); // 2
 static const long long H1_lvl_n_Volume = tc_vmul(1, 14); // 14
 static const long long H1_lvl_t_Volume = tc_vmul(1, 14); // 14
 
-#define H1_lvl_USES(X) X(cg) X(nc) X(pos) X(tot) X(fq) X(sa) X(sb) X(q6) X(lh) X(md) X(lt) X(g1)
+#define H1_lvl_USES(X) X(lt) X(lh) X(pos) X(cg) X(tot) X(fq) X(sa) X(sb) X(q6) X(md) X(g1)
 
 struct H1_lvl_T { 
 #undef USE_NEW

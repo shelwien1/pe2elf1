@@ -17,8 +17,9 @@ void H1_lvl_make( const H_lvl_v & D, tcx & X ) {
   (void) cg;  (void) g1;  (void) e1;  (void) nc;  (void) pos;  (void) sa;  (void) sb;  (void) q6;  (void) tot;  (void) md;  (void) pm;  (void) pg;  (void) em;  (void) pe;  (void) pl;  (void) tz;  (void) pq;  (void) lh;  (void) lt;  (void) ls;  (void) hv;  (void) fq;
 
   a = 0;
-  a = a*14 + H1_lvl_a_cg[__min(13,__max(0,cg-(1-1)))];
-  a = a*5 + H1_lvl_a_nc[__min(5,__max(0,nc-(1-1)))];
+  a = a*8 + H1_lvl_a_lt[__min(7,__max(0,lt-(1-1)))];
+  a = a*65 + H1_lvl_a_lh[__min(64,__max(0,lh-(1-1)))];
+  a = a*6 + H1_lvl_a_pos[__min(5,__max(0,pos-(1-1)))];
 
   b = 0;
   b = b*14 + H1_lvl_b_cg[__min(13,__max(0,cg-(1-1)))];

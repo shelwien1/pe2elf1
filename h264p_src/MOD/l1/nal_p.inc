@@ -17,8 +17,8 @@ void H1_nal_make( const H_nal_v & D, tcx & X ) {
   (void) fld;  (void) ctx;  (void) p1;  (void) p2;
 
   a = 0;
-  a = a*5 + H1_nal_a_fld[__min(31,__max(0,fld-(1-1)))];
-  a = a*16 + H1_nal_a_ctx[__min(15,__max(0,ctx-(1-1)))];
+  a = a*6 + H1_nal_a_fld[__min(31,__max(0,fld-(1-1)))];
+  a = a*3 + ((ctx>1+(1-1))+(ctx>8+(1-1)));
 
   b = 0;
   b = b*32 + H1_nal_b_fld[__min(31,__max(0,fld-(1-1)))];

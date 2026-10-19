@@ -51,9 +51,8 @@ Index c
 
 Index d
  d_cat: cat, 1!1111111111111
- d_nc: nc, 1!11111
- d_md: md, 1!0110000000000100100
- d_kn: kn, 1!1
+ d_md: md, 1!1100000110110100100
+ d_q6: q6, 1!11111111
 
 Index m
  m_cat: cat, 1!1111000000000
@@ -71,7 +70,7 @@ Index g
 Number rA, 1, 0!01000000
 Number rB, 1, 0!11111111
 Number rC, 1, 0!01000000
-Number rD, 1, 0!11110010
+Number rD, 1, 0!01000000
 Number rT, 1, 0!00110111
 Number rG, 1, 0!01011010
 Number lr, 1, 0!01100
@@ -80,7 +79,7 @@ Number mbm, 1, 0!00000000
 Number mwA, 1, 0!00000000
 Number mwB, 1, 0!00000000
 Number mwC, 1, 0!00000000
-Number mwD, 1, 0!11001000
+Number mwD, 1, 0!00000000
 Number mwT, 1, 0!00001000
 Number mwG, 1, 0!00000000
 Number mt, 1, 0!010
@@ -92,7 +91,7 @@ Number mb, 1, 0!10000010
 ! Number hA, 1, 0!11000
 ! Number hB, 1, 0!10001
 ! Number hC, 1, 0!11000
-! Number hD, 1, 0!11000
+! Number hD, 1, 0!10000
 ! Number hM, 1, 0!11000
 ! Number hT, 1, 0!11000
 ! Number hN, 1, 0!11000

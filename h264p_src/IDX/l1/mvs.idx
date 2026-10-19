@@ -46,11 +46,9 @@ Index b
  b_zd: zd, 1!111111111111
 
 Index c
- c_kind: kind, 1!111
- c_comp: comp, 1!1
- c_pd: pd, 1!11101101
- c_sp: sp, 1!11111111
- c_zd: zd, 1!111111111111
+ c_kind: kind, 1!011
+ c_comp: comp, 1!0
+ c_sp: sp, 1!00000000
 
 Index d
  d_kind: kind, 1!111
@@ -78,7 +76,7 @@ Index g
 
 Number rA, 1, 0!11111101
 Number rB, 1, 0!00000000
-Number rC, 1, 0!01000000
+Number rC, 1, 0!00000110
 Number rD, 1, 0!11111111
 Number rT, 1, 0!00011110
 Number rG, 1, 0!01001000
@@ -87,7 +85,7 @@ Number lrm, 1, 0!11110
 Number mbm, 1, 0!00000000
 Number mwA, 1, 0!00001000
 Number mwB, 1, 0!00001000
-Number mwC, 1, 0!10111000
+Number mwC, 1, 0!10010010
 Number mwD, 1, 0!00101110
 Number mwT, 1, 0!00000000
 Number mwG, 1, 0!00000000

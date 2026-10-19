@@ -1,6 +1,5 @@
 
-static const byte H1_nal_a_fld[31+1]={ 0,0,1,2,3,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4 };
-static const byte H1_nal_a_ctx[15+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
+static const byte H1_nal_a_fld[31+1]={ 0,1,2,3,4,4,4,4,4,4,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5 };
 
 static const byte H1_nal_b_fld[31+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31 };
 static const byte H1_nal_b_p1[6+1]={ 0,1,2,3,4,5,6 };
@@ -20,7 +19,7 @@ static const byte H1_nal_n_fld[31+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,
 static const byte H1_nal_t_fld[31+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31 };
 
 
-static const int H1_nal_rA = (192+0) * (1);
+static const int H1_nal_rA = (64+0) * (1);
 static const int H1_nal_rB = (0+0) * (1);
 static const int H1_nal_rC = (32+0) * (1);
 static const int H1_nal_rD = (96+0) * (1);
@@ -29,7 +28,7 @@ static const int H1_nal_rG = (90+0) * (1);
 static const int H1_nal_lr = (30+0) * (1);
 static const int H1_nal_lrm = (12+0) * (1);
 static const int H1_nal_mbm = (0+0) * (1);
-static const int H1_nal_mwA = (128+0) * (1);
+static const int H1_nal_mwA = (0+0) * (1);
 static const int H1_nal_mwB = (0+0) * (1);
 static const int H1_nal_mwC = (0+0) * (1);
 static const int H1_nal_mwD = (4+0) * (1);
@@ -46,7 +45,7 @@ static const int H1_nal_hT = (24+0) * (1);
 static const int H1_nal_hN = (24+0) * (1);
 
 
-static const long long H1_nal_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 5), 16), 1); // 80
+static const long long H1_nal_a_Volume = tc_vmul(tc_vmul(1, 6), 3); // 18
 static const long long H1_nal_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 32), 7), 4); // 896
 static const long long H1_nal_c_Volume = tc_vmul(tc_vmul(1, 32), 3); // 96
 static const long long H1_nal_d_Volume = tc_vmul(1, 32); // 32

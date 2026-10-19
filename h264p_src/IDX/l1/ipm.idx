@@ -30,10 +30,10 @@ Index a
  a_mc: mc, 1!1111111111
 
 Index b
- b_k8: k8, 1!10
- b_mp: mp, 1!111111111
- b_pv: pv, 1!111111111
+ b_k8: k8, 1!11
  b_mh: mh, 1!1111111111111111
+ b_mb: mb, 1!1111111111
+ b_p2: p2, 1!11111111
 
 Index c
  c_k8: k8, 1!11
@@ -42,7 +42,6 @@ Index c
 
 Index d
  d_k8: k8, 1!11
- d_mp: mp, 1!111111111
 
 Index m
  m_k8: k8, 1!00
@@ -59,18 +58,18 @@ Index g
  g_k8: k8, 1!0
 
 Number rA, 1, 0!11100100
-Number rB, 1, 0!00010001
+Number rB, 1, 0!01000000
 Number rC, 1, 0!11100101
-Number rD, 1, 0!11111111
+Number rD, 1, 0!11000101
 Number rT, 1, 0!00110111
 Number rG, 1, 0!01011010
 Number lr, 1, 0!01100
 Number lrm, 1, 0!01100
 Number mbm, 1, 0!00000000
 Number mwA, 1, 0!00000000
-Number mwB, 1, 0!00001010
+Number mwB, 1, 0!00100000
 Number mwC, 1, 0!00000000
-Number mwD, 1, 0!11100000
+Number mwD, 1, 0!00000000
 Number mwT, 1, 0!00000000
 Number mwG, 1, 0!00000000
 Number mt, 1, 0!110

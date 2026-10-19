@@ -33,11 +33,7 @@ void H1_mvs_make( const H_mvs_v & D, tcx & X ) {
   b = b*13 + H1_mvs_b_zd[__min(12,__max(0,zd-(1-1)))];
 
   c = 0;
-  c = c*4 + H1_mvs_c_kind[__min(3,__max(0,kind-(1-1)))];
-  c = c*2 + ((comp>0+(1-1)));
-  c = c*7 + H1_mvs_c_pd[__min(8,__max(0,pd-(1-1)))];
-  c = c*9 + H1_mvs_c_sp[__min(8,__max(0,sp-(1-1)))];
-  c = c*13 + H1_mvs_c_zd[__min(12,__max(0,zd-(1-1)))];
+  c = c*3 + ((kind>1+(1-1))+(kind>2+(1-1)));
 
   d = 0;
   d = d*4 + H1_mvs_d_kind[__min(3,__max(0,kind-(1-1)))];

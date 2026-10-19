@@ -35,11 +35,15 @@ Index b
 
 Index c
  c_cg: cg, 1!1111111111111
- c_mag: mag, 1!10
- c_md: md, 1!1100110000010101100
+ c_pos: pos, 1!111
+ c_gh: gh, 1!11111111
 
 Index d
  d_cg: cg, 1!1111111111111
+ d_sa: sa, 1!111
+ d_sb: sb, 1!111
+ d_gh: gh, 1!11111111
+ d_pos: pos, 1!100
 
 Index m
  m_cg: cg, 1!1111111111111
@@ -55,8 +59,8 @@ Index g
 
 Number rA, 1, 0!11101001
 Number rB, 1, 0!11001101
-Number rC, 1, 0!00000011
-Number rD, 1, 0!11110110
+Number rC, 1, 0!11101011
+Number rD, 1, 0!11100000
 Number rT, 1, 0!00110111
 Number rG, 1, 0!01011010
 Number lr, 1, 0!01100
@@ -65,7 +69,7 @@ Number mbm, 1, 0!00000000
 Number mwA, 1, 0!00011101
 Number mwB, 1, 0!00000101
 Number mwC, 1, 0!00000000
-Number mwD, 1, 0!00011111
+Number mwD, 1, 0!00000000
 Number mwT, 1, 0!00000000
 Number mwG, 1, 0!00000000
 Number mt, 1, 0!110

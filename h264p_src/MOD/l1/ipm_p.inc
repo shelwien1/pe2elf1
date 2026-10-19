@@ -23,10 +23,10 @@ void H1_ipm_make( const H_ipm_v & D, tcx & X ) {
   a = a*11 + H1_ipm_a_mc[__min(10,__max(0,mc-(1-1)))];
 
   b = 0;
-  b = b*2 + ((k8>0+(1-1)));
-  b = b*10 + H1_ipm_b_mp[__min(9,__max(0,mp-(1-1)))];
-  b = b*10 + H1_ipm_b_pv[__min(9,__max(0,pv-(1-1)))];
+  b = b*3 + ((k8>0+(1-1))+(k8>1+(1-1)));
   b = b*17 + H1_ipm_b_mh[__min(16,__max(0,mh-(1-1)))];
+  b = b*11 + H1_ipm_b_mb[__min(10,__max(0,mb-(1-1)))];
+  b = b*9 + H1_ipm_b_p2[__min(8,__max(0,p2-(1-1)))];
 
   c = 0;
   c = c*3 + ((k8>0+(1-1))+(k8>1+(1-1)));
@@ -35,7 +35,6 @@ void H1_ipm_make( const H_ipm_v & D, tcx & X ) {
 
   d = 0;
   d = d*3 + ((k8>0+(1-1))+(k8>1+(1-1)));
-  d = d*10 + H1_ipm_d_mp[__min(9,__max(0,mp-(1-1)))];
 
   m = 0;
 

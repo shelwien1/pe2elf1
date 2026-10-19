@@ -18,7 +18,9 @@ void H1_mvg_make( const H_mvg_v & D, tcx & X ) {
 
   a = 0;
   a = a*2 + ((comp>0+(1-1)));
-  a = a*8 + H1_mvg_a_mag[__min(7,__max(0,mag-(1-1)))];
+  a = a*2 + ((lst>0+(1-1)));
+  a = a*4 + H1_mvg_a_ox[__min(3,__max(0,ox-(1-1)))];
+  a = a*7 + H1_mvg_a_ns[__min(6,__max(0,ns-(1-1)))];
 
   b = 0;
   b = b*9 + H1_mvg_b_zs[__min(8,__max(0,zs-(1-1)))];
@@ -27,6 +29,7 @@ void H1_mvg_make( const H_mvg_v & D, tcx & X ) {
 
   c = 0;
   c = c*9 + H1_mvg_c_zs[__min(8,__max(0,zs-(1-1)))];
+  c = c*10 + H1_mvg_c_ds[__min(9,__max(0,ds-(1-1)))];
 
   d = 0;
   d = d*10 + H1_mvg_d_ds[__min(9,__max(0,ds-(1-1)))];

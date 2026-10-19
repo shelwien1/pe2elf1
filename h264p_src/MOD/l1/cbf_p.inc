@@ -40,9 +40,8 @@ void H1_cbf_make( const H_cbf_v & D, tcx & X ) {
 
   d = 0;
   d = d*14 + H1_cbf_d_cat[__min(13,__max(0,cat-(1-1)))];
-  d = d*6 + H1_cbf_d_nc[__min(5,__max(0,nc-(1-1)))];
-  d = d*5 + H1_cbf_d_md[__min(19,__max(0,md-(1-1)))];
-  d = d*2 + ((kn>0+(1-1)));
+  d = d*9 + H1_cbf_d_md[__min(19,__max(0,md-(1-1)))];
+  d = d*9 + H1_cbf_d_q6[__min(8,__max(0,q6-(1-1)))];
 
   m = 0;
   m = m*5 + H1_cbf_m_cat[__min(13,__max(0,cat-(1-1)))];

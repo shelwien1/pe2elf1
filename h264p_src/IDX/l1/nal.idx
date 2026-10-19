@@ -10,9 +10,8 @@ Debug 1
 Const 0
 
 Index a
- a_fld: fld, 1!0111000000000010000000000000000
- a_ctx: ctx, 1!111111111111111
- a_p1: p1, 1!000000000000000
+ a_fld: fld, 1!1111000000000001000000000000000
+ a_ctx: ctx, 1!0100000010000000000000000000000
 
 Index b
  b_fld: fld, 1!1111111111111111111111111111111
@@ -39,7 +38,7 @@ Index g
  g_fld: fld, 1!1111111111111111111111111111111
  g_ctx: ctx, 1!111
 
-Number rA, 1, 0!11000000
+Number rA, 1, 0!01000000
 Number rB, 1, 0!00000000
 Number rC, 1, 0!00100000
 Number rD, 1, 0!01100000
@@ -48,7 +47,7 @@ Number rG, 1, 0!01011010
 Number lr, 1, 0!11110
 Number lrm, 1, 0!01100
 Number mbm, 1, 0!00000000
-Number mwA, 1, 0!10000000
+Number mwA, 1, 0!00000000
 Number mwB, 1, 0!00000000
 Number mwC, 1, 0!00000000
 Number mwD, 1, 0!00000100

@@ -22,7 +22,9 @@ Const 0
 
 Index a
  a_comp: comp, 1!1
- a_mag: mag, 1!1111111
+ a_lst: lst, 1!1
+ a_ox: ox, 1!111
+ a_ns: ns, 1!111111
 
 Index b
  b_zs: zs, 1!11111111
@@ -31,6 +33,7 @@ Index b
 
 Index c
  c_zs: zs, 1!11111111
+ c_ds: ds, 1!111111111
 
 Index d
  d_ds: ds, 1!111111111
@@ -47,16 +50,16 @@ Index n
 Index g
  g_comp: comp, 1!0
 
-Number rA, 1, 0!11101011
+Number rA, 1, 0!11100000
 Number rB, 1, 0!11001101
-Number rC, 1, 0!00000011
+Number rC, 1, 0!01000000
 Number rD, 1, 0!01101111
 Number rT, 1, 0!00110111
 Number rG, 1, 0!01011010
 Number lr, 1, 0!01100
 Number lrm, 1, 0!01100
 Number mbm, 1, 0!00000000
-Number mwA, 1, 0!00011101
+Number mwA, 1, 0!00000000
 Number mwB, 1, 0!00010000
 Number mwC, 1, 0!00000000
 Number mwD, 1, 0!00011111

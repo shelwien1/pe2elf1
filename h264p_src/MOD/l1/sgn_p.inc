@@ -30,11 +30,15 @@ void H1_sgn_make( const H_sgn_v & D, tcx & X ) {
 
   c = 0;
   c = c*14 + H1_sgn_c_cg[__min(13,__max(0,cg-(1-1)))];
-  c = c*2 + ((mag>0+(1-1)));
-  c = c*9 + H1_sgn_c_md[__min(19,__max(0,md-(1-1)))];
+  c = c*4 + H1_sgn_c_pos[__min(3,__max(0,pos-(1-1)))];
+  c = c*9 + H1_sgn_c_gh[__min(8,__max(0,gh-(1-1)))];
 
   d = 0;
   d = d*14 + H1_sgn_d_cg[__min(13,__max(0,cg-(1-1)))];
+  d = d*4 + H1_sgn_d_sa[__min(3,__max(0,sa-(1-1)))];
+  d = d*4 + H1_sgn_d_sb[__min(3,__max(0,sb-(1-1)))];
+  d = d*9 + H1_sgn_d_gh[__min(8,__max(0,gh-(1-1)))];
+  d = d*2 + ((pos>0+(1-1)));
 
   m = 0;
   m = m*14 + H1_sgn_m_cg[__min(13,__max(0,cg-(1-1)))];
