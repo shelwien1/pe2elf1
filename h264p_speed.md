@@ -612,6 +612,8 @@ What did not pay:
 - The three mixers' counts in their weight rows (rows of 128 bytes, the
   count after the 24 weights: three lines fewer for each decision to
   fetch, 9 MB more): `d` of 03 1.6% faster, of 04 as fast, of 00 3% slower.
+- The intra mode estimates' SATDs four 4x4 blocks (or two 8x8) to a
+  vector instead of one: 0.1% fewer instructions on 03.
 
 Where the time goes now (decompressing, the decoding's thread; sampled,
 the finishing thread's share left out):
