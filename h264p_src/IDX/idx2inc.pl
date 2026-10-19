@@ -32,6 +32,22 @@ open I1, "<$file";
 $index = "";
 $xdesc = "";
 
+# The variables the indices read, in the order they first appear, for
+# ${prefix}_USES: the model computes only those.  In the folded form
+# (Const 1) a line counts when its pattern has a 1 (a line of zeros adds
+# nothing to its index); in the tuning form also when it is live, since
+# opt.pl may set any of its bits.  Of an expression, every name not
+# called counts.
+@uses = (); %used = ();
+sub use_var {
+  my ($expr, $map, $const, $debug) = @_;
+  return unless $map =~ /1/ || ($const == 0 && $debug);
+  while( $expr =~ /\b([A-Za-z_]\w*)\b(\s*\()?/g ) {
+    next if defined $2;
+    push @uses, $1 unless $used{$1}++;
+  }
+}
+
 while( <I1> ) {
   s/\r//g;
   s/\#(.*)$//g;
@@ -54,6 +70,7 @@ while( <I1> ) {
 #    print STDERR "Const=<$gconst>\n";
   } elsif( /^\s*ADD\s+(.*?):\s*(.*)/ ) {
     ($coef,$var) = ($1,$2);
+    use_var($var, '1', $const, $debug);
     $coef=~s/\%M\%/${prefix}_/g;
     $var=~s/\%M\%/${prefix}_/g;
     print "ADD $coef:$var\n";
@@ -112,6 +129,7 @@ while( <I1> ) {
   } elsif( /^\s*(.*?):\s*(.*?),\s*b\&(.*?)\s*$/ ) {
     print "$1:$2,$3!\n";
     ($tag,$var,$map) = ($1,$2,$3);
+    use_var($var, $map, $const, $debug);
     $ccount = ($map=~s/1/1/g);
     if( $const==0 ) {
       push @{$vfactors{$index}}, "${prefix}_${tag}.Size";
@@ -154,6 +172,7 @@ while( <I1> ) {
   } elsif( /^\s*(.*?):\s*(.*?),\s*\&(.*?)\s*$/ ) {
     print "$1:$2,$3!\n";
     ($tag,$var,$map) = ($1,$2,$3);
+    use_var($var, $map, $const, $debug);
     $ccount = ($map=~s/1/1/g);
     if( $const==0 ) {
       push @{$vfactors{$index}}, "${prefix}_${tag}.Size";
@@ -193,6 +212,7 @@ while( <I1> ) {
   } elsif( /^\s*(.*?):\s*(.*?),\s*(.*?)!(.*?)\s*$/ ) {
     print "$1:$2,$3!\n";
     ($tag,$var,$base,$map) = ($1,$2,$3,$4);
+    use_var($var, $map, $const, $debug);
     $var =~ tr/|/,/; $var=~s/\%M\%/${prefix}_/g;
     $ccount = ($map=~s/1/1/g) + 1;
     $count{$index} *= $ccount;
@@ -365,6 +385,7 @@ for (sort keys %volume) {
   $porder{$_} .= '; // ' . eval( substr( $porder{$_}, index( $porder{$_}, "=" )+1 ) );
 #  print O1 "$porder{$_}\n";
 } print O1 "\n";
+print O1 "#define ${prefix}_USES(X)" . join('', map { " X($_)" } @uses) . "\n\n";
 
 chomp $t_con;
 chomp $init_code;

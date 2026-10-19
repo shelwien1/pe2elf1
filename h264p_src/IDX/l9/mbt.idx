@@ -1,0 +1,163 @@
+#  h264p's mbt family: its context indices and its tunable parameters.
+#  IDX/IDX-FORMAT.md is the format; ../mk.sh regenerates MOD/mbt_h.inc and
+#  MOD/mbt_p.inc from this file and mbt.inc.
+#
+#  mb_type as a binary tree over its value, the node being the position in the
+#  tree. st is the slice type and reference status, ca/cb/cc the classes of
+#  macroblocks A, B and of the same one in the previous picture of the type
+#  (0 none, 1 skip, 2 direct, 3 16x16, 4 16x8/8x16, 5 8x8, 6 I_NxN, 7 I16,
+#  8 PCM), nsk the skipped ones of A, B, C and D; for Intra16x16 (from its
+#  coded_block_pattern on), im 1 + the mode that does best in the proxy (0
+#  none) and ig by how much it beats the next; in B slices, c1 1 + the class
+#  of the same macroblock in list 1's first reference (0 none); tx the
+#  skip family's.
+
+Prefix H9_mbt
+Debug 1
+Const 0
+
+Index a
+ a_st: st, 1!000100000
+ a_ca: ca, 1!11100000
+ a_cb: cb, 1!10000110
+ a_en: en, 1!11111111111111
+
+Index b
+ b_st: st, 1!111111111
+ b_cc: cc, 1!11111111
+ b_nsk: nsk, 1!0000
+ b_td: td, 1!1111111111111111
+ b_c1: c1, 1!111111111
+
+Index c
+ c_st: st, 1!000000000
+ c_ca: ca, 1!10111100
+ c_cc: cc, 1!11111111
+ c_im: im, 1!1111
+ c_ig: ig, 1!111111111111
+
+Index d
+ d_st: st, 1!111111111
+ d_sm: sm, 1!1111111111111111
+ d_tm: tm, 1!1111111111111111
+
+Index e
+ e_st: st, 1!111111111
+ e_ca: ca, 1!11111111
+ e_td: td, 1!0000000010000000
+ e_sm: sm, 1!1111110000000000
+ e_tx: tx, 1!11111111111111
+
+Index h
+ h_st: st, 1!010000000
+ h_dh: dh, 1!111111111
+ h_tb: tb, 1!1111111111111111
+ h_nsk: nsk, 1!0001
+ h_bd: bd, 1!1111111111111111
+
+Index i
+ i_st: st, 1!111111111
+ i_tb: tb, 1!1111111111111111
+ i_en: en, 1!01010011000100
+ i_ca: ca, 1!11111111
+
+Index j
+ j_st: st, 1!111111111
+ j_sm: sm, 1!1111111111111111
+ j_dh: dh, 1!111111111
+ j_cb: cb, 1!11111111
+
+Index k
+ k_st: st, 1!111111111
+ k_tm: tm, 1!1010110001000000
+ k_nsk: nsk, 1!1111
+ k_cc: cc, 1!11111111
+
+Index l
+ l_st: st, 1!111111111
+ l_bd: bd, 1!1100000000000000
+ l_ca: ca, 1!11111111
+ l_cb: cb, 1!11111111
+
+Index s
+ s_st: st, 1!111111111
+ s_tb: tb, 1!1111111111111111
+ s_dh: dh, 1!111111111
+
+Index f
+ f_st: st, 1!111111111
+ f_ca: ca, 1!00000110
+ f_qc: qc, 1!11111111111111111
+ f_im: im, 1!1111
+
+Index m
+ m_st: st, 1!111111111
+ m_bd: bd, 1!1111111111111111
+
+Index w
+ w_st: st, 1!111111111
+ w_sm: sm, 1!1111111111111111
+ w_tm: tm, 1!1111111111111111
+
+Index t
+ t_st: st, 1!0
+
+Index n
+ n_st: st, 1!0
+
+Index g
+ g_st: st, 1!0
+
+Number rA, 1, 0!11101010
+Number rB, 1, 0!00000000
+Number rC, 1, 0!11111101
+Number rE, 1, 0!11110100
+Number rH, 1, 0!11100000
+Number rI, 1, 0!01000000
+Number rJ, 1, 0!11000100
+Number rK, 1, 0!01000000
+Number rL, 1, 0!01000000
+Number rD, 1, 0!11101111
+Number rT, 1, 0!00110111
+Number rG, 1, 0!01011010
+Number rS1, 1, 0!00000
+Number rS2, 1, 0!00011
+Number lr, 1, 0!01100
+Number lrm, 1, 0!01100
+Number mbm, 1, 0!00000000
+Number mwA, 1, 0!00010000
+Number mwB, 1, 0!00000001
+Number mwC, 1, 0!00100000
+Number mwE, 1, 0!00100000
+Number mwH, 1, 0!00000000
+Number mwI, 1, 0!00000000
+Number mwJ, 1, 0!00000000
+Number mwK, 1, 0!00000000
+Number mwL, 1, 0!00000000
+Number mwD, 1, 0!00010100
+Number mwT, 1, 0!00000000
+Number mwG, 1, 0!00000000
+Number bw, 1, 0!01100
+Number mt, 1, 0!110
+Number qs, 1, 3!0010000
+Number qf, 1, 3!0010110
+Number mb, 1, 0!00010110
+
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
+#  direct, one that does not is hashed into 2^h rows and contexts share
+#  them.  31 is "never hashed".  Frozen: left live these only grow.
+! Number hA, 1, 0!11000
+! Number hB, 1, 0!11000
+! Number hC, 1, 0!11000
+! Number hE, 1, 0!01111
+! Number hH, 1, 0!11000
+! Number hI, 1, 0!11000
+! Number hJ, 1, 0!11000
+! Number hK, 1, 0!11000
+! Number hL, 1, 0!11000
+! Number hD, 1, 0!11000
+! Number hS, 1, 0!11000
+! Number hF, 1, 0!11000
+! Number hM, 1, 0!11000
+! Number hT, 1, 0!11000
+! Number hN, 1, 0!11000

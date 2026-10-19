@@ -46,38 +46,6 @@ struct H_mvg_v { int comp, lst, ts, zs, ds, sa, sb, mag, tq, ox, ns, es, as; };
 struct H_qpg_v { int as, cs, bs, ls, rs, mag, cls, st, ss, xe, lq, bk; };
 struct H_pcm_v { int pl, dp, pd, pd2; };
 
-#include "MOD/nal_h.inc"
-#include "MOD/hdr_h.inc"
-#include "MOD/skp_h.inc"
-#include "MOD/mbt_h.inc"
-#include "MOD/cbp_h.inc"
-#include "MOD/ipm_h.inc"
-#include "MOD/mvs_h.inc"
-#include "MOD/qpd_h.inc"
-#include "MOD/cbf_h.inc"
-#include "MOD/sig_h.inc"
-#include "MOD/lvl_h.inc"
-#include "MOD/sgn_h.inc"
-#include "MOD/mvg_h.inc"
-#include "MOD/qpg_h.inc"
-#include "MOD/pcm_h.inc"
-
-#include "MOD/nal_p.inc"
-#include "MOD/hdr_p.inc"
-#include "MOD/skp_p.inc"
-#include "MOD/mbt_p.inc"
-#include "MOD/cbp_p.inc"
-#include "MOD/ipm_p.inc"
-#include "MOD/mvs_p.inc"
-#include "MOD/qpd_p.inc"
-#include "MOD/cbf_p.inc"
-#include "MOD/sig_p.inc"
-#include "MOD/lvl_p.inc"
-#include "MOD/sgn_p.inc"
-#include "MOD/mvg_p.inc"
-#include "MOD/qpg_p.inc"
-#include "MOD/pcm_p.inc"
-
 // A family's tables, mapped: zero is every table's starting state, and a
 // page costs memory only once the coder reaches it.
 template <class T>
@@ -85,17 +53,17 @@ static T* tc_table() {
   return new (tc_map(sizeof(T))) T;
 }
 
-#define H_WIRE(F)                                                                                                   \
-  f_##F.wire(t_##F->H_##F##_A, H_##F##_a_Volume, t_##F->H_##F##_B, H_##F##_b_Volume, t_##F->H_##F##_C,              \
-             H_##F##_c_Volume, t_##F->H_##F##_D, H_##F##_d_Volume, t_##F->H_##F##_E, H_##F##_e_Volume, t_##F->H_##F##_H, H_##F##_h_Volume, t_##F->H_##F##_I, H_##F##_i_Volume, t_##F->H_##F##_J, H_##F##_j_Volume, t_##F->H_##F##_K, H_##F##_k_Volume, t_##F->H_##F##_L, H_##F##_l_Volume, t_##F->H_##F##_MT, H_##F##_t_Volume,             \
-             t_##F->H_##F##_S, t_##F->H_##F##_SC, H_##F##_s_Volume, t_##F->H_##F##_F, t_##F->H_##F##_FC,            \
-             H_##F##_f_Volume, t_##F->H_##F##_W, H_##F##_m_Volume, t_##F->H_##F##_G, H_##F##_NG, H_##F##_g_Volume,  \
-             t_##F->H_##F##_WM, H_##F##_n_Volume, t_##F->H_##F##_WC, t_##F->H_##F##_WMC, t_##F->H_##F##_W2,            \
-             t_##F->H_##F##_W2C, H_##F##_w_Volume, t_##F->H_##F##_W3, t_##F->H_##F##_W3C, t_##F->H_##F##_WF, t_##F->H_##F##_WFC, H_##F##_rA, H_##F##_rB,                    \
-             H_##F##_rC, H_##F##_rD, H_##F##_rE, H_##F##_rH, H_##F##_rI, H_##F##_rJ, H_##F##_rK, H_##F##_rL, H_##F##_rT, H_##F##_rG, H_##F##_mwA, H_##F##_mwB, H_##F##_mwC, H_##F##_mwD, H_##F##_mwE, H_##F##_mwH, H_##F##_mwI, H_##F##_mwJ, H_##F##_mwK, H_##F##_mwL,    \
-             H_##F##_mwT, H_##F##_mwG, H_##F##_rS1, H_##F##_rS2, H_##F##_lr, H_##F##_mb, H_##F##_lrm, H_##F##_mbm,  \
-             H_##F##_bw, H_##F##_mt, H_##F##_qs, H_##F##_qf, H_##F##_ND, H_##F##_MND, H_##F##_hA, H_##F##_hB, H_##F##_hD, H_##F##_hE, H_##F##_hH, H_##F##_hI, H_##F##_hJ, H_##F##_hK, H_##F##_hL,       \
-             H_##F##_hS, H_##F##_hF, H_##F##_hM, H_##F##_hT, H_##F##_hN)
+// --- the levels: each one's generated families (MOD/l<L>/), wrapped into
+// configuration classes (famcfg.inc), and its own class, which Model takes
+// (h264p_levels.md sections 6 and 7). The level of a build, or every level.
+#ifndef H264P_ONLY
+#define H264P_LV(n) 1
+#else
+#define H264P_LV(n) ((n) == H264P_ONLY)
+#endif
+#if H264P_LV(9)
+#include "lv9.inc"
+#endif
 
 // where the bits go (-v)
 enum { STG_NAL, STG_HDR, STG_RAW, STG_SKIP, STG_MBT, STG_CBP, STG_IPM, STG_MVS, STG_MVD, STG_MVSG, STG_QPD, STG_CBF,
@@ -379,27 +347,40 @@ static const ZzInv kZzInv;
 static const uint8_t* const kInv4 = kZzInv.v4;
 static const uint8_t* const kInv8 = kZzInv.v8;
 
-template <int f_DEC>
+template <int f_DEC, class LV>
 struct Model {
   static constexpr int ENC = f_DEC == 0;
-  static Rangecoder<f_DEC> rc;
 
-  tc_fam<f_DEC> f_nal, f_hdr, f_skp, f_mbt, f_cbp, f_ipm, f_mvs, f_qpd, f_cbf, f_sig, f_lvl, f_sgn, f_mvg, f_qpg, f_pcm;
-  H_nal_T* t_nal;
-  H_hdr_T* t_hdr;
-  H_skp_T* t_skp;
-  H_mbt_T* t_mbt;
-  H_cbp_T* t_cbp;
-  H_ipm_T* t_ipm;
-  H_mvs_T* t_mvs;
-  H_qpd_T* t_qpd;
-  H_cbf_T* t_cbf;
-  H_sig_T* t_sig;
-  H_lvl_T* t_lvl;
-  H_sgn_T* t_sgn;
-  H_mvg_T* t_mvg;
-  H_qpg_T* t_qpg;
-  H_pcm_T* t_pcm;
+  tc_fam<f_DEC, typename LV::nal> f_nal;
+  tc_fam<f_DEC, typename LV::hdr> f_hdr;
+  tc_fam<f_DEC, typename LV::skp> f_skp;
+  tc_fam<f_DEC, typename LV::mbt> f_mbt;
+  tc_fam<f_DEC, typename LV::cbp> f_cbp;
+  tc_fam<f_DEC, typename LV::ipm> f_ipm;
+  tc_fam<f_DEC, typename LV::mvs> f_mvs;
+  tc_fam<f_DEC, typename LV::qpd> f_qpd;
+  tc_fam<f_DEC, typename LV::cbf> f_cbf;
+  tc_fam<f_DEC, typename LV::sig> f_sig;
+  tc_fam<f_DEC, typename LV::lvl> f_lvl;
+  tc_fam<f_DEC, typename LV::sgn> f_sgn;
+  tc_fam<f_DEC, typename LV::mvg> f_mvg;
+  tc_fam<f_DEC, typename LV::qpg> f_qpg;
+  tc_fam<f_DEC, typename LV::pcm> f_pcm;
+  typename LV::nal::T* t_nal;
+  typename LV::hdr::T* t_hdr;
+  typename LV::skp::T* t_skp;
+  typename LV::mbt::T* t_mbt;
+  typename LV::cbp::T* t_cbp;
+  typename LV::ipm::T* t_ipm;
+  typename LV::mvs::T* t_mvs;
+  typename LV::qpd::T* t_qpd;
+  typename LV::cbf::T* t_cbf;
+  typename LV::sig::T* t_sig;
+  typename LV::lvl::T* t_lvl;
+  typename LV::sgn::T* t_sgn;
+  typename LV::mvg::T* t_mvg;
+  typename LV::qpg::T* t_qpg;
+  typename LV::pcm::T* t_pcm;
 
   void init() {
     cm_tables();
@@ -408,7 +389,7 @@ struct Model {
     for (int& p : hist_poc_) p = INT_MIN;
     std::fill(&hist_rpoc_[0][0][0], &hist_rpoc_[0][0][0] + sizeof hist_rpoc_ / sizeof(int), INT_MIN);
     std::fill(&col_rpoc_[0][0], &col_rpoc_[0][0] + sizeof col_rpoc_ / sizeof(int), INT_MIN);
-#define H_MAP(F) (t_##F = tc_table<H_##F##_T>(), t_##F->H_##F##_Init(), H_WIRE(F))
+#define H_MAP(F) (t_##F = tc_table<typename LV::F::T>(), LV::F::init(t_##F), f_##F.wire(t_##F))
     H_MAP(nal);
     H_MAP(hdr);
     H_MAP(skp);
@@ -429,9 +410,9 @@ struct Model {
     rbuf_.clear();
   }
   u64 table_bytes() const {
-    return (u64)t_nal->H_nal_Size + t_hdr->H_hdr_Size + t_skp->H_skp_Size + t_mbt->H_mbt_Size + t_cbp->H_cbp_Size +
-           t_ipm->H_ipm_Size + t_mvs->H_mvs_Size + t_qpd->H_qpd_Size + t_cbf->H_cbf_Size + t_sig->H_sig_Size +
-           t_lvl->H_lvl_Size + t_sgn->H_sgn_Size + t_mvg->H_mvg_Size + t_qpg->H_qpg_Size + t_pcm->H_pcm_Size;
+    return (u64)LV::nal::bytes(t_nal) + LV::hdr::bytes(t_hdr) + LV::skp::bytes(t_skp) + LV::mbt::bytes(t_mbt) + LV::cbp::bytes(t_cbp) +
+           LV::ipm::bytes(t_ipm) + LV::mvs::bytes(t_mvs) + LV::qpd::bytes(t_qpd) + LV::cbf::bytes(t_cbf) + LV::sig::bytes(t_sig) +
+           LV::lvl::bytes(t_lvl) + LV::sgn::bytes(t_sgn) + LV::mvg::bytes(t_mvg) + LV::qpg::bytes(t_qpg) + LV::pcm::bytes(t_pcm);
   }
 
   // ------------------------------------------------------------------------
@@ -442,7 +423,7 @@ struct Model {
     tc_stage = STG_NAL;
     H_nal_v D = {fld, c, tc_qlog(last_[fld][0]), tc_qlog(last_[fld][1])};
     tcx X;
-    H_nal_make(D, X);
+    LV::nal::make(D, X);
     x = f_nal.code(X, ENC ? x : 0);
     last_[fld][1] = last_[fld][0];
     last_[fld][0] = x;
@@ -577,7 +558,7 @@ struct Model {
     HLast& h = hl_[(u32)tag_ | (u32)(fld_ < 15 ? fld_ : 15) << 8 | (u32)(runpos_ < 15 ? runpos_ : 15) << 12 | (u32)sty_ << 16];
     H_hdr_v D = {tag_, fld_, sq2(h.d1), sq2(h.d2), tc_qlog(runpos_), (int)(h.v & 255), sty_ < 9 ? sty_ : 9, slice_nal_ ? prev_sref_ : 3};
     tcx X;
-    H_hdr_make(D, X);
+    LV::hdr::make(D, X);
     i64 m = is_wrap_ && hbits_ > 0 && hbits_ < 31 ? (i64)1 << hbits_ : 0, dx = ENC ? x - h.v : 0;
     hbits_ = 0;
     if (m && ENC) dx = ((dx % m) + m + m / 2) % m - m / 2;  // into [-m/2, m/2)
@@ -994,7 +975,7 @@ struct Model {
   bool maps_ok() const { return rec_.maps_w == width_ && rec_.maps_w * rec_.maps_h == size_ && !mbaff_; }
   int skp_bit(const H_skp_v& D, int node, int v, int pr = -1) {
     tcx X;
-    H_skp_make(D, X);
+    LV::skp::make(D, X);
     f_skp.select(X);
     tc_syms[STG_SKIP]++;
     f_skp.prp = pr;
@@ -1123,7 +1104,7 @@ struct Model {
         mbt_d_->im = 1 + m;
         mbt_d_->ig = c2 == INT_MAX ? 0 : 1 + tc_clamp(tc_qlog((c2 - costs[m]) * 32 / x264_lam16(qp_pred_)), 0, 11);
         tcx X;
-        H_mbt_make(*mbt_d_, X);
+        LV::mbt::make(*mbt_d_, X);
         f_mbt.select(X);
       }
     }
@@ -1160,7 +1141,7 @@ struct Model {
     D.qc = tc_clamp(qp_pred_ / 3, 0, 17);
     D.tx = tx_;
     tcx X;
-    H_mbt_make(D, X);
+    LV::mbt::make(D, X);
     f_mbt.select(X);
     mbt_d_ = &D;
     int stype = sc_->stype_;
@@ -1216,7 +1197,7 @@ struct Model {
   // --- coded_block_pattern and transform_size_8x8_flag: the cbp family
   int cbp_bit(H_cbp_v& D, int node, int v, int pr) {
     tcx X;
-    H_cbp_make(D, X);
+    LV::cbp::make(D, X);
     f_cbp.select(X);
     f_cbp.prp = pr;
     return f_cbp.bit(node, v);
@@ -1479,7 +1460,7 @@ struct Model {
     }
     D.dr = D.dm < 9 && D.dm != mpm ? D.dm - (D.dm > mpm) : 8;
     tcx X;
-    H_ipm_make(D, X);
+    LV::ipm::make(D, X);
     f_ipm.select(X);
     int r = -1;
     f_ipm.prp = cab0(68);
@@ -1549,7 +1530,7 @@ struct Model {
       }
     }
     tcx X;
-    H_ipm_make(D, X);
+    LV::ipm::make(D, X);
     f_ipm.select(X);
     int r = 0;
     auto cond = [](const MbState* n) { return n && n->intra && !n->pcm && n->cpred != 0; };
@@ -1569,7 +1550,7 @@ struct Model {
     bool b = sc_->stype_ == kB;
     H_mvs_v D = {b, 0, 0, i ? sub_[i - 1] + 1 : 0, 0, 0, 0, 0, i, 0, 0, 0};
     tcx X;
-    H_mvs_make(D, X);
+    LV::mvs::make(D, X);
     f_mvs.select(X);
     f_mvs.prp = -1;
     f_mvs.prpa = nullptr;
@@ -1827,7 +1808,7 @@ struct Model {
       D.rt = t < 0 ? 0 : 1 + tc_clamp(tc_qlog((int64_t)t * 256 / (w * h * 16) * 16 / qstep16(qp_pred_)), 0, 14);
     }
     tcx X;
-    H_mvs_make(D, X);
+    LV::mvs::make(D, X);
     int pr[TC_NODE];
     for (int k = 0; k < TC_NODE; k++) pr[k] = -1;
     pr[0] = cab0(54 + sc_->ref_inc(list, x, y));
@@ -1960,7 +1941,7 @@ struct Model {
       D.rt = t < 0 ? 0 : 1 + tc_clamp(tc_qlog((int64_t)t * 512 / (w * h * 16) * 16 / qstep16(qp_pred_)), 0, 14);
     }
     tcx X;
-    H_mvs_make(D, X);
+    LV::mvs::make(D, X);
     tc_stage = STG_MVD;
     tc_syms[STG_MVD]++;
     int pr[TC_NODE];
@@ -1997,7 +1978,7 @@ struct Model {
         G.es = ea == -128 && eb == -128 ? 3 : sgn3((ea == -128 ? 0 : ea) + (eb == -128 ? 0 : eb));
         G.as = tmn_ || talt_[0] == INT_MIN ? 9 : rel(talt_[comp] - mvp_[comp]);
         tcx Y;
-        H_mvg_make(G, Y);
+        LV::mvg::make(G, Y);
         f_mvg.select(Y);
         f_mvg.prp = -1;
         if (f_mvg.bit(0, ENC && v < 0)) v = -m;
@@ -2166,7 +2147,7 @@ struct Model {
         D.ac = 7 + tc_clamp((int)div_floor(aq_res_[key_][ma] + 4, 8), -6, 6);
     }
     tcx X;
-    H_qpd_make(D, X);
+    LV::qpd::make(D, X);
     int pr[TC_NODE];
     for (int k = 0; k < TC_NODE; k++) pr[k] = -1;
     pr[0] = cab1(60 + (sc_->last_qpd_ != 0));
@@ -2194,7 +2175,7 @@ struct Model {
         G.lq = D.lq ? rel(D.lq - 7) : 9;
         G.bk = D.bc ? rel(D.bc - 7) : 9;
         tcx Y;
-        H_qpg_make(G, Y);
+        LV::qpg::make(G, Y);
         f_qpg.select(Y);
         f_qpg.prp = -1;
         v = f_qpg.bit(0, neg) ? -m : m;
@@ -2539,7 +2520,7 @@ struct Model {
     D.pg = pg;
     D.em = em;
     tcx X;
-    H_cbf_make(D, X);
+    LV::cbf::make(D, X);
     int pr[TC_NODE];
     for (int k = 0; k < TC_NODE; k++) pr[k] = -1;
     if (!coded && sc_->cabac_) {
@@ -2628,7 +2609,7 @@ struct Model {
         // the same position in the blocks A and B (0 none, 1 zero, 2 not)
         S.sn = (na.m ? 1 + (coef_at(na.m, g, na.i, i) != 0) : 0) * 3 + (nb.m ? 1 + (coef_at(nb.m, g, nb.i, i) != 0) : 0);
         tcx Y;
-        H_sig_make(S, Y);
+        LV::sig::make(S, Y);
         f_sig.select(Y);
         f_sig.prp = cab0(sig_base + (cat == 3 ? std::min(i / numc8x8, 2) : b8x8 ? (fld ? kSig8x8Field[i] : kSig8x8Frame[i]) : i));
         sig[i] = f_sig.bit(0, ENC && c[i] != 0);
@@ -2684,7 +2665,7 @@ struct Model {
       L.sa = na.m ? std::min(abs(coef_at(na.m, g, na.i, k)), 3) : 0;
       L.sb = nb.m ? std::min(abs(coef_at(nb.m, g, nb.i, k)), 3) : 0;
       tcx X;
-      H_lvl_make(L, X);
+      LV::lvl::make(L, X);
       // the intra estimate's level there
       f_lvl.hint = pok ? std::max(abs(est(k)) - 1, 0) : -1;
       int a = cm_int(f_lvl.code(X, ENC ? abs(c[k]) - 1 : 0), 1 << 24);
@@ -2766,7 +2747,7 @@ struct Model {
         if (fd && r) G.dm = 1 + (r < 0) + 2 * (ra > fd * m) + 2 * (ra > 4 * fd * m);
       }
       tcx X;
-      H_sgn_make(G, X);
+      LV::sgn::make(G, X);
       f_sgn.select(X);
       int sg = f_sgn.bit(0, ENC && c[k] < 0);
       ghist = ghist % 3 * 3 + 1 + sg;
@@ -2835,7 +2816,7 @@ struct Model {
           int half = 1 << (depth - 1), mask = (1 << depth) - 1;
           H_pcm_v D = {p, depth - 8, sq2(d1), sq2(d2)};
           tcx X;
-          H_pcm_make(D, X);
+          LV::pcm::make(D, X);
           i64 d = f_pcm.codes(X, ENC ? ((s[i] - pred + half) & mask) - half : 0, (u32)p);
           s[i] = (pred + cm_int(d, 1 << 16)) & mask;
           d2 = d1;
@@ -2849,17 +2830,15 @@ struct Model {
   }
 };
 
-template <int f_DEC>
-Rangecoder<f_DEC> Model<f_DEC>::rc;
 
 
 // The channel between the walk and the model. Coding, it takes each value
 // from the log of the dry run and has the model code it; decoding, the
 // model decodes it. Either way the value goes back to the walk.
-template <int f_DEC>
+template <int f_DEC, class LV>
 struct ModelChan : Chan {
   static constexpr int ENC = f_DEC == 0;
-  ModelChan(Model<f_DEC>& m, LogChan* log) : Chan(true), m_(m), log_(log) {}
+  ModelChan(Model<f_DEC, LV>& m, LogChan* log) : Chan(true), m_(m), log_(log) {}
 
   void hbegin(const char* name) override { m_.hbegin(name); }
   void hbits(int n) override { m_.hbits(n); }
@@ -2902,7 +2881,7 @@ struct ModelChan : Chan {
     throw CmError(std::string(ENC ? "internal: " : "corrupt stream: ") + msg);
   }
 
-  Model<f_DEC>& m_;
+  Model<f_DEC, LV>& m_;
   LogChan* log_;
 };
 

@@ -85,6 +85,8 @@ struct cm_cnt2 {
     q = (u16)(cq + ((target - cq) >> 3));
   }
 };
+// an APM's count limit by its rate (1-15)
+constexpr int cm_apm_limit(int rate) { return rate >= 8 ? CM_AMAX : (1 << rate) - 2 < 1 ? 1 : (1 << rate) - 2; }
 struct cm_apm {
   i16 *__restrict t;
   u8 *__restrict c;
@@ -121,10 +123,7 @@ struct cm_apm {
     v += ((g - v) * cm_arec[k]) >> 16;
     tt[i] = (i16)(v - (int)ident[b]);
   }
-  static int limit(int rate) {
-    int lim = rate >= 8 ? CM_AMAX : (1 << rate) - 2;
-    return lim < 1 ? 1 : lim;
-  }
+  static int limit(int rate) { return cm_apm_limit(rate); }
   INLINE void upd(int bit, int lim) {
     int g = bit ? 0 : CM_PONE;
     upd1(idx, bkt, g, lim);

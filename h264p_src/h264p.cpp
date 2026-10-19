@@ -16,6 +16,7 @@
 #include <new>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include <sys/stat.h>
@@ -864,9 +865,9 @@ int compress(const char* in_name, const char* out_name, const Options& opt) {
   fwrite(kCmMagic, 1, sizeof kCmMagic - 1, fo);
   fputc(kCmVersion, fo);
   u64 in_bytes = 0, out_bytes = sizeof kCmMagic;
-  std::unique_ptr<Model<0>> mp(new Model<0>());
-  Model<0>& m = *mp;
-  auto& rc = Model<0>::rc;
+  std::unique_ptr<Model<0, Lv9>> mp(new Model<0, Lv9>());
+  Model<0, Lv9>& m = *mp;
+  auto& rc = tc_rc<0>::rc;
   Stats st;
   try {
     m.init();
@@ -973,7 +974,7 @@ int compress(const char* in_name, const char* out_name, const Options& opt) {
       if (it.ok) {
         const Trailer& t = it.t;
         it.log.rewind();
-        ModelChan<0> ch(m, &it.log);
+        ModelChan<0, Lv9> ch(m, &it.log);
         m.nal_begin(type, ref_idc);
         BitWriter bw;
         write_syntax(type, ref_idc, cb, ch, bw);
@@ -1067,9 +1068,9 @@ int decompress(const char* in_name, const char* out_name, const Options& opt) {
     return 1;
   }
   FILE* fo = open_out(out_name);
-  std::unique_ptr<Model<1>> mp(new Model<1>());
-  Model<1>& m = *mp;
-  auto& rc = Model<1>::rc;
+  std::unique_ptr<Model<1, Lv9>> mp(new Model<1, Lv9>());
+  Model<1, Lv9>& m = *mp;
+  auto& rc = tc_rc<1>::rc;
   std::vector<uint8_t> buf;
   Crc32 crc;
   long nals = 0;
@@ -1124,7 +1125,7 @@ int decompress(const char* in_name, const char* out_name, const Options& opt) {
         buf.insert(buf.end(), b.begin(), b.end());
         update_params(type, unescape(b.data(), b.size()), ctx);
       } else {
-        ModelChan<1> ch(m, nullptr);
+        ModelChan<1, Lv9> ch(m, nullptr);
         m.nal_begin(type, ref_idc);
         BitWriter bw;
         int pad = write_syntax(type, ref_idc, ctx, ch, bw);

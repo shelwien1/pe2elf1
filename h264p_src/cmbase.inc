@@ -86,7 +86,7 @@ static INLINE i32 tc_sq(i32 v) {
   i32 q = tc_qlog(v);
   return v < 0 ? -q : q;
 }
-static INLINE int tc_clamp(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
+constexpr int tc_clamp(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
 
 // Tables are mapped, not allocated and filled: a table costs address space
 // when it is made and memory only where the coder reaches it.

@@ -1,0 +1,173 @@
+#  h264p's qpd family: its context indices and its tunable parameters.
+#  IDX/IDX-FORMAT.md is the format; ../mk.sh regenerates MOD/qpd_h.inc and
+#  MOD/qpd_p.inc from this file and qpd.inc.
+#
+#  mb_qp_delta. lnz: the previous macroblock had a nonzero delta (CABAC's
+#  context); pc the luma bits of the coded_block_pattern, cc its chroma part,
+#  cls the class; dc and db the QP of the same macroblock in the previous
+#  picture of the type and of macroblock B, relative to the predicted QP
+#  (4 equal); lz the last nonzero delta (3 for none); st the slice type; ae
+#  the delta adaptive quantization would give, from the energy of the
+#  macroblock in the last picture decoded against that of the one that set
+#  the predicted QP (7 none); aq the delta the line of QP against energy
+#  gives (7 + the delta, 0 none), ac how far the last picture of the kind
+#  was from its line where the macroblock's content was; td how much the
+#  macroblock changed between the last two pictures decoded (1 + tc_qlog, 0
+#  not known), for the macroblock tree's lower QP where pictures stay; sq
+#  the slice's QP less the predicted one (7 + that, -6 to 6): an encoder's
+#  QPs keep near the slice's; xe the class of the energy the line takes
+#  (1 + log2, up to 18; 0 none), for an encoder whose QP is no line of it
+#  (flat below an energy, then rising); lq the QP of the picture's last
+#  macroblock of the kind (inter, I_NxN, other) and energy class less the
+#  predicted one (7 + that, -6 to 6; 0 none): the rate control's QP plus
+#  what the class adds; bc B's QP less the predicted one where B is coded
+#  and of the same kind (7 + that, -6 to 6; 0 not), cl and kc the same for
+#  col and C.  The
+#  magnitude has the line's delta as code()'s hint; the sign is the qpg
+#  family's.
+
+Prefix H9_qpd
+Debug 1
+Const 0
+
+Index a
+ a_lnz: lnz, 1!1
+ a_pc: pc, 1!1111
+ a_cc: cc, 1!11
+ a_cls: cls, 1!00000100
+ a_sq: sq, 1!1111111111111
+
+Index b
+ b_dc: dc, 1!11111111
+ b_aq: aq, 1!1000000000000
+ b_ae: ae, 1!1111111111111
+ b_lq: lq, 1!1111111111111
+
+Index c
+ c_lz: lz, 1!111111
+ c_st: st, 1!111111111
+ c_db: db, 1!11110110
+ c_bc: bc, 1!1111111111111
+
+Index d
+ d_st: st, 1!111111111
+ d_aq: aq, 1!1111111111111
+ d_ac: ac, 1!1111111111111
+
+Index e
+ e_lnz: lnz, 1!0
+ e_aq: aq, 1!1111111111111
+ e_cls: cls, 1!11111111
+ e_sq: sq, 1!1111111111111
+ e_xe: xe, 1!100100010000001001
+
+Index h
+ h_ae: ae, 1!0000001000001
+ h_dc: dc, 1!11111111
+ h_pc: pc, 1!1111
+
+Index i
+ i_aq: aq, 1!1111111111111
+ i_ac: ac, 1!1111111111111
+ i_cls: cls, 1!00000110
+ i_td: td, 1!1001000001000000
+
+Index j
+ j_st: st, 1!111111111
+ j_dc: dc, 1!11111111
+ j_db: db, 1!11111111
+ j_lnz: lnz, 1!1
+ j_td: td, 1!1010101010101010
+ j_lq: lq, 1!1111111111111
+
+Index k
+ k_aq: aq, 1!1111111111111
+ k_lnz: lnz, 1!1
+ k_pc: pc, 1!1000
+ k_kc: kc, 1!1111111111111
+
+Index l
+ l_ac: ac, 1!1111110101110
+ l_db: db, 1!11111111
+ l_st: st, 1!111111111
+ l_cl: cl, 1!1111111111111
+
+Index s
+ s_lnz: lnz, 1!0
+ s_aq: aq, 1!1111111111111
+
+Index f
+ f_st: st, 1!111111111
+
+Index m
+ m_lnz: lnz, 1!1
+ m_aq: aq, 1!0000000000000
+
+Index w
+ w_st: st, 1!111111111
+ w_aq: aq, 1!1111111111111
+ w_ac: ac, 1!1111111111111
+
+Index t
+ t_lnz: lnz, 1!0
+
+Index n
+ n_lnz: lnz, 1!0
+
+Index g
+ g_lz: lz, 1!101101
+ g_aq: aq, 1!1111111111111
+
+Number rA, 1, 0!10000000
+Number rB, 1, 0!00010000
+Number rC, 1, 0!01000100
+Number rE, 1, 0!01000000
+Number rH, 1, 0!01000000
+Number rI, 1, 0!01000000
+Number rJ, 1, 0!01000000
+Number rK, 1, 0!01000000
+Number rL, 1, 0!01000000
+Number rD, 1, 0!11111111
+Number rT, 1, 0!00110111
+Number rG, 1, 0!01011010
+Number rS1, 1, 0!00110
+Number rS2, 1, 0!00101
+Number lr, 1, 0!01100
+Number lrm, 1, 0!11100
+Number mbm, 1, 0!00000000
+Number mwA, 1, 0!00000111
+Number mwB, 1, 0!00000000
+Number mwC, 1, 0!00000000
+Number mwE, 1, 0!00000000
+Number mwH, 1, 0!00000100
+Number mwI, 1, 0!00000000
+Number mwJ, 1, 0!00000000
+Number mwK, 1, 0!00000000
+Number mwL, 1, 0!00000000
+Number mwD, 1, 0!00010000
+Number mwT, 1, 0!00000000
+Number mwG, 1, 0!00000000
+Number bw, 1, 0!01000
+Number mt, 1, 0!110
+Number qs, 1, 3!0010000
+Number qf, 1, 3!0111000
+Number mb, 1, 0!00000101
+
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
+#  direct, one that does not is hashed into 2^h rows and contexts share
+#  them.  31 is "never hashed".  Frozen: left live these only grow.
+! Number hA, 1, 0!11000
+! Number hB, 1, 0!11000
+! Number hC, 1, 0!11000
+! Number hE, 1, 0!11000
+! Number hH, 1, 0!11000
+! Number hI, 1, 0!11000
+! Number hJ, 1, 0!10000
+! Number hK, 1, 0!11000
+! Number hL, 1, 0!11000
+! Number hD, 1, 0!11000
+! Number hS, 1, 0!11000
+! Number hF, 1, 0!11000
+! Number hM, 1, 0!11000
+! Number hT, 1, 0!11000
+! Number hN, 1, 0!11000
