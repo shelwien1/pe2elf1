@@ -17,9 +17,11 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
-#ifndef H264P_NO_THREADS  // the compressor codes in a thread of its own (TcDefer)
+#ifndef H264P_NO_THREADS  // the compressor codes in a thread of its own (TcDefer), and parses in another
 #include <atomic>
 #include <condition_variable>
+#include <deque>
+#include <exception>
 #include <functional>
 #include <mutex>
 #include <system_error>
@@ -906,9 +908,24 @@ int compress(const char* in_name, const char* out_name, const Options& opt) {
       }
     }
 #endif
-    Context ctx;
+    // A NAL unit's work that needs no model (its parsing, and writing it back
+    // to see that it comes out the same) runs ahead of the model, on a
+    // context of its own (cf), in a thread of its own when the coder has
+    // one; the model's context (cb) takes the same parameter sets and
+    // padding as it reaches each NAL unit
+    struct NalItem {
+      size_t zeros = 0;
+      std::vector<uint8_t> nal;
+      bool bad = false;  // empty, or forbidden_zero_bit set
+      int type = 0, ref_idc = 0;
+      bool slice = false, newpic = false, ok = false, padchg = false, padon = false;
+      int64_t padframe = 0;
+      Trailer t;
+      std::string why;
+      LogChan log;
+    };
+    Context cf, cb;
     PadDetector det;
-    LogChan log;
     Crc32 crc;
     AnnexBReader rd(fi);
     std::vector<uint8_t> nal;
@@ -918,67 +935,81 @@ int compress(const char* in_name, const char* out_name, const Options& opt) {
     m.nal(F_JUNK, 0, (i64)junk.size());
     for (uint8_t b : junk) m.raw(b);
     crc.add(junk);
-    in_bytes += junk.size();
-    int prev_type = 0;
-    for (; more; more = rd.next(zeros, nal)) {
+    u64 in_nals = junk.size();  // (the bytes of the NAL units, counted ahead)
+    auto fill = [&](NalItem& it) {
       static const uint8_t sc[3] = {0, 0, 1};
-      crc.zeros(zeros);
+      crc.zeros(it.zeros);
       crc.add(sc, 3);
-      crc.add(nal);
-      in_bytes += zeros + 3 + nal.size();
-      st.nals++;
-      m.nal(F_MORE, 0, 1);
-      if (nal.empty() || (nal[0] & 0x80)) {  // empty, or forbidden_zero_bit set
-        m.nal(F_TYPE, prev_type, 32);
-        m.nal(F_ZEROS, 32, (i64)zeros);
-        m.nal(F_LEN, 32, (i64)nal.size());
-        for (uint8_t b : nal) m.raw(b);
-        st.raw++;
-        st.reasons["empty or forbidden_zero_bit"]++;
-        continue;
-      }
-      int ref_idc = nal[0] >> 5 & 3, type = nal[0] & 31;
-      m.nal(F_TYPE, prev_type, type);
-      m.nal(F_REF, type, ref_idc);
-      m.nal(F_ZEROS, type, (i64)zeros);
-      prev_type = type;
-      const uint8_t* payload = nal.data() + 1;
-      size_t len = nal.size() - 1;
-      bool slice = type == 1 || type == 5;
-      bool newpic = starts_picture(type, payload, len);
-      if (slice) det.slice(newpic);
-      if (type == 7 || (type == 6 && is_x264_sei(payload, len))) det.restart();
-      Trailer t;
-      std::string why;
+      crc.add(it.nal);
+      in_nals += it.zeros + 3 + it.nal.size();
+      it.bad = it.nal.empty() || (it.nal[0] & 0x80);
+      if (it.bad) return;
+      it.ref_idc = it.nal[0] >> 5 & 3, it.type = it.nal[0] & 31;
+      const uint8_t* payload = it.nal.data() + 1;
+      size_t len = it.nal.size() - 1;
+      it.slice = it.type == 1 || it.type == 5;
+      it.newpic = starts_picture(it.type, payload, len);
+      if (it.slice) det.slice(it.newpic);
+      if (it.type == 7 || (it.type == 6 && is_x264_sei(payload, len))) det.restart();
       int obs;
-      bool ok = dry_run(type, ref_idc, payload, len, ctx, log, t, why, obs);
-      bool padchg = false;
-      if (ok && obs >= 0 && det.observe(obs)) {
+      it.ok = dry_run(it.type, it.ref_idc, payload, len, cf, it.log, it.t, it.why, obs);
+      if (it.ok && obs >= 0 && det.observe(obs)) {
         // once more, with padding bits that predict this one
-        padchg = true;
+        it.padchg = true;
         int64_t frame = det.frame();
         if (frame < 0)
-          ctx.pad.on = false;
+          cf.pad.on = false;
         else
-          ctx.pad.set(frame);
-        st.pad++;
-        ok = dry_run(type, ref_idc, payload, len, ctx, log, t, why, obs);
+          cf.pad.set(frame);
+        it.ok = dry_run(it.type, it.ref_idc, payload, len, cf, it.log, it.t, it.why, obs);
       }
-      if (slice) {
-        m.nal(F_PADCHG, 0, padchg);
-        if (padchg) {
-          m.nal(F_PADON, 0, ctx.pad.on);
-          if (ctx.pad.on) m.nal(F_PADFRAME, 0, ctx.pad.frame);
+      it.padon = cf.pad.on, it.padframe = cf.pad.frame;
+      if (it.slice) cf.pad.next_slice(it.newpic);
+    };
+    int prev_type = 0;
+    // (false: a NAL unit -s would not have verbatim)
+    auto use = [&](NalItem& it) {
+      st.nals++;
+      m.nal(F_MORE, 0, 1);
+      if (it.bad) {
+        m.nal(F_TYPE, prev_type, 32);
+        m.nal(F_ZEROS, 32, (i64)it.zeros);
+        m.nal(F_LEN, 32, (i64)it.nal.size());
+        for (uint8_t b : it.nal) m.raw(b);
+        st.raw++;
+        st.reasons["empty or forbidden_zero_bit"]++;
+        return true;
+      }
+      int type = it.type, ref_idc = it.ref_idc;
+      m.nal(F_TYPE, prev_type, type);
+      m.nal(F_REF, type, ref_idc);
+      m.nal(F_ZEROS, type, (i64)it.zeros);
+      prev_type = type;
+      const uint8_t* payload = it.nal.data() + 1;
+      size_t len = it.nal.size() - 1;
+      if (it.padchg) {
+        if (!it.padon)
+          cb.pad.on = false;
+        else
+          cb.pad.set(it.padframe);
+        st.pad++;
+      }
+      if (it.slice) {
+        m.nal(F_PADCHG, 0, it.padchg);
+        if (it.padchg) {
+          m.nal(F_PADON, 0, cb.pad.on);
+          if (cb.pad.on) m.nal(F_PADFRAME, 0, cb.pad.frame);
         }
       }
-      if (parsed_type(type)) m.nal(F_VERB, type, !ok);
-      if (ok) {
-        log.rewind();
-        ModelChan<0> ch(m, &log);
+      if (parsed_type(type)) m.nal(F_VERB, type, !it.ok);
+      if (it.ok) {
+        const Trailer& t = it.t;
+        it.log.rewind();
+        ModelChan<0> ch(m, &it.log);
         m.nal_begin(type, ref_idc);
         BitWriter bw;
-        write_syntax(type, ref_idc, ctx, ch, bw);
-        if (!log.at_end()) cm_fail("internal: values left over");
+        write_syntax(type, ref_idc, cb, ch, bw);
+        if (!it.log.at_end()) cm_fail("internal: values left over");
         m.nal(F_TRAIL, type, t.irregular);
         if (t.irregular) {
           m.nal(F_DROP, 0, t.drop);
@@ -989,20 +1020,98 @@ int compress(const char* in_name, const char* out_name, const Options& opt) {
         st.parsed++;
         st.trail += t.irregular;
       } else {
+        // (an SPS or PPS stored verbatim may still define a parameter set,
+        // as it did ahead)
+        if (type == 7 || type == 8) update_params(type, unescape(payload, len), cb);
         m.nal(F_LEN, type, (i64)len);
         for (size_t i = 0; i < len; i++) m.raw(payload[i]);
         st.raw++;
-        st.reasons[why]++;
+        st.reasons[it.why]++;
         if (opt.verbose && parsed_type(type))
-          fprintf(stderr, "h264p: NAL unit %ld (type %d) stored verbatim: %s\n", st.nals - 1, type, why.c_str());
+          fprintf(stderr, "h264p: NAL unit %ld (type %d) stored verbatim: %s\n", st.nals - 1, type, it.why.c_str());
         if (opt.strict && parsed_type(type)) {
-          fprintf(stderr, "h264p: NAL unit %ld (type %d) cannot be converted: %s\n", st.nals - 1, type, why.c_str());
-          return fail_out(fo, out_name);
+          fprintf(stderr, "h264p: NAL unit %ld (type %d) cannot be converted: %s\n", st.nals - 1, type, it.why.c_str());
+          return false;
         }
       }
-      if (slice) ctx.pad.next_slice(newpic);
+      if (it.slice) cb.pad.next_slice(it.newpic);
       if (!own && rc.buf.size() > (1 << 20)) flush();
+      return true;
+    };
+    bool ahead = false;  // the parsing in a thread of its own
+#ifndef H264P_NO_THREADS
+    // (three NAL units ahead at most: their values take memory, and the
+    // parsing takes far less time than the model)
+    struct Ahead {
+      std::mutex mu;
+      std::condition_variable cv;
+      std::deque<std::unique_ptr<NalItem>> q;
+      bool done = false, quit = false;
+      std::exception_ptr err;
+      std::thread th;
+      ~Ahead() {
+        if (!th.joinable()) return;
+        {
+          std::lock_guard<std::mutex> lk(mu);
+          quit = true;
+        }
+        cv.notify_all();
+        th.join();
+      }
+    } ah;
+    if (own) {
+      try {
+        ah.th = std::thread([&] {
+          try {
+            for (; more; more = rd.next(zeros, nal)) {
+              std::unique_ptr<NalItem> it(new NalItem);
+              it->zeros = zeros;
+              it->nal.swap(nal);
+              fill(*it);
+              std::unique_lock<std::mutex> lk(ah.mu);
+              ah.cv.wait(lk, [&] { return ah.q.size() < 3 || ah.quit; });
+              if (ah.quit) return;
+              ah.q.push_back(std::move(it));
+              ah.cv.notify_all();
+            }
+          } catch (...) {
+            std::lock_guard<std::mutex> lk(ah.mu);
+            ah.err = std::current_exception();
+          }
+          std::lock_guard<std::mutex> lk(ah.mu);
+          ah.done = true;
+          ah.cv.notify_all();
+        });
+        ahead = true;
+      } catch (const std::system_error&) {  // no thread to be had: parsed here
+      }
     }
+    if (ahead) {
+      for (;;) {
+        std::unique_ptr<NalItem> it;
+        {
+          std::unique_lock<std::mutex> lk(ah.mu);
+          ah.cv.wait(lk, [&] { return !ah.q.empty() || ah.done; });
+          if (ah.q.empty()) break;
+          it = std::move(ah.q.front());
+          ah.q.pop_front();
+        }
+        ah.cv.notify_all();
+        if (!use(*it)) return fail_out(fo, out_name);
+      }
+      ah.th.join();
+      if (ah.err) std::rethrow_exception(ah.err);
+    }
+#endif
+    if (!ahead)
+      for (; more; more = rd.next(zeros, nal)) {
+        NalItem it;
+        it.zeros = zeros;
+        it.nal.swap(nal);
+        fill(it);
+        if (!use(it)) return fail_out(fo, out_name);
+      }
+    in_bytes += in_nals;
     if (rd.error()) {
       fprintf(stderr, "h264p: read error\n");
       return fail_out(fo, out_name);
