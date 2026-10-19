@@ -612,7 +612,8 @@ struct Model {
   std::vector<MbCol> hist_[30];
   std::vector<uint8_t> hskip_[30];  // the same's valid && skip, a byte a macroblock (for skp_vars)
   MbCol* hcur_ = nullptr;  // hist_ of the current slice's kind
-  std::vector<MbCol> hprev_;  // and as it was when the picture began
+  std::vector<MbCol> hprev_;  // and as it was when the picture began (if hprev_ok_: a P picture)
+  bool hprev_ok_ = false;
   uint32_t pic_ = 1;       // pictures so far
   SliceHeader last_h_;     // the last slice coded (no sps: none yet)
   int st_ = 0, key_ = 0;   // slice type x reference; st_ x frame/top/bottom field
@@ -771,7 +772,9 @@ struct Model {
     if ((int)info_.size() < size_) info_.resize(size_);
     if ((int)hist_[key_].size() < size_) hist_[key_].resize(size_), hskip_[key_].resize(size_);
     hcur_ = hist_[key_].data();
-    if (newpic) hprev_.assign(hcur_, hcur_ + size_);
+    // (the macroblocks as they were for the P slices' mc_col, mc_nz only)
+    if (newpic) hprev_ok_ = h.type() == kP || h.type() == kSP;
+    if (newpic && hprev_ok_) hprev_.assign(hcur_, hcur_ + size_);
     qp_off_ = 6 * (sc.sps_.bit_depth_luma - 8);
     qp_pred_ = slice_qp_ = sc.pps_.pic_init_qp + h.slice_qp_delta;
     last_qpd_ = 0;
@@ -1692,9 +1695,12 @@ struct Model {
     for (int l = 0; l < 2; l++)
       if (!zero && ref[l] >= 0) mv_pred(l, 0, 0, 4, 4, ref[l], mv[l]);
     bool lt = rec_.col_long_term();
+    // (with direct_8x8_inference the four 4x4 blocks of an 8x8 one have the
+    // same colocated block: the 8x8 block at once)
+    int n = rec_.direct8x8 ? 2 : 1;
     for (int b8 = 0; b8 < 4; b8++)
       if (mask >> b8 & 1)
-        for (int k = 0; k < 4; k++) {
+        for (int k = 0; k < 4; k += 3 * n - 2) {
           int x = (b8 & 1) * 2 + (k & 1), y = (b8 >> 1) * 2 + (k >> 1), cr, cm[2];
           int64_t pid;
           // colZeroFlag: the colocated block is still
@@ -1703,7 +1709,7 @@ struct Model {
           for (int l = 0; l < 2; l++) {
             if (ref[l] < 0) continue;
             int z[2] = {0, 0};
-            set_mv(l, x, y, 1, 1, ref[l], still && ref[l] == 0 ? z : mv[l]);
+            set_mv(l, x, y, n, n, ref[l], still && ref[l] == 0 ? z : mv[l]);
           }
         }
     parts_ = saved;
@@ -1970,7 +1976,7 @@ struct Model {
   const MbCol* ref_hist(int l, int r) const {
     if (!rec_.active || r < 0 || r >= rec_.nlist[l] || !rec_.list[l][r]) return nullptr;
     int poc = rec_.list[l][r]->poc;
-    if (poc == prev_poc_ && (int)hprev_.size() == size_) return hprev_.data();
+    if (poc == prev_poc_ && (int)hprev_.size() == size_) return hprev_ok_ ? hprev_.data() : nullptr;
     for (int k = 0; k < 30; k++)
       if (k != key_ && hist_poc_[k] == poc && (int)hist_[k].size() >= size_) return hist_[k].data();
     return nullptr;

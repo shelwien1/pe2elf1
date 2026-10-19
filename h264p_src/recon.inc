@@ -853,7 +853,8 @@ struct Recon {
     mb_cdone[0] = mb_cdone[1] = 0;
     mb_cdc[0] = mb_cdc[1] = false;
     // the first references' samples at the next macroblock (the vector
-    // zero), on their way into the cache for that one's prediction
+    // zero), on their way into the cache for that one's prediction (rows of
+    // 16 and 8 aligned so, each in a line)
     int na = addr + 1;
     if (active && na < cur->mbw * cur->mbh)
       for (int l = 0; l < 2; l++) {
@@ -861,7 +862,7 @@ struct Recon {
         if (!R || R->mbw != cur->mbw || R->mbh != cur->mbh) continue;
         int ps, pm, x = na % cur->mbw * 16, y = na / cur->mbw * 16, cw = R->w / 2;
         const uint8_t* p = R->luma(ps, pm) + y * ps + x;
-        for (int j = 0; j < 16; j++) CM_PREFETCH(p + j * ps), CM_PREFETCH(p + j * ps + 15);
+        for (int j = 0; j < 16; j++) CM_PREFETCH(p + j * ps);
         const uint8_t *u = R->u.data() + y / 2 * cw + x / 2, *v = R->v.data() + y / 2 * cw + x / 2;
         for (int j = 0; j < 8; j++) CM_PREFETCH(u + j * cw), CM_PREFETCH(v + j * cw);
       }
