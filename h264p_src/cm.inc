@@ -3,7 +3,7 @@
 // (cm_mix), on 12-bit probabilities. Changed: the counters with a second,
 // fast probability (cm_cnt2), and the mixers' sums in AVX2 where the
 // inputs are packed once for the mixers sharing them (cm_x16), to the same
-// results.
+// results (a family's ten counters of a decision too: tc_fam::bit_x).
 
 namespace h264p {
 
@@ -18,7 +18,7 @@ static u16 cm_rec[CM_TMAX + 2];
 constexpr int CM_AMAX = 255;
 static u16 cm_arec[CM_AMAX + 2];
 static u16 cm_mrec[CM_AMAX + 2];
-static i16 cm_st[CM_PONE];
+static i16 cm_st[CM_PONE + 1];  // (and one more, read in pairs)
 static u16 cm_sq[2 * CM_STMAX + 1];
 constexpr int CM_QMAX = 130;
 static void cm_tables(void) {

@@ -272,6 +272,10 @@ template <int f_DEC> struct tc_fam {
   int rA, rB, rC, rD, rE, rH, rI, rJ, rK, rL, rT, rG;
   int mwA, mwB, mwC, mwD, mwE, mwH, mwI, mwJ, mwK, mwL, mwT, mwG;
   int rS1, rS2;
+  //  the ten counters' limits and targets (bit 0, 1) as 32-bit lanes, two
+  //  each (cn_v: their arrays in this order in memory, coded at once)
+  int cn_lim[24], cn_tg[2][24];
+  bool cn_v = false;
   int lr, mb, lrm, mbm;
   int bw;
   int mt;  // the mantissa bits whose nodes have the bits above them
@@ -369,6 +373,19 @@ template <int f_DEC> struct tc_fam {
     mwL = tc_clamp(mwl * 64, 0, CM_CONE / 4);
     mwT = tc_clamp(mwtt * 64, 0, CM_CONE / 4);
     mwG = tc_clamp(mwg * 64, 0, CM_CONE / 4);
+    {
+      const int lim[10] = {rA, rB, rC, rD, rE, rH, rI, rJ, rK, rL}, mw[10] = {mwA, mwB, mwC, mwD, mwE, mwH, mwI, mwJ, mwK, mwL};
+      const cm_cnt2 *arr[10] = {A, B, C, D, E, H, I, J, K, L};
+      cn_v = true;
+      for(int k = 0; k < 12; k++)
+        for(int i = 0; i < 2; i++) {
+          cn_lim[2 * k + i] = k < 10 ? lim[k] : 0;
+          cn_tg[0][2 * k + i] = k < 10 ? CM_CONE - 1 - mw[k] : 0;
+          cn_tg[1][2 * k + i] = k < 10 ? mw[k] : 0;
+        }
+      for(int k = 0; k + 1 < 10; k++)
+        cn_v &= arr[k] < arr[k + 1];
+    }
     rS1 = cm_apm::limit(tc_clamp(rs1, 1, 15));
     rS2 = cm_apm::limit(tc_clamp(rs2, 1, 15));
     lr = tc_clamp(lrate, 1, 64);
@@ -505,50 +522,64 @@ template <int f_DEC> struct tc_fam {
   INLINE int bit_x(int node, int b) {
     if(node + 1 < nd)
       fetch(node + 1);
-    cm_cnt2 a = A[ba + node];
-    cm_cnt2 c = B[bb + node];
-    cm_cnt2 e = C[bc + node];
-    cm_cnt2 f = D[bd + node];
-    cm_cnt2 g = E[be + node];
-    cm_cnt2 h = H[bh + node];
-    cm_cnt2 ci = I[bi + node];
-    cm_cnt2 cj = J[bj + node];
-    cm_cnt2 ck = K[bk + node];
-    cm_cnt2 cl = L[bl + node];
-    int pa = a.P();
+    cm_cnt2 *const cp[10] = {A + ba + node, B + bb + node, C + bc + node, D + bd + node, E + be + node,
+                             H + bh + node, I + bi + node, J + bj + node, K + bk + node, L + bl + node};
+    //  The mixers' inputs: the ten counters' two probabilities each (in
+    //  the order of the arrays), the APM's refinement of A's, the outside
+    //  prediction, the bias and the hint's counter (stretched); the three
+    //  mixers' are the same, packed once
+    cm_x16<TC_MIXN> xp;
+    cm_cnt2 cn[10];
+    int pa;
+#ifdef H264P_AVX2
+    //  (cn_v: the counters all at once, as 64-bit lanes p, t, q and the next
+    //  counter's p, four to a vector; their probabilities as 32-bit lanes,
+    //  P and Q of each in turn)
+    __m256i cv[3];
+    if(cn_v) {
+      auto ld2 = [&](int k) {
+        return _mm_unpacklo_epi64(_mm_loadl_epi64((const __m128i *)cp[k]), _mm_loadl_epi64((const __m128i *)cp[k + 1]));
+      };
+      cv[0] = _mm256_inserti128_si256(_mm256_castsi128_si256(ld2(0)), ld2(2), 1);
+      cv[1] = _mm256_inserti128_si256(_mm256_castsi128_si256(ld2(4)), ld2(6), 1);
+      cv[2] = _mm256_inserti128_si256(_mm256_setzero_si256(), ld2(8), 0);
+      const __m256i m16 = _mm256_set1_epi32(0xFFFF), z = _mm256_setzero_si256();
+      __m256i st[3];
+      for(int j = 0; j < 3; j++) {
+        // (cm_cnt2::P and Q, then cm_stretch)
+        __m256i t = _mm256_srli_epi32(_mm256_shuffle_epi32(cv[j], 0xA0), 16);
+        __m256i v = _mm256_max_epi32(_mm256_srli_epi32(_mm256_and_si256(cv[j], m16), CM_CBITS - CM_PBITS), _mm256_set1_epi32(1));
+        v = _mm256_blendv_epi8(v, _mm256_set1_epi32(CM_PHALF), _mm256_cmpeq_epi32(t, z));
+        if(!j)
+          pa = _mm256_cvtsi256_si32(v);
+        st[j] = _mm256_srai_epi32(_mm256_slli_epi32(_mm256_i32gather_epi32((const int *)cm_st, v, 2), 16), 16);
+      }
+      xp.v[0] = _mm256_packs_epi32(st[0], st[1]);
+      xp.t = _mm256_castsi256_si128(st[2]);
+    } else
+#endif
+    {
+      for(int k = 0; k < 10; k++) {
+        cn[k] = *cp[k];
+        mx.set(2 * k, cm_stretch(cn[k].P()));
+        mx.set(2 * k + 1, cm_stretch(cn[k].Q()));
+      }
+      pa = cn[0].P();
+    }
     int p1 = ap.pp(pa, bs + (u32)node);
     if(p1 > CM_PONE - 1)
       p1 = CM_PONE - 1;
-    mx.set(0, cm_stretch(p1));
-    mx.set(1, cm_stretch(c.P()));
-    mx.set(2, cm_stretch(e.P()));
-    mx.set(3, cm_stretch(f.P()));
-    mx.set(4, cm_stretch(g.P()));
-    mx.set(5, cm_stretch(h.P()));
-    mx.set(6, cm_stretch(pa));
     int pp = cprpa ? cprpa[node] : cprp;
-    mx.set(7, pp >= 0 ? cm_stretch(pp) : 0);
-    mx.set(8, 256);
-    mx.set(9, cm_stretch(a.Q()));
-    mx.set(10, cm_stretch(c.Q()));
-    mx.set(11, cm_stretch(e.Q()));
-    mx.set(12, cm_stretch(f.Q()));
-    mx.set(13, cm_stretch(g.Q()));
-    mx.set(14, cm_stretch(h.Q()));
-    mx.set(15, cm_stretch(ci.P()));
-    mx.set(16, cm_stretch(ci.Q()));
-    mx.set(17, cm_stretch(cj.P()));
-    mx.set(18, cm_stretch(cj.Q()));
-    mx.set(19, cm_stretch(ck.P()));
-    mx.set(20, cm_stretch(ck.Q()));
-    mx.set(21, cm_stretch(cl.P()));
-    mx.set(22, cm_stretch(cl.Q()));
     cm_cnt2 *zc = hs ? &Z[((sz)bz * nd + (u32)node) * 5 + (u32)hs] : nullptr;
+    mx.set(20, cm_stretch(p1));
+    mx.set(21, pp >= 0 ? cm_stretch(pp) : 0);
+    mx.set(22, 256);
     mx.set(23, zc ? cm_stretch(zc->P()) : 0);
-    // (the three mixers' inputs are the same, packed once)
-    cm_x16<TC_MIXN> xp;
-    xp.pack(mx.x);
 #ifdef H264P_AVX2
+    if(cn_v)
+      xp.t = _mm_packs_epi32(xp.t, _mm_loadu_si128((const __m128i *)(mx.x + 20)));
+    else
+      xp.pack(mx.x);
     const cm_x16<TC_MIXN> *xq = &xp;
 #else
     const cm_x16<TC_MIXN> *xq = nullptr;
@@ -569,26 +600,41 @@ template <int f_DEC> struct tc_fam {
     mxf.upd(b, lr, mb);
     ap.upd(b, rS1);
     ap2.upd(b, rS2);
-    a.upd(b, rA, mwA);
-    A[ba + node] = a;
-    c.upd(b, rB, mwB);
-    B[bb + node] = c;
-    e.upd(b, rC, mwC);
-    C[bc + node] = e;
-    f.upd(b, rD, mwD);
-    D[bd + node] = f;
-    g.upd(b, rE, mwE);
-    E[be + node] = g;
-    h.upd(b, rH, mwH);
-    H[bh + node] = h;
-    ci.upd(b, rI, mwI);
-    I[bi + node] = ci;
-    cj.upd(b, rJ, mwJ);
-    J[bj + node] = cj;
-    ck.upd(b, rK, mwK);
-    K[bk + node] = ck;
-    cl.upd(b, rL, mwL);
-    L[bl + node] = cl;
+#ifdef H264P_AVX2
+    if(cn_v) {
+      // as cm_cnt2::upd, each counter's q through its p's arithmetic with
+      // the rate 8192 / 65536; written back in the order of the arrays,
+      // each with the next counter's p as it was (rewritten after, where
+      // the next counter is one of these)
+      const __m256i m16 = _mm256_set1_epi32(0xFFFF), z = _mm256_setzero_si256();
+      const __m256i even = _mm256_setr_epi32(-1, 0, -1, 0, -1, 0, -1, 0);
+      for(int j = 0; j < 3; j++) {
+        __m256i t = _mm256_srli_epi32(_mm256_shuffle_epi32(cv[j], 0xA0), 16);
+        __m256i cur = _mm256_blendv_epi8(_mm256_and_si256(cv[j], m16), _mm256_set1_epi32(CM_CONE / 2), _mm256_cmpeq_epi32(t, z));
+        __m256i t1 = _mm256_sub_epi32(t, _mm256_cmpgt_epi32(_mm256_loadu_si256((const __m256i *)(cn_lim + 8 * j)), t));
+        __m256i rec = _mm256_and_si256(_mm256_mask_i32gather_epi32(_mm256_set1_epi32(8192), (const int *)cm_rec, t1, even, 2), m16);
+        __m256i tg = _mm256_loadu_si256((const __m256i *)(cn_tg[b] + 8 * j));
+        __m256i nv = _mm256_add_epi32(cur, _mm256_srai_epi32(_mm256_mullo_epi32(_mm256_sub_epi32(tg, cur), rec), CM_CBITS));
+        __m256i up = _mm256_blend_epi32(_mm256_slli_epi32(t1, 16), _mm256_andnot_si256(m16, cv[j]), 0xAA);
+        __m256i o = _mm256_or_si256(_mm256_and_si256(nv, m16), up);
+        __m128i lo = _mm256_castsi256_si128(o);
+        _mm_storel_epi64((__m128i *)cp[4 * j], lo);
+        _mm_storel_epi64((__m128i *)cp[4 * j + 1], _mm_unpackhi_epi64(lo, lo));
+        if(j < 2) {
+          __m128i hi = _mm256_extracti128_si256(o, 1);
+          _mm_storel_epi64((__m128i *)cp[4 * j + 2], hi);
+          _mm_storel_epi64((__m128i *)cp[4 * j + 3], _mm_unpackhi_epi64(hi, hi));
+        }
+      }
+    } else
+#endif
+    {
+      const int lim[10] = {rA, rB, rC, rD, rE, rH, rI, rJ, rK, rL}, mw[10] = {mwA, mwB, mwC, mwD, mwE, mwH, mwI, mwJ, mwK, mwL};
+      for(int k = 0; k < 10; k++) {
+        cn[k].upd(b, lim[k], mw[k]);
+        *cp[k] = cn[k];
+      }
+    }
     if(zc)
       zc->upd(b, rT, mwT);
     return b;
