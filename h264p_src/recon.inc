@@ -1872,14 +1872,27 @@ struct Recon {
         cur->rf[(addr * 4 + b8) * 2 + l] = (int8_t)(rp ? r : -1);
         cur->rpid[(addr * 4 + b8) * 2 + l] = rp ? rp->id : -1;
       }
-      int16_t* cm = &cur->mv[(size_t)addr * 64];
-      if (intra) {
+      if (intra)
         memset(D.mv[l], 0, sizeof D.mv[l]);
-        for (int b = 0; b < 16; b++) cm[(b * 2 + l) * 2] = cm[(b * 2 + l) * 2 + 1] = 0;
-      } else {
+      else
         memcpy(D.mv[l], mv[l], sizeof D.mv[l]);
-        for (int b = 0; b < 16; b++) memcpy(cm + (b * 2 + l) * 2, mv[l][b], 2 * sizeof(int16_t));
+    }
+    // the picture's vectors: by block, those of both lists in turn
+    int16_t* cm = &cur->mv[(size_t)addr * 64];
+    if (intra) {
+      memset(cm, 0, 64 * sizeof(int16_t));
+    } else {
+#ifdef H264P_AVX2
+      for (int h = 0; h < 2; h++) {
+        __m256i a = _mm256_loadu_si256((const __m256i*)mv[0][8 * h]), b = _mm256_loadu_si256((const __m256i*)mv[1][8 * h]);
+        __m256i lo = _mm256_unpacklo_epi32(a, b), hi = _mm256_unpackhi_epi32(a, b);
+        _mm256_storeu_si256((__m256i*)(cm + 32 * h), _mm256_permute2x128_si256(lo, hi, 0x20));
+        _mm256_storeu_si256((__m256i*)(cm + 32 * h + 16), _mm256_permute2x128_si256(lo, hi, 0x31));
       }
+#else
+      for (int l = 0; l < 2; l++)
+        for (int b = 0; b < 16; b++) memcpy(cm + (b * 2 + l) * 2, mv[l][b], 2 * sizeof(int16_t));
+#endif
     }
   }
 
@@ -2379,13 +2392,16 @@ struct Recon {
           if (e & 1 && Q.t8) continue;
           int pa = e ? addr : na;
           int b[4];
-          bool any = false;
-          for (int k = 0; k < 4; k++) {
-            int bq = dir ? e * 4 + k : k * 4 + e;
-            int bp = e ? (dir ? bq - 4 : bq - 1) : (dir ? 12 + k : k * 4 + 3);
-            b[k] = bs(pa, addr, bp, bq, e == 0);
-            any |= b[k] != 0;
-          }
+          bool any = db[pa].intra || Q.intra;
+          if (any)
+            b[0] = b[1] = b[2] = b[3] = e ? 3 : 4;  // (as bs, whatever the blocks)
+          else
+            for (int k = 0; k < 4; k++) {
+              int bq = dir ? e * 4 + k : k * 4 + e;
+              int bp = e ? (dir ? bq - 4 : bq - 1) : (dir ? 12 + k : k * 4 + 3);
+              b[k] = bs(pa, addr, bp, bq, e == 0);
+              any |= b[k] != 0;
+            }
           if (!any) continue;
           const DbMb& P = db[pa];
           int qpp = P.pcm ? 0 : P.qp, qpq = Q.pcm ? 0 : Q.qp;
