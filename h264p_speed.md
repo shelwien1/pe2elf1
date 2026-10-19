@@ -575,6 +575,13 @@ What did not pay:
   the row below: more instructions, since most calls stop after two rows.
 - The model's per-macroblock records in a window of a few rows (to stay
   in L2) instead of the whole picture: no change measured.
+- PGO (trained on 02, 04, 05, 06): 2-3% slower. clang 18 at -O3: as fast
+  on 04, 2-4% slower on 00 and 03. (Trying it found clang's AVX2 build
+  coding differently from GCC's: an 8-sample row widened by a cast left
+  the vector's high half undefined, and it was summed. Fixed; the two
+  compilers' builds now code alike.)
+- Huge pages for the small families' tables only (those under 16 MB, the
+  skip flag's among them): no change.
 
 Where the time goes now (decompressing, the decoding's thread):
 
