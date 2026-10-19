@@ -6,10 +6,11 @@ same speed (04: 10.5 s): the model is symmetric, and both sides reconstruct the
 pictures. This plan starts from where the time actually goes, answers seven
 questions (allocation, template branches, `restrict`, SIMD lookups, memory
 latency, layout, vectorization), and orders the work by what it buys.
-Section 4 has what has been done since, measured: compression 3.7x and
-decompression 3.0x faster over the corpus, to the same output but for a
-cheaper end_of_slice_flag and lighter template searches (830 bytes more
-over the 96 test streams, 0.02%).
+Section 4 has what has been done since, measured: compression 3.9x and
+decompression 3.1x faster over the corpus, to the same output but for a
+cheaper end_of_slice_flag, lighter template searches and a B macroblock's
+list context read off its skip motion (915 bytes more over the 96 test
+streams, 0.02%).
 
 ## 1. Where the time goes
 
@@ -423,14 +424,14 @@ searches go and where a B macroblock's list context comes from.
 
 | stream | bytes | `c` before | `c` now | `d` before | `d` now |
 |---|---:|---:|---:|---:|---:|
-| 00 (low rate, nearly all skipped) | 815,140 | 31.92 s | 8.78 s | 32.83 s | 10.74 s |
-| 01 | 1,095,103 | 30.24 s | 9.15 s | 30.83 s | 9.78 s |
-| 02 (intra, high rate) | 28,143 | 0.31 s | 0.26 s | 0.33 s | 0.20 s |
-| 03 (much intra) | 1,181,369 | 43.11 s | 10.47 s | 42.80 s | 14.67 s |
-| 04 (P/B) | 484,238 | 13.93 s | 2.95 s | 12.71 s | 3.86 s |
-| 05 | 31,669 | 0.45 s | 0.28 s | 0.51 s | 0.27 s |
-| 06 | 230,978 | 2.74 s | 0.91 s | 2.17 s | 1.10 s |
-| **total** | 3,866,640 | **122.7 s** | **32.8 s (3.7x)** | **122.2 s** | **40.6 s (3.0x)** |
+| 00 (low rate, nearly all skipped) | 815,140 | 30.85 s | 7.56 s | 29.23 s | 9.15 s |
+| 01 | 1,095,103 | 28.04 s | 6.64 s | 27.58 s | 8.57 s |
+| 02 (intra, high rate) | 28,143 | 0.29 s | 0.27 s | 0.28 s | 0.21 s |
+| 03 (much intra) | 1,181,369 | 40.74 s | 10.92 s | 39.95 s | 12.55 s |
+| 04 (P/B) | 484,238 | 12.80 s | 2.97 s | 11.54 s | 3.95 s |
+| 05 | 31,669 | 0.43 s | 0.27 s | 0.46 s | 0.29 s |
+| 06 | 230,978 | 2.14 s | 0.92 s | 2.21 s | 1.24 s |
+| **total** | 3,866,640 | **115.3 s** | **29.6 s (3.9x)** | **111.2 s** | **36.0 s (3.1x)** |
 
 The steps, in order (the gains on the streams named, paired runs):
 
@@ -605,15 +606,19 @@ What did not pay:
   compilers' builds now code alike.)
 - Huge pages for the small families' tables only (those under 16 MB, the
   skip flag's among them): no change.
+- Huge pages for all the tables once more, on whole streams (`d`): 03 as
+  fast, 00 within the noise. The coder's share is its arithmetic and its
+  rows' fetches together, not page walks.
 
-Where the time goes now (decompressing, the decoding's thread):
+Where the time goes now (decompressing, the decoding's thread; sampled,
+the finishing thread's share left out):
 
-- 00: the coder about 30% (the skip flag's decision alone 8%), the
-  model's contexts (direct motion, motion vector prediction, the
-  neighbours' counts, bookkeeping) about 22%, the predictions, misses and
-  the rest of the reconstruction 32%, the template searches 11%.
-- 01: the coder about 35%, the model's contexts 20%, the reconstruction
-  23%, the template searches 15%.
+- 00: the coder 35% (the skip flag's decision alone 9%), the
+  reconstruction (predictions, misses, intra estimates, the residual) 25%,
+  the model's contexts and their indices 21%, the template searches 14%,
+  the syntax walk 5%.
+- 03: the coder 33%, the reconstruction 27%, the model's contexts 18%, the
+  template searches 17%, the syntax walk 5%.
 - Compressing, the model's thread sets the pace: on 00, 03 and 04 it is
   busy all along, while the coder's takes 45-62% of a core and the parsing
   and the finishing threads 9-21% each.

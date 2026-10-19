@@ -195,8 +195,8 @@ On the test streams (`-v` shows where the bits go):
 The macroblock syntax takes 72.1% of what its CABAC coding takes (from
 3,536,129 to 2,551,582 bytes over these streams; whole streams go from
 3,603,993 to 2,556,834 bytes; `h264p_cm.md` section 9 has the figures by
-syntax element). Speed, on a 2.1 GHz Xeon with the x86-64-v3 build, is 0.09-0.25
-MB of H.264 per second compressing (in four threads) and 0.08-0.21 MB/s
+syntax element). Speed, on a 2.1 GHz Xeon with the x86-64-v3 build, is 0.10-0.25
+MB of H.264 per second compressing (in four threads) and 0.09-0.19 MB/s
 decompressing (in two), depending on the stream (`h264p_speed.md` has the
 figures), and the model tables take about 226 MB.
 
