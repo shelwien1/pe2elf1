@@ -53,7 +53,8 @@ struct LogChan : Chan {
   void block(int, int, int* c, int n, bool) override {
     for (int i = 0; i < n; i++) c[i] = io32(c[i]);
   }
-  void pcm(int& align, int, int* s, int n) override {
+  void pcm(int& align, int& nb, int* s, int n) override {
+    nb = io32(nb);
     align = io32(align);
     for (int i = 0; i < n; i++) s[i] = io32(s[i]);
   }

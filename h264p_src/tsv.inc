@@ -227,7 +227,7 @@ struct TsvChan : Chan {
       for (size_t i = 0; i < b.len; i++) c[i] = r.coef[b.off + i];
     }
   }
-  void pcm(int& align, int nb, int* s, int n) override {
+  void pcm(int& align, int& nb, int* s, int n) override {
     (void)nb;
     MbRec& r = r_;
     if (!W) {

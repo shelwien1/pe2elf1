@@ -2868,7 +2868,9 @@ struct Model {
 template <int f_DEC, class LV>
 struct ModelChan : Chan {
   static constexpr int ENC = f_DEC == 0;
-  ModelChan(Model<f_DEC, LV>& m, LogChan* log) : Chan(true), m_(m), log_(log) {}
+  // (coding: the walk's bins are dropped, so where the level reads no CABAC
+  // states, it need not code them)
+  ModelChan(Model<f_DEC, LV>& m, LogChan* log) : Chan(true), m_(m), log_(log) { nobins = ENC && !LV::cabpred; }
 
   void hbegin(const char* name) override { m_.hbegin(name); }
   void hbits(int n) override { m_.hbits(n); }
@@ -2903,7 +2905,7 @@ struct ModelChan : Chan {
     if (ENC) log_->block(cat, idx, c, n, coded);
     m_.block(cat, idx, c, n, coded);
   }
-  void pcm(int& align, int nb, int* s, int n) override {
+  void pcm(int& align, int& nb, int* s, int n) override {
     if (ENC) log_->pcm(align, nb, s, n);
     m_.pcm(align, nb, s, n);
   }

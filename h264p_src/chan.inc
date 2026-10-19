@@ -20,6 +20,11 @@ struct Chan {
   explicit Chan(bool w) : W(w) {}
   virtual ~Chan() {}
   bool W;  // the walk writes a bitstream: values come from the channel
+  // (writing) the CABAC bins are not wanted, only the values: the walk
+  // skips their arithmetic coding (the compressor's model pass at a level
+  // that reads no CABAC states), and the bits it writes are not the
+  // stream's
+  bool nobins = false;
 
   // --- header syntax: groups of values under the name of a TSV row
   virtual void hbegin(const char* name) = 0;
@@ -52,8 +57,10 @@ struct Chan {
   // the coefficients of a block in scan order; coded: it is known to have a
   // nonzero one (CABAC 8x8 blocks without coded_block_flag)
   virtual void block(int cat, int idx, int* c, int n, bool coded) = 0;
-  // I_PCM: the alignment bits (nb of them, XOR x264's padding bit) and the samples
-  virtual void pcm(int& align, int nb, int* s, int n) = 0;
+  // I_PCM: the alignment bits (nb of them, XOR x264's padding bit) and the
+  // samples; writing, a channel that knows nb gives it (the walk without
+  // its bins cannot count them)
+  virtual void pcm(int& align, int& nb, int* s, int n) = 0;
 
   // an inconsistency found while writing
   [[noreturn]] virtual void fail(const std::string& msg) = 0;

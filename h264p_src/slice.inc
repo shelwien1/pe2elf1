@@ -172,7 +172,8 @@ std::vector<uint8_t> slice_group_map(const SliceHeader& h, int width, int size) 
 
 struct SliceCoder {
   SliceCoder(const SliceHeader& h, MbStore& store, BitReader* br, BitWriter* bw, Chan& ch)
-      : W(bw != nullptr), h_(h), sps_(*h.sps), pps_(*h.pps), store_(store), br_(br), bw_(bw), ch_(&ch) {}
+      : W(bw != nullptr), nobins_(W && ch.nobins), h_(h), sps_(*h.sps), pps_(*h.pps), store_(store), br_(br), bw_(bw),
+        ch_(&ch) {}
 
   void run() {
     stype_ = h_.type();
@@ -262,17 +263,17 @@ struct SliceCoder {
   // --- CABAC primitives
   int bin(int ctx, int v) {
     if (!W) return dec_.decision(ctx_[ctx]);
-    enc_.decision(ctx_[ctx], v);
+    if (!nobins_) enc_.decision(ctx_[ctx], v);
     return v;
   }
   int bypass(int v) {
     if (!W) return dec_.bypass();
-    enc_.bypass(v);
+    if (!nobins_) enc_.bypass(v);
     return v;
   }
   int term(int v) {
     if (!W) return dec_.terminate();
-    enc_.terminate(v);
+    if (!nobins_) enc_.terminate(v);
     return v;
   }
 
@@ -1194,6 +1195,7 @@ struct SliceCoder {
   }
 
   const bool W;
+  const bool nobins_;  // W, but the bins only walked, not coded (Chan::nobins)
   const SliceHeader& h_;
   const Sps& sps_;
   const Pps& pps_;
