@@ -83,18 +83,27 @@ template <int f_DEC> static INLINE int tc_bit(int p, int bit) {
 //  prediction and the hint's state (B a decision of bit_x(); m a mantissa
 //  bit, by its place in the number, so that the tree's depth mt can
 //  change; G a sign). None of it depends on the family's parameters, so
-//  that famtune codes one dump again under each of them.
-struct tc_dump_b {
-  i32 node, b, pp, hs;
-};
-struct tc_dump_m {
-  i32 nb, p, b, hs, prp, pa;
-  u64 pref;
-};
-struct tc_dump_g {
-  u32 sc;
-  i32 s;
-};
+//  that famtune codes one dump again under each of them. A record is its
+//  letter and its numbers, each a zigzag varint (a byte for those within
+//  -64..63), in the order of tc_dump's calls below.
+static INLINE void tc_dump_put(FILE *f, i64 v) {
+  u64 u = ((u64)v << 1) ^ (u64)(v >> 63);
+  for(; u >= 0x80; u >>= 7)
+    putc((int)(u & 0x7F) | 0x80, f);
+  putc((int)u, f);
+}
+static INLINE i64 tc_dump_get(const char *&p, const char *e) {
+  u64 u = 0;
+  for(int s = 0;; s += 7) {
+    if(UNLIKELY(p == e || s > 63))
+      cm_fail("famtune: a dump cut short");
+    u8 c = (u8)*p++;
+    u |= (u64)(c & 0x7F) << s;
+    if(!(c & 0x80))
+      break;
+  }
+  return (i64)(u >> 1) ^ -(i64)(u & 1);
+}
 #ifdef H264P_DUMP
 struct tc_dump {
   FILE *f = nullptr;
@@ -105,19 +114,25 @@ struct tc_dump {
     std::string fn = std::string(dir) + "/" + fam + ".dump";
     if(!(f = fopen(fn.c_str(), "ab")))
       cm_fail("cannot write %s", fn.c_str());
-    fputc('R', f);
+    putc('R', f);
   }
   ~tc_dump() {
     if(f)
       fclose(f);
   }
-  template <class T> void rec(char tag, const T &v) {
-    if(f)
-      fputc(tag, f), fwrite(&v, sizeof v, 1, f);
+  template <class... A> void rec(char tag, A... a) {
+    if(!f)
+      return;
+    putc(tag, f);
+    int unused[] = {0, (tc_dump_put(f, (i64)a), 0)...};
+    (void)unused;
   }
-  void rec(char tag) {
-    if(f)
-      fputc(tag, f);
+  void vars(const int *v, int n) {  // M
+    if(!f)
+      return;
+    putc('M', f);
+    for(int i = 0; i < n; i++)
+      tc_dump_put(f, v[i]);
   }
 };
 #define TC_DUMP(x)                                                                                                     \
@@ -249,7 +264,7 @@ template <int f_DEC, class C> struct tc_fam {
   int sign(u32 sc, int s) {
     if(!G)
       cm_fail("internal: a family with no sign counter coded a sign");
-    TC_DUMP(rec('G', tc_dump_g{sc, s}));
+    TC_DUMP(rec('G', sc, s));
     cm_cnt g = G[bg * (u32)C::NG + sc];
     s = tc_bit<f_DEC>(g.P(), ENC && s);
     g.upd(s, C::rG, C::mwG);
@@ -284,7 +299,7 @@ template <int f_DEC, class C> struct tc_fam {
     }
   }
   INLINE int bit_x(int node, int b) {
-    TC_DUMP(rec('B', tc_dump_b{node, b, prpa ? prpa[node] : prp, hs}));
+    TC_DUMP(rec('B', node, b, prpa ? prpa[node] : prp, hs));
     if(node + 1 < ND)
       fetch(node + 1);
     cm_cnt2 *cp[NC];
@@ -521,7 +536,7 @@ template <int f_DEC, class C> struct tc_fam {
       for(p = 0; p < nb - 1; p++) {
         int hb = (int)(hu >> (nb - 2 - p) & 1);
         hs = hst == 1 ? 1 + hb : hst;
-        TC_DUMP(rec('m', tc_dump_m{nb, p, (int)((u >> (nb - 2 - p)) & 1), hs, prp, prpa != nullptr, pref}));
+        TC_DUMP(rec('m', nb, p, (int)((u >> (nb - 2 - p)) & 1), hs, prp, prpa != nullptr, pref));
         int mb = bitm(tc_node_man(nb, p, pref, C::mt), ENC && ((u >> (nb - 2 - p)) & 1) != 0);
         if(hst == 1 && mb != hb)
           hst = mb > hb ? 3 : 4;

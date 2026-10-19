@@ -74,15 +74,6 @@ std::vector<char> slurp(const char* fn) {
   return d;
 }
 
-template <class R>
-R take(const char*& p, const char* e) {
-  R r;
-  if ((size_t)(e - p) < sizeof r) cm_fail("famtune: a dump cut short");
-  memcpy(&r, p, sizeof r);
-  p += sizeof r;
-  return r;
-}
-
 // One family's dumps, as Model codes them: its tables mapped fresh at each
 // stream (zero, as tc_table maps them), the hint's counters made at once
 // (code() makes them at its first hint, zero too).
@@ -109,32 +100,35 @@ void replay(char** files, int n) {
       }
       if (!f) cm_fail("famtune: a dump that does not start with a stream");
       switch (tag) {
-        case 'M':
-          D = take<typename C::V>(p, e);
+        case 'M': {
+          int* v = reinterpret_cast<int*>(&D);
+          for (size_t k = 0; k < sizeof D / sizeof(int); k++) v[k] = (int)tc_dump_get(p, e);
           C::make(D, X);
           break;
+        }
         case 'S':
           f->select(X);
           break;
         case 'B': {
-          tc_dump_b r = take<tc_dump_b>(p, e);
-          f->prp = r.pp;
+          int node = (int)tc_dump_get(p, e), b = (int)tc_dump_get(p, e);
+          f->prp = (int)tc_dump_get(p, e);
           f->prpa = nullptr;
-          f->hs = r.hs;
-          f->bit_x(r.node, r.b);
+          f->hs = (int)tc_dump_get(p, e);
+          f->bit_x(node, b);
           break;
         }
         case 'm': {
-          tc_dump_m r = take<tc_dump_m>(p, e);
-          f->prp = r.prp;
-          f->prpa = r.pa ? &any : nullptr;
-          f->hs = r.hs;
-          f->bitm(tc_node_man(r.nb, r.p, r.pref, C::mt), r.b);
+          int nb = (int)tc_dump_get(p, e), q = (int)tc_dump_get(p, e), b = (int)tc_dump_get(p, e);
+          f->hs = (int)tc_dump_get(p, e);
+          f->prp = (int)tc_dump_get(p, e);
+          f->prpa = tc_dump_get(p, e) ? &any : nullptr;
+          u64 pref = (u64)tc_dump_get(p, e);
+          f->bitm(tc_node_man(nb, q, pref, C::mt), b);
           break;
         }
         case 'G': {
-          tc_dump_g r = take<tc_dump_g>(p, e);
-          f->sign(r.sc, r.s);
+          u32 sc = (u32)tc_dump_get(p, e);
+          f->sign(sc, (int)tc_dump_get(p, e));
           break;
         }
         default:

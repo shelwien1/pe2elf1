@@ -59,7 +59,7 @@ struct FC_NAME {
     return d;
   }
   static INLINE void make(const V& D, tcx& X) {
-    dump().rec('M', D);
+    dump().vars(reinterpret_cast<const int*>(&D), sizeof D / sizeof(int));
     FCX(make)(D, X);
   }
 #else
