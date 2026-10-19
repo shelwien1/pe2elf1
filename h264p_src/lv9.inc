@@ -1,8 +1,9 @@
-// lv9.inc -- level -9, the strongest: every part of the model, and in each family
-// the ten counters, the three mixers and the final one, and the two APMs (h264p_levels.md
-// sections 4 and 6). Its families as IDX/l9 declares them (generated into
-// MOD/l9), each wrapped into its configuration class (famcfg.inc), and the
-// level's class, which Model<f_DEC, Lv9> takes.
+// lv9.inc -- level -9, the strongest: every part of the model, and in
+// each family the ten counters, the three mixers and the final one, and
+// the two APMs (h264p_levels.md sections 4 and 6).
+// Its families as IDX/l9 declares them (generated into MOD/l9), each
+// wrapped into its configuration class (famcfg.inc), and the level's class,
+// which Model<f_DEC, Lv9> takes.
 #include "MOD/l9/nal_h.inc"
 #include "MOD/l9/hdr_h.inc"
 #include "MOD/l9/skp_h.inc"

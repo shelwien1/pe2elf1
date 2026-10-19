@@ -9,6 +9,10 @@
 // picture, the last one at each address in a picture of the same kind, the
 // QP). Coding, the values come from the log of the compressor's dry run;
 // decoding, from the range decoder.
+//
+// The model is a template on the level (LV, lv<L>.inc): which of its parts
+// the level has (the decoder in the loop, its searches, ...) and its
+// families' classes (h264p_levels.md sections 6 and 7).
 
 namespace h264p {
 
@@ -795,9 +799,9 @@ struct Model {
   bool proxy_build_(A&&... a) {
     return LV::proxy && rec_.proxy_build(std::forward<A>(a)...);
   }
-#define H_PROXY(F, R, NONE)                                \
-  template <class... A>                                    \
-  R F##_(A&&... a) const {                                 \
+#define H_PROXY(F, R, NONE)                                  \
+  template <class... A>                                      \
+  R F##_(A&&... a) const {                                   \
     return LV::proxy ? rec_.F(std::forward<A>(a)...) : NONE; \
   }
   H_PROXY(proxy_nz, int, -1)

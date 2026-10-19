@@ -1,5 +1,8 @@
 # Compressing h264p dumps with context mixing
 
+(This is the model of level `-9`, the strongest; `h264p_levels.md` has the
+lighter levels, which leave parts of it out.)
+
 `h264p c` turns an H.264 stream into rows of syntax element values, and
 `h264p d` turns the rows back into the identical stream. A compressor for
 the TSV files is therefore an H.264 recompressor, and its model has the same
@@ -924,7 +927,7 @@ with their defaults (0.6 KB: 02's 667 bytes of it take 84).
 | levels | 302,611 | 219,815 | −27.4% |
 | signs | 329,382 | 182,124 | −44.7% |
 | macroblock syntax | 3,536,129 | 2,551,582 | −27.8% |
-| whole streams (H.264 against compressed) | 3,603,993 | 2,556,834 | −29.1% |
+| whole streams (H.264 against compressed) | 3,603,993 | 2,556,839 | −29.1% |
 
 The model tables take 226 MB.
 

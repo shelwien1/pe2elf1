@@ -1,8 +1,9 @@
-// lv3.inc -- level -3: no decoder in the loop; in each family -9's coder without its
-// APMs (h264p_levels.md
-// sections 4 and 6). Its families as IDX/l3 declares them (generated into
-// MOD/l3), each wrapped into its configuration class (famcfg.inc), and the
-// level's class, which Model<f_DEC, Lv3> takes.
+// lv3.inc -- level -3: no decoder in the loop, but its reference lists and
+// the pictures' motion (ReconRefs); in each family -9's coder without its
+// APMs (h264p_levels.md sections 4 and 6).
+// Its families as IDX/l3 declares them (generated into MOD/l3), each
+// wrapped into its configuration class (famcfg.inc), and the level's class,
+// which Model<f_DEC, Lv3> takes.
 #include "MOD/l3/nal_h.inc"
 #include "MOD/l3/hdr_h.inc"
 #include "MOD/l3/skp_h.inc"

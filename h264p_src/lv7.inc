@@ -1,8 +1,8 @@
-// lv7.inc -- level -7: -9 without the decoder's template searches, and in each family
-// without the APMs (h264p_levels.md
-// sections 4 and 6). Its families as IDX/l7 declares them (generated into
-// MOD/l7), each wrapped into its configuration class (famcfg.inc), and the
-// level's class, which Model<f_DEC, Lv7> takes.
+// lv7.inc -- level -7: -9 without the decoder's template searches, and in
+// each family without the APMs (h264p_levels.md sections 4 and 6).
+// Its families as IDX/l7 declares them (generated into MOD/l7), each
+// wrapped into its configuration class (famcfg.inc), and the level's class,
+// which Model<f_DEC, Lv7> takes.
 #include "MOD/l7/nal_h.inc"
 #include "MOD/l7/hdr_h.inc"
 #include "MOD/l7/skp_h.inc"

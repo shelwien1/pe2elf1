@@ -12,6 +12,13 @@ cheaper end_of_slice_flag, lighter template searches and a B macroblock's
 list context read off its skip motion (915 bytes more over the 96 test
 streams, 0.02%).
 
+Since then h264p runs in one thread, and its model has five levels
+(`h264p_levels.md`): the threads below (the coder's, the parse-ahead and
+the finishing threads of sections 3.4 and 4) are gone, their single-thread
+paths the only ones, coding the same. The figures here are of the model
+that is now level `-9`, partly in several threads; `h264p_levels.md` has
+each level's in one.
+
 ## 1. Where the time goes
 
 Measured with callgrind (instruction counts, `-O3 -g` build of the current

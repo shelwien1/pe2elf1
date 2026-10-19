@@ -286,6 +286,14 @@ Two things to get right when splitting one module into several:
 `import.pl` takes one `.idx` at a time, so importing an export across a split
 model is a loop — `IDX/import-all.bat` is that loop.
 
+h264p goes one step further: one set of modules per level of its model,
+`IDX/l<L>/<family>.idx` with `Prefix H<L>_<family>`, generated into
+`MOD/l<L>/`, so that a level's contexts and parameters are edited and tuned
+without touching another's. The level in the `Prefix` keeps every name,
+`!MAP!` pattern and export line apart, and `import.pl` folds an export back
+only into the level it came from; `mk.sh tuning L` builds a binary of one
+level alone, so that its patterns are all `opt.pl` finds.
+
 ---
 
 ## 8. IDX values as template parameters — `IDXP` / `IDXC`
@@ -524,8 +532,25 @@ For `xad-G0.idx` + `xad-G0.inc`:
 
 | file | holds |
 |---|---|
-| `xad-G0_h.inc` | constants, mapping declarations, `_Volume`s, the `G0_T` struct with `Init`/`Quit`, and the `USE_NEW` define |
+| `xad-G0_h.inc` | constants, mapping declarations, `_Volume`s, the `G0_USES` list, the `G0_T` struct with `Init`/`Quit`, and the `USE_NEW` define |
 | `xad-G0_p.inc` | the template with `MakeIndex` expanded |
+
+### The variables the indices read: `%M%_USES`
+
+`idx2inc.pl` also writes, after the Volumes, the names its mapping lines
+read, in the order they first appear, as an X-macro:
+
+```c
+#define H1_skp_USES(X) X(st) X(a3) X(b3) X(c9) X(eq) X(lf) X(af) X(cd) X(cnt) X(c1) X(col) X(run) X(k9)
+```
+
+so that the program can compute only those (h264p: `famcfg.inc` turns the
+list into a bit per field of the family's variables, and the model asserts
+at compile time that a level reads nothing its parts cannot make). In the
+folded build a line counts when its pattern has a 1 (a line of zeros adds
+nothing to its index and is left out already); in the tuning build also
+when it is live, since `opt.pl` may set any of its bits. Of an expression
+(`ADD`, or a mapping of one), every name not called counts.
 
 ---
 

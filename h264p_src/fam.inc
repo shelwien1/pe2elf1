@@ -1,15 +1,18 @@
 // A model family (oggcomp's tc_fam, balrogg-P-hash tc_fam.inc): the integer
 // coder every IDX family is. A value is a cascade of binary decisions --
 // zero? one? two? then the length of the rest in unary and its bits below
-// the top one -- and each decision is predicted from ten counters (tables
-// A-E, H-L under ten contexts), an APM, three mixers and a second APM, all
-// indexed by the decision's node in the cascade. Decisions outside the
-// cascade use bit() with nodes of their own, and the sign of a value has its
-// own counters (G). prp, when set, is one more prediction for the mixer;
-// hint, a magnitude the value is expected near, one more set of counters.
+// the top one -- and each decision is predicted from up to ten counters
+// (tables A-E, H-L under as many contexts), an APM, three mixers and a
+// second APM, all indexed by the decision's node in the cascade; a level's
+// families may have fewer (four counters and one mixer at -1: the shape is
+// the family's class's, famcfg.inc). Decisions outside the cascade use
+// bit() with nodes of their own, and the sign of a value has its own
+// counters (G). prp, when set, is one more prediction for the mixer; hint,
+// a magnitude the value is expected near, one more set of counters.
 //
-// Changed from oggcomp: no codebook-derived priors (tc_pcur), and errors
-// are exceptions.
+// Changed from oggcomp: no codebook-derived priors (tc_pcur), errors are
+// exceptions, and the parameters come from a class (the template argument
+// C) whose constants the shipping build folds into the code.
 
 namespace h264p {
 

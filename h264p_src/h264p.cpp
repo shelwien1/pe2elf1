@@ -880,7 +880,8 @@ void cm_report(u64 in_bytes, u64 out_bytes, u64 tables) {
   }
 }
 
-// The compressed stream: the magic and version, then one range coded run of
+// The compressed stream: the magic, the version and the model's level (c's
+// -L; d takes the instance of the model for it), then one range coded run of
 // decisions. The bytes before the first start code (junk), then for each
 // NAL unit: that there is one (F_MORE), its type, nal_ref_idc and the zero
 // bytes before its start code, a change of x264's padding bits (slices),
