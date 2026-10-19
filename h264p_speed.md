@@ -609,6 +609,9 @@ What did not pay:
 - Huge pages for all the tables once more, on whole streams (`d`): 03 as
   fast, 00 within the noise. The coder's share is its arithmetic and its
   rows' fetches together, not page walks.
+- The three mixers' counts in their weight rows (rows of 128 bytes, the
+  count after the 24 weights: three lines fewer for each decision to
+  fetch, 9 MB more): `d` of 03 1.6% faster, of 04 as fast, of 00 3% slower.
 
 Where the time goes now (decompressing, the decoding's thread; sampled,
 the finishing thread's share left out):
