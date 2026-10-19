@@ -522,6 +522,13 @@ The steps, in order (the gains on the streams named, paired runs):
   rows are finished at the same points. `d` of 00 5%, of 01 4%, of 04 2-4%,
   of 06 as before; `c` of 00 7% (04's coder thread sets its pace). It
   costs 6-11% more CPU time, the thread's share included.
+- **A macroblock's coefficient rows cleared only where written**: each
+  record notes the rows of coefficients it wrote, the next macroblock in
+  its place clears those instead of all 816 bytes, the neighbours' and the
+  colocated block's rows not written read as zero without a load, and the
+  history copies the rows written then or before. On 00, 0.5% fewer
+  instructions and 8.5% fewer L1 data misses; the time it saves is within
+  the noise.
 
 What did not pay:
 

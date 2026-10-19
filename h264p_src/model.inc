@@ -115,6 +115,9 @@ enum { CL_NONE, CL_SKIP, CL_DIRECT, CL_16x16, CL_PART, CL_8x8, CL_INXN, CL_I16, 
 struct MbInfo {
   uint32_t pic;  // Model::pic_ when it was coded
   uint8_t skip, cls, qp, cbp, t8, cpred, i16m, field;
+  // the rows of coef (plane * 16 + block) and of dc (48 + plane) written;
+  // the others are zero
+  uint64_t cmask;
   uint8_t modes[16];        // Intra4x4/8x8 modes of the 4x4 blocks, raster order (2 for other macroblocks)
   int8_t ref[2][4];         // ref_idx of the 8x8 blocks as coded
   int8_t rf[2][4];          // refIdxLX of the 8x8 blocks, -1 where list X is not used
@@ -136,6 +139,7 @@ struct MbCol {
   int16_t mv[2][16][2];
   uint16_t nzm[3];        // 4x4 blocks with coefficients
   uint8_t dcm;            // DC blocks with coefficients
+  uint16_t cm;            // the rows of coef that may not be zero
   int8_t coef[16][16];    // luma coefficients, as MbInfo's
 };
 
@@ -812,7 +816,12 @@ struct Model {
     }
     height_ = size_ / width_;
     mi_ = &info_[addr_];
-    memset(mi_, 0, sizeof *mi_);
+    // (of the coefficients, the rows the last macroblock here wrote)
+    for (uint64_t m = mi_->cmask; m; m &= m - 1) {
+      int r = __builtin_ctzll(m);
+      memset(r < 48 ? mi_->coef[r >> 4][r & 15] : mi_->dc[r - 48], 0, 16);
+    }
+    memset(mi_, 0, offsetof(MbInfo, coef));
     mi_->pic = pic_;
     mi_->qp = (uint8_t)(qp_pred_ + qp_off_);
     memset(mi_->modes, 2, sizeof mi_->modes);
@@ -871,7 +880,12 @@ struct Model {
 #endif
     }
     c.dcm = (uint8_t)(s.cbf_dc[0] | s.cbf_dc[1] << 1 | s.cbf_dc[2] << 2);
-    memcpy(c.coef, mi_->coef[0], sizeof c.coef);
+    // (the rows either wrote: the rest are zero in both)
+    for (uint32_t m = c.cm | (uint32_t)(mi_->cmask & 0xFFFF); m; m &= m - 1) {
+      int r = __builtin_ctz(m);
+      memcpy(c.coef[r], mi_->coef[0][r], 16);
+    }
+    c.cm = (uint16_t)mi_->cmask;
     mb_open_ = false;
     rec_.mb_end(addr_, mi_->cls, mi_->i16m, mi_->modes, mi_->cpred, mi_->t8, mi_->qp - qp_off_, mi_->rf, mi_->mv, s.nz[0]);
     if (rec_.active && (int)aq_x_.size() == size_) {
@@ -2275,14 +2289,27 @@ struct Model {
     return score;
   }
   static int coef_at(const MbInfo* m, const Geo& g, int i, int j) {
-    if (g.kind == 0) return m->dc[g.plane][j];
+    if (g.kind == 0) return m->cmask >> (48 + g.plane) & 1 ? m->dc[g.plane][j] : 0;
     if (g.kind == 3) {
       int s = j & 3, x = (i & 3 & ~1) + (s & 1), y = ((i >> 2) & ~1) + (s >> 1);
-      return m->coef[g.plane][y * 4 + x][j >> 2];
+      i = y * 4 + x, j >>= 2;
+    } else {
+      j += g.off;
     }
-    return m->coef[g.plane][i][j + g.off];
+    return m->cmask >> (g.plane * 16 + i) & 1 ? m->coef[g.plane][i][j] : 0;
   }
   void store_coef(const Geo& g, const int* c, int n) {
+    // (the rows it covers; where they are not written yet, a block all zero
+    // is there already)
+    uint64_t rows = g.kind == 0   ? (uint64_t)1 << (48 + g.plane)
+                    : g.kind == 3 ? (uint64_t)0x33 << (g.plane * 16 + g.y * 4 + g.x)
+                                  : (uint64_t)1 << (g.plane * 16 + (g.kind == 2 ? g.y * 2 + g.x : g.y * 4 + g.x));
+    if (!(mi_->cmask & rows)) {
+      int k = 0, m = g.kind == 3 ? 64 : g.kind == 0 ? std::min(n, 16) : n;
+      while (k < m && !c[k]) k++;
+      if (k == m) return;
+    }
+    mi_->cmask |= rows;
     int8_t* d;
     if (g.kind == 0) {
       d = mi_->dc[g.plane];
@@ -2408,7 +2435,10 @@ struct Model {
                             ? mc_col(g.x, g.y, g.kind == 3 ? 8 : 4, tbx, tby, tmv) : nullptr;
     if (tcol && tcol->cls >= CL_INXN) tcol = nullptr;
     bool tok = tcol != nullptr;
+    // (where none of its rows were written, all zero)
+    bool tany = tok && tcol->cm >> (tby * 4 + tbx) & (g.kind == 3 ? 0x33 : 1);
     auto tcf = [&](int j) {
+      if (!tany) return 0;
       int k = j + g.off;
       if (g.kind == 3) {
         int q = k & 3, x = tbx + (q & 1), y = tby + (q >> 1);
@@ -2417,7 +2447,7 @@ struct Model {
       return (int)tcol->coef[tby * 4 + tbx][k];
     };
     int tnz = 0;
-    if (tok)
+    if (tany)
       for (int j = 0; j < n; j++) tnz += tcf(j) != 0;
     // the number of nonzero coefficients
     tc_stage = STG_CBF;
