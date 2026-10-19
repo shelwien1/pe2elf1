@@ -7,6 +7,12 @@
 #                             every knob of IDX/lL live (MOD/lL in the tuning form)
 #      ./mk.sh check L        the tuning and the shipping build of -L compress
 #                             the streams of test/002 to the same bytes
+#      ./mk.sh dump L DIR STREAM...
+#                             what each family of -L codes compressing the
+#                             streams, a directory of dumps per stream in DIR
+#                             (h264p built with -DH264P_DUMP; fam.inc)
+#      ./mk.sh famtune L      ../famtune: the families of -L coding their
+#                             dumps again, the tuning build (IDX/famtune.cpp)
 #
 #  Each level has its own IDX sources, IDX/l<L>/<family>.idx with its
 #  template IDX/l<L>/<family>.inc (format: IDX/IDX-FORMAT.md), which
@@ -26,13 +32,30 @@
 #      cd IDX/l1 && for f in *.idx; do perl ../import.pl $f ../../export.\!\!\! > t && mv t $f; done
 #      cd ../.. && ./mk.sh mod && ./mk.sh check 1
 #
+#  Faster, a family at a time against its dumps (IDX/ftune.py), since a
+#  trial then codes only that family's decisions:
+#
+#      ./mk.sh dump 1 dump stream...
+#      ./mk.sh famtune 1
+#      python3 IDX/ftune.py ../famtune dump        # every family, four at a time
+#      (then import the exports as above, one per family)
+#
 #  Both builds must code identically.  A stream coded by a tuning binary that
 #  opt.pl has patched decodes only with that binary: the parameters are part
 #  of the format.
 
 set -e
+orig=$(pwd)
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 cd "$here"
+
+#  $1 = a path as given, relative to where mk.sh was run
+abspath() {
+  case $1 in
+    /*) echo "$1" ;;
+    *) echo "$orig/$1" ;;
+  esac
+}
 
 CXX=${CXX:-g++}
 CXXFLAGS=${CXXFLAGS:--O2}
@@ -111,8 +134,9 @@ case "${1:-}" in
     ;;
   check)
     level "${2:?usage: ./mk.sh check L}"
+    lv=$2
     tmp=$(mktemp -d)
-    trap 'rm -rf "$tmp"; cleanup' EXIT
+    trap 'rm -rf "$tmp"; generate "$lv" 0 1; cleanup' EXIT
     generate "$2" 1 0
     build "$tmp/tuning" -DH264P_ONLY="$2"
     generate "$2" 0 1
@@ -130,8 +154,41 @@ case "${1:-}" in
     done
     exit $bad
     ;;
+  dump)
+    level "${2:?usage: ./mk.sh dump L DIR STREAM...}"
+    lv=$2
+    dir=$(abspath "${3:?usage: ./mk.sh dump L DIR STREAM...}")
+    shift 3
+    tmp=$(mktemp -d)
+    trap 'rm -rf "$tmp"; cleanup' EXIT
+    build "$tmp/h264p" -DH264P_ONLY="$lv" -DH264P_DUMP
+    mkdir -p "$dir"
+    n=0
+    for s in "$@"; do
+      d=$dir/$(printf 's%03d' $n)
+      rm -rf "$d"
+      mkdir -p "$d"
+      H264P_DUMP=$d "$tmp/h264p" c "$(abspath "$s")" "$tmp/c"
+      n=$((n + 1))
+    done
+    echo "mk.sh: dumps of $n streams in $dir"
+    ;;
+  famtune)
+    level "${2:?usage: ./mk.sh famtune L}"
+    lv=$2
+    tmp=$(mktemp -d)
+    # (MOD/lL back in the shipping form however the build ends)
+    trap 'rm -rf "$tmp"; generate "$lv" 0 1; cleanup' EXIT
+    generate "$lv" 1 0
+    $CXX $CXXFLAGS $PARCH -std=c++11 -fwrapv -DH264P_ONLY="$lv" -o "$tmp/famtune" IDX/famtune.cpp
+    cp "$tmp/famtune" ../famtune
+    perl -e 'undef $/; $_ = <>;
+             while( /!MAP!(.*?)!(.*?)\x00(.*?)\x00/gs ) { $n++; $b += length $3 }
+             printf "mk.sh: ../famtune for -%d -- %d tunable bits in %d patterns\n", $ARGV[0], $b, $n;
+             exit($n ? 0 : 1)' ../famtune "$2"
+    ;;
   *)
-    echo "usage: ./mk.sh release | mod | tuning L | check L   (levels: $LEVELS)" >&2
+    echo "usage: ./mk.sh release | mod | tuning L | check L | dump L DIR STREAM... | famtune L   (levels: $LEVELS)" >&2
     exit 2
     ;;
 esac

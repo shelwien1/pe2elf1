@@ -3,3 +3,4 @@
 *.yuv
 /h264p
 __pycache__/
+/famtune

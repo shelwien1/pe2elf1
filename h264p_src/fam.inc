@@ -75,6 +75,62 @@ template <int f_DEC> static INLINE int tc_bit(int p, int bit) {
   return (int)b;
 }
 
+//  The dump (IDX/famtune.cpp): what each family is asked to code as the
+//  compressor runs, written by a build with H264P_DUMP to
+//  $H264P_DUMP/<family>.dump -- R where a stream starts, then the
+//  variables of each value (M, at make()), each select() (S), and each
+//  decision with what reaches it from outside the family: the outside
+//  prediction and the hint's state (B a decision of bit_x(); m a mantissa
+//  bit, by its place in the number, so that the tree's depth mt can
+//  change; G a sign). None of it depends on the family's parameters, so
+//  that famtune codes one dump again under each of them.
+struct tc_dump_b {
+  i32 node, b, pp, hs;
+};
+struct tc_dump_m {
+  i32 nb, p, b, hs, prp, pa;
+  u64 pref;
+};
+struct tc_dump_g {
+  u32 sc;
+  i32 s;
+};
+#ifdef H264P_DUMP
+struct tc_dump {
+  FILE *f = nullptr;
+  explicit tc_dump(const char *fam) {
+    const char *dir = getenv("H264P_DUMP");
+    if(!dir || !*dir)
+      return;
+    std::string fn = std::string(dir) + "/" + fam + ".dump";
+    if(!(f = fopen(fn.c_str(), "ab")))
+      cm_fail("cannot write %s", fn.c_str());
+    fputc('R', f);
+  }
+  ~tc_dump() {
+    if(f)
+      fclose(f);
+  }
+  template <class T> void rec(char tag, const T &v) {
+    if(f)
+      fputc(tag, f), fwrite(&v, sizeof v, 1, f);
+  }
+  void rec(char tag) {
+    if(f)
+      fputc(tag, f);
+  }
+};
+#define TC_DUMP(x)                                                                                                     \
+  do {                                                                                                                 \
+    if(ENC)                                                                                                            \
+      C::dump().x;                                                                                                     \
+  } while(0)
+#else
+#define TC_DUMP(x)                                                                                                     \
+  do {                                                                                                                 \
+  } while(0)
+#endif
+
 //  A family of a level: C is its configuration class (famcfg.inc), whose
 //  constants (the shape, the rates, which indices are hashed) shape the
 //  code here and, in the shipping build, are folded into it
@@ -160,6 +216,7 @@ template <int f_DEC, class C> struct tc_fam {
   }
   //  The coding calls of the model
   INLINE void select(const tcx &x) {
+    TC_DUMP(rec('S'));
     for(int k = 0; k < NC; k++)
       cb[k] = (sz)(C::hc[k] ? tc_hrow((u32)x.c[k], C::hc[k]) : (u32)x.c[k]) * ND;
     if(C::NMIX > 1 || C::NAPM)
@@ -192,6 +249,7 @@ template <int f_DEC, class C> struct tc_fam {
   int sign(u32 sc, int s) {
     if(!G)
       cm_fail("internal: a family with no sign counter coded a sign");
+    TC_DUMP(rec('G', tc_dump_g{sc, s}));
     cm_cnt g = G[bg * (u32)C::NG + sc];
     s = tc_bit<f_DEC>(g.P(), ENC && s);
     g.upd(s, C::rG, C::mwG);
@@ -226,6 +284,7 @@ template <int f_DEC, class C> struct tc_fam {
     }
   }
   INLINE int bit_x(int node, int b) {
+    TC_DUMP(rec('B', tc_dump_b{node, b, prpa ? prpa[node] : prp, hs}));
     if(node + 1 < ND)
       fetch(node + 1);
     cm_cnt2 *cp[NC];
@@ -462,6 +521,7 @@ template <int f_DEC, class C> struct tc_fam {
       for(p = 0; p < nb - 1; p++) {
         int hb = (int)(hu >> (nb - 2 - p) & 1);
         hs = hst == 1 ? 1 + hb : hst;
+        TC_DUMP(rec('m', tc_dump_m{nb, p, (int)((u >> (nb - 2 - p)) & 1), hs, prp, prpa != nullptr, pref}));
         int mb = bitm(tc_node_man(nb, p, pref, C::mt), ENC && ((u >> (nb - 2 - p)) & 1) != 0);
         if(hst == 1 && mb != hb)
           hst = mb > hb ? 3 : 4;

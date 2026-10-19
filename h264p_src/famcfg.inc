@@ -26,6 +26,8 @@
 #define FCX(n) FC_CAT(FC_PFX, n)              // H9_skp_rA
 #define FCF(n) FC_CAT(FC_CAT(H_, FC_FAM), n)  // H_skp_v, H_skp_ND
 #define FC_USE(f) | 1ull << offsetof(V, f) / sizeof(int)
+#define FC_STR2(a) #a
+#define FC_STR(a) FC_STR2(a)  // "skp"
 
 // the counters: their tables' letters and their indices', in order
 #if FC_NC == 10
@@ -51,7 +53,18 @@
 struct FC_NAME {
   typedef FCF(_v) V;  // the variables, as the model fills them
   typedef FCX(T) T;   // the level's tables
+#ifdef H264P_DUMP
+  static tc_dump& dump() {
+    static tc_dump d(FC_STR(FC_FAM));
+    return d;
+  }
+  static INLINE void make(const V& D, tcx& X) {
+    dump().rec('M', D);
+    FCX(make)(D, X);
+  }
+#else
   static INLINE void make(const V& D, tcx& X) { FCX(make)(D, X); }
+#endif
   static void init(T* t) { t->FCX(Init)(); }
   static u64 bytes(const T* t) { return t->FCX(Size); }
   static const int ND = FCF(_ND), MND = FCF(_MND), NG = FCF(_NG);
@@ -174,6 +187,8 @@ static_assert(std::extent<decltype(FC_NAME::T::FCX(W))>::value == 0 ||
 #undef FCX
 #undef FC_CAT
 #undef FC_CAT2
+#undef FC_STR
+#undef FC_STR2
 #undef FC_NAME
 #undef FC_PFX
 #undef FC_FAM
