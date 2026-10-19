@@ -3123,6 +3123,32 @@ struct Recon {
     if (!active || !prx_ok) return -1;
     int w = cur->w, mx = mb_addr % cur->mbw * 16, my = mb_addr / cur->mbw * 16, sum = 0, cnt = 0;
     const uint8_t* Y = cur->y.data() + my * w + mx;
+#ifdef H264P_AVX2
+    {
+      // by rows of 4x4 blocks, those done (of the 4x4 ones, then of the 8x8)
+      // as a mask of their bytes in each row
+      uint8_t g[2][4] = {};
+      for (int b = 0; b < 16; b++)
+        if (mb_done4 >> b & 1) g[0][blk_y(b)] |= (uint8_t)(1 << blk_x(b)), cnt += 16;
+      for (int b8 = 0; b8 < 4; b8++)
+        if (mb_done8 >> b8 & 1) g[1][(b8 >> 1) * 2] |= (uint8_t)(3 << (b8 & 1) * 2), cnt += 64;
+      for (int b8 = 0; b8 < 4; b8 += 2) g[1][b8 + 1] = g[1][b8];
+      __m128i acc = _mm_setzero_si128();
+      for (int k = 0; k < 2; k++)
+        for (int by = 0; by < 4; by++) {
+          int m = g[k][by];
+          if (!m) continue;
+          const __m128i mask = _mm_setr_epi32(-(m & 1), -(m >> 1 & 1), -(m >> 2 & 1), -(m >> 3 & 1));
+          for (int y = by * 4; y < by * 4 + 4; y++) {
+            __m128i a = _mm_loadu_si128((const __m128i*)(Y + y * w)), c = _mm_loadu_si128((const __m128i*)(prx_y + y * 16));
+            __m128i d = _mm_and_si128(_mm_or_si128(_mm_subs_epu8(a, c), _mm_subs_epu8(c, a)), mask);
+            acc = _mm_add_epi64(acc, _mm_sad_epu8(d, _mm_setzero_si128()));
+          }
+        }
+      sum = _mm_cvtsi128_si32(_mm_add_epi64(acc, _mm_unpackhi_epi64(acc, acc)));
+      return cnt ? sum * 4 / cnt : -1;
+    }
+#endif
     auto add = [&](int x0, int y0, int n) {
       for (int y = y0; y < y0 + n; y++)
         for (int x = x0; x < x0 + n; x++) sum += abs(Y[y * w + x] - prx_y[y * 16 + x]);
