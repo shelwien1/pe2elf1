@@ -42,7 +42,8 @@ references that both ffmpeg and the JM reference decoder agree on:
 `test/run.sh ./h264dec file.264...` checks any other stream against ffmpeg.
 
 It then round-trips these streams and the ones in `test/h264p` through
-h264p (`test/h264p.sh`, which takes stream names too).
+h264p, compressing at each level of its model (`test/h264p.sh`, which
+takes stream names too, and `LEVELS="9 1"` for some of the levels).
 
 ## h264dec
 
