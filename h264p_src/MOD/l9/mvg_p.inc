@@ -20,69 +20,64 @@ void H9_mvg_make( const H_mvg_v & D, tcx & X ) {
 
   a = 0;
   a = a*2 + ((comp>0+(1-1)));
-  a = a*3 + ((ts>2+(1-1))+(ts>5+(1-1)));
-  a = a*8 + H9_mvg_a_mag[__min(7,__max(0,mag-(1-1)))];
+  a = a*6 + H9_mvg_a_ts[__min(9,__max(0,ts-(1-1)))];
+  a = a*4 + H9_mvg_a_mag[__min(7,__max(0,mag-(1-1)))];
 
   b = 0;
-  b = b*9 + H9_mvg_b_zs[__min(8,__max(0,zs-(1-1)))];
-  b = b*8 + H9_mvg_b_mag[__min(7,__max(0,mag-(1-1)))];
+  b = b*7 + H9_mvg_b_zs[__min(8,__max(0,zs-(1-1)))];
+  b = b*4 + H9_mvg_b_mag[__min(7,__max(0,mag-(1-1)))];
   b = b*2 + ((comp>0+(1-1)));
 
   c = 0;
-  c = c*10 + H9_mvg_c_ts[__min(9,__max(0,ts-(1-1)))];
-  c = c*9 + H9_mvg_c_zs[__min(8,__max(0,zs-(1-1)))];
-  c = c*10 + H9_mvg_c_as[__min(9,__max(0,as-(1-1)))];
+  c = c*6 + H9_mvg_c_ts[__min(9,__max(0,ts-(1-1)))];
+  c = c*6 + H9_mvg_c_zs[__min(8,__max(0,zs-(1-1)))];
+  c = c*8 + H9_mvg_c_as[__min(9,__max(0,as-(1-1)))];
 
   d = 0;
-  d = d*10 + H9_mvg_d_ds[__min(9,__max(0,ds-(1-1)))];
-  d = d*8 + H9_mvg_d_mag[__min(7,__max(0,mag-(1-1)))];
+  d = d*8 + H9_mvg_d_ds[__min(9,__max(0,ds-(1-1)))];
+  d = d*3 + ((mag>3+(1-1))+(mag>6+(1-1)));
 
   e = 0;
   e = e*3 + ((sa>0+(1-1))+(sa>1+(1-1)));
   e = e*3 + ((sb>0+(1-1))+(sb>1+(1-1)));
   e = e*2 + ((comp>0+(1-1)));
-  e = e*7 + H9_mvg_e_ns[__min(6,__max(0,ns-(1-1)))];
+  e = e*5 + H9_mvg_e_ns[__min(6,__max(0,ns-(1-1)))];
 
   h = 0;
-  h = h*10 + H9_mvg_h_ts[__min(9,__max(0,ts-(1-1)))];
+  h = h*7 + H9_mvg_h_ts[__min(9,__max(0,ts-(1-1)))];
   h = h*9 + H9_mvg_h_tq[__min(12,__max(0,tq-(1-1)))];
   h = h*4 + H9_mvg_h_es[__min(3,__max(0,es-(1-1)))];
 
   i = 0;
-  i = i*10 + H9_mvg_i_ts[__min(9,__max(0,ts-(1-1)))];
-  i = i*9 + H9_mvg_i_zs[__min(8,__max(0,zs-(1-1)))];
-  i = i*10 + H9_mvg_i_ds[__min(9,__max(0,ds-(1-1)))];
+  i = i*4 + H9_mvg_i_ts[__min(9,__max(0,ts-(1-1)))];
+  i = i*4 + H9_mvg_i_ds[__min(9,__max(0,ds-(1-1)))];
 
   j = 0;
-  j = j*2 + ((comp>0+(1-1)));
   j = j*2 + ((lst>0+(1-1)));
   j = j*4 + H9_mvg_j_ox[__min(3,__max(0,ox-(1-1)))];
-  j = j*7 + H9_mvg_j_ns[__min(6,__max(0,ns-(1-1)))];
+  j = j*5 + H9_mvg_j_ns[__min(6,__max(0,ns-(1-1)))];
 
   k = 0;
-  k = k*8 + H9_mvg_k_mag[__min(7,__max(0,mag-(1-1)))];
-  k = k*10 + H9_mvg_k_ts[__min(9,__max(0,ts-(1-1)))];
+  k = k*3 + ((mag>1+(1-1))+(mag>4+(1-1)));
+  k = k*7 + H9_mvg_k_ts[__min(9,__max(0,ts-(1-1)))];
   k = k*3 + ((sa>0+(1-1))+(sa>1+(1-1)));
 
   l = 0;
-  l = l*9 + H9_mvg_l_zs[__min(8,__max(0,zs-(1-1)))];
-  l = l*10 + H9_mvg_l_ds[__min(9,__max(0,ds-(1-1)))];
-  l = l*3 + ((sb>0+(1-1))+(sb>1+(1-1)));
+  l = l*7 + H9_mvg_l_zs[__min(8,__max(0,zs-(1-1)))];
+  l = l*6 + H9_mvg_l_ds[__min(9,__max(0,ds-(1-1)))];
 
   s = 0;
-  s = s*3 + ((ts>5+(1-1))+(ts>7+(1-1)));
-  s = s*8 + H9_mvg_s_mag[__min(7,__max(0,mag-(1-1)))];
+  s = s*4 + H9_mvg_s_ts[__min(9,__max(0,ts-(1-1)))];
+  s = s*4 + H9_mvg_s_mag[__min(7,__max(0,mag-(1-1)))];
 
   f = 0;
   f = f*2 + ((comp>0+(1-1)));
-  f = f*10 + H9_mvg_f_ts[__min(9,__max(0,ts-(1-1)))];
+  f = f*8 + H9_mvg_f_ts[__min(9,__max(0,ts-(1-1)))];
 
   m = 0;
-  m = m*10 + H9_mvg_m_ts[__min(9,__max(0,ts-(1-1)))];
 
   w = 0;
-  w = w*9 + H9_mvg_w_zs[__min(8,__max(0,zs-(1-1)))];
-  w = w*10 + H9_mvg_w_ts[__min(9,__max(0,ts-(1-1)))];
+  w = w*7 + H9_mvg_w_zs[__min(8,__max(0,zs-(1-1)))];
 
   t = 0;
 

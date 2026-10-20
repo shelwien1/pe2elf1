@@ -1,103 +1,87 @@
 
-static const byte H9_mbt_a_ca[8+1]={ 0,1,2,3,3,3,3,3,3 };
 static const byte H9_mbt_a_cb[8+1]={ 0,1,1,1,1,1,2,3,3 };
-static const byte H9_mbt_a_en[14+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14 };
+static const byte H9_mbt_a_en[14+1]={ 0,0,1,1,2,2,3,3,3,4,4,4,4,5,5 };
 
-static const byte H9_mbt_b_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H9_mbt_b_cc[8+1]={ 0,1,2,3,4,5,6,7,8 };
-static const byte H9_mbt_b_td[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
-static const byte H9_mbt_b_c1[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
+static const byte H9_mbt_b_cc[8+1]={ 0,0,1,2,2,2,3,3,3 };
+static const byte H9_mbt_b_c1[9+1]={ 0,1,1,2,3,4,4,5,6,6 };
 
-static const byte H9_mbt_c_ca[8+1]={ 0,1,1,2,3,4,5,5,5 };
-static const byte H9_mbt_c_cc[8+1]={ 0,1,2,3,4,5,6,7,8 };
-static const byte H9_mbt_c_im[4+1]={ 0,1,2,3,4 };
-static const byte H9_mbt_c_ig[12+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12 };
+static const byte H9_mbt_c_im[4+1]={ 0,0,1,2,3 };
+static const byte H9_mbt_c_ig[12+1]={ 0,0,1,1,1,1,1,1,2,2,2,2,3 };
 
-static const byte H9_mbt_d_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H9_mbt_d_sm[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
-static const byte H9_mbt_d_tm[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
+static const byte H9_mbt_d_tm[16+1]={ 0,0,0,0,0,0,0,0,0,1,1,2,2,3,4,5,5 };
 
-static const byte H9_mbt_e_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H9_mbt_e_ca[8+1]={ 0,1,2,3,4,5,6,7,8 };
-static const byte H9_mbt_e_sm[16+1]={ 0,1,2,3,4,5,6,6,6,6,6,6,6,6,6,6,6 };
-static const byte H9_mbt_e_tx[14+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14 };
+static const byte H9_mbt_e_ca[8+1]={ 0,1,2,3,3,3,4,5,5 };
+static const byte H9_mbt_e_sm[16+1]={ 0,1,2,3,3,4,5,5,5,6,6,6,6,6,7,7,7 };
+static const byte H9_mbt_e_tx[14+1]={ 0,0,1,1,1,1,2,2,2,3,4,4,4,5,6 };
 
-static const byte H9_mbt_f_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H9_mbt_f_qc[17+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17 };
-static const byte H9_mbt_f_im[4+1]={ 0,1,2,3,4 };
+static const byte H9_mbt_f_ca[8+1]={ 0,1,1,1,1,1,2,3,3 };
+static const byte H9_mbt_f_qc[17+1]={ 0,0,1,2,3,3,4,4,5,6,6,6,6,7,8,8,8,8 };
+static const byte H9_mbt_f_im[4+1]={ 0,0,1,2,3 };
 
 
 static const byte H9_mbt_h_dh[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H9_mbt_h_tb[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
-static const byte H9_mbt_h_bd[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
+static const byte H9_mbt_h_tb[16+1]={ 0,0,1,1,1,2,2,2,2,3,3,4,4,4,4,4,4 };
+static const byte H9_mbt_h_bd[16+1]={ 0,1,2,3,4,5,6,6,7,7,7,7,8,8,8,8,9 };
 
-static const byte H9_mbt_i_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H9_mbt_i_tb[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
-static const byte H9_mbt_i_en[14+1]={ 0,0,1,1,2,2,2,3,4,4,4,4,5,5,5 };
-static const byte H9_mbt_i_ca[8+1]={ 0,1,2,3,4,5,6,7,8 };
+static const byte H9_mbt_i_tb[16+1]={ 0,1,1,1,2,2,2,2,2,3,3,3,3,4,4,5,5 };
+static const byte H9_mbt_i_en[14+1]={ 0,1,2,2,2,3,3,3,4,4,5,5,6,6,7 };
 
-static const byte H9_mbt_j_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H9_mbt_j_sm[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
+static const byte H9_mbt_j_sm[16+1]={ 0,0,1,2,3,4,5,6,6,6,6,6,7,7,7,7,7 };
 static const byte H9_mbt_j_dh[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H9_mbt_j_cb[8+1]={ 0,1,2,3,4,5,6,7,8 };
+static const byte H9_mbt_j_cb[8+1]={ 0,1,2,3,4,4,5,6,6 };
 
-static const byte H9_mbt_k_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H9_mbt_k_tm[16+1]={ 0,1,1,2,2,3,4,4,4,4,5,5,5,5,5,5,5 };
-static const byte H9_mbt_k_nsk[4+1]={ 0,1,2,3,4 };
-static const byte H9_mbt_k_cc[8+1]={ 0,1,2,3,4,5,6,7,8 };
+static const byte H9_mbt_k_tm[16+1]={ 0,0,0,1,2,3,4,4,5,5,6,7,7,7,7,7,7 };
+static const byte H9_mbt_k_cc[8+1]={ 0,0,0,1,2,3,4,5,5 };
 
-static const byte H9_mbt_l_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H9_mbt_l_ca[8+1]={ 0,1,2,3,4,5,6,7,8 };
-static const byte H9_mbt_l_cb[8+1]={ 0,1,2,3,4,5,6,7,8 };
+static const byte H9_mbt_l_bd[16+1]={ 0,0,1,1,1,2,3,3,3,4,5,6,6,6,6,6,6 };
+static const byte H9_mbt_l_ca[8+1]={ 0,1,2,2,3,3,4,5,5 };
+static const byte H9_mbt_l_cb[8+1]={ 0,1,2,3,4,5,6,7,7 };
 
-static const byte H9_mbt_m_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H9_mbt_m_bd[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
+static const byte H9_mbt_m_st[9+1]={ 0,0,1,2,2,3,3,3,3,3 };
+static const byte H9_mbt_m_bd[16+1]={ 0,1,2,2,2,3,4,4,4,4,4,5,5,5,5,5,5 };
 
 
-static const byte H9_mbt_s_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H9_mbt_s_tb[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
-static const byte H9_mbt_s_dh[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
+static const byte H9_mbt_s_dh[9+1]={ 0,1,2,3,3,3,3,4,5,6 };
 
 
-static const byte H9_mbt_w_st[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H9_mbt_w_sm[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
-static const byte H9_mbt_w_tm[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
+static const byte H9_mbt_w_sm[16+1]={ 0,1,2,3,4,5,6,6,6,7,7,8,8,8,8,9,9 };
+static const byte H9_mbt_w_tm[16+1]={ 0,0,1,1,2,2,2,2,3,3,3,4,4,4,5,5,5 };
 
 
-static const int H9_mbt_rA = (234+0) * (1);
+static const int H9_mbt_rA = (250+0) * (1);
 static const int H9_mbt_rB = (0+0) * (1);
-static const int H9_mbt_rC = (253+0) * (1);
-static const int H9_mbt_rE = (244+0) * (1);
-static const int H9_mbt_rH = (224+0) * (1);
-static const int H9_mbt_rI = (64+0) * (1);
-static const int H9_mbt_rJ = (196+0) * (1);
-static const int H9_mbt_rK = (64+0) * (1);
-static const int H9_mbt_rL = (64+0) * (1);
-static const int H9_mbt_rD = (239+0) * (1);
-static const int H9_mbt_rT = (55+0) * (1);
-static const int H9_mbt_rG = (90+0) * (1);
-static const int H9_mbt_rS1 = (0+0) * (1);
+static const int H9_mbt_rC = (255+0) * (1);
+static const int H9_mbt_rE = (254+0) * (1);
+static const int H9_mbt_rH = (196+0) * (1);
+static const int H9_mbt_rI = (253+0) * (1);
+static const int H9_mbt_rJ = (252+0) * (1);
+static const int H9_mbt_rK = (103+0) * (1);
+static const int H9_mbt_rL = (241+0) * (1);
+static const int H9_mbt_rD = (141+0) * (1);
+static const int H9_mbt_rT = (0+0) * (1);
+static const int H9_mbt_rG = (0+0) * (1);
+static const int H9_mbt_rS1 = (8+0) * (1);
 static const int H9_mbt_rS2 = (3+0) * (1);
-static const int H9_mbt_lr = (12+0) * (1);
-static const int H9_mbt_lrm = (12+0) * (1);
+static const int H9_mbt_lr = (15+0) * (1);
+static const int H9_mbt_lrm = (0+0) * (1);
 static const int H9_mbt_mbm = (0+0) * (1);
 static const int H9_mbt_mwA = (16+0) * (1);
-static const int H9_mbt_mwB = (1+0) * (1);
-static const int H9_mbt_mwC = (32+0) * (1);
-static const int H9_mbt_mwE = (32+0) * (1);
-static const int H9_mbt_mwH = (0+0) * (1);
-static const int H9_mbt_mwI = (0+0) * (1);
-static const int H9_mbt_mwJ = (0+0) * (1);
-static const int H9_mbt_mwK = (0+0) * (1);
-static const int H9_mbt_mwL = (0+0) * (1);
-static const int H9_mbt_mwD = (20+0) * (1);
+static const int H9_mbt_mwB = (29+0) * (1);
+static const int H9_mbt_mwC = (16+0) * (1);
+static const int H9_mbt_mwE = (0+0) * (1);
+static const int H9_mbt_mwH = (1+0) * (1);
+static const int H9_mbt_mwI = (3+0) * (1);
+static const int H9_mbt_mwJ = (11+0) * (1);
+static const int H9_mbt_mwK = (10+0) * (1);
+static const int H9_mbt_mwL = (64+0) * (1);
+static const int H9_mbt_mwD = (17+0) * (1);
 static const int H9_mbt_mwT = (0+0) * (1);
 static const int H9_mbt_mwG = (0+0) * (1);
-static const int H9_mbt_bw = (12+0) * (1);
-static const int H9_mbt_mt = (6+0) * (1);
-static const int H9_mbt_qs = (16+3) * (1);
+static const int H9_mbt_bw = (13+0) * (1);
+static const int H9_mbt_mt = (0+0) * (1);
+static const int H9_mbt_qs = (24+3) * (1);
 static const int H9_mbt_qf = (22+3) * (1);
-static const int H9_mbt_mb = (22+0) * (1);
+static const int H9_mbt_mb = (27+0) * (1);
 static const int H9_mbt_hA = (24+0) * (1);
 static const int H9_mbt_hB = (24+0) * (1);
 static const int H9_mbt_hC = (24+0) * (1);
@@ -115,23 +99,23 @@ static const int H9_mbt_hT = (24+0) * (1);
 static const int H9_mbt_hN = (24+0) * (1);
 
 
-static const long long H9_mbt_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 4), 4), 15); // 480
-static const long long H9_mbt_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 9), 1), 17), 10); // 15300
-static const long long H9_mbt_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 6), 9), 5), 13); // 3510
-static const long long H9_mbt_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, 10), 17), 17); // 2890
-static const long long H9_mbt_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 9), 2), 7), 15); // 18900
-static const long long H9_mbt_f_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 3), 18), 5); // 2700
+static const long long H9_mbt_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 4), 6); // 96
+static const long long H9_mbt_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 4), 1), 3), 7); // 252
+static const long long H9_mbt_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 2), 1), 4), 4); // 32
+static const long long H9_mbt_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 3), 6); // 54
+static const long long H9_mbt_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 6), 2), 8), 7); // 2016
+static const long long H9_mbt_f_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 4), 9), 4); // 144
 static const long long H9_mbt_g_Volume = tc_vmul(1, 1); // 1
-static const long long H9_mbt_h_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 10), 17), 2), 17); // 11560
-static const long long H9_mbt_i_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 17), 6), 9); // 9180
-static const long long H9_mbt_j_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 17), 10), 9); // 15300
-static const long long H9_mbt_k_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 6), 5), 9); // 2700
-static const long long H9_mbt_l_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 3), 9), 9); // 2430
-static const long long H9_mbt_m_Volume = tc_vmul(tc_vmul(1, 10), 17); // 170
+static const long long H9_mbt_h_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 10), 5), 3), 10); // 3000
+static const long long H9_mbt_i_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 6), 8), 3); // 432
+static const long long H9_mbt_j_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 8), 10), 7); // 560
+static const long long H9_mbt_k_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 8), 3), 6); // 144
+static const long long H9_mbt_l_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 7), 6), 8); // 336
+static const long long H9_mbt_m_Volume = tc_vmul(tc_vmul(1, 4), 6); // 24
 static const long long H9_mbt_n_Volume = tc_vmul(1, 1); // 1
-static const long long H9_mbt_s_Volume = tc_vmul(tc_vmul(tc_vmul(1, 10), 17), 10); // 1700
+static const long long H9_mbt_s_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 3), 7); // 21
 static const long long H9_mbt_t_Volume = tc_vmul(1, 1); // 1
-static const long long H9_mbt_w_Volume = tc_vmul(tc_vmul(tc_vmul(1, 10), 17), 17); // 2890
+static const long long H9_mbt_w_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 10), 6); // 60
 
 #define H9_mbt_USES(X) X(st) X(ca) X(cb) X(en) X(cc) X(td) X(c1) X(im) X(ig) X(sm) X(tm) X(tx) X(dh) X(tb) X(nsk) X(bd) X(qc)
 
