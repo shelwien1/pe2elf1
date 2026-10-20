@@ -204,7 +204,7 @@ struct SliceCoder {
       cabac_init_contexts(ctx_, qp, stype_ == kI || stype_ == kSI ? 0 : h_.cabac_init_idc + 1);
       if (!W)
         dec_.init(br_);
-      else
+      else if (!nobins_)
         enc_.init(bw_);
     }
     ch_->slice_begin(*this);
@@ -638,10 +638,11 @@ struct SliceCoder {
         bw_->put((uint32_t)pcm_[i], depth);
       }
     }
+    // (the walk without its bins writes no CABAC data, nor whole bytes)
     if (cabac_) {
       if (!W)
         dec_.init(br_);
-      else
+      else if (!nobins_)
         enc_.init(bw_);
     }
   }

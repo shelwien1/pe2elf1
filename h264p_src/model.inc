@@ -818,7 +818,7 @@ struct Model {
   int cab0(int ctx) const {
     if (!LV::cabpred || !sc_->cabac_) return -1;
     const CabacCtx& c = sc_->ctx_[ctx];
-    return c.mps ? cab_lps[c.state] : CM_PONE - cab_lps[c.state];
+    return c.mps() ? cab_lps[c.state()] : CM_PONE - cab_lps[c.state()];
   }
   int cab1(int ctx) const {
     int p = cab0(ctx);
