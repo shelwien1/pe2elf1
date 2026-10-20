@@ -12,7 +12,8 @@ changes the model (section 3), each with what it would save.
 
 Section 6 has what was built of it and what each item gave: all of
 section 2 but the stretch (2.7, which gave nothing), and 3.1 and 3.3,
-which make `-1` 0.53% larger. `-1` now compresses the corpus at 660 KB/s
+which make `-1` 0.53% larger (skip runs, 3.2, cost more than they would
+save: section 6.7). `-1` now compresses the corpus at 660 KB/s
 and decompresses it at 742, 45% and 28% faster than before (454 and 578
 measured in the same runs: the VM's speed varies from run to run and
 from day to day); the
@@ -251,7 +252,7 @@ before, which `test/h264p.sh` and MD5s of all 480 outputs checked:
 | 2.6 | the walk a template on its mode | 562 -> 606 | 632 -> 643 |
 | 2.7 | the stretch by eight loads: no gain, not kept | 562 -> 547 | 634 -> 636 |
 | 3.1, 3.3 | no motion vectors, no `sn` (`-1` 0.53% larger) | 559 -> 623 | 645 -> 714 |
-| 3.2 | skip runs: not built | | |
+| 3.2 | skip runs: simulated, larger, not built | | |
 | **all** | | **454 -> 660** | **578 -> 742** |
 
 (The last row: the build before section 2 and the one after 3.1 in turn,
@@ -358,18 +359,38 @@ The significance's line reading `sn` (two `coef_at()` lookups a decision)
 went, as priced: retuned, the significance codes the tuning corpus 80
 bytes larger (0.01%).
 
-### 6.7 Skip runs (3.2): not built
+### 6.7 Skip runs (3.2): tried in simulation, not built
 
 The skip flags carry 6% of what `-1` makes of 00 and 19% of 03 (0.04 and
 0.22 bits a decision, a skip flag or an end of slice flag, two a
-macroblock), so a run code would have to model
-them about as well as the per-macroblock contexts do (the 3x3 window of
-the last picture's skip map, the neighbours, the run so far); that is a
-model and a tuning of its own, and `-1` is above the target without it.
-What it could save: the skip family's decisions take 10.5% of compressing
-and 12.3% of decompressing (section 7), the model's work at the start and
-end of each macroblock and for the skip variables 8.3% and 9.0% (for every
-macroblock, skipped or not).
+macroblock); they take 10.5% of compressing and 12.3% of decompressing
+(section 7), and the model's work at the start and end of each macroblock
+and for the skip variables 8.3% and 9.0% more (for every macroblock,
+skipped or not). A run code has to model them as well as the
+per-macroblock contexts do, and these are surest where the runs are long:
+in 00, a decision inside a run a copy would cover costs 0.009 bits.
+
+Simulated in the compressor: at a macroblock where the last picture of
+the kind has a run of K >= 2 skipped macroblocks from there, one decision
+says whether this picture's next K are all skipped too (an adaptive
+probability by K's class, whether the macroblocks above the run were all
+skipped in this picture, and the last such decision's outcome); if so,
+none of them codes a skip flag; if not, none is tried again within the
+run. It would spare half the skip decisions of 00 and 01 and a fifth of
+03's and 04's, but cost more than they did:
+
+| stream | skip decisions | spared | they cost | the copy decisions cost |
+|---|---:|---:|---:|---:|
+| 00 | 3,790,320 | 1,950,980 | 2,227 bytes | 5,376 bytes |
+| 01 | 1,678,320 | 750,542 | 1,738 | 4,339 |
+| 03 | 3,153,600 | 680,624 | 8,919 | 20,096 |
+| 04 | 413,250 | 95,312 | 1,202 | 2,662 |
+
+0.5% of 00, 0.3% of 01 and 04, 1.2% of 03 larger, for about 4% of the
+time (the skip family's share of the decisions spared). Not built: the
+decisions a run code spares are the cheapest, and a run model as sure as
+the per-macroblock contexts would need much of their work at each
+macroblock.
 
 ### 6.8 Every level
 
@@ -427,5 +448,5 @@ coded block flags 5.8/6.9, significance 5.5/6.9, levels 5.5/6.8, mb_type
 Half of compressing and nearly two thirds of decompressing is now the
 coder, whose time goes with the number of decisions; outside it are the
 parse (a sixth of compressing), the model's work per macroblock and the
-walk. What would make `-1` faster next is fewer decisions (skip runs,
-3.2) or cheaper ones.
+walk. What would make `-1` faster next is cheaper decisions, or fewer of
+them where they cost (section 6.7: not the skip flags).
