@@ -170,10 +170,13 @@ std::vector<uint8_t> slice_group_map(const SliceHeader& h, int width, int size) 
 
 // ---------------------------------------------------------------------------
 
-struct SliceCoder {
-  SliceCoder(const SliceHeader& h, MbStore& store, BitReader* br, BitWriter* bw, Chan& ch)
-      : W(bw != nullptr), nobins_(W && ch.nobins), h_(h), sps_(*h.sps), pps_(*h.pps), store_(store), br_(br), bw_(bw),
-        ch_(&ch), rec_(W ? nullptr : ch.rec) {}
+// The walk of the slice data, which parses (kMode 0) or writes it (1; 2
+// without the CABAC bins, Chan::nobins), a type for each so that what
+// differs is decided once.
+template <int kMode>
+struct SliceCoderT {
+  SliceCoderT(const SliceHeader& h, MbStore& store, BitReader* br, BitWriter* bw, Chan& ch)
+      : h_(h), sps_(*h.sps), pps_(*h.pps), store_(store), br_(br), bw_(bw), ch_(&ch), rec_(W ? nullptr : ch.rec) {}
 
   void run() {
     stype_ = h_.type();
@@ -1232,8 +1235,8 @@ struct SliceCoder {
     return inc;
   }
 
-  const bool W;
-  const bool nobins_;  // W, but the bins only walked, not coded (Chan::nobins)
+  static constexpr bool W = kMode != 0;
+  static constexpr bool nobins_ = kMode == 2;  // W, but the bins only walked, not coded (Chan::nobins)
   const SliceHeader& h_;
   const Sps& sps_;
   const Pps& pps_;
@@ -1265,11 +1268,14 @@ struct SliceCoder {
 };
 
 void read_slice_data(const SliceHeader& h, MbStore& store, BitReader& br, Chan& ch) {
-  SliceCoder(h, store, &br, nullptr, ch).run();
+  SliceCoderT<0>(h, store, &br, nullptr, ch).run();
 }
 
 void write_slice_data(const SliceHeader& h, MbStore& store, Chan& ch, BitWriter& bw) {
-  SliceCoder(h, store, nullptr, &bw, ch).run();
+  if (ch.nobins)
+    SliceCoderT<2>(h, store, nullptr, &bw, ch).run();
+  else
+    SliceCoderT<1>(h, store, nullptr, &bw, ch).run();
 }
 
 }  // namespace h264p

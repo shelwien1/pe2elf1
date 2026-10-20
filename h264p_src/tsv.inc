@@ -111,11 +111,14 @@ struct TsvChan : Chan {
   }
 
   // --- slice data
-  void slice_begin(SliceCoder& sc) override {
+  template <class SC>
+  void begin(SC& sc) {
     intra_ = sc.stype_ == kI || sc.stype_ == kSI;
     size_ = sc.size_;
     row_ = nullptr;
   }
+  void slice_begin(SliceCoderT<0>& sc) override { begin(sc); }
+  void slice_begin(SliceCoderT<1>& sc) override { begin(sc); }
   void slice_end() override {
     if (!W) flush_skip();
   }

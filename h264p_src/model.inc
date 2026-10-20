@@ -699,7 +699,9 @@ struct Model {
 
   // ------------------------------------------------------------------------
   // slice data
-  SliceCoder* sc_ = nullptr;
+  // (the walk writing, its bins coded unless the model pass needs none)
+  typedef SliceCoderT<f_DEC == 0 && !LV::cabpred ? 2 : 1> SC;
+  SC* sc_ = nullptr;
   const MbState* mbs_ = nullptr;  // the walk's macroblock states, for addresses
   std::vector<MbInfo> info_;
   std::vector<MbCol> hist_[30];
@@ -877,7 +879,7 @@ struct Model {
     return h.nal_unit_type == 5 && h.idr_pic_id != p.idr_pic_id;
   }
 
-  void slice_begin(SliceCoder& sc) {
+  void slice_begin(SC& sc) {
     sc_ = &sc;
     mbs_ = sc.store_.mbs.data();
     const SliceHeader& h = sc.h_;
@@ -3027,7 +3029,7 @@ struct ModelChan : Chan {
   }
   void hend() override {}
   bool hmore(const char* next, bool) override { return m_.hmore(next, ENC && log_->hmore(next, false)); }
-  void slice_begin(SliceCoder& sc) override { m_.slice_begin(sc); }
+  void slice_begin(typename Model<f_DEC, LV>::SC& sc) override { m_.slice_begin(sc); }
   void slice_end() override { m_.slice_end(); }
   int skip(int) override { return m_.skip(ENC ? log_->skip(0) : 0); }
   int end(int, bool certain) override { return m_.end(ENC ? log_->end(0, certain) : 0, certain); }

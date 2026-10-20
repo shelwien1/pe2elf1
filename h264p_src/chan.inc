@@ -1,6 +1,6 @@
 // What the syntax walk exchanges the values of the syntax elements with.
 //
-// The walk (Syn for the headers, SliceCoder for the slice data) parses a
+// The walk (Syn for the headers, SliceCoderT for the slice data) parses a
 // bitstream or writes one. Parsing, it hands every value it reads to a
 // channel; writing, it asks the channel for every value it writes. The
 // channel is the TSV rows (tsv.inc), the value log of the compressor's dry
@@ -14,7 +14,8 @@
 
 namespace h264p {
 
-struct SliceCoder;
+template <int kMode>
+struct SliceCoderT;
 
 // What the compressor's parse of a slice records, for its model pass to
 // check in place of writing the slice back from the values (h264p.cpp,
@@ -62,7 +63,10 @@ struct Chan {
   virtual bool hmore(const char* next, bool m) = 0;
 
   // --- slice data
-  virtual void slice_begin(SliceCoder& sc) { (void)sc; }
+  // (by the walk's mode: SliceCoderT)
+  virtual void slice_begin(SliceCoderT<0>& sc) { (void)sc; }
+  virtual void slice_begin(SliceCoderT<1>& sc) { (void)sc; }
+  virtual void slice_begin(SliceCoderT<2>& sc) { (void)sc; }
   virtual void slice_end() {}
   virtual int skip(int v) = 0;                 // the macroblock is skipped
   virtual int end(int v, bool certain) = 0;    // the slice ends after it (certain: at the end of the picture)
