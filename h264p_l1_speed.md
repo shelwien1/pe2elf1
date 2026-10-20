@@ -235,6 +235,11 @@ the rest are worth keeping, and 2.5 makes `c9` cheap.
 - The prices of section 3: `famtune` of `-1`'s tuning build replaying
   `-1`'s dumps of the tuning corpus, with the patterns of the lines named
   set to zeros.
+- Section 6.8's history copy, on a 2-core 2.8 GHz Xeon VM whose times
+  vary more than the change: `perf record` (cpu-clock at 2 kHz, call
+  graphs through frame pointers) of the two builds side by side, one on
+  each core, compressing and decompressing 00, 01 and 04; each part's
+  share of its own run's samples.
 ## 6. What was built
 
 In the order of section 4. Each step was timed against the build before
@@ -417,6 +422,42 @@ depend on the bins alone): the walk keeps only the states
 (`SliceCoderT<3>`, `Chan::states`), and checks the bins as `-1` and `-5`
 do. The output is the same; compressing 04 at `-3` takes 1.5% fewer
 instructions (9.27 G to 9.13 G), the times moving within their noise.
+
+What stayed `-1`'s alone, at `-3` to `-9`:
+
+- **The history copy (2.3).** Gated off where nothing reads it; but `-3`
+  to `-9` read it, through `mc_nz()` (cbp's `col`) and `mc_col()` (the
+  coded block flags' hint, and above `-3` the `tn`, `tz` and `ts`
+  contexts). Copying 498 bytes a macroblock, cold, at each P picture took
+  1.0-2.8% of their time on 00 and 0.3-1.6% on 01 and 04 (the share of
+  `memmove` under `slice_begin()`). Now `finish_mb()` keeps what those two
+  read of a record (`valid`, `cls`, `cm`, `nzm[0]` and the coefficient
+  rows) before it first rewrites it in the picture, in arrays of their
+  own (`hkeep_`, `hcoef_`), and `ref_hist()` answers from there where a
+  record was kept, from the history where not: the same records, so the
+  same output (all test streams, all levels). The copy's share against
+  what keeping adds to `finish_mb()`, as the sum of the two, in points of
+  each run's time (the build before and this one, side by side):
+
+  | level | 00 `c` / `d` | 01 `c` / `d` | 04 `c` / `d` |
+  |---|---:|---:|---:|
+  | `-3` | -1.9 / -2.0 | -0.3 / -1.2 | +0.2 / -0.6 |
+  | `-5` | -1.0 / -0.8 | -0.9 / -0.8 | -0.3 / +0.1 |
+  | `-7` | -0.8 / -0.9 | -0.5 / -0.6 | -0.4 / -0.3 |
+  | `-9` | -0.4 / -0.6 | -0.5 / -0.4 | +0.1 / -0.2 |
+
+  (A part's share moves by about 0.3 points from run to run.) Below what
+  the timings resolve. Copying only those fields at the picture's start
+  saved a third of the copy: it still touches every record.
+- **No motion vectors (3.1)**: not at these levels: the reference lists
+  and the decoder need them (asserted).
+- **`sn` (3.3)**: `-3`'s significance reads it in two lines (`k_sn`,
+  `l_sn`): set to zeros in the replay of `-3`'s dumps of `test/002`, it
+  codes 1,595 bytes larger (0.05%) before any retuning, and `-3` not
+  computing it was no faster within the noise. Kept, as at the levels
+  above.
+- **The stretch by loads (2.7)**, at ten counters (`-3`): no faster within
+  the noise, as at `-1`.
 
 ## 7. Where the time goes now
 

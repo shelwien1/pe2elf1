@@ -728,7 +728,24 @@ struct Model {
   std::vector<MbCol> hist_[30];
   std::vector<uint8_t> hskip_[30];  // the same's valid && skip, a byte a macroblock (for skp_vars)
   MbCol* hcur_ = nullptr;  // hist_ of the current slice's kind
-  std::vector<MbCol> hprev_;  // and as it was when the picture began (if hprev_ok_: a P picture)
+  // and as it was when the picture began (if hprev_ok_: a P picture), for
+  // mc_col() and mc_nz(): hist_[hkey_] where hkeep_'s stamp is not hsnap_,
+  // else hkeep_ and hcoef_, where finish_mb() keeps what they read of a
+  // record before rewriting it (hsize_ records; at a picture of another
+  // size, unused). (Copying the history as the picture begins costs more:
+  // it touches every record, cold; h264p_l1_speed.md section 6.8.)
+  struct HKeep {
+    uint32_t stamp;  // kept for the picture that began with hsnap_ this
+    uint8_t valid, cls;
+    uint16_t cm, nzm;  // nzm[0]
+  };
+  std::vector<HKeep> hkeep_;
+  struct HCoef {
+    int8_t r[16][16];  // (rows outside cm zero)
+  };
+  std::vector<HCoef> hcoef_;
+  uint32_t hsnap_ = 0;
+  int hkey_ = 0, hsize_ = 0;
   bool hprev_ok_ = false;
   uint32_t pic_ = 1;       // pictures so far
   SliceHeader last_h_;     // the last slice coded (no sps: none yet)
@@ -918,7 +935,12 @@ struct Model {
     // (the macroblocks as they were for the P slices' mc_col, mc_nz only,
     // which need the reference lists: a level without them reads none)
     if (newpic) hprev_ok_ = h.type() == kP || h.type() == kSP;
-    if ((LV::refs || LV::recon) && newpic && hprev_ok_) hprev_.assign(hcur_, hcur_ + size_);
+    if ((LV::refs || LV::recon) && newpic && hprev_ok_) {
+      if ((int)hkeep_.size() < size_) hkeep_.resize(size_, HKeep{}), hcoef_.resize(size_, HCoef{});
+      hsnap_++;  // (nothing kept yet: every record is hist_'s)
+      hkey_ = key_;
+      hsize_ = size_;
+    }
     qp_off_ = 6 * (sc.sps_.bit_depth_luma - 8);
     qp_pred_ = slice_qp_ = sc.pps_.pic_init_qp + h.slice_qp_delta;
     last_qpd_ = 0;
@@ -941,6 +963,17 @@ struct Model {
     if (newpic) memset(lq_, 0, sizeof lq_);
   }
   void slice_end() { slice_cnt_[key_] = cnt_; }
+  // before finish_mb() rewrites the record of the macroblock in the history
+  // hkey_'s: what mc_col() and mc_nz() read of it (valid, cls, nzm[0], cm and
+  // the coefficient rows, those outside cm zero as in hist_)
+  INLINE void keep_hprev(const MbCol& s) {
+    HKeep& d = hkeep_[addr_];
+    for (uint32_t m = (uint32_t)(d.cm | s.cm); m; m &= m - 1) {
+      int r = __builtin_ctz(m);
+      memcpy(hcoef_[addr_].r[r], s.coef[r], 16);
+    }
+    d = HKeep{hsnap_, s.valid, s.cls, s.cm, s.nzm[0]};
+  }
 
   void begin_mb() {
     addr_ = sc_->cur_addr_;
@@ -991,6 +1024,7 @@ struct Model {
   void finish_mb() {
     const MbState& s = *sc_->cur_;
     MbCol& c = hcur_[addr_];
+    if ((LV::refs || LV::recon) && key_ == hkey_ && addr_ < hsize_ && hkeep_[addr_].stamp != hsnap_) keep_hprev(c);
     c.valid = 1;
     hskip_[key_][addr_] = mi_->skip != 0;
     c.skip = mi_->skip;
@@ -2193,45 +2227,73 @@ struct Model {
   }
 
   // the macroblocks, as they were, of the picture list l's reference r is:
-  // the last picture of a kind with its POC; nullptr none
-  const MbCol* ref_hist(int l, int r) const {
-    if (!rec_.mact || r < 0 || r >= rec_.nlist[l] || !rec_.list[l][r]) return nullptr;
+  // the last picture of a kind with its POC (none: false); by address, what
+  // mc_col() and mc_nz() read of each
+  struct MbRef {
+    uint8_t valid, cls;
+    uint16_t cm, nzm;          // nzm[0]
+    const int8_t (*coef)[16];  // the luma coefficients (rows outside cm zero)
+  };
+  struct HistView {
+    const MbCol* cur = nullptr;   // a history
+    const HKeep* keep = nullptr;  // and its records kept as they were, where rewritten since (hsnap_)
+    const HCoef* coef = nullptr;
+    uint32_t id = 0;
+    explicit operator bool() const { return cur != nullptr; }
+    MbRef at(int a) const {
+      if (keep && keep[a].stamp == id) {
+        const HKeep& k = keep[a];
+        return MbRef{k.valid, k.cls, k.cm, k.nzm, coef[a].r};
+      }
+      const MbCol& c = cur[a];
+      return MbRef{c.valid, c.cls, c.cm, c.nzm[0], c.coef};
+    }
+  };
+  HistView ref_hist(int l, int r) const {
+    HistView v;
+    if (!rec_.mact || r < 0 || r >= rec_.nlist[l] || !rec_.list[l][r]) return v;
     int poc = rec_.list[l][r]->poc;
-    if (poc == prev_poc_ && (int)hprev_.size() == size_) return hprev_ok_ ? hprev_.data() : nullptr;
+    if (poc == prev_poc_ && hsize_ == size_) {
+      if (hprev_ok_) v.cur = hist_[hkey_].data(), v.keep = hkeep_.data(), v.coef = hcoef_.data(), v.id = hsnap_;
+      return v;
+    }
     for (int k = 0; k < 30; k++)
-      if (k != key_ && hist_poc_[k] == poc && (int)hist_[k].size() >= size_) return hist_[k].data();
-    return nullptr;
+      if (k != key_ && hist_poc_[k] == poc && (int)hist_[k].size() >= size_) {
+        v.cur = hist_[k].data();
+        return v;
+      }
+    return v;
   }
   // The block of the reference, as it was, that the vector of the current
   // macroblock's block of n x n samples at (x, y) (4x4 blocks) points at,
   // for an inter macroblock of a P picture whose reference is the last
   // picture of a kind: the macroblock there, and (bx, by) the block's place
   // in it (4x4 blocks, the top left one of an 8x8 block); moved, the vector
-  // moves it; nullptr none.
-  const MbCol* mc_col(int x, int y, int n, int& bx, int& by, int& moved) const {
-    if ((sc_->stype_ != kP && sc_->stype_ != kSP) || mi_->cls >= CL_INXN || mbaff_) return nullptr;
-    const MbCol* hr = ref_hist(0, mi_->rf[0][(y >> 1) * 2 + (x >> 1)]);
-    if (!hr) return nullptr;
+  // moves it; false none.
+  bool mc_col(int x, int y, int n, int& bx, int& by, int& moved, MbRef& c) const {
+    if ((sc_->stype_ != kP && sc_->stype_ != kSP) || mi_->cls >= CL_INXN || mbaff_) return false;
+    HistView hr = ref_hist(0, mi_->rf[0][(y >> 1) * 2 + (x >> 1)]);
+    if (!hr) return false;
     const int16_t* v = mi_->mv[0][y * 4 + x];
     int still = abs(v[0]) <= 1 && abs(v[1]) <= 1;
     int px = addr_ % width_ * 16 + x * 4 + (still ? 0 : (int)div_floor(v[0] + 2, 4)) + n / 2;
     int py = addr_ / width_ * 16 + y * 4 + (still ? 0 : (int)div_floor(v[1] + 2, 4)) + n / 2;
     px = tc_clamp(px, 0, width_ * 16 - 1);
     py = tc_clamp(py, 0, size_ / width_ * 16 - 1);
-    const MbCol& c = hr[(py >> 4) * width_ + (px >> 4)];
-    if (!c.valid) return nullptr;
+    c = hr.at((py >> 4) * width_ + (px >> 4));
+    if (!c.valid) return false;
     moved = !still;
     bx = (px & 15) >> 2;
     by = (py & 15) >> 2;
     if (n == 8) bx &= 2, by &= 2;
-    return &c;
+    return true;
   }
   // the 4x4 luma blocks with coefficients, of the reference, under where
   // the vector of the current macroblock's 8x8 block at (x, y) (4x4 blocks)
   // puts it, as mc_col: 0-4 still, 5-9 moved; -1 none
   int mc_nz(int x, int y) const {
     if ((sc_->stype_ != kP && sc_->stype_ != kSP) || mi_->cls >= CL_INXN || mbaff_) return -1;
-    const MbCol* hr = ref_hist(0, mi_->rf[0][(y >> 1) * 2 + (x >> 1)]);
+    HistView hr = ref_hist(0, mi_->rf[0][(y >> 1) * 2 + (x >> 1)]);
     if (!hr) return -1;
     const int16_t* v = mi_->mv[0][y * 4 + x];
     int still = abs(v[0]) <= 1 && abs(v[1]) <= 1, nz = 0, h = size_ / width_ * 16;
@@ -2239,9 +2301,9 @@ struct Model {
     int py = addr_ / width_ * 16 + y * 4 + (still ? 0 : (int)div_floor(v[1] + 2, 4)) + 2;
     for (int k = 0; k < 4; k++) {
       int qx = tc_clamp(px + (k & 1) * 4, 0, width_ * 16 - 1), qy = tc_clamp(py + (k >> 1) * 4, 0, h - 1);
-      const MbCol& c = hr[(qy >> 4) * width_ + (qx >> 4)];
+      MbRef c = hr.at((qy >> 4) * width_ + (qx >> 4));
       if (!c.valid) return -1;
-      nz += c.nzm[0] >> (((qy & 15) >> 2) * 4 + ((qx & 15) >> 2)) & 1;
+      nz += c.nzm >> (((qy & 15) >> 2) * 4 + ((qx & 15) >> 2)) & 1;
     }
     return nz + 5 * !still;
   }
@@ -2623,20 +2685,19 @@ struct Model {
     // by scan position, of the block its vector points at in the last
     // picture of the kind (that reference); tmv: the vector moves it
     int tmv = 0, tbx = 0, tby = 0;
-    const MbCol* tcol = g.plane == 0 && (g.kind == 1 || g.kind == 2 || g.kind == 3)
-                            ? mc_col(g.x, g.y, g.kind == 3 ? 8 : 4, tbx, tby, tmv) : nullptr;
-    if (tcol && tcol->cls >= CL_INXN) tcol = nullptr;
-    bool tok = tcol != nullptr;
+    MbRef tcol;
+    bool tok = g.plane == 0 && (g.kind == 1 || g.kind == 2 || g.kind == 3) &&
+               mc_col(g.x, g.y, g.kind == 3 ? 8 : 4, tbx, tby, tmv, tcol) && tcol.cls < CL_INXN;
     // (where none of its rows were written, all zero)
-    bool tany = tok && tcol->cm >> (tby * 4 + tbx) & (g.kind == 3 ? 0x33 : 1);
+    bool tany = tok && tcol.cm >> (tby * 4 + tbx) & (g.kind == 3 ? 0x33 : 1);
     auto tcf = [&](int j) {
       if (!tany) return 0;
       int k = j + g.off;
       if (g.kind == 3) {
         int q = k & 3, x = tbx + (q & 1), y = tby + (q >> 1);
-        return (int)tcol->coef[y * 4 + x][k >> 2];
+        return (int)tcol.coef[y * 4 + x][k >> 2];
       }
-      return (int)tcol->coef[tby * 4 + tbx][k];
+      return (int)tcol.coef[tby * 4 + tbx][k];
     };
     int tnz = 0;
     if (tany)
