@@ -2454,21 +2454,21 @@ struct ReconT {
     int64_t p0 = P.rp[0][b8p], p1 = P.rp[1][b8p], q0 = Q.rp[0][b8q], q1 = Q.rp[1][b8q];
     int np = (p0 >= 0) + (p1 >= 0), nq = (q0 >= 0) + (q1 >= 0);
     if (np != nq) return 1;
-    auto far = [](const int16_t* a, const int16_t* b) { return abs(a[0] - b[0]) >= 4 || abs(a[1] - b[1]) >= 4; };
+    auto apart = [](const int16_t* a, const int16_t* b) { return abs(a[0] - b[0]) >= 4 || abs(a[1] - b[1]) >= 4; };
     if (np == 1) {
       int lp = p0 >= 0 ? 0 : 1, lq = q0 >= 0 ? 0 : 1;
       if ((lp ? p1 : p0) != (lq ? q1 : q0)) return 1;
-      return far(P.mv[lp][bp], Q.mv[lq][bq]);
+      return apart(P.mv[lp][bp], Q.mv[lq][bq]);
     }
     // two vectors each: the same two pictures?
     if (!((p0 == q0 && p1 == q1) || (p0 == q1 && p1 == q0))) return 1;
     if (p0 != p1) {
-      if (p0 == q0) return far(P.mv[0][bp], Q.mv[0][bq]) || far(P.mv[1][bp], Q.mv[1][bq]);
-      return far(P.mv[0][bp], Q.mv[1][bq]) || far(P.mv[1][bp], Q.mv[0][bq]);
+      if (p0 == q0) return apart(P.mv[0][bp], Q.mv[0][bq]) || apart(P.mv[1][bp], Q.mv[1][bq]);
+      return apart(P.mv[0][bp], Q.mv[1][bq]) || apart(P.mv[1][bp], Q.mv[0][bq]);
     }
     // both vectors of each refer to the same picture
-    return (far(P.mv[0][bp], Q.mv[0][bq]) || far(P.mv[1][bp], Q.mv[1][bq])) &&
-           (far(P.mv[0][bp], Q.mv[1][bq]) || far(P.mv[1][bp], Q.mv[0][bq]));
+    return (apart(P.mv[0][bp], Q.mv[0][bq]) || apart(P.mv[1][bp], Q.mv[1][bq])) &&
+           (apart(P.mv[0][bp], Q.mv[1][bq]) || apart(P.mv[1][bp], Q.mv[0][bq]));
   }
   // filters the samples across one edge of 4 (luma) or 2 (chroma) lines:
   // p points at q0 of the first line, s is the step across the edge, t the
