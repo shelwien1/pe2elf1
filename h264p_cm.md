@@ -913,23 +913,26 @@ with their defaults (0.6 KB: 02's 667 bytes of it take 84).
 
 \* measured when added, with four counters and before the later contexts.
 
-**Results** (test/002, against the CABAC cost of each element):
+**Results** (test/002, streams 00-04, against the CABAC cost of each
+element; level `-9` as tuned last):
 
 | element | CABAC | model | |
 |---|---:|---:|---:|
-| skip, end | 336,175 | 221,412 | −34.1% |
-| mb_type | 365,120 | 259,426 | −28.9% |
-| cbp, transform_size_8x8_flag | 216,100 | 153,390 | −29.0% |
-| intra modes | 299,858 | 231,869 | −22.7% |
-| sub_mb_type, ref_idx, mvd | 504,865 | 404,213 | −19.9% |
-| mb_qp_delta | 271,297 | 182,415 | −32.8% |
-| coded_block_flag, significance (count, significance) | 910,721 | 696,918 | −23.5% |
-| levels | 302,611 | 219,815 | −27.4% |
-| signs | 329,382 | 182,124 | −44.7% |
-| macroblock syntax | 3,536,129 | 2,551,582 | −27.8% |
-| whole streams (H.264 against compressed) | 3,603,993 | 2,556,839 | −29.1% |
+| skip, end | 336,175 | 217,592 | −35.3% |
+| mb_type | 365,120 | 256,033 | −29.9% |
+| cbp, transform_size_8x8_flag | 216,100 | 151,446 | −29.9% |
+| intra modes | 299,858 | 229,506 | −23.5% |
+| sub_mb_type, ref_idx, mvd | 504,865 | 399,872 | −20.8% |
+| mb_qp_delta | 271,297 | 180,070 | −33.6% |
+| coded_block_flag, significance (count, significance) | 910,721 | 689,758 | −24.3% |
+| levels | 302,611 | 216,079 | −28.6% |
+| signs | 329,382 | 180,675 | −45.1% |
+| macroblock syntax | 3,536,129 | 2,521,031 | −28.7% |
+| whole streams (H.264 against compressed) | 3,603,993 | 2,526,140 | −29.9% |
 
-The model tables take 226 MB.
+The model tables take 28 MB (226 MB before its parameters were tuned
+against dumps of their decisions, `h264p_levels.md` section 7.5, which
+left many contexts smaller).
 
 **Tried, no gain:** the CABAC-style significance/last binarization instead
 of the count; the mirrored list 0 vector for list 1 mvds (as a context, and

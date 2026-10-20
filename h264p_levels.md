@@ -12,7 +12,7 @@ Sections 1-3 measure where one thread's time went in the model that is
 now `-9`, what each part buys in compression, and what lighter levels
 would cost; sections 4-8 planned the levels. They are built: h264p runs in
 one thread, `c -9`, `-7`, `-5`, `-3` and `-1` pick the level, and `-1`
-compresses the corpus at 409 KB/s and decompresses it at 530, 17.4% larger
+compresses the corpus at 422 KB/s and decompresses it at 528, 17.5% larger
 than `-9` (section 4). Everything was measured on the 7 corpus streams
 (`test/002`, 3.87 MB of H.264), in one thread, on the 2.1 GHz Xeon VM the
 other documents use (section 9 has how).
@@ -173,35 +173,39 @@ corpus in one thread:
 
 | level | has | size | vs `-9` | `c` KB/s | `d` KB/s | memory |
 |---|---|---:|---:|---:|---:|---:|
-| `-9` | everything | 2,750,196 | 0 | 93 | 100 | 164 MB |
-| `-7` | no APMs, no template searches (c) | 2,794,747 | +1.62% (+1.6%) | 109 (110) | 122 (122) | 145 MB |
-| `-5` | the decoder only for maps, textures and edge misses, unfiltered; one mixer, no APMs, no CABAC states (f) | 3,068,628 | +11.58% (+11.6%) | 188 (168) | 206 (194) | 95 MB |
-| `-3` | no decoder but its reference lists; `-9`'s coder without its APMs (h) | 3,160,944 | +14.94% (+15.9%) | 257 (225) | 314 (279) | 52 MB |
-| `-1` | no decoder; four counters, one mixer, no APMs, no CABAC states (k) | 3,229,830 | +17.44% (about +16%) | 409 (about 400) | 530 (about 500) | 42 MB |
+| `-9` | everything | 2,718,200 | 0 | 103 | 111 | 62 MB |
+| `-7` | no APMs, no template searches (c) | 2,762,018 | +1.61% (+1.6%) | 125 (110) | 139 (122) | 62 MB |
+| `-5` | the decoder only for maps, textures and edge misses, unfiltered; one mixer, no APMs, no CABAC states (f) | 3,028,487 | +11.42% (+11.6%) | 205 (168) | 232 (194) | 58 MB |
+| `-3` | no decoder but its reference lists; `-9`'s coder without its APMs (h) | 3,128,074 | +15.08% (+15.9%) | 263 (225) | 311 (279) | 36 MB |
+| `-1` | no decoder; its own four counters a family, one mixer, no APMs, no CABAC states (k) | 3,193,962 | +17.50% (about +16%) | 422 (about 400) | 528 (about 500) | 30 MB |
 
-`-9` codes as the model of sections 1-3, 7 bytes more: each stream's
-header has the level. Memory is the peak resident size, compressing
-stream 03 (decompressing it takes 5-6 MB less). `-1` by stream:
+`-9` is the model of sections 1-3 (2,750,189 bytes there, 7 more with the
+level byte each stream's header has now) with its parameters tuned again,
+1.16% smaller; every level's parameters were tuned so, against dumps of
+its families' decisions (section 7.5), which also left their tables
+smaller (`-9`'s 28 MB instead of 226) and every level faster. Memory is
+the peak resident size, compressing stream 03 (decompressing it takes
+4-6 MB less). `-1` by stream:
 
 | stream | size vs `-9` | `c` KB/s | `d` KB/s |
 |---|---:|---:|---:|
-| 00 | +15.4% | 327 | 423 |
-| 01 | +21.8% | 451 | 620 |
-| 02 | +1.8% | 319 | 460 |
-| 03 | +19.1% | 378 | 473 |
-| 04 | +12.6% | 506 | 653 |
-| 05 | +10.7% | 546 | 652 |
-| 06 | +10.3% | 762 | 925 |
-| **all** | +17.4% | **409** | **530** |
+| 00 | +15.6% | 331 | 427 |
+| 01 | +22.3% | 478 | 570 |
+| 02 | +2.3% | 477 | 620 |
+| 03 | +18.6% | 387 | 486 |
+| 04 | +12.7% | 504 | 648 |
+| 05 | +11.0% | 649 | 821 |
+| 06 | +10.3% | 816 | 994 |
+| **all** | +17.5% | **422** | **528** |
 
-`-1` reaches the target on the corpus: 409 KB/s compressing and 530
-decompressing. Below it are 00 and 03, where macroblocks, not bytes, cost
-(00: 3.8 M macroblocks in 815 KB, 95% skipped), and compressing, 02, 28 KB
-of intra pictures at a high rate (its times, like 05's, are short and vary
-from run to run).
+`-1` reaches the target on the corpus: 422 KB/s compressing and 528
+decompressing. Below it, compressing, are 00 and 03, where macroblocks,
+not bytes, cost (00: 3.8 M macroblocks in 815 KB, 95% skipped);
+`h264p_l1_speed.md` has where its time goes now and what could make it
+faster.
 The other levels fill the range between: `-7` is `-9` at 1.2 times the
-speed for 1.6%, `-5` twice as fast for 11.6%, `-3` nearly three times for
-14.9%.
+speed for 1.6%, `-5` twice as fast for 11.4%, `-3` 2.6 times (2.8
+decompressing) for 15.1%.
 `-3` has the decoder's reference lists and pictures' motion without their
 samples (`ReconRefs`, section 6), worth 0.8% to it at 8% of its speed;
 `-1` could have them for the same 0.8% at 9% of its speed, which it has
@@ -229,9 +233,9 @@ The plan's items (estimates, from the prototype), and what came of each:
 - **A 12-input mixer** (−4%). The mixers take 2 inputs per counter and 4
   more, in lanes of 8: 16 for four counters, one AVX2 vector, instead of
   24 (W0 is then 1/16, where the prototype kept 1/24).
-- **Smaller tables.** `-1`'s tables are its own, 34 MB of address space
-  (`-9`'s are 226 MB); it peaks at 42 MB compressing stream 03, 37 MB
-  decompressing.
+- **Smaller tables.** `-1`'s tables are its own, 13 MB of address space
+  (34 MB before its tuning; `-9`'s are 28 MB, 226 MB before theirs); it
+  peaks at 30 MB compressing stream 03, 25 MB decompressing.
 - **Compression back** (1-2%): 1.1%, from its contexts and its
   parameters (test/002: 3,229,830 bytes before, 3,193,962 after); the
   contexts at about the same speed, the tuned parameters 6% faster both
@@ -292,7 +296,7 @@ As built:
 - **The format** (version 5): the level is a byte of the header after the
   version; `d` reads it and runs `Model<1, L>`; `c -L` runs `Model<0, L>`.
   What `-9` codes is as before, byte for byte after the header.
-- **Code size**: the binary with all five levels is 5.3 MB (the
+- **Code size**: the binary with all five levels is 5.4 MB (the
   Makefile's `-O3`; 1.4 MB before, with `-9` alone) and compiles in about
   3 minutes, one translation unit; a level alone (`-DH264P_ONLY=L`, as
   `mk.sh`'s tuning and check builds have it) in under one.
@@ -681,6 +685,17 @@ cd IDX/l1 && for f in *.idx; do perl ../import.pl $f ../../export.\!\!\! > t && 
   larger levels 2-4 hours, of which the significance's second pass alone
   is half an hour or more. The levels after `-1` were given two passes a
   family.
+- **What it gave.** test/002 0.64-1.31% smaller at each level (`-9`
+  1.16%, `-7` 1.17%, `-5` 1.31%, `-3` 1.04%, `-1` 0.64%, after its own
+  contexts' 0.47%), the tuning corpus 0.75-1.77% (`-3` 1.13%, `-5`
+  1.48%, `-7` and `-9` 1.77%): the lighter levels had `-9`'s
+  parameters, made for `-9`'s shape, and `-9`'s own were `opt.pl`'s,
+  from whole-corpus runs that saw only whole bytes. The
+  tie rule (a flip that changes nothing is kept if it clears a bit) and
+  the gains left many contexts smaller: the levels' tables went from
+  226, 186, 93, 47 and 34 MB to 28, 22, 28, 17 and 13, and every level is
+  faster for it (`-9` 103 KB/s compressing instead of 93, `-7` 125
+  instead of 109, `-5` 205 instead of 188; runs vary by about 5%).
 
 ### 7.6 Getting there
 

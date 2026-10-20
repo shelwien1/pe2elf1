@@ -188,30 +188,32 @@ On the test streams (`-v` shows where the bits go):
 
 | stream | H.264 | compressed | |
 |---|---:|---:|---:|
-| 00 | 815,140 | 567,360 | 69.6% |
-| 01 | 1,095,103 | 804,283 | 73.4% |
-| 02 | 28,143 | 26,253 | 93.3% |
-| 03 | 1,181,369 | 775,209 | 65.6% |
-| 04 | 484,238 | 383,734 | 79.2% |
+| 00 | 815,140 | 559,790 | 68.7% |
+| 01 | 1,095,103 | 793,364 | 72.4% |
+| 02 | 28,143 | 26,047 | 92.6% |
+| 03 | 1,181,369 | 768,001 | 65.0% |
+| 04 | 484,238 | 378,938 | 78.3% |
 
-The macroblock syntax takes 72.1% of what its CABAC coding takes (from
-3,536,129 to 2,551,582 bytes over these streams; whole streams go from
-3,603,993 to 2,556,839 bytes; `h264p_cm.md` section 9 has the figures by
+The macroblock syntax takes 71.3% of what its CABAC coding takes (from
+3,536,129 to 2,521,031 bytes over these streams; whole streams go from
+3,603,993 to 2,526,140 bytes; `h264p_cm.md` section 9 has the figures by
 syntax element). That is level `-9`. In one thread, on a 2.1 GHz Xeon with
 the x86-64-v3 build, the levels do on the 7 streams of `test/002` (3.87 MB
 of H.264):
 
 | level | compressed | | `c` KB/s | `d` KB/s | memory |
 |---|---:|---:|---:|---:|---:|
-| `-9` | 2,750,196 | 71.1% | 93 | 100 | 164 MB |
-| `-7` | 2,794,747 | 72.3% | 109 | 122 | 145 MB |
-| `-5` | 3,068,628 | 79.4% | 188 | 206 | 95 MB |
-| `-3` | 3,160,944 | 81.7% | 257 | 314 | 52 MB |
-| `-1` | 3,229,830 | 83.5% | 409 | 530 | 42 MB |
+| `-9` | 2,718,200 | 70.3% | 103 | 111 | 62 MB |
+| `-7` | 2,762,018 | 71.4% | 125 | 139 | 62 MB |
+| `-5` | 3,028,487 | 78.3% | 205 | 232 | 58 MB |
+| `-3` | 3,128,074 | 80.9% | 263 | 311 | 36 MB |
+| `-1` | 3,193,962 | 82.6% | 422 | 528 | 30 MB |
 
 (memory: the peak resident size compressing 03). `h264p_levels.md` has
 what each level leaves out of the model, where the time goes, and how each
-level has its own IDX profile to tune; `h264p_speed.md` how `-9` got here.
+level has its own IDX profile, tuned against dumps of its families'
+decisions; `h264p_speed.md` how `-9` got here, `h264p_l1_speed.md` what
+could still make `-1` faster.
 
 ### TSV
 

@@ -2,10 +2,11 @@
 
 `-1` as built (its own four contexts a family, its parameters tuned, no
 decoder, no CABAC states, `h264p_levels.md` sections 4 and 5) compresses
-the 7 corpus streams (`test/002`, 3.87 MB of H.264) at 444 KB/s and
-decompresses them at 557, in one thread on the 2.1 GHz Xeon VM of the
-other documents (its tuning made it 6% faster both ways: its tables
-went from 34 MB to 13). The target was 400-500 KB/s. This document
+the 7 corpus streams (`test/002`, 3.87 MB of H.264) at 422 KB/s and
+decompresses them at 528, in one thread on the 2.1 GHz Xeon VM of the
+other documents (`h264p_levels.md` section 4; its tuning made it 6%
+faster both ways, its tables going from 34 MB to 13). The target was
+400-500 KB/s. This document
 profiles `-1` again and lists what could make it faster: first what
 keeps the format (section 2), then what changes the model (section 3),
 each with what it would save. Nothing here is built yet.
@@ -153,7 +154,7 @@ To be measured; perhaps 3%.
 ### 2.8 Together
 
 2.1-2.6: about 22% of compression time and 11% of decompression, which
-would make `-1` about 570 KB/s compressing and 625 decompressing, with
+would make `-1` about 540 KB/s compressing and 595 decompressing, with
 2.7 still open.
 
 ## 3. Faster, changing the model
