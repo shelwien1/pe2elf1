@@ -891,9 +891,10 @@ struct Model {
     if ((int)info_.size() < size_) info_.resize(size_);
     if ((int)hist_[key_].size() < size_) hist_[key_].resize(size_), hskip_[key_].resize(size_);
     hcur_ = hist_[key_].data();
-    // (the macroblocks as they were for the P slices' mc_col, mc_nz only)
+    // (the macroblocks as they were for the P slices' mc_col, mc_nz only,
+    // which need the reference lists: a level without them reads none)
     if (newpic) hprev_ok_ = h.type() == kP || h.type() == kSP;
-    if (newpic && hprev_ok_) hprev_.assign(hcur_, hcur_ + size_);
+    if ((LV::refs || LV::recon) && newpic && hprev_ok_) hprev_.assign(hcur_, hcur_ + size_);
     qp_off_ = 6 * (sc.sps_.bit_depth_luma - 8);
     qp_pred_ = slice_qp_ = sc.pps_.pic_init_qp + h.slice_qp_delta;
     last_qpd_ = 0;
