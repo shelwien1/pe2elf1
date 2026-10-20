@@ -13,12 +13,11 @@ changes the model (section 3), each with what it would save.
 Section 6 has what was built of it and what each item gave: all of
 section 2 but the stretch (2.7, which gave nothing), and 3.1 and 3.3,
 which make `-1` 0.53% larger (skip runs, 3.2, cost more than they would
-save: section 6.7). `-1` now compresses the corpus at 660 KB/s
-and decompresses it at 742, 45% and 28% faster than before (454 and 578
+save: section 6.7). `-1` now compresses the corpus at 660 KB/s and
+decompresses it at 742, 45% and 28% faster than before (454 and 578
 measured in the same runs: the VM's speed varies from run to run and
-from day to day); the
-other levels code as before and got faster too, most of them compressing
-(section 6.8). Section 7 profiles `-1` again.
+from day to day); the other levels code as before and got faster too,
+most of them compressing (section 6.8). Section 7 profiles `-1` again.
 
 ## 1. Where the time went
 
@@ -66,9 +65,10 @@ decompressing (its share of the measured times, over the corpus's
 47.9 M decisions and mantissa bits). `-1`'s tables are 13.6 MB (34 MB
 before its tuning, which left many contexts smaller), nearly all of
 them under 1 MB a family (the significance's counter B is 7.1 MB, the
-levels' counter C 2.1 MB), so the counters' cost is less their memory
-than the gather that stretches them: the instruction after it holds
-3.6% of all the samples.
+levels' counter C 2.1 MB). The instruction after the gather that
+stretches the counters' probabilities holds 3.6% of all the samples,
+which looked like the gather's cost; it is the counters' loads it waits
+for, its indices (section 6.4).
 
 By instruction counts (callgrind, compressing 04: 6.6 G instructions,
 13,600 a byte), the slice coder's `macroblock()` and `bin()` lead with
@@ -77,6 +77,8 @@ By instruction counts (callgrind, compressing 04: 6.6 G instructions,
 range coder's `rc_Renorm()` 2.4% and the log's `block()` 2.3%.
 
 ## 2. Faster, coding the same
+
+What was built of each and what it gave: section 6.
 
 ### 2.1 The CABAC engines and the bit I/O
 
@@ -168,6 +170,8 @@ would make `-1` about 540 KB/s compressing and 595 decompressing, with
 
 ## 3. Faster, changing the model
 
+What was built of each and what it gave: section 6.
+
 Prices from the dumps of `IDX/ftune.py` (`h264p_levels.md` section 7.5),
 on the tuning corpus, where `-1` codes 1,152,117 bytes: the lines named
 set to zeros in the family's replay.
@@ -240,6 +244,7 @@ the rest are worth keeping, and 2.5 makes `c9` cheap.
   graphs through frame pointers) of the two builds side by side, one on
   each core, compressing and decompressing 00, 01 and 04; each part's
   share of its own run's samples.
+
 ## 6. What was built
 
 In the order of section 4. Each step was timed against the build before
@@ -332,7 +337,9 @@ the check only compares them.
   macroblock's record is prefetched. (Prefetching its history too, and the
   clearing in vector stores instead of `rep stos`, gave nothing measurable
   and were not kept.)
-- `SliceCoderT<kMode>`: 0 parses, 1 writes, 2 writes without the bins.
+- `SliceCoderT<kMode>`: 0 parses, 1 writes, 2 writes without the bins
+  (and since, 3 writes without the bins but follows the contexts' states:
+  section 6.8).
 
 ### 6.4 The stretch (2.7)
 
@@ -400,10 +407,11 @@ macroblock.
 
 ### 6.8 Every level
 
-2.1, 2.2, 2.4 and 2.6 are the engines', the dry run's, the log's and the
-walk's, which every level has, so every level is faster, compressing
-most: the build before section 2 and the one after 3.1 on the corpus, in
-turn, two runs of two rounds, the best of the four:
+2.1, 2.2 and 2.4-2.6 are the engines', the dry run's, the log's, the skip
+window's and the walk's, which every level has, so every level is
+faster, compressing most: the build before section 2 and the one after
+3.1 (before the two changes below) on the corpus, in turn, two runs of
+two rounds, the best of the four:
 
 | level | `c` KB/s | `d` KB/s | size |
 |---|---:|---:|---|
@@ -461,8 +469,10 @@ What stayed `-1`'s alone, at `-3` to `-9`:
 
 ## 7. Where the time goes now
 
-As section 1, on the build after section 6 (37,389 samples compressing,
-33,052 decompressing):
+As section 1, on the build after 3.1 and 3.3 (37,389 samples
+compressing, 33,052 decompressing; the changes since, in section 6.8,
+leave `-1`'s code as it was: it keeps neither the contexts' states nor
+the history):
 
 | part | `c` | `d` | |
 |---|---:|---:|---|
