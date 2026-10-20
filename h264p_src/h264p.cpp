@@ -70,8 +70,10 @@
 #include "recon.inc"
 #include "model.inc"
 
-using namespace h264p;
-
+// (h264p's names stay in its namespace: Lib3's global byte, uint and qword,
+// and whatever more of the library a program that includes this file has
+// after it, MTwrap's included, see only theirs)
+namespace h264p {
 namespace {
 
 const char kMagic[] = "h264p";  // TSV files
@@ -1471,8 +1473,13 @@ void usage() {
 }
 
 }  // namespace
+}  // namespace h264p
 
+// (H264P_NO_MAIN: a program of its own includes this file, for the
+// coroutines of coro.inc)
+#ifndef H264P_NO_MAIN
 int main(int argc, char** argv) {
+  using namespace h264p;
   if (argc < 2 || !argv[1][0] || argv[1][1] || !strchr("cdtrx", argv[1][0])) {
     usage();
     return 2;
@@ -1523,3 +1530,4 @@ int main(int argc, char** argv) {
     return 1;
   }
 }
+#endif

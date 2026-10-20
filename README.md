@@ -239,7 +239,11 @@ the input). They have `Init(const H264pArgs*)`, `do_process()` and `Quit()`,
 no constructor (a run allocates its state on the heap as it starts, and
 `Quit()` frees it wherever the run was left), and the decompressor hands
 over only full output buffers but its last: what MTwrap takes as its
-workers' `Enc_class`. Nothing runs in threads yet.
+workers' `Enc_class`. Nothing runs in threads yet, but a program can have
+them: with `H264P_NO_MAIN` defined it includes `h264p_src/h264p.cpp` (whose
+names stay in `namespace h264p`) and then more of the library; for one,
+`CoroFileProc<MTwrap<f_DEC, h264p::H264pCoro<f_DEC>, const
+h264p::H264pArgs*>>` compiles and links as rzwrap's workers do.
 
 Each yield copies the coroutine's stack out, into a buffer of 64 KB
 (`Coroutine::STKPAD`). The compressor yields between NAL units, with 2.4 KB
