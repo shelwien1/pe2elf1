@@ -19,7 +19,7 @@ measured in the same runs: the VM's speed varies from run to run and
 from day to day), and decompresses 3-5% faster since (the stretch kept
 with the counters, 6.4); the other levels code as before and got faster
 too, most of them compressing (section 6.8). Section 7 profiles `-1`
-again.
+again; section 8 sets its entropy coding against CABAC's.
 
 ## 1. Where the time went
 
@@ -246,6 +246,11 @@ the rest are worth keeping, and 2.5 makes `c9` cheap.
   graphs through frame pointers) of the two builds side by side, one on
   each core, compressing and decompressing 00, 01 and 04; each part's
   share of its own run's samples.
+- Section 8: the parse's CABAC bins, each with its context or kind,
+  written out by a build of `-1` and coded again by a separate program:
+  CABAC by `cabac.inc`'s encoder (the first row), the rest as the sums of
+  their ideal code lengths; the coder's bytes and speed by a third
+  program on the same bins.
 
 ## 6. What was built
 
@@ -563,3 +568,57 @@ coder, whose time goes with the number of decisions; outside it are the
 parse (a sixth of compressing), the model's work per macroblock and the
 walk. What would make `-1` faster next is cheaper decisions, or fewer of
 them where they cost (section 6.7: not the skip flags).
+
+## 8. The entropy coding
+
+`-1` codes no CABAC: CABAC is what it parses and what it writes back. Each
+of its decisions goes to a binary range coder (`rc.inc`: a 32-bit range,
+15-bit probabilities) with the probability its family mixes from four
+counters. The coder adds 0.012% to the ideal code lengths of those
+probabilities (the corpus: 3,210,963 bytes against the 3,210,578 that `-v`
+sums, the container's own bytes included), and the probabilities' floor
+(the mixer's output kept 1/4096 from 0 and 1, so a decision costs at least
+0.00035 bits) at most 0.05% where it could matter most, 00's 7.6 M skip
+and end of slice decisions. What redundancy `-1` leaves is in its model,
+not in its coder.
+
+What a coder of CABAC's own shape could gain on CABAC, without `-1`'s
+model: the bins of the five CABAC streams as the parse reads them (56.4 M:
+42.7 M decisions, 4.06 M bypass bins, 9.70 M terminating bins, the end of
+slice flags) coded again, by CABAC itself (3,581,408 bytes, exactly the
+input's) and by other estimators on the same contexts, their ideal code
+lengths:
+
+| on CABAC's contexts | bytes | |
+|---|---:|---:|
+| CABAC | 3,581,408 | |
+| CABAC's states, ideal | 3,576,407 | -0.14% |
+| an adaptive rate, 1/n down to 1/31, from CABAC's initial states | 3,531,107 | -1.40% |
+| the same, down to 1/128 | 3,563,703 | -0.49% |
+| two rates, 1/16 and 1/128, their mean | 3,633,263 | +1.45% |
+| 1/n down to 1/61, the contexts kept from slice to slice | 3,495,106 | -2.41% |
+| the two rates, kept | 3,469,200 | -3.13% |
+| and the bypass and terminating bins modeled | 3,449,261 | -3.69% |
+| the two rates mixed by weights of each context's own | 3,431,394 | -4.19% |
+| and an SSE of each context's own | 3,434,094 | -4.11% |
+
+(Kept: one set of contexts by slice type, I, P or B, initialized at its
+first slice only. The bypass bins modeled by kind and by place in their
+code, the terminating bins by one probability.)
+
+So CABAC leaves about 4% at its own speed: its 64-state machine about
+1.4% (0.14% of it the tables' arithmetic), initializing at every slice
+1-2% more (4% of 00 and 03, cut into many slices), its bypass and
+terminating bins 0.5%; mixing a context's two rates 0.5% more. As a coder
+(the two rates, kept, the bypass bins modeled, a 32-bit binary range
+coder, each context starting at 1/2): 3,451,136 bytes (-3.64%), 6.2 ns a
+bin encoding and 8.8 decoding, where the table-driven CABAC engines of
+6.1 took 6.6 and 8.6 the same day. A level of that shape, the parse and
+the walk around such a coder, would run at about the parse's speed (a
+sixth of `-1`'s compressing, section 7) for about 4%. `-1` makes the same
+streams 16.8% smaller (2,998,197 bytes from 3,603,993): that is its
+contexts (more of each value's surroundings than CABAC's flags: the
+neighbours' values and counts, the positions, the last picture's
+macroblocks) and the mixing of four counters a decision, which is what
+its time goes to. CABAC's states as one more input of its mixers were
+worth 0.15% (`h264p_levels.md` section 3, rows j and k).
