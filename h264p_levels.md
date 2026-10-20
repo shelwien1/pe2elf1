@@ -266,7 +266,9 @@ The plan's items (estimates, from the prototype), and what came of each:
     9% slower. Taken for `-3`, not for `-1` (section 4).
 - **Skip runs** (for 00 and 03): not done; it changes the format of the
   skip family and the model's bookkeeping, and the corpus reaches the
-  target without.
+  target without. (Simulated later: the skip flags it would spare are the
+  cheapest, and it would make 00 0.5% larger and 03 1.2%,
+  `h264p_l1_speed.md` section 6.7.)
 - **No motion vectors** (later, `h264p_l1_speed.md` section 3.1): `-1`
   has not the part `mvp`, the motion vectors predicted and kept as the
   decoder has them, nor the six contexts of the mvds and their signs that
