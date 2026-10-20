@@ -162,11 +162,13 @@ struct Lv1 {
   // (or without it the reference lists and the pictures' motion, refs), its
   // template searches, the intra proxy, sign prediction, the skip
   // prediction's pixels, deblocking (or the contexts see the pictures
-  // unfiltered), the CABAC states as predictions
+  // unfiltered), the CABAC states as predictions, the motion vectors as
+  // the decoder has them (mvp; the decoder and refs need them)
   // (not even the reference lists: they would take -1 0.8% smaller and
-  // 9% slower)
+  // 9% slower; nor the motion vectors: 0.5% for 11%, h264p_l1_speed.md
+  // 3.1)
   static const bool refs = false, recon = false, search = false, proxy = false, signpred = false, skippx = false,
-                    deblock = false, cabpred = false;
+                    deblock = false, cabpred = false, mvp = false;
   typedef C1_nal nal;
   typedef C1_hdr hdr;
   typedef C1_skp skp;

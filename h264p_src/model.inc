@@ -114,6 +114,23 @@ constexpr u64 H_pcm_search = 0;
 constexpr u64 H_pcm_proxy = 0;
 constexpr u64 H_pcm_signp = 0;
 constexpr u64 H_pcm_skippx = 0;
+// mvp: the motion vectors as the decoder has them, predicted and kept (the
+// reference lists and the decoder need them too)
+constexpr u64 H_nal_mvp = 0;
+constexpr u64 H_hdr_mvp = 0;
+constexpr u64 H_skp_mvp = 0;
+constexpr u64 H_mbt_mvp = 0;
+constexpr u64 H_cbp_mvp = 0;
+constexpr u64 H_ipm_mvp = 0;
+constexpr u64 H_mvs_mvp = H_BIT(H_mvs_v, pd) | H_BIT(H_mvs_v, sp) | H_BIT(H_mvs_v, zd);
+constexpr u64 H_qpd_mvp = 0;
+constexpr u64 H_cbf_mvp = 0;
+constexpr u64 H_sig_mvp = 0;
+constexpr u64 H_lvl_mvp = 0;
+constexpr u64 H_sgn_mvp = 0;
+constexpr u64 H_mvg_mvp = H_BIT(H_mvg_v, zs) | H_BIT(H_mvg_v, ds) | H_BIT(H_mvg_v, ns);
+constexpr u64 H_qpg_mvp = 0;
+constexpr u64 H_pcm_mvp = 0;
 
 // A family's tables, mapped: zero is every table's starting state, and a
 // page costs memory only once the coder reaches it.
@@ -483,7 +500,9 @@ struct Model {
   static_assert(LV::signpred || !(LV::F::Uses & H_##F##_signp),                                             \
                 "a level without sign prediction reads a variable of " #F " that needs it");                \
   static_assert(LV::skippx || !(LV::F::Uses & H_##F##_skippx),                                              \
-                "a level without the skip prediction's pixels reads a variable of " #F " that needs them");
+                "a level without the skip prediction's pixels reads a variable of " #F " that needs them");  \
+  static_assert(LV::mvp || !(LV::F::Uses & H_##F##_mvp),                                                    \
+                "a level without the motion vectors reads a variable of " #F " that needs them");
   H_PARTS(nal)
   H_PARTS(hdr)
   H_PARTS(skp)
@@ -500,6 +519,7 @@ struct Model {
   H_PARTS(qpg)
   H_PARTS(pcm)
 #undef H_PARTS
+  static_assert(LV::mvp || !(LV::refs || LV::recon), "the reference lists and the decoder need the motion vectors");
 
   void init() {
     cm_tables();
@@ -981,8 +1001,10 @@ struct Model {
     c.field = mi_->field = s.field;
     memcpy(c.modes, mi_->modes, sizeof c.modes);
     memcpy(c.ref, mi_->ref, sizeof c.ref);
-    memcpy(c.rf, mi_->rf, sizeof c.rf);
-    memcpy(c.mv, mi_->mv, sizeof c.mv);
+    if (LV::mvp) {
+      memcpy(c.rf, mi_->rf, sizeof c.rf);
+      memcpy(c.mv, mi_->mv, sizeof c.mv);
+    }
     static const decltype(mi_->mvd) kNoMvd = {};
     if (!memcmp(mi_->mvd, kNoMvd, sizeof kNoMvd)) {
       memset(c.mvq, 0, sizeof c.mvq);  // (a skipped macroblock: tc_qlog 0 throughout)
@@ -1167,6 +1189,8 @@ struct Model {
         memcpy(mi_->mv, smv_, sizeof smv_);
         memcpy(mi_->rf, srf_, sizeof srf_);
         parts_ = 0;
+      } else if (!LV::mvp) {
+        // (a level without the motion keeps none)
       } else if (sc_->stype_ == kB) {
         mv_direct(15);
       } else {
@@ -1354,7 +1378,7 @@ struct Model {
       parts_ = t <= 3 ? 0 : t == 22 ? 3 : t < 22 ? 2 - (t & 1) : 0;
     else if (stype == kP || stype == kSP)
       parts_ = t < 3 ? t : 3;
-    if (stype == kB && t == 0) mv_direct(15);
+    if (LV::mvp && stype == kB && t == 0) mv_direct(15);
     tc_syms[STG_MBT]++;
     return t;
   }
@@ -1724,7 +1748,7 @@ struct Model {
     int r = node - (b ? 16 : 4);
     sub_[i] = r;
     subshape_[i] = b ? kBSubShape[r % 13] : r;
-    if (i == 3 && b) mv_direct((sub_[0] == 0) | (sub_[1] == 0) << 1 | (sub_[2] == 0) << 2 | (sub_[3] == 0) << 3);
+    if (LV::mvp && i == 3 && b) mv_direct((sub_[0] == 0) | (sub_[1] == 0) << 1 | (sub_[2] == 0) << 2 | (sub_[3] == 0) << 3);
     tc_syms[STG_MVS]++;
     return r;
   }
@@ -2014,7 +2038,12 @@ struct Model {
   int mvd(int list, int comp, int x, int y, int w, int h, int v) {
     tc_stage = STG_MVS;
     int ia, ib, b8 = (y >> 1) * 2 + (x >> 1), ref = sc_->cur_->ref[list][b8];
-    if (!comp) {
+    if (!comp && !LV::mvp) {
+      // (a level without the motion: no prediction, nor what depends on it)
+      for (int k = 0; k < 2; k++) mvp_[k] = 0, sp_[k] = -1, ns_[k] = 0, pdv_[k] = 0;
+      pdn_ = true;
+      tmn_ = true;
+    } else if (!comp) {
       MvN nbs[3];
       mv_pred(list, x, y, w, h, ref, mvp_, nbs);
       for (int k = 0; k < 2; k++) {
@@ -2151,7 +2180,7 @@ struct Model {
     }
     if (!comp) {
       mvx_ = v;
-    } else {
+    } else if (LV::mvp) {
       int mv[2] = {mvp_[0] + mvx_, mvp_[1] + v};
       set_mv(list, x, y, w, h, ref, mv);
     }

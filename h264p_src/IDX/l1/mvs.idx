@@ -32,10 +32,9 @@ Const 0
 Index a
  a_kind: kind, 1!011
  a_comp: comp, 1!1
- a_ma: ma, 1!1111000
- a_mb: mb, 1!1111000
- a_oth: oth, 1!11101
- a_sp: sp, 1!11111011
+ a_ma: ma, 1!1111101
+ a_mb: mb, 1!1111101
+ a_oth: oth, 1!11011
 
 Index b
  b_kind: kind, 1!011
@@ -43,24 +42,20 @@ Index b
  b_lst: lst, 1!1
  b_ps: ps, 1!111
  b_rf: rf, 1!111
- b_zd: zd, 1!101010111001
 
 Index c
  c_kind: kind, 1!111
  c_comp: comp, 1!1
- c_sp: sp, 1!00000000
 
 Index d
  d_kind: kind, 1!001
  d_comp: comp, 1!0
- d_pd: pd, 1!11111101
  d_ma: ma, 1!0000000
  d_nr: nr, 1!111
 
 Index m
  m_kind: kind, 1!111
  m_comp: comp, 1!0
- m_pd: pd, 1!00000
 
 Index t
  t_kind: kind, 1!001
@@ -75,7 +70,7 @@ Index g
  g_oth: oth, 1!0
 
 Number rA, 1, 0!11111111
-Number rB, 1, 0!11011101
+Number rB, 1, 0!11111111
 Number rC, 1, 0!00000000
 Number rD, 1, 0!11111111
 Number rT, 1, 0!00011100
@@ -84,7 +79,7 @@ Number lr, 1, 0!01111
 Number lrm, 1, 0!00000
 Number mbm, 1, 0!00000000
 Number mwA, 1, 0!01000000
-Number mwB, 1, 0!00001000
+Number mwB, 1, 0!00100001
 Number mwC, 1, 0!10000000
 Number mwD, 1, 0!00100000
 Number mwT, 1, 0!01000000

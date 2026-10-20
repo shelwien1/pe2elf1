@@ -24,20 +24,15 @@ Index a
  a_comp: comp, 1!1
  a_lst: lst, 1!1
  a_ox: ox, 1!010
- a_ns: ns, 1!011110
 
 Index b
- b_zs: zs, 1!00111111
- b_mag: mag, 1!0001111
+ b_mag: mag, 1!0101011
  b_comp: comp, 1!1
 
 Index c
- c_zs: zs, 1!00111111
- c_ds: ds, 1!001001111
 
 Index d
- d_ds: ds, 1!001111111
- d_mag: mag, 1!0101001
+ d_mag: mag, 1!0010100
 
 Index m
 
@@ -50,23 +45,23 @@ Index n
 Index g
  g_comp: comp, 1!0
 
-Number rA, 1, 0!11100100
-Number rB, 1, 0!11111111
-Number rC, 1, 0!11111110
-Number rD, 1, 0!11111111
+Number rA, 1, 0!11000000
+Number rB, 1, 0!11111110
+Number rC, 1, 0!01000000
+Number rD, 1, 0!00000000
 Number rT, 1, 0!00000000
 Number rG, 1, 0!00000000
 Number lr, 1, 0!01111
 Number lrm, 1, 0!00000
 Number mbm, 1, 0!00000000
-Number mwA, 1, 0!00011110
-Number mwB, 1, 0!00100000
-Number mwC, 1, 0!00010010
-Number mwD, 1, 0!00001000
+Number mwA, 1, 0!00011111
+Number mwB, 1, 0!00010111
+Number mwC, 1, 0!00001010
+Number mwD, 1, 0!01111110
 Number mwT, 1, 0!00000000
 Number mwG, 1, 0!00000000
 Number mt, 1, 0!000
-Number mb, 1, 0!01001000
+Number mb, 1, 0!00010010
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
 #  direct, one that does not is hashed into 2^h rows and contexts share

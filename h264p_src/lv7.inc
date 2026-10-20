@@ -161,9 +161,10 @@ struct Lv7 {
   // (or without it the reference lists and the pictures' motion, refs), its
   // template searches, the intra proxy, sign prediction, the skip
   // prediction's pixels, deblocking (or the contexts see the pictures
-  // unfiltered), the CABAC states as predictions
+  // unfiltered), the CABAC states as predictions, the motion vectors as
+  // the decoder has them (mvp; the decoder and refs need them)
   static const bool refs = true, recon = true, search = false, proxy = true, signpred = true, skippx = true, deblock = true,
-                    cabpred = true;
+                    cabpred = true, mvp = true;
   typedef C7_nal nal;
   typedef C7_hdr hdr;
   typedef C7_skp skp;

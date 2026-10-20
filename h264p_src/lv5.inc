@@ -163,9 +163,10 @@ struct Lv5 {
   // (or without it the reference lists and the pictures' motion, refs), its
   // template searches, the intra proxy, sign prediction, the skip
   // prediction's pixels, deblocking (or the contexts see the pictures
-  // unfiltered), the CABAC states as predictions
+  // unfiltered), the CABAC states as predictions, the motion vectors as
+  // the decoder has them (mvp; the decoder and refs need them)
   static const bool refs = true, recon = true, search = false, proxy = false, signpred = false, skippx = false, deblock = false,
-                    cabpred = false;
+                    cabpred = false, mvp = true;
   typedef C5_nal nal;
   typedef C5_hdr hdr;
   typedef C5_skp skp;

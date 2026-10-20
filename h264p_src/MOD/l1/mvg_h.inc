@@ -1,37 +1,31 @@
 
-static const byte H1_mvg_a_ns[6+1]={ 0,0,1,2,3,4,4 };
 
-static const byte H1_mvg_b_zs[8+1]={ 0,0,0,1,2,3,4,5,6 };
-static const byte H1_mvg_b_mag[7+1]={ 0,0,0,0,1,2,3,4 };
-
-static const byte H1_mvg_c_zs[8+1]={ 0,0,0,1,2,3,4,5,6 };
-static const byte H1_mvg_c_ds[9+1]={ 0,0,0,1,1,1,2,3,4,5 };
-
-static const byte H1_mvg_d_ds[9+1]={ 0,0,0,1,2,3,4,5,6,7 };
-static const byte H1_mvg_d_mag[7+1]={ 0,0,1,1,2,2,2,3 };
+static const byte H1_mvg_b_mag[7+1]={ 0,0,1,1,2,2,3,4 };
 
 
 
 
 
 
-static const int H1_mvg_rA = (228+0) * (1);
-static const int H1_mvg_rB = (255+0) * (1);
-static const int H1_mvg_rC = (254+0) * (1);
-static const int H1_mvg_rD = (255+0) * (1);
+
+
+static const int H1_mvg_rA = (192+0) * (1);
+static const int H1_mvg_rB = (254+0) * (1);
+static const int H1_mvg_rC = (64+0) * (1);
+static const int H1_mvg_rD = (0+0) * (1);
 static const int H1_mvg_rT = (0+0) * (1);
 static const int H1_mvg_rG = (0+0) * (1);
 static const int H1_mvg_lr = (15+0) * (1);
 static const int H1_mvg_lrm = (0+0) * (1);
 static const int H1_mvg_mbm = (0+0) * (1);
-static const int H1_mvg_mwA = (30+0) * (1);
-static const int H1_mvg_mwB = (32+0) * (1);
-static const int H1_mvg_mwC = (18+0) * (1);
-static const int H1_mvg_mwD = (8+0) * (1);
+static const int H1_mvg_mwA = (31+0) * (1);
+static const int H1_mvg_mwB = (23+0) * (1);
+static const int H1_mvg_mwC = (10+0) * (1);
+static const int H1_mvg_mwD = (126+0) * (1);
 static const int H1_mvg_mwT = (0+0) * (1);
 static const int H1_mvg_mwG = (0+0) * (1);
 static const int H1_mvg_mt = (0+0) * (1);
-static const int H1_mvg_mb = (72+0) * (1);
+static const int H1_mvg_mb = (18+0) * (1);
 static const int H1_mvg_hA = (24+0) * (1);
 static const int H1_mvg_hB = (24+0) * (1);
 static const int H1_mvg_hC = (24+0) * (1);
@@ -41,16 +35,16 @@ static const int H1_mvg_hT = (24+0) * (1);
 static const int H1_mvg_hN = (24+0) * (1);
 
 
-static const long long H1_mvg_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 2), 5); // 40
-static const long long H1_mvg_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 7), 5), 2); // 70
-static const long long H1_mvg_c_Volume = tc_vmul(tc_vmul(1, 7), 6); // 42
-static const long long H1_mvg_d_Volume = tc_vmul(tc_vmul(1, 8), 4); // 32
+static const long long H1_mvg_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 2); // 8
+static const long long H1_mvg_b_Volume = tc_vmul(tc_vmul(1, 5), 2); // 10
+static const long long H1_mvg_c_Volume = 1; // 1
+static const long long H1_mvg_d_Volume = tc_vmul(1, 3); // 3
 static const long long H1_mvg_g_Volume = tc_vmul(1, 1); // 1
 static const long long H1_mvg_m_Volume = 1; // 1
 static const long long H1_mvg_n_Volume = tc_vmul(1, 1); // 1
 static const long long H1_mvg_t_Volume = tc_vmul(1, 1); // 1
 
-#define H1_mvg_USES(X) X(comp) X(lst) X(ox) X(ns) X(zs) X(mag) X(ds)
+#define H1_mvg_USES(X) X(comp) X(lst) X(ox) X(mag)
 
 struct H1_mvg_T { 
 #undef USE_NEW

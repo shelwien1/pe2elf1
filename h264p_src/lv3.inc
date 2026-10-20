@@ -162,9 +162,10 @@ struct Lv3 {
   // (or without it the reference lists and the pictures' motion, refs), its
   // template searches, the intra proxy, sign prediction, the skip
   // prediction's pixels, deblocking (or the contexts see the pictures
-  // unfiltered), the CABAC states as predictions
+  // unfiltered), the CABAC states as predictions, the motion vectors as
+  // the decoder has them (mvp; the decoder and refs need them)
   static const bool refs = true, recon = false, search = false, proxy = false, signpred = false, skippx = false, deblock = false,
-                    cabpred = true;
+                    cabpred = true, mvp = true;
   typedef C3_nal nal;
   typedef C3_hdr hdr;
   typedef C3_skp skp;
