@@ -234,8 +234,9 @@ std::vector<uint8_t> escape(const std::vector<uint8_t>& r) {
 bool parsed_type(int type) { return (type >= 5 && type <= 12) || type == 1; }
 
 // Parses the RBSP of a NAL unit, handing the values to a channel; parameter
-// sets are stored in the context. Throws ParseError.
-void read_nal(int type, int ref_idc, const std::vector<uint8_t>& rbsp, Context& ctx, Chan& ch) {
+// sets are stored in the context. Returns x264's padding bit for the end of
+// CABAC slice data, else -1, as write_syntax(). Throws ParseError.
+int read_nal(int type, int ref_idc, const std::vector<uint8_t>& rbsp, Context& ctx, Chan& ch) {
   BitReader br(rbsp.data(), rbsp.size());
   Syn s(&br, &ch);
   switch (type) {
@@ -272,11 +273,12 @@ void read_nal(int type, int ref_idc, const std::vector<uint8_t>& rbsp, Context& 
       code_slice_header(s, h, ctx.ps);
       h.pad = ctx.pad.bit(h.first_mb == 0);
       read_slice_data(h, ctx.mbs, br, ch);
-      break;
+      return h.pps->entropy_coding_mode_flag ? h.pad : -1;
     }
     default:
       throw ParseError("unsupported NAL unit type");
   }
+  return -1;
 }
 
 // Writes the syntax of a NAL unit with the values of a channel, up to and
@@ -501,13 +503,31 @@ bool convert_nal(int type, int ref_idc, const uint8_t* p, size_t n, Context& ctx
   }
 }
 
+// The first nbits bits of an RBSP, as written.
+BitWriter rbsp_bits(const std::vector<uint8_t>& rbsp, size_t nbits) {
+  BitWriter bw;
+  bw.buf_.assign(rbsp.begin(), rbsp.begin() + nbits / 8);
+  if (nbits & 7) bw.cur_ = (uint8_t)(rbsp[nbits / 8] >> (8 - (nbits & 7)));
+  bw.n_ = nbits;
+  return bw;
+}
+
 // The compressor's dry run of the payload of a NAL unit: parses it into the
 // log, writes it back from the log and finds how it ends. False when it has
 // to be stored verbatim. obs: see find_trailer.
+//
+// With rec, a slice is not written back: it would come out as it is up to
+// its stop bit, unless the walk writes other values, bits or bins than it
+// reads, which the model pass checks (Chan::rec, checked_bits) when this
+// returns true with checked set; rbsp is then the RBSP. With CABAC, the
+// bins of the parse go to rec, and each run of CABAC data must end in a 1
+// bit (as written, the stop bit; its bits are then what an encoder writes
+// for the bins).
 bool dry_run(int type, int ref_idc, const uint8_t* p, size_t n, Context& ctx, LogChan& log, Trailer& t,
-             std::string& why, int& obs) {
-  std::vector<uint8_t> rbsp = unescape(p, n);
+             std::string& why, int& obs, BinRec* rec, bool& checked, std::vector<uint8_t>& rbsp) {
+  rbsp = unescape(p, n);
   obs = -1;
+  checked = false;
   if (!parsed_type(type)) {
     why = "NAL unit type " + std::to_string(type);
     return false;
@@ -518,11 +538,22 @@ bool dry_run(int type, int ref_idc, const uint8_t* p, size_t n, Context& ctx, Lo
     return false;
   }
   log.clear();
+  if (rec) rec->clear();
+  log.rec = rec;
+  int pad;
   try {
-    read_nal(type, ref_idc, rbsp, ctx, log);
+    pad = read_nal(type, ref_idc, rbsp, ctx, log);
   } catch (const ParseError& e) {
     why = e.what();
     return false;
+  }
+  log.rec = nullptr;
+  if (rec && rec->slice && rec->stops) {
+    BitWriter bw = rbsp_bits(rbsp, rec->end);
+    if (find_trailer(bw, pad, rbsp, t, why, obs)) {
+      checked = true;
+      return true;
+    }
   }
   try {
     log.rewind();
@@ -534,6 +565,25 @@ bool dry_run(int type, int ref_idc, const uint8_t* p, size_t n, Context& ctx, Lo
     why = std::string("re-encoding failed: ") + e.what();
     return false;
   }
+}
+
+// The model pass of a NAL unit that dry_run() did not write back (rec):
+// whether what it wrote (bw) is the RBSP up to its stop bit. Without its
+// CABAC bins (nobins), it wrote the bits outside the runs of CABAC data, and
+// checked the bins against those recorded.
+bool checked_bits(const BitWriter& bw, bool nobins, const BinRec& rec, const std::vector<uint8_t>& rbsp) {
+  if (rec.bad || !rec.slice || (rec.segs.size() & 1)) return false;
+  if (!nobins || rec.segs.empty()) {
+    BitWriter r = rbsp_bits(rbsp, rec.end);
+    return bw.n_ == r.n_ && bw.cur_ == r.cur_ && bw.buf_ == r.buf_;
+  }
+  size_t k = 0, from = 0;
+  for (size_t i = 0; i < rec.segs.size(); i += 2) {
+    for (size_t b = from; b < rec.segs[i]; b++, k++)
+      if (k >= bw.pos() || bw.at(k) != get_bit(rbsp, b)) return false;
+    from = rec.segs[i + 1];
+  }
+  return k == bw.pos();
 }
 
 // Splits an Annex B byte stream into NAL units while reading it.
@@ -889,8 +939,19 @@ void cm_report(u64 in_bytes, u64 out_bytes, u64 tables) {
 // whether it is stored verbatim (a type the walk knows); then its syntax
 // through the model and the trailer, or its length and bytes. At the end,
 // the zero bytes after the last NAL unit and the CRC-32 of the stream.
+//
+// check: the dry runs leave the CABAC slices they can to the model pass to
+// check (dry_run); if one of them does not come out as it is, the model
+// has coded it, and compress_run() returns kRestart.
+const int kRestart = -1;
+
+// (thrown by the model pass of a NAL unit that does not come out as it is)
+struct Restart {
+  long nal;
+};
+
 template <class LV>
-int compress_lv(const char* in_name, const char* out_name, const Options& opt) {
+int compress_run(const char* in_name, const char* out_name, const Options& opt, bool check) {
   FILE* fi = strcmp(in_name, "-") ? fopen(in_name, "rb") : stdin;
   if (!fi) {
     fprintf(stderr, "h264p: cannot open %s: %s\n", in_name, strerror(errno));
@@ -905,6 +966,10 @@ int compress_lv(const char* in_name, const char* out_name, const Options& opt) {
   Model<0, LV>& m = *mp;
   auto& rc = tc_rc<0>::rc;
   Stats st;
+  // (all of it again after kRestart)
+  memset(tc_bits, 0, sizeof tc_bits);
+  memset(tc_syms, 0, sizeof tc_syms);
+  rc.buf.clear();
   try {
     m.init();
     tc_verbose = opt.verbose;
@@ -928,6 +993,9 @@ int compress_lv(const char* in_name, const char* out_name, const Options& opt) {
       Trailer t;
       std::string why;
       LogChan log;
+      BinRec rec;
+      bool checked = false;  // the model pass checks it (dry_run)
+      std::vector<uint8_t> rbsp;
     };
     Context cf, cb;
     PadDetector det;
@@ -957,7 +1025,8 @@ int compress_lv(const char* in_name, const char* out_name, const Options& opt) {
       if (it.slice) det.slice(it.newpic);
       if (it.type == 7 || (it.type == 6 && is_x264_sei(payload, len))) det.restart();
       int obs;
-      it.ok = dry_run(it.type, it.ref_idc, payload, len, cf, it.log, it.t, it.why, obs);
+      BinRec* rec = check ? &it.rec : nullptr;
+      it.ok = dry_run(it.type, it.ref_idc, payload, len, cf, it.log, it.t, it.why, obs, rec, it.checked, it.rbsp);
       if (it.ok && obs >= 0 && det.observe(obs)) {
         // once more, with padding bits that predict this one
         it.padchg = true;
@@ -966,7 +1035,7 @@ int compress_lv(const char* in_name, const char* out_name, const Options& opt) {
           cf.pad.on = false;
         else
           cf.pad.set(frame);
-        it.ok = dry_run(it.type, it.ref_idc, payload, len, cf, it.log, it.t, it.why, obs);
+        it.ok = dry_run(it.type, it.ref_idc, payload, len, cf, it.log, it.t, it.why, obs, rec, it.checked, it.rbsp);
       }
       it.padon = cf.pad.on, it.padframe = cf.pad.frame;
       if (it.slice) cf.pad.next_slice(it.newpic);
@@ -1013,8 +1082,20 @@ int compress_lv(const char* in_name, const char* out_name, const Options& opt) {
         ModelChan<0, LV> ch(m, &it.log);
         m.nal_begin(type, ref_idc);
         BitWriter bw;
-        write_syntax(type, ref_idc, cb, ch, bw);
-        if (!it.log.at_end()) cm_fail("internal: values left over");
+        if (it.checked) {
+          // (whatever fails, the NAL unit would not come out as it is)
+          ch.rec = &it.rec;
+          bool same = false;
+          try {
+            write_syntax(type, ref_idc, cb, ch, bw);
+            same = it.log.at_end() && checked_bits(bw, ch.nobins, it.rec, it.rbsp);
+          } catch (const std::exception&) {
+          }
+          if (!same) throw Restart{st.nals - 1};
+        } else {
+          write_syntax(type, ref_idc, cb, ch, bw);
+          if (!it.log.at_end()) cm_fail("internal: values left over");
+        }
         m.nal(F_TRAIL, type, t.irregular);
         if (t.irregular) {
           m.nal(F_DROP, 0, t.drop);
@@ -1066,6 +1147,12 @@ int compress_lv(const char* in_name, const char* out_name, const Options& opt) {
   } catch (const std::exception& e) {  // CmError, or no memory for the model
     fprintf(stderr, "h264p: %s: %s\n", in_name, e.what());
     return fail_out(fo, out_name);
+  } catch (const Restart& r) {
+    if (opt.verbose)
+      fprintf(stderr, "h264p: NAL unit %ld would not come out as it is; compressing again, writing back each\n", r.nal);
+    if (fi != stdin) fclose(fi);
+    fclose(fo);
+    return kRestart;
   }
   if (ferror(fo) || (fo != stdout && fclose(fo))) {
     fprintf(stderr, "h264p: write error\n");
@@ -1079,6 +1166,18 @@ int compress_lv(const char* in_name, const char* out_name, const Options& opt) {
     cm_report(in_bytes, out_bytes, m.table_bytes());
   }
   return 0;
+}
+
+// (the model pass checks the dry runs where the input can be read again and
+// the output written again: regular files)
+template <class LV>
+int compress_lv(const char* in_name, const char* out_name, const Options& opt) {
+  struct stat si, so;
+  bool check = strcmp(in_name, "-") && strcmp(out_name, "-") && stat(in_name, &si) == 0 && S_ISREG(si.st_mode) &&
+               (stat(out_name, &so) != 0 || S_ISREG(so.st_mode));
+  int r = compress_run<LV>(in_name, out_name, opt, check);
+  if (r == kRestart) r = compress_run<LV>(in_name, out_name, opt, false);
+  return r;
 }
 
 // a count coded in a compressed stream

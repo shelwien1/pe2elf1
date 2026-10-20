@@ -173,7 +173,7 @@ std::vector<uint8_t> slice_group_map(const SliceHeader& h, int width, int size) 
 struct SliceCoder {
   SliceCoder(const SliceHeader& h, MbStore& store, BitReader* br, BitWriter* bw, Chan& ch)
       : W(bw != nullptr), nobins_(W && ch.nobins), h_(h), sps_(*h.sps), pps_(*h.pps), store_(store), br_(br), bw_(bw),
-        ch_(&ch) {}
+        ch_(&ch), rec_(W ? nullptr : ch.rec) {}
 
   void run() {
     stype_ = h_.type();
@@ -203,13 +203,17 @@ struct SliceCoder {
       int qp = pps_.pic_init_qp + h_.slice_qp_delta;
       cabac_init_contexts(ctx_, qp, stype_ == kI || stype_ == kSI ? 0 : h_.cabac_init_idc + 1);
       if (!W)
-        dec_.init(br_);
+        dec_init();
       else if (!nobins_)
         enc_.init(bw_);
+      else if (ch_->rec)
+        chk_ = ch_->rec->bins.data();
     }
     ch_->slice_begin(*this);
     loop();
     ch_->slice_end();
+    if (cabac_ && rec_) rec_->bins.push_back(2);
+    if (chk_ && *chk_ != 2) ch_->rec->bad = true;
     if (!cabac_) {
       if (!W) {
         // the rbsp_stop_one_bit
@@ -218,6 +222,7 @@ struct SliceCoder {
         bw_->bit(1);
       }
     }
+    if (rec_) rec_->slice = true, rec_->end = br_->pos();
   }
 
   // --- errors
@@ -262,19 +267,51 @@ struct SliceCoder {
 
   // --- CABAC primitives
   int bin(int ctx, int v) {
-    if (!W) return dec_.decision(ctx_[ctx]);
-    if (!nobins_) enc_.decision(ctx_[ctx], v);
+    if (!W) return got(dec_.decision(ctx_[ctx]));
+    if (!nobins_)
+      enc_.decision(ctx_[ctx], v);
+    else if (chk_)
+      check(v);
     return v;
   }
   int bypass(int v) {
-    if (!W) return dec_.bypass();
-    if (!nobins_) enc_.bypass(v);
+    if (!W) return got(dec_.bypass());
+    if (!nobins_)
+      enc_.bypass(v);
+    else if (chk_)
+      check(v);
     return v;
   }
   int term(int v) {
-    if (!W) return dec_.terminate();
-    if (!nobins_) enc_.terminate(v);
+    if (!W) {
+      int b = got(dec_.terminate());
+      if (b && rec_) {  // the end of a run of CABAC data: its last bit
+        size_t e = br_->pos();
+        rec_->segs.push_back(e);
+        if (!(br_->data_[(e - 1) >> 3] >> (7 - ((e - 1) & 7)) & 1)) rec_->stops = false;
+      }
+      return b;
+    }
+    if (!nobins_)
+      enc_.terminate(v);
+    else if (chk_)
+      check(v);
     return v;
+  }
+  void dec_init() {
+    if (rec_) rec_->segs.push_back(br_->pos());
+    dec_.init(br_);
+  }
+  int got(int b) {
+    if (rec_) rec_->bins.push_back((uint8_t)b);
+    return b;
+  }
+  // (a bin that differs stays the next one, failing all that follow)
+  void check(int v) {
+    if (*chk_ == v)
+      chk_++;
+    else
+      ch_->rec->bad = true;
   }
 
   int exp_golomb_bypass(int k, int v) {
@@ -620,18 +657,18 @@ struct SliceCoder {
     int nc = chroma_ ? 2 * (16 / (chroma_ == 3 ? 1 : 2)) * (16 / (chroma_ == 1 ? 2 : 1)) : 0;
     int n = 256 + nc;
     // the alignment bits relative to x264's, whose last one is its padding bit
+    // (writing without the bins, nb comes from the channel)
     int nb = (8 - (int)((W ? bw_->pos() : br_->pos()) & 7)) & 7;
-    int pad = cabac_ && nb ? h_.pad : 0;
     int align = 0;
     pcm_.resize(n);
     if (!W) {
-      align = (int)br_->u(nb) ^ pad;
+      align = (int)br_->u(nb) ^ (cabac_ && nb ? h_.pad : 0);
       for (int i = 0; i < n; i++) pcm_[i] = (int)br_->u(i < 256 ? sps_.bit_depth_luma : sps_.bit_depth_chroma);
       ch_->pcm(align, nb, pcm_.data(), n);
     } else {
       ch_->pcm(align, nb, pcm_.data(), n);
       if (align < 0 || align >= (1 << nb)) fail("bad pcm alignment bits");
-      bw_->put((uint32_t)(align ^ pad), nb);
+      bw_->put((uint32_t)(align ^ (cabac_ && nb ? h_.pad : 0)), nb);
       for (int i = 0; i < n; i++) {
         int depth = i < 256 ? sps_.bit_depth_luma : sps_.bit_depth_chroma;
         if (pcm_[i] < 0 || pcm_[i] >= (1 << depth)) fail("PCM sample out of range");
@@ -641,7 +678,7 @@ struct SliceCoder {
     // (the walk without its bins writes no CABAC data, nor whole bytes)
     if (cabac_) {
       if (!W)
-        dec_.init(br_);
+        dec_init();
       else if (!nobins_)
         enc_.init(bw_);
     }
@@ -1204,6 +1241,8 @@ struct SliceCoder {
   BitReader* br_;
   BitWriter* bw_;
   Chan* ch_;
+  BinRec* rec_;                    // parsing: the bins recorded (Chan::rec)
+  const uint8_t* chk_ = nullptr;   // writing without the bins: the next one recorded
 
   bool cabac_ = false, field_ = false, mbaff_ = false;
   int stype_ = 0, chroma_ = 1, ch_h_ = 2, ch_blocks_ = 4;

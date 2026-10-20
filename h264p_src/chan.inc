@@ -16,6 +16,27 @@ namespace h264p {
 
 struct SliceCoder;
 
+// What the compressor's parse of a slice records, for its model pass to
+// check in place of writing the slice back from the values (h264p.cpp,
+// dry_run): where the slice data ends, and with CABAC, the bins as the walk
+// reads them and where the CABAC data is.
+struct BinRec {
+  bool slice = false;         // the walk parsed slice data, up to `end`
+  size_t end = 0;             // the bit after its rbsp_stop_one_bit
+  std::vector<uint8_t> bins;  // 0 or 1 each, then a 2
+  std::vector<size_t> segs;   // each run of CABAC data: its first bit and the one after it, in the RBSP
+  bool stops = true;          // the last bit of each run is 1 (so the run is what an encoder writes)
+  bool bad = false;           // checking: the walk wrote another bin, or fewer
+  void clear() {
+    slice = false;
+    end = 0;
+    bins.clear();
+    segs.clear();
+    stops = true;
+    bad = false;
+  }
+};
+
 struct Chan {
   explicit Chan(bool w) : W(w) {}
   virtual ~Chan() {}
@@ -25,6 +46,9 @@ struct Chan {
   // that reads no CABAC states), and the bits it writes are not the
   // stream's
   bool nobins = false;
+  // the bins: parsing, recorded here; writing them not (nobins), checked
+  // against those recorded
+  BinRec* rec = nullptr;
 
   // --- header syntax: groups of values under the name of a TSV row
   virtual void hbegin(const char* name) = 0;
