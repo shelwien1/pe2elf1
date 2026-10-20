@@ -18,64 +18,62 @@ void H7_qpg_make( const H_qpg_v & D, tcx & X ) {
   (void) as;  (void) cs;  (void) bs;  (void) ls;  (void) rs;  (void) mag;  (void) cls;  (void) st;  (void) ss;  (void) xe;  (void) lq;  (void) bk;
 
   a = 0;
-  a = a*10 + H7_qpg_a_as[__min(9,__max(0,as-(1-1)))];
-  a = a*8 + H7_qpg_a_mag[__min(7,__max(0,mag-(1-1)))];
-  a = a*2 + ((ss>5+(1-1)));
-  a = a*19 + H7_qpg_a_xe[__min(18,__max(0,xe-(1-1)))];
-  a = a*10 + H7_qpg_a_lq[__min(9,__max(0,lq-(1-1)))];
+  a = a*2 + ((mag>4+(1-1)));
+  a = a*3 + ((ss>5+(1-1))+(ss>7+(1-1)));
+  a = a*8 + H7_qpg_a_xe[__min(18,__max(0,xe-(1-1)))];
+  a = a*6 + H7_qpg_a_lq[__min(9,__max(0,lq-(1-1)))];
 
   b = 0;
-  b = b*10 + H7_qpg_b_as[__min(9,__max(0,as-(1-1)))];
+  b = b*4 + H7_qpg_b_as[__min(9,__max(0,as-(1-1)))];
+  b = b*2 + ((ls>0+(1-1)));
 
   c = 0;
-  c = c*10 + H7_qpg_c_as[__min(9,__max(0,as-(1-1)))];
-  c = c*10 + H7_qpg_c_cs[__min(9,__max(0,cs-(1-1)))];
+  c = c*4 + H7_qpg_c_as[__min(9,__max(0,as-(1-1)))];
+  c = c*6 + H7_qpg_c_cs[__min(9,__max(0,cs-(1-1)))];
 
   d = 0;
-  d = d*10 + H7_qpg_d_bs[__min(9,__max(0,bs-(1-1)))];
-  d = d*8 + H7_qpg_d_mag[__min(7,__max(0,mag-(1-1)))];
-  d = d*10 + H7_qpg_d_bk[__min(9,__max(0,bk-(1-1)))];
+  d = d*7 + H7_qpg_d_bs[__min(9,__max(0,bs-(1-1)))];
+  d = d*4 + H7_qpg_d_mag[__min(7,__max(0,mag-(1-1)))];
+  d = d*2 + ((bk>8+(1-1)));
 
   e = 0;
-  e = e*3 + ((cs>5+(1-1))+(cs>8+(1-1)));
-  e = e*4 + H7_qpg_e_rs[__min(3,__max(0,rs-(1-1)))];
-  e = e*10 + H7_qpg_e_ss[__min(9,__max(0,ss-(1-1)))];
+  e = e*4 + H7_qpg_e_cs[__min(9,__max(0,cs-(1-1)))];
+  e = e*2 + ((rs>2+(1-1)));
+  e = e*7 + H7_qpg_e_ss[__min(9,__max(0,ss-(1-1)))];
 
   h = 0;
-  h = h*10 + H7_qpg_h_as[__min(9,__max(0,as-(1-1)))];
+  h = h*4 + H7_qpg_h_as[__min(9,__max(0,as-(1-1)))];
   h = h*4 + H7_qpg_h_rs[__min(3,__max(0,rs-(1-1)))];
   h = h*3 + ((ls>0+(1-1))+(ls>1+(1-1)));
 
   i = 0;
-  i = i*10 + H7_qpg_i_as[__min(9,__max(0,as-(1-1)))];
-  i = i*10 + H7_qpg_i_cs[__min(9,__max(0,cs-(1-1)))];
-  i = i*10 + H7_qpg_i_bs[__min(9,__max(0,bs-(1-1)))];
+  i = i*5 + H7_qpg_i_as[__min(9,__max(0,as-(1-1)))];
+  i = i*6 + H7_qpg_i_cs[__min(9,__max(0,cs-(1-1)))];
+  i = i*8 + H7_qpg_i_bs[__min(9,__max(0,bs-(1-1)))];
 
   j = 0;
-  j = j*9 + H7_qpg_j_cls[__min(8,__max(0,cls-(1-1)))];
-  j = j*10 + H7_qpg_j_st[__min(9,__max(0,st-(1-1)))];
-  j = j*3 + ((ls>0+(1-1))+(ls>1+(1-1)));
+  j = j*6 + H7_qpg_j_cls[__min(8,__max(0,cls-(1-1)))];
+  j = j*3 + ((st>1+(1-1))+(st>2+(1-1)));
 
   k = 0;
-  k = k*8 + H7_qpg_k_mag[__min(7,__max(0,mag-(1-1)))];
-  k = k*10 + H7_qpg_k_as[__min(9,__max(0,as-(1-1)))];
-  k = k*9 + H7_qpg_k_cls[__min(8,__max(0,cls-(1-1)))];
+  k = k*3 + ((mag>1+(1-1))+(mag>2+(1-1)));
+  k = k*6 + H7_qpg_k_as[__min(9,__max(0,as-(1-1)))];
+  k = k*3 + ((cls>5+(1-1))+(cls>6+(1-1)));
 
   l = 0;
-  l = l*10 + H7_qpg_l_cs[__min(9,__max(0,cs-(1-1)))];
-  l = l*10 + H7_qpg_l_bs[__min(9,__max(0,bs-(1-1)))];
-  l = l*2 + ((ls>0+(1-1)));
+  l = l*7 + H7_qpg_l_cs[__min(9,__max(0,cs-(1-1)))];
+  l = l*6 + H7_qpg_l_bs[__min(9,__max(0,bs-(1-1)))];
+  l = l*2 + ((ls>1+(1-1)));
 
   s = 0;
-  s = s*10 + H7_qpg_s_as[__min(9,__max(0,as-(1-1)))];
-  s = s*8 + H7_qpg_s_mag[__min(7,__max(0,mag-(1-1)))];
+  s = s*7 + H7_qpg_s_as[__min(9,__max(0,as-(1-1)))];
+  s = s*4 + H7_qpg_s_mag[__min(7,__max(0,mag-(1-1)))];
 
   m = 0;
-  m = m*10 + H7_qpg_m_as[__min(9,__max(0,as-(1-1)))];
 
   w = 0;
-  w = w*10 + H7_qpg_w_as[__min(9,__max(0,as-(1-1)))];
-  w = w*10 + H7_qpg_w_cs[__min(9,__max(0,cs-(1-1)))];
+  w = w*3 + ((as>4+(1-1))+(as>5+(1-1)));
+  w = w*6 + H7_qpg_w_cs[__min(9,__max(0,cs-(1-1)))];
 
   t = 0;
 

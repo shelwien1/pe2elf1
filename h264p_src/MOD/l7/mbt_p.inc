@@ -18,76 +18,69 @@ void H7_mbt_make( const H_mbt_v & D, tcx & X ) {
   (void) st;  (void) ca;  (void) cb;  (void) cc;  (void) nsk;  (void) en;  (void) td;  (void) sm;  (void) tm;  (void) tb;  (void) dh;  (void) bd;  (void) qc;  (void) im;  (void) ig;  (void) c1;  (void) tx;
 
   a = 0;
-  a = a*2 + ((st>3+(1-1)));
-  a = a*4 + H7_mbt_a_ca[__min(8,__max(0,ca-(1-1)))];
-  a = a*4 + H7_mbt_a_cb[__min(8,__max(0,cb-(1-1)))];
-  a = a*15 + H7_mbt_a_en[__min(14,__max(0,en-(1-1)))];
+  a = a*2 + ((st>4+(1-1)));
+  a = a*8 + H7_mbt_a_ca[__min(8,__max(0,ca-(1-1)))];
+  a = a*7 + H7_mbt_a_cb[__min(8,__max(0,cb-(1-1)))];
+  a = a*6 + H7_mbt_a_en[__min(14,__max(0,en-(1-1)))];
 
   b = 0;
-  b = b*10 + H7_mbt_b_st[__min(9,__max(0,st-(1-1)))];
-  b = b*9 + H7_mbt_b_cc[__min(8,__max(0,cc-(1-1)))];
-  b = b*17 + H7_mbt_b_td[__min(16,__max(0,td-(1-1)))];
-  b = b*10 + H7_mbt_b_c1[__min(9,__max(0,c1-(1-1)))];
+  b = b*3 + ((st>2+(1-1))+(st>4+(1-1)));
+  b = b*8 + H7_mbt_b_cc[__min(8,__max(0,cc-(1-1)))];
+  b = b*4 + H7_mbt_b_td[__min(16,__max(0,td-(1-1)))];
+  b = b*5 + H7_mbt_b_c1[__min(9,__max(0,c1-(1-1)))];
 
   c = 0;
-  c = c*6 + H7_mbt_c_ca[__min(8,__max(0,ca-(1-1)))];
-  c = c*9 + H7_mbt_c_cc[__min(8,__max(0,cc-(1-1)))];
-  c = c*5 + H7_mbt_c_im[__min(4,__max(0,im-(1-1)))];
-  c = c*13 + H7_mbt_c_ig[__min(12,__max(0,ig-(1-1)))];
+  c = c*2 + ((ca>0+(1-1)));
+  c = c*4 + H7_mbt_c_im[__min(4,__max(0,im-(1-1)))];
+  c = c*4 + H7_mbt_c_ig[__min(12,__max(0,ig-(1-1)))];
 
   d = 0;
-  d = d*10 + H7_mbt_d_st[__min(9,__max(0,st-(1-1)))];
-  d = d*17 + H7_mbt_d_sm[__min(16,__max(0,sm-(1-1)))];
-  d = d*17 + H7_mbt_d_tm[__min(16,__max(0,tm-(1-1)))];
+  d = d*2 + ((st>1+(1-1)));
+  d = d*7 + H7_mbt_d_sm[__min(16,__max(0,sm-(1-1)))];
+  d = d*9 + H7_mbt_d_tm[__min(16,__max(0,tm-(1-1)))];
 
   e = 0;
-  e = e*10 + H7_mbt_e_st[__min(9,__max(0,st-(1-1)))];
-  e = e*9 + H7_mbt_e_ca[__min(8,__max(0,ca-(1-1)))];
+  e = e*2 + ((st>1+(1-1)));
+  e = e*5 + H7_mbt_e_ca[__min(8,__max(0,ca-(1-1)))];
   e = e*2 + ((td>8+(1-1)));
-  e = e*7 + H7_mbt_e_sm[__min(16,__max(0,sm-(1-1)))];
-  e = e*15 + H7_mbt_e_tx[__min(14,__max(0,tx-(1-1)))];
+  e = e*8 + H7_mbt_e_sm[__min(16,__max(0,sm-(1-1)))];
+  e = e*7 + H7_mbt_e_tx[__min(14,__max(0,tx-(1-1)))];
 
   h = 0;
   h = h*2 + ((st>1+(1-1)));
   h = h*10 + H7_mbt_h_dh[__min(9,__max(0,dh-(1-1)))];
-  h = h*2 + ((nsk>3+(1-1)));
-  h = h*17 + H7_mbt_h_bd[__min(16,__max(0,bd-(1-1)))];
+  h = h*6 + H7_mbt_h_bd[__min(16,__max(0,bd-(1-1)))];
 
   i = 0;
-  i = i*10 + H7_mbt_i_st[__min(9,__max(0,st-(1-1)))];
+  i = i*4 + H7_mbt_i_st[__min(9,__max(0,st-(1-1)))];
   i = i*6 + H7_mbt_i_en[__min(14,__max(0,en-(1-1)))];
-  i = i*9 + H7_mbt_i_ca[__min(8,__max(0,ca-(1-1)))];
 
   j = 0;
-  j = j*10 + H7_mbt_j_st[__min(9,__max(0,st-(1-1)))];
-  j = j*17 + H7_mbt_j_sm[__min(16,__max(0,sm-(1-1)))];
+  j = j*3 + ((st>1+(1-1))+(st>2+(1-1)));
+  j = j*9 + H7_mbt_j_sm[__min(16,__max(0,sm-(1-1)))];
   j = j*10 + H7_mbt_j_dh[__min(9,__max(0,dh-(1-1)))];
-  j = j*9 + H7_mbt_j_cb[__min(8,__max(0,cb-(1-1)))];
+  j = j*7 + H7_mbt_j_cb[__min(8,__max(0,cb-(1-1)))];
 
   k = 0;
-  k = k*10 + H7_mbt_k_st[__min(9,__max(0,st-(1-1)))];
-  k = k*6 + H7_mbt_k_tm[__min(16,__max(0,tm-(1-1)))];
-  k = k*5 + H7_mbt_k_nsk[__min(4,__max(0,nsk-(1-1)))];
-  k = k*9 + H7_mbt_k_cc[__min(8,__max(0,cc-(1-1)))];
+  k = k*9 + H7_mbt_k_tm[__min(16,__max(0,tm-(1-1)))];
+  k = k*3 + ((nsk>0+(1-1))+(nsk>1+(1-1)));
+  k = k*6 + H7_mbt_k_cc[__min(8,__max(0,cc-(1-1)))];
 
   l = 0;
-  l = l*10 + H7_mbt_l_st[__min(9,__max(0,st-(1-1)))];
-  l = l*3 + ((bd>0+(1-1))+(bd>1+(1-1)));
-  l = l*9 + H7_mbt_l_ca[__min(8,__max(0,ca-(1-1)))];
-  l = l*9 + H7_mbt_l_cb[__min(8,__max(0,cb-(1-1)))];
+  l = l*9 + H7_mbt_l_bd[__min(16,__max(0,bd-(1-1)))];
+  l = l*5 + H7_mbt_l_ca[__min(8,__max(0,ca-(1-1)))];
+  l = l*7 + H7_mbt_l_cb[__min(8,__max(0,cb-(1-1)))];
 
   s = 0;
-  s = s*10 + H7_mbt_s_st[__min(9,__max(0,st-(1-1)))];
-  s = s*10 + H7_mbt_s_dh[__min(9,__max(0,dh-(1-1)))];
+  s = s*4 + H7_mbt_s_dh[__min(9,__max(0,dh-(1-1)))];
 
   m = 0;
-  m = m*10 + H7_mbt_m_st[__min(9,__max(0,st-(1-1)))];
-  m = m*17 + H7_mbt_m_bd[__min(16,__max(0,bd-(1-1)))];
+  m = m*3 + ((st>1+(1-1))+(st>2+(1-1)));
+  m = m*7 + H7_mbt_m_bd[__min(16,__max(0,bd-(1-1)))];
 
   w = 0;
-  w = w*10 + H7_mbt_w_st[__min(9,__max(0,st-(1-1)))];
-  w = w*17 + H7_mbt_w_sm[__min(16,__max(0,sm-(1-1)))];
-  w = w*17 + H7_mbt_w_tm[__min(16,__max(0,tm-(1-1)))];
+  w = w*9 + H7_mbt_w_sm[__min(16,__max(0,sm-(1-1)))];
+  w = w*5 + H7_mbt_w_tm[__min(16,__max(0,tm-(1-1)))];
 
   t = 0;
 

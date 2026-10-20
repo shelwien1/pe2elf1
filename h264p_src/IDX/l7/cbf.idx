@@ -28,125 +28,125 @@ Debug 1
 Const 0
 
 Index a
- a_cat: cat, 1!1111111111111
- a_na: na, 1!110100101
- a_nb: nb, 1!111111111
- a_intra: intra, 1!1
- a_ly: ly, 1!1111111111
+ a_cat: cat, 1!1100000000000
+ a_na: na, 1!000000011
+ a_nb: nb, 1!000101010
+ a_intra: intra, 1!0
+ a_ly: ly, 1!1101111010
 
 Index b
- b_cat: cat, 1!1111111111111
- b_np: np, 1!111
- b_pos: pos, 1!111
+ b_cat: cat, 1!1111100000000
+ b_np: np, 1!110
+ b_pos: pos, 1!011
  b_crcb: crcb, 1!11
- b_kn: kn, 1!1
- b_em: em, 1!1111111111111111
- b_dq: dq, 1!11111111
+ b_kn: kn, 1!0
+ b_em: em, 1!1000010101010000
+ b_dq: dq, 1!00101100
 
 Index c
- c_cat: cat, 1!1000000000000
- c_q6: q6, 1!11111111
+ c_cat: cat, 1!1111000000000
+ c_q6: q6, 1!00111000
  c_col: col, 1!11
  c_kn: kn, 1!1
- c_en: en, 1!10011000100010
- c_ch: ch, 1!111111111111111
+ c_en: en, 1!10000000100010
+ c_ch: ch, 1!111110111010000
 
 Index d
- d_cat: cat, 1!1111111111111
- d_nc: nc, 1!11111
- d_md: md, 1!0110000000000100100
+ d_cat: cat, 1!1011000000000
+ d_nc: nc, 1!00001
+ d_md: md, 1!1110000000000111101
  d_kn: kn, 1!1
- d_pg: pg, 1!1111111111111111
+ d_pg: pg, 1!0000010010010000
 
 Index e
- e_cat: cat, 1!1111111111111
- e_pz: pz, 1!1011100000000000
- e_na: na, 1!111111111
- e_nb: nb, 1!111111111
- e_tn: tn, 1!1111111111
+ e_cat: cat, 1!1111000000000
+ e_pz: pz, 1!1110110100000000
+ e_na: na, 1!110000100
+ e_nb: nb, 1!110010000
+ e_tn: tn, 1!0001100001
 
 Index h
- h_cat: cat, 1!1111111111111
- h_pg: pg, 1!1111111111111111
- h_md: md, 1!1100000110110100100
- h_q6: q6, 1!11111111
- h_hv: hv, 1!1111111
+ h_cat: cat, 1!1011100000000
+ h_pg: pg, 1!0101001101100101
+ h_md: md, 1!1101100100110100110
+ h_q6: q6, 1!11111100
+ h_hv: hv, 1!0110010
 
 Index i
- i_cat: cat, 1!1111111111111
- i_pz: pz, 1!1111111111111111
- i_pq: pq, 1!100000000000100000000011
- i_np: np, 1!111
- i_ds: ds, 1!1111111
+ i_cat: cat, 1!1111100000000
+ i_pz: pz, 1!1111010010100001
+ i_pq: pq, 1!000000000100000000001010
+ i_np: np, 1!101
+ i_ds: ds, 1!1111100
 
 Index j
- j_cat: cat, 1!1111111111111
- j_em: em, 1!1111111111111111
- j_pg: pg, 1!1111111111111111
- j_na: na, 1!111111111
+ j_cat: cat, 1!1011000000000
+ j_em: em, 1!1011000010101001
+ j_pg: pg, 1!0110100101001010
+ j_na: na, 1!000100001
 
 Index k
- k_cat: cat, 1!1000000000000
- k_na: na, 1!111111111
+ k_cat: cat, 1!1000100000000
+ k_na: na, 1!000000000
  k_nb: nb, 1!000000000
- k_pz: pz, 1!1111111111111111
+ k_pz: pz, 1!1001101001000100
 
 Index l
- l_cat: cat, 1!1111111111111
- l_col: col, 1!01
+ l_cat: cat, 1!1111100000000
+ l_col: col, 1!00
  l_np: np, 1!000
- l_md: md, 1!1111111111111111111
+ l_md: md, 1!0000000000000000000
 
 Index s
- s_cat: cat, 1!1111111111111
- s_kn: kn, 1!1
- s_pq: pq, 1!011000011000100000001001
+ s_cat: cat, 1!0000000000000
+ s_kn: kn, 1!0
+ s_pq: pq, 1!000000000000000000000001
 
 Index m
  m_cat: cat, 1!1111000000000
  m_kn: kn, 1!1
 
 Index w
- w_cat: cat, 1!1000000000000
- w_nc: nc, 1!11011
- w_md: md, 1!0110000000000100100
+ w_cat: cat, 1!1011000000000
+ w_nc: nc, 1!11010
+ w_md: md, 1!0010000010000000100
  w_kn: kn, 1!1
 
 Index t
- t_cat: cat, 1!1111111111111
+ t_cat: cat, 1!1011100000000
 
 Index n
- n_cat: cat, 1!1111111111111
+ n_cat: cat, 1!1111100000000
 
 Index g
  g_cat: cat, 1!0
 
-Number rA, 1, 0!01000000
-Number rB, 1, 0!11111111
-Number rC, 1, 0!01000000
-Number rE, 1, 0!01000000
-Number rH, 1, 0!01000000
-Number rI, 1, 0!11110111
-Number rJ, 1, 0!11000111
-Number rK, 1, 0!01000000
-Number rL, 1, 0!01000000
-Number rD, 1, 0!11110010
-Number rT, 1, 0!00110111
-Number rG, 1, 0!01011010
+Number rA, 1, 0!11111111
+Number rB, 1, 0!11111101
+Number rC, 1, 0!11111111
+Number rE, 1, 0!11111101
+Number rH, 1, 0!11111110
+Number rI, 1, 0!11111110
+Number rJ, 1, 0!11111111
+Number rK, 1, 0!00000000
+Number rL, 1, 0!10111110
+Number rD, 1, 0!11111111
+Number rT, 1, 0!00010000
+Number rG, 1, 0!00000000
 Number lr, 1, 0!01100
-Number lrm, 1, 0!01100
-Number mbm, 1, 0!00000000
-Number mwA, 1, 0!00000000
-Number mwB, 1, 0!00000000
-Number mwC, 1, 0!00000000
-Number mwE, 1, 0!00010010
-Number mwH, 1, 0!00000000
-Number mwI, 1, 0!00100100
-Number mwJ, 1, 0!00000000
-Number mwK, 1, 0!00000000
-Number mwL, 1, 0!00000000
-Number mwD, 1, 0!11001000
-Number mwT, 1, 0!00001000
+Number lrm, 1, 0!11111
+Number mbm, 1, 0!00100000
+Number mwA, 1, 0!01000000
+Number mwB, 1, 0!00000001
+Number mwC, 1, 0!00100000
+Number mwE, 1, 0!00111111
+Number mwH, 1, 0!00000001
+Number mwI, 1, 0!00001001
+Number mwJ, 1, 0!00100010
+Number mwK, 1, 0!01111111
+Number mwL, 1, 0!00100000
+Number mwD, 1, 0!01000000
+Number mwT, 1, 0!00100000
 Number mwG, 1, 0!00000000
 Number mt, 1, 0!010
 Number mb, 1, 0!10000010

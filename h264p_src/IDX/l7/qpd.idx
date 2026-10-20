@@ -31,79 +31,79 @@ Debug 1
 Const 0
 
 Index a
- a_lnz: lnz, 1!1
- a_pc: pc, 1!1111
- a_cc: cc, 1!11
- a_cls: cls, 1!00000100
- a_sq: sq, 1!1111111111111
+ a_lnz: lnz, 1!0
+ a_pc: pc, 1!1100
+ a_cc: cc, 1!10
+ a_cls: cls, 1!00100100
+ a_sq: sq, 1!0101011011011
 
 Index b
- b_dc: dc, 1!11111111
- b_aq: aq, 1!1000000000000
- b_ae: ae, 1!1111111111111
- b_lq: lq, 1!1111111111111
+ b_dc: dc, 1!00000000
+ b_aq: aq, 1!1000001000000
+ b_ae: ae, 1!0101001110001
+ b_lq: lq, 1!1101110011011
 
 Index c
- c_lz: lz, 1!111111
- c_st: st, 1!111111111
- c_db: db, 1!11110110
- c_bc: bc, 1!1111111111111
+ c_lz: lz, 1!101100
+ c_st: st, 1!011000000
+ c_db: db, 1!11100110
+ c_bc: bc, 1!1101011100101
 
 Index d
- d_st: st, 1!111111111
- d_aq: aq, 1!1111111111111
- d_ac: ac, 1!1111111111111
+ d_st: st, 1!011000000
+ d_aq: aq, 1!0001010010101
+ d_ac: ac, 1!1100100110000
 
 Index e
  e_lnz: lnz, 1!0
- e_aq: aq, 1!1111111111111
- e_cls: cls, 1!11111111
- e_sq: sq, 1!1111111111111
- e_xe: xe, 1!100100010000001001
+ e_aq: aq, 1!1101011010101
+ e_cls: cls, 1!00000110
+ e_sq: sq, 1!0110100100000
+ e_xe: xe, 1!110001010000101001
 
 Index h
- h_ae: ae, 1!0000001000001
- h_dc: dc, 1!11111111
- h_pc: pc, 1!1111
+ h_ae: ae, 1!0100111010100
+ h_dc: dc, 1!11010110
+ h_pc: pc, 1!1001
 
 Index i
- i_aq: aq, 1!1111111111111
- i_ac: ac, 1!1111111111111
- i_cls: cls, 1!00000110
- i_td: td, 1!1001000001000000
+ i_aq: aq, 1!1010111101010
+ i_ac: ac, 1!1000100001001
+ i_cls: cls, 1!00100110
+ i_td: td, 1!0010001001001000
 
 Index j
- j_st: st, 1!111111111
- j_dc: dc, 1!11111111
- j_db: db, 1!11111111
+ j_st: st, 1!010100000
+ j_dc: dc, 1!01100100
+ j_db: db, 1!11100110
  j_lnz: lnz, 1!1
- j_td: td, 1!1010101010101010
- j_lq: lq, 1!1111111111111
+ j_td: td, 1!0110000001000010
+ j_lq: lq, 1!1000011101100
 
 Index k
- k_aq: aq, 1!1111111111111
- k_lnz: lnz, 1!1
- k_pc: pc, 1!1000
- k_kc: kc, 1!1111111111111
+ k_aq: aq, 1!1100100010010
+ k_lnz: lnz, 1!0
+ k_pc: pc, 1!1100
+ k_kc: kc, 1!1101111010101
 
 Index l
- l_ac: ac, 1!1111110101110
- l_db: db, 1!11111111
- l_st: st, 1!111111111
- l_cl: cl, 1!1111111111111
+ l_ac: ac, 1!1000000000111
+ l_db: db, 1!00000000
+ l_st: st, 1!000010000
+ l_cl: cl, 1!1111011111101
 
 Index s
  s_lnz: lnz, 1!0
- s_aq: aq, 1!1111111111111
+ s_aq: aq, 1!0000000000000
 
 Index m
  m_lnz: lnz, 1!1
- m_aq: aq, 1!0000000000000
+ m_aq: aq, 1!0010001000001
 
 Index w
- w_st: st, 1!111111111
- w_aq: aq, 1!1111111111111
- w_ac: ac, 1!1111111111111
+ w_st: st, 1!010010000
+ w_aq: aq, 1!0100010101000
+ w_ac: ac, 1!1000010000010
 
 Index t
  t_lnz: lnz, 1!0
@@ -112,38 +112,38 @@ Index n
  n_lnz: lnz, 1!0
 
 Index g
- g_lz: lz, 1!101101
- g_aq: aq, 1!1111111111111
+ g_lz: lz, 1!000000
+ g_aq: aq, 1!0000000000000
 
-Number rA, 1, 0!10000000
-Number rB, 1, 0!00010000
-Number rC, 1, 0!01000100
-Number rE, 1, 0!01000000
-Number rH, 1, 0!01000000
-Number rI, 1, 0!01000000
-Number rJ, 1, 0!01000000
-Number rK, 1, 0!01000000
-Number rL, 1, 0!01000000
-Number rD, 1, 0!11111111
-Number rT, 1, 0!00110111
-Number rG, 1, 0!01011010
-Number lr, 1, 0!01100
-Number lrm, 1, 0!11100
-Number mbm, 1, 0!00000000
-Number mwA, 1, 0!00000111
-Number mwB, 1, 0!00000000
-Number mwC, 1, 0!00000000
-Number mwE, 1, 0!00000000
-Number mwH, 1, 0!00000100
-Number mwI, 1, 0!00000000
-Number mwJ, 1, 0!00000000
-Number mwK, 1, 0!00000000
-Number mwL, 1, 0!00000000
-Number mwD, 1, 0!00010000
-Number mwT, 1, 0!00000000
+Number rA, 1, 0!11111011
+Number rB, 1, 0!11111011
+Number rC, 1, 0!11111101
+Number rE, 1, 0!11111110
+Number rH, 1, 0!11111100
+Number rI, 1, 0!00111011
+Number rJ, 1, 0!11110000
+Number rK, 1, 0!11111000
+Number rL, 1, 0!11000110
+Number rD, 1, 0!00000000
+Number rT, 1, 0!00010000
+Number rG, 1, 0!00000000
+Number lr, 1, 0!01111
+Number lrm, 1, 0!11111
+Number mbm, 1, 0!00100000
+Number mwA, 1, 0!00010010
+Number mwB, 1, 0!00001111
+Number mwC, 1, 0!00010000
+Number mwE, 1, 0!00000100
+Number mwH, 1, 0!00100000
+Number mwI, 1, 0!10000000
+Number mwJ, 1, 0!00010000
+Number mwK, 1, 0!00010000
+Number mwL, 1, 0!00011011
+Number mwD, 1, 0!11000110
+Number mwT, 1, 0!00000110
 Number mwG, 1, 0!00000000
-Number mt, 1, 0!110
-Number mb, 1, 0!00000101
+Number mt, 1, 0!010
+Number mb, 1, 0!00101111
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
 #  direct, one that does not is hashed into 2^h rows and contexts share

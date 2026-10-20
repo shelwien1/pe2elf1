@@ -17,78 +17,78 @@ Debug 1
 Const 0
 
 Index a
- a_st: st, 1!000100000
- a_ca: ca, 1!11100000
- a_cb: cb, 1!10000110
- a_en: en, 1!11111111111111
+ a_st: st, 1!000010000
+ a_ca: ca, 1!11111110
+ a_cb: cb, 1!11101110
+ a_en: en, 1!01010100100001
 
 Index b
- b_st: st, 1!111111111
- b_cc: cc, 1!11111111
+ b_st: st, 1!001010000
+ b_cc: cc, 1!11111110
  b_nsk: nsk, 1!0000
- b_td: td, 1!1111111111111111
- b_c1: c1, 1!111111111
+ b_td: td, 1!0100000000010001
+ b_c1: c1, 1!001010110
 
 Index c
  c_st: st, 1!000000000
- c_ca: ca, 1!10111100
- c_cc: cc, 1!11111111
- c_im: im, 1!1111
- c_ig: ig, 1!111111111111
+ c_ca: ca, 1!10000000
+ c_cc: cc, 1!00000000
+ c_im: im, 1!0111
+ c_ig: ig, 1!010000100010
 
 Index d
- d_st: st, 1!111111111
- d_sm: sm, 1!1111111111111111
- d_tm: tm, 1!1111111111111111
+ d_st: st, 1!010000000
+ d_sm: sm, 1!0000000001110111
+ d_tm: tm, 1!0000011011110110
 
 Index e
- e_st: st, 1!111111111
- e_ca: ca, 1!11111111
+ e_st: st, 1!010000000
+ e_ca: ca, 1!11000110
  e_td: td, 1!0000000010000000
- e_sm: sm, 1!1111110000000000
- e_tx: tx, 1!11111111111111
+ e_sm: sm, 1!1110110001010000
+ e_tx: tx, 1!01000010110101
 
 Index h
  h_st: st, 1!010000000
  h_dh: dh, 1!111111111
- h_nsk: nsk, 1!0001
- h_bd: bd, 1!1111111111111111
+ h_nsk: nsk, 1!0000
+ h_bd: bd, 1!1100110000100000
 
 Index i
- i_st: st, 1!111111111
- i_en: en, 1!01010011000100
- i_ca: ca, 1!11111111
+ i_st: st, 1!011100000
+ i_en: en, 1!11010001000100
+ i_ca: ca, 1!00000000
 
 Index j
- j_st: st, 1!111111111
- j_sm: sm, 1!1111111111111111
+ j_st: st, 1!011000000
+ j_sm: sm, 1!0111111001000001
  j_dh: dh, 1!111111111
- j_cb: cb, 1!11111111
+ j_cb: cb, 1!11110110
 
 Index k
- k_st: st, 1!111111111
- k_tm: tm, 1!1010110001000000
- k_nsk: nsk, 1!1111
- k_cc: cc, 1!11111111
+ k_st: st, 1!000000000
+ k_tm: tm, 1!0011110101100100
+ k_nsk: nsk, 1!1100
+ k_cc: cc, 1!00111110
 
 Index l
- l_st: st, 1!111111111
- l_bd: bd, 1!1100000000000000
- l_ca: ca, 1!11111111
- l_cb: cb, 1!11111111
+ l_st: st, 1!000000000
+ l_bd: bd, 1!1101000011100101
+ l_ca: ca, 1!11100010
+ l_cb: cb, 1!11110110
 
 Index s
- s_st: st, 1!111111111
- s_dh: dh, 1!111111111
+ s_st: st, 1!000000000
+ s_dh: dh, 1!000000111
 
 Index m
- m_st: st, 1!111111111
- m_bd: bd, 1!1111111111111111
+ m_st: st, 1!011000000
+ m_bd: bd, 1!1100110100010000
 
 Index w
- w_st: st, 1!111111111
- w_sm: sm, 1!1111111111111111
- w_tm: tm, 1!1111111111111111
+ w_st: st, 1!000000000
+ w_sm: sm, 1!1111110010001000
+ w_tm: tm, 1!0101000100010000
 
 Index t
  t_st: st, 1!0
@@ -99,35 +99,35 @@ Index n
 Index g
  g_st: st, 1!0
 
-Number rA, 1, 0!11101010
-Number rB, 1, 0!00000000
-Number rC, 1, 0!11111101
-Number rE, 1, 0!11110100
-Number rH, 1, 0!11100000
-Number rI, 1, 0!01000000
-Number rJ, 1, 0!11000100
-Number rK, 1, 0!01000000
-Number rL, 1, 0!01000000
-Number rD, 1, 0!11101111
-Number rT, 1, 0!00110111
-Number rG, 1, 0!01011010
-Number lr, 1, 0!01100
-Number lrm, 1, 0!01100
+Number rA, 1, 0!11111110
+Number rB, 1, 0!11111010
+Number rC, 1, 0!11111110
+Number rE, 1, 0!11111110
+Number rH, 1, 0!11000000
+Number rI, 1, 0!11111111
+Number rJ, 1, 0!11111110
+Number rK, 1, 0!11111011
+Number rL, 1, 0!11111111
+Number rD, 1, 0!00111001
+Number rT, 1, 0!00000000
+Number rG, 1, 0!00000000
+Number lr, 1, 0!01111
+Number lrm, 1, 0!00000
 Number mbm, 1, 0!00000000
 Number mwA, 1, 0!00010000
-Number mwB, 1, 0!00000001
-Number mwC, 1, 0!00100000
-Number mwE, 1, 0!00100000
-Number mwH, 1, 0!00000000
-Number mwI, 1, 0!00000000
-Number mwJ, 1, 0!00000000
-Number mwK, 1, 0!00000000
-Number mwL, 1, 0!00000000
-Number mwD, 1, 0!00010100
+Number mwB, 1, 0!00001111
+Number mwC, 1, 0!00010000
+Number mwE, 1, 0!00000000
+Number mwH, 1, 0!00001000
+Number mwI, 1, 0!00100000
+Number mwJ, 1, 0!00011001
+Number mwK, 1, 0!10000000
+Number mwL, 1, 0!00111110
+Number mwD, 1, 0!10000000
 Number mwT, 1, 0!00000000
 Number mwG, 1, 0!00000000
-Number mt, 1, 0!110
-Number mb, 1, 0!00010110
+Number mt, 1, 0!000
+Number mb, 1, 0!00011111
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
 #  direct, one that does not is hashed into 2^h rows and contexts share

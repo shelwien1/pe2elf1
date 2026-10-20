@@ -22,54 +22,54 @@ Const 0
 
 Index a
  a_comp: comp, 1!1
- a_mag: mag, 1!1111111
+ a_mag: mag, 1!0000000
 
 Index b
- b_zs: zs, 1!11111111
- b_mag: mag, 1!1111111
+ b_zs: zs, 1!00111111
+ b_mag: mag, 1!0001011
  b_comp: comp, 1!1
 
 Index c
- c_zs: zs, 1!11111111
+ c_zs: zs, 1!00110110
 
 Index d
- d_ds: ds, 1!111111111
- d_mag: mag, 1!1111111
+ d_ds: ds, 1!001111111
+ d_mag: mag, 1!0101001
 
 Index e
  e_sa: sa, 1!11
  e_sb: sb, 1!11
  e_comp: comp, 1!1
- e_ns: ns, 1!111111
+ e_ns: ns, 1!011110
 
 Index h
 
 Index i
- i_zs: zs, 1!11111111
- i_ds: ds, 1!111111111
+ i_zs: zs, 1!00000000
+ i_ds: ds, 1!001001001
 
 Index j
- j_comp: comp, 1!1
+ j_comp: comp, 1!0
  j_lst: lst, 1!1
- j_ox: ox, 1!111
- j_ns: ns, 1!111111
+ j_ox: ox, 1!011
+ j_ns: ns, 1!001100
 
 Index k
- k_mag: mag, 1!1111111
+ k_mag: mag, 1!0100010
  k_sa: sa, 1!11
 
 Index l
- l_zs: zs, 1!11111111
- l_ds: ds, 1!111111111
+ l_zs: zs, 1!00111111
+ l_ds: ds, 1!001111111
  l_sb: sb, 1!11
 
 Index s
- s_mag: mag, 1!1111111
+ s_mag: mag, 1!0100010
 
 Index m
 
 Index w
- w_zs: zs, 1!11111111
+ w_zs: zs, 1!00111111
 
 Index t
  t_comp: comp, 1!0
@@ -80,35 +80,35 @@ Index n
 Index g
  g_comp: comp, 1!0
 
-Number rA, 1, 0!11101011
-Number rB, 1, 0!11001101
-Number rC, 1, 0!00000011
-Number rE, 1, 0!01000000
-Number rH, 1, 0!01000000
-Number rI, 1, 0!01000000
-Number rJ, 1, 0!11100000
-Number rK, 1, 0!01000000
-Number rL, 1, 0!11101011
-Number rD, 1, 0!01101111
-Number rT, 1, 0!00110111
-Number rG, 1, 0!01011010
-Number lr, 1, 0!01100
-Number lrm, 1, 0!01100
+Number rA, 1, 0!10000000
+Number rB, 1, 0!00000000
+Number rC, 1, 0!01000000
+Number rE, 1, 0!11111101
+Number rH, 1, 0!01000001
+Number rI, 1, 0!11111101
+Number rJ, 1, 0!10000000
+Number rK, 1, 0!11111111
+Number rL, 1, 0!11111110
+Number rD, 1, 0!11111111
+Number rT, 1, 0!00000000
+Number rG, 1, 0!00000000
+Number lr, 1, 0!01110
+Number lrm, 1, 0!00000
 Number mbm, 1, 0!00000000
-Number mwA, 1, 0!00011101
-Number mwB, 1, 0!00010000
-Number mwC, 1, 0!00000000
-Number mwE, 1, 0!00000000
-Number mwH, 1, 0!00100000
-Number mwI, 1, 0!00000000
-Number mwJ, 1, 0!00000000
-Number mwK, 1, 0!00000000
-Number mwL, 1, 0!00000010
-Number mwD, 1, 0!00011111
+Number mwA, 1, 0!00000110
+Number mwB, 1, 0!01000010
+Number mwC, 1, 0!00001010
+Number mwE, 1, 0!00001000
+Number mwH, 1, 0!00000010
+Number mwI, 1, 0!00010100
+Number mwJ, 1, 0!00001111
+Number mwK, 1, 0!10010001
+Number mwL, 1, 0!01000000
+Number mwD, 1, 0!00001000
 Number mwT, 1, 0!00000000
 Number mwG, 1, 0!00000000
-Number mt, 1, 0!110
-Number mb, 1, 0!10100000
+Number mt, 1, 0!000
+Number mb, 1, 0!10000010
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
 #  direct, one that does not is hashed into 2^h rows and contexts share

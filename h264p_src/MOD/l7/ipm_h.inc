@@ -1,83 +1,77 @@
 
 static const byte H7_ipm_a_ma[10+1]={ 0,1,2,3,4,5,6,7,8,9,10 };
 static const byte H7_ipm_a_mb[10+1]={ 0,1,2,3,4,5,6,7,8,9,10 };
-static const byte H7_ipm_a_mc[10+1]={ 0,1,2,3,4,5,6,7,8,9,10 };
+static const byte H7_ipm_a_mc[10+1]={ 0,1,2,3,4,4,5,6,7,8,9 };
 
-static const byte H7_ipm_b_mp[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H7_ipm_b_pv[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H7_ipm_b_mh[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
+static const byte H7_ipm_b_pv[9+1]={ 0,1,2,3,4,4,5,6,7,7 };
+static const byte H7_ipm_b_mh[16+1]={ 0,0,0,1,2,3,4,4,5,5,6,7,8,8,9,9,10 };
 
-static const byte H7_ipm_c_mp[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
+static const byte H7_ipm_c_mp[9+1]={ 0,1,2,3,4,4,5,6,6,6 };
 static const byte H7_ipm_c_col[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 
-static const byte H7_ipm_d_mp[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H7_ipm_d_dm[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
+static const byte H7_ipm_d_mp[9+1]={ 0,1,2,3,4,4,5,6,7,7 };
+static const byte H7_ipm_d_dm[9+1]={ 0,1,1,2,3,4,5,6,7,7 };
+static const byte H7_ipm_d_ds[9+1]={ 0,0,1,2,2,2,2,3,4,4 };
 
 static const byte H7_ipm_e_pm[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H7_ipm_e_mp[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H7_ipm_e_mg[12+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12 };
+static const byte H7_ipm_e_mg[12+1]={ 0,0,0,0,0,0,1,2,2,2,2,3,3 };
 
 
-static const byte H7_ipm_h_pr[8+1]={ 0,1,2,3,4,5,6,7,8 };
-static const byte H7_ipm_h_ds[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H7_ipm_h_rg[12+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12 };
+static const byte H7_ipm_h_pr[8+1]={ 0,1,2,3,4,5,6,7,7 };
 
-static const byte H7_ipm_i_pm[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H7_ipm_i_dm[9+1]={ 0,1,2,2,2,2,2,2,2,3 };
-static const byte H7_ipm_i_ma[10+1]={ 0,1,2,3,4,5,6,7,8,9,10 };
+static const byte H7_ipm_i_pm[9+1]={ 0,1,2,3,4,5,6,7,8,8 };
+static const byte H7_ipm_i_ma[10+1]={ 0,1,2,3,4,5,6,7,8,9,9 };
 
-static const byte H7_ipm_j_mh[16+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 };
-static const byte H7_ipm_j_pr[8+1]={ 0,1,2,3,4,5,6,7,8 };
+static const byte H7_ipm_j_mh[16+1]={ 0,0,1,2,3,4,5,6,7,7,8,9,10,10,11,12,13 };
+static const byte H7_ipm_j_pr[8+1]={ 0,1,2,2,3,4,5,6,6 };
 static const byte H7_ipm_j_mb[10+1]={ 0,1,2,3,4,5,6,7,8,9,10 };
-static const byte H7_ipm_j_p2[8+1]={ 0,1,2,3,4,5,6,7,8 };
+static const byte H7_ipm_j_p2[8+1]={ 0,1,2,2,3,4,5,6,6 };
 
-static const byte H7_ipm_k_mp[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H7_ipm_k_pm[9+1]={ 0,1,2,3,4,4,4,5,5,5 };
-static const byte H7_ipm_k_pv[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
+static const byte H7_ipm_k_pm[9+1]={ 0,0,1,2,3,3,3,4,4,5 };
+static const byte H7_ipm_k_pv[9+1]={ 0,0,0,1,2,2,2,3,4,4 };
 
-static const byte H7_ipm_l_mc[10+1]={ 0,1,2,3,4,5,6,7,8,9,10 };
-static const byte H7_ipm_l_ma[10+1]={ 0,1,2,3,4,5,6,7,8,9,10 };
+static const byte H7_ipm_l_mc[10+1]={ 0,1,2,3,4,4,4,5,6,7,8 };
+static const byte H7_ipm_l_ma[10+1]={ 0,0,0,0,1,1,2,3,4,4,5 };
 static const byte H7_ipm_l_dm[9+1]={ 0,1,1,2,3,3,4,5,6,7 };
 
-static const byte H7_ipm_m_mg[12+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12 };
 
 
-static const byte H7_ipm_s_pr[8+1]={ 0,1,2,3,4,5,6,7,8 };
+static const byte H7_ipm_s_mg[12+1]={ 0,1,2,2,3,3,3,3,3,3,3,3,4 };
 
 
-static const byte H7_ipm_w_mp[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte H7_ipm_w_ds[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
+static const byte H7_ipm_w_mp[9+1]={ 0,1,2,3,4,5,6,6,7,7 };
+static const byte H7_ipm_w_ds[9+1]={ 0,1,1,1,1,2,2,2,2,3 };
 
 
-static const int H7_ipm_rA = (228+0) * (1);
-static const int H7_ipm_rB = (17+0) * (1);
-static const int H7_ipm_rC = (229+0) * (1);
-static const int H7_ipm_rE = (64+0) * (1);
-static const int H7_ipm_rH = (197+0) * (1);
-static const int H7_ipm_rI = (64+0) * (1);
-static const int H7_ipm_rJ = (64+0) * (1);
-static const int H7_ipm_rK = (220+0) * (1);
-static const int H7_ipm_rL = (64+0) * (1);
-static const int H7_ipm_rD = (255+0) * (1);
-static const int H7_ipm_rT = (55+0) * (1);
-static const int H7_ipm_rG = (90+0) * (1);
-static const int H7_ipm_lr = (12+0) * (1);
-static const int H7_ipm_lrm = (12+0) * (1);
+static const int H7_ipm_rA = (255+0) * (1);
+static const int H7_ipm_rB = (253+0) * (1);
+static const int H7_ipm_rC = (255+0) * (1);
+static const int H7_ipm_rE = (255+0) * (1);
+static const int H7_ipm_rH = (254+0) * (1);
+static const int H7_ipm_rI = (254+0) * (1);
+static const int H7_ipm_rJ = (250+0) * (1);
+static const int H7_ipm_rK = (252+0) * (1);
+static const int H7_ipm_rL = (242+0) * (1);
+static const int H7_ipm_rD = (254+0) * (1);
+static const int H7_ipm_rT = (0+0) * (1);
+static const int H7_ipm_rG = (0+0) * (1);
+static const int H7_ipm_lr = (15+0) * (1);
+static const int H7_ipm_lrm = (0+0) * (1);
 static const int H7_ipm_mbm = (0+0) * (1);
-static const int H7_ipm_mwA = (0+0) * (1);
-static const int H7_ipm_mwB = (10+0) * (1);
-static const int H7_ipm_mwC = (0+0) * (1);
-static const int H7_ipm_mwE = (0+0) * (1);
-static const int H7_ipm_mwH = (0+0) * (1);
-static const int H7_ipm_mwI = (22+0) * (1);
+static const int H7_ipm_mwA = (32+0) * (1);
+static const int H7_ipm_mwB = (134+0) * (1);
+static const int H7_ipm_mwC = (16+0) * (1);
+static const int H7_ipm_mwE = (32+0) * (1);
+static const int H7_ipm_mwH = (5+0) * (1);
+static const int H7_ipm_mwI = (20+0) * (1);
 static const int H7_ipm_mwJ = (32+0) * (1);
-static const int H7_ipm_mwK = (0+0) * (1);
-static const int H7_ipm_mwL = (0+0) * (1);
-static const int H7_ipm_mwD = (224+0) * (1);
+static const int H7_ipm_mwK = (128+0) * (1);
+static const int H7_ipm_mwL = (32+0) * (1);
+static const int H7_ipm_mwD = (17+0) * (1);
 static const int H7_ipm_mwT = (0+0) * (1);
 static const int H7_ipm_mwG = (0+0) * (1);
-static const int H7_ipm_mt = (6+0) * (1);
-static const int H7_ipm_mb = (44+0) * (1);
+static const int H7_ipm_mt = (0+0) * (1);
+static const int H7_ipm_mb = (40+0) * (1);
 static const int H7_ipm_hA = (24+0) * (1);
 static const int H7_ipm_hB = (24+0) * (1);
 static const int H7_ipm_hC = (24+0) * (1);
@@ -94,22 +88,22 @@ static const int H7_ipm_hT = (24+0) * (1);
 static const int H7_ipm_hN = (24+0) * (1);
 
 
-static const long long H7_ipm_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 11), 11), 11); // 3993
-static const long long H7_ipm_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 10), 10), 17); // 3400
-static const long long H7_ipm_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 10), 10); // 300
-static const long long H7_ipm_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 10), 10), 3); // 900
-static const long long H7_ipm_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 10), 10), 13); // 3900
+static const long long H7_ipm_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 11), 11), 10); // 2420
+static const long long H7_ipm_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 8), 11); // 352
+static const long long H7_ipm_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 7), 10); // 70
+static const long long H7_ipm_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 8), 8), 5); // 320
+static const long long H7_ipm_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 10), 1), 4); // 40
 static const long long H7_ipm_g_Volume = tc_vmul(1, 1); // 1
-static const long long H7_ipm_h_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 9), 1), 10), 13); // 3510
-static const long long H7_ipm_i_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 10), 4), 11); // 440
-static const long long H7_ipm_j_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 17), 9), 11), 9); // 45441
-static const long long H7_ipm_k_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 10), 6), 10); // 1800
-static const long long H7_ipm_l_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 11), 11), 8); // 2904
-static const long long H7_ipm_m_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 1), 13); // 13
+static const long long H7_ipm_h_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 8), 1), 1), 3); // 24
+static const long long H7_ipm_i_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 9), 3), 10); // 270
+static const long long H7_ipm_j_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 14), 7), 11), 7); // 15092
+static const long long H7_ipm_k_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 2), 6), 5); // 60
+static const long long H7_ipm_l_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 9), 6), 8); // 864
+static const long long H7_ipm_m_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 2), 2), 3); // 12
 static const long long H7_ipm_n_Volume = tc_vmul(1, 1); // 1
-static const long long H7_ipm_s_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 9), 3); // 81
+static const long long H7_ipm_s_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 1), 5); // 10
 static const long long H7_ipm_t_Volume = tc_vmul(1, 1); // 1
-static const long long H7_ipm_w_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 10), 2), 10); // 600
+static const long long H7_ipm_w_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 8), 3), 4); // 192
 
 #define H7_ipm_USES(X) X(k8) X(ma) X(mb) X(mc) X(mp) X(pv) X(mh) X(col) X(dm) X(ds) X(pm) X(mg) X(pr) X(rg) X(p2)
 
