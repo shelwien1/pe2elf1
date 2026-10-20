@@ -226,7 +226,9 @@ The plan's items (estimates, from the prototype), and what came of each:
   comes from the dry run's log instead. No restart is needed, and the
   output is the same: `-1` compresses at 414 KB/s instead of 369 (+12%).
   (Since, the dry run no longer writes a slice back at all: the model pass
-  checks it, `h264p_l1_speed.md` sections 2.2 and 6.2.)
+  checks it, `h264p_l1_speed.md` sections 2.2 and 6.2; and no level's
+  model pass codes the bins, those whose model reads the CABAC states
+  keeping only these, `Chan::states`.)
 - **The level's own contexts** (−8%). `-1`'s families are its own (four
   counters, one mixer, the tables of that shape and nothing else);
   ReconOff answers every query about pictures as a constant, so the code

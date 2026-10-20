@@ -719,8 +719,9 @@ struct Model {
 
   // ------------------------------------------------------------------------
   // slice data
-  // (the walk writing, its bins coded unless the model pass needs none)
-  typedef SliceCoderT<f_DEC == 0 && !LV::cabpred ? 2 : 1> SC;
+  // (the walk writing: decoding, its bins coded; coding, not, only the
+  // contexts' states following them where the level reads them, cab0)
+  typedef SliceCoderT<f_DEC ? 1 : LV::cabpred ? 3 : 2> SC;
   SC* sc_ = nullptr;
   const MbState* mbs_ = nullptr;  // the walk's macroblock states, for addresses
   std::vector<MbInfo> info_;
@@ -3045,9 +3046,12 @@ struct Model {
 template <int f_DEC, class LV>
 struct ModelChan : Chan {
   static constexpr int ENC = f_DEC == 0;
-  // (coding: the walk's bins are dropped, so where the level reads no CABAC
-  // states, it need not code them)
-  ModelChan(Model<f_DEC, LV>& m, LogChan* log) : Chan(true), m_(m), log_(log) { nobins = ENC && !LV::cabpred; }
+  // (coding: the walk's bins are dropped, so it need not code them; where
+  // the level reads the CABAC states, those still follow the bins)
+  ModelChan(Model<f_DEC, LV>& m, LogChan* log) : Chan(true), m_(m), log_(log) {
+    nobins = ENC;
+    states = ENC && LV::cabpred;
+  }
 
   void hbegin(const char* name) override { m_.hbegin(name); }
   void hbits(int n) override { m_.hbits(n); }

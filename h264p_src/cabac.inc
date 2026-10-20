@@ -34,6 +34,9 @@ struct CabacTables {
 };
 const CabacTables kCabac;
 
+// the state a context goes to after a bin, whatever the interval
+inline void cabac_next(CabacCtx& c, int bin) { c.s = kCabac.next[bin != (c.s & 1)][c.s]; }
+
 // the left shift that brings a range of 2..511 to 256..511
 inline int cabac_shift(uint32_t range) { return __builtin_clz(range) - 23; }
 

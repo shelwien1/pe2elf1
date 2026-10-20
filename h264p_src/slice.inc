@@ -171,8 +171,9 @@ std::vector<uint8_t> slice_group_map(const SliceHeader& h, int width, int size) 
 // ---------------------------------------------------------------------------
 
 // The walk of the slice data, which parses (kMode 0) or writes it (1; 2
-// without the CABAC bins, Chan::nobins), a type for each so that what
-// differs is decided once.
+// without the CABAC bins, Chan::nobins; 3 without them but with their
+// contexts' states, Chan::states), a type for each so that what differs
+// is decided once.
 template <int kMode>
 struct SliceCoderT {
   SliceCoderT(const SliceHeader& h, MbStore& store, BitReader* br, BitWriter* bw, Chan& ch)
@@ -271,10 +272,12 @@ struct SliceCoderT {
   // --- CABAC primitives
   int bin(int ctx, int v) {
     if (!W) return got(dec_.decision(ctx_[ctx]));
-    if (!nobins_)
+    if (!nobins_) {
       enc_.decision(ctx_[ctx], v);
-    else if (chk_)
-      check(v);
+      return v;
+    }
+    if (states_) cabac_next(ctx_[ctx], v);
+    if (chk_) check(v);
     return v;
   }
   int bypass(int v) {
@@ -1236,7 +1239,8 @@ struct SliceCoderT {
   }
 
   static constexpr bool W = kMode != 0;
-  static constexpr bool nobins_ = kMode == 2;  // W, but the bins only walked, not coded (Chan::nobins)
+  static constexpr bool nobins_ = kMode >= 2;  // W, but the bins only walked, not coded (Chan::nobins)
+  static constexpr bool states_ = kMode == 3;  // and the contexts' states following them (Chan::states)
   const SliceHeader& h_;
   const Sps& sps_;
   const Pps& pps_;
@@ -1272,10 +1276,12 @@ void read_slice_data(const SliceHeader& h, MbStore& store, BitReader& br, Chan& 
 }
 
 void write_slice_data(const SliceHeader& h, MbStore& store, Chan& ch, BitWriter& bw) {
-  if (ch.nobins)
-    SliceCoderT<2>(h, store, nullptr, &bw, ch).run();
-  else
+  if (!ch.nobins)
     SliceCoderT<1>(h, store, nullptr, &bw, ch).run();
+  else if (ch.states)
+    SliceCoderT<3>(h, store, nullptr, &bw, ch).run();
+  else
+    SliceCoderT<2>(h, store, nullptr, &bw, ch).run();
 }
 
 }  // namespace h264p

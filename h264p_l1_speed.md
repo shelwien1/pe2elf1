@@ -291,9 +291,10 @@ instead:
   the slice would come out as it is, if the walk writes the same values,
   bits and bins as it read;
 - the model pass, which walks the write direction anyway, checks that:
-  without its bins (`-1`, `-5`) it compares each bin it would write with
-  the one recorded and the bits it writes with those outside the CABAC
-  data; with them, all of its bits with the input;
+  it compares each bin it would write with the one recorded, and the bits
+  it writes with those outside the CABAC data (it codes no bins: at `-3`,
+  `-7` and `-9`, whose model reads the CABAC states, only the contexts'
+  states follow the bins, which is all the states depend on);
 - should that ever fail, the model has coded the slice already, so
   compression starts again, the dry run writing back every NAL unit as
   before: the output is the same in every case. That needs the input read
@@ -409,6 +410,13 @@ turn, two runs of two rounds, the best of the four:
 
 Peak memory, compressing 03, is as it was within a megabyte, `-1`'s 28
 MB instead of 30 (decompressing, 24 instead of 25).
+
+Since, `-3`, `-7` and `-9` no longer run the CABAC encoder in the model
+pass either (they had, for the contexts' states their model reads, which
+depend on the bins alone): the walk keeps only the states
+(`SliceCoderT<3>`, `Chan::states`), and checks the bins as `-1` and `-5`
+do. The output is the same; compressing 04 at `-3` takes 1.5% fewer
+instructions (9.27 G to 9.13 G), the times moving within their noise.
 
 ## 7. Where the time goes now
 

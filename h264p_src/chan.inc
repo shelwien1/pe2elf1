@@ -43,10 +43,10 @@ struct Chan {
   virtual ~Chan() {}
   bool W;  // the walk writes a bitstream: values come from the channel
   // (writing) the CABAC bins are not wanted, only the values: the walk
-  // skips their arithmetic coding (the compressor's model pass at a level
-  // that reads no CABAC states), and the bits it writes are not the
-  // stream's
-  bool nobins = false;
+  // skips their arithmetic coding (the compressor's model pass), and the
+  // bits it writes are not the stream's; with states, the contexts' states
+  // still follow the bins (for a model that reads them, Model::cab0)
+  bool nobins = false, states = false;
   // the bins: parsing, recorded here; writing them not (nobins), checked
   // against those recorded
   BinRec* rec = nullptr;
@@ -67,6 +67,7 @@ struct Chan {
   virtual void slice_begin(SliceCoderT<0>& sc) { (void)sc; }
   virtual void slice_begin(SliceCoderT<1>& sc) { (void)sc; }
   virtual void slice_begin(SliceCoderT<2>& sc) { (void)sc; }
+  virtual void slice_begin(SliceCoderT<3>& sc) { (void)sc; }
   virtual void slice_end() {}
   virtual int skip(int v) = 0;                 // the macroblock is skipped
   virtual int end(int v, bool certain) = 0;    // the slice ends after it (certain: at the end of the picture)
