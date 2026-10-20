@@ -996,6 +996,13 @@ int compress_run(const char* in_name, const char* out_name, const Options& opt, 
       BinRec rec;
       bool checked = false;  // the model pass checks it (dry_run)
       std::vector<uint8_t> rbsp;
+      // (one item for every NAL unit: its buffers only grow)
+      void reset() {
+        bad = slice = newpic = ok = padchg = padon = checked = false;
+        type = ref_idc = 0;
+        padframe = 0;
+        why.clear();
+      }
     };
     Context cf, cb;
     PadDetector det;
@@ -1124,8 +1131,9 @@ int compress_run(const char* in_name, const char* out_name, const Options& opt, 
       if (rc.buf.size() > (1 << 20)) flush();
       return true;
     };
+    NalItem it;
     for (; more; more = rd.next(zeros, nal)) {
-      NalItem it;
+      it.reset();
       it.zeros = zeros;
       it.nal.swap(nal);
       fill(it);

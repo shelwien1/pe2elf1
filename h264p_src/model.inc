@@ -165,7 +165,8 @@ struct MbInfo {
   uint32_t pic;  // Model::pic_ when it was coded
   uint8_t skip, cls, qp, cbp, t8, cpred, i16m, field;
   // the rows of coef (plane * 16 + block) and of dc (48 + plane) written;
-  // the others are zero
+  // the others are zero (they hold what an older macroblock wrote: read
+  // them through cmask)
   uint64_t cmask;
   uint8_t modes[16];        // Intra4x4/8x8 modes of the 4x4 blocks, raster order (2 for other macroblocks)
   int8_t ref[2][4];         // ref_idx of the 8x8 blocks as coded
@@ -930,11 +931,12 @@ struct Model {
     }
     height_ = size_ / width_;
     mi_ = &info_[addr_];
-    // (of the coefficients, the rows the last macroblock here wrote)
-    for (uint64_t m = mi_->cmask; m; m &= m - 1) {
-      int r = __builtin_ctzll(m);
-      memset(r < 48 ? mi_->coef[r >> 4][r & 15] : mi_->dc[r - 48], 0, 16);
-    }
+    // (the next macroblock's record, on its way into the cache: the part
+    // cleared below)
+    if (addr_ + 1 < size_)
+      for (size_t k = 0; k < offsetof(MbInfo, coef); k += 64) CM_PREFETCHW(reinterpret_cast<const char*>(mi_ + 1) + k);
+    // (and the coefficients with cmask: the rows the last macroblock here
+    // wrote stay until rewritten, unread)
     memset(mi_, 0, offsetof(MbInfo, coef));
     mi_->pic = pic_;
     mi_->qp = (uint8_t)(qp_pred_ + qp_off_);
@@ -1000,7 +1002,10 @@ struct Model {
     // (the rows either wrote: the rest are zero in both)
     for (uint32_t m = c.cm | (uint32_t)(mi_->cmask & 0xFFFF); m; m &= m - 1) {
       int r = __builtin_ctz(m);
-      memcpy(c.coef[r], mi_->coef[0][r], 16);
+      if (mi_->cmask >> r & 1)
+        memcpy(c.coef[r], mi_->coef[0][r], 16);
+      else
+        memset(c.coef[r], 0, 16);
     }
     c.cm = (uint16_t)mi_->cmask;
     mb_open_ = false;
@@ -1017,6 +1022,29 @@ struct Model {
   }
 
   // --- skip, end of slice, field decoding flag: the skp family
+  // the ones in a map of 0 or 1 a macroblock (hskip_) in the 3x3 window
+  // around the macroblock, by mb_near (none outside the picture)
+  int win9(const uint8_t* m) const {
+    int n = 0;
+    if (mbaff_) {
+      for (int dy = -1; dy <= 1; dy++)
+        for (int dx = -1; dx <= 1; dx++) {
+          int a = mb_near(dx, dy);
+          n += a >= 0 && m[a];
+        }
+      return n;
+    }
+    const uint8_t* r = m + addr_;
+    if (mbx_ > 0 && mbx_ + 1 < width_ && mby_ > 0 && mby_ + 1 < height_) {
+      const uint8_t *a = r - width_, *b = r + width_;
+      return a[-1] + a[0] + a[1] + r[-1] + r[0] + r[1] + b[-1] + b[0] + b[1];
+    }
+    int x0 = mbx_ > 0 ? -1 : 0, x1 = mbx_ + 1 < width_ ? 1 : 0;
+    int y0 = mby_ > 0 ? -1 : 0, y1 = mby_ + 1 < height_ ? 1 : 0;
+    for (int dy = y0; dy <= y1; dy++)
+      for (int dx = x0; dx <= x1; dx++) n += r[dy * width_ + dx];
+    return n;
+  }
   void skp_vars(H_skp_v& D) const {
     const MbState* a = sc_->mb_a_;
     const MbState* b = sc_->mb_b_;
@@ -1024,25 +1052,10 @@ struct Model {
     D.a3 = a ? 2 - a->skip : 0;
     D.b3 = b ? 2 - b->skip : 0;
     D.col = col_ ? 2 - col_->skip : 0;
-    D.c9 = 0;
-    const uint8_t* hs = hskip_[key_].data();
-    for (int dy = -1; dy <= 1; dy++)
-      for (int dx = -1; dx <= 1; dx++) {
-        int n = mb_near(dx, dy);
-        D.c9 += n >= 0 && hs[n];
-      }
+    D.c9 = win9(hskip_[key_].data());
     D.c1 = col1_ ? 2 - col1_->skip : 0;
     // and the skipped ones around it there (10 none)
-    D.k9 = 10;
-    if (phk_ >= 0) {
-      const uint8_t* p = hskip_[phk_].data();
-      D.k9 = 0;
-      for (int dy = -1; dy <= 1; dy++)
-        for (int dx = -1; dx <= 1; dx++) {
-          int n = mb_near(dx, dy);
-          D.k9 += n >= 0 && p[n];
-        }
-    }
+    D.k9 = phk_ >= 0 ? win9(hskip_[phk_].data()) : 10;
     const MbInfo* c = near_info(1, -1);
     const MbInfo* d = near_info(-1, -1);
     D.cd = (c && c->skip) + (d && d->skip);
@@ -2451,6 +2464,11 @@ struct Model {
       while (k < m && !c[k]) k++;
       if (k == m) return;
     }
+    // (rows not written yet hold an older macroblock's)
+    for (uint64_t m = rows & ~mi_->cmask; m; m &= m - 1) {
+      int r = __builtin_ctzll(m);
+      memset(r < 48 ? mi_->coef[r >> 4][r & 15] : mi_->dc[r - 48], 0, 16);
+    }
     mi_->cmask |= rows;
     int8_t* d;
     if (g.kind == 0) {
@@ -2627,7 +2645,10 @@ struct Model {
     D.ds = 0;
     if (g.kind == 1 && g.plane == 0 && cat == 2 && mi_->cls < CL_INXN && (sc_->stype_ == kP || sc_->stype_ == kB)) {
       int score = 0, req = popc4(mi_->cbp & 15) == 1 ? 6 : 4;
-      for (int b = idx & ~3; b < idx; b++) score += decimate_score(mi_->coef[0][blk_y(b) * 4 + blk_x(b)]);
+      for (int b = idx & ~3; b < idx; b++) {
+        int r = blk_y(b) * 4 + blk_x(b);
+        if (mi_->cmask >> r & 1) score += decimate_score(mi_->coef[0][r]);
+      }
       D.ds = 1 + std::max(0, req - score);
     }
     // a 4:2:0 chroma block: the coefficients of the luma under it (its 8x8
@@ -2644,14 +2665,16 @@ struct Model {
     // one (frame scan); 1 + tc_qlog (0 not such a block)
     D.dq = 0;
     if (g.kind == 2 && sc_->chroma_ == 1) {
-      const int8_t* d = mi_->dc[g.plane];
+      static const int8_t z[16] = {};
+      const int8_t* d = mi_->cmask >> (48 + g.plane) & 1 ? mi_->dc[g.plane] : z;
       D.dq = 1 + std::min(tc_qlog(d[0] + (g.x ? -d[1] : d[1]) + (g.y ? -d[2] : d[2]) + (g.x ^ g.y ? -d[3] : d[3])), 7);
     } else if (cat == 1) {
       static const int kH[4][4] = {{1, 1, 1, 1}, {1, 1, -1, -1}, {1, -1, -1, 1}, {1, -1, 1, -1}};
       const int8_t* d = mi_->dc[0];
       int v = 0;
-      for (int k = 0; k < 16; k++)
-        if (d[k]) v += kH[g.y][kZz4[k] >> 2] * d[k] * kH[kZz4[k] & 3][g.x];
+      if (mi_->cmask >> 48 & 1)
+        for (int k = 0; k < 16; k++)
+          if (d[k]) v += kH[g.y][kZz4[k] >> 2] * d[k] * kH[kZz4[k] & 3][g.x];
       D.dq = 1 + std::min(tc_qlog(v), 7);
     }
     D.crcb = 0;
