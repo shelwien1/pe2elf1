@@ -233,8 +233,10 @@ The plan's items (estimates, from the prototype), and what came of each:
   (`-9`'s are 226 MB); it peaks at 42 MB compressing stream 03, 37 MB
   decompressing.
 - **Compression back** (1-2%): 1.1%, from its contexts and its
-  parameters, at about the same speed (test/002: 3,229,830 bytes before,
-  3,193,962 after).
+  parameters (test/002: 3,229,830 bytes before, 3,193,962 after); the
+  contexts at about the same speed, the tuned parameters 6% faster both
+  ways (they leave many contexts smaller: the tables went from 34 MB to
+  13).
   - its own four contexts a family. `-1` had kept `-9`'s first four
     indices (a-d), less their decoder variables. Instead, one of a-d
     swapped at a time for one of the six `-1` left out (e, h-l: several
@@ -663,8 +665,22 @@ cd IDX/l1 && for f in *.idx; do perl ../import.pl $f ../../export.\!\!\! > t && 
   a trial are coded side by side too.
 - **Its own measure.** `ftune.py` keeps a flip that makes the family's
   size smaller by any amount (`opt.pl` sees whole bytes of the
-  corpus), and ends a family's climb with a pass that gains less than a
-  byte.
+  corpus), and ends a family's climb with a pass that gains less than
+  0.01% of the family's size (or a byte).
+- **The dumps.** Each record is a letter and its numbers as zigzag
+  varints: a level's dumps of the tuning corpus (1.37 MB of H.264, 10
+  streams) take 325-337 MB, and replaying the largest family's (the
+  significance's) takes 1-1.7 s of CPU at any level. A level's dumps
+  are written in 30 s (`-9`'s in a minute), `famtune` compiles in 8 s.
+- **A run cut short.** The export is rewritten at each gain, and
+  `FTUNE_FROM=export` starts a run from one, so that a run stopped (the
+  machine restarted under `-5` and `-7`) resumes where it was.
+- **The cost.** The significance family has 1,035 tunable bits at `-1`
+  and 2,200-2,400 at the other levels, far more than any other, and its
+  climb is each level's last: `-1` took 75 minutes on four cores, the
+  larger levels 2-4 hours, of which the significance's second pass alone
+  is half an hour or more. The levels after `-1` were given two passes a
+  family.
 
 ### 7.6 Getting there
 
