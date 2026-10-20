@@ -18,8 +18,9 @@ Linux (gcc or clang):
 Windows (MinGW): `g.bat`, as before, for h264dec, `gp.bat` for h264p.
 
 h264p is a single module: `h264p_src/h264p.cpp` includes the rest of its
-sources (`*.inc`), so `g++ -O2 -march=x86-64-v3 -std=c++11 -fwrapv
-h264p_src/h264p.cpp -o h264p` builds it too. Its target is x86-64-v3 (AVX2:
+sources (`*.inc`, and the coroutine library in `h264p_src/Lib3`), so
+`g++ -O2 -march=x86-64-v3 -std=c++11 -fwrapv h264p_src/h264p.cpp -o h264p`
+builds it too. Its target is x86-64-v3 (AVX2:
 Haswell, Zen and later), for which its pixel kernels and mixers have SIMD
 code; built for any other target (`make PARCH=`, or without `-march`) it
 uses the plain C++ beside them, which is slower and codes identically
@@ -87,12 +88,13 @@ type-puns its motion vector arrays.
     ./h264p d [options] input.h264c output.264   # decompress
     ./h264p t [options] input.264 output.tsv     # dump the syntax
     ./h264p r [options] input.tsv output.264     # restore from the dump
+    ./h264p x [options] input.264 output.264     # c and d at once: the stream restored
 
-`-v` prints statistics, `-s` makes `c` and `t` fail when a NAL unit of a
-supported type has to be stored verbatim, and `-9`, `-7`, `-5`, `-3`, `-1`
-pick the level of `c`'s model, from the strongest (the default) to the
-fastest; `d` reads the level from the stream. Input and output can be `-`
-(stdin, stdout).
+`-v` prints statistics, `-s` makes `c`, `t` and `x` fail when a NAL unit of
+a supported type has to be stored verbatim, and `-9`, `-7`, `-5`, `-3`, `-1`
+pick the level of `c`'s (and `x`'s) model, from the strongest (the default)
+to the fastest; `d` reads the level from the stream. Input and output can be
+`-` (stdin, stdout).
 
 ### Compression
 
@@ -220,6 +222,43 @@ what each level leaves out of the model, where the time goes, and how each
 level has its own IDX profile, tuned against dumps of its families'
 decisions; `h264p_speed.md` how `-9` got here, `h264p_l1_speed.md` how
 `-1` got from 422 and 528 KB/s to this.
+
+### Streaming: coroutines
+
+`c` and `d` run as coroutines of Lib3, the stack-copying coroutines of the
+library mtwrap is built on (`h264p_src/Lib3`, its files unchanged):
+`H264pCoro<0>` compresses and `H264pCoro<1>` decompresses
+(`h264p_src/coro.inc`), in the library's buffer protocol. The input comes
+in the buffers `addinp()` gives, a 0-length one with `f_quit` set at its
+end, and `yield 1` asks for the next; the output goes into the buffer
+`addout()` gave, `yield 2` handing it over full; `yield 0` ends a run,
+`yield 3` an error. So the library's drivers run them: `CoroFileProc` on
+files (`c`, `d`), and `CoroutinePair` chains the two (`x`: the compressor's
+output is the decompressor's input, in one pass, and what comes out must be
+the input). They have `Init(const H264pArgs*)`, `do_process()` and `Quit()`,
+no constructor (a run allocates its state on the heap as it starts, and
+`Quit()` frees it wherever the run was left), and the decompressor hands
+over only full output buffers but its last: what MTwrap takes as its
+workers' `Enc_class`. Nothing runs in threads yet.
+
+Each yield copies the coroutine's stack out, into a buffer of 64 KB
+(`Coroutine::STKPAD`). The compressor yields between NAL units, with 2.4 KB
+of stack; the decompressor deep in the model, where the range decoder
+reads its input, with up to 12.5 KB (`-9`; 8 KB at `-1`; `-v` prints it).
+A yield that would need more than the buffer fails the run instead of
+overrunning it. The output is byte for byte the file-based h264p's (every
+level's output of every test stream has the MD5 it had), as fast.
+
+Two limits remain. One compressor and one decompressor at a time in a
+process: the range coders (`tc_rc<f_DEC>::rc`) and the statistics of `-v`
+are the process's, and threads would need them per coroutine. And the
+model pass checks the slices only where the input can be read again,
+regular files (a slice that does not come out as it is makes the front end
+compress the file again, as before); through pipes, a `CoroutinePair` stage
+or a worker's stream, the dry run writes back each NAL unit, as h264p
+always did through pipes. The library's `setjmp`/`longjmp` are GCC's
+builtins or, with clang, x86-64 assembly: h264p builds for x86 now (the
+plain C++ build there too); elsewhere, the library's `CORO_NOASM`, untested.
 
 ### TSV
 

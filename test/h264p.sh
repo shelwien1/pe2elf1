@@ -12,7 +12,8 @@
 # levels in LEVELS (default: all of them, "9 7 5 3 1"), and at the last one
 # once more through pipes, where the dry run writes back every NAL unit
 # instead of leaving slices to the model pass to check: the output must be
-# the same.
+# the same; and at that level by x too (the compressor's coroutine feeding
+# the decompressor's, a CoroutinePair), whose output must be the stream.
 
 bin=${1:-./h264p}
 shift
@@ -65,6 +66,9 @@ for s in "$@"; do
   done
   if [ -z "$why" ] && [ -n "$l" ]; then
     "$bin" c -s -$l - - < "$s" > "$tmp/p.c" 2> /dev/null && cmp -s "$tmp/t.c" "$tmp/p.c" || why="c through pipes differs"
+  fi
+  if [ -z "$why" ] && [ -n "$l" ]; then
+    "$bin" x -s -$l "$s" "$tmp/x.264" 2> /dev/null && cmp -s "$s" "$tmp/x.264" || why="x: the stream differs"
   fi
   if [ -n "$why" ]; then
     echo "FAIL $s ($why)"

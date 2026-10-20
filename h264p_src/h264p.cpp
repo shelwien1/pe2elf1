@@ -1,11 +1,15 @@
 // h264p: a lossless compressor of H.264 Annex B streams (c, d): the syntax
 // of the stream, with the entropy coding removed, is coded with a context
-// mixing model (model.inc) and coded back by the decompressor. The same
-// syntax can be dumped to a TSV file (t) and the identical stream restored
-// from it (r). This is the only module: the other sources are included here.
+// mixing model (model.inc) and coded back by the decompressor; both run as
+// coroutines, streaming (coro.inc). The same syntax can be dumped to a TSV
+// file (t) and the identical stream restored from it (r). This is the only
+// module: the other sources are included here.
 #include <algorithm>
 #include <cerrno>
+#include <cinttypes>
 #include <climits>
+#include <cmath>
+#include <cstdarg>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -24,7 +28,27 @@
 #ifdef _WIN32
 #include <fcntl.h>
 #include <io.h>
+#include <windows.h>
+#else
+#include <sys/mman.h>
 #endif
+#if defined(__AVX2__)
+#include <immintrin.h>
+#endif
+
+// The stack-copying coroutines of Lib3 (unchanged from mtwrap's), which
+// h264p's compressor and decompressor are (coro.inc), and the library's
+// drivers of them: CoroFileProc on files, CoroutinePair for two stages.
+// Before h264p's own sources, which see its INLINE and NOINLINE, and after
+// the system headers, which its setjmp and longjmp macros must not reach.
+#ifndef FILE_API_STD
+#define FILE_API_STD  // (its stdio file API on Windows too, as h264p had)
+#endif
+#include "Lib3/common.inc"
+#include "Lib3/coro3b.inc"
+#include "Lib3/file_api.inc"
+#include "Lib3/coro_fhp2.inc"
+#include "Lib3/coro2pair.inc"
 
 #include "bits.inc"
 #include "rows.inc"
@@ -588,7 +612,7 @@ bool checked_bits(const BitWriter& bw, bool nobins, const BinRec& rec, const std
 
 // Splits an Annex B byte stream into NAL units while reading it.
 struct AnnexBReader {
-  explicit AnnexBReader(FILE* f) : f_(f) {}
+  explicit AnnexBReader(ByteSource src) : src_(src) {}
 
   // The next NAL unit: the 0x00 bytes before its start code (zero_byte, and
   // the trailing_zero_8bits of the previous NAL unit), and its bytes up to
@@ -628,7 +652,6 @@ struct AnnexBReader {
   const std::vector<uint8_t>& junk() const { return junk_; }
   // 0x00 bytes after the last NAL unit
   size_t eof_zeros() const { return eof_zeros_; }
-  bool error() const { return ferror(f_) != 0; }
 
   // the next start code at or after scan_, reading as much as needed
   bool find(size_t& k) {
@@ -645,20 +668,29 @@ struct AnnexBReader {
       scan_ -= head_;
       head_ = 0;
       size_t old = buf_.size();
-      buf_.resize(old + (1 << 20));
-      size_t n = fread(&buf_[old], 1, 1 << 20, f_);
+      buf_.resize(old + (1 << 16));
+      size_t n = src_.read(&buf_[old], 1 << 16);
       buf_.resize(old + n);
       if (!n) return false;
     }
   }
 
-  FILE* f_;
+  ByteSource src_;
   std::vector<uint8_t> buf_, junk_;
   size_t head_ = 0;  // start of the current NAL unit in buf_
   size_t scan_ = 0;  // where to look for the next start code
   size_t zeros_ = 0, eof_zeros_ = 0;
   bool started_ = false, done_ = false;
 };
+
+// a file as a ByteSource (t's input)
+size_t file_read(void* f, uint8_t* p, size_t n) { return fread(p, 1, n, (FILE*)f); }
+ByteSource file_source(FILE* f) {
+  ByteSource s;
+  s.fn = file_read;
+  s.ctx = f;
+  return s;
+}
 
 FILE* open_out(const char* name) {
   FILE* f = strcmp(name, "-") ? fopen(name, "wb") : stdout;
@@ -697,7 +729,7 @@ int tsv_dump(const char* in_name, const char* out_name, const Options& opt) {
   out.add(kVersion);
   out.end();
 
-  AnnexBReader rd(fi);
+  AnnexBReader rd(file_source(fi));
   std::vector<uint8_t> nal;
   size_t zeros;
   bool first = true;
@@ -783,7 +815,7 @@ int tsv_dump(const char* in_name, const char* out_name, const Options& opt) {
     out.add(to_hex(rd.junk().data(), rd.junk().size()));
     out.end();
   }
-  if (rd.error()) {
+  if (ferror(fi)) {
     fprintf(stderr, "h264p: read error\n");
     return fail_out(f, out_name);
   }
@@ -942,7 +974,7 @@ void cm_report(u64 in_bytes, u64 out_bytes, u64 tables) {
 //
 // check: the dry runs leave the CABAC slices they can to the model pass to
 // check (dry_run); if one of them does not come out as it is, the model
-// has coded it, and compress_run() returns kRestart.
+// has coded it, and compress_stream() returns kRestart.
 const int kRestart = -1;
 
 // (thrown by the model pass of a NAL unit that does not come out as it is)
@@ -950,22 +982,73 @@ struct Restart {
   long nal;
 };
 
-template <class LV>
-int compress_run(const char* in_name, const char* out_name, const Options& opt, bool check) {
-  FILE* fi = strcmp(in_name, "-") ? fopen(in_name, "rb") : stdin;
-  if (!fi) {
-    fprintf(stderr, "h264p: cannot open %s: %s\n", in_name, strerror(errno));
-    return 1;
+// A NAL unit's work that needs no model (its parsing, and writing it back
+// to see that it comes out the same) runs before the model's, on a context
+// of its own (cf); the model's context (cb) takes the same parameter sets
+// and padding as it reaches each NAL unit
+struct NalItem {
+  size_t zeros = 0;
+  std::vector<uint8_t> nal;
+  bool bad = false;  // empty, or forbidden_zero_bit set
+  int type = 0, ref_idc = 0;
+  bool slice = false, newpic = false, ok = false, padchg = false, padon = false;
+  int64_t padframe = 0;
+  Trailer t;
+  std::string why;
+  LogChan log;
+  BinRec rec;
+  bool checked = false;  // the model pass checks it (dry_run)
+  std::vector<uint8_t> rbsp;
+  // (one item for every NAL unit: its buffers only grow)
+  void reset() {
+    bad = slice = newpic = ok = padchg = padon = checked = false;
+    type = ref_idc = 0;
+    padframe = 0;
+    why.clear();
   }
-  FILE* fo = open_out(out_name);
-  fwrite(kCmMagic, 1, sizeof kCmMagic - 1, fo);
-  fputc(kCmVersion, fo);
-  fputc(LV::id, fo);
-  u64 in_bytes = 0, out_bytes = sizeof kCmMagic + 1;
-  std::unique_ptr<Model<0, LV>> mp(new Model<0, LV>());
+};
+
+// What a compression keeps from one NAL unit to the next, on the heap: the
+// stack of its coroutine (coro.inc), which each yield copies, stays small,
+// and Quit() frees all of it wherever the coroutine was left
+struct CompressState {
+  std::shared_ptr<void> model;  // Model<0, LV>
+  Context cf, cb;
+  PadDetector det;
+  Crc32 crc;
+  Stats st;
+  NalItem it;
+  std::vector<uint8_t> nal;
+  AnnexBReader rd;  // the input
+  explicit CompressState(ByteSource in) : rd(in) {}
+};
+
+// and a decompression
+struct DecompressState {
+  std::shared_ptr<void> model;  // Model<1, LV>
+  Context ctx;
+  Crc32 crc;
+  std::vector<uint8_t> buf;  // the stream decoded, not yet written
+};
+
+// Compresses the stream s.rd reads into out: 0, 1 after an error (reported),
+// or kRestart (check: a slice did not come out as it is; what out has is to
+// be thrown away)
+template <class LV>
+int compress_stream(CompressState& s, ByteSink out, const Options& opt, bool check, const char* name) {
+  Model<0, LV>* mp = new Model<0, LV>();
+  s.model = std::shared_ptr<Model<0, LV>>(mp);
   Model<0, LV>& m = *mp;
   auto& rc = tc_rc<0>::rc;
-  Stats st;
+  Stats& st = s.st;
+  Context &cf = s.cf, &cb = s.cb;
+  PadDetector& det = s.det;
+  Crc32& crc = s.crc;
+  AnnexBReader& rd = s.rd;
+  const uint8_t head[2] = {(uint8_t)kCmVersion, (uint8_t)LV::id};
+  out.write((const uint8_t*)kCmMagic, sizeof kCmMagic - 1);
+  out.write(head, 2);
+  u64 in_bytes = 0, out_bytes = sizeof kCmMagic + 1;
   // (all of it again after kRestart)
   memset(tc_bits, 0, sizeof tc_bits);
   memset(tc_syms, 0, sizeof tc_syms);
@@ -975,40 +1058,11 @@ int compress_run(const char* in_name, const char* out_name, const Options& opt, 
     tc_verbose = opt.verbose;
     rc.rc_Init();
     auto flush = [&]() {
-      if (!rc.buf.empty()) fwrite(rc.buf.data(), 1, rc.buf.size(), fo);
+      out.write(rc.buf.data(), rc.buf.size());
       out_bytes += rc.buf.size();
       rc.buf.clear();
     };
-    // A NAL unit's work that needs no model (its parsing, and writing it back
-    // to see that it comes out the same) runs before the model's, on a
-    // context of its own (cf); the model's context (cb) takes the same
-    // parameter sets and padding as it reaches each NAL unit
-    struct NalItem {
-      size_t zeros = 0;
-      std::vector<uint8_t> nal;
-      bool bad = false;  // empty, or forbidden_zero_bit set
-      int type = 0, ref_idc = 0;
-      bool slice = false, newpic = false, ok = false, padchg = false, padon = false;
-      int64_t padframe = 0;
-      Trailer t;
-      std::string why;
-      LogChan log;
-      BinRec rec;
-      bool checked = false;  // the model pass checks it (dry_run)
-      std::vector<uint8_t> rbsp;
-      // (one item for every NAL unit: its buffers only grow)
-      void reset() {
-        bad = slice = newpic = ok = padchg = padon = checked = false;
-        type = ref_idc = 0;
-        padframe = 0;
-        why.clear();
-      }
-    };
-    Context cf, cb;
-    PadDetector det;
-    Crc32 crc;
-    AnnexBReader rd(fi);
-    std::vector<uint8_t> nal;
+    std::vector<uint8_t>& nal = s.nal;
     size_t zeros;
     bool more = rd.next(zeros, nal);
     const std::vector<uint8_t>& junk = rd.junk();
@@ -1128,23 +1182,18 @@ int compress_run(const char* in_name, const char* out_name, const Options& opt, 
         }
       }
       if (it.slice) cb.pad.next_slice(it.newpic);
-      if (rc.buf.size() > (1 << 20)) flush();
+      if (rc.buf.size() > (1 << 16)) flush();
       return true;
     };
-    NalItem it;
+    NalItem& it = s.it;
     for (; more; more = rd.next(zeros, nal)) {
       it.reset();
       it.zeros = zeros;
       it.nal.swap(nal);
       fill(it);
-      if (!use(it)) return fail_out(fo, out_name);
+      if (!use(it)) return 1;
     }
     in_bytes += in_nals;
-    if (rd.error()) {
-      fprintf(stderr, "h264p: read error\n");
-      return fail_out(fo, out_name);
-    }
-    if (fi != stdin) fclose(fi);
     m.nal(F_MORE, 0, 0);
     m.nal(F_EOFZ, 0, (i64)rd.eof_zeros());
     crc.zeros(rd.eof_zeros());
@@ -1152,19 +1201,13 @@ int compress_run(const char* in_name, const char* out_name, const Options& opt, 
     m.nal(F_CRC, 0, crc.value() ^ kCrcXor);
     rc.rc_Quit();
     flush();
-  } catch (const std::exception& e) {  // CmError, or no memory for the model
-    fprintf(stderr, "h264p: %s: %s\n", in_name, e.what());
-    return fail_out(fo, out_name);
+  } catch (const std::exception& e) {  // CmError, or no memory
+    fprintf(stderr, "h264p: %s: %s\n", name, e.what());
+    return 1;
   } catch (const Restart& r) {
     if (opt.verbose)
       fprintf(stderr, "h264p: NAL unit %ld would not come out as it is; compressing again, writing back each\n", r.nal);
-    if (fi != stdin) fclose(fi);
-    fclose(fo);
     return kRestart;
-  }
-  if (ferror(fo) || (fo != stdout && fclose(fo))) {
-    fprintf(stderr, "h264p: write error\n");
-    return 1;
   }
   if (opt.verbose) {
     fprintf(stderr, "%ld NAL units: %ld coded (%ld with irregular trailing bits), %ld stored verbatim\n", st.nals,
@@ -1176,50 +1219,42 @@ int compress_run(const char* in_name, const char* out_name, const Options& opt, 
   return 0;
 }
 
-// (the model pass checks the dry runs where the input can be read again and
-// the output written again: regular files)
-template <class LV>
-int compress_lv(const char* in_name, const char* out_name, const Options& opt) {
-  struct stat si, so;
-  bool check = strcmp(in_name, "-") && strcmp(out_name, "-") && stat(in_name, &si) == 0 && S_ISREG(si.st_mode) &&
-               (stat(out_name, &so) != 0 || S_ISREG(so.st_mode));
-  int r = compress_run<LV>(in_name, out_name, opt, check);
-  if (r == kRestart) r = compress_run<LV>(in_name, out_name, opt, false);
-  return r;
-}
-
 // a count coded in a compressed stream
 size_t cm_count(i64 v, i64 lim) {
   if (v < 0 || v > lim) cm_fail("corrupt stream: a count of %" PRId64, v);
   return (size_t)v;
 }
 
+// Decompresses the stream in (after its magic, version and level) into out:
+// 0, or 1 after an error (reported; out has what was decoded)
 template <class LV>
-int decompress_lv(FILE* fi, const char* in_name, const char* out_name, const Options& opt) {
-  FILE* fo = open_out(out_name);
-  std::unique_ptr<Model<1, LV>> mp(new Model<1, LV>());
+int decompress_stream(DecompressState& s, ByteSource in, ByteSink out, const Options& opt, const char* name) {
+  Model<1, LV>* mp = new Model<1, LV>();
+  s.model = std::shared_ptr<Model<1, LV>>(mp);
   Model<1, LV>& m = *mp;
   auto& rc = tc_rc<1>::rc;
-  std::vector<uint8_t> buf;
-  Crc32 crc;
+  std::vector<uint8_t>& buf = s.buf;
+  Crc32& crc = s.crc;
   long nals = 0;
   auto flush = [&]() {
     crc.add(buf);
-    if (!buf.empty()) fwrite(buf.data(), 1, buf.size(), fo);
+    out.write(buf.data(), buf.size());
     buf.clear();
   };
   auto put_zeros = [&](size_t n) {
     for (; n; n -= std::min(n, (size_t)1 << 20)) {
       buf.insert(buf.end(), std::min(n, (size_t)1 << 20), 0);
-      if (buf.size() > (1 << 22)) flush();
+      if (buf.size() > (1 << 16)) flush();
     }
   };
+  bool failed = false;  // (reported after the handler: flush() may yield, which none may)
+  std::string why;
   try {
     m.init();
     tc_verbose = opt.verbose;
-    rc.f = fi;
+    rc.reset(in);
     rc.rc_Init();
-    Context ctx;
+    Context& ctx = s.ctx;
     for (size_t n = cm_count(m.nal(F_JUNK, 0, 0), (i64)1 << 40); n; n--) buf.push_back((uint8_t)m.raw(0));
     int prev_type = 0;
     while (m.nal(F_MORE, 0, 0)) {
@@ -1272,7 +1307,7 @@ int decompress_lv(FILE* fi, const char* in_name, const char* out_name, const Opt
         buf.insert(buf.end(), e.begin(), e.end());
       }
       if (slice) ctx.pad.next_slice(starts_picture(type, buf.data() + start, buf.size() - start));
-      if (buf.size() > (1 << 22)) flush();
+      if (buf.size() > (1 << 16)) flush();
     }
     put_zeros(cm_count(m.nal(F_EOFZ, 0, 0), (i64)1 << 40));
     flush();
@@ -1281,57 +1316,142 @@ int decompress_lv(FILE* fi, const char* in_name, const char* out_name, const Opt
     // reads past the end of a whole stream
     if (!rc.over) cm_fail("corrupt stream: data after its end");
   } catch (const std::exception& e) {  // CmError, TsvError
-    flush();
-    fprintf(stderr, "h264p: %s: %s\n", in_name, e.what());
-    return 1;
+    failed = true;
+    why = e.what();
   }
-  if (fi != stdin) fclose(fi);
-  if (ferror(fo) || (fo != stdout && fclose(fo))) {
-    fprintf(stderr, "h264p: write error\n");
+  if (failed) {
+    flush();  // what was decoded
+    fprintf(stderr, "h264p: %s: %s\n", name, why.c_str());
     return 1;
   }
   if (opt.verbose) fprintf(stderr, "%ld NAL units\n", nals);
   return 0;
 }
 
-int compress(const char* in_name, const char* out_name, const Options& opt) {
-  switch (opt.level) {
-#define H264P_C(n) \
-  case n:          \
-    return compress_lv<Lv##n>(in_name, out_name, opt);
-    H264P_LEVELS(H264P_C)
-#undef H264P_C
+#include "coro.inc"
+
+// c, d and x on files, or stdin and stdout for "-" (Lib3's stdio file API):
+// the coroutines CoroFileProc runs, plain data, never constructed
+static union {
+  CoroFileProc<H264pCoro<0>> fc;
+  CoroFileProc<H264pCoro<1>> fd;
+  CoroFileProc<CoroutinePair<H264pCoro<0>, H264pCoro<1>>> fx;  // x: the one into the other
+};
+
+bool open_files(const char* in_name, const char* out_name, filehandle& f, filehandle& g) {
+  f.open(in_name);
+  if (!f.f) {
+    fprintf(stderr, "h264p: cannot open %s: %s\n", in_name, strerror(errno));
+    return false;
   }
-  fprintf(stderr, "h264p: no level -%d in this build\n", opt.level);
-  return 2;
+  g.make(out_name);
+  if (!g.f) {
+    fprintf(stderr, "h264p: cannot create %s: %s\n", out_name, strerror(errno));
+    if (f.f != stdin) fclose(f.f);
+    return false;
+  }
+  return true;
+}
+
+// The exit status of c, d or x after their coroutines' status r, the files
+// closed: a failed c or x leaves no output file behind, a failed d none it
+// wrote nothing to (only a regular file: the output may be /dev/null)
+int close_files(int r, filehandle& f, filehandle& g, const char* out_name, bool keep) {
+  if (!r && ferror(f.f)) {
+    fprintf(stderr, "h264p: read error\n");
+    r = 1;
+  }
+  if (f.f != stdin) fclose(f.f);
+  bool werr = false;
+  if (g.f) {  // (none after a failed rewind_files)
+    werr = ferror(g.f) != 0;
+    if (fclose(g.f)) werr = true;
+  }
+  if (!r && werr) {
+    fprintf(stderr, "h264p: write error\n");
+    r = 1;
+  }
+  struct stat st;
+  if (r && !keep && strcmp(out_name, "-") && stat(out_name, &st) == 0 && S_ISREG(st.st_mode)) remove(out_name);
+  return r ? 1 : 0;
+}
+
+// (the model pass checks the dry runs where the input can be read again and
+// the output written again: regular files)
+bool can_check(const char* in_name, const char* out_name) {
+  struct stat si, so;
+  return strcmp(in_name, "-") && strcmp(out_name, "-") && stat(in_name, &si) == 0 && S_ISREG(si.st_mode) &&
+         (stat(out_name, &so) != 0 || S_ISREG(so.st_mode));
+}
+
+// after kRestart: the input from its start, the output empty
+bool rewind_files(const char* out_name, filehandle& f, filehandle& g) {
+  fclose(g.f);
+  g.make(out_name);
+  if (!g.f || fseek(f.f, 0, SEEK_SET)) {
+    fprintf(stderr, "h264p: cannot start again\n");
+    return false;
+  }
+  return true;
+}
+
+bool has_level(int level) {
+  bool r = false;
+#define H264P_K(n) r = r || level == n;
+  H264P_LEVELS(H264P_K)
+#undef H264P_K
+  if (!r) fprintf(stderr, "h264p: no level -%d in this build\n", level);
+  return r;
+}
+
+int compress(const char* in_name, const char* out_name, const Options& opt) {
+  if (!has_level(opt.level)) return 2;
+  filehandle f, g;
+  if (!open_files(in_name, out_name, f, g)) return 1;
+  H264pArgs a = {opt.level, opt.verbose, opt.strict, can_check(in_name, out_name), in_name};
+  for (;;) {
+    fc.Init(&a);
+    fc.processfile(f, g);
+    int r = fc.status;
+    fc.Quit();
+    if (r != kRestart) return close_files(r, f, g, out_name, false);
+    // (a slice did not come out as it is: again, the dry run writing back each)
+    a.check = false;
+    if (!rewind_files(out_name, f, g)) return close_files(1, f, g, out_name, false);
+  }
 }
 
 int decompress(const char* in_name, const char* out_name, const Options& opt) {
-  FILE* fi = strcmp(in_name, "-") ? fopen(in_name, "rb") : stdin;
-  if (!fi) {
-    fprintf(stderr, "h264p: cannot open %s: %s\n", in_name, strerror(errno));
-    return 1;
+  filehandle f, g;
+  if (!open_files(in_name, out_name, f, g)) return 1;
+  H264pArgs a = {0, opt.verbose, false, false, in_name};
+  fd.Init(&a);
+  fd.processfile(f, g);
+  int r = fd.status;
+  bool keep = fd.n_out > 0;  // (what was decoded before an error)
+  fd.Quit();
+  return close_files(r, f, g, out_name, keep);
+}
+
+// x: c and d at once, the compressed stream going from the one coroutine to
+// the other in a CoroutinePair; the output is the stream restored
+int roundtrip(const char* in_name, const char* out_name, const Options& opt) {
+  if (!has_level(opt.level)) return 2;
+  filehandle f, g;
+  if (!open_files(in_name, out_name, f, g)) return 1;
+  H264pArgs a = {opt.level, opt.verbose, opt.strict, can_check(in_name, out_name), in_name};
+  H264pArgs b = {0, opt.verbose, false, false, "the compressed stream"};
+  for (;;) {
+    fx.M1.Init(&a);
+    fx.M2.Init(&b);
+    fx.processfile(f, g);
+    int r = fx.M1.status ? fx.M1.status : fx.M2.status;
+    fx.M1.Quit();
+    fx.M2.Quit();
+    if (r != kRestart) return close_files(r, f, g, out_name, false);
+    a.check = false;
+    if (!rewind_files(out_name, f, g)) return close_files(1, f, g, out_name, false);
   }
-  char head[sizeof kCmMagic + 1];
-  if (fread(head, 1, sizeof kCmMagic, fi) != sizeof kCmMagic || memcmp(head, kCmMagic, sizeof kCmMagic - 1)) {
-    fprintf(stderr, "h264p: %s: not a stream h264p compressed\n", in_name);
-    return 1;
-  }
-  if (head[sizeof kCmMagic - 1] != kCmVersion) {
-    fprintf(stderr, "h264p: %s: compressed by version %d, this is version %d\n", in_name,
-            (int)(uint8_t)head[sizeof kCmMagic - 1], kCmVersion);
-    return 1;
-  }
-  int level = fgetc(fi);
-  switch (level) {
-#define H264P_D(n) \
-  case n:          \
-    return decompress_lv<Lv##n>(fi, in_name, out_name, opt);
-    H264P_LEVELS(H264P_D)
-#undef H264P_D
-  }
-  fprintf(stderr, "h264p: %s: compressed at level -%d, which this build has not\n", in_name, level);
-  return 1;
 }
 
 void usage() {
@@ -1341,17 +1461,19 @@ void usage() {
           "  d  decompress it\n"
           "  t  dump the stream's syntax to a TSV file\n"
           "  r  restore the stream from the TSV file\n"
+          "  x  compress and decompress at once (the compressor's output the\n"
+          "     decompressor's input, two coroutines): writes the stream restored\n"
           "options:\n"
           "  -v  print statistics\n"
-          "  -s  strict (c, t): fail if a NAL unit of a supported type has to be stored verbatim\n"
-          "  -L  (c) the model's level, 1 (fastest) to 9 (strongest, the default)\n"
+          "  -s  strict (c, t, x): fail if a NAL unit of a supported type has to be stored verbatim\n"
+          "  -L  (c, x) the model's level, 1 (fastest) to 9 (strongest, the default)\n"
           "input and output can be - for stdin and stdout\n");
 }
 
 }  // namespace
 
 int main(int argc, char** argv) {
-  if (argc < 2 || !argv[1][0] || argv[1][1] || !strchr("cdtr", argv[1][0])) {
+  if (argc < 2 || !argv[1][0] || argv[1][1] || !strchr("cdtrx", argv[1][0])) {
     usage();
     return 2;
   }
@@ -1391,6 +1513,8 @@ int main(int argc, char** argv) {
         return decompress(files[0], files[1], opt);
       case 't':
         return tsv_dump(files[0], files[1], opt);
+      case 'x':
+        return roundtrip(files[0], files[1], opt);
       default:
         return tsv_restore(files[0], files[1], opt);
     }

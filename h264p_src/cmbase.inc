@@ -20,16 +20,25 @@
 #define H264P_AVX2 1
 #endif
 
+// (INLINE and NOINLINE as Lib3/common.inc has them, where it came first)
 #if defined(__GNUC__) || defined(__clang__)
+#ifndef INLINE
 #define INLINE inline __attribute__((__always_inline__))
+#endif
+#ifndef NOINLINE
 #define NOINLINE __attribute__((__noinline__))
+#endif
 #define LIKELY(x) __builtin_expect(!!(x), 1)
 #define UNLIKELY(x) __builtin_expect(!!(x), 0)
 #define CM_PREFETCH(p) __builtin_prefetch(p)
 #define CM_PREFETCHW(p) __builtin_prefetch(p, 1)
 #else
+#ifndef INLINE
 #define INLINE inline
+#endif
+#ifndef NOINLINE
 #define NOINLINE
+#endif
 #define LIKELY(x) (x)
 #define UNLIKELY(x) (x)
 #define CM_PREFETCH(p)
