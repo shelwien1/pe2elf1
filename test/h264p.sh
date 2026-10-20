@@ -14,6 +14,9 @@
 # instead of leaving slices to the model pass to check: the output must be
 # the same; and at that level by x too (the compressor's coroutine feeding
 # the decompressor's, a CoroutinePair), whose output must be the stream.
+# At that level, last, the stream is compressed on threads (-t, in parts of
+# at least 16 KB that start at IDR access units): by c on 3 threads and d,
+# through pipes on 2, and by x on 2 (MTwrap's coder into its decoder).
 
 bin=${1:-./h264p}
 shift
@@ -69,6 +72,17 @@ for s in "$@"; do
   fi
   if [ -z "$why" ] && [ -n "$l" ]; then
     "$bin" x -s -$l "$s" "$tmp/x.264" 2> /dev/null && cmp -s "$s" "$tmp/x.264" || why="x: the stream differs"
+  fi
+  if [ -z "$why" ] && [ -n "$l" ]; then
+    why=$(trip "$s" c d "$tmp/m.c" "-$l -t 3 -c 16k")
+    [ -z "$why" ] && [ "$(head -c 5 "$tmp/m.c")" != h264m ] && why="c -t: not a stream in parts"
+  fi
+  if [ -z "$why" ] && [ -n "$l" ]; then
+    "$bin" c -s -$l -t 2 -c 16k - - < "$s" 2> /dev/null | "$bin" d - - > "$tmp/p.264" 2> /dev/null &&
+      cmp -s "$s" "$tmp/p.264" || why="c -t, d through pipes: the stream differs"
+  fi
+  if [ -z "$why" ] && [ -n "$l" ]; then
+    "$bin" x -s -$l -t 2 -c 16k "$s" "$tmp/x.264" 2> /dev/null && cmp -s "$s" "$tmp/x.264" || why="x -t: the stream differs"
   fi
   if [ -n "$why" ]; then
     echo "FAIL $s ($why)"

@@ -99,7 +99,7 @@ constexpr int tc_clamp(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi
 
 // Tables are mapped, not allocated and filled: a table costs address space
 // when it is made and memory only where the coder reaches it.
-static void* tc_map(sz n) {
+static void* tc_map(sz n, const char* what = "a model table") {
   void* p;
 #ifdef _WIN32
   p = VirtualAlloc(nullptr, n, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
@@ -107,7 +107,7 @@ static void* tc_map(sz n) {
   p = mmap(nullptr, n, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
   if (p == MAP_FAILED) p = nullptr;
 #endif
-  if (!p) cm_fail("cannot map %" PRIu64 " MB for a model table", (u64)(n >> 20));
+  if (!p) cm_fail("cannot map %" PRIu64 " MB for %s", (u64)(n >> 20), what);
   return p;
 }
 static inline void tc_unmap(void* p, sz n) {

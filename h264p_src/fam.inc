@@ -38,10 +38,6 @@ static void tc_ifits(const char *what, sz vol, sz mult) {
   if(!(vol * mult < ((sz)1 << 31)))
     cm_fail("an IDX family gives the %s %" PRIu64 " rows of %" PRIu64 "; the product must stay under 2^31", what, (u64)vol, (u64)mult);
 }
-//  Where the bits went, by stage (-v)
-static double tc_bits[32];
-static u64 tc_syms[32];
-static int tc_stage, tc_verbose;
 //  The context indices of one value: what idx2inc.pl's MakeIndex builds
 //  (c: the counters', A-E, H-L in turn)
 struct tcx {
@@ -60,19 +56,25 @@ struct tc_tabs {
   u8 *SC = nullptr, *FC = nullptr;
 };
 
-//  The direction is a template parameter, f_DEC as in Rangecoder: 0
-//  codes, 1 decodes.  One bit through the one coder there is, tc_rc<f_DEC>::rc
-//  -- a static member reached by type, the same for every level, so a family
-//  needs no pointer to the model it belongs to.
-template <int f_DEC> struct tc_rc {
-  static Rangecoder<f_DEC> rc;
+//  The range coder of a run (a stream compressed or decompressed), with
+//  where its bits went, by stage (-v): the base of the run's model, which
+//  is the coroutine the run is (rcio.inc), and what the model's families
+//  code through, each by a pointer to it (wire()). Runs share nothing, so
+//  that any number of them can go at once, on as many threads (-t). The
+//  direction is a template parameter, f_DEC as in Rangecoder: 0 codes, 1
+//  decodes.
+template <int f_DEC> struct tc_rc : Rangecoder<f_DEC> {
+  double tc_bits[32] = {};
+  u64 tc_syms[32] = {};
+  int tc_stage = 0;
+  bool tc_verbose = false;
 };
-template <int f_DEC> Rangecoder<f_DEC> tc_rc<f_DEC>::rc;
-template <int f_DEC> static INLINE int tc_bit(int p, int bit) {
+//  One bit through it
+template <int f_DEC> static INLINE int tc_bit(tc_rc<f_DEC> *rc, int p, int bit) {
   uint b = (uint)bit;
-  if(!f_DEC && tc_verbose)
-    tc_bits[tc_stage] -= log2(bit ? 1.0 - p / (double)CM_PONE : p / (double)CM_PONE);
-  tc_rc<f_DEC>::rc.rc_Process((uint)(p << 3), b);
+  if(!f_DEC && rc->tc_verbose)
+    rc->tc_bits[rc->tc_stage] -= log2(bit ? 1.0 - p / (double)CM_PONE : p / (double)CM_PONE);
+  rc->rc_Process((uint)(p << 3), b);
   return (int)b;
 }
 
@@ -106,11 +108,13 @@ static INLINE i64 tc_dump_get(const char *&p, const char *e) {
   return (i64)(u >> 1) ^ -(i64)(u & 1);
 }
 #ifdef H264P_DUMP
+//  (each family's own, for each model: R as its model starts; none for a
+//  decompressor's, fam null)
 struct tc_dump {
   FILE *f = nullptr;
   explicit tc_dump(const char *fam) {
     const char *dir = getenv("H264P_DUMP");
-    if(!dir || !*dir)
+    if(!fam || !dir || !*dir)
       return;
     std::string fn = std::string(dir) + "/" + fam + ".dump";
     if(!(f = fopen(fn.c_str(), "ab")))
@@ -139,7 +143,7 @@ struct tc_dump {
 #define TC_DUMP(x)                                                                                                     \
   do {                                                                                                                 \
     if(ENC)                                                                                                            \
-      C::dump().x;                                                                                                     \
+      dump_.x;                                                                                                         \
   } while(0)
 #else
 #define TC_DUMP(x)                                                                                                     \
@@ -206,6 +210,10 @@ template <int f_DEC, class C> struct tc_fam {
   static_assert(C::NMIX == 1 || C::NMIX == 3, "tc_fam: one mixer, or three and the final one");
   static_assert(C::NAPM == 0 || C::NAPM == 2, "tc_fam: no APM, or two");
   typedef typename C::Cnt Cnt;  // cm_cnt2, or cm_cnt2s
+  tc_rc<f_DEC> *rc;  // the coder of the model it belongs to
+#ifdef H264P_DUMP
+  tc_dump dump_{ENC ? C::name() : nullptr};
+#endif
   Cnt *cnt[NC];  // the counters' tables: A-E, H-L, the first NC
   cm_cnt *G, *T;
   cm_apm ap, ap2;                  // (with APMs)
@@ -230,7 +238,8 @@ template <int f_DEC, class C> struct tc_fam {
   //  (cn_v: their arrays in this order in memory, coded at once)
   int cn_lim[24], cn_tg[2][24];
   bool cn_v = false;
-  void wire(typename C::T *t) {
+  void wire(typename C::T *t, tc_rc<f_DEC> *r) {
+    rc = r;
     tc_tabs b;
     C::tables(t, b);
     for(int k = 0; k < NC; k++)
@@ -280,7 +289,13 @@ template <int f_DEC, class C> struct tc_fam {
     hint = -1;
     hs = 0;
   }
-  //  The coding calls of the model
+  //  The coding calls of the model: make() a value's indices from its
+  //  variables (C::make; a dump records them), select() the rows they
+  //  pick, then code it (code(), codes(), bit(), sign())
+  INLINE void make(const typename C::V &D, tcx &X) {
+    TC_DUMP(vars(reinterpret_cast<const int *>(&D), sizeof D / sizeof(int)));
+    C::make(D, X);
+  }
   INLINE void select(const tcx &x) {
     TC_DUMP(rec('S'));
     for(int k = 0; k < NC; k++)
@@ -317,7 +332,7 @@ template <int f_DEC, class C> struct tc_fam {
       cm_fail("internal: a family with no sign counter coded a sign");
     TC_DUMP(rec('G', sc, s));
     cm_cnt g = G[bg * (u32)C::NG + sc];
-    s = tc_bit<f_DEC>(g.P(), ENC && s);
+    s = tc_bit(rc, g.P(), ENC && s);
     g.upd(s, C::rG, C::mwG);
     G[bg * (u32)C::NG + sc] = g;
     return s;
@@ -445,7 +460,7 @@ template <int f_DEC, class C> struct tc_fam {
       mxf.set(3, 256);
       int pm = mxf.mix((u32)node * 5 + (u32)hs);  // by node and hint state
       int pf = C::NAPM ? (C::bw * pm + (16 - C::bw) * ap2.pp(pm, bf + (u32)node) + 8) >> 4 : pm;
-      b = tc_bit<f_DEC>(pf < 1 ? 1 : pf > CM_PONE - 1 ? CM_PONE - 1 : pf, b);
+      b = tc_bit(rc, pf < 1 ? 1 : pf > CM_PONE - 1 ? CM_PONE - 1 : pf, b);
       mx.upd(b, C::lr, C::mb, mx.x, xq);
       mx2.upd(b, C::lr, C::mb, mx.x, xq);
       mx3.upd(b, C::lr, C::mb, mx.x, xq);
@@ -453,7 +468,7 @@ template <int f_DEC, class C> struct tc_fam {
     } else {
       int pm = mx.mix(bm + (u32)node, mx.x, xq);
       int pf = C::NAPM ? (C::bw * pm + (16 - C::bw) * ap2.pp(pm, bf + (u32)node) + 8) >> 4 : pm;
-      b = tc_bit<f_DEC>(pf < 1 ? 1 : pf > CM_PONE - 1 ? CM_PONE - 1 : pf, b);
+      b = tc_bit(rc, pf < 1 ? 1 : pf > CM_PONE - 1 ? CM_PONE - 1 : pf, b);
       mx.upd(b, C::lr, C::mb, mx.x, xq);
     }
     if(C::NAPM) {
@@ -514,7 +529,7 @@ template <int f_DEC, class C> struct tc_fam {
       mxm.set(1, cm_stretch(z.P()));
       mxm.set(2, 256);
       int pm = mxm.mix(bn + (u32)node);
-      b = tc_bit<f_DEC>(pm < 1 ? 1 : pm > CM_PONE - 1 ? CM_PONE - 1 : pm, b);
+      b = tc_bit(rc, pm < 1 ? 1 : pm > CM_PONE - 1 ? CM_PONE - 1 : pm, b);
       mxm.upd(b, C::lrm, C::mbm);
       t.upd(b, C::rT, C::mwT);
       T[bt + node] = t;
@@ -522,7 +537,7 @@ template <int f_DEC, class C> struct tc_fam {
       return b;
     }
     if(prp < 0 || prpa) {
-      b = tc_bit<f_DEC>(t.P(), b);
+      b = tc_bit(rc, t.P(), b);
       t.upd(b, C::rT, C::mwT);
       T[bt + node] = t;
       return b;
@@ -532,7 +547,7 @@ template <int f_DEC, class C> struct tc_fam {
     mxm.set(2, 256);
     {
       int pm = mxm.mix(bn + (u32)node);
-      b = tc_bit<f_DEC>(pm < 1 ? 1 : pm > CM_PONE - 1 ? CM_PONE - 1 : pm, b);
+      b = tc_bit(rc, pm < 1 ? 1 : pm > CM_PONE - 1 ? CM_PONE - 1 : pm, b);
     }
     mxm.upd(b, C::lrm, C::mbm);
     t.upd(b, C::rT, C::mwT);

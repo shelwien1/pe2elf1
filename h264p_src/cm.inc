@@ -15,39 +15,49 @@ constexpr int CM_STMAX = 2047;
 constexpr int CM_CBITS = 16;
 constexpr int CM_CONE = 1 << CM_CBITS;
 constexpr int CM_TMAX = 4096;
-static u16 cm_rec[CM_TMAX + 2];
 constexpr int CM_AMAX = 255;
-static u16 cm_arec[CM_AMAX + 2];
-static u16 cm_mrec[CM_AMAX + 2];
-static i16 cm_st[CM_PONE + 1];  // (and one more, read in pairs)
-static u16 cm_sq[2 * CM_STMAX + 1];
 constexpr int CM_QMAX = 130;
-static void cm_tables(void) {
-  int i;
-  for(i = 0; i <= CM_TMAX + 1; i++)
-    cm_rec[i] = (u16)(CM_CONE / (i + 2));
-  for(i = 0; i <= CM_AMAX + 1; i++)
-    cm_arec[i] = (u16)(65536 / (i + 2));
-  for(i = 0; i <= CM_AMAX + 1; i++)
-    cm_mrec[i] = (u16)(65535 / (i + 1));
-  for(i = -CM_STMAX; i <= CM_STMAX; i++) {
-    double v = CM_PONE / (1.0 + exp(-i / 256.0));
-    int p = (int)(v + 0.5);
-    if(p < 1)
-      p = 1;
-    if(p > CM_PONE - 1)
-      p = CM_PONE - 1;
-    cm_sq[i + CM_STMAX] = (u16)p;
-  }
-  {
+//  The tables the counters, APMs and mixers read: the reciprocals of their
+//  counts and squash and stretch -- constants, computed as the program
+//  starts and only read after, by every model at once
+struct cm_tabs {
+  u16 rec[CM_TMAX + 2];
+  u16 arec[CM_AMAX + 2];
+  u16 mrec[CM_AMAX + 2];
+  i16 st[CM_PONE + 1];  // (and one more, read in pairs)
+  u16 sq[2 * CM_STMAX + 1];
+  cm_tabs() {
+    int i;
+    for(i = 0; i <= CM_TMAX + 1; i++)
+      rec[i] = (u16)(CM_CONE / (i + 2));
+    for(i = 0; i <= CM_AMAX + 1; i++)
+      arec[i] = (u16)(65536 / (i + 2));
+    for(i = 0; i <= CM_AMAX + 1; i++)
+      mrec[i] = (u16)(65535 / (i + 1));
+    for(i = -CM_STMAX; i <= CM_STMAX; i++) {
+      double v = CM_PONE / (1.0 + exp(-i / 256.0));
+      int p = (int)(v + 0.5);
+      if(p < 1)
+        p = 1;
+      if(p > CM_PONE - 1)
+        p = CM_PONE - 1;
+      sq[i + CM_STMAX] = (u16)p;
+    }
     int j = 0;
     for(i = 0; i < CM_PONE; i++) {
-      while(j < 2 * CM_STMAX && cm_sq[j] < i)
+      while(j < 2 * CM_STMAX && sq[j] < i)
         j++;
-      cm_st[i] = (i16)(j - CM_STMAX);
+      st[i] = (i16)(j - CM_STMAX);
     }
+    st[CM_PONE] = 0;
   }
-}
+};
+static const cm_tabs cm_tab;
+static const u16 (&cm_rec)[CM_TMAX + 2] = cm_tab.rec;
+static const u16 (&cm_arec)[CM_AMAX + 2] = cm_tab.arec;
+static const u16 (&cm_mrec)[CM_AMAX + 2] = cm_tab.mrec;
+static const i16 (&cm_st)[CM_PONE + 1] = cm_tab.st;
+static const u16 (&cm_sq)[2 * CM_STMAX + 1] = cm_tab.sq;
 static INLINE int cm_squash(int x) {
   x = x < -CM_STMAX ? -CM_STMAX : x > CM_STMAX ? CM_STMAX : x;
   return cm_sq[x + CM_STMAX];

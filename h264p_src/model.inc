@@ -446,9 +446,38 @@ static const ZzInv kZzInv;
 static const uint8_t* const kInv4 = kZzInv.v4;
 static const uint8_t* const kInv8 = kZzInv.v8;
 
+// The model of a level, coding or decoding: the range coder, which its
+// families code through, is its base (and the coroutine of the run that
+// base's, rcio.inc), its tables its own (mapped as it starts, unmapped as it
+// ends)
 template <int f_DEC, class LV>
-struct Model {
+struct Model : tc_rc<f_DEC> {
   static constexpr int ENC = f_DEC == 0;
+  using tc_rc<f_DEC>::tc_stage;
+  using tc_rc<f_DEC>::tc_syms;
+
+  Model() = default;
+  Model(const Model&) = delete;
+  void operator=(const Model&) = delete;
+  ~Model() {
+#define H_UNMAP(F) tc_unmap(t_##F, sizeof(typename LV::F::T))
+    H_UNMAP(nal);
+    H_UNMAP(hdr);
+    H_UNMAP(skp);
+    H_UNMAP(mbt);
+    H_UNMAP(cbp);
+    H_UNMAP(ipm);
+    H_UNMAP(mvs);
+    H_UNMAP(qpd);
+    H_UNMAP(cbf);
+    H_UNMAP(sig);
+    H_UNMAP(lvl);
+    H_UNMAP(sgn);
+    H_UNMAP(mvg);
+    H_UNMAP(qpg);
+    H_UNMAP(pcm);
+#undef H_UNMAP
+  }
 
   tc_fam<f_DEC, typename LV::nal> f_nal;
   tc_fam<f_DEC, typename LV::hdr> f_hdr;
@@ -465,21 +494,21 @@ struct Model {
   tc_fam<f_DEC, typename LV::mvg> f_mvg;
   tc_fam<f_DEC, typename LV::qpg> f_qpg;
   tc_fam<f_DEC, typename LV::pcm> f_pcm;
-  typename LV::nal::T* t_nal;
-  typename LV::hdr::T* t_hdr;
-  typename LV::skp::T* t_skp;
-  typename LV::mbt::T* t_mbt;
-  typename LV::cbp::T* t_cbp;
-  typename LV::ipm::T* t_ipm;
-  typename LV::mvs::T* t_mvs;
-  typename LV::qpd::T* t_qpd;
-  typename LV::cbf::T* t_cbf;
-  typename LV::sig::T* t_sig;
-  typename LV::lvl::T* t_lvl;
-  typename LV::sgn::T* t_sgn;
-  typename LV::mvg::T* t_mvg;
-  typename LV::qpg::T* t_qpg;
-  typename LV::pcm::T* t_pcm;
+  typename LV::nal::T* t_nal = nullptr;
+  typename LV::hdr::T* t_hdr = nullptr;
+  typename LV::skp::T* t_skp = nullptr;
+  typename LV::mbt::T* t_mbt = nullptr;
+  typename LV::cbp::T* t_cbp = nullptr;
+  typename LV::ipm::T* t_ipm = nullptr;
+  typename LV::mvs::T* t_mvs = nullptr;
+  typename LV::qpd::T* t_qpd = nullptr;
+  typename LV::cbf::T* t_cbf = nullptr;
+  typename LV::sig::T* t_sig = nullptr;
+  typename LV::lvl::T* t_lvl = nullptr;
+  typename LV::sgn::T* t_sgn = nullptr;
+  typename LV::mvg::T* t_mvg = nullptr;
+  typename LV::qpg::T* t_qpg = nullptr;
+  typename LV::pcm::T* t_pcm = nullptr;
   // whether the level's family F reads its variable f: what it reads not is
   // not computed (where computing it has no other use)
 #ifdef H264P_DUMP
@@ -522,14 +551,13 @@ struct Model {
   static_assert(LV::mvp || !(LV::refs || LV::recon), "the reference lists and the decoder need the motion vectors");
 
   void init() {
-    cm_tables();
     rec_.deblock = LV::deblock;
     // (end_of_slice_flag 0 nearly for sure: as if seen a few times)
     for (cm_cnt& c : end_c_) c.p = (u16)(CM_CONE - 16), c.t = 8;
     for (int& p : hist_poc_) p = INT_MIN;
     std::fill(&hist_rpoc_[0][0][0], &hist_rpoc_[0][0][0] + sizeof hist_rpoc_ / sizeof(int), INT_MIN);
     std::fill(&col_rpoc_[0][0], &col_rpoc_[0][0] + sizeof col_rpoc_ / sizeof(int), INT_MIN);
-#define H_MAP(F) (t_##F = tc_table<typename LV::F::T>(), LV::F::init(t_##F), f_##F.wire(t_##F))
+#define H_MAP(F) (t_##F = tc_table<typename LV::F::T>(), LV::F::init(t_##F), f_##F.wire(t_##F, this))
     H_MAP(nal);
     H_MAP(hdr);
     H_MAP(skp);
@@ -563,7 +591,7 @@ struct Model {
     tc_stage = STG_NAL;
     H_nal_v D = {fld, c, tc_qlog(last_[fld][0]), tc_qlog(last_[fld][1])};
     tcx X;
-    LV::nal::make(D, X);
+    f_nal.make(D, X);
     x = f_nal.code(X, ENC ? x : 0);
     last_[fld][1] = last_[fld][0];
     last_[fld][0] = x;
@@ -624,7 +652,7 @@ struct Model {
       if (pbyte >= 0 && (u32)(pbyte | 256) >> (i + 1) == node) mb = pbyte >> i & 1;
       int sm = mb < 0 ? 0 : cm_stretch(raw_mc_[ml].P());
       raw_mx_.set(3, mb < 0 ? 0 : mb ? sm : -sm);
-      int bit = tc_bit<f_DEC>(raw_mx_.mix(node), (int)(ENC && ((b >> i) & 1)));
+      int bit = tc_bit(this, raw_mx_.mix(node), (int)(ENC && ((b >> i) & 1)));
       raw_mx_.upd(bit, 24, 0);
       c0.upd(bit, 250, 0);
       c1.upd(bit, 60, 0);
@@ -698,7 +726,7 @@ struct Model {
     HLast& h = hl_[(u32)tag_ | (u32)(fld_ < 15 ? fld_ : 15) << 8 | (u32)(runpos_ < 15 ? runpos_ : 15) << 12 | (u32)sty_ << 16];
     H_hdr_v D = {tag_, fld_, sq2(h.d1), sq2(h.d2), tc_qlog(runpos_), (int)(h.v & 255), sty_ < 9 ? sty_ : 9, slice_nal_ ? prev_sref_ : 3};
     tcx X;
-    LV::hdr::make(D, X);
+    f_hdr.make(D, X);
     i64 m = is_wrap_ && hbits_ > 0 && hbits_ < 31 ? (i64)1 << hbits_ : 0, dx = ENC ? x - h.v : 0;
     hbits_ = 0;
     if (m && ENC) dx = ((dx % m) + m + m / 2) % m - m / 2;  // into [-m/2, m/2)
@@ -1197,7 +1225,7 @@ struct Model {
   bool maps_ok() const { return rec_.maps_w == width_ && rec_.maps_w * rec_.maps_h == size_ && !mbaff_; }
   int skp_bit(const H_skp_v& D, int node, int v, int pr = -1) {
     tcx X;
-    LV::skp::make(D, X);
+    f_skp.make(D, X);
     f_skp.select(X);
     tc_syms[STG_SKIP]++;
     f_skp.prp = pr;
@@ -1255,7 +1283,7 @@ struct Model {
   }
   int end_x(int ctx, int v) {
     cm_cnt& c = end_c_[ctx];
-    v = tc_bit<f_DEC>(c.P(), ENC && v);
+    v = tc_bit(this, c.P(), ENC && v);
     c.upd(v, 1023, 0);
     return v;
   }
@@ -1328,7 +1356,7 @@ struct Model {
         mbt_d_->im = 1 + m;
         mbt_d_->ig = c2 == INT_MAX ? 0 : 1 + tc_clamp(tc_qlog((c2 - costs[m]) * 32 / x264_lam16(qp_pred_)), 0, 11);
         tcx X;
-        LV::mbt::make(*mbt_d_, X);
+        f_mbt.make(*mbt_d_, X);
         f_mbt.select(X);
       }
     }
@@ -1365,7 +1393,7 @@ struct Model {
     D.qc = tc_clamp(qp_pred_ / 3, 0, 17);
     D.tx = tx_;
     tcx X;
-    LV::mbt::make(D, X);
+    f_mbt.make(D, X);
     f_mbt.select(X);
     mbt_d_ = &D;
     int stype = sc_->stype_;
@@ -1421,7 +1449,7 @@ struct Model {
   // --- coded_block_pattern and transform_size_8x8_flag: the cbp family
   int cbp_bit(H_cbp_v& D, int node, int v, int pr) {
     tcx X;
-    LV::cbp::make(D, X);
+    f_cbp.make(D, X);
     f_cbp.select(X);
     f_cbp.prp = pr;
     return f_cbp.bit(node, v);
@@ -1684,7 +1712,7 @@ struct Model {
     }
     D.dr = D.dm < 9 && D.dm != mpm ? D.dm - (D.dm > mpm) : 8;
     tcx X;
-    LV::ipm::make(D, X);
+    f_ipm.make(D, X);
     f_ipm.select(X);
     int r = -1;
     f_ipm.prp = cab0(68);
@@ -1754,7 +1782,7 @@ struct Model {
       }
     }
     tcx X;
-    LV::ipm::make(D, X);
+    f_ipm.make(D, X);
     f_ipm.select(X);
     int r = 0;
     auto cond = [](const MbState* n) { return n && n->intra && !n->pcm && n->cpred != 0; };
@@ -1774,7 +1802,7 @@ struct Model {
     bool b = sc_->stype_ == kB;
     H_mvs_v D = {b, 0, 0, i ? sub_[i - 1] + 1 : 0, 0, 0, 0, 0, i, 0, 0, 0};
     tcx X;
-    LV::mvs::make(D, X);
+    f_mvs.make(D, X);
     f_mvs.select(X);
     f_mvs.prp = -1;
     f_mvs.prpa = nullptr;
@@ -2032,7 +2060,7 @@ struct Model {
       D.rt = t < 0 ? 0 : 1 + tc_clamp(tc_qlog((int64_t)t * 256 / (w * h * 16) * 16 / qstep16(qp_pred_)), 0, 14);
     }
     tcx X;
-    LV::mvs::make(D, X);
+    f_mvs.make(D, X);
     int pr[TC_NODE];
     for (int k = 0; k < TC_NODE; k++) pr[k] = -1;
     pr[0] = cab0(54 + sc_->ref_inc(list, x, y));
@@ -2170,7 +2198,7 @@ struct Model {
       D.rt = t < 0 ? 0 : 1 + tc_clamp(tc_qlog((int64_t)t * 512 / (w * h * 16) * 16 / qstep16(qp_pred_)), 0, 14);
     }
     tcx X;
-    LV::mvs::make(D, X);
+    f_mvs.make(D, X);
     tc_stage = STG_MVD;
     tc_syms[STG_MVD]++;
     int pr[TC_NODE];
@@ -2207,7 +2235,7 @@ struct Model {
         G.es = ea == -128 && eb == -128 ? 3 : sgn3((ea == -128 ? 0 : ea) + (eb == -128 ? 0 : eb));
         G.as = tmn_ || talt_[0] == INT_MIN ? 9 : rel(talt_[comp] - mvp_[comp]);
         tcx Y;
-        LV::mvg::make(G, Y);
+        f_mvg.make(G, Y);
         f_mvg.select(Y);
         f_mvg.prp = -1;
         if (f_mvg.bit(0, ENC && v < 0)) v = -m;
@@ -2404,7 +2432,7 @@ struct Model {
         D.ac = 7 + tc_clamp((int)div_floor(aq_res_[key_][ma] + 4, 8), -6, 6);
     }
     tcx X;
-    LV::qpd::make(D, X);
+    f_qpd.make(D, X);
     int pr[TC_NODE];
     for (int k = 0; k < TC_NODE; k++) pr[k] = -1;
     pr[0] = cab1(60 + (sc_->last_qpd_ != 0));
@@ -2432,7 +2460,7 @@ struct Model {
         G.lq = D.lq ? rel(D.lq - 7) : 9;
         G.bk = D.bc ? rel(D.bc - 7) : 9;
         tcx Y;
-        LV::qpg::make(G, Y);
+        f_qpg.make(G, Y);
         f_qpg.select(Y);
         f_qpg.prp = -1;
         v = f_qpg.bit(0, neg) ? -m : m;
@@ -2786,7 +2814,7 @@ struct Model {
     D.pg = pg;
     D.em = em;
     tcx X;
-    LV::cbf::make(D, X);
+    f_cbf.make(D, X);
     int pr[TC_NODE];
     for (int k = 0; k < TC_NODE; k++) pr[k] = -1;
     if (!coded && sc_->cabac_) {
@@ -2878,7 +2906,7 @@ struct Model {
         if (H_USES(sig, sn))
           S.sn = (na.m ? 1 + (coef_at(na.m, g, na.i, i) != 0) : 0) * 3 + (nb.m ? 1 + (coef_at(nb.m, g, nb.i, i) != 0) : 0);
         tcx Y;
-        LV::sig::make(S, Y);
+        f_sig.make(S, Y);
         f_sig.select(Y);
         f_sig.prp = cab0(sig_base + (cat == 3 ? std::min(i / numc8x8, 2) : b8x8 ? (fld ? kSig8x8Field[i] : kSig8x8Frame[i]) : i));
         sig[i] = f_sig.bit(0, ENC && c[i] != 0);
@@ -2934,7 +2962,7 @@ struct Model {
       L.sa = na.m ? std::min(abs(coef_at(na.m, g, na.i, k)), 3) : 0;
       L.sb = nb.m ? std::min(abs(coef_at(nb.m, g, nb.i, k)), 3) : 0;
       tcx X;
-      LV::lvl::make(L, X);
+      f_lvl.make(L, X);
       // the intra estimate's level there
       f_lvl.hint = pok ? std::max(abs(est(k)) - 1, 0) : -1;
       int a = cm_int(f_lvl.code(X, ENC ? abs(c[k]) - 1 : 0), 1 << 24);
@@ -3016,7 +3044,7 @@ struct Model {
         if (fd && r) G.dm = 1 + (r < 0) + 2 * (ra > fd * m) + 2 * (ra > 4 * fd * m);
       }
       tcx X;
-      LV::sgn::make(G, X);
+      f_sgn.make(G, X);
       f_sgn.select(X);
       int sg = f_sgn.bit(0, ENC && c[k] < 0);
       ghist = ghist % 3 * 3 + 1 + sg;
@@ -3085,7 +3113,7 @@ struct Model {
           int half = 1 << (depth - 1), mask = (1 << depth) - 1;
           H_pcm_v D = {p, depth - 8, sq2(d1), sq2(d2)};
           tcx X;
-          LV::pcm::make(D, X);
+          f_pcm.make(D, X);
           i64 d = f_pcm.codes(X, ENC ? ((s[i] - pred + half) & mask) - half : 0, (u32)p);
           s[i] = (pred + cm_int(d, 1 << 16)) & mask;
           d2 = d1;

@@ -53,18 +53,8 @@
 struct FC_NAME {
   typedef FCF(_v) V;  // the variables, as the model fills them
   typedef FCX(T) T;   // the level's tables
-#ifdef H264P_DUMP
-  static tc_dump& dump() {
-    static tc_dump d(FC_STR(FC_FAM));
-    return d;
-  }
-  static INLINE void make(const V& D, tcx& X) {
-    dump().vars(reinterpret_cast<const int*>(&D), sizeof D / sizeof(int));
-    FCX(make)(D, X);
-  }
-#else
+  static const char* name() { return FC_STR(FC_FAM); }  // (its dump's, fam.inc)
   static INLINE void make(const V& D, tcx& X) { FCX(make)(D, X); }
-#endif
   // the counters' type (the level's template of the family declares their
   // tables): cm_cnt2, or cm_cnt2s with their probabilities kept stretched
   typedef typename std::remove_reference<decltype(((T*)nullptr)->FCX(A)[0])>::type Cnt;

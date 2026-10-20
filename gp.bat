@@ -2,4 +2,4 @@
 
 set path=C:\mingwG20x\bin
 
-g++ -s -static -O2 -march=x86-64-v3 -ffp-contract=off -std=c++11 -fwrapv h264p_src/h264p.cpp -o h264p.exe
+g++ -s -static -O2 -march=x86-64-v3 -ffp-contract=off -std=c++11 -fwrapv -Ih264p_src/Lib3 h264p_src/h264p.cpp -o h264p.exe

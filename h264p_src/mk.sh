@@ -100,7 +100,7 @@ generate() {
 build() {
   out=$1
   shift
-  $CXX $CXXFLAGS $PARCH -std=c++11 -fwrapv "$@" -o "$out" h264p.cpp
+  $CXX $CXXFLAGS $PARCH -std=c++11 -fwrapv -ILib3 -pthread "$@" -o "$out" h264p.cpp
 }
 
 level() {

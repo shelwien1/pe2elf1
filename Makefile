@@ -26,13 +26,13 @@ h264dec: $(OBJS)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -pthread -o $@ $^ $(LDLIBS)
 
 h264p: $(POBJS)
-	$(CXX) $(CXXFLAGS) $(PARCH) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+	$(CXX) $(CXXFLAGS) $(PARCH) $(LDFLAGS) -pthread -o $@ $^ $(LDLIBS)
 
 $(OBJDIR)/%.o: codec/%.cpp | $(OBJDIR)
 	$(CXX) $(CPPFLAGS) -Icodec $(CXXFLAGS) -fno-strict-aliasing -pthread -MMD -MP -c $< -o $@
 
 $(OBJDIR)/h264p/%.o: h264p_src/%.cpp | $(OBJDIR)/h264p
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(PARCH) -std=c++11 -fwrapv -MMD -MP -c $< -o $@
+	$(CXX) $(CPPFLAGS) -Ih264p_src/Lib3 $(CXXFLAGS) $(PARCH) -std=c++11 -fwrapv -pthread -MMD -MP -c $< -o $@
 
 $(OBJDIR) $(OBJDIR)/h264p:
 	mkdir -p $@

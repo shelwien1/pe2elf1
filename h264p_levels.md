@@ -2,7 +2,9 @@
 
 The aim: h264p runs in one thread. Several threads are used by running
 several h264p processes side by side, each on a large piece of video
-stream, not by splitting the work of one. Each must do 400-500 KB of
+stream, not by splitting the work of one. (`c -t N` now does that in one
+process: the stream in parts that start at IDR access units, each part
+compressed by a model of its own on one of N threads; README, Threads.) Each must do 400-500 KB of
 H.264 per second, compressing and decompressing, and can lose some
 compression for it. The model of before stays as level `-9`, the
 strongest; lighter levels are further instances of the model template, as
@@ -308,8 +310,10 @@ As built:
   level: an even count of counters up to ten (read and updated four to an
   AVX2 vector), one mixer or three and the final one, no APM or two; the
   mixers' inputs two per counter and four more, in lanes of 8.
-- **The coder**, `tc_rc<f_DEC>::rc`, is out of the model: the same for
-  every level.
+- **The coder** is the same for every level: `tc_rc<f_DEC>`, the range
+  coder with the statistics of `-v`, the base of `Model<f_DEC, L>` (as
+  built, a static `tc_rc<f_DEC>::rc` out of the model; since then the
+  model's own, so that models can run on threads side by side).
 - **The format** (version 5): the level is a byte of the header after the
   version; `d` reads it and runs `Model<1, L>`; `c -L` runs `Model<0, L>`.
   What `-9` codes is as before, byte for byte after the header.

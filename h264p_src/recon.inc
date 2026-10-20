@@ -524,6 +524,25 @@ struct ReconT {
   int energy_mean = 0;
   std::vector<int> means;  // 16 x the means of the 4x4 blocks, for the next picture's change
   int maps_w = 0, maps_h = 0;
+  // H264P_RECDUMP's file (finish_picture()), opened as the first picture is
+  struct RecDump {
+    FILE* f = nullptr;
+    bool tried = false;
+    FILE* get() {
+      if (!tried) {
+        tried = true;
+        const char* fn = getenv("H264P_RECDUMP");
+        if (fn) f = fopen(fn, "wb");
+      }
+      return f;
+    }
+    RecDump() {}
+    RecDump(const RecDump&) = delete;
+    void operator=(const RecDump&) = delete;
+    ~RecDump() {
+      if (f) fclose(f);
+    }
+  } recdump;
 
   // 4 log2 v, rounded down to quarters (integers only: the model must come
   // out the same everywhere)
@@ -678,8 +697,9 @@ struct ReconT {
     if (act()) fin_end();
     // checking the reconstruction against a decoder's: H264P_RECDUMP=file
     // gets the pictures, in decoding order, as raw 4:2:0 of whole macroblocks
-    static FILE* dump = getenv("H264P_RECDUMP") ? fopen(getenv("H264P_RECDUMP"), "wb") : nullptr;
-    if (dump && act()) {
+    // (this model's: c or d without -t)
+    FILE* dump = act() ? recdump.get() : nullptr;
+    if (dump) {
       fwrite(cur->y.data(), 1, cur->y.size(), dump);
       fwrite(cur->u.data(), 1, cur->u.size(), dump);
       fwrite(cur->v.data(), 1, cur->v.size(), dump);

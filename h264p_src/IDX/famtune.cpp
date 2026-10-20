@@ -26,6 +26,10 @@
 #include <type_traits>
 #include <vector>
 
+// (the coder's bytes go through a coroutine's output, rcio.inc)
+#include "../Lib3/common.inc"
+#include "../Lib3/coro3b.inc"
+
 #include "../cmbase.inc"
 #include "../rcio.inc"
 #include "../rc.inc"
@@ -78,7 +82,7 @@ std::vector<char> slurp(const char* fn) {
 // stream (zero, as tc_table maps them), the hint's counters made at once
 // (code() makes them at its first hint, zero too).
 template <class C>
-void replay(char** files, int n) {
+void replay(char** files, int n, tc_rc<0>& rc) {
   typedef tc_fam<0, C> F;
   static const int any = 0;  // (prpa only set: what bitm() asks of it)
   std::unique_ptr<F> f;
@@ -93,7 +97,7 @@ void replay(char** files, int n) {
         typename C::T* t = new (tc_map(sizeof(typename C::T))) typename C::T;
         C::init(t);
         f.reset(new F());
-        f->wire(t);
+        f->wire(t, &rc);
         f->Z.assign(C::kT * (sz)C::ND * 5, cm_cnt2{});
         f->ZM.assign(C::kT * (sz)C::MND * 5, cm_cnt{});
         continue;
@@ -138,6 +142,28 @@ void replay(char** files, int n) {
   }
 }
 
+// The replay as a coroutine, as the model codes (its coder is a coroutine's,
+// rcio.inc), whose output main() throws away: what counts is the size -v
+// counts (tc_bits, stage 0 throughout)
+struct Replay : tc_rc<0> {
+  char** argv;
+  int argc;
+  std::string err;  // empty: done
+  void do_process() {
+    io_init();
+    try {
+      rc_Init();
+#define FT_FAM(F) !strcmp(argv[1], #F) ? replay<FtLv::F>(argv + 2, argc - 2, *this) :
+      FT_FAM(nal) FT_FAM(hdr) FT_FAM(skp) FT_FAM(mbt) FT_FAM(cbp) FT_FAM(ipm) FT_FAM(mvs) FT_FAM(qpd) FT_FAM(cbf)
+          FT_FAM(sig) FT_FAM(lvl) FT_FAM(sgn) FT_FAM(mvg) FT_FAM(qpg) FT_FAM(pcm) cm_fail("famtune: no family %s", argv[1]);
+#undef FT_FAM
+    } catch (const std::exception& e) {
+      err = e.what();
+    }
+    for (;;) yield(static_cast<Coroutine*>(this), err.empty() ? 0 : 3);
+  }
+};
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -145,18 +171,19 @@ int main(int argc, char** argv) {
     fprintf(stderr, "usage: famtune FAMILY DUMP...   (level -%d)\n", FtLv::id);
     return 2;
   }
-  try {
-    cm_tables();
-    tc_verbose = 1;
-    tc_rc<0>::rc.rc_Init();
-#define FT_FAM(F) !strcmp(argv[1], #F) ? replay<FtLv::F>(argv + 2, argc - 2) :
-    FT_FAM(nal) FT_FAM(hdr) FT_FAM(skp) FT_FAM(mbt) FT_FAM(cbp) FT_FAM(ipm) FT_FAM(mvs) FT_FAM(qpd) FT_FAM(cbf)
-        FT_FAM(sig) FT_FAM(lvl) FT_FAM(sgn) FT_FAM(mvg) FT_FAM(qpg) FT_FAM(pcm) cm_fail("famtune: no family %s", argv[1]);
-#undef FT_FAM
-  } catch (const std::exception& e) {
-    fprintf(stderr, "famtune: %s\n", e.what());
+  // (on pages of its own: a coroutine's jmp_bufs are aligned)
+  Replay* r = new (tc_map(sizeof(Replay), "the replay")) Replay();
+  static uint8_t out[1 << 16];
+  r->coro_init();
+  r->argv = argv;
+  r->argc = argc;
+  r->tc_verbose = true;
+  r->addout(out, sizeof out);
+  while (r->coro_call(r) == 2) r->addout(out, sizeof out);
+  if (!r->err.empty()) {
+    fprintf(stderr, "famtune: %s\n", r->err.c_str());
     return 1;
   }
-  printf("%.3f\n", tc_bits[0] / 8);
+  printf("%.3f\n", r->tc_bits[0] / 8);
   return 0;
 }

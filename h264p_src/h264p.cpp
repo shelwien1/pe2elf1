@@ -49,6 +49,12 @@
 #include "Lib3/file_api.inc"
 #include "Lib3/coro_fhp2.inc"
 #include "Lib3/coro2pair.inc"
+// MTwrap (unchanged from mtwrap's, as is Lib3's win_shim.inc it includes:
+// build with -I Lib3, and with threads, -pthread), which runs coroutines on
+// threads, and h264split's splitter (rzwrap_h264's), which cuts a stream
+// into the parts it deals to them (mt.inc)
+#include "MTwrap_v3/MTwrap.inc"
+#include "h264split.inc"
 
 #include "bits.inc"
 #include "rows.inc"
@@ -84,6 +90,26 @@ const int kCmVersion = 5;
 // end of its input decodes zeros, and 0 is the CRC-32 of an empty stream.
 const uint32_t kCrcXor = 0x68323634;
 
+// The level of a compressed stream from its first bytes, n of them read
+// (the magic, the version, the level), or -1 (reported) if they are not
+// h264p's
+int cm_level(const uint8_t* head, size_t n, const char* name) {
+  if (n < sizeof kCmMagic || memcmp(head, kCmMagic, sizeof kCmMagic - 1)) {
+    fprintf(stderr, "h264p: %s: not a stream h264p compressed\n", name);
+    return -1;
+  }
+  if (head[sizeof kCmMagic - 1] != kCmVersion) {
+    fprintf(stderr, "h264p: %s: compressed by version %d, this is version %d\n", name, (int)head[sizeof kCmMagic - 1],
+            kCmVersion);
+    return -1;
+  }
+  if (n == sizeof kCmMagic) {
+    fprintf(stderr, "h264p: %s: the compressed stream is cut short\n", name);
+    return -1;
+  }
+  return head[sizeof kCmMagic];
+}
+
 // The levels of this build (h264p_levels.md section 4): every level, or the
 // one a tuning build has (mk.sh); c without -L takes the first
 #if H264P_LV(9)
@@ -118,7 +144,9 @@ const int kLevels[] = {H264P_LEVELS(H264P_FIRST)};
 struct Options {
   bool verbose = false;
   bool strict = false;
-  int level = kLevels[0];  // c's model: -L
+  int level = kLevels[0];   // c's model: -L
+  int threads = 1;          // c's threads: -t (more than one: the stream in parts, mt.inc)
+  uint32_t part = 4 << 20;  // and the size of a part, at least: -c
 };
 
 struct Stats {
@@ -953,15 +981,16 @@ struct Crc32 {
   uint32_t c = 0xFFFFFFFFu;
 };
 
-void cm_report(u64 in_bytes, u64 out_bytes, u64 tables) {
+void cm_report(const tc_rc<0>& e, u64 in_bytes, u64 out_bytes, u64 tables) {
   double tot = 0;
-  for (int i = 0; i < STG_N; i++) tot += tc_bits[i];
+  for (int i = 0; i < STG_N; i++) tot += e.tc_bits[i];
   fprintf(stderr, "%" PRIu64 " -> %" PRIu64 " bytes (%.2f%%), %" PRIu64 " MB of model tables\n", in_bytes, out_bytes,
           in_bytes ? 100.0 * out_bytes / in_bytes : 0.0, tables >> 20);
   for (int i = 0; i < STG_N; i++) {
-    if (!tc_syms[i]) continue;
+    if (!e.tc_syms[i]) continue;
     fprintf(stderr, "  %-13s %11.0f bytes %6.2f%%  %10" PRIu64 " decisions or values, %.3f bits each\n", kStage[i],
-            tc_bits[i] / 8, tot > 0 ? 100.0 * tc_bits[i] / tot : 0.0, tc_syms[i], tc_bits[i] / (double)tc_syms[i]);
+            e.tc_bits[i] / 8, tot > 0 ? 100.0 * e.tc_bits[i] / tot : 0.0, e.tc_syms[i],
+            e.tc_bits[i] / (double)e.tc_syms[i]);
   }
 }
 
@@ -1010,11 +1039,11 @@ struct NalItem {
   }
 };
 
-// What a compression keeps from one NAL unit to the next, on the heap: the
-// stack of its coroutine (coro.inc), which each yield copies, stays small,
-// and Quit() frees all of it wherever the coroutine was left
+// What a compression keeps from one NAL unit to the next besides its
+// model, on the heap: the stack of its coroutine (coro.inc), which each
+// yield copies, stays small, and Quit() frees all of it wherever the
+// coroutine was left
 struct CompressState {
-  std::shared_ptr<void> model;  // Model<0, LV>
   Context cf, cb;
   PadDetector det;
   Crc32 crc;
@@ -1027,43 +1056,30 @@ struct CompressState {
 
 // and a decompression
 struct DecompressState {
-  std::shared_ptr<void> model;  // Model<1, LV>
   Context ctx;
   Crc32 crc;
   std::vector<uint8_t> buf;  // the stream decoded, not yet written
 };
 
-// Compresses the stream s.rd reads into out: 0, 1 after an error (reported),
-// or kRestart (check: a slice did not come out as it is; what out has is to
-// be thrown away)
+// Compresses the stream s.rd reads with the model m, a new one, into its
+// output (m is the range coder too, and the coroutine whose output it is,
+// coro.inc): 0, 1 after an error (reported), or kRestart (check: a slice
+// did not come out as it is; what the output has is to be thrown away)
 template <class LV>
-int compress_stream(CompressState& s, ByteSink out, const Options& opt, bool check, const char* name) {
-  Model<0, LV>* mp = new Model<0, LV>();
-  s.model = std::shared_ptr<Model<0, LV>>(mp);
-  Model<0, LV>& m = *mp;
-  auto& rc = tc_rc<0>::rc;
+int compress_stream(Model<0, LV>& m, CompressState& s, const Options& opt, bool check, const char* name) {
   Stats& st = s.st;
   Context &cf = s.cf, &cb = s.cb;
   PadDetector& det = s.det;
   Crc32& crc = s.crc;
   AnnexBReader& rd = s.rd;
   const uint8_t head[2] = {(uint8_t)kCmVersion, (uint8_t)LV::id};
-  out.write((const uint8_t*)kCmMagic, sizeof kCmMagic - 1);
-  out.write(head, 2);
-  u64 in_bytes = 0, out_bytes = sizeof kCmMagic + 1;
-  // (all of it again after kRestart)
-  memset(tc_bits, 0, sizeof tc_bits);
-  memset(tc_syms, 0, sizeof tc_syms);
-  rc.buf.clear();
+  m.write((const uint8_t*)kCmMagic, sizeof kCmMagic - 1);
+  m.write(head, 2);
+  u64 in_bytes = 0;
   try {
     m.init();
-    tc_verbose = opt.verbose;
-    rc.rc_Init();
-    auto flush = [&]() {
-      out.write(rc.buf.data(), rc.buf.size());
-      out_bytes += rc.buf.size();
-      rc.buf.clear();
-    };
+    m.tc_verbose = opt.verbose;
+    m.rc_Init();
     std::vector<uint8_t>& nal = s.nal;
     size_t zeros;
     bool more = rd.next(zeros, nal);
@@ -1184,7 +1200,6 @@ int compress_stream(CompressState& s, ByteSink out, const Options& opt, bool che
         }
       }
       if (it.slice) cb.pad.next_slice(it.newpic);
-      if (rc.buf.size() > (1 << 16)) flush();
       return true;
     };
     NalItem& it = s.it;
@@ -1201,8 +1216,7 @@ int compress_stream(CompressState& s, ByteSink out, const Options& opt, bool che
     crc.zeros(rd.eof_zeros());
     in_bytes += rd.eof_zeros();
     m.nal(F_CRC, 0, crc.value() ^ kCrcXor);
-    rc.rc_Quit();
-    flush();
+    m.rc_Quit();
   } catch (const std::exception& e) {  // CmError, or no memory
     fprintf(stderr, "h264p: %s: %s\n", name, e.what());
     return 1;
@@ -1216,7 +1230,7 @@ int compress_stream(CompressState& s, ByteSink out, const Options& opt, bool che
             st.parsed, st.trail, st.raw);
     if (st.pad) fprintf(stderr, "%ld changes of x264's padding bits\n", st.pad);
     for (auto& r : st.reasons) fprintf(stderr, "  verbatim: %ld x %s\n", r.second, r.first.c_str());
-    cm_report(in_bytes, out_bytes, m.table_bytes());
+    cm_report(m, in_bytes, m.n_out, m.table_bytes());
   }
   return 0;
 }
@@ -1227,20 +1241,18 @@ size_t cm_count(i64 v, i64 lim) {
   return (size_t)v;
 }
 
-// Decompresses the stream in (after its magic, version and level) into out:
-// 0, or 1 after an error (reported; out has what was decoded)
+// Decompresses with the model m, a new one, what is left of its input
+// after the magic, the version and the level, into its output (m is the
+// range decoder too, and the coroutine whose input it reads, coro.inc): 0,
+// or 1 after an error (reported; the output has what was decoded)
 template <class LV>
-int decompress_stream(DecompressState& s, ByteSource in, ByteSink out, const Options& opt, const char* name) {
-  Model<1, LV>* mp = new Model<1, LV>();
-  s.model = std::shared_ptr<Model<1, LV>>(mp);
-  Model<1, LV>& m = *mp;
-  auto& rc = tc_rc<1>::rc;
+int decompress_stream(Model<1, LV>& m, DecompressState& s, const Options& opt, const char* name) {
   std::vector<uint8_t>& buf = s.buf;
   Crc32& crc = s.crc;
   long nals = 0;
   auto flush = [&]() {
     crc.add(buf);
-    out.write(buf.data(), buf.size());
+    m.write(buf.data(), buf.size());
     buf.clear();
   };
   auto put_zeros = [&](size_t n) {
@@ -1253,9 +1265,8 @@ int decompress_stream(DecompressState& s, ByteSource in, ByteSink out, const Opt
   std::string why;
   try {
     m.init();
-    tc_verbose = opt.verbose;
-    rc.reset(in);
-    rc.rc_Init();
+    m.tc_verbose = opt.verbose;
+    m.rc_Init();
     Context& ctx = s.ctx;
     for (size_t n = cm_count(m.nal(F_JUNK, 0, 0), (i64)1 << 40); n; n--) buf.push_back((uint8_t)m.raw(0));
     int prev_type = 0;
@@ -1316,7 +1327,7 @@ int decompress_stream(DecompressState& s, ByteSource in, ByteSink out, const Opt
     if (m.nal(F_CRC, 0, 0) != (crc.value() ^ kCrcXor)) cm_fail("CRC mismatch: the stream did not decompress correctly");
     // the coder's flush leaves off the last bytes, so the decoder always
     // reads past the end of a whole stream
-    if (!rc.over) cm_fail("corrupt stream: data after its end");
+    if (!m.over) cm_fail("corrupt stream: data after its end");
   } catch (const std::exception& e) {  // CmError, TsvError
     failed = true;
     why = e.what();
@@ -1332,13 +1343,27 @@ int decompress_stream(DecompressState& s, ByteSource in, ByteSink out, const Opt
 
 #include "coro.inc"
 
-// c, d and x on files, or stdin and stdout for "-" (Lib3's stdio file API):
-// the coroutines CoroFileProc runs, plain data, never constructed
-static union {
-  CoroFileProc<H264pCoro<0>> fc;
-  CoroFileProc<H264pCoro<1>> fd;
-  CoroFileProc<CoroutinePair<H264pCoro<0>, H264pCoro<1>>> fx;  // x: the one into the other
+// The coroutine of a call of c, d or x (or of a part, mt.inc), constructed
+// on pages of its own -- zeroed, and aligned as CoroutinePair's members
+// ask -- and destroyed with them
+template <class T>
+struct CoroObj {
+  T* p;
+  CoroObj() : p(new (tc_map(sizeof(T), "a coroutine")) T()) {}
+  ~CoroObj() {
+    p->~T();
+    tc_unmap(p, sizeof(T));
+  }
+  CoroObj(const CoroObj&) = delete;
+  void operator=(const CoroObj&) = delete;
+  T* get() const { return p; }
+  T* operator->() const { return p; }
 };
+
+#include "mt.inc"
+
+// c, d and x on files, or stdin and stdout for "-" (Lib3's stdio file API),
+// their coroutines run by CoroFileProc
 
 bool open_files(const char* in_name, const char* out_name, filehandle& f, filehandle& g) {
   f.open(in_name);
@@ -1406,16 +1431,18 @@ bool has_level(int level) {
   return r;
 }
 
-int compress(const char* in_name, const char* out_name, const Options& opt) {
-  if (!has_level(opt.level)) return 2;
-  filehandle f, g;
-  if (!open_files(in_name, out_name, f, g)) return 1;
+// c: one model, the level's (H264pCoro<0, LV>), on all of the stream
+template <class LV>
+int compress_lv(const char* in_name, const char* out_name, const Options& opt, filehandle& f, filehandle& g) {
   H264pArgs a = {opt.level, opt.verbose, opt.strict, can_check(in_name, out_name), in_name};
   for (;;) {
-    fc.Init(&a);
-    fc.processfile(f, g);
-    int r = fc.status;
-    fc.Quit();
+    int r;
+    {
+      CoroObj<CoroFileProc<H264pCoro<0, LV>>> c;  // (a new model each time)
+      c->Init(&a);
+      c->processfile(f, g);
+      r = c->status;
+    }
     if (r != kRestart) return close_files(r, f, g, out_name, false);
     // (a slice did not come out as it is: again, the dry run writing back each)
     a.check = false;
@@ -1423,42 +1450,177 @@ int compress(const char* in_name, const char* out_name, const Options& opt) {
   }
 }
 
+// c -t N: the stream in parts on N threads (mt.inc), after h264p's header
+int compress_mt(const char* in_name, const char* out_name, const Options& opt, filehandle& f, filehandle& g) {
+  H264pArgs a = {opt.level, false, opt.strict, true, in_name};
+  CoroObj<CoroFileProc<MtEnc>> c;
+  if (c->M1.Init(opt.part, 0) || c->M2.Init(opt.threads, opt.part, &a, 1)) {
+    fprintf(stderr, "h264p: cannot start %d threads\n", opt.threads);
+    return close_files(1, f, g, out_name, false);
+  }
+  uint8_t head[kMtHead];
+  memcpy(head, kMtMagic, sizeof kMtMagic - 1);
+  head[sizeof kMtMagic - 1] = (uint8_t)kCmVersion;
+  head[sizeof kMtMagic] = (uint8_t)opt.threads;
+  put_le(head + sizeof kMtMagic + 1, opt.part >> 10, 4);
+  fwrite(head, 1, sizeof head, g.f);
+  int r = c->processfile(f, g) ? 1 : 0;
+  bool said = mt_failed(c->M2);
+  uint64_t in_bytes = c->M1.st->total, out_bytes = sizeof head + c->M2.c_out, parts = c->M1.st->parts;
+  c->M2.Quit();  // (the threads joined)
+  c->M1.Quit();
+  if (r && !said) fprintf(stderr, "h264p: %s: internal: a thread stopped early\n", in_name);
+  if (!r && opt.verbose)
+    fprintf(stderr, "%" PRIu64 " -> %" PRIu64 " bytes (%.2f%%), %" PRIu64 " parts on %d threads\n", in_bytes, out_bytes,
+            in_bytes ? 100.0 * out_bytes / in_bytes : 0.0, parts, opt.threads);
+  return close_files(r, f, g, out_name, false);
+}
+
+int compress(const char* in_name, const char* out_name, const Options& opt) {
+  if (!has_level(opt.level)) return 2;
+  filehandle f, g;
+  if (!open_files(in_name, out_name, f, g)) return 1;
+  if (opt.threads > 1) return compress_mt(in_name, out_name, opt, f, g);
+  switch (opt.level) {
+#define H264P_C(n) \
+  case n:          \
+    return compress_lv<Lv##n>(in_name, out_name, opt, f, g);
+    H264P_LEVELS(H264P_C)
+#undef H264P_C
+  }
+  return close_files(1, f, g, out_name, false);
+}
+
+// d of one model's stream, at its level: the bytes of the input read
+// already (head, got of them) first
+template <class LV>
+int decompress_lv(const char* in_name, const char* out_name, const Options& opt, filehandle& f, filehandle& g,
+                  uint8_t* head, size_t got) {
+  H264pArgs a = {0, opt.verbose, false, false, in_name};
+  int r;
+  bool keep;
+  {
+    CoroObj<CoroFileProc<H264pCoro<1, LV>>> d;
+    d->Init(&a);
+    d->processfile(f, g, head, head + got);
+    r = d->status;
+    keep = d->n_out > 0;  // (what was decoded before an error)
+  }
+  return close_files(r, f, g, out_name, keep);
+}
+
+// d of the parts on threads: as many threads as compressed them
+int decompress_mt(const char* in_name, const char* out_name, const Options& opt, filehandle& f, filehandle& g,
+                  const uint8_t* head, size_t got) {
+  int threads = got == (size_t)kMtHead ? head[sizeof kMtMagic] : 0;
+  uint32_t part = (uint32_t)std::min<uint64_t>(get_le(head + sizeof kMtMagic + 1, 4) << 10, 4095u << 20);
+  if (got > sizeof kMtMagic - 1 && head[sizeof kMtMagic - 1] != kCmVersion) {
+    fprintf(stderr, "h264p: %s: compressed by version %d, this is version %d\n", in_name, (int)head[sizeof kMtMagic - 1],
+            kCmVersion);
+    return close_files(1, f, g, out_name, false);
+  }
+  if (threads < 1 || threads > 64) {
+    fprintf(stderr, "h264p: %s: a broken or truncated stream\n", in_name);
+    return close_files(1, f, g, out_name, false);
+  }
+  H264pArgs a = {0, false, false, false, in_name};
+  CoroObj<CoroFileProc<MtDec>> d;
+  if (d->Init(threads, part, &a, 1)) {
+    fprintf(stderr, "h264p: cannot start %d threads\n", threads);
+    return close_files(1, f, g, out_name, false);
+  }
+  int r = d->processfile(f, g) ? 1 : 0;
+  bool said = mt_failed(*d.get());
+  uint64_t out_bytes = d->c_out, parts = mt_parts(*d.get());
+  d->Quit();
+  if (r && !said) fprintf(stderr, "h264p: %s: a broken or truncated stream\n", in_name);
+  if (!r && opt.verbose) fprintf(stderr, "%" PRIu64 " bytes, %" PRIu64 " parts on %d threads\n", out_bytes, parts, threads);
+  return close_files(r, f, g, out_name, out_bytes > 0);
+}
+
+// d: the first bytes say which it is, a stream of one model (and its level)
+// or of parts on threads (kMtMagic)
 int decompress(const char* in_name, const char* out_name, const Options& opt) {
   filehandle f, g;
   if (!open_files(in_name, out_name, f, g)) return 1;
-  H264pArgs a = {0, opt.verbose, false, false, in_name};
-  fd.Init(&a);
-  fd.processfile(f, g);
-  int r = fd.status;
-  bool keep = fd.n_out > 0;  // (what was decoded before an error)
-  fd.Quit();
-  return close_files(r, f, g, out_name, keep);
+  uint8_t head[kMtHead];
+  size_t got = fread(head, 1, sizeof head, f.f);
+  if (got >= sizeof kMtMagic - 1 && !memcmp(head, kMtMagic, sizeof kMtMagic - 1))
+    return decompress_mt(in_name, out_name, opt, f, g, head, got);
+  int level = cm_level(head, got, in_name);
+  switch (level) {
+#define H264P_D(n) \
+  case n:          \
+    return decompress_lv<Lv##n>(in_name, out_name, opt, f, g, head, got);
+    H264P_LEVELS(H264P_D)
+#undef H264P_D
+  }
+  if (level >= 0) fprintf(stderr, "h264p: %s: compressed at level -%d, which this build has not\n", in_name, level);
+  return close_files(1, f, g, out_name, false);
 }
 
 // x: c and d at once, the compressed stream going from the one coroutine to
 // the other in a CoroutinePair; the output is the stream restored
-int roundtrip(const char* in_name, const char* out_name, const Options& opt) {
-  if (!has_level(opt.level)) return 2;
-  filehandle f, g;
-  if (!open_files(in_name, out_name, f, g)) return 1;
+template <class LV>
+int roundtrip_lv(const char* in_name, const char* out_name, const Options& opt, filehandle& f, filehandle& g) {
   H264pArgs a = {opt.level, opt.verbose, opt.strict, can_check(in_name, out_name), in_name};
   H264pArgs b = {0, opt.verbose, false, false, "the compressed stream"};
   for (;;) {
-    fx.M1.Init(&a);
-    fx.M2.Init(&b);
-    fx.processfile(f, g);
-    int r = fx.M1.status ? fx.M1.status : fx.M2.status;
-    fx.M1.Quit();
-    fx.M2.Quit();
+    int r;
+    {
+      CoroObj<CoroFileProc<CoroutinePair<H264pCoro<0, LV>, H264pCoro<1, LV>>>> x;
+      x->M1.Init(&a);
+      x->M2.Init(&b);
+      x->processfile(f, g);
+      r = x->M1.status ? x->M1.status : x->M2.status;
+    }
     if (r != kRestart) return close_files(r, f, g, out_name, false);
     a.check = false;
     if (!rewind_files(out_name, f, g)) return close_files(1, f, g, out_name, false);
   }
 }
 
+// x -t N: the parts on N threads into MTwrap's decoder on N more
+int roundtrip_mt(const char* in_name, const char* out_name, const Options& opt, filehandle& f, filehandle& g) {
+  H264pArgs a = {opt.level, false, opt.strict, true, in_name};
+  H264pArgs b = {0, false, false, false, "the compressed stream"};
+  CoroObj<CoroFileProc<CoroutinePair<MtEnc, MtDec>>> x;
+  if (x->M1.M1.Init(opt.part, 0) || x->M1.M2.Init(opt.threads, opt.part, &a, 1) ||
+      x->M2.Init(opt.threads, opt.part, &b, 1)) {
+    fprintf(stderr, "h264p: cannot start %d threads\n", 2 * opt.threads);
+    return close_files(1, f, g, out_name, false);
+  }
+  int r = x->processfile(f, g) ? 1 : 0;
+  bool said = mt_failed(x->M1.M2) || mt_failed(x->M2);
+  uint64_t in_bytes = x->M1.M1.st->total, mid_bytes = kMtHead + x->M1.M2.c_out, parts = x->M1.M1.st->parts;
+  x->M2.Quit();
+  x->M1.M2.Quit();
+  x->M1.M1.Quit();
+  if (r && !said) fprintf(stderr, "h264p: %s: internal: a thread stopped early\n", in_name);
+  if (!r && opt.verbose)
+    fprintf(stderr, "%" PRIu64 " -> %" PRIu64 " bytes (%.2f%%), %" PRIu64 " parts on %d threads\n", in_bytes, mid_bytes,
+            in_bytes ? 100.0 * mid_bytes / in_bytes : 0.0, parts, opt.threads);
+  return close_files(r, f, g, out_name, false);
+}
+
+int roundtrip(const char* in_name, const char* out_name, const Options& opt) {
+  if (!has_level(opt.level)) return 2;
+  filehandle f, g;
+  if (!open_files(in_name, out_name, f, g)) return 1;
+  if (opt.threads > 1) return roundtrip_mt(in_name, out_name, opt, f, g);
+  switch (opt.level) {
+#define H264P_X(n) \
+  case n:          \
+    return roundtrip_lv<Lv##n>(in_name, out_name, opt, f, g);
+    H264P_LEVELS(H264P_X)
+#undef H264P_X
+  }
+  return close_files(1, f, g, out_name, false);
+}
+
 void usage() {
   fprintf(stderr,
-          "usage: h264p c|d|t|r [options] input output\n"
+          "usage: h264p c|d|t|r|x [options] input output\n"
           "  c  compress an H.264 Annex B stream\n"
           "  d  decompress it\n"
           "  t  dump the stream's syntax to a TSV file\n"
@@ -1466,9 +1628,12 @@ void usage() {
           "  x  compress and decompress at once (the compressor's output the\n"
           "     decompressor's input, two coroutines): writes the stream restored\n"
           "options:\n"
-          "  -v  print statistics\n"
-          "  -s  strict (c, t, x): fail if a NAL unit of a supported type has to be stored verbatim\n"
-          "  -L  (c, x) the model's level, 1 (fastest) to 9 (strongest, the default)\n"
+          "  -v    print statistics\n"
+          "  -s    strict (c, t, x): fail if a NAL unit of a supported type has to be stored verbatim\n"
+          "  -L    (c, x) the model's level, 1 (fastest) to 9 (strongest, the default)\n"
+          "  -t N  (c, x) compress on N threads, 1 to 64 (default 1): the stream in parts that start\n"
+          "        at IDR access units, a model for each; d takes N from the stream\n"
+          "  -c N  (c, x with -t) the size of a part, at least: N MB, or N KB with a k (default 4)\n"
           "input and output can be - for stdin and stdout\n");
 }
 
@@ -1499,7 +1664,28 @@ int main(int argc, char** argv) {
           opt.strict = true;
         else if (*p >= '1' && *p <= '9')
           opt.level = *p - '0';
-        else {
+        else if ((*p == 't' || *p == 'c') && (p[1] || i + 1 < argc)) {
+          // -t N, -c N (or -tN, -cN): the rest of the argument, or the next
+          const char* v = p[1] ? p + 1 : argv[++i];
+          char* e;
+          unsigned long n = strtoul(v, &e, 10);
+          if (*p == 't') {
+            if (*e || e == v || n < 1 || n > 64) {
+              fprintf(stderr, "h264p: -t takes 1 to 64 threads\n");
+              return 2;
+            }
+            opt.threads = (int)n;
+          } else {
+            unsigned long unit = 1 << 20;
+            if (*e == 'k' || *e == 'K') unit = 1 << 10, e++;
+            if (*e || e == v || n < 1 || n > (4095ul << 20) / unit) {
+              fprintf(stderr, "h264p: -c takes a part size of 1 to 4095 MB, or in KB with a k\n");
+              return 2;
+            }
+            opt.part = (uint32_t)(n * unit);
+          }
+          break;
+        } else {
           usage();
           return 2;
         }

@@ -18,16 +18,17 @@ Linux (gcc or clang):
 Windows (MinGW): `g.bat`, as before, for h264dec, `gp.bat` for h264p.
 
 h264p is a single module: `h264p_src/h264p.cpp` includes the rest of its
-sources (`*.inc`, and the coroutine library in `h264p_src/Lib3`), so
-`g++ -O2 -march=x86-64-v3 -std=c++11 -fwrapv h264p_src/h264p.cpp -o h264p`
+sources (`*.inc`, the coroutine library in `h264p_src/Lib3` and MTwrap in
+`h264p_src/MTwrap_v3`, which includes `Lib3/win_shim.inc` by its name
+alone, as mtwrap builds it), so
+`g++ -O2 -march=x86-64-v3 -std=c++11 -fwrapv -Ih264p_src/Lib3 -pthread h264p_src/h264p.cpp -o h264p`
 builds it too. Its target is x86-64-v3 (AVX2:
 Haswell, Zen and later), for which its pixel kernels and mixers have SIMD
 code; built for any other target (`make PARCH=`, or without `-march`) it
 uses the plain C++ beside them, which is slower and codes identically
 (as do builds by GCC and clang).
-h264p runs in one thread: a long stream is meant to be compressed in
-pieces, one process each (`h264p_levels.md`). `-DH264P_ONLY=L` builds one
-level of its model alone.
+h264p runs in one thread, or with `-t N` on N (below). `-DH264P_ONLY=L`
+builds one level of its model alone.
 
 ## Test
 
@@ -93,8 +94,12 @@ type-puns its motion vector arrays.
 `-v` prints statistics, `-s` makes `c`, `t` and `x` fail when a NAL unit of
 a supported type has to be stored verbatim, and `-9`, `-7`, `-5`, `-3`, `-1`
 pick the level of `c`'s (and `x`'s) model, from the strongest (the default)
-to the fastest; `d` reads the level from the stream. Input and output can be
-`-` (stdin, stdout).
+to the fastest; `d` reads the level from the stream. `-t N` makes `c` (and
+`x`) compress on N threads, up to 64, the stream in parts of at least `-c N`
+MB (`-c Nk`: KB; 4 MB by default), and `d` decompresses that on as many
+threads as it says (see Threads, below); without `-t` (or with `-t 1`), `c`
+writes the stream of one model in one thread, as it always did. Input and
+output can be `-` (stdin, stdout).
 
 ### Compression
 
@@ -226,43 +231,92 @@ decisions; `h264p_speed.md` how `-9` got here, `h264p_l1_speed.md` how
 ### Streaming: coroutines
 
 `c` and `d` run as coroutines of Lib3, the stack-copying coroutines of the
-library mtwrap is built on (`h264p_src/Lib3`, its files unchanged):
-`H264pCoro<0>` compresses and `H264pCoro<1>` decompresses
-(`h264p_src/coro.inc`), in the library's buffer protocol. The input comes
-in the buffers `addinp()` gives, a 0-length one with `f_quit` set at its
-end, and `yield 1` asks for the next; the output goes into the buffer
-`addout()` gave, `yield 2` handing it over full; `yield 0` ends a run,
-`yield 3` an error. So the library's drivers run them: `CoroFileProc` on
-files (`c`, `d`), and `CoroutinePair` chains the two (`x`: the compressor's
-output is the decompressor's input, in one pass, and what comes out must be
-the input). They have `Init(const H264pArgs*)`, `do_process()` and `Quit()`,
-no constructor (a run allocates its state on the heap as it starts, and
-`Quit()` frees it wherever the run was left), and the decompressor hands
-over only full output buffers but its last: what MTwrap takes as its
-workers' `Enc_class`. Nothing runs in threads yet, but a program can have
-them: with `H264P_NO_MAIN` defined it includes `h264p_src/h264p.cpp` (whose
-names stay in `namespace h264p`) and then more of the library; for one,
-`CoroFileProc<MTwrap<f_DEC, h264p::H264pCoro<f_DEC>, const
-h264p::H264pArgs*>>` compiles and links as rzwrap's workers do.
+library mtwrap is built on (`h264p_src/Lib3`, its files unchanged), in its
+buffer protocol: the input comes in the buffers `addinp()` gives, a
+0-length one with `f_quit` set at its end, and `yield 1` asks for the next;
+the output goes into the buffer `addout()` gave, `yield 2` handing it over
+full; `yield 0` ends a run, `yield 3` an error. So the library's drivers run
+them: `CoroFileProc` on files (`c`, `d`), and `CoroutinePair` chains two
+(`x`: the compressor's output is the decompressor's input, in one pass, and
+what comes out must be the input).
+
+The coroutine is the codec, as in the library's own codecs:
+`H264pCoro<f_DEC, L>` (`h264p_src/coro.inc`; `f_DEC` 0 compresses, 1
+decompresses, `L` the level) derives from the model, `Model<f_DEC, L>`; the
+model from the range coder with the statistics of `-v` (`tc_rc<f_DEC>`,
+`fam.inc`), which its families code through, each by a pointer to it; and
+the coder from the coroutine's I/O (`rcio.inc`: its bytes go into the
+coroutine's output buffer and come from its input buffer, through
+`Coroutine`). A run is an object of its own, constructed for it, and runs
+share nothing: any number of them can go at once, on as many threads. What
+the program has besides are constants (the counters' and mixers' tables,
+computed as it starts). The front end constructs a run's coroutine for the
+level (`c`'s `-L`, or the byte `d` reads ahead in the stream) on pages of
+its own, and its model maps its tables as it starts and unmaps them as it
+ends.
 
 Each yield copies the coroutine's stack out, into a buffer of 64 KB
-(`Coroutine::STKPAD`). The compressor yields between NAL units, with 2.4 KB
-of stack; the decompressor deep in the model, where the range decoder
-reads its input, with up to 12.5 KB (`-9`; 8 KB at `-1`; `-v` prints it).
-A yield that would need more than the buffer fails the run instead of
-overrunning it. The output is byte for byte the file-based h264p's (every
-level's output of every test stream has the MD5 it had), as fast.
+(`Coroutine::STKPAD`). Both yield deep in the model, where the range coder
+writes its output or reads its input, with up to 11 KB of stack (`-9`;
+`-v` prints it); a yield that would need more than the buffer fails the run
+instead of overrunning it. The output is byte for byte the file-based
+h264p's (every level's output of every test stream has the MD5 it had), as
+fast.
 
-Two limits remain. One compressor and one decompressor at a time in a
-process: the range coders (`tc_rc<f_DEC>::rc`) and the statistics of `-v`
-are the process's, and threads would need them per coroutine. And the
-model pass checks the slices only where the input can be read again,
-regular files (a slice that does not come out as it is makes the front end
-compress the file again, as before); through pipes, a `CoroutinePair` stage
-or a worker's stream, the dry run writes back each NAL unit, as h264p
-always did through pipes. The library's `setjmp`/`longjmp` are GCC's
-builtins or, with clang, x86-64 assembly: h264p builds for x86 now (the
-plain C++ build there too); elsewhere, the library's `CORO_NOASM`, untested.
+The model pass checks the slices only where the input can be read again
+(regular files, and the parts on threads, which are read whole first): a
+slice that does not come out as it is makes the front end compress the file
+again, as before; through pipes, or a `CoroutinePair` stage, the dry run
+writes back each NAL unit, as h264p always did through pipes. The library's
+`setjmp`/`longjmp` are GCC's builtins or, with clang, x86-64 assembly: h264p
+builds for x86 now (the plain C++ build there too); elsewhere, the
+library's `CORO_NOASM`, untested.
+
+### Threads
+
+`c -t N` compresses on N threads, 2 to 64 (`h264p_src/mt.inc`). A splitter
+(`h264p_src/h264split.inc`, rzwrap_h264's, on the main thread) cuts the
+stream into parts: a part ends at the first IDR access unit at least `-c`
+(4 MB by default) after its start, and the parameter sets it needs are
+copied in at its start (after its access unit delimiter, if it has one), so
+that each part is a stream by itself. MTwrap (`h264p_src/MTwrap_v3`,
+unchanged, its parts mode: `MTwrap.md` section 11 in mtwrap) deals the
+parts in turn to N workers; a worker reads a part whole into memory and
+compresses it with a model of its own, an `H264pCoro` run as a coroutine of
+the worker's, then the next part dealt to it. Decompressing, a worker
+decompresses its parts so, removes the inserted parameter sets, and MTwrap
+takes the parts from the workers in turn, as they were dealt.
+
+The stream starts with `h264m`, the version, the count of threads and the
+part size (KB, 32 bits), then MTwrap's container of the workers' streams
+(a block of up to 64 KB at a time, tagged with its worker), each of them a
+record for each of its parts: its size, the count of inserted parameter
+sets, the size of the part as compressed (32, 32 and 64 bits,
+little-endian), and the part compressed, a stream of h264p's with its own
+header. `d` knows it by its first bytes and runs as many threads as it
+says; `x -t N` runs both at once, MTwrap's coder into its decoder. Without
+`-t`, or with `-t 1`, `c` writes h264p's stream of one model, as before
+(`h264c`).
+
+On the 7 corpus streams concatenated (3.87 MB, 82 IDR pictures), on 4
+cores of the 2.1 GHz Xeon VM:
+
+| | size | `c` | `d` |
+|---|---|---|---|
+| `-1` | 3,212,415 | 6.3 s | 5.2 s |
+| `-1 -t 2 -c 1` | 3,217,271 (+0.15%) | 4.0 s | 3.7 s |
+| `-1 -t 4 -c 1` | 3,217,276 (+0.15%) | 2.1 s | 2.0 s |
+| `-1 -t 4 -c 256k` | 3,228,356 (+0.50%) | 2.1 s | 1.9 s |
+| `-1 -t 4 -c 64k` | 3,254,952 (+1.33%) | 2.5 s | 2.3 s |
+| `-9` | 2,719,928 | 33.8 s | 33.1 s |
+| `-9 -t 4 -c 1` | 2,736,446 (+0.61%) | 11.3 s | 11.2 s |
+| `-9 -t 4 -c 256k` | 2,767,700 (+1.76%) | 10.0 s | 10.0 s |
+
+A part starts its model from nothing, which costs compression (more at
+`-9`, whose model learns more) and the set-up of the model (about 50 ms of
+CPU time at `-1`); hence parts of 4 MB by default, for long streams. A
+stream shorter than a part is one part, on one thread. Each thread has a
+model: at `-9`, 64 MB of memory in one thread, 194 MB on 4.
 
 ### TSV
 
