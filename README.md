@@ -96,14 +96,18 @@ fastest; `d` reads the level from the stream. Input and output can be `-`
 
 ### Compression
 
-`c` parses each NAL unit, writes it back from the values it parsed to see
-that the NAL unit comes out the same, and then codes the values with the
-model: the macroblock syntax (skip flags, mb_type, intra modes, motion,
+`c` parses each NAL unit and codes the values it parsed with the model: the
+macroblock syntax (skip flags, mb_type, intra modes, motion,
 coded_block_pattern, mb_qp_delta, the coefficients) and the header syntax.
 `d` decodes the values and codes them with CAVLC or CABAC as the stream did.
-A NAL unit that does not come out the same is stored verbatim, as in the TSV
-file (below); a CRC-32 at the end checks the whole stream, and `d` takes
-data after the end of the compressed stream for corruption.
+`c` sees to it that this gives back the NAL unit as it was: it writes the
+NAL unit back from the values before coding them, or, a slice, checks as it
+codes it that the walk writes the bits and CABAC bins it read (should a
+slice fail that, `c` compresses the stream again, writing back every NAL
+unit first, as it always does through pipes). A NAL unit that does not come
+out the same is stored verbatim, as in the TSV file (below); a CRC-32 at
+the end checks the whole stream, and `d` takes data after the end of the
+compressed stream for corruption.
 
 The model is binary context mixing, after oggcomp (Ogg Vorbis): each value
 is a sequence of binary decisions, each predicted by ten adaptive counters
@@ -203,17 +207,17 @@ of H.264):
 
 | level | compressed | | `c` KB/s | `d` KB/s | memory |
 |---|---:|---:|---:|---:|---:|
-| `-9` | 2,718,200 | 70.3% | 103 | 111 | 62 MB |
-| `-7` | 2,762,018 | 71.4% | 125 | 139 | 62 MB |
-| `-5` | 3,028,487 | 78.3% | 205 | 232 | 58 MB |
-| `-3` | 3,128,074 | 80.9% | 263 | 311 | 36 MB |
-| `-1` | 3,193,962 | 82.6% | 422 | 528 | 30 MB |
+| `-9` | 2,718,200 | 70.3% | 106 | 108 | 63 MB |
+| `-7` | 2,762,018 | 71.4% | 131 | 141 | 61 MB |
+| `-5` | 3,028,487 | 78.3% | 222 | 226 | 58 MB |
+| `-3` | 3,128,074 | 80.9% | 323 | 349 | 37 MB |
+| `-1` | 3,210,963 | 83.0% | 660 | 742 | 28 MB |
 
 (memory: the peak resident size compressing 03). `h264p_levels.md` has
 what each level leaves out of the model, where the time goes, and how each
 level has its own IDX profile, tuned against dumps of its families'
-decisions; `h264p_speed.md` how `-9` got here, `h264p_l1_speed.md` what
-could still make `-1` faster.
+decisions; `h264p_speed.md` how `-9` got here, `h264p_l1_speed.md` how
+`-1` got from 422 and 528 KB/s to this.
 
 ### TSV
 

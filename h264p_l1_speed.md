@@ -1,17 +1,25 @@
-# h264p `-1`: where its time goes now, and what could still speed it up
+# h264p `-1`: where its time went, and what made it faster
 
-`-1` as built (its own four contexts a family, its parameters tuned, no
-decoder, no CABAC states, `h264p_levels.md` sections 4 and 5) compresses
-the 7 corpus streams (`test/002`, 3.87 MB of H.264) at 422 KB/s and
-decompresses them at 528, in one thread on the 2.1 GHz Xeon VM of the
-other documents (`h264p_levels.md` section 4; its tuning made it 6%
-faster both ways, its tables going from 34 MB to 13). The target was
-400-500 KB/s. This document
-profiles `-1` again and lists what could make it faster: first what
-keeps the format (section 2), then what changes the model (section 3),
-each with what it would save. Nothing here is built yet.
+`-1` as first built (its own four contexts a family, its parameters
+tuned, no decoder, no CABAC states, `h264p_levels.md` sections 4 and 5)
+compressed the 7 corpus streams (`test/002`, 3.87 MB of H.264) at 422
+KB/s and decompressed them at 528, in one thread on the 2.1 GHz Xeon VM
+of the other documents (`h264p_levels.md` section 4; its tuning had made
+it 6% faster both ways, its tables going from 34 MB to 13). The target
+was 400-500 KB/s. Sections 1-5 profile that `-1` and list what could
+make it faster: first what keeps the format (section 2), then what
+changes the model (section 3), each with what it would save.
 
-## 1. Where the time goes
+Section 6 has what was built of it and what each item gave: all of
+section 2 but the stretch (2.7, which gave nothing), and 3.1 and 3.3,
+which make `-1` 0.53% larger. `-1` now compresses the corpus at 660 KB/s
+and decompresses it at 742, 45% and 28% faster than before (454 and 578
+measured in the same runs: the VM's speed varies from run to run and
+from day to day); the
+other levels code as before and got faster too, most of them compressing
+(section 6.8). Section 7 profiles `-1` again.
+
+## 1. Where the time went
 
 Sampled with call stacks (section 5), all 7 streams, compressing (`c`,
 52,558 samples) and decompressing (`d`, 43,112):
@@ -226,3 +234,198 @@ the rest are worth keeping, and 2.5 makes `c9` cheap.
 - The prices of section 3: `famtune` of `-1`'s tuning build replaying
   `-1`'s dumps of the tuning corpus, with the patterns of the lines named
   set to zeros.
+## 6. What was built
+
+In the order of section 4. Each step was timed against the build before
+it, the two run in turn on the corpus, best of two or three runs (runs
+vary by 2-5%, so the steps' gains do not add up exactly); each step but
+3.1 and 3.3 codes every stream at every level to the same bytes as
+before, which `test/h264p.sh` and MD5s of all 480 outputs checked:
+
+| | as built | `c` KB/s | `d` KB/s |
+|---|---|---:|---:|
+| 2.3 | the history copy gated by `refs` or `recon` | within the noise | within the noise |
+| 2.1 | table-driven CABAC engines | 445 -> 488 | 562 -> 614 |
+| 2.2 | the model pass checks a slice, not a write-back | 464 -> 545 | - |
+| 2.4, 2.5, 2.6 | the log's buffers kept, the skip window summed, no clearing per macroblock | 523 -> 574 | 609 -> 627 |
+| 2.6 | the walk a template on its mode | 562 -> 606 | 632 -> 643 |
+| 2.7 | the stretch by eight loads: no gain, not kept | 562 -> 547 | 634 -> 636 |
+| 3.1, 3.3 | no motion vectors, no `sn` (`-1` 0.53% larger) | 559 -> 623 | 645 -> 714 |
+| 3.2 | skip runs: not built | | |
+| **all** | | **454 -> 660** | **578 -> 742** |
+
+(The last row: the build before section 2 and the one after 3.1 in turn,
+best of four runs, section 6.8.)
+
+### 6.1 The CABAC engines (2.1)
+
+A context is one byte, pStateIdx * 2 + valMPS, its transitions and
+rangeTabLPS indexed by it, and a decision takes the LPS's values by
+selection, not by a branch on the bin; a renormalization is one shift by
+the range's leading zeros. The decoder keeps codIOffset above the input it
+has read ahead (32 bits at a time); its position, the bits taken into
+codIOffset, is exact, and goes back to the `BitReader` when a terminating
+bin is 1 (the I_PCM samples follow it), and it fails exactly where the
+bit-serial one read past the end. The encoder keeps codILow with the bits
+above it not yet written, writes 32 of them at a time as bytes, and adds a
+carry back into the bytes written (it never reaches before the first: the
+bit `PutBit()` leaves out is always 0). Both agreed with the bit-serial
+engines on 129 M random decisions, bypass and terminating bins, with I_PCM
+breaks between runs, and on where truncated input fails. On 20 M bins of
+mixed probabilities, alone, decoding takes 7.5 ns a bin instead of 9.5,
+encoding 5.7 instead of 12.8.
+
+### 6.2 The check of a slice (2.2)
+
+As section 2.2 had it, a mirror encoder fed the bins as they are decoded,
+the check would have been weaker than the write-back: for a run of CABAC
+data that ends in a 1 bit, an encoder fed the decoded bins always writes
+the input's own bits back, so it would check nothing of what the walk does
+when it writes from the values, which is what decompression does. Built
+instead:
+
+- the parse records where the slice data ends and, with CABAC, its bins
+  and where each run of CABAC data starts and ends (`BinRec`); where each
+  run ends in a 1 bit (and the trailer is found against the input itself),
+  the slice would come out as it is, if the walk writes the same values,
+  bits and bins as it read;
+- the model pass, which walks the write direction anyway, checks that:
+  without its bins (`-1`, `-5`) it compares each bin it would write with
+  the one recorded and the bits it writes with those outside the CABAC
+  data; with them, all of its bits with the input;
+- should that ever fail, the model has coded the slice already, so
+  compression starts again, the dry run writing back every NAL unit as
+  before: the output is the same in every case. That needs the input read
+  again and the output written again, so files only; through pipes the
+  dry run writes back as before (`test/h264p.sh` now compresses each
+  stream through pipes too and compares). The restart was tried by forcing
+  a mismatch at chosen slices, and by corrupting the recorded bins and the
+  input's bits as the check sees them: each was caught, and the output
+  stayed the same.
+
+A run of CABAC data that does not end in a 1 bit, or a trailer not found,
+still goes through the write-back, as do the NAL units that are not slices.
+It saved 17%, more than the 8% estimated: the estimate left the
+write-back's encoding to the check, but without the bins (as `-1` runs it)
+the check only compares them.
+
+### 6.3 The smaller ones (2.4-2.6)
+
+- The log: one buffer that only grows (the NAL unit's item is kept for the
+  next, with its log, bin record and RBSP), written and read without
+  `push_back`'s checks, a block of coefficients and the I_PCM samples at
+  once.
+- The skip window: summed without a bounds check per neighbour (one for
+  the macroblock, its nine bytes added where it is inside the picture;
+  MBAFF as before).
+- `begin_mb()`: the coefficient rows the last macroblock at the address
+  wrote stay (`cmask` says which rows are written), `store_coef()` clears a
+  row as it starts writing it, and the three places that read the
+  macroblock's own rows directly read them through `cmask`; the next
+  macroblock's record is prefetched. (Prefetching its history too, and the
+  clearing in vector stores instead of `rep stos`, gave nothing measurable
+  and were not kept.)
+- `SliceCoderT<kMode>`: 0 parses, 1 writes, 2 writes without the bins.
+
+### 6.4 The stretch (2.7)
+
+Eight scalar loads from `cm_st` instead of the gather code the same and
+gave nothing (562 KB/s compressing with the gather, 547 with the loads;
+decompressing the same), so the gather stays. The other candidate, the
+stretched probabilities kept beside the counter's, was not tried: what the
+counters cost is their loads, not the gather, and it would make a counter
+10 bytes instead of 6.
+
+### 6.5 No motion vectors (3.1)
+
+A new part of the model, `mvp`: the motion vectors as the decoder has
+them, predicted (`mv_pred()`, the direct and P_Skip motion) and kept in
+each macroblock's record and history. `-1` is the one level without it
+(the decoder and the reference lists need the vectors, which `Model`
+asserts); the variables that need it were found as the other parts' were,
+comparing dumps of every family's variables with and without it (on P, B,
+hierarchical, spatial and temporal direct streams, and every partition):
+the mvd's `pd`, `sp`, `zd` and the mvd signs' `zs`, `ds`, `ns`, and no
+other. Section 3.1 had missed `zs` and `ds`, which also read the
+prediction: without the six lines, retuned against their dumps, `-1` codes
+the tuning corpus 0.50% larger (mvds +3,281 bytes, their signs +2,397),
+test/002 0.53%; and it is 11% faster both ways, more than the 3.5% and
+4.5% estimated, the vectors' share having grown as the rest shrank.
+
+### 6.6 `sn` (3.3)
+
+The significance's line reading `sn` (two `coef_at()` lookups a decision)
+went, as priced: retuned, the significance codes the tuning corpus 80
+bytes larger (0.01%).
+
+### 6.7 Skip runs (3.2): not built
+
+The skip flags carry 6% of what `-1` makes of 00 and 19% of 03 (0.04 and
+0.22 bits a decision, a skip flag or an end of slice flag, two a
+macroblock), so a run code would have to model
+them about as well as the per-macroblock contexts do (the 3x3 window of
+the last picture's skip map, the neighbours, the run so far); that is a
+model and a tuning of its own, and `-1` is above the target without it.
+What it could save: the skip family's decisions take 10.5% of compressing
+and 12.3% of decompressing (section 7), the model's work at the start and
+end of each macroblock and for the skip variables 8.3% and 9.0% (for every
+macroblock, skipped or not).
+
+### 6.8 Every level
+
+2.1, 2.2, 2.4 and 2.6 are the engines', the dry run's, the log's and the
+walk's, which every level has, so every level is faster, compressing
+most: the build before section 2 and the one after 3.1 on the corpus, in
+turn, two runs of two rounds, the best of the four:
+
+| level | `c` KB/s | `d` KB/s | size |
+|---|---:|---:|---|
+| `-9` | 96 -> 106 (+10%) | 108 -> 108 | the same |
+| `-7` | 123 -> 131 (+6%) | 128 -> 141 (+10%) | the same |
+| `-5` | 191 -> 222 (+16%) | 217 -> 226 (+4%) | the same |
+| `-3` | 257 -> 323 (+26%) | 316 -> 349 (+11%) | the same |
+| `-1` | 454 -> 660 (+45%) | 578 -> 742 (+28%) | +0.53% |
+
+Peak memory, compressing 03, is as it was within a megabyte, `-1`'s 28
+MB instead of 30 (decompressing, 24 instead of 25).
+
+## 7. Where the time goes now
+
+As section 1, on the build after section 6 (37,389 samples compressing,
+33,052 decompressing):
+
+| part | `c` | `d` | |
+|---|---:|---:|---|
+| **coder** | **53.8%** | **62.6%** | |
+| counters: read, stretch | 16.2 | 18.1 | |
+| mixer and its inputs | 15.0 | 18.7 | |
+| rows: select, prefetch | 7.7 | 8.9 | |
+| context indices | 4.3 | 5.7 | |
+| range coder | 4.2 | 4.4 | |
+| counters: update | 3.2 | 4.7 | |
+| binarization, the rest | 3.2 | 2.0 | |
+| **the parse** (`c` only) | **16.1** | | was the dry run's 30.5 |
+| CABAC engine, bit input | 5.7 | | |
+| syntax walk | 7.4 | | |
+| log of the values | 2.6 | | |
+| trailer, the rest | 0.4 | | |
+| **model contexts** | **22.9** | **24.2** | |
+| coefficients (`block`, `store_coef`, `coef_at`) | 5.9 | 5.6 | |
+| the macroblock's start and end | 6.1 | 6.9 | `begin_mb`, `finish_mb` |
+| skip variables | 2.2 | 2.1 | `skp_vars`, `win9` |
+| the rest | 8.7 | 9.6 | |
+| **the walk** | **6.5** | **12.6** | |
+| syntax | 5.0 | 6.8 | |
+| bins, bit output | 1.5 | 5.8 | `c` checks its bins against the parse's |
+| **other** | **0.7** | **0.7** | |
+
+The coder by family (`c`/`d`, % of all the time): skip flags 10.5/12.3,
+coded block flags 5.8/6.9, significance 5.5/6.9, levels 5.5/6.8, mb_type
+4.8/5.2, cbp 4.8/5.9, sub_mb_type, ref_idx and mvd 4.7/5.5, intra modes
+3.4/4.1, signs 3.1/3.9, mb_qp_delta 2.2/2.4, the rest 3.5/2.7.
+
+Half of compressing and nearly two thirds of decompressing is now the
+coder, whose time goes with the number of decisions; outside it are the
+parse (a sixth of compressing), the model's work per macroblock and the
+walk. What would make `-1` faster next is fewer decisions (skip runs,
+3.2) or cheaper ones.

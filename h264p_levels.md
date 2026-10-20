@@ -12,8 +12,9 @@ Sections 1-3 measure where one thread's time went in the model that is
 now `-9`, what each part buys in compression, and what lighter levels
 would cost; sections 4-8 planned the levels. They are built: h264p runs in
 one thread, `c -9`, `-7`, `-5`, `-3` and `-1` pick the level, and `-1`
-compresses the corpus at 422 KB/s and decompresses it at 528, 17.5% larger
-than `-9` (section 4). Everything was measured on the 7 corpus streams
+compresses the corpus at 660 KB/s and decompresses it at 742, 18.1% larger
+than `-9` (section 4; as first built, 422 and 528, `h264p_l1_speed.md`
+has how it got faster). Everything was measured on the 7 corpus streams
 (`test/002`, 3.87 MB of H.264), in one thread, on the 2.1 GHz Xeon VM the
 other documents use (section 9 has how).
 
@@ -173,11 +174,11 @@ corpus in one thread:
 
 | level | has | size | vs `-9` | `c` KB/s | `d` KB/s | memory |
 |---|---|---:|---:|---:|---:|---:|
-| `-9` | everything | 2,718,200 | 0 | 103 | 111 | 62 MB |
-| `-7` | no APMs, no template searches (c) | 2,762,018 | +1.61% (+1.6%) | 125 (110) | 139 (122) | 62 MB |
-| `-5` | the decoder only for maps, textures and edge misses, unfiltered; one mixer, no APMs, no CABAC states (f) | 3,028,487 | +11.42% (+11.6%) | 205 (168) | 232 (194) | 58 MB |
-| `-3` | no decoder but its reference lists; `-9`'s coder without its APMs (h) | 3,128,074 | +15.08% (+15.9%) | 263 (225) | 311 (279) | 36 MB |
-| `-1` | no decoder; its own four counters a family, one mixer, no APMs, no CABAC states (k) | 3,193,962 | +17.50% (about +16%) | 422 (about 400) | 528 (about 500) | 30 MB |
+| `-9` | everything | 2,718,200 | 0 | 106 | 108 | 63 MB |
+| `-7` | no APMs, no template searches (c) | 2,762,018 | +1.61% (+1.6%) | 131 (110) | 141 (122) | 61 MB |
+| `-5` | the decoder only for maps, textures and edge misses, unfiltered; one mixer, no APMs, no CABAC states (f) | 3,028,487 | +11.42% (+11.6%) | 222 (168) | 226 (194) | 58 MB |
+| `-3` | no decoder but its reference lists; `-9`'s coder without its APMs (h) | 3,128,074 | +15.08% (+15.9%) | 323 (225) | 349 (279) | 37 MB |
+| `-1` | no decoder, no motion vectors; its own four counters a family, one mixer, no APMs, no CABAC states (k) | 3,210,963 | +18.13% (about +16%) | 660 (about 400) | 742 (about 500) | 28 MB |
 
 `-9` is the model of sections 1-3 (2,750,189 bytes there, 7 more with the
 level byte each stream's header has now) with its parameters tuned again,
@@ -189,27 +190,28 @@ the peak resident size, compressing stream 03 (decompressing it takes
 
 | stream | size vs `-9` | `c` KB/s | `d` KB/s |
 |---|---:|---:|---:|
-| 00 | +15.6% | 331 | 427 |
-| 01 | +22.3% | 478 | 570 |
-| 02 | +2.3% | 477 | 620 |
-| 03 | +18.6% | 387 | 486 |
-| 04 | +12.7% | 504 | 648 |
-| 05 | +11.0% | 649 | 821 |
-| 06 | +10.3% | 816 | 994 |
-| **all** | +17.5% | **422** | **528** |
+| 00 | +16.7% | 537 | 582 |
+| 01 | +22.8% | 747 | 811 |
+| 02 | +2.3% | 680 | 807 |
+| 03 | +18.9% | 596 | 713 |
+| 04 | +13.6% | 807 | 905 |
+| 05 | +11.7% | 859 | 1001 |
+| 06 | +10.7% | 1103 | 1158 |
+| **all** | +18.1% | **660** | **742** |
 
-`-1` reaches the target on the corpus: 422 KB/s compressing and 528
-decompressing. Below it, compressing, are 00 and 03, where macroblocks,
-not bytes, cost (00: 3.8 M macroblocks in 815 KB, 95% skipped);
-`h264p_l1_speed.md` has where its time goes now and what could make it
-faster.
-The other levels fill the range between: `-7` is `-9` at 1.2 times the
-speed for 1.6%, `-5` twice as fast for 11.4%, `-3` 2.6 times (2.8
-decompressing) for 15.1%.
+`-1` is above the target on the corpus and on each stream: 660 KB/s
+compressing and 742 decompressing (as first built, 422 and 528, 0.53%
+smaller: `h264p_l1_speed.md` has what made it faster, and where its time
+goes now). Its slowest are 00 and 03, where macroblocks, not bytes, cost
+(00: 3.8 M macroblocks in 815 KB, 95% skipped).
+The other levels fill the range between: `-7` is `-9` at 1.2-1.3 times
+the speed for 1.6%, `-5` twice as fast for 11.4%, `-3` three times for
+15.1%.
 `-3` has the decoder's reference lists and pictures' motion without their
 samples (`ReconRefs`, section 6), worth 0.8% to it at 8% of its speed;
-`-1` could have them for the same 0.8% at 9% of its speed, which it has
-not to spare.
+`-1` could have them for the same 0.8% at 9% of its speed as first built,
+and with them the motion vectors it has not since (0.5% for 11%,
+`h264p_l1_speed.md` section 6.5).
 
 ## 5. What `-1` got
 
@@ -223,6 +225,8 @@ The plan's items (estimates, from the prototype), and what came of each:
   from its writer, the count of I_PCM alignment bits in a CABAC slice,
   comes from the dry run's log instead. No restart is needed, and the
   output is the same: `-1` compresses at 414 KB/s instead of 369 (+12%).
+  (Since, the dry run no longer writes a slice back at all: the model pass
+  checks it, `h264p_l1_speed.md` sections 2.2 and 6.2.)
 - **The level's own contexts** (−8%). `-1`'s families are its own (four
   counters, one mixer, the tables of that shape and nothing else);
   ReconOff answers every query about pictures as a constant, so the code
@@ -263,6 +267,11 @@ The plan's items (estimates, from the prototype), and what came of each:
 - **Skip runs** (for 00 and 03): not done; it changes the format of the
   skip family and the model's bookkeeping, and the corpus reaches the
   target without.
+- **No motion vectors** (later, `h264p_l1_speed.md` section 3.1): `-1`
+  has not the part `mvp`, the motion vectors predicted and kept as the
+  decoder has them, nor the six contexts of the mvds and their signs that
+  read them, nor the significance's `sn`: 0.53% larger, 11% faster both
+  ways.
 
 ## 6. The template
 
@@ -272,10 +281,12 @@ As built:
   class (`Lv9`, `Lv7`, `Lv5`, `Lv3`, `Lv1` in `lv<L>.inc`): its switches
   as compile-time constants, `refs` (the reference lists and the
   pictures' motion), `recon` (the decoder in the loop), `search`,
-  `proxy`, `signpred`, `skippx`, `deblock`, `cabpred`, and its families'
-  classes. The prototype's switches (`X_NOREC`, `X_NOSEARCH`,
-  `X_NOPROXY`, `X_NOSIGNP`, `X_NOSKIPPX`, `X_NODEBLOCK`, `X_NOCAB`) became
-  these; its coder's (`X_CNT`, `X_MIX1`, `X_NOAPM`) the families' shapes.
+  `proxy`, `signpred`, `skippx`, `deblock`, `cabpred`, `mvp` (the motion
+  vectors as the decoder has them, which `refs` and `recon` need; later,
+  for `-1`), and its families' classes. The prototype's switches
+  (`X_NOREC`, `X_NOSEARCH`, `X_NOPROXY`, `X_NOSIGNP`, `X_NOSKIPPX`,
+  `X_NODEBLOCK`, `X_NOCAB`) became these; its coder's (`X_CNT`, `X_MIX1`,
+  `X_NOAPM`) the families' shapes.
 - **The decoder as a member type**, by the switches: `Recon`
   (`ReconT<true>`) for levels with it; `ReconRefs` (`ReconT<false>`), the
   pictures' motion, POCs and reference lists without their samples, for
@@ -748,8 +759,10 @@ only ones, and the output was the same. Memory per process is in section
   peak resident size.
 - Sections 4 and 5 (the built levels): CPU time in one thread on one core,
   each stream compressed and decompressed by every level in turn, twice in
-  alternating order, the better of the two runs; sizes of the shipping
-  build; memory the peak resident size (`wait4`). Every level round-trips
+  alternating order, the better of the two runs (section 4's table: two
+  such runs, each with the build of before `h264p_l1_speed.md` section 6
+  in turn, the best of the four); sizes of the shipping build; memory the
+  peak resident size (`wait4`). Every level round-trips
   the 98 streams of `test/h264p.sh`. The masks of section 7.3 come from
   coding the corpus with `-9` and each part switched off in turn,
   recording each context variable's range.
