@@ -49,9 +49,10 @@ struct tcx {
   int s, f, m, w, t, n, g;
 };
 //  A family's tables, in the order tc_fam takes them (its class's
-//  tables(), famcfg.inc): those its shape has
+//  tables(), famcfg.inc): those its shape has (the counters' of its
+//  class's type, C::Cnt)
 struct tc_tabs {
-  cm_cnt2 *cnt[10] = {};
+  void *cnt[10] = {};
   cm_cnt *T = nullptr, *G = nullptr;
   i32 *W = nullptr, *WM = nullptr, *W2 = nullptr, *W3 = nullptr, *WF = nullptr;
   u8 *WC = nullptr, *WMC = nullptr, *W2C = nullptr, *W3C = nullptr, *WFC = nullptr;
@@ -146,6 +147,55 @@ struct tc_dump {
   } while(0)
 #endif
 
+//  A counter's probabilities stretched: looked up (cm_cnt2), or as the
+//  counter keeps them (cm_cnt2s)
+static INLINE int tc_sp(const cm_cnt2 &c) { return cm_stretch(c.P()); }
+static INLINE int tc_sq(const cm_cnt2 &c) { return cm_stretch(c.Q()); }
+static INLINE int tc_sp(const cm_cnt2s &c) { return c.sp; }
+static INLINE int tc_sq(const cm_cnt2s &c) { return c.sq; }
+#ifdef H264P_AVX2
+//  The same of four counters at once (four false: two, the upper lanes 0),
+//  as the 32-bit lanes P and Q of each in turn (v: P and Q so)
+static INLINE __m256i tc_st4(cm_cnt2 *const *, bool, __m256i v) {
+  return _mm256_srai_epi32(_mm256_slli_epi32(_mm256_i32gather_epi32((const int *)cm_st, v, 2), 16), 16);
+}
+static INLINE __m256i tc_st4(cm_cnt2s *const *c, bool four, __m256i) {
+  auto ld = [&](int k) {
+    int v;
+    memcpy(&v, &c[k]->sp, 4);
+    return v;
+  };
+  return _mm256_cvtepi16_epi32(four ? _mm_setr_epi32(ld(0), ld(1), ld(2), ld(3)) : _mm_setr_epi32(ld(0), ld(1), 0, 0));
+}
+//  At their update, what a counter's 8-byte store writes above its q, in
+//  the odd lanes' upper halves: the next counter's p as it was (cm_cnt2,
+//  from cv, the counters as read), or its new P stretched (cm_cnt2s, from
+//  nv, the new p and q, and t1, the new counts; sn: P and Q stretched)
+static INLINE __m256i tc_upper(cm_cnt2 *const *, __m256i cv, __m256i, __m256i, __m256i &) {
+  return _mm256_andnot_si256(_mm256_set1_epi32(0xFFFF), cv);
+}
+static INLINE __m256i tc_upper(cm_cnt2s *const *, __m256i, __m256i nv, __m256i t1, __m256i &sn) {
+  const __m256i m16 = _mm256_set1_epi32(0xFFFF);
+  __m256i v = _mm256_max_epi32(_mm256_srli_epi32(_mm256_and_si256(nv, m16), CM_CBITS - CM_PBITS), _mm256_set1_epi32(1));
+  v = _mm256_blendv_epi8(v, _mm256_set1_epi32(CM_PHALF), _mm256_cmpeq_epi32(t1, _mm256_setzero_si256()));
+  sn = _mm256_and_si256(_mm256_i32gather_epi32((const int *)cm_st, v, 2), m16);
+  return _mm256_slli_epi64(_mm256_and_si256(sn, _mm256_set1_epi64x(0xFFFF)), 48);
+}
+//  and cm_cnt2s's Q stretched, after the store
+static INLINE void tc_put_sq(cm_cnt2 *const *, bool, __m256i) {}
+static INLINE void tc_put_sq(cm_cnt2s *const *c, bool four, __m256i sn) {
+  c[0]->sq = (i16)_mm256_extract_epi16(sn, 2);
+  c[1]->sq = (i16)_mm256_extract_epi16(sn, 6);
+  if(four) {
+    c[2]->sq = (i16)_mm256_extract_epi16(sn, 10);
+    c[3]->sq = (i16)_mm256_extract_epi16(sn, 14);
+  }
+}
+#endif
+//  counter A's P stretched, as the mixers see it without APMs (p1 = its P)
+static INLINE int tc_x20(const cm_cnt2 *, int p1) { return cm_stretch(p1); }
+static INLINE int tc_x20(const cm_cnt2s *c, int) { return c->sp; }
+
 //  A family of a level: C is its configuration class (famcfg.inc), whose
 //  constants (the shape, the rates, which indices are hashed) shape the
 //  code here and, in the shipping build, are folded into it
@@ -155,7 +205,8 @@ template <int f_DEC, class C> struct tc_fam {
   static_assert(NC % 2 == 0 && NC >= 2 && NC <= 10, "tc_fam: an even count of counters, up to 10");
   static_assert(C::NMIX == 1 || C::NMIX == 3, "tc_fam: one mixer, or three and the final one");
   static_assert(C::NAPM == 0 || C::NAPM == 2, "tc_fam: no APM, or two");
-  cm_cnt2 *cnt[NC];  // the counters' tables: A-E, H-L, the first NC
+  typedef typename C::Cnt Cnt;  // cm_cnt2, or cm_cnt2s
+  Cnt *cnt[NC];  // the counters' tables: A-E, H-L, the first NC
   cm_cnt *G, *T;
   cm_apm ap, ap2;                  // (with APMs)
   cm_mix<NIN> mx, mx2, mx3;        // (mx2, mx3: three mixers)
@@ -183,7 +234,7 @@ template <int f_DEC, class C> struct tc_fam {
     tc_tabs b;
     C::tables(t, b);
     for(int k = 0; k < NC; k++)
-      cnt[k] = b.cnt[k];
+      cnt[k] = static_cast<Cnt *>(b.cnt[k]);
     T = b.T;
     G = b.G;
     {
@@ -302,7 +353,7 @@ template <int f_DEC, class C> struct tc_fam {
     TC_DUMP(rec('B', node, b, prpa ? prpa[node] : prp, hs));
     if(node + 1 < ND)
       fetch(node + 1);
-    cm_cnt2 *cp[NC];
+    Cnt *cp[NC];
     for(int k = 0; k < NC; k++)
       cp[k] = cnt[k] + cb[k] + node;
     //  The mixers' inputs: the counters' two probabilities each (in the
@@ -311,13 +362,13 @@ template <int f_DEC, class C> struct tc_fam {
     //  (stretched), then zeros to a multiple of 8; the mixers' are the same,
     //  packed once
     cm_x16<NIN> xp;
-    cm_cnt2 cn[NC];
+    Cnt cn[NC];
     int pa;
     constexpr int NV = (NC + 3) / 4;  // the counters' vectors: four in each, the last two or four
 #ifdef H264P_AVX2
     //  (cn_v: the counters all at once, as 64-bit lanes p, t, q and the next
-    //  counter's p, four to a vector; their probabilities as 32-bit lanes,
-    //  P and Q of each in turn)
+    //  counter's p, cm_cnt2s's own P stretched, four to a vector; their
+    //  probabilities as 32-bit lanes, P and Q of each in turn)
     __m256i cv[NV], st[NV];
     if(cn_v) {
       auto ld2 = [&](int k) {
@@ -328,21 +379,21 @@ template <int f_DEC, class C> struct tc_fam {
                                : _mm256_inserti128_si256(_mm256_setzero_si256(), ld2(4 * j), 0);
       const __m256i m16 = _mm256_set1_epi32(0xFFFF), z = _mm256_setzero_si256();
       for(int j = 0; j < NV; j++) {
-        // (cm_cnt2::P and Q, then cm_stretch)
+        // (cm_cnt2::P and Q, then cm_stretch, or as cm_cnt2s keeps them)
         __m256i t = _mm256_srli_epi32(_mm256_shuffle_epi32(cv[j], 0xA0), 16);
         __m256i v = _mm256_max_epi32(_mm256_srli_epi32(_mm256_and_si256(cv[j], m16), CM_CBITS - CM_PBITS), _mm256_set1_epi32(1));
         v = _mm256_blendv_epi8(v, _mm256_set1_epi32(CM_PHALF), _mm256_cmpeq_epi32(t, z));
         if(!j)
           pa = _mm256_cvtsi256_si32(v);
-        st[j] = _mm256_srai_epi32(_mm256_slli_epi32(_mm256_i32gather_epi32((const int *)cm_st, v, 2), 16), 16);
+        st[j] = tc_st4(cp + 4 * j, 4 * j + 2 < NC, v);
       }
     } else
 #endif
     {
       for(int k = 0; k < NC; k++) {
         cn[k] = *cp[k];
-        mx.set(2 * k, cm_stretch(cn[k].P()));
-        mx.set(2 * k + 1, cm_stretch(cn[k].Q()));
+        mx.set(2 * k, tc_sp(cn[k]));
+        mx.set(2 * k + 1, tc_sq(cn[k]));
       }
       pa = cn[0].P();
     }
@@ -351,7 +402,8 @@ template <int f_DEC, class C> struct tc_fam {
       p1 = CM_PONE - 1;
     int pp = prpa ? prpa[node] : prp;
     cm_cnt2 *zc = hs ? &Z[((sz)bz * ND + (u32)node) * 5 + (u32)hs] : nullptr;
-    const int x20 = cm_stretch(p1), x21 = pp >= 0 ? cm_stretch(pp) : 0, x23 = zc ? cm_stretch(zc->P()) : 0;
+    const int x20 = C::NAPM ? cm_stretch(p1) : tc_x20(cp[0], p1), x21 = pp >= 0 ? cm_stretch(pp) : 0,
+              x23 = zc ? cm_stretch(zc->P()) : 0;
 #ifdef H264P_AVX2
     if(cn_v) {
       //  the 32-bit lanes in vectors of 8: the counters', then the four
@@ -413,7 +465,8 @@ template <int f_DEC, class C> struct tc_fam {
       // as cm_cnt2::upd, each counter's q through its p's arithmetic with
       // the rate 8192 / 65536; written back in the order of the arrays,
       // each with the next counter's p as it was (rewritten after, where
-      // the next counter is one of these)
+      // the next counter is one of these), or cm_cnt2s with its new P and
+      // Q stretched (tc_upper, tc_put_sq)
       const __m256i m16 = _mm256_set1_epi32(0xFFFF), z = _mm256_setzero_si256();
       const __m256i even = _mm256_setr_epi32(-1, 0, -1, 0, -1, 0, -1, 0);
       for(int j = 0; j < NV; j++) {
@@ -423,7 +476,8 @@ template <int f_DEC, class C> struct tc_fam {
         __m256i rec = _mm256_and_si256(_mm256_mask_i32gather_epi32(_mm256_set1_epi32(8192), (const int *)cm_rec, t1, even, 2), m16);
         __m256i tg = _mm256_loadu_si256((const __m256i *)(cn_tg[b] + 8 * j));
         __m256i nv = _mm256_add_epi32(cur, _mm256_srai_epi32(_mm256_mullo_epi32(_mm256_sub_epi32(tg, cur), rec), CM_CBITS));
-        __m256i up = _mm256_blend_epi32(_mm256_slli_epi32(t1, 16), _mm256_andnot_si256(m16, cv[j]), 0xAA);
+        __m256i sn = z;
+        __m256i up = _mm256_blend_epi32(_mm256_slli_epi32(t1, 16), tc_upper(cp + 4 * j, cv[j], nv, t1, sn), 0xAA);
         __m256i o = _mm256_or_si256(_mm256_and_si256(nv, m16), up);
         __m128i lo = _mm256_castsi256_si128(o);
         _mm_storel_epi64((__m128i *)cp[4 * j], lo);
@@ -433,6 +487,7 @@ template <int f_DEC, class C> struct tc_fam {
           _mm_storel_epi64((__m128i *)cp[4 * j + 2], hi);
           _mm_storel_epi64((__m128i *)cp[4 * j + 3], _mm_unpackhi_epi64(hi, hi));
         }
+        tc_put_sq(cp + 4 * j, 4 * j + 2 < NC, sn);
       }
     } else
 #endif

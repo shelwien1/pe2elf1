@@ -65,6 +65,9 @@ struct FC_NAME {
 #else
   static INLINE void make(const V& D, tcx& X) { FCX(make)(D, X); }
 #endif
+  // the counters' type (the level's template of the family declares their
+  // tables): cm_cnt2, or cm_cnt2s with their probabilities kept stretched
+  typedef typename std::remove_reference<decltype(((T*)nullptr)->FCX(A)[0])>::type Cnt;
   static void init(T* t) { t->FCX(Init)(); }
   static u64 bytes(const T* t) { return t->FCX(Size); }
   static const int ND = FCF(_ND), MND = FCF(_MND), NG = FCF(_NG);
@@ -90,7 +93,9 @@ struct FC_NAME {
   static const int rS1, rS2, qs, qf, bw;  // the APMs' rates and widths, and the last one's share
   // the tables, in the order tc_fam takes them
   static void tables(T* t, tc_tabs& b) {
-#define FC_TAB(U, l) b.cnt[i++] = t->FCX(U);
+#define FC_TAB(U, l)                                                                                 \
+  static_assert(std::is_same<decltype(+t->FCX(U)), Cnt*>::value, "a family's counters of one type"); \
+  b.cnt[i++] = t->FCX(U);
     int i = 0;
     FC_CNT(FC_TAB)
 #undef FC_TAB

@@ -20,10 +20,10 @@ void %M%make( const H_nal_v & D, tcx & X ) {
   X.n = n;  X.g = g;
 }
 
-Table( cm_cnt2, %M%A, tc_rows(%M%a_Volume, %M%hA) * H_nal_ND );
-Table( cm_cnt2, %M%B, tc_rows(%M%b_Volume, %M%hB) * H_nal_ND );
-Table( cm_cnt2, %M%C, tc_rows(%M%c_Volume, %M%hC) * H_nal_ND );
-Table( cm_cnt2, %M%D, tc_rows(%M%d_Volume, %M%hD) * H_nal_ND );
+Table( cm_cnt2s, %M%A, tc_rows(%M%a_Volume, %M%hA) * H_nal_ND );
+Table( cm_cnt2s, %M%B, tc_rows(%M%b_Volume, %M%hB) * H_nal_ND );
+Table( cm_cnt2s, %M%C, tc_rows(%M%c_Volume, %M%hC) * H_nal_ND );
+Table( cm_cnt2s, %M%D, tc_rows(%M%d_Volume, %M%hD) * H_nal_ND );
 Table( cm_cnt, %M%MT, tc_rows(%M%t_Volume, %M%hT) * H_nal_MND );
 Table( i32,    %M%W, tc_rows(%M%m_Volume, %M%hM) * H_nal_ND * 16 );
 Table( u8,     %M%WC, tc_rows(%M%m_Volume, %M%hM) * H_nal_ND );

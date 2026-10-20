@@ -56,10 +56,10 @@ struct H1_qpg_T {
 #define USE_NEW 0
 
 
-  cm_cnt2 H1_qpg_A[tc_rows(H1_qpg_a_Volume, H1_qpg_hA) * H_qpg_ND];
-  cm_cnt2 H1_qpg_B[tc_rows(H1_qpg_b_Volume, H1_qpg_hB) * H_qpg_ND];
-  cm_cnt2 H1_qpg_C[tc_rows(H1_qpg_c_Volume, H1_qpg_hC) * H_qpg_ND];
-  cm_cnt2 H1_qpg_D[tc_rows(H1_qpg_d_Volume, H1_qpg_hD) * H_qpg_ND];
+  cm_cnt2s H1_qpg_A[tc_rows(H1_qpg_a_Volume, H1_qpg_hA) * H_qpg_ND];
+  cm_cnt2s H1_qpg_B[tc_rows(H1_qpg_b_Volume, H1_qpg_hB) * H_qpg_ND];
+  cm_cnt2s H1_qpg_C[tc_rows(H1_qpg_c_Volume, H1_qpg_hC) * H_qpg_ND];
+  cm_cnt2s H1_qpg_D[tc_rows(H1_qpg_d_Volume, H1_qpg_hD) * H_qpg_ND];
   cm_cnt H1_qpg_MT[tc_rows(H1_qpg_t_Volume, H1_qpg_hT) * H_qpg_MND];
   i32 H1_qpg_W[tc_rows(H1_qpg_m_Volume, H1_qpg_hM) * H_qpg_ND * 16];
   u8 H1_qpg_WC[tc_rows(H1_qpg_m_Volume, H1_qpg_hM) * H_qpg_ND];
@@ -70,10 +70,10 @@ struct H1_qpg_T {
   /* Total bytes this module's Table() members occupy -- a constant here, since
    * Const mode has already folded every count. */
   static constexpr unsigned long long H1_qpg_Size = 0
-                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H1_qpg_a_Volume, H1_qpg_hA) * H_qpg_ND)
-                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H1_qpg_b_Volume, H1_qpg_hB) * H_qpg_ND)
-                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H1_qpg_c_Volume, H1_qpg_hC) * H_qpg_ND)
-                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H1_qpg_d_Volume, H1_qpg_hD) * H_qpg_ND)
+                              + (unsigned long long)sizeof(cm_cnt2s) * (unsigned long long)(tc_rows(H1_qpg_a_Volume, H1_qpg_hA) * H_qpg_ND)
+                              + (unsigned long long)sizeof(cm_cnt2s) * (unsigned long long)(tc_rows(H1_qpg_b_Volume, H1_qpg_hB) * H_qpg_ND)
+                              + (unsigned long long)sizeof(cm_cnt2s) * (unsigned long long)(tc_rows(H1_qpg_c_Volume, H1_qpg_hC) * H_qpg_ND)
+                              + (unsigned long long)sizeof(cm_cnt2s) * (unsigned long long)(tc_rows(H1_qpg_d_Volume, H1_qpg_hD) * H_qpg_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(tc_rows(H1_qpg_t_Volume, H1_qpg_hT) * H_qpg_MND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H1_qpg_m_Volume, H1_qpg_hM) * H_qpg_ND * 16)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H1_qpg_m_Volume, H1_qpg_hM) * H_qpg_ND)

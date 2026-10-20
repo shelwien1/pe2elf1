@@ -186,7 +186,9 @@ level byte each stream's header has now) with its parameters tuned again,
 its families' decisions (section 7.5), which also left their tables
 smaller (`-9`'s 28 MB instead of 226) and every level faster. Memory is
 the peak resident size, compressing stream 03 (decompressing it takes
-4-6 MB less). `-1` by stream:
+4-6 MB less). (Since, `-1`'s counters keep their probabilities stretched:
+it decompresses 3-5% faster than the table has it and peaks at 30 MB,
+`h264p_l1_speed.md` section 6.4.) `-1` by stream:
 
 | stream | size vs `-9` | `c` KB/s | `d` KB/s |
 |---|---:|---:|---:|

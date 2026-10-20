@@ -213,7 +213,9 @@ of H.264):
 | `-3` | 3,128,074 | 80.9% | 323 | 349 | 37 MB |
 | `-1` | 3,210,963 | 83.0% | 660 | 742 | 28 MB |
 
-(memory: the peak resident size compressing 03). `h264p_levels.md` has
+(memory: the peak resident size compressing 03; since, `-1`'s counters
+keep their probabilities stretched, so it decompresses 3-5% faster and
+peaks at 30 MB: `h264p_l1_speed.md` section 6.4). `h264p_levels.md` has
 what each level leaves out of the model, where the time goes, and how each
 level has its own IDX profile, tuned against dumps of its families'
 decisions; `h264p_speed.md` how `-9` got here, `h264p_l1_speed.md` how

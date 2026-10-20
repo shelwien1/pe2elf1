@@ -1,9 +1,10 @@
 // The context mixing parts of oggcomp (balrogg-P-hash cm.inc): adaptive
 // counters (cm_cnt), interpolated APMs (cm_apm) and logistic mixers
 // (cm_mix), on 12-bit probabilities. Changed: the counters with a second,
-// fast probability (cm_cnt2), and the mixers' sums in AVX2 where the
-// inputs are packed once for the mixers sharing them (cm_x16), to the same
-// results (a family's ten counters of a decision too: tc_fam::bit_x).
+// fast probability (cm_cnt2; cm_cnt2s keeps both stretched too), and the
+// mixers' sums in AVX2 where the inputs are packed once for the mixers
+// sharing them (cm_x16), to the same results (a family's ten counters of a
+// decision too: tc_fam::bit_x).
 
 namespace h264p {
 
@@ -83,6 +84,20 @@ struct cm_cnt2 {
     t = (u16)(t + (t < lim));
     p = (u16)(cur + (((target - cur) * cm_rec[t]) >> CM_CBITS));
     q = (u16)(cq + ((target - cq) >> 3));
+  }
+};
+// cm_cnt2 with its two probabilities kept stretched, written at each update:
+// a decision reads them with the counter instead of looking them up on its
+// way to the mixer (-1's counters, four a family: h264p_l1_speed.md 6.4)
+struct cm_cnt2s {
+  cm_cnt2 c;
+  i16 sp, sq;  // cm_stretch(P()), cm_stretch(Q())
+  INLINE int P() const { return c.P(); }
+  INLINE int Q() const { return c.Q(); }
+  INLINE void upd(int bit, int lim, int mw) {
+    c.upd(bit, lim, mw);
+    sp = cm_st[c.P()];
+    sq = cm_st[c.Q()];
   }
 };
 // an APM's count limit by its rate (1-15)

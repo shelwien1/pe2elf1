@@ -10,14 +10,16 @@ was 400-500 KB/s. Sections 1-5 profile that `-1` and list what could
 make it faster: first what keeps the format (section 2), then what
 changes the model (section 3), each with what it would save.
 
-Section 6 has what was built of it and what each item gave: all of
-section 2 but the stretch (2.7, which gave nothing), and 3.1 and 3.3,
-which make `-1` 0.53% larger (skip runs, 3.2, cost more than they would
-save: section 6.7). `-1` now compresses the corpus at 660 KB/s and
+Section 6 has what was built of it and what each item gave: section 2 but
+for the parts that measured too small to keep (section 6.9), and 3.1 and
+3.3, which make `-1` 0.53% larger (skip runs, 3.2, cost more than they
+would save: section 6.7). `-1` now compresses the corpus at 660 KB/s and
 decompresses it at 742, 45% and 28% faster than before (454 and 578
 measured in the same runs: the VM's speed varies from run to run and
-from day to day); the other levels code as before and got faster too,
-most of them compressing (section 6.8). Section 7 profiles `-1` again.
+from day to day), and decompresses 3-5% faster since (the stretch kept
+with the counters, 6.4); the other levels code as before and got faster
+too, most of them compressing (section 6.8). Section 7 profiles `-1`
+again.
 
 ## 1. Where the time went
 
@@ -66,9 +68,9 @@ decompressing (its share of the measured times, over the corpus's
 before its tuning, which left many contexts smaller), nearly all of
 them under 1 MB a family (the significance's counter B is 7.1 MB, the
 levels' counter C 2.1 MB). The instruction after the gather that
-stretches the counters' probabilities holds 3.6% of all the samples,
-which looked like the gather's cost; it is the counters' loads it waits
-for, its indices (section 6.4).
+stretches the counters' probabilities holds 3.6% of all the samples:
+compressing, what it waits for is the counters' loads, the gather's
+indices; decompressing, the gather too (section 6.4).
 
 By instruction counts (callgrind, compressing 04: 6.6 G instructions,
 13,600 a byte), the slice coder's `macroblock()` and `bin()` lead with
@@ -261,12 +263,13 @@ before, which `test/h264p.sh` and MD5s of all 480 outputs checked:
 | 2.4, 2.5, 2.6 | the log's buffers kept, the skip window summed, no clearing per macroblock | 523 -> 574 | 609 -> 627 |
 | 2.6 | the walk a template on its mode | 562 -> 606 | 632 -> 643 |
 | 2.7 | the stretch by eight loads: no gain, not kept | 562 -> 547 | 634 -> 636 |
+| 2.7 | the stretch kept beside `-1`'s counters (after 6.8) | within the noise | 685 -> 708 |
 | 3.1, 3.3 | no motion vectors, no `sn` (`-1` 0.53% larger) | 559 -> 623 | 645 -> 714 |
 | 3.2 | skip runs: simulated, larger, not built | | |
 | **all** | | **454 -> 660** | **578 -> 742** |
 
 (The last row: the build before section 2 and the one after 3.1 in turn,
-best of four runs, section 6.8.)
+best of four runs, section 6.8; the stretch's second row came after it.)
 
 ### 6.1 The CABAC engines (2.1)
 
@@ -345,10 +348,26 @@ the check only compares them.
 
 Eight scalar loads from `cm_st` instead of the gather code the same and
 gave nothing (562 KB/s compressing with the gather, 547 with the loads;
-decompressing the same), so the gather stays. The other candidate, the
-stretched probabilities kept beside the counter's, was not tried: what the
-counters cost is their loads, not the gather, and it would make a counter
-10 bytes instead of 6.
+decompressing the same), so the gather stays.
+
+The other candidate, the stretched probabilities kept beside the
+counter's, was left out at first, on the reading that the counters cost
+their loads, not the gather. Tried since (6.9), first as a bound: a
+stretch for nothing (a shift for the gather, the probabilities wrong, the
+work elsewhere the same) decompressed the corpus 3.7% faster, and 00, 01,
+03 and 04 3.3-6.5% faster in another run, but compressed no faster:
+compressing, the decisions' bits are known and their chains overlap;
+decompressing, each decision waits for the last. Then as built:
+`cm_cnt2s`, a counter of 10 bytes instead of 6 that keeps its P and Q
+stretched, written at its update (a gather there, off the next decision's
+way) and read with the counter. It codes the same; `-1` decompresses the
+corpus 3-5% faster (three runs: 686 to 705 KB/s, 685 to 708, and 696 to
+730 with its first version), compresses as fast within the noise (-1.6%
+to +6.1%), and peaks 2 MB higher (30 MB compressing 03). With the ten
+counters a family of `-3` to `-9` it made decompressing 4-7% slower (`-3`
+and `-9` on 04 and 01), so the counters' type is the level's: `-1`'s
+templates (`IDX/l1/*.inc`) declare `cm_cnt2s` tables, the other levels'
+`cm_cnt2`, and `tc_fam` reads and writes either.
 
 ### 6.5 No motion vectors (3.1)
 
@@ -467,12 +486,47 @@ What stayed `-1`'s alone, at `-3` to `-9`:
 - **The stretch by loads (2.7)**, at ten counters (`-3`): no faster within
   the noise, as at `-1`.
 
+### 6.9 The rest of sections 2 and 3
+
+What the sections above left untried, tried since on the build after 6.8
+(timings interleaved, best of four or five runs):
+
+- **Bypass bins in groups (2.1).** The parse's bins of the five CABAC
+  streams number 56.4 M, 4.06 M of them bypass bins (7.2%: 2.69 M
+  coefficients' signs, 0.89 M and 0.46 M the mvds' suffixes and signs,
+  18 K the levels' suffixes), in 3.15 M runs of 1.29 bins on average:
+  3.0 M of them a single bin (a sign), and the runs of four or more (an
+  mvd's suffix and sign) 1.06 M bins. A run coded at once saves a
+  renormalization a bin encoding (decoding one needs a division): a few
+  milliseconds of the corpus's seconds. Not built.
+- **The bit I/O outside CABAC (2.1).** `BitReader` and `BitWriter` still
+  go a bit at a time through the headers and CAVLC: 6-7% of compressing
+  the CAVLC streams (05, 06) and 2-4% of decompressing them, which take
+  4.5% of the corpus's time, so a reader and a writer by words could save
+  about 0.2% of it. Not built.
+- **The log without its calls (2.4).** The parse calling `LogChan`'s
+  methods directly (the class final, the walk's channel a `LogChan*` when
+  it parses: 82 indirect calls fewer) coded the same, and compressed 04,
+  01, 00 and 03 0.1%, 3.2% and 3.0% faster and 0.9% slower, while
+  decompressing, which it does not touch, moved by up to 3.9% in the same
+  runs. Not kept.
+- **The skip window's alternatives (2.5)**, a map with a border or the
+  sum kept along the row: what they could save is part of `win9()`, 0.6%
+  of compressing now (section 7's skip variables are mostly the others).
+  Not built.
+- **`c9` and `hb` (3.3).** Priced at 0.10% and 0.14% and kept for that;
+  timed since, `-1` without either was no faster: compressing the corpus
+  at 595 KB/s without `hb`, 595 without `c9`, 613 with both, decompressing
+  at 671, 672 and 671 (the same run). Kept.
+- **The stretch beside the counters (2.7)**: built, section 6.4.
+
 ## 7. Where the time goes now
 
 As section 1, on the build after 3.1 and 3.3 (37,389 samples
-compressing, 33,052 decompressing; the changes since, in section 6.8,
-leave `-1`'s code as it was: it keeps neither the contexts' states nor
-the history):
+compressing, 33,052 decompressing; of the changes since, those of section
+6.8 leave `-1`'s code as it was, since it keeps neither the contexts'
+states nor the history, and the stretch kept with the counters, 6.4,
+takes from the counters' share decompressing):
 
 | part | `c` | `d` | |
 |---|---:|---:|---|
