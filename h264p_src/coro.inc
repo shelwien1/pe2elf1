@@ -99,22 +99,19 @@ struct H264pCoro : Model<f_DEC, LV> {
   void written(std::integral_constant<int, 1>) { this->write(st->buf.data(), st->buf.size()), st->buf.clear(); }
 };
 
-// The coroutine of a call of c or d (or of a part, mt.inc), constructed
-// on pages of its own -- zeroed, and aligned as CoroutinePair's members
-// ask -- and destroyed with them
+// The coroutine of a call of c or d (or of a part, mt.inc), on pages of
+// its own -- zeroed, and aligned as CoroutinePair's members ask: made by
+// coro_new(), and after its Quit() freed by coro_free(). (Still
+// constructed and destroyed, for the model's members that are.)
 template <class T>
-struct CoroObj {
-  T* p;
-  CoroObj() : p(new (tc_map(sizeof(T), "a coroutine")) T()) {}
-  ~CoroObj() {
-    p->~T();
-    tc_unmap(p, sizeof(T));
-  }
-  CoroObj(const CoroObj&) = delete;
-  void operator=(const CoroObj&) = delete;
-  T* get() const { return p; }
-  T* operator->() const { return p; }
-};
+T* coro_new() {
+  return new (tc_map(sizeof(T), "a coroutine")) T();
+}
+template <class T>
+void coro_free(T* p) {
+  p->~T();
+  tc_unmap(p, sizeof(T));
+}
 
 // Runs the coroutine c in coro.inc's buffer protocol to its end: in() gives
 // it its next input when it asks for it (yield 1), out(more) takes what it

@@ -33,13 +33,20 @@ int cm_level(const uint8_t* head, size_t n, const char* name, Progress* meter = 
 // What a run of the compressor or the decompressor takes: Init() (coro.inc),
 // which MTwrap's workers have too (mt.inc)
 struct H264pArgs {
-  int level = 0;              // compressing: the model's level (1-9)
-  bool verbose = false;       // statistics on stderr
-  bool strict = false;        // compressing: fail where a NAL unit of a supported type would be stored verbatim
-  bool check = false;         // compressing: the model pass checks the slices it can; status kRestart if one does
-                              // not come out as it is, and the input has to be compressed again without
-  const char* name = "";      // the input's, for messages
-  Progress* meter = nullptr;  // the call's progress line, if one is shown (messages cut it)
+  int level;        // compressing: the model's level (1-9)
+  bool verbose;     // statistics on stderr
+  bool strict;      // compressing: fail where a NAL unit of a supported type would be stored verbatim
+  bool check;       // compressing: the model pass checks the slices it can; status kRestart if one does
+                    // not come out as it is, and the input has to be compressed again without
+  const char* name;  // the input's, for messages
+  Progress* meter;   // the call's progress line, if one is shown (messages cut it)
+
+  void Init() {
+    level = 0;
+    verbose = strict = check = false;
+    name = "";
+    meter = nullptr;
+  }
 };
 
 // The compressor's dry run of a NAL unit (run()): parses it into the log,

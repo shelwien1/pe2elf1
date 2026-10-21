@@ -6,8 +6,9 @@
 namespace h264p {
 
 void usage() {
-  std::string lv;
-  for (int n : kLevels) lv += " -" + std::to_string(n);
+  char lv[64];
+  int k = 0;
+  for (int n : kLevels) k += snprintf(lv + k, sizeof lv - k, " -%d", n);
   fprintf(stderr,
           "usage: h264p c|d [options] input output\n"
           "  c  compress an H.264 Annex B stream\n"
@@ -23,7 +24,7 @@ void usage() {
           "  -c N  (c with -t) the size of a part, at least: N MB (1 to 1024), or N KB with a k\n"
           "        (default 4)\n"
           "input and output can be - for stdin and stdout, and not the same file\n",
-          lv.c_str() + 1);
+          lv + 1);
 }
 
 }  // namespace h264p
@@ -39,7 +40,9 @@ int main(int argc, char** argv) {
   _setmode(_fileno(stdout), _O_BINARY);
 #endif
   Options opt;
-  std::vector<const char*> files;
+  opt.Init();
+  const char* files[2];
+  int nfiles = 0;
   for (int i = 2; i < argc; i++) {
     if (argv[i][0] == '-' && argv[i][1]) {
       for (const char* p = argv[i] + 1; *p; p++) {
@@ -78,10 +81,11 @@ int main(int argc, char** argv) {
         }
       }
     } else {
-      files.push_back(argv[i]);
+      if (nfiles < 2) files[nfiles] = argv[i];
+      nfiles++;
     }
   }
-  if (files.size() != 2) {
+  if (nfiles != 2) {
     usage();
     return 2;
   }

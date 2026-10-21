@@ -6,13 +6,52 @@ namespace h264p {
 
 // The command line's options
 struct Options {
-  bool verbose = false;
-  bool strict = false;
-  bool progress = false;    // -p: progress even where stderr is not a terminal
-  int level = kLevels[0];   // c's model: -L
-  int threads = 1;          // c's threads: -t (more than one: the stream in parts, mt.inc)
-  uint32_t part = 4 << 20;  // and the size of a part, at least: -c
+  bool verbose;
+  bool strict;
+  bool progress;  // -p: progress even where stderr is not a terminal
+  int level;      // c's model: -L
+  int threads;    // c's threads: -t (more than one: the stream in parts, mt.inc)
+  uint32_t part;  // and the size of a part, at least: -c
+
+  // the defaults
+  void Init() {
+    verbose = strict = progress = false;
+    level = kLevels[0];
+    threads = 1;
+    part = 4 << 20;
+  }
 };
+
+// A lock between threads: a critical section (Windows), else a mutex
+struct Lock {
+#ifdef _WIN32
+  CRITICAL_SECTION cs;
+  void Init() { InitializeCriticalSection(&cs); }
+  void Quit() { DeleteCriticalSection(&cs); }
+  void lock() { EnterCriticalSection(&cs); }
+  void unlock() { LeaveCriticalSection(&cs); }
+#else
+  pthread_mutex_t m;
+  void Init() { pthread_mutex_init(&m, nullptr); }
+  void Quit() { pthread_mutex_destroy(&m); }
+  void lock() { pthread_mutex_lock(&m); }
+  void unlock() { pthread_mutex_unlock(&m); }
+#endif
+};
+
+// The time in nanoseconds, by a clock that only goes forward
+int64_t clock_ns() {
+#ifdef _WIN32
+  LARGE_INTEGER f, c;
+  QueryPerformanceFrequency(&f);
+  QueryPerformanceCounter(&c);
+  return (int64_t)(c.QuadPart / f.QuadPart * 1000000000 + c.QuadPart % f.QuadPart * 1000000000 / f.QuadPart);
+#else
+  struct timespec t;
+  clock_gettime(CLOCK_MONOTONIC, &t);
+  return (int64_t)t.tv_sec * 1000000000 + t.tv_nsec;
+#endif
+}
 
 // Progress on stderr, as c and d go: a line put over itself every half
 // second -- the bytes of the stream (raw) and of the compressed stream
@@ -20,54 +59,76 @@ struct Options {
 // (of the stream) and the memory the process has now (its resident set)
 // -- and at the end, how long it all took and the most memory it had.
 // When stderr is a terminal, or with -p.
-// what() gives the counts; poll() puts a line if one is due, from any
-// thread (with -t, the workers', as they code: the main thread waits on
-// them). Messages go through say() (below), which puts them after the
-// line, under the same lock: an error ends the lines.
+// what() gives the counts (of what_ctx); poll() puts a line if one is
+// due, from any thread (with -t, the workers', as they code: the main
+// thread waits on them). Messages go through say() (below), which puts
+// them after the line, under the same lock: an error ends the lines.
 struct Progress {
-  typedef std::chrono::steady_clock clk;
-  const char* tag = nullptr;  // enc, dec; none: no progress
-  uint64_t total = 0;         // the input's size (0: not known, no percentage)
-  std::function<void(uint64_t& raw, uint64_t& packed, uint64_t& pos)> what;  // pos of total: raw or packed
-  clk::time_point t0;
-  std::atomic<int64_t> last{0};     // the last line, ns after t0
-  std::atomic<bool> halted{false};  // an error was reported: no more lines
-  std::mutex lock;                  // stderr: one line or message at a time
-  int len = 0;                      // the line's length (a shorter one is padded over it)
-  bool up = false;                  // a line is up, the cursor after it
+  const char* tag;  // enc, dec; none: no progress
+  uint64_t total;   // the input's size (0: not known, no percentage)
+  void (*what)(void* ctx, uint64_t& raw, uint64_t& packed, uint64_t& pos);  // pos of total: raw or packed
+  void* what_ctx;
+  int64_t t0;    // the start (clock_ns())
+  int64_t last;  // the last line, ns after t0 (atomic)
+  int halted;    // an error was reported: no more lines (atomic)
+  Lock lock;     // stderr: one line or message at a time
+  int len;       // the line's length (a shorter one is padded over it)
+  bool up;       // a line is up, the cursor after it
+
+  void Init() {
+    tag = nullptr;
+    total = 0;
+    what = nullptr;
+    what_ctx = nullptr;
+    t0 = last = 0;
+    halted = 0;
+    lock.Init();
+    len = 0;
+    up = false;
+  }
+  void Quit() { lock.Quit(); }
 
   void start(const char* t, uint64_t size) {
     tag = t;
     total = size;
-    t0 = clk::now();
+    t0 = clock_ns();
   }
+  // the counts (none: no lines), from the thread that sets them
+  void counts(void (*f)(void*, uint64_t&, uint64_t&, uint64_t&), void* ctx) {
+    what_ctx = ctx;
+    __atomic_store_n(&what, f, __ATOMIC_SEQ_CST);
+  }
+  bool stopped() const { return __atomic_load_n(&halted, __ATOMIC_SEQ_CST) != 0; }
   // a line, if half a second has gone by since the last (one thread puts it)
   void poll() {
-    if (!tag || !what || halted) return;
-    int64_t t = std::chrono::duration_cast<std::chrono::nanoseconds>(clk::now() - t0).count();
-    int64_t l = last.load(std::memory_order_relaxed);
-    if (t - l < 500000000 || !last.compare_exchange_strong(l, t)) return;
+    void (*f)(void*, uint64_t&, uint64_t&, uint64_t&) = __atomic_load_n(&what, __ATOMIC_SEQ_CST);
+    if (!tag || !f || stopped()) return;
+    int64_t t = clock_ns() - t0;
+    int64_t l = __atomic_load_n(&last, __ATOMIC_RELAXED);
+    if (t - l < 500000000 || !__atomic_compare_exchange_n(&last, &l, t, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) return;
     uint64_t raw, packed, pos;
-    what(raw, packed, pos);
+    f(what_ctx, raw, packed, pos);
     double mbs = raw / (t * 1e-9) / (1 << 20);
     char b[192];
     int n = total ? snprintf(b, sizeof b, "[%s] %" PRIu64 " > %" PRIu64 "  %5.1f%%  %5.2f MB/s  %5.2fM RAM", tag, raw,
                              packed, std::min(100.0, 100.0 * pos / total), mbs, ram(false))
                   : snprintf(b, sizeof b, "[%s] %" PRIu64 " > %" PRIu64 "  %5.2f MB/s  %5.2fM RAM", tag, raw, packed,
                              mbs, ram(false));
-    std::lock_guard<std::mutex> g(lock);
-    if (!halted) show(b, n, "");
+    lock.lock();
+    if (!stopped()) show(b, n, "");
+    lock.unlock();
   }
   // the end, done (the main thread, no worker left; not after an error)
   void done(uint64_t raw, uint64_t packed) {
-    if (!tag || halted) return;
-    double s = std::chrono::duration<double>(clk::now() - t0).count();
+    if (!tag || stopped()) return;
+    double s = (clock_ns() - t0) * 1e-9;
     char b[192];
     int n = snprintf(b, sizeof b, "[%s] %" PRIu64 " > %" PRIu64 "  100.0%%  done in %.2fs  %5.2fM RAM at most", tag, raw,
                      packed, s, ram(true));
-    std::lock_guard<std::mutex> g(lock);
+    lock.lock();
     show(b, n, "\n");
     up = false;
+    lock.unlock();
   }
   // the end of a call, r its status: done, or the line ended after an error
   void end(int r, uint64_t raw, uint64_t packed) {
@@ -79,16 +140,19 @@ struct Progress {
   // a message (stop: an error, after which no line comes, and no other
   // error: with threads, what follows from the first)
   void say(bool stop, const char* fmt, va_list ap) {
-    std::lock_guard<std::mutex> g(lock);
-    if (stop && halted.exchange(true)) return;
-    cut();
-    vfprintf(stderr, fmt, ap);
+    lock.lock();
+    if (!stop || !__atomic_exchange_n(&halted, 1, __ATOMIC_SEQ_CST)) {
+      cut();
+      vfprintf(stderr, fmt, ap);
+    }
+    lock.unlock();
   }
   // the line ended after an error (none comes after it)
   void end_line() {
-    std::lock_guard<std::mutex> g(lock);
-    halted = true;
+    lock.lock();
+    __atomic_store_n(&halted, 1, __ATOMIC_SEQ_CST);
     cut();
+    lock.unlock();
   }
   // the line ended, where one is up (the lock held)
   void cut() {
@@ -193,14 +257,42 @@ bool same_file(FILE* f, const char* name) {
 // The output of a call: "-" is stdout. A regular file, or a new one, is
 // written under a temporary name beside it and renamed to its own as the
 // call ends well, so that a failed call leaves what was there; anything else
-// (a device, a pipe) is written as it is. Never the input.
-struct Output {
-  const char* name = nullptr;  // as given
-  std::string dest, tmp;       // the file, and the temporary one written (none: name itself)
-  bool file = false;           // a regular file is written: it can be written again (kRestart)
-  filehandle g = filehandle();
+// (a device, a pipe) is written as it is. Never the input. (Quit() closes
+// and removes what close() did not: the program ends on an error outside a
+// run, err.inc, with Quit() of the call's output.)
+struct Output;
+Output* open_output = nullptr;  // the call's (the main thread's)
+void quit_open_output();
 
+struct Output {
+  const char* name;  // as given
+  char* dest;        // the file (mem_alloc()'d), and the temporary one written (none: name itself)
+  char* tmp;
+  bool file;  // a regular file is written: it can be written again (kRestart)
+  filehandle0 g;
+
+  void Init() {
+    name = nullptr;
+    dest = tmp = nullptr;
+    file = false;
+    g.f = nullptr;
+  }
+  void Quit() {
+    if (g.f && g.f != stdout) fclose(g.f);
+    g.f = nullptr;
+    if (tmp) remove(tmp);
+    mem_free(tmp);
+    mem_free(dest);
+    tmp = dest = nullptr;
+    if (open_output == this) open_output = nullptr;
+  }
+  static char* str_dup(const char* s) { return (char*)memcpy(mem_alloc(strlen(s) + 1), s, strlen(s) + 1); }
+
+  // (false: said, and Quit())
   bool open(const char* out_name, FILE* in, const char* in_name) {
+    static bool hooked = !atexit(quit_open_output);
+    (void)hooked;
+    open_output = this;
     name = out_name;
     if (!strcmp(name, "-")) {
       g.f = stdout;
@@ -208,28 +300,31 @@ struct Output {
     }
     if (same_file(in, name)) {
       fprintf(stderr, "h264p: %s: the input and the output are the same file\n", in_name);
+      Quit();
       return false;
     }
     bool fresh = !exists(name);
     file = fresh || is_regular(name);
     if (file) {
-      dest = name;
 #ifdef _WIN32
       long pid = (long)_getpid();
+      dest = str_dup(name);
 #else
       long pid = (long)getpid();
-      if (char* real = fresh ? nullptr : realpath(name, nullptr)) {  // (through a link: beside the file)
-        dest = real;
-        free(real);
-      }
+      char* real = fresh ? nullptr : realpath(name, nullptr);  // (through a link: beside the file)
+      dest = str_dup(real ? real : name);
+      free(real);
 #endif
-      tmp = dest + "." + std::to_string(pid) + ".tmp";
-      g.f = fopen(tmp.c_str(), "wb");
-      if (!g.f) tmp.clear();  // (no room for it beside the file: the file itself)
+      size_t n = strlen(dest) + 32;
+      tmp = (char*)mem_alloc(n);
+      snprintf(tmp, n, "%s.%ld.tmp", dest, pid);
+      g.f = fopen(tmp, "wb");
+      if (!g.f) mem_free(tmp), tmp = nullptr;  // (no room for it beside the file: the file itself)
     }
     if (!g.f) g.f = fopen(name, "wb");
     if (!g.f) {
       fprintf(stderr, "h264p: cannot create %s: %s\n", name, strerror(errno));
+      Quit();
       return false;
     }
     return true;
@@ -237,7 +332,7 @@ struct Output {
   // empty again, for the call to start over (kRestart)
   bool rewind() {
     fclose(g.f);
-    g.f = fopen(tmp.empty() ? name : tmp.c_str(), "wb");
+    g.f = fopen(tmp ? tmp : name, "wb");
     return g.f != nullptr;
   }
   // The end of the call, r its status so far: what it wrote becomes the
@@ -257,22 +352,19 @@ struct Output {
       r = 1;
     }
     bool stay = !r || keep;
-    if (!tmp.empty()) {
-      if (stay && !move_file(tmp.c_str(), dest.c_str())) {
-        fprintf(stderr, "h264p: cannot rename %s to %s: %s\n", tmp.c_str(), dest.c_str(), strerror(errno));
+    if (tmp) {
+      if (stay && !move_file(tmp, dest)) {
+        fprintf(stderr, "h264p: cannot rename %s to %s: %s\n", tmp, dest, strerror(errno));
         r = 1, stay = false;
       }
-      if (!stay) remove(tmp.c_str());
-      tmp.clear();
+      if (!stay) remove(tmp);
+      mem_free(tmp);
+      tmp = nullptr;
     } else if (!stay && file) {
       remove(name);
     }
+    Quit();
     return r ? 1 : 0;
-  }
-  // (a call that ends by an exception leaves no temporary file)
-  ~Output() {
-    if (g.f && g.f != stdout) fclose(g.f);
-    if (!tmp.empty()) remove(tmp.c_str());
   }
   static bool move_file(const char* from, const char* to) {
 #ifdef _WIN32
@@ -283,8 +375,12 @@ struct Output {
   }
 };
 
+void quit_open_output() {
+  if (open_output) open_output->Quit();
+}
+
 // a call's input (f) and output (o); false after a message
-bool open_io(const char* in_name, const char* out_name, filehandle& f, Output& o) {
+bool open_io(const char* in_name, const char* out_name, filehandle0& f, Output& o) {
   f.open(in_name);
   if (!f.f) {
     fprintf(stderr, "h264p: cannot open %s: %s\n", in_name, strerror(errno));
@@ -297,7 +393,7 @@ bool open_io(const char* in_name, const char* out_name, filehandle& f, Output& o
   return true;
 }
 // and their end, r the call's status so far: the exit status (Output::close)
-int close_io(int r, filehandle& f, Output& o, bool keep) {
+int close_io(int r, filehandle0& f, Output& o, bool keep) {
   if (!r && ferror(f.f)) {
     fprintf(stderr, "h264p: read error\n");
     r = 1;
@@ -305,8 +401,6 @@ int close_io(int r, filehandle& f, Output& o, bool keep) {
   if (f.f != stdin) fclose(f.f);
   return o.close(r, keep);
 }
-
-void put(FILE* f, const std::string& s) { fwrite(s.data(), 1, s.size(), f); }
 
 // the size of the file f reads, 0 if it is not a regular file (a pipe)
 uint64_t file_size(FILE* f) {

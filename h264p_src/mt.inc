@@ -50,13 +50,15 @@ void mt_head(uint8_t* head, int threads, uint32_t part) {
 uint64_t mt_cap(uint32_t part) { return std::min<uint64_t>(4 * (uint64_t)part, (uint64_t)1 << 31); }
 
 // A worker's counts for the progress line: its input and its output so
-// far (their parts' and the part's under way)
+// far (their parts' and the part's under way), read from any thread
 struct PartProg {
-  std::atomic<uint64_t> in, out;
+  uint64_t in_, out_;
   void set(uint64_t i, uint64_t o) {
-    in.store(i, std::memory_order_relaxed);
-    out.store(o, std::memory_order_relaxed);
+    __atomic_store_n(&in_, i, __ATOMIC_RELAXED);
+    __atomic_store_n(&out_, o, __ATOMIC_RELAXED);
   }
+  uint64_t in() const { return __atomic_load_n(&in_, __ATOMIC_RELAXED); }
+  uint64_t out() const { return __atomic_load_n(&out_, __ATOMIC_RELAXED); }
 };
 
 // A run of a codec, H264pCoro<f_DEC, LV>, on a part in memory: all of in
@@ -66,7 +68,7 @@ struct PartProg {
 // line of progress may be due.
 template <class C>
 int run_part(const H264pArgs& a, Buf<uint8_t>& in, Buf<uint8_t>& out, PartProg& prog, uint64_t in0, uint64_t out0) {
-  CoroObj<C> c;
+  C* c = coro_new<C>();
   c->Init(&a);
   size_t pos = 0;
   auto feed = [&]() {  // the next piece of the part (addinp() takes 32 bits), or its end
@@ -79,7 +81,7 @@ int run_part(const H264pArgs& a, Buf<uint8_t>& in, Buf<uint8_t>& out, PartProg& 
   c->addout(out.data(), (uint)out.size());
   feed();
   drive(
-      *c.get(), feed,
+      *c, feed,
       [&](bool more) {
         size_t done = (size_t)(c->outptr - out.data());
         if (!more) {  // the end, or an error
@@ -93,7 +95,10 @@ int run_part(const H264pArgs& a, Buf<uint8_t>& in, Buf<uint8_t>& out, PartProg& 
         prog.set(in0 + c->n_in, out0 + c->n_out);
         progress_poll(a.meter);
       });
-  return c->status;
+  int r = c->status;
+  c->Quit();
+  coro_free(c);
+  return r;
 }
 
 // MTwrap's Enc_class: a worker. Plain data, never constructed (MTwrap maps
@@ -174,7 +179,7 @@ struct H264pPart : CoroIo {
       // each, again)
       H264pArgs a = args;
       a.check = true;
-      uint64_t in0 = prog.in.load(std::memory_order_relaxed), out0 = prog.out.load(std::memory_order_relaxed);
+      uint64_t in0 = prog.in(), out0 = prog.out();
       int r = code(a, in0, out0);
       if (r == kRestart) {
         a.check = false;
@@ -205,7 +210,7 @@ struct H264pPart : CoroIo {
       if (g_size < 16 || !take(g_size - 16)) return fail("a part's record cut short or broken");
       H264pArgs a = args;
       a.level = cm_level(in_.data(), std::min(in_.size(), sizeof kCmMagic + 1), args.name, args.meter);
-      uint64_t in0 = prog.in.load(std::memory_order_relaxed), out0 = prog.out.load(std::memory_order_relaxed);
+      uint64_t in0 = prog.in(), out0 = prog.out();
       if (a.level < 0 || code(a, in0 + 16, out0)) return 1;
       size_t ins, pos;
       if (out_.size() != plen || !inserted(nins, ins, pos)) return fail("a part did not decompress as it was compressed");
@@ -259,8 +264,8 @@ template <class M>
 void mt_done(const M& m, uint64_t& in, uint64_t& out) {
   in = out = 0;
   for (uint i = 0; i < m.th_N; i++) {
-    in += m.C1[i].prog.in.load(std::memory_order_relaxed);
-    out += m.C1[i].prog.out.load(std::memory_order_relaxed);
+    in += m.C1[i].prog.in();
+    out += m.C1[i].prog.out();
   }
 }
 // whether a worker failed (and said why)
