@@ -43,295 +43,6 @@ const uint8_t kTc0[52][3] = {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 
                              {4, 6, 9}, {5, 7, 10}, {6, 8, 11}, {6, 8, 13}, {7, 10, 14}, {8, 11, 16},
                              {9, 12, 18}, {10, 13, 20}, {11, 15, 23}, {13, 17, 25}};
 
-static INLINE int clip1(int v) { return v < 0 ? 0 : v > 255 ? 255 : v; }
-static INLINE int clip3(int lo, int hi, int v) { return v < lo ? lo : v > hi ? hi : v; }
-// the 16 vectors of a list's 4x4 blocks all alike
-static INLINE bool one_mv(const int16_t mv[16][2]) {
-#ifdef H264P_AVX2
-  int32_t f;
-  memcpy(&f, mv[0], 4);
-  __m256i v = _mm256_set1_epi32(f);
-  __m256i a = _mm256_cmpeq_epi32(_mm256_loadu_si256((const __m256i*)mv[0]), v);
-  __m256i b = _mm256_cmpeq_epi32(_mm256_loadu_si256((const __m256i*)mv[8]), v);
-  return _mm256_movemask_epi8(_mm256_and_si256(a, b)) == -1;
-#else
-  for (int b = 1; b < 16; b++)
-    if (mv[b][0] != mv[0][0] || mv[b][1] != mv[0][1]) return false;
-  return true;
-#endif
-}
-
-// The sum of the absolute differences between n x rows samples of q (stride
-// qs) and their bilinear prediction from a (stride as) at (fx, fy) quarter
-// samples: ((4-fx)(4-fy) a + fx(4-fy) a' + (4-fx)fy c + fx fy c' + 8) >> 4, a'
-// and c' right of a and c, c below a. Stops once the sum reaches budget (>
-// 0), after a row or two, and returns budget then: what it returns is the
-// same however far it went (the AVX2 code and the plain alike; a caller
-// sums such parts against one budget); a must be readable n + 1 samples
-// wide and rows + 1 down.
-static int sad_bil(const uint8_t* q, int qs, const uint8_t* a, int as, int n, int rows, int fx, int fy, int budget) {
-  int s = 0;
-#ifdef H264P_AVX2
-  if ((n == 16 || n == 8 || n == 4) && !(rows & 1)) {
-    // two rows at a time: the byte pairs (a, a') and (c, c') through
-    // pmaddubsw, wa a + wb a' and wc c + wd c' in 16-bit lanes
-    const int wa = (4 - fx) * (4 - fy), wb = fx * (4 - fy), wc = (4 - fx) * fy, wd = fx * fy;
-    if (n == 16) {
-      auto ld = [](const uint8_t* p0, const uint8_t* p1) {
-        return _mm256_inserti128_si256(_mm256_castsi128_si256(_mm_loadu_si128((const __m128i*)p0)),
-                                       _mm_loadu_si128((const __m128i*)p1), 1);
-      };
-      const __m256i wab = _mm256_set1_epi16((short)(wa | wb << 8)), wcd = _mm256_set1_epi16((short)(wc | wd << 8));
-      const __m256i r8 = _mm256_set1_epi16(8);
-      __m256i acc = _mm256_setzero_si256();
-      for (int j = 0; j < rows; j += 2, q += 2 * qs, a += 2 * as) {
-        __m256i d = ld(a, a + as);
-        if (fx | fy) {
-          __m256i x1 = fx ? ld(a + 1, a + as + 1) : d;
-          __m256i lo = _mm256_maddubs_epi16(_mm256_unpacklo_epi8(d, x1), wab);
-          __m256i hi = _mm256_maddubs_epi16(_mm256_unpackhi_epi8(d, x1), wab);
-          if (fy) {
-            __m256i y0 = ld(a + as, a + 2 * as), y1 = fx ? ld(a + as + 1, a + 2 * as + 1) : y0;
-            lo = _mm256_add_epi16(lo, _mm256_maddubs_epi16(_mm256_unpacklo_epi8(y0, y1), wcd));
-            hi = _mm256_add_epi16(hi, _mm256_maddubs_epi16(_mm256_unpackhi_epi8(y0, y1), wcd));
-          }
-          d = _mm256_packus_epi16(_mm256_srli_epi16(_mm256_add_epi16(lo, r8), 4),
-                                  _mm256_srli_epi16(_mm256_add_epi16(hi, r8), 4));
-        }
-        acc = _mm256_add_epi64(acc, _mm256_sad_epu8(d, ld(q, q + qs)));
-        __m128i t = _mm_add_epi64(_mm256_castsi256_si128(acc), _mm256_extracti128_si256(acc, 1));
-        s = _mm_cvtsi128_si32(_mm_add_epi64(t, _mm_unpackhi_epi64(t, t)));
-        if (s >= budget) break;
-      }
-      return std::min(s, budget);
-    }
-    // rows of 8 in the two halves, of 4 in the low two quarters
-    auto ld = [n](const uint8_t* p0, const uint8_t* p1) {
-      if (n == 8) return _mm_unpacklo_epi64(_mm_loadl_epi64((const __m128i*)p0), _mm_loadl_epi64((const __m128i*)p1));
-      int32_t u0, u1;
-      memcpy(&u0, p0, 4);
-      memcpy(&u1, p1, 4);
-      return _mm_unpacklo_epi32(_mm_cvtsi32_si128(u0), _mm_cvtsi32_si128(u1));
-    };
-    const __m128i wab = _mm_set1_epi16((short)(wa | wb << 8)), wcd = _mm_set1_epi16((short)(wc | wd << 8));
-    const __m128i r8 = _mm_set1_epi16(8), z = _mm_setzero_si128();
-    __m128i acc = z;
-    for (int j = 0; j < rows; j += 2, q += 2 * qs, a += 2 * as) {
-      __m128i d = ld(a, a + as);
-      if (fx | fy) {
-        __m128i x1 = fx ? ld(a + 1, a + as + 1) : d;
-        __m128i lo = _mm_maddubs_epi16(_mm_unpacklo_epi8(d, x1), wab);
-        __m128i hi = n == 8 ? _mm_maddubs_epi16(_mm_unpackhi_epi8(d, x1), wab) : z;
-        if (fy) {
-          __m128i y0 = ld(a + as, a + 2 * as), y1 = fx ? ld(a + as + 1, a + 2 * as + 1) : y0;
-          lo = _mm_add_epi16(lo, _mm_maddubs_epi16(_mm_unpacklo_epi8(y0, y1), wcd));
-          if (n == 8) hi = _mm_add_epi16(hi, _mm_maddubs_epi16(_mm_unpackhi_epi8(y0, y1), wcd));
-        }
-        d = _mm_packus_epi16(_mm_srli_epi16(_mm_add_epi16(lo, r8), 4),
-                             n == 8 ? _mm_srli_epi16(_mm_add_epi16(hi, r8), 4) : z);
-      }
-      acc = _mm_add_epi64(acc, _mm_sad_epu8(d, ld(q, q + qs)));
-      s = _mm_cvtsi128_si32(_mm_add_epi64(acc, _mm_unpackhi_epi64(acc, acc)));
-      if (s >= budget) break;
-    }
-    return std::min(s, budget);
-  }
-#endif
-  int wa = (4 - fx) * (4 - fy), wb = fx * (4 - fy), wc = (4 - fx) * fy, wd = fx * fy;
-  for (int j = 0; j < rows && s < budget; j++, q += qs, a += as) {
-    const uint8_t* c = a + as;
-    if (!(fx | fy))
-      for (int i = 0; i < n; i++) s += abs(q[i] - a[i]);
-    else
-      for (int i = 0; i < n; i++) s += abs(q[i] - ((wa * a[i] + wb * a[i + 1] + wc * c[i] + wd * c[i + 1] + 8) >> 4));
-  }
-  return std::min(s, budget);
-}
-#ifdef H264P_AVX2
-// two rows of 16 samples (p0, p1) in one vector
-static INLINE __m256i ld16x2(const uint8_t* p0, const uint8_t* p1) {
-  return _mm256_inserti128_si256(_mm256_castsi128_si256(_mm_loadu_si128((const __m128i*)p0)), _mm_loadu_si128((const __m128i*)p1), 1);
-}
-// two rows of n (8 or 4) samples (p0, p1): of 8 in the two halves, of 4 in
-// the low two quarters
-static INLINE __m128i ld8x2(const uint8_t* p0, const uint8_t* p1, int n) {
-  if (n == 8) return _mm_unpacklo_epi64(_mm_loadl_epi64((const __m128i*)p0), _mm_loadl_epi64((const __m128i*)p1));
-  int32_t u0, u1;
-  memcpy(&u0, p0, 4);
-  memcpy(&u1, p1, 4);
-  return _mm_unpacklo_epi32(_mm_cvtsi32_si128(u0), _mm_cvtsi32_si128(u1));
-}
-// the sum of the four sums of _mm256_sad_epu8
-static INLINE int sad_sum(__m256i v) {
-  __m128i t = _mm_add_epi64(_mm256_castsi256_si128(v), _mm256_extracti128_si256(v, 1));
-  return _mm_cvtsi128_si32(_mm_add_epi64(t, _mm_unpackhi_epi64(t, t)));
-}
-// the weights of the bilinear prediction at (fx, fy), by fx + 4 fy, as
-// byte pairs for pmaddubsw: of the two samples above (ab) and below (cd)
-struct BilW {
-  __m256i ab[16], cd[16];
-  BilW() {
-    for (int f = 0; f < 16; f++) {
-      int fx = f & 3, fy = f >> 2;
-      ab[f] = _mm256_set1_epi16((short)((4 - fx) * (4 - fy) | fx * (4 - fy) << 8));
-      cd[f] = _mm256_set1_epi16((short)((4 - fx) * fy | fx * fy << 8));
-    }
-  }
-};
-static const BilW kBilW;
-// two rows of 16 samples from a (stride as) predicted bilinearly at (fx,
-// fy), as sad_bil's, without a branch on the position
-static INLINE __m256i bil16x2(const uint8_t* a, int as, int fx, int fy) {
-  const __m256i wab = kBilW.ab[fx + 4 * fy], wcd = kBilW.cd[fx + 4 * fy];
-  const __m256i r8 = _mm256_set1_epi16(8);
-  __m256i x0 = ld16x2(a, a + as), x1 = ld16x2(a + 1, a + as + 1), y0 = ld16x2(a + as, a + 2 * as), y1 = ld16x2(a + as + 1, a + 2 * as + 1);
-  __m256i lo = _mm256_add_epi16(_mm256_maddubs_epi16(_mm256_unpacklo_epi8(x0, x1), wab),
-                                _mm256_maddubs_epi16(_mm256_unpacklo_epi8(y0, y1), wcd));
-  __m256i hi = _mm256_add_epi16(_mm256_maddubs_epi16(_mm256_unpackhi_epi8(x0, x1), wab),
-                                _mm256_maddubs_epi16(_mm256_unpackhi_epi8(y0, y1), wcd));
-  return _mm256_packus_epi16(_mm256_srli_epi16(_mm256_add_epi16(lo, r8), 4), _mm256_srli_epi16(_mm256_add_epi16(hi, r8), 4));
-}
-// sad_bil of rows of 32 samples, a row at a time (each row's pairs of
-// samples serve as the row above for one and below for the next), checked
-// against budget every 4 rows (budget once it is reached, as sad_bil)
-static int sad_bil32(const uint8_t* q, int qs, const uint8_t* a, int as, int rows, int fx, int fy, int budget) {
-  auto ld = [](const uint8_t* p) { return _mm256_loadu_si256((const __m256i*)p); };
-  __m256i acc = _mm256_setzero_si256();
-  int s;
-  if (!(fx | fy)) {
-    for (int j = 0; j < rows; j++, q += qs, a += as) {
-      acc = _mm256_add_epi64(acc, _mm256_sad_epu8(ld(a), ld(q)));
-      if ((j & 3) == 3 && (s = sad_sum(acc)) >= budget) return budget;
-    }
-    return std::min(sad_sum(acc), budget);
-  }
-  const __m256i wab = kBilW.ab[fx + 4 * fy], wcd = kBilW.cd[fx + 4 * fy], r8 = _mm256_set1_epi16(8);
-  __m256i x0 = ld(a), x1 = ld(a + 1);
-  __m256i plo = _mm256_unpacklo_epi8(x0, x1), phi = _mm256_unpackhi_epi8(x0, x1);
-  for (int j = 0; j < rows; j++, q += qs) {
-    a += as;
-    __m256i y0 = ld(a), y1 = ld(a + 1);
-    __m256i nlo = _mm256_unpacklo_epi8(y0, y1), nhi = _mm256_unpackhi_epi8(y0, y1);
-    __m256i lo = _mm256_add_epi16(_mm256_maddubs_epi16(plo, wab), _mm256_maddubs_epi16(nlo, wcd));
-    __m256i hi = _mm256_add_epi16(_mm256_maddubs_epi16(phi, wab), _mm256_maddubs_epi16(nhi, wcd));
-    __m256i d = _mm256_packus_epi16(_mm256_srli_epi16(_mm256_add_epi16(lo, r8), 4), _mm256_srli_epi16(_mm256_add_epi16(hi, r8), 4));
-    acc = _mm256_add_epi64(acc, _mm256_sad_epu8(d, ld(q)));
-    plo = nlo, phi = nhi;
-    if ((j & 3) == 3 && (s = sad_sum(acc)) >= budget) return budget;
-  }
-  return std::min(sad_sum(acc), budget);
-}
-#endif
-#ifdef H264P_AVX2
-// sad_bil of a block of n x n (4 or 8), whole: two rows of n at a time
-// (rows of 4 in the low two quarters, of 8 in the halves)
-static INLINE int sad_bil_blk(const uint8_t* q, int qs, const uint8_t* a, int as, int n, int fx, int fy) {
-  const __m128i wab = _mm256_castsi256_si128(kBilW.ab[fx + 4 * fy]), wcd = _mm256_castsi256_si128(kBilW.cd[fx + 4 * fy]);
-  const __m128i r8 = _mm_set1_epi16(8);
-  // (each row's pairs of samples, for it as the row above and below)
-  auto ld = [n](const uint8_t* p) {
-    if (n == 8) return _mm_loadl_epi64((const __m128i*)p);
-    int32_t u;
-    memcpy(&u, p, 4);
-    return _mm_cvtsi32_si128(u);
-  };
-  auto pairs = [&](const uint8_t* p) { return _mm_unpacklo_epi8(ld(p), ld(p + 1)); };
-  __m128i acc = _mm_setzero_si128(), pa = pairs(a);
-  for (int j = 0; j < n; j += 2, q += 2 * qs) {
-    __m128i pb = pairs(a + (j + 1) * as), pc = pairs(a + (j + 2) * as);
-    __m128i lo, hi;
-    if (n == 8) {
-      lo = _mm_add_epi16(_mm_maddubs_epi16(pa, wab), _mm_maddubs_epi16(pb, wcd));
-      hi = _mm_add_epi16(_mm_maddubs_epi16(pb, wab), _mm_maddubs_epi16(pc, wcd));
-    } else {
-      lo = _mm_add_epi16(_mm_maddubs_epi16(_mm_unpacklo_epi64(pa, pb), wab), _mm_maddubs_epi16(_mm_unpacklo_epi64(pb, pc), wcd));
-      hi = _mm_setzero_si128();
-    }
-    __m128i d = _mm_packus_epi16(_mm_srli_epi16(_mm_add_epi16(lo, r8), 4), _mm_srli_epi16(_mm_add_epi16(hi, r8), 4));
-    // (n 4: the upper half is of zeros in both)
-    __m128i t = ld8x2(q, q + qs, n);
-    acc = _mm_add_epi64(acc, _mm_sad_epu8(d, t));
-    pa = pc;
-  }
-  return _mm_cvtsi128_si32(_mm_add_epi64(acc, _mm_unpackhi_epi64(acc, acc)));
-}
-#endif
-// A thin template: two rows of n (16, 8 or 4) samples at q (stride qs; none
-// if null), loaded once for the many places of a search that sad_bil2
-// matches it against
-struct Tpl2 {
-#ifdef H264P_AVX2
-  __m256i v;  // (as sad_bil2 predicts the rows: of 16 in the two halves, else ld8x2's)
-#else
-  const uint8_t* q;
-  int qs;
-#endif
-  int n;
-  Tpl2(const uint8_t* q_, int qs_, int n_) : n(n_) {
-#ifdef H264P_AVX2
-    v = !q_ ? _mm256_setzero_si256() : n == 16 ? ld16x2(q_, q_ + qs_) : _mm256_inserti128_si256(_mm256_setzero_si256(), ld8x2(q_, q_ + qs_, n), 0);
-#else
-    q = q_, qs = qs_;
-#endif
-  }
-};
-// sad_bil of a thin template against two rows of t.n samples at a, whole,
-// and without a branch on the position (fx, fy): the vectors of a search
-// change position from one to the next
-static INLINE int sad_bil2(const Tpl2& t, const uint8_t* a, int as, int fx, int fy) {
-#ifdef H264P_AVX2
-  if (t.n == 16) return sad_sum(_mm256_sad_epu8(bil16x2(a, as, fx, fy), t.v));
-  const int n = t.n;
-  const __m128i wab = _mm256_castsi256_si128(kBilW.ab[fx + 4 * fy]), wcd = _mm256_castsi256_si128(kBilW.cd[fx + 4 * fy]);
-  const __m128i r8 = _mm_set1_epi16(8);
-  __m128i x0 = ld8x2(a, a + as, n), x1 = ld8x2(a + 1, a + as + 1, n), y0 = ld8x2(a + as, a + 2 * as, n),
-          y1 = ld8x2(a + as + 1, a + 2 * as + 1, n);
-  __m128i lo = _mm_add_epi16(_mm_maddubs_epi16(_mm_unpacklo_epi8(x0, x1), wab), _mm_maddubs_epi16(_mm_unpacklo_epi8(y0, y1), wcd));
-  __m128i hi = _mm_add_epi16(_mm_maddubs_epi16(_mm_unpackhi_epi8(x0, x1), wab), _mm_maddubs_epi16(_mm_unpackhi_epi8(y0, y1), wcd));
-  __m128i d = _mm_packus_epi16(_mm_srli_epi16(_mm_add_epi16(lo, r8), 4), _mm_srli_epi16(_mm_add_epi16(hi, r8), 4));
-  // (n 4: the upper half is of the zeros beyond both rows, the same in both)
-  __m128i v = _mm_sad_epu8(d, _mm256_castsi256_si128(t.v));
-  return _mm_cvtsi128_si32(_mm_add_epi64(v, _mm_unpackhi_epi64(v, v)));
-#else
-  return sad_bil(t.q, t.qs, a, as, t.n, 2, fx, fy, INT_MAX);
-#endif
-}
-
-// The sums of the absolute differences between neighbouring samples of n
-// x n (16, 8 or 4) at p: across (gx: n - 1 pairs a row) and down (gy)
-static void grads(const uint8_t* p, int stride, int n, int& gx, int& gy) {
-#ifdef H264P_AVX2
-  static const uint8_t kOnes[32] = {255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255};
-  auto ld = [n](const uint8_t* q) {
-    if (n == 16) return _mm_loadu_si128((const __m128i*)q);
-    if (n == 8) return _mm_loadl_epi64((const __m128i*)q);
-    int32_t u;
-    memcpy(&u, q, 4);
-    return _mm_cvtsi32_si128(u);
-  };
-  // (a row against itself one on, its last sample out of both)
-  const __m128i m = _mm_loadu_si128((const __m128i*)(kOnes + 17 - n));
-  __m128i ax = _mm_setzero_si128(), ay = ax, x = ld(p);
-  for (int j = 0; j < n; j++) {
-    ax = _mm_add_epi64(ax, _mm_sad_epu8(_mm_and_si128(x, m), _mm_srli_si128(x, 1)));
-    if (j + 1 < n) {
-      __m128i y = ld(p + (j + 1) * stride);
-      ay = _mm_add_epi64(ay, _mm_sad_epu8(x, y));
-      x = y;
-    }
-  }
-  gx = _mm_cvtsi128_si32(_mm_add_epi64(ax, _mm_unpackhi_epi64(ax, ax)));
-  gy = _mm_cvtsi128_si32(_mm_add_epi64(ay, _mm_unpackhi_epi64(ay, ay)));
-#else
-  gx = gy = 0;
-  for (int j = 0; j < n; j++)
-    for (int i = 0; i < n; i++) {
-      if (i + 1 < n) gx += abs(p[j * stride + i + 1] - p[j * stride + i]);
-      if (j + 1 < n) gy += abs(p[(j + 1) * stride + i] - p[j * stride + i]);
-    }
-#endif
-}
-
 static int chroma_qp(int qpy, int off) {
   int qpi = clip3(0, 51, qpy + off);
   return qpi < 30 ? qpi : kQpc[qpi - 30];
@@ -340,59 +51,6 @@ static int chroma_qp(int qpy, int off) {
 // --- pictures
 
 // A decoded picture, and what decoding later pictures needs of it.
-// rows of n samples (any n; 16, 8, 4 and 2 inlined), from s to d
-static INLINE void copy_rows(uint8_t* d, int ds, const uint8_t* s, int ss, int n, int rows) {
-  switch (n) {
-    case 16:
-      for (int j = 0; j < rows; j++) memcpy(d + j * ds, s + j * ss, 16);
-      break;
-    case 8:
-      for (int j = 0; j < rows; j++) memcpy(d + j * ds, s + j * ss, 8);
-      break;
-    case 4:
-      for (int j = 0; j < rows; j++) memcpy(d + j * ds, s + j * ss, 4);
-      break;
-    case 2:
-      for (int j = 0; j < rows; j++) memcpy(d + j * ds, s + j * ss, 2);
-      break;
-    default:
-      for (int j = 0; j < rows; j++) memcpy(d + j * ds, s + j * ss, n);
-  }
-}
-
-// 16 x 16 samples at s (stride ss) transposed into d (stride ds)
-static void transpose16(const uint8_t* s, int ss, uint8_t* d, int ds) {
-#ifdef H264P_AVX2
-  // interleaved bytes, words, dwords and qwords of rows ever further apart
-  __m128i r[16], t[16];
-  for (int i = 0; i < 16; i++) r[i] = _mm_loadu_si128((const __m128i*)(s + (size_t)i * ss));
-  for (int i = 0; i < 8; i++) {
-    t[i] = _mm_unpacklo_epi8(r[2 * i], r[2 * i + 1]);
-    t[i + 8] = _mm_unpackhi_epi8(r[2 * i], r[2 * i + 1]);
-  }
-  for (int h = 0; h < 2; h++)
-    for (int i = 0; i < 4; i++) {
-      r[h * 8 + i] = _mm_unpacklo_epi16(t[h * 8 + 2 * i], t[h * 8 + 2 * i + 1]);
-      r[h * 8 + i + 4] = _mm_unpackhi_epi16(t[h * 8 + 2 * i], t[h * 8 + 2 * i + 1]);
-    }
-  for (int q = 0; q < 4; q++)
-    for (int i = 0; i < 2; i++) {
-      t[q * 4 + i] = _mm_unpacklo_epi32(r[q * 4 + 2 * i], r[q * 4 + 2 * i + 1]);
-      t[q * 4 + i + 2] = _mm_unpackhi_epi32(r[q * 4 + 2 * i], r[q * 4 + 2 * i + 1]);
-    }
-  // (t[4q + 2p]: rows 0-7 of columns 4q + 2p and the next, t[4q + 2p + 1]
-  // rows 8-15)
-  for (int c = 0; c < 16; c += 2) {
-    int k = c / 4 * 4 + (c / 2 & 1) * 2;
-    _mm_storeu_si128((__m128i*)(d + (size_t)c * ds), _mm_unpacklo_epi64(t[k], t[k + 1]));
-    _mm_storeu_si128((__m128i*)(d + (size_t)(c + 1) * ds), _mm_unpackhi_epi64(t[k], t[k + 1]));
-  }
-#else
-  for (int i = 0; i < 16; i++)
-    for (int j = 0; j < 16; j++) d[(size_t)i * ds + j] = s[(size_t)j * ss + i];
-#endif
-}
-
 struct RPic {
   int w = 0, h = 0, mbw = 0, mbh = 0;  // luma size (whole macroblocks), in macroblocks
   std::vector<uint8_t> y, u, v;
@@ -406,7 +64,6 @@ struct RPic {
   std::vector<int8_t> rf;      // [(mb * 4 + b8) * 2 + list]
   std::vector<int64_t> rpid;   // likewise
   std::vector<int16_t> mv;     // [((mb * 16 + blk) * 2 + list) * 2 + comp]
-  bool lt_ref[2][33] = {};     // whether its references were long-term, per list and index
   // the luma again with its edges repeated kPad samples out, so that the
   // reads of motion compensation and template matching near the edges
   // need no clipping (padded: made since the picture was finished)
@@ -437,11 +94,6 @@ struct RPic {
     }
     for (int j = j0; j < j1; j += 16)
       for (int i = 0; i < pw; i += 16) transpose16(yp.data() + (size_t)j * pw + i, pw, yt.data() + (size_t)i * ph + j, ph);
-  }
-  void pad() {
-    pad_alloc();
-    pad_rows(0, mbh);
-    padded = true;
   }
   // the luma as plane, its stride and how far out it may be read (the
   // padded copy where there is one)
@@ -484,23 +136,16 @@ struct DbMb {
   int16_t mv[2][16][2];
 };
 
-// PX: the pictures with their samples, the decoder in the loop (Recon); or
-// (ReconRefs) only the pictures' motion, POCs and reference lists, which
-// direct prediction and the model's reference contexts need: every query
-// about samples then answers "not known", as while no picture is active
-template <bool PX>
-struct ReconT {
-  bool on = false;       // the current stream is reconstructed
-  bool active = false;   // the current picture is
-  bool mact = false;     // and its motion (and the reference lists) are: active, or PX false
-  // (the pictures' samples: never where PX is false, a constant there)
-  bool act() const { return PX && active; }
+// The decoded picture buffer (8.2.4, 8.2.5): the reference pictures and
+// the current one, its POC (8.2.1), the reference lists of the current
+// slice and their weights (8.4.2.3); what ReconT<PX> keeps whether it has
+// the samples (Recon) or not (ReconRefs), and what it does as a picture
+// ends (mark()) and as a slice begins (poc(), build_lists(), weights()).
+struct Dpb {
   std::vector<std::unique_ptr<RPic>> dpb;  // reference pictures
   std::unique_ptr<RPic> cur;               // the picture being decoded
   std::vector<std::unique_ptr<RPic>> spare;  // pictures to reuse
   int64_t next_id = 1;
-  std::vector<DbMb> db;
-  int slice_no = 0;
   // the current picture's header values that marking needs
   int cur_idr = 0, cur_ref_idc = 0, cur_lt_flag = 0, cur_mmco5 = 0;
   std::vector<std::vector<int64_t>> cur_mmco;
@@ -517,215 +162,8 @@ struct ReconT {
   int wmode = 0, lwd = 0, cwd = 0;
   int wt[2][32][6];
   int implicit_w[32][32];  // implicit bi-prediction weight of list 0 (64 - w for list 1)
-  int cqp_off[2] = {0, 0};
-  int stype = 0, disable = 0, alpha_off = 0, beta_off = 0;
-  bool constrained_intra = false, direct_spatial = true, direct8x8 = true;
-  // what the model sees of the last picture decoded: per macroblock the
-  // energy of its luma (4 log2 of 1 + the sum of squared deviations), the
-  // mean of that over the picture, and how much the means of its 4x4 blocks
-  // changed from the picture before (16 x the mean absolute difference; -1
-  // none)
-  std::vector<int> energy, change;
-  int energy_mean = 0;
-  std::vector<int> means;  // 16 x the means of the 4x4 blocks, for the next picture's change
-  int maps_w = 0, maps_h = 0;
-  // H264P_RECDUMP's file (finish_picture()), opened as the first picture is
-  struct RecDump {
-    FILE* f = nullptr;
-    bool tried = false;
-    FILE* get() {
-      if (!tried) {
-        tried = true;
-        const char* fn = getenv("H264P_RECDUMP");
-        if (fn) f = fopen(fn, "wb");
-      }
-      return f;
-    }
-    RecDump() {}
-    RecDump(const RecDump&) = delete;
-    void operator=(const RecDump&) = delete;
-    ~RecDump() {
-      if (f) fclose(f);
-    }
-  } recdump;
 
-  // 4 log2 v, rounded down to quarters (integers only: the model must come
-  // out the same everywhere)
-  static int log2q(int64_t v) {
-    int n = 0;
-    while (v >> (n + 1)) n++;
-    return 4 * n + (n >= 2 ? (int)(v >> (n - 2) & 3) : n == 1 ? (int)(v & 1) * 2 : 0);
-  }
-  // the current picture's maps as it is finished (by rows), and whether
-  // the last picture's means are of its size (maps_begin)
-  std::vector<int> energy_n, change_n, means_n;
-  bool maps_same = false;
-  void maps_begin() {
-    int n = cur->mbw * cur->mbh;
-    maps_same = maps_w == cur->mbw && maps_h == cur->mbh && (int)means.size() == n * 16;
-    energy_n.resize(n);
-    change_n.assign(n, -1);
-    means_n.resize((size_t)n * 16);
-  }
-  // those of macroblock row row, deblocked
-  void maps_row(int row) {
-    int mbw = cur->mbw, w = cur->w;
-    int* m = means_n.data();
-    for (int a = row * mbw; a < (row + 1) * mbw; a++) {
-      const uint8_t* p = cur->y.data() + (a / mbw) * 16 * w + (a % mbw) * 16;
-      int64_t s1 = 0, s2 = 0;
-#ifdef H264P_AVX2
-      {
-        // a row's sums of four by pmaddubsw and pmaddwd, its squares by
-        // pmaddwd
-        const __m128i o8 = _mm_set1_epi8(1), o16 = _mm_set1_epi16(1), z = _mm_setzero_si128();
-        __m128i sq = z;
-        for (int by = 0; by < 4; by++) {
-          __m128i acc = z;
-          for (int y = 0; y < 4; y++) {
-            __m128i r = _mm_loadu_si128((const __m128i*)(p + (by * 4 + y) * w));
-            acc = _mm_add_epi32(acc, _mm_madd_epi16(_mm_maddubs_epi16(r, o8), o16));
-            __m128i lo = _mm_unpacklo_epi8(r, z), hi = _mm_unpackhi_epi8(r, z);
-            sq = _mm_add_epi32(sq, _mm_add_epi32(_mm_madd_epi16(lo, lo), _mm_madd_epi16(hi, hi)));
-          }
-          _mm_storeu_si128((__m128i*)&m[a * 16 + by * 4], acc);
-        }
-        for (int b = 0; b < 16; b++) s1 += m[a * 16 + b];
-        sq = _mm_add_epi32(sq, _mm_shuffle_epi32(sq, 0x4E));
-        s2 = _mm_cvtsi128_si32(_mm_add_epi32(sq, _mm_shuffle_epi32(sq, 0xB1)));
-      }
-#else
-      for (int b = 0; b < 16; b++) {
-        int bs1 = 0;
-        const uint8_t* q = p + (b >> 2) * 4 * w + (b & 3) * 4;
-        for (int y = 0; y < 4; y++)
-          for (int x = 0; x < 4; x++) {
-            int v = q[y * w + x];
-            bs1 += v;
-            s2 += v * v;
-          }
-        s1 += bs1;
-        m[a * 16 + b] = bs1;  // 16 x the mean
-      }
-#endif
-      int64_t ssd = (s2 * 256 - s1 * s1) / 256;  // the sum of squared deviations
-      energy_n[a] = log2q(ssd + 1);
-      if (maps_same) {
-        int d = 0;
-        for (int b = 0; b < 16; b++) d += abs(m[a * 16 + b] - means[a * 16 + b]);
-        change_n[a] = d / 16;
-      }
-    }
-  }
-  // the picture finished: its maps are the model's
-  void maps_end() {
-    int n = cur->mbw * cur->mbh;
-    int64_t sum = 0;
-    for (int a = 0; a < n; a++) sum += energy_n[a];
-    energy_mean = n ? (int)(sum / n) : 0;
-    energy.swap(energy_n);
-    change.swap(change_n);
-    means.swap(means_n);
-    maps_w = cur->mbw;
-    maps_h = cur->mbh;
-  }
-
-  // --- finishing the picture as its decoding goes on: deblocking it, then
-  // the maps and (a reference picture's) padded luma of each row done with.
-  // Decoding a macroblock row reads the row above it unfiltered, and
-  // deblocking row j changes rows j - 1 and j: so row j is let go once the
-  // decoding has come in order to row j + 2, and is final once row j + 1 is
-  // deblocked; the rest is finished when the picture ends. A decoding that
-  // leaves the order (slice groups, slices out of order or twice) has what
-  // was let go finished and lets go no more.
-  int fin_next = 0;                // the macroblock next in order
-  bool fin_off = false;            // the decoding left the order
-  int fin_rows = 0, fin_post = 0;  // the rows deblocked, and final and finished
-  int fin_db = 0;                  // the rows of db made none again for the next picture
-  static DbMb db_none() {
-    DbMb none;
-    memset(&none, 0, sizeof none);
-    none.slice = -1;
-    return none;
-  }
-  void finish_rows(int let, bool all) {
-    int mbw = cur->mbw;
-    while (fin_rows < let) {
-      deblock_row(fin_rows++);
-      // (deblocking reads the row above, decoding two rows down)
-      for (; fin_db < fin_rows - 1; fin_db++) std::fill(&db[fin_db * mbw], &db[fin_db * mbw] + mbw, db_none());
-      for (; fin_post < fin_rows - 1; fin_post++) post_row(fin_post);
-    }
-    if (all) {
-      for (; fin_post < cur->mbh; fin_post++) post_row(fin_post);
-      // (all of it where the decoding left the order: it may have come back)
-      std::fill(db.begin() + (fin_off ? 0 : (size_t)fin_db * mbw), db.end(), db_none());
-    }
-  }
-  void post_row(int row) {
-    maps_row(row);
-    if (cur_ref_idc) cur->pad_rows(row, row + 1);
-  }
-  // (the decoding's side) a picture begins
-  void fin_begin() {
-    fin_next = 0;
-    fin_off = false;
-    fin_rows = fin_post = fin_db = 0;
-    maps_begin();
-    if (cur_ref_idc) cur->pad_alloc();
-  }
-  void fin_let(int rows) {
-    finish_rows(rows, false);
-  }
-  // macroblock addr begins (mb_start), ends (mb_end)
-  void fin_mb(int addr, bool end) {
-    if (fin_off) return;
-    if (addr != fin_next) {
-      fin_off = true;
-      return;
-    }
-    int mbw = cur->mbw;
-    if (end && ++fin_next % mbw == 0 && fin_next >= 2 * mbw) fin_let(fin_next / mbw - 1);
-  }
-  // the picture ends: the rest of it
-  void fin_end() {
-    finish_rows(cur->mbh, true);
-    maps_end();
-    if (cur_ref_idc) cur->padded = true;
-  }
-
-  // --- reference picture management (8.2.4, 8.2.5)
   int pic_num(const RPic* p) const { return p->lt ? p->lt_idx : (p->frame_num > cur->frame_num ? p->frame_num - max_frame_num : p->frame_num); }
-
-  // the end of the stream: its last picture finished too
-  void end() { finish_picture(); }
-  // an inter macroblock's transform size, which comes after its prediction
-  // (prepare()): its 8x8 blocks then go to the picture as they come
-  void set_t8(int t8) {
-    if (act() && mb_prepared) mb_t8 = t8;
-  }
-  void finish_picture() {
-    if (!cur) return;
-    if (act()) fin_end();
-    // checking the reconstruction against a decoder's: H264P_RECDUMP=file
-    // gets the pictures, in decoding order, as raw 4:2:0 of whole macroblocks
-    // (this model's: c or d without -t, the only model of the call)
-    FILE* dump = act() ? recdump.get() : nullptr;
-    if (dump) {
-      fwrite(cur->y.data(), 1, cur->y.size(), dump);
-      fwrite(cur->u.data(), 1, cur->u.size(), dump);
-      fwrite(cur->v.data(), 1, cur->v.size(), dump);
-    }
-    if (cur_ref_idc) mark();
-    if (cur->ref) {
-      if (PX && !cur->padded) cur->pad();
-      dpb.push_back(std::move(cur));
-    } else {
-      spare.push_back(std::move(cur));
-    }
-    active = mact = false;
-    nlist[0] = nlist[1] = 0;  // marking may have dropped the pictures they hold
-  }
 
   void mark() {
     RPic* c = cur.get();
@@ -741,7 +179,6 @@ struct ReconT {
       c->ref = true;
       return;
     }
-    bool lt_done = false;
     if (!cur_mmco.empty()) {
       for (auto& op : cur_mmco) {
         int64_t a = op.size() > 1 ? op[1] : 0;
@@ -782,7 +219,6 @@ struct ReconT {
               if (p->ref && p->lt && p->lt_idx == a) p->ref = false;
             c->lt = true;
             c->lt_idx = (int)a;
-            lt_done = true;
             break;
         }
       }
@@ -798,7 +234,6 @@ struct ReconT {
         if (old) old->ref = false;
       }
     }
-    (void)lt_done;
     c->ref = true;
     // pictures no longer used for reference go, and the oldest beyond the
     // 15 a conforming stream keeps besides the current one (a stream that
@@ -971,6 +406,218 @@ struct ReconT {
         }
     }
   }
+};
+
+// PX: the pictures with their samples, the decoder in the loop (Recon); or
+// (ReconRefs) only the pictures' motion, POCs and reference lists, which
+// direct prediction and the model's reference contexts need: every query
+// about samples then answers "not known", as while no picture is active
+template <bool PX>
+struct ReconT : Dpb {
+  // a picture is current: its motion (and the reference lists) are known,
+  // and its samples (act()) where PX, a constant false where not
+  bool mact = false;
+  bool act() const { return PX && mact; }
+  std::vector<DbMb> db;
+  int slice_no = 0;
+  int cqp_off[2] = {0, 0};
+  int disable = 0, alpha_off = 0, beta_off = 0;
+  bool constrained_intra = false, direct8x8 = true;
+  // what the model sees of the last picture decoded: per macroblock the
+  // energy of its luma (4 log2 of 1 + the sum of squared deviations), the
+  // mean of that over the picture, and how much the means of its 4x4 blocks
+  // changed from the picture before (16 x the mean absolute difference; -1
+  // none)
+  std::vector<int> energy, change;
+  int energy_mean = 0;
+  std::vector<int> means;  // 16 x the means of the 4x4 blocks, for the next picture's change
+  int maps_w = 0, maps_h = 0;
+  // H264P_RECDUMP's file (finish_picture()), opened as the first picture is
+  struct RecDump {
+    FILE* f = nullptr;
+    bool tried = false;
+    FILE* get() {
+      if (!tried) {
+        tried = true;
+        const char* fn = getenv("H264P_RECDUMP");
+        if (fn) f = fopen(fn, "wb");
+      }
+      return f;
+    }
+    RecDump() {}
+    RecDump(const RecDump&) = delete;
+    void operator=(const RecDump&) = delete;
+    ~RecDump() {
+      if (f) fclose(f);
+    }
+  } recdump;
+
+  // 4 log2 v, rounded down to quarters (integers only: the model must come
+  // out the same everywhere)
+  static int log2q(int64_t v) {
+    int n = 0;
+    while (v >> (n + 1)) n++;
+    return 4 * n + (n >= 2 ? (int)(v >> (n - 2) & 3) : n == 1 ? (int)(v & 1) * 2 : 0);
+  }
+  // the current picture's maps as it is finished (by rows), and whether
+  // the last picture's means are of its size (maps_begin)
+  std::vector<int> energy_n, change_n, means_n;
+  bool maps_same = false;
+  void maps_begin() {
+    int n = cur->mbw * cur->mbh;
+    maps_same = maps_w == cur->mbw && maps_h == cur->mbh && (int)means.size() == n * 16;
+    energy_n.resize(n);
+    change_n.assign(n, -1);
+    means_n.resize((size_t)n * 16);
+  }
+  // those of macroblock row row, deblocked
+  void maps_row(int row) {
+    int mbw = cur->mbw, w = cur->w;
+    int* m = means_n.data();
+    for (int a = row * mbw; a < (row + 1) * mbw; a++) {
+      const uint8_t* p = cur->y.data() + (a / mbw) * 16 * w + (a % mbw) * 16;
+      int64_t s1 = 0, s2 = 0;
+#ifdef H264P_AVX2
+      {
+        // a row's sums of four by pmaddubsw and pmaddwd, its squares by
+        // pmaddwd
+        const __m128i o8 = _mm_set1_epi8(1), o16 = _mm_set1_epi16(1), z = _mm_setzero_si128();
+        __m128i sq = z;
+        for (int by = 0; by < 4; by++) {
+          __m128i acc = z;
+          for (int y = 0; y < 4; y++) {
+            __m128i r = _mm_loadu_si128((const __m128i*)(p + (by * 4 + y) * w));
+            acc = _mm_add_epi32(acc, _mm_madd_epi16(_mm_maddubs_epi16(r, o8), o16));
+            __m128i lo = _mm_unpacklo_epi8(r, z), hi = _mm_unpackhi_epi8(r, z);
+            sq = _mm_add_epi32(sq, _mm_add_epi32(_mm_madd_epi16(lo, lo), _mm_madd_epi16(hi, hi)));
+          }
+          _mm_storeu_si128((__m128i*)&m[a * 16 + by * 4], acc);
+        }
+        for (int b = 0; b < 16; b++) s1 += m[a * 16 + b];
+        s2 = sum32x4(sq);
+      }
+#else
+      for (int b = 0; b < 16; b++) {
+        int bs1 = 0;
+        const uint8_t* q = p + (b >> 2) * 4 * w + (b & 3) * 4;
+        for (int y = 0; y < 4; y++)
+          for (int x = 0; x < 4; x++) {
+            int v = q[y * w + x];
+            bs1 += v;
+            s2 += v * v;
+          }
+        s1 += bs1;
+        m[a * 16 + b] = bs1;  // 16 x the mean
+      }
+#endif
+      int64_t ssd = (s2 * 256 - s1 * s1) / 256;  // the sum of squared deviations
+      energy_n[a] = log2q(ssd + 1);
+      if (maps_same) {
+        int d = 0;
+        for (int b = 0; b < 16; b++) d += abs(m[a * 16 + b] - means[a * 16 + b]);
+        change_n[a] = d / 16;
+      }
+    }
+  }
+  // the picture finished: its maps are the model's
+  void maps_end() {
+    int n = cur->mbw * cur->mbh;
+    int64_t sum = 0;
+    for (int a = 0; a < n; a++) sum += energy_n[a];
+    energy_mean = n ? (int)(sum / n) : 0;
+    energy.swap(energy_n);
+    change.swap(change_n);
+    means.swap(means_n);
+    maps_w = cur->mbw;
+    maps_h = cur->mbh;
+  }
+
+  // --- finishing the picture as its decoding goes on: deblocking it, then
+  // the maps and (a reference picture's) padded luma of each row done with.
+  // Decoding a macroblock row reads the row above it unfiltered, and
+  // deblocking row j changes rows j - 1 and j: so row j is let go once the
+  // decoding has come in order to row j + 2, and is final once row j + 1 is
+  // deblocked; the rest is finished when the picture ends. A decoding that
+  // leaves the order (slice groups, slices out of order or twice) has what
+  // was let go finished and lets go no more.
+  int fin_next = 0;                // the macroblock next in order
+  bool fin_off = false;            // the decoding left the order
+  int fin_rows = 0, fin_post = 0;  // the rows deblocked, and final and finished
+  int fin_db = 0;                  // the rows of db made none again for the next picture
+  static DbMb db_none() { return DbMb(); }  // (zeros, but slice -1)
+  void finish_rows(int let, bool all) {
+    int mbw = cur->mbw;
+    while (fin_rows < let) {
+      deblock_row(fin_rows++);
+      // (deblocking reads the row above, decoding two rows down)
+      for (; fin_db < fin_rows - 1; fin_db++) std::fill(&db[fin_db * mbw], &db[fin_db * mbw] + mbw, db_none());
+      for (; fin_post < fin_rows - 1; fin_post++) post_row(fin_post);
+    }
+    if (all) {
+      for (; fin_post < cur->mbh; fin_post++) post_row(fin_post);
+      // (all of it where the decoding left the order: it may have come back)
+      std::fill(db.begin() + (fin_off ? 0 : (size_t)fin_db * mbw), db.end(), db_none());
+    }
+  }
+  void post_row(int row) {
+    maps_row(row);
+    if (cur_ref_idc) cur->pad_rows(row, row + 1);
+  }
+  // (the decoding's side) a picture begins
+  void fin_begin() {
+    fin_next = 0;
+    fin_off = false;
+    fin_rows = fin_post = fin_db = 0;
+    maps_begin();
+    if (cur_ref_idc) cur->pad_alloc();
+  }
+  // macroblock addr begins (mb_start), ends (mb_end)
+  void fin_mb(int addr, bool end) {
+    if (fin_off) return;
+    if (addr != fin_next) {
+      fin_off = true;
+      return;
+    }
+    int mbw = cur->mbw;
+    if (end && ++fin_next % mbw == 0 && fin_next >= 2 * mbw) finish_rows(fin_next / mbw - 1, false);
+  }
+  // the picture ends: the rest of it
+  void fin_end() {
+    finish_rows(cur->mbh, true);
+    maps_end();
+    if (cur_ref_idc) cur->padded = true;
+  }
+
+  // --- reference picture management (Dpb), as a picture ends
+
+  // the end of the stream: its last picture finished too
+  void end() { finish_picture(); }
+  // an inter macroblock's transform size, which comes after its prediction
+  // (prepare()): its 8x8 blocks then go to the picture as they come
+  void set_t8(int t8) {
+    if (act() && mb_prepared) mb_t8 = t8;
+  }
+  void finish_picture() {
+    if (!cur) return;
+    if (act()) fin_end();
+    // checking the reconstruction against a decoder's: H264P_RECDUMP=file
+    // gets the pictures, in decoding order, as raw 4:2:0 of whole macroblocks
+    // (this model's: c or d without -t, the only model of the call)
+    FILE* dump = act() ? recdump.get() : nullptr;
+    if (dump) {
+      fwrite(cur->y.data(), 1, cur->y.size(), dump);
+      fwrite(cur->u.data(), 1, cur->u.size(), dump);
+      fwrite(cur->v.data(), 1, cur->v.size(), dump);
+    }
+    if (cur_ref_idc) mark();
+    if (cur->ref) {  // (fin_end() padded it)
+      dpb.push_back(std::move(cur));
+    } else {
+      spare.push_back(std::move(cur));
+    }
+    mact = false;
+    nlist[0] = nlist[1] = 0;  // marking may have dropped the pictures they hold
+  }
 
   // --- reconstruction of a macroblock
 
@@ -1136,10 +783,14 @@ struct ReconT {
     for (int k = first; k < 16; k++) {
       if (!c[k]) continue;
       int r = kZz4[k], y = r >> 2, x = r & 3;
-      int ls = 16 * kNorm4[m][(x & 1) && (y & 1) ? 1 : !(x & 1) && !(y & 1) ? 0 : 2];
+      int ls = 16 * kNorm4[m][norm4_class(y, x)];
       d[r] = qp >= 24 ? c[k] * ls * (1 << (q6 - 4)) : (c[k] * ls + (1 << (3 - q6))) >> (4 - q6);
     }
   }
+  // the class of the coefficient at row y, column x of a 4x4 block, and of
+  // an 8x8 one: which of normAdjust's columns (8.5.9) and of the forward
+  // quantizer's it takes
+  static int norm4_class(int y, int x) { return (x & 1) && (y & 1) ? 1 : !(x & 1) && !(y & 1) ? 0 : 2; }
   static int norm8_class(int y, int x) {
     if (x % 4 == 0 && y % 4 == 0) return 0;
     if (x % 2 == 1 && y % 2 == 1) return 1;
@@ -1239,13 +890,6 @@ struct ReconT {
   // the edge of the luma n x n block at (bx, by) (in units of n) of the
   // macroblock at addr; n 4 or 8. Returns whether the top and left are there.
   void luma_edge(int addr, int n, int bx, int by, int* e, bool& top, bool& left) const {
-    int w = cur->w;
-    const uint8_t* Y = cur->y.data();
-    edge_of(addr, n, bx, by, e, top, left, [&](int x, int y) { return (int)Y[y * w + x]; });
-  }
-  // the same from samples at(x, y) (picture coordinates)
-  template <class F>
-  void edge_of(int addr, int n, int bx, int by, int* e, bool& top, bool& left, F at) const {
     int mx = addr % cur->mbw * 16, my = addr / cur->mbw * 16;
     int x0 = mx + bx * n, y0 = my + by * n;
     bool aA = intra_avail(addr, nb_mb(addr, -1, 0)), aB = intra_avail(addr, nb_mb(addr, 0, -1));
@@ -1268,6 +912,15 @@ struct ReconT {
       int nb_i = (ny >> 1) * 8 + (nx >> 1) * 4 + (ny & 1) * 2 + (nx & 1);
       tr = nb_i < cur_i;
     }
+    int w = cur->w;
+    const uint8_t* Y = cur->y.data();
+    edge_fill(n, x0, y0, top, left, tl, tr, e, [&](int x, int y) { return (int)Y[y * w + x]; });
+  }
+  // the edge of an n x n block at (x0, y0) of a picture, its samples at(x,
+  // y), where its top, left, top left and top right are there (else 128,
+  // or for the top right the last top sample); filtered where n is 8
+  template <class F>
+  static void edge_fill(int n, int x0, int y0, bool top, bool left, bool tl, bool tr, int* e, F at) {
     e[0] = tl ? at(x0 - 1, y0 - 1) : 128;
     for (int i = 0; i < n; i++) e[1 + i] = top ? at(x0 + i, y0 - 1) : 128;
     for (int i = 0; i < n; i++) e[1 + n + i] = tr ? at(x0 + n + i, y0 - 1) : e[n];
@@ -1450,10 +1103,7 @@ struct ReconT {
           acc = _mm256_add_epi32(acc, _mm256_madd_epi16(_mm256_abs_epi16(x), one));
         }
       }
-      __m128i t = _mm_add_epi32(_mm256_castsi256_si128(acc), _mm256_extracti128_si256(acc, 1));
-      t = _mm_add_epi32(t, _mm_shuffle_epi32(t, 0x4E));
-      int s = _mm_cvtsi128_si32(_mm_add_epi32(t, _mm_shuffle_epi32(t, 0xB1)));
-      return (s + 1) >> 1;
+      return (sum32x8(acc) + 1) >> 1;
     }
 #endif
     int s = 0;
@@ -1617,34 +1267,32 @@ struct ReconT {
         }
       }
     } else {
-    // 8 columns or 4, in 16-bit lanes; j's sums in 32 bits
-    const __m128i z = _mm_setzero_si128(), k5 = _mm_set1_epi16(5), k20 = _mm_set1_epi16(20), k16 = _mm_set1_epi16(16);
-    const __m128i p1m5 = _mm_setr_epi16(1, -5, 1, -5, 1, -5, 1, -5), p20 = _mm_set1_epi16(20);
-    const __m128i m5p1 = _mm_setr_epi16(-5, 1, -5, 1, -5, 1, -5, 1), k512 = _mm_set1_epi32(512);
-    auto ld = [w, z](const uint8_t* p) {
-      if (w == 4) {
-        int32_t t;
-        memcpy(&t, p, 4);
-        return _mm_unpacklo_epi8(_mm_cvtsi32_si128(t), z);
-      }
-      return _mm_unpacklo_epi8(_mm_loadl_epi64((const __m128i*)p), z);
-    };
-    auto st = [w](uint8_t* p, __m128i v) {
-      if (w == 4) {
-        int32_t t = _mm_cvtsi128_si32(v);
-        memcpy(p, &t, 4);
-      } else {
-        _mm_storel_epi64((__m128i*)p, v);
-      }
-    };
-    auto t6 = [&](__m128i a, __m128i b, __m128i c0, __m128i d, __m128i e, __m128i f) {
-      __m128i v = _mm_sub_epi16(_mm_add_epi16(a, f), _mm_mullo_epi16(_mm_add_epi16(b, e), k5));
-      return _mm_add_epi16(v, _mm_mullo_epi16(_mm_add_epi16(c0, d), k20));
-    };
-    auto across = [&](const uint8_t* p) { return t6(ld(p - 2), ld(p - 1), ld(p), ld(p + 1), ld(p + 2), ld(p + 3)); };
-    auto r5 = [&](__m128i v) { return _mm_packus_epi16(_mm_srai_epi16(_mm_add_epi16(v, k16), 5), z); };
-    {
-      const int k = 0;
+      // 8 columns or 4, in 16-bit lanes; j's sums in 32 bits
+      const __m128i z = _mm_setzero_si128(), k5 = _mm_set1_epi16(5), k20 = _mm_set1_epi16(20), k16 = _mm_set1_epi16(16);
+      const __m128i p1m5 = _mm_setr_epi16(1, -5, 1, -5, 1, -5, 1, -5), p20 = _mm_set1_epi16(20);
+      const __m128i m5p1 = _mm_setr_epi16(-5, 1, -5, 1, -5, 1, -5, 1), k512 = _mm_set1_epi32(512);
+      auto ld = [w, z](const uint8_t* p) {
+        if (w == 4) {
+          int32_t t;
+          memcpy(&t, p, 4);
+          return _mm_unpacklo_epi8(_mm_cvtsi32_si128(t), z);
+        }
+        return _mm_unpacklo_epi8(_mm_loadl_epi64((const __m128i*)p), z);
+      };
+      auto st = [w](uint8_t* p, __m128i v) {
+        if (w == 4) {
+          int32_t t = _mm_cvtsi128_si32(v);
+          memcpy(p, &t, 4);
+        } else {
+          _mm_storel_epi64((__m128i*)p, v);
+        }
+      };
+      auto t6 = [&](__m128i a, __m128i b, __m128i c0, __m128i d, __m128i e, __m128i f) {
+        __m128i v = _mm_sub_epi16(_mm_add_epi16(a, f), _mm_mullo_epi16(_mm_add_epi16(b, e), k5));
+        return _mm_add_epi16(v, _mm_mullo_epi16(_mm_add_epi16(c0, d), k20));
+      };
+      auto across = [&](const uint8_t* p) { return t6(ld(p - 2), ld(p - 1), ld(p), ld(p + 1), ld(p + 2), ld(p + 3)); };
+      auto r5 = [&](__m128i v) { return _mm_packus_epi16(_mm_srai_epi16(_mm_add_epi16(v, k16), 5), z); };
       const uint8_t* q = g;
       if (need_j) {
         __m128i r0 = across(q - 2 * gs), r1 = across(q - gs), r2 = across(q), r3 = across(q + gs), r4 = across(q + 2 * gs);
@@ -1658,23 +1306,22 @@ struct ReconT {
                                      _mm_madd_epi16(_mm_unpackhi_epi16(r4, r5v), m5p1));
           lo = _mm_srai_epi32(_mm_add_epi32(lo, k512), 10);
           hi = _mm_srai_epi32(_mm_add_epi32(hi, k512), 10);
-          st(jj + j * 16 + k, _mm_packus_epi16(_mm_packs_epi32(lo, hi), z));
-          if (need_b) st(bb + j * 16 + k, r5(boff ? r3 : r2));
+          st(jj + j * 16, _mm_packus_epi16(_mm_packs_epi32(lo, hi), z));
+          if (need_b) st(bb + j * 16, r5(boff ? r3 : r2));
           r0 = r1, r1 = r2, r2 = r3, r3 = r4, r4 = r5v;
         }
       } else if (need_b) {
-        for (int j = 0; j < h; j++) st(bb + j * 16 + k, r5(across(q + (j + boff) * gs)));
+        for (int j = 0; j < h; j++) st(bb + j * 16, r5(across(q + (j + boff) * gs)));
       }
       if (need_h) {
         const uint8_t* p = q + hoff;
         __m128i v0 = ld(p - 2 * gs), v1 = ld(p - gs), v2 = ld(p), v3 = ld(p + gs), v4 = ld(p + 2 * gs);
         for (int j = 0; j < h; j++) {
           __m128i v5 = ld(p + (j + 3) * gs);
-          st(hh + j * 16 + k, r5(t6(v0, v1, v2, v3, v4, v5)));
+          st(hh + j * 16, r5(t6(v0, v1, v2, v3, v4, v5)));
           v0 = v1, v1 = v2, v2 = v3, v3 = v4, v4 = v5;
         }
       }
-    }
     }
 #else
 #define T6(p, s) ((p)[-2 * (s)] - 5 * (p)[-(s)] + 20 * (p)[0] + 20 * (p)[s] - 5 * (p)[2 * (s)] + (p)[3 * (s)])
@@ -1766,13 +1413,7 @@ struct ReconT {
     if (w == 8 || w == 4) {
       // two rows at a time: the byte pairs (r, r') and (s, s') of a row and
       // the next through pmaddubsw
-      auto ld = [w](const uint8_t* p0, const uint8_t* p1) {
-        if (w == 8) return _mm_unpacklo_epi64(_mm_loadl_epi64((const __m128i*)p0), _mm_loadl_epi64((const __m128i*)p1));
-        int32_t u0, u1;
-        memcpy(&u0, p0, 4);
-        memcpy(&u1, p1, 4);
-        return _mm_unpacklo_epi32(_mm_cvtsi32_si128(u0), _mm_cvtsi32_si128(u1));
-      };
+      auto ld = [w](const uint8_t* p0, const uint8_t* p1) { return ld8x2(p0, p1, w); };
       const __m128i wab = _mm_set1_epi16((short)(cA | cB << 8)), wcd = _mm_set1_epi16((short)(cC | cD << 8));
       const __m128i r32 = _mm_set1_epi16(32);
       for (int j = 0; j < h; j += 2, r += 2 * rs) {
@@ -1810,10 +1451,8 @@ struct ReconT {
 
   // The macroblock being reconstructed: what its prediction needs, from
   // prepare() on, and which of its luma blocks are done.
-  int mb_cls = 0, mb_i16m = 0, mb_cpred = 0, mb_t8 = 0;
+  int mb_cls = 0, mb_t8 = 0;
   const uint8_t* mb_modes = nullptr;
-  int8_t mb_rf[2][4];
-  int16_t mb_mv[2][16][2];
   bool mb_prepared = false, mb_dc = false;
   // skip_miss put the prediction by this motion in the picture
   bool skip_in = false;
@@ -1826,6 +1465,10 @@ struct ReconT {
   bool mb_cdc[2];         // their DC scaled
   int mb_dcc[2][4];
 
+  // whether the macroblock above the current one is decoded, and the one
+  // to its left
+  bool above_done() const { return mb_addr >= cur->mbw && db[mb_addr - cur->mbw].slice >= 0; }
+  bool left_done() const { return mb_addr % cur->mbw > 0 && db[mb_addr - 1].slice >= 0; }
   uint8_t* luma_at(int x, int y) const {
     return cur->y.data() + ((mb_addr / cur->mbw) * 16 + y) * cur->w + (mb_addr % cur->mbw) * 16 + x;
   }
@@ -1838,20 +1481,16 @@ struct ReconT {
     if (!act() || mb_prepared) return;
     mb_prepared = true;
     mb_cls = cls;
-    mb_i16m = i16m;
     mb_modes = modes;
-    mb_cpred = cpred;
     mb_t8 = t8;
-    memcpy(mb_rf, rf, sizeof mb_rf);
-    memcpy(mb_mv, mv, sizeof mb_mv);
     int addr = mb_addr, w = cur->w, cw = w / 2, mx = addr % cur->mbw * 16, my = addr / cur->mbw * 16;
     DbMb& D = db[addr];
     D.slice = slice_no;
     D.intra = cls >= 6;
     if (cls == 8) return;
     if (cls < 6) {
-      if (!skip_in || memcmp(skip_rf, mb_rf, sizeof skip_rf) || memcmp(skip_mv, mb_mv, sizeof skip_mv))
-        inter(addr, mb_rf, mb_mv, cur->y.data() + my * w + mx, cur->u.data() + my / 2 * cw + mx / 2,
+      if (!skip_in || memcmp(skip_rf, rf, sizeof skip_rf) || memcmp(skip_mv, mv, sizeof skip_mv))
+        inter(addr, rf, mv, cur->y.data() + my * w + mx, cur->u.data() + my / 2 * cw + mx / 2,
               cur->v.data() + my / 2 * cw + mx / 2);
       return;
     }
@@ -2139,6 +1778,33 @@ struct ReconT {
       }
     }
   }
+  // How weighted sample prediction (8.4.2.3) makes a block with references
+  // r0 and r1 (-1 none; one at least) of component k (0 Y, 2 Cb, 4 Cr; lw
+  // its logWD) from its predictions a (list 0) and b (list 1): with
+  // weights, (a m0 + b m1 + r) >> sh, plus o, clipped, where bi, else
+  // (p m0 + r) >> sh, plus o, p the prediction of list l; without (plain),
+  // (a + b + 1) >> 1 where bi, else p
+  struct Wp {
+    bool bi, plain;
+    int l, m0, m1, r, sh, o;
+  };
+  Wp wp_of(int r0, int r1, int k, int lw) const {
+    Wp q = {r0 >= 0 && r1 >= 0, false, r0 >= 0 ? 0 : 1, 0, 0, 0, 0, 0};
+    int r = q.l ? r1 : r0;
+    if (q.bi && wmode == 1) {
+      q.m0 = wt[0][r0 & 31][k], q.m1 = wt[1][r1 & 31][k];
+      q.r = 1 << lw, q.sh = lw + 1, q.o = (wt[0][r0 & 31][k + 1] + wt[1][r1 & 31][k + 1] + 1) >> 1;
+    } else if (q.bi && wmode == 2) {
+      q.m0 = implicit_w[r0 & 31][r1 & 31], q.m1 = 64 - q.m0;
+      q.r = 32, q.sh = 6;
+    } else if (!q.bi && wmode == 1) {
+      q.m0 = wt[q.l][r & 31][k];
+      q.r = lw >= 1 ? 1 << (lw - 1) : 0, q.sh = lw, q.o = wt[q.l][r & 31][k + 1];
+    } else {
+      q.plain = true;
+    }
+    return q;
+  }
   // inter prediction of a macroblock (8.4.2), with the weights of 8.4.2.3
   void inter(int addr, const int8_t rf[2][4], const int16_t mv[2][16][2], uint8_t* Y, uint8_t* U, uint8_t* V) {
     int w = cur->w, cw = w / 2;
@@ -2151,8 +1817,7 @@ struct ReconT {
       // one pair of references throughout (as a skipped macroblock has): the
       // weights of 8x8 block 0 for all of it, 32 samples at a time (two rows
       // of luma, four of chroma) in 32-bit lanes through pmaddwd
-      int r0 = rf[0][0], r1 = rf[1][0], l = r0 >= 0 ? 0 : 1, r = l ? r1 : r0;
-      bool bi = r0 >= 0 && r1 >= 0;
+      int r0 = rf[0][0], r1 = rf[1][0];
       auto wsum = [](__m256i x, __m256i y, int m0, int m1, int rr, int sh, int o) {
         const __m256i m = _mm256_set1_epi32((int)((unsigned)(m0 & 0xFFFF) | (unsigned)m1 << 16));
         const __m256i rv = _mm256_set1_epi32(rr), ov = _mm256_set1_epi32(o), z = _mm256_setzero_si256();
@@ -2171,6 +1836,7 @@ struct ReconT {
         uint8_t* dst = comp == 0 ? Y : comp == 1 ? U : V;
         const uint8_t* a = comp ? pc[0][comp - 1] : pl[0];
         const uint8_t* b = comp ? pc[1][comp - 1] : pl[1];
+        const Wp q = wp_of(r0, r1, k, lw);
         // (rows y and y + 1 of luma, y to y + 3 of chroma)
         auto get = [n](const uint8_t* q, int y) {
           if (n == 16) return ld16x2(q + y * 16, q + y * 16 + 16);
@@ -2190,20 +1856,10 @@ struct ReconT {
         };
         for (int y = 0; y < n; y += n == 16 ? 2 : 4) {
           __m256i v;
-          if (bi && wmode == 1) {
-            int w0 = wt[0][r0 & 31][k], o0 = wt[0][r0 & 31][k + 1], w1 = wt[1][r1 & 31][k], o1 = wt[1][r1 & 31][k + 1];
-            v = wsum(get(a, y), get(b, y), w0, w1, 1 << lw, lw + 1, (o0 + o1 + 1) >> 1);
-          } else if (bi && wmode == 2) {
-            int w0 = implicit_w[r0 & 31][r1 & 31];
-            v = wsum(get(a, y), get(b, y), w0, 64 - w0, 32, 6, 0);
-          } else if (bi) {
-            v = _mm256_avg_epu8(get(a, y), get(b, y));
-          } else if (wmode == 1) {
-            int ww = wt[l][r & 31][k], o = wt[l][r & 31][k + 1];
-            v = wsum(get(l ? b : a, y), _mm256_setzero_si256(), ww, 0, lw >= 1 ? 1 << (lw - 1) : 0, lw, o);
-          } else {
-            v = get(l ? b : a, y);
-          }
+          if (q.bi)
+            v = q.plain ? _mm256_avg_epu8(get(a, y), get(b, y)) : wsum(get(a, y), get(b, y), q.m0, q.m1, q.r, q.sh, q.o);
+          else
+            v = q.plain ? get(q.l ? b : a, y) : wsum(get(q.l ? b : a, y), _mm256_setzero_si256(), q.m0, 0, q.r, q.sh, q.o);
           put(y, v);
         }
       }
@@ -2254,59 +1910,31 @@ struct ReconT {
             a3 = _mm_add_epi32(_mm_sra_epi32(_mm_add_epi32(a3, rr), c), oo);
             return _mm_packus_epi16(_mm_packs_epi32(a0, a1), _mm_packs_epi32(a2, a3));
           };
-          bool bi = r0 >= 0 && r1 >= 0;
-          int l = r0 >= 0 ? 0 : 1, r = l ? r1 : r0;
-          const uint8_t* p = l ? b : a;
+          const Wp q = wp_of(r0, r1, k, lw);
+          const uint8_t* p = q.l ? b : a;
           for (int y = 0; y < n; y += n == 8 ? 2 : 4) {
             __m128i v;
-            if (bi && wmode == 1) {
-              int w0 = wt[0][r0 & 31][k], o0 = wt[0][r0 & 31][k + 1], w1 = wt[1][r1 & 31][k], o1 = wt[1][r1 & 31][k + 1];
-              v = wsum(get(a, y), get(b, y), w0, w1, 1 << lw, lw + 1, (o0 + o1 + 1) >> 1);
-            } else if (bi && wmode == 2) {
-              int w0 = implicit_w[r0 & 31][r1 & 31];
-              v = wsum(get(a, y), get(b, y), w0, 64 - w0, 32, 6, 0);
-            } else if (bi) {
-              v = _mm_avg_epu8(get(a, y), get(b, y));
-            } else if (wmode == 1) {
-              int ww = wt[l][r & 31][k], o = wt[l][r & 31][k + 1];
-              v = wsum(get(p, y), _mm_setzero_si128(), ww, 0, lw >= 1 ? 1 << (lw - 1) : 0, lw, o);
-            } else {
-              v = get(p, y);
-            }
+            if (q.bi)
+              v = q.plain ? _mm_avg_epu8(get(a, y), get(b, y)) : wsum(get(a, y), get(b, y), q.m0, q.m1, q.r, q.sh, q.o);
+            else
+              v = q.plain ? get(p, y) : wsum(get(p, y), _mm_setzero_si128(), q.m0, 0, q.r, q.sh, q.o);
             put(dst, y, v);
           }
         }
         continue;
 #endif
-        if (r0 >= 0 && r1 >= 0) {
-          if (wmode == 1) {
-            int w0 = wt[0][r0 & 31][k], o0 = wt[0][r0 & 31][k + 1], w1 = wt[1][r1 & 31][k], o1 = wt[1][r1 & 31][k + 1];
-            int o = (o0 + o1 + 1) >> 1;
-            for (int y = 0; y < n; y++)
-              for (int x = 0; x < n; x++)
-                dst[y * ds + x] = (uint8_t)clip1(((a[y * ss + x] * w0 + b[y * ss + x] * w1 + (1 << lw)) >> (lw + 1)) + o);
-          } else if (wmode == 2) {
-            int w0 = implicit_w[r0 & 31][r1 & 31], w1 = 64 - w0;
-            for (int y = 0; y < n; y++)
-              for (int x = 0; x < n; x++) dst[y * ds + x] = (uint8_t)clip1((a[y * ss + x] * w0 + b[y * ss + x] * w1 + 32) >> 6);
-          } else {
-            for (int y = 0; y < n; y++)
-              for (int x = 0; x < n; x++) dst[y * ds + x] = (uint8_t)((a[y * ss + x] + b[y * ss + x] + 1) >> 1);
-          }
-        } else if (r0 >= 0 || r1 >= 0) {
-          int l = r0 >= 0 ? 0 : 1, r = l ? r1 : r0;
-          const uint8_t* p = l ? b : a;
-          if (wmode == 1) {
-            int ww = wt[l][r & 31][k], o = wt[l][r & 31][k + 1];
-            for (int y = 0; y < n; y++)
-              for (int x = 0; x < n; x++) {
-                int v = p[y * ss + x];
-                dst[y * ds + x] = (uint8_t)(lw >= 1 ? clip1(((v * ww + (1 << (lw - 1))) >> lw) + o) : clip1(v * ww + o));
-              }
-          } else {
-            copy_rows(dst, ds, p, ss, n, n);
-          }
+        if (r0 < 0 && r1 < 0) continue;
+        const Wp q = wp_of(r0, r1, k, lw);
+        const uint8_t* p = q.l ? b : a;
+        if (q.plain && !q.bi) {
+          copy_rows(dst, ds, p, ss, n, n);
+          continue;
         }
+        for (int y = 0; y < n; y++)
+          for (int x = 0; x < n; x++) {
+            int u = q.bi ? a[y * ss + x] : p[y * ss + x], v = q.bi ? b[y * ss + x] : 0;
+            dst[y * ds + x] = (uint8_t)(q.plain ? (u + v + 1) >> 1 : clip1(((u * q.m0 + v * q.m1 + q.r) >> q.sh) + q.o));
+          }
       }
     }
   }
@@ -2675,7 +2303,6 @@ struct ReconT {
       // (finishing the last picture left db as none)
       if (PX && db.size() != (size_t)cur->mbw * cur->mbh) db.assign((size_t)cur->mbw * cur->mbh, db_none());
       slice_no = 0;
-      active = PX;
       mact = true;
       // references of another size are no use
       std::vector<std::unique_ptr<RPic>> keep;
@@ -2688,19 +2315,15 @@ struct ReconT {
     }
     if (!mact) return;
     curr_pic_num = h.frame_num;
-    stype = h.type();
     disable = h.disable_deblocking;
     alpha_off = h.alpha_offset;
     beta_off = h.beta_offset;
     cqp_off[0] = pps.chroma_qp_index_offset;
     cqp_off[1] = pps.second_chroma_qp_index_offset;
     constrained_intra = pps.constrained_intra_pred_flag;
-    direct_spatial = h.direct_spatial_mv_pred_flag;
     direct8x8 = sps.direct_8x8_inference_flag;
     build_lists(h);
     weights(h, pps);
-    for (int l = 0; l < 2; l++)
-      for (int i = 0; i < 33; i++) cur->lt_ref[l][i] = i < nlist[l] && list[l][i] && list[l][i]->lt;
   }
 
   // the colocated block of the 4x4 block blk (raster) of macroblock addr,
@@ -2801,9 +2424,7 @@ struct ReconT {
       };
       auto total = [](__m256i s1, __m256i s2, int64_t& a, int64_t& b) {
         a = sad_sum(s1);
-        __m128i t = _mm_add_epi32(_mm256_castsi256_si128(s2), _mm256_extracti128_si256(s2, 1));
-        t = _mm_add_epi32(t, _mm_shuffle_epi32(t, 0x4E));
-        b = _mm_cvtsi128_si32(_mm_add_epi32(t, _mm_shuffle_epi32(t, 0xB1)));
+        b = sum32x8(s2);
       };
       const uint8_t* p = cur->y.data() + my * w + mx;
       __m256i s1 = z, s2 = z;
@@ -2924,8 +2545,7 @@ struct ReconT {
     if (per) per[0] = per[1] = -1;
     if (!act()) return -1;
     int mbw = cur->mbw, mx = mb_addr % mbw * 16, my = mb_addr / mbw * 16, w = cur->w;
-    bool top = my > 0 && db[mb_addr - mbw].slice >= 0;
-    bool left = mx > 0 && db[mb_addr - 1].slice >= 0;
+    bool top = above_done(), left = left_done();
     int sum = 0, cnt = 0, ls[2] = {0, 0}, lc[2] = {0, 0};
     // per list, the strip: the rows above, the columns left transposed (both
     // 2 x 16, stride 16)
@@ -3118,8 +2738,7 @@ struct ReconT {
                  int* alt = nullptr) const {
     if (!act()) return false;
     int mbw = cur->mbw, x0 = mb_addr % mbw * 16 + bx, y0 = mb_addr / mbw * 16 + by, w = cur->w;
-    bool top = by == 0 && y0 > 0 && db[mb_addr - mbw].slice >= 0;
-    bool left = bx == 0 && x0 > 0 && db[mb_addr - 1].slice >= 0;
+    bool top = by == 0 && above_done(), left = bx == 0 && left_done();
     const RPic* ref = l < 0 ? proxy_pic() : r >= 0 && r < nlist[l] ? list[l][r] : nullptr;
     if (inner == 1) top = left = false;
     int ninner = inner == 1 ? bw * bh : 0;
@@ -3354,25 +2973,37 @@ struct ReconT {
     const RPic* P = nlist[0] > 0 && list[0][0] ? list[0][0] : !dpb.empty() ? dpb.back().get() : nullptr;
     return P && P->w == cur->w && P->h == cur->h ? P : nullptr;
   }
+  // What proxy_nz() and proxy_mode() share: the block of the proxy picture
+  // where the luma block of n x n at (bx, by) blocks of the current
+  // macroblock is, displaced by dx, dy (within the picture): its place
+  // (x0, y0), and its edge e as intra prediction has it, whether its top,
+  // left and top left are there going by the picture's edges; null no
+  // picture
+  const RPic* proxy_block(int bx, int by, int n, int dx, int dy, int& x0, int& y0, int* e, bool& top, bool& left,
+                          bool& tl) const {
+    if (!act()) return nullptr;
+    const RPic* P = proxy_pic();
+    if (!P) return nullptr;
+    int w = P->w;
+    x0 = clip3(0, w - n, mb_addr % cur->mbw * 16 + bx * n + dx);
+    y0 = clip3(0, P->h - n, mb_addr / cur->mbw * 16 + by * n + dy);
+    const uint8_t* Y = P->y.data();
+    top = y0 > 0, left = x0 > 0, tl = top && left;
+    bool tr = top && x0 + 2 * n <= w;
+    edge_fill(n, x0, y0, top, left, tl, tr, e, [&](int x, int y) { return (int)Y[y * w + x]; });
+    return P;
+  }
   // The nonzero levels an encoder would have for the luma block of n x n at
   // (bx, by) blocks of the current macroblock in intra mode m were the
   // source and its surroundings the proxy picture there (displaced by dx,
   // dy); -1 no picture
   int proxy_nz(int bx, int by, int n, int m, int qp, int dx, int dy) const {
-    if (!act()) return -1;
-    const RPic* P = proxy_pic();
+    int x0, y0, e[25];
+    bool top, left, tl;
+    const RPic* P = proxy_block(bx, by, n, dx, dy, x0, y0, e, top, left, tl);
     if (!P) return -1;
-    int w = P->w, x0 = mb_addr % cur->mbw * 16 + bx * n, y0 = mb_addr / cur->mbw * 16 + by * n;
-    x0 = clip3(0, w - n, x0 + dx);
-    y0 = clip3(0, P->h - n, y0 + dy);
+    int w = P->w;
     const uint8_t* Y = P->y.data();
-    bool top = y0 > 0, left = x0 > 0, tl = top && left, tr = top && x0 + 2 * n <= w;
-    int e[25];
-    e[0] = tl ? Y[(y0 - 1) * w + x0 - 1] : 128;
-    for (int i = 0; i < n; i++) e[1 + i] = top ? Y[(y0 - 1) * w + x0 + i] : 128;
-    for (int i = 0; i < n; i++) e[1 + n + i] = tr ? Y[(y0 - 1) * w + x0 + n + i] : e[n];
-    for (int i = 0; i < n; i++) e[1 + 2 * n + i] = left ? Y[(y0 + i) * w + x0 - 1] : 128;
-    if (n == 8) filter8(e, top, left, tl);
     uint8_t d[64];
     pred_nxn(d, 8, n, m, e, top, left);
     int r[64], lv[64], cnt = 0;
@@ -3386,20 +3017,12 @@ struct ReconT {
     return cnt;
   }
   int proxy_mode(int bx, int by, int n, int dx, int dy, int* sads = nullptr) const {
-    if (!act()) return -1;
-    const RPic* P = proxy_pic();
+    int x0, y0, e[25];
+    bool top, left, tl;
+    const RPic* P = proxy_block(bx, by, n, dx, dy, x0, y0, e, top, left, tl);
     if (!P) return -1;
-    int w = P->w, x0 = mb_addr % cur->mbw * 16 + bx * n, y0 = mb_addr / cur->mbw * 16 + by * n;
-    x0 = clip3(0, w - n, x0 + dx);
-    y0 = clip3(0, P->h - n, y0 + dy);
+    int w = P->w;
     const uint8_t* Y = P->y.data();
-    bool top = y0 > 0, left = x0 > 0, tl = top && left, tr = top && x0 + 2 * n <= w;
-    int e[25];
-    e[0] = tl ? Y[(y0 - 1) * w + x0 - 1] : 128;
-    for (int i = 0; i < n; i++) e[1 + i] = top ? Y[(y0 - 1) * w + x0 + i] : 128;
-    for (int i = 0; i < n; i++) e[1 + n + i] = tr ? Y[(y0 - 1) * w + x0 + n + i] : e[n];
-    for (int i = 0; i < n; i++) e[1 + 2 * n + i] = left ? Y[(y0 + i) * w + x0 - 1] : 128;
-    if (n == 8) filter8(e, top, left, tl);
     int best = -1, bsad = 1 << 30;
     uint8_t d[64];
     for (int m = 0; m < 9; m++) {
@@ -3439,7 +3062,7 @@ struct ReconT {
     int qb = 13 + qp / 6;
     for (int k = 0; k < 16; k++) {
       int p = kZz4[k], y = p >> 2, x = p & 3;
-      int m = mf[qp % 6][(x & 1) && (y & 1) ? 1 : !(x & 1) && !(y & 1) ? 0 : 2];
+      int m = mf[qp % 6][norm4_class(y, x)];
       int q = (int)(((int64_t)abs(W[p]) * m) >> qb);
       lv[k] = W[p] < 0 ? -q : q;
     }
@@ -3649,11 +3272,11 @@ struct ReconT {
     if (!act() || !mb_prepared || mb_cls == 8) return false;
     return edges(plane, x, y, n, scale, target, avail);
   }
+  // the same, the macroblock's prediction there or not (miss() too)
   bool edges(int plane, int x, int y, int n, int64_t scale, int64_t* target, bool* avail) const {
     int mbw = cur->mbw, mx = mb_addr % mbw, my = mb_addr / mbw;
     int w = plane ? cur->w / 2 : cur->w, m = plane ? 8 : 16;
-    bool top = y > 0 ? true : my > 0 && db[mb_addr - mbw].slice >= 0;
-    bool left = x > 0 ? true : mx > 0 && db[mb_addr - 1].slice >= 0;
+    bool top = y > 0 || above_done(), left = x > 0 || left_done();
     if (!top && !left) return false;
     const uint8_t* p = (plane == 0 ? cur->y.data() : plane == 1 ? cur->u.data() : cur->v.data()) + (my * m + y) * w + mx * m + x;
     for (int i = 0; i < n; i++) {
@@ -3673,7 +3296,7 @@ struct ReconT {
     int q6 = qp / 6, m = qp % 6;
     if (!b8) {
       int r = kZz4[k], y = r >> 2, x = r & 3;
-      int ls = 16 * kNorm4[m][(x & 1) && (y & 1) ? 1 : !(x & 1) && !(y & 1) ? 0 : 2];
+      int ls = 16 * kNorm4[m][norm4_class(y, x)];
       return qp >= 24 ? (int64_t)c * ls * ((int64_t)1 << (q6 - 4)) : ((int64_t)c * ls + (1 << (3 - q6))) >> (4 - q6);
     }
     int r = kZz8[k], ls = 16 * kNorm8[m][norm8_class(r >> 3, r & 7)];
@@ -3694,8 +3317,7 @@ struct ReconT {
       // edges()' sums, the row above in 16-bit lanes
       int mbw = cur->mbw, mx = mb_addr % mbw, my = mb_addr / mbw;
       int w = c ? cur->w / 2 : cur->w, m = c ? 8 : 16;
-      bool top = y > 0 ? true : my > 0 && db[mb_addr - mbw].slice >= 0;
-      bool left = x > 0 ? true : mx > 0 && db[mb_addr - 1].slice >= 0;
+      bool top = y > 0 || above_done(), left = x > 0 || left_done();
       if (!top && !left) return -1;
       const uint8_t* p = (c == 0 ? cur->y.data() : c == 1 ? cur->u.data() : cur->v.data()) + (my * m + y) * w + mx * m + x;
       // (rows of 8 in the low half, the high half zero: a cast would leave it
@@ -3729,10 +3351,7 @@ struct ReconT {
         }
         a = _mm256_add_epi16(a, _mm256_abs_epi16(_mm256_sub_epi16(_mm256_sub_epi16(_mm256_add_epi16(r1, r1), r2), col(p))));
       }
-      __m256i t = _mm256_madd_epi16(a, _mm256_set1_epi16(1));
-      __m128i u = _mm_add_epi32(_mm256_castsi256_si128(t), _mm256_extracti128_si256(t, 1));
-      u = _mm_add_epi32(u, _mm_shuffle_epi32(u, 0x4E));
-      int64_t sum = 4 * (int64_t)_mm_cvtsi128_si32(_mm_add_epi32(u, _mm_shuffle_epi32(u, 0xB1)));
+      int64_t sum = 4 * (int64_t)sum32x8(_mm256_madd_epi16(a, _mm256_set1_epi16(1)));
       return (int)(sum / (n * (top + left)));
     }
 #endif
@@ -3754,7 +3373,7 @@ typedef ReconT<false> ReconRefs;
 // here as constants, so that the model's code that needs the pictures folds
 // away, and the level has none of the pictures.
 struct ReconOff {
-  static constexpr bool active = false, mact = false;
+  static constexpr bool mact = false;
   static constexpr bool act() { return false; }
   void end() {}
   void set_t8(int) {}
@@ -3816,7 +3435,6 @@ struct ReconOff {
   int dcc_at(int, int, int) { return 0; }
   bool deblock = true;
 };
-constexpr bool ReconOff::active;
 constexpr bool ReconOff::mact;
 
 }  // namespace h264p

@@ -92,6 +92,7 @@
 #include "mapping.inc"
 #include "fam.inc"
 #include "famvars.inc"
+#include "pixel.inc"
 #include "recon.inc"
 #include "model.inc"
 
