@@ -3,8 +3,8 @@
 // The walk (Syn for the headers, SliceCoderT for the slice data) parses a
 // bitstream or writes one. Parsing, it hands every value it reads to a
 // channel; writing, it asks the channel for every value it writes. The
-// channel is the TSV rows (tsv.inc), the value log of the compressor's dry
-// run (log.inc) or the model of the compressor (model.inc).
+// channel is the value log of the compressor's dry run (log.inc) or the
+// model (model.inc).
 //
 // Each value method takes the value read when the walk parses (W false) and
 // returns it; when the walk writes (W true), the argument is ignored and the
@@ -28,7 +28,7 @@ struct Chan {
   virtual ~Chan() {}
   bool W;  // the walk writes a bitstream: values come from the channel
 
-  // --- header syntax: groups of values under the name of a TSV row
+  // --- header syntax: groups of values under a name (a syntax element's, or its group's)
   virtual void hbegin(const char* name) = 0;
   // the next value is a u(n): of n bits (before hval)
   virtual void hbits(int n) { (void)n; }

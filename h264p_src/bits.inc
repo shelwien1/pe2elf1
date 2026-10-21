@@ -8,10 +8,9 @@ struct ParseError : std::runtime_error {
   explicit ParseError(const std::string& s) : std::runtime_error(s) {}
 };
 
-// The values a channel gives cannot be written: a malformed TSV file when
-// restoring (r), or, when the compressor writes back what it parsed (its dry
-// run, its model pass), an inconsistency (c then stores the NAL unit
-// verbatim, or fails).
+// The values a channel gives cannot be written: when the compressor writes
+// back what it parsed (its dry run, its model pass), an inconsistency (c
+// then stores the NAL unit verbatim, or fails).
 struct TsvError : std::runtime_error {
   explicit TsvError(const std::string& s) : std::runtime_error(s) {}
 };

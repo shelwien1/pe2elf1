@@ -1,15 +1,15 @@
-// The per-NAL step that the TSV pipeline (t, r: tsvfile.inc) and the
-// compressed one (c, d: cmstream.inc) share: the context of a stream (its
-// parameter sets, its macroblocks, x264's padding), the NAL unit's syntax
-// through a channel, parsed or written by the same walk (code_nal), how its
-// RBSP ends (Trailer), the padding detector, and the statistics of -v.
+// The per-NAL step of the compressor and the decompressor (cmstream.inc):
+// the context of a stream (its parameter sets, its macroblocks, x264's
+// padding), the NAL unit's syntax through a channel, parsed or written by
+// the same walk (code_nal), how its RBSP ends (Trailer), the padding
+// detector, and the statistics of -v.
 
 namespace h264p {
 
 // the NAL unit types the walk knows (the others are stored verbatim)
 bool parsed_type(int type) { return (type >= 5 && type <= 12) || type == 1; }
 
-// What t and c did with the NAL units of a stream
+// What c did with the NAL units of a stream
 struct Stats {
   long nals = 0, parsed = 0, raw = 0, trail = 0, pad = 0;
   std::map<std::string, long> reasons;
@@ -43,12 +43,12 @@ struct Stats {
 // the alignment zero bits, it sets the last bit of the byte to bit
 // (frame & 31) of 0x35a4e4f5, frame being the number of the picture in
 // coding order from the start of the encoding, and it does the same before
-// the samples of I_PCM macroblocks. An "x264_padding N" row says that the
-// slices that follow do that, the next one being in frame N; restoring then
-// writes these bits by default.
+// the samples of I_PCM macroblocks. The compressor finds that out
+// (PadDetector) and codes where it starts or changes phase (set(): the
+// next slice is in frame N); both sides then expect these bits.
 struct X264Padding {
   bool on = false;
-  bool hold = false;  // set by the row: the next slice is in frame `frame`
+  bool hold = false;  // set(): the next slice is in frame `frame`
   int64_t frame = 0;  // the frame of the last slice
 
   // the padding bit of the next slice, which starts a picture or not
@@ -226,9 +226,9 @@ int code_nal(int type, int ref_idc, Context& ctx, Chan& ch, BitReader* br, BitWr
         write_slice_data(h, ctx.mbs, ch, *bw, bp);  // with the stop bit
       return h.pps->entropy_coding_mode_flag ? h.pad : -1;
     }
-    default:
+    default:  // (writing, only the types parsed: the others are stored verbatim)
       if (br) throw ParseError("unsupported NAL unit type");
-      throw TsvError("NAL unit type " + std::to_string(type) + " needs a hex row");
+      throw TsvError("internal: NAL unit type " + std::to_string(type) + " written");
   }
   if (bw) bw->bit(1);  // rbsp_stop_one_bit
   return -1;
@@ -360,7 +360,7 @@ bool write_back(const NalHead& h, Context& ctx, Ch& ch, const std::vector<uint8_
   }
 }
 
-// The output of r and d: n zero bytes appended to buf, spill() after each
+// The output of d: n zero bytes appended to buf, spill() after each
 // MB of them (it hands buf on once it is full)
 template <class F>
 void put_zeros(std::vector<uint8_t>& buf, uint64_t n, F spill) {

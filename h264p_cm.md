@@ -1,12 +1,15 @@
 # Compressing h264p dumps with context mixing
 
 (This is the model of level `-9`, the strongest; `h264p_levels.md` has the
-lighter levels, which leave parts of it out.)
+lighter levels, which leave parts of it out. The TSV files below are the
+form in which the values were studied: h264p's `t` dumped them, one row per
+syntax element, and `r` restored the stream from them; both have since been
+removed, and `c` codes the same values directly.)
 
-`h264p c` turns an H.264 stream into rows of syntax element values, and
-`h264p d` turns the rows back into the identical stream. A compressor for
-the TSV files is therefore an H.264 recompressor, and its model has the same
-job as paq8's JpegModel: follow the syntax, keep the decoded state of the
+h264p's walk turns an H.264 stream into the values of its syntax elements,
+and the values back into the identical stream. A compressor of the values
+is therefore an H.264 recompressor, and its model has the same job as
+paq8's JpegModel: follow the syntax, keep the decoded state of the
 neighbouring blocks and predict each value from it.
 
 This note covers four things:
@@ -795,9 +798,9 @@ In moving camera video like 04 there is nothing to find.
    parsing or the neighbour state is wrong.
 3. **Add contexts element by element**, and measure each element against
    the table in section 1. The experiments in appendix A were made with
-   `tools/ctxexp.py`, which parses the TSV, keeps the per-picture state and
-   codes chosen decisions under several context sets. It is a starting point
-   for trying more.
+   `tools/ctxexp.py`, which parsed the TSV, kept the per-picture state and
+   coded chosen decisions under several context sets (removed with `t`; it
+   is in the repository's history).
 4. **Test on all the test streams.** Tune for progressive 4:2:0 8-bit x264,
    but keep everything lossless on all of `test/002`, `test/gen` and
    `test/h264p` (CAVLC, interlaced, 4:2:2, 4:4:4, high bit depth, PCM, FMO).

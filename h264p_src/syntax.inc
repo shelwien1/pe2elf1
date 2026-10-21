@@ -48,7 +48,7 @@ struct WalkCodes {
 };
 
 // Header syntax: each syntax element, or group of elements, is one named
-// group of values (a TSV row).
+// group of values.
 struct Syn : WalkCodes<Syn> {
   Syn(BitReader* br, Chan* ch) : W(false), br_(br), bw_(nullptr), ch_(ch) { same_way(); }
   Syn(Chan* ch, BitWriter* bw) : W(true), br_(nullptr), bw_(bw), ch_(ch) { same_way(); }
@@ -140,8 +140,8 @@ struct Syn : WalkCodes<Syn> {
     return xval([&](int64_t x) { return check(W ? x : v, lo, hi); });
   }
 
-  // more_rbsp_data() when parsing; when writing, what the channel says (for
-  // TSV rows, whether the next row is named `next`)
+  // more_rbsp_data() when parsing; when writing, what the channel says (the
+  // model codes it: `next` names what would follow)
   bool more_data(const char* next) {
     if (!W) return ch_->hmore(next, br_->more_rbsp_data());
     return ch_->hmore(next, false);

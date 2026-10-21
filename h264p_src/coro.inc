@@ -4,8 +4,7 @@
 // set at its end, and yield 1 asks for the next; the output goes into the
 // buffer addout() gave, yield 2 handing it over full; yield 0 at the end
 // (the last output in the buffer), yield 3 after an error (reported on
-// stderr). So h264p.cpp's run_file() runs one on files (c, d),
-// CoroutinePair chains one with another stage (x: the two of them), and an
+// stderr). So drivers.inc's run_file() runs one on files (c, d), and an
 // MTwrap worker runs one on each part of a stream (mt.inc's run_part()).
 //
 // The coroutine is the model: H264pCoro derives from Model, the model from
@@ -84,7 +83,7 @@ struct H264pCoro : Model<f_DEC, LV> {
   }
 };
 
-// The coroutine of a call of c, d or x (or of a part, mt.inc), constructed
+// The coroutine of a call of c or d (or of a part, mt.inc), constructed
 // on pages of its own -- zeroed, and aligned as CoroutinePair's members
 // ask -- and destroyed with them
 template <class T>

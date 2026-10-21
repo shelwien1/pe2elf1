@@ -4,9 +4,8 @@
   (upstream commit 0819f288 from 2022, C code only, flattened into `codec/`),
   with fixes that make it decode correctly.
 - `h264p`: a lossless compressor of H.264 streams: it removes the entropy
-  coding and codes the syntax again with a context mixing model. The same
-  syntax can be dumped to a TSV file, from which the identical stream is
-  restored (`h264p_src/`).
+  coding and codes the syntax again with a context mixing model
+  (`h264p_src/`).
 
 ## Build
 
@@ -89,25 +88,22 @@ type-puns its motion vector arrays.
 
     ./h264p c [options] input.264 output.h264c   # compress
     ./h264p d [options] input.h264c output.264   # decompress
-    ./h264p t [options] input.264 output.tsv     # dump the syntax
-    ./h264p r [options] input.tsv output.264     # restore from the dump
-    ./h264p x [options] input.264 output.264     # c and d at once: the stream restored
 
-`-v` prints statistics, `-s` makes `c`, `t` and `x` fail when a NAL unit of
-a supported type has to be stored verbatim, and `-9`, `-7`, `-5`, `-3`, `-1`
-pick the level of `c`'s (and `x`'s) model, from the strongest (the default)
-to the fastest; `d` reads the level from the stream. `-t N` makes `c` (and
-`x`) compress on N threads, up to 64, the stream in parts of at least `-c N`
-MB, 1 to 1024 (`-c Nk`: KB; 4 MB by default), and `d` decompresses that on
-as many threads as it says (see Threads, below); without `-t` (or with
-`-t 1`), `c` writes the stream of one model in one thread, as it always
-did. Input and output can be `-` (stdin, stdout), and not the same file. A
-file is written under a temporary name beside it (`name.PID.tmp`) and
-renamed when the call is done: a call that fails leaves what was there (or
-nothing), except that `d` and `r` keep what they restored before an error.
+`-v` prints statistics, `-s` makes `c` fail when a NAL unit of a supported
+type has to be stored verbatim, and `-9`, `-7`, `-5`, `-3`, `-1` pick the
+level of `c`'s model, from the strongest (the default) to the fastest; `d`
+reads the level from the stream. `-t N` makes `c` compress on N threads, up
+to 64, the stream in parts of at least `-c N` MB, 1 to 1024 (`-c Nk`: KB;
+4 MB by default), and `d` decompresses that on as many threads as it says
+(see Threads, below); without `-t` (or with `-t 1`), `c` writes the stream
+of one model in one thread, as it always did. Input and output can be `-`
+(stdin, stdout), and not the same file. A file is written under a temporary
+name beside it (`name.PID.tmp`) and renamed when the call is done: a call
+that fails leaves what was there (or nothing), except that `d` keeps what
+it restored before an error.
 
-Where stderr is a terminal (or with `-p`), `c`, `d` and `x` show their
-progress there, on a line put over itself every half second:
+Where stderr is a terminal (or with `-p`), `c` and `d` show their progress
+there, on a line put over itself every half second:
 
     [enc] 1441792 > 983051   37.3%   0.47 MB/s  180.01M RAM
     [enc] 3866640 > 2736446  100.0%  done in 11.89s  193.72M RAM
@@ -132,12 +128,12 @@ NAL unit back from the values before coding them, or, a slice, checks as it
 codes it that the walk writes the bits and CABAC bins it read (should a
 slice fail that, `c` compresses the stream again, writing back every NAL
 unit first, as it always does through pipes). A NAL unit that does not come
-out the same is stored verbatim, as in the TSV file (below), and so is a
-slice that would take the model's records of the last picture of each kind
-(slice type, reference or not, frame or field) past 512 MB: a stream has a
-few kinds, 4.2 MB each at 1080p, while all 30 at the largest pictures would
-take 1.4 GB. A CRC-32 at the end checks the whole stream, and `d` takes
-data after the end of the compressed stream for corruption.
+out the same is stored verbatim, and so is a slice that would take the
+model's records of the last picture of each kind (slice type, reference or
+not, frame or field) past 512 MB: a stream has a few kinds, 4.2 MB each at
+1080p, while all 30 at the largest pictures would take 1.4 GB. A CRC-32 at
+the end checks the whole stream, and `d` takes data after the end of the
+compressed stream for corruption.
 
 The model is binary context mixing, after oggcomp (Ogg Vorbis): each value
 is a sequence of binary decisions, each predicted by ten adaptive counters
@@ -260,8 +256,8 @@ buffer protocol: the input comes in the buffers `addinp()` gives, a
 the output goes into the buffer `addout()` gave, `yield 2` handing it over
 full; `yield 0` ends a run, `yield 3` an error. So `run_file()`
 (`drivers.inc`) runs one on files (`c`, `d`), and the library's
-`CoroutinePair` chains two (`x`: the compressor's output is the
-decompressor's input, in one pass, and what comes out must be the input).
+`CoroutinePair` chains `c -t`'s splitter to MTwrap's coder (Threads,
+below).
 
 The coroutine is the codec, as in the library's own codecs:
 `H264pCoro<f_DEC, L>` (`h264p_src/coro.inc`; `f_DEC` 0 compresses, 1
@@ -289,8 +285,8 @@ fast.
 The model pass checks the slices only where the input can be read again
 (regular files, and the parts on threads, which are read whole first): a
 slice that does not come out as it is makes the front end compress the file
-again, as before; through pipes, or a `CoroutinePair` stage, the dry run
-writes back each NAL unit, as h264p always did through pipes. The library's
+again, as before; through pipes, the dry run writes back each NAL unit, as
+h264p always did. The library's
 `setjmp`/`longjmp` are GCC's builtins or, with clang, x86-64 assembly: h264p
 builds for x86 now (the plain C++ build there too); elsewhere, the
 library's `CORO_NOASM`, untested.
@@ -321,9 +317,8 @@ record for each of its parts: its size, the count of inserted parameter
 sets, the size of the part as compressed (32, 32 and 64 bits,
 little-endian), and the part compressed, a stream of h264p's with its own
 header. `d` knows it by its first bytes and runs as many threads as it
-says; `x -t N` runs both at once, MTwrap's coder into its decoder. Without
-`-t`, or with `-t 1`, `c` writes h264p's stream of one model, as before
-(`h264c`).
+says. Without `-t`, or with `-t 1`, `c` writes h264p's stream of one model,
+as before (`h264c`).
 
 On the 7 corpus streams concatenated (3.87 MB, 82 IDR pictures), on 4
 cores of the 2.1 GHz Xeon VM:
@@ -345,154 +340,23 @@ CPU time at `-1`); hence parts of 4 MB by default, for long streams. A
 stream shorter than a part is one part, on one thread. Each thread has a
 model: at `-9`, 64 MB of memory in one thread, 194 MB on 4.
 
-### TSV
-
-The TSV file holds the values of the syntax elements, with the CAVLC, CABAC
-and Exp-Golomb coding undone: a macroblock's coefficients are numbers, not
-coeff_token, level_prefix etc. or CABAC bins. `r` codes the values again,
-with CAVLC or CABAC as the picture parameter set says, and the stream comes
-out byte for byte as it was. To guarantee that, `t` restores each NAL unit
-from its rows and compares; a NAL unit it cannot reproduce is stored in hex,
-verbatim. That happens to
-
-- NAL unit types other than slices (1, 5), SEI (6), SPS (7), PPS (8), access
-  unit delimiters (9), end of sequence and stream (10, 11) and filler data
-  (12): data partitions (2-4), SVC and MVC (14, 15, 20) and the rest
-- NAL units with syntax errors or referring to a missing parameter set
-- emulation prevention bytes the standard would not insert
-
-Everything else of the H.264 standard (2D, single layer) is supported: CAVLC
-and CABAC; I, P, B, SP and SI slices; frames, field pictures and MBAFF;
-monochrome, 4:2:0, 4:2:2 and 4:4:4, also with separate colour planes; bit
-depths up to 14; lossless coding, I_PCM; FMO and arbitrary slice order;
-redundant pictures; scaling matrices.
-
-Speed is about 1 MB of H.264 per second for `t` and 2 MB/s for `r`; the TSV
-file is 10-20 times as large as the stream. `h264p_cm.md` is about
-compressing it with context mixing: where CABAC spends its bits, and
-contexts for each field (`tools/ctxexp.py` tries them out).
-
-#### TSV format
-
-One row per line: a name and tab-separated values. Absent values are `-`.
-Rows of the stream, in stream order:
-
-    h264p  1               first row, format version
-    junk   HEX             bytes before the first start code
-    nal    Z REF TYPE      a NAL unit: Z 0x00 bytes before its 00 00 01 start
-                           code (zero_byte and the previous NAL unit's
-                           trailing_zero_8bits), nal_ref_idc, nal_unit_type;
-                           its rows follow
-    nalx   Z HEX           a NAL unit with forbidden_zero_bit set, or empty
-    hex    HEX             the NAL unit after its header byte, verbatim
-    trail  N BITS          the trailing bits are not the expected ones: the
-                           last N bits written, up to the rbsp_stop_one_bit,
-                           are replaced by BITS
-    czw    N               N cabac_zero_words
-    x264_padding N         before a nal row: the slices from there on end
-                           their CABAC data with x264's padding bit (below),
-                           that slice being in frame N; - for no padding bit
-    eof    N               N 0x00 bytes after the last NAL unit
-
-x264 does not end its CABAC data quite like the standard: it sets the last
-bit of the byte with the rbsp_stop_one_bit, after the alignment zero bits, to
-bit (frame & 31) of 0x35a4e4f5, frame being the number of the picture in
-coding order from the start of the encoding. It does the same with the
-pcm_alignment_zero_bits before I_PCM samples. `t` recognizes the pattern in
-the bits it sees and writes an x264_padding row where it starts or its phase
-changes (in a stream cut from a longer one, or a concatenation); the frame
-number then goes up with every slice that has first_mb_in_slice 0. These bits
-are expected from then on, so trail rows and nonzero pcm alignment values are
-only needed for bits that differ: an x264 stream from the start of the
-encoding gets one x264_padding row and none of those.
-
-The rows of SPS, PPS, SEI, AUD, filler data and slice headers are named after
-their syntax elements in the standard (7.3) and come in bitstream order, one
-row per syntax element, except for these groups:
-
-    constraint_set_flags              constraint_set0..5_flag, reserved_zero_2bits: 8 bits
-    seq_scaling_list, pic_scaling_list   present flag, the delta_scale values
-    offset_for_ref_frame              all of them
-    cpb                               bit_rate_value_minus1 cpb_size_value_minus1 cbr_flag
-    run_length_minus1, slice_group_id all of them
-    slice_group_rect                  top_left bottom_right
-    sei_message                       payloadType payloadSize payload (hex)
-    ff_bytes                          the number of ff_byte of filler data
-    ref_pic_list_modification_l0/l1   flag, then each modification_of_pic_nums_idc
-                                      with its argument, ending with 3
-    pred_weight_l0/l1                 one row per reference index: luma_weight_flag
-                                      [weight offset] chroma_weight_flag [Cb weight
-                                      offset Cr weight offset]
-    mmco                              one row per memory_management_control_operation,
-                                      with its arguments; the last one is mmco 0
-
-The slice data follows the slice header, a group of rows per macroblock in
-decoding order:
-
-    skip  N                 N skipped macroblocks (mb_skip_run, mb_skip_flag)
-    mb    T X C P Q         a coded macroblock: mb_type T, numbered as in the
-                            standard for the slice type (I 0-25, SI 0-26, P and
-                            SP 0-30, B 0-48), transform_size_8x8_flag X,
-                            intra_chroma_pred_mode C, coded_block_pattern P,
-                            mb_qp_delta Q
-    fld   F                 mb_field_decoding_flag (MBAFF), where coded
-    pcm   A S...            I_PCM: the pcm_alignment_zero_bits as a number, XOR
-                            x264's padding bit in the last one if expected,
-                            and the samples: 256 Y, then Cb, Cr
-    ipm   M...              Intra 4x4 or 8x8 prediction modes: -1 for
-                            prev_intra_pred_mode_flag, else rem_intra_pred_mode
-    sub   S S S S           sub_mb_type
-    ref0  R...              ref_idx_l0 of each partition that has one
-    ref1  R...              ref_idx_l1
-    mvd0  X Y...            mvd_l0 of each partition or sub-partition
-    mvd1  X Y...            mvd_l1
-    res   CAT IDX C...      a block of coefficients that are not all zero, in
-                            scan order up to the last nonzero one; blocks
-                            without a row are zero
-
-    CAT   block                    IDX                       coefficients
-    0     Intra16x16 DC            0                         16
-    1     Intra16x16 AC            luma4x4BlkIdx             15 (scan positions 1-15)
-    2     luma 4x4                 luma4x4BlkIdx             16
-    3     chroma DC                0 Cb, 1 Cr                4 (4:2:0), 8 (4:2:2)
-    4     chroma AC                iCbCr * 4 (8 for 4:2:2)   15
-                                   + chroma block index
-    5     luma 8x8                 luma8x8BlkIdx             64, also with CAVLC
-    6-9   Cb (4:4:4) as 0, 1, 2, 5
-    10-13 Cr (4:4:4) as 0, 1, 2, 5
-
-CAT is the ctxBlockCat of the standard. Two macroblocks of
-`test/002/01.h264`: an I_16x16_0_1_0 one with luma and chroma DC
-coefficients, and a B_Bi_Bi_16x8 one (two references in list 0, one in
-list 1, so no ref_idx_l1):
-
-    mb    5   -   0   -   13
-    res   0   0   5   0   -1  -1  0   0   0   0   0   -1
-    res   3   0   2   0   -1
-    res   3   1   -1  0   1
-
-    mb    20  -   -   0   -
-    ref0  0   0
-    mvd0  0   0   0   0
-    mvd1  0   6   0   1
-
 ### Verification
 
-`test/h264p.sh` round-trips every test stream both ways, `c` and `d`, `t` and
-`r`, with `-s`, so all their NAL units are converted (except the data
-partitions of `test/h264p/jm_dp.264`), and two concatenations: one in which
+`test/h264p.sh` round-trips every test stream through `c` and `d`, with
+`-s`, so all their NAL units are converted (except the data partitions of
+`test/h264p/jm_dp.264`), and two concatenations: one in which
 x264's padding bits change phase, and one that changes the picture size,
 chroma format, bit depth, slice groups and field coding from stream to
 stream. Then the cases that must fail, and fail well (a corrupt slice with
-`-s`, on threads too, where `x` must not hang; the input as the output; a
+`-s`, on threads too, where `c` must not hang; the input as the output; a
 cut compressed stream; a full output device), and the crafted streams of
 `test/crafted`, each one h264p once crashed on, took minutes or gigabytes
 for, or failed as a whole (`h264p_review.md`).
 The streams in `test/h264p` cover what the others don't (see `gen.sh` there).
-The dumped values of all test streams were also compared, macroblock by
-macroblock, with the syntax elements traced by the JM reference decoder;
-`t` and `r` were fuzzed with corrupted streams and TSV files, and `c` and
-`d` (built with ASan and UBSan, which report nothing on the test streams)
-with corrupted streams, compressed files and random concatenations of the
-test streams. The tuning and release builds of `h264p_src/mk.sh`, and gcc
+The values h264p parses from all test streams were also compared,
+macroblock by macroblock, with the syntax elements traced by the JM
+reference decoder (through the TSV dump h264p had then), and `c` and `d`
+(built with ASan and UBSan, which report nothing on the test streams) were
+fuzzed with corrupted streams, compressed files and random concatenations
+of the test streams. The tuning and release builds of `h264p_src/mk.sh`, and gcc
 and clang builds at -O2 and -O3, code the test streams identically.

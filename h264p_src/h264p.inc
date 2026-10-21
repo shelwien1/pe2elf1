@@ -2,9 +2,7 @@
 // compressor of H.264 Annex B streams (c, d). The syntax of the stream, with
 // the entropy coding removed, is coded with a context mixing model
 // (model.inc) and coded back by the decompressor; both run as coroutines,
-// streaming (coro.inc), and on threads, the stream in parts (mt.inc). The
-// same syntax can be dumped to a TSV file (t) and the identical stream
-// restored from it (r: tsvfile.inc).
+// streaming (coro.inc), and on threads, the stream in parts (mt.inc).
 //
 // One translation unit: a program includes this file once, as h264p.cpp
 // does, and it includes every source. Its names stay in namespace h264p:
@@ -73,16 +71,14 @@
 #include "MTwrap_v3/MTwrap.inc"
 
 // the syntax: the bitstream, its walk and the channels it exchanges the
-// values with (TSV rows, the value log, the model)
+// values with (the value log, the model)
 #include "bits.inc"
-#include "rows.inc"
 #include "tables.inc"
 #include "cabac.inc"
 #include "cavlc.inc"
 #include "chan.inc"
 #include "syntax.inc"
 #include "slice.inc"
-#include "tsv.inc"
 #include "log.inc"
 // the model: the coder, the families and the decoder in the loop
 #include "cmbase.inc"
@@ -97,13 +93,12 @@
 #include "model.inc"
 
 // the front end: the byte stream, the splitter of -t, a call's options,
-// progress and files, the per-NAL step, the TSV and the compressed streams,
-// the coroutines and the calls
+// progress and files, the per-NAL step, the compressed stream, the
+// coroutines and the calls
 #include "annexb.inc"
 #include "h264split.inc"
 #include "cli.inc"
 #include "nal.inc"
-#include "tsvfile.inc"
 #include "cmstream.inc"
 #include "coro.inc"
 #include "mt.inc"

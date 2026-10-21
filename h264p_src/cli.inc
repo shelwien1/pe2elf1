@@ -14,7 +14,7 @@ struct Options {
   uint32_t part = 4 << 20;  // and the size of a part, at least: -c
 };
 
-// Progress on stderr, as c, d and x go: a line put over itself every half
+// Progress on stderr, as c and d go: a line put over itself every half
 // second -- the bytes of the stream (raw) and of the compressed stream
 // (packed) done so far, how far through its input the call is, the speed
 // (of the stream) and the memory (the most the process has had) -- and at
@@ -25,7 +25,7 @@ struct Options {
 // line, under the same lock: an error ends the lines.
 struct Progress {
   typedef std::chrono::steady_clock clk;
-  const char* tag = nullptr;  // enc, dec, x; none: no progress
+  const char* tag = nullptr;  // enc, dec; none: no progress
   uint64_t total = 0;         // the input's size (0: not known, no percentage)
   std::function<void(uint64_t& raw, uint64_t& packed, uint64_t& pos)> what;  // pos of total: raw or packed
   clk::time_point t0;
@@ -141,15 +141,6 @@ void progress_poll(Progress* p) {
   if (p) p->poll();
 }
 
-// a file as a ByteSource (t's input)
-size_t file_read(void* f, uint8_t* p, size_t n) { return fread(p, 1, n, (FILE*)f); }
-ByteSource file_source(FILE* f) {
-  ByteSource s;
-  s.fn = file_read;
-  s.ctx = f;
-  return s;
-}
-
 // whether there is a file name, and whether it is a regular file
 bool exists(const char* name) {
 #ifdef _WIN32
@@ -238,8 +229,8 @@ struct Output {
     return g.f != nullptr;
   }
   // The end of the call, r its status so far: what it wrote becomes the
-  // output, or after an error is removed, unless keep (d and r keep what
-  // they restored); the exit status
+  // output, or after an error is removed, unless keep (d keeps what it
+  // restored); the exit status
   int close(int r, bool keep) {
     bool werr = false;
     if (g.f == stdout)

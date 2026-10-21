@@ -528,7 +528,7 @@ struct HeaderModel {
     if (slice_nal_) prev_sref_ = last_sref_, last_sref_ = ref_idc != 0;
     sty_ = slice_nal_ ? last_sty_ : 10;
   }
-  // a group of values (a TSV row), by its name
+  // a group of values (a syntax element, or a group of them), by its name
   void begin(const char* name) {
     auto it = tags_.find(name);
     if (it == tags_.end()) {

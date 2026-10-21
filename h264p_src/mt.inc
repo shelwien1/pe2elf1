@@ -1,4 +1,4 @@
-// h264p on threads (c and x with -t N, and d of what that wrote): the stream
+// h264p on threads (c with -t N, and d of what it wrote): the stream
 // cut into parts by h264split.inc's splitter (H264Split, on the main
 // thread) -- a part ends at the first IDR or I access unit at least -c's
 // part size after its start, or at the first picture at least mt_cap()
@@ -255,7 +255,7 @@ struct H264pPart : CoroIo {
   }
 };
 
-// c, x: the splitter into MTwrap's coder; d, x: MTwrap's decoder
+// c: the splitter into MTwrap's coder; d: MTwrap's decoder
 typedef CoroutinePair<H264Split, MTwrap<0, H264pPart<0>, const H264pArgs*>> MtEnc;
 typedef MTwrap<1, H264pPart<1>, const H264pArgs*> MtDec;
 
