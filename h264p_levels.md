@@ -763,8 +763,10 @@ Each step checked on the 96 test streams:
 Done: the coder's thread (`TcDefer`), the thread that parsed ahead and the
 finishing thread (deblocking, padding, maps behind the decoding) are gone;
 their single-thread paths, built before with `H264P_NO_THREADS`, are the
-only ones, and the output was the same. Memory per process is in section
-4.
+only ones, and the output was the same. (The finishing went on row by row,
+two rows behind the decoding, until `h264p_review.md` (D3) had it measured:
+finishing each picture at its end codes the same in the same time, and is
+what it does now.) Memory per process is in section 4.
 
 ## 9. How this was measured
 

@@ -532,58 +532,28 @@ struct ReconT : Dpb {
     maps_h = cur->mbh;
   }
 
-  // --- finishing the picture as its decoding goes on: deblocking it, then
-  // the maps and (a reference picture's) padded luma of each row done with.
-  // Decoding a macroblock row reads the row above it unfiltered, and
-  // deblocking row j changes rows j - 1 and j: so row j is let go once the
-  // decoding has come in order to row j + 2, and is final once row j + 1 is
-  // deblocked; the rest is finished when the picture ends. A decoding that
-  // leaves the order (slice groups, slices out of order or twice) has what
-  // was let go finished and lets go no more.
-  int fin_next = 0;                // the macroblock next in order
-  bool fin_off = false;            // the decoding left the order
-  int fin_rows = 0, fin_post = 0;  // the rows deblocked, and final and finished
-  int fin_db = 0;                  // the rows of db made none again for the next picture
+  // --- finishing the picture as its decoding ends: deblocking it, then
+  // the maps and (a reference picture's) padded luma of each row. Until
+  // then only the decoding reads the picture, as decoded, unfiltered, and
+  // the deblocking records of the macroblocks above and to the left.
+  // (Finished row by row two rows behind the decoding, as when a thread of
+  // its own did it, it measured no faster on the test streams:
+  // h264p_review.md, D3.)
   static DbMb db_none() { return DbMb(); }  // (zeros, but slice -1)
-  void finish_rows(int let, bool all) {
-    int mbw = cur->mbw;
-    while (fin_rows < let) {
-      deblock_row(fin_rows++);
-      // (deblocking reads the row above, decoding two rows down)
-      for (; fin_db < fin_rows - 1; fin_db++) std::fill(&db[fin_db * mbw], &db[fin_db * mbw] + mbw, db_none());
-      for (; fin_post < fin_rows - 1; fin_post++) post_row(fin_post);
-    }
-    if (all) {
-      for (; fin_post < cur->mbh; fin_post++) post_row(fin_post);
-      // (all of it where the decoding left the order: it may have come back)
-      std::fill(db.begin() + (fin_off ? 0 : (size_t)fin_db * mbw), db.end(), db_none());
-    }
-  }
   void post_row(int row) {
     maps_row(row);
     if (cur_ref_idc) cur->pad_rows(row, row + 1);
   }
   // (the decoding's side) a picture begins
   void fin_begin() {
-    fin_next = 0;
-    fin_off = false;
-    fin_rows = fin_post = fin_db = 0;
     maps_begin();
     if (cur_ref_idc) cur->pad_alloc();
   }
-  // macroblock addr begins (mb_start), ends (mb_end)
-  void fin_mb(int addr, bool end) {
-    if (fin_off) return;
-    if (addr != fin_next) {
-      fin_off = true;
-      return;
-    }
-    int mbw = cur->mbw;
-    if (end && ++fin_next % mbw == 0 && fin_next >= 2 * mbw) finish_rows(fin_next / mbw - 1, false);
-  }
-  // the picture ends: the rest of it
+  // the picture ends
   void fin_end() {
-    finish_rows(cur->mbh, true);
+    for (int row = 0; row < cur->mbh; row++) deblock_row(row);
+    for (int row = 0; row < cur->mbh; row++) post_row(row);
+    std::fill(db.begin(), db.end(), db_none());  // (for the next picture)
     maps_end();
     if (cur_ref_idc) cur->padded = true;
   }
@@ -660,7 +630,6 @@ struct ReconT : Dpb {
       CM_PREFETCH(&c->mv[(size_t)na * 64 + 32]);
     }
     if (act()) {
-      fin_mb(addr, false);
       // what mb_end will write of the macroblock, on its way into the cache
       const char* d = (const char*)&db[addr];
       for (int k = 0; k < (int)sizeof(DbMb); k += 64) CM_PREFETCHW(d + k);
@@ -1723,7 +1692,6 @@ struct ReconT : Dpb {
         for (int b = 0; b < 16; b++) memcpy(cm + (b * 2 + l) * 2, mv[l][b], 2 * sizeof(int16_t));
 #endif
     }
-    if (PX) fin_mb(addr, true);
   }
 
   // The predictions of a macroblock by each list, before the weights (luma
