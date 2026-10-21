@@ -16,7 +16,8 @@
 # the decompressor's, a CoroutinePair), whose output must be the stream.
 # At that level, last, the stream is compressed on threads (-t, in parts of
 # at least 16 KB that start at IDR access units): by c on 3 threads and d,
-# through pipes on 2, and by x on 2 (MTwrap's coder into its decoder).
+# through pipes on 2, and by x on 2 (MTwrap's coder into its decoder); c
+# and x there with the progress line on (-p), which must end done.
 
 bin=${1:-./h264p}
 shift
@@ -74,7 +75,7 @@ for s in "$@"; do
     "$bin" x -s -$l "$s" "$tmp/x.264" 2> /dev/null && cmp -s "$s" "$tmp/x.264" || why="x: the stream differs"
   fi
   if [ -z "$why" ] && [ -n "$l" ]; then
-    why=$(trip "$s" c d "$tmp/m.c" "-$l -t 3 -c 16k")
+    why=$(trip "$s" c d "$tmp/m.c" "-$l -t 3 -c 16k -p")
     [ -z "$why" ] && [ "$(head -c 5 "$tmp/m.c")" != h264m ] && why="c -t: not a stream in parts"
   fi
   if [ -z "$why" ] && [ -n "$l" ]; then
@@ -82,7 +83,8 @@ for s in "$@"; do
       cmp -s "$s" "$tmp/p.264" || why="c -t, d through pipes: the stream differs"
   fi
   if [ -z "$why" ] && [ -n "$l" ]; then
-    "$bin" x -s -$l -t 2 -c 16k "$s" "$tmp/x.264" 2> /dev/null && cmp -s "$s" "$tmp/x.264" || why="x -t: the stream differs"
+    "$bin" x -s -$l -t 2 -c 16k -p "$s" "$tmp/x.264" 2> "$tmp/log" && cmp -s "$s" "$tmp/x.264" || why="x -t: the stream differs"
+    [ -z "$why" ] && ! grep -q "done in" "$tmp/log" && why="x -t -p: no progress line"
   fi
   if [ -n "$why" ]; then
     echo "FAIL $s ($why)"

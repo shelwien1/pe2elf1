@@ -28,6 +28,7 @@ struct H264pArgs {
   bool check;        // compressing: the model pass checks the slices it can; status kRestart if one does
                      // not come out as it is, and the input has to be compressed again without
   const char* name;  // the input's, for messages
+  Progress* meter;   // the call's progress line, if one is shown (messages cut it)
 };
 
 template <int f_DEC, class LV>
@@ -55,15 +56,19 @@ struct H264pCoro : Model<f_DEC, LV> {
     try {
       r = run(std::integral_constant<int, f_DEC>());
     } catch (const std::exception& e) {  // no memory for the model (nothing in a handler may yield)
+      progress_stop(args.meter);
       fprintf(stderr, "h264p: %s: %s\n", args.name, e.what());
     } catch (...) {
+      progress_stop(args.meter);
       fprintf(stderr, "h264p: %s: an unknown exception\n", args.name);
     }
     delete st;
     st = nullptr;
-    if (args.verbose)
+    if (args.verbose) {
+      progress_cut(args.meter);
       fprintf(stderr, "coroutine: %zu bytes of stack copied out at a yield, at most (room for %d)\n", this->depth,
               (int)Coroutine::STKPAD);
+    }
     status = r;
     for (;;) yield(static_cast<Coroutine*>(this), r ? 3 : 0);
   }
@@ -75,6 +80,7 @@ struct H264pCoro : Model<f_DEC, LV> {
     opt.level = args.level;
     opt.verbose = args.verbose;
     opt.strict = args.strict;
+    opt.meter = args.meter;
     return compress_stream<LV>(*this, *st, opt, args.check, args.name);
   }
 
@@ -83,14 +89,16 @@ struct H264pCoro : Model<f_DEC, LV> {
   int run(std::integral_constant<int, 1>) {
     st = new DecompressState();
     uint8_t head[sizeof kCmMagic + 1];
-    int level = cm_level(head, this->read(head, sizeof head), args.name);
+    int level = cm_level(head, this->read(head, sizeof head), args.name, args.meter);
     if (level < 0) return 1;
     if (level != LV::id) {
+      progress_stop(args.meter);
       fprintf(stderr, "h264p: %s: compressed at level -%d, not -%d\n", args.name, level, LV::id);
       return 1;
     }
     Options opt;
     opt.verbose = args.verbose;
+    opt.meter = args.meter;
     return decompress_stream<LV>(*this, *st, opt, args.name);
   }
 };

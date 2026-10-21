@@ -101,6 +101,21 @@ threads as it says (see Threads, below); without `-t` (or with `-t 1`), `c`
 writes the stream of one model in one thread, as it always did. Input and
 output can be `-` (stdin, stdout).
 
+Where stderr is a terminal (or with `-p`), `c`, `d` and `x` show their
+progress there, on a line put over itself every half second:
+
+    [enc] 1441792 > 983051   37.3%   0.47 MB/s  180.01M RAM
+    [enc] 3866640 > 2736446  100.0%  done in 11.89s  193.72M RAM
+
+the bytes of the stream and of the compressed stream done so far (`dec`:
+the same way round, the stream written from the compressed stream read),
+how far through its input the call is (none for a pipe, whose size is not
+known), the speed (MB of the stream a second) and the most memory the
+process has had; and at the end, how long it took. With `-t`, the workers
+put the line as they code (the counts are theirs), since the main thread
+mostly waits on them. A message (an error, `-v`'s) starts on a line of its
+own, and after an error the line is not put again.
+
 ### Compression
 
 `c` parses each NAL unit and codes the values it parsed with the model: the

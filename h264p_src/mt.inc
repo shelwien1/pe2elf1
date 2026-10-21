@@ -31,19 +31,31 @@ uint64_t get_le(const uint8_t* p, int n) {
   return v;
 }
 
+// A worker's counts for the progress line: its input and its output so
+// far (their parts' and the part's under way)
+struct PartProg {
+  std::atomic<uint64_t> in, out;
+  void set(uint64_t i, uint64_t o) {
+    in.store(i, std::memory_order_relaxed);
+    out.store(o, std::memory_order_relaxed);
+  }
+};
+
 // A run of a codec, H264pCoro<f_DEC, LV>, on a part in memory: all of in
-// its input, its output into out (grown as it fills); the run's status (0,
-// 1 after an error, kRestart)
+// its input, its output into out (grown as it fills, handed to it 64 KB at
+// a time); the run's status (0, 1 after an error, kRestart). As it goes,
+// its input and output from in0 and out0 on are the worker's counts, and a
+// line of progress may be due.
 template <class C>
-int run_part(const H264pArgs& a, std::vector<uint8_t>& in, std::vector<uint8_t>& out) {
-  static uint8_t none[1];
+int run_part(const H264pArgs& a, std::vector<uint8_t>& in, std::vector<uint8_t>& out, PartProg& prog, uint64_t in0,
+             uint64_t out0) {
   CoroObj<C> c;
   c->Init(&a);
   size_t pos = 0;
   auto feed = [&]() {  // the next piece of the part (addinp() takes 32 bits), or its end
     size_t l = std::min(in.size() - pos, (size_t)1 << 30);
     if (!l) c->f_quit = 1;
-    c->addinp(l ? in.data() + pos : none, (uint)l);
+    c->addinp(in.data() + pos, (uint)l);
     pos += l;
   };
   out.resize(1 << 16);
@@ -51,6 +63,8 @@ int run_part(const H264pArgs& a, std::vector<uint8_t>& in, std::vector<uint8_t>&
   feed();
   for (;;) {
     uint r = c->coro_call(c.get());
+    prog.set(in0 + c->n_in, out0 + c->n_out);
+    progress_poll(a.meter);
     if (r == 1) {
       feed();
       continue;
@@ -60,8 +74,8 @@ int run_part(const H264pArgs& a, std::vector<uint8_t>& in, std::vector<uint8_t>&
       out.resize(done);
       break;
     }
-    out.resize(done * 2);  // (the output full: twice the room)
-    c->addout(out.data() + done, (uint)std::min(out.size() - done, (size_t)1 << 30));
+    if (done == out.size()) out.resize(done * 2);  // (the output full: twice the room)
+    c->addout(out.data() + done, (uint)std::min(out.size() - done, (size_t)1 << 16));
   }
   return c->status;
 }
@@ -75,12 +89,14 @@ struct H264pPart : CoroIo {
   std::vector<uint8_t>* in_;   // a part, or its record: all of it, read before its model starts
   std::vector<uint8_t>* out_;  // what the part's model made of it
   uint64_t parts;              // the parts done
+  PartProg prog;               // the input coded so far and the output (the progress line)
 
   uint32_t Init(const H264pArgs* a) {
     coro_init();
     args = *a;
     in_ = out_ = nullptr;
     parts = 0;
+    prog.set(0, 0);
     return 0;
   }
   void Quit() {
@@ -97,6 +113,7 @@ struct H264pPart : CoroIo {
       out_ = new std::vector<uint8_t>;
       r = run(std::integral_constant<int, f_DEC>());
     } catch (const std::exception& e) {  // no memory (nothing in a handler may yield)
+      progress_stop(args.meter);
       fprintf(stderr, "h264p: %s: %s\n", args.name, e.what());
     }
     Quit();
@@ -104,6 +121,7 @@ struct H264pPart : CoroIo {
   }
 
   int fail(const char* why) {
+    progress_stop(args.meter);
     fprintf(stderr, "h264p: %s: %s\n", args.name, why);
     return 1;
   }
@@ -113,15 +131,17 @@ struct H264pPart : CoroIo {
     in_->resize((size_t)n);
     return read(in_->data(), (size_t)n) == n;
   }
-  // the part's model run on in_ into out_, at the level of a.level
-  int code(const H264pArgs& a) {
+  // the part's model run on in_ into out_, at the level of a.level (the
+  // counts from in0 and out0 on)
+  int code(const H264pArgs& a, uint64_t in0, uint64_t out0) {
     switch (a.level) {
 #define H264P_P(n) \
   case n:          \
-    return run_part<H264pCoro<f_DEC, Lv##n>>(a, *in_, *out_);
+    return run_part<H264pCoro<f_DEC, Lv##n>>(a, *in_, *out_, prog, in0, out0);
       H264P_LEVELS(H264P_P)
 #undef H264P_P
     }
+    progress_stop(args.meter);
     fprintf(stderr, "h264p: %s: a part compressed at level -%d, which this build has not\n", args.name, a.level);
     return 1;
   }
@@ -145,12 +165,14 @@ struct H264pPart : CoroIo {
       // each, again)
       H264pArgs a = args;
       a.check = true;
-      int r = code(a);
+      uint64_t in0 = prog.in.load(std::memory_order_relaxed), out0 = prog.out.load(std::memory_order_relaxed);
+      int r = code(a, in0, out0);
       if (r == kRestart) {
         a.check = false;
-        r = code(a);
+        r = code(a, in0, out0);
       }
       if (r) return 1;
+      prog.set(in0 + plen, out0 + 16 + out_->size());
       if (out_->size() > 0xFFFFFFFFu - 16) return fail("a part compressed to 4 GB or more");
       put_le(h, out_->size() + 16, 4);
       put_le(h + 4, nins, 4);
@@ -173,10 +195,12 @@ struct H264pPart : CoroIo {
       uint64_t g_size = get_le(h, 4), nins = get_le(h + 4, 4), plen = get_le(h + 8, 8);
       if (g_size < 16 || !take(g_size - 16)) return fail("a part's record cut short or broken");
       H264pArgs a = args;
-      a.level = cm_level(in_->data(), std::min(in_->size(), sizeof kCmMagic + 1), args.name);
-      if (a.level < 0 || code(a)) return 1;
+      a.level = cm_level(in_->data(), std::min(in_->size(), sizeof kCmMagic + 1), args.name, args.meter);
+      uint64_t in0 = prog.in.load(std::memory_order_relaxed), out0 = prog.out.load(std::memory_order_relaxed);
+      if (a.level < 0 || code(a, in0 + 16, out0)) return 1;
       size_t ins, pos;
       if (out_->size() != plen || !inserted(nins, ins, pos)) return fail("a part did not decompress as it was compressed");
+      prog.set(in0 + g_size, out0 + out_->size() - (pos - ins));
       write(out_->data(), ins);
       write(out_->data() + pos, out_->size() - pos);
       parts++;
@@ -226,6 +250,16 @@ struct H264pPart : CoroIo {
 typedef CoroutinePair<H264Split, MTwrap<0, H264pPart<0>, const H264pArgs*>> MtEnc;
 typedef MTwrap<1, H264pPart<1>, const H264pArgs*> MtDec;
 
+// the input the workers have coded so far and their output (the progress
+// line; from any thread)
+template <class M>
+void mt_done(const M& m, uint64_t& in, uint64_t& out) {
+  in = out = 0;
+  for (uint i = 0; i < m.th_N; i++) {
+    in += m.C1[i].prog.in.load(std::memory_order_relaxed);
+    out += m.C1[i].prog.out.load(std::memory_order_relaxed);
+  }
+}
 // whether a worker failed (and said why)
 template <class M>
 bool mt_failed(const M& m) {

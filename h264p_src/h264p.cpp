@@ -5,7 +5,9 @@
 // file (t) and the identical stream restored from it (r). This is the only
 // module: the other sources are included here.
 #include <algorithm>
+#include <atomic>
 #include <cerrno>
+#include <chrono>
 #include <cinttypes>
 #include <climits>
 #include <cmath>
@@ -15,6 +17,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
 #include <map>
 #include <memory>
 #include <new>
@@ -29,8 +32,12 @@
 #include <fcntl.h>
 #include <io.h>
 #include <windows.h>
+#define PSAPI_VERSION 2  // (GetProcessMemoryInfo from kernel32)
+#include <psapi.h>
 #else
 #include <sys/mman.h>
+#include <sys/resource.h>
+#include <unistd.h>
 #endif
 #if defined(__AVX2__)
 #include <immintrin.h>
@@ -90,25 +97,6 @@ const int kCmVersion = 5;
 // end of its input decodes zeros, and 0 is the CRC-32 of an empty stream.
 const uint32_t kCrcXor = 0x68323634;
 
-// The level of a compressed stream from its first bytes, n of them read
-// (the magic, the version, the level), or -1 (reported) if they are not
-// h264p's
-int cm_level(const uint8_t* head, size_t n, const char* name) {
-  if (n < sizeof kCmMagic || memcmp(head, kCmMagic, sizeof kCmMagic - 1)) {
-    fprintf(stderr, "h264p: %s: not a stream h264p compressed\n", name);
-    return -1;
-  }
-  if (head[sizeof kCmMagic - 1] != kCmVersion) {
-    fprintf(stderr, "h264p: %s: compressed by version %d, this is version %d\n", name, (int)head[sizeof kCmMagic - 1],
-            kCmVersion);
-    return -1;
-  }
-  if (n == sizeof kCmMagic) {
-    fprintf(stderr, "h264p: %s: the compressed stream is cut short\n", name);
-    return -1;
-  }
-  return head[sizeof kCmMagic];
-}
 
 // The levels of this build (h264p_levels.md section 4): every level, or the
 // one a tuning build has (mk.sh); c without -L takes the first
@@ -141,12 +129,128 @@ int cm_level(const uint8_t* head, size_t n, const char* name) {
 #define H264P_FIRST(n) n,
 const int kLevels[] = {H264P_LEVELS(H264P_FIRST)};
 
+// Progress on stderr, as c, d and x go: a line put over itself every half
+// second -- the bytes of the stream (raw) and of the compressed stream
+// (packed) done so far, how far through its input the call is, the speed
+// (of the stream) and the memory (the most the process has had) -- and at
+// the end, how long it all took. When stderr is a terminal, or with -p.
+// what() gives the counts; poll() puts a line if one is due, from any
+// thread (with -t, the workers', as they code: the main thread waits on
+// them), and messages put a newline after the line first: cut(), or for
+// an error, which ends the run, stop() (no more lines).
+struct Progress {
+  typedef std::chrono::steady_clock clk;
+  const char* tag = nullptr;  // enc, dec, x; none: no progress
+  uint64_t total = 0;         // the input's size (0: not known, no percentage)
+  std::function<void(uint64_t& raw, uint64_t& packed, uint64_t& pos)> what;  // pos of total: raw or packed
+  clk::time_point t0;
+  std::atomic<int64_t> last{0};  // the last line, ns after t0
+  std::atomic<int> len{0};       // its length (a shorter one is padded over it)
+  std::atomic<bool> up{false};   // a line is up, the cursor after it
+  std::atomic<bool> halted{false};  // an error was reported: no more lines
+
+  void start(const char* t, uint64_t size) {
+    tag = t;
+    total = size;
+    t0 = clk::now();
+  }
+  // a line, if half a second has gone by since the last (one thread puts it)
+  void poll() {
+    if (!tag || !what || halted) return;
+    int64_t t = std::chrono::duration_cast<std::chrono::nanoseconds>(clk::now() - t0).count();
+    int64_t l = last.load(std::memory_order_relaxed);
+    if (t - l < 500000000 || !last.compare_exchange_strong(l, t)) return;
+    uint64_t raw, packed, pos;
+    what(raw, packed, pos);
+    double mbs = raw / (t * 1e-9) / (1 << 20);
+    char b[192];
+    int n = total ? snprintf(b, sizeof b, "[%s] %" PRIu64 " > %" PRIu64 "  %5.1f%%  %5.2f MB/s  %5.2fM RAM", tag, raw,
+                             packed, std::min(100.0, 100.0 * pos / total), mbs, ram())
+                  : snprintf(b, sizeof b, "[%s] %" PRIu64 " > %" PRIu64 "  %5.2f MB/s  %5.2fM RAM", tag, raw, packed,
+                             mbs, ram());
+    show(b, n, "");
+  }
+  // the end, done (the main thread, no worker left)
+  void done(uint64_t raw, uint64_t packed) {
+    if (!tag) return;
+    double s = std::chrono::duration<double>(clk::now() - t0).count();
+    char b[192];
+    int n = snprintf(b, sizeof b, "[%s] %" PRIu64 " > %" PRIu64 "  100.0%%  done in %.2fs  %5.2fM RAM", tag, raw, packed,
+                     s, ram());
+    show(b, n, "\n");
+    up = false;
+  }
+  void cut() {
+    if (up.exchange(false)) fputc('\n', stderr);
+  }
+  void stop() {
+    halted = true;
+    cut();
+  }
+  void show(const char* b, int n, const char* end) {
+    int l = up ? len.load() : 0;
+    fprintf(stderr, "\r%s%*s%s", b, l > n ? l - n : 0, "", end);
+    fflush(stderr);
+    len = n;
+    up = true;
+  }
+  // the most memory the process has had (its resident set), in MB
+  static double ram() {
+#ifdef _WIN32
+    PROCESS_MEMORY_COUNTERS m;
+    return GetProcessMemoryInfo(GetCurrentProcess(), &m, sizeof m) ? m.PeakWorkingSetSize / 1048576.0 : 0.0;
+#else
+    struct rusage u;
+    if (getrusage(RUSAGE_SELF, &u)) return 0;
+#ifdef __APPLE__
+    return u.ru_maxrss / 1048576.0;  // (bytes)
+#else
+    return u.ru_maxrss / 1024.0;  // (KB)
+#endif
+#endif
+  }
+};
+void progress_cut(Progress* p) {
+  if (p) p->cut();
+}
+void progress_stop(Progress* p) {
+  if (p) p->stop();
+}
+void progress_poll(Progress* p) {
+  if (p) p->poll();
+}
+
+// The level of a compressed stream from its first bytes, n of them read
+// (the magic, the version, the level), or -1 (reported) if they are not
+// h264p's
+int cm_level(const uint8_t* head, size_t n, const char* name, Progress* meter = nullptr) {
+  if (n < sizeof kCmMagic || memcmp(head, kCmMagic, sizeof kCmMagic - 1)) {
+    progress_stop(meter);
+    fprintf(stderr, "h264p: %s: not a stream h264p compressed\n", name);
+    return -1;
+  }
+  if (head[sizeof kCmMagic - 1] != kCmVersion) {
+    progress_stop(meter);
+    fprintf(stderr, "h264p: %s: compressed by version %d, this is version %d\n", name, (int)head[sizeof kCmMagic - 1],
+            kCmVersion);
+    return -1;
+  }
+  if (n == sizeof kCmMagic) {
+    progress_stop(meter);
+    fprintf(stderr, "h264p: %s: the compressed stream is cut short\n", name);
+    return -1;
+  }
+  return head[sizeof kCmMagic];
+}
+
 struct Options {
   bool verbose = false;
   bool strict = false;
+  bool progress = false;    // -p: progress even where stderr is not a terminal
   int level = kLevels[0];   // c's model: -L
   int threads = 1;          // c's threads: -t (more than one: the stream in parts, mt.inc)
   uint32_t part = 4 << 20;  // and the size of a part, at least: -c
+  Progress* meter = nullptr;  // the call's progress line, which messages cut
 };
 
 struct Stats {
@@ -1192,9 +1296,12 @@ int compress_stream(Model<0, LV>& m, CompressState& s, const Options& opt, bool 
         for (size_t i = 0; i < len; i++) m.raw(payload[i]);
         st.raw++;
         st.reasons[it.why]++;
-        if (opt.verbose && parsed_type(type))
+        if (opt.verbose && parsed_type(type)) {
+          progress_cut(opt.meter);
           fprintf(stderr, "h264p: NAL unit %ld (type %d) stored verbatim: %s\n", st.nals - 1, type, it.why.c_str());
+        }
         if (opt.strict && parsed_type(type)) {
+          progress_stop(opt.meter);
           fprintf(stderr, "h264p: NAL unit %ld (type %d) cannot be converted: %s\n", st.nals - 1, type, it.why.c_str());
           return false;
         }
@@ -1218,14 +1325,18 @@ int compress_stream(Model<0, LV>& m, CompressState& s, const Options& opt, bool 
     m.nal(F_CRC, 0, crc.value() ^ kCrcXor);
     m.rc_Quit();
   } catch (const std::exception& e) {  // CmError, or no memory
+    progress_stop(opt.meter);
     fprintf(stderr, "h264p: %s: %s\n", name, e.what());
     return 1;
   } catch (const Restart& r) {
-    if (opt.verbose)
+    if (opt.verbose) {
+      progress_cut(opt.meter);
       fprintf(stderr, "h264p: NAL unit %ld would not come out as it is; compressing again, writing back each\n", r.nal);
+    }
     return kRestart;
   }
   if (opt.verbose) {
+    progress_cut(opt.meter);
     fprintf(stderr, "%ld NAL units: %ld coded (%ld with irregular trailing bits), %ld stored verbatim\n", st.nals,
             st.parsed, st.trail, st.raw);
     if (st.pad) fprintf(stderr, "%ld changes of x264's padding bits\n", st.pad);
@@ -1334,10 +1445,14 @@ int decompress_stream(Model<1, LV>& m, DecompressState& s, const Options& opt, c
   }
   if (failed) {
     flush();  // what was decoded
+    progress_stop(opt.meter);
     fprintf(stderr, "h264p: %s: %s\n", name, why.c_str());
     return 1;
   }
-  if (opt.verbose) fprintf(stderr, "%ld NAL units\n", nals);
+  if (opt.verbose) {
+    progress_cut(opt.meter);
+    fprintf(stderr, "%ld NAL units\n", nals);
+  }
   return 0;
 }
 
@@ -1364,6 +1479,54 @@ struct CoroObj {
 
 // c, d and x on files, or stdin and stdout for "-" (Lib3's stdio file API),
 // their coroutines run by CoroFileProc
+
+// CoroFileProc::processfile() (Lib3's coro_fhp2.inc), and a look at the
+// progress line after each buffer it reads or writes: the input from f
+// (what was read of it already, [pre, pre_end), first), the output into g
+template <class C>
+uint process_file(C& c, filehandle f, filehandle g, Progress& pr, byte* pre = nullptr, byte* pre_end = nullptr) {
+  uint r;
+  c.coro_init();
+  c.addout(c.outbuf, C::outbufsize);
+  if (pre) c.addinp(pre, (uint)(pre_end - pre));
+  for (;;) {
+    r = c.coro_call(&c);
+    if (r == 1) {
+      uint l = f.sread(c.inpbuf, C::inpbufsize);
+      if (!l) c.f_quit = 1;
+      c.addinp(c.inpbuf, l);
+    } else {
+      uint l = c.getoutsize();
+      if (l) g.writ(c.outbeg, l);
+      if (r != 2) break;
+      c.addout(c.outbuf, C::outbufsize);
+    }
+    pr.poll();
+  }
+  return r;
+}
+
+// the size of the file f reads, 0 if it is not a regular file (a pipe)
+uint64_t file_size(FILE* f) {
+#ifdef _WIN32
+  struct _stati64 s;
+  return _fstati64(_fileno(f), &s) == 0 && (s.st_mode & _S_IFMT) == _S_IFREG ? (uint64_t)s.st_size : 0;
+#else
+  struct stat s;
+  return fstat(fileno(f), &s) == 0 && S_ISREG(s.st_mode) ? (uint64_t)s.st_size : 0;
+#endif
+}
+
+// A call's progress line, tagged tag, through the input f: shown with -p,
+// or where stderr is a terminal
+void progress_start(Progress& pr, const Options& opt, const char* tag, filehandle& f) {
+#ifdef _WIN32
+  bool tty = _isatty(_fileno(stderr)) != 0;
+#else
+  bool tty = isatty(fileno(stderr)) != 0;
+#endif
+  if (opt.progress || tty) pr.start(tag, file_size(f.f));
+}
 
 bool open_files(const char* in_name, const char* out_name, filehandle& f, filehandle& g) {
   f.open(in_name);
@@ -1434,16 +1597,28 @@ bool has_level(int level) {
 // c: one model, the level's (H264pCoro<0, LV>), on all of the stream
 template <class LV>
 int compress_lv(const char* in_name, const char* out_name, const Options& opt, filehandle& f, filehandle& g) {
-  H264pArgs a = {opt.level, opt.verbose, opt.strict, can_check(in_name, out_name), in_name};
+  Progress pr;
+  progress_start(pr, opt, "enc", f);
+  H264pArgs a = {opt.level, opt.verbose, opt.strict, can_check(in_name, out_name), in_name, &pr};
   for (;;) {
     int r;
+    uint64_t raw, packed;
     {
       CoroObj<CoroFileProc<H264pCoro<0, LV>>> c;  // (a new model each time)
+      pr.what = [&](uint64_t& raw, uint64_t& packed, uint64_t& pos) { pos = raw = c->n_in, packed = c->n_out; };
       c->Init(&a);
-      c->processfile(f, g);
+      process_file(*c.get(), f, g, pr);
+      pr.what = nullptr;
       r = c->status;
+      raw = c->n_in, packed = c->n_out;
     }
-    if (r != kRestart) return close_files(r, f, g, out_name, false);
+    if (r != kRestart) {
+      if (r)
+        pr.cut();
+      else
+        pr.done(raw, packed);
+      return close_files(r, f, g, out_name, false);
+    }
     // (a slice did not come out as it is: again, the dry run writing back each)
     a.check = false;
     if (!rewind_files(out_name, f, g)) return close_files(1, f, g, out_name, false);
@@ -1452,8 +1627,15 @@ int compress_lv(const char* in_name, const char* out_name, const Options& opt, f
 
 // c -t N: the stream in parts on N threads (mt.inc), after h264p's header
 int compress_mt(const char* in_name, const char* out_name, const Options& opt, filehandle& f, filehandle& g) {
-  H264pArgs a = {opt.level, false, opt.strict, true, in_name};
+  Progress pr;
+  progress_start(pr, opt, "enc", f);
+  H264pArgs a = {opt.level, false, opt.strict, true, in_name, &pr};
   CoroObj<CoroFileProc<MtEnc>> c;
+  pr.what = [&](uint64_t& raw, uint64_t& packed, uint64_t& pos) {
+    mt_done(c->M2, raw, packed);
+    pos = raw = pr.total ? std::min(raw, pr.total) : raw;  // (parts have their parameter sets copied in)
+    packed += kMtHead;
+  };
   if (c->M1.Init(opt.part, 0) || c->M2.Init(opt.threads, opt.part, &a, 1)) {
     fprintf(stderr, "h264p: cannot start %d threads\n", opt.threads);
     return close_files(1, f, g, out_name, false);
@@ -1464,11 +1646,15 @@ int compress_mt(const char* in_name, const char* out_name, const Options& opt, f
   head[sizeof kMtMagic] = (uint8_t)opt.threads;
   put_le(head + sizeof kMtMagic + 1, opt.part >> 10, 4);
   fwrite(head, 1, sizeof head, g.f);
-  int r = c->processfile(f, g) ? 1 : 0;
+  int r = process_file(*c.get(), f, g, pr) ? 1 : 0;
   bool said = mt_failed(c->M2);
   uint64_t in_bytes = c->M1.st->total, out_bytes = sizeof head + c->M2.c_out, parts = c->M1.st->parts;
   c->M2.Quit();  // (the threads joined)
   c->M1.Quit();
+  if (r)
+    pr.cut();
+  else
+    pr.done(in_bytes, out_bytes);
   if (r && !said) fprintf(stderr, "h264p: %s: internal: a thread stopped early\n", in_name);
   if (!r && opt.verbose)
     fprintf(stderr, "%" PRIu64 " -> %" PRIu64 " bytes (%.2f%%), %" PRIu64 " parts on %d threads\n", in_bytes, out_bytes,
@@ -1496,17 +1682,25 @@ int compress(const char* in_name, const char* out_name, const Options& opt) {
 template <class LV>
 int decompress_lv(const char* in_name, const char* out_name, const Options& opt, filehandle& f, filehandle& g,
                   uint8_t* head, size_t got) {
-  H264pArgs a = {0, opt.verbose, false, false, in_name};
+  Progress pr;
+  progress_start(pr, opt, "dec", f);
+  H264pArgs a = {0, opt.verbose, false, false, in_name, &pr};
   int r;
-  bool keep;
+  uint64_t raw, packed;
   {
     CoroObj<CoroFileProc<H264pCoro<1, LV>>> d;
+    pr.what = [&](uint64_t& raw, uint64_t& packed, uint64_t& pos) { raw = d->n_out, pos = packed = d->n_in; };
     d->Init(&a);
-    d->processfile(f, g, head, head + got);
+    process_file(*d.get(), f, g, pr, head, head + got);
+    pr.what = nullptr;
     r = d->status;
-    keep = d->n_out > 0;  // (what was decoded before an error)
+    raw = d->n_out, packed = d->n_in;
   }
-  return close_files(r, f, g, out_name, keep);
+  if (r)
+    pr.cut();
+  else
+    pr.done(raw, packed);
+  return close_files(r, f, g, out_name, raw > 0);  // (what was decoded before an error)
 }
 
 // d of the parts on threads: as many threads as compressed them
@@ -1523,16 +1717,26 @@ int decompress_mt(const char* in_name, const char* out_name, const Options& opt,
     fprintf(stderr, "h264p: %s: a broken or truncated stream\n", in_name);
     return close_files(1, f, g, out_name, false);
   }
-  H264pArgs a = {0, false, false, false, in_name};
+  Progress pr;
+  progress_start(pr, opt, "dec", f);
+  H264pArgs a = {0, false, false, false, in_name, &pr};
   CoroObj<CoroFileProc<MtDec>> d;
+  pr.what = [&](uint64_t& raw, uint64_t& packed, uint64_t& pos) {
+    mt_done(*d.get(), packed, raw);
+    pos = packed += kMtHead;
+  };
   if (d->Init(threads, part, &a, 1)) {
     fprintf(stderr, "h264p: cannot start %d threads\n", threads);
     return close_files(1, f, g, out_name, false);
   }
-  int r = d->processfile(f, g) ? 1 : 0;
+  int r = process_file(*d.get(), f, g, pr) ? 1 : 0;
   bool said = mt_failed(*d.get());
-  uint64_t out_bytes = d->c_out, parts = mt_parts(*d.get());
+  uint64_t out_bytes = d->c_out, in_bytes = kMtHead + d->c_inp, parts = mt_parts(*d.get());
   d->Quit();
+  if (r)
+    pr.cut();
+  else
+    pr.done(out_bytes, in_bytes);
   if (r && !said) fprintf(stderr, "h264p: %s: a broken or truncated stream\n", in_name);
   if (!r && opt.verbose) fprintf(stderr, "%" PRIu64 " bytes, %" PRIu64 " parts on %d threads\n", out_bytes, parts, threads);
   return close_files(r, f, g, out_name, out_bytes > 0);
@@ -1563,18 +1767,30 @@ int decompress(const char* in_name, const char* out_name, const Options& opt) {
 // the other in a CoroutinePair; the output is the stream restored
 template <class LV>
 int roundtrip_lv(const char* in_name, const char* out_name, const Options& opt, filehandle& f, filehandle& g) {
-  H264pArgs a = {opt.level, opt.verbose, opt.strict, can_check(in_name, out_name), in_name};
-  H264pArgs b = {0, opt.verbose, false, false, "the compressed stream"};
+  Progress pr;
+  progress_start(pr, opt, "x", f);
+  H264pArgs a = {opt.level, opt.verbose, opt.strict, can_check(in_name, out_name), in_name, &pr};
+  H264pArgs b = {0, opt.verbose, false, false, "the compressed stream", &pr};
   for (;;) {
     int r;
+    uint64_t raw, packed;
     {
       CoroObj<CoroFileProc<CoroutinePair<H264pCoro<0, LV>, H264pCoro<1, LV>>>> x;
+      pr.what = [&](uint64_t& raw, uint64_t& packed, uint64_t& pos) { pos = raw = x->M1.n_in, packed = x->M1.n_out; };
       x->M1.Init(&a);
       x->M2.Init(&b);
-      x->processfile(f, g);
+      process_file(*x.get(), f, g, pr);
+      pr.what = nullptr;
       r = x->M1.status ? x->M1.status : x->M2.status;
+      raw = x->M1.n_in, packed = x->M1.n_out;
     }
-    if (r != kRestart) return close_files(r, f, g, out_name, false);
+    if (r != kRestart) {
+      if (r)
+        pr.cut();
+      else
+        pr.done(raw, packed);
+      return close_files(r, f, g, out_name, false);
+    }
     a.check = false;
     if (!rewind_files(out_name, f, g)) return close_files(1, f, g, out_name, false);
   }
@@ -1582,20 +1798,31 @@ int roundtrip_lv(const char* in_name, const char* out_name, const Options& opt, 
 
 // x -t N: the parts on N threads into MTwrap's decoder on N more
 int roundtrip_mt(const char* in_name, const char* out_name, const Options& opt, filehandle& f, filehandle& g) {
-  H264pArgs a = {opt.level, false, opt.strict, true, in_name};
-  H264pArgs b = {0, false, false, false, "the compressed stream"};
+  Progress pr;
+  progress_start(pr, opt, "x", f);
+  H264pArgs a = {opt.level, false, opt.strict, true, in_name, &pr};
+  H264pArgs b = {0, false, false, false, "the compressed stream", &pr};
   CoroObj<CoroFileProc<CoroutinePair<MtEnc, MtDec>>> x;
+  pr.what = [&](uint64_t& raw, uint64_t& packed, uint64_t& pos) {
+    mt_done(x->M1.M2, raw, packed);
+    pos = raw = pr.total ? std::min(raw, pr.total) : raw;
+    packed += kMtHead;
+  };
   if (x->M1.M1.Init(opt.part, 0) || x->M1.M2.Init(opt.threads, opt.part, &a, 1) ||
       x->M2.Init(opt.threads, opt.part, &b, 1)) {
     fprintf(stderr, "h264p: cannot start %d threads\n", 2 * opt.threads);
     return close_files(1, f, g, out_name, false);
   }
-  int r = x->processfile(f, g) ? 1 : 0;
+  int r = process_file(*x.get(), f, g, pr) ? 1 : 0;
   bool said = mt_failed(x->M1.M2) || mt_failed(x->M2);
   uint64_t in_bytes = x->M1.M1.st->total, mid_bytes = kMtHead + x->M1.M2.c_out, parts = x->M1.M1.st->parts;
   x->M2.Quit();
   x->M1.M2.Quit();
   x->M1.M1.Quit();
+  if (r)
+    pr.cut();
+  else
+    pr.done(in_bytes, mid_bytes);
   if (r && !said) fprintf(stderr, "h264p: %s: internal: a thread stopped early\n", in_name);
   if (!r && opt.verbose)
     fprintf(stderr, "%" PRIu64 " -> %" PRIu64 " bytes (%.2f%%), %" PRIu64 " parts on %d threads\n", in_bytes, mid_bytes,
@@ -1630,6 +1857,7 @@ void usage() {
           "options:\n"
           "  -v    print statistics\n"
           "  -s    strict (c, t, x): fail if a NAL unit of a supported type has to be stored verbatim\n"
+          "  -p    (c, d, x) progress on stderr even when it is not a terminal (where it is, always)\n"
           "  -L    (c, x) the model's level, 1 (fastest) to 9 (strongest, the default)\n"
           "  -t N  (c, x) compress on N threads, 1 to 64 (default 1): the stream in parts that start\n"
           "        at IDR access units, a model for each; d takes N from the stream\n"
@@ -1662,6 +1890,8 @@ int main(int argc, char** argv) {
           opt.verbose = true;
         else if (*p == 's')
           opt.strict = true;
+        else if (*p == 'p')
+          opt.progress = true;
         else if (*p >= '1' && *p <= '9')
           opt.level = *p - '0';
         else if ((*p == 't' || *p == 'c') && (p[1] || i + 1 < argc)) {
