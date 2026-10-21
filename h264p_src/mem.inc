@@ -126,7 +126,8 @@ struct Buf {
   void resize(size_t m, const T& v) {
     T x = v;  // (v may be one of the elements)
     room(m);
-    for (size_t i = n; i < m; i++) p[i] = x;
+    T* q = p;  // (stores through p could change p, were they bytes: none fill as memset)
+    for (size_t i = n; i < m; i++) q[i] = x;
     n = m;
   }
   void push_back(const T& v) {
