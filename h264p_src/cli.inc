@@ -193,48 +193,44 @@ struct Progress {
 #endif
   }
 };
-// A message on stderr, after the progress line of the call (p, if any)
+// A message on stderr, after the progress line of the call (p, if any);
+// and an error's, which ends the call: no progress line after it
+void say_v(Progress* p, bool stop, const char* fmt, va_list ap) {
+  if (p)
+    p->say(stop, fmt, ap);
+  else
+    vfprintf(stderr, fmt, ap);
+}
 void say(Progress* p, const char* fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  if (p)
-    p->say(false, fmt, ap);
-  else
-    vfprintf(stderr, fmt, ap);
+  say_v(p, false, fmt, ap);
   va_end(ap);
 }
-// and an error's, which ends the call: no progress line after it
 void say_error(Progress* p, const char* fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  if (p)
-    p->say(true, fmt, ap);
-  else
-    vfprintf(stderr, fmt, ap);
+  say_v(p, true, fmt, ap);
   va_end(ap);
 }
 void progress_poll(Progress* p) {
   if (p) p->poll();
 }
 
-// whether there is a file name, and whether it is a regular file
-bool exists(const char* name) {
+// what the file name is: -1 nothing, 1 a regular file, 0 anything else;
+// and its mode
+int name_kind(const char* name, unsigned* mode = nullptr) {
 #ifdef _WIN32
   struct _stati64 s;
-  return _stati64(name, &s) == 0;
+  if (_stati64(name, &s)) return -1;
+  bool reg = (s.st_mode & _S_IFMT) == _S_IFREG;
 #else
   struct stat s;
-  return stat(name, &s) == 0;
+  if (stat(name, &s)) return -1;
+  bool reg = S_ISREG(s.st_mode);
 #endif
-}
-bool is_regular(const char* name) {
-#ifdef _WIN32
-  struct _stati64 s;
-  return _stati64(name, &s) == 0 && (s.st_mode & _S_IFMT) == _S_IFREG;
-#else
-  struct stat s;
-  return stat(name, &s) == 0 && S_ISREG(s.st_mode);
-#endif
+  if (mode) *mode = (unsigned)s.st_mode;
+  return reg;
 }
 // whether name is the file f has open
 bool same_file(FILE* f, const char* name) {
@@ -259,7 +255,8 @@ bool same_file(FILE* f, const char* name) {
 // call ends well, so that a failed call leaves what was there; anything else
 // (a device, a pipe) is written as it is. Never the input. (Quit() closes
 // and removes what close() did not: the program ends on an error outside a
-// run, err.inc, with Quit() of the call's output.)
+// run, err.inc, with Quit() of the call's output, and on POSIX on a signal
+// that ends it, with its temporary file removed.)
 struct Output;
 Output* open_output = nullptr;  // the call's (the main thread's)
 void quit_open_output();
@@ -280,10 +277,12 @@ struct Output {
   void Quit() {
     if (g.f && g.f != stdout) fclose(g.f);
     g.f = nullptr;
-    if (tmp) remove(tmp);
-    mem_free(tmp);
+    char* t = tmp;
+    tmp = nullptr;  // (before it is freed: quit_on_signal() reads it)
+    if (t) remove(t);
+    mem_free(t);
     mem_free(dest);
-    tmp = dest = nullptr;
+    dest = nullptr;
     if (open_output == this) open_output = nullptr;
   }
   static char* str_dup(const char* s) { return (char*)memcpy(mem_alloc(strlen(s) + 1), s, strlen(s) + 1); }
@@ -301,8 +300,10 @@ struct Output {
       Quit();
       return false;
     }
-    bool fresh = !exists(name);
-    file = fresh || is_regular(name);
+    unsigned mode = 0;
+    int kind = name_kind(name, &mode);
+    bool fresh = kind < 0;
+    file = fresh || kind == 1;
     if (file) {
 #ifdef _WIN32
       long pid = (long)_getpid();
@@ -318,6 +319,9 @@ struct Output {
       snprintf(tmp, n, "%s.%ld.tmp", dest, pid);
       g.f = fopen(tmp, "wb");
       if (!g.f) mem_free(tmp), tmp = nullptr;  // (no room for it beside the file: the file itself)
+#ifndef _WIN32
+      if (g.f && !fresh) (void)!fchmod(fileno(g.f), mode & 07777);  // (as private as the file it replaces)
+#endif
     }
     if (!g.f) g.f = fopen(name, "wb");
     if (!g.f) {
@@ -335,8 +339,9 @@ struct Output {
   }
   // The end of the call, r its status so far: what it wrote becomes the
   // output, or after an error is removed, unless keep (d keeps what it
-  // restored); the exit status
-  int close(int r, bool keep) {
+  // restored, if it could write it); the exit status. (Messages after p's
+  // line, if any.)
+  int close(int r, bool keep, Progress* p) {
     bool werr = false;
     if (g.f == stdout)
       werr = fflush(stdout) != 0 || ferror(stdout) != 0;
@@ -346,13 +351,13 @@ struct Output {
     }
     g.f = nullptr;
     if (!r && werr) {
-      fprintf(stderr, "h264p: %s: write error\n", name);
+      say_error(p, "h264p: %s: write error\n", name);
       r = 1;
     }
-    bool stay = !r || keep;
+    bool stay = !r || (keep && !werr);
     if (tmp) {
       if (stay && !move_file(tmp, dest)) {
-        fprintf(stderr, "h264p: cannot rename %s to %s: %s\n", tmp, dest, strerror(errno));
+        say_error(p, "h264p: cannot rename %s to %s: %s\n", tmp, dest, strerror(errno));
         r = 1, stay = false;
       }
       if (!stay) remove(tmp);
@@ -377,6 +382,24 @@ void quit_open_output() {
   if (open_output) open_output->Quit();
 }
 const bool open_output_hooked = !atexit(quit_open_output);  // (as the program starts)
+#ifndef _WIN32
+// a signal that ends the program: the temporary file of the call's output
+// goes first (only what is safe in a signal handler)
+void quit_on_signal(int sig) {
+  Output* o = open_output;
+  const char* t = o ? o->tmp : nullptr;
+  if (t) unlink(t);
+  signal(sig, SIG_DFL);
+  raise(sig);
+}
+bool hook_signals() {
+  const int sigs[] = {SIGINT, SIGTERM, SIGHUP};
+  for (int s : sigs)
+    if (signal(s, quit_on_signal) == SIG_IGN) signal(s, SIG_IGN);  // (one ignored, as by nohup, stays so)
+  return true;
+}
+const bool signals_hooked = hook_signals();  // (as the program starts)
+#endif
 
 // a call's input (f) and output (o); false after a message
 bool open_io(const char* in_name, const char* out_name, filehandle0& f, Output& o) {
@@ -392,13 +415,13 @@ bool open_io(const char* in_name, const char* out_name, filehandle0& f, Output& 
   return true;
 }
 // and their end, r the call's status so far: the exit status (Output::close)
-int close_io(int r, filehandle0& f, Output& o, bool keep) {
+int close_io(int r, filehandle0& f, Output& o, bool keep, Progress* p = nullptr) {
   if (!r && ferror(f.f)) {
-    fprintf(stderr, "h264p: read error\n");
+    say_error(p, "h264p: read error\n");
     r = 1;
   }
   if (f.f != stdin) fclose(f.f);
-  return o.close(r, keep);
+  return o.close(r, keep, p);
 }
 
 // the size of the file f reads, 0 if it is not a regular file (a pipe)

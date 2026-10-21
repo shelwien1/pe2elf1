@@ -46,7 +46,7 @@ void progress_start(Progress& pr, const Options& opt, const char* tag, filehandl
 
 // (the model pass checks the dry runs where the input can be read again and
 // the output written again: regular files)
-bool can_check(const char* in_name, const Output& o) { return strcmp(in_name, "-") && is_regular(in_name) && o.file; }
+bool can_check(const char* in_name, const Output& o) { return strcmp(in_name, "-") && name_kind(in_name) == 1 && o.file; }
 
 // whether this build has level -level (else said)
 bool has_level(int level) {
@@ -56,84 +56,98 @@ bool has_level(int level) {
   return false;
 }
 
-// What the compressor's run of a call takes, and the decompressor's
-H264pArgs enc_args(const Options& opt, const char* name, Progress* pr) {
+// What a run of a call takes (decompressing, it reads the level from the
+// stream, and -s has nothing to do), its progress line pr started (tag)
+// on the input f
+H264pArgs call_start(Progress& pr, const Options& opt, const char* tag, filehandle0& f, const char* name) {
+  pr.Init();
+  progress_start(pr, opt, tag, f);
   H264pArgs a;
   a.Init();
   a.level = opt.level;
   a.verbose = opt.verbose;
   a.strict = opt.strict;
   a.name = name;
-  a.meter = pr;
+  a.meter = &pr;
   return a;
 }
-H264pArgs dec_args(const Options& opt, const char* name, Progress* pr) {
-  H264pArgs a;
-  a.Init();
-  a.verbose = opt.verbose;
-  a.name = name;
-  a.meter = pr;
-  return a;
+// and its end, r its status: the output committed (close_io(); keep: what
+// was decoded stays after an error), then pr's line ended, done or not;
+// the exit status
+int call_end(int r, filehandle0& f, Output& o, bool keep, Progress& pr, uint64_t raw, uint64_t packed) {
+  r = close_io(r, f, o, keep, &pr);
+  pr.end(r, raw, packed);
+  pr.Quit();
+  return r;
 }
 
-// c of one model, H264pCoro<0, LV>, on all of the stream, and again
-// without the model pass's checks if a slice did not come out as it is
-// (the counts of a run of one model on the progress line)
-template <class C>
-void enc_counts(void* c, uint64_t& raw, uint64_t& packed, uint64_t& pos) {
-  pos = raw = ((C*)c)->n_in, packed = ((C*)c)->n_out;
+// A run of one model, C (H264pCoro<DEC, LV>), on the call's files, its
+// input from f (what was read of it already, [pre, pre + npre), first):
+// its status, the stream's bytes (raw) and the compressed stream's
+// (packed); its counts on the progress line as it goes
+template <class C, int DEC>
+void model_counts(void* c, uint64_t& raw, uint64_t& packed, uint64_t& pos) {
+  const C& m = *(const C*)c;
+  pos = m.n_in;
+  raw = DEC ? m.n_out : m.n_in;
+  packed = DEC ? m.n_in : m.n_out;
 }
-template <class C>
-void dec_counts(void* c, uint64_t& raw, uint64_t& packed, uint64_t& pos) {
-  raw = ((C*)c)->n_out, pos = packed = ((C*)c)->n_in;
+template <class C, int DEC>
+int run_model(const H264pArgs& a, Progress& pr, filehandle0& f, Output& o, uint8_t* pre, size_t npre, uint64_t& raw,
+              uint64_t& packed) {
+  C* m = coro_new<C>();
+  pr.counts(model_counts<C, DEC>, m);
+  m->Init(&a);
+  run_file(*m, f, o.g, pr, pre, npre);
+  pr.counts(nullptr, nullptr);
+  int r = m->status;
+  uint64_t pos;
+  model_counts<C, DEC>(m, raw, packed, pos);
+  m->Quit();
+  coro_free(m);
+  return r;
 }
 
-// c of one model, H264pCoro<0, LV>, on all of the stream, and again
-// without the model pass's checks if a slice did not come out as it is
-template <class LV>
-int code_one(const char* in_name, const Options& opt, filehandle0& f, Output& o) {
-  typedef H264pCoro<0, LV> C;
-  Progress pr;
-  pr.Init();
-  progress_start(pr, opt, "enc", f);
-  H264pArgs a = enc_args(opt, in_name, &pr);
-  a.check = can_check(in_name, o);
-  for (;;) {
-    C* e = coro_new<C>();  // (a new model each time)
-    pr.counts(enc_counts<C>, e);
-    e->Init(&a);
-    run_file(*e, f, o.g, pr);
-    pr.counts(nullptr, nullptr);
-    int r = e->status;
-    uint64_t raw = e->n_in, packed = e->n_out;
-    e->Quit();
-    coro_free(e);
-    if (r != kRestart) {
-      pr.end(r, raw, packed);
-      pr.Quit();
-      return close_io(r, f, o, false);
-    }
-    a.check = false;
-    if (!o.rewind() || fseek(f.f, 0, SEEK_SET)) {
-      fprintf(stderr, "h264p: cannot start again\n");
-      pr.Quit();
-      return close_io(1, f, o, false);
-    }
-  }
-}
+// c of one model, on all of the stream, and again (a new model) without
+// the model pass's checks if a slice did not come out as it is
 template <class LV>
 struct CodeLv {
   static int run(const char* in_name, const Options& opt, filehandle0& f, Output& o) {
-    return code_one<LV>(in_name, opt, f, o);
+    Progress pr;
+    H264pArgs a = call_start(pr, opt, "enc", f, in_name);
+    a.check = can_check(in_name, o);
+    uint64_t raw, packed;
+    int r;
+    while ((r = run_model<H264pCoro<0, LV>, 0>(a, pr, f, o, nullptr, 0, raw, packed)) == kRestart) {
+      a.check = false;
+      if (!o.rewind() || fseek(f.f, 0, SEEK_SET)) {
+        say_error(&pr, "h264p: cannot start again\n");
+        r = 1;
+        break;
+      }
+    }
+    return call_end(r, f, o, false, pr, raw, packed);
+  }
+};
+// d of one model's stream, at its level: the bytes of the input read
+// already (head, got of them) first
+template <class LV>
+struct DecodeLv {
+  static int run(const char* in_name, const Options& opt, filehandle0& f, Output& o, uint8_t* head, size_t got) {
+    Progress pr;
+    H264pArgs a = call_start(pr, opt, "dec", f, in_name);
+    uint64_t raw, packed;
+    int r = run_model<H264pCoro<1, LV>, 1>(a, pr, f, o, head, got, raw, packed);
+    return call_end(r, f, o, raw > 0, pr, raw, packed);  // (what was decoded before an error)
   }
 };
 
 // what MTwrap's Init() returned, said (false: nothing to say)
-bool mt_init_failed(uint r, int threads) {
+bool mt_init_failed(uint r, int threads, Progress& pr) {
   if (r == 7)
-    fprintf(stderr, "h264p: cannot start %d threads\n", threads);
+    say_error(&pr, "h264p: cannot start %d threads\n", threads);
   else if (r)
-    fprintf(stderr, "h264p: no memory for the buffers of %d threads\n", threads);
+    say_error(&pr, "h264p: no memory for the buffers of %d threads\n", threads);
   return r != 0;
 }
 
@@ -145,47 +159,44 @@ struct MtProg {
 };
 void mt_enc_counts(void* c, uint64_t& raw, uint64_t& packed, uint64_t& pos) {
   MtProg& p = *(MtProg*)c;
-  mt_done(((MtEnc*)p.m)->M2, raw, packed);
-  pos = raw = p.pr->total ? Min(raw, p.pr->total) : raw;  // (parts have their parameter sets copied in)
-  packed += kMtHead;
+  MtWork w = mt_work(((MtEnc*)p.m)->M2);
+  pos = raw = p.pr->total ? Min(w.in, p.pr->total) : w.in;  // (parts have their parameter sets copied in)
+  packed = kMtHead + w.out;
 }
 void mt_dec_counts(void* c, uint64_t& raw, uint64_t& packed, uint64_t& pos) {
-  mt_done(*(MtDec*)((MtProg*)c)->m, packed, raw);
-  pos = packed += kMtHead;
+  MtWork w = mt_work(*(MtDec*)((MtProg*)c)->m);
+  raw = w.out;
+  pos = packed = kMtHead + w.in;
 }
 
 // c -t N: the stream in parts on N threads (mt.inc), after h264p's header
 int code_mt(const char* in_name, const Options& opt, filehandle0& f, Output& o) {
   Progress pr;
-  pr.Init();
-  progress_start(pr, opt, "enc", f);
-  H264pArgs a = enc_args(opt, in_name, &pr);
+  H264pArgs a = call_start(pr, opt, "enc", f, in_name);
   a.verbose = false;  // (no statistics for each part)
-  MtEnc* c = coro_new<MtEnc>();
-  MtEnc& e = *c;
-  MtProg mp = {&pr, c};
+  MtEnc* e = coro_new<MtEnc>();
+  MtProg mp = {&pr, e};
   pr.counts(mt_enc_counts, &mp);
-  e.M1.Init(opt.part, 1, mt_cap(opt.part));
-  if (mt_init_failed(e.M2.Init(opt.threads, kMtRing, &a, 1), opt.threads))
-    return close_io(1, f, o, false);  // (threads already started end with the process)
+  e->M1.Init(opt.part, 1, mt_cap(opt.part));
+  if (mt_init_failed(e->M2.Init(opt.threads, kMtRing, &a, 1), opt.threads, pr)) {
+    e->M1.Quit();  // (threads already started wait on input: they end with the process, e as they have it)
+    return call_end(1, f, o, false, pr, 0, 0);
+  }
   uint8_t head[kMtHead];
   mt_head(head, opt.threads, opt.part);
   fwrite(head, 1, sizeof head, o.g.f);
-  int r = run_file(e, f, o.g, pr) || mt_failed(e.M2);
-  mt_drain(e.M2);  // (the coder's threads, where the splitter stopped early)
-  bool said = mt_failed(e.M2);
-  MtCounts n = mt_counts(e);
-  e.M2.Quit();  // (the threads joined)
-  e.M1.Quit();
+  int r = run_file(*e, f, o.g, pr) || mt_failed(e->M2);
+  if (r && !mt_failed(e->M2)) say_error(&pr, "h264p: %s: internal: a thread stopped early\n", in_name);
+  MtCounts n = mt_counts(*e);
+  e->M2.Quit();  // (the threads joined)
+  e->M1.Quit();
   pr.counts(nullptr, nullptr);
-  coro_free(c);
-  pr.end(r, n.raw, n.packed);
-  pr.Quit();
-  if (r && !said) fprintf(stderr, "h264p: %s: internal: a thread stopped early\n", in_name);
+  coro_free(e);
+  r = call_end(r, f, o, false, pr, n.raw, n.packed);
   if (!r && opt.verbose)
     fprintf(stderr, "%" PRIu64 " -> %" PRIu64 " bytes (%.2f%%), %" PRIu64 " parts on %d threads\n", n.raw, n.packed,
             n.raw ? 100.0 * n.packed / n.raw : 0.0, n.parts, opt.threads);
-  return close_io(r, f, o, false);
+  return r;
 }
 
 // H264P_RECDUMP (recon.inc) is the reconstruction of one model: whether the
@@ -213,65 +224,31 @@ int code(const char* in_name, const char* out_name, const Options& opt) {
   return with_level<CodeLv>(opt.level, in_name, opt, f, o);
 }
 
-// d of one model's stream, at its level: the bytes of the input read
-// already (head, got of them) first
-template <class LV>
-struct DecodeLv {
-  static int run(const char* in_name, const Options& opt, filehandle0& f, Output& o, uint8_t* head, size_t got) {
-    typedef H264pCoro<1, LV> C;
-    Progress pr;
-    pr.Init();
-    progress_start(pr, opt, "dec", f);
-    H264pArgs a = dec_args(opt, in_name, &pr);
-    C* d = coro_new<C>();
-    pr.counts(dec_counts<C>, d);
-    d->Init(&a);
-    run_file(*d, f, o.g, pr, head, got);
-    pr.counts(nullptr, nullptr);
-    int r = d->status;
-    uint64_t raw = d->n_out, packed = d->n_in;
-    d->Quit();
-    coro_free(d);
-    pr.end(r, raw, packed);
-    pr.Quit();
-    return close_io(r, f, o, raw > 0);  // (what was decoded before an error)
-  }
-};
-
 // d of the parts on threads: as many threads as compressed them
 int decode_mt(const char* in_name, const Options& opt, filehandle0& f, Output& o, const uint8_t* head, size_t got) {
   int threads = got == (size_t)kMtHead ? head[sizeof kMtMagic] : 0;
   if (!recdump_ok(false)) return close_io(1, f, o, false);
-  if (got > sizeof kMtMagic - 1 && head[sizeof kMtMagic - 1] != kCmVersion) {
-    fprintf(stderr, "h264p: %s: compressed by version %d, this is version %d\n", in_name, (int)head[sizeof kMtMagic - 1],
-            kCmVersion);
-    return close_io(1, f, o, false);
-  }
+  if (got > sizeof kMtMagic - 1 && !cm_version_ok(head[sizeof kMtMagic - 1], in_name)) return close_io(1, f, o, false);
   if (threads < 1 || threads > 64) {
     fprintf(stderr, "h264p: %s: a broken or truncated stream\n", in_name);
     return close_io(1, f, o, false);
   }
   Progress pr;
-  pr.Init();
-  progress_start(pr, opt, "dec", f);
-  H264pArgs a = dec_args(opt, in_name, &pr);
+  H264pArgs a = call_start(pr, opt, "dec", f, in_name);
   a.verbose = false;  // (no statistics for each part)
   MtDec* d = coro_new<MtDec>();
   MtProg mp = {&pr, d};
   pr.counts(mt_dec_counts, &mp);
-  if (mt_init_failed(d->Init(threads, kMtRing, &a, 1), threads)) return close_io(1, f, o, false);
+  if (mt_init_failed(d->Init(threads, kMtRing, &a, 1), threads, pr)) return call_end(1, f, o, false, pr, 0, 0);
   int r = run_file(*d, f, o.g, pr) || mt_failed(*d);
-  mt_drain(*d);
-  bool said = mt_failed(*d);
+  if (r && !mt_failed(*d)) say_error(&pr, "h264p: %s: a broken or truncated stream\n", in_name);
   MtCounts n = mt_counts(*d);
   d->Quit();
   pr.counts(nullptr, nullptr);
   coro_free(d);
-  pr.end(r, n.raw, n.packed);
-  pr.Quit();
-  if (r && !said) fprintf(stderr, "h264p: %s: a broken or truncated stream\n", in_name);
+  r = call_end(r, f, o, n.raw > 0, pr, n.raw, n.packed);  // (what was decoded before an error)
   if (!r && opt.verbose) fprintf(stderr, "%" PRIu64 " bytes, %" PRIu64 " parts on %d threads\n", n.raw, n.parts, threads);
-  return close_io(r, f, o, n.raw > 0);
+  return r;
 }
 
 // d: the first bytes say which it is, a stream of one model (and its level)

@@ -31,12 +31,12 @@ static INLINE int tc_node_man(int nb, int p, u64 pref, int mt) {
 }
 static void tc_vfits(const char *what, sz vol, sz nodes) {
   if(!(vol > 0 && vol < ((sz)1 << 31) && nodes > 0))
-    cm_fail("an IDX family gives the %s an index of %" PRIu64 " rows; a Volume must stay under 2^31", what, (u64)vol);
+    err_raise("an IDX family gives the %s an index of %" PRIu64 " rows; a Volume must stay under 2^31", what, (u64)vol);
 }
 static void tc_ifits(const char *what, sz vol, sz mult) {
   tc_vfits(what, vol, mult);
   if(!(vol * mult < ((sz)1 << 31)))
-    cm_fail("an IDX family gives the %s %" PRIu64 " rows of %" PRIu64 "; the product must stay under 2^31", what, (u64)vol, (u64)mult);
+    err_raise("an IDX family gives the %s %" PRIu64 " rows of %" PRIu64 "; the product must stay under 2^31", what, (u64)vol, (u64)mult);
 }
 //  The context indices of one value: what idx2inc.pl's MakeIndex builds
 //  (c: the counters', A-E, H-L in turn)
@@ -107,7 +107,7 @@ static INLINE i64 tc_dump_get(const char *&p, const char *e) {
   u64 u = 0;
   for(int s = 0;; s += 7) {
     if(UNLIKELY(p == e || s > 63))
-      cm_fail("famtune: a dump cut short");
+      err_raise("a dump cut short");
     u8 c = (u8)*p++;
     u |= (u64)(c & 0x7F) << s;
     if(!(c & 0x80))
@@ -135,7 +135,7 @@ struct tc_dump {
       char why[256];
       snprintf(why, sizeof why, "cannot write %s", fn);
       mem_free(fn);
-      cm_fail("%s", why);
+      err_raise("%s", why);
     }
     mem_free(fn);
     fseek(f, 0, SEEK_END);
@@ -156,7 +156,7 @@ struct tc_dump {
     _chsize_s(_fileno(f), start);
 #else
     if(ftruncate(fileno(f), start))
-      cm_fail("cannot cut a dump short");
+      err_raise("cannot cut a dump short");
 #endif
     putc('R', f);  // (appended: at the end, where it was cut)
   }
@@ -368,7 +368,7 @@ template <int f_DEC, class C> struct tc_fam {
   }
   INLINE int bit(int node, int b) {
     if(UNLIKELY((unsigned)node >= (unsigned)ND))
-      cm_fail("internal: decision node %d of a family of %d", node, ND);
+      err_raise("internal: decision node %d of a family of %d", node, ND);
     return bit_x(node, b);
   }
   void dump_discard() { TC_DUMP(discard()); }
@@ -382,7 +382,7 @@ template <int f_DEC, class C> struct tc_fam {
   //  and sign context sc: 1 negative.
   int sign(u32 sc, int s) {
     if(UNLIKELY(sc >= (u32)C::NG))
-      cm_fail("internal: sign context %u of a family of %d", sc, C::NG);
+      err_raise("internal: sign context %u of a family of %d", sc, C::NG);
     TC_DUMP(rec('G', sc, s));
     cm_cnt g = G[bg * (u32)C::NG + sc];
     s = tc_bit(rc, g.P(), ENC && s);
@@ -620,7 +620,7 @@ template <int f_DEC, class C> struct tc_fam {
 #endif
   INLINE int bitm(int node, int b) {
     if(UNLIKELY((unsigned)node >= (unsigned)MND))
-      cm_fail("internal: mantissa node %d of a family of %d", node, MND);
+      err_raise("internal: mantissa node %d of a family of %d", node, MND);
     cm_cnt t = T[bt + node];
     // (no outside prediction: the families that code() a magnitude give
     // one per node of its head, prpa, or none)
@@ -650,7 +650,7 @@ template <int f_DEC, class C> struct tc_fam {
     u64 u, hu = 0;
     select(v);
     if(UNLIKELY(ENC && x < 0))
-      cm_fail("internal: a negative magnitude");
+      err_raise("internal: a negative magnitude");
     if(hint >= 0) {
       // hst: 1 the value agrees with the hint so far, 3 it is above, 4 below
       hst = 1;
@@ -690,7 +690,7 @@ template <int f_DEC, class C> struct tc_fam {
         break;
       }
       if(UNLIKELY(k + 2 > TC_NBMAX))
-        cm_fail("%s a value of 2^%d or more", ENC ? "internal:" : "corrupt stream:", TC_NBMAX);
+        err_raise("%s a value of 2^%d or more", ENC ? "internal:" : "corrupt stream:", TC_NBMAX);
     }
     {
       u64 pref = 1;

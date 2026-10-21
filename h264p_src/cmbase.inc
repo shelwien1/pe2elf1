@@ -59,17 +59,6 @@ typedef u8 byte;
 typedef u16 word;  // idx2inc.pl's maps of variables with more than 256 values
 typedef u32 uint;
 
-// The compressed stream cannot be decoded, or a model table cannot be
-// had: an error (err.inc)
-[[noreturn]] static void cm_fail(const char* fmt, ...) {
-  char buf[256];
-  va_list ap;
-  va_start(ap, fmt);
-  vsnprintf(buf, sizeof buf, fmt, ap);
-  va_end(ap);
-  err_raise_s(buf);
-}
-
 // 0..3 as they are, then two buckets per octave: a magnitude class
 static INLINE i32 tc_qlog(i64 x) {
   u64 u = (u64)(x < 0 ? -x : x);
@@ -98,8 +87,8 @@ static void* tc_map(sz n, const char* what = "a model table") {
   p = mmap(nullptr, n, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
   if (p == MAP_FAILED) p = nullptr;
 #endif
-  if (!p && n >> 20) cm_fail("cannot map %" PRIu64 " MB for %s", (u64)(n >> 20), what);
-  if (!p) cm_fail("cannot map %" PRIu64 " KB for %s", (u64)((n + 1023) >> 10), what);
+  if (!p && n >> 20) err_raise("cannot map %" PRIu64 " MB for %s", (u64)(n >> 20), what);
+  if (!p) err_raise("cannot map %" PRIu64 " KB for %s", (u64)((n + 1023) >> 10), what);
   return p;
 }
 static inline void tc_unmap(void* p, sz n) {
@@ -117,7 +106,7 @@ static inline void tc_unmap(void* p, sz n) {
 constexpr long long TC_VOLMAX = (long long)1 << 60;
 constexpr long long tc_vmul(long long a, long long b) { return (a <= 0 || b <= 0 || a > TC_VOLMAX / b) ? TC_VOLMAX : a * b; }
 static INLINE u64 tbl_n(u64 n) {
-  if (!(n > 0 && n <= ((u64)1 << 40))) cm_fail("a model table of %" PRIu64 " entries", n);
+  if (!(n > 0 && n <= ((u64)1 << 40))) err_raise("a model table of %" PRIu64 " entries", n);
   return n;
 }
 // Rows of a table: the Volume when it fits in 2^h rows, else 2^h rows into

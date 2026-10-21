@@ -143,6 +143,22 @@ if [ -n "${negative:-}" ]; then
   for x in "$here/gen/x264_base.264" "$tmp/empty.c" "$tmp/ver.c"; do
     check "d of $(basename "$x") fails, no output" sh -c '! "$1" d "$2" "$3/n.264" 2>/dev/null && [ ! -e "$3/n.264" ] && ! ls "$3"/n.264.*.tmp > /dev/null 2>&1' - "$bin" "$x" "$tmp"
   done
+  # a part's record of -t that claims 4 GB (its size's high bytes set): d
+  # fails as the bytes run out, without taking the 4 GB first
+  "$bin" c -1 -t 2 "$here/h264p/x264_16x16.264" "$tmp/m4.c" 2>/dev/null
+  printf '\377\377' | dd of="$tmp/m4.c" bs=1 seek=15 conv=notrunc 2>/dev/null
+  check "d of a part's record claiming 4 GB fails, in 300 MB" sh -c 'ulimit -v 300000 2>/dev/null; ! "$1" d "$2/m4.c" "$2/k.264" 2>"$2/log" && grep -q "cut short" "$2/log"' - "$bin" "$tmp"
+  # d failing to write keeps the old output; a replaced output keeps its
+  # mode; an interrupted c leaves no temporary file
+  echo old > "$tmp/old.264"
+  check "d with a write error keeps the old output" sh -c '(trap "" XFSZ; ulimit -f 8; ! "$1" d "$2/k.c" "$2/old.264" 2>/dev/null) && [ "$(cat "$2/old.264")" = old ]' - "$bin" "$tmp"
+  if chmod 600 "$tmp/old.264" 2>/dev/null && [ "$(stat -c %a "$tmp/old.264" 2>/dev/null)" = 600 ]; then
+    check "d replacing a file keeps its mode" sh -c '"$1" d "$2/k.c" "$2/old.264" && [ "$(stat -c %a "$2/old.264")" = 600 ]' - "$bin" "$tmp"
+  fi
+  if command -v timeout > /dev/null; then
+    cat "$here"/002/0[0-4].h264 > "$tmp/int.264"
+    check "c interrupted leaves no temporary file" sh -c 'timeout -s INT 1 "$1" c -9 "$2/int.264" "$2/int.c"; [ $? -ne 0 ] && ! ls "$2"/int.c* > /dev/null 2>&1' - "$bin" "$tmp"
+  fi
   if [ -w /dev/full ]; then
     check "c and d to a full device fail" sh -c '! "$1" c -1 "$2" - > /dev/full 2>/dev/null && "$1" c -1 "$2" "$3/k.c" && ! "$1" d "$3/k.c" - > /dev/full 2>/dev/null' - "$bin" "$here/h264p/x264_16x16.264" "$tmp"
   fi

@@ -77,7 +77,7 @@ namespace {
 // the file fn's bytes, into d
 void slurp(const char* fn, Buf<char>& d) {
   FILE* f = fopen(fn, "rb");
-  if (!f) cm_fail("cannot read %s", fn);
+  if (!f) err_raise("cannot read %s", fn);
   d.clear();
   char buf[1 << 16];
   size_t n;
@@ -115,7 +115,7 @@ void replay(char** files, int n, tc_rc<0>& rc) {
         f->ZM.fill(C::kT * (sz)C::MND * 5, cm_cnt{});
         continue;
       }
-      if (!f) cm_fail("famtune: a dump that does not start with a stream");
+      if (!f) err_raise("a dump that does not start with a stream");
       switch (tag) {
         case 'M': {
           int* v = reinterpret_cast<int*>(&D);
@@ -149,7 +149,7 @@ void replay(char** files, int n, tc_rc<0>& rc) {
           break;
         }
         default:
-          cm_fail("famtune: a broken dump (%s)", files[i]);
+          err_raise("a broken dump (%s)", files[i]);
       }
     }
   }
@@ -180,7 +180,7 @@ struct Replay : tc_rc<0> {
       err_push(t);
       rc_Init();
 #define FT_FAM(F) !strcmp(argv[1], #F) ? replay<FtLv::F>(argv + 2, argc - 2, *this) :
-      H264P_FAMS(FT_FAM) cm_fail("famtune: no family %s", argv[1]);
+      H264P_FAMS(FT_FAM) err_raise("no family %s", argv[1]);
 #undef FT_FAM
       err_pop(t);
     } else {

@@ -156,6 +156,7 @@ struct Buf {
   void copy(const Buf& o) { assign(o.p, o.n); }
   // the first k elements gone, the rest moved to the front
   void erase_front(size_t k) {
+    if (!k) return;
     if (k < n) memmove((void*)p, p + k, (n - k) * sizeof(T));
     n = k < n ? n - k : 0;
   }

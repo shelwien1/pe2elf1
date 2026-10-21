@@ -65,29 +65,31 @@ struct CoroIo : Coroutine {
   }
 
   // the next input buffer (false: the input has ended), the next output
-  // buffer
-  NOINLINE bool next_input() {
-    if (eof) return false;
+  // buffer: a yield for either (wait()), the coroutine's traps not jumped
+  // to while it waits
+  NOINLINE void wait(bool in) {
     before_yield();
-    ErrTrap* t = err_hold();  // (the coroutine's traps are not jumped to while it waits)
-    chkinp();
+    ErrTrap* t = err_hold();
+    if (in)
+      chkinp();
+    else
+      chkout();
     err_resume(t);
+  }
+  bool next_input() {
+    if (eof) return false;
+    wait(true);
     if (inpptr >= inpend) eof = true;  // a 0-length input: the end
     return !eof;
   }
-  NOINLINE void next_output() {
-    before_yield();
-    ErrTrap* t = err_hold();
-    chkout();
-    err_resume(t);
-  }
+  void next_output() { wait(false); }
 
   // the stack a yield is about to copy out, against Coroutine::stk's room
   void before_yield() {
     char here;
     size_t d = (size_t)((const char*)stkptrH - &here);
     if (d > depth) depth = d;
-    if (d + 4096 > (size_t)STKPAD) cm_fail("internal: the coroutine's stack (%zu bytes) is too deep to yield", d);
+    if (d + 4096 > (size_t)STKPAD) err_raise("internal: the coroutine's stack (%zu bytes) is too deep to yield", d);
   }
 
   static size_t read_cb(void* c, uint8_t* p, size_t n) { return ((CoroIo*)c)->read(p, n); }
@@ -116,7 +118,7 @@ struct RcIo : CoroIo {
   }
   INLINE uint8_t get() {
     if (UNLIKELY(inpptr >= inpend) && !next_input()) {
-      if (++over > 48) cm_fail("the compressed stream is cut short");
+      if (++over > 48) err_raise("the compressed stream is cut short");
       return 0xFF;
     }
     n_in++;

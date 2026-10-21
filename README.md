@@ -104,9 +104,11 @@ to 64, the stream in parts of at least `-c N` MB, 1 to 1024 (`-c Nk`: KB;
 (see Threads, below); without `-t` (or with `-t 1`), `c` writes the stream
 of one model in one thread, as it always did. Input and output can be `-`
 (stdin, stdout), and not the same file. A file is written under a temporary
-name beside it (`name.PID.tmp`) and renamed when the call is done: a call
-that fails leaves what was there (or nothing), except that `d` keeps what
-it restored before an error.
+name beside it (`name.PID.tmp`, with the mode of the file it replaces) and
+renamed when the call is done: a call that fails leaves what was there (or
+nothing), except that `d` keeps what it restored before an error in the
+stream (not after one writing it). Interrupted (SIGINT, SIGTERM, SIGHUP;
+not on Windows), it removes the temporary file.
 
 Where stderr is a terminal (or with `-p`), `c` and `d` show their progress
 there, on a line put over itself every half second:

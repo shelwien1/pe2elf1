@@ -75,7 +75,7 @@ struct MbCol {
 };
 
 static INLINE int cm_int(i64 v, i64 lim) {
-  if (v < -lim || v > lim) cm_fail("corrupt stream: a value of %" PRId64 " out of range", v);
+  if (v < -lim || v > lim) err_raise("corrupt stream: a value of %" PRId64 " out of range", v);
   return (int)v;
 }
 // a signed value as a class: 0 zero, then -1, +1, -2, +2, -3..., by tc_qlog
@@ -593,7 +593,7 @@ struct HeaderModel {
     for (uint32_t i = h & 511;; i = (i + 1) & 511) {
       int k = tag_ix_[i];
       if (!k) {
-        if (tag_at_.size() >= 256) cm_fail("internal: more than 256 header elements");
+        if (tag_at_.size() >= 256) err_raise("internal: more than 256 header elements");
         tag_at_.push_back((uint32_t)names_.size());
         names_.append(name, strlen(name) + 1);
         tag_ix_[i] = (uint16_t)tag_at_.size();
@@ -3110,7 +3110,7 @@ struct Model : tc_rc<f_DEC> {
     f_cbf.hint = -1;
     cnth_ = (cnth_ * 4 + Min(total, 3)) & 15;
     f_cbf.prpa = nullptr;
-    if (total > b.n) cm_fail("corrupt stream: %d coefficients in a block of %d", total, b.n);
+    if (total > b.n) err_raise("corrupt stream: %d coefficients in a block of %d", total, b.n);
     tc_syms[STG_CBF]++;
     return total;
   }
@@ -3466,7 +3466,7 @@ struct Model : tc_rc<f_DEC> {
       i64 d1 = 0, d2 = 0;
       for (int y = 0; y < hh; y++)
         for (int x = 0; x < w; x++, i++) {
-          if (i >= n) cm_fail("internal: I_PCM sample count");
+          if (i >= n) err_raise("internal: I_PCM sample count");
           int pred = x ? s[i - 1] : y ? s[i - w] : 1 << (depth - 1);
           int half = 1 << (depth - 1), mask = (1 << depth) - 1;
           H_pcm_v D;
@@ -3483,7 +3483,7 @@ struct Model : tc_rc<f_DEC> {
           tc_syms[STG_PCM]++;
         }
     }
-    if (i != n) cm_fail("internal: I_PCM sample count");
+    if (i != n) err_raise("internal: I_PCM sample count");
     mi_->cbp = 0x2f;
     for (int k = 0; k < n && k < 384; k++) rec_.pcm_s[k] = s[k];
   }

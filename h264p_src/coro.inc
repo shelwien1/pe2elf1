@@ -121,11 +121,15 @@ void coro_free(T* p) {
 // it its next input when it asks for it (yield 1), out(more) takes what it
 // put in its output buffer when that is full (yield 2, more: and then gives
 // it the next) or as it ends (yield 0, or 3 after an error: what drive()
-// returns), and tick() comes after each yield (the progress line)
+// returns), and tick() comes after each yield (the progress line). The
+// caller's traps (err.inc) are put aside while c runs, so that c's are not
+// set on them: c's errors end at c's own (a part's model in a worker's).
 template <class C, class In, class Out, class Tick>
 uint drive(C& c, In in, Out out, Tick tick) {
   for (;;) {
+    ErrTrap* t = err_hold();
     uint r = c.coro_call(&c);
+    err_resume(t);
     tick();
     if (r == 1) {
       in();

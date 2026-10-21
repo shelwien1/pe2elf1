@@ -51,6 +51,20 @@ void escape(const uint8_t* r, size_t n, Buf<uint8_t>& e) {
   if (n && r[n - 1] == 0) e.push_back(3);
 }
 
+// A start code of 4 bytes (zero_byte, then 00 00 01)
+const uint8_t kStartCode4[4] = {0, 0, 0, 1};
+// Where in the n bytes at b the parameter sets copied into a part of -t go
+// (h264split.inc) and are found again (mt.inc): after the access unit
+// delimiter, up to its last nonzero byte, if the first NAL unit is one;
+// else at the start
+size_t aud_end(const uint8_t* b, size_t n) {
+  size_t sc = find_start_code(b, n, 0);
+  if (sc + 4 > n || (b[sc + 3] & 31) != 9) return 0;
+  size_t j = Min(find_start_code(b, n, sc + 4), n);
+  while (j > sc + 4 && !b[j - 1]) j--;
+  return j;
+}
+
 // Splits an Annex B byte stream into NAL units while reading it.
 struct AnnexBReader {
   void Init(ByteSource src) {

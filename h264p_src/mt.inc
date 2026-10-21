@@ -127,10 +127,20 @@ struct H264pPart : CoroIo {
   }
 
   // (an error in a part's model ends that run at its own trap: run_part()
-  // returns its status)
+  // returns its status. One outside it, as no memory for the part, its
+  // model or its output, fails the worker here, at the worker's trap: the
+  // call fails, and a part's model left at that is freed as it ends.)
   void do_process() {
     io_init();
-    int r = run(IntTag<f_DEC>());
+    int r;
+    ErrTrap t;
+    if (!setjmp(t.jb)) {
+      err_push(t);
+      r = run(IntTag<f_DEC>());
+      err_pop(t);
+    } else {
+      r = fail(t.why);
+    }
     Quit();
     for (;;) yield(static_cast<Coroutine*>(this), r ? 3 : 0);
   }
@@ -139,11 +149,19 @@ struct H264pPart : CoroIo {
     say_error(args.meter, "h264p: %s: %s\n", args.name, why);
     return 1;
   }
-  // the next n bytes of the input into in_ (false: there are fewer)
+  // the next n bytes of the input into in_ (false: there are fewer); in_
+  // grown as they come, not by n, which a broken record can make anything
   bool take(uint64_t n) {
     if (n != (size_t)n) return false;
-    in_.resize((size_t)n);
-    return read(in_.data(), (size_t)n) == n;
+    in_.clear();
+    while (in_.size() < n) {
+      size_t m = in_.size(), k = (size_t)Min<uint64_t>(n - m, (uint64_t)1 << 20);
+      in_.resize(m + k);
+      size_t got = read(in_.data() + m, k);
+      in_.resize(m + got);
+      if (got < k) return false;
+    }
+    return true;
   }
   // the part's model run on in_ into out_, at the level of a.level (the
   // counts from in0 and out0 on)
@@ -229,23 +247,14 @@ struct H264pPart : CoroIo {
   // extension or a subset SPS, up to its last nonzero byte (h264split r's
   // checks); false if they are not there
   bool inserted(uint64_t nins, size_t& ins, size_t& pos) const {
-    static const uint8_t sc4[4] = {0, 0, 0, 1};
     const uint8_t* b = out_.data();
     size_t n = out_.size(), j;
     ins = pos = 0;
     if (!nins) return true;
-    size_t sc = find_start_code(b, n, 0);
-    if (sc + 4 > n) return false;
-    if ((b[sc + 3] & 31) == 9) {
-      if ((j = find_start_code(b, n, sc + 4)) >= n) return false;
-      while (j > sc + 4 && !b[j - 1]) j--;
-      ins = j;
-    }
-    pos = ins;
+    pos = ins = aud_end(b, n);
     for (uint64_t k = 0; k < nins; k++) {
-      if (pos + 5 > n || memcmp(b + pos, sc4, 4)) return false;
-      int t = b[pos + 4] & 31;
-      if (!(t == 7 || t == 8 || t == 13 || t == 15)) return false;
+      if (pos + 5 > n || memcmp(b + pos, kStartCode4, 4)) return false;
+      if (!h264s::is_pset(b[pos + 4] & 31)) return false;
       if ((j = find_start_code(b, n, pos + 5)) >= n) return false;
       while (j > pos + 5 && !b[j - 1]) j--;
       pos = j;
@@ -258,29 +267,27 @@ struct H264pPart : CoroIo {
 typedef CoroutinePair<H264Split, MTwrap<0, H264pPart<0>, const H264pArgs*>> MtEnc;
 typedef MTwrap<1, H264pPart<1>, const H264pArgs*> MtDec;
 
-// the input the workers have coded so far and their output (the progress
-// line; from any thread)
+// What the workers did: the input they have coded so far and their output
+// (the progress line; from any thread), their parts, and whether one
+// failed (and said why)
+struct MtWork {
+  uint64_t in, out, parts;
+  bool failed;
+};
 template <class M>
-void mt_done(const M& m, uint64_t& in, uint64_t& out) {
-  in = out = 0;
+MtWork mt_work(const M& m) {
+  MtWork w = {0, 0, 0, false};
   for (uint i = 0; i < m.th_N; i++) {
-    in += m.C1[i].prog.in();
-    out += m.C1[i].prog.out();
+    w.in += m.C1[i].prog.in();
+    w.out += m.C1[i].prog.out();
+    w.parts += m.C1[i].parts;
+    w.failed = w.failed || m.C1[i].f_fail;
   }
+  return w;
 }
-// whether a worker failed (and said why)
 template <class M>
 bool mt_failed(const M& m) {
-  for (uint i = 0; i < m.th_N; i++)
-    if (m.C1[i].f_fail) return true;
-  return false;
-}
-// the parts the workers did
-template <class M>
-uint64_t mt_parts(const M& m) {
-  uint64_t n = 0;
-  for (uint i = 0; i < m.th_N; i++) n += m.C1[i].parts;
-  return n;
+  return mt_work(m).failed;
 }
 // What a run on threads did, as h264p reports it (-v, the progress line's
 // end): the stream's bytes (raw), the compressed stream's with h264p's
@@ -290,28 +297,5 @@ struct MtCounts {
   uint64_t raw, packed, parts;
 };
 MtCounts mt_counts(const MtEnc& e) { return {e.M1.st->total, kMtHead + e.M2.c_out, e.M1.st->parts}; }
-MtCounts mt_counts(const MtDec& d) { return {d.c_out, kMtHead + d.c_inp, mt_parts(d)}; }
-// An MTwrap stage that the pair it was in stopped driving (the other stage
-// failed) run to its end, its input ended and its output dropped, so that
-// its workers end and Quit() can join them (nothing to do where they have)
-template <class M>
-void mt_drain(M& m) {
-  bool busy = false;
-  for (uint i = 0; i < m.th_N; i++) busy = busy || !m.C1[i].f_done;
-  if (!busy) return;
-  static byte sink[1 << 16];  // (the main thread's)
-  m.f_quit = 1;
-  m.addinp(sink, 0);
-  m.addout(sink, (uint)sizeof sink);
-  for (;;) {
-    uint r = m.coro_call(&m);
-    if (r == 1)
-      m.addinp(sink, 0);
-    else if (r == 2)
-      m.addout(sink, (uint)sizeof sink);
-    else
-      break;
-  }
-}
-
+MtCounts mt_counts(const MtDec& d) { return {d.c_out, kMtHead + d.c_inp, mt_work(d).parts}; }
 }  // namespace h264p

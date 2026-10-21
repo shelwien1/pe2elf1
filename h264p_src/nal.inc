@@ -22,46 +22,39 @@ void set_why(char* why, const char* fmt, ...) {
 struct Stats {
   long nals, parsed, raw, trail, pad;
   // why NAL units were stored verbatim: each reason once, with how many it
-  // was; found by its hash in index (the reason's number + 1, 0 none)
+  // was, the first kReasons of them (a reason can have numbers in it: a
+  // stream could make any number of them), the rest counted in others
+  static const size_t kReasons = 64;
   struct Reason {
     char why[kWhy];
     long n;
   };
   Buf<Reason> reasons;
-  Buf<uint32_t> index;  // (a power of 2 of them, more than twice the reasons)
+  long others;
 
   void Init() {
     nals = parsed = raw = trail = pad = 0;
     reasons.Init();
-    index.Init();
+    others = 0;
   }
-  void Quit() {
-    reasons.Quit();
-    index.Quit();
-  }
+  void Quit() { reasons.Quit(); }
 
   // a NAL unit stored verbatim, and why
   void verbatim(const char* why) {
     raw++;
-    char w[kWhy];
-    set_why(w, "%s", why);
-    if (2 * (reasons.size() + 1) > index.size()) reindex();
-    size_t mask = index.size() - 1;
-    for (size_t i = hash(w) & mask;; i = (i + 1) & mask) {
-      uint32_t k = index[i];
-      if (!k) {
-        Reason r;
-        memcpy(r.why, w, sizeof w);
-        r.n = 1;
-        reasons.push_back(r);
-        index[i] = (uint32_t)reasons.size();
+    for (Reason& r : reasons)
+      if (!strncmp(r.why, why, kWhy - 1)) {
+        r.n++;
         return;
       }
-      if (!strcmp(reasons[k - 1].why, w)) {
-        reasons[k - 1].n++;
-        return;
-      }
+    if (reasons.size() == kReasons) {
+      others++;
+      return;
     }
+    Reason r;
+    set_why(r.why, "%s", why);
+    r.n = 1;
+    reasons.push_back(r);
   }
   // and one with a header, the last: false if that ends the call (-s, where
   // the walk knows its type; said, and with -v said anyway)
@@ -74,35 +67,16 @@ struct Stats {
     return false;
   }
   // -v's report at the end: done, what was done to the NAL units not stored
-  // verbatim; pads, what pad counts. (The reasons in order of their text:
-  // the index is made again if one comes after.)
+  // verbatim; pads, what pad counts (the reasons in order of their text)
   void report(const char* done, const char* pads, Progress* meter) {
     say(meter, "%ld NAL units: %ld %s (%ld with irregular trailing bits), %ld stored verbatim\n", nals, parsed, done,
         trail, raw);
     if (pad) say(meter, "%ld %s\n", pad, pads);
     if (!reasons.empty()) qsort(reasons.data(), reasons.size(), sizeof(Reason), by_why);
-    index.clear();
     for (const Reason& r : reasons) say(meter, "  verbatim: %ld x %s\n", r.n, r.why);
-  }
-
-  static uint64_t hash(const char* w) {
-    uint64_t h = 14695981039346656037ull;  // (FNV-1a)
-    for (; *w; w++) h = (h ^ (uint8_t)*w) * 1099511628211ull;
-    return h;
+    if (others) say(meter, "  verbatim: %ld x for other reasons\n", others);
   }
   static int by_why(const void* a, const void* b) { return strcmp(((const Reason*)a)->why, ((const Reason*)b)->why); }
-  // the index, of room for the reasons and one more
-  void reindex() {
-    size_t m = 16;
-    while (m < 2 * (reasons.size() + 1)) m *= 2;
-    index.clear();
-    index.resize(m);
-    for (size_t k = 0; k < reasons.size(); k++) {
-      size_t i = hash(reasons[k].why) & (m - 1);
-      while (index[i]) i = (i + 1) & (m - 1);
-      index[i] = (uint32_t)(k + 1);
-    }
-  }
 };
 
 // x264 ends its CABAC data in its own way: after the rbsp_stop_one_bit and
@@ -121,12 +95,10 @@ struct X264Padding {
     on = hold = false;
     frame = 0;
   }
-  // the padding bit of the next slice, which starts a picture or not
-  int bit(bool newpic) const {
-    if (!on) return 0;
-    uint64_t f = (uint64_t)frame + (newpic && !hold);
-    return 0x35a4e4f5u >> (f & 31) & 1;
-  }
+  // x264's padding bit of frame f; that of the next slice, which starts a
+  // picture or not
+  static int bit_of(int64_t f) { return 0x35a4e4f5u >> ((uint64_t)f & 31) & 1; }
+  int bit(bool newpic) const { return on ? bit_of(frame + (newpic && !hold)) : 0; }
   void set(int64_t n) { on = true, hold = true, frame = n; }
   void next_slice(bool newpic) {
     frame += newpic && !hold;
@@ -146,6 +118,7 @@ struct Context {
   X264Padding pad;
   SliceHeader sh;                // the slice's (code_nal())
   int slice_kind, slice_mbs;     // the last slice's picture (pic_kind, pic_mbs)
+  ValueLog plog;                 // a verbatim parameter set's values (update_params())
 
   void Init() {
     ps.Init();
@@ -153,10 +126,12 @@ struct Context {
     pad.Init();
     sh.Init();
     slice_kind = -1, slice_mbs = 0;
+    plog.Init();
   }
   void Quit() {
     ps.Quit();
     mbs.Quit();
+    plog.Quit();
   }
 
   // a NAL unit done, its payload (after the header byte) as in the stream:
@@ -217,7 +192,7 @@ struct PadDetector {
   }
 
   static const int kOff = 32;
-  int predict(int p) const { return 0x35a4e4f5u >> (((uint64_t)pic_ + p) & 31) & 1; }
+  int predict(int p) const { return X264Padding::bit_of((int64_t)pic_ + p); }
 
   int64_t pic_;        // pictures so far, the first one being 0
   int64_t n_;          // observations so far
@@ -425,17 +400,15 @@ bool find_trailer(const BitWriter& bw, int pad, const Buf<uint8_t>& rbsp, Traile
 // parse: an error is of no matter)
 void update_params(int type, const Buf<uint8_t>& rbsp, Context& ctx) {
   if (type != 7 && type != 8) return;
-  ValueLog log;
-  log.Init();
+  ctx.plog.clear();
   LogChan ch;
-  ch.Init(log, false);
+  ch.Init(ctx.plog, false);
   ErrTrap t;
   if (!setjmp(t.jb)) {
     err_push(t);
     read_nal(type, 0, rbsp, ctx, ch);
     err_pop(t);
   }
-  log.Quit();
 }
 
 // The RBSP of a NAL unit's payload, to parse (rbsp), or false when the NAL
@@ -443,11 +416,11 @@ void update_params(int type, const Buf<uint8_t>& rbsp, Context& ctx) {
 // emulation prevention that escape() would not write (into esc; an SPS or
 // PPS still defines its parameter set)
 bool nal_rbsp(const NalHead& h, Context& ctx, Buf<uint8_t>& rbsp, Buf<uint8_t>& esc, char* why) {
-  unescape(h.payload, h.len, rbsp);
   if (!parsed_type(h.type)) {
     set_why(why, "NAL unit type %d", h.type);
     return false;
   }
+  unescape(h.payload, h.len, rbsp);
   esc.clear();
   escape(rbsp.data(), rbsp.size(), esc);
   if (!esc.same(h.payload, h.len)) {
@@ -500,6 +473,7 @@ void put_start(Buf<uint8_t>& buf, uint64_t zeros, F spill) {
 // parameter set: rbsp, room for it)
 void put_verbatim(Buf<uint8_t>& buf, int type, const Buf<uint8_t>& b, Context& ctx, Buf<uint8_t>& rbsp) {
   buf.append(b.data(), b.size());
+  if (type != 7 && type != 8) return;
   unescape(b.data(), b.size(), rbsp);
   update_params(type, rbsp, ctx);
 }
