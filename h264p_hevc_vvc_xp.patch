@@ -1,0 +1,418 @@
+diff --git a/h264p_src/model.inc b/h264p_src/model.inc
+index 3a738b3..3bed4e2 100644
+--- a/h264p_src/model.inc
++++ b/h264p_src/model.inc
+@@ -1068,6 +1068,9 @@ struct Model : tc_rc<f_DEC> {
+     for (int& v : sub_) v = 0;
+     pmv_[0] = pmv_[1] = 0;
+     pmv_ok_ = false;
++#ifdef XP_ITMP
++    itmp_ = false;
++#endif
+     pxq_ = 0;
+     prx_v_[0] = prx_v_[1] = 0;
+     prx_blk_ = 0;
+@@ -1273,6 +1276,9 @@ struct Model : tc_rc<f_DEC> {
+   //   the vectors of its macroblocks' proxies (pxv_; INT16_MIN none)
+   int pmv_[2];
+   bool pmv_ok_;
++#ifdef XP_ITMP
++  bool itmp_;
++#endif
+   int pxq_;
+   int prx_v_[2];
+   int prx_blk_;
+@@ -1291,6 +1297,13 @@ struct Model : tc_rc<f_DEC> {
+   bool pdn_;
+   int tmv_[2];
+   bool tmn_;
++#ifdef XP_MVDUMP
++  int dbgn_[3][3], dbgtm_[2], dbgcm_[2];
++  bool dbgtmok_, dbgcmok_;
++#endif
++#ifdef XP_HMVP
++  int hmv_[2][8][3], nhmv_[2];  // recent distinct coded vectors per list: ref, x, y
++#endif
+   int tmq_;
+   int talt_[2];
+   int mvx_;
+@@ -1425,6 +1438,9 @@ struct Model : tc_rc<f_DEC> {
+     cur_poc_ = hist_.poc[key_];
+     phk_ = phist_key_of_slice();
+     if (newpic) {
++#ifdef XP_HMVP
++      nhmv_[0] = nhmv_[1] = 0;
++#endif
+       aq_.picture(key_, size_);
+       pxv_.fill(size_ * 2, INT16_MIN);
+       memset(lq_, 0, sizeof lq_);
+@@ -1473,6 +1489,9 @@ struct Model : tc_rc<f_DEC> {
+     sm_ = tm_ = tb_ = dh_ = bd_ = tx_ = 0;
+     tmb_ok_ = false;
+     pmv_ok_ = false;
++#ifdef XP_ITMP
++    itmp_ = false;
++#endif
+     smv_ok_ = false;
+     shx_ = shy_ = shd_ = 0;
+     prx_chroma_ = false;
+@@ -1921,6 +1940,16 @@ struct Model : tc_rc<f_DEC> {
+       pxv_[addr_ * 2 + 1] = (int16_t)tc_clamp(p[1], -32767, 32767);
+     }
+     proxy_build_(p);
++#ifdef XP_ITMP
++    itmp_ = false;
++    if (LV::proxy && rec_.prx_ok) {
++      int bx, by, bc;
++      #ifndef XP_ITMP_K
++#define XP_ITMP_K 1
++#endif
++      if (rec_.itmp_search(bx, by, bc) && (int64_t)bc * XP_ITMP_K < rec_.ref_tcost(p)) rec_.itmp_build(bx, by), itmp_ = true;
++    }
++#endif
+     prx_v_[0] = p[0];
+     prx_v_[1] = p[1];
+     pmv_[0] = (p[0] + 2) >> 2;
+@@ -2410,11 +2439,30 @@ struct Model : tc_rc<f_DEC> {
+       tc_syms[STG_MVSG]++;
+       v = mvd_sign(list, comp, v, dv, va, vb, ea, eb, D.tq);
+     }
++#ifdef XP_MVDUMP
++    // (encode only) poc stype addr list ref x y w h mvp mv, A B C (ref x y), col (ok x y), template (ok x y), qp class
++    if (comp && ENC)
++      fprintf(stderr, "MV %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d\n", cur_poc_,
++              (int)sc_->stype_, addr_, list, ref, x, y, w, h, mvp_[0], mvp_[1], mvp_[0] + mvx_, mvp_[1] + v, dbgn_[0][0],
++              dbgn_[0][1], dbgn_[0][2], dbgn_[1][0], dbgn_[1][1], dbgn_[1][2], dbgn_[2][0], dbgn_[2][1], dbgn_[2][2],
++              (int)dbgcmok_, dbgcm_[0], dbgcm_[1], (int)dbgtmok_, dbgtm_[0], dbgtm_[1], qp_pred_, (int)mi_->cls);
++#endif
+     if (!comp) {
+       mvx_ = v;
+     } else if (LV::mvp) {
+       int mv[2] = {mvp_[0] + mvx_, mvp_[1] + v};
+       mvpred_.set(mi_->mv, mi_->rf, list, x, y, w, h, ref, mv);
++#ifdef XP_HMVP
++      {
++        int (*H)[3] = hmv_[list];
++        int n = nhmv_[list], j = 0;
++        while (j < n && !(H[j][0] == ref && H[j][1] == mv[0] && H[j][2] == mv[1])) j++;
++        if (j == n) j = n < 8 ? n++ : 7;
++        for (; j > 0; j--) H[j][0] = H[j - 1][0], H[j][1] = H[j - 1][1], H[j][2] = H[j - 1][2];
++        H[0][0] = ref, H[0][1] = mv[0], H[0][2] = mv[1];
++        nhmv_[list] = n;
++      }
++#endif
+     }
+     int16_t s = (int16_t)tc_clamp(v, -32767, 32767);
+     int8_t te = tmn_ ? (int8_t)-128 : (int8_t)tc_clamp(v - dv, -127, 127);
+@@ -2477,8 +2525,29 @@ struct Model : tc_rc<f_DEC> {
+     }
+     if (!pdn_) cand[nc][0] = cm[0], cand[nc][1] = cm[1], nc++;
+     if (ccok) cand[nc][0] = cc[0], cand[nc][1] = cc[1], nc++;  // and col's, temporal direct's taken
++#ifdef XP_HMVP
++    {
++      int cand2[8 + XP_HMVP][2];
++      for (int j = 0; j < nc; j++) cand2[j][0] = cand[j][0], cand2[j][1] = cand[j][1];
++      int n2 = nc;
++      for (int j = 0, used = 0; j < nhmv_[list] && used < XP_HMVP; j++)
++        if (hmv_[list][j][0] == ref) {
++          bool dup = false;
++          for (int k = 0; k < n2; k++) dup |= cand2[k][0] == hmv_[list][j][1] && cand2[k][1] == hmv_[list][j][2];
++          if (!dup) cand2[n2][0] = hmv_[list][j][1], cand2[n2][1] = hmv_[list][j][2], n2++, used++;
++        }
++      cand2[n2][0] = cand2[n2][1] = 0, n2++;
++      tmn_ = !tm_search_(list, ref, x * 4, y * 4, w * 4, h * 4, tmv_, false, cand2, n2, &tmq_, kTmLambda, 1, 0, talt_);
++    }
++#else
+     cand[nc][0] = cand[nc][1] = 0, nc++;
+     tmn_ = !tm_search_(list, ref, x * 4, y * 4, w * 4, h * 4, tmv_, false, cand, nc, &tmq_, kTmLambda, 1, 0, talt_);
++#endif
++#ifdef XP_MVDUMP
++    for (int j = 0; j < 3; j++) dbgn_[j][0] = nbs[j].ref, dbgn_[j][1] = nbs[j].mv[0], dbgn_[j][2] = nbs[j].mv[1];
++    dbgtm_[0] = tmv_[0], dbgtm_[1] = tmv_[1], dbgtmok_ = !tmn_;
++    dbgcm_[0] = cm[0], dbgcm_[1] = cm[1], dbgcmok_ = !pdn_;
++#endif
+   }
+   // the sign of a nonzero mvd component v (the mvg family), knowing the
+   // magnitude: whether it is the template match's (dv), the zero vector's,
+@@ -2907,6 +2976,10 @@ struct Model : tc_rc<f_DEC> {
+     // block's); how far to trust it (pq)
+     bool pok;
+     int plv[64], pnz, esuf[65], pq;
++#ifdef XP_LIC
++    bool lic;
++    int licq;
++#endif
+     // a luma block of a P picture on its first reference (tok): the block
+     // its vector points at in the last picture of the kind (tcol, its place
+     // tbx, tby in it; tmv: the vector moves it), its nonzero coefficients
+@@ -2937,7 +3010,26 @@ struct Model : tc_rc<f_DEC> {
+     }
+   };
+   // a block of coefficients (c, n of them; coded: as coded_block_flag)
++#ifdef XP_STAT
++  struct XpStat {
++    double b[2][14]; long n[2][14];
++    ~XpStat() {
++      const char* nm[14] = {"I16DC", "I16AC", "L4x4", "CDC", "CAC", "L8x8", "", "", "", "", "", "", "", ""};
++      double t = 0;
++      for (int i = 0; i < 2; i++) for (int c = 0; c < 14; c++) t += b[i][c];
++      for (int i = 0; i < 2; i++)
++        for (int c = 0; c < 6; c++)
++          if (n[i][c]) fprintf(stderr, "XPSTAT %s %-6s blocks %8ld  bytes %9.0f  %5.1f%%\n", i ? "intra" : "inter", nm[c], n[i][c], b[i][c] / 8, 100 * b[i][c] / t);
++    }
++  };
++  static XpStat& xpstat() { static XpStat s = {}; return s; }
++#endif
+   void block(int cat, int idx, int* c, int n, bool coded) {
++#ifdef XP_STAT
++    double xp0 = 0;
++    for (int k = STG_CBF; k <= STG_SGN; k++) xp0 += this->tc_bits[k];
++    struct XpG { Model* m; double x0; int cat; ~XpG() { double x1 = 0; for (int k = STG_CBF; k <= STG_SGN; k++) x1 += m->tc_bits[k]; int i = m->mi_->cls >= CL_INXN; xpstat().b[i][cat] += x1 - x0; xpstat().n[i][cat]++; } } xpg = {this, xp0, cat};
++#endif
+     prepare();
+     if (cat == 2 || cat == 5) rec_.luma_ready(idx, mi_->qp - qp_off_);
+     if (cat == 4 && sc_->chroma_ == 1) rec_.chroma_ready(idx >> 2 & 1, idx & 3, mi_->qp - qp_off_);
+@@ -3002,6 +3094,17 @@ struct Model : tc_rc<f_DEC> {
+   INLINE void block_proxy(BlockCx& b) {
+     const Geo& g = b.g;
+     b.pok = false;
++#ifdef XP_LIC
++    b.lic = false;
++    if (LV::proxy && mi_->cls < CL_INXN && b.cat == 3 && sc_->chroma_ == 1) {
++      int l = mi_->rf[0][0] >= 0 ? 0 : mi_->rf[1][0] >= 0 ? 1 : -1;
++      if (l >= 0) {
++        int qp = mi_->qp - qp_off_;
++        b.pok = b.lic = rec_.lic_dc(g.plane, l, mi_->rf[l][0], mi_->mv[l][0][0], mi_->mv[l][0][1],
++                                    rec_.chroma_qp_of(g.plane - 1, qp), b.plv, b.licq);
++      }
++    }
++#endif
+     if (mi_->cls >= CL_INXN && mi_->cls != CL_PCM && sc_->chroma_ == 1) {
+       proxy_mv();
+       int qp = mi_->qp - qp_off_;
+@@ -3019,11 +3122,17 @@ struct Model : tc_rc<f_DEC> {
+           inner = 2;
+         }
+         int p[2] = {prx_v_[0], prx_v_[1]};
++#ifdef XP_ITMP
++        if (itmp_) inner = 0;
++#endif
+         if (inner && tm_search_(-1, 0, 0, 0, 16, 16, p, false, nullptr, 0, nullptr, 0, 1, inner)) {
+           proxy_build_(p);
+           prx_v_[0] = p[0];
+           prx_v_[1] = p[1];
+         }
++#ifdef XP_CCLM
++        if (inner == 1 && LV::proxy) rec_.proxy_cclm(XP_CCLM);
++#endif
+       }
+       if (g.kind == 0)
+         b.pok = proxy_dc_(g.plane, g.plane ? rec_.chroma_qp_of(g.plane - 1, qp) : qp, b.plv);
+@@ -3071,6 +3180,9 @@ struct Model : tc_rc<f_DEC> {
+     if (pok) {
+       int pa = proxy_acc_();
+       b.pq = pa >= 0 ? 13 + tc_clamp(tc_qlog(pa), 0, 11) : pxq_;
++#ifdef XP_LIC
++      if (b.lic) b.pq = 1 + tc_clamp(tc_qlog(b.licq), 0, 11);
++#endif
+     }
+     D.pq = b.pq;
+     D.tn = tok ? 1 + 5 * b.tmv + Min(b.tnz, 4) : 0;
+@@ -3317,9 +3429,29 @@ struct Model : tc_rc<f_DEC> {
+           if (j > k && j <= last && sig[j]) sum += mag[j];  // none significant beyond last
+           nn += j > k && j < n;
+         };
++#ifndef XP_LT
+         if (fx + 1 < sg.w) lv(r + 1);
+         if (fy + 1 < sg.h) lv(r + sg.w);
+         L.lt = nn ? 1 + Min(sum, 6) : 0;
++#else
++        // VVC's template (9.3.4.2.7): right, right 2, below, below 2, below right
++        int ns = 0;
++        auto lv5 = [&](int rr) {
++          int j = sg.inv[rr] - g.off;
++          if (j > k && j <= last && sig[j]) sum += Min(mag[j], 4), ns++;
++          nn += j > k && j < n;
++        };
++        if (fx + 1 < sg.w) lv5(r + 1);
++        if (fx + 2 < sg.w) lv5(r + 2);
++        if (fy + 1 < sg.h) lv5(r + sg.w);
++        if (fy + 2 < sg.h) lv5(r + 2 * sg.w);
++        if (fx + 1 < sg.w && fy + 1 < sg.h) lv5(r + sg.w + 1);
++#if XP_LT == 1
++        L.lt = nn ? 1 + Min(sum, 6) : 0;
++#else
++        L.lt = nn ? 1 + Min(sum - ns, 6) : 0;   // VVC's gtx offset: the levels above 1
++#endif
++#endif
+       }
+       L.tz = tok ? 1 + 4 * b.tmv + Min(abs(b.tcf(k)), 3) : 0;
+       L.sa = na.m ? Min(abs(coef_at(na.m, g, na.i, k)), 3) : 0;
+diff --git a/h264p_src/recon.inc b/h264p_src/recon.inc
+index 40699b5..1153ed6 100644
+--- a/h264p_src/recon.inc
++++ b/h264p_src/recon.inc
+@@ -2738,6 +2738,55 @@ struct ReconT : MbDecoder<K> {
+     prx_ok = true;
+     return true;
+   }
++#ifdef XP_CCLM
++  // XP: the chroma proxy from the macroblock's decoded luma (VVC's CCLM):
++  // 1 a linear model fitted on the samples around the macroblock, applied
++  // to its luma; 2 the proxy corrected by its luma's miss, the slope fitted
++  // on the proxy; 3 the same, the slope fitted around the macroblock
++  void proxy_cclm(int mode) {
++    if (!act() || !prx_ok) return;
++    int w = cur->w, cw = stride(1);
++    const uint8_t* Y = mb_px(mb_addr, 0);
++    int lds[64], pds[64];
++    for (int j = 0; j < 8; j++)
++      for (int i = 0; i < 8; i++) {
++        const uint8_t* p = Y + 2 * j * w + 2 * i;
++        lds[j * 8 + i] = (p[0] + p[1] + p[w] + p[w + 1] + 2) >> 2;
++        const uint8_t* q = prx_y + 2 * j * 16 + 2 * i;
++        pds[j * 8 + i] = (q[0] + q[1] + q[16] + q[17] + 2) >> 2;
++      }
++    bool top = above_done(), left = left_done();
++    for (int c = 0; c < 2; c++) {
++      uint8_t* P = prx_c[c];
++      const uint8_t* C = mb_px(mb_addr, 1 + c);
++      double n = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;
++      auto add = [&](double x, double y) { n++, sx += x, sy += y, sxx += x * x, sxy += x * y; };
++      if (mode == 2) {
++        for (int k = 0; k < 64; k++) add(pds[k], P[k]);
++      } else {
++        if (top)
++          for (int i = 0; i < 8; i++) {
++            const uint8_t* p = Y - 2 * w + 2 * i;
++            add((p[0] + p[1] + p[w] + p[w + 1] + 2) >> 2, C[-cw + i]);
++          }
++        if (left)
++          for (int j = 0; j < 8; j++) {
++            const uint8_t* p = Y + 2 * j * w - 2;
++            add((p[0] + p[1] + p[w] + p[w + 1] + 2) >> 2, C[j * cw - 1]);
++          }
++      }
++      if (n < 4) continue;
++      double den = n * sxx - sx * sx, a = den > 0 ? (n * sxy - sx * sy) / den : 0, b = (sy - a * sx) / n;
++      if (a > 4) a = 4;
++      if (a < -4) a = -4;
++      for (int k = 0; k < 64; k++) {
++        double v = mode == 1 ? a * lds[k] + b : P[k] + a * (lds[k] - pds[k]);
++        int iv = (int)(v + 0.5);
++        P[k] = (uint8_t)(iv < 0 ? 0 : iv > 255 ? 255 : iv);
++      }
++    }
++  }
++#endif
+   // how far the luma of the current macroblock decoded so far is from the
+   // proxy: 4 x the mean absolute difference; -1 none decoded or no proxy
+   int proxy_acc() const {
+@@ -2781,6 +2830,107 @@ struct ReconT : MbDecoder<K> {
+       if (mb_done8 >> b8 & 1) add((b8 & 1) * 8, (b8 >> 1) * 8, 8);
+     return cnt ? sum * 4 / cnt : -1;
+   }
++#ifdef XP_ITMP
++  // XP: ECM's intra template matching (IntraTMP) as the intra proxy: the
++  // block of the current picture, decoded already, whose template (4 rows
++  // above, 4 columns left) best matches the macroblock's; full samples
++  static constexpr int IT_T = 4;
++  int itmp_cost(const uint8_t* Y, int w, int x0, int y0, int cx, int cy, int best) const {
++    int c = 0;
++    for (int j = -IT_T; j < 0; j++) {
++      const uint8_t *a = Y + (y0 + j) * w + x0 - IT_T, *b = Y + (cy + j) * w + cx - IT_T;
++      for (int i = 0; i < 16 + IT_T; i++) c += abs(a[i] - b[i]);
++      if (c >= best) return c;
++    }
++    for (int j = 0; j < 16; j++) {
++      const uint8_t *a = Y + (y0 + j) * w + x0 - IT_T, *b = Y + (cy + j) * w + cx - IT_T;
++      for (int i = 0; i < IT_T; i++) c += abs(a[i] - b[i]);
++      if (c >= best) return c;
++    }
++    return c;
++  }
++  bool itmp_search(int& bx, int& by, int& bc) const {
++    if (!act()) return false;
++    int w = cur->w, x0 = mb_x(mb_addr), y0 = mb_y(mb_addr);
++    if (x0 < IT_T || y0 < IT_T || !above_done() || !left_done()) return false;
++    const uint8_t* Y = cur->y.data();
++    bc = INT_MAX;
++    for (int cy = Max(IT_T, y0 - XP_ITMP); cy <= y0; cy++)
++      for (int cx = Max(IT_T, x0 - XP_ITMP); cx <= Min(w - 16, x0 + XP_ITMP); cx++) {
++        if (cy + 16 > y0 && cx + 16 > x0) continue;  // not decoded yet
++        int c = itmp_cost(Y, w, x0, y0, cx, cy, bc);
++        if (c < bc) bc = c, bx = cx, by = cy;
++      }
++    return bc < INT_MAX;
++  }
++  // the same template's cost for the proxy picture at the vector mv (full samples)
++  int ref_tcost(const int* mv) const {
++    const RPic* P = proxy_pic();
++    int w = cur->w, x0 = mb_x(mb_addr), y0 = mb_y(mb_addr);
++    if (!P || x0 < IT_T || y0 < IT_T) return INT_MAX;
++    int cx = clip3(IT_T, w - 16, x0 + ((mv[0] + 2) >> 2)), cy = clip3(IT_T, P->h - 16, y0 + ((mv[1] + 2) >> 2));
++    const uint8_t *Y = cur->y.data(), *R = P->y.data();
++    int c = 0;
++    for (int j = -IT_T; j < 16; j++) {
++      const uint8_t *a = Y + (y0 + j) * w + x0 - IT_T, *b = R + (cy + j) * w + cx - IT_T;
++      for (int i = 0; i < (j < 0 ? 16 + IT_T : IT_T); i++) c += abs(a[i] - b[i]);
++    }
++    return c;
++  }
++  void itmp_build(int bx, int by) {
++    int w = cur->w, cw = w / 2;
++    for (int j = 0; j < 16; j++) memcpy(prx_y + j * 16, cur->y.data() + (by + j) * w + bx, 16);
++    for (int c = 0; c < 2; c++) {
++      const uint8_t* C = (c ? cur->v : cur->u).data();
++      for (int j = 0; j < 8; j++) memcpy(prx_c[c] + j * 8, C + (by / 2 + j) * cw + bx / 2, 8);
++    }
++    prx_ok = true;
++  }
++#endif
++#ifdef XP_LIC
++  // XP: ECM's local illumination compensation as an estimate of an inter
++  // macroblock's chroma DC: the decoded samples above and left of the
++  // macroblock less the same samples of its reference displaced by its
++  // vector, averaged per 4x4 block over the template parts next to it,
++  // as the 2x2 DC transform's levels (quarters); q how far the top and
++  // left templates disagree
++  bool lic_dc(int c, int l, int r, int mvx, int mvy, int qp, int* lv, int& q) const {
++    if (!act() || r < 0 || r >= nlist[l] || !list[l][r]) return false;
++    const RPic* P = list[l][r];
++    if (P->w != cur->w || P->h != cur->h) return false;
++    bool top = above_done(), left = left_done();
++    if (!top && !left) return false;
++    int cw = stride(c), cx = mb_x(mb_addr) / 2, cy = mb_y(mb_addr) / 2;
++    const uint8_t* C = mb_px(mb_addr, c);
++    uint8_t rt[64], rl[64];
++    int dt[8] = {}, dl[8] = {}, st = 0, sl = 0;
++    if (top) {
++      mc_chroma(P, c - 1, cx, cy - 1, 8, 1, mvx, mvy, rt);
++      for (int i = 0; i < 8; i++) dt[i] = C[-cw + i] - rt[i], st += dt[i];
++    }
++    if (left) {
++      mc_chroma(P, c - 1, cx - 1, cy, 1, 8, mvx, mvy, rl);
++      for (int j = 0; j < 8; j++) dl[j] = C[j * cw - 1] - rl[j * 8], sl += dl[j];
++    }
++    q = top && left ? abs(st - sl) : 0;
++    int d[4], f[4];
++    for (int by = 0; by < 2; by++)
++      for (int bx = 0; bx < 2; bx++) {
++        int sum = 0, n = 0;
++        if (top) for (int i = 0; i < 4; i++) sum += dt[bx * 4 + i], n++;
++        if (left) for (int j = 0; j < 4; j++) sum += dl[by * 4 + j], n++;
++        d[by * 2 + bx] = n ? sum * 16 / n : 0;
++      }
++    static const int mf0[6] = {13107, 11916, 10082, 9362, 8192, 7282};
++    int qb = 15 + qp / 6;
++    hadamard2x2(d, f);
++    for (int k = 0; k < 4; k++) {
++      int v = (int)(((int64_t)abs(f[k]) * mf0[qp % 6]) >> (qb - 1));
++      lv[k] = f[k] < 0 ? -v : v;
++    }
++    return true;
++  }
++#endif
+   const RPic* proxy_pic() const {
+     const RPic* P = nlist[0] > 0 && list[0][0] ? list[0][0] : !dpb.empty() ? dpb.back() : nullptr;
+     return P && P->w == cur->w && P->h == cur->h ? P : nullptr;
