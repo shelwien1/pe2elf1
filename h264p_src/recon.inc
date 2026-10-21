@@ -52,28 +52,55 @@ static int chroma_qp(int qpy, int off) {
 
 // A decoded picture, and what decoding later pictures needs of it.
 struct RPic {
-  int w = 0, h = 0, mbw = 0, mbh = 0;  // luma size (whole macroblocks), in macroblocks
-  std::vector<uint8_t> y, u, v;
-  int64_t id = 0;  // which picture it is (a reference picture of a block is compared by it)
-  int poc = 0, frame_num = 0, lt_idx = -1;
-  bool ref = false, lt = false;  // used for reference, long-term
+  int w, h, mbw, mbh;  // luma size (whole macroblocks), in macroblocks
+  Buf<uint8_t> y, u, v;
+  int64_t id;  // which picture it is (a reference picture of a block is compared by it)
+  int poc, frame_num, lt_idx;
+  bool ref, lt;  // used for reference, long-term
   // motion of the macroblocks, for direct prediction (8.4.1.2): per
   // macroblock whether intra, per 8x8 block and list refIdx (-1 none) and the
   // id of the picture it refers to, per 4x4 block and list the vector
-  std::vector<uint8_t> intra;
-  std::vector<int8_t> rf;      // [(mb * 4 + b8) * 2 + list]
-  std::vector<int64_t> rpid;   // likewise
-  std::vector<int16_t> mv;     // [((mb * 16 + blk) * 2 + list) * 2 + comp]
+  Buf<uint8_t> intra;
+  Buf<int8_t> rf;     // [(mb * 4 + b8) * 2 + list]
+  Buf<int64_t> rpid;  // likewise
+  Buf<int16_t> mv;    // [((mb * 16 + blk) * 2 + list) * 2 + comp]
   // the luma again with its edges repeated kPad samples out, so that the
   // reads of motion compensation and template matching near the edges
   // need no clipping (padded: made since the picture was finished)
   static constexpr int kPad = 32;
-  std::vector<uint8_t> yp;
+  Buf<uint8_t> yp;
 
   // and that transposed, its columns as rows (a template two samples wide
   // and 16 tall is then two rows of 16)
-  std::vector<uint8_t> yt;
-  bool padded = false;
+  Buf<uint8_t> yt;
+  bool padded;
+
+  void Init() {
+    w = h = mbw = mbh = 0;
+    y.Init(), u.Init(), v.Init();
+    id = 0;
+    poc = frame_num = 0, lt_idx = -1;
+    ref = lt = false;
+    intra.Init(), rf.Init(), rpid.Init(), mv.Init();
+    yp.Init(), yt.Init();
+    padded = false;
+  }
+  void Quit() {
+    y.Quit(), u.Quit(), v.Quit();
+    intra.Quit(), rf.Quit(), rpid.Quit(), mv.Quit();
+    yp.Quit(), yt.Quit();
+  }
+  // a new one, and one freed
+  static RPic* make() {
+    RPic* p = (RPic*)mem_alloc(sizeof(RPic));
+    p->Init();
+    return p;
+  }
+  static void drop(RPic* p) {
+    if (!p) return;
+    p->Quit();
+    mem_free(p);
+  }
 
   void pad_alloc() {
     yp.resize((size_t)(w + 2 * kPad) * (h + 2 * kPad));
@@ -112,20 +139,20 @@ struct RPic {
     w = mw * 16;
     h = mh * 16;
     if (px) {
-      y.assign((size_t)w * h, 0);
-      u.assign((size_t)w * h / 4, 128);
-      v.assign((size_t)w * h / 4, 128);
+      y.fill((size_t)w * h, 0);
+      u.fill((size_t)w * h / 4, 128);
+      v.fill((size_t)w * h / 4, 128);
     }
-    intra.assign((size_t)mw * mh, 1);
-    rf.assign((size_t)mw * mh * 8, -1);
-    rpid.assign((size_t)mw * mh * 8, -1);
-    mv.assign((size_t)mw * mh * 64, 0);
+    intra.fill((size_t)mw * mh, 1);
+    rf.fill((size_t)mw * mh * 8, -1);
+    rpid.fill((size_t)mw * mh * 8, -1);
+    mv.fill((size_t)mw * mh * 64, 0);
   }
 };
 
 // What deblocking needs of a macroblock of the current picture.
 struct DbMb {
-  int slice = -1;  // slice number in the picture, -1 not decoded
+  int slice;  // slice number in the picture, -1 not decoded
   uint8_t intra, t8, pcm, qp, disable;
   int8_t alpha_off, beta_off, cqp[2];
   uint8_t nz[16];          // 4x4 blocks with coefficients (raster)
@@ -139,34 +166,63 @@ struct DbMb {
 // the samples (Recon) or not (ReconRefs), and what it does as a picture
 // ends (mark()) and as a slice begins (poc(), build_lists(), weights()).
 struct Dpb {
-  std::vector<std::unique_ptr<RPic>> dpb;  // reference pictures
-  std::unique_ptr<RPic> cur;               // the picture being decoded
-  std::vector<std::unique_ptr<RPic>> spare;  // pictures to reuse
-  int64_t next_id = 1;
+  Buf<RPic*> dpb;    // reference pictures (16 at most: 15 and the last)
+  RPic* cur;         // the picture being decoded
+  Buf<RPic*> spare;  // pictures to reuse
+  int64_t next_id;
   // the current picture's header values that marking needs
-  int cur_idr = 0, cur_ref_idc = 0, cur_lt_flag = 0, cur_mmco5 = 0;
-  int cur_nmmco = 0;
+  int cur_idr, cur_ref_idc, cur_lt_flag, cur_mmco5;
+  int cur_nmmco;
   Mmco cur_mmco[68];
-  int max_frame_num = 16, max_num_ref = 1, max_lt_idx = -1;  // max_lt_idx: MaxLongTermFrameIdx, -1 none
+  int max_frame_num, max_num_ref, max_lt_idx;  // max_lt_idx: MaxLongTermFrameIdx, -1 none
   // POC state (8.2.1)
-  int prev_poc_msb = 0, prev_poc_lsb = 0, prev_frame_num = 0;
-  int64_t prev_frame_num_offset = 0;
+  int prev_poc_msb, prev_poc_lsb, prev_frame_num;
+  int64_t prev_frame_num_offset;
   // the current slice
-  RPic* list[2][33] = {};
-  int nlist[2] = {0, 0};
-  int curr_pic_num = 0;
+  RPic* list[2][33];
+  int nlist[2];
+  int curr_pic_num;
   // weighted prediction of the slice: per list and reference, luma w, o,
   // Cb w, o, Cr w, o; logWD luma, chroma; 0 default, 1 explicit, 2 implicit
-  int wmode = 0, lwd = 0, cwd = 0;
+  int wmode, lwd, cwd;
   int wt[2][32][6];
   int implicit_w[32][32];  // implicit bi-prediction weight of list 0 (64 - w for list 1)
+
+  void Init() {
+    dpb.Init();
+    cur = nullptr;
+    spare.Init();
+    next_id = 1;
+    cur_idr = cur_ref_idc = cur_lt_flag = cur_mmco5 = 0;
+    cur_nmmco = 0;
+    max_frame_num = 16, max_num_ref = 1, max_lt_idx = -1;
+    prev_poc_msb = prev_poc_lsb = prev_frame_num = 0;
+    prev_frame_num_offset = 0;
+    memset(list, 0, sizeof list);
+    nlist[0] = nlist[1] = 0;
+    curr_pic_num = 0;
+    wmode = lwd = cwd = 0;
+  }
+  void Quit() {
+    drop_refs();
+    dpb.Quit();
+    for (RPic* p : spare) RPic::drop(p);
+    spare.Quit();
+    RPic::drop(cur);
+    cur = nullptr;
+  }
+  // the reference pictures gone
+  void drop_refs() {
+    for (RPic* p : dpb) RPic::drop(p);
+    dpb.clear();
+  }
 
   int pic_num(const RPic* p) const { return p->lt ? p->lt_idx : (p->frame_num > cur->frame_num ? p->frame_num - max_frame_num : p->frame_num); }
 
   void mark() {
-    RPic* c = cur.get();
+    RPic* c = cur;
     if (cur_idr) {
-      dpb.clear();
+      drop_refs();
       if (cur_lt_flag) {
         c->lt = true;
         c->lt_idx = 0;
@@ -184,21 +240,21 @@ struct Dpb {
         switch (op.op) {
           case 1: {  // a short-term picture no longer used for reference
             int pn = curr_pic_num - (int)(a + 1);
-            for (auto& p : dpb)
-              if (p->ref && !p->lt && pic_num(p.get()) == pn) p->ref = false;
+            for (RPic* p : dpb)
+              if (p->ref && !p->lt && pic_num(p) == pn) p->ref = false;
             break;
           }
           case 2:  // a long-term picture
-            for (auto& p : dpb)
+            for (RPic* p : dpb)
               if (p->ref && p->lt && p->lt_idx == a) p->ref = false;
             break;
           case 3: {  // a short-term picture becomes long-term
             int pn = curr_pic_num - (int)(a + 1);
             int idx = (int)(op.n > 1 ? op.arg[1] : 0);
-            for (auto& p : dpb)
+            for (RPic* p : dpb)
               if (p->ref && p->lt && p->lt_idx == idx) p->ref = false;
-            for (auto& p : dpb)
-              if (p->ref && !p->lt && pic_num(p.get()) == pn) {
+            for (RPic* p : dpb)
+              if (p->ref && !p->lt && pic_num(p) == pn) {
                 p->lt = true;
                 p->lt_idx = idx;
               }
@@ -206,15 +262,15 @@ struct Dpb {
           }
           case 4:
             max_lt_idx = (int)a - 1;
-            for (auto& p : dpb)
+            for (RPic* p : dpb)
               if (p->ref && p->lt && p->lt_idx > max_lt_idx) p->ref = false;
             break;
           case 5:
-            for (auto& p : dpb) p->ref = false;
+            for (RPic* p : dpb) p->ref = false;
             max_lt_idx = -1;
             break;
           case 6:
-            for (auto& p : dpb)
+            for (RPic* p : dpb)
               if (p->ref && p->lt && p->lt_idx == a) p->ref = false;
             c->lt = true;
             c->lt_idx = (int)a;
@@ -224,12 +280,12 @@ struct Dpb {
     } else {
       // sliding window
       int ns = 0, nl = 0;
-      for (auto& p : dpb)
+      for (RPic* p : dpb)
         if (p->ref) (p->lt ? nl : ns)++;
       if (ns + nl >= std::max(max_num_ref, 1) && ns > 0) {
         RPic* old = nullptr;
-        for (auto& p : dpb)
-          if (p->ref && !p->lt && (!old || pic_num(p.get()) < pic_num(old))) old = p.get();
+        for (RPic* p : dpb)
+          if (p->ref && !p->lt && (!old || pic_num(p) < pic_num(old))) old = p;
         if (old) old->ref = false;
       }
     }
@@ -237,17 +293,17 @@ struct Dpb {
     // pictures no longer used for reference go, and the oldest beyond the
     // 15 a conforming stream keeps besides the current one (a stream that
     // does not conform could make it keep any number)
-    std::vector<std::unique_ptr<RPic>> keep;
-    for (auto& p : dpb)
-      if (p->ref)
-        keep.push_back(std::move(p));
+    size_t keep = 0;  // (those kept move up, in order)
+    for (size_t i = 0; i < dpb.size(); i++)
+      if (dpb[i]->ref)
+        dpb[keep++] = dpb[i];
       else
-        spare.push_back(std::move(p));
-    if (keep.size() > 15) {
-      for (size_t i = 0; i + 15 < keep.size(); i++) spare.push_back(std::move(keep[i]));
-      keep.erase(keep.begin(), keep.end() - 15);
+        spare.push_back(dpb[i]);
+    dpb.n = keep;
+    if (keep > 15) {
+      for (size_t i = 0; i + 15 < keep; i++) spare.push_back(dpb[i]);
+      dpb.erase_front(keep - 15);
     }
-    dpb.swap(keep);
     if (cur_mmco5) {
       c->frame_num = 0;
       c->poc = 0;
@@ -309,40 +365,58 @@ struct Dpb {
     return poc_sat(std::min(top, bot));
   }
 
+  // pictures p[0, n) in order by less, where they are not, in their
+  // order before (an insertion sort: std::sort's for up to 16, as here)
+  template <class Less>
+  static void sort_pics(RPic** p, int n, Less less) {
+    for (int i = 1; i < n; i++) {
+      RPic* v = p[i];
+      int j = i;
+      for (; j > 0 && less(v, p[j - 1]); j--) p[j] = p[j - 1];
+      p[j] = v;
+    }
+  }
   // the reference lists of a slice (8.2.4.2, 8.2.4.3)
   void build_lists(const SliceHeader& h) {
     nlist[0] = nlist[1] = 0;
     int t = h.type();
     if (t == kI || t == kSI) return;
-    std::vector<RPic*> st, lt;
-    for (auto& p : dpb)
-      if (p->ref) (p->lt ? lt : st).push_back(p.get());
-    std::sort(lt.begin(), lt.end(), [](const RPic* a, const RPic* b) { return a->lt_idx < b->lt_idx; });
-    std::vector<RPic*> l[2];
+    RPic *st[16], *lt[16];  // (the reference pictures: 16 at most)
+    int nst = 0, nlt = 0;
+    for (RPic* p : dpb)
+      if (p->ref) (p->lt ? lt[nlt++] : st[nst++]) = p;
+    sort_pics(lt, nlt, [](const RPic* a, const RPic* b) { return a->lt_idx < b->lt_idx; });
+    RPic* l[2][33];  // (and one more, inserted)
+    int nl[2] = {0, 0};
     if (t == kB) {
-      std::vector<RPic*> before, after;
-      for (RPic* p : st) (p->poc < cur->poc ? before : after).push_back(p);
-      std::sort(before.begin(), before.end(), [](const RPic* a, const RPic* b) { return a->poc > b->poc; });
-      std::sort(after.begin(), after.end(), [](const RPic* a, const RPic* b) { return a->poc < b->poc; });
-      l[0] = before;
-      l[0].insert(l[0].end(), after.begin(), after.end());
-      l[0].insert(l[0].end(), lt.begin(), lt.end());
-      l[1] = after;
-      l[1].insert(l[1].end(), before.begin(), before.end());
-      l[1].insert(l[1].end(), lt.begin(), lt.end());
-      if (l[1].size() > 1 && l[1] == l[0]) std::swap(l[1][0], l[1][1]);
+      RPic *before[16], *after[16];
+      int nb = 0, na = 0;
+      for (int i = 0; i < nst; i++) (st[i]->poc < cur->poc ? before[nb++] : after[na++]) = st[i];
+      sort_pics(before, nb, [](const RPic* a, const RPic* b) { return a->poc > b->poc; });
+      sort_pics(after, na, [](const RPic* a, const RPic* b) { return a->poc < b->poc; });
+      for (int i = 0; i < nb; i++) l[0][nl[0]++] = before[i];
+      for (int i = 0; i < na; i++) l[0][nl[0]++] = after[i];
+      for (int i = 0; i < nlt; i++) l[0][nl[0]++] = lt[i];
+      for (int i = 0; i < na; i++) l[1][nl[1]++] = after[i];
+      for (int i = 0; i < nb; i++) l[1][nl[1]++] = before[i];
+      for (int i = 0; i < nlt; i++) l[1][nl[1]++] = lt[i];
+      if (nl[1] > 1 && !memcmp(l[1], l[0], nl[1] * sizeof(RPic*))) {
+        RPic* p = l[1][0];
+        l[1][0] = l[1][1], l[1][1] = p;
+      }
     } else {
-      std::sort(st.begin(), st.end(), [this](const RPic* a, const RPic* b) { return pic_num(a) > pic_num(b); });
-      l[0] = st;
-      l[0].insert(l[0].end(), lt.begin(), lt.end());
+      sort_pics(st, nst, [this](const RPic* a, const RPic* b) { return pic_num(a) > pic_num(b); });
+      for (int i = 0; i < nst; i++) l[0][nl[0]++] = st[i];
+      for (int i = 0; i < nlt; i++) l[0][nl[0]++] = lt[i];
     }
     for (int li = 0; li < (t == kB ? 2 : 1); li++) {
       // (32 at most, as the parser reads it: list[][] and the weights are of
       // that many)
       int n = std::min(h.num_ref_idx_active[li], 32);
-      std::vector<RPic*>& L = l[li];
-      L.resize(std::max((int)L.size(), n), nullptr);
-      L.resize(n);
+      RPic** L = l[li];
+      int& nL = nl[li];
+      for (; nL < n; nL++) L[nL] = nullptr;
+      nL = n;
       // modifications
       int pred = curr_pic_num, ri = 0;
       for (int m = 0; m < h.nrplm[li]; m++) {
@@ -356,21 +430,23 @@ struct Dpb {
           if (nw >= max_frame_num) nw -= max_frame_num;
           pred = nw;
           int pn = nw > curr_pic_num ? nw - max_frame_num : nw;
-          for (RPic* p : st)
-            if (pic_num(p) == pn) pic = p;
+          for (int i = 0; i < nst; i++)
+            if (pic_num(st[i]) == pn) pic = st[i];
         } else if (op.idc == 2) {
-          for (RPic* p : lt)
-            if (p->lt_idx == op.arg) pic = p;
+          for (int i = 0; i < nlt; i++)
+            if (lt[i]->lt_idx == op.arg) pic = lt[i];
         }
         if (!pic) continue;
-        L.insert(L.begin() + ri, pic);
-        ri++;
-        for (int k = ri; k < (int)L.size(); k++)
-          if (L[k] == pic) {
-            L.erase(L.begin() + k);
+        for (int k = nL; k > ri; k--) L[k] = L[k - 1];  // (inserted at ri)
+        L[ri++] = pic;
+        nL++;
+        for (int k = ri; k < nL; k++)
+          if (L[k] == pic) {  // (and taken out after)
+            for (; k + 1 < nL; k++) L[k] = L[k + 1];
+            nL--;
             break;
           }
-        L.resize(n);
+        nL = n;
       }
       nlist[li] = n;
       for (int k = 0; k < n; k++) list[li][k] = L[k];
@@ -416,10 +492,22 @@ struct Dpb {
 // of its 4x4 blocks changed from the picture before (16 x the mean
 // absolute difference; -1 none); of w x h macroblocks (0 x 0 none yet)
 struct PicMaps {
-  std::vector<int> energy, change;
-  int energy_mean = 0, w = 0, h = 0;
-  std::vector<int> means;                        // 16 x the means of the 4x4 blocks, for the next picture's change
-  std::vector<int> energy_n, change_n, means_n;  // (the next picture's, made in place)
+  Buf<int> energy, change;
+  int energy_mean, w, h;
+  Buf<int> means;                        // 16 x the means of the 4x4 blocks, for the next picture's change
+  Buf<int> energy_n, change_n, means_n;  // (the next picture's, made in place)
+
+  void Init() {
+    energy.Init(), change.Init();
+    energy_mean = w = h = 0;
+    means.Init();
+    energy_n.Init(), change_n.Init(), means_n.Init();
+  }
+  void Quit() {
+    energy.Quit(), change.Quit();
+    means.Quit();
+    energy_n.Quit(), change_n.Quit(), means_n.Quit();
+  }
 
   // 4 log2 v, rounded down to quarters (integers only: the model must come
   // out the same everywhere)
@@ -434,7 +522,7 @@ struct PicMaps {
     int n = mbw * mbh;
     bool same = w == mbw && h == mbh && (int)means.size() == n * 16;
     energy_n.resize(n);
-    change_n.assign(n, -1);
+    change_n.fill(n, -1);
     means_n.resize((size_t)n * 16);
     int64_t sum = 0;
     for (int my = 0, a = 0; my < mbh; my++)
@@ -481,7 +569,7 @@ struct MbDecoder : Dpb {
   static constexpr bool REFS = K >= 1, PX = K == 2;
   // a picture is current: its motion and reference lists are known
   // (motion()), and its samples (act())
-  bool mact = false;
+  bool mact;
   bool motion() const { return REFS && mact; }
   bool act() const { return PX && mact; }
   // Where things are in the current picture: macroblock addr's first
@@ -495,17 +583,25 @@ struct MbDecoder : Dpb {
   int stride(int c) const { return c ? cur->w / 2 : cur->w; }
   uint8_t* mb_px(int addr, int c) const { return plane(c) + mb_y(addr, c ? 8 : 16) * stride(c) + mb_x(addr, c ? 8 : 16); }
   uint8_t* mb_at(int c, int x, int y) const { return mb_px(mb_addr, c) + y * stride(c) + x; }
-  std::vector<DbMb> db;
-  int slice_no = 0;
-  int cqp_off[2] = {0, 0};
-  int disable = 0, alpha_off = 0, beta_off = 0;
-  bool constrained_intra = false, direct8x8 = true;
+  Buf<DbMb> db;
+  int slice_no;
+  int cqp_off[2];
+  int disable, alpha_off, beta_off;
+  bool constrained_intra, direct8x8;
   // what the model sees of the last picture finished
   PicMaps maps;
   // H264P_RECDUMP's file (finish_picture()), opened as the first picture is
   struct RecDump {
-    FILE* f = nullptr;
-    bool tried = false;
+    FILE* f;
+    bool tried;
+    void Init() {
+      f = nullptr;
+      tried = false;
+    }
+    void Quit() {
+      if (f) fclose(f);
+      f = nullptr;
+    }
     FILE* get() {
       if (!tried) {
         tried = true;
@@ -514,13 +610,36 @@ struct MbDecoder : Dpb {
       }
       return f;
     }
-    RecDump() {}
-    RecDump(const RecDump&) = delete;
-    void operator=(const RecDump&) = delete;
-    ~RecDump() {
-      if (f) fclose(f);
-    }
   } recdump;
+
+  void Init() {
+    Dpb::Init();
+    mact = false;
+    db.Init();
+    slice_no = 0;
+    cqp_off[0] = cqp_off[1] = 0;
+    disable = alpha_off = beta_off = 0;
+    constrained_intra = false, direct8x8 = true;
+    maps.Init();
+    recdump.Init();
+    mb_addr = 0;
+    mb_cls = mb_t8 = 0;
+    mb_modes = nullptr;
+    mb_prepared = mb_dc = false;
+    skip_in = false;
+    mb_done4 = 0;
+    mb_done8 = 0;
+    pq_pic = -1;
+    pq_addr = -1;
+    pq_ok = false;
+    deblock = true;
+  }
+  void Quit() {
+    Dpb::Quit();
+    db.Quit();
+    maps.Quit();
+    recdump.Quit();
+  }
 
   // --- finishing the picture as its decoding ends: deblocking it, then
   // its maps and (a reference picture's) padded luma. Until
@@ -529,7 +648,12 @@ struct MbDecoder : Dpb {
   // (Finished row by row two rows behind the decoding, as when a thread of
   // its own did it, it measured no faster on the test streams:
   // h264p_review.md, D3.)
-  static DbMb db_none() { return DbMb(); }  // (zeros, but slice -1)
+  static DbMb db_none() {  // (zeros, but slice -1)
+    DbMb d;
+    memset((void*)&d, 0, sizeof d);
+    d.slice = -1;
+    return d;
+  }
   // (the decoding's side) a picture begins
   void fin_begin() {
     if (cur_ref_idc) cur->pad_alloc();
@@ -539,7 +663,7 @@ struct MbDecoder : Dpb {
     for (int row = 0; row < cur->mbh; row++) deblock_row(row);
     maps.add(cur->y.data(), cur->w, cur->mbw, cur->mbh);
     if (cur_ref_idc) cur->pad();
-    std::fill(db.begin(), db.end(), db_none());  // (for the next picture)
+    db.fill(db.size(), db_none());  // (for the next picture)
     if (cur_ref_idc) cur->padded = true;
   }
 
@@ -565,11 +689,11 @@ struct MbDecoder : Dpb {
       fwrite(cur->v.data(), 1, cur->v.size(), dump);
     }
     if (cur_ref_idc) mark();
-    if (cur->ref) {  // (fin_end() padded it)
-      dpb.push_back(std::move(cur));
-    } else {
-      spare.push_back(std::move(cur));
-    }
+    if (cur->ref)  // (fin_end() padded it)
+      dpb.push_back(cur);
+    else
+      spare.push_back(cur);
+    cur = nullptr;
     mact = false;
     nlist[0] = nlist[1] = 0;  // marking may have dropped the pictures they hold
   }
@@ -587,7 +711,7 @@ struct MbDecoder : Dpb {
     uint8_t m8, mdc, mcdc, mcac[2];
   } res;
   int pcm_s[384];
-  int mb_addr = 0;
+  int mb_addr;
   void mb_start(int addr) {
     if (!REFS) return;
     // the motion of the next macroblock's colocated one (direct prediction),
@@ -1056,15 +1180,15 @@ struct MbDecoder : Dpb {
 
   // The macroblock being reconstructed: what its prediction needs, from
   // prepare() on, and which of its luma blocks are done.
-  int mb_cls = 0, mb_t8 = 0;
-  const uint8_t* mb_modes = nullptr;
-  bool mb_prepared = false, mb_dc = false;
+  int mb_cls, mb_t8;
+  const uint8_t* mb_modes;
+  bool mb_prepared, mb_dc;
   // skip_miss put the prediction by this motion in the picture
-  bool skip_in = false;
+  bool skip_in;
   int8_t skip_rf[2][4];
   int16_t skip_mv[2][16][2];
-  uint16_t mb_done4 = 0;  // 4x4 blocks (luma4x4BlkIdx) done
-  uint8_t mb_done8 = 0;
+  uint16_t mb_done4;  // 4x4 blocks (luma4x4BlkIdx) done
+  uint8_t mb_done8;
   int mb_dcr[16];         // Intra16x16 DC, scaled (raster)
   uint8_t mb_cdone[2];    // chroma blocks done, per component
   bool mb_cdc[2];         // their DC scaled
@@ -1315,9 +1439,9 @@ struct MbDecoder : Dpb {
   // lists predicts from the current picture (a missing reference), which
   // changes
   uint8_t pq_l[2][256], pq_c[2][2][64];
-  int64_t pq_pic = -1;
-  int pq_addr = -1;
-  bool pq_ok = false;
+  int64_t pq_pic;
+  int pq_addr;
+  bool pq_ok;
   int8_t pq_rf[2][4];
   int16_t pq_mv[2][16][2];
   bool predicted(int addr, const int8_t rf[2][4], const int16_t mv[2][16][2]) const {
@@ -1341,7 +1465,7 @@ struct MbDecoder : Dpb {
         int r = rf[l][b8];
         if (r < 0) continue;
         const RPic* ref = r < nlist[l] ? list[l][r] : nullptr;
-        if (!ref) ref = cur.get(), pq_ok = false;  // a missing reference: whatever is there
+        if (!ref) ref = cur, pq_ok = false;  // a missing reference: whatever is there
         int x0 = (b8 & 1) * 2, y0 = (b8 >> 1) * 2, n = whole ? 4 : 2;
         bool same = true;
         if (!whole)
@@ -1728,7 +1852,7 @@ struct MbDecoder : Dpb {
   }
   // macroblock row row of the current picture (the rows above it done);
   // not where the level has the contexts see pictures unfiltered
-  bool deblock = true;
+  bool deblock;  // (Init(): true)
   void deblock_row(int row) {
     if (!deblock) return;
     int mbw = cur->mbw, w = cur->w, cw = w / 2;
@@ -1812,24 +1936,24 @@ struct MbDecoder : Dpb {
     if (newpic || !cur || cur->mbw != sps.width_mbs || cur->mbh != sps.frame_height_mbs()) {
       finish_picture();
       if (!supported(sps, pps)) {
-        dpb.clear();
+        drop_refs();
         return;
       }
       max_frame_num = 1 << sps.log2_max_frame_num;
       max_num_ref = sps.max_num_ref_frames;
       if (!spare.empty()) {
-        cur = std::move(spare.back());
+        cur = spare.back();
         spare.pop_back();
       } else {
-        cur.reset(new RPic);
+        cur = RPic::make();
       }
       if (cur->mbw != sps.width_mbs || cur->mbh != sps.frame_height_mbs()) {
         cur->alloc(sps.width_mbs, sps.frame_height_mbs(), PX);
       } else {
         // (a picture of before: what no slice decodes has no motion, as in
         // a new one)
-        std::fill(cur->intra.begin(), cur->intra.end(), 1);
-        std::fill(cur->rf.begin(), cur->rf.end(), -1);
+        cur->intra.fill(cur->intra.size(), 1);
+        cur->rf.fill(cur->rf.size(), -1);
       }
       cur->ref = cur->lt = cur->padded = false;
       cur->lt_idx = -1;
@@ -1843,14 +1967,17 @@ struct MbDecoder : Dpb {
       cur_nmmco = h.nmmco;
       memcpy(cur_mmco, h.mmco, h.nmmco * sizeof(Mmco));
       // (finishing the last picture left db as none)
-      if (PX && db.size() != (size_t)cur->mbw * cur->mbh) db.assign((size_t)cur->mbw * cur->mbh, db_none());
+      if (PX && db.size() != (size_t)cur->mbw * cur->mbh) db.fill((size_t)cur->mbw * cur->mbh, db_none());
       slice_no = 0;
       mact = true;
       // references of another size are no use
-      std::vector<std::unique_ptr<RPic>> keep;
-      for (auto& p : dpb)
-        if (p->mbw == cur->mbw && p->mbh == cur->mbh) keep.push_back(std::move(p));
-      dpb.swap(keep);
+      size_t keep = 0;
+      for (size_t i = 0; i < dpb.size(); i++)
+        if (dpb[i]->mbw == cur->mbw && dpb[i]->mbh == cur->mbh)
+          dpb[keep++] = dpb[i];
+        else
+          RPic::drop(dpb[i]);
+      dpb.n = keep;
       if (PX) fin_begin();
     } else {
       slice_no++;
@@ -1947,13 +2074,21 @@ struct ReconT : MbDecoder<K> {
   // the decoder's kernels
   using D::mc_luma; using D::mc_luma_t; using D::mc_chroma; using D::pred_nxn; using D::pred_l16; using D::pred_c8;
   using D::edge_fill; using D::norm4_class; using D::norm8_class;
+  void Init() {
+    D::Init();
+    lst_ok = false;
+    memset((void*)tmm, 0, sizeof tmm);
+    tmm_gen = 1;
+    prx_ok = false;
+  }
+  void Quit() { D::Quit(); }
   // (a macroblock begins: what the queries knew of the last is gone)
   void mb_start(int addr) {
     D::mb_start(addr);
     if (!D::PX) return;
     lst_ok = prx_ok = false;
     if (!++tmm_gen) {
-      std::fill(tmm.begin(), tmm.end(), TmMemo());
+      memset((void*)tmm, 0, sizeof tmm);
       tmm_gen = 1;
     }
   }
@@ -1961,7 +2096,7 @@ struct ReconT : MbDecoder<K> {
   // the two columns of samples left of the current macroblock, decoded,
   // as two rows of 16 (made at its first use in the macroblock)
   mutable uint8_t lst[32];
-  mutable bool lst_ok = false;
+  mutable bool lst_ok;
   const uint8_t* left_strip() const {
     if (!lst_ok) {
       int w = cur->w;
@@ -2139,7 +2274,7 @@ struct ReconT : MbDecoder<K> {
         }
         int r = rf[l][b8];
         const RPic* ref = r < nlist[l] ? list[l][r] : nullptr;
-        mc_luma(ref ? ref : cur.get(), mx + x, my + y, 8, 8, mv[l][b][0], mv[l][b][1], p[l]);
+        mc_luma(ref ? ref : cur, mx + x, my + y, 8, 8, mv[l][b][0], mv[l][b][1], p[l]);
         q[l] = p[l];
       }
 #ifdef H264P_AVX2
@@ -2229,7 +2364,7 @@ struct ReconT : MbDecoder<K> {
   // reference r with vector v (the macroblock at mx, my)
   void tm_strip(int side, int mx, int my, int l, int k, int e, int r, const int16_t* v, uint8_t (*p)[32]) const {
     const RPic* ref = r < nlist[l] ? list[l][r] : nullptr;
-    if (!ref) ref = cur.get();
+    if (!ref) ref = cur;
     int n4 = 4 * (e - k);
     if (side == 0) {
       mc_luma(ref, mx + k * 4, my - 2, n4, 2, v[0], v[1], p[l] + k * 4);
@@ -2318,8 +2453,8 @@ struct ReconT : MbDecoder<K> {
     uint16_t m4;
     uint8_t m8;
   };
-  mutable std::vector<TmMemo> tmm = std::vector<TmMemo>(D::PX ? 1024 : 0);  // (none without samples)
-  uint32_t tmm_gen = 1;
+  mutable TmMemo tmm[D::PX ? 1024 : 1];  // (none without samples)
+  uint32_t tmm_gen;
   // tm_search's walk from mv (where it leaves the best): the candidates
   // (alt: the best of them but the best, of the start too; INT_MIN none),
   // a small diamond in whole samples while it finds better (up to 2 steps),
@@ -2518,19 +2653,24 @@ struct ReconT : MbDecoder<K> {
   // [yl, yh)) both parts at once, by sad_bil2 (ot, ol: where the top
   // template is in RP and the left in RT at the vector 0); TmCx's outside
   struct TmThin {
-    const TmCx& cx;
+    const TmCx* cx;
     const uint8_t *RP, *RT;
     int ps, pt, lambda, px, py, xl, xh, yl, yh, ot, ol;
     bool top, left;
     Tpl2 qa, ql;
-    explicit TmThin(const TmCx& c)
-        : cx(c), RP(c.RP), RT(c.RT), ps(c.ps), pt(c.pt), lambda(c.lambda), px(c.px), py(c.py),
-          xl(2 - c.pm - c.x0), xh(c.W + c.pm - c.bw - c.x0), yl(2 - c.pm - c.y0), yh(c.H + c.pm - c.bh - c.y0),
-          ot((c.y0 - 2) * c.ps + c.x0), ol((c.x0 - 2) * c.pt + c.y0), top(c.top), left(c.left),
-          qa(c.top ? c.Y + (c.y0 - 2) * c.w + c.x0 : nullptr, c.w, c.bw), ql(c.left ? c.qt : nullptr, 16, c.bh) {}
+    void Init(const TmCx& c) {
+      cx = &c;
+      RP = c.RP, RT = c.RT;
+      ps = c.ps, pt = c.pt, lambda = c.lambda, px = c.px, py = c.py;
+      xl = 2 - c.pm - c.x0, xh = c.W + c.pm - c.bw - c.x0, yl = 2 - c.pm - c.y0, yh = c.H + c.pm - c.bh - c.y0;
+      ot = (c.y0 - 2) * c.ps + c.x0, ol = (c.x0 - 2) * c.pt + c.y0;
+      top = c.top, left = c.left;
+      qa.Init(c.top ? c.Y + (c.y0 - 2) * c.w + c.x0 : nullptr, c.w, c.bw);
+      ql.Init(c.left ? c.qt : nullptr, 16, c.bh);
+    }
     int operator()(int vx, int vy, int bound) const {
       int ix = vx >> 2, iy = vy >> 2;
-      if (ix < xl || ix >= xh || iy < yl || iy >= yh) return cx(vx, vy, bound);
+      if (ix < xl || ix >= xh || iy < yl || iy >= yh) return (*cx)(vx, vy, bound);
       int c = lambda * (abs(vx - px) + abs(vy - py));
       if (top) c += sad_bil2(qa, RP + (ot + iy * ps + ix), ps, vx & 3, vy & 3);
       if (left) c += sad_bil2(ql, RT + (ol + ix * pt + iy), pt, vy & 3, vx & 3);
@@ -2544,8 +2684,14 @@ struct ReconT : MbDecoder<K> {
     TmCx c;
     if (!tm_cx(c, l, r, bx, by, bw, bh, mv, lambda, inner)) return false;
     // (thin templates but no inner one: TmThin)
-    int best = c.T == 2 && !c.ninner && (!c.left || c.RT) ? tm_walk(TmThin(c), mv, only_y, cand, ncand, finest, alt)
-                                                           : tm_walk(c, mv, only_y, cand, ncand, finest, alt);
+    int best;
+    if (c.T == 2 && !c.ninner && (!c.left || c.RT)) {
+      TmThin th;
+      th.Init(c);
+      best = tm_walk(th, mv, only_y, cand, ncand, finest, alt);
+    } else {
+      best = tm_walk(c, mv, only_y, cand, ncand, finest, alt);
+    }
     if (miss) *miss = best * 4 / ((c.top ? c.T * bw : 0) + (c.left ? c.T * bh : 0) + (c.tr ? c.T * c.T : 0) + c.ninner);
     return true;
   }
@@ -2581,7 +2727,7 @@ struct ReconT : MbDecoder<K> {
   // a stand-in for the source of the current (intra) macroblock: its
   // prediction from proxy_pic by a vector (proxy_build), luma and chroma
   uint8_t prx_y[256], prx_c[2][64];
-  bool prx_ok = false;
+  bool prx_ok;
   bool proxy_build(const int* mv) {
     prx_ok = false;
     const RPic* P = act() ? proxy_pic() : nullptr;
@@ -2636,7 +2782,7 @@ struct ReconT : MbDecoder<K> {
     return cnt ? sum * 4 / cnt : -1;
   }
   const RPic* proxy_pic() const {
-    const RPic* P = nlist[0] > 0 && list[0][0] ? list[0][0] : !dpb.empty() ? dpb.back().get() : nullptr;
+    const RPic* P = nlist[0] > 0 && list[0][0] ? list[0][0] : !dpb.empty() ? dpb.back() : nullptr;
     return P && P->w == cur->w && P->h == cur->h ? P : nullptr;
   }
   // What proxy_nz() and proxy_mode() share: the block of the proxy picture

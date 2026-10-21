@@ -930,6 +930,7 @@ struct Model : tc_rc<f_DEC> {
   tc_unmap(t_##F, sizeof(typename LV::F::T));
     H264P_FAMS(H_UNMAP)
 #undef H_UNMAP
+    rec_.Quit();
   }
 
   // each family's coder (f_nal ...) and tables (t_nal ...)
@@ -967,6 +968,7 @@ struct Model : tc_rc<f_DEC> {
 
   void init() {
     last_h_.Init();
+    rec_.Init();
     rec_.deblock = LV::deblock;
     // (end_of_slice_flag 0 nearly for sure: as if seen a few times)
     for (cm_cnt& c : end_c_) c.p = (u16)(CM_CONE - 16), c.t = 8;

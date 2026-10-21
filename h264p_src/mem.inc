@@ -88,6 +88,12 @@ struct Buf {
     n += k;
   }
   void append(size_t k, const T& v) { resize(n + k, v); }
+  // m elements, all v
+  void fill(size_t m, const T& v) {
+    n = 0;
+    resize(m, v);
+  }
+  void pop_back() { n--; }
   // q's k elements in place of these
   void assign(const T* q, size_t k) {
     n = 0;

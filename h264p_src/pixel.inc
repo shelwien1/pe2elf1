@@ -259,15 +259,17 @@ static int sad_bil(const uint8_t* q, int qs, const uint8_t* a, int as, int n, in
 // byte pairs for pmaddubsw: of the two samples above (ab) and below (cd)
 struct BilW {
   __m256i ab[16], cd[16];
-  BilW() {
-    for (int f = 0; f < 16; f++) {
-      int fx = f & 3, fy = f >> 2;
-      ab[f] = _mm256_set1_epi16((short)((4 - fx) * (4 - fy) | fx * (4 - fy) << 8));
-      cd[f] = _mm256_set1_epi16((short)((4 - fx) * fy | fx * fy << 8));
-    }
-  }
 };
-static const BilW kBilW;
+static BilW bil_weights() {
+  BilW b;
+  for (int f = 0; f < 16; f++) {
+    int fx = f & 3, fy = f >> 2;
+    b.ab[f] = _mm256_set1_epi16((short)((4 - fx) * (4 - fy) | fx * (4 - fy) << 8));
+    b.cd[f] = _mm256_set1_epi16((short)((4 - fx) * fy | fx * fy << 8));
+  }
+  return b;
+}
+static const BilW kBilW = bil_weights();
 // two rows of 16 samples from a (stride as) predicted bilinearly at (fx,
 // fy), as sad_bil's, without a branch on the position
 static INLINE __m256i bil16x2(const uint8_t* a, int as, int fx, int fy) {
@@ -345,7 +347,8 @@ struct Tpl2 {
   int qs;
 #endif
   int n;
-  Tpl2(const uint8_t* q_, int qs_, int n_) : n(n_) {
+  void Init(const uint8_t* q_, int qs_, int n_) {
+    n = n_;
 #ifdef H264P_AVX2
     v = !q_ ? _mm256_setzero_si256() : n == 16 ? ld16x2(q_, q_ + qs_) : _mm256_inserti128_si256(_mm256_setzero_si256(), ld8x2(q_, q_ + qs_, n), 0);
 #else
@@ -466,8 +469,10 @@ static void transpose16(const uint8_t* s, int ss, uint8_t* d, int ds) {
 struct Halves {
   bool b, h, j;
   int boff, hoff;
-  explicit Halves(int c)
-      : b(0xE0EE >> c & 1), h(0xBBB0 >> c & 1), j(0x4E40 >> c & 1), boff(c >= 13), hoff(c == 7 || c == 11 || c == 15) {}
+  void Init(int c) {
+    b = 0xE0EE >> c & 1, h = 0xBBB0 >> c & 1, j = 0x4E40 >> c & 1;
+    boff = c >= 13, hoff = c == 7 || c == 11 || c == 15;
+  }
 };
 #ifdef H264P_AVX2
 // mc_halves of w columns (V256: 16; V128: 8 or 4) in 16-bit lanes, j's sums
@@ -514,7 +519,8 @@ static INLINE void mc_halves_v(const uint8_t* g, int gs, int w, int h, const Hal
 // (stride 16: bb, hh, jj), from the whole samples at g (stride gs, read 2
 // before them and 3 after, across and down)
 static void mc_halves(const uint8_t* g, int gs, int w, int h, int c, uint8_t* bb, uint8_t* hh, uint8_t* jj) {
-  const Halves n(c);
+  Halves n;
+  n.Init(c);
 #ifdef H264P_AVX2
   if (w == 16)
     mc_halves_v<V256>(g, gs, w, h, n, bb, hh, jj);
