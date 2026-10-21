@@ -176,17 +176,108 @@ struct DecompressState {
   std::vector<uint8_t> buf;  // the stream decoded, not yet written
 };
 
+// The model pass of a NAL unit that parsed (h, its dry run's in s.dr):
+// its syntax through the model, then what the syntax leaves out of it (its
+// trailer). Restart where a.check finds it would not come out as it is.
+template <class LV>
+void compress_parsed(Model<0, LV>& m, CompressState& s, const NalHead& h) {
+  DryRun& dr = s.dr;
+  const Trailer& t = dr.t;
+  dr.log.rewind();
+  ModelChan<0, LV> ch(m, &dr.log);
+  BinPolicy bp = ch.policy();
+  m.nal_begin(h.type, h.ref_idc);
+  BitWriter bw;
+  if (dr.checked) {
+    // (whatever fails, the NAL unit would not come out as it is)
+    bp.rec = &dr.rec;
+    bool same = false;
+    try {
+      write_syntax(h.type, h.ref_idc, s.ctx, ch, bw, bp);
+      same = dr.log.at_end() && checked_bits(bw, bp.nobins, dr.rec, dr.rbsp);
+    } catch (const std::exception&) {
+    }
+    if (!same) throw Restart{s.st.nals - 1};
+  } else {
+    write_syntax(h.type, h.ref_idc, s.ctx, ch, bw, bp);
+    if (!dr.log.at_end()) cm_fail("internal: values left over");
+  }
+  m.nal(F_TRAIL, h.type, t.irregular);
+  if (t.irregular) {
+    m.nal(F_DROP, 0, t.drop);
+    m.nal(F_NBITS, 0, (i64)t.bits.size());
+    for (char c : t.bits) m.nal(F_TBIT, 0, c - '0');
+  }
+  m.nal(F_CZW, h.type, t.czw);
+  s.st.parsed++;
+  s.st.trail += t.irregular;
+}
+
+// A NAL unit of the stream (zeros before it; prev_type, the type of the
+// one before it): its dry run, then the model pass, on one context (the
+// parameter sets and the macroblocks of either are the same; x264's
+// padding moves on to the next slice after both). 0, or 1 after an error
+// (reported).
+template <class LV>
+int compress_nal(Model<0, LV>& m, CompressState& s, const H264pArgs& a, const std::vector<uint8_t>& nal, size_t zeros,
+                 int& prev_type) {
+  static const uint8_t sc[3] = {0, 0, 1};
+  Stats& st = s.st;
+  Context& ctx = s.ctx;
+  s.crc.zeros(zeros);
+  s.crc.add(sc, 3);
+  s.crc.add(nal);
+  st.nals++;
+  m.nal(F_MORE, 0, 1);
+  if (headless(nal)) {
+    m.nal(F_TYPE, prev_type, 32);
+    m.nal(F_ZEROS, 32, (i64)zeros);
+    m.nal(F_LEN, 32, (i64)nal.size());
+    for (uint8_t b : nal) m.raw(b);
+    st.verbatim("empty or forbidden_zero_bit");
+    return 0;
+  }
+  NalHead h = nal_head(nal, s.det);
+  int obs;
+  bool ok = s.dr.run(h, ctx, a.check, obs);
+  bool padchg = ok && repad(s.det, obs, ctx.pad);
+  if (padchg) {
+    ok = s.dr.run(h, ctx, a.check, obs);  // once more, with padding bits that predict this one
+    st.pad++;
+  }
+  m.nal(F_TYPE, prev_type, h.type);
+  m.nal(F_REF, h.type, h.ref_idc);
+  m.nal(F_ZEROS, h.type, (i64)zeros);
+  prev_type = h.type;
+  if (h.slice) {
+    m.nal(F_PADCHG, 0, padchg);
+    if (padchg) {
+      m.nal(F_PADON, 0, ctx.pad.on);
+      if (ctx.pad.on) m.nal(F_PADFRAME, 0, ctx.pad.frame);
+    }
+  }
+  if (parsed_type(h.type)) m.nal(F_VERB, h.type, !ok);
+  if (ok) {
+    compress_parsed(m, s, h);
+  } else {
+    // (an SPS or PPS stored verbatim still defines its parameter set
+    // where it could be parsed: the dry run has it so)
+    m.nal(F_LEN, h.type, (i64)h.len);
+    for (size_t i = 0; i < h.len; i++) m.raw(h.payload[i]);
+    if (!st.verbatim(h.type, s.dr.why, a.verbose, a.strict, a.meter)) return 1;
+  }
+  ctx.done(h.type, h.payload, h.len);
+  return 0;
+}
+
 // Compresses the stream s.rd reads with the model m, a new one, into its
 // output (m is the range coder too, and the coroutine whose output it is,
 // coro.inc): 0, 1 after an error (reported), or kRestart (a.check: a slice
 // did not come out as it is; what the output has is to be thrown away)
 template <class LV>
 int compress_stream(Model<0, LV>& m, CompressState& s, const H264pArgs& a) {
-  Stats& st = s.st;
-  Context& ctx = s.ctx;
   Crc32& crc = s.crc;
   AnnexBReader& rd = s.rd;
-  DryRun& dr = s.dr;
   const uint8_t head[2] = {(uint8_t)kCmVersion, (uint8_t)LV::id};
   m.write((const uint8_t*)kCmMagic, sizeof kCmMagic - 1);
   m.write(head, 2);
@@ -202,83 +293,8 @@ int compress_stream(Model<0, LV>& m, CompressState& s, const H264pArgs& a) {
     for (uint8_t b : junk) m.raw(b);
     crc.add(junk);
     int prev_type = 0;
-    // each NAL unit: its dry run, then the model pass, on one context (the
-    // parameter sets and the macroblocks of either are the same; x264's
-    // padding moves on to the next slice after both)
-    for (; more; more = rd.next(zeros, nal)) {
-      static const uint8_t sc[3] = {0, 0, 1};
-      crc.zeros(zeros);
-      crc.add(sc, 3);
-      crc.add(nal);
-      st.nals++;
-      m.nal(F_MORE, 0, 1);
-      if (headless(nal)) {
-        m.nal(F_TYPE, prev_type, 32);
-        m.nal(F_ZEROS, 32, (i64)zeros);
-        m.nal(F_LEN, 32, (i64)nal.size());
-        for (uint8_t b : nal) m.raw(b);
-        st.verbatim("empty or forbidden_zero_bit");
-        continue;
-      }
-      NalHead h = nal_head(nal, s.det);
-      int obs;
-      bool ok = dr.run(h, ctx, a.check, obs);
-      bool padchg = ok && repad(s.det, obs, ctx.pad);
-      if (padchg) {
-        ok = dr.run(h, ctx, a.check, obs);  // once more, with padding bits that predict this one
-        st.pad++;
-      }
-      m.nal(F_TYPE, prev_type, h.type);
-      m.nal(F_REF, h.type, h.ref_idc);
-      m.nal(F_ZEROS, h.type, (i64)zeros);
-      prev_type = h.type;
-      if (h.slice) {
-        m.nal(F_PADCHG, 0, padchg);
-        if (padchg) {
-          m.nal(F_PADON, 0, ctx.pad.on);
-          if (ctx.pad.on) m.nal(F_PADFRAME, 0, ctx.pad.frame);
-        }
-      }
-      if (parsed_type(h.type)) m.nal(F_VERB, h.type, !ok);
-      if (ok) {
-        const Trailer& t = dr.t;
-        dr.log.rewind();
-        ModelChan<0, LV> ch(m, &dr.log);
-        BinPolicy bp = ch.policy();
-        m.nal_begin(h.type, h.ref_idc);
-        BitWriter bw;
-        if (dr.checked) {
-          // (whatever fails, the NAL unit would not come out as it is)
-          bp.rec = &dr.rec;
-          bool same = false;
-          try {
-            write_syntax(h.type, h.ref_idc, ctx, ch, bw, bp);
-            same = dr.log.at_end() && checked_bits(bw, bp.nobins, dr.rec, dr.rbsp);
-          } catch (const std::exception&) {
-          }
-          if (!same) throw Restart{st.nals - 1};
-        } else {
-          write_syntax(h.type, h.ref_idc, ctx, ch, bw, bp);
-          if (!dr.log.at_end()) cm_fail("internal: values left over");
-        }
-        m.nal(F_TRAIL, h.type, t.irregular);
-        if (t.irregular) {
-          m.nal(F_DROP, 0, t.drop);
-          m.nal(F_NBITS, 0, (i64)t.bits.size());
-          for (char c : t.bits) m.nal(F_TBIT, 0, c - '0');
-        }
-        m.nal(F_CZW, h.type, t.czw);
-        st.parsed++;
-        st.trail += t.irregular;
-      } else {
-        // (an SPS or PPS stored verbatim still defines its parameter set
-        // where it could be parsed: the dry run has it so)
-        m.nal(F_LEN, h.type, (i64)h.len);
-        for (size_t i = 0; i < h.len; i++) m.raw(h.payload[i]);
-        if (!st.verbatim(h.type, dr.why, a.verbose, a.strict, a.meter)) return 1;
-      }
-      ctx.done(h.type, h.payload, h.len);
-    }
+    for (; more; more = rd.next(zeros, nal))
+      if (compress_nal(m, s, a, nal, zeros, prev_type)) return 1;
     m.nal(F_MORE, 0, 0);
     m.nal(F_EOFZ, 0, (i64)rd.eof_zeros());
     crc.zeros(rd.eof_zeros());
@@ -294,7 +310,7 @@ int compress_stream(Model<0, LV>& m, CompressState& s, const H264pArgs& a) {
     return kRestart;
   }
   if (a.verbose) {
-    st.report("coded", "changes of x264's padding bits", a.meter);
+    s.st.report("coded", "changes of x264's padding bits", a.meter);
     cm_report(m, m.n_in, m.n_out, m.table_bytes());
   }
   return 0;

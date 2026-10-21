@@ -47,7 +47,7 @@ Sampled with call stacks (section 5), all 7 streams, compressing (`c`,
 | coefficients (`block`) | 3.9 | 3.6 | |
 | the macroblock's start (`begin_mb`) | 3.0 | 3.5 | a third of it a `memset` |
 | skip variables (`skp_vars`, `mb_near`) | 2.4 | 4.0 | a 3x3 window of the skip map and two more neighbours, a bounds check each |
-| motion vector prediction | 3.2 | 4.3 | `mv_nb`, `mv_pred`, `mv_direct`, `set_mv` |
+| motion vector prediction | 3.2 | 4.3 | `mv_nb`, `mv_pred`, `mv_direct`, `set_mv` (now `MotionPred`'s `nb`, `pred`, `direct`, `set`) |
 | the history copied at each P picture (`slice_begin`) | 1.3 | 1.5 | `hprev_`, which `-1` never reads |
 | the macroblock's end, mvd, the rest | 10.2 | 13.3 | |
 | **the walk** | **6.5** | **19.2** | the syntax walked once more with the model's values |
@@ -377,7 +377,8 @@ templates (`IDX/l1/*.inc`) declare `cm_cnt2s` tables, the other levels'
 ### 6.5 No motion vectors (3.1)
 
 A new part of the model, `mvp`: the motion vectors as the decoder has
-them, predicted (`mv_pred()`, the direct and P_Skip motion) and kept in
+them, predicted (`mv_pred()`, the direct and P_Skip motion; now
+`MotionPred`) and kept in
 each macroblock's record and history. `-1` is the one level without it
 (the decoder and the reference lists need the vectors, which `Model`
 asserts); the variables that need it were found as the other parts' were,
@@ -465,7 +466,8 @@ What stayed `-1`'s alone, at `-3` to `-9`:
   `memmove` under `slice_begin()`). Now `finish_mb()` keeps what those two
   read of a record (`valid`, `cls`, `cm`, `nzm[0]` and the coefficient
   rows) before it first rewrites it in the picture, in arrays of their
-  own (`hkeep_`, `hcoef_`), and `ref_hist()` answers from there where a
+  own (`hkeep_`, `hcoef_`; now `History::keep`, `coef`, kept by
+  `History::before_write()`), and `ref_hist()` answers from there where a
   record was kept, from the history where not: the same records, so the
   same output (all test streams, all levels). The copy's share against
   what keeping adds to `finish_mb()`, as the sum of the two, in points of

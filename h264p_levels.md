@@ -558,7 +558,7 @@ Both are constants.
 
 The model can leave a variable the level does not read unfilled, and
 does where filling it costs work of its own: sig's `ft`, `hb`, `h3` and
-`sn`, per coefficient (`block()` in `model.inc`). The other variables are
+`sn`, per coefficient (`block_sig()` in `model.inc`). The other variables are
 cheap, or their work goes with a part the level has not (the switches,
 below), and are filled whatever the level reads:
 

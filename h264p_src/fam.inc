@@ -383,61 +383,86 @@ template <int f_DEC, class C> struct tc_fam {
       CM_PREFETCH(mx3.c + bs + node);
     }
   }
+  //  A decision's counters (bit_x): their rows (cp), and their 64-bit lanes
+  //  in vectors of four (cv) with their probabilities stretched (st), where
+  //  cn_v, else copies of them (cn)
+  struct CntRows {
+    Cnt *cp[NC];
+    Cnt cn[NC];
+#ifdef H264P_AVX2
+    __m256i cv[(NC + 3) / 4], st[(NC + 3) / 4];
+#endif
+  };
   INLINE int bit_x(int node, int b) {
     TC_DUMP(rec('B', node, b, prpa ? prpa[node] : prp, hs));
     if(node + 1 < ND)
       fetch(node + 1);
-    Cnt *cp[NC];
+    CntRows r;
     for(int k = 0; k < NC; k++)
-      cp[k] = cnt[k] + cb[k] + node;
+      r.cp[k] = cnt[k] + cb[k] + node;
     //  The mixers' inputs: the counters' two probabilities each (in the
     //  order of the arrays), the APM's refinement of A's (A's own without
     //  APMs), the outside prediction, the bias and the hint's counter
     //  (stretched), then zeros to a multiple of 8; the mixers' are the same,
     //  packed once
+    int pa = cnt_inputs(r);
+    int p1 = C::NAPM ? ap.pp(pa, bs + (u32)node) : pa;
+    if(p1 > CM_PONE - 1)
+      p1 = CM_PONE - 1;
+    int pp = prpa ? prpa[node] : prp;
+    cm_cnt2 *zc = hs ? &Z[((sz)bz * ND + (u32)node) * 5 + (u32)hs] : nullptr;
+    const int x20 = C::NAPM ? cm_stretch(p1) : tc_x20(r.cp[0], p1), x21 = pp >= 0 ? cm_stretch(pp) : 0,
+              x23 = zc ? cm_stretch(zc->P()) : 0;
     cm_x16<NIN> xp;
-    Cnt cn[NC];
+    mix_inputs(r, x20, x21, x23, xp);
+    b = mix_code(node, b, xp);
+    cnt_update(r, b);
+    if(zc)
+      zc->upd(b, C::rT, C::mwT);
+    return b;
+  }
+  //  the counters' probabilities, as the mixers' inputs (where cn_v, in
+  //  r.st); A's (the first counter's) P
+  INLINE int cnt_inputs(CntRows &r) {
     int pa;
     constexpr int NV = (NC + 3) / 4;  // the counters' vectors: four in each, the last two or four
 #ifdef H264P_AVX2
     //  (cn_v: the counters all at once, as 64-bit lanes p, t, q and the next
     //  counter's p, cm_cnt2s's own P stretched, four to a vector; their
     //  probabilities as 32-bit lanes, P and Q of each in turn)
-    __m256i cv[NV], st[NV];
     if(cn_v) {
       auto ld2 = [&](int k) {
-        return _mm_unpacklo_epi64(_mm_loadl_epi64((const __m128i *)cp[k]), _mm_loadl_epi64((const __m128i *)cp[k + 1]));
+        return _mm_unpacklo_epi64(_mm_loadl_epi64((const __m128i *)r.cp[k]), _mm_loadl_epi64((const __m128i *)r.cp[k + 1]));
       };
       for(int j = 0; j < NV; j++)
-        cv[j] = 4 * j + 2 < NC ? _mm256_inserti128_si256(_mm256_castsi128_si256(ld2(4 * j)), ld2(4 * j + 2), 1)
+        r.cv[j] = 4 * j + 2 < NC ? _mm256_inserti128_si256(_mm256_castsi128_si256(ld2(4 * j)), ld2(4 * j + 2), 1)
                                : _mm256_inserti128_si256(_mm256_setzero_si256(), ld2(4 * j), 0);
       const __m256i m16 = _mm256_set1_epi32(0xFFFF), z = _mm256_setzero_si256();
       for(int j = 0; j < NV; j++) {
         // (cm_cnt2::P and Q, then cm_stretch, or as cm_cnt2s keeps them)
-        __m256i t = _mm256_srli_epi32(_mm256_shuffle_epi32(cv[j], 0xA0), 16);
-        __m256i v = _mm256_max_epi32(_mm256_srli_epi32(_mm256_and_si256(cv[j], m16), CM_CBITS - CM_PBITS), _mm256_set1_epi32(1));
+        __m256i t = _mm256_srli_epi32(_mm256_shuffle_epi32(r.cv[j], 0xA0), 16);
+        __m256i v = _mm256_max_epi32(_mm256_srli_epi32(_mm256_and_si256(r.cv[j], m16), CM_CBITS - CM_PBITS), _mm256_set1_epi32(1));
         v = _mm256_blendv_epi8(v, _mm256_set1_epi32(CM_PHALF), _mm256_cmpeq_epi32(t, z));
         if(!j)
           pa = _mm256_cvtsi256_si32(v);
-        st[j] = tc_st4(cp + 4 * j, 4 * j + 2 < NC, v);
+        r.st[j] = tc_st4(r.cp + 4 * j, 4 * j + 2 < NC, v);
       }
     } else
 #endif
     {
       for(int k = 0; k < NC; k++) {
-        cn[k] = *cp[k];
-        mx.set(2 * k, tc_sp(cn[k]));
-        mx.set(2 * k + 1, tc_sq(cn[k]));
+        r.cn[k] = *r.cp[k];
+        mx.set(2 * k, tc_sp(r.cn[k]));
+        mx.set(2 * k + 1, tc_sq(r.cn[k]));
       }
-      pa = cn[0].P();
+      pa = r.cn[0].P();
     }
-    int p1 = C::NAPM ? ap.pp(pa, bs + (u32)node) : pa;
-    if(p1 > CM_PONE - 1)
-      p1 = CM_PONE - 1;
-    int pp = prpa ? prpa[node] : prp;
-    cm_cnt2 *zc = hs ? &Z[((sz)bz * ND + (u32)node) * 5 + (u32)hs] : nullptr;
-    const int x20 = C::NAPM ? cm_stretch(p1) : tc_x20(cp[0], p1), x21 = pp >= 0 ? cm_stretch(pp) : 0,
-              x23 = zc ? cm_stretch(zc->P()) : 0;
+    (void)NV;
+    return pa;
+  }
+  //  the mixers' inputs, the counters' and the four more, packed
+  INLINE void mix_inputs(const CntRows &r, int x20, int x21, int x23, cm_x16<NIN> &xp) {
+    (void)r;
 #ifdef H264P_AVX2
     if(cn_v) {
       //  the 32-bit lanes in vectors of 8: the counters', then the four
@@ -447,9 +472,9 @@ template <int f_DEC, class C> struct tc_fam {
       __m256i zz[NZ];
       const __m128i ex = _mm_setr_epi32(x20, x21, 256, x23);
       for(int j = 0; j < NC / 4; j++)
-        zz[j] = st[j];
+        zz[j] = r.st[j];
       if(NC % 4)
-        zz[NC / 4] = _mm256_inserti128_si256(st[NC / 4], ex, 1);
+        zz[NC / 4] = _mm256_inserti128_si256(r.st[NC / 4], ex, 1);
       else
         zz[NC / 4] = _mm256_inserti128_si256(_mm256_setzero_si256(), ex, 0);
       for(int j = NC / 4 + 1; j < NZ; j++)
@@ -467,6 +492,10 @@ template <int f_DEC, class C> struct tc_fam {
       mx.set(2 * NC + 3, x23);
       xp.pack(mx.x);
     }
+  }
+  //  the mixing, the bit coded with it, and the mixers and APMs trained
+  INLINE int mix_code(int node, int b, const cm_x16<NIN> &xp) {
+    (void)xp;
 #ifdef H264P_AVX2
     const cm_x16<NIN> *xq = &xp;
 #else
@@ -497,6 +526,11 @@ template <int f_DEC, class C> struct tc_fam {
       if(C::bw < 16)
         ap2.upd(b, C::rS2);
     }
+    return b;
+  }
+  //  the counters, trained
+  INLINE void cnt_update(CntRows &r, int b) {
+    constexpr int NV = (NC + 3) / 4;
 #ifdef H264P_AVX2
     if(cn_v) {
       // as cm_cnt2::upd, each counter's q through its p's arithmetic with
@@ -507,37 +541,34 @@ template <int f_DEC, class C> struct tc_fam {
       const __m256i m16 = _mm256_set1_epi32(0xFFFF), z = _mm256_setzero_si256();
       const __m256i even = _mm256_setr_epi32(-1, 0, -1, 0, -1, 0, -1, 0);
       for(int j = 0; j < NV; j++) {
-        __m256i t = _mm256_srli_epi32(_mm256_shuffle_epi32(cv[j], 0xA0), 16);
-        __m256i cur = _mm256_blendv_epi8(_mm256_and_si256(cv[j], m16), _mm256_set1_epi32(CM_CONE / 2), _mm256_cmpeq_epi32(t, z));
+        __m256i t = _mm256_srli_epi32(_mm256_shuffle_epi32(r.cv[j], 0xA0), 16);
+        __m256i cur = _mm256_blendv_epi8(_mm256_and_si256(r.cv[j], m16), _mm256_set1_epi32(CM_CONE / 2), _mm256_cmpeq_epi32(t, z));
         __m256i t1 = _mm256_sub_epi32(t, _mm256_cmpgt_epi32(_mm256_loadu_si256((const __m256i *)(cn_lim + 8 * j)), t));
         __m256i rec = _mm256_and_si256(_mm256_mask_i32gather_epi32(_mm256_set1_epi32(8192), (const int *)cm_rec, t1, even, 2), m16);
         __m256i tg = _mm256_loadu_si256((const __m256i *)(cn_tg[b] + 8 * j));
         __m256i nv = _mm256_add_epi32(cur, _mm256_srai_epi32(_mm256_mullo_epi32(_mm256_sub_epi32(tg, cur), rec), CM_CBITS));
         __m256i sn = z;
-        __m256i up = _mm256_blend_epi32(_mm256_slli_epi32(t1, 16), tc_upper(cp + 4 * j, cv[j], nv, t1, sn), 0xAA);
+        __m256i up = _mm256_blend_epi32(_mm256_slli_epi32(t1, 16), tc_upper(r.cp + 4 * j, r.cv[j], nv, t1, sn), 0xAA);
         __m256i o = _mm256_or_si256(_mm256_and_si256(nv, m16), up);
         __m128i lo = _mm256_castsi256_si128(o);
-        _mm_storel_epi64((__m128i *)cp[4 * j], lo);
-        _mm_storel_epi64((__m128i *)cp[4 * j + 1], _mm_unpackhi_epi64(lo, lo));
+        _mm_storel_epi64((__m128i *)r.cp[4 * j], lo);
+        _mm_storel_epi64((__m128i *)r.cp[4 * j + 1], _mm_unpackhi_epi64(lo, lo));
         if(4 * j + 2 < NC) {
           __m128i hi = _mm256_extracti128_si256(o, 1);
-          _mm_storel_epi64((__m128i *)cp[4 * j + 2], hi);
-          _mm_storel_epi64((__m128i *)cp[4 * j + 3], _mm_unpackhi_epi64(hi, hi));
+          _mm_storel_epi64((__m128i *)r.cp[4 * j + 2], hi);
+          _mm_storel_epi64((__m128i *)r.cp[4 * j + 3], _mm_unpackhi_epi64(hi, hi));
         }
-        tc_put_sq(cp + 4 * j, 4 * j + 2 < NC, sn);
+        tc_put_sq(r.cp + 4 * j, 4 * j + 2 < NC, sn);
       }
     } else
 #endif
     {
       for(int k = 0; k < NC; k++) {
-        cn[k].upd(b, C::lim[k], C::tg[k]);
-        *cp[k] = cn[k];
+        r.cn[k].upd(b, C::lim[k], C::tg[k]);
+        *r.cp[k] = r.cn[k];
       }
     }
-    if(zc)
-      zc->upd(b, C::rT, C::mwT);
     (void)NV;
-    return b;
   }
   INLINE int bitm(int node, int b) {
     if(UNLIKELY((unsigned)node >= (unsigned)MND))

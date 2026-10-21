@@ -443,6 +443,53 @@ static void ref_pic_list_modification(Syn& s, const char* name, std::vector<std:
   s.end();
 }
 
+// pred_weight_table() (7.3.3.2) of lists lists, the pictures with chroma
+// or not, into h.wt
+static void pred_weight_table(Syn& s, SliceHeader& h, bool chroma, int lists) {
+  h.luma_log2_wd = (int)s.ue("luma_log2_weight_denom", 0, 7);
+  if (chroma) h.chroma_log2_wd = (int)s.ue("chroma_log2_weight_denom", 0, 7);
+  for (int l = 0; l < lists; l++)
+    for (int i = 0; i < h.num_ref_idx_active[l]; i++) {
+      // luma_weight_lX_flag [luma_weight luma_offset]
+      // chroma_weight_lX_flag [cb_weight cb_offset cr_weight cr_offset]
+      int w[6] = {1 << h.luma_log2_wd, 0, 1 << h.chroma_log2_wd, 0, 1 << h.chroma_log2_wd, 0};
+      s.begin(l ? "pred_weight_l1" : "pred_weight_l0");
+      if (s.vu(1)) {
+        w[0] = (int)s.vse(-128, 127);
+        w[1] = (int)s.vse(-128, 127);
+      }
+      if (chroma && s.vu(1))
+        for (int j = 0; j < 4; j++) w[2 + j] = (int)s.vse(-128, 127);
+      s.end();
+      h.wt[l].insert(h.wt[l].end(), w, w + 6);
+    }
+}
+
+// dec_ref_pic_marking() (7.3.3.3), into h's long_term_reference_flag,
+// mmco and mmco5
+static void dec_ref_pic_marking(Syn& s, SliceHeader& h) {
+  if (h.nal_unit_type == 5) {
+    s.u("no_output_of_prior_pics_flag", 1);
+    h.long_term_reference_flag = (int)s.u("long_term_reference_flag", 1);
+    return;
+  }
+  if (!s.u("adaptive_ref_pic_marking_mode_flag", 1)) return;
+  for (int n = 0;; n++) {
+    std::vector<int64_t> op(1);
+    s.begin("mmco");  // memory_management_control_operation and its arguments
+    op[0] = s.vue(0, 6);
+    if (op[0] == 1 || op[0] == 3) op.push_back(s.vue(0, kU32));  // difference_of_pic_nums_minus1
+    if (op[0] == 2) op.push_back(s.vue(0, kU32));                // long_term_pic_num
+    if (op[0] == 3 || op[0] == 6) op.push_back(s.vue(0, kU32));  // long_term_frame_idx
+    if (op[0] == 4) op.push_back(s.vue(0, kU32));                // max_long_term_frame_idx_plus1
+    s.end();
+    if (op[0] == 0) break;
+    h.mmco5 |= op[0] == 5;
+    h.mmco.push_back(op);
+    if (n > 66) s.fail("too many memory management operations");
+  }
+}
+
 void code_slice_header(Syn& s, SliceHeader& h, const ParamSets& ps) {
   h.first_mb = (int)s.ue("first_mb_in_slice", 0, kMaxMbs);
   h.slice_type = (int)s.ue("slice_type", 0, 9);
@@ -484,47 +531,9 @@ void code_slice_header(Syn& s, SliceHeader& h, const ParamSets& ps) {
   }
   if (t != kI && t != kSI) ref_pic_list_modification(s, "ref_pic_list_modification_l0", h.rplm[0]);
   if (t == kB) ref_pic_list_modification(s, "ref_pic_list_modification_l1", h.rplm[1]);
-  if ((pps.weighted_pred_flag && (t == kP || t == kSP)) || (pps.weighted_bipred_idc == 1 && t == kB)) {
-    h.luma_log2_wd = (int)s.ue("luma_log2_weight_denom", 0, 7);
-    int chroma = sps.chroma_array_type() != 0;
-    if (chroma) h.chroma_log2_wd = (int)s.ue("chroma_log2_weight_denom", 0, 7);
-    for (int l = 0; l < (t == kB ? 2 : 1); l++)
-      for (int i = 0; i < h.num_ref_idx_active[l]; i++) {
-        // luma_weight_lX_flag [luma_weight luma_offset]
-        // chroma_weight_lX_flag [cb_weight cb_offset cr_weight cr_offset]
-        int w[6] = {1 << h.luma_log2_wd, 0, 1 << h.chroma_log2_wd, 0, 1 << h.chroma_log2_wd, 0};
-        s.begin(l ? "pred_weight_l1" : "pred_weight_l0");
-        if (s.vu(1)) {
-          w[0] = (int)s.vse(-128, 127);
-          w[1] = (int)s.vse(-128, 127);
-        }
-        if (chroma && s.vu(1))
-          for (int j = 0; j < 4; j++) w[2 + j] = (int)s.vse(-128, 127);
-        s.end();
-        h.wt[l].insert(h.wt[l].end(), w, w + 6);
-      }
-  }
-  if (h.nal_ref_idc) {
-    if (h.nal_unit_type == 5) {
-      s.u("no_output_of_prior_pics_flag", 1);
-      h.long_term_reference_flag = (int)s.u("long_term_reference_flag", 1);
-    } else if (s.u("adaptive_ref_pic_marking_mode_flag", 1)) {
-      for (int n = 0;; n++) {
-        std::vector<int64_t> op(1);
-        s.begin("mmco");  // memory_management_control_operation and its arguments
-        op[0] = s.vue(0, 6);
-        if (op[0] == 1 || op[0] == 3) op.push_back(s.vue(0, kU32));  // difference_of_pic_nums_minus1
-        if (op[0] == 2) op.push_back(s.vue(0, kU32));                // long_term_pic_num
-        if (op[0] == 3 || op[0] == 6) op.push_back(s.vue(0, kU32));  // long_term_frame_idx
-        if (op[0] == 4) op.push_back(s.vue(0, kU32));                // max_long_term_frame_idx_plus1
-        s.end();
-        if (op[0] == 0) break;
-        h.mmco5 |= op[0] == 5;
-        h.mmco.push_back(op);
-        if (n > 66) s.fail("too many memory management operations");
-      }
-    }
-  }
+  if ((pps.weighted_pred_flag && (t == kP || t == kSP)) || (pps.weighted_bipred_idc == 1 && t == kB))
+    pred_weight_table(s, h, sps.chroma_array_type() != 0, t == kB ? 2 : 1);
+  if (h.nal_ref_idc) dec_ref_pic_marking(s, h);
   if (pps.entropy_coding_mode_flag && t != kI && t != kSI) h.cabac_init_idc = (int)s.ue("cabac_init_idc", 0, 2);
   h.slice_qp_delta = (int)s.se("slice_qp_delta", -128, 127);
   // SliceQPY in -QpBdOffsetY..51 (7.4.3), which the model and the reconstruction rely on

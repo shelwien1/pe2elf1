@@ -2174,102 +2174,118 @@ struct ReconT : MbDecoder<K> {
     for (int l = 0; l < 2; l++) uni[l] = rf[l][1] == rf[l][0] && rf[l][2] == rf[l][0] && rf[l][3] == rf[l][0] && one_mv(mv[l]);
     for (int side = 0; side < 2; side++) {
       if (side == 0 ? !top : !left) continue;
-      // the pieces next to the 4x4 blocks 0-3 of the top row (side 0) or
-      // 0, 4, 8, 12 of the left column; per list, each run of pieces on the
-      // same reference with the same vector predicted at once
-      // (the pieces' 4x4 blocks and their 8x8 blocks)
-      static const uint8_t kBlk[2][4] = {{0, 1, 2, 3}, {0, 4, 8, 12}}, kB8[2][4] = {{0, 0, 1, 1}, {0, 0, 2, 2}};
-      const uint8_t *blk = kBlk[side], *b8 = kB8[side];
       bool use[2][4];
-      // pieces k to e - 1 of list l, on reference r by vector v
-      auto strip = [&](int l, int k, int e, int r, const int16_t* v) {
-        const RPic* ref = r < nlist[l] ? list[l][r] : nullptr;
-        if (!ref) ref = cur.get();
-        int n4 = 4 * (e - k);
-        if (side == 0) {
-          mc_luma(ref, mx + k * 4, my - 2, n4, 2, v[0], v[1], p[l] + k * 4);
-        } else if (!mc_luma_t(ref, mx - 2, my + k * 4, 2, n4, v[0], v[1], p[l] + k * 4)) {
-          // (the current picture has no transposed luma: turned here)
-          uint8_t t[16 * 16];
-          mc_luma(ref, mx - 2, my + k * 4, 2, n4, v[0], v[1], t);
-          for (int j = 0; j < n4; j++) p[l][k * 4 + j] = t[j * 16], p[l][16 + k * 4 + j] = t[j * 16 + 1];
-        }
-      };
-      for (int l = 0; l < 2; l++) {
-        if (uni[l]) {
-          bool u = rf[l][0] >= 0;
-          use[l][0] = use[l][1] = use[l][2] = use[l][3] = u;
-          if (u) strip(l, 0, 4, rf[l][0], mv[l][0]);
-          continue;
-        }
-        for (int k = 0; k < 4;) {
-          int b = blk[k], r = rf[l][b8[k]], e = k + 1;
-          use[l][k] = r >= 0;
-          if (r < 0) {
-            k++;
-            continue;
-          }
-          uint32_t v, u;
-          memcpy(&v, mv[l][b], 4);
-          for (; e < 4; e++) {
-            memcpy(&u, mv[l][blk[e]], 4);
-            if (rf[l][b8[e]] != r || u != v) break;
-            use[l][e] = true;
-          }
-          strip(l, k, e, r, mv[l][b]);
-          k = e;
-        }
-      }
+      tm_pieces(side, mx, my, rf, mv, uni, p, use);
       // the decoded samples, alike
       const uint8_t* q = mb_at(0, 0, -2);
       int qs = w;
       if (side == 1) q = left_strip(), qs = 16;
-#ifdef H264P_AVX2
-      {
-        // the pieces as 32-bit lanes k and 4 + k: from list 0 where it is
-        // used (else 1), averaged with list 1 where both are, those of
-        // neither out
-        int m1[4], m2[4], mu[4], u1[4];
-        for (int k = 0; k < 4; k++) {
-          m1[k] = use[0][k] ? 0 : -1;
-          m2[k] = use[0][k] && use[1][k] ? -1 : 0;
-          mu[k] = use[0][k] || use[1][k] ? -1 : 0;
-          u1[k] = use[1][k] ? -1 : 0;
-          cnt += mu[k] & 8;
-          lc[0] += ~m1[k] & 8, lc[1] += u1[k] & 8;
-        }
-        __m256i P0 = _mm256_loadu_si256((const __m256i*)p[0]), P1 = _mm256_loadu_si256((const __m256i*)p[1]);
-        __m256i M1 = _mm256_setr_epi32(m1[0], m1[1], m1[2], m1[3], m1[0], m1[1], m1[2], m1[3]);
-        __m256i a = _mm256_blendv_epi8(P0, P1, M1);
-        __m256i b = _mm256_blendv_epi8(a, P1, _mm256_setr_epi32(m2[0], m2[1], m2[2], m2[3], m2[0], m2[1], m2[2], m2[3]));
-        __m256i m = _mm256_setr_epi32(mu[0], mu[1], mu[2], mu[3], mu[0], mu[1], mu[2], mu[3]);
-        __m256i v = _mm256_and_si256(_mm256_avg_epu8(a, b), m), d = _mm256_and_si256(ld16x2(q, q + qs), m);
-        sum += sad_sum(_mm256_sad_epu8(v, d));
-        if (per) {
-          __m256i U1 = _mm256_setr_epi32(u1[0], u1[1], u1[2], u1[3], u1[0], u1[1], u1[2], u1[3]);
-          ls[0] += sad_sum(_mm256_sad_epu8(_mm256_andnot_si256(M1, P0), _mm256_andnot_si256(M1, d)));
-          ls[1] += sad_sum(_mm256_sad_epu8(_mm256_and_si256(U1, P1), _mm256_and_si256(U1, d)));
-        }
-      }
-#else
-      for (int k = 0; k < 4; k++) {
-        int n = use[0][k] + use[1][k];
-        if (!n) continue;
-        const uint8_t *p0 = (use[0][k] ? p[0] : p[1]) + k * 4, *p1 = p[1] + k * 4;
-        for (int j = 0; j < 2; j++)
-          for (int i = 0; i < 4; i++) {
-            int v = n == 2 ? (p0[j * 16 + i] + p1[j * 16 + i] + 1) >> 1 : p0[j * 16 + i];
-            sum += abs(q[j * qs + k * 4 + i] - v);
-            cnt++;
-            for (int l = 0; l < 2; l++)
-              if (use[l][k]) ls[l] += abs(q[j * qs + k * 4 + i] - p[l][j * 16 + k * 4 + i]), lc[l]++;
-          }
-      }
-#endif
+      tm_compare(p, use, q, qs, per != nullptr, sum, cnt, ls, lc);
     }
     if (per)
       for (int l = 0; l < 2; l++) per[l] = lc[l] ? ls[l] * 4 / lc[l] : -1;
     return cnt ? sum * 4 / cnt : -1;
+  }
+  // tm_miss()'s strip of a side predicted by each list (into p[l]): the
+  // pieces next to the 4x4 blocks 0-3 of the top row (side 0) or 0, 4, 8,
+  // 12 of the left column, each run of pieces on the same reference with
+  // the same vector at once; use[l][k]: list l predicts piece k
+  void tm_pieces(int side, int mx, int my, const int8_t rf[2][4], const int16_t mv[2][16][2], const bool* uni,
+                 uint8_t (*p)[32], bool (*use)[4]) const {
+    // (the pieces' 4x4 blocks and their 8x8 blocks)
+    static const uint8_t kBlk[2][4] = {{0, 1, 2, 3}, {0, 4, 8, 12}}, kB8[2][4] = {{0, 0, 1, 1}, {0, 0, 2, 2}};
+    const uint8_t *blk = kBlk[side], *b8 = kB8[side];
+    for (int l = 0; l < 2; l++) {
+      if (uni[l]) {
+        bool u = rf[l][0] >= 0;
+        use[l][0] = use[l][1] = use[l][2] = use[l][3] = u;
+        if (u) tm_strip(side, mx, my, l, 0, 4, rf[l][0], mv[l][0], p);
+        continue;
+      }
+      for (int k = 0; k < 4;) {
+        int b = blk[k], r = rf[l][b8[k]], e = k + 1;
+        use[l][k] = r >= 0;
+        if (r < 0) {
+          k++;
+          continue;
+        }
+        uint32_t v, u;
+        memcpy(&v, mv[l][b], 4);
+        for (; e < 4; e++) {
+          memcpy(&u, mv[l][blk[e]], 4);
+          if (rf[l][b8[e]] != r || u != v) break;
+          use[l][e] = true;
+        }
+        tm_strip(side, mx, my, l, k, e, r, mv[l][b], p);
+        k = e;
+      }
+    }
+  }
+  // the pieces k to e - 1 of a side's strip predicted by list l's
+  // reference r with vector v (the macroblock at mx, my)
+  void tm_strip(int side, int mx, int my, int l, int k, int e, int r, const int16_t* v, uint8_t (*p)[32]) const {
+    const RPic* ref = r < nlist[l] ? list[l][r] : nullptr;
+    if (!ref) ref = cur.get();
+    int n4 = 4 * (e - k);
+    if (side == 0) {
+      mc_luma(ref, mx + k * 4, my - 2, n4, 2, v[0], v[1], p[l] + k * 4);
+    } else if (!mc_luma_t(ref, mx - 2, my + k * 4, 2, n4, v[0], v[1], p[l] + k * 4)) {
+      // (the current picture has no transposed luma: turned here)
+      uint8_t t[16 * 16];
+      mc_luma(ref, mx - 2, my + k * 4, 2, n4, v[0], v[1], t);
+      for (int j = 0; j < n4; j++) p[l][k * 4 + j] = t[j * 16], p[l][16 + k * 4 + j] = t[j * 16 + 1];
+    }
+  }
+  // tm_miss()'s samples of a side decoded (q, stride qs) against the
+  // strip's prediction: of the pieces list 0 predicts (else 1), averaged
+  // with list 1's where both do, those of neither out; the sums of their
+  // absolute differences and the samples they are of, into sum and cnt,
+  // and per list (per) ls and lc
+  static void tm_compare(const uint8_t (*p)[32], const bool (*use)[4], const uint8_t* q, int qs, bool per, int& sum,
+                         int& cnt, int* ls, int* lc) {
+#ifdef H264P_AVX2
+    {
+      // the pieces as 32-bit lanes k and 4 + k: from list 0 where it is
+      // used (else 1), averaged with list 1 where both are, those of
+      // neither out
+      int m1[4], m2[4], mu[4], u1[4];
+      for (int k = 0; k < 4; k++) {
+        m1[k] = use[0][k] ? 0 : -1;
+        m2[k] = use[0][k] && use[1][k] ? -1 : 0;
+        mu[k] = use[0][k] || use[1][k] ? -1 : 0;
+        u1[k] = use[1][k] ? -1 : 0;
+        cnt += mu[k] & 8;
+        lc[0] += ~m1[k] & 8, lc[1] += u1[k] & 8;
+      }
+      __m256i P0 = _mm256_loadu_si256((const __m256i*)p[0]), P1 = _mm256_loadu_si256((const __m256i*)p[1]);
+      __m256i M1 = _mm256_setr_epi32(m1[0], m1[1], m1[2], m1[3], m1[0], m1[1], m1[2], m1[3]);
+      __m256i a = _mm256_blendv_epi8(P0, P1, M1);
+      __m256i b = _mm256_blendv_epi8(a, P1, _mm256_setr_epi32(m2[0], m2[1], m2[2], m2[3], m2[0], m2[1], m2[2], m2[3]));
+      __m256i m = _mm256_setr_epi32(mu[0], mu[1], mu[2], mu[3], mu[0], mu[1], mu[2], mu[3]);
+      __m256i v = _mm256_and_si256(_mm256_avg_epu8(a, b), m), d = _mm256_and_si256(ld16x2(q, q + qs), m);
+      sum += sad_sum(_mm256_sad_epu8(v, d));
+      if (per) {
+        __m256i U1 = _mm256_setr_epi32(u1[0], u1[1], u1[2], u1[3], u1[0], u1[1], u1[2], u1[3]);
+        ls[0] += sad_sum(_mm256_sad_epu8(_mm256_andnot_si256(M1, P0), _mm256_andnot_si256(M1, d)));
+        ls[1] += sad_sum(_mm256_sad_epu8(_mm256_and_si256(U1, P1), _mm256_and_si256(U1, d)));
+      }
+    }
+#else
+    (void)per;  // (the plain code sums per list anyway)
+    for (int k = 0; k < 4; k++) {
+      int n = use[0][k] + use[1][k];
+      if (!n) continue;
+      const uint8_t *p0 = (use[0][k] ? p[0] : p[1]) + k * 4, *p1 = p[1] + k * 4;
+      for (int j = 0; j < 2; j++)
+        for (int i = 0; i < 4; i++) {
+          int v = n == 2 ? (p0[j * 16 + i] + p1[j * 16 + i] + 1) >> 1 : p0[j * 16 + i];
+          sum += abs(q[j * qs + k * 4 + i] - v);
+          cnt++;
+          for (int l = 0; l < 2; l++)
+            if (use[l][k]) ls[l] += abs(q[j * qs + k * 4 + i] - p[l][j * 16 + k * 4 + i]), lc[l]++;
+        }
+    }
+#endif
   }
   // Template matching motion search for the luma block (bx, by, bw, bh)
   // of the current macroblock, on reference r of list l: from mv (quarter
@@ -2351,28 +2367,25 @@ struct ReconT : MbDecoder<K> {
     mv[1] = vy;
     return best;
   }
-  bool tm_search(int l, int r, int bx, int by, int bw, int bh, int* mv, bool only_y, const int (*cand)[2] = nullptr,
-                 int ncand = 0, int* miss = nullptr, int lambda = 0, int finest = 1, int inner = 0,
-                 int* alt = nullptr) const {
-    if (!act()) return false;
-    int mbw = cur->mbw, x0 = mb_x(mb_addr) + bx, y0 = mb_y(mb_addr) + by, w = cur->w;
-    bool top = by == 0 && above_done(), left = bx == 0 && left_done();
-    const RPic* ref = l < 0 ? proxy_pic() : r >= 0 && r < nlist[l] ? list[l][r] : nullptr;
-    if (inner == 1) top = left = false;
-    int ninner = inner == 1 ? bw * bh : 0;
-    if (inner == 2) {
-      for (int b = 0; b < 16; b++) ninner += (mb_done4 >> b & 1) * 16;
-      for (int b8 = 0; b8 < 4; b8++) ninner += (mb_done8 >> b8 & 1) * 64;
-    }
-    if ((!top && !left && !ninner) || !ref) return false;
-    // the samples of a rectangle of the current picture against the
-    // reference displaced by (vx, vy): bilinear between whole samples (not
-    // the six taps of the prediction; fast)
-    const uint8_t *R = ref->y.data(), *Y = cur->y.data();
-    int W = ref->w, H = ref->h, ps, pm;
-    const uint8_t* RP = ref->luma(ps, pm);
-    // (budget once it reaches budget, as sad_bil)
-    auto sad = [&](int xs, int ys, int rw, int rh, int vx, int vy, int budget) {
+  // A template search's context (tm_search): the templates of the block
+  // at (x0, y0), bw x bh, of the current picture (Y, stride w): the T rows
+  // above it (top), the T columns left of it (left; where T is 2 against
+  // the transposed reference RT, qt the template transposed), T x T above
+  // right (tr), and the blocks decoded inside it (inner 1: all of it, 2:
+  // those done; ninner samples); the reference (R, W x H; RP padded,
+  // stride ps, readable pm out of it; RT's stride pt). A vector's cost:
+  // lambda times its distance from (px, py), plus the templates' sums of
+  // absolute differences against the reference displaced by it, bilinear
+  // between whole samples (not the six taps of the prediction: fast); or,
+  // once not below bound, something not below bound. The search for an
+  // intra macroblock's proxy (memo) keeps each vector's in tmm.
+  struct TmCx {
+    const ReconT* rec;
+    const uint8_t *Y, *R, *RP, *RT, *qt;
+    int w, W, H, ps, pm, pt, x0, y0, bw, bh, T, inner, ninner, lambda, px, py;
+    bool top, left, tr, memo;
+    // a rectangle of samples (budget once it reaches budget, as sad_bil)
+    int sad(int xs, int ys, int rw, int rh, int vx, int vy, int budget) const {
       int ix = xs + (vx >> 2), iy = ys + (vy >> 2), fx = vx & 3, fy = vy & 3, s = 0;
       if (ix >= -pm && iy >= -pm && ix + rw < W + pm && iy + rh < H + pm)
         return sad_bil(Y + ys * w + xs, w, RP + iy * ps + ix, ps, rw, rh, fx, fy, budget);
@@ -2387,31 +2400,24 @@ struct ReconT : MbDecoder<K> {
         }
       }
       return std::min(s, budget);
-    };
-    const int px = mv[0], py = mv[1];
-    const int T = l < 0 ? TM_TP : TM_T;
-    bool tr = l < 0 && top && x0 + bw + T <= w && mb_x(mb_addr, 1) + 1 < mbw && db[mb_addr - mbw + 1].slice >= 0;
-    // a thin left template against the transposed reference: two rows of
-    // bh (and the template transposed, qt)
-    int pt = 0;
-    const uint8_t* RT = left && T == 2 ? ref->luma_t(pt) : nullptr;
-    const uint8_t* qt = RT ? left_strip() + by : nullptr;
-    auto sad_left = [&](int vx, int vy, int budget) {
+    }
+    int sad_left(int vx, int vy, int budget) const {
       int ix = x0 - T + (vx >> 2), iy = y0 + (vy >> 2);
       if (RT && ix >= -pm && iy >= -pm && ix + T < W + pm && iy + bh < H + pm)
         return sad_bil(qt, 16, RT + ix * pt + iy, pt, bh, 2, vy & 3, vx & 3, budget);
       return sad(x0 - T, y0, T, bh, vx, vy, budget);
-    };
-    auto inner_sad = [&](int vx, int vy, int budget) {
+    }
+    int inner_sad(int vx, int vy, int budget) const {
       if (inner == 1) return sad(x0, y0, bw, bh, vx, vy, budget);
       int s = 0;
       for (int b = 0; b < 16 && s < budget; b++)
-        if (mb_done4 >> b & 1) s += sad(x0 + blk_x(b) * 4, y0 + blk_y(b) * 4, 4, 4, vx, vy, budget - s);
+        if (rec->mb_done4 >> b & 1) s += sad(x0 + blk_x(b) * 4, y0 + blk_y(b) * 4, 4, 4, vx, vy, budget - s);
       for (int b8 = 0; b8 < 4 && s < budget; b8++)
-        if (mb_done8 >> b8 & 1) s += sad(x0 + (b8 & 1) * 8, y0 + (b8 >> 1) * 8, 8, 8, vx, vy, budget - s);
+        if (rec->mb_done8 >> b8 & 1) s += sad(x0 + (b8 & 1) * 8, y0 + (b8 >> 1) * 8, 8, 8, vx, vy, budget - s);
       return s;
-    };
-    auto outer_sad = [&](int vx, int vy, int budget) {
+    }
+    // the templates outside the block
+    int outer_sad(int vx, int vy, int budget) const {
       int s = 0;
 #ifdef H264P_AVX2
       // (the top and the top right as one, rows of 32)
@@ -2428,9 +2434,9 @@ struct ReconT : MbDecoder<K> {
       if (left && s < budget) s += sad_left(vx, vy, budget - s);
       if (tr && s < budget) s += sad(x0 + bw, y0 - T, T, T, vx, vy, budget - s);
       return s;
-    };
-    // (the whole sums of the 4x4 blocks of m4 and the 8x8 of m8)
-    auto blocks_sad = [&](int vx, int vy, unsigned m4, unsigned m8) {
+    }
+    // the whole sums of the 4x4 blocks of m4 and the 8x8 of m8
+    int blocks_sad(int vx, int vy, unsigned m4, unsigned m8) const {
       int s = 0;
 #ifdef H264P_AVX2
       int ix = x0 + (vx >> 2), iy = y0 + (vy >> 2), fx = vx & 3, fy = vy & 3;
@@ -2453,76 +2459,119 @@ struct ReconT : MbDecoder<K> {
       for (int b8 = 0; b8 < 4; b8++)
         if (m8 >> b8 & 1) s += sad(x0 + (b8 & 1) * 8, y0 + (b8 >> 1) * 8, 8, 8, vx, vy, INT_MAX);
       return s;
-    };
-    const bool memo = l < 0 && bx == 0 && by == 0 && bw == 16 && bh == 16;
-    // the cost of a vector, or something not below bound once it is not
-    auto cost = [&](int vx, int vy, int bound) {
+    }
+    // a vector's cost
+    int operator()(int vx, int vy, int bound) const {
       int c = lambda * (abs(vx - px) + abs(vy - py));
-      if (memo) {
-        TmMemo& e = tmm[((unsigned)vx & 31) | ((unsigned)vy & 31) << 5];
-        if (e.gen != tmm_gen || e.vx != vx || e.vy != vy) e = {tmm_gen, vx, vy, -1, 0, 0, 0};
-        if (top || left || tr) {
-          // (the searches for the blocks inside will be back: whole; else
-          // whole only where below bound, as below)
-          if (e.outer < 0 && inner == 2) e.outer = outer_sad(vx, vy, INT_MAX);
-          if (e.outer < 0) {
-            if (c >= bound) return c;
-            int s = outer_sad(vx, vy, bound - c);
-            if (s >= bound - c) return c + s;
-            e.outer = s;
-          }
-          c += e.outer;
-        }
-        if (inner && c < bound) {
-          if (inner == 1) {
-            // the block whole, decoded: what is known of it, and the rest
-            if (e.m4 && e.m8) e.inner = e.m4 = e.m8 = 0;
-            if (e.m8) {
-              e.inner += blocks_sad(vx, vy, 0, ~e.m8 & 15), e.m8 = 15;
-            } else if (e.m4) {
-              e.inner += blocks_sad(vx, vy, ~e.m4 & 0xFFFF, 0), e.m4 = 0xFFFF;
-            } else {
-              int s = sad(x0, y0, 16, 16, vx, vy, bound - c);
-              if (s >= bound - c) return c + s;
-              e.inner = s, e.m4 = 0xFFFF;
-            }
-          } else {
-            if ((e.m4 & ~mb_done4) || (e.m8 & ~mb_done8)) e.inner = e.m4 = e.m8 = 0;
-            e.inner += blocks_sad(vx, vy, mb_done4 & ~e.m4, mb_done8 & ~e.m8);
-            e.m4 = mb_done4, e.m8 = mb_done8;
-          }
-          c += e.inner;
-        }
-        return c;
-      }
+      if (memo) return memo_cost(vx, vy, bound, c);
       if (top && c < bound) c += sad(x0, y0 - T, bw, T, vx, vy, bound - c);
       if (left && c < bound) c += sad_left(vx, vy, bound - c);
       if (tr && c < bound) c += sad(x0 + bw, y0 - T, T, T, vx, vy, bound - c);
       if (ninner && c < bound) c += inner_sad(vx, vy, bound - c);
       return c;
-    };
-    int best;
-    if (T == 2 && !ninner && (!left || RT)) {
-      // thin templates (but no inner one): inside the margins whole, both
-      // parts at once (there the vectors' whole samples in [xl, xh) x [yl,
-      // yh); ot, ol: where the top template is in RP and the left in RT at
-      // the vector 0)
-      const int xl = 2 - pm - x0, xh = W + pm - bw - x0, yl = 2 - pm - y0, yh = H + pm - bh - y0;
-      const int ot = (y0 - 2) * ps + x0, ol = (x0 - 2) * pt + y0;
-      const Tpl2 qa(top ? Y + (y0 - 2) * w + x0 : nullptr, w, bw), ql(left ? qt : nullptr, 16, bh);
-      auto thin = [=, &cost](int vx, int vy, int bound) {
-        int ix = vx >> 2, iy = vy >> 2;
-        if (ix < xl || ix >= xh || iy < yl || iy >= yh) return cost(vx, vy, bound);
-        int c = lambda * (abs(vx - px) + abs(vy - py));
-        if (top) c += sad_bil2(qa, RP + (ot + iy * ps + ix), ps, vx & 3, vy & 3);
-        if (left) c += sad_bil2(ql, RT + (ol + ix * pt + iy), pt, vy & 3, vx & 3);
-        return c;
-      };
-      best = tm_walk(thin, mv, only_y, cand, ncand, finest, alt);
-    } else {
-      best = tm_walk(cost, mv, only_y, cand, ncand, finest, alt);
     }
-    if (miss) *miss = best * 4 / ((top ? T * bw : 0) + (left ? T * bh : 0) + (tr ? T * T : 0) + ninner);
+    // that of the proxy's search, with what tmm knows of the vector (c: its
+    // distance's part)
+    int memo_cost(int vx, int vy, int bound, int c) const {
+      TmMemo& e = rec->tmm[((unsigned)vx & 31) | ((unsigned)vy & 31) << 5];
+      if (e.gen != rec->tmm_gen || e.vx != vx || e.vy != vy) e = {rec->tmm_gen, vx, vy, -1, 0, 0, 0};
+      if (top || left || tr) {
+        // (the searches for the blocks inside will be back: whole; else
+        // whole only where below bound, as below)
+        if (e.outer < 0 && inner == 2) e.outer = outer_sad(vx, vy, INT_MAX);
+        if (e.outer < 0) {
+          if (c >= bound) return c;
+          int s = outer_sad(vx, vy, bound - c);
+          if (s >= bound - c) return c + s;
+          e.outer = s;
+        }
+        c += e.outer;
+      }
+      if (!inner || c >= bound) return c;
+      if (inner == 1) {
+        // the block whole, decoded: what is known of it, and the rest
+        if (e.m4 && e.m8) e.inner = e.m4 = e.m8 = 0;
+        if (e.m8) {
+          e.inner += blocks_sad(vx, vy, 0, ~e.m8 & 15), e.m8 = 15;
+        } else if (e.m4) {
+          e.inner += blocks_sad(vx, vy, ~e.m4 & 0xFFFF, 0), e.m4 = 0xFFFF;
+        } else {
+          int s = sad(x0, y0, 16, 16, vx, vy, bound - c);
+          if (s >= bound - c) return c + s;
+          e.inner = s, e.m4 = 0xFFFF;
+        }
+      } else {
+        unsigned m4 = rec->mb_done4, m8 = rec->mb_done8;
+        if ((e.m4 & ~m4) || (e.m8 & ~m8)) e.inner = e.m4 = e.m8 = 0;
+        e.inner += blocks_sad(vx, vy, m4 & ~e.m4, m8 & ~e.m8);
+        e.m4 = (uint16_t)m4, e.m8 = (uint8_t)m8;
+      }
+      return c + e.inner;
+    }
+  };
+  // the cost where the templates are thin (T 2) and there is no inner one:
+  // inside the margins (there the vectors' whole samples in [xl, xh) x
+  // [yl, yh)) both parts at once, by sad_bil2 (ot, ol: where the top
+  // template is in RP and the left in RT at the vector 0); TmCx's outside
+  struct TmThin {
+    const TmCx& cx;
+    const uint8_t *RP, *RT;
+    int ps, pt, lambda, px, py, xl, xh, yl, yh, ot, ol;
+    bool top, left;
+    Tpl2 qa, ql;
+    explicit TmThin(const TmCx& c)
+        : cx(c), RP(c.RP), RT(c.RT), ps(c.ps), pt(c.pt), lambda(c.lambda), px(c.px), py(c.py),
+          xl(2 - c.pm - c.x0), xh(c.W + c.pm - c.bw - c.x0), yl(2 - c.pm - c.y0), yh(c.H + c.pm - c.bh - c.y0),
+          ot((c.y0 - 2) * c.ps + c.x0), ol((c.x0 - 2) * c.pt + c.y0), top(c.top), left(c.left),
+          qa(c.top ? c.Y + (c.y0 - 2) * c.w + c.x0 : nullptr, c.w, c.bw), ql(c.left ? c.qt : nullptr, 16, c.bh) {}
+    int operator()(int vx, int vy, int bound) const {
+      int ix = vx >> 2, iy = vy >> 2;
+      if (ix < xl || ix >= xh || iy < yl || iy >= yh) return cx(vx, vy, bound);
+      int c = lambda * (abs(vx - px) + abs(vy - py));
+      if (top) c += sad_bil2(qa, RP + (ot + iy * ps + ix), ps, vx & 3, vy & 3);
+      if (left) c += sad_bil2(ql, RT + (ol + ix * pt + iy), pt, vy & 3, vx & 3);
+      return c;
+    }
+  };
+  bool tm_search(int l, int r, int bx, int by, int bw, int bh, int* mv, bool only_y, const int (*cand)[2] = nullptr,
+                 int ncand = 0, int* miss = nullptr, int lambda = 0, int finest = 1, int inner = 0,
+                 int* alt = nullptr) const {
+    if (!act()) return false;
+    TmCx c;
+    if (!tm_cx(c, l, r, bx, by, bw, bh, mv, lambda, inner)) return false;
+    // (thin templates but no inner one: TmThin)
+    int best = c.T == 2 && !c.ninner && (!c.left || c.RT) ? tm_walk(TmThin(c), mv, only_y, cand, ncand, finest, alt)
+                                                           : tm_walk(c, mv, only_y, cand, ncand, finest, alt);
+    if (miss) *miss = best * 4 / ((c.top ? c.T * bw : 0) + (c.left ? c.T * bh : 0) + (c.tr ? c.T * c.T : 0) + c.ninner);
+    return true;
+  }
+  // tm_search's context (as there); false: no template or no reference
+  bool tm_cx(TmCx& c, int l, int r, int bx, int by, int bw, int bh, const int* mv, int lambda, int inner) const {
+    int mbw = cur->mbw;
+    c.rec = this;
+    c.x0 = mb_x(mb_addr) + bx, c.y0 = mb_y(mb_addr) + by, c.w = cur->w, c.bw = bw, c.bh = bh;
+    c.top = by == 0 && above_done(), c.left = bx == 0 && left_done();
+    const RPic* ref = l < 0 ? proxy_pic() : r >= 0 && r < nlist[l] ? list[l][r] : nullptr;
+    if (inner == 1) c.top = c.left = false;
+    c.inner = inner;
+    c.ninner = inner == 1 ? bw * bh : 0;
+    if (inner == 2) {
+      for (int b = 0; b < 16; b++) c.ninner += (mb_done4 >> b & 1) * 16;
+      for (int b8 = 0; b8 < 4; b8++) c.ninner += (mb_done8 >> b8 & 1) * 64;
+    }
+    if ((!c.top && !c.left && !c.ninner) || !ref) return false;
+    c.R = ref->y.data(), c.Y = cur->y.data();
+    c.W = ref->w, c.H = ref->h;
+    c.RP = ref->luma(c.ps, c.pm);
+    c.lambda = lambda, c.px = mv[0], c.py = mv[1];
+    c.T = l < 0 ? TM_TP : TM_T;
+    c.tr = l < 0 && c.top && c.x0 + bw + c.T <= c.w && mb_x(mb_addr, 1) + 1 < mbw && db[mb_addr - mbw + 1].slice >= 0;
+    // a thin left template against the transposed reference: two rows of
+    // bh (and the template transposed, qt)
+    c.pt = 0;
+    c.RT = c.left && c.T == 2 ? ref->luma_t(c.pt) : nullptr;
+    c.qt = c.RT ? left_strip() + by : nullptr;
+    c.memo = l < 0 && bx == 0 && by == 0 && bw == 16 && bh == 16;
     return true;
   }
   // a stand-in for the source of the current (intra) macroblock: its

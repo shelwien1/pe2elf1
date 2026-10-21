@@ -153,6 +153,84 @@ struct AqFit {
   }
 };
 
+// The shift of an inter luma block's prediction that its residual looks
+// like (the sgn family): the levels of the prediction's horizontal and
+// vertical gradients (lx, ly) fitted by least squares to those of the
+// coefficients whose signs are known (cv), in integers (the format
+// depending on no floating point)
+struct ShiftFit {
+  i64 sxx = 0, sxy = 0, syy = 0, sxc = 0, syc = 0;
+  void add(i64 lx, i64 ly, i64 cv) { sxx += lx * lx, sxy += lx * ly, syy += ly * ly, sxc += lx * cv, syc += ly * cv; }
+  // the shift fitted so far: (fx, fy) / fd, scaled into 40 bits; fd 0 none
+  void fit(i64& fx, i64& fy, i64& fd) const {
+    i64 det = sxx * syy - sxy * sxy, sum = sxx + syy + 1;
+    if (det > 0 && det > (sum * sum >> 30)) {
+      fx = syy * sxc - sxy * syc, fy = sxx * syc - sxy * sxc, fd = det;
+    } else if (sxx + syy + 2 * sxy > 0) {
+      // one direction only so far: along the gradients seen
+      fx = fy = sxc + syc, fd = sxx + syy + 2 * sxy;
+    } else {
+      fx = fy = fd = 0;
+      return;
+    }
+    while (std::max(std::max(fx < 0 ? -fx : fx, fy < 0 ? -fy : fy), fd) >= ((i64)1 << 40)) fx /= 2, fy /= 2, fd /= 2;
+  }
+};
+
+// x264's AQ as the model follows it: per picture three lines (AqFit),
+// through the macroblocks that coded mb_qp_delta, of the QP against the
+// energy of their reconstruction (fit), of their prediction (fitp: inter)
+// and of their proxy (fitx: intra); the energies of the macroblocks of
+// the current and the last picture (16 log2, -1 not known); the QP of the
+// current picture's that coded mb_qp_delta (-1 other); and per kind of
+// picture how far the QP of the last one's was from its line (16ths,
+// INT16_MIN not known)
+struct AqModel {
+  AqFit fit, fitp, fitx;
+  int xp = -1;      // the energy of the current macroblock's prediction (inter), or (xi) its proxy's (intra)
+  bool xi = false;
+  std::vector<int16_t> x, xl, q, res[30];
+  int key = -1;
+  // a picture of kind k and n macroblocks begins: the last one's lines and
+  // energies are the past
+  void picture(int k, int n) {
+    if (key >= 0) {
+      std::vector<int16_t>& r = res[key];
+      r.assign(q.size(), INT16_MIN);
+      for (size_t a = 0; a < q.size(); a++) {
+        int q16;
+        if (q[a] >= 0 && fit.predict(x[a], q16)) r[a] = (int16_t)tc_clamp(16 * q[a] - q16, -32767, 32767);
+      }
+    }
+    xl.swap(x);
+    x.assign(n, -1);
+    q.assign(n, -1);
+    fit.clear();
+    fitp.clear();
+    fitx.clear();
+    key = k;
+  }
+  // macroblock a decoded: the energy e of its reconstruction, its QP qp,
+  // and whether it coded mb_qp_delta
+  void decoded(int a, int e, int qp, bool coded) {
+    x[a] = (int16_t)e;
+    if (!coded) return;
+    fit.add(e, qp);
+    if (xp >= 0) (xi ? fitx : fitp).add(xp, qp);
+    q[a] = (int16_t)qp;
+  }
+  // the energy where the last picture's and the current one's left and
+  // upper neighbours' put macroblock a (their mean; -1 none), the picture
+  // w macroblocks wide
+  int around(int a, int w) const {
+    int xs = 0, xn = 0;
+    if (xl.size() == x.size() && xl[a] >= 0) xs += xl[a], xn++;
+    if (a % w && x[a - 1] >= 0) xs += x[a - 1], xn++;
+    if (a >= w && x[a - w] >= 0) xs += x[a - w], xn++;
+    return xn ? xs / xn : -1;
+  }
+};
+
 // 16 x the quantizer's step of a QP (0.625 x 2^(qp/6))
 static INLINE int qstep16(int qp) {
   static const int k[6] = {10, 11, 13, 14, 16, 18};
@@ -493,6 +571,348 @@ struct HeaderModel {
   }
 };
 
+// --- The model's histories: per kind of picture (slice type, reference or
+// not, frame or top or bottom field: 30 kinds) what it keeps of the last
+// macroblock coded at each address (MbCol), and which pictures those are;
+// and, from the first P slice of a P picture on, the records of its kind
+// as they were when the picture began, for the contexts that follow a
+// block's vector into its reference (Model::mc_col, mc_nz).
+struct History {
+  std::vector<MbCol> rec[30];
+  std::vector<uint8_t> skip[30];  // rec's valid && skip, a byte a macroblock (for skp_vars)
+  MbCol* cur = nullptr;           // rec of the current slice's kind
+  // each kind's: the POC of the picture it is (INT_MIN none) and of the
+  // picture of the kind before it, and the picture it is (Model::pic_):
+  // its first slice of the kind made it so
+  int poc[30], prev[30];
+  uint32_t pic[30] = {};
+  // The records of kind key as they were when its picture began (if ok: a
+  // P picture): rec[key] where keep's stamp is not snap, else keep and
+  // coef, where before_write() keeps what views read of a record before it
+  // is rewritten (size records; at a picture of another size, unused).
+  // (Copying the records as the picture begins costs more: it touches
+  // every record, cold; h264p_l1_speed.md section 6.8.)
+  struct Keep {
+    uint32_t stamp;  // kept for the picture that began with snap this
+    uint8_t valid, cls;
+    uint16_t cm, nzm;  // nzm[0]
+  };
+  struct Coef {
+    int8_t r[16][16];  // (rows outside cm zero)
+  };
+  std::vector<Keep> keep;
+  std::vector<Coef> coef;
+  uint32_t snap = 0;
+  int key = 0, size = 0;
+  bool ok = false;
+  History() {
+    std::fill_n(poc, 30, INT_MIN);
+    std::fill_n(prev, 30, INT_MIN);
+  }
+
+  // a slice of kind k begins, in a picture of n macroblocks (newpic: its
+  // first slice); p: a P slice whose picture's records are kept as they were
+  void slice(int k, int n, bool newpic, bool p) {
+    if ((int)rec[k].size() < n) rec[k].resize(n), skip[k].resize(n);
+    cur = rec[k].data();
+    // (from the picture's first P slice: a picture may begin with another)
+    if (newpic) ok = false;
+    if (p && !ok) {
+      ok = true;
+      if ((int)keep.size() < n) keep.resize(n, Keep{}), coef.resize(n, Coef{});
+      snap++;  // (nothing kept yet: every record is rec's)
+      key = k;
+      size = n;
+    }
+  }
+  // kind k's first slice in picture p, of POC pc: the kind's records are
+  // the picture's from here on
+  void picture(int k, uint32_t p, int pc) {
+    if (pic[k] == p) return;
+    pic[k] = p;
+    prev[k] = poc[k];
+    poc[k] = pc;
+  }
+  // before the record of macroblock a of kind k is rewritten: what views
+  // read of it (valid, cls, nzm[0], cm and the coefficient rows, those
+  // outside cm zero as in rec), kept as it was when the picture began
+  INLINE void before_write(int k, int a) {
+    if (!ok || k != key || a >= size || keep[a].stamp == snap) return;
+    const MbCol& s = rec[k][a];
+    Keep& d = keep[a];
+    for (uint32_t m = (uint32_t)(d.cm | s.cm); m; m &= m - 1) {
+      int r = __builtin_ctz(m);
+      memcpy(coef[a].r[r], s.coef[r], 16);
+    }
+    d = Keep{snap, s.valid, s.cls, s.cm, s.nzm[0]};
+  }
+  // the kind, other than k, whose records are the picture with POC pc (of
+  // n macroblocks); -1 none
+  int of_poc(int pc, int k, int n) const {
+    for (int j = 0; j < 30; j++)
+      if (j != k && poc[j] == pc && (int)rec[j].size() >= n) return j;
+    return -1;
+  }
+
+  // What a view reads of a macroblock's record
+  struct Ref {
+    uint8_t valid, cls;
+    uint16_t cm, nzm;          // nzm[0]
+    const int8_t (*coef)[16];  // the luma coefficients (rows outside cm zero)
+  };
+  // the records of a picture, as they were: by address
+  struct View {
+    const MbCol* cur = nullptr;   // a kind's records
+    const Keep* keep = nullptr;   // and those kept as they were, where rewritten since (snap)
+    const Coef* coef = nullptr;
+    uint32_t id = 0;
+    explicit operator bool() const { return cur != nullptr; }
+    Ref at(int a) const {
+      if (keep && keep[a].stamp == id) {
+        const Keep& k = keep[a];
+        return Ref{k.valid, k.cls, k.cm, k.nzm, coef[a].r};
+      }
+      const MbCol& c = cur[a];
+      return Ref{c.valid, c.cls, c.cm, c.nzm[0], c.coef};
+    }
+  };
+  // those of the picture with POC pc (none: false), from a slice of kind k
+  // in a picture of n macroblocks whose kind's last picture had POC pp:
+  // the current kind's as they were if it is that one, else another kind's
+  View view(int pc, int pp, int k, int n) const {
+    View v;
+    if (pc == pp && size == n) {
+      if (ok && key == k) v.cur = rec[key].data(), v.keep = keep.data(), v.coef = coef.data(), v.id = snap;
+      return v;
+    }
+    int j = of_poc(pc, k, n);
+    if (j >= 0) v.cur = rec[j].data();
+    return v;
+  }
+};
+
+// --- The motion vectors as the decoder reconstructs them (8.4.1): the
+// prediction a partition's mvd is coded against (pred), P_Skip's motion
+// (pskip) and B direct's (direct). From the motion of the macroblocks
+// around (their records, by the walk's neighbours), of the partitions of
+// the current one decoded so far (its record and their shape) and of the
+// decoder's colocated pictures; into the arrays it is given (a
+// macroblock's record's, or the skip motion the model looks at first).
+template <class R>
+struct MotionPred {
+  struct MvN {
+    bool avail;  // the partition is there (it may be intra or not use the list)
+    int ref, mv[2];
+  };
+  // the slice's walk, its macroblock states and their records (by
+  // address), its decoder; the current macroblock: its address, its record
+  // and the shape of its partitions (16x16, 16x8, 8x16, 8x8; the
+  // sub-macroblocks')
+  const WalkState* sc = nullptr;
+  const MbState* mbs = nullptr;
+  const MbInfo* info = nullptr;
+  const R* rec = nullptr;
+  int width = 1;
+  bool mbaff = false;
+  int addr = 0;
+  const MbInfo* mi = nullptr;
+  int parts = 0, subshape[4] = {};
+  void slice(const WalkState& w, const MbInfo* inf, const R& r) {
+    sc = &w, mbs = w.store_.mbs.data(), info = inf, rec = &r, width = w.width_, mbaff = w.mbaff_;
+  }
+  void begin(int a, const MbInfo* m) { addr = a, mi = m, parts = 0; }
+
+  // the place of the partition with the 4x4 block (x, y) of the current
+  // macroblock in decoding order
+  int part_ord(int x, int y) const {
+    switch (parts) {
+      case 0:
+        return 0;
+      case 1:
+        return y >> 1;
+      case 2:
+        return x >> 1;
+      default: {
+        int i = (y >> 1) * 2 + (x >> 1), sh = subshape[i];
+        return 4 * i + (sh == 0 ? 0 : sh == 1 ? y & 1 : sh == 2 ? x & 1 : (y & 1) * 2 + (x & 1));
+      }
+    }
+  }
+  // the motion of the neighbouring 4x4 block (x, y) of the current
+  // macroblock, x in -1..4, y in -1..3, for a partition at place ord
+  // (8.4.1.3.2); approximate at the corners of MBAFF macroblock pairs
+  MvN nb(int list, int x, int y, int ord) const {
+    MvN r = {false, -1, {0, 0}};
+    const MbState* s;
+    const MbInfo* m;
+    int i = 0;
+    if (x >= 0 && y >= 0) {
+      if (x > 3 || part_ord(x, y) > ord) return r;  // not decoded yet
+      s = sc->cur_;
+      m = mi;
+      i = y * 4 + x;
+    } else if ((x < 0 && y < 0) || x > 3) {  // D or C, in the macroblock above left or right
+      if (mbaff || addr < width) return r;
+      int a = x < 0 ? (addr % width ? addr - width - 1 : -1) : (addr % width < width - 1 ? addr - width + 1 : -1);
+      if (a < 0 || mbs[a].slice != sc->slice_id_) return r;
+      s = &mbs[a];
+      m = &info[a];
+      i = x < 0 ? 15 : 12;
+    } else {
+      s = sc->nb4(x, y, i);
+      if (!s) return r;
+      m = &info[s - mbs];
+    }
+    r.avail = true;
+    int ref = m->rf[list][(i >> 3) * 2 + ((i & 3) >> 1)];
+    if (ref < 0) return r;
+    r.ref = ref;
+    r.mv[0] = m->mv[list][i][0];
+    r.mv[1] = m->mv[list][i][1];
+    if (mbaff && s != sc->cur_) {
+      if (sc->cur_->field && !s->field) {
+        r.mv[1] /= 2;
+        r.ref *= 2;
+      } else if (!sc->cur_->field && s->field) {
+        r.mv[1] *= 2;
+        r.ref >>= 1;
+      }
+    }
+    return r;
+  }
+  static int median3(int a, int b, int c) { return a + b + c - std::min(a, std::min(b, c)) - std::max(a, std::max(b, c)); }
+  // the prediction of the motion vector of a partition (8.4.1.3); nbs gets
+  // its neighbours A, B and C
+  void pred(int list, int x, int y, int w, int h, int ref, int* p, MvN* nbs = nullptr) const {
+    int ord = part_ord(x, y);
+    MvN a = nb(list, x - 1, y, ord), b = nb(list, x, y - 1, ord), c = nb(list, x + w, y - 1, ord);
+    if (!c.avail) c = nb(list, x - 1, y - 1, ord);
+    if (nbs) {
+      nbs[0] = a;
+      nbs[1] = b;
+      nbs[2] = c;
+    }
+    pred(a, b, c, x, y, w, h, ref, p);
+  }
+  // the same from its neighbours A, B and C (C, D where C is not available)
+  static void pred(const MvN& a, MvN b, MvN c, int x, int y, int w, int h, int ref, int* p) {
+    const MvN* d = nullptr;
+    if (w == 4 && h == 2)
+      d = y == 0 ? (b.ref == ref ? &b : nullptr) : (a.ref == ref ? &a : nullptr);
+    else if (w == 2 && h == 4)
+      d = x == 0 ? (a.ref == ref ? &a : nullptr) : (c.ref == ref ? &c : nullptr);
+    if (!d) {
+      if (!b.avail && !c.avail && a.avail) b = c = a;
+      int n = (a.ref == ref) + (b.ref == ref) + (c.ref == ref);
+      if (n == 1) d = a.ref == ref ? &a : b.ref == ref ? &b : &c;
+    }
+    if (d) {
+      p[0] = d->mv[0];
+      p[1] = d->mv[1];
+    } else {
+      for (int k = 0; k < 2; k++) p[k] = median3(a.mv[k], b.mv[k], c.mv[k]);
+    }
+  }
+  // the motion of a partition of list l (4x4 blocks x, y, w x h): its
+  // reference ref and vector p, into the vectors mv and references rf
+  static void set(int16_t (*mv)[16][2], int8_t (*rf)[4], int list, int x, int y, int w, int h, int ref, const int* p) {
+    int16_t v[2] = {(int16_t)tc_clamp(p[0], -32768, 32767), (int16_t)tc_clamp(p[1], -32768, 32767)};
+    if (w == 4 && h == 4) {
+      for (int b = 0; b < 16; b++) memcpy(mv[list][b], v, sizeof v);
+      memset(rf[list], ref, 4);
+      return;
+    }
+    for (int yy = y; yy < y + h; yy++)
+      for (int xx = x; xx < x + w; xx++) memcpy(mv[list][yy * 4 + xx], v, sizeof v);
+    for (int yy = y; yy < y + h; yy += 2)
+      for (int xx = x; xx < x + w; xx += 2) rf[list][(yy >> 1) * 2 + (xx >> 1)] = (int8_t)ref;
+  }
+  // P_Skip (8.4.1.1)
+  void pskip(int16_t (*mv)[16][2], int8_t (*rf)[4]) {
+    parts = 0;
+    MvN a = nb(0, -1, 0, 0), b = nb(0, 0, -1, 0);
+    int p[2] = {0, 0};
+    if (a.avail && b.avail && !(a.ref == 0 && !a.mv[0] && !a.mv[1]) && !(b.ref == 0 && !b.mv[0] && !b.mv[1])) {
+      MvN c = nb(0, 4, -1, 0);
+      if (!c.avail) c = nb(0, -1, -1, 0);
+      pred(a, b, c, 0, 0, 4, 4, 0, p);
+    }
+    set(mv, rf, 0, 0, 0, 4, 4, 0, p);
+  }
+  // B direct, spatial (8.4.1.2.2), for the 8x8 blocks of mask (its
+  // neighbours are those of the macroblock, outside it)
+  static int minpos(int a, int b) { return a >= 0 && b >= 0 ? std::min(a, b) : std::max(a, b); }
+  void direct(int mask, int16_t (*mv)[16][2], int8_t (*rf)[4]) {
+    if (!sc->h_.direct_spatial_mv_pred_flag) {
+      temporal(mask, mv, rf);
+      return;
+    }
+    int saved = parts, ref[2], v[2][2] = {{0, 0}, {0, 0}};
+    parts = 0;
+    MvN n3[2][3];
+    for (int l = 0; l < 2; l++) {
+      MvN &a = n3[l][0], &b = n3[l][1], &c = n3[l][2];
+      a = nb(l, -1, 0, 0), b = nb(l, 0, -1, 0), c = nb(l, 4, -1, 0);
+      if (!c.avail) c = nb(l, -1, -1, 0);
+      ref[l] = minpos(a.ref, minpos(b.ref, c.ref));
+    }
+    bool zero = ref[0] < 0 && ref[1] < 0;
+    if (zero) ref[0] = ref[1] = 0;
+    // (the macroblock's prediction, from the neighbours just found)
+    for (int l = 0; l < 2; l++)
+      if (!zero && ref[l] >= 0) pred(n3[l][0], n3[l][1], n3[l][2], 0, 0, 4, 4, ref[l], v[l]);
+    bool lt = rec->col_long_term();
+    // (with direct_8x8_inference the four 4x4 blocks of an 8x8 one have the
+    // same colocated block: the 8x8 block at once)
+    int n = rec->direct8x8 ? 2 : 1;
+    // colZeroFlag, by 4x4 block (bit y * 4 + x): the colocated block is
+    // still, which zeroes the vector of a list on reference 0
+    int still = 0;
+    if (!zero && !lt && (ref[0] == 0 || ref[1] == 0))
+      for (int b8 = 0; b8 < 4; b8++)
+        if (mask >> b8 & 1)
+          for (int k = 0; k < 4; k += 3 * n - 2) {
+            int x = (b8 & 1) * 2 + (k & 1), y = (b8 >> 1) * 2 + (k >> 1), cr, cm[2];
+            int64_t pid;
+            if (rec->colocated(addr, y * 4 + x, cr, cm, pid) && cr == 0 && abs(cm[0]) <= 1 && abs(cm[1]) <= 1)
+              still |= (n == 2 ? 0x33 : 1) << (y * 4 + x);
+          }
+    for (int l = 0; l < 2; l++) {
+      if (ref[l] < 0) continue;
+      int z[2] = {0, 0}, s = ref[l] == 0 ? still : 0;
+      if (mask == 15 && (s == 0 || s == 0xFFFF)) {
+        set(mv, rf, l, 0, 0, 4, 4, ref[l], s ? z : v[l]);
+        continue;
+      }
+      for (int b8 = 0; b8 < 4; b8++)
+        if (mask >> b8 & 1)
+          for (int k = 0; k < 4; k += 3 * n - 2) {
+            int x = (b8 & 1) * 2 + (k & 1), y = (b8 >> 1) * 2 + (k >> 1);
+            set(mv, rf, l, x, y, n, n, ref[l], s >> (y * 4 + x) & 1 ? z : v[l]);
+          }
+    }
+    parts = saved;
+  }
+  // temporal direct (8.4.1.2.3)
+  void temporal(int mask, int16_t (*mv)[16][2], int8_t (*rf)[4]) const {
+    for (int b8 = 0; b8 < 4; b8++)
+      if (mask >> b8 & 1)
+        for (int k = 0; k < 4; k++) {
+          int x = (b8 & 1) * 2 + (k & 1), y = (b8 >> 1) * 2 + (k >> 1), cr, cm[2] = {0, 0}, r0 = 0;
+          int64_t pid;
+          if (rec->colocated(addr, y * 4 + x, cr, cm, pid))
+            r0 = rec->map_col(pid);
+          else
+            cm[0] = cm[1] = 0;
+          int dsf = rec->dist_scale(r0);
+          int m0[2] = {(dsf * cm[0] + 128) >> 8, (dsf * cm[1] + 128) >> 8};
+          int m1[2] = {m0[0] - cm[0], m0[1] - cm[1]};
+          set(mv, rf, 0, x, y, 1, 1, r0, m0);
+          set(mv, rf, 1, x, y, 1, 1, 0, m1);
+        }
+  }
+};
+
 template <int f_DEC, class LV>
 struct Model : tc_rc<f_DEC> {
   static constexpr int ENC = f_DEC == 0;
@@ -547,8 +967,6 @@ struct Model : tc_rc<f_DEC> {
     rec_.deblock = LV::deblock;
     // (end_of_slice_flag 0 nearly for sure: as if seen a few times)
     for (cm_cnt& c : end_c_) c.p = (u16)(CM_CONE - 16), c.t = 8;
-    for (int& p : hist_poc_) p = INT_MIN;
-    for (int& p : hist_prev_) p = INT_MIN;
 #define H_MAP(F) t_##F = tc_table<typename LV::F::T>(), LV::F::init(t_##F), f_##F.wire(t_##F, this);
     H264P_FAMS(H_MAP)
 #undef H_MAP
@@ -622,28 +1040,9 @@ struct Model : tc_rc<f_DEC> {
   SC* sc_ = nullptr;
   const MbState* mbs_ = nullptr;  // the walk's macroblock states, for addresses
   std::vector<MbInfo> info_;
-  std::vector<MbCol> hist_[30];
-  std::vector<uint8_t> hskip_[30];  // the same's valid && skip, a byte a macroblock (for skp_vars)
-  MbCol* hcur_ = nullptr;  // hist_ of the current slice's kind
-  // and as it was when the picture began (if hprev_ok_: a P picture), for
-  // mc_col() and mc_nz(): hist_[hkey_] where hkeep_'s stamp is not hsnap_,
-  // else hkeep_ and hcoef_, where finish_mb() keeps what they read of a
-  // record before rewriting it (hsize_ records; at a picture of another
-  // size, unused). (Copying the history as the picture begins costs more:
-  // it touches every record, cold; h264p_l1_speed.md section 6.8.)
-  struct HKeep {
-    uint32_t stamp;  // kept for the picture that began with hsnap_ this
-    uint8_t valid, cls;
-    uint16_t cm, nzm;  // nzm[0]
-  };
-  std::vector<HKeep> hkeep_;
-  struct HCoef {
-    int8_t r[16][16];  // (rows outside cm zero)
-  };
-  std::vector<HCoef> hcoef_;
-  uint32_t hsnap_ = 0;
-  int hkey_ = 0, hsize_ = 0;
-  bool hprev_ok_ = false;
+  History hist_;
+  typedef History::Ref MbRef;
+  typedef History::View HistView;
   uint32_t pic_ = 1;       // pictures so far
   SliceHeader last_h_;     // the last slice coded (no sps: none yet)
   int st_ = 0, key_ = 0;   // slice type x reference; st_ x frame/top/bottom field
@@ -661,43 +1060,76 @@ struct Model : tc_rc<f_DEC> {
   bool mb_open_ = false;
   int addr_ = 0;
   MbInfo* mi_ = nullptr;
+  // What the coding of one family leaves for others', each made where its
+  // comment says and reset by begin_mb() unless it says otherwise: the
+  // walk's order decides what is known when.
+  // - the history's records (History): the macroblock's own, col_, and in
+  //   a B slice the same macroblock's in list 1's first reference (col1_);
+  //   col_'s skip as skp_vars() has it (col_skip_), for end(), which comes
+  //   after finish_mb() rewrote col_'s record (col_ is null from there)
   const MbCol* col_ = nullptr;
-  int col_skip_ = 0;  // col_'s skip as skp_vars() has it, from before finish_mb()
-  const MbCol* col1_ = nullptr;  // B: the same macroblock in list 1's first reference (phist)
-  int sub_[4] = {};
-  int pmv_[2] = {};  // proxy_mv()
-  i64 shx_ = 0, shy_ = 0, shd_ = 0;  // block(): the shift fitted to the macroblock's last inter luma block, (x, y) / d
-  int tx_ = 0;  // skip_miss: the skip prediction's texture (class)
-  H_mbt_v* mbt_d_ = nullptr;  // mb_type's contexts while it is coded
-  int prx_v_[2] = {};       // the proxy's vector (quarter samples), as searched again (block)
-  int prx_blk_ = 0;         // the luma block it was last searched for
-  bool prx_chroma_ = false;  // and whether for the chroma
-  int pxq_ = 0;      // proxy_mv(): how well its vector matches the samples around (1 + tc_qlog, 0 not known)
-  bool pmv_ok_ = false;
-  std::vector<int16_t> pxv_;  // the vectors of the current picture's proxies (INT16_MIN none)
-  int sm_ = 0, tm_ = 0;  // skip_miss() of the macroblock, its template matching miss
-  int16_t smv_[2][16][2];  // skip_miss(): the skip motion (smv_ok_: made)
+  int col_skip_ = 0;
+  const MbCol* col1_ = nullptr;
+  // - skip_miss(), as the skp family codes mb_skip_flag: how well the skip
+  //   prediction continues the samples around (sm_), its template matching
+  //   miss (tm_), the best template match on list 0 (tb_; its vector tmb_),
+  //   the better list of the skip motion (dh_; B), how far apart its two
+  //   predictions are (bd_; B), its texture's class (tx_); and the skip
+  //   motion itself (smv_, srf_: smv_ok_), which skip() takes
+  int sm_ = 0, tm_ = 0, tb_ = 0, dh_ = 0, bd_ = 0, tx_ = 0;
+  int tmb_[2] = {};
+  bool tmb_ok_ = false;
+  int16_t smv_[2][16][2];
   int8_t srf_[2][4];
   bool smv_ok_ = false;
-  int mph_ = 1;          // ipm(): the macroblock's most-probable-mode flags so far, after a 1
-  int cnth_ = 0;         // block(): the counts of the last two blocks, two bits each
-  int tb_ = 0, dh_ = 0;  // skip_miss(): the best template match on list 0, the better list of the skip motion (B)
-  int bd_ = 0;           // skip_miss(): the skip motion's two predictions apart (B)
-  int tmb_[2] = {};      // that vector
-  bool tmb_ok_ = false;
-  int prev_mode_ = 9, mvx_ = 0;
-  int parts_ = 0, subshape_[4] = {};  // partitions of the macroblock: 16x16, 16x8, 8x16, 8x8; sub-macroblock shapes
-  int mvp_[2] = {}, sp_[2] = {}, pdv_[2] = {};  // the current partition: mvp, spread of the neighbours, col - mvp
-  int ns_[2] = {};  // and the signs of the neighbours' vectors less mvp, summed
-  bool pdn_ = false;                             // no col vector
-  int tmv_[2] = {};                              // its vector by template matching (Recon::tm_search)
-  bool tmn_ = true;                              // none
-  int tmq_ = 0;                                  // its miss (Recon::tm_search)
+  // - mb_type: its contexts while it is coded (mbt_intra's), null after
+  H_mbt_v* mbt_d_ = nullptr;
+  // - sub(): the sub-macroblock types (set as coded)
+  int sub_[4] = {};
+  // - proxy_mv(), made where a family first asks for it in the macroblock
+  //   (pmv_ok_): where the neighbours' motion puts the macroblock in the
+  //   reference (pmv_, whole samples) and how well its vector matches the
+  //   samples around (pxq_: 1 + tc_qlog, 0 not known); the proxy's vector
+  //   (prx_v_, quarter samples), as block() searches it again: for the luma
+  //   block prx_blk_ last, and for the chroma (prx_chroma_); per picture,
+  //   the vectors of its macroblocks' proxies (pxv_; INT16_MIN none)
+  int pmv_[2] = {};
+  bool pmv_ok_ = false;
+  int pxq_ = 0;
+  int prx_v_[2] = {};
+  int prx_blk_ = 0;
+  bool prx_chroma_ = false;
+  std::vector<int16_t> pxv_;
+  // - ipm(): the macroblock's most-probable-mode flags so far, after a 1
+  //   (mph_; made from its first block on), the last mode (prev_mode_)
+  int mph_ = 1, prev_mode_ = 9;
+  // - mvd(), the partition's prediction (mvd_pred, at its horizontal
+  //   component; the vertical's reads it): mvp, the spread of the
+  //   neighbours around it, col's vector less mvp (pdv_; pdn_: none), the
+  //   signs of the neighbours' vectors less mvp, summed (ns_); the vector
+  //   by template matching (tmv_; its miss tmq_; tmn_: none) and the
+  //   runner-up's start (talt_; INT_MIN none); the horizontal mvd (mvx_)
+  int mvp_[2] = {}, sp_[2] = {}, pdv_[2] = {}, ns_[2] = {};
+  bool pdn_ = false;
+  int tmv_[2] = {};
+  bool tmn_ = true;
+  int tmq_ = 0;
+  int talt_[2] = {INT_MIN, 0};
+  int mvx_ = 0;
+  // - block(): the counts of the last two blocks, two bits each (cnth_,
+  //   from one macroblock to the next); the shift fitted to the
+  //   macroblock's last inter luma block ((shx_, shy_) / shd_)
+  int cnth_ = 0;
+  i64 shx_ = 0, shy_ = 0, shd_ = 0;
 
   // the pictures, reconstructed: by the decoder; their motion and the
   // reference lists alone (a level with refs but without the decoder); or
   // as never known
-  ReconT<LV::recon ? 2 : LV::refs ? 1 : 0> rec_;
+  typedef ReconT<LV::recon ? 2 : LV::refs ? 1 : 0> Rec;
+  Rec rec_;
+  // the motion vectors, as the decoder has them
+  MotionPred<Rec> mvpred_;
+  typedef typename MotionPred<Rec>::MvN MvN;
   // the decoder's parts the level has: its template searches, the intra
   // proxy (where it has them not, constants "not known")
   template <class... A>
@@ -722,34 +1154,8 @@ struct Model : tc_rc<f_DEC> {
   H_PROXY(proxy_energy, int64_t, -1)
   H_PROXY(proxy_acc, int, -1)
 #undef H_PROXY
-  // x264's AQ (AqFit): the line of the current picture; 16 log2 energy of
-  // the macroblocks of the current and the last picture (-1 not known); the
-  // QP of the current picture's that coded mb_qp_delta (-1 other); per kind
-  // of picture, how far the QP of the last one's was from its line (16ths,
-  // INT16_MIN not known)
-  AqFit aq_fit_, aq_fitp_, aq_fitx_;
-  int aq_xp_ = -1;  // 16 log2 energy of the current macroblock's prediction (inter)
-  bool aq_xi_ = false;  // or of its proxy (intra; aq_fitx_)
-  std::vector<int16_t> aq_x_, aq_xl_, aq_q_, aq_res_[30];
-  int aq_key_ = -1;
-  void aq_picture() {
-    if (aq_key_ >= 0) {
-      std::vector<int16_t>& r = aq_res_[aq_key_];
-      r.assign(aq_q_.size(), INT16_MIN);
-      for (size_t a = 0; a < aq_q_.size(); a++) {
-        int q16;
-        if (aq_q_[a] >= 0 && aq_fit_.predict(aq_x_[a], q16)) r[a] = (int16_t)tc_clamp(16 * aq_q_[a] - q16, -32767, 32767);
-      }
-    }
-    aq_xl_.swap(aq_x_);
-    aq_x_.assign(size_, -1);
-    aq_q_.assign(size_, -1);
-    aq_fit_.clear();
-    aq_fitp_.clear();
-    aq_fitx_.clear();
-    aq_key_ = key_;
-    pxv_.assign(size_ * 2, INT16_MIN);
-  }
+  // x264's AQ
+  AqModel aq_;
   int idx(const MbState* n) const { return (int)(n - mbs_); }
   // CABAC's probability of a bin in the walk's current state, as the outside
   // prediction of one of the model's decisions: of the bin being 0 (cab0) or
@@ -775,30 +1181,19 @@ struct Model : tc_rc<f_DEC> {
     return mbaff_ ? ((y >> 1) * width_ + x) * 2 + (y & 1) : y * width_ + x;
   }
   int mbx_ = 0, mby_ = 0, height_ = 0;  // the macroblock's place (begin_mb), the picture's height (in macroblocks)
-  // each kind's history: the POC of the picture it is (INT_MIN none) and
-  // of the picture of the kind before it, and the picture it is (pic_):
-  // its first slice of the kind made it so; prev_poc_ and cur_poc_, the
-  // current kind's two POCs
-  int hist_poc_[30], prev_poc_ = INT_MIN, cur_poc_ = INT_MIN;
-  int hist_prev_[30];
-  uint32_t hist_pic_[30] = {};
+  // the POCs of the current slice's kind's last picture and its picture
+  // (History::prev, poc)
+  int prev_poc_ = INT_MIN, cur_poc_ = INT_MIN;
   // in a B slice, the kind (not the current one) whose history is the
   // picture list 1's first reference is; -1 other slices or none (as the
   // slice begins)
   int phk_ = -1;
   int phist_key_of_slice() const {
     if (sc_->stype_ != kB || !rec_.motion() || rec_.nlist[1] < 1 || !rec_.list[1][0]) return -1;
-    return hist_of_poc(rec_.list[1][0]->poc);
-  }
-  // the kind of slice, other than the current one's, whose history is the
-  // picture with POC poc (of the current size); -1 none
-  int hist_of_poc(int poc) const {
-    for (int k = 0; k < 30; k++)
-      if (k != key_ && hist_poc_[k] == poc && (int)hist_[k].size() >= size_) return k;
-    return -1;
+    return hist_.of_poc(rec_.list[1][0]->poc, key_, size_);
   }
   // that history, nullptr none
-  const MbCol* phist() const { return phk_ < 0 ? nullptr : hist_[phk_].data(); }
+  const MbCol* phist() const { return phk_ < 0 ? nullptr : hist_.rec[phk_].data(); }
   // the macroblock dx, dy away (mb_near()), of the current picture and
   // coded already; nullptr other
   const MbInfo* near_info(int dx, int dy) const {
@@ -832,19 +1227,10 @@ struct Model : tc_rc<f_DEC> {
     size_ = sc.size_;
     mbaff_ = sc.mbaff_;
     if ((int)info_.size() < size_) info_.resize(size_);
-    if ((int)hist_[key_].size() < size_) hist_[key_].resize(size_), hskip_[key_].resize(size_);
-    hcur_ = hist_[key_].data();
+    mvpred_.slice(sc, info_.data(), rec_);
     // (the macroblocks as they were for the P slices' mc_col, mc_nz only,
     // which need the reference lists: a level without them reads none)
-    // (from the picture's first P slice: a picture may begin with another)
-    if (newpic) hprev_ok_ = false;
-    if ((LV::refs || LV::recon) && !hprev_ok_ && (h.type() == kP || h.type() == kSP)) {
-      hprev_ok_ = true;
-      if ((int)hkeep_.size() < size_) hkeep_.resize(size_, HKeep{}), hcoef_.resize(size_, HCoef{});
-      hsnap_++;  // (nothing kept yet: every record is hist_'s)
-      hkey_ = key_;
-      hsize_ = size_;
-    }
+    hist_.slice(key_, size_, newpic, (LV::refs || LV::recon) && (h.type() == kP || h.type() == kSP));
     qp_off_ = 6 * (sc.sps_.bit_depth_luma - 8);
     qp_pred_ = slice_qp_ = sc.pps_.pic_init_qp + h.slice_qp_delta;
     last_qpd_ = 0;
@@ -856,31 +1242,19 @@ struct Model : tc_rc<f_DEC> {
     rec_.slice_begin(h, newpic);
     // (the first slice of its kind in the picture: the kind's history is
     // the picture's from here on)
-    if (hist_pic_[key_] != pic_) {
-      hist_pic_[key_] = pic_;
-      hist_prev_[key_] = hist_poc_[key_];
-      hist_poc_[key_] = rec_.motion() ? rec_.cur->poc : INT_MIN;
-    }
-    prev_poc_ = hist_prev_[key_];
-    cur_poc_ = hist_poc_[key_];
+    hist_.picture(key_, pic_, rec_.motion() ? rec_.cur->poc : INT_MIN);
+    prev_poc_ = hist_.prev[key_];
+    cur_poc_ = hist_.poc[key_];
     phk_ = phist_key_of_slice();
-    if (newpic) aq_picture();
-    if (newpic) memset(lq_, 0, sizeof lq_);
+    if (newpic) {
+      aq_.picture(key_, size_);
+      pxv_.assign(size_ * 2, INT16_MIN);
+      memset(lq_, 0, sizeof lq_);
+    }
   }
   void slice_end() { slice_cnt_[key_] = cnt_; }
   // the end of the stream
   void end_stream() { rec_.end(); }
-  // before finish_mb() rewrites the record of the macroblock in the history
-  // hkey_'s: what mc_col() and mc_nz() read of it (valid, cls, nzm[0], cm and
-  // the coefficient rows, those outside cm zero as in hist_)
-  INLINE void keep_hprev(const MbCol& s) {
-    HKeep& d = hkeep_[addr_];
-    for (uint32_t m = (uint32_t)(d.cm | s.cm); m; m &= m - 1) {
-      int r = __builtin_ctz(m);
-      memcpy(hcoef_[addr_].r[r], s.coef[r], 16);
-    }
-    d = HKeep{hsnap_, s.valid, s.cls, s.cm, s.nzm[0]};
-  }
 
   void begin_mb() {
     addr_ = sc_->cur_addr_;
@@ -906,7 +1280,7 @@ struct Model : tc_rc<f_DEC> {
     memset(mi_->modes, 2, sizeof mi_->modes);
     memset(mi_->rf, -1, sizeof mi_->rf);
     memset(mi_->tme, -128, sizeof mi_->tme);
-    col_ = hcur_[addr_].valid ? &hcur_[addr_] : nullptr;
+    col_ = hist_.cur[addr_].valid ? &hist_.cur[addr_] : nullptr;
     col_skip_ = col_ ? 2 - col_->skip : 0;
     // B: the same macroblock in list 1's first reference too
     col1_ = nullptr;
@@ -914,7 +1288,7 @@ struct Model : tc_rc<f_DEC> {
       col1_ = p[addr_].valid ? &p[addr_] : nullptr;
       if (addr_ + 1 < size_) CM_PREFETCH(&p[addr_ + 1]);  // (the next macroblock's, on its way into the cache)
     }
-    parts_ = 0;
+    mvpred_.begin(addr_, mi_);
     rec_.mb_start(addr_);
     qpd_coded_ = false;
     prev_mode_ = 9;
@@ -931,11 +1305,10 @@ struct Model : tc_rc<f_DEC> {
   // into the history of the slice's kind
   void finish_mb() {
     const MbState& s = *sc_->cur_;
-    MbCol& c = hcur_[addr_];
-    if ((LV::refs || LV::recon) && hprev_ok_ && key_ == hkey_ && addr_ < hsize_ && hkeep_[addr_].stamp != hsnap_)
-      keep_hprev(c);
+    if (LV::refs || LV::recon) hist_.before_write(key_, addr_);
+    MbCol& c = hist_.cur[addr_];
     c.valid = 1;
-    hskip_[key_][addr_] = mi_->skip != 0;
+    hist_.skip[key_][addr_] = mi_->skip != 0;
     c.skip = mi_->skip;
     c.cls = mi_->cls;
     c.qp = mi_->qp;
@@ -982,21 +1355,14 @@ struct Model : tc_rc<f_DEC> {
         memset(c.coef[r], 0, 16);
     }
     c.cm = (uint16_t)mi_->cmask;
+    col_ = nullptr;  // (that record is the macroblock's now)
     mb_open_ = false;
     rec_.mb_end(addr_, mi_->cls, mi_->i16m, mi_->modes, mi_->cpred, mi_->t8, mi_->qp - qp_off_, mi_->rf, mi_->mv, s.nz[0]);
-    if (rec_.act() && (int)aq_x_.size() == size_) {
-      int x = lg16(rec_.ac_energy(addr_));
-      aq_x_[addr_] = (int16_t)x;
-      if (qpd_coded_) {
-        aq_fit_.add(x, mi_->qp - qp_off_);
-        if (aq_xp_ >= 0) (aq_xi_ ? aq_fitx_ : aq_fitp_).add(aq_xp_, mi_->qp - qp_off_);
-        aq_q_[addr_] = (int16_t)(mi_->qp - qp_off_);
-      }
-    }
+    if (rec_.act() && (int)aq_.x.size() == size_) aq_.decoded(addr_, lg16(rec_.ac_energy(addr_)), mi_->qp - qp_off_, qpd_coded_);
   }
 
   // --- skip, end of slice, field decoding flag: the skp family
-  // the ones in a map of 0 or 1 a macroblock (hskip_) in the 3x3 window
+  // the ones in a map of 0 or 1 a macroblock (History::skip) in the 3x3 window
   // around the macroblock, by mb_near (none outside the picture)
   int win9(const uint8_t* m) const {
     int n = 0;
@@ -1026,10 +1392,10 @@ struct Model : tc_rc<f_DEC> {
     D.a3 = a ? 2 - a->skip : 0;
     D.b3 = b ? 2 - b->skip : 0;
     D.col = col_skip_;  // (end() comes after finish_mb() rewrote col_'s record)
-    D.c9 = win9(hskip_[key_].data());
+    D.c9 = win9(hist_.skip[key_].data());
     D.c1 = col1_ ? 2 - col1_->skip : 0;
     // and the skipped ones around it there (10 none)
-    D.k9 = phk_ >= 0 ? win9(hskip_[phk_].data()) : 10;
+    D.k9 = phk_ >= 0 ? win9(hist_.skip[phk_].data()) : 10;
     const MbInfo* c = near_info(1, -1);
     const MbInfo* d = near_info(-1, -1);
     D.cd = (c && c->skip) + (d && d->skip);
@@ -1049,7 +1415,7 @@ struct Model : tc_rc<f_DEC> {
   bool tm_best(int l, int* mv, int& miss) const {
     MvN nbs[3];
     int mp[2];
-    mv_pred(l, 0, 0, 4, 4, 0, mp, nbs);
+    mvpred_.pred(l, 0, 0, 4, 4, 0, mp, nbs);
     return tm_best(l, nbs, mp, mv, miss);
   }
   // how well the prediction of the macroblock were it skipped continues
@@ -1063,16 +1429,18 @@ struct Model : tc_rc<f_DEC> {
     int m0;
     tmb_ok_ = tm_best(0, tmb_, m0);
     if (tmb_ok_) tb_ = 1 + tc_clamp(tc_qlog(m0), 0, 15);
+    // (kept for skip(), should the macroblock be skipped; from no motion,
+    // as a macroblock's record begins, the lists direct prediction leaves
+    // unused)
+    memset(smv_, 0, sizeof smv_);
+    memset(srf_, -1, sizeof srf_);
     if (sc_->stype_ == kB)
-      mv_direct(15);
+      mvpred_.direct(15, smv_, srf_);
     else
-      mv_pskip();
-    // (kept for skip(), should the macroblock be skipped)
-    memcpy(smv_, mi_->mv, sizeof smv_);
-    memcpy(srf_, mi_->rf, sizeof srf_);
+      mvpred_.pskip(smv_, srf_);
     smv_ok_ = true;
     int per[2];
-    int tm = rec_.tm_miss(mi_->rf, mi_->mv, per);
+    int tm = rec_.tm_miss(srf_, smv_, per);
     tm_ = qlog1(tm, 15);
     // B: which list's prediction of the skip motion does that better, and
     // whether their average does better still
@@ -1085,20 +1453,17 @@ struct Model : tc_rc<f_DEC> {
     // far the skip vector is from the best template match's
     int bd = -1;
     if (sc_->stype_ == kB)
-      bd = rec_.bi_diff(mi_->rf, mi_->mv);
+      bd = rec_.bi_diff(srf_, smv_);
     else if (tmb_ok_)
-      bd = abs(tmb_[0] - mi_->mv[0][0][0]) + abs(tmb_[1] - mi_->mv[0][0][1]);
+      bd = abs(tmb_[0] - smv_[0][0][0]) + abs(tmb_[1] - smv_[0][0][1]);
     bd_ = qlog1(bd, 15);
-    int ms = rec_.skip_miss(mi_->rf, mi_->mv);
+    int ms = rec_.skip_miss(srf_, smv_);
     // the texture of the skip prediction, per sample, against the step:
     // flat, its residual is likelier to quantize away
     {
       int t = ms < 0 ? -1 : rec_.mb_texture();
       tx_ = qlog1(t, 14, 16, qstep16(qp_pred_));
     }
-    memset(mi_->mv, 0, sizeof mi_->mv);
-    memset(mi_->rf, -1, sizeof mi_->rf);
-    parts_ = 0;
     return qlog1(ms, 15);
   }
   // the last picture decoded at the current macroblock: how much it changed
@@ -1132,13 +1497,12 @@ struct Model : tc_rc<f_DEC> {
       if (smv_ok_) {
         memcpy(mi_->mv, smv_, sizeof smv_);
         memcpy(mi_->rf, srf_, sizeof srf_);
-        parts_ = 0;
       } else if (!LV::mvp) {
         // (a level without the motion keeps none)
       } else if (sc_->stype_ == kB) {
-        mv_direct(15);
+        mvpred_.direct(15, mi_->mv, mi_->rf);
       } else {
-        mv_pskip();
+        mvpred_.pskip(mi_->mv, mi_->rf);
       }
       last_qpd_ = 0;
       run_++;
@@ -1309,10 +1673,10 @@ struct Model : tc_rc<f_DEC> {
     mbt_d_ = nullptr;
     mi_->cls = (uint8_t)class_of(stype, t);
     if (stype == kB)
-      parts_ = t <= 3 ? 0 : t == 22 ? 3 : t < 22 ? 1 + (t & 1) : 0;  // (16x8 even, 8x16 odd)
+      mvpred_.parts = t <= 3 ? 0 : t == 22 ? 3 : t < 22 ? 1 + (t & 1) : 0;  // (16x8 even, 8x16 odd)
     else if (stype == kP || stype == kSP)
-      parts_ = t < 3 ? t : 3;
-    if (LV::mvp && stype == kB && t == 0) mv_direct(15);
+      mvpred_.parts = t < 3 ? t : 3;
+    if (LV::mvp && stype == kB && t == 0) mvpred_.direct(15, mi_->mv, mi_->rf);
     tc_syms[STG_MBT]++;
     return t;
   }
@@ -1338,7 +1702,7 @@ struct Model : tc_rc<f_DEC> {
     bool inter = sc_->stype_ != kI && sc_->stype_ != kSI;
     MvN nbs[3];
     int mp[2] = {0, 0};
-    if (inter) mv_pred(0, 0, 0, 4, 4, 0, mp, nbs);
+    if (inter) mvpred_.pred(0, 0, 0, 4, 4, 0, mp, nbs);
     if (tmb_ok_)
       p[0] = tmb_[0], p[1] = tmb_[1];
     else if (inter && !tm_best(0, nbs, mp, p, miss))
@@ -1683,110 +2047,14 @@ struct Model : tc_rc<f_DEC> {
     for (int k = b ? 3 : 1; k >= 0; k--) node = node * 2 + f_mvs.bit(node, ENC && (v >> k & 1));
     int r = node - (b ? 16 : 4);
     sub_[i] = r;
-    subshape_[i] = b ? kBSubShape[r % 13] : r;
-    if (LV::mvp && i == 3 && b) mv_direct((sub_[0] == 0) | (sub_[1] == 0) << 1 | (sub_[2] == 0) << 2 | (sub_[3] == 0) << 3);
+    mvpred_.subshape[i] = b ? kBSubShape[r % 13] : r;
+    if (LV::mvp && i == 3 && b)
+      mvpred_.direct((sub_[0] == 0) | (sub_[1] == 0) << 1 | (sub_[2] == 0) << 2 | (sub_[3] == 0) << 3, mi_->mv, mi_->rf);
     tc_syms[STG_MVS]++;
     return r;
   }
 
-  // --- motion vectors, reconstructed as the decoder does (8.4.1): what the
-  // mvd is coded against
-  struct MvN {
-    bool avail;  // the partition is there (it may be intra or not use the list)
-    int ref, mv[2];
-  };
-  // the place of the partition with the 4x4 block (x, y) of the current
-  // macroblock in decoding order
-  int part_ord(int x, int y) const {
-    switch (parts_) {
-      case 0:
-        return 0;
-      case 1:
-        return y >> 1;
-      case 2:
-        return x >> 1;
-      default: {
-        int i = (y >> 1) * 2 + (x >> 1), sh = subshape_[i];
-        return 4 * i + (sh == 0 ? 0 : sh == 1 ? y & 1 : sh == 2 ? x & 1 : (y & 1) * 2 + (x & 1));
-      }
-    }
-  }
-  // the motion of the neighbouring 4x4 block (x, y) of the current
-  // macroblock, x in -1..4, y in -1..3, for a partition at place ord
-  // (8.4.1.3.2); approximate at the corners of MBAFF macroblock pairs
-  MvN mv_nb(int list, int x, int y, int ord) const {
-    MvN r = {false, -1, {0, 0}};
-    const MbState* s;
-    const MbInfo* m;
-    int i = 0;
-    if (x >= 0 && y >= 0) {
-      if (x > 3 || part_ord(x, y) > ord) return r;  // not decoded yet
-      s = sc_->cur_;
-      m = mi_;
-      i = y * 4 + x;
-    } else if ((x < 0 && y < 0) || x > 3) {  // D or C, in the macroblock above left or right
-      if (mbaff_ || addr_ < width_) return r;
-      int a = x < 0 ? (addr_ % width_ ? addr_ - width_ - 1 : -1) : (addr_ % width_ < width_ - 1 ? addr_ - width_ + 1 : -1);
-      if (a < 0 || mbs_[a].slice != sc_->slice_id_) return r;
-      s = &mbs_[a];
-      m = &info_[a];
-      i = x < 0 ? 15 : 12;
-    } else {
-      s = sc_->nb4(x, y, i);
-      if (!s) return r;
-      m = &info_[idx(s)];
-    }
-    r.avail = true;
-    int ref = m->rf[list][(i >> 3) * 2 + ((i & 3) >> 1)];
-    if (ref < 0) return r;
-    r.ref = ref;
-    r.mv[0] = m->mv[list][i][0];
-    r.mv[1] = m->mv[list][i][1];
-    if (mbaff_ && s != sc_->cur_) {
-      if (sc_->cur_->field && !s->field) {
-        r.mv[1] /= 2;
-        r.ref *= 2;
-      } else if (!sc_->cur_->field && s->field) {
-        r.mv[1] *= 2;
-        r.ref >>= 1;
-      }
-    }
-    return r;
-  }
-  static int median3(int a, int b, int c) { return a + b + c - std::min(a, std::min(b, c)) - std::max(a, std::max(b, c)); }
-  // the prediction of the motion vector of a partition (8.4.1.3); nbs gets
-  // its neighbours A, B and C
-  void mv_pred(int list, int x, int y, int w, int h, int ref, int* p, MvN* nbs = nullptr) const {
-    int ord = part_ord(x, y);
-    MvN a = mv_nb(list, x - 1, y, ord), b = mv_nb(list, x, y - 1, ord), c = mv_nb(list, x + w, y - 1, ord);
-    if (!c.avail) c = mv_nb(list, x - 1, y - 1, ord);
-    if (nbs) {
-      nbs[0] = a;
-      nbs[1] = b;
-      nbs[2] = c;
-    }
-    mv_pred(a, b, c, x, y, w, h, ref, p);
-  }
-  // the same from its neighbours A, B and C (C, D where C is not available)
-  static void mv_pred(const MvN& a, MvN b, MvN c, int x, int y, int w, int h, int ref, int* p) {
-    const MvN* d = nullptr;
-    if (w == 4 && h == 2)
-      d = y == 0 ? (b.ref == ref ? &b : nullptr) : (a.ref == ref ? &a : nullptr);
-    else if (w == 2 && h == 4)
-      d = x == 0 ? (a.ref == ref ? &a : nullptr) : (c.ref == ref ? &c : nullptr);
-    if (!d) {
-      if (!b.avail && !c.avail && a.avail) b = c = a;
-      int n = (a.ref == ref) + (b.ref == ref) + (c.ref == ref);
-      if (n == 1) d = a.ref == ref ? &a : b.ref == ref ? &b : &c;
-    }
-    if (d) {
-      p[0] = d->mv[0];
-      p[1] = d->mv[1];
-    } else {
-      for (int k = 0; k < 2; k++) p[k] = median3(a.mv[k], b.mv[k], c.mv[k]);
-    }
-  }
-  // tm_best() from mv_pred()'s vector of the macroblock (mp) and its
+  // tm_best() from MotionPred::pred()'s vector of the macroblock (mp) and its
   // neighbours (nbs), which are the same whatever its partitions (they
   // are the macroblocks around)
   bool tm_best(int l, const MvN* nbs, const int* mp, int* mv, int& miss) const {
@@ -1796,103 +2064,6 @@ struct Model : tc_rc<f_DEC> {
       if (nbs[j].ref == 0) cand[nc][0] = nbs[j].mv[0], cand[nc][1] = nbs[j].mv[1], nc++;
     cand[nc][0] = cand[nc][1] = 0, nc++;
     return tm_search_(l, 0, 0, 0, 16, 16, mv, false, cand, nc, &miss, 0, 4);
-  }
-  void set_mv(int list, int x, int y, int w, int h, int ref, const int* p) {
-    int16_t v[2] = {(int16_t)tc_clamp(p[0], -32768, 32767), (int16_t)tc_clamp(p[1], -32768, 32767)};
-    if (w == 4 && h == 4) {
-      for (int b = 0; b < 16; b++) memcpy(mi_->mv[list][b], v, sizeof v);
-      memset(mi_->rf[list], ref, 4);
-      return;
-    }
-    for (int yy = y; yy < y + h; yy++)
-      for (int xx = x; xx < x + w; xx++) memcpy(mi_->mv[list][yy * 4 + xx], v, sizeof v);
-    for (int yy = y; yy < y + h; yy += 2)
-      for (int xx = x; xx < x + w; xx += 2) mi_->rf[list][(yy >> 1) * 2 + (xx >> 1)] = (int8_t)ref;
-  }
-  // P_Skip (8.4.1.1)
-  void mv_pskip() {
-    parts_ = 0;
-    MvN a = mv_nb(0, -1, 0, 0), b = mv_nb(0, 0, -1, 0);
-    int p[2] = {0, 0};
-    if (a.avail && b.avail && !(a.ref == 0 && !a.mv[0] && !a.mv[1]) && !(b.ref == 0 && !b.mv[0] && !b.mv[1])) {
-      MvN c = mv_nb(0, 4, -1, 0);
-      if (!c.avail) c = mv_nb(0, -1, -1, 0);
-      mv_pred(a, b, c, 0, 0, 4, 4, 0, p);
-    }
-    set_mv(0, 0, 0, 4, 4, 0, p);
-  }
-  // B direct, spatial (8.4.1.2.2), for the 8x8 blocks of mask; without
-  // colZeroFlag, which needs the motion of the first picture of list 1.
-  // Temporal direct is taken for spatial.
-  static int minpos(int a, int b) { return a >= 0 && b >= 0 ? std::min(a, b) : std::max(a, b); }
-  void mv_direct(int mask) {
-    if (!sc_->h_.direct_spatial_mv_pred_flag) {
-      mv_temporal(mask);
-      return;
-    }
-    int saved = parts_, ref[2], mv[2][2] = {{0, 0}, {0, 0}};
-    parts_ = 0;
-    MvN nb[2][3];
-    for (int l = 0; l < 2; l++) {
-      MvN &a = nb[l][0], &b = nb[l][1], &c = nb[l][2];
-      a = mv_nb(l, -1, 0, 0), b = mv_nb(l, 0, -1, 0), c = mv_nb(l, 4, -1, 0);
-      if (!c.avail) c = mv_nb(l, -1, -1, 0);
-      ref[l] = minpos(a.ref, minpos(b.ref, c.ref));
-    }
-    bool zero = ref[0] < 0 && ref[1] < 0;
-    if (zero) ref[0] = ref[1] = 0;
-    // (the macroblock's prediction, from the neighbours just found)
-    for (int l = 0; l < 2; l++)
-      if (!zero && ref[l] >= 0) mv_pred(nb[l][0], nb[l][1], nb[l][2], 0, 0, 4, 4, ref[l], mv[l]);
-    bool lt = rec_.col_long_term();
-    // (with direct_8x8_inference the four 4x4 blocks of an 8x8 one have the
-    // same colocated block: the 8x8 block at once)
-    int n = rec_.direct8x8 ? 2 : 1;
-    // colZeroFlag, by 4x4 block (bit y * 4 + x): the colocated block is
-    // still, which zeroes the vector of a list on reference 0
-    int still = 0;
-    if (!zero && !lt && (ref[0] == 0 || ref[1] == 0))
-      for (int b8 = 0; b8 < 4; b8++)
-        if (mask >> b8 & 1)
-          for (int k = 0; k < 4; k += 3 * n - 2) {
-            int x = (b8 & 1) * 2 + (k & 1), y = (b8 >> 1) * 2 + (k >> 1), cr, cm[2];
-            int64_t pid;
-            if (rec_.colocated(addr_, y * 4 + x, cr, cm, pid) && cr == 0 && abs(cm[0]) <= 1 && abs(cm[1]) <= 1)
-              still |= (n == 2 ? 0x33 : 1) << (y * 4 + x);
-          }
-    for (int l = 0; l < 2; l++) {
-      if (ref[l] < 0) continue;
-      int z[2] = {0, 0}, s = ref[l] == 0 ? still : 0;
-      if (mask == 15 && (s == 0 || s == 0xFFFF)) {
-        set_mv(l, 0, 0, 4, 4, ref[l], s ? z : mv[l]);
-        continue;
-      }
-      for (int b8 = 0; b8 < 4; b8++)
-        if (mask >> b8 & 1)
-          for (int k = 0; k < 4; k += 3 * n - 2) {
-            int x = (b8 & 1) * 2 + (k & 1), y = (b8 >> 1) * 2 + (k >> 1);
-            set_mv(l, x, y, n, n, ref[l], s >> (y * 4 + x) & 1 ? z : mv[l]);
-          }
-    }
-    parts_ = saved;
-  }
-  // temporal direct (8.4.1.2.3)
-  void mv_temporal(int mask) {
-    for (int b8 = 0; b8 < 4; b8++)
-      if (mask >> b8 & 1)
-        for (int k = 0; k < 4; k++) {
-          int x = (b8 & 1) * 2 + (k & 1), y = (b8 >> 1) * 2 + (k >> 1), cr, cm[2] = {0, 0}, r0 = 0;
-          int64_t pid;
-          if (rec_.colocated(addr_, y * 4 + x, cr, cm, pid))
-            r0 = rec_.map_col(pid);
-          else
-            cm[0] = cm[1] = 0;
-          int dsf = rec_.dist_scale(r0);
-          int m0[2] = {(dsf * cm[0] + 128) >> 8, (dsf * cm[1] + 128) >> 8};
-          int m1[2] = {m0[0] - cm[0], m0[1] - cm[1]};
-          set_mv(0, x, y, 1, 1, r0, m0);
-          set_mv(1, x, y, 1, 1, 0, m1);
-        }
   }
   static int part_size(int w, int h) { return w * h == 16 ? 0 : w * h == 8 ? 1 : w * h == 4 ? 2 : 3; }
   int ref(int list, int x, int y, int w, int h, int v) {
@@ -1916,13 +2087,13 @@ struct Model : tc_rc<f_DEC> {
     D.tv = 0;
     // the reference the template matches best (of the first four, by their
     // candidates alone), and by how much better than the first
-    int p0[2], have_p0 = 0;  // mv_pred()'s vector of the first reference
+    int p0[2] = {0, 0}, have_p0 = 0;  // MotionPred::pred()'s vector of the first reference
     if (rec_.act() && sc_->num_ref_[list] > 1) {
       int bm = INT_MAX, m0 = 0, rbest = -1;
       for (int r = 0; r < std::min(sc_->num_ref_[list], 4); r++) {
         int p[2], miss, cand[4][2], nc = 0;
         MvN nbs[3];
-        mv_pred(list, x, y, w, h, r, p, nbs);
+        mvpred_.pred(list, x, y, w, h, r, p, nbs);
         if (!r) p0[0] = p[0], p0[1] = p[1], have_p0 = 1;
         for (int j = 0; j < 3; j++)
           if (nbs[j].ref == r) cand[nc][0] = nbs[j].mv[0], cand[nc][1] = nbs[j].mv[1], nc++;
@@ -1943,7 +2114,7 @@ struct Model : tc_rc<f_DEC> {
       if (have_p0)
         p[0] = p0[0], p[1] = p0[1];
       else
-        mv_pred(list, x, y, w, h, 0, p);
+        mvpred_.pred(list, x, y, w, h, 0, p);
       int t = rec_.ref_texture(list, 0, x * 4, y * 4, w * 4, h * 4, p);
       D.rt = t < 0 ? 0 : 1 + tc_clamp(tc_qlog((int64_t)t * 256 / (w * h * 16) * 16 / qstep16(qp_pred_)), 0, 14);
     }
@@ -1985,12 +2156,11 @@ struct Model : tc_rc<f_DEC> {
     int td = ref_dist(0, 0) - ref_dist(1, 0), tr = ref_dist(l, ref), k1 = phk_;
     // over the distance from that picture to its own reference, where known
     if (cr >= 0 && k1 >= 0 && col1_->rpoc[cl][b8] != INT_MIN && ref_dist(1, 0))
-      td = poc_dist(hist_poc_[k1], col1_->rpoc[cl][b8]);
+      td = poc_dist(hist_.poc[k1], col1_->rpoc[cl][b8]);
     if (cr < 0 || !td || !tr || !ref_dist(0, 0)) return false;
     for (int k = 0; k < 2; k++) m[k] = mv_scale(col1_->mv[cl][y * 4 + x][k], tr, td);
     return true;
   }
-  int talt_[2] = {INT_MIN, 0};  // the template search's runner-up start (INT_MIN none)
   int mvd(int list, int comp, int x, int y, int w, int h, int v) {
     tc_stage = STG_MVS;
     int ia, ib, b8 = (y >> 1) * 2 + (x >> 1), ref = sc_->cur_->ref[list][b8];
@@ -2000,56 +2170,7 @@ struct Model : tc_rc<f_DEC> {
       pdn_ = true;
       tmn_ = true;
     } else if (!comp) {
-      MvN nbs[3];
-      mv_pred(list, x, y, w, h, ref, mvp_, nbs);
-      for (int k = 0; k < 2; k++) {
-        sp_[k] = -1;
-        ns_[k] = 0;
-        for (int j = 0; j < 3; j++)
-          if (nbs[j].ref >= 0) {
-            sp_[k] = std::max(sp_[k], abs(nbs[j].mv[k] - mvp_[k]));
-            ns_[k] += (nbs[j].mv[k] > mvp_[k]) - (nbs[j].mv[k] < mvp_[k]);
-          }
-        pdv_[k] = 0;
-      }
-      // col's vector; in B slices, temporal direct's where there is one
-      int cm[2] = {0, 0};
-      pdn_ = !col_ || col_->rf[list][b8] < 0;
-      if (!pdn_) {
-        cm[0] = col_->mv[list][y * 4 + x][0], cm[1] = col_->mv[list][y * 4 + x][1];
-        // scaled by the reference's distance against that of col's own
-        // (where not known, the first reference's)
-        int d0 = ref_dist(list, 0), dr = ref_dist(list, ref);
-        if (prev_poc_ != INT_MIN && col_->rpoc[list][b8] != INT_MIN) d0 = poc_dist(prev_poc_, col_->rpoc[list][b8]);
-        if (d0 && dr && d0 != dr)
-          for (int k = 0; k < 2; k++) cm[k] = mv_scale(cm[k], dr, d0);
-      }
-      int cc[2] = {cm[0], cm[1]};
-      bool ccok = !pdn_;
-      if (td_mv(list, ref, x, y, cm)) pdn_ = false;
-      else ccok = false;
-      if (!pdn_)
-        for (int k = 0; k < 2; k++) pdv_[k] = cm[k] - mvp_[k];
-      tmv_[0] = mvp_[0];
-      tmv_[1] = mvp_[1];
-      // starting from mvp, the neighbours' vectors on the same reference,
-      // col's, zero
-      int cand[8][2], nc = 0;
-      for (int j = 0; j < 3; j++)
-        if (nbs[j].ref == ref) cand[nc][0] = nbs[j].mv[0], cand[nc][1] = nbs[j].mv[1], nc++;
-      // and those on other references of the list, scaled to this one's
-      // distance
-      for (int j = 0; j < 3; j++) {
-        int dn = ref_dist(list, nbs[j].ref), dr = ref_dist(list, ref);
-        if (nbs[j].ref >= 0 && nbs[j].ref != ref && dn && dr) {
-          for (int k = 0; k < 2; k++) cand[nc][k] = mv_scale(nbs[j].mv[k], dr, dn);
-          nc++;
-        }
-      }
-      if (!pdn_) cand[nc][0] = cm[0], cand[nc][1] = cm[1], nc++;
-      if (ccok) cand[nc][0] = cc[0], cand[nc][1] = cc[1], nc++;  // and col's, temporal direct's taken
-      cand[nc][0] = cand[nc][1] = 0, nc++;
-      tmn_ = !tm_search_(list, ref, x * 4, y * 4, w * 4, h * 4, tmv_, false, cand, nc, &tmq_, kTmLambda, 1, 0, talt_);
+      mvd_pred(list, x, y, w, h, ref);
     } else if (!tmn_) {
       // the horizontal component known
       tmv_[0] = mvp_[0] + mvx_;
@@ -2107,37 +2228,13 @@ struct Model : tc_rc<f_DEC> {
     if (v) {
       tc_stage = STG_MVSG;
       tc_syms[STG_MVSG]++;
-      {
-        // the sign (the mvg family), knowing the magnitude: whether it is
-        // the template match's, the zero vector's, col's
-        int m = abs(v);
-        auto rel = [&](int d) { return rel_sign(m, d); };
-        H_mvg_v G = {};
-        G.comp = comp;
-        G.lst = list;
-        G.ts = tmn_ ? 9 : rel(dv);
-        G.zs = rel(-mvp_[comp]);
-        G.ds = pdn_ ? 9 : rel(pdv_[comp]);
-        G.sa = sgn3(va);
-        G.sb = sgn3(vb);
-        G.mag = std::min(tc_qlog(m), 7);
-        G.tq = D.tq;
-        G.ox = comp ? sgn3(mvx_) : 3;
-        G.ns = 3 + ns_[comp];
-        G.es = ea == -128 && eb == -128 ? 3 : sgn3((ea == -128 ? 0 : ea) + (eb == -128 ? 0 : eb));
-        G.as = tmn_ || talt_[0] == INT_MIN ? 9 : rel(talt_[comp] - mvp_[comp]);
-        tcx Y;
-        f_mvg.make(G, Y);
-        f_mvg.select(Y);
-        f_mvg.prp = -1;
-        if (f_mvg.bit(0, ENC && v < 0)) v = -m;
-      }
+      v = mvd_sign(list, comp, v, dv, va, vb, ea, eb, D.tq);
     }
     if (!comp) {
       mvx_ = v;
     } else if (LV::mvp) {
       int mv[2] = {mvp_[0] + mvx_, mvp_[1] + v};
-      set_mv(list, x, y, w, h, ref, mv);
+      mvpred_.set(mi_->mv, mi_->rf, list, x, y, w, h, ref, mv);
     }
     int16_t s = (int16_t)tc_clamp(v, -32767, 32767);
     int8_t te = tmn_ ? (int8_t)-128 : (int8_t)tc_clamp(v - dv, -127, 127);
@@ -2145,41 +2242,99 @@ struct Model : tc_rc<f_DEC> {
       for (int xx = x; xx < x + w; xx++) mi_->mvd[list][yy * 4 + xx][comp] = s, mi_->tme[list][yy * 4 + xx][comp] = te;
     return v;
   }
+  // the prediction of a partition's vector (mvp_), and what the mvd is
+  // coded against besides: how the neighbours spread around it (sp_, ns_),
+  // col's vector (scaled to the reference; temporal direct's in B slices)
+  // less it (pdv_; pdn_ none), the template match from it (tmv_, tmq_;
+  // tmn_ none; talt_ the runner-up's start)
+  void mvd_pred(int list, int x, int y, int w, int h, int ref) {
+    int b8 = (y >> 1) * 2 + (x >> 1);
+    MvN nbs[3];
+    mvpred_.pred(list, x, y, w, h, ref, mvp_, nbs);
+    for (int k = 0; k < 2; k++) {
+      sp_[k] = -1;
+      ns_[k] = 0;
+      for (int j = 0; j < 3; j++)
+        if (nbs[j].ref >= 0) {
+          sp_[k] = std::max(sp_[k], abs(nbs[j].mv[k] - mvp_[k]));
+          ns_[k] += (nbs[j].mv[k] > mvp_[k]) - (nbs[j].mv[k] < mvp_[k]);
+        }
+      pdv_[k] = 0;
+    }
+    // col's vector; in B slices, temporal direct's where there is one
+    int cm[2] = {0, 0};
+    pdn_ = !col_ || col_->rf[list][b8] < 0;
+    if (!pdn_) {
+      cm[0] = col_->mv[list][y * 4 + x][0], cm[1] = col_->mv[list][y * 4 + x][1];
+      // scaled by the reference's distance against that of col's own
+      // (where not known, the first reference's)
+      int d0 = ref_dist(list, 0), dr = ref_dist(list, ref);
+      if (prev_poc_ != INT_MIN && col_->rpoc[list][b8] != INT_MIN) d0 = poc_dist(prev_poc_, col_->rpoc[list][b8]);
+      if (d0 && dr && d0 != dr)
+        for (int k = 0; k < 2; k++) cm[k] = mv_scale(cm[k], dr, d0);
+    }
+    int cc[2] = {cm[0], cm[1]};
+    bool ccok = !pdn_;
+    if (td_mv(list, ref, x, y, cm)) pdn_ = false;
+    else ccok = false;
+    if (!pdn_)
+      for (int k = 0; k < 2; k++) pdv_[k] = cm[k] - mvp_[k];
+    tmv_[0] = mvp_[0];
+    tmv_[1] = mvp_[1];
+    // starting from mvp, the neighbours' vectors on the same reference,
+    // col's, zero
+    int cand[8][2], nc = 0;
+    for (int j = 0; j < 3; j++)
+      if (nbs[j].ref == ref) cand[nc][0] = nbs[j].mv[0], cand[nc][1] = nbs[j].mv[1], nc++;
+    // and those on other references of the list, scaled to this one's
+    // distance
+    for (int j = 0; j < 3; j++) {
+      int dn = ref_dist(list, nbs[j].ref), dr = ref_dist(list, ref);
+      if (nbs[j].ref >= 0 && nbs[j].ref != ref && dn && dr) {
+        for (int k = 0; k < 2; k++) cand[nc][k] = mv_scale(nbs[j].mv[k], dr, dn);
+        nc++;
+      }
+    }
+    if (!pdn_) cand[nc][0] = cm[0], cand[nc][1] = cm[1], nc++;
+    if (ccok) cand[nc][0] = cc[0], cand[nc][1] = cc[1], nc++;  // and col's, temporal direct's taken
+    cand[nc][0] = cand[nc][1] = 0, nc++;
+    tmn_ = !tm_search_(list, ref, x * 4, y * 4, w * 4, h * 4, tmv_, false, cand, nc, &tmq_, kTmLambda, 1, 0, talt_);
+  }
+  // the sign of a nonzero mvd component v (the mvg family), knowing the
+  // magnitude: whether it is the template match's (dv), the zero vector's,
+  // col's; A's and B's mvds (va, vb) and how far they were from their
+  // template matches' (ea, eb); the match's miss (tq)
+  int mvd_sign(int list, int comp, int v, int dv, int va, int vb, int ea, int eb, int tq) {
+    int m = abs(v);
+    auto rel = [&](int d) { return rel_sign(m, d); };
+    H_mvg_v G = {};
+    G.comp = comp;
+    G.lst = list;
+    G.ts = tmn_ ? 9 : rel(dv);
+    G.zs = rel(-mvp_[comp]);
+    G.ds = pdn_ ? 9 : rel(pdv_[comp]);
+    G.sa = sgn3(va);
+    G.sb = sgn3(vb);
+    G.mag = std::min(tc_qlog(m), 7);
+    G.tq = tq;
+    G.ox = comp ? sgn3(mvx_) : 3;
+    G.ns = 3 + ns_[comp];
+    G.es = ea == -128 && eb == -128 ? 3 : sgn3((ea == -128 ? 0 : ea) + (eb == -128 ? 0 : eb));
+    G.as = tmn_ || talt_[0] == INT_MIN ? 9 : rel(talt_[comp] - mvp_[comp]);
+    tcx Y;
+    f_mvg.make(G, Y);
+    f_mvg.select(Y);
+    f_mvg.prp = -1;
+    if (f_mvg.bit(0, ENC && v < 0)) v = -m;
+    return v;
+  }
 
   // the macroblocks, as they were, of the picture list l's reference r is:
   // the last picture of a kind with its POC (none: false); by address, what
   // mc_col() and mc_nz() read of each
-  struct MbRef {
-    uint8_t valid, cls;
-    uint16_t cm, nzm;          // nzm[0]
-    const int8_t (*coef)[16];  // the luma coefficients (rows outside cm zero)
-  };
-  struct HistView {
-    const MbCol* cur = nullptr;   // a history
-    const HKeep* keep = nullptr;  // and its records kept as they were, where rewritten since (hsnap_)
-    const HCoef* coef = nullptr;
-    uint32_t id = 0;
-    explicit operator bool() const { return cur != nullptr; }
-    MbRef at(int a) const {
-      if (keep && keep[a].stamp == id) {
-        const HKeep& k = keep[a];
-        return MbRef{k.valid, k.cls, k.cm, k.nzm, coef[a].r};
-      }
-      const MbCol& c = cur[a];
-      return MbRef{c.valid, c.cls, c.cm, c.nzm[0], c.coef};
-    }
-  };
   HistView ref_hist(int l, int r) const {
-    HistView v;
-    if (!rec_.motion() || r < 0 || r >= rec_.nlist[l] || !rec_.list[l][r]) return v;
-    int poc = rec_.list[l][r]->poc;
-    if (poc == prev_poc_ && hsize_ == size_) {
-      if (hprev_ok_ && hkey_ == key_) v.cur = hist_[hkey_].data(), v.keep = hkeep_.data(), v.coef = hcoef_.data(), v.id = hsnap_;
-      return v;
-    }
-    int k = hist_of_poc(poc);
-    if (k >= 0) v.cur = hist_[k].data();
-    return v;
+    if (!rec_.motion() || r < 0 || r >= rec_.nlist[l] || !rec_.list[l][r]) return HistView();
+    return hist_.view(rec_.list[l][r]->poc, prev_poc_, key_, size_);
   }
   // What mc_col() and mc_nz() share: for an inter macroblock of a P
   // picture (not MBAFF) whose block at (x, y) (4x4 blocks) refers to the
@@ -2259,10 +2414,43 @@ struct Model : tc_rc<f_DEC> {
   int qpd(int v) {
     prepare();
     tc_stage = STG_QPD;
-    aq_xp_ = -1;
-    aq_xi_ = false;
+    aq_.xp = -1;
+    aq_.xi = false;
     const MbInfo* b = info(sc_->mb_b_);
     H_qpd_v D = {};
+    qpd_vars(D, b);
+    int aqd = qpd_aq(D);
+    tcx X;
+    f_qpd.make(D, X);
+    NodePrp pr;
+    pr[0] = cab1(sc_->ctx_qpd());
+    f_qpd.prpa = pr;
+    f_qpd.hint = aqd == INT_MIN ? -1 : abs(aqd);
+    {
+      int m = cm_int(f_qpd.code(X, ENC ? abs(v) : 0), 1 << 20);
+      bool neg = ENC && v < 0;
+      v = m ? qpd_sign(D, b, aqd, m, neg) : 0;
+    }
+    f_qpd.hint = -1;
+    f_qpd.prpa = nullptr;
+    int qp = ((qp_pred_ + v + 52 + 2 * qp_off_) % (52 + qp_off_) + (52 + qp_off_)) % (52 + qp_off_) - qp_off_;
+    qp_pred_ = qp;
+    qp_src_ = addr_;
+    lq_[kind3(mi_->cls)][D.xe] = qp + 1;
+    mi_->qp = (uint8_t)(qp + qp_off_);
+    last_qpd_ = v;
+    if (v) {
+      lz_ = v;
+      has_lz_ = true;
+    }
+    qpd_coded_ = true;
+    tc_syms[STG_QPD]++;
+    return v;
+  }
+  // the qpd family's variables but x264's AQ's: the deltas of the
+  // macroblocks around and of the last one, the slice's, the picture's
+  // change there
+  void qpd_vars(H_qpd_v& D, const MbInfo* b) const {
     D.lnz = last_qpd_ != 0;
     D.pc = popc4(mi_->cbp & 15);
     D.cc = mi_->cbp >> 4;
@@ -2288,97 +2476,73 @@ struct Model : tc_rc<f_DEC> {
       int e0 = qp_src_ >= 0 ? rec_.maps.energy[qp_src_] : rec_.maps.energy_mean;
       D.ae = 7 + tc_clamp((rec_.maps.energy[addr_] - e0 + 2 * (rec_.maps.energy[addr_] > e0) - 2 * (rec_.maps.energy[addr_] < e0)) / 4, -6, 6);
     }
-    // and the QP its line gives the energy of the prediction (inter) or of
-    // the last picture there, less the predicted QP; how far the last
-    // picture of the kind was from its line there
+  }
+  // and x264's AQ's (AqModel): the QP its line gives the energy of the
+  // prediction (inter) or the proxy (intra), or of the last picture there,
+  // less the predicted QP; how far the last picture of the kind was from
+  // its line there; the energy's class and the QP of the last macroblock
+  // of it. The change the line asks for (INT_MIN none).
+  int qpd_aq(H_qpd_v& D) {
     D.aq = D.ac = 0;
-    int aqd = INT_MIN;  // the change the line asks for
-    if (rec_.act() && (int)aq_x_.size() == size_) {
+    int aqd = INT_MIN;
+    if (rec_.act() && (int)aq_.x.size() == size_) {
       // intra: the mean of the last picture's there and the left and upper
       // neighbours'
-      int x = -1, xs = 0, xn = 0;
-      if ((int)aq_xl_.size() == size_ && aq_xl_[addr_] >= 0) xs += aq_xl_[addr_], xn++;
-      if (addr_ % width_ && aq_x_[addr_ - 1] >= 0) xs += aq_x_[addr_ - 1], xn++;
-      if (addr_ >= width_ && aq_x_[addr_ - width_] >= 0) xs += aq_x_[addr_ - width_], xn++;
-      if (xn) x = xs / xn;
+      int x = aq_.around(addr_, width_);
       int q16;
       bool ok = false;
       if (mi_->cls < 6) {
-        aq_xp_ = lg16(rec_.ac_energy(addr_));
-        ok = aq_fitp_.predict(aq_xp_, q16);
-        if (!ok) x = aq_xp_;
+        aq_.xp = lg16(rec_.ac_energy(addr_));
+        ok = aq_.fitp.predict(aq_.xp, q16);
+        if (!ok) x = aq_.xp;
       } else if (mi_->cls != CL_PCM && sc_->chroma_ == 1) {
         // intra: the energy of its proxy, a reference's block
         proxy_mv();
         int64_t e = proxy_energy_();
         if (e >= 0) {
-          aq_xp_ = lg16(e);
-          aq_xi_ = true;
-          ok = aq_fitx_.predict(aq_xp_, q16) || aq_fitp_.predict(aq_xp_, q16);
+          aq_.xp = lg16(e);
+          aq_.xi = true;
+          ok = aq_.fitx.predict(aq_.xp, q16) || aq_.fitp.predict(aq_.xp, q16);
         }
       }
-      D.xe = aq_xp_ < 0 ? 0 : 1 + std::min(aq_xp_ / 16, 17);
+      D.xe = aq_.xp < 0 ? 0 : 1 + std::min(aq_.xp / 16, 17);
       // the QP of the last macroblock of the class: an encoder's QP is its
       // rate control's plus what the energy adds
       int lk = kind3(mi_->cls);
       if (lq_[lk][D.xe]) D.lq = 7 + tc_clamp(lq_[lk][D.xe] - 1 - qp_pred_, -6, 6);
-      if (ok || (x >= 0 && aq_fit_.predict(x, q16))) {
+      if (ok || (x >= 0 && aq_.fit.predict(x, q16))) {
         aqd = (int)div_floor(q16 - 16 * qp_pred_ + 8, 16);
         D.aq = 7 + tc_clamp(aqd, -6, 6);
       }
       int ma = mc_addr();
-      if ((int)aq_res_[key_].size() == size_ && aq_res_[key_][ma] != INT16_MIN)
-        D.ac = 7 + tc_clamp((int)div_floor(aq_res_[key_][ma] + 4, 8), -6, 6);
+      if ((int)aq_.res[key_].size() == size_ && aq_.res[key_][ma] != INT16_MIN)
+        D.ac = 7 + tc_clamp((int)div_floor(aq_.res[key_][ma] + 4, 8), -6, 6);
     }
-    tcx X;
-    f_qpd.make(D, X);
-    NodePrp pr;
-    pr[0] = cab1(sc_->ctx_qpd());
-    f_qpd.prpa = pr;
-    f_qpd.hint = aqd == INT_MIN ? -1 : abs(aqd);
-    {
-      int m = cm_int(f_qpd.code(X, ENC ? abs(v) : 0), 1 << 20);
-      bool neg = ENC && v < 0;
-      v = m;
-      if (m) {
-        // the sign (the qpg family), knowing the magnitude: on which side of
-        // the line's delta, col's and B's it puts the QP
-        auto rel = [&](int d) { return rel_sign(m, d); };
-        H_qpg_v G = {};
-        G.as = aqd == INT_MIN ? 9 : rel(aqd);
-        G.cs = col_ ? rel(col_->qp - qp_off_ - qp_pred_) : 9;
-        G.bs = b ? rel(b->qp - qp_off_ - qp_pred_) : 9;
-        G.ls = has_lz_ ? sgn3(lz_) : 0;
-        G.rs = D.ac ? sgn3(D.ac - 7) : 3;
-        G.mag = std::min(tc_qlog(m), 7);
-        G.cls = mi_->cls;
-        G.st = st_;
-        G.ss = rel(slice_qp_ - qp_pred_);
-        G.xe = D.xe;
-        G.lq = D.lq ? rel(D.lq - 7) : 9;
-        G.bk = D.bc ? rel(D.bc - 7) : 9;
-        tcx Y;
-        f_qpg.make(G, Y);
-        f_qpg.select(Y);
-        f_qpg.prp = -1;
-        v = f_qpg.bit(0, neg) ? -m : m;
-      }
-    }
-    f_qpd.hint = -1;
-    f_qpd.prpa = nullptr;
-    int qp = ((qp_pred_ + v + 52 + 2 * qp_off_) % (52 + qp_off_) + (52 + qp_off_)) % (52 + qp_off_) - qp_off_;
-    qp_pred_ = qp;
-    qp_src_ = addr_;
-    lq_[kind3(mi_->cls)][D.xe] = qp + 1;
-    mi_->qp = (uint8_t)(qp + qp_off_);
-    last_qpd_ = v;
-    if (v) {
-      lz_ = v;
-      has_lz_ = true;
-    }
-    qpd_coded_ = true;
-    tc_syms[STG_QPD]++;
-    return v;
+    return aqd;
+  }
+  // the sign of a nonzero mb_qp_delta (the qpg family), knowing its
+  // magnitude m: on which side of the line's delta, col's and B's it puts
+  // the QP
+  int qpd_sign(const H_qpd_v& D, const MbInfo* b, int aqd, int m, bool neg) {
+    auto rel = [&](int d) { return rel_sign(m, d); };
+    H_qpg_v G = {};
+    G.as = aqd == INT_MIN ? 9 : rel(aqd);
+    G.cs = col_ ? rel(col_->qp - qp_off_ - qp_pred_) : 9;
+    G.bs = b ? rel(b->qp - qp_off_ - qp_pred_) : 9;
+    G.ls = has_lz_ ? sgn3(lz_) : 0;
+    G.rs = D.ac ? sgn3(D.ac - 7) : 3;
+    G.mag = std::min(tc_qlog(m), 7);
+    G.cls = mi_->cls;
+    G.st = st_;
+    G.ss = rel(slice_qp_ - qp_pred_);
+    G.xe = D.xe;
+    G.lq = D.lq ? rel(D.lq - 7) : 9;
+    G.bk = D.bc ? rel(D.bc - 7) : 9;
+    tcx Y;
+    f_qpg.make(G, Y);
+    f_qpg.select(Y);
+    f_qpg.prp = -1;
+    return f_qpg.bit(0, neg) ? -m : m;
   }
 
   // --- blocks of coefficients: whether a block has a nonzero one (cbf),
@@ -2541,44 +2705,119 @@ struct Model : tc_rc<f_DEC> {
             abs(mi_->mvd[1][y * 4 + x][1]);
     return 17 + (m > 0) + (m > 8);
   }
+  // The context of a block of coefficients as block() codes it: what the
+  // families of its stages (cbf, sig, lvl, sgn) read of the block, its
+  // prediction and the pictures, and what the stages coded
+  struct BlockCx {
+    int cat, idx, n;
+    Geo g;
+    Scan sg;
+    Nb na, nb;      // the blocks A and B
+    int q, nc, md;  // the QP / 6, nC's class, the prediction's mode (block_mode)
+    // the prediction: which way its texture runs (hv), how much of it there
+    // is (pga; pg against the quantizer's step), how far it is from
+    // continuing its surroundings (em)
+    int hv, pga, pg, em;
+    // an intra block's proxy (pok): what its levels would be were the
+    // source what the reference shows, by scan position in quarters (plv);
+    // the nonzero of their estimates from each position on (esuf; pnz the
+    // block's); how far to trust it (pq)
+    bool pok;
+    int plv[64], pnz, esuf[65], pq;
+    // a luma block of a P picture on its first reference (tok): the block
+    // its vector points at in the last picture of the kind (tcol, its place
+    // tbx, tby in it; tmv: the vector moves it), its nonzero coefficients
+    // (tnz; tany: any)
+    bool tok, tany;
+    int tmv, tbx, tby, tnz;
+    MbRef tcol;
+    // as coded: the count, the significance, the last, the magnitudes
+    int total, last;
+    bool sig[64];
+    int mag[64];
+    // the proxy's level at scan position j, in quarters, and as the level
+    // an encoder would code
+    int q4(int j) const { return plv[std::min(j + g.off, g.kind == 3 ? 63 : g.kind == 0 && g.plane ? 3 : 15)]; }
+    int est(int j) const {
+      int a = (3 * abs(q4(j)) + 4) / 12;
+      return q4(j) < 0 ? -a : a;
+    }
+    // the coefficient at scan position j of the block under the vector
+    int tcf(int j) const {
+      if (!tany) return 0;
+      int k = j + g.off;
+      if (g.kind == 3) {
+        int r = k & 3, x = tbx + (r & 1), y = tby + (r >> 1);
+        return (int)tcol.coef[y * 4 + x][k >> 2];
+      }
+      return (int)tcol.coef[tby * 4 + tbx][k];
+    }
+  };
+  // a block of coefficients (c, n of them; coded: as coded_block_flag)
   void block(int cat, int idx, int* c, int n, bool coded) {
     prepare();
     if (cat == 2 || cat == 5) rec_.luma_ready(idx, mi_->qp - qp_off_);
     if (cat == 4 && sc_->chroma_ == 1) rec_.chroma_ready(idx >> 2 & 1, idx & 3, mi_->qp - qp_off_);
-    Geo g = geo(cat, idx);
-    const Scan sg = scan_of(g);
-    const MbState& cur = *sc_->cur_;
-    Nb na = nb_block(g, 0), nb = nb_block(g, 1);
-    int q = q6();
-    int nc = nc_class(block_nc(g)), md = block_mode(g);
+    BlockCx b;
+    block_begin(b, cat, idx, n);
+    block_proxy(b);
+    block_col(b);
+    b.total = block_count(b, c, coded);
+    if (b.total) {
+      // what the samples around the block ask of it (sign prediction, and
+      // the level estimates)
+      SignPred sp;
+      bool spok = LV::signpred && cat <= 5 && (cat != 3 || sc_->chroma_ == 1) && sp.init(rec_, b.g, cat, mi_->qp - qp_off_, idx);
+      block_sig(b, c, spok, sp);
+      block_levels(b, c, spok, sp);
+      block_signs(b, c, spok, sp);
+    } else {
+      for (int i = 0; i < n; i++) c[i] = 0;
+    }
+    store_coef(b.g, c, n);
+    if (b.total) rec_.coef(cat, idx, c, n);
+    rec_.luma_add(cat, idx, mi_->qp - qp_off_);
+    if (cat == 4 && sc_->chroma_ == 1) rec_.chroma_add(idx >> 2 & 1, idx & 3, mi_->qp - qp_off_);
+  }
+  // block(): the block's place and neighbours, and what its prediction is
+  // like
+  INLINE void block_begin(BlockCx& b, int cat, int idx, int n) {
+    b.cat = cat, b.idx = idx, b.n = n;
+    b.g = geo(cat, idx);
+    const Geo& g = b.g;
+    b.sg = scan_of(g);
+    b.na = nb_block(g, 0), b.nb = nb_block(g, 1);
+    b.q = q6();
+    b.nc = nc_class(block_nc(g)), b.md = block_mode(g);
     // the texture of the block's prediction
     int gxy[2] = {0, 0};
     int pt = g.kind == 0 ? rec_.pred_texture(g.plane, 0, 0, g.plane ? 8 : 16, gxy)
              : g.kind == 2 ? rec_.pred_texture(g.plane, g.x * 4, g.y * 4, 4, gxy)
                            : rec_.pred_texture(g.plane, g.x * 4, g.y * 4, g.kind == 3 ? 8 : 4, gxy);
-    // which way the prediction's texture runs (a motion error along it
-    // leaves a residual of those frequencies): 4 + log2 of the differences
-    // along rows over those along columns, -3 to 3 (0 flat or none)
-    int hv = 0;
+    // which way it runs (a motion error along it leaves a residual of
+    // those frequencies): 4 + log2 of the differences along rows over those
+    // along columns, -3 to 3 (0 flat or none)
+    b.hv = 0;
     if (pt > 0) {
-      int a = gxy[0] + 1, b = gxy[1] + 1, l = 0;
-      while (a >= 2 * b && l < 3) a /= 2, l++;
-      while (b >= 2 * a && l > -3) b /= 2, l--;
-      hv = 4 + l;
+      int x = gxy[0] + 1, y = gxy[1] + 1, l = 0;
+      while (x >= 2 * y && l < 3) x /= 2, l++;
+      while (y >= 2 * x && l > -3) y /= 2, l--;
+      b.hv = 4 + l;
     }
     // (for the count and the significance, against the quantizer's step)
-    int pga = qlog1(pt, 15);
+    b.pga = qlog1(pt, 15);
     int qs = qstep16(mi_->qp - qp_off_);
-    int pg = qlog1(pt, 15, 16, qs);
-    // and how far it is from continuing its surroundings (against the
-    // step too)
+    b.pg = qlog1(pt, 15, 16, qs);
+    // and how far it is from continuing its surroundings (against the step
+    // too)
     int ms = g.kind == 0 ? rec_.edge_miss(g.plane, 0, 0, g.plane ? 8 : 16)
              : rec_.edge_miss(g.plane, g.x * 4, g.y * 4, g.kind == 3 ? 8 : 4);
-    int em = qlog1(ms, 15, 256, qs);
-    // an intra block: what its levels would be were the source what the
-    // reference shows (Recon::proxy_levels), by scan position
-    int plv[64];
-    bool pok = false;
+    b.em = qlog1(ms, 15, 256, qs);
+  }
+  // block(): an intra block's proxy levels (BlockCx::pok)
+  INLINE void block_proxy(BlockCx& b) {
+    const Geo& g = b.g;
+    b.pok = false;
     if (mi_->cls >= CL_INXN && mi_->cls != CL_PCM && sc_->chroma_ == 1) {
       proxy_mv();
       int qp = mi_->qp - qp_off_;
@@ -2591,8 +2830,8 @@ struct Model : tc_rc<f_DEC> {
           prx_chroma_ = true;
           rec_.luma_finish(qp, mi_->t8);
           inner = 1;
-        } else if (!g.plane && mi_->cls == CL_INXN && (cat == 2 || cat == 5) && idx > prx_blk_) {
-          prx_blk_ = idx;
+        } else if (!g.plane && mi_->cls == CL_INXN && (b.cat == 2 || b.cat == 5) && b.idx > prx_blk_) {
+          prx_blk_ = b.idx;
           inner = 2;
         }
         int p[2] = {prx_v_[0], prx_v_[1]};
@@ -2603,155 +2842,168 @@ struct Model : tc_rc<f_DEC> {
         }
       }
       if (g.kind == 0)
-        pok = proxy_dc_(g.plane, g.plane ? rec_.chroma_qp_of(g.plane - 1, qp) : qp, plv);
+        b.pok = proxy_dc_(g.plane, g.plane ? rec_.chroma_qp_of(g.plane - 1, qp) : qp, b.plv);
       else
-        pok = proxy_levels_(g.kind == 2 ? g.plane : 0, g.x * 4, g.y * 4,
-                                g.kind == 2 ? rec_.chroma_qp_of(g.plane - 1, qp) : qp, plv, g.kind == 3 ? 8 : 4);
+        b.pok = proxy_levels_(g.kind == 2 ? g.plane : 0, g.x * 4, g.y * 4,
+                              g.kind == 2 ? rec_.chroma_qp_of(g.plane - 1, qp) : qp, b.plv, g.kind == 3 ? 8 : 4);
     }
-    // in quarters (q4), and as the level an encoder would code
-    auto q4 = [&](int j) { return plv[std::min(j + g.off, g.kind == 3 ? 63 : g.kind == 0 && g.plane ? 3 : 15)]; };
-    auto est = [&](int j) {
-      int a = (3 * abs(q4(j)) + 4) / 12;
-      return q4(j) < 0 ? -a : a;
-    };
-    // (from each position on)
-    int pnz = 0, esuf[65];
-    esuf[n] = 0;
-    if (pok) {
-      for (int j = n - 1; j >= 0; j--) esuf[j] = esuf[j + 1] + (est(j) != 0);
-      pnz = esuf[0];
+    // (their estimates' nonzero from each position on)
+    b.pnz = 0;
+    b.esuf[b.n] = 0;
+    if (LV::proxy && b.pok) {
+      for (int j = b.n - 1; j >= 0; j--) b.esuf[j] = b.esuf[j + 1] + (b.est(j) != 0);
+      b.pnz = b.esuf[0];
     }
-    // a luma block of a P picture on its first reference: the coefficients,
-    // by scan position, of the block its vector points at in the last
-    // picture of the kind (that reference); tmv: the vector moves it
-    int tmv = 0, tbx = 0, tby = 0;
-    MbRef tcol;
-    bool tok = g.plane == 0 && (g.kind == 1 || g.kind == 3) &&
-               mc_col(g.x, g.y, g.kind == 3 ? 8 : 4, tbx, tby, tmv, tcol) && tcol.cls < CL_INXN;
+  }
+  // block(): a luma block of a P picture on its first reference: the block
+  // its vector points at in the last picture of the kind (BlockCx::tok)
+  INLINE void block_col(BlockCx& b) {
+    const Geo& g = b.g;
+    b.tmv = b.tbx = b.tby = 0;
+    b.tcol = MbRef();
+    b.tok = g.plane == 0 && (g.kind == 1 || g.kind == 3) &&
+            mc_col(g.x, g.y, g.kind == 3 ? 8 : 4, b.tbx, b.tby, b.tmv, b.tcol) && b.tcol.cls < CL_INXN;
     // (where none of its rows were written, all zero)
-    bool tany = tok && tcol.cm >> (tby * 4 + tbx) & (g.kind == 3 ? 0x33 : 1);
-    auto tcf = [&](int j) {
-      if (!tany) return 0;
-      int k = j + g.off;
-      if (g.kind == 3) {
-        int q = k & 3, x = tbx + (q & 1), y = tby + (q >> 1);
-        return (int)tcol.coef[y * 4 + x][k >> 2];
-      }
-      return (int)tcol.coef[tby * 4 + tbx][k];
-    };
-    int tnz = 0;
-    if (tany)
-      for (int j = 0; j < n; j++) tnz += tcf(j) != 0;
-    // the number of nonzero coefficients
+    b.tany = b.tok && b.tcol.cm >> (b.tby * 4 + b.tbx) & (g.kind == 3 ? 0x33 : 1);
+    b.tnz = 0;
+    if (b.tany)
+      for (int j = 0; j < b.n; j++) b.tnz += b.tcf(j) != 0;
+  }
+
+  // --- the cbf family: the number of a block's nonzero coefficients
+  INLINE int block_count(BlockCx& b, const int* c, bool coded) {
+    const Geo& g = b.g;
+    // (the proxy and the reference's block where the level has them: else
+    // constants false)
+    const bool pok = LV::proxy && b.pok, tok = (LV::refs || LV::recon) && b.tok;
     tc_stage = STG_CBF;
     H_cbf_v D = {};
-    D.pz = pok ? 1 + std::min(pnz, 15) : 0;
-    D.hv = hv;
+    D.pz = pok ? 1 + std::min(b.pnz, 15) : 0;
+    D.hv = b.hv;
     D.ch = cnth_ & 15;  // the counts of the last two blocks coded (up to 3 each)
-    // how far to trust it: how far the macroblock's luma decoded so far is
-    // from the proxy (13-24), else how well its vector matched (1-12)
-    int pq = 0;
+    // how far to trust the proxy: how far the macroblock's luma decoded so
+    // far is from it (13-24), else how well its vector matched (1-12)
+    b.pq = 0;
     if (pok) {
       int pa = proxy_acc_();
-      pq = pa >= 0 ? 13 + tc_clamp(tc_qlog(pa), 0, 11) : pxq_;
+      b.pq = pa >= 0 ? 13 + tc_clamp(tc_qlog(pa), 0, 11) : pxq_;
     }
-    D.pq = pq;
-    D.tn = tok ? 1 + 5 * tmv + std::min(tnz, 4) : 0;
-    D.cat = cat;
-    D.na = nb_count(na, g);
-    D.nb = nb_count(nb, g);
+    D.pq = b.pq;
+    D.tn = tok ? 1 + 5 * b.tmv + std::min(b.tnz, 4) : 0;
+    D.cat = b.cat;
+    D.na = nb_count(b.na, g);
+    D.nb = nb_count(b.nb, g);
     D.intra = mi_->cls >= CL_INXN;
-    D.q6 = q;
-    D.np = 0;
-    if (g.kind == 1)
-      for (int b = idx & ~3; b < idx; b++) D.np += cur.nz[g.plane][blk_y(b) * 4 + blk_x(b)] != 0;
-    else if (g.kind == 2)
-      for (int b = idx - idx % sc_->ch_blocks_; b < idx; b++) D.np += cur.nz[g.plane][b % sc_->ch_blocks_] != 0;
+    D.q6 = b.q;
+    D.np = cbf_np(g, b.idx);
     D.pos = g.pos;
-    // x264's decimation (an inter luma 4x4 block of a P or B slice): an 8x8
-    // block whose 4x4 blocks score under 4 (6 when it is the macroblock's
-    // only one) is zeroed, so a coded one's blocks make that up; what is
-    // still owed, after the blocks before this one
-    D.ds = 0;
-    if (g.kind == 1 && g.plane == 0 && cat == 2 && mi_->cls < CL_INXN && (sc_->stype_ == kP || sc_->stype_ == kB)) {
-      int score = 0, req = popc4(mi_->cbp & 15) == 1 ? 6 : 4;
-      for (int b = idx & ~3; b < idx; b++) {
-        int r = blk_y(b) * 4 + blk_x(b);
-        if (mi_->cmask >> r & 1) score += decimate_score(mi_->coef[0][r]);
-      }
-      D.ds = 1 + std::max(0, req - score);
-    }
-    // a 4:2:0 chroma block: the coefficients of the luma under it (its 8x8
-    // block; for DC, the macroblock's), 1 + tc_qlog (0 luma)
-    D.ly = 0;
-    if (g.plane && sc_->chroma_ == 1) {
-      int n = 0;
-      for (int b = 0; b < 16; b++)
-        if (g.kind == 0 || ((b & 3) >> 1 == g.x && (b >> 2) >> 1 == g.y)) n += cur.nz[0][b];
-      D.ly = 1 + std::min(tc_qlog(n), 9);
-    }
-    // a 4:2:0 chroma AC block: its DC, from the chroma DC levels' 2x2
-    // transform; an Intra16x16 luma AC block, from the luma DC levels' 4x4
-    // one (frame scan); 1 + tc_qlog (0 not such a block)
-    D.dq = 0;
-    if (g.kind == 2 && sc_->chroma_ == 1) {
-      static const int8_t z[16] = {};
-      const int8_t* d = mi_->cmask >> (48 + g.plane) & 1 ? mi_->dc[g.plane] : z;
-      D.dq = 1 + std::min(tc_qlog(d[0] + (g.x ? -d[1] : d[1]) + (g.y ? -d[2] : d[2]) + (g.x ^ g.y ? -d[3] : d[3])), 7);
-    } else if (cat == 1) {
-      static const int kH[4][4] = {{1, 1, 1, 1}, {1, 1, -1, -1}, {1, -1, -1, 1}, {1, -1, 1, -1}};
-      const int8_t* d = mi_->dc[0];
-      int v = 0;
-      if (mi_->cmask >> 48 & 1)
-        for (int k = 0; k < 16; k++)
-          if (d[k]) v += kH[g.y][kZz4[k] >> 2] * d[k] * kH[kZz4[k] & 3][g.x];
-      D.dq = 1 + std::min(tc_qlog(v), 7);
-    }
-    D.crcb = 0;
-    if (g.plane == 2 && sc_->chroma_ != 3)
-      D.crcb = 1 + (g.kind == 0 ? cur.cbf_dc[1] : cur.nz[1][g.y * 2 + g.x] != 0);
-    else if (g.plane == 2)
-      D.crcb = 1 + (g.kind == 0 ? cur.cbf_dc[1] : cur.nz[1][g.y * 4 + g.x] != 0);
-    D.col = 2;
-    if (col_)
-      D.col = g.kind == 0 ? col_->dcm >> g.plane & 1
-                          : col_->nzm[g.plane] >> (g.kind == 2 ? g.y * 2 + g.x : g.y * 4 + g.x) & 1;
-    D.nc = nc;
+    D.ds = cbf_ds(g, b.cat, b.idx);
+    D.ly = cbf_ly(g);
+    D.dq = cbf_dq(g, b.cat);
+    D.crcb = cbf_crcb(g);
+    D.col = cbf_col(g);
+    D.nc = b.nc;
     D.kn = coded;
-    D.md = md;
+    D.md = b.md;
     D.en = map_en();
-    D.pg = pg;
-    D.em = em;
+    D.pg = b.pg;
+    D.em = b.em;
     tcx X;
     f_cbf.make(D, X);
     NodePrp pr;
     if (!coded && sc_->cabac_) {
       int inc = g.kind == 0 ? sc_->cbf_inc_dc(g.plane)
                 : g.kind == 2 ? sc_->cbf_inc_chroma_ac(g.plane - 1, g.x, g.y)
-                : g.kind == 3 ? sc_->cbf_inc_8x8(g.plane, idx)
+                : g.kind == 3 ? sc_->cbf_inc_8x8(g.plane, b.idx)
                               : sc_->cbf_inc_luma(g.plane, g.x, g.y);
-      pr[0] = cab1(kCbfBase[cat] + inc);
+      pr[0] = cab1(kCbfBase[b.cat] + inc);
     }
     f_cbf.prpa = pr;
     // the intra estimate's count, or that of the block under the vector
-    f_cbf.hint = pok ? std::max(pnz - (int)coded, 0) : tok ? std::max(tnz - (int)coded, 0) : -1;
-    int total = cm_int(f_cbf.code(X, ENC ? count_nonzero(c, n) - coded : 0), n) + coded;
+    f_cbf.hint = pok ? std::max(b.pnz - (int)coded, 0) : tok ? std::max(b.tnz - (int)coded, 0) : -1;
+    int total = cm_int(f_cbf.code(X, ENC ? count_nonzero(c, b.n) - coded : 0), b.n) + coded;
     f_cbf.hint = -1;
     cnth_ = (cnth_ * 4 + std::min(total, 3)) & 15;
     f_cbf.prpa = nullptr;
-    if (total > n) cm_fail("corrupt stream: %d coefficients in a block of %d", total, n);
+    if (total > b.n) cm_fail("corrupt stream: %d coefficients in a block of %d", total, b.n);
     tc_syms[STG_CBF]++;
-    if (!total) {
-      for (int i = 0; i < n; i++) c[i] = 0;
-      store_coef(g, c, n);
-      rec_.luma_add(cat, idx, mi_->qp - qp_off_);
-      if (cat == 4 && sc_->chroma_ == 1) rec_.chroma_add(idx >> 2 & 1, idx & 3, mi_->qp - qp_off_);
-      return;
+    return total;
+  }
+  // the blocks before it with coefficients, in its 8x8 block (4x4 blocks)
+  // or its component (chroma AC)
+  int cbf_np(const Geo& g, int idx) const {
+    const MbState& cur = *sc_->cur_;
+    int np = 0;
+    if (g.kind == 1)
+      for (int b = idx & ~3; b < idx; b++) np += cur.nz[g.plane][blk_y(b) * 4 + blk_x(b)] != 0;
+    else if (g.kind == 2)
+      for (int b = idx - idx % sc_->ch_blocks_; b < idx; b++) np += cur.nz[g.plane][b % sc_->ch_blocks_] != 0;
+    return np;
+  }
+  // x264's decimation (an inter luma 4x4 block of a P or B slice): an 8x8
+  // block whose 4x4 blocks score under 4 (6 when it is the macroblock's
+  // only one) is zeroed, so a coded one's blocks make that up; 1 + what is
+  // still owed after the blocks before this one (0 not such a block)
+  int cbf_ds(const Geo& g, int cat, int idx) const {
+    if (g.kind != 1 || g.plane != 0 || cat != 2 || mi_->cls >= CL_INXN || (sc_->stype_ != kP && sc_->stype_ != kB)) return 0;
+    int score = 0, req = popc4(mi_->cbp & 15) == 1 ? 6 : 4;
+    for (int b = idx & ~3; b < idx; b++) {
+      int r = blk_y(b) * 4 + blk_x(b);
+      if (mi_->cmask >> r & 1) score += decimate_score(mi_->coef[0][r]);
     }
-    // what the samples around the block ask of it (sign prediction, below,
-    // and the level estimates)
-    SignPred sp;
-    bool spok = LV::signpred && cat <= 5 && (cat != 3 || sc_->chroma_ == 1) && sp.init(rec_, g, cat, mi_->qp - qp_off_, idx);
+    return 1 + std::max(0, req - score);
+  }
+  // a 4:2:0 chroma block: the coefficients of the luma under it (its 8x8
+  // block; for DC, the macroblock's), 1 + tc_qlog (0 luma)
+  int cbf_ly(const Geo& g) const {
+    if (!g.plane || sc_->chroma_ != 1) return 0;
+    const MbState& cur = *sc_->cur_;
+    int n = 0;
+    for (int b = 0; b < 16; b++)
+      if (g.kind == 0 || ((b & 3) >> 1 == g.x && (b >> 2) >> 1 == g.y)) n += cur.nz[0][b];
+    return 1 + std::min(tc_qlog(n), 9);
+  }
+  // a 4:2:0 chroma AC block: its DC, from the chroma DC levels' 2x2
+  // transform; an Intra16x16 luma AC block, from the luma DC levels' 4x4
+  // one (frame scan); 1 + tc_qlog (0 not such a block)
+  int cbf_dq(const Geo& g, int cat) const {
+    if (g.kind == 2 && sc_->chroma_ == 1) {
+      static const int8_t z[16] = {};
+      const int8_t* d = mi_->cmask >> (48 + g.plane) & 1 ? mi_->dc[g.plane] : z;
+      return 1 + std::min(tc_qlog(d[0] + (g.x ? -d[1] : d[1]) + (g.y ? -d[2] : d[2]) + (g.x ^ g.y ? -d[3] : d[3])), 7);
+    }
+    if (cat != 1) return 0;
+    static const int kH[4][4] = {{1, 1, 1, 1}, {1, 1, -1, -1}, {1, -1, -1, 1}, {1, -1, 1, -1}};
+    const int8_t* d = mi_->dc[0];
+    int v = 0;
+    if (mi_->cmask >> 48 & 1)
+      for (int k = 0; k < 16; k++)
+        if (d[k]) v += kH[g.y][kZz4[k] >> 2] * d[k] * kH[kZz4[k] & 3][g.x];
+    return 1 + std::min(tc_qlog(v), 7);
+  }
+  // a Cr block: 1 + whether the Cb block there has coefficients (0 other)
+  int cbf_crcb(const Geo& g) const {
+    const MbState& cur = *sc_->cur_;
+    if (g.plane != 2) return 0;
+    if (sc_->chroma_ != 3) return 1 + (g.kind == 0 ? cur.cbf_dc[1] : cur.nz[1][g.y * 2 + g.x] != 0);
+    return 1 + (g.kind == 0 ? cur.cbf_dc[1] : cur.nz[1][g.y * 4 + g.x] != 0);
+  }
+  // whether the block had coefficients in the last macroblock of the kind
+  // there (col_; 2 none)
+  int cbf_col(const Geo& g) const {
+    if (!col_) return 2;
+    return g.kind == 0 ? col_->dcm >> g.plane & 1 : col_->nzm[g.plane] >> (g.kind == 2 ? g.y * 2 + g.x : g.y * 4 + g.x) & 1;
+  }
+
+  // --- the sig family: where a block's nonzero coefficients are, per
+  // position whether the coefficient is nonzero, knowing how many are still
+  // to come (into BlockCx::sig, last)
+  INLINE void block_sig(BlockCx& b, const int* c, bool spok, SignPred& sp) {
+    const Geo& g = b.g;
+    const Scan& sg = b.sg;
+    const Nb &na = b.na, &nb = b.nb;
+    const int cat = b.cat, n = b.n;
+    const bool pok = LV::proxy && b.pok, tok = (LV::refs || LV::recon) && b.tok;  // (as block_count)
     // the prediction's own levels by position (its texture by frequency):
     // an inter residual's follow them
     int pfl[64];
@@ -2759,21 +3011,19 @@ struct Model : tc_rc<f_DEC> {
                 rec_.pred_levels(g.plane, g.x * 4, g.y * 4,
                                  g.plane ? rec_.chroma_qp_of(g.plane - 1, mi_->qp - qp_off_) : mi_->qp - qp_off_, pfl,
                                  g.kind == 3 ? 8 : 4);
-    // where they are: per position, whether the coefficient is nonzero,
-    // knowing how many are still to come
     tc_stage = STG_SIG;
-    bool fld = sc_->field_mb();
-    bool sig[64] = {};
-    int rem = total, last = 0, cnt = total;
+    bool* sig = b.sig;
+    memset(sig, 0, sizeof b.sig);
+    int rem = b.total, last = 0;
     H_sig_v S = {};
     S.cg = cat;
-    S.md = md;
-    S.nc = nc;
-    S.fld = fld;
-    S.q6 = q;
-    S.pg = pg;
-    S.em = em;
-    S.pq = pq;
+    S.md = b.md;
+    S.nc = b.nc;
+    S.fld = sc_->field_mb();
+    S.q6 = b.q;
+    S.pg = b.pg;
+    S.em = b.em;
+    S.pq = b.pq;
     for (int i = 0; rem; i++) {
       if (n - i == rem) {
         sig[i] = true;
@@ -2782,9 +3032,9 @@ struct Model : tc_rc<f_DEC> {
         S.rem = tc_qlog(rem);
         S.zl = tc_qlog(n - i - rem);
         S.pe = spok && i < 4 ? sp.estimate(i) : 0;
-        S.ps = pok ? 1 + std::min(abs(q4(i)), 6) : 0;
+        S.ps = pok ? 1 + std::min(abs(b.q4(i)), 6) : 0;
         // the estimate's levels from here on, against the coefficients left
-        S.pr = pok ? 1 + 3 + tc_clamp(esuf[i] - rem, -3, 3) : 0;
+        S.pr = pok ? 1 + 3 + tc_clamp(b.esuf[i] - rem, -3, 3) : 0;
         // the last two positions' significance (4 at the start)
         if (H_USES(sig, ft)) {
           // the frequencies left of and above it, where coded already (0
@@ -2811,8 +3061,8 @@ struct Model : tc_rc<f_DEC> {
           for (int k = 1; k <= 3 && k <= i; k++) h3 = h3 * 2 + sig[i - k];
           S.h3 = h3 - 1;
         }
-        S.tz = tok ? 1 + 4 * tmv + std::min(abs(tcf(i)), 3) : 0;
-        S.hv = hv;
+        S.tz = tok ? 1 + 4 * b.tmv + std::min(abs(b.tcf(i)), 3) : 0;
+        S.hv = b.hv;
         S.pf = pfok ? 1 + std::min(tc_qlog(abs(pfl[std::min(i + g.off, g.kind == 3 ? 63 : 15)])), 10) : 0;
         // the same position in the blocks A and B (0 none, 1 zero, 2 not)
         if (H_USES(sig, sn))
@@ -2829,20 +3079,31 @@ struct Model : tc_rc<f_DEC> {
         last = i;
       }
     }
-    // the magnitudes, from the last coefficient back
+    b.last = last;
+  }
+
+  // --- the lvl family: the magnitudes of a block's nonzero coefficients,
+  // from the last back (into BlockCx::mag)
+  INLINE void block_levels(BlockCx& b, const int* c, bool spok, SignPred& sp) {
+    const Geo& g = b.g;
+    const Scan& sg = b.sg;
+    const Nb &na = b.na, &nb = b.nb;
+    const int cat = b.cat, n = b.n, last = b.last;
+    const bool* sig = b.sig;
+    int* mag = b.mag;
+    const bool pok = LV::proxy && b.pok, tok = (LV::refs || LV::recon) && b.tok;  // (as block_count)
     tc_stage = STG_LVL;
-    int mag[64];
     int g1 = 0, e1 = 0, lhist = 0, lsum = 0, esum = 0;  // lhist: the last levels coded less 1 (up to 3), two bits each
     H_lvl_v L = {};
     L.cg = cat;
-    L.nc = nc;
-    L.q6 = q;
-    L.tot = tc_qlog(cnt);
-    L.md = md;
-    L.pg = pga;
-    L.em = em;
-    L.pq = pq;
-    for (int k = 0; k < TC_NODE; k++) pr[k] = -1;
+    L.nc = b.nc;
+    L.q6 = b.q;
+    L.tot = tc_qlog(b.total);
+    L.md = b.md;
+    L.pg = b.pga;
+    L.em = b.em;
+    L.pq = b.pq;
+    NodePrp pr;
     f_lvl.prpa = pr;
     for (int k = last; k >= 0; k--) {
       if (!sig[k]) continue;
@@ -2855,11 +3116,11 @@ struct Model : tc_rc<f_DEC> {
         // the texture's direction, and whether the coefficient is a
         // horizontal (1) or vertical (2) frequency or both (3) or DC (0)
         int r = sg.zz[k + g.off];
-        L.hv = hv;
+        L.hv = b.hv;
         L.fq = (r % sg.w > 0) + 2 * (r / sg.w > 0);
       }
       L.pe = spok && k < 4 ? sp.estimate(k) : 0;
-      L.pl = pok ? 1 + std::min(abs(q4(k)) / 2, 10) : 0;
+      L.pl = pok ? 1 + std::min(abs(b.q4(k)) / 2, 10) : 0;
       // intra: the levels so far against the estimate's there
       L.ls = pok ? 7 + tc_clamp(lsum - esum, -6, 6) : 0;
       {
@@ -2874,18 +3135,18 @@ struct Model : tc_rc<f_DEC> {
         if (fy + 1 < sg.h) lv(r + sg.w);
         L.lt = nn ? 1 + std::min(sum, 6) : 0;
       }
-      L.tz = tok ? 1 + 4 * tmv + std::min(abs(tcf(k)), 3) : 0;
+      L.tz = tok ? 1 + 4 * b.tmv + std::min(abs(b.tcf(k)), 3) : 0;
       L.sa = na.m ? std::min(abs(coef_at(na.m, g, na.i, k)), 3) : 0;
       L.sb = nb.m ? std::min(abs(coef_at(nb.m, g, nb.i, k)), 3) : 0;
       tcx X;
       f_lvl.make(L, X);
       // the intra estimate's level there
-      f_lvl.hint = pok ? std::max(abs(est(k)) - 1, 0) : -1;
+      f_lvl.hint = pok ? std::max(abs(b.est(k)) - 1, 0) : -1;
       int a = cm_int(f_lvl.code(X, ENC ? abs(c[k]) - 1 : 0), kMaxLevel - 1);
       f_lvl.hint = -1;
       mag[k] = a + 1;
       lsum += a + 1;
-      if (pok) esum += abs(est(k));
+      if (pok) esum += abs(b.est(k));
       L.pm = std::min(a + 1, 4);
       lhist = (lhist * 4 + std::min(a, 3)) & 63;
       L.lh = 1 + lhist;
@@ -2896,120 +3157,107 @@ struct Model : tc_rc<f_DEC> {
       tc_syms[STG_LVL]++;
     }
     f_lvl.prpa = nullptr;
-    // the signs
+  }
+
+  // --- the sgn family: the signs of a block's nonzero coefficients. Of a
+  // luma block's first ones in scan order (sign prediction: spok), coded
+  // after the others, each with the sign that makes the block continue its
+  // surroundings best; of an inter luma block's, with the shift of its
+  // prediction its residual looks like, fitted to the signs known so far
+  // (from the macroblock's last block before any)
+  struct SgnCx {
+    bool gok;              // the prediction's gradients' levels (glx, gly) there
+    int glx[64], gly[64];
+    ShiftFit fit;
+    int ghist = 0;         // the last two signs coded in the block (0 none, 1 +, 2 -)
+    int sagree = 0;        // the signs the intra estimate got right less those it got wrong
+  };
+  INLINE void block_signs(BlockCx& b, int* c, bool spok, SignPred& sp) {
+    const Geo& g = b.g;
     tc_stage = STG_SGN;
     H_sgn_v G = {};
-    G.cg = cat;
+    G.cg = b.cat;
     G.scb = 3;
-    G.md = md;
-    G.pq = pq;
-    bool cr = g.plane == 2;
-    // sign prediction (luma blocks): the signs of the first nonzero
-    // coefficients in scan order are coded after the others, each with the
-    // sign that makes the block continue its surroundings best
+    G.md = b.md;
+    G.pq = b.pq;
     int npred = 0, pk[6];
     if (spok)
-      for (int k = 0; k <= last && npred < 6; k++)
-        if (sig[k]) pk[npred++] = k;
-    int ghist = 0;  // the last two signs coded in the block (0 none, 1 +, 2 -)
-    // an inter luma block: its residual taken for a small shift of its
-    // prediction, the shift fitted (least squares) to the coefficients whose
-    // signs are known so far (from the macroblock's last block before any)
-    // (in integers, the format depending on no floating point)
-    int glx[64], gly[64];
-    bool gok = mi_->cls < CL_INXN && g.plane == 0 && (cat == 2 || cat == 5) &&
-               rec_.pred_grad_levels(0, g.x * 4, g.y * 4, cat == 5 ? 8 : 4, mi_->qp - qp_off_, glx, gly);
-    if (gok)
-      for (int k = 0; k < n; k++) glx[k] = tc_clamp(glx[k], -2047, 2047), gly[k] = tc_clamp(gly[k], -2047, 2047);
-    i64 sxx = 0, sxy = 0, syy = 0, sxc = 0, syc = 0;
-    // the shift fitted so far: (fx, fy) / fd, scaled into 40 bits; fd 0 none
-    auto fit = [&](i64& fx, i64& fy, i64& fd) {
-      i64 det = sxx * syy - sxy * sxy, sum = sxx + syy + 1;
-      if (det > 0 && det > (sum * sum >> 30)) {
-        fx = syy * sxc - sxy * syc, fy = sxx * syc - sxy * sxc, fd = det;
-      } else if (sxx + syy + 2 * sxy > 0) {
-        // one direction only so far: along the gradients seen
-        fx = fy = sxc + syc, fd = sxx + syy + 2 * sxy;
-      } else {
-        fx = fy = fd = 0;
-        return;
-      }
-      while (std::max(std::max(fx < 0 ? -fx : fx, fy < 0 ? -fy : fy), fd) >= ((i64)1 << 40)) fx /= 2, fy /= 2, fd /= 2;
-    };
-    int sagree = 0;  // the signs the intra estimate got right less those it got wrong
-    auto code_sign = [&](int k) {
-      G.pos = k == 0 ? 0 : k < 3 ? 1 : k < 6 ? 2 : 3;
-      G.sa = na.m ? sgn3(coef_at(na.m, g, na.i, k)) : 3;
-      G.sb = nb.m ? sgn3(coef_at(nb.m, g, nb.i, k)) : 3;
-      if (cr) {
-        Geo gb = g;
-        gb.plane = 1;
-        G.scb = sgn3(coef_at(mi_, gb, g.kind == 2 ? g.y * 2 + g.x : g.y * 4 + g.x, k));
-      }
-      G.mag = std::min(mag[k], 3) - 1;
-      G.ez = pok ? (q4(k) ? (q4(k) > 0 ? 2 : 3) + 2 * (abs(q4(k)) >= 4) : 1) : 0;
-      G.ts = tok ? 1 + 3 * tmv + sgn3(tcf(k)) : 0;
-      G.gh = ghist % 9;
-      // intra: how often the estimate's signs were right in the block
-      G.se = pok ? 4 + tc_clamp(sagree, -3, 3) : 0;
-      // what that shift says of this sign, and how surely (its level
-      // against a quarter of the coefficient's, and against all of it)
-      G.dm = 0;
-      if (gok) {
-        i64 fx, fy, fd;
-        fit(fx, fy, fd);
-        if (!fd) fx = shx_, fy = shy_, fd = shd_;
-        i64 r = fx * glx[k] + fy * gly[k], ra = r < 0 ? -r : r, m = std::min(mag[k], 4096);
-        if (fd && r) G.dm = 1 + (r < 0) + 2 * (ra > fd * m) + 2 * (ra > 4 * fd * m);
-      }
-      tcx X;
-      f_sgn.make(G, X);
-      f_sgn.select(X);
-      int sg = f_sgn.bit(0, ENC && c[k] < 0);
-      ghist = ghist % 3 * 3 + 1 + sg;
-      if (pok && q4(k)) sagree += (q4(k) < 0) == (sg != 0) ? 1 : -1;
-      c[k] = sg ? -mag[k] : mag[k];
-      if (gok) {
-        i64 lx = glx[k], ly = gly[k], cv = tc_clamp(4 * c[k], -4095, 4095);
-        sxx += lx * lx, sxy += lx * ly, syy += ly * ly, sxc += lx * cv, syc += ly * cv;
-      }
-      tc_syms[STG_SGN]++;
-      return sg;
-    };
-    for (int k = last; k >= 0; k--) {
-      if (!sig[k]) {
+      for (int k = 0; k <= b.last && npred < 6; k++)
+        if (b.sig[k]) pk[npred++] = k;
+    SgnCx s;
+    s.gok = mi_->cls < CL_INXN && g.plane == 0 && (b.cat == 2 || b.cat == 5) &&
+            rec_.pred_grad_levels(0, g.x * 4, g.y * 4, b.cat == 5 ? 8 : 4, mi_->qp - qp_off_, s.glx, s.gly);
+    if (s.gok)
+      for (int k = 0; k < b.n; k++) s.glx[k] = tc_clamp(s.glx[k], -2047, 2047), s.gly[k] = tc_clamp(s.gly[k], -2047, 2047);
+    for (int k = b.last; k >= 0; k--) {
+      if (!b.sig[k]) {
         if (!ENC) c[k] = 0;
         continue;
       }
       bool predicted = false;
       for (int j = 0; j < npred; j++) predicted |= pk[j] == k;
       if (!predicted) {
-        code_sign(k);
+        sign1(b, s, G, c, k);
         if (npred) sp.add(k, c[k]);
       }
     }
     if (npred) {
-      for (int j = 0; j < npred; j++) sp.cand(pk[j], mag[pk[j]]);
+      for (int j = 0; j < npred; j++) sp.cand(pk[j], b.mag[pk[j]]);
       sp.costs();
       for (int j = 0; j < npred; j++) {
         int margin, pred = sp.predict(j, margin);
         G.pp = 1 + pred;
         G.mg = 1 + tc_clamp(tc_qlog(margin), 0, 14);
-        sp.decide(j, code_sign(pk[j]));
+        sp.decide(j, sign1(b, s, G, c, pk[j]));
       }
       G.pp = G.mg = 0;
     }
-    for (int k = last + 1; k < n; k++) c[k] = 0;
-    if (gok) {
+    for (int k = b.last + 1; k < b.n; k++) c[k] = 0;
+    if (s.gok) {
       // the shift fitted to the whole block, for the next block's first signs
       i64 fx, fy, fd;
-      fit(fx, fy, fd);
+      s.fit.fit(fx, fy, fd);
       if (fd) shx_ = fx, shy_ = fy, shd_ = fd;
     }
-    store_coef(g, c, n);
-    rec_.coef(cat, idx, c, n);
-    rec_.luma_add(cat, idx, mi_->qp - qp_off_);
-    if (cat == 4 && sc_->chroma_ == 1) rec_.chroma_add(idx >> 2 & 1, idx & 3, mi_->qp - qp_off_);
+  }
+  // the sign of the coefficient at scan position k: coded, its value into c
+  INLINE int sign1(const BlockCx& b, SgnCx& s, H_sgn_v& G, int* c, int k) {
+    const Geo& g = b.g;
+    const bool pok = LV::proxy && b.pok, tok = (LV::refs || LV::recon) && b.tok;  // (as block_count)
+    G.pos = k == 0 ? 0 : k < 3 ? 1 : k < 6 ? 2 : 3;
+    G.sa = b.na.m ? sgn3(coef_at(b.na.m, g, b.na.i, k)) : 3;
+    G.sb = b.nb.m ? sgn3(coef_at(b.nb.m, g, b.nb.i, k)) : 3;
+    if (g.plane == 2) {
+      Geo gb = g;
+      gb.plane = 1;
+      G.scb = sgn3(coef_at(mi_, gb, g.kind == 2 ? g.y * 2 + g.x : g.y * 4 + g.x, k));
+    }
+    G.mag = std::min(b.mag[k], 3) - 1;
+    G.ez = pok ? (b.q4(k) ? (b.q4(k) > 0 ? 2 : 3) + 2 * (abs(b.q4(k)) >= 4) : 1) : 0;
+    G.ts = tok ? 1 + 3 * b.tmv + sgn3(b.tcf(k)) : 0;
+    G.gh = s.ghist % 9;
+    // intra: how often the estimate's signs were right in the block
+    G.se = pok ? 4 + tc_clamp(s.sagree, -3, 3) : 0;
+    // what the shift says of this sign, and how surely (its level against a
+    // quarter of the coefficient's, and against all of it)
+    G.dm = 0;
+    if (s.gok) {
+      i64 fx, fy, fd;
+      s.fit.fit(fx, fy, fd);
+      if (!fd) fx = shx_, fy = shy_, fd = shd_;
+      i64 r = fx * s.glx[k] + fy * s.gly[k], ra = r < 0 ? -r : r, m = std::min(b.mag[k], 4096);
+      if (fd && r) G.dm = 1 + (r < 0) + 2 * (ra > fd * m) + 2 * (ra > 4 * fd * m);
+    }
+    tcx X;
+    f_sgn.make(G, X);
+    f_sgn.select(X);
+    int sg = f_sgn.bit(0, ENC && c[k] < 0);
+    s.ghist = s.ghist % 3 * 3 + 1 + sg;
+    if (pok && b.q4(k)) s.sagree += (b.q4(k) < 0) == (sg != 0) ? 1 : -1;
+    c[k] = sg ? -b.mag[k] : b.mag[k];
+    if (s.gok) s.fit.add(s.glx[k], s.gly[k], tc_clamp(4 * c[k], -4095, 4095));
+    tc_syms[STG_SGN]++;
+    return sg;
   }
 
   // --- I_PCM: the alignment bits, and the samples as differences to the
