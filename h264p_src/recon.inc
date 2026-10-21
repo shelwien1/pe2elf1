@@ -26,6 +26,11 @@ const uint8_t kZz8[64] = {0,  1,  8,  16, 9,  2,  3,  10, 17, 24, 32, 25, 18, 11
 const int kNorm4[6][3] = {{10, 16, 13}, {11, 18, 14}, {13, 20, 16}, {14, 23, 18}, {16, 25, 20}, {18, 29, 23}};
 const int kNorm8[6][6] = {{20, 18, 32, 19, 25, 24}, {22, 19, 35, 21, 28, 26}, {26, 23, 42, 24, 33, 31},
                           {28, 25, 45, 26, 35, 33}, {32, 28, 51, 30, 40, 38}, {36, 32, 58, 34, 46, 43}};
+// x264's quantization factors of the 4x4 transform, by qp % 6 and the
+// position's class as kNorm4's (the first, the DC's, also the 8x8's and
+// the DC blocks')
+const int kQuant4[6][3] = {{13107, 5243, 8066}, {11916, 4660, 7490}, {10082, 4194, 6554},
+                           {9362, 3647, 5825},  {8192, 3355, 5243},  {7282, 2893, 4559}};
 // QPc from qPI (table 8-15) for qPI >= 30
 const uint8_t kQpc[22] = {29, 30, 31, 32, 32, 33, 34, 34, 35, 35, 36, 36, 37, 37, 37, 38, 38, 38, 39, 39, 39, 39};
 // deblocking (tables 8-16, 8-17)
@@ -1016,12 +1021,18 @@ struct MbDecoder : Dpb {
     uint8_t* d = Y + my * w + mx;
     bool aA = intra_avail(addr, nb_mb(addr, -1, 0)), aB = intra_avail(addr, nb_mb(addr, 0, -1));
     bool aD = intra_avail(addr, nb_mb(addr, -1, -1));
-    int T[16], L[16], Q = aD ? d[-w - 1] : 128;
-    for (int i = 0; i < 16; i++) {
-      T[i] = aB ? d[-w + i] : 128;
-      L[i] = aA ? d[i * w - 1] : 128;
-    }
+    int T[16], L[16], Q;
+    around(d, w, 16, aB, aA, aD, T, L, Q);
     pred_l16(d, w, mode, T, L, Q, aA, aB);
+  }
+  // the n samples above d (T), to its left (L) and the one above left (Q),
+  // where there are (top, left, tl), else 128
+  static void around(const uint8_t* d, int stride, int n, bool top, bool left, bool tl, int* T, int* L, int& Q) {
+    Q = tl ? d[-stride - 1] : 128;
+    for (int i = 0; i < n; i++) {
+      T[i] = top ? d[-stride + i] : 128;
+      L[i] = left ? d[i * stride - 1] : 128;
+    }
   }
   // the Intra16x16 prediction from the samples above (T), to the left (L)
   // and above left (Q)
@@ -1053,11 +1064,8 @@ struct MbDecoder : Dpb {
     bool aD = intra_avail(addr, nb_mb(addr, -1, -1));
     for (int c = 0; c < 2; c++) {
       uint8_t* d = (c ? cur->v.data() : cur->u.data()) + my * cw + mx;
-      int T[8], L[8], Q = aD ? d[-cw - 1] : 128;
-      for (int i = 0; i < 8; i++) {
-        T[i] = aB ? d[-cw + i] : 128;
-        L[i] = aA ? d[i * cw - 1] : 128;
-      }
+      int T[8], L[8], Q;
+      around(d, cw, 8, aB, aA, aD, T, L, Q);
       pred_c8(d, cw, mode, T, L, Q, aA, aB);
     }
   }
@@ -2075,7 +2083,7 @@ struct ReconT : MbDecoder<K> {
   using D::skip_in; using D::skip_rf; using D::skip_mv; using D::inter; using D::predict; using D::predicted;
   using D::pq_l; using D::pq_ok;
   // the decoder's kernels
-  using D::mc_luma; using D::mc_luma_t; using D::mc_chroma; using D::pred_nxn; using D::pred_l16; using D::pred_c8;
+  using D::mc_luma; using D::mc_luma_t; using D::mc_chroma; using D::pred_nxn; using D::pred_l16; using D::pred_c8; using D::around;
   using D::edge_fill; using D::norm4_class; using D::norm8_class;
   void Init() {
     D::Init();
@@ -2121,11 +2129,8 @@ struct ReconT : MbDecoder<K> {
     int x0 = clip3(0, w - 16, mb_x(mb_addr) + dx), y0 = clip3(0, P->h - 16, mb_y(mb_addr) + dy);
     bool aA = x0 > 0, aB = y0 > 0;
     const uint8_t* s = P->y.data() + y0 * w + x0;
-    int T[16], L[16], Q = aA && aB ? s[-w - 1] : 128;
-    for (int i = 0; i < 16; i++) {
-      T[i] = aB ? s[-w + i] : 128;
-      L[i] = aA ? s[i * w - 1] : 128;
-    }
+    int T[16], L[16], Q;
+    around(s, w, 16, aB, aA, aA && aB, T, L, Q);
     int best = -1;
     for (int m = 0; m < 4; m++) {
       costs[m] = INT_MAX;
@@ -2151,11 +2156,8 @@ struct ReconT : MbDecoder<K> {
     for (int m = 0; m < 4; m++) costs[m] = 0;
     for (int c = 0; c < 2; c++) {
       const uint8_t* s = (c ? P->v.data() : P->u.data()) + y0 * cw + x0;
-      int T[8], L[8], Q = aA && aB ? s[-cw - 1] : 128;
-      for (int i = 0; i < 8; i++) {
-        T[i] = aB ? s[-cw + i] : 128;
-        L[i] = aA ? s[i * cw - 1] : 128;
-      }
+      int T[8], L[8], Q;
+      around(s, cw, 8, aB, aA, aA && aB, T, L, Q);
       for (int m = 0; m < 4; m++) {
         if ((m == 1 && !aA) || (m == 2 && !aB) || (m == 3 && !(aA && aB))) {
           costs[m] = INT_MAX;
@@ -2280,18 +2282,7 @@ struct ReconT : MbDecoder<K> {
         mc_luma(ref ? ref : cur, mx + x, my + y, 8, 8, mv[l][b][0], mv[l][b][1], p[l]);
         q[l] = p[l];
       }
-#ifdef H264P_AVX2
-      __m128i a = _mm_setzero_si128();
-      for (int j = 0; j < 8; j += 2) {
-        __m128i u = _mm_unpacklo_epi64(_mm_loadl_epi64((const __m128i*)(q[0] + j * 16)), _mm_loadl_epi64((const __m128i*)(q[0] + j * 16 + 16)));
-        __m128i v = _mm_unpacklo_epi64(_mm_loadl_epi64((const __m128i*)(q[1] + j * 16)), _mm_loadl_epi64((const __m128i*)(q[1] + j * 16 + 16)));
-        a = _mm_add_epi64(a, _mm_sad_epu8(u, v));
-      }
-      sum += _mm_cvtsi128_si32(_mm_add_epi64(a, _mm_unpackhi_epi64(a, a)));
-#else
-      for (int j = 0; j < 8; j++)
-        for (int i = 0; i < 8; i++) sum += abs(q[0][j * 16 + i] - q[1][j * 16 + i]);
-#endif
+      sum += sad_bil(q[0], 16, q[1], 16, 8, 8, 0, 0, INT_MAX);
       cnt += 64;
     }
     return cnt ? sum * 4 / cnt : -1;
@@ -2549,15 +2540,6 @@ struct ReconT : MbDecoder<K> {
         return sad_bil(qt, 16, RT + ix * pt + iy, pt, bh, 2, vy & 3, vx & 3, budget);
       return sad(x0 - T, y0, T, bh, vx, vy, budget);
     }
-    int inner_sad(int vx, int vy, int budget) const {
-      if (inner == 1) return sad(x0, y0, bw, bh, vx, vy, budget);
-      int s = 0;
-      for (int b = 0; b < 16 && s < budget; b++)
-        if (rec->mb_done4 >> b & 1) s += sad(x0 + blk_x(b) * 4, y0 + blk_y(b) * 4, 4, 4, vx, vy, budget - s);
-      for (int b8 = 0; b8 < 4 && s < budget; b8++)
-        if (rec->mb_done8 >> b8 & 1) s += sad(x0 + (b8 & 1) * 8, y0 + (b8 >> 1) * 8, 8, 8, vx, vy, budget - s);
-      return s;
-    }
     // the templates outside the block
     int outer_sad(int vx, int vy, int budget) const {
       int s = 0;
@@ -2602,14 +2584,13 @@ struct ReconT : MbDecoder<K> {
         if (m8 >> b8 & 1) s += sad(x0 + (b8 & 1) * 8, y0 + (b8 >> 1) * 8, 8, 8, vx, vy, INT_MAX);
       return s;
     }
-    // a vector's cost
+    // a vector's cost (the top right and the blocks inside only in the
+    // proxy's search, memo: tm_cx())
     int operator()(int vx, int vy, int bound) const {
       int c = lambda * (abs(vx - px) + abs(vy - py));
       if (memo) return memo_cost(vx, vy, bound, c);
       if (top && c < bound) c += sad(x0, y0 - T, bw, T, vx, vy, bound - c);
       if (left && c < bound) c += sad_left(vx, vy, bound - c);
-      if (tr && c < bound) c += sad(x0 + bw, y0 - T, T, T, vx, vy, bound - c);
-      if (ninner && c < bound) c += inner_sad(vx, vy, bound - c);
       return c;
     }
     // that of the proxy's search, with what tmm knows of the vector (c: its
@@ -2824,10 +2805,7 @@ struct ReconT : MbDecoder<K> {
     int r[64], lv[64], cnt = 0;
     for (int y = 0; y < n; y++)
       for (int x = 0; x < n; x++) r[y * n + x] = Y[(y0 + y) * w + x0 + x] - d[y * 8 + x];
-    if (n == 8)
-      fquant8(r, qp, lv);
-    else
-      fquant4(r, qp, lv);
+    fquant(r, n, qp, lv);
     for (int k = 0; k < n * n; k++) cnt += abs(lv[k]) >= 3;
     return cnt;
   }
@@ -2852,12 +2830,16 @@ struct ReconT : MbDecoder<K> {
     }
     return best;
   }
-  // The forward 4x4 transform and quantization of residual r (raster): the
-  // levels in zigzag order, in quarters, not rounded (an encoder rounding
-  // intra levels up from 2/3 would code (3 |q| + 4) / 12)
+  // The forward transform and quantization of residual r (raster) of n x n
+  // (4, 8): the levels in zigzag order, in quarters, not rounded (an
+  // encoder rounding intra levels up from 2/3 would code (3 |q| + 4) / 12)
+  static void fquant(const int* r, int n, int qp, int* lv) {
+    if (n == 8)
+      fquant8(r, qp, lv);
+    else
+      fquant4(r, qp, lv);
+  }
   static void fquant4(const int* r, int qp, int* lv) {
-    static const int mf[6][3] = {{13107, 5243, 8066}, {11916, 4660, 7490}, {10082, 4194, 6554},
-                                 {9362, 3647, 5825},  {8192, 3355, 5243},  {7282, 2893, 4559}};
     int t[16], W[16];
     for (int i = 0; i < 4; i++) {
       const int* x = r + i * 4;
@@ -2877,12 +2859,12 @@ struct ReconT : MbDecoder<K> {
     int qb = 13 + qp / 6;
     for (int k = 0; k < 16; k++) {
       int p = kZz4[k], y = p >> 2, x = p & 3;
-      int m = mf[qp % 6][norm4_class(y, x)];
+      int m = kQuant4[qp % 6][norm4_class(y, x)];
       int q = (int)(((int64_t)abs(W[p]) * m) >> qb);
       lv[k] = W[p] < 0 ? -q : q;
     }
   }
-  // the same for an 8x8 block (x264's dct8)
+  // (x264's dct8)
   static void fquant8(const int* r, int qp, int* lv) {
     static const int mf[6][6] = {{13107, 11428, 20972, 12222, 16777, 15481}, {11916, 10826, 19174, 11058, 14980, 14290},
                                  {10082, 8943, 15978, 9675, 12710, 11985},   {9362, 8228, 14913, 8931, 11984, 11259},
@@ -2914,7 +2896,7 @@ struct ReconT : MbDecoder<K> {
   }
   // The levels of a block of n x n (4, 8) were the source the proxy
   // (proxy_build): the proxy less the prediction in the picture, through
-  // fquant4 or fquant8 at qp. c 0 luma, 1 and 2 chroma; x, y in its
+  // fquant() at qp. c 0 luma, 1 and 2 chroma; x, y in its
   // samples of the current macroblock. false: no proxy.
   bool proxy_levels(int c, int x, int y, int qp, int* lv, int n = 4) const {
     if (!act() || !prx_ok) return false;
@@ -2924,15 +2906,12 @@ struct ReconT : MbDecoder<K> {
     int r[64];
     for (int j = 0; j < n; j++)
       for (int i = 0; i < n; i++) r[j * n + i] = Q[j * m + i] - C[j * w + i];
-    if (n == 8)
-      fquant8(r, qp, lv);
-    else
-      fquant4(r, qp, lv);
+    fquant(r, n, qp, lv);
     return true;
   }
   // the levels of the prediction's horizontal and vertical gradients
   // (central differences, from the picture around the block too), as
-  // fquant4/fquant8 at qp: what a residual of a small shift of the block
+  // fquant() at qp: what a residual of a small shift of the block
   // would have, per unit of shift each way
   bool pred_grad_levels(int c, int x, int y, int n, int qp, int* lx, int* ly) const {
     if (!act() || !mb_prepared || mb_cls == 8) return false;
@@ -2946,10 +2925,7 @@ struct ReconT : MbDecoder<K> {
         gx[j * n + i] = at(i + 1, j) - at(i - 1, j);
         gy[j * n + i] = at(i, j + 1) - at(i, j - 1);
       }
-    if (n == 8)
-      fquant8(gx, qp, lx), fquant8(gy, qp, ly);
-    else
-      fquant4(gx, qp, lx), fquant4(gy, qp, ly);
+    fquant(gx, n, qp, lx), fquant(gy, n, qp, ly);
     return true;
   }
   // the same of the prediction itself (in the picture, before the
@@ -2961,10 +2937,7 @@ struct ReconT : MbDecoder<K> {
     int r[64];
     for (int j = 0; j < n; j++)
       for (int i = 0; i < n; i++) r[j * n + i] = C[j * w + i];
-    if (n == 8)
-      fquant8(r, qp, lv);
-    else
-      fquant4(r, qp, lv);
+    fquant(r, n, qp, lv);
     return true;
   }
   // and for the DC blocks: Intra16x16's (plane 0: 16 levels in zigzag
@@ -2983,12 +2956,11 @@ struct ReconT : MbDecoder<K> {
           for (int i = 0; i < 4; i++) sum += Q[(by * 4 + j) * m + bx * 4 + i] - C[(by * 4 + j) * w + bx * 4 + i];
         d[by * nb + bx] = sum;
       }
-    static const int mf0[6] = {13107, 11916, 10082, 9362, 8192, 7282};
-    int qb = 15 + qp / 6;
+    int qb = 15 + qp / 6, mf0 = kQuant4[qp % 6][0];
     if (nb == 2) {
       hadamard2x2(d, f);
       for (int k = 0; k < 4; k++) {
-        int q = (int)(((int64_t)abs(f[k]) * mf0[qp % 6]) >> (qb - 1));
+        int q = (int)(((int64_t)abs(f[k]) * mf0) >> (qb - 1));
         lv[k] = f[k] < 0 ? -q : q;
       }
       return true;
@@ -2998,7 +2970,7 @@ struct ReconT : MbDecoder<K> {
     for (int j = 0; j < 4; j++) hadamard4(t + j, 4, f + j, 4);
     for (int k = 0; k < 16; k++) {
       int v = f[kZz4[k]] / 2;
-      int q = (int)(((int64_t)abs(v) * mf0[qp % 6]) >> (qb - 1));
+      int q = (int)(((int64_t)abs(v) * mf0) >> (qb - 1));
       lv[k] = v < 0 ? -q : q;
     }
     return true;
