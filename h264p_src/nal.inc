@@ -9,33 +9,99 @@ namespace h264p {
 // the NAL unit types the walk knows (the others are stored verbatim)
 bool parsed_type(int type) { return (type >= 5 && type <= 12) || type == 1; }
 
+// Why a NAL unit is stored verbatim (said with -v), in a char[kWhy]
+const int kWhy = 320;
+void set_why(char* why, const char* fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  vsnprintf(why, kWhy, fmt, ap);
+  va_end(ap);
+}
+
 // What c did with the NAL units of a stream
 struct Stats {
-  long nals = 0, parsed = 0, raw = 0, trail = 0, pad = 0;
-  std::map<std::string, long> reasons;
+  long nals, parsed, raw, trail, pad;
+  // why NAL units were stored verbatim: each reason once, with how many it
+  // was; found by its hash in index (the reason's number + 1, 0 none)
+  struct Reason {
+    char why[kWhy];
+    long n;
+  };
+  Buf<Reason> reasons;
+  Buf<uint32_t> index;  // (a power of 2 of them, more than twice the reasons)
+
+  void Init() {
+    nals = parsed = raw = trail = pad = 0;
+    reasons.Init();
+    index.Init();
+  }
+  void Quit() {
+    reasons.Quit();
+    index.Quit();
+  }
 
   // a NAL unit stored verbatim, and why
-  void verbatim(const std::string& why) {
+  void verbatim(const char* why) {
     raw++;
-    reasons[why]++;
+    char w[kWhy];
+    set_why(w, "%s", why);
+    if (2 * (reasons.size() + 1) > index.size()) reindex();
+    size_t mask = index.size() - 1;
+    for (size_t i = hash(w) & mask;; i = (i + 1) & mask) {
+      uint32_t k = index[i];
+      if (!k) {
+        Reason r;
+        memcpy(r.why, w, sizeof w);
+        r.n = 1;
+        reasons.push_back(r);
+        index[i] = (uint32_t)reasons.size();
+        return;
+      }
+      if (!strcmp(reasons[k - 1].why, w)) {
+        reasons[k - 1].n++;
+        return;
+      }
+    }
   }
   // and one with a header, the last: false if that ends the call (-s, where
   // the walk knows its type; said, and with -v said anyway)
-  bool verbatim(int type, const std::string& why, bool verbose, bool strict, Progress* meter) {
+  bool verbatim(int type, const char* why, bool verbose, bool strict, Progress* meter) {
     verbatim(why);
     if (!parsed_type(type)) return true;
-    if (verbose) say(meter, "h264p: NAL unit %ld (type %d) stored verbatim: %s\n", nals - 1, type, why.c_str());
+    if (verbose) say(meter, "h264p: NAL unit %ld (type %d) stored verbatim: %s\n", nals - 1, type, why);
     if (!strict) return true;
-    say_error(meter, "h264p: NAL unit %ld (type %d) cannot be converted: %s\n", nals - 1, type, why.c_str());
+    say_error(meter, "h264p: NAL unit %ld (type %d) cannot be converted: %s\n", nals - 1, type, why);
     return false;
   }
   // -v's report at the end: done, what was done to the NAL units not stored
-  // verbatim; pads, what pad counts
-  void report(const char* done, const char* pads, Progress* meter) const {
+  // verbatim; pads, what pad counts. (The reasons in order of their text:
+  // the index is made again if one comes after.)
+  void report(const char* done, const char* pads, Progress* meter) {
     say(meter, "%ld NAL units: %ld %s (%ld with irregular trailing bits), %ld stored verbatim\n", nals, parsed, done,
         trail, raw);
     if (pad) say(meter, "%ld %s\n", pad, pads);
-    for (auto& r : reasons) say(meter, "  verbatim: %ld x %s\n", r.second, r.first.c_str());
+    if (!reasons.empty()) qsort(reasons.data(), reasons.size(), sizeof(Reason), by_why);
+    index.clear();
+    for (const Reason& r : reasons) say(meter, "  verbatim: %ld x %s\n", r.n, r.why);
+  }
+
+  static uint64_t hash(const char* w) {
+    uint64_t h = 14695981039346656037ull;  // (FNV-1a)
+    for (; *w; w++) h = (h ^ (uint8_t)*w) * 1099511628211ull;
+    return h;
+  }
+  static int by_why(const void* a, const void* b) { return strcmp(((const Reason*)a)->why, ((const Reason*)b)->why); }
+  // the index, of room for the reasons and one more
+  void reindex() {
+    size_t m = 16;
+    while (m < 2 * (reasons.size() + 1)) m *= 2;
+    index.clear();
+    index.resize(m);
+    for (size_t k = 0; k < reasons.size(); k++) {
+      size_t i = hash(reasons[k].why) & (m - 1);
+      while (index[i]) i = (i + 1) & (m - 1);
+      index[i] = (uint32_t)(k + 1);
+    }
   }
 };
 
@@ -47,10 +113,14 @@ struct Stats {
 // (PadDetector) and codes where it starts or changes phase (set(): the
 // next slice is in frame N); both sides then expect these bits.
 struct X264Padding {
-  bool on = false;
-  bool hold = false;  // set(): the next slice is in frame `frame`
-  int64_t frame = 0;  // the frame of the last slice
+  bool on;
+  bool hold;      // set(): the next slice is in frame `frame`
+  int64_t frame;  // the frame of the last slice
 
+  void Init() {
+    on = hold = false;
+    frame = 0;
+  }
   // the padding bit of the next slice, which starts a picture or not
   int bit(bool newpic) const {
     if (!on) return 0;
@@ -74,7 +144,20 @@ struct Context {
   ParamSets ps;
   MbStore mbs;
   X264Padding pad;
-  int slice_kind = -1, slice_mbs = 0;  // the last slice's picture (pic_kind, pic_mbs)
+  SliceHeader sh;                // the slice's (code_nal())
+  int slice_kind, slice_mbs;     // the last slice's picture (pic_kind, pic_mbs)
+
+  void Init() {
+    ps.Init();
+    mbs.Init();
+    pad.Init();
+    sh.Init();
+    slice_kind = -1, slice_mbs = 0;
+  }
+  void Quit() {
+    ps.Quit();
+    mbs.Quit();
+  }
 
   // a NAL unit done, its payload (after the header byte) as in the stream:
   // past a slice, x264's padding moves on
@@ -91,8 +174,13 @@ struct Context {
 // padding, if that predicted all bits since, else to the hypothesis that
 // predicted the longest run of the latest bits.
 struct PadDetector {
-  PadDetector() {
+  void Init() {
+    pic_ = -1;
+    n_ = 0;
     for (int64_t& l : last_) l = -1;
+    cur_ = kOff;
+    pref_ = 0;
+    since_ = 0;
   }
   // a slice NAL unit, which starts a picture or not
   void slice(bool newpic) { pic_ += newpic; }
@@ -131,12 +219,12 @@ struct PadDetector {
   static const int kOff = 32;
   int predict(int p) const { return 0x35a4e4f5u >> (((uint64_t)pic_ + p) & 31) & 1; }
 
-  int64_t pic_ = -1;  // pictures so far, the first one being 0
-  int64_t n_ = 0;     // observations so far
-  int64_t last_[33];  // the last observation each hypothesis mispredicted
-  int cur_ = kOff;
-  int pref_ = 0;       // the phase that makes the picture after the restart frame 0
-  int64_t since_ = 0;  // the first observation after the restart
+  int64_t pic_;        // pictures so far, the first one being 0
+  int64_t n_;          // observations so far
+  int64_t last_[33];   // the last observation each hypothesis mispredicted
+  int cur_;
+  int pref_;           // the phase that makes the picture after the restart frame 0
+  int64_t since_;      // the first observation after the restart
 };
 
 // x264's version SEI: user_data_unregistered with its UUID
@@ -188,20 +276,19 @@ bool repad(PadDetector& det, int obs, X264Padding& pad) {
 // data, else -1. What cannot be parsed or written raises an error
 // (err.inc), as the channel puts it.
 int code_nal(int type, int ref_idc, Context& ctx, Chan& ch, BitReader* br, BitWriter* bw, const BinPolicy& bp) {
-  Syn s = br ? Syn(br, &ch) : Syn(&ch, bw);
+  Syn s;
+  s.Init(br, bw, &ch);
   switch (type) {
-    case 7: {
-      auto sps = std::make_shared<Sps>();
-      code_sps(s, *sps);
-      ctx.ps.sps[sps->id] = sps;
+    case 7:
+      ctx.ps.next_sps.Init();
+      code_sps(s, ctx.ps.next_sps);
+      ctx.ps.define_sps();
       break;
-    }
-    case 8: {
-      auto pps = std::make_shared<Pps>();
-      code_pps(s, *pps, ctx.ps);
-      ctx.ps.pps[pps->id] = pps;
+    case 8:
+      ctx.ps.next_pps.reset();
+      code_pps(s, ctx.ps.next_pps, ctx.ps);
+      ctx.ps.define_pps();
       break;
-    }
     case 6:
       code_sei(s);
       break;
@@ -217,7 +304,8 @@ int code_nal(int type, int ref_idc, Context& ctx, Chan& ch, BitReader* br, BitWr
       return -1;
     case 1:
     case 5: {
-      SliceHeader h;
+      SliceHeader& h = ctx.sh;
+      h.Init();
       h.nal_unit_type = type;
       h.nal_ref_idc = ref_idc;
       code_slice_header(s, h, ctx.ps);
@@ -286,14 +374,6 @@ void apply_trailer(const Trailer& t, BitWriter& bw, int pad) {
 
 int get_bit(const Buf<uint8_t>& v, size_t i) { return v[i >> 3] >> (7 - (i & 7)) & 1; }
 
-// Why a NAL unit is stored verbatim (said with -v)
-const int kWhy = 320;
-void set_why(char* why, const char* fmt, ...) {
-  va_list ap;
-  va_start(ap, fmt);
-  vsnprintf(why, kWhy, fmt, ap);
-  va_end(ap);
-}
 
 // Compares the RBSP written up to and including the stop bit (bw; pad as
 // write_syntax returned it) with the original one, and finds the trailer

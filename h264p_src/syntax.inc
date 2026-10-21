@@ -54,13 +54,19 @@ struct WalkCodes {
 // Header syntax: each syntax element, or group of elements, is one named
 // group of values.
 struct Syn : WalkCodes<Syn> {
-  Syn(BitReader* br, Chan* ch) : W(false), br_(br), bw_(nullptr), ch_(ch) { same_way(); }
-  Syn(Chan* ch, BitWriter* bw) : W(true), br_(nullptr), bw_(bw), ch_(ch) { same_way(); }
+  // parsing br, or (none) writing bw, with ch
+  void Init(BitReader* br, BitWriter* bw, Chan* ch) {
+    W = !br;
+    br_ = br;
+    bw_ = br ? nullptr : bw;
+    ch_ = ch;
+    same_way();
+  }
 
-  const bool W;  // writing a bitstream
-  BitReader* const br_;
-  BitWriter* const bw_;
-  Chan* const ch_;
+  bool W;  // writing a bitstream
+  BitReader* br_;
+  BitWriter* bw_;
+  Chan* ch_;
 
   // a group with one value
   int64_t u(const char* name, int n) {
@@ -161,68 +167,160 @@ struct Syn : WalkCodes<Syn> {
 };
 
 struct Sps {
-  int id = 0;
-  int profile_idc = 0;
-  int chroma_format_idc = 1, separate_colour_plane_flag = 0;
-  int bit_depth_luma = 8, bit_depth_chroma = 8;
-  int log2_max_frame_num = 4;
-  int poc_type = 0, log2_max_poc_lsb = 4, delta_pic_order_always_zero_flag = 0;
-  int width_mbs = 0, height_map_units = 0;
-  int frame_mbs_only_flag = 1, mb_adaptive_frame_field_flag = 0, direct_8x8_inference_flag = 0;
+  uint64_t gen;  // the definition it is (ParamSets): 0, none
+  int id;
+  int profile_idc;
+  int chroma_format_idc, separate_colour_plane_flag;
+  int bit_depth_luma, bit_depth_chroma;
+  int log2_max_frame_num;
+  int poc_type, log2_max_poc_lsb, delta_pic_order_always_zero_flag;
+  int width_mbs, height_map_units;
+  int frame_mbs_only_flag, mb_adaptive_frame_field_flag, direct_8x8_inference_flag;
   // for decoding the pictures (model.inc)
-  int max_num_ref_frames = 0, transform_bypass = 0, scaling_matrix = 0;
-  int64_t offset_for_non_ref_pic = 0, offset_for_top_to_bottom_field = 0;
-  std::vector<int64_t> offset_for_ref_frame;
+  int max_num_ref_frames, transform_bypass, scaling_matrix;
+  int64_t offset_for_non_ref_pic, offset_for_top_to_bottom_field;
+  int num_ref_frames_in_poc_cycle;
+  int64_t offset_for_ref_frame[255];
 
+  // none, with the values of what an SPS leaves out
+  void Init() {
+    gen = 0;
+    id = profile_idc = 0;
+    chroma_format_idc = 1, separate_colour_plane_flag = 0;
+    bit_depth_luma = bit_depth_chroma = 8;
+    log2_max_frame_num = 4;
+    poc_type = 0, log2_max_poc_lsb = 4, delta_pic_order_always_zero_flag = 0;
+    width_mbs = height_map_units = 0;
+    frame_mbs_only_flag = 1, mb_adaptive_frame_field_flag = direct_8x8_inference_flag = 0;
+    max_num_ref_frames = transform_bypass = scaling_matrix = 0;
+    offset_for_non_ref_pic = offset_for_top_to_bottom_field = 0;
+    num_ref_frames_in_poc_cycle = 0;
+  }
   int chroma_array_type() const { return separate_colour_plane_flag ? 0 : chroma_format_idc; }
   int frame_height_mbs() const { return (2 - frame_mbs_only_flag) * height_map_units; }
 };
 
 struct Pps {
-  int id = 0, sps_id = 0;
-  int entropy_coding_mode_flag = 0;
-  int bottom_field_pic_order_in_frame_present_flag = 0;
-  int num_slice_groups = 1, slice_group_map_type = 0;
-  std::vector<int> run_length_minus1, top_left, bottom_right, slice_group_id;
-  int slice_group_change_direction_flag = 0, slice_group_change_rate = 1;
-  int num_ref_idx_default[2] = {1, 1};
-  int weighted_pred_flag = 0, weighted_bipred_idc = 0;
-  int pic_init_qp = 26;
-  int deblocking_filter_control_present_flag = 0, constrained_intra_pred_flag = 0;
-  int redundant_pic_cnt_present_flag = 0;
-  int transform_8x8_mode_flag = 0;
-  int chroma_qp_index_offset = 0, second_chroma_qp_index_offset = 0, scaling_matrix = 0;
+  uint64_t gen;  // the definition it is (ParamSets): 0, none
+  int id, sps_id;
+  int entropy_coding_mode_flag;
+  int bottom_field_pic_order_in_frame_present_flag;
+  int num_slice_groups, slice_group_map_type;
+  int run_length_minus1[8], top_left[8], bottom_right[8];  // of the slice groups
+  Buf<uint8_t> slice_group_id;                             // of the map units
+  int slice_group_change_direction_flag, slice_group_change_rate;
+  int num_ref_idx_default[2];
+  int weighted_pred_flag, weighted_bipred_idc;
+  int pic_init_qp;
+  int deblocking_filter_control_present_flag, constrained_intra_pred_flag;
+  int redundant_pic_cnt_present_flag;
+  int transform_8x8_mode_flag;
+  int chroma_qp_index_offset, second_chroma_qp_index_offset, scaling_matrix;
+
+  void Init() {
+    slice_group_id.Init();
+    reset();
+  }
+  void Quit() { slice_group_id.Quit(); }
+  // none, with the values of what a PPS leaves out (the room for
+  // slice_group_id stays)
+  void reset() {
+    gen = 0;
+    id = sps_id = 0;
+    entropy_coding_mode_flag = 0;
+    bottom_field_pic_order_in_frame_present_flag = 0;
+    num_slice_groups = 1, slice_group_map_type = 0;
+    for (int g = 0; g < 8; g++) run_length_minus1[g] = top_left[g] = bottom_right[g] = 0;
+    slice_group_id.clear();
+    slice_group_change_direction_flag = 0, slice_group_change_rate = 1;
+    num_ref_idx_default[0] = num_ref_idx_default[1] = 1;
+    weighted_pred_flag = weighted_bipred_idc = 0;
+    pic_init_qp = 26;
+    deblocking_filter_control_present_flag = constrained_intra_pred_flag = 0;
+    redundant_pic_cnt_present_flag = 0;
+    transform_8x8_mode_flag = 0;
+    chroma_qp_index_offset = second_chroma_qp_index_offset = scaling_matrix = 0;
+  }
 };
 
+// The parameter sets of a stream: the last definition of each id (gen,
+// its number in the stream: a slice header's parameter sets are those
+// they were while gen stays), and room to parse the next definition in
 struct ParamSets {
-  std::shared_ptr<const Sps> sps[32];
-  std::shared_ptr<const Pps> pps[256];
+  Sps sps[32];
+  Pps pps[256];
+  Sps next_sps;
+  Pps next_pps;
+  uint64_t gen;  // the definitions so far
+
+  void Init() {
+    for (Sps& p : sps) p.Init();
+    for (Pps& p : pps) p.Init();
+    next_sps.Init();
+    next_pps.Init();
+    gen = 0;
+  }
+  void Quit() {
+    for (Pps& p : pps) p.Quit();
+    next_pps.Quit();
+  }
+  const Sps* get_sps(int id) const { return sps[id].gen ? &sps[id] : nullptr; }
+  const Pps* get_pps(int id) const { return pps[id].gen ? &pps[id] : nullptr; }
+  // next_sps (next_pps), parsed, the definition of its id
+  void define_sps() {
+    next_sps.gen = ++gen;
+    sps[next_sps.id] = next_sps;
+  }
+  void define_pps() {
+    next_pps.gen = ++gen;
+    Pps& p = pps[next_pps.id];
+    char t[sizeof(Pps)];  // (swapped whole: the slot's room for slice_group_id goes to next_pps)
+    memcpy(t, (void*)&p, sizeof t);
+    memcpy((void*)&p, (void*)&next_pps, sizeof t);
+    memcpy((void*)&next_pps, t, sizeof t);
+  }
 };
 
 enum SliceType { kP = 0, kB = 1, kI = 2, kSP = 3, kSI = 4 };
 
-struct SliceHeader {
-  int nal_unit_type = 0, nal_ref_idc = 0;
-  int first_mb = 0, slice_type = 0, pps_id = 0;
-  int frame_num = 0, field_pic_flag = 0, bottom_field_flag = 0;
-  int direct_spatial_mv_pred_flag = 0;
-  int num_ref_idx_active[2] = {0, 0};
-  int cabac_init_idc = 0;
-  int slice_qp_delta = 0;
-  int slice_group_change_cycle = 0;
-  // for decoding the pictures (model.inc)
-  int poc_lsb = 0, long_term_reference_flag = 0, mmco5 = 0;
-  int64_t idr_pic_id = 0;
-  int64_t delta_poc_bottom = 0, delta_poc[2] = {0, 0};
-  std::vector<std::pair<int, int64_t>> rplm[2];  // modification_of_pic_nums_idc and its argument
-  std::vector<std::vector<int64_t>> mmco;        // memory_management_control_operation and its arguments
-  int luma_log2_wd = 0, chroma_log2_wd = 0;
-  std::vector<int> wt[2];  // per reference: luma weight, offset, Cb weight, offset, Cr weight, offset; empty: none
-  int disable_deblocking = 0, alpha_offset = 0, beta_offset = 0;
-  std::shared_ptr<const Sps> sps;
-  std::shared_ptr<const Pps> pps;
-  int pad = 0;  // x264's padding bit after CABAC flushes (x264_padding row), not coded
+// a ref_pic_list_modification(): modification_of_pic_nums_idc and its argument
+struct Rplm {
+  int idc;
+  int64_t arg;
+};
+// a memory_management_control_operation and its n arguments
+struct Mmco {
+  int64_t op, arg[2];
+  int n;
+};
 
+struct SliceHeader {
+  int nal_unit_type, nal_ref_idc;
+  int first_mb, slice_type, pps_id;
+  int frame_num, field_pic_flag, bottom_field_flag;
+  int direct_spatial_mv_pred_flag;
+  int num_ref_idx_active[2];
+  int cabac_init_idc;
+  int slice_qp_delta;
+  int slice_group_change_cycle;
+  // for decoding the pictures (model.inc)
+  int poc_lsb, long_term_reference_flag, mmco5;
+  int64_t idr_pic_id;
+  int64_t delta_poc_bottom, delta_poc[2];
+  int nrplm[2];
+  Rplm rplm[2][66];  // (65 at most, and one that fails)
+  int nmmco;
+  Mmco mmco[68];  // (67 at most, and one that fails)
+  int luma_log2_wd, chroma_log2_wd;
+  int nwt[2];
+  int wt[2][32 * 6];  // per reference: luma weight, offset, Cb weight, offset, Cr weight, offset; none: no table
+  int disable_deblocking, alpha_offset, beta_offset;
+  const Sps* sps;  // its parameter sets (ParamSets')
+  const Pps* pps;
+  int pad;  // x264's padding bit after CABAC flushes (x264_padding row), not coded
+
+  // all 0: none yet
+  void Init() { memset((void*)this, 0, sizeof *this); }
   int type() const { return slice_type % 5; }
 };
 
@@ -344,9 +442,9 @@ void code_sps(Syn& s, Sps& p) {
     p.delta_pic_order_always_zero_flag = (int)s.u("delta_pic_order_always_zero_flag", 1);
     p.offset_for_non_ref_pic = s.se("offset_for_non_ref_pic", -kS32, kS32);
     p.offset_for_top_to_bottom_field = s.se("offset_for_top_to_bottom_field", -kS32, kS32);
-    int n = (int)s.ue("num_ref_frames_in_pic_order_cnt_cycle", 0, 255);
+    p.num_ref_frames_in_poc_cycle = (int)s.ue("num_ref_frames_in_pic_order_cnt_cycle", 0, 255);
     s.begin("offset_for_ref_frame");
-    for (int i = 0; i < n; i++) p.offset_for_ref_frame.push_back(s.vse(-kS32, kS32));
+    for (int i = 0; i < p.num_ref_frames_in_poc_cycle; i++) p.offset_for_ref_frame[i] = s.vse(-kS32, kS32);
     s.end();
   }
   p.max_num_ref_frames = (int)std::min<int64_t>(s.ue("max_num_ref_frames", 0, kU32), 1 << 16);
@@ -376,13 +474,13 @@ void code_pps(Syn& s, Pps& p, const ParamSets& ps) {
     p.slice_group_map_type = (int)s.ue("slice_group_map_type", 0, 6);
     if (p.slice_group_map_type == 0) {
       s.begin("run_length_minus1");
-      for (int i = 0; i < p.num_slice_groups; i++) p.run_length_minus1.push_back((int)s.vue(0, kMaxMbs));
+      for (int i = 0; i < p.num_slice_groups; i++) p.run_length_minus1[i] = (int)s.vue(0, kMaxMbs);
       s.end();
     } else if (p.slice_group_map_type == 2) {
       for (int i = 0; i < p.num_slice_groups - 1; i++) {
         s.begin("slice_group_rect");  // top_left, bottom_right
-        p.top_left.push_back((int)s.vue(0, kMaxMbs));
-        p.bottom_right.push_back((int)s.vue(0, kMaxMbs));
+        p.top_left[i] = (int)s.vue(0, kMaxMbs);
+        p.bottom_right[i] = (int)s.vue(0, kMaxMbs);
         s.end();
       }
     } else if (p.slice_group_map_type >= 3 && p.slice_group_map_type <= 5) {
@@ -393,7 +491,7 @@ void code_pps(Syn& s, Pps& p, const ParamSets& ps) {
       int bits = 0;
       while ((1 << bits) < p.num_slice_groups) bits++;
       s.begin("slice_group_id");
-      for (int i = 0; i < n; i++) p.slice_group_id.push_back((int)s.vu(bits));
+      for (int i = 0; i < n; i++) p.slice_group_id.push_back((uint8_t)s.vu(bits));
       s.end();
     }
   }
@@ -410,7 +508,7 @@ void code_pps(Syn& s, Pps& p, const ParamSets& ps) {
   if (s.more_data("transform_8x8_mode_flag")) {
     p.transform_8x8_mode_flag = (int)s.u("transform_8x8_mode_flag", 1);
     if ((p.scaling_matrix = (int)s.u("pic_scaling_matrix_present_flag", 1))) {
-      const Sps* sps = ps.sps[p.sps_id].get();
+      const Sps* sps = ps.get_sps(p.sps_id);
       if (!sps) s.fail("PPS refers to a missing SPS");
       int n = 6 + (sps->chroma_format_idc != 3 ? 2 : 6) * p.transform_8x8_mode_flag;
       for (int i = 0; i < n; i++) scaling_list(s, "pic_scaling_list", i < 6 ? 16 : 64);
@@ -446,13 +544,15 @@ void code_filler(Syn& s) {
   s.end();
 }
 
-static void ref_pic_list_modification(Syn& s, const char* name, std::vector<std::pair<int, int64_t>>& ops) {
+static void ref_pic_list_modification(Syn& s, const char* name, Rplm* ops, int& nops) {
   s.begin(name);  // ref_pic_list_modification_flag, then the operations
   if (s.vu(1)) {
     for (int n = 0;; n++) {
       int idc = (int)s.vue(0, 3);
       if (idc == 3) break;
-      ops.push_back(std::make_pair(idc, s.vue(0, kU32)));  // abs_diff_pic_num_minus1 or long_term_pic_num
+      ops[n].idc = idc;
+      ops[n].arg = s.vue(0, kU32);  // abs_diff_pic_num_minus1 or long_term_pic_num
+      nops = n + 1;
       if (n > 64) s.fail("too many reference list modifications");
     }
   }
@@ -477,7 +577,7 @@ static void pred_weight_table(Syn& s, SliceHeader& h, bool chroma, int lists) {
       if (chroma && s.vu(1))
         for (int j = 0; j < 4; j++) w[2 + j] = (int)s.vse(-128, 127);
       s.end();
-      h.wt[l].insert(h.wt[l].end(), w, w + 6);
+      for (int k = 0; k < 6; k++) h.wt[l][h.nwt[l]++] = w[k];
     }
 }
 
@@ -491,17 +591,18 @@ static void dec_ref_pic_marking(Syn& s, SliceHeader& h) {
   }
   if (!s.u("adaptive_ref_pic_marking_mode_flag", 1)) return;
   for (int n = 0;; n++) {
-    std::vector<int64_t> op(1);
+    Mmco& op = h.mmco[n];
+    op.n = 0;
     s.begin("mmco");  // memory_management_control_operation and its arguments
-    op[0] = s.vue(0, 6);
-    if (op[0] == 1 || op[0] == 3) op.push_back(s.vue(0, kU32));  // difference_of_pic_nums_minus1
-    if (op[0] == 2) op.push_back(s.vue(0, kU32));                // long_term_pic_num
-    if (op[0] == 3 || op[0] == 6) op.push_back(s.vue(0, kU32));  // long_term_frame_idx
-    if (op[0] == 4) op.push_back(s.vue(0, kU32));                // max_long_term_frame_idx_plus1
+    op.op = s.vue(0, 6);
+    if (op.op == 1 || op.op == 3) op.arg[op.n++] = s.vue(0, kU32);  // difference_of_pic_nums_minus1
+    if (op.op == 2) op.arg[op.n++] = s.vue(0, kU32);                // long_term_pic_num
+    if (op.op == 3 || op.op == 6) op.arg[op.n++] = s.vue(0, kU32);  // long_term_frame_idx
+    if (op.op == 4) op.arg[op.n++] = s.vue(0, kU32);                // max_long_term_frame_idx_plus1
     s.end();
-    if (op[0] == 0) break;
-    h.mmco5 |= op[0] == 5;
-    h.mmco.push_back(op);
+    if (op.op == 0) break;
+    h.mmco5 |= op.op == 5;
+    h.nmmco = n + 1;
     if (n > 66) s.fail("too many memory management operations");
   }
 }
@@ -510,9 +611,9 @@ void code_slice_header(Syn& s, SliceHeader& h, const ParamSets& ps) {
   h.first_mb = (int)s.ue("first_mb_in_slice", 0, kMaxMbs);
   h.slice_type = (int)s.ue("slice_type", 0, 9);
   h.pps_id = (int)s.ue("pic_parameter_set_id", 0, 255);
-  h.pps = ps.pps[h.pps_id];
+  h.pps = ps.get_pps(h.pps_id);
   if (!h.pps) s.fail("slice refers to a missing PPS");
-  h.sps = ps.sps[h.pps->sps_id];
+  h.sps = ps.get_sps(h.pps->sps_id);
   if (!h.sps) s.fail("slice refers to a missing SPS");
   const Sps& sps = *h.sps;
   const Pps& pps = *h.pps;
@@ -545,8 +646,8 @@ void code_slice_header(Syn& s, SliceHeader& h, const ParamSets& ps) {
       if (t == kB) h.num_ref_idx_active[1] = 1 + (int)s.ue("num_ref_idx_l1_active_minus1", 0, 31);
     }
   }
-  if (t != kI && t != kSI) ref_pic_list_modification(s, "ref_pic_list_modification_l0", h.rplm[0]);
-  if (t == kB) ref_pic_list_modification(s, "ref_pic_list_modification_l1", h.rplm[1]);
+  if (t != kI && t != kSI) ref_pic_list_modification(s, "ref_pic_list_modification_l0", h.rplm[0], h.nrplm[0]);
+  if (t == kB) ref_pic_list_modification(s, "ref_pic_list_modification_l1", h.rplm[1], h.nrplm[1]);
   if ((pps.weighted_pred_flag && (t == kP || t == kSP)) || (pps.weighted_bipred_idc == 1 && t == kB))
     pred_weight_table(s, h, sps.chroma_array_type() != 0, t == kB ? 2 : 1);
   if (h.nal_ref_idc) dec_ref_pic_marking(s, h);

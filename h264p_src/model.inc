@@ -720,7 +720,7 @@ struct MotionPred {
   const MbInfo* mi = nullptr;
   int parts = 0, subshape[4] = {};
   void slice(const WalkState& w, const MbInfo* inf, const R& r) {
-    sc = &w, mbs = w.store_.mbs.data(), info = inf, rec = &r, width = w.width_, mbaff = w.mbaff_;
+    sc = &w, mbs = w.store_->mbs.data(), info = inf, rec = &r, width = w.width_, mbaff = w.mbaff_;
   }
   void begin(int a, const MbInfo* m) { addr = a, mi = m, parts = 0; }
 
@@ -845,7 +845,7 @@ struct MotionPred {
   // neighbours are those of the macroblock, outside it)
   static int minpos(int a, int b) { return a >= 0 && b >= 0 ? std::min(a, b) : std::max(a, b); }
   void direct(int mask, int16_t (*mv)[16][2], int8_t (*rf)[4]) {
-    if (!sc->h_.direct_spatial_mv_pred_flag) {
+    if (!sc->h_->direct_spatial_mv_pred_flag) {
       temporal(mask, mv, rf);
       return;
     }
@@ -966,6 +966,7 @@ struct Model : tc_rc<f_DEC> {
   static_assert(LV::mvp || !(LV::refs || LV::recon), "the reference lists and the decoder need the motion vectors");
 
   void init() {
+    last_h_.Init();
     rec_.deblock = LV::deblock;
     // (end_of_slice_flag 0 nearly for sure: as if seen a few times)
     for (cm_cnt& c : end_c_) c.p = (u16)(CM_CONE - 16), c.t = 8;
@@ -1220,8 +1221,8 @@ struct Model : tc_rc<f_DEC> {
 
   void slice_begin(SC& sc) {
     sc_ = &sc;
-    mbs_ = sc.store_.mbs.data();
-    const SliceHeader& h = sc.h_;
+    mbs_ = sc.store_->mbs.data();
+    const SliceHeader& h = *sc.h_;
     bool newpic = new_picture(h);
     last_h_ = h;
     key_ = pic_kind(h);
@@ -1235,8 +1236,8 @@ struct Model : tc_rc<f_DEC> {
     // (the macroblocks as they were for the P slices' mc_col, mc_nz only,
     // which need the reference lists: a level without them reads none)
     hist_.slice(key_, size_, newpic, (LV::refs || LV::recon) && (h.type() == kP || h.type() == kSP));
-    qp_off_ = 6 * (sc.sps_.bit_depth_luma - 8);
-    qp_pred_ = slice_qp_ = sc.pps_.pic_init_qp + h.slice_qp_delta;
+    qp_off_ = 6 * (sc.sps_->bit_depth_luma - 8);
+    qp_pred_ = slice_qp_ = sc.pps_->pic_init_qp + h.slice_qp_delta;
     last_qpd_ = 0;
     has_lz_ = false;
     qp_src_ = -1;
@@ -1869,7 +1870,7 @@ struct Model : tc_rc<f_DEC> {
       return 10;
     }
     const MbInfo& m = info_[idx(n)];
-    if (m.cls < CL_INXN && sc_->pps_.constrained_intra_pred_flag) {
+    if (m.cls < CL_INXN && sc_->pps_->constrained_intra_pred_flag) {
       dc = true;
       return 9;
     }
@@ -3275,7 +3276,7 @@ struct Model : tc_rc<f_DEC> {
     int i = 0;
     for (int p = 0; p < (ch ? 3 : 1); p++) {
       int w = p ? cw : 16, hh = p ? chh : 16;
-      int depth = p ? sc_->sps_.bit_depth_chroma : sc_->sps_.bit_depth_luma;
+      int depth = p ? sc_->sps_->bit_depth_chroma : sc_->sps_->bit_depth_luma;
       i64 d1 = 0, d2 = 0;
       for (int y = 0; y < hh; y++)
         for (int x = 0; x < w; x++, i++) {
@@ -3322,6 +3323,7 @@ struct ModelChan : Chan {
   // those still follow the bins); decoding, they are the stream's
   static BinPolicy policy() {
     BinPolicy p;
+    p.Init();
     p.nobins = ENC;
     p.states = ENC && LV::cabpred;
     return p;

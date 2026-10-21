@@ -13,14 +13,19 @@ namespace {
 
 // A prefix code decoded with one table lookup of maxlen bits.
 struct Vlc {
-  int maxlen = 0;
-  std::vector<uint16_t> tab;  // value << 5 | length; 0 = invalid code
+  int maxlen;
+  Buf<uint16_t> tab;  // value << 5 | length; 0 = invalid code
 
-  void add(int value, int code, int len) { codes.push_back({value, code, len}); }
+  void Init() {
+    maxlen = 0;
+    tab.Init();
+    codes.Init();
+  }
+  void add(int value, int code, int len) { codes.push_back(Code{value, code, len}); }
   void build() {
     for (auto& c : codes)
       if (c.len > maxlen) maxlen = c.len;
-    tab.assign((size_t)1 << maxlen, 0);
+    tab.resize((size_t)1 << maxlen);
     for (auto& c : codes) {
       size_t base = (size_t)c.code << (maxlen - c.len);
       for (size_t i = 0; i < ((size_t)1 << (maxlen - c.len)); i++) {
@@ -31,7 +36,7 @@ struct Vlc {
         tab[base + i] = (uint16_t)(c.value << 5 | c.len);
       }
     }
-    codes.clear();
+    codes.Quit();
   }
   int read(BitReader& br) const {
     uint16_t e = tab[br.peek(maxlen)];
@@ -43,7 +48,7 @@ struct Vlc {
   struct Code {
     int value, code, len;
   };
-  std::vector<Code> codes;
+  Buf<Code> codes;  // (as they are added)
 };
 
 struct Tables {
@@ -51,7 +56,13 @@ struct Tables {
   Vlc total_zeros[15], tz_dc420[3], tz_dc422[7];
   Vlc run_before[7];
 
-  Tables() {
+  // (once, by tables())
+  bool Init() {
+    for (auto& v : coeff_token) v.Init();
+    for (auto& v : total_zeros) v.Init();
+    for (auto& v : tz_dc420) v.Init();
+    for (auto& v : tz_dc422) v.Init();
+    for (auto& v : run_before) v.Init();
     for (int t = 0; t < 5; t++)
       for (int k = 0; k < 17 * 4; k++)
         if (kCoeffToken[t][k][1]) coeff_token[t].add(k, kCoeffToken[t][k][0], kCoeffToken[t][k][1]);
@@ -77,11 +88,16 @@ struct Tables {
     for (auto& v : tz_dc420) v.build();
     for (auto& v : tz_dc422) v.build();
     for (auto& v : run_before) v.build();
+    return true;
   }
 };
 
+// (made as they are first needed, by one thread: C++'s statics in a
+// function are, and kept to the end)
 const Tables& tables() {
-  static const Tables t;
+  static Tables t;
+  static bool made = t.Init();
+  (void)made;
   return t;
 }
 

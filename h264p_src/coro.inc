@@ -36,7 +36,7 @@ struct H264pCoro : Model<f_DEC, LV> {
   }
   void Quit() {
     if (st) st->Quit();
-    delete st;
+    mem_free(st);
     st = nullptr;
   }
   ~H264pCoro() { Quit(); }
@@ -75,7 +75,7 @@ struct H264pCoro : Model<f_DEC, LV> {
 
   // compressing
   int run(std::integral_constant<int, 0>) {
-    st = new CompressState;
+    st = (CompressState*)mem_alloc(sizeof(CompressState));
     st->Init(this->source());
     return compress_stream<LV>(*this, *st, args);
   }
@@ -83,7 +83,7 @@ struct H264pCoro : Model<f_DEC, LV> {
   // decompressing: the magic, the version and the level (this model's),
   // then the model on the rest
   int run(std::integral_constant<int, 1>) {
-    st = new DecompressState;
+    st = (DecompressState*)mem_alloc(sizeof(DecompressState));
     st->Init();
     uint8_t head[sizeof kCmMagic + 1];
     int level = cm_level(head, this->read(head, sizeof head), args.name, args.meter);

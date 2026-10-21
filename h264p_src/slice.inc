@@ -39,10 +39,15 @@ struct BinPolicy {
   // arithmetic coding (the compressor's model pass), and the bits it writes
   // are not the stream's; with states, the contexts' states still follow
   // the bins (for a model that reads them, Model::cab0)
-  bool nobins = false, states = false;
+  bool nobins, states;
   // the bins: parsing, recorded here; writing them not (nobins), checked
   // against those recorded
-  BinRec* rec = nullptr;
+  BinRec* rec;
+  // (BinPolicy(), all 0, is the same: the bins are coded, and not recorded)
+  void Init() {
+    nobins = states = false;
+    rec = nullptr;
+  }
 };
 
 // What later macroblocks of the slice need to know about a macroblock to
@@ -63,20 +68,46 @@ struct MbState {
 // depends on changes: the parameter sets, field or frame, and the change
 // cycle of the map types that move (3-5)
 struct GroupMap {
-  std::shared_ptr<const Pps> pps;
-  std::shared_ptr<const Sps> sps;
-  int field = -1;
-  int64_t cycle = -1;
-  std::vector<uint8_t> group;  // mbToSliceGroupMap
-  std::vector<int> next;       // each macroblock's next one in its group (the picture's size: none)
-  std::vector<int> rank;       // box-out's order of the map units (type 3), whatever the cycle
+  uint64_t pps_gen, sps_gen;  // the parameter sets it was made of (their definitions, ParamSets)
+  int field;
+  int64_t cycle;
+  Buf<uint8_t> group;  // mbToSliceGroupMap
+  Buf<int> next;       // each macroblock's next one in its group (the picture's size: none)
+  Buf<int> rank;       // box-out's order of the map units (type 3), whatever the cycle
+  Buf<int> map;        // the map units' groups, as the map is made
+
+  void Init() {
+    pps_gen = sps_gen = 0;
+    field = -1;
+    cycle = -1;
+    group.Init();
+    next.Init();
+    rank.Init();
+    map.Init();
+  }
+  void Quit() {
+    group.Quit();
+    next.Quit();
+    rank.Quit();
+    map.Quit();
+  }
 };
 
 // Macroblock states of the current picture, kept between slices.
 struct MbStore {
-  std::vector<MbState> mbs;
-  uint32_t slices = 0;
+  Buf<MbState> mbs;
+  uint32_t slices;
   GroupMap groups;
+
+  void Init() {
+    mbs.Init();
+    slices = 0;
+    groups.Init();
+  }
+  void Quit() {
+    mbs.Quit();
+    groups.Quit();
+  }
 };
 
 // 4x4 block position (in 4x4 units) of luma4x4BlkIdx
@@ -139,9 +170,10 @@ const int kCatDc[3] = {0, 6, 10}, kCatAc[3] = {1, 7, 11}, kCat4x4[3] = {2, 8, 12
 // a side at the edge of the picture, its bound held, has only units filled
 // before, and is passed in one step, so that the walk takes the time of the
 // units, not of the width times the turns.
-std::vector<int> box_out_ranks(int width, int height, int dir) {
+void box_out_ranks(int width, int height, int dir, Buf<int>& rank) {
   int units = width * height;
-  std::vector<int> rank(units, -1);
+  rank.clear();
+  rank.resize(units, -1);
   int x = (width - dir) / 2, y = (height - dir) / 2;
   int left = x, top = y, right = x, bottom = y;
   int xdir = dir - 1, ydir = dir;
@@ -183,7 +215,6 @@ std::vector<int> box_out_ranks(int width, int height, int dir) {
       y += ydir;
     }
   }
-  return rank;
 }
 
 // The slice group map of slice h, whose picture is width macroblocks wide
@@ -194,14 +225,16 @@ bool slice_group_map(GroupMap& m, const SliceHeader& h, int width, int size) {
   const Pps& pps = *h.pps;
   int type = pps.slice_group_map_type;
   int64_t cycle = type >= 3 && type <= 5 ? h.slice_group_change_cycle : 0;
-  if (m.pps == h.pps && m.sps == h.sps && m.field == h.field_pic_flag && m.cycle == cycle && (int)m.group.size() == size)
-    return true;
-  if (m.pps != h.pps || m.sps != h.sps) m.rank.clear();
-  m.pps = h.pps, m.sps = h.sps, m.field = h.field_pic_flag, m.cycle = cycle;
+  bool same = m.pps_gen == pps.gen && m.sps_gen == sps.gen;
+  if (same && m.field == h.field_pic_flag && m.cycle == cycle && (int)m.group.size() == size) return true;
+  if (!same) m.rank.clear();
+  m.pps_gen = pps.gen, m.sps_gen = sps.gen, m.field = h.field_pic_flag, m.cycle = cycle;
   m.group.clear();  // (until it is made: a map that fails is not kept)
   int units_h = sps.height_map_units;
   int units = width * units_h;
-  std::vector<int> map(units, 0);
+  Buf<int>& map = m.map;
+  map.clear();
+  map.resize(units);
   int ngroups = pps.num_slice_groups;
   int dir = pps.slice_group_change_direction_flag;
   int64_t in_group0 = std::min<int64_t>(cycle * pps.slice_group_change_rate, units);
@@ -229,7 +262,7 @@ bool slice_group_map(GroupMap& m, const SliceHeader& h, int width, int size) {
       }
       break;
     case 3:
-      if (m.rank.empty()) m.rank = box_out_ranks(width, units_h, dir);
+      if (m.rank.empty()) box_out_ranks(width, units_h, dir, m.rank);
       for (int i = 0; i < units; i++) map[i] = m.rank[i] >= in_group0;
       break;
     case 4:
@@ -257,7 +290,7 @@ bool slice_group_map(GroupMap& m, const SliceHeader& h, int width, int size) {
   }
   m.next.resize(size);
   int last[256];
-  std::fill(last, last + 256, size);
+  for (int& l : last) l = size;
   for (int i = size - 1; i >= 0; i--) m.next[i] = last[m.group[i]], last[m.group[i]] = i;
   return true;
 }
@@ -271,11 +304,27 @@ bool slice_group_map(GroupMap& m, const SliceHeader& h, int width, int size) {
 // walk -- the model, through Chan::slice_begin() -- reads the same ones
 // whatever the walk's mode.
 struct WalkState {
-  WalkState(const SliceHeader& h, MbStore& store) : h_(h), sps_(*h.sps), pps_(*h.pps), store_(store) {}
+  void Init(const SliceHeader& h, MbStore& store) {
+    h_ = &h;
+    sps_ = h.sps;
+    pps_ = h.pps;
+    store_ = &store;
+    cabac_ = field_ = mbaff_ = false;
+    stype_ = 0, chroma_ = 1, ch_h_ = 2, ch_blocks_ = 4;
+    width_ = size_ = 0;
+    num_ref_[0] = num_ref_[1] = 0;
+    slice_id_ = 0;
+    next_ = nullptr;
+    cur_addr_ = 0;
+    cur_ = nullptr;
+    mb_a_ = mb_b_ = left_ = above_ = nullptr;
+    pair_field_ = 0;
+    last_qpd_ = 0;
+  }
 
   // --- neighbours
   const MbState* avail(int addr) const {
-    return store_.mbs[addr].slice == slice_id_ ? &store_.mbs[addr] : nullptr;
+    return store_->mbs[addr].slice == slice_id_ ? &store_->mbs[addr] : nullptr;
   }
 
   // macroblock containing the sample (xN, yN) relative to the current
@@ -525,25 +574,25 @@ struct WalkState {
                    [&](const MbState* n, int i) { return (n->cbp >> 4) == 2 && n->nz[1 + comp][i] != 0; });
   }
 
-  const SliceHeader& h_;
-  const Sps& sps_;
-  const Pps& pps_;
-  MbStore& store_;
+  const SliceHeader* h_;
+  const Sps* sps_;
+  const Pps* pps_;
+  MbStore* store_;
 
-  bool cabac_ = false, field_ = false, mbaff_ = false;
-  int stype_ = 0, chroma_ = 1, ch_h_ = 2, ch_blocks_ = 4;
-  int width_ = 0, size_ = 0;
-  int num_ref_[2] = {0, 0};
-  uint32_t slice_id_ = 0;
-  const int* next_ = nullptr;  // without FMO, none (MbStore::groups)
-  int cur_addr_ = 0;
-  MbState* cur_ = nullptr;
-  const MbState* mb_a_ = nullptr;  // macroblocks A and B (6.4.10.1)
-  const MbState* mb_b_ = nullptr;
-  const MbState* left_ = nullptr;  // left and above macroblock, or top
-  const MbState* above_ = nullptr; // macroblock of the left and above pair
-  int pair_field_ = 0;             // MBAFF: field decoding mode of the pair
-  int last_qpd_ = 0;
+  bool cabac_, field_, mbaff_;
+  int stype_, chroma_, ch_h_, ch_blocks_;
+  int width_, size_;
+  int num_ref_[2];
+  uint32_t slice_id_;
+  const int* next_;  // without FMO, none (MbStore::groups)
+  int cur_addr_;
+  MbState* cur_;
+  const MbState* mb_a_;   // macroblocks A and B (6.4.10.1)
+  const MbState* mb_b_;
+  const MbState* left_;   // left and above macroblock, or top
+  const MbState* above_;  // macroblock of the left and above pair
+  int pair_field_;        // MBAFF: field decoding mode of the pair
+  int last_qpd_;
   CabacCtx ctx_[kNumCtx];
 };
 
@@ -553,31 +602,38 @@ struct WalkState {
 // differs is decided once.
 template <int kMode>
 struct SliceCoderT : WalkState, WalkCodes<SliceCoderT<kMode>> {
-  SliceCoderT(const SliceHeader& h, MbStore& store, BitReader* br, BitWriter* bw, Chan& ch, const BinPolicy& bp)
-      : WalkState(h, store), br_(br), bw_(bw), ch_(&ch), bins_(bp.rec), rec_(W ? nullptr : bp.rec) {
+  // (the CABAC engines are set up as the CABAC data starts)
+  void Init(const SliceHeader& h, MbStore& store, BitReader* br, BitWriter* bw, Chan& ch, const BinPolicy& bp) {
+    WalkState::Init(h, store);
+    br_ = br;
+    bw_ = bw;
+    ch_ = &ch;
+    bins_ = bp.rec;
+    rec_ = W ? nullptr : bp.rec;
+    chk_ = nullptr;
     if (ch.W != W) err_raise("internal: the walk and its channel go different ways");
   }
   using WalkCodes<SliceCoderT>::fail;
 
   void run() {
-    stype_ = h_.type();
-    cabac_ = pps_.entropy_coding_mode_flag;
-    field_ = h_.field_pic_flag;
-    chroma_ = sps_.chroma_array_type();
+    stype_ = h_->type();
+    cabac_ = pps_->entropy_coding_mode_flag;
+    field_ = h_->field_pic_flag;
+    chroma_ = sps_->chroma_array_type();
     ch_h_ = chroma_ == 2 ? 4 : 2;
     ch_blocks_ = chroma_ == 2 ? 8 : 4;
-    mbaff_ = sps_.mb_adaptive_frame_field_flag && !h_.field_pic_flag;
-    width_ = sps_.width_mbs;
-    size_ = pic_mbs(h_);
-    num_ref_[0] = h_.num_ref_idx_active[0];
-    num_ref_[1] = h_.num_ref_idx_active[1];
-    if (pps_.num_slice_groups > 1) {
-      if (!slice_group_map(store_.groups, h_, width_, size_)) fail("slice_group_id does not match the picture size");
-      next_ = store_.groups.next.data();
+    mbaff_ = sps_->mb_adaptive_frame_field_flag && !h_->field_pic_flag;
+    width_ = sps_->width_mbs;
+    size_ = pic_mbs(*h_);
+    num_ref_[0] = h_->num_ref_idx_active[0];
+    num_ref_[1] = h_->num_ref_idx_active[1];
+    if (pps_->num_slice_groups > 1) {
+      if (!slice_group_map(store_->groups, *h_, width_, size_)) fail("slice_group_id does not match the picture size");
+      next_ = store_->groups.next.data();
     }
-    if ((int)store_.mbs.size() < size_) store_.mbs.resize(size_, MbState());
-    slice_id_ = ++store_.slices;
-    if (h_.first_mb * (1 + mbaff_) >= size_) fail("first_mb_in_slice out of range");
+    if ((int)store_->mbs.size() < size_) store_->mbs.resize(size_);
+    slice_id_ = ++store_->slices;
+    if (h_->first_mb * (1 + mbaff_) >= size_) fail("first_mb_in_slice out of range");
 
     if (cabac_) {
       if (!W) {
@@ -586,8 +642,8 @@ struct SliceCoderT : WalkState, WalkCodes<SliceCoderT<kMode>> {
       } else {
         while (bw_->pos() & 7) bw_->bit(1);
       }
-      int qp = pps_.pic_init_qp + h_.slice_qp_delta;
-      cabac_init_contexts(ctx_, qp, stype_ == kI || stype_ == kSI ? 0 : h_.cabac_init_idc + 1);
+      int qp = pps_->pic_init_qp + h_->slice_qp_delta;
+      cabac_init_contexts(ctx_, qp, stype_ == kI || stype_ == kSI ? 0 : h_->cabac_init_idc + 1);
       if (!W)
         dec_init();
       else if (!nobins_)
@@ -692,7 +748,7 @@ struct SliceCoderT : WalkState, WalkCodes<SliceCoderT<kMode>> {
   // written before the next coded one, or at the end.
   void loop() {
     bool intra = stype_ == kI || stype_ == kSI;
-    int addr = h_.first_mb * (1 + mbaff_);
+    int addr = h_->first_mb * (1 + mbaff_);
     bool prev_skipped = false;
     bool expect_run = !cabac_ && !intra;  // parsing CAVLC: a mb_skip_run comes next
     int run = 0;  // CAVLC: skipped macroblocks left in the run (parsing), not written yet (writing)
@@ -782,7 +838,7 @@ struct SliceCoderT : WalkState, WalkCodes<SliceCoderT<kMode>> {
       left_ = addr % width_ ? avail(addr - 1) : nullptr;
       above_ = addr >= width_ ? avail(addr - width_) : nullptr;
     }
-    cur_ = &store_.mbs[addr];
+    cur_ = &store_->mbs[addr];
     memset(cur_, 0, sizeof *cur_);
     cur_->slice = slice_id_;
     cur_->field = (uint8_t)(mbaff_ && pair_field_);
@@ -874,7 +930,7 @@ struct SliceCoderT : WalkState, WalkCodes<SliceCoderT<kMode>> {
     if (ptype == 3 || ptype == 4 || btype == 22) {
       sub_mb_pred(ptype, no_sub_lt8);
     } else if (m.intra) {
-      if (pps_.transform_8x8_mode_flag && m.inxn) t8 = t8x8_v();
+      if (pps_->transform_8x8_mode_flag && m.inxn) t8 = t8x8_v();
       if (m.inxn || si) {
         for (int i = 0; i < (t8 ? 4 : 16); i++) ipm_v(i);
       }
@@ -885,8 +941,8 @@ struct SliceCoderT : WalkState, WalkCodes<SliceCoderT<kMode>> {
     int cbp;
     if (!m.i16) {
       cbp = cbp_v(m.inxn || si);
-      if ((cbp & 15) && pps_.transform_8x8_mode_flag && !m.inxn && no_sub_lt8 &&
-          (btype != 0 || sps_.direct_8x8_inference_flag))
+      if ((cbp & 15) && pps_->transform_8x8_mode_flag && !m.inxn && no_sub_lt8 &&
+          (btype != 0 || sps_->direct_8x8_inference_flag))
         t8 = t8x8_v();
     } else {
       cbp = ((itype - 1) / 12 ? 15 : 0) | ((itype - 1) / 4 % 3) << 4;
@@ -908,17 +964,16 @@ struct SliceCoderT : WalkState, WalkCodes<SliceCoderT<kMode>> {
     // (writing without the bins, nb comes from the channel)
     int nb = (8 - (int)((W ? bw_->pos() : br_->pos()) & 7)) & 7;
     int align = 0;
-    pcm_.resize(n);
     if (!W) {
-      align = (int)br_->u(nb) ^ (cabac_ && nb ? h_.pad : 0);
-      for (int i = 0; i < n; i++) pcm_[i] = (int)br_->u(i < 256 ? sps_.bit_depth_luma : sps_.bit_depth_chroma);
-      ch_->pcm(align, nb, pcm_.data(), n);
+      align = (int)br_->u(nb) ^ (cabac_ && nb ? h_->pad : 0);
+      for (int i = 0; i < n; i++) pcm_[i] = (int)br_->u(i < 256 ? sps_->bit_depth_luma : sps_->bit_depth_chroma);
+      ch_->pcm(align, nb, pcm_, n);
     } else {
-      ch_->pcm(align, nb, pcm_.data(), n);
+      ch_->pcm(align, nb, pcm_, n);
       if (align < 0 || align >= (1 << nb)) fail("bad pcm alignment bits");
-      bw_->put((uint32_t)(align ^ (cabac_ && nb ? h_.pad : 0)), nb);
+      bw_->put((uint32_t)(align ^ (cabac_ && nb ? h_->pad : 0)), nb);
       for (int i = 0; i < n; i++) {
-        int depth = i < 256 ? sps_.bit_depth_luma : sps_.bit_depth_chroma;
+        int depth = i < 256 ? sps_->bit_depth_luma : sps_->bit_depth_chroma;
         if (pcm_[i] < 0 || pcm_[i] >= (1 << depth)) fail("PCM sample out of range");
         bw_->put((uint32_t)pcm_[i], depth);
       }
@@ -984,7 +1039,7 @@ struct SliceCoderT : WalkState, WalkCodes<SliceCoderT<kMode>> {
         }
     for (int i = 0; i < 4; i++) {
       if (b && sub[i] == 0) {
-        if (!sps_.direct_8x8_inference_flag) no_sub_lt8 = false;
+        if (!sps_->direct_8x8_inference_flag) no_sub_lt8 = false;
       } else if (kNumSubParts[shape(i)] > 1) {
         no_sub_lt8 = false;
       }
@@ -1324,8 +1379,8 @@ struct SliceCoderT : WalkState, WalkCodes<SliceCoderT<kMode>> {
   Chan* ch_;
   BinRec* bins_;                   // the bins, recorded or checked (BinPolicy::rec)
   BinRec* rec_;                    // parsing: the same, to record them
-  const uint8_t* chk_ = nullptr;   // writing without the bins: the next one recorded
-  std::vector<int> pcm_;
+  const uint8_t* chk_;             // writing without the bins: the next one recorded
+  int pcm_[768];                   // an I_PCM macroblock's samples (256 luma, up to 512 chroma)
   CabacDecoder dec_;
   CabacEncoder enc_;
 };
@@ -1334,17 +1389,24 @@ struct SliceCoderT : WalkState, WalkCodes<SliceCoderT<kMode>> {
 // a channel, or writes it with the values of a channel, the bins as bp says.
 // The slice data ends with the rbsp_stop_one_bit (written by the CABAC
 // flush, or explicitly for CAVLC).
+template <int kMode>
+void walk_slice_data(const SliceHeader& h, MbStore& store, BitReader* br, BitWriter* bw, Chan& ch,
+                     const BinPolicy& bp) {
+  SliceCoderT<kMode> c;
+  c.Init(h, store, br, bw, ch, bp);
+  c.run();
+}
 void read_slice_data(const SliceHeader& h, MbStore& store, BitReader& br, Chan& ch, const BinPolicy& bp) {
-  SliceCoderT<0>(h, store, &br, nullptr, ch, bp).run();
+  walk_slice_data<0>(h, store, &br, nullptr, ch, bp);
 }
 
 void write_slice_data(const SliceHeader& h, MbStore& store, Chan& ch, BitWriter& bw, const BinPolicy& bp) {
   if (!bp.nobins)
-    SliceCoderT<1>(h, store, nullptr, &bw, ch, bp).run();
+    walk_slice_data<1>(h, store, nullptr, &bw, ch, bp);
   else if (bp.states)
-    SliceCoderT<3>(h, store, nullptr, &bw, ch, bp).run();
+    walk_slice_data<3>(h, store, nullptr, &bw, ch, bp);
   else
-    SliceCoderT<2>(h, store, nullptr, &bw, ch, bp).run();
+    walk_slice_data<2>(h, store, nullptr, &bw, ch, bp);
 }
 
 }  // namespace h264p

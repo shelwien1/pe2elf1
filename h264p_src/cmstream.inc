@@ -92,6 +92,7 @@ struct DryRun {
     LogChan ch;
     ch.Init(log, false);
     BinPolicy bp;
+    bp.Init();
     if (check) rec.clear(), bp.rec = &rec;
     int pad;
     ErrTrap e;  // (an error: the NAL unit is stored verbatim)
@@ -191,8 +192,13 @@ void cm_report(const tc_rc<0>& e, u64 in_bytes, u64 out_bytes, u64 tables) {
 struct HistBound {
   static constexpr uint64_t kPerMb = sizeof(MbCol) + 1 + sizeof(int16_t);  // History's rec and skip, AqModel's res
   static constexpr uint64_t kMax = (uint64_t)H264P_HIST_MB << 20;
-  int mbs[30] = {};  // the largest picture of each kind the model has had
-  uint64_t bytes = 0;
+  int mbs[30];  // the largest picture of each kind the model has had
+  uint64_t bytes;
+
+  void Init() {
+    for (int& n : mbs) n = 0;
+    bytes = 0;
+  }
   bool fits(int k, int n) const { return n <= mbs[k] || bytes + (uint64_t)(n - mbs[k]) * kPerMb <= kMax; }
   void add(int k, int n) {
     if (n > mbs[k]) bytes += (uint64_t)(n - mbs[k]) * kPerMb, mbs[k] = n;
@@ -214,12 +220,18 @@ struct CompressState {
   AnnexBReader rd;  // the input
 
   void Init(ByteSource in) {
+    ctx.Init();
+    det.Init();
     crc.Init();
+    st.Init();
     dr.Init();
+    hist.Init();
     nal.Init();
     rd.Init(in);
   }
   void Quit() {
+    ctx.Quit();
+    st.Quit();
     dr.Quit();
     nal.Quit();
     rd.Quit();
@@ -236,6 +248,7 @@ struct DecompressState {
   Trailer t;             // and how it ends
 
   void Init() {
+    ctx.Init();
     crc.Init();
     buf.Init();
     b.Init();
@@ -244,6 +257,7 @@ struct DecompressState {
     t.Init();
   }
   void Quit() {
+    ctx.Quit();
     buf.Quit();
     b.Quit();
     rbsp.Quit();

@@ -21,16 +21,18 @@ const int kNumCtx = 1024;
 struct CabacTables {
   uint8_t lps[4][128];   // codIRangeLPS, by (codIRange >> 6) & 3
   uint8_t next[2][128];  // s after an MPS, after an LPS (valMPS flipped at pStateIdx 0)
-  CabacTables() {
-    for (int s = 0; s < 128; s++) {
-      int st = s >> 1, m = s & 1;
-      for (int q = 0; q < 4; q++) lps[q][s] = kRangeLps[st][q];
-      next[0][s] = (uint8_t)(kTransIdx[st][1] * 2 + m);
-      next[1][s] = (uint8_t)(kTransIdx[st][0] * 2 + (st == 0 ? 1 - m : m));
-    }
-  }
 };
-const CabacTables kCabac;
+CabacTables cabac_tables() {
+  CabacTables t;
+  for (int s = 0; s < 128; s++) {
+    int st = s >> 1, m = s & 1;
+    for (int q = 0; q < 4; q++) t.lps[q][s] = kRangeLps[st][q];
+    t.next[0][s] = (uint8_t)(kTransIdx[st][1] * 2 + m);
+    t.next[1][s] = (uint8_t)(kTransIdx[st][0] * 2 + (st == 0 ? 1 - m : m));
+  }
+  return t;
+}
+const CabacTables kCabac = cabac_tables();
 
 // the state a context goes to after a bin, whatever the interval
 inline void cabac_next(CabacCtx& c, int bin) { c.s = kCabac.next[bin != (c.s & 1)][c.s]; }
@@ -111,11 +113,11 @@ struct CabacDecoder {
     if (nb_ < 0 && p_ == end_) err_raise("unexpected end of NAL unit");
     for (; p_ < end_ && nb_ < 24; nb_ += 8) val_ |= (uint64_t)*p_++ << (kB - 8 - nb_);
   }
-  BitReader* br_ = nullptr;
-  const uint8_t *data_ = nullptr, *end_ = nullptr, *p_ = nullptr;
-  uint64_t val_ = 0;
-  uint32_t range_ = 0;
-  int nb_ = 0;
+  BitReader* br_;
+  const uint8_t *data_, *end_, *p_;
+  uint64_t val_;
+  uint32_t range_;
+  int nb_;
 };
 
 struct CabacEncoder {
@@ -195,11 +197,11 @@ struct CabacEncoder {
     while (i > start_ && ++b[--i] == 0) {
     }
   }
-  BitWriter* bw_ = nullptr;
-  size_t start_ = 0;
-  uint64_t low_ = 0;
-  uint32_t range_ = 0;
-  int cut_ = 9;
+  BitWriter* bw_;
+  size_t start_;
+  uint64_t low_;
+  uint32_t range_;
+  int cut_;
 };
 
 // the contexts' initial states (9.3.1.1); model: 0 for I and SI slices,

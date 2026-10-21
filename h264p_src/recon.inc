@@ -145,7 +145,8 @@ struct Dpb {
   int64_t next_id = 1;
   // the current picture's header values that marking needs
   int cur_idr = 0, cur_ref_idc = 0, cur_lt_flag = 0, cur_mmco5 = 0;
-  std::vector<std::vector<int64_t>> cur_mmco;
+  int cur_nmmco = 0;
+  Mmco cur_mmco[68];
   int max_frame_num = 16, max_num_ref = 1, max_lt_idx = -1;  // max_lt_idx: MaxLongTermFrameIdx, -1 none
   // POC state (8.2.1)
   int prev_poc_msb = 0, prev_poc_lsb = 0, prev_frame_num = 0;
@@ -176,10 +177,11 @@ struct Dpb {
       c->ref = true;
       return;
     }
-    if (!cur_mmco.empty()) {
-      for (auto& op : cur_mmco) {
-        int64_t a = op.size() > 1 ? op[1] : 0;
-        switch (op[0]) {
+    if (cur_nmmco) {
+      for (int i = 0; i < cur_nmmco; i++) {
+        const Mmco& op = cur_mmco[i];
+        int64_t a = op.n > 0 ? op.arg[0] : 0;
+        switch (op.op) {
           case 1: {  // a short-term picture no longer used for reference
             int pn = curr_pic_num - (int)(a + 1);
             for (auto& p : dpb)
@@ -192,7 +194,7 @@ struct Dpb {
             break;
           case 3: {  // a short-term picture becomes long-term
             int pn = curr_pic_num - (int)(a + 1);
-            int idx = (int)(op.size() > 2 ? op[2] : 0);
+            int idx = (int)(op.n > 1 ? op.arg[1] : 0);
             for (auto& p : dpb)
               if (p->ref && p->lt && p->lt_idx == idx) p->ref = false;
             for (auto& p : dpb)
@@ -287,7 +289,7 @@ struct Dpb {
     if (sps.poc_type == 2) {
       top = bot = idr ? 0 : 2 * (fno + h.frame_num) - (h.nal_ref_idc == 0);
     } else {
-      int n = (int)sps.offset_for_ref_frame.size();
+      int n = sps.num_ref_frames_in_poc_cycle;
       int64_t abs_fn = n ? fno + h.frame_num : 0;
       if (h.nal_ref_idc == 0 && abs_fn > 0) abs_fn--;
       int64_t exp = 0;
@@ -343,21 +345,22 @@ struct Dpb {
       L.resize(n);
       // modifications
       int pred = curr_pic_num, ri = 0;
-      for (auto& op : h.rplm[li]) {
+      for (int m = 0; m < h.nrplm[li]; m++) {
+        const Rplm& op = h.rplm[li][m];
         if (ri >= n) break;
         RPic* pic = nullptr;
-        if (op.first < 2) {
-          int d = (int)op.second + 1;
-          int nw = op.first == 0 ? pred - d : pred + d;
+        if (op.idc < 2) {
+          int d = (int)op.arg + 1;
+          int nw = op.idc == 0 ? pred - d : pred + d;
           if (nw < 0) nw += max_frame_num;
           if (nw >= max_frame_num) nw -= max_frame_num;
           pred = nw;
           int pn = nw > curr_pic_num ? nw - max_frame_num : nw;
           for (RPic* p : st)
             if (pic_num(p) == pn) pic = p;
-        } else if (op.first == 2) {
+        } else if (op.idc == 2) {
           for (RPic* p : lt)
-            if (p->lt_idx == op.second) pic = p;
+            if (p->lt_idx == op.arg) pic = p;
         }
         if (!pic) continue;
         L.insert(L.begin() + ri, pic);
@@ -386,7 +389,7 @@ struct Dpb {
       cwd = std::min(h.chroma_log2_wd, 7);
       for (int l = 0; l < 2; l++)
         for (int i = 0; i < h.num_ref_idx_active[l] && i < 32; i++)
-          for (int k = 0; k < 6; k++) wt[l][i][k] = (size_t)(i * 6 + k) < h.wt[l].size() ? h.wt[l][i * 6 + k] : 0;
+          for (int k = 0; k < 6; k++) wt[l][i][k] = i * 6 + k < h.nwt[l] ? h.wt[l][i * 6 + k] : 0;
     } else if (wmode == 2) {
       for (int i0 = 0; i0 < nlist[0] && i0 < 32; i0++)
         for (int i1 = 0; i1 < nlist[1] && i1 < 32; i1++) {
@@ -1837,7 +1840,8 @@ struct MbDecoder : Dpb {
       cur_ref_idc = h.nal_ref_idc;
       cur_lt_flag = h.long_term_reference_flag;
       cur_mmco5 = h.mmco5;
-      cur_mmco = h.mmco;
+      cur_nmmco = h.nmmco;
+      memcpy(cur_mmco, h.mmco, h.nmmco * sizeof(Mmco));
       // (finishing the last picture left db as none)
       if (PX && db.size() != (size_t)cur->mbw * cur->mbh) db.assign((size_t)cur->mbw * cur->mbh, db_none());
       slice_no = 0;
