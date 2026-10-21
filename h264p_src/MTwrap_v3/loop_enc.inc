@@ -137,7 +137,7 @@
     } // for
 
     // f_eof may have reached f_eof_all in this very iteration: waiting then would
-    // never return (with Sleep() polling it only cost one tick)
+    // never return
     if( (f_busy==0) && (f_eof!=f_eof_all) ) main_wait();
   }
 

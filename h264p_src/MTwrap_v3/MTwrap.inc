@@ -67,7 +67,7 @@ struct MTwrap : Coroutine {
   HANDLE ev_main;
 
   void main_wait( void ) {
-    if( ev_main ) WaitForSingleObject( ev_main, INFINITE ); else thread_wait();
+    WaitForSingleObject( ev_main, INFINITE );
   }
 
   // f_parts: input/output in rounds of variable size (see loop_enc.inc/loop_dec.inc)
@@ -134,7 +134,7 @@ if( f_DEC ) buf1_N1=(buf1_N1*MUL)/DIV, buf2_N=(buf2_N*MUL)/DIV;
       if( r==0 ) if( C1[i].Init(MArgs1) ) r=6; 
     }
 
-    ev_main = 0; if( r==0 ) ev_main = CreateEventA( 0, 0, 0, 0 ); // auto-reset; 0 -> Sleep() polling
+    ev_main = 0; if( r==0 ) { ev_main = CreateEventA( 0, 0, 0, 0 ); if( ev_main==0 ) r=7; } // auto-reset
 
     if( r==0 )
     for( i=0; i<th_N; i++ ) {

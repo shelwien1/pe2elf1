@@ -27,6 +27,3 @@ struct thread {
   }
 };
 
-void thread_wait( void ) { 
-  Sleep(10); 
-} 

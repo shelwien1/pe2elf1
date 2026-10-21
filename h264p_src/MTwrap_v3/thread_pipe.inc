@@ -24,10 +24,11 @@ struct thread_pipe : thread< thread_pipe<bufN1,bufN2,coro_t> >, coro_t {
   uint inp_left; // input the coroutine left unconsumed when it finished (0 after an error)
   volatile uint f_fail; // the coroutine stopped with an error (r>=3); set before f_done
 
-  // auto-reset events instead of Sleep() polling:
+  // auto-reset events, which the worker waits on (it never polls):
   HANDLE ev_inp; // = finp.ev_push: set by the main thread after it pushes an input buffer
   HANDLE ev_out; // = fout.ev_pop:  set by the main thread after it frees an output slot
 
+  // 0 when the events or the thread cannot be made
   uint thread_start( bufring1_t& finp, bufring2_t& fout ) {
     coro_init(); f_quit=0; f_done=0; f_fail=0;
     pinp = &finp; 
@@ -35,6 +36,12 @@ struct thread_pipe : thread< thread_pipe<bufN1,bufN2,coro_t> >, coro_t {
     zc_inp = 0; zc_out = 0; 
     ev_inp = CreateEventA( 0, 0, 0, 0 ); // auto-reset, initially clear
     ev_out = CreateEventA( 0, 0, 0, 0 );
+    if( ev_inp==0 || ev_out==0 ) {
+      if( ev_inp ) CloseHandle( ev_inp );
+      if( ev_out ) CloseHandle( ev_out );
+      ev_inp = 0; ev_out = 0;
+      return 0;
+    }
     finp.ev_push = ev_inp;
     fout.ev_pop  = ev_out;
     return base::thread_start();
@@ -52,7 +59,7 @@ struct thread_pipe : thread< thread_pipe<bufN1,bufN2,coro_t> >, coro_t {
   // the ring condition is rechecked after every wakeup; a signal that comes
   // between the check and the wait stays set (auto-reset), so none is lost
   static void wait_ev( HANDLE ev ) {
-    if( ev ) WaitForSingleObject( ev, INFINITE ); else thread_wait();
+    WaitForSingleObject( ev, INFINITE );
   }
 
   void thread( void ) {

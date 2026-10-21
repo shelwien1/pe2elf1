@@ -302,7 +302,8 @@ and the parameter sets it needs are copied in at its start (after its
 access unit delimiter, if it has one), so that each part is a stream by
 itself (one that starts at a P picture loses the reference pictures before
 it, and some compression; never losslessness). MTwrap (`h264p_src/MTwrap_v3`,
-unchanged, its parts mode: `MTwrap.md` section 11 in mtwrap) deals the
+mtwrap's but that it only ever waits on events, never polls with `Sleep()`;
+its parts mode: `MTwrap.md` section 11 in mtwrap) deals the
 parts in turn to N workers; a worker reads a part whole into memory and
 compresses it with a model of its own, an `H264pCoro` run as a coroutine of
 the worker's, then the next part dealt to it. Decompressing, a worker

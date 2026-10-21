@@ -65,9 +65,10 @@
 #include "Lib3/coro3b.inc"
 #include "Lib3/file_api.inc"
 #include "Lib3/coro2pair.inc"
-// MTwrap (unchanged from mtwrap's, as is Lib3's win_shim.inc it includes:
-// build with -I Lib3, and with threads, -pthread), which runs coroutines on
-// threads (mt.inc)
+// MTwrap (mtwrap's, but that it waits only on events: a failure to make
+// one fails Init() instead of falling back to Sleep() polling; Lib3's
+// win_shim.inc it includes is unchanged: build with -I Lib3, and with
+// threads, -pthread), which runs coroutines on threads (mt.inc)
 #include "MTwrap_v3/MTwrap.inc"
 
 // the syntax: the bitstream, its walk and the channels it exchanges the
