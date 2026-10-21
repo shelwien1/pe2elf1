@@ -24,9 +24,10 @@ alone, as mtwrap builds it; a program of its own includes `h264p.inc` for
 h264p's coroutines), so
 `g++ -O2 -march=x86-64-v3 -std=c++11 -fwrapv -fno-exceptions -fno-rtti -Ih264p_src/Lib3 -pthread h264p_src/h264p.cpp -o h264p`
 builds it too: it uses neither C++ exceptions nor RTTI (its errors jump
-to traps the callers set, `h264p_src/err.inc`), nor the C++ library's
-containers, strings or algorithms (`h264p_src/mem.inc` has the few it
-needs), and its structs have no constructors or destructors: `Init()`
+to traps the callers set, `h264p_src/err.inc`), nor anything of the C++
+library: no containers, strings or algorithms (`h264p_src/mem.inc` has the
+few it needs), so that it links without it (`gcc` in place of `g++`, with
+`-lm`); and its structs have no constructors or destructors: `Init()`
 sets one up and `Quit()` frees what it holds, so that its coroutines are
 plain data on pages mapped for them. Its target is x86-64-v3 (AVX2:
 Haswell, Zen and later), for which its pixel kernels and mixers have SIMD

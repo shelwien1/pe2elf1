@@ -290,8 +290,6 @@ struct Output {
 
   // (false: said, and Quit())
   bool open(const char* out_name, FILE* in, const char* in_name) {
-    static bool hooked = !atexit(quit_open_output);
-    (void)hooked;
     open_output = this;
     name = out_name;
     if (!strcmp(name, "-")) {
@@ -378,6 +376,7 @@ struct Output {
 void quit_open_output() {
   if (open_output) open_output->Quit();
 }
+const bool open_output_hooked = !atexit(quit_open_output);  // (as the program starts)
 
 // a call's input (f) and output (o); false after a message
 bool open_io(const char* in_name, const char* out_name, filehandle0& f, Output& o) {

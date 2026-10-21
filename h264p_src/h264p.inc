@@ -9,13 +9,14 @@
 // Lib3's global byte, uint and qword, and whatever more of the library a
 // program has after it, MTwrap's included, see only theirs.
 //
-// It takes nothing of the C++ library but the language's own (the C
-// library's headers, and a function's statics made once): no exceptions or
-// RTTI (err.inc), no containers, strings or algorithms (mem.inc); and its
-// structs have no constructors or destructors -- Init() sets one up,
-// Quit() frees what it holds -- so that they can live on pages that are
-// mapped, not constructed, as its coroutines do (coro.inc). (The channels'
-// vtables aside, chan.inc.)
+// It takes nothing of the C++ library, and links without it (the C
+// library's headers only): no exceptions or RTTI (err.inc), no containers,
+// strings or algorithms (mem.inc), no statics in functions (their guards
+// are the library's: what it makes once is made as the program starts);
+// and its structs have no constructors or destructors -- Init() sets one
+// up, Quit() frees what it holds -- so that they can live on pages that
+// are mapped, not constructed, as its coroutines do (coro.inc). (The
+// channels' vtables aside, chan.inc.)
 #ifndef H264P_INC
 #define H264P_INC
 

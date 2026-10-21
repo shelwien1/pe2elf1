@@ -56,7 +56,7 @@ struct Tables {
   Vlc total_zeros[15], tz_dc420[3], tz_dc422[7];
   Vlc run_before[7];
 
-  // (once, by tables())
+  // (once, as the program starts)
   bool Init() {
     for (auto& v : coeff_token) v.Init();
     for (auto& v : total_zeros) v.Init();
@@ -92,14 +92,11 @@ struct Tables {
   }
 };
 
-// (made as they are first needed, by one thread: C++'s statics in a
-// function are, and kept to the end)
-const Tables& tables() {
-  static Tables t;
-  static bool made = t.Init();
-  (void)made;
-  return t;
-}
+// (made as the program starts, as kCabac is, before any thread reads them,
+// and kept to the end)
+Tables cavlc_tables;
+const bool cavlc_made = cavlc_tables.Init();
+const Tables& tables() { return cavlc_tables; }
 
 int token_table(int nC) { return nC == -1 ? 4 : nC == -2 ? 5 : nC < 2 ? 0 : nC < 4 ? 1 : nC < 8 ? 2 : 3; }
 
