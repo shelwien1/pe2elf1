@@ -235,10 +235,10 @@ The plan's items (estimates, from the prototype), and what came of each:
   keeping only these, `Chan::states`.)
 - **The level's own contexts** (−8%). `-1`'s families are its own (four
   counters, one mixer, the tables of that shape and nothing else);
-  ReconOff answers every query about pictures as a constant, so the code
-  that needs them folds away at compile time; the variables it does not
-  read are not computed where that costs (the significance loop's
-  neighbour coefficients). The last gave nothing measurable: what cost was
+  its decoder (`ReconOff`) answers every query about pictures as a
+  constant, so the code that needs them folds away at compile time; the
+  variables it does not read are not computed where that costs (the
+  significance loop's neighbour coefficients). The last gave nothing measurable: what cost was
   gone with the decoder.
 - **A 12-input mixer** (−4%). The mixers take 2 inputs per counter and 4
   more, in lanes of 8: 16 for four counters, one AVX2 vector, instead of
@@ -295,17 +295,22 @@ As built:
   (`X_NOREC`, `X_NOSEARCH`, `X_NOPROXY`, `X_NOSIGNP`, `X_NOSKIPPX`,
   `X_NODEBLOCK`, `X_NOCAB`) became these; its coder's (`X_CNT`, `X_MIX1`,
   `X_NOAPM`) the families' shapes.
-- **The decoder as a member type**, by the switches: `Recon`
-  (`ReconT<true>`) for levels with it; `ReconRefs` (`ReconT<false>`), the
-  pictures' motion, POCs and reference lists without their samples, for
-  `refs` alone; `ReconOff` without either, what `Recon` answers while no
-  picture is active, as constants. A query about samples asks `act()`,
-  `PX && active`, which folds to false in the last two, so a level
-  without the decoder has none of its pixel code or its pictures. The
-  searches and the intra proxy are reached through helpers that are a
-  constant "not known" where the level has them not; sign prediction, the
-  skip prediction's pixels and the CABAC states as predictions are gated
-  at their one place each; deblocking is a flag of `Recon`.
+- **The decoder as a member type**, by the switches: `ReconT<K>`, `K`
+  what the level has of it: `Recon` (`ReconT<2>`) for levels with it;
+  `ReconRefs` (`ReconT<1>`), the pictures' motion, POCs and reference
+  lists without their samples, for `refs` alone; `ReconOff`
+  (`ReconT<0>`) without either. `MbDecoder<K>` is the decoder, on `Dpb`
+  (the pictures, their marking, POCs, lists and weights); `ReconT<K>` on
+  it the model's queries of the samples. What a level has not is a
+  constant, as while no picture is active: a query about the pictures'
+  motion asks `motion()` (`K >= 1 && active`), one about their samples
+  `act()` (`K == 2 && active`), and both fold to false where the level
+  has them not, so a level without the decoder has none of its pixel code
+  or its pictures' samples, and one without either none of its pictures.
+  The searches and the intra proxy are reached through helpers that are
+  a constant "not known" where the level has them not; sign prediction,
+  the skip prediction's pixels and the CABAC states as predictions are
+  gated at their one place each; deblocking is a flag of the decoder.
 - **The families as `tc_fam<f_DEC, C>`**, `C` the family's class at the
   level: an even count of counters up to ten (read and updated four to an
   AVX2 vector), one mixer or three and the final one, no APM or two; the

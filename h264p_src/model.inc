@@ -697,7 +697,7 @@ struct Model : tc_rc<f_DEC> {
   // the pictures, reconstructed: by the decoder; their motion and the
   // reference lists alone (a level with refs but without the decoder); or
   // as never known
-  typename std::conditional<LV::recon, Recon, typename std::conditional<LV::refs, ReconRefs, ReconOff>::type>::type rec_;
+  ReconT<LV::recon ? 2 : LV::refs ? 1 : 0> rec_;
   // the decoder's parts the level has: its template searches, the intra
   // proxy (where it has them not, constants "not known")
   template <class... A>
@@ -787,7 +787,7 @@ struct Model : tc_rc<f_DEC> {
   // slice begins)
   int phk_ = -1;
   int phist_key_of_slice() const {
-    if (sc_->stype_ != kB || !rec_.mact || rec_.nlist[1] < 1 || !rec_.list[1][0]) return -1;
+    if (sc_->stype_ != kB || !rec_.motion() || rec_.nlist[1] < 1 || !rec_.list[1][0]) return -1;
     return hist_of_poc(rec_.list[1][0]->poc);
   }
   // the kind of slice, other than the current one's, whose history is the
@@ -859,7 +859,7 @@ struct Model : tc_rc<f_DEC> {
     if (hist_pic_[key_] != pic_) {
       hist_pic_[key_] = pic_;
       hist_prev_[key_] = hist_poc_[key_];
-      hist_poc_[key_] = rec_.mact ? rec_.cur->poc : INT_MIN;
+      hist_poc_[key_] = rec_.motion() ? rec_.cur->poc : INT_MIN;
     }
     prev_poc_ = hist_prev_[key_];
     cur_poc_ = hist_poc_[key_];
@@ -953,7 +953,7 @@ struct Model : tc_rc<f_DEC> {
       for (int l = 0; l < 2; l++)
         for (int b8 = 0; b8 < 4; b8++) {
           int r = mi_->rf[l][b8];
-          c.rpoc[l][b8] = rec_.mact && r >= 0 && r < rec_.nlist[l] && rec_.list[l][r] ? rec_.list[l][r]->poc : INT_MIN;
+          c.rpoc[l][b8] = rec_.motion() && r >= 0 && r < rec_.nlist[l] && rec_.list[l][r] ? rec_.list[l][r]->poc : INT_MIN;
         }
     static const decltype(mi_->mvd) kNoMvd = {};
     if (!memcmp(mi_->mvd, kNoMvd, sizeof kNoMvd)) {
@@ -1103,10 +1103,10 @@ struct Model : tc_rc<f_DEC> {
   }
   // the last picture decoded at the current macroblock: how much it changed
   // (1 + tc_qlog, 0 not known), its energy (log2 classes, 0 not known)
-  int map_td() const { return maps_ok() && rec_.change[addr_] >= 0 ? 1 + tc_qlog(rec_.change[addr_]) : 0; }
-  int map_en() const { return maps_ok() ? 1 + tc_clamp(rec_.energy[addr_] / 4 - 4, 0, 13) : 0; }
+  int map_td() const { return maps_ok() && rec_.maps.change[addr_] >= 0 ? 1 + tc_qlog(rec_.maps.change[addr_]) : 0; }
+  int map_en() const { return maps_ok() ? 1 + tc_clamp(rec_.maps.energy[addr_] / 4 - 4, 0, 13) : 0; }
   // the maps of the last picture decoded fit the current one
-  bool maps_ok() const { return rec_.maps_w == width_ && rec_.maps_w * rec_.maps_h == size_ && !mbaff_; }
+  bool maps_ok() const { return rec_.maps.w == width_ && rec_.maps.w * rec_.maps.h == size_ && !mbaff_; }
   int skp_bit(const H_skp_v& D, int node, int v, int pr = -1) {
     tcx X;
     f_skp.make(D, X);
@@ -1972,7 +1972,7 @@ struct Model : tc_rc<f_DEC> {
   // the distance in POC from the current picture to list l's reference r
   // (0 not known), and a vector over distance dn scaled to distance dr
   int ref_dist(int l, int r) const {
-    return rec_.mact && r >= 0 && r < rec_.nlist[l] && rec_.list[l][r] ? poc_dist(cur_poc_, rec_.list[l][r]->poc) : 0;
+    return rec_.motion() && r >= 0 && r < rec_.nlist[l] && rec_.list[l][r] ? poc_dist(cur_poc_, rec_.list[l][r]->poc) : 0;
   }
   static int mv_scale(int v, int dr, int dn) { return (int)div_floor((int64_t)v * dr * 2 + dn, 2 * (int64_t)dn); }
   // B: the vector the motion of list 1's first reference's co-located
@@ -2171,7 +2171,7 @@ struct Model : tc_rc<f_DEC> {
   };
   HistView ref_hist(int l, int r) const {
     HistView v;
-    if (!rec_.mact || r < 0 || r >= rec_.nlist[l] || !rec_.list[l][r]) return v;
+    if (!rec_.motion() || r < 0 || r >= rec_.nlist[l] || !rec_.list[l][r]) return v;
     int poc = rec_.list[l][r]->poc;
     if (poc == prev_poc_ && hsize_ == size_) {
       if (hprev_ok_ && hkey_ == key_) v.cur = hist_[hkey_].data(), v.keep = hkeep_.data(), v.coef = hcoef_.data(), v.id = hsnap_;
@@ -2285,8 +2285,8 @@ struct Model : tc_rc<f_DEC> {
     // that set the predicted QP
     D.ae = 0;
     if (maps_ok()) {
-      int e0 = qp_src_ >= 0 ? rec_.energy[qp_src_] : rec_.energy_mean;
-      D.ae = 7 + tc_clamp((rec_.energy[addr_] - e0 + 2 * (rec_.energy[addr_] > e0) - 2 * (rec_.energy[addr_] < e0)) / 4, -6, 6);
+      int e0 = qp_src_ >= 0 ? rec_.maps.energy[qp_src_] : rec_.maps.energy_mean;
+      D.ae = 7 + tc_clamp((rec_.maps.energy[addr_] - e0 + 2 * (rec_.maps.energy[addr_] > e0) - 2 * (rec_.maps.energy[addr_] < e0)) / 4, -6, 6);
     }
     // and the QP its line gives the energy of the prediction (inter) or of
     // the last picture there, less the predicted QP; how far the last
