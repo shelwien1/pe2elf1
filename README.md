@@ -132,9 +132,12 @@ NAL unit back from the values before coding them, or, a slice, checks as it
 codes it that the walk writes the bits and CABAC bins it read (should a
 slice fail that, `c` compresses the stream again, writing back every NAL
 unit first, as it always does through pipes). A NAL unit that does not come
-out the same is stored verbatim, as in the TSV file (below); a CRC-32 at
-the end checks the whole stream, and `d` takes data after the end of the
-compressed stream for corruption.
+out the same is stored verbatim, as in the TSV file (below), and so is a
+slice that would take the model's records of the last picture of each kind
+(slice type, reference or not, frame or field) past 512 MB: a stream has a
+few kinds, 4.2 MB each at 1080p, while all 30 at the largest pictures would
+take 1.4 GB. A CRC-32 at the end checks the whole stream, and `d` takes
+data after the end of the compressed stream for corruption.
 
 The model is binary context mixing, after oggcomp (Ogg Vorbis): each value
 is a sequence of binary decisions, each predicted by ten adaptive counters

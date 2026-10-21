@@ -102,8 +102,9 @@ echo "passed $pass, failed $fail; $total bytes compressed:$(for l in $levels; do
 # With no streams given, the cases that must fail, and must fail well, and
 # the crafted streams of test/crafted (h264p_review.md): each a stream h264p
 # once crashed on (poc_wrap), took minutes (fmo_boxout) or gigabytes
-# (empty_blocks) for, failed as a whole (big_level), mismodelled
-# (pps_repeat) or read and wrote differently (sei_size)
+# (empty_blocks; kinds, 261 bytes: a slice of each kind of picture at the
+# largest size, made with r) for, failed as a whole (big_level),
+# mismodelled (pps_repeat) or read and wrote differently (sei_size)
 if [ -n "${negative:-}" ]; then
   nfail=0
   check() {  # $1 what, then a command that must succeed
@@ -116,6 +117,7 @@ if [ -n "${negative:-}" ]; then
     check "$n: c -9, d" sh -c 'timeout 300 "$1" c -9 "$2" "$3/k.c" 2>/dev/null && "$1" d "$3/k.c" "$3/k.264" && cmp -s "$2" "$3/k.264"' - "$bin" "$s" "$tmp"
     check "$n: t, r (in 20 s)" sh -c 'timeout 20 "$1" t "$2" "$3/k.tsv" 2>/dev/null && "$1" r "$3/k.tsv" "$3/k.264" && cmp -s "$2" "$3/k.264"' - "$bin" "$s" "$tmp"
   done
+  check "kinds.264: c -9, d in 1.05 GB of address space (1.64 GB unbounded)" sh -c 'ulimit -v 1100000 2>/dev/null; "$1" c -9 "$2" "$3/k.c" 2>/dev/null && "$1" d "$3/k.c" "$3/k.264" && cmp -s "$2" "$3/k.264"' - "$bin" "$here/crafted/kinds.264" "$tmp"
   check "sei_size.264: t -s fails (a size past 2^24)" sh -c '! "$1" t -s "$2" "$3/k.tsv" 2>/dev/null' - "$bin" "$here/crafted/sei_size.264" "$tmp"
   # a slice with a byte changed: stored verbatim, or with -s a failure that
   # leaves no output, on threads too; x on threads fails rather than hangs

@@ -154,6 +154,26 @@ struct Restart {
   long nal;
 };
 
+// The model's records of the last picture of each kind (History and
+// AqModel, model.inc: 535 bytes a macroblock) grow with the kinds of
+// picture a stream has: a few, 4.2 MB each at 1080p. All 30 at the
+// largest pictures (139,264 macroblocks a frame, half that a field) would
+// take 1.4 GB, which 261 bytes can ask for (test/crafted/kinds.264). So a
+// slice that would take them past H264P_HIST_MB is stored verbatim.
+#ifndef H264P_HIST_MB
+#define H264P_HIST_MB 512
+#endif
+struct HistBound {
+  static constexpr uint64_t kPerMb = sizeof(MbCol) + 1 + sizeof(int16_t);  // History's rec and skip, AqModel's res
+  static constexpr uint64_t kMax = (uint64_t)H264P_HIST_MB << 20;
+  int mbs[30] = {};  // the largest picture of each kind the model has had
+  uint64_t bytes = 0;
+  bool fits(int k, int n) const { return n <= mbs[k] || bytes + (uint64_t)(n - mbs[k]) * kPerMb <= kMax; }
+  void add(int k, int n) {
+    if (n > mbs[k]) bytes += (uint64_t)(n - mbs[k]) * kPerMb, mbs[k] = n;
+  }
+};
+
 // What a compression keeps from one NAL unit to the next besides its
 // model, on the heap: the stack of its coroutine (coro.inc), which each
 // yield copies, stays small, and Quit() frees all of it wherever the
@@ -164,6 +184,7 @@ struct CompressState {
   Crc32 crc;
   Stats st;
   DryRun dr;
+  HistBound hist;
   std::vector<uint8_t> nal;
   AnnexBReader rd;  // the input
   explicit CompressState(ByteSource in) : rd(in) {}
@@ -240,11 +261,16 @@ int compress_nal(Model<0, LV>& m, CompressState& s, const H264pArgs& a, const st
   NalHead h = nal_head(nal, s.det);
   int obs;
   bool ok = s.dr.run(h, ctx, a.check, obs);
+  if (ok && h.slice && !s.hist.fits(ctx.slice_kind, ctx.slice_mbs)) {
+    ok = false;
+    s.dr.why = "the model's records of the kinds of picture would pass " + std::to_string(H264P_HIST_MB) + " MB";
+  }
   bool padchg = ok && repad(s.det, obs, ctx.pad);
   if (padchg) {
     ok = s.dr.run(h, ctx, a.check, obs);  // once more, with padding bits that predict this one
     st.pad++;
   }
+  if (ok && h.slice) s.hist.add(ctx.slice_kind, ctx.slice_mbs);
   m.nal(F_TYPE, prev_type, h.type);
   m.nal(F_REF, h.type, h.ref_idc);
   m.nal(F_ZEROS, h.type, (i64)zeros);

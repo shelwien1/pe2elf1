@@ -572,11 +572,13 @@ struct HeaderModel {
 };
 
 // --- The model's histories: per kind of picture (slice type, reference or
-// not, frame or top or bottom field: 30 kinds) what it keeps of the last
-// macroblock coded at each address (MbCol), and which pictures those are;
-// and, from the first P slice of a P picture on, the records of its kind
-// as they were when the picture began, for the contexts that follow a
-// block's vector into its reference (Model::mc_col, mc_nz).
+// not, frame or top or bottom field: 30 kinds, pic_kind) what it keeps of
+// the last macroblock coded at each address (MbCol), and which pictures
+// those are; and, from the first P slice of a P picture on, the records of
+// its kind as they were when the picture began, for the contexts that
+// follow a block's vector into its reference (Model::mc_col, mc_nz). (The
+// compressor stores verbatim a slice that would take the kinds' records
+// past a bound: HistBound, cmstream.inc.)
 struct History {
   std::vector<MbCol> rec[30];
   std::vector<uint8_t> skip[30];  // rec's valid && skip, a byte a macroblock (for skp_vars)
@@ -1045,7 +1047,7 @@ struct Model : tc_rc<f_DEC> {
   typedef History::View HistView;
   uint32_t pic_ = 1;       // pictures so far
   SliceHeader last_h_;     // the last slice coded (no sps: none yet)
-  int st_ = 0, key_ = 0;   // slice type x reference; st_ x frame/top/bottom field
+  int st_ = 0, key_ = 0;   // slice type x reference; st_ x frame/top/bottom field (pic_kind)
   int width_ = 1, size_ = 0;
   bool mbaff_ = false;
   int qp_off_ = 0, qp_pred_ = 26, slice_qp_ = 26;
@@ -1220,8 +1222,8 @@ struct Model : tc_rc<f_DEC> {
     const SliceHeader& h = sc.h_;
     bool newpic = new_picture(h);
     last_h_ = h;
-    st_ = h.type() * 2 + (h.nal_ref_idc != 0);
-    key_ = st_ * 3 + (h.field_pic_flag ? 1 + h.bottom_field_flag : 0);
+    key_ = pic_kind(h);
+    st_ = key_ / 3;
     if (newpic) pic_++;
     width_ = sc.width_;
     size_ = sc.size_;

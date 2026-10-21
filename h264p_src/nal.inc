@@ -74,6 +74,7 @@ struct Context {
   ParamSets ps;
   MbStore mbs;
   X264Padding pad;
+  int slice_kind = -1, slice_mbs = 0;  // the last slice's picture (pic_kind, pic_mbs)
 
   // a NAL unit done, its payload (after the header byte) as in the stream:
   // past a slice, x264's padding moves on
@@ -217,6 +218,7 @@ int code_nal(int type, int ref_idc, Context& ctx, Chan& ch, BitReader* br, BitWr
       h.nal_unit_type = type;
       h.nal_ref_idc = ref_idc;
       code_slice_header(s, h, ctx.ps);
+      ctx.slice_kind = pic_kind(h), ctx.slice_mbs = pic_mbs(h);
       h.pad = ctx.pad.bit(h.first_mb == 0);
       if (br)
         read_slice_data(h, ctx.mbs, *br, ch, bp);

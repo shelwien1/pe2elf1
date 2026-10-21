@@ -220,6 +220,16 @@ struct SliceHeader {
   int type() const { return slice_type % 5; }
 };
 
+// A slice's picture: its kind, by which the model keeps its records of the
+// last picture of each (History, model.inc): slice type, reference or not,
+// frame or top or bottom field, 30 kinds; and its size in macroblocks
+inline int pic_kind(const SliceHeader& h) {
+  return (h.type() * 2 + (h.nal_ref_idc != 0)) * 3 + (h.field_pic_flag ? 1 + h.bottom_field_flag : 0);
+}
+inline int pic_mbs(const SliceHeader& h) {
+  return h.sps->width_mbs * (h.sps->frame_height_mbs() / (1 + h.field_pic_flag));
+}
+
 
 static int64_t tc_clamp64(int64_t v, int64_t lo, int64_t hi) { return v < lo ? lo : v > hi ? hi : v; }
 

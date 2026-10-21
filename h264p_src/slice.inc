@@ -559,7 +559,7 @@ struct SliceCoderT : WalkState, WalkCodes<SliceCoderT<kMode>> {
     ch_blocks_ = chroma_ == 2 ? 8 : 4;
     mbaff_ = sps_.mb_adaptive_frame_field_flag && !h_.field_pic_flag;
     width_ = sps_.width_mbs;
-    size_ = width_ * (sps_.frame_height_mbs() / (1 + field_));
+    size_ = pic_mbs(h_);
     num_ref_[0] = h_.num_ref_idx_active[0];
     num_ref_[1] = h_.num_ref_idx_active[1];
     if (pps_.num_slice_groups > 1) {
