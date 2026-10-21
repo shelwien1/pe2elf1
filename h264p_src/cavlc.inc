@@ -35,7 +35,7 @@ struct Vlc {
   }
   int read(BitReader& br) const {
     uint16_t e = tab[br.peek(maxlen)];
-    if (!e) throw ParseError("invalid CAVLC code");
+    if (!e) err_raise("invalid CAVLC code");
     br.skip(e & 31);
     return e >> 5;
   }
@@ -98,21 +98,21 @@ int cavlc_read_block(BitReader& br, int nC, int max_coeff, int* c) {
   int tok = T.coeff_token[token_table(nC)].read(br);
   int tc = tok >> 2, t1 = tok & 3;
   if (tc == 0) return 0;
-  if (tc > max_coeff) throw ParseError("invalid coeff_token");
+  if (tc > max_coeff) err_raise("invalid coeff_token");
   int level[16], run[16];
   for (int i = 0; i < t1; i++) level[i] = br.bit() ? -1 : 1;
   int suffix_length = tc > 10 && t1 < 3;
   for (int i = t1; i < tc; i++) {
     int prefix = 0;
     while (!br.bit())
-      if (++prefix > 31) throw ParseError("invalid level_prefix");
+      if (++prefix > 31) err_raise("invalid level_prefix");
     int64_t code = (int64_t)(prefix < 15 ? prefix : 15) << suffix_length;
     int suffix_size = prefix == 14 && suffix_length == 0 ? 4 : prefix >= 15 ? prefix - 3 : suffix_length;
     if (suffix_size > 0) code += br.u(suffix_size);
     if (prefix >= 15 && suffix_length == 0) code += 15;
     if (prefix >= 16) code += ((int64_t)1 << (prefix - 3)) - 4096;
     if (i == t1 && t1 < 3) code += 2;
-    if (code > 2 * (int64_t)kMaxLevel - 1) throw ParseError("coefficient level too large");
+    if (code > 2 * (int64_t)kMaxLevel - 1) err_raise("coefficient level too large");
     level[i] = (int)(code % 2 == 0 ? (code + 2) >> 1 : (-code - 1) >> 1);
     if (suffix_length == 0) suffix_length = 1;
     if (abs(level[i]) > (3 << (suffix_length - 1)) && suffix_length < 6) suffix_length++;
@@ -121,13 +121,13 @@ int cavlc_read_block(BitReader& br, int nC, int max_coeff, int* c) {
   if (tc < max_coeff) {
     const Vlc& v = nC == -1 ? T.tz_dc420[tc - 1] : nC == -2 ? T.tz_dc422[tc - 1] : T.total_zeros[tc - 1];
     zeros_left = v.read(br);
-    if (zeros_left + tc > max_coeff) throw ParseError("invalid total_zeros");
+    if (zeros_left + tc > max_coeff) err_raise("invalid total_zeros");
   }
   for (int i = 0; i < tc - 1; i++) {
     run[i] = 0;
     if (zeros_left > 0) {
       run[i] = T.run_before[(zeros_left < 7 ? zeros_left : 7) - 1].read(br);
-      if (run[i] > zeros_left) throw ParseError("invalid run_before");
+      if (run[i] > zeros_left) err_raise("invalid run_before");
       zeros_left -= run[i];
     }
   }
@@ -155,7 +155,7 @@ int cavlc_write_block(BitWriter& bw, int nC, int max_coeff, const int* c) {
   for (int i = 0; i < t1; i++) bw.bit(level[i] < 0);
   int suffix_length = tc > 10 && t1 < 3;
   for (int i = t1; i < tc; i++) {
-    if (std::abs((int64_t)level[i]) > kMaxLevel) throw TsvError("coefficient level too large");
+    if (std::abs((int64_t)level[i]) > kMaxLevel) err_raise("coefficient level too large");
     int64_t code = level[i] > 0 ? 2 * (int64_t)level[i] - 2 : -2 * (int64_t)level[i] - 1;
     if (i == t1 && t1 < 3) code -= 2;
     int prefix, suffix_size = 0;

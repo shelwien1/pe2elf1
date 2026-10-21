@@ -122,16 +122,13 @@ struct H264pPart : CoroIo {
     in_ = out_ = nullptr;
   }
 
+  // (an error in a part's model ends that run at its own trap: run_part()
+  // returns its status)
   void do_process() {
-    int r = 1;
     io_init();
-    try {
-      in_ = new std::vector<uint8_t>;
-      out_ = new std::vector<uint8_t>;
-      r = run(std::integral_constant<int, f_DEC>());
-    } catch (const std::exception& e) {  // no memory (nothing in a handler may yield)
-      say_error(args.meter, "h264p: %s: %s\n", args.name, e.what());
-    }
+    in_ = new std::vector<uint8_t>;
+    out_ = new std::vector<uint8_t>;
+    int r = run(std::integral_constant<int, f_DEC>());
     Quit();
     for (;;) yield(static_cast<Coroutine*>(this), r ? 3 : 0);
   }
@@ -156,7 +153,7 @@ struct H264pPart : CoroIo {
   };
   int code(const H264pArgs& a, uint64_t in0, uint64_t out0) {
     int r = with_level<Lv>(a.level, *this, a, in0, out0);
-    if (r >= 0) return r;
+    if (r != kNoLevel) return r;  // (0, 1, or kRestart)
     say_error(args.meter, "h264p: %s: a part compressed at level -%d, which this build has not\n", args.name, a.level);
     return 1;
   }

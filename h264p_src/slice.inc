@@ -546,7 +546,7 @@ template <int kMode>
 struct SliceCoderT : WalkState, WalkCodes<SliceCoderT<kMode>> {
   SliceCoderT(const SliceHeader& h, MbStore& store, BitReader* br, BitWriter* bw, Chan& ch, const BinPolicy& bp)
       : WalkState(h, store), br_(br), bw_(bw), ch_(&ch), bins_(bp.rec), rec_(W ? nullptr : bp.rec) {
-    if (ch.W != W) throw std::logic_error("the walk and its channel go different ways");
+    if (ch.W != W) err_raise("internal: the walk and its channel go different ways");
   }
   using WalkCodes<SliceCoderT>::fail;
 
@@ -607,7 +607,7 @@ struct SliceCoderT : WalkState, WalkCodes<SliceCoderT<kMode>> {
   int ue(int v, int hi) { return (int)this->code_ue(v, 0, hi); }
   int se(int v, int lim) { return (int)this->code_se(v, -lim, lim); }
   int te(int v, int range) {
-    if (W && (v < 0 || v > range)) fail("value " + std::to_string(v) + " out of range");
+    if (W && (v < 0 || v > range)) fail("value %d out of range", v);
     if (range == 1) return !u(1, !v);
     return ue(v, range);
   }

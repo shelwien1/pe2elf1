@@ -70,12 +70,14 @@ struct DryRun {
     BinPolicy bp;
     if (check) rec.clear(), bp.rec = &rec;
     int pad;
-    try {
-      pad = read_nal(h.type, h.ref_idc, rbsp, ctx, log, bp);
-    } catch (const ParseError& e) {
-      why = e.what();
+    ErrTrap e;  // (an error: the NAL unit is stored verbatim)
+    if (setjmp(e.jb)) {
+      why = e.why;
       return false;
     }
+    err_push(e);
+    pad = read_nal(h.type, h.ref_idc, rbsp, ctx, log, bp);
+    err_pop(e);
     if (check && rec.slice && rec.stops && find_trailer(BitWriter(rbsp.data(), rec.end), pad, rbsp, t, why, obs)) {
       checked = true;
       return true;
@@ -146,13 +148,7 @@ void cm_report(const tc_rc<0>& e, u64 in_bytes, u64 out_bytes, u64 tables) {
 //
 // check: the dry runs leave the CABAC slices they can to the model pass to
 // check (dry_run); if one of them does not come out as it is, the model
-// has coded it, and compress_stream() returns kRestart.
-const int kRestart = -1;
-
-// (thrown by the model pass of a NAL unit that does not come out as it is)
-struct Restart {
-  long nal;
-};
+// has coded it, and the run ends with kRestart (its trap, coro.inc).
 
 // The model's records of the last picture of each kind (History and
 // AqModel, model.inc: 535 bytes a macroblock) grow with the kinds of
@@ -199,9 +195,9 @@ struct DecompressState {
 
 // The model pass of a NAL unit that parsed (h, its dry run's in s.dr):
 // its syntax through the model, then what the syntax leaves out of it (its
-// trailer). Restart where a.check finds it would not come out as it is.
+// trailer). False where the check finds it would not come out as it is.
 template <class LV>
-void compress_parsed(Model<0, LV>& m, CompressState& s, const NalHead& h) {
+bool compress_parsed(Model<0, LV>& m, CompressState& s, const NalHead& h) {
   DryRun& dr = s.dr;
   const Trailer& t = dr.t;
   dr.log.rewind();
@@ -212,13 +208,12 @@ void compress_parsed(Model<0, LV>& m, CompressState& s, const NalHead& h) {
   if (dr.checked) {
     // (whatever fails, the NAL unit would not come out as it is)
     bp.rec = &dr.rec;
-    bool same = false;
-    try {
-      write_syntax(h.type, h.ref_idc, s.ctx, ch, bw, bp);
-      same = dr.log.at_end() && checked_bits(bw, bp.nobins, dr.rec, dr.rbsp);
-    } catch (const std::exception&) {
-    }
-    if (!same) throw Restart{s.st.nals - 1};
+    ErrTrap e;
+    if (setjmp(e.jb)) return false;
+    err_push(e);
+    write_syntax(h.type, h.ref_idc, s.ctx, ch, bw, bp);
+    err_pop(e);
+    if (!dr.log.at_end() || !checked_bits(bw, bp.nobins, dr.rec, dr.rbsp)) return false;
   } else {
     write_syntax(h.type, h.ref_idc, s.ctx, ch, bw, bp);
     if (!dr.log.at_end()) cm_fail("internal: values left over");
@@ -232,6 +227,7 @@ void compress_parsed(Model<0, LV>& m, CompressState& s, const NalHead& h) {
   m.nal(F_CZW, h.type, t.czw);
   s.st.parsed++;
   s.st.trail += t.irregular;
+  return true;
 }
 
 // A NAL unit of the stream (zeros before it; prev_type, the type of the
@@ -284,7 +280,12 @@ int compress_nal(Model<0, LV>& m, CompressState& s, const H264pArgs& a, const st
   }
   if (parsed_type(h.type)) m.nal(F_VERB, h.type, !ok);
   if (ok) {
-    compress_parsed(m, s, h);
+    if (!compress_parsed(m, s, h)) {
+      if (a.verbose)
+        say(a.meter, "h264p: NAL unit %ld would not come out as it is; compressing again, writing back each\n",
+            st.nals - 1);
+      err_jump(*m.run_trap, kRestart);
+    }
   } else {
     // (an SPS or PPS stored verbatim still defines its parameter set
     // where it could be parsed: the dry run has it so)
@@ -298,8 +299,9 @@ int compress_nal(Model<0, LV>& m, CompressState& s, const H264pArgs& a, const st
 
 // Compresses the stream s.rd reads with the model m, a new one, into its
 // output (m is the range coder too, and the coroutine whose output it is,
-// coro.inc): 0, 1 after an error (reported), or kRestart (a.check: a slice
-// did not come out as it is; what the output has is to be thrown away)
+// coro.inc): 0, or 1 after a NAL unit -s would not store verbatim
+// (reported). An error, or a slice the check finds would not come out as
+// it is, ends the run at its trap instead (coro.inc).
 template <class LV>
 int compress_stream(Model<0, LV>& m, CompressState& s, const H264pArgs& a) {
   Crc32& crc = s.crc;
@@ -307,34 +309,25 @@ int compress_stream(Model<0, LV>& m, CompressState& s, const H264pArgs& a) {
   const uint8_t head[2] = {(uint8_t)kCmVersion, (uint8_t)LV::id};
   m.write((const uint8_t*)kCmMagic, sizeof kCmMagic - 1);
   m.write(head, 2);
-  try {
-    m.init();
-    m.tc_verbose = a.verbose;
-    m.rc_Init();
-    std::vector<uint8_t>& nal = s.nal;
-    size_t zeros;
-    bool more = rd.next(zeros, nal);
-    const std::vector<uint8_t>& junk = rd.junk();
-    m.nal(F_JUNK, 0, (i64)junk.size());
-    for (uint8_t b : junk) m.raw(b);
-    crc.add(junk);
-    int prev_type = 0;
-    for (; more; more = rd.next(zeros, nal))
-      if (compress_nal(m, s, a, nal, zeros, prev_type)) return 1;
-    m.nal(F_MORE, 0, 0);
-    m.nal(F_EOFZ, 0, (i64)rd.eof_zeros());
-    crc.zeros(rd.eof_zeros());
-    m.nal(F_CRC, 0, crc.value() ^ kCrcXor);
-    m.end_stream();
-    m.rc_Quit();
-  } catch (const std::exception& e) {  // CmError, or no memory
-    say_error(a.meter, "h264p: %s: %s\n", a.name, e.what());
-    return 1;
-  } catch (const Restart& r) {
-    if (a.verbose)
-      say(a.meter, "h264p: NAL unit %ld would not come out as it is; compressing again, writing back each\n", r.nal);
-    return kRestart;
-  }
+  m.init();
+  m.tc_verbose = a.verbose;
+  m.rc_Init();
+  std::vector<uint8_t>& nal = s.nal;
+  size_t zeros;
+  bool more = rd.next(zeros, nal);
+  const std::vector<uint8_t>& junk = rd.junk();
+  m.nal(F_JUNK, 0, (i64)junk.size());
+  for (uint8_t b : junk) m.raw(b);
+  crc.add(junk);
+  int prev_type = 0;
+  for (; more; more = rd.next(zeros, nal))
+    if (compress_nal(m, s, a, nal, zeros, prev_type)) return 1;
+  m.nal(F_MORE, 0, 0);
+  m.nal(F_EOFZ, 0, (i64)rd.eof_zeros());
+  crc.zeros(rd.eof_zeros());
+  m.nal(F_CRC, 0, crc.value() ^ kCrcXor);
+  m.end_stream();
+  m.rc_Quit();
   if (a.verbose) {
     s.st.report("coded", "changes of x264's padding bits", a.meter);
     cm_report(m, m.n_in, m.n_out, m.table_bytes());
@@ -350,8 +343,9 @@ size_t cm_count(i64 v, i64 lim) {
 
 // Decompresses with the model m, a new one, what is left of its input
 // after the magic, the version and the level, into its output (m is the
-// range decoder too, and the coroutine whose input it reads, coro.inc): 0,
-// or 1 after an error (reported; the output has what was decoded)
+// range decoder too, and the coroutine whose input it reads, coro.inc): 0.
+// An error ends the run at its trap (coro.inc), which writes what was
+// decoded (s.buf) and says why.
 template <class LV>
 int decompress_stream(Model<1, LV>& m, DecompressState& s, const H264pArgs& a) {
   std::vector<uint8_t>& buf = s.buf;
@@ -365,75 +359,63 @@ int decompress_stream(Model<1, LV>& m, DecompressState& s, const H264pArgs& a) {
   auto spill = [&]() {
     if (buf.size() > (1 << 16)) flush();
   };
-  bool failed = false;  // (reported after the handler: flush() may yield, which none may)
-  std::string why;
-  try {
-    m.init();
-    m.tc_verbose = a.verbose;
-    m.rc_Init();
-    Context& ctx = s.ctx;
-    for (size_t n = cm_count(m.nal(F_JUNK, 0, 0), (i64)1 << 40); n; n--) buf.push_back((uint8_t)m.raw(0));
-    int prev_type = 0;
-    while (m.nal(F_MORE, 0, 0)) {
-      nals++;
-      int type = (int)cm_count(m.nal(F_TYPE, prev_type, 0), 32);
-      if (type == 32) {
-        put_start(buf, cm_count(m.nal(F_ZEROS, 32, 0), (i64)1 << 40), spill);
-        for (size_t n = cm_count(m.nal(F_LEN, 32, 0), (i64)1 << 40); n; n--) buf.push_back((uint8_t)m.raw(0));
-        continue;
-      }
-      int ref_idc = (int)cm_count(m.nal(F_REF, type, 0), 3);
-      put_start(buf, cm_count(m.nal(F_ZEROS, type, 0), (i64)1 << 40), spill);
-      buf.push_back((uint8_t)(ref_idc << 5 | type));
-      prev_type = type;
-      size_t start = buf.size();
-      if ((type == 1 || type == 5) && m.nal(F_PADCHG, 0, 0)) {
-        if (m.nal(F_PADON, 0, 0))
-          ctx.pad.set((int64_t)cm_count(m.nal(F_PADFRAME, 0, 0), INT32_MAX));
-        else
-          ctx.pad.on = false;
-      }
-      if (!parsed_type(type) || m.nal(F_VERB, type, 0)) {
-        std::vector<uint8_t> b;  // grown as the bytes come: the length may be corrupt
-        for (size_t n = cm_count(m.nal(F_LEN, type, 0), (i64)1 << 40); n; n--) b.push_back((uint8_t)m.raw(0));
-        put_verbatim(buf, type, b, ctx);
-      } else {
-        ModelChan<1, LV> ch(m, nullptr);
-        m.nal_begin(type, ref_idc);
-        BitWriter bw;
-        int pad = write_syntax(type, ref_idc, ctx, ch, bw, ch.policy());
-        Trailer t;
-        t.irregular = m.nal(F_TRAIL, type, 0) != 0;
-        if (t.irregular) {
-          t.drop = (int64_t)cm_count(m.nal(F_DROP, 0, 0), (i64)bw.pos());
-          t.bits.resize(cm_count(m.nal(F_NBITS, 0, 0), 1 << 16));
-          for (auto& c : t.bits) c = (char)('0' + cm_count(m.nal(F_TBIT, 0, 0), 1));
-          if ((bw.pos() - (size_t)t.drop + t.bits.size()) & 7) cm_fail("corrupt stream: trailing bits");
-        }
-        t.czw = (int64_t)cm_count(m.nal(F_CZW, type, 0), 1 << 26);
-        apply_trailer(t, bw, pad);
-        std::vector<uint8_t> e = escape(bw.data());
-        buf.insert(buf.end(), e.begin(), e.end());
-      }
-      ctx.done(type, buf.data() + start, buf.size() - start);
-      spill();
+  m.init();
+  m.tc_verbose = a.verbose;
+  m.rc_Init();
+  Context& ctx = s.ctx;
+  for (size_t n = cm_count(m.nal(F_JUNK, 0, 0), (i64)1 << 40); n; n--) buf.push_back((uint8_t)m.raw(0));
+  int prev_type = 0;
+  while (m.nal(F_MORE, 0, 0)) {
+    nals++;
+    int type = (int)cm_count(m.nal(F_TYPE, prev_type, 0), 32);
+    if (type == 32) {
+      put_start(buf, cm_count(m.nal(F_ZEROS, 32, 0), (i64)1 << 40), spill);
+      for (size_t n = cm_count(m.nal(F_LEN, 32, 0), (i64)1 << 40); n; n--) buf.push_back((uint8_t)m.raw(0));
+      continue;
     }
-    put_zeros(buf, cm_count(m.nal(F_EOFZ, 0, 0), (i64)1 << 40), spill);
-    m.end_stream();
-    flush();
-    if (m.nal(F_CRC, 0, 0) != (crc.value() ^ kCrcXor)) cm_fail("CRC mismatch: the stream did not decompress correctly");
-    // the coder's flush leaves off the last bytes, so the decoder always
-    // reads past the end of a whole stream
-    if (!m.over) cm_fail("corrupt stream: data after its end");
-  } catch (const std::exception& e) {  // CmError, TsvError
-    failed = true;
-    why = e.what();
+    int ref_idc = (int)cm_count(m.nal(F_REF, type, 0), 3);
+    put_start(buf, cm_count(m.nal(F_ZEROS, type, 0), (i64)1 << 40), spill);
+    buf.push_back((uint8_t)(ref_idc << 5 | type));
+    prev_type = type;
+    size_t start = buf.size();
+    if ((type == 1 || type == 5) && m.nal(F_PADCHG, 0, 0)) {
+      if (m.nal(F_PADON, 0, 0))
+        ctx.pad.set((int64_t)cm_count(m.nal(F_PADFRAME, 0, 0), INT32_MAX));
+      else
+        ctx.pad.on = false;
+    }
+    if (!parsed_type(type) || m.nal(F_VERB, type, 0)) {
+      std::vector<uint8_t> b;  // grown as the bytes come: the length may be corrupt
+      for (size_t n = cm_count(m.nal(F_LEN, type, 0), (i64)1 << 40); n; n--) b.push_back((uint8_t)m.raw(0));
+      put_verbatim(buf, type, b, ctx);
+    } else {
+      ModelChan<1, LV> ch(m, nullptr);
+      m.nal_begin(type, ref_idc);
+      BitWriter bw;
+      int pad = write_syntax(type, ref_idc, ctx, ch, bw, ch.policy());
+      Trailer t;
+      t.irregular = m.nal(F_TRAIL, type, 0) != 0;
+      if (t.irregular) {
+        t.drop = (int64_t)cm_count(m.nal(F_DROP, 0, 0), (i64)bw.pos());
+        t.bits.resize(cm_count(m.nal(F_NBITS, 0, 0), 1 << 16));
+        for (auto& c : t.bits) c = (char)('0' + cm_count(m.nal(F_TBIT, 0, 0), 1));
+        if ((bw.pos() - (size_t)t.drop + t.bits.size()) & 7) cm_fail("corrupt stream: trailing bits");
+      }
+      t.czw = (int64_t)cm_count(m.nal(F_CZW, type, 0), 1 << 26);
+      apply_trailer(t, bw, pad);
+      std::vector<uint8_t> e = escape(bw.data());
+      buf.insert(buf.end(), e.begin(), e.end());
+    }
+    ctx.done(type, buf.data() + start, buf.size() - start);
+    spill();
   }
-  if (failed) {
-    flush();  // what was decoded
-    say_error(a.meter, "h264p: %s: %s\n", a.name, why.c_str());
-    return 1;
-  }
+  put_zeros(buf, cm_count(m.nal(F_EOFZ, 0, 0), (i64)1 << 40), spill);
+  m.end_stream();
+  flush();
+  if (m.nal(F_CRC, 0, 0) != (crc.value() ^ kCrcXor)) cm_fail("CRC mismatch: the stream did not decompress correctly");
+  // the coder's flush leaves off the last bytes, so the decoder always
+  // reads past the end of a whole stream
+  if (!m.over) cm_fail("corrupt stream: data after its end");
   if (a.verbose) say(a.meter, "%ld NAL units\n", nals);
   return 0;
 }

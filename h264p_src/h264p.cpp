@@ -85,10 +85,5 @@ int main(int argc, char** argv) {
     usage();
     return 2;
   }
-  try {
-    return argv[1][0] == 'c' ? code(files[0], files[1], opt) : decode(files[0], files[1], opt);
-  } catch (const std::exception& e) {  // no memory
-    fprintf(stderr, "h264p: %s\n", e.what());
-    return 1;
-  }
+  return argv[1][0] == 'c' ? code(files[0], files[1], opt) : decode(files[0], files[1], opt);
 }

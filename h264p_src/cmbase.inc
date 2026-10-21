@@ -59,18 +59,15 @@ typedef u8 byte;
 typedef u16 word;  // idx2inc.pl's maps of variables with more than 256 values
 typedef u32 uint;
 
-// The compressed stream cannot be decoded, or a model table cannot be had.
-struct CmError : std::runtime_error {
-  explicit CmError(const std::string& s) : std::runtime_error(s) {}
-};
-
+// The compressed stream cannot be decoded, or a model table cannot be
+// had: an error (err.inc)
 [[noreturn]] static void cm_fail(const char* fmt, ...) {
-  char buf[512];
+  char buf[256];
   va_list ap;
   va_start(ap, fmt);
   vsnprintf(buf, sizeof buf, fmt, ap);
   va_end(ap);
-  throw CmError(buf);
+  err_raise_s(buf);
 }
 
 // 0..3 as they are, then two buckets per octave: a magnitude class

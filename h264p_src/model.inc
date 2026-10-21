@@ -981,6 +981,8 @@ struct Model : tc_rc<f_DEC> {
 #undef H_BYTES
     return n;
   }
+  ErrTrap* run_trap = nullptr;  // the trap of the run (coro.inc): kRestart goes there
+
   // (a build with H264P_DUMP: a compression that starts over, kRestart,
   // drops what it dumped)
   void dump_discard() {
@@ -3357,9 +3359,7 @@ struct ModelChan : Chan {
     if (ENC) log_->pcm(align, nb, s, n);
     m_.pcm(align, nb, s, n);
   }
-  [[noreturn]] void fail(const std::string& msg) override {
-    throw CmError(std::string(ENC ? "internal: " : "corrupt stream: ") + msg);
-  }
+  [[noreturn]] void fail(const char* why) override { err_raise("%s%s", ENC ? "internal: " : "corrupt stream: ", why); }
 
   Model<f_DEC, LV>& m_;
   LogChan* log_;

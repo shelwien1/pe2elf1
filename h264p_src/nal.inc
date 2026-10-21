@@ -183,7 +183,8 @@ bool repad(PadDetector& det, int obs, X264Padding& pad) {
 // written to bw (with the rbsp_stop_one_bit), either way by the same walk
 // (Syn's direction), a slice's bins as bp says; parameter sets are stored
 // in the context. Returns x264's padding bit for the end of CABAC slice
-// data, else -1. Throws ParseError parsing, what the channel throws writing.
+// data, else -1. What cannot be parsed or written raises an error
+// (err.inc), as the channel puts it.
 int code_nal(int type, int ref_idc, Context& ctx, Chan& ch, BitReader* br, BitWriter* bw, const BinPolicy& bp) {
   Syn s = br ? Syn(br, &ch) : Syn(&ch, bw);
   switch (type) {
@@ -210,7 +211,7 @@ int code_nal(int type, int ref_idc, Context& ctx, Chan& ch, BitReader* br, BitWr
       break;
     case 10:
     case 11:  // (empty: no stop bit either)
-      if (br && br->size()) throw ParseError("end of sequence/stream NAL unit with data");
+      if (br && br->size()) err_raise("end of sequence/stream NAL unit with data");
       return -1;
     case 1:
     case 5: {
@@ -227,8 +228,8 @@ int code_nal(int type, int ref_idc, Context& ctx, Chan& ch, BitReader* br, BitWr
       return h.pps->entropy_coding_mode_flag ? h.pad : -1;
     }
     default:  // (writing, only the types parsed: the others are stored verbatim)
-      if (br) throw ParseError("unsupported NAL unit type");
-      throw TsvError("internal: NAL unit type " + std::to_string(type) + " written");
+      if (br) err_raise("unsupported NAL unit type");
+      err_raise("internal: NAL unit type %d written", type);
   }
   if (bw) bw->bit(1);  // rbsp_stop_one_bit
   return -1;
@@ -314,14 +315,16 @@ bool find_trailer(const BitWriter& bw, int pad, const std::vector<uint8_t>& rbsp
   return true;
 }
 
-// SPS and PPS stored verbatim still define parameter sets.
+// SPS and PPS stored verbatim still define parameter sets (where they
+// parse: an error is of no matter)
 void update_params(int type, const std::vector<uint8_t>& rbsp, Context& ctx) {
   if (type != 7 && type != 8) return;
-  try {
-    LogChan ch;
-    read_nal(type, 0, rbsp, ctx, ch);
-  } catch (const ParseError&) {
-  }
+  LogChan ch;
+  ErrTrap t;
+  if (setjmp(t.jb)) return;
+  err_push(t);
+  read_nal(type, 0, rbsp, ctx, ch);
+  err_pop(t);
 }
 
 // The RBSP of a NAL unit's payload, to parse (rbsp), or false when the NAL
@@ -349,15 +352,17 @@ bool nal_rbsp(const NalHead& h, Context& ctx, std::vector<uint8_t>& rbsp, std::s
 template <class Ch>
 bool write_back(const NalHead& h, Context& ctx, Ch& ch, const std::vector<uint8_t>& rbsp, Trailer& t,
                 std::string& why, int& obs) {
-  try {
-    BitWriter bw;
-    int pad = write_syntax(h.type, h.ref_idc, ctx, ch, bw);
-    if (!ch.at_end()) throw TsvError("values left over");
-    return find_trailer(bw, pad, rbsp, t, why, obs);
-  } catch (const std::exception& e) {
-    why = std::string("re-encoding failed: ") + e.what();
+  BitWriter bw;
+  ErrTrap e;
+  if (setjmp(e.jb)) {
+    why = std::string("re-encoding failed: ") + e.why;
     return false;
   }
+  err_push(e);
+  int pad = write_syntax(h.type, h.ref_idc, ctx, ch, bw);
+  if (!ch.at_end()) err_raise("values left over");
+  err_pop(e);
+  return find_trailer(bw, pad, rbsp, t, why, obs);
 }
 
 // The output of d: n zero bytes appended to buf, spill() after each

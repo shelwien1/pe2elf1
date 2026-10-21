@@ -53,7 +53,7 @@ struct CabacDecoder {
     while (br->pos_ & 7) val_ |= (uint64_t)br->bit() << (kB - ++nb_);
     p_ = data_ + br->pos_ / 8;
     while (nb_ < 0) refill();
-    if (val_ >> kB >= 510) throw ParseError("invalid CABAC data");
+    if (val_ >> kB >= 510) err_raise("invalid CABAC data");
   }
   // (without branches on the bin: an LPS selects its values)
   int decision(CabacCtx& c) {
@@ -108,7 +108,7 @@ struct CabacDecoder {
       p_ += 4;
       return;
     }
-    if (nb_ < 0 && p_ == end_) throw ParseError("unexpected end of NAL unit");
+    if (nb_ < 0 && p_ == end_) err_raise("unexpected end of NAL unit");
     for (; p_ < end_ && nb_ < 24; nb_ += 8) val_ |= (uint64_t)*p_++ << (kB - 8 - nb_);
   }
   BitReader* br_ = nullptr;
@@ -125,7 +125,7 @@ struct CabacEncoder {
   // the standard's PutBit() leaves out, bit 9, is the first cut_, always 0
   // (the code value stays below 510 / 512).
   void init(BitWriter* bw) {
-    if (bw->n_ & 7) throw std::logic_error("CABAC data not byte aligned");
+    if (bw->n_ & 7) err_raise("internal: CABAC data not byte aligned");
     bw_ = bw;
     start_ = bw->buf_.size();
     low_ = 0;

@@ -32,7 +32,7 @@ $(OBJDIR)/%.o: codec/%.cpp | $(OBJDIR)
 	$(CXX) $(CPPFLAGS) -Icodec $(CXXFLAGS) -fno-strict-aliasing -pthread -MMD -MP -c $< -o $@
 
 $(OBJDIR)/h264p/%.o: h264p_src/%.cpp | $(OBJDIR)/h264p
-	$(CXX) $(CPPFLAGS) -Ih264p_src/Lib3 $(CXXFLAGS) $(PARCH) -std=c++11 -fwrapv -pthread -MMD -MP -c $< -o $@
+	$(CXX) $(CPPFLAGS) -Ih264p_src/Lib3 $(CXXFLAGS) $(PARCH) -std=c++11 -fwrapv -fno-exceptions -fno-rtti -pthread -MMD -MP -c $< -o $@
 
 $(OBJDIR) $(OBJDIR)/h264p:
 	mkdir -p $@

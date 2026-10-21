@@ -42,6 +42,7 @@
 #include "../Lib3/common.inc"
 #include "../Lib3/coro3b.inc"
 
+#include "../err.inc"
 #include "../cmbase.inc"
 #include "../rcio.inc"
 #include "../rc.inc"
@@ -167,13 +168,16 @@ struct Replay : tc_rc<0> {
   std::string err;  // empty: done
   void do_process() {
     io_init();
-    try {
+    ErrTrap t;  // (an error: err.inc)
+    if (!setjmp(t.jb)) {
+      err_push(t);
       rc_Init();
 #define FT_FAM(F) !strcmp(argv[1], #F) ? replay<FtLv::F>(argv + 2, argc - 2, *this) :
       H264P_FAMS(FT_FAM) cm_fail("famtune: no family %s", argv[1]);
 #undef FT_FAM
-    } catch (const std::exception& e) {
-      err = e.what();
+      err_pop(t);
+    } else {
+      err = t.why;
     }
     for (;;) yield(static_cast<Coroutine*>(this), err.empty() ? 0 : 3);
   }

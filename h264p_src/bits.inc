@@ -2,18 +2,9 @@
 
 namespace h264p {
 
-// The input stream cannot be parsed (syntax error or unsupported feature):
-// the NAL unit is then stored verbatim.
-struct ParseError : std::runtime_error {
-  explicit ParseError(const std::string& s) : std::runtime_error(s) {}
-};
-
-// The values a channel gives cannot be written: when the compressor writes
-// back what it parsed (its dry run, its model pass), an inconsistency (c
-// then stores the NAL unit verbatim, or fails).
-struct TsvError : std::runtime_error {
-  explicit TsvError(const std::string& s) : std::runtime_error(s) {}
-};
+// What cannot be parsed (a syntax error or a feature not supported), or
+// written (the values a channel gives are inconsistent), raises an error
+// (err.inc): the compressor's dry run then stores the NAL unit verbatim.
 
 struct BitReader {
   BitReader(const uint8_t* data, size_t size) : data_(data), nbits_(size * 8), pos_(0) {
@@ -33,7 +24,7 @@ struct BitReader {
   bool more_rbsp_data() const { return (int64_t)pos_ < last_one_; }
 
   int bit() {
-    if (pos_ >= nbits_) throw ParseError("unexpected end of NAL unit");
+    if (pos_ >= nbits_) err_raise("unexpected end of NAL unit");
     int b = (data_[pos_ >> 3] >> (7 - (pos_ & 7))) & 1;
     pos_++;
     return b;
@@ -54,13 +45,13 @@ struct BitReader {
     return v;
   }
   void skip(int n) {
-    if (pos_ + n > nbits_) throw ParseError("unexpected end of NAL unit");
+    if (pos_ + n > nbits_) err_raise("unexpected end of NAL unit");
     pos_ += n;
   }
   uint32_t ue() {
     int lz = 0;
     while (!bit())
-      if (++lz > 31) throw ParseError("invalid Exp-Golomb code");
+      if (++lz > 31) err_raise("invalid Exp-Golomb code");
     return lz ? (uint32_t)((1ull << lz) - 1 + u(lz)) : 0;
   }
   int64_t se() {

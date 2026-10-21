@@ -40,16 +40,29 @@ struct H264pCoro : Model<f_DEC, LV> {
   }
   ~H264pCoro() { Quit(); }
 
+  // The run, in a trap (err.inc) that an error ends it at: said, after
+  // what was decoded is written (d keeps it); or kRestart, a slice the
+  // model pass's check found would not come out as it is (compress_nal()),
+  // what it dumped then dropped. The coroutine yields from here, its stack
+  // shallow again.
   void do_process() {
-    int r = 1;
+    int r;
     this->io_init();
-    try {
+    ErrTrap t;
+    if (!setjmp(t.jb)) {
+      err_push(t);
+      this->run_trap = &t;
       r = run(std::integral_constant<int, f_DEC>());
-    } catch (const std::exception& e) {  // no memory for the model (nothing in a handler may yield)
-      say_error(args.meter, "h264p: %s: %s\n", args.name, e.what());
-    } catch (...) {
-      say_error(args.meter, "h264p: %s: an unknown exception\n", args.name);
+      err_pop(t);
+    } else if (t.code == kRestart) {
+      r = kRestart;
+      this->dump_discard();  // (what it dumped goes: it starts over)
+    } else {
+      r = 1;
+      if (st) written(std::integral_constant<int, f_DEC>());
+      say_error(args.meter, "h264p: %s: %s\n", args.name, t.why);
     }
+    this->run_trap = nullptr;
     delete st;
     st = nullptr;
     if (args.verbose) {
@@ -63,9 +76,7 @@ struct H264pCoro : Model<f_DEC, LV> {
   // compressing
   int run(std::integral_constant<int, 0>) {
     st = new CompressState(this->source());
-    int r = compress_stream<LV>(*this, *st, args);
-    if (r == kRestart) this->dump_discard();  // (what it dumped goes: it starts over)
-    return r;
+    return compress_stream<LV>(*this, *st, args);
   }
 
   // decompressing: the magic, the version and the level (this model's),
@@ -81,6 +92,9 @@ struct H264pCoro : Model<f_DEC, LV> {
     }
     return decompress_stream<LV>(*this, *st, args);
   }
+  // after an error: decompressing, what was decoded, written
+  void written(std::integral_constant<int, 0>) {}
+  void written(std::integral_constant<int, 1>) { this->write(st->buf.data(), st->buf.size()), st->buf.clear(); }
 };
 
 // The coroutine of a call of c or d (or of a part, mt.inc), constructed

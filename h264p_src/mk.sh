@@ -103,7 +103,7 @@ generate() {
 build() {
   out=$1
   shift
-  $CXX $CXXFLAGS $PARCH -std=c++11 -fwrapv -ILib3 -pthread "$@" -o "$out" h264p.cpp
+  $CXX $CXXFLAGS $PARCH -std=c++11 -fwrapv -fno-exceptions -fno-rtti -ILib3 -pthread "$@" -o "$out" h264p.cpp
 }
 
 level() {
@@ -191,7 +191,7 @@ case "${1:-}" in
     # (MOD/lL back in the shipping form however the build ends)
     trap 'rm -rf "$tmp"; generate "$lv" 0 1; cleanup' EXIT
     generate "$lv" 1 0
-    $CXX $CXXFLAGS $PARCH -std=c++11 -fwrapv -DH264P_ONLY="$lv" -o "$tmp/famtune" IDX/famtune.cpp
+    $CXX $CXXFLAGS $PARCH -std=c++11 -fwrapv -fno-exceptions -fno-rtti -DH264P_ONLY="$lv" -o "$tmp/famtune" IDX/famtune.cpp
     cp "$tmp/famtune" ../famtune
     perl -e 'undef $/; $_ = <>;
              while( /!MAP!(.*?)!(.*?)\x00(.*?)\x00/gs ) { $n++; $b += length $3 }

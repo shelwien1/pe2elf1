@@ -22,8 +22,9 @@ includes `h264p_src/h264p.inc`, which includes the rest of its sources
 `h264p_src/MTwrap_v3`, which includes `Lib3/win_shim.inc` by its name
 alone, as mtwrap builds it; a program of its own includes `h264p.inc` for
 h264p's coroutines), so
-`g++ -O2 -march=x86-64-v3 -std=c++11 -fwrapv -Ih264p_src/Lib3 -pthread h264p_src/h264p.cpp -o h264p`
-builds it too. Its target is x86-64-v3 (AVX2:
+`g++ -O2 -march=x86-64-v3 -std=c++11 -fwrapv -fno-exceptions -fno-rtti -Ih264p_src/Lib3 -pthread h264p_src/h264p.cpp -o h264p`
+builds it too: it uses neither C++ exceptions nor RTTI (its errors jump
+to traps the callers set, `h264p_src/err.inc`). Its target is x86-64-v3 (AVX2:
 Haswell, Zen and later), for which its pixel kernels and mixers have SIMD
 code; built for any other target (`make PARCH=`, or without `-march`) it
 uses the plain C++ beside them, which is slower and codes identically

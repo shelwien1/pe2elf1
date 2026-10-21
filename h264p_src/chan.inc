@@ -67,8 +67,9 @@ struct Chan {
   // its bins cannot count them)
   virtual void pcm(int& align, int& nb, int* s, int n) = 0;
 
-  // an inconsistency found while writing
-  [[noreturn]] virtual void fail(const std::string& msg) = 0;
+  // an inconsistency found while writing: raises it (err.inc), as the
+  // channel puts it
+  [[noreturn]] virtual void fail(const char* why) = 0;
 };
 
 }  // namespace h264p

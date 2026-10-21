@@ -91,7 +91,7 @@ struct LogChan : Chan {
     align = io32(align);
     io32(s, n);
   }
-  [[noreturn]] void fail(const std::string& msg) override { throw TsvError(msg); }
+  [[noreturn]] void fail(const char* why) override { err_raise_s(why); }
 
   std::vector<int32_t> v_;  // the values (only grows: its room stays for the next NAL unit)
   size_t pos_ = 0;           // the next one to read

@@ -11,15 +11,19 @@ namespace h264p {
 // member of Syn, a constant of the slice walk's mode.)
 template <class D>
 struct WalkCodes {
-  // an inconsistency the walk found: parsing, the stream cannot be parsed
-  // (ParseError); writing, what the channel throws (else a TsvError)
-  [[noreturn]] void fail(const std::string& msg) {
-    if (!d().W) throw ParseError(msg);
-    d().ch_->fail(msg);
-    throw TsvError(msg);  // not reached
+  // an inconsistency the walk found (err_raise(), err.inc): parsing, the
+  // stream cannot be parsed; writing, the channel says what it means
+  [[noreturn]] void fail(const char* fmt, ...) {
+    char why[256];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(why, sizeof why, fmt, ap);
+    va_end(ap);
+    if (d().W) d().ch_->fail(why);
+    err_raise_s(why);
   }
   int64_t check(int64_t v, int64_t lo, int64_t hi) {
-    if (v < lo || v > hi) fail("value " + std::to_string(v) + " out of range");
+    if (v < lo || v > hi) fail("value %" PRId64 " out of range", v);
     return v;
   }
   // u(n), ue(v) and se(v): parsing, the value read (v unused); writing, v
@@ -150,7 +154,7 @@ struct Syn : WalkCodes<Syn> {
   // (the walk and the channel go the same way: a channel's direction is
   // the walk's, of the headers as of the slice data)
   void same_way() const {
-    if (ch_->W != W) throw std::logic_error("the walk and its channel go different ways");
+    if (ch_->W != W) err_raise("internal: the walk and its channel go different ways");
   }
 };
 
