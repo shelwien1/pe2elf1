@@ -447,7 +447,7 @@ void code_sps(Syn& s, Sps& p) {
     for (int i = 0; i < p.num_ref_frames_in_poc_cycle; i++) p.offset_for_ref_frame[i] = s.vse(-kS32, kS32);
     s.end();
   }
-  p.max_num_ref_frames = (int)std::min<int64_t>(s.ue("max_num_ref_frames", 0, kU32), 1 << 16);
+  p.max_num_ref_frames = (int)Min<int64_t>(s.ue("max_num_ref_frames", 0, kU32), 1 << 16);
   s.u("gaps_in_frame_num_value_allowed_flag", 1);
   p.width_mbs = 1 + (int)s.ue("pic_width_in_mbs_minus1", 0, 4095);
   p.height_map_units = 1 + (int)s.ue("pic_height_in_map_units_minus1", 0, 4095);
@@ -661,7 +661,7 @@ void code_slice_header(Syn& s, SliceHeader& h, const ParamSets& ps) {
     s.se("slice_qs_delta", -kS32, kS32);
   }
   if (pps.deblocking_filter_control_present_flag) {
-    h.disable_deblocking = (int)std::min<int64_t>(s.ue("disable_deblocking_filter_idc", 0, kU32), 3);
+    h.disable_deblocking = (int)Min<int64_t>(s.ue("disable_deblocking_filter_idc", 0, kU32), 3);
     if (h.disable_deblocking != 1) {
       h.alpha_offset = 2 * (int)tc_clamp64(s.se("slice_alpha_c0_offset_div2", -kS32, kS32), -6, 6);
       h.beta_offset = 2 * (int)tc_clamp64(s.se("slice_beta_offset_div2", -kS32, kS32), -6, 6);

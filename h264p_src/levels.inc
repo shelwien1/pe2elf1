@@ -53,7 +53,7 @@ int with_level(int level, A&&... a) {
   switch (level) {
 #define H264P_W(n) \
   case n:          \
-    return F<Lv##n>::run(std::forward<A>(a)...);
+    return F<Lv##n>::run(static_cast<A&&>(a)...);
     H264P_LEVELS(H264P_W)
 #undef H264P_W
   }

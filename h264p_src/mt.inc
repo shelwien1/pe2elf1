@@ -47,7 +47,7 @@ void mt_head(uint8_t* head, int threads, uint32_t part) {
 }
 // The size past which a part ends at any picture (with no IDR or I access
 // unit to cut at), for the memory a part takes and its record's 32 bits
-uint64_t mt_cap(uint32_t part) { return std::min<uint64_t>(4 * (uint64_t)part, (uint64_t)1 << 31); }
+uint64_t mt_cap(uint32_t part) { return Min<uint64_t>(4 * (uint64_t)part, (uint64_t)1 << 31); }
 
 // A worker's counts for the progress line: its input and its output so
 // far (their parts' and the part's under way), read from any thread
@@ -72,7 +72,7 @@ int run_part(const H264pArgs& a, Buf<uint8_t>& in, Buf<uint8_t>& out, PartProg& 
   c->Init(&a);
   size_t pos = 0;
   auto feed = [&]() {  // the next piece of the part (addinp() takes 32 bits), or its end
-    size_t l = std::min(in.size() - pos, (size_t)1 << 30);
+    size_t l = Min(in.size() - pos, (size_t)1 << 30);
     if (!l) c->f_quit = 1;
     c->addinp(in.data() + pos, (uint)l);
     pos += l;
@@ -89,7 +89,7 @@ int run_part(const H264pArgs& a, Buf<uint8_t>& in, Buf<uint8_t>& out, PartProg& 
           return;
         }
         if (done == out.size()) out.resize(done * 2);  // (the output full: twice the room)
-        c->addout(out.data() + done, (uint)std::min(out.size() - done, (size_t)1 << 16));
+        c->addout(out.data() + done, (uint)Min(out.size() - done, (size_t)1 << 16));
       },
       [&]() {
         prog.set(in0 + c->n_in, out0 + c->n_out);
@@ -130,7 +130,7 @@ struct H264pPart : CoroIo {
   // returns its status)
   void do_process() {
     io_init();
-    int r = run(std::integral_constant<int, f_DEC>());
+    int r = run(IntTag<f_DEC>());
     Quit();
     for (;;) yield(static_cast<Coroutine*>(this), r ? 3 : 0);
   }
@@ -162,7 +162,7 @@ struct H264pPart : CoroIo {
 
   // compressing: each part as the splitter frames it (u64 L, u32 nins,
   // then the part, L-4 bytes) into its record
-  int run(std::integral_constant<int, 0>) {
+  int run(IntTag<0>) {
     for (;;) {
       uint8_t h[16];
       size_t n = read(h, 12);
@@ -200,7 +200,7 @@ struct H264pPart : CoroIo {
   // decompressing: each record into its part, the inserted parameter sets
   // removed, at the end of which MTwrap takes the next part from the next
   // worker
-  int run(std::integral_constant<int, 1>) {
+  int run(IntTag<1>) {
     for (;;) {
       uint8_t h[16];
       size_t n = read(h, 16);
@@ -209,7 +209,7 @@ struct H264pPart : CoroIo {
       uint64_t g_size = get_le(h, 4), nins = get_le(h + 4, 4), plen = get_le(h + 8, 8);
       if (g_size < 16 || !take(g_size - 16)) return fail("a part's record cut short or broken");
       H264pArgs a = args;
-      a.level = cm_level(in_.data(), std::min(in_.size(), sizeof kCmMagic + 1), args.name, args.meter);
+      a.level = cm_level(in_.data(), Min(in_.size(), sizeof kCmMagic + 1), args.name, args.meter);
       uint64_t in0 = prog.in(), out0 = prog.out();
       if (a.level < 0 || code(a, in0 + 16, out0)) return 1;
       size_t ins, pos;

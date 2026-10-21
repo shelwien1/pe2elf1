@@ -1,6 +1,9 @@
-// Memory and arrays, without the C++ library's containers: mem_alloc()
-// and its kin end the run when there is no memory (err_fatal(), err.inc),
-// and Buf<T> is a growable array of plain data.
+// Memory and arrays, and the few other things h264p would take from the
+// C++ library (it takes none): mem_alloc() and its kin end the run when
+// there is no memory (err_fatal(), err.inc), Buf<T> is a growable array of
+// plain data and Map32<V> a map of 32-bit keys; Min() and Max() are
+// std::min's and std::max's, and IntTag, Pick, NoRef, SameType and Extent
+// what h264p used of <type_traits>.
 //
 // Like h264p's other structs, a Buf has no constructor or destructor:
 // Init() sets it up empty, Quit() frees it (and leaves it empty, set up
@@ -8,6 +11,56 @@
 // copies its elements), so neither is a struct that holds one.
 
 namespace h264p {
+
+// the smaller and the larger of two values of a type (b and a where they
+// are equal, as std::min and std::max)
+template <class T>
+INLINE T Min(T a, T b) {
+  return b < a ? b : a;
+}
+template <class T>
+INLINE T Max(T a, T b) {
+  return a < b ? b : a;
+}
+INLINE int64_t abs64(int64_t v) { return v < 0 ? -v : v; }
+
+// a type for each int (a function's overload for each value of a template
+// argument); T if B, else F; T without its reference; whether two types
+// are one; the size of an array type's first dimension (0: not an array)
+template <int N>
+struct IntTag {};
+template <bool B, class T, class F>
+struct Pick {
+  typedef T type;
+};
+template <class T, class F>
+struct Pick<false, T, F> {
+  typedef F type;
+};
+template <class T>
+struct NoRef {
+  typedef T type;
+};
+template <class T>
+struct NoRef<T&> {
+  typedef T type;
+};
+template <class A, class B>
+struct SameType {
+  static const bool value = false;
+};
+template <class A>
+struct SameType<A, A> {
+  static const bool value = true;
+};
+template <class T>
+struct Extent {
+  static const size_t value = 0;
+};
+template <class T, size_t N>
+struct Extent<T[N]> {
+  static const size_t value = N;
+};
 
 void* mem_alloc(size_t n) {
   void* p = malloc(n ? n : 1);

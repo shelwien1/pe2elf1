@@ -146,7 +146,7 @@ struct MtProg {
 void mt_enc_counts(void* c, uint64_t& raw, uint64_t& packed, uint64_t& pos) {
   MtProg& p = *(MtProg*)c;
   mt_done(((MtEnc*)p.m)->M2, raw, packed);
-  pos = raw = p.pr->total ? std::min(raw, p.pr->total) : raw;  // (parts have their parameter sets copied in)
+  pos = raw = p.pr->total ? Min(raw, p.pr->total) : raw;  // (parts have their parameter sets copied in)
   packed += kMtHead;
 }
 void mt_dec_counts(void* c, uint64_t& raw, uint64_t& packed, uint64_t& pos) {

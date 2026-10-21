@@ -218,7 +218,7 @@ static int sad_bil(const uint8_t* q, int qs, const uint8_t* a, int as, int n, in
         s = sad_sum(acc);
         if (s >= budget) break;
       }
-      return std::min(s, budget);
+      return Min(s, budget);
     }
     // rows of 8 in the two halves, of 4 in the low two quarters
     auto ld = [n](const uint8_t* p0, const uint8_t* p1) { return ld8x2(p0, p1, n); };
@@ -241,7 +241,7 @@ static int sad_bil(const uint8_t* q, int qs, const uint8_t* a, int as, int n, in
       s = sum64x2(acc);
       if (s >= budget) break;
     }
-    return std::min(s, budget);
+    return Min(s, budget);
   }
 #endif
   int wa = (4 - fx) * (4 - fy), wb = fx * (4 - fy), wc = (4 - fx) * fy, wd = fx * fy;
@@ -252,7 +252,7 @@ static int sad_bil(const uint8_t* q, int qs, const uint8_t* a, int as, int n, in
     else
       for (int i = 0; i < n; i++) s += abs(q[i] - bil1(wa, wb, wc, wd, a[i], a[i + 1], c[i], c[i + 1], 8, 4));
   }
-  return std::min(s, budget);
+  return Min(s, budget);
 }
 #ifdef H264P_AVX2
 // the weights of the bilinear prediction at (fx, fy), by fx + 4 fy, as
@@ -288,7 +288,7 @@ static int sad_bil32(const uint8_t* q, int qs, const uint8_t* a, int as, int row
       acc = _mm256_add_epi64(acc, _mm256_sad_epu8(ld(a), ld(q)));
       if ((j & 3) == 3 && (s = sad_sum(acc)) >= budget) return budget;
     }
-    return std::min(sad_sum(acc), budget);
+    return Min(sad_sum(acc), budget);
   }
   const __m256i wab = kBilW.ab[fx + 4 * fy], wcd = kBilW.cd[fx + 4 * fy], r8 = _mm256_set1_epi16(8);
   __m256i x0 = ld(a), x1 = ld(a + 1);
@@ -303,7 +303,7 @@ static int sad_bil32(const uint8_t* q, int qs, const uint8_t* a, int as, int row
     plo = nlo, phi = nhi;
     if ((j & 3) == 3 && (s = sad_sum(acc)) >= budget) return budget;
   }
-  return std::min(sad_sum(acc), budget);
+  return Min(sad_sum(acc), budget);
 }
 #endif
 #ifdef H264P_AVX2

@@ -42,7 +42,7 @@ struct CoroIo : Coroutine {
     size_t k = 0;
     while (k < n) {
       if (inpptr >= inpend && !next_input()) break;
-      size_t l = std::min(n - k, (size_t)(inpend - inpptr));
+      size_t l = Min(n - k, (size_t)(inpend - inpptr));
       memcpy(p + k, inpptr, l);
       inpptr += l;
       k += l;
@@ -55,7 +55,7 @@ struct CoroIo : Coroutine {
   void write(const uint8_t* p, size_t n) {
     while (n) {
       if (outptr >= outend) next_output();
-      size_t l = std::min(n, (size_t)(outend - outptr));
+      size_t l = Min(n, (size_t)(outend - outptr));
       memcpy(outptr, p, l);
       outptr += l;
       p += l;

@@ -24,7 +24,7 @@ namespace h264p {
 
 template <int f_DEC, class LV>
 struct H264pCoro : Model<f_DEC, LV> {
-  typedef typename std::conditional<f_DEC != 0, DecompressState, CompressState>::type State;
+  typedef typename Pick<f_DEC != 0, DecompressState, CompressState>::type State;
 
   H264pArgs args;
   State* st;
@@ -57,14 +57,14 @@ struct H264pCoro : Model<f_DEC, LV> {
     if (!setjmp(t.jb)) {
       err_push(t);
       this->run_trap = &t;
-      r = run(std::integral_constant<int, f_DEC>());
+      r = run(IntTag<f_DEC>());
       err_pop(t);
     } else if (t.code == kRestart) {
       r = kRestart;
       this->dump_discard();  // (what it dumped goes: it starts over)
     } else {
       r = 1;
-      if (st) written(std::integral_constant<int, f_DEC>());
+      if (st) written(IntTag<f_DEC>());
       say_error(args.meter, "h264p: %s: %s\n", args.name, t.why);
     }
     this->run_trap = nullptr;
@@ -78,7 +78,7 @@ struct H264pCoro : Model<f_DEC, LV> {
   }
 
   // compressing
-  int run(std::integral_constant<int, 0>) {
+  int run(IntTag<0>) {
     st = (CompressState*)mem_alloc(sizeof(CompressState));
     st->Init(this->source());
     return compress_stream<LV>(*this, *st, args);
@@ -86,7 +86,7 @@ struct H264pCoro : Model<f_DEC, LV> {
 
   // decompressing: the magic, the version and the level (this model's),
   // then the model on the rest
-  int run(std::integral_constant<int, 1>) {
+  int run(IntTag<1>) {
     st = (DecompressState*)mem_alloc(sizeof(DecompressState));
     st->Init();
     uint8_t head[sizeof kCmMagic + 1];
@@ -99,8 +99,8 @@ struct H264pCoro : Model<f_DEC, LV> {
     return decompress_stream<LV>(*this, *st, args);
   }
   // after an error: decompressing, what was decoded, written
-  void written(std::integral_constant<int, 0>) {}
-  void written(std::integral_constant<int, 1>) { this->write(st->buf.data(), st->buf.size()), st->buf.clear(); }
+  void written(IntTag<0>) {}
+  void written(IntTag<1>) { this->write(st->buf.data(), st->buf.size()), st->buf.clear(); }
 };
 
 // The coroutine of a call of c or d (or of a part, mt.inc), on pages of

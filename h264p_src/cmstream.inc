@@ -15,7 +15,7 @@ const uint32_t kCrcXor = 0x68323634;
 // h264p's
 int cm_level(const uint8_t* head, size_t n, const char* name, Progress* meter = nullptr) {
   const size_t m = sizeof kCmMagic - 1;  // the magic's bytes; the version, the level after them
-  if (!n || memcmp(head, kCmMagic, std::min(n, m))) {
+  if (!n || memcmp(head, kCmMagic, Min(n, m))) {
     say_error(meter, "h264p: %s: not a stream h264p compressed\n", name);
     return -1;
   }

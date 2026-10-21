@@ -111,7 +111,7 @@ struct Progress {
     double mbs = raw / (t * 1e-9) / (1 << 20);
     char b[192];
     int n = total ? snprintf(b, sizeof b, "[%s] %" PRIu64 " > %" PRIu64 "  %5.1f%%  %5.2f MB/s  %5.2fM RAM", tag, raw,
-                             packed, std::min(100.0, 100.0 * pos / total), mbs, ram(false))
+                             packed, Min(100.0, 100.0 * pos / total), mbs, ram(false))
                   : snprintf(b, sizeof b, "[%s] %" PRIu64 " > %" PRIu64 "  %5.2f MB/s  %5.2fM RAM", tag, raw, packed,
                              mbs, ram(false));
     lock.lock();

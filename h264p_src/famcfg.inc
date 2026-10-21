@@ -62,7 +62,7 @@ struct FC_NAME {
   static INLINE void make(const V& D, tcx& X) { FCX(make)(D, X); }
   // the counters' type (the level's template of the family declares their
   // tables): cm_cnt2, or cm_cnt2s with their probabilities kept stretched
-  typedef typename std::remove_reference<decltype(((T*)nullptr)->FCX(A)[0])>::type Cnt;
+  typedef typename NoRef<decltype(((T*)nullptr)->FCX(A)[0])>::type Cnt;
   static void init(T* t) { t->FCX(Init)(); }
   static void quit(T* t) { t->FCX(Quit)(); }  // (the tuning build: its tables unmapped)
   static u64 bytes(const T* t) { return t->FCX(Size); }
@@ -90,7 +90,7 @@ struct FC_NAME {
   // the tables, in the order tc_fam takes them
   static void tables(T* t, tc_tabs<Cnt>& b) {
 #define FC_TAB(U, l)                                                                                 \
-  static_assert(std::is_same<decltype(+t->FCX(U)), Cnt*>::value, "a family's counters of one type"); \
+  static_assert(SameType<decltype(+t->FCX(U)), Cnt*>::value, "a family's counters of one type"); \
   b.cnt[i++] = t->FCX(U);
     int i = 0;
     FC_CNT(FC_TAB)
@@ -178,8 +178,8 @@ set kF = 0;
 #undef set
 #undef FC_HASH
 // (the shipping build: the mixers' rows as wide as their inputs)
-static_assert(std::extent<decltype(FC_NAME::T::FCX(W))>::value == 0 ||
-                  std::extent<decltype(FC_NAME::T::FCX(W))>::value == FC_NAME::kM * FC_NAME::ND * FC_NAME::NIN,
+static_assert(Extent<decltype(FC_NAME::T::FCX(W))>::value == 0 ||
+                  Extent<decltype(FC_NAME::T::FCX(W))>::value == FC_NAME::kM * FC_NAME::ND * FC_NAME::NIN,
               "famcfg.inc: the template's mixer rows are not as wide as the family's inputs");
 
 // (the counters' vector path, fam.inc, loads and stores 8 bytes at a
@@ -187,7 +187,7 @@ static_assert(std::extent<decltype(FC_NAME::T::FCX(W))>::value == 0 ||
 // member's, which no decision writes meanwhile -- the counter tables come
 // first and another member after them -- and in the tuning build the 8
 // bytes each table is mapped longer, idx2inc.pl)
-static_assert(std::extent<decltype(FC_NAME::T::FCX(A))>::value == 0 ||
+static_assert(Extent<decltype(FC_NAME::T::FCX(A))>::value == 0 ||
                   offsetof(FC_NAME::T, FCX(FC_LASTC)) + sizeof(FC_NAME::T::FCX(FC_LASTC)) + 2 <= sizeof(FC_NAME::T),
               "famcfg.inc: the last counter table is the last member of the family's tables");
 

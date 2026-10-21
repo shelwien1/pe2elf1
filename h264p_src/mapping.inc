@@ -5,8 +5,9 @@
 
     `mapping` is handed a descriptor string and, after it, the pattern --
     `S += strlen(S)+1` steps over the first to reach the second -- and builds
-    the bucket map from the '1' positions.  That indirection is the whole
-    trick the format turns on.  `pdesc` puts "!MAP!" at the front of the
+    the bucket map from the '1' positions (Init(), as the program starts:
+    mapping_make() makes one).  That indirection is the whole trick the
+    format turns on.  `pdesc` puts "!MAP!" at the front of the
     descriptor, so IDX/opt.pl can find the pattern by scanning the
     executable and hill-climb it *in the binary*, with no parse and no
     rebuild.  `mdesc` builds the identical object without the marker, which
@@ -23,12 +24,12 @@ struct mapping {
   volatile int value;
 
   NOINLINE
-  mapping(int L, const char* S1) {
+  void Init(int L, const char* S1) {
     const char* S = S1;
     S += strlen(S) + 1;
     left = L - 1;
     MSize = strlen(S);
-    pmap = new int[MSize + 1];
+    pmap = (int*)mem_alloc((MSize + 1) * sizeof(int));
     int i, j;
     value = 0;
     for (i = 0, j = 0; i < MSize; i++) {
@@ -59,7 +60,7 @@ struct masking {
   int  Size, SMSize, bits;
   int* pmap;
 
-  masking(const char* S1) {
+  void Init(const char* S1) {
     const char* S = S1;
     S += strlen(S) + 1;
     int MSize = strlen(S);
@@ -73,7 +74,7 @@ struct masking {
       bits += (S[i] & 1);
     }
     SMSize = 1 << MSize;
-    pmap = new int[SMSize];
+    pmap = (int*)mem_alloc(SMSize * sizeof(int));
     Size = 1 << bits;
     for (i = 0, j = 0; i < Size; i++) {
       pmap[j] = i;
@@ -95,19 +96,31 @@ struct masking {
   }
 };
 
+// (one made, for a map's static: its maps last as long as the program)
+NOINLINE mapping mapping_make(int L, const char* S1) {
+  mapping m;
+  m.Init(L, S1);
+  return m;
+}
+NOINLINE masking masking_make(const char* S1) {
+  masking m;
+  m.Init(S1);
+  return m;
+}
+
 // Tunable: the descriptor starts with "!MAP!", so IDX/opt.pl's scan of the
 // executable finds the pattern and hill-climbs it in place.
-#define pdesc(Desc, Ofs, Map) mapping Desc(Ofs, "!MAP!" #Desc "!" #Ofs "\x00" Map)
-#define pmask(Desc, Map) masking Desc("!MAP!" #Desc "!0\x00" Map)
+#define pdesc(Desc, Ofs, Map) mapping Desc = mapping_make(Ofs, "!MAP!" #Desc "!" #Ofs "\x00" Map)
+#define pmask(Desc, Map) masking Desc = masking_make("!MAP!" #Desc "!0\x00" Map)
 
 // Frozen (IDX-FORMAT.md sec.10): the same object built from the same
 // pattern, but the descriptor carries no "!MAP!" marker, so the optimizer's
 // scan never finds it and the value compiles in exactly as written.  The
 // pattern has to stay a separate literal after the "\x00" -- \x escapes are
 // greedy in hex digits, so one merged literal would swallow its leading
-// zeroes -- and the constructor still steps over the descriptor with
+// zeroes -- and Init() still steps over the descriptor with
 // S += strlen(S)+1, so both strings must be there.
-#define mdesc(Desc, Ofs, Map) mapping Desc(Ofs, #Desc "!" #Ofs "\x00" Map)
-#define mmask(Desc, Map) masking Desc(#Desc "!0\x00" Map)
+#define mdesc(Desc, Ofs, Map) mapping Desc = mapping_make(Ofs, #Desc "!" #Ofs "\x00" Map)
+#define mmask(Desc, Map) masking Desc = masking_make(#Desc "!0\x00" Map)
 
 }  // namespace h264p

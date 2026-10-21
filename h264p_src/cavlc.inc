@@ -171,7 +171,7 @@ int cavlc_write_block(BitWriter& bw, int nC, int max_coeff, const int* c) {
   for (int i = 0; i < t1; i++) bw.bit(level[i] < 0);
   int suffix_length = tc > 10 && t1 < 3;
   for (int i = t1; i < tc; i++) {
-    if (std::abs((int64_t)level[i]) > kMaxLevel) err_raise("coefficient level too large");
+    if (abs64((int64_t)level[i]) > kMaxLevel) err_raise("coefficient level too large");
     int64_t code = level[i] > 0 ? 2 * (int64_t)level[i] - 2 : -2 * (int64_t)level[i] - 1;
     if (i == t1 && t1 < 3) code -= 2;
     int prefix, suffix_size = 0;

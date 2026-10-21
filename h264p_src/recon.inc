@@ -282,7 +282,7 @@ struct Dpb {
       int ns = 0, nl = 0;
       for (RPic* p : dpb)
         if (p->ref) (p->lt ? nl : ns)++;
-      if (ns + nl >= std::max(max_num_ref, 1) && ns > 0) {
+      if (ns + nl >= Max(max_num_ref, 1) && ns > 0) {
         RPic* old = nullptr;
         for (RPic* p : dpb)
           if (p->ref && !p->lt && (!old || pic_num(p) < pic_num(old))) old = p;
@@ -334,10 +334,10 @@ struct Dpb {
         prev_poc_lsb = (int)lsb;
         if (h.mmco5) {
           prev_poc_msb = 0;
-          prev_poc_lsb = poc_sat(top - std::min(top, bot));
+          prev_poc_lsb = poc_sat(top - Min(top, bot));
         }
       }
-      return poc_sat(std::min(top, bot));
+      return poc_sat(Min(top, bot));
     }
   // types 1 and 2: FrameNumOffset
     int64_t fno = idr ? 0 : prev_frame_num_offset + (prev_frame_num > h.frame_num ? max_frame_num : 0);
@@ -362,7 +362,7 @@ struct Dpb {
     }
     prev_frame_num_offset = h.mmco5 ? 0 : fno;
     prev_frame_num = h.mmco5 ? 0 : h.frame_num;
-    return poc_sat(std::min(top, bot));
+    return poc_sat(Min(top, bot));
   }
 
   // pictures p[0, n) in order by less, where they are not, in their
@@ -412,7 +412,7 @@ struct Dpb {
     for (int li = 0; li < (t == kB ? 2 : 1); li++) {
       // (32 at most, as the parser reads it: list[][] and the weights are of
       // that many)
-      int n = std::min(h.num_ref_idx_active[li], 32);
+      int n = Min(h.num_ref_idx_active[li], 32);
       RPic** L = l[li];
       int& nL = nl[li];
       for (; nL < n; nL++) L[nL] = nullptr;
@@ -461,8 +461,8 @@ struct Dpb {
     if (t == kB && pps.weighted_bipred_idc == 1) wmode = 1;
     if (t == kB && pps.weighted_bipred_idc == 2) wmode = 2;
     if (wmode == 1) {
-      lwd = std::min(h.luma_log2_wd, 7);  // (7 at most, as the parser reads them)
-      cwd = std::min(h.chroma_log2_wd, 7);
+      lwd = Min(h.luma_log2_wd, 7);  // (7 at most, as the parser reads them)
+      cwd = Min(h.chroma_log2_wd, 7);
       for (int l = 0; l < 2; l++)
         for (int i = 0; i < h.num_ref_idx_active[l] && i < 32; i++)
           for (int k = 0; k < 6; k++) wt[l][i][k] = i * 6 + k < h.nwt[l] ? h.wt[l][i * 6 + k] : 0;
@@ -2204,9 +2204,9 @@ struct ReconT : MbDecoder<K> {
     };
     int up = my ? addr - mbw : -1, left = mx ? addr - 1 : -1;
     if (up >= 0 && db[up].slice >= 0)
-      for (int x = std::max(x0, 1); x < std::min(x0 + n, 15); x++) vote(mx * 16 + x, my * 16 - 2);
+      for (int x = Max(x0, 1); x < Min(x0 + n, 15); x++) vote(mx * 16 + x, my * 16 - 2);
     if (left >= 0 && db[left].slice >= 0)
-      for (int y = std::max(y0, 1); y < std::min(y0 + n, 15); y++) vote(mx * 16 - 2, my * 16 + y);
+      for (int y = Max(y0, 1); y < Min(y0 + n, 15); y++) vote(mx * 16 - 2, my * 16 + y);
     if (!strength) return 9;
     int best = 0;
     for (int k = 1; k < 9; k++)
@@ -2538,7 +2538,7 @@ struct ReconT : MbDecoder<K> {
           s += abs(q[i] - bil1(wa, wb, wc, wd, a[x1], a[x2], c[x1], c[x2], 8, 4));
         }
       }
-      return std::min(s, budget);
+      return Min(s, budget);
     }
     int sad_left(int vx, int vy, int budget) const {
       int ix = x0 - T + (vx >> 2), iy = y0 + (vy >> 2);

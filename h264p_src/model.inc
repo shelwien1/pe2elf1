@@ -180,7 +180,7 @@ struct ShiftFit {
       fx = fy = fd = 0;
       return;
     }
-    while (std::max(std::max(fx < 0 ? -fx : fx, fy < 0 ? -fy : fy), fd) >= ((i64)1 << 40)) fx /= 2, fy /= 2, fd /= 2;
+    while (Max(Max(fx < 0 ? -fx : fx, fy < 0 ? -fy : fy), fd) >= ((i64)1 << 40)) fx /= 2, fy /= 2, fd /= 2;
   }
 };
 
@@ -261,7 +261,7 @@ static INLINE int qstep16(int qp) {
 static INLINE int x264_lam16(int qp) {
   static const int k16[6] = {16, 18, 20, 23, 25, 29};
   int q = qp < 0 ? 0 : qp > 51 ? 51 : qp;
-  return std::max(16, (k16[q % 6] << (q / 6)) >> 2);
+  return Max(16, (k16[q % 6] << (q / 6)) >> 2);
 }
 
 // P(LPS) of the CABAC context states, 12 bits: 2048 * (0.01875 / 0.5)^(s / 63)
@@ -380,12 +380,12 @@ struct SignPred {
     for (int m = 0; m < (1 << nc); m++) {
       if ((m & fixed_mask) != fixed_val) continue;
       if (m >> j & 1)
-        c1 = std::min(c1, cost[m]);
+        c1 = Min(c1, cost[m]);
       else
-        c0 = std::min(c0, cost[m]);
+        c0 = Min(c0, cost[m]);
     }
     int64_t d = (c0 > c1 ? c0 - c1 : c1 - c0) * 4 / scale;
-    margin = (int)std::min<int64_t>(d, 1 << 20);
+    margin = (int)Min<int64_t>(d, 1 << 20);
     return c1 < c0;
   }
   void decide(int j, int negative) {
@@ -407,7 +407,7 @@ struct SignPred {
     int64_t l1 = level(k, 1);
     if (!den || !l1) return 0;
     int64_t m2 = (num < 0 ? -num : num) * 2 / den / l1;
-    return m2 ? 1 + std::min(tc_qlog(m2), 14) : 0;
+    return m2 ? 1 + Min(tc_qlog(m2), 14) : 0;
   }
 };
 constexpr int SignPred::kT4[4][4];
@@ -506,7 +506,7 @@ struct RawModel {
     if (buf_.empty()) init_dict();
     cm_cnt* row = o1_[prev_];
     u32 node = 1;
-    int pbyte = len_ && ptr_ < buf_.size() ? buf_[ptr_] : -1, ml = std::min(len_, 15);
+    int pbyte = len_ && ptr_ < buf_.size() ? buf_[ptr_] : -1, ml = Min(len_, 15);
     for (int i = 7; i >= 0; i--) {
       cm_cnt c0 = o0_[node], c1 = row[node];
       mx_.set(0, cm_stretch(c0.P()));
@@ -889,7 +889,7 @@ struct MotionPred {
     }
     return r;
   }
-  static int median3(int a, int b, int c) { return a + b + c - std::min(a, std::min(b, c)) - std::max(a, std::max(b, c)); }
+  static int median3(int a, int b, int c) { return a + b + c - Min(a, Min(b, c)) - Max(a, Max(b, c)); }
   // the prediction of the motion vector of a partition (8.4.1.3); nbs gets
   // its neighbours A, B and C
   void pred(int list, int x, int y, int w, int h, int ref, int* p, MvN* nbs = nullptr) const {
@@ -950,7 +950,7 @@ struct MotionPred {
   }
   // B direct, spatial (8.4.1.2.2), for the 8x8 blocks of mask (its
   // neighbours are those of the macroblock, outside it)
-  static int minpos(int a, int b) { return a >= 0 && b >= 0 ? std::min(a, b) : std::max(a, b); }
+  static int minpos(int a, int b) { return a >= 0 && b >= 0 ? Min(a, b) : Max(a, b); }
   void direct(int mask, int16_t (*mv)[16][2], int8_t (*rf)[4]) {
     if (!sc->h_->direct_spatial_mv_pred_flag) {
       temporal(mask, mv, rf);
@@ -1312,16 +1312,16 @@ struct Model : tc_rc<f_DEC> {
   // proxy (where it has them not, constants "not known")
   template <class... A>
   bool tm_search_(A&&... a) const {
-    return LV::search && rec_.tm_search(std::forward<A>(a)...);
+    return LV::search && rec_.tm_search(static_cast<A&&>(a)...);
   }
   template <class... A>
   bool proxy_build_(A&&... a) {
-    return LV::proxy && rec_.proxy_build(std::forward<A>(a)...);
+    return LV::proxy && rec_.proxy_build(static_cast<A&&>(a)...);
   }
 #define H_PROXY(F, R, NONE)                                  \
   template <class... A>                                      \
   R F##_(A&&... a) const {                                   \
-    return LV::proxy ? rec_.F(std::forward<A>(a)...) : NONE; \
+    return LV::proxy ? rec_.F(static_cast<A&&>(a)...) : NONE; \
   }
   H_PROXY(proxy_nz, int, -1)
   H_PROXY(proxy_mode, int, -1)
@@ -1624,7 +1624,7 @@ struct Model : tc_rc<f_DEC> {
     // whether their average does better still
     if (sc_->stype_ == kB && per[0] >= 0 && per[1] >= 0) {
       dh_ = per[0] * 4 < per[1] * 3 ? 1 : per[1] * 4 < per[0] * 3 ? 2 : 3;
-      int mn = std::min(per[0], per[1]);
+      int mn = Min(per[0], per[1]);
       dh_ += 3 * (tm * 4 < mn * 3 ? 1 : tm > mn ? 2 : 0);
     }
     // B: how far apart the two predictions of the skip motion are; P: how
@@ -1765,7 +1765,7 @@ struct Model : tc_rc<f_DEC> {
       if (m >= 0) {
         int c2 = INT_MAX;
         for (int k = 0; k < 4; k++)
-          if (k != m) c2 = std::min(c2, costs[k]);
+          if (k != m) c2 = Min(c2, costs[k]);
         mbt_d_->im = 1 + m;
         mbt_d_->ig = c2 == INT_MAX ? 0 : 1 + tc_clamp(tc_qlog((c2 - costs[m]) * 32 / x264_lam16(qp_pred_)), 0, 11);
         tcx X;
@@ -1970,7 +1970,7 @@ struct Model : tc_rc<f_DEC> {
             int x = bx + (k & 1), y = by + (k >> 1), z = proxy_nz_(x, y, 4, mi_->modes[y * 4 + x], qp, pmv_[0], pmv_[1]);
             nz = z < 0 ? -1 : nz + z;
           }
-        D.pq = nz < 0 ? 0 : 1 + std::min(nz, 5);
+        D.pq = nz < 0 ? 0 : 1 + Min(nz, 5);
       }
       luma |= cbp_bit(D, b8, ENC && (v >> b8 & 1), cab0(SC::kCtxCbpLuma + D.inc)) << b8;
     }
@@ -1980,7 +1980,7 @@ struct Model : tc_rc<f_DEC> {
       if (pt >= 0) pt += rec_.pred_texture(2, 0, 0, 8);
       D.pg = qlog1(pt, 15);
       int ms = rec_.edge_miss(1, 0, 0, 8);
-      if (ms >= 0) ms += std::max(0, rec_.edge_miss(2, 0, 0, 8));
+      if (ms >= 0) ms += Max(0, rec_.edge_miss(2, 0, 0, 8));
       D.em = qlog1(ms, 15);
       D.inc = sc_->cbp_chroma_inc(0);
       D.pc = popc4(luma);
@@ -1993,8 +1993,8 @@ struct Model : tc_rc<f_DEC> {
         for (int pl = 1; pl <= 2; pl++) {
           int qc = rec_.chroma_qp_of(pl - 1, qp);
           if (!proxy_dc_(pl, qc, lv)) break;
-          pdc = std::max(pdc, 0);
-          pac = std::max(pac, 0);
+          pdc = Max(pdc, 0);
+          pac = Max(pac, 0);
           for (int k = 0; k < 4; k++) pdc += abs(lv[k]) >= 3;
           for (int b = 0; b < 4; b++) {
             proxy_levels_(pl, (b & 1) * 4, (b >> 1) * 4, qc, lv);
@@ -2002,11 +2002,11 @@ struct Model : tc_rc<f_DEC> {
           }
         }
       }
-      D.pq = pdc < 0 ? 0 : 1 + std::min(pdc + pac, 5);
+      D.pq = pdc < 0 ? 0 : 1 + Min(pdc + pac, 5);
       if (cbp_bit(D, 4, ENC && (v >> 4) != 0, cab0(SC::kCtxCbpChroma + D.inc))) {
         D.inc = sc_->cbp_chroma_inc(1);
         D.col = col_ ? 1 + (col_->cbp >> 4 == 2) : 0;
-        D.pq = pac < 0 ? 0 : 1 + std::min(pac, 5);
+        D.pq = pac < 0 ? 0 : 1 + Min(pac, 5);
         c = 1 + cbp_bit(D, 5, ENC && (v >> 4) == 2, cab0(SC::kCtxCbpChroma + 4 + D.inc));
       }
     }
@@ -2058,7 +2058,7 @@ struct Model : tc_rc<f_DEC> {
     const MbState* nb = sc_->nb4(x, y - 1, ib);
     bool dc = false;
     int ma = nb_mode(na, ia, dc), mb = nb_mode(nb, ib, dc);
-    int mpm = dc ? 2 : std::min(ma > 8 ? 2 : ma, mb > 8 ? 2 : mb);
+    int mpm = dc ? 2 : Min(ma > 8 ? 2 : ma, mb > 8 ? 2 : mb);
     H_ipm_v D = {};
     D.k8 = k8;
     D.ma = ma;
@@ -2268,7 +2268,7 @@ struct Model : tc_rc<f_DEC> {
     int p0[2] = {0, 0}, have_p0 = 0;  // MotionPred::pred()'s vector of the first reference
     if (rec_.act() && sc_->num_ref_[list] > 1) {
       int bm = INT_MAX, m0 = 0, rbest = -1;
-      for (int r = 0; r < std::min(sc_->num_ref_[list], 4); r++) {
+      for (int r = 0; r < Min(sc_->num_ref_[list], 4); r++) {
         int p[2], miss, cand[4][2], nc = 0;
         MvN nbs[3];
         mvpred_.pred(list, x, y, w, h, r, p, nbs);
@@ -2377,11 +2377,11 @@ struct Model : tc_rc<f_DEC> {
     D.tv = tmn_ ? 0 : 1 + tc_clamp(sq2(dv), 0, 12);
     // the mvd were the vector zero; col's mvd
     D.zd = tc_clamp(sq2(-mvp_[comp]), 0, 12);
-    D.cq = col_ && col_->cls < CL_INXN ? 1 + std::min<int>(col_->mvq[list][y * 4 + x][comp], 8) : 0;
+    D.cq = col_ && col_->cls < CL_INXN ? 1 + Min<int>(col_->mvq[list][y * 4 + x][comp], 8) : 0;
     D.tq = tmn_ ? 0 : 1 + tc_clamp(tc_qlog(tmq_), 0, 11);
     D.ta = tmn_ || talt_[0] == INT_MIN ? 0 : 1 + tc_clamp(sq2(talt_[comp] - mvp_[comp]), 0, 12);
-    D.ea = ea == -128 ? 0 : 1 + std::min(tc_qlog(ea), 5);
-    D.eb = eb == -128 ? 0 : 1 + std::min(tc_qlog(eb), 5);
+    D.ea = ea == -128 ? 0 : 1 + Min(tc_qlog(ea), 5);
+    D.eb = eb == -128 ? 0 : 1 + Min(tc_qlog(eb), 5);
     // the texture of the reference at the predicted vector across the
     // component (x: the differences along rows), per sample, against the
     // quantizer's step: where it is flat that way, a search for a better
@@ -2436,7 +2436,7 @@ struct Model : tc_rc<f_DEC> {
       ns_[k] = 0;
       for (int j = 0; j < 3; j++)
         if (nbs[j].ref >= 0) {
-          sp_[k] = std::max(sp_[k], abs(nbs[j].mv[k] - mvp_[k]));
+          sp_[k] = Max(sp_[k], abs(nbs[j].mv[k] - mvp_[k]));
           ns_[k] += (nbs[j].mv[k] > mvp_[k]) - (nbs[j].mv[k] < mvp_[k]);
         }
       pdv_[k] = 0;
@@ -2495,7 +2495,7 @@ struct Model : tc_rc<f_DEC> {
     G.ds = pdn_ ? 9 : rel(pdv_[comp]);
     G.sa = sgn3(va);
     G.sb = sgn3(vb);
-    G.mag = std::min(tc_qlog(m), 7);
+    G.mag = Min(tc_qlog(m), 7);
     G.tq = tq;
     G.ox = comp ? sgn3(mvx_) : 3;
     G.ns = 3 + ns_[comp];
@@ -2688,7 +2688,7 @@ struct Model : tc_rc<f_DEC> {
           ok = aq_.fitx.predict(aq_.xp, q16) || aq_.fitp.predict(aq_.xp, q16);
         }
       }
-      D.xe = aq_.xp < 0 ? 0 : 1 + std::min(aq_.xp / 16, 17);
+      D.xe = aq_.xp < 0 ? 0 : 1 + Min(aq_.xp / 16, 17);
       // the QP of the last macroblock of the class: an encoder's QP is its
       // rate control's plus what the energy adds
       int lk = kind3(mi_->cls);
@@ -2714,7 +2714,7 @@ struct Model : tc_rc<f_DEC> {
     G.bs = b ? rel(b->qp - qp_off_ - qp_pred_) : 9;
     G.ls = has_lz_ ? sgn3(lz_) : 0;
     G.rs = D.ac ? sgn3(D.ac - 7) : 3;
-    G.mag = std::min(tc_qlog(m), 7);
+    G.mag = Min(tc_qlog(m), 7);
     G.cls = mi_->cls;
     G.st = st_;
     G.ss = rel(slice_qp_ - qp_pred_);
@@ -2840,7 +2840,7 @@ struct Model : tc_rc<f_DEC> {
                     : g.kind == 3 ? (uint64_t)0x33 << (g.plane * 16 + g.y * 4 + g.x)
                                   : (uint64_t)1 << (g.plane * 16 + (g.kind == 2 ? g.y * 2 + g.x : g.y * 4 + g.x));
     if (!(mi_->cmask & rows)) {
-      int k = 0, m = g.kind == 3 ? 64 : g.kind == 0 ? std::min(n, 16) : n;
+      int k = 0, m = g.kind == 3 ? 64 : g.kind == 0 ? Min(n, 16) : n;
       while (k < m && !c[k]) k++;
       if (k == m) return;
     }
@@ -2868,7 +2868,7 @@ struct Model : tc_rc<f_DEC> {
   int nb_count(const Nb& n, const Geo& g) const {
     if (!n.s) return 9;
     if (g.kind == 0) return n.s->cbf_dc[g.plane];
-    return std::min<int>(n.s->nz[g.plane][n.i], 8);
+    return Min<int>(n.s->nz[g.plane][n.i], 8);
   }
   int block_nc(const Geo& g) const {
     if (g.kind == 0) return g.plane && sc_->chroma_ != 3 ? 0 : sc_->nc_luma(g.plane, 0, 0);
@@ -2920,7 +2920,7 @@ struct Model : tc_rc<f_DEC> {
     int mag[64];
     // the proxy's level at scan position j, in quarters, and as the level
     // an encoder would code
-    int q4(int j) const { return plv[std::min(j + g.off, g.kind == 3 ? 63 : g.kind == 0 && g.plane ? 3 : 15)]; }
+    int q4(int j) const { return plv[Min(j + g.off, g.kind == 3 ? 63 : g.kind == 0 && g.plane ? 3 : 15)]; }
     int est(int j) const {
       int a = (3 * abs(q4(j)) + 4) / 12;
       return q4(j) < 0 ? -a : a;
@@ -3062,7 +3062,7 @@ struct Model : tc_rc<f_DEC> {
     const bool pok = LV::proxy && b.pok, tok = (LV::refs || LV::recon) && b.tok;
     tc_stage = STG_CBF;
     H_cbf_v D = {};
-    D.pz = pok ? 1 + std::min(b.pnz, 15) : 0;
+    D.pz = pok ? 1 + Min(b.pnz, 15) : 0;
     D.hv = b.hv;
     D.ch = cnth_ & 15;  // the counts of the last two blocks coded (up to 3 each)
     // how far to trust the proxy: how far the macroblock's luma decoded so
@@ -3073,7 +3073,7 @@ struct Model : tc_rc<f_DEC> {
       b.pq = pa >= 0 ? 13 + tc_clamp(tc_qlog(pa), 0, 11) : pxq_;
     }
     D.pq = b.pq;
-    D.tn = tok ? 1 + 5 * b.tmv + std::min(b.tnz, 4) : 0;
+    D.tn = tok ? 1 + 5 * b.tmv + Min(b.tnz, 4) : 0;
     D.cat = b.cat;
     D.na = nb_count(b.na, g);
     D.nb = nb_count(b.nb, g);
@@ -3105,10 +3105,10 @@ struct Model : tc_rc<f_DEC> {
     }
     f_cbf.prpa = pr;
     // the intra estimate's count, or that of the block under the vector
-    f_cbf.hint = pok ? std::max(b.pnz - (int)coded, 0) : tok ? std::max(b.tnz - (int)coded, 0) : -1;
+    f_cbf.hint = pok ? Max(b.pnz - (int)coded, 0) : tok ? Max(b.tnz - (int)coded, 0) : -1;
     int total = cm_int(f_cbf.code(X, ENC ? count_nonzero(c, b.n) - coded : 0), b.n) + coded;
     f_cbf.hint = -1;
-    cnth_ = (cnth_ * 4 + std::min(total, 3)) & 15;
+    cnth_ = (cnth_ * 4 + Min(total, 3)) & 15;
     f_cbf.prpa = nullptr;
     if (total > b.n) cm_fail("corrupt stream: %d coefficients in a block of %d", total, b.n);
     tc_syms[STG_CBF]++;
@@ -3136,7 +3136,7 @@ struct Model : tc_rc<f_DEC> {
       int r = blk_y(b) * 4 + blk_x(b);
       if (mi_->cmask >> r & 1) score += decimate_score(mi_->coef[0][r]);
     }
-    return 1 + std::max(0, req - score);
+    return 1 + Max(0, req - score);
   }
   // a 4:2:0 chroma block: the coefficients of the luma under it (its 8x8
   // block; for DC, the macroblock's), 1 + tc_qlog (0 luma)
@@ -3146,7 +3146,7 @@ struct Model : tc_rc<f_DEC> {
     int n = 0;
     for (int b = 0; b < 16; b++)
       if (g.kind == 0 || ((b & 3) >> 1 == g.x && (b >> 2) >> 1 == g.y)) n += cur.nz[0][b];
-    return 1 + std::min(tc_qlog(n), 9);
+    return 1 + Min(tc_qlog(n), 9);
   }
   // a 4:2:0 chroma AC block: its DC, from the chroma DC levels' 2x2
   // transform; an Intra16x16 luma AC block, from the luma DC levels' 4x4
@@ -3155,7 +3155,7 @@ struct Model : tc_rc<f_DEC> {
     if (g.kind == 2 && sc_->chroma_ == 1) {
       static const int8_t z[16] = {};
       const int8_t* d = mi_->cmask >> (48 + g.plane) & 1 ? mi_->dc[g.plane] : z;
-      return 1 + std::min(tc_qlog(d[0] + (g.x ? -d[1] : d[1]) + (g.y ? -d[2] : d[2]) + (g.x ^ g.y ? -d[3] : d[3])), 7);
+      return 1 + Min(tc_qlog(d[0] + (g.x ? -d[1] : d[1]) + (g.y ? -d[2] : d[2]) + (g.x ^ g.y ? -d[3] : d[3])), 7);
     }
     if (cat != 1) return 0;
     static const int kH[4][4] = {{1, 1, 1, 1}, {1, 1, -1, -1}, {1, -1, -1, 1}, {1, -1, 1, -1}};
@@ -3164,7 +3164,7 @@ struct Model : tc_rc<f_DEC> {
     if (mi_->cmask >> 48 & 1)
       for (int k = 0; k < 16; k++)
         if (d[k]) v += kH[g.y][kZz4[k] >> 2] * d[k] * kH[kZz4[k] & 3][g.x];
-    return 1 + std::min(tc_qlog(v), 7);
+    return 1 + Min(tc_qlog(v), 7);
   }
   // a Cr block: 1 + whether the Cb block there has coefficients (0 other)
   int cbf_crcb(const Geo& g) const {
@@ -3217,7 +3217,7 @@ struct Model : tc_rc<f_DEC> {
         S.rem = tc_qlog(rem);
         S.zl = tc_qlog(n - i - rem);
         S.pe = spok && i < 4 ? sp.estimate(i) : 0;
-        S.ps = pok ? 1 + std::min(abs(b.q4(i)), 6) : 0;
+        S.ps = pok ? 1 + Min(abs(b.q4(i)), 6) : 0;
         // the estimate's levels from here on, against the coefficients left
         S.pr = pok ? 1 + 3 + tc_clamp(b.esuf[i] - rem, -3, 3) : 0;
         // the last two positions' significance (4 at the start)
@@ -3246,9 +3246,9 @@ struct Model : tc_rc<f_DEC> {
           for (int k = 1; k <= 3 && k <= i; k++) h3 = h3 * 2 + sig[i - k];
           S.h3 = h3 - 1;
         }
-        S.tz = tok ? 1 + 4 * b.tmv + std::min(abs(b.tcf(i)), 3) : 0;
+        S.tz = tok ? 1 + 4 * b.tmv + Min(abs(b.tcf(i)), 3) : 0;
         S.hv = b.hv;
-        S.pf = pfok ? 1 + std::min(tc_qlog(abs(pfl[std::min(i + g.off, g.kind == 3 ? 63 : 15)])), 10) : 0;
+        S.pf = pfok ? 1 + Min(tc_qlog(abs(pfl[Min(i + g.off, g.kind == 3 ? 63 : 15)])), 10) : 0;
         // the same position in the blocks A and B (0 none, 1 zero, 2 not)
         if (H_USES(sig, sn))
           S.sn = (na.m ? 1 + (coef_at(na.m, g, na.i, i) != 0) : 0) * 3 + (nb.m ? 1 + (coef_at(nb.m, g, nb.i, i) != 0) : 0);
@@ -3306,7 +3306,7 @@ struct Model : tc_rc<f_DEC> {
         L.fq = (r % sg.w > 0) + 2 * (r / sg.w > 0);
       }
       L.pe = spok && k < 4 ? sp.estimate(k) : 0;
-      L.pl = pok ? 1 + std::min(abs(b.q4(k)) / 2, 10) : 0;
+      L.pl = pok ? 1 + Min(abs(b.q4(k)) / 2, 10) : 0;
       // intra: the levels so far against the estimate's there
       L.ls = pok ? 7 + tc_clamp(lsum - esum, -6, 6) : 0;
       {
@@ -3319,22 +3319,22 @@ struct Model : tc_rc<f_DEC> {
         };
         if (fx + 1 < sg.w) lv(r + 1);
         if (fy + 1 < sg.h) lv(r + sg.w);
-        L.lt = nn ? 1 + std::min(sum, 6) : 0;
+        L.lt = nn ? 1 + Min(sum, 6) : 0;
       }
-      L.tz = tok ? 1 + 4 * b.tmv + std::min(abs(b.tcf(k)), 3) : 0;
-      L.sa = na.m ? std::min(abs(coef_at(na.m, g, na.i, k)), 3) : 0;
-      L.sb = nb.m ? std::min(abs(coef_at(nb.m, g, nb.i, k)), 3) : 0;
+      L.tz = tok ? 1 + 4 * b.tmv + Min(abs(b.tcf(k)), 3) : 0;
+      L.sa = na.m ? Min(abs(coef_at(na.m, g, na.i, k)), 3) : 0;
+      L.sb = nb.m ? Min(abs(coef_at(nb.m, g, nb.i, k)), 3) : 0;
       tcx X;
       f_lvl.make(L, X);
       // the intra estimate's level there
-      f_lvl.hint = pok ? std::max(abs(b.est(k)) - 1, 0) : -1;
+      f_lvl.hint = pok ? Max(abs(b.est(k)) - 1, 0) : -1;
       int a = cm_int(f_lvl.code(X, ENC ? abs(c[k]) - 1 : 0), kMaxLevel - 1);
       f_lvl.hint = -1;
       mag[k] = a + 1;
       lsum += a + 1;
       if (pok) esum += abs(b.est(k));
-      L.pm = std::min(a + 1, 4);
-      lhist = (lhist * 4 + std::min(a, 3)) & 63;
+      L.pm = Min(a + 1, 4);
+      lhist = (lhist * 4 + Min(a, 3)) & 63;
       L.lh = 1 + lhist;
       if (a)
         g1++;
@@ -3423,7 +3423,7 @@ struct Model : tc_rc<f_DEC> {
       gb.plane = 1;
       G.scb = sgn3(coef_at(mi_, gb, g.kind == 2 ? g.y * 2 + g.x : g.y * 4 + g.x, k));
     }
-    G.mag = std::min(b.mag[k], 3) - 1;
+    G.mag = Min(b.mag[k], 3) - 1;
     G.ez = pok ? (b.q4(k) ? (b.q4(k) > 0 ? 2 : 3) + 2 * (abs(b.q4(k)) >= 4) : 1) : 0;
     G.ts = tok ? 1 + 3 * b.tmv + sgn3(b.tcf(k)) : 0;
     G.gh = s.ghist % 9;
@@ -3436,7 +3436,7 @@ struct Model : tc_rc<f_DEC> {
       i64 fx, fy, fd;
       s.fit.fit(fx, fy, fd);
       if (!fd) fx = shx_, fy = shy_, fd = shd_;
-      i64 r = fx * s.glx[k] + fy * s.gly[k], ra = r < 0 ? -r : r, m = std::min(b.mag[k], 4096);
+      i64 r = fx * s.glx[k] + fy * s.gly[k], ra = r < 0 ? -r : r, m = Min(b.mag[k], 4096);
       if (fd && r) G.dm = 1 + (r < 0) + 2 * (ra > fd * m) + 2 * (ra > 4 * fd * m);
     }
     tcx X;

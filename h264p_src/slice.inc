@@ -188,25 +188,25 @@ void box_out_ranks(int width, int height, int dir, Buf<int>& rank) {
       y = ydir < 0 ? top : bottom;
     if (xdir == -1 && x == left) {
       held = left == 0;
-      left = std::max(left - 1, 0);
+      left = Max(left - 1, 0);
       x = left;
       xdir = 0;
       ydir = 2 * dir - 1;
     } else if (xdir == 1 && x == right) {
       held = right == width - 1;
-      right = std::min(right + 1, width - 1);
+      right = Min(right + 1, width - 1);
       x = right;
       xdir = 0;
       ydir = 1 - 2 * dir;
     } else if (ydir == -1 && y == top) {
       held = top == 0;
-      top = std::max(top - 1, 0);
+      top = Max(top - 1, 0);
       y = top;
       xdir = 1 - 2 * dir;
       ydir = 0;
     } else if (ydir == 1 && y == bottom) {
       held = bottom == height - 1;
-      bottom = std::min(bottom + 1, height - 1);
+      bottom = Min(bottom + 1, height - 1);
       y = bottom;
       xdir = 2 * dir - 1;
       ydir = 0;
@@ -237,7 +237,7 @@ bool slice_group_map(GroupMap& m, const SliceHeader& h, int width, int size) {
   map.resize(units);
   int ngroups = pps.num_slice_groups;
   int dir = pps.slice_group_change_direction_flag;
-  int64_t in_group0 = std::min<int64_t>(cycle * pps.slice_group_change_rate, units);
+  int64_t in_group0 = Min<int64_t>(cycle * pps.slice_group_change_rate, units);
   int upper_left = (int)(dir ? units - in_group0 : in_group0);
   switch (type) {
     case 0: {
@@ -452,8 +452,8 @@ struct WalkState {
   int ctx_last(int cat, int i) const { return kLastBase[field_mb()][cat] + last_inc(cat)[i]; }
   // coeff_abs_level_minus1's first bin and the others, after gt1 levels
   // above 1 and eq1 of 1
-  static int ctx_abs0(int cat, int gt1, int eq1) { return kAbsBase[cat] + (gt1 ? 0 : std::min(4, 1 + eq1)); }
-  static int ctx_abs1(int cat, int gt1) { return kAbsBase[cat] + 5 + std::min(4 - (cat == 3), gt1); }
+  static int ctx_abs0(int cat, int gt1, int eq1) { return kAbsBase[cat] + (gt1 ? 0 : Min(4, 1 + eq1)); }
+  static int ctx_abs1(int cat, int gt1) { return kAbsBase[cat] + 5 + Min(4 - (cat == 3), gt1); }
 
   // ctxIdxInc of the first bin of ref_idx_lX of the partition at the 4x4 block (x, y)
   int ref_inc(int list, int x, int y) const {
@@ -1056,7 +1056,7 @@ struct SliceCoderT : WalkState, WalkCodes<SliceCoderT<kMode>> {
   void code_mvd(int list, const Part& p) {
     int mx = xchg(&Chan::mvd, [&](int v) { return mvd(list, 0, p.x, p.y, v); }, list, 0, p.x, p.y, p.w, p.h);
     int my = xchg(&Chan::mvd, [&](int v) { return mvd(list, 1, p.x, p.y, v); }, list, 1, p.x, p.y, p.w, p.h);
-    uint8_t ax = (uint8_t)std::min(abs(mx), 127), ay = (uint8_t)std::min(abs(my), 127);
+    uint8_t ax = (uint8_t)Min(abs(mx), 127), ay = (uint8_t)Min(abs(my), 127);
     for (int y = p.y; y < p.y + p.h; y++)
       for (int x = p.x; x < p.x + p.w; x++) {
         cur_->mvd[list][y * 4 + x][0] = ax;
@@ -1351,7 +1351,7 @@ struct SliceCoderT : WalkState, WalkCodes<SliceCoderT<kMode>> {
         c[i] = 0;
         continue;
       }
-      if (W && std::abs((int64_t)c[i]) > kMaxLevel) fail("coefficient level too large");
+      if (W && abs64((int64_t)c[i]) > kMaxLevel) fail("coefficient level too large");
       int a = W ? abs(c[i]) - 1 : 0;
       int v = bin(ctx_abs0(cat, gt1, eq1), a > 0);
       if (v) {

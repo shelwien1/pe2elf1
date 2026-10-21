@@ -8,33 +8,27 @@
 // does, and it includes every source. Its names stay in namespace h264p:
 // Lib3's global byte, uint and qword, and whatever more of the library a
 // program has after it, MTwrap's included, see only theirs.
+//
+// It takes nothing of the C++ library but the language's own (the C
+// library's headers, and a function's statics made once): no exceptions or
+// RTTI (err.inc), no containers, strings or algorithms (mem.inc); and its
+// structs have no constructors or destructors -- Init() sets one up,
+// Quit() frees what it holds -- so that they can live on pages that are
+// mapped, not constructed, as its coroutines do (coro.inc). (The channels'
+// vtables aside, chan.inc.)
 #ifndef H264P_INC
 #define H264P_INC
 
-#include <algorithm>
-#include <atomic>
-#include <cerrno>
-#include <chrono>
-#include <cinttypes>
-#include <climits>
-#include <cmath>
-#include <cstdarg>
-#include <cstddef>
-#include <cstdint>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <functional>
-#include <iterator>
-#include <map>
-#include <memory>
-#include <mutex>
-#include <new>
-#include <set>
-#include <stdexcept>
-#include <string>
-#include <type_traits>
-#include <vector>
+#include <errno.h>
+#include <inttypes.h>
+#include <limits.h>
+#include <math.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include <sys/stat.h>
 

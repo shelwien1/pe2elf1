@@ -12,17 +12,15 @@
 // Each dump file holds one or more streams (R), each coded from a fresh
 // state, as h264p codes each stream.
 
-#include <algorithm>
-#include <cinttypes>
-#include <climits>
-#include <cmath>
-#include <cstdarg>
-#include <cstddef>
-#include <cstdint>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <type_traits>
+#include <inttypes.h>
+#include <limits.h>
+#include <math.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #ifndef _WIN32
 #include <sys/mman.h>

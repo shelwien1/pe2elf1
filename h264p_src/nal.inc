@@ -483,7 +483,7 @@ bool write_back(const NalHead& h, Context& ctx, Ch& ch, const Buf<uint8_t>& rbsp
 template <class F>
 void put_zeros(Buf<uint8_t>& buf, uint64_t n, F spill) {
   while (n) {
-    size_t k = (size_t)std::min<uint64_t>(n, 1 << 20);
+    size_t k = (size_t)Min<uint64_t>(n, 1 << 20);
     buf.append(k, 0);
     n -= k;
     spill();
