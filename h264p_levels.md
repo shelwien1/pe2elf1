@@ -540,15 +540,17 @@ generator already leaves it out); in the tuning build, when a live line
 reads it, or a frozen one with a 1, since `opt.pl` can set any live bit.
 Both are constants.
 
-The model fills a variable only where the level reads it:
+The model can leave a variable the level does not read unfilled, and
+does where filling it costs work of its own: sig's `ft`, `hb`, `h3` and
+`sn`, per coefficient (`block()` in `model.inc`). The other variables are
+cheap, or their work goes with a part the level has not (the switches,
+below), and are filled whatever the level reads:
 
 ```cpp
 #define H_USES(F, f) ((L::F::Uses >> (offsetof(H_##F##_v, f) / sizeof(int))) & 1)
 
-if (H_USES(skp, c9)) {  // the skipped ones in the 3x3 window
-  D.c9 = 0;
-  ...
-}
+if (H_USES(sig, sn))  // the same position in the blocks A and B
+  S.sn = ...;
 ```
 
 - A variable that several families read is made if one of them reads
