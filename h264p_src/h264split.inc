@@ -35,9 +35,14 @@ using h264p::unescape;
 
 struct Bits {
   const uint8_t* p;
-  size_t n, pos = 0;  // n and pos in bits
-  bool err = false;
-  explicit Bits(const h264p::Buf<uint8_t>& v) : p(v.data()), n(v.size() * 8) {}
+  size_t n, pos;  // n and pos in bits
+  bool err;
+  void Init(const h264p::Buf<uint8_t>& v) {
+    p = v.data();
+    n = v.size() * 8;
+    pos = 0;
+    err = false;
+  }
   uint32_t u(int k) {
     uint32_t v = 0;
     while (k-- > 0) {
@@ -67,13 +72,19 @@ struct Bits {
 };
 
 struct Sps {
-  int id = 0, separate_colour_plane = 0, log2_max_frame_num = 4, poc_type = 0, log2_max_poc_lsb = 4,
-      delta_pic_order_always_zero = 0, frame_mbs_only = 1;
-  uint64_t mbs = 0;  // macroblocks in a frame
+  int id, separate_colour_plane, log2_max_frame_num, poc_type, log2_max_poc_lsb, delta_pic_order_always_zero,
+      frame_mbs_only;
+  uint64_t mbs;  // macroblocks in a frame
+  void Init() {
+    id = separate_colour_plane = 0, log2_max_frame_num = 4, poc_type = 0, log2_max_poc_lsb = 4;
+    delta_pic_order_always_zero = 0, frame_mbs_only = 1;
+    mbs = 0;
+  }
 };
 
 struct Pps {
-  int id = 0, sps_id = 0, bottom_field_pic_order_in_frame_present = 0, redundant_pic_cnt_present = 0;
+  int id, sps_id, bottom_field_pic_order_in_frame_present, redundant_pic_cnt_present;
+  void Init() { id = sps_id = bottom_field_pic_order_in_frame_present = redundant_pic_cnt_present = 0; }
 };
 
 bool high_profile(int p) {
@@ -85,7 +96,8 @@ bool high_profile(int p) {
 
 // seq_parameter_set_data() up to frame_mbs_only_flag; false if it is bad
 bool parse_sps(const h264p::Buf<uint8_t>& rbsp, Sps& s) {
-  Bits b(rbsp);
+  Bits b;
+  b.Init(rbsp);
   int profile = b.u(8);
   b.u(16);
   s.id = b.ue();
@@ -135,7 +147,8 @@ bool parse_sps(const h264p::Buf<uint8_t>& rbsp, Sps& s) {
 
 // pic_parameter_set_rbsp() up to redundant_pic_cnt_present_flag
 bool parse_pps(const h264p::Buf<uint8_t>& rbsp, Pps& s) {
-  Bits b(rbsp);
+  Bits b;
+  b.Init(rbsp);
   s.id = b.ue();
   s.sps_id = b.ue();
   if (s.id > 255 || s.sps_id > 31) return false;
@@ -174,13 +187,14 @@ bool parse_pps(const h264p::Buf<uint8_t>& rbsp, Pps& s) {
 }
 
 struct SliceInfo {
-  int level = 0;  // 0: nothing parsed, 1: up to pic_parameter_set_id, 2: all
-  uint32_t first_mb = 0, type = 0, pps_id = 0;
-  int ref_idc = 0, idr = 0;
-  uint32_t frame_num = 0, idr_pic_id = 0, poc_lsb = 0, redundant = 0;
-  int field = 0, bottom = 0, poc_type = 0;
-  int32_t dpoc_bottom = 0, dpoc0 = 0, dpoc1 = 0;
-  uint64_t mbs = 0;  // macroblocks in the picture
+  int level;  // 0: nothing parsed, 1: up to pic_parameter_set_id, 2: all
+  uint32_t first_mb, type, pps_id;
+  int ref_idc, idr;
+  uint32_t frame_num, idr_pic_id, poc_lsb, redundant;
+  int field, bottom, poc_type;
+  int32_t dpoc_bottom, dpoc0, dpoc1;
+  uint64_t mbs;  // macroblocks in the picture
+  void Init() { memset((void*)this, 0, sizeof *this); }  // (all 0)
 };
 
 // whether b, which follows a, is the first slice of a new primary coded picture
@@ -203,10 +217,15 @@ bool is_intra(uint32_t slice_type) { return slice_type % 5 == 2 || slice_type % 
 // Annex B scanning
 
 struct Nal {
-  uint64_t cut = 0;  // start of the zero bytes before its start code
-  uint64_t pos = 0;  // offset of the NAL unit header byte
-  uint64_t len = 0;  // length up to its last nonzero byte
-  std::vector<uint8_t> head;  // its first bytes; all of them for a parameter set
+  uint64_t cut;  // start of the zero bytes before its start code
+  uint64_t pos;  // offset of the NAL unit header byte
+  uint64_t len;  // length up to its last nonzero byte
+  h264p::Buf<uint8_t> head;  // its first bytes; all of them for a parameter set
+  void Init() {
+    cut = pos = len = 0;
+    head.Init();
+  }
+  void Quit() { head.Quit(); }
   int type() const { return head.empty() ? -1 : head[0] & 31; }
 };
 
@@ -219,13 +238,20 @@ const size_t kMaxPset = 1u << 20;   // larger "parameter sets" are not tracked
 // Finding the cut points
 
 uint32_t pset_key(int type, int id) { return (uint32_t)type << 8 | (uint32_t)id; }
+// the place of a parameter set's key in the tables by key (kSlots of them,
+// in the order of the keys: SPS 7, PPS 8, SPS extension 13, subset SPS 15)
+const int kSlots = 4 * 256;
+int pset_slot(uint32_t key) {
+  int t = (int)(key >> 8);
+  return (t == 7 ? 0 : t == 8 ? 1 : t == 13 ? 2 : 3) * 256 + (int)(key & 255);
+}
 
 // A new version of a parameter set, at the NAL unit starting at `cut`.
 struct PsetEvent {
   uint64_t cut;
   uint32_t key;
-  int ref_sps;  // the SPS a PPS refers to, else -1
-  std::vector<uint8_t> data;  // the NAL unit
+  int ref_sps;      // the SPS a PPS refers to, else -1
+  size_t off, len;  // the NAL unit (Analyzer::ev_bytes)
 };
 
 struct Candidate {
@@ -234,29 +260,73 @@ struct Candidate {
   uint64_t mbs;   // macroblocks of the pictures before it
   uint64_t pics;  // pictures before it
   uint64_t ins;   // where to insert parameter sets, relative to cut
-  std::vector<uint32_t> keys;  // parameter sets defined before its first slice
+  h264p::Buf<uint32_t> keys;  // parameter sets defined before its first slice
+  void Init() {
+    sync = false;
+    cut = mbs = pics = ins = 0;
+    keys.Init();
+  }
+  void Quit() { keys.Quit(); }
+  void copy(const Candidate& o) {
+    sync = o.sync, cut = o.cut, mbs = o.mbs, pics = o.pics, ins = o.ins;
+    keys.copy(o.keys);
+  }
 };
 
 struct Analyzer {
-  bool allow_i = false;
-  std::map<int, Sps> sps;
-  std::map<int, Pps> pps;
-  std::map<uint32_t, size_t> latest;  // key -> index in events
-  std::vector<PsetEvent> events;
-  std::vector<Candidate> cands;
-  long nals = 0, pictures = 0, idr = 0, intra = 0, untracked = 0;
-  uint64_t mbs = 0;  // macroblocks of the pictures so far
+  bool allow_i;
+  Sps sps[32];
+  Pps pps[256];
+  bool has_sps[32], has_pps[256];
+  size_t latest[kSlots];  // by key: the index in events + 1 of its last version (0 none)
+  h264p::Buf<PsetEvent> events;
+  h264p::Buf<uint8_t> ev_bytes;  // their NAL units
+  // the cut point the last picture ended (cand, where has_cand: one at a
+  // time, as end_picture() makes one and the splitter looks at it, which
+  // it does after each NAL unit)
+  Candidate cand;
+  bool has_cand;
+  long nals, pictures, idr, intra, untracked;
+  uint64_t mbs;  // macroblocks of the pictures so far
 
   // the non-VCL NAL units since the last VCL NAL unit that may start an
   // access unit
-  bool run = false, force_new = false;
+  bool run, force_new;
   Candidate run_au;
   // the current picture
   Candidate pic;
-  bool pic_ok = false, pic_idr = false, pic_intra = false;
+  bool pic_ok, pic_idr, pic_intra;
   SliceInfo prev;
-  bool have_prev = false;
-  h264p::Buf<uint8_t> rbsp;  // a NAL unit's (Init() and Quit(): H264Split's)
+  bool have_prev;
+  h264p::Buf<uint8_t> rbsp;  // a NAL unit's
+
+  void Init(bool allow) {
+    allow_i = allow;
+    memset(has_sps, 0, sizeof has_sps);
+    memset(has_pps, 0, sizeof has_pps);
+    memset(latest, 0, sizeof latest);
+    events.Init();
+    ev_bytes.Init();
+    cand.Init();
+    has_cand = false;
+    nals = pictures = idr = intra = untracked = 0;
+    mbs = 0;
+    run = force_new = false;
+    run_au.Init();
+    pic.Init();
+    pic_ok = pic_idr = pic_intra = false;
+    prev.Init();
+    have_prev = false;
+    rbsp.Init();
+  }
+  void Quit() {
+    events.Quit();
+    ev_bytes.Quit();
+    cand.Quit();
+    run_au.Quit();
+    pic.Quit();
+    rbsp.Quit();
+  }
 
   void begin_run(const Nal& n, bool aud) {
     run = true;
@@ -276,12 +346,15 @@ struct Analyzer {
     int id = -1, ref = -1;
     if (t == 7) {
       Sps s;
-      if (parse_sps(rbsp, s)) sps[s.id] = s, id = s.id;
+      s.Init();
+      if (parse_sps(rbsp, s)) sps[s.id] = s, has_sps[s.id] = true, id = s.id;
     } else if (t == 8) {
       Pps s;
-      if (parse_pps(rbsp, s)) pps[s.id] = s, id = s.id, ref = s.sps_id;
+      s.Init();
+      if (parse_pps(rbsp, s)) pps[s.id] = s, has_pps[s.id] = true, id = s.id, ref = s.sps_id;
     } else {
-      Bits b(rbsp);
+      Bits b;
+      b.Init(rbsp);
       if (t == 15) b.u(24);
       uint32_t v = b.ue();
       if (!b.err && v <= 31) id = (int)v;
@@ -292,15 +365,20 @@ struct Analyzer {
     }
     uint32_t key = pset_key(t, id);
     run_au.keys.push_back(key);
-    auto it = latest.find(key);
-    if (it != latest.end() && events[it->second].data == n.head) return;
-    latest[key] = events.size();
-    events.push_back(PsetEvent{n.cut, key, ref, n.head});
+    size_t& last = latest[pset_slot(key)];
+    if (last) {
+      const PsetEvent& e = events[last - 1];
+      if (e.len == n.head.size() && !memcmp(ev_bytes.data() + e.off, n.head.data(), e.len)) return;
+    }
+    last = events.size() + 1;
+    events.push_back(PsetEvent{n.cut, key, ref, ev_bytes.size(), n.head.size()});
+    ev_bytes.append(n.head.data(), n.head.size());
   }
 
   void parse_slice(const Nal& n, SliceInfo& s) {
     unescape(n.head.data() + 1, n.head.size() - 1, rbsp);
-    Bits b(rbsp);
+    Bits b;
+    b.Init(rbsp);
     s.ref_idc = n.head[0] >> 5 & 3;
     s.idr = n.type() == 5;
     s.first_mb = b.ue();
@@ -308,12 +386,9 @@ struct Analyzer {
     s.pps_id = b.ue();
     if (b.err || s.type > 9) return;
     s.level = 1;
-    auto pi = pps.find((int)s.pps_id);
-    if (pi == pps.end()) return;
-    auto si = sps.find(pi->second.sps_id);
-    if (si == sps.end()) return;
-    const Pps& p = pi->second;
-    const Sps& q = si->second;
+    if (s.pps_id > 255 || !has_pps[s.pps_id] || !has_sps[pps[s.pps_id].sps_id]) return;
+    const Pps& p = pps[s.pps_id];
+    const Sps& q = sps[p.sps_id];
     if (q.separate_colour_plane) b.u(2);
     s.frame_num = b.u(q.log2_max_frame_num);
     if (!q.frame_mbs_only) {
@@ -341,12 +416,14 @@ struct Analyzer {
     intra += pic_intra && !pic_idr;
     if (pictures > 1 && pic_ok) {
       pic.sync = pic_idr || (allow_i && pic_intra);
-      cands.push_back(pic);
+      cand.copy(pic);
+      has_cand = true;
     }
   }
 
   void slice(const Nal& n) {
     SliceInfo s;
+    s.Init();
     parse_slice(n, s);
     if (s.redundant) {  // a slice of a redundant coded picture
       run = false;
@@ -357,7 +434,7 @@ struct Analyzer {
       end_picture();
       pictures++;
       if (run) {
-        pic = run_au;
+        pic.copy(run_au);
       } else {
         pic.cut = n.cut;
         pic.ins = 0;
@@ -415,18 +492,25 @@ struct Analyzer {
 
 // scan_nals() of h264split.cpp, fed one buffer at a time
 struct Scanner {
-  uint64_t off = 0;   // stream offset of the next byte fed
-  uint64_t zrun = 0;  // zero bytes at the end of the data so far
-  bool in_nal = false;
+  uint64_t off;   // stream offset of the next byte fed
+  uint64_t zrun;  // zero bytes at the end of the data so far
+  bool in_nal;
   Nal cur;
+
+  void Init() {
+    off = zrun = 0;
+    in_nal = false;
+    cur.Init();
+  }
+  void Quit() { cur.Quit(); }
 
   void append(const uint8_t* p, size_t n) {
     if (!in_nal) return;
     while (n) {
       size_t cap = cur.head.empty() ? 1 : is_pset(cur.head[0] & 31) ? kMaxPset + 1 : kHeadBytes;
       if (cur.head.size() >= cap) return;
-      size_t k = std::min(n, cap - cur.head.size());
-      cur.head.insert(cur.head.end(), p, p + k);
+      size_t k = n < cap - cur.head.size() ? n : cap - cur.head.size();
+      cur.head.append(p, k);
       p += k, n -= k;
     }
   }
@@ -475,21 +559,37 @@ struct Scanner {
 
 struct H264Split : Coroutine {
 
-  // C++ state lives on the heap, behind raw pointers: the object may sit in
-  // memory that is never constructed (rzwrap's static union; h264p's
-  // CoroObj constructs it, on zeroed pages)
+  // The state lives on the heap, behind a pointer, Init() and Quit() its
+  // (the object may sit in memory that is never constructed: rzwrap's
+  // static union; h264p's coro_new() maps it, on zeroed pages)
   struct State {
     h264s::Scanner sc;
     h264s::Analyzer an;
-    std::vector<uint8_t> buf;          // stream bytes from `begin` on
-    size_t seen = 0;                   // candidates already examined
-    std::map<uint32_t, size_t> state;  // parameter sets before the last cut
-    size_t ev = 0;
-    uint64_t begin = 0;                // the current part
-    uint64_t ins = 0;
-    uint32_t nins = 0;
-    std::vector<uint8_t> extra;
-    uint64_t parts = 0, total = 0;
+    h264p::Buf<uint8_t> buf;       // stream bytes from `begin` on
+    size_t state[h264s::kSlots];   // by key: the parameter set before the last cut (an.events' index + 1; 0 none)
+    size_t ev;
+    uint64_t begin;                // the current part
+    uint64_t ins;
+    uint32_t nins;
+    h264p::Buf<uint8_t> extra;
+    uint64_t parts, total;
+    void Init( bool allow_i ) {
+      sc.Init();
+      an.Init( allow_i );
+      buf.Init();
+      memset( state, 0, sizeof state );
+      ev = 0;
+      begin = ins = 0;
+      nins = 0;
+      extra.Init();
+      parts = total = 0;
+    }
+    void Quit( void ) {
+      sc.Quit();
+      an.Quit();
+      buf.Quit();
+      extra.Quit();
+    }
   };
   State* st;
   qword chunksize;
@@ -499,15 +599,14 @@ struct H264Split : Coroutine {
     coro_init();
     chunksize = _chunksize;
     cap = _cap;
-    st = new State;
-    st->an.allow_i = allow_i!=0;
-    st->an.rbsp.Init();
+    st = (State*)h264p::mem_alloc( sizeof(State) );
+    st->Init( allow_i!=0 );
     return 0;
   }
 
   void Quit( void ) {
-    if( st ) st->an.rbsp.Quit();
-    delete st; st = 0;
+    if( st ) st->Quit(), h264p::mem_free( st );
+    st = 0;
   }
 
   void put_bytes( const byte* p, size_t n ) {
@@ -527,46 +626,55 @@ struct H264Split : Coroutine {
     put_bytes( s.buf.data(), size_t(s.ins) );
     put_bytes( s.extra.data(), s.extra.size() );
     put_bytes( s.buf.data()+s.ins, size_t(n-s.ins) );
-    s.buf.erase( s.buf.begin(), s.buf.begin()+size_t(n) );
+    s.buf.erase_front( size_t(n) );
     s.begin = end;
     s.parts++;
   }
 
-  // a new part at cut point c: h264split's choice of parameter sets to copy
+  // a new part at cut point c: h264split's choice of parameter sets to
+  // copy: those defined before it but not in its first access unit, and
+  // the SPSs of the PPSs among them; by type (SPS, SPS extension, subset
+  // SPS, PPS), each by id
   void start_part( const h264s::Candidate& c ) {
     using namespace h264s;
     State& s = *st;
     Analyzer& an = s.an;
-    while( s.ev<an.events.size() && an.events[s.ev].cut<c.cut ) s.state[an.events[s.ev].key] = s.ev, s.ev++;
-    std::set<uint32_t> defined( c.keys.begin(), c.keys.end() ), use;
-    for( auto& x : s.state )
-      if( !defined.count(x.first) ) use.insert(x.first);
-    for( uint32_t key : std::set<uint32_t>(use) ) { // the SPS of the PPS copied
-      int ref = an.events[s.state[key]].ref_sps;
+    while( s.ev<an.events.size() && an.events[s.ev].cut<c.cut ) s.state[pset_slot(an.events[s.ev].key)] = s.ev+1, s.ev++;
+    bool defined[kSlots] = {}, use[kSlots] = {}, use0[kSlots];
+    for( uint32_t key : c.keys ) defined[pset_slot(key)] = true;
+    for( int k=0; k<kSlots; k++ )
+      if( s.state[k] && !defined[k] ) use[k] = true;
+    memcpy( use0, use, sizeof use );
+    static const int sps_types[2] = {7, 15};
+    for( int k=0; k<kSlots; k++ ) { // the SPS of the PPS copied
+      if( !use0[k] ) continue;
+      int ref = an.events[s.state[k]-1].ref_sps;
       if( ref<0 ) continue;
-      for( int t : {7, 15} )
-        if( s.state.count(pset_key(t, ref)) ) use.insert(pset_key(t, ref));
+      for( int t : sps_types )
+        if( s.state[pset_slot(pset_key(t, ref))] ) use[pset_slot(pset_key(t, ref))] = true;
     }
     s.extra.clear(); s.nins = 0;
-    for( int t : {7, 13, 15, 8} )
-      for( uint32_t key : use )
-        if( (int)(key>>8)==t ) {
-          static const uint8_t sc4[4] = {0, 0, 0, 1};
-          const std::vector<uint8_t>& d = an.events[s.state[key]].data;
-          s.extra.insert( s.extra.end(), sc4, sc4+4 );
-          s.extra.insert( s.extra.end(), d.begin(), d.end() );
-          s.nins++;
-        }
+    static const int order[4] = {7, 13, 15, 8};
+    for( int t : order )
+      for( int id=0; id<256; id++ ) {
+        int k = pset_slot( pset_key(t, id) );
+        if( !use[k] ) continue;
+        static const uint8_t sc4[4] = {0, 0, 0, 1};
+        const PsetEvent& e = an.events[s.state[k]-1];
+        s.extra.append( sc4, 4 );
+        s.extra.append( an.ev_bytes.data()+e.off, e.len );
+        s.nins++;
+      }
     s.ins = s.extra.empty() ? 0 : c.ins;
   }
 
+  // (the cut point of the picture that ended, if any: none is looked at again)
   void check_cands( void ) {
     State& s = *st;
-    while( s.seen<s.an.cands.size() ) {
-      h264s::Candidate c = s.an.cands[s.seen++];
-      if( (c.sync && c.cut-s.begin>=chunksize) || (cap && c.cut-s.begin>=cap) ) { emit( c.cut ); start_part( c ); }
-    }
-    s.an.cands.clear(); s.seen = 0; // (each picture's: none is looked at again)
+    if( !s.an.has_cand ) return;
+    const h264s::Candidate& c = s.an.cand;
+    if( (c.sync && c.cut-s.begin>=chunksize) || (cap && c.cut-s.begin>=cap) ) { emit( c.cut ); start_part( c ); }
+    s.an.has_cand = false;
   }
 
   void do_process( void ) {
@@ -577,7 +685,7 @@ struct H264Split : Coroutine {
       chkinp(); uint l = getinplen();
       if( l==0 ) break; // EOF
       const byte* p = (const byte*)inpptr;
-      s.buf.insert( s.buf.end(), p, p+l );
+      s.buf.append( p, l );
       s.sc.feed( p, l, on_nal ); // may emit parts (and yield 2); p stays valid: no input is requested meanwhile
       inpptr += l;
     }
