@@ -1,6 +1,6 @@
 # h264p source review
 
-This review covers `h264p_src/` at commit 547d495. It looks for:
+This review covers `h264p_src/` at commit 547d495 (section 7 says where each finding stands since). It looks for:
 
 - bugs;
 - duplicate or redundant code;
@@ -673,3 +673,99 @@ test/h264p.sh has no negative tests: no truncated or corrupt input, no `-s` fail
 9. **D4 and A5:** a family X-macro, and generated per-level boilerplate and masks.
 10. **A2, A3 and D9:** split Model and ReconT along the lines above, starting with the parts that have no call-order coupling (RawModel, HeaderModel, the DPB, one SIMD-helper header).
 11. **The low-severity rest and the dead code (D10),** a file at a time.
+
+## 7. Status
+
+The findings above are of commit 547d495. They were worked through in the order of section 6, in these commits:
+
+| commit | what |
+|---|---|
+| 91b9ea8 | the crash, the `-t` failures and the robustness bugs: R1, F1-F10, S1-S4, M3, M4, M8, R3, R6, R7; the negative and crafted tests (A9) |
+| 102d1e1 | format 6, the model fixes that change the output: M1, M2, M5-M7, M9-M11, R4, R5; the tuning tools, C1-C9; D1; D3's parse-ahead scaffolding |
+| 1e60b92 | h264p.cpp split (A4); D2, D5, D6, W1, W2, W8 |
+| 15d7ee6 | the seam between the walk and its channels (A1); D7 |
+| 4cc4931 | RawModel and HeaderModel out of Model (A2); D8, W5 |
+| c989917 | recon.inc: the DPB and the pixel kernels apart (A3); D9, W6, W7 |
+| 52acec8 | the context mixing and tuning code: D4, W3, W4, A5, A8, the rest of D10, the dead knobs |
+| 51b0753 | the picture finished at its end, not row by row (D3) |
+
+Each commit but the format bump is bit-exact: the same MD5s of `t` and of `c -1` to `c -9` for every test stream, from the AVX2 and from the plain C++ build, and test/h264p.sh passes (98 round trips, and the negative and crafted cases). Format 6 codes the test streams at `-9` in 4,592,881 bytes, 2,314 fewer than format 5.
+
+Nothing got slower. Against a build of 547d495 on the same machine, compressing each stream of test/002 at `-9` takes the same CPU time or less (03: 13.3 s against 14.1 s, 04: 3.6 against 3.9, 06: 0.86 against 0.99, the others about the same), and `-1` compresses and decompresses the seven of them in the same time.
+
+### Bugs: all fixed
+
+| id | fix |
+|---|---|
+| R1 | POCs held to ±(2³⁰−1), POC distances to 16 bits, `mv_scale`'s divisor in 64 bits |
+| F1 | a worker that fails after the input has ended fails the call: exit 1, no output |
+| F2 | the stage that a failure leaves running is drained (`mt_drain()`) before its threads are joined |
+| F3, F7 | one `Output` for the five commands: never the input (same file, link or stdin), written under a temporary name and renamed when the call ends well, removed when it fails; `d` and `r` keep what they restored |
+| F4 | the splitter also cuts at I access units, and at any picture past 4 × `-c`; `-c` is at most 1024 MB, which keeps a part's record within its 32 bits |
+| F5 | MTwrap's rings have a size of their own (1 MB); `d` no longer uses the header's part size |
+| F6 | stdout is flushed and checked |
+| F8 | progress lines and messages under one lock; a call shows its first error only |
+| F9 | the usage lists the build's levels; a 5-byte file is cut short, not foreign; small maps in KB; `mt_head()` exists |
+| F10 | Windows file checks with `_stati64` and file IDs (cross-compiled, not run) |
+| S1 | the slice-group map kept from slice to slice; box-out as a rank order: 0.1 s instead of 43 s |
+| S2 | the log keeps 32-bit values and blocks up to their last nonzero value: 287 MB instead of 1.6 GB |
+| S3 | an SEI size past 2²⁴ fails as it is read, as it fails written |
+| S4, M3 | one coefficient limit (2²⁴) for CAVLC, CABAC and the model; a larger level stores its NAL unit verbatim |
+| M1 | picture starts compare the PPS id |
+| M2 | transform_size_8x8_flag reaches the reconstruction before `prepare()` |
+| M4 | the raw byte model's tables start zeroed however the model is made |
+| M5, M6 | `tx_` and the co-located end-of-slice context are reset per macroblock |
+| M7 | `div_floor` rounds towards minus infinity for a negative divisor |
+| M8 | B 16x8 and 8x16 the right way round |
+| M9 | the part masks match what the levels read, and are now made from one list (D4) |
+| M10 | per-picture history snapshots, and the reference POCs kept in MbCol |
+| M11 | one scan description per block geometry |
+| R3 | the last picture is finished at the end of the stream; H264P_RECDUMP refuses `x` and `-t` |
+| R4 | SP/SI documented as reconstructed like P/I |
+| R5 | a reused picture buffer resets its intra and reference maps |
+| R6 | `luma_ready()` checks `mb_prepared` |
+| R7 | the SAD kernels return their budget once it is reached, AVX2 and plain alike |
+| C1 | ftune.py commits only strict gains and skips families with no cost |
+| C2 | idx2inc.pl parenthesizes the variables it pastes |
+| C3 | the tuning tables are unmapped (`_Quit()`) |
+| C4 | each tuning table is mapped 8 bytes longer; a static_assert checks the shipping layout |
+| C5 | `cm_apm_q()` clamps the APM widths for the tables and the APMs alike |
+| C6 | the node, sign-context and table-size guards; the mixer's width asserted (≤ 32) |
+| C7 | a restarted run discards what it dumped; `-t` is refused in a dump build |
+| C8 | `mk.sh tuning` restores MOD/ |
+| C9 | opt.pl names h264p, needs a corpus list and fails on open errors; mk.sh, ftune.py and IDX-FORMAT.md corrected |
+
+### Duplication, wrappers, architecture
+
+| id | status |
+|---|---|
+| D1 | fixed: the ctxIdx rules are walk helpers (slice.inc) that the model calls |
+| D2 | fixed: one per-NAL step for `t` and `c` (nal.inc), one `code_nal()` for both directions |
+| D3 | fixed. The parse-ahead scaffolding is gone. The row-by-row finishing was measured first: finishing each picture at its end codes the same (the golden MD5s), and costs the same CPU time on test/002 within the runs' ±5% noise (−5: 20.5 s row by row, 21.1 s at the end; −9: 41.4 s and 40.0 s; three runs each). So a picture is now finished at its end, and `fin_next`, `fin_off`, `fin_rows`, `fin_post`, `fin_db`, `fin_mb` and `finish_rows` are gone |
+| D4 | fixed: `H264P_FAMS` lists the families (model.inc, famtune.cpp, and mk.sh reads it); one template per level, `IDX/l<L>/family.inc`, instead of 75; famvars.inc's `H_<fam>_VARS` list each family's variables once, with the parts each needs, and make the structs, the 105 part masks and the index builders' locals; the shape is stated once per level |
+| D5 | fixed: `drive()` runs every coroutine; `code_one`/`code_mt`; `with_level()` is the one switch over the levels |
+| D6 | one `unescape()` and one start-code finder. The splitter's own header parser stays: it cuts a stream it sees in pieces by 7.4.1.2.4, while h264p's walk needs a whole context, and parts are coded losslessly wherever they are cut (h264split.inc says so) |
+| D7 | fixed: `WalkCodes`, `xchg()`, `xval()`, `nc()`, `cbf_inc()` |
+| D8 | fixed |
+| D9 | partly. pixel.inc has the kernels and the helpers they share (the horizontal sums, `ld16x2`/`ld8x2`); one weighted-prediction decision (`wp_of`), one proxy prologue (`proxy_block`), one 4x4 norm class, `above_done()`/`left_done()`. Not merged: the bilinear SAD kernels of different widths and budgets, `mc_luma_p`'s two widths, the AVX2 `miss()` beside `edges()`, the three variances, the four Hadamard transforms. Each is a hot path that has to stay bit-exact between AVX2 and plain C++, so merging it is a speed question to measure kernel by kernel. Nor the macroblock coordinates written inline (28 times, at different scales and offsets and in different pictures, which a helper would only rename), or ReconOff, the stub of the levels without the decoder, which mirrors the interface |
+| D10 | fixed, except `tbl_n()`: the tuning form's generated code calls it (idx2inc.pl's `Table()`), so the finding was wrong |
+| dead knobs | the knobs a family never reads are frozen in every .idx, which says why; nal's `fld` patterns are cut to its 18 values; APM 2 is neither read nor trained where its share is nothing (bw 16: sig, lvl, sgn and cbf at `-9`). The shipping build codes the same |
+| orphaned comments | moved to their code, or removed with the code they described |
+| H_USES | h264p_levels.md §7.3 says where `H_USES` gates work |
+| W1 | fixed: compress_stream/decompress_stream take `H264pArgs` |
+| W2 | fixed: `drive()` replaces `process_file` |
+| W3 | fixed: one `code()` |
+| W4 | the class is made by each family's generated file (the level's template defines the shape and includes famcfg.inc), and `tc_tabs` is typed; famcfg.inc's `make`/`init`/`quit`/`bytes`/`name`/`tables` stay, as the interface `tc_fam` reads every family through |
+| W5 | fixed |
+| W6 | `fin_let` is gone; `luma_edge` and the proxy functions (with one prologue, `proxy_block`) fill their edges with one `edge_fill`. `sign_edges` → `edges` and `edge_miss` → `miss` stay: each adds the guard its callers need |
+| W7 | fixed: `act()` is `PX && mact` |
+| W8 | fixed: `BitWriter(p, nbits)` and `operator==` |
+| A1 | fixed: `WalkState` (the walk's state and its ctxIdx rules, not a template) is what the model reads; the caller chooses the bin policy (`BinPolicy`); one virtual `slice_begin`; the walk and its channel check their direction; errors follow the direction |
+| A2 | partly. RawModel and HeaderModel are out of Model, the `H_*_v` structs are assigned by name (GCC's 320 warnings are gone), and M2, M5 and M6 are fixed. Model's other parts (motion-vector prediction, the histories, the AQ fit, the per-family context builders), its call-order coupling, and the size of MbInfo and MbCol are as they were |
+| A3 | partly. The DPB (`Dpb`) and the pixel kernels (pixel.inc) are apart; the macroblock decoder and the model's sample queries share one class still, and ReconRefs carries the sample machinery |
+| A4 | fixed: h264p.cpp is the command line; annexb.inc, cli.inc, nal.inc, tsvfile.inc, cmstream.inc, drivers.inc and levels.inc the rest |
+| A5 | fixed: a level is its .idx files, one template, and an lv file of includes and flags; `mk.sh check` also compares a build without AVX2 |
+| A6 | F1, F2 and F5 fixed; MTwrap's counts are read in one place (`mt_counts()`); MTwrap itself is unchanged and still has no abort path (a failed pair's other stage is drained instead) |
+| A7 | fixed: one `Output` (F3, F7) |
+| A8 | the include order (no system header after Lib3's), `qword`, the namespaces of coro.inc and mt.inc: fixed. h264p's own sources have no warnings under GCC 13 and clang 18 with `-Wall -Wextra`; what remains is in Lib3 and MTwrap_v3. The long functions: compress_stream (118 lines) and tsv_dump (79) are shorter; block (470), mc_luma_p (199), tm_search (174), bit_x (156), mvd (154), inter (132) and qpd (124) are about as long as they were |
+| A9 | fixed: test/h264p.sh's negative and crafted cases |
