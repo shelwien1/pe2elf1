@@ -546,23 +546,23 @@ template <int f_DEC, class C> struct tc_fam {
 #else
     const cm_x16<NIN> *xq = nullptr;
 #endif
+    int pm;
     if(C::NMIX > 1) {
       mxf.set(0, cm_stretch(mx.mix(bm + (u32)node, mx.x, xq)));
       mxf.set(1, cm_stretch(mx2.mix(bw2 + (u32)node, mx.x, xq)));
       mxf.set(2, cm_stretch(mx3.mix(bs + (u32)node, mx.x, xq)));
       mxf.set(3, 256);
-      int pm = mxf.mix((u32)node * 5 + (u32)hs);  // by node and hint state
-      int pf = C::NAPM && C::bw < 16 ? (C::bw * pm + (16 - C::bw) * ap2.pp(pm, bf + (u32)node) + 8) >> 4 : pm;
-      b = tc_bit(rc, pf < 1 ? 1 : pf > CM_PONE - 1 ? CM_PONE - 1 : pf, b);
-      mx.upd(b, C::lr, C::mb, mx.x, xq);
+      pm = mxf.mix((u32)node * 5 + (u32)hs);  // by node and hint state
+    } else {
+      pm = mx.mix(bm + (u32)node, mx.x, xq);
+    }
+    int pf = C::NAPM && C::bw < 16 ? (C::bw * pm + (16 - C::bw) * ap2.pp(pm, bf + (u32)node) + 8) >> 4 : pm;
+    b = tc_bit(rc, pf < 1 ? 1 : pf > CM_PONE - 1 ? CM_PONE - 1 : pf, b);
+    mx.upd(b, C::lr, C::mb, mx.x, xq);
+    if(C::NMIX > 1) {
       mx2.upd(b, C::lr, C::mb, mx.x, xq);
       mx3.upd(b, C::lr, C::mb, mx.x, xq);
       mxf.upd(b, C::lr, C::mb);
-    } else {
-      int pm = mx.mix(bm + (u32)node, mx.x, xq);
-      int pf = C::NAPM && C::bw < 16 ? (C::bw * pm + (16 - C::bw) * ap2.pp(pm, bf + (u32)node) + 8) >> 4 : pm;
-      b = tc_bit(rc, pf < 1 ? 1 : pf > CM_PONE - 1 ? CM_PONE - 1 : pf, b);
-      mx.upd(b, C::lr, C::mb, mx.x, xq);
     }
     //  (APM 2 with no share, bw 16, is neither read nor trained: what it
     //  would give goes nowhere)

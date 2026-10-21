@@ -6,6 +6,11 @@ namespace h264p {
 // written (the values a channel gives are inconsistent), raises an error
 // (err.inc): the compressor's dry run then stores the NAL unit verbatim.
 
+// bit i of the bits at p, the first p[0]'s most significant; and the bits
+// before bit n in its byte, as the low bits of a byte (0 if none)
+INLINE int bit_at(const uint8_t* p, size_t i) { return p[i >> 3] >> (7 - (i & 7)) & 1; }
+INLINE uint8_t head_bits(const uint8_t* p, size_t n) { return (n & 7) ? (uint8_t)(p[n >> 3] >> (8 - (n & 7))) : 0; }
+
 struct BitReader {
   void Init(const uint8_t* data, size_t size) {
     data_ = data;
@@ -28,7 +33,7 @@ struct BitReader {
 
   int bit() {
     if (pos_ >= nbits_) err_raise("unexpected end of NAL unit");
-    int b = (data_[pos_ >> 3] >> (7 - (pos_ & 7))) & 1;
+    int b = bit_at(data_, pos_);
     pos_++;
     return b;
   }
@@ -42,7 +47,7 @@ struct BitReader {
     uint32_t v = 0;
     for (int i = 0; i < n; i++) {
       size_t p = pos_ + i;
-      int b = p < nbits_ ? (data_[p >> 3] >> (7 - (p & 7))) & 1 : 0;
+      int b = p < nbits_ ? bit_at(data_, p) : 0;
       v = (v << 1) | b;
     }
     return v;
@@ -87,7 +92,7 @@ struct BitWriter {
   // the first nbits bits of p, as if written
   void set(const uint8_t* p, size_t nbits) {
     buf_.assign(p, nbits / 8);
-    cur_ = (nbits & 7) ? (uint8_t)(p[nbits / 8] >> (8 - (nbits & 7))) : 0;
+    cur_ = head_bits(p, nbits);
     n_ = nbits;
   }
   // the bits o wrote
@@ -98,7 +103,7 @@ struct BitWriter {
   }
   // whether these bits are the first nbits bits of p
   bool same(const uint8_t* p, size_t nbits) const {
-    return n_ == nbits && buf_.same(p, nbits / 8) && (!(nbits & 7) || cur_ == (uint8_t)(p[nbits / 8] >> (8 - (nbits & 7))));
+    return n_ == nbits && buf_.same(p, nbits / 8) && (!(nbits & 7) || cur_ == head_bits(p, nbits));
   }
 
   void bit(int b) {
@@ -121,7 +126,7 @@ struct BitWriter {
   void se(int64_t v) { ue(v > 0 ? 2 * (uint64_t)v - 1 : 2 * (uint64_t)(-v)); }
   size_t pos() const { return n_; }
   int at(size_t i) const {
-    if (i >> 3 < buf_.size()) return (buf_[i >> 3] >> (7 - (i & 7))) & 1;
+    if (i >> 3 < buf_.size()) return bit_at(buf_.data(), i);
     return (cur_ >> ((n_ & 7) - 1 - (i & 7))) & 1;
   }
   void truncate(size_t nbits) {
@@ -129,7 +134,7 @@ struct BitWriter {
     if (nbits >> 3 == buf_.size())  // within the incomplete byte
       cur_ = (uint8_t)(cur_ >> ((n_ & 7) - (nbits & 7)));
     else
-      cur_ = (nbits & 7) ? (uint8_t)(buf_[nbits >> 3] >> (8 - (nbits & 7))) : 0;
+      cur_ = head_bits(buf_.data(), nbits);
     buf_.resize(nbits >> 3);
     n_ = nbits;
   }

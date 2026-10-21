@@ -1650,10 +1650,16 @@ struct Model : tc_rc<f_DEC> {
   int map_en() const { return maps_ok() ? 1 + tc_clamp(rec_.maps.energy[addr_] / 4 - 4, 0, 13) : 0; }
   // the maps of the last picture decoded fit the current one
   bool maps_ok() const { return rec_.maps.w == width_ && rec_.maps.w * rec_.maps.h == size_ && !mbaff_; }
-  int skp_bit(const H_skp_v& D, int node, int v, int pr = -1) {
+  // family f's contexts from its variables D, selected: what its bit()s
+  // code with
+  template <class F, class V>
+  static INLINE void sel(F& f, const V& D) {
     tcx X;
-    f_skp.make(D, X);
-    f_skp.select(X);
+    f.make(D, X);
+    f.select(X);
+  }
+  int skp_bit(const H_skp_v& D, int node, int v, int pr = -1) {
+    sel(f_skp, D);
     tc_syms[STG_SKIP]++;
     f_skp.prp = pr;
     return f_skp.bit(node, v);
@@ -1768,9 +1774,7 @@ struct Model : tc_rc<f_DEC> {
           if (k != m) c2 = Min(c2, costs[k]);
         mbt_d_->im = 1 + m;
         mbt_d_->ig = c2 == INT_MAX ? 0 : 1 + tc_clamp(tc_qlog((c2 - costs[m]) * 32 / x264_lam16(qp_pred_)), 0, 11);
-        tcx X;
-        f_mbt.make(*mbt_d_, X);
-        f_mbt.select(X);
+        sel(f_mbt, *mbt_d_);
       }
     }
     int x = ENC ? it - 1 : 0;
@@ -1805,9 +1809,7 @@ struct Model : tc_rc<f_DEC> {
     D.bd = bd_;
     D.qc = tc_clamp(qp_pred_ / 3, 0, 17);
     D.tx = tx_;
-    tcx X;
-    f_mbt.make(D, X);
-    f_mbt.select(X);
+    sel(f_mbt, D);
     mbt_d_ = &D;
     int stype = sc_->stype_;
     f_mbt.prp = -1;
@@ -1861,9 +1863,7 @@ struct Model : tc_rc<f_DEC> {
 
   // --- coded_block_pattern and transform_size_8x8_flag: the cbp family
   int cbp_bit(H_cbp_v& D, int node, int v, int pr) {
-    tcx X;
-    f_cbp.make(D, X);
-    f_cbp.select(X);
+    sel(f_cbp, D);
     f_cbp.prp = pr;
     return f_cbp.bit(node, v);
   }
@@ -2124,9 +2124,7 @@ struct Model : tc_rc<f_DEC> {
       if (b2 >= 0) D.rg = 1 + tc_clamp(tc_qlog((sads[b2] - sads[b1]) * 32 / lam16), 0, 11);
     }
     D.dr = D.dm < 9 && D.dm != mpm ? D.dm - (D.dm > mpm) : 8;
-    tcx X;
-    f_ipm.make(D, X);
-    f_ipm.select(X);
+    sel(f_ipm, D);
     int r = -1;
     f_ipm.prp = cab0(68);
     if (!f_ipm.bit(0, ENC && v < 0)) {
@@ -2194,9 +2192,7 @@ struct Model : tc_rc<f_DEC> {
         D.mg = 1 + tc_clamp(tc_qlog((c0 - costs[pc]) * 32 / x264_lam16(qp_pred_)), 0, 11);
       }
     }
-    tcx X;
-    f_ipm.make(D, X);
-    f_ipm.select(X);
+    sel(f_ipm, D);
     int r = 0;
     f_ipm.prp = cab0(SC::kCtxCpred + sc_->inc_cpred());
     if (f_ipm.bit(16, ENC && v > 0)) {
@@ -2216,9 +2212,7 @@ struct Model : tc_rc<f_DEC> {
     D.kind = b;
     D.ma = i ? sub_[i - 1] + 1 : 0;
     D.pi = i;
-    tcx X;
-    f_mvs.make(D, X);
-    f_mvs.select(X);
+    sel(f_mvs, D);
     f_mvs.prp = -1;
     f_mvs.prpa = nullptr;
     int node = 1;
@@ -2506,9 +2500,7 @@ struct Model : tc_rc<f_DEC> {
     G.ns = 3 + ns_[comp];
     G.es = ea == -128 && eb == -128 ? 3 : sgn3((ea == -128 ? 0 : ea) + (eb == -128 ? 0 : eb));
     G.as = tmn_ || talt_[0] == INT_MIN ? 9 : rel(talt_[comp] - mvp_[comp]);
-    tcx Y;
-    f_mvg.make(G, Y);
-    f_mvg.select(Y);
+    sel(f_mvg, G);
     f_mvg.prp = -1;
     if (f_mvg.bit(0, ENC && v < 0)) v = -m;
     return v;
@@ -2726,9 +2718,7 @@ struct Model : tc_rc<f_DEC> {
     G.xe = D.xe;
     G.lq = D.lq ? rel(D.lq - 7) : 9;
     G.bk = D.bc ? rel(D.bc - 7) : 9;
-    tcx Y;
-    f_qpg.make(G, Y);
-    f_qpg.select(Y);
+    sel(f_qpg, G);
     f_qpg.prp = -1;
     return f_qpg.bit(0, neg) ? -m : m;
   }
@@ -2741,6 +2731,9 @@ struct Model : tc_rc<f_DEC> {
     int kind;         // 0 DC, 1 4x4 or AC, 2 chroma AC (4:2:0, 4:2:2), 3 8x8
     int off;          // first scan position in the store: 1 for AC blocks
     int pos;          // place in the 8x8 block (in the macroblock for chroma)
+    // its row of the store (a plane's 4x4 blocks in raster order, chroma
+    // AC's 2 a row)
+    int row() const { return kind == 2 ? y * 2 + x : y * 4 + x; }
   };
   // the scan of a block's coefficients as raster positions in its w x h,
   // and back: 8x8 and 4x4 zigzag (Intra16x16's DC, and 4:4:4's chroma DC,
@@ -2843,7 +2836,7 @@ struct Model : tc_rc<f_DEC> {
     // is there already)
     uint64_t rows = g.kind == 0   ? (uint64_t)1 << (48 + g.plane)
                     : g.kind == 3 ? (uint64_t)0x33 << (g.plane * 16 + g.y * 4 + g.x)
-                                  : (uint64_t)1 << (g.plane * 16 + (g.kind == 2 ? g.y * 2 + g.x : g.y * 4 + g.x));
+                                  : (uint64_t)1 << (g.plane * 16 + g.row());
     if (!(mi_->cmask & rows)) {
       int k = 0, m = g.kind == 3 ? 64 : g.kind == 0 ? Min(n, 16) : n;
       while (k < m && !c[k]) k++;
@@ -2865,7 +2858,7 @@ struct Model : tc_rc<f_DEC> {
         mi_->coef[g.plane][(g.y + (s >> 1)) * 4 + g.x + (s & 1)][j >> 2] = (int8_t)tc_clamp(c[j], -127, 127);
       }
     } else {
-      d = mi_->coef[g.plane][g.kind == 2 ? g.y * 2 + g.x : g.y * 4 + g.x];
+      d = mi_->coef[g.plane][g.row()];
       for (int j = 0; j < n; j++) d[j + g.off] = (int8_t)tc_clamp(c[j], -127, 127);
     }
   }
@@ -3182,7 +3175,7 @@ struct Model : tc_rc<f_DEC> {
   // there (col_; 2 none)
   int cbf_col(const Geo& g) const {
     if (!col_) return 2;
-    return g.kind == 0 ? col_->dcm >> g.plane & 1 : col_->nzm[g.plane] >> (g.kind == 2 ? g.y * 2 + g.x : g.y * 4 + g.x) & 1;
+    return g.kind == 0 ? col_->dcm >> g.plane & 1 : col_->nzm[g.plane] >> g.row() & 1;
   }
 
   // --- the sig family: where a block's nonzero coefficients are, per
@@ -3257,9 +3250,7 @@ struct Model : tc_rc<f_DEC> {
         // the same position in the blocks A and B (0 none, 1 zero, 2 not)
         if (H_USES(sig, sn))
           S.sn = (na.m ? 1 + (coef_at(na.m, g, na.i, i) != 0) : 0) * 3 + (nb.m ? 1 + (coef_at(nb.m, g, nb.i, i) != 0) : 0);
-        tcx Y;
-        f_sig.make(S, Y);
-        f_sig.select(Y);
+        sel(f_sig, S);
         f_sig.prp = cab0(sc_->ctx_sig(cat, i));
         sig[i] = f_sig.bit(0, ENC && c[i] != 0);
         tc_syms[STG_SIG]++;
@@ -3426,7 +3417,7 @@ struct Model : tc_rc<f_DEC> {
     if (g.plane == 2) {
       Geo gb = g;
       gb.plane = 1;
-      G.scb = sgn3(coef_at(mi_, gb, g.kind == 2 ? g.y * 2 + g.x : g.y * 4 + g.x, k));
+      G.scb = sgn3(coef_at(mi_, gb, g.row(), k));
     }
     G.mag = Min(b.mag[k], 3) - 1;
     G.ez = pok ? (b.q4(k) ? (b.q4(k) > 0 ? 2 : 3) + 2 * (abs(b.q4(k)) >= 4) : 1) : 0;
@@ -3444,9 +3435,7 @@ struct Model : tc_rc<f_DEC> {
       i64 r = fx * s.glx[k] + fy * s.gly[k], ra = r < 0 ? -r : r, m = Min(b.mag[k], 4096);
       if (fd && r) G.dm = 1 + (r < 0) + 2 * (ra > fd * m) + 2 * (ra > 4 * fd * m);
     }
-    tcx X;
-    f_sgn.make(G, X);
-    f_sgn.select(X);
+    sel(f_sgn, G);
     int sg = f_sgn.bit(0, ENC && c[k] < 0);
     s.ghist = s.ghist % 3 * 3 + 1 + sg;
     if (pok && b.q4(k)) s.sagree += (b.q4(k) < 0) == (sg != 0) ? 1 : -1;

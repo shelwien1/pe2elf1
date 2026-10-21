@@ -385,18 +385,14 @@ struct WalkState {
   }
 
   // macroblock and 4x4 block containing the luma 4x4 block (x, y) of the
-  // current macroblock, x or y may be -1
-  const MbState* nb4(int x, int y, int& idx) const {
+  // current macroblock, x or y may be -1; nbc() the same for chroma 4x4
+  // blocks (2 wide, ch_h_ high)
+  const MbState* nb4(int x, int y, int& idx) const { return nb_blk(x, y, 16, 16, idx); }
+  const MbState* nbc(int x, int y, int& idx) const { return nb_blk(x, y, 8, 4 * ch_h_, idx); }
+  const MbState* nb_blk(int x, int y, int w, int h, int& idx) const {
     int xW = 0, yW = 0;
-    const MbState* n = nb_loc(x < 0 ? -1 : 4 * x, y < 0 ? -1 : 4 * y, 16, 16, xW, yW);
-    idx = (yW >> 2) * 4 + (xW >> 2);
-    return n;
-  }
-  // the same for chroma 4x4 blocks (2 wide, ch_h_ high)
-  const MbState* nbc(int x, int y, int& idx) const {
-    int xW = 0, yW = 0;
-    const MbState* n = nb_loc(x < 0 ? -1 : 4 * x, y < 0 ? -1 : 4 * y, 8, 4 * ch_h_, xW, yW);
-    idx = (yW >> 2) * 2 + (xW >> 2);
+    const MbState* n = nb_loc(x < 0 ? -1 : 4 * x, y < 0 ? -1 : 4 * y, w, h, xW, yW);
+    idx = (yW >> 2) * (w >> 2) + (xW >> 2);
     return n;
   }
   bool field_mb() const { return field_ || cur_->field; }
@@ -438,15 +434,12 @@ struct WalkState {
   static int ctx_mvd(int comp) { return comp ? 47 : 40; }  // + mvd_inc(), then + 3, + 4 ...
   // significant_coeff_flag's and last_significant_coeff_flag's ctxIdxInc
   // by scan position in a block of ctxBlockCat cat, and their ctxIdx
-  const uint8_t* sig_inc(int cat) const {
+  const uint8_t* sig_inc(int cat) const { return inc_of(cat, field_mb() ? kSig8x8Field : kSig8x8Frame); }
+  const uint8_t* last_inc(int cat) const { return inc_of(cat, kLast8x8); }
+  // (t8 that of the 8x8 blocks)
+  const uint8_t* inc_of(int cat, const uint8_t* t8) const {
     if (cat == 3) return chroma_ == 2 ? kDcInc422 : kDcInc420;
-    if (cat == 5 || cat == 9 || cat == 13) return field_mb() ? kSig8x8Field : kSig8x8Frame;
-    return kScanPos;
-  }
-  const uint8_t* last_inc(int cat) const {
-    if (cat == 3) return chroma_ == 2 ? kDcInc422 : kDcInc420;
-    if (cat == 5 || cat == 9 || cat == 13) return kLast8x8;
-    return kScanPos;
+    return cat == 5 || cat == 9 || cat == 13 ? t8 : kScanPos;
   }
   int ctx_sig(int cat, int i) const { return kSigBase[field_mb()][cat] + sig_inc(cat)[i]; }
   int ctx_last(int cat, int i) const { return kLastBase[field_mb()][cat] + last_inc(cat)[i]; }
@@ -702,7 +695,7 @@ struct SliceCoderT : WalkState, WalkCodes<SliceCoderT<kMode>> {
       if (b && rec_) {  // the end of a run of CABAC data: its last bit
         size_t e = br_->pos();
         rec_->segs.push_back(e);
-        if (!(br_->data_[(e - 1) >> 3] >> (7 - ((e - 1) & 7)) & 1)) rec_->stops = false;
+        if (!bit_at(br_->data_, e - 1)) rec_->stops = false;
       }
       return b;
     }
@@ -1152,7 +1145,7 @@ struct SliceCoderT : WalkState, WalkCodes<SliceCoderT<kMode>> {
   int mb_skip_flag(int v) { return bin(ctx_skip(), v); }
 
   int mb_field_decoding_flag(int v) {
-    if (W && (v < 0 || v > 1)) fail("missing or bad mb_field_decoding_flag (fld row)");
+    if (W && (v < 0 || v > 1)) fail("missing or bad mb_field_decoding_flag");
     if (!cabac_) return u(1, v);
     return bin(ctx_field(), v);
   }

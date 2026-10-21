@@ -52,7 +52,7 @@ struct Bits {
     while (k-- > 0) {
       int b = 0;
       if (pos < n)
-        b = p[pos >> 3] >> (7 - (pos & 7)) & 1, pos++;
+        b = h264p::bit_at(p, pos), pos++;
       else
         err = true;
       v = v << 1 | b;

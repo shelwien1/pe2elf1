@@ -347,9 +347,6 @@ void apply_trailer(const Trailer& t, BitWriter& bw, int pad) {
   bw.append(2 * (size_t)t.czw, 0);
 }
 
-int get_bit(const Buf<uint8_t>& v, size_t i) { return v[i >> 3] >> (7 - (i & 7)) & 1; }
-
-
 // Compares the RBSP written up to and including the stop bit (bw; pad as
 // write_syntax returned it) with the original one, and finds the trailer
 // that makes them equal. False when there is none (why). obs is the bit
@@ -378,14 +375,14 @@ bool find_trailer(const BitWriter& bw, int pad, const Buf<uint8_t>& rbsp, Traile
   if (!o.data().same(rbsp.data(), rn)) {
     // compare our bits up to and including the stop bit
     size_t rbits = rn * 8, d = 0;
-    while (d < pbits && d < rbits && bw.at(d) == get_bit(rbsp, d)) d++;
+    while (d < pbits && d < rbits && bw.at(d) == bit_at(rbsp.data(), d)) d++;
     if (pbits - d > 64 || rbits - d > 4096) {
       set_why(why, "re-encoding differs at bit %zu of %zu", d, rbits);
       return false;
     }
     t.irregular = true;
     t.drop = (int64_t)(pbits - d);
-    for (size_t i = d; i < rbits; i++) t.bits.push_back((uint8_t)get_bit(rbsp, i));
+    for (size_t i = d; i < rbits; i++) t.bits.push_back((uint8_t)bit_at(rbsp.data(), i));
   }
   o.copy(bw);
   apply_trailer(t, o, pad);

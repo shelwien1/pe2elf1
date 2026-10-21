@@ -136,7 +136,7 @@ bool checked_bits(const BitWriter& bw, bool nobins, const BinRec& rec, const Buf
   size_t k = 0, from = 0;
   for (size_t i = 0; i < rec.segs.size(); i += 2) {
     for (size_t b = from; b < rec.segs[i]; b++, k++)
-      if (k >= bw.pos() || bw.at(k) != get_bit(rbsp, b)) return false;
+      if (k >= bw.pos() || bw.at(k) != bit_at(rbsp.data(), b)) return false;
     from = rec.segs[i + 1];
   }
   return k == bw.pos();
