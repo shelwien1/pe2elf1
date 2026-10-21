@@ -2324,7 +2324,12 @@ struct Model : tc_rc<f_DEC> {
   int ref_dist(int l, int r) const {
     return rec_.motion() && r >= 0 && r < rec_.nlist[l] && rec_.list[l][r] ? poc_dist(cur_poc_, rec_.list[l][r]->poc) : 0;
   }
-  static int mv_scale(int v, int dr, int dn) { return (int)div_floor((int64_t)v * dr * 2 + dn, 2 * (int64_t)dn); }
+  // (held to the range the records keep a vector in: scaled by a far
+  // POC distance, the template search's costs would pass an int)
+  static int mv_scale(int v, int dr, int dn) {
+    int64_t m = div_floor((int64_t)v * dr * 2 + dn, 2 * (int64_t)dn);
+    return (int)(m < -32768 ? -32768 : m > 32767 ? 32767 : m);
+  }
   // B: the vector the motion of list 1's first reference's co-located
   // block (as if it pointed at list 0's first reference) gives the 4x4
   // block (x, y) on list l's reference ref, as temporal direct does: false

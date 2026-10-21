@@ -1933,7 +1933,10 @@ struct MbDecoder : Dpb {
     if (!REFS) return;
     const Sps& sps = *h.sps;
     const Pps& pps = *h.pps;
-    if (newpic || !cur || cur->mbw != sps.width_mbs || cur->mbh != sps.frame_height_mbs()) {
+    // (a picture whose SPS or PPS is redefined between its slices, as one it
+    // does not support, ends there: its reconstruction, as the samples' QP,
+    // would be the wrong one's)
+    if (newpic || !cur || cur->mbw != sps.width_mbs || cur->mbh != sps.frame_height_mbs() || !supported(sps, pps)) {
       finish_picture();
       if (!supported(sps, pps)) {
         drop_refs();
