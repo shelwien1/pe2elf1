@@ -1,22 +1,20 @@
 /*  IDX's runtime, from Shelwien's psrc tree by way of oggcomp
-    (balrogg-P-hash sh_mapping.inc), unchanged but for the namespace.
-    See IDX/IDX-FORMAT.md sec.13.
+    (balrogg-P-hash sh_mapping.inc): `mapping`, the threshold quantization,
+    and `masking`, the bit selection, which the code IDX/idx2inc.pl
+    generates builds its maps with.  See IDX/IDX-FORMAT.md sec.13.
 
-    `mapping` is threshold quantization: it is handed a descriptor string and,
-    after it, the pattern -- `S += strlen(S)+1` steps over the first to reach
-    the second -- and builds the bucket map from the '1' positions.  That
-    indirection is the whole trick the format turns on.  `pdesc` puts "!MAP!"
-    at the front of the descriptor, so IDX/opt.pl can find the pattern by
-    scanning the executable and hill-climb it *in the binary*, with no parse
-    and no rebuild.  `mdesc` builds the identical object without the marker,
-    which is how a knob is frozen out of the search space.
-
-    tsvcomp uses `mapping` and `masking`; `masking_b` is here because the
-    format has it.  */
+    `mapping` is handed a descriptor string and, after it, the pattern --
+    `S += strlen(S)+1` steps over the first to reach the second -- and builds
+    the bucket map from the '1' positions.  That indirection is the whole
+    trick the format turns on.  `pdesc` puts "!MAP!" at the front of the
+    descriptor, so IDX/opt.pl can find the pattern by scanning the
+    executable and hill-climb it *in the binary*, with no parse and no
+    rebuild.  `mdesc` builds the identical object without the marker, which
+    is how a knob is frozen out of the search space; `pmask` and `mmask` the
+    same for a masking.  (The library's masking_b, for IDX's "b&" lines,
+    which h264p's IDX has none of, is left out.)  */
 
 namespace h264p {
-
-
 
 struct mapping {
   int  left;
@@ -56,6 +54,7 @@ struct mapping {
 
 };
 
+// the selected bits of a value, in order (an index's "&" line)
 struct masking {
   int  Size, SMSize, bits;
   int* pmap;
@@ -96,54 +95,10 @@ struct masking {
   }
 };
 
-struct masking_b {
-  int  Size, SMSize;
-  int* pmap;
-
-  masking_b(const char* S1) {
-    const char* S = S1;
-    S += strlen(S) + 1;
-    int MSize = strlen(S);
-    unsigned int mask;
-    int b, i, j, k;
-    mask = 0;
-    for (i = 0; i < MSize; i++) {
-      mask <<= 1;
-      mask += (S[i] & 1); 
-    }
-    SMSize = 1 << MSize;
-    pmap = new int[SMSize];
-    for (i = 0; i < SMSize; i++) pmap[i] = 0;
-    for (b = MSize - 1, k = 0; b >= 0; b--) {
-      for (i = (1 << (MSize - 1 - b)); i < (2 << (MSize - 1 - b)); i++) {
-        j = (i & (int(~mask) >> (b + 1)));
-        pmap[i] = (j < i) ? pmap[j] : k++;
-      }
-    }
-    Size = k;
-  }
-
-  int map(int x) {
-    if (x < 1) x = 1;
-    if (x >= SMSize) x = SMSize - 1;
-    return pmap[x];
-  }
-
-  void inc(int& y, int r) {
-    y *= Size;
-    y += map(r);
-  }
-};
-
-// Kept just in case you rely on them elsewhere
-#define GCCBUG1(X) #X
-#define GCCBUG2(X,Y) X##Y
-
 // Tunable: the descriptor starts with "!MAP!", so IDX/opt.pl's scan of the
 // executable finds the pattern and hill-climbs it in place.
-#define pdesc_live(Desc, Ofs, Map) mapping Desc(Ofs, "!MAP!" #Desc "!" #Ofs "\x00" Map)
-#define pmask_live(Desc, Map) masking Desc("!MAP!" #Desc "!0\x00" Map)
-#define pmask2_live(Desc, Map) masking_b Desc("!MAP!" #Desc "!0\x00" Map)
+#define pdesc(Desc, Ofs, Map) mapping Desc(Ofs, "!MAP!" #Desc "!" #Ofs "\x00" Map)
+#define pmask(Desc, Map) masking Desc("!MAP!" #Desc "!0\x00" Map)
 
 // Frozen (IDX-FORMAT.md sec.10): the same object built from the same
 // pattern, but the descriptor carries no "!MAP!" marker, so the optimizer's
@@ -154,14 +109,5 @@ struct masking_b {
 // S += strlen(S)+1, so both strings must be there.
 #define mdesc(Desc, Ofs, Map) mapping Desc(Ofs, #Desc "!" #Ofs "\x00" Map)
 #define mmask(Desc, Map) masking Desc(#Desc "!0\x00" Map)
-#define mmask2(Desc, Map) masking_b Desc(#Desc "!0\x00" Map)
-
-// The indirection lets a consumer freeze a whole generated header without
-// editing it: #undef pdesc / #define pdesc(D,O,M) mdesc(D,O,M) around the
-// #include, then point it back at pdesc_live.  bmpc does that to coder0's
-// C0 block, which is shared and was tuned on text.
-#define pdesc(Desc, Ofs, Map) pdesc_live(Desc, Ofs, Map)
-#define pmask(Desc, Map) pmask_live(Desc, Map)
-#define pmask2(Desc, Map) pmask2_live(Desc, Map)
 
 }  // namespace h264p

@@ -54,11 +54,7 @@ static const int H7_cbp_rJ = (254+0) * (1);
 static const int H7_cbp_rK = (255+0) * (1);
 static const int H7_cbp_rL = (254+0) * (1);
 static const int H7_cbp_rD = (255+0) * (1);
-static const int H7_cbp_rT = (0+0) * (1);
-static const int H7_cbp_rG = (0+0) * (1);
 static const int H7_cbp_lr = (15+0) * (1);
-static const int H7_cbp_lrm = (0+0) * (1);
-static const int H7_cbp_mbm = (0+0) * (1);
 static const int H7_cbp_mwA = (2+0) * (1);
 static const int H7_cbp_mwB = (5+0) * (1);
 static const int H7_cbp_mwC = (1+0) * (1);
@@ -69,10 +65,14 @@ static const int H7_cbp_mwJ = (8+0) * (1);
 static const int H7_cbp_mwK = (8+0) * (1);
 static const int H7_cbp_mwL = (38+0) * (1);
 static const int H7_cbp_mwD = (60+0) * (1);
-static const int H7_cbp_mwT = (0+0) * (1);
-static const int H7_cbp_mwG = (0+0) * (1);
-static const int H7_cbp_mt = (0+0) * (1);
 static const int H7_cbp_mb = (17+0) * (1);
+static const int H7_cbp_rT = (0+0) * (1);
+static const int H7_cbp_mwT = (0+0) * (1);
+static const int H7_cbp_mt = (0+0) * (1);
+static const int H7_cbp_lrm = (0+0) * (1);
+static const int H7_cbp_mbm = (0+0) * (1);
+static const int H7_cbp_rG = (0+0) * (1);
+static const int H7_cbp_mwG = (0+0) * (1);
 static const int H7_cbp_hA = (24+0) * (1);
 static const int H7_cbp_hB = (24+0) * (1);
 static const int H7_cbp_hC = (24+0) * (1);
@@ -108,11 +108,7 @@ static const long long H7_cbp_w_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 7), 4); 
 
 #define H7_cbp_USES(X) X(pc) X(cls) X(st) X(col) X(q6) X(pq) X(pg) X(em) X(tp) X(td) X(en) X(inc)
 
-struct H7_cbp_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H7_cbp_T {
   cm_cnt2 H7_cbp_A[tc_rows(H7_cbp_a_Volume, H7_cbp_hA) * H_cbp_ND];
   cm_cnt2 H7_cbp_B[tc_rows(H7_cbp_b_Volume, H7_cbp_hB) * H_cbp_ND];
   cm_cnt2 H7_cbp_C[tc_rows(H7_cbp_c_Volume, H7_cbp_hC) * H_cbp_ND];
@@ -161,8 +157,6 @@ struct H7_cbp_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_cbp_ND * 5 * 4)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_cbp_ND * 5)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H7_cbp_g_Volume * H_cbp_NG);
-  void H7_cbp_Init( void ) {
-  
-  }
+  void H7_cbp_Init( void ) {}
   void H7_cbp_Quit( void ) {}
 };

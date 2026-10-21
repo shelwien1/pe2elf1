@@ -1,6 +1,6 @@
 #  h264p's mbt family at level -7: its context indices and its tunable
 #  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
-#  MOD/l7/mbt_h.inc and MOD/l7/mbt_p.inc from this file and mbt.inc.
+#  MOD/l7/mbt_h.inc and MOD/l7/mbt_p.inc from this file and family.inc.
 #
 #  mb_type as a binary tree over its value, the node being the position in the
 #  tree. st is the slice type and reference status, ca/cb/cc the classes of
@@ -90,14 +90,15 @@ Index w
  w_sm: sm, 1!1111110010001000
  w_tm: tm, 1!0101000100010000
 
+#  (frozen: see the parameters below)
 Index t
- t_st: st, 1!0
+! t_st: st, 1!0
 
 Index n
- n_st: st, 1!0
+! n_st: st, 1!0
 
 Index g
- g_st: st, 1!0
+! g_st: st, 1!0
 
 Number rA, 1, 0!11111110
 Number rB, 1, 0!11111010
@@ -109,11 +110,7 @@ Number rJ, 1, 0!11111110
 Number rK, 1, 0!11111011
 Number rL, 1, 0!11111111
 Number rD, 1, 0!00111001
-Number rT, 1, 0!00000000
-Number rG, 1, 0!00000000
 Number lr, 1, 0!01111
-Number lrm, 1, 0!00000
-Number mbm, 1, 0!00000000
 Number mwA, 1, 0!00010000
 Number mwB, 1, 0!00001111
 Number mwC, 1, 0!00010000
@@ -124,10 +121,18 @@ Number mwJ, 1, 0!00011001
 Number mwK, 1, 0!10000000
 Number mwL, 1, 0!00111110
 Number mwD, 1, 0!10000000
-Number mwT, 1, 0!00000000
-Number mwG, 1, 0!00000000
-Number mt, 1, 0!000
 Number mb, 1, 0!00011111
+
+#  Frozen: what mbt never reads, which live would only take opt.pl's trials.
+#  It codes decisions with bit() alone: no mantissa (rT, mwT, mt, index t),
+#  no hint and its mixer (lrm, mbm, index n), no signs (rG, mwG, index g).
+! Number rT, 1, 0!00000000
+! Number mwT, 1, 0!00000000
+! Number mt, 1, 0!000
+! Number lrm, 1, 0!00000
+! Number mbm, 1, 0!00000000
+! Number rG, 1, 0!00000000
+! Number mwG, 1, 0!00000000
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
 #  direct, one that does not is hashed into 2^h rows and contexts share

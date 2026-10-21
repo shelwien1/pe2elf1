@@ -62,11 +62,7 @@ static const int H3_sig_rJ = (255+0) * (1);
 static const int H3_sig_rK = (253+0) * (1);
 static const int H3_sig_rL = (253+0) * (1);
 static const int H3_sig_rD = (254+0) * (1);
-static const int H3_sig_rT = (0+0) * (1);
-static const int H3_sig_rG = (0+0) * (1);
 static const int H3_sig_lr = (10+0) * (1);
-static const int H3_sig_lrm = (0+0) * (1);
-static const int H3_sig_mbm = (0+0) * (1);
 static const int H3_sig_mwA = (63+0) * (1);
 static const int H3_sig_mwB = (9+0) * (1);
 static const int H3_sig_mwC = (67+0) * (1);
@@ -77,10 +73,14 @@ static const int H3_sig_mwJ = (76+0) * (1);
 static const int H3_sig_mwK = (22+0) * (1);
 static const int H3_sig_mwL = (96+0) * (1);
 static const int H3_sig_mwD = (64+0) * (1);
-static const int H3_sig_mwT = (0+0) * (1);
-static const int H3_sig_mwG = (0+0) * (1);
-static const int H3_sig_mt = (0+0) * (1);
 static const int H3_sig_mb = (122+0) * (1);
+static const int H3_sig_rT = (0+0) * (1);
+static const int H3_sig_mwT = (0+0) * (1);
+static const int H3_sig_mt = (0+0) * (1);
+static const int H3_sig_lrm = (0+0) * (1);
+static const int H3_sig_mbm = (0+0) * (1);
+static const int H3_sig_rG = (0+0) * (1);
+static const int H3_sig_mwG = (0+0) * (1);
 static const int H3_sig_hA = (24+0) * (1);
 static const int H3_sig_hB = (21+0) * (1);
 static const int H3_sig_hC = (24+0) * (1);
@@ -116,11 +116,7 @@ static const long long H3_sig_w_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 5), 6); 
 
 #define H3_sig_USES(X) X(cg) X(pos) X(rem) X(md) X(hb) X(q6) X(ft) X(zl) X(h3) X(sn)
 
-struct H3_sig_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H3_sig_T {
   cm_cnt2 H3_sig_A[tc_rows(H3_sig_a_Volume, H3_sig_hA) * H_sig_ND];
   cm_cnt2 H3_sig_B[tc_rows(H3_sig_b_Volume, H3_sig_hB) * H_sig_ND];
   cm_cnt2 H3_sig_C[tc_rows(H3_sig_c_Volume, H3_sig_hC) * H_sig_ND];
@@ -169,8 +165,6 @@ struct H3_sig_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_sig_ND * 5 * 4)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_sig_ND * 5)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H3_sig_g_Volume * H_sig_NG);
-  void H3_sig_Init( void ) {
-  
-  }
+  void H3_sig_Init( void ) {}
   void H3_sig_Quit( void ) {}
 };

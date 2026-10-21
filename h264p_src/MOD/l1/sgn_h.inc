@@ -27,19 +27,19 @@ static const int H1_sgn_rA = (255+0) * (1);
 static const int H1_sgn_rB = (194+0) * (1);
 static const int H1_sgn_rC = (127+0) * (1);
 static const int H1_sgn_rD = (255+0) * (1);
-static const int H1_sgn_rT = (0+0) * (1);
-static const int H1_sgn_rG = (0+0) * (1);
 static const int H1_sgn_lr = (13+0) * (1);
-static const int H1_sgn_lrm = (0+0) * (1);
-static const int H1_sgn_mbm = (0+0) * (1);
 static const int H1_sgn_mwA = (3+0) * (1);
 static const int H1_sgn_mwB = (4+0) * (1);
 static const int H1_sgn_mwC = (16+0) * (1);
 static const int H1_sgn_mwD = (16+0) * (1);
-static const int H1_sgn_mwT = (0+0) * (1);
-static const int H1_sgn_mwG = (0+0) * (1);
-static const int H1_sgn_mt = (0+0) * (1);
 static const int H1_sgn_mb = (128+0) * (1);
+static const int H1_sgn_rT = (0+0) * (1);
+static const int H1_sgn_mwT = (0+0) * (1);
+static const int H1_sgn_mt = (0+0) * (1);
+static const int H1_sgn_lrm = (0+0) * (1);
+static const int H1_sgn_mbm = (0+0) * (1);
+static const int H1_sgn_rG = (0+0) * (1);
+static const int H1_sgn_mwG = (0+0) * (1);
 static const int H1_sgn_hA = (24+0) * (1);
 static const int H1_sgn_hB = (24+0) * (1);
 static const int H1_sgn_hC = (24+0) * (1);
@@ -60,11 +60,7 @@ static const long long H1_sgn_t_Volume = tc_vmul(1, 1); // 1
 
 #define H1_sgn_USES(X) X(cg) X(pos) X(sa) X(sb) X(gh) X(scb)
 
-struct H1_sgn_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H1_sgn_T {
   cm_cnt2s H1_sgn_A[tc_rows(H1_sgn_a_Volume, H1_sgn_hA) * H_sgn_ND];
   cm_cnt2s H1_sgn_B[tc_rows(H1_sgn_b_Volume, H1_sgn_hB) * H_sgn_ND];
   cm_cnt2s H1_sgn_C[tc_rows(H1_sgn_c_Volume, H1_sgn_hC) * H_sgn_ND];
@@ -89,8 +85,6 @@ struct H1_sgn_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H1_sgn_n_Volume, H1_sgn_hN) * H_sgn_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H1_sgn_n_Volume, H1_sgn_hN) * H_sgn_MND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H1_sgn_g_Volume * H_sgn_NG);
-  void H1_sgn_Init( void ) {
-  
-  }
+  void H1_sgn_Init( void ) {}
   void H1_sgn_Quit( void ) {}
 };

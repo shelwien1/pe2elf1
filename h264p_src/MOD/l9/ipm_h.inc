@@ -58,13 +58,9 @@ static const int H9_ipm_rJ = (253+0) * (1);
 static const int H9_ipm_rK = (182+0) * (1);
 static const int H9_ipm_rL = (255+0) * (1);
 static const int H9_ipm_rD = (255+0) * (1);
-static const int H9_ipm_rT = (0+0) * (1);
-static const int H9_ipm_rG = (0+0) * (1);
 static const int H9_ipm_rS1 = (16+0) * (1);
 static const int H9_ipm_rS2 = (6+0) * (1);
 static const int H9_ipm_lr = (15+0) * (1);
-static const int H9_ipm_lrm = (0+0) * (1);
-static const int H9_ipm_mbm = (0+0) * (1);
 static const int H9_ipm_mwA = (64+0) * (1);
 static const int H9_ipm_mwB = (62+0) * (1);
 static const int H9_ipm_mwC = (20+0) * (1);
@@ -75,13 +71,17 @@ static const int H9_ipm_mwJ = (32+0) * (1);
 static const int H9_ipm_mwK = (35+0) * (1);
 static const int H9_ipm_mwL = (31+0) * (1);
 static const int H9_ipm_mwD = (32+0) * (1);
-static const int H9_ipm_mwT = (0+0) * (1);
-static const int H9_ipm_mwG = (0+0) * (1);
 static const int H9_ipm_bw = (12+0) * (1);
-static const int H9_ipm_mt = (0+0) * (1);
 static const int H9_ipm_qs = (49+3) * (1);
 static const int H9_ipm_qf = (51+3) * (1);
 static const int H9_ipm_mb = (40+0) * (1);
+static const int H9_ipm_rT = (0+0) * (1);
+static const int H9_ipm_mwT = (0+0) * (1);
+static const int H9_ipm_mt = (0+0) * (1);
+static const int H9_ipm_lrm = (0+0) * (1);
+static const int H9_ipm_mbm = (0+0) * (1);
+static const int H9_ipm_rG = (0+0) * (1);
+static const int H9_ipm_mwG = (0+0) * (1);
 static const int H9_ipm_hA = (24+0) * (1);
 static const int H9_ipm_hB = (24+0) * (1);
 static const int H9_ipm_hC = (24+0) * (1);
@@ -119,11 +119,7 @@ static const long long H9_ipm_w_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 
 
 #define H9_ipm_USES(X) X(k8) X(ma) X(mb) X(mc) X(mp) X(pv) X(mh) X(col) X(dm) X(ds) X(pm) X(mg) X(pr) X(rg) X(p2) X(pq) X(dr)
 
-struct H9_ipm_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H9_ipm_T {
   cm_cnt2 H9_ipm_A[tc_rows(H9_ipm_a_Volume, H9_ipm_hA) * H_ipm_ND];
   cm_cnt2 H9_ipm_B[tc_rows(H9_ipm_b_Volume, H9_ipm_hB) * H_ipm_ND];
   cm_cnt2 H9_ipm_C[tc_rows(H9_ipm_c_Volume, H9_ipm_hC) * H_ipm_ND];
@@ -180,8 +176,6 @@ struct H9_ipm_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_ipm_ND * 5 * 4)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_ipm_ND * 5)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H9_ipm_g_Volume * H_ipm_NG);
-  void H9_ipm_Init( void ) {
-  
-  }
+  void H9_ipm_Init( void ) {}
   void H9_ipm_Quit( void ) {}
 };

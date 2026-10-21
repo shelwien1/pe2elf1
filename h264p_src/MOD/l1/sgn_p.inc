@@ -1,20 +1,21 @@
-/*  The template IDX/idx2inc.pl reads alongside sgn.idx: the sgn
-    family's index builder and the tables its indices address.  Copied
-    through into MOD/l1/sgn_p.inc with `H1_sgn_` replaced by the prefix,
-    `MakeIndex` by the statements that build the indices, and the Table()
-    lines lifted out into the struct in MOD/l1/sgn_h.inc.  Edit this file
-    and sgn.idx, not MOD/; ../../mk.sh regenerates both.
+/*  The template IDX/idx2inc.pl reads alongside each .idx of IDX/l1: a
+    family's index builder, the tables its indices address and its
+    configuration class, at level -1.  Copied through into
+    MOD/l1/<family>_p.inc with the family's name and prefix in place of
+    their markers and `MakeIndex` by the statements that build the
+    indices, and the Table() lines lifted out into the struct in
+    MOD/l1/<family>_h.inc.  Edit this file and the .idx, not MOD/;
+    ../../mk.sh regenerates both.
 
-    Level -1: `_A`-`_D` are the four counters, `_W` the one mixer
-    (selected by index m, rows of 16 inputs), `_MT` and `_WM` the mantissa
-    plane and its mixer, `_G` the sign counters.  Each is H_sgn_ND (or H_sgn_MND) rows deep per
-    context: where a decision sits among the family's nodes is context
-    without being a variable.  */
+    `_A`-`_D` are the four counters, `_W` the one mixer (selected by index
+    m, rows of 16 inputs), `_MT` and `_WM` the mantissa plane and its
+    mixer, `_G` the sign counters.  Each is H_sgn_ND (or H_sgn_MND) rows
+    deep per context: where a decision sits among the family's nodes is
+    context without being a variable.  */
 
 void H1_sgn_make( const H_sgn_v & D, tcx & X ) {
   int a, b, c, d, m, t, n, g;
-  int cg = D.cg, pos = D.pos, sa = D.sa, sb = D.sb, scb = D.scb, mag = D.mag, md = D.md, pp = D.pp, mg = D.mg, ez = D.ez, ts = D.ts, pq = D.pq, gh = D.gh, se = D.se, dm = D.dm;
-  (void) cg;  (void) pos;  (void) sa;  (void) sb;  (void) scb;  (void) mag;  (void) md;  (void) pp;  (void) mg;  (void) ez;  (void) ts;  (void) pq;  (void) gh;  (void) se;  (void) dm;
+  H_sgn_VARS(H_LOCAL)
 
   a = 0;
   a = a*6 + H1_sgn_a_cg[__min(13,__max(0,(cg)-(1-1)))];
@@ -51,3 +52,13 @@ void H1_sgn_make( const H_sgn_v & D, tcx & X ) {
   X.n = n;  X.g = g;
 }
 
+
+// the family's configuration class (famcfg.inc): the level's shape, as
+// the tables above have it
+#define FC_NAME C1_sgn
+#define FC_PFX H1_sgn_
+#define FC_FAM sgn
+#define FC_NC 4
+#define FC_NMIX 1
+#define FC_NAPM 0
+#include "../../famcfg.inc"

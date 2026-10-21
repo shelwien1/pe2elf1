@@ -64,7 +64,6 @@ static const int H7_cbf_rK = (0+0) * (1);
 static const int H7_cbf_rL = (190+0) * (1);
 static const int H7_cbf_rD = (255+0) * (1);
 static const int H7_cbf_rT = (16+0) * (1);
-static const int H7_cbf_rG = (0+0) * (1);
 static const int H7_cbf_lr = (12+0) * (1);
 static const int H7_cbf_lrm = (31+0) * (1);
 static const int H7_cbf_mbm = (32+0) * (1);
@@ -79,9 +78,10 @@ static const int H7_cbf_mwK = (127+0) * (1);
 static const int H7_cbf_mwL = (32+0) * (1);
 static const int H7_cbf_mwD = (64+0) * (1);
 static const int H7_cbf_mwT = (32+0) * (1);
-static const int H7_cbf_mwG = (0+0) * (1);
 static const int H7_cbf_mt = (2+0) * (1);
 static const int H7_cbf_mb = (130+0) * (1);
+static const int H7_cbf_rG = (0+0) * (1);
+static const int H7_cbf_mwG = (0+0) * (1);
 static const int H7_cbf_hA = (24+0) * (1);
 static const int H7_cbf_hB = (17+0) * (1);
 static const int H7_cbf_hC = (24+0) * (1);
@@ -117,11 +117,7 @@ static const long long H7_cbf_w_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 
 
 #define H7_cbf_USES(X) X(cat) X(na) X(nb) X(ly) X(np) X(pos) X(crcb) X(em) X(dq) X(q6) X(col) X(kn) X(en) X(ch) X(nc) X(md) X(pg) X(pz) X(tn) X(hv) X(pq) X(ds)
 
-struct H7_cbf_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H7_cbf_T {
   cm_cnt2 H7_cbf_A[tc_rows(H7_cbf_a_Volume, H7_cbf_hA) * H_cbf_ND];
   cm_cnt2 H7_cbf_B[tc_rows(H7_cbf_b_Volume, H7_cbf_hB) * H_cbf_ND];
   cm_cnt2 H7_cbf_C[tc_rows(H7_cbf_c_Volume, H7_cbf_hC) * H_cbf_ND];
@@ -170,8 +166,6 @@ struct H7_cbf_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_cbf_ND * 5 * 4)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_cbf_ND * 5)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H7_cbf_g_Volume * H_cbf_NG);
-  void H7_cbf_Init( void ) {
-  
-  }
+  void H7_cbf_Init( void ) {}
   void H7_cbf_Quit( void ) {}
 };

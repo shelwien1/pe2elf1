@@ -1,21 +1,22 @@
-/*  The template IDX/idx2inc.pl reads alongside sig.idx: the sig
-    family's index builder and the tables its indices address.  Copied
-    through into MOD/l7/sig_p.inc with `H7_sig_` replaced by the prefix,
-    `MakeIndex` by the statements that build the indices, and the Table()
-    lines lifted out into the struct in MOD/l7/sig_h.inc.  Edit this file
-    and sig.idx, not MOD/; ../../mk.sh regenerates both.
+/*  The template IDX/idx2inc.pl reads alongside each .idx of IDX/l7: a
+    family's index builder, the tables its indices address and its
+    configuration class, at level -7.  Copied through into
+    MOD/l7/<family>_p.inc with the family's name and prefix in place of
+    their markers and `MakeIndex` by the statements that build the
+    indices, and the Table() lines lifted out into the struct in
+    MOD/l7/<family>_h.inc.  Edit this file and the .idx, not MOD/;
+    ../../mk.sh regenerates both.
 
-    Level -7: `_A`-`_E`, `_H`-`_L` are the ten counters, `_W`, `_W2` and `_W3`
-    the three mixers (selected by indices m, w and s) and `_WF` the one that
+    `_A`-`_E`, `_H`-`_L` are the ten counters, `_W`, `_W2` and `_W3` the
+    three mixers (selected by indices m, w and s) and `_WF` the one that
     mixes them (by node and the state of code()'s hint), `_MT` and `_WM`
-    the mantissa plane and its mixer, `_G` the sign counters.  Each is H_sig_ND (or H_sig_MND) rows deep per
-    context: where a decision sits among the family's nodes is context
-    without being a variable.  */
+    the mantissa plane and its mixer, `_G` the sign counters.  Each is
+    H_sig_ND (or H_sig_MND) rows deep per context: where a decision sits
+    among the family's nodes is context without being a variable.  */
 
 void H7_sig_make( const H_sig_v & D, tcx & X ) {
   int a, b, c, d, e, h, i, j, k, l, s, m, w, t, n, g;
-  int cg = D.cg, pos = D.pos, rem = D.rem, zl = D.zl, md = D.md, nc = D.nc, fld = D.fld, q6 = D.q6, pg = D.pg, em = D.em, pe = D.pe, ps = D.ps, tz = D.tz, pq = D.pq, hb = D.hb, ft = D.ft, h3 = D.h3, pr = D.pr, sn = D.sn, hv = D.hv, pf = D.pf;
-  (void) cg;  (void) pos;  (void) rem;  (void) zl;  (void) md;  (void) nc;  (void) fld;  (void) q6;  (void) pg;  (void) em;  (void) pe;  (void) ps;  (void) tz;  (void) pq;  (void) hb;  (void) ft;  (void) h3;  (void) pr;  (void) sn;  (void) hv;  (void) pf;
+  H_sig_VARS(H_LOCAL)
 
   a = 0;
   a = a*6 + H7_sig_a_cg[__min(13,__max(0,(cg)-(1-1)))];
@@ -106,3 +107,13 @@ void H7_sig_make( const H_sig_v & D, tcx & X ) {
   X.n = n;  X.g = g;
 }
 
+
+// the family's configuration class (famcfg.inc): the level's shape, as
+// the tables above have it
+#define FC_NAME C7_sig
+#define FC_PFX H7_sig_
+#define FC_FAM sig
+#define FC_NC 10
+#define FC_NMIX 3
+#define FC_NAPM 0
+#include "../../famcfg.inc"

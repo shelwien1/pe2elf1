@@ -65,7 +65,6 @@ static const int H9_cbf_rK = (252+0) * (1);
 static const int H9_cbf_rL = (254+0) * (1);
 static const int H9_cbf_rD = (253+0) * (1);
 static const int H9_cbf_rT = (32+0) * (1);
-static const int H9_cbf_rG = (0+0) * (1);
 static const int H9_cbf_rS1 = (7+0) * (1);
 static const int H9_cbf_rS2 = (0+0) * (1);
 static const int H9_cbf_lr = (12+0) * (1);
@@ -82,12 +81,13 @@ static const int H9_cbf_mwK = (65+0) * (1);
 static const int H9_cbf_mwL = (64+0) * (1);
 static const int H9_cbf_mwD = (64+0) * (1);
 static const int H9_cbf_mwT = (7+0) * (1);
-static const int H9_cbf_mwG = (0+0) * (1);
 static const int H9_cbf_bw = (16+0) * (1);
 static const int H9_cbf_mt = (2+0) * (1);
 static const int H9_cbf_qs = (0+3) * (1);
 static const int H9_cbf_qf = (0+3) * (1);
 static const int H9_cbf_mb = (130+0) * (1);
+static const int H9_cbf_rG = (0+0) * (1);
+static const int H9_cbf_mwG = (0+0) * (1);
 static const int H9_cbf_hA = (24+0) * (1);
 static const int H9_cbf_hB = (17+0) * (1);
 static const int H9_cbf_hC = (24+0) * (1);
@@ -125,11 +125,7 @@ static const long long H9_cbf_w_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 
 
 #define H9_cbf_USES(X) X(cat) X(na) X(nb) X(intra) X(ly) X(np) X(pos) X(crcb) X(kn) X(em) X(dq) X(q6) X(col) X(en) X(ch) X(nc) X(md) X(pg) X(pz) X(tn) X(hv) X(pq) X(ds)
 
-struct H9_cbf_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H9_cbf_T {
   cm_cnt2 H9_cbf_A[tc_rows(H9_cbf_a_Volume, H9_cbf_hA) * H_cbf_ND];
   cm_cnt2 H9_cbf_B[tc_rows(H9_cbf_b_Volume, H9_cbf_hB) * H_cbf_ND];
   cm_cnt2 H9_cbf_C[tc_rows(H9_cbf_c_Volume, H9_cbf_hC) * H_cbf_ND];
@@ -186,8 +182,6 @@ struct H9_cbf_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_cbf_ND * 5 * 4)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_cbf_ND * 5)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H9_cbf_g_Volume * H_cbf_NG);
-  void H9_cbf_Init( void ) {
-  
-  }
+  void H9_cbf_Init( void ) {}
   void H9_cbf_Quit( void ) {}
 };

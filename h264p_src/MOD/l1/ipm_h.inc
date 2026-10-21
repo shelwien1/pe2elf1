@@ -19,19 +19,19 @@ static const int H1_ipm_rA = (255+0) * (1);
 static const int H1_ipm_rB = (246+0) * (1);
 static const int H1_ipm_rC = (255+0) * (1);
 static const int H1_ipm_rD = (254+0) * (1);
-static const int H1_ipm_rT = (0+0) * (1);
-static const int H1_ipm_rG = (0+0) * (1);
 static const int H1_ipm_lr = (31+0) * (1);
-static const int H1_ipm_lrm = (0+0) * (1);
-static const int H1_ipm_mbm = (0+0) * (1);
 static const int H1_ipm_mwA = (37+0) * (1);
 static const int H1_ipm_mwB = (131+0) * (1);
 static const int H1_ipm_mwC = (8+0) * (1);
 static const int H1_ipm_mwD = (63+0) * (1);
-static const int H1_ipm_mwT = (0+0) * (1);
-static const int H1_ipm_mwG = (0+0) * (1);
-static const int H1_ipm_mt = (0+0) * (1);
 static const int H1_ipm_mb = (18+0) * (1);
+static const int H1_ipm_rT = (0+0) * (1);
+static const int H1_ipm_mwT = (0+0) * (1);
+static const int H1_ipm_mt = (0+0) * (1);
+static const int H1_ipm_lrm = (0+0) * (1);
+static const int H1_ipm_mbm = (0+0) * (1);
+static const int H1_ipm_rG = (0+0) * (1);
+static const int H1_ipm_mwG = (0+0) * (1);
 static const int H1_ipm_hA = (24+0) * (1);
 static const int H1_ipm_hB = (24+0) * (1);
 static const int H1_ipm_hC = (24+0) * (1);
@@ -52,11 +52,7 @@ static const long long H1_ipm_t_Volume = tc_vmul(1, 1); // 1
 
 #define H1_ipm_USES(X) X(k8) X(ma) X(mb) X(mc) X(mh) X(mp) X(col)
 
-struct H1_ipm_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H1_ipm_T {
   cm_cnt2s H1_ipm_A[tc_rows(H1_ipm_a_Volume, H1_ipm_hA) * H_ipm_ND];
   cm_cnt2s H1_ipm_B[tc_rows(H1_ipm_b_Volume, H1_ipm_hB) * H_ipm_ND];
   cm_cnt2s H1_ipm_C[tc_rows(H1_ipm_c_Volume, H1_ipm_hC) * H_ipm_ND];
@@ -81,8 +77,6 @@ struct H1_ipm_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H1_ipm_n_Volume, H1_ipm_hN) * H_ipm_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H1_ipm_n_Volume, H1_ipm_hN) * H_ipm_MND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H1_ipm_g_Volume * H_ipm_NG);
-  void H1_ipm_Init( void ) {
-  
-  }
+  void H1_ipm_Init( void ) {}
   void H1_ipm_Quit( void ) {}
 };

@@ -36,8 +36,6 @@ static const int H5_hdr_rD = (253+0) * (1);
 static const int H5_hdr_rT = (2+0) * (1);
 static const int H5_hdr_rG = (64+0) * (1);
 static const int H5_hdr_lr = (20+0) * (1);
-static const int H5_hdr_lrm = (0+0) * (1);
-static const int H5_hdr_mbm = (0+0) * (1);
 static const int H5_hdr_mwA = (0+0) * (1);
 static const int H5_hdr_mwB = (4+0) * (1);
 static const int H5_hdr_mwC = (10+0) * (1);
@@ -52,6 +50,8 @@ static const int H5_hdr_mwT = (7+0) * (1);
 static const int H5_hdr_mwG = (0+0) * (1);
 static const int H5_hdr_mt = (0+0) * (1);
 static const int H5_hdr_mb = (242+0) * (1);
+static const int H5_hdr_lrm = (0+0) * (1);
+static const int H5_hdr_mbm = (0+0) * (1);
 static const int H5_hdr_hA = (24+0) * (1);
 static const int H5_hdr_hB = (24+0) * (1);
 static const int H5_hdr_hC = (24+0) * (1);
@@ -84,11 +84,7 @@ static const long long H5_hdr_t_Volume = tc_vmul(1, (1<<4)); // 16
 
 #define H5_hdr_USES(X) X(tag) X(fld) X(p1) X(sty) X(pr) X(p1r) X(p2) X(pos)
 
-struct H5_hdr_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H5_hdr_T {
   cm_cnt2 H5_hdr_A[tc_rows(H5_hdr_a_Volume, H5_hdr_hA) * H_hdr_ND];
   cm_cnt2 H5_hdr_B[tc_rows(H5_hdr_b_Volume, H5_hdr_hB) * H_hdr_ND];
   cm_cnt2 H5_hdr_C[tc_rows(H5_hdr_c_Volume, H5_hdr_hC) * H_hdr_ND];
@@ -125,8 +121,6 @@ struct H5_hdr_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H5_hdr_n_Volume, H5_hdr_hN) * H_hdr_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H5_hdr_n_Volume, H5_hdr_hN) * H_hdr_MND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H5_hdr_g_Volume * H_hdr_NG);
-  void H5_hdr_Init( void ) {
-  
-  }
+  void H5_hdr_Init( void ) {}
   void H5_hdr_Quit( void ) {}
 };

@@ -49,7 +49,6 @@ static const int H5_qpd_rK = (110+0) * (1);
 static const int H5_qpd_rL = (233+0) * (1);
 static const int H5_qpd_rD = (248+0) * (1);
 static const int H5_qpd_rT = (16+0) * (1);
-static const int H5_qpd_rG = (0+0) * (1);
 static const int H5_qpd_lr = (15+0) * (1);
 static const int H5_qpd_lrm = (31+0) * (1);
 static const int H5_qpd_mbm = (24+0) * (1);
@@ -64,9 +63,10 @@ static const int H5_qpd_mwK = (35+0) * (1);
 static const int H5_qpd_mwL = (97+0) * (1);
 static const int H5_qpd_mwD = (132+0) * (1);
 static const int H5_qpd_mwT = (7+0) * (1);
-static const int H5_qpd_mwG = (0+0) * (1);
 static const int H5_qpd_mt = (2+0) * (1);
 static const int H5_qpd_mb = (27+0) * (1);
+static const int H5_qpd_rG = (0+0) * (1);
+static const int H5_qpd_mwG = (0+0) * (1);
 static const int H5_qpd_hA = (24+0) * (1);
 static const int H5_qpd_hB = (24+0) * (1);
 static const int H5_qpd_hC = (24+0) * (1);
@@ -99,11 +99,7 @@ static const long long H5_qpd_t_Volume = tc_vmul(1, 1); // 1
 
 #define H5_qpd_USES(X) X(pc) X(cc) X(cls) X(sq) X(dc) X(aq) X(ae) X(lq) X(lz) X(st) X(db) X(bc) X(ac) X(xe) X(td) X(lnz) X(kc) X(cl)
 
-struct H5_qpd_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H5_qpd_T {
   cm_cnt2 H5_qpd_A[tc_rows(H5_qpd_a_Volume, H5_qpd_hA) * H_qpd_ND];
   cm_cnt2 H5_qpd_B[tc_rows(H5_qpd_b_Volume, H5_qpd_hB) * H_qpd_ND];
   cm_cnt2 H5_qpd_C[tc_rows(H5_qpd_c_Volume, H5_qpd_hC) * H_qpd_ND];
@@ -140,8 +136,6 @@ struct H5_qpd_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H5_qpd_n_Volume, H5_qpd_hN) * H_qpd_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H5_qpd_n_Volume, H5_qpd_hN) * H_qpd_MND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H5_qpd_g_Volume * H_qpd_NG);
-  void H5_qpd_Init( void ) {
-  
-  }
+  void H5_qpd_Init( void ) {}
   void H5_qpd_Quit( void ) {}
 };

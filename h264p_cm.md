@@ -914,21 +914,21 @@ with their defaults (0.6 KB: 02's 667 bytes of it take 84).
 \* measured when added, with four counters and before the later contexts.
 
 **Results** (test/002, streams 00-04, against the CABAC cost of each
-element; level `-9` as tuned last):
+element; level `-9` as tuned last, format 6):
 
 | element | CABAC | model | |
 |---|---:|---:|---:|
 | skip, end | 336,175 | 217,592 | −35.3% |
-| mb_type | 365,120 | 256,033 | −29.9% |
-| cbp, transform_size_8x8_flag | 216,100 | 151,446 | −29.9% |
-| intra modes | 299,858 | 229,506 | −23.5% |
-| sub_mb_type, ref_idx, mvd | 504,865 | 399,872 | −20.8% |
+| mb_type | 365,120 | 256,032 | −29.9% |
+| cbp, transform_size_8x8_flag | 216,100 | 151,445 | −29.9% |
+| intra modes | 299,858 | 229,507 | −23.5% |
+| sub_mb_type, ref_idx, mvd | 504,865 | 399,792 | −20.8% |
 | mb_qp_delta | 271,297 | 180,070 | −33.6% |
-| coded_block_flag, significance (count, significance) | 910,721 | 689,758 | −24.3% |
-| levels | 302,611 | 216,079 | −28.6% |
-| signs | 329,382 | 180,675 | −45.1% |
-| macroblock syntax | 3,536,129 | 2,521,031 | −28.7% |
-| whole streams (H.264 against compressed) | 3,603,993 | 2,526,140 | −29.9% |
+| coded_block_flag, significance (count, significance) | 910,721 | 689,754 | −24.3% |
+| levels | 302,611 | 216,047 | −28.6% |
+| signs | 329,382 | 180,368 | −45.2% |
+| macroblock syntax | 3,536,129 | 2,520,607 | −28.7% |
+| whole streams (H.264 against compressed) | 3,603,993 | 2,525,717 | −29.9% |
 
 The model tables take 28 MB (226 MB before its parameters were tuned
 against dumps of their decisions, `h264p_levels.md` section 7.5, which

@@ -13,7 +13,10 @@
 // state, as h264p codes each stream.
 
 #include <algorithm>
+#include <cinttypes>
 #include <climits>
+#include <cmath>
+#include <cstdarg>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -25,6 +28,15 @@
 #include <string>
 #include <type_traits>
 #include <vector>
+
+#ifndef _WIN32
+#include <sys/mman.h>
+#else
+#include <windows.h>
+#endif
+#if defined(__AVX2__)
+#include <immintrin.h>
+#endif
 
 // (the coder's bytes go through a coroutine's output, rcio.inc)
 #include "../Lib3/common.inc"

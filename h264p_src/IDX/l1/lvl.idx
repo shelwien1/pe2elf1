@@ -1,6 +1,6 @@
 #  h264p's lvl family at level -1: its context indices and its tunable
 #  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
-#  MOD/l1/lvl_h.inc and MOD/l1/lvl_p.inc from this file and lvl.inc.
+#  MOD/l1/lvl_h.inc and MOD/l1/lvl_p.inc from this file and family.inc.
 #
 #  coeff_abs_level_minus1, in reverse scan order as CABAC codes it. cg is the
 #  ctxBlockCat, g1/e1 the levels coded so far above 1 and equal to 1, nc the
@@ -49,15 +49,15 @@ Index t
 Index n
  n_cg: cg, 1!0000000000000
 
+#  (frozen: see the parameters below)
 Index g
- g_cg: cg, 1!0
+! g_cg: cg, 1!0
 
 Number rA, 1, 0!11111101
 Number rB, 1, 0!11110010
 Number rC, 1, 0!11111111
 Number rD, 1, 0!11111110
 Number rT, 1, 0!10000001
-Number rG, 1, 0!00000000
 Number lr, 1, 0!01111
 Number lrm, 1, 0!00000
 Number mbm, 1, 0!00000000
@@ -66,9 +66,13 @@ Number mwB, 1, 0!00001000
 Number mwC, 1, 0!00001000
 Number mwD, 1, 0!00111011
 Number mwT, 1, 0!00110001
-Number mwG, 1, 0!00000000
 Number mt, 1, 0!000
 Number mb, 1, 0!01001101
+
+#  Frozen: what lvl never reads, which live would only take opt.pl's trials.
+#  It codes with code(), without signs: no sign counters (rG, mwG, index g).
+! Number rG, 1, 0!00000000
+! Number mwG, 1, 0!00000000
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
 #  direct, one that does not is hashed into 2^h rows and contexts share

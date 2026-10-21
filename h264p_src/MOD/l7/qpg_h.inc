@@ -47,11 +47,7 @@ static const int H7_qpg_rJ = (239+0) * (1);
 static const int H7_qpg_rK = (254+0) * (1);
 static const int H7_qpg_rL = (254+0) * (1);
 static const int H7_qpg_rD = (253+0) * (1);
-static const int H7_qpg_rT = (0+0) * (1);
-static const int H7_qpg_rG = (0+0) * (1);
 static const int H7_qpg_lr = (14+0) * (1);
-static const int H7_qpg_lrm = (0+0) * (1);
-static const int H7_qpg_mbm = (0+0) * (1);
 static const int H7_qpg_mwA = (7+0) * (1);
 static const int H7_qpg_mwB = (65+0) * (1);
 static const int H7_qpg_mwC = (194+0) * (1);
@@ -62,10 +58,14 @@ static const int H7_qpg_mwJ = (0+0) * (1);
 static const int H7_qpg_mwK = (4+0) * (1);
 static const int H7_qpg_mwL = (66+0) * (1);
 static const int H7_qpg_mwD = (3+0) * (1);
-static const int H7_qpg_mwT = (0+0) * (1);
-static const int H7_qpg_mwG = (0+0) * (1);
-static const int H7_qpg_mt = (0+0) * (1);
 static const int H7_qpg_mb = (130+0) * (1);
+static const int H7_qpg_rT = (0+0) * (1);
+static const int H7_qpg_mwT = (0+0) * (1);
+static const int H7_qpg_mt = (0+0) * (1);
+static const int H7_qpg_lrm = (0+0) * (1);
+static const int H7_qpg_mbm = (0+0) * (1);
+static const int H7_qpg_rG = (0+0) * (1);
+static const int H7_qpg_mwG = (0+0) * (1);
 static const int H7_qpg_hA = (24+0) * (1);
 static const int H7_qpg_hB = (24+0) * (1);
 static const int H7_qpg_hC = (24+0) * (1);
@@ -101,11 +101,7 @@ static const long long H7_qpg_w_Volume = tc_vmul(tc_vmul(1, 3), 6); // 18
 
 #define H7_qpg_USES(X) X(mag) X(ss) X(xe) X(lq) X(as) X(ls) X(cs) X(bs) X(bk) X(rs) X(cls) X(st)
 
-struct H7_qpg_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H7_qpg_T {
   cm_cnt2 H7_qpg_A[tc_rows(H7_qpg_a_Volume, H7_qpg_hA) * H_qpg_ND];
   cm_cnt2 H7_qpg_B[tc_rows(H7_qpg_b_Volume, H7_qpg_hB) * H_qpg_ND];
   cm_cnt2 H7_qpg_C[tc_rows(H7_qpg_c_Volume, H7_qpg_hC) * H_qpg_ND];
@@ -154,8 +150,6 @@ struct H7_qpg_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_qpg_ND * 5 * 4)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_qpg_ND * 5)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H7_qpg_g_Volume * H_qpg_NG);
-  void H7_qpg_Init( void ) {
-  
-  }
+  void H7_qpg_Init( void ) {}
   void H7_qpg_Quit( void ) {}
 };

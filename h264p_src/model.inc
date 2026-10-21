@@ -16,123 +16,6 @@
 
 namespace h264p {
 
-// --- what each variable needs of the model's parts (h264p_levels.md section
-// 7.3): a bit per field, set where the field is "not known" without the part
-// (found by coding the corpus with each part switched off: a field that
-// varies with the part and not without it): rec the decoder's pictures, refs
-// only their motion and reference lists (which the decoder has too). A level
-// must not read what its parts cannot make (Model's static_asserts): such a
-// line goes from its .idx.
-#define H_BIT(V, f) (1ull << offsetof(V, f) / sizeof(int))
-constexpr u64 H_nal_rec = 0;
-constexpr u64 H_nal_refs = 0;
-constexpr u64 H_nal_search = 0;
-constexpr u64 H_nal_proxy = 0;
-constexpr u64 H_nal_signp = 0;
-constexpr u64 H_nal_skippx = 0;
-constexpr u64 H_hdr_rec = 0;
-constexpr u64 H_hdr_refs = 0;
-constexpr u64 H_hdr_search = 0;
-constexpr u64 H_hdr_proxy = 0;
-constexpr u64 H_hdr_signp = 0;
-constexpr u64 H_hdr_skippx = 0;
-constexpr u64 H_skp_rec = H_BIT(H_skp_v, td) | H_BIT(H_skp_v, en) | H_BIT(H_skp_v, sm) | H_BIT(H_skp_v, tm) | H_BIT(H_skp_v, tb) | H_BIT(H_skp_v, bd) | H_BIT(H_skp_v, tx);
-constexpr u64 H_skp_refs = H_BIT(H_skp_v, c1) | H_BIT(H_skp_v, k9);
-constexpr u64 H_skp_search = H_BIT(H_skp_v, tb);
-constexpr u64 H_skp_proxy = 0;
-constexpr u64 H_skp_signp = 0;
-constexpr u64 H_skp_skippx = H_BIT(H_skp_v, sm) | H_BIT(H_skp_v, tm) | H_BIT(H_skp_v, tb) | H_BIT(H_skp_v, bd) | H_BIT(H_skp_v, tx);
-constexpr u64 H_mbt_rec = H_BIT(H_mbt_v, en) | H_BIT(H_mbt_v, td) | H_BIT(H_mbt_v, sm) | H_BIT(H_mbt_v, tm) | H_BIT(H_mbt_v, tb) | H_BIT(H_mbt_v, dh) | H_BIT(H_mbt_v, bd) | H_BIT(H_mbt_v, im) | H_BIT(H_mbt_v, ig) | H_BIT(H_mbt_v, tx);
-constexpr u64 H_mbt_refs = H_BIT(H_mbt_v, c1);
-constexpr u64 H_mbt_search = H_BIT(H_mbt_v, tb);
-constexpr u64 H_mbt_proxy = H_BIT(H_mbt_v, im) | H_BIT(H_mbt_v, ig);
-constexpr u64 H_mbt_signp = 0;
-constexpr u64 H_mbt_skippx = H_BIT(H_mbt_v, sm) | H_BIT(H_mbt_v, tm) | H_BIT(H_mbt_v, tb) | H_BIT(H_mbt_v, dh) | H_BIT(H_mbt_v, bd) | H_BIT(H_mbt_v, tx);
-constexpr u64 H_cbp_rec = H_BIT(H_cbp_v, en) | H_BIT(H_cbp_v, td) | H_BIT(H_cbp_v, pg) | H_BIT(H_cbp_v, tp) | H_BIT(H_cbp_v, em) | H_BIT(H_cbp_v, pq);
-constexpr u64 H_cbp_refs = 0;
-constexpr u64 H_cbp_search = 0;
-constexpr u64 H_cbp_proxy = H_BIT(H_cbp_v, pq);
-constexpr u64 H_cbp_signp = 0;
-constexpr u64 H_cbp_skippx = 0;
-constexpr u64 H_ipm_rec = H_BIT(H_ipm_v, dm) | H_BIT(H_ipm_v, ds) | H_BIT(H_ipm_v, pm) | H_BIT(H_ipm_v, pr) | H_BIT(H_ipm_v, dr) | H_BIT(H_ipm_v, pq) | H_BIT(H_ipm_v, mg) | H_BIT(H_ipm_v, rg) | H_BIT(H_ipm_v, p2);
-constexpr u64 H_ipm_refs = 0;
-constexpr u64 H_ipm_search = H_BIT(H_ipm_v, pq);
-constexpr u64 H_ipm_proxy = H_BIT(H_ipm_v, pm) | H_BIT(H_ipm_v, pr) | H_BIT(H_ipm_v, mg) | H_BIT(H_ipm_v, rg) | H_BIT(H_ipm_v, p2);
-constexpr u64 H_ipm_signp = 0;
-constexpr u64 H_ipm_skippx = 0;
-constexpr u64 H_mvs_rec = H_BIT(H_mvs_v, tv) | H_BIT(H_mvs_v, tq) | H_BIT(H_mvs_v, ea) | H_BIT(H_mvs_v, eb) | H_BIT(H_mvs_v, ta) | H_BIT(H_mvs_v, rt);
-constexpr u64 H_mvs_refs = 0;
-constexpr u64 H_mvs_search = H_BIT(H_mvs_v, tv) | H_BIT(H_mvs_v, tq) | H_BIT(H_mvs_v, ea) | H_BIT(H_mvs_v, eb) | H_BIT(H_mvs_v, ta);
-constexpr u64 H_mvs_proxy = 0;
-constexpr u64 H_mvs_signp = 0;
-constexpr u64 H_mvs_skippx = 0;
-constexpr u64 H_qpd_rec = H_BIT(H_qpd_v, ae) | H_BIT(H_qpd_v, aq) | H_BIT(H_qpd_v, ac) | H_BIT(H_qpd_v, td) | H_BIT(H_qpd_v, xe) | H_BIT(H_qpd_v, lq);
-constexpr u64 H_qpd_refs = 0;
-constexpr u64 H_qpd_search = 0;
-constexpr u64 H_qpd_proxy = 0;
-constexpr u64 H_qpd_signp = 0;
-constexpr u64 H_qpd_skippx = 0;
-constexpr u64 H_cbf_rec = H_BIT(H_cbf_v, en) | H_BIT(H_cbf_v, pg) | H_BIT(H_cbf_v, em) | H_BIT(H_cbf_v, pz) | H_BIT(H_cbf_v, tn) | H_BIT(H_cbf_v, pq) | H_BIT(H_cbf_v, hv);
-constexpr u64 H_cbf_refs = 0;
-constexpr u64 H_cbf_search = 0;
-constexpr u64 H_cbf_proxy = H_BIT(H_cbf_v, pz) | H_BIT(H_cbf_v, pq);
-constexpr u64 H_cbf_signp = 0;
-constexpr u64 H_cbf_skippx = 0;
-constexpr u64 H_sig_rec = H_BIT(H_sig_v, pg) | H_BIT(H_sig_v, em) | H_BIT(H_sig_v, pe) | H_BIT(H_sig_v, ps) | H_BIT(H_sig_v, tz) | H_BIT(H_sig_v, pq) | H_BIT(H_sig_v, pr) | H_BIT(H_sig_v, hv) | H_BIT(H_sig_v, pf);
-constexpr u64 H_sig_refs = 0;
-constexpr u64 H_sig_search = 0;
-constexpr u64 H_sig_proxy = H_BIT(H_sig_v, ps) | H_BIT(H_sig_v, pq) | H_BIT(H_sig_v, pr);
-constexpr u64 H_sig_signp = H_BIT(H_sig_v, pe);
-constexpr u64 H_sig_skippx = 0;
-constexpr u64 H_lvl_rec = H_BIT(H_lvl_v, pg) | H_BIT(H_lvl_v, em) | H_BIT(H_lvl_v, pe) | H_BIT(H_lvl_v, pl) | H_BIT(H_lvl_v, tz) | H_BIT(H_lvl_v, pq) | H_BIT(H_lvl_v, ls) | H_BIT(H_lvl_v, hv);
-constexpr u64 H_lvl_refs = 0;
-constexpr u64 H_lvl_search = 0;
-constexpr u64 H_lvl_proxy = H_BIT(H_lvl_v, pl) | H_BIT(H_lvl_v, pq) | H_BIT(H_lvl_v, ls);
-constexpr u64 H_lvl_signp = H_BIT(H_lvl_v, pe);
-constexpr u64 H_lvl_skippx = 0;
-constexpr u64 H_sgn_rec = H_BIT(H_sgn_v, pp) | H_BIT(H_sgn_v, mg) | H_BIT(H_sgn_v, ez) | H_BIT(H_sgn_v, ts) | H_BIT(H_sgn_v, pq) | H_BIT(H_sgn_v, se) | H_BIT(H_sgn_v, dm);
-constexpr u64 H_sgn_refs = 0;
-constexpr u64 H_sgn_search = 0;
-constexpr u64 H_sgn_proxy = H_BIT(H_sgn_v, ez) | H_BIT(H_sgn_v, pq) | H_BIT(H_sgn_v, se);
-constexpr u64 H_sgn_signp = H_BIT(H_sgn_v, pp) | H_BIT(H_sgn_v, mg);
-constexpr u64 H_sgn_skippx = 0;
-constexpr u64 H_mvg_rec = H_BIT(H_mvg_v, ts) | H_BIT(H_mvg_v, tq) | H_BIT(H_mvg_v, es) | H_BIT(H_mvg_v, as);
-constexpr u64 H_mvg_refs = 0;
-constexpr u64 H_mvg_search = H_BIT(H_mvg_v, ts) | H_BIT(H_mvg_v, tq) | H_BIT(H_mvg_v, es) | H_BIT(H_mvg_v, as);
-constexpr u64 H_mvg_proxy = 0;
-constexpr u64 H_mvg_signp = 0;
-constexpr u64 H_mvg_skippx = 0;
-constexpr u64 H_qpg_rec = H_BIT(H_qpg_v, as) | H_BIT(H_qpg_v, rs) | H_BIT(H_qpg_v, xe) | H_BIT(H_qpg_v, lq);
-constexpr u64 H_qpg_refs = 0;
-constexpr u64 H_qpg_search = 0;
-constexpr u64 H_qpg_proxy = 0;
-constexpr u64 H_qpg_signp = 0;
-constexpr u64 H_qpg_skippx = 0;
-constexpr u64 H_pcm_rec = 0;
-constexpr u64 H_pcm_refs = 0;
-constexpr u64 H_pcm_search = 0;
-constexpr u64 H_pcm_proxy = 0;
-constexpr u64 H_pcm_signp = 0;
-constexpr u64 H_pcm_skippx = 0;
-// mvp: the motion vectors as the decoder has them, predicted and kept (the
-// reference lists and the decoder need them too)
-constexpr u64 H_nal_mvp = 0;
-constexpr u64 H_hdr_mvp = 0;
-constexpr u64 H_skp_mvp = 0;
-constexpr u64 H_mbt_mvp = 0;
-constexpr u64 H_cbp_mvp = 0;
-constexpr u64 H_ipm_mvp = 0;
-constexpr u64 H_mvs_mvp = H_BIT(H_mvs_v, pd) | H_BIT(H_mvs_v, sp) | H_BIT(H_mvs_v, zd);
-constexpr u64 H_qpd_mvp = 0;
-constexpr u64 H_cbf_mvp = 0;
-constexpr u64 H_sig_mvp = 0;
-constexpr u64 H_lvl_mvp = 0;
-constexpr u64 H_sgn_mvp = 0;
-constexpr u64 H_mvg_mvp = H_BIT(H_mvg_v, zs) | H_BIT(H_mvg_v, ds) | H_BIT(H_mvg_v, ns);
-constexpr u64 H_qpg_mvp = 0;
-constexpr u64 H_pcm_mvp = 0;
-#undef H_BIT
-
 // A family's tables, mapped: zero is every table's starting state, and a
 // page costs memory only once the coder reaches it.
 template <class T>
@@ -462,7 +345,7 @@ template <int f_DEC>
 struct RawModel {
   static constexpr int ENC = f_DEC == 0;
   void init() {
-    mx_.init(w_, wc_, 256);
+    mx_.init(w_, wc_);
     buf_.clear();
   }
 
@@ -640,21 +523,21 @@ struct Model : tc_rc<f_DEC> {
 #else
 #define H_USES(F, f) ((LV::F::Uses >> (offsetof(H_##F##_v, f) / sizeof(int))) & 1)
 #endif
-  // (a level reads no variable its parts cannot make)
+  // (a level reads no variable its parts cannot make: famvars.inc)
 #define H_PARTS(F)                                                                                          \
-  static_assert(LV::recon || !(LV::F::Uses & H_##F##_rec),                                                  \
+  static_assert(LV::recon || !(LV::F::Uses & H_##F##_needs<NEED_REC>()),                                    \
                 "a level without the decoder reads a variable of " #F " that needs it");                    \
-  static_assert(LV::recon || LV::refs || !(LV::F::Uses & H_##F##_refs),                                     \
+  static_assert(LV::recon || LV::refs || !(LV::F::Uses & H_##F##_needs<NEED_REFS>()),                       \
                 "a level without the reference lists reads a variable of " #F " that needs them");          \
-  static_assert(LV::search || !(LV::F::Uses & H_##F##_search),                                              \
+  static_assert(LV::search || !(LV::F::Uses & H_##F##_needs<NEED_SEARCH>()),                                \
                 "a level without the template searches reads a variable of " #F " that needs them");        \
-  static_assert(LV::proxy || !(LV::F::Uses & H_##F##_proxy),                                                \
+  static_assert(LV::proxy || !(LV::F::Uses & H_##F##_needs<NEED_PROXY>()),                                  \
                 "a level without the intra proxy reads a variable of " #F " that needs it");                \
-  static_assert(LV::signpred || !(LV::F::Uses & H_##F##_signp),                                             \
+  static_assert(LV::signpred || !(LV::F::Uses & H_##F##_needs<NEED_SIGNP>()),                               \
                 "a level without sign prediction reads a variable of " #F " that needs it");                \
-  static_assert(LV::skippx || !(LV::F::Uses & H_##F##_skippx),                                              \
+  static_assert(LV::skippx || !(LV::F::Uses & H_##F##_needs<NEED_SKIPPX>()),                                \
                 "a level without the skip prediction's pixels reads a variable of " #F " that needs them");  \
-  static_assert(LV::mvp || !(LV::F::Uses & H_##F##_mvp),                                                    \
+  static_assert(LV::mvp || !(LV::F::Uses & H_##F##_needs<NEED_MVP>()),                                      \
                 "a level without the motion vectors reads a variable of " #F " that needs them");
   H264P_FAMS(H_PARTS)
 #undef H_PARTS

@@ -1,6 +1,6 @@
 #  h264p's cbp family at level -3: its context indices and its tunable
 #  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
-#  MOD/l3/cbp_h.inc and MOD/l3/cbp_p.inc from this file and cbp.inc.
+#  MOD/l3/cbp_h.inc and MOD/l3/cbp_p.inc from this file and family.inc.
 #
 #  coded_block_pattern, one decision at a time: the luma bits of the four 8x8
 #  blocks (nodes 0-3), chroma not 0 (4), chroma 2 (5), and
@@ -73,14 +73,15 @@ Index w
  w_inc: inc, 1!011
  w_cls: cls, 1!00110100
 
+#  (frozen: see the parameters below)
 Index t
- t_st: st, 1!0
+! t_st: st, 1!0
 
 Index n
- n_st: st, 1!0
+! n_st: st, 1!0
 
 Index g
- g_st: st, 1!0
+! g_st: st, 1!0
 
 Number rA, 1, 0!11111011
 Number rB, 1, 0!11111101
@@ -92,11 +93,7 @@ Number rJ, 1, 0!01111110
 Number rK, 1, 0!11111101
 Number rL, 1, 0!11111100
 Number rD, 1, 0!01011100
-Number rT, 1, 0!00000000
-Number rG, 1, 0!00000000
 Number lr, 1, 0!00111
-Number lrm, 1, 0!00000
-Number mbm, 1, 0!00000000
 Number mwA, 1, 0!00000001
 Number mwB, 1, 0!00000100
 Number mwC, 1, 0!00000011
@@ -107,10 +104,18 @@ Number mwJ, 1, 0!01000000
 Number mwK, 1, 0!00000010
 Number mwL, 1, 0!00111111
 Number mwD, 1, 0!11111000
-Number mwT, 1, 0!00000000
-Number mwG, 1, 0!00000000
-Number mt, 1, 0!000
 Number mb, 1, 0!00111111
+
+#  Frozen: what cbp never reads, which live would only take opt.pl's trials.
+#  It codes decisions with bit() alone: no mantissa (rT, mwT, mt, index t),
+#  no hint and its mixer (lrm, mbm, index n), no signs (rG, mwG, index g).
+! Number rT, 1, 0!00000000
+! Number mwT, 1, 0!00000000
+! Number mt, 1, 0!000
+! Number lrm, 1, 0!00000
+! Number mbm, 1, 0!00000000
+! Number rG, 1, 0!00000000
+! Number mwG, 1, 0!00000000
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
 #  direct, one that does not is hashed into 2^h rows and contexts share

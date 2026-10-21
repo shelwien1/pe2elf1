@@ -53,7 +53,6 @@ static const int H3_mvs_rK = (255+0) * (1);
 static const int H3_mvs_rL = (254+0) * (1);
 static const int H3_mvs_rD = (254+0) * (1);
 static const int H3_mvs_rT = (28+0) * (1);
-static const int H3_mvs_rG = (0+0) * (1);
 static const int H3_mvs_lr = (15+0) * (1);
 static const int H3_mvs_lrm = (0+0) * (1);
 static const int H3_mvs_mbm = (0+0) * (1);
@@ -68,9 +67,10 @@ static const int H3_mvs_mwK = (64+0) * (1);
 static const int H3_mvs_mwL = (128+0) * (1);
 static const int H3_mvs_mwD = (33+0) * (1);
 static const int H3_mvs_mwT = (60+0) * (1);
-static const int H3_mvs_mwG = (0+0) * (1);
 static const int H3_mvs_mt = (6+0) * (1);
 static const int H3_mvs_mb = (29+0) * (1);
+static const int H3_mvs_rG = (0+0) * (1);
+static const int H3_mvs_mwG = (0+0) * (1);
 static const int H3_mvs_hA = (16+0) * (1);
 static const int H3_mvs_hB = (24+0) * (1);
 static const int H3_mvs_hC = (24+0) * (1);
@@ -106,11 +106,7 @@ static const long long H3_mvs_w_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul
 
 #define H3_mvs_USES(X) X(kind) X(comp) X(ma) X(mb) X(oth) X(sp) X(lst) X(ps) X(rf) X(zd) X(pd) X(nr) X(cq)
 
-struct H3_mvs_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H3_mvs_T {
   cm_cnt2 H3_mvs_A[tc_rows(H3_mvs_a_Volume, H3_mvs_hA) * H_mvs_ND];
   cm_cnt2 H3_mvs_B[tc_rows(H3_mvs_b_Volume, H3_mvs_hB) * H_mvs_ND];
   cm_cnt2 H3_mvs_C[tc_rows(H3_mvs_c_Volume, H3_mvs_hC) * H_mvs_ND];
@@ -159,8 +155,6 @@ struct H3_mvs_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_mvs_ND * 5 * 4)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_mvs_ND * 5)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H3_mvs_g_Volume * H_mvs_NG);
-  void H3_mvs_Init( void ) {
-  
-  }
+  void H3_mvs_Init( void ) {}
   void H3_mvs_Quit( void ) {}
 };

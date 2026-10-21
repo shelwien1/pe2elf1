@@ -1,22 +1,23 @@
-/*  The template IDX/idx2inc.pl reads alongside skp.idx: the skp
-    family's index builder and the tables its indices address.  Copied
-    through into MOD/l9/skp_p.inc with `H9_skp_` replaced by the prefix,
-    `MakeIndex` by the statements that build the indices, and the Table()
-    lines lifted out into the struct in MOD/l9/skp_h.inc.  Edit this file
-    and skp.idx, not MOD/; ../../mk.sh regenerates both.
+/*  The template IDX/idx2inc.pl reads alongside each .idx of IDX/l9: a
+    family's index builder, the tables its indices address and its
+    configuration class, at level -9.  Copied through into
+    MOD/l9/<family>_p.inc with the family's name and prefix in place of
+    their markers and `MakeIndex` by the statements that build the
+    indices, and the Table() lines lifted out into the struct in
+    MOD/l9/<family>_h.inc.  Edit this file and the .idx, not MOD/;
+    ../../mk.sh regenerates both.
 
     `_A`-`_E`, `_H`-`_L` are the ten counters, `_S` and `_F` the two APMs,
-    `_W`, `_W2` and `_W3` the three mixers (selected by indices m, w and s)
-    and `_WF` the one that mixes them (by node and the state of code()'s
-    hint), `_MT` and `_WM` the mantissa plane and its mixer, `_G` the sign
-    counters.  Each is H_skp_ND (or H_skp_MND) rows deep per
+    `_W`, `_W2` and `_W3` the three mixers (selected by indices m, w and
+    s) and `_WF` the one that mixes them (by node and the state of
+    code()'s hint), `_MT` and `_WM` the mantissa plane and its mixer, `_G`
+    the sign counters.  Each is H_skp_ND (or H_skp_MND) rows deep per
     context: where a decision sits among the family's nodes is context
     without being a variable.  */
 
 void H9_skp_make( const H_skp_v & D, tcx & X ) {
   int a, b, c, d, e, h, i, j, k, l, s, f, m, w, t, n, g;
-  int st = D.st, a3 = D.a3, b3 = D.b3, col = D.col, c9 = D.c9, cd = D.cd, run = D.run, cnt = D.cnt, eq = D.eq, lf = D.lf, af = D.af, td = D.td, en = D.en, sm = D.sm, tm = D.tm, tb = D.tb, bd = D.bd, qc = D.qc, c1 = D.c1, k9 = D.k9, tx = D.tx;
-  (void) st;  (void) a3;  (void) b3;  (void) col;  (void) c9;  (void) cd;  (void) run;  (void) cnt;  (void) eq;  (void) lf;  (void) af;  (void) td;  (void) en;  (void) sm;  (void) tm;  (void) tb;  (void) bd;  (void) qc;  (void) c1;  (void) k9;  (void) tx;
+  H_skp_VARS(H_LOCAL)
 
   a = 0;
   a = a*3 + (((st)>1+(1-1))+((st)>2+(1-1)));
@@ -110,3 +111,13 @@ void H9_skp_make( const H_skp_v & D, tcx & X ) {
   X.n = n;  X.g = g;
 }
 
+
+// the family's configuration class (famcfg.inc): the level's shape, as
+// the tables above have it
+#define FC_NAME C9_skp
+#define FC_PFX H9_skp_
+#define FC_FAM skp
+#define FC_NC 10
+#define FC_NMIX 3
+#define FC_NAPM 2
+#include "../../famcfg.inc"

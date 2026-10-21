@@ -1,6 +1,6 @@
 #  h264p's qpd family at level -9: its context indices and its tunable
 #  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
-#  MOD/l9/qpd_h.inc and MOD/l9/qpd_p.inc from this file and qpd.inc.
+#  MOD/l9/qpd_h.inc and MOD/l9/qpd_p.inc from this file and family.inc.
 #
 #  mb_qp_delta. lnz: the previous macroblock had a nonzero delta (CABAC's
 #  context); pc the luma bits of the coded_block_pattern, cc its chroma part,
@@ -114,9 +114,10 @@ Index t
 Index n
  n_lnz: lnz, 1!0
 
+#  (frozen: see the parameters below)
 Index g
- g_lz: lz, 1!000000
- g_aq: aq, 1!0000000000000
+! g_lz: lz, 1!000000
+! g_aq: aq, 1!0000000000000
 
 Number rA, 1, 0!11111111
 Number rB, 1, 0!11111111
@@ -129,7 +130,6 @@ Number rK, 1, 0!11011101
 Number rL, 1, 0!11110100
 Number rD, 1, 0!11111111
 Number rT, 1, 0!00100000
-Number rG, 1, 0!00000000
 Number rS1, 1, 0!00110
 Number rS2, 1, 0!00110
 Number lr, 1, 0!11000
@@ -146,12 +146,16 @@ Number mwK, 1, 0!00110001
 Number mwL, 1, 0!00010001
 Number mwD, 1, 0!11100000
 Number mwT, 1, 0!00000000
-Number mwG, 1, 0!00000000
 Number bw, 1, 0!01010
 Number mt, 1, 0!010
 Number qs, 1, 3!0000001
 Number qf, 1, 3!0110001
 Number mb, 1, 0!00001111
+
+#  Frozen: what qpd never reads, which live would only take opt.pl's trials.
+#  It codes with code(), without signs: no sign counters (rG, mwG, index g).
+! Number rG, 1, 0!00000000
+! Number mwG, 1, 0!00000000
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
 #  direct, one that does not is hashed into 2^h rows and contexts share

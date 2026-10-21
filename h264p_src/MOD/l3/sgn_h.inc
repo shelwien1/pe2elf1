@@ -47,11 +47,7 @@ static const int H3_sgn_rJ = (250+0) * (1);
 static const int H3_sgn_rK = (255+0) * (1);
 static const int H3_sgn_rL = (97+0) * (1);
 static const int H3_sgn_rD = (255+0) * (1);
-static const int H3_sgn_rT = (0+0) * (1);
-static const int H3_sgn_rG = (0+0) * (1);
 static const int H3_sgn_lr = (14+0) * (1);
-static const int H3_sgn_lrm = (0+0) * (1);
-static const int H3_sgn_mbm = (0+0) * (1);
 static const int H3_sgn_mwA = (5+0) * (1);
 static const int H3_sgn_mwB = (5+0) * (1);
 static const int H3_sgn_mwC = (64+0) * (1);
@@ -62,10 +58,14 @@ static const int H3_sgn_mwJ = (16+0) * (1);
 static const int H3_sgn_mwK = (255+0) * (1);
 static const int H3_sgn_mwL = (22+0) * (1);
 static const int H3_sgn_mwD = (254+0) * (1);
-static const int H3_sgn_mwT = (0+0) * (1);
-static const int H3_sgn_mwG = (0+0) * (1);
-static const int H3_sgn_mt = (0+0) * (1);
 static const int H3_sgn_mb = (128+0) * (1);
+static const int H3_sgn_rT = (0+0) * (1);
+static const int H3_sgn_mwT = (0+0) * (1);
+static const int H3_sgn_mt = (0+0) * (1);
+static const int H3_sgn_lrm = (0+0) * (1);
+static const int H3_sgn_mbm = (0+0) * (1);
+static const int H3_sgn_rG = (0+0) * (1);
+static const int H3_sgn_mwG = (0+0) * (1);
 static const int H3_sgn_hA = (24+0) * (1);
 static const int H3_sgn_hB = (24+0) * (1);
 static const int H3_sgn_hC = (24+0) * (1);
@@ -101,11 +101,7 @@ static const long long H3_sgn_w_Volume = tc_vmul(1, 4); // 4
 
 #define H3_sgn_USES(X) X(cg) X(pos) X(sa) X(sb) X(gh) X(scb) X(mag) X(md)
 
-struct H3_sgn_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H3_sgn_T {
   cm_cnt2 H3_sgn_A[tc_rows(H3_sgn_a_Volume, H3_sgn_hA) * H_sgn_ND];
   cm_cnt2 H3_sgn_B[tc_rows(H3_sgn_b_Volume, H3_sgn_hB) * H_sgn_ND];
   cm_cnt2 H3_sgn_C[tc_rows(H3_sgn_c_Volume, H3_sgn_hC) * H_sgn_ND];
@@ -154,8 +150,6 @@ struct H3_sgn_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_sgn_ND * 5 * 4)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_sgn_ND * 5)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H3_sgn_g_Volume * H_sgn_NG);
-  void H3_sgn_Init( void ) {
-  
-  }
+  void H3_sgn_Init( void ) {}
   void H3_sgn_Quit( void ) {}
 };

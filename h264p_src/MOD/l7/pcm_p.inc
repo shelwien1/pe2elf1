@@ -1,21 +1,22 @@
-/*  The template IDX/idx2inc.pl reads alongside pcm.idx: the pcm
-    family's index builder and the tables its indices address.  Copied
-    through into MOD/l7/pcm_p.inc with `H7_pcm_` replaced by the prefix,
-    `MakeIndex` by the statements that build the indices, and the Table()
-    lines lifted out into the struct in MOD/l7/pcm_h.inc.  Edit this file
-    and pcm.idx, not MOD/; ../../mk.sh regenerates both.
+/*  The template IDX/idx2inc.pl reads alongside each .idx of IDX/l7: a
+    family's index builder, the tables its indices address and its
+    configuration class, at level -7.  Copied through into
+    MOD/l7/<family>_p.inc with the family's name and prefix in place of
+    their markers and `MakeIndex` by the statements that build the
+    indices, and the Table() lines lifted out into the struct in
+    MOD/l7/<family>_h.inc.  Edit this file and the .idx, not MOD/;
+    ../../mk.sh regenerates both.
 
-    Level -7: `_A`-`_E`, `_H`-`_L` are the ten counters, `_W`, `_W2` and `_W3`
-    the three mixers (selected by indices m, w and s) and `_WF` the one that
+    `_A`-`_E`, `_H`-`_L` are the ten counters, `_W`, `_W2` and `_W3` the
+    three mixers (selected by indices m, w and s) and `_WF` the one that
     mixes them (by node and the state of code()'s hint), `_MT` and `_WM`
-    the mantissa plane and its mixer, `_G` the sign counters.  Each is H_pcm_ND (or H_pcm_MND) rows deep per
-    context: where a decision sits among the family's nodes is context
-    without being a variable.  */
+    the mantissa plane and its mixer, `_G` the sign counters.  Each is
+    H_pcm_ND (or H_pcm_MND) rows deep per context: where a decision sits
+    among the family's nodes is context without being a variable.  */
 
 void H7_pcm_make( const H_pcm_v & D, tcx & X ) {
   int a, b, c, d, e, h, i, j, k, l, s, m, w, t, n, g;
-  int pl = D.pl, dp = D.dp, pd = D.pd, pd2 = D.pd2;
-  (void) pl;  (void) dp;  (void) pd;  (void) pd2;
+  H_pcm_VARS(H_LOCAL)
 
   a = 0;
   a = a*3 + (((pl)>0+(1-1))+((pl)>1+(1-1)));
@@ -83,3 +84,13 @@ void H7_pcm_make( const H_pcm_v & D, tcx & X ) {
   X.n = n;  X.g = g;
 }
 
+
+// the family's configuration class (famcfg.inc): the level's shape, as
+// the tables above have it
+#define FC_NAME C7_pcm
+#define FC_PFX H7_pcm_
+#define FC_FAM pcm
+#define FC_NC 10
+#define FC_NMIX 3
+#define FC_NAPM 0
+#include "../../famcfg.inc"

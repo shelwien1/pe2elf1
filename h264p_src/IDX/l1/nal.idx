@@ -1,6 +1,6 @@
 #  h264p's nal family at level -1: its context indices and its tunable
 #  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
-#  MOD/l1/nal_h.inc and MOD/l1/nal_p.inc from this file and nal.inc.
+#  MOD/l1/nal_h.inc and MOD/l1/nal_p.inc from this file and family.inc.
 #
 #  NAL unit fields: the field id (fld) is a dense factor and the rest is the
 #  field's own recent history (p1, p2) and a context the coder gives (ctx).
@@ -10,51 +10,56 @@ Debug 1
 Const 0
 
 Index a
- a_fld: fld, 1!1111000000000101000000000000000
+ a_fld: fld, 1!11110000000001010
  a_ctx: ctx, 1!1100011010000000000000000000000
 
 Index b
- b_fld: fld, 1!0001010010000001000000000000000
+ b_fld: fld, 1!00010100100000010
  b_p1: p1, 1!100001
  b_p2: p2, 1!111
 
 Index c
- c_fld: fld, 1!1010000100000001000000000000000
+ c_fld: fld, 1!10100001000000010
  c_ctx: ctx, 1!1010010000000000000000000000000
 
 Index d
- d_fld: fld, 1!0111101100000001000000000000000
+ d_fld: fld, 1!01111011000000010
 
 Index m
- m_fld: fld, 1!0110000000000001000000000000000
+ m_fld: fld, 1!01100000000000010
 
 Index t
- t_fld: fld, 1!0000000000000000000000000000000
+ t_fld: fld, 1!00000000000000000
 
+#  (frozen: see the parameters below)
 Index n
- n_fld: fld, 1!0000000000000000000000000000000
+! n_fld: fld, 1!00000000000000000
 
 Index g
- g_fld: fld, 1!0000000000000000000000000000000
- g_ctx: ctx, 1!000
+! g_fld: fld, 1!00000000000000000
+! g_ctx: ctx, 1!000
 
 Number rA, 1, 0!11111100
 Number rB, 1, 0!00000000
 Number rC, 1, 0!00000010
 Number rD, 1, 0!00010000
 Number rT, 1, 0!11111100
-Number rG, 1, 0!00000000
 Number lr, 1, 0!11111
-Number lrm, 1, 0!00000
-Number mbm, 1, 0!00000000
 Number mwA, 1, 0!00000000
 Number mwB, 1, 0!01011000
 Number mwC, 1, 0!01110000
 Number mwD, 1, 0!00000000
 Number mwT, 1, 0!00000000
-Number mwG, 1, 0!00000000
 Number mt, 1, 0!100
 Number mb, 1, 0!11111111
+
+#  Frozen: what nal never reads, which live would only take opt.pl's trials.
+#  It codes with code(), without a hint or signs: no hint's mixer (lrm, mbm,
+#  index n), no signs (rG, mwG, index g).
+! Number lrm, 1, 0!00000
+! Number mbm, 1, 0!00000000
+! Number rG, 1, 0!00000000
+! Number mwG, 1, 0!00000000
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
 #  direct, one that does not is hashed into 2^h rows and contexts share

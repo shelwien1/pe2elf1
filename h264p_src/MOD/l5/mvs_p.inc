@@ -1,20 +1,21 @@
-/*  The template IDX/idx2inc.pl reads alongside mvs.idx: the mvs
-    family's index builder and the tables its indices address.  Copied
-    through into MOD/l5/mvs_p.inc with `H5_mvs_` replaced by the prefix,
-    `MakeIndex` by the statements that build the indices, and the Table()
-    lines lifted out into the struct in MOD/l5/mvs_h.inc.  Edit this file
-    and mvs.idx, not MOD/; ../../mk.sh regenerates both.
+/*  The template IDX/idx2inc.pl reads alongside each .idx of IDX/l5: a
+    family's index builder, the tables its indices address and its
+    configuration class, at level -5.  Copied through into
+    MOD/l5/<family>_p.inc with the family's name and prefix in place of
+    their markers and `MakeIndex` by the statements that build the
+    indices, and the Table() lines lifted out into the struct in
+    MOD/l5/<family>_h.inc.  Edit this file and the .idx, not MOD/;
+    ../../mk.sh regenerates both.
 
-    Level -5: `_A`-`_E`, `_H`-`_L` are the ten counters, `_W` the one mixer
-    (selected by index m), `_MT` and `_WM` the mantissa plane and its mixer,
-    `_G` the sign counters.  Each is H_mvs_ND (or H_mvs_MND) rows deep per
-    context: where a decision sits among the family's nodes is context
-    without being a variable.  */
+    `_A`-`_E`, `_H`-`_L` are the ten counters, `_W` the one mixer
+    (selected by index m), `_MT` and `_WM` the mantissa plane and its
+    mixer, `_G` the sign counters.  Each is H_mvs_ND (or H_mvs_MND) rows
+    deep per context: where a decision sits among the family's nodes is
+    context without being a variable.  */
 
 void H5_mvs_make( const H_mvs_v & D, tcx & X ) {
   int a, b, c, d, e, h, i, j, k, l, m, t, n, g;
-  int kind = D.kind, comp = D.comp, lst = D.lst, ma = D.ma, mb = D.mb, oth = D.oth, ps = D.ps, rf = D.rf, pi = D.pi, nr = D.nr, pd = D.pd, sp = D.sp, tv = D.tv, zd = D.zd, cq = D.cq, tq = D.tq, rt = D.rt, ea = D.ea, eb = D.eb, ta = D.ta;
-  (void) kind;  (void) comp;  (void) lst;  (void) ma;  (void) mb;  (void) oth;  (void) ps;  (void) rf;  (void) pi;  (void) nr;  (void) pd;  (void) sp;  (void) tv;  (void) zd;  (void) cq;  (void) tq;  (void) rt;  (void) ea;  (void) eb;  (void) ta;
+  H_mvs_VARS(H_LOCAL)
 
   a = 0;
   a = a*3 + (((kind)>1+(1-1))+((kind)>2+(1-1)));
@@ -89,3 +90,13 @@ void H5_mvs_make( const H_mvs_v & D, tcx & X ) {
   X.n = n;  X.g = g;
 }
 
+
+// the family's configuration class (famcfg.inc): the level's shape, as
+// the tables above have it
+#define FC_NAME C5_mvs
+#define FC_PFX H5_mvs_
+#define FC_FAM mvs
+#define FC_NC 10
+#define FC_NMIX 1
+#define FC_NAPM 0
+#include "../../famcfg.inc"

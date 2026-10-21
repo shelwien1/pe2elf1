@@ -54,11 +54,7 @@ static const int H7_sgn_rJ = (255+0) * (1);
 static const int H7_sgn_rK = (255+0) * (1);
 static const int H7_sgn_rL = (123+0) * (1);
 static const int H7_sgn_rD = (254+0) * (1);
-static const int H7_sgn_rT = (0+0) * (1);
-static const int H7_sgn_rG = (0+0) * (1);
 static const int H7_sgn_lr = (15+0) * (1);
-static const int H7_sgn_lrm = (0+0) * (1);
-static const int H7_sgn_mbm = (0+0) * (1);
 static const int H7_sgn_mwA = (21+0) * (1);
 static const int H7_sgn_mwB = (4+0) * (1);
 static const int H7_sgn_mwC = (155+0) * (1);
@@ -69,10 +65,14 @@ static const int H7_sgn_mwJ = (32+0) * (1);
 static const int H7_sgn_mwK = (22+0) * (1);
 static const int H7_sgn_mwL = (1+0) * (1);
 static const int H7_sgn_mwD = (70+0) * (1);
-static const int H7_sgn_mwT = (0+0) * (1);
-static const int H7_sgn_mwG = (0+0) * (1);
-static const int H7_sgn_mt = (0+0) * (1);
 static const int H7_sgn_mb = (128+0) * (1);
+static const int H7_sgn_rT = (0+0) * (1);
+static const int H7_sgn_mwT = (0+0) * (1);
+static const int H7_sgn_mt = (0+0) * (1);
+static const int H7_sgn_lrm = (0+0) * (1);
+static const int H7_sgn_mbm = (0+0) * (1);
+static const int H7_sgn_rG = (0+0) * (1);
+static const int H7_sgn_mwG = (0+0) * (1);
 static const int H7_sgn_hA = (24+0) * (1);
 static const int H7_sgn_hB = (24+0) * (1);
 static const int H7_sgn_hC = (24+0) * (1);
@@ -108,11 +108,7 @@ static const long long H7_sgn_w_Volume = tc_vmul(tc_vmul(tc_vmul(1, 6), 1), 6); 
 
 #define H7_sgn_USES(X) X(cg) X(pos) X(sa) X(sb) X(gh) X(scb) X(md) X(pp) X(mg) X(ez) X(ts) X(pq) X(dm) X(se)
 
-struct H7_sgn_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H7_sgn_T {
   cm_cnt2 H7_sgn_A[tc_rows(H7_sgn_a_Volume, H7_sgn_hA) * H_sgn_ND];
   cm_cnt2 H7_sgn_B[tc_rows(H7_sgn_b_Volume, H7_sgn_hB) * H_sgn_ND];
   cm_cnt2 H7_sgn_C[tc_rows(H7_sgn_c_Volume, H7_sgn_hC) * H_sgn_ND];
@@ -161,8 +157,6 @@ struct H7_sgn_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_sgn_ND * 5 * 4)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_sgn_ND * 5)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H7_sgn_g_Volume * H_sgn_NG);
-  void H7_sgn_Init( void ) {
-  
-  }
+  void H7_sgn_Init( void ) {}
   void H7_sgn_Quit( void ) {}
 };

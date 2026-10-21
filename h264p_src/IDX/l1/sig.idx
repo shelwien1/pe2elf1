@@ -1,6 +1,6 @@
 #  h264p's sig family at level -1: its context indices and its tunable
 #  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
-#  MOD/l1/sig_h.inc and MOD/l1/sig_p.inc from this file and sig.inc.
+#  MOD/l1/sig_h.inc and MOD/l1/sig_p.inc from this file and family.inc.
 #
 #  The significance map, given the number of nonzero coefficients: whether
 #  the coefficient at each scan position is nonzero, until none remain. cg
@@ -45,32 +45,37 @@ Index m
  m_pos: pos, 1!100001000
  m_rem: rem, 1!0110001100
 
+#  (frozen: see the parameters below)
 Index t
- t_cg: cg, 1!0
+! t_cg: cg, 1!0
 
 Index n
- n_cg: cg, 1!0
+! n_cg: cg, 1!0
 
 Index g
- g_cg: cg, 1!0
+! g_cg: cg, 1!0
 
 Number rA, 1, 0!11111010
 Number rB, 1, 0!11111111
 Number rC, 1, 0!11111010
 Number rD, 1, 0!11111111
-Number rT, 1, 0!00000000
-Number rG, 1, 0!00000000
 Number lr, 1, 0!01111
-Number lrm, 1, 0!00000
-Number mbm, 1, 0!00000000
 Number mwA, 1, 0!00111110
 Number mwB, 1, 0!00001111
 Number mwC, 1, 0!01000101
 Number mwD, 1, 0!00101111
-Number mwT, 1, 0!00000000
-Number mwG, 1, 0!00000000
-Number mt, 1, 0!000
 Number mb, 1, 0!01000000
+
+#  Frozen: what sig never reads, which live would only take opt.pl's trials.
+#  It codes decisions with bit() alone: no mantissa (rT, mwT, mt, index t),
+#  no hint and its mixer (lrm, mbm, index n), no signs (rG, mwG, index g).
+! Number rT, 1, 0!00000000
+! Number mwT, 1, 0!00000000
+! Number mt, 1, 0!000
+! Number lrm, 1, 0!00000
+! Number mbm, 1, 0!00000000
+! Number rG, 1, 0!00000000
+! Number mwG, 1, 0!00000000
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
 #  direct, one that does not is hashed into 2^h rows and contexts share

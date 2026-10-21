@@ -1,6 +1,6 @@
 #  h264p's mvs family at level -3: its context indices and its tunable
 #  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
-#  MOD/l3/mvs_h.inc and MOD/l3/mvs_p.inc from this file and mvs.inc.
+#  MOD/l3/mvs_h.inc and MOD/l3/mvs_p.inc from this file and family.inc.
 #
 #  Motion: sub_mb_type (kind 0 P, 1 B, as a binary tree), ref_idx (kind 2) and
 #  the components of mvd (kind 3; the sign is the mvg family's). comp is the
@@ -117,10 +117,11 @@ Index t
 Index n
  n_kind: kind, 1!000
 
+#  (frozen: see the parameters below)
 Index g
- g_kind: kind, 1!000
- g_ma: ma, 1!0
- g_oth: oth, 1!0
+! g_kind: kind, 1!000
+! g_ma: ma, 1!0
+! g_oth: oth, 1!0
 
 Number rA, 1, 0!11111110
 Number rB, 1, 0!00000000
@@ -133,7 +134,6 @@ Number rK, 1, 0!11111111
 Number rL, 1, 0!11111110
 Number rD, 1, 0!11111110
 Number rT, 1, 0!00011100
-Number rG, 1, 0!00000000
 Number lr, 1, 0!01111
 Number lrm, 1, 0!00000
 Number mbm, 1, 0!00000000
@@ -148,9 +148,13 @@ Number mwK, 1, 0!01000000
 Number mwL, 1, 0!10000000
 Number mwD, 1, 0!00100001
 Number mwT, 1, 0!00111100
-Number mwG, 1, 0!00000000
 Number mt, 1, 0!110
 Number mb, 1, 0!00011101
+
+#  Frozen: what mvs never reads, which live would only take opt.pl's trials.
+#  It codes with code(), without signs: no sign counters (rG, mwG, index g).
+! Number rG, 1, 0!00000000
+! Number mwG, 1, 0!00000000
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
 #  direct, one that does not is hashed into 2^h rows and contexts share

@@ -1,6 +1,6 @@
 #  h264p's sgn family at level -7: its context indices and its tunable
 #  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
-#  MOD/l7/sgn_h.inc and MOD/l7/sgn_p.inc from this file and sgn.inc.
+#  MOD/l7/sgn_h.inc and MOD/l7/sgn_p.inc from this file and family.inc.
 #
 #  The sign of a nonzero coefficient. cg is the ctxBlockCat, pos the scan
 #  position (class), sa/sb the sign at the same position in the blocks A and
@@ -97,14 +97,15 @@ Index w
  w_pp: pp, 1!00
  w_mg: mg, 1!100000100101001
 
+#  (frozen: see the parameters below)
 Index t
- t_cg: cg, 1!0
+! t_cg: cg, 1!0
 
 Index n
- n_cg: cg, 1!0
+! n_cg: cg, 1!0
 
 Index g
- g_cg: cg, 1!0
+! g_cg: cg, 1!0
 
 Number rA, 1, 0!11100001
 Number rB, 1, 0!11111101
@@ -116,11 +117,7 @@ Number rJ, 1, 0!11111111
 Number rK, 1, 0!11111111
 Number rL, 1, 0!01111011
 Number rD, 1, 0!11111110
-Number rT, 1, 0!00000000
-Number rG, 1, 0!00000000
 Number lr, 1, 0!01111
-Number lrm, 1, 0!00000
-Number mbm, 1, 0!00000000
 Number mwA, 1, 0!00010101
 Number mwB, 1, 0!00000100
 Number mwC, 1, 0!10011011
@@ -131,10 +128,18 @@ Number mwJ, 1, 0!00100000
 Number mwK, 1, 0!00010110
 Number mwL, 1, 0!00000001
 Number mwD, 1, 0!01000110
-Number mwT, 1, 0!00000000
-Number mwG, 1, 0!00000000
-Number mt, 1, 0!000
 Number mb, 1, 0!10000000
+
+#  Frozen: what sgn never reads, which live would only take opt.pl's trials.
+#  It codes decisions with bit() alone: no mantissa (rT, mwT, mt, index t),
+#  no hint and its mixer (lrm, mbm, index n), no signs (rG, mwG, index g).
+! Number rT, 1, 0!00000000
+! Number mwT, 1, 0!00000000
+! Number mt, 1, 0!000
+! Number lrm, 1, 0!00000
+! Number mbm, 1, 0!00000000
+! Number rG, 1, 0!00000000
+! Number mwG, 1, 0!00000000
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
 #  direct, one that does not is hashed into 2^h rows and contexts share

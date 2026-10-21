@@ -244,8 +244,10 @@ struct Output {
     bool werr = false;
     if (g.f == stdout)
       werr = fflush(stdout) != 0 || ferror(stdout) != 0;
-    else if (g.f)
-      werr = (ferror(g.f) != 0) | (fclose(g.f) != 0);
+    else if (g.f) {
+      werr = ferror(g.f) != 0;
+      werr = fclose(g.f) != 0 || werr;  // (closed whatever ferror says)
+    }
     g.f = nullptr;
     if (!r && werr) {
       fprintf(stderr, "h264p: %s: write error\n", name);

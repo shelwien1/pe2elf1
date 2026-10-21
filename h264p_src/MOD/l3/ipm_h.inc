@@ -44,11 +44,7 @@ static const int H3_ipm_rJ = (255+0) * (1);
 static const int H3_ipm_rK = (255+0) * (1);
 static const int H3_ipm_rL = (252+0) * (1);
 static const int H3_ipm_rD = (253+0) * (1);
-static const int H3_ipm_rT = (0+0) * (1);
-static const int H3_ipm_rG = (0+0) * (1);
 static const int H3_ipm_lr = (15+0) * (1);
-static const int H3_ipm_lrm = (0+0) * (1);
-static const int H3_ipm_mbm = (0+0) * (1);
 static const int H3_ipm_mwA = (22+0) * (1);
 static const int H3_ipm_mwB = (148+0) * (1);
 static const int H3_ipm_mwC = (8+0) * (1);
@@ -59,10 +55,14 @@ static const int H3_ipm_mwJ = (34+0) * (1);
 static const int H3_ipm_mwK = (128+0) * (1);
 static const int H3_ipm_mwL = (64+0) * (1);
 static const int H3_ipm_mwD = (134+0) * (1);
-static const int H3_ipm_mwT = (0+0) * (1);
-static const int H3_ipm_mwG = (0+0) * (1);
-static const int H3_ipm_mt = (0+0) * (1);
 static const int H3_ipm_mb = (40+0) * (1);
+static const int H3_ipm_rT = (0+0) * (1);
+static const int H3_ipm_mwT = (0+0) * (1);
+static const int H3_ipm_mt = (0+0) * (1);
+static const int H3_ipm_lrm = (0+0) * (1);
+static const int H3_ipm_mbm = (0+0) * (1);
+static const int H3_ipm_rG = (0+0) * (1);
+static const int H3_ipm_mwG = (0+0) * (1);
 static const int H3_ipm_hA = (24+0) * (1);
 static const int H3_ipm_hB = (24+0) * (1);
 static const int H3_ipm_hC = (24+0) * (1);
@@ -98,11 +98,7 @@ static const long long H3_ipm_w_Volume = tc_vmul(tc_vmul(1, 2), 8); // 16
 
 #define H3_ipm_USES(X) X(k8) X(ma) X(mb) X(mc) X(mp) X(pv) X(mh) X(col)
 
-struct H3_ipm_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H3_ipm_T {
   cm_cnt2 H3_ipm_A[tc_rows(H3_ipm_a_Volume, H3_ipm_hA) * H_ipm_ND];
   cm_cnt2 H3_ipm_B[tc_rows(H3_ipm_b_Volume, H3_ipm_hB) * H_ipm_ND];
   cm_cnt2 H3_ipm_C[tc_rows(H3_ipm_c_Volume, H3_ipm_hC) * H_ipm_ND];
@@ -151,8 +147,6 @@ struct H3_ipm_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_ipm_ND * 5 * 4)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_ipm_ND * 5)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H3_ipm_g_Volume * H_ipm_NG);
-  void H3_ipm_Init( void ) {
-  
-  }
+  void H3_ipm_Init( void ) {}
   void H3_ipm_Quit( void ) {}
 };

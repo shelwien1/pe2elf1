@@ -1,21 +1,22 @@
-/*  The template IDX/idx2inc.pl reads alongside qpd.idx: the qpd
-    family's index builder and the tables its indices address.  Copied
-    through into MOD/l7/qpd_p.inc with `H7_qpd_` replaced by the prefix,
-    `MakeIndex` by the statements that build the indices, and the Table()
-    lines lifted out into the struct in MOD/l7/qpd_h.inc.  Edit this file
-    and qpd.idx, not MOD/; ../../mk.sh regenerates both.
+/*  The template IDX/idx2inc.pl reads alongside each .idx of IDX/l7: a
+    family's index builder, the tables its indices address and its
+    configuration class, at level -7.  Copied through into
+    MOD/l7/<family>_p.inc with the family's name and prefix in place of
+    their markers and `MakeIndex` by the statements that build the
+    indices, and the Table() lines lifted out into the struct in
+    MOD/l7/<family>_h.inc.  Edit this file and the .idx, not MOD/;
+    ../../mk.sh regenerates both.
 
-    Level -7: `_A`-`_E`, `_H`-`_L` are the ten counters, `_W`, `_W2` and `_W3`
-    the three mixers (selected by indices m, w and s) and `_WF` the one that
+    `_A`-`_E`, `_H`-`_L` are the ten counters, `_W`, `_W2` and `_W3` the
+    three mixers (selected by indices m, w and s) and `_WF` the one that
     mixes them (by node and the state of code()'s hint), `_MT` and `_WM`
-    the mantissa plane and its mixer, `_G` the sign counters.  Each is H_qpd_ND (or H_qpd_MND) rows deep per
-    context: where a decision sits among the family's nodes is context
-    without being a variable.  */
+    the mantissa plane and its mixer, `_G` the sign counters.  Each is
+    H_qpd_ND (or H_qpd_MND) rows deep per context: where a decision sits
+    among the family's nodes is context without being a variable.  */
 
 void H7_qpd_make( const H_qpd_v & D, tcx & X ) {
   int a, b, c, d, e, h, i, j, k, l, s, m, w, t, n, g;
-  int lnz = D.lnz, pc = D.pc, cc = D.cc, cls = D.cls, dc = D.dc, db = D.db, lz = D.lz, st = D.st, ae = D.ae, aq = D.aq, ac = D.ac, td = D.td, sq = D.sq, xe = D.xe, lq = D.lq, bc = D.bc, cl = D.cl, kc = D.kc;
-  (void) lnz;  (void) pc;  (void) cc;  (void) cls;  (void) dc;  (void) db;  (void) lz;  (void) st;  (void) ae;  (void) aq;  (void) ac;  (void) td;  (void) sq;  (void) xe;  (void) lq;  (void) bc;  (void) cl;  (void) kc;
+  H_qpd_VARS(H_LOCAL)
 
   a = 0;
   a = a*3 + (((pc)>0+(1-1))+((pc)>1+(1-1)));
@@ -94,3 +95,13 @@ void H7_qpd_make( const H_qpd_v & D, tcx & X ) {
   X.n = n;  X.g = g;
 }
 
+
+// the family's configuration class (famcfg.inc): the level's shape, as
+// the tables above have it
+#define FC_NAME C7_qpd
+#define FC_PFX H7_qpd_
+#define FC_FAM qpd
+#define FC_NC 10
+#define FC_NMIX 3
+#define FC_NAPM 0
+#include "../../famcfg.inc"

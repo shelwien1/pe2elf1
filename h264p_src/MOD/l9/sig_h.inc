@@ -75,13 +75,9 @@ static const int H9_sig_rJ = (253+0) * (1);
 static const int H9_sig_rK = (196+0) * (1);
 static const int H9_sig_rL = (243+0) * (1);
 static const int H9_sig_rD = (255+0) * (1);
-static const int H9_sig_rT = (0+0) * (1);
-static const int H9_sig_rG = (0+0) * (1);
 static const int H9_sig_rS1 = (2+0) * (1);
 static const int H9_sig_rS2 = (0+0) * (1);
 static const int H9_sig_lr = (12+0) * (1);
-static const int H9_sig_lrm = (0+0) * (1);
-static const int H9_sig_mbm = (0+0) * (1);
 static const int H9_sig_mwA = (31+0) * (1);
 static const int H9_sig_mwB = (128+0) * (1);
 static const int H9_sig_mwC = (4+0) * (1);
@@ -92,13 +88,17 @@ static const int H9_sig_mwJ = (65+0) * (1);
 static const int H9_sig_mwK = (7+0) * (1);
 static const int H9_sig_mwL = (32+0) * (1);
 static const int H9_sig_mwD = (64+0) * (1);
-static const int H9_sig_mwT = (0+0) * (1);
-static const int H9_sig_mwG = (0+0) * (1);
 static const int H9_sig_bw = (16+0) * (1);
-static const int H9_sig_mt = (0+0) * (1);
 static const int H9_sig_qs = (1+3) * (1);
 static const int H9_sig_qf = (0+3) * (1);
 static const int H9_sig_mb = (88+0) * (1);
+static const int H9_sig_rT = (0+0) * (1);
+static const int H9_sig_mwT = (0+0) * (1);
+static const int H9_sig_mt = (0+0) * (1);
+static const int H9_sig_lrm = (0+0) * (1);
+static const int H9_sig_mbm = (0+0) * (1);
+static const int H9_sig_rG = (0+0) * (1);
+static const int H9_sig_mwG = (0+0) * (1);
 static const int H9_sig_hA = (24+0) * (1);
 static const int H9_sig_hB = (21+0) * (1);
 static const int H9_sig_hC = (24+0) * (1);
@@ -136,11 +136,7 @@ static const long long H9_sig_w_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 
 
 #define H9_sig_USES(X) X(cg) X(pos) X(rem) X(md) X(hb) X(q6) X(pg) X(ft) X(zl) X(em) X(ps) X(tz) X(pq) X(pr) X(h3) X(hv) X(sn) X(pf) X(pe)
 
-struct H9_sig_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H9_sig_T {
   cm_cnt2 H9_sig_A[tc_rows(H9_sig_a_Volume, H9_sig_hA) * H_sig_ND];
   cm_cnt2 H9_sig_B[tc_rows(H9_sig_b_Volume, H9_sig_hB) * H_sig_ND];
   cm_cnt2 H9_sig_C[tc_rows(H9_sig_c_Volume, H9_sig_hC) * H_sig_ND];
@@ -197,8 +193,6 @@ struct H9_sig_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_sig_ND * 5 * 4)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_sig_ND * 5)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H9_sig_g_Volume * H_sig_NG);
-  void H9_sig_Init( void ) {
-  
-  }
+  void H9_sig_Init( void ) {}
   void H9_sig_Quit( void ) {}
 };

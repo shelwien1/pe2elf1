@@ -40,11 +40,7 @@ static const int H3_mbt_rJ = (254+0) * (1);
 static const int H3_mbt_rK = (160+0) * (1);
 static const int H3_mbt_rL = (254+0) * (1);
 static const int H3_mbt_rD = (119+0) * (1);
-static const int H3_mbt_rT = (0+0) * (1);
-static const int H3_mbt_rG = (0+0) * (1);
 static const int H3_mbt_lr = (8+0) * (1);
-static const int H3_mbt_lrm = (0+0) * (1);
-static const int H3_mbt_mbm = (0+0) * (1);
 static const int H3_mbt_mwA = (33+0) * (1);
 static const int H3_mbt_mwB = (7+0) * (1);
 static const int H3_mbt_mwC = (58+0) * (1);
@@ -55,10 +51,14 @@ static const int H3_mbt_mwJ = (128+0) * (1);
 static const int H3_mbt_mwK = (2+0) * (1);
 static const int H3_mbt_mwL = (0+0) * (1);
 static const int H3_mbt_mwD = (71+0) * (1);
-static const int H3_mbt_mwT = (0+0) * (1);
-static const int H3_mbt_mwG = (0+0) * (1);
-static const int H3_mbt_mt = (0+0) * (1);
 static const int H3_mbt_mb = (64+0) * (1);
+static const int H3_mbt_rT = (0+0) * (1);
+static const int H3_mbt_mwT = (0+0) * (1);
+static const int H3_mbt_mt = (0+0) * (1);
+static const int H3_mbt_lrm = (0+0) * (1);
+static const int H3_mbt_mbm = (0+0) * (1);
+static const int H3_mbt_rG = (0+0) * (1);
+static const int H3_mbt_mwG = (0+0) * (1);
 static const int H3_mbt_hA = (24+0) * (1);
 static const int H3_mbt_hB = (24+0) * (1);
 static const int H3_mbt_hC = (24+0) * (1);
@@ -94,11 +94,7 @@ static const long long H3_mbt_w_Volume = tc_vmul(1, 1); // 1
 
 #define H3_mbt_USES(X) X(ca) X(cb) X(st) X(cc) X(c1) X(nsk)
 
-struct H3_mbt_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H3_mbt_T {
   cm_cnt2 H3_mbt_A[tc_rows(H3_mbt_a_Volume, H3_mbt_hA) * H_mbt_ND];
   cm_cnt2 H3_mbt_B[tc_rows(H3_mbt_b_Volume, H3_mbt_hB) * H_mbt_ND];
   cm_cnt2 H3_mbt_C[tc_rows(H3_mbt_c_Volume, H3_mbt_hC) * H_mbt_ND];
@@ -147,8 +143,6 @@ struct H3_mbt_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_mbt_ND * 5 * 4)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_mbt_ND * 5)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H3_mbt_g_Volume * H_mbt_NG);
-  void H3_mbt_Init( void ) {
-  
-  }
+  void H3_mbt_Init( void ) {}
   void H3_mbt_Quit( void ) {}
 };

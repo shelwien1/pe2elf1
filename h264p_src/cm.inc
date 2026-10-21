@@ -118,14 +118,12 @@ constexpr int cm_apm_limit(int rate) { return rate >= 8 ? CM_AMAX : (1 << rate) 
 struct cm_apm {
   i16 *__restrict t;
   u8 *__restrict c;
-  sz n;
   int idx, bkt, q;
   u16 ident[CM_QMAX];
-  void init(i16 *tab, u8 *cnt, sz nctx, int qq) {
+  void init(i16 *tab, u8 *cnt, int qq) {
     int j;
     t = tab;
     c = cnt;
-    n = nctx;
     idx = 0;
     bkt = 0;
     q = cm_apm_q(qq);
@@ -151,7 +149,6 @@ struct cm_apm {
     v += ((g - v) * cm_arec[k]) >> 16;
     tt[i] = (i16)(v - (int)ident[b]);
   }
-  static int limit(int rate) { return cm_apm_limit(rate); }
   INLINE void upd(int bit, int lim) {
     int g = bit ? 0 : CM_PONE;
     upd1(idx, bkt, g, lim);
@@ -192,8 +189,7 @@ template <int N> struct cm_mix {
   u8 *__restrict c;
   int x[N], pr, row, ctxn;
   enum { W0 = (1 << 16) / N };
-  void init(i32 *wt, u8 *cnt, sz nctx) {
-    (void)nctx;
+  void init(i32 *wt, u8 *cnt) {
     w = wt;
     c = cnt;
     row = 0;

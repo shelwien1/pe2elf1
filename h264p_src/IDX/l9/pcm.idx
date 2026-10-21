@@ -1,6 +1,6 @@
 #  h264p's pcm family at level -9: its context indices and its tunable
 #  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
-#  MOD/l9/pcm_h.inc and MOD/l9/pcm_p.inc from this file and pcm.inc.
+#  MOD/l9/pcm_h.inc and MOD/l9/pcm_p.inc from this file and family.inc.
 #
 #  I_PCM samples, as the difference to the sample to the left (above, in the
 #  first column). pl is the plane, dp the bit depth above 8, pd/pd2 the last
@@ -69,8 +69,9 @@ Index t
  t_pl: pl, 1!11
  t_dp: dp, 1!111111
 
+#  (frozen: see the parameters below)
 Index n
- n_pl: pl, 1!11
+! n_pl: pl, 1!11
 
 Index g
  g_pl: pl, 1!11
@@ -91,8 +92,6 @@ Number rG, 1, 0!01011010
 Number rS1, 1, 0!00110
 Number rS2, 1, 0!00110
 Number lr, 1, 0!01100
-Number lrm, 1, 0!01100
-Number mbm, 1, 0!00000000
 Number mwA, 1, 0!00000000
 Number mwB, 1, 0!00000000
 Number mwC, 1, 0!00000000
@@ -110,6 +109,12 @@ Number mt, 1, 0!000
 Number qs, 1, 3!0010000
 Number qf, 1, 3!0010000
 Number mb, 1, 0!00000101
+
+#  Frozen: what pcm never reads, which live would only take opt.pl's trials.
+#  It codes with codes(), without a hint: no hint's mixer (lrm, mbm, index
+#  n).
+! Number lrm, 1, 0!01100
+! Number mbm, 1, 0!00000000
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
 #  direct, one that does not is hashed into 2^h rows and contexts share

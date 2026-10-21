@@ -45,11 +45,7 @@ static const int H5_ipm_rJ = (254+0) * (1);
 static const int H5_ipm_rK = (255+0) * (1);
 static const int H5_ipm_rL = (254+0) * (1);
 static const int H5_ipm_rD = (254+0) * (1);
-static const int H5_ipm_rT = (0+0) * (1);
-static const int H5_ipm_rG = (0+0) * (1);
 static const int H5_ipm_lr = (15+0) * (1);
-static const int H5_ipm_lrm = (0+0) * (1);
-static const int H5_ipm_mbm = (0+0) * (1);
 static const int H5_ipm_mwA = (32+0) * (1);
 static const int H5_ipm_mwB = (128+0) * (1);
 static const int H5_ipm_mwC = (2+0) * (1);
@@ -60,10 +56,14 @@ static const int H5_ipm_mwJ = (95+0) * (1);
 static const int H5_ipm_mwK = (94+0) * (1);
 static const int H5_ipm_mwL = (8+0) * (1);
 static const int H5_ipm_mwD = (32+0) * (1);
-static const int H5_ipm_mwT = (0+0) * (1);
-static const int H5_ipm_mwG = (0+0) * (1);
-static const int H5_ipm_mt = (0+0) * (1);
 static const int H5_ipm_mb = (22+0) * (1);
+static const int H5_ipm_rT = (0+0) * (1);
+static const int H5_ipm_mwT = (0+0) * (1);
+static const int H5_ipm_mt = (0+0) * (1);
+static const int H5_ipm_lrm = (0+0) * (1);
+static const int H5_ipm_mbm = (0+0) * (1);
+static const int H5_ipm_rG = (0+0) * (1);
+static const int H5_ipm_mwG = (0+0) * (1);
 static const int H5_ipm_hA = (24+0) * (1);
 static const int H5_ipm_hB = (24+0) * (1);
 static const int H5_ipm_hC = (24+0) * (1);
@@ -96,11 +96,7 @@ static const long long H5_ipm_t_Volume = tc_vmul(1, 1); // 1
 
 #define H5_ipm_USES(X) X(k8) X(ma) X(mb) X(mc) X(mp) X(pv) X(mh) X(col) X(dm) X(ds) X(dr)
 
-struct H5_ipm_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H5_ipm_T {
   cm_cnt2 H5_ipm_A[tc_rows(H5_ipm_a_Volume, H5_ipm_hA) * H_ipm_ND];
   cm_cnt2 H5_ipm_B[tc_rows(H5_ipm_b_Volume, H5_ipm_hB) * H_ipm_ND];
   cm_cnt2 H5_ipm_C[tc_rows(H5_ipm_c_Volume, H5_ipm_hC) * H_ipm_ND];
@@ -137,8 +133,6 @@ struct H5_ipm_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H5_ipm_n_Volume, H5_ipm_hN) * H_ipm_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H5_ipm_n_Volume, H5_ipm_hN) * H_ipm_MND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H5_ipm_g_Volume * H_ipm_NG);
-  void H5_ipm_Init( void ) {
-  
-  }
+  void H5_ipm_Init( void ) {}
   void H5_ipm_Quit( void ) {}
 };

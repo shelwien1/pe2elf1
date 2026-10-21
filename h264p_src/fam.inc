@@ -47,8 +47,9 @@ struct tcx {
 //  A family's tables, in the order tc_fam takes them (its class's
 //  tables(), famcfg.inc): those its shape has (the counters' of its
 //  class's type, C::Cnt)
+template <class Cnt>
 struct tc_tabs {
-  void *cnt[10] = {};
+  Cnt *cnt[10] = {};
   cm_cnt *T = nullptr, *G = nullptr;
   i32 *W = nullptr, *WM = nullptr, *W2 = nullptr, *W3 = nullptr, *WF = nullptr;
   u8 *WC = nullptr, *WMC = nullptr, *W2C = nullptr, *W3C = nullptr, *WFC = nullptr;
@@ -256,10 +257,10 @@ template <int f_DEC, class C> struct tc_fam {
   bool cn_v = false;
   void wire(typename C::T *t, tc_rc<f_DEC> *r) {
     rc = r;
-    tc_tabs b;
+    tc_tabs<Cnt> b;
     C::tables(t, b);
     for(int k = 0; k < NC; k++)
-      cnt[k] = static_cast<Cnt *>(b.cnt[k]);
+      cnt[k] = b.cnt[k];
     T = b.T;
     G = b.G;
     {
@@ -269,25 +270,24 @@ template <int f_DEC, class C> struct tc_fam {
         tc_vfits(name[k], C::kc[k], ND);
       // (and their rows times nodes: bt and bg, below, are 32-bit products)
       tc_ifits("counter T", C::kT, MND);
-      if(G)
-        tc_ifits("counter G", C::kG, C::NG);
+      tc_ifits("counter G", C::kG, C::NG);
       tc_ifits("mixer", C::kM, (sz)ND * NIN);
       tc_ifits("mantissa mixer", C::kN, (sz)MND * 3);
-      mx.init(b.W, b.WC, C::kM * ND);
+      mx.init(b.W, b.WC);
       if(C::NMIX > 1) {
         tc_ifits("mixer 2", C::kW, (sz)ND * NIN);
         tc_ifits("mixer 3", C::kS, (sz)ND * NIN);
-        mx2.init(b.W2, b.W2C, C::kW * ND);
-        mx3.init(b.W3, b.W3C, C::kS * ND);
-        mxf.init(b.WF, b.WFC, ND * 5);
+        mx2.init(b.W2, b.W2C);
+        mx3.init(b.W3, b.W3C);
+        mxf.init(b.WF, b.WFC);
       }
       if(C::NAPM) {
         tc_ifits("APM 1", C::kS, (sz)ND * C::qs);
         tc_ifits("APM 2", C::kF, (sz)ND * C::qf);
-        ap.init(b.S, b.SC, C::kS * ND, C::qs);
-        ap2.init(b.F, b.FC, C::kF * ND, C::qf);
+        ap.init(b.S, b.SC, C::qs);
+        ap2.init(b.F, b.FC, C::qf);
       }
-      mxm.init(b.WM, b.WMC, C::kN * MND);
+      mxm.init(b.WM, b.WMC);
     }
     //  (the inputs past the last are 0 for good)
     for(int i = 0; i < NIN; i++)
@@ -335,10 +335,9 @@ template <int f_DEC, class C> struct tc_fam {
       cm_fail("internal: decision node %d of a family of %d", node, ND);
     return bit_x(node, b);
   }
-  i64 code(const tcx &v, i64 x) { return code_x(v, x); }
   void dump_discard() { TC_DUMP(discard()); }
   i64 codes(const tcx &v, i64 x, u32 sc) {
-    i64 m = code_x(v, ENC ? (x < 0 ? -x : x) : 0);
+    i64 m = code(v, ENC ? (x < 0 ? -x : x) : 0);
     if(!m)
       return 0;
     return sign(sc, x < 0) ? -m : m;
@@ -346,7 +345,7 @@ template <int f_DEC, class C> struct tc_fam {
   //  The sign of a nonzero value, under the g index of the last select()
   //  and sign context sc: 1 negative.
   int sign(u32 sc, int s) {
-    if(!G || UNLIKELY(sc >= (u32)C::NG))
+    if(UNLIKELY(sc >= (u32)C::NG))
       cm_fail("internal: sign context %u of a family of %d", sc, C::NG);
     TC_DUMP(rec('G', sc, s));
     cm_cnt g = G[bg * (u32)C::NG + sc];
@@ -363,8 +362,10 @@ template <int f_DEC, class C> struct tc_fam {
     if(C::NAPM) {
       CM_PREFETCH(ap.t + (sz)(bs + node) * (u32)ap.q);
       CM_PREFETCH(ap.c + (sz)(bs + node) * (u32)ap.q);
-      CM_PREFETCH(ap2.t + (sz)(bf + node) * (u32)ap2.q);
-      CM_PREFETCH(ap2.c + (sz)(bf + node) * (u32)ap2.q);
+      if(C::bw < 16) {
+        CM_PREFETCH(ap2.t + (sz)(bf + node) * (u32)ap2.q);
+        CM_PREFETCH(ap2.c + (sz)(bf + node) * (u32)ap2.q);
+      }
     }
     const i32 *w1 = mx.w + (sz)(bm + node) * NIN;
     CM_PREFETCH(w1);
@@ -477,7 +478,7 @@ template <int f_DEC, class C> struct tc_fam {
       mxf.set(2, cm_stretch(mx3.mix(bs + (u32)node, mx.x, xq)));
       mxf.set(3, 256);
       int pm = mxf.mix((u32)node * 5 + (u32)hs);  // by node and hint state
-      int pf = C::NAPM ? (C::bw * pm + (16 - C::bw) * ap2.pp(pm, bf + (u32)node) + 8) >> 4 : pm;
+      int pf = C::NAPM && C::bw < 16 ? (C::bw * pm + (16 - C::bw) * ap2.pp(pm, bf + (u32)node) + 8) >> 4 : pm;
       b = tc_bit(rc, pf < 1 ? 1 : pf > CM_PONE - 1 ? CM_PONE - 1 : pf, b);
       mx.upd(b, C::lr, C::mb, mx.x, xq);
       mx2.upd(b, C::lr, C::mb, mx.x, xq);
@@ -485,13 +486,16 @@ template <int f_DEC, class C> struct tc_fam {
       mxf.upd(b, C::lr, C::mb);
     } else {
       int pm = mx.mix(bm + (u32)node, mx.x, xq);
-      int pf = C::NAPM ? (C::bw * pm + (16 - C::bw) * ap2.pp(pm, bf + (u32)node) + 8) >> 4 : pm;
+      int pf = C::NAPM && C::bw < 16 ? (C::bw * pm + (16 - C::bw) * ap2.pp(pm, bf + (u32)node) + 8) >> 4 : pm;
       b = tc_bit(rc, pf < 1 ? 1 : pf > CM_PONE - 1 ? CM_PONE - 1 : pf, b);
       mx.upd(b, C::lr, C::mb, mx.x, xq);
     }
+    //  (APM 2 with no share, bw 16, is neither read nor trained: what it
+    //  would give goes nowhere)
     if(C::NAPM) {
       ap.upd(b, C::rS1);
-      ap2.upd(b, C::rS2);
+      if(C::bw < 16)
+        ap2.upd(b, C::rS2);
     }
 #ifdef H264P_AVX2
     if(cn_v) {
@@ -539,7 +543,9 @@ template <int f_DEC, class C> struct tc_fam {
     if(UNLIKELY((unsigned)node >= (unsigned)MND))
       cm_fail("internal: mantissa node %d of a family of %d", node, MND);
     cm_cnt t = T[bt + node];
-    if(hs && (prp < 0 || prpa)) {
+    // (no outside prediction: the families that code() a magnitude give
+    // one per node of its head, prpa, or none)
+    if(hs) {
       // with the hint's counter, through the mantissa mixer the value
       // would not use otherwise
       cm_cnt &z = ZM[((sz)bz * MND + (u32)node) * 5 + (u32)hs];
@@ -554,25 +560,12 @@ template <int f_DEC, class C> struct tc_fam {
       z.upd(b, C::rT, C::mwT);
       return b;
     }
-    if(prp < 0 || prpa) {
-      b = tc_bit(rc, t.P(), b);
-      t.upd(b, C::rT, C::mwT);
-      T[bt + node] = t;
-      return b;
-    }
-    mxm.set(0, cm_stretch(t.P()));
-    mxm.set(1, cm_stretch(prp));
-    mxm.set(2, 256);
-    {
-      int pm = mxm.mix(bn + (u32)node);
-      b = tc_bit(rc, pm < 1 ? 1 : pm > CM_PONE - 1 ? CM_PONE - 1 : pm, b);
-    }
-    mxm.upd(b, C::lrm, C::mbm);
+    b = tc_bit(rc, t.P(), b);
     t.upd(b, C::rT, C::mwT);
     T[bt + node] = t;
     return b;
   }
-  i64 code_x(const tcx &v, i64 x) {
+  i64 code(const tcx &v, i64 x) {
     static_assert(ND >= TC_NODE, "tc_fam: code() takes nodes up to TC_NODE - 1");
     int k, p, nb = 0, hst = 0, hnb = 0;
     u64 u, hu = 0;

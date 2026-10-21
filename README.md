@@ -219,25 +219,25 @@ On the test streams (`-v` shows where the bits go):
 
 | stream | H.264 | compressed | |
 |---|---:|---:|---:|
-| 00 | 815,140 | 559,790 | 68.7% |
-| 01 | 1,095,103 | 793,364 | 72.4% |
-| 02 | 28,143 | 26,047 | 92.6% |
-| 03 | 1,181,369 | 768,001 | 65.0% |
-| 04 | 484,238 | 378,938 | 78.3% |
+| 00 | 815,140 | 559,490 | 68.6% |
+| 01 | 1,095,103 | 793,286 | 72.4% |
+| 02 | 28,143 | 26,044 | 92.5% |
+| 03 | 1,181,369 | 767,960 | 65.0% |
+| 04 | 484,238 | 378,937 | 78.3% |
 
 The macroblock syntax takes 71.3% of what its CABAC coding takes (from
-3,536,129 to 2,521,031 bytes over these streams; whole streams go from
-3,603,993 to 2,526,140 bytes; `h264p_cm.md` section 9 has the figures by
+3,536,129 to 2,520,607 bytes over these streams; whole streams go from
+3,603,993 to 2,525,717 bytes; `h264p_cm.md` section 9 has the figures by
 syntax element). That is level `-9`. In one thread, on a 2.1 GHz Xeon with
 the x86-64-v3 build, the levels do on the 7 streams of `test/002` (3.87 MB
 of H.264):
 
 | level | compressed | | `c` KB/s | `d` KB/s | memory |
 |---|---:|---:|---:|---:|---:|
-| `-9` | 2,718,200 | 70.3% | 106 | 108 | 63 MB |
-| `-7` | 2,762,018 | 71.4% | 131 | 141 | 61 MB |
-| `-5` | 3,028,487 | 78.3% | 222 | 226 | 58 MB |
-| `-3` | 3,128,074 | 80.9% | 323 | 349 | 37 MB |
+| `-9` | 2,717,777 | 70.3% | 106 | 108 | 63 MB |
+| `-7` | 2,761,576 | 71.4% | 131 | 141 | 61 MB |
+| `-5` | 3,028,386 | 78.3% | 222 | 226 | 58 MB |
+| `-3` | 3,127,949 | 80.9% | 323 | 349 | 37 MB |
 | `-1` | 3,210,963 | 83.0% | 660 | 742 | 28 MB |
 
 (memory: the peak resident size compressing 03; since, `-1`'s counters

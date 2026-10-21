@@ -50,13 +50,9 @@ static const int H9_skp_rJ = (250+0) * (1);
 static const int H9_skp_rK = (126+0) * (1);
 static const int H9_skp_rL = (247+0) * (1);
 static const int H9_skp_rD = (254+0) * (1);
-static const int H9_skp_rT = (0+0) * (1);
-static const int H9_skp_rG = (0+0) * (1);
 static const int H9_skp_rS1 = (3+0) * (1);
 static const int H9_skp_rS2 = (6+0) * (1);
 static const int H9_skp_lr = (15+0) * (1);
-static const int H9_skp_lrm = (0+0) * (1);
-static const int H9_skp_mbm = (0+0) * (1);
 static const int H9_skp_mwA = (192+0) * (1);
 static const int H9_skp_mwB = (7+0) * (1);
 static const int H9_skp_mwC = (4+0) * (1);
@@ -67,13 +63,17 @@ static const int H9_skp_mwJ = (74+0) * (1);
 static const int H9_skp_mwK = (7+0) * (1);
 static const int H9_skp_mwL = (40+0) * (1);
 static const int H9_skp_mwD = (8+0) * (1);
-static const int H9_skp_mwT = (0+0) * (1);
-static const int H9_skp_mwG = (0+0) * (1);
 static const int H9_skp_bw = (11+0) * (1);
-static const int H9_skp_mt = (0+0) * (1);
 static const int H9_skp_qs = (20+3) * (1);
 static const int H9_skp_qf = (65+3) * (1);
 static const int H9_skp_mb = (32+0) * (1);
+static const int H9_skp_rT = (0+0) * (1);
+static const int H9_skp_mwT = (0+0) * (1);
+static const int H9_skp_mt = (0+0) * (1);
+static const int H9_skp_lrm = (0+0) * (1);
+static const int H9_skp_mbm = (0+0) * (1);
+static const int H9_skp_rG = (0+0) * (1);
+static const int H9_skp_mwG = (0+0) * (1);
 static const int H9_skp_hA = (24+0) * (1);
 static const int H9_skp_hB = (24+0) * (1);
 static const int H9_skp_hC = (24+0) * (1);
@@ -111,11 +111,7 @@ static const long long H9_skp_w_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 
 
 #define H9_skp_USES(X) X(st) X(a3) X(b3) X(col) X(c9) X(eq) X(cd) X(cnt) X(c1) X(run) X(en) X(td) X(k9) X(sm) X(tx) X(tm) X(bd) X(tb) X(qc)
 
-struct H9_skp_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H9_skp_T {
   cm_cnt2 H9_skp_A[tc_rows(H9_skp_a_Volume, H9_skp_hA) * H_skp_ND];
   cm_cnt2 H9_skp_B[tc_rows(H9_skp_b_Volume, H9_skp_hB) * H_skp_ND];
   cm_cnt2 H9_skp_C[tc_rows(H9_skp_c_Volume, H9_skp_hC) * H_skp_ND];
@@ -172,8 +168,6 @@ struct H9_skp_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_skp_ND * 5 * 4)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_skp_ND * 5)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H9_skp_g_Volume * H_skp_NG);
-  void H9_skp_Init( void ) {
-  
-  }
+  void H9_skp_Init( void ) {}
   void H9_skp_Quit( void ) {}
 };

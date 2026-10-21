@@ -1,6 +1,6 @@
 #  h264p's nal family at level -5: its context indices and its tunable
 #  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
-#  MOD/l5/nal_h.inc and MOD/l5/nal_p.inc from this file and nal.inc.
+#  MOD/l5/nal_h.inc and MOD/l5/nal_p.inc from this file and family.inc.
 #
 #  NAL unit fields: the field id (fld) is a dense factor and the rest is the
 #  field's own recent history (p1, p2) and a context the coder gives (ctx).
@@ -10,28 +10,28 @@ Debug 1
 Const 0
 
 Index a
- a_fld: fld, 1!1111000000000101000000000000000
+ a_fld: fld, 1!11110000000001010
  a_ctx: ctx, 1!110001001000000
  a_p1: p1, 1!000000000000000
 
 Index b
- b_fld: fld, 1!0001001110000001000000000000000
+ b_fld: fld, 1!00010011100000010
  b_p1: p1, 1!011001
  b_p2: p2, 1!111
 
 Index c
- c_fld: fld, 1!1101000100000001000000000000000
+ c_fld: fld, 1!11010001000000010
  c_ctx: ctx, 1!1000110010000000000000000000000
 
 Index d
- d_fld: fld, 1!1111101100000001000000000000000
+ d_fld: fld, 1!11111011000000010
 
 Index e
- e_fld: fld, 1!0111000000000001000000000000000
+ e_fld: fld, 1!01110000000000010
  e_p2: p2, 1!000
 
 Index h
- h_fld: fld, 1!0111000000000101000000000000000
+ h_fld: fld, 1!01110000000001010
  h_ctx: ctx, 1!0100000010000000000000000000000
 
 Index i
@@ -39,12 +39,12 @@ Index i
  i_p1: p1, 1!010111000000000
 
 Index j
- j_fld: fld, 1!1110000100000001000000000000000
+ j_fld: fld, 1!11100001000000010
  j_p2: p2, 1!000
  j_p1: p1, 1!000011000000000
 
 Index k
- k_fld: fld, 1!1111000000000001000000000000000
+ k_fld: fld, 1!11110000000000010
  k_ctx: ctx, 1!1000111010000000000000000000000
 
 Index l
@@ -52,17 +52,18 @@ Index l
  l_p2: p2, 1!000
 
 Index m
- m_fld: fld, 1!0110000000000001000000000000000
+ m_fld: fld, 1!01100000000000010
 
 Index t
- t_fld: fld, 1!0000000000000000000000000000000
+ t_fld: fld, 1!00000000000000000
 
+#  (frozen: see the parameters below)
 Index n
- n_fld: fld, 1!0000000000000000000000000000000
+! n_fld: fld, 1!00000000000000000
 
 Index g
- g_fld: fld, 1!0000000000000000000000000000000
- g_ctx: ctx, 1!000
+! g_fld: fld, 1!00000000000000000
+! g_ctx: ctx, 1!000
 
 Number rA, 1, 0!11110010
 Number rB, 1, 0!00000000
@@ -75,10 +76,7 @@ Number rK, 1, 0!11101000
 Number rL, 1, 0!11111000
 Number rD, 1, 0!11010110
 Number rT, 1, 0!11111110
-Number rG, 1, 0!00000000
 Number lr, 1, 0!11111
-Number lrm, 1, 0!00000
-Number mbm, 1, 0!00000000
 Number mwA, 1, 0!00001000
 Number mwB, 1, 0!00000001
 Number mwC, 1, 0!00010000
@@ -90,9 +88,16 @@ Number mwK, 1, 0!00001000
 Number mwL, 1, 0!11111110
 Number mwD, 1, 0!00000000
 Number mwT, 1, 0!00000000
-Number mwG, 1, 0!00000000
 Number mt, 1, 0!010
 Number mb, 1, 0!01101011
+
+#  Frozen: what nal never reads, which live would only take opt.pl's trials.
+#  It codes with code(), without a hint or signs: no hint's mixer (lrm, mbm,
+#  index n), no signs (rG, mwG, index g).
+! Number lrm, 1, 0!00000
+! Number mbm, 1, 0!00000000
+! Number rG, 1, 0!00000000
+! Number mwG, 1, 0!00000000
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
 #  direct, one that does not is hashed into 2^h rows and contexts share

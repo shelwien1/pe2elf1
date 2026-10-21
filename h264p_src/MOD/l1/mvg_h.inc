@@ -13,19 +13,19 @@ static const int H1_mvg_rA = (192+0) * (1);
 static const int H1_mvg_rB = (254+0) * (1);
 static const int H1_mvg_rC = (64+0) * (1);
 static const int H1_mvg_rD = (0+0) * (1);
-static const int H1_mvg_rT = (0+0) * (1);
-static const int H1_mvg_rG = (0+0) * (1);
 static const int H1_mvg_lr = (15+0) * (1);
-static const int H1_mvg_lrm = (0+0) * (1);
-static const int H1_mvg_mbm = (0+0) * (1);
 static const int H1_mvg_mwA = (31+0) * (1);
 static const int H1_mvg_mwB = (23+0) * (1);
 static const int H1_mvg_mwC = (10+0) * (1);
 static const int H1_mvg_mwD = (126+0) * (1);
-static const int H1_mvg_mwT = (0+0) * (1);
-static const int H1_mvg_mwG = (0+0) * (1);
-static const int H1_mvg_mt = (0+0) * (1);
 static const int H1_mvg_mb = (18+0) * (1);
+static const int H1_mvg_rT = (0+0) * (1);
+static const int H1_mvg_mwT = (0+0) * (1);
+static const int H1_mvg_mt = (0+0) * (1);
+static const int H1_mvg_lrm = (0+0) * (1);
+static const int H1_mvg_mbm = (0+0) * (1);
+static const int H1_mvg_rG = (0+0) * (1);
+static const int H1_mvg_mwG = (0+0) * (1);
 static const int H1_mvg_hA = (24+0) * (1);
 static const int H1_mvg_hB = (24+0) * (1);
 static const int H1_mvg_hC = (24+0) * (1);
@@ -46,11 +46,7 @@ static const long long H1_mvg_t_Volume = tc_vmul(1, 1); // 1
 
 #define H1_mvg_USES(X) X(comp) X(lst) X(ox) X(mag)
 
-struct H1_mvg_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H1_mvg_T {
   cm_cnt2s H1_mvg_A[tc_rows(H1_mvg_a_Volume, H1_mvg_hA) * H_mvg_ND];
   cm_cnt2s H1_mvg_B[tc_rows(H1_mvg_b_Volume, H1_mvg_hB) * H_mvg_ND];
   cm_cnt2s H1_mvg_C[tc_rows(H1_mvg_c_Volume, H1_mvg_hC) * H_mvg_ND];
@@ -75,8 +71,6 @@ struct H1_mvg_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H1_mvg_n_Volume, H1_mvg_hN) * H_mvg_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H1_mvg_n_Volume, H1_mvg_hN) * H_mvg_MND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H1_mvg_g_Volume * H_mvg_NG);
-  void H1_mvg_Init( void ) {
-  
-  }
+  void H1_mvg_Init( void ) {}
   void H1_mvg_Quit( void ) {}
 };

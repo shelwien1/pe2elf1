@@ -2,8 +2,9 @@
 // constant tc_fam<f_DEC, C> reads, wrapped from the family's generated
 // headers (h264p_levels.md section 7).
 //
-// Included once per level and family (lv<L>.inc), after the family's
-// MOD/l<L>/<family>_h.inc and _p.inc, with
+// Included at the end of each family's MOD/l<L>/<family>_p.inc, from the
+// level's template of its families (IDX/l<L>/family.inc), which states the
+// level's shape once for all of them -- after the family's _h.inc, with
 //
 //   #define FC_NAME  C9_skp   // the class to define
 //   #define FC_PFX   H9_skp_  // the prefix of the generated names
@@ -11,15 +12,14 @@
 //   #define FC_NC    10       // counters: the first FC_NC of A-E, H-L
 //   #define FC_NMIX  3        // mixers: 1 (by index m), or 3 (m, w, s) and the final one
 //   #define FC_NAPM  2        // APMs: 0, or 2 (by s, refining A's; by f, the last step)
-//   #include "famcfg.inc"
+//   #include "../../famcfg.inc"
 //
-// and the level's template of the family (IDX/l<L>/<family>.inc) declaring
-// the tables of that shape. Every clamp is the consumer's (IDX-FORMAT.md
-// sec.5). In the shipping build (MOD/ in the Const form) the members are
-// constant expressions, and tc_fam's code has them folded in; in the tuning
-// build they are reads of the mapping objects opt.pl patches, initialized
-// when the program starts in the order of the definitions below, each after
-// what it reads.
+// and the template declaring the tables of that shape. Every clamp is the
+// consumer's (IDX-FORMAT.md sec.5). In the shipping build (MOD/ in the
+// Const form) the members are constant expressions, and tc_fam's code has
+// them folded in; in the tuning build they are reads of the mapping
+// objects opt.pl patches, initialized when the program starts in the order
+// of the definitions below, each after what it reads.
 
 #define FC_CAT2(a, b) a##b
 #define FC_CAT(a, b) FC_CAT2(a, b)
@@ -88,7 +88,7 @@ struct FC_NAME {
   static const sz kF;
   static const int rS1, rS2, qs, qf, bw;  // the APMs' rates and widths, and the last one's share
   // the tables, in the order tc_fam takes them
-  static void tables(T* t, tc_tabs& b) {
+  static void tables(T* t, tc_tabs<Cnt>& b) {
 #define FC_TAB(U, l)                                                                                 \
   static_assert(std::is_same<decltype(+t->FCX(U)), Cnt*>::value, "a family's counters of one type"); \
   b.cnt[i++] = t->FCX(U);

@@ -55,11 +55,7 @@ static const int H7_mbt_rJ = (254+0) * (1);
 static const int H7_mbt_rK = (251+0) * (1);
 static const int H7_mbt_rL = (255+0) * (1);
 static const int H7_mbt_rD = (57+0) * (1);
-static const int H7_mbt_rT = (0+0) * (1);
-static const int H7_mbt_rG = (0+0) * (1);
 static const int H7_mbt_lr = (15+0) * (1);
-static const int H7_mbt_lrm = (0+0) * (1);
-static const int H7_mbt_mbm = (0+0) * (1);
 static const int H7_mbt_mwA = (16+0) * (1);
 static const int H7_mbt_mwB = (15+0) * (1);
 static const int H7_mbt_mwC = (16+0) * (1);
@@ -70,10 +66,14 @@ static const int H7_mbt_mwJ = (25+0) * (1);
 static const int H7_mbt_mwK = (128+0) * (1);
 static const int H7_mbt_mwL = (62+0) * (1);
 static const int H7_mbt_mwD = (128+0) * (1);
-static const int H7_mbt_mwT = (0+0) * (1);
-static const int H7_mbt_mwG = (0+0) * (1);
-static const int H7_mbt_mt = (0+0) * (1);
 static const int H7_mbt_mb = (31+0) * (1);
+static const int H7_mbt_rT = (0+0) * (1);
+static const int H7_mbt_mwT = (0+0) * (1);
+static const int H7_mbt_mt = (0+0) * (1);
+static const int H7_mbt_lrm = (0+0) * (1);
+static const int H7_mbt_mbm = (0+0) * (1);
+static const int H7_mbt_rG = (0+0) * (1);
+static const int H7_mbt_mwG = (0+0) * (1);
 static const int H7_mbt_hA = (24+0) * (1);
 static const int H7_mbt_hB = (24+0) * (1);
 static const int H7_mbt_hC = (24+0) * (1);
@@ -109,11 +109,7 @@ static const long long H7_mbt_w_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 9), 5); 
 
 #define H7_mbt_USES(X) X(st) X(ca) X(cb) X(en) X(cc) X(td) X(c1) X(im) X(ig) X(sm) X(tm) X(tx) X(dh) X(bd) X(nsk)
 
-struct H7_mbt_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H7_mbt_T {
   cm_cnt2 H7_mbt_A[tc_rows(H7_mbt_a_Volume, H7_mbt_hA) * H_mbt_ND];
   cm_cnt2 H7_mbt_B[tc_rows(H7_mbt_b_Volume, H7_mbt_hB) * H_mbt_ND];
   cm_cnt2 H7_mbt_C[tc_rows(H7_mbt_c_Volume, H7_mbt_hC) * H_mbt_ND];
@@ -162,8 +158,6 @@ struct H7_mbt_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_mbt_ND * 5 * 4)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_mbt_ND * 5)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H7_mbt_g_Volume * H_mbt_NG);
-  void H7_mbt_Init( void ) {
-  
-  }
+  void H7_mbt_Init( void ) {}
   void H7_mbt_Quit( void ) {}
 };

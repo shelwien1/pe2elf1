@@ -46,11 +46,7 @@ static const int H5_sgn_rJ = (255+0) * (1);
 static const int H5_sgn_rK = (64+0) * (1);
 static const int H5_sgn_rL = (253+0) * (1);
 static const int H5_sgn_rD = (254+0) * (1);
-static const int H5_sgn_rT = (0+0) * (1);
-static const int H5_sgn_rG = (0+0) * (1);
 static const int H5_sgn_lr = (15+0) * (1);
-static const int H5_sgn_lrm = (0+0) * (1);
-static const int H5_sgn_mbm = (0+0) * (1);
 static const int H5_sgn_mwA = (16+0) * (1);
 static const int H5_sgn_mwB = (4+0) * (1);
 static const int H5_sgn_mwC = (64+0) * (1);
@@ -61,10 +57,14 @@ static const int H5_sgn_mwJ = (9+0) * (1);
 static const int H5_sgn_mwK = (193+0) * (1);
 static const int H5_sgn_mwL = (4+0) * (1);
 static const int H5_sgn_mwD = (254+0) * (1);
-static const int H5_sgn_mwT = (0+0) * (1);
-static const int H5_sgn_mwG = (0+0) * (1);
-static const int H5_sgn_mt = (0+0) * (1);
 static const int H5_sgn_mb = (128+0) * (1);
+static const int H5_sgn_rT = (0+0) * (1);
+static const int H5_sgn_mwT = (0+0) * (1);
+static const int H5_sgn_mt = (0+0) * (1);
+static const int H5_sgn_lrm = (0+0) * (1);
+static const int H5_sgn_mbm = (0+0) * (1);
+static const int H5_sgn_rG = (0+0) * (1);
+static const int H5_sgn_mwG = (0+0) * (1);
 static const int H5_sgn_hA = (24+0) * (1);
 static const int H5_sgn_hB = (24+0) * (1);
 static const int H5_sgn_hC = (24+0) * (1);
@@ -97,11 +97,7 @@ static const long long H5_sgn_t_Volume = tc_vmul(1, 1); // 1
 
 #define H5_sgn_USES(X) X(cg) X(pos) X(sa) X(sb) X(gh) X(scb) X(mag) X(md) X(ts) X(dm)
 
-struct H5_sgn_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H5_sgn_T {
   cm_cnt2 H5_sgn_A[tc_rows(H5_sgn_a_Volume, H5_sgn_hA) * H_sgn_ND];
   cm_cnt2 H5_sgn_B[tc_rows(H5_sgn_b_Volume, H5_sgn_hB) * H_sgn_ND];
   cm_cnt2 H5_sgn_C[tc_rows(H5_sgn_c_Volume, H5_sgn_hC) * H_sgn_ND];
@@ -138,8 +134,6 @@ struct H5_sgn_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H5_sgn_n_Volume, H5_sgn_hN) * H_sgn_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H5_sgn_n_Volume, H5_sgn_hN) * H_sgn_MND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H5_sgn_g_Volume * H_sgn_NG);
-  void H5_sgn_Init( void ) {
-  
-  }
+  void H5_sgn_Init( void ) {}
   void H5_sgn_Quit( void ) {}
 };

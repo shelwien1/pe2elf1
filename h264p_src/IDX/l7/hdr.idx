@@ -1,6 +1,6 @@
 #  h264p's hdr family at level -7: its context indices and its tunable
 #  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
-#  MOD/l7/hdr_h.inc and MOD/l7/hdr_p.inc from this file and hdr.inc.
+#  MOD/l7/hdr_h.inc and MOD/l7/hdr_p.inc from this file and family.inc.
 #
 #  Header syntax elements (SPS, PPS, SEI, slice headers), coded as the
 #  difference to the last value of the same element at the same place in
@@ -72,8 +72,9 @@ Index w
 Index t
  t_tag: tag, &01101110
 
+#  (frozen: see the parameters below)
 Index n
- n_tag: tag, &00000000
+! n_tag: tag, &00000000
 
 Index g
  g_p1: p1, 1!1111110
@@ -92,8 +93,6 @@ Number rD, 1, 0!11101100
 Number rT, 1, 0!00000010
 Number rG, 1, 0!00010000
 Number lr, 1, 0!11110
-Number lrm, 1, 0!00000
-Number mbm, 1, 0!00000000
 Number mwA, 1, 0!00000000
 Number mwB, 1, 0!00000100
 Number mwC, 1, 0!00001000
@@ -108,6 +107,12 @@ Number mwT, 1, 0!00010000
 Number mwG, 1, 0!00000000
 Number mt, 1, 0!000
 Number mb, 1, 0!00101000
+
+#  Frozen: what hdr never reads, which live would only take opt.pl's trials.
+#  It codes with codes(), without a hint: no hint's mixer (lrm, mbm, index
+#  n).
+! Number lrm, 1, 0!00000
+! Number mbm, 1, 0!00000000
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
 #  direct, one that does not is hashed into 2^h rows and contexts share

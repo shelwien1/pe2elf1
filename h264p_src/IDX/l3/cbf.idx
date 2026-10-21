@@ -1,6 +1,6 @@
 #  h264p's cbf family at level -3: its context indices and its tunable
 #  parameters.  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates
-#  MOD/l3/cbf_h.inc and MOD/l3/cbf_p.inc from this file and cbf.inc.
+#  MOD/l3/cbf_h.inc and MOD/l3/cbf_p.inc from this file and family.inc.
 #
 #  The number of nonzero coefficients of a block, 0 for none (kn 0), or
 #  less 1 where the block is known to have one (kn 1: CABAC 8x8 blocks
@@ -105,8 +105,9 @@ Index t
 Index n
  n_cat: cat, 1!0001000000000
 
+#  (frozen: see the parameters below)
 Index g
- g_cat: cat, 1!0
+! g_cat: cat, 1!0
 
 Number rA, 1, 0!11111111
 Number rB, 1, 0!11111101
@@ -119,7 +120,6 @@ Number rK, 1, 0!01111110
 Number rL, 1, 0!00000000
 Number rD, 1, 0!11111111
 Number rT, 1, 0!00100000
-Number rG, 1, 0!00000000
 Number lr, 1, 0!01111
 Number lrm, 1, 0!11110
 Number mbm, 1, 0!00000111
@@ -134,9 +134,13 @@ Number mwK, 1, 0!00011000
 Number mwL, 1, 0!00111101
 Number mwD, 1, 0!01110010
 Number mwT, 1, 0!00001111
-Number mwG, 1, 0!00000000
 Number mt, 1, 0!011
 Number mb, 1, 0!00100100
+
+#  Frozen: what cbf never reads, which live would only take opt.pl's trials.
+#  It codes with code(), without signs: no sign counters (rG, mwG, index g).
+! Number rG, 1, 0!00000000
+! Number mwG, 1, 0!00000000
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
 #  direct, one that does not is hashed into 2^h rows and contexts share

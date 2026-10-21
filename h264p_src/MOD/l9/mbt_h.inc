@@ -58,13 +58,9 @@ static const int H9_mbt_rJ = (252+0) * (1);
 static const int H9_mbt_rK = (103+0) * (1);
 static const int H9_mbt_rL = (241+0) * (1);
 static const int H9_mbt_rD = (141+0) * (1);
-static const int H9_mbt_rT = (0+0) * (1);
-static const int H9_mbt_rG = (0+0) * (1);
 static const int H9_mbt_rS1 = (8+0) * (1);
 static const int H9_mbt_rS2 = (3+0) * (1);
 static const int H9_mbt_lr = (15+0) * (1);
-static const int H9_mbt_lrm = (0+0) * (1);
-static const int H9_mbt_mbm = (0+0) * (1);
 static const int H9_mbt_mwA = (16+0) * (1);
 static const int H9_mbt_mwB = (29+0) * (1);
 static const int H9_mbt_mwC = (16+0) * (1);
@@ -75,13 +71,17 @@ static const int H9_mbt_mwJ = (11+0) * (1);
 static const int H9_mbt_mwK = (10+0) * (1);
 static const int H9_mbt_mwL = (64+0) * (1);
 static const int H9_mbt_mwD = (17+0) * (1);
-static const int H9_mbt_mwT = (0+0) * (1);
-static const int H9_mbt_mwG = (0+0) * (1);
 static const int H9_mbt_bw = (13+0) * (1);
-static const int H9_mbt_mt = (0+0) * (1);
 static const int H9_mbt_qs = (24+3) * (1);
 static const int H9_mbt_qf = (22+3) * (1);
 static const int H9_mbt_mb = (27+0) * (1);
+static const int H9_mbt_rT = (0+0) * (1);
+static const int H9_mbt_mwT = (0+0) * (1);
+static const int H9_mbt_mt = (0+0) * (1);
+static const int H9_mbt_lrm = (0+0) * (1);
+static const int H9_mbt_mbm = (0+0) * (1);
+static const int H9_mbt_rG = (0+0) * (1);
+static const int H9_mbt_mwG = (0+0) * (1);
 static const int H9_mbt_hA = (24+0) * (1);
 static const int H9_mbt_hB = (24+0) * (1);
 static const int H9_mbt_hC = (24+0) * (1);
@@ -119,11 +119,7 @@ static const long long H9_mbt_w_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 10), 6);
 
 #define H9_mbt_USES(X) X(st) X(ca) X(cb) X(en) X(cc) X(td) X(c1) X(im) X(ig) X(sm) X(tm) X(tx) X(dh) X(tb) X(nsk) X(bd) X(qc)
 
-struct H9_mbt_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H9_mbt_T {
   cm_cnt2 H9_mbt_A[tc_rows(H9_mbt_a_Volume, H9_mbt_hA) * H_mbt_ND];
   cm_cnt2 H9_mbt_B[tc_rows(H9_mbt_b_Volume, H9_mbt_hB) * H_mbt_ND];
   cm_cnt2 H9_mbt_C[tc_rows(H9_mbt_c_Volume, H9_mbt_hC) * H_mbt_ND];
@@ -180,8 +176,6 @@ struct H9_mbt_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_mbt_ND * 5 * 4)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_mbt_ND * 5)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H9_mbt_g_Volume * H_mbt_NG);
-  void H9_mbt_Init( void ) {
-  
-  }
+  void H9_mbt_Init( void ) {}
   void H9_mbt_Quit( void ) {}
 };

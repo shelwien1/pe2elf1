@@ -32,11 +32,7 @@ static const int H3_skp_rJ = (253+0) * (1);
 static const int H3_skp_rK = (64+0) * (1);
 static const int H3_skp_rL = (246+0) * (1);
 static const int H3_skp_rD = (255+0) * (1);
-static const int H3_skp_rT = (0+0) * (1);
-static const int H3_skp_rG = (0+0) * (1);
 static const int H3_skp_lr = (14+0) * (1);
-static const int H3_skp_lrm = (0+0) * (1);
-static const int H3_skp_mbm = (0+0) * (1);
 static const int H3_skp_mwA = (70+0) * (1);
 static const int H3_skp_mwB = (16+0) * (1);
 static const int H3_skp_mwC = (62+0) * (1);
@@ -47,10 +43,14 @@ static const int H3_skp_mwJ = (4+0) * (1);
 static const int H3_skp_mwK = (0+0) * (1);
 static const int H3_skp_mwL = (70+0) * (1);
 static const int H3_skp_mwD = (1+0) * (1);
-static const int H3_skp_mwT = (0+0) * (1);
-static const int H3_skp_mwG = (0+0) * (1);
-static const int H3_skp_mt = (0+0) * (1);
 static const int H3_skp_mb = (15+0) * (1);
+static const int H3_skp_rT = (0+0) * (1);
+static const int H3_skp_mwT = (0+0) * (1);
+static const int H3_skp_mt = (0+0) * (1);
+static const int H3_skp_lrm = (0+0) * (1);
+static const int H3_skp_mbm = (0+0) * (1);
+static const int H3_skp_rG = (0+0) * (1);
+static const int H3_skp_mwG = (0+0) * (1);
 static const int H3_skp_hA = (24+0) * (1);
 static const int H3_skp_hB = (24+0) * (1);
 static const int H3_skp_hC = (24+0) * (1);
@@ -86,11 +86,7 @@ static const long long H3_skp_w_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 3), 3); 
 
 #define H3_skp_USES(X) X(a3) X(b3) X(col) X(c9) X(eq) X(st) X(cd) X(cnt) X(c1) X(run) X(k9) X(qc)
 
-struct H3_skp_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H3_skp_T {
   cm_cnt2 H3_skp_A[tc_rows(H3_skp_a_Volume, H3_skp_hA) * H_skp_ND];
   cm_cnt2 H3_skp_B[tc_rows(H3_skp_b_Volume, H3_skp_hB) * H_skp_ND];
   cm_cnt2 H3_skp_C[tc_rows(H3_skp_c_Volume, H3_skp_hC) * H_skp_ND];
@@ -139,8 +135,6 @@ struct H3_skp_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_skp_ND * 5 * 4)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_skp_ND * 5)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H3_skp_g_Volume * H_skp_NG);
-  void H3_skp_Init( void ) {
-  
-  }
+  void H3_skp_Init( void ) {}
   void H3_skp_Quit( void ) {}
 };

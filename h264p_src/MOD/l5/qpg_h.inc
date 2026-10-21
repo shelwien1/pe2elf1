@@ -43,11 +43,7 @@ static const int H5_qpg_rJ = (129+0) * (1);
 static const int H5_qpg_rK = (252+0) * (1);
 static const int H5_qpg_rL = (212+0) * (1);
 static const int H5_qpg_rD = (254+0) * (1);
-static const int H5_qpg_rT = (0+0) * (1);
-static const int H5_qpg_rG = (0+0) * (1);
 static const int H5_qpg_lr = (15+0) * (1);
-static const int H5_qpg_lrm = (0+0) * (1);
-static const int H5_qpg_mbm = (0+0) * (1);
 static const int H5_qpg_mwA = (0+0) * (1);
 static const int H5_qpg_mwB = (23+0) * (1);
 static const int H5_qpg_mwC = (167+0) * (1);
@@ -58,10 +54,14 @@ static const int H5_qpg_mwJ = (128+0) * (1);
 static const int H5_qpg_mwK = (6+0) * (1);
 static const int H5_qpg_mwL = (124+0) * (1);
 static const int H5_qpg_mwD = (1+0) * (1);
-static const int H5_qpg_mwT = (0+0) * (1);
-static const int H5_qpg_mwG = (0+0) * (1);
-static const int H5_qpg_mt = (0+0) * (1);
 static const int H5_qpg_mb = (130+0) * (1);
+static const int H5_qpg_rT = (0+0) * (1);
+static const int H5_qpg_mwT = (0+0) * (1);
+static const int H5_qpg_mt = (0+0) * (1);
+static const int H5_qpg_lrm = (0+0) * (1);
+static const int H5_qpg_mbm = (0+0) * (1);
+static const int H5_qpg_rG = (0+0) * (1);
+static const int H5_qpg_mwG = (0+0) * (1);
 static const int H5_qpg_hA = (24+0) * (1);
 static const int H5_qpg_hB = (24+0) * (1);
 static const int H5_qpg_hC = (24+0) * (1);
@@ -94,11 +94,7 @@ static const long long H5_qpg_t_Volume = tc_vmul(1, 1); // 1
 
 #define H5_qpg_USES(X) X(mag) X(ss) X(xe) X(lq) X(as) X(cs) X(bs) X(bk) X(rs) X(ls) X(cls) X(st)
 
-struct H5_qpg_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H5_qpg_T {
   cm_cnt2 H5_qpg_A[tc_rows(H5_qpg_a_Volume, H5_qpg_hA) * H_qpg_ND];
   cm_cnt2 H5_qpg_B[tc_rows(H5_qpg_b_Volume, H5_qpg_hB) * H_qpg_ND];
   cm_cnt2 H5_qpg_C[tc_rows(H5_qpg_c_Volume, H5_qpg_hC) * H_qpg_ND];
@@ -135,8 +131,6 @@ struct H5_qpg_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H5_qpg_n_Volume, H5_qpg_hN) * H_qpg_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H5_qpg_n_Volume, H5_qpg_hN) * H_qpg_MND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H5_qpg_g_Volume * H_qpg_NG);
-  void H5_qpg_Init( void ) {
-  
-  }
+  void H5_qpg_Init( void ) {}
   void H5_qpg_Quit( void ) {}
 };

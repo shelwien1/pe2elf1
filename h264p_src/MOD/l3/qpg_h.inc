@@ -40,11 +40,7 @@ static const int H3_qpg_rJ = (238+0) * (1);
 static const int H3_qpg_rK = (250+0) * (1);
 static const int H3_qpg_rL = (249+0) * (1);
 static const int H3_qpg_rD = (252+0) * (1);
-static const int H3_qpg_rT = (0+0) * (1);
-static const int H3_qpg_rG = (0+0) * (1);
 static const int H3_qpg_lr = (13+0) * (1);
-static const int H3_qpg_lrm = (0+0) * (1);
-static const int H3_qpg_mbm = (0+0) * (1);
 static const int H3_qpg_mwA = (16+0) * (1);
 static const int H3_qpg_mwB = (25+0) * (1);
 static const int H3_qpg_mwC = (20+0) * (1);
@@ -55,10 +51,14 @@ static const int H3_qpg_mwJ = (64+0) * (1);
 static const int H3_qpg_mwK = (4+0) * (1);
 static const int H3_qpg_mwL = (87+0) * (1);
 static const int H3_qpg_mwD = (0+0) * (1);
-static const int H3_qpg_mwT = (0+0) * (1);
-static const int H3_qpg_mwG = (0+0) * (1);
-static const int H3_qpg_mt = (0+0) * (1);
 static const int H3_qpg_mb = (224+0) * (1);
+static const int H3_qpg_rT = (0+0) * (1);
+static const int H3_qpg_mwT = (0+0) * (1);
+static const int H3_qpg_mt = (0+0) * (1);
+static const int H3_qpg_lrm = (0+0) * (1);
+static const int H3_qpg_mbm = (0+0) * (1);
+static const int H3_qpg_rG = (0+0) * (1);
+static const int H3_qpg_mwG = (0+0) * (1);
 static const int H3_qpg_hA = (24+0) * (1);
 static const int H3_qpg_hB = (24+0) * (1);
 static const int H3_qpg_hC = (24+0) * (1);
@@ -94,11 +94,7 @@ static const long long H3_qpg_w_Volume = tc_vmul(1, 7); // 7
 
 #define H3_qpg_USES(X) X(mag) X(ss) X(ls) X(cs) X(bs) X(bk) X(cls) X(st)
 
-struct H3_qpg_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H3_qpg_T {
   cm_cnt2 H3_qpg_A[tc_rows(H3_qpg_a_Volume, H3_qpg_hA) * H_qpg_ND];
   cm_cnt2 H3_qpg_B[tc_rows(H3_qpg_b_Volume, H3_qpg_hB) * H_qpg_ND];
   cm_cnt2 H3_qpg_C[tc_rows(H3_qpg_c_Volume, H3_qpg_hC) * H_qpg_ND];
@@ -147,8 +143,6 @@ struct H3_qpg_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_qpg_ND * 5 * 4)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_qpg_ND * 5)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H3_qpg_g_Volume * H_qpg_NG);
-  void H3_qpg_Init( void ) {
-  
-  }
+  void H3_qpg_Init( void ) {}
   void H3_qpg_Quit( void ) {}
 };

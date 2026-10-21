@@ -3,20 +3,15 @@
 // oggcomp (balrogg-P-hash: oc_platform.inc, tc_base.inc), cut down to what
 // h264p uses.
 
-#ifndef _WIN32
-#include <sys/mman.h>
-#else
-#include <windows.h>
-#endif
-#include <cinttypes>
-#include <cmath>
-#include <cstdarg>
+// (the system headers it needs, <sys/mman.h> or <windows.h>, <cinttypes>,
+// <cmath>, <cstdarg> and with AVX2 <immintrin.h>, come first, before Lib3's,
+// whose setjmp and ALIGN macros must not reach them: h264p.inc,
+// IDX/famtune.cpp)
 
 // AVX2 (x86-64-v3, what the build targets) for the template matching,
 // motion compensation and the mixers; the plain C++ beside it, for other
 // targets, gives the same results
 #if defined(__AVX2__)
-#include <immintrin.h>
 #define H264P_AVX2 1
 #endif
 
@@ -63,7 +58,6 @@ typedef size_t sz;
 typedef u8 byte;
 typedef u16 word;  // idx2inc.pl's maps of variables with more than 256 values
 typedef u32 uint;
-typedef u64 qword;
 
 // The compressed stream cannot be decoded, or a model table cannot be had.
 struct CmError : std::runtime_error {

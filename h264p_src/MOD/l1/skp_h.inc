@@ -16,19 +16,19 @@ static const int H1_skp_rA = (255+0) * (1);
 static const int H1_skp_rB = (255+0) * (1);
 static const int H1_skp_rC = (254+0) * (1);
 static const int H1_skp_rD = (254+0) * (1);
-static const int H1_skp_rT = (0+0) * (1);
-static const int H1_skp_rG = (0+0) * (1);
 static const int H1_skp_lr = (13+0) * (1);
-static const int H1_skp_lrm = (0+0) * (1);
-static const int H1_skp_mbm = (0+0) * (1);
 static const int H1_skp_mwA = (6+0) * (1);
 static const int H1_skp_mwB = (32+0) * (1);
 static const int H1_skp_mwC = (6+0) * (1);
 static const int H1_skp_mwD = (31+0) * (1);
-static const int H1_skp_mwT = (0+0) * (1);
-static const int H1_skp_mwG = (0+0) * (1);
-static const int H1_skp_mt = (0+0) * (1);
 static const int H1_skp_mb = (64+0) * (1);
+static const int H1_skp_rT = (0+0) * (1);
+static const int H1_skp_mwT = (0+0) * (1);
+static const int H1_skp_mt = (0+0) * (1);
+static const int H1_skp_lrm = (0+0) * (1);
+static const int H1_skp_mbm = (0+0) * (1);
+static const int H1_skp_rG = (0+0) * (1);
+static const int H1_skp_mwG = (0+0) * (1);
 static const int H1_skp_hA = (24+0) * (1);
 static const int H1_skp_hB = (24+0) * (1);
 static const int H1_skp_hC = (24+0) * (1);
@@ -49,11 +49,7 @@ static const long long H1_skp_t_Volume = tc_vmul(1, 1); // 1
 
 #define H1_skp_USES(X) X(st) X(a3) X(b3) X(col) X(c9) X(eq) X(cd) X(cnt) X(run)
 
-struct H1_skp_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H1_skp_T {
   cm_cnt2s H1_skp_A[tc_rows(H1_skp_a_Volume, H1_skp_hA) * H_skp_ND];
   cm_cnt2s H1_skp_B[tc_rows(H1_skp_b_Volume, H1_skp_hB) * H_skp_ND];
   cm_cnt2s H1_skp_C[tc_rows(H1_skp_c_Volume, H1_skp_hC) * H_skp_ND];
@@ -78,8 +74,6 @@ struct H1_skp_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H1_skp_n_Volume, H1_skp_hN) * H_skp_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H1_skp_n_Volume, H1_skp_hN) * H_skp_MND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H1_skp_g_Volume * H_skp_NG);
-  void H1_skp_Init( void ) {
-  
-  }
+  void H1_skp_Init( void ) {}
   void H1_skp_Quit( void ) {}
 };

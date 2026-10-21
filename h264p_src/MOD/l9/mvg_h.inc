@@ -50,13 +50,9 @@ static const int H9_mvg_rJ = (129+0) * (1);
 static const int H9_mvg_rK = (251+0) * (1);
 static const int H9_mvg_rL = (254+0) * (1);
 static const int H9_mvg_rD = (253+0) * (1);
-static const int H9_mvg_rT = (0+0) * (1);
-static const int H9_mvg_rG = (0+0) * (1);
 static const int H9_mvg_rS1 = (5+0) * (1);
 static const int H9_mvg_rS2 = (7+0) * (1);
 static const int H9_mvg_lr = (12+0) * (1);
-static const int H9_mvg_lrm = (0+0) * (1);
-static const int H9_mvg_mbm = (0+0) * (1);
 static const int H9_mvg_mwA = (14+0) * (1);
 static const int H9_mvg_mwB = (69+0) * (1);
 static const int H9_mvg_mwC = (77+0) * (1);
@@ -67,13 +63,17 @@ static const int H9_mvg_mwJ = (11+0) * (1);
 static const int H9_mvg_mwK = (7+0) * (1);
 static const int H9_mvg_mwL = (26+0) * (1);
 static const int H9_mvg_mwD = (10+0) * (1);
-static const int H9_mvg_mwT = (0+0) * (1);
-static const int H9_mvg_mwG = (0+0) * (1);
 static const int H9_mvg_bw = (12+0) * (1);
-static const int H9_mvg_mt = (0+0) * (1);
 static const int H9_mvg_qs = (0+3) * (1);
 static const int H9_mvg_qf = (30+3) * (1);
 static const int H9_mvg_mb = (129+0) * (1);
+static const int H9_mvg_rT = (0+0) * (1);
+static const int H9_mvg_mwT = (0+0) * (1);
+static const int H9_mvg_mt = (0+0) * (1);
+static const int H9_mvg_lrm = (0+0) * (1);
+static const int H9_mvg_mbm = (0+0) * (1);
+static const int H9_mvg_rG = (0+0) * (1);
+static const int H9_mvg_mwG = (0+0) * (1);
 static const int H9_mvg_hA = (24+0) * (1);
 static const int H9_mvg_hB = (24+0) * (1);
 static const int H9_mvg_hC = (24+0) * (1);
@@ -111,11 +111,7 @@ static const long long H9_mvg_w_Volume = tc_vmul(tc_vmul(1, 7), 1); // 7
 
 #define H9_mvg_USES(X) X(comp) X(ts) X(mag) X(zs) X(as) X(ds) X(sa) X(sb) X(ns) X(tq) X(es) X(lst) X(ox)
 
-struct H9_mvg_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H9_mvg_T {
   cm_cnt2 H9_mvg_A[tc_rows(H9_mvg_a_Volume, H9_mvg_hA) * H_mvg_ND];
   cm_cnt2 H9_mvg_B[tc_rows(H9_mvg_b_Volume, H9_mvg_hB) * H_mvg_ND];
   cm_cnt2 H9_mvg_C[tc_rows(H9_mvg_c_Volume, H9_mvg_hC) * H_mvg_ND];
@@ -172,8 +168,6 @@ struct H9_mvg_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_mvg_ND * 5 * 4)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_mvg_ND * 5)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H9_mvg_g_Volume * H_mvg_NG);
-  void H9_mvg_Init( void ) {
-  
-  }
+  void H9_mvg_Init( void ) {}
   void H9_mvg_Quit( void ) {}
 };

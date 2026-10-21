@@ -55,13 +55,9 @@ static const int H9_cbp_rJ = (254+0) * (1);
 static const int H9_cbp_rK = (248+0) * (1);
 static const int H9_cbp_rL = (222+0) * (1);
 static const int H9_cbp_rD = (254+0) * (1);
-static const int H9_cbp_rT = (0+0) * (1);
-static const int H9_cbp_rG = (0+0) * (1);
 static const int H9_cbp_rS1 = (8+0) * (1);
 static const int H9_cbp_rS2 = (0+0) * (1);
 static const int H9_cbp_lr = (15+0) * (1);
-static const int H9_cbp_lrm = (0+0) * (1);
-static const int H9_cbp_mbm = (0+0) * (1);
 static const int H9_cbp_mwA = (2+0) * (1);
 static const int H9_cbp_mwB = (8+0) * (1);
 static const int H9_cbp_mwC = (2+0) * (1);
@@ -72,13 +68,17 @@ static const int H9_cbp_mwJ = (4+0) * (1);
 static const int H9_cbp_mwK = (11+0) * (1);
 static const int H9_cbp_mwL = (32+0) * (1);
 static const int H9_cbp_mwD = (57+0) * (1);
-static const int H9_cbp_mwT = (0+0) * (1);
-static const int H9_cbp_mwG = (0+0) * (1);
 static const int H9_cbp_bw = (15+0) * (1);
-static const int H9_cbp_mt = (0+0) * (1);
 static const int H9_cbp_qs = (52+3) * (1);
 static const int H9_cbp_qf = (10+3) * (1);
 static const int H9_cbp_mb = (17+0) * (1);
+static const int H9_cbp_rT = (0+0) * (1);
+static const int H9_cbp_mwT = (0+0) * (1);
+static const int H9_cbp_mt = (0+0) * (1);
+static const int H9_cbp_lrm = (0+0) * (1);
+static const int H9_cbp_mbm = (0+0) * (1);
+static const int H9_cbp_rG = (0+0) * (1);
+static const int H9_cbp_mwG = (0+0) * (1);
 static const int H9_cbp_hA = (24+0) * (1);
 static const int H9_cbp_hB = (24+0) * (1);
 static const int H9_cbp_hC = (24+0) * (1);
@@ -116,11 +116,7 @@ static const long long H9_cbp_w_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 7), 3); 
 
 #define H9_cbp_USES(X) X(inc) X(pc) X(cls) X(st) X(col) X(q6) X(pq) X(pg) X(em) X(tp) X(td) X(en)
 
-struct H9_cbp_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H9_cbp_T {
   cm_cnt2 H9_cbp_A[tc_rows(H9_cbp_a_Volume, H9_cbp_hA) * H_cbp_ND];
   cm_cnt2 H9_cbp_B[tc_rows(H9_cbp_b_Volume, H9_cbp_hB) * H_cbp_ND];
   cm_cnt2 H9_cbp_C[tc_rows(H9_cbp_c_Volume, H9_cbp_hC) * H_cbp_ND];
@@ -177,8 +173,6 @@ struct H9_cbp_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_cbp_ND * 5 * 4)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_cbp_ND * 5)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H9_cbp_g_Volume * H_cbp_NG);
-  void H9_cbp_Init( void ) {
-  
-  }
+  void H9_cbp_Init( void ) {}
   void H9_cbp_Quit( void ) {}
 };

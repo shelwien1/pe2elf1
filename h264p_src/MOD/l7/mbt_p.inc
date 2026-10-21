@@ -1,21 +1,22 @@
-/*  The template IDX/idx2inc.pl reads alongside mbt.idx: the mbt
-    family's index builder and the tables its indices address.  Copied
-    through into MOD/l7/mbt_p.inc with `H7_mbt_` replaced by the prefix,
-    `MakeIndex` by the statements that build the indices, and the Table()
-    lines lifted out into the struct in MOD/l7/mbt_h.inc.  Edit this file
-    and mbt.idx, not MOD/; ../../mk.sh regenerates both.
+/*  The template IDX/idx2inc.pl reads alongside each .idx of IDX/l7: a
+    family's index builder, the tables its indices address and its
+    configuration class, at level -7.  Copied through into
+    MOD/l7/<family>_p.inc with the family's name and prefix in place of
+    their markers and `MakeIndex` by the statements that build the
+    indices, and the Table() lines lifted out into the struct in
+    MOD/l7/<family>_h.inc.  Edit this file and the .idx, not MOD/;
+    ../../mk.sh regenerates both.
 
-    Level -7: `_A`-`_E`, `_H`-`_L` are the ten counters, `_W`, `_W2` and `_W3`
-    the three mixers (selected by indices m, w and s) and `_WF` the one that
+    `_A`-`_E`, `_H`-`_L` are the ten counters, `_W`, `_W2` and `_W3` the
+    three mixers (selected by indices m, w and s) and `_WF` the one that
     mixes them (by node and the state of code()'s hint), `_MT` and `_WM`
-    the mantissa plane and its mixer, `_G` the sign counters.  Each is H_mbt_ND (or H_mbt_MND) rows deep per
-    context: where a decision sits among the family's nodes is context
-    without being a variable.  */
+    the mantissa plane and its mixer, `_G` the sign counters.  Each is
+    H_mbt_ND (or H_mbt_MND) rows deep per context: where a decision sits
+    among the family's nodes is context without being a variable.  */
 
 void H7_mbt_make( const H_mbt_v & D, tcx & X ) {
   int a, b, c, d, e, h, i, j, k, l, s, m, w, t, n, g;
-  int st = D.st, ca = D.ca, cb = D.cb, cc = D.cc, nsk = D.nsk, en = D.en, td = D.td, sm = D.sm, tm = D.tm, tb = D.tb, dh = D.dh, bd = D.bd, qc = D.qc, im = D.im, ig = D.ig, c1 = D.c1, tx = D.tx;
-  (void) st;  (void) ca;  (void) cb;  (void) cc;  (void) nsk;  (void) en;  (void) td;  (void) sm;  (void) tm;  (void) tb;  (void) dh;  (void) bd;  (void) qc;  (void) im;  (void) ig;  (void) c1;  (void) tx;
+  H_mbt_VARS(H_LOCAL)
 
   a = 0;
   a = a*2 + (((st)>4+(1-1)));
@@ -91,3 +92,13 @@ void H7_mbt_make( const H_mbt_v & D, tcx & X ) {
   X.n = n;  X.g = g;
 }
 
+
+// the family's configuration class (famcfg.inc): the level's shape, as
+// the tables above have it
+#define FC_NAME C7_mbt
+#define FC_PFX H7_mbt_
+#define FC_FAM mbt
+#define FC_NC 10
+#define FC_NMIX 3
+#define FC_NAPM 0
+#include "../../famcfg.inc"

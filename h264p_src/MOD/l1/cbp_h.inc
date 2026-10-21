@@ -18,19 +18,19 @@ static const int H1_cbp_rA = (251+0) * (1);
 static const int H1_cbp_rB = (255+0) * (1);
 static const int H1_cbp_rC = (254+0) * (1);
 static const int H1_cbp_rD = (0+0) * (1);
-static const int H1_cbp_rT = (0+0) * (1);
-static const int H1_cbp_rG = (0+0) * (1);
 static const int H1_cbp_lr = (14+0) * (1);
-static const int H1_cbp_lrm = (0+0) * (1);
-static const int H1_cbp_mbm = (0+0) * (1);
 static const int H1_cbp_mwA = (0+0) * (1);
 static const int H1_cbp_mwB = (16+0) * (1);
 static const int H1_cbp_mwC = (32+0) * (1);
 static const int H1_cbp_mwD = (100+0) * (1);
-static const int H1_cbp_mwT = (0+0) * (1);
-static const int H1_cbp_mwG = (0+0) * (1);
-static const int H1_cbp_mt = (0+0) * (1);
 static const int H1_cbp_mb = (31+0) * (1);
+static const int H1_cbp_rT = (0+0) * (1);
+static const int H1_cbp_mwT = (0+0) * (1);
+static const int H1_cbp_mt = (0+0) * (1);
+static const int H1_cbp_lrm = (0+0) * (1);
+static const int H1_cbp_mbm = (0+0) * (1);
+static const int H1_cbp_rG = (0+0) * (1);
+static const int H1_cbp_mwG = (0+0) * (1);
 static const int H1_cbp_hA = (24+0) * (1);
 static const int H1_cbp_hB = (24+0) * (1);
 static const int H1_cbp_hC = (24+0) * (1);
@@ -51,11 +51,7 @@ static const long long H1_cbp_t_Volume = tc_vmul(1, 1); // 1
 
 #define H1_cbp_USES(X) X(inc) X(pc) X(cls) X(st) X(col) X(q6)
 
-struct H1_cbp_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H1_cbp_T {
   cm_cnt2s H1_cbp_A[tc_rows(H1_cbp_a_Volume, H1_cbp_hA) * H_cbp_ND];
   cm_cnt2s H1_cbp_B[tc_rows(H1_cbp_b_Volume, H1_cbp_hB) * H_cbp_ND];
   cm_cnt2s H1_cbp_C[tc_rows(H1_cbp_c_Volume, H1_cbp_hC) * H_cbp_ND];
@@ -80,8 +76,6 @@ struct H1_cbp_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H1_cbp_n_Volume, H1_cbp_hN) * H_cbp_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H1_cbp_n_Volume, H1_cbp_hN) * H_cbp_MND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H1_cbp_g_Volume * H_cbp_NG);
-  void H1_cbp_Init( void ) {
-  
-  }
+  void H1_cbp_Init( void ) {}
   void H1_cbp_Quit( void ) {}
 };

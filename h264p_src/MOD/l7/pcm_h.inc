@@ -46,8 +46,6 @@ static const int H7_pcm_rD = (255+0) * (1);
 static const int H7_pcm_rT = (55+0) * (1);
 static const int H7_pcm_rG = (90+0) * (1);
 static const int H7_pcm_lr = (12+0) * (1);
-static const int H7_pcm_lrm = (12+0) * (1);
-static const int H7_pcm_mbm = (0+0) * (1);
 static const int H7_pcm_mwA = (0+0) * (1);
 static const int H7_pcm_mwB = (0+0) * (1);
 static const int H7_pcm_mwC = (0+0) * (1);
@@ -62,6 +60,8 @@ static const int H7_pcm_mwT = (0+0) * (1);
 static const int H7_pcm_mwG = (0+0) * (1);
 static const int H7_pcm_mt = (0+0) * (1);
 static const int H7_pcm_mb = (5+0) * (1);
+static const int H7_pcm_lrm = (12+0) * (1);
+static const int H7_pcm_mbm = (0+0) * (1);
 static const int H7_pcm_hA = (24+0) * (1);
 static const int H7_pcm_hB = (24+0) * (1);
 static const int H7_pcm_hC = (24+0) * (1);
@@ -97,11 +97,7 @@ static const long long H7_pcm_w_Volume = tc_vmul(1, 7); // 7
 
 #define H7_pcm_USES(X) X(pl) X(dp) X(pd) X(pd2)
 
-struct H7_pcm_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H7_pcm_T {
   cm_cnt2 H7_pcm_A[tc_rows(H7_pcm_a_Volume, H7_pcm_hA) * H_pcm_ND];
   cm_cnt2 H7_pcm_B[tc_rows(H7_pcm_b_Volume, H7_pcm_hB) * H_pcm_ND];
   cm_cnt2 H7_pcm_C[tc_rows(H7_pcm_c_Volume, H7_pcm_hC) * H_pcm_ND];
@@ -150,8 +146,6 @@ struct H7_pcm_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_pcm_ND * 5 * 4)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_pcm_ND * 5)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H7_pcm_g_Volume * H_pcm_NG);
-  void H7_pcm_Init( void ) {
-  
-  }
+  void H7_pcm_Init( void ) {}
   void H7_pcm_Quit( void ) {}
 };

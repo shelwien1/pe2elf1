@@ -176,15 +176,15 @@ corpus in one thread:
 
 | level | has | size | vs `-9` | `c` KB/s | `d` KB/s | memory |
 |---|---|---:|---:|---:|---:|---:|
-| `-9` | everything | 2,718,200 | 0 | 106 | 108 | 63 MB |
-| `-7` | no APMs, no template searches (c) | 2,762,018 | +1.61% (+1.6%) | 131 (110) | 141 (122) | 61 MB |
-| `-5` | the decoder only for maps, textures and edge misses, unfiltered; one mixer, no APMs, no CABAC states (f) | 3,028,487 | +11.42% (+11.6%) | 222 (168) | 226 (194) | 58 MB |
-| `-3` | no decoder but its reference lists; `-9`'s coder without its APMs (h) | 3,128,074 | +15.08% (+15.9%) | 323 (225) | 349 (279) | 37 MB |
-| `-1` | no decoder, no motion vectors; its own four counters a family, one mixer, no APMs, no CABAC states (k) | 3,210,963 | +18.13% (about +16%) | 660 (about 400) | 742 (about 500) | 28 MB |
+| `-9` | everything | 2,717,777 | 0 | 106 | 108 | 63 MB |
+| `-7` | no APMs, no template searches (c) | 2,761,576 | +1.61% (+1.6%) | 131 (110) | 141 (122) | 61 MB |
+| `-5` | the decoder only for maps, textures and edge misses, unfiltered; one mixer, no APMs, no CABAC states (f) | 3,028,386 | +11.43% (+11.6%) | 222 (168) | 226 (194) | 58 MB |
+| `-3` | no decoder but its reference lists; `-9`'s coder without its APMs (h) | 3,127,949 | +15.09% (+15.9%) | 323 (225) | 349 (279) | 37 MB |
+| `-1` | no decoder, no motion vectors; its own four counters a family, one mixer, no APMs, no CABAC states (k) | 3,210,963 | +18.15% (about +16%) | 660 (about 400) | 742 (about 500) | 28 MB |
 
 `-9` is the model of sections 1-3 (2,750,189 bytes there, 7 more with the
-level byte each stream's header has now) with its parameters tuned again,
-1.16% smaller; every level's parameters were tuned so, against dumps of
+level byte each stream's header has now) with its parameters tuned again
+and the model fixes of format 6 (`h264p_review.md`), 1.18% smaller; every level's parameters were tuned so, against dumps of
 its families' decisions (section 7.5), which also left their tables
 smaller (`-9`'s 28 MB instead of 226) and every level faster. Memory is
 the peak resident size, compressing stream 03 (decompressing it takes
@@ -194,8 +194,8 @@ it decompresses 3-5% faster than the table has it and peaks at 30 MB,
 
 | stream | size vs `-9` | `c` KB/s | `d` KB/s |
 |---|---:|---:|---:|
-| 00 | +16.7% | 537 | 582 |
-| 01 | +22.8% | 747 | 811 |
+| 00 | +16.8% | 537 | 582 |
+| 01 | +22.9% | 747 | 811 |
 | 02 | +2.3% | 680 | 807 |
 | 03 | +18.9% | 596 | 713 |
 | 04 | +13.6% | 807 | 905 |
@@ -340,9 +340,17 @@ reference lists: skp's `c1` and `k9`, mbt's `c1`, mvs's `rt`).
 level's shape, less the lines of variables its parts cannot make) and
 are each level's own from there. `mk.sh` has `release`, `mod`, `tuning
 L` and `check L`; `./mk.sh tuning 1` has 5,030 tunable bits in 525
-patterns (the cut copy of 7.5 less its decoder lines), and `./mk.sh check
+patterns (the cut copy of 7.5 less its decoder lines; 3,904 in 415 since
+the knobs its families never read are frozen), and `./mk.sh check
 1` finds the tuning and the shipping build of `-1` coding the corpus
-alike.
+alike. Since `h264p_review.md` (D4, W4): a level's 15 families share one
+template, `IDX/l<L>/family.inc` (`%F%` in it the family's name), which
+states the level's shape once and ends with the family's class (it
+defines the `FC_` macros of 7.2 and includes `famcfg.inc`), so `lv<L>.inc`
+only includes the generated files and names the classes; and each
+family's variables are listed once, with what each needs of the model's
+parts, in `famvars.inc` (`H_<fam>_VARS`), which makes the structs, the
+masks of 7.3 and the index builders' locals.
 
 Today there is one profile. `IDX/<fam>.idx` and its template
 `IDX/<fam>.inc` are generated into `MOD/<fam>_h.inc` (the parameters,
@@ -368,8 +376,8 @@ build has its constants folded into its own code.
 | path | what |
 |---|---|
 | `IDX/idx2inc.pl`, `opt.pl`, `import.pl`, `IDX-FORMAT.md` | the tools, shared |
-| `IDX/l9/<fam>.idx`, `<fam>.inc` | `-9`: today's 15 families, moved |
-| `IDX/l1/<fam>.idx`, `<fam>.inc` | `-1`: a copy of `IDX/l9` to start with |
+| `IDX/l9/<fam>.idx`, `family.inc` | `-9`: today's 15 families, moved, and the template they share |
+| `IDX/l1/<fam>.idx`, `family.inc` | `-1`: a copy of `IDX/l9` to start with |
 | `MOD/l9/`, `MOD/l1/` | generated from them, kept in the repository in the shipping form as `MOD/` is now |
 | `famcfg.inc` | the class of one family at one level (7.2) |
 | `lv9.inc`, `lv1.inc` | a level: its `MOD/` headers, its families' classes, its own class (7.4) |
@@ -508,7 +516,7 @@ set hA = FCX(a_Volume) > (1LL << tc_hbits(FCX(hA))) ? tc_hbits(FCX(hA)) : 0;
 - **The tables** stay in the generated struct (`H1_skp_T`: arrays in the
   shipping build, pointers mapped by `H1_skp_Init()` in the tuning one),
   mapped by `tc_table<>()` as now. Each level's template
-  (`IDX/l1/skp.inc`) declares the tables of its shape and builds the
+  (`IDX/l1/family.inc`) declares the tables of its shape and builds the
   indices they take (its `MakeIndex` list); `bind()` hands them to
   `tc_fam` under the same `#if`s as the members, so a template with fewer
   tables than the shape asks for does not compile.
@@ -516,7 +524,10 @@ set hA = FCX(a_Volume) > (1LL << tc_hbits(FCX(hA))) ? tc_hbits(FCX(hA)) : 0;
   undefines it at its end, as `config.hpp` does `CP_SSE`), so a level's
   families can differ: `-1` can keep more counters where the bits are
   (coefficient counts, significance and mvd are 40% of `-9`'s output)
-  than in its small families.
+  than in its small families. (As built, the level's template defines
+  it for all of its families; a family that should differ gets a
+  template of its own, `IDX/l<L>/<fam>.inc`, which `idx2inc.pl` takes
+  before `family.inc`.)
 
 ### 7.3 What a level reads, and what it computes
 
@@ -563,13 +574,14 @@ if (H_USES(sig, sn))  // the same position in the blocks A and B
 - The tuning build reads more than the shipping build (its live lines
   of zeros), so it computes more; the two code the same as long as the
   skipped work has no other product. That is what `./mk.sh check` tests.
-- The switches are tied to the variables at compile time. Next to each
-  family's `V` is a mask per switch of the fields it feeds (skp: `td`,
-  `en`, `sm`, `tm`, `tb`, `bd` and `tx` need the decoder), and the model
-  asserts them:
+- The switches are tied to the variables at compile time. Each field
+  of a family's `V` says which parts it needs (`famvars.inc`'s
+  `H_skp_VARS`: skp's `td`, `en`, `sm`, `tm`, `tb`, `bd` and `tx` need
+  the decoder, `NEED_REC`), a mask per part is made of that, and the
+  model asserts them:
 
   ```cpp
-  static_assert(L::recon || !(L::skp::Uses & H_skp_rec), "a level without the decoder reads a pixel context of skp");
+  static_assert(L::recon || !(L::skp::Uses & H_skp_needs<NEED_REC>()), "a level without the decoder reads ...");
   ```
 
   A level without the decoder whose `.idx` reads a pixel context does
@@ -589,19 +601,18 @@ is fast.
 
 ### 7.4 A level's class
 
-`lv1.inc` includes `MOD/l1`'s headers (the 15 `_h.inc`, then the 15
-`_p.inc`), makes the 15 families' classes through `famcfg.inc`, and
-then the level's own:
+`lv1.inc` includes `MOD/l1`'s headers (each family's `_h.inc` and
+`_p.inc`, which ends with the family's class, `famcfg.inc`'s), and then
+defines the level's own:
 
 ```cpp
 struct Lv1 {
   static const int id = 1;  // the header's level byte
   static const bool recon = false, search = false, proxy = false, signpred = false,
                     skippx = false, deblock = false, cabpred = false;
-  typedef C1_nal nal;
-  typedef C1_hdr hdr;
-  typedef C1_skp skp;
-  // ... to pcm
+#define LV_FAM(F) typedef C1_##F F;  // nal, hdr, skp, ... pcm
+  H264P_FAMS(LV_FAM)
+#undef LV_FAM
 };
 ```
 

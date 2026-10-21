@@ -12,21 +12,13 @@
 
 namespace h264p {
 
-// Where bytes come from and go to: a coroutine's buffers (CoroIo), or a
-// file. read() gives up to n bytes, fewer only at the end of the input (0
-// there); write() takes all n. (Plain function pointers: a coroutine is
-// plain data.)
+// Where bytes come from: a coroutine's input (CoroIo), or a file. read()
+// gives up to n bytes, fewer only at the end of the input (0 there).
+// (Plain function pointers: a coroutine is plain data.)
 struct ByteSource {
   size_t (*fn)(void* ctx, uint8_t* p, size_t n) = nullptr;
   void* ctx = nullptr;
   size_t read(uint8_t* p, size_t n) const { return fn ? fn(ctx, p, n) : 0; }
-};
-struct ByteSink {
-  void (*fn)(void* ctx, const uint8_t* p, size_t n) = nullptr;
-  void* ctx = nullptr;
-  void write(const uint8_t* p, size_t n) const {
-    if (n) fn(ctx, p, n);
-  }
 };
 
 // A coroutine's input and output as runs of bytes. Plain data, which
@@ -95,16 +87,10 @@ struct CoroIo : Coroutine {
   }
 
   static size_t read_cb(void* c, uint8_t* p, size_t n) { return ((CoroIo*)c)->read(p, n); }
-  static void write_cb(void* c, const uint8_t* p, size_t n) { ((CoroIo*)c)->write(p, n); }
+  // the input as a ByteSource (the compressor's AnnexBReader reads it)
   ByteSource source() {
     ByteSource s;
     s.fn = read_cb;
-    s.ctx = this;
-    return s;
-  }
-  ByteSink sink() {
-    ByteSink s;
-    s.fn = write_cb;
     s.ctx = this;
     return s;
   }

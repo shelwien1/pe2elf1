@@ -66,7 +66,6 @@ static const int H9_mvs_rK = (229+0) * (1);
 static const int H9_mvs_rL = (98+0) * (1);
 static const int H9_mvs_rD = (249+0) * (1);
 static const int H9_mvs_rT = (28+0) * (1);
-static const int H9_mvs_rG = (0+0) * (1);
 static const int H9_mvs_rS1 = (8+0) * (1);
 static const int H9_mvs_rS2 = (7+0) * (1);
 static const int H9_mvs_lr = (15+0) * (1);
@@ -83,12 +82,13 @@ static const int H9_mvs_mwK = (57+0) * (1);
 static const int H9_mvs_mwL = (14+0) * (1);
 static const int H9_mvs_mwD = (37+0) * (1);
 static const int H9_mvs_mwT = (9+0) * (1);
-static const int H9_mvs_mwG = (0+0) * (1);
 static const int H9_mvs_bw = (12+0) * (1);
 static const int H9_mvs_mt = (6+0) * (1);
 static const int H9_mvs_qs = (118+3) * (1);
 static const int H9_mvs_qf = (30+3) * (1);
 static const int H9_mvs_mb = (45+0) * (1);
+static const int H9_mvs_rG = (0+0) * (1);
+static const int H9_mvs_mwG = (0+0) * (1);
 static const int H9_mvs_hA = (16+0) * (1);
 static const int H9_mvs_hB = (24+0) * (1);
 static const int H9_mvs_hC = (24+0) * (1);
@@ -126,11 +126,7 @@ static const long long H9_mvs_w_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul
 
 #define H9_mvs_USES(X) X(kind) X(comp) X(ma) X(mb) X(oth) X(sp) X(rt) X(lst) X(ps) X(rf) X(zd) X(pd) X(nr) X(tv) X(tq) X(ea) X(eb) X(ta) X(cq)
 
-struct H9_mvs_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H9_mvs_T {
   cm_cnt2 H9_mvs_A[tc_rows(H9_mvs_a_Volume, H9_mvs_hA) * H_mvs_ND];
   cm_cnt2 H9_mvs_B[tc_rows(H9_mvs_b_Volume, H9_mvs_hB) * H_mvs_ND];
   cm_cnt2 H9_mvs_C[tc_rows(H9_mvs_c_Volume, H9_mvs_hC) * H_mvs_ND];
@@ -187,8 +183,6 @@ struct H9_mvs_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_mvs_ND * 5 * 4)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_mvs_ND * 5)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H9_mvs_g_Volume * H_mvs_NG);
-  void H9_mvs_Init( void ) {
-  
-  }
+  void H9_mvs_Init( void ) {}
   void H9_mvs_Quit( void ) {}
 };

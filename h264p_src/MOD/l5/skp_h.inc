@@ -34,11 +34,7 @@ static const int H5_skp_rJ = (149+0) * (1);
 static const int H5_skp_rK = (253+0) * (1);
 static const int H5_skp_rL = (255+0) * (1);
 static const int H5_skp_rD = (255+0) * (1);
-static const int H5_skp_rT = (0+0) * (1);
-static const int H5_skp_rG = (0+0) * (1);
 static const int H5_skp_lr = (10+0) * (1);
-static const int H5_skp_lrm = (0+0) * (1);
-static const int H5_skp_mbm = (0+0) * (1);
 static const int H5_skp_mwA = (129+0) * (1);
 static const int H5_skp_mwB = (17+0) * (1);
 static const int H5_skp_mwC = (0+0) * (1);
@@ -49,10 +45,14 @@ static const int H5_skp_mwJ = (6+0) * (1);
 static const int H5_skp_mwK = (39+0) * (1);
 static const int H5_skp_mwL = (128+0) * (1);
 static const int H5_skp_mwD = (1+0) * (1);
-static const int H5_skp_mwT = (0+0) * (1);
-static const int H5_skp_mwG = (0+0) * (1);
-static const int H5_skp_mt = (0+0) * (1);
 static const int H5_skp_mb = (8+0) * (1);
+static const int H5_skp_rT = (0+0) * (1);
+static const int H5_skp_mwT = (0+0) * (1);
+static const int H5_skp_mt = (0+0) * (1);
+static const int H5_skp_lrm = (0+0) * (1);
+static const int H5_skp_mbm = (0+0) * (1);
+static const int H5_skp_rG = (0+0) * (1);
+static const int H5_skp_mwG = (0+0) * (1);
 static const int H5_skp_hA = (24+0) * (1);
 static const int H5_skp_hB = (24+0) * (1);
 static const int H5_skp_hC = (24+0) * (1);
@@ -85,11 +85,7 @@ static const long long H5_skp_t_Volume = tc_vmul(1, 1); // 1
 
 #define H5_skp_USES(X) X(st) X(a3) X(b3) X(col) X(c9) X(cd) X(cnt) X(c1) X(run) X(en) X(td) X(k9) X(qc)
 
-struct H5_skp_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H5_skp_T {
   cm_cnt2 H5_skp_A[tc_rows(H5_skp_a_Volume, H5_skp_hA) * H_skp_ND];
   cm_cnt2 H5_skp_B[tc_rows(H5_skp_b_Volume, H5_skp_hB) * H_skp_ND];
   cm_cnt2 H5_skp_C[tc_rows(H5_skp_c_Volume, H5_skp_hC) * H_skp_ND];
@@ -126,8 +122,6 @@ struct H5_skp_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H5_skp_n_Volume, H5_skp_hN) * H_skp_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H5_skp_n_Volume, H5_skp_hN) * H_skp_MND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H5_skp_g_Volume * H_skp_NG);
-  void H5_skp_Init( void ) {
-  
-  }
+  void H5_skp_Init( void ) {}
   void H5_skp_Quit( void ) {}
 };

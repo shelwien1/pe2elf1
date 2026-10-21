@@ -40,7 +40,6 @@ static const int H3_qpd_rK = (252+0) * (1);
 static const int H3_qpd_rL = (255+0) * (1);
 static const int H3_qpd_rD = (158+0) * (1);
 static const int H3_qpd_rT = (29+0) * (1);
-static const int H3_qpd_rG = (0+0) * (1);
 static const int H3_qpd_lr = (13+0) * (1);
 static const int H3_qpd_lrm = (0+0) * (1);
 static const int H3_qpd_mbm = (0+0) * (1);
@@ -55,9 +54,10 @@ static const int H3_qpd_mwK = (23+0) * (1);
 static const int H3_qpd_mwL = (32+0) * (1);
 static const int H3_qpd_mwD = (16+0) * (1);
 static const int H3_qpd_mwT = (31+0) * (1);
-static const int H3_qpd_mwG = (0+0) * (1);
 static const int H3_qpd_mt = (4+0) * (1);
 static const int H3_qpd_mb = (64+0) * (1);
+static const int H3_qpd_rG = (0+0) * (1);
+static const int H3_qpd_mwG = (0+0) * (1);
 static const int H3_qpd_hA = (24+0) * (1);
 static const int H3_qpd_hB = (24+0) * (1);
 static const int H3_qpd_hC = (24+0) * (1);
@@ -93,11 +93,7 @@ static const long long H3_qpd_w_Volume = tc_vmul(1, 3); // 3
 
 #define H3_qpd_USES(X) X(pc) X(cc) X(cls) X(sq) X(dc) X(lz) X(db) X(bc) X(st) X(lnz) X(kc) X(cl)
 
-struct H3_qpd_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H3_qpd_T {
   cm_cnt2 H3_qpd_A[tc_rows(H3_qpd_a_Volume, H3_qpd_hA) * H_qpd_ND];
   cm_cnt2 H3_qpd_B[tc_rows(H3_qpd_b_Volume, H3_qpd_hB) * H_qpd_ND];
   cm_cnt2 H3_qpd_C[tc_rows(H3_qpd_c_Volume, H3_qpd_hC) * H_qpd_ND];
@@ -146,8 +142,6 @@ struct H3_qpd_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_qpd_ND * 5 * 4)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_qpd_ND * 5)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H3_qpd_g_Volume * H_qpd_NG);
-  void H3_qpd_Init( void ) {
-  
-  }
+  void H3_qpd_Init( void ) {}
   void H3_qpd_Quit( void ) {}
 };

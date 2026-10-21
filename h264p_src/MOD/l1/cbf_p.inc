@@ -1,20 +1,21 @@
-/*  The template IDX/idx2inc.pl reads alongside cbf.idx: the cbf
-    family's index builder and the tables its indices address.  Copied
-    through into MOD/l1/cbf_p.inc with `H1_cbf_` replaced by the prefix,
-    `MakeIndex` by the statements that build the indices, and the Table()
-    lines lifted out into the struct in MOD/l1/cbf_h.inc.  Edit this file
-    and cbf.idx, not MOD/; ../../mk.sh regenerates both.
+/*  The template IDX/idx2inc.pl reads alongside each .idx of IDX/l1: a
+    family's index builder, the tables its indices address and its
+    configuration class, at level -1.  Copied through into
+    MOD/l1/<family>_p.inc with the family's name and prefix in place of
+    their markers and `MakeIndex` by the statements that build the
+    indices, and the Table() lines lifted out into the struct in
+    MOD/l1/<family>_h.inc.  Edit this file and the .idx, not MOD/;
+    ../../mk.sh regenerates both.
 
-    Level -1: `_A`-`_D` are the four counters, `_W` the one mixer
-    (selected by index m, rows of 16 inputs), `_MT` and `_WM` the mantissa
-    plane and its mixer, `_G` the sign counters.  Each is H_cbf_ND (or H_cbf_MND) rows deep per
-    context: where a decision sits among the family's nodes is context
-    without being a variable.  */
+    `_A`-`_D` are the four counters, `_W` the one mixer (selected by index
+    m, rows of 16 inputs), `_MT` and `_WM` the mantissa plane and its
+    mixer, `_G` the sign counters.  Each is H_cbf_ND (or H_cbf_MND) rows
+    deep per context: where a decision sits among the family's nodes is
+    context without being a variable.  */
 
 void H1_cbf_make( const H_cbf_v & D, tcx & X ) {
   int a, b, c, d, m, t, n, g;
-  int cat = D.cat, na = D.na, nb = D.nb, intra = D.intra, q6 = D.q6, np = D.np, pos = D.pos, crcb = D.crcb, col = D.col, nc = D.nc, kn = D.kn, md = D.md, en = D.en, pg = D.pg, em = D.em, pz = D.pz, tn = D.tn, pq = D.pq, ch = D.ch, ds = D.ds, hv = D.hv, ly = D.ly, dq = D.dq;
-  (void) cat;  (void) na;  (void) nb;  (void) intra;  (void) q6;  (void) np;  (void) pos;  (void) crcb;  (void) col;  (void) nc;  (void) kn;  (void) md;  (void) en;  (void) pg;  (void) em;  (void) pz;  (void) tn;  (void) pq;  (void) ch;  (void) ds;  (void) hv;  (void) ly;  (void) dq;
+  H_cbf_VARS(H_LOCAL)
 
   a = 0;
   a = a*6 + H1_cbf_a_cat[__min(13,__max(0,(cat)-(1-1)))];
@@ -55,3 +56,13 @@ void H1_cbf_make( const H_cbf_v & D, tcx & X ) {
   X.n = n;  X.g = g;
 }
 
+
+// the family's configuration class (famcfg.inc): the level's shape, as
+// the tables above have it
+#define FC_NAME C1_cbf
+#define FC_PFX H1_cbf_
+#define FC_FAM cbf
+#define FC_NC 4
+#define FC_NMIX 1
+#define FC_NAPM 0
+#include "../../famcfg.inc"

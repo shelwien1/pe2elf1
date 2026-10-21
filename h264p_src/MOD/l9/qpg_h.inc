@@ -50,13 +50,9 @@ static const int H9_qpg_rJ = (134+0) * (1);
 static const int H9_qpg_rK = (240+0) * (1);
 static const int H9_qpg_rL = (233+0) * (1);
 static const int H9_qpg_rD = (244+0) * (1);
-static const int H9_qpg_rT = (0+0) * (1);
-static const int H9_qpg_rG = (0+0) * (1);
 static const int H9_qpg_rS1 = (6+0) * (1);
 static const int H9_qpg_rS2 = (8+0) * (1);
 static const int H9_qpg_lr = (15+0) * (1);
-static const int H9_qpg_lrm = (0+0) * (1);
-static const int H9_qpg_mbm = (0+0) * (1);
 static const int H9_qpg_mwA = (4+0) * (1);
 static const int H9_qpg_mwB = (21+0) * (1);
 static const int H9_qpg_mwC = (60+0) * (1);
@@ -67,13 +63,17 @@ static const int H9_qpg_mwJ = (66+0) * (1);
 static const int H9_qpg_mwK = (2+0) * (1);
 static const int H9_qpg_mwL = (43+0) * (1);
 static const int H9_qpg_mwD = (0+0) * (1);
-static const int H9_qpg_mwT = (0+0) * (1);
-static const int H9_qpg_mwG = (0+0) * (1);
 static const int H9_qpg_bw = (13+0) * (1);
-static const int H9_qpg_mt = (0+0) * (1);
 static const int H9_qpg_qs = (70+3) * (1);
 static const int H9_qpg_qf = (32+3) * (1);
 static const int H9_qpg_mb = (63+0) * (1);
+static const int H9_qpg_rT = (0+0) * (1);
+static const int H9_qpg_mwT = (0+0) * (1);
+static const int H9_qpg_mt = (0+0) * (1);
+static const int H9_qpg_lrm = (0+0) * (1);
+static const int H9_qpg_mbm = (0+0) * (1);
+static const int H9_qpg_rG = (0+0) * (1);
+static const int H9_qpg_mwG = (0+0) * (1);
 static const int H9_qpg_hA = (24+0) * (1);
 static const int H9_qpg_hB = (24+0) * (1);
 static const int H9_qpg_hC = (24+0) * (1);
@@ -111,11 +111,7 @@ static const long long H9_qpg_w_Volume = tc_vmul(tc_vmul(1, 5), 2); // 10
 
 #define H9_qpg_USES(X) X(as) X(mag) X(ss) X(xe) X(lq) X(cs) X(bs) X(bk) X(rs) X(ls) X(cls) X(st)
 
-struct H9_qpg_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H9_qpg_T {
   cm_cnt2 H9_qpg_A[tc_rows(H9_qpg_a_Volume, H9_qpg_hA) * H_qpg_ND];
   cm_cnt2 H9_qpg_B[tc_rows(H9_qpg_b_Volume, H9_qpg_hB) * H_qpg_ND];
   cm_cnt2 H9_qpg_C[tc_rows(H9_qpg_c_Volume, H9_qpg_hC) * H_qpg_ND];
@@ -172,8 +168,6 @@ struct H9_qpg_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_qpg_ND * 5 * 4)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_qpg_ND * 5)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H9_qpg_g_Volume * H_qpg_NG);
-  void H9_qpg_Init( void ) {
-  
-  }
+  void H9_qpg_Init( void ) {}
   void H9_qpg_Quit( void ) {}
 };

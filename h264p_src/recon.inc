@@ -1635,10 +1635,6 @@ struct ReconT : Dpb {
     for (int i = 0; i < 16; i++) mb_dcr[i] = qp >= 36 ? c[i] * ls * (1 << (q6 - 6)) : (c[i] * ls + (1 << (5 - q6))) >> (6 - q6);
   }
 
-  // The macroblock is coded or skipped: what is left of it (the luma blocks
-  // without coefficients, the chroma residual, I_PCM samples), and what
-  // deblocking and the direct prediction of later pictures need. nz: the
-  // walk's coefficient counts.
   // (the samples of the macroblock, and what deblocking needs of it)
   void mb_pixels(int addr, int cls, int i16m, const uint8_t* modes, int cpred, int t8, int qp, const int8_t rf[2][4],
                  const int16_t mv[2][16][2], const uint8_t nz[16]) {
@@ -1684,6 +1680,10 @@ struct ReconT : Dpb {
         D.nz[i] = D.nz[i + 1] = D.nz[i + 4] = D.nz[i + 5] = any;
       }
   }
+  // The macroblock is coded or skipped: what is left of it (the luma blocks
+  // without coefficients, the chroma residual, I_PCM samples), and what
+  // deblocking and the direct prediction of later pictures need. nz: the
+  // walk's coefficient counts.
   void mb_end(int addr, int cls, int i16m, const uint8_t* modes, int cpred, int t8, int qp, const int8_t rf[2][4],
               const int16_t mv[2][16][2], const uint8_t nz[16]) {
     if (!mact) return;
@@ -2405,9 +2405,6 @@ struct ReconT : Dpb {
     return best;
   }
 
-  // The texture of the prediction of a block of n x n samples at (x, y) of
-  // the current macroblock in plane c (0 luma): the sum of the absolute
-  // differences between neighbouring samples; -1 not known.
   // x264's AQ energy (ac_energy_mb) of macroblock addr of the current
   // picture: the luma 16x16 and the two chroma 8x8 variances, summed
   int64_t ac_energy(int addr) const {
@@ -2907,11 +2904,6 @@ struct ReconT : Dpb {
     if (miss) *miss = best * 4 / ((top ? T * bw : 0) + (left ? T * bh : 0) + (tr ? T * T : 0) + ninner);
     return true;
   }
-  // The intra mode that would predict the block best in the last picture:
-  // the luma block of n x n at (bx, by) blocks of the current macroblock in
-  // list 0's first reference (else the last reference decoded), predicted
-  // from that picture's samples around it by each mode, the one that misses
-  // least (sum of absolute differences); -1 no picture
   // a stand-in for the source of the current (intra) macroblock: its
   // prediction from proxy_pic by a vector (proxy_build), luma and chroma
   uint8_t prx_y[256], prx_c[2][64];
@@ -3252,6 +3244,9 @@ struct ReconT : Dpb {
         g += (dir & 1 ? abs(p[j * W + i + 1] - p[j * W + i]) : 0) + (dir & 2 ? abs(p[(j + 1) * W + i] - p[j * W + i]) : 0);
     return g;
   }
+  // The texture of the prediction of a block of n x n samples at (x, y) of
+  // the current macroblock in plane c (0 luma): the sum of the absolute
+  // differences between neighbouring samples; -1 not known.
   int pred_texture(int c, int x, int y, int n, int* gxy = nullptr) const {
     if (!act() || !mb_prepared || mb_cls == 8) return -1;
     int w = c ? cur->w / 2 : cur->w, m = c ? 8 : 16;

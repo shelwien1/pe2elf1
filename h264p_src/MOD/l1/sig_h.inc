@@ -26,19 +26,19 @@ static const int H1_sig_rA = (250+0) * (1);
 static const int H1_sig_rB = (255+0) * (1);
 static const int H1_sig_rC = (250+0) * (1);
 static const int H1_sig_rD = (255+0) * (1);
-static const int H1_sig_rT = (0+0) * (1);
-static const int H1_sig_rG = (0+0) * (1);
 static const int H1_sig_lr = (15+0) * (1);
-static const int H1_sig_lrm = (0+0) * (1);
-static const int H1_sig_mbm = (0+0) * (1);
 static const int H1_sig_mwA = (62+0) * (1);
 static const int H1_sig_mwB = (15+0) * (1);
 static const int H1_sig_mwC = (69+0) * (1);
 static const int H1_sig_mwD = (47+0) * (1);
-static const int H1_sig_mwT = (0+0) * (1);
-static const int H1_sig_mwG = (0+0) * (1);
-static const int H1_sig_mt = (0+0) * (1);
 static const int H1_sig_mb = (64+0) * (1);
+static const int H1_sig_rT = (0+0) * (1);
+static const int H1_sig_mwT = (0+0) * (1);
+static const int H1_sig_mt = (0+0) * (1);
+static const int H1_sig_lrm = (0+0) * (1);
+static const int H1_sig_mbm = (0+0) * (1);
+static const int H1_sig_rG = (0+0) * (1);
+static const int H1_sig_mwG = (0+0) * (1);
 static const int H1_sig_hA = (24+0) * (1);
 static const int H1_sig_hB = (21+0) * (1);
 static const int H1_sig_hC = (21+0) * (1);
@@ -59,11 +59,7 @@ static const long long H1_sig_t_Volume = tc_vmul(1, 1); // 1
 
 #define H1_sig_USES(X) X(cg) X(pos) X(rem) X(md) X(hb) X(h3)
 
-struct H1_sig_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H1_sig_T {
   cm_cnt2s H1_sig_A[tc_rows(H1_sig_a_Volume, H1_sig_hA) * H_sig_ND];
   cm_cnt2s H1_sig_B[tc_rows(H1_sig_b_Volume, H1_sig_hB) * H_sig_ND];
   cm_cnt2s H1_sig_C[tc_rows(H1_sig_c_Volume, H1_sig_hC) * H_sig_ND];
@@ -88,8 +84,6 @@ struct H1_sig_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H1_sig_n_Volume, H1_sig_hN) * H_sig_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H1_sig_n_Volume, H1_sig_hN) * H_sig_MND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H1_sig_g_Volume * H_sig_NG);
-  void H1_sig_Init( void ) {
-  
-  }
+  void H1_sig_Init( void ) {}
   void H1_sig_Quit( void ) {}
 };

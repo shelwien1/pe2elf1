@@ -57,13 +57,9 @@ static const int H9_sgn_rJ = (254+0) * (1);
 static const int H9_sgn_rK = (255+0) * (1);
 static const int H9_sgn_rL = (254+0) * (1);
 static const int H9_sgn_rD = (255+0) * (1);
-static const int H9_sgn_rT = (0+0) * (1);
-static const int H9_sgn_rG = (0+0) * (1);
 static const int H9_sgn_rS1 = (16+0) * (1);
 static const int H9_sgn_rS2 = (0+0) * (1);
 static const int H9_sgn_lr = (15+0) * (1);
-static const int H9_sgn_lrm = (0+0) * (1);
-static const int H9_sgn_mbm = (0+0) * (1);
 static const int H9_sgn_mwA = (8+0) * (1);
 static const int H9_sgn_mwB = (4+0) * (1);
 static const int H9_sgn_mwC = (131+0) * (1);
@@ -74,13 +70,17 @@ static const int H9_sgn_mwJ = (14+0) * (1);
 static const int H9_sgn_mwK = (29+0) * (1);
 static const int H9_sgn_mwL = (2+0) * (1);
 static const int H9_sgn_mwD = (31+0) * (1);
-static const int H9_sgn_mwT = (0+0) * (1);
-static const int H9_sgn_mwG = (0+0) * (1);
 static const int H9_sgn_bw = (16+0) * (1);
-static const int H9_sgn_mt = (0+0) * (1);
 static const int H9_sgn_qs = (1+3) * (1);
 static const int H9_sgn_qf = (0+3) * (1);
 static const int H9_sgn_mb = (128+0) * (1);
+static const int H9_sgn_rT = (0+0) * (1);
+static const int H9_sgn_mwT = (0+0) * (1);
+static const int H9_sgn_mt = (0+0) * (1);
+static const int H9_sgn_lrm = (0+0) * (1);
+static const int H9_sgn_mbm = (0+0) * (1);
+static const int H9_sgn_rG = (0+0) * (1);
+static const int H9_sgn_mwG = (0+0) * (1);
 static const int H9_sgn_hA = (24+0) * (1);
 static const int H9_sgn_hB = (24+0) * (1);
 static const int H9_sgn_hC = (24+0) * (1);
@@ -118,11 +118,7 @@ static const long long H9_sgn_w_Volume = tc_vmul(tc_vmul(tc_vmul(1, 6), 1), 7); 
 
 #define H9_sgn_USES(X) X(cg) X(pos) X(sa) X(sb) X(scb) X(md) X(pp) X(mg) X(ez) X(ts) X(pq) X(dm) X(se) X(gh)
 
-struct H9_sgn_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H9_sgn_T {
   cm_cnt2 H9_sgn_A[tc_rows(H9_sgn_a_Volume, H9_sgn_hA) * H_sgn_ND];
   cm_cnt2 H9_sgn_B[tc_rows(H9_sgn_b_Volume, H9_sgn_hB) * H_sgn_ND];
   cm_cnt2 H9_sgn_C[tc_rows(H9_sgn_c_Volume, H9_sgn_hC) * H_sgn_ND];
@@ -179,8 +175,6 @@ struct H9_sgn_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_sgn_ND * 5 * 4)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_sgn_ND * 5)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H9_sgn_g_Volume * H_sgn_NG);
-  void H9_sgn_Init( void ) {
-  
-  }
+  void H9_sgn_Init( void ) {}
   void H9_sgn_Quit( void ) {}
 };

@@ -1,20 +1,21 @@
-/*  The template IDX/idx2inc.pl reads alongside qpg.idx: the qpg
-    family's index builder and the tables its indices address.  Copied
-    through into MOD/l1/qpg_p.inc with `H1_qpg_` replaced by the prefix,
-    `MakeIndex` by the statements that build the indices, and the Table()
-    lines lifted out into the struct in MOD/l1/qpg_h.inc.  Edit this file
-    and qpg.idx, not MOD/; ../../mk.sh regenerates both.
+/*  The template IDX/idx2inc.pl reads alongside each .idx of IDX/l1: a
+    family's index builder, the tables its indices address and its
+    configuration class, at level -1.  Copied through into
+    MOD/l1/<family>_p.inc with the family's name and prefix in place of
+    their markers and `MakeIndex` by the statements that build the
+    indices, and the Table() lines lifted out into the struct in
+    MOD/l1/<family>_h.inc.  Edit this file and the .idx, not MOD/;
+    ../../mk.sh regenerates both.
 
-    Level -1: `_A`-`_D` are the four counters, `_W` the one mixer
-    (selected by index m, rows of 16 inputs), `_MT` and `_WM` the mantissa
-    plane and its mixer, `_G` the sign counters.  Each is H_qpg_ND (or H_qpg_MND) rows deep per
-    context: where a decision sits among the family's nodes is context
-    without being a variable.  */
+    `_A`-`_D` are the four counters, `_W` the one mixer (selected by index
+    m, rows of 16 inputs), `_MT` and `_WM` the mantissa plane and its
+    mixer, `_G` the sign counters.  Each is H_qpg_ND (or H_qpg_MND) rows
+    deep per context: where a decision sits among the family's nodes is
+    context without being a variable.  */
 
 void H1_qpg_make( const H_qpg_v & D, tcx & X ) {
   int a, b, c, d, m, t, n, g;
-  int as = D.as, cs = D.cs, bs = D.bs, ls = D.ls, rs = D.rs, mag = D.mag, cls = D.cls, st = D.st, ss = D.ss, xe = D.xe, lq = D.lq, bk = D.bk;
-  (void) as;  (void) cs;  (void) bs;  (void) ls;  (void) rs;  (void) mag;  (void) cls;  (void) st;  (void) ss;  (void) xe;  (void) lq;  (void) bk;
+  H_qpg_VARS(H_LOCAL)
 
   a = 0;
   a = a*7 + H1_qpg_a_mag[__min(7,__max(0,(mag)-(1-1)))];
@@ -44,3 +45,13 @@ void H1_qpg_make( const H_qpg_v & D, tcx & X ) {
   X.n = n;  X.g = g;
 }
 
+
+// the family's configuration class (famcfg.inc): the level's shape, as
+// the tables above have it
+#define FC_NAME C1_qpg
+#define FC_PFX H1_qpg_
+#define FC_FAM qpg
+#define FC_NC 4
+#define FC_NMIX 1
+#define FC_NAPM 0
+#include "../../famcfg.inc"

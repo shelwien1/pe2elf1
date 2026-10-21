@@ -1,32 +1,32 @@
 
-static const byte H5_nal_a_fld[31+1]={ 0,1,2,3,4,4,4,4,4,4,4,4,4,4,5,5,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6 };
+static const byte H5_nal_a_fld[17+1]={ 0,1,2,3,4,4,4,4,4,4,4,4,4,4,5,5,6,6 };
 static const byte H5_nal_a_ctx[15+1]={ 0,1,2,2,2,2,3,3,3,4,4,4,4,4,4,4 };
 
-static const byte H5_nal_b_fld[31+1]={ 0,0,0,0,1,1,1,2,3,4,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5 };
+static const byte H5_nal_b_fld[17+1]={ 0,0,0,0,1,1,1,2,3,4,4,4,4,4,4,4,5,5 };
 static const byte H5_nal_b_p1[6+1]={ 0,0,1,2,2,2,3 };
 static const byte H5_nal_b_p2[3+1]={ 0,1,2,3 };
 
-static const byte H5_nal_c_fld[31+1]={ 0,1,2,2,3,3,3,3,4,4,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5 };
+static const byte H5_nal_c_fld[17+1]={ 0,1,2,2,3,3,3,3,4,4,4,4,4,4,4,4,5,5 };
 static const byte H5_nal_c_ctx[31+1]={ 0,1,1,1,1,2,3,3,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4 };
 
-static const byte H5_nal_d_fld[31+1]={ 0,1,2,3,4,5,5,6,7,7,7,7,7,7,7,7,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8 };
+static const byte H5_nal_d_fld[17+1]={ 0,1,2,3,4,5,5,6,7,7,7,7,7,7,7,7,8,8 };
 
-static const byte H5_nal_e_fld[31+1]={ 0,0,1,2,3,3,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4 };
+static const byte H5_nal_e_fld[17+1]={ 0,0,1,2,3,3,3,3,3,3,3,3,3,3,3,3,4,4 };
 
 
-static const byte H5_nal_h_fld[31+1]={ 0,0,1,2,3,3,3,3,3,3,3,3,3,3,4,4,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5 };
+static const byte H5_nal_h_fld[17+1]={ 0,0,1,2,3,3,3,3,3,3,3,3,3,3,4,4,5,5 };
 
 static const byte H5_nal_i_ctx[31+1]={ 0,0,0,0,0,0,0,1,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3 };
 static const byte H5_nal_i_p1[15+1]={ 0,0,1,1,2,3,4,4,4,4,4,4,4,4,4,4 };
 
-static const byte H5_nal_j_fld[31+1]={ 0,1,2,3,3,3,3,3,4,4,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5 };
+static const byte H5_nal_j_fld[17+1]={ 0,1,2,3,3,3,3,3,4,4,4,4,4,4,4,4,5,5 };
 
-static const byte H5_nal_k_fld[31+1]={ 0,1,2,3,4,4,4,4,4,4,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5 };
+static const byte H5_nal_k_fld[17+1]={ 0,1,2,3,4,4,4,4,4,4,4,4,4,4,4,4,5,5 };
 static const byte H5_nal_k_ctx[31+1]={ 0,1,1,1,1,2,3,4,4,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5 };
 
 static const byte H5_nal_l_p1[15+1]={ 0,0,1,1,2,3,4,4,4,4,4,4,4,4,4,4 };
 
-static const byte H5_nal_m_fld[31+1]={ 0,0,1,2,2,2,2,2,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3 };
+static const byte H5_nal_m_fld[17+1]={ 0,0,1,2,2,2,2,2,2,2,2,2,2,2,2,2,3,3 };
 
 
 
@@ -42,10 +42,7 @@ static const int H5_nal_rK = (232+0) * (1);
 static const int H5_nal_rL = (248+0) * (1);
 static const int H5_nal_rD = (214+0) * (1);
 static const int H5_nal_rT = (254+0) * (1);
-static const int H5_nal_rG = (0+0) * (1);
 static const int H5_nal_lr = (31+0) * (1);
-static const int H5_nal_lrm = (0+0) * (1);
-static const int H5_nal_mbm = (0+0) * (1);
 static const int H5_nal_mwA = (8+0) * (1);
 static const int H5_nal_mwB = (1+0) * (1);
 static const int H5_nal_mwC = (16+0) * (1);
@@ -57,9 +54,12 @@ static const int H5_nal_mwK = (8+0) * (1);
 static const int H5_nal_mwL = (254+0) * (1);
 static const int H5_nal_mwD = (0+0) * (1);
 static const int H5_nal_mwT = (0+0) * (1);
-static const int H5_nal_mwG = (0+0) * (1);
 static const int H5_nal_mt = (2+0) * (1);
 static const int H5_nal_mb = (107+0) * (1);
+static const int H5_nal_lrm = (0+0) * (1);
+static const int H5_nal_mbm = (0+0) * (1);
+static const int H5_nal_rG = (0+0) * (1);
+static const int H5_nal_mwG = (0+0) * (1);
 static const int H5_nal_hA = (24+0) * (1);
 static const int H5_nal_hB = (24+0) * (1);
 static const int H5_nal_hC = (24+0) * (1);
@@ -92,11 +92,7 @@ static const long long H5_nal_t_Volume = tc_vmul(1, 1); // 1
 
 #define H5_nal_USES(X) X(fld) X(ctx) X(p1) X(p2)
 
-struct H5_nal_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H5_nal_T {
   cm_cnt2 H5_nal_A[tc_rows(H5_nal_a_Volume, H5_nal_hA) * H_nal_ND];
   cm_cnt2 H5_nal_B[tc_rows(H5_nal_b_Volume, H5_nal_hB) * H_nal_ND];
   cm_cnt2 H5_nal_C[tc_rows(H5_nal_c_Volume, H5_nal_hC) * H_nal_ND];
@@ -133,8 +129,6 @@ struct H5_nal_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H5_nal_n_Volume, H5_nal_hN) * H_nal_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H5_nal_n_Volume, H5_nal_hN) * H_nal_MND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H5_nal_g_Volume * H_nal_NG);
-  void H5_nal_Init( void ) {
-  
-  }
+  void H5_nal_Init( void ) {}
   void H5_nal_Quit( void ) {}
 };

@@ -1,9 +1,17 @@
-
-# $UseNew=1 -> Table() members are pointers, allocated in %M%_Init()
-# $UseNew=0 -> Table() members are fixed-size arrays (needs const-expression
-#              sizes, i.e. the Const build).  Override per invocation with
-#              IDX_USENEW=0 in the environment or a second argument:
-#                perl idx2inc.pl foo.idx 0
+# idx2inc.pl -- an IDX declaration and its template to C++ (IDX-FORMAT.md):
+#
+#   perl idx2inc.pl foo.idx [UseNew]
+#
+# reads foo.idx and its template, foo.inc or else family.inc beside it (a
+# template for every .idx there: %F% in it is the family's name, the Prefix
+# after its first "_"), and writes foo_h.inc (the mappings, constants,
+# Volumes, the USES list and the tables' struct) and foo_p.inc (the
+# template, its MakeIndex lines expanded).
+#
+# UseNew 1 (the default): Table() members are pointers, mapped in %M%_Init()
+# and unmapped in %M%_Quit(); 0: fixed-size arrays, members of the struct,
+# which needs constant sizes, i.e. the Const build.  IDX_USENEW=0 in the
+# environment does the same as the argument.
 $UseNew = 1;
 $UseNew = $ENV{IDX_USENEW} if defined $ENV{IDX_USENEW};
 $UseNew = $ARGV[1]         if defined $ARGV[1];
@@ -14,20 +22,18 @@ $UseNew = $ARGV[1]         if defined $ARGV[1];
 # so the default is 0 here, overridable with IDX_NOCONST=1.
 $NoConst = 0;
 $NoConst = $ENV{IDX_NOCONST} if defined $ENV{IDX_NOCONST};
-$SizeOut= 0; # =1 with UseNew=1 only
-$Verify = 0; # =1 with UseNew=0 only
 
 $gdebug = 1; # global debug
 $gconst = 0;
 $prefix = "M_";
 
 $file = $ARGV[0];
-($file1=$file) =~ s/\.idx/.inc/;
-($file2=$file) =~ s/\.idx/_p.inc/;
-($fileT=$file) =~ s/\.idx/_t.inc/;
-($fileH=$file) =~ s/\.idx/_h.inc/;
+($file1=$file) =~ s/\.idx$/.inc/;
+($file1=$file) =~ s/[^\/]*$/family.inc/ unless -e $file1;
+($file2=$file) =~ s/\.idx$/_p.inc/;
+($fileH=$file) =~ s/\.idx$/_h.inc/;
 
-open I1, "<$file";
+open I1, "<$file" or die "idx2inc.pl: cannot read $file\n";
 
 $index = "";
 $xdesc = "";
@@ -64,20 +70,8 @@ while( <I1> ) {
     print "Prefix=<$prefix>\n";
   } elsif( /^\s*Debug\s+([^\s]*)/ ) {
     $gdebug = $1;
-#    print STDERR "Debug=<$gdebug>\n";
   } elsif( /^\s*Const\s+([^\s]*)/ ) {
     $gconst = $NoConst ? 1 : $1;
-#    print STDERR "Const=<$gconst>\n";
-  } elsif( /^\s*ADD\s+(.*?):\s*(.*)/ ) {
-    ($coef,$var) = ($1,$2);
-    use_var($var, '1', $const, $debug);
-    $coef=~s/\%M\%/${prefix}_/g;
-    $var=~s/\%M\%/${prefix}_/g;
-    print "ADD $coef:$var\n";
-    push @{$vfactors{$index}}, "$coef";
-    $count{$index} *= $coef;
-    $porder{$index} .= "*(1+$coef";
-    $code{$index} .= "\n$index = $index*($coef) + ($var);";
   } elsif( /^\s*Index\s+([^\s]*)/ ) {
     $index = $1;
     print "Index=<$index>\n";
@@ -93,7 +87,6 @@ while( <I1> ) {
     # at least as large as what was asked for, and refuses it.
     $volume{$index} = "1";
     $vfactors{$index} = [];
-    $porder{$index} = "static const int ${prefix}_${index}_POrder = 1";
     $count{$index} = 1;
     $maps{$index} = "";
   } elsif( /^\s*Number\s+(.*?),\s*(.*?)\s*,\s*(.*?)!(.*)/ ) {
@@ -105,69 +98,6 @@ while( <I1> ) {
       ($var,$coef,$base,$map) = ($1,$2,$3,$4);
       $q=0; $q+=$q+($_&1) for( unpack("c*",$map) );
       $xdesc .= "static const int ${prefix}_$var = ($q+$base) * ($coef);\n";
-    }
-  } elsif( /^\s*Rate\s+(.*?),\s*(.*?)!(.*?)\s*$/ ) {
-    print "Rate: <$1><$2><$3>\n";
-    if( $const==0 ) {
-      $xdesc .= ($debug>0?'p':'m')."desc( ${prefix}_${1}_, $2, \"$3\" );\n";
-      $xdesc .= "static const word* ${prefix}_$1 = TTable[${prefix}_${1}_.value];\n";
-    } else {
-      ($var,$base,$map) = ($1,$2,$3);
-      $q=0; $q+=$q+($_&1) for( unpack("c*",$map) );
-      $xdesc .= "static const word* ${prefix}_$var = TTable[$q+$base];\n";
-    }
-  } elsif( /^\s*Rate1\s+(.*?),\s*(.*?)!(.*?)\s*$/ ) {
-    ($var,$base,$map) = ($1,$2,$3);
-    print "Rate: <$1><$2><$3>\n";
-    if( $const==0 ) {
-      $xdesc .= ($debug>0?'p':'m')."desc( ${prefix}_${var}_, $base, \"$map\" );\n";
-      $xdesc .= "static const int ${prefix}_$var = eSCALE/${prefix}_${var}_.value;\n";
-    } else {
-      $q=0; $q+=$q+($_&1) for( unpack("c*",$map) );
-      $xdesc .= "static const int ${prefix}_$var = (eSCALE/($q+$base));\n";
-    }
-  } elsif( /^\s*(.*?):\s*(.*?),\s*b\&(.*?)\s*$/ ) {
-    print "$1:$2,$3!\n";
-    ($tag,$var,$map) = ($1,$2,$3);
-    use_var($var, $map, $const, $debug);
-    $ccount = ($map=~s/1/1/g);
-    if( $const==0 ) {
-      push @{$vfactors{$index}}, "${prefix}_${tag}.Size";
-      $code{$index} .= "\n${prefix}_${tag}.inc( $index, $var );";
-      $maps{$index} .= ($debug>0?'p':'m')."mask2( ${prefix}_${tag}, \"$map\" );\n"
-    } else {
-      $lmap = length($map);
-      $h = 1 << $lmap;
-      $sz = 1 << $lmap;
-      if( $ccount>0 ) {
-        $mask = unpack( "N", pack( "B32", substr(('0' x 32).$map,-32) ) );
-        undef @pmap;
-        for( $i=0; $i<$h; $i++ ) { $pmap[$i]=0; }
-        for( $b=$lmap-1,$k=0; $b>=0; $b-- ) {
-          for( $i=(1 << ($lmap-1-$b)); $i<(2 << ($lmap-1-$b)); $i++ ) {
-            $j = ($i & (($mask^0xFFFFFFFF) >> ($b+1)));
-            $pmap[$i] = ( $j<$i ) ? $pmap[$j] : $k++;
-          }
-        }
-        push @{$vfactors{$index}}, "$k";
-        $count{$index} *= $k;
-        $sz1 = $sz-1;
-        $code{$index} .= "\n$index = ($index*$k) + ${prefix}_${tag}[($var)<1?1:(($var)>$sz1?$sz1:($var))]; // $map"; # clamped == masking_b::map
-
-        $j = 0; 
-        $q = sprintf( "static const %s ${prefix}_${tag}[$sz]={ ", (($k<256)?"byte":"uint") );
-        $c = "";
-        for( $i=0; $i<$sz; $i++ ) {
-          $c .= sprintf "$q%i",$pmap[$i]; $q=',';
-        }
-        $c .= " };\n";
-        $maps{$index} .= $c;
-      } else {
-        push @{$vfactors{$index}}, "$sz";
-        $count{$index} *= $k;
-        $sz1 = $sz-1;
-        $code{$index} .= "\n$index = ($index*$sz) + (($var)<1?1:(($var)>$sz1?$sz1:($var))); // $map"; # clamped == masking_b::map
-      }
     }
   } elsif( /^\s*(.*?):\s*(.*?),\s*\&(.*?)\s*$/ ) {
     print "$1:$2,$3!\n";
@@ -218,12 +148,10 @@ while( <I1> ) {
     $count{$index} *= $ccount;
     if( $const==0 ) {
       push @{$vfactors{$index}}, "${prefix}_${tag}.Size";
-      $porder{$index} .= "*(1+${prefix}_${tag}.Size";
       $code{$index} .= "\n${prefix}_${tag}.inc( $index, $var );";
       $maps{$index} .= ($debug>0?'p':'m')."desc( ${prefix}_${tag}, $base, \"$map\" );\n"
     } else {
-        push @{$vfactors{$index}}, "$ccount";
-      $porder{$index} .= "*(1+$ccount";
+      push @{$vfactors{$index}}, "$ccount";
       $lmap = length($map);
       # A table for four buckets or more, a compare chain below that.  The
       # chain is a compare and a set per threshold plus the adds, the table a
@@ -256,23 +184,15 @@ while( <I1> ) {
         }
       }
     }
+  } elsif( /\S/ ) {
+    die "idx2inc.pl: $file:$.: not an IDX line: $_\n";
   }
-  
 }
-
-# z_p:   p,  -7!000000000000000
-# ADD    2:  (n&1)
-# M_FF_z_col.Size
-# Number wlim,  16,0!11010111
-# Rate   w_wr,     0!00000
-# mdesc( M_Bx_mw,  0, "00000000" );
-#const int Bx_mw  = M_Bx_mw.value *16;
-#mdesc( M_Ba_wr, 0, "00000" );
-#const word* Ba_wr = TTable[M_Ba_wr.value];
 
 close I1;
 
-open I2, "<$file1";
+open I2, "<$file1" or die "idx2inc.pl: no template for $file ($file1)\n";
+($fam = $prefix) =~ s/^[^_]*_//;
 
 $hdr = "\n";
 for (sort keys %maps) {
@@ -283,35 +203,14 @@ $hdr .= "$xdesc\n";
 
 $body = "";
 
-$t_dat = $t_sta = $t_ptr = $t_con = "";
+$t_sta = $t_ptr = $t_con = $t_quit = "";
 $t_siz = "";   # per-table byte counts, summed into ${prefix}_Size
-
-$f_init=0;
-$init_code = "";
-
-$f_data=0;
 
 while( <I2> ) {
   s/\%M\%/${prefix}_/g;
+  s/\%F\%/$fam/g;
 
-  if( /^(\s*)def_Data\s*$/ ) { $f_data=1; next; } 
-  elsif( /^(\s*)end_Data\s*$/ ) { $f_data=0; next; } 
-  elsif( $f_data==1 ) {
-    $t_dat .= $_; next;
-  }
-
-  if( /^(\s*)def_Init\s*$/ ) { $f_init=1; next; } 
-  elsif( /^(\s*)end_Init\s*$/ ) { $f_init=0; next; } 
-  elsif( $f_init==1 ) {
-    $init_code .= $_; next;
-  }
-
-  if( /^(\s*)MakeTables\s*$/ ) { 
-    $ident = $1;
-    $hdr =~ s/\n/\n$ident/gs;
-    $body .= "$hdr\n"; $hdr=""; next;
-  }
-#Table( Node2i,     M_Ak_Bt, M_Ak_t_Volume );
+  # Table( type, %M%name, count ); -- a table of the struct
   if( /^\s*Table\(\s*(.*?)\s*,\s*(.*?)\s*,\s*(.*?)\s*\)\;/ ) {
     ($t,$v,$sz) = ($1,$2,$3);
     $t =~ s/\|/,/g; # for template support like SSE<6|6|2>
@@ -338,23 +237,6 @@ while( <I2> ) {
     # objects opt.pl patches at load, so there it accumulates in _Init().
     $t_con .= "  ${prefix}_Size += (unsigned long long)sizeof(${t}) * (unsigned long long)tbl_n(${sz});\n";
     $t_siz .= "\n                              + (unsigned long long)sizeof(${t}) * (unsigned long long)(${sz})";
-
-$t_sta1 .= <<TEXT;
-  $t ${v}__[${sz}];
-  __declspec(property( get=get_${v} )) ${t} ${v}[];
-  ${t}& get_${v}( int i ) { 
-    if( (i>=0) && (i<${sz}) ) return ${v}__[i]; else {
-      printf( "!!! Wrong access: ${v}[%i] access !!!\\n", i );
-      return ${v}__[0];
-    }
-  }
-TEXT
-
-#printf( "sizeof("#Type" "#Name"[%i]) = %i\n", Size, sizeof( Type[Size] )
-    if( $SizeOut==1 ) {
-      #$t_con .= "printf( \"sizeof($t ${v}[%i]) = %i\\n\", ${sz}, sizeof( ${t}[${sz}] ) );\n";
-    }
-
     next;
   }
   if( /^(\s*)MakeIndex\s+([^\s]+)/ ) {
@@ -363,17 +245,12 @@ TEXT
     for( split(",",$idx) ) {
       $c = $code{$_};
       $c =~ s/\n/\n$ident/gs;
-#      $c =~ s/^\n//s;
       $body .= "$c\n";
     }
   } else {
     $body .= $_;
   }
 }
-
-#for (sort keys %code) {
-#  print O1 "$code{$_}\n"
-#}
 
 open O1, ">$file2"; 
 print O1 $body; 
@@ -382,27 +259,21 @@ close O1;
 open O1, ">$fileH";
 print O1 "$hdr\n";
 for (sort keys %volume) {
-  { my $v = $volume{$_};
-    $v = "tc_vmul($v, $_)" for @{$vfactors{$_}};
-    print O1 "static const long long ${prefix}_${_}_Volume = $v; // $count{$_}\n"; }
-  $porder{$_} .= '*0' . (')' x ($porder{$_}=~s/\(/\(/g));
-  $porder{$_} .= '; // ' . eval( substr( $porder{$_}, index( $porder{$_}, "=" )+1 ) );
-#  print O1 "$porder{$_}\n";
+  my $v = $volume{$_};
+  $v = "tc_vmul($v, $_)" for @{$vfactors{$_}};
+  print O1 "static const long long ${prefix}_${_}_Volume = $v; // $count{$_}\n";
 } print O1 "\n";
 print O1 "#define ${prefix}_USES(X)" . join('', map { " X($_)" } @uses) . "\n\n";
 
 chomp $t_con;
 chomp $t_quit;
-chomp $init_code;
-$init_code =~ s/(^|\n)/$1  /g;
 $t_sta =~ s/(^|\n)/$1  /g;
 $t_ptr =~ s/(^|\n)/$1  /g;
 $t_con =~ s/(^|\n)/$1  /g;
 
 if( $UseNew==1 ) {
 print O1 <<TEXT;
-struct ${prefix}_T { \n#undef USE_NEW\n#define USE_NEW 1\n
-$t_dat
+struct ${prefix}_T {
 $t_ptr
   /* Total bytes this module's Table() members occupy.  Accumulated in _Init()
    * because the counts are load-time values here. */
@@ -410,7 +281,6 @@ $t_ptr
   void ${prefix}_Init( void ) {
     ${prefix}_Size = 0;
 $t_con
-$init_code
   }
   void ${prefix}_Quit( void ) {
 $t_quit
@@ -418,24 +288,16 @@ $t_quit
 };
 TEXT
 } else {
-  $t_sta=$t_sta1 if $Verify;
-#  print O1 "struct ${prefix}_T {\n$t_sta${prefix}_T( void ) {\n$init_code}\n };\n"
   print O1 <<TEXT;
-struct ${prefix}_T { \n#undef USE_NEW\n#define USE_NEW 0\n
-$t_dat
+struct ${prefix}_T {
 $t_sta
   /* Total bytes this module's Table() members occupy -- a constant here, since
    * Const mode has already folded every count. */
   static constexpr unsigned long long ${prefix}_Size = 0$t_siz;
-  void ${prefix}_Init( void ) {
-$init_code
-  }
+  void ${prefix}_Init( void ) {}
   void ${prefix}_Quit( void ) {}
 };
 TEXT
 }
 
 close O1;
-
-#open O2, ">$fileT"; 
-#close O2;

@@ -43,11 +43,7 @@ static const int H5_mbt_rJ = (95+0) * (1);
 static const int H5_mbt_rK = (255+0) * (1);
 static const int H5_mbt_rL = (255+0) * (1);
 static const int H5_mbt_rD = (61+0) * (1);
-static const int H5_mbt_rT = (0+0) * (1);
-static const int H5_mbt_rG = (0+0) * (1);
 static const int H5_mbt_lr = (14+0) * (1);
-static const int H5_mbt_lrm = (0+0) * (1);
-static const int H5_mbt_mbm = (0+0) * (1);
 static const int H5_mbt_mwA = (1+0) * (1);
 static const int H5_mbt_mwB = (13+0) * (1);
 static const int H5_mbt_mwC = (125+0) * (1);
@@ -58,10 +54,14 @@ static const int H5_mbt_mwJ = (128+0) * (1);
 static const int H5_mbt_mwK = (132+0) * (1);
 static const int H5_mbt_mwL = (64+0) * (1);
 static const int H5_mbt_mwD = (3+0) * (1);
-static const int H5_mbt_mwT = (0+0) * (1);
-static const int H5_mbt_mwG = (0+0) * (1);
-static const int H5_mbt_mt = (0+0) * (1);
 static const int H5_mbt_mb = (31+0) * (1);
+static const int H5_mbt_rT = (0+0) * (1);
+static const int H5_mbt_mwT = (0+0) * (1);
+static const int H5_mbt_mt = (0+0) * (1);
+static const int H5_mbt_lrm = (0+0) * (1);
+static const int H5_mbt_mbm = (0+0) * (1);
+static const int H5_mbt_rG = (0+0) * (1);
+static const int H5_mbt_mwG = (0+0) * (1);
 static const int H5_mbt_hA = (24+0) * (1);
 static const int H5_mbt_hB = (24+0) * (1);
 static const int H5_mbt_hC = (24+0) * (1);
@@ -94,11 +94,7 @@ static const long long H5_mbt_t_Volume = tc_vmul(1, 1); // 1
 
 #define H5_mbt_USES(X) X(st) X(ca) X(cb) X(en) X(cc) X(td) X(c1) X(nsk)
 
-struct H5_mbt_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H5_mbt_T {
   cm_cnt2 H5_mbt_A[tc_rows(H5_mbt_a_Volume, H5_mbt_hA) * H_mbt_ND];
   cm_cnt2 H5_mbt_B[tc_rows(H5_mbt_b_Volume, H5_mbt_hB) * H_mbt_ND];
   cm_cnt2 H5_mbt_C[tc_rows(H5_mbt_c_Volume, H5_mbt_hC) * H_mbt_ND];
@@ -135,8 +131,6 @@ struct H5_mbt_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H5_mbt_n_Volume, H5_mbt_hN) * H_mbt_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H5_mbt_n_Volume, H5_mbt_hN) * H_mbt_MND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H5_mbt_g_Volume * H_mbt_NG);
-  void H5_mbt_Init( void ) {
-  
-  }
+  void H5_mbt_Init( void ) {}
   void H5_mbt_Quit( void ) {}
 };

@@ -36,11 +36,7 @@ static const int H7_mvg_rJ = (128+0) * (1);
 static const int H7_mvg_rK = (255+0) * (1);
 static const int H7_mvg_rL = (254+0) * (1);
 static const int H7_mvg_rD = (255+0) * (1);
-static const int H7_mvg_rT = (0+0) * (1);
-static const int H7_mvg_rG = (0+0) * (1);
 static const int H7_mvg_lr = (14+0) * (1);
-static const int H7_mvg_lrm = (0+0) * (1);
-static const int H7_mvg_mbm = (0+0) * (1);
 static const int H7_mvg_mwA = (6+0) * (1);
 static const int H7_mvg_mwB = (66+0) * (1);
 static const int H7_mvg_mwC = (10+0) * (1);
@@ -51,10 +47,14 @@ static const int H7_mvg_mwJ = (15+0) * (1);
 static const int H7_mvg_mwK = (145+0) * (1);
 static const int H7_mvg_mwL = (64+0) * (1);
 static const int H7_mvg_mwD = (8+0) * (1);
-static const int H7_mvg_mwT = (0+0) * (1);
-static const int H7_mvg_mwG = (0+0) * (1);
-static const int H7_mvg_mt = (0+0) * (1);
 static const int H7_mvg_mb = (130+0) * (1);
+static const int H7_mvg_rT = (0+0) * (1);
+static const int H7_mvg_mwT = (0+0) * (1);
+static const int H7_mvg_mt = (0+0) * (1);
+static const int H7_mvg_lrm = (0+0) * (1);
+static const int H7_mvg_mbm = (0+0) * (1);
+static const int H7_mvg_rG = (0+0) * (1);
+static const int H7_mvg_mwG = (0+0) * (1);
 static const int H7_mvg_hA = (24+0) * (1);
 static const int H7_mvg_hB = (24+0) * (1);
 static const int H7_mvg_hC = (24+0) * (1);
@@ -90,11 +90,7 @@ static const long long H7_mvg_w_Volume = tc_vmul(1, 7); // 7
 
 #define H7_mvg_USES(X) X(comp) X(zs) X(mag) X(ds) X(sa) X(sb) X(ns) X(lst) X(ox)
 
-struct H7_mvg_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H7_mvg_T {
   cm_cnt2 H7_mvg_A[tc_rows(H7_mvg_a_Volume, H7_mvg_hA) * H_mvg_ND];
   cm_cnt2 H7_mvg_B[tc_rows(H7_mvg_b_Volume, H7_mvg_hB) * H_mvg_ND];
   cm_cnt2 H7_mvg_C[tc_rows(H7_mvg_c_Volume, H7_mvg_hC) * H_mvg_ND];
@@ -143,8 +139,6 @@ struct H7_mvg_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H_mvg_ND * 5 * 4)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H_mvg_ND * 5)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H7_mvg_g_Volume * H_mvg_NG);
-  void H7_mvg_Init( void ) {
-  
-  }
+  void H7_mvg_Init( void ) {}
   void H7_mvg_Quit( void ) {}
 };

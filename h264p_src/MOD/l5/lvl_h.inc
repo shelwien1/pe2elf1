@@ -54,7 +54,6 @@ static const int H5_lvl_rK = (253+0) * (1);
 static const int H5_lvl_rL = (255+0) * (1);
 static const int H5_lvl_rD = (255+0) * (1);
 static const int H5_lvl_rT = (130+0) * (1);
-static const int H5_lvl_rG = (0+0) * (1);
 static const int H5_lvl_lr = (13+0) * (1);
 static const int H5_lvl_lrm = (0+0) * (1);
 static const int H5_lvl_mbm = (0+0) * (1);
@@ -69,9 +68,10 @@ static const int H5_lvl_mwK = (96+0) * (1);
 static const int H5_lvl_mwL = (63+0) * (1);
 static const int H5_lvl_mwD = (64+0) * (1);
 static const int H5_lvl_mwT = (50+0) * (1);
-static const int H5_lvl_mwG = (0+0) * (1);
 static const int H5_lvl_mt = (0+0) * (1);
 static const int H5_lvl_mb = (37+0) * (1);
+static const int H5_lvl_rG = (0+0) * (1);
+static const int H5_lvl_mwG = (0+0) * (1);
 static const int H5_lvl_hA = (24+0) * (1);
 static const int H5_lvl_hB = (24+0) * (1);
 static const int H5_lvl_hC = (24+0) * (1);
@@ -104,11 +104,7 @@ static const long long H5_lvl_t_Volume = tc_vmul(1, 1); // 1
 
 #define H5_lvl_USES(X) X(cg) X(e1) X(nc) X(pos) X(tot) X(hv) X(fq) X(sa) X(sb) X(q6) X(lh) X(md) X(pg) X(lt) X(g1) X(tz)
 
-struct H5_lvl_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H5_lvl_T {
   cm_cnt2 H5_lvl_A[tc_rows(H5_lvl_a_Volume, H5_lvl_hA) * H_lvl_ND];
   cm_cnt2 H5_lvl_B[tc_rows(H5_lvl_b_Volume, H5_lvl_hB) * H_lvl_ND];
   cm_cnt2 H5_lvl_C[tc_rows(H5_lvl_c_Volume, H5_lvl_hC) * H_lvl_ND];
@@ -145,8 +141,6 @@ struct H5_lvl_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H5_lvl_n_Volume, H5_lvl_hN) * H_lvl_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H5_lvl_n_Volume, H5_lvl_hN) * H_lvl_MND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H5_lvl_g_Volume * H_lvl_NG);
-  void H5_lvl_Init( void ) {
-  
-  }
+  void H5_lvl_Init( void ) {}
   void H5_lvl_Quit( void ) {}
 };

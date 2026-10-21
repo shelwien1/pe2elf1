@@ -18,19 +18,19 @@ static const int H1_qpg_rA = (253+0) * (1);
 static const int H1_qpg_rB = (201+0) * (1);
 static const int H1_qpg_rC = (254+0) * (1);
 static const int H1_qpg_rD = (254+0) * (1);
-static const int H1_qpg_rT = (0+0) * (1);
-static const int H1_qpg_rG = (0+0) * (1);
 static const int H1_qpg_lr = (15+0) * (1);
-static const int H1_qpg_lrm = (0+0) * (1);
-static const int H1_qpg_mbm = (0+0) * (1);
 static const int H1_qpg_mwA = (1+0) * (1);
 static const int H1_qpg_mwB = (21+0) * (1);
 static const int H1_qpg_mwC = (8+0) * (1);
 static const int H1_qpg_mwD = (0+0) * (1);
-static const int H1_qpg_mwT = (0+0) * (1);
-static const int H1_qpg_mwG = (0+0) * (1);
-static const int H1_qpg_mt = (0+0) * (1);
 static const int H1_qpg_mb = (192+0) * (1);
+static const int H1_qpg_rT = (0+0) * (1);
+static const int H1_qpg_mwT = (0+0) * (1);
+static const int H1_qpg_mt = (0+0) * (1);
+static const int H1_qpg_lrm = (0+0) * (1);
+static const int H1_qpg_mbm = (0+0) * (1);
+static const int H1_qpg_rG = (0+0) * (1);
+static const int H1_qpg_mwG = (0+0) * (1);
 static const int H1_qpg_hA = (24+0) * (1);
 static const int H1_qpg_hB = (24+0) * (1);
 static const int H1_qpg_hC = (24+0) * (1);
@@ -51,11 +51,7 @@ static const long long H1_qpg_t_Volume = tc_vmul(1, 1); // 1
 
 #define H1_qpg_USES(X) X(mag) X(ss) X(cls) X(st) X(ls) X(cs) X(bs) X(bk)
 
-struct H1_qpg_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
+struct H1_qpg_T {
   cm_cnt2s H1_qpg_A[tc_rows(H1_qpg_a_Volume, H1_qpg_hA) * H_qpg_ND];
   cm_cnt2s H1_qpg_B[tc_rows(H1_qpg_b_Volume, H1_qpg_hB) * H_qpg_ND];
   cm_cnt2s H1_qpg_C[tc_rows(H1_qpg_c_Volume, H1_qpg_hC) * H_qpg_ND];
@@ -80,8 +76,6 @@ struct H1_qpg_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H1_qpg_n_Volume, H1_qpg_hN) * H_qpg_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H1_qpg_n_Volume, H1_qpg_hN) * H_qpg_MND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H1_qpg_g_Volume * H_qpg_NG);
-  void H1_qpg_Init( void ) {
-  
-  }
+  void H1_qpg_Init( void ) {}
   void H1_qpg_Quit( void ) {}
 };
