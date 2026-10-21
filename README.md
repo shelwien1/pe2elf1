@@ -106,13 +106,15 @@ Where stderr is a terminal (or with `-p`), `c` and `d` show their progress
 there, on a line put over itself every half second:
 
     [enc] 1441792 > 983051   37.3%   0.47 MB/s  180.01M RAM
-    [enc] 3866640 > 2736446  100.0%  done in 11.89s  193.72M RAM
+    [enc] 3866640 > 2736446  100.0%  done in 11.89s  193.72M RAM at most
 
 the bytes of the stream and of the compressed stream done so far (`dec`:
 the same way round, the stream written from the compressed stream read),
 how far through its input the call is (none for a pipe, whose size is not
-known), the speed (MB of the stream a second) and the most memory the
-process has had; and at the end, how long it took. With `-t`, the workers
+known), the speed (MB of the stream a second) and the memory the process
+has (its resident set); and at the end, how long it took and the most
+memory it had. (On systems other than Linux and Windows, the line shows
+the most throughout.) With `-t`, the workers
 put the line as they code (the counts are theirs), since the main thread
 mostly waits on them. A message (an error, `-v`'s) starts on a line of its
 own, and after an error the line is not put again.

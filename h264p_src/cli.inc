@@ -17,8 +17,9 @@ struct Options {
 // Progress on stderr, as c and d go: a line put over itself every half
 // second -- the bytes of the stream (raw) and of the compressed stream
 // (packed) done so far, how far through its input the call is, the speed
-// (of the stream) and the memory (the most the process has had) -- and at
-// the end, how long it all took. When stderr is a terminal, or with -p.
+// (of the stream) and the memory the process has now (its resident set)
+// -- and at the end, how long it all took and the most memory it had.
+// When stderr is a terminal, or with -p.
 // what() gives the counts; poll() puts a line if one is due, from any
 // thread (with -t, the workers', as they code: the main thread waits on
 // them). Messages go through say() (below), which puts them after the
@@ -51,9 +52,9 @@ struct Progress {
     double mbs = raw / (t * 1e-9) / (1 << 20);
     char b[192];
     int n = total ? snprintf(b, sizeof b, "[%s] %" PRIu64 " > %" PRIu64 "  %5.1f%%  %5.2f MB/s  %5.2fM RAM", tag, raw,
-                             packed, std::min(100.0, 100.0 * pos / total), mbs, ram())
+                             packed, std::min(100.0, 100.0 * pos / total), mbs, ram(false))
                   : snprintf(b, sizeof b, "[%s] %" PRIu64 " > %" PRIu64 "  %5.2f MB/s  %5.2fM RAM", tag, raw, packed,
-                             mbs, ram());
+                             mbs, ram(false));
     std::lock_guard<std::mutex> g(lock);
     if (!halted) show(b, n, "");
   }
@@ -62,8 +63,8 @@ struct Progress {
     if (!tag || halted) return;
     double s = std::chrono::duration<double>(clk::now() - t0).count();
     char b[192];
-    int n = snprintf(b, sizeof b, "[%s] %" PRIu64 " > %" PRIu64 "  100.0%%  done in %.2fs  %5.2fM RAM", tag, raw, packed,
-                     s, ram());
+    int n = snprintf(b, sizeof b, "[%s] %" PRIu64 " > %" PRIu64 "  100.0%%  done in %.2fs  %5.2fM RAM at most", tag, raw,
+                     packed, s, ram(true));
     std::lock_guard<std::mutex> g(lock);
     show(b, n, "\n");
     up = false;
@@ -101,12 +102,23 @@ struct Progress {
     len = n;
     up = true;
   }
-  // the most memory the process has had (its resident set), in MB
-  static double ram() {
+  // the memory the process has (its resident set), in MB: now, or (peak)
+  // the most it has had. (Where only the most is known, that.)
+  static double ram(bool peak) {
 #ifdef _WIN32
     PROCESS_MEMORY_COUNTERS m;
-    return GetProcessMemoryInfo(GetCurrentProcess(), &m, sizeof m) ? m.PeakWorkingSetSize / 1048576.0 : 0.0;
+    if (!GetProcessMemoryInfo(GetCurrentProcess(), &m, sizeof m)) return 0;
+    return (peak ? m.PeakWorkingSetSize : m.WorkingSetSize) / 1048576.0;
 #else
+#ifdef __linux__
+    if (!peak) {
+      long size, res;  // (pages)
+      FILE* f = fopen("/proc/self/statm", "r");
+      bool ok = f && fscanf(f, "%ld %ld", &size, &res) == 2;
+      if (f) fclose(f);
+      if (ok) return res * (double)sysconf(_SC_PAGESIZE) / 1048576.0;
+    }
+#endif
     struct rusage u;
     if (getrusage(RUSAGE_SELF, &u)) return 0;
 #ifdef __APPLE__
