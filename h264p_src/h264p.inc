@@ -36,6 +36,7 @@
 #ifdef _WIN32
 #include <fcntl.h>
 #include <io.h>
+#include <process.h>
 #include <windows.h>
 #define PSAPI_VERSION 2  // (GetProcessMemoryInfo from kernel32)
 #include <psapi.h>
