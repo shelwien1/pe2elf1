@@ -386,7 +386,8 @@ template <int f_DEC, class C> struct tc_fam {
   //  (No -Wmaybe-uninitialized here: cnt_inputs sets the counters' vectors
   //  and cnt_update reads them, both where cn_v, but GCC at -O3 with AVX2
   //  cannot tell that the coding in between leaves cn_v as it was. Reading
-  //  cn_v once instead, so that it could, made -1 3% slower.)
+  //  cn_v once instead, so that it could, ran 0.05% more instructions at -1
+  //  and measured up to 3% slower there: h264p_review.md, A8.)
 #if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
