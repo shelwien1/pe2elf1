@@ -3311,7 +3311,12 @@ struct Model : tc_rc<f_DEC> {
 template <int f_DEC, class LV>
 struct ModelChan : Chan {
   static constexpr int ENC = f_DEC == 0;
-  ModelChan(Model<f_DEC, LV>& m, LogChan* log) : Chan(true), m_(m), log_(log) {}
+  // (log: coding, the dry run's values)
+  void Init(Model<f_DEC, LV>& m, LogChan* log) {
+    W = true;
+    m_ = &m;
+    log_ = log;
+  }
   // how the walk codes the bins with the model: coding, they are dropped,
   // so it need not code them (where the level reads the CABAC states,
   // those still follow the bins); decoding, they are the stream's
@@ -3322,46 +3327,46 @@ struct ModelChan : Chan {
     return p;
   }
 
-  void hbegin(const char* name) override { m_.hbegin(name); }
-  void hbits(int n) override { m_.hbits(n); }
-  int64_t hval(int64_t) override { return m_.hval(ENC ? log_->hval(0) : 0); }
-  void hbytes(std::vector<uint8_t>& b) override {
-    if (ENC) log_->hbytes(b);
-    for (auto& x : b) x = (uint8_t)m_.raw(x);
+  void hbegin(const char* name) override { m_->hbegin(name); }
+  void hbits(int n) override { m_->hbits(n); }
+  int64_t hval(int64_t) override { return m_->hval(ENC ? log_->hval(0) : 0); }
+  void hbytes(uint8_t* b, size_t n) override {
+    if (ENC) log_->hbytes(b, n);
+    for (size_t i = 0; i < n; i++) b[i] = (uint8_t)m_->raw(b[i]);
   }
   void hend() override {}
-  bool hmore(const char* next, bool) override { return m_.hmore(next, ENC && log_->hmore(next, false)); }
-  void slice_begin(WalkState& ws) override { m_.slice_begin(ws); }
-  void slice_end() override { m_.slice_end(); }
-  int skip(int) override { return m_.skip(ENC ? log_->skip(0) : 0); }
-  int end(int, bool certain) override { return m_.end(ENC ? log_->end(0, certain) : 0, certain); }
-  void mb_begin() override { m_.mb_begin(); }
-  void mb_end() override { m_.mb_end(); }
-  int field(int) override { return m_.field(ENC ? log_->field(0) : 0); }
-  int mb_type(int) override { return m_.mb_type(ENC ? log_->mb_type(0) : 0); }
-  int t8x8(int) override { return m_.t8x8(ENC ? log_->t8x8(0) : 0); }
-  int ipm(int blk, int) override { return m_.ipm(blk, ENC ? log_->ipm(blk, 0) : 0); }
-  int cpred(int) override { return m_.cpred(ENC ? log_->cpred(0) : 0); }
-  int sub(int i, int) override { return m_.sub(i, ENC ? log_->sub(i, 0) : 0); }
+  bool hmore(const char* next, bool) override { return m_->hmore(next, ENC && log_->hmore(next, false)); }
+  void slice_begin(WalkState& ws) override { m_->slice_begin(ws); }
+  void slice_end() override { m_->slice_end(); }
+  int skip(int) override { return m_->skip(ENC ? log_->skip(0) : 0); }
+  int end(int, bool certain) override { return m_->end(ENC ? log_->end(0, certain) : 0, certain); }
+  void mb_begin() override { m_->mb_begin(); }
+  void mb_end() override { m_->mb_end(); }
+  int field(int) override { return m_->field(ENC ? log_->field(0) : 0); }
+  int mb_type(int) override { return m_->mb_type(ENC ? log_->mb_type(0) : 0); }
+  int t8x8(int) override { return m_->t8x8(ENC ? log_->t8x8(0) : 0); }
+  int ipm(int blk, int) override { return m_->ipm(blk, ENC ? log_->ipm(blk, 0) : 0); }
+  int cpred(int) override { return m_->cpred(ENC ? log_->cpred(0) : 0); }
+  int sub(int i, int) override { return m_->sub(i, ENC ? log_->sub(i, 0) : 0); }
   int ref(int list, int x, int y, int w, int h, int) override {
-    return m_.ref(list, x, y, w, h, ENC ? log_->ref(list, x, y, w, h, 0) : 0);
+    return m_->ref(list, x, y, w, h, ENC ? log_->ref(list, x, y, w, h, 0) : 0);
   }
   int mvd(int list, int comp, int x, int y, int w, int h, int) override {
-    return m_.mvd(list, comp, x, y, w, h, ENC ? log_->mvd(list, comp, x, y, w, h, 0) : 0);
+    return m_->mvd(list, comp, x, y, w, h, ENC ? log_->mvd(list, comp, x, y, w, h, 0) : 0);
   }
-  int cbp(int) override { return m_.cbp(ENC ? log_->cbp(0) : 0); }
-  int qpd(int) override { return m_.qpd(ENC ? log_->qpd(0) : 0); }
+  int cbp(int) override { return m_->cbp(ENC ? log_->cbp(0) : 0); }
+  int qpd(int) override { return m_->qpd(ENC ? log_->qpd(0) : 0); }
   void block(int cat, int idx, int* c, int n, bool coded) override {
     if (ENC) log_->block(cat, idx, c, n, coded);
-    m_.block(cat, idx, c, n, coded);
+    m_->block(cat, idx, c, n, coded);
   }
   void pcm(int& align, int& nb, int* s, int n) override {
     if (ENC) log_->pcm(align, nb, s, n);
-    m_.pcm(align, nb, s, n);
+    m_->pcm(align, nb, s, n);
   }
   [[noreturn]] void fail(const char* why) override { err_raise("%s%s", ENC ? "internal: " : "corrupt stream: ", why); }
 
-  Model<f_DEC, LV>& m_;
+  Model<f_DEC, LV>* m_;
   LogChan* log_;
 };
 

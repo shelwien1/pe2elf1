@@ -56,34 +56,62 @@ struct H264pArgs {
 // for the bins).
 struct DryRun {
   Trailer t;
-  std::string why;
-  LogChan log;
+  char why[kWhy];
+  ValueLog log;
   BinRec rec;
-  bool checked = false;  // the model pass checks it
-  std::vector<uint8_t> rbsp;
+  bool checked;            // the model pass checks it
+  Buf<uint8_t> rbsp, esc;  // the RBSP; escaped again, to compare
+  BitWriter bw, o;         // the NAL unit written back (and by the model pass); find_trailer()'s
+
+  void Init() {
+    t.Init();
+    why[0] = 0;
+    log.Init();
+    rec.Init();
+    checked = false;
+    rbsp.Init();
+    esc.Init();
+    bw.Init();
+    o.Init();
+  }
+  void Quit() {
+    t.Quit();
+    log.Quit();
+    rec.Quit();
+    rbsp.Quit();
+    esc.Quit();
+    bw.Quit();
+    o.Quit();
+  }
 
   bool run(const NalHead& h, Context& ctx, bool check, int& obs) {
     obs = -1;
     checked = false;
-    if (!nal_rbsp(h, ctx, rbsp, why)) return false;
+    if (!nal_rbsp(h, ctx, rbsp, esc, why)) return false;
     log.clear();
+    LogChan ch;
+    ch.Init(log, false);
     BinPolicy bp;
     if (check) rec.clear(), bp.rec = &rec;
     int pad;
     ErrTrap e;  // (an error: the NAL unit is stored verbatim)
     if (setjmp(e.jb)) {
-      why = e.why;
+      set_why(why, "%s", e.why);
       return false;
     }
     err_push(e);
-    pad = read_nal(h.type, h.ref_idc, rbsp, ctx, log, bp);
+    pad = read_nal(h.type, h.ref_idc, rbsp, ctx, ch, bp);
     err_pop(e);
-    if (check && rec.slice && rec.stops && find_trailer(BitWriter(rbsp.data(), rec.end), pad, rbsp, t, why, obs)) {
-      checked = true;
-      return true;
+    if (check && rec.slice && rec.stops) {
+      bw.set(rbsp.data(), rec.end);
+      if (find_trailer(bw, pad, rbsp, t, why, obs, o)) {
+        checked = true;
+        return true;
+      }
     }
     log.rewind();
-    return write_back(h, ctx, log, rbsp, t, why, obs);
+    ch.Init(log, true);
+    return write_back(h, ctx, ch, rbsp, t, why, obs, bw, o);
   }
 };
 
@@ -91,9 +119,9 @@ struct DryRun {
 // whether what it wrote (bw) is the RBSP up to its stop bit. Without its
 // CABAC bins (nobins), it wrote the bits outside the runs of CABAC data, and
 // checked the bins against those recorded.
-bool checked_bits(const BitWriter& bw, bool nobins, const BinRec& rec, const std::vector<uint8_t>& rbsp) {
+bool checked_bits(const BitWriter& bw, bool nobins, const BinRec& rec, const Buf<uint8_t>& rbsp) {
   if (rec.bad || !rec.slice || (rec.segs.size() & 1)) return false;
-  if (!nobins || rec.segs.empty()) return bw == BitWriter(rbsp.data(), rec.end);
+  if (!nobins || rec.segs.empty()) return bw.same(rbsp.data(), rec.end);
   size_t k = 0, from = 0;
   for (size_t i = 0; i < rec.segs.size(); i += 2) {
     for (size_t b = from; b < rec.segs[i]; b++, k++)
@@ -105,23 +133,24 @@ bool checked_bits(const BitWriter& bw, bool nobins, const BinRec& rec, const std
 
 // CRC-32 (IEEE) of the stream, coded at the end of a compressed one
 struct Crc32 {
-  Crc32() {
+  void Init() {
     for (uint32_t i = 0; i < 256; i++) {
       uint32_t x = i;
       for (int k = 0; k < 8; k++) x = x & 1 ? 0xEDB88320u ^ (x >> 1) : x >> 1;
       t[i] = x;
     }
+    c = 0xFFFFFFFFu;
   }
   void add(const uint8_t* p, size_t n) {
     for (size_t i = 0; i < n; i++) c = t[(c ^ p[i]) & 255] ^ (c >> 8);
   }
-  void add(const std::vector<uint8_t>& v) { add(v.data(), v.size()); }
+  void add(const Buf<uint8_t>& v) { add(v.data(), v.size()); }
   void zeros(size_t n) {
     for (size_t i = 0; i < n; i++) c = t[c & 255] ^ (c >> 8);
   }
   uint32_t value() const { return ~c; }
   uint32_t t[256];
-  uint32_t c = 0xFFFFFFFFu;
+  uint32_t c;
 };
 
 void cm_report(const tc_rc<0>& e, u64 in_bytes, u64 out_bytes, u64 tables) {
@@ -181,16 +210,46 @@ struct CompressState {
   Stats st;
   DryRun dr;
   HistBound hist;
-  std::vector<uint8_t> nal;
+  Buf<uint8_t> nal;
   AnnexBReader rd;  // the input
-  explicit CompressState(ByteSource in) : rd(in) {}
+
+  void Init(ByteSource in) {
+    crc.Init();
+    dr.Init();
+    nal.Init();
+    rd.Init(in);
+  }
+  void Quit() {
+    dr.Quit();
+    nal.Quit();
+    rd.Quit();
+  }
 };
 
 // and a decompression
 struct DecompressState {
   Context ctx;
   Crc32 crc;
-  std::vector<uint8_t> buf;  // the stream decoded, not yet written
+  Buf<uint8_t> buf;      // the stream decoded, not yet written
+  Buf<uint8_t> b, rbsp;  // a NAL unit stored verbatim, and its RBSP
+  BitWriter bw;          // a NAL unit's RBSP written
+  Trailer t;             // and how it ends
+
+  void Init() {
+    crc.Init();
+    buf.Init();
+    b.Init();
+    rbsp.Init();
+    bw.Init();
+    t.Init();
+  }
+  void Quit() {
+    buf.Quit();
+    b.Quit();
+    rbsp.Quit();
+    bw.Quit();
+    t.Quit();
+  }
 };
 
 // The model pass of a NAL unit that parsed (h, its dry run's in s.dr):
@@ -201,10 +260,14 @@ bool compress_parsed(Model<0, LV>& m, CompressState& s, const NalHead& h) {
   DryRun& dr = s.dr;
   const Trailer& t = dr.t;
   dr.log.rewind();
-  ModelChan<0, LV> ch(m, &dr.log);
+  LogChan log;
+  log.Init(dr.log, true);
+  ModelChan<0, LV> ch;
+  ch.Init(m, &log);
   BinPolicy bp = ch.policy();
   m.nal_begin(h.type, h.ref_idc);
-  BitWriter bw;
+  BitWriter& bw = dr.bw;
+  bw.clear();
   if (dr.checked) {
     // (whatever fails, the NAL unit would not come out as it is)
     bp.rec = &dr.rec;
@@ -213,16 +276,16 @@ bool compress_parsed(Model<0, LV>& m, CompressState& s, const NalHead& h) {
     err_push(e);
     write_syntax(h.type, h.ref_idc, s.ctx, ch, bw, bp);
     err_pop(e);
-    if (!dr.log.at_end() || !checked_bits(bw, bp.nobins, dr.rec, dr.rbsp)) return false;
+    if (!log.at_end() || !checked_bits(bw, bp.nobins, dr.rec, dr.rbsp)) return false;
   } else {
     write_syntax(h.type, h.ref_idc, s.ctx, ch, bw, bp);
-    if (!dr.log.at_end()) cm_fail("internal: values left over");
+    if (!log.at_end()) cm_fail("internal: values left over");
   }
   m.nal(F_TRAIL, h.type, t.irregular);
   if (t.irregular) {
     m.nal(F_DROP, 0, t.drop);
     m.nal(F_NBITS, 0, (i64)t.bits.size());
-    for (char c : t.bits) m.nal(F_TBIT, 0, c - '0');
+    for (uint8_t b : t.bits) m.nal(F_TBIT, 0, b);
   }
   m.nal(F_CZW, h.type, t.czw);
   s.st.parsed++;
@@ -236,7 +299,7 @@ bool compress_parsed(Model<0, LV>& m, CompressState& s, const NalHead& h) {
 // padding moves on to the next slice after both). 0, or 1 after an error
 // (reported).
 template <class LV>
-int compress_nal(Model<0, LV>& m, CompressState& s, const H264pArgs& a, const std::vector<uint8_t>& nal, size_t zeros,
+int compress_nal(Model<0, LV>& m, CompressState& s, const H264pArgs& a, const Buf<uint8_t>& nal, size_t zeros,
                  int& prev_type) {
   static const uint8_t sc[3] = {0, 0, 1};
   Stats& st = s.st;
@@ -259,7 +322,7 @@ int compress_nal(Model<0, LV>& m, CompressState& s, const H264pArgs& a, const st
   bool ok = s.dr.run(h, ctx, a.check, obs);
   if (ok && h.slice && !s.hist.fits(ctx.slice_kind, ctx.slice_mbs)) {
     ok = false;
-    s.dr.why = "the model's records of the kinds of picture would pass " + std::to_string(H264P_HIST_MB) + " MB";
+    set_why(s.dr.why, "the model's records of the kinds of picture would pass %lld MB", (long long)H264P_HIST_MB);
   }
   bool padchg = ok && repad(s.det, obs, ctx.pad);
   if (padchg) {
@@ -312,10 +375,10 @@ int compress_stream(Model<0, LV>& m, CompressState& s, const H264pArgs& a) {
   m.init();
   m.tc_verbose = a.verbose;
   m.rc_Init();
-  std::vector<uint8_t>& nal = s.nal;
+  Buf<uint8_t>& nal = s.nal;
   size_t zeros;
   bool more = rd.next(zeros, nal);
-  const std::vector<uint8_t>& junk = rd.junk();
+  const Buf<uint8_t>& junk = rd.junk();
   m.nal(F_JUNK, 0, (i64)junk.size());
   for (uint8_t b : junk) m.raw(b);
   crc.add(junk);
@@ -348,7 +411,7 @@ size_t cm_count(i64 v, i64 lim) {
 // decoded (s.buf) and says why.
 template <class LV>
 int decompress_stream(Model<1, LV>& m, DecompressState& s, const H264pArgs& a) {
-  std::vector<uint8_t>& buf = s.buf;
+  Buf<uint8_t>& buf = s.buf;
   Crc32& crc = s.crc;
   long nals = 0;
   auto flush = [&]() {
@@ -385,26 +448,30 @@ int decompress_stream(Model<1, LV>& m, DecompressState& s, const H264pArgs& a) {
         ctx.pad.on = false;
     }
     if (!parsed_type(type) || m.nal(F_VERB, type, 0)) {
-      std::vector<uint8_t> b;  // grown as the bytes come: the length may be corrupt
+      Buf<uint8_t>& b = s.b;  // grown as the bytes come: the length may be corrupt
+      b.clear();
       for (size_t n = cm_count(m.nal(F_LEN, type, 0), (i64)1 << 40); n; n--) b.push_back((uint8_t)m.raw(0));
-      put_verbatim(buf, type, b, ctx);
+      put_verbatim(buf, type, b, ctx, s.rbsp);
     } else {
-      ModelChan<1, LV> ch(m, nullptr);
+      ModelChan<1, LV> ch;
+      ch.Init(m, nullptr);
       m.nal_begin(type, ref_idc);
-      BitWriter bw;
+      BitWriter& bw = s.bw;
+      bw.clear();
       int pad = write_syntax(type, ref_idc, ctx, ch, bw, ch.policy());
-      Trailer t;
+      Trailer& t = s.t;
+      t.reset();
       t.irregular = m.nal(F_TRAIL, type, 0) != 0;
       if (t.irregular) {
         t.drop = (int64_t)cm_count(m.nal(F_DROP, 0, 0), (i64)bw.pos());
         t.bits.resize(cm_count(m.nal(F_NBITS, 0, 0), 1 << 16));
-        for (auto& c : t.bits) c = (char)('0' + cm_count(m.nal(F_TBIT, 0, 0), 1));
+        for (uint8_t& b : t.bits) b = (uint8_t)cm_count(m.nal(F_TBIT, 0, 0), 1);
         if ((bw.pos() - (size_t)t.drop + t.bits.size()) & 7) cm_fail("corrupt stream: trailing bits");
       }
       t.czw = (int64_t)cm_count(m.nal(F_CZW, type, 0), 1 << 26);
       apply_trailer(t, bw, pad);
-      std::vector<uint8_t> e = escape(bw.data());
-      buf.insert(buf.end(), e.begin(), e.end());
+      const Buf<uint8_t>& e = bw.data();
+      escape(e.data(), e.size(), buf);
     }
     ctx.done(type, buf.data() + start, buf.size() - start);
     spill();

@@ -13,8 +13,12 @@
 // A trap is set with setjmp() in the function that holds it (err_push()
 // after it, err_pop() before it is left), and the jump to it skips what
 // the frames between would destroy: they hold nothing that must be
-// destroyed. Code outside a run raises nothing, so that a trap a
-// suspended coroutine set is never jumped to.
+// destroyed. The traps are those of the coroutine that set them: as it
+// yields, they are put aside (err_hold(), rcio.inc), so that an error
+// outside it never jumps into it.
+//
+// Running out of memory (mem.inc) is an error of the run, not of what it
+// was parsing: err_fatal() jumps to the outermost trap.
 
 namespace h264p {
 
@@ -64,5 +68,24 @@ INLINE void err_pop(ErrTrap& t) { err_trap_ = t.up; }
   va_end(ap);
   err_raise_s(why);
 }
+// an error to the outermost trap (the run's), past those set since
+[[noreturn]] NOINLINE void err_fatal(const char* why) {
+  ErrTrap* t = err_trap_;
+  while (t && t->up) t = t->up;
+  if (!t) {
+    fprintf(stderr, "h264p: %s\n", why);
+    exit(1);
+  }
+  snprintf(t->why, sizeof t->why, "%s", why);
+  err_jump(*t, 1);
+}
+
+// the traps of a coroutine about to yield, put aside; and back as it goes on
+INLINE ErrTrap* err_hold() {
+  ErrTrap* t = err_trap_;
+  err_trap_ = nullptr;
+  return t;
+}
+INLINE void err_resume(ErrTrap* t) { err_trap_ = t; }
 
 }  // namespace h264p

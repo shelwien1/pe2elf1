@@ -10,23 +10,27 @@ namespace h264p {
 // line after each yield; how it ended (drive())
 template <class C>
 uint run_file(C& c, filehandle f, filehandle g, Progress& pr, uint8_t* pre = nullptr, size_t npre = 0) {
-  std::vector<byte> ib(1 << 16), ob(1 << 16);
+  const uint kIo = 1 << 16;  // the size of the input buffer and of the output buffer
+  byte* ib = (byte*)mem_alloc(2 * kIo);
+  byte* ob = ib + kIo;
   c.coro_init();
-  c.addout(ob.data(), (uint)ob.size());
+  c.addout(ob, kIo);
   if (npre) c.addinp(pre, (uint)npre);
-  return drive(
+  uint r = drive(
       c,
       [&]() {
-        uint l = f.sread(ib.data(), (uint)ib.size());
+        uint l = f.sread(ib, kIo);
         if (!l) c.f_quit = 1;
-        c.addinp(ib.data(), l);
+        c.addinp(ib, l);
       },
       [&](bool more) {
         uint l = c.getoutsize();
         if (l) g.writ(c.outbeg, l);
-        if (more) c.addout(ob.data(), (uint)ob.size());
+        if (more) c.addout(ob, kIo);
       },
       [&]() { pr.poll(); });
+  mem_free(ib);
+  return r;
 }
 
 // A call's progress line, tagged tag, through the input f: shown with -p,

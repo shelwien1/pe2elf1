@@ -7,12 +7,21 @@ namespace h264p {
 // dry_run): where the slice data ends, and with CABAC, the bins as the walk
 // reads them and where the CABAC data is.
 struct BinRec {
-  bool slice = false;         // the walk parsed slice data, up to `end`
-  size_t end = 0;             // the bit after its rbsp_stop_one_bit
-  std::vector<uint8_t> bins;  // 0 or 1 each, then a 2
-  std::vector<size_t> segs;   // each run of CABAC data: its first bit and the one after it, in the RBSP
-  bool stops = true;          // the last bit of each run is 1 (so the run is what an encoder writes)
-  bool bad = false;           // checking: the walk wrote another bin, or fewer
+  bool slice;         // the walk parsed slice data, up to `end`
+  size_t end;         // the bit after its rbsp_stop_one_bit
+  Buf<uint8_t> bins;  // 0 or 1 each, then a 2
+  Buf<size_t> segs;   // each run of CABAC data: its first bit and the one after it, in the RBSP
+  bool stops;         // the last bit of each run is 1 (so the run is what an encoder writes)
+  bool bad;           // checking: the walk wrote another bin, or fewer
+  void Init() {
+    bins.Init();
+    segs.Init();
+    clear();
+  }
+  void Quit() {
+    bins.Quit();
+    segs.Quit();
+  }
   void clear() {
     slice = false;
     end = 0;

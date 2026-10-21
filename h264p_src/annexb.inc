@@ -4,20 +4,22 @@
 
 namespace h264p {
 
-// The RBSP of a NAL unit's payload: its emulation prevention bytes removed
-std::vector<uint8_t> unescape(const uint8_t* p, size_t n) {
-  std::vector<uint8_t> r;
+// The RBSP of a NAL unit's payload (into r): its emulation prevention
+// bytes removed
+void unescape(const uint8_t* p, size_t n, Buf<uint8_t>& r) {
+  r.clear();
   r.reserve(n);
+  uint8_t* q = r.data();
   int zeros = 0;
   for (size_t i = 0; i < n; i++) {
     if (zeros >= 2 && p[i] == 3) {
       zeros = 0;
       continue;
     }
-    r.push_back(p[i]);
+    *q++ = p[i];
     zeros = p[i] ? 0 : zeros + 1;
   }
-  return r;
+  r.n = (size_t)(q - r.data());
 }
 
 // the first start code (00 00 01) in b[0, n) at i or after, n if none
@@ -32,13 +34,13 @@ inline size_t find_start_code(const uint8_t* b, size_t n, size_t i) {
   return n;
 }
 
-// and back: emulation prevention bytes where the standard needs them (one
-// after a final zero byte too), as an encoder writes them
-std::vector<uint8_t> escape(const std::vector<uint8_t>& r) {
-  std::vector<uint8_t> e;
-  e.reserve(r.size() + r.size() / 64 + 2);
+// and back (appended to e): emulation prevention bytes where the standard
+// needs them (one after a final zero byte too), as an encoder writes them
+void escape(const uint8_t* r, size_t n, Buf<uint8_t>& e) {
+  e.room(e.size() + n + n / 64 + 2);
   int zeros = 0;
-  for (uint8_t b : r) {
+  for (size_t i = 0; i < n; i++) {
+    uint8_t b = r[i];
     if (zeros >= 2 && b <= 3) {
       e.push_back(3);
       zeros = 0;
@@ -46,18 +48,28 @@ std::vector<uint8_t> escape(const std::vector<uint8_t>& r) {
     e.push_back(b);
     zeros = b ? 0 : zeros + 1;
   }
-  if (!r.empty() && r.back() == 0) e.push_back(3);
-  return e;
+  if (n && r[n - 1] == 0) e.push_back(3);
 }
 
 // Splits an Annex B byte stream into NAL units while reading it.
 struct AnnexBReader {
-  explicit AnnexBReader(ByteSource src) : src_(src) {}
+  void Init(ByteSource src) {
+    src_ = src;
+    buf_.Init();
+    junk_.Init();
+    head_ = scan_ = 0;
+    zeros_ = eof_zeros_ = 0;
+    started_ = done_ = false;
+  }
+  void Quit() {
+    buf_.Quit();
+    junk_.Quit();
+  }
 
   // The next NAL unit: the 0x00 bytes before its start code (zero_byte, and
   // the trailing_zero_8bits of the previous NAL unit), and its bytes up to
   // the zero bytes before the next start code. False at the end.
-  bool next(size_t& zeros, std::vector<uint8_t>& nal) {
+  bool next(size_t& zeros, Buf<uint8_t>& nal) {
     if (done_) return false;
     size_t k;
     if (!started_) {
@@ -68,7 +80,7 @@ struct AnnexBReader {
       }
       size_t j = k;
       while (j > 0 && buf_[j - 1] == 0) j--;
-      junk_.assign(buf_.begin(), buf_.begin() + j);
+      junk_.assign(buf_.data(), j);
       zeros_ = k - j;
       started_ = true;
       head_ = scan_ = k + 3;
@@ -77,7 +89,7 @@ struct AnnexBReader {
     if (last) k = buf_.size();
     size_t e = k;
     while (e > head_ && buf_[e - 1] == 0) e--;
-    nal.assign(buf_.begin() + head_, buf_.begin() + e);
+    nal.assign(buf_.data() + head_, e - head_);
     zeros = zeros_;
     if (last) {
       eof_zeros_ = k - e;
@@ -89,7 +101,7 @@ struct AnnexBReader {
     return true;
   }
   // bytes before the first start code (all bytes if there is none)
-  const std::vector<uint8_t>& junk() const { return junk_; }
+  const Buf<uint8_t>& junk() const { return junk_; }
   // 0x00 bytes after the last NAL unit
   size_t eof_zeros() const { return eof_zeros_; }
 
@@ -101,7 +113,7 @@ struct AnnexBReader {
       scan_ = buf_.size() > 2 ? buf_.size() - 2 : 0;
       if (scan_ < head_) scan_ = head_;
       // drop what was returned before reading more
-      buf_.erase(buf_.begin(), buf_.begin() + head_);
+      buf_.erase_front(head_);
       scan_ -= head_;
       head_ = 0;
       size_t old = buf_.size();
@@ -113,11 +125,11 @@ struct AnnexBReader {
   }
 
   ByteSource src_;
-  std::vector<uint8_t> buf_, junk_;
-  size_t head_ = 0;  // start of the current NAL unit in buf_
-  size_t scan_ = 0;  // where to look for the next start code
-  size_t zeros_ = 0, eof_zeros_ = 0;
-  bool started_ = false, done_ = false;
+  Buf<uint8_t> buf_, junk_;
+  size_t head_;  // start of the current NAL unit in buf_
+  size_t scan_;  // where to look for the next start code
+  size_t zeros_, eof_zeros_;
+  bool started_, done_;
 };
 
 }  // namespace h264p

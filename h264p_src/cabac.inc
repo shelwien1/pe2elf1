@@ -179,7 +179,7 @@ struct CabacEncoder {
     low_ &= (1ull << k) - 1;
     cut_ = k;
     if (out >> 32) carry();
-    std::vector<uint8_t>& b = bw_->buf_;
+    Buf<uint8_t>& b = bw_->buf_;
     size_t i = b.size();
     b.resize(i + 4);
     b[i] = (uint8_t)(out >> 24);
@@ -190,7 +190,7 @@ struct CabacEncoder {
   }
   // 1 added to the bytes written (past 0xff bytes); never before the first
   void carry() {
-    std::vector<uint8_t>& b = bw_->buf_;
+    Buf<uint8_t>& b = bw_->buf_;
     size_t i = b.size();
     while (i > start_ && ++b[--i] == 0) {
     }

@@ -23,9 +23,9 @@ namespace h264p {
 
 struct WalkState;
 
+// (A channel is made where its walk goes, and Init() of its kind sets it
+// up: the vtable aside, it is plain data, and holds no memory of its own.)
 struct Chan {
-  explicit Chan(bool w) : W(w) {}
-  virtual ~Chan() {}
   bool W;  // the walk writes a bitstream: values come from the channel
 
   // --- header syntax: groups of values under a name (a syntax element's, or its group's)
@@ -33,8 +33,8 @@ struct Chan {
   // the next value is a u(n): of n bits (before hval)
   virtual void hbits(int n) { (void)n; }
   virtual int64_t hval(int64_t v) = 0;
-  // bytes; writing, b has the size wanted
-  virtual void hbytes(std::vector<uint8_t>& b) = 0;
+  // n bytes (of a run of them, which comes in pieces)
+  virtual void hbytes(uint8_t* b, size_t n) = 0;
   virtual void hend() = 0;
   // whether more_rbsp_data(): parsing, m; writing, whether a row `next` follows
   virtual bool hmore(const char* next, bool m) = 0;

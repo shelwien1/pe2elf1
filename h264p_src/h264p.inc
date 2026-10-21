@@ -71,9 +71,11 @@
 // threads, -pthread), which runs coroutines on threads (mt.inc)
 #include "MTwrap_v3/MTwrap.inc"
 
-// errors (without C++ exceptions), then the syntax: the bitstream, its walk
-// and the channels it exchanges the values with (the value log, the model)
+// errors (without C++ exceptions) and memory (without the C++ library's
+// containers), then the syntax: the bitstream, its walk and the channels
+// it exchanges the values with (the value log, the model)
 #include "err.inc"
+#include "mem.inc"
 #include "bits.inc"
 #include "tables.inc"
 #include "cabac.inc"

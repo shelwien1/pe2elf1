@@ -65,8 +65,7 @@ struct PartProg {
 // its input and output from in0 and out0 on are the worker's counts, and a
 // line of progress may be due.
 template <class C>
-int run_part(const H264pArgs& a, std::vector<uint8_t>& in, std::vector<uint8_t>& out, PartProg& prog, uint64_t in0,
-             uint64_t out0) {
+int run_part(const H264pArgs& a, Buf<uint8_t>& in, Buf<uint8_t>& out, PartProg& prog, uint64_t in0, uint64_t out0) {
   CoroObj<C> c;
   c->Init(&a);
   size_t pos = 0;
@@ -103,31 +102,29 @@ int run_part(const H264pArgs& a, std::vector<uint8_t>& in, std::vector<uint8_t>&
 template <int f_DEC>
 struct H264pPart : CoroIo {
   H264pArgs args;
-  std::vector<uint8_t>* in_;   // a part, or its record: all of it, read before its model starts
-  std::vector<uint8_t>* out_;  // what the part's model made of it
+  Buf<uint8_t> in_;   // a part, or its record: all of it, read before its model starts
+  Buf<uint8_t> out_;  // what the part's model made of it
   uint64_t parts;              // the parts done
   PartProg prog;               // the input coded so far and the output (the progress line)
 
   uint32_t Init(const H264pArgs* a) {
     coro_init();
     args = *a;
-    in_ = out_ = nullptr;
+    in_.Init();
+    out_.Init();
     parts = 0;
     prog.set(0, 0);
     return 0;
   }
   void Quit() {
-    delete in_;
-    delete out_;
-    in_ = out_ = nullptr;
+    in_.Quit();
+    out_.Quit();
   }
 
   // (an error in a part's model ends that run at its own trap: run_part()
   // returns its status)
   void do_process() {
     io_init();
-    in_ = new std::vector<uint8_t>;
-    out_ = new std::vector<uint8_t>;
     int r = run(std::integral_constant<int, f_DEC>());
     Quit();
     for (;;) yield(static_cast<Coroutine*>(this), r ? 3 : 0);
@@ -140,15 +137,15 @@ struct H264pPart : CoroIo {
   // the next n bytes of the input into in_ (false: there are fewer)
   bool take(uint64_t n) {
     if (n != (size_t)n) return false;
-    in_->resize((size_t)n);
-    return read(in_->data(), (size_t)n) == n;
+    in_.resize((size_t)n);
+    return read(in_.data(), (size_t)n) == n;
   }
   // the part's model run on in_ into out_, at the level of a.level (the
   // counts from in0 and out0 on)
   template <class LV>
   struct Lv {
     static int run(H264pPart& w, const H264pArgs& a, uint64_t in0, uint64_t out0) {
-      return run_part<H264pCoro<f_DEC, LV>>(a, *w.in_, *w.out_, w.prog, in0, out0);
+      return run_part<H264pCoro<f_DEC, LV>>(a, w.in_, w.out_, w.prog, in0, out0);
     }
   };
   int code(const H264pArgs& a, uint64_t in0, uint64_t out0) {
@@ -184,13 +181,13 @@ struct H264pPart : CoroIo {
         r = code(a, in0, out0);
       }
       if (r) return 1;
-      prog.set(in0 + plen, out0 + 16 + out_->size());
-      if (out_->size() > 0xFFFFFFFFu - 16) return fail("a part compressed to 4 GB or more");
-      put_le(h, out_->size() + 16, 4);
+      prog.set(in0 + plen, out0 + 16 + out_.size());
+      if (out_.size() > 0xFFFFFFFFu - 16) return fail("a part compressed to 4 GB or more");
+      put_le(h, out_.size() + 16, 4);
       put_le(h + 4, nins, 4);
       put_le(h + 8, plen, 8);
       write(h, 16);
-      write(out_->data(), out_->size());
+      write(out_.data(), out_.size());
       parts++;
     }
   }
@@ -207,14 +204,14 @@ struct H264pPart : CoroIo {
       uint64_t g_size = get_le(h, 4), nins = get_le(h + 4, 4), plen = get_le(h + 8, 8);
       if (g_size < 16 || !take(g_size - 16)) return fail("a part's record cut short or broken");
       H264pArgs a = args;
-      a.level = cm_level(in_->data(), std::min(in_->size(), sizeof kCmMagic + 1), args.name, args.meter);
+      a.level = cm_level(in_.data(), std::min(in_.size(), sizeof kCmMagic + 1), args.name, args.meter);
       uint64_t in0 = prog.in.load(std::memory_order_relaxed), out0 = prog.out.load(std::memory_order_relaxed);
       if (a.level < 0 || code(a, in0 + 16, out0)) return 1;
       size_t ins, pos;
-      if (out_->size() != plen || !inserted(nins, ins, pos)) return fail("a part did not decompress as it was compressed");
-      prog.set(in0 + g_size, out0 + out_->size() - (pos - ins));
-      write(out_->data(), ins);
-      write(out_->data() + pos, out_->size() - pos);
+      if (out_.size() != plen || !inserted(nins, ins, pos)) return fail("a part did not decompress as it was compressed");
+      prog.set(in0 + g_size, out0 + out_.size() - (pos - ins));
+      write(out_.data(), ins);
+      write(out_.data() + pos, out_.size() - pos);
       parts++;
       before_yield();
       yield(static_cast<Coroutine*>(this), 4);
@@ -228,8 +225,8 @@ struct H264pPart : CoroIo {
   // checks); false if they are not there
   bool inserted(uint64_t nins, size_t& ins, size_t& pos) const {
     static const uint8_t sc4[4] = {0, 0, 0, 1};
-    const uint8_t* b = out_->data();
-    size_t n = out_->size(), j;
+    const uint8_t* b = out_.data();
+    size_t n = out_.size(), j;
     ins = pos = 0;
     if (!nins) return true;
     size_t sc = find_start_code(b, n, 0);
@@ -297,16 +294,16 @@ void mt_drain(M& m) {
   bool busy = false;
   for (uint i = 0; i < m.th_N; i++) busy = busy || !m.C1[i].f_done;
   if (!busy) return;
-  std::vector<byte> sink((size_t)1 << 16);
+  static byte sink[1 << 16];  // (the main thread's)
   m.f_quit = 1;
-  m.addinp(sink.data(), 0);
-  m.addout(sink.data(), (uint)sink.size());
+  m.addinp(sink, 0);
+  m.addout(sink, (uint)sizeof sink);
   for (;;) {
     uint r = m.coro_call(&m);
     if (r == 1)
-      m.addinp(sink.data(), 0);
+      m.addinp(sink, 0);
     else if (r == 2)
-      m.addout(sink.data(), (uint)sink.size());
+      m.addout(sink, (uint)sizeof sink);
     else
       break;
   }

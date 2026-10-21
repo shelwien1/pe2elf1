@@ -16,8 +16,8 @@ namespace h264p {
 // gives up to n bytes, fewer only at the end of the input (0 there).
 // (Plain function pointers: a coroutine is plain data.)
 struct ByteSource {
-  size_t (*fn)(void* ctx, uint8_t* p, size_t n) = nullptr;
-  void* ctx = nullptr;
+  size_t (*fn)(void* ctx, uint8_t* p, size_t n);  // (none: no bytes)
+  void* ctx;
   size_t read(uint8_t* p, size_t n) const { return fn ? fn(ctx, p, n) : 0; }
 };
 
@@ -69,13 +69,17 @@ struct CoroIo : Coroutine {
   NOINLINE bool next_input() {
     if (eof) return false;
     before_yield();
+    ErrTrap* t = err_hold();  // (the coroutine's traps are not jumped to while it waits)
     chkinp();
+    err_resume(t);
     if (inpptr >= inpend) eof = true;  // a 0-length input: the end
     return !eof;
   }
   NOINLINE void next_output() {
     before_yield();
+    ErrTrap* t = err_hold();
     chkout();
+    err_resume(t);
   }
 
   // the stack a yield is about to copy out, against Coroutine::stk's room

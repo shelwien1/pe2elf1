@@ -37,7 +37,7 @@ struct Bits {
   const uint8_t* p;
   size_t n, pos = 0;  // n and pos in bits
   bool err = false;
-  explicit Bits(const std::vector<uint8_t>& v) : p(v.data()), n(v.size() * 8) {}
+  explicit Bits(const h264p::Buf<uint8_t>& v) : p(v.data()), n(v.size() * 8) {}
   uint32_t u(int k) {
     uint32_t v = 0;
     while (k-- > 0) {
@@ -84,7 +84,7 @@ bool high_profile(int p) {
 }
 
 // seq_parameter_set_data() up to frame_mbs_only_flag; false if it is bad
-bool parse_sps(const std::vector<uint8_t>& rbsp, Sps& s) {
+bool parse_sps(const h264p::Buf<uint8_t>& rbsp, Sps& s) {
   Bits b(rbsp);
   int profile = b.u(8);
   b.u(16);
@@ -134,7 +134,7 @@ bool parse_sps(const std::vector<uint8_t>& rbsp, Sps& s) {
 }
 
 // pic_parameter_set_rbsp() up to redundant_pic_cnt_present_flag
-bool parse_pps(const std::vector<uint8_t>& rbsp, Pps& s) {
+bool parse_pps(const h264p::Buf<uint8_t>& rbsp, Pps& s) {
   Bits b(rbsp);
   s.id = b.ue();
   s.sps_id = b.ue();
@@ -256,6 +256,7 @@ struct Analyzer {
   bool pic_ok = false, pic_idr = false, pic_intra = false;
   SliceInfo prev;
   bool have_prev = false;
+  h264p::Buf<uint8_t> rbsp;  // a NAL unit's (Init() and Quit(): H264Split's)
 
   void begin_run(const Nal& n, bool aud) {
     run = true;
@@ -271,7 +272,7 @@ struct Analyzer {
       untracked++;
       return;
     }
-    std::vector<uint8_t> rbsp = unescape(n.head.data() + 1, n.head.size() - 1);
+    unescape(n.head.data() + 1, n.head.size() - 1, rbsp);
     int id = -1, ref = -1;
     if (t == 7) {
       Sps s;
@@ -298,7 +299,7 @@ struct Analyzer {
   }
 
   void parse_slice(const Nal& n, SliceInfo& s) {
-    std::vector<uint8_t> rbsp = unescape(n.head.data() + 1, n.head.size() - 1);
+    unescape(n.head.data() + 1, n.head.size() - 1, rbsp);
     Bits b(rbsp);
     s.ref_idc = n.head[0] >> 5 & 3;
     s.idr = n.type() == 5;
@@ -500,10 +501,12 @@ struct H264Split : Coroutine {
     cap = _cap;
     st = new State;
     st->an.allow_i = allow_i!=0;
+    st->an.rbsp.Init();
     return 0;
   }
 
   void Quit( void ) {
+    if( st ) st->an.rbsp.Quit();
     delete st; st = 0;
   }
 

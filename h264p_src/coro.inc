@@ -35,6 +35,7 @@ struct H264pCoro : Model<f_DEC, LV> {
     return 0;
   }
   void Quit() {
+    if (st) st->Quit();
     delete st;
     st = nullptr;
   }
@@ -63,8 +64,7 @@ struct H264pCoro : Model<f_DEC, LV> {
       say_error(args.meter, "h264p: %s: %s\n", args.name, t.why);
     }
     this->run_trap = nullptr;
-    delete st;
-    st = nullptr;
+    Quit();
     if (args.verbose) {
       say(args.meter, "coroutine: %zu bytes of stack copied out at a yield, at most (room for %d)\n", this->depth,
               (int)Coroutine::STKPAD);
@@ -75,14 +75,16 @@ struct H264pCoro : Model<f_DEC, LV> {
 
   // compressing
   int run(std::integral_constant<int, 0>) {
-    st = new CompressState(this->source());
+    st = new CompressState;
+    st->Init(this->source());
     return compress_stream<LV>(*this, *st, args);
   }
 
   // decompressing: the magic, the version and the level (this model's),
   // then the model on the rest
   int run(std::integral_constant<int, 1>) {
-    st = new DecompressState();
+    st = new DecompressState;
+    st->Init();
     uint8_t head[sizeof kCmMagic + 1];
     int level = cm_level(head, this->read(head, sizeof head), args.name, args.meter);
     if (level < 0) return 1;

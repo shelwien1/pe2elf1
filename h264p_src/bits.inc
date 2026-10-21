@@ -7,7 +7,10 @@ namespace h264p {
 // (err.inc): the compressor's dry run then stores the NAL unit verbatim.
 
 struct BitReader {
-  BitReader(const uint8_t* data, size_t size) : data_(data), nbits_(size * 8), pos_(0) {
+  void Init(const uint8_t* data, size_t size) {
+    data_ = data;
+    nbits_ = size * 8;
+    pos_ = 0;
     // position of the last 1 bit, the rbsp_stop_one_bit
     last_one_ = -1;
     for (size_t i = size; i-- > 0;)
@@ -65,13 +68,38 @@ struct BitReader {
 };
 
 struct BitWriter {
-  BitWriter() {}
-  // the first nbits bits of p, as written
-  BitWriter(const uint8_t* p, size_t nbits) : buf_(p, p + nbits / 8), n_(nbits) {
-    if (nbits & 7) cur_ = (uint8_t)(p[nbits / 8] >> (8 - (nbits & 7)));
+  void Init() {
+    buf_.Init();
+    padded_.Init();
+    cur_ = 0;
+    n_ = 0;
   }
-  // the same bits written
-  bool operator==(const BitWriter& o) const { return n_ == o.n_ && cur_ == o.cur_ && buf_ == o.buf_; }
+  void Quit() {
+    buf_.Quit();
+    padded_.Quit();
+  }
+  // nothing written (the room stays)
+  void clear() {
+    buf_.clear();
+    cur_ = 0;
+    n_ = 0;
+  }
+  // the first nbits bits of p, as if written
+  void set(const uint8_t* p, size_t nbits) {
+    buf_.assign(p, nbits / 8);
+    cur_ = (nbits & 7) ? (uint8_t)(p[nbits / 8] >> (8 - (nbits & 7))) : 0;
+    n_ = nbits;
+  }
+  // the bits o wrote
+  void copy(const BitWriter& o) {
+    buf_.copy(o.buf_);
+    cur_ = o.cur_;
+    n_ = o.n_;
+  }
+  // whether these bits are the first nbits bits of p
+  bool same(const uint8_t* p, size_t nbits) const {
+    return n_ == nbits && buf_.same(p, nbits / 8) && (!(nbits & 7) || cur_ == (uint8_t)(p[nbits / 8] >> (8 - (nbits & 7))));
+  }
 
   void bit(int b) {
     cur_ = (uint8_t)(cur_ << 1 | b);
@@ -106,23 +134,22 @@ struct BitWriter {
     n_ = nbits;
   }
   // whole bytes, the last one padded with zero bits
-  const std::vector<uint8_t>& data() {
+  const Buf<uint8_t>& data() {
     if (n_ & 7) {
-      std::vector<uint8_t> v(buf_);
-      v.push_back((uint8_t)(cur_ << (8 - (n_ & 7))));
-      padded_.swap(v);
+      padded_.copy(buf_);
+      padded_.push_back((uint8_t)(cur_ << (8 - (n_ & 7))));
       return padded_;
     }
     return buf_;
   }
   // appends whole bytes; the bit position must be byte aligned
-  void append(size_t n, uint8_t value) { buf_.insert(buf_.end(), n, value), n_ += 8 * n; }
+  void append(size_t n, uint8_t value) { buf_.append(n, value), n_ += 8 * n; }
 
  private:
   friend struct CabacEncoder;  // (which writes whole bytes, and carries into them)
-  std::vector<uint8_t> buf_, padded_;  // complete bytes
-  uint8_t cur_ = 0;                    // the bits of the incomplete byte
-  size_t n_ = 0;
+  Buf<uint8_t> buf_, padded_;  // complete bytes
+  uint8_t cur_;                // the bits of the incomplete byte
+  size_t n_;
 };
 
 }  // namespace h264p

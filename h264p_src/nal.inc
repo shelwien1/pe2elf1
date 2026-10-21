@@ -143,7 +143,9 @@ struct PadDetector {
 bool is_x264_sei(const uint8_t* p, size_t n) {
   static const uint8_t uuid[16] = {0xdc, 0x45, 0xe9, 0xbd, 0xe6, 0xd9, 0x48, 0xb7,
                                    0x96, 0x2c, 0xd8, 0x20, 0xd9, 0x23, 0xee, 0xef};
-  return std::search(p, p + n, uuid, uuid + 16) != p + n;
+  for (size_t i = 0; i + 16 <= n; i++)
+    if (!memcmp(p + i, uuid, 16)) return true;
+  return false;
 }
 
 // A NAL unit's header byte, and its payload after it (t and c)
@@ -154,9 +156,9 @@ struct NalHead {
   bool slice, newpic;  // a slice, and one that starts a picture
 };
 // whether a NAL unit has no header to read: empty, or forbidden_zero_bit set
-bool headless(const std::vector<uint8_t>& nal) { return nal.empty() || (nal[0] & 0x80); }
+bool headless(const Buf<uint8_t>& nal) { return nal.empty() || (nal[0] & 0x80); }
 // The header of a NAL unit that has one, the padding detector told of it
-NalHead nal_head(const std::vector<uint8_t>& nal, PadDetector& det) {
+NalHead nal_head(const Buf<uint8_t>& nal, PadDetector& det) {
   NalHead h;
   h.ref_idc = nal[0] >> 5 & 3, h.type = nal[0] & 31;
   h.payload = nal.data() + 1, h.len = nal.size() - 1;
@@ -234,9 +236,10 @@ int code_nal(int type, int ref_idc, Context& ctx, Chan& ch, BitReader* br, BitWr
   if (bw) bw->bit(1);  // rbsp_stop_one_bit
   return -1;
 }
-int read_nal(int type, int ref_idc, const std::vector<uint8_t>& rbsp, Context& ctx, Chan& ch,
+int read_nal(int type, int ref_idc, const Buf<uint8_t>& rbsp, Context& ctx, Chan& ch,
              const BinPolicy& bp = BinPolicy()) {
-  BitReader br(rbsp.data(), rbsp.size());
+  BitReader br;
+  br.Init(rbsp.data(), rbsp.size());
   return code_nal(type, ref_idc, ctx, ch, &br, nullptr, bp);
 }
 int write_syntax(int type, int ref_idc, Context& ctx, Chan& ch, BitWriter& bw, const BinPolicy& bp = BinPolicy()) {
@@ -251,65 +254,88 @@ void align(BitWriter& bw, int pad) { bw.put(pad > 0, (8 - (int)(bw.pos() & 7)) &
 // procedure): the last `drop` bits written are replaced by `bits`. Then come
 // the cabac_zero_words.
 struct Trailer {
-  bool irregular = false;
-  int64_t drop = 0;
-  std::string bits;  // of '0' and '1'
-  int64_t czw = 0;
+  bool irregular;
+  int64_t drop;
+  Buf<uint8_t> bits;  // 0 or 1 each
+  int64_t czw;
+
+  void Init() {
+    bits.Init();
+    reset();
+  }
+  void Quit() { bits.Quit(); }
+  // the expected end (the room for bits stays)
+  void reset() {
+    irregular = false;
+    drop = 0;
+    bits.clear();
+    czw = 0;
+  }
 };
 
 // The rest of the RBSP after the rbsp_stop_one_bit, as the trailer says.
 void apply_trailer(const Trailer& t, BitWriter& bw, int pad) {
   if (t.irregular) {
     bw.truncate(bw.pos() - (size_t)t.drop);
-    for (char c : t.bits) bw.bit(c - '0');
+    for (uint8_t b : t.bits) bw.bit(b);
   } else {
     align(bw, pad);
   }
   bw.append(2 * (size_t)t.czw, 0);
 }
 
-int get_bit(const std::vector<uint8_t>& v, size_t i) { return v[i >> 3] >> (7 - (i & 7)) & 1; }
+int get_bit(const Buf<uint8_t>& v, size_t i) { return v[i >> 3] >> (7 - (i & 7)) & 1; }
+
+// Why a NAL unit is stored verbatim (said with -v)
+const int kWhy = 320;
+void set_why(char* why, const char* fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  vsnprintf(why, kWhy, fmt, ap);
+  va_end(ap);
+}
 
 // Compares the RBSP written up to and including the stop bit (bw; pad as
 // write_syntax returned it) with the original one, and finds the trailer
-// that makes them equal. False when there is none. obs is the bit where x264
-// puts its padding bit in a CABAC slice, -1 if there is none.
-bool find_trailer(const BitWriter& bw, int pad, const std::vector<uint8_t>& rbsp, Trailer& t, std::string& why,
-                  int& obs) {
-  t = Trailer();
+// that makes them equal. False when there is none (why). obs is the bit
+// where x264 puts its padding bit in a CABAC slice, -1 if there is none.
+// (o: room for what it writes)
+bool find_trailer(const BitWriter& bw, int pad, const Buf<uint8_t>& rbsp, Trailer& t, char* why, int& obs,
+                  BitWriter& o) {
+  t.reset();
   size_t pbits = bw.pos();
   // the last bit of the byte with the stop bit, unless it is the stop bit
   obs = -1;
   if (pad >= 0 && (pbits & 7) && (pbits - 1) / 8 < rbsp.size()) obs = rbsp[(pbits - 1) / 8] & 1;
-  BitWriter o = bw;
+  o.copy(bw);
   align(o, pad);
-  if (o.data() == rbsp) return true;
+  if (o.data().same(rbsp)) return true;
   // the end differs: cabac_zero_words, or trailing bits that are not the
   // expected ones
   size_t zeros = 0;
   while (zeros < rbsp.size() && rbsp[rbsp.size() - 1 - zeros] == 0) zeros++;
   t.czw = (int64_t)(zeros / 2);
   if (t.czw > (1 << 26)) {
-    why = "too many cabac_zero_words";
+    set_why(why, "too many cabac_zero_words");
     return false;
   }
-  std::vector<uint8_t> r(rbsp.begin(), rbsp.end() - 2 * (size_t)t.czw);
-  if (o.data() != r) {
+  size_t rn = rbsp.size() - 2 * (size_t)t.czw;  // (the RBSP without them)
+  if (!o.data().same(rbsp.data(), rn)) {
     // compare our bits up to and including the stop bit
-    size_t rbits = r.size() * 8, d = 0;
-    while (d < pbits && d < rbits && bw.at(d) == get_bit(r, d)) d++;
+    size_t rbits = rn * 8, d = 0;
+    while (d < pbits && d < rbits && bw.at(d) == get_bit(rbsp, d)) d++;
     if (pbits - d > 64 || rbits - d > 4096) {
-      why = "re-encoding differs at bit " + std::to_string(d) + " of " + std::to_string(rbits);
+      set_why(why, "re-encoding differs at bit %zu of %zu", d, rbits);
       return false;
     }
     t.irregular = true;
     t.drop = (int64_t)(pbits - d);
-    for (size_t i = d; i < rbits; i++) t.bits += (char)('0' + get_bit(r, i));
+    for (size_t i = d; i < rbits; i++) t.bits.push_back((uint8_t)get_bit(rbsp, i));
   }
-  BitWriter chk = bw;
-  apply_trailer(t, chk, pad);
-  if (chk.data() != rbsp) {
-    why = "re-encoding differs";
+  o.copy(bw);
+  apply_trailer(t, o, pad);
+  if (!o.data().same(rbsp)) {
+    set_why(why, "re-encoding differs");
     return false;
   }
   return true;
@@ -317,77 +343,85 @@ bool find_trailer(const BitWriter& bw, int pad, const std::vector<uint8_t>& rbsp
 
 // SPS and PPS stored verbatim still define parameter sets (where they
 // parse: an error is of no matter)
-void update_params(int type, const std::vector<uint8_t>& rbsp, Context& ctx) {
+void update_params(int type, const Buf<uint8_t>& rbsp, Context& ctx) {
   if (type != 7 && type != 8) return;
+  ValueLog log;
+  log.Init();
   LogChan ch;
+  ch.Init(log, false);
   ErrTrap t;
-  if (setjmp(t.jb)) return;
-  err_push(t);
-  read_nal(type, 0, rbsp, ctx, ch);
-  err_pop(t);
+  if (!setjmp(t.jb)) {
+    err_push(t);
+    read_nal(type, 0, rbsp, ctx, ch);
+    err_pop(t);
+  }
+  log.Quit();
 }
 
 // The RBSP of a NAL unit's payload, to parse (rbsp), or false when the NAL
 // unit is to be stored verbatim (why): a type the walk does not know, or
-// emulation prevention that escape() would not write (an SPS or PPS still
-// defines its parameter set)
-bool nal_rbsp(const NalHead& h, Context& ctx, std::vector<uint8_t>& rbsp, std::string& why) {
-  rbsp = unescape(h.payload, h.len);
+// emulation prevention that escape() would not write (into esc; an SPS or
+// PPS still defines its parameter set)
+bool nal_rbsp(const NalHead& h, Context& ctx, Buf<uint8_t>& rbsp, Buf<uint8_t>& esc, char* why) {
+  unescape(h.payload, h.len, rbsp);
   if (!parsed_type(h.type)) {
-    why = "NAL unit type " + std::to_string(h.type);
+    set_why(why, "NAL unit type %d", h.type);
     return false;
   }
-  if (escape(rbsp) != std::vector<uint8_t>(h.payload, h.payload + h.len)) {
-    why = "irregular emulation prevention";
+  esc.clear();
+  escape(rbsp.data(), rbsp.size(), esc);
+  if (!esc.same(h.payload, h.len)) {
+    set_why(why, "irregular emulation prevention");
     update_params(h.type, rbsp, ctx);
     return false;
   }
   return true;
 }
 
-// A NAL unit written back from the values its parse gave the channel ch,
-// which hands them out again (at_end() when it has no more), and the
-// trailer that makes it its RBSP; false when there is none, or the writing
-// fails (why). obs: see find_trailer.
+// A NAL unit written back (into bw) from the values its parse gave the
+// channel ch, which hands them out again (at_end() when it has no more),
+// and the trailer that makes it its RBSP; false when there is none, or the
+// writing fails (why). obs: see find_trailer (o, its room).
 template <class Ch>
-bool write_back(const NalHead& h, Context& ctx, Ch& ch, const std::vector<uint8_t>& rbsp, Trailer& t,
-                std::string& why, int& obs) {
-  BitWriter bw;
+bool write_back(const NalHead& h, Context& ctx, Ch& ch, const Buf<uint8_t>& rbsp, Trailer& t, char* why, int& obs,
+                BitWriter& bw, BitWriter& o) {
+  bw.clear();
   ErrTrap e;
   if (setjmp(e.jb)) {
-    why = std::string("re-encoding failed: ") + e.why;
+    set_why(why, "re-encoding failed: %s", e.why);
     return false;
   }
   err_push(e);
   int pad = write_syntax(h.type, h.ref_idc, ctx, ch, bw);
   if (!ch.at_end()) err_raise("values left over");
   err_pop(e);
-  return find_trailer(bw, pad, rbsp, t, why, obs);
+  return find_trailer(bw, pad, rbsp, t, why, obs, o);
 }
 
 // The output of d: n zero bytes appended to buf, spill() after each
 // MB of them (it hands buf on once it is full)
 template <class F>
-void put_zeros(std::vector<uint8_t>& buf, uint64_t n, F spill) {
+void put_zeros(Buf<uint8_t>& buf, uint64_t n, F spill) {
   while (n) {
     size_t k = (size_t)std::min<uint64_t>(n, 1 << 20);
-    buf.insert(buf.end(), k, 0);
+    buf.append(k, 0);
     n -= k;
     spill();
   }
 }
 // the zero bytes before a NAL unit and its start code
 template <class F>
-void put_start(std::vector<uint8_t>& buf, uint64_t zeros, F spill) {
+void put_start(Buf<uint8_t>& buf, uint64_t zeros, F spill) {
   static const uint8_t sc[3] = {0, 0, 1};
   put_zeros(buf, zeros, spill);
-  buf.insert(buf.end(), sc, sc + 3);
+  buf.append(sc, 3);
 }
 // a NAL unit's payload stored verbatim (an SPS or PPS still defines its
-// parameter set)
-void put_verbatim(std::vector<uint8_t>& buf, int type, const std::vector<uint8_t>& b, Context& ctx) {
-  buf.insert(buf.end(), b.begin(), b.end());
-  update_params(type, unescape(b.data(), b.size()), ctx);
+// parameter set: rbsp, room for it)
+void put_verbatim(Buf<uint8_t>& buf, int type, const Buf<uint8_t>& b, Context& ctx, Buf<uint8_t>& rbsp) {
+  buf.append(b.data(), b.size());
+  unescape(b.data(), b.size(), rbsp);
+  update_params(type, rbsp, ctx);
 }
 
 }  // namespace h264p

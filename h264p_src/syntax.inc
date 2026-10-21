@@ -123,17 +123,19 @@ struct Syn : WalkCodes<Syn> {
     return v;
   }
 
-  // bytes
+  // bytes, a piece at a time
   void vbytes(size_t nbytes) {
-    std::vector<uint8_t> b(nbytes);
-    if (!W) {
-      for (auto& x : b) x = (uint8_t)br_->u(8);
-      ch_->hbytes(b);
-      return;
+    uint8_t b[256];
+    for (size_t i = 0; i < nbytes; i += sizeof b) {
+      size_t n = nbytes - i < sizeof b ? nbytes - i : sizeof b;
+      if (!W) {
+        for (size_t k = 0; k < n; k++) b[k] = (uint8_t)br_->u(8);
+        ch_->hbytes(b, n);
+        continue;
+      }
+      ch_->hbytes(b, n);
+      for (size_t k = 0; k < n; k++) bw_->put(b[k], 8);
     }
-    ch_->hbytes(b);
-    if (b.size() != nbytes) fail("wrong data length");
-    for (uint8_t x : b) bw_->put(x, 8);
   }
 
   void end() { ch_->hend(); }
