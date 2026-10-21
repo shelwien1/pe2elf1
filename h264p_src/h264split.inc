@@ -20,29 +20,18 @@
 // place (after the access unit delimiter, if any). Every part but the first
 // starts at an access unit, with the parameter sets it needs.
 
-#include <stdint.h>
-#include <string.h>
-#include <algorithm>
-#include <map>
-#include <set>
-#include <vector>
+// (h264p: the system headers it needs come first, from h264p.inc; and
+// h264split's own copy of unescape() is h264p's, annexb.inc. Its parser of
+// the headers stays its own, apart from h264p's walk, which needs a whole
+// context: it tells pictures apart by 7.4.1.2.4, where h264p's x264
+// padding counts slices with first_mb_in_slice 0 -- where they differ, a
+// part is cut elsewhere, and parts are coded losslessly whatever they hold.
+// Its Scanner finds start codes in the buffers it is fed, across their
+// ends, which annexb.inc's reader does in a buffer of its own.)
 
 namespace h264s {
 
-std::vector<uint8_t> unescape(const uint8_t* p, size_t n) {
-  std::vector<uint8_t> r;
-  r.reserve(n);
-  int zeros = 0;
-  for (size_t i = 0; i < n; i++) {
-    if (zeros >= 2 && p[i] == 3) {
-      zeros = 0;
-      continue;
-    }
-    r.push_back(p[i]);
-    zeros = p[i] ? 0 : zeros + 1;
-  }
-  return r;
-}
+using h264p::unescape;
 
 struct Bits {
   const uint8_t* p;
@@ -485,8 +474,9 @@ struct Scanner {
 
 struct H264Split : Coroutine {
 
-  // C++ state lives on the heap: this object is never constructed (it sits in
-  // CoroFileProc's static union), and only raw pointers survive that
+  // C++ state lives on the heap, behind raw pointers: the object may sit in
+  // memory that is never constructed (rzwrap's static union; h264p's
+  // CoroObj constructs it, on zeroed pages)
   struct State {
     h264s::Scanner sc;
     h264s::Analyzer an;

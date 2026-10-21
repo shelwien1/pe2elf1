@@ -66,6 +66,8 @@ static void get_list(const Row& row, std::vector<int>& v, size_t from = 1) {
 struct TsvChan : Chan {
   explicit TsvChan(RowWriter* out) : Chan(false), out_(out), in_(nullptr) {}
   explicit TsvChan(RowReader* in) : Chan(true), out_(nullptr), in_(in) {}
+  // (writing) whether the rows are all taken
+  bool at_end() { return in_->at_end(); }
 
   // --- header syntax
   void hbegin(const char* name) override {

@@ -17,10 +17,12 @@ Linux (gcc or clang):
 
 Windows (MinGW): `g.bat`, as before, for h264dec, `gp.bat` for h264p.
 
-h264p is a single module: `h264p_src/h264p.cpp` includes the rest of its
-sources (`*.inc`, the coroutine library in `h264p_src/Lib3` and MTwrap in
+h264p is one translation unit: `h264p_src/h264p.cpp`, its command line,
+includes `h264p_src/h264p.inc`, which includes the rest of its sources
+(`*.inc`, the coroutine library in `h264p_src/Lib3` and MTwrap in
 `h264p_src/MTwrap_v3`, which includes `Lib3/win_shim.inc` by its name
-alone, as mtwrap builds it), so
+alone, as mtwrap builds it; a program of its own includes `h264p.inc` for
+h264p's coroutines), so
 `g++ -O2 -march=x86-64-v3 -std=c++11 -fwrapv -Ih264p_src/Lib3 -pthread h264p_src/h264p.cpp -o h264p`
 builds it too. Its target is x86-64-v3 (AVX2:
 Haswell, Zen and later), for which its pixel kernels and mixers have SIMD
@@ -253,10 +255,10 @@ library mtwrap is built on (`h264p_src/Lib3`, its files unchanged), in its
 buffer protocol: the input comes in the buffers `addinp()` gives, a
 0-length one with `f_quit` set at its end, and `yield 1` asks for the next;
 the output goes into the buffer `addout()` gave, `yield 2` handing it over
-full; `yield 0` ends a run, `yield 3` an error. So the library's drivers run
-them: `CoroFileProc` on files (`c`, `d`), and `CoroutinePair` chains two
-(`x`: the compressor's output is the decompressor's input, in one pass, and
-what comes out must be the input).
+full; `yield 0` ends a run, `yield 3` an error. So `run_file()`
+(`drivers.inc`) runs one on files (`c`, `d`), and the library's
+`CoroutinePair` chains two (`x`: the compressor's output is the
+decompressor's input, in one pass, and what comes out must be the input).
 
 The coroutine is the codec, as in the library's own codecs:
 `H264pCoro<f_DEC, L>` (`h264p_src/coro.inc`; `f_DEC` 0 compresses, 1

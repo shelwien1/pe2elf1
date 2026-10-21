@@ -139,29 +139,8 @@ static T* tc_table() {
   return new (tc_map(sizeof(T))) T;
 }
 
-// --- the levels: each one's generated families (MOD/l<L>/), wrapped into
-// configuration classes (famcfg.inc), and its own class, which Model takes
-// (h264p_levels.md sections 6 and 7). The level of a build, or every level.
-#ifndef H264P_ONLY
-#define H264P_LV(n) 1
-#else
-#define H264P_LV(n) ((n) == H264P_ONLY)
-#endif
-#if H264P_LV(9)
-#include "lv9.inc"
-#endif
-#if H264P_LV(7)
-#include "lv7.inc"
-#endif
-#if H264P_LV(5)
-#include "lv5.inc"
-#endif
-#if H264P_LV(3)
-#include "lv3.inc"
-#endif
-#if H264P_LV(1)
-#include "lv1.inc"
-#endif
+// --- the levels of this build (levels.inc)
+#include "levels.inc"
 
 // where the bits go (-v)
 enum { STG_NAL, STG_HDR, STG_RAW, STG_SKIP, STG_MBT, STG_CBP, STG_IPM, STG_MVS, STG_MVD, STG_MVSG, STG_QPD, STG_CBF,

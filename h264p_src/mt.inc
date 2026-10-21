@@ -20,6 +20,8 @@
 // (the header has it); each part ends a round of MTwrap's decoder (yield 4),
 // which takes the parts from the workers in turn as they were dealt.
 
+namespace h264p {
+
 const char kMtMagic[] = "h264m";  // compressed on threads, followed by the version, the threads and the part size in KB
 const int kMtHead = (int)sizeof kMtMagic + 1 + 4;  // the magic, the version, the threads, the part size (u32)
 // MTwrap's rings between the main thread and a worker: their size does not
@@ -77,22 +79,21 @@ int run_part(const H264pArgs& a, std::vector<uint8_t>& in, std::vector<uint8_t>&
   out.resize(1 << 16);
   c->addout(out.data(), (uint)out.size());
   feed();
-  for (;;) {
-    uint r = c->coro_call(c.get());
-    prog.set(in0 + c->n_in, out0 + c->n_out);
-    progress_poll(a.meter);
-    if (r == 1) {
-      feed();
-      continue;
-    }
-    size_t done = (size_t)(c->outptr - out.data());
-    if (r != 2) {  // the end, or an error
-      out.resize(done);
-      break;
-    }
-    if (done == out.size()) out.resize(done * 2);  // (the output full: twice the room)
-    c->addout(out.data() + done, (uint)std::min(out.size() - done, (size_t)1 << 16));
-  }
+  drive(
+      *c.get(), feed,
+      [&](bool more) {
+        size_t done = (size_t)(c->outptr - out.data());
+        if (!more) {  // the end, or an error
+          out.resize(done);
+          return;
+        }
+        if (done == out.size()) out.resize(done * 2);  // (the output full: twice the room)
+        c->addout(out.data() + done, (uint)std::min(out.size() - done, (size_t)1 << 16));
+      },
+      [&]() {
+        prog.set(in0 + c->n_in, out0 + c->n_out);
+        progress_poll(a.meter);
+      });
   return c->status;
 }
 
@@ -234,10 +235,10 @@ struct H264pPart : CoroIo {
     size_t n = out_->size(), j;
     ins = pos = 0;
     if (!nins) return true;
-    size_t sc = start_code(b, n, 0);
+    size_t sc = find_start_code(b, n, 0);
     if (sc + 4 > n) return false;
     if ((b[sc + 3] & 31) == 9) {
-      if ((j = start_code(b, n, sc + 4)) >= n) return false;
+      if ((j = find_start_code(b, n, sc + 4)) >= n) return false;
       while (j > sc + 4 && !b[j - 1]) j--;
       ins = j;
     }
@@ -246,17 +247,11 @@ struct H264pPart : CoroIo {
       if (pos + 5 > n || memcmp(b + pos, sc4, 4)) return false;
       int t = b[pos + 4] & 31;
       if (!(t == 7 || t == 8 || t == 13 || t == 15)) return false;
-      if ((j = start_code(b, n, pos + 5)) >= n) return false;
+      if ((j = find_start_code(b, n, pos + 5)) >= n) return false;
       while (j > pos + 5 && !b[j - 1]) j--;
       pos = j;
     }
     return true;
-  }
-  // the first 00 00 01 at i or after (n if none)
-  static size_t start_code(const uint8_t* b, size_t n, size_t i) {
-    for (; i + 2 < n; i++)
-      if (!b[i] && !b[i + 1] && b[i + 2] == 1) return i;
-    return n;
   }
 };
 
@@ -288,6 +283,15 @@ uint64_t mt_parts(const M& m) {
   for (uint i = 0; i < m.th_N; i++) n += m.C1[i].parts;
   return n;
 }
+// What a run on threads did, as h264p reports it (-v, the progress line's
+// end): the stream's bytes (raw), the compressed stream's with h264p's
+// header (packed), and the parts. (Here, as the rest of MTwrap's and the
+// splitter's insides h264p reads, so that the calls see none of them.)
+struct MtCounts {
+  uint64_t raw, packed, parts;
+};
+MtCounts mt_counts(const MtEnc& e) { return {e.M1.st->total, kMtHead + e.M2.c_out, e.M1.st->parts}; }
+MtCounts mt_counts(const MtDec& d) { return {d.c_out, kMtHead + d.c_inp, mt_parts(d)}; }
 // An MTwrap stage that the pair it was in stopped driving (the other stage
 // failed) run to its end, its input ended and its output dropped, so that
 // its workers end and Quit() can join them (nothing to do where they have)
@@ -310,3 +314,5 @@ void mt_drain(M& m) {
       break;
   }
 }
+
+}  // namespace h264p

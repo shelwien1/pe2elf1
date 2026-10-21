@@ -4,9 +4,9 @@
 // set at its end, and yield 1 asks for the next; the output goes into the
 // buffer addout() gave, yield 2 handing it over full; yield 0 at the end
 // (the last output in the buffer), yield 3 after an error (reported on
-// stderr). So CoroFileProc runs one on files (c, d), CoroutinePair chains
-// one with another stage (x: the two of them), and an MTwrap worker runs one
-// on each part of a stream (mt.inc).
+// stderr). So h264p.cpp's run_file() runs one on files (c, d),
+// CoroutinePair chains one with another stage (x: the two of them), and an
+// MTwrap worker runs one on each part of a stream (mt.inc's run_part()).
 //
 // The coroutine is the model: H264pCoro derives from Model, the model from
 // the range coder (fam.inc's tc_rc) and the coder from the coroutine's I/O
@@ -20,16 +20,7 @@
 // in the model, where the range decoder reads its input, and the compressor
 // where the coder writes its output.
 
-// what Init() takes: the options of c and d
-struct H264pArgs {
-  int level;         // compressing: the model's level (1-9)
-  bool verbose;      // statistics on stderr
-  bool strict;       // compressing: fail where a NAL unit of a supported type would be stored verbatim
-  bool check;        // compressing: the model pass checks the slices it can; status kRestart if one does
-                     // not come out as it is, and the input has to be compressed again without
-  const char* name;  // the input's, for messages
-  Progress* meter;   // the call's progress line, if one is shown (messages cut it)
-};
+namespace h264p {
 
 template <int f_DEC, class LV>
 struct H264pCoro : Model<f_DEC, LV> {
@@ -73,12 +64,7 @@ struct H264pCoro : Model<f_DEC, LV> {
   // compressing
   int run(std::integral_constant<int, 0>) {
     st = new CompressState(this->source());
-    Options opt;
-    opt.level = args.level;
-    opt.verbose = args.verbose;
-    opt.strict = args.strict;
-    opt.meter = args.meter;
-    int r = compress_stream<LV>(*this, *st, opt, args.check, args.name);
+    int r = compress_stream<LV>(*this, *st, args);
     if (r == kRestart) this->dump_discard();  // (what it dumped goes: it starts over)
     return r;
   }
@@ -94,9 +80,44 @@ struct H264pCoro : Model<f_DEC, LV> {
       say_error(args.meter, "h264p: %s: compressed at level -%d, not -%d\n", args.name, level, LV::id);
       return 1;
     }
-    Options opt;
-    opt.verbose = args.verbose;
-    opt.meter = args.meter;
-    return decompress_stream<LV>(*this, *st, opt, args.name);
+    return decompress_stream<LV>(*this, *st, args);
   }
 };
+
+// The coroutine of a call of c, d or x (or of a part, mt.inc), constructed
+// on pages of its own -- zeroed, and aligned as CoroutinePair's members
+// ask -- and destroyed with them
+template <class T>
+struct CoroObj {
+  T* p;
+  CoroObj() : p(new (tc_map(sizeof(T), "a coroutine")) T()) {}
+  ~CoroObj() {
+    p->~T();
+    tc_unmap(p, sizeof(T));
+  }
+  CoroObj(const CoroObj&) = delete;
+  void operator=(const CoroObj&) = delete;
+  T* get() const { return p; }
+  T* operator->() const { return p; }
+};
+
+// Runs the coroutine c in coro.inc's buffer protocol to its end: in() gives
+// it its next input when it asks for it (yield 1), out(more) takes what it
+// put in its output buffer when that is full (yield 2, more: and then gives
+// it the next) or as it ends (yield 0, or 3 after an error: what drive()
+// returns), and tick() comes after each yield (the progress line)
+template <class C, class In, class Out, class Tick>
+uint drive(C& c, In in, Out out, Tick tick) {
+  for (;;) {
+    uint r = c.coro_call(&c);
+    tick();
+    if (r == 1) {
+      in();
+      continue;
+    }
+    out(r == 2);
+    if (r != 2) return r;
+  }
+}
+
+}  // namespace h264p

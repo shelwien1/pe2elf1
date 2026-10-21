@@ -72,6 +72,14 @@ struct BitReader {
 };
 
 struct BitWriter {
+  BitWriter() {}
+  // the first nbits bits of p, as written
+  BitWriter(const uint8_t* p, size_t nbits) : buf_(p, p + nbits / 8), n_(nbits) {
+    if (nbits & 7) cur_ = (uint8_t)(p[nbits / 8] >> (8 - (nbits & 7)));
+  }
+  // the same bits written
+  bool operator==(const BitWriter& o) const { return n_ == o.n_ && cur_ == o.cur_ && buf_ == o.buf_; }
+
   void bit(int b) {
     cur_ = (uint8_t)(cur_ << 1 | b);
     if ((++n_ & 7) == 0) {
@@ -90,9 +98,6 @@ struct BitWriter {
     put(x, len + 1);
   }
   void se(int64_t v) { ue(v > 0 ? 2 * (uint64_t)v - 1 : 2 * (uint64_t)(-v)); }
-  void align_zero() {
-    while (n_ & 7) bit(0);
-  }
   size_t pos() const { return n_; }
   int at(size_t i) const {
     if (i >> 3 < buf_.size()) return (buf_[i >> 3] >> (7 - (i & 7))) & 1;
@@ -120,6 +125,8 @@ struct BitWriter {
   // appends whole bytes; the bit position must be byte aligned
   void append(size_t n, uint8_t value) { buf_.insert(buf_.end(), n, value), n_ += 8 * n; }
 
+ private:
+  friend struct CabacEncoder;  // (which writes whole bytes, and carries into them)
   std::vector<uint8_t> buf_, padded_;  // complete bytes
   uint8_t cur_ = 0;                    // the bits of the incomplete byte
   size_t n_ = 0;
