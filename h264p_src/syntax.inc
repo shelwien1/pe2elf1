@@ -78,7 +78,7 @@ struct Syn {
       uint32_t b;
       while ((b = br->u(8)) == 255)
         if ((v += 255) > (1 << 24)) fail("invalid SEI message header");
-      v += b;
+      if ((v += b) > (1 << 24)) fail("invalid SEI message header");
       ch_->hval(v);
       return v;
     }

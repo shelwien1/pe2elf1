@@ -96,10 +96,13 @@ a supported type has to be stored verbatim, and `-9`, `-7`, `-5`, `-3`, `-1`
 pick the level of `c`'s (and `x`'s) model, from the strongest (the default)
 to the fastest; `d` reads the level from the stream. `-t N` makes `c` (and
 `x`) compress on N threads, up to 64, the stream in parts of at least `-c N`
-MB (`-c Nk`: KB; 4 MB by default), and `d` decompresses that on as many
-threads as it says (see Threads, below); without `-t` (or with `-t 1`), `c`
-writes the stream of one model in one thread, as it always did. Input and
-output can be `-` (stdin, stdout).
+MB, 1 to 1024 (`-c Nk`: KB; 4 MB by default), and `d` decompresses that on
+as many threads as it says (see Threads, below); without `-t` (or with
+`-t 1`), `c` writes the stream of one model in one thread, as it always
+did. Input and output can be `-` (stdin, stdout), and not the same file. A
+file is written under a temporary name beside it (`name.PID.tmp`) and
+renamed when the call is done: a call that fails leaves what was there (or
+nothing), except that `d` and `r` keep what they restored before an error.
 
 Where stderr is a terminal (or with `-p`), `c`, `d` and `x` show their
 progress there, on a line put over itself every half second:
@@ -291,10 +294,13 @@ library's `CORO_NOASM`, untested.
 
 `c -t N` compresses on N threads, 2 to 64 (`h264p_src/mt.inc`). A splitter
 (`h264p_src/h264split.inc`, rzwrap_h264's, on the main thread) cuts the
-stream into parts: a part ends at the first IDR access unit at least `-c`
-(4 MB by default) after its start, and the parameter sets it needs are
-copied in at its start (after its access unit delimiter, if it has one), so
-that each part is a stream by itself. MTwrap (`h264p_src/MTwrap_v3`,
+stream into parts: a part ends at the first IDR or I access unit at least
+`-c` (4 MB by default) after its start, or, in a stream with too few of
+those, at the first picture at least 4 times `-c` (at most 2 GB) after it,
+and the parameter sets it needs are copied in at its start (after its
+access unit delimiter, if it has one), so that each part is a stream by
+itself (one that starts at a P picture loses the reference pictures before
+it, and some compression; never losslessness). MTwrap (`h264p_src/MTwrap_v3`,
 unchanged, its parts mode: `MTwrap.md` section 11 in mtwrap) deals the
 parts in turn to N workers; a worker reads a part whole into memory and
 compresses it with a model of its own, an `H264pCoro` run as a coroutine of
@@ -303,7 +309,8 @@ decompresses its parts so, removes the inserted parameter sets, and MTwrap
 takes the parts from the workers in turn, as they were dealt.
 
 The stream starts with `h264m`, the version, the count of threads and the
-part size (KB, 32 bits), then MTwrap's container of the workers' streams
+part size (KB, 32 bits; to be seen: `d` does not need it, MTwrap's rings
+have a size of their own), then MTwrap's container of the workers' streams
 (a block of up to 64 KB at a time, tagged with its worker), each of them a
 record for each of its parts: its size, the count of inserted parameter
 sets, the size of the part as compressed (32, 32 and 64 bits,
@@ -471,7 +478,11 @@ list 1, so no ref_idx_l1):
 partitions of `test/h264p/jm_dp.264`), and two concatenations: one in which
 x264's padding bits change phase, and one that changes the picture size,
 chroma format, bit depth, slice groups and field coding from stream to
-stream.
+stream. Then the cases that must fail, and fail well (a corrupt slice with
+`-s`, on threads too, where `x` must not hang; the input as the output; a
+cut compressed stream; a full output device), and the crafted streams of
+`test/crafted`, each one h264p once crashed on, took minutes or gigabytes
+for, or failed as a whole (`h264p_review.md`).
 The streams in `test/h264p` cover what the others don't (see `gen.sh` there).
 The dumped values of all test streams were also compared, macroblock by
 macroblock, with the syntax elements traced by the JM reference decoder;

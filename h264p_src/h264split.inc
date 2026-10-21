@@ -7,14 +7,18 @@
 // h264split.cpp's (h264split-1), unchanged; only the file-based scan_nals()
 // became the incremental Scanner below, and choose_cuts() (which needs the
 // whole stream) became a greedy rule: a part ends at the first cut point
-// at least `chunksize` bytes after its start.
+// (an IDR access unit, or with allow_i an I one) at least `chunksize` bytes
+// after its start, or, with a cap, at the first picture at least `cap`
+// bytes after it (h264p: a stream with few IDR access units still comes in
+// parts of a bounded size, at the cost of a part that starts with no
+// reference pictures).
 //
 // Output: one frame per part, for MTwrap's parts mode:
 //   u64 L, u32 nins, part[L-4]
 // part = the stream bytes [begin,end) with the parameter sets h264split
 // would insert (nins NAL units, each with a 4-byte start code) at the same
 // place (after the access unit delimiter, if any). Every part but the first
-// starts at an IDR access unit and is a valid stream by itself.
+// starts at an access unit, with the parameter sets it needs.
 
 #include <stdint.h>
 #include <string.h>
@@ -236,6 +240,7 @@ struct PsetEvent {
 };
 
 struct Candidate {
+  bool sync;      // an IDR access unit (or an I one, with allow_i)
   uint64_t cut;   // start of the access unit
   uint64_t mbs;   // macroblocks of the pictures before it
   uint64_t pics;  // pictures before it
@@ -344,7 +349,10 @@ struct Analyzer {
     if (!pictures) return;
     idr += pic_idr;
     intra += pic_intra && !pic_idr;
-    if (pictures > 1 && pic_ok && (pic_idr || (allow_i && pic_intra))) cands.push_back(pic);
+    if (pictures > 1 && pic_ok) {
+      pic.sync = pic_idr || (allow_i && pic_intra);
+      cands.push_back(pic);
+    }
   }
 
   void slice(const Nal& n) {
@@ -494,10 +502,12 @@ struct H264Split : Coroutine {
   };
   State* st;
   qword chunksize;
+  qword cap; // 0: none
 
-  uint Init( qword _chunksize, uint allow_i ) {
+  uint Init( qword _chunksize, uint allow_i, qword _cap=0 ) {
     coro_init();
     chunksize = _chunksize;
+    cap = _cap;
     st = new State;
     st->an.allow_i = allow_i!=0;
     return 0;
@@ -561,8 +571,9 @@ struct H264Split : Coroutine {
     State& s = *st;
     while( s.seen<s.an.cands.size() ) {
       h264s::Candidate c = s.an.cands[s.seen++];
-      if( c.cut-s.begin>=chunksize ) { emit( c.cut ); start_part( c ); }
+      if( (c.sync && c.cut-s.begin>=chunksize) || (cap && c.cut-s.begin>=cap) ) { emit( c.cut ); start_part( c ); }
     }
+    s.an.cands.clear(); s.seen = 0; // (each picture's: none is looked at again)
   }
 
   void do_process( void ) {

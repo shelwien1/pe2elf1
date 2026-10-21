@@ -17,9 +17,23 @@ struct MbState {
 };
 
 // Macroblock states of the current picture, kept between slices.
+// The slice group map of the slices (8.2.2), made again only where what it
+// depends on changes: the parameter sets, field or frame, and the change
+// cycle of the map types that move (3-5)
+struct GroupMap {
+  std::shared_ptr<const Pps> pps;
+  std::shared_ptr<const Sps> sps;
+  int field = -1;
+  int64_t cycle = -1;
+  std::vector<uint8_t> group;  // mbToSliceGroupMap
+  std::vector<int> next;       // each macroblock's next one in its group (the picture's size: none)
+  std::vector<int> rank;       // box-out's order of the map units (type 3), whatever the cycle
+};
+
 struct MbStore {
   std::vector<MbState> mbs;
   uint32_t slices = 0;
+  GroupMap groups;
 };
 
 // Parses the slice data following the slice header, handing the values to
@@ -74,17 +88,79 @@ const int kCatDc[3] = {0, 6, 10}, kCatAc[3] = {1, 7, 11}, kCat4x4[3] = {2, 8, 12
 // ---------------------------------------------------------------------------
 // slice group map (8.2.2)
 
-std::vector<uint8_t> slice_group_map(const SliceHeader& h, int width, int size) {
+// box-out (8.2.2.4) as the order in which its walk fills the map units: the
+// units of slice group 0 are those ranked below mapUnitsInSliceGroup0,
+// whatever that is. The walk goes round the box it grows a side at a time;
+// a side at the edge of the picture, its bound held, has only units filled
+// before, and is passed in one step, so that the walk takes the time of the
+// units, not of the width times the turns.
+std::vector<int> box_out_ranks(int width, int height, int dir) {
+  int units = width * height;
+  std::vector<int> rank(units, -1);
+  int x = (width - dir) / 2, y = (height - dir) / 2;
+  int left = x, top = y, right = x, bottom = y;
+  int xdir = dir - 1, ydir = dir;
+  bool held = false;  // the side the walk is on lies on a bound that did not move
+  for (int k = 0; k < units;) {
+    int& r = rank[y * width + x];
+    if (r < 0)
+      r = k++;
+    else if (held && xdir)
+      x = xdir < 0 ? left : right;
+    else if (held)
+      y = ydir < 0 ? top : bottom;
+    if (xdir == -1 && x == left) {
+      held = left == 0;
+      left = std::max(left - 1, 0);
+      x = left;
+      xdir = 0;
+      ydir = 2 * dir - 1;
+    } else if (xdir == 1 && x == right) {
+      held = right == width - 1;
+      right = std::min(right + 1, width - 1);
+      x = right;
+      xdir = 0;
+      ydir = 1 - 2 * dir;
+    } else if (ydir == -1 && y == top) {
+      held = top == 0;
+      top = std::max(top - 1, 0);
+      y = top;
+      xdir = 1 - 2 * dir;
+      ydir = 0;
+    } else if (ydir == 1 && y == bottom) {
+      held = bottom == height - 1;
+      bottom = std::min(bottom + 1, height - 1);
+      y = bottom;
+      xdir = 2 * dir - 1;
+      ydir = 0;
+    } else {
+      x += xdir;
+      y += ydir;
+    }
+  }
+  return rank;
+}
+
+// The slice group map of slice h, whose picture is width macroblocks wide
+// and size of them, in m (made again only where it differs)
+void slice_group_map(GroupMap& m, const SliceHeader& h, int width, int size) {
   const Sps& sps = *h.sps;
   const Pps& pps = *h.pps;
+  int type = pps.slice_group_map_type;
+  int64_t cycle = type >= 3 && type <= 5 ? h.slice_group_change_cycle : 0;
+  if (m.pps == h.pps && m.sps == h.sps && m.field == h.field_pic_flag && m.cycle == cycle && (int)m.group.size() == size)
+    return;
+  if (m.pps != h.pps || m.sps != h.sps) m.rank.clear();
+  m.pps = h.pps, m.sps = h.sps, m.field = h.field_pic_flag, m.cycle = cycle;
+  m.group.clear();  // (until it is made: a map that throws is not kept)
   int units_h = sps.height_map_units;
   int units = width * units_h;
   std::vector<int> map(units, 0);
   int ngroups = pps.num_slice_groups;
   int dir = pps.slice_group_change_direction_flag;
-  int64_t in_group0 = std::min<int64_t>((int64_t)h.slice_group_change_cycle * pps.slice_group_change_rate, units);
+  int64_t in_group0 = std::min<int64_t>(cycle * pps.slice_group_change_rate, units);
   int upper_left = (int)(dir ? units - in_group0 : in_group0);
-  switch (pps.slice_group_map_type) {
+  switch (type) {
     case 0: {
       int i = 0;
       do
@@ -106,42 +182,10 @@ std::vector<uint8_t> slice_group_map(const SliceHeader& h, int width, int size) 
             if (y * width + x < units) map[y * width + x] = g;
       }
       break;
-    case 3: {
-      for (int i = 0; i < units; i++) map[i] = 1;
-      int x = (width - dir) / 2, y = (units_h - dir) / 2;
-      int left = x, top = y, right = x, bottom = y;
-      int xdir = dir - 1, ydir = dir;
-      for (int64_t k = 0; k < in_group0;) {
-        int vacant = map[y * width + x] == 1;
-        if (vacant) map[y * width + x] = 0;
-        if (xdir == -1 && x == left) {
-          left = std::max(left - 1, 0);
-          x = left;
-          xdir = 0;
-          ydir = 2 * dir - 1;
-        } else if (xdir == 1 && x == right) {
-          right = std::min(right + 1, width - 1);
-          x = right;
-          xdir = 0;
-          ydir = 1 - 2 * dir;
-        } else if (ydir == -1 && y == top) {
-          top = std::max(top - 1, 0);
-          y = top;
-          xdir = 1 - 2 * dir;
-          ydir = 0;
-        } else if (ydir == 1 && y == bottom) {
-          bottom = std::min(bottom + 1, units_h - 1);
-          y = bottom;
-          xdir = 2 * dir - 1;
-          ydir = 0;
-        } else {
-          x += xdir;
-          y += ydir;
-        }
-        k += vacant;
-      }
+    case 3:
+      if (m.rank.empty()) m.rank = box_out_ranks(width, units_h, dir);
+      for (int i = 0; i < units; i++) map[i] = m.rank[i] >= in_group0;
       break;
-    }
     case 4:
       for (int i = 0; i < units; i++) map[i] = i < upper_left ? dir : 1 - dir;
       break;
@@ -156,16 +200,19 @@ std::vector<uint8_t> slice_group_map(const SliceHeader& h, int width, int size) 
       for (int i = 0; i < units; i++) map[i] = pps.slice_group_id[i];
       break;
   }
-  std::vector<uint8_t> mb(size);
+  m.group.resize(size);
   for (int i = 0; i < size; i++) {
     if (sps.frame_mbs_only_flag || h.field_pic_flag)
-      mb[i] = (uint8_t)map[i];
+      m.group[i] = (uint8_t)map[i];
     else if (sps.mb_adaptive_frame_field_flag)
-      mb[i] = (uint8_t)map[i / 2];
+      m.group[i] = (uint8_t)map[i / 2];
     else
-      mb[i] = (uint8_t)map[(i / (2 * width)) * width + (i % width)];
+      m.group[i] = (uint8_t)map[(i / (2 * width)) * width + (i % width)];
   }
-  return mb;
+  m.next.resize(size);
+  int last[256];
+  std::fill(last, last + 256, size);
+  for (int i = size - 1; i >= 0; i--) m.next[i] = last[m.group[i]], last[m.group[i]] = i;
 }
 
 // ---------------------------------------------------------------------------
@@ -192,7 +239,10 @@ struct SliceCoderT {
     size_ = width_ * (sps_.frame_height_mbs() / (1 + field_));
     num_ref_[0] = h_.num_ref_idx_active[0];
     num_ref_[1] = h_.num_ref_idx_active[1];
-    if (pps_.num_slice_groups > 1) group_ = slice_group_map(h_, width_, size_);
+    if (pps_.num_slice_groups > 1) {
+      slice_group_map(store_.groups, h_, width_, size_);
+      next_ = store_.groups.next.data();
+    }
     if ((int)store_.mbs.size() < size_) store_.mbs.resize(size_, MbState());
     slice_id_ = ++store_.slices;
     if (h_.first_mb * (1 + mbaff_) >= size_) fail("first_mb_in_slice out of range");
@@ -539,12 +589,7 @@ struct SliceCoderT {
     mb_b_ = nb_loc(0, -1, 16, 16, xW, yW);
   }
 
-  int next_mb(int addr) const {
-    if (group_.empty()) return addr + 1;
-    int i = addr + 1;
-    while (i < size_ && group_[i] != group_[addr]) i++;
-    return i;
-  }
+  int next_mb(int addr) const { return next_ ? next_[addr] : addr + 1; }
 
   // --- macroblock layer (7.3.5)
   //
@@ -1124,12 +1169,14 @@ struct SliceCoderT {
         c[i] = 0;
         continue;
       }
+      if (W && std::abs((int64_t)c[i]) > kMaxLevel) fail("coefficient level too large");
       int a = W ? abs(c[i]) - 1 : 0;
       int v = bin(abs_base + (gt1 ? 0 : std::min(4, 1 + eq1)), a > 0);
       if (v) {
         int ctx = abs_base + 5 + std::min(4 - (cat == 3), gt1);
         while (v < 14 && bin(ctx, a > v)) v++;
         if (v == 14) v += exp_golomb_bypass(0, a - 14);
+        if (v >= kMaxLevel) fail("coefficient level too large");
       }
       int s = bypass(W ? c[i] < 0 : 0);
       c[i] = s ? -(v + 1) : v + 1;
@@ -1256,7 +1303,7 @@ struct SliceCoderT {
   int width_ = 0, size_ = 0;
   int num_ref_[2] = {0, 0};
   uint32_t slice_id_ = 0;
-  std::vector<uint8_t> group_;  // mbToSliceGroupMap, empty without FMO
+  const int* next_ = nullptr;  // without FMO, none (MbStore::groups)
   int cur_addr_ = 0;
   MbState* cur_ = nullptr;
   const MbState* mb_a_ = nullptr;  // macroblocks A and B (6.4.10.1)

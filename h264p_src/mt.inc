@@ -1,8 +1,9 @@
 // h264p on threads (c and x with -t N, and d of what that wrote): the stream
 // cut into parts by h264split.inc's splitter (H264Split, on the main
-// thread) -- a part ends at the first IDR access unit at least -c's part
-// size after its start, and the parameter sets a part needs are copied in
-// at its start, so that each is a stream by itself -- and the parts dealt in
+// thread) -- a part ends at the first IDR or I access unit at least -c's
+// part size after its start, or at the first picture at least mt_cap()
+// after it, and the parameter sets a part needs are copied in at its
+// start, so that each is a stream by itself -- and the parts dealt in
 // turn to N workers by MTwrap (MTwrap_v3, its parts mode: MTwrap.md section
 // 11). A worker codes its parts one after the other, each by a model of its
 // own: H264pCoro (coro.inc), run as a coroutine of the worker's on the part
@@ -21,6 +22,9 @@
 
 const char kMtMagic[] = "h264m";  // compressed on threads, followed by the version, the threads and the part size in KB
 const int kMtHead = (int)sizeof kMtMagic + 1 + 4;  // the magic, the version, the threads, the part size (u32)
+// MTwrap's rings between the main thread and a worker: their size does not
+// depend on the parts (a part goes through them a buffer at a time)
+const uint32_t kMtRing = 1 << 20;
 
 void put_le(uint8_t* p, uint64_t v, int n) {
   for (int i = 0; i < n; i++) p[i] = (uint8_t)(v >> 8 * i);
@@ -30,6 +34,18 @@ uint64_t get_le(const uint8_t* p, int n) {
   for (int i = 0; i < n; i++) v |= (uint64_t)p[i] << 8 * i;
   return v;
 }
+
+// h264p's header of a stream compressed on threads (the part size is
+// there to be seen: d does not need it)
+void mt_head(uint8_t* head, int threads, uint32_t part) {
+  memcpy(head, kMtMagic, sizeof kMtMagic - 1);
+  head[sizeof kMtMagic - 1] = (uint8_t)kCmVersion;
+  head[sizeof kMtMagic] = (uint8_t)threads;
+  put_le(head + sizeof kMtMagic + 1, part >> 10, 4);
+}
+// The size past which a part ends at any picture (with no IDR or I access
+// unit to cut at), for the memory a part takes and its record's 32 bits
+uint64_t mt_cap(uint32_t part) { return std::min<uint64_t>(4 * (uint64_t)part, (uint64_t)1 << 31); }
 
 // A worker's counts for the progress line: its input and its output so
 // far (their parts' and the part's under way)
@@ -113,16 +129,14 @@ struct H264pPart : CoroIo {
       out_ = new std::vector<uint8_t>;
       r = run(std::integral_constant<int, f_DEC>());
     } catch (const std::exception& e) {  // no memory (nothing in a handler may yield)
-      progress_stop(args.meter);
-      fprintf(stderr, "h264p: %s: %s\n", args.name, e.what());
+      say_error(args.meter, "h264p: %s: %s\n", args.name, e.what());
     }
     Quit();
     for (;;) yield(static_cast<Coroutine*>(this), r ? 3 : 0);
   }
 
   int fail(const char* why) {
-    progress_stop(args.meter);
-    fprintf(stderr, "h264p: %s: %s\n", args.name, why);
+    say_error(args.meter, "h264p: %s: %s\n", args.name, why);
     return 1;
   }
   // the next n bytes of the input into in_ (false: there are fewer)
@@ -133,16 +147,16 @@ struct H264pPart : CoroIo {
   }
   // the part's model run on in_ into out_, at the level of a.level (the
   // counts from in0 and out0 on)
-  int code(const H264pArgs& a, uint64_t in0, uint64_t out0) {
-    switch (a.level) {
-#define H264P_P(n) \
-  case n:          \
-    return run_part<H264pCoro<f_DEC, Lv##n>>(a, *in_, *out_, prog, in0, out0);
-      H264P_LEVELS(H264P_P)
-#undef H264P_P
+  template <class LV>
+  struct Lv {
+    static int run(H264pPart& w, const H264pArgs& a, uint64_t in0, uint64_t out0) {
+      return run_part<H264pCoro<f_DEC, LV>>(a, *w.in_, *w.out_, w.prog, in0, out0);
     }
-    progress_stop(args.meter);
-    fprintf(stderr, "h264p: %s: a part compressed at level -%d, which this build has not\n", args.name, a.level);
+  };
+  int code(const H264pArgs& a, uint64_t in0, uint64_t out0) {
+    int r = with_level<Lv>(a.level, *this, a, in0, out0);
+    if (r >= 0) return r;
+    say_error(args.meter, "h264p: %s: a part compressed at level -%d, which this build has not\n", args.name, a.level);
     return 1;
   }
 
@@ -273,4 +287,26 @@ uint64_t mt_parts(const M& m) {
   uint64_t n = 0;
   for (uint i = 0; i < m.th_N; i++) n += m.C1[i].parts;
   return n;
+}
+// An MTwrap stage that the pair it was in stopped driving (the other stage
+// failed) run to its end, its input ended and its output dropped, so that
+// its workers end and Quit() can join them (nothing to do where they have)
+template <class M>
+void mt_drain(M& m) {
+  bool busy = false;
+  for (uint i = 0; i < m.th_N; i++) busy = busy || !m.C1[i].f_done;
+  if (!busy) return;
+  std::vector<byte> sink((size_t)1 << 16);
+  m.f_quit = 1;
+  m.addinp(sink.data(), 0);
+  m.addout(sink.data(), (uint)sink.size());
+  for (;;) {
+    uint r = m.coro_call(&m);
+    if (r == 1)
+      m.addinp(sink.data(), 0);
+    else if (r == 2)
+      m.addout(sink.data(), (uint)sink.size());
+    else
+      break;
+  }
 }

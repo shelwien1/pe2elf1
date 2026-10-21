@@ -2,6 +2,12 @@
 
 namespace h264p {
 
+// The largest coefficient level (in magnitude) the walk takes, CABAC's and
+// CAVLC's, read or written, and so the model's: a NAL unit with a larger
+// one is stored verbatim (a stream the spec allows has at most 2^(7 + bit
+// depth), 2^21)
+const int kMaxLevel = 1 << 24;
+
 // One residual_block_cavlc(); c[0..max_coeff-1] are the coefficients in
 // coding order. nC is -1 for 4:2:0 chroma DC, -2 for 4:2:2 chroma DC.
 // Both return TotalCoeff.
@@ -108,6 +114,7 @@ int cavlc_read_block(BitReader& br, int nC, int max_coeff, int* c) {
     if (prefix >= 15 && suffix_length == 0) code += 15;
     if (prefix >= 16) code += ((int64_t)1 << (prefix - 3)) - 4096;
     if (i == t1 && t1 < 3) code += 2;
+    if (code > 2 * (int64_t)kMaxLevel - 1) throw ParseError("coefficient level too large");
     level[i] = (int)(code % 2 == 0 ? (code + 2) >> 1 : (-code - 1) >> 1);
     if (suffix_length == 0) suffix_length = 1;
     if (abs(level[i]) > (3 << (suffix_length - 1)) && suffix_length < 6) suffix_length++;
@@ -150,7 +157,7 @@ int cavlc_write_block(BitWriter& bw, int nC, int max_coeff, const int* c) {
   for (int i = 0; i < t1; i++) bw.bit(level[i] < 0);
   int suffix_length = tc > 10 && t1 < 3;
   for (int i = t1; i < tc; i++) {
-    if (abs(level[i]) > (1 << 26)) throw TsvError("coefficient too large");
+    if (std::abs((int64_t)level[i]) > kMaxLevel) throw TsvError("coefficient level too large");
     int64_t code = level[i] > 0 ? 2 * (int64_t)level[i] - 2 : -2 * (int64_t)level[i] - 1;
     if (i == t1 && t1 < 3) code -= 2;
     int prefix, suffix_size = 0;

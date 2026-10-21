@@ -56,17 +56,14 @@ struct H264pCoro : Model<f_DEC, LV> {
     try {
       r = run(std::integral_constant<int, f_DEC>());
     } catch (const std::exception& e) {  // no memory for the model (nothing in a handler may yield)
-      progress_stop(args.meter);
-      fprintf(stderr, "h264p: %s: %s\n", args.name, e.what());
+      say_error(args.meter, "h264p: %s: %s\n", args.name, e.what());
     } catch (...) {
-      progress_stop(args.meter);
-      fprintf(stderr, "h264p: %s: an unknown exception\n", args.name);
+      say_error(args.meter, "h264p: %s: an unknown exception\n", args.name);
     }
     delete st;
     st = nullptr;
     if (args.verbose) {
-      progress_cut(args.meter);
-      fprintf(stderr, "coroutine: %zu bytes of stack copied out at a yield, at most (room for %d)\n", this->depth,
+      say(args.meter, "coroutine: %zu bytes of stack copied out at a yield, at most (room for %d)\n", this->depth,
               (int)Coroutine::STKPAD);
     }
     status = r;
@@ -92,8 +89,7 @@ struct H264pCoro : Model<f_DEC, LV> {
     int level = cm_level(head, this->read(head, sizeof head), args.name, args.meter);
     if (level < 0) return 1;
     if (level != LV::id) {
-      progress_stop(args.meter);
-      fprintf(stderr, "h264p: %s: compressed at level -%d, not -%d\n", args.name, level, LV::id);
+      say_error(args.meter, "h264p: %s: compressed at level -%d, not -%d\n", args.name, level, LV::id);
       return 1;
     }
     Options opt;

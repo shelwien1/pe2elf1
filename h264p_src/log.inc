@@ -10,7 +10,7 @@ struct LogChan : Chan {
   LogChan() : Chan(false) {}
 
   void clear() {
-    n_ = 0;
+    v_.clear();
     pos_ = 0;
     W = false;
   }
@@ -19,41 +19,58 @@ struct LogChan : Chan {
     pos_ = 0;
     W = true;
   }
-  bool at_end() const { return pos_ == n_; }
+  bool at_end() const { return pos_ == v_.size(); }
 
-  int64_t io(int64_t x) {
-    if (!W) {
-      if (n_ == v_.size()) grow(1);
-      v_[n_++] = x;
-      return x;
-    }
-    if (pos_ >= n_) fail("more values asked for than there are");
+  // a value: 32 bits, the most a value of the walk's has, or a header's
+  // 64 in two
+  int32_t get() {
+    if (pos_ >= v_.size()) fail("more values asked for than there are");
     return v_[pos_++];
   }
-  int io32(int x) { return (int)io(x); }
-  // n values at once
+  int io32(int x) {
+    if (!W) {
+      v_.push_back(x);
+      return x;
+    }
+    return get();
+  }
+  int64_t io(int64_t x) {
+    if (!W) {
+      v_.push_back((int32_t)x);
+      v_.push_back((int32_t)((uint64_t)x >> 32));
+      return x;
+    }
+    uint64_t lo = (uint32_t)get();
+    return (int64_t)((uint64_t)(uint32_t)get() << 32 | lo);
+  }
+  // n values at once; as a block of coefficients (sparse), how many there
+  // are up to the last that is not zero, and those
   void io32(int* c, int n) {
     if (!W) {
-      if (n_ + n > v_.size()) grow(n);
-      int64_t* p = v_.data() + n_;
-      for (int i = 0; i < n; i++) p[i] = c[i];
-      n_ += n;
+      v_.insert(v_.end(), c, c + n);
       return;
     }
-    if (n > 0 && pos_ + n > n_) fail("more values asked for than there are");
-    const int64_t* p = v_.data() + pos_;
-    for (int i = 0; i < n; i++) c[i] = (int)p[i];
+    if (n > 0 && v_.size() - pos_ < (size_t)n) fail("more values asked for than there are");
+    std::copy(v_.data() + pos_, v_.data() + pos_ + n, c);
     pos_ += n;
   }
-  void grow(size_t n) { v_.resize(std::max(2 * v_.size(), n_ + n + 4096)); }
+  void coefs(int* c, int n) {
+    int k = n;
+    if (!W)
+      while (k > 0 && !c[k - 1]) k--;
+    k = io32(k);
+    if (k < 0 || k > n) fail("more values asked for than there are");
+    io32(c, k);
+    std::fill(c + k, c + n, 0);
+  }
 
   void hbegin(const char*) override {}
   int64_t hval(int64_t v) override { return io(v); }
   void hbytes(std::vector<uint8_t>& b) override {
-    for (auto& x : b) x = (uint8_t)io(x);
+    for (auto& x : b) x = (uint8_t)io32(x);
   }
   void hend() override {}
-  bool hmore(const char*, bool m) override { return io(m) != 0; }
+  bool hmore(const char*, bool m) override { return io32(m) != 0; }
   int skip(int v) override { return io32(v); }
   int end(int v, bool) override { return io32(v); }
   void mb_begin() override {}
@@ -68,7 +85,7 @@ struct LogChan : Chan {
   int mvd(int, int, int, int, int, int, int v) override { return io32(v); }
   int cbp(int v) override { return io32(v); }
   int qpd(int v) override { return io32(v); }
-  void block(int, int, int* c, int n, bool) override { io32(c, n); }
+  void block(int, int, int* c, int n, bool) override { coefs(c, n); }
   void pcm(int& align, int& nb, int* s, int n) override {
     nb = io32(nb);
     align = io32(align);
@@ -76,8 +93,8 @@ struct LogChan : Chan {
   }
   [[noreturn]] void fail(const std::string& msg) override { throw TsvError(msg); }
 
-  std::vector<int64_t> v_;  // the values: n_ of them
-  size_t n_ = 0, pos_ = 0;
+  std::vector<int32_t> v_;  // the values (only grows: its room stays for the next NAL unit)
+  size_t pos_ = 0;           // the next one to read
 };
 
 }  // namespace h264p

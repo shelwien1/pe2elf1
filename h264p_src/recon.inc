@@ -62,8 +62,10 @@ static INLINE bool one_mv(const int16_t mv[16][2]) {
 // qs) and their bilinear prediction from a (stride as) at (fx, fy) quarter
 // samples: ((4-fx)(4-fy) a + fx(4-fy) a' + (4-fx)fy c + fx fy c' + 8) >> 4, a'
 // and c' right of a and c, c below a. Stops once the sum reaches budget (>
-// 0), after a row or two; a must be readable n + 1 samples wide and rows + 1
-// down.
+// 0), after a row or two, and returns budget then: what it returns is the
+// same however far it went (the AVX2 code and the plain alike; a caller
+// sums such parts against one budget); a must be readable n + 1 samples
+// wide and rows + 1 down.
 static int sad_bil(const uint8_t* q, int qs, const uint8_t* a, int as, int n, int rows, int fx, int fy, int budget) {
   int s = 0;
 #ifdef H264P_AVX2
@@ -98,7 +100,7 @@ static int sad_bil(const uint8_t* q, int qs, const uint8_t* a, int as, int n, in
         s = _mm_cvtsi128_si32(_mm_add_epi64(t, _mm_unpackhi_epi64(t, t)));
         if (s >= budget) break;
       }
-      return s;
+      return std::min(s, budget);
     }
     // rows of 8 in the two halves, of 4 in the low two quarters
     auto ld = [n](const uint8_t* p0, const uint8_t* p1) {
@@ -129,7 +131,7 @@ static int sad_bil(const uint8_t* q, int qs, const uint8_t* a, int as, int n, in
       s = _mm_cvtsi128_si32(_mm_add_epi64(acc, _mm_unpackhi_epi64(acc, acc)));
       if (s >= budget) break;
     }
-    return s;
+    return std::min(s, budget);
   }
 #endif
   int wa = (4 - fx) * (4 - fy), wb = fx * (4 - fy), wc = (4 - fx) * fy, wd = fx * fy;
@@ -140,7 +142,7 @@ static int sad_bil(const uint8_t* q, int qs, const uint8_t* a, int as, int n, in
     else
       for (int i = 0; i < n; i++) s += abs(q[i] - ((wa * a[i] + wb * a[i + 1] + wc * c[i] + wd * c[i + 1] + 8) >> 4));
   }
-  return s;
+  return std::min(s, budget);
 }
 #ifdef H264P_AVX2
 // two rows of 16 samples (p0, p1) in one vector
@@ -188,7 +190,7 @@ static INLINE __m256i bil16x2(const uint8_t* a, int as, int fx, int fy) {
 }
 // sad_bil of rows of 32 samples, a row at a time (each row's pairs of
 // samples serve as the row above for one and below for the next), checked
-// against budget every 4 rows
+// against budget every 4 rows (budget once it is reached, as sad_bil)
 static int sad_bil32(const uint8_t* q, int qs, const uint8_t* a, int as, int rows, int fx, int fy, int budget) {
   auto ld = [](const uint8_t* p) { return _mm256_loadu_si256((const __m256i*)p); };
   __m256i acc = _mm256_setzero_si256();
@@ -196,9 +198,9 @@ static int sad_bil32(const uint8_t* q, int qs, const uint8_t* a, int as, int row
   if (!(fx | fy)) {
     for (int j = 0; j < rows; j++, q += qs, a += as) {
       acc = _mm256_add_epi64(acc, _mm256_sad_epu8(ld(a), ld(q)));
-      if ((j & 3) == 3 && (s = sad_sum(acc)) >= budget) return s;
+      if ((j & 3) == 3 && (s = sad_sum(acc)) >= budget) return budget;
     }
-    return sad_sum(acc);
+    return std::min(sad_sum(acc), budget);
   }
   const __m256i wab = kBilW.ab[fx + 4 * fy], wcd = kBilW.cd[fx + 4 * fy], r8 = _mm256_set1_epi16(8);
   __m256i x0 = ld(a), x1 = ld(a + 1);
@@ -212,9 +214,9 @@ static int sad_bil32(const uint8_t* q, int qs, const uint8_t* a, int as, int row
     __m256i d = _mm256_packus_epi16(_mm256_srli_epi16(_mm256_add_epi16(lo, r8), 4), _mm256_srli_epi16(_mm256_add_epi16(hi, r8), 4));
     acc = _mm256_add_epi64(acc, _mm256_sad_epu8(d, ld(q)));
     plo = nlo, phi = nhi;
-    if ((j & 3) == 3 && (s = sad_sum(acc)) >= budget) return s;
+    if ((j & 3) == 3 && (s = sad_sum(acc)) >= budget) return budget;
   }
-  return sad_sum(acc);
+  return std::min(sad_sum(acc), budget);
 }
 #endif
 #ifdef H264P_AVX2
@@ -692,12 +694,14 @@ struct ReconT {
   // --- reference picture management (8.2.4, 8.2.5)
   int pic_num(const RPic* p) const { return p->lt ? p->lt_idx : (p->frame_num > cur->frame_num ? p->frame_num - max_frame_num : p->frame_num); }
 
+  // the end of the stream: its last picture finished too
+  void end() { finish_picture(); }
   void finish_picture() {
     if (!cur) return;
     if (act()) fin_end();
     // checking the reconstruction against a decoder's: H264P_RECDUMP=file
     // gets the pictures, in decoding order, as raw 4:2:0 of whole macroblocks
-    // (this model's: c or d without -t)
+    // (this model's: c or d without -t, the only model of the call)
     FILE* dump = act() ? recdump.get() : nullptr;
     if (dump) {
       fwrite(cur->y.data(), 1, cur->y.size(), dump);
@@ -808,30 +812,36 @@ struct ReconT {
     }
   }
 
-  // POC of the current picture (8.2.1)
+  // POC of the current picture (8.2.1), held within +-(2^30 - 1): a stream
+  // the spec allows has POC differences of 16 bits, and held so, any two
+  // POCs subtract in an int
+  static int poc_sat(int64_t v) {
+    const int64_t m = ((int64_t)1 << 30) - 1;
+    return (int)(v < -m ? -m : v > m ? m : v);
+  }
   int poc(const SliceHeader& h) {
     const Sps& sps = *h.sps;
     bool idr = h.nal_unit_type == 5;
     if (sps.poc_type == 0) {
-      int max_lsb = 1 << sps.log2_max_poc_lsb;
-      int pm = idr ? 0 : prev_poc_msb, pl = idr ? 0 : prev_poc_lsb;
-      int msb = pm;
-      if (h.poc_lsb < pl && pl - h.poc_lsb >= max_lsb / 2)
+      int64_t max_lsb = (int64_t)1 << sps.log2_max_poc_lsb;
+      int64_t pm = idr ? 0 : prev_poc_msb, pl = idr ? 0 : prev_poc_lsb, lsb = h.poc_lsb;
+      int64_t msb = pm;
+      if (lsb < pl && pl - lsb >= max_lsb / 2)
         msb = pm + max_lsb;
-      else if (h.poc_lsb > pl && h.poc_lsb - pl > max_lsb / 2)
+      else if (lsb > pl && lsb - pl > max_lsb / 2)
         msb = pm - max_lsb;
-      int top = msb + h.poc_lsb, bot = top + (int)h.delta_poc_bottom;
+      int64_t top = msb + lsb, bot = top + h.delta_poc_bottom;
       if (h.nal_ref_idc) {
-        prev_poc_msb = msb;
-        prev_poc_lsb = h.poc_lsb;
+        prev_poc_msb = poc_sat(msb);
+        prev_poc_lsb = (int)lsb;
         if (h.mmco5) {
           prev_poc_msb = 0;
-          prev_poc_lsb = top - std::min(top, bot);
+          prev_poc_lsb = poc_sat(top - std::min(top, bot));
         }
       }
-      return std::min(top, bot);
+      return poc_sat(std::min(top, bot));
     }
-    // types 1 and 2: FrameNumOffset
+  // types 1 and 2: FrameNumOffset
     int64_t fno = idr ? 0 : prev_frame_num_offset + (prev_frame_num > h.frame_num ? max_frame_num : 0);
     int64_t top, bot;
     if (sps.poc_type == 2) {
@@ -854,7 +864,7 @@ struct ReconT {
     }
     prev_frame_num_offset = h.mmco5 ? 0 : fno;
     prev_frame_num = h.mmco5 ? 0 : h.frame_num;
-    return (int)std::min(top, bot);
+    return poc_sat(std::min(top, bot));
   }
 
   // the reference lists of a slice (8.2.4.2, 8.2.4.3)
@@ -1844,7 +1854,7 @@ struct ReconT {
   // an Intra4x4 (Intra8x8: blk the 8x8 block) block about to be coded: the
   // ones before it reconstructed, its prediction in the picture
   void luma_ready(int blk, int qp) {
-    if (!act() || mb_cls != 6) return;
+    if (!act() || !mb_prepared || mb_cls != 6) return;
     if (mb_t8) {
       for (int b8 = 0; b8 <= blk; b8++) {
         if (mb_done8 >> b8 & 1) continue;
@@ -3110,7 +3120,7 @@ struct ReconT {
     const uint8_t *R = ref->y.data(), *Y = cur->y.data();
     int W = ref->w, H = ref->h, ps, pm;
     const uint8_t* RP = ref->luma(ps, pm);
-    // (stopping once it reaches budget)
+    // (budget once it reaches budget, as sad_bil)
     auto sad = [&](int xs, int ys, int rw, int rh, int vx, int vy, int budget) {
       int ix = xs + (vx >> 2), iy = ys + (vy >> 2), fx = vx & 3, fy = vy & 3, s = 0;
       if (ix >= -pm && iy >= -pm && ix + rw < W + pm && iy + rh < H + pm)
@@ -3125,7 +3135,7 @@ struct ReconT {
           s += abs(q[i] - ((wa * a[x1] + wb * a[x2] + wc * c[x1] + wd * c[x2] + 8) >> 4));
         }
       }
-      return s;
+      return std::min(s, budget);
     };
     const int px = mv[0], py = mv[1];
     const int T = l < 0 ? TM_TP : TM_T;
@@ -3732,6 +3742,7 @@ typedef ReconT<false> ReconRefs;
 struct ReconOff {
   static constexpr bool active = false, mact = false;
   static constexpr bool act() { return false; }
+  void end() {}
   RPic* cur = nullptr;
   RPic* list[2][33] = {};
   int nlist[2] = {0, 0};

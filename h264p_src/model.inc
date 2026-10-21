@@ -604,17 +604,18 @@ struct Model : tc_rc<f_DEC> {
   // (oggcomp's raw model and a match): the match finds the last three bytes
   // in what was coded so far, after a dictionary of the user data x264
   // writes in an SEI message (its UUID and its options with their defaults)
-  cm_cnt raw_o0_[256];
-  cm_cnt raw_o1_[256][256];
-  i32 raw_w_[256 * 4];
-  u8 raw_wc_[256];
+  // (zeros whatever constructs the model: the decompressor's must match)
+  cm_cnt raw_o0_[256] = {};
+  cm_cnt raw_o1_[256][256] = {};
+  i32 raw_w_[256 * 4] = {};
+  u8 raw_wc_[256] = {};
   cm_mix<4> raw_mx_;
   u32 raw_prev_ = 0;
   std::vector<u8> rbuf_;           // the dictionary, then the bytes coded
   std::vector<i32> rhash_;         // by the hash of three bytes, the place after them in rbuf_ (-1 none)
   size_t rptr_ = 0, rdict_ = 0;    // where the match predicts from; the dictionary's size
   int rlen_ = 0;                   // the match's length (0 none)
-  cm_cnt raw_mc_[16];              // whether the match's bit is right, by its length
+  cm_cnt raw_mc_[16] = {};         // whether the match's bit is right, by its length
   static u32 rkey(const u8* p) { return ((u32)p[0] * 0x9E3779B1u ^ (u32)p[1] * 0x85EBCA77u ^ (u32)p[2] * 0xC2B2AE3Du) >> 16; }
   void raw_init() {
     static const u8 kUuid[16] = {0xdc, 0x45, 0xe9, 0xbd, 0xe6, 0xd9, 0x48, 0xb7, 0x96, 0x2c, 0xd8, 0x20, 0xd9, 0x23, 0xee, 0xef};
@@ -991,6 +992,8 @@ struct Model : tc_rc<f_DEC> {
     if (newpic) memset(lq_, 0, sizeof lq_);
   }
   void slice_end() { slice_cnt_[key_] = cnt_; }
+  // the end of the stream
+  void end_stream() { rec_.end(); }
   // before finish_mb() rewrites the record of the macroblock in the history
   // hkey_'s: what mc_col() and mc_nz() read of it (valid, cls, nzm[0], cm and
   // the coefficient rows, those outside cm zero as in hist_)
@@ -1438,7 +1441,7 @@ struct Model : tc_rc<f_DEC> {
     mbt_d_ = nullptr;
     mi_->cls = (uint8_t)class_of(stype, t);
     if (stype == kB)
-      parts_ = t <= 3 ? 0 : t == 22 ? 3 : t < 22 ? 2 - (t & 1) : 0;
+      parts_ = t <= 3 ? 0 : t == 22 ? 3 : t < 22 ? 1 + (t & 1) : 0;  // (16x8 even, 8x16 odd)
     else if (stype == kP || stype == kSP)
       parts_ = t < 3 ? t : 3;
     if (LV::mvp && stype == kB && t == 0) mv_direct(15);
@@ -1496,7 +1499,7 @@ struct Model : tc_rc<f_DEC> {
         cand[nc][0] = tv[0], cand[nc][1] = tv[1], nc++;
       } else if (col_ && col_->cls < CL_INXN && col_->rf[0][0] >= 0) {
         int cr = col_->rf[0][0], d0 = ref_dist(0, 0), dr = d0;
-        if (prev_poc_ != INT_MIN && cr < 32 && col_rpoc_[0][cr] != INT_MIN) d0 = prev_poc_ - col_rpoc_[0][cr];
+        if (prev_poc_ != INT_MIN && cr < 32 && col_rpoc_[0][cr] != INT_MIN) d0 = poc_dist(prev_poc_, col_rpoc_[0][cr]);
         for (int k = 0; k < 2; k++) cand[nc][k] = d0 && dr && d0 != dr ? mv_scale(col_->mv[0][5][k], dr, d0) : col_->mv[0][5][k];
         nc++;
       }
@@ -2076,12 +2079,18 @@ struct Model : tc_rc<f_DEC> {
     tc_syms[STG_MVS]++;
     return v;
   }
+  // a distance in POC, held to the 16 bits the spec allows (a stream past
+  // them would have the scaling below overflow)
+  static int poc_dist(int a, int b) {
+    int64_t d = (int64_t)a - b;
+    return (int)(d < -32768 ? -32768 : d > 32767 ? 32767 : d);
+  }
   // the distance in POC from the current picture to list l's reference r
   // (0 not known), and a vector over distance dn scaled to distance dr
   int ref_dist(int l, int r) const {
-    return rec_.mact && r >= 0 && r < rec_.nlist[l] && rec_.list[l][r] ? cur_poc_ - rec_.list[l][r]->poc : 0;
+    return rec_.mact && r >= 0 && r < rec_.nlist[l] && rec_.list[l][r] ? poc_dist(cur_poc_, rec_.list[l][r]->poc) : 0;
   }
-  static int mv_scale(int v, int dr, int dn) { return (int)div_floor((int64_t)v * dr * 2 + dn, 2 * dn); }
+  static int mv_scale(int v, int dr, int dn) { return (int)div_floor((int64_t)v * dr * 2 + dn, 2 * (int64_t)dn); }
   // B: the vector the motion of list 1's first reference's co-located
   // block (as if it pointed at list 0's first reference) gives the 4x4
   // block (x, y) on list l's reference ref, as temporal direct does: false
@@ -2092,7 +2101,7 @@ struct Model : tc_rc<f_DEC> {
     int td = ref_dist(0, 0) - ref_dist(1, 0), tr = ref_dist(l, ref), k1 = phist_key();
     // over the distance from that picture to its own reference, where known
     if (cr >= 0 && cr < 32 && k1 >= 0 && hist_rpoc_[k1][cl][cr] != INT_MIN && ref_dist(1, 0))
-      td = hist_poc_[k1] - hist_rpoc_[k1][cl][cr];
+      td = poc_dist(hist_poc_[k1], hist_rpoc_[k1][cl][cr]);
     if (cr < 0 || !td || !tr || !ref_dist(0, 0)) return false;
     for (int k = 0; k < 2; k++) m[k] = mv_scale(col1_->mv[cl][y * 4 + x][k], tr, td);
     return true;
@@ -2127,7 +2136,7 @@ struct Model : tc_rc<f_DEC> {
         // scaled by the reference's distance against that of col's own
         // (where not known, the first reference's)
         int cr = col_->rf[list][b8], d0 = ref_dist(list, 0), dr = ref_dist(list, ref);
-        if (prev_poc_ != INT_MIN && cr < 32 && col_rpoc_[list][cr] != INT_MIN) d0 = prev_poc_ - col_rpoc_[list][cr];
+        if (prev_poc_ != INT_MIN && cr < 32 && col_rpoc_[list][cr] != INT_MIN) d0 = poc_dist(prev_poc_, col_rpoc_[list][cr]);
         if (d0 && dr && d0 != dr)
           for (int k = 0; k < 2; k++) cm[k] = mv_scale(cm[k], dr, d0);
       }
@@ -2965,7 +2974,7 @@ struct Model : tc_rc<f_DEC> {
       f_lvl.make(L, X);
       // the intra estimate's level there
       f_lvl.hint = pok ? std::max(abs(est(k)) - 1, 0) : -1;
-      int a = cm_int(f_lvl.code(X, ENC ? abs(c[k]) - 1 : 0), 1 << 24);
+      int a = cm_int(f_lvl.code(X, ENC ? abs(c[k]) - 1 : 0), kMaxLevel - 1);
       f_lvl.hint = -1;
       mag[k] = a + 1;
       lsum += a + 1;

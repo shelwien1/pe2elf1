@@ -107,7 +107,8 @@ static void* tc_map(sz n, const char* what = "a model table") {
   p = mmap(nullptr, n, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
   if (p == MAP_FAILED) p = nullptr;
 #endif
-  if (!p) cm_fail("cannot map %" PRIu64 " MB for %s", (u64)(n >> 20), what);
+  if (!p && n >> 20) cm_fail("cannot map %" PRIu64 " MB for %s", (u64)(n >> 20), what);
+  if (!p) cm_fail("cannot map %" PRIu64 " KB for %s", (u64)((n + 1023) >> 10), what);
   return p;
 }
 static inline void tc_unmap(void* p, sz n) {
