@@ -11,10 +11,11 @@
 // the range coder (fam.inc's tc_rc) and the coder from the coroutine's I/O
 // (rcio.inc), whose buffers its bytes go through. A run is an object of its
 // own, and shares nothing with another, so that any number of them can go at
-// once, on as many threads. One is constructed for a run, and its model is
-// set up as do_process() starts (Model::init()); the stream's state (the
-// parser's contexts, its buffers) is allocated then too and freed as the
-// run ends, or by Quit() wherever the coroutine was left. The stack a yield
+// once, on as many threads. One is made for a run (coro_new(), Init()),
+// and its model's tables are mapped as the run starts (Model::start()); the
+// stream's state (the parser's contexts, its buffers) is allocated then too
+// and freed as the run ends, or by Quit() wherever the coroutine was left,
+// which frees the model's too (coro_free() after). The stack a yield
 // copies out stays small (rcio.inc's CoroIo); the decompressor yields deep
 // in the model, where the range decoder reads its input, and the compressor
 // where the coder writes its output.
@@ -26,20 +27,23 @@ struct H264pCoro : Model<f_DEC, LV> {
   typedef typename std::conditional<f_DEC != 0, DecompressState, CompressState>::type State;
 
   H264pArgs args;
-  State* st = nullptr;
-  int status = 1;  // the run's: 0, 1 (an error), kRestart; 1 until it has ended
+  State* st;
+  int status;  // the run's: 0, 1 (an error), kRestart; 1 until it has ended
 
   uint32_t Init(const H264pArgs* a) {
     this->coro_init();
+    Model<f_DEC, LV>::Init();
     args = *a;
+    st = nullptr;
+    status = 1;
     return 0;
   }
   void Quit() {
     if (st) st->Quit();
     mem_free(st);
     st = nullptr;
+    Model<f_DEC, LV>::Quit();
   }
-  ~H264pCoro() { Quit(); }
 
   // The run, in a trap (err.inc) that an error ends it at: said, after
   // what was decoded is written (d keeps it); or kRestart, a slice the
@@ -101,15 +105,15 @@ struct H264pCoro : Model<f_DEC, LV> {
 
 // The coroutine of a call of c or d (or of a part, mt.inc), on pages of
 // its own -- zeroed, and aligned as CoroutinePair's members ask: made by
-// coro_new(), and after its Quit() freed by coro_free(). (Still
-// constructed and destroyed, for the model's members that are.)
+// coro_new() (plain data: Init() sets it up), and after its Quit() freed
+// by coro_free()
 template <class T>
 T* coro_new() {
-  return new (tc_map(sizeof(T), "a coroutine")) T();
+  static_assert(__is_trivially_constructible(T), "a coroutine is plain data, not constructed");
+  return (T*)tc_map(sizeof(T), "a coroutine");
 }
 template <class T>
 void coro_free(T* p) {
-  p->~T();
   tc_unmap(p, sizeof(T));
 }
 

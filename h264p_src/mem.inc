@@ -116,4 +116,47 @@ struct Buf {
   bool same(const Buf& o) const { return same(o.p, o.n); }
 };
 
+// A map from 32-bit keys to plain data V (a hash table, open addressing):
+// get(k) is k's value, made zero where k is new
+template <class V>
+struct Map32 {
+  struct E {
+    uint32_t key, used;
+    V v;
+  };
+  Buf<E> t;  // (a power of 2 of them, more than twice the keys)
+  size_t n;  // the keys
+
+  void Init() {
+    t.Init();
+    n = 0;
+  }
+  void Quit() { t.Quit(); }
+  V& get(uint32_t k) {
+    if (2 * (n + 1) > t.size()) grow();
+    size_t m = t.size() - 1;
+    for (size_t i = (size_t)(((uint64_t)k * 0x9E3779B97F4A7C15ull) >> 40) & m;; i = (i + 1) & m) {
+      E& e = t[i];
+      if (!e.used) {
+        e.key = k, e.used = 1;
+        memset((void*)&e.v, 0, sizeof e.v);
+        n++;
+        return e.v;
+      }
+      if (e.key == k) return e.v;
+    }
+  }
+  // twice the room, the keys put in again
+  void grow() {
+    Buf<E> o;
+    o.Init();
+    o.swap(t);
+    t.resize(o.size() ? 2 * o.size() : 16);
+    n = 0;
+    for (const E& e : o)
+      if (e.used) get(e.key) = e.v;
+    o.Quit();
+  }
+};
+
 }  // namespace h264p

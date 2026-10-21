@@ -393,7 +393,7 @@ int compress_stream(Model<0, LV>& m, CompressState& s, const H264pArgs& a) {
   const uint8_t head[2] = {(uint8_t)kCmVersion, (uint8_t)LV::id};
   m.write((const uint8_t*)kCmMagic, sizeof kCmMagic - 1);
   m.write(head, 2);
-  m.init();
+  m.start();
   m.tc_verbose = a.verbose;
   m.rc_Init();
   Buf<uint8_t>& nal = s.nal;
@@ -443,7 +443,7 @@ int decompress_stream(Model<1, LV>& m, DecompressState& s, const H264pArgs& a) {
   auto spill = [&]() {
     if (buf.size() > (1 << 16)) flush();
   };
-  m.init();
+  m.start();
   m.tc_verbose = a.verbose;
   m.rc_Init();
   Context& ctx = s.ctx;

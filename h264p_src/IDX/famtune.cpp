@@ -22,12 +22,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <memory>
-#include <new>
-#include <stdexcept>
-#include <string>
 #include <type_traits>
-#include <vector>
 
 #ifndef _WIN32
 #include <sys/mman.h>
@@ -43,6 +38,7 @@
 #include "../Lib3/coro3b.inc"
 
 #include "../err.inc"
+#include "../mem.inc"
 #include "../cmbase.inc"
 #include "../rcio.inc"
 #include "../rc.inc"
@@ -80,15 +76,15 @@ using namespace h264p;
 
 namespace {
 
-std::vector<char> slurp(const char* fn) {
+// the file fn's bytes, into d
+void slurp(const char* fn, Buf<char>& d) {
   FILE* f = fopen(fn, "rb");
   if (!f) cm_fail("cannot read %s", fn);
-  std::vector<char> d;
+  d.clear();
   char buf[1 << 16];
   size_t n;
-  while ((n = fread(buf, 1, sizeof buf, f)) > 0) d.insert(d.end(), buf, buf + n);
+  while ((n = fread(buf, 1, sizeof buf, f)) > 0) d.append(buf, n);
   fclose(f);
-  return d;
 }
 
 // One family's dumps, as Model codes them: its tables mapped fresh at each
@@ -98,23 +94,27 @@ template <class C>
 void replay(char** files, int n, tc_rc<0>& rc) {
   typedef tc_fam<0, C> F;
   static const int any = 0;  // (prpa only set: what bitm() asks of it)
-  std::unique_ptr<F> f;
-  typename C::T* t = nullptr;  // its tables (the last stream's)
+  F* f = nullptr;              // the family (the last stream's), on zeroed pages
+  typename C::T* t = nullptr;  // its tables
   typename C::V D;
   tcx X{};
+  Buf<char> d;
+  d.Init();
   for (int i = 0; i < n; i++) {
-    std::vector<char> d = slurp(files[i]);
+    slurp(files[i], d);
     const char *p = d.data(), *e = p + d.size();
     while (p < e) {
       char tag = *p++;
       if (tag == 'R') {
         if (t) C::quit(t), tc_unmap(t, sizeof(typename C::T));
-        t = new (tc_map(sizeof(typename C::T))) typename C::T;
+        t = (typename C::T*)tc_map(sizeof(typename C::T));
         C::init(t);
-        f.reset(new F());
+        if (f) f->Quit(), tc_unmap(f, sizeof(F));
+        f = (F*)tc_map(sizeof(F), "a family");
+        f->Init();
         f->wire(t, &rc);
-        f->Z.assign(C::kT * (sz)C::ND * 5, cm_cnt2{});
-        f->ZM.assign(C::kT * (sz)C::MND * 5, cm_cnt{});
+        f->Z.fill(C::kT * (sz)C::ND * 5, cm_cnt2{});
+        f->ZM.fill(C::kT * (sz)C::MND * 5, cm_cnt{});
         continue;
       }
       if (!f) cm_fail("famtune: a dump that does not start with a stream");
@@ -155,8 +155,9 @@ void replay(char** files, int n, tc_rc<0>& rc) {
       }
     }
   }
-  f.reset();
+  if (f) f->Quit(), tc_unmap(f, sizeof(F));
   if (t) C::quit(t), tc_unmap(t, sizeof(typename C::T));
+  d.Quit();
 }
 
 // The replay as a coroutine, as the model codes (its coder is a coroutine's,
@@ -165,7 +166,15 @@ void replay(char** files, int n, tc_rc<0>& rc) {
 struct Replay : tc_rc<0> {
   char** argv;
   int argc;
-  std::string err;  // empty: done
+  bool failed;
+  char err[256];  // (failed) why
+  void Init(int c, char** v) {
+    coro_init();
+    tc_rc<0>::Init();
+    argc = c, argv = v;
+    failed = false;
+    err[0] = 0;
+  }
   void do_process() {
     io_init();
     ErrTrap t;  // (an error: err.inc)
@@ -177,9 +186,10 @@ struct Replay : tc_rc<0> {
 #undef FT_FAM
       err_pop(t);
     } else {
-      err = t.why;
+      failed = true;
+      snprintf(err, sizeof err, "%s", t.why);
     }
-    for (;;) yield(static_cast<Coroutine*>(this), err.empty() ? 0 : 3);
+    for (;;) yield(static_cast<Coroutine*>(this), failed ? 3 : 0);
   }
 };
 
@@ -190,17 +200,15 @@ int main(int argc, char** argv) {
     fprintf(stderr, "usage: famtune FAMILY DUMP...   (level -%d)\n", FtLv::id);
     return 2;
   }
-  // (on pages of its own: a coroutine's jmp_bufs are aligned)
-  Replay* r = new (tc_map(sizeof(Replay), "the replay")) Replay();
+  // (on pages of its own, zeroed: a coroutine's jmp_bufs are aligned)
+  Replay* r = (Replay*)tc_map(sizeof(Replay), "the replay");
   static uint8_t out[1 << 16];
-  r->coro_init();
-  r->argv = argv;
-  r->argc = argc;
+  r->Init(argc, argv);
   r->tc_verbose = true;
   r->addout(out, sizeof out);
   while (r->coro_call(r) == 2) r->addout(out, sizeof out);
-  if (!r->err.empty()) {
-    fprintf(stderr, "famtune: %s\n", r->err.c_str());
+  if (r->failed) {
+    fprintf(stderr, "famtune: %s\n", r->err);
     return 1;
   }
   printf("%.3f\n", r->tc_bits[0] / 8);

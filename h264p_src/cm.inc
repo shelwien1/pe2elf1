@@ -29,7 +29,7 @@ struct cm_tabs {
   u16 mrec[CM_AMAX + 2];
   i16 st[CM_PONE + 1];  // (and one more, read in pairs)
   u16 sq[2 * CM_STMAX + 1];
-  cm_tabs() {
+  void Init() {
     int i;
     for(i = 0; i <= CM_TMAX + 1; i++)
       rec[i] = (u16)(CM_CONE / (i + 2));
@@ -55,7 +55,12 @@ struct cm_tabs {
     st[CM_PONE] = 0;
   }
 };
-static const cm_tabs cm_tab;
+static cm_tabs cm_make_tabs() {
+  cm_tabs t;
+  t.Init();
+  return t;
+}
+static const cm_tabs cm_tab = cm_make_tabs();
 static const u16 (&cm_rec)[CM_TMAX + 2] = cm_tab.rec;
 static const u16 (&cm_arec)[CM_AMAX + 2] = cm_tab.arec;
 static const u16 (&cm_mrec)[CM_AMAX + 2] = cm_tab.mrec;

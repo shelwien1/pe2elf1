@@ -10,9 +10,9 @@
 // counters (G). prp, when set, is one more prediction for the mixer; hint,
 // a magnitude the value is expected near, one more set of counters.
 //
-// Changed from oggcomp: no codebook-derived priors (tc_pcur), errors are
-// exceptions, and the parameters come from a class (the template argument
-// C) whose constants the shipping build folds into the code.
+// Changed from oggcomp: no codebook-derived priors (tc_pcur), errors jump
+// to traps (err.inc), and the parameters come from a class (the template
+// argument C) whose constants the shipping build folds into the code.
 
 namespace h264p {
 
@@ -49,12 +49,13 @@ struct tcx {
 //  class's type, C::Cnt)
 template <class Cnt>
 struct tc_tabs {
-  Cnt *cnt[10] = {};
-  cm_cnt *T = nullptr, *G = nullptr;
-  i32 *W = nullptr, *WM = nullptr, *W2 = nullptr, *W3 = nullptr, *WF = nullptr;
-  u8 *WC = nullptr, *WMC = nullptr, *W2C = nullptr, *W3C = nullptr, *WFC = nullptr;
-  i16 *S = nullptr, *F = nullptr;
-  u8 *SC = nullptr, *FC = nullptr;
+  Cnt *cnt[10];
+  cm_cnt *T, *G;
+  i32 *W, *WM, *W2, *W3, *WF;
+  u8 *WC, *WMC, *W2C, *W3C, *WFC;
+  i16 *S, *F;
+  u8 *SC, *FC;
+  void Init() { memset((void *)this, 0, sizeof *this); }  // (none)
 };
 
 //  The range coder of a run (a stream compressed or decompressed), with
@@ -65,10 +66,16 @@ struct tc_tabs {
 //  direction is a template parameter, f_DEC as in Rangecoder: 0 codes, 1
 //  decodes.
 template <int f_DEC> struct tc_rc : Rangecoder<f_DEC> {
-  double tc_bits[32] = {};
-  u64 tc_syms[32] = {};
-  int tc_stage = 0;
-  bool tc_verbose = false;
+  double tc_bits[32];
+  u64 tc_syms[32];
+  int tc_stage;
+  bool tc_verbose;
+  void Init() {
+    for(int i = 0; i < 32; i++)
+      tc_bits[i] = 0, tc_syms[i] = 0;
+    tc_stage = 0;
+    tc_verbose = false;
+  }
 };
 //  One bit through it
 template <int f_DEC> static INLINE int tc_bit(tc_rc<f_DEC> *rc, int p, int bit) {
@@ -112,18 +119,33 @@ static INLINE i64 tc_dump_get(const char *&p, const char *e) {
 //  (each family's own, for each model: R as its model starts; none for a
 //  decompressor's, fam null)
 struct tc_dump {
-  FILE *f = nullptr;
-  long start = 0;  // where this model's records begin
-  explicit tc_dump(const char *fam) {
+  FILE *f;
+  long start;  // where this model's records begin
+  void Init(const char *fam) {
+    f = nullptr;
+    start = 0;
     const char *dir = getenv("H264P_DUMP");
     if(!fam || !dir || !*dir)
       return;
-    std::string fn = std::string(dir) + "/" + fam + ".dump";
-    if(!(f = fopen(fn.c_str(), "ab")))
-      cm_fail("cannot write %s", fn.c_str());
+    size_t n = strlen(dir) + strlen(fam) + 8;
+    char *fn = (char *)mem_alloc(n);
+    snprintf(fn, n, "%s/%s.dump", dir, fam);
+    f = fopen(fn, "ab");
+    if(!f) {
+      char why[256];
+      snprintf(why, sizeof why, "cannot write %s", fn);
+      mem_free(fn);
+      cm_fail("%s", why);
+    }
+    mem_free(fn);
     fseek(f, 0, SEEK_END);
     start = ftell(f);
     putc('R', f);
+  }
+  void Quit() {
+    if(f)
+      fclose(f);
+    f = nullptr;
   }
   //  a model whose compression starts over (kRestart): its records go
   void discard() {
@@ -137,10 +159,6 @@ struct tc_dump {
       cm_fail("cannot cut a dump short");
 #endif
     putc('R', f);  // (appended: at the end, where it was cut)
-  }
-  ~tc_dump() {
-    if(f)
-      fclose(f);
   }
   template <class... A> void rec(char tag, A... a) {
     if(!f)
@@ -229,7 +247,7 @@ template <int f_DEC, class C> struct tc_fam {
   typedef typename C::Cnt Cnt;  // cm_cnt2, or cm_cnt2s
   tc_rc<f_DEC> *rc;  // the coder of the model it belongs to
 #ifdef H264P_DUMP
-  tc_dump dump_{ENC ? C::name() : nullptr};
+  tc_dump dump_;
 #endif
   Cnt *cnt[NC];  // the counters' tables: A-E, H-L, the first NC
   cm_cnt *G, *T;
@@ -247,17 +265,35 @@ template <int f_DEC, class C> struct tc_fam {
   i64 hint;
   int hs;
   u32 bz;
-  std::vector<cm_cnt2> Z;
-  std::vector<cm_cnt> ZM;
+  Buf<cm_cnt2> Z;
+  Buf<cm_cnt> ZM;
   sz cb[NC];  // the rows of the counters' contexts (select())
   u32 bs, bf, bm, bw2, bt, bn, bg;
   //  the counters' limits and targets (bit 0, 1) as 32-bit lanes, two each
   //  (cn_v: their arrays in this order in memory, coded at once)
   int cn_lim[24], cn_tg[2][24];
-  bool cn_v = false;
+  bool cn_v;
+  //  (Init(), then wire() to its tables as the model starts; on zeroed
+  //  memory: what it sets not, as it codes, is 0)
+  void Init() {
+    Z.Init();
+    ZM.Init();
+    cn_v = false;
+#ifdef H264P_DUMP
+    dump_.Init(ENC ? C::name() : nullptr);
+#endif
+  }
+  void Quit() {
+    Z.Quit();
+    ZM.Quit();
+#ifdef H264P_DUMP
+    dump_.Quit();
+#endif
+  }
   void wire(typename C::T *t, tc_rc<f_DEC> *r) {
     rc = r;
     tc_tabs<Cnt> b;
+    b.Init();
     C::tables(t, b);
     for(int k = 0; k < NC; k++)
       cnt[k] = b.cnt[k];
@@ -619,7 +655,7 @@ template <int f_DEC, class C> struct tc_fam {
       // hst: 1 the value agrees with the hint so far, 3 it is above, 4 below
       hst = 1;
       if(Z.empty())
-        Z.assign(C::kT * (sz)ND * 5, cm_cnt2{}), ZM.assign(C::kT * (sz)MND * 5, cm_cnt{});
+        Z.fill(C::kT * (sz)ND * 5, cm_cnt2{}), ZM.fill(C::kT * (sz)MND * 5, cm_cnt{});
       hu = hint >= 3 ? (u64)(hint - 3) + 1 : 0;
       for(u64 t = hu; t; t >>= 1)
         hnb++;
