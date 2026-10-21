@@ -45,6 +45,15 @@ $xdesc = "";
 # opt.pl may set any of its bits.  Of an expression, every name not
 # called counts.
 @uses = (); %used = ();
+# a pattern as it stands, which must be of 0s and 1s: the shipping build
+# counts its 1s and the tuning build reads its bits (mapping.inc's S[i]&1),
+# which would disagree on anything else
+sub binary {
+  my $m = shift;
+  die "idx2inc.pl: $file line $.: pattern \"$m\" is not of 0s and 1s\n" unless $m =~ /^[01]*$/;
+  return $m;
+}
+
 sub use_var {
   my ($expr, $map, $const, $debug) = @_;
   return unless $map =~ /1/ || ($const == 0 && $debug);
@@ -91,6 +100,7 @@ while( <I1> ) {
     $maps{$index} = "";
   } elsif( /^\s*Number\s+(.*?),\s*(.*?)\s*,\s*(.*?)!(.*)/ ) {
     print "Number: <$1><$2><$3><$4>\n";
+    binary($4);
     if( $const==0 ) {
       $xdesc .= ($debug>0?'p':'m')."desc( ${prefix}_${1}_, $3, \"$4\" );\n";
       $xdesc .= "static const int ${prefix}_$1 = ${prefix}_${1}_.value * ($2);\n";
@@ -101,7 +111,7 @@ while( <I1> ) {
     }
   } elsif( /^\s*(.*?):\s*(.*?),\s*\&(.*?)\s*$/ ) {
     print "$1:$2,$3!\n";
-    ($tag,$var,$map) = ($1,$2,$3);
+    ($tag,$var,$map) = ($1,$2,binary($3));
     use_var($var, $map, $const, $debug);
     $ccount = ($map=~s/1/1/g);
     if( $const==0 ) {
@@ -141,7 +151,7 @@ while( <I1> ) {
     }
   } elsif( /^\s*(.*?):\s*(.*?),\s*(.*?)!(.*?)\s*$/ ) {
     print "$1:$2,$3!\n";
-    ($tag,$var,$base,$map) = ($1,$2,$3,$4);
+    ($tag,$var,$base,$map) = ($1,$2,$3,binary($4));
     use_var($var, $map, $const, $debug);
     $var=~s/\%M\%/${prefix}_/g;
     $ccount = ($map=~s/1/1/g) + 1;

@@ -85,6 +85,14 @@ void slurp(const char* fn, Buf<char>& d) {
   fclose(f);
 }
 
+// a hint's state from a dump (0-4: the rows of 5 it picks in Z, ZM and the
+// final mixer's)
+int hint_state(const char*& p, const char* e) {
+  i64 hs = tc_dump_get(p, e);
+  if (hs < 0 || hs > 4) err_raise("a hint state of %" PRId64 " in a dump", hs);
+  return (int)hs;
+}
+
 // One family's dumps, as Model codes them: its tables mapped fresh at each
 // stream (zero, as tc_table maps them), the hint's counters made at once
 // (code() makes them at its first hint, zero too).
@@ -130,13 +138,13 @@ void replay(char** files, int n, tc_rc<0>& rc) {
           int node = (int)tc_dump_get(p, e), b = (int)tc_dump_get(p, e);
           f->prp = (int)tc_dump_get(p, e);
           f->prpa = nullptr;
-          f->hs = (int)tc_dump_get(p, e);
-          f->bit_x(node, b);
+          f->hs = hint_state(p, e);
+          f->bit(node, b);  // (its node checked: a dump of another shape fails, not writes past a table)
           break;
         }
         case 'm': {
           int nb = (int)tc_dump_get(p, e), q = (int)tc_dump_get(p, e), b = (int)tc_dump_get(p, e);
-          f->hs = (int)tc_dump_get(p, e);
+          f->hs = hint_state(p, e);
           f->prp = (int)tc_dump_get(p, e);
           f->prpa = tc_dump_get(p, e) ? &any : nullptr;
           u64 pref = (u64)tc_dump_get(p, e);

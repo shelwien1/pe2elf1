@@ -76,6 +76,19 @@ cleanup() {
   done
 }
 trap cleanup EXIT
+# (a signal ends the script through exit, so that the EXIT trap runs: sh, as
+# dash, would not run it otherwise, and MOD/ would stay in the tuning form)
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
+
+# the tunable patterns in the binary $1 (said, as what $2 is): 1 if none
+count_maps() {
+  perl -e 'undef $/; $_ = <>;
+           while( /!MAP!(.*?)!(.*?)\x00(.*?)\x00/gs ) { $n++; $b += length $3 }
+           printf "mk.sh: %s -- %d tunable bits in %d patterns\n", $ARGV[0], $b, $n;
+           exit($n ? 0 : 1)' "$1" "$2"
+}
 
 #  $1 = the level, $2 = UseNew (1 pointers mapped at init, 0 fixed arrays),
 #  $3 = 1 to fold every parameter to a literal (IDX-FORMAT.md sec.1)
@@ -121,10 +134,7 @@ case "${1:-}" in
     trap 'generate "$lv" 0 1; cleanup' EXIT
     generate "$2" 1 0
     build ../h264p -DH264P_ONLY="$2"
-    perl -e 'undef $/; $_ = <>;
-             while( /!MAP!(.*?)!(.*?)\x00(.*?)\x00/gs ) { $n++; $b += length $3 }
-             printf "mk.sh: tuning build of -%d -- %d tunable bits in %d patterns\n", $ARGV[0], $b, $n;
-             exit($n ? 0 : 1)' ../h264p "$2"
+    count_maps ../h264p "tuning build of -$2"
     ;;
   release)
     for l in $LEVELS; do generate "$l" 0 1; done
@@ -193,10 +203,7 @@ case "${1:-}" in
     generate "$lv" 1 0
     $CXX $CXXFLAGS $PARCH -std=c++11 -fwrapv -fno-exceptions -fno-rtti -DH264P_ONLY="$lv" -o "$tmp/famtune" IDX/famtune.cpp
     cp "$tmp/famtune" ../famtune
-    perl -e 'undef $/; $_ = <>;
-             while( /!MAP!(.*?)!(.*?)\x00(.*?)\x00/gs ) { $n++; $b += length $3 }
-             printf "mk.sh: ../famtune for -%d -- %d tunable bits in %d patterns\n", $ARGV[0], $b, $n;
-             exit($n ? 0 : 1)' ../famtune "$2"
+    count_maps ../famtune "../famtune for -$2"
     ;;
   *)
     echo "usage: ./mk.sh release | mod | tuning L | check L | dump L DIR STREAM... | famtune L   (levels: $LEVELS)" >&2
