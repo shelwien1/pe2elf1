@@ -400,12 +400,13 @@ template <int f_DEC, class C> struct tc_fam {
     CntRows r;
     for(int k = 0; k < NC; k++)
       r.cp[k] = cnt[k] + cb[k] + node;
+    const bool v = cn_v;  // (once: the steps below take the same path)
     //  The mixers' inputs: the counters' two probabilities each (in the
     //  order of the arrays), the APM's refinement of A's (A's own without
     //  APMs), the outside prediction, the bias and the hint's counter
     //  (stretched), then zeros to a multiple of 8; the mixers' are the same,
     //  packed once
-    int pa = cnt_inputs(r);
+    int pa = cnt_inputs(r, v);
     int p1 = C::NAPM ? ap.pp(pa, bs + (u32)node) : pa;
     if(p1 > CM_PONE - 1)
       p1 = CM_PONE - 1;
@@ -414,23 +415,24 @@ template <int f_DEC, class C> struct tc_fam {
     const int x20 = C::NAPM ? cm_stretch(p1) : tc_x20(r.cp[0], p1), x21 = pp >= 0 ? cm_stretch(pp) : 0,
               x23 = zc ? cm_stretch(zc->P()) : 0;
     cm_x16<NIN> xp;
-    mix_inputs(r, x20, x21, x23, xp);
+    mix_inputs(r, v, x20, x21, x23, xp);
     b = mix_code(node, b, xp);
-    cnt_update(r, b);
+    cnt_update(r, v, b);
     if(zc)
       zc->upd(b, C::rT, C::mwT);
     return b;
   }
-  //  the counters' probabilities, as the mixers' inputs (where cn_v, in
-  //  r.st); A's (the first counter's) P
-  INLINE int cnt_inputs(CntRows &r) {
+  //  the counters' probabilities, as the mixers' inputs (where v, bit_x's
+  //  cn_v: in r.st); A's (the first counter's) P
+  INLINE int cnt_inputs(CntRows &r, bool v) {
+    (void)v;
     int pa;
     constexpr int NV = (NC + 3) / 4;  // the counters' vectors: four in each, the last two or four
 #ifdef H264P_AVX2
     //  (cn_v: the counters all at once, as 64-bit lanes p, t, q and the next
     //  counter's p, cm_cnt2s's own P stretched, four to a vector; their
     //  probabilities as 32-bit lanes, P and Q of each in turn)
-    if(cn_v) {
+    if(v) {
       auto ld2 = [&](int k) {
         return _mm_unpacklo_epi64(_mm_loadl_epi64((const __m128i *)r.cp[k]), _mm_loadl_epi64((const __m128i *)r.cp[k + 1]));
       };
@@ -461,10 +463,10 @@ template <int f_DEC, class C> struct tc_fam {
     return pa;
   }
   //  the mixers' inputs, the counters' and the four more, packed
-  INLINE void mix_inputs(const CntRows &r, int x20, int x21, int x23, cm_x16<NIN> &xp) {
-    (void)r;
+  INLINE void mix_inputs(const CntRows &r, bool v, int x20, int x21, int x23, cm_x16<NIN> &xp) {
+    (void)r, (void)v;
 #ifdef H264P_AVX2
-    if(cn_v) {
+    if(v) {
       //  the 32-bit lanes in vectors of 8: the counters', then the four
       //  more (after the last two counters' where their count is not a
       //  multiple of 4), then zeros
@@ -529,10 +531,11 @@ template <int f_DEC, class C> struct tc_fam {
     return b;
   }
   //  the counters, trained
-  INLINE void cnt_update(CntRows &r, int b) {
+  INLINE void cnt_update(CntRows &r, bool v, int b) {
+    (void)v;
     constexpr int NV = (NC + 3) / 4;
 #ifdef H264P_AVX2
-    if(cn_v) {
+    if(v) {
       // as cm_cnt2::upd, each counter's q through its p's arithmetic with
       // the rate 8192 / 65536; written back in the order of the arrays,
       // each with the next counter's p as it was (rewritten after, where
