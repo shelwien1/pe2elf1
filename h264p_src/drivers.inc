@@ -286,7 +286,8 @@ int decode(const char* in_name, const char* out_name, const Options& opt) {
   if (got >= sizeof kMtMagic - 1 && !memcmp(head, kMtMagic, sizeof kMtMagic - 1))
     return decode_mt(in_name, opt, f, o, head, got);
   int level = cm_level(head, got, in_name);
-  int r = level < 0 ? 1 : with_level<DecodeLv>(level, in_name, opt, f, o, head, got);
+  if (level < 0) return close_io(1, f, o, false);
+  int r = with_level<DecodeLv>(level, in_name, opt, f, o, head, got);
   if (r != kNoLevel) return r;
   fprintf(stderr, "h264p: %s: compressed at level -%d, which this build has not\n", in_name, level);
   return close_io(1, f, o, false);
