@@ -17,45 +17,45 @@ void H5_nal_make( const H_nal_v & D, tcx & X ) {
   (void) fld;  (void) ctx;  (void) p1;  (void) p2;
 
   a = 0;
-  a = a*7 + H5_nal_a_fld[__min(31,__max(0,fld-(1-1)))];
-  a = a*5 + H5_nal_a_ctx[__min(15,__max(0,ctx-(1-1)))];
+  a = a*7 + H5_nal_a_fld[__min(31,__max(0,(fld)-(1-1)))];
+  a = a*5 + H5_nal_a_ctx[__min(15,__max(0,(ctx)-(1-1)))];
 
   b = 0;
-  b = b*6 + H5_nal_b_fld[__min(31,__max(0,fld-(1-1)))];
-  b = b*4 + H5_nal_b_p1[__min(6,__max(0,p1-(1-1)))];
-  b = b*4 + H5_nal_b_p2[__min(3,__max(0,p2-(1-1)))];
+  b = b*6 + H5_nal_b_fld[__min(31,__max(0,(fld)-(1-1)))];
+  b = b*4 + H5_nal_b_p1[__min(6,__max(0,(p1)-(1-1)))];
+  b = b*4 + H5_nal_b_p2[__min(3,__max(0,(p2)-(1-1)))];
 
   c = 0;
-  c = c*6 + H5_nal_c_fld[__min(31,__max(0,fld-(1-1)))];
-  c = c*5 + H5_nal_c_ctx[__min(31,__max(0,ctx-(1-1)))];
+  c = c*6 + H5_nal_c_fld[__min(31,__max(0,(fld)-(1-1)))];
+  c = c*5 + H5_nal_c_ctx[__min(31,__max(0,(ctx)-(1-1)))];
 
   d = 0;
-  d = d*9 + H5_nal_d_fld[__min(31,__max(0,fld-(1-1)))];
+  d = d*9 + H5_nal_d_fld[__min(31,__max(0,(fld)-(1-1)))];
 
   e = 0;
-  e = e*5 + H5_nal_e_fld[__min(31,__max(0,fld-(1-1)))];
+  e = e*5 + H5_nal_e_fld[__min(31,__max(0,(fld)-(1-1)))];
 
   h = 0;
-  h = h*6 + H5_nal_h_fld[__min(31,__max(0,fld-(1-1)))];
-  h = h*3 + ((ctx>1+(1-1))+(ctx>8+(1-1)));
+  h = h*6 + H5_nal_h_fld[__min(31,__max(0,(fld)-(1-1)))];
+  h = h*3 + (((ctx)>1+(1-1))+((ctx)>8+(1-1)));
 
   i = 0;
-  i = i*4 + H5_nal_i_ctx[__min(31,__max(0,ctx-(1-1)))];
-  i = i*5 + H5_nal_i_p1[__min(15,__max(0,p1-(1-1)))];
+  i = i*4 + H5_nal_i_ctx[__min(31,__max(0,(ctx)-(1-1)))];
+  i = i*5 + H5_nal_i_p1[__min(15,__max(0,(p1)-(1-1)))];
 
   j = 0;
-  j = j*6 + H5_nal_j_fld[__min(31,__max(0,fld-(1-1)))];
-  j = j*3 + ((p1>4+(1-1))+(p1>5+(1-1)));
+  j = j*6 + H5_nal_j_fld[__min(31,__max(0,(fld)-(1-1)))];
+  j = j*3 + (((p1)>4+(1-1))+((p1)>5+(1-1)));
 
   k = 0;
-  k = k*6 + H5_nal_k_fld[__min(31,__max(0,fld-(1-1)))];
-  k = k*6 + H5_nal_k_ctx[__min(31,__max(0,ctx-(1-1)))];
+  k = k*6 + H5_nal_k_fld[__min(31,__max(0,(fld)-(1-1)))];
+  k = k*6 + H5_nal_k_ctx[__min(31,__max(0,(ctx)-(1-1)))];
 
   l = 0;
-  l = l*5 + H5_nal_l_p1[__min(15,__max(0,p1-(1-1)))];
+  l = l*5 + H5_nal_l_p1[__min(15,__max(0,(p1)-(1-1)))];
 
   m = 0;
-  m = m*4 + H5_nal_m_fld[__min(31,__max(0,fld-(1-1)))];
+  m = m*4 + H5_nal_m_fld[__min(31,__max(0,(fld)-(1-1)))];
 
   t = 0;
 

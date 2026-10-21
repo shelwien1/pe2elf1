@@ -173,4 +173,5 @@ struct H7_cbf_T {
   void H7_cbf_Init( void ) {
   
   }
+  void H7_cbf_Quit( void ) {}
 };

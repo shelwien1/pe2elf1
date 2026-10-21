@@ -159,4 +159,5 @@ struct H5_sig_T {
   void H5_sig_Init( void ) {
   
   }
+  void H5_sig_Quit( void ) {}
 };

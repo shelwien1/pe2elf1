@@ -213,7 +213,7 @@ while( <I1> ) {
     print "$1:$2,$3!\n";
     ($tag,$var,$base,$map) = ($1,$2,$3,$4);
     use_var($var, $map, $const, $debug);
-    $var =~ tr/|/,/; $var=~s/\%M\%/${prefix}_/g;
+    $var=~s/\%M\%/${prefix}_/g;
     $ccount = ($map=~s/1/1/g) + 1;
     $count{$index} *= $ccount;
     if( $const==0 ) {
@@ -233,7 +233,7 @@ while( <I1> ) {
       # (OGGCOMP-SPEED.md section 5.4).  The tuning build maps through
       # pmap[] regardless, so both builds bucket the same way.
       if( $ccount > 3 ) {
-        $code{$index} .= "\n$index = $index*$ccount + ${prefix}_${tag}[__min($lmap,__max(0,$var-($base-1)))];";
+        $code{$index} .= "\n$index = $index*$ccount + ${prefix}_${tag}[__min($lmap,__max(0,($var)-($base-1)))];";
         $j = 0; 
         $q = sprintf( "static const %s ${prefix}_${tag}[$lmap+1]={ ", (($ccount<256)?"byte":"word") );
         $c = "";
@@ -248,7 +248,7 @@ while( <I1> ) {
           $j=0; $c=""; $q="";
           for( unpack("c*",$map) ) {
             if( ($_&1)==1 ) {
-              $c .= sprintf( "$q($var>%i+($base-1))", $j ); $q="+";
+              $c .= sprintf( "$q(($var)>%i+($base-1))", $j ); $q="+";
             }
             $j++;
           }
@@ -328,7 +328,11 @@ while( <I2> ) {
     # this build's memory behaviour the Const build's, whose tables are
     # members of one mapped object, so `./mk.sh check` can compare the two on
     # a set neither could allocate outright.
-    $t_con .= "  $v = (${t} *) tc_map( (unsigned long long)sizeof(${t}) * tbl_n(${sz}) );\n";
+    # (8 bytes more than its entries: the counters' vector path reads and
+    # writes back 8 bytes at a 6-byte counter, 2 past a table's last one,
+    # which in the Const build are the next member's)
+    $t_con .= "  $v = (${t} *) tc_map( (unsigned long long)sizeof(${t}) * tbl_n(${sz}) + 8 );\n";
+    $t_quit .= "  tc_unmap( $v, (unsigned long long)sizeof(${t}) * tbl_n(${sz}) + 8 );\n";
     # Running total of this module's table bytes.  Const mode can fold the sum
     # at compile time; Debug cannot, because the counts come from the mapping
     # objects opt.pl patches at load, so there it accumulates in _Init().
@@ -388,6 +392,7 @@ for (sort keys %volume) {
 print O1 "#define ${prefix}_USES(X)" . join('', map { " X($_)" } @uses) . "\n\n";
 
 chomp $t_con;
+chomp $t_quit;
 chomp $init_code;
 $init_code =~ s/(^|\n)/$1  /g;
 $t_sta =~ s/(^|\n)/$1  /g;
@@ -407,6 +412,9 @@ $t_ptr
 $t_con
 $init_code
   }
+  void ${prefix}_Quit( void ) {
+$t_quit
+  }
 };
 TEXT
 } else {
@@ -422,6 +430,7 @@ $t_sta
   void ${prefix}_Init( void ) {
 $init_code
   }
+  void ${prefix}_Quit( void ) {}
 };
 TEXT
 }

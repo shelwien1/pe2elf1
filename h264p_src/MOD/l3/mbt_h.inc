@@ -150,4 +150,5 @@ struct H3_mbt_T {
   void H3_mbt_Init( void ) {
   
   }
+  void H3_mbt_Quit( void ) {}
 };

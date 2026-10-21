@@ -149,4 +149,5 @@ struct H3_qpd_T {
   void H3_qpd_Init( void ) {
   
   }
+  void H3_qpd_Quit( void ) {}
 };

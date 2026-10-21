@@ -83,4 +83,5 @@ struct H1_qpg_T {
   void H1_qpg_Init( void ) {
   
   }
+  void H1_qpg_Quit( void ) {}
 };

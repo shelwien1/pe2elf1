@@ -142,4 +142,5 @@ struct H3_skp_T {
   void H3_skp_Init( void ) {
   
   }
+  void H3_skp_Quit( void ) {}
 };

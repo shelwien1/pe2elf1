@@ -54,7 +54,6 @@ struct mapping {
 
   template<class INT> void inc(INT& y, int r) { y = y * Size + map(r); }
 
-  template<class INT> void inc(INT& y, int r, int f_cat) { y = y * 1 + map(r); }
 };
 
 struct masking {

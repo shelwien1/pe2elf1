@@ -146,4 +146,5 @@ struct H3_mvg_T {
   void H3_mvg_Init( void ) {
   
   }
+  void H3_mvg_Quit( void ) {}
 };

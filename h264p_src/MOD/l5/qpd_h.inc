@@ -143,4 +143,5 @@ struct H5_qpd_T {
   void H5_qpd_Init( void ) {
   
   }
+  void H5_qpd_Quit( void ) {}
 };

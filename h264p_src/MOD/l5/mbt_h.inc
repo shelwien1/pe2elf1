@@ -138,4 +138,5 @@ struct H5_mbt_T {
   void H5_mbt_Init( void ) {
   
   }
+  void H5_mbt_Quit( void ) {}
 };

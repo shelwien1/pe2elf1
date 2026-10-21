@@ -8,7 +8,10 @@
 // scaling matrices; CAVLC and CABAC, I, P and B slices, all macroblock
 // types, weighted prediction, long-term references, list modification,
 // spatial and temporal direct, deblocking. Other streams are not
-// reconstructed.
+// reconstructed. SP and SI slices (Extended profile) are reconstructed as
+// P and I slices, without SP's requantization (8.6.1, 8.6.2), as ffmpeg
+// does: such a picture differs from what a conforming decoder makes, and
+// the pictures predicted from it with it, which costs only compression.
 
 namespace h264p {
 
@@ -696,6 +699,11 @@ struct ReconT {
 
   // the end of the stream: its last picture finished too
   void end() { finish_picture(); }
+  // an inter macroblock's transform size, which comes after its prediction
+  // (prepare()): its 8x8 blocks then go to the picture as they come
+  void set_t8(int t8) {
+    if (act() && mb_prepared) mb_t8 = t8;
+  }
   void finish_picture() {
     if (!cur) return;
     if (act()) fin_end();
@@ -2646,8 +2654,14 @@ struct ReconT {
       } else {
         cur.reset(new RPic);
       }
-      if (cur->mbw != sps.width_mbs || cur->mbh != sps.frame_height_mbs())
+      if (cur->mbw != sps.width_mbs || cur->mbh != sps.frame_height_mbs()) {
         cur->alloc(sps.width_mbs, sps.frame_height_mbs(), PX);
+      } else {
+        // (a picture of before: what no slice decodes has no motion, as in
+        // a new one)
+        std::fill(cur->intra.begin(), cur->intra.end(), 1);
+        std::fill(cur->rf.begin(), cur->rf.end(), -1);
+      }
       cur->ref = cur->lt = cur->padded = false;
       cur->lt_idx = -1;
       cur->id = next_id++;
@@ -3743,6 +3757,7 @@ struct ReconOff {
   static constexpr bool active = false, mact = false;
   static constexpr bool act() { return false; }
   void end() {}
+  void set_t8(int) {}
   RPic* cur = nullptr;
   RPic* list[2][33] = {};
   int nlist[2] = {0, 0};

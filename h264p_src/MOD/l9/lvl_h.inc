@@ -138,10 +138,10 @@ struct H9_lvl_T {
   cm_cnt2 H9_lvl_K[tc_rows(H9_lvl_k_Volume, H9_lvl_hK) * H_lvl_ND];
   cm_cnt2 H9_lvl_L[tc_rows(H9_lvl_l_Volume, H9_lvl_hL) * H_lvl_ND];
   cm_cnt H9_lvl_MT[tc_rows(H9_lvl_t_Volume, H9_lvl_hT) * H_lvl_MND];
-  i16 H9_lvl_S[tc_rows(H9_lvl_s_Volume, H9_lvl_hS) * H_lvl_ND * H9_lvl_qs];
-  u8 H9_lvl_SC[tc_rows(H9_lvl_s_Volume, H9_lvl_hS) * H_lvl_ND * H9_lvl_qs];
-  i16 H9_lvl_F[tc_rows(H9_lvl_f_Volume, H9_lvl_hF) * H_lvl_ND * H9_lvl_qf];
-  u8 H9_lvl_FC[tc_rows(H9_lvl_f_Volume, H9_lvl_hF) * H_lvl_ND * H9_lvl_qf];
+  i16 H9_lvl_S[tc_rows(H9_lvl_s_Volume, H9_lvl_hS) * H_lvl_ND * cm_apm_q(H9_lvl_qs)];
+  u8 H9_lvl_SC[tc_rows(H9_lvl_s_Volume, H9_lvl_hS) * H_lvl_ND * cm_apm_q(H9_lvl_qs)];
+  i16 H9_lvl_F[tc_rows(H9_lvl_f_Volume, H9_lvl_hF) * H_lvl_ND * cm_apm_q(H9_lvl_qf)];
+  u8 H9_lvl_FC[tc_rows(H9_lvl_f_Volume, H9_lvl_hF) * H_lvl_ND * cm_apm_q(H9_lvl_qf)];
   i32 H9_lvl_W[tc_rows(H9_lvl_m_Volume, H9_lvl_hM) * H_lvl_ND * TC_MIXN];
   u8 H9_lvl_WC[tc_rows(H9_lvl_m_Volume, H9_lvl_hM) * H_lvl_ND];
   i32 H9_lvl_WM[tc_rows(H9_lvl_n_Volume, H9_lvl_hN) * H_lvl_MND * 3];
@@ -168,10 +168,10 @@ struct H9_lvl_T {
                               + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H9_lvl_k_Volume, H9_lvl_hK) * H_lvl_ND)
                               + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H9_lvl_l_Volume, H9_lvl_hL) * H_lvl_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(tc_rows(H9_lvl_t_Volume, H9_lvl_hT) * H_lvl_MND)
-                              + (unsigned long long)sizeof(i16) * (unsigned long long)(tc_rows(H9_lvl_s_Volume, H9_lvl_hS) * H_lvl_ND * H9_lvl_qs)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H9_lvl_s_Volume, H9_lvl_hS) * H_lvl_ND * H9_lvl_qs)
-                              + (unsigned long long)sizeof(i16) * (unsigned long long)(tc_rows(H9_lvl_f_Volume, H9_lvl_hF) * H_lvl_ND * H9_lvl_qf)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H9_lvl_f_Volume, H9_lvl_hF) * H_lvl_ND * H9_lvl_qf)
+                              + (unsigned long long)sizeof(i16) * (unsigned long long)(tc_rows(H9_lvl_s_Volume, H9_lvl_hS) * H_lvl_ND * cm_apm_q(H9_lvl_qs))
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H9_lvl_s_Volume, H9_lvl_hS) * H_lvl_ND * cm_apm_q(H9_lvl_qs))
+                              + (unsigned long long)sizeof(i16) * (unsigned long long)(tc_rows(H9_lvl_f_Volume, H9_lvl_hF) * H_lvl_ND * cm_apm_q(H9_lvl_qf))
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H9_lvl_f_Volume, H9_lvl_hF) * H_lvl_ND * cm_apm_q(H9_lvl_qf))
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H9_lvl_m_Volume, H9_lvl_hM) * H_lvl_ND * TC_MIXN)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H9_lvl_m_Volume, H9_lvl_hM) * H_lvl_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H9_lvl_n_Volume, H9_lvl_hN) * H_lvl_MND * 3)
@@ -186,4 +186,5 @@ struct H9_lvl_T {
   void H9_lvl_Init( void ) {
   
   }
+  void H9_lvl_Quit( void ) {}
 };

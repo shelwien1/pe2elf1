@@ -6,6 +6,9 @@
 
 namespace h264p {
 
+// the families, X(name) each, in the order the model has them
+#define H264P_FAMS(X) X(nal) X(hdr) X(skp) X(mbt) X(cbp) X(ipm) X(mvs) X(qpd) X(cbf) X(sig) X(lvl) X(sgn) X(mvg) X(qpg) X(pcm)
+
 // decisions per context (ND, mantissa nodes MND), sign contexts (NG)
 constexpr int H_nal_ND = TC_NODE, H_nal_MND = TC_MNODE, H_nal_NG = 32;
 constexpr int H_hdr_ND = TC_NODE, H_hdr_MND = TC_MNODE, H_hdr_NG = 256;

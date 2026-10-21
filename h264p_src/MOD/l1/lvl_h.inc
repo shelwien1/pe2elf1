@@ -91,4 +91,5 @@ struct H1_lvl_T {
   void H1_lvl_Init( void ) {
   
   }
+  void H1_lvl_Quit( void ) {}
 };

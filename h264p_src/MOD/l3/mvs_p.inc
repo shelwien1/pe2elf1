@@ -18,80 +18,80 @@ void H3_mvs_make( const H_mvs_v & D, tcx & X ) {
   (void) kind;  (void) comp;  (void) lst;  (void) ma;  (void) mb;  (void) oth;  (void) ps;  (void) rf;  (void) pi;  (void) nr;  (void) pd;  (void) sp;  (void) tv;  (void) zd;  (void) cq;  (void) tq;  (void) rt;  (void) ea;  (void) eb;  (void) ta;
 
   a = 0;
-  a = a*4 + H3_mvs_a_kind[__min(3,__max(0,kind-(1-1)))];
-  a = a*2 + ((comp>0+(1-1)));
-  a = a*6 + H3_mvs_a_ma[__min(7,__max(0,ma-(1-1)))];
-  a = a*5 + H3_mvs_a_mb[__min(7,__max(0,mb-(1-1)))];
-  a = a*6 + H3_mvs_a_oth[__min(5,__max(0,oth-(1-1)))];
-  a = a*8 + H3_mvs_a_sp[__min(8,__max(0,sp-(1-1)))];
+  a = a*4 + H3_mvs_a_kind[__min(3,__max(0,(kind)-(1-1)))];
+  a = a*2 + (((comp)>0+(1-1)));
+  a = a*6 + H3_mvs_a_ma[__min(7,__max(0,(ma)-(1-1)))];
+  a = a*5 + H3_mvs_a_mb[__min(7,__max(0,(mb)-(1-1)))];
+  a = a*6 + H3_mvs_a_oth[__min(5,__max(0,(oth)-(1-1)))];
+  a = a*8 + H3_mvs_a_sp[__min(8,__max(0,(sp)-(1-1)))];
 
   b = 0;
-  b = b*2 + ((kind>2+(1-1)));
-  b = b*2 + ((comp>0+(1-1)));
-  b = b*2 + ((lst>0+(1-1)));
-  b = b*4 + H3_mvs_b_ps[__min(3,__max(0,ps-(1-1)))];
-  b = b*4 + H3_mvs_b_rf[__min(3,__max(0,rf-(1-1)))];
-  b = b*9 + H3_mvs_b_zd[__min(12,__max(0,zd-(1-1)))];
+  b = b*2 + (((kind)>2+(1-1)));
+  b = b*2 + (((comp)>0+(1-1)));
+  b = b*2 + (((lst)>0+(1-1)));
+  b = b*4 + H3_mvs_b_ps[__min(3,__max(0,(ps)-(1-1)))];
+  b = b*4 + H3_mvs_b_rf[__min(3,__max(0,(rf)-(1-1)))];
+  b = b*9 + H3_mvs_b_zd[__min(12,__max(0,(zd)-(1-1)))];
 
   c = 0;
-  c = c*3 + ((kind>0+(1-1))+(kind>2+(1-1)));
-  c = c*2 + ((comp>0+(1-1)));
-  c = c*7 + H3_mvs_c_pd[__min(8,__max(0,pd-(1-1)))];
-  c = c*6 + H3_mvs_c_sp[__min(8,__max(0,sp-(1-1)))];
-  c = c*10 + H3_mvs_c_zd[__min(12,__max(0,zd-(1-1)))];
+  c = c*3 + (((kind)>0+(1-1))+((kind)>2+(1-1)));
+  c = c*2 + (((comp)>0+(1-1)));
+  c = c*7 + H3_mvs_c_pd[__min(8,__max(0,(pd)-(1-1)))];
+  c = c*6 + H3_mvs_c_sp[__min(8,__max(0,(sp)-(1-1)))];
+  c = c*10 + H3_mvs_c_zd[__min(12,__max(0,(zd)-(1-1)))];
 
   d = 0;
-  d = d*2 + ((kind>2+(1-1)));
-  d = d*8 + H3_mvs_d_pd[__min(8,__max(0,pd-(1-1)))];
-  d = d*4 + H3_mvs_d_nr[__min(3,__max(0,nr-(1-1)))];
+  d = d*2 + (((kind)>2+(1-1)));
+  d = d*8 + H3_mvs_d_pd[__min(8,__max(0,(pd)-(1-1)))];
+  d = d*4 + H3_mvs_d_nr[__min(3,__max(0,(nr)-(1-1)))];
 
   e = 0;
-  e = e*3 + ((kind>1+(1-1))+(kind>2+(1-1)));
+  e = e*3 + (((kind)>1+(1-1))+((kind)>2+(1-1)));
 
   h = 0;
-  h = h*3 + ((kind>0+(1-1))+(kind>1+(1-1)));
-  h = h*5 + H3_mvs_h_oth[__min(5,__max(0,oth-(1-1)))];
+  h = h*3 + (((kind)>0+(1-1))+((kind)>1+(1-1)));
+  h = h*5 + H3_mvs_h_oth[__min(5,__max(0,(oth)-(1-1)))];
 
   i = 0;
-  i = i*3 + ((kind>1+(1-1))+(kind>2+(1-1)));
-  i = i*2 + ((comp>0+(1-1)));
-  i = i*3 + ((zd>4+(1-1))+(zd>8+(1-1)));
+  i = i*3 + (((kind)>1+(1-1))+((kind)>2+(1-1)));
+  i = i*2 + (((comp)>0+(1-1)));
+  i = i*3 + (((zd)>4+(1-1))+((zd)>8+(1-1)));
 
   j = 0;
-  j = j*4 + H3_mvs_j_kind[__min(3,__max(0,kind-(1-1)))];
-  j = j*6 + H3_mvs_j_ma[__min(7,__max(0,ma-(1-1)))];
-  j = j*7 + H3_mvs_j_mb[__min(7,__max(0,mb-(1-1)))];
-  j = j*5 + H3_mvs_j_cq[__min(9,__max(0,cq-(1-1)))];
+  j = j*4 + H3_mvs_j_kind[__min(3,__max(0,(kind)-(1-1)))];
+  j = j*6 + H3_mvs_j_ma[__min(7,__max(0,(ma)-(1-1)))];
+  j = j*7 + H3_mvs_j_mb[__min(7,__max(0,(mb)-(1-1)))];
+  j = j*5 + H3_mvs_j_cq[__min(9,__max(0,(cq)-(1-1)))];
 
   k = 0;
-  k = k*3 + ((kind>1+(1-1))+(kind>2+(1-1)));
-  k = k*7 + H3_mvs_k_pd[__min(8,__max(0,pd-(1-1)))];
-  k = k*7 + H3_mvs_k_sp[__min(8,__max(0,sp-(1-1)))];
-  k = k*4 + H3_mvs_k_ps[__min(3,__max(0,ps-(1-1)))];
+  k = k*3 + (((kind)>1+(1-1))+((kind)>2+(1-1)));
+  k = k*7 + H3_mvs_k_pd[__min(8,__max(0,(pd)-(1-1)))];
+  k = k*7 + H3_mvs_k_sp[__min(8,__max(0,(sp)-(1-1)))];
+  k = k*4 + H3_mvs_k_ps[__min(3,__max(0,(ps)-(1-1)))];
 
   l = 0;
-  l = l*2 + ((kind>1+(1-1)));
-  l = l*2 + ((comp>0+(1-1)));
-  l = l*5 + H3_mvs_l_oth[__min(5,__max(0,oth-(1-1)))];
-  l = l*3 + ((rf>0+(1-1))+(rf>2+(1-1)));
+  l = l*2 + (((kind)>1+(1-1)));
+  l = l*2 + (((comp)>0+(1-1)));
+  l = l*5 + H3_mvs_l_oth[__min(5,__max(0,(oth)-(1-1)))];
+  l = l*3 + (((rf)>0+(1-1))+((rf)>2+(1-1)));
 
   s = 0;
-  s = s*3 + ((kind>1+(1-1))+(kind>2+(1-1)));
+  s = s*3 + (((kind)>1+(1-1))+((kind)>2+(1-1)));
 
   m = 0;
-  m = m*4 + H3_mvs_m_kind[__min(3,__max(0,kind-(1-1)))];
-  m = m*2 + ((comp>0+(1-1)));
-  m = m*4 + H3_mvs_m_pd[__min(5,__max(0,pd-(1-1)))];
+  m = m*4 + H3_mvs_m_kind[__min(3,__max(0,(kind)-(1-1)))];
+  m = m*2 + (((comp)>0+(1-1)));
+  m = m*4 + H3_mvs_m_pd[__min(5,__max(0,(pd)-(1-1)))];
 
   w = 0;
-  w = w*3 + ((kind>0+(1-1))+(kind>1+(1-1)));
-  w = w*4 + H3_mvs_w_pd[__min(8,__max(0,pd-(1-1)))];
-  w = w*2 + ((ma>4+(1-1)));
-  w = w*4 + H3_mvs_w_nr[__min(3,__max(0,nr-(1-1)))];
+  w = w*3 + (((kind)>0+(1-1))+((kind)>1+(1-1)));
+  w = w*4 + H3_mvs_w_pd[__min(8,__max(0,(pd)-(1-1)))];
+  w = w*2 + (((ma)>4+(1-1)));
+  w = w*4 + H3_mvs_w_nr[__min(3,__max(0,(nr)-(1-1)))];
 
   t = 0;
-  t = t*2 + ((kind>2+(1-1)));
-  t = t*2 + ((comp>0+(1-1)));
+  t = t*2 + (((kind)>2+(1-1)));
+  t = t*2 + (((comp)>0+(1-1)));
 
   n = 0;
 

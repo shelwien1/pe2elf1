@@ -81,4 +81,5 @@ struct H1_mbt_T {
   void H1_mbt_Init( void ) {
   
   }
+  void H1_mbt_Quit( void ) {}
 };

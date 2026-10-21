@@ -1,59 +1,42 @@
-# opt.pl -- parameter optimizer for oggcomp.
+# opt.pl -- parameter optimizer for h264p's model (from oggcomp's).
 #
 # Flips the bits of the "!MAP!" pattern strings the tuning build embeds in the
 # executable, keeping whatever shrinks the corpus.  It does not parse or rebuild
 # anything: the patterns are patched in the binary in place, so one build serves
-# the whole hill-climb.  The build must therefore be the tuning build -- ./mk.sh
-# with no argument.  ./mk.sh release folds every parameter to a literal and
-# there is nothing left to find.
+# the whole hill-climb.  The build must therefore be the tuning build of a
+# level -- ./mk.sh tuning L, which writes ../h264p.  ./mk.sh release folds
+# every parameter to a literal and there is nothing left to find.
 #
-#   perl IDX/opt.pl [corpus-file-list] [exe]
+#   perl IDX/opt.pl corpus-file-list [exe]       (in h264p_src)
 #
-# corpus-file-list: text file, one .ogg path per line (default:
-# opt.lst, and if that is missing, the single file $deffile below).  Optimizing
-# on one file overfits it, and the corpus has to reach every model the
-# parameters cover: a libvorbis stream and an ffmpeg one at least, since the
-# ffmpeg encoder uses more residues and more cascade passes, and a short file
-# as well as a long one, since the header model is most of a short file and
-# almost none of a long one.
+# corpus-file-list: text file, one H.264 stream path per line (opt.lst if
+# not given).  Optimizing on one stream overfits it, and the corpus has to
+# reach every context the parameters cover: streams of different encoders,
+# rates and picture sizes, intra and inter, CABAC and CAVLC.
 #
-# exe: which binary to patch (default ./oggcomp).  Point it at a copy while
+# exe: which binary to patch (default ../h264p).  Point it at a copy while
 # tuning; opt.pl rewrites the file it is given.
 #
-# Memory is invisible to this script -- it minimizes the size of a file and a
-# wider context only ever makes that smaller, so left alone it will widen
-# every threshold it can reach and arrive at a model no machine can hold.
-# Build the binary it patches with a price on memory and the two become one
-# number:
-#   CXXFLAGS='-O2 -DTC_MEMCOST' ./mk.sh      # 10000 bytes per GB of tables
-# The encoder pads its output by that much, so a widening that costs more
-# memory than it saves bytes now measures worse and this script rejects it on
-# its own.  Nothing is refused outright and there is no threshold to pick.
-#
 # Results are written continuously to export.!!! (mdesc lines) and progress to
-# opttimes.!!!.  Fold them back into the .idx source with:
-#   cd IDX && for f in tsvcomp-*.idx; do perl import.pl $f ../export.!!! > t && mv t $f; done
-# then ./mk.sh to continue tuning, or ./mk.sh check to prove the shipping build
-# still agrees and ship it.
+# opttimes.!!!.  Fold them back into the .idx sources with:
+#   cd IDX/lL && for f in *.idx; do perl ../import.pl $f ../../export.!!! > t && mv t $f; done
+# then ./mk.sh mod, and ./mk.sh check L to prove the shipping build still
+# agrees.  (IDX/ftune.py tunes a family at a time against its dumps, faster.)
 #
-# One caution particular to this tree: oggcomp's parameters are part of its
-# format.  A stream coded by a patched binary decodes only under that same
-# patched binary, so throw away anything mid-hill-climb writes.
+# One caution: h264p's parameters are part of its format.  A stream coded by a
+# patched binary decodes only under that same patched binary, so throw away
+# anything mid-hill-climb writes.
 
-$exe     = $ARGV[1] || "./oggcomp";
-$deffile = "00.ogg";
+$exe     = $ARGV[1] || "../h264p";
 $tmp     = "$exe.opt_tmp";
 $rndfrac = 0.75;   # bit is flipped in the initial random kick when rand>this
 
 #---------------------------------------------------------------- corpus
 
-$lst = $ARGV[0];
-$lst = "opt.lst" if !defined($lst) && -e "opt.lst";
-if( defined($lst) && -e $lst ) {
-  open L, "<$lst"; while(<L>) { s/[\r\n]+$//; push @files,$_ if /\S/ && !/^\s*#/; } close L;
-} else {
-  @files = ($deffile);
-}
+$lst = $ARGV[0] // "opt.lst";
+open L, "<$lst" or die "opt.pl: no corpus list $lst (one stream path per line)\n";
+while(<L>) { s/[\r\n]+$//; push @files,$_ if /\S/ && !/^\s*#/; } close L;
+die "opt.pl: $lst lists no stream\n" if !@files;
 printf "corpus: %i file(s): %s\n", scalar(@files), join(" ",@files);
 
 sub measure {
@@ -66,7 +49,7 @@ sub measure {
     # has already flushed part of its output, and a part of an 800 kB stream
     # is 64 kB -- which, measured by size alone, is the best result the search
     # has ever seen, so it walks towards whatever killed it and stays there.
-    # oggcomp removes its own half-written output, but a signal it cannot
+    # h264p removes its own half-written output, but a signal it cannot
     # catch (the OOM killer) still leaves one, and this is the check that does
     # not depend on the program getting the chance to tidy up.
     return 0x7FFFFFFF if $rc != 0 || !defined($s) || $s < 64;
@@ -78,7 +61,7 @@ sub measure {
 #---------------------------------------------------------------- map table
 
 undef $/;
-open INP, "<$exe" or die "no $exe -- build it first (./mk.sh)\n";
+open INP, "<$exe" or die "no $exe -- build it first (./mk.sh tuning L)\n";
 binmode INP; $exe_data = <INP>; close INP;
 
 $lsum = 0;
@@ -92,11 +75,11 @@ printf "%i maps, %i bits total\n", scalar(keys %adr), $lsum;
 die "no !MAP! markers -- this is a Const/release build\n" if $lsum==0;
 
 sub wexe {                      # write $_[1] at offset $_[0]
-  1 while not open EXE,"+<$exe"; binmode EXE;
+  open EXE,"+<$exe" or die "opt.pl: cannot write $exe: $!\n"; binmode EXE;
   seek EXE,$_[0],0; print EXE $_[1]; close EXE;
 }
 sub export {
-  1 while not open OUT, ">export.!!!";
+  open OUT, ">export.!!!" or die "opt.pl: cannot write export.!!!: $!\n";
   for my $k (sort keys %adr) {
     printf OUT "mdesc( %s, %s, \"%s\" );\n", $k, $ofs{$k}, substr($exe_data,$adr{$k},$len{$k});
   }
@@ -147,7 +130,7 @@ while( $flag==1 ) {
           $flag=1;
           substr($exe_data,$addr,$leng) = $vmap;
           $bass = $s;
-          1 while not open OUT, ">>opttimes.!!!";
+          open OUT, ">>opttimes.!!!" or die "opt.pl: cannot write opttimes.!!!: $!\n";
           printf OUT "{ %10i, %7i },\n", time, $bass; close OUT;
           export();
         }

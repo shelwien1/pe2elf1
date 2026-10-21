@@ -161,4 +161,5 @@ struct H3_cbf_T {
   void H3_cbf_Init( void ) {
   
   }
+  void H3_cbf_Quit( void ) {}
 };

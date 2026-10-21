@@ -17,36 +17,36 @@ void H1_cbf_make( const H_cbf_v & D, tcx & X ) {
   (void) cat;  (void) na;  (void) nb;  (void) intra;  (void) q6;  (void) np;  (void) pos;  (void) crcb;  (void) col;  (void) nc;  (void) kn;  (void) md;  (void) en;  (void) pg;  (void) em;  (void) pz;  (void) tn;  (void) pq;  (void) ch;  (void) ds;  (void) hv;  (void) ly;  (void) dq;
 
   a = 0;
-  a = a*6 + H1_cbf_a_cat[__min(13,__max(0,cat-(1-1)))];
-  a = a*6 + H1_cbf_a_na[__min(9,__max(0,na-(1-1)))];
-  a = a*6 + H1_cbf_a_nb[__min(9,__max(0,nb-(1-1)))];
-  a = a*2 + ((intra>0+(1-1)));
-  a = a*5 + H1_cbf_a_ly[__min(10,__max(0,ly-(1-1)))];
+  a = a*6 + H1_cbf_a_cat[__min(13,__max(0,(cat)-(1-1)))];
+  a = a*6 + H1_cbf_a_na[__min(9,__max(0,(na)-(1-1)))];
+  a = a*6 + H1_cbf_a_nb[__min(9,__max(0,(nb)-(1-1)))];
+  a = a*2 + (((intra)>0+(1-1)));
+  a = a*5 + H1_cbf_a_ly[__min(10,__max(0,(ly)-(1-1)))];
 
   b = 0;
-  b = b*6 + H1_cbf_b_cat[__min(13,__max(0,cat-(1-1)))];
-  b = b*4 + H1_cbf_b_np[__min(3,__max(0,np-(1-1)))];
-  b = b*3 + ((pos>1+(1-1))+(pos>2+(1-1)));
-  b = b*3 + ((crcb>0+(1-1))+(crcb>1+(1-1)));
-  b = b*4 + H1_cbf_b_dq[__min(8,__max(0,dq-(1-1)))];
+  b = b*6 + H1_cbf_b_cat[__min(13,__max(0,(cat)-(1-1)))];
+  b = b*4 + H1_cbf_b_np[__min(3,__max(0,(np)-(1-1)))];
+  b = b*3 + (((pos)>1+(1-1))+((pos)>2+(1-1)));
+  b = b*3 + (((crcb)>0+(1-1))+((crcb)>1+(1-1)));
+  b = b*4 + H1_cbf_b_dq[__min(8,__max(0,(dq)-(1-1)))];
 
   c = 0;
-  c = c*5 + H1_cbf_c_cat[__min(13,__max(0,cat-(1-1)))];
-  c = c*4 + H1_cbf_c_q6[__min(8,__max(0,q6-(1-1)))];
-  c = c*3 + ((col>0+(1-1))+(col>1+(1-1)));
-  c = c*8 + H1_cbf_c_ch[__min(15,__max(0,ch-(1-1)))];
+  c = c*5 + H1_cbf_c_cat[__min(13,__max(0,(cat)-(1-1)))];
+  c = c*4 + H1_cbf_c_q6[__min(8,__max(0,(q6)-(1-1)))];
+  c = c*3 + (((col)>0+(1-1))+((col)>1+(1-1)));
+  c = c*8 + H1_cbf_c_ch[__min(15,__max(0,(ch)-(1-1)))];
 
   d = 0;
-  d = d*5 + H1_cbf_d_cat[__min(13,__max(0,cat-(1-1)))];
-  d = d*9 + H1_cbf_d_md[__min(19,__max(0,md-(1-1)))];
-  d = d*4 + H1_cbf_d_q6[__min(8,__max(0,q6-(1-1)))];
+  d = d*5 + H1_cbf_d_cat[__min(13,__max(0,(cat)-(1-1)))];
+  d = d*9 + H1_cbf_d_md[__min(19,__max(0,(md)-(1-1)))];
+  d = d*4 + H1_cbf_d_q6[__min(8,__max(0,(q6)-(1-1)))];
 
   m = 0;
-  m = m*5 + H1_cbf_m_cat[__min(13,__max(0,cat-(1-1)))];
-  m = m*2 + ((kn>0+(1-1)));
+  m = m*5 + H1_cbf_m_cat[__min(13,__max(0,(cat)-(1-1)))];
+  m = m*2 + (((kn)>0+(1-1)));
 
   t = 0;
-  t = t*6 + H1_cbf_t_cat[__min(13,__max(0,cat-(1-1)))];
+  t = t*6 + H1_cbf_t_cat[__min(13,__max(0,(cat)-(1-1)))];
 
   n = 0;
 

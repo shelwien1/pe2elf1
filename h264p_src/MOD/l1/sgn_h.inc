@@ -92,4 +92,5 @@ struct H1_sgn_T {
   void H1_sgn_Init( void ) {
   
   }
+  void H1_sgn_Quit( void ) {}
 };

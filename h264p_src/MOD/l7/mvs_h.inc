@@ -161,4 +161,5 @@ struct H7_mvs_T {
   void H7_mvs_Init( void ) {
   
   }
+  void H7_mvs_Quit( void ) {}
 };

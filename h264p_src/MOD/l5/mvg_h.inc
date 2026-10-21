@@ -129,4 +129,5 @@ struct H5_mvg_T {
   void H5_mvg_Init( void ) {
   
   }
+  void H5_mvg_Quit( void ) {}
 };

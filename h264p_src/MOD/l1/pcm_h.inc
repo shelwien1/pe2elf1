@@ -84,4 +84,5 @@ struct H1_pcm_T {
   void H1_pcm_Init( void ) {
   
   }
+  void H1_pcm_Quit( void ) {}
 };

@@ -85,4 +85,5 @@ struct H1_mvs_T {
   void H1_mvs_Init( void ) {
   
   }
+  void H1_mvs_Quit( void ) {}
 };

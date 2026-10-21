@@ -136,4 +136,5 @@ struct H5_nal_T {
   void H5_nal_Init( void ) {
   
   }
+  void H5_nal_Quit( void ) {}
 };

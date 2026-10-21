@@ -91,4 +91,5 @@ struct H1_sig_T {
   void H1_sig_Init( void ) {
   
   }
+  void H1_sig_Quit( void ) {}
 };

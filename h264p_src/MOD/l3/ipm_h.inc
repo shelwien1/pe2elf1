@@ -87,7 +87,7 @@ static const long long H3_ipm_e_Volume = tc_vmul(tc_vmul(1, 1), 8); // 8
 static const long long H3_ipm_g_Volume = tc_vmul(1, 1); // 1
 static const long long H3_ipm_h_Volume = tc_vmul(1, 1); // 1
 static const long long H3_ipm_i_Volume = tc_vmul(tc_vmul(1, 1), 11); // 11
-static const long long H3_ipm_j_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 15), 11), 1); // 330
+static const long long H3_ipm_j_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 15), 11); // 330
 static const long long H3_ipm_k_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 7); // 28
 static const long long H3_ipm_l_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 8), 7); // 56
 static const long long H3_ipm_m_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 8); // 32
@@ -154,4 +154,5 @@ struct H3_ipm_T {
   void H3_ipm_Init( void ) {
   
   }
+  void H3_ipm_Quit( void ) {}
 };

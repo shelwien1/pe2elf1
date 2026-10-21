@@ -81,4 +81,5 @@ struct H1_skp_T {
   void H1_skp_Init( void ) {
   
   }
+  void H1_skp_Quit( void ) {}
 };

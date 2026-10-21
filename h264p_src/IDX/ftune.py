@@ -7,9 +7,12 @@ FAMTUNE is a level's replayer (mk.sh famtune L), DUMPDIR what mk.sh dump
 wrote (a directory per stream, a <family>.dump in each).  Each family is
 tuned in a copy of FAMTUNE of its own, its patterns flipped a bit at a
 time, a flip kept when the family codes its dumps smaller (or as small with
-the bit now 0), pattern after pattern in random order, pass after pass
-until a pass gains less than 0.01% of the family's size, or a byte
-($FTUNE_MINPASS; or `passes` of them).  The families do not
+the bit now 0, but such ties only with a pattern that gains, as opt.pl
+commits only a gain), pattern after pattern in random order, pass after
+pass until a pass gains less than 0.01% of the family's size, or a byte
+($FTUNE_MINPASS; or `passes` of them).  A family whose dumps code to less
+than a byte (no decisions: pcm without I_PCM) is left as it is, not
+zeroed; a trial that fails counts as the worst (logged).  The families do not
 interact, so four are tuned at once, the largest first, each trial a
 process per stream.  Writes the
 winners to export.!!! (mdesc lines, for IDX/import.pl; every pattern of
@@ -77,12 +80,20 @@ def tune(fam):
         tot = 0.0
         for p in ps:
             out, err = p.communicate()
-            if p.returncode:
-                raise RuntimeError('%s: %s' % (fam, err.decode().strip()))
-            tot += float(out)
+            try:
+                if p.returncode:
+                    raise ValueError(err.decode().strip())
+                tot += float(out)
+            except ValueError as e:
+                say('%s: a trial failed (%s): the worst' % (fam, e))
+                tot = float('inf')
         return tot
 
     start = best = measure()
+    if not start < float('inf') or start < 1.0:
+        say('%s: %.1f bytes in its dumps: left as it is' % (fam, start))
+        os.remove(mine)
+        return fam, None, None
     say('%s: %d patterns, %d bits, %.1f bytes' % (fam, len(fams[fam]), sum(pats[k][1] for k in fams[fam]), best))
     for p in range(passes):
         before = best
@@ -115,9 +126,7 @@ def tune(fam):
                 say('%s %-26s %s  %.1f' % (fam, k, cur.decode(), best))
                 export()  # (a run cut short resumes from here: FTUNE_FROM)
             else:
-                img[a:a + l] = cur  # (ties: the zeros kept)
-                with lock:
-                    data[a:a + l] = cur
+                write(a, img[a:a + l])  # (no gain: its ties go too)
         export()
         say('%s: pass %d done, %.1f bytes (%+.1f)' % (fam, p, best, best - start))
         if best > before - max(1.0, minrel * start):

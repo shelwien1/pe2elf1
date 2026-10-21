@@ -314,9 +314,10 @@ As built:
   coder with the statistics of `-v`, the base of `Model<f_DEC, L>` (as
   built, a static `tc_rc<f_DEC>::rc` out of the model; since then the
   model's own, so that models can run on threads side by side).
-- **The format** (version 5): the level is a byte of the header after the
-  version; `d` reads it and runs `Model<1, L>`; `c -L` runs `Model<0, L>`.
-  What `-9` codes is as before, byte for byte after the header.
+- **The format** (version 5; 6 since the model fixes of `h264p_review.md`):
+  the level is a byte of the header after the version; `d` reads it and
+  runs `Model<1, L>`; `c -L` runs `Model<0, L>`.  What `-9` coded was as
+  before, byte for byte after the header.
 - **Code size**: the binary with all five levels is 5.4 MB (the
   Makefile's `-O3`; 1.4 MB before, with `-9` alone) and compiles in about
   3 minutes, one translation unit; a level alone (`-DH264P_ONLY=L`, as

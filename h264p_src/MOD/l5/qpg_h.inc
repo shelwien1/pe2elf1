@@ -138,4 +138,5 @@ struct H5_qpg_T {
   void H5_qpg_Init( void ) {
   
   }
+  void H5_qpg_Quit( void ) {}
 };

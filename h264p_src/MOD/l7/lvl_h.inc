@@ -172,4 +172,5 @@ struct H7_lvl_T {
   void H7_lvl_Init( void ) {
   
   }
+  void H7_lvl_Quit( void ) {}
 };

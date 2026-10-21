@@ -78,4 +78,5 @@ struct H1_mvg_T {
   void H1_mvg_Init( void ) {
   
   }
+  void H1_mvg_Quit( void ) {}
 };

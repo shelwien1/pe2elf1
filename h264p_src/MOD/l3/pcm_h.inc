@@ -153,4 +153,5 @@ struct H3_pcm_T {
   void H3_pcm_Init( void ) {
   
   }
+  void H3_pcm_Quit( void ) {}
 };

@@ -157,4 +157,5 @@ struct H7_qpg_T {
   void H7_qpg_Init( void ) {
   
   }
+  void H7_qpg_Quit( void ) {}
 };

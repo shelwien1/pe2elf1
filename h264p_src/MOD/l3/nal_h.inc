@@ -154,4 +154,5 @@ struct H3_nal_T {
   void H3_nal_Init( void ) {
   
   }
+  void H3_nal_Quit( void ) {}
 };

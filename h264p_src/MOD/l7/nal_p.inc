@@ -18,55 +18,55 @@ void H7_nal_make( const H_nal_v & D, tcx & X ) {
   (void) fld;  (void) ctx;  (void) p1;  (void) p2;
 
   a = 0;
-  a = a*7 + H7_nal_a_fld[__min(31,__max(0,fld-(1-1)))];
-  a = a*4 + H7_nal_a_ctx[__min(15,__max(0,ctx-(1-1)))];
-  a = a*2 + ((p1>4+(1-1)));
+  a = a*7 + H7_nal_a_fld[__min(31,__max(0,(fld)-(1-1)))];
+  a = a*4 + H7_nal_a_ctx[__min(15,__max(0,(ctx)-(1-1)))];
+  a = a*2 + (((p1)>4+(1-1)));
 
   b = 0;
-  b = b*7 + H7_nal_b_fld[__min(31,__max(0,fld-(1-1)))];
-  b = b*3 + ((p1>0+(1-1))+(p1>5+(1-1)));
-  b = b*4 + H7_nal_b_p2[__min(3,__max(0,p2-(1-1)))];
+  b = b*7 + H7_nal_b_fld[__min(31,__max(0,(fld)-(1-1)))];
+  b = b*3 + (((p1)>0+(1-1))+((p1)>5+(1-1)));
+  b = b*4 + H7_nal_b_p2[__min(3,__max(0,(p2)-(1-1)))];
 
   c = 0;
-  c = c*7 + H7_nal_c_fld[__min(31,__max(0,fld-(1-1)))];
-  c = c*5 + H7_nal_c_ctx[__min(31,__max(0,ctx-(1-1)))];
+  c = c*7 + H7_nal_c_fld[__min(31,__max(0,(fld)-(1-1)))];
+  c = c*5 + H7_nal_c_ctx[__min(31,__max(0,(ctx)-(1-1)))];
 
   d = 0;
-  d = d*8 + H7_nal_d_fld[__min(31,__max(0,fld-(1-1)))];
+  d = d*8 + H7_nal_d_fld[__min(31,__max(0,(fld)-(1-1)))];
 
   e = 0;
-  e = e*6 + H7_nal_e_fld[__min(31,__max(0,fld-(1-1)))];
-  e = e*2 + ((p2>2+(1-1)));
+  e = e*6 + H7_nal_e_fld[__min(31,__max(0,(fld)-(1-1)))];
+  e = e*2 + (((p2)>2+(1-1)));
 
   h = 0;
-  h = h*7 + H7_nal_h_fld[__min(31,__max(0,fld-(1-1)))];
-  h = h*6 + H7_nal_h_ctx[__min(31,__max(0,ctx-(1-1)))];
+  h = h*7 + H7_nal_h_fld[__min(31,__max(0,(fld)-(1-1)))];
+  h = h*6 + H7_nal_h_ctx[__min(31,__max(0,(ctx)-(1-1)))];
 
   i = 0;
-  i = i*5 + H7_nal_i_ctx[__min(31,__max(0,ctx-(1-1)))];
-  i = i*2 + ((p1>5+(1-1)));
+  i = i*5 + H7_nal_i_ctx[__min(31,__max(0,(ctx)-(1-1)))];
+  i = i*2 + (((p1)>5+(1-1)));
 
   j = 0;
-  j = j*8 + H7_nal_j_fld[__min(31,__max(0,fld-(1-1)))];
-  j = j*4 + H7_nal_j_p2[__min(3,__max(0,p2-(1-1)))];
-  j = j*4 + H7_nal_j_p1[__min(15,__max(0,p1-(1-1)))];
+  j = j*8 + H7_nal_j_fld[__min(31,__max(0,(fld)-(1-1)))];
+  j = j*4 + H7_nal_j_p2[__min(3,__max(0,(p2)-(1-1)))];
+  j = j*4 + H7_nal_j_p1[__min(15,__max(0,(p1)-(1-1)))];
 
   k = 0;
-  k = k*8 + H7_nal_k_fld[__min(31,__max(0,fld-(1-1)))];
-  k = k*4 + H7_nal_k_ctx[__min(31,__max(0,ctx-(1-1)))];
+  k = k*8 + H7_nal_k_fld[__min(31,__max(0,(fld)-(1-1)))];
+  k = k*4 + H7_nal_k_ctx[__min(31,__max(0,(ctx)-(1-1)))];
 
   l = 0;
-  l = l*3 + ((p1>2+(1-1))+(p1>5+(1-1)));
-  l = l*3 + ((p2>1+(1-1))+(p2>2+(1-1)));
+  l = l*3 + (((p1)>2+(1-1))+((p1)>5+(1-1)));
+  l = l*3 + (((p2)>1+(1-1))+((p2)>2+(1-1)));
 
   s = 0;
-  s = s*5 + H7_nal_s_fld[__min(31,__max(0,fld-(1-1)))];
+  s = s*5 + H7_nal_s_fld[__min(31,__max(0,(fld)-(1-1)))];
 
   m = 0;
-  m = m*6 + H7_nal_m_fld[__min(31,__max(0,fld-(1-1)))];
+  m = m*6 + H7_nal_m_fld[__min(31,__max(0,(fld)-(1-1)))];
 
   w = 0;
-  w = w*9 + H7_nal_w_fld[__min(31,__max(0,fld-(1-1)))];
+  w = w*9 + H7_nal_w_fld[__min(31,__max(0,(fld)-(1-1)))];
 
   t = 0;
 

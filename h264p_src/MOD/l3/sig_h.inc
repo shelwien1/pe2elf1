@@ -172,4 +172,5 @@ struct H3_sig_T {
   void H3_sig_Init( void ) {
   
   }
+  void H3_sig_Quit( void ) {}
 };

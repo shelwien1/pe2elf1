@@ -164,4 +164,5 @@ struct H7_qpd_T {
   void H7_qpd_Init( void ) {
   
   }
+  void H7_qpd_Quit( void ) {}
 };

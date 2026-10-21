@@ -32,14 +32,19 @@
 // the counters: their tables' letters and their indices', in order
 #if FC_NC == 10
 #define FC_CNT(X) X(A, a) X(B, b) X(C, c) X(D, d) X(E, e) X(H, h) X(I, i) X(J, j) X(K, k) X(L, l)
+#define FC_LASTC L
 #elif FC_NC == 8
 #define FC_CNT(X) X(A, a) X(B, b) X(C, c) X(D, d) X(E, e) X(H, h) X(I, i) X(J, j)
+#define FC_LASTC J
 #elif FC_NC == 6
 #define FC_CNT(X) X(A, a) X(B, b) X(C, c) X(D, d) X(E, e) X(H, h)
+#define FC_LASTC H
 #elif FC_NC == 4
 #define FC_CNT(X) X(A, a) X(B, b) X(C, c) X(D, d)
+#define FC_LASTC D
 #elif FC_NC == 2
 #define FC_CNT(X) X(A, a) X(B, b)
+#define FC_LASTC B
 #else
 #error "famcfg.inc: FC_NC is 2, 4, 6, 8 or 10"
 #endif
@@ -59,6 +64,7 @@ struct FC_NAME {
   // tables): cm_cnt2, or cm_cnt2s with their probabilities kept stretched
   typedef typename std::remove_reference<decltype(((T*)nullptr)->FCX(A)[0])>::type Cnt;
   static void init(T* t) { t->FCX(Init)(); }
+  static void quit(T* t) { t->FCX(Quit)(); }  // (the tuning build: its tables unmapped)
   static u64 bytes(const T* t) { return t->FCX(Size); }
   static const int ND = FCF(_ND), MND = FCF(_MND), NG = FCF(_NG);
   static const int NC = FC_NC, NMIX = FC_NMIX, NAPM = FC_NAPM;
@@ -134,8 +140,8 @@ set hS = 0;
 set hF = FC_HASH(FCX(f_Volume), FCX(hF));
 set rS1 = cm_apm_limit(tc_clamp(FCX(rS1), 1, 15));
 set rS2 = cm_apm_limit(tc_clamp(FCX(rS2), 1, 15));
-set qs = FCX(qs);
-set qf = FCX(qf);
+set qs = cm_apm_q(FCX(qs));
+set qf = cm_apm_q(FCX(qf));
 set bw = tc_clamp(FCX(bw), 0, 16);
 #else
 set hF = 0;
@@ -176,6 +182,16 @@ static_assert(std::extent<decltype(FC_NAME::T::FCX(W))>::value == 0 ||
                   std::extent<decltype(FC_NAME::T::FCX(W))>::value == FC_NAME::kM * FC_NAME::ND * FC_NAME::NIN,
               "famcfg.inc: the template's mixer rows are not as wide as the family's inputs");
 
+// (the counters' vector path, fam.inc, loads and stores 8 bytes at a
+// 6-byte counter, 2 past a table's last one: in the shipping build the next
+// member's, which no decision writes meanwhile -- the counter tables come
+// first and another member after them -- and in the tuning build the 8
+// bytes each table is mapped longer, idx2inc.pl)
+static_assert(std::extent<decltype(FC_NAME::T::FCX(A))>::value == 0 ||
+                  offsetof(FC_NAME::T, FCX(FC_LASTC)) + sizeof(FC_NAME::T::FCX(FC_LASTC)) + 2 <= sizeof(FC_NAME::T),
+              "famcfg.inc: the last counter table is the last member of the family's tables");
+
+#undef FC_LASTC
 #undef FC_CNT
 #undef FC_USE
 #undef FCF

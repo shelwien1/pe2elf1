@@ -141,4 +141,5 @@ struct H5_sgn_T {
   void H5_sgn_Init( void ) {
   
   }
+  void H5_sgn_Quit( void ) {}
 };

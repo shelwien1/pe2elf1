@@ -129,4 +129,5 @@ struct H5_skp_T {
   void H5_skp_Init( void ) {
   
   }
+  void H5_skp_Quit( void ) {}
 };

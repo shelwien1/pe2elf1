@@ -157,4 +157,5 @@ struct H3_sgn_T {
   void H3_sgn_Init( void ) {
   
   }
+  void H3_sgn_Quit( void ) {}
 };

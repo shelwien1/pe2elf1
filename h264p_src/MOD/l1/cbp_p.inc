@@ -17,27 +17,27 @@ void H1_cbp_make( const H_cbp_v & D, tcx & X ) {
   (void) inc;  (void) pc;  (void) cls;  (void) col;  (void) q6;  (void) st;  (void) en;  (void) td;  (void) pg;  (void) tp;  (void) em;  (void) pq;
 
   a = 0;
-  a = a*3 + ((inc>0+(1-1))+(inc>2+(1-1)));
-  a = a*4 + H1_cbp_a_pc[__min(4,__max(0,pc-(1-1)))];
-  a = a*4 + H1_cbp_a_cls[__min(8,__max(0,cls-(1-1)))];
-  a = a*4 + H1_cbp_a_st[__min(9,__max(0,st-(1-1)))];
+  a = a*3 + (((inc)>0+(1-1))+((inc)>2+(1-1)));
+  a = a*4 + H1_cbp_a_pc[__min(4,__max(0,(pc)-(1-1)))];
+  a = a*4 + H1_cbp_a_cls[__min(8,__max(0,(cls)-(1-1)))];
+  a = a*4 + H1_cbp_a_st[__min(9,__max(0,(st)-(1-1)))];
 
   b = 0;
-  b = b*3 + ((col>0+(1-1))+(col>1+(1-1)));
-  b = b*2 + ((q6>2+(1-1)));
+  b = b*3 + (((col)>0+(1-1))+((col)>1+(1-1)));
+  b = b*2 + (((q6)>2+(1-1)));
 
   c = 0;
-  c = c*4 + H1_cbp_c_cls[__min(8,__max(0,cls-(1-1)))];
-  c = c*2 + ((col>1+(1-1)));
-  c = c*3 + ((pc>0+(1-1))+(pc>2+(1-1)));
+  c = c*4 + H1_cbp_c_cls[__min(8,__max(0,(cls)-(1-1)))];
+  c = c*2 + (((col)>1+(1-1)));
+  c = c*3 + (((pc)>0+(1-1))+((pc)>2+(1-1)));
 
   d = 0;
-  d = d*2 + ((inc>1+(1-1)));
-  d = d*2 + ((pc>1+(1-1)));
-  d = d*5 + H1_cbp_d_q6[__min(8,__max(0,q6-(1-1)))];
+  d = d*2 + (((inc)>1+(1-1)));
+  d = d*2 + (((pc)>1+(1-1)));
+  d = d*5 + H1_cbp_d_q6[__min(8,__max(0,(q6)-(1-1)))];
 
   m = 0;
-  m = m*4 + H1_cbp_m_inc[__min(3,__max(0,inc-(1-1)))];
+  m = m*4 + H1_cbp_m_inc[__min(3,__max(0,(inc)-(1-1)))];
 
   t = 0;
 

@@ -112,6 +112,7 @@ static INLINE i64 tc_dump_get(const char *&p, const char *e) {
 //  decompressor's, fam null)
 struct tc_dump {
   FILE *f = nullptr;
+  long start = 0;  // where this model's records begin
   explicit tc_dump(const char *fam) {
     const char *dir = getenv("H264P_DUMP");
     if(!fam || !dir || !*dir)
@@ -119,7 +120,22 @@ struct tc_dump {
     std::string fn = std::string(dir) + "/" + fam + ".dump";
     if(!(f = fopen(fn.c_str(), "ab")))
       cm_fail("cannot write %s", fn.c_str());
+    fseek(f, 0, SEEK_END);
+    start = ftell(f);
     putc('R', f);
+  }
+  //  a model whose compression starts over (kRestart): its records go
+  void discard() {
+    if(!f)
+      return;
+    fflush(f);
+#ifdef _WIN32
+    _chsize_s(_fileno(f), start);
+#else
+    if(ftruncate(fileno(f), start))
+      cm_fail("cannot cut a dump short");
+#endif
+    putc('R', f);  // (appended: at the end, where it was cut)
   }
   ~tc_dump() {
     if(f)
@@ -251,9 +267,10 @@ template <int f_DEC, class C> struct tc_fam {
                                            "counter H", "counter I", "counter J", "counter K", "counter L"};
       for(int k = 0; k < NC; k++)
         tc_vfits(name[k], C::kc[k], ND);
-      tc_vfits("counter T", C::kT, MND);
+      // (and their rows times nodes: bt and bg, below, are 32-bit products)
+      tc_ifits("counter T", C::kT, MND);
       if(G)
-        tc_vfits("counter G", C::kG, C::NG);
+        tc_ifits("counter G", C::kG, C::NG);
       tc_ifits("mixer", C::kM, (sz)ND * NIN);
       tc_ifits("mantissa mixer", C::kN, (sz)MND * 3);
       mx.init(b.W, b.WC, C::kM * ND);
@@ -319,6 +336,7 @@ template <int f_DEC, class C> struct tc_fam {
     return bit_x(node, b);
   }
   i64 code(const tcx &v, i64 x) { return code_x(v, x); }
+  void dump_discard() { TC_DUMP(discard()); }
   i64 codes(const tcx &v, i64 x, u32 sc) {
     i64 m = code_x(v, ENC ? (x < 0 ? -x : x) : 0);
     if(!m)
@@ -328,8 +346,8 @@ template <int f_DEC, class C> struct tc_fam {
   //  The sign of a nonzero value, under the g index of the last select()
   //  and sign context sc: 1 negative.
   int sign(u32 sc, int s) {
-    if(!G)
-      cm_fail("internal: a family with no sign counter coded a sign");
+    if(!G || UNLIKELY(sc >= (u32)C::NG))
+      cm_fail("internal: sign context %u of a family of %d", sc, C::NG);
     TC_DUMP(rec('G', sc, s));
     cm_cnt g = G[bg * (u32)C::NG + sc];
     s = tc_bit(rc, g.P(), ENC && s);
@@ -555,6 +573,7 @@ template <int f_DEC, class C> struct tc_fam {
     return b;
   }
   i64 code_x(const tcx &v, i64 x) {
+    static_assert(ND >= TC_NODE, "tc_fam: code() takes nodes up to TC_NODE - 1");
     int k, p, nb = 0, hst = 0, hnb = 0;
     u64 u, hu = 0;
     select(v);

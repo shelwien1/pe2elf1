@@ -31,7 +31,7 @@ That gives three shapes worth naming, of which the tree uses two:
 
 | shape | flags | what it is for |
 |---|---|---|
-| **tuning** | `Debug 1, Const 0` | `./mk.sh`. Every knob live; `opt.pl` hill-climbs it |
+| **tuning** | `Debug 1, Const 0` | `./mk.sh tuning L`. Every knob live; `opt.pl` hill-climbs it |
 | **shipping** | `Const 1` | `./mk.sh release`. Every knob folded; no indirection, no mapping objects |
 | frozen | `Debug 0, Const 0` | per-line, to shrink the optimizer's search space — see §10 |
 
@@ -284,7 +284,7 @@ Two things to get right when splitting one module into several:
   renamed its mantissa plane to `%M%MT` for this and nothing else.
 
 `import.pl` takes one `.idx` at a time, so importing an export across a split
-model is a loop — `IDX/import-all.bat` is that loop.
+model is a loop over the `.idx` files (`mk.sh`'s header has it).
 
 h264p goes one step further: one set of modules per level of its model,
 `IDX/l<L>/<family>.idx` with `Prefix H<L>_<family>`, generated into
@@ -297,6 +297,9 @@ level alone, so that its patterns are all `opt.pl` finds.
 ---
 
 ## 8. IDX values as template parameters — `IDXP` / `IDXC`
+
+(oggcomp's; h264p's families take their constants through the configuration
+classes of `famcfg.inc` instead, and use neither macro.)
 
 *New in `xadpcm`; the trick that let the codec's hot loops take their shape from
 IDX rather than from `#define`s.*
@@ -461,13 +464,12 @@ schedule and the predictor instead.
 ## 11. The tuning loop
 
 ```
-./mk.sh                                   # tuning build: Debug 1, Const 0
-perl IDX/opt.pl opt.lst                   # hill-climb; writes export.!!!
-cd IDX && for f in *.idx; do              # fold the results back into source
-  perl import.pl $f ../export.!!! > t && mv t $f
+./mk.sh tuning L                          # tuning build of level L: Debug 1, Const 0
+perl IDX/opt.pl opt.lst ../h264p          # hill-climb; writes export.!!!
+cd IDX/lL && for f in *.idx; do           # fold the results back into source
+  perl ../import.pl $f ../../export.!!! > t && mv t $f
 done
-./mk.sh          # continue tuning
-./mk.sh release  # or ship
+cd ../.. && ./mk.sh mod && ./mk.sh check L   # MOD/ again, and the two builds agree
 ```
 
 `opt.pl` does not parse or rebuild anything. The `pdesc` macro embeds each

@@ -18,10 +18,10 @@ void H1_hdr_make( const H_hdr_v & D, tcx & X ) {
 
   a = 0;
   a = (a<<6) + (((((tag)>>6)&1)<<5) + ((tag)&31)); // 01011111
-  a = a*4 + H1_hdr_a_fld[__min(3,__max(0,fld-(1-1)))];
-  a = a*5 + H1_hdr_a_p1[__min(7,__max(0,p1-(1-1)))];
-  a = a*4 + H1_hdr_a_sty[__min(9,__max(0,sty-(1-1)))];
-  a = a*3 + ((pr>0+(1-1))+(pr>1+(1-1)));
+  a = a*4 + H1_hdr_a_fld[__min(3,__max(0,(fld)-(1-1)))];
+  a = a*5 + H1_hdr_a_p1[__min(7,__max(0,(p1)-(1-1)))];
+  a = a*4 + H1_hdr_a_sty[__min(9,__max(0,(sty)-(1-1)))];
+  a = a*3 + (((pr)>0+(1-1))+((pr)>1+(1-1)));
 
   b = 0;
   b = (b<<5) + (((((tag)>>5)&3)<<3) + ((tag)&7)); // 01100111
@@ -29,12 +29,12 @@ void H1_hdr_make( const H_hdr_v & D, tcx & X ) {
 
   c = 0;
   c = (c<<5) + (((tag)&31)); // 00011111
-  c = c*10 + H1_hdr_c_fld[__min(15,__max(0,fld-(1-1)))];
+  c = c*10 + H1_hdr_c_fld[__min(15,__max(0,(fld)-(1-1)))];
 
   d = 0;
   d = (d<<7) + (((tag)&127)); // 01111111
-  d = d*9 + H1_hdr_d_p1[__min(15,__max(0,p1-(1-1)))];
-  d = d*8 + H1_hdr_d_p2[__min(7,__max(0,p2-(1-1)))];
+  d = d*9 + H1_hdr_d_p1[__min(15,__max(0,(p1)-(1-1)))];
+  d = d*8 + H1_hdr_d_p2[__min(7,__max(0,(p2)-(1-1)))];
 
   m = 0;
 
@@ -44,7 +44,7 @@ void H1_hdr_make( const H_hdr_v & D, tcx & X ) {
   n = 0;
 
   g = 0;
-  g = g*7 + H1_hdr_g_p1[__min(7,__max(0,p1-(1-1)))];
+  g = g*7 + H1_hdr_g_p1[__min(7,__max(0,(p1)-(1-1)))];
   X.c[0] = a;  X.c[1] = b;  X.c[2] = c;  X.c[3] = d;  X.m = m;  X.t = t;
   X.n = n;  X.g = g;
 }

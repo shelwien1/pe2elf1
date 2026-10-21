@@ -164,4 +164,5 @@ struct H7_cbp_T {
   void H7_cbp_Init( void ) {
   
   }
+  void H7_cbp_Quit( void ) {}
 };

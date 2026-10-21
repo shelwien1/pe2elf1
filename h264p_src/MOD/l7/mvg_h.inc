@@ -146,4 +146,5 @@ struct H7_mvg_T {
   void H7_mvg_Init( void ) {
   
   }
+  void H7_mvg_Quit( void ) {}
 };

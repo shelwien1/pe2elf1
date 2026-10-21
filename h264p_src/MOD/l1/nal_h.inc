@@ -85,4 +85,5 @@ struct H1_nal_T {
   void H1_nal_Init( void ) {
   
   }
+  void H1_nal_Quit( void ) {}
 };

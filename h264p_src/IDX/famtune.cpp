@@ -86,6 +86,7 @@ void replay(char** files, int n, tc_rc<0>& rc) {
   typedef tc_fam<0, C> F;
   static const int any = 0;  // (prpa only set: what bitm() asks of it)
   std::unique_ptr<F> f;
+  typename C::T* t = nullptr;  // its tables (the last stream's)
   typename C::V D;
   tcx X{};
   for (int i = 0; i < n; i++) {
@@ -94,7 +95,8 @@ void replay(char** files, int n, tc_rc<0>& rc) {
     while (p < e) {
       char tag = *p++;
       if (tag == 'R') {
-        typename C::T* t = new (tc_map(sizeof(typename C::T))) typename C::T;
+        if (t) C::quit(t), tc_unmap(t, sizeof(typename C::T));
+        t = new (tc_map(sizeof(typename C::T))) typename C::T;
         C::init(t);
         f.reset(new F());
         f->wire(t, &rc);
@@ -140,6 +142,8 @@ void replay(char** files, int n, tc_rc<0>& rc) {
       }
     }
   }
+  f.reset();
+  if (t) C::quit(t), tc_unmap(t, sizeof(typename C::T));
 }
 
 // The replay as a coroutine, as the model codes (its coder is a coroutine's,
@@ -154,8 +158,7 @@ struct Replay : tc_rc<0> {
     try {
       rc_Init();
 #define FT_FAM(F) !strcmp(argv[1], #F) ? replay<FtLv::F>(argv + 2, argc - 2, *this) :
-      FT_FAM(nal) FT_FAM(hdr) FT_FAM(skp) FT_FAM(mbt) FT_FAM(cbp) FT_FAM(ipm) FT_FAM(mvs) FT_FAM(qpd) FT_FAM(cbf)
-          FT_FAM(sig) FT_FAM(lvl) FT_FAM(sgn) FT_FAM(mvg) FT_FAM(qpg) FT_FAM(pcm) cm_fail("famtune: no family %s", argv[1]);
+      H264P_FAMS(FT_FAM) cm_fail("famtune: no family %s", argv[1]);
 #undef FT_FAM
     } catch (const std::exception& e) {
       err = e.what();

@@ -17,18 +17,18 @@ void H1_mvg_make( const H_mvg_v & D, tcx & X ) {
   (void) comp;  (void) lst;  (void) ts;  (void) zs;  (void) ds;  (void) sa;  (void) sb;  (void) mag;  (void) tq;  (void) ox;  (void) ns;  (void) es;  (void) as;
 
   a = 0;
-  a = a*2 + ((comp>0+(1-1)));
-  a = a*2 + ((lst>0+(1-1)));
-  a = a*2 + ((ox>1+(1-1)));
+  a = a*2 + (((comp)>0+(1-1)));
+  a = a*2 + (((lst)>0+(1-1)));
+  a = a*2 + (((ox)>1+(1-1)));
 
   b = 0;
-  b = b*5 + H1_mvg_b_mag[__min(7,__max(0,mag-(1-1)))];
-  b = b*2 + ((comp>0+(1-1)));
+  b = b*5 + H1_mvg_b_mag[__min(7,__max(0,(mag)-(1-1)))];
+  b = b*2 + (((comp)>0+(1-1)));
 
   c = 0;
 
   d = 0;
-  d = d*3 + ((mag>2+(1-1))+(mag>4+(1-1)));
+  d = d*3 + (((mag)>2+(1-1))+((mag)>4+(1-1)));
 
   m = 0;
 

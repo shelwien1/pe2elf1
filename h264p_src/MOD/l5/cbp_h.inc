@@ -139,4 +139,5 @@ struct H5_cbp_T {
   void H5_cbp_Init( void ) {
   
   }
+  void H5_cbp_Quit( void ) {}
 };

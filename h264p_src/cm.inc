@@ -17,6 +17,9 @@ constexpr int CM_CONE = 1 << CM_CBITS;
 constexpr int CM_TMAX = 4096;
 constexpr int CM_AMAX = 255;
 constexpr int CM_QMAX = 130;
+// an APM's width, its interpolation points: 3 to CM_QMAX, as the tables of
+// it are sized (the templates' * cm_apm_q(qs)) and as cm_apm takes it
+constexpr int cm_apm_q(int q) { return q < 3 ? 3 : q > CM_QMAX ? CM_QMAX : q; }
 //  The tables the counters, APMs and mixers read: the reciprocals of their
 //  counts and squash and stretch -- constants, computed as the program
 //  starts and only read after, by every model at once
@@ -125,7 +128,7 @@ struct cm_apm {
     n = nctx;
     idx = 0;
     bkt = 0;
-    q = qq < 3 ? 3 : qq > CM_QMAX ? CM_QMAX : qq;
+    q = cm_apm_q(qq);
     for(j = 0; j < q; j++) {
       int x = j * 4096 / (q - 1) - CM_STMAX - 1;
       ident[j] = (u16)cm_squash(x);
@@ -184,6 +187,7 @@ template <int N> struct cm_x16 {
 };
 
 template <int N> struct cm_mix {
+  static_assert(N <= 32, "cm_mix: its AVX2 sum is exact for 32 inputs at most");
   i32 *__restrict w;
   u8 *__restrict c;
   int x[N], pr, row, ctxn;

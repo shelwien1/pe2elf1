@@ -165,4 +165,5 @@ struct H7_mbt_T {
   void H7_mbt_Init( void ) {
   
   }
+  void H7_mbt_Quit( void ) {}
 };

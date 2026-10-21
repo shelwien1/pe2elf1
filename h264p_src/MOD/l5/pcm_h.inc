@@ -135,4 +135,5 @@ struct H5_pcm_T {
   void H5_pcm_Init( void ) {
   
   }
+  void H5_pcm_Quit( void ) {}
 };

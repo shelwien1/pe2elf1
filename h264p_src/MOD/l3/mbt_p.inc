@@ -18,50 +18,50 @@ void H3_mbt_make( const H_mbt_v & D, tcx & X ) {
   (void) st;  (void) ca;  (void) cb;  (void) cc;  (void) nsk;  (void) en;  (void) td;  (void) sm;  (void) tm;  (void) tb;  (void) dh;  (void) bd;  (void) qc;  (void) im;  (void) ig;  (void) c1;  (void) tx;
 
   a = 0;
-  a = a*7 + H3_mbt_a_ca[__min(8,__max(0,ca-(1-1)))];
-  a = a*7 + H3_mbt_a_cb[__min(8,__max(0,cb-(1-1)))];
+  a = a*7 + H3_mbt_a_ca[__min(8,__max(0,(ca)-(1-1)))];
+  a = a*7 + H3_mbt_a_cb[__min(8,__max(0,(cb)-(1-1)))];
 
   b = 0;
-  b = b*2 + ((st>2+(1-1)));
-  b = b*7 + H3_mbt_b_cc[__min(8,__max(0,cc-(1-1)))];
-  b = b*6 + H3_mbt_b_c1[__min(9,__max(0,c1-(1-1)))];
+  b = b*2 + (((st)>2+(1-1)));
+  b = b*7 + H3_mbt_b_cc[__min(8,__max(0,(cc)-(1-1)))];
+  b = b*6 + H3_mbt_b_c1[__min(9,__max(0,(c1)-(1-1)))];
 
   c = 0;
-  c = c*3 + ((st>1+(1-1))+(st>3+(1-1)));
-  c = c*7 + H3_mbt_c_ca[__min(8,__max(0,ca-(1-1)))];
-  c = c*5 + H3_mbt_c_cc[__min(8,__max(0,cc-(1-1)))];
+  c = c*3 + (((st)>1+(1-1))+((st)>3+(1-1)));
+  c = c*7 + H3_mbt_c_ca[__min(8,__max(0,(ca)-(1-1)))];
+  c = c*5 + H3_mbt_c_cc[__min(8,__max(0,(cc)-(1-1)))];
 
   d = 0;
-  d = d*2 + ((st>4+(1-1)));
+  d = d*2 + (((st)>4+(1-1)));
 
   e = 0;
-  e = e*4 + H3_mbt_e_ca[__min(8,__max(0,ca-(1-1)))];
+  e = e*4 + H3_mbt_e_ca[__min(8,__max(0,(ca)-(1-1)))];
 
   h = 0;
-  h = h*2 + ((st>1+(1-1)));
+  h = h*2 + (((st)>1+(1-1)));
 
   i = 0;
-  i = i*3 + ((st>2+(1-1))+(st>3+(1-1)));
-  i = i*2 + ((ca>0+(1-1)));
+  i = i*3 + (((st)>2+(1-1))+((st)>3+(1-1)));
+  i = i*2 + (((ca)>0+(1-1)));
 
   j = 0;
-  j = j*6 + H3_mbt_j_cb[__min(8,__max(0,cb-(1-1)))];
+  j = j*6 + H3_mbt_j_cb[__min(8,__max(0,(cb)-(1-1)))];
 
   k = 0;
-  k = k*4 + H3_mbt_k_st[__min(9,__max(0,st-(1-1)))];
-  k = k*5 + H3_mbt_k_nsk[__min(4,__max(0,nsk-(1-1)))];
-  k = k*5 + H3_mbt_k_cc[__min(8,__max(0,cc-(1-1)))];
+  k = k*4 + H3_mbt_k_st[__min(9,__max(0,(st)-(1-1)))];
+  k = k*5 + H3_mbt_k_nsk[__min(4,__max(0,(nsk)-(1-1)))];
+  k = k*5 + H3_mbt_k_cc[__min(8,__max(0,(cc)-(1-1)))];
 
   l = 0;
-  l = l*3 + ((st>1+(1-1))+(st>3+(1-1)));
-  l = l*7 + H3_mbt_l_ca[__min(8,__max(0,ca-(1-1)))];
-  l = l*7 + H3_mbt_l_cb[__min(8,__max(0,cb-(1-1)))];
+  l = l*3 + (((st)>1+(1-1))+((st)>3+(1-1)));
+  l = l*7 + H3_mbt_l_ca[__min(8,__max(0,(ca)-(1-1)))];
+  l = l*7 + H3_mbt_l_cb[__min(8,__max(0,(cb)-(1-1)))];
 
   s = 0;
-  s = s*2 + ((st>1+(1-1)));
+  s = s*2 + (((st)>1+(1-1)));
 
   m = 0;
-  m = m*4 + H3_mbt_m_st[__min(9,__max(0,st-(1-1)))];
+  m = m*4 + H3_mbt_m_st[__min(9,__max(0,(st)-(1-1)))];
 
   w = 0;
 

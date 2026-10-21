@@ -186,4 +186,5 @@ struct H7_sig_T {
   void H7_sig_Init( void ) {
   
   }
+  void H7_sig_Quit( void ) {}
 };

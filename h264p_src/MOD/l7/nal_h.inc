@@ -155,4 +155,5 @@ struct H7_nal_T {
   void H7_nal_Init( void ) {
   
   }
+  void H7_nal_Quit( void ) {}
 };

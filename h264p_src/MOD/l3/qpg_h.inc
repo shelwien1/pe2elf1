@@ -150,4 +150,5 @@ struct H3_qpg_T {
   void H3_qpg_Init( void ) {
   
   }
+  void H3_qpg_Quit( void ) {}
 };

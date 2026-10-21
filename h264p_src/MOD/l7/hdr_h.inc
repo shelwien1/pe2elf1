@@ -146,4 +146,5 @@ struct H7_hdr_T {
   void H7_hdr_Init( void ) {
   
   }
+  void H7_hdr_Quit( void ) {}
 };

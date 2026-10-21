@@ -18,57 +18,57 @@ void H3_ipm_make( const H_ipm_v & D, tcx & X ) {
   (void) k8;  (void) ma;  (void) mb;  (void) mp;  (void) blk;  (void) pv;  (void) col;  (void) dm;  (void) ds;  (void) pm;  (void) pr;  (void) dr;  (void) pq;  (void) mh;  (void) mc;  (void) mg;  (void) rg;  (void) p2;
 
   a = 0;
-  a = a*2 + ((k8>0+(1-1)));
-  a = a*11 + H3_ipm_a_ma[__min(10,__max(0,ma-(1-1)))];
-  a = a*11 + H3_ipm_a_mb[__min(10,__max(0,mb-(1-1)))];
-  a = a*10 + H3_ipm_a_mc[__min(10,__max(0,mc-(1-1)))];
+  a = a*2 + (((k8)>0+(1-1)));
+  a = a*11 + H3_ipm_a_ma[__min(10,__max(0,(ma)-(1-1)))];
+  a = a*11 + H3_ipm_a_mb[__min(10,__max(0,(mb)-(1-1)))];
+  a = a*10 + H3_ipm_a_mc[__min(10,__max(0,(mc)-(1-1)))];
 
   b = 0;
-  b = b*2 + ((k8>0+(1-1)));
-  b = b*7 + H3_ipm_b_mp[__min(9,__max(0,mp-(1-1)))];
-  b = b*9 + H3_ipm_b_pv[__min(9,__max(0,pv-(1-1)))];
-  b = b*16 + H3_ipm_b_mh[__min(16,__max(0,mh-(1-1)))];
+  b = b*2 + (((k8)>0+(1-1)));
+  b = b*7 + H3_ipm_b_mp[__min(9,__max(0,(mp)-(1-1)))];
+  b = b*9 + H3_ipm_b_pv[__min(9,__max(0,(pv)-(1-1)))];
+  b = b*16 + H3_ipm_b_mh[__min(16,__max(0,(mh)-(1-1)))];
 
   c = 0;
-  c = c*8 + H3_ipm_c_mp[__min(9,__max(0,mp-(1-1)))];
-  c = c*10 + H3_ipm_c_col[__min(9,__max(0,col-(1-1)))];
+  c = c*8 + H3_ipm_c_mp[__min(9,__max(0,(mp)-(1-1)))];
+  c = c*10 + H3_ipm_c_col[__min(9,__max(0,(col)-(1-1)))];
 
   d = 0;
-  d = d*2 + ((k8>0+(1-1)));
-  d = d*4 + H3_ipm_d_mp[__min(9,__max(0,mp-(1-1)))];
+  d = d*2 + (((k8)>0+(1-1)));
+  d = d*4 + H3_ipm_d_mp[__min(9,__max(0,(mp)-(1-1)))];
 
   e = 0;
-  e = e*8 + H3_ipm_e_mp[__min(9,__max(0,mp-(1-1)))];
+  e = e*8 + H3_ipm_e_mp[__min(9,__max(0,(mp)-(1-1)))];
 
   h = 0;
 
   i = 0;
-  i = i*11 + H3_ipm_i_ma[__min(10,__max(0,ma-(1-1)))];
+  i = i*11 + H3_ipm_i_ma[__min(10,__max(0,(ma)-(1-1)))];
 
   j = 0;
-  j = j*2 + ((k8>0+(1-1)));
-  j = j*15 + H3_ipm_j_mh[__min(16,__max(0,mh-(1-1)))];
-  j = j*11 + H3_ipm_j_mb[__min(10,__max(0,mb-(1-1)))];
+  j = j*2 + (((k8)>0+(1-1)));
+  j = j*15 + H3_ipm_j_mh[__min(16,__max(0,(mh)-(1-1)))];
+  j = j*11 + H3_ipm_j_mb[__min(10,__max(0,(mb)-(1-1)))];
 
   k = 0;
-  k = k*2 + ((k8>0+(1-1)));
-  k = k*2 + ((mp>3+(1-1)));
-  k = k*7 + H3_ipm_k_pv[__min(9,__max(0,pv-(1-1)))];
+  k = k*2 + (((k8)>0+(1-1)));
+  k = k*2 + (((mp)>3+(1-1)));
+  k = k*7 + H3_ipm_k_pv[__min(9,__max(0,(pv)-(1-1)))];
 
   l = 0;
-  l = l*8 + H3_ipm_l_mc[__min(10,__max(0,mc-(1-1)))];
-  l = l*7 + H3_ipm_l_ma[__min(10,__max(0,ma-(1-1)))];
+  l = l*8 + H3_ipm_l_mc[__min(10,__max(0,(mc)-(1-1)))];
+  l = l*7 + H3_ipm_l_ma[__min(10,__max(0,(ma)-(1-1)))];
 
   s = 0;
 
   m = 0;
-  m = m*2 + ((k8>0+(1-1)));
-  m = m*2 + ((ma>9+(1-1)));
-  m = m*8 + H3_ipm_m_mb[__min(10,__max(0,mb-(1-1)))];
+  m = m*2 + (((k8)>0+(1-1)));
+  m = m*2 + (((ma)>9+(1-1)));
+  m = m*8 + H3_ipm_m_mb[__min(10,__max(0,(mb)-(1-1)))];
 
   w = 0;
-  w = w*2 + ((k8>0+(1-1)));
-  w = w*8 + H3_ipm_w_mp[__min(9,__max(0,mp-(1-1)))];
+  w = w*2 + (((k8)>0+(1-1)));
+  w = w*8 + H3_ipm_w_mp[__min(9,__max(0,(mp)-(1-1)))];
 
   t = 0;
 

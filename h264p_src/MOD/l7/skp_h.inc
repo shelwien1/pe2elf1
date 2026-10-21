@@ -155,4 +155,5 @@ struct H7_skp_T {
   void H7_skp_Init( void ) {
   
   }
+  void H7_skp_Quit( void ) {}
 };

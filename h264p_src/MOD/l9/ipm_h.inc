@@ -135,10 +135,10 @@ struct H9_ipm_T {
   cm_cnt2 H9_ipm_K[tc_rows(H9_ipm_k_Volume, H9_ipm_hK) * H_ipm_ND];
   cm_cnt2 H9_ipm_L[tc_rows(H9_ipm_l_Volume, H9_ipm_hL) * H_ipm_ND];
   cm_cnt H9_ipm_MT[tc_rows(H9_ipm_t_Volume, H9_ipm_hT) * H_ipm_MND];
-  i16 H9_ipm_S[tc_rows(H9_ipm_s_Volume, H9_ipm_hS) * H_ipm_ND * H9_ipm_qs];
-  u8 H9_ipm_SC[tc_rows(H9_ipm_s_Volume, H9_ipm_hS) * H_ipm_ND * H9_ipm_qs];
-  i16 H9_ipm_F[tc_rows(H9_ipm_f_Volume, H9_ipm_hF) * H_ipm_ND * H9_ipm_qf];
-  u8 H9_ipm_FC[tc_rows(H9_ipm_f_Volume, H9_ipm_hF) * H_ipm_ND * H9_ipm_qf];
+  i16 H9_ipm_S[tc_rows(H9_ipm_s_Volume, H9_ipm_hS) * H_ipm_ND * cm_apm_q(H9_ipm_qs)];
+  u8 H9_ipm_SC[tc_rows(H9_ipm_s_Volume, H9_ipm_hS) * H_ipm_ND * cm_apm_q(H9_ipm_qs)];
+  i16 H9_ipm_F[tc_rows(H9_ipm_f_Volume, H9_ipm_hF) * H_ipm_ND * cm_apm_q(H9_ipm_qf)];
+  u8 H9_ipm_FC[tc_rows(H9_ipm_f_Volume, H9_ipm_hF) * H_ipm_ND * cm_apm_q(H9_ipm_qf)];
   i32 H9_ipm_W[tc_rows(H9_ipm_m_Volume, H9_ipm_hM) * H_ipm_ND * TC_MIXN];
   u8 H9_ipm_WC[tc_rows(H9_ipm_m_Volume, H9_ipm_hM) * H_ipm_ND];
   i32 H9_ipm_WM[tc_rows(H9_ipm_n_Volume, H9_ipm_hN) * H_ipm_MND * 3];
@@ -165,10 +165,10 @@ struct H9_ipm_T {
                               + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H9_ipm_k_Volume, H9_ipm_hK) * H_ipm_ND)
                               + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H9_ipm_l_Volume, H9_ipm_hL) * H_ipm_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(tc_rows(H9_ipm_t_Volume, H9_ipm_hT) * H_ipm_MND)
-                              + (unsigned long long)sizeof(i16) * (unsigned long long)(tc_rows(H9_ipm_s_Volume, H9_ipm_hS) * H_ipm_ND * H9_ipm_qs)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H9_ipm_s_Volume, H9_ipm_hS) * H_ipm_ND * H9_ipm_qs)
-                              + (unsigned long long)sizeof(i16) * (unsigned long long)(tc_rows(H9_ipm_f_Volume, H9_ipm_hF) * H_ipm_ND * H9_ipm_qf)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H9_ipm_f_Volume, H9_ipm_hF) * H_ipm_ND * H9_ipm_qf)
+                              + (unsigned long long)sizeof(i16) * (unsigned long long)(tc_rows(H9_ipm_s_Volume, H9_ipm_hS) * H_ipm_ND * cm_apm_q(H9_ipm_qs))
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H9_ipm_s_Volume, H9_ipm_hS) * H_ipm_ND * cm_apm_q(H9_ipm_qs))
+                              + (unsigned long long)sizeof(i16) * (unsigned long long)(tc_rows(H9_ipm_f_Volume, H9_ipm_hF) * H_ipm_ND * cm_apm_q(H9_ipm_qf))
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H9_ipm_f_Volume, H9_ipm_hF) * H_ipm_ND * cm_apm_q(H9_ipm_qf))
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H9_ipm_m_Volume, H9_ipm_hM) * H_ipm_ND * TC_MIXN)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H9_ipm_m_Volume, H9_ipm_hM) * H_ipm_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H9_ipm_n_Volume, H9_ipm_hN) * H_ipm_MND * 3)
@@ -183,4 +183,5 @@ struct H9_ipm_T {
   void H9_ipm_Init( void ) {
   
   }
+  void H9_ipm_Quit( void ) {}
 };

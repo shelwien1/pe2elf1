@@ -17,21 +17,21 @@ void H1_qpg_make( const H_qpg_v & D, tcx & X ) {
   (void) as;  (void) cs;  (void) bs;  (void) ls;  (void) rs;  (void) mag;  (void) cls;  (void) st;  (void) ss;  (void) xe;  (void) lq;  (void) bk;
 
   a = 0;
-  a = a*7 + H1_qpg_a_mag[__min(7,__max(0,mag-(1-1)))];
-  a = a*7 + H1_qpg_a_ss[__min(9,__max(0,ss-(1-1)))];
+  a = a*7 + H1_qpg_a_mag[__min(7,__max(0,(mag)-(1-1)))];
+  a = a*7 + H1_qpg_a_ss[__min(9,__max(0,(ss)-(1-1)))];
 
   b = 0;
-  b = b*6 + H1_qpg_b_cls[__min(8,__max(0,cls-(1-1)))];
-  b = b*3 + ((st>1+(1-1))+(st>4+(1-1)));
-  b = b*3 + ((ls>0+(1-1))+(ls>1+(1-1)));
+  b = b*6 + H1_qpg_b_cls[__min(8,__max(0,(cls)-(1-1)))];
+  b = b*3 + (((st)>1+(1-1))+((st)>4+(1-1)));
+  b = b*3 + (((ls)>0+(1-1))+((ls)>1+(1-1)));
 
   c = 0;
-  c = c*7 + H1_qpg_c_cs[__min(9,__max(0,cs-(1-1)))];
+  c = c*7 + H1_qpg_c_cs[__min(9,__max(0,(cs)-(1-1)))];
 
   d = 0;
-  d = d*7 + H1_qpg_d_bs[__min(9,__max(0,bs-(1-1)))];
-  d = d*4 + H1_qpg_d_mag[__min(7,__max(0,mag-(1-1)))];
-  d = d*2 + ((bk>8+(1-1)));
+  d = d*7 + H1_qpg_d_bs[__min(9,__max(0,(bs)-(1-1)))];
+  d = d*4 + H1_qpg_d_mag[__min(7,__max(0,(mag)-(1-1)))];
+  d = d*2 + (((bk)>8+(1-1)));
 
   m = 0;
 

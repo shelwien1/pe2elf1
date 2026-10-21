@@ -92,4 +92,5 @@ struct H1_cbf_T {
   void H1_cbf_Init( void ) {
   
   }
+  void H1_cbf_Quit( void ) {}
 };

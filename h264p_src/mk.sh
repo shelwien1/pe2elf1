@@ -27,8 +27,8 @@
 #  the binary holds that level alone, so that its patterns are all opt.pl
 #  finds and `c` runs it:
 #
-#      ./mk.sh tuning 1
-#      perl IDX/opt.pl opt.lst ./h264p          # one stream path per line
+#      ./mk.sh tuning 1                         # ../h264p, the tuning build
+#      perl IDX/opt.pl opt.lst ../h264p         # one stream path per line
 #      cd IDX/l1 && for f in *.idx; do perl ../import.pl $f ../../export.\!\!\! > t && mv t $f; done
 #      cd ../.. && ./mk.sh mod && ./mk.sh check 1
 #
@@ -113,6 +113,9 @@ level() {
 case "${1:-}" in
   tuning)
     level "${2:?usage: ./mk.sh tuning L}"
+    lv=$2
+    # (MOD/lL back in the shipping form once the build has it, as famtune)
+    trap 'generate "$lv" 0 1; cleanup' EXIT
     generate "$2" 1 0
     build ../h264p -DH264P_ONLY="$2"
     perl -e 'undef $/; $_ = <>;

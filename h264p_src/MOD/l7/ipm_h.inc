@@ -163,4 +163,5 @@ struct H7_ipm_T {
   void H7_ipm_Init( void ) {
   
   }
+  void H7_ipm_Quit( void ) {}
 };

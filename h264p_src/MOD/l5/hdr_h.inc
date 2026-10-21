@@ -128,4 +128,5 @@ struct H5_hdr_T {
   void H5_hdr_Init( void ) {
   
   }
+  void H5_hdr_Quit( void ) {}
 };

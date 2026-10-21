@@ -93,7 +93,7 @@ namespace {
 const char kMagic[] = "h264p";  // TSV files
 const int kVersion = 1;
 const char kCmMagic[] = "h264c";  // compressed streams, followed by the version and level bytes
-const int kCmVersion = 5;
+const int kCmVersion = 6;
 // The CRC-32 at the end is coded XORed with this: a decoder fed past the
 // end of its input decodes zeros, and 0 is the CRC-32 of an empty stream.
 const uint32_t kCrcXor = 0x68323634;
@@ -433,12 +433,13 @@ std::vector<uint8_t> escape(const std::vector<uint8_t>& r) {
 
 bool parsed_type(int type) { return (type >= 5 && type <= 12) || type == 1; }
 
-// Parses the RBSP of a NAL unit, handing the values to a channel; parameter
-// sets are stored in the context. Returns x264's padding bit for the end of
-// CABAC slice data, else -1, as write_syntax(). Throws ParseError.
-int read_nal(int type, int ref_idc, const std::vector<uint8_t>& rbsp, Context& ctx, Chan& ch) {
-  BitReader br(rbsp.data(), rbsp.size());
-  Syn s(&br, &ch);
+// The syntax of a NAL unit's RBSP through a channel, parsed from br or
+// written to bw (with the rbsp_stop_one_bit), either way by the same walk
+// (Syn's direction); parameter sets are stored in the context. Returns
+// x264's padding bit for the end of CABAC slice data, else -1. Throws
+// ParseError parsing, what the channel throws writing.
+int code_nal(int type, int ref_idc, Context& ctx, Chan& ch, BitReader* br, BitWriter* bw) {
+  Syn s = br ? Syn(br, &ch) : Syn(&ch, bw);
   switch (type) {
     case 7: {
       auto sps = std::make_shared<Sps>();
@@ -462,9 +463,9 @@ int read_nal(int type, int ref_idc, const std::vector<uint8_t>& rbsp, Context& c
       code_filler(s);
       break;
     case 10:
-    case 11:
-      if (!rbsp.empty()) throw ParseError("end of sequence/stream NAL unit with data");
-      break;
+    case 11:  // (empty: no stop bit either)
+      if (br && br->size()) throw ParseError("end of sequence/stream NAL unit with data");
+      return -1;
     case 1:
     case 5: {
       SliceHeader h;
@@ -472,62 +473,25 @@ int read_nal(int type, int ref_idc, const std::vector<uint8_t>& rbsp, Context& c
       h.nal_ref_idc = ref_idc;
       code_slice_header(s, h, ctx.ps);
       h.pad = ctx.pad.bit(h.first_mb == 0);
-      read_slice_data(h, ctx.mbs, br, ch);
+      if (br)
+        read_slice_data(h, ctx.mbs, *br, ch);
+      else
+        write_slice_data(h, ctx.mbs, ch, *bw);  // with the stop bit
       return h.pps->entropy_coding_mode_flag ? h.pad : -1;
     }
     default:
-      throw ParseError("unsupported NAL unit type");
-  }
-  return -1;
-}
-
-// Writes the syntax of a NAL unit with the values of a channel, up to and
-// including the rbsp_stop_one_bit. Returns x264's padding bit for the end
-// of CABAC slice data, else -1. Throws what the channel throws.
-int write_syntax(int type, int ref_idc, Context& ctx, Chan& ch, BitWriter& bw) {
-  Syn s(&ch, &bw);
-  bool trailing = true;
-  switch (type) {
-    case 7: {
-      auto sps = std::make_shared<Sps>();
-      code_sps(s, *sps);
-      ctx.ps.sps[sps->id] = sps;
-      break;
-    }
-    case 8: {
-      auto pps = std::make_shared<Pps>();
-      code_pps(s, *pps, ctx.ps);
-      ctx.ps.pps[pps->id] = pps;
-      break;
-    }
-    case 6:
-      code_sei(s);
-      break;
-    case 9:
-      code_aud(s);
-      break;
-    case 12:
-      code_filler(s);
-      break;
-    case 10:
-    case 11:
-      trailing = false;
-      break;
-    case 1:
-    case 5: {
-      SliceHeader h;
-      h.nal_unit_type = type;
-      h.nal_ref_idc = ref_idc;
-      code_slice_header(s, h, ctx.ps);
-      h.pad = ctx.pad.bit(h.first_mb == 0);
-      write_slice_data(h, ctx.mbs, ch, bw);  // with the stop bit
-      return h.pps->entropy_coding_mode_flag ? h.pad : -1;
-    }
-    default:
+      if (br) throw ParseError("unsupported NAL unit type");
       throw TsvError("NAL unit type " + std::to_string(type) + " needs a hex row");
   }
-  if (trailing) bw.bit(1);  // rbsp_stop_one_bit
+  if (bw) bw->bit(1);  // rbsp_stop_one_bit
   return -1;
+}
+int read_nal(int type, int ref_idc, const std::vector<uint8_t>& rbsp, Context& ctx, Chan& ch) {
+  BitReader br(rbsp.data(), rbsp.size());
+  return code_nal(type, ref_idc, ctx, ch, &br, nullptr);
+}
+int write_syntax(int type, int ref_idc, Context& ctx, Chan& ch, BitWriter& bw) {
+  return code_nal(type, ref_idc, ctx, ch, nullptr, &bw);
 }
 
 // The alignment zero bits, the last one being x264's padding bit if pad is 1.
@@ -1280,30 +1244,15 @@ struct Restart {
   long nal;
 };
 
-// A NAL unit's work that needs no model (its parsing, and writing it back
-// to see that it comes out the same) runs before the model's, on a context
-// of its own (cf); the model's context (cb) takes the same parameter sets
-// and padding as it reaches each NAL unit
-struct NalItem {
-  size_t zeros = 0;
-  std::vector<uint8_t> nal;
-  bool bad = false;  // empty, or forbidden_zero_bit set
-  int type = 0, ref_idc = 0;
-  bool slice = false, newpic = false, ok = false, padchg = false, padon = false;
-  int64_t padframe = 0;
+// A NAL unit's dry run (dry_run): what it found, and its buffers, which
+// only grow, for the next one
+struct DryRun {
   Trailer t;
   std::string why;
   LogChan log;
   BinRec rec;
-  bool checked = false;  // the model pass checks it (dry_run)
+  bool checked = false;  // the model pass checks it
   std::vector<uint8_t> rbsp;
-  // (one item for every NAL unit: its buffers only grow)
-  void reset() {
-    bad = slice = newpic = ok = padchg = padon = checked = false;
-    type = ref_idc = 0;
-    padframe = 0;
-    why.clear();
-  }
 };
 
 // What a compression keeps from one NAL unit to the next besides its
@@ -1311,11 +1260,11 @@ struct NalItem {
 // yield copies, stays small, and Quit() frees all of it wherever the
 // coroutine was left
 struct CompressState {
-  Context cf, cb;
+  Context ctx;
   PadDetector det;
   Crc32 crc;
   Stats st;
-  NalItem it;
+  DryRun dr;
   std::vector<uint8_t> nal;
   AnnexBReader rd;  // the input
   explicit CompressState(ByteSource in) : rd(in) {}
@@ -1335,14 +1284,14 @@ struct DecompressState {
 template <class LV>
 int compress_stream(Model<0, LV>& m, CompressState& s, const Options& opt, bool check, const char* name) {
   Stats& st = s.st;
-  Context &cf = s.cf, &cb = s.cb;
+  Context& ctx = s.ctx;
   PadDetector& det = s.det;
   Crc32& crc = s.crc;
   AnnexBReader& rd = s.rd;
+  DryRun& dr = s.dr;
   const uint8_t head[2] = {(uint8_t)kCmVersion, (uint8_t)LV::id};
   m.write((const uint8_t*)kCmMagic, sizeof kCmMagic - 1);
   m.write(head, 2);
-  u64 in_bytes = 0;
   try {
     m.init();
     m.tc_verbose = opt.verbose;
@@ -1354,93 +1303,77 @@ int compress_stream(Model<0, LV>& m, CompressState& s, const Options& opt, bool 
     m.nal(F_JUNK, 0, (i64)junk.size());
     for (uint8_t b : junk) m.raw(b);
     crc.add(junk);
-    u64 in_nals = junk.size();  // (the bytes of the NAL units, counted ahead)
-    auto fill = [&](NalItem& it) {
-      static const uint8_t sc[3] = {0, 0, 1};
-      crc.zeros(it.zeros);
-      crc.add(sc, 3);
-      crc.add(it.nal);
-      in_nals += it.zeros + 3 + it.nal.size();
-      it.bad = it.nal.empty() || (it.nal[0] & 0x80);
-      if (it.bad) return;
-      it.ref_idc = it.nal[0] >> 5 & 3, it.type = it.nal[0] & 31;
-      const uint8_t* payload = it.nal.data() + 1;
-      size_t len = it.nal.size() - 1;
-      it.slice = it.type == 1 || it.type == 5;
-      it.newpic = starts_picture(it.type, payload, len);
-      if (it.slice) det.slice(it.newpic);
-      if (it.type == 7 || (it.type == 6 && is_x264_sei(payload, len))) det.restart();
-      int obs;
-      BinRec* rec = check ? &it.rec : nullptr;
-      it.ok = dry_run(it.type, it.ref_idc, payload, len, cf, it.log, it.t, it.why, obs, rec, it.checked, it.rbsp);
-      if (it.ok && obs >= 0 && det.observe(obs)) {
-        // once more, with padding bits that predict this one
-        it.padchg = true;
-        int64_t frame = det.frame();
-        if (frame < 0)
-          cf.pad.on = false;
-        else
-          cf.pad.set(frame);
-        it.ok = dry_run(it.type, it.ref_idc, payload, len, cf, it.log, it.t, it.why, obs, rec, it.checked, it.rbsp);
-      }
-      it.padon = cf.pad.on, it.padframe = cf.pad.frame;
-      if (it.slice) cf.pad.next_slice(it.newpic);
-    };
     int prev_type = 0;
-    // (false: a NAL unit -s would not have verbatim)
-    auto use = [&](NalItem& it) {
+    // each NAL unit: its dry run, then the model pass, on one context (the
+    // parameter sets and the macroblocks of either are the same; x264's
+    // padding moves on to the next slice after both)
+    for (; more; more = rd.next(zeros, nal)) {
+      static const uint8_t sc[3] = {0, 0, 1};
+      crc.zeros(zeros);
+      crc.add(sc, 3);
+      crc.add(nal);
       st.nals++;
       m.nal(F_MORE, 0, 1);
-      if (it.bad) {
+      if (nal.empty() || (nal[0] & 0x80)) {  // empty, or forbidden_zero_bit set
         m.nal(F_TYPE, prev_type, 32);
-        m.nal(F_ZEROS, 32, (i64)it.zeros);
-        m.nal(F_LEN, 32, (i64)it.nal.size());
-        for (uint8_t b : it.nal) m.raw(b);
+        m.nal(F_ZEROS, 32, (i64)zeros);
+        m.nal(F_LEN, 32, (i64)nal.size());
+        for (uint8_t b : nal) m.raw(b);
         st.raw++;
         st.reasons["empty or forbidden_zero_bit"]++;
-        return true;
+        continue;
       }
-      int type = it.type, ref_idc = it.ref_idc;
-      m.nal(F_TYPE, prev_type, type);
-      m.nal(F_REF, type, ref_idc);
-      m.nal(F_ZEROS, type, (i64)it.zeros);
-      prev_type = type;
-      const uint8_t* payload = it.nal.data() + 1;
-      size_t len = it.nal.size() - 1;
-      if (it.padchg) {
-        if (!it.padon)
-          cb.pad.on = false;
+      int ref_idc = nal[0] >> 5 & 3, type = nal[0] & 31;
+      const uint8_t* payload = nal.data() + 1;
+      size_t len = nal.size() - 1;
+      bool slice = type == 1 || type == 5, newpic = starts_picture(type, payload, len);
+      if (slice) det.slice(newpic);
+      if (type == 7 || (type == 6 && is_x264_sei(payload, len))) det.restart();
+      int obs;
+      BinRec* rec = check ? &dr.rec : nullptr;
+      bool ok = dry_run(type, ref_idc, payload, len, ctx, dr.log, dr.t, dr.why, obs, rec, dr.checked, dr.rbsp);
+      bool padchg = ok && obs >= 0 && det.observe(obs);
+      if (padchg) {
+        // once more, with padding bits that predict this one
+        int64_t frame = det.frame();
+        if (frame < 0)
+          ctx.pad.on = false;
         else
-          cb.pad.set(it.padframe);
+          ctx.pad.set(frame);
+        ok = dry_run(type, ref_idc, payload, len, ctx, dr.log, dr.t, dr.why, obs, rec, dr.checked, dr.rbsp);
         st.pad++;
       }
-      if (it.slice) {
-        m.nal(F_PADCHG, 0, it.padchg);
-        if (it.padchg) {
-          m.nal(F_PADON, 0, cb.pad.on);
-          if (cb.pad.on) m.nal(F_PADFRAME, 0, cb.pad.frame);
+      m.nal(F_TYPE, prev_type, type);
+      m.nal(F_REF, type, ref_idc);
+      m.nal(F_ZEROS, type, (i64)zeros);
+      prev_type = type;
+      if (slice) {
+        m.nal(F_PADCHG, 0, padchg);
+        if (padchg) {
+          m.nal(F_PADON, 0, ctx.pad.on);
+          if (ctx.pad.on) m.nal(F_PADFRAME, 0, ctx.pad.frame);
         }
       }
-      if (parsed_type(type)) m.nal(F_VERB, type, !it.ok);
-      if (it.ok) {
-        const Trailer& t = it.t;
-        it.log.rewind();
-        ModelChan<0, LV> ch(m, &it.log);
+      if (parsed_type(type)) m.nal(F_VERB, type, !ok);
+      if (ok) {
+        const Trailer& t = dr.t;
+        dr.log.rewind();
+        ModelChan<0, LV> ch(m, &dr.log);
         m.nal_begin(type, ref_idc);
         BitWriter bw;
-        if (it.checked) {
+        if (dr.checked) {
           // (whatever fails, the NAL unit would not come out as it is)
-          ch.rec = &it.rec;
+          ch.rec = &dr.rec;
           bool same = false;
           try {
-            write_syntax(type, ref_idc, cb, ch, bw);
-            same = it.log.at_end() && checked_bits(bw, ch.nobins, it.rec, it.rbsp);
+            write_syntax(type, ref_idc, ctx, ch, bw);
+            same = dr.log.at_end() && checked_bits(bw, ch.nobins, dr.rec, dr.rbsp);
           } catch (const std::exception&) {
           }
           if (!same) throw Restart{st.nals - 1};
         } else {
-          write_syntax(type, ref_idc, cb, ch, bw);
-          if (!it.log.at_end()) cm_fail("internal: values left over");
+          write_syntax(type, ref_idc, ctx, ch, bw);
+          if (!dr.log.at_end()) cm_fail("internal: values left over");
         }
         m.nal(F_TRAIL, type, t.irregular);
         if (t.irregular) {
@@ -1452,37 +1385,25 @@ int compress_stream(Model<0, LV>& m, CompressState& s, const Options& opt, bool 
         st.parsed++;
         st.trail += t.irregular;
       } else {
-        // (an SPS or PPS stored verbatim may still define a parameter set,
-        // as it did ahead)
-        if (type == 7 || type == 8) update_params(type, unescape(payload, len), cb);
+        // (an SPS or PPS stored verbatim still defines its parameter set
+        // where it could be parsed: the dry run has it so)
         m.nal(F_LEN, type, (i64)len);
         for (size_t i = 0; i < len; i++) m.raw(payload[i]);
         st.raw++;
-        st.reasons[it.why]++;
-        if (opt.verbose && parsed_type(type)) {
-          say(opt.meter, "h264p: NAL unit %ld (type %d) stored verbatim: %s\n", st.nals - 1, type, it.why.c_str());
-        }
+        st.reasons[dr.why]++;
+        if (opt.verbose && parsed_type(type))
+          say(opt.meter, "h264p: NAL unit %ld (type %d) stored verbatim: %s\n", st.nals - 1, type, dr.why.c_str());
         if (opt.strict && parsed_type(type)) {
-          say_error(opt.meter, "h264p: NAL unit %ld (type %d) cannot be converted: %s\n", st.nals - 1, type, it.why.c_str());
-          return false;
+          say_error(opt.meter, "h264p: NAL unit %ld (type %d) cannot be converted: %s\n", st.nals - 1, type,
+                    dr.why.c_str());
+          return 1;
         }
       }
-      if (it.slice) cb.pad.next_slice(it.newpic);
-      return true;
-    };
-    NalItem& it = s.it;
-    for (; more; more = rd.next(zeros, nal)) {
-      it.reset();
-      it.zeros = zeros;
-      it.nal.swap(nal);
-      fill(it);
-      if (!use(it)) return 1;
+      if (slice) ctx.pad.next_slice(newpic);
     }
-    in_bytes += in_nals;
     m.nal(F_MORE, 0, 0);
     m.nal(F_EOFZ, 0, (i64)rd.eof_zeros());
     crc.zeros(rd.eof_zeros());
-    in_bytes += rd.eof_zeros();
     m.nal(F_CRC, 0, crc.value() ^ kCrcXor);
     m.end_stream();
     m.rc_Quit();
@@ -1490,17 +1411,16 @@ int compress_stream(Model<0, LV>& m, CompressState& s, const Options& opt, bool 
     say_error(opt.meter, "h264p: %s: %s\n", name, e.what());
     return 1;
   } catch (const Restart& r) {
-    if (opt.verbose) {
+    if (opt.verbose)
       say(opt.meter, "h264p: NAL unit %ld would not come out as it is; compressing again, writing back each\n", r.nal);
-    }
     return kRestart;
   }
   if (opt.verbose) {
     say(opt.meter, "%ld NAL units: %ld coded (%ld with irregular trailing bits), %ld stored verbatim\n", st.nals,
-            st.parsed, st.trail, st.raw);
+        st.parsed, st.trail, st.raw);
     if (st.pad) fprintf(stderr, "%ld changes of x264's padding bits\n", st.pad);
     for (auto& r : st.reasons) fprintf(stderr, "  verbatim: %ld x %s\n", r.second, r.first.c_str());
-    cm_report(m, in_bytes, m.n_out, m.table_bytes());
+    cm_report(m, m.n_in, m.n_out, m.table_bytes());
   }
   return 0;
 }
@@ -1836,6 +1756,12 @@ bool recdump_ok(bool one) {
 // c and x
 int code(bool x, const char* in_name, const char* out_name, const Options& opt) {
   if (!has_level(opt.level) || !recdump_ok(!x && opt.threads == 1)) return 2;
+#ifdef H264P_DUMP
+  if (opt.threads > 1) {  // (the parts' models would write the dumps at once)
+    fprintf(stderr, "h264p: a build with H264P_DUMP dumps one model: without -t\n");
+    return 2;
+  }
+#endif
   filehandle f;
   Output o;
   if (!open_io(in_name, out_name, f, o)) return 1;

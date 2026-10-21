@@ -151,4 +151,5 @@ struct H5_cbf_T {
   void H5_cbf_Init( void ) {
   
   }
+  void H5_cbf_Quit( void ) {}
 };

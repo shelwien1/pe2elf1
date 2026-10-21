@@ -143,4 +143,5 @@ struct H5_mvs_T {
   void H5_mvs_Init( void ) {
   
   }
+  void H5_mvs_Quit( void ) {}
 };

@@ -161,4 +161,5 @@ struct H3_lvl_T {
   void H3_lvl_Init( void ) {
   
   }
+  void H3_lvl_Quit( void ) {}
 };

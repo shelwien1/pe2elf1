@@ -84,4 +84,5 @@ struct H1_hdr_T {
   void H1_hdr_Init( void ) {
   
   }
+  void H1_hdr_Quit( void ) {}
 };

@@ -42,7 +42,7 @@ static const int H1_ipm_hN = (24+0) * (1);
 
 
 static const long long H1_ipm_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 11), 11), 10); // 2420
-static const long long H1_ipm_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 16), 11), 1); // 352
+static const long long H1_ipm_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 16), 11); // 352
 static const long long H1_ipm_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 8), 10); // 80
 static const long long H1_ipm_d_Volume = tc_vmul(1, 1); // 1
 static const long long H1_ipm_g_Volume = tc_vmul(1, 1); // 1
@@ -84,4 +84,5 @@ struct H1_ipm_T {
   void H1_ipm_Init( void ) {
   
   }
+  void H1_ipm_Quit( void ) {}
 };

@@ -78,7 +78,9 @@ struct H264pCoro : Model<f_DEC, LV> {
     opt.verbose = args.verbose;
     opt.strict = args.strict;
     opt.meter = args.meter;
-    return compress_stream<LV>(*this, *st, opt, args.check, args.name);
+    int r = compress_stream<LV>(*this, *st, opt, args.check, args.name);
+    if (r == kRestart) this->dump_discard();  // (what it dumped goes: it starts over)
+    return r;
   }
 
   // decompressing: the magic, the version and the level (this model's),

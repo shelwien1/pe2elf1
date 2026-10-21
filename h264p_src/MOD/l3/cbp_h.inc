@@ -153,4 +153,5 @@ struct H3_cbp_T {
   void H3_cbp_Init( void ) {
   
   }
+  void H3_cbp_Quit( void ) {}
 };

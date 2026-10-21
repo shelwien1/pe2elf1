@@ -73,6 +73,15 @@ const int kBSubShape[13] = {0, 0, 0, 0, 1, 2, 1, 2, 1, 2, 3, 3, 3};
 // B 16x8 / 8x16 types 4..21: prediction lists of both partitions
 const int kBPartPred[9][2] = {{1, 1}, {2, 2}, {1, 2}, {2, 1}, {1, 3}, {2, 3}, {3, 1}, {3, 2}, {3, 3}};
 
+// ctxIdxInc of significant_coeff_flag and last_significant_coeff_flag by
+// scan position: chroma DC's (4:2:0 and 4:2:2: Min(i / NumC8x8, 2)), and of
+// the 4x4 blocks (the position itself; 8x8 blocks: kSig8x8*, kLast8x8)
+const uint8_t kDcInc420[64] = {0, 1, 2, 2, 2, 2, 2, 2};
+const uint8_t kDcInc422[64] = {0, 0, 1, 1, 2, 2, 2, 2};
+const uint8_t kScanPos[64] = {0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+                              22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43,
+                              44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63};
+
 // first ctxIdx for each ctxBlockCat (tables 9-34 and 9-40): coded_block_flag,
 // significant_coeff_flag and last_significant_coeff_flag (frame and field
 // coded), coeff_abs_level_minus1
@@ -901,16 +910,65 @@ struct SliceCoderT {
     return k;
   }
 
-  // --- syntax elements
-  int mb_skip_flag(int v) {
-    int inc = (mb_a_ && !mb_a_->skip) + (mb_b_ && !mb_b_->skip);
-    return bin((stype_ == kB ? 24 : 11) + inc, v);
+  // --- the ctxIdx (or ctxIdxInc) of the CABAC bins (9.3.3.1): one rule
+  // each, which the model reads too (Model::cab0)
+  enum {
+    kCtxMbtP = 14,      // P mb_type's first bin
+    kCtxRef = 54,       // ref_idx: + ref_inc(), then + 4, + 5
+    kCtxQpd = 60,       // mb_qp_delta: + ctx_qpd(), then 62, 63
+    kCtxCpred = 64,     // intra_chroma_pred_mode: + inc_cpred(), then + 3
+    kCtxIpm = 68,       // prev_intra_pred_mode_flag, then rem_intra_pred_mode 69
+    kCtxCbpLuma = 73,   // coded_block_pattern: + cbp_luma_inc()
+    kCtxCbpChroma = 77, // + cbp_chroma_inc(0), then 81 + cbp_chroma_inc(1)
+    kCtxT8x8 = 399      // transform_size_8x8_flag: + inc_t8x8()
+  };
+  int ctx_skip() const { return (stype_ == kB ? 24 : 11) + (mb_a_ && !mb_a_->skip) + (mb_b_ && !mb_b_->skip); }
+  int ctx_field() const { return 70 + (left_ && left_->field) + (above_ && above_->field); }
+  int inc_mbt_si() const { return (mb_a_ && !mb_a_->si) + (mb_b_ && !mb_b_->si); }
+  int ctx_mbt_b() const { return 27 + (mb_a_ && !mb_a_->direct16) + (mb_b_ && !mb_b_->direct16); }
+  // mb_type of an intra macroblock at ctxIdxOffset off (I slices, or the
+  // suffix of P and B ones): its first bin, and bin k of luma, chroma (two)
+  // and the prediction mode (two) after the terminate one
+  int ctx_mbt_i0(int off, bool islice) const {
+    return islice ? off + (mb_a_ && !mb_a_->inxn) + (mb_b_ && !mb_b_->inxn) : off;
   }
+  static int ctx_mbt_i(int off, bool islice, int k) {
+    static const int8_t inc[2][5] = {{1, 2, 2, 3, 3}, {3, 4, 5, 6, 7}};
+    return off + inc[islice][k];
+  }
+  int inc_cpred() const {
+    auto cond = [](const MbState* n) { return n && n->intra && !n->pcm && n->cpred != 0; };
+    return cond(mb_a_) + cond(mb_b_);
+  }
+  int inc_t8x8() const { return (mb_a_ && mb_a_->t8x8) + (mb_b_ && mb_b_->t8x8); }
+  int ctx_qpd() const { return kCtxQpd + (last_qpd_ != 0); }
+  static int ctx_mvd(int comp) { return comp ? 47 : 40; }  // + mvd_inc(), then + 3, + 4 ...
+  // significant_coeff_flag's and last_significant_coeff_flag's ctxIdxInc
+  // by scan position in a block of ctxBlockCat cat, and their ctxIdx
+  const uint8_t* sig_inc(int cat) const {
+    if (cat == 3) return chroma_ == 2 ? kDcInc422 : kDcInc420;
+    if (cat == 5 || cat == 9 || cat == 13) return field_mb() ? kSig8x8Field : kSig8x8Frame;
+    return kScanPos;
+  }
+  const uint8_t* last_inc(int cat) const {
+    if (cat == 3) return chroma_ == 2 ? kDcInc422 : kDcInc420;
+    if (cat == 5 || cat == 9 || cat == 13) return kLast8x8;
+    return kScanPos;
+  }
+  int ctx_sig(int cat, int i) const { return kSigBase[field_mb()][cat] + sig_inc(cat)[i]; }
+  int ctx_last(int cat, int i) const { return kLastBase[field_mb()][cat] + last_inc(cat)[i]; }
+  // coeff_abs_level_minus1's first bin and the others, after gt1 levels
+  // above 1 and eq1 of 1
+  static int ctx_abs0(int cat, int gt1, int eq1) { return kAbsBase[cat] + (gt1 ? 0 : std::min(4, 1 + eq1)); }
+  static int ctx_abs1(int cat, int gt1) { return kAbsBase[cat] + 5 + std::min(4 - (cat == 3), gt1); }
+
+  // --- syntax elements
+  int mb_skip_flag(int v) { return bin(ctx_skip(), v); }
 
   int mb_field_decoding_flag(int v) {
     if (W && (v < 0 || v > 1)) fail("missing or bad mb_field_decoding_flag (fld row)");
     if (!cabac_) return u(1, v);
-    return bin(70 + (left_ && left_->field) + (above_ && above_->field), v);
+    return bin(ctx_field(), v);
   }
 
   int mb_type(int v) {
@@ -920,14 +978,12 @@ struct SliceCoderT {
         return mb_type_i(v, 3, true);
       case kSI: {
         if (W && (v < 0 || v > 26)) fail("mb_type out of range");
-        int inc = (mb_a_ && !mb_a_->si) + (mb_b_ && !mb_b_->si);
-        if (!bin(inc, v != 0)) return 0;
+        if (!bin(inc_mbt_si(), v != 0)) return 0;
         return 1 + mb_type_i(v - 1, 3, true);
       }
       case kB: {
         if (W && (v < 0 || v > 48)) fail("mb_type out of range");
-        int inc = (mb_a_ && !mb_a_->direct16) + (mb_b_ && !mb_b_->direct16);
-        if (!bin(27 + inc, v != 0)) return 0;
+        if (!bin(ctx_mbt_b(), v != 0)) return 0;
         if (!bin(30, v >= 3)) return 1 + bin(32, v == 2);
         int bits = v <= 10 ? v - 3 : v == 11 ? 14 : v == 22 ? 15 : v >= 23 ? 13 : (v + 4) >> 1;
         int x = bin(31, bits >> 3 & 1) << 3;
@@ -943,7 +999,7 @@ struct SliceCoderT {
       default: {
         if (W && (v < 0 || v > 30)) fail("mb_type out of range");
         if (W && v == 4) fail("P_8x8ref0 cannot be coded with CABAC");
-        if (bin(14, v >= 5)) return 5 + mb_type_i(v - 5, 17, false);
+        if (bin(kCtxMbtP, v >= 5)) return 5 + mb_type_i(v - 5, 17, false);
         int b1 = bin(15, v == 1 || v == 2);
         int b2 = bin(b1 ? 17 : 16, v == 1 || v == 3);
         return b1 ? (b2 ? 1 : 2) : (b2 ? 3 : 0);
@@ -955,16 +1011,15 @@ struct SliceCoderT {
   // 3) or the suffix in P (17) and B (32) slices
   int mb_type_i(int v, int off, bool islice) {
     if (W && (v < 0 || v > 25)) fail("mb_type out of range");
-    int ctx0 = islice ? off + (mb_a_ && !mb_a_->inxn) + (mb_b_ && !mb_b_->inxn) : off;
-    if (!bin(ctx0, v != 0)) return 0;
+    if (!bin(ctx_mbt_i0(off, islice), v != 0)) return 0;
     if (term(v == 25)) return 25;
     int x = v - 1;
-    int luma = bin(off + (islice ? 3 : 1), x / 12);
+    int luma = bin(ctx_mbt_i(off, islice, 0), x / 12);
     int c = x / 4 % 3;
-    int chroma = bin(off + (islice ? 4 : 2), c != 0);
-    if (chroma) chroma += bin(off + (islice ? 5 : 2), c == 2);
-    int p = bin(off + (islice ? 6 : 3), x % 4 >> 1) << 1;
-    p |= bin(off + (islice ? 7 : 3), x & 1);
+    int chroma = bin(ctx_mbt_i(off, islice, 1), c != 0);
+    if (chroma) chroma += bin(ctx_mbt_i(off, islice, 2), c == 2);
+    int p = bin(ctx_mbt_i(off, islice, 3), x % 4 >> 1) << 1;
+    p |= bin(ctx_mbt_i(off, islice, 4), x & 1);
     return 1 + p + 4 * chroma + 12 * luma;
   }
 
@@ -994,7 +1049,7 @@ struct SliceCoderT {
     if (W && (v < 0 || v > range)) fail("ref_idx out of range");
     int inc = ref_inc(list, x, y);
     int n = 0;
-    while (bin(54 + inc, n < v)) {
+    while (bin(kCtxRef + inc, n < v)) {
       inc = n ? 5 : 4;
       if (++n > range) fail("ref_idx out of range");
     }
@@ -1035,7 +1090,7 @@ struct SliceCoderT {
     const int lim = 1 << 24;
     if (!cabac_) return se(v, lim);
     if (W && (v < -lim || v > lim)) fail("mvd out of range");
-    int base = comp ? 47 : 40;
+    int base = ctx_mvd(comp);
     int av = abs(v);
     if (!bin(base + mvd_inc(list, comp, x, y), av > 0)) return 0;
     int n = 1, ctx = base + 3;
@@ -1054,20 +1109,19 @@ struct SliceCoderT {
       if (u(1, v < 0)) return -1;
       return u(3, v);
     }
-    if (bin(68, v < 0)) return -1;
-    int r = bin(69, v & 1);
-    r |= bin(69, v >> 1 & 1) << 1;
-    r |= bin(69, v >> 2 & 1) << 2;
+    if (bin(kCtxIpm, v < 0)) return -1;
+    int r = bin(kCtxIpm + 1, v & 1);
+    r |= bin(kCtxIpm + 1, v >> 1 & 1) << 1;
+    r |= bin(kCtxIpm + 1, v >> 2 & 1) << 2;
     return r;
   }
 
   int intra_chroma_pred_mode(int v) {
     if (!cabac_) return ue(v, 3);
     if (W && (v < 0 || v > 3)) fail("intra_chroma_pred_mode out of range");
-    auto cond = [](const MbState* n) { return n && n->intra && !n->pcm && n->cpred != 0; };
-    if (!bin(64 + cond(mb_a_) + cond(mb_b_), v > 0)) return 0;
-    if (!bin(67, v > 1)) return 1;
-    return bin(67, v > 2) ? 3 : 2;
+    if (!bin(kCtxCpred + inc_cpred(), v > 0)) return 0;
+    if (!bin(kCtxCpred + 3, v > 1)) return 1;
+    return bin(kCtxCpred + 3, v > 2) ? 3 : 2;
   }
 
   int coded_block_pattern(int v, bool intra_nxn) {
@@ -1083,10 +1137,11 @@ struct SliceCoderT {
       return tab[ue(code, n - 1)];
     }
     int luma = 0;
-    for (int b8 = 0; b8 < 4; b8++) luma |= bin(73 + cbp_luma_inc(b8, luma), v >> b8 & 1) << b8;
+    for (int b8 = 0; b8 < 4; b8++) luma |= bin(kCtxCbpLuma + cbp_luma_inc(b8, luma), v >> b8 & 1) << b8;
     if (!has_chroma) return luma;
     int c = 0;
-    if (bin(77 + cbp_chroma_inc(0), (v >> 4) != 0)) c = 1 + bin(81 + cbp_chroma_inc(1), (v >> 4) == 2);
+    if (bin(kCtxCbpChroma + cbp_chroma_inc(0), (v >> 4) != 0))
+      c = 1 + bin(kCtxCbpChroma + 4 + cbp_chroma_inc(1), (v >> 4) == 2);
     return luma | c << 4;
   }
 
@@ -1112,7 +1167,7 @@ struct SliceCoderT {
   int transform_size_8x8_flag(int v) {
     if (!cabac_) return u(1, v);
     if (W && (v < 0 || v > 1)) fail("transform_size_8x8_flag out of range");
-    return bin(399 + (mb_a_ && mb_a_->t8x8) + (mb_b_ && mb_b_->t8x8), v);
+    return bin(kCtxT8x8 + inc_t8x8(), v);
   }
 
   int mb_qp_delta(int v) {
@@ -1120,7 +1175,7 @@ struct SliceCoderT {
     if (!cabac_) return se(v, lim);
     if (W && (v < -lim || v > lim)) fail("mb_qp_delta out of range");
     int k = v > 0 ? 2 * v - 1 : -2 * v;
-    int n = 0, ctx = 60 + (last_qpd_ != 0);
+    int n = 0, ctx = ctx_qpd();
     while (bin(ctx, n < k)) {
       ctx = n ? 63 : 62;
       if (++n > 2 * lim) fail("mb_qp_delta out of range");
@@ -1144,23 +1199,13 @@ struct SliceCoderT {
     int last = n - 1;
     if (W)
       while (!c[last]) last--;
-    int sig_base = kSigBase[field_mb()][cat], last_base = kLastBase[field_mb()][cat], abs_base = kAbsBase[cat];
-    bool b8x8 = cat == 5 || cat == 9 || cat == 13;
-    int numc8x8 = chroma_ == 2 ? 2 : 1;
+    int sig_base = kSigBase[field_mb()][cat], last_base = kLastBase[field_mb()][cat];
+    const uint8_t *isig = sig_inc(cat), *ilast = last_inc(cat);
     bool sig[64];
     int i;
     for (i = 0; i < n - 1; i++) {
-      int inc_sig, inc_last;
-      if (cat == 3) {
-        inc_sig = inc_last = std::min(i / numc8x8, 2);
-      } else if (b8x8) {
-        inc_sig = field_mb() ? kSig8x8Field[i] : kSig8x8Frame[i];
-        inc_last = kLast8x8[i];
-      } else {
-        inc_sig = inc_last = i;
-      }
-      sig[i] = bin(sig_base + inc_sig, W ? c[i] != 0 : 0);
-      if (sig[i] && bin(last_base + inc_last, W ? i == last : 0)) break;
+      sig[i] = bin(sig_base + isig[i], W ? c[i] != 0 : 0);
+      if (sig[i] && bin(last_base + ilast[i], W ? i == last : 0)) break;
     }
     if (i == n - 1) sig[i] = true;  // no last flag: the last coefficient is significant
     int eq1 = 0, gt1 = 0, count = 0;
@@ -1171,9 +1216,9 @@ struct SliceCoderT {
       }
       if (W && std::abs((int64_t)c[i]) > kMaxLevel) fail("coefficient level too large");
       int a = W ? abs(c[i]) - 1 : 0;
-      int v = bin(abs_base + (gt1 ? 0 : std::min(4, 1 + eq1)), a > 0);
+      int v = bin(ctx_abs0(cat, gt1, eq1), a > 0);
       if (v) {
-        int ctx = abs_base + 5 + std::min(4 - (cat == 3), gt1);
+        int ctx = ctx_abs1(cat, gt1);
         while (v < 14 && bin(ctx, a > v)) v++;
         if (v == 14) v += exp_golomb_bypass(0, a - 14);
         if (v >= kMaxLevel) fail("coefficient level too large");

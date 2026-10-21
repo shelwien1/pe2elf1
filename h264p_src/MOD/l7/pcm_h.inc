@@ -153,4 +153,5 @@ struct H7_pcm_T {
   void H7_pcm_Init( void ) {
   
   }
+  void H7_pcm_Quit( void ) {}
 };

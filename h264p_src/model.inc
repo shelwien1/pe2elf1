@@ -54,14 +54,14 @@ constexpr u64 H_cbp_search = 0;
 constexpr u64 H_cbp_proxy = H_BIT(H_cbp_v, pq);
 constexpr u64 H_cbp_signp = 0;
 constexpr u64 H_cbp_skippx = 0;
-constexpr u64 H_ipm_rec = H_BIT(H_ipm_v, dm) | H_BIT(H_ipm_v, ds) | H_BIT(H_ipm_v, pm) | H_BIT(H_ipm_v, pr) | H_BIT(H_ipm_v, dr) | H_BIT(H_ipm_v, pq) | H_BIT(H_ipm_v, mg) | H_BIT(H_ipm_v, rg);
+constexpr u64 H_ipm_rec = H_BIT(H_ipm_v, dm) | H_BIT(H_ipm_v, ds) | H_BIT(H_ipm_v, pm) | H_BIT(H_ipm_v, pr) | H_BIT(H_ipm_v, dr) | H_BIT(H_ipm_v, pq) | H_BIT(H_ipm_v, mg) | H_BIT(H_ipm_v, rg) | H_BIT(H_ipm_v, p2);
 constexpr u64 H_ipm_refs = 0;
 constexpr u64 H_ipm_search = H_BIT(H_ipm_v, pq);
-constexpr u64 H_ipm_proxy = H_BIT(H_ipm_v, pm) | H_BIT(H_ipm_v, pr) | H_BIT(H_ipm_v, mg) | H_BIT(H_ipm_v, rg);
+constexpr u64 H_ipm_proxy = H_BIT(H_ipm_v, pm) | H_BIT(H_ipm_v, pr) | H_BIT(H_ipm_v, mg) | H_BIT(H_ipm_v, rg) | H_BIT(H_ipm_v, p2);
 constexpr u64 H_ipm_signp = 0;
 constexpr u64 H_ipm_skippx = 0;
-constexpr u64 H_mvs_rec = H_BIT(H_mvs_v, tv) | H_BIT(H_mvs_v, tq) | H_BIT(H_mvs_v, ea) | H_BIT(H_mvs_v, eb) | H_BIT(H_mvs_v, ta);
-constexpr u64 H_mvs_refs = H_BIT(H_mvs_v, rt);
+constexpr u64 H_mvs_rec = H_BIT(H_mvs_v, tv) | H_BIT(H_mvs_v, tq) | H_BIT(H_mvs_v, ea) | H_BIT(H_mvs_v, eb) | H_BIT(H_mvs_v, ta) | H_BIT(H_mvs_v, rt);
+constexpr u64 H_mvs_refs = 0;
 constexpr u64 H_mvs_search = H_BIT(H_mvs_v, tv) | H_BIT(H_mvs_v, tq) | H_BIT(H_mvs_v, ea) | H_BIT(H_mvs_v, eb) | H_BIT(H_mvs_v, ta);
 constexpr u64 H_mvs_proxy = 0;
 constexpr u64 H_mvs_signp = 0;
@@ -202,6 +202,7 @@ struct MbCol {
   uint8_t modes[16];
   int8_t ref[2][4];
   int8_t rf[2][4];
+  int rpoc[2][4];         // the POCs of rf's pictures, in its slice's lists (INT_MIN none; levels with them)
   uint8_t mvq[2][16][2];  // tc_qlog |mvd|
   int16_t mv[2][16][2];
   uint16_t nzm[3];        // 4x4 blocks with coefficients
@@ -228,8 +229,11 @@ static INLINE int lg16(i64 v) {
   while (v >> (n + 1)) n++;
   return 16 * n + (int)(n >= 4 ? (v >> (n - 4)) & 15 : (v << (4 - n)) & 15);
 }
-// a / b rounded down, b > 0
-static INLINE i64 div_floor(i64 a, i64 b) { return a >= 0 ? a / b : -((-a + b - 1) / b); }
+// a / b rounded down (b not 0)
+static INLINE i64 div_floor(i64 a, i64 b) {
+  if (b < 0) a = -a, b = -b;
+  return a >= 0 ? a / b : -((-a + b - 1) / b);
+}
 
 // x264's adaptive quantization: in a picture the QP of a macroblock is the
 // picture's plus a multiple of log2 of the macroblock's energy (and, in a
@@ -445,6 +449,11 @@ struct ZzInv {
 static const ZzInv kZzInv;
 static const uint8_t* const kInv4 = kZzInv.v4;
 static const uint8_t* const kInv8 = kZzInv.v8;
+// 4:2:2 chroma DC's scan, down the columns of its 2 x 4 (8.5.11.1), as
+// raster positions and back; and the raster order itself (4:2:0's 2 x 2)
+const uint8_t kZzC422[8] = {0, 2, 1, 4, 6, 3, 5, 7};
+const uint8_t kInvC422[8] = {0, 2, 1, 5, 3, 6, 4, 7};
+const uint8_t kRaster4[4] = {0, 1, 2, 3};
 
 // The model of a level, coding or decoding: the range coder, which its
 // families code through, is its base (and the coroutine of the run that
@@ -460,55 +469,19 @@ struct Model : tc_rc<f_DEC> {
   Model(const Model&) = delete;
   void operator=(const Model&) = delete;
   ~Model() {
-#define H_UNMAP(F) tc_unmap(t_##F, sizeof(typename LV::F::T))
-    H_UNMAP(nal);
-    H_UNMAP(hdr);
-    H_UNMAP(skp);
-    H_UNMAP(mbt);
-    H_UNMAP(cbp);
-    H_UNMAP(ipm);
-    H_UNMAP(mvs);
-    H_UNMAP(qpd);
-    H_UNMAP(cbf);
-    H_UNMAP(sig);
-    H_UNMAP(lvl);
-    H_UNMAP(sgn);
-    H_UNMAP(mvg);
-    H_UNMAP(qpg);
-    H_UNMAP(pcm);
+#define H_UNMAP(F)                   \
+  if (t_##F) LV::F::quit(t_##F); \
+  tc_unmap(t_##F, sizeof(typename LV::F::T));
+    H264P_FAMS(H_UNMAP)
 #undef H_UNMAP
   }
 
-  tc_fam<f_DEC, typename LV::nal> f_nal;
-  tc_fam<f_DEC, typename LV::hdr> f_hdr;
-  tc_fam<f_DEC, typename LV::skp> f_skp;
-  tc_fam<f_DEC, typename LV::mbt> f_mbt;
-  tc_fam<f_DEC, typename LV::cbp> f_cbp;
-  tc_fam<f_DEC, typename LV::ipm> f_ipm;
-  tc_fam<f_DEC, typename LV::mvs> f_mvs;
-  tc_fam<f_DEC, typename LV::qpd> f_qpd;
-  tc_fam<f_DEC, typename LV::cbf> f_cbf;
-  tc_fam<f_DEC, typename LV::sig> f_sig;
-  tc_fam<f_DEC, typename LV::lvl> f_lvl;
-  tc_fam<f_DEC, typename LV::sgn> f_sgn;
-  tc_fam<f_DEC, typename LV::mvg> f_mvg;
-  tc_fam<f_DEC, typename LV::qpg> f_qpg;
-  tc_fam<f_DEC, typename LV::pcm> f_pcm;
-  typename LV::nal::T* t_nal = nullptr;
-  typename LV::hdr::T* t_hdr = nullptr;
-  typename LV::skp::T* t_skp = nullptr;
-  typename LV::mbt::T* t_mbt = nullptr;
-  typename LV::cbp::T* t_cbp = nullptr;
-  typename LV::ipm::T* t_ipm = nullptr;
-  typename LV::mvs::T* t_mvs = nullptr;
-  typename LV::qpd::T* t_qpd = nullptr;
-  typename LV::cbf::T* t_cbf = nullptr;
-  typename LV::sig::T* t_sig = nullptr;
-  typename LV::lvl::T* t_lvl = nullptr;
-  typename LV::sgn::T* t_sgn = nullptr;
-  typename LV::mvg::T* t_mvg = nullptr;
-  typename LV::qpg::T* t_qpg = nullptr;
-  typename LV::pcm::T* t_pcm = nullptr;
+  // each family's coder (f_nal ...) and tables (t_nal ...)
+#define H_FAM(F)                          \
+  tc_fam<f_DEC, typename LV::F> f_##F; \
+  typename LV::F::T* t_##F = nullptr;
+  H264P_FAMS(H_FAM)
+#undef H_FAM
   // whether the level's family F reads its variable f: what it reads not is
   // not computed (where computing it has no other use)
 #ifdef H264P_DUMP
@@ -532,21 +505,7 @@ struct Model : tc_rc<f_DEC> {
                 "a level without the skip prediction's pixels reads a variable of " #F " that needs them");  \
   static_assert(LV::mvp || !(LV::F::Uses & H_##F##_mvp),                                                    \
                 "a level without the motion vectors reads a variable of " #F " that needs them");
-  H_PARTS(nal)
-  H_PARTS(hdr)
-  H_PARTS(skp)
-  H_PARTS(mbt)
-  H_PARTS(cbp)
-  H_PARTS(ipm)
-  H_PARTS(mvs)
-  H_PARTS(qpd)
-  H_PARTS(cbf)
-  H_PARTS(sig)
-  H_PARTS(lvl)
-  H_PARTS(sgn)
-  H_PARTS(mvg)
-  H_PARTS(qpg)
-  H_PARTS(pcm)
+  H264P_FAMS(H_PARTS)
 #undef H_PARTS
   static_assert(LV::mvp || !(LV::refs || LV::recon), "the reference lists and the decoder need the motion vectors");
 
@@ -555,32 +514,26 @@ struct Model : tc_rc<f_DEC> {
     // (end_of_slice_flag 0 nearly for sure: as if seen a few times)
     for (cm_cnt& c : end_c_) c.p = (u16)(CM_CONE - 16), c.t = 8;
     for (int& p : hist_poc_) p = INT_MIN;
-    std::fill(&hist_rpoc_[0][0][0], &hist_rpoc_[0][0][0] + sizeof hist_rpoc_ / sizeof(int), INT_MIN);
-    std::fill(&col_rpoc_[0][0], &col_rpoc_[0][0] + sizeof col_rpoc_ / sizeof(int), INT_MIN);
-#define H_MAP(F) (t_##F = tc_table<typename LV::F::T>(), LV::F::init(t_##F), f_##F.wire(t_##F, this))
-    H_MAP(nal);
-    H_MAP(hdr);
-    H_MAP(skp);
-    H_MAP(mbt);
-    H_MAP(cbp);
-    H_MAP(ipm);
-    H_MAP(mvs);
-    H_MAP(qpd);
-    H_MAP(cbf);
-    H_MAP(sig);
-    H_MAP(lvl);
-    H_MAP(sgn);
-    H_MAP(mvg);
-    H_MAP(qpg);
-    H_MAP(pcm);
+    for (int& p : hist_prev_) p = INT_MIN;
+#define H_MAP(F) t_##F = tc_table<typename LV::F::T>(), LV::F::init(t_##F), f_##F.wire(t_##F, this);
+    H264P_FAMS(H_MAP)
 #undef H_MAP
     raw_mx_.init(raw_w_, raw_wc_, 256);
     rbuf_.clear();
   }
   u64 table_bytes() const {
-    return (u64)LV::nal::bytes(t_nal) + LV::hdr::bytes(t_hdr) + LV::skp::bytes(t_skp) + LV::mbt::bytes(t_mbt) + LV::cbp::bytes(t_cbp) +
-           LV::ipm::bytes(t_ipm) + LV::mvs::bytes(t_mvs) + LV::qpd::bytes(t_qpd) + LV::cbf::bytes(t_cbf) + LV::sig::bytes(t_sig) +
-           LV::lvl::bytes(t_lvl) + LV::sgn::bytes(t_sgn) + LV::mvg::bytes(t_mvg) + LV::qpg::bytes(t_qpg) + LV::pcm::bytes(t_pcm);
+    u64 n = 0;
+#define H_BYTES(F) n += LV::F::bytes(t_##F);
+    H264P_FAMS(H_BYTES)
+#undef H_BYTES
+    return n;
+  }
+  // (a build with H264P_DUMP: a compression that starts over, kRestart,
+  // drops what it dumped)
+  void dump_discard() {
+#define H_DISCARD(F) f_##F.dump_discard();
+    H264P_FAMS(H_DISCARD)
+#undef H_DISCARD
   }
 
   // ------------------------------------------------------------------------
@@ -794,6 +747,7 @@ struct Model : tc_rc<f_DEC> {
   int addr_ = 0;
   MbInfo* mi_ = nullptr;
   const MbCol* col_ = nullptr;
+  int col_skip_ = 0;  // col_'s skip as skp_vars() has it, from before finish_mb()
   const MbCol* col1_ = nullptr;  // B: the same macroblock in list 1's first reference (phist)
   int sub_[4] = {};
   int pmv_[2] = {};  // proxy_mv()
@@ -911,10 +865,10 @@ struct Model : tc_rc<f_DEC> {
   // the last picture of a kind (by its POC) and nearer in time than the
   // last picture of the current kind; nullptr other slices or none
   int hist_poc_[30], prev_poc_ = INT_MIN, cur_poc_ = INT_MIN;
-  // the POCs of each kind's last picture's references by list and index
-  // (INT_MIN none), and those of the one before the current picture's;
-  // frame references only (a field macroblock's ref_idx goes up to 63)
-  int hist_rpoc_[30][2][32], col_rpoc_[2][32];
+  // and the POC of the one before it, and the picture (pic_) whose the
+  // history of each kind is: its first slice of the kind made it so
+  int hist_prev_[30];
+  uint32_t hist_pic_[30] = {};
   int phist_key() const { return phk_; }
   int phk_ = -1;  // phist_key() of the slice (slice_begin)
   int phist_key_of_slice() const {
@@ -937,7 +891,7 @@ struct Model : tc_rc<f_DEC> {
   // apart differs from the last slice coded
   bool new_picture(const SliceHeader& h) const {
     const SliceHeader& p = last_h_;
-    if (!p.sps || h.sps != p.sps || h.pps != p.pps || h.frame_num != p.frame_num ||
+    if (!p.sps || h.pps->id != p.pps->id || h.frame_num != p.frame_num ||
         h.field_pic_flag != p.field_pic_flag || h.bottom_field_flag != p.bottom_field_flag ||
         !h.nal_ref_idc != !p.nal_ref_idc || (h.nal_unit_type == 5) != (p.nal_unit_type == 5))
       return true;
@@ -963,8 +917,10 @@ struct Model : tc_rc<f_DEC> {
     hcur_ = hist_[key_].data();
     // (the macroblocks as they were for the P slices' mc_col, mc_nz only,
     // which need the reference lists: a level without them reads none)
-    if (newpic) hprev_ok_ = h.type() == kP || h.type() == kSP;
-    if ((LV::refs || LV::recon) && newpic && hprev_ok_) {
+    // (from the picture's first P slice: a picture may begin with another)
+    if (newpic) hprev_ok_ = false;
+    if ((LV::refs || LV::recon) && !hprev_ok_ && (h.type() == kP || h.type() == kSP)) {
+      hprev_ok_ = true;
       if ((int)hkeep_.size() < size_) hkeep_.resize(size_, HKeep{}), hcoef_.resize(size_, HCoef{});
       hsnap_++;  // (nothing kept yet: every record is hist_'s)
       hkey_ = key_;
@@ -979,14 +935,15 @@ struct Model : tc_rc<f_DEC> {
     prev_cnt_ = slice_cnt_[key_];
     mb_open_ = false;
     rec_.slice_begin(h, newpic);
-    if (newpic) {
-      prev_poc_ = hist_poc_[key_];
-      cur_poc_ = hist_poc_[key_] = rec_.mact ? rec_.cur->poc : INT_MIN;
-      memcpy(col_rpoc_, hist_rpoc_[key_], sizeof col_rpoc_);
-      for (int l = 0; l < 2; l++)
-        for (int r = 0; r < 32; r++)
-          hist_rpoc_[key_][l][r] = rec_.mact && r < rec_.nlist[l] && rec_.list[l][r] ? rec_.list[l][r]->poc : INT_MIN;
+    // (the first slice of its kind in the picture: the kind's history is
+    // the picture's from here on)
+    if (hist_pic_[key_] != pic_) {
+      hist_pic_[key_] = pic_;
+      hist_prev_[key_] = hist_poc_[key_];
+      hist_poc_[key_] = rec_.mact ? rec_.cur->poc : INT_MIN;
     }
+    prev_poc_ = hist_prev_[key_];
+    cur_poc_ = hist_poc_[key_];
     phk_ = phist_key_of_slice();
     if (newpic) aq_picture();
     if (newpic) memset(lq_, 0, sizeof lq_);
@@ -1031,6 +988,7 @@ struct Model : tc_rc<f_DEC> {
     memset(mi_->rf, -1, sizeof mi_->rf);
     memset(mi_->tme, -128, sizeof mi_->tme);
     col_ = hcur_[addr_].valid ? &hcur_[addr_] : nullptr;
+    col_skip_ = col_ ? 2 - col_->skip : 0;
     // B: the same macroblock in list 1's first reference too
     col1_ = nullptr;
     if (const MbCol* p = phist()) {
@@ -1041,7 +999,7 @@ struct Model : tc_rc<f_DEC> {
     rec_.mb_start(addr_);
     qpd_coded_ = false;
     prev_mode_ = 9;
-    sm_ = tm_ = tb_ = dh_ = bd_ = 0;
+    sm_ = tm_ = tb_ = dh_ = bd_ = tx_ = 0;
     tmb_ok_ = false;
     pmv_ok_ = false;
     smv_ok_ = false;
@@ -1055,7 +1013,8 @@ struct Model : tc_rc<f_DEC> {
   void finish_mb() {
     const MbState& s = *sc_->cur_;
     MbCol& c = hcur_[addr_];
-    if ((LV::refs || LV::recon) && key_ == hkey_ && addr_ < hsize_ && hkeep_[addr_].stamp != hsnap_) keep_hprev(c);
+    if ((LV::refs || LV::recon) && hprev_ok_ && key_ == hkey_ && addr_ < hsize_ && hkeep_[addr_].stamp != hsnap_)
+      keep_hprev(c);
     c.valid = 1;
     hskip_[key_][addr_] = mi_->skip != 0;
     c.skip = mi_->skip;
@@ -1071,6 +1030,12 @@ struct Model : tc_rc<f_DEC> {
       memcpy(c.rf, mi_->rf, sizeof c.rf);
       memcpy(c.mv, mi_->mv, sizeof c.mv);
     }
+    if (LV::refs || LV::recon)
+      for (int l = 0; l < 2; l++)
+        for (int b8 = 0; b8 < 4; b8++) {
+          int r = mi_->rf[l][b8];
+          c.rpoc[l][b8] = rec_.mact && r >= 0 && r < rec_.nlist[l] && rec_.list[l][r] ? rec_.list[l][r]->poc : INT_MIN;
+        }
     static const decltype(mi_->mvd) kNoMvd = {};
     if (!memcmp(mi_->mvd, kNoMvd, sizeof kNoMvd)) {
       memset(c.mvq, 0, sizeof c.mvq);  // (a skipped macroblock: tc_qlog 0 throughout)
@@ -1141,7 +1106,7 @@ struct Model : tc_rc<f_DEC> {
     D.st = st_;
     D.a3 = a ? 2 - a->skip : 0;
     D.b3 = b ? 2 - b->skip : 0;
-    D.col = col_ ? 2 - col_->skip : 0;
+    D.col = col_skip_;  // (end() comes after finish_mb() rewrote col_'s record)
     D.c9 = win9(hskip_[key_].data());
     D.c1 = col1_ ? 2 - col1_->skip : 0;
     // and the skipped ones around it there (10 none)
@@ -1175,7 +1140,7 @@ struct Model : tc_rc<f_DEC> {
     return tm_search_(l, 0, 0, 0, 16, 16, mv, false, cand, nc, &miss, 0, 4);
   }
   int skip_miss() {
-    tm_ = tb_ = dh_ = bd_ = 0;
+    tm_ = tb_ = dh_ = bd_ = tx_ = 0;
     if (!rec_.act() || !LV::skippx) return 0;
     // how well the reference can predict the samples around at best (list
     // 0)
@@ -1244,10 +1209,7 @@ struct Model : tc_rc<f_DEC> {
     D.tm = tm_;
     D.tb = tb_;
     D.bd = bd_;
-    const MbState* a = sc_->mb_a_;
-    const MbState* b = sc_->mb_b_;
-    int ctx = (sc_->stype_ == kB ? 24 : 11) + (a && !a->skip) + (b && !b->skip);
-    v = skp_bit(D, 0, ENC && v, cab0(ctx));
+    v = skp_bit(D, 0, ENC && v, cab0(sc_->ctx_skip()));
     if (v) {
       mi_->skip = 1;
       mi_->cls = CL_SKIP;
@@ -1295,8 +1257,7 @@ struct Model : tc_rc<f_DEC> {
     H_skp_v D = {};
     skp_vars(D);
     D.col = col_ ? 1 + col_->field : 0;
-    int ctx = 70 + (sc_->left_ && sc_->left_->field) + (sc_->above_ && sc_->above_->field);
-    return skp_bit(D, 2, ENC && v, cab0(ctx));
+    return skp_bit(D, 2, ENC && v, cab0(sc_->ctx_field()));
   }
   void mb_begin() {
     if (!mb_open_) begin_mb();
@@ -1338,13 +1299,7 @@ struct Model : tc_rc<f_DEC> {
     int st = sc_->stype_;
     bool islice = st == kI || st == kSI;
     int off = islice ? 3 : st == kB ? 32 : 17;
-    int ctx0 = off;
-    if (islice) {
-      const MbState* a = sc_->mb_a_;
-      const MbState* b = sc_->mb_b_;
-      ctx0 += (a && !a->inxn) + (b && !b->inxn);
-    }
-    if (mbt_bit(21, ENC && it == 0, cab1(ctx0))) return 0;
+    if (mbt_bit(21, ENC && it == 0, cab1(sc_->ctx_mbt_i0(off, islice)))) return 0;
     if (mbt_bit(22, ENC && it == 25)) return 25;
     if (sc_->chroma_ == 1 && mbt_d_) {
       // Intra16x16: the mode that does best in the proxy, and by how much
@@ -1364,12 +1319,12 @@ struct Model : tc_rc<f_DEC> {
       }
     }
     int x = ENC ? it - 1 : 0;
-    int luma = mbt_bit(23, ENC && x / 12, cab0(off + (islice ? 3 : 1)));
+    int luma = mbt_bit(23, ENC && x / 12, cab0(SC::ctx_mbt_i(off, islice, 0)));
     int c = x / 4 % 3;
-    int chroma = mbt_bit(24, ENC && c != 0, cab0(off + (islice ? 4 : 2)));
-    if (chroma) chroma += mbt_bit(25, ENC && c == 2, cab0(off + (islice ? 5 : 2)));
-    int p1 = mbt_bit(26, ENC && (x & 2), cab0(off + (islice ? 6 : 3)));
-    int p0 = mbt_bit(27 + p1, ENC && (x & 1), cab0(off + (islice ? 7 : 3)));
+    int chroma = mbt_bit(24, ENC && c != 0, cab0(SC::ctx_mbt_i(off, islice, 1)));
+    if (chroma) chroma += mbt_bit(25, ENC && c == 2, cab0(SC::ctx_mbt_i(off, islice, 2)));
+    int p1 = mbt_bit(26, ENC && (x & 2), cab0(SC::ctx_mbt_i(off, islice, 3)));
+    int p0 = mbt_bit(27 + p1, ENC && (x & 1), cab0(SC::ctx_mbt_i(off, islice, 4)));
     mi_->i16m = (uint8_t)(p1 * 2 + p0);
     return 1 + p1 * 2 + p0 + 4 * chroma + 12 * luma;
   }
@@ -1411,7 +1366,7 @@ struct Model : tc_rc<f_DEC> {
       case kB:
         if (mbt_bit(1, ENC && t >= 23)) {
           t = 23 + mbt_intra(t - 23);
-        } else if (mbt_bit(6, ENC && t == 0, cab1(27 + (a && !a->direct16) + (b && !b->direct16)))) {
+        } else if (mbt_bit(6, ENC && t == 0, cab1(sc_->ctx_mbt_b()))) {
           t = 0;
         } else if (mbt_bit(7, ENC && t <= 3)) {
           t = mbt_bit(8, ENC && t == 1) ? 1 : mbt_bit(9, ENC && t == 3) ? 3 : 2;
@@ -1429,7 +1384,7 @@ struct Model : tc_rc<f_DEC> {
         }
         break;
       default:
-        if (mbt_bit(1, ENC && t >= 5, cab0(14)))
+        if (mbt_bit(1, ENC && t >= 5, cab0(SC::kCtxMbtP)))
           t = 5 + mbt_intra(t - 5);
         else if (mbt_bit(2, ENC && t == 0))
           t = 0;
@@ -1498,8 +1453,8 @@ struct Model : tc_rc<f_DEC> {
       if (td_mv(0, 0, 1, 1, tv)) {
         cand[nc][0] = tv[0], cand[nc][1] = tv[1], nc++;
       } else if (col_ && col_->cls < CL_INXN && col_->rf[0][0] >= 0) {
-        int cr = col_->rf[0][0], d0 = ref_dist(0, 0), dr = d0;
-        if (prev_poc_ != INT_MIN && cr < 32 && col_rpoc_[0][cr] != INT_MIN) d0 = poc_dist(prev_poc_, col_rpoc_[0][cr]);
+        int d0 = ref_dist(0, 0), dr = d0;
+        if (prev_poc_ != INT_MIN && col_->rpoc[0][0] != INT_MIN) d0 = poc_dist(prev_poc_, col_->rpoc[0][0]);
         for (int k = 0; k < 2; k++) cand[nc][k] = d0 && dr && d0 != dr ? mv_scale(col_->mv[0][5][k], dr, d0) : col_->mv[0][5][k];
         nc++;
       }
@@ -1561,7 +1516,7 @@ struct Model : tc_rc<f_DEC> {
           }
         D.pq = nz < 0 ? 0 : 1 + std::min(nz, 5);
       }
-      luma |= cbp_bit(D, b8, ENC && (v >> b8 & 1), cab0(73 + D.inc)) << b8;
+      luma |= cbp_bit(D, b8, ENC && (v >> b8 & 1), cab0(SC::kCtxCbpLuma + D.inc)) << b8;
     }
     int c = 0;
     if (sc_->chroma_ == 1 || sc_->chroma_ == 2) {
@@ -1592,11 +1547,11 @@ struct Model : tc_rc<f_DEC> {
         }
       }
       D.pq = pdc < 0 ? 0 : 1 + std::min(pdc + pac, 5);
-      if (cbp_bit(D, 4, ENC && (v >> 4) != 0, cab0(77 + D.inc))) {
+      if (cbp_bit(D, 4, ENC && (v >> 4) != 0, cab0(SC::kCtxCbpChroma + D.inc))) {
         D.inc = sc_->cbp_chroma_inc(1);
         D.col = col_ ? 1 + (col_->cbp >> 4 == 2) : 0;
         D.pq = pac < 0 ? 0 : 1 + std::min(pac, 5);
-        c = 1 + cbp_bit(D, 5, ENC && (v >> 4) == 2, cab0(81 + D.inc));
+        c = 1 + cbp_bit(D, 5, ENC && (v >> 4) == 2, cab0(SC::kCtxCbpChroma + 4 + D.inc));
       }
     }
     tc_syms[STG_CBP]++;
@@ -1605,10 +1560,8 @@ struct Model : tc_rc<f_DEC> {
   }
   int t8x8(int v) {
     tc_stage = STG_CBP;
-    const MbState* a = sc_->mb_a_;
-    const MbState* b = sc_->mb_b_;
     H_cbp_v D = {};
-    D.inc = (a && a->t8x8) + (b && b->t8x8);
+    D.inc = sc_->inc_t8x8();
     D.pc = popc4(mi_->cbp & 15);
     D.cls = mi_->cls;
     D.col = col_ ? 1 + col_->t8 : 0;
@@ -1618,8 +1571,9 @@ struct Model : tc_rc<f_DEC> {
     D.td = map_td();
     D.pg = 0;
     tc_syms[STG_CBP]++;
-    v = cbp_bit(D, 6, ENC && v, cab0(399 + D.inc));
+    v = cbp_bit(D, 6, ENC && v, cab0(SC::kCtxT8x8 + D.inc));
     mi_->t8 = (uint8_t)v;
+    rec_.set_t8(v);  // (an inter macroblock's prediction is made by then, at cbp)
     return v;
   }
 
@@ -1788,10 +1742,9 @@ struct Model : tc_rc<f_DEC> {
     f_ipm.make(D, X);
     f_ipm.select(X);
     int r = 0;
-    auto cond = [](const MbState* n) { return n && n->intra && !n->pcm && n->cpred != 0; };
-    f_ipm.prp = cab0(64 + cond(sc_->mb_a_) + cond(sc_->mb_b_));
+    f_ipm.prp = cab0(SC::kCtxCpred + sc_->inc_cpred());
     if (f_ipm.bit(16, ENC && v > 0)) {
-      f_ipm.prp = cab0(67);
+      f_ipm.prp = cab0(SC::kCtxCpred + 3);
       r = f_ipm.bit(17, ENC && v > 1) ? 2 + f_ipm.bit(18, ENC && v > 2) : 1;
     }
     mi_->cpred = (uint8_t)r;
@@ -2066,9 +2019,9 @@ struct Model : tc_rc<f_DEC> {
     f_mvs.make(D, X);
     int pr[TC_NODE];
     for (int k = 0; k < TC_NODE; k++) pr[k] = -1;
-    pr[0] = cab0(54 + sc_->ref_inc(list, x, y));
-    pr[1] = cab0(58);
-    pr[2] = cab0(59);
+    pr[0] = cab0(SC::kCtxRef + sc_->ref_inc(list, x, y));
+    pr[1] = cab0(SC::kCtxRef + 4);
+    pr[2] = cab0(SC::kCtxRef + 5);
     if (pr[0] >= 0)
       for (int k = 0; k < 3; k++) pr[k] = CM_PONE - pr[k];
     f_mvs.prpa = pr;
@@ -2100,8 +2053,8 @@ struct Model : tc_rc<f_DEC> {
     int b8 = (y >> 1) * 2 + (x >> 1), cl = col1_->rf[0][b8] >= 0 ? 0 : 1, cr = col1_->rf[cl][b8];
     int td = ref_dist(0, 0) - ref_dist(1, 0), tr = ref_dist(l, ref), k1 = phist_key();
     // over the distance from that picture to its own reference, where known
-    if (cr >= 0 && cr < 32 && k1 >= 0 && hist_rpoc_[k1][cl][cr] != INT_MIN && ref_dist(1, 0))
-      td = poc_dist(hist_poc_[k1], hist_rpoc_[k1][cl][cr]);
+    if (cr >= 0 && k1 >= 0 && col1_->rpoc[cl][b8] != INT_MIN && ref_dist(1, 0))
+      td = poc_dist(hist_poc_[k1], col1_->rpoc[cl][b8]);
     if (cr < 0 || !td || !tr || !ref_dist(0, 0)) return false;
     for (int k = 0; k < 2; k++) m[k] = mv_scale(col1_->mv[cl][y * 4 + x][k], tr, td);
     return true;
@@ -2135,8 +2088,8 @@ struct Model : tc_rc<f_DEC> {
         cm[0] = col_->mv[list][y * 4 + x][0], cm[1] = col_->mv[list][y * 4 + x][1];
         // scaled by the reference's distance against that of col's own
         // (where not known, the first reference's)
-        int cr = col_->rf[list][b8], d0 = ref_dist(list, 0), dr = ref_dist(list, ref);
-        if (prev_poc_ != INT_MIN && cr < 32 && col_rpoc_[list][cr] != INT_MIN) d0 = poc_dist(prev_poc_, col_rpoc_[list][cr]);
+        int d0 = ref_dist(list, 0), dr = ref_dist(list, ref);
+        if (prev_poc_ != INT_MIN && col_->rpoc[list][b8] != INT_MIN) d0 = poc_dist(prev_poc_, col_->rpoc[list][b8]);
         if (d0 && dr && d0 != dr)
           for (int k = 0; k < 2; k++) cm[k] = mv_scale(cm[k], dr, d0);
       }
@@ -2212,7 +2165,7 @@ struct Model : tc_rc<f_DEC> {
     tc_syms[STG_MVD]++;
     int pr[TC_NODE];
     for (int k = 0; k < TC_NODE; k++) pr[k] = -1;
-    int base = comp ? 47 : 40;
+    int base = SC::ctx_mvd(comp);
     pr[0] = cab1(base + sc_->mvd_inc(list, comp, x, y));
     pr[1] = cab1(base + 3);
     pr[2] = cab1(base + 4);
@@ -2291,7 +2244,7 @@ struct Model : tc_rc<f_DEC> {
     if (!rec_.mact || r < 0 || r >= rec_.nlist[l] || !rec_.list[l][r]) return v;
     int poc = rec_.list[l][r]->poc;
     if (poc == prev_poc_ && hsize_ == size_) {
-      if (hprev_ok_) v.cur = hist_[hkey_].data(), v.keep = hkeep_.data(), v.coef = hcoef_.data(), v.id = hsnap_;
+      if (hprev_ok_ && hkey_ == key_) v.cur = hist_[hkey_].data(), v.keep = hkeep_.data(), v.coef = hcoef_.data(), v.id = hsnap_;
       return v;
     }
     for (int k = 0; k < 30; k++)
@@ -2444,7 +2397,7 @@ struct Model : tc_rc<f_DEC> {
     f_qpd.make(D, X);
     int pr[TC_NODE];
     for (int k = 0; k < TC_NODE; k++) pr[k] = -1;
-    pr[0] = cab1(60 + (sc_->last_qpd_ != 0));
+    pr[0] = cab1(sc_->ctx_qpd());
     f_qpd.prpa = pr;
     f_qpd.hint = aqd == INT_MIN ? -1 : abs(aqd);
     {
@@ -2501,6 +2454,19 @@ struct Model : tc_rc<f_DEC> {
     int off;          // first scan position in the store: 1 for AC blocks
     int pos;          // place in the 8x8 block (in the macroblock for chroma)
   };
+  // the scan of a block's coefficients as raster positions in its w x h,
+  // and back: 8x8 and 4x4 zigzag (Intra16x16's DC, and 4:4:4's chroma DC,
+  // too), 4:2:0's chroma DC 2 x 2 in raster order, 4:2:2's 2 x 4 in its own
+  struct Scan {
+    int w, h;
+    const uint8_t *zz, *inv;
+  };
+  Scan scan_of(const Geo& g) const {
+    if (g.kind == 3) return Scan{8, 8, kZz8, kInv8};
+    if (g.kind == 0 && g.plane && sc_->chroma_ != 3)
+      return sc_->chroma_ == 2 ? Scan{2, 4, kZzC422, kInvC422} : Scan{2, 2, kRaster4, kRaster4};
+    return Scan{4, 4, kZz4, kInv4};
+  }
   Geo geo(int cat, int idx) const {
     Geo g = {0, 0, 0, 1, 0, 0};
     g.plane = cat < 6 ? 0 : cat < 10 ? 1 : 2;
@@ -2644,6 +2610,7 @@ struct Model : tc_rc<f_DEC> {
     if (cat == 2 || cat == 5) rec_.luma_ready(idx, mi_->qp - qp_off_);
     if (cat == 4 && sc_->chroma_ == 1) rec_.chroma_ready(idx >> 2 & 1, idx & 3, mi_->qp - qp_off_);
     Geo g = geo(cat, idx);
+    const Scan sg = scan_of(g);
     const MbState& cur = *sc_->cur_;
     Nb na = nb_block(g, 0), nb = nb_block(g, 1);
     int q = q6();
@@ -2868,8 +2835,6 @@ struct Model : tc_rc<f_DEC> {
     int rem = total, last = 0, cnt = total;
     H_sig_v S = {cat, 0, 0, 0, md, nc, fld, q, pg, em, 0};
     S.pq = pq;
-    int sig_base = kSigBase[fld][cat], numc8x8 = sc_->chroma_ == 2 ? 2 : 1;
-    bool b8x8 = cat == 5 || cat == 9 || cat == 13;
     for (int i = 0; rem; i++) {
       if (n - i == rem) {
         sig[i] = true;
@@ -2885,14 +2850,13 @@ struct Model : tc_rc<f_DEC> {
         if (H_USES(sig, ft)) {
           // the frequencies left of and above it, where coded already (0
           // not, 1 zero, 2 not zero)
-          int N = g.kind == 3 ? 8 : g.kind == 0 && g.plane ? 2 : 4, k = i + g.off;
-          int r = N == 8 ? kZz8[k] : N == 4 ? kZz4[k] : k, fx = r % N, fy = r / N, fl = 0, fa = 0;
+          int r = sg.zz[i + g.off], fx = r % sg.w, fy = r / sg.w, fl = 0, fa = 0;
           auto known = [&](int rr) {
-            int kk = N == 8 ? kInv8[rr] : N == 4 ? kInv4[rr] : rr, jj = kk - g.off;
+            int jj = sg.inv[rr] - g.off;
             return jj >= 0 && jj < i ? 1 + sig[jj] : 0;
           };
           if (fx) fl = known(r - 1);
-          if (fy) fa = known(r - N);
+          if (fy) fa = known(r - sg.w);
           S.ft = fl * 3 + fa;
         }
         if (H_USES(sig, hb)) {
@@ -2917,7 +2881,7 @@ struct Model : tc_rc<f_DEC> {
         tcx Y;
         f_sig.make(S, Y);
         f_sig.select(Y);
-        f_sig.prp = cab0(sig_base + (cat == 3 ? std::min(i / numc8x8, 2) : b8x8 ? (fld ? kSig8x8Field[i] : kSig8x8Frame[i]) : i));
+        f_sig.prp = cab0(sc_->ctx_sig(cat, i));
         sig[i] = f_sig.bit(0, ENC && c[i] != 0);
         tc_syms[STG_SIG]++;
       }
@@ -2932,23 +2896,21 @@ struct Model : tc_rc<f_DEC> {
     int g1 = 0, e1 = 0, lhist = 0, lsum = 0, esum = 0;  // lhist: the last levels coded less 1 (up to 3), two bits each
     H_lvl_v L = {cat, 0, 0, nc, 0, 0, 0, q, tc_qlog(cnt), md, 0, pga, em, 0};
     L.pq = pq;
-    int abs_base = kAbsBase[cat];
     for (int k = 0; k < TC_NODE; k++) pr[k] = -1;
     f_lvl.prpa = pr;
     for (int k = last; k >= 0; k--) {
       if (!sig[k]) continue;
       L.g1 = g1;
       L.e1 = e1;
-      pr[0] = cab1(abs_base + (g1 ? 0 : std::min(4, 1 + e1)));
-      pr[1] = pr[2] = cab1(abs_base + 5 + std::min(4 - (cat == 3), g1));
+      pr[0] = cab1(SC::ctx_abs0(cat, g1, e1));
+      pr[1] = pr[2] = cab1(SC::ctx_abs1(cat, g1));
       L.pos = tc_qlog(k);
       {
         // the texture's direction, and whether the coefficient is a
         // horizontal (1) or vertical (2) frequency or both (3) or DC (0)
-        int N = g.kind == 3 ? 8 : g.kind == 0 && g.plane ? 2 : 4, kk = k + g.off;
-        int r = N == 8 ? kZz8[kk] : N == 4 ? kZz4[kk] : kk;
+        int r = sg.zz[k + g.off];
         L.hv = hv;
-        L.fq = (r % N > 0) + 2 * (r / N > 0);
+        L.fq = (r % sg.w > 0) + 2 * (r / sg.w > 0);
       }
       L.pe = spok && k < 4 ? sp.estimate(k) : 0;
       L.pl = pok ? 1 + std::min(abs(q4(k)) / 2, 10) : 0;
@@ -2956,15 +2918,14 @@ struct Model : tc_rc<f_DEC> {
       L.ls = pok ? 7 + tc_clamp(lsum - esum, -6, 6) : 0;
       {
         // the levels right of and below it (higher frequencies, coded already)
-        int N = g.kind == 3 ? 8 : g.kind == 0 && g.plane ? 2 : 4, kk = k + g.off;
-        int r = N == 8 ? kZz8[kk] : N == 4 ? kZz4[kk] : kk, fx = r % N, fy = r / N, sum = 0, cnt = 0;
+        int r = sg.zz[k + g.off], fx = r % sg.w, fy = r / sg.w, sum = 0, cnt = 0;
         auto lv = [&](int rr) {
-          int j = (N == 8 ? kInv8[rr] : N == 4 ? kInv4[rr] : rr) - g.off;
+          int j = sg.inv[rr] - g.off;
           if (j > k && j <= last && sig[j]) sum += mag[j];  // none significant beyond last
           cnt += j > k && j < n;
         };
-        if (fx + 1 < N) lv(r + 1);
-        if (fy + 1 < N && (N != 2 || r + N < n + g.off)) lv(r + N);
+        if (fx + 1 < sg.w) lv(r + 1);
+        if (fy + 1 < sg.h) lv(r + sg.w);
         L.lt = cnt ? 1 + std::min(sum, 6) : 0;
       }
       L.tz = tok ? 1 + 4 * tmv + std::min(abs(tcf(k)), 3) : 0;

@@ -164,4 +164,5 @@ struct H7_sgn_T {
   void H7_sgn_Init( void ) {
   
   }
+  void H7_sgn_Quit( void ) {}
 };

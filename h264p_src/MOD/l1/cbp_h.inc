@@ -83,4 +83,5 @@ struct H1_cbp_T {
   void H1_cbp_Init( void ) {
   
   }
+  void H1_cbp_Quit( void ) {}
 };

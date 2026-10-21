@@ -148,4 +148,5 @@ struct H5_lvl_T {
   void H5_lvl_Init( void ) {
   
   }
+  void H5_lvl_Quit( void ) {}
 };

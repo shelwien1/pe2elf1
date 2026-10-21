@@ -17,46 +17,46 @@ void H5_mvg_make( const H_mvg_v & D, tcx & X ) {
   (void) comp;  (void) lst;  (void) ts;  (void) zs;  (void) ds;  (void) sa;  (void) sb;  (void) mag;  (void) tq;  (void) ox;  (void) ns;  (void) es;  (void) as;
 
   a = 0;
-  a = a*2 + ((comp>0+(1-1)));
+  a = a*2 + (((comp)>0+(1-1)));
 
   b = 0;
-  b = b*7 + H5_mvg_b_zs[__min(8,__max(0,zs-(1-1)))];
-  b = b*4 + H5_mvg_b_mag[__min(7,__max(0,mag-(1-1)))];
-  b = b*2 + ((comp>0+(1-1)));
+  b = b*7 + H5_mvg_b_zs[__min(8,__max(0,(zs)-(1-1)))];
+  b = b*4 + H5_mvg_b_mag[__min(7,__max(0,(mag)-(1-1)))];
+  b = b*2 + (((comp)>0+(1-1)));
 
   c = 0;
-  c = c*4 + H5_mvg_c_zs[__min(8,__max(0,zs-(1-1)))];
+  c = c*4 + H5_mvg_c_zs[__min(8,__max(0,(zs)-(1-1)))];
 
   d = 0;
-  d = d*8 + H5_mvg_d_ds[__min(9,__max(0,ds-(1-1)))];
-  d = d*4 + H5_mvg_d_mag[__min(7,__max(0,mag-(1-1)))];
+  d = d*8 + H5_mvg_d_ds[__min(9,__max(0,(ds)-(1-1)))];
+  d = d*4 + H5_mvg_d_mag[__min(7,__max(0,(mag)-(1-1)))];
 
   e = 0;
-  e = e*3 + ((sa>0+(1-1))+(sa>1+(1-1)));
-  e = e*3 + ((sb>0+(1-1))+(sb>1+(1-1)));
-  e = e*2 + ((comp>0+(1-1)));
-  e = e*5 + H5_mvg_e_ns[__min(6,__max(0,ns-(1-1)))];
+  e = e*3 + (((sa)>0+(1-1))+((sa)>1+(1-1)));
+  e = e*3 + (((sb)>0+(1-1))+((sb)>1+(1-1)));
+  e = e*2 + (((comp)>0+(1-1)));
+  e = e*5 + H5_mvg_e_ns[__min(6,__max(0,(ns)-(1-1)))];
 
   h = 0;
 
   i = 0;
-  i = i*6 + H5_mvg_i_zs[__min(8,__max(0,zs-(1-1)))];
-  i = i*8 + H5_mvg_i_ds[__min(9,__max(0,ds-(1-1)))];
+  i = i*6 + H5_mvg_i_zs[__min(8,__max(0,(zs)-(1-1)))];
+  i = i*8 + H5_mvg_i_ds[__min(9,__max(0,(ds)-(1-1)))];
 
   j = 0;
-  j = j*2 + ((comp>0+(1-1)));
-  j = j*2 + ((lst>0+(1-1)));
-  j = j*2 + ((ox>1+(1-1)));
-  j = j*3 + ((ns>2+(1-1))+(ns>3+(1-1)));
+  j = j*2 + (((comp)>0+(1-1)));
+  j = j*2 + (((lst)>0+(1-1)));
+  j = j*2 + (((ox)>1+(1-1)));
+  j = j*3 + (((ns)>2+(1-1))+((ns)>3+(1-1)));
 
   k = 0;
-  k = k*3 + ((mag>1+(1-1))+(mag>5+(1-1)));
-  k = k*3 + ((sa>0+(1-1))+(sa>1+(1-1)));
+  k = k*3 + (((mag)>1+(1-1))+((mag)>5+(1-1)));
+  k = k*3 + (((sa)>0+(1-1))+((sa)>1+(1-1)));
 
   l = 0;
-  l = l*6 + H5_mvg_l_zs[__min(8,__max(0,zs-(1-1)))];
-  l = l*4 + H5_mvg_l_ds[__min(9,__max(0,ds-(1-1)))];
-  l = l*3 + ((sb>0+(1-1))+(sb>1+(1-1)));
+  l = l*6 + H5_mvg_l_zs[__min(8,__max(0,(zs)-(1-1)))];
+  l = l*4 + H5_mvg_l_ds[__min(9,__max(0,(ds)-(1-1)))];
+  l = l*3 + (((sb)>0+(1-1))+((sb)>1+(1-1)));
 
   m = 0;
 

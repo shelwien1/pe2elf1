@@ -146,4 +146,5 @@ struct H3_hdr_T {
   void H3_hdr_Init( void ) {
   
   }
+  void H3_hdr_Quit( void ) {}
 };
