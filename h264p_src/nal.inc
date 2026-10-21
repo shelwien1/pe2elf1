@@ -180,10 +180,10 @@ bool repad(PadDetector& det, int obs, X264Padding& pad) {
 
 // The syntax of a NAL unit's RBSP through a channel, parsed from br or
 // written to bw (with the rbsp_stop_one_bit), either way by the same walk
-// (Syn's direction); parameter sets are stored in the context. Returns
-// x264's padding bit for the end of CABAC slice data, else -1. Throws
-// ParseError parsing, what the channel throws writing.
-int code_nal(int type, int ref_idc, Context& ctx, Chan& ch, BitReader* br, BitWriter* bw) {
+// (Syn's direction), a slice's bins as bp says; parameter sets are stored
+// in the context. Returns x264's padding bit for the end of CABAC slice
+// data, else -1. Throws ParseError parsing, what the channel throws writing.
+int code_nal(int type, int ref_idc, Context& ctx, Chan& ch, BitReader* br, BitWriter* bw, const BinPolicy& bp) {
   Syn s = br ? Syn(br, &ch) : Syn(&ch, bw);
   switch (type) {
     case 7: {
@@ -219,9 +219,9 @@ int code_nal(int type, int ref_idc, Context& ctx, Chan& ch, BitReader* br, BitWr
       code_slice_header(s, h, ctx.ps);
       h.pad = ctx.pad.bit(h.first_mb == 0);
       if (br)
-        read_slice_data(h, ctx.mbs, *br, ch);
+        read_slice_data(h, ctx.mbs, *br, ch, bp);
       else
-        write_slice_data(h, ctx.mbs, ch, *bw);  // with the stop bit
+        write_slice_data(h, ctx.mbs, ch, *bw, bp);  // with the stop bit
       return h.pps->entropy_coding_mode_flag ? h.pad : -1;
     }
     default:
@@ -231,12 +231,13 @@ int code_nal(int type, int ref_idc, Context& ctx, Chan& ch, BitReader* br, BitWr
   if (bw) bw->bit(1);  // rbsp_stop_one_bit
   return -1;
 }
-int read_nal(int type, int ref_idc, const std::vector<uint8_t>& rbsp, Context& ctx, Chan& ch) {
+int read_nal(int type, int ref_idc, const std::vector<uint8_t>& rbsp, Context& ctx, Chan& ch,
+             const BinPolicy& bp = BinPolicy()) {
   BitReader br(rbsp.data(), rbsp.size());
-  return code_nal(type, ref_idc, ctx, ch, &br, nullptr);
+  return code_nal(type, ref_idc, ctx, ch, &br, nullptr, bp);
 }
-int write_syntax(int type, int ref_idc, Context& ctx, Chan& ch, BitWriter& bw) {
-  return code_nal(type, ref_idc, ctx, ch, nullptr, &bw);
+int write_syntax(int type, int ref_idc, Context& ctx, Chan& ch, BitWriter& bw, const BinPolicy& bp = BinPolicy()) {
+  return code_nal(type, ref_idc, ctx, ch, nullptr, &bw, bp);
 }
 
 // The alignment zero bits, the last one being x264's padding bit if pad is 1.

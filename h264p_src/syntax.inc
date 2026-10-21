@@ -4,15 +4,59 @@
 
 namespace h264p {
 
+// What the walks of the headers (Syn) and of the slice data (SliceCoderT,
+// slice.inc) share, D the walk: its failure, and the fixed-length and
+// Exp-Golomb codes in its direction -- writing to D::bw_ (D::W), else
+// parsing D::br_ -- their values range-checked either way. (D::W is a
+// member of Syn, a constant of the slice walk's mode.)
+template <class D>
+struct WalkCodes {
+  // an inconsistency the walk found: parsing, the stream cannot be parsed
+  // (ParseError); writing, what the channel throws (else a TsvError)
+  [[noreturn]] void fail(const std::string& msg) {
+    if (!d().W) throw ParseError(msg);
+    d().ch_->fail(msg);
+    throw TsvError(msg);  // not reached
+  }
+  int64_t check(int64_t v, int64_t lo, int64_t hi) {
+    if (v < lo || v > hi) fail("value " + std::to_string(v) + " out of range");
+    return v;
+  }
+  // u(n), ue(v) and se(v): parsing, the value read (v unused); writing, v
+  // written; within [lo, hi] (u(n): its n bits)
+  int64_t code_u(int n, int64_t v) {
+    if (!d().W) return d().br_->u(n);
+    check(v, 0, ((int64_t)1 << n) - 1);
+    d().bw_->put((uint64_t)v, n);
+    return v;
+  }
+  int64_t code_ue(int64_t v, int64_t lo, int64_t hi) {
+    if (!d().W) return check(d().br_->ue(), lo, hi);
+    check(v, lo, hi);
+    d().bw_->ue((uint64_t)v);
+    return v;
+  }
+  int64_t code_se(int64_t v, int64_t lo, int64_t hi) {
+    if (!d().W) return check(d().br_->se(), lo, hi);
+    check(v, lo, hi);
+    d().bw_->se(v);
+    return v;
+  }
+
+ private:
+  D& d() { return *static_cast<D*>(this); }
+};
+
 // Header syntax: each syntax element, or group of elements, is one named
 // group of values (a TSV row).
-struct Syn {
-  Syn(BitReader* br, Chan* ch) : W(false), br(br), bw(nullptr), ch_(ch) {}
-  Syn(Chan* ch, BitWriter* bw) : W(true), br(nullptr), bw(bw), ch_(ch) {}
+struct Syn : WalkCodes<Syn> {
+  Syn(BitReader* br, Chan* ch) : W(false), br_(br), bw_(nullptr), ch_(ch) { same_way(); }
+  Syn(Chan* ch, BitWriter* bw) : W(true), br_(nullptr), bw_(bw), ch_(ch) { same_way(); }
 
   const bool W;  // writing a bitstream
-  BitReader* const br;
-  BitWriter* const bw;
+  BitReader* const br_;
+  BitWriter* const bw_;
+  Chan* const ch_;
 
   // a group with one value
   int64_t u(const char* name, int n) {
@@ -37,38 +81,23 @@ struct Syn {
   // a group with several values
   void begin(const char* name) { ch_->hbegin(name); }
 
+  // A value through the channel: parsing, handed to it after code() read
+  // it; writing, the channel's, coded by code()
+  template <class F>
+  int64_t xval(F code) {
+    int64_t v = code(W ? ch_->hval(0) : 0);
+    if (!W) ch_->hval(v);
+    return v;
+  }
   int64_t vu(int n) {
     ch_->hbits(n);
-    if (!W) {
-      int64_t v = br->u(n);
-      ch_->hval(v);
-      return v;
-    }
-    int64_t v = check(ch_->hval(0), 0, ((int64_t)1 << n) - 1);
-    bw->put((uint64_t)v, n);
-    return v;
+    return xval([&](int64_t v) { return code_u(n, v); });
   }
-
   int64_t vue(int64_t lo, int64_t hi) {
-    if (!W) {
-      int64_t v = check(br->ue(), lo, hi);
-      ch_->hval(v);
-      return v;
-    }
-    int64_t v = check(ch_->hval(0), lo, hi);
-    bw->ue((uint64_t)v);
-    return v;
+    return xval([&](int64_t v) { return code_ue(v, lo, hi); });
   }
-
   int64_t vse(int64_t lo, int64_t hi) {
-    if (!W) {
-      int64_t v = check(br->se(), lo, hi);
-      ch_->hval(v);
-      return v;
-    }
-    int64_t v = check(ch_->hval(0), lo, hi);
-    bw->se(v);
-    return v;
+    return xval([&](int64_t v) { return code_se(v, lo, hi); });
   }
 
   // SEI payloadType/payloadSize coding
@@ -76,7 +105,7 @@ struct Syn {
     if (!W) {
       int64_t v = 0;
       uint32_t b;
-      while ((b = br->u(8)) == 255)
+      while ((b = br_->u(8)) == 255)
         if ((v += 255) > (1 << 24)) fail("invalid SEI message header");
       if ((v += b) > (1 << 24)) fail("invalid SEI message header");
       ch_->hval(v);
@@ -84,7 +113,7 @@ struct Syn {
     }
     int64_t v = check(ch_->hval(0), 0, 1 << 24);
     for (int64_t x = v;; x -= 255) {
-      bw->put(x < 255 ? x : 255, 8);
+      bw_->put(x < 255 ? x : 255, 8);
       if (x < 255) break;
     }
     return v;
@@ -94,13 +123,13 @@ struct Syn {
   void vbytes(size_t nbytes) {
     std::vector<uint8_t> b(nbytes);
     if (!W) {
-      for (auto& x : b) x = (uint8_t)br->u(8);
+      for (auto& x : b) x = (uint8_t)br_->u(8);
       ch_->hbytes(b);
       return;
     }
     ch_->hbytes(b);
     if (b.size() != nbytes) fail("wrong data length");
-    for (uint8_t x : b) bw->put(x, 8);
+    for (uint8_t x : b) bw_->put(x, 8);
   }
 
   void end() { ch_->hend(); }
@@ -108,33 +137,21 @@ struct Syn {
   // a value that is not coded as such: parsing, v goes to the channel;
   // writing, the value of the channel is returned
   int64_t vval(int64_t v, int64_t lo, int64_t hi) {
-    if (!W) {
-      check(v, lo, hi);
-      ch_->hval(v);
-      return v;
-    }
-    return check(ch_->hval(0), lo, hi);
+    return xval([&](int64_t x) { return check(W ? x : v, lo, hi); });
   }
 
   // more_rbsp_data() when parsing; when writing, what the channel says (for
   // TSV rows, whether the next row is named `next`)
   bool more_data(const char* next) {
-    if (!W) return ch_->hmore(next, br->more_rbsp_data());
+    if (!W) return ch_->hmore(next, br_->more_rbsp_data());
     return ch_->hmore(next, false);
   }
 
-  [[noreturn]] void fail(const std::string& msg) {
-    if (!W) throw ParseError(msg);
-    ch_->fail(msg);
-    throw TsvError(msg);  // not reached
+  // (the walk and the channel go the same way: a channel's direction is
+  // the walk's, of the headers as of the slice data)
+  void same_way() const {
+    if (ch_->W != W) throw std::logic_error("the walk and its channel go different ways");
   }
-
-  int64_t check(int64_t v, int64_t lo, int64_t hi) {
-    if (v < lo || v > hi) fail("value " + std::to_string(v) + " out of range");
-    return v;
-  }
-
-  Chan* ch_;
 };
 
 struct Sps {
@@ -180,7 +197,7 @@ enum SliceType { kP = 0, kB = 1, kI = 2, kSP = 3, kSI = 4 };
 
 struct SliceHeader {
   int nal_unit_type = 0, nal_ref_idc = 0;
-  int first_mb = 0, slice_type = 0, pps_id = 0, colour_plane_id = 0;
+  int first_mb = 0, slice_type = 0, pps_id = 0;
   int frame_num = 0, field_pic_flag = 0, bottom_field_flag = 0;
   int direct_spatial_mv_pred_flag = 0;
   int num_ref_idx_active[2] = {0, 0};
@@ -203,12 +220,6 @@ struct SliceHeader {
   int type() const { return slice_type % 5; }
 };
 
-void code_sps(Syn& s, Sps& sps);
-void code_pps(Syn& s, Pps& pps, const ParamSets& ps);
-void code_sei(Syn& s);
-void code_aud(Syn& s);
-void code_filler(Syn& s);
-void code_slice_header(Syn& s, SliceHeader& h, const ParamSets& ps);
 
 static int64_t tc_clamp64(int64_t v, int64_t lo, int64_t hi) { return v < lo ? lo : v > hi ? hi : v; }
 
@@ -397,7 +408,7 @@ void code_sei(Syn& s) {
     s.begin("sei_message");  // payloadType, payloadSize, payload in hex
     s.vff();
     int64_t size = s.vff();
-    if (!s.W && (uint64_t)size * 8 > s.br->size() - s.br->pos()) s.fail("SEI payload past the end");
+    if (!s.W && (uint64_t)size * 8 > s.br_->size() - s.br_->pos()) s.fail("SEI payload past the end");
     s.vbytes((size_t)size);
     s.end();
   } while (s.more_data("sei_message"));
@@ -409,13 +420,13 @@ void code_filler(Syn& s) {
   s.begin("ff_bytes");  // the number of ff_byte
   int64_t n = 0;
   if (!s.W)
-    while (s.br->size() - s.br->pos() >= 8 && s.br->peek(8) == 0xFF) {
-      s.br->skip(8);
+    while (s.br_->size() - s.br_->pos() >= 8 && s.br_->peek(8) == 0xFF) {
+      s.br_->skip(8);
       n++;
     }
   n = s.vval(n, 0, 1 << 24);
   if (s.W)
-    for (int64_t i = 0; i < n; i++) s.bw->put(0xFF, 8);
+    for (int64_t i = 0; i < n; i++) s.bw_->put(0xFF, 8);
   s.end();
 }
 
@@ -443,7 +454,7 @@ void code_slice_header(Syn& s, SliceHeader& h, const ParamSets& ps) {
   const Sps& sps = *h.sps;
   const Pps& pps = *h.pps;
   int t = h.type();
-  if (sps.separate_colour_plane_flag) h.colour_plane_id = (int)s.u("colour_plane_id", 2);
+  if (sps.separate_colour_plane_flag) s.u("colour_plane_id", 2);
   h.frame_num = (int)s.u("frame_num", sps.log2_max_frame_num);
   if (!sps.frame_mbs_only_flag) {
     h.field_pic_flag = (int)s.u("field_pic_flag", 1);

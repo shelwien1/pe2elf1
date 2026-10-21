@@ -49,7 +49,7 @@ struct H264pArgs {
 //
 // With check, a slice is not written back: it would come out as it is up
 // to its stop bit, unless the walk writes other values, bits or bins than
-// it reads, which the model pass checks (Chan::rec, checked_bits) when this
+// it reads, which the model pass checks (BinPolicy::rec, checked_bits) when this
 // returns true with checked set; rbsp is then the RBSP. With CABAC, the
 // bins of the parse go to rec, and each run of CABAC data must end in a 1
 // bit (as written, the stop bit; its bits are then what an encoder writes
@@ -67,16 +67,15 @@ struct DryRun {
     checked = false;
     if (!nal_rbsp(h, ctx, rbsp, why)) return false;
     log.clear();
-    if (check) rec.clear();
-    log.rec = check ? &rec : nullptr;
+    BinPolicy bp;
+    if (check) rec.clear(), bp.rec = &rec;
     int pad;
     try {
-      pad = read_nal(h.type, h.ref_idc, rbsp, ctx, log);
+      pad = read_nal(h.type, h.ref_idc, rbsp, ctx, log, bp);
     } catch (const ParseError& e) {
       why = e.what();
       return false;
     }
-    log.rec = nullptr;
     if (check && rec.slice && rec.stops && find_trailer(BitWriter(rbsp.data(), rec.end), pad, rbsp, t, why, obs)) {
       checked = true;
       return true;
@@ -245,20 +244,21 @@ int compress_stream(Model<0, LV>& m, CompressState& s, const H264pArgs& a) {
         const Trailer& t = dr.t;
         dr.log.rewind();
         ModelChan<0, LV> ch(m, &dr.log);
+        BinPolicy bp = ch.policy();
         m.nal_begin(h.type, h.ref_idc);
         BitWriter bw;
         if (dr.checked) {
           // (whatever fails, the NAL unit would not come out as it is)
-          ch.rec = &dr.rec;
+          bp.rec = &dr.rec;
           bool same = false;
           try {
-            write_syntax(h.type, h.ref_idc, ctx, ch, bw);
-            same = dr.log.at_end() && checked_bits(bw, ch.nobins, dr.rec, dr.rbsp);
+            write_syntax(h.type, h.ref_idc, ctx, ch, bw, bp);
+            same = dr.log.at_end() && checked_bits(bw, bp.nobins, dr.rec, dr.rbsp);
           } catch (const std::exception&) {
           }
           if (!same) throw Restart{st.nals - 1};
         } else {
-          write_syntax(h.type, h.ref_idc, ctx, ch, bw);
+          write_syntax(h.type, h.ref_idc, ctx, ch, bw, bp);
           if (!dr.log.at_end()) cm_fail("internal: values left over");
         }
         m.nal(F_TRAIL, h.type, t.irregular);
@@ -359,7 +359,7 @@ int decompress_stream(Model<1, LV>& m, DecompressState& s, const H264pArgs& a) {
         ModelChan<1, LV> ch(m, nullptr);
         m.nal_begin(type, ref_idc);
         BitWriter bw;
-        int pad = write_syntax(type, ref_idc, ctx, ch, bw);
+        int pad = write_syntax(type, ref_idc, ctx, ch, bw, ch.policy());
         Trailer t;
         t.irregular = m.nal(F_TRAIL, type, 0) != 0;
         if (t.irregular) {

@@ -183,10 +183,6 @@ struct RowReader {
   bool have_next_ = false;
 };
 
-std::string to_hex(const uint8_t* p, size_t n);
-// throws TsvError
-std::vector<uint8_t> from_hex(const Row& r, size_t field);
-
 std::string to_hex(const uint8_t* p, size_t n) {
   static const char d[] = "0123456789abcdef";
   std::string s(2 * n, '0');
@@ -204,6 +200,7 @@ static int hexval(char c) {
   return -1;
 }
 
+// the bytes of a hex field (throws TsvError)
 std::vector<uint8_t> from_hex(const Row& r, size_t field) {
   std::vector<uint8_t> v;
   if (field >= r.size()) return v;  // empty data

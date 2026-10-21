@@ -681,8 +681,9 @@ struct Model : tc_rc<f_DEC> {
   // ------------------------------------------------------------------------
   // slice data
   // (the walk writing: decoding, its bins coded; coding, not, only the
-  // contexts' states following them where the level reads them, cab0)
-  typedef SliceCoderT<f_DEC ? 1 : LV::cabpred ? 3 : 2> SC;
+  // contexts' states following them where the level reads them, cab0:
+  // ModelChan::policy())
+  typedef WalkState SC;
   SC* sc_ = nullptr;
   const MbState* mbs_ = nullptr;  // the walk's macroblock states, for addresses
   std::vector<MbInfo> info_;
@@ -3084,11 +3085,15 @@ struct Model : tc_rc<f_DEC> {
 template <int f_DEC, class LV>
 struct ModelChan : Chan {
   static constexpr int ENC = f_DEC == 0;
-  // (coding: the walk's bins are dropped, so it need not code them; where
-  // the level reads the CABAC states, those still follow the bins)
-  ModelChan(Model<f_DEC, LV>& m, LogChan* log) : Chan(true), m_(m), log_(log) {
-    nobins = ENC;
-    states = ENC && LV::cabpred;
+  ModelChan(Model<f_DEC, LV>& m, LogChan* log) : Chan(true), m_(m), log_(log) {}
+  // how the walk codes the bins with the model: coding, they are dropped,
+  // so it need not code them (where the level reads the CABAC states,
+  // those still follow the bins); decoding, they are the stream's
+  static BinPolicy policy() {
+    BinPolicy p;
+    p.nobins = ENC;
+    p.states = ENC && LV::cabpred;
+    return p;
   }
 
   void hbegin(const char* name) override { m_.hbegin(name); }
@@ -3100,7 +3105,7 @@ struct ModelChan : Chan {
   }
   void hend() override {}
   bool hmore(const char* next, bool) override { return m_.hmore(next, ENC && log_->hmore(next, false)); }
-  void slice_begin(typename Model<f_DEC, LV>::SC& sc) override { m_.slice_begin(sc); }
+  void slice_begin(WalkState& ws) override { m_.slice_begin(ws); }
   void slice_end() override { m_.slice_end(); }
   int skip(int) override { return m_.skip(ENC ? log_->skip(0) : 0); }
   int end(int, bool certain) override { return m_.end(ENC ? log_->end(0, certain) : 0, certain); }

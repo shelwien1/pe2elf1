@@ -8,11 +8,6 @@ namespace h264p {
 // depth), 2^21)
 const int kMaxLevel = 1 << 24;
 
-// One residual_block_cavlc(); c[0..max_coeff-1] are the coefficients in
-// coding order. nC is -1 for 4:2:0 chroma DC, -2 for 4:2:2 chroma DC.
-// Both return TotalCoeff.
-int cavlc_read_block(BitReader& br, int nC, int max_coeff, int* c);
-int cavlc_write_block(BitWriter& bw, int nC, int max_coeff, const int* c);
 
 namespace {
 
@@ -94,6 +89,9 @@ int token_table(int nC) { return nC == -1 ? 4 : nC == -2 ? 5 : nC < 2 ? 0 : nC <
 
 }  // namespace
 
+// One residual_block_cavlc(), parsed or written; c[0..max_coeff-1] are the
+// coefficients in coding order. nC is -1 for 4:2:0 chroma DC, -2 for 4:2:2
+// chroma DC. Both return TotalCoeff.
 int cavlc_read_block(BitReader& br, int nC, int max_coeff, int* c) {
   const Tables& T = tables();
   for (int i = 0; i < max_coeff; i++) c[i] = 0;

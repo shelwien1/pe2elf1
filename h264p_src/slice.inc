@@ -2,6 +2,40 @@
 
 namespace h264p {
 
+// What the compressor's parse of a slice records, for its model pass to
+// check in place of writing the slice back from the values (h264p.cpp,
+// dry_run): where the slice data ends, and with CABAC, the bins as the walk
+// reads them and where the CABAC data is.
+struct BinRec {
+  bool slice = false;         // the walk parsed slice data, up to `end`
+  size_t end = 0;             // the bit after its rbsp_stop_one_bit
+  std::vector<uint8_t> bins;  // 0 or 1 each, then a 2
+  std::vector<size_t> segs;   // each run of CABAC data: its first bit and the one after it, in the RBSP
+  bool stops = true;          // the last bit of each run is 1 (so the run is what an encoder writes)
+  bool bad = false;           // checking: the walk wrote another bin, or fewer
+  void clear() {
+    slice = false;
+    end = 0;
+    bins.clear();
+    segs.clear();
+    stops = true;
+    bad = false;
+  }
+};
+
+// How the walk codes the CABAC bins of a slice besides its values: what the
+// compressor chooses (the channels know nothing of it).
+struct BinPolicy {
+  // (writing) the bins are not wanted, only the values: the walk skips their
+  // arithmetic coding (the compressor's model pass), and the bits it writes
+  // are not the stream's; with states, the contexts' states still follow
+  // the bins (for a model that reads them, Model::cab0)
+  bool nobins = false, states = false;
+  // the bins: parsing, recorded here; writing them not (nobins), checked
+  // against those recorded
+  BinRec* rec = nullptr;
+};
+
 // What later macroblocks of the slice need to know about a macroblock to
 // parse their own syntax elements (neighbour contexts).
 struct MbState {
@@ -16,7 +50,6 @@ struct MbState {
   uint8_t mvd[2][16][2];   // |mvd_lX| of the 4x4 blocks, clipped to 127
 };
 
-// Macroblock states of the current picture, kept between slices.
 // The slice group map of the slices (8.2.2), made again only where what it
 // depends on changes: the parameter sets, field or frame, and the change
 // cycle of the map types that move (3-5)
@@ -30,18 +63,12 @@ struct GroupMap {
   std::vector<int> rank;       // box-out's order of the map units (type 3), whatever the cycle
 };
 
+// Macroblock states of the current picture, kept between slices.
 struct MbStore {
   std::vector<MbState> mbs;
   uint32_t slices = 0;
   GroupMap groups;
 };
-
-// Parses the slice data following the slice header, handing the values to
-// a channel, or writes it with the values of a channel. The slice data ends
-// with the rbsp_stop_one_bit (written by the CABAC flush, or explicitly for
-// CAVLC).
-void read_slice_data(const SliceHeader& h, MbStore& store, BitReader& br, Chan& ch);
-void write_slice_data(const SliceHeader& h, MbStore& store, Chan& ch, BitWriter& bw);
 
 // 4x4 block position (in 4x4 units) of luma4x4BlkIdx
 inline int blk_x(int b) { return (b & 1) | ((b >> 1) & 2); }
@@ -151,17 +178,18 @@ std::vector<int> box_out_ranks(int width, int height, int dir) {
 }
 
 // The slice group map of slice h, whose picture is width macroblocks wide
-// and size of them, in m (made again only where it differs)
-void slice_group_map(GroupMap& m, const SliceHeader& h, int width, int size) {
+// and size of them, in m (made again only where it differs); false if the
+// PPS's map does not fit the picture
+bool slice_group_map(GroupMap& m, const SliceHeader& h, int width, int size) {
   const Sps& sps = *h.sps;
   const Pps& pps = *h.pps;
   int type = pps.slice_group_map_type;
   int64_t cycle = type >= 3 && type <= 5 ? h.slice_group_change_cycle : 0;
   if (m.pps == h.pps && m.sps == h.sps && m.field == h.field_pic_flag && m.cycle == cycle && (int)m.group.size() == size)
-    return;
+    return true;
   if (m.pps != h.pps || m.sps != h.sps) m.rank.clear();
   m.pps = h.pps, m.sps = h.sps, m.field = h.field_pic_flag, m.cycle = cycle;
-  m.group.clear();  // (until it is made: a map that throws is not kept)
+  m.group.clear();  // (until it is made: a map that fails is not kept)
   int units_h = sps.height_map_units;
   int units = width * units_h;
   std::vector<int> map(units, 0);
@@ -205,7 +233,7 @@ void slice_group_map(GroupMap& m, const SliceHeader& h, int width, int size) {
       break;
     }
     case 6:
-      if ((int)pps.slice_group_id.size() != units) throw ParseError("slice_group_id does not match the picture size");
+      if ((int)pps.slice_group_id.size() != units) return false;
       for (int i = 0; i < units; i++) map[i] = pps.slice_group_id[i];
       break;
   }
@@ -222,172 +250,19 @@ void slice_group_map(GroupMap& m, const SliceHeader& h, int width, int size) {
   int last[256];
   std::fill(last, last + 256, size);
   for (int i = size - 1; i >= 0; i--) m.next[i] = last[m.group[i]], last[m.group[i]] = i;
+  return true;
 }
 
 // ---------------------------------------------------------------------------
 
-// The walk of the slice data, which parses (kMode 0) or writes it (1; 2
-// without the CABAC bins, Chan::nobins; 3 without them but with their
-// contexts' states, Chan::states), a type for each so that what differs
-// is decided once.
-template <int kMode>
-struct SliceCoderT {
-  SliceCoderT(const SliceHeader& h, MbStore& store, BitReader* br, BitWriter* bw, Chan& ch)
-      : h_(h), sps_(*h.sps), pps_(*h.pps), store_(store), br_(br), bw_(bw), ch_(&ch), rec_(W ? nullptr : ch.rec) {}
-
-  void run() {
-    stype_ = h_.type();
-    cabac_ = pps_.entropy_coding_mode_flag;
-    field_ = h_.field_pic_flag;
-    chroma_ = sps_.chroma_array_type();
-    ch_h_ = chroma_ == 2 ? 4 : 2;
-    ch_blocks_ = chroma_ == 2 ? 8 : 4;
-    mbaff_ = sps_.mb_adaptive_frame_field_flag && !h_.field_pic_flag;
-    if (h_.nal_unit_type != 1 && h_.nal_unit_type != 5) fail("unsupported NAL unit type");
-    width_ = sps_.width_mbs;
-    size_ = width_ * (sps_.frame_height_mbs() / (1 + field_));
-    num_ref_[0] = h_.num_ref_idx_active[0];
-    num_ref_[1] = h_.num_ref_idx_active[1];
-    if (pps_.num_slice_groups > 1) {
-      slice_group_map(store_.groups, h_, width_, size_);
-      next_ = store_.groups.next.data();
-    }
-    if ((int)store_.mbs.size() < size_) store_.mbs.resize(size_, MbState());
-    slice_id_ = ++store_.slices;
-    if (h_.first_mb * (1 + mbaff_) >= size_) fail("first_mb_in_slice out of range");
-
-    if (cabac_) {
-      if (!W) {
-        while (!br_->byte_aligned())
-          if (!br_->bit()) fail("cabac_alignment_one_bit is 0");
-      } else {
-        while (bw_->pos() & 7) bw_->bit(1);
-      }
-      int qp = pps_.pic_init_qp + h_.slice_qp_delta;
-      cabac_init_contexts(ctx_, qp, stype_ == kI || stype_ == kSI ? 0 : h_.cabac_init_idc + 1);
-      if (!W)
-        dec_init();
-      else if (!nobins_)
-        enc_.init(bw_);
-      else if (ch_->rec)
-        chk_ = ch_->rec->bins.data();
-    }
-    ch_->slice_begin(*this);
-    loop();
-    ch_->slice_end();
-    if (cabac_ && rec_) rec_->bins.push_back(2);
-    if (chk_ && *chk_ != 2) ch_->rec->bad = true;
-    if (!cabac_) {
-      if (!W) {
-        // the rbsp_stop_one_bit
-        if (!br_->bit()) fail("missing rbsp_stop_one_bit");
-      } else {
-        bw_->bit(1);
-      }
-    }
-    if (rec_) rec_->slice = true, rec_->end = br_->pos();
-  }
-
-  // --- errors
-  [[noreturn]] void fail(const std::string& msg) {
-    if (!W) throw ParseError(msg);
-    ch_->fail(msg);
-    throw TsvError(msg);  // not reached
-  }
-
-  // --- CAVLC primitives
-  int u(int n, int v) {
-    if (!W) return (int)br_->u(n);
-    if (v < 0 || v >= (1 << n)) fail("value " + std::to_string(v) + " out of range");
-    bw_->put((uint32_t)v, n);
-    return v;
-  }
-  int ue(int v, int hi) {
-    if (!W) {
-      uint32_t x = br_->ue();
-      if (x > (uint32_t)hi) fail("value out of range");
-      return (int)x;
-    }
-    if (v < 0 || v > hi) fail("value " + std::to_string(v) + " out of range");
-    bw_->ue((uint32_t)v);
-    return v;
-  }
-  int se(int v, int lim) {
-    if (!W) {
-      int64_t x = br_->se();
-      if (x < -lim || x > lim) fail("value out of range");
-      return (int)x;
-    }
-    if (v < -lim || v > lim) fail("value " + std::to_string(v) + " out of range");
-    bw_->se(v);
-    return v;
-  }
-  int te(int v, int range) {
-    if (W && (v < 0 || v > range)) fail("value " + std::to_string(v) + " out of range");
-    if (range == 1) return !u(1, !v);
-    return ue(v, range);
-  }
-
-  // --- CABAC primitives
-  int bin(int ctx, int v) {
-    if (!W) return got(dec_.decision(ctx_[ctx]));
-    if (!nobins_) {
-      enc_.decision(ctx_[ctx], v);
-      return v;
-    }
-    if (states_) cabac_next(ctx_[ctx], v);
-    if (chk_) check(v);
-    return v;
-  }
-  int bypass(int v) {
-    if (!W) return got(dec_.bypass());
-    if (!nobins_)
-      enc_.bypass(v);
-    else if (chk_)
-      check(v);
-    return v;
-  }
-  int term(int v) {
-    if (!W) {
-      int b = got(dec_.terminate());
-      if (b && rec_) {  // the end of a run of CABAC data: its last bit
-        size_t e = br_->pos();
-        rec_->segs.push_back(e);
-        if (!(br_->data_[(e - 1) >> 3] >> (7 - ((e - 1) & 7)) & 1)) rec_->stops = false;
-      }
-      return b;
-    }
-    if (!nobins_)
-      enc_.terminate(v);
-    else if (chk_)
-      check(v);
-    return v;
-  }
-  void dec_init() {
-    if (rec_) rec_->segs.push_back(br_->pos());
-    dec_.init(br_);
-  }
-  int got(int b) {
-    if (rec_) rec_->bins.push_back((uint8_t)b);
-    return b;
-  }
-  // (a bin that differs stays the next one, failing all that follow)
-  void check(int v) {
-    if (*chk_ == v)
-      chk_++;
-    else
-      ch_->rec->bad = true;
-  }
-
-  int exp_golomb_bypass(int k, int v) {
-    int x = 0;
-    while (bypass(W ? v - x >= (1 << k) : 0)) {
-      x += 1 << k;
-      if (++k > 28) fail("invalid Exp-Golomb suffix");
-    }
-    while (k--) x += bypass(W ? ((v - x) >> k) & 1 : 0) << k;
-    return x;
-  }
+// The state of the walk of a slice's data, whichever its direction: the
+// slice, its macroblocks and their neighbours, the CABAC contexts, and
+// the rules that derive a bin's ctxIdx and a block's nC from them
+// (9.2.1, 9.3.3.1). Not a template, so that what reads them besides the
+// walk -- the model, through Chan::slice_begin() -- reads the same ones
+// whatever the walk's mode.
+struct WalkState {
+  WalkState(const SliceHeader& h, MbStore& store) : h_(h), sps_(*h.sps), pps_(*h.pps), store_(store) {}
 
   // --- neighbours
   const MbState* avail(int addr) const {
@@ -468,6 +343,336 @@ struct SliceCoderT {
   }
   bool field_mb() const { return field_ || cur_->field; }
 
+  int next_mb(int addr) const { return next_ ? next_[addr] : addr + 1; }
+
+  // --- the ctxIdx (or ctxIdxInc) of the CABAC bins (9.3.3.1): one rule
+  // each, which the model reads too (Model::cab0)
+  enum {
+    kCtxMbtP = 14,      // P mb_type's first bin
+    kCtxRef = 54,       // ref_idx: + ref_inc(), then + 4, + 5
+    kCtxQpd = 60,       // mb_qp_delta: + ctx_qpd(), then 62, 63
+    kCtxCpred = 64,     // intra_chroma_pred_mode: + inc_cpred(), then + 3
+    kCtxIpm = 68,       // prev_intra_pred_mode_flag, then rem_intra_pred_mode 69
+    kCtxCbpLuma = 73,   // coded_block_pattern: + cbp_luma_inc()
+    kCtxCbpChroma = 77, // + cbp_chroma_inc(0), then 81 + cbp_chroma_inc(1)
+    kCtxT8x8 = 399      // transform_size_8x8_flag: + inc_t8x8()
+  };
+  int ctx_skip() const { return (stype_ == kB ? 24 : 11) + (mb_a_ && !mb_a_->skip) + (mb_b_ && !mb_b_->skip); }
+  int ctx_field() const { return 70 + (left_ && left_->field) + (above_ && above_->field); }
+  int inc_mbt_si() const { return (mb_a_ && !mb_a_->si) + (mb_b_ && !mb_b_->si); }
+  int ctx_mbt_b() const { return 27 + (mb_a_ && !mb_a_->direct16) + (mb_b_ && !mb_b_->direct16); }
+  // mb_type of an intra macroblock at ctxIdxOffset off (I slices, or the
+  // suffix of P and B ones): its first bin, and bin k of luma, chroma (two)
+  // and the prediction mode (two) after the terminate one
+  int ctx_mbt_i0(int off, bool islice) const {
+    return islice ? off + (mb_a_ && !mb_a_->inxn) + (mb_b_ && !mb_b_->inxn) : off;
+  }
+  static int ctx_mbt_i(int off, bool islice, int k) {
+    static const int8_t inc[2][5] = {{1, 2, 2, 3, 3}, {3, 4, 5, 6, 7}};
+    return off + inc[islice][k];
+  }
+  int inc_cpred() const {
+    auto cond = [](const MbState* n) { return n && n->intra && !n->pcm && n->cpred != 0; };
+    return cond(mb_a_) + cond(mb_b_);
+  }
+  int inc_t8x8() const { return (mb_a_ && mb_a_->t8x8) + (mb_b_ && mb_b_->t8x8); }
+  int ctx_qpd() const { return kCtxQpd + (last_qpd_ != 0); }
+  static int ctx_mvd(int comp) { return comp ? 47 : 40; }  // + mvd_inc(), then + 3, + 4 ...
+  // significant_coeff_flag's and last_significant_coeff_flag's ctxIdxInc
+  // by scan position in a block of ctxBlockCat cat, and their ctxIdx
+  const uint8_t* sig_inc(int cat) const {
+    if (cat == 3) return chroma_ == 2 ? kDcInc422 : kDcInc420;
+    if (cat == 5 || cat == 9 || cat == 13) return field_mb() ? kSig8x8Field : kSig8x8Frame;
+    return kScanPos;
+  }
+  const uint8_t* last_inc(int cat) const {
+    if (cat == 3) return chroma_ == 2 ? kDcInc422 : kDcInc420;
+    if (cat == 5 || cat == 9 || cat == 13) return kLast8x8;
+    return kScanPos;
+  }
+  int ctx_sig(int cat, int i) const { return kSigBase[field_mb()][cat] + sig_inc(cat)[i]; }
+  int ctx_last(int cat, int i) const { return kLastBase[field_mb()][cat] + last_inc(cat)[i]; }
+  // coeff_abs_level_minus1's first bin and the others, after gt1 levels
+  // above 1 and eq1 of 1
+  static int ctx_abs0(int cat, int gt1, int eq1) { return kAbsBase[cat] + (gt1 ? 0 : std::min(4, 1 + eq1)); }
+  static int ctx_abs1(int cat, int gt1) { return kAbsBase[cat] + 5 + std::min(4 - (cat == 3), gt1); }
+
+  // ctxIdxInc of the first bin of ref_idx_lX of the partition at the 4x4 block (x, y)
+  int ref_inc(int list, int x, int y) const {
+    int inc = 0;
+    for (int k = 0; k < 2; k++) {
+      int i;
+      const MbState* n = k ? nb4(x, y - 1, i) : nb4(x - 1, y, i);
+      // refIdxZeroFlagN: a field neighbour of a frame macroblock refers to fields
+      if (n && n->ref[list][(i >> 3) * 2 + ((i & 3) >> 1)] > (!cur_->field && n->field)) inc += 1 + k;
+    }
+    return inc;
+  }
+
+  // ctxIdxInc of the first bin of mvd_lX[comp] of the partition at the 4x4 block (x, y)
+  int mvd_inc(int list, int comp, int x, int y) const {
+    int ia, ib;
+    const MbState* a = nb4(x - 1, y, ia);
+    const MbState* b = nb4(x, y - 1, ib);
+    int sum = 0;
+    for (int k = 0; k < 2; k++) {
+      const MbState* n = k ? b : a;
+      if (!n) continue;
+      int m = n->mvd[list][k ? ib : ia][comp];
+      // vertical components of frame and field macroblocks of MBAFF frames
+      if (comp && !cur_->field && n->field) m *= 2;
+      if (comp && cur_->field && !n->field) m /= 2;
+      sum += m;
+    }
+    return sum < 3 ? 0 : sum > 32 ? 2 : 1;
+  }
+
+  // ctxIdxInc of the luma bit of the 8x8 block b8 of coded_block_pattern,
+  // luma having the bits of the blocks before it (9.3.3.1.1.4)
+  int cbp_luma_inc(int b8, int luma) const {
+    int inc = 0;
+    for (int k = 0; k < 2; k++) {
+      int x = (b8 & 1) * 8 - !k, y = (b8 >> 1) * 8 - k, xW, yW;
+      const MbState* n = nb_loc(x, y, 16, 16, xW, yW);
+      int b8n = (yW >> 3) * 2 + (xW >> 3);
+      int cbp = n == cur_ ? luma : n ? n->cbp : 0;
+      if (n && !(n != cur_ && n->pcm) && !(cbp >> b8n & 1)) inc += 1 + k;
+    }
+    return inc;
+  }
+
+  // ctxIdxInc of the first (bin 0: chroma not 0) or second chroma bin (1: chroma 2)
+  int cbp_chroma_inc(int bin) const {
+    return (mb_a_ && (mb_a_->cbp >> 4) > bin) + 2 * (mb_b_ && (mb_b_->cbp >> 4) > bin);
+  }
+
+  // CAVLC nC (9.2.1), from the coefficient counts of blocks A (a, its block
+  // ia) and B (b, ib) of plane (0 Y, 1 Cb, 2 Cr), either missing
+  static int nc(const MbState* a, int ia, const MbState* b, int ib, int plane) {
+    if (a && b) return (a->nz[plane][ia] + b->nz[plane][ib] + 1) >> 1;
+    if (a) return a->nz[plane][ia];
+    if (b) return b->nz[plane][ib];
+    return 0;
+  }
+  // of the 4x4 block (x, y) of a luma-like plane, and of the chroma 4x4
+  // block (x, y) of Cb or Cr (comp 0 or 1)
+  int nc_luma(int plane, int x, int y) const {
+    int ia, ib;
+    const MbState *a = nb4(x - 1, y, ia), *b = nb4(x, y - 1, ib);
+    return nc(a, ia, b, ib, plane);
+  }
+  int nc_chroma(int comp, int x, int y) const {
+    int ia, ib;
+    const MbState *a = nbc(x - 1, y, ia), *b = nbc(x, y - 1, ib);
+    return nc(a, ia, b, ib, 1 + comp);
+  }
+
+  // coded_block_flag ctxIdxInc (9.3.3.1.1.9): condTermFlagA + 2
+  // condTermFlagB, nb(k, i) giving block A (k 0) or B (1) and its index i,
+  // or null. Each flag is whether the macroblock is intra where N is not
+  // available, 1 where N is I_PCM, else coded(n, i), N's block's flag.
+  template <class Nb, class Coded>
+  int cbf_inc(Nb nb, Coded coded) const {
+    int inc = 0;
+    for (int k = 0; k < 2; k++) {
+      int i = 0;
+      const MbState* n = nb(k, i);
+      inc += (!n ? cur_->intra : n->pcm ? 1 : coded(n, i)) << k;
+    }
+    return inc;
+  }
+  // of a 4x4 block of a luma-like plane: of the 4x4 block, or of the 8x8
+  // block when transform_size_8x8_flag
+  int cbf_inc_luma(int plane, int x, int y) const {
+    return cbf_inc([&](int k, int& i) { return k ? nb4(x, y - 1, i) : nb4(x - 1, y, i); },
+                   [&](const MbState* n, int i) {
+                     return (n->cbp >> ((i >> 3) * 2 + ((i & 3) >> 1)) & 1) && n->nz[plane][i] != 0;
+                   });
+  }
+  // of an 8x8 block (4:4:4 only), i being yW << 4 | xW
+  int cbf_inc_8x8(int plane, int b8) const {
+    return cbf_inc(
+        [&](int k, int& i) {
+          int xW, yW;
+          const MbState* n = nb_loc((b8 & 1) * 8 - !k, (b8 >> 1) * 8 - k, 16, 16, xW, yW);
+          i = yW << 4 | xW;
+          return n;
+        },
+        [&](const MbState* n, int i) {
+          int xW = i & 15, yW = i >> 4;
+          return (n->cbp >> ((yW >> 3) * 2 + (xW >> 3)) & 1) && n->t8x8 && n->nz[plane][(yW >> 2) * 4 + (xW >> 2)] != 0;
+        });
+  }
+  // of a DC block: Intra16x16's of a luma-like plane (comp), or a chroma one
+  int cbf_inc_dc(int comp) const {
+    return cbf_inc([&](int k, int&) { return k ? mb_b_ : mb_a_; },
+                   [&](const MbState* n, int) {
+                     return (comp == 0 || chroma_ == 3 ? n->i16 : n->cbp >> 4) && n->cbf_dc[comp];
+                   });
+  }
+  // of a chroma AC block
+  int cbf_inc_chroma_ac(int comp, int x, int y) const {
+    return cbf_inc([&](int k, int& i) { return k ? nbc(x, y - 1, i) : nbc(x - 1, y, i); },
+                   [&](const MbState* n, int i) { return (n->cbp >> 4) == 2 && n->nz[1 + comp][i] != 0; });
+  }
+
+  const SliceHeader& h_;
+  const Sps& sps_;
+  const Pps& pps_;
+  MbStore& store_;
+
+  bool cabac_ = false, field_ = false, mbaff_ = false;
+  int stype_ = 0, chroma_ = 1, ch_h_ = 2, ch_blocks_ = 4;
+  int width_ = 0, size_ = 0;
+  int num_ref_[2] = {0, 0};
+  uint32_t slice_id_ = 0;
+  const int* next_ = nullptr;  // without FMO, none (MbStore::groups)
+  int cur_addr_ = 0;
+  MbState* cur_ = nullptr;
+  const MbState* mb_a_ = nullptr;  // macroblocks A and B (6.4.10.1)
+  const MbState* mb_b_ = nullptr;
+  const MbState* left_ = nullptr;  // left and above macroblock, or top
+  const MbState* above_ = nullptr; // macroblock of the left and above pair
+  int pair_field_ = 0;             // MBAFF: field decoding mode of the pair
+  int last_qpd_ = 0;
+  CabacCtx ctx_[kNumCtx];
+};
+
+// The walk of the slice data, which parses (kMode 0) or writes it (1; 2
+// without the CABAC bins, BinPolicy::nobins; 3 without them but with their
+// contexts' states, BinPolicy::states), a type for each so that what
+// differs is decided once.
+template <int kMode>
+struct SliceCoderT : WalkState, WalkCodes<SliceCoderT<kMode>> {
+  SliceCoderT(const SliceHeader& h, MbStore& store, BitReader* br, BitWriter* bw, Chan& ch, const BinPolicy& bp)
+      : WalkState(h, store), br_(br), bw_(bw), ch_(&ch), bins_(bp.rec), rec_(W ? nullptr : bp.rec) {
+    if (ch.W != W) throw std::logic_error("the walk and its channel go different ways");
+  }
+  using WalkCodes<SliceCoderT>::fail;
+
+  void run() {
+    stype_ = h_.type();
+    cabac_ = pps_.entropy_coding_mode_flag;
+    field_ = h_.field_pic_flag;
+    chroma_ = sps_.chroma_array_type();
+    ch_h_ = chroma_ == 2 ? 4 : 2;
+    ch_blocks_ = chroma_ == 2 ? 8 : 4;
+    mbaff_ = sps_.mb_adaptive_frame_field_flag && !h_.field_pic_flag;
+    width_ = sps_.width_mbs;
+    size_ = width_ * (sps_.frame_height_mbs() / (1 + field_));
+    num_ref_[0] = h_.num_ref_idx_active[0];
+    num_ref_[1] = h_.num_ref_idx_active[1];
+    if (pps_.num_slice_groups > 1) {
+      if (!slice_group_map(store_.groups, h_, width_, size_)) fail("slice_group_id does not match the picture size");
+      next_ = store_.groups.next.data();
+    }
+    if ((int)store_.mbs.size() < size_) store_.mbs.resize(size_, MbState());
+    slice_id_ = ++store_.slices;
+    if (h_.first_mb * (1 + mbaff_) >= size_) fail("first_mb_in_slice out of range");
+
+    if (cabac_) {
+      if (!W) {
+        while (!br_->byte_aligned())
+          if (!br_->bit()) fail("cabac_alignment_one_bit is 0");
+      } else {
+        while (bw_->pos() & 7) bw_->bit(1);
+      }
+      int qp = pps_.pic_init_qp + h_.slice_qp_delta;
+      cabac_init_contexts(ctx_, qp, stype_ == kI || stype_ == kSI ? 0 : h_.cabac_init_idc + 1);
+      if (!W)
+        dec_init();
+      else if (!nobins_)
+        enc_.init(bw_);
+      else if (bins_)
+        chk_ = bins_->bins.data();
+    }
+    ch_->slice_begin(*this);
+    loop();
+    ch_->slice_end();
+    if (cabac_ && rec_) rec_->bins.push_back(2);
+    if (chk_ && *chk_ != 2) bins_->bad = true;
+    if (!cabac_) {
+      if (!W) {
+        // the rbsp_stop_one_bit
+        if (!br_->bit()) fail("missing rbsp_stop_one_bit");
+      } else {
+        bw_->bit(1);
+      }
+    }
+    if (rec_) rec_->slice = true, rec_->end = br_->pos();
+  }
+
+  // --- CAVLC primitives (WalkCodes)
+  int u(int n, int v) { return (int)this->code_u(n, v); }
+  int ue(int v, int hi) { return (int)this->code_ue(v, 0, hi); }
+  int se(int v, int lim) { return (int)this->code_se(v, -lim, lim); }
+  int te(int v, int range) {
+    if (W && (v < 0 || v > range)) fail("value " + std::to_string(v) + " out of range");
+    if (range == 1) return !u(1, !v);
+    return ue(v, range);
+  }
+
+  // --- CABAC primitives
+  int bin(int ctx, int v) {
+    if (!W) return got(dec_.decision(ctx_[ctx]));
+    if (!nobins_) {
+      enc_.decision(ctx_[ctx], v);
+      return v;
+    }
+    if (states_) cabac_next(ctx_[ctx], v);
+    if (chk_) check(v);
+    return v;
+  }
+  int bypass(int v) {
+    if (!W) return got(dec_.bypass());
+    if (!nobins_)
+      enc_.bypass(v);
+    else if (chk_)
+      check(v);
+    return v;
+  }
+  int term(int v) {
+    if (!W) {
+      int b = got(dec_.terminate());
+      if (b && rec_) {  // the end of a run of CABAC data: its last bit
+        size_t e = br_->pos();
+        rec_->segs.push_back(e);
+        if (!(br_->data_[(e - 1) >> 3] >> (7 - ((e - 1) & 7)) & 1)) rec_->stops = false;
+      }
+      return b;
+    }
+    if (!nobins_)
+      enc_.terminate(v);
+    else if (chk_)
+      check(v);
+    return v;
+  }
+  void dec_init() {
+    if (rec_) rec_->segs.push_back(br_->pos());
+    dec_.init(br_);
+  }
+  int got(int b) {
+    if (rec_) rec_->bins.push_back((uint8_t)b);
+    return b;
+  }
+  // (a bin that differs stays the next one, failing all that follow)
+  void check(int v) {
+    if (*chk_ == v)
+      chk_++;
+    else
+      bins_->bad = true;
+  }
+
+  int exp_golomb_bypass(int k, int v) {
+    int x = 0;
+    while (bypass(W ? v - x >= (1 << k) : 0)) {
+      x += 1 << k;
+      if (++k > 28) fail("invalid Exp-Golomb suffix");
+    }
+    while (k--) x += bypass(W ? ((v - x) >> k) & 1 : 0) << k;
+    return x;
+  }
+
   // --- slice data
   //
   // A macroblock at a time: whether it is skipped, the macroblock, and
@@ -546,11 +751,8 @@ struct SliceCoderT {
 
   void coded_mb(int addr, bool prev_skipped) {
     ch_->mb_begin();
-    if (mbaff_ && (!(addr & 1) || prev_skipped)) {
-      int f = mb_field_decoding_flag(W ? ch_->field(0) : 0);
-      if (!W) ch_->field(f);
-      set_field(f);
-    }
+    if (mbaff_ && (!(addr & 1) || prev_skipped))
+      set_field(xchg(&Chan::field, [&](int v) { return mb_field_decoding_flag(v); }));
     macroblock();
     ch_->mb_end();
   }
@@ -598,47 +800,24 @@ struct SliceCoderT {
     mb_b_ = nb_loc(0, -1, 16, 16, xW, yW);
   }
 
-  int next_mb(int addr) const { return next_ ? next_[addr] : addr + 1; }
-
   // --- macroblock layer (7.3.5)
   //
-  // Each syntax element goes through the channel: parsing, after it is
-  // read; writing, before it is written.
-  int mb_type_v() {
-    int v = mb_type(W ? ch_->mb_type(0) : 0);
-    if (!W) ch_->mb_type(v);
+  // Each syntax element goes through the channel, by its method f (its
+  // arguments a..., then the value): parsing, the value code() read is
+  // handed to f; writing, the value f gives is coded.
+  template <class C, class... P, class... A>
+  int xchg(int (Chan::*f)(P...), C code, A... a) {
+    int v = code(W ? (ch_->*f)(a..., 0) : 0);
+    if (!W) (ch_->*f)(a..., v);
     return v;
   }
-  int t8x8_v() {
-    int v = transform_size_8x8_flag(W ? ch_->t8x8(0) : 0);
-    if (!W) ch_->t8x8(v);
-    return v;
-  }
-  int ipm_v(int blk) {
-    int v = intra_pred_mode(W ? ch_->ipm(blk, 0) : 0);
-    if (!W) ch_->ipm(blk, v);
-    return v;
-  }
-  int cpred_v() {
-    int v = intra_chroma_pred_mode(W ? ch_->cpred(0) : 0);
-    if (!W) ch_->cpred(v);
-    return v;
-  }
-  int sub_v(int i) {
-    int v = sub_mb_type(W ? ch_->sub(i, 0) : 0);
-    if (!W) ch_->sub(i, v);
-    return v;
-  }
-  int cbp_v(bool intra_nxn) {
-    int v = coded_block_pattern(W ? ch_->cbp(0) : 0, intra_nxn);
-    if (!W) ch_->cbp(v);
-    return v;
-  }
-  int qpd_v() {
-    int v = mb_qp_delta(W ? ch_->qpd(0) : 0);
-    if (!W) ch_->qpd(v);
-    return v;
-  }
+  int mb_type_v() { return xchg(&Chan::mb_type, [&](int v) { return mb_type(v); }); }
+  int t8x8_v() { return xchg(&Chan::t8x8, [&](int v) { return transform_size_8x8_flag(v); }); }
+  int ipm_v(int blk) { return xchg(&Chan::ipm, [&](int v) { return intra_pred_mode(v); }, blk); }
+  int cpred_v() { return xchg(&Chan::cpred, [&](int v) { return intra_chroma_pred_mode(v); }); }
+  int sub_v(int i) { return xchg(&Chan::sub, [&](int v) { return sub_mb_type(v); }, i); }
+  int cbp_v(bool intra_nxn) { return xchg(&Chan::cbp, [&](int v) { return coded_block_pattern(v, intra_nxn); }); }
+  int qpd_v() { return xchg(&Chan::qpd, [&](int v) { return mb_qp_delta(v); }); }
 
   void macroblock() {
     MbState& m = *cur_;
@@ -805,19 +984,14 @@ struct SliceCoderT {
 
   void code_ref(int list, const Part& p, bool coded) {
     int v = 0;
-    if (coded) {
-      v = ref_idx(list, p.x, p.y, W ? ch_->ref(list, p.x, p.y, p.w, p.h, 0) : 0);
-      if (!W) ch_->ref(list, p.x, p.y, p.w, p.h, v);
-    }
+    if (coded) v = xchg(&Chan::ref, [&](int v) { return ref_idx(list, p.x, p.y, v); }, list, p.x, p.y, p.w, p.h);
     for (int y = p.y; y < p.y + p.h; y += 2)
       for (int x = p.x; x < p.x + p.w; x += 2) cur_->ref[list][(y >> 1) * 2 + (x >> 1)] = (int8_t)v;
   }
 
   void code_mvd(int list, const Part& p) {
-    int mx = mvd(list, 0, p.x, p.y, W ? ch_->mvd(list, 0, p.x, p.y, p.w, p.h, 0) : 0);
-    if (!W) ch_->mvd(list, 0, p.x, p.y, p.w, p.h, mx);
-    int my = mvd(list, 1, p.x, p.y, W ? ch_->mvd(list, 1, p.x, p.y, p.w, p.h, 0) : 0);
-    if (!W) ch_->mvd(list, 1, p.x, p.y, p.w, p.h, my);
+    int mx = xchg(&Chan::mvd, [&](int v) { return mvd(list, 0, p.x, p.y, v); }, list, 0, p.x, p.y, p.w, p.h);
+    int my = xchg(&Chan::mvd, [&](int v) { return mvd(list, 1, p.x, p.y, v); }, list, 1, p.x, p.y, p.w, p.h);
     uint8_t ax = (uint8_t)std::min(abs(mx), 127), ay = (uint8_t)std::min(abs(my), 127);
     for (int y = p.y; y < p.y + p.h; y++)
       for (int x = p.x; x < p.x + p.w; x++) {
@@ -909,58 +1083,6 @@ struct SliceCoderT {
     if (!W) ch_->block(cat, idx, c, n, coded);
     return k;
   }
-
-  // --- the ctxIdx (or ctxIdxInc) of the CABAC bins (9.3.3.1): one rule
-  // each, which the model reads too (Model::cab0)
-  enum {
-    kCtxMbtP = 14,      // P mb_type's first bin
-    kCtxRef = 54,       // ref_idx: + ref_inc(), then + 4, + 5
-    kCtxQpd = 60,       // mb_qp_delta: + ctx_qpd(), then 62, 63
-    kCtxCpred = 64,     // intra_chroma_pred_mode: + inc_cpred(), then + 3
-    kCtxIpm = 68,       // prev_intra_pred_mode_flag, then rem_intra_pred_mode 69
-    kCtxCbpLuma = 73,   // coded_block_pattern: + cbp_luma_inc()
-    kCtxCbpChroma = 77, // + cbp_chroma_inc(0), then 81 + cbp_chroma_inc(1)
-    kCtxT8x8 = 399      // transform_size_8x8_flag: + inc_t8x8()
-  };
-  int ctx_skip() const { return (stype_ == kB ? 24 : 11) + (mb_a_ && !mb_a_->skip) + (mb_b_ && !mb_b_->skip); }
-  int ctx_field() const { return 70 + (left_ && left_->field) + (above_ && above_->field); }
-  int inc_mbt_si() const { return (mb_a_ && !mb_a_->si) + (mb_b_ && !mb_b_->si); }
-  int ctx_mbt_b() const { return 27 + (mb_a_ && !mb_a_->direct16) + (mb_b_ && !mb_b_->direct16); }
-  // mb_type of an intra macroblock at ctxIdxOffset off (I slices, or the
-  // suffix of P and B ones): its first bin, and bin k of luma, chroma (two)
-  // and the prediction mode (two) after the terminate one
-  int ctx_mbt_i0(int off, bool islice) const {
-    return islice ? off + (mb_a_ && !mb_a_->inxn) + (mb_b_ && !mb_b_->inxn) : off;
-  }
-  static int ctx_mbt_i(int off, bool islice, int k) {
-    static const int8_t inc[2][5] = {{1, 2, 2, 3, 3}, {3, 4, 5, 6, 7}};
-    return off + inc[islice][k];
-  }
-  int inc_cpred() const {
-    auto cond = [](const MbState* n) { return n && n->intra && !n->pcm && n->cpred != 0; };
-    return cond(mb_a_) + cond(mb_b_);
-  }
-  int inc_t8x8() const { return (mb_a_ && mb_a_->t8x8) + (mb_b_ && mb_b_->t8x8); }
-  int ctx_qpd() const { return kCtxQpd + (last_qpd_ != 0); }
-  static int ctx_mvd(int comp) { return comp ? 47 : 40; }  // + mvd_inc(), then + 3, + 4 ...
-  // significant_coeff_flag's and last_significant_coeff_flag's ctxIdxInc
-  // by scan position in a block of ctxBlockCat cat, and their ctxIdx
-  const uint8_t* sig_inc(int cat) const {
-    if (cat == 3) return chroma_ == 2 ? kDcInc422 : kDcInc420;
-    if (cat == 5 || cat == 9 || cat == 13) return field_mb() ? kSig8x8Field : kSig8x8Frame;
-    return kScanPos;
-  }
-  const uint8_t* last_inc(int cat) const {
-    if (cat == 3) return chroma_ == 2 ? kDcInc422 : kDcInc420;
-    if (cat == 5 || cat == 9 || cat == 13) return kLast8x8;
-    return kScanPos;
-  }
-  int ctx_sig(int cat, int i) const { return kSigBase[field_mb()][cat] + sig_inc(cat)[i]; }
-  int ctx_last(int cat, int i) const { return kLastBase[field_mb()][cat] + last_inc(cat)[i]; }
-  // coeff_abs_level_minus1's first bin and the others, after gt1 levels
-  // above 1 and eq1 of 1
-  static int ctx_abs0(int cat, int gt1, int eq1) { return kAbsBase[cat] + (gt1 ? 0 : std::min(4, 1 + eq1)); }
-  static int ctx_abs1(int cat, int gt1) { return kAbsBase[cat] + 5 + std::min(4 - (cat == 3), gt1); }
 
   // --- syntax elements
   int mb_skip_flag(int v) { return bin(ctx_skip(), v); }
@@ -1056,36 +1178,6 @@ struct SliceCoderT {
     return n;
   }
 
-  // ctxIdxInc of the first bin of ref_idx_lX of the partition at the 4x4 block (x, y)
-  int ref_inc(int list, int x, int y) const {
-    int inc = 0;
-    for (int k = 0; k < 2; k++) {
-      int i;
-      const MbState* n = k ? nb4(x, y - 1, i) : nb4(x - 1, y, i);
-      // refIdxZeroFlagN: a field neighbour of a frame macroblock refers to fields
-      if (n && n->ref[list][(i >> 3) * 2 + ((i & 3) >> 1)] > (!cur_->field && n->field)) inc += 1 + k;
-    }
-    return inc;
-  }
-
-  // ctxIdxInc of the first bin of mvd_lX[comp] of the partition at the 4x4 block (x, y)
-  int mvd_inc(int list, int comp, int x, int y) const {
-    int ia, ib;
-    const MbState* a = nb4(x - 1, y, ia);
-    const MbState* b = nb4(x, y - 1, ib);
-    int sum = 0;
-    for (int k = 0; k < 2; k++) {
-      const MbState* n = k ? b : a;
-      if (!n) continue;
-      int m = n->mvd[list][k ? ib : ia][comp];
-      // vertical components of frame and field macroblocks of MBAFF frames
-      if (comp && !cur_->field && n->field) m *= 2;
-      if (comp && cur_->field && !n->field) m /= 2;
-      sum += m;
-    }
-    return sum < 3 ? 0 : sum > 32 ? 2 : 1;
-  }
-
   int mvd(int list, int comp, int x, int y, int v) {
     const int lim = 1 << 24;
     if (!cabac_) return se(v, lim);
@@ -1126,7 +1218,7 @@ struct SliceCoderT {
 
   int coded_block_pattern(int v, bool intra_nxn) {
     bool has_chroma = chroma_ == 1 || chroma_ == 2;
-    if (W && (v < 0 || (v & 15) > 15 || (v >> 4) > (has_chroma ? 2 : 0))) fail("coded_block_pattern out of range");
+    if (W && (v < 0 || (v >> 4) > (has_chroma ? 2 : 0))) fail("coded_block_pattern out of range");
     if (!cabac_) {
       const uint8_t* tab =
           has_chroma ? (intra_nxn ? kCbpIntra : kCbpInter) : (intra_nxn ? kCbpIntraMono : kCbpInterMono);
@@ -1143,25 +1235,6 @@ struct SliceCoderT {
     if (bin(kCtxCbpChroma + cbp_chroma_inc(0), (v >> 4) != 0))
       c = 1 + bin(kCtxCbpChroma + 4 + cbp_chroma_inc(1), (v >> 4) == 2);
     return luma | c << 4;
-  }
-
-  // ctxIdxInc of the luma bit of the 8x8 block b8 of coded_block_pattern,
-  // luma having the bits of the blocks before it (9.3.3.1.1.4)
-  int cbp_luma_inc(int b8, int luma) const {
-    int inc = 0;
-    for (int k = 0; k < 2; k++) {
-      int x = (b8 & 1) * 8 - !k, y = (b8 >> 1) * 8 - k, xW, yW;
-      const MbState* n = nb_loc(x, y, 16, 16, xW, yW);
-      int b8n = (yW >> 3) * 2 + (xW >> 3);
-      int cbp = n == cur_ ? luma : n ? n->cbp : 0;
-      if (n && !(n != cur_ && n->pcm) && !(cbp >> b8n & 1)) inc += 1 + k;
-    }
-    return inc;
-  }
-
-  // ctxIdxInc of the first (bin 0: chroma not 0) or second chroma bin (1: chroma 2)
-  int cbp_chroma_inc(int bin) const {
-    return (mb_a_ && (mb_a_->cbp >> 4) > bin) + 2 * (mb_b_ && (mb_b_->cbp >> 4) > bin);
   }
 
   int transform_size_8x8_flag(int v) {
@@ -1234,146 +1307,35 @@ struct SliceCoderT {
     return count;
   }
 
-  // CAVLC nC (9.2.1)
-  int nc_luma(int plane, int x, int y) const {
-    int ia, ib;
-    const MbState* a = nb4(x - 1, y, ia);
-    const MbState* b = nb4(x, y - 1, ib);
-    if (a && b) return (a->nz[plane][ia] + b->nz[plane][ib] + 1) >> 1;
-    if (a) return a->nz[plane][ia];
-    if (b) return b->nz[plane][ib];
-    return 0;
-  }
-
-  int nc_chroma(int comp, int x, int y) const {
-    int ia, ib;
-    const MbState* a = nbc(x - 1, y, ia);
-    const MbState* b = nbc(x, y - 1, ib);
-    if (a && b) return (a->nz[1 + comp][ia] + b->nz[1 + comp][ib] + 1) >> 1;
-    if (a) return a->nz[1 + comp][ia];
-    if (b) return b->nz[1 + comp][ib];
-    return 0;
-  }
-
-  // coded_block_flag ctxIdxInc (9.3.3.1.1.9)
-  int cbf_inc_luma(int plane, int x, int y) const {
-    int inc = 0;
-    for (int k = 0; k < 2; k++) {
-      int i;
-      const MbState* n = k ? nb4(x, y - 1, i) : nb4(x - 1, y, i);
-      int cond;
-      if (!n)
-        cond = cur_->intra;
-      else if (n->pcm)
-        cond = 1;
-      else if (!((n->cbp >> ((i >> 3) * 2 + ((i & 3) >> 1))) & 1))
-        cond = 0;
-      else  // of the 4x4 block, or of the 8x8 block when transform_size_8x8_flag
-        cond = n->nz[plane][i] != 0;
-      inc += cond << k;
-    }
-    return inc;
-  }
-
-  // coded_block_flag of an 8x8 block (4:4:4 only)
-  int cbf_inc_8x8(int plane, int b8) const {
-    int inc = 0;
-    for (int k = 0; k < 2; k++) {
-      int xW, yW;
-      const MbState* n = nb_loc((b8 & 1) * 8 - !k, (b8 >> 1) * 8 - k, 16, 16, xW, yW);
-      int cond;
-      if (!n)
-        cond = cur_->intra;
-      else if (n->pcm)
-        cond = 1;
-      else if (!((n->cbp >> ((yW >> 3) * 2 + (xW >> 3))) & 1) || !n->t8x8)
-        cond = 0;
-      else
-        cond = n->nz[plane][(yW >> 2) * 4 + (xW >> 2)] != 0;
-      inc += cond << k;
-    }
-    return inc;
-  }
-
-  int cbf_inc_dc(int comp) const {
-    int inc = 0;
-    for (int k = 0; k < 2; k++) {
-      const MbState* n = k ? mb_b_ : mb_a_;
-      int cond;
-      if (!n)
-        cond = cur_->intra;
-      else if (n->pcm)
-        cond = 1;
-      else if (comp == 0 || chroma_ == 3)
-        cond = n->i16 && n->cbf_dc[comp];
-      else
-        cond = (n->cbp >> 4) && n->cbf_dc[comp];
-      inc += cond << k;
-    }
-    return inc;
-  }
-
-  int cbf_inc_chroma_ac(int comp, int x, int y) const {
-    int inc = 0;
-    for (int k = 0; k < 2; k++) {
-      int i;
-      const MbState* n = k ? nbc(x, y - 1, i) : nbc(x - 1, y, i);
-      int cond;
-      if (!n)
-        cond = cur_->intra;
-      else if (n->pcm)
-        cond = 1;
-      else
-        cond = (n->cbp >> 4) == 2 && n->nz[1 + comp][i] != 0;
-      inc += cond << k;
-    }
-    return inc;
-  }
-
   static constexpr bool W = kMode != 0;
-  static constexpr bool nobins_ = kMode >= 2;  // W, but the bins only walked, not coded (Chan::nobins)
-  static constexpr bool states_ = kMode == 3;  // and the contexts' states following them (Chan::states)
-  const SliceHeader& h_;
-  const Sps& sps_;
-  const Pps& pps_;
-  MbStore& store_;
+  static constexpr bool nobins_ = kMode >= 2;  // W, but the bins only walked, not coded (BinPolicy)
+  static constexpr bool states_ = kMode == 3;  // and the contexts' states following them
   BitReader* br_;
   BitWriter* bw_;
   Chan* ch_;
-  BinRec* rec_;                    // parsing: the bins recorded (Chan::rec)
+  BinRec* bins_;                   // the bins, recorded or checked (BinPolicy::rec)
+  BinRec* rec_;                    // parsing: the same, to record them
   const uint8_t* chk_ = nullptr;   // writing without the bins: the next one recorded
-
-  bool cabac_ = false, field_ = false, mbaff_ = false;
-  int stype_ = 0, chroma_ = 1, ch_h_ = 2, ch_blocks_ = 4;
-  int width_ = 0, size_ = 0;
-  int num_ref_[2] = {0, 0};
-  uint32_t slice_id_ = 0;
-  const int* next_ = nullptr;  // without FMO, none (MbStore::groups)
-  int cur_addr_ = 0;
-  MbState* cur_ = nullptr;
-  const MbState* mb_a_ = nullptr;  // macroblocks A and B (6.4.10.1)
-  const MbState* mb_b_ = nullptr;
-  const MbState* left_ = nullptr;  // left and above macroblock, or top
-  const MbState* above_ = nullptr; // macroblock of the left and above pair
-  int pair_field_ = 0;             // MBAFF: field decoding mode of the pair
   std::vector<int> pcm_;
-  int last_qpd_ = 0;
-  CabacCtx ctx_[kNumCtx];
   CabacDecoder dec_;
   CabacEncoder enc_;
 };
 
-void read_slice_data(const SliceHeader& h, MbStore& store, BitReader& br, Chan& ch) {
-  SliceCoderT<0>(h, store, &br, nullptr, ch).run();
+// Parses the slice data following the slice header, handing the values to
+// a channel, or writes it with the values of a channel, the bins as bp says.
+// The slice data ends with the rbsp_stop_one_bit (written by the CABAC
+// flush, or explicitly for CAVLC).
+void read_slice_data(const SliceHeader& h, MbStore& store, BitReader& br, Chan& ch, const BinPolicy& bp) {
+  SliceCoderT<0>(h, store, &br, nullptr, ch, bp).run();
 }
 
-void write_slice_data(const SliceHeader& h, MbStore& store, Chan& ch, BitWriter& bw) {
-  if (!ch.nobins)
-    SliceCoderT<1>(h, store, nullptr, &bw, ch).run();
-  else if (ch.states)
-    SliceCoderT<3>(h, store, nullptr, &bw, ch).run();
+void write_slice_data(const SliceHeader& h, MbStore& store, Chan& ch, BitWriter& bw, const BinPolicy& bp) {
+  if (!bp.nobins)
+    SliceCoderT<1>(h, store, nullptr, &bw, ch, bp).run();
+  else if (bp.states)
+    SliceCoderT<3>(h, store, nullptr, &bw, ch, bp).run();
   else
-    SliceCoderT<2>(h, store, nullptr, &bw, ch).run();
+    SliceCoderT<2>(h, store, nullptr, &bw, ch, bp).run();
 }
 
 }  // namespace h264p

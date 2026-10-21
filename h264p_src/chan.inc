@@ -8,48 +8,25 @@
 //
 // Each value method takes the value read when the walk parses (W false) and
 // returns it; when the walk writes (W true), the argument is ignored and the
-// method returns the value to write. A method is called exactly where the
-// walk reaches the syntax element, in both directions, so the walk's state
-// at the call is the same whether it parses or writes.
+// method returns the value to write. A method is called where the walk
+// reaches the syntax element: parsing, once it is read; writing, before it
+// is written. So what the walk knows at the call -- the macroblocks before,
+// their neighbours -- is the same either way, but for the element itself
+// and the CABAC contexts of its bins, which are past it parsing and before
+// it writing (the model, which reads the contexts, runs the walk writing
+// both to compress and to decompress).
+//
+// The direction is the walk's (Syn::W, SliceCoderT's mode), which checks
+// that its channel's W is the same.
 
 namespace h264p {
 
-template <int kMode>
-struct SliceCoderT;
-
-// What the compressor's parse of a slice records, for its model pass to
-// check in place of writing the slice back from the values (h264p.cpp,
-// dry_run): where the slice data ends, and with CABAC, the bins as the walk
-// reads them and where the CABAC data is.
-struct BinRec {
-  bool slice = false;         // the walk parsed slice data, up to `end`
-  size_t end = 0;             // the bit after its rbsp_stop_one_bit
-  std::vector<uint8_t> bins;  // 0 or 1 each, then a 2
-  std::vector<size_t> segs;   // each run of CABAC data: its first bit and the one after it, in the RBSP
-  bool stops = true;          // the last bit of each run is 1 (so the run is what an encoder writes)
-  bool bad = false;           // checking: the walk wrote another bin, or fewer
-  void clear() {
-    slice = false;
-    end = 0;
-    bins.clear();
-    segs.clear();
-    stops = true;
-    bad = false;
-  }
-};
+struct WalkState;
 
 struct Chan {
   explicit Chan(bool w) : W(w) {}
   virtual ~Chan() {}
   bool W;  // the walk writes a bitstream: values come from the channel
-  // (writing) the CABAC bins are not wanted, only the values: the walk
-  // skips their arithmetic coding (the compressor's model pass), and the
-  // bits it writes are not the stream's; with states, the contexts' states
-  // still follow the bins (for a model that reads them, Model::cab0)
-  bool nobins = false, states = false;
-  // the bins: parsing, recorded here; writing them not (nobins), checked
-  // against those recorded
-  BinRec* rec = nullptr;
 
   // --- header syntax: groups of values under the name of a TSV row
   virtual void hbegin(const char* name) = 0;
@@ -63,11 +40,10 @@ struct Chan {
   virtual bool hmore(const char* next, bool m) = 0;
 
   // --- slice data
-  // (by the walk's mode: SliceCoderT)
-  virtual void slice_begin(SliceCoderT<0>& sc) { (void)sc; }
-  virtual void slice_begin(SliceCoderT<1>& sc) { (void)sc; }
-  virtual void slice_begin(SliceCoderT<2>& sc) { (void)sc; }
-  virtual void slice_begin(SliceCoderT<3>& sc) { (void)sc; }
+  // the walk's state, as the slice begins: its macroblocks, their
+  // neighbours, the CABAC contexts and the rules on them (slice.inc), for
+  // a channel that reads them (the model)
+  virtual void slice_begin(WalkState& ws) { (void)ws; }
   virtual void slice_end() {}
   virtual int skip(int v) = 0;                 // the macroblock is skipped
   virtual int end(int v, bool certain) = 0;    // the slice ends after it (certain: at the end of the picture)

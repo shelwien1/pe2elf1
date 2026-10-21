@@ -113,14 +113,11 @@ struct TsvChan : Chan {
   }
 
   // --- slice data
-  template <class SC>
-  void begin(SC& sc) {
-    intra_ = sc.stype_ == kI || sc.stype_ == kSI;
-    size_ = sc.size_;
+  void slice_begin(WalkState& ws) override {
+    intra_ = ws.stype_ == kI || ws.stype_ == kSI;
+    size_ = ws.size_;
     row_ = nullptr;
   }
-  void slice_begin(SliceCoderT<0>& sc) override { begin(sc); }
-  void slice_begin(SliceCoderT<1>& sc) override { begin(sc); }
   void slice_end() override {
     if (!W) flush_skip();
   }
@@ -386,7 +383,7 @@ struct TsvChan : Chan {
 
   RowWriter* out_;
   RowReader* in_;
-  const Row* row_ = nullptr;  // header row being read
+  const Row* row_ = nullptr;  // header row being read: RowReader's last taken (take()'s buffer)
   size_t field_ = 0;
   MbRec r_;
   bool in_mb_ = false;

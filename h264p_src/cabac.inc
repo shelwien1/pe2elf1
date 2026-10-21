@@ -16,8 +16,6 @@ struct CabacCtx {
 
 const int kNumCtx = 1024;
 
-// model: 0 for I and SI slices, else cabac_init_idc + 1
-void cabac_init_contexts(CabacCtx* ctx, int slice_qp, int model);
 
 // tables 9-44 and 9-45 by a context's s
 struct CabacTables {
@@ -204,6 +202,8 @@ struct CabacEncoder {
   int cut_ = 9;
 };
 
+// the contexts' initial states (9.3.1.1); model: 0 for I and SI slices,
+// else cabac_init_idc + 1
 void cabac_init_contexts(CabacCtx* ctx, int slice_qp, int model) {
   int qp = slice_qp < 0 ? 0 : slice_qp > 51 ? 51 : slice_qp;
   for (int i = 0; i < kNumCtx; i++) {
