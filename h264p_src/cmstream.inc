@@ -163,22 +163,22 @@ VideoInfo video_of(const Context& ctx) {
   v.height = Max(0, 16 * q->frame_height_mbs() - cy * (q->crop_top + q->crop_bottom));
   v.profile = q->profile_idc, v.constraints = q->constraint_flags, v.level = q->level_idc;
   v.chroma = q->chroma_format_idc, v.depth_luma = q->bit_depth_luma, v.depth_chroma = q->bit_depth_chroma;
-  v.cabac = p->entropy_coding_mode_flag;
-  v.frames_only = q->frame_mbs_only_flag, v.mbaff = q->mb_adaptive_frame_field_flag, v.field = h.field_pic_flag;
-  v.transform_8x8 = p->transform_8x8_mode_flag;
-  v.weighted_p = p->weighted_pred_flag, v.weighted_b = p->weighted_bipred_idc;
-  v.slice_groups = p->num_slice_groups, v.constrained_intra = p->constrained_intra_pred_flag;
-  v.refs = q->max_num_ref_frames, v.lossless = q->transform_bypass, v.scaling = q->scaling_matrix || p->scaling_matrix;
+  v.frames_only = q->frame_mbs_only_flag, v.mbaff = q->mb_adaptive_frame_field_flag;
+  v.refs = q->max_num_ref_frames, v.lossless = q->transform_bypass;
   v.num_units_in_tick = q->num_units_in_tick, v.time_scale = q->time_scale;
+  v.entropy = 1 << p->entropy_coding_mode_flag;
+  v.weighted_b = p->weighted_bipred_idc ? 1 << p->weighted_bipred_idc : 0;
+  v.slice_groups = p->num_slice_groups, v.field = h.field_pic_flag, v.transform_8x8 = p->transform_8x8_mode_flag;
+  v.weighted_p = p->weighted_pred_flag, v.constrained_intra = p->constrained_intra_pred_flag;
+  v.scaling = q->scaling_matrix || p->scaling_matrix;
   return v;
 }
-// told to the driver (kYieldVideo), after a slice parsed, where it is not
-// what was told last; and the progress, at each picture (kYieldTick)
+// told to the driver (kYieldVideo), after a slice parsed, where it adds to
+// what was told (VideoInfo::add()); and the progress, at each picture
+// (kYieldTick)
 void tell_video(CoroIo& io, const Context& ctx) {
   VideoInfo v = video_of(ctx);
-  if (!v.width || !memcmp(&v, &io.video, sizeof v)) return;
-  io.video = v;
-  io.tell(kYieldVideo);
+  if (v.width && io.video.add(v)) io.tell(kYieldVideo);
 }
 void tell_tick(CoroIo& io, const Context& ctx) {
   if (ctx.pictures == io.pictures) return;

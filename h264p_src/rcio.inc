@@ -34,16 +34,36 @@ enum : uint {
   kYieldVideo = 5, kYieldNote = 6, kYieldStats = 7, kYieldTick = 8
 };
 
-// What the video is, from its parameter sets and a slice of it (cmstream.inc's
-// video_of()): plain values, compared as bytes, all zero where it is not known
+// What the video is, from its parameter sets and its slices (cmstream.inc's
+// video_of()): plain values, compared as bytes, all zero where it is not
+// known. Its sequence's (an SPS's), then the tools its slices use, as the
+// sets of what they used since the sequence's last changed (bits), so that
+// a stream that goes back and forth between them (frame and field
+// pictures, PAFF; PPSs of other tools) tells each of them once (add()).
 struct VideoInfo {
   int width, height;              // the pictures as shown (the cropping taken off), in samples
   int profile, constraints, level;  // profile_idc, the constraint_set flags, level_idc
   int chroma, depth_luma, depth_chroma;  // chroma_format_idc, bit depths
-  int cabac, frames_only, mbaff, field;  // field: the slice told of is a field
-  int transform_8x8, weighted_p, weighted_b, slice_groups, constrained_intra;
-  int refs, lossless, scaling;    // max_num_ref_frames, transform bypass, scaling matrices
+  int frames_only, mbaff, refs, lossless;  // ..., max_num_ref_frames, transform bypass
   uint32_t num_units_in_tick, time_scale;  // VUI's timing (0: none)
+  // the tools: 1 << entropy_coding_mode_flag (1 CAVLC, 2 CABAC), 1 << weighted_bipred_idc
+  // where not 0 (2 explicit, 4 implicit), the most slice groups; the rest 1 where used
+  int entropy, weighted_b, slice_groups;
+  int field, transform_8x8, weighted_p, constrained_intra, scaling;
+
+  // v, of a slice, added to what this says: v where its sequence is not
+  // this one's, else this one's tools and v's; whether this changed
+  bool add(const VideoInfo& v) {
+    VideoInfo u = v;
+    if (!memcmp(this, &v, offsetof(VideoInfo, entropy))) {
+      u.entropy |= entropy, u.weighted_b |= weighted_b, u.slice_groups = Max(u.slice_groups, slice_groups);
+      u.field |= field, u.transform_8x8 |= transform_8x8, u.weighted_p |= weighted_p;
+      u.constrained_intra |= constrained_intra, u.scaling |= scaling;
+    }
+    if (!memcmp(this, &u, sizeof u)) return false;
+    *this = u;
+    return true;
+  }
 };
 
 // A coroutine's input and output as runs of bytes. Plain data, which

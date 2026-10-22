@@ -126,8 +126,11 @@ and bit depth, entropy coding, frames or fields (MBAFF, field pictures),
 the tools its parameter sets turn on (8x8 transform, weighted prediction,
 slice groups, constrained intra, lossless, scaling matrices), the
 reference frames and the frame rate where the stream gives one. With `-v`
-it is said where there is no progress line too, and again wherever it
-changes ("the video now: ..."). The line: the bytes of the stream and of
+it is said where there is no progress line too (and with `-t`), and again
+where it changes ("the video now: ..."): another sequence (SPS), or a tool
+its slices had not used since. A stream that goes back and forth between
+frame and field pictures (PAFF), or between PPSs of other tools, says
+each of them once. The line: the bytes of the stream and of
 the compressed stream done so far (`dec`: the same way round, the stream
 written from the compressed stream read), how far through its input the
 call is (none for a pipe, whose size is not known), the pictures, the

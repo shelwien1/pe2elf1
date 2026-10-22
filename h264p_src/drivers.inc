@@ -34,7 +34,7 @@ uint run_file(C& c, filehandle0 f, filehandle0 g, Show show, uint8_t* pre = null
 }
 
 // A call's progress line, tagged tag, through the input f: shown with -p,
-// or where stderr is a terminal
+// or where stderr is a terminal; and with -v, the video's changes
 void progress_start(Progress& pr, const Options& opt, const char* tag, filehandle0& f) {
 #ifdef _WIN32
   bool tty = _isatty(_fileno(stderr)) != 0;
@@ -42,6 +42,7 @@ void progress_start(Progress& pr, const Options& opt, const char* tag, filehandl
   bool tty = isatty(fileno(stderr)) != 0;
 #endif
   if (opt.progress || tty) pr.start(tag, file_size(f.f));
+  pr.verbose = opt.verbose;  // (-t's parts run without: no statistics for each)
 }
 
 // (the model pass checks the dry runs where the input can be read again and

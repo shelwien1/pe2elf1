@@ -101,14 +101,15 @@ void video_words(const VideoInfo& v, char* b, size_t n) {
     put_text(b, n, k, " %d/%d-bit", v.depth_luma, v.depth_chroma);
   else
     put_text(b, n, k, " %d-bit", v.depth_luma);
-  put_text(b, n, k, ", %s", v.cabac ? "CABAC" : "CAVLC");
+  put_text(b, n, k, ", %s", v.entropy == 3 ? "CAVLC and CABAC" : v.entropy == 2 ? "CABAC" : "CAVLC");
   if (v.frames_only)
     put_text(b, n, k, ", progressive");
   else
     put_text(b, n, k, ", interlaced%s%s", v.mbaff ? ", MBAFF" : "", v.field ? ", field pictures" : "");
   if (v.transform_8x8) put_text(b, n, k, ", 8x8 transform");
   if (v.weighted_p) put_text(b, n, k, ", weighted P");
-  if (v.weighted_b) put_text(b, n, k, v.weighted_b == 1 ? ", weighted B" : ", implicit weighted B");
+  if (v.weighted_b & 2) put_text(b, n, k, ", weighted B");
+  if (v.weighted_b & 4) put_text(b, n, k, ", implicit weighted B");
   if (v.slice_groups > 1) put_text(b, n, k, ", %d slice groups", v.slice_groups);
   if (v.constrained_intra) put_text(b, n, k, ", constrained intra");
   if (v.lossless) put_text(b, n, k, ", lossless");
@@ -134,7 +135,8 @@ struct Progress {
   // pos of total: raw or packed; pics: the pictures
   void (*what)(void* ctx, uint64_t& raw, uint64_t& packed, uint64_t& pos, uint64_t& pics);
   void* what_ctx;
-  VideoInfo shown;  // the video said last (shown.width 0: none)
+  VideoInfo shown;  // the video so far (VideoInfo::add(); shown.width 0: none)
+  bool verbose;     // -v: the video said where there is no line too, and its changes
   int64_t t0;    // the start (clock_ns())
   int64_t last;  // the last line, ns after t0 (atomic)
   int halted;    // an error was reported: no more lines (atomic)
@@ -148,6 +150,7 @@ struct Progress {
     what = nullptr;
     what_ctx = nullptr;
     memset((void*)&shown, 0, sizeof shown);
+    verbose = false;
     t0 = last = 0;
     halted = 0;
     lock.Init();
@@ -208,18 +211,18 @@ struct Progress {
   }
   // what the video is, as a codec tells it (coro.inc's show_told()): said
   // as it first comes, where the progress line is shown or with -v
-  // (verbose), and with -v where it changes (from what was said last: the
-  // parts of -t each tell it, from as many threads)
-  void video(const VideoInfo& v, bool verbose) {
+  // (verbose), and with -v where it adds to what was said (VideoInfo::add():
+  // the parts of -t each tell it, from as many threads)
+  void video(const VideoInfo& v) {
     if (!tag && !verbose) return;
     lock.lock();
-    if (!stopped() && (!shown.width || (verbose && memcmp(&v, &shown, sizeof v)))) {
+    bool first = !shown.width;
+    if (shown.add(v) && (first || verbose) && !stopped()) {
       char b[400];
-      video_words(v, b, sizeof b);
+      video_words(shown, b, sizeof b);
       cut();
       if (tag) fprintf(stderr, "[%s] ", tag);
-      fprintf(stderr, "%s: %s\n", shown.width ? "the video now" : "video", b);
-      shown = v;
+      fprintf(stderr, "%s: %s\n", first ? "video" : "the video now", b);
     }
     lock.unlock();
   }

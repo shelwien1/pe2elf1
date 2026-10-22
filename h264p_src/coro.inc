@@ -158,7 +158,7 @@ void show_stats(H264pCoro<1, LV>& c, Progress* pr) {
 template <int f_DEC, class LV>
 void show_told(H264pCoro<f_DEC, LV>& c, uint code, Progress* pr, const H264pArgs& a) {
   if (code == kYieldVideo) {
-    if (pr) pr->video(c.video, a.verbose);
+    if (pr) pr->video(c.video);
   } else if (code == kYieldNote) {
     say(pr, "%s", c.note);
   } else if (code == kYieldFail && c.status == 1) {

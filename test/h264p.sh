@@ -226,6 +226,9 @@ if [ -n "${negative:-}" ]; then
   cat "$here/h264p/x264_16x16.264" "$here/gen/x264_baseline.264" > "$tmp/two.264"
   check "c -p says the video, d -p too" sh -c '"$1" c -1 -p "$2" "$3/v.c" 2>&1 | tr "\r" "\n" | grep -qxF "[enc] video: $4" && "$1" d -p "$3/v.c" "$3/v.264" 2>&1 | tr "\r" "\n" | grep -qxF "[dec] video: $4"' - "$bin" "$here/h264p/x264_16x16.264" "$tmp" "$v16"
   check "c -v says the video and its change; c -t -p once; a quiet c nothing" sh -c '"$1" c -1 -v "$2/two.264" "$2/v.c" 2>"$2/log" && grep -qxF "video: $3" "$2/log" && grep -q "^the video now: 640x352, Constrained Baseline@L3.0, 4:2:0 8-bit, CAVLC" "$2/log" && [ $("$1" c -1 -t 2 -c 1k -p "$2/two.264" "$2/v.c" 2>&1 | tr "\r" "\n" | grep -c "video") -eq 1 ] && "$1" c -1 "$2/two.264" "$2/v.c" 2>"$2/log" && [ ! -s "$2/log" ]' - "$bin" "$tmp" "$v16"
+  # (kinds goes back and forth between frame and field pictures, as PAFF
+  # does: -v says the field pictures once; -t's parts each tell the video)
+  check "c -v says a tool once where the slices go back and forth; c -t -v says the video" sh -c '"$1" c -1 -v "$2" "$3/v.c" 2>"$3/log" && [ $(grep -c "^the video now: " "$3/log") -eq 1 ] && grep -q "^the video now: .*, field pictures, " "$3/log" && "$1" c -1 -t 2 -c 1k -v "$3/two.264" "$3/v.c" 2>"$3/log" && grep -qxF -e "video: $4" -e "the video now: $4" "$3/log" && grep -q ": 640x352, Constrained Baseline@L3.0, " "$3/log"' - "$bin" "$here/crafted/kinds.264" "$tmp" "$v16"
   if [ -w /dev/full ]; then
     check "c and d to a full device fail" sh -c '! "$1" c -1 "$2" - > /dev/full 2>/dev/null && "$1" c -1 "$2" "$3/k.c" && ! "$1" d "$3/k.c" - > /dev/full 2>/dev/null' - "$bin" "$here/h264p/x264_16x16.264" "$tmp"
   fi
