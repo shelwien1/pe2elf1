@@ -55,12 +55,17 @@ static int chroma_qp(int qpy, int off) {
 
 // --- pictures
 
+// The difference of two POCs, which are kept modulo 2^32 (Dpb::poc()):
+// exact while they are less than 2^31 apart (a stream the spec allows keeps
+// them within 16 bits)
+inline int poc_diff(int a, int b) { return (int)((uint32_t)a - (uint32_t)b); }
+
 // A decoded picture, and what decoding later pictures needs of it.
 struct RPic {
   int w, h, mbw, mbh;  // luma size (whole macroblocks), in macroblocks
   Buf<uint8_t> y, u, v;
   int64_t id;  // which picture it is (a reference picture of a block is compared by it)
-  int poc, frame_num, lt_idx;
+  int poc, frame_num, lt_idx;  // poc: modulo 2^32 (poc_diff())
   bool ref, lt;  // used for reference, long-term
   // motion of the macroblocks, for direct prediction (8.4.1.2): per
   // macroblock whether intra, per 8x8 block and list refIdx (-1 none) and the
@@ -181,7 +186,8 @@ struct Dpb {
   Mmco cur_mmco[68];
   int max_frame_num, max_num_ref, max_lt_idx;  // max_lt_idx: MaxLongTermFrameIdx, -1 none
   // POC state (8.2.1)
-  int prev_poc_msb, prev_poc_lsb, prev_frame_num;
+  uint32_t prev_poc_msb;  // (modulo 2^32, as the POCs)
+  int prev_poc_lsb, prev_frame_num;
   int64_t prev_frame_num_offset;
   // the current slice
   RPic* list[2][33];
@@ -315,9 +321,10 @@ struct Dpb {
     }
   }
 
-  // POC of the current picture (8.2.1), held within +-(2^30 - 1): a stream
-  // the spec allows has POC differences of 16 bits, and held so, any two
-  // POCs subtract in an int
+  // POC of the current picture (8.2.1), modulo 2^32: what is used of POCs
+  // is their differences (poc_diff()), so that they go on however long a
+  // stream runs without an IDR picture or MMCO 5. (FrameNumOffset is held
+  // to 2^62 frames, past any stream.)
   static int poc_sat(int64_t v) {
     const int64_t m = ((int64_t)1 << 30) - 1;
     return (int)(v < -m ? -m : v > m ? m : v);
@@ -326,50 +333,51 @@ struct Dpb {
     const Sps& sps = *h.sps;
     bool idr = h.nal_unit_type == 5;
     if (sps.poc_type == 0) {
-      int64_t max_lsb = (int64_t)1 << sps.log2_max_poc_lsb;
-      int64_t pm = idr ? 0 : prev_poc_msb, pl = idr ? 0 : prev_poc_lsb, lsb = h.poc_lsb;
-      int64_t msb = pm;
+      uint32_t max_lsb = (uint32_t)1 << sps.log2_max_poc_lsb;
+      uint32_t pm = idr ? 0 : prev_poc_msb;
+      int64_t pl = idr ? 0 : prev_poc_lsb, lsb = h.poc_lsb;
+      uint32_t msb = pm;
       if (lsb < pl && pl - lsb >= max_lsb / 2)
         msb = pm + max_lsb;
       else if (lsb > pl && lsb - pl > max_lsb / 2)
         msb = pm - max_lsb;
-      int64_t top = msb + lsb, bot = top + h.delta_poc_bottom;
+      uint32_t top = msb + (uint32_t)lsb;  // (the bottom field's: top + delta_poc_bottom)
       if (h.nal_ref_idc) {
-        prev_poc_msb = poc_sat(msb);
+        prev_poc_msb = msb;
         prev_poc_lsb = (int)lsb;
         if (h.mmco5) {
           prev_poc_msb = 0;
-          prev_poc_lsb = poc_sat(top - Min(top, bot));
+          prev_poc_lsb = poc_sat(h.delta_poc_bottom < 0 ? -(int64_t)h.delta_poc_bottom : 0);  // top - Min(top, bottom)
         }
       }
-      return poc_sat(Min(top, bot));
+      return (int)(top + (uint32_t)Min(h.delta_poc_bottom, (int64_t)0));
     }
-  // types 1 and 2: FrameNumOffset (held to 2^40, and type 1's expected
-  // POC to 2^62, so that no sum overflows: the POC is saturated anyway)
-    int64_t fno = idr ? 0 : Min(prev_frame_num_offset + (prev_frame_num > h.frame_num ? max_frame_num : 0), (int64_t)1 << 40);
-    int64_t top, bot;
+    // types 1 and 2: FrameNumOffset
+    int64_t fno = prev_frame_num_offset + (prev_frame_num > h.frame_num ? max_frame_num : 0);
+    fno = idr ? 0 : Min(fno, (int64_t)1 << 62);
+    uint64_t top;
+    int64_t bot_d = 0;  // the bottom field's POC less top's
     if (sps.poc_type == 2) {
-      top = bot = idr ? 0 : 2 * (fno + h.frame_num) - (h.nal_ref_idc == 0);
+      top = idr ? 0 : 2 * (uint64_t)(fno + h.frame_num) - (h.nal_ref_idc == 0);
     } else {
       int n = sps.num_ref_frames_in_poc_cycle;
       int64_t abs_fn = n ? fno + h.frame_num : 0;
       if (h.nal_ref_idc == 0 && abs_fn > 0) abs_fn--;
-      int64_t exp = 0;
+      uint64_t exp = 0;
       if (abs_fn > 0) {
         int64_t delta = 0;
         for (int i = 0; i < n; i++) delta += sps.offset_for_ref_frame[i];
         int64_t cycle = (abs_fn - 1) / n, in = (abs_fn - 1) % n;
-        const int64_t lim = (int64_t)1 << 62;
-        exp = delta && cycle > lim / abs64(delta) ? (delta > 0 ? lim : -lim) : cycle * delta;
-        for (int i = 0; i <= in; i++) exp += sps.offset_for_ref_frame[i];
+        exp = (uint64_t)cycle * (uint64_t)delta;  // (modulo 2^64, past which only 32 bits are kept)
+        for (int i = 0; i <= in; i++) exp += (uint64_t)(int64_t)sps.offset_for_ref_frame[i];
       }
-      if (h.nal_ref_idc == 0) exp += sps.offset_for_non_ref_pic;
-      top = exp + h.delta_poc[0];
-      bot = top + sps.offset_for_top_to_bottom_field + h.delta_poc[1];
+      if (h.nal_ref_idc == 0) exp += (uint64_t)(int64_t)sps.offset_for_non_ref_pic;
+      top = exp + (uint64_t)(int64_t)h.delta_poc[0];
+      bot_d = (int64_t)sps.offset_for_top_to_bottom_field + h.delta_poc[1];
     }
     prev_frame_num_offset = h.mmco5 ? 0 : fno;
     prev_frame_num = h.mmco5 ? 0 : h.frame_num;
-    return poc_sat(Min(top, bot));
+    return (int)(uint32_t)(top + (uint64_t)Min(bot_d, (int64_t)0));
   }
 
   // pictures p[0, n) in order by less, where they are not, in their
@@ -398,9 +406,9 @@ struct Dpb {
     if (t == kB) {
       RPic *before[16], *after[16];
       int nb = 0, na = 0;
-      for (int i = 0; i < nst; i++) (st[i]->poc < cur->poc ? before[nb++] : after[na++]) = st[i];
-      sort_pics(before, nb, [](const RPic* a, const RPic* b) { return a->poc > b->poc; });
-      sort_pics(after, na, [](const RPic* a, const RPic* b) { return a->poc < b->poc; });
+      for (int i = 0; i < nst; i++) (poc_diff(st[i]->poc, cur->poc) < 0 ? before[nb++] : after[na++]) = st[i];
+      sort_pics(before, nb, [](const RPic* a, const RPic* b) { return poc_diff(a->poc, b->poc) > 0; });
+      sort_pics(after, na, [](const RPic* a, const RPic* b) { return poc_diff(a->poc, b->poc) < 0; });
       for (int i = 0; i < nb; i++) l[0][nl[0]++] = before[i];
       for (int i = 0; i < na; i++) l[0][nl[0]++] = after[i];
       for (int i = 0; i < nlt; i++) l[0][nl[0]++] = lt[i];
@@ -480,7 +488,7 @@ struct Dpb {
           const RPic* p1 = list[1][i1];
           int w = 32;
           if (p0 && p1 && !p0->lt && !p1->lt) {
-            int tb = clip3(-128, 127, cur->poc - p0->poc), td = clip3(-128, 127, p1->poc - p0->poc);
+            int tb = clip3(-128, 127, poc_diff(cur->poc, p0->poc)), td = clip3(-128, 127, poc_diff(p1->poc, p0->poc));
             if (td) {
               int tx = (16384 + abs(td / 2)) / td;
               int dsf = clip3(-1024, 1023, (tb * tx + 32) >> 6);
@@ -2042,7 +2050,7 @@ struct MbDecoder : Dpb {
     const RPic* p0 = r0 < nlist[0] ? list[0][r0] : nullptr;
     const RPic* p1 = nlist[1] ? list[1][0] : nullptr;
     if (!p0 || !p1 || p0->lt) return 256;
-    int tb = clip3(-128, 127, cur->poc - p0->poc), td = clip3(-128, 127, p1->poc - p0->poc);
+    int tb = clip3(-128, 127, poc_diff(cur->poc, p0->poc)), td = clip3(-128, 127, poc_diff(p1->poc, p0->poc));
     if (!td) return 256;
     int tx = (16384 + abs(td / 2)) / td;
     return clip3(-1024, 1023, (tb * tx + 32) >> 6);

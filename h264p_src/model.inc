@@ -1451,7 +1451,7 @@ struct Model : tc_rc<f_DEC> {
     rec_.slice_begin(h, newpic);
     // (the first slice of its kind in the picture: the kind's history is
     // the picture's from here on)
-    hist_.picture(key_, pic_, rec_.motion() ? rec_.cur->poc : INT_MIN, rec_.motion() ? rec_.cur->id : -1);
+    hist_.picture(key_, pic_, rec_.motion() ? model_poc(rec_.cur->poc) : INT_MIN, rec_.motion() ? rec_.cur->id : -1);
     prev_poc_ = hist_.prev[key_];
     prev_pid_ = hist_.ppid[key_];
     cur_poc_ = hist_.poc[key_];
@@ -1579,7 +1579,8 @@ struct Model : tc_rc<f_DEC> {
       for (int l = 0; l < 2; l++)
         for (int b8 = 0; b8 < 4; b8++) {
           int r = m.rf[l][b8];
-          c.rpoc[l][b8] = rec_.motion() && r >= 0 && r < rec_.nlist[l] && rec_.list[l][r] ? rec_.list[l][r]->poc : INT_MIN;
+          const RPic* rp = rec_.motion() && r >= 0 && r < rec_.nlist[l] ? rec_.list[l][r] : nullptr;
+          c.rpoc[l][b8] = rp ? model_poc(rp->poc) : INT_MIN;
         }
   }
 
@@ -2382,13 +2383,17 @@ struct Model : tc_rc<f_DEC> {
   // a distance in POC, held to the 16 bits the spec allows (a stream past
   // them would have the scaling below overflow)
   static int poc_dist(int a, int b) {
-    int64_t d = (int64_t)a - b;
-    return (int)(d < -32768 ? -32768 : d > 32767 ? 32767 : d);
+    int d = poc_diff(a, b);
+    return d < -32768 ? -32768 : d > 32767 ? 32767 : d;
   }
+  // a POC as the model keeps it: INT_MIN is none (POCs are modulo 2^32:
+  // Dpb::poc())
+  static int model_poc(int poc) { return poc == INT_MIN ? INT_MIN + 1 : poc; }
   // the distance in POC from the current picture to list l's reference r
   // (0 not known), and a vector over distance dn scaled to distance dr
   int ref_dist(int l, int r) const {
-    return rec_.motion() && r >= 0 && r < rec_.nlist[l] && rec_.list[l][r] ? poc_dist(cur_poc_, rec_.list[l][r]->poc) : 0;
+    const RPic* p = rec_.motion() && r >= 0 && r < rec_.nlist[l] ? rec_.list[l][r] : nullptr;
+    return p ? poc_dist(cur_poc_, model_poc(p->poc)) : 0;
   }
   // (held to the range the records keep a vector in: scaled by a far
   // POC distance, the template search's costs would pass an int)

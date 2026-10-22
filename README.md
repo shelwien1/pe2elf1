@@ -148,6 +148,18 @@ not, frame or field) past 512 MB: a stream has a few kinds, 4.2 MB each at
 the end checks the whole stream, and `d` takes data after the end of the
 compressed stream for corruption.
 
+Memory does not grow with the stream, so one call can take a stream of any
+length (petabytes, through a pipe). `c` and `d` hold at most 64 MB of a NAL
+unit: a longer one, and the bytes before the first start code, are stored
+verbatim as they are read, in chunks of 1 MB, and runs of zero bytes are
+counted, not held. The model's tables and records are bounded by the
+level and the largest pictures, and the bytes stored verbatim are matched
+against the last 16 MB of them. Counters are 64-bit or start again where
+they would wrap, and POCs are kept modulo 2^32 and compared by their
+differences, so a stream that never sends another IDR picture is decoded
+as a decoder would. With `-t`, the splitter keeps one version of each
+parameter set and those of the part under way.
+
 The model is binary context mixing, after oggcomp (Ogg Vorbis): each value
 is a sequence of binary decisions, each predicted by ten adaptive counters
 under different contexts (each with a slow and a fast probability), an
