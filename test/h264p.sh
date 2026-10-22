@@ -185,6 +185,15 @@ if [ -n "${negative:-}" ]; then
     # and ended by its progress line's pipe closing (SIGPIPE)
     check "c ended by a closed pipe leaves no temporary file" sh -c '"$1" c -9 -p "$2/int.264" "$2/pp.c" 2>&1 | head -c 1 > /dev/null; ! ls "$2"/pp.c* > /dev/null 2>&1' - "$bin" "$tmp"
   fi
+  # /dev/fd/N (/dev/stdout), here through links of our own, as the output:
+  # written through the descriptor, where the shell put it (c renamed its
+  # output over the file the shell had open, losing what was there and the
+  # next call's output, and then renamed one over /dev/stdout itself)
+  if [ -e /dev/fd/1 ]; then
+    ln -sf /dev/fd/1 "$tmp/o1"
+    ln -sf /dev/fd/3 "$tmp/o3"
+    check "c and d to /dev/fd/1 and /dev/fd/3 write where redirected (>>)" sh -c '"$1" c -1 "$2" "$3/s.c" && printf old > "$3/so" && { "$1" c -1 "$2" "$3/o1" && "$1" c -1 "$2" "$3/o3" 3>&1 && "$1" d "$3/s.c" "$3/o1"; } >> "$3/so" && { printf old; cat "$3/s.c" "$3/s.c" "$2"; } | cmp -s - "$3/so"' - "$bin" "$here/h264p/x264_16x16.264" "$tmp"
+  fi
   if [ -w /dev/full ]; then
     check "c and d to a full device fail" sh -c '! "$1" c -1 "$2" - > /dev/full 2>/dev/null && "$1" c -1 "$2" "$3/k.c" && ! "$1" d "$3/k.c" - > /dev/full 2>/dev/null' - "$bin" "$here/h264p/x264_16x16.264" "$tmp"
   fi

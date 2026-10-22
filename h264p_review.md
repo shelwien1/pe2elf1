@@ -471,7 +471,7 @@ h264p_levels.md §7.3 says the model "fills a variable only where the level read
 - **The coroutine codec.** The chain `Coroutine ← CoroIo ← RcIo ← Rangecoder ← tc_rc ← Model ← H264pCoro` makes a run one object with no mutable globals. Its state is on the heap, the copied stack stays small (`before_yield` checks it), and nothing yields inside an exception handler.
 - **Encoder/decoder symmetry.** Both directions run the same writer walk. The current value is read only under `ENC ? … : 0`, and nothing in the coding path depends on unordered containers, floating point or heap addresses. Every generated `make` clamps its variables before indexing.
 - **The decoder core and the vector paths.** The decoder core is careful: the DPB is bounded, every `list[][]` read is guarded by `nlist`, and motion compensation clips any vector. The AVX2 paths match the scalar ones exactly.
-- **The range coder** handles carries correctly. Its flush trims at most 40 bytes of 0xFF, within the decoder's 48-byte allowance.
+- **The range coder** handles carries correctly. Its flush trims at most 40 bytes of 0xFF, within the decoder's 48-byte allowance. (Since format 7 it trims nothing, and the decoder reads exactly the bytes written: b6879b8, section 7.)
 
 ### A1. The seam between the syntax walk and its channels
 
@@ -774,3 +774,21 @@ Speed. Against a build of 547d495 on the same machine (test/002, CPU time, at c9
 | A7 | fixed: one `Output` (F3, F7) |
 | A8 | fixed. The include order (no system header after Lib3's), `qword`, the namespaces of coro.inc and mt.inc. Warnings: h264p's own sources have none under GCC 13 and clang 18 with `-Wall -Wextra`, at `-O2` and `-O3`, with AVX2 and without, and neither has famtune.cpp at any level; what remains is in Lib3 and MTwrap_v3. At 547d495, GCC at `-O3` with AVX2 also gave 448 `-Wmaybe-uninitialized`, which the finding missed. They were false: bit_x sets and reads its counter vectors under one flag, `cn_v`, which GCC cannot tell holds in between. Reading the flag once (31cf885) ran 0.05% more instructions at `-1` and measured up to 3% slower there, so the warning is turned off around that code instead, for GCC only, and bit_x's machine code is 1c2b10b's again (10d2afd). The long functions are in parts: block (470 lines) in its families' stages (block_begin, block_proxy, block_col, block_count with cbf's variables, block_sig, block_levels, block_signs, sign1), mc_luma_p (199) in mc_halves_v, mc_halves and mc_mean, tm_search (174) in TmCx, TmThin and tm_cx, inter (132) in inter_mb and inter_b8, bit_x (156) in cnt_inputs, mix_inputs, mix_code and cnt_update, mvd (154) with mvd_pred and mvd_sign, qpd (124) with qpd_vars, qpd_aq and qpd_sign, compress_stream (118) with compress_nal and compress_parsed, and tm_miss (112) and code_slice_header (106) too. No function written by hand is 100 lines long (the longest, ipm, has 98); the index builders that idx2inc.pl generates into MOD/ are straight-line code of up to 100 lines (H9_mvs_make) |
 | A9 | fixed: test/h264p.sh's negative and crafted cases |
+
+### Any input restored (format 7)
+
+After this review, `c` (without `-s`) had to take any input — cut short, with garbage after it, or no H.264 at all — and `d` had to restore it byte for byte, at every level, with and without `-t`, through files and pipes. Four readers mapped where that could fail (the front end, the stream layer, the model, the splitter and its parts). Six fuzzers then ran about 75,000 round trips, under release and UBSan builds: cut streams, garbage heads and tails, mutations, synthesized NAL streams, the splitter's cuts and copies, and pipes. The findings, and the deferred format-changing ones above, were fixed in these commits:
+
+| commit | what |
+|---|---|
+| b6879b8 | format 7: the coder's end is exact. `d` accepted 1 or 2 bytes after a stream; now it fails on a byte cut off or any byte after the end |
+| 953cd49 | model: Intra16x16's cbp recorded, end()'s skip window, the history matched by picture id (not POC), redundant slices kept out of the reconstruction and the records |
+| c66f4ec | `-t`: a part that was only an access unit delimiter, with parameter sets copied in after it, could not be restored (`c` exited 0, `d` failed). `d` now removes the copies by the place and length the record gives; `-t`'s messages name the stream's NAL unit |
+| 5d9ae89 | `-t`: a stretch with no NAL unit to cut at is cut at twice the cap. A part's sizes are 64-bit, so a part of 4 GB or more no longer fails |
+| 137f3ee | POC type 1's expected POC saturated (int64 overflow); x264's padding frame coded mod 32, the range `d` accepts |
+| 2cc6468 | `-t` copies into a part only the parameter sets its slices use (unused large sets made a crafted stream 25 times its size) |
+| d1c9f11 | a skipped MBAFF top macroblock's motion derived in the field mode the pair decodes with |
+| 275e74e | a closed pipe (SIGPIPE) removes the temporary output |
+| this commit | an output named `/dev/stdout`, `/dev/fd/N` or `/proc/self/fd/N`, or a link to one, is written through that descriptor. It had been renamed over the file the shell had open, losing what was there and the next call's output, and then renamed over `/dev/stdout` itself |
+
+Each fix of a failure (b6879b8, c66f4ec, 5d9ae89, 2cc6468, 275e74e, the last one) has a test in test/h264p.sh, or a crafted stream (aud_last.264), that fails on the build before it; the model's fixes change only how streams compress. What is left: the splitter keeps every version of every parameter set for the whole run (memory, not correctness); and `c`'s restart (a slice the checked model pass cannot reproduce) has been reached by no input, crafted or fuzzed, so only reading covers it.

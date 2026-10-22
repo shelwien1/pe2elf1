@@ -103,7 +103,9 @@ to 64, the stream in parts of at least `-c N` MB, 1 to 1024 (`-c Nk`: KB;
 4 MB by default), and `d` decompresses that on as many threads as it says
 (see Threads, below); without `-t` (or with `-t 1`), `c` writes the stream
 of one model in one thread, as it always did. Input and output can be `-`
-(stdin, stdout), and not the same file. A file is written under a temporary
+(stdin, stdout), and not the same file; an output named `/dev/stdout`,
+`/dev/fd/N` or `/proc/self/fd/N` (or a link to one) is written through that
+descriptor, as `-` is, where the shell put it. A file is written under a temporary
 name beside it (`name.PID.tmp`, with the mode of the file it replaces) and
 renamed when the call is done: a call that fails leaves what was there (or
 nothing), except that `d` keeps what it restored before an error in the

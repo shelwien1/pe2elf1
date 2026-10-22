@@ -250,10 +250,46 @@ bool same_file(FILE* f, const char* name) {
 #endif
 }
 
+// the descriptor of this process that name opens again: /dev/stdout,
+// /dev/stderr, /dev/fd/N, /proc/self/fd/N or /proc/PID/fd/N, a link to one
+// of them, or the file stdout has open; -1 none
+int name_fd(const char* name) {
+#ifdef _WIN32
+  (void)name;
+  return -1;
+#else
+  if (same_file(stdout, name)) return 1;
+  char a[4096], b[4096], self[48];
+  snprintf(self, sizeof self, "/proc/%ld/fd/", (long)getpid());
+  const char* dirs[] = {"/dev/fd/", "/proc/self/fd/", self};
+  if (strlen(name) >= sizeof a) return -1;
+  strcpy(a, name);
+  for (int hop = 0; hop < 40; hop++) {  // (the links followed one by one)
+    int fd = !strcmp(a, "/dev/stdout") ? 1 : !strcmp(a, "/dev/stderr") ? 2 : -1;
+    for (const char* d : dirs) {
+      size_t m = strlen(d);
+      if (!strncmp(a, d, m) && a[m] && strlen(a + m) <= 9 && strspn(a + m, "0123456789") == strlen(a + m)) fd = atoi(a + m);
+    }
+    if (fd >= 0) return fcntl(fd, F_GETFD) < 0 ? -1 : fd;
+    ssize_t k = readlink(a, b, sizeof b - 1);
+    if (k < 0) return -1;
+    b[k] = 0;
+    const char* s = b[0] == '/' ? nullptr : strrchr(a, '/');  // (relative: to the link's directory)
+    size_t at = s ? (size_t)(s - a) + 1 : 0;
+    if (at + (size_t)k >= sizeof a) return -1;
+    memcpy(a + at, b, (size_t)k + 1);
+  }
+  return -1;
+#endif
+}
+
 // The output of a call: "-" is stdout. A regular file, or a new one, is
 // written under a temporary name beside it and renamed to its own as the
 // call ends well, so that a failed call leaves what was there; anything else
-// (a device, a pipe) is written as it is. Never the input. (Quit() closes
+// (a device, a pipe) is written as it is. A name that opens one of the
+// program's descriptors again (/dev/stdout, name_fd()) is written through
+// that descriptor, where the shell put it (">>", a file it also writes to),
+// as "-" is. Never the input. (Quit() closes
 // and removes what close() did not: the program ends on an error outside a
 // run, err.inc, with Quit() of the call's output, and on POSIX on a signal
 // that ends it, with its temporary file removed.)
@@ -299,6 +335,19 @@ struct Output {
       fprintf(stderr, "h264p: %s: the input and the output are the same file\n", in_name);
       Quit();
       return false;
+    }
+    int fd = name_fd(name);
+    if (fd >= 0) {
+      int d = fd == 1 ? -1 : dup(fd);
+      g.f = fd == 1 ? stdout : d < 0 ? nullptr : fdopen(d, "wb");
+      if (!g.f) {
+        int e = errno;
+        if (d >= 0) ::close(d);
+        fprintf(stderr, "h264p: cannot write %s: %s\n", name, strerror(e));
+        Quit();
+        return false;
+      }
+      return true;
     }
     unsigned mode = 0;
     int kind = name_kind(name, &mode);
