@@ -492,7 +492,7 @@ int decompress_stream(Model<1, LV>& m, DecompressState& s, const H264pArgs& a) {
     size_t start = buf.size();
     if ((type == 1 || type == 5) && m.nal(F_PADCHG, 0, 0)) {
       if (m.nal(F_PADON, 0, 0))
-        ctx.pad.set((int64_t)cm_count(m.nal(F_PADFRAME, 0, 0), INT32_MAX));
+        ctx.pad.set((int64_t)cm_count(m.nal(F_PADFRAME, 0, 0), 31));
       else
         ctx.pad.on = false;
     }

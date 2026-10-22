@@ -344,8 +344,9 @@ struct Dpb {
       }
       return poc_sat(Min(top, bot));
     }
-  // types 1 and 2: FrameNumOffset
-    int64_t fno = idr ? 0 : prev_frame_num_offset + (prev_frame_num > h.frame_num ? max_frame_num : 0);
+  // types 1 and 2: FrameNumOffset (held to 2^40, and type 1's expected
+  // POC to 2^62, so that no sum overflows: the POC is saturated anyway)
+    int64_t fno = idr ? 0 : Min(prev_frame_num_offset + (prev_frame_num > h.frame_num ? max_frame_num : 0), (int64_t)1 << 40);
     int64_t top, bot;
     if (sps.poc_type == 2) {
       top = bot = idr ? 0 : 2 * (fno + h.frame_num) - (h.nal_ref_idc == 0);
@@ -358,7 +359,8 @@ struct Dpb {
         int64_t delta = 0;
         for (int i = 0; i < n; i++) delta += sps.offset_for_ref_frame[i];
         int64_t cycle = (abs_fn - 1) / n, in = (abs_fn - 1) % n;
-        exp = cycle * delta;
+        const int64_t lim = (int64_t)1 << 62;
+        exp = delta && cycle > lim / abs64(delta) ? (delta > 0 ? lim : -lim) : cycle * delta;
         for (int i = 0; i <= in; i++) exp += sps.offset_for_ref_frame[i];
       }
       if (h.nal_ref_idc == 0) exp += sps.offset_for_non_ref_pic;

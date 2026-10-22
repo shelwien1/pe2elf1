@@ -254,7 +254,7 @@ bool repad(PadDetector& det, int obs, X264Padding& pad) {
   if (frame < 0)
     pad.on = false;
   else
-    pad.set(frame);
+    pad.set(frame & 31);  // (x264's bits repeat every 32 frames: what the model codes)
   return true;
 }
 
