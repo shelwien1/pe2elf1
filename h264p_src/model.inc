@@ -447,10 +447,10 @@ const uint8_t kRaster4[4] = {0, 1, 2, 3};
 // Bytes nothing else models (Model::raw()): an order 0 and an order 1
 // counter and a match model mixed by a weight set the bits of the byte so
 // far select (oggcomp's raw model and a match): the match finds the last
-// three bytes in what was coded so far, after a dictionary of the user data
-// x264 writes in an SEI message (its UUID and its options with their
-// defaults). (Its counters and weights zero as it starts: the
-// decompressor's must match.)
+// three bytes in the last kRing bytes coded, after a dictionary of the
+// user data x264 writes in an SEI message (its UUID and its options with
+// their defaults), which they replace as they come. (Its counters and
+// weights zero as it starts: the decompressor's must match.)
 template <int f_DEC>
 struct RawModel {
   static constexpr int ENC = f_DEC == 0;
@@ -460,19 +460,20 @@ struct RawModel {
     memset(w_, 0, sizeof w_);
     memset(wc_, 0, sizeof wc_);
     prev_ = 0;
-    buf_.Init();
+    ring_ = nullptr;
     hash_.Init();
-    ptr_ = dict_ = 0;
+    pos_ = ptr_ = dict_ = 0;
     len_ = 0;
     memset(mc_, 0, sizeof mc_);
   }
   void Quit() {
-    buf_.Quit();
+    mem_free(ring_);
+    ring_ = nullptr;
     hash_.Quit();
   }
   void start() {
     mx_.init(w_, wc_);
-    buf_.clear();
+    pos_ = 0;
   }
 
   cm_cnt o0_[256];
@@ -481,10 +482,14 @@ struct RawModel {
   u8 wc_[256];
   cm_mix<4> mx_;
   u32 prev_;
-  Buf<u8> buf_;    // the dictionary, then the bytes coded
-  Buf<i32> hash_;  // by the hash of three bytes, the place after them in buf_ (-1 none)
-  size_t ptr_, dict_;  // where the match predicts from; the dictionary's size
-  int len_;            // the match's length (0 none)
+  // the dictionary, then the bytes coded: the one at place a (counted from
+  // the start) at ring_[a % kRing], while a is one of the last kRing places
+  static constexpr uint64_t kRing = (uint64_t)1 << 24;
+  u8* ring_;
+  Buf<int64_t> hash_;  // by the hash of three bytes, the place after them (-1 none)
+  uint64_t pos_, ptr_, dict_;  // the next place; where the match predicts from; the dictionary's size
+  int len_;                    // the match's length (0 none), up to 15
+  u8 at(uint64_t a) const { return ring_[a & (kRing - 1)]; }
   cm_cnt mc_[16];      // whether the match's bit is right, by its length
   static u32 key(const u8* p) { return ((u32)p[0] * 0x9E3779B1u ^ (u32)p[1] * 0x85EBCA77u ^ (u32)p[2] * 0xC2B2AE3Du) >> 16; }
   void init_dict() {
@@ -497,19 +502,20 @@ struct RawModel {
         "bframes=3 b_pyramid=2 b_adapt=1 b_bias=0 direct=1 weightb=1 open_gop=0 weightp=2 keyint=250 keyint_min=25 "
         "scenecut=40 intra_refresh=0 rc_lookahead=40 rc=crf mbtree=1 crf=23.0 qcomp=0.60 qpmin=0 qpmax=69 qpstep=4 "
         "ip_ratio=1.40 aq=1:1.00";
-    buf_.assign(kUuid, 16);
-    buf_.append((const u8*)kText, sizeof kText);  // with the terminating zero x264 writes
+    if (!ring_) ring_ = (u8*)mem_alloc(kRing);  // (its pages taken as they are written)
+    memcpy(ring_, kUuid, 16);
+    memcpy(ring_ + 16, kText, sizeof kText);  // with the terminating zero x264 writes
+    pos_ = dict_ = 16 + sizeof kText;
     hash_.fill((size_t)1 << 16, -1);
-    for (size_t i = 3; i <= buf_.size(); i++) hash_[key(&buf_[i - 3])] = (i32)i;
-    dict_ = buf_.size();
+    for (uint64_t i = 3; i <= pos_; i++) hash_[key(ring_ + i - 3)] = (int64_t)i;
     len_ = 0;
   }
   // a byte coded (its value b coding; decoding, returned), by the coder rc
   u32 code(tc_rc<f_DEC>* rc, u32 b) {
-    if (buf_.empty()) init_dict();
+    if (!pos_) init_dict();
     cm_cnt* row = o1_[prev_];
     u32 node = 1;
-    int pbyte = len_ && ptr_ < buf_.size() ? buf_[ptr_] : -1, ml = Min(len_, 15);
+    int pbyte = len_ && ptr_ < pos_ && pos_ - ptr_ <= kRing ? at(ptr_) : -1, ml = len_;
     for (int i = 7; i >= 0; i--) {
       cm_cnt c0 = o0_[node], c1 = row[node];
       mx_.set(0, cm_stretch(c0.P()));
@@ -530,20 +536,17 @@ struct RawModel {
       node = node * 2 + (u32)bit;
     }
     prev_ = node & 255;
-    // the match goes on or ends; then the bytes coded join what it searches
-    // (the first 256 MB of them)
+    // the match goes on or ends; then the byte joins what it searches
     if (pbyte >= 0 && (u32)pbyte == (node & 255))
-      len_++, ptr_++;
+      len_ += len_ < 15, ptr_++;
     else
       len_ = 0;
-    if (buf_.size() < ((size_t)1 << 28)) {
-      buf_.push_back((u8)(node & 255));
-      size_t n = buf_.size();
-      if (n - dict_ >= 3) {
-        u32 k = key(&buf_[n - 3]);
-        if (!len_ && hash_[k] >= 0) ptr_ = (size_t)hash_[k], len_ = 1;
-        hash_[k] = (i32)n;
-      }
+    ring_[pos_++ & (kRing - 1)] = (u8)(node & 255);
+    if (pos_ - dict_ >= 3) {
+      const u8 last[3] = {at(pos_ - 3), at(pos_ - 2), at(pos_ - 1)};
+      u32 k = key(last);
+      if (!len_ && hash_[k] >= 0) ptr_ = (uint64_t)hash_[k], len_ = 1;
+      hash_[k] = (int64_t)pos_;
     }
     rc->tc_syms[STG_RAW]++;
     return node & 255;
