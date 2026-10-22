@@ -7,13 +7,13 @@
 // turn to N workers by MTwrap (MTwrap_v3, its parts mode: MTwrap.md section
 // 11). A worker codes its parts one after the other, each by a model of its
 // own: H264pCoro (coro.inc), run as a coroutine of the worker's on the part
-// read whole into memory. A worker's stream is a record for each part
-// (rzwrap_h264's):
+// read whole into memory. A worker's stream is a record for each part:
 //
-//   u32 g_size  the record's size, these 16 bytes included
-//   u32 nins    the parameter sets the splitter inserted, removed after decoding
+//   u32 g_size  the record's size, these 24 bytes included
+//   u32 xlen    the bytes of the parameter sets the splitter inserted,
 //   u64 plen    the size of the part as compressed (with those sets)
-//   g_size-16 bytes: the part compressed, a stream of h264p's (magic, version, level, ...)
+//   u64 ins     where in it they are: [ins, ins + xlen), removed after decoding
+//   g_size-24 bytes: the part compressed, a stream of h264p's (magic, version, level, ...)
 //
 // (little-endian), and MTwrap's container holds the N streams; h264p's
 // header goes before it (kMtMagic, mt_head()). Decoding needs the same N
@@ -178,25 +178,23 @@ struct H264pPart : CoroIo {
     return 1;
   }
 
-  // compressing: each part as the splitter frames it (u64 L, u32 nins,
-  // then the part, L-4 bytes) into its record
+  // compressing: each part as the splitter frames it (u64 L, then u64 ins,
+  // xlen, nins and nal0, then the part, L-32 bytes) into its record
   int run(IntTag<0>) {
     for (;;) {
-      uint8_t h[16];
-      size_t n = read(h, 12);
+      uint8_t h[40];
+      size_t n = read(h, 40);
       if (!n) return 0;  // the end
-      if (n < 12) return fail("internal: a part framed wrong");
-      uint64_t L;
-      uint32_t nins;
-      memcpy(&L, h, 8);
-      memcpy(&nins, h + 8, 4);
-      uint64_t plen = L - 4;
-      if (L < 4 || !take(plen)) return fail("internal: a part framed wrong");
+      uint64_t L = get_le(h, 8), ins = get_le(h + 8, 8), xlen = get_le(h + 16, 8);
+      uint64_t plen = L - 32;
+      if (n < 40 || L < 32 || ins > plen || xlen > plen - ins || xlen > 0xFFFFFFFFu || !take(plen))
+        return fail("internal: a part framed wrong");
       // (the part can be read again: the model pass checks the slices it
       // can, and if one does not come out as it is, the dry runs write back
       // each, again)
       H264pArgs a = args;
       a.check = true;
+      a.nal0 = get_le(h + 32, 8), a.ncopy = get_le(h + 24, 8), a.copy_at = ins > 0;  // (after an AUD, if any)
       uint64_t in0 = prog.in(), out0 = prog.out();
       int r = code(a, in0, out0);
       if (r == kRestart) {
@@ -204,12 +202,13 @@ struct H264pPart : CoroIo {
         r = code(a, in0, out0);
       }
       if (r) return 1;
-      prog.set(in0 + plen, out0 + 16 + out_.size());
-      if (out_.size() > 0xFFFFFFFFu - 16) return fail("a part compressed to 4 GB or more");
-      put_le(h, out_.size() + 16, 4);
-      put_le(h + 4, nins, 4);
+      prog.set(in0 + plen, out0 + 24 + out_.size());
+      if (out_.size() > 0xFFFFFFFFu - 24) return fail("a part compressed to 4 GB or more");
+      put_le(h, out_.size() + 24, 4);
+      put_le(h + 4, xlen, 4);
       put_le(h + 8, plen, 8);
-      write(h, 16);
+      put_le(h + 16, ins, 8);
+      write(h, 24);
       write(out_.data(), out_.size());
       parts++;
     }
@@ -220,46 +219,26 @@ struct H264pPart : CoroIo {
   // worker
   int run(IntTag<1>) {
     for (;;) {
-      uint8_t h[16];
-      size_t n = read(h, 16);
+      uint8_t h[24];
+      size_t n = read(h, 24);
       if (!n) return 0;  // the end
-      if (n < 16) return fail("a part's record cut short");
-      uint64_t g_size = get_le(h, 4), nins = get_le(h + 4, 4), plen = get_le(h + 8, 8);
-      if (g_size < 16 || !take(g_size - 16)) return fail("a part's record cut short or broken");
+      if (n < 24) return fail("a part's record cut short");
+      uint64_t g_size = get_le(h, 4), xlen = get_le(h + 4, 4), plen = get_le(h + 8, 8), ins = get_le(h + 16, 8);
+      if (g_size < 24 || !take(g_size - 24)) return fail("a part's record cut short or broken");
       H264pArgs a = args;
       a.level = cm_level(in_.data(), Min(in_.size(), sizeof kCmMagic + 1), args.name, args.meter);
       uint64_t in0 = prog.in(), out0 = prog.out();
-      if (a.level < 0 || code(a, in0 + 16, out0)) return 1;
-      size_t ins, pos;
-      if (out_.size() != plen || !inserted(nins, ins, pos)) return fail("a part did not decompress as it was compressed");
-      prog.set(in0 + g_size, out0 + out_.size() - (pos - ins));
-      write(out_.data(), ins);
+      if (a.level < 0 || code(a, in0 + 24, out0)) return 1;
+      if (out_.size() != plen || ins > plen || xlen > plen - ins)
+        return fail("a part did not decompress as it was compressed");
+      size_t pos = (size_t)(ins + xlen);
+      prog.set(in0 + g_size, out0 + plen - xlen);
+      write(out_.data(), (size_t)ins);
       write(out_.data() + pos, out_.size() - pos);
       parts++;
       before_yield();
       yield(static_cast<Coroutine*>(this), 4);
     }
-  }
-
-  // Where the nins parameter sets the splitter inserted are in the part
-  // decoded (out_): [ins, pos), after the access unit delimiter if the part
-  // starts with one, and each a 4-byte start code and an SPS, a PPS, an SPS
-  // extension or a subset SPS, up to its last nonzero byte (h264split r's
-  // checks); false if they are not there
-  bool inserted(uint64_t nins, size_t& ins, size_t& pos) const {
-    const uint8_t* b = out_.data();
-    size_t n = out_.size(), j;
-    ins = pos = 0;
-    if (!nins) return true;
-    pos = ins = aud_end(b, n);
-    for (uint64_t k = 0; k < nins; k++) {
-      if (pos + 5 > n || memcmp(b + pos, kStartCode4, 4)) return false;
-      if (!h264s::is_pset(b[pos + 4] & 31)) return false;
-      if ((j = find_start_code(b, n, pos + 5)) >= n) return false;
-      while (j > pos + 5 && !b[j - 1]) j--;
-      pos = j;
-    }
-    return true;
   }
 };
 

@@ -43,12 +43,17 @@ struct H264pArgs {
                     // not come out as it is, and the input has to be compressed again without
   const char* name;  // the input's, for messages
   Progress* meter;   // the call's progress line, if one is shown (messages cut it)
+  // compressing a part of -t: the index in the stream of its first NAL
+  // unit, and the parameter sets copied into it, ncopy NAL units from its
+  // copy_at (for messages: Stats)
+  uint64_t nal0, copy_at, ncopy;
 
   void Init() {
     level = 0;
     verbose = strict = check = false;
     name = "";
     meter = nullptr;
+    nal0 = copy_at = ncopy = 0;
   }
 };
 
@@ -392,9 +397,11 @@ int compress_nal(Model<0, LV>& m, CompressState& s, const H264pArgs& a, const Bu
   if (parsed_type(h.type)) m.nal(F_VERB, h.type, !ok);
   if (ok) {
     if (!compress_parsed(m, s, h)) {
-      if (a.verbose)
-        say(a.meter, "h264p: NAL unit %ld would not come out as it is; compressing again, writing back each\n",
-            st.nals - 1);
+      if (a.verbose) {
+        char w[64];
+        st.name_last(w, sizeof w);
+        say(a.meter, "h264p: %s would not come out as it is; compressing again, writing back each\n", w);
+      }
       err_jump(*m.run_trap, kRestart);
     }
   } else {
@@ -422,6 +429,7 @@ int compress_stream(Model<0, LV>& m, CompressState& s, const H264pArgs& a) {
   m.start();
   m.tc_verbose = a.verbose;
   m.rc_Init();
+  s.st.nal0 = a.nal0, s.st.copy_at = a.copy_at, s.st.ncopy = a.ncopy;
   Buf<uint8_t>& nal = s.nal;
   size_t zeros;
   bool more = rd.next(zeros, nal);

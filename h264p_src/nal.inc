@@ -21,6 +21,9 @@ void set_why(char* why, const char* fmt, ...) {
 // What c did with the NAL units of a stream
 struct Stats {
   long nals, parsed, raw, trail, pad;
+  // (a part of -t: the stream's index of its first NAL unit, and the
+  // parameter sets copied into it, ncopy NAL units from its copy_at)
+  uint64_t nal0, copy_at, ncopy;
   // why NAL units were stored verbatim: each reason once, with how many it
   // was, the first kReasons of them (a reason can have numbers in it: a
   // stream could make any number of them), the rest counted in others
@@ -34,6 +37,7 @@ struct Stats {
 
   void Init() {
     nals = parsed = raw = trail = pad = 0;
+    nal0 = copy_at = ncopy = 0;
     reasons.Init();
     others = 0;
   }
@@ -61,10 +65,20 @@ struct Stats {
   bool verbatim(int type, const char* why, bool verbose, bool strict, Progress* meter) {
     verbatim(why);
     if (!parsed_type(type)) return true;
-    if (verbose) say(meter, "h264p: NAL unit %ld (type %d) stored verbatim: %s\n", nals - 1, type, why);
+    char w[64];
+    name_last(w, sizeof w);
+    if (verbose) say(meter, "h264p: %s (type %d) stored verbatim: %s\n", w, type, why);
     if (!strict) return true;
-    say_error(meter, "h264p: NAL unit %ld (type %d) cannot be converted: %s\n", nals - 1, type, why);
+    say_error(meter, "h264p: %s (type %d) cannot be converted: %s\n", w, type, why);
     return false;
+  }
+  // the last NAL unit, as a message names it: by its index in the stream
+  void name_last(char* w, size_t n) const {
+    uint64_t i = (uint64_t)nals - 1;
+    if (i >= copy_at && i - copy_at < ncopy)
+      snprintf(w, n, "a parameter set copied into a part");
+    else
+      snprintf(w, n, "NAL unit %" PRIu64, nal0 + i - (i >= copy_at ? ncopy : 0));
   }
   // -v's report at the end: done, what was done to the NAL units not stored
   // verbatim; pads, what pad counts (the reasons in order of their text)

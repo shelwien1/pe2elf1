@@ -54,7 +54,7 @@ void escape(const uint8_t* r, size_t n, Buf<uint8_t>& e) {
 // A start code of 4 bytes (zero_byte, then 00 00 01)
 const uint8_t kStartCode4[4] = {0, 0, 0, 1};
 // Where in the n bytes at b the parameter sets copied into a part of -t go
-// (h264split.inc) and are found again (mt.inc): after the access unit
+// (h264split.inc; the part's record says where): after the access unit
 // delimiter, up to its last nonzero byte, if the first NAL unit is one;
 // else at the start
 size_t aud_end(const uint8_t* b, size_t n) {

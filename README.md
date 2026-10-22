@@ -324,10 +324,11 @@ The stream starts with `h264m`, the version, the count of threads and the
 part size (KB, 32 bits; to be seen: `d` does not need it, MTwrap's rings
 have a size of their own), then MTwrap's container of the workers' streams
 (a block of up to 64 KB at a time, tagged with its worker), each of them a
-record for each of its parts: its size, the count of inserted parameter
-sets, the size of the part as compressed (32, 32 and 64 bits,
-little-endian), and the part compressed, a stream of h264p's with its own
-header. `d` knows it by its first bytes and runs as many threads as it
+record for each of its parts: its size, the bytes of the inserted
+parameter sets, the size of the part as compressed and where in it those
+sets are (32, 32, 64 and 64 bits, little-endian: `d` removes those bytes,
+whatever the part holds), and the part compressed, a stream of h264p's
+with its own header. `d` knows it by its first bytes and runs as many threads as it
 says. Without `-t`, or with `-t 1`, `c` writes h264p's stream of one model,
 as before (`h264c`).
 

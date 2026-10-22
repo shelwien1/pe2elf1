@@ -15,13 +15,15 @@
 // cap, at any NAL unit.
 //
 // Output: one frame per part, for MTwrap's parts mode:
-//   u64 L, u32 nins, part[L-4]
+//   u64 L, u64 ins, u64 xlen, u64 nins, u64 nal0, part[L-32]
 // part = the stream bytes [begin,end) with the parameter sets h264split
 // would insert, but for PPSs its slices do not refer to (nins NAL units,
-// each with a 4-byte start code), after its access unit delimiter, if it
-// starts with one (h264p::aud_end(), where d finds them). Every part but
-// the first starts at an access unit (or after a cut at the cap's half
-// again, at a NAL unit), with the parameter sets it needs.
+// each with a 4-byte start code, xlen bytes in all), at ins: after its
+// access unit delimiter, if it starts with one (h264p::aud_end()), else
+// first; nal0 the index in the stream of its first NAL unit (for
+// messages). Every part but the first starts at an access unit (or after
+// a cut at the cap's half again, at a NAL unit), with the parameter sets
+// it needs.
 
 // (h264p: the system headers it needs come first, from h264p.inc; and
 // h264split's own copy of unescape() is h264p's, annexb.inc. Its parser of
@@ -252,15 +254,16 @@ struct PsetEvent {
 struct Candidate {
   bool sync;      // an IDR access unit (or an I one, with allow_i)
   uint64_t cut;   // start of the access unit
+  uint64_t nal;   // its first NAL unit's index in the stream
   h264p::Buf<uint32_t> keys;  // parameter sets defined before its first slice
   void Init() {
     sync = false;
-    cut = 0;
+    cut = nal = 0;
     keys.Init();
   }
   void Quit() { keys.Quit(); }
   void copy(const Candidate& o) {
-    sync = o.sync, cut = o.cut;
+    sync = o.sync, cut = o.cut, nal = o.nal;
     keys.copy(o.keys);
   }
 };
@@ -285,6 +288,7 @@ struct Analyzer {
   bool has_cand;
   long pictures;
   h264p::Buf<PpsUse> uses;  // the slices since the last cut (H264Split::emit())
+  uint64_t nals;            // the NAL units so far (the one nal() has: nals - 1)
 
   // the non-VCL NAL units since the last VCL NAL unit that may start an
   // access unit
@@ -307,6 +311,7 @@ struct Analyzer {
     cand.Init();
     has_cand = false;
     pictures = 0;
+    nals = 0;
     uses.Init();
     run = force_new = false;
     run_au.Init();
@@ -329,6 +334,7 @@ struct Analyzer {
   void begin_run(const Nal& n, bool aud) {
     run = true;
     run_au.cut = n.cut;
+    run_au.nal = nals - 1;
     run_au.keys.clear();
     if (aud) force_new = true;
   }
@@ -426,6 +432,7 @@ struct Analyzer {
         pic.copy(run_au);
       } else {
         pic.cut = n.cut;
+        pic.nal = nals - 1;
         pic.keys.clear();
       }
       pic_ok = s.level == 2;
@@ -442,6 +449,7 @@ struct Analyzer {
 
   void nal(const Nal& n) {
     int t = n.type();
+    nals++;
     switch (t) {
       case 9:
         begin_run(n, true);
@@ -553,6 +561,7 @@ struct H264Split : Coroutine {
     size_t state[h264s::kSlots];   // by key: the parameter set before the last cut (an.events' index + 1; 0 none)
     size_t ev;
     uint64_t begin;                // the current part
+    uint64_t nal0;                 // its first NAL unit's index in the stream
     h264p::Buf<uint32_t> keys;     // the parameter sets its first access unit defines
     h264p::Buf<uint8_t> extra;     // (emit()'s)
     uint64_t parts, total;
@@ -562,7 +571,7 @@ struct H264Split : Coroutine {
       buf.Init();
       memset( state, 0, sizeof state );
       ev = 0;
-      begin = 0;
+      begin = nal0 = 0;
       keys.Init();
       extra.Init();
       parts = total = 0;
@@ -639,9 +648,9 @@ struct H264Split : Coroutine {
         nins++;
       }
     size_t ins = nins ? h264p::aud_end( s.buf.data(), size_t(n) ) : 0;
-    qword L = 4 + n + s.extra.size();
+    qword L = 32 + n + s.extra.size(), h[4] = {ins, s.extra.size(), nins, s.nal0};
     put_bytes( (const byte*)&L, 8 );
-    put_bytes( (const byte*)&nins, 4 );
+    put_bytes( (const byte*)h, 32 );
     put_bytes( s.buf.data(), ins );
     put_bytes( s.extra.data(), s.extra.size() );
     put_bytes( s.buf.data()+ins, size_t(n-ins) );
@@ -658,6 +667,7 @@ struct H264Split : Coroutine {
     Analyzer& an = s.an;
     while( s.ev<an.events.size() && an.events[s.ev].cut<c.cut ) s.state[pset_slot(an.events[s.ev].key)] = s.ev+1, s.ev++;
     s.keys.copy( c.keys );
+    s.nal0 = c.nal;
   }
   void cut( const h264s::Candidate& c ) { emit( c.cut ); start_part( c ); }
 
@@ -679,6 +689,7 @@ struct H264Split : Coroutine {
     h264s::Candidate c;
     c.Init();
     c.cut = n.cut;
+    c.nal = an.nals - 1;
     cut( c );
     c.Quit();
   }
