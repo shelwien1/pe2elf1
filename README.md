@@ -307,11 +307,14 @@ library's `CORO_NOASM`, untested.
 (`h264p_src/h264split.inc`, rzwrap_h264's, on the main thread) cuts the
 stream into parts: a part ends at the first IDR or I access unit at least
 `-c` (4 MB by default) after its start, or, in a stream with too few of
-those, at the first picture at least 4 times `-c` (at most 2 GB) after it,
-and the parameter sets it needs are copied in at its start (after its
-access unit delimiter, if it has one), so that each part is a stream by
-itself (one that starts at a P picture loses the reference pictures before
-it, and some compression; never losslessness). MTwrap (`h264p_src/MTwrap_v3`,
+those, at the first picture at least 4 times `-c` (the cap, at most 2 GB)
+after it; where no picture comes within half again of the cap, at a NAL
+unit, and where none comes within twice the cap (no start code, or one
+NAL unit as large), there, inside it. The parameter sets a part needs are
+copied in at its start (after its access unit delimiter, if it has one),
+so that each part is a stream by itself (one that starts at a P picture
+loses the reference pictures before it, and some compression; never
+losslessness: the bytes of a part are coded whatever they are). MTwrap (`h264p_src/MTwrap_v3`,
 mtwrap's but that it only ever waits on events, never polls with `Sleep()`;
 its parts mode: `MTwrap.md` section 11 in mtwrap) deals the
 parts in turn to N workers; a worker reads a part whole into memory and
@@ -326,7 +329,7 @@ have a size of their own), then MTwrap's container of the workers' streams
 (a block of up to 64 KB at a time, tagged with its worker), each of them a
 record for each of its parts: its size, the bytes of the inserted
 parameter sets, the size of the part as compressed and where in it those
-sets are (32, 32, 64 and 64 bits, little-endian: `d` removes those bytes,
+sets are (64 bits each, little-endian: `d` removes those bytes,
 whatever the part holds), and the part compressed, a stream of h264p's
 with its own header. `d` knows it by its first bytes and runs as many threads as it
 says. Without `-t`, or with `-t 1`, `c` writes h264p's stream of one model,

@@ -12,7 +12,7 @@
 // bytes after it (h264p: a stream with few IDR access units still comes in
 // parts of a bounded size, at the cost of a part that starts with no
 // reference pictures), or where no picture came within half again of the
-// cap, at any NAL unit.
+// cap, at any NAL unit, or where none came within twice the cap, there.
 //
 // Output: one frame per part, for MTwrap's parts mode:
 //   u64 L, u64 ins, u64 xlen, u64 nins, u64 nal0, part[L-32]
@@ -22,8 +22,8 @@
 // access unit delimiter, if it starts with one (h264p::aud_end()), else
 // first; nal0 the index in the stream of its first NAL unit (for
 // messages). Every part but the first starts at an access unit (or after
-// a cut at the cap's half again, at a NAL unit), with the parameter sets
-// it needs.
+// a cut at the cap's half again, at a NAL unit, or at twice the cap,
+// anywhere), with the parameter sets it needs.
 
 // (h264p: the system headers it needs come first, from h264p.inc; and
 // h264split's own copy of unescape() is h264p's, annexb.inc. Its parser of
@@ -705,6 +705,17 @@ struct H264Split : Coroutine {
       s.buf.append( p, l );
       s.sc.feed( p, l, on_nal ); // may emit parts (and yield 2); p stays valid: no input is requested meanwhile
       inpptr += l;
+      // (a stretch that check_cands() could not cut, with no start code or
+      // one NAL unit past the cap, is cut at twice the cap: a part may then
+      // start inside a NAL unit, whose bytes its model codes as they are)
+      while( cap && s.sc.off-s.begin>=2*cap ) {
+        h264s::Candidate c;
+        c.Init();
+        c.cut = s.begin+2*cap;
+        c.nal = s.an.nals+s.sc.in_nal;  // (the part's first whole NAL unit)
+        cut( c );
+        c.Quit();
+      }
     }
     s.sc.end( on_nal );
     s.an.end_picture();

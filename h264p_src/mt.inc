@@ -9,11 +9,12 @@
 // own: H264pCoro (coro.inc), run as a coroutine of the worker's on the part
 // read whole into memory. A worker's stream is a record for each part:
 //
-//   u32 g_size  the record's size, these 24 bytes included
-//   u32 xlen    the bytes of the parameter sets the splitter inserted,
-//   u64 plen    the size of the part as compressed (with those sets)
-//   u64 ins     where in it they are: [ins, ins + xlen), removed after decoding
-//   g_size-24 bytes: the part compressed, a stream of h264p's (magic, version, level, ...)
+//   u64 g_size  the record's size, these 32 bytes included
+//   u64 plen    the size of the part as compressed (with the parameter
+//               sets the splitter inserted)
+//   u64 ins     where in it those are: [ins, ins + xlen), removed after decoding
+//   u64 xlen
+//   g_size-32 bytes: the part compressed, a stream of h264p's (magic, version, level, ...)
 //
 // (little-endian), and MTwrap's container holds the N streams; h264p's
 // header goes before it (kMtMagic, mt_head()). Decoding needs the same N
@@ -46,7 +47,7 @@ void mt_head(uint8_t* head, int threads, uint32_t part) {
   put_le(head + sizeof kMtMagic + 1, part >> 10, 4);
 }
 // The size past which a part ends at any picture (with no IDR or I access
-// unit to cut at), for the memory a part takes and its record's 32 bits
+// unit to cut at), for the memory a part takes
 uint64_t mt_cap(uint32_t part) { return Min<uint64_t>(4 * (uint64_t)part, (uint64_t)1 << 31); }
 
 // A worker's counts for the progress line: its input and its output so
@@ -187,7 +188,7 @@ struct H264pPart : CoroIo {
       if (!n) return 0;  // the end
       uint64_t L = get_le(h, 8), ins = get_le(h + 8, 8), xlen = get_le(h + 16, 8);
       uint64_t plen = L - 32;
-      if (n < 40 || L < 32 || ins > plen || xlen > plen - ins || xlen > 0xFFFFFFFFu || !take(plen))
+      if (n < 40 || L < 32 || ins > plen || xlen > plen - ins || !take(plen))
         return fail("internal: a part framed wrong");
       // (the part can be read again: the model pass checks the slices it
       // can, and if one does not come out as it is, the dry runs write back
@@ -202,13 +203,12 @@ struct H264pPart : CoroIo {
         r = code(a, in0, out0);
       }
       if (r) return 1;
-      prog.set(in0 + plen, out0 + 24 + out_.size());
-      if (out_.size() > 0xFFFFFFFFu - 24) return fail("a part compressed to 4 GB or more");
-      put_le(h, out_.size() + 24, 4);
-      put_le(h + 4, xlen, 4);
+      prog.set(in0 + plen, out0 + 32 + out_.size());
+      put_le(h, out_.size() + 32, 8);
       put_le(h + 8, plen, 8);
       put_le(h + 16, ins, 8);
-      write(h, 24);
+      put_le(h + 24, xlen, 8);
+      write(h, 32);
       write(out_.data(), out_.size());
       parts++;
     }
@@ -219,16 +219,16 @@ struct H264pPart : CoroIo {
   // worker
   int run(IntTag<1>) {
     for (;;) {
-      uint8_t h[24];
-      size_t n = read(h, 24);
+      uint8_t h[32];
+      size_t n = read(h, 32);
       if (!n) return 0;  // the end
-      if (n < 24) return fail("a part's record cut short");
-      uint64_t g_size = get_le(h, 4), xlen = get_le(h + 4, 4), plen = get_le(h + 8, 8), ins = get_le(h + 16, 8);
-      if (g_size < 24 || !take(g_size - 24)) return fail("a part's record cut short or broken");
+      if (n < 32) return fail("a part's record cut short");
+      uint64_t g_size = get_le(h, 8), plen = get_le(h + 8, 8), ins = get_le(h + 16, 8), xlen = get_le(h + 24, 8);
+      if (g_size < 32 || !take(g_size - 32)) return fail("a part's record cut short or broken");
       H264pArgs a = args;
       a.level = cm_level(in_.data(), Min(in_.size(), sizeof kCmMagic + 1), args.name, args.meter);
       uint64_t in0 = prog.in(), out0 = prog.out();
-      if (a.level < 0 || code(a, in0 + 24, out0)) return 1;
+      if (a.level < 0 || code(a, in0 + 32, out0)) return 1;
       if (out_.size() != plen || ins > plen || xlen > plen - ins)
         return fail("a part did not decompress as it was compressed");
       size_t pos = (size_t)(ins + xlen);
