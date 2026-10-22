@@ -393,7 +393,7 @@ void quit_on_signal(int sig) {
   raise(sig);
 }
 bool hook_signals() {
-  const int sigs[] = {SIGINT, SIGTERM, SIGHUP};
+  const int sigs[] = {SIGINT, SIGTERM, SIGHUP, SIGPIPE};
   for (int s : sigs)
     if (signal(s, quit_on_signal) == SIG_IGN) signal(s, SIG_IGN);  // (one ignored, as by nohup, stays so)
   return true;

@@ -107,8 +107,9 @@ of one model in one thread, as it always did. Input and output can be `-`
 name beside it (`name.PID.tmp`, with the mode of the file it replaces) and
 renamed when the call is done: a call that fails leaves what was there (or
 nothing), except that `d` keeps what it restored before an error in the
-stream (not after one writing it). Interrupted (SIGINT, SIGTERM, SIGHUP;
-not on Windows), it removes the temporary file.
+stream (not after one writing it). Interrupted, or ended by a pipe it
+writes to closing (SIGINT, SIGTERM, SIGHUP, SIGPIPE; not on Windows), it
+removes the temporary file.
 
 Where stderr is a terminal (or with `-p`), `c` and `d` show their progress
 there, on a line put over itself every half second:

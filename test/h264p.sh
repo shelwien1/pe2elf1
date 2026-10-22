@@ -182,6 +182,8 @@ if [ -n "${negative:-}" ]; then
   if command -v timeout > /dev/null; then
     cat "$here"/002/0[0-4].h264 > "$tmp/int.264"
     check "c interrupted leaves no temporary file" sh -c 'timeout -s INT 1 "$1" c -9 "$2/int.264" "$2/int.c"; [ $? -ne 0 ] && ! ls "$2"/int.c* > /dev/null 2>&1' - "$bin" "$tmp"
+    # and ended by its progress line's pipe closing (SIGPIPE)
+    check "c ended by a closed pipe leaves no temporary file" sh -c '"$1" c -9 -p "$2/int.264" "$2/pp.c" 2>&1 | head -c 1 > /dev/null; ! ls "$2"/pp.c* > /dev/null 2>&1' - "$bin" "$tmp"
   fi
   if [ -w /dev/full ]; then
     check "c and d to a full device fail" sh -c '! "$1" c -1 "$2" - > /dev/full 2>/dev/null && "$1" c -1 "$2" "$3/k.c" && ! "$1" d "$3/k.c" - > /dev/full 2>/dev/null' - "$bin" "$here/h264p/x264_16x16.264" "$tmp"
