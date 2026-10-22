@@ -20,7 +20,7 @@ void set_why(char* why, const char* fmt, ...) {
 
 // What c did with the NAL units of a stream
 struct Stats {
-  long nals, parsed, raw, trail, pad;
+  uint64_t nals, parsed, raw, trail, pad;
   // (a part of -t: the stream's index of its first NAL unit, and the
   // parameter sets copied into it, ncopy NAL units from its copy_at)
   uint64_t nal0, copy_at, ncopy;
@@ -30,10 +30,10 @@ struct Stats {
   static const size_t kReasons = 64;
   struct Reason {
     char why[kWhy];
-    long n;
+    uint64_t n;
   };
   Buf<Reason> reasons;
-  long others;
+  uint64_t others;
 
   void Init() {
     nals = parsed = raw = trail = pad = 0;
@@ -74,7 +74,7 @@ struct Stats {
   }
   // the last NAL unit, as a message names it: by its index in the stream
   void name_last(char* w, size_t n) const {
-    uint64_t i = (uint64_t)nals - 1;
+    uint64_t i = nals - 1;
     if (i >= copy_at && i - copy_at < ncopy)
       snprintf(w, n, "a parameter set copied into a part");
     else
@@ -83,12 +83,14 @@ struct Stats {
   // -v's report at the end: done, what was done to the NAL units not stored
   // verbatim; pads, what pad counts (the reasons in order of their text)
   void report(const char* done, const char* pads, Progress* meter) {
-    say(meter, "%ld NAL units: %ld %s (%ld with irregular trailing bits), %ld stored verbatim\n", nals, parsed, done,
-        trail, raw);
-    if (pad) say(meter, "%ld %s\n", pad, pads);
+    say(meter,
+        "%" PRIu64 " NAL units: %" PRIu64 " %s (%" PRIu64 " with irregular trailing bits), %" PRIu64
+        " stored verbatim\n",
+        nals, parsed, done, trail, raw);
+    if (pad) say(meter, "%" PRIu64 " %s\n", pad, pads);
     if (!reasons.empty()) qsort(reasons.data(), reasons.size(), sizeof(Reason), by_why);
-    for (const Reason& r : reasons) say(meter, "  verbatim: %ld x %s\n", r.n, r.why);
-    if (others) say(meter, "  verbatim: %ld x for other reasons\n", others);
+    for (const Reason& r : reasons) say(meter, "  verbatim: %" PRIu64 " x %s\n", r.n, r.why);
+    if (others) say(meter, "  verbatim: %" PRIu64 " x for other reasons\n", others);
   }
   static int by_why(const void* a, const void* b) { return strcmp(((const Reason*)a)->why, ((const Reason*)b)->why); }
 };

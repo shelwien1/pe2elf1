@@ -42,7 +42,7 @@ enum { CL_NONE, CL_SKIP, CL_DIRECT, CL_16x16, CL_PART, CL_8x8, CL_INXN, CL_I16, 
 
 // What the model keeps of a macroblock of the current picture.
 struct MbInfo {
-  uint32_t pic;  // Model::pic_ when it was coded
+  uint64_t pic;  // Model::pic_ when it was coded
   uint8_t skip, cls, qp, cbp, t8, cpred, i16m;
   // the rows of coef (plane * 16 + block) and of dc (48 + plane) written;
   // the others are zero (they hold what an older macroblock wrote: read
@@ -132,6 +132,9 @@ struct AqFit {
     n = sx = sy = sxx = sxy = 0;
   }
   void add(int x, int q) {
+    // (2^18 points are more than a picture has; in one that never ends,
+    // the sums are halved there, so that no product below overflows)
+    if (n == (i64)1 << 18) n /= 2, sx /= 2, sy /= 2, sxx /= 2, sxy /= 2;
     n++;
     sx += x;
     sy += q;
@@ -617,7 +620,7 @@ struct HeaderModel {
     is_slice_type_ = slice_nal_ && !strcmp(name, "slice_type");
     is_wrap_ = !strcmp(name, "frame_num") || !strcmp(name, "pic_order_cnt_lsb");
     fld_ = 0;
-    runpos_ = tag_ == lasttag_ ? runpos_ + 1 : 0;
+    runpos_ = tag_ == lasttag_ ? Min(runpos_ + 1, 15) : 0;  // (no more is told apart)
     lasttag_ = tag_;
   }
   // its next value (x, encoding; decoding, returned), by the hdr family f
@@ -668,7 +671,7 @@ struct History {
   // its first slice of the kind made it so
   int poc[30], prev[30];
   int64_t pid[30], ppid[30];
-  uint32_t pic[30];
+  uint64_t pic[30];
   // The records of kind key as they were when its picture began (if ok: a
   // P picture): rec[key] where keep's stamp is not snap, else keep and
   // coef, where before_write() keeps what views read of a record before it
@@ -713,14 +716,19 @@ struct History {
     if (p && !ok) {
       ok = true;
       if ((int)keep.size() < n) keep.resize(n), coef.resize(n);
-      snap++;  // (nothing kept yet: every record is rec's)
+      // (nothing kept yet: every record is rec's; after 2^32 such pictures
+      // the count starts again, and no stamp is of one before)
+      if (!++snap) {
+        for (Keep& e : keep) e.stamp = 0;
+        snap = 1;
+      }
       key = k;
       size = n;
     }
   }
   // kind k's first slice in picture p, of POC pc and id d: the kind's
   // records are the picture's from here on
-  void picture(int k, uint32_t p, int pc, int64_t d) {
+  void picture(int k, uint64_t p, int pc, int64_t d) {
     if (pic[k] == p) return;
     pic[k] = p;
     prev[k] = poc[k];
@@ -1238,7 +1246,7 @@ struct Model : tc_rc<f_DEC> {
   History hist_;
   typedef History::Ref MbRef;
   typedef History::View HistView;
-  uint32_t pic_;       // pictures so far
+  uint64_t pic_;       // pictures so far
   SliceHeader last_h_;     // the last slice coded (no sps: none yet)
   int st_, key_;   // slice type x reference; st_ x frame/top/bottom field (pic_kind)
   int width_, size_;

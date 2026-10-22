@@ -157,7 +157,7 @@ struct RPic {
 
 // What deblocking needs of a macroblock of the current picture.
 struct DbMb {
-  int slice;  // slice number in the picture, -1 not decoded
+  int64_t slice;  // slice number in the picture, -1 not decoded (a picture may never end)
   uint8_t intra, t8, pcm, qp, disable;
   int8_t alpha_off, beta_off, cqp[2];
   uint8_t nz[16];          // 4x4 blocks with coefficients (raster)
@@ -592,7 +592,7 @@ struct MbDecoder : Dpb {
   uint8_t* mb_px(int addr, int c) const { return plane(c) + mb_y(addr, c ? 8 : 16) * stride(c) + mb_x(addr, c ? 8 : 16); }
   uint8_t* mb_at(int c, int x, int y) const { return mb_px(mb_addr, c) + y * stride(c) + x; }
   Buf<DbMb> db;
-  int slice_no;
+  int64_t slice_no;
   int cqp_off[2];
   int disable, alpha_off, beta_off;
   bool constrained_intra, direct8x8;

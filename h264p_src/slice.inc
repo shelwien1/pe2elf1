@@ -639,7 +639,11 @@ struct SliceCoderT : WalkState, WalkCodes<SliceCoderT<kMode>> {
       next_ = store_->groups.next.data();
     }
     if ((int)store_->mbs.size() < size_) store_->mbs.resize(size_);
-    slice_id_ = ++store_->slices;
+    if (!++store_->slices) {  // (after 2^32 walks: the states before are of none, and the count starts again)
+      for (MbState& st : store_->mbs) st.slice = 0;
+      store_->slices = 1;
+    }
+    slice_id_ = store_->slices;
     if (h_->first_mb * (1 + mbaff_) >= size_) fail("first_mb_in_slice out of range");
 
     if (cabac_) {

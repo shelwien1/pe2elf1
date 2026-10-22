@@ -37,7 +37,7 @@ template <int f_DEC> struct Rangecoder : RC_IO_BASE<Rangecoder<f_DEC>> {
   uint Carry;
   uint code;
   uint range;
-  uint FFNum;
+  uint64_t FFNum;  // (a run of 0xFF bytes can pass 2^32: 11 TB of bytes all 0xFF coded as they are)
   uint Cache;
   uint skip;
   uint low_Add() {
@@ -132,7 +132,7 @@ template <int f_DEC> struct Rangecoder : RC_IO_BASE<Rangecoder<f_DEC>> {
     llow |= (k >= 64) ? ~uint64_t(0) : ((uint64_t(1) << k) - 1);
     if(Cache != uint(-1))
       emit((byte)(Cache + Carry));
-    for(uint i = 0; i < FFNum; i++)
+    for(uint64_t i = 0; i < FFNum; i++)
       emit((byte)(0xFF + Carry));
     for(uint i = 0; i < LOWBYTES; i++)
       emit((byte)(llow >> (LOWBITS - 8 - i * 8)));
