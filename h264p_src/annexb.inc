@@ -1,6 +1,7 @@
 // The byte stream format (Annex B): start codes and emulation prevention,
-// and the reader that splits a stream into its NAL units (t and c), which
-// h264split.inc's splitter (mt.inc) shares.
+// and the reader that splits a stream into its NAL units (c); the start
+// codes and the access unit delimiter's end are h264split.inc's splitter's
+// too (mt.inc).
 
 namespace h264p {
 
@@ -65,85 +66,120 @@ size_t aud_end(const uint8_t* b, size_t n) {
   return j;
 }
 
-// Splits an Annex B byte stream into NAL units while reading it.
+// CRC-32 (IEEE) of a stream (c reads it, d writes it), coded at the end of a
+// compressed one
+struct Crc32 {
+  void Init() {
+    for (uint32_t i = 0; i < 256; i++) {
+      uint32_t x = i;
+      for (int k = 0; k < 8; k++) x = x & 1 ? 0xEDB88320u ^ (x >> 1) : x >> 1;
+      t[i] = x;
+    }
+    c = 0xFFFFFFFFu;
+  }
+  void add(const uint8_t* p, size_t n) {
+    for (size_t i = 0; i < n; i++) c = t[(c ^ p[i]) & 255] ^ (c >> 8);
+  }
+  void add(const Buf<uint8_t>& v) { add(v.data(), v.size()); }
+  uint32_t value() const { return ~c; }
+  uint32_t t[256];
+  uint32_t c;
+};
+
+// Splits an Annex B byte stream into its segments while reading it: the
+// bytes before the first start code (the junk), then each NAL unit's, each
+// up to its last nonzero byte; the zero bytes after one go with the next
+// start code (zero_byte, trailing_zero_8bits) or with the end. It holds 64 KB
+// of the stream: a segment's bytes are read() a piece at a time, and zero
+// bytes are counted until a nonzero one says whose they are, so nothing is
+// held whole, however long (and it keeps the CRC-32 of the stream).
 struct AnnexBReader {
   void Init(ByteSource src) {
     src_ = src;
+    crc_.Init();
     buf_.Init();
-    junk_.Init();
-    head_ = scan_ = 0;
-    zeros_ = eof_zeros_ = 0;
-    started_ = done_ = false;
+    pos_ = 0;
+    run_ = data0_ = zeros_ = eof_zeros_ = 0;
+    end_ = eof_ = false;
   }
-  void Quit() {
-    buf_.Quit();
-    junk_.Quit();
-  }
+  void Quit() { buf_.Quit(); }
 
-  // The next NAL unit: the 0x00 bytes before its start code (zero_byte, and
-  // the trailing_zero_8bits of the previous NAL unit), and its bytes up to
-  // the zero bytes before the next start code. False at the end.
-  bool next(size_t& zeros, Buf<uint8_t>& nal) {
-    if (done_) return false;
-    size_t k;
-    if (!started_) {
-      if (!find(k)) {  // no start code at all
-        junk_.swap(buf_);
-        done_ = true;
-        return false;
+  // The current segment's next bytes, at most n of them into p (0: its end)
+  size_t read(uint8_t* p, size_t n) {
+    size_t k = 0;
+    while (k < n) {
+      if (data0_) {  // zero bytes that a nonzero byte showed to be the segment's
+        size_t m = (size_t)Min<uint64_t>(data0_, n - k);
+        memset(p + k, 0, m);
+        k += m, data0_ -= m;
+        continue;
       }
-      size_t j = k;
-      while (j > 0 && buf_[j - 1] == 0) j--;
-      junk_.assign(buf_.data(), j);
-      zeros_ = k - j;
-      started_ = true;
-      head_ = scan_ = k + 3;
+      if (end_) break;
+      if (pos_ == buf_.size() && !fill()) {  // the end of the stream
+        end_ = eof_ = true;
+        eof_zeros_ = run_, run_ = 0;
+        break;
+      }
+      const uint8_t* q = buf_.data();
+      if (!q[pos_]) {
+        size_t i = pos_;
+        while (i < buf_.size() && !q[i]) i++;
+        run_ += i - pos_, pos_ = i;
+        continue;
+      }
+      if (q[pos_] == 1 && run_ >= 2) {  // a start code: the end of the segment
+        end_ = true;
+        zeros_ = run_ - 2, run_ = 0;
+        pos_++;
+        break;
+      }
+      if (run_) {
+        data0_ = run_, run_ = 0;
+        continue;
+      }
+      size_t m = Min(buf_.size() - pos_, n - k);
+      const uint8_t* z = (const uint8_t*)memchr(q + pos_, 0, m);
+      if (z) m = (size_t)(z - (q + pos_));
+      memcpy(p + k, q + pos_, m);
+      k += m, pos_ += m;
     }
-    bool last = !find(k);
-    if (last) k = buf_.size();
-    size_t e = k;
-    while (e > head_ && buf_[e - 1] == 0) e--;
-    nal.assign(buf_.data() + head_, e - head_);
+    return k;
+  }
+  // On to the next NAL unit (what is left of the segment skipped): false at
+  // the end of the stream; the zero bytes before its start code
+  bool next(uint64_t& zeros) {
+    uint8_t skip[256];
+    while (read(skip, sizeof skip)) {
+    }
+    if (eof_) return false;
     zeros = zeros_;
-    if (last) {
-      eof_zeros_ = k - e;
-      done_ = true;
-    } else {
-      zeros_ = k - e;
-      head_ = scan_ = k + 3;
-    }
+    end_ = false;
     return true;
   }
-  // bytes before the first start code (all bytes if there is none)
-  const Buf<uint8_t>& junk() const { return junk_; }
-  // 0x00 bytes after the last NAL unit
-  size_t eof_zeros() const { return eof_zeros_; }
+  // the zero bytes after the last segment (once next() is false)
+  uint64_t eof_zeros() const { return eof_zeros_; }
+  // the CRC-32 of the stream read so far (all of it, once next() is false)
+  uint32_t crc() const { return crc_.value(); }
 
-  // the next start code at or after scan_, reading as much as needed
-  bool find(size_t& k) {
-    for (;;) {
-      k = find_start_code(buf_.data(), buf_.size(), scan_);
-      if (k < buf_.size()) return true;
-      scan_ = buf_.size() > 2 ? buf_.size() - 2 : 0;
-      if (scan_ < head_) scan_ = head_;
-      // drop what was returned before reading more
-      buf_.erase_front(head_);
-      scan_ -= head_;
-      head_ = 0;
-      size_t old = buf_.size();
-      buf_.resize(old + (1 << 16));
-      size_t n = src_.read(&buf_[old], 1 << 16);
-      buf_.resize(old + n);
-      if (!n) return false;
-    }
+  // more of the stream in buf_, in place of what was read: false at its end
+  bool fill() {
+    buf_.resize(1 << 16);
+    size_t n = src_.read(buf_.data(), 1 << 16);
+    buf_.resize(n);
+    crc_.add(buf_);
+    pos_ = 0;
+    return n != 0;
   }
 
   ByteSource src_;
-  Buf<uint8_t> buf_, junk_;
-  size_t head_;  // start of the current NAL unit in buf_
-  size_t scan_;  // where to look for the next start code
-  size_t zeros_, eof_zeros_;
-  bool started_, done_;
+  Crc32 crc_;
+  Buf<uint8_t> buf_;
+  size_t pos_;      // the next byte in buf_
+  uint64_t run_;    // zero bytes before it, whose they are not known yet
+  uint64_t data0_;  // zero bytes the segment has, not read yet
+  uint64_t zeros_, eof_zeros_;
+  bool end_;  // the segment has ended
+  bool eof_;  // and the stream
 };
 
 }  // namespace h264p

@@ -5,7 +5,7 @@
 namespace h264p {
 
 const char kCmMagic[] = "h264c";  // compressed streams, followed by the version and level bytes
-const int kCmVersion = 7;
+const int kCmVersion = 8;
 // The CRC-32 at the end is coded XORed with this: a decoder fed past the
 // end of its input decodes zeros, and 0 is the CRC-32 of an empty stream.
 const uint32_t kCrcXor = 0x68323634;
@@ -147,28 +147,6 @@ bool checked_bits(const BitWriter& bw, bool nobins, const BinRec& rec, const Buf
   return k == bw.pos();
 }
 
-// CRC-32 (IEEE) of the stream, coded at the end of a compressed one
-struct Crc32 {
-  void Init() {
-    for (uint32_t i = 0; i < 256; i++) {
-      uint32_t x = i;
-      for (int k = 0; k < 8; k++) x = x & 1 ? 0xEDB88320u ^ (x >> 1) : x >> 1;
-      t[i] = x;
-    }
-    c = 0xFFFFFFFFu;
-  }
-  void add(const uint8_t* p, size_t n) {
-    for (size_t i = 0; i < n; i++) c = t[(c ^ p[i]) & 255] ^ (c >> 8);
-  }
-  void add(const Buf<uint8_t>& v) { add(v.data(), v.size()); }
-  void zeros(size_t n) {
-    for (size_t i = 0; i < n; i++) c = t[c & 255] ^ (c >> 8);
-  }
-  uint32_t value() const { return ~c; }
-  uint32_t t[256];
-  uint32_t c;
-};
-
 void cm_report(const tc_rc<0>& e, u64 in_bytes, u64 out_bytes, u64 tables) {
   double tot = 0;
   for (int i = 0; i < STG_N; i++) tot += e.tc_bits[i];
@@ -188,8 +166,10 @@ void cm_report(const tc_rc<0>& e, u64 in_bytes, u64 out_bytes, u64 tables) {
 // NAL unit: that there is one (F_MORE), its type, nal_ref_idc and the zero
 // bytes before its start code, a change of x264's padding bits (slices),
 // whether it is stored verbatim (a type the walk knows); then its syntax
-// through the model and the trailer, or its length and bytes. At the end,
-// the zero bytes after the last NAL unit and the CRC-32 of the stream.
+// through the model and the trailer, or its bytes. At the end, the zero
+// bytes after the last NAL unit and the CRC-32 of the stream. Bytes stored
+// as they are come in chunks (code_raw()), and a NAL unit longer than kHold
+// is stored so as it is read: neither side holds one whole.
 //
 // check: the dry runs leave the CABAC slices they can to the model pass to
 // check (dry_run); if one of them does not come out as it is, the model
@@ -227,7 +207,6 @@ struct HistBound {
 struct CompressState {
   Context ctx;
   PadDetector det;
-  Crc32 crc;
   Stats st;
   DryRun dr;
   HistBound hist;
@@ -237,7 +216,6 @@ struct CompressState {
   void Init(ByteSource in) {
     ctx.Init();
     det.Init();
-    crc.Init();
     st.Init();
     dr.Init();
     hist.Init();
@@ -286,17 +264,68 @@ size_t cm_count(i64 v, i64 lim) {
   if (v < 0 || v > lim) err_raise("corrupt stream: a count of %" PRId64, v);
   return (size_t)v;
 }
-// Bytes coded as they are: their count (field fld, context c), then each,
-// coded (code_raw) or decoded onto b (grown as they come: the count may be
-// corrupt)
+// A count of zero bytes (field fld, context c), any up to 2^64 - 1: in
+// pieces of at most 2^40, one of 2^40 followed by another
+const i64 kCountPiece = (i64)1 << 40;
 template <class M>
-void code_raw(M& m, int fld, int c, const uint8_t* p, size_t n) {
-  m.nal(fld, c, (i64)n);
-  for (size_t i = 0; i < n; i++) m.raw(p[i]);
+void code_count(M& m, int fld, int c, uint64_t v) {
+  for (;;) {
+    i64 k = (i64)Min<uint64_t>(v, (uint64_t)kCountPiece);
+    m.nal(fld, c, k);
+    v -= (uint64_t)k;
+    if (k < kCountPiece) return;
+  }
 }
 template <class M>
-void decode_raw(M& m, int fld, int c, Buf<uint8_t>& b) {
-  for (size_t n = cm_count(m.nal(fld, c, 0), (i64)1 << 40); n; n--) b.push_back((uint8_t)m.raw(0));
+uint64_t decode_count(M& m, int fld, int c) {
+  uint64_t v = 0;
+  for (;;) {
+    size_t k = cm_count(m.nal(fld, c, 0), kCountPiece);
+    v += k;
+    if ((i64)k < kCountPiece) return v;
+  }
+}
+
+// Bytes coded as they are, in chunks: the count of each (field fld,
+// context c), up to kChunk, then its bytes; a chunk of kChunk is followed
+// by another (the last one shorter, maybe empty). So no run of them, however
+// long, is held whole: here b's from b[i] on, then what is left of the
+// reader's segment, if one is given, b holding a chunk of it at a time.
+// Decoded, each byte goes to put().
+const size_t kChunk = (size_t)1 << 20;
+// what is left of rd's segment read onto b, up to n bytes in all: b's size
+// (b grows as they come: n may be far more than there are)
+size_t read_more(AnnexBReader& rd, Buf<uint8_t>& b, size_t n) {
+  while (b.size() < n) {
+    size_t k = b.size(), want = Min(n - k, (size_t)1 << 16);
+    b.room(k + want);
+    size_t r = rd.read(b.data() + k, want);
+    if (!r) break;
+    b.n = k + r;
+  }
+  return b.size();
+}
+template <class M>
+void code_raw(M& m, int fld, int c, Buf<uint8_t>& b, size_t i, AnnexBReader* rd = nullptr) {
+  for (;;) {
+    if (rd && b.size() - i < kChunk) {
+      b.erase_front(i), i = 0;
+      read_more(*rd, b, kChunk);
+    }
+    size_t k = Min(b.size() - i, kChunk);
+    m.nal(fld, c, (i64)k);
+    for (size_t j = 0; j < k; j++) m.raw(b[i + j]);
+    i += k;
+    if (k < kChunk) return;
+  }
+}
+template <class M, class F>
+void decode_raw(M& m, int fld, int c, F put) {
+  for (;;) {
+    size_t k = cm_count(m.nal(fld, c, 0), (i64)kChunk);
+    for (size_t j = 0; j < k; j++) put((uint8_t)m.raw(0));
+    if (k < kChunk) return;
+  }
 }
 // How a NAL unit that parsed ends (its trailer t), coded, or decoded into
 // t: the same calls of the model either way. (The bounds are those of
@@ -347,32 +376,39 @@ bool compress_parsed(Model<0, LV>& m, CompressState& s, const NalHead& h) {
   return true;
 }
 
-// A NAL unit of the stream (zeros before it; prev_type, the type of the
-// one before it): its dry run, then the model pass, on one context (the
-// parameter sets and the macroblocks of either are the same; x264's
-// padding moves on to the next slice after both). 0, or 1 after an error
-// (reported).
+// A NAL unit longer than this is stored verbatim as it is read (in chunks,
+// code_raw()), not held whole to be parsed. (A slice of the largest
+// picture in 8-bit 4:2:0 I_PCM macroblocks takes 52 MB.)
+const size_t kHold = (size_t)1 << 26;
+
+// A NAL unit of the stream (zeros before it; its bytes in nal, all of them,
+// or with lng the first kHold + 1, the rest still in the reader; prev_type,
+// the type of the one before it): its dry run, then the model pass, on one
+// context (the parameter sets and the macroblocks of either are the same;
+// x264's padding moves on to the next slice after both). 0, or 1 after an
+// error (reported).
 template <class LV>
-int compress_nal(Model<0, LV>& m, CompressState& s, const H264pArgs& a, const Buf<uint8_t>& nal, size_t zeros,
+int compress_nal(Model<0, LV>& m, CompressState& s, const H264pArgs& a, Buf<uint8_t>& nal, uint64_t zeros, bool lng,
                  int& prev_type) {
-  static const uint8_t sc[3] = {0, 0, 1};
   Stats& st = s.st;
   Context& ctx = s.ctx;
-  s.crc.zeros(zeros);
-  s.crc.add(sc, 3);
-  s.crc.add(nal);
+  AnnexBReader* rest = lng ? &s.rd : nullptr;
   st.nals++;
   m.nal(F_MORE, 0, 1);
   if (headless(nal)) {
     m.nal(F_TYPE, prev_type, 32);
-    m.nal(F_ZEROS, 32, (i64)zeros);
-    code_raw(m, F_LEN, 32, nal.data(), nal.size());
+    code_count(m, F_ZEROS, 32, zeros);
+    code_raw(m, F_LEN, 32, nal, 0, rest);
     st.verbatim("empty or forbidden_zero_bit");
     return 0;
   }
   NalHead h = nal_head(nal, s.det);
-  int obs;
-  bool ok = s.dr.run(h, ctx, a.check, obs);
+  int obs = -1;
+  bool ok = false;
+  if (lng)
+    set_why(s.dr.why, "longer than %d MB", (int)(kHold >> 20));
+  else
+    ok = s.dr.run(h, ctx, a.check, obs);
   if (ok && h.slice && !s.hist.fits(ctx.slice_kind, ctx.slice_mbs)) {
     ok = false;
     set_why(s.dr.why, "the model's records of the kinds of picture would pass %lld MB", (long long)H264P_HIST_MB);
@@ -385,7 +421,7 @@ int compress_nal(Model<0, LV>& m, CompressState& s, const H264pArgs& a, const Bu
   if (ok && h.slice) s.hist.add(ctx.slice_kind, ctx.slice_mbs);
   m.nal(F_TYPE, prev_type, h.type);
   m.nal(F_REF, h.type, h.ref_idc);
-  m.nal(F_ZEROS, h.type, (i64)zeros);
+  code_count(m, F_ZEROS, h.type, zeros);
   prev_type = h.type;
   if (h.slice) {
     m.nal(F_PADCHG, 0, padchg);
@@ -404,14 +440,15 @@ int compress_nal(Model<0, LV>& m, CompressState& s, const H264pArgs& a, const Bu
       }
       err_jump(*m.run_trap, kRestart);
     }
-  } else {
-    // (an SPS or PPS stored verbatim still defines its parameter set
-    // where it could be parsed: the dry run has it so)
-    code_raw(m, F_LEN, h.type, h.payload, h.len);
-    if (!st.verbatim(h.type, s.dr.why, a.verbose, a.strict, a.meter)) return 1;
+    ctx.done(h.type, h.payload, h.len);
+    return 0;
   }
+  // (an SPS or PPS stored verbatim still defines its parameter set where
+  // it could be parsed: the dry run has it so; a long one is not parsed.
+  // Done before its bytes, which a long one's reading moves.)
   ctx.done(h.type, h.payload, h.len);
-  return 0;
+  code_raw(m, F_LEN, h.type, nal, 1, rest);
+  return st.verbatim(h.type, s.dr.why, a.verbose, a.strict, a.meter) ? 0 : 1;
 }
 
 // Compresses the stream s.rd reads with the model m, a new one, into its
@@ -421,7 +458,6 @@ int compress_nal(Model<0, LV>& m, CompressState& s, const H264pArgs& a, const Bu
 // it is, ends the run at its trap instead (coro.inc).
 template <class LV>
 int compress_stream(Model<0, LV>& m, CompressState& s, const H264pArgs& a) {
-  Crc32& crc = s.crc;
   AnnexBReader& rd = s.rd;
   const uint8_t head[2] = {(uint8_t)kCmVersion, (uint8_t)LV::id};
   m.write((const uint8_t*)kCmMagic, sizeof kCmMagic - 1);
@@ -431,18 +467,18 @@ int compress_stream(Model<0, LV>& m, CompressState& s, const H264pArgs& a) {
   m.rc_Init();
   s.st.nal0 = a.nal0, s.st.copy_at = a.copy_at, s.st.ncopy = a.ncopy;
   Buf<uint8_t>& nal = s.nal;
-  size_t zeros;
-  bool more = rd.next(zeros, nal);
-  const Buf<uint8_t>& junk = rd.junk();
-  code_raw(m, F_JUNK, 0, junk.data(), junk.size());
-  crc.add(junk);
+  nal.clear();
+  code_raw(m, F_JUNK, 0, nal, 0, &rd);
   int prev_type = 0;
-  for (; more; more = rd.next(zeros, nal))
-    if (compress_nal(m, s, a, nal, zeros, prev_type)) return 1;
+  uint64_t zeros;
+  while (rd.next(zeros)) {
+    nal.clear();
+    bool lng = read_more(rd, nal, kHold + 1) > kHold;
+    if (compress_nal(m, s, a, nal, zeros, lng, prev_type)) return 1;
+  }
   m.nal(F_MORE, 0, 0);
-  m.nal(F_EOFZ, 0, (i64)rd.eof_zeros());
-  crc.zeros(rd.eof_zeros());
-  m.nal(F_CRC, 0, crc.value() ^ kCrcXor);
+  code_count(m, F_EOFZ, 0, rd.eof_zeros());
+  m.nal(F_CRC, 0, rd.crc() ^ kCrcXor);
   m.end_stream();
   m.rc_Quit();
   if (a.verbose) {
@@ -461,7 +497,7 @@ template <class LV>
 int decompress_stream(Model<1, LV>& m, DecompressState& s, const H264pArgs& a) {
   Buf<uint8_t>& buf = s.buf;
   Crc32& crc = s.crc;
-  long nals = 0;
+  uint64_t nals = 0;
   auto flush = [&]() {
     crc.add(buf);
     m.write(buf.data(), buf.size());
@@ -470,26 +506,29 @@ int decompress_stream(Model<1, LV>& m, DecompressState& s, const H264pArgs& a) {
   auto spill = [&]() {
     if (buf.size() > (1 << 16)) flush();
   };
+  auto out = [&](uint8_t x) {
+    buf.push_back(x);
+    spill();
+  };
   m.start();
   m.tc_verbose = a.verbose;
   m.rc_Init();
   Context& ctx = s.ctx;
-  decode_raw(m, F_JUNK, 0, buf);
+  decode_raw(m, F_JUNK, 0, out);
   int prev_type = 0;
   while (m.nal(F_MORE, 0, 0)) {
     nals++;
     int type = (int)cm_count(m.nal(F_TYPE, prev_type, 0), 32);
     if (type == 32) {
-      put_start(buf, cm_count(m.nal(F_ZEROS, 32, 0), (i64)1 << 40), spill);
-      decode_raw(m, F_LEN, 32, buf);
+      put_start(buf, decode_count(m, F_ZEROS, 32), spill);
+      decode_raw(m, F_LEN, 32, out);
       spill();
       continue;
     }
     int ref_idc = (int)cm_count(m.nal(F_REF, type, 0), 3);
-    put_start(buf, cm_count(m.nal(F_ZEROS, type, 0), (i64)1 << 40), spill);
+    put_start(buf, decode_count(m, F_ZEROS, type), spill);
     buf.push_back((uint8_t)(ref_idc << 5 | type));
     prev_type = type;
-    size_t start = buf.size();
     if ((type == 1 || type == 5) && m.nal(F_PADCHG, 0, 0)) {
       if (m.nal(F_PADON, 0, 0))
         ctx.pad.set((int64_t)cm_count(m.nal(F_PADFRAME, 0, 0), 31));
@@ -497,11 +536,27 @@ int decompress_stream(Model<1, LV>& m, DecompressState& s, const H264pArgs& a) {
         ctx.pad.on = false;
     }
     if (!parsed_type(type) || m.nal(F_VERB, type, 0)) {
+      // its payload held while the NAL unit has at most kHold bytes (an SPS
+      // or PPS then defines its parameter set), else put out as it comes
       Buf<uint8_t>& b = s.b;
       b.clear();
-      decode_raw(m, F_LEN, type, b);
-      put_verbatim(buf, type, b, ctx, s.rbsp);
+      bool held = true;
+      decode_raw(m, F_LEN, type, [&](uint8_t x) {
+        if (held && b.size() == kHold - 1) {  // (a long one: what is held goes out first)
+          flush();
+          crc.add(b);
+          m.write(b.data(), b.size());
+          held = false;
+        }
+        if (held)
+          b.push_back(x);
+        else
+          out(x);
+      });
+      if (held) put_verbatim(buf, type, b, ctx, s.rbsp);
+      ctx.done(type, b.data(), b.size());
     } else {
+      size_t start = buf.size();
       ModelChan<1, LV> ch;
       ch.Init(m, nullptr);
       m.nal_begin(type, ref_idc);
@@ -516,16 +571,16 @@ int decompress_stream(Model<1, LV>& m, DecompressState& s, const H264pArgs& a) {
       apply_trailer(t, bw, pad);
       const Buf<uint8_t>& e = bw.data();
       escape(e.data(), e.size(), buf);
+      ctx.done(type, buf.data() + start, buf.size() - start);
     }
-    ctx.done(type, buf.data() + start, buf.size() - start);
     spill();
   }
-  put_zeros(buf, cm_count(m.nal(F_EOFZ, 0, 0), (i64)1 << 40), spill);
+  put_zeros(buf, decode_count(m, F_EOFZ, 0), spill);
   m.end_stream();
   flush();
   if (m.nal(F_CRC, 0, 0) != (crc.value() ^ kCrcXor)) err_raise("CRC mismatch: the stream did not decompress correctly");
   if (!m.input_done()) err_raise("corrupt stream: data after its end");
-  if (a.verbose) say(a.meter, "%ld NAL units\n", nals);
+  if (a.verbose) say(a.meter, "%" PRIu64 " NAL units\n", nals);
   return 0;
 }
 

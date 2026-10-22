@@ -136,6 +136,20 @@ if [ -n "${negative:-}" ]; then
     if sh -c 'ulimit -v $1 2>/dev/null || exit 1; for i in 1 2 3 4 5; do cat "$2/ab"; done | "$3" c -1 -t 2 -c 16k - - > /dev/null 2>&1' - $l "$tmp" "$bin"; then lim=$l; break; fi
   done
   check "an endless run of parameter set versions: c -t 2 through 63 MB in what 8 MB took${lim:+ ($lim KB)} and 128 MB" sh -c '[ -z "$1" ] || ulimit -v $(($1 + 131072)); for i in $(seq 40); do cat "$2/ab"; done | "$3" c -1 -t 2 -c 16k - - > /dev/null' - "$lim" "$tmp" "$bin"
+  # a run of zero bytes (100 MB, between two access unit delimiters): c and
+  # d count them, in the address space that 1 MB takes and 16 MB (c held
+  # them); and a NAL unit of 68 MB, past the 64 MB c holds of one: stored
+  # as it is read, and restored
+  lim=
+  for l in 20000 30000 40000 50000 60000 80000 100000 150000 200000 300000 500000; do
+    if sh -c 'ulimit -v $1 2>/dev/null || exit 1; { printf "\000\000\000\001\011\360"; head -c 1000000 /dev/zero; printf "\000\000\000\001\011\360"; } | "$2" c -1 - - > /dev/null 2>&1' - $l "$bin"; then lim=$l; break; fi
+  done
+  { printf '\000\000\000\001\011\360'; head -c 100000000 /dev/zero; printf '\000\000\000\001\011\360'; } > "$tmp/z.264"
+  check "100 MB of zero bytes between two NAL units: c and d in what 1 MB took${lim:+ ($lim KB)} and 16 MB" sh -c '[ -z "$1" ] || ulimit -v $(($1 + 16384)); "$2" c -1 "$3/z.264" "$3/z.c" && "$2" d "$3/z.c" "$3/z.d" && cmp -s "$3/z.264" "$3/z.d"' - "$lim" "$bin" "$tmp"
+  rm -f "$tmp/z.264" "$tmp/z.d"
+  { printf '\000\000\000\001\016'; head -c 68000000 /dev/zero | tr '\0' '\125'; cat "$here/h264p/x264_16x16.264"; } > "$tmp/long.264"
+  check "a NAL unit of 68 MB: c, d" sh -c '"$1" c -1 "$2/long.264" "$2/k.c" && "$1" d "$2/k.c" "$2/k.264" && cmp -s "$2/long.264" "$2/k.264"' - "$bin" "$tmp"
+  rm -f "$tmp/long.264" "$tmp/k.264"
   check "aud_last.264: c -t 2 -c 1k, d" sh -c '"$1" c -1 -t 2 -c 1k "$2" "$3/k.c" 2>/dev/null && "$1" d "$3/k.c" "$3/k.264" && cmp -s "$2" "$3/k.264"' - "$bin" "$here/crafted/aud_last.264" "$tmp"
   check "sei_size.264: c -s fails (a size past 2^24)" sh -c '! "$1" c -s -1 "$2" "$3/k.c" 2>/dev/null' - "$bin" "$here/crafted/sei_size.264" "$tmp"
   # a slice with a byte changed: stored verbatim, or with -s a failure that
