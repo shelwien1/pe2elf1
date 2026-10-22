@@ -125,6 +125,17 @@ if [ -n "${negative:-}" ]; then
     for i in $(seq 60); do printf '\000\000\000\001\014'; head -c 1000 /dev/zero | tr '\0' '\377'; done
   } > "$tmp/psets.264"
   check "large unused parameter sets: c -t 2 -c 1k under twice the input, d" sh -c '"$1" c -1 -t 2 -c 1k "$2/psets.264" "$2/k.c" 2>/dev/null && [ $(wc -c < "$2/k.c") -lt $((2 * $(wc -c < "$2/psets.264"))) ] && "$1" d "$2/k.c" "$2/k.264" && cmp -s "$2/psets.264" "$2/k.264"' - "$bin" "$tmp"
+  # an endless run of parameter set versions (two of an SPS extension in
+  # 6-byte units, each a new version): -t's address space through 63 MB
+  # stays within 128 MB of what 8 MB took (the splitter kept every version:
+  # 6 times the input). The least that 8 MB takes is found first.
+  printf '\000\000\001\155\377\101\000\000\001\155\377\102' > "$tmp/ab"
+  for i in $(seq 17); do cat "$tmp/ab" "$tmp/ab" > "$tmp/ab2" && mv "$tmp/ab2" "$tmp/ab"; done
+  lim=
+  for l in 150000 175000 200000 225000 250000 275000 300000 350000 400000 500000 700000 1000000; do
+    if sh -c 'ulimit -v $1 2>/dev/null || exit 1; for i in 1 2 3 4 5; do cat "$2/ab"; done | "$3" c -1 -t 2 -c 16k - - > /dev/null 2>&1' - $l "$tmp" "$bin"; then lim=$l; break; fi
+  done
+  check "an endless run of parameter set versions: c -t 2 through 63 MB in what 8 MB took${lim:+ ($lim KB)} and 128 MB" sh -c '[ -z "$1" ] || ulimit -v $(($1 + 131072)); for i in $(seq 40); do cat "$2/ab"; done | "$3" c -1 -t 2 -c 16k - - > /dev/null' - "$lim" "$tmp" "$bin"
   check "aud_last.264: c -t 2 -c 1k, d" sh -c '"$1" c -1 -t 2 -c 1k "$2" "$3/k.c" 2>/dev/null && "$1" d "$3/k.c" "$3/k.264" && cmp -s "$2" "$3/k.264"' - "$bin" "$here/crafted/aud_last.264" "$tmp"
   check "sei_size.264: c -s fails (a size past 2^24)" sh -c '! "$1" c -s -1 "$2" "$3/k.c" 2>/dev/null' - "$bin" "$here/crafted/sei_size.264" "$tmp"
   # a slice with a byte changed: stored verbatim, or with -s a failure that

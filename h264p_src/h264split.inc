@@ -243,6 +243,18 @@ int pset_slot(uint32_t key) {
   return (t == 7 ? 0 : t == 8 ? 1 : t == 13 ? 2 : 3) * 256 + (int)(key & 255);
 }
 
+// a set of parameter sets' keys (by slot: fixed, however many a run of
+// them holds)
+struct KeySet {
+  uint64_t w[kSlots / 64];
+  void clear() { memset(w, 0, sizeof w); }
+  void add(uint32_t key) {
+    int i = pset_slot(key);
+    w[i >> 6] |= uint64_t(1) << (i & 63);
+  }
+  bool has(int slot) const { return w[slot >> 6] >> (slot & 63) & 1; }
+};
+
 // A new version of a parameter set, at the NAL unit starting at `cut`.
 struct PsetEvent {
   uint64_t cut;
@@ -254,16 +266,11 @@ struct Candidate {
   bool sync;      // an IDR access unit (or an I one, with allow_i)
   uint64_t cut;   // start of the access unit
   uint64_t nal;   // its first NAL unit's index in the stream
-  h264p::Buf<uint32_t> keys;  // parameter sets defined before its first slice
+  KeySet keys;     // parameter sets defined before its first slice
   void Init() {
     sync = false;
     cut = nal = 0;
-    keys.Init();
-  }
-  void Quit() { keys.Quit(); }
-  void copy(const Candidate& o) {
-    sync = o.sync, cut = o.cut, nal = o.nal;
-    keys.copy(o.keys);
+    keys.clear();
   }
 };
 // A slice that refers to a PPS (its id), at the NAL unit starting at cut,
@@ -287,7 +294,7 @@ struct Analyzer {
   // it does after each NAL unit)
   Candidate cand;
   bool has_cand;
-  long pictures;
+  uint64_t pictures;
   h264p::Buf<PpsUse> uses;  // the slices since the last cut (H264Split::emit())
   uint64_t nals;            // the NAL units so far (the one nal() has: nals - 1)
 
@@ -325,10 +332,7 @@ struct Analyzer {
   void Quit() {
     events.Quit();
     ev_bytes.Quit();
-    cand.Quit();
     uses.Quit();
-    run_au.Quit();
-    pic.Quit();
     rbsp.Quit();
   }
 
@@ -362,7 +366,7 @@ struct Analyzer {
     }
     if (id < 0) return;
     uint32_t key = pset_key(t, id);
-    run_au.keys.push_back(key);
+    run_au.keys.add(key);
     size_t& last = latest[pset_slot(key)];
     if (last) {
       const PsetEvent& e = events[last - 1];
@@ -411,7 +415,7 @@ struct Analyzer {
     if (!pictures) return;
     if (pictures > 1 && pic_ok) {
       pic.sync = pic_idr || (allow_i && pic_intra);
-      cand.copy(pic);
+      cand = pic;
       has_cand = true;
     }
   }
@@ -430,7 +434,7 @@ struct Analyzer {
       end_picture();
       pictures++;
       if (run) {
-        pic.copy(run_au);
+        pic = run_au;
       } else {
         pic.cut = n.cut;
         pic.nal = nals - 1;
@@ -563,7 +567,7 @@ struct H264Split : Coroutine {
     size_t ev;
     uint64_t begin;                // the current part
     uint64_t nal0;                 // its first NAL unit's index in the stream
-    h264p::Buf<uint32_t> keys;     // the parameter sets its first access unit defines
+    h264s::KeySet keys;            // the parameter sets its first access unit defines
     h264p::Buf<uint8_t> extra;     // (emit()'s)
     uint64_t parts, total;
     void Init( bool allow_i ) {
@@ -573,7 +577,7 @@ struct H264Split : Coroutine {
       memset( state, 0, sizeof state );
       ev = 0;
       begin = nal0 = 0;
-      keys.Init();
+      keys.clear();
       extra.Init();
       parts = total = 0;
     }
@@ -581,7 +585,6 @@ struct H264Split : Coroutine {
       sc.Quit();
       an.Quit();
       buf.Quit();
-      keys.Quit();
       extra.Quit();
     }
   };
@@ -621,16 +624,15 @@ struct H264Split : Coroutine {
     State& s = *st;
     Analyzer& an = s.an;
     uint64_t n = end - s.begin;
-    bool used[256] = {}, used_sps[32] = {}, defined[kSlots] = {}, use[kSlots] = {};
+    bool used[256] = {}, used_sps[32] = {}, use[kSlots] = {};
     size_t k = 0;
     for( ; k<an.uses.size() && an.uses[k].cut<end; k++ ) {
       used[an.uses[k].pps] = true;
       if( an.uses[k].sps>=0 && an.uses[k].sps<32 ) used_sps[an.uses[k].sps] = true;
     }
     an.uses.erase_front( k );
-    for( uint32_t key : s.keys ) defined[pset_slot(key)] = true;
     for( int i=0; i<kSlots; i++ )  // (slots 256..511: the PPSs; the others' ids are SPS ids, below 32)
-      if( s.state[i] && !defined[i] ) use[i] = i/256==1 ? used[i%256] : i%256<32 && used_sps[i%256];
+      if( s.state[i] && !s.keys.has(i) ) use[i] = i/256==1 ? used[i%256] : i%256<32 && used_sps[i%256];
     s.extra.clear();
     uint32_t nins = 0;
     static const int order[4] = {7, 13, 15, 8};
@@ -662,8 +664,40 @@ struct H264Split : Coroutine {
     State& s = *st;
     Analyzer& an = s.an;
     while( s.ev<an.events.size() && an.events[s.ev].cut<c.cut ) s.state[pset_slot(an.events[s.ev].key)] = s.ev+1, s.ev++;
-    s.keys.copy( c.keys );
+    s.keys = c.keys;
     s.nal0 = c.nal;
+    trim_events();
+  }
+
+  // The versions of parameter sets no part can copy any more (before the
+  // last cut, each key's but its last) go, once they are most of what
+  // an.events holds: what stays is a version of each key (s.state's) and
+  // those of the part under way (of its own bytes), however long the stream
+  // and however many versions it brings
+  void trim_events( void ) {
+    using namespace h264s;
+    State& s = *st;
+    Analyzer& an = s.an;
+    const size_t w = sizeof(PsetEvent);  // (an event's weight: its bytes and this)
+    size_t live = (an.events.size()-s.ev)*w + (s.ev<an.events.size() ? an.ev_bytes.size()-an.events[s.ev].off : 0);
+    for( int i=0; i<kSlots; i++ ) if( s.state[i] ) live += w+an.events[s.state[i]-1].len;
+    if( an.events.size()*w+an.ev_bytes.size() < 2*live+(1<<16) ) return;
+    size_t j = 0, off = 0, ev = 0;
+    for( size_t i=0; i<an.events.size(); i++ ) {  // (in place: what stays moves to the front, in order)
+      PsetEvent e = an.events[i];
+      int k = pset_slot( e.key );
+      if( i<s.ev && s.state[k]!=i+1 ) continue;
+      memmove( an.ev_bytes.data()+off, an.ev_bytes.data()+e.off, e.len );
+      e.off = off, off += e.len;
+      // (renumbered to an index no larger: no later event of the key is taken for it)
+      if( s.state[k]==i+1 ) s.state[k] = j+1;
+      if( an.latest[k]==i+1 ) an.latest[k] = j+1;
+      an.events[j++] = e;
+      if( i<s.ev ) ev = j;
+    }
+    an.events.resize( j );
+    an.ev_bytes.resize( off );
+    s.ev = ev;
   }
   void cut( const h264s::Candidate& c ) { emit( c.cut ); start_part( c ); }
 
@@ -687,7 +721,6 @@ struct H264Split : Coroutine {
     c.cut = n.cut;
     c.nal = an.nals - 1;
     cut( c );
-    c.Quit();
   }
 
   void do_process( void ) {
@@ -710,7 +743,6 @@ struct H264Split : Coroutine {
         c.cut = s.begin+2*cap;
         c.nal = s.an.nals+s.sc.in_nal;  // (the part's first whole NAL unit)
         cut( c );
-        c.Quit();
       }
     }
     s.sc.end( on_nal );
