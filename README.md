@@ -113,22 +113,36 @@ stream (not after one writing it). Interrupted, or ended by a pipe it
 writes to closing (SIGINT, SIGTERM, SIGHUP, SIGPIPE; not on Windows), it
 removes the temporary file.
 
-Where stderr is a terminal (or with `-p`), `c` and `d` show their progress
-there, on a line put over itself every half second:
+Where stderr is a terminal (or with `-p`), `c` and `d` say what the video
+is, as its first slice has it, and show their progress on a line put over
+itself every half second:
 
-    [enc] 1441792 > 983051   37.3%   0.47 MB/s  180.01M RAM
-    [enc] 3866640 > 2736446  100.0%  done in 11.89s  193.72M RAM at most
+    [enc] video: 960x540, High@L4.0, 4:2:0 8-bit, CABAC, progressive, 8x8 transform, weighted P, implicit weighted B, 4 reference frames, 60 fps
+    [enc] 1441792 > 983051   37.3%  1910 pictures   0.47 MB/s  180.01M RAM
+    [enc] 3866640 > 2736446  100.0%  4840 pictures  done in 11.89s  193.72M RAM at most
 
-the bytes of the stream and of the compressed stream done so far (`dec`:
-the same way round, the stream written from the compressed stream read),
-how far through its input the call is (none for a pipe, whose size is not
-known), the speed (MB of the stream a second) and the memory the process
-has (its resident set); and at the end, how long it took and the most
-memory it had. (On systems other than Linux and Windows, the line shows
-the most throughout.) With `-t`, the workers
-put the line as they code (the counts are theirs), since the main thread
-mostly waits on them. A message (an error, `-v`'s) starts on a line of its
-own, and after an error the line is not put again.
+The video: its size as shown (cropped), profile and level, chroma format
+and bit depth, entropy coding, frames or fields (MBAFF, field pictures),
+the tools its parameter sets turn on (8x8 transform, weighted prediction,
+slice groups, constrained intra, lossless, scaling matrices), the
+reference frames and the frame rate where the stream gives one. With `-v`
+it is said where there is no progress line too, and again wherever it
+changes ("the video now: ..."). The line: the bytes of the stream and of
+the compressed stream done so far (`dec`: the same way round, the stream
+written from the compressed stream read), how far through its input the
+call is (none for a pipe, whose size is not known), the pictures, the
+speed (MB of the stream a second) and the memory the process has (its
+resident set); and at the end, how long it took and the most memory it
+had. (On systems other than Linux and Windows, the line shows the most
+throughout.) A message (an error, `-v`'s) starts on a line of its own,
+and after an error the line is not put again.
+
+The codec prints nothing: its coroutine tells the front end what there is
+to show, by what it yields with (`rcio.inc`): the video, a message, its
+statistics at the end, a point to show progress at (each picture), its
+error. The front end (`drivers.inc`, and with `-t` the workers'
+`run_part()` in `mt.inc`, which put the line as they code, since the main
+thread mostly waits on them) shows it, under one lock.
 
 ### Compression
 

@@ -53,12 +53,77 @@ int64_t clock_ns() {
 #endif
 }
 
+// A line of text (b, of n bytes) after the k bytes it has: fmt's
+void put_text(char* b, size_t n, size_t& k, const char* fmt, ...) {
+  if (k >= n) return;
+  va_list ap;
+  va_start(ap, fmt);
+  int l = vsnprintf(b + k, n - k, fmt, ap);
+  va_end(ap);
+  if (l > 0) k = Min(n - 1, k + (size_t)l);
+}
+// What the video is (rcio.inc's VideoInfo), in words, into b (n bytes):
+// its size, profile and level, chroma and bit depth, entropy coding, how it
+// is scanned, the tools its parameter sets turn on, references, frame rate
+void video_words(const VideoInfo& v, char* b, size_t n) {
+  static const struct {
+    int idc, set;  // profile_idc, and the constraint_set flags (bits: set0 128 .. set5 4) it has too
+    const char* name;
+  } kProfiles[] = {{66, 64, "Constrained Baseline"}, {66, 0, "Baseline"}, {77, 0, "Main"}, {88, 0, "Extended"},
+                   {100, 12, "Constrained High"}, {100, 8, "Progressive High"}, {100, 0, "High"},
+                   {110, 16, "High 10 Intra"}, {110, 0, "High 10"}, {122, 16, "High 4:2:2 Intra"},
+                   {122, 0, "High 4:2:2"}, {244, 16, "High 4:4:4 Intra"}, {244, 0, "High 4:4:4 Predictive"},
+                   {44, 0, "CAVLC 4:4:4 Intra"}, {118, 0, "Multiview High"}, {128, 0, "Stereo High"},
+                   {83, 0, "Scalable Baseline"}, {86, 0, "Scalable High"}, {134, 0, "MFC High"},
+                   {135, 0, "MFC Depth High"}, {138, 0, "Multiview Depth High"},
+                   {139, 0, "Enhanced Multiview Depth High"}};
+  static const char* const kChroma[4] = {"4:0:0", "4:2:0", "4:2:2", "4:4:4"};
+  size_t k = 0;
+  put_text(b, n, k, "%dx%d", v.width, v.height);
+  const char* prof = nullptr;
+  for (const auto& p : kProfiles)
+    if (p.idc == v.profile && (v.constraints & p.set) == p.set) {
+      prof = p.name;
+      break;
+    }
+  if (prof)
+    put_text(b, n, k, ", %s", prof);
+  else
+    put_text(b, n, k, ", profile %d", v.profile);
+  bool l1b = v.level == 9 ||  // (or 11 with constraint_set3 in the profiles before High)
+             (v.level == 11 && (v.constraints & 16) && (v.profile == 66 || v.profile == 77 || v.profile == 88));
+  if (l1b)
+    put_text(b, n, k, "@L1b");
+  else
+    put_text(b, n, k, "@L%d.%d", v.level / 10, v.level % 10);
+  put_text(b, n, k, ", %s", kChroma[v.chroma & 3]);
+  if (v.chroma && v.depth_chroma != v.depth_luma)
+    put_text(b, n, k, " %d/%d-bit", v.depth_luma, v.depth_chroma);
+  else
+    put_text(b, n, k, " %d-bit", v.depth_luma);
+  put_text(b, n, k, ", %s", v.cabac ? "CABAC" : "CAVLC");
+  if (v.frames_only)
+    put_text(b, n, k, ", progressive");
+  else
+    put_text(b, n, k, ", interlaced%s%s", v.mbaff ? ", MBAFF" : "", v.field ? ", field pictures" : "");
+  if (v.transform_8x8) put_text(b, n, k, ", 8x8 transform");
+  if (v.weighted_p) put_text(b, n, k, ", weighted P");
+  if (v.weighted_b) put_text(b, n, k, v.weighted_b == 1 ? ", weighted B" : ", implicit weighted B");
+  if (v.slice_groups > 1) put_text(b, n, k, ", %d slice groups", v.slice_groups);
+  if (v.constrained_intra) put_text(b, n, k, ", constrained intra");
+  if (v.lossless) put_text(b, n, k, ", lossless");
+  if (v.scaling) put_text(b, n, k, ", scaling matrices");
+  put_text(b, n, k, ", %d reference frame%s", v.refs, v.refs == 1 ? "" : "s");
+  if (v.num_units_in_tick && v.time_scale) put_text(b, n, k, ", %.4g fps", v.time_scale / (2.0 * v.num_units_in_tick));
+}
+
 // Progress on stderr, as c and d go: a line put over itself every half
 // second -- the bytes of the stream (raw) and of the compressed stream
-// (packed) done so far, how far through its input the call is, the speed
-// (of the stream) and the memory the process has now (its resident set)
-// -- and at the end, how long it all took and the most memory it had.
-// When stderr is a terminal, or with -p.
+// (packed) done so far, how far through its input the call is, the
+// pictures, the speed (of the stream) and the memory the process has now
+// (its resident set) -- and at the end, how long it all took and the most
+// memory it had. When stderr is a terminal, or with -p. Before the lines,
+// what the video is, as the codec tells it (video()).
 // what() gives the counts (of what_ctx); poll() puts a line if one is
 // due, from any thread (with -t, the workers', as they code: the main
 // thread waits on them). Messages go through say() (below), which puts
@@ -66,8 +131,10 @@ int64_t clock_ns() {
 struct Progress {
   const char* tag;  // enc, dec; none: no progress
   uint64_t total;   // the input's size (0: not known, no percentage)
-  void (*what)(void* ctx, uint64_t& raw, uint64_t& packed, uint64_t& pos);  // pos of total: raw or packed
+  // pos of total: raw or packed; pics: the pictures
+  void (*what)(void* ctx, uint64_t& raw, uint64_t& packed, uint64_t& pos, uint64_t& pics);
   void* what_ctx;
+  VideoInfo shown;  // the video said last (shown.width 0: none)
   int64_t t0;    // the start (clock_ns())
   int64_t last;  // the last line, ns after t0 (atomic)
   int halted;    // an error was reported: no more lines (atomic)
@@ -80,6 +147,7 @@ struct Progress {
     total = 0;
     what = nullptr;
     what_ctx = nullptr;
+    memset((void*)&shown, 0, sizeof shown);
     t0 = last = 0;
     halted = 0;
     lock.Init();
@@ -94,48 +162,66 @@ struct Progress {
     t0 = clock_ns();
   }
   // the counts (none: no lines), from the thread that sets them
-  void counts(void (*f)(void*, uint64_t&, uint64_t&, uint64_t&), void* ctx) {
+  void counts(void (*f)(void*, uint64_t&, uint64_t&, uint64_t&, uint64_t&), void* ctx) {
     what_ctx = ctx;
     __atomic_store_n(&what, f, __ATOMIC_SEQ_CST);
   }
   bool stopped() const { return __atomic_load_n(&halted, __ATOMIC_SEQ_CST) != 0; }
   // a line, if half a second has gone by since the last (one thread puts it)
   void poll() {
-    void (*f)(void*, uint64_t&, uint64_t&, uint64_t&) = __atomic_load_n(&what, __ATOMIC_SEQ_CST);
+    void (*f)(void*, uint64_t&, uint64_t&, uint64_t&, uint64_t&) = __atomic_load_n(&what, __ATOMIC_SEQ_CST);
     if (!tag || !f || stopped()) return;
     int64_t t = clock_ns() - t0;
     int64_t l = __atomic_load_n(&last, __ATOMIC_RELAXED);
     if (t - l < 500000000 || !__atomic_compare_exchange_n(&last, &l, t, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) return;
-    uint64_t raw, packed, pos;
-    f(what_ctx, raw, packed, pos);
+    uint64_t raw, packed, pos, pics;
+    f(what_ctx, raw, packed, pos, pics);
     double mbs = raw / (t * 1e-9) / (1 << 20);
     char b[192];
-    int n = total ? snprintf(b, sizeof b, "[%s] %" PRIu64 " > %" PRIu64 "  %5.1f%%  %5.2f MB/s  %5.2fM RAM", tag, raw,
-                             packed, Min(100.0, 100.0 * pos / total), mbs, ram(false))
-                  : snprintf(b, sizeof b, "[%s] %" PRIu64 " > %" PRIu64 "  %5.2f MB/s  %5.2fM RAM", tag, raw, packed,
-                             mbs, ram(false));
+    size_t n = 0;
+    put_text(b, sizeof b, n, "[%s] %" PRIu64 " > %" PRIu64, tag, raw, packed);
+    if (total) put_text(b, sizeof b, n, "  %5.1f%%", Min(100.0, 100.0 * pos / total));
+    put_text(b, sizeof b, n, "  %" PRIu64 " pictures  %5.2f MB/s  %5.2fM RAM", pics, mbs, ram(false));
     lock.lock();
-    if (!stopped()) show(b, n, "");
+    if (!stopped()) show(b, (int)n, "");
     lock.unlock();
   }
   // the end, done (the main thread, no worker left; not after an error)
-  void done(uint64_t raw, uint64_t packed) {
+  void done(uint64_t raw, uint64_t packed, uint64_t pics) {
     if (!tag || stopped()) return;
     double s = (clock_ns() - t0) * 1e-9;
     char b[192];
-    int n = snprintf(b, sizeof b, "[%s] %" PRIu64 " > %" PRIu64 "  100.0%%  done in %.2fs  %5.2fM RAM at most", tag, raw,
-                     packed, s, ram(true));
+    int n = snprintf(b, sizeof b,
+                     "[%s] %" PRIu64 " > %" PRIu64 "  100.0%%  %" PRIu64 " pictures  done in %.2fs  %5.2fM RAM at most",
+                     tag, raw, packed, pics, s, ram(true));
     lock.lock();
     show(b, n, "\n");
     up = false;
     lock.unlock();
   }
   // the end of a call, r its status: done, or the line ended after an error
-  void end(int r, uint64_t raw, uint64_t packed) {
+  void end(int r, uint64_t raw, uint64_t packed, uint64_t pics) {
     if (r)
       end_line();
     else
-      done(raw, packed);
+      done(raw, packed, pics);
+  }
+  // what the video is, as a codec tells it (coro.inc's show_told()): said
+  // as it first comes, where the progress line is shown or with -v
+  // (verbose), and with -v where it changes (from what was said last: the
+  // parts of -t each tell it, from as many threads)
+  void video(const VideoInfo& v, bool verbose) {
+    if (!tag && !verbose) return;
+    lock.lock();
+    if (!stopped() && (!shown.width || (verbose && memcmp(&v, &shown, sizeof v)))) {
+      char b[400];
+      video_words(v, b, sizeof b);
+      cut();
+      if (tag) fprintf(stderr, "[%s] ", tag);
+      fprintf(stderr, "%s: %s\n", shown.width ? "the video now" : "video", b);
+      shown = v;
+    }
+    lock.unlock();
   }
   // a message (stop: an error, after which no line comes, and no other
   // error: with threads, what follows from the first)

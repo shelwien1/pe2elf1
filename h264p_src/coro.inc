@@ -3,9 +3,11 @@
 // the input comes in the buffers addinp() gives, a 0-length one with f_quit
 // set at its end, and yield 1 asks for the next; the output goes into the
 // buffer addout() gave, yield 2 handing it over full; yield 0 at the end
-// (the last output in the buffer), yield 3 after an error (reported on
-// stderr). So drivers.inc's run_file() runs one on files (c, d), and an
-// MTwrap worker runs one on each part of a stream (mt.inc's run_part()).
+// (the last output in the buffer), yield 3 after an error (its note says
+// it). What else it yields with tells its driver what to show (rcio.inc):
+// a codec prints nothing. So drivers.inc's run_file() runs one on files
+// (c, d), and an MTwrap worker runs one on each part of a stream (mt.inc's
+// run_part()), each showing what it tells (show_told(), below).
 //
 // The coroutine is the model: H264pCoro derives from Model, the model from
 // the range coder (fam.inc's tc_rc) and the coder from the coroutine's I/O
@@ -45,11 +47,11 @@ struct H264pCoro : Model<f_DEC, LV> {
     Model<f_DEC, LV>::Quit();
   }
 
-  // The run, in a trap (err.inc) that an error ends it at: said, after
-  // what was decoded is written (d keeps it); or kRestart, a slice the
-  // model pass's check found would not come out as it is (compress_nal()),
-  // what it dumped then dropped. The coroutine yields from here, its stack
-  // shallow again.
+  // The run, in a trap (err.inc) that an error ends it at: its note says
+  // why, after what was decoded is written (d keeps it); or kRestart, a
+  // slice the model pass's check found would not come out as it is
+  // (compress_nal()), what it dumped then dropped. The coroutine yields from
+  // here, its stack shallow again.
   void do_process() {
     int r;
     this->io_init();
@@ -65,16 +67,12 @@ struct H264pCoro : Model<f_DEC, LV> {
     } else {
       r = 1;
       if (st) written(IntTag<f_DEC>());
-      say_error(args.meter, "h264p: %s: %s\n", args.name, t.why);
+      this->set_note("h264p: %s: %s", args.name, t.why);
     }
     this->run_trap = nullptr;
     Quit();
-    if (args.verbose) {
-      say(args.meter, "coroutine: %zu bytes of stack copied out at a yield, at most (room for %d)\n", this->depth,
-              (int)Coroutine::STKPAD);
-    }
     status = r;
-    for (;;) yield(static_cast<Coroutine*>(this), r ? 3 : 0);
+    for (;;) yield(static_cast<Coroutine*>(this), r ? kYieldFail : kYieldEnd);
   }
 
   // compressing
@@ -90,10 +88,10 @@ struct H264pCoro : Model<f_DEC, LV> {
     st = (DecompressState*)mem_alloc(sizeof(DecompressState));
     st->Init();
     uint8_t head[sizeof kCmMagic + 1];
-    int level = cm_level(head, this->read(head, sizeof head), args.name, args.meter);
+    int level = cm_level(head, this->read(head, sizeof head), args.name, this->note, sizeof this->note);
     if (level < 0) return 1;
     if (level != LV::id) {
-      say_error(args.meter, "h264p: %s: compressed at level -%d, not -%d\n", args.name, level, LV::id);
+      this->set_note("h264p: %s: compressed at level -%d, not -%d", args.name, level, LV::id);
       return 1;
     }
     return decompress_stream<LV>(*this, *st, args);
@@ -118,25 +116,55 @@ void coro_free(T* p) {
 }
 
 // Runs the coroutine c in coro.inc's buffer protocol to its end: in() gives
-// it its next input when it asks for it (yield 1), out(more) takes what it
-// put in its output buffer when that is full (yield 2, more: and then gives
-// it the next) or as it ends (yield 0, or 3 after an error: what drive()
-// returns), and tick() comes after each yield (the progress line). The
-// caller's traps (err.inc) are put aside while c runs, so that c's are not
-// set on them: c's errors end at c's own (a part's model in a worker's).
-template <class C, class In, class Out, class Tick>
-uint drive(C& c, In in, Out out, Tick tick) {
+// it its next input when it asks for it (kYieldIn), out(more) takes what
+// it put in its output buffer when that is full (kYieldOut, more: and then
+// gives it the next) or as it ends (kYieldEnd, or kYieldFail after an
+// error: what drive() returns), and show(code) comes after each yield
+// (what c tells, rcio.inc, and the progress line). The caller's traps
+// (err.inc) are put aside while c runs, so that c's are not set on them:
+// c's errors end at c's own (a part's model in a worker's).
+template <class C, class In, class Out, class Show>
+uint drive(C& c, In in, Out out, Show show) {
   for (;;) {
     ErrTrap* t = err_hold();
     uint r = c.coro_call(&c);
     err_resume(t);
-    tick();
-    if (r == 1) {
+    show(r);
+    if (r == kYieldIn) {
       in();
       continue;
     }
-    out(r == 2);
-    if (r != 2) return r;
+    if (r >= kYieldVideo) continue;  // (told)
+    out(r == kYieldOut);
+    if (r != kYieldOut) return r;
+  }
+}
+
+// -v's statistics of a run of codec c, at its end (kYieldStats), after the
+// progress line pr: c.st's, and its coder's
+template <class LV>
+void show_stats(H264pCoro<0, LV>& c, Progress* pr) {
+  c.st->st.report("coded", "changes of x264's padding bits", pr);
+  cm_report(c, c.n_in, c.n_out, c.table_bytes(), pr);
+}
+template <class LV>
+void show_stats(H264pCoro<1, LV>& c, Progress* pr) {
+  say(pr, "%" PRIu64 " NAL units\n", c.st->nals);
+}
+// What a driver shows of what its codec c, of a run with args a, tells
+// (code, each yield), after the progress line pr: the video, a message,
+// the statistics (-v); and as the run ends, its error (not a restart).
+// (From any thread: pr's lock orders them.)
+template <int f_DEC, class LV>
+void show_told(H264pCoro<f_DEC, LV>& c, uint code, Progress* pr, const H264pArgs& a) {
+  if (code == kYieldVideo) {
+    if (pr) pr->video(c.video, a.verbose);
+  } else if (code == kYieldNote) {
+    say(pr, "%s", c.note);
+  } else if (code == kYieldFail && c.status == 1) {
+    say_error(pr, "%s", c.note);
+  } else if (code == kYieldStats && a.verbose) {
+    show_stats(c, pr);
   }
 }
 

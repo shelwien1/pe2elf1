@@ -10,24 +10,25 @@ const int kCmVersion = 8;
 // end of its input decodes zeros, and 0 is the CRC-32 of an empty stream.
 const uint32_t kCrcXor = 0x68323634;
 
-// whether v, a compressed stream's version byte, is this version (else said)
-bool cm_version_ok(int v, const char* name, Progress* meter = nullptr) {
+// whether v, a compressed stream's version byte, is this version (else why,
+// a line, in msg, of mn bytes, for the caller to say)
+bool cm_version_ok(int v, const char* name, char* msg, size_t mn) {
   if (v == kCmVersion) return true;
-  say_error(meter, "h264p: %s: compressed by version %d, this is version %d\n", name, v, kCmVersion);
+  snprintf(msg, mn, "h264p: %s: compressed by version %d, this is version %d\n", name, v, kCmVersion);
   return false;
 }
 // The level of a compressed stream from its first bytes, n of them read
-// (the magic, the version, the level), or -1 (reported) if they are not
-// h264p's
-int cm_level(const uint8_t* head, size_t n, const char* name, Progress* meter = nullptr) {
+// (the magic, the version, the level), or -1 if they are not h264p's (why
+// in msg)
+int cm_level(const uint8_t* head, size_t n, const char* name, char* msg, size_t mn) {
   const size_t m = sizeof kCmMagic - 1;  // the magic's bytes; the version, the level after them
   if (!n || memcmp(head, kCmMagic, Min(n, m))) {
-    say_error(meter, "h264p: %s: not a stream h264p compressed\n", name);
+    snprintf(msg, mn, "h264p: %s: not a stream h264p compressed\n", name);
     return -1;
   }
-  if (n > m && !cm_version_ok(head[m], name, meter)) return -1;
+  if (n > m && !cm_version_ok(head[m], name, msg, mn)) return -1;
   if (n < m + 2) {
-    say_error(meter, "h264p: %s: the compressed stream is cut short\n", name);
+    snprintf(msg, mn, "h264p: %s: the compressed stream is cut short\n", name);
     return -1;
   }
   return head[m + 1];
@@ -37,12 +38,12 @@ int cm_level(const uint8_t* head, size_t n, const char* name, Progress* meter = 
 // which MTwrap's workers have too (mt.inc)
 struct H264pArgs {
   int level;        // compressing: the model's level (1-9)
-  bool verbose;     // statistics on stderr
+  bool verbose;     // statistics, and the messages they come with (the codec tells them: coro.inc)
   bool strict;      // compressing: fail where a NAL unit of a supported type would be stored verbatim
   bool check;       // compressing: the model pass checks the slices it can; status kRestart if one does
                     // not come out as it is, and the input has to be compressed again without
   const char* name;  // the input's, for messages
-  Progress* meter;   // the call's progress line, if one is shown (messages cut it)
+  Progress* meter;   // the call's progress line, where its driver shows what the codec tells (coro.inc)
   // compressing a part of -t: the index in the stream of its first NAL
   // unit, and the parameter sets copied into it, ncopy NAL units from its
   // copy_at (for messages: Stats)
@@ -147,16 +148,56 @@ bool checked_bits(const BitWriter& bw, bool nobins, const BinRec& rec, const Buf
   return k == bw.pos();
 }
 
-void cm_report(const tc_rc<0>& e, u64 in_bytes, u64 out_bytes, u64 tables) {
+// What the video is, as the slice just parsed (ctx.sh) and its parameter
+// sets say (none: all zero)
+VideoInfo video_of(const Context& ctx) {
+  VideoInfo v;
+  memset((void*)&v, 0, sizeof v);
+  const SliceHeader& h = ctx.sh;
+  const Sps* q = h.sps;
+  const Pps* p = h.pps;
+  if (!q || !p) return v;
+  int ct = q->chroma_array_type();
+  int cx = ct == 1 || ct == 2 ? 2 : 1, cy = (ct == 1 ? 2 : 1) * (2 - q->frame_mbs_only_flag);  // CropUnitX, CropUnitY
+  v.width = Max(0, 16 * q->width_mbs - cx * (q->crop_left + q->crop_right));
+  v.height = Max(0, 16 * q->frame_height_mbs() - cy * (q->crop_top + q->crop_bottom));
+  v.profile = q->profile_idc, v.constraints = q->constraint_flags, v.level = q->level_idc;
+  v.chroma = q->chroma_format_idc, v.depth_luma = q->bit_depth_luma, v.depth_chroma = q->bit_depth_chroma;
+  v.cabac = p->entropy_coding_mode_flag;
+  v.frames_only = q->frame_mbs_only_flag, v.mbaff = q->mb_adaptive_frame_field_flag, v.field = h.field_pic_flag;
+  v.transform_8x8 = p->transform_8x8_mode_flag;
+  v.weighted_p = p->weighted_pred_flag, v.weighted_b = p->weighted_bipred_idc;
+  v.slice_groups = p->num_slice_groups, v.constrained_intra = p->constrained_intra_pred_flag;
+  v.refs = q->max_num_ref_frames, v.lossless = q->transform_bypass, v.scaling = q->scaling_matrix || p->scaling_matrix;
+  v.num_units_in_tick = q->num_units_in_tick, v.time_scale = q->time_scale;
+  return v;
+}
+// told to the driver (kYieldVideo), after a slice parsed, where it is not
+// what was told last; and the progress, at each picture (kYieldTick)
+void tell_video(CoroIo& io, const Context& ctx) {
+  VideoInfo v = video_of(ctx);
+  if (!v.width || !memcmp(&v, &io.video, sizeof v)) return;
+  io.video = v;
+  io.tell(kYieldVideo);
+}
+void tell_tick(CoroIo& io, const Context& ctx) {
+  if (ctx.pictures == io.pictures) return;
+  io.pictures = ctx.pictures;
+  io.tell(kYieldTick);
+}
+
+// -v's statistics of a compression's coder e (said after the progress line,
+// meter's, if any)
+void cm_report(const tc_rc<0>& e, u64 in_bytes, u64 out_bytes, u64 tables, Progress* meter) {
   double tot = 0;
   for (int i = 0; i < STG_N; i++) tot += e.tc_bits[i];
-  fprintf(stderr, "%" PRIu64 " -> %" PRIu64 " bytes (%.2f%%), %" PRIu64 " MB of model tables\n", in_bytes, out_bytes,
-          in_bytes ? 100.0 * out_bytes / in_bytes : 0.0, tables >> 20);
+  say(meter, "%" PRIu64 " -> %" PRIu64 " bytes (%.2f%%), %" PRIu64 " MB of model tables\n", in_bytes, out_bytes,
+      in_bytes ? 100.0 * out_bytes / in_bytes : 0.0, tables >> 20);
   for (int i = 0; i < STG_N; i++) {
     if (!e.tc_syms[i]) continue;
-    fprintf(stderr, "  %-13s %11.0f bytes %6.2f%%  %10" PRIu64 " decisions or values, %.3f bits each\n", kStage[i],
-            e.tc_bits[i] / 8, tot > 0 ? 100.0 * e.tc_bits[i] / tot : 0.0, e.tc_syms[i],
-            e.tc_bits[i] / (double)e.tc_syms[i]);
+    say(meter, "  %-13s %11.0f bytes %6.2f%%  %10" PRIu64 " decisions or values, %.3f bits each\n", kStage[i],
+        e.tc_bits[i] / 8, tot > 0 ? 100.0 * e.tc_bits[i] / tot : 0.0, e.tc_syms[i],
+        e.tc_bits[i] / (double)e.tc_syms[i]);
   }
 }
 
@@ -235,6 +276,7 @@ struct CompressState {
 struct DecompressState {
   Context ctx;
   Crc32 crc;
+  uint64_t nals;         // the NAL units decoded (-v)
   Buf<uint8_t> buf;      // the stream decoded, not yet written
   Buf<uint8_t> b, rbsp;  // a NAL unit stored verbatim, and its RBSP
   BitWriter bw;          // a NAL unit's RBSP written
@@ -243,6 +285,7 @@ struct DecompressState {
   void Init() {
     ctx.Init();
     crc.Init();
+    nals = 0;
     buf.Init();
     b.Init();
     rbsp.Init();
@@ -436,10 +479,11 @@ int compress_nal(Model<0, LV>& m, CompressState& s, const H264pArgs& a, Buf<uint
       if (a.verbose) {
         char w[64];
         st.name_last(w, sizeof w);
-        say(a.meter, "h264p: %s would not come out as it is; compressing again, writing back each\n", w);
+        m.tell_note("h264p: %s would not come out as it is; compressing again, writing back each", w);
       }
       err_jump(*m.run_trap, kRestart);
     }
+    if (h.slice) tell_video(m, ctx);
     ctx.done(h.type, h.payload, h.len);
     return 0;
   }
@@ -448,14 +492,16 @@ int compress_nal(Model<0, LV>& m, CompressState& s, const H264pArgs& a, Buf<uint
   // Done before its bytes, which a long one's reading moves.)
   ctx.done(h.type, h.payload, h.len);
   code_raw(m, F_LEN, h.type, nal, 1, rest);
-  return st.verbatim(h.type, s.dr.why, a.verbose, a.strict, a.meter) ? 0 : 1;
+  return st.verbatim(h.type, s.dr.why, a.verbose, a.strict, m) ? 0 : 1;
 }
 
 // Compresses the stream s.rd reads with the model m, a new one, into its
 // output (m is the range coder too, and the coroutine whose output it is,
-// coro.inc): 0, or 1 after a NAL unit -s would not store verbatim
-// (reported). An error, or a slice the check finds would not come out as
-// it is, ends the run at its trap instead (coro.inc).
+// coro.inc, which tells its driver what the video is, each picture, and
+// at the end that its statistics are ready, s.st and its coder's): 0, or
+// 1 after a NAL unit -s would not store verbatim (why in m's note). An
+// error, or a slice the check finds would not come out as it is, ends the
+// run at its trap instead (coro.inc).
 template <class LV>
 int compress_stream(Model<0, LV>& m, CompressState& s, const H264pArgs& a) {
   AnnexBReader& rd = s.rd;
@@ -475,29 +521,27 @@ int compress_stream(Model<0, LV>& m, CompressState& s, const H264pArgs& a) {
     nal.clear();
     bool lng = read_more(rd, nal, kHold + 1) > kHold;
     if (compress_nal(m, s, a, nal, zeros, lng, prev_type)) return 1;
+    tell_tick(m, s.ctx);
   }
   m.nal(F_MORE, 0, 0);
   code_count(m, F_EOFZ, 0, rd.eof_zeros());
   m.nal(F_CRC, 0, rd.crc() ^ kCrcXor);
   m.end_stream();
   m.rc_Quit();
-  if (a.verbose) {
-    s.st.report("coded", "changes of x264's padding bits", a.meter);
-    cm_report(m, m.n_in, m.n_out, m.table_bytes());
-  }
+  m.tell(kYieldStats);
   return 0;
 }
 
 // Decompresses with the model m, a new one, what is left of its input
 // after the magic, the version and the level, into its output (m is the
-// range decoder too, and the coroutine whose input it reads, coro.inc): 0.
-// An error ends the run at its trap (coro.inc), which writes what was
-// decoded (s.buf) and says why.
+// range decoder too, and the coroutine whose input it reads, coro.inc,
+// which tells its driver what compress_stream() tells, its statistics
+// s.nals): 0. An error ends the run at its trap (coro.inc), which writes
+// what was decoded (s.buf), and the error is m's note.
 template <class LV>
 int decompress_stream(Model<1, LV>& m, DecompressState& s, const H264pArgs& a) {
   Buf<uint8_t>& buf = s.buf;
   Crc32& crc = s.crc;
-  uint64_t nals = 0;
   auto flush = [&]() {
     crc.add(buf);
     m.write(buf.data(), buf.size());
@@ -517,7 +561,7 @@ int decompress_stream(Model<1, LV>& m, DecompressState& s, const H264pArgs& a) {
   decode_raw(m, F_JUNK, 0, out);
   int prev_type = 0;
   while (m.nal(F_MORE, 0, 0)) {
-    nals++;
+    s.nals++;
     int type = (int)cm_count(m.nal(F_TYPE, prev_type, 0), 32);
     if (type == 32) {
       put_start(buf, decode_count(m, F_ZEROS, 32), spill);
@@ -571,16 +615,18 @@ int decompress_stream(Model<1, LV>& m, DecompressState& s, const H264pArgs& a) {
       apply_trailer(t, bw, pad);
       const Buf<uint8_t>& e = bw.data();
       escape(e.data(), e.size(), buf);
+      if (type == 1 || type == 5) tell_video(m, ctx);
       ctx.done(type, buf.data() + start, buf.size() - start);
     }
     spill();
+    tell_tick(m, ctx);
   }
   put_zeros(buf, decode_count(m, F_EOFZ, 0), spill);
   m.end_stream();
   flush();
   if (m.nal(F_CRC, 0, 0) != (crc.value() ^ kCrcXor)) err_raise("CRC mismatch: the stream did not decompress correctly");
   if (!m.input_done()) err_raise("corrupt stream: data after its end");
-  if (a.verbose) say(a.meter, "%" PRIu64 " NAL units\n", nals);
+  m.tell(kYieldStats);
   return 0;
 }
 

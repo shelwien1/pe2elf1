@@ -61,15 +61,15 @@ struct Stats {
     reasons.push_back(r);
   }
   // and one with a header, the last: false if that ends the call (-s, where
-  // the walk knows its type; said, and with -v said anyway)
-  bool verbatim(int type, const char* why, bool verbose, bool strict, Progress* meter) {
+  // the walk knows its type: the error in io's note; with -v told anyway)
+  bool verbatim(int type, const char* why, bool verbose, bool strict, CoroIo& io) {
     verbatim(why);
     if (!parsed_type(type)) return true;
     char w[64];
     name_last(w, sizeof w);
-    if (verbose) say(meter, "h264p: %s (type %d) stored verbatim: %s\n", w, type, why);
+    if (verbose) io.tell_note("h264p: %s (type %d) stored verbatim: %s", w, type, why);
     if (!strict) return true;
-    say_error(meter, "h264p: %s (type %d) cannot be converted: %s\n", w, type, why);
+    io.set_note("h264p: %s (type %d) cannot be converted: %s", w, type, why);
     return false;
   }
   // the last NAL unit, as a message names it: by its index in the stream
@@ -135,6 +135,7 @@ struct Context {
   SliceHeader sh;                // the slice's (code_nal())
   int slice_kind, slice_mbs;     // the last slice's picture (pic_kind, pic_mbs)
   ValueLog plog;                 // a verbatim parameter set's values (update_params())
+  uint64_t pictures;             // the slices so far that start a picture (starts_picture())
 
   void Init() {
     ps.Init();
@@ -143,6 +144,7 @@ struct Context {
     sh.Init();
     slice_kind = -1, slice_mbs = 0;
     plog.Init();
+    pictures = 0;
   }
   void Quit() {
     ps.Quit();
@@ -151,9 +153,12 @@ struct Context {
   }
 
   // a NAL unit done, its payload (after the header byte) as in the stream:
-  // past a slice, x264's padding moves on
+  // past a slice, x264's padding moves on, and the pictures are counted
   void done(int type, const uint8_t* payload, size_t n) {
-    if (type == 1 || type == 5) pad.next_slice(starts_picture(type, payload, n));
+    if (type != 1 && type != 5) return;
+    bool newpic = starts_picture(type, payload, n);
+    pad.next_slice(newpic);
+    pictures += newpic;
   }
 };
 

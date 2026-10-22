@@ -219,6 +219,13 @@ if [ -n "${negative:-}" ]; then
     ln -sf /dev/fd/3 "$tmp/o3"
     check "c and d to /dev/fd/1 and /dev/fd/3 write where redirected (>>)" sh -c '"$1" c -1 "$2" "$3/s.c" && printf old > "$3/so" && { "$1" c -1 "$2" "$3/o1" && "$1" c -1 "$2" "$3/o3" 3>&1 && "$1" d "$3/s.c" "$3/o1"; } >> "$3/so" && { printf old; cat "$3/s.c" "$3/s.c" "$2"; } | cmp -s - "$3/so"' - "$bin" "$here/h264p/x264_16x16.264" "$tmp"
   fi
+  # what the video is: the codec tells, the front end says it -- with -p or
+  # -v (once for all the parts of -t), with -v where it changes, and
+  # nothing on a quiet call
+  v16="16x16, High@L1.0, 4:2:0 8-bit, CABAC, progressive, 8x8 transform, weighted P, implicit weighted B, 4 reference frames, 25 fps"
+  cat "$here/h264p/x264_16x16.264" "$here/gen/x264_baseline.264" > "$tmp/two.264"
+  check "c -p says the video, d -p too" sh -c '"$1" c -1 -p "$2" "$3/v.c" 2>&1 | tr "\r" "\n" | grep -qxF "[enc] video: $4" && "$1" d -p "$3/v.c" "$3/v.264" 2>&1 | tr "\r" "\n" | grep -qxF "[dec] video: $4"' - "$bin" "$here/h264p/x264_16x16.264" "$tmp" "$v16"
+  check "c -v says the video and its change; c -t -p once; a quiet c nothing" sh -c '"$1" c -1 -v "$2/two.264" "$2/v.c" 2>"$2/log" && grep -qxF "video: $3" "$2/log" && grep -q "^the video now: 640x352, Constrained Baseline@L3.0, 4:2:0 8-bit, CAVLC" "$2/log" && [ $("$1" c -1 -t 2 -c 1k -p "$2/two.264" "$2/v.c" 2>&1 | tr "\r" "\n" | grep -c "video") -eq 1 ] && "$1" c -1 "$2/two.264" "$2/v.c" 2>"$2/log" && [ ! -s "$2/log" ]' - "$bin" "$tmp" "$v16"
   if [ -w /dev/full ]; then
     check "c and d to a full device fail" sh -c '! "$1" c -1 "$2" - > /dev/full 2>/dev/null && "$1" c -1 "$2" "$3/k.c" && ! "$1" d "$3/k.c" - > /dev/full 2>/dev/null' - "$bin" "$here/h264p/x264_16x16.264" "$tmp"
   fi

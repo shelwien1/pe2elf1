@@ -181,11 +181,19 @@ struct Sps {
   int64_t offset_for_non_ref_pic, offset_for_top_to_bottom_field;
   int num_ref_frames_in_poc_cycle;
   int64_t offset_for_ref_frame[255];
+  // for telling what the video is (VideoInfo): the constraint_set flags
+  // (and the 2 reserved bits), the level, the cropping, VUI's timing (0: none)
+  int constraint_flags, level_idc;
+  int crop_left, crop_right, crop_top, crop_bottom;
+  uint32_t num_units_in_tick, time_scale;
 
   // none, with the values of what an SPS leaves out
   void Init() {
     gen = 0;
     id = profile_idc = 0;
+    constraint_flags = level_idc = 0;
+    crop_left = crop_right = crop_top = crop_bottom = 0;
+    num_units_in_tick = time_scale = 0;
     chroma_format_idc = 1, separate_colour_plane_flag = 0;
     bit_depth_luma = bit_depth_chroma = 8;
     log2_max_frame_num = 4;
@@ -372,7 +380,7 @@ static void hrd_parameters(Syn& s) {
   s.u("time_offset_length", 5);
 }
 
-static void vui_parameters(Syn& s) {
+static void vui_parameters(Syn& s, Sps& p) {
   if (s.u("aspect_ratio_info_present_flag", 1))
     if (s.u("aspect_ratio_idc", 8) == 255) {
       s.u("sar_width", 16);
@@ -393,8 +401,8 @@ static void vui_parameters(Syn& s) {
     s.ue("chroma_sample_loc_type_bottom_field", 0, kU32);
   }
   if (s.u("timing_info_present_flag", 1)) {
-    s.u("num_units_in_tick", 32);
-    s.u("time_scale", 32);
+    p.num_units_in_tick = (uint32_t)s.u("num_units_in_tick", 32);
+    p.time_scale = (uint32_t)s.u("time_scale", 32);
     s.u("fixed_frame_rate_flag", 1);
   }
   int nal = (int)s.u("nal_hrd_parameters_present_flag", 1);
@@ -421,8 +429,8 @@ static bool high_profile(int p) {
 
 void code_sps(Syn& s, Sps& p) {
   p.profile_idc = (int)s.u("profile_idc", 8);
-  s.u("constraint_set_flags", 8);  // constraint_set0..5_flag, reserved_zero_2bits
-  s.u("level_idc", 8);
+  p.constraint_flags = (int)s.u("constraint_set_flags", 8);  // constraint_set0..5_flag, reserved_zero_2bits
+  p.level_idc = (int)s.u("level_idc", 8);
   p.id = (int)s.ue("seq_parameter_set_id", 0, 31);
   if (high_profile(p.profile_idc)) {
     p.chroma_format_idc = (int)s.ue("chroma_format_idc", 0, 3);
@@ -454,13 +462,13 @@ void code_sps(Syn& s, Sps& p) {
   p.frame_mbs_only_flag = (int)s.u("frame_mbs_only_flag", 1);
   if (!p.frame_mbs_only_flag) p.mb_adaptive_frame_field_flag = (int)s.u("mb_adaptive_frame_field_flag", 1);
   p.direct_8x8_inference_flag = (int)s.u("direct_8x8_inference_flag", 1);
-  if (s.u("frame_cropping_flag", 1)) {
-    s.ue("frame_crop_left_offset", 0, kU32);
-    s.ue("frame_crop_right_offset", 0, kU32);
-    s.ue("frame_crop_top_offset", 0, kU32);
-    s.ue("frame_crop_bottom_offset", 0, kU32);
+  if (s.u("frame_cropping_flag", 1)) {  // (held to what fits a picture: VideoInfo)
+    p.crop_left = (int)Min<int64_t>(s.ue("frame_crop_left_offset", 0, kU32), 1 << 16);
+    p.crop_right = (int)Min<int64_t>(s.ue("frame_crop_right_offset", 0, kU32), 1 << 16);
+    p.crop_top = (int)Min<int64_t>(s.ue("frame_crop_top_offset", 0, kU32), 1 << 16);
+    p.crop_bottom = (int)Min<int64_t>(s.ue("frame_crop_bottom_offset", 0, kU32), 1 << 16);
   }
-  if (s.u("vui_parameters_present_flag", 1)) vui_parameters(s);
+  if (s.u("vui_parameters_present_flag", 1)) vui_parameters(s, p);
   if ((int64_t)p.width_mbs * p.frame_height_mbs() > kMaxMbs) s.fail("picture too large");
 }
 

@@ -21,6 +21,31 @@ struct ByteSource {
   size_t read(uint8_t* p, size_t n) const { return fn ? fn(ctx, p, n) : 0; }
 };
 
+// What a codec's coroutine yields with: the buffer protocol's kYieldIn (it
+// needs its next input), kYieldOut (its output buffer is full), kYieldEnd
+// (the end) and kYieldFail (an error, said in its note); and what it tells
+// its driver, which shows what it will of it (a codec says nothing on its
+// own): kYieldVideo, what the video is (its video, at the first slice and
+// where that changes), kYieldNote, a message (its note), kYieldStats, its
+// statistics are ready to be read (at the end), and kYieldTick, a point at
+// which the driver may show the progress (each picture). (4 is MTwrap's.)
+enum : uint {
+  kYieldEnd = 0, kYieldIn = 1, kYieldOut = 2, kYieldFail = 3,
+  kYieldVideo = 5, kYieldNote = 6, kYieldStats = 7, kYieldTick = 8
+};
+
+// What the video is, from its parameter sets and a slice of it (cmstream.inc's
+// video_of()): plain values, compared as bytes, all zero where it is not known
+struct VideoInfo {
+  int width, height;              // the pictures as shown (the cropping taken off), in samples
+  int profile, constraints, level;  // profile_idc, the constraint_set flags, level_idc
+  int chroma, depth_luma, depth_chroma;  // chroma_format_idc, bit depths
+  int cabac, frames_only, mbaff, field;  // field: the slice told of is a field
+  int transform_8x8, weighted_p, weighted_b, slice_groups, constrained_intra;
+  int refs, lossless, scaling;    // max_num_ref_frames, transform bypass, scaling matrices
+  uint32_t num_units_in_tick, time_scale;  // VUI's timing (0: none)
+};
+
 // A coroutine's input and output as runs of bytes. Plain data, which
 // io_init() sets up as do_process() starts: MTwrap's workers (mt.inc) are
 // never constructed. A yield copies the coroutine's stack out into
@@ -30,11 +55,49 @@ struct CoroIo : Coroutine {
   bool eof;              // the input has ended
   uint64_t n_in, n_out;  // the bytes read and written
   size_t depth;          // the stack a yield copied out, at most
+  // what it tells its driver (above): the pictures so far (each kYieldTick),
+  // a message (kYieldNote, kYieldFail: a line of text, with its '\n'), the
+  // video (kYieldVideo)
+  uint64_t pictures;
+  char note[512];
+  VideoInfo video;
 
   void io_init() {
     eof = false;
     n_in = n_out = 0;
     depth = 0;
+    pictures = 0;
+    note[0] = 0;
+    memset((void*)&video, 0, sizeof video);
+  }
+
+  // a yield of code to the driver, which tells it something (above): the
+  // coroutine's traps put aside while it waits
+  NOINLINE void tell(uint code) {
+    before_yield();
+    ErrTrap* t = err_hold();
+    yield(static_cast<Coroutine*>(this), code);
+    err_resume(t);
+  }
+  // the note, a line made of fmt (a '\n' after it): the error the run will
+  // end with (kYieldFail), or (tell_note()) a message told now
+  void vnote(const char* fmt, va_list ap) {
+    vsnprintf(note, sizeof note - 1, fmt, ap);
+    size_t n = strlen(note);
+    if (!n || note[n - 1] != '\n') note[n] = '\n', note[n + 1] = 0;
+  }
+  void set_note(const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    vnote(fmt, ap);
+    va_end(ap);
+  }
+  void tell_note(const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    vnote(fmt, ap);
+    va_end(ap);
+    tell(kYieldNote);
   }
 
   // up to n bytes of the input, fewer only at its end (yield 1 for more)
