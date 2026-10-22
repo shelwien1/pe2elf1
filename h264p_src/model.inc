@@ -807,8 +807,9 @@ struct MotionPred {
     int ref, mv[2];
   };
   // the slice's walk, its macroblock states and their records (by
-  // address), its decoder; the current macroblock: its address, its record
-  // and the shape of its partitions (16x16, 16x8, 8x16, 8x8; the
+  // address), its decoder; the current macroblock: its address, its state
+  // and record, its field decoding mode where not its state's (fld; -1 that
+  // one) and the shape of its partitions (16x16, 16x8, 8x16, 8x8; the
   // sub-macroblocks')
   const WalkState* sc;
   const MbState* mbs;
@@ -817,7 +818,9 @@ struct MotionPred {
   int width;
   bool mbaff;
   int addr;
+  const MbState* ms;
   const MbInfo* mi;
+  int fld;
   int parts, subshape[4];
   void Init() {
     sc = nullptr;
@@ -827,14 +830,19 @@ struct MotionPred {
     width = 1;
     mbaff = false;
     addr = 0;
+    ms = nullptr;
     mi = nullptr;
+    fld = -1;
     parts = 0;
     for (int& s : subshape) s = 0;
   }
   void slice(const WalkState& w, const MbInfo* inf, const R& r) {
     sc = &w, mbs = w.store_->mbs.data(), info = inf, rec = &r, width = w.width_, mbaff = w.mbaff_;
   }
-  void begin(int a, const MbInfo* m) { addr = a, mi = m, parts = 0; }
+  // macroblock a: the walk's current one, or the skipped top one of its
+  // pair in the mode f its bottom one decodes (Model::skipped_top)
+  void begin(int a, const MbInfo* m, int f = -1) { addr = a, ms = mbs + a, mi = m, fld = f, parts = 0; }
+  bool field() const { return fld < 0 ? ms->field : fld; }
 
   // the place of the partition with the 4x4 block (x, y) of the current
   // macroblock in decoding order
@@ -862,7 +870,7 @@ struct MotionPred {
     int i = 0;
     if (x >= 0 && y >= 0) {
       if (x > 3 || part_ord(x, y) > ord) return r;  // not decoded yet
-      s = sc->cur_;
+      s = ms;
       m = mi;
       i = y * 4 + x;
     } else if ((x < 0 && y < 0) || x > 3) {  // D or C, in the macroblock above left or right
@@ -873,7 +881,9 @@ struct MotionPred {
       m = &info[a];
       i = x < 0 ? 15 : 12;
     } else {
-      s = sc->nb4(x, y, i);
+      // (the walk's current macroblock's, but where skipped_top() has it
+      // derive another's)
+      s = fld < 0 ? sc->nb4(x, y, i) : sc->nb4_mbaff(ms, !(addr & 1), fld != 0, x, y, i);
       if (!s) return r;
       m = &info[s - mbs];
     }
@@ -883,11 +893,11 @@ struct MotionPred {
     r.ref = ref;
     r.mv[0] = m->mv[list][i][0];
     r.mv[1] = m->mv[list][i][1];
-    if (mbaff && s != sc->cur_) {
-      if (sc->cur_->field && !s->field) {
+    if (mbaff && s != ms) {
+      if (field() && !s->field) {
         r.mv[1] /= 2;
         r.ref *= 2;
-      } else if (!sc->cur_->field && s->field) {
+      } else if (!field() && s->field) {
         r.mv[1] *= 2;
         r.ref >>= 1;
       }
@@ -1511,19 +1521,9 @@ struct Model : tc_rc<f_DEC> {
     c.cbp = mi_->cbp;
     c.t8 = mi_->t8;
     c.cpred = mi_->cpred;
-    c.field = s.field;
     memcpy(c.modes, mi_->modes, sizeof c.modes);
     memcpy(c.ref, mi_->ref, sizeof c.ref);
-    if (LV::mvp) {
-      memcpy(c.rf, mi_->rf, sizeof c.rf);
-      memcpy(c.mv, mi_->mv, sizeof c.mv);
-    }
-    if (LV::refs || LV::recon)
-      for (int l = 0; l < 2; l++)
-        for (int b8 = 0; b8 < 4; b8++) {
-          int r = mi_->rf[l][b8];
-          c.rpoc[l][b8] = rec_.motion() && r >= 0 && r < rec_.nlist[l] && rec_.list[l][r] ? rec_.list[l][r]->poc : INT_MIN;
-        }
+    col_motion(c, *mi_, s.field);
     static const decltype(mi_->mvd) kNoMvd = {};
     if (!memcmp(mi_->mvd, kNoMvd, sizeof kNoMvd)) {
       memset(c.mvq, 0, sizeof c.mvq);  // (a skipped macroblock: tc_qlog 0 throughout)
@@ -1555,6 +1555,21 @@ struct Model : tc_rc<f_DEC> {
     mb_open_ = false;
     rec_.mb_end(addr_, mi_->cls, mi_->i16m, mi_->modes, mi_->cpred, mi_->t8, mi_->qp - qp_off_, mi_->rf, mi_->mv, s.nz[0]);
     if (rec_.act() && (int)aq_.x.size() == size_) aq_.decoded(addr_, lg16(rec_.ac_energy(addr_)), mi_->qp - qp_off_, qpd_coded_);
+  }
+  // a record's motion: the field decoding mode f, the vectors and
+  // references of macroblock m and the POCs of those
+  void col_motion(MbCol& c, const MbInfo& m, int f) const {
+    c.field = (uint8_t)f;
+    if (LV::mvp) {
+      memcpy(c.rf, m.rf, sizeof c.rf);
+      memcpy(c.mv, m.mv, sizeof c.mv);
+    }
+    if (LV::refs || LV::recon)
+      for (int l = 0; l < 2; l++)
+        for (int b8 = 0; b8 < 4; b8++) {
+          int r = m.rf[l][b8];
+          c.rpoc[l][b8] = rec_.motion() && r >= 0 && r < rec_.nlist[l] && rec_.list[l][r] ? rec_.list[l][r]->poc : INT_MIN;
+        }
   }
 
   // --- skip, end of slice, field decoding flag: the skp family
@@ -1739,7 +1754,31 @@ struct Model : tc_rc<f_DEC> {
     H_skp_v D = {};
     skp_vars(D);
     D.col = col_ ? 1 + col_->field : 0;
-    return skp_bit(D, 2, ENC && v, cab0(sc_->ctx_field()));
+    v = skp_bit(D, 2, ENC && v, cab0(sc_->ctx_field()));
+    // (coded with the bottom macroblock of a pair, the flag is the skipped
+    // top one's too, 7.4.4, whose motion skip() made in the mode inferred)
+    if ((addr_ & 1) && v != sc_->cur_->field) skipped_top(v);
+    return v;
+  }
+  // the skipped top macroblock of the pair in field decoding mode f: its
+  // motion again, from none as begin_mb() starts a record (on a copy of the
+  // predictor: the bottom macroblock's stays), and its record (none in a
+  // redundant picture; the decoder in the loop keeps no motion of MBAFF
+  // pictures, Recon::supported)
+  void skipped_top(int f) {
+    int a = addr_ - 1;
+    MbInfo& t = info_[a];
+    if (LV::mvp) {
+      memset(t.mv, 0, sizeof t.mv);
+      memset(t.rf, -1, sizeof t.rf);
+      MotionPred<Rec> p = mvpred_;
+      p.begin(a, &t, f);
+      if (sc_->stype_ == kB)
+        p.direct(15, t.mv, t.rf);
+      else
+        p.pskip(t.mv, t.rf);
+    }
+    if (!red_) col_motion(hist_.cur[a], t, f);
   }
   void mb_begin() {
     if (!mb_open_) begin_mb();

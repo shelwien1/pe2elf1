@@ -341,7 +341,14 @@ struct WalkState {
       yW = yN < 0 ? yN + maxH : yN;
       return xN < 0 ? left_ : above_;
     }
-    bool top = !(cur_addr_ & 1), curf = cur_->field;
+    return nb_mbaff(cur_, !(cur_addr_ & 1), cur_->field, xN, yN, maxW, maxH, xW, yW);
+  }
+  // the same in an MBAFF frame, xN or yN -1, relative to macroblock cur, the
+  // top one of its pair or not (top), of field decoding mode curf: the
+  // current one, or the other one of its pair (the model derives a skipped
+  // top macroblock's motion again in the mode its bottom one decodes)
+  const MbState* nb_mbaff(const MbState* cur, bool top, bool curf, int xN, int yN, int maxW, int maxH, int& xW,
+                          int& yW) const {
     const MbState* n;
     int yM;
     if (xN < 0) {  // 0 <= yN < maxH
@@ -366,7 +373,7 @@ struct WalkState {
       xW = xN + maxW;
     } else {  // yN < 0, 0 <= xN < maxW
       if (!curf && !top) {
-        n = cur_ - 1;  // top macroblock of the same pair
+        n = cur - 1;  // top macroblock of the same pair
         yM = yN;
       } else {
         if (!above_) return nullptr;
@@ -393,6 +400,13 @@ struct WalkState {
     int xW = 0, yW = 0;
     const MbState* n = nb_loc(x < 0 ? -1 : 4 * x, y < 0 ? -1 : 4 * y, w, h, xW, yW);
     idx = (yW >> 2) * (w >> 2) + (xW >> 2);
+    return n;
+  }
+  // nb4's in an MBAFF frame, x or y -1, relative to macroblock cur (nb_mbaff)
+  const MbState* nb4_mbaff(const MbState* cur, bool top, bool curf, int x, int y, int& idx) const {
+    int xW = 0, yW = 0;
+    const MbState* n = nb_mbaff(cur, top, curf, x < 0 ? -1 : 4 * x, y < 0 ? -1 : 4 * y, 16, 16, xW, yW);
+    idx = (yW >> 2) * 4 + (xW >> 2);
     return n;
   }
   bool field_mb() const { return field_ || cur_->field; }
