@@ -16,12 +16,12 @@
 //
 // Output: one frame per part, for MTwrap's parts mode:
 //   u64 L, u64 ins, u64 xlen, u64 nins, u64 nal0, part[L-32]
-// part = the stream bytes [begin,end) with the parameter sets h264split
-// would insert, but for PPSs its slices do not refer to (nins NAL units,
-// each with a 4-byte start code, xlen bytes in all), at ins: after its
-// access unit delimiter, if it starts with one (h264p::aud_end()), else
-// first; nal0 the index in the stream of its first NAL unit (for
-// messages). Every part but the first starts at an access unit (or after
+// part = the stream bytes [begin,end) with the parameter sets its slices
+// refer to, as defined before it (their PPSs and the SPSs of those: nins
+// NAL units, each with a 4-byte start code, xlen bytes in all), at ins:
+// after its access unit delimiter, if it starts with one
+// (h264p::aud_end()), else first; nal0 the index in the stream of its
+// first NAL unit (for messages). Every part but the first starts at an access unit (or after
 // a cut at the cap's half again, at a NAL unit, or at twice the cap,
 // anywhere), with the parameter sets it needs.
 
@@ -247,7 +247,6 @@ int pset_slot(uint32_t key) {
 struct PsetEvent {
   uint64_t cut;
   uint32_t key;
-  int ref_sps;      // the SPS a PPS refers to, else -1
   size_t off, len;  // the NAL unit (Analyzer::ev_bytes)
 };
 
@@ -267,10 +266,12 @@ struct Candidate {
     keys.copy(o.keys);
   }
 };
-// A slice that refers to a PPS (its id), at the NAL unit starting at cut
+// A slice that refers to a PPS (its id), at the NAL unit starting at cut,
+// and to that PPS's SPS (its id, as the PPS was then; -1 not known)
 struct PpsUse {
   uint64_t cut;
   uint32_t pps;
+  int sps;
 };
 
 struct Analyzer {
@@ -343,7 +344,7 @@ struct Analyzer {
     int t = n.type();
     if (n.len > kMaxPset) return;
     unescape(n.head.data() + 1, n.head.size() - 1, rbsp);
-    int id = -1, ref = -1;
+    int id = -1;
     if (t == 7) {
       Sps s;
       s.Init();
@@ -351,7 +352,7 @@ struct Analyzer {
     } else if (t == 8) {
       Pps s;
       s.Init();
-      if (parse_pps(rbsp, s)) pps[s.id] = s, has_pps[s.id] = true, id = s.id, ref = s.sps_id;
+      if (parse_pps(rbsp, s)) pps[s.id] = s, has_pps[s.id] = true, id = s.id;
     } else {
       Bits b;
       b.Init(rbsp);
@@ -368,7 +369,7 @@ struct Analyzer {
       if (e.len == n.head.size() && !memcmp(ev_bytes.data() + e.off, n.head.data(), e.len)) return;
     }
     last = events.size() + 1;
-    events.push_back(PsetEvent{n.cut, key, ref, ev_bytes.size(), n.head.size()});
+    events.push_back(PsetEvent{n.cut, key, ev_bytes.size(), n.head.size()});
     ev_bytes.append(n.head.data(), n.head.size());
   }
 
@@ -419,7 +420,7 @@ struct Analyzer {
     SliceInfo s;
     s.Init();
     parse_slice(n, s);
-    if (s.level >= 1 && s.pps_id <= 255) uses.push_back(PpsUse{n.cut, s.pps_id});
+    if (s.level >= 1 && s.pps_id <= 255) uses.push_back(PpsUse{n.cut, s.pps_id, has_pps[s.pps_id] ? pps[s.pps_id].sps_id : -1});
     if (s.redundant) {  // a slice of a redundant coded picture
       run = false;
       return;
@@ -610,31 +611,26 @@ struct H264Split : Coroutine {
   }
 
   // The current part, up to stream offset `end`, as a frame, with the
-  // parameter sets it needs copied in (h264split's choice, but for PPSs
-  // its slices do not refer to): those defined before it but not in its
-  // first access unit, and the SPSs of the PPSs among them; by type (SPS,
-  // SPS extension, subset SPS, PPS), each by id, where aud_end() puts them
+  // parameter sets it needs copied in: the PPSs its slices refer to and
+  // their SPSs (each id's SPS, SPS extension and subset SPS), as defined
+  // before it, where its first access unit does not define them; by type
+  // (SPS, SPS extension, subset SPS, PPS), each by id, where aud_end() puts
+  // them (a part with no slice gets none)
   void emit( uint64_t end ) {
     using namespace h264s;
     State& s = *st;
     Analyzer& an = s.an;
     uint64_t n = end - s.begin;
-    bool used[256] = {}, defined[kSlots] = {}, use[kSlots] = {}, use0[kSlots];
+    bool used[256] = {}, used_sps[32] = {}, defined[kSlots] = {}, use[kSlots] = {};
     size_t k = 0;
-    for( ; k<an.uses.size() && an.uses[k].cut<end; k++ ) used[an.uses[k].pps] = true;
+    for( ; k<an.uses.size() && an.uses[k].cut<end; k++ ) {
+      used[an.uses[k].pps] = true;
+      if( an.uses[k].sps>=0 && an.uses[k].sps<32 ) used_sps[an.uses[k].sps] = true;
+    }
     an.uses.erase_front( k );
     for( uint32_t key : s.keys ) defined[pset_slot(key)] = true;
-    for( int i=0; i<kSlots; i++ )
-      if( s.state[i] && !defined[i] ) use[i] = i/256!=1 || used[i%256];  // (slots 256..511: the PPSs)
-    memcpy( use0, use, sizeof use );
-    static const int sps_types[2] = {7, 15};
-    for( int i=0; i<kSlots; i++ ) { // the SPS of the PPS copied
-      if( !use0[i] ) continue;
-      int ref = an.events[s.state[i]-1].ref_sps;
-      if( ref<0 ) continue;
-      for( int t : sps_types )
-        if( s.state[pset_slot(pset_key(t, ref))] ) use[pset_slot(pset_key(t, ref))] = true;
-    }
+    for( int i=0; i<kSlots; i++ )  // (slots 256..511: the PPSs; the others' ids are SPS ids, below 32)
+      if( s.state[i] && !defined[i] ) use[i] = i/256==1 ? used[i%256] : i%256<32 && used_sps[i%256];
     s.extra.clear();
     uint32_t nins = 0;
     static const int order[4] = {7, 13, 15, 8};
