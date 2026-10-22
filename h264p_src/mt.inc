@@ -38,8 +38,8 @@ uint64_t get_le(const uint8_t* p, int n) {
   return v;
 }
 
-// h264p's header of a stream compressed on threads (the part size is
-// there to be seen: d does not need it)
+// h264p's header of a stream compressed on threads (the part size bounds
+// what d takes a part's record to be: mt_part_max())
 void mt_head(uint8_t* head, int threads, uint32_t part) {
   memcpy(head, kMtMagic, sizeof kMtMagic - 1);
   head[sizeof kMtMagic - 1] = (uint8_t)kCmVersion;
@@ -48,7 +48,15 @@ void mt_head(uint8_t* head, int threads, uint32_t part) {
 }
 // The size past which a part ends at any picture (with no IDR or I access
 // unit to cut at), for the memory a part takes
-uint64_t mt_cap(uint32_t part) { return Min<uint64_t>(4 * (uint64_t)part, (uint64_t)1 << 31); }
+uint64_t mt_cap(uint64_t part) { return Min<uint64_t>(4 * part, (uint64_t)1 << 31); }
+// The most a part can be, as the splitter cuts it: twice the cap, past which
+// it cuts after each piece of the input (64 KB), and the parameter sets it
+// copies in (kSlots of at most kMaxPset bytes, after start codes). d takes
+// a record of a larger part, or one whose part comes out larger than it
+// says, to be broken: so a part's output it holds is bounded by -c too.
+uint64_t mt_part_max(uint64_t part) {
+  return 2 * mt_cap(part) + (1 << 20) + (uint64_t)h264s::kSlots * (h264s::kMaxPset + 4);
+}
 
 // A worker's counts for the progress line: its input, its output and its
 // pictures so far (their parts' and the part's under way), read from any
@@ -67,13 +75,14 @@ struct PartProg {
 
 // A run of a codec, H264pCoro<f_DEC, LV>, on a part in memory: all of in
 // its input, its output into out (grown as it fills, handed to it 64 KB at
-// a time); the run's status (0, 1 after an error, kRestart). As it goes,
+// a time, to most bytes: one more fails the worker); the run's status (0, 1
+// after an error, kRestart). As it goes,
 // its input, output and pictures from in0, out0 and pics0 on are the
 // worker's counts, what it tells is shown (show_told(): the parts' video
 // once), and a line of progress may be due.
 template <class C>
-int run_part(const H264pArgs& a, Buf<uint8_t>& in, Buf<uint8_t>& out, PartProg& prog, uint64_t in0, uint64_t out0,
-             uint64_t pics0) {
+int run_part(const H264pArgs& a, Buf<uint8_t>& in, Buf<uint8_t>& out, uint64_t most, PartProg& prog, uint64_t in0,
+             uint64_t out0, uint64_t pics0) {
   C* c = coro_new<C>();
   c->Init(&a);
   size_t pos = 0;
@@ -83,7 +92,7 @@ int run_part(const H264pArgs& a, Buf<uint8_t>& in, Buf<uint8_t>& out, PartProg& 
     c->addinp(in.data() + pos, (uint)l);
     pos += l;
   };
-  out.resize(1 << 16);
+  out.resize((size_t)Min<uint64_t>(1 << 16, most + 1));
   c->addout(out.data(), (uint)out.size());
   feed();
   drive(
@@ -94,7 +103,10 @@ int run_part(const H264pArgs& a, Buf<uint8_t>& in, Buf<uint8_t>& out, PartProg& 
           out.resize(done);
           return;
         }
-        if (done == out.size()) out.resize(done * 2);  // (the output full: twice the room)
+        if (done == out.size()) {  // (the output full: twice the room, to one byte past the most)
+          if (done > most) err_raise("a part came out longer than its record says");
+          out.resize((size_t)Min<uint64_t>(2 * (uint64_t)done, most + 1));
+        }
         c->addout(out.data() + done, (uint)Min(out.size() - done, (size_t)1 << 16));
       },
       [&](uint code) {
@@ -170,16 +182,16 @@ struct H264pPart : CoroIo {
     }
     return true;
   }
-  // the part's model run on in_ into out_, at the level of a.level (the
-  // counts from in0, out0 and pics0 on)
+  // the part's model run on in_ into out_ (most bytes), at the level of
+  // a.level (the counts from in0, out0 and pics0 on)
   template <class LV>
   struct Lv {
-    static int run(H264pPart& w, const H264pArgs& a, uint64_t in0, uint64_t out0, uint64_t pics0) {
-      return run_part<H264pCoro<f_DEC, LV>>(a, w.in_, w.out_, w.prog, in0, out0, pics0);
+    static int run(H264pPart& w, const H264pArgs& a, uint64_t most, uint64_t in0, uint64_t out0, uint64_t pics0) {
+      return run_part<H264pCoro<f_DEC, LV>>(a, w.in_, w.out_, most, w.prog, in0, out0, pics0);
     }
   };
-  int code(const H264pArgs& a, uint64_t in0, uint64_t out0, uint64_t pics0) {
-    int r = with_level<Lv>(a.level, *this, a, in0, out0, pics0);
+  int code(const H264pArgs& a, uint64_t most, uint64_t in0, uint64_t out0, uint64_t pics0) {
+    int r = with_level<Lv>(a.level, *this, a, most, in0, out0, pics0);
     if (r != kNoLevel) return r;  // (0, 1, or kRestart)
     say_error(args.meter, "h264p: %s: a part compressed at level -%d, which this build has not\n", args.name, a.level);
     return 1;
@@ -203,10 +215,11 @@ struct H264pPart : CoroIo {
       a.check = true;
       a.nal0 = get_le(h + 32, 8), a.ncopy = get_le(h + 24, 8), a.copy_at = ins > 0;  // (after an AUD, if any)
       uint64_t in0 = prog.in(), out0 = prog.out(), pics0 = prog.pics();
-      int r = code(a, in0, out0, pics0);
+      const uint64_t kAny = ~(uint64_t)0 >> 1;  // (a part's compressed size: as it comes)
+      int r = code(a, kAny, in0, out0, pics0);
       if (r == kRestart) {
         a.check = false;
-        r = code(a, in0, out0, pics0);
+        r = code(a, kAny, in0, out0, pics0);
       }
       if (r) return 1;
       prog.set(in0 + plen, out0 + 32 + out_.size(), prog.pics());
@@ -230,6 +243,7 @@ struct H264pPart : CoroIo {
       if (!n) return 0;  // the end
       if (n < 32) return fail("a part's record cut short");
       uint64_t g_size = get_le(h, 8), plen = get_le(h + 8, 8), ins = get_le(h + 16, 8), xlen = get_le(h + 24, 8);
+      if (plen > args.part_max || ins > plen || xlen > plen - ins) return fail("a part's record broken");
       if (g_size < 32 || !take(g_size - 32)) return fail("a part's record cut short or broken");
       H264pArgs a = args;
       a.level = cm_level(in_.data(), Min(in_.size(), sizeof kCmMagic + 1), args.name, note, sizeof note);
@@ -238,9 +252,8 @@ struct H264pPart : CoroIo {
         return 1;
       }
       uint64_t in0 = prog.in(), out0 = prog.out(), pics0 = prog.pics();
-      if (code(a, in0 + 32, out0, pics0)) return 1;
-      if (out_.size() != plen || ins > plen || xlen > plen - ins)
-        return fail("a part did not decompress as it was compressed");
+      if (code(a, plen, in0 + 32, out0, pics0)) return 1;
+      if (out_.size() != plen) return fail("a part did not decompress as it was compressed");
       size_t pos = (size_t)(ins + xlen);
       prog.set(in0 + g_size, out0 + plen - xlen, prog.pics());
       write(out_.data(), (size_t)ins);

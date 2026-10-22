@@ -197,6 +197,26 @@ if [ -n "${negative:-}" ]; then
   "$bin" c -1 -t 2 "$here/h264p/x264_16x16.264" "$tmp/m4.c" 2>/dev/null
   printf '\377\377' | dd of="$tmp/m4.c" bs=1 seek=15 conv=notrunc 2>/dev/null
   check "d of a part's record claiming 4 GB fails, in 300 MB" sh -c 'ulimit -v 300000 2>/dev/null; ! "$1" d "$2/m4.c" "$2/k.264" 2>"$2/log" && grep -q "cut short" "$2/log"' - "$bin" "$tmp"
+  # a -t 2 stream of one part, made here: the stream $2 (one model's), its
+  # record saying the part is $3 bytes, into $4 (h264p's header from $1, a
+  # c -t 2 stream's; MTwrap's: a tail block for worker 0)
+  byte() { printf "\\$(printf %03o "$1")"; }
+  le8() { local i; for i in 0 1 2 3 4 5 6 7; do byte $((($1 >> (8 * i)) & 255)); done; }
+  mt_one() {
+    { le8 $((32 + $(stat -c %s "$2"))); le8 "$3"; le8 0; le8 0; cat "$2"; } > "$tmp/rec"
+    local l=$(($(stat -c %s "$tmp/rec") + 1))
+    { head -c 11 "$1"; byte 193; byte 128; byte $((l >> 8)); byte $((l & 255)); tail -c +3 "$tmp/rec"
+      byte $(od -An -tu1 -j1 -N1 "$tmp/rec"); byte $(od -An -tu1 -N1 "$tmp/rec"); } > "$4"
+  }
+  # 300 MB of zeros as a part of 100 bytes, or of 1 TB, which c makes of no
+  # -c: d fails as it passes 100, or at once, without holding 300 MB first
+  head -c 3000000 /dev/zero > "$tmp/z3"
+  "$bin" c -1 "$tmp/z3" "$tmp/z3.c"
+  head -c 300000000 /dev/zero | "$bin" c -1 - "$tmp/z300.c"
+  mt_one "$tmp/m4.c" "$tmp/z3.c" 3000000 "$tmp/p_ok.c"
+  mt_one "$tmp/m4.c" "$tmp/z300.c" 100 "$tmp/p_short.c"
+  mt_one "$tmp/m4.c" "$tmp/z300.c" $((1 << 40)) "$tmp/p_big.c"
+  check "d of a part longer than its record, or a record of a part larger than -c makes, fails in 250 MB" sh -c 'ulimit -v 250000 2>/dev/null; "$1" d "$2/p_ok.c" - | cmp -s - "$2/z3" && ! "$1" d "$2/p_short.c" "$2/k.264" 2>"$2/log" && grep -q "longer than its record" "$2/log" && ! "$1" d "$2/p_big.c" "$2/k.264" 2>"$2/log" && grep -q "record broken" "$2/log"' - "$bin" "$tmp"
   # d failing to write keeps the old output; a replaced output keeps its
   # mode; an interrupted c leaves no temporary file
   echo old > "$tmp/old.264"

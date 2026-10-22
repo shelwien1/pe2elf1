@@ -525,6 +525,13 @@ void code_pps(Syn& s, Pps& p, const ParamSets& ps) {
   }
 }
 
+// A NAL unit longer than this is not parsed: cmstream.inc stores it
+// verbatim as it is read (in chunks, code_raw()), not held whole. (A slice
+// of the largest picture in 8-bit 4:2:0 I_PCM macroblocks takes 52 MB.)
+const size_t kHold = (size_t)1 << 26;
+
+// (writing, the messages end at the most a NAL unit parsed can hold: the
+// channel's stream is broken where they go on past it)
 void code_sei(Syn& s) {
   do {
     s.begin("sei_message");  // payloadType, payloadSize, payload in hex
@@ -533,6 +540,7 @@ void code_sei(Syn& s) {
     if (!s.W && (uint64_t)size * 8 > s.br_->size() - s.br_->pos()) s.fail("SEI payload past the end");
     s.vbytes((size_t)size);
     s.end();
+    if (s.W && s.bw_->pos() > 8 * kHold) s.fail("SEI longer than a NAL unit parsed");
   } while (s.more_data("sei_message"));
 }
 

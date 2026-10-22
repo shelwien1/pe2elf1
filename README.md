@@ -175,7 +175,11 @@ against the last 16 MB of them. Counters are 64-bit or start again where
 they would wrap, and POCs are kept modulo 2^32 and compared by their
 differences, so a stream that never sends another IDR picture is decoded
 as a decoder would. With `-t`, the splitter keeps one version of each
-parameter set and those of the part under way.
+parameter set and those of the part under way. `d` holds no more of a
+compressed stream than `c` makes of one, whatever it reads: a NAL unit it
+would parse past 64 MB (an SEI's messages), a part of `-t` that comes out
+longer than its record says, or a record of a part larger than `-c` lets
+`c` make, is broken as it gets there.
 
 The model is binary context mixing, after oggcomp (Ogg Vorbis): each value
 is a sequence of binary decisions, each predicted by ten adaptive counters

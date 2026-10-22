@@ -48,6 +48,7 @@ struct H264pArgs {
   // unit, and the parameter sets copied into it, ncopy NAL units from its
   // copy_at (for messages: Stats)
   uint64_t nal0, copy_at, ncopy;
+  uint64_t part_max;  // decompressing -t: the most a part's record can say it is (mt.inc's mt_part_max())
 
   void Init() {
     level = 0;
@@ -55,6 +56,7 @@ struct H264pArgs {
     name = "";
     meter = nullptr;
     nal0 = copy_at = ncopy = 0;
+    part_max = 0;
   }
 };
 
@@ -418,11 +420,6 @@ bool compress_parsed(Model<0, LV>& m, CompressState& s, const NalHead& h) {
   s.st.trail += dr.t.irregular;
   return true;
 }
-
-// A NAL unit longer than this is stored verbatim as it is read (in chunks,
-// code_raw()), not held whole to be parsed. (A slice of the largest
-// picture in 8-bit 4:2:0 I_PCM macroblocks takes 52 MB.)
-const size_t kHold = (size_t)1 << 26;
 
 // A NAL unit of the stream (zeros before it; its bytes in nal, all of them,
 // or with lng the first kHold + 1, the rest still in the reader; prev_type,
