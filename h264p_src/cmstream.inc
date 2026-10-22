@@ -5,7 +5,7 @@
 namespace h264p {
 
 const char kCmMagic[] = "h264c";  // compressed streams, followed by the version and level bytes
-const int kCmVersion = 6;
+const int kCmVersion = 7;
 // The CRC-32 at the end is coded XORed with this: a decoder fed past the
 // end of its input decodes zeros, and 0 is the CRC-32 of an empty stream.
 const uint32_t kCrcXor = 0x68323634;
@@ -516,9 +516,7 @@ int decompress_stream(Model<1, LV>& m, DecompressState& s, const H264pArgs& a) {
   m.end_stream();
   flush();
   if (m.nal(F_CRC, 0, 0) != (crc.value() ^ kCrcXor)) err_raise("CRC mismatch: the stream did not decompress correctly");
-  // the coder's flush leaves off the last bytes, so the decoder always
-  // reads past the end of a whole stream
-  if (!m.over) err_raise("corrupt stream: data after its end");
+  if (!m.input_done()) err_raise("corrupt stream: data after its end");
   if (a.verbose) say(a.meter, "%ld NAL units\n", nals);
   return 0;
 }

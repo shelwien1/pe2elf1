@@ -136,6 +136,16 @@ if [ -n "${negative:-}" ]; then
   "$bin" c -1 "$here/gen/x264_base.264" "$tmp/k.c" 2>/dev/null && head -c 9000 "$tmp/k.c" > "$tmp/cut.c"
   "$bin" c -1 -t 2 -c 1k "$here/gen/x264_base.264" "$tmp/m.c" 2>/dev/null && head -c 9000 "$tmp/m.c" > "$tmp/mcut.c"
   check "a cut compressed stream: d fails" sh -c '! "$1" d "$2/cut.c" "$2/k.264" 2>/dev/null && ! "$1" d "$2/mcut.c" "$2/k.264" 2>/dev/null' - "$bin" "$tmp"
+  # the last byte gone, or 1 to 3 bytes after the end: d fails (the coder
+  # reads exactly the bytes it wrote)
+  for x in k m; do
+    head -c -1 "$tmp/$x.c" > "$tmp/x1.c"
+    check "$x.c with its last byte gone: d fails" sh -c '! "$1" d "$2/x1.c" "$2/k.264" 2>/dev/null' - "$bin" "$tmp"
+    for j in '\000' '\377' '\000\377' '\245\245\245'; do
+      { cat "$tmp/$x.c"; printf "$j"; } > "$tmp/xj.c"
+      check "$x.c with $j after it: d fails" sh -c '! "$1" d "$2/xj.c" "$2/k.264" 2>/dev/null' - "$bin" "$tmp"
+    done
+  done
   # not h264p's (a stream, nothing, another version's): d fails and leaves
   # no output, not even its temporary file
   : > "$tmp/empty.c"

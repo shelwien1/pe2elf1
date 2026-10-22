@@ -1,9 +1,11 @@
 // The binary range coder of oggcomp (balrogg-P-hash rc.inc): 15-bit
 // probabilities, 64-bit low with carry propagation -- oggcomp's options as
-// h264p has them: no carryless mode, eight bytes of low, at most 32 of a
-// final run of 0xFF bytes left off by the flush (the decoder reads 0xFF
-// past the end of its input: rcio.inc). The byte I/O is the template base
-// RC_IO_BASE, defined before inclusion.
+// h264p has them: no carryless mode, eight bytes of low. The flush writes
+// all of low, so that the decoder reads exactly the bytes the coder wrote,
+// to the last: none past them, none left (d checks both, rcio.inc and
+// cmstream.inc, so that a compressed stream cut short or with bytes after
+// it fails). The byte I/O is the template base RC_IO_BASE, defined before
+// inclusion.
 
 namespace h264p {
 
@@ -28,7 +30,6 @@ template <int f_DEC> struct Rangecoder : RC_IO_BASE<Rangecoder<f_DEC>> {
   static const uint CODBYTES = 4;
   static const uint LOWBYTES = 8;
   static const uint LOWBITS = LOWBYTES * 8;
-  static const uint FF_TRIM = 32;
   static const uint sTOP = 1u << 24;
   static const uint gTOP = 1u << 16;
   uint lowl, lowh;
@@ -117,32 +118,24 @@ template <int f_DEC> struct Rangecoder : RC_IO_BASE<Rangecoder<f_DEC>> {
         code = (code << 8) + get();
     }
   }
+  //  The flush: the last decision's low, then a value in [low, low +
+  //  range), all LOWBYTES of it (no renormalisation: the decoder, which
+  //  read CODBYTES ahead, has then read every byte written, and the coder
+  //  skipped LOWBYTES - CODBYTES)
   void rc_Quit() {
     if(f_DEC)
       return;
-    rc_Renorm();
-    uint i, n = LOWBYTES;
+    ShiftLow(0);
     uint64_t llow = low_Get();
     const uint64_t high = llow + range;
-    const uint hic = (high < llow);
-    const uint k = hic ? LOWBITS : RC_BSR64(llow ^ high);
+    const uint k = high < llow ? LOWBITS : RC_BSR64(llow ^ high);
     llow |= (k >= 64) ? ~uint64_t(0) : ((uint64_t(1) << k) - 1);
-    n -= k / 8;
-    if(n == 0 && Carry == 0) {
-      const uint run = FFNum + (Cache != uint(-1) && Cache == 0xFF);
-      const uint keep = run > FF_TRIM ? run - FF_TRIM : 0;
-      if(Cache != uint(-1) && Cache != 0xFF)
-        emit((byte)Cache);
-      for(i = 0; i < keep; i++)
-        emit(0xFF);
-    } else {
-      if(Cache != uint(-1))
-        emit((byte)(Cache + Carry));
-      for(i = 0; i < FFNum; i++)
-        emit((byte)(0xFF + Carry));
-      for(i = 0; i < n; i++)
-        emit((byte)(llow >> (LOWBITS - 8 - i * 8)));
-    }
+    if(Cache != uint(-1))
+      emit((byte)(Cache + Carry));
+    for(uint i = 0; i < FFNum; i++)
+      emit((byte)(0xFF + Carry));
+    for(uint i = 0; i < LOWBYTES; i++)
+      emit((byte)(llow >> (LOWBITS - 8 - i * 8)));
   }
 };
 #undef RC_BSR64

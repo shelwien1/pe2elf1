@@ -102,27 +102,26 @@ struct CoroIo : Coroutine {
   }
 };
 
-// and the range coder's bytes, one at a time
+// and the range coder's bytes, one at a time (decoding, every byte the
+// coder wrote and no more: rc.inc's flush)
 template <class RC>
 struct RcIo : CoroIo {
-  int over;  // decoding: the bytes taken past the end of the input
-
-  void io_init() {
-    CoroIo::io_init();
-    over = 0;
-  }
   INLINE void put(uint8_t c) {
     if (UNLIKELY(outptr >= outend)) next_output();
     *outptr++ = c;
     n_out++;
   }
   INLINE uint8_t get() {
-    if (UNLIKELY(inpptr >= inpend) && !next_input()) {
-      if (++over > 48) err_raise("the compressed stream is cut short");
-      return 0xFF;
-    }
+    if (UNLIKELY(inpptr >= inpend) && !next_input()) err_raise("the compressed stream is cut short");
     n_in++;
     return *inpptr++;
+  }
+  // whether the input has ended (decoding, after the last value: nothing
+  // may come after it)
+  bool input_done() {
+    while (inpptr >= inpend)
+      if (!next_input()) return true;
+    return false;
   }
 };
 
