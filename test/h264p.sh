@@ -99,8 +99,10 @@ echo "passed $pass, failed $fail; $total bytes compressed:$(for l in $levels; do
 # once crashed on (poc_wrap), took minutes (fmo_boxout) or gigabytes
 # (empty_blocks; kinds, 261 bytes: a slice of each kind of picture at the
 # largest size) for, failed as a whole (big_level), mismodelled
-# (pps_repeat), read and wrote differently (sei_size) or, with -t, could
-# not restore (aud_last: a last part that is only an access unit delimiter)
+# (pps_repeat; redundant: P pictures that begin with a redundant slice,
+# whose POC the model took as none), read and wrote differently (sei_size)
+# or, with -t, could not restore (aud_last: a last part that is only an
+# access unit delimiter)
 if [ -n "${negative:-}" ]; then
   nfail=0
   check() {  # $1 what, then a command that must succeed

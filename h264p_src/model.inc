@@ -730,9 +730,14 @@ struct History {
     }
   }
   // kind k's first slice in picture p, of POC pc and id d: the kind's
-  // records are the picture's from here on
+  // records are the picture's from here on. (A later slice of it gives the
+  // POC where the first had none, INT_MIN: a redundant slice, which the
+  // reconstruction leaves out. So none reaches a distance: Model::ref_dist().)
   void picture(int k, uint64_t p, int pc, int64_t d) {
-    if (pic[k] == p) return;
+    if (pic[k] == p) {
+      if (poc[k] == INT_MIN) poc[k] = pc;
+      return;
+    }
     pic[k] = p;
     prev[k] = poc[k];
     poc[k] = pc;
