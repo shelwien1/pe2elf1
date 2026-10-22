@@ -662,9 +662,12 @@ struct History {
   Buf<uint8_t> skip[30];  // rec's valid && skip, a byte a macroblock (for skp_vars)
   MbCol* cur;             // rec of the current slice's kind
   // each kind's: the POC of the picture it is (INT_MIN none) and of the
-  // picture of the kind before it, and the picture it is (Model::pic_):
+  // picture of the kind before it, the same pictures by their RPic::id (-1
+  // none; what a reference picture is matched by: a POC is used again
+  // after an IDR picture or MMCO 5), and the picture it is (Model::pic_):
   // its first slice of the kind made it so
   int poc[30], prev[30];
+  int64_t pid[30], ppid[30];
   uint32_t pic[30];
   // The records of kind key as they were when its picture began (if ok: a
   // P picture): rec[key] where keep's stamp is not snap, else keep and
@@ -686,7 +689,7 @@ struct History {
   int key, size;
   bool ok;
   void Init() {
-    for (int k = 0; k < 30; k++) rec[k].Init(), skip[k].Init(), poc[k] = prev[k] = INT_MIN, pic[k] = 0;
+    for (int k = 0; k < 30; k++) rec[k].Init(), skip[k].Init(), poc[k] = prev[k] = INT_MIN, pid[k] = ppid[k] = -1, pic[k] = 0;
     cur = nullptr;
     keep.Init();
     coef.Init();
@@ -715,13 +718,15 @@ struct History {
       size = n;
     }
   }
-  // kind k's first slice in picture p, of POC pc: the kind's records are
-  // the picture's from here on
-  void picture(int k, uint32_t p, int pc) {
+  // kind k's first slice in picture p, of POC pc and id d: the kind's
+  // records are the picture's from here on
+  void picture(int k, uint32_t p, int pc, int64_t d) {
     if (pic[k] == p) return;
     pic[k] = p;
     prev[k] = poc[k];
     poc[k] = pc;
+    ppid[k] = pid[k];
+    pid[k] = d;
   }
   // before the record of macroblock a of kind k is rewritten: what views
   // read of it (valid, cls, nzm[0], cm and the coefficient rows, those
@@ -736,11 +741,11 @@ struct History {
     }
     d = Keep{snap, s.valid, s.cls, s.cm, s.nzm[0]};
   }
-  // the kind, other than k, whose records are the picture with POC pc (of
-  // n macroblocks); -1 none
-  int of_poc(int pc, int k, int n) const {
-    for (int j = 0; j < 30; j++)
-      if (j != k && poc[j] == pc && (int)rec[j].size() >= n) return j;
+  // the kind, other than k, whose records are the picture with id d (of n
+  // macroblocks); -1 none
+  int of_pic(int64_t d, int k, int n) const {
+    for (int j = 0; j < 30 && d >= 0; j++)
+      if (j != k && pid[j] == d && (int)rec[j].size() >= n) return j;
     return -1;
   }
 
@@ -772,17 +777,17 @@ struct History {
       return Ref{c.valid, c.cls, c.cm, c.nzm[0], c.coef};
     }
   };
-  // those of the picture with POC pc (none: false), from a slice of kind k
-  // in a picture of n macroblocks whose kind's last picture had POC pp:
-  // the current kind's as they were if it is that one, else another kind's
-  View view(int pc, int pp, int k, int n) const {
+  // those of the picture with id d (none: false), from a slice of kind k
+  // in a picture of n macroblocks whose kind's last picture had id pd: the
+  // current kind's as they were if it is that one, else another kind's
+  View view(int64_t d, int64_t pd, int k, int n) const {
     View v;
     v.Init();
-    if (pc == pp && size == n) {
+    if (d >= 0 && d == pd && size == n) {
       if (ok && key == k) v.cur = rec[key].data(), v.keep = keep.data(), v.coef = coef.data(), v.id = snap;
       return v;
     }
-    int j = of_poc(pc, k, n);
+    int j = of_pic(d, k, n);
     if (j >= 0) v.cur = rec[j].data();
     return v;
   }
@@ -1088,6 +1093,8 @@ struct Model : tc_rc<f_DEC> {
     aq_.Init();
     mbx_ = mby_ = height_ = 0;
     prev_poc_ = cur_poc_ = INT_MIN;
+    prev_pid_ = -1;
+    red_ = false;
     phk_ = -1;
   }
   void Quit() {
@@ -1362,13 +1369,15 @@ struct Model : tc_rc<f_DEC> {
   // the POCs of the current slice's kind's last picture and its picture
   // (History::prev, poc)
   int prev_poc_, cur_poc_;
+  int64_t prev_pid_;  // (its id)
+  bool red_;          // the slice is a redundant coded picture's
   // in a B slice, the kind (not the current one) whose history is the
   // picture list 1's first reference is; -1 other slices or none (as the
   // slice begins)
   int phk_;
   int phist_key_of_slice() const {
     if (sc_->stype_ != kB || !rec_.motion() || rec_.nlist[1] < 1 || !rec_.list[1][0]) return -1;
-    return hist_.of_poc(rec_.list[1][0]->poc, key_, size_);
+    return hist_.of_pic(rec_.list[1][0]->id, key_, size_);
   }
   // that history, nullptr none
   const MbCol* phist() const { return phk_ < 0 ? nullptr : hist_.rec[phk_].data(); }
@@ -1398,6 +1407,7 @@ struct Model : tc_rc<f_DEC> {
     const SliceHeader& h = *sc.h_;
     bool newpic = new_picture(h);
     last_h_ = h;
+    red_ = h.redundant_pic_cnt > 0;
     key_ = pic_kind(h);
     st_ = key_ / 3;
     if (newpic) pic_++;
@@ -1420,8 +1430,9 @@ struct Model : tc_rc<f_DEC> {
     rec_.slice_begin(h, newpic);
     // (the first slice of its kind in the picture: the kind's history is
     // the picture's from here on)
-    hist_.picture(key_, pic_, rec_.motion() ? rec_.cur->poc : INT_MIN);
+    hist_.picture(key_, pic_, rec_.motion() ? rec_.cur->poc : INT_MIN, rec_.motion() ? rec_.cur->id : -1);
     prev_poc_ = hist_.prev[key_];
+    prev_pid_ = hist_.ppid[key_];
     cur_poc_ = hist_.poc[key_];
     phk_ = phist_key_of_slice();
     if (newpic) {
@@ -1483,6 +1494,13 @@ struct Model : tc_rc<f_DEC> {
   // into the history of the slice's kind
   void finish_mb() {
     const MbState& s = *sc_->cur_;
+    if (red_) {
+      // (a redundant coded picture's macroblock: the primary one's stay the
+      // picture's records)
+      col_ = nullptr;
+      mb_open_ = false;
+      return;
+    }
     if (LV::refs || LV::recon) hist_.before_write(key_, addr_);
     MbCol& c = hist_.cur[addr_];
     c.valid = 1;
@@ -1711,6 +1729,9 @@ struct Model : tc_rc<f_DEC> {
     }
     H_skp_v D = {};
     skp_vars(D);
+    // (finish_mb() wrote this macroblock's skip where the window's centre
+    // had col_'s)
+    D.c9 += (col_skip_ == 1) - (mi_->skip != 0);
     return skp_bit(D, 1, ENC && v);
   }
   int field(int v) {
@@ -1785,6 +1806,7 @@ struct Model : tc_rc<f_DEC> {
     int p1 = mbt_bit(26, ENC && (x & 2), cab0(SC::ctx_mbt_i(off, islice, 3)));
     int p0 = mbt_bit(27 + p1, ENC && (x & 1), cab0(SC::ctx_mbt_i(off, islice, 4)));
     mi_->i16m = (uint8_t)(p1 * 2 + p0);
+    mi_->cbp = (uint8_t)((luma ? 15 : 0) | chroma << 4);  // (its cbp is in its mb_type)
     return 1 + p1 * 2 + p0 + 4 * chroma + 12 * luma;
   }
   int mb_type(int t) {
@@ -2511,7 +2533,7 @@ struct Model : tc_rc<f_DEC> {
   // mc_col() and mc_nz() read of each
   HistView ref_hist(int l, int r) const {
     if (!rec_.motion() || r < 0 || r >= rec_.nlist[l] || !rec_.list[l][r]) return HistView();
-    return hist_.view(rec_.list[l][r]->poc, prev_poc_, key_, size_);
+    return hist_.view(rec_.list[l][r]->id, prev_pid_, key_, size_);
   }
   // What mc_col() and mc_nz() share: for an inter macroblock of a P
   // picture (not MBAFF) whose block at (x, y) (4x4 blocks) refers to the

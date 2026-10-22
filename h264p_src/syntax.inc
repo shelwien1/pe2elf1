@@ -305,7 +305,7 @@ struct SliceHeader {
   int slice_group_change_cycle;
   // for decoding the pictures (model.inc)
   int poc_lsb, long_term_reference_flag, mmco5;
-  int64_t idr_pic_id;
+  int64_t idr_pic_id, redundant_pic_cnt;  // (a redundant coded picture's slice: redundant_pic_cnt > 0)
   int64_t delta_poc_bottom, delta_poc[2];
   int nrplm[2];
   Rplm rplm[2][66];  // (65 at most, and one that fails)
@@ -635,7 +635,7 @@ void code_slice_header(Syn& s, SliceHeader& h, const ParamSets& ps) {
     if (pps.bottom_field_pic_order_in_frame_present_flag && !h.field_pic_flag)
       h.delta_poc[1] = s.se("delta_pic_order_cnt_1", -kS32, kS32);
   }
-  if (pps.redundant_pic_cnt_present_flag) s.ue("redundant_pic_cnt", 0, kU32);
+  if (pps.redundant_pic_cnt_present_flag) h.redundant_pic_cnt = s.ue("redundant_pic_cnt", 0, kU32);
   if (t == kB) h.direct_spatial_mv_pred_flag = (int)s.u("direct_spatial_mv_pred_flag", 1);
   h.num_ref_idx_active[0] = h.num_ref_idx_active[1] = 0;
   if (t == kP || t == kSP || t == kB) {

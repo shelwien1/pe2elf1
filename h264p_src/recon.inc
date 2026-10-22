@@ -573,10 +573,11 @@ template <int K>
 struct MbDecoder : Dpb {
   static constexpr bool REFS = K >= 1, PX = K == 2;
   // a picture is current: its motion and reference lists are known
-  // (motion()), and its samples (act())
-  bool mact;
-  bool motion() const { return REFS && mact; }
-  bool act() const { return PX && mact; }
+  // (motion()), and its samples (act()); not in the slices of a redundant
+  // coded picture (red), which a decoder that has the primary one drops
+  bool mact, red;
+  bool motion() const { return REFS && mact && !red; }
+  bool act() const { return PX && mact && !red; }
   // Where things are in the current picture: macroblock addr's first
   // column and row in a plane of m samples a macroblock (16 luma, 8
   // chroma, 1 the macroblocks themselves); plane c (0 Y, 1 Cb, 2 Cr) and
@@ -619,7 +620,7 @@ struct MbDecoder : Dpb {
 
   void Init() {
     Dpb::Init();
-    mact = false;
+    mact = red = false;
     db.Init();
     slice_no = 0;
     cqp_off[0] = cqp_off[1] = 0;
@@ -682,6 +683,7 @@ struct MbDecoder : Dpb {
     if (act() && mb_prepared) mb_t8 = t8;
   }
   void finish_picture() {
+    red = false;
     if (!REFS || !cur) return;
     if (act()) fin_end();
     // checking the reconstruction against a decoder's: H264P_RECDUMP=file
@@ -1939,6 +1941,7 @@ struct MbDecoder : Dpb {
   }
   void slice_begin(const SliceHeader& h, bool newpic) {
     if (!REFS) return;
+    red = false;
     const Sps& sps = *h.sps;
     const Pps& pps = *h.pps;
     // (a picture whose SPS or PPS is redefined between its slices, as one it
@@ -1993,7 +1996,8 @@ struct MbDecoder : Dpb {
     } else {
       slice_no++;
     }
-    if (!mact) return;
+    red = h.redundant_pic_cnt > 0;
+    if (!mact || red) return;
     curr_pic_num = h.frame_num;
     disable = h.disable_deblocking;
     alpha_off = h.alpha_offset;
