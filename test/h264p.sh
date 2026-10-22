@@ -113,6 +113,9 @@ if [ -n "${negative:-}" ]; then
     check "$n: c -9, d" sh -c 'timeout 300 "$1" c -9 "$2" "$3/k.c" 2>/dev/null && "$1" d "$3/k.c" "$3/k.264" && cmp -s "$2" "$3/k.264"' - "$bin" "$s" "$tmp"
   done
   check "kinds.264: c -9, d in 1.05 GB of address space (1.64 GB unbounded)" sh -c 'ulimit -v 1100000 2>/dev/null; "$1" c -9 "$2" "$3/k.c" 2>/dev/null && "$1" d "$3/k.c" "$3/k.264" && cmp -s "$2" "$3/k.264"' - "$bin" "$here/crafted/kinds.264" "$tmp"
+  # no start code at all: -t cuts it at twice the cap (8 KB at -c 1k)
+  head -c 50000 /dev/zero | tr '\0' '\377' > "$tmp/ff.264"
+  check "50 KB with no start code: c -t 2 -c 1k in parts, d" sh -c '"$1" c -1 -v -t 2 -c 1k "$2/ff.264" "$2/k.c" 2>"$2/log" && grep -q " [2-9] parts" "$2/log" && "$1" d "$2/k.c" "$2/k.264" && cmp -s "$2/ff.264" "$2/k.264"' - "$bin" "$tmp"
   check "aud_last.264: c -t 2 -c 1k, d" sh -c '"$1" c -1 -t 2 -c 1k "$2" "$3/k.c" 2>/dev/null && "$1" d "$3/k.c" "$3/k.264" && cmp -s "$2" "$3/k.264"' - "$bin" "$here/crafted/aud_last.264" "$tmp"
   check "sei_size.264: c -s fails (a size past 2^24)" sh -c '! "$1" c -s -1 "$2" "$3/k.c" 2>/dev/null' - "$bin" "$here/crafted/sei_size.264" "$tmp"
   # a slice with a byte changed: stored verbatim, or with -s a failure that
