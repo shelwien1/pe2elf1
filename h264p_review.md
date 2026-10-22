@@ -789,6 +789,22 @@ After this review, `c` (without `-s`) had to take any input — cut short, with 
 | 2cc6468 | `-t` copies into a part only the parameter sets its slices use (unused large sets made a crafted stream 25 times its size) |
 | d1c9f11 | a skipped MBAFF top macroblock's motion derived in the field mode the pair decodes with |
 | 275e74e | a closed pipe (SIGPIPE) removes the temporary output |
-| this commit | an output named `/dev/stdout`, `/dev/fd/N` or `/proc/self/fd/N`, or a link to one, is written through that descriptor. It had been renamed over the file the shell had open, losing what was there and the next call's output, and then renamed over `/dev/stdout` itself |
+| 9d82a83 | an output named `/dev/stdout`, `/dev/fd/N` or `/proc/self/fd/N`, or a link to one, is written through that descriptor. It had been renamed over the file the shell had open, losing what was there and the next call's output, and then renamed over `/dev/stdout` itself |
 
-Each fix of a failure (b6879b8, c66f4ec, 5d9ae89, 2cc6468, 275e74e, the last one) has a test in test/h264p.sh, or a crafted stream (aud_last.264), that fails on the build before it; the model's fixes change only how streams compress. What is left: the splitter keeps every version of every parameter set for the whole run (memory, not correctness); and `c`'s restart (a slice the checked model pass cannot reproduce) has been reached by no input, crafted or fuzzed, so only reading covers it.
+Each fix of a failure (b6879b8, c66f4ec, 5d9ae89, 2cc6468, 275e74e, 9d82a83) has a test in test/h264p.sh, or a crafted stream (aud_last.264), that fails on the build before it; the model's fixes change only how streams compress. What is left: `c`'s restart (a slice the checked model pass cannot reproduce) has been reached by no input, crafted or fuzzed, so only reading covers it. (The splitter's memory: the next section.)
+
+### Bounded memory (format 8)
+
+Then one call had to take an endless stream (petabytes through a pipe) in memory that does not grow with it: what the level, the options and the largest pictures need, and no more. Six readers mapped what grows or counts with the stream: the splitter and `-t`, the stream layer, the model, the reconstruction, every integer, and peak RSS on long synthetic streams. What they found, in these commits:
+
+| commit | what |
+|---|---|
+| e343553 | the splitter kept every version of every parameter set, and listed every set of a run with no slice: trimmed at each cut, and the keys a fixed set |
+| 13d07ae | format 8: the reader held a NAL unit, the junk (a stream with no start code: all of it) and each run of zeros whole, and `c` made more copies. Now it holds 64 KB, counts zeros, and a unit over 64 MB is stored verbatim as it is read, in 1 MB chunks. Counts that `c` coded and `d` refused past 2^40 now go in pieces |
+| 97ee2fd | counters: the walk's slice ids wrapped at different slices in `c` and `d` (a round trip broken, shown with the count started near 2^32); the range coder's run of 0xFF bytes; the picture and snapshot stamps; the header model's run position (and its map); the AQ fit's sums in a picture that never ends; the reconstruction's slice number; `-v`'s counters (32-bit `long` on Windows) |
+| 37396c8 | the raw bytes' match kept up to 256 MB of them a model: now the last 16 MB, in a ring |
+| 65c5903 | POCs saturated at 2^30 (after 32,770 pictures of a conforming stream, or 2^29 frames with no IDR), and B lists then went wrong: now modulo 2^32, compared by their differences |
+
+The corpus compresses to the same bytes as before at all five levels, but for the version byte and crafted/poc_wrap.264 (5 or 6 bytes smaller at `-3` to `-9`). Peak RSS before and after: 400 MB of zeros between two NAL units, `c` 395 MB, now 4.4 MB; a 160 MB NAL unit, 473 MB, now 87 MB; 80 MB of distinct parameter sets through `-t 2 -c 1k`, 115 MB, now 12 MB. test/h264p.sh checks the zeros and the parameter sets within an address-space limit that the build before passes, and a 68 MB NAL unit's round trip. Instructions run (c -1 of 002/00, c -5 and -9 of 06, d -1 of 00) against 9d82a83: +0.06%, -0.03%, +0.01%, +0.18%.
+
+What stays bounded by the options rather than fixed: a `-t` part is held whole (at most twice the cap: 32 MB by default, 4 GB at most), and so is the splitter's list of the part's slices (16 bytes each).
