@@ -590,13 +590,17 @@ struct RawModel {
   // are: whether the model would spend 8 bits a byte on them or more. It
   // spends about 0.015 bits more than their entropy (on random bytes), so
   // their entropy has to be above 7.985 bits, as the estimates tell it,
-  // which fall short of it by their bias (Miller-Madow): order 0 (184/n),
-  // that of the differences (a ramp has a flat histogram) and, held to
-  // twice its bias (47,100/n), order 1, which the model has too. And the
-  // match, run over them as code() would run it (its hash as it would be:
-  // the chunk's places where it has had them, seen_, else hash_; none of
-  // the model changed), may predict no more than 1 in 1024 of them after
-  // one it predicted (by chance, 1 in 65,536).
+  // which fall short of it by their bias: order 0 (Miller-Madow: 184/n),
+  // that of the differences (a ramp has a flat histogram), order 0 in
+  // windows of 4 KB averaged (bytes flat over the chunk may be skewed in
+  // its parts, to which the model adapts: random bytes give 7.954 there),
+  // and, held to 1.3 times its bias (47,100/n; an order-1 source of 7.34
+  // bits in 64 KB got past twice it), order 1, which the model has too.
+  // And the match, run over them as code() would run it (its hash as it
+  // would be: the chunk's places where it has had them, seen_, else hash_;
+  // none of the model changed), may predict no more than 3 in 512 of them,
+  // half again what it does by chance (1 in 256: a short copy every few
+  // bytes, which the model codes, is predicted at length 1).
   bool random(const u8* p, size_t n) {
     if (!pos_) init_dict();
     u32 h0[256] = {}, hd[256] = {}, rows[256] = {};
@@ -607,8 +611,16 @@ struct RawModel {
         if (h[k]) s -= h[k] * log2(h[k] / t);
       return s;
     };
-    const double dn = (double)n, f0 = 7.985 - 184.0 / dn, f1 = 7.985 - 2 * 47100.0 / dn;
+    const double dn = (double)n, f0 = 7.985 - 184.0 / dn, f1 = 7.985 - 1.3 * 47100.0 / dn;
     if (bits(h0, 256, dn) / dn < f0 || bits(hd, 256, dn) / dn < f0) return false;
+    const size_t kWin = 4096, nw = n / kWin;
+    double sw = 0;
+    for (size_t w = 0; w < nw; w++) {
+      u32 hw[256] = {};
+      for (size_t i = w * kWin; i < (w + 1) * kWin; i++) hw[p[i]]++;
+      sw += bits(hw, 256, (double)kWin);
+    }
+    if (sw / (double)(nw * kWin) < 7.985 - (8 - 7.954)) return false;
     seen_.fill((size_t)1 << 16, 0);
     for (size_t i = 1; i < n; i++) seen_[(u32)p[i - 1] << 8 | p[i]]++, rows[p[i - 1]]++;
     // H(a byte | the one before) = H(the pair) - H(the one before)
@@ -617,11 +629,11 @@ struct RawModel {
     auto byte_at = [&](uint64_t a) -> int { return a >= pos_ ? p[a - pos_] : at(a); };
     uint64_t ptr = ptr_, pos = pos_;
     int len = len_;
-    size_t runs = 0;
+    size_t hits = 0;
     for (size_t j = 0; j < n; j++) {
       int pb = len && ptr < pos && pos - ptr <= kRing ? byte_at(ptr) : -1;
       if (pb == p[j])
-        runs += len >= 2, len += len < 15, ptr++;
+        hits++, len += len < 15, ptr++;
       else
         len = 0;
       pos++;
@@ -633,7 +645,7 @@ struct RawModel {
         seen_[k] = (u32)(pos - pos_);
       }
     }
-    return runs * 1024 <= n;
+    return hits * 512 <= n * 3;
   }
 };
 
