@@ -47,7 +47,13 @@ struct dyn_buff {
 
   ptr alloc0( void ) {
     ptr p = VAlloc<byte>(bufsize); //new byte[bufsize];
-    if( p==0 ) __debugbreak();
+    if( p==0 ) {
+#ifdef MTWRAP_NOMEM
+      MTWRAP_NOMEM(); // (the program's way to end without memory)
+#else
+      __debugbreak();
+#endif
+    }
     (ptr&)p[0] = 0; 
     c_alloc0++;
     return p;
@@ -127,8 +133,18 @@ struct dyn_buff {
     Init();
   }
 
-  // save a buffer
+  // save a buffer: after the last one saved for the thread, in its node,
+  // where they fit (a buffer of a few bytes took a node of its own, bufsize
+  // bytes: a stream of them took bufsize/5 times what it was); an empty one
+  // (the thread's EOF) in a node of its own
   byte* Save( uint tid, byte* p, uint psize ) {
+    ptrlist* q = prev[tid];
+    if( psize && q && q->p && q->len && q->len+psize<=bufsize ) {
+      byte* r = q->p + q->len;
+      q->len += psize;
+      memcpy( r, p, psize );
+      return r;
+    }
     ptrlist* pl = tail[tid];
     prev[tid] = pl;
     pl->p = alloc();
@@ -162,6 +178,7 @@ struct dyn_buff {
   void Drop( uint tid ) {
     ptrlist* pl = head[tid];
     if( pl->p ) {
+      if( pl==prev[tid] ) prev[tid] = 0; // (nothing more goes into it)
       head[tid] = pl->next; // remove list node from thread's list
       free( pl->p ); // free buffer
       pl_free( pl ); // free list node

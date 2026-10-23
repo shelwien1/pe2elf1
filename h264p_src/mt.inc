@@ -73,24 +73,24 @@ struct PartProg {
   uint64_t pics() const { return __atomic_load_n(&pics_, __ATOMIC_RELAXED); }
 };
 
-// A run of a codec, H264pCoro<f_DEC, LV>, on a part in memory: all of in
-// its input, its output into out (grown as it fills, handed to it 64 KB at
-// a time, to most bytes: one more fails the worker); the run's status (0, 1
-// after an error, kRestart). As it goes,
+// A run of a codec, H264pCoro<f_DEC, LV>, on a part: its input as src
+// gives it (src(p): the next piece at p, its size; 0, the end), its output
+// into out (grown as it fills, handed to it 64 KB at a time, to most bytes:
+// one more fails the worker); the run's status (0, 1 after an error,
+// kRestart). As it goes,
 // its input, output and pictures from in0, out0 and pics0 on are the
 // worker's counts, what it tells is shown (show_told(): the parts' video
 // once), and a line of progress may be due.
-template <class C>
-int run_part(const H264pArgs& a, Buf<uint8_t>& in, Buf<uint8_t>& out, uint64_t most, PartProg& prog, uint64_t in0,
+template <class C, class Src>
+int run_part(const H264pArgs& a, Src& src, Buf<uint8_t>& out, uint64_t most, PartProg& prog, uint64_t in0,
              uint64_t out0, uint64_t pics0) {
   C* c = coro_new<C>();
   c->Init(&a);
-  size_t pos = 0;
   auto feed = [&]() {  // the next piece of the part (addinp() takes 32 bits), or its end
-    size_t l = Min(in.size() - pos, (size_t)1 << 30);
+    const uint8_t* p = nullptr;
+    size_t l = src(p);
     if (!l) c->f_quit = 1;
-    c->addinp(in.data() + pos, (uint)l);
-    pos += l;
+    c->addinp((byte*)(l ? p : out.data()), (uint)l);
   };
   out.resize((size_t)Min<uint64_t>(1 << 16, most + 1));
   c->addout(out.data(), (uint)out.size());
@@ -126,7 +126,7 @@ int run_part(const H264pArgs& a, Buf<uint8_t>& in, Buf<uint8_t>& out, uint64_t m
 template <int f_DEC>
 struct H264pPart : CoroIo {
   H264pArgs args;
-  Buf<uint8_t> in_;   // a part, or its record: all of it, read before its model starts
+  Buf<uint8_t> in_;   // compressing, a part, all of it, read before its model starts; decompressing, 64 KB of its record
   Buf<uint8_t> out_;  // what the part's model made of it
   uint64_t parts;              // the parts done
   PartProg prog;               // the input coded so far and the output (the progress line)
@@ -182,16 +182,19 @@ struct H264pPart : CoroIo {
     }
     return true;
   }
-  // the part's model run on in_ into out_ (most bytes), at the level of
-  // a.level (the counts from in0, out0 and pics0 on)
+  // the part's model run on what src gives (run_part()) into out_ (most
+  // bytes), at the level of a.level (the counts from in0, out0 and pics0 on)
   template <class LV>
   struct Lv {
-    static int run(H264pPart& w, const H264pArgs& a, uint64_t most, uint64_t in0, uint64_t out0, uint64_t pics0) {
-      return run_part<H264pCoro<f_DEC, LV>>(a, w.in_, w.out_, most, w.prog, in0, out0, pics0);
+    template <class Src>
+    static int run(H264pPart& w, const H264pArgs& a, Src& src, uint64_t most, uint64_t in0, uint64_t out0,
+                   uint64_t pics0) {
+      return run_part<H264pCoro<f_DEC, LV>>(a, src, w.out_, most, w.prog, in0, out0, pics0);
     }
   };
-  int code(const H264pArgs& a, uint64_t most, uint64_t in0, uint64_t out0, uint64_t pics0) {
-    int r = with_level<Lv>(a.level, *this, a, most, in0, out0, pics0);
+  template <class Src>
+  int code(const H264pArgs& a, Src& src, uint64_t most, uint64_t in0, uint64_t out0, uint64_t pics0) {
+    int r = with_level<Lv>(a.level, *this, a, src, most, in0, out0, pics0);
     if (r != kNoLevel) return r;  // (0, 1, or kRestart)
     say_error(args.meter, "h264p: %s: a part compressed at level -%d, which this build has not\n", args.name, a.level);
     return 1;
@@ -216,10 +219,18 @@ struct H264pPart : CoroIo {
       a.nal0 = get_le(h + 32, 8), a.ncopy = get_le(h + 24, 8), a.copy_at = ins > 0;  // (after an AUD, if any)
       uint64_t in0 = prog.in(), out0 = prog.out(), pics0 = prog.pics();
       const uint64_t kAny = ~(uint64_t)0 >> 1;  // (a part's compressed size: as it comes)
-      int r = code(a, kAny, in0, out0, pics0);
+      size_t pos = 0;
+      auto src = [&](const uint8_t*& p) {  // in_, from pos on (each run from its start)
+        size_t l = Min(in_.size() - pos, (size_t)1 << 30);
+        p = in_.data() + pos;
+        pos += l;
+        return l;
+      };
+      int r = code(a, src, kAny, in0, out0, pics0);
       if (r == kRestart) {
         a.check = false;
-        r = code(a, kAny, in0, out0, pics0);
+        pos = 0;
+        r = code(a, src, kAny, in0, out0, pics0);
       }
       if (r) return 1;
       prog.set(in0 + plen, out0 + 32 + out_.size(), prog.pics());
@@ -251,16 +262,37 @@ struct H264pPart : CoroIo {
       if (!n) return 0;  // the end
       if (n < 32) return fail("a part's record cut short");
       uint64_t g_size = get_le(h, 8), plen = get_le(h + 8, 8), ins = get_le(h + 16, 8), xlen = get_le(h + 24, 8);
-      if (plen > args.part_max || ins > plen || xlen > plen - ins) return fail("a part's record broken");
-      if (g_size < 32 || !take(g_size - 32)) return fail("a part's record cut short or broken");
+      if (plen > args.part_max || ins > plen || xlen > plen - ins || g_size < 32) return fail("a part's record broken");
+      // the part compressed, read as its model asks for it, none of it
+      // held but 64 KB (whatever size the record says): its first bytes
+      // here (its level), then the rest of g_size from the input
+      uint64_t left = g_size - 32;
+      uint8_t head[sizeof kCmMagic + 1];
+      size_t nh = (size_t)Min<uint64_t>(left, sizeof head);
+      if (read(head, nh) < nh) return fail("a part's record cut short");
+      left -= nh;
       H264pArgs a = args;
-      a.level = cm_level(in_.data(), Min(in_.size(), sizeof kCmMagic + 1), args.name, note, sizeof note);
+      a.level = cm_level(head, nh, args.name, note, sizeof note);
       if (a.level < 0) {
         say_error(args.meter, "%s", note);
         return 1;
       }
+      in_.resize((size_t)1 << 16);
+      bool first = true;
+      auto src = [&](const uint8_t*& p) {
+        if (first) {
+          first = false;
+          p = head;
+          return nh;
+        }
+        size_t got = read(in_.data(), (size_t)Min<uint64_t>(left, in_.size()));
+        left -= got;
+        p = in_.data();
+        return got;
+      };
       uint64_t in0 = prog.in(), out0 = prog.out(), pics0 = prog.pics();
-      if (code(a, plen, in0 + 32, out0, pics0)) return 1;
+      if (code(a, src, plen, in0 + 32, out0, pics0)) return 1;
+      if (left) return fail("a part's record broken");  // (its stream ended before it)
       if (out_.size() != plen) return fail("a part did not decompress as it was compressed");
       size_t pos = (size_t)(ins + xlen);
       prog.set(in0 + g_size, out0 + plen - xlen, prog.pics());

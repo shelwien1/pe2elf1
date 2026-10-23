@@ -192,7 +192,12 @@ parameter set and those of the part under way. `d` holds no more of a
 compressed stream than `c` makes of one, whatever it reads: a NAL unit it
 would parse past 64 MB (an SEI's messages), a part of `-t` that comes out
 longer than its record says, or a record of a part larger than `-c` lets
-`c` make, is broken as it gets there.
+`c` make, is broken as it gets there. It reads a part's compressed bytes
+as the part's model asks for them, whatever size its record says. What it
+reads past to find the next part in turn (MTwrap's container has the
+workers' blocks in the order they came: `c`'s within about a round of
+parts of each other) it holds packed: a stream made to make it hold much
+can make it hold no more than the bytes it has read.
 
 The model is binary context mixing, after oggcomp (Ogg Vorbis): each value
 is a sequence of binary decisions, each predicted by ten adaptive counters

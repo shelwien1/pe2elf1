@@ -65,7 +65,13 @@
 // MTwrap (mtwrap's, but that it waits only on events: a failure to make
 // one fails Init() instead of falling back to Sleep() polling; Lib3's
 // win_shim.inc it includes is unchanged: build with -I Lib3, and with
-// threads, -pthread), which runs coroutines on threads (mt.inc)
+// threads, -pthread), which runs coroutines on threads (mt.inc). Out of
+// memory for the blocks it puts aside (dyn_buff.inc), it ends the run as
+// h264p does (err.inc's err_fatal()), not on a trap.
+namespace h264p {
+[[noreturn]] void err_fatal(const char* why);
+}
+#define MTWRAP_NOMEM() h264p::err_fatal("out of memory")
 #include "MTwrap_v3/MTwrap.inc"
 
 // errors (without C++ exceptions) and memory (without the C++ library's
