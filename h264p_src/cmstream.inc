@@ -5,7 +5,7 @@
 namespace h264p {
 
 const char kCmMagic[] = "h264c";  // compressed streams, followed by the version and level bytes
-const int kCmVersion = 8;
+const int kCmVersion = 9;
 // The CRC-32 at the end is coded XORed with this: a decoder fed past the
 // end of its input decodes zeros, and 0 is the CRC-32 of an empty stream.
 const uint32_t kCrcXor = 0x68323634;
@@ -205,7 +205,9 @@ void cm_report(const tc_rc<0>& e, u64 in_bytes, u64 out_bytes, u64 tables, Progr
 
 // The compressed stream: the magic, the version and the model's level (c's
 // -L; d takes the instance of the model for it), then one range coded run of
-// decisions. The bytes before the first start code (junk), then for each
+// decisions, flushed once at its end (bytes that look random among them, a
+// chunk at a time, as they are: code_raw()). The bytes before the first
+// start code (junk), then for each
 // NAL unit: that there is one (F_MORE), its type, nal_ref_idc and the zero
 // bytes before its start code, a change of x264's padding bits (slices),
 // whether it is stored verbatim (a type the walk knows); then its syntax
@@ -332,8 +334,11 @@ uint64_t decode_count(M& m, int fld, int c) {
 }
 
 // Bytes coded as they are, in chunks: the count of each (field fld,
-// context c), up to kChunk, then its bytes; a chunk of kChunk is followed
-// by another (the last one shorter, maybe empty). So no run of them, however
+// context c), up to kChunk, then its bytes -- of a chunk of kPlainMin or
+// more, whether they are coded each a uniform step of the coder (bytes
+// that look random) or by the model (model.inc's RawModel::plain()); a
+// chunk of kChunk is followed by another (the last one shorter, maybe
+// empty). So no run of them, however
 // long, is held whole: here b's from b[i] on, then what is left of the
 // reader's segment, if one is given, b holding a chunk of it at a time.
 // Decoded, each byte goes to put().
@@ -359,7 +364,10 @@ void code_raw(M& m, int fld, int c, Buf<uint8_t>& b, size_t i, AnnexBReader* rd 
     }
     size_t k = Min(b.size() - i, kChunk);
     m.nal(fld, c, (i64)k);
-    for (size_t j = 0; j < k; j++) m.raw(b[i + j]);
+    if (k >= kPlainMin && m.raw_plain(m.raw_random(b.data() + i, k)))
+      for (size_t j = 0; j < k; j++) m.raw_byte(b[i + j]);
+    else
+      for (size_t j = 0; j < k; j++) m.raw(b[i + j]);
     i += k;
     if (k < kChunk) return;
   }
@@ -368,7 +376,10 @@ template <class M, class F>
 void decode_raw(M& m, int fld, int c, F put) {
   for (;;) {
     size_t k = cm_count(m.nal(fld, c, 0), (i64)kChunk);
-    for (size_t j = 0; j < k; j++) put((uint8_t)m.raw(0));
+    if (k >= kPlainMin && m.raw_plain(0))
+      for (size_t j = 0; j < k; j++) put((uint8_t)m.raw_byte(0));
+    else
+      for (size_t j = 0; j < k; j++) put((uint8_t)m.raw(0));
     if (k < kChunk) return;
   }
 }

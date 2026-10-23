@@ -165,6 +165,19 @@ not, frame or field) past 512 MB: a stream has a few kinds, 4.2 MB each at
 the end checks the whole stream, and `d` takes data after the end of the
 compressed stream for corruption.
 
+The whole stream is one run of the range coder, flushed once at its end;
+only h264p's header (the magic, the version, the level) is outside it. The
+bytes stored verbatim, and those before the first start code, go through
+it in chunks of up to 1 MB. A chunk of 64 KB or more that would cost the
+model 8 bits a byte or more is coded as it is, each byte one step of the
+coder that takes 1/256 of its range: bytes that look random to the model
+(their entropy of order 0, of their differences and of order 1 near 8
+bits, and next to nothing its match would find). That costs nothing over
+the bytes themselves, where the model spends 0.1-0.2% more on random
+bytes, and is about ten times faster: 16 MB of random bytes, `c` 3.3 s
+and `d` 3.4 s before, 0.34 s and 0.22 s now (one decision a chunk says
+which it is).
+
 Memory does not grow with the stream, so one call can take a stream of any
 length (petabytes, through a pipe). `c` and `d` hold at most 64 MB of a NAL
 unit: a longer one, and the bytes before the first start code, are stored

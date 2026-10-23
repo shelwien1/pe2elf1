@@ -115,6 +115,18 @@ if [ -n "${negative:-}" ]; then
     check "$n: c -9, d" sh -c 'timeout 300 "$1" c -9 "$2" "$3/k.c" 2>/dev/null && "$1" d "$3/k.c" "$3/k.264" && cmp -s "$2" "$3/k.264"' - "$bin" "$s" "$tmp"
   done
   check "kinds.264: c -9, d in 1.05 GB of address space (1.64 GB unbounded)" sh -c 'ulimit -v 1100000 2>/dev/null; "$1" c -9 "$2" "$3/k.c" 2>/dev/null && "$1" d "$3/k.c" "$3/k.264" && cmp -s "$2" "$3/k.264"' - "$bin" "$here/crafted/kinds.264" "$tmp"
+  # bytes that look random (3 MB with no zero byte: no start code) are coded
+  # as they are, a chunk at a time: c within 256 bytes of them (the model
+  # spent 0.12% more), also with -t; a random block of 512 KB four times,
+  # and a ramp, whose histograms are as flat, are not: matched, modelled
+  head -c 3300000 /dev/urandom | tr -d '\000' | head -c 3000000 > "$tmp/rnd3.264"
+  head -c 600000 /dev/urandom | tr -d '\000' | head -c 524288 > "$tmp/blk"
+  cat "$tmp/blk" "$tmp/blk" "$tmp/blk" "$tmp/blk" > "$tmp/rep4.264"
+  for i in $(seq 255); do printf "\\$(printf %03o $i)"; done > "$tmp/ramp.264"
+  for i in $(seq 13); do cat "$tmp/ramp.264" "$tmp/ramp.264" > "$tmp/ramp2" && mv "$tmp/ramp2" "$tmp/ramp.264"; done
+  check "3 MB that look random: c within 256 bytes of them, -t 2 too; d" sh -c '"$1" c -1 "$2/rnd3.264" "$2/k.c" && [ $(wc -c < "$2/k.c") -le 3000256 ] && "$1" d "$2/k.c" "$2/k.264" && cmp -s "$2/rnd3.264" "$2/k.264" && "$1" c -1 -t 2 -c 256k "$2/rnd3.264" "$2/m.c" && [ $(wc -c < "$2/m.c") -le 3001024 ] && "$1" d "$2/m.c" "$2/k.264" && cmp -s "$2/rnd3.264" "$2/k.264"' - "$bin" "$tmp"
+  check "a random block of 512 KB 4 times: under 600 KB; a ramp of 2 MB: under 64 KB; d" sh -c '"$1" c -1 "$2/rep4.264" "$2/k.c" && [ $(wc -c < "$2/k.c") -lt 600000 ] && "$1" d "$2/k.c" "$2/k.264" && cmp -s "$2/rep4.264" "$2/k.264" && "$1" c -1 "$2/ramp.264" "$2/k.c" && [ $(wc -c < "$2/k.c") -lt 65536 ] && "$1" d "$2/k.c" "$2/k.264" && cmp -s "$2/ramp.264" "$2/k.264"' - "$bin" "$tmp"
+  rm -f "$tmp/rnd3.264" "$tmp/rep4.264" "$tmp/ramp.264" "$tmp/blk"
   # no start code at all: -t cuts it at twice the cap (8 KB at -c 1k)
   head -c 50000 /dev/zero | tr '\0' '\377' > "$tmp/ff.264"
   check "50 KB with no start code: c -t 2 -c 1k in parts, d" sh -c '"$1" c -1 -v -t 2 -c 1k "$2/ff.264" "$2/k.c" 2>"$2/log" && grep -q " [2-9] parts" "$2/log" && "$1" d "$2/k.c" "$2/k.264" && cmp -s "$2/ff.264" "$2/k.264"' - "$bin" "$tmp"
@@ -153,29 +165,22 @@ if [ -n "${negative:-}" ]; then
   # (a NAL unit of type 30, no zero byte in it) and 1 MB of zero bytes (then
   # an end of sequence), each after an IDR picture (-c 512k: a part each,
   # one worker gets every one of a kind): d takes the parts in turn, its
-  # peak resident set through 40 pairs within 16 MB of what 2 took. (c put
-  # a worker's records out 64 KB at a time, so those of zeros, small, came
-  # at the end, and d held the other worker's parts until then: +38 MB.)
-  if [ -r /proc/self/status ]; then
-    peak_kb() {  # a command's peak resident set in KB (sampled), after it ran well
-      "$@" & local p=$! m=0 h
-      while kill -0 $p 2>/dev/null; do
-        h=$(sed -n 's/^VmHWM:[[:space:]]*\([0-9]*\).*/\1/p' /proc/$p/status 2>/dev/null)
-        [ -n "$h" ] && m=$h
-        sleep 0.1
-      done
-      wait $p && echo $m
-    }
-    { printf '\000\000\000\001\036'; head -c 1100000 /dev/urandom | tr -d '\000' | head -c 1000000; } > "$tmp/rnd"
-    { cat "$here/h264p/x264_16x16.264" "$tmp/rnd" "$here/h264p/x264_16x16.264"; head -c 1000000 /dev/zero; printf '\000\000\000\001\012'; } > "$tmp/pair"
-    cat "$tmp/pair" "$tmp/pair" > "$tmp/pairs2.264"
-    for i in $(seq 40); do cat "$tmp/pair"; done > "$tmp/pairs40.264"
-    "$bin" c -1 -t 2 -c 512k "$tmp/pairs2.264" "$tmp/p2.c" && "$bin" c -1 -t 2 -c 512k "$tmp/pairs40.264" "$tmp/p40.c"
-    m2=$(peak_kb "$bin" d "$tmp/p2.c" "$tmp/p2.d")
-    m40=$(peak_kb "$bin" d "$tmp/p40.c" "$tmp/p40.d")
-    check "-t 2 parts of 1 MB that do not compress between parts of zeros: d of 40 pairs within 16 MB of 2 (${m2:-?} KB, ${m40:-?} KB)" sh -c '[ "${1:-0}" -gt 0 ] && [ "${2:-0}" -gt 0 ] && [ $2 -lt $(($1 + 16384)) ] && cmp -s "$3/pairs40.264" "$3/p40.d"' - "$m2" "$m40" "$tmp"
-    rm -f "$tmp/pairs40.264" "$tmp/p40.c" "$tmp/p40.d"
-  fi
+  # peak resident set through 40 pairs (as -p says it, at the end) within
+  # 16 MB of what 2 took. (c put a worker's records out 64 KB at a time, so
+  # those of zeros, small, came at the end, and d held the other worker's
+  # parts until then: +38 MB.)
+  peak_mb() {  # the most memory d had, as its line says at the end with -p (MB)
+    "$bin" d -p "$1" "$2" 2>&1 | tr '\r' '\n' | sed -n 's/.* \([0-9][0-9]*\)\.[0-9]*M RAM at most.*/\1/p'
+  }
+  { printf '\000\000\000\001\036'; head -c 1100000 /dev/urandom | tr -d '\000' | head -c 1000000; } > "$tmp/rnd"
+  { cat "$here/h264p/x264_16x16.264" "$tmp/rnd" "$here/h264p/x264_16x16.264"; head -c 1000000 /dev/zero; printf '\000\000\000\001\012'; } > "$tmp/pair"
+  cat "$tmp/pair" "$tmp/pair" > "$tmp/pairs2.264"
+  for i in $(seq 40); do cat "$tmp/pair"; done > "$tmp/pairs40.264"
+  "$bin" c -1 -t 2 -c 512k "$tmp/pairs2.264" "$tmp/p2.c" && "$bin" c -1 -t 2 -c 512k "$tmp/pairs40.264" "$tmp/p40.c"
+  m2=$(peak_mb "$tmp/p2.c" "$tmp/p2.d")
+  m40=$(peak_mb "$tmp/p40.c" "$tmp/p40.d")
+  check "-t 2 parts of 1 MB that do not compress between parts of zeros: d of 40 pairs within 16 MB of 2 (${m2:-?} MB, ${m40:-?} MB)" sh -c '[ "${1:-0}" -gt 0 ] && [ "${2:-0}" -gt 0 ] && [ $2 -lt $(($1 + 16)) ] && cmp -s "$3/pairs40.264" "$3/p40.d"' - "$m2" "$m40" "$tmp"
+  rm -f "$tmp/pairs40.264" "$tmp/p40.c" "$tmp/p40.d"
   { printf '\000\000\000\001\016'; head -c 68000000 /dev/zero | tr '\0' '\125'; cat "$here/h264p/x264_16x16.264"; } > "$tmp/long.264"
   check "a NAL unit of 68 MB: c, d" sh -c '"$1" c -1 "$2/long.264" "$2/k.c" && "$1" d "$2/k.c" "$2/k.264" && cmp -s "$2/long.264" "$2/k.264"' - "$bin" "$tmp"
   rm -f "$tmp/long.264" "$tmp/k.264"

@@ -451,9 +451,12 @@ const uint8_t kRaster4[4] = {0, 1, 2, 3};
 // user data x264 writes in an SEI message (its UUID and its options with
 // their defaults), which they replace as they come. (Its counters and
 // weights zero as it starts: the decompressor's must match.)
+// (A chunk of kPlainMin bytes or more may be coded as it is: plain().)
+const size_t kPlainMin = (size_t)1 << 16;
 template <int f_DEC>
 struct RawModel {
   static constexpr int ENC = f_DEC == 0;
+  static constexpr size_t kPlainMin = h264p::kPlainMin;
   void Init() {
     memset(o0_, 0, sizeof o0_);
     memset(o1_, 0, sizeof o1_);
@@ -465,11 +468,14 @@ struct RawModel {
     pos_ = ptr_ = dict_ = 0;
     len_ = 0;
     memset(mc_, 0, sizeof mc_);
+    memset(&plain_c_, 0, sizeof plain_c_);
+    seen_.Init();
   }
   void Quit() {
     mem_free(ring_);
     ring_ = nullptr;
     hash_.Quit();
+    seen_.Quit();
   }
   void start() {
     mx_.init(w_, wc_);
@@ -491,6 +497,8 @@ struct RawModel {
   int len_;                    // the match's length (0 none), up to 15
   u8 at(uint64_t a) const { return ring_[a & (kRing - 1)]; }
   cm_cnt mc_[16];      // whether the match's bit is right, by its length
+  cm_cnt plain_c_;     // whether a chunk's bytes are coded as they are (plain())
+  Buf<u32> seen_;      // compressing: a chunk's places by the hash of three bytes (random())
   static u32 key(const u8* p) { return ((u32)p[0] * 0x9E3779B1u ^ (u32)p[1] * 0x85EBCA77u ^ (u32)p[2] * 0xC2B2AE3Du) >> 16; }
   void init_dict() {
     static const u8 kUuid[16] = {0xdc, 0x45, 0xe9, 0xbd, 0xe6, 0xd9, 0x48, 0xb7, 0x96, 0x2c, 0xd8, 0x20, 0xd9, 0x23, 0xee, 0xef};
@@ -550,6 +558,82 @@ struct RawModel {
     }
     rc->tc_syms[STG_RAW]++;
     return node & 255;
+  }
+
+  // A chunk of bytes (cmstream.inc's code_raw()) of kPlainMin or more is
+  // coded as it is, a byte a uniform step of the coder (plain_byte()), or
+  // by code() above, as one decision of its own says (plain(), its value v
+  // coding; decoding, returned). Compressing, random() decides: bytes the
+  // model could not code in fewer than 8 bits each, which cost it 0.19%
+  // more (random bytes) and eight mixed decisions a byte. As they are,
+  // they still go where the match searches.
+  int plain(tc_rc<f_DEC>* rc, int v) {
+    int b = tc_bit(rc, plain_c_.P(), v);
+    plain_c_.upd(b, 30, 0);
+    return b;
+  }
+  u32 plain_byte(tc_rc<f_DEC>* rc, u32 b) {
+    if (!pos_) init_dict();
+    if (ENC && rc->tc_verbose) rc->tc_bits[rc->tc_stage] += 8;
+    b = rc->rc_Byte(b);
+    prev_ = b;
+    len_ = 0;
+    ring_[pos_++ & (kRing - 1)] = (u8)b;
+    if (pos_ - dict_ >= 3) {
+      const u8 last[3] = {at(pos_ - 3), at(pos_ - 2), at(pos_ - 1)};
+      hash_[key(last)] = (int64_t)pos_;
+    }
+    rc->tc_syms[STG_RAW]++;
+    return b;
+  }
+  // whether the n bytes of p (kPlainMin or more) are better coded as they
+  // are: whether the model would spend 8 bits a byte on them or more. It
+  // spends about 0.015 bits more than their entropy (on random bytes), so
+  // their entropy has to be above 7.985 bits, as the estimates tell it,
+  // which fall short of it by their bias (Miller-Madow): order 0 (184/n),
+  // that of the differences (a ramp has a flat histogram) and, held to
+  // twice its bias (47,100/n), order 1, which the model has too. And the
+  // match, run over them as code() would run it (its hash as it would be:
+  // the chunk's places where it has had them, seen_, else hash_; none of
+  // the model changed), may predict no more than 1 in 1024 of them after
+  // one it predicted (by chance, 1 in 65,536).
+  bool random(const u8* p, size_t n) {
+    if (!pos_) init_dict();
+    u32 h0[256] = {}, hd[256] = {}, rows[256] = {};
+    for (size_t i = 0; i < n; i++) h0[p[i]]++, hd[(u8)(p[i] - (i ? p[i - 1] : 0))]++;
+    auto bits = [](const u32* h, int m, double t) {  // -sum h log2(h/t) over m counts
+      double s = 0;
+      for (int k = 0; k < m; k++)
+        if (h[k]) s -= h[k] * log2(h[k] / t);
+      return s;
+    };
+    const double dn = (double)n, f0 = 7.985 - 184.0 / dn, f1 = 7.985 - 2 * 47100.0 / dn;
+    if (bits(h0, 256, dn) / dn < f0 || bits(hd, 256, dn) / dn < f0) return false;
+    seen_.fill((size_t)1 << 16, 0);
+    for (size_t i = 1; i < n; i++) seen_[(u32)p[i - 1] << 8 | p[i]]++, rows[p[i - 1]]++;
+    // H(a byte | the one before) = H(the pair) - H(the one before)
+    if ((bits(seen_.data(), 1 << 16, dn - 1) - bits(rows, 256, dn - 1)) / (dn - 1) < f1) return false;
+    seen_.fill((size_t)1 << 16, ~0u);
+    auto byte_at = [&](uint64_t a) -> int { return a >= pos_ ? p[a - pos_] : at(a); };
+    uint64_t ptr = ptr_, pos = pos_;
+    int len = len_;
+    size_t runs = 0;
+    for (size_t j = 0; j < n; j++) {
+      int pb = len && ptr < pos && pos - ptr <= kRing ? byte_at(ptr) : -1;
+      if (pb == p[j])
+        runs += len >= 2, len += len < 15, ptr++;
+      else
+        len = 0;
+      pos++;
+      if (pos - dict_ >= 3) {
+        const u8 last[3] = {(u8)byte_at(pos - 3), (u8)byte_at(pos - 2), (u8)byte_at(pos - 1)};
+        u32 k = key(last);
+        int64_t h = seen_[k] != ~0u ? (int64_t)(pos_ + seen_[k]) : hash_[k];
+        if (!len && h >= 0) ptr = (uint64_t)h, len = 1;
+        seen_[k] = (u32)(pos - pos_);
+      }
+    }
+    return runs * 1024 <= n;
   }
 };
 
@@ -1222,6 +1306,16 @@ struct Model : tc_rc<f_DEC> {
     tc_stage = STG_RAW;
     return raw_.code(this, b);
   }
+  // or a chunk of them as they are, as its decision says (RawModel::plain())
+  int raw_plain(int v) {
+    tc_stage = STG_RAW;
+    return raw_.plain(this, v);
+  }
+  u32 raw_byte(u32 b) {
+    tc_stage = STG_RAW;
+    return raw_.plain_byte(this, b);
+  }
+  bool raw_random(const u8* p, size_t n) { return raw_.random(p, n); }
 
   // ------------------------------------------------------------------------
   // header syntax (HeaderModel), through the hdr family

@@ -104,6 +104,23 @@ template <int f_DEC> struct Rangecoder : RC_IO_BASE<Rangecoder<f_DEC>> {
     rpre &= -b;
     bit = b;
   }
+  //  A byte as it is: each of its 256 values equally likely, in one step
+  //  (range at least 2^24 first, so each value has 2^16 of it or more: next
+  //  to nothing is lost to the rounding). Decoding, the byte; a code past
+  //  the last value, which only a broken stream gives, reads as 255.
+  INLINE uint rc_Byte(uint b) {
+    rc_Renorm();
+    if(range < sTOP)
+      rc_Renorm();
+    const uint r = range >> 8;
+    if(f_DEC) {
+      b = code / r;
+      b = b > 255 ? 255 : b;
+    }
+    rpre = r * b;
+    range = r;
+    return b;
+  }
   void rc_Init() {
     lowl = lowh = 0;
     rpre = 0;
