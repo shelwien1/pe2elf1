@@ -198,7 +198,7 @@ if( f_DEC ) buf1_N1=(buf1_N1*MUL)/DIV, buf2_N=(buf2_N*MUL)/DIV;
     uint f_busy, f_next_j, j=0, n, l, i;
     int InpBuf_l = 0;
     uint f_err = 0; // container error (decode) or failed worker (encode)
-    qword f_seen = 0;   // decode: workers that had at least one block
+    qword f_seen = 0;   // workers that had at least one block (encode: written)
     qword f_eofblk = 0; // decode: workers whose empty (EOF) block was seen
 
     //StartTimer();

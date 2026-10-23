@@ -230,6 +230,14 @@ struct H264pPart : CoroIo {
       write(h, 32);
       write(out_.data(), out_.size());
       parts++;
+      // the record handed over now, its last buffer as far as it is filled
+      // (a round's end, as d's worker ends one): so MTwrap puts each record
+      // in its stream as its part is done, and d, which takes the parts in
+      // turn, finds the next within about a round of the others. (A worker
+      // whose records are small held them until 64 KB of them, thousands of
+      // parts, past all of which d had to read the others' and hold them.)
+      before_yield();
+      yield(static_cast<Coroutine*>(this), 4);
     }
   }
 

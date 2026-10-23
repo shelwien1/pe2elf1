@@ -360,10 +360,13 @@ decompresses its parts so, removes the inserted parameter sets, and MTwrap
 takes the parts from the workers in turn, as they were dealt.
 
 The stream starts with `h264m`, the version, the count of threads and the
-part size (KB, 32 bits; to be seen: `d` does not need it, MTwrap's rings
-have a size of their own), then MTwrap's container of the workers' streams
-(a block of up to 64 KB at a time, tagged with its worker), each of them a
-record for each of its parts: its size, the bytes of the inserted
+part size (KB, 32 bits: `d` takes a part's record that says more than `c`
+makes at that size for broken; MTwrap's rings have a size of their own),
+then MTwrap's container of the workers' streams (a block of up to 64 KB at
+a time, tagged with its worker; a worker's record goes out as its part is
+done, its last block as far as it is filled, so that `d`, which takes the
+parts in turn, finds each within about a round of parts of the others),
+each of them a record for each of its parts: its size, the bytes of the inserted
 parameter sets, the size of the part as compressed and where in it those
 sets are (64 bits each, little-endian: `d` removes those bytes,
 whatever the part holds), and the part compressed, a stream of h264p's

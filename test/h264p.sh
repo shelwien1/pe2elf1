@@ -149,6 +149,33 @@ if [ -n "${negative:-}" ]; then
   { printf '\000\000\000\001\011\360'; head -c 100000000 /dev/zero; printf '\000\000\000\001\011\360'; } > "$tmp/z.264"
   check "100 MB of zero bytes between two NAL units: c and d in what 1 MB took${lim:+ ($lim KB)} and 16 MB" sh -c '[ -z "$1" ] || ulimit -v $(($1 + 16384)); "$2" c -1 "$3/z.264" "$3/z.c" && "$2" d "$3/z.c" "$3/z.d" && cmp -s "$3/z.264" "$3/z.d"' - "$lim" "$bin" "$tmp"
   rm -f "$tmp/z.264" "$tmp/z.d"
+  # parts of -t 2 that alternate between 1 MB of bytes that do not compress
+  # (a NAL unit of type 30, no zero byte in it) and 1 MB of zero bytes (then
+  # an end of sequence), each after an IDR picture (-c 512k: a part each,
+  # one worker gets every one of a kind): d takes the parts in turn, its
+  # peak resident set through 40 pairs within 16 MB of what 2 took. (c put
+  # a worker's records out 64 KB at a time, so those of zeros, small, came
+  # at the end, and d held the other worker's parts until then: +38 MB.)
+  if [ -r /proc/self/status ]; then
+    peak_kb() {  # a command's peak resident set in KB (sampled), after it ran well
+      "$@" & local p=$! m=0 h
+      while kill -0 $p 2>/dev/null; do
+        h=$(sed -n 's/^VmHWM:[[:space:]]*\([0-9]*\).*/\1/p' /proc/$p/status 2>/dev/null)
+        [ -n "$h" ] && m=$h
+        sleep 0.1
+      done
+      wait $p && echo $m
+    }
+    { printf '\000\000\000\001\036'; head -c 1100000 /dev/urandom | tr -d '\000' | head -c 1000000; } > "$tmp/rnd"
+    { cat "$here/h264p/x264_16x16.264" "$tmp/rnd" "$here/h264p/x264_16x16.264"; head -c 1000000 /dev/zero; printf '\000\000\000\001\012'; } > "$tmp/pair"
+    cat "$tmp/pair" "$tmp/pair" > "$tmp/pairs2.264"
+    for i in $(seq 40); do cat "$tmp/pair"; done > "$tmp/pairs40.264"
+    "$bin" c -1 -t 2 -c 512k "$tmp/pairs2.264" "$tmp/p2.c" && "$bin" c -1 -t 2 -c 512k "$tmp/pairs40.264" "$tmp/p40.c"
+    m2=$(peak_kb "$bin" d "$tmp/p2.c" "$tmp/p2.d")
+    m40=$(peak_kb "$bin" d "$tmp/p40.c" "$tmp/p40.d")
+    check "-t 2 parts of 1 MB that do not compress between parts of zeros: d of 40 pairs within 16 MB of 2 (${m2:-?} KB, ${m40:-?} KB)" sh -c '[ "${1:-0}" -gt 0 ] && [ "${2:-0}" -gt 0 ] && [ $2 -lt $(($1 + 16384)) ] && cmp -s "$3/pairs40.264" "$3/p40.d"' - "$m2" "$m40" "$tmp"
+    rm -f "$tmp/pairs40.264" "$tmp/p40.c" "$tmp/p40.d"
+  fi
   { printf '\000\000\000\001\016'; head -c 68000000 /dev/zero | tr '\0' '\125'; cat "$here/h264p/x264_16x16.264"; } > "$tmp/long.264"
   check "a NAL unit of 68 MB: c, d" sh -c '"$1" c -1 "$2/long.264" "$2/k.c" && "$1" d "$2/k.c" "$2/k.264" && cmp -s "$2/long.264" "$2/k.264"' - "$bin" "$tmp"
   rm -f "$tmp/long.264" "$tmp/k.264"

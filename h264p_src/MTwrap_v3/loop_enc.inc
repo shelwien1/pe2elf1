@@ -86,9 +86,19 @@
         // may have been filled in between -- that block used to be dropped
         if( C1[i].f_done && (que2[i].inp()==0) ) f_eof |= qword(1) << i; // no buffers and f_done
 
+      } else if( (p->len<=1) && ((f_seen>>i)&1) ) {
+        // an empty buffer (a worker that ends a round, parts mode, hands its
+        // last one over empty when it ends): nothing to write. Written, a block
+        // of the id alone would read as the worker's end (the decoder ends a
+        // worker's input at the container's end, so it is not needed), and one
+        // cut off would go unnoticed. A worker's first is written, empty or not:
+        // the decoder wants a block of each.
+        que2[i].pop();
+        f_busy=1;
       } else {
         byte* q = p->buf; l = p->len; // includes the first id byte
         uint j=0, n; byte b1,b2;
+        f_seen |= qword(1)<<i;
 
 /*
   00xxxxxx: l=0x10000, tid=x
