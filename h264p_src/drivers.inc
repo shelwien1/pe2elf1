@@ -188,6 +188,7 @@ int code_mt(const char* in_name, const Options& opt, filehandle0& f, Output& o) 
   Progress pr;
   H264pArgs a = call_start(pr, opt, "enc", f, in_name);
   a.verbose = false;  // (no statistics for each part)
+  a.threads = opt.threads;
   MtEnc* e = coro_new<MtEnc>();
   MtProg mp = {&pr, e};
   pr.counts(mt_enc_counts, &mp);
@@ -255,11 +256,12 @@ int decode_mt(const char* in_name, const Options& opt, filehandle0& f, Output& o
   H264pArgs a = call_start(pr, opt, "dec", f, in_name);
   a.verbose = false;  // (no statistics for each part)
   a.part_max = mt_part_max((get_le(head + sizeof kMtMagic + 1, 4) + 1) << 10);  // (the part size in KB, rounded down)
+  a.threads = threads;
   MtDec* d = coro_new<MtDec>();
   MtProg mp = {&pr, d};
   pr.counts(mt_dec_counts, &mp);
   if (mt_init_failed(d->Init(threads, kMtRing, &a, 1), threads, pr)) return call_end(1, f, o, false, pr, 0, 0, 0);
-  int r = run_file(*d, f, o.g, [&](uint) { pr.poll(); }) || mt_failed(*d);
+  int r = run_file(*d, f, o.g, [&](uint) { pr.poll(); }) || mt_failed(*d) || !mt_dealt(*d);
   if (r && !mt_failed(*d)) say_error(&pr, "h264p: %s: a broken or truncated stream\n", in_name);
   MtCounts n = mt_counts(*d);
   d->Quit();

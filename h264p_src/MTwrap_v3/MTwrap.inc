@@ -131,7 +131,7 @@ if( f_DEC ) buf1_N1=(buf1_N1*MUL)/DIV, buf2_N=(buf2_N*MUL)/DIV;
     for( i=0; i<th_N; i++ ) { 
       if( r==0 ) que1[i].init(buf1+size_t(InpBufsize)*buf1_N1*i, InpBufsize, 0, 0, buf1_N1 ); 
       if( r==0 ) que2[i].init(buf2+size_t(OutBufsize)*buf2_N*i, OutBufsize, 1-f_DEC, 0, buf2_N );
-      if( r==0 ) if( C1[i].Init(MArgs1) ) r=6; 
+      if( r==0 ) if( C1[i].Init(MArgs1,i) ) r=6; // (the worker's place: i, of th_N)
     }
 
     ev_main = 0; if( r==0 ) { ev_main = CreateEventA( 0, 0, 0, 0 ); if( ev_main==0 ) r=7; } // auto-reset

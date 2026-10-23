@@ -209,6 +209,30 @@ if [ -n "${negative:-}" ]; then
   "$bin" c -1 "$here/gen/x264_base.264" "$tmp/k.c" 2>/dev/null && head -c 9000 "$tmp/k.c" > "$tmp/cut.c"
   "$bin" c -1 -t 2 -c 1k "$here/gen/x264_base.264" "$tmp/m.c" 2>/dev/null && head -c 9000 "$tmp/m.c" > "$tmp/mcut.c"
   check "a cut compressed stream: d fails" sh -c '! "$1" d "$2/cut.c" "$2/k.264" 2>/dev/null && ! "$1" d "$2/mcut.c" "$2/k.264" 2>/dev/null' - "$bin" "$tmp"
+  # with -t, a part ends with a block of its own (c86afa6): cut at the end
+  # of any block, any block left out or there twice, d fails -- its
+  # worker's records say their places and its end -- and a record's
+  # removed range (xlen, the 37th byte: the first record's) changed
+  mt_blocks() {  # the offsets at which MTwrap's blocks of the -t stream $1 end
+    od -An -tu1 -v -j 11 "$1" | awk '{ for (i = 1; i <= NF; i++) b[n++] = $i }
+      END { p = 0; while (p < n) { k = int(b[p] / 64)
+        if (k == 2) { m = b[p + 1] * 256 + b[p + 2] + 2; if (m < 5) m = 5 } else if (k == 3) m = 1; else if (k == 1) m = 65535; else m = 65536
+        p += m; print p + 11 } }'
+  }
+  "$bin" c -1 -t 3 -c 1k "$here/gen/x264_keyint12.264" "$tmp/kb.c"
+  printf '\001' | dd of="$tmp/kb.c" bs=1 seek=36 count=1 conv=notrunc 2>/dev/null
+  cp "$tmp/kb.c" "$tmp/kx.c"
+  "$bin" c -1 -t 3 -c 1k "$here/gen/x264_keyint12.264" "$tmp/kb.c"
+  ok=0 bad=0 prev=11 tot=$(wc -c < "$tmp/kb.c")
+  for o in $(mt_blocks "$tmp/kb.c"); do
+    [ $o -lt $tot ] && { head -c $o "$tmp/kb.c" > "$tmp/kv.c"; if "$bin" d "$tmp/kv.c" "$tmp/k.264" 2>/dev/null; then bad=$((bad + 1)); else ok=$((ok + 1)); fi; }
+    { head -c $prev "$tmp/kb.c"; tail -c +$((o + 1)) "$tmp/kb.c"; } > "$tmp/kv.c"
+    if "$bin" d "$tmp/kv.c" "$tmp/k.264" 2>/dev/null; then bad=$((bad + 1)); else ok=$((ok + 1)); fi
+    { head -c $o "$tmp/kb.c"; tail -c +$((prev + 1)) "$tmp/kb.c"; } > "$tmp/kv.c"
+    if "$bin" d "$tmp/kv.c" "$tmp/k.264" 2>/dev/null; then bad=$((bad + 1)); else ok=$((ok + 1)); fi
+    prev=$o
+  done
+  check "-t 3 -c 1k: a cut at a block's end, a block left out or twice, d fails ($ok of $((ok + bad))); a record's xlen changed, d fails" sh -c '[ $1 -eq 0 ] && [ $2 -gt 30 ] && "$3" d "$4/kb.c" - | cmp -s - "$5" && ! "$3" d "$4/kx.c" "$4/k.264" 2>/dev/null' - "$bad" "$ok" "$bin" "$tmp" "$here/gen/x264_keyint12.264"
   # the last byte gone, or 1 to 3 bytes after the end: d fails (the coder
   # reads exactly the bytes it wrote)
   for x in k m; do
@@ -236,11 +260,28 @@ if [ -n "${negative:-}" ]; then
   # c -t 2 stream's; MTwrap's: a tail block for worker 0)
   byte() { printf "\\$(printf %03o "$1")"; }
   le8() { local i; for i in 0 1 2 3 4 5 6 7; do byte $((($1 >> (8 * i)) & 255)); done; }
+  # a whole -t 2 container, built here (mt.inc's record format 10): h264p's
+  # header from $1 (a c -t 2 stream's), then worker 0 with one part -- the
+  # one-model stream $2, its record saying plen $3 -- and both workers'
+  # end records, into $4. A record is g_size, plen, ins, xlen, place, the
+  # CRC-32 of those 40 bytes and a zero word; a worker's end a record of 48
+  # bytes whose plen is 0; each goes in an MTwrap tail block (its worker's
+  # id, then its bytes, the first two swapped to the end).
   mt_one() {
-    { le8 $((32 + $(stat -c %s "$2"))); le8 "$3"; le8 0; le8 0; cat "$2"; } > "$tmp/rec"
-    local l=$(($(stat -c %s "$tmp/rec") + 1))
-    { head -c 11 "$1"; byte 193; byte 128; byte $((l >> 8)); byte $((l & 255)); tail -c +3 "$tmp/rec"
-      byte $(od -An -tu1 -j1 -N1 "$tmp/rec"); byte $(od -An -tu1 -N1 "$tmp/rec"); } > "$4"
+    python3 -I -c 'import sys, struct, binascii
+hdr, body, plen, out = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4]
+part = open(body, "rb").read()
+def rec(g, p, place):
+    h = struct.pack("<QQQQQ", g, p, 0, 0, place)
+    return h + struct.pack("<II", binascii.crc32(h) & 0xffffffff, 0)
+def blk(w, p):
+    l = len(p) + 1
+    return bytes([w | 0x80, (l >> 8) & 0xff, l & 0xff]) + p[2:] + p[1:2] + p[0:1]
+o = open(hdr, "rb").read()[:11]
+o += blk(0, rec(48 + len(part), plen, 0) + part)  # worker 0 part, place 0
+o += blk(0, rec(48, 0, 2))                          # worker 0 end, place 0 + 1*2
+o += blk(1, rec(48, 0, 1))                          # worker 1 end, place 1
+open(out, "wb").write(o)' "$1" "$2" "$3" "$4"
   }
   # 300 MB of zeros as a part of 100 bytes, or of 1 TB, which c makes of no
   # -c: d fails as it passes 100, or at once, without holding 300 MB first

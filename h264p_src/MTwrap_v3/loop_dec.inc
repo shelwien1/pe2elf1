@@ -9,6 +9,19 @@
     // a failed worker ends the job: stop parsing, EOF to the others
     if( f_err==0 ) for( i=0; i<th_N; i++ ) if( C1[i].f_fail ) { f_err=1; f_quit=1; InpBuf_l=0; break; }
 
+    // blocks put aside (dynbuff) go to their workers as soon as these have
+    // room, before any more is read: else the worker whose output is next
+    // could wait on its own blocks, put aside, while the reading went on,
+    // putting aside the others' (more and more of a stream, on one whose
+    // parts were not in step)
+    for( i=0; i<th_N; i++ )
+      while( B.Load(i) && (p=que1[i].out()) ) {
+        l = B.CopyDrop(i,p->buf);
+        p->f_eof = (l==0);
+        que1[i].push(l);
+        f_busy = 1;
+      }
+
     byte* InpBug = InpBuf;
 
     if( InpBuf_l<InpBufsize ) {

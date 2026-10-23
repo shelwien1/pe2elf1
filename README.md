@@ -384,12 +384,15 @@ then MTwrap's container of the workers' streams (a block of up to 64 KB at
 a time, tagged with its worker; a worker's record goes out as its part is
 done, its last block as far as it is filled, so that `d`, which takes the
 parts in turn, finds each within about a round of parts of the others),
-each of them a record for each of its parts: its size, the bytes of the inserted
-parameter sets, the size of the part as compressed and where in it those
-sets are (64 bits each, little-endian: `d` removes those bytes,
-whatever the part holds), and the part compressed, a stream of h264p's
-with its own header. `d` knows it by its first bytes and runs as many threads as it
-says. Without `-t`, or with `-t 1`, `c` writes h264p's stream of one model,
+each of them a record for each of its parts: its size, the size of the
+part as compressed (with the inserted parameter sets) and where in it
+those sets are (`d` removes those bytes, whatever the part holds), the
+part's place in the stream (worker w's k-th of N: w + kN), 64 bits each,
+little-endian, and the CRC-32 of these, then the part compressed, a
+stream of h264p's with its own header; and at its end a record that says
+it ends. So `d` finds a part lost, added or moved, a stream cut where a
+part ends, and a record changed, which the parts' own CRCs do not see.
+`d` knows it by its first bytes and runs as many threads as it says. Without `-t`, or with `-t 1`, `c` writes h264p's stream of one model,
 as before (`h264c`).
 
 On the 7 corpus streams concatenated (3.87 MB, 82 IDR pictures), on 4

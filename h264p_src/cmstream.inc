@@ -5,7 +5,7 @@
 namespace h264p {
 
 const char kCmMagic[] = "h264c";  // compressed streams, followed by the version and level bytes
-const int kCmVersion = 9;
+const int kCmVersion = 10;
 // The CRC-32 at the end is coded XORed with this: a decoder fed past the
 // end of its input decodes zeros, and 0 is the CRC-32 of an empty stream.
 const uint32_t kCrcXor = 0x68323634;
@@ -49,6 +49,7 @@ struct H264pArgs {
   // copy_at (for messages: Stats)
   uint64_t nal0, copy_at, ncopy;
   uint64_t part_max;  // decompressing -t: the most a part's record can say it is (mt.inc's mt_part_max())
+  int threads;        // -t: the workers, dealt the parts in turn (a record's place: mt.inc)
 
   void Init() {
     level = 0;
@@ -57,6 +58,7 @@ struct H264pArgs {
     meter = nullptr;
     nal0 = copy_at = ncopy = 0;
     part_max = 0;
+    threads = 1;
   }
 };
 
