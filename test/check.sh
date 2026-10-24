@@ -1,11 +1,13 @@
 #!/bin/sh
-# check.sh BIN FILE -- what roundtrip.sh does not try, with FILE an AAC
-# stream: no input, bytes that are not AAC, pipes, a stream cut short, with
-# junk in it or a container that is not looked for, strict mode, and
+# check.sh BIN FILE [MP4] -- what roundtrip.sh does not try, with FILE an
+# AAC stream (and MP4 an MP4 file): no input, bytes that are not AAC, pipes
+# (the MP4 file's too), a stream cut short, with junk in it or a container
+# that is not looked for, strict mode, and
 # compressed streams that are broken (d must fail on them; what it restored
 # before it found out stays as the output). Exit status 1 if any fails.
 BIN=$1
 F=$2
+M=$3
 tmp=${TMPDIR:-/tmp}/aacpack.$$
 fail=0
 ok() { echo "ok    $1"; }
@@ -30,6 +32,11 @@ head -c 300000 /dev/urandom > "$tmp.in"
 rt "random bytes" "$tmp.in"
 [ "$(wc -c < "$tmp.apk")" -le 300100 ] && ok "random bytes stay their size" || bad "random bytes stay their size"
 if "$BIN" c - - < "$F" 2> /dev/null | "$BIN" d - - 2> /dev/null | cmp -s "$F" -; then ok "pipes"; else bad "pipes"; fi
+if [ -n "$M" ]; then
+  if "$BIN" c - - < "$M" 2> /dev/null | "$BIN" d - - 2> /dev/null | cmp -s "$M" -; then ok "an MP4 file through pipes"; else bad "an MP4 file through pipes"; fi
+  head -c 77777 "$M" > "$tmp.in"
+  rt "an MP4 file cut short" "$tmp.in"
+fi
 head -c 54321 "$F" > "$tmp.in"
 rt "a stream cut short" "$tmp.in"
 { head -c 30000 "$F"; head -c 777 /dev/urandom; tail -c +30001 "$F"; } > "$tmp.in"
