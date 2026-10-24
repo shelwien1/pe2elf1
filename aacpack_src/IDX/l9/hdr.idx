@@ -5,7 +5,8 @@
 #  p2 the last two differences there (sq2), p1r the last value's low byte,
 #  pos the values in a row the element has had (tc_qlog), nb its bits (0 a
 #  count), ws the channel's window sequence (4 none), ch the channel
-#  element's channel (2 none).
+#  element's channel (2 none), pb the element's value at the index before
+#  where that was the value before (1 + its low 3 bits; 0 not).
 #  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates MOD/l9 from
 #  this file and family.inc.
 
@@ -20,6 +21,7 @@ Index a
 Index b
  b_tag: tag, &11111111
  b_p1r: p1r, &11111111
+ b_pb: pb, 1!11111111
 
 Index c
  c_tag: tag, &11111111

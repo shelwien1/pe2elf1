@@ -9,7 +9,7 @@ namespace aacpack {
 
 // decisions per context (ND, mantissa nodes MND), sign contexts (NG)
 constexpr int H_unt_ND = TC_NODE, H_unt_MND = TC_MNODE, H_unt_NG = 1;
-constexpr int H_hdr_ND = TC_NODE, H_hdr_MND = TC_MNODE, H_hdr_NG = 256;
+constexpr int H_hdr_ND = TC_NODE, H_hdr_MND = TC_MNODE, H_hdr_NG = 3 * 256;  // (the element, and where its last value is)
 constexpr int H_sec_ND = 16, H_sec_MND = 1, H_sec_NG = 1;  // the codebook's tree (1-15), a section's going on (0)
 constexpr int H_scf_ND = TC_NODE, H_scf_MND = TC_MNODE, H_scf_NG = 16;
 constexpr int H_spc_ND = 16, H_spc_MND = 1, H_spc_NG = 1;  // the magnitude in unary: > j (j 0-15)
@@ -28,8 +28,10 @@ constexpr int H_sbr_ND = TC_NODE, H_sbr_MND = TC_MNODE, H_sbr_NG = 64;
 //   the element's values at that index in that channel (sq2), p1r the last
 //   value's low byte, pos how many values in a row the element has had
 //   (tc_qlog), nb its bits (0 a count), ws the channel's window sequence
-//   (4 none), ch the channel element's channel (0, 1; 2 none)
-#define H_hdr_VARS(X) X(tag) X(fld) X(p1) X(p2) X(p1r) X(pos) X(nb) X(ws) X(ch)
+//   (4 none), ch the channel element's channel (0, 1; 2 none), pb the
+//   element's value at the index before, where that was the value before
+//   (1 + its low 3 bits; 0 not)
+#define H_hdr_VARS(X) X(tag) X(fld) X(p1) X(p2) X(p1r) X(pos) X(nb) X(ws) X(ch) X(pb)
 // sec: section_data: kd 0 the codebook (its bits, a tree: nd the node),
 //   1 whether a section goes on to the next band; cb the section's
 //   codebook (16 not yet), pc the one before it in the group (16 none), fc

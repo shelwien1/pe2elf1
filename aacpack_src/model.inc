@@ -286,6 +286,7 @@ struct Model : tc_rc<f_DEC> {
     raw_.Init();
     hl_.Init();
     lasttag_ = -1, runpos_ = 0;
+    lastslot_ = lastfi_ = -1, lastv_ = 0;
     hist_.Init();
     sbrh_.Init();
     memset((void*)cc_, 0, sizeof cc_);
@@ -449,6 +450,8 @@ struct Model : tc_rc<f_DEC> {
   };
   Map32<HLast> hl_;
   int lasttag_, runpos_;
+  int lastslot_, lastfi_;  // the last field's slot and index, and its value
+  i64 lastv_;
   i64 hdr_val(const Walk& w, int e, int n, i64 x, int i) {
     tc_stage = STG_HDR;
     double b0 = ENC && tc_verbose ? bits_now() : 0;
@@ -456,6 +459,7 @@ struct Model : tc_rc<f_DEC> {
     int slot = e >= E_ELEM ? slot_of(w) : 0;
     int fi = i < 63 ? i : 63;
     HLast& h = hl_.get((u32)e | (u32)fi << 8 | (u32)slot << 14);
+    const bool next = e == lasttag_ && slot == lastslot_ && fi == lastfi_ + 1;  // (the index after the last value's)
     runpos_ = e == lasttag_ ? Min(runpos_ + 1, 15) : 0;
     lasttag_ = e;
     H_hdr_v D;
@@ -469,14 +473,21 @@ struct Model : tc_rc<f_DEC> {
     const ChanData& cd = wcd(w);
     D.ws = e >= E_ELEM && cd.ii.num_windows ? cd.ii.ws : 4;
     D.ch = e >= E_ELEM ? w.at.chn : 2;
+    D.pb = next ? 1 + (int)(lastv_ & 7) : 0;
+    // (the second channel's global_gain against the first's of its CPE)
+    const i64 base = e == E_GLOBAL_GAIN && w.at.type == TYPE_CPE && w.cur == 1 ? w.cd[0].gg : h.v;
+    // the sign by the element, and whether the value is at the bottom of its
+    // range or at the top (a field's: a bit's change has one sign)
+    const int bound = base <= 0 ? 1 : n > 0 && n < 32 && base >= ((i64)1 << n) - 1 ? 2 : 0;
     tcx X;
     f_hdr.make(D, X);
-    i64 dx = ENC ? x - h.v : 0;
-    i64 d = f_hdr.codes(X, dx, (u32)e);
-    x = h.v + d;
+    i64 dx = ENC ? x - base : 0;
+    i64 d = f_hdr.codes(X, dx, (u32)(e * 3 + bound));
+    x = base + d;
     h.d2 = h.d1;
     h.d1 = d;
     h.v = x;
+    lastslot_ = slot, lastfi_ = fi, lastv_ = x;
     tc_syms[STG_HDR]++;
     if (ENC && tc_verbose) ebits_[e] += bits_now() - b0, esyms_[e]++;
     return x;
