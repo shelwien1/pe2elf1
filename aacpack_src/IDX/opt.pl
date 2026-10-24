@@ -1,20 +1,20 @@
-# opt.pl -- parameter optimizer for h264p's model (from oggcomp's).
+# opt.pl -- parameter optimizer for aacpack's model (h264p's, from oggcomp's).
 #
 # Flips the bits of the "!MAP!" pattern strings the tuning build embeds in the
 # executable, keeping whatever shrinks the corpus.  It does not parse or rebuild
 # anything: the patterns are patched in the binary in place, so one build serves
 # the whole hill-climb.  The build must therefore be the tuning build of a
-# level -- ./mk.sh tuning L, which writes ../h264p.  ./mk.sh release folds
+# level -- ./mk.sh tuning L, which writes ../aacpack.  ./mk.sh release folds
 # every parameter to a literal and there is nothing left to find.
 #
-#   perl IDX/opt.pl corpus-file-list [exe]       (in h264p_src)
+#   perl IDX/opt.pl corpus-file-list [exe]       (in aacpack_src)
 #
-# corpus-file-list: text file, one H.264 stream path per line (opt.lst if
-# not given).  Optimizing on one stream overfits it, and the corpus has to
-# reach every context the parameters cover: streams of different encoders,
-# rates and picture sizes, intra and inter, CABAC and CAVLC.
+# corpus-file-list: text file, one AAC stream path per line (opt.lst if not
+# given).  Optimizing on one stream overfits it, and the corpus has to reach
+# every context the parameters cover: streams of different encoders, rates
+# and object types, mono and stereo, long and short windows, SBR and PS.
 #
-# exe: which binary to patch (default ../h264p).  Point it at a copy while
+# exe: which binary to patch (default ../aacpack).  Point it at a copy while
 # tuning; opt.pl rewrites the file it is given.
 #
 # Results are written continuously to export.!!! (mdesc lines) and progress to
@@ -23,11 +23,11 @@
 # then ./mk.sh mod, and ./mk.sh check L to prove the shipping build still
 # agrees.  (IDX/ftune.py tunes a family at a time against its dumps, faster.)
 #
-# One caution: h264p's parameters are part of its format.  A stream coded by a
+# One caution: aacpack's parameters are part of its format.  A stream coded by a
 # patched binary decodes only under that same patched binary, so throw away
 # anything mid-hill-climb writes.
 
-$exe     = $ARGV[1] || "../h264p";
+$exe     = $ARGV[1] || "../aacpack";
 $tmp     = "$exe.opt_tmp";
 $rndfrac = 0.75;   # bit is flipped in the initial random kick when rand>this
 
@@ -49,7 +49,7 @@ sub measure {
     # has already flushed part of its output, and a part of an 800 kB stream
     # is 64 kB -- which, measured by size alone, is the best result the search
     # has ever seen, so it walks towards whatever killed it and stays there.
-    # h264p removes its own half-written output, but a signal it cannot
+    # aacpack removes its own half-written output, but a signal it cannot
     # catch (the OOM killer) still leaves one, and this is the check that does
     # not depend on the program getting the chance to tidy up.
     return 0x7FFFFFFF if $rc != 0 || !defined($s) || $s < 64;

@@ -1,5 +1,8 @@
 # IDX Format Specification
 
+(h264p's document, as it is: where it says h264p and `../h264p`, aacpack's
+are the same, with `../aacpack`; aacpack has one level, `-9`.)
+
 IDX is a small language for declaring the two things a context-mixing compressor
 is made of: **context indices** (how a handful of variables become one table row)
 and **tunable parameters** (every number an optimizer is allowed to move).
