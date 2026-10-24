@@ -36,7 +36,9 @@ constexpr int H_sbr_ND = TC_NODE, H_sbr_MND = TC_MNODE, H_sbr_NG = 64;
 //   the band's in the last frame of the channel (16 not known), gc in the
 //   group before (16 none), oc of the other channel of the CPE (16 none),
 //   sb the band, run the bands of the section so far, rem those left to
-//   max_sfb, ws the window sequence, g the group
+//   max_sfb, ws the window sequence, gr the group, fn the band in the last
+//   frame (going on: 1 + 2 if its codebook was another + 1 if a section
+//   started there; 0 not known)
 #define H_sec_VARS(X) X(kd) X(cb) X(pc) X(fc) X(gc) X(oc) X(sb) X(run) X(rem) X(ws) X(gr) X(fn)
 // scf: scale_factor_data: kd 0 a scalefactor, 1 an intensity position, 2
 //   a noise energy; sb the band, d1 d2 the last two deltas of the kind in
@@ -44,7 +46,8 @@ constexpr int H_sbr_ND = TC_NODE, H_sbr_MND = TC_MNODE, H_sbr_NG = 64;
 //   0 not known), pa the last frame's value at the band less this band's
 //   predecessor's (sq2), cb the band's codebook, oc the other channel's
 //   delta at the band (CPE, sq2), ws the window sequence, gr the group,
-//   gd global_gain less the last frame's (sq2)
+//   gd global_gain less the last frame's (1 + sq2; 0 not known), pv the
+//   value so far less global_gain (intensity: the value; sq2)
 #define H_scf_VARS(X) X(kd) X(sb) X(d1) X(d2) X(pd) X(pa) X(cb) X(oc) X(ws) X(gr) X(gd) X(pv)
 // spc: the magnitude of a spectral value: cb its codebook, sb its band, bp
 //   its place in the band, a1 a2 the magnitudes before it in the window
@@ -55,18 +58,18 @@ constexpr int H_sbr_ND = TC_NODE, H_sbr_MND = TC_MNODE, H_sbr_NG = 64;
 //   ms_used, ws long 0, short 1, tp the place in the codebook's tuple, nz
 //   the nonzero ones so far in the band (up to 7), ds the band's
 //   scalefactor less the last frame's (sq2), qn the band's magnitudes so
-//   far (tc_qlog of the sum)
+//   far (tc_qlog of the sum), kq the place (tc_qlog)
 #define H_spc_VARS(X) \
   X(cb) X(sb) X(bp) X(a1) X(a2) X(a3) X(pf) X(pn) X(ex) X(oc) X(ms) X(ws) X(tp) X(nz) X(ds) X(qn) X(kq)
 // esc: an escaped magnitude of codebook 11, less 16: kq the place
 //   (tc_qlog), a1 the magnitude before (tc_qlog), pf the last frame's at
 //   the place (tc_qlog, 0 not known), oc the other channel's (tc_qlog + 1,
-//   0 none), ws, la the last escape of the channel's (tc_qlog)
+//   0 none), ws, la the last escape of the channel's (tc_qlog), sb the band
 #define H_esc_VARS(X) X(kq) X(a1) X(pf) X(oc) X(ws) X(la) X(sb)
 // sgn: the sign of a nonzero spectral value: cb, oc the other channel's
 //   at the place (0 zero or none, 1 +, 2 -), ms ms_used, s1 the value's
 //   before it (0 1 2), pf the last frame's at the place (0 1 2), mg its
-//   magnitude (up to 7), kq its place (tc_qlog), s2 the one before s1
+//   magnitude (up to 7), kq its place (tc_qlog), s2 the one before s1, ws
 #define H_sgn_VARS(X) X(cb) X(oc) X(ms) X(s1) X(pf) X(mg) X(kq) X(s2) X(ws)
 // sbr: SBR envelopes and noise floors and PS parameters (deltas): kd the
 //   kind (0 envelope f, 1 t, 2 noise f, 3 t; 4-7 the same of a balance

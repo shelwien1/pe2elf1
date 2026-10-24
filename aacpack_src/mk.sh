@@ -10,6 +10,12 @@
 #                             shipping build without AVX2 (the plain C++
 #                             paths), compress the given streams (or
 #                             ../test/corpus/*) to the same bytes
+#      ./mk.sh dump L DIR STREAM...
+#                             what each family of -L codes compressing the
+#                             streams, a directory of dumps per stream in DIR
+#                             (aacpack built with -DAACPACK_DUMP; fam.inc)
+#      ./mk.sh famtune L      ../famtune: the families of -L coding their
+#                             dumps again, the tuning build (IDX/famtune.cpp)
 #
 #  Each level has its own IDX sources, IDX/l<L>/<family>.idx and the
 #  template of the level's families IDX/l<L>/family.inc (format:
@@ -29,6 +35,14 @@
 #      perl IDX/opt.pl opt.lst ../aacpack       # one stream path per line
 #      cd IDX/l9 && for f in *.idx; do perl ../import.pl $f ../../export.\!\!\! > t && mv t $f; done
 #      cd ../.. && ./mk.sh mod && ./mk.sh check 9
+#
+#  Faster, a family at a time against its dumps (IDX/ftune.py), since a
+#  trial then codes only that family's decisions:
+#
+#      ./mk.sh dump 9 dump stream...
+#      ./mk.sh famtune 9
+#      python3 IDX/ftune.py ../famtune dump        # every family, four at a time
+#      (then import the export as above)
 #
 #  Both builds must code identically.  A stream coded by a tuning binary that
 #  opt.pl has patched decodes only with that binary: the parameters are part
@@ -97,6 +111,14 @@ build() {
   $CXX $CXXFLAGS $PARCH -std=c++11 -fwrapv -fno-exceptions -fno-rtti -ILib3 -pthread "$@" -o "$out" aacpack.cpp -lm
 }
 
+#  $1 = a path as given, relative to where mk.sh was run
+abspath() {
+  case $1 in
+    /*) echo "$1" ;;
+    *) echo "$orig/$1" ;;
+  esac
+}
+
 level() {
   case " $LEVELS " in
     *" $1 "*) ;;
@@ -156,8 +178,38 @@ case "${1:-}" in
     done
     exit $bad
     ;;
+  dump)
+    level "${2:?usage: ./mk.sh dump L DIR STREAM...}"
+    lv=$2
+    dir=$(abspath "${3:?usage: ./mk.sh dump L DIR STREAM...}")
+    shift 3
+    tmp=$(mktemp -d)
+    trap 'rm -rf "$tmp"; cleanup' EXIT
+    build "$tmp/aacpack" -DAACPACK_ONLY="$lv" -DAACPACK_DUMP
+    mkdir -p "$dir"
+    n=0
+    for s in "$@"; do
+      d=$dir/$(printf 's%03d' $n)
+      rm -rf "$d"
+      mkdir -p "$d"
+      AACPACK_DUMP=$d "$tmp/aacpack" c "$(abspath "$s")" "$tmp/c"
+      n=$((n + 1))
+    done
+    echo "mk.sh: dumps of $n streams in $dir"
+    ;;
+  famtune)
+    level "${2:?usage: ./mk.sh famtune L}"
+    lv=$2
+    tmp=$(mktemp -d)
+    # (MOD/lL back in the shipping form however the build ends)
+    trap 'rm -rf "$tmp"; generate "$lv" 0 1; cleanup' EXIT
+    generate "$lv" 1 0
+    $CXX $CXXFLAGS $PARCH -std=c++11 -fwrapv -fno-exceptions -fno-rtti -DAACPACK_ONLY="$lv" -o "$tmp/famtune" IDX/famtune.cpp -lm
+    cp "$tmp/famtune" ../famtune
+    count_maps ../famtune "../famtune for -$2"
+    ;;
   *)
-    echo "usage: ./mk.sh release | mod | tuning L | check L [STREAM...]   (levels: $LEVELS)" >&2
+    echo "usage: ./mk.sh release | mod | tuning L | check L [STREAM...] | dump L DIR STREAM... | famtune L   (levels: $LEVELS)" >&2
     exit 2
     ;;
 esac
