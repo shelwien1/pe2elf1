@@ -351,6 +351,7 @@ struct Scanner {
   int last;            // the kind of the last unit coded
   bool stop;           // the probe is done
   uint64_t probe_units;
+  bool track_cfg;      // an MP4 file: the walk has the config of the track (Mp4Coded::cur)
 
   void Init(Model<0, LV>* mm, CompressState* ss, const AacArgs* aa) {
     m = mm, s = ss, a = aa;
@@ -358,6 +359,7 @@ struct Scanner {
     last = U_END;
     stop = false;
     probe_units = 0;
+    track_cfg = false;
   }
   bool probe() const { return !m; }
   InWindow& win() { return s->win; }
@@ -620,7 +622,8 @@ struct Scanner {
     }
     return true;
   }
-  // the access units in the mdat box that ends at end, from pos
+  // the access units in the mdat box that ends at end, from pos (an ADTS
+  // frame each, some muxers' mistake, as such: U_ADTS)
   void samples(uint64_t end) {
     Mp4Index& x = s->mp4;
     while (!stop && x.next < x.s.size()) {
@@ -630,10 +633,12 @@ struct Scanner {
       if (u.at < pos || u.n > end - u.at) continue;  // (over what went before, or out of the box)
       skip_raw(u.at - pos);
       if (pos != u.at || win().need(pos, u.n) < u.n) break;  // (the stream ended first)
-      if ((int)u.track != s->mc.cur) config((int)u.track);
-      const uint64_t coded = s->st.units[U_SAMPLE];
-      unit(U_SAMPLE, u.n);
-      if (s->st.units[U_SAMPLE] != coded) s->mc.len[u.track].push_back(u.n);
+      const int kind = adts_frame_len(win().at(pos), u.n) == u.n ? U_ADTS : U_SAMPLE;
+      if ((int)u.track != s->mc.cur || (kind == U_SAMPLE && !track_cfg)) config((int)u.track);
+      const uint64_t coded = s->st.units[kind];
+      unit(kind, u.n);
+      if (s->st.units[kind] != coded) s->mc.len[u.track].push_back(u.n);
+      if (kind == U_ADTS) track_cfg = false;  // (the walk has the frame's config)
     }
   }
   // the walk configured for the access units of the MP4 track t (U_ASC)
@@ -641,6 +646,7 @@ struct Scanner {
     Mp4Index& x = s->mp4;
     Mp4Coded& mc = s->mc;
     mc.cur = t;
+    track_cfg = true;
     if (!probe()) {
       flush_raw();
       m->unit(UF_KIND, last, U_ASC);
@@ -856,7 +862,7 @@ int decompress_stream(Model<1, LV>& m, DecompressState& s, const AacArgs& a) {
       walk_unit(c, s.rg, kind, 0, 0);
       if (c.fw.pos & 7) err_raise_s("corrupt stream: a unit of other than whole bytes");
       buf.append(c.fw.b.p, c.fw.pos / 8);
-      if (kind == U_SAMPLE && s.mc.cur >= 0) s.mc.len[s.mc.cur].push_back((uint32_t)(c.fw.pos / 8));
+      if ((kind == U_SAMPLE || kind == U_ADTS) && s.mc.cur >= 0) s.mc.len[s.mc.cur].push_back((uint32_t)(c.fw.pos / 8));
     }
     if (buf.size() > ((size_t)1 << 16)) flush();
     tell_unit(m, c, kind);
