@@ -38,7 +38,8 @@ struct AdtsFixed {
 /* syntax state carried from frame to frame */
 struct SynState {
     int aot, sf_index, frame960, sbr_rate;   /* configuration of the stream */
-    int blocks;                              /* access units are parsed raw_data_block()s */
+    int blocks;                              /* access units are parsed */
+    int er, chan_config;                     /* ER syntax: 1 ER LC/LD, 2 ELD */
     int have_fixed;                          /* ADTS: fixed header of the last adtsh */
     AdtsFixed fixed;
     int latm_cfg;                            /* LATM: StreamMuxConfig known */
@@ -69,6 +70,13 @@ struct SbrCh {
 };
 
 static const int8_t sbr_ceil_log2[] = { 0, 1, 2, 2, 3, 3 };
+
+/* channel elements of an ER access unit per channel configuration, in order
+ * (aacdec ff_aac_channel_layout_map; ER is decoded for 1-7, 11, 12) */
+static const char *const er_layout[16] = {
+    nullptr, "S", "C", "SC", "SCS", "SCC", "SCCL", "SCCCL", nullptr, nullptr, nullptr, "SCCSL", "SCCCL",
+    nullptr, nullptr, nullptr
+};
 
 static int debug_level = 0;   /* -vv: report payloads that are kept as hex */
 
@@ -302,11 +310,23 @@ struct Codec {
 
     void ics_info(Ics &ii, bool common_window)
     {
+        ii.num_groups = 1;
+        ii.group_len[0] = 1;
+        if (st.er == 2) {   /* ELD: no window_sequence, window_shape, predictor syntax */
+            ii.ws = 0;
+            ii.max_sfb = u(6);
+            ii.num_windows = 1;
+            ii.swb = st.frame960 ? ff_swb_offset_480[st.sf_index] : ff_swb_offset_512[st.sf_index];
+            ii.num_swb = st.frame960 ? ff_aac_num_swb_480[st.sf_index] : ff_aac_num_swb_512[st.sf_index];
+            if (ii.max_sfb > ii.num_swb)
+                bad("max_sfb exceeds the number of scalefactor bands");
+            return;
+        }
         u(1);              /* ics_reserved_bit */
         ii.ws = u(2);      /* window_sequence */
         u(1);              /* window_shape */
-        ii.num_groups = 1;
-        ii.group_len[0] = 1;
+        if (st.aot == 23 && ii.ws)
+            bad("ER AAC LD with a window sequence other than ONLY_LONG");
         if (ii.ws == EIGHT_SHORT_SEQUENCE) {
             ii.max_sfb = u(4);
             unsigned grouping = u(7);
@@ -324,9 +344,16 @@ struct Codec {
         } else {
             ii.max_sfb = u(6);
             ii.num_windows = 1;
-            ii.swb = st.frame960 ? ff_swb_offset_960[st.sf_index] : ff_swb_offset_1024[st.sf_index];
-            ii.num_swb = st.frame960 ? ff_aac_num_swb_960[st.sf_index] : ff_aac_num_swb_1024[st.sf_index];
+            if (st.aot == 23) {
+                ii.swb = st.frame960 ? ff_swb_offset_480[st.sf_index] : ff_swb_offset_512[st.sf_index];
+                ii.num_swb = st.frame960 ? ff_aac_num_swb_480[st.sf_index] : ff_aac_num_swb_512[st.sf_index];
+            } else {
+                ii.swb = st.frame960 ? ff_swb_offset_960[st.sf_index] : ff_swb_offset_1024[st.sf_index];
+                ii.num_swb = st.frame960 ? ff_aac_num_swb_960[st.sf_index] : ff_aac_num_swb_1024[st.sf_index];
+            }
             if (u(1)) {   /* predictor_data_present */
+                if (st.aot == 23)
+                    bad("LTP in ER AAC LD");
                 if (st.aot == 1) {
                     if (u(1))   /* predictor_reset */
                         u(5);   /* predictor_reset_group_number */
@@ -599,12 +626,24 @@ struct Codec {
             ics_info(ii, false);
         section_data(ii, bt);
         scale_factor_data(ii, bt);
-        if (flag(R_PULSE))
+        if (st.er != 2 && flag(R_PULSE))
             pulse_data();
-        if (flag(R_TNS))
-            tns_data(ii);
-        if (flag(R_GC))
-            gain_control_data(ii);
+        if (!st.er) {
+            if (flag(R_TNS))
+                tns_data(ii);
+            if (flag(R_GC))
+                gain_control_data(ii);
+        } else {   /* ER: tns_data() after gain_control_data(), which ER does not use */
+            bool tns = flag(R_TNS);
+            if (st.er != 2) {   /* gain_control_data_present */
+                if (!R)
+                    w->put(0, 1);
+                else if (br.get1())
+                    bad("gain control data in an ER stream");
+            }
+            if (tns)
+                tns_data(ii);
+        }
         spectral_data(ii, bt);
     }
 
@@ -616,7 +655,7 @@ struct Codec {
         Ics ii;
         rb(name);
         size_t s = bitpos();
-        int tag = u(4);
+        int tag = st.er == 2 ? 0 : (int)u(4);   /* no element_instance_tag in ELD */
         ics(ii, false, bt);
         crcr.push_back({ s, bitpos(), 192 });
         prev_che_type = name == R_SCE ? TYPE_SCE : TYPE_LFE;
@@ -629,8 +668,8 @@ struct Codec {
         Ics ii0, ii1;
         rb(R_CPE);
         size_t s = bitpos();
-        int tag = u(4);
-        int cw = u(1);   /* common_window */
+        int tag = st.er == 2 ? 0 : (int)u(4);
+        int cw = st.er == 2 ? 1 : (int)u(1);   /* common_window (always in ELD) */
         if (cw) {
             ics_info(ii0, true);
             rb(R_MS);
@@ -926,7 +965,7 @@ struct Codec {
             return sbr_payload_w(pk);
         case R_FILL: {
             rb(R_FILL);
-            int n = (int)geti(1, 269), t = 1, byte = 0xa5;
+            int n = (int)geti(1, 1 << 24), t = 1, byte = 0xa5;   /* fil() limits it to 269 */
             if (more()) {
                 t = (int)geti(0, 15);
                 byte = (int)geti(0, 255);
@@ -1587,6 +1626,63 @@ struct Codec {
         br.pos = end;
     }
 
+    /* W mode: a rest record where a syntax element would start */
+    bool rest_here_w()
+    {
+        if (peek() != R_REST)
+            return false;
+        rb(R_REST);
+        int64_t n = geti(0, (int64_t)1 << 40);
+        put_nibbles(getnibbles(), (size_t)n);
+        return true;
+    }
+
+    /* ER access unit (aacdec aac_decode_er_frame()): the channel elements of
+     * the channel configuration, without element ids and END, then extension
+     * payloads, each taking the whole bytes left, while 8 or more bits are
+     * left (fdk-aac aacDecoder_ParseExplicitMpsAndSbr(); aacdec ignores the
+     * rest of the frame). Returns false when the rest was stored as a rest
+     * record */
+    bool er_frame(size_t frame_end)
+    {
+        prev_che_type = -1;
+        prev_che_tag = 0;
+        crcr.clear();
+        for (const char *p = er_layout[st.chan_config]; *p; p++) {
+            int name = *p == 'S' ? R_SCE : *p == 'C' ? R_CPE : R_LFE;
+            if (R) {
+                size_t es = br.pos, mark = out->n;
+                try {
+                    if (name == R_CPE)
+                        cpe();
+                    else
+                        sce_lfe(name);
+                } catch (ParseError &) {
+                    out->n = mark;
+                    br.end = frame_end;
+                    rest_r(es, frame_end);
+                    return false;
+                }
+            } else {
+                if (rest_here_w())
+                    return false;
+                if (name == R_CPE)
+                    cpe();
+                else
+                    sce_lfe(name);
+            }
+        }
+        if (R) {
+            while (frame_end - br.pos > 7)
+                payload_r((int)((frame_end - br.pos) >> 3));
+        } else {
+            bool all = false;
+            while (!all && is_payload(peek()))
+                payload_w(&all);
+        }
+        return true;
+    }
+
     /* returns false when the frame was finished by a rest record */
     bool raw_data_block(size_t frame_end, bool align_end)
     {
@@ -1612,13 +1708,9 @@ struct Codec {
                     return false;
                 }
             } else {
-                int pk = peek();
-                if (pk == R_REST) {
-                    rb(R_REST);
-                    int64_t n = geti(0, (int64_t)1 << 40);
-                    put_nibbles(getnibbles(), (size_t)n);
+                if (rest_here_w())
                     return false;
-                }
+                int pk = peek();
                 int t;
                 switch (pk) {
                 case R_SCE: t = TYPE_SCE; break;

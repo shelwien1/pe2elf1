@@ -12,7 +12,8 @@ struct AscInfo {
     int sf_index;      /* core sampling frequency index (15: explicit rate) */
     int chan_config;
     int frame960;      /* frameLengthFlag */
-    bool raw_blocks;   /* access units are raw_data_block()s aac2tsv parses */
+    int er;            /* 1 ER AAC LC/LD, 2 ER AAC ELD */
+    bool raw_blocks;   /* aac2tsv parses the access units */
 };
 
 static int asc_object_type(BitReader &b)
@@ -58,6 +59,8 @@ static AscInfo parse_asc(BitReader &b, size_t align_ref)
     a.sf_index = asc_sample_rate(b);
     a.chan_config = b.get(4);
     a.frame960 = 0;
+    a.er = 0;
+    bool ldsbr = false;
     if (a.chan_config > 14)
         parse_fail("invalid channel configuration");
     if (a.aot == 5 || (a.aot == 29 && !(b.peek(3) & 0x03 && !(b.peek(9) & 0x3f)))) {
@@ -91,8 +94,19 @@ static AscInfo parse_asc(BitReader &b, size_t align_ref)
         a.frame960 = b.get1();
         if (b.get(3))
             parse_fail("error resilience tools");
-        if (b.get1())
-            parse_fail("LD-SBR");
+        if (b.get1()) {   /* ldSbrPresentFlag: aacdec does not decode it */
+            ldsbr = true;
+            b.get(2);     /* ldSbrSamplingRate, ldSbrCrcFlag */
+            static const int nhdr[16] = { 0, 1, 1, 2, 3, 3, 3, 4, 0, 0, 0, 4, 4, 0, 4, 0 };   /* as fdk-aac */
+            for (int k = 0; k < nhdr[a.chan_config]; k++) {   /* ld_sbr_header() */
+                b.get(14);                   /* bs_amp_res .. bs_reserved */
+                int x1 = b.get1(), x2 = b.get1();
+                if (x1)
+                    b.get(5);                /* bs_freq_scale, bs_alter_scale, bs_noise_bands */
+                if (x2)
+                    b.get(6);                /* bs_limiter_bands .. bs_smoothing_mode */
+            }
+        }
         while (b.get(4)) {   /* eldExtType != ELDEXT_TERM */
             int len = b.get(4);
             if (len == 15)
@@ -108,6 +122,13 @@ static AscInfo parse_asc(BitReader &b, size_t align_ref)
     default:
         parse_fail("unsupported audio object type");
     }
-    a.raw_blocks = a.aot >= 1 && a.aot <= 4 && a.sf_index <= 12;
+    a.er = a.aot == 17 || a.aot == 23 ? 1 : a.aot == 39 ? 2 : 0;
+    if (!a.er) {
+        a.raw_blocks = a.aot >= 1 && a.aot <= 4 && a.sf_index <= 12;
+    } else {
+        bool ld = a.aot != 17;
+        a.raw_blocks = a.sf_index <= 12 && er_layout[a.chan_config] && !ldsbr &&
+                       (!ld || (a.frame960 ? ff_aac_num_swb_480 : ff_aac_num_swb_512)[a.sf_index]);
+    }
     return a;
 }

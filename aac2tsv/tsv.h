@@ -18,7 +18,7 @@ struct TsvError {
 enum RecName {
     R_HDR, R_RAW, R_EOF,
     R_ADTSH, R_ADTS, R_CRC, R_RDBPOS, R_TAIL, R_REST,
-    R_ADIF, R_ADIFPCE, R_RAWASC, R_AUS1, R_AU, R_AUTAIL,
+    R_ADIF, R_ADIFPCE, R_RAWASC, R_AUS1, R_AU,
     R_LOAS, R_SMC, R_ASC, R_SMCX, R_PAY, R_PAYRAW, R_PAYPAD, R_OTHER,
     R_SCE, R_CPE, R_CCE, R_LFE, R_DSE, R_PCE, R_FIL, R_END,
     R_ICS, R_MS, R_SEC, R_SF, R_PULSE, R_TNS, R_GC, R_SPEC, R_CGAIN,
@@ -32,7 +32,7 @@ enum RecName {
 static const char *const rec_names[R_COUNT] = {
     "aac2tsv", "raw", "eof",
     "adtsh", "adts", "crc", "rdbpos", "tail", "rest",
-    "adif", "adifpce", "rawasc", "aus1", "au", "autail",
+    "adif", "adifpce", "rawasc", "aus1", "au",
     "loas", "smc", "asc", "smcx", "pay", "payraw", "paypad", "other",
     "sce", "cpe", "cce", "lfe", "dse", "pce", "fil", "end",
     "ics", "ms", "sec", "sf", "pulse", "tns", "gc", "spec", "cgain",

@@ -76,6 +76,7 @@ static uint16_t adts_crc(const uint8_t *b, size_t hdr_start, size_t hdr_bits, co
 
 static void adts_config(Codec &c, const AdtsFixed &fx)
 {
+    c.st.er = 0;
     c.st.aot = fx.profile + 1;
     c.st.sf_index = fx.sf_index;
     c.st.frame960 = 0;
@@ -356,6 +357,8 @@ static void set_config(SynState &st, const AscInfo &a, bool blocks)
     st.frame960 = a.frame960;
     st.sbr_rate = a.sf_index <= 12 ? 2 * sample_rates[a.sf_index] : 0;
     st.blocks = blocks && a.raw_blocks;
+    st.er = a.er;
+    st.chan_config = a.chan_config;
 }
 
 /* AudioSpecificConfig of nbits as a hex field; for LATM version 0 its length
@@ -515,7 +518,7 @@ static void loas_frame_r(Codec &c, size_t fs, size_t flen)
         if (c.st.blocks) {
             c.rb(R_PAY);
             br.end = pe;
-            bool ok = c.raw_data_block(pe, false);
+            bool ok = c.st.er ? c.er_frame(pe) : c.raw_data_block(pe, false);
             br.end = fend;
             if (ok) {
                 size_t pad = pe - br.pos;
@@ -567,7 +570,7 @@ static void loas_frame_w(Codec &c)
         c.push_sub();
         if (c.st.blocks) {
             c.rb(R_PAY);
-            if (c.raw_data_block(0, false)) {
+            if (c.st.er ? c.er_frame(0) : c.raw_data_block(0, false)) {
                 if (c.peek() == R_PAYPAD) {
                     c.rb(R_PAYPAD);
                     int64_t n = c.geti(0, 8 * 8192);
@@ -651,6 +654,7 @@ static void adif_header(Codec &c, size_t hs)
     a.sf_index = sfi;
     a.chan_config = 0;
     a.frame960 = 0;
+    a.er = 0;
     a.raw_blocks = sfi <= 12;
     set_config(c.st, a, true);
 }
@@ -678,6 +682,8 @@ static void asc_config_w(Codec &c, int name)
     try {
         BitReader b(asc.data(), 0, (asc.size() - 16) * 8);
         set_config(c.st, parse_asc(b, 0), true);
+        if (name == R_RAWASC && c.st.er)
+            c.st.blocks = 0;   /* not self-delimiting */
     } catch (ParseError &) {
         c.st.blocks = 0;
     }
@@ -691,22 +697,30 @@ static void asc_config_w(Codec &c, int name)
     }
 }
 
-/* AUS1 access unit: le32 length, raw_data_block(), bytes after it */
+/* AUS1 access unit: le32 length, raw_data_block() or ER frame and the bits
+ * after it (paypad), or the whole unit as payraw */
 static void au_w(Codec &c)
 {
     BitWriter &w = c.fw;
     c.rb(R_AU);
     w.put(0, 32);
-    if (c.st.blocks) {
-        if (c.raw_data_block(0, true) && c.peek() == R_AUTAIL) {
-            c.rb(R_AUTAIL);
-            for (uint8_t v : c.getbytes())
-                w.put(v, 8);
-        }
-    } else if (c.peek() == R_AUTAIL) {
-        c.rb(R_AUTAIL);
+    if (c.peek() == R_PAYRAW) {
+        c.rb(R_PAYRAW);
         for (uint8_t v : c.getbytes())
             w.put(v, 8);
+    } else {
+        if (!c.st.blocks)
+            c.err("access unit records without a configuration that allows parsing them");
+        bool ok = c.st.er ? c.er_frame(0) : c.raw_data_block(0, true);
+        if (ok) {
+            if (c.peek() == R_PAYPAD) {
+                c.rb(R_PAYPAD);
+                int64_t n = c.geti(0, (int64_t)1 << 40);
+                c.put_nibbles(c.getnibbles(), (size_t)n);
+            } else {
+                w.put(0, (int)((8 - w.pos % 8) % 8));
+            }
+        }
     }
     c.wend_check();
     uint32_t n = (uint32_t)(w.pos / 8 - 4);
@@ -842,7 +856,7 @@ struct Encoder {
     OutFrame of;
     std::string ftxt;
     RecStream vrs;
-    uint64_t units = 0, raw_units = 0, raw_bytes = 0, rest_units = 0;
+    uint64_t units = 0, raw_units = 0, raw_bytes = 0, rest_units = 0, hex_payloads = 0;
     /* probe: a parse-only pass that finds the first SBR header of the
      * elements whose first SBR payloads come without one */
     bool probe = false, stop = false;
@@ -978,11 +992,14 @@ struct Encoder {
             pend.insert(pend.end(), data + start, data + end);
             return end;
         }
-        for (size_t k = 0; k < of.n; k++)
-            if (of.recs[k].name == R_REST && !of.recs[k].omit) {
-                rest_units++;
-                break;
-            }
+        bool rest = false;
+        for (size_t k = 0; k < of.n; k++) {
+            if (of.recs[k].omit)
+                continue;
+            rest |= of.recs[k].name == R_REST;
+            hex_payloads += of.recs[k].name == R_PAYRAW;
+        }
+        rest_units += rest;
         flush_raw();
         obuf += ftxt;
         flush_out(false);
@@ -1103,13 +1120,19 @@ struct Encoder {
             pos = unit(pos, n + 4, [&] {
                 size_t ab = (s + 4) * 8, ae = (s + 4 + n) * 8;
                 rc.rb(R_AU);
-                bool ok = false;
                 rc.br = BitReader(data, ab, ae);
-                if (rc.st.blocks)
-                    ok = rc.raw_data_block(ae, true);
-                if ((ok || !rc.st.blocks) && rc.br.pos < ae) {
-                    rc.rb(R_AUTAIL);
-                    rc.cr->hex(data, rc.br.pos, ae - rc.br.pos);
+                if (!rc.st.blocks) {
+                    rc.rb(R_PAYRAW);
+                    rc.cr->hex(data, ab, ae - ab);
+                    return s + 4 + n;
+                }
+                if (rc.st.er ? rc.er_frame(ae) : rc.raw_data_block(ae, true)) {
+                    size_t pad = ae - rc.br.pos;
+                    if (pad >= 8 || (pad && rc.br.peek((int)pad))) {
+                        rc.rb(R_PAYPAD);
+                        rc.cr->i((int64_t)pad);
+                        rc.cr->hex(data, rc.br.pos, pad);
+                    }
                 }
                 return s + 4 + n;
             });
@@ -1172,9 +1195,10 @@ struct Encoder {
         obuf += '\n';
         flush_out(true);
         if (verbose > 1 && !probe)
-            fprintf(stderr, "%llu units (%llu stored raw, %llu partly raw), %llu other bytes\n",
-                    (unsigned long long)units, (unsigned long long)raw_units,
-                    (unsigned long long)rest_units, (unsigned long long)raw_bytes);
+            fprintf(stderr, "%llu units (%llu stored raw, %llu partly raw), %llu payloads not parsed, "
+                            "%llu other bytes\n",
+                    (unsigned long long)units, (unsigned long long)raw_units, (unsigned long long)rest_units,
+                    (unsigned long long)hex_payloads, (unsigned long long)raw_bytes);
     }
 };
 
@@ -1194,6 +1218,8 @@ static int cmd_encode(const Options &opt, const char *in, const char *outn)
             AscInfo ai = parse_asc(b, 0);
             if (!ai.raw_blocks)
                 parse_fail("access units of this object type are not parsed");
+            if (ai.er)
+                parse_fail("ER access units do not end with END, they cannot be back to back");
         } catch (ParseError &e) {
             fprintf(stderr, "-asc: %s\n", e.msg);
             return 1;
@@ -1312,7 +1338,7 @@ static void usage()
         "  -asc HEX    input is raw access units with this AudioSpecificConfig\n"
         "  -noverify   skip the check that each frame converts back (faster)\n"
         "  -q          quiet\n"
-        "  -v          verbose (statistics)\n");
+        "  -v          verbose (statistics); -vv also lists SBR payloads kept as hex\n");
 }
 
 static bool parse_hex(const char *s, std::vector<uint8_t> &out)
@@ -1345,8 +1371,10 @@ int main(int argc, char **argv)
                 verbose = 0;
             else if (!strcmp(a, "-v"))
                 verbose = 2;
-            else if (!strcmp(a, "-vv"))
-                verbose = 2, debug_level = 1;
+            else if (!strcmp(a, "-vv")) {
+                verbose = 2;
+                debug_level = 1;
+            }
             else if (!strcmp(a, "-adts"))
                 opt.format = F_ADTS;
             else if (!strcmp(a, "-latm") || !strcmp(a, "-loas"))

@@ -20,7 +20,7 @@ aac2tsv.cpp` for Windows).
 | option | |
 |---|---|
 | `-adts` `-latm` `-adif` | c: only look for this container (default: autodetect) |
-| `-asc HEX` | c: the input is back-to-back raw access units with this AudioSpecificConfig (as `aacdec -asc`) |
+| `-asc HEX` | c: the input is back-to-back raw access units with this AudioSpecificConfig (as `aacdec -asc`; not for ER object types, whose access units have no END) |
 | `-noverify` | c: skip the per-frame check (about 2.5× faster) |
 | `-q` / `-v` / `-vv` | quiet / statistics on stderr / also report SBR payloads kept as hex |
 
@@ -46,9 +46,9 @@ the line number.
 |---|---|
 | containers | ADTS (any number of raw_data_blocks, CRC), LOAS/LATM (AudioSyncStream; one program, one layer, frameLengthType 0, any number of subframes, audioMuxVersion 0 and 1), ADIF, raw access units (`-asc`), AUS1 (ASC + length-prefixed AUs, written by `gen_remux.py`) |
 | syntax elements | SCE, CPE, CCE, LFE, DSE, PCE, FIL, END |
-| object types | AAC Main (prediction), LC, SSR (gain control), LTP; HE-AAC (SBR, with or without SBR CRC) and HE-AACv2 (PS incl. IPD/OPD); 1024 and 960 sample frames |
-| fill payloads | SBR, DRC (`dynamic_range_info`), padding (`EXT_FILL_DATA` A5 bytes, zeros), anything else as hex |
-| kept as hex | ER AAC (LC/LD/ELD), USAC and other object types (their access units inside LATM), MP4 and other containers |
+| object types | AAC Main (prediction), LC, SSR (gain control), LTP; HE-AAC (SBR, with or without SBR CRC) and HE-AACv2 (PS incl. IPD/OPD); 1024 and 960 sample frames. ER AAC LC, LD and ELD in LATM and AUS1 (LD and ELD: 480 and 512 sample frames at 22.05–48 kHz, the rates the decoder has band tables for), without the error resilience tools (epConfig 0, no section/scalefactor/spectral data resilience) |
+| fill payloads | SBR, DRC (`dynamic_range_info`), padding (`EXT_FILL_DATA` A5 bytes, zeros), anything else as hex; the same for the extension payloads after the channel elements of an ER access unit |
+| kept as hex | ER AAC with resilience tools, ELD with LD-SBR (only its config is parsed), LTP in ER AAC LD, USAC and other object types (their access units inside LATM and AUS1), MP4 and other containers |
 
 The syntax follows the aacdec decoder (FFmpeg 8.1.3 AAC decoder in C++), its
 tables are used for the codebooks, scalefactor bands and the SBR frequency
@@ -85,14 +85,15 @@ signs and escapes applied.
 | `smc` | StreamMuxConfig: `audioMuxVersion [audioMuxVersionA] [taraBufferFullness: bytes value] allStreamsSameTimeFraming numSubFrames numProgram numLayer` |
 | `asc` | AudioSpecificConfig: `nbits hex [bytesForValue]` (version 1: nbits is ascLen, fill bits included) |
 | `smcx` | `frameLengthType latmBufferFullness otherDataPresent [otherDataLenBits: bytes value] crcCheckPresent [crcCheckSum]` |
-| `pay` | one PayloadMux(), a raw_data_block follows (MuxSlotLengthBytes derived) |
+| `pay` | one PayloadMux(), a raw_data_block or ER access unit follows (MuxSlotLengthBytes derived) |
 | `payraw` | hex payload of an object type that is not parsed |
-| `paypad` | `nbits hex` — payload bits after END, if not the zero bits up to the next byte |
+| `paypad` | `nbits hex` — payload bits after END (ER: after the extension payloads), if not the zero bits up to the next byte |
 | `other` | hex otherDataBits |
 | `adif` | `copyright_id_present [copyright_id: 18 nibbles] original_copy home bitstream_type bitrate num_program_config_elements`; then `adifpce` records, then the raw_data_blocks |
 | `adifpce` | `[adif_buffer_fullness]` + the fields of `pce` |
 | `rawasc` | AudioSpecificConfig given with `-asc` (hex); then the raw_data_blocks |
-| `aus1` `au` `autail` | AUS1 header (ASC hex), one access unit, hex bytes after its raw_data_block |
+| `aus1` | AUS1 header: the AudioSpecificConfig (hex) |
+| `au` | one access unit (length derived): a raw_data_block (with byte_alignment) or ER access unit, then `[paypad]`; or `payraw` |
 
 ### raw_data_block
 
@@ -150,6 +151,18 @@ it). When a stream starts like that (cut streams, some conformance streams),
 and states it in a `sbrinit` record; the earlier payloads are then parsed
 with it, and any that still do not fit stay `ext` records.
 
+### ER access units
+
+An ER access unit (`er_raw_data_block()`) holds the channel elements of its
+channel configuration in a fixed order, without element ids and END: `sce`,
+`cpe` and `lfe` records as in a raw_data_block, with the ER order of the
+channel stream tools (TNS data after the gain control flag, no pulse data in
+ELD). In ELD, `sce` and `cpe` have no element_instance_tag, a CPE always has
+a common window (not stored), and ics_info is only `max_sfb`. The bits after
+the channel elements are read as fdk-aac does: extension payloads (`fill`,
+`drc`, `ext`, ...), each taking the remaining whole bytes, while 8 or more bits
+are left, then `[paypad]` for the last bits if they are not zero.
+
 ### Example
 
 ```
@@ -192,6 +205,20 @@ header and sample rate they equal the decoder's float tables, also under
 `-ffast-math`. Random data, truncated, spliced and bit-flipped inputs (5600
 cases, 800 of them under ASan/UBSan) all round-trip without a single frame
 needing the fallback; 1500 mutated TSV files give errors, never crashes.
+
+ER AAC: the LD and ELD conformance streams of the FATE suite (as AUS1, and
+remuxed to LATM) and fdk-aac encodes (LD and ELD, 480 and 512 sample frames,
+22.05–48 kHz, mono, stereo and 5.1, CBR and VBR, raw and LOAS) parse without
+fallbacks, and in every access unit the channel elements end at the same bit
+as in the fdk-aac decoder. LC streams rewritten as ER AAC LC through the TSV
+(pulse data, TNS, short windows, M/S) decode to the same PCM as the originals
+with aacdec and with fdk-aac.
+
+`tests/` has the scripts used for this: `fuzz.py` (mutated inputs),
+`tsvfuzz.py` (mutated TSV files), `oracle.py` (pulse, LTP, gain control and CCE
+injected through the TSV, checked with aacdec), `lc2er.py` (LC to ER AAC LC
+through the TSV), `adts2loas.py` and `adts2adif.py` (remuxing to LATM variants,
+ADIF and raw access units).
 
 ## License
 
