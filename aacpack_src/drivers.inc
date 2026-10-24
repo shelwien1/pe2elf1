@@ -123,8 +123,15 @@ struct CodeLv {
   static int run(const char* in_name, const Options& opt, filehandle0& f, Output& o) {
     Progress pr;
     AacArgs a = call_start(pr, opt, "enc", f, in_name);
+    // (an MP4 file's moov box after its mdat: read ahead, where the input is a file)
+    Buf<uint8_t> moov;
+    moov.Init();
+    if (!opt.asc_n && opt.format == F_AUTO) mp4_moov_ahead(f.f, file_size(f.f), moov);
+    a.moov = moov.data();
+    a.moov_n = moov.size();
     uint64_t raw, packed, frames;
     int r = run_model<AacpCoro<0, LV>, 0>(a, pr, f, o, nullptr, 0, raw, packed, frames);
+    moov.Quit();
     return call_end(r, f, o, false, pr, raw, packed, frames);
   }
 };

@@ -2,11 +2,12 @@
 # gen.sh [DIR] -- a small corpus of AAC streams for make test (DIR, by
 # default test/corpus): a test signal (chords, a chirp, plucks, noise bursts)
 # through ffmpeg's AAC encoder (LC, Main, LTP, mono, 5.1, with PNS,
-# intensity and TNS) as ADTS, LATM and MP4 (made AUS1 by mp42aus1.py), and
-# the ADTS made ADIF, LOAS of audioMuxVersion 1 and raw access units (named
-# NAME.asc-HEX.raw, for roundtrip.sh's -asc HEX); with fdkaac and faac, when
-# they are there, HE-AAC, HE-AACv2, LD and ELD, CRCs, VBR. Needs ffmpeg and
-# python3.
+# intensity and TNS) as ADTS, LATM and MP4 (the moov box after the mdat or
+# before it, fragmented, two tracks, with a video track; and made AUS1 by
+# mp42aus1.py), and the ADTS made ADIF, LOAS of audioMuxVersion 1 and raw
+# access units (named NAME.asc-HEX.raw, for roundtrip.sh's -asc HEX); with
+# fdkaac and faac, when they are there, HE-AAC, HE-AACv2, LD and ELD, CRCs,
+# VBR, HE-AAC in MP4. Needs ffmpeg and python3.
 set -e
 D=${1:-test/corpus}
 T=$(dirname "$0")
@@ -38,8 +39,12 @@ ff ff_main.aac -profile:a aac_main -b:a 128k -f adts
 ff ff_ltp.aac -profile:a aac_ltp -strict -2 -b:a 128k -f adts
 ff ff_51.aac -af "pan=5.1|FL=c0|FR=c1|FC=0.5*c0+0.5*c1|LFE=0.3*c0+0.3*c1|BL=0.7*c0|BR=0.7*c1" -ar 48000 -b:a 320k -f adts
 ff ff_lc128.latm -b:a 128k -f latm
-ff .ff_lc128.m4a -b:a 128k -f mp4
-python3 "$T/mp42aus1.py" "$D/.ff_lc128.m4a" "$D/ff_lc128.aus1" > /dev/null
+ff ff_lc128.m4a -b:a 128k -f mp4
+ff ff_faststart.m4a -b:a 96k -movflags +faststart -f mp4
+ff ff_frag.m4a -b:a 96k -movflags frag_keyframe+empty_moov -frag_duration 2000000 -f mp4
+ffmpeg $q -i "$w" -i "$wm" -map 0:a -map 1:a -c:a aac -b:a 64k -f mp4 "$D/ff_two.m4a"
+ffmpeg $q -f lavfi -i testsrc=size=160x120:rate=10:duration=8 -i "$w" -c:v mpeg4 -c:a aac -b:a 64k -f mp4 "$D/ff_video.mp4"
+python3 "$T/mp42aus1.py" "$D/ff_lc128.m4a" "$D/ff_lc128.aus1" > /dev/null
 python3 "$T/adts2adif.py" "$D/ff_lc128.aac" "$D/ff_lc128.adif" 1 "a comment"
 python3 "$T/adts2loas.py" "$D/ff_lc128.aac" "$D/ff_lc128_v1.loas" 1 1 8 4
 python3 "$T/adts2loas.py" "$D/ff_main.aac" "$D/ff_main_v0.loas" 0 2 0 3
@@ -64,11 +69,12 @@ if command -v fdkaac > /dev/null; then
   fdk fdk_ld96.latm "$w48" -p 23 -b 96 -f 10
   fdk fdk_eld96.latm "$w48" -p 39 -b 96 -f 10
   fdk fdk_mono64.aac "$wm" -b 64 -f 2
+  fdk fdk_he48.m4a "$w" -p 5 -b 48
 fi
 if command -v faac > /dev/null; then
   faac -b 128 -o "$D/faac128.aac" "$w" > /dev/null 2>&1 || rm -f "$D/faac128.aac"
 fi
-rm -f "$w" "$w48" "$wm" "$D/.ff_lc128.m4a"
+rm -f "$w" "$w48" "$wm"
 # what an encoder did not write (an option it does not have)
 find "$D" -type f -size 0 -exec rm -f {} +
 echo "$(ls "$D" | wc -l) files in $D"

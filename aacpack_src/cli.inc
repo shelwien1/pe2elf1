@@ -67,11 +67,11 @@ void put_text(char* b, size_t n, size_t& k, const char* fmt, ...) {
 // What the stream is (rcio.inc's AudioInfo), in words, into b (n bytes):
 // its container, object type, sampling rate, channels, SBR and PS
 void audio_words(const AudioInfo& a, char* b, size_t n) {
-  static const char* const kCont[6] = {"?", "ADTS", "LOAS/LATM", "ADIF", "AUS1", "raw access units"};
+  static const char* const kCont[7] = {"?", "ADTS", "LOAS/LATM", "ADIF", "AUS1", "raw access units", "MP4"};
   static const char* const kAot[] = {"?", "AAC Main", "AAC LC", "AAC SSR", "AAC LTP", "SBR", "AAC Scalable"};
   static const int kRate[13] = {96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350};
   size_t k = 0;
-  put_text(b, n, k, "%s", kCont[a.container >= 0 && a.container < 6 ? a.container : 0]);
+  put_text(b, n, k, "%s", kCont[a.container >= 0 && a.container < 7 ? a.container : 0]);
   if (a.aot >= 1 && a.aot <= 6)
     put_text(b, n, k, ", %s", kAot[a.aot]);
   else if (a.aot == 17)
@@ -109,6 +109,8 @@ struct Progress {
   void (*what)(void* ctx, uint64_t& raw, uint64_t& packed, uint64_t& pos, uint64_t& pics);
   void* what_ctx;
   AudioInfo shown;  // the stream so far (AudioInfo::add(); shown.container 0: none)
+  AudioInfo said[8];  // what was said of it (an MP4 file's tracks take turns: each once)
+  int nsaid;
   bool verbose;     // -v: the stream said where there is no line too, and its changes
   int64_t t0;    // the start (clock_ns())
   int64_t last;  // the last line, ns after t0 (atomic)
@@ -123,6 +125,7 @@ struct Progress {
     what = nullptr;
     what_ctx = nullptr;
     memset((void*)&shown, 0, sizeof shown);
+    nsaid = 0;
     verbose = false;
     t0 = last = 0;
     halted = 0;
@@ -184,12 +187,18 @@ struct Progress {
   }
   // what the stream is, as a codec tells it (coro.inc's show_told()):
   // said as it first comes, where the progress line is shown or with -v
-  // (verbose), and with -v where it adds to what was said
+  // (verbose), and with -v where it adds to what was said (once each)
   void audio(const AudioInfo& v) {
     if (!tag && !verbose) return;
     lock.lock();
     bool first = !shown.container;
-    if (shown.add(v) && (first || verbose) && !stopped()) {
+    bool fresh = false;  // (what it is now was not said before)
+    if (shown.add(v)) {
+      fresh = true;
+      for (int i = 0; i < nsaid && fresh; i++) fresh = memcmp(&said[i], &shown, sizeof shown) != 0;
+      if (fresh && nsaid < 8) said[nsaid++] = shown;
+    }
+    if (fresh && (first || verbose) && !stopped()) {
       char b[400];
       audio_words(shown, b, sizeof b);
       cut();
