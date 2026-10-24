@@ -1,0 +1,26 @@
+#!/bin/sh
+# roundtrip.sh BIN files... -- compress each file with BIN c, decompress it
+# with BIN d and compare; prints the sizes. Exit status 1 if any fails.
+BIN=$1
+shift
+tmp=${TMPDIR:-/tmp}/aacpack.$$
+fail=0
+tin=0
+tout=0
+for f in "$@"; do
+  [ -f "$f" ] || continue
+  if "$BIN" c $OPTS "$f" "$tmp.apk" 2> "$tmp.err" && "$BIN" d "$tmp.apk" "$tmp.out" 2>> "$tmp.err" && cmp -s "$f" "$tmp.out"; then
+    a=$(wc -c < "$f")
+    b=$(wc -c < "$tmp.apk")
+    tin=$((tin + a))
+    tout=$((tout + b))
+    printf 'ok    %10d %10d %6.2f%%  %s\n' "$a" "$b" "$(echo "100 * $b / $a" | bc -l)" "$f"
+  else
+    echo "FAIL  $f"
+    sed 's/^/      /' "$tmp.err"
+    fail=1
+  fi
+done
+[ "$tin" -gt 0 ] && printf 'total %10d %10d %6.2f%%\n' "$tin" "$tout" "$(echo "100 * $tout / $tin" | bc -l)"
+rm -f "$tmp.apk" "$tmp.out" "$tmp.err"
+exit $fail

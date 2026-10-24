@@ -1,0 +1,123 @@
+#  aacpack's unt family at level -9: the stream's own values (cmstream.inc):
+#  the kind of each unit, the lengths of what is stored as its bytes, the
+#  assumed SBR headers, the CRC.  fld is the field, ctx a context its caller
+#  gives, p1 p2 the field's last two values (tc_qlog).
+#  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates MOD/l9 from
+#  this file and family.inc.
+
+Prefix H9_unt
+Debug 1
+Const 0
+
+Index a
+ a_fld: fld, 1!111111111111111
+ a_ctx: ctx, 1!1111111
+
+Index b
+ b_fld: fld, 1!111111111111111
+ b_p1: p1, 1!111111
+
+Index c
+ c_fld: fld, 1!111111111111111
+ c_ctx: ctx, 1!111111111111111
+
+Index d
+ d_fld: fld, 1!111111111111111
+
+Index e
+ e_fld: fld, 1!111111111111111
+ e_p2: p2, 1!111
+
+Index h
+ h_fld: fld, 1!111111111111111
+ h_p1: p1, 1!111
+ h_p2: p2, 1!111
+
+Index i
+ i_ctx: ctx, 1!111111111111111
+ i_p1: p1, 1!111111
+
+Index j
+ j_fld: fld, 1!111111111111111
+ j_p1: p1, 1!1111111111
+
+Index k
+ k_fld: fld, 1!111111111111111
+ k_ctx: ctx, 1!1111111
+ k_p1: p1, 1!11
+
+Index l
+ l_p1: p1, 1!111111
+ l_p2: p2, 1!111
+
+Index s
+ s_fld: fld, 1!111111111111111
+
+Index f
+ f_fld: fld, 1!111111111111111
+
+Index m
+ m_fld: fld, 1!111111111111111
+
+Index w
+ w_fld: fld, 1!1111111
+
+Index t
+ t_fld: fld, 1!111111111111111
+
+Index n
+
+Index g
+
+Number rA, 1, 0!10000010
+Number rB, 1, 0!11110010
+Number rC, 1, 0!11111111
+Number rD, 1, 0!11111111
+Number rE, 1, 0!11111111
+Number rH, 1, 0!11111111
+Number rI, 1, 0!10001001
+Number rJ, 1, 0!11111110
+Number rK, 1, 0!11111111
+Number rL, 1, 0!11111101
+Number rT, 1, 0!10000000
+Number rG, 1, 0!01000000
+Number rS1, 1, 0!01000
+Number rS2, 1, 0!00110
+Number lr, 1, 0!01111
+Number mwA, 1, 0!10000000
+Number mwB, 1, 0!00000100
+Number mwC, 1, 0!00000100
+Number mwD, 1, 0!00011011
+Number mwE, 1, 0!00010000
+Number mwH, 1, 0!00001000
+Number mwI, 1, 0!00000001
+Number mwJ, 1, 0!00010100
+Number mwK, 1, 0!00110011
+Number mwL, 1, 0!00111110
+Number mwT, 1, 0!00000000
+Number mwG, 1, 0!00000000
+Number bw, 1, 0!01100
+Number mt, 1, 0!010
+Number qs, 1, 3!0010111
+Number qf, 1, 3!0010001
+Number mb, 1, 0!00100001
+#  Frozen: no hint's mixer (lrm, mbm, index n): the family codes without one.
+! Number lrm, 1, 0!00000
+! Number mbm, 1, 0!00000000
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
+#  direct, one that does not is hashed into 2^h rows.  Frozen.
+! Number hA, 1, 0!11000
+! Number hB, 1, 0!11000
+! Number hC, 1, 0!11000
+! Number hD, 1, 0!11000
+! Number hE, 1, 0!11000
+! Number hH, 1, 0!11000
+! Number hI, 1, 0!11000
+! Number hJ, 1, 0!11000
+! Number hK, 1, 0!11000
+! Number hL, 1, 0!11000
+! Number hS, 1, 0!11000
+! Number hF, 1, 0!11000
+! Number hM, 1, 0!11000
+! Number hT, 1, 0!11000
+! Number hN, 1, 0!11000
