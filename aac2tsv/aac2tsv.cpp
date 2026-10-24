@@ -749,6 +749,9 @@ static bool decode_unit(Codec &c)
     case R_AU:
         au_w(c);
         break;
+    case R_SBRINIT:
+        c.sbrinit_w();
+        break;
     case R_SCE: case R_CPE: case R_CCE: case R_LFE: case R_DSE: case R_PCE: case R_FIL: case R_END: case R_REST:
         block_w(c);
         break;
@@ -840,6 +843,12 @@ struct Encoder {
     std::string ftxt;
     RecStream vrs;
     uint64_t units = 0, raw_units = 0, raw_bytes = 0, rest_units = 0;
+    /* probe: a parse-only pass that finds the first SBR header of the
+     * elements whose first SBR payloads come without one */
+    bool probe = false, stop = false;
+    uint64_t probe_units = 0;
+    int assume[3][16] = {};
+    SbrState assumed[3][16];
 
     Encoder(const Options &o, const uint8_t *d, size_t n, FILE *f) : opt(o), data(d), size(n), fo(f)
     {
@@ -854,6 +863,10 @@ struct Encoder {
 
     void flush_out(bool force)
     {
+        if (probe) {
+            obuf.clear();
+            return;
+        }
         if (obuf.size() >= (1 << 20) || (force && !obuf.empty())) {
             fwrite(obuf.data(), 1, obuf.size(), fo);
             obuf.clear();
@@ -891,7 +904,7 @@ struct Encoder {
                 if (!decode_unit(vc))
                     return false;
                 size_t n = vc.fw.pos / 8;
-                if (pos + n > len || memcmp(vc.fw.b.data(), data + start + pos, n))
+                if (pos + n > len || (n && memcmp(vc.fw.b.data(), data + start + pos, n)))
                     return false;
                 pos += n;
             }
@@ -907,8 +920,38 @@ struct Encoder {
      * ParseError if it does not parse); emits its records if they decode back
      * to the same bytes, else the bytes as raw. Returns the end byte, or 0 if
      * the unit did not parse. */
+    /* probe: stop when every element with header-less SBR payloads has
+     * found a header, or after a while without such payloads */
+    void probe_check()
+    {
+        bool need = false, open = false;
+        for (int k = 0; k < 3; k++)
+            for (int t = 0; t < 16; t++)
+                if (rc.sbr_need[k][t]) {
+                    need = true;
+                    open |= !rc.sbr_found[k][t];
+                }
+        probe_units++;
+        stop = need ? !open : probe_units > 1000;
+        pend.clear();
+    }
+
     template <class F> size_t unit(size_t start, size_t known_len, F fn)
     {
+        if (probe) {
+            size_t end = start + known_len;
+            SynState before = rc.st;
+            of.clear();
+            try {
+                end = fn();
+            } catch (ParseError &) {
+                rc.st = before;
+                if (!known_len)
+                    return 0;
+            }
+            probe_check();
+            return end;
+        }
         SynState before = rc.st;
         of.clear();
         size_t end;
@@ -966,7 +1009,7 @@ struct Encoder {
     void scan_frames(size_t pos)
     {
         bool insync = false;
-        while (pos < size) {
+        while (pos < size && !stop) {
             size_t tl = id3v2_len(data + pos, size - pos);
             if (tl) {
                 pend.insert(pend.end(), data + pos, data + pos + tl);
@@ -1003,7 +1046,7 @@ struct Encoder {
     /* back-to-back raw_data_block()s until the end */
     void scan_blocks(size_t pos)
     {
-        while (pos < size)
+        while (pos < size && !stop)
             pos = unit(pos, 0, [&] {
                 rc.br = BitReader(data, pos * 8, size * 8);
                 rc.raw_data_block(size * 8, true);
@@ -1050,7 +1093,7 @@ struct Encoder {
             }
         }
         pos += 6 + alen;
-        while (pos < size) {
+        while (pos < size && !stop) {
             if (size - pos < 4)
                 break;
             size_t n = data[pos] | data[pos + 1] << 8 | data[pos + 2] << 16 | (size_t)data[pos + 3] << 24;
@@ -1081,6 +1124,19 @@ struct Encoder {
         obuf += '\t';
         append_int(obuf, AAC2TSV_VERSION);
         obuf += "\n# aac2tsv: one AAC syntax structure per line, see README.md\n";
+        for (int k = 0; k < 3; k++)
+            for (int t = 0; t < 16; t++)
+                if (assume[k][t]) {
+                    const SbrState &a = assumed[k][t];
+                    OutRec r = OutRec();
+                    r.i(k); r.i(t); r.i(a.amp_res);
+                    r.i(a.sp.start_freq); r.i(a.sp.stop_freq); r.i(a.sp.xover_band);
+                    r.i(a.sp.freq_scale); r.i(a.sp.alter_scale); r.i(a.sp.noise_bands);
+                    obuf += rec_names[R_SBRINIT];
+                    obuf += r.s;
+                    obuf += '\n';
+                    Codec::sbr_assume(rc.st.sbr[k][t], a.amp_res, a.sp);
+                }
         size_t pos = 0, tl;
         while ((tl = id3v2_len(data + pos, size - pos)) != 0) {
             pend.insert(pend.end(), data + pos, data + pos + tl);
@@ -1115,7 +1171,7 @@ struct Encoder {
             obuf += hexdig[(crc >> k) & 15];
         obuf += '\n';
         flush_out(true);
-        if (verbose > 1)
+        if (verbose > 1 && !probe)
             fprintf(stderr, "%llu units (%llu stored raw, %llu partly raw), %llu other bytes\n",
                     (unsigned long long)units, (unsigned long long)raw_units,
                     (unsigned long long)rest_units, (unsigned long long)raw_bytes);
@@ -1146,7 +1202,20 @@ static int cmd_encode(const Options &opt, const char *in, const char *outn)
     FILE *fo = open_out(outn);
     if (!fo)
         return 1;
+    Encoder *p = new Encoder(opt, data.data(), size, nullptr);
+    p->probe = true;
+    int dl = debug_level;
+    debug_level = 0;
+    p->run();
+    debug_level = dl;
     Encoder *e = new Encoder(opt, data.data(), size, fo);
+    for (int k = 0; k < 3; k++)
+        for (int t = 0; t < 16; t++)
+            if (p->rc.sbr_need[k][t] && p->rc.sbr_found[k][t]) {
+                e->assume[k][t] = 1;
+                e->assumed[k][t] = p->rc.sbr_first[k][t];
+            }
+    delete p;
     e->run();
     delete e;
     return close_out(fo) ? 0 : 1;
@@ -1276,6 +1345,8 @@ int main(int argc, char **argv)
                 verbose = 0;
             else if (!strcmp(a, "-v"))
                 verbose = 2;
+            else if (!strcmp(a, "-vv"))
+                verbose = 2, debug_level = 1;
             else if (!strcmp(a, "-adts"))
                 opt.format = F_ADTS;
             else if (!strcmp(a, "-latm") || !strcmp(a, "-loas"))

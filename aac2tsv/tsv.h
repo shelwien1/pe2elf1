@@ -24,7 +24,7 @@ enum RecName {
     R_ICS, R_MS, R_SEC, R_SF, R_PULSE, R_TNS, R_GC, R_SPEC, R_CGAIN,
     R_FILL, R_EXT, R_DRC, R_SBR, R_SBRC,
     R_SBRH, R_SBRD, R_SGRID, R_SDTDF, R_SINVF, R_SENV, R_SNOISE, R_SHARM,
-    R_SBRX, R_SBRXE, R_SBRPAD,
+    R_SBRX, R_SBRXE, R_SBRPAD, R_SBRINIT,
     R_PS, R_PSIID, R_PSICC, R_PSX, R_PSXE, R_PSIPD, R_PSPD,
     R_COUNT
 };
@@ -38,7 +38,7 @@ static const char *const rec_names[R_COUNT] = {
     "ics", "ms", "sec", "sf", "pulse", "tns", "gc", "spec", "cgain",
     "fill", "ext", "drc", "sbr", "sbrc",
     "sbrh", "sbrd", "sgrid", "sdtdf", "sinvf", "senv", "snoise", "sharm",
-    "sbrx", "sbrxe", "sbrpad",
+    "sbrx", "sbrxe", "sbrpad", "sbrinit",
     "ps", "psiid", "psicc", "psx", "psxe", "psipd", "pspd",
 };
 

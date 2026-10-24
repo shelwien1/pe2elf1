@@ -22,7 +22,7 @@ aac2tsv.cpp` for Windows).
 | `-adts` `-latm` `-adif` | c: only look for this container (default: autodetect) |
 | `-asc HEX` | c: the input is back-to-back raw access units with this AudioSpecificConfig (as `aacdec -asc`) |
 | `-noverify` | c: skip the per-frame check (about 2.5× faster) |
-| `-q` / `-v` | quiet / statistics on stderr |
+| `-q` / `-v` / `-vv` | quiet / statistics on stderr / also report SBR payloads kept as hex |
 
 ## Lossless by construction
 
@@ -78,7 +78,7 @@ signs and escapes applied.
 | `adtsh` | ADTS fixed header, written when it changes: `id layer protection_absent profile sampling_frequency_index private_bit channel_configuration original_copy home` |
 | `adts` | one ADTS frame: `adts_buffer_fullness number_of_raw_data_blocks_in_frame [copyright_identification_bit copyright_identification_start]`; then the raw_data_block(s) |
 | `rdbpos` | `raw_data_block_position[1..n]`, only if not the actual block offsets |
-| `crc` | `crc_check`, only if it is not the CRC of the frame (fdk-aac regions: header, then per element 192 bits from the tag, 128 more bits from the second channel of a CPE, DSE/PCE whole); after `adts` for the header CRC, after `end` for the per-block CRCs |
+| `crc` | `crc_check`, only if it is not the CRC of the frame (regions as in fdk-aac: header, then per element 192 bits from the tag, 128 more bits from the second channel of a CPE, DSE/PCE whole; checked with the fdk-aac decoder); after `adts` for the header CRC, after `end` for the per-block CRCs |
 | `tail` | hex bytes after the last raw_data_block of a frame (frame length is derived) |
 | `rest` | `nbits hex` — the rest of a frame/payload from a syntax element that does not parse |
 | `loas` | one AudioSyncStream frame: `useSameStreamMux [byte_align bits]` (audioMuxLengthBytes derived) |
@@ -138,9 +138,17 @@ signs and escapes applied.
 | `sharm` | `add_harmonic_flag [add_harmonic bits]` |
 | `sbrx` | extended data, `[fill bits]`; `ps` records or `sbrxe id nbits hex` follow |
 | `sbrpad` | `nbits hex` — bits after the SBR data, if not the zero bits up to the byte boundary |
+| `sbrinit` | at the start of the file: `element_type (0 SCE, 1 CPE, 2 CCE) element_instance_tag bs_amp_res start_freq stop_freq xover_band freq_scale alter_scale noise_bands` — SBR header assumed for the payloads of that element before its first header (see below) |
 | `ps` | `enable_ps_header [enable_iid [iid_mode] enable_icc [icc_mode] enable_ext] frame_class num_env_idx [border_position*]` |
 | `psiid` `psicc` | one per envelope: `dt values` |
 | `psx` | PS extension, `[fill bits]`; `psipd enable_ipdopd reserved_ps` (+ `pspd ipd_dt ipd* opd_dt opd*` per envelope) or `psxe id` follow |
+
+The SBR payload syntax depends on the last SBR header of its element, so a
+payload that comes before the first header cannot be parsed (decoders skip
+it). When a stream starts like that (cut streams, some conformance streams),
+`c` makes a quick parse-only pass, takes the first header of such an element
+and states it in a `sbrinit` record; the earlier payloads are then parsed
+with it, and any that still do not fit stay `ext` records.
 
 ### Example
 
@@ -177,8 +185,13 @@ encodes (Main with prediction, PNS, intensity stereo, 5.1/7.1 with PCE, 8 to
 FFmpeg's FATE suite to ADTS and LATM (pulse data, coupling channels, AAC Main
 and LTP prediction, 960-sample frames, SBR/PS), LATM, ADIF and raw AUs.
 Pulse, LTP, SSR gain control and CCE added to real streams decode with aacdec
-without errors. Random data, truncated, spliced and bit-flipped inputs
-(4800 cases) all round-trip, without a single frame needing the fallback.
+without errors. The derived ADTS CRCs (single and multi-block frames, block
+positions) and SBR CRCs are accepted by the fdk-aac decoder, which rejects
+wrong ones. The SBR band tables are computed in double; for every possible
+header and sample rate they equal the decoder's float tables, also under
+`-ffast-math`. Random data, truncated, spliced and bit-flipped inputs (5600
+cases, 800 of them under ASan/UBSan) all round-trip without a single frame
+needing the fallback; 1500 mutated TSV files give errors, never crashes.
 
 ## License
 

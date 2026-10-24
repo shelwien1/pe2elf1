@@ -92,6 +92,8 @@ struct BitWriter {
     /* copy nbits from src starting at bit from */
     void put_range(const uint8_t *src, size_t from, size_t nbits)
     {
+        if (!nbits)
+            return;
         reserve_bits(nbits);
         if (!(from & 7) && !(pos & 7)) {
             memcpy(&b[pos >> 3], src + (from >> 3), nbits >> 3);

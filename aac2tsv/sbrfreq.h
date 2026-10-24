@@ -5,6 +5,12 @@
  * that make a decoder turn SBR off. Ported from aacdec aacsbr.inc
  * (FFmpeg aacsbr_template.c).
  *
+ * The decoder computes in float; here it is done in double, which gives the
+ * same tables for every possible header and sample rate (checked
+ * exhaustively), but with enough margin to the rounding decisions that
+ * compilers, libms and -ffast-math cannot change them (the closest float
+ * case is a few ulps from a .5 boundary).
+ *
  * Licensed under the GNU Lesser General Public License v2.1 or later.
  */
 
@@ -31,15 +37,15 @@ static int sbr_cmp_int16(const void *a, const void *b)
 static void sbr_make_bands(int16_t *bands, int start, int stop, int num_bands)
 {
     int k, previous, present;
-    float base, prod;
+    double base, prod;
 
-    base = powf((float)stop / start, 1.0f / num_bands);
-    prod = (float)start;
+    base = pow((double)stop / start, 1.0 / num_bands);
+    prod = start;
     previous = start;
 
     for (k = 0; k < num_bands - 1; k++) {
         prod *= base;
-        present = (int)lrintf(prod);
+        present = (int)lrint(prod);
         bands[k] = (int16_t)(present - previous);
         previous = present;
     }
@@ -117,7 +123,7 @@ static bool sbr_compute_bands(int sample_rate, const SbrSpectrum &sp, SbrBands &
             two_regions = 0;
             k1 = k2;
         }
-        num_bands_0 = (int)lrintf(half_bands * log2f(k1 / (float)k0)) * 2;
+        num_bands_0 = (int)lrint(half_bands * log2(k1 / (double)k0)) * 2;
         if (num_bands_0 <= 0 || num_bands_0 > 48)
             return false;
         vk0[0] = 0;
@@ -132,8 +138,8 @@ static bool sbr_compute_bands(int sample_rate, const SbrSpectrum &sp, SbrBands &
         }
         if (two_regions) {
             int16_t vk1[49];
-            float invwarp = sp.alter_scale ? 0.76923076923076923077f : 1.0f;
-            int num_bands_1 = (int)lrintf(half_bands * invwarp * log2f(k2 / (float)k1)) * 2;
+            double invwarp = sp.alter_scale ? 0.76923076923076923077 : 1.0;
+            int num_bands_1 = (int)lrint(half_bands * invwarp * log2(k2 / (double)k1)) * 2;
             if (num_bands_1 <= 0 || num_bands_1 > 48)
                 return false;
             sbr_make_bands(vk1 + 1, k1, k2, num_bands_1);
@@ -179,7 +185,7 @@ static bool sbr_compute_bands(int sample_rate, const SbrSpectrum &sp, SbrBands &
     int kx = f_tablehigh[0];
     if (kx + m > 64 || kx > 32)
         return false;
-    int n_q = (int)lrintf(sp.noise_bands * log2f(k2 / (float)kx));
+    int n_q = (int)lrint(sp.noise_bands * log2(k2 / (double)kx));
     if (n_q < 1)
         n_q = 1;
     if (n_q > 5)

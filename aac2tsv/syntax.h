@@ -70,6 +70,8 @@ struct SbrCh {
 
 static const int8_t sbr_ceil_log2[] = { 0, 1, 2, 2, 3, 3 };
 
+static int debug_level = 0;   /* -vv: report payloads that are kept as hex */
+
 struct Codec {
     bool R = true;
 
@@ -93,6 +95,12 @@ struct Codec {
     /* per raw_data_block */
     int prev_che_type = -1, prev_che_tag = 0;
     std::vector<CrcReg> crcr;
+
+    /* c mode pre-scan: SBR payloads that came before any SBR header of their
+     * element, and the first header of each element */
+    int sbr_need[3][16] = {};
+    int sbr_found[3][16] = {};
+    SbrState sbr_first[3][16];
 
     ~Codec()
     {
@@ -1433,13 +1441,16 @@ struct Codec {
         }
         SbrState s = *ps;
         size_t mark = out->n, save_end = br.end;
+        const int k = (int)(ps - &st.sbr[0][0]) / 16, tag = prev_che_tag;
+        const bool had_hdr = s.have_hdr;
+        bool hdr = false;
         br.end = pend;
         try {
             size_t ri = out->n;
             rb(t == 14 ? R_SBRC : R_SBR);
             unsigned crc = t == 14 ? br.get(10) : 0;   /* bs_sbr_crc_bits */
             SbrSpectrum sp = {};
-            bool hdr = br.get1();   /* bs_header_flag */
+            hdr = br.get1();        /* bs_header_flag */
             if (hdr)
                 sbr_header(s, sp);
             sbr_tables(s, hdr, sp);
@@ -1455,7 +1466,15 @@ struct Codec {
                 out->recs[ri].i(crc);
             br.end = save_end;
             *ps = s;
-        } catch (ParseError &) {
+            if (!had_hdr && !sbr_found[k][tag]) {
+                sbr_found[k][tag] = 1;
+                sbr_first[k][tag] = s;
+            }
+        } catch (ParseError &e) {
+            if (debug_level)
+                fprintf(stderr, "SBR payload at bit %zu kept as hex: %s\n", start, e.msg);
+            if (!had_hdr && !hdr)
+                sbr_need[k][tag]++;
             out->n = mark;
             br.end = save_end;
             ext_raw(t, start, pend);
@@ -1500,6 +1519,30 @@ struct Codec {
         w->append(sub);
         *ps = s;
         return (int)(sub.pos / 8);
+    }
+
+    /* sbrinit record: an SBR header assumed for the payloads of an element
+     * that come before its first header (fields: element type 0 SCE, 1 CPE,
+     * 2 CCE, element_instance_tag, then as sbrh without the extra flags) */
+    static void sbr_assume(SbrState &s, int amp_res, const SbrSpectrum &sp)
+    {
+        memset(&s, 0, sizeof(s));
+        s.have_hdr = 1;
+        s.amp_res = amp_res;
+        s.sp = sp;   /* rate 0: the tables are computed when first used */
+    }
+    void sbrinit_w()
+    {
+        rb(R_SBRINIT);
+        int k = (int)geti(0, 2), tag = (int)geti(0, 15), amp = (int)geti(0, 1);
+        SbrSpectrum sp;
+        sp.start_freq = (int)geti(0, 15);
+        sp.stop_freq = (int)geti(0, 15);
+        sp.xover_band = (int)geti(0, 7);
+        sp.freq_scale = (int)geti(0, 3);
+        sp.alter_scale = (int)geti(0, 1);
+        sp.noise_bands = (int)geti(0, 3);
+        sbr_assume(st.sbr[k][tag], amp, sp);
     }
 
     /* ---------- raw_data_block ---------- */
