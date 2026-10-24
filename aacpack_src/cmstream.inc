@@ -155,6 +155,7 @@ struct Stats {
   uint64_t raw_bytes;   // coded as bytes
   uint64_t bad, unverified, rests;  // units that did not parse, did not come out as they were, kept partly as bits
   uint64_t assumed;     // SBR headers assumed
+  uint64_t ob[OB_N];    // the bits of the parts of the units coded, as they were (Walk::ob)
 
   void Init() { memset((void*)this, 0, sizeof *this); }
   void report(Progress* p) const {
@@ -164,6 +165,10 @@ struct Stats {
     say(p, "\n%" PRIu64 " bytes stored as they are; %" PRIu64 " frames that did not parse, %" PRIu64
            " that would not come out as they were, %" PRIu64 " kept partly as bits; %" PRIu64 " SBR headers assumed\n",
         raw_bytes, bad, unverified, rests, assumed);
+    const char* sep = "the parts, as they were:";
+    for (int k = 0; k < OB_N; k++)
+      if (ob[k]) say(p, "%s %s %.0f bytes", sep, kObName[k], ob[k] / 8.0), sep = ",";
+    if (sep[0] == ',') say(p, " (the signs a bit each, part of the spectra)\n");
   }
 };
 
@@ -461,6 +466,7 @@ struct Scanner {
       s->st.rests++;
       strict("parses only in part", nullptr);
     }
+    for (int k = 0; k < OB_N; k++) s->st.ob[k] += c.ob[k];
     flush_raw();
     c.st = before;
     m->unit(UF_KIND, last, kind);

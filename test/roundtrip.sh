@@ -1,6 +1,8 @@
 #!/bin/sh
 # roundtrip.sh BIN files... -- compress each file with BIN c, decompress it
-# with BIN d and compare; prints the sizes. Exit status 1 if any fails.
+# with BIN d and compare; prints the sizes. Exit status 1 if any fails. OPTS
+# are more options for c; a file named NAME.asc-HEX.raw is raw access units,
+# compressed with -asc HEX.
 BIN=$1
 shift
 tmp=${TMPDIR:-/tmp}/aacpack.$$
@@ -9,7 +11,11 @@ tin=0
 tout=0
 for f in "$@"; do
   [ -f "$f" ] || continue
-  if "$BIN" c $OPTS "$f" "$tmp.apk" 2> "$tmp.err" && "$BIN" d "$tmp.apk" "$tmp.out" 2>> "$tmp.err" && cmp -s "$f" "$tmp.out"; then
+  asc=
+  case "$f" in
+  *.asc-*.raw) asc="-asc $(echo "$f" | sed 's/.*\.asc-\([0-9a-fA-F]*\)\.raw$/\1/')" ;;
+  esac
+  if "$BIN" c $OPTS $asc "$f" "$tmp.apk" 2> "$tmp.err" && "$BIN" d "$tmp.apk" "$tmp.out" 2>> "$tmp.err" && cmp -s "$f" "$tmp.out"; then
     a=$(wc -c < "$f")
     b=$(wc -c < "$tmp.apk")
     tin=$((tin + a))

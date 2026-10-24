@@ -1,3 +1,4 @@
 /aacpack
 /aacpack.exe
 *.apk
+/test/corpus/

@@ -73,8 +73,12 @@ int main(int argc, char** argv) {
         uint8_t pad[sizeof opt.asc + 16];
         memset(pad, 0, sizeof pad);
         memcpy(pad, opt.asc, opt.asc_n);
-        if (!asc_parses(pad, 0, opt.asc_n * 8, false, ai) || !ai.raw_blocks || ai.er) {
-          fprintf(stderr, "aacpack: -asc: not the config of access units it parses (ER units cannot be back to back)\n");
+        const char* why = !asc_parses(pad, 0, opt.asc_n * 8, false, ai) ? "it does not parse, or is of a kind not known"
+                          : ai.er ? "ER access units have no END, so they cannot be told apart back to back (AUS1 can hold them)"
+                          : !ai.raw_blocks ? "its access units are not parsed (object type, or sampling rate)"
+                                           : nullptr;
+        if (why) {
+          fprintf(stderr, "aacpack: -asc %s: %s\n", argv[i], why);
           return 2;
         }
       } else {

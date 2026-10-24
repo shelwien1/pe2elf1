@@ -96,6 +96,10 @@ struct ChanData {
 // what the walk tells its channel it is at (Chan::note)
 enum { N_BLOCK, N_ICS, N_ICS_END, N_SBR, N_SBR_END, N_UNIT_END };
 
+// what the parts of a unit took in its bitstream (parsing; -v)
+enum { OB_SEC, OB_SF, OB_SPEC, OB_SIGN, OB_SBR, OB_N };
+static const char* const kObName[OB_N] = {"sections", "scalefactors", "spectra", "their signs", "SBR and PS"};
+
 static const int8_t sbr_ceil_log2[] = {0, 1, 2, 2, 3, 3};
 
 struct Walk {
@@ -138,6 +142,7 @@ struct Walk {
   ChanData cd[2];  // the channel element's channels
   int cur;         // cd[cur] is walked
   int rests;       // rests parsed (the compressor's -s, -v)
+  uint64_t ob[OB_N];  // the bits of the parts of the unit parsed (-v)
   int sbr_seen, ps_seen;  // SBR and PS payloads walked (what the stream is, -v)
 
   void Init() {
@@ -181,6 +186,7 @@ struct Walk {
     R = true;
     ch = c;
     buf = b;
+    memset(ob, 0, sizeof ob);
     begin();
     c->begin(*this);
   }
@@ -349,6 +355,7 @@ struct Walk {
   void section_data(ChanData& c) {
     const Ics& ii = c.ii;
     if (!ii.max_sfb) return;
+    const size_t p0 = br.pos;
     const int bits = ii.ws == EIGHT_SHORT_SEQUENCE ? 3 : 5, esc = (1 << bits) - 1;
     for (int g = 0; g < ii.num_groups; g++) {
       at.g = g;
@@ -383,6 +390,7 @@ struct Walk {
         k += len;
       }
     }
+    if (R) ob[OB_SEC] += br.pos - p0;
   }
 
   // the scalefactors, and each band's as the decoder has it (sf), from the
@@ -392,6 +400,7 @@ struct Walk {
     if (!ii.max_sfb) return;
     bool noise_pcm = true;
     int off_sf = c.gg, off_is = 0, off_noise = c.gg - 90;
+    const size_t p0 = br.pos;
     for (int g = 0; g < ii.num_groups; g++) {
       at.g = g;
       for (int sfb = 0; sfb < ii.max_sfb; sfb++) {
@@ -417,6 +426,7 @@ struct Walk {
         }
       }
     }
+    if (R) ob[OB_SF] += br.pos - p0;
   }
 
   void pulse_data() {
@@ -529,6 +539,7 @@ struct Walk {
     bool any = false;
     for (int k = 0; k < ii.num_groups * ii.max_sfb; k++) any |= c.bt[k] && c.bt[k] < 13;
     if (!any) return;
+    const size_t p0 = br.pos;
     int win = 0;
     for (int g = 0; g < ii.num_groups; g++) {
       at.g = g;
@@ -544,7 +555,10 @@ struct Walk {
           int* cc = c.coef + (win + wi) * 128;
           for (int k = a; k < b; k += dim) {
             at.k = k;
-            if (R) dec_tuple(cb, cc + k);
+            if (R) {
+              dec_tuple(cb, cc + k);
+              for (int j = 0; j < dim; j++) ob[OB_SIGN] += cc[k + j] != 0;
+            }
             ch->spec(cb, win + wi, k, cc + k, dim);
             if (!R) enc_tuple(cb, cc + k);
           }
@@ -552,6 +566,7 @@ struct Walk {
       }
       win += ii.group_len[g];
     }
+    if (R) ob[OB_SPEC] += br.pos - p0;
   }
 
   // individual_channel_stream(common_window, 0) of the channel cd[cur]
@@ -1304,6 +1319,7 @@ struct Walk {
     const bool had_hdr = s.have_hdr != 0;
     volatile bool hdr = false;
     br.end = pend;
+    ob[OB_SBR] += 8 * (size_t)n;
     ErrTrap tr;
     if (!setjmp(tr.jb)) {
       err_push(tr);
