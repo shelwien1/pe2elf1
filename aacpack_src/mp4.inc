@@ -166,7 +166,6 @@ struct Mp4Index {
   bool have;          // a moov box parsed
   uint64_t moof_end;  // where the last moof box parsed ends
   size_t next;        // the scan's next access unit
-  int cur;            // and the track whose config the walk has (-1 none)
 
   void Init() {
     s.Init();
@@ -184,7 +183,6 @@ struct Mp4Index {
     have = false;
     moof_end = 0;
     next = 0;
-    cur = -1;
   }
   void Quit() { s.Quit(); }
 
