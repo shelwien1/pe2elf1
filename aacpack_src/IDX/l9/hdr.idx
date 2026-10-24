@@ -21,7 +21,6 @@ Index a
 Index b
  b_tag: tag, &11111111
  b_p1r: p1r, &11111111
- b_pb: pb, 1!11111111
 
 Index c
  c_tag: tag, &11111111
@@ -45,6 +44,8 @@ Index h
 
 Index i
  i_tag: tag, &11111111
+ i_pb: pb, 1!11111111
+ i_p1r: p1r, &00000111
 
 Index j
  j_tag: tag, &11111111

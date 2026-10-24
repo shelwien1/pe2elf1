@@ -287,6 +287,7 @@ struct Model : tc_rc<f_DEC> {
     hl_.Init();
     lasttag_ = -1, runpos_ = 0;
     lastslot_ = lastfi_ = -1, lastv_ = 0;
+    res_.n = res_.bits = res_.first = 0, res_.last = -1, res_.unit = 0;
     hist_.Init();
     sbrh_.Init();
     memset((void*)cc_, 0, sizeof cc_);
@@ -452,6 +453,43 @@ struct Model : tc_rc<f_DEC> {
   int lasttag_, runpos_;
   int lastslot_, lastfi_;  // the last field's slot and index, and its value
   i64 lastv_;
+  // ADTS's adts_buffer_fullness, an encoder's bit reservoir after the frame
+  // in units of 32 bits a channel (0x7ff: none, VBR), given after the
+  // frame: the reservoir gains a mean frame's bits and loses the frame's.
+  // The mean from the frames since the first of the run (n of them after
+  // it, their bits): the fullness then is the first's, plus what n mean
+  // frames bring, less their bits
+  struct AdtsRes {
+    i64 n, bits, first, last;
+    int unit;
+  } res_;
+  i64 fullness_guess(const Walk& w) {
+    static const int kChans[8] = {0, 1, 2, 3, 4, 5, 6, 8};
+    AdtsRes& r = res_;
+    const int u = 32 * kChans[w.st.fixed.chan_config & 7];
+    if (!u || u != r.unit || r.last < 0 || r.last == 0x7ff) return r.last < 0 ? 0 : r.last;
+    if (!r.n) return r.last;
+    // last + (mean - bits) / u, mean = (bits so far + u (last - first)) / n: rounded
+    const i64 num = r.bits + (i64)u * (r.last - r.first) - (i64)w.fw.pos * r.n, den = (i64)u * r.n;
+    const i64 q = num >= 0 ? (2 * num + den) / (2 * den) : -((-2 * num + den) / (2 * den));
+    return tc_clamp(r.last + q, (i64)0, (i64)0x7fe);
+  }
+  void fullness_seen(const Walk& w, i64 x) {
+    static const int kChans[8] = {0, 1, 2, 3, 4, 5, 6, 8};
+    AdtsRes& r = res_;
+    const int u = 32 * kChans[w.st.fixed.chan_config & 7];
+    // (a run starts again where the fullness is none, the channels change, or it strays)
+    if (u != r.unit || r.last < 0 || x == 0x7ff || r.last == 0x7ff || (r.n && iabs((int)(x - fullness_guess(w))) > 64)) {
+      r.n = r.bits = 0;
+      r.first = x;
+      r.unit = u;
+    } else {
+      r.n++;
+      r.bits += (i64)w.fw.pos;
+      if (r.n > ((i64)1 << 20)) r.n /= 2, r.bits /= 2, r.first = x - (x - r.first) / 2;  // (no overflow)
+    }
+    r.last = x;
+  }
   i64 hdr_val(const Walk& w, int e, int n, i64 x, int i) {
     tc_stage = STG_HDR;
     double b0 = ENC && tc_verbose ? bits_now() : 0;
@@ -474,8 +512,11 @@ struct Model : tc_rc<f_DEC> {
     D.ws = e >= E_ELEM && cd.ii.num_windows ? cd.ii.ws : 4;
     D.ch = e >= E_ELEM ? w.at.chn : 2;
     D.pb = next ? 1 + (int)(lastv_ & 7) : 0;
-    // (the second channel's global_gain against the first's of its CPE)
-    const i64 base = e == E_GLOBAL_GAIN && w.at.type == TYPE_CPE && w.cur == 1 ? w.cd[0].gg : h.v;
+    // (the second channel's global_gain against the first's of its CPE; the
+    // fullness against its guess)
+    const i64 base = e == E_GLOBAL_GAIN && w.at.type == TYPE_CPE && w.cur == 1 ? w.cd[0].gg
+                     : e == E_ADTS_FULL                                         ? fullness_guess(w)
+                                                                                : h.v;
     // the sign by the element, and whether the value is at the bottom of its
     // range or at the top (a field's: a bit's change has one sign)
     const int bound = base <= 0 ? 1 : n > 0 && n < 32 && base >= ((i64)1 << n) - 1 ? 2 : 0;
@@ -488,6 +529,7 @@ struct Model : tc_rc<f_DEC> {
     h.d1 = d;
     h.v = x;
     lastslot_ = slot, lastfi_ = fi, lastv_ = x;
+    if (e == E_ADTS_FULL) fullness_seen(w, x);
     tc_syms[STG_HDR]++;
     if (ENC && tc_verbose) ebits_[e] += bits_now() - b0, esyms_[e]++;
     return x;

@@ -104,10 +104,9 @@ static void adts_frame(Walk& c, AdtsRegs& rg, size_t fs, size_t flen) {
   c.st.have_fixed = 1;
   cib = (int)c.pass(E_ADTS_CIB, 1, cib);
   cis = (int)c.pass(E_ADTS_CIS, 1, cis);
-  full = (int)c.pass(E_ADTS_FULL, 11, full);
   nrdb = (int)c.pass(E_ADTS_NRDB, 2, nrdb);
   BitWriter& w = c.fw;
-  size_t flpos = 0;
+  size_t flpos = 0;  // (and adts_buffer_fullness after it: given after the frame, which the model predicts it from)
   if (!c.R) {
     w.put(0xfff, 12);
     w.put(fx.id, 1);
@@ -176,6 +175,8 @@ static void adts_frame(Walk& c, AdtsRegs& rg, size_t fs, size_t flen) {
     size_t tn = (size_t)c.cnt(E_TAIL_N, c.R ? (int64_t)((fend - br.pos) / 8) : 0, 0, 8191);
     c.bitstr(E_TAIL, tn * 8);
   }
+  full = (int)c.pass(E_ADTS_FULL, 11, full);
+  if (!c.R) w.patch(flpos + 13, (uint32_t)full, 11);
 
   // the CRCs and block positions, where they are not the values computed
   // from the frame
