@@ -597,7 +597,8 @@ struct Scanner {
   // else is bytes
   bool mp4() {
     Mp4Index& x = s->mp4;
-    if (!mp4_start(win().at(pos), win().need(pos, 16))) return false;
+    size_t avail = win().need(pos, 16);  // (before at(): need() moves the window)
+    if (!mp4_start(win().at(pos), avail)) return false;
     if (!x.have && a->moov_n) x.parse(a->moov, a->moov_n, a->moov_at);
     x.next = 0;
     s->mc.Quit();
@@ -606,7 +607,8 @@ struct Scanner {
       uint64_t n;
       uint32_t t;
       size_t h;
-      if (!mp4_head(win().at(pos), win().need(pos, 16), n, t, h)) break;
+      avail = win().need(pos, 16);
+      if (!mp4_head(win().at(pos), avail, n, t, h)) break;
       const uint64_t end = n ? pos + n : ~(uint64_t)0;  // (0: to the end)
       if (t == fourcc("moov") && !x.have && n && n - h <= kMoovMax && win().need(pos, (size_t)n) == n)
         x.parse(win().at(pos) + h, (size_t)(n - h), pos + h);
