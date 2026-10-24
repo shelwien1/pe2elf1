@@ -131,12 +131,35 @@ struct Mp4Sample {
   uint32_t track;  // its track (Mp4Index::asc)
 };
 
+// What both the compressor and the decompressor know of an MP4 file's AAC
+// tracks: the lengths of each one's access units coded as units, in order
+// (for its stsz box, when that comes after them: U_STSZ), each one's
+// config once it is given (U_ASC), and the track the walk is configured
+// for (-1 none)
+struct Mp4Coded {
+  Buf<uint32_t> len[kMp4Tracks];
+  bool given[kMp4Tracks];
+  int cur;
+  void Init() {
+    for (auto& l : len) l.Init();
+    memset(given, 0, sizeof given);
+    cur = -1;
+  }
+  void Quit() {
+    for (auto& l : len) l.Quit();
+  }
+};
+
 // What the compressor knows of an MP4 file's AAC tracks
 struct Mp4Index {
   Buf<Mp4Sample> s;  // the access units, by place
   int ntracks;
   uint8_t asc[kMp4Tracks][kMp4AscMax + 16];  // each track's AudioSpecificConfig (16 zeros after it)
   size_t asc_n[kMp4Tracks];
+  uint64_t stsz_at[kMp4Tracks];  // the place of its stsz box's entries in the file, and their count (0: none)
+  uint32_t stsz_n[kMp4Tracks];
+  const uint8_t* p0;  // (parsing: the moov box's payload, and its place in the file)
+  uint64_t at0;
   uint32_t id[kMp4Tracks], sdi[kMp4Tracks];  // its track_ID, the index of its sample entry (1 on)
   uint32_t dsize[kMp4Tracks];                // the default sample size of its fragments (trex)
   uint64_t work;      // samples gone through in the tables (kMp4Work)
@@ -153,6 +176,10 @@ struct Mp4Index {
     memset(id, 0, sizeof id);
     memset(sdi, 0, sizeof sdi);
     memset(dsize, 0, sizeof dsize);
+    memset(stsz_at, 0, sizeof stsz_at);
+    memset(stsz_n, 0, sizeof stsz_n);
+    p0 = nullptr;
+    at0 = 0;
     work = 0;
     have = false;
     moof_end = 0;
@@ -161,12 +188,13 @@ struct Mp4Index {
   }
   void Quit() { s.Quit(); }
 
-  // the moov box's payload [p, p + n): its AAC tracks, and their defaults
-  // for fragments (mvex)
-  void parse(const uint8_t* p, size_t n) {
+  // the moov box's payload [p, p + n), at the place at in the file: its AAC
+  // tracks, and their defaults for fragments (mvex)
+  void parse(const uint8_t* p, size_t n, uint64_t at) {
     have = true;
     const uint8_t* e = p + n;
     Mp4Box b, tx;
+    p0 = p, at0 = at;
     for (const uint8_t* q = p; mp4_next(q, e, b);)
       if (b.t == fourcc("trak") && ntracks < kMp4Tracks) track(b.p, b.e);
     if (mp4_find(p, e, fourcc("mvex"), b))
@@ -290,6 +318,7 @@ struct Mp4Index {
       count = be32(sz.p + 8);
       szs = sz.p + 12;
       if (!fixed && (uint64_t)count * 4 > (uint64_t)(sz.e - szs)) return;
+      if (!fixed && count) stsz_at[t] = at0 + (uint64_t)(szs - p0), stsz_n[t] = count;
     } else if (mp4_find(stbl.p, stbl.e, fourcc("stz2"), sz) && sz.e - sz.p >= 12) {
       field = sz.p[7];
       count = be32(sz.p + 8);
@@ -375,7 +404,7 @@ struct Mp4Index {
 #define MP4_TELL _ftelli64
 #define MP4_SEEK _fseeki64
 #endif
-static void mp4_moov_ahead(FILE* f, uint64_t size, Buf<uint8_t>& moov) {
+static void mp4_moov_ahead(FILE* f, uint64_t size, Buf<uint8_t>& moov, uint64_t& moov_at) {
   if (!size || MP4_TELL(f) != 0) return;
   uint8_t h[16];
   uint64_t at = 0;
@@ -395,6 +424,7 @@ static void mp4_moov_ahead(FILE* f, uint64_t size, Buf<uint8_t>& moov) {
       if (mdat && n - hl <= kMoovMax && MP4_SEEK(f, (int64_t)(at + hl), SEEK_SET) == 0) {
         moov.resize((size_t)(n - hl));
         if (fread(moov.data(), 1, moov.size(), f) != moov.size()) moov.clear();
+        moov_at = at + hl;
       }
       break;
     }

@@ -126,7 +126,7 @@ struct CodeLv {
     // (an MP4 file's moov box after its mdat: read ahead, where the input is a file)
     Buf<uint8_t> moov;
     moov.Init();
-    if (!opt.asc_n && opt.format == F_AUTO) mp4_moov_ahead(f.f, file_size(f.f), moov);
+    if (!opt.asc_n && opt.format == F_AUTO) mp4_moov_ahead(f.f, file_size(f.f), moov, a.moov_at);
     a.moov = moov.data();
     a.moov_n = moov.size();
     uint64_t raw, packed, frames;

@@ -34,7 +34,7 @@ static const char* const kStage[STG_N] = {"units",   "bytes",   "fields", "secti
                                           "escapes", "signs",   "SBR",    "PS",       "payloads"};
 
 // the fields of the unt family: the stream's own
-enum { UF_KIND, UF_RAWN, UF_ASCN, UF_SBRN, UF_SBRI, UF_CRC, UF_N };
+enum { UF_KIND, UF_RAWN, UF_ASCN, UF_SBRN, UF_SBRI, UF_CRC, UF_TRACK, UF_STSZN, UF_STSZ, UF_N };
 
 // a signed value as a class: 0 zero, then -1, +1, -2, +2, -3..., by tc_qlog
 static INLINE int sq2(i64 d) { return d == 0 ? 0 : d > 0 ? 2 * tc_qlog(d) : 2 * tc_qlog(d) - 1; }
