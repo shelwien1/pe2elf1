@@ -820,7 +820,13 @@ struct Model : tc_rc<f_DEC> {
       H_esc_v E;
       E.kq = tc_qlog(k);
       E.a1 = k > 0 ? tc_qlog(iabs(cc[k - 1])) : 0;
-      E.pf = pp ? 1 + tc_qlog(iabs(pv)) : 0;
+      // (the last frame's value scaled by the band's scalefactor change, or in this frame's terms)
+      int pfs = iabs(pv);
+      if (conv[1] >= 0)
+        pfs = conv[1];
+      else if (pp && psf != INT_MIN)
+        pfs = (int)(((i64)iabs(pv) * kScale.v[tc_clamp(psf - sfc, -60, 60) + 60]) >> 12);
+      E.pf = pp ? 1 + tc_qlog(pfs) : 0;
       E.oc = o ? 1 + tc_qlog(iabs(oval)) : 0;
       E.ws = D.ws;
       E.la = tc_qlog(c.last_esc);
