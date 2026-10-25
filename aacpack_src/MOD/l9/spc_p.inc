@@ -79,8 +79,7 @@ void H9_spc_make( const H_spc_v & D, tcx & X ) {
 
   f = 0;
   f = f*11 + H9_spc_f_cb[__min(10,__max(0,(cb)-(1-1)))];
-  f = f*32 + H9_spc_f_av[__min(31,__max(0,(av)-(1-1)))];
-  f = f*4 + H9_spc_f_pf[__min(3,__max(0,(pf)-(1-1)))];
+  f = f*40 + H9_spc_f_xp[__min(39,__max(0,(xp)-(1-1)))];
 
   m = 0;
   m = m*11 + H9_spc_m_cb[__min(10,__max(0,(cb)-(1-1)))];

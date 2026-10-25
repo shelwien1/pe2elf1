@@ -61,10 +61,13 @@ constexpr int H_sbr_ND = TC_NODE, H_sbr_MND = TC_MNODE, H_sbr_NG = 64;
 //   the nonzero ones so far in the band (up to 7), ds the band's
 //   scalefactor less the last frame's (sq2), qn the band's magnitudes so
 //   far (tc_qlog of the sum), kq the place (tc_qlog), av the place's
-//   magnitude averaged over the frames (long windows: 1 + tc_qlog of 16
-//   times it; 0 not known)
+//   magnitude averaged over the frames (of short windows over the
+//   windows) as the band's scalefactor now quantizes it (1 + tc_qlog of 16
+//   times it; 0 not known), xp a guess at the magnitude from av, the last
+//   frame's (scaled), the two before it and the other channel's (1 +
+//   tc_qlog of a weighted sum)
 #define H_spc_VARS(X) \
-  X(cb) X(sb) X(bp) X(a1) X(a2) X(a3) X(pf) X(pn) X(ex) X(oc) X(ms) X(ws) X(tp) X(nz) X(ds) X(qn) X(kq) X(av)
+  X(cb) X(sb) X(bp) X(a1) X(a2) X(a3) X(pf) X(pn) X(ex) X(oc) X(ms) X(ws) X(tp) X(nz) X(ds) X(qn) X(kq) X(av) X(xp)
 // esc: an escaped magnitude of codebook 11, less 16: kq the place
 //   (tc_qlog), a1 the magnitude before (tc_qlog), pf the last frame's at
 //   the place (tc_qlog, 0 not known), oc the other channel's (tc_qlog + 1,

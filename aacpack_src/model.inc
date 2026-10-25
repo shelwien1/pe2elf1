@@ -288,9 +288,15 @@ struct ChanHist {
   uint8_t msb[64];      // long windows, of a CPE: the band was M/S
   int coef[1024];       // the spectral values
   // long windows: each place's magnitude, an average over the frames that
-  // fades by 3/4 a frame (in 1/16; mp3c's av_MDCT), of av_n frames of av_swb bands
+  // fades by 3/4 a frame (in 1/16; mp3c's av_MDCT), of av_n frames of av_swb
+  // bands, as the band's scalefactor avsf quantizes it (INT16_MIN: not coded)
   uint16_t av[1024];
+  int16_t avsf[64];
   int av_n, av_swb;
+  // and short windows' the same, over the windows (fading by 7/8 a window)
+  uint16_t av8[128];
+  int16_t av8sf[16];
+  int av8_n, av8_swb;
 };
 // and what it keeps of a channel as it is coded
 struct CurChan {
@@ -496,12 +502,44 @@ struct Model : tc_rc<f_DEC> {
         for (int b = 0; b < d.ii.max_sfb && b < 64; b++) h.msb[b] = d0.ms[b];
       memcpy(h.coef, d.coef, sizeof h.coef);
       if (d.ii.num_windows == 1) {
-        if (h.av_swb != d.ii.num_swb) memset(h.av, 0, sizeof h.av), h.av_n = 0, h.av_swb = d.ii.num_swb;
-        for (int k = 0; k < 1024; k++) {
-          const int m = Min(iabs(d.coef[k]), 4095);
-          h.av[k] = (uint16_t)Min(65535, h.av[k] - (h.av[k] >> 2) + 4 * m);
+        if (h.av_swb != d.ii.num_swb) {
+          memset(h.av, 0, sizeof h.av), h.av_n = 0, h.av_swb = d.ii.num_swb;
+          for (int b = 0; b < 64; b++) h.avsf[b] = INT16_MIN;
+        }
+        for (int b = 0; b < d.ii.num_swb && b < 64; b++) {
+          // (a band coded now: the average to its scalefactor first)
+          int f = 4096;
+          if (b < d.ii.max_sfb && d.bt[b] && d.bt[b] < 13) {
+            if (h.avsf[b] != INT16_MIN) f = kScale.v[tc_clamp(h.avsf[b] - d.sf[b], -60, 60) + 60];
+            h.avsf[b] = d.sf[b];
+          }
+          for (int k = d.ii.swb[b]; k < d.ii.swb[b + 1]; k++) {
+            const i64 m = Min(iabs(d.coef[k]), 4095), v = ((i64)h.av[k] * f) >> 12;
+            h.av[k] = (uint16_t)Min<i64>(65535, v - (v >> 2) + 4 * m);
+          }
         }
         h.av_n = Min(h.av_n + 1, 1 << 20);
+      } else {
+        if (h.av8_swb != d.ii.num_swb) {
+          memset(h.av8, 0, sizeof h.av8), h.av8_n = 0, h.av8_swb = d.ii.num_swb;
+          for (int b = 0; b < 16; b++) h.av8sf[b] = INT16_MIN;
+        }
+        for (int wn = 0, g = 0, x = d.ii.group_len[0]; wn < 8; wn++) {
+          if (wn >= x && g < d.ii.num_groups - 1) x += d.ii.group_len[++g];
+          for (int b = 0; b < d.ii.num_swb && b < 16; b++) {
+            int f = 4096;
+            const int i = g * d.ii.max_sfb + b;
+            if (b < d.ii.max_sfb && d.bt[i] && d.bt[i] < 13) {
+              if (h.av8sf[b] != INT16_MIN) f = kScale.v[tc_clamp(h.av8sf[b] - d.sf[i], -60, 60) + 60];
+              h.av8sf[b] = d.sf[i];
+            }
+            for (int k = d.ii.swb[b]; k < d.ii.swb[b + 1]; k++) {
+              const i64 m = Min(iabs(d.coef[wn * 128 + k]), 4095), v = ((i64)h.av8[k] * f) >> 12;
+              h.av8[k] = (uint16_t)Min<i64>(65535, v - (v >> 3) + 2 * m);
+            }
+          }
+        }
+        h.av8_n = Min(h.av8_n + 1, 1 << 20);
       }
     }
   }
@@ -819,9 +857,31 @@ struct Model : tc_rc<f_DEC> {
     D.nz = Min(c.bnz, 7);
     D.qn = tc_qlog(c.bsum);
     D.kq = tc_qlog(k);
+    D.av = 0;
+    i64 avs = 0;
     {
       const ChanHist& hh = hist_[c.slot];
-      D.av = ii.ws != EIGHT_SHORT_SEQUENCE && hh.av_n && hh.av_swb == ii.num_swb ? 1 + Min(tc_qlog(hh.av[k]), 30) : 0;
+      if (ii.ws != EIGHT_SHORT_SEQUENCE && hh.av_n && hh.av_swb == ii.num_swb) {
+        i64 v = hh.av[k];
+        if (hh.avsf[sfb] != INT16_MIN) v = (v * kScale.v[tc_clamp(hh.avsf[sfb] - sfc, -60, 60) + 60]) >> 12;
+        D.av = 1 + Min(tc_qlog(v), 30);
+        avs = v;
+      } else if (ii.ws == EIGHT_SHORT_SEQUENCE && hh.av8_n && hh.av8_swb == ii.num_swb && sfb < 16) {
+        i64 v = hh.av8[k];
+        if (hh.av8sf[sfb] != INT16_MIN) v = (v * kScale.v[tc_clamp(hh.av8sf[sfb] - sfc, -60, 60) + 60]) >> 12;
+        D.av = 1 + Min(tc_qlog(v), 30);
+        avs = v;
+      }
+    }
+    // (the last frame's value scaled by the band's scalefactor change, or in this frame's terms)
+    int pfs = iabs(pv);
+    if (conv[1] >= 0)
+      pfs = conv[1];
+    else if (pp && psf != INT_MIN)
+      pfs = (int)(((i64)iabs(pv) * kScale.v[tc_clamp(psf - sfc, -60, 60) + 60]) >> 12);
+    {
+      i64 e = avs + (pp ? 16 * (i64)pfs : 0) + 8 * (i64)(k > 0 ? iabs(cc[k - 1]) : 0) + 8 * (i64)(k > 1 ? iabs(cc[k - 2]) : 0) + (o ? 16 * (i64)iabs(oval) : 0);
+      D.xp = 1 + Min(tc_qlog(e), 39);
     }
     tcx X;
     f_spc.make(D, X);
@@ -836,12 +896,6 @@ struct Model : tc_rc<f_DEC> {
       H_esc_v E;
       E.kq = tc_qlog(k);
       E.a1 = k > 0 ? tc_qlog(iabs(cc[k - 1])) : 0;
-      // (the last frame's value scaled by the band's scalefactor change, or in this frame's terms)
-      int pfs = iabs(pv);
-      if (conv[1] >= 0)
-        pfs = conv[1];
-      else if (pp && psf != INT_MIN)
-        pfs = (int)(((i64)iabs(pv) * kScale.v[tc_clamp(psf - sfc, -60, 60) + 60]) >> 12);
       E.pf = pp ? 1 + tc_qlog(pfs) : 0;
       E.oc = o ? 1 + tc_qlog(iabs(oval)) : 0;
       E.ws = D.ws;
