@@ -20,13 +20,13 @@ for f in "$@"; do
     b=$(wc -c < "$tmp.apk")
     tin=$((tin + a))
     tout=$((tout + b))
-    printf 'ok    %10d %10d %6.2f%%  %s\n' "$a" "$b" "$(echo "100 * $b / $a" | bc -l)" "$f"
+    printf 'ok    %10d %10d %7s  %s\n' "$a" "$b" "$(awk "BEGIN { if ($a) printf \"%.2f%%\", 100 * $b / $a; else print \"-\" }")" "$f"
   else
     echo "FAIL  $f"
     sed 's/^/      /' "$tmp.err"
     fail=1
   fi
 done
-[ "$tin" -gt 0 ] && printf 'total %10d %10d %6.2f%%\n' "$tin" "$tout" "$(echo "100 * $tout / $tin" | bc -l)"
+[ "$tin" -gt 0 ] && printf 'total %10d %10d %6.2f%%\n' "$tin" "$tout" "$(awk "BEGIN { print 100 * $tout / $tin }")"
 rm -f "$tmp.apk" "$tmp.out" "$tmp.err"
 exit $fail
