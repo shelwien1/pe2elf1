@@ -836,7 +836,8 @@ struct Model : tc_rc<f_DEC> {
       D.a3 = tc_qlog(s);
     }
     D.pf = pp ? 1 + Min(iabs(pv), 14) : 0;
-    D.pn = pp ? 1 + tc_qlog(iabs(k > 0 ? pp[k - 1] : 0) + 2 * iabs(pv) + iabs(k < 1023 ? pp[k + 1] : 0)) : 0;
+    const int klast = ii.ws == EIGHT_SHORT_SEQUENCE ? 127 : 1023;  // (the window's last place)
+    D.pn = pp ? 1 + tc_qlog(iabs(k > 0 ? pp[k - 1] : 0) + 2 * iabs(pv) + iabs(k < klast ? pp[k + 1] : 0)) : 0;
     if (conv[1] >= 0) {  // (the values converted: their scale is this band's already)
       D.pf = 1 + Min(conv[1], 14);
       D.pn = 1 + tc_qlog(Max(conv[0], 0) + 2 * conv[1] + Max(conv[2], 0));
