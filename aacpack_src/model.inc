@@ -57,6 +57,50 @@ static ScaleTab scale_make() {
 }
 static const ScaleTab kScale = scale_make();
 
+// |q|^(4/3) in Q4 for |q| < 2048, by integer cube roots (the same everywhere,
+// as the model must be); and 2^(x / 4) for x mod 4, in Q16
+struct Pow43Tab {
+  uint32_t v[2048];
+  void Init() {
+    for (u64 q = 0; q < 2048; q++) {
+      const u64 x = q * q * q * q * 4096;  // (q^(4/3) * 16 = cbrt(q^4 * 16^3))
+      u64 lo = 0, hi = (u64)1 << 21;
+      while (lo < hi) {  // the largest r with r^3 <= x
+        u64 mid = (lo + hi + 1) / 2;
+        if (mid * mid * mid <= x) lo = mid; else hi = mid - 1;
+      }
+      v[q] = (uint32_t)(x - lo * lo * lo > (lo + 1) * (lo + 1) * (lo + 1) - x ? lo + 1 : lo);
+    }
+  }
+};
+static Pow43Tab pow43_make() {
+  Pow43Tab t;
+  t.Init();
+  return t;
+}
+static const Pow43Tab kPow43 = pow43_make();
+static const int kFrac4[4] = {65536, 77936, 92682, 110218};
+// a quantized value q as the decoder has it, sign(q) |q|^(4/3) 2^(d / 4),
+// in Q20 (d: its band's scalefactor less the one it is compared with, -60..60)
+static INLINE i64 lin_q(int q, int d) {
+  const int a = q < 0 ? (q < -2047 ? 2047 : -q) : (q > 2047 ? 2047 : q);
+  i64 v = (i64)kPow43.v[a] * kFrac4[d & 3];
+  const int sh = d >> 2;
+  v = sh >= 0 ? v << sh : v >> -sh;
+  return q < 0 ? -v : v;
+}
+// and back: the magnitude whose |q|^(4/3) is nearest |v|
+static INLINE int q_of_lin(i64 v) {
+  const i64 t = (v < 0 ? -v : v) >> 16;
+  int lo = 0, hi = 2047;
+  while (lo < hi) {
+    int mid = (lo + hi) / 2;
+    if ((i64)kPow43.v[mid] < t) lo = mid + 1; else hi = mid;
+  }
+  if (lo > 0 && t - (i64)kPow43.v[lo - 1] < (i64)kPow43.v[lo] - t) lo--;
+  return lo;
+}
+
 // Bytes nothing else models (h264p's RawModel, without its dictionary): an
 // order 0 and an order 1 counter and a match model mixed by a weight set
 // the bits of the byte so far select: the match finds the last three bytes
@@ -241,6 +285,7 @@ struct ChanHist {
   int16_t sf[8 * 64];   // and its scalefactor (Walk's ChanData::sf)
   int8_t sfd[8 * 64];   // its scalefactor's delta as coded (0 none)
   uint8_t secb[8 * 64]; // a section starts at the band
+  uint8_t msb[64];      // long windows, of a CPE: the band was M/S
   int coef[1024];       // the spectral values
 };
 // and what it keeps of a channel as it is coded
@@ -322,6 +367,7 @@ struct Model : tc_rc<f_DEC> {
     raw_.start();
     hist_.resize(kSlots);
     sbrh_.resize(kSlots);
+    memset((void*)&last0_, 0, sizeof last0_);
   }
   u64 table_bytes() const {
     u64 n = 0;
@@ -386,6 +432,7 @@ struct Model : tc_rc<f_DEC> {
   }
   Buf<ChanHist> hist_;
   CurChan cc_[2];  // the channel element's channels as they are coded
+  ChanHist last0_;  // a CPE's first channel's last frame, as its second is coded (hist_ has this one's)
   // the walk's channel, its record of the last frame (valid: one the
   // current frame's bands can be read against), the other channel of the CPE
   static const ChanData& wcd(const Walk& w) { return w.cd[w.cur]; }
@@ -411,6 +458,7 @@ struct Model : tc_rc<f_DEC> {
     if (what == N_ICS) {
       CurChan& c = cur(w);
       c.slot = slot_of(w);
+      if (w.at.type == TYPE_CPE && w.at.chn == 0) last0_ = hist_[c.slot];
       c.off[0] = c.off[1] = c.off[2] = 0;
       for (int k = 0; k < 3; k++) c.d1[k] = c.d2[k] = 0;
       c.pc = 16;
@@ -438,6 +486,10 @@ struct Model : tc_rc<f_DEC> {
       memcpy(h.sf, d.sf, (size_t)nb * sizeof(int16_t));
       memcpy(h.sfd, c.sfd, sizeof h.sfd);
       memcpy(h.secb, c.secb, sizeof h.secb);
+      memset(h.msb, 0, sizeof h.msb);
+      const ChanData& d0 = w.cd[0];
+      if (w.at.type == TYPE_CPE && d0.ms_present && d.ii.num_windows == 1)
+        for (int b = 0; b < d.ii.max_sfb && b < 64; b++) h.msb[b] = d0.ms[b];
       memcpy(h.coef, d.coef, sizeof h.coef);
     }
   }
@@ -695,6 +747,30 @@ struct Model : tc_rc<f_DEC> {
     const ChanData* o = other_of(w);
     const int oval = o ? o->coef[win * 128 + k] : 0;
     const int pv = pp ? pp[k] : 0;
+    // A CPE's band of long windows, M/S now and L/R in the last frame or the
+    // other way: the last frame's values about the place in this frame's
+    // terms (L = M + S, R = M - S; M = (L + R) / 2, S = (L - R) / 2), from both
+    // channels' values and scalefactors there, as this band quantizes them
+    int conv[3] = {-1, -1, -1};
+    if (ii.ws != EIGHT_SHORT_SEQUENCE && h && w.at.type == TYPE_CPE && sfb < h->max_sfb) {
+      const ChanData& d0 = w.cd[0];
+      const int now = d0.ms_present ? d0.ms[sfb] : 0;
+      const ChanHist* o0 = w.at.chn ? &last0_ : &hist_[c.slot];
+      const ChanHist* o1 = &hist_[c.slot | 1];
+      auto coded = [&](const ChanHist* x) {
+        return x->valid && x->num_windows == 1 && x->num_swb == ii.num_swb && sfb < x->max_sfb && x->bt[sfb] &&
+               x->bt[sfb] < 13;
+      };
+      if (now != h->msb[sfb] && coded(o0) && coded(o1)) {
+        const int d0s = tc_clamp(o0->sf[sfb] - sfc, -60, 60), d1s = tc_clamp(o1->sf[sfb] - sfc, -60, 60);
+        for (int j = -1; j <= 1; j++) {
+          if (k + j < 0 || k + j > 1023) continue;
+          const i64 x0 = lin_q(o0->coef[k + j], d0s), x1 = lin_q(o1->coef[k + j], d1s);
+          const i64 y = w.at.chn ? x0 - x1 : x0 + x1;
+          conv[j + 1] = q_of_lin(now ? y / 2 : y);
+        }
+      }
+    }
 
     tc_stage = STG_SPEC;
     H_spc_v D;
@@ -710,7 +786,12 @@ struct Model : tc_rc<f_DEC> {
     }
     D.pf = pp ? 1 + Min(iabs(pv), 14) : 0;
     D.pn = pp ? 1 + tc_qlog(iabs(k > 0 ? pp[k - 1] : 0) + 2 * iabs(pv) + iabs(k < 1023 ? pp[k + 1] : 0)) : 0;
-    if (pp && psf != INT_MIN) {
+    if (conv[1] >= 0) {  // (the values converted: their scale is this band's already)
+      D.pf = 1 + Min(conv[1], 14);
+      D.pn = 1 + tc_qlog(Max(conv[0], 0) + 2 * conv[1] + Max(conv[2], 0));
+      D.ex = 1 + tc_qlog((i64)4 * conv[1]);
+      D.ds = psf != INT_MIN ? 1 + sq2(sfc - psf) : 0;
+    } else if (pp && psf != INT_MIN) {
       int dsf = tc_clamp(psf - sfc, -60, 60);
       D.ex = 1 + tc_qlog(((i64)4 * iabs(pv) * kScale.v[dsf + 60]) >> 12);
       D.ds = 1 + sq2(sfc - psf);
