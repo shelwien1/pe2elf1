@@ -182,11 +182,11 @@ header from the start, and puts it in the compressed stream's own header.
 Memory does not grow with the stream: `c` holds a window of the input
 (a unit at most 1 MB, and at the start what the read-ahead for SBR
 headers read: up to 1000 units, or 8 MB of bytes that are not AAC), and
-`d` a unit's output. The model's tables are a
-fixed 20 MB of address space, of which a run touches what its stream
-needs (about 11 MB of memory in all for a stereo stream). `c` and `d`
-are coroutines (h264p's Lib3) that ask their driver for
-input and give it output, so pipes of any length work.
+`d` a unit's output. The model's tables are a fixed 20 MB of address
+space, of which a run touches what its stream needs (about 11 MB of
+memory in all for a stereo stream). `c` and `d` are coroutines (h264p's
+Lib3) that ask their driver for input and give it output, so pipes of
+any length work.
 
 ## Results
 
@@ -231,13 +231,13 @@ HE-AAC, ffmpeg's and faac's encoders.
     make test
 
 makes a corpus in `test/corpus` (`test/gen.sh`, which needs ffmpeg and
-python3, if it is not there: a test signal through ffmpeg's AAC encoder as ADTS, LATM, LOAS v1, ADIF,
-AUS1 and raw access units, LC, Main, LTP, mono, 5.1,
-PNS, intensity and TNS; with fdkaac and faac too, if present: HE-AAC,
-HE-AACv2, LD, ELD, CRC, VBR). It round-trips every file through `c` and
-`d` (`test/roundtrip.sh`, which takes any files: `test/roundtrip.sh
-./aacpack *.aac`), then runs `test/check.sh`: no input, random bytes,
-pipes, a stream cut short or with junk in it, strict
+python3, if it is not there: a test signal through ffmpeg's AAC encoder
+as ADTS, LATM, LOAS v1, ADIF, AUS1 and raw access units, LC, Main, LTP,
+mono, 5.1, PNS, intensity and TNS; with fdkaac and faac too, if present:
+HE-AAC, HE-AACv2, LD, ELD, CRC, VBR). It round-trips every file through
+`c` and `d` (`test/roundtrip.sh`, which takes any files:
+`test/roundtrip.sh ./aacpack *.aac`), then runs `test/check.sh`: no
+input, random bytes, pipes, a stream cut short or with junk in it, strict
 mode, and compressed streams cut short, with a byte changed, with bytes
 after them, or not compressed streams at all.
 
