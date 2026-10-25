@@ -89,8 +89,8 @@
 #include "famvars.inc"
 #include "model.inc"
 
-// the front end: a call's options, progress and files, the compressed
-// stream, the coroutines and the calls
+// the front end: a call's options, progress and files, MP4 files' tracks,
+// the compressed stream, the coroutines and the calls
 #include "cli.inc"
 #include "mp4.inc"
 #include "cmstream.inc"

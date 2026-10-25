@@ -8,11 +8,12 @@
 // of -asc, if any, and the SBR headers assumed for the elements whose first
 // SBR payloads come before their first header; then each unit's kind (the
 // end, bytes, an ADTS or LOAS frame, an ADIF header, a raw_data_block, the
-// AUS1 header or one of its access units) and the unit: its syntax through
-// the model, or (bytes) their count and the bytes; and the CRC-32 of the
-// stream. What the compressor finds of no container (tags, junk, frames that
-// do not parse or would not come out as they were) is bytes, in chunks of at
-// most kChunk.
+// AUS1 header or one of its access units, an MP4 track's config, access
+// unit or stsz entries) and the unit: its syntax through the model, or
+// (bytes) their count and the bytes; and the CRC-32 of the stream. What the
+// compressor finds of no container (tags, junk, frames that do not parse or
+// would not come out as they were, an MP4 file's boxes) is bytes, in chunks
+// of at most kChunk.
 
 namespace aacpack {
 
