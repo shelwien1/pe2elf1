@@ -571,6 +571,7 @@ struct Model : tc_rc<f_DEC> {
                                                                                 : h.v;
     // the sign by the element, and whether the value is at the bottom of its
     // range or at the top (a field's: a bit's change has one sign)
+    static_assert(E_N <= H_hdr_NG / 3, "the fields' sign contexts: 3 an element");
     const int bound = base <= 0 ? 1 : n > 0 && n < 32 && base >= ((i64)1 << n) - 1 ? 2 : 0;
     tcx X;
     f_hdr.make(D, X);
