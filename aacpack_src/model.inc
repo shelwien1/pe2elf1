@@ -287,6 +287,10 @@ struct ChanHist {
   uint8_t secb[8 * 64]; // a section starts at the band
   uint8_t msb[64];      // long windows, of a CPE: the band was M/S
   int coef[1024];       // the spectral values
+  // long windows: each place's magnitude, an average over the frames that
+  // fades by 3/4 a frame (in 1/16; mp3c's av_MDCT), of av_n frames of av_swb bands
+  uint16_t av[1024];
+  int av_n, av_swb;
 };
 // and what it keeps of a channel as it is coded
 struct CurChan {
@@ -491,6 +495,14 @@ struct Model : tc_rc<f_DEC> {
       if (w.at.type == TYPE_CPE && d0.ms_present && d.ii.num_windows == 1)
         for (int b = 0; b < d.ii.max_sfb && b < 64; b++) h.msb[b] = d0.ms[b];
       memcpy(h.coef, d.coef, sizeof h.coef);
+      if (d.ii.num_windows == 1) {
+        if (h.av_swb != d.ii.num_swb) memset(h.av, 0, sizeof h.av), h.av_n = 0, h.av_swb = d.ii.num_swb;
+        for (int k = 0; k < 1024; k++) {
+          const int m = Min(iabs(d.coef[k]), 4095);
+          h.av[k] = (uint16_t)Min(65535, h.av[k] - (h.av[k] >> 2) + 4 * m);
+        }
+        h.av_n = Min(h.av_n + 1, 1 << 20);
+      }
     }
   }
 
@@ -807,6 +819,10 @@ struct Model : tc_rc<f_DEC> {
     D.nz = Min(c.bnz, 7);
     D.qn = tc_qlog(c.bsum);
     D.kq = tc_qlog(k);
+    {
+      const ChanHist& hh = hist_[c.slot];
+      D.av = ii.ws != EIGHT_SHORT_SEQUENCE && hh.av_n && hh.av_swb == ii.num_swb ? 1 + Min(tc_qlog(hh.av[k]), 30) : 0;
+    }
     tcx X;
     f_spc.make(D, X);
     f_spc.select(X);
@@ -831,6 +847,7 @@ struct Model : tc_rc<f_DEC> {
       E.ws = D.ws;
       E.la = tc_qlog(c.last_esc);
       E.sb = sfb;
+      E.av = D.av;
       tcx Y;
       f_esc.make(E, Y);
       i64 r = f_esc.code(Y, ENC ? m - 16 : 0);

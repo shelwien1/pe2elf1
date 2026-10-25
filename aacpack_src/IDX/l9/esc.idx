@@ -2,7 +2,8 @@
 #  less 16.  kq its place (tc_qlog), a1 the magnitude before it (tc_qlog), pf
 #  the channel's last frame's at the place (1 + tc_qlog; 0 not known), oc
 #  the CPE's other channel's (1 + tc_qlog; 0 none), ws long 0 short 1, la the
-#  channel's last escape (tc_qlog), sb the band.
+#  channel's last escape (tc_qlog), sb the band, av spc's: the place's
+#  magnitude averaged over the frames.
 #  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates MOD/l9 from
 #  this file and family.inc.
 
@@ -51,9 +52,11 @@ Index l
 
 Index s
  s_a1: a1, 1!11111
+ s_av: av, 1!1111111111111111111111111111111
 
 Index f
  f_pf: pf, 1!11111
+ f_av: av, 1!1010101010101010101010101010101
 
 Index m
  m_ws: ws, 1!1

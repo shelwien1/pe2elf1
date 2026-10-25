@@ -26,7 +26,7 @@ void H9_spc_make( const H_spc_v & D, tcx & X ) {
 
   b = 0;
   b = b*11 + H9_spc_b_cb[__min(10,__max(0,(cb)-(1-1)))];
-  b = b*20 + H9_spc_b_kq[__min(19,__max(0,(kq)-(1-1)))];
+  b = b*32 + H9_spc_b_av[__min(31,__max(0,(av)-(1-1)))];
   b = b*4 + H9_spc_b_a1[__min(3,__max(0,(a1)-(1-1)))];
 
   c = 0;
@@ -74,15 +74,18 @@ void H9_spc_make( const H_spc_v & D, tcx & X ) {
 
   s = 0;
   s = s*11 + H9_spc_s_cb[__min(10,__max(0,(cb)-(1-1)))];
+  s = s*32 + H9_spc_s_av[__min(31,__max(0,(av)-(1-1)))];
   s = s*4 + H9_spc_s_a1[__min(3,__max(0,(a1)-(1-1)))];
 
   f = 0;
   f = f*11 + H9_spc_f_cb[__min(10,__max(0,(cb)-(1-1)))];
+  f = f*32 + H9_spc_f_av[__min(31,__max(0,(av)-(1-1)))];
   f = f*4 + H9_spc_f_pf[__min(3,__max(0,(pf)-(1-1)))];
 
   m = 0;
   m = m*11 + H9_spc_m_cb[__min(10,__max(0,(cb)-(1-1)))];
   m = m*2 + (((ws)>0+(1-1)));
+  m = m*8 + H9_spc_m_av[__min(28,__max(0,(av)-(1-1)))];
 
   w = 0;
   w = w*8 + H9_spc_w_a1[__min(7,__max(0,(a1)-(1-1)))];

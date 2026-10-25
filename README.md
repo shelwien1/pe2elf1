@@ -119,9 +119,11 @@ contexts and parameters (`famvars.inc`, `model.inc`):
   its codebook and the magnitudes before it in the window. Other
   contexts are the magnitudes at its place in the channel's last frame,
   scaled by the change of the band's scalefactor; the other channel of a
-  CPE at its place; its place in the band and the tuple; and the band's
-  magnitudes so far. Escapes of codebook 11 are coded as numbers, under
-  the last frame's.
+  CPE at its place; its place in the band and the tuple; the band's
+  magnitudes so far; and the magnitude at its place averaged over the
+  earlier frames, each counting 3/4 of the one after it (mp3c's
+  `av_MDCT`), which also selects mixer weights. Escapes of codebook 11
+  are coded as numbers, under the last frame's and that average.
 - **signs** (`sgn`): under the signs before, the other channel's, and
   the last frame's at the place. They come out at about a bit each: the
   signs of MDCT coefficients are close to random. A per-line predictor

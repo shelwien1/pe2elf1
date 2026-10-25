@@ -9,7 +9,8 @@
 #  place in the codebook's tuple, nz the nonzero ones so far in the band (up
 #  to 7), ds the band's scalefactor less the last frame's (1 + sq2; 0 not
 #  known), qn the band's magnitudes so far (tc_qlog of the sum), kq the
-#  place (tc_qlog).
+#  place (tc_qlog), av the place's magnitude averaged over the frames (long
+#  windows: 1 + tc_qlog of 16 times it; 0 not known).
 #  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates MOD/l9 from
 #  this file and family.inc.
 
@@ -24,7 +25,7 @@ Index a
 
 Index b
  b_cb: cb, 1!1111111111
- b_kq: kq, 1!1111111111111111111
+ b_av: av, 1!1111111111111111111111111111111
  b_a1: a1, 1!111
 
 Index c
@@ -72,15 +73,18 @@ Index l
 
 Index s
  s_cb: cb, 1!1111111111
+ s_av: av, 1!1111111111111111111111111111111
  s_a1: a1, 1!111
 
 Index f
  f_cb: cb, 1!1111111111
+ f_av: av, 1!1111111111111111111111111111111
  f_pf: pf, 1!111
 
 Index m
  m_cb: cb, 1!1111111111
  m_ws: ws, 1!1
+ m_av: av, 1!0001000100010001000100010001
 
 Index w
  w_a1: a1, 1!1111111
