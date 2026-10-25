@@ -178,6 +178,7 @@ struct RawModel {
   void Init() {
     memset(o0_, 0, sizeof o0_);
     memset(o1_, 0, sizeof o1_);
+    o2_ = nullptr;
     memset(w_, 0, sizeof w_);
     memset(wc_, 0, sizeof wc_);
     prev_ = 0;
@@ -190,6 +191,7 @@ struct RawModel {
     seen_.Init();
   }
   void Quit() {
+    if (o2_) tc_unmap(o2_, kO2 * sizeof(cm_cnt)), o2_ = nullptr;
     mem_free(ring_);
     ring_ = nullptr;
     hash_.Quit();
@@ -199,15 +201,20 @@ struct RawModel {
     mx_.init(w_, wc_);
     pos_ = 0;
     if (!ring_) ring_ = (u8*)mem_alloc(kRing);  // (its pages taken as they are written)
+    if (!o2_) o2_ = (cm_cnt*)tc_map(kO2 * sizeof(cm_cnt));
     hash_.fill((size_t)1 << 16, -1);
     len_ = 0;
   }
 
   cm_cnt o0_[256];
   cm_cnt o1_[256][256];
-  i32 w_[256 * 4];
+  // order 2: by the two bytes before, hashed into kO2 counters (mapped: zero)
+  static constexpr int kO2Bits = 22;
+  static constexpr u32 kO2 = 1u << kO2Bits;
+  cm_cnt* o2_;
+  i32 w_[256 * 5];
   u8 wc_[256];
-  cm_mix<4> mx_;
+  cm_mix<5> mx_;
   u32 prev_;
   // the bytes coded: the one at place a at ring_[a % kRing], while a is
   // one of the last kRing places
@@ -225,7 +232,8 @@ struct RawModel {
   }
   // a byte coded (its value b coding; decoding, returned), by the coder rc
   u32 code(tc_rc<f_DEC>* rc, u32 b) {
-    cm_cnt* row = o1_[prev_];
+    cm_cnt* row = o1_[prev_ & 255];
+    const u32 h2 = (prev_ & 0xffff) * 0x9E3779B1u;
     u32 node = 1;
     int pbyte = len_ && ptr_ < pos_ && pos_ - ptr_ <= kRing ? at(ptr_) : -1, ml = len_;
     for (int i = 7; i >= 0; i--) {
@@ -238,16 +246,19 @@ struct RawModel {
       if (pbyte >= 0 && (u32)(pbyte | 256) >> (i + 1) == node) mb = pbyte >> i & 1;
       int sm = mb < 0 ? 0 : cm_stretch(mc_[ml].P());
       mx_.set(3, mb < 0 ? 0 : mb ? sm : -sm);
+      cm_cnt& c2 = o2_[(h2 + node * 0x85EBCA77u) >> (32 - kO2Bits)];
+      mx_.set(4, c2.t ? cm_stretch(c2.P()) : 0);
       int bit = tc_bit(rc, mx_.mix(node), (int)(ENC && ((b >> i) & 1)));
       mx_.upd(bit, 24, 0);
       c0.upd(bit, 250, 0);
       c1.upd(bit, 60, 0);
+      c2.upd(bit, 30, 0);
       if (mb >= 0) mc_[ml].upd(bit == mb, 250, 0);
       o0_[node] = c0;
       row[node] = c1;
       node = node * 2 + (u32)bit;
     }
-    prev_ = node & 255;
+    prev_ = (prev_ << 8 | (node & 255)) & 0xffff;
     // the match goes on or ends; then the byte joins what it searches
     if (pbyte >= 0 && (u32)pbyte == (node & 255))
       len_ += len_ < 15, ptr_++;
@@ -278,7 +289,7 @@ struct RawModel {
   u32 plain_byte(tc_rc<f_DEC>* rc, u32 b) {
     if (ENC && rc->tc_verbose) rc->tc_bits[rc->tc_stage] += 8;
     b = rc->rc_Byte(b);
-    prev_ = b;
+    prev_ = (prev_ << 8 | b) & 0xffff;
     len_ = 0;
     ring_[pos_++ & (kRing - 1)] = (u8)b;
     if (pos_ >= 3) {
@@ -346,6 +357,7 @@ struct ChanHist {
   int gg;
   int last_esc;
   int first_d[3];       // each kind's first scalefactor delta (0 none)
+  int tl;               // the top coded band's level (sf units, long windows: -1 none)
   uint8_t bt[8 * 64];   // the codebook of each band
   int16_t sf[8 * 64];   // and its scalefactor (Walk's ChanData::sf)
   int8_t sfd[8 * 64];   // its scalefactor's delta as coded (0 none)
@@ -407,16 +419,26 @@ struct Model : tc_rc<f_DEC> {
     memset(last_, 0, sizeof last_);
     raw_.Init();
     hl_.Init();
+    dring_ = nullptr;
+    dhash_.Init();
+    eqrun_ = 0, dn_ = 0, dptr_ = -1, dlen_ = 0;
     lasttag_ = -1, runpos_ = 0;
     nbase_ = INT_MIN;
+    fill_len_ = -1, fill_e1_ = fill_e3_ = 0;
+    memset(&lat_, 0, sizeof lat_), lat_.last = -1;
+    memset(period_, 0, sizeof period_);
+    memset(sbrt_, 0, sizeof sbrt_);
+    sbr_hdr_now_ = 0;
     lastslot_ = lastfi_ = -1, lastv_ = 0;
     res_.n = res_.bits = res_.first = 0, res_.last = -1, res_.unit = 0;
+    res_.pbits = res_.prev = res_.ec = res_.ep = 0;
     hist_.Init();
     sbrh_.Init();
     memset((void*)cc_, 0, sizeof cc_);
     memset(ebits_, 0, sizeof ebits_);
     memset(esyms_, 0, sizeof esyms_);
     memset(cur_env_, 0, sizeof cur_env_);
+    memset(cur_sum_, 0, sizeof cur_sum_);
     memset(lvcur_, 0, sizeof lvcur_);
   }
   void Quit() {
@@ -427,6 +449,8 @@ struct Model : tc_rc<f_DEC> {
 #undef H_QUIT
     raw_.Quit();
     hl_.Quit();
+    if (dring_) tc_unmap(dring_, kDig * sizeof(u32)), dring_ = nullptr;
+    dhash_.Quit();
     hist_.Quit();
     sbrh_.Quit();
   }
@@ -533,6 +557,7 @@ struct Model : tc_rc<f_DEC> {
   }
 
   void walk_note(const Walk& w, int what) {
+    if (what == N_BLOCK) eqrun_ = 0;
     if (what == N_ICS) {
       CurChan& c = cur(w);
       c.slot = slot_of(w);
@@ -550,6 +575,14 @@ struct Model : tc_rc<f_DEC> {
       const CurChan& c = cur(w);
       const ChanData& d = wcd(w);
       ChanHist& h = hist_[c.slot];
+      h.tl = -1;
+      if (d.ii.num_windows == 1)  // (the last band with values: its scalefactor plus 8/3 its magnitudes' class)
+        for (int b = d.ii.max_sfb - 1; b >= 0 && h.tl < 0; b--)
+          if (d.bt[b] && d.bt[b] < 12) {
+            int sm = 0;
+            for (int k = d.ii.swb[b]; k < d.ii.swb[b + 1]; k++) sm += iabs(d.coef[k]);
+            if (sm) h.tl = Max(0, d.sf[b] + 8 * tc_qlog(sm) / 3);
+          }
       h.valid = 1;
       h.ws = d.ii.ws;
       h.max_sfb = d.ii.max_sfb;
@@ -623,6 +656,18 @@ struct Model : tc_rc<f_DEC> {
     i64 v, d1, d2;  // the last value, the last two differences
   };
   Map32<HLast> hl_;
+  // the design's 8: the fields so far in the unit equal to their last value
+  // (a slot match's length), and a match of the last 4 tokens (id, value) in
+  // the tokens coded so far (the digest: fields, sections, scalefactors,
+  // spectral values, SBR and PS values)
+  int eqrun_;
+  static constexpr int kDig = 1 << 22;  // the last tokens kept
+  static constexpr int kDigHash = 18;
+  static constexpr int kDigMin = 16;  // (the match's right predictions before the spectra and SBR see it)
+  u32* dring_;         // the tokens coded: (id << 24 | value & 0xffffff), token t at t % kDig
+  Buf<u32> dhash_;     // by the hash of the last 4, the place after them, + 1 (0 none; mod 2^32)
+  int64_t dn_, dptr_;  // the tokens so far; where the match predicts from (-1 none)
+  int dlen_;
   int lasttag_, runpos_;
   int nbase_;  // the first noise energy's prediction (INT_MIN none)
   int lastslot_, lastfi_;  // the last field's slot and index, and its value
@@ -636,6 +681,7 @@ struct Model : tc_rc<f_DEC> {
   struct AdtsRes {
     i64 n, bits, first, last;
     int unit;
+    i64 pbits, prev, ec, ep;  // the other convention's: the frames' bits a frame late, the last frame's; both's errors
   } res_;
   i64 fullness_guess(const Walk& w) {
     static const int kChans[8] = {0, 1, 2, 3, 4, 5, 6, 8};
@@ -644,25 +690,152 @@ struct Model : tc_rc<f_DEC> {
     if (!u || u != r.unit || r.last < 0 || r.last == 0x7ff) return r.last < 0 ? 0 : r.last;
     if (!r.n) return r.last;
     // last + (mean - bits) / u, mean = (bits so far + u (last - first)) / n: rounded
-    const i64 num = r.bits + (i64)u * (r.last - r.first) - (i64)w.fw.pos * r.n, den = (i64)u * r.n;
+    // (an encoder that counts the frame before instead: the same, a frame late)
+    const bool late = r.ep < r.ec;
+    const i64 num = (late ? r.pbits : r.bits) + (i64)u * (r.last - r.first) - (late ? r.prev : (i64)w.fw.pos) * r.n,
+              den = (i64)u * r.n;
     const i64 q = num >= 0 ? (2 * num + den) / (2 * den) : -((-2 * num + den) / (2 * den));
     return tc_clamp(r.last + q, (i64)0, (i64)0x7fe);
+  }
+  i64 fullness_both(const Walk& w, bool late) {
+    const i64 ec = res_.ec, ep = res_.ep;
+    res_.ec = late ? 1 : 0, res_.ep = late ? 0 : 1;
+    const i64 g = fullness_guess(w);
+    res_.ec = ec, res_.ep = ep;
+    return g;
   }
   void fullness_seen(const Walk& w, i64 x) {
     static const int kChans[8] = {0, 1, 2, 3, 4, 5, 6, 8};
     AdtsRes& r = res_;
     const int u = 32 * kChans[w.st.fixed.chan_config & 7];
+    if (r.n) {  // (the errors of both, fading)
+      const i64 gc = fullness_both(w, false), gp = fullness_both(w, true);
+      r.ec = r.ec - (r.ec >> 4) + (x > gc ? x - gc : gc - x);
+      r.ep = r.ep - (r.ep >> 4) + (x > gp ? x - gp : gp - x);
+    }
     // (a run starts again where the fullness is none, the channels change, or it strays)
     if (u != r.unit || r.last < 0 || x == 0x7ff || r.last == 0x7ff || (r.n && iabs((int)(x - fullness_guess(w))) > 64)) {
-      r.n = r.bits = 0;
+      r.n = r.bits = r.pbits = 0;
       r.first = x;
       r.unit = u;
     } else {
       r.n++;
       r.bits += (i64)w.fw.pos;
-      if (r.n > ((i64)1 << 20)) r.n /= 2, r.bits /= 2, r.first = x - (x - r.first) / 2;  // (no overflow)
+      r.pbits += r.prev;
+      if (r.n > ((i64)1 << 20)) r.n /= 2, r.bits /= 2, r.pbits /= 2, r.first = x - (x - r.first) / 2;  // (no overflow)
     }
+    r.prev = (i64)w.fw.pos;
     r.last = x;
+  }
+  // A fill payload's count (the design's 5.2): the count that makes the unit
+  // as long as the last one (P1: the bits so far and the count's bytes then,
+  // fill_len_) or the last count (P3), whichever was nearer the last time
+  i64 fill_len_, fill_e1_, fill_e3_;
+  // what the SBR fields' contexts keep of an SBR channel (by its slot): the
+  // grid's class, envelopes and freq_res (frlast: the last frame's last
+  // envelope's), the trailing border (ptrail the last frame's, for this
+  // frame's leading one)
+  struct SbrTrack {
+    int cls, ne, nfr, trail, ptrail;
+    uint8_t fr[8], frlast;
+  } sbrt_[kSlots];
+  int sbr_hdr_now_;
+  void sbr_seen_field(const Walk& w, int e, i64 x, int i) {
+    SbrTrack& t = sbrt_[sbr_slot(w)];
+    switch (e) {
+      case E_SGRID_CLASS:
+        t.frlast = t.nfr ? t.fr[t.nfr - 1] : 0;
+        t.ptrail = t.trail;
+        t.trail = 0;
+        t.cls = (int)x, t.ne = 1, t.nfr = 0;
+        break;
+      case E_SGRID_NENV: t.ne = 1 << (int)(x & 3); break;
+      case E_SGRID_FR:
+        for (int k = 0; k < 8; k++) t.fr[k] = (uint8_t)x;
+        t.nfr = t.ne;
+        break;
+      case E_SGRID_NREL:
+        if (i == 0) t.ne = (int)x + 1; else t.ne += (int)x;
+        break;
+      case E_SGRID_ABS:  // (FIXVAR's border, and VARVAR's second, trail)
+        if ((t.cls == 1 && i == 0) || (t.cls == 3 && i == 1)) t.trail = (int)x;
+        break;
+      case E_SGRID_FRB:
+        if (i < 8) t.fr[t.cls == 1 ? Max(0, t.ne - 1 - i) : i] = (uint8_t)x, t.nfr = Max(t.nfr, i + 1);
+        break;
+      default: break;
+    }
+  }
+  // headers that come now and then (useSameStreamMux 0, bs_header_flag,
+  // enable_ps_header): the frames since the last and the interval before it
+  struct Period {
+    int since, iv;
+  } period_[3][kSlots];
+  // LATM's latmBufferFullness the same way as ADTS's (the design's 5.1, 5.3):
+  // the last value, plus what the frames since bring (k of them, sb their
+  // bits; tb, tn: all frames' bits and count), in units of 2^j bits for the
+  // j (3-9) whose guesses were nearest so far (lat_e)
+  struct LatmRes {
+    i64 last, sb, k, tb, tn, e[7];
+  } lat_;
+  i64 latm_guess(int j) const {
+    const LatmRes& r = lat_;
+    if (r.last < 0 || r.last == 0xff || !r.tn) return r.last < 0 ? 0 : r.last;
+    const i64 num = r.k * r.tb - r.sb * r.tn, den = r.tn << (j + 3);
+    const i64 q = num >= 0 ? (2 * num + den) / (2 * den) : -((-2 * num + den) / (2 * den));
+    return tc_clamp(r.last + q, (i64)0, (i64)0xfe);
+  }
+  int latm_best() const {
+    int b = 0;
+    for (int j = 1; j < 7; j++)
+      if (lat_.e[j] < lat_.e[b]) b = j;
+    return b;
+  }
+  static i64 unit_bits(const Walk& w) {
+    i64 b = (i64)w.fw.pos;
+    for (int d = 0; d < w.wdepth; d++) b += (i64)w.sub[d].pos;
+    return b;
+  }
+  i64 fill_guess(const Walk& w, i64 last) const {
+    if (fill_len_ < 0) return last;
+    const i64 p1 = Max<i64>(1, (fill_len_ - unit_bits(w) + 4) / 8);
+    return fill_e1_ <= fill_e3_ ? p1 : last;
+  }
+  void fill_seen(const Walk& w, i64 x, i64 last) {
+    const i64 nowb = unit_bits(w);
+    if (fill_len_ >= 0) {
+      const i64 p1 = Max<i64>(1, (fill_len_ - nowb + 4) / 8);
+      fill_e1_ = x > p1 ? x - p1 : p1 - x;
+    }
+    fill_e3_ = x > last ? x - last : last - x;
+    fill_len_ = nowb + 8 * x;
+  }
+  // the digest's prediction of the next token of id e (its value, -1 none)
+  int dig_pred(int e) const {
+    if (dptr_ >= 0 && dptr_ < dn_ && dn_ - dptr_ < kDig && (int)(dring_[dptr_ & (kDig - 1)] >> 24) == e)
+      return (int)(dring_[dptr_ & (kDig - 1)] & 0xffffff);
+    return -1;
+  }
+  // and the token coded: the match goes on or ends; the token joins what it searches
+  void dig_push(int e, int pred, i64 x) {
+    if (pred >= 0 && pred == (int)(x & 0xffffff))
+      dlen_ = Min(dlen_ + 1, 64), dptr_++;
+    else
+      dlen_ = 0, dptr_ = -1;
+    if (!dring_) dring_ = (u32*)tc_map(kDig * sizeof(u32));
+    dring_[dn_ & (kDig - 1)] = (u32)e << 24 | (u32)(x & 0xffffff);
+    dn_++;
+    if (dn_ >= 4) {
+      u32 hk = 0;
+      for (int64_t k = dn_ - 4; k < dn_; k++) hk = (hk ^ dring_[k & (kDig - 1)]) * 0x9E3779B1u;
+      hk >>= 32 - kDigHash;
+      if (dhash_.empty()) dhash_.fill((size_t)1 << kDigHash, 0);
+      if (dptr_ < 0 && dhash_[hk]) {
+        const int64_t p = dn_ - (int64_t)(u32)((u32)dn_ + 1 - dhash_[hk]);  // (the place, from its low 32 bits)
+        if (p >= 0 && dn_ - p < kDig) dptr_ = p, dlen_ = 0;
+      }
+      dhash_[hk] = (u32)dn_ + 1;
+    }
   }
   i64 hdr_val(const Walk& w, int e, int n, i64 x, int i) {
     tc_stage = STG_HDR;
@@ -670,6 +843,7 @@ struct Model : tc_rc<f_DEC> {
     // (the containers' fields not by channel)
     int slot = e >= E_ELEM ? slot_of(w) : 0;
     int fi = i < 63 ? i : 63;
+    if (e == E_MAX_SFB && n == 4) fi = 1;  // (short windows' own)
     HLast& h = hl_.get((u32)e | (u32)fi << 8 | (u32)slot << 14);
     const bool next = e == lasttag_ && slot == lastslot_ && fi == lastfi_ + 1;  // (the index after the last value's)
     runpos_ = e == lasttag_ ? Min(runpos_ + 1, 15) : 0;
@@ -686,11 +860,44 @@ struct Model : tc_rc<f_DEC> {
     D.ws = e >= E_ELEM && cd.ii.num_windows ? cd.ii.ws : 4;
     D.ch = e >= E_ELEM ? w.at.chn : 2;
     D.pb = next ? 1 + (int)(lastv_ & 7) : 0;
+    // (the design's 8: how many fields in a row matched their last value, and
+    // what the digest's match predicts)
+    D.ml = 1 + Min(tc_qlog(eqrun_), 7);
+    const int dpred = dig_pred(e);
+    D.dm = dpred >= 0 ? 1 + Min(dlen_, 3) * 15 + Min(sq2(dpred - h.v), 14) : 0;
+    // the design's contexts of single fields (hx; 0 for the rest)
+    D.hx = 0;
+    switch (e) {
+      case E_WIN_SHAPE: {  // the window sequence now and before
+        const ChanHist& sh = hist_[slot_of(w)];
+        D.hx = 1 + (cd.ii.ws & 3) + 4 * (sh.valid ? 1 + (sh.ws & 3) : 0);
+        break;
+      }
+      case E_LOAS_SAME:
+      case E_SBR_HDR:
+      case E_PS_HDR: {  // a header now and then: the frames since the last, against the interval before
+        const Period& pr = period_[e == E_LOAS_SAME ? 0 : e == E_SBR_HDR ? 1 : 2][slot_of(w) & (kSlots - 1)];
+        D.hx = pr.iv ? 1 + (pr.since + 1 == pr.iv ? 1 : pr.since + 1 > pr.iv ? 2 : 0) + 3 * Min(tc_qlog(pr.since), 4) : 0;
+        break;
+      }
+      case E_SDF_ENV:
+      case E_SDF_NOISE: {  // the first; a header in this payload; the envelope's freq_res the one before's
+        const SbrTrack& t = sbrt_[sbr_slot(w)];
+        const int fr = i < 8 ? t.fr[i] : 0, ref = i > 0 ? t.fr[i - 1] : t.frlast;
+        D.hx = 1 + (i == 0) + 2 * sbr_hdr_now_ + 4 * (e == E_SDF_ENV && fr == ref);
+        break;
+      }
+      default: break;
+    }
     // (the second channel's global_gain against the first's of its CPE; the
     // fullness against its guess)
     const i64 base = e == E_GLOBAL_GAIN && w.at.type == TYPE_CPE && w.cur == 1 ? w.cd[0].gg
                      : e == E_ADTS_FULL                                         ? fullness_guess(w)
                      : e == E_NOISE_NRG && nbase_ != INT_MIN                    ? tc_clamp((i64)nbase_, (i64)0, (i64)511)
+                     : e == E_FILL_N                                            ? fill_guess(w, h.v)
+                     : e == E_SMCX_FULL                                         ? latm_guess(latm_best())
+                     : e == E_SGRID_ABS && i == 0 && (sbrt_[sbr_slot(w)].cls & 2)
+                         ? sbrt_[sbr_slot(w)].ptrail  // (a leading border: the last frame's trailing one, less 16)
                                                                                 : h.v;
     // the sign by the element, and whether the value is at the bottom of its
     // range or at the top (a field's: a bit's change has one sign)
@@ -704,10 +911,31 @@ struct Model : tc_rc<f_DEC> {
                 ? f_hdr.codes_in(X, dx, (u32)(e * 3 + bound), -base, ((i64)1 << n) - 1 - base)
                 : f_hdr.codes(X, dx, (u32)(e * 3 + bound));
     x = base + d;
+    const i64 hv0 = h.v;
     h.d2 = h.d1;
     h.d1 = d;
     h.v = x;
     lastslot_ = slot, lastfi_ = fi, lastv_ = x;
+    eqrun_ = x == base ? Min(eqrun_ + 1, 1 << 20) : 0;
+    dig_push(e, dpred, x);
+    if (e == E_FILL_N) fill_seen(w, x, hv0);
+    if (e == E_SBR_HDR) sbr_hdr_now_ = (int)(x & 1);
+    if (e >= E_SGRID_CLASS && e <= E_SGRID_FRB) sbr_seen_field(w, e, x, i);
+    if (e == E_LOAS_SAME || e == E_SBR_HDR || e == E_PS_HDR) {
+      Period& pr = period_[e == E_LOAS_SAME ? 0 : e == E_SBR_HDR ? 1 : 2][slot_of(w) & (kSlots - 1)];
+      if ((e == E_LOAS_SAME) == !x)
+        pr.iv = pr.since + 1, pr.since = 0;
+      else
+        pr.since = Min(pr.since + 1, 1 << 20);
+    }
+    if (e == E_TAIL_N && w.wdepth == 0) lat_.sb += (i64)w.fw.pos, lat_.k++, lat_.tb += (i64)w.fw.pos, lat_.tn++;
+    if (e == E_SMCX_FULL) {
+      for (int j = 0; j < 7; j++) {
+        const i64 g = latm_guess(j);
+        lat_.e[j] += x > g ? x - g : g - x;
+      }
+      lat_.last = x, lat_.sb = 0, lat_.k = 0;
+    }
     if (e == E_ADTS_FULL) fullness_seen(w, x);
     tc_syms[STG_HDR]++;
     if (ENC && tc_verbose) ebits_[e] += bits_now() - b0, esyms_[e]++;
@@ -736,13 +964,10 @@ struct Model : tc_rc<f_DEC> {
     D.rem = ii.max_sfb - sfb;
     D.ws = ii.ws;
     D.gr = g;
-    // the band's ms_used (a CPE's: 1 L/R, 2 M/S; 0 none); against the last
-    // frame's max_sfb (0 not known, 1 below, 2 at, 3 above); whether a section
-    // of the first channel (CPE) / of the group before (short) starts there (0 none, 1 no, 2 yes)
+    // the band's ms_used (a CPE's: 1 L/R, 2 M/S; 0 none); whether a section of
+    // the first channel (CPE) starts there (0 none, 1 no, 2 yes)
     D.mu = w.at.type == TYPE_CPE ? 1 + (cd.ms_present == 2 || (cd.ms_present == 1 && w.cd[0].ms[g * ii.max_sfb + sfb])) : 0;
-    D.bm = h ? (sfb < h->max_sfb ? 1 : sfb == h->max_sfb ? 2 : 3) : 0;
     D.ob = o ? 1 + cc_[0].secb[g * ii.max_sfb + sfb] : 0;
-    D.gb = g > 0 ? 1 + cur(w).secb[(g - 1) * ii.max_sfb + sfb] : 0;
   }
   int sect_cb(const Walk& w, int v, int g) {
     tc_stage = STG_SEC;
@@ -753,6 +978,8 @@ struct Model : tc_rc<f_DEC> {
     D.cb = 16;
     D.run = 0;
     D.fn = 0;
+    const int dpc = dig_pred(E_SECT_CB);
+    D.dm = dpc >= 0 ? 1 + Min(dlen_, 3) * 17 + Min(dpc, 16) : 0;
     tcx X;
     f_sec.make(D, X);
     f_sec.select(X);
@@ -760,6 +987,7 @@ struct Model : tc_rc<f_DEC> {
     for (int j = 3; j >= 0; j--) node = node * 2 + f_sec.bit(node, ENC ? (v >> j) & 1 : 0);
     tc_syms[STG_SEC]++;
     if (ENC && tc_verbose) ebits_[E_SECT_CB] += bits_now() - b0, esyms_[E_SECT_CB]++;
+    dig_push(E_SECT_CB, dpc, node - 16);
     return node - 16;
   }
   int sect_len(const Walk& w, int len, int g) {
@@ -769,6 +997,7 @@ struct Model : tc_rc<f_DEC> {
     const Ics& ii = cd.ii;
     const ChanHist* h = last_of(w);
     const int k = w.at.sfb, cb = w.at.cb;
+    const int dpl = dig_pred(E_SECT_LEN);
     int n = 0;
     while (k + n < ii.max_sfb) {
       int b = k + n;
@@ -780,12 +1009,14 @@ struct Model : tc_rc<f_DEC> {
       // the last frame at the band: the codebook's, and whether a section started there
       int lc = last_cb(h, g, b);
       D.fn = lc == 16 ? 0 : 1 + (lc == cb ? 0 : 2) + (h->secb[g * h->max_sfb + b] ? 1 : 0);
+      D.dm = dpl >= 0 ? 1 + (n < dpl ? 0 : n == dpl ? 1 : 2) + 3 * Min(dlen_, 3) : 0;
       tcx X;
       f_sec.make(D, X);
       f_sec.select(X);
       if (!f_sec.bit(0, ENC && n < len)) break;
       n++;
     }
+    dig_push(E_SECT_LEN, dpl, n);
     CurChan& c = cur(w);
     if (k < ii.max_sfb) c.secb[g * ii.max_sfb + k] = 1;
     c.pc = cb;
@@ -846,9 +1077,12 @@ struct Model : tc_rc<f_DEC> {
       }
       D.pw = pwv != INT_MIN ? 1 + sq2(pwv - c.off[kd]) : 0;
     }
+    const int dps = dig_pred(E_SF);
+    D.dm = dps >= 0 ? 1 + Min(dlen_, 3) * 15 + Min(sq2(dps - 60), 14) : 0;
     tcx X;
     f_scf.make(D, X);
     int d = (int)f_scf.codes(X, v, (u32)(kd * 3 + sgn3(pa)));
+    dig_push(E_SF, dps, d + 60);
     c.off[kd] += d;
     c.d2[kd] = c.d1[kd];
     c.d1[kd] = d;
@@ -1039,6 +1273,9 @@ struct Model : tc_rc<f_DEC> {
       const int left = (ii.swb[sfb + 1] - k - 1) + (wg0 + wgl - win - 1) * bw + wgl * (ii.swb[c.sk_hi] - ii.swb[sfb + 1]);
       D.sc = c.sk_max > kLo[cb - 1] ? 0 : 1 + Min(tc_qlog(left), 15);
     }
+    // (the digest's prediction, once its match has been right 16 times)
+    const int dpv = dig_pred(E_SPEC);
+    D.dg = dpv >= 0 && dlen_ >= kDigMin ? 1 + Min(dlen_ >> 3, 3) * 17 + Min(iabs(dpv - 8192), 16) : 0;
     tcx X;
     f_spc.make(D, X);
     f_spc.select(X);
@@ -1107,6 +1344,7 @@ struct Model : tc_rc<f_DEC> {
       c.bsum += mm;
     }
     if (ENC && tc_verbose) ebits_[E_SPEC] += bits_now() - b0, esyms_[E_SPEC]++;
+    dig_push(E_SPEC, dpv, (s ? -mm : mm) + 8192);
     return s ? -mm : mm;
   }
 
@@ -1151,6 +1389,17 @@ struct Model : tc_rc<f_DEC> {
     const int pb = lvk >= 0 && sh.lvn[lvk] ? Min(bd * sh.lvn[lvk] / nbw, 63) : 0;
     D.lv = lvk >= 0 && sh.lvn[lvk] ? 1 + tc_qlog(sh.lv[lvk][pb]) : 0;
     D.q = w.at.ph ? w.at.ph->iid_quant : 0;
+    // the design's: the mean of the envelope's values so far, the core's top
+    // coded band's level (envelopes), the last envelope's shape at the band
+    // (frequency deltas), and what the digest's match predicts
+    D.rm = band > 0 && kd != 14 ? 1 + Min(sq2((2 * cur_sum_[hk] + (cur_sum_[hk] >= 0 ? band : -band)) / (2 * band)), 14) : 0;
+    {
+      const ChanHist& ch = hist_[sbr_slot(w)];
+      D.cl = (e == E_SENV || e == E_SENV_START) && ch.valid && ch.tl >= 0 ? 1 + Min(ch.tl / 8, 30) : 0;
+    }
+    D.rs = lvk >= 0 && !w.at.dt && band > 0 && sh.lvn[lvk] && pb > 0 ? 1 + Min(sq2(sh.lv[lvk][pb] - sh.lv[lvk][pb - 1]), 14) : 0;
+    const int dpb = dig_pred(e);
+    D.dg = dpb >= 0 && dlen_ >= kDigMin ? 1 + Min(dlen_ >> 3, 3) * 15 + Min(sq2(dpb - 4096), 14) : 0;
     tcx X;
     f_sbr.make(D, X);
     i64 x;
@@ -1165,8 +1414,10 @@ struct Model : tc_rc<f_DEC> {
       cur_env_[hk][bd] = (int8_t)xv;
       sh.last[hk][bd] = (int8_t)xv;
       sh.have[hk] = 1;
+      cur_sum_[hk] = (band > 0 ? cur_sum_[hk] : 0) + xv;
     } else {
       cur_env_[hk][0] = 0;  // (a start value: no delta at the first band)
+      cur_sum_[hk] = 0;
     }
     // the levels the deltas leave (envelope and noise of a channel that is
     // not a balance one): across frequency from the start value, in time
@@ -1185,10 +1436,12 @@ struct Model : tc_rc<f_DEC> {
     }
     tc_syms[ps ? STG_PS : STG_SBR]++;
     if (ENC && tc_verbose) ebits_[e] += bits_now() - b0, esyms_[e]++;
+    dig_push(e, dpb, x + 4096);
     return x;
   }
   int s2p_[17];
   int8_t cur_env_[8][64];  // the values of the envelope being coded, by kind
+  int cur_sum_[8];         // and their sum so far
   int16_t lvcur_[2][64];
 
   // ------------------------------------------------------------------------
@@ -1217,6 +1470,13 @@ struct Model : tc_rc<f_DEC> {
         nbase_ = INT_MIN;
         cur(w).off[2] += (int)x - 256;
         return x;
+      }
+      case E_GROUPING: {
+        // MSB first, a bit at a time: by its place, the bit there in the last
+        // pattern and the bit before it
+        i64 r = 0;
+        for (int b = 6; b >= 0; b--) r = r * 2 + hdr_val(w, e, 1, ENC ? (x >> b) & 1 : 0, 6 - b);
+        return r;
       }
       default: return hdr_val(w, e, n, x, i);
     }

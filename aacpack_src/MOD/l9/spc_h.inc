@@ -10,6 +10,7 @@ static const byte H9_spc_b_a1[3+1]={ 0,1,2,3 };
 static const byte H9_spc_c_cb[10+1]={ 0,1,2,3,4,5,6,7,8,9,10 };
 static const byte H9_spc_c_pf[15+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
 static const byte H9_spc_c_a1[7+1]={ 0,1,2,3,4,5,6,7 };
+static const byte H9_spc_c_dg[69+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69 };
 
 static const byte H9_spc_d_cb[10+1]={ 0,1,2,3,4,5,6,7,8,9,10 };
 static const byte H9_spc_d_ex[14+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14 };
@@ -85,7 +86,7 @@ static const int H9_spc_mwL = (2+0) * (1);
 static const int H9_spc_bw = (12+0) * (1);
 static const int H9_spc_qs = (23+3) * (1);
 static const int H9_spc_qf = (17+3) * (1);
-static const int H9_spc_mb = (128+0) * (1);
+static const int H9_spc_mb = (32+0) * (1);
 static const int H9_spc_rT = (0+0) * (1);
 static const int H9_spc_mwT = (0+0) * (1);
 static const int H9_spc_mt = (0+0) * (1);
@@ -112,7 +113,7 @@ static const int H9_spc_hN = (24+0) * (1);
 
 static const long long H9_spc_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 11), 16), 8); // 1408
 static const long long H9_spc_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 11), 32), 4); // 1408
-static const long long H9_spc_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 11), 16), 8); // 1408
+static const long long H9_spc_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 11), 16), 8), 70); // 98560
 static const long long H9_spc_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, 11), 15), 4); // 660
 static const long long H9_spc_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 11), 16), 3), 4); // 2112
 static const long long H9_spc_f_Volume = tc_vmul(tc_vmul(1, 11), 40); // 440
@@ -128,7 +129,7 @@ static const long long H9_spc_s_Volume = tc_vmul(tc_vmul(tc_vmul(1, 11), 32), 4)
 static const long long H9_spc_t_Volume = 1; // 1
 static const long long H9_spc_w_Volume = tc_vmul(tc_vmul(1, 8), 10); // 80
 
-#define H9_spc_USES(X) X(cb) X(a1) X(a2) X(av) X(pf) X(ex) X(oc) X(ms) X(a3) X(nz) X(bp) X(pl) X(zr) X(pn) X(tp) X(ws) X(qn) X(ds) X(sc) X(sb) X(xp)
+#define H9_spc_USES(X) X(cb) X(a1) X(a2) X(av) X(pf) X(dg) X(ex) X(oc) X(ms) X(a3) X(nz) X(bp) X(pl) X(zr) X(pn) X(tp) X(ws) X(qn) X(ds) X(sc) X(sb) X(xp)
 
 struct H9_spc_T {
   cm_cnt2 H9_spc_A[tc_rows(H9_spc_a_Volume, H9_spc_hA) * H_spc_ND];

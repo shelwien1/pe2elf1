@@ -28,6 +28,7 @@ void H9_sec_make( const H_sec_v & D, tcx & X ) {
   b = b*2 + (((kd)>0+(1-1)));
   b = b*17 + H9_sec_b_fc[__min(16,__max(0,(fc)-(1-1)))];
   b = b*8 + H9_sec_b_sb[__min(7,__max(0,(sb)-(1-1)))];
+  b = b*70 + H9_sec_b_dm[__min(69,__max(0,(dm)-(1-1)))];
 
   c = 0;
   c = c*2 + (((kd)>0+(1-1)));

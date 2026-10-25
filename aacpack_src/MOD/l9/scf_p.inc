@@ -38,6 +38,7 @@ void H9_scf_make( const H_scf_v & D, tcx & X ) {
   d = d*3 + (((kd)>0+(1-1))+((kd)>1+(1-1)));
   d = d*14 + H9_scf_d_d1[__min(13,__max(0,(d1)-(1-1)))];
   d = d*6 + H9_scf_d_d2[__min(5,__max(0,(d2)-(1-1)))];
+  d = d*61 + H9_scf_d_dm[__min(60,__max(0,(dm)-(1-1)))];
 
   e = 0;
   e = e*3 + (((kd)>0+(1-1))+((kd)>1+(1-1)));

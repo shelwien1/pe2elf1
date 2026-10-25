@@ -17,7 +17,7 @@
 namespace aacpack {
 
 const char kCmMagic[] = "aacpk";  // compressed streams, followed by the version and level bytes
-const int kCmVersion = 5;
+const int kCmVersion = 6;
 // The CRC-32 at the end is coded XORed with this: a decoder fed past the
 // end of its input decodes zeros, and 0 is the CRC-32 of an empty stream.
 const uint32_t kCrcXor = 0x61616370;

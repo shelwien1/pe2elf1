@@ -23,11 +23,13 @@ void H9_sbr_make( const H_sbr_v & D, tcx & X ) {
   a = a*15 + H9_sbr_a_kd[__min(14,__max(0,(kd)-(1-1)))];
   a = a*11 + H9_sbr_a_d1[__min(10,__max(0,(d1)-(1-1)))];
   a = a*6 + H9_sbr_a_pv[__min(5,__max(0,(pv)-(1-1)))];
+  a = a*15 + H9_sbr_a_rs[__min(14,__max(0,(rs)-(1-1)))];
 
   b = 0;
   b = b*15 + H9_sbr_b_kd[__min(14,__max(0,(kd)-(1-1)))];
   b = b*14 + H9_sbr_b_pv[__min(13,__max(0,(pv)-(1-1)))];
   b = b*6 + H9_sbr_b_bd[__min(5,__max(0,(bd)-(1-1)))];
+  b = b*31 + H9_sbr_b_cl[__min(30,__max(0,(cl)-(1-1)))];
 
   c = 0;
   c = c*15 + H9_sbr_c_kd[__min(14,__max(0,(kd)-(1-1)))];
@@ -38,6 +40,7 @@ void H9_sbr_make( const H_sbr_v & D, tcx & X ) {
   d = d*15 + H9_sbr_d_kd[__min(14,__max(0,(kd)-(1-1)))];
   d = d*11 + H9_sbr_d_d1[__min(10,__max(0,(d1)-(1-1)))];
   d = d*7 + H9_sbr_d_d2[__min(6,__max(0,(d2)-(1-1)))];
+  d = d*15 + H9_sbr_d_rm[__min(14,__max(0,(rm)-(1-1)))];
 
   e = 0;
   e = e*15 + H9_sbr_e_kd[__min(14,__max(0,(kd)-(1-1)))];
@@ -49,6 +52,7 @@ void H9_sbr_make( const H_sbr_v & D, tcx & X ) {
   h = h*8 + H9_sbr_h_en[__min(7,__max(0,(en)-(1-1)))];
   h = h*2 + (((fr)>0+(1-1)));
   h = h*4 + H9_sbr_h_pv[__min(3,__max(0,(pv)-(1-1)))];
+  h = h*61 + H9_sbr_h_dg[__min(60,__max(0,(dg)-(1-1)))];
 
   i = 0;
   i = i*15 + H9_sbr_i_kd[__min(14,__max(0,(kd)-(1-1)))];

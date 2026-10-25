@@ -36,16 +36,19 @@ void H9_hdr_make( const H_hdr_v & D, tcx & X ) {
   d = (d<<8) + (((tag)&255)); // 11111111
   d = d*8 + H9_hdr_d_fld[__min(7,__max(0,(fld)-(1-1)))];
   d = d*7 + H9_hdr_d_p1[__min(6,__max(0,(p1)-(1-1)))];
+  d = d*61 + H9_hdr_d_dm[__min(60,__max(0,(dm)-(1-1)))];
 
   e = 0;
   e = (e<<8) + (((tag)&255)); // 11111111
   e = e*5 + H9_hdr_e_ws[__min(4,__max(0,(ws)-(1-1)))];
   e = e*8 + H9_hdr_e_fld[__min(7,__max(0,(fld)-(1-1)))];
+  e = e*8 + H9_hdr_e_ml[__min(7,__max(0,(ml)-(1-1)))];
 
   h = 0;
   h = (h<<8) + (((tag)&255)); // 11111111
   h = h*3 + (((ch)>0+(1-1))+((ch)>1+(1-1)));
   h = h*16 + H9_hdr_h_fld[__min(15,__max(0,(fld)-(1-1)))];
+  h = h*17 + H9_hdr_h_hx[__min(16,__max(0,(hx)-(1-1)))];
 
   i = 0;
   i = (i<<8) + (((tag)&255)); // 11111111

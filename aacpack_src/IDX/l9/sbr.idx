@@ -6,7 +6,10 @@
 #  envelope (sq2), pv the value at the band in the last envelope of the
 #  kind (1 + sq2; 0 not known), ar amp_res, fr freq_res, en the envelope, ch
 #  the channel, lv the band's level as the last envelope left it (1 +
-#  tc_qlog; 0 not known), q the fine iid quantization.
+#  tc_qlog; 0 not known), q the fine iid quantization, rm the mean of the
+#  envelope's values so far (1 + sq2), cl the core's top coded band's
+#  level (envelopes; 0 not known), rs the last envelope's shape at the band
+#  (frequency deltas: 1 + sq2), dg the digest's prediction (0 none).
 #  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates MOD/l9 from
 #  this file and family.inc.
 
@@ -18,11 +21,13 @@ Index a
  a_kd: kd, 1!11111111111111
  a_d1: d1, 1!1111111111
  a_pv: pv, 1!11111
+ a_rs: rs, 1!11111111111111
 
 Index b
  b_kd: kd, 1!11111111111111
  b_pv: pv, 1!1111111111111
  b_bd: bd, 1!11111
+ b_cl: cl, 1!111111111111111111111111111111
 
 Index c
  c_kd: kd, 1!11111111111111
@@ -33,6 +38,7 @@ Index d
  d_kd: kd, 1!11111111111111
  d_d1: d1, 1!1111111111
  d_d2: d2, 1!111111
+ d_rm: rm, 1!11111111111111
 
 Index e
  e_kd: kd, 1!11111111111111
@@ -44,6 +50,7 @@ Index h
  h_en: en, 1!1111111
  h_fr: fr, 1!1
  h_pv: pv, 1!111
+ h_dg: dg, 1!111111111111111111111111111111111111111111111111111111111111
 
 Index i
  i_kd: kd, 1!11111111111111
@@ -118,7 +125,7 @@ Number bw, 1, 0!01100
 Number mt, 1, 0!010
 Number qs, 1, 3!0010111
 Number qf, 1, 3!0010001
-Number mb, 1, 0!00100001
+Number mb, 1, 0!00001000
 #  Frozen: no hint's mixer (lrm, mbm, index n): the family codes without one.
 ! Number lrm, 1, 0!00000
 ! Number mbm, 1, 0!00000000

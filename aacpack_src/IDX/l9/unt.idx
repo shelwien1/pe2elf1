@@ -100,7 +100,7 @@ Number bw, 1, 0!01100
 Number mt, 1, 0!010
 Number qs, 1, 3!0010111
 Number qf, 1, 3!0010001
-Number mb, 1, 0!00100001
+Number mb, 1, 0!00001000
 #  Frozen: no hint's mixer (lrm, mbm, index n): the family codes without one.
 ! Number lrm, 1, 0!00000
 ! Number mbm, 1, 0!00000000

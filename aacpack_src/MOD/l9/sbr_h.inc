@@ -2,10 +2,12 @@
 static const byte H9_sbr_a_kd[14+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14 };
 static const byte H9_sbr_a_d1[10+1]={ 0,1,2,3,4,5,6,7,8,9,10 };
 static const byte H9_sbr_a_pv[5+1]={ 0,1,2,3,4,5 };
+static const byte H9_sbr_a_rs[14+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14 };
 
 static const byte H9_sbr_b_kd[14+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14 };
 static const byte H9_sbr_b_pv[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 static const byte H9_sbr_b_bd[5+1]={ 0,1,2,3,4,5 };
+static const byte H9_sbr_b_cl[30+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30 };
 
 static const byte H9_sbr_c_kd[14+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14 };
 static const byte H9_sbr_c_bd[30+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30 };
@@ -13,6 +15,7 @@ static const byte H9_sbr_c_bd[30+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,1
 static const byte H9_sbr_d_kd[14+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14 };
 static const byte H9_sbr_d_d1[10+1]={ 0,1,2,3,4,5,6,7,8,9,10 };
 static const byte H9_sbr_d_d2[6+1]={ 0,1,2,3,4,5,6 };
+static const byte H9_sbr_d_rm[14+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14 };
 
 static const byte H9_sbr_e_kd[14+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14 };
 static const byte H9_sbr_e_lv[11+1]={ 0,1,2,3,4,5,6,7,8,9,10,11 };
@@ -25,6 +28,7 @@ static const byte H9_sbr_g_d1[5+1]={ 0,1,2,3,4,5 };
 static const byte H9_sbr_h_kd[14+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14 };
 static const byte H9_sbr_h_en[7+1]={ 0,1,2,3,4,5,6,7 };
 static const byte H9_sbr_h_pv[3+1]={ 0,1,2,3 };
+static const byte H9_sbr_h_dg[60+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60 };
 
 static const byte H9_sbr_i_kd[14+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14 };
 static const byte H9_sbr_i_nb[20+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20 };
@@ -80,7 +84,7 @@ static const int H9_sbr_bw = (12+0) * (1);
 static const int H9_sbr_mt = (2+0) * (1);
 static const int H9_sbr_qs = (23+3) * (1);
 static const int H9_sbr_qf = (17+3) * (1);
-static const int H9_sbr_mb = (33+0) * (1);
+static const int H9_sbr_mb = (8+0) * (1);
 static const int H9_sbr_lrm = (0+0) * (1);
 static const int H9_sbr_mbm = (0+0) * (1);
 static const int H9_sbr_hA = (24+0) * (1);
@@ -100,14 +104,14 @@ static const int H9_sbr_hT = (24+0) * (1);
 static const int H9_sbr_hN = (24+0) * (1);
 
 
-static const long long H9_sbr_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 15), 11), 6); // 990
-static const long long H9_sbr_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 15), 14), 6); // 1260
+static const long long H9_sbr_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 15), 11), 6), 15); // 14850
+static const long long H9_sbr_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 15), 14), 6), 31); // 39060
 static const long long H9_sbr_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 15), 31), 2); // 930
-static const long long H9_sbr_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, 15), 11), 7); // 1155
+static const long long H9_sbr_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 15), 11), 7), 15); // 17325
 static const long long H9_sbr_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, 15), 12), 2); // 360
 static const long long H9_sbr_f_Volume = tc_vmul(tc_vmul(1, 15), 4); // 60
 static const long long H9_sbr_g_Volume = tc_vmul(1, 6); // 6
-static const long long H9_sbr_h_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 15), 8), 2), 4); // 960
+static const long long H9_sbr_h_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 15), 8), 2), 4), 61); // 58560
 static const long long H9_sbr_i_Volume = tc_vmul(tc_vmul(tc_vmul(1, 15), 21), 4); // 1260
 static const long long H9_sbr_j_Volume = tc_vmul(tc_vmul(tc_vmul(1, 15), 2), 6); // 180
 static const long long H9_sbr_k_Volume = tc_vmul(tc_vmul(tc_vmul(1, 15), 8), 6); // 720
@@ -118,7 +122,7 @@ static const long long H9_sbr_s_Volume = tc_vmul(1, 15); // 15
 static const long long H9_sbr_t_Volume = tc_vmul(1, 15); // 15
 static const long long H9_sbr_w_Volume = tc_vmul(1, 2); // 2
 
-#define H9_sbr_USES(X) X(kd) X(d1) X(pv) X(bd) X(ar) X(d2) X(lv) X(ch) X(en) X(fr) X(nb) X(q)
+#define H9_sbr_USES(X) X(kd) X(d1) X(pv) X(rs) X(bd) X(cl) X(ar) X(d2) X(rm) X(lv) X(ch) X(en) X(fr) X(dg) X(nb) X(q)
 
 struct H9_sbr_T {
   cm_cnt2 H9_sbr_A[tc_rows(H9_sbr_a_Volume, H9_sbr_hA) * H_sbr_ND];

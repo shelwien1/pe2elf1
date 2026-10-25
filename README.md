@@ -122,8 +122,17 @@ contexts and parameters (`famvars.inc`, `model.inc`):
   CPE at its place; its place in the band and the tuple; the band's
   magnitudes so far; and the magnitude at its place averaged over the
   earlier frames, each counting 3/4 of the one after it (mp3c's
-  `av_MDCT`), which also selects mixer weights. Escapes of codebook 11
-  are coded as numbers, under the last frame's and that average.
+  `av_MDCT`), which also selects mixer weights. More contexts: the
+  places left in the band, whether the section has had a magnitude
+  above the next smaller codebook's range yet, and the zeros right
+  before the place. Magnitudes from the band before are rescaled to
+  this band's scalefactor. A second channel's band that was intensity
+  stereo in the last frame is read as the first channel's values,
+  scaled by the position. The mixers also see the probability the
+  codebook itself gives each decision, from its code lengths and the
+  tuple so far, blended with a Laplace distribution's around a guess
+  made from those contexts. Escapes of codebook 11 are coded as
+  numbers, under the last frame's value, the average and that guess.
 - **signs** (`sgn`): under the signs before, the other channel's, and
   the last frame's at the place. They come out at about a bit each: the
   signs of MDCT coefficients are close to random. A per-line predictor
@@ -134,16 +143,22 @@ contexts and parameters (`famvars.inc`, `model.inc`):
   section length as a decision for each band (does the section go on).
   Both are coded under the last section's codebook, the band's codebook
   and section start in the last frame of the channel, the other channel's
-  codebook and the group before.
+  codebook and section start, the group before, the band's M/S flag, and
+  the codebook with the band.
 - **scalefactors** (`scf`): each delta under the last two deltas, the
   delta at the band in the last frame, and the last frame's value there
   relative to this band's predecessor. Intensity positions and noise
-  energies have their own contexts. Also used: the band's codebook, the
-  other channel, and the change of global_gain.
+  energies have their own contexts. Also used: the band's codebook and
+  M/S flag (the strongest of these), the other channel, the change of
+  global_gain, whether it is the first of its kind in the frame, the
+  bands skipped since the last of its kind, and in short windows the
+  group before. A first noise energy is coded against the last frame's
+  at the band.
 - **SBR and PS** (`sbr`): envelope and noise floor deltas (in frequency or
-  time) and PS parameters, under the band, the deltas before it, the
-  value at the band in the last envelope of the kind, and the level the
-  band had.
+  time) and PS parameters, under the band, the deltas before it and their
+  mean, the value at the band in the last envelope of the kind, the level
+  the band had and the last envelope's shape there, and the core's top
+  coded band's level.
 - **fields** (`hdr`): everything else (headers, window sequences,
   max_sfb, global_gain, flags, TNS and pulse data, DSE and fill bytes).
   Each is coded as the difference to the last value of the element at its
@@ -153,11 +168,31 @@ contexts and parameters (`famvars.inc`, `model.inc`):
   flag's change has one sign). A CPE's second global_gain is coded
   against the first's. ADTS's buffer fullness is coded after its frame,
   against the encoder's bit reservoir: the last fullness, plus a mean
-  frame's bits (from the frames so far), less this frame's.
-- **bytes**: under order-0 and order-1 contexts and a match against
-  the last 16 MB of bytes stored as they are (found by a hash of three
-  bytes). A chunk of 64 KB or more that looks random is coded as it is,
-  one coder step a byte, at no cost over its size.
+  frame's bits (from the frames so far), less this frame's (or the frame
+  before's, for encoders that count that one). LATM's latmBufferFullness
+  goes the same way. A fill element's count is coded against the count
+  that gives the unit the last unit's length. Headers that come every so
+  many frames (LATM's StreamMuxConfig, SBR and PS headers) are coded
+  under the frames since the last one and the interval before it.
+  window_shape is coded under the window sequences, max_sfb has a history
+  for each window kind, and scale_factor_grouping goes a bit at a time.
+  A field of n bits skips the decisions its range rules out.
+- **bytes**: under order-0, order-1 and order-2 contexts and a match
+  against the last 16 MB of bytes stored as they are (found by a hash of
+  three bytes). A chunk of 64 KB or more that looks random is coded as
+  it is, one coder step a byte, at no cost over its size.
+- **matches**: every value coded (its element and value: fields,
+  sections, scalefactors, spectral values, SBR and PS) goes into a digest
+  of the last 4M tokens. The last 4 tokens are looked up in it, and a
+  match's next token is a context of the family coding it (of the
+  spectra and SBR, once the match has been right 16 times). Repeated
+  material (loops, streams joined end to end) codes to little: a 9.6 MB
+  stream with repeats comes to 2.9 MB instead of 8.2 MB. The fields
+  also see how many fields in a row matched their last value.
+
+`aac_cm_design_results.md` lists each idea of the CM design
+(`aac_cm_design.md`) with what it measured, in aacpack or taken out of
+it, and whether it is kept.
 
 Each family's contexts and parameters are declared in
 `aacpack_src/IDX/l9/*.idx`. `aacpack_src/mk.sh` turns them into code
@@ -184,11 +219,12 @@ header from the start, and puts it in the compressed stream's own header.
 Memory does not grow with the stream: `c` holds a window of the input
 (a unit at most 1 MB, and at the start what the read-ahead for SBR
 headers read: up to 1000 units, or 8 MB of bytes that are not AAC), and
-`d` a unit's output. The model's tables are a fixed 25 MB of address
-space, of which a run touches what its stream needs (about 13 MB of
-memory in all for a stereo stream). `c` and `d` are coroutines (h264p's
-Lib3) that ask their driver for input and give it output, so pipes of
-any length work.
+`d` a unit's output. The model's tables are a fixed 157 MB of address
+space, and 16 MB each for the match model's ring of the last 4M tokens
+and the bytes' order-2 table; a run touches what its stream needs (about
+43 MB of memory in all for a stereo stream). `c` and `d` are coroutines
+(h264p's Lib3) that ask their driver for input and give it output, so
+pipes of any length work.
 
 ## Results
 
@@ -198,41 +234,42 @@ from its git, c41c3c7), the AAC encoder of ffmpeg 6.1.1 and faac 1.30:
 
 | stream | bytes | compressed | |
 |---|---:|---:|---:|
-| fdkaac LC 128 kbit/s CBR | 1922423 | 1744029 | 90.72% |
-| fdkaac LC VBR 4 | 2436321 | 2250324 | 92.37% |
-| fdkaac LC 64 kbit/s mono | 480606 | 422162 | 87.84% |
-| fdkaac HE-AAC 48 kbit/s | 722366 | 619270 | 85.73% |
-| fdkaac HE-AACv2 24 kbit/s | 361655 | 290713 | 80.38% |
-| fdkaac LD 96 kbit/s (LATM) | 720379 | 588177 | 81.65% |
-| fdkaac ELD 96 kbit/s (LATM) | 720365 | 598392 | 83.07% |
-| ffmpeg LC 128 kbit/s | 1980658 | 1756276 | 88.67% |
-| ffmpeg LC 256 kbit/s | 3952064 | 3635260 | 91.98% |
-| ffmpeg LC 96 kbit/s, PNS, IS, TNS | 743006 | 634113 | 85.34% |
-| ffmpeg Main 128 kbit/s | 990527 | 876280 | 88.47% |
-| ffmpeg LTP 128 kbit/s | 990690 | 879640 | 88.79% |
-| ffmpeg LC 64 kbit/s mono | 501742 | 442026 | 88.10% |
-| faac LC 128 kbit/s | 2016176 | 1703725 | 84.50% |
-| faac LC 64 kbit/s mono | 492284 | 401024 | 81.46% |
-| all | 19031262 | 16841411 | 88.49% |
+| fdkaac LC 128 kbit/s CBR | 1922423 | 1739836 | 90.50% |
+| fdkaac LC VBR 4 | 2436321 | 2246239 | 92.20% |
+| fdkaac LC 64 kbit/s mono | 480606 | 421114 | 87.62% |
+| fdkaac HE-AAC 48 kbit/s | 722366 | 615127 | 85.15% |
+| fdkaac HE-AACv2 24 kbit/s | 361655 | 288751 | 79.84% |
+| fdkaac LD 96 kbit/s (LATM) | 720379 | 585007 | 81.21% |
+| fdkaac ELD 96 kbit/s (LATM) | 720365 | 595361 | 82.65% |
+| ffmpeg LC 128 kbit/s | 1980658 | 1747670 | 88.24% |
+| ffmpeg LC 256 kbit/s | 3952064 | 3621937 | 91.65% |
+| ffmpeg LC 96 kbit/s, PNS, IS, TNS | 743006 | 629272 | 84.69% |
+| ffmpeg Main 128 kbit/s | 990527 | 872009 | 88.03% |
+| ffmpeg LTP 128 kbit/s | 990690 | 875380 | 88.36% |
+| ffmpeg LC 64 kbit/s mono | 501742 | 441275 | 87.95% |
+| faac LC 128 kbit/s | 2016176 | 1697651 | 84.20% |
+| faac LC 64 kbit/s mono | 492284 | 399808 | 81.21% |
+| all | 19031262 | 16776437 | 88.15% |
 
 The 39 AAC streams of FFmpeg's FATE suite (`fate-suite/aac`: conformance
 streams and bug reports; LC, Main, HE-AAC, PS, 960-sample frames, 5.1, a
 PCE, ID3 tags, LATM in MPEG-TS and MPEG-PS, whose packets are bytes to
-aacpack), 4985631 bytes, come to 2935803 (58.89%). Two are mostly the same
+aacpack), 4985631 bytes, come to 2682960 (53.81%). Two are mostly the same
 frames again (al18_44 and id3v2_two_tags, to 0.4% and 0.5%); without them,
-66.92%. The conformance streams of test signals (sweeps, tones) come to
-25-35%.
+61.15%. The conformance streams of test signals (sweeps, tones) come to
+23-30%. The SBR ones (al_sbr_*) repeat much of their material: the match
+model takes about a third off them.
 
 Where the bytes of fdkaac's 128 kbit/s stream go (`-v`):
 
 | part | in the stream | compressed | |
 |---|---:|---:|---:|
-| spectral magnitudes (and escapes) | 626642 | 598468 | 95.5% |
-| their signs | 209727 | 209038 | 99.7% |
-| scalefactors | 53657 | 44933 | 83.7% |
-| sections | 36080 | 17201 | 47.7% |
-| headers and other fields | 35135 | 3474 | 9.9% |
-| all | 961241 | 873127 | 90.8% |
+| spectral magnitudes (and escapes) | 626642 | 597067 | 95.3% |
+| their signs | 209727 | 209096 | 99.7% |
+| scalefactors | 53657 | 44934 | 83.7% |
+| sections | 36080 | 16516 | 45.8% |
+| headers and other fields | 35135 | 3429 | 9.8% |
+| all | 961241 | 871057 | 90.6% |
 
 The Huffman codes of AAC are already close to what the values carry. A
 quantized spectral magnitude is all but white noise given its codebook
@@ -244,7 +281,7 @@ HE-AAC, ffmpeg's and faac's encoders.
 
 ## Limitations
 
-- One thread, about 0.4 MB/s both ways on a current x86-64 core (25
+- One thread, about 0.37 MB/s both ways on a current x86-64 core (23
   times real time at 128 kbit/s).
 - The model's parameters are part of the format, and the version byte
   says which: a stream decodes with the version that made it.

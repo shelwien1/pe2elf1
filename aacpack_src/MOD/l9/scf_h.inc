@@ -9,6 +9,7 @@ static const byte H9_scf_c_sb[50+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,1
 
 static const byte H9_scf_d_d1[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 static const byte H9_scf_d_d2[5+1]={ 0,1,2,3,4,5 };
+static const byte H9_scf_d_dm[60+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60 };
 
 static const byte H9_scf_e_oc[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 static const byte H9_scf_e_pa[5+1]={ 0,1,2,3,4,5 };
@@ -71,7 +72,7 @@ static const int H9_scf_bw = (12+0) * (1);
 static const int H9_scf_mt = (2+0) * (1);
 static const int H9_scf_qs = (23+3) * (1);
 static const int H9_scf_qf = (17+3) * (1);
-static const int H9_scf_mb = (33+0) * (1);
+static const int H9_scf_mb = (8+0) * (1);
 static const int H9_scf_lrm = (0+0) * (1);
 static const int H9_scf_mbm = (0+0) * (1);
 static const int H9_scf_hA = (24+0) * (1);
@@ -94,7 +95,7 @@ static const int H9_scf_hN = (24+0) * (1);
 static const long long H9_scf_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 15), 6); // 270
 static const long long H9_scf_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 15), 4); // 180
 static const long long H9_scf_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 51), 2); // 306
-static const long long H9_scf_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 14), 6); // 252
+static const long long H9_scf_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 14), 6), 61); // 15372
 static const long long H9_scf_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 14), 6), 3); // 756
 static const long long H9_scf_f_Volume = tc_vmul(tc_vmul(1, 3), 4); // 12
 static const long long H9_scf_g_Volume = tc_vmul(1, 6); // 6
@@ -109,7 +110,7 @@ static const long long H9_scf_s_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 4), 3); 
 static const long long H9_scf_t_Volume = tc_vmul(1, 3); // 3
 static const long long H9_scf_w_Volume = tc_vmul(1, 2); // 2
 
-#define H9_scf_USES(X) X(kd) X(pa) X(d1) X(pd) X(sb) X(ws) X(d2) X(oc) X(mu) X(cb) X(gd) X(gr) X(pw) X(pv) X(sk) X(fb)
+#define H9_scf_USES(X) X(kd) X(pa) X(d1) X(pd) X(sb) X(ws) X(d2) X(dm) X(oc) X(mu) X(cb) X(gd) X(gr) X(pw) X(pv) X(sk) X(fb)
 
 struct H9_scf_T {
   cm_cnt2 H9_scf_A[tc_rows(H9_scf_a_Volume, H9_scf_hA) * H_scf_ND];
