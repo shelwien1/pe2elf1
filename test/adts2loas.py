@@ -2,8 +2,9 @@
 """adts2loas.py in.aac out.loas version subframes otherbits smc_interval [alignones]: ADTS (or AUS1, for
 ER AAC) -> LOAS/LATM with audioMuxVersion 0/1, numSubFrames+1 AUs per AudioMuxElement, otherData, crcCheck,
 ascLen fill bits (v1).
-(aac2tsv's tests/adts2loas.py, as it is.)"""
+(aac2tsv's tests/adts2loas.py, its ADTS frames and bit writer in adts.py.)"""
 import sys, random
+from adts import BW, frames
 d = open(sys.argv[1], 'rb').read(); out = sys.argv[2]
 ver, nsub, obits, interval = int(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5]), int(sys.argv[6])
 ones = len(sys.argv) > 7
@@ -37,19 +38,12 @@ if d[:4] == b'AUS1':
     while p + 4 <= len(d):
         n = int.from_bytes(d[p:p + 4], 'little'); aus.append(d[p + 4:p + 4 + n]); p += 4 + n
     ascn = asc_bits(ascb)
-while ascb is None and p + 7 <= len(d):
-    if d[p] != 0xff or (d[p+1] & 0xf6) != 0xf0: p += 1; continue
-    pa = d[p+1] & 1; flen = ((d[p+3] & 3) << 11) | (d[p+4] << 3) | (d[p+5] >> 5)
-    if hdr is None: hdr = d[p:p+7]
-    aus.append(d[p + (7 if pa else 9):p + flen]); p += flen
 if ascb is None:
+    fr = list(frames(d))
+    if not fr: sys.exit('adts2loas.py: no ADTS frame in %s' % sys.argv[1])
+    hdr = fr[0][0]; aus = [b for _, b in fr]
     prof = hdr[2] >> 6; sfi = (hdr[2] >> 2) & 15; ch = ((hdr[2] & 1) << 2) | (hdr[3] >> 6)
     ascn = 16
-class BW:
-    def __init__(s): s.b = []
-    def put(s, v, n):
-        for i in range(n - 1, -1, -1): s.b.append((v >> i) & 1)
-    def bytes(s): return bytes(int(''.join(map(str, s.b[i:i+8])), 2) for i in range(0, len(s.b), 8))
 def latm_value(w, v, nb): w.put(nb, 2); w.put(v, 8 * (nb + 1))
 def asc(w):
     if ascb is not None:
@@ -82,7 +76,7 @@ while k + nsub + 1 <= len(aus):
         for c in au: w.put(c, 8)
     if obits:
         for _ in range(obits): w.put(rnd.randrange(2), 1)
-    while len(w.b) % 8: w.b.append(1 if ones else 0)
+    w.align(1 if ones else 0)
     body = w.bytes()
     res += bytes([0x56, 0xe0 | (len(body) >> 8), len(body) & 255]) + body
     k += nsub + 1; fr += 1

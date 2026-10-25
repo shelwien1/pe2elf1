@@ -1,7 +1,7 @@
 // The context mixing parts of oggcomp (balrogg-P-hash cm.inc): adaptive
 // counters (cm_cnt), interpolated APMs (cm_apm) and logistic mixers
 // (cm_mix), on 12-bit probabilities. Changed: the counters with a second,
-// fast probability (cm_cnt2; cm_cnt2s keeps both stretched too), and the
+// fast probability (cm_cnt2), and the
 // mixers' sums in AVX2 where the inputs are packed once for the mixers
 // sharing them (cm_x16), to the same results (a family's ten counters of a
 // decision too: tc_fam::bit_x).
@@ -16,6 +16,7 @@ constexpr int CM_CBITS = 16;
 constexpr int CM_CONE = 1 << CM_CBITS;
 constexpr int CM_TMAX = 4096;
 constexpr int CM_AMAX = 255;
+static_assert(CM_AMAX <= CM_TMAX && CM_CONE == 65536, "cm_apm's updates read cm_rec");
 constexpr int CM_QMAX = 130;
 // an APM's width, its interpolation points: 3 to CM_QMAX, as the tables of
 // it are sized (the templates' * cm_apm_q(qs)) and as cm_apm takes it
@@ -24,8 +25,7 @@ constexpr int cm_apm_q(int q) { return q < 3 ? 3 : q > CM_QMAX ? CM_QMAX : q; }
 //  counts and squash and stretch -- constants, computed as the program
 //  starts and only read after, by every model at once
 struct cm_tabs {
-  u16 rec[CM_TMAX + 2];
-  u16 arec[CM_AMAX + 2];
+  u16 rec[CM_TMAX + 2];  // (CM_TMAX >= CM_AMAX: the APMs' too)
   u16 mrec[CM_AMAX + 2];
   i16 st[CM_PONE + 1];  // (and one more, read in pairs)
   u16 sq[2 * CM_STMAX + 1];
@@ -33,8 +33,6 @@ struct cm_tabs {
     int i;
     for(i = 0; i <= CM_TMAX + 1; i++)
       rec[i] = (u16)(CM_CONE / (i + 2));
-    for(i = 0; i <= CM_AMAX + 1; i++)
-      arec[i] = (u16)(65536 / (i + 2));
     for(i = 0; i <= CM_AMAX + 1; i++)
       mrec[i] = (u16)(65535 / (i + 1));
     for(i = -CM_STMAX; i <= CM_STMAX; i++) {
@@ -62,7 +60,6 @@ static cm_tabs cm_make_tabs() {
 }
 static const cm_tabs cm_tab = cm_make_tabs();
 static const u16 (&cm_rec)[CM_TMAX + 2] = cm_tab.rec;
-static const u16 (&cm_arec)[CM_AMAX + 2] = cm_tab.arec;
 static const u16 (&cm_mrec)[CM_AMAX + 2] = cm_tab.mrec;
 static const i16 (&cm_st)[CM_PONE + 1] = cm_tab.st;
 static const u16 (&cm_sq)[2 * CM_STMAX + 1] = cm_tab.sq;
@@ -104,20 +101,6 @@ struct cm_cnt2 {
     q = (u16)(cq + ((target - cq) >> 3));
   }
 };
-// cm_cnt2 with its two probabilities kept stretched, written at each update:
-// a decision reads them with the counter instead of looking them up on its
-// way to the mixer (h264p's -1 counters)
-struct cm_cnt2s {
-  cm_cnt2 c;
-  i16 sp, sq;  // cm_stretch(P()), cm_stretch(Q())
-  INLINE int P() const { return c.P(); }
-  INLINE int Q() const { return c.Q(); }
-  INLINE void upd(int bit, int lim, int mw) {
-    c.upd(bit, lim, mw);
-    sp = cm_st[c.P()];
-    sq = cm_st[c.Q()];
-  }
-};
 // an APM's count limit by its rate (1-15)
 constexpr int cm_apm_limit(int rate) { return rate >= 8 ? CM_AMAX : (1 << rate) - 2 < 1 ? 1 : (1 << rate) - 2; }
 struct cm_apm {
@@ -151,7 +134,7 @@ struct cm_apm {
     int k = cc[i];
     int v = (int)ident[b] + tt[i];
     cc[i] = (u8)(k + (k < lim));
-    v += ((g - v) * cm_arec[k]) >> 16;
+    v += ((g - v) * cm_rec[k]) >> 16;
     tt[i] = (i16)(v - (int)ident[b]);
   }
   INLINE void upd(int bit, int lim) {

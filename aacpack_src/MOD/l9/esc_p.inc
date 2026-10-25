@@ -9,14 +9,13 @@
 
     `_A`-`_E`, `_H`-`_L` are the ten counters, `_S` and `_F` the two APMs,
     `_W`, `_W2` and `_W3` the three mixers (selected by indices m, w and
-    s) and `_WF` the one that mixes them (by node and the state of
-    code()'s hint), `_MT` and `_WM` the mantissa plane and its mixer, `_G`
-    the sign counters.  Each is H_esc_ND (or H_esc_MND) rows deep per
-    context: where a decision sits among the family's nodes is context
-    without being a variable.  */
+    s) and `_WF` the one that mixes them (by node), `_MT` the mantissa
+    plane, `_G` the sign counters.  Each is H_esc_ND (or H_esc_MND) rows
+    deep per context: where a decision sits among the family's nodes is
+    context without being a variable.  */
 
 void H9_esc_make( const H_esc_v & D, tcx & X ) {
-  int a, b, c, d, e, h, i, j, k, l, s, f, m, w, t, n, g;
+  int a, b, c, d, e, h, i, j, k, l, s, f, m, w, t, g;
   H_esc_VARS(H_LOCAL)
 
   a = 0;
@@ -76,11 +75,9 @@ void H9_esc_make( const H_esc_v & D, tcx & X ) {
   t = 0;
   t = t*20 + H9_esc_t_kq[__min(19,__max(0,(kq)-(1-1)))];
 
-  n = 0;
-
   g = 0;
   X.c[0] = a;  X.c[1] = b;  X.c[2] = c;  X.c[3] = d;  X.c[4] = e;  X.c[5] = h;  X.c[6] = i;  X.c[7] = j;  X.c[8] = k;  X.c[9] = l;  X.s = s;  X.f = f;  X.m = m;  X.w = w;  X.t = t;
-  X.n = n;  X.g = g;
+  X.g = g;
 }
 
 

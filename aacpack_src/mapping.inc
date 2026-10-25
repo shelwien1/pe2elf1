@@ -31,17 +31,15 @@ struct mapping {
     MSize = strlen(S);
     pmap = (int*)mem_alloc((MSize + 1) * sizeof(int));
     int i, j;
-    value = 0;
+    unsigned v = 0;  // (a Number's: its bits, with L; a longer pattern's is not read)
     for (i = 0, j = 0; i < MSize; i++) {
       pmap[i] = j;
       j += (S[i] & 1);
-      // Split to avoid Clang's -Wunsequenced error
-      value <<= 1;
-      value += (S[i] & 1);
+      v = (v << 1) + (unsigned)(S[i] & 1);
     }
     pmap[i] = j;
     Size = j + 1;
-    value += L;
+    value = (int)(v + (unsigned)L);
   }
 
   int map(int x) {
@@ -81,12 +79,6 @@ struct masking {
       j = ((j | (~mask)) + 1) & mask;
     }
     for (i = 0; i < SMSize; i++) pmap[i] = pmap[i & mask];
-  }
-
-  int map(int x) {
-    if (x < 0) x = 0;
-    if (x >= SMSize) x = SMSize - 1;
-    return pmap[x];
   }
 
   void inc(int& y, int r) {

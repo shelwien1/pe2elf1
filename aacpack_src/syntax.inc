@@ -90,7 +90,7 @@ struct ChanData {
   int16_t sf[8 * 64];  // its scalefactor as the decoder has it: of the spectrum, intensity position or noise energy
   uint8_t ms[8 * 64];  // ms_used
   int coef[1024];      // the spectral values (window w's at w * 128), as far as walked
-  int tns, pulse;      // present
+  int tns;             // tns_data present
 };
 
 // what the walk tells its channel it is at (Chan::note)
@@ -131,12 +131,11 @@ struct Walk {
   // where the walk is, for the model
   struct Pos {
     int type, tag, chn;   // the channel element (TYPE_*, its tag or, in ELD, its place), its channel
-    int g, sfb, win, k;   // group, band, window, coefficient
+    int g, sfb;           // group, band
     int cb;               // the section's codebook
     int env, dt, bal;     // SBR, PS: envelope, time differential, balance (SBR coupling's second channel)
     int nb;               // the bands of the SBR envelope or PS parameter
     const SbrCh* sc;      // the SBR channel's grid
-    const SbrState* ss;   // and its header state
     const PsHdr* ph;
   } at;
   ChanData cd[2];  // the channel element's channels
@@ -237,6 +236,18 @@ struct Walk {
     return b;
   }
   size_t bitpos() const { return R ? br.pos : w->pos; }
+  // writing, after push_sub(): a counted extension's (ps_data's,
+  // sbr_extension's) as long as the channel says one more and one() goes
+  // on, then the fill to a byte, the whole after its length in bytes
+  template <class F>
+  void ext_write(int e_more, int e_fill, F one) {
+    while (pass(e_more, 1, 0) && one()) {
+    }
+    u(e_fill, w->to_byte());
+    BitWriter& b = pop_sub();
+    write_ext_size((int)(b.pos / 8));
+    w->append(b);
+  }
 
   // ---------- values ----------
 
@@ -454,7 +465,6 @@ struct Walk {
   void tns_data(const Ics& ii) {
     const bool is8 = ii.ws == EIGHT_SHORT_SEQUENCE;
     for (int wi = 0; wi < ii.num_windows; wi++) {
-      at.win = wi;
       int nf = (int)u(E_TNS_NFILT, is8 ? 1 : 2, wi);
       if (!nf) continue;
       int coef_res = (int)u(E_TNS_RES, 1);
@@ -564,10 +574,8 @@ struct Walk {
         at.sfb = sfb;
         at.cb = cb;
         for (int wi = 0; wi < ii.group_len[g]; wi++) {
-          at.win = win + wi;
           int* cc = c.coef + (win + wi) * 128;
           for (int k = a; k < b; k += dim) {
-            at.k = k;
             if (R) {
               dec_tuple(cb, cc + k);
               for (int j = 0; j < dim; j++) ob[OB_SIGN] += cc[k + j] != 0;
@@ -611,12 +619,9 @@ struct Walk {
         at.sfb = sfb;
         at.cb = 0;
         for (int wi = 0; wi < ii.group_len[g]; wi++) {
-          at.win = win + wi;
           int* cc = c.coef + (win + wi) * 128;
-          for (int k = a; k < b; k += 4) {  // (every band's width is a multiple of 4)
-            at.k = k;
+          for (int k = a; k < b; k += 4)  // (every band's width is a multiple of 4)
             ch->spec(0, win + wi, k, cc + k, 4);
-          }
         }
       }
       win += ii.group_len[g];
@@ -666,7 +671,7 @@ struct Walk {
   // individual_channel_stream(common_window, 0) of the channel cd[cur]
   void ics(bool common_window) {
     ChanData& c = cd[cur];
-    c.tns = c.pulse = 0;
+    c.tns = 0;
     note(N_ICS);
     c.gg = (int)u(E_GLOBAL_GAIN, 8);
     if (!common_window) ics_info(c.ii, false);
@@ -681,10 +686,7 @@ struct Walk {
       section_data(c);
     }
     scale_factor_data(c);
-    if (st.er != 2 && u(E_PULSE_PRESENT, 1)) {
-      c.pulse = 1;
-      pulse_data();
-    }
+    if (st.er != 2 && u(E_PULSE_PRESENT, 1)) pulse_data();
     if (!st.er) {
       if (u(E_TNS_PRESENT, 1)) {
         c.tns = 1;
@@ -1170,7 +1172,7 @@ struct Walk {
       fh = &huff_sbr[c.amp_res ? F_HUFFMAN_ENV_3_0DB : F_HUFFMAN_ENV_1_5DB];
       startbits = c.amp_res ? 6 : 7;
     }
-    at.sc = &c, at.ss = &s, at.bal = bal;
+    at.sc = &c, at.bal = bal;
     for (int e = 0; e < c.num_env; e++) {
       int nb = s.bands.n[c.freq_res[e]];
       at.env = e, at.dt = c.df_env[e], at.nb = nb;
@@ -1186,7 +1188,7 @@ struct Walk {
   void sbr_noise(const SbrState& s, const SbrCh& c, bool bal) {
     const Huff& th = huff_sbr[bal ? T_HUFFMAN_NOISE_BAL_3_0DB : T_HUFFMAN_NOISE_3_0DB];
     const Huff& fh = huff_sbr[bal ? F_HUFFMAN_ENV_BAL_3_0DB : F_HUFFMAN_ENV_3_0DB];
-    at.sc = &c, at.ss = &s, at.bal = bal;
+    at.sc = &c, at.bal = bal;
     for (int i = 0; i < c.num_noise; i++) {
       at.env = i, at.dt = c.df_noise[i], at.nb = s.bands.n_q;
       if (c.df_noise[i]) {
@@ -1295,14 +1297,10 @@ struct Walk {
       u(E_PSX_FILL, (int)left);
     } else {
       push_sub();
-      for (;;) {
-        if (!pass(E_PSX_MORE, 1, 0)) break;
+      ext_write(E_PSX_MORE, E_PSX_FILL, [&]() {
         if (u(E_PSX_ID, 2) == 0) ps_ipdopd(h, ne);
-      }
-      u(E_PSX_FILL, (int)((8 - w->pos % 8) % 8));
-      BitWriter& s = pop_sub();
-      write_ext_size((int)(s.pos / 8));
-      w->append(s);
+        return true;
+      });
     }
   }
 
@@ -1332,21 +1330,16 @@ struct Walk {
       u(E_SBRX_FILL, (int)left);
     } else {
       push_sub();
-      for (;;) {
-        if (!pass(E_SBRX_MORE, 1, 0)) break;
+      ext_write(E_SBRX_MORE, E_SBRX_FILL, [&]() {
         if (u(E_SBRX_ID, 2) == 2) {
           ps_data(s.ps);
-        } else {
-          size_t n = (size_t)cnt(E_SBRXE_N, 0, 0, 8 * 270);
-          bitstr(E_SBRXE, n);
-          if (w->pos % 8) bad("corrupt stream: an SBR extension that does not end on a byte");
-          break;
+          return true;
         }
-      }
-      u(E_SBRX_FILL, (int)((8 - w->pos % 8) % 8));
-      BitWriter& b = pop_sub();
-      write_ext_size((int)(b.pos / 8));
-      w->append(b);
+        size_t n = (size_t)cnt(E_SBRXE_N, 0, 0, 8 * 270);
+        bitstr(E_SBRXE, n);
+        if (w->pos % 8) bad("corrupt stream: an SBR extension that does not end on a byte");
+        return false;
+      });
     }
   }
 
@@ -1355,7 +1348,6 @@ struct Walk {
     SbrCh c0, c1;
     memset((void*)&c0, 0, sizeof c0);
     memset((void*)&c1, 0, sizeof c1);
-    at.ss = &s;
     at.bal = 0;
     if (prev_che_type != TYPE_CPE) {
       at.chn = 0;
@@ -1442,7 +1434,7 @@ struct Walk {
       sbr_tables(s, hdr, sp);
       sbr_data(s);
       size_t pad = pend - br.pos;
-      if (pad >= 8 || (pad && br.peek((int)pad))) {
+      if (br.not_zero_pad(pad)) {
         cnt(E_SBRPAD_N, (int64_t)pad, 1, 8 * 270);
         bitstr(E_SBRPAD, pad);
       } else {
@@ -1491,7 +1483,7 @@ struct Walk {
     if (pn)
       bitstr(E_SBRPAD, pn);
     else
-      w->put(0, (int)((8 - w->pos % 8) % 8));
+      w->put(0, w->to_byte());
     if (w->pos % 8) bad("corrupt stream: an SBR payload that does not end on a byte");
     if (t == 14) {
       unsigned crc = pass(E_SBR_CRC_OK, 1, 0) ? crc10_bits(w->b.p, 14, w->pos - 14) : (unsigned)pass(E_SBR_CRC, 10, 0);

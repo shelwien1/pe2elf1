@@ -50,7 +50,6 @@ static const byte H9_spc_l_sb[50+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,1
 static const byte H9_spc_m_cb[10+1]={ 0,1,2,3,4,5,6,7,8,9,10 };
 static const byte H9_spc_m_av[28+1]={ 0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6,7 };
 
-
 static const byte H9_spc_s_cb[10+1]={ 0,1,2,3,4,5,6,7,8,9,10 };
 static const byte H9_spc_s_av[31+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31 };
 static const byte H9_spc_s_a1[3+1]={ 0,1,2,3 };
@@ -92,8 +91,6 @@ static const int H9_spc_mwT = (0+0) * (1);
 static const int H9_spc_mt = (0+0) * (1);
 static const int H9_spc_rG = (0+0) * (1);
 static const int H9_spc_mwG = (0+0) * (1);
-static const int H9_spc_lrm = (0+0) * (1);
-static const int H9_spc_mbm = (0+0) * (1);
 static const int H9_spc_hA = (24+0) * (1);
 static const int H9_spc_hB = (24+0) * (1);
 static const int H9_spc_hC = (24+0) * (1);
@@ -108,7 +105,6 @@ static const int H9_spc_hS = (24+0) * (1);
 static const int H9_spc_hF = (24+0) * (1);
 static const int H9_spc_hM = (24+0) * (1);
 static const int H9_spc_hT = (24+0) * (1);
-static const int H9_spc_hN = (24+0) * (1);
 
 
 static const long long H9_spc_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 11), 16), 8); // 1408
@@ -124,7 +120,6 @@ static const long long H9_spc_j_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 11),
 static const long long H9_spc_k_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 11), 11), 8), 17); // 16456
 static const long long H9_spc_l_Volume = tc_vmul(tc_vmul(tc_vmul(1, 11), 51), 2); // 1122
 static const long long H9_spc_m_Volume = tc_vmul(tc_vmul(tc_vmul(1, 11), 2), 8); // 176
-static const long long H9_spc_n_Volume = 1; // 1
 static const long long H9_spc_s_Volume = tc_vmul(tc_vmul(tc_vmul(1, 11), 32), 4); // 1408
 static const long long H9_spc_t_Volume = 1; // 1
 static const long long H9_spc_w_Volume = tc_vmul(tc_vmul(1, 8), 10); // 80
@@ -149,14 +144,12 @@ struct H9_spc_T {
   u8 H9_spc_FC[tc_rows(H9_spc_f_Volume, H9_spc_hF) * H_spc_ND * cm_apm_q(H9_spc_qf)];
   i32 H9_spc_W[tc_rows(H9_spc_m_Volume, H9_spc_hM) * H_spc_ND * TC_MIXN];
   u8 H9_spc_WC[tc_rows(H9_spc_m_Volume, H9_spc_hM) * H_spc_ND];
-  i32 H9_spc_WM[tc_rows(H9_spc_n_Volume, H9_spc_hN) * H_spc_MND * 3];
-  u8 H9_spc_WMC[tc_rows(H9_spc_n_Volume, H9_spc_hN) * H_spc_MND];
   i32 H9_spc_W2[H9_spc_w_Volume * H_spc_ND * TC_MIXN];
   u8 H9_spc_W2C[H9_spc_w_Volume * H_spc_ND];
   i32 H9_spc_W3[tc_rows(H9_spc_s_Volume, H9_spc_hS) * H_spc_ND * TC_MIXN];
   u8 H9_spc_W3C[tc_rows(H9_spc_s_Volume, H9_spc_hS) * H_spc_ND];
-  i32 H9_spc_WF[H_spc_ND * 5 * 4];
-  u8 H9_spc_WFC[H_spc_ND * 5];
+  i32 H9_spc_WF[H_spc_ND * 4];
+  u8 H9_spc_WFC[H_spc_ND];
   cm_cnt H9_spc_G[H9_spc_g_Volume * H_spc_NG];
   
   /* Total bytes this module's Table() members occupy -- a constant here, since
@@ -179,14 +172,12 @@ struct H9_spc_T {
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H9_spc_f_Volume, H9_spc_hF) * H_spc_ND * cm_apm_q(H9_spc_qf))
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H9_spc_m_Volume, H9_spc_hM) * H_spc_ND * TC_MIXN)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H9_spc_m_Volume, H9_spc_hM) * H_spc_ND)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H9_spc_n_Volume, H9_spc_hN) * H_spc_MND * 3)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H9_spc_n_Volume, H9_spc_hN) * H_spc_MND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H9_spc_w_Volume * H_spc_ND * TC_MIXN)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H9_spc_w_Volume * H_spc_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H9_spc_s_Volume, H9_spc_hS) * H_spc_ND * TC_MIXN)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H9_spc_s_Volume, H9_spc_hS) * H_spc_ND)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_spc_ND * 5 * 4)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(H_spc_ND * 5)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_spc_ND * 4)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(H_spc_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H9_spc_g_Volume * H_spc_NG);
   void H9_spc_Init( void ) {}
   void H9_spc_Quit( void ) {}

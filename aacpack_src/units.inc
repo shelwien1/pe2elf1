@@ -330,7 +330,7 @@ static void stream_mux_config(Walk& c) {
 static void paypad(Walk& c, size_t pe) {
   if (c.R) {
     size_t pad = pe - c.br.pos;
-    int x = pad >= 8 || (pad && c.br.peek((int)pad));
+    int x = c.br.not_zero_pad(pad);
     c.cnt(E_PAYPAD_N, x ? (int64_t)pad : 0, 0, (int64_t)1 << 40);
     if (x) c.bitstr(E_PAYPAD, pad);
   } else {
@@ -338,7 +338,7 @@ static void paypad(Walk& c, size_t pe) {
     if (n)
       c.bitstr(E_PAYPAD, n);
     else
-      c.w->put(0, (int)((8 - c.w->pos % 8) % 8));
+      c.w->put(0, c.w->to_byte());
   }
 }
 

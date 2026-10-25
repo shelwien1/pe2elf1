@@ -89,8 +89,6 @@ Index w
 Index t
  t_kd: kd, 1!11111111111111
 
-Index n
-
 Index g
  g_d1: d1, 1!11111
 
@@ -126,9 +124,6 @@ Number mt, 1, 0!010
 Number qs, 1, 3!0010111
 Number qf, 1, 3!0010001
 Number mb, 1, 0!00001000
-#  Frozen: no hint's mixer (lrm, mbm, index n): the family codes without one.
-! Number lrm, 1, 0!00000
-! Number mbm, 1, 0!00000000
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
 #  direct, one that does not is hashed into 2^h rows.  Frozen.
 ! Number hA, 1, 0!11000
@@ -145,4 +140,3 @@ Number mb, 1, 0!00001000
 ! Number hF, 1, 0!11000
 ! Number hM, 1, 0!11000
 ! Number hT, 1, 0!11000
-! Number hN, 1, 0!11000

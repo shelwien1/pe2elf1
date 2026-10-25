@@ -58,25 +58,19 @@ enum { F_AUTO, F_ADTS, F_LOAS, F_ADIF };
 
 // What a run of the compressor or the decompressor takes: Init() (coro.inc)
 struct AacArgs {
-  int level;       // compressing: the model's level
-  int order;       // compressing: the model's order (Model's f_CS)
   bool verbose;    // statistics, and the messages they come with
   bool strict;     // compressing: fail where a frame would be stored as its bytes, or kept partly as bits
   int format;      // compressing: the container to look for (F_*; 0 any)
   const uint8_t* asc;  // compressing: -asc, the AudioSpecificConfig of raw access units (asc_n bytes; none 0)
   size_t asc_n;
   const char* name;  // the input's, for messages
-  Progress* meter;   // the call's progress line, where its driver shows what the codec tells (coro.inc)
 
   void Init() {
-    level = 0;
-    order = 1;
     verbose = strict = false;
     format = F_AUTO;
     asc = nullptr;
     asc_n = 0;
     name = "";
-    meter = nullptr;
   }
 };
 
@@ -146,6 +140,7 @@ static AudioInfo audio_of(const Walk& c, int kind) {
 static void tell_unit(CoroIo& io, const Walk& c, int kind) {
   if (kind != U_RAW && kind != U_AUS1) {
     AudioInfo a = audio_of(c, kind);
+    if (kind == U_BLOCK && io.audio.container == 3) a.container = 3;  // (an ADIF header's blocks: ADIF still)
     if (io.audio.add(a)) io.tell(kYieldAudio);
   }
   io.frames++;
@@ -402,8 +397,13 @@ struct Scanner {
     err_raise("a unit at byte %" PRIu64 " %s%s%s", pos, what, why && *why ? ": " : "", why ? why : "");
   }
 
-  // whether the unit, written back from its values, is as it was (end
-  // bytes at p), and its state the parse's
+  // whether a walk that wrote the unit from the log came out as it was (end
+  // bytes at p), its values all taken and its state the parse's
+  bool walked_as(const LogChan& lw, const uint8_t* p, size_t end) {
+    const Walk& c = s->walk;
+    return lw.at_end() && c.fw.pos == end * 8 && !memcmp(c.fw.b.p, p, end) && c.st.same(s->after);
+  }
+  // whether the unit, written back from its values, is as it was
   bool writes_back(int kind, const uint8_t* p, size_t end) {
     Walk& c = s->walk;
     s->log.rewind();
@@ -415,7 +415,7 @@ struct Scanner {
     c.start_write(&lw, cap_of(kind));
     walk_unit(c, s->rg, kind, 0, 0);
     err_pop(t);
-    return lw.at_end() && c.fw.pos == end * 8 && !memcmp(c.fw.b.p, p, end) && c.st.same(s->after);
+    return walked_as(lw, p, end);
   }
 
   // The unit of the kind at pos, len bytes long (0: as long as it parses to
@@ -476,7 +476,7 @@ struct Scanner {
       strict("parses only in part", nullptr);
     }
     for (int k = 0; k < OB_N; k++) s->st.ob[k] += c.ob[k];
-    flush_raw();
+    flush_raw();  // (which may move the window: p is stale after it)
     c.st = before;
     m->unit(UF_KIND, last, kind);
     last = kind;
@@ -487,8 +487,7 @@ struct Scanner {
     mc.Init(*m, &lw);
     c.start_write(&mc, cap_of(kind), f_CS != 0);
     walk_unit(c, s->rg, kind, 0, 0);
-    if (!lw.at_end() || !c.st.same(s->after) || c.fw.pos != end * 8 || memcmp(c.fw.b.p, p, end))
-      err_raise_s("internal: the model pass did not walk the unit as it was parsed");
+    if (!walked_as(lw, win().at(pos), end)) err_raise_s("internal: the model pass did not walk the unit as it was parsed");
     pos += end;
     raw_start = pos;
     s->st.units[kind]++;

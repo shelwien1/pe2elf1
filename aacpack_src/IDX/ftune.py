@@ -11,14 +11,15 @@ the bit now 0, but such ties only with a pattern that gains, as opt.pl
 commits only a gain), pattern after pattern in random order, pass after
 pass until a pass gains less than 0.01% of the family's size, or a byte
 ($FTUNE_MINPASS; or `passes` of them).  A family whose dumps code to less
-than a byte (no decisions: pcm without I_PCM) is left as it is, not
+than a byte (no decisions: one that no stream reached) is left as it is, not
 zeroed; a trial that fails counts as the worst (logged).  The families do not
 interact, so four are tuned at once, the largest first, each trial a
 process per stream.  Writes the
 winners to export.!!! (mdesc lines, for IDX/import.pl; every pattern of
 the level) at each gain, and the progress to ftune.log, both in the
 current directory; with FTUNE_FROM=EXPORT it starts from that export's
-patterns.
+patterns.  Interrupted (^C), it stops at the next trial and exports the best
+so far.  Exit status 1 if it tuned no family.
 """
 import glob, os, random, re, shutil, subprocess, sys, threading, time
 from concurrent.futures import ThreadPoolExecutor
@@ -47,7 +48,19 @@ for k in pats:
     m = re.match(r'H\d+_([a-z0-9]+)_', k)
     if m:
         fams.setdefault(m.group(1), []).append(k)
+if not fams:
+    sys.exit('ftune.py: no patterns in %s (mk.sh famtune L makes the binary)' % exe)
+if not glob.glob(os.path.join(ddir, '*', '*.dump')):
+    sys.exit('ftune.py: no dumps in %s (mk.sh dump L DIR STREAM... makes them)' % ddir)
+unknown = [f for f in only if f not in fams]
+if unknown:
+    sys.exit('ftune.py: no family %s (the families: %s)' % (' '.join(unknown), ' '.join(sorted(fams))))
 lock = threading.Lock()
+stop = threading.Event()  # (^C: the families end at their next trial)
+
+
+class Stop(Exception):
+    pass
 log = open('ftune.log', 'a')
 t0 = time.time()
 
@@ -75,6 +88,8 @@ def tune(fam):
             f.write(bytes(b))
 
     def measure():
+        if stop.is_set():
+            raise Stop
         # a process per stream, at once: the cores the small families leave go to the large ones
         ps = [subprocess.Popen(['./' + mine, fam, d], stdout=subprocess.PIPE, stderr=subprocess.PIPE) for d in dumps]
         tot = 0.0
@@ -89,12 +104,30 @@ def tune(fam):
                 tot = float('inf')
         return tot
 
+    try:
+        return climb(fam, measure, write, img)
+    except Stop:
+        return fam, None, None
+    finally:
+        os.remove(mine)
+
+def climb(fam, measure, write, img):
     start = best = measure()
     if not start < float('inf') or start < 1.0:
         say('%s: %.1f bytes in its dumps: left as it is' % (fam, start))
-        os.remove(mine)
+        if not start < float('inf'):
+            print('ftune.py: %s: its dumps do not code (ftune.log says why): left as it is' % fam, file=sys.stderr)
         return fam, None, None
     say('%s: %d patterns, %d bits, %.1f bytes' % (fam, len(fams[fam]), sum(pats[k][1] for k in fams[fam]), best))
+    try:
+        best = passes_of(fam, measure, write, img, start)
+    except Stop:  # (the best so far is in data, and exported)
+        say('%s: interrupted' % fam)
+        raise
+    return fam, start, best
+
+def passes_of(fam, measure, write, img, start):
+    best = start
     for p in range(passes):
         before = best
         names = sorted(fams[fam])
@@ -131,19 +164,34 @@ def tune(fam):
         say('%s: pass %d done, %.1f bytes (%+.1f)' % (fam, p, best, best - start))
         if best > before - max(1.0, minrel * start):
             break
-    os.remove(mine)
-    return fam, start, best
+    return best
 
 order = sorted((f for f in fams if not only or f in only),
                key=lambda f: -sum(os.path.getsize(d) for d in glob.glob(os.path.join(ddir, '*', f + '.dump'))))
 export()
 tot0 = tot1 = 0.0
-with ThreadPoolExecutor(max_workers=int(os.environ.get('J', '4'))) as ex:
-    for fam, a, b in ex.map(tune, order):
+tuned = 0
+ex = ThreadPoolExecutor(max_workers=int(os.environ.get('J', '4')))
+futs = [ex.submit(tune, f) for f in order]
+try:
+    for fu in futs:
+        fam, a, b = fu.result()
         if a is not None:
+            tuned += 1
             tot0 += a
             tot1 += b
             print('%-4s %12.1f -> %12.1f  (%+.1f)' % (fam, a, b, b - a), flush=True)
+except KeyboardInterrupt:
+    stop.set()
+    for fu in futs:
+        fu.cancel()
+    print('ftune.py: interrupted: the best patterns so far go to export.!!!', file=sys.stderr)
+    ex.shutdown(wait=True)
+    export()
+    sys.exit(130)
+ex.shutdown(wait=True)
 export()
 say('all: %.1f -> %.1f bytes (%+.1f)' % (tot0, tot1, tot1 - tot0))
 print('all: %.1f -> %.1f bytes (%+.1f)' % (tot0, tot1, tot1 - tot0))
+if not tuned:
+    sys.exit('ftune.py: no family was tuned (ftune.log says why)')

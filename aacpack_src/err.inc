@@ -29,23 +29,20 @@ namespace aacpack {
 struct ErrTrap {
   jmp_buf jb;
   ErrTrap* up;    // the trap set before it
-  int code;       // what reached it: 1 an error (why), or err_jump()'s code
-  char why[256];
+  char why[256];  // what reached it
 };
 
 thread_local ErrTrap* err_trap_ = nullptr;  // the innermost
 
 INLINE void err_push(ErrTrap& t) {
   t.up = err_trap_;
-  t.code = 0;
   t.why[0] = 0;
   err_trap_ = &t;
 }
 INLINE void err_pop(ErrTrap& t) { err_trap_ = t.up; }
 
-// to trap t (set before), with code: the traps set since it are gone
-[[noreturn]] NOINLINE void err_jump(ErrTrap& t, int code) {
-  t.code = code;
+// to trap t (set before): the traps set since it are gone
+[[noreturn]] NOINLINE void err_jump(ErrTrap& t) {
   err_trap_ = t.up;
   longjmp(t.jb, 1);
   __builtin_unreachable();
@@ -58,7 +55,7 @@ INLINE void err_pop(ErrTrap& t) { err_trap_ = t.up; }
     exit(1);
   }
   snprintf(t->why, sizeof t->why, "%s", why);
-  err_jump(*t, 1);
+  err_jump(*t);
 }
 [[noreturn]] NOINLINE void err_raise_s(const char* why) { err_to(err_trap_, why); }
 [[noreturn]] NOINLINE void err_raise(const char* fmt, ...) {

@@ -9,7 +9,8 @@
 #      ./mk.sh check L        the tuning and the shipping build of -L, and the
 #                             shipping build without AVX2 (the plain C++
 #                             paths), compress the given streams (or
-#                             ../test/corpus/*) to the same bytes
+#                             ../test/corpus/*) to the same bytes, in both
+#                             orders (c, and c -b)
 #      ./mk.sh dump L DIR STREAM...
 #                             what each family of -L codes compressing the
 #                             streams, a directory of dumps per stream in DIR
@@ -32,7 +33,8 @@
 #  finds and `c` runs it:
 #
 #      ./mk.sh tuning 9                         # ../aacpack, the tuning build
-#      perl IDX/opt.pl opt.lst ../aacpack       # one stream path per line
+#      cp ../aacpack ../aacpack.tune            # (opt.pl patches the binary it is given)
+#      perl IDX/opt.pl opt.lst ../aacpack.tune  # one stream path per line
 #      cd IDX/l9 && for f in *.idx; do perl ../import.pl $f ../../export.\!\!\! > t && mv t $f; done
 #      cd ../.. && ./mk.sh mod && ./mk.sh check 9
 #
@@ -63,8 +65,7 @@ LEVELS="9"
 cleanup() {
   for l in $LEVELS; do
     for f in $FAMS; do
-      rm -f "IDX/l$l/$f-const.idx" "IDX/l$l/${f}_h.inc" "IDX/l$l/${f}_p.inc" \
-            "IDX/l$l/$f-const_h.inc" "IDX/l$l/$f-const_p.inc"
+      rm -f "IDX/l$l/${f}_h.inc" "IDX/l$l/${f}_p.inc"
     done
   done
 }
@@ -83,32 +84,32 @@ count_maps() {
 }
 
 #  $1 = the level, $2 = UseNew (1 pointers mapped at init, 0 fixed arrays),
-#  $3 = 1 to fold every parameter to a literal (IDX-FORMAT.md sec.1)
+#  $3 = 1 to fold every parameter to a literal (IDX-FORMAT.md sec.1; here
+#  idx2inc.pl's IDX_NOCONST=1, which folds every line of the .idx as it is)
 generate() {
   mkdir -p "MOD/l$1"
   for f in $FAMS; do
-    s=$f
-    if [ "$3" = 1 ]; then
-      sed 's/^Const 0/Const 1/' "IDX/l$1/$f.idx" > "IDX/l$1/$f-const.idx"
-      s=$f-const
-    fi
-    ( cd "IDX/l$1" && IDX_NOCONST=0 perl ../idx2inc.pl "$s.idx" "$2" >/dev/null )
+    ( cd "IDX/l$1" && IDX_NOCONST=$3 perl ../idx2inc.pl "$f.idx" "$2" >/dev/null )
     for o in _h _p; do
-      if [ ! -s "IDX/l$1/${s}${o}.inc" ]; then
-        echo "mk.sh: IDX/idx2inc.pl wrote no l$1/${s}${o}.inc -- is IDX/l$1/family.inc there?" >&2
+      if [ ! -s "IDX/l$1/${f}${o}.inc" ]; then
+        echo "mk.sh: IDX/idx2inc.pl wrote no l$1/${f}${o}.inc -- is IDX/l$1/family.inc there?" >&2
         exit 1
       fi
     done
-    mv -f "IDX/l$1/${s}_h.inc" "MOD/l$1/${f}_h.inc"
-    mv -f "IDX/l$1/${s}_p.inc" "MOD/l$1/${f}_p.inc"
+    if [ "$3" = 1 ] && grep -qE '^[pm](desc|mask)\(' "IDX/l$1/${f}_h.inc"; then
+      echo "mk.sh: l$1/$f.idx: a parameter not folded in the shipping form" >&2
+      exit 1
+    fi
+    mv -f "IDX/l$1/${f}_h.inc" "MOD/l$1/${f}_h.inc"
+    mv -f "IDX/l$1/${f}_p.inc" "MOD/l$1/${f}_p.inc"
   done
 }
 
-#  $1 = the binary, $2... more flags
+#  $1 = the binary, $2 = its source, $3... more flags
 build() {
-  out=$1
-  shift
-  $CXX $CXXFLAGS $PARCH -std=c++11 -fwrapv -fno-exceptions -fno-rtti -ILib3 -pthread "$@" -o "$out" aacpack.cpp -lm
+  out=$1 src=$2
+  shift 2
+  $CXX $CXXFLAGS $PARCH -std=c++11 -fwrapv -fno-exceptions -fno-rtti -ILib3 -pthread "$@" -o "$out" "$src" -lm
 }
 
 #  $1 = a path as given, relative to where mk.sh was run
@@ -133,12 +134,12 @@ case "${1:-}" in
     # (MOD/lL back in the shipping form once the build has it)
     trap 'generate "$lv" 0 1; cleanup' EXIT
     generate "$2" 1 0
-    build ../aacpack -DAACPACK_ONLY="$2"
+    build ../aacpack aacpack.cpp -DAACPACK_ONLY="$2"
     count_maps ../aacpack "tuning build of -$2"
     ;;
   release)
     for l in $LEVELS; do generate "$l" 0 1; done
-    build ../aacpack
+    build ../aacpack aacpack.cpp
     if grep -aq '!MAP!' ../aacpack; then
       echo "mk.sh: the release build still carries !MAP! markers" >&2
       exit 1
@@ -155,26 +156,31 @@ case "${1:-}" in
     tmp=$(mktemp -d)
     trap 'rm -rf "$tmp"; generate "$lv" 0 1; cleanup' EXIT
     generate "$lv" 1 0
-    build "$tmp/tuning" -DAACPACK_ONLY="$lv"
+    build "$tmp/tuning" aacpack.cpp -DAACPACK_ONLY="$lv"
     generate "$lv" 0 1
-    build "$tmp/release" -DAACPACK_ONLY="$lv"
+    build "$tmp/release" aacpack.cpp -DAACPACK_ONLY="$lv"
     p=$PARCH
     PARCH=
-    build "$tmp/plain" -DAACPACK_ONLY="$lv"
+    build "$tmp/plain" aacpack.cpp -DAACPACK_ONLY="$lv"
     PARCH=$p
     bad=0
-    if [ $# -eq 0 ]; then set -- ../test/corpus/*; fi
+    if [ $# -eq 0 ]; then set -- "$here"/../test/corpus/*; fi
     for s in "$@"; do
-      case $s in /*) ;; *) s=$orig/$s ;; esac
-      "$tmp/tuning" c "$s" "$tmp/a"
-      "$tmp/release" c "$s" "$tmp/b"
-      "$tmp/plain" c "$s" "$tmp/p"
-      if cmp -s "$tmp/a" "$tmp/b" && cmp -s "$tmp/b" "$tmp/p"; then
-        echo "mk.sh: $s: the same"
-      else
-        echo "mk.sh: $s: the builds differ" >&2
-        bad=1
-      fi
+      s=$(abspath "$s")
+      # (NAME.asc-HEX.raw: raw access units, coded with -asc HEX, as test/roundtrip.sh does)
+      asc=
+      case $s in *.asc-*.raw) asc="-asc $(echo "$s" | sed 's/.*\.asc-\([0-9a-fA-F]*\)\.raw$/\1/')" ;; esac
+      for o in "" -b; do
+        "$tmp/tuning" c $o $asc "$s" "$tmp/a"
+        "$tmp/release" c $o $asc "$s" "$tmp/b"
+        "$tmp/plain" c $o $asc "$s" "$tmp/p"
+        if cmp -s "$tmp/a" "$tmp/b" && cmp -s "$tmp/b" "$tmp/p"; then
+          echo "mk.sh: $s${o:+ ($o)}: the same"
+        else
+          echo "mk.sh: $s${o:+ ($o)}: the builds differ" >&2
+          bad=1
+        fi
+      done
     done
     exit $bad
     ;;
@@ -185,7 +191,7 @@ case "${1:-}" in
     shift 3
     tmp=$(mktemp -d)
     trap 'rm -rf "$tmp"; cleanup' EXIT
-    build "$tmp/aacpack" -DAACPACK_ONLY="$lv" -DAACPACK_DUMP
+    build "$tmp/aacpack" aacpack.cpp -DAACPACK_ONLY="$lv" -DAACPACK_DUMP
     mkdir -p "$dir"
     n=0
     for s in "$@"; do
@@ -204,7 +210,7 @@ case "${1:-}" in
     # (MOD/lL back in the shipping form however the build ends)
     trap 'rm -rf "$tmp"; generate "$lv" 0 1; cleanup' EXIT
     generate "$lv" 1 0
-    $CXX $CXXFLAGS $PARCH -std=c++11 -fwrapv -fno-exceptions -fno-rtti -DAACPACK_ONLY="$lv" -o "$tmp/famtune" IDX/famtune.cpp -lm
+    build "$tmp/famtune" IDX/famtune.cpp -DAACPACK_ONLY="$lv"
     cp "$tmp/famtune" ../famtune
     count_maps ../famtune "../famtune for -$2"
     ;;

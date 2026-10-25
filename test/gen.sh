@@ -5,15 +5,19 @@
 # intensity and TNS) as ADTS, LATM and MP4 made AUS1 (by mp42aus1.py), and
 # the ADTS made ADIF, LOAS of audioMuxVersion 1 and raw access units (named
 # NAME.asc-HEX.raw, for roundtrip.sh's -asc HEX); with fdkaac and faac, when
-# they are there, HE-AAC, HE-AACv2, LD and ELD, CRCs, VBR. Needs ffmpeg and
-# python3.
+# they are there, LD and ELD, CRCs, VBR, and HE-AAC and HE-AACv2 when
+# fdkaac's library has SBR (a stream an encoder cannot make is said and left
+# out). Needs ffmpeg and python3. DIR/.done says that the corpus is whole.
 set -e
 D=${1:-test/corpus}
 T=$(dirname "$0")
 mkdir -p "$D"
+rm -f "$D/.done"
 w=$D/.sig.wav
 w48=$D/.sig48.wav
 wm=$D/.sigm.wav
+# (the signal and what is made from it on the way go however this ends)
+trap 'rm -f "$w" "$w48" "$wm" "$D/.ff_lc128.m4a" "$D/.raw" "$D/.enc.err"' EXIT
 q="-hide_banner -loglevel error -y"
 # 8 s: a chord whose notes change each second, a chirp, plucks every 0.5 s,
 # noise bursts; the right channel a little different from the left
@@ -53,7 +57,10 @@ if command -v fdkaac > /dev/null; then
   fdk() {  # fdk NAME WAV fdkaac-options...
     n=$1 i=$2
     shift 2
-    fdkaac -S "$@" -o "$D/$n" "$i" 2> /dev/null || rm -f "$D/$n"
+    if ! fdkaac -S "$@" -o "$D/$n" "$i" 2> "$D/.enc.err"; then
+      echo "gen.sh: no $n: fdkaac $*: $(tr '\n' ' ' < "$D/.enc.err")" >&2
+      rm -f "$D/$n"
+    fi
   }
   fdk fdk_lc128.aac "$w" -b 128 -f 2
   fdk fdk_crc.aac "$w" -b 128 -f 2 -C
@@ -66,9 +73,13 @@ if command -v fdkaac > /dev/null; then
   fdk fdk_mono64.aac "$wm" -b 64 -f 2
 fi
 if command -v faac > /dev/null; then
-  faac -b 128 -o "$D/faac128.aac" "$w" > /dev/null 2>&1 || rm -f "$D/faac128.aac"
+  if ! faac -b 128 -o "$D/faac128.aac" "$w" > "$D/.enc.err" 2>&1; then
+    echo "gen.sh: no faac128.aac: faac: $(tail -n 1 "$D/.enc.err")" >&2
+    rm -f "$D/faac128.aac"
+  fi
 fi
-rm -f "$w" "$w48" "$wm" "$D/.ff_lc128.m4a"
 # what an encoder did not write (an option it does not have)
 find "$D" -type f -size 0 -exec rm -f {} +
+ls "$D"/fdk_he* > /dev/null 2>&1 || echo "gen.sh: no HE-AAC or HE-AACv2 stream: make test covers no SBR or PS" >&2
+: > "$D/.done"
 echo "$(ls "$D" | wc -l) files in $D"

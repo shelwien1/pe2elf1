@@ -20,8 +20,7 @@ uint run_file(C& c, filehandle0 f, filehandle0 g, Show show, uint8_t* pre = null
       c,
       [&]() {
         uint l = f.sread(ib, kIo);
-        if (!l) c.f_quit = 1;
-        c.addinp(ib, l);
+        c.addinp(ib, l);  // (0 bytes: the end)
       },
       [&](bool more) {
         uint l = c.getoutsize();
@@ -59,15 +58,12 @@ AacArgs call_start(Progress& pr, const Options& opt, const char* tag, filehandle
   progress_start(pr, opt, tag, f);
   AacArgs a;
   a.Init();
-  a.level = opt.level;
-  a.order = opt.order;
   a.verbose = opt.verbose;
   a.strict = opt.strict;
   a.format = opt.format;
   a.asc = opt.asc_n ? opt.asc : nullptr;
   a.asc_n = opt.asc_n;
   a.name = name;
-  a.meter = &pr;
   return a;
 }
 // and its end, r its status: the output committed (close_io(); keep: what
@@ -118,29 +114,28 @@ int run_model(const AacArgs& a, Progress& pr, filehandle0& f, Output& o, uint8_t
   return r;
 }
 
-// c of one model
+// c (DEC 0) or d of one model, at the level LV and in the order (1 the
+// section data after the spectra): the bytes of the input read already
+// (head, got of them) first
+template <class LV, int DEC>
+int run_lv(const char* in_name, const Options& opt, filehandle0& f, Output& o, uint8_t* head, size_t got, int order) {
+  Progress pr;
+  AacArgs a = call_start(pr, opt, DEC ? "dec" : "enc", f, in_name);
+  uint64_t raw, packed, frames;
+  int r = order ? run_model<AacpCoro<DEC, LV, 1>, DEC>(a, pr, f, o, head, got, raw, packed, frames)
+                : run_model<AacpCoro<DEC, LV, 0>, DEC>(a, pr, f, o, head, got, raw, packed, frames);
+  return call_end(r, f, o, DEC && raw > 0, pr, raw, packed, frames);  // (d: what was decoded before an error)
+}
 template <class LV>
 struct CodeLv {
   static int run(const char* in_name, const Options& opt, filehandle0& f, Output& o) {
-    Progress pr;
-    AacArgs a = call_start(pr, opt, "enc", f, in_name);
-    uint64_t raw, packed, frames;
-    int r = opt.order ? run_model<AacpCoro<0, LV, 1>, 0>(a, pr, f, o, nullptr, 0, raw, packed, frames)
-                      : run_model<AacpCoro<0, LV, 0>, 0>(a, pr, f, o, nullptr, 0, raw, packed, frames);
-    return call_end(r, f, o, false, pr, raw, packed, frames);
+    return run_lv<LV, 0>(in_name, opt, f, o, nullptr, 0, opt.order);
   }
 };
-// d of one model's stream, at its level and in its order: the bytes of the
-// input read already (head, got of them) first
 template <class LV>
 struct DecodeLv {
   static int run(const char* in_name, const Options& opt, filehandle0& f, Output& o, uint8_t* head, size_t got, int order) {
-    Progress pr;
-    AacArgs a = call_start(pr, opt, "dec", f, in_name);
-    uint64_t raw, packed, frames;
-    int r = order ? run_model<AacpCoro<1, LV, 1>, 1>(a, pr, f, o, head, got, raw, packed, frames)
-                  : run_model<AacpCoro<1, LV, 0>, 1>(a, pr, f, o, head, got, raw, packed, frames);
-    return call_end(r, f, o, raw > 0, pr, raw, packed, frames);  // (what was decoded before an error)
+    return run_lv<LV, 1>(in_name, opt, f, o, head, got, order);
   }
 };
 

@@ -35,7 +35,6 @@ static const byte H9_scf_l_pa[12+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12 };
 static const byte H9_scf_l_pd[5+1]={ 0,1,2,3,4,5 };
 
 
-
 static const byte H9_scf_s_pa[3+1]={ 0,1,2,3 };
 
 
@@ -73,8 +72,6 @@ static const int H9_scf_mt = (2+0) * (1);
 static const int H9_scf_qs = (23+3) * (1);
 static const int H9_scf_qf = (17+3) * (1);
 static const int H9_scf_mb = (8+0) * (1);
-static const int H9_scf_lrm = (0+0) * (1);
-static const int H9_scf_mbm = (0+0) * (1);
 static const int H9_scf_hA = (24+0) * (1);
 static const int H9_scf_hB = (24+0) * (1);
 static const int H9_scf_hC = (24+0) * (1);
@@ -89,7 +86,6 @@ static const int H9_scf_hS = (24+0) * (1);
 static const int H9_scf_hF = (24+0) * (1);
 static const int H9_scf_hM = (24+0) * (1);
 static const int H9_scf_hT = (24+0) * (1);
-static const int H9_scf_hN = (24+0) * (1);
 
 
 static const long long H9_scf_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 15), 6); // 270
@@ -105,7 +101,6 @@ static const long long H9_scf_j_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 
 static const long long H9_scf_k_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 11), 6), 16); // 3168
 static const long long H9_scf_l_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 13), 6); // 234
 static const long long H9_scf_m_Volume = tc_vmul(tc_vmul(1, 3), 3); // 9
-static const long long H9_scf_n_Volume = 1; // 1
 static const long long H9_scf_s_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 4), 3); // 36
 static const long long H9_scf_t_Volume = tc_vmul(1, 3); // 3
 static const long long H9_scf_w_Volume = tc_vmul(1, 2); // 2
@@ -130,14 +125,12 @@ struct H9_scf_T {
   u8 H9_scf_FC[tc_rows(H9_scf_f_Volume, H9_scf_hF) * H_scf_ND * cm_apm_q(H9_scf_qf)];
   i32 H9_scf_W[tc_rows(H9_scf_m_Volume, H9_scf_hM) * H_scf_ND * TC_MIXN];
   u8 H9_scf_WC[tc_rows(H9_scf_m_Volume, H9_scf_hM) * H_scf_ND];
-  i32 H9_scf_WM[tc_rows(H9_scf_n_Volume, H9_scf_hN) * H_scf_MND * 3];
-  u8 H9_scf_WMC[tc_rows(H9_scf_n_Volume, H9_scf_hN) * H_scf_MND];
   i32 H9_scf_W2[H9_scf_w_Volume * H_scf_ND * TC_MIXN];
   u8 H9_scf_W2C[H9_scf_w_Volume * H_scf_ND];
   i32 H9_scf_W3[tc_rows(H9_scf_s_Volume, H9_scf_hS) * H_scf_ND * TC_MIXN];
   u8 H9_scf_W3C[tc_rows(H9_scf_s_Volume, H9_scf_hS) * H_scf_ND];
-  i32 H9_scf_WF[H_scf_ND * 5 * 4];
-  u8 H9_scf_WFC[H_scf_ND * 5];
+  i32 H9_scf_WF[H_scf_ND * 4];
+  u8 H9_scf_WFC[H_scf_ND];
   cm_cnt H9_scf_G[H9_scf_g_Volume * H_scf_NG];
   
   /* Total bytes this module's Table() members occupy -- a constant here, since
@@ -160,14 +153,12 @@ struct H9_scf_T {
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H9_scf_f_Volume, H9_scf_hF) * H_scf_ND * cm_apm_q(H9_scf_qf))
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H9_scf_m_Volume, H9_scf_hM) * H_scf_ND * TC_MIXN)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H9_scf_m_Volume, H9_scf_hM) * H_scf_ND)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H9_scf_n_Volume, H9_scf_hN) * H_scf_MND * 3)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H9_scf_n_Volume, H9_scf_hN) * H_scf_MND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(H9_scf_w_Volume * H_scf_ND * TC_MIXN)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(H9_scf_w_Volume * H_scf_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H9_scf_s_Volume, H9_scf_hS) * H_scf_ND * TC_MIXN)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H9_scf_s_Volume, H9_scf_hS) * H_scf_ND)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_scf_ND * 5 * 4)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(H_scf_ND * 5)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(H_scf_ND * 4)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(H_scf_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H9_scf_g_Volume * H_scf_NG);
   void H9_scf_Init( void ) {}
   void H9_scf_Quit( void ) {}

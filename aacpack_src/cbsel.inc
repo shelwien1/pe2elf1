@@ -110,17 +110,21 @@ struct CbSel {
       int cnt, start, bits, book;
     } s[64];
     int lk[64][12];
+    // the codebook that takes the fewest bits of the bands merged at i (book
+    // where none holds them), and its bits
+    auto best_of = [&](int i, int book, int& mb) {
+      mb = kCsInf;
+      for (int j = 0; j < 12; j++)
+        if (lk[i][j] < mb) mb = lk[i][j], book = j;
+      return book;
+    };
     for (int i = 0; i < nb; i++) {
       for (int j = 0; j < 12; j++) lk[i][j] = bits[i][j];
       s[i].cnt = 1, s[i].start = i;
-      if (kind[i] >= 13) {
+      if (kind[i] >= 13)
         s[i].book = kind[i], s[i].bits = 0;
-      } else {
-        int mb = kCsInf, book = 0;
-        for (int j = 0; j < 12; j++)
-          if (lk[i][j] < mb) mb = lk[i][j], book = j;
-        s[i].bits = mb, s[i].book = book;
-      }
+      else
+        s[i].book = best_of(i, 0, s[i].bits);
     }
     auto merge_bits = [&](int a, int b) {
       for (int j = 0; j < 12; j++) lk[a][j] = Min(lk[a][j] + lk[b][j], kCsInf);
@@ -162,12 +166,8 @@ struct CbSel {
       if (nx < nb) gain[mx] = calc(mx, nx);
     }
     for (int i = 0; i < nb; i += s[i].cnt) {
-      int book = s[i].book;
-      if (book < 13) {
-        int mb = kCsInf;
-        for (int j = 0; j < 12; j++)
-          if (lk[i][j] < mb) mb = lk[i][j], book = j;
-      }
+      int book = s[i].book, mb;
+      if (book < 13) book = best_of(i, book, mb);
       for (int k = i; k < i + s[i].cnt; k++) cb[CS_FDK][k] = (uint8_t)book, st[CS_FDK][k] = k == i;
     }
   }

@@ -2,8 +2,8 @@
 // C++ library (it takes none; h264p's mem.inc): mem_alloc() and its kin end the run when
 // there is no memory (err_fatal(), err.inc), Buf<T> is a growable array of
 // plain data and Map32<V> a map of 32-bit keys; Min() and Max() are
-// std::min's and std::max's, and IntTag, Pick, NoRef, SameType and Extent
-// what it uses of <type_traits>.
+// std::min's and std::max's, and IntTag, Pick, SameType and Extent what it
+// uses of <type_traits>.
 //
 // Like aacpack's other structs, a Buf has no constructor or destructor:
 // Init() sets it up empty, Quit() frees it (and leaves it empty, set up
@@ -22,11 +22,10 @@ template <class T>
 INLINE T Max(T a, T b) {
   return a < b ? b : a;
 }
-INLINE int64_t abs64(int64_t v) { return v < 0 ? -v : v; }
 
 // a type for each int (a function's overload for each value of a template
-// argument); T if B, else F; T without its reference; whether two types
-// are one; the size of an array type's first dimension (0: not an array)
+// argument); T if B, else F; whether two types are one; the size of an
+// array type's first dimension (0: not an array)
 template <int N>
 struct IntTag {};
 template <bool B, class T, class F>
@@ -36,14 +35,6 @@ struct Pick {
 template <class T, class F>
 struct Pick<false, T, F> {
   typedef F type;
-};
-template <class T>
-struct NoRef {
-  typedef T type;
-};
-template <class T>
-struct NoRef<T&> {
-  typedef T type;
 };
 template <class A, class B>
 struct SameType {
@@ -103,13 +94,12 @@ struct Buf {
   const T* end() const { return p + n; }
   T& operator[](size_t i) { return p[i]; }
   const T& operator[](size_t i) const { return p[i]; }
-  T& back() { return p[n - 1]; }
-  const T& back() const { return p[n - 1]; }
 
   void clear() { n = 0; }
   // room for m elements (what is there stays)
   void reserve(size_t m) {
     if (m <= cap) return;
+    if (m > SIZE_MAX / sizeof(T)) err_fatal("out of memory");
     p = (T*)mem_realloc(p, m * sizeof(T));
     cap = m;
   }
@@ -147,7 +137,6 @@ struct Buf {
     n = 0;
     resize(m, v);
   }
-  void pop_back() { n--; }
   // q's k elements in place of these
   void assign(const T* q, size_t k) {
     n = 0;
@@ -166,9 +155,6 @@ struct Buf {
     p = o.p, n = o.n, cap = o.cap;
     o.p = q, o.n = m, o.cap = c;
   }
-  // the same elements as q's k (byte for byte: integers)
-  bool same(const T* q, size_t k) const { return n == k && (!k || !memcmp(p, q, k * sizeof(T))); }
-  bool same(const Buf& o) const { return same(o.p, o.n); }
 };
 
 // A map from 32-bit keys to plain data V (a hash table, open addressing):

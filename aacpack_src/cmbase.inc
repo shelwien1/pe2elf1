@@ -25,7 +25,6 @@
 #define LIKELY(x) __builtin_expect(!!(x), 1)
 #define UNLIKELY(x) __builtin_expect(!!(x), 0)
 #define CM_PREFETCH(p) __builtin_prefetch(p)
-#define CM_PREFETCHW(p) __builtin_prefetch(p, 1)
 #else
 #ifndef INLINE
 #define INLINE inline
@@ -36,7 +35,6 @@
 #define LIKELY(x) (x)
 #define UNLIKELY(x) (x)
 #define CM_PREFETCH(p)
-#define CM_PREFETCHW(p)
 #endif
 
 #ifndef __min
@@ -70,11 +68,8 @@ static INLINE i32 tc_qlog(i64 x) {
 #endif
   return 2 + n * 2 + (i32)((u >> n) & 1);
 }
-static INLINE i32 tc_sq(i32 v) {
-  i32 q = tc_qlog(v);
-  return v < 0 ? -q : q;
-}
 constexpr int tc_clamp(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
+constexpr i64 tc_clamp(i64 v, i64 lo, i64 hi) { return v < lo ? lo : v > hi ? hi : v; }
 
 // Tables are mapped, not allocated and filled: a table costs address space
 // when it is made and memory only where the coder reaches it.
@@ -86,8 +81,14 @@ static void* tc_map(sz n, const char* what = "a model table") {
   p = mmap(nullptr, n, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
   if (p == MAP_FAILED) p = nullptr;
 #endif
-  if (!p && n >> 20) err_raise("cannot map %" PRIu64 " MB for %s", (u64)(n >> 20), what);
-  if (!p) err_raise("cannot map %" PRIu64 " KB for %s", (u64)((n + 1023) >> 10), what);
+  if (!p) {  // (an error of the run, as running out of memory is: err.inc)
+    char why[128];
+    if (n >> 20)
+      snprintf(why, sizeof why, "cannot map %" PRIu64 " MB for %s", (u64)(n >> 20), what);
+    else
+      snprintf(why, sizeof why, "cannot map %" PRIu64 " KB for %s", (u64)((n + 1023) >> 10), what);
+    err_fatal(why);
+  }
   return p;
 }
 static inline void tc_unmap(void* p, sz n) {

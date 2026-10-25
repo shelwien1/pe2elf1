@@ -22,14 +22,15 @@ It is built from two earlier programs: the syntax walk of
 
 aacpack is one translation unit: `aacpack_src/aacpack.cpp` is its command
 line and includes `aacpack_src/aacpack.inc`, which includes the rest. So
-`g++ -O2 -march=x86-64-v3 -std=c++11 -fwrapv -fno-exceptions -fno-rtti -Iaacpack_src/Lib3 -pthread aacpack_src/aacpack.cpp -o aacpack -lm`
+`g++ -O2 -march=x86-64-v3 -ffp-contract=off -std=c++11 -fwrapv -fno-exceptions -fno-rtti -Iaacpack_src/Lib3 -pthread aacpack_src/aacpack.cpp -o aacpack -lm`
 builds it too. As in h264p, it uses neither C++ exceptions nor RTTI.
 Errors jump to traps the callers set (`err.inc`). It uses nothing of the
 C++ library either (`mem.inc` has the few containers it needs), and its
 structs are set up by `Init()` and freed by `Quit()`, not constructors and
 destructors. The target is x86-64-v3 (AVX2); the mixers' SIMD code has
 plain C++ beside it that codes identically, and GCC and clang builds code
-the same bytes too.
+the same bytes too, at any optimization. The coroutines (Lib3) are
+x86-64's (or i386's): other targets do not build.
 
 ## Use
 
@@ -43,12 +44,16 @@ the same bytes too.
 | `-adts` `-latm` `-adif` | `c`: look for this container alone (default: whatever comes) |
 | `-asc HEX` | `c`: the input is back-to-back raw_data_blocks of this AudioSpecificConfig, as `aac2tsv -asc` and `aacdec -asc` take them (not ER object types, whose access units have no END to tell where one ends) |
 
-Input and output can be `-` (stdin, stdout), and not the same file. A
-file is written under a temporary name beside it (`name.PID.tmp`) and
-renamed when the call is done, so a call that fails leaves what was
-there. The exception is `d`, which keeps what it restored before an
-error in the compressed stream. An interrupted call (SIGINT, SIGTERM,
-SIGHUP, SIGPIPE) removes the temporary file. On a terminal (or with `-p`),
+Input and output can be `-` (stdin, stdout), and not the same file (nor
+the output a link to nothing). A file is written under a temporary name
+beside it, a new file of its own (`name.PID.tmp`, or `.aacpack.PID.tmp`
+in its directory where that name is too long), and renamed when the call
+is done, so a call that fails leaves what was there; where no temporary
+file can be made, the call fails. The exception is `d` where there was
+no file: it keeps what it restored before an error in the compressed
+stream. A call ended by a signal (SIGINT, SIGTERM, SIGHUP, SIGPIPE,
+SIGQUIT, SIGALRM, SIGUSR1, SIGUSR2, SIGXCPU, SIGXFSZ, ...) removes the
+temporary file. On a terminal (or with `-p`),
 `c` and `d` say what the audio is and show their progress:
 
     audio: ADTS, AAC LC + SBR (HE-AAC), 22050 Hz, channel configuration 2
@@ -219,7 +224,8 @@ contexts and parameters (`famvars.inc`, `model.inc`):
 
 `aac_cm_design_results.md` lists each idea of the CM design
 (`aac_cm_design.md`) with what it measured, in aacpack or taken out of
-it, and whether it is kept.
+it, and whether it is kept. `aacpack_review.md` is a review of the code:
+the bugs, duplicate and unused code found, and what was done about each.
 
 Each family's contexts and parameters are declared in
 `aacpack_src/IDX/l9/*.idx`. `aacpack_src/mk.sh` turns them into code
@@ -332,9 +338,12 @@ makes a corpus in `test/corpus` (`test/gen.sh`, which needs ffmpeg and
 python3, if it is not there: a test signal through ffmpeg's AAC encoder
 as ADTS, LATM, LOAS v1, ADIF, AUS1 and raw access units, LC, Main, LTP,
 mono, 5.1, PNS, intensity and TNS; with fdkaac and faac too, if present:
-HE-AAC, HE-AACv2, LD, ELD, CRC, VBR). It round-trips every file through
-`c` and `d` (`test/roundtrip.sh`, which takes any files:
-`test/roundtrip.sh ./aacpack *.aac`), then runs `test/check.sh`: no
+LD, ELD, CRC, VBR, and HE-AAC and HE-AACv2 where fdkaac's library has SBR
+-- gen.sh says what an encoder could not make, and that without them the
+test has no SBR or PS). It round-trips every file through `c` and `d`, in
+both orders of the section data (`-b`; `test/roundtrip.sh`, which takes
+any files: `test/roundtrip.sh ./aacpack *.aac`, and fails on one that is
+not there), then runs `test/check.sh`: no
 input, random bytes, pipes, a stream cut short or with junk in it, strict
 mode, and compressed streams cut short, with a byte changed, with bytes
 after them, or not compressed streams at all.
@@ -342,8 +351,9 @@ after them, or not compressed streams at all.
 `test/fuzz.py BIN WORKDIR SEED N files...` mutates inputs (random bytes,
 cuts, bit flips, junk, splices, repeats, broken frame headers) and checks
 that they round-trip with no unit stored as bytes for not coming out as it
-was. It also mutates compressed streams, and checks that `d` fails cleanly
-on them (exit status 1, no crash, no hang). Build with
+was. It also mutates compressed streams, and checks that `d` ends cleanly
+on them (exit status 0 or 1, no crash, no hang); in both halves, no
+sanitizer report on stderr (UBSan's, which go on, too). Build with
 `-fsanitize=address,undefined --param asan-use-after-return=0` (the
 coroutines copy stacks) and run with
 `ASAN_OPTIONS=detect_leaks=0:detect_stack_use_after_return=0:replace_intrin=0`.
@@ -373,7 +383,7 @@ thousands of fuzzed inputs and compressed streams.
 | `err.inc` `mem.inc` `cmbase.inc` `rc.inc` `cm.inc` `mapping.inc` `fam.inc` `famcfg.inc` `rcio.inc` | h264p's: errors, memory, the range coder, counters, mixers, APMs, the families and their configuration, the coroutine's I/O |
 | `levels.inc` `lv9.inc` `IDX/` `MOD/` | the model's level, its families' IDX sources and the code generated from them |
 | `cli.inc` `coro.inc` `drivers.inc` | files, progress, coroutines, the drivers of `c` and `d` |
-| `Lib3/` | the stack-copying coroutines (mtwrap's, as h264p has them) |
+| `Lib3/` | the stack-copying coroutines (mtwrap's, as h264p has them, but for what aacpack does not use) and the file API |
 
 ### Tuning
 

@@ -3,3 +3,4 @@
 *.apk
 /test/corpus/
 /famtune
+__pycache__/

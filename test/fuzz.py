@@ -9,9 +9,13 @@ it was (a walk that writes what it did not read: -v's "would not come out").
 The other half compress an input and mutate the compressed stream (bit flips,
 a cut, bytes after it), and check that d ends with an error or with some
 output, as it should: no crash, no sanitizer report, no hang (a timeout).
+A file named NAME.asc-HEX.raw is raw access units, compressed with -asc HEX
+(as roundtrip.sh's). Exit status 1 if a case failed or a unit would not come
+out as it was.
 """
 import os
 import random
+import re
 import subprocess
 import sys
 
@@ -19,6 +23,11 @@ binp, work, seed, n = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4
 files = sys.argv[5:]
 rnd = random.Random(seed)
 srcs = [open(f, 'rb').read() for f in files]
+# c's options for each: -asc HEX for raw access units
+copts = []
+for f in files:
+    m = re.search(r'\.asc-([0-9a-fA-F]+)\.raw$', f)
+    copts.append(['-asc', m.group(1)] if m else [])
 os.makedirs(work, exist_ok=True)
 fin, fcmp, fout = (os.path.join(work, x) for x in ('in.bin', 'x.apk', 'out.bin'))
 bad = 0
@@ -31,6 +40,10 @@ def run(args, timeout=120):
         return p.returncode, p.stderr.decode('latin1')
     except subprocess.TimeoutExpired:
         return 'timeout', ''
+
+
+def sanitized(err):  # a sanitizer's report (UBSan's goes on unless told to halt)
+    return 'Sanitizer' in err or 'runtime error' in err
 
 
 def mutate(src):
@@ -81,13 +94,15 @@ def mutate(src):
 
 
 for it in range(n):
-    src = rnd.choice(srcs)
+    si = rnd.randrange(len(srcs))
+    src, co = srcs[si], copts[si]
     if it % 2 == 0:
         d = mutate(src)
         open(fin, 'wb').write(d)
-        r, err = run(['c', '-v', fin, fcmp])
-        if r != 0:
+        r, err = run(['c', '-v'] + co + [fin, fcmp])
+        if r != 0 or sanitized(err):
             print('case %d: c failed (%s): %s' % (it, r, err.strip()[-300:]))
+            open(os.path.join(work, 'bad%d.bin' % it), 'wb').write(d)
             bad += 1
             continue
         for line in err.splitlines():
@@ -96,15 +111,15 @@ for it in range(n):
                 print('case %d: %s' % (it, line.strip()))
                 open(os.path.join(work, 'unverified%d.bin' % it), 'wb').write(d)
         r, err = run(['d', fcmp, fout])
-        if r != 0 or open(fout, 'rb').read() != d:
+        if r != 0 or sanitized(err) or open(fout, 'rb').read() != d:
             print('case %d: does not round-trip (%s): %s' % (it, r, err.strip()[-300:]))
             open(os.path.join(work, 'bad%d.bin' % it), 'wb').write(d)
             bad += 1
     else:
         open(fin, 'wb').write(src[:rnd.randrange(1, 300000)])
-        r, err = run(['c', fin, fcmp])
-        if r != 0:
-            print('case %d: c failed (%s)' % (it, r))
+        r, err = run(['c'] + co + [fin, fcmp])
+        if r != 0 or sanitized(err):
+            print('case %d: c failed (%s): %s' % (it, r, err.strip()[-300:]))
             bad += 1
             continue
         b = bytearray(open(fcmp, 'rb').read())
@@ -119,9 +134,9 @@ for it in range(n):
             b += bytes(rnd.randrange(256) for _ in range(rnd.randrange(1, 10)))
         open(fcmp, 'wb').write(bytes(b))
         r, err = run(['d', fcmp, fout], timeout=60)
-        if r not in (0, 1) or 'Sanitizer' in err or 'runtime error' in err:
+        if r not in (0, 1) or sanitized(err):
             print('case %d: d of a broken stream: %s %s' % (it, r, err.strip()[-500:]))
             open(os.path.join(work, 'badd%d.apk' % it), 'wb').write(bytes(b))
             bad += 1
 print('%d cases, %d bad, %d units that would not come out as they were' % (n, bad, unverified))
-sys.exit(1 if bad else 0)
+sys.exit(1 if bad or unverified else 0)

@@ -36,7 +36,10 @@ rt "a stream cut short" "$tmp.in"
 rt "junk in a stream" "$tmp.in"
 rt "a container not looked for" "$F" -adif
 rt "strict" "$F" -s
-if "$BIN" c -s "$tmp.in" "$tmp.apk" 2> /dev/null; then bad "strict fails on junk in a frame"; else ok "strict fails on junk in a frame"; fi
+# (its failure: status 1, not a crash)
+"$BIN" c -s "$tmp.in" "$tmp.apk" 2> /dev/null
+r=$?
+if [ $r -eq 1 ]; then ok "strict fails on junk in a frame"; else bad "strict fails on junk in a frame (status $r)"; fi
 
 "$BIN" c "$F" "$tmp.apk" 2> /dev/null
 n=$(wc -c < "$tmp.apk")

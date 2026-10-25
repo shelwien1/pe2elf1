@@ -1,7 +1,7 @@
 
 //#define CORO_NOASM 1
 
-#if defined(_MSC_VER) || defined(__clang__)
+#if defined(_MSC_VER) && !defined(__clang__)
 #pragma runtime_checks( "scu", off )
 #pragma check_stack(off)
 #pragma strict_gs_check(off)
@@ -10,15 +10,13 @@
 #if ((defined __GNUC__) || (defined __INTEL_COMPILER) || (defined __clang__)) && (!defined CORO_NOASM)
   #define _INC_SETJMP
   #ifdef X64
-    #if __clang__
-       #include "coro3_setjmp_x64d.h"
-    #else
-       #include "coro3_setjmp_x64.h"
-    #endif
-//    #include "coro3_setjmp_x64b.h"
-  #else
+    // (clang too: its inline-asm version, which kept neither rbp nor rbx,
+    // crashed where frames keep their pointer -- -O0, -fno-omit-frame-pointer)
+    #include "coro3_setjmp_x64.h"
+  #elif defined(__i386__)
     #include "coro3_setjmp_x32.h"
-//    #include "coro3_setjmp_x32b.h"
+  #else
+    #error "Lib3's coroutines: x86-64 (or i386) only"
   #endif
 #else 
   #ifndef CORO_NOASM
@@ -34,16 +32,6 @@ static void yield( void* p, int value );
 
 static uint coro_call0( Coroutine* that );
 static void call_do_process0( Coroutine* that );
-
-enum CAPI { 
-  INIT=0,  // have to run Init()
-  QUIT=1,  // all done, have to run Quit()
-  FLUSH=2,
-  PROG=3,  // processing possible
-  DONE=4,  // Quit() complete
-  ALLOC=8880,
-  FREE=8881,
-};
 
 struct Coroutine {
 
@@ -65,8 +53,6 @@ struct Coroutine {
   };
 
   volatile uint  state;
-  volatile uint  f_quit;
-           uint  f_init; // state of main routine
 
   ALIGN(32) jmp_buf PointA;
   ALIGN(32) jmp_buf PointB;
@@ -78,16 +64,14 @@ struct Coroutine {
   typedef void (Coroutine::*t_do_process)( void );
   t_do_process p_do_process;
 
-  enum{ STKPAD=4096*16+24 }; // coroutine stack size
+  enum{ STKPAD=4096*64+24 }; // coroutine stack size (an -O0 build's yields copy out 100 KB and more)
   enum{ STKPAD0=1<<18 }; // stack padding from frontend to coroutine
 
   ALIGN(8) byte stk[STKPAD];
 
   void coro_init( void ) {
-    f_init = CAPI::INIT;
-    f_quit = 0;
     state = 0; 
-    for( uint i=0; i<DIM(pin); i++ ) pin[i].pin_init( this, 1+i );
+    for( int i=0; i<DIM(pin); i++ ) pin[i].pin_init( this, 1+i );
   }
 
   template <typename T> 
@@ -101,17 +85,7 @@ struct Coroutine {
 
   void chkinp( void ) { pin[0].chkinp(); }
   void chkout( uint d=0 ) { pin[1].chkout(d); }
-  uint get( void ) { return pin[0].get(); }
-  void put( uint c ) { pin[1].put(c); }
 
-  byte get0( void ) { return pin[0].get0(); }
-  void put0( uint c ) { pin[1].put0(c); }
-
-  uint getinplen() { return pin[0].getinplen(); } //-V110
-  uint getoutlen() { return pin[1].getoutlen(); } //-V110
-  uint getinpleft() { return pin[0].getinpleft(); } //-V524 //-V110
-  uint getoutleft() { return pin[1].getoutleft(); } //-V524 //-V110
-  uint getinpsize() { return pin[0].getinpsize(); } //-V110
   uint getoutsize() { return pin[1].getoutsize(); } //-V110
 
   void addinp( byte* inp,uint inplen ) { pin[0].addinp(inp,inplen); }
@@ -123,7 +97,7 @@ struct Coroutine {
 NOINLINE
 static void yield( void* p, int value ) { 
   Coroutine& q = *(Coroutine*)p;
-  char curtmp; q.stkptrL=(&curtmp)-16;
+  char curtmp; q.stkptrL=(char*)((uintptr_t)&curtmp-16);  // (below this frame's locals)
   if( setjmp(q.PointB)==0 ) { 
     q.state=value; 
     memcpy( q.stk, (char*)q.stkptrL, q.stkptrH-q.stkptrL );
@@ -161,9 +135,6 @@ static void call_do_process0( Coroutine* that ) {
   __assume(0);
 }
 
-
-coro3_pin_DEFINE_f_quit
-#undef coro3_pin_DEFINE_f_quit
 
 //#include "coro3_init.inc"
 

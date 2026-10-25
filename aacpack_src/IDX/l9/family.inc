@@ -9,18 +9,17 @@
 
     `_A`-`_E`, `_H`-`_L` are the ten counters, `_S` and `_F` the two APMs,
     `_W`, `_W2` and `_W3` the three mixers (selected by indices m, w and
-    s) and `_WF` the one that mixes them (by node and the state of
-    code()'s hint), `_MT` and `_WM` the mantissa plane and its mixer, `_G`
-    the sign counters.  Each is H_%F%_ND (or H_%F%_MND) rows deep per
-    context: where a decision sits among the family's nodes is context
-    without being a variable.  */
+    s) and `_WF` the one that mixes them (by node), `_MT` the mantissa
+    plane, `_G` the sign counters.  Each is H_%F%_ND (or H_%F%_MND) rows
+    deep per context: where a decision sits among the family's nodes is
+    context without being a variable.  */
 
 void %M%make( const H_%F%_v & D, tcx & X ) {
-  int a, b, c, d, e, h, i, j, k, l, s, f, m, w, t, n, g;
+  int a, b, c, d, e, h, i, j, k, l, s, f, m, w, t, g;
   H_%F%_VARS(H_LOCAL)
-  MakeIndex a,b,c,d,e,h,i,j,k,l,s,f,m,w,t,n,g
+  MakeIndex a,b,c,d,e,h,i,j,k,l,s,f,m,w,t,g
   X.c[0] = a;  X.c[1] = b;  X.c[2] = c;  X.c[3] = d;  X.c[4] = e;  X.c[5] = h;  X.c[6] = i;  X.c[7] = j;  X.c[8] = k;  X.c[9] = l;  X.s = s;  X.f = f;  X.m = m;  X.w = w;  X.t = t;
-  X.n = n;  X.g = g;
+  X.g = g;
 }
 
 Table( cm_cnt2, %M%A, tc_rows(%M%a_Volume, %M%hA) * H_%F%_ND );
@@ -40,14 +39,12 @@ Table( i16,    %M%F, tc_rows(%M%f_Volume, %M%hF) * H_%F%_ND * cm_apm_q(%M%qf) );
 Table( u8,     %M%FC, tc_rows(%M%f_Volume, %M%hF) * H_%F%_ND * cm_apm_q(%M%qf) );
 Table( i32,    %M%W, tc_rows(%M%m_Volume, %M%hM) * H_%F%_ND * TC_MIXN );
 Table( u8,     %M%WC, tc_rows(%M%m_Volume, %M%hM) * H_%F%_ND );
-Table( i32,    %M%WM, tc_rows(%M%n_Volume, %M%hN) * H_%F%_MND * 3 );
-Table( u8,     %M%WMC, tc_rows(%M%n_Volume, %M%hN) * H_%F%_MND );
 Table( i32,    %M%W2, %M%w_Volume * H_%F%_ND * TC_MIXN );
 Table( u8,     %M%W2C, %M%w_Volume * H_%F%_ND );
 Table( i32,    %M%W3, tc_rows(%M%s_Volume, %M%hS) * H_%F%_ND * TC_MIXN );
 Table( u8,     %M%W3C, tc_rows(%M%s_Volume, %M%hS) * H_%F%_ND );
-Table( i32,    %M%WF, H_%F%_ND * 5 * 4 );
-Table( u8,     %M%WFC, H_%F%_ND * 5 );
+Table( i32,    %M%WF, H_%F%_ND * 4 );
+Table( u8,     %M%WFC, H_%F%_ND );
 Table( cm_cnt, %M%G, %M%g_Volume * H_%F%_NG );
 
 // the family's configuration class (famcfg.inc): the level's shape, as

@@ -7,7 +7,7 @@
 // code length, as aacpack -v counts it). (h264p's, with aacpack's names.)
 //
 //   ./mk.sh famtune L           (the binary, ../famtune)
-//   famtune FAMILY DUMP...      e.g. famtune sig dump/*/sig.dump
+//   famtune FAMILY DUMP...      e.g. famtune spc dump/*/spc.dump
 //
 // Each dump file holds one or more streams (R), each coded from a fresh
 // state, as aacpack codes each stream.
@@ -73,17 +73,8 @@ void slurp(const char* fn, Buf<char>& d) {
   fclose(f);
 }
 
-// a hint's state from a dump (0-4: the rows of 5 it picks in Z, ZM and the
-// final mixer's)
-int hint_state(const char*& p, const char* e) {
-  i64 hs = tc_dump_get(p, e);
-  if (hs < 0 || hs > 4) err_raise("a hint state of %" PRId64 " in a dump", hs);
-  return (int)hs;
-}
-
 // One family's dumps, as Model codes them: its tables mapped fresh at each
-// stream (zero, as tc_table maps them), the hint's counters made at once
-// (code() makes them at its first hint, zero too).
+// stream (zero, as tc_table maps them).
 template <class C>
 void replay(char** files, int n, tc_rc<0>& rc) {
   typedef tc_fam<0, C> F;
@@ -107,8 +98,6 @@ void replay(char** files, int n, tc_rc<0>& rc) {
         f = (F*)tc_map(sizeof(F), "a family");
         f->Init();
         f->wire(t, &rc);
-        f->Z.fill(C::kT * (sz)C::ND * 5, cm_cnt2{});
-        f->ZM.fill(C::kT * (sz)C::MND * 5, cm_cnt{});
         continue;
       }
       if (!f) err_raise("a dump that does not start with a stream");
@@ -126,13 +115,11 @@ void replay(char** files, int n, tc_rc<0>& rc) {
           int node = (int)tc_dump_get(p, e), b = (int)tc_dump_get(p, e);
           f->prp = (int)tc_dump_get(p, e);
           f->prpa = nullptr;
-          f->hs = hint_state(p, e);
           f->bit(node, b);  // (its node checked: a dump of another shape fails, not writes past a table)
           break;
         }
         case 'm': {
           int nb = (int)tc_dump_get(p, e), q = (int)tc_dump_get(p, e), b = (int)tc_dump_get(p, e);
-          f->hs = hint_state(p, e);
           f->prp = (int)tc_dump_get(p, e);
           f->prpa = tc_dump_get(p, e) ? &any : nullptr;
           u64 pref = (u64)tc_dump_get(p, e);

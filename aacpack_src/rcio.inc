@@ -3,7 +3,7 @@
 // its statistics, fam.inc's tc_rc), the coder from RcIo here (RC_IO_BASE of
 // rc.inc), and RcIo from CoroIo and that from Lib3's Coroutine, whose buffer
 // protocol they follow: the input comes in the buffers addinp() gives, a
-// 0-length one with f_quit set at its end, and yield 1 asks for the next;
+// 0-length one at its end, and yield 1 asks for the next;
 // the output goes into the buffer addout() gave, yield 2 handing it over
 // full. The coder's bytes go the same way: coding, into the output buffer;
 // decoding, from the input buffer -- and past its end the decoder gets 0xFF,

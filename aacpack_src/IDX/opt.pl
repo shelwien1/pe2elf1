@@ -25,7 +25,8 @@
 #
 # One caution: aacpack's parameters are part of its format.  A stream coded by a
 # patched binary decodes only under that same patched binary, so throw away
-# anything mid-hill-climb writes.
+# anything mid-hill-climb writes.  Interrupted (INT, TERM, HUP), it puts the
+# best patterns so far back in the binary, as export.!!! has them, and stops.
 
 $exe     = $ARGV[1] || "../aacpack";
 $tmp     = "$exe.opt_tmp";
@@ -39,11 +40,34 @@ while(<L>) { s/[\r\n]+$//; push @files,$_ if /\S/ && !/^\s*#/; } close L;
 die "opt.pl: $lst lists no stream\n" if !@files;
 printf "corpus: %i file(s): %s\n", scalar(@files), join(" ",@files);
 
+# a signal: the binary back to the best patterns so far (the pattern being
+# tried, $addr, is the only one that differs), and stop
+$stop = 0;
+$SIG{INT} = $SIG{TERM} = $SIG{HUP} = sub { $stop = 1; };
+sub interrupted {
+  wexe( $addr, substr($exe_data,$addr,$leng) ) if defined $addr;
+  unlink $tmp;
+  die "opt.pl: interrupted -- $exe has the best patterns so far, as export.!!! has them\n";
+}
+
+# the binary compressing a stream, its output nowhere (no shell: the paths are
+# as they are); its exit status
+sub run_c {
+  open my $so, '>&', \*STDOUT or die "opt.pl: $!\n";
+  open my $se, '>&', \*STDERR or die "opt.pl: $!\n";
+  open STDOUT, '>', '/dev/null'; open STDERR, '>', '/dev/null';
+  my $rc = system { $exe } $exe, 'c', @_;
+  open STDOUT, '>&', $so; open STDERR, '>&', $se;
+  return $rc;
+}
+
 sub measure {
   my $t = 0;
   for my $f (@files) {
     unlink $tmp;
-    my $rc = system( "$exe c \"$f\" $tmp >/dev/null 2>&1" );
+    my $rc = run_c( $f, $tmp );
+    # (system() ignores INT and QUIT while the binary runs: a ^C ends the binary)
+    interrupted() if $stop || ($rc & 127) == 2 || ($rc & 127) == 15 || ($rc & 127) == 1;
     my $s = -s $tmp;
     # The exit status decides, not the size.  A run that dies partway through
     # has already flushed part of its output, and a part of an 800 kB stream
@@ -87,6 +111,7 @@ sub export {
 }
 
 $bass = measure(); print "=== start $bass\n";
+die "opt.pl: $exe fails on a stream of $lst (or cannot be run): nothing to measure against\n" if $bass == 0x7FFFFFFF;
 export();
 
 $flag=1; $ct0=0;
@@ -143,4 +168,5 @@ while( $flag==1 ) {
   } $ct0 = $ctim;
 }
 
+unlink $tmp;
 print "Done: $bass\n";

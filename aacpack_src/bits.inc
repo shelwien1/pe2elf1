@@ -33,6 +33,9 @@ struct BitReader {
     if (UNLIKELY(n > end - pos)) err_raise_s("bitstream overrun");
     pos += n;
   }
+  // whether the n bits from pos are not just the zeros to a byte (more than
+  // 7, or a 1 among them)
+  INLINE bool not_zero_pad(size_t n) const { return n >= 8 || (n && peek((int)n)); }
   // n <= 32
   INLINE uint32_t get(int n) {
     if (!n) return 0;
@@ -62,6 +65,8 @@ struct BitWriter {
     if (b.n) memset(b.p, 0, Min(b.n, (pos + 7) / 8 + 8));
     pos = 0;
   }
+  // the bits to the next byte
+  int to_byte() const { return (int)((8 - pos % 8) % 8); }
   // room for n bits more (and 8 bytes past them, zero)
   INLINE void reserve_bits(size_t n) {
     if (UNLIKELY(n > cap - Min(cap, pos))) err_raise_s("a unit written past its largest size");

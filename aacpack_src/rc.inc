@@ -61,6 +61,13 @@ template <int f_DEC> struct Rangecoder : RC_IO_BASE<Rangecoder<f_DEC>> {
     }
     put(c);
   }
+  //  the byte held back (Cache, with the carry) and the 0xFF bytes after it
+  INLINE void emit_held() {
+    if(Cache != uint(-1))
+      emit((byte)(Cache + Carry));
+    for(; FFNum; FFNum--)
+      emit((byte)(Carry - 1));
+  }
   void ShiftLow(uint n) {
     Carry |= low_Add();
     rpre = 0;
@@ -68,10 +75,7 @@ template <int f_DEC> struct Rangecoder : RC_IO_BASE<Rangecoder<f_DEC>> {
       const uint cl = low_Top();
       low_Shift8();
       if(LIKELY(cl != 0xFF || Carry)) {
-        if(Cache != uint(-1))
-          emit((byte)(Cache + Carry));
-        for(; FFNum; FFNum--)
-          emit((byte)(Carry - 1));
+        emit_held();
         Cache = cl;
         Carry = 0;
       } else
@@ -147,10 +151,7 @@ template <int f_DEC> struct Rangecoder : RC_IO_BASE<Rangecoder<f_DEC>> {
     const uint64_t high = llow + range;
     const uint k = high < llow ? LOWBITS : RC_BSR64(llow ^ high);
     llow |= (k >= 64) ? ~uint64_t(0) : ((uint64_t(1) << k) - 1);
-    if(Cache != uint(-1))
-      emit((byte)(Cache + Carry));
-    for(uint64_t i = 0; i < FFNum; i++)
-      emit((byte)(0xFF + Carry));
+    emit_held();
     for(uint i = 0; i < LOWBYTES; i++)
       emit((byte)(llow >> (LOWBITS - 8 - i * 8)));
   }

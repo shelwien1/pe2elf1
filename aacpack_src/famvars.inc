@@ -84,19 +84,18 @@ constexpr int H_sbr_ND = TC_NODE, H_sbr_MND = TC_MNODE, H_sbr_NG = 64;
 //   ms_used, ws long 0, short 1, tp the place in the codebook's tuple, nz
 //   the nonzero ones so far in the band (up to 7), ds the band's
 //   scalefactor less the last frame's (sq2), qn the band's magnitudes so
-//   far (tc_qlog of the sum), kq the place (tc_qlog), av the place's
-//   magnitude averaged over the frames (of short windows over the
-//   windows) as the band's scalefactor now quantizes it (1 + tc_qlog of 16
-//   times it; 0 not known), xp a guess at the magnitude from av, the last
-//   frame's (scaled), the two before it and the other channel's (1 +
-//   tc_qlog of a weighted sum), pl the places left in the band (tc_qlog),
-//   sc the section so far: 0 a magnitude above the next smaller
-//   codebook's largest came, else 1 + the places left in it (tc_qlog), zr
-//   the zeros right before the place (tc_qlog, up to 64), dg the digest's
-//   prediction of the value, once its match has been right 16 times (1 +
-//   17 its length class + the magnitude, up to 16; 0 none)
+//   far (tc_qlog of the sum), av the place's magnitude averaged over the
+//   frames (of short windows over the windows) as the band's scalefactor
+//   now quantizes it (1 + tc_qlog of 16 times it; 0 not known), xp a
+//   guess at the magnitude from av, the last frame's (scaled), the two
+//   before it and the other channel's (1 + tc_qlog of a weighted sum), pl the
+//   places left in the band (tc_qlog), sc the section so far: 0 a magnitude
+//   above the next smaller codebook's largest came, else 1 + the places left
+//   in it (tc_qlog), zr the zeros right before the place (tc_qlog, up to 64),
+//   dg the digest's prediction of the value, once its match has been right 16
+//   times (1 + 17 its length class + the magnitude, up to 16; 0 none)
 #define H_spc_VARS(X) \
-  X(cb) X(sb) X(bp) X(a1) X(a2) X(a3) X(pf) X(pn) X(ex) X(oc) X(ms) X(ws) X(tp) X(nz) X(ds) X(qn) X(kq) X(av) X(xp) \
+  X(cb) X(sb) X(bp) X(a1) X(a2) X(a3) X(pf) X(pn) X(ex) X(oc) X(ms) X(ws) X(tp) X(nz) X(ds) X(qn) X(av) X(xp) \
   X(pl) X(sc) X(zr) X(dg)
 // esc: an escaped magnitude of codebook 11, less 16: kq the place
 //   (tc_qlog), a1 the magnitude before (tc_qlog), pf the last frame's at

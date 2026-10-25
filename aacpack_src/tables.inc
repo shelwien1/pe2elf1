@@ -554,10 +554,6 @@ static const uint16_t swb_offset_120_8[] =
     0, 4, 8, 12, 16,  20, 24, 28, 36, 44, 52, 60, 72, 88, 108, 120
 };
 
-#define swb_offset_768_32 swb_offset_768_48
-
-/* not referenced (FFmpeg uses the 96 kHz table for 64 kHz) */
-
 const uint16_t * const ff_swb_offset_1024[] = {
     swb_offset_1024_96, swb_offset_1024_96, swb_offset_1024_64,
     swb_offset_1024_48, swb_offset_1024_48, swb_offset_1024_32,

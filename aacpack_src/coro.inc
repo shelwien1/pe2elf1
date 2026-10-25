@@ -1,7 +1,7 @@
 // aacpack's compressor (AacpCoro<0, LV, CS>) and decompressor (AacpCoro<1, LV, CS>)
 // of a level and an order (CS: Model's f_CS) as coroutines of Lib3 (coro3b.inc), in its buffer protocol
 // (h264p's coro.inc): the input comes in the buffers addinp() gives, a
-// 0-length one with f_quit set at its end, and yield 1 asks for the next;
+// 0-length one at its end, and yield 1 asks for the next;
 // the output goes into the buffer addout() gave, yield 2 handing it over
 // full; yield 0 at the end (the last output in the buffer), yield 3 after
 // an error (its note says it). What else it yields with tells its driver
@@ -70,19 +70,13 @@ struct AacpCoro : Model<f_DEC, LV, f_CS> {
     st->Init(this->source());
     return compress_stream<LV, f_CS>(*this, *st, args);
   }
-  // decompressing: the magic, the version, the level and the order (this
-  // model's), then the model on the rest
+  // decompressing: past the magic, the version, the level and the order
+  // (decode() read them, and made this model for them), the model on the rest
   int run(IntTag<1>) {
     st = (DecompressState*)mem_alloc(sizeof(DecompressState));
     st->Init();
     uint8_t head[sizeof kCmMagic + 2];
-    int order = -1;
-    int level = cm_level(head, this->read(head, sizeof head), args.name, this->note, sizeof this->note, &order);
-    if (level < 0) return 1;
-    if (level != LV::id || order != f_CS) {
-      this->set_note("aacpack: %s: compressed at level -%d in order %d, not -%d in %d", args.name, level, order, LV::id, f_CS);
-      return 1;
-    }
+    if (this->read(head, sizeof head) != sizeof head) err_raise_s("internal: the stream's header went");
     return decompress_stream<LV, f_CS>(*this, *st, args);
   }
   // after an error: decompressing, what was decoded, written

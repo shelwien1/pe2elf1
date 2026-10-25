@@ -38,7 +38,6 @@ struct Chan {
 
   // a unit is walked (begin), with the walk whose state the model reads
   virtual void begin(Walk& w) { (void)w; }
-  virtual void end() {}
   // a field e of n bits (n 0: a count or length the bitstream has
   // otherwise), its index i in a run of e (a band, an envelope, ...)
   virtual int64_t val(int e, int n, int64_t v, int i) = 0;

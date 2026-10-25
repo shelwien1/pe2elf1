@@ -8,16 +8,16 @@
 #  at the place (1 +; 0 none), ms ms_used (2 none), ws long 0 short 1, tp the
 #  place in the codebook's tuple, nz the nonzero ones so far in the band (up
 #  to 7), ds the band's scalefactor less the last frame's (1 + sq2; 0 not
-#  known), qn the band's magnitudes so far (tc_qlog of the sum), kq the
-#  place (tc_qlog), av the place's magnitude averaged over the frames (of
-#  short windows over the windows) as the band's scalefactor now quantizes
-#  it (1 + tc_qlog of 16 times it; 0 not known), xp a guess at the
-#  magnitude from av, the last frame's (scaled), the two before it and the
-#  other channel's (1 + tc_qlog of a weighted sum), pl the places left in
-#  the band (tc_qlog), sc the section so far (0 a magnitude above the next
-#  smaller codebook's largest came; else 1 + the places left, tc_qlog), zr
-#  the zeros right before the place (tc_qlog), dg the digest's prediction
-#  (once right 16 times; 0 none).  a1 a2 of the band before are in this
+#  known), qn the band's magnitudes so far (tc_qlog of the sum), av the
+#  place's magnitude averaged over the frames (of short windows over the
+#  windows) as the band's scalefactor now quantizes it (1 + tc_qlog of 16
+#  times it; 0 not known), xp a guess at the magnitude from av, the last
+#  frame's (scaled), the two before it and the other channel's (1 +
+#  tc_qlog of a weighted sum), pl the places left in the band (tc_qlog),
+#  sc the section so far (0 a magnitude above the next smaller codebook's
+#  largest came; else 1 + the places left, tc_qlog), zr the zeros right
+#  before the place (tc_qlog), dg the digest's prediction (once right 16
+#  times; 0 none).  a1 a2 of the band before are in this
 #  band's scale.  The mixers also see the codebook's own
 #  probability of each decision, blended with a Laplace's of xp's mean.
 #  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates MOD/l9 from
@@ -104,8 +104,6 @@ Index w
 
 Index t
 
-Index n
-
 Index g
 
 Number rA, 1, 0!11111110
@@ -142,9 +140,6 @@ Number mb, 1, 0!00100000
 ! Number mt, 1, 0!000
 ! Number rG, 1, 0!00000000
 ! Number mwG, 1, 0!00000000
-#  Frozen: no hint's mixer (lrm, mbm, index n): the family codes without one.
-! Number lrm, 1, 0!00000
-! Number mbm, 1, 0!00000000
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
 #  direct, one that does not is hashed into 2^h rows.  Frozen.
 ! Number hA, 1, 0!11000
@@ -161,4 +156,3 @@ Number mb, 1, 0!00100000
 ! Number hF, 1, 0!11000
 ! Number hM, 1, 0!11000
 ! Number hT, 1, 0!11000
-! Number hN, 1, 0!11000

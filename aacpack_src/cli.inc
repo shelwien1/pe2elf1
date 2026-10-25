@@ -285,9 +285,6 @@ void say_error(Progress* p, const char* fmt, ...) {
   say_v(p, true, fmt, ap);
   va_end(ap);
 }
-void progress_poll(Progress* p) {
-  if (p) p->poll();
-}
 
 // what the file name is: -1 nothing, 1 a regular file, 0 anything else;
 // and its mode
@@ -303,6 +300,18 @@ int name_kind(const char* name, unsigned* mode = nullptr) {
 #endif
   if (mode) *mode = (unsigned)s.st_mode;
   return reg;
+}
+// whether the descriptor fd of this process writes the regular file f reads
+bool same_fd(FILE* f, int fd) {
+#ifdef _WIN32
+  struct _stati64 a, b;
+  return _fstati64(fd, &a) == 0 && _fstati64(_fileno(f), &b) == 0 && (a.st_mode & _S_IFMT) == _S_IFREG &&
+         a.st_dev == b.st_dev && a.st_ino == b.st_ino && a.st_ino != 0;
+#else
+  struct stat a, b;
+  return fstat(fd, &a) == 0 && fstat(fileno(f), &b) == 0 && S_ISREG(a.st_mode) && a.st_dev == b.st_dev &&
+         a.st_ino == b.st_ino;
+#endif
 }
 // whether name is the file f has open
 bool same_file(FILE* f, const char* name) {
@@ -357,14 +366,18 @@ int name_fd(const char* name) {
 
 // The output of a call: "-" is stdout. A regular file, or a new one, is
 // written under a temporary name beside it and renamed to its own as the
-// call ends well, so that a failed call leaves what was there; anything else
+// call ends well, so that a failed call leaves what was there (d keeps what
+// it restored before an error only where there was nothing); anything else
 // (a device, a pipe) is written as it is. A name that opens one of the
 // program's descriptors again (/dev/stdout, name_fd()) is written through
 // that descriptor, where the shell put it (">>", a file it also writes to),
-// as "-" is. Never the input. (Quit() closes
-// and removes what close() did not: the program ends on an error outside a
-// run, err.inc, with Quit() of the call's output, and on POSIX on a signal
-// that ends it, with its temporary file removed.)
+// as "-" is. Never the input, and never through a link to nothing. (Quit()
+// closes and removes what close() did not: the program ends on an error
+// outside a run, err.inc, with Quit() of the call's output, and on POSIX on
+// a signal that ends it, with its temporary file removed.)
+#if !defined(_WIN32) && !defined(O_NOFOLLOW)
+#define O_NOFOLLOW 0  // (where a link cannot be refused: as fopen())
+#endif
 struct Output;
 Output* open_output = nullptr;  // the call's (the main thread's)
 void quit_open_output();
@@ -373,13 +386,14 @@ struct Output {
   const char* name;  // as given
   char* dest;        // the file (mem_alloc()'d), and the temporary one written (none: name itself)
   char* tmp;
-  bool file;  // a regular file is written
+  bool file;   // a regular file is written
+  bool fresh;  // and there was none
   filehandle0 g;
 
   void Init() {
     name = nullptr;
     dest = tmp = nullptr;
-    file = false;
+    file = fresh = false;
     g.f = nullptr;
   }
   void Quit() {
@@ -395,20 +409,64 @@ struct Output {
   }
   static char* str_dup(const char* s) { return (char*)memcpy(mem_alloc(strlen(s) + 1), s, strlen(s) + 1); }
 
+  // A file of its own beside dest, new (none of that name made before, not
+  // through a link): dest.PID.tmp, or where that name is too long
+  // .aacpack.PID.tmp in dest's directory, each with a number more where
+  // one is there; tmp its name once it is made (quit_on_signal() removes
+  // tmp), null where none can be (errno why)
+  FILE* make_tmp(long pid) {
+    const char* slash = strrchr(dest, '/');
+#ifdef _WIN32
+    const char* bs = strrchr(dest, '\\');
+    if (bs && (!slash || bs > slash)) slash = bs;
+#endif
+    const size_t dn = slash ? (size_t)(slash - dest) + 1 : 0, n = strlen(dest) + 48;
+    char* name_of = (char*)mem_alloc(n);
+    for (int k = 0; k < 64; k++) {
+      for (int shortname = 0; shortname < 2; shortname++) {
+        char num[24] = "";
+        if (k) snprintf(num, sizeof num, "-%d", k);
+        if (!shortname)
+          snprintf(name_of, n, "%s.%ld%s.tmp", dest, pid, num);
+        else
+          snprintf(name_of, n, "%.*s.aacpack.%ld%s.tmp", (int)dn, dest, pid, num);
+#ifdef _WIN32
+        int fd = _open(name_of, _O_WRONLY | _O_CREAT | _O_EXCL | _O_BINARY, _S_IREAD | _S_IWRITE);
+#else
+        int fd = ::open(name_of, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0666);
+#endif
+        if (fd >= 0) {
+          tmp = name_of;
+          FILE* f = fdopen(fd, "wb");
+          if (f) return f;
+          int e = errno;
+          ::close(fd);
+          tmp = nullptr;
+          remove(name_of);
+          mem_free(name_of);
+          errno = e;
+          return nullptr;
+        }
+        if (errno != ENAMETOOLONG) break;  // (else the short name)
+      }
+      if (errno != EEXIST) break;  // (else one more)
+    }
+    int e = errno;
+    mem_free(name_of);
+    errno = e;
+    return nullptr;
+  }
+
   // (false: said, and Quit())
   bool open(const char* out_name, FILE* in, const char* in_name) {
     open_output = this;
     name = out_name;
-    if (!strcmp(name, "-")) {
-      g.f = stdout;
-      return true;
-    }
-    if (same_file(in, name)) {
+    int fd = !strcmp(name, "-") ? 1 : name_fd(name);
+    if (fd >= 0 ? same_fd(in, fd) : same_file(in, name)) {
       fprintf(stderr, "aacpack: %s: the input and the output are the same file\n", in_name);
       Quit();
       return false;
     }
-    int fd = name_fd(name);
     if (fd >= 0) {
       int d = fd == 1 ? -1 : dup(fd);
       g.f = fd == 1 ? stdout : d < 0 ? nullptr : fdopen(d, "wb");
@@ -423,8 +481,16 @@ struct Output {
     }
     unsigned mode = 0;
     int kind = name_kind(name, &mode);
-    bool fresh = kind < 0;
+    fresh = kind < 0;
     file = fresh || kind == 1;
+#ifndef _WIN32
+    struct stat ls;
+    if (fresh && lstat(name, &ls) == 0 && S_ISLNK(ls.st_mode)) {
+      fprintf(stderr, "aacpack: %s: a link to a file that is not there\n", name);
+      Quit();
+      return false;
+    }
+#endif
     if (file) {
 #ifdef _WIN32
       long pid = (long)_getpid();
@@ -435,16 +501,18 @@ struct Output {
       dest = str_dup(real ? real : name);
       free(real);
 #endif
-      size_t n = strlen(dest) + 32;
-      tmp = (char*)mem_alloc(n);
-      snprintf(tmp, n, "%s.%ld.tmp", dest, pid);
-      g.f = fopen(tmp, "wb");
-      if (!g.f) mem_free(tmp), tmp = nullptr;  // (no room for it beside the file: the file itself)
+      g.f = make_tmp(pid);
+      if (!g.f) {
+        fprintf(stderr, "aacpack: cannot create a file beside %s to write it: %s\n", name, strerror(errno));
+        Quit();
+        return false;
+      }
 #ifndef _WIN32
-      if (g.f && !fresh) (void)!fchmod(fileno(g.f), mode & 07777);  // (as private as the file it replaces)
+      if (!fresh) (void)!fchmod(fileno(g.f), mode & 07777);  // (as private as the file it replaces)
 #endif
+      return true;
     }
-    if (!g.f) g.f = fopen(name, "wb");
+    g.f = fopen(name, "wb");  // (a device, a pipe)
     if (!g.f) {
       fprintf(stderr, "aacpack: cannot create %s: %s\n", name, strerror(errno));
       Quit();
@@ -454,8 +522,8 @@ struct Output {
   }
   // The end of the call, r its status so far: what it wrote becomes the
   // output, or after an error is removed, unless keep (d keeps what it
-  // restored, if it could write it); the exit status. (Messages after p's
-  // line, if any.)
+  // restored, if it could write it, where there was no file); the exit
+  // status. (Messages after p's line, if any.)
   int close(int r, bool keep, Progress* p) {
     bool werr = false;
     if (g.f == stdout)
@@ -469,17 +537,17 @@ struct Output {
       say_error(p, "aacpack: %s: write error\n", name);
       r = 1;
     }
-    bool stay = !r || (keep && !werr);
+    bool stay = !r || (keep && !werr && (fresh || !file));
+    if (r && keep && !werr && file && !fresh) say_error(p, "aacpack: %s was there: left as it was\n", name);
     if (tmp) {
       if (stay && !move_file(tmp, dest)) {
         say_error(p, "aacpack: cannot rename %s to %s: %s\n", tmp, dest, strerror(errno));
         r = 1, stay = false;
       }
-      if (!stay) remove(tmp);
-      mem_free(tmp);
-      tmp = nullptr;
-    } else if (!stay && file) {
-      remove(name);
+      char* t = tmp;
+      tmp = nullptr;  // (before it is freed: quit_on_signal() reads it)
+      if (!stay) remove(t);
+      mem_free(t);
     }
     Quit();
     return r ? 1 : 0;
@@ -508,7 +576,8 @@ void quit_on_signal(int sig) {
   raise(sig);
 }
 bool hook_signals() {
-  const int sigs[] = {SIGINT, SIGTERM, SIGHUP, SIGPIPE};
+  // (each that ends a process by default)
+  const int sigs[] = {SIGINT, SIGTERM, SIGHUP, SIGPIPE, SIGQUIT, SIGALRM, SIGUSR1, SIGUSR2, SIGXCPU, SIGXFSZ, SIGVTALRM, SIGPROF};
   for (int s : sigs)
     if (signal(s, quit_on_signal) == SIG_IGN) signal(s, SIG_IGN);  // (one ignored, as by nohup, stays so)
   return true;

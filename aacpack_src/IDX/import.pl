@@ -4,9 +4,11 @@
 #   perl import.pl foo.idx export.!!! > new.idx
 #
 # each knob the export names (its mdesc lines, by the generated name) takes
-# the exported pattern; the rest of the file is copied as it is.
+# the exported pattern; the rest of the file is copied as it is.  An export
+# that is not there, or has no mdesc line, is an error.
 
-open I2, "<$ARGV[1]";
+die "usage: perl import.pl foo.idx export.!!! > new.idx\n" if @ARGV != 2;
+open I2, "<$ARGV[1]" or die "import.pl: cannot read $ARGV[1]: $!\n";
 
 while( <I2> ) {
   s/[\r\n]+$//gs;
@@ -16,9 +18,11 @@ while( <I2> ) {
     print STDERR "$1: $2!$3\n";
   }
 }
+close I2;
+die "import.pl: $ARGV[1] has no mdesc line\n" if !%imp;
 
 $file = $ARGV[0];
-open I1, "<$file";
+open I1, "<$file" or die "import.pl: cannot read $file: $!\n";
 
 $prefix = "M_";
 $index = "";

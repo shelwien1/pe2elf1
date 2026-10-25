@@ -109,8 +109,6 @@ struct Huff {
     int s = v - offset;
     bw.put(code[s], len[s]);
   }
-  // the symbol's code length (for the walk's bit counts)
-  INLINE int bits_of(int v) const { return len[v - offset]; }
 };
 
 // spectral codebook properties, index cb - 1

@@ -15,11 +15,9 @@
 $UseNew = 1;
 $UseNew = $ENV{IDX_USENEW} if defined $ENV{IDX_USENEW};
 $UseNew = $ARGV[1]         if defined $ARGV[1];
-# $NoConst=1 forces every line to Const regardless of what the .idx says, which
-# is how the archived copy shipped.  bmf needs the flag to mean what the format
-# says it means -- mk.sh derives the shipping build by rewriting "Const 0" to
-# "Const 1" in a copy of the source, exactly as IDX-FORMAT.md sec.1 describes --
-# so the default is 0 here, overridable with IDX_NOCONST=1.
+# $NoConst=1 (IDX_NOCONST=1) folds every line, whatever the .idx says: its
+# Const lines, a line's "-", the lines before its first Const -- the shipping
+# form, which mk.sh makes so.  The default, 0, is the form the .idx states.
 $NoConst = 0;
 $NoConst = $ENV{IDX_NOCONST} if defined $ENV{IDX_NOCONST};
 
@@ -39,7 +37,8 @@ $index = "";
 $xdesc = "";
 
 # The variables the indices read, in the order they first appear, for
-# ${prefix}_USES: the model computes only those.  In the folded form
+# ${prefix}_USES: all that a model needs to compute (aacpack's computes
+# every one of its families' variables, and reads no USES).  In the folded form
 # (Const 1) a line counts when its pattern has a 1 (a line of zeros adds
 # nothing to its index); in the tuning form also when it is live, since
 # opt.pl may set any of its bits.  Of an expression, every name not
@@ -53,6 +52,9 @@ sub binary {
   die "idx2inc.pl: $file line $.: pattern \"$m\" is not of 0s and 1s\n" unless $m =~ /^[01]*$/;
   return $m;
 }
+
+# a base as it goes into an expression: a number as it is, else in parentheses
+sub paren { my $b = shift; return $b =~ /^\s*-?\d+\s*$/ ? $b : "($b)"; }
 
 sub use_var {
   my ($expr, $map, $const, $debug) = @_;
@@ -72,6 +74,7 @@ while( <I1> ) {
   s/\s+$//;
 
   $const = s/^\-//; $const ^= $gconst;
+  $const = 1 if $NoConst;
   $debug = s/^\!//; $debug ^= $gdebug;
 
   if( /^\s*Prefix\s+([^\s]*)/ ) {
@@ -107,13 +110,16 @@ while( <I1> ) {
     } else {
       ($var,$coef,$base,$map) = ($1,$2,$3,$4);
       $q=0; $q+=$q+($_&1) for( unpack("c*",$map) );
-      $xdesc .= "static const int ${prefix}_$var = ($q+$base) * ($coef);\n";
+      $xdesc .= "static const int ${prefix}_$var = ($q+" . paren($base) . ") * ($coef);\n";
     }
   } elsif( /^\s*(.*?):\s*(.*?),\s*\&(.*?)\s*$/ ) {
     print "$1:$2,$3!\n";
     ($tag,$var,$map) = ($1,$2,binary($3));
     use_var($var, $map, $const, $debug);
     $ccount = ($map=~s/1/1/g);
+    # (the tuning form maps a variable through a table of 2^length entries, mapping.inc)
+    die "idx2inc.pl: $file:$.: a mask of ".length($map)." bits, of which the tuning form would make a table of 2^".length($map)." (20 bits at most)\n"
+      if $const==0 && length($map) > 20;
     if( $const==0 ) {
       push @{$vfactors{$index}}, "${prefix}_${tag}.Size";
       $code{$index} .= "\n${prefix}_${tag}.inc( $index, $var );";
@@ -167,11 +173,12 @@ while( <I1> ) {
       # chain is a compare and a set per threshold plus the adds, the table a
       # clamp and a load whatever the count -- at four buckets they cost the
       # same and past it the chain only grows.  It was a table above eight,
-      # and those chains were a fifth of the coder's instructions
-      # (OGGCOMP-SPEED.md section 5.4).  The tuning build maps through
+      # and those chains were a fifth of the coder's instructions (as oggcomp,
+      # whose coder this is, measured them).  The tuning build maps through
       # pmap[] regardless, so both builds bucket the same way.
+      $bp = paren($base);
       if( $ccount > 3 ) {
-        $code{$index} .= "\n$index = $index*$ccount + ${prefix}_${tag}[__min($lmap,__max(0,($var)-($base-1)))];";
+        $code{$index} .= "\n$index = $index*$ccount + ${prefix}_${tag}[__min($lmap,__max(0,($var)-($bp-1)))];";
         $j = 0; 
         $q = sprintf( "static const %s ${prefix}_${tag}[$lmap+1]={ ", (($ccount<256)?"byte":"word") );
         $c = "";
@@ -186,7 +193,7 @@ while( <I1> ) {
           $j=0; $c=""; $q="";
           for( unpack("c*",$map) ) {
             if( ($_&1)==1 ) {
-              $c .= sprintf( "$q(($var)>%i+($base-1))", $j ); $q="+";
+              $c .= sprintf( "$q(($var)>%i+($bp-1))", $j ); $q="+";
             }
             $j++;
           }

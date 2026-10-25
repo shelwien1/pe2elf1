@@ -51,17 +51,15 @@
 #include <immintrin.h>
 #endif
 
-// The stack-copying coroutines of Lib3 (unchanged from mtwrap's, as h264p
-// has them), which aacpack's compressor and decompressor are (coro.inc).
-// Before aacpack's own sources, which see its INLINE and NOINLINE, and
-// after the system headers, which its setjmp and longjmp macros must not
-// reach.
-#ifndef FILE_API_STD
-#define FILE_API_STD  // (its stdio file API on Windows too)
-#endif
+// The stack-copying coroutines of Lib3 (mtwrap's, as h264p has them, but
+// for what aacpack does not use of them, and clang's setjmp as gcc's),
+// which aacpack's compressor and decompressor are (coro.inc), and its
+// stdio file API. Before aacpack's own sources, which see its INLINE and
+// NOINLINE, and after the system headers, which its setjmp and longjmp
+// macros must not reach.
 #include "Lib3/common.inc"
 #include "Lib3/coro3b.inc"
-#include "Lib3/file_api.inc"
+#include "Lib3/file_api_std.inc"
 
 // errors (without C++ exceptions) and memory (without the C++ library's
 // containers), the bits, the tables and codebooks of the syntax, the

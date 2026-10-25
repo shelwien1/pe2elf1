@@ -40,22 +40,36 @@ enum { UF_KIND, UF_RAWN, UF_ASCN, UF_SBRN, UF_SBRI, UF_CRC, UF_N };
 static INLINE int sq2(i64 d) { return d == 0 ? 0 : d > 0 ? 2 * tc_qlog(d) : 2 * tc_qlog(d) - 1; }
 static INLINE int sgn3(int v) { return v > 0 ? 1 : v < 0 ? 2 : 0; }
 static INLINE int iabs(int v) { return v < 0 ? -v : v; }
+// the group of window win (the last where win is past them), and its first window
+static INLINE int group_of(const Ics& ii, int win, int* first = nullptr) {
+  int g = 0, x = 0;
+  while (g < ii.num_groups - 1 && win >= x + ii.group_len[g]) x += ii.group_len[g++];
+  if (first) *first = x;
+  return g;
+}
+// what a band's scalefactor is, by its codebook: 0 a scalefactor, 1 an
+// intensity position (14, 15), 2 a noise energy (13)
+static INLINE int sf_kind(int cb) { return cb == 13 ? 2 : cb >= 14 ? 1 : 0; }
+
+// a table of the model's, made as the program starts (Init())
+template <class T>
+static T table_make() {
+  T t;
+  t.Init();
+  return t;
+}
 
 // 2^(3 x / 16) in Q12 for x in -60..60: how a quantized magnitude scales
 // with a scalefactor x smaller (the quantizer's step goes as 2^(x / 4), a
-// magnitude as the step to the -3/4)
+// magnitude as the step to the -3/4); at(x), x clamped to that
 struct ScaleTab {
   int v[121];
   void Init() {
     for (int x = -60; x <= 60; x++) v[x + 60] = (int)lrint(4096.0 * pow(2.0, 3.0 * x / 16.0));
   }
+  INLINE int at(int x) const { return v[tc_clamp(x, -60, 60) + 60]; }
 };
-static ScaleTab scale_make() {
-  ScaleTab t;
-  t.Init();
-  return t;
-}
-static const ScaleTab kScale = scale_make();
+static const ScaleTab kScale = table_make<ScaleTab>();
 
 // |q|^(4/3) in Q4 for |q| < 2048, by integer cube roots (the same everywhere,
 // as the model must be); and 2^(x / 4) for x mod 4, in Q16
@@ -73,12 +87,7 @@ struct Pow43Tab {
     }
   }
 };
-static Pow43Tab pow43_make() {
-  Pow43Tab t;
-  t.Init();
-  return t;
-}
-static const Pow43Tab kPow43 = pow43_make();
+static const Pow43Tab kPow43 = table_make<Pow43Tab>();
 static const int kFrac4[4] = {65536, 77936, 92682, 110218};
 // a quantized value q as the decoder has it, sign(q) |q|^(4/3) 2^(d / 4),
 // in Q20 (d: its band's scalefactor less the one it is compared with, -60..60)
@@ -140,12 +149,7 @@ struct SpecPrior {
     }
   }
 };
-static SpecPrior spec_prior_make() {
-  SpecPrior t;
-  t.Init();
-  return t;
-}
-static const SpecPrior kSpecPrior = spec_prior_make();
+static const SpecPrior kSpecPrior = table_make<SpecPrior>();
 // and a two-sided geometric's (Laplace's) of a mean magnitude mu, in 1/16
 // (mu16 up to 4095): P(0) of |v| > 0, and of |v| > j for j > 0
 struct GeoPrior {
@@ -158,12 +162,7 @@ struct GeoPrior {
     }
   }
 };
-static GeoPrior geo_prior_make() {
-  GeoPrior t;
-  t.Init();
-  return t;
-}
-static const GeoPrior kGeoPrior = geo_prior_make();
+static const GeoPrior kGeoPrior = table_make<GeoPrior>();
 
 // Bytes nothing else models (h264p's RawModel, without its dictionary): an
 // order 0 and an order 1 counter and a match model mixed by a weight set
@@ -353,7 +352,6 @@ struct RawModel {
 struct ChanHist {
   int valid;  // a frame of the channel was walked
   int ws, max_sfb, num_groups, num_windows, num_swb;
-  int group_len[8];
   int gg;
   int last_esc;
   int first_d[3];       // each kind's first scalefactor delta (0 none)
@@ -595,7 +593,6 @@ struct Model : tc_rc<f_DEC> {
       h.num_groups = d.ii.num_groups;
       h.num_windows = d.ii.num_windows;
       h.num_swb = d.ii.num_swb;
-      memcpy(h.group_len, d.ii.group_len, sizeof h.group_len);
       h.gg = d.gg;
       h.last_esc = c.last_esc;
       for (int k = 0; k < 3; k++) h.first_d[k] = c.first_d[k];
@@ -620,7 +617,7 @@ struct Model : tc_rc<f_DEC> {
           // (a band coded now: the average to its scalefactor first)
           int f = 4096;
           if (b < d.ii.max_sfb && d.bt[b] && d.bt[b] < 13) {
-            if (h.avsf[b] != INT16_MIN) f = kScale.v[tc_clamp(h.avsf[b] - d.sf[b], -60, 60) + 60];
+            if (h.avsf[b] != INT16_MIN) f = kScale.at(h.avsf[b] - d.sf[b]);
             h.avsf[b] = d.sf[b];
           }
           for (int k = d.ii.swb[b]; k < d.ii.swb[b + 1]; k++) {
@@ -640,7 +637,7 @@ struct Model : tc_rc<f_DEC> {
             int f = 4096;
             const int i = g * d.ii.max_sfb + b;
             if (b < d.ii.max_sfb && d.bt[i] && d.bt[i] < 13) {
-              if (h.av8sf[b] != INT16_MIN) f = kScale.v[tc_clamp(h.av8sf[b] - d.sf[i], -60, 60) + 60];
+              if (h.av8sf[b] != INT16_MIN) f = kScale.at(h.av8sf[b] - d.sf[i]);
               h.av8sf[b] = d.sf[i];
             }
             for (int k = d.ii.swb[b]; k < d.ii.swb[b + 1]; k++) {
@@ -976,26 +973,39 @@ struct Model : tc_rc<f_DEC> {
     D.ob = o ? 1 + cc_[0].secb[g * ii.max_sfb + sfb] : 0;
     D.pr = D.pt = D.ch = D.bq = 0;
   }
-  int sect_cb(const Walk& w, int v, int g) {
-    tc_stage = STG_SEC;
-    double b0 = ENC && tc_verbose ? bits_now() : 0;
-    H_sec_v D;
-    sec_vars(w, D, g, w.at.sfb);
-    D.kd = 0;
-    D.cb = 16;
-    D.run = 0;
-    D.fn = 0;
-    const int dpc = dig_pred(E_SECT_CB);
-    D.dm = dpc >= 0 ? 1 + Min(dlen_, 3) * 17 + Min(dpc, 16) : 0;
+  // a codebook (or kind) by its tree of four bits, and a decision (sec)
+  int sec_tree(H_sec_v& D, int v) {
     tcx X;
     f_sec.make(D, X);
     f_sec.select(X);
     int node = 1;
     for (int j = 3; j >= 0; j--) node = node * 2 + f_sec.bit(node, ENC ? (v >> j) & 1 : 0);
-    tc_syms[STG_SEC]++;
-    if (ENC && tc_verbose) ebits_[E_SECT_CB] += bits_now() - b0, esyms_[E_SECT_CB]++;
-    dig_push(E_SECT_CB, dpc, node - 16);
     return node - 16;
+  }
+  int sec_bit(H_sec_v& D, int v) {
+    tcx X;
+    f_sec.make(D, X);
+    f_sec.select(X);
+    return f_sec.bit(0, ENC && v);
+  }
+  // a section's codebook (kd 0), with the digest's guess of it (dm)
+  int sec_first(H_sec_v& D, int v) {
+    D.kd = 0, D.cb = 16, D.run = 0, D.fn = 0;
+    const int dpc = dig_pred(E_SECT_CB);
+    D.dm = dpc >= 0 ? 1 + Min(dlen_, 3) * 17 + Min(dpc, 16) : 0;
+    const int cb = sec_tree(D, v);
+    dig_push(E_SECT_CB, dpc, cb);
+    tc_syms[STG_SEC]++;
+    return cb;
+  }
+  int sect_cb(const Walk& w, int v, int g) {
+    tc_stage = STG_SEC;
+    double b0 = ENC && tc_verbose ? bits_now() : 0;
+    H_sec_v D;
+    sec_vars(w, D, g, w.at.sfb);
+    const int cb = sec_first(D, v);
+    if (ENC && tc_verbose) ebits_[E_SECT_CB] += bits_now() - b0, esyms_[E_SECT_CB]++;
+    return cb;
   }
   int sect_len(const Walk& w, int len, int g) {
     tc_stage = STG_SEC;
@@ -1017,10 +1027,7 @@ struct Model : tc_rc<f_DEC> {
       int lc = last_cb(h, g, b);
       D.fn = lc == 16 ? 0 : 1 + (lc == cb ? 0 : 2) + (h->secb[g * h->max_sfb + b] ? 1 : 0);
       D.dm = dpl >= 0 ? 1 + (n < dpl ? 0 : n == dpl ? 1 : 2) + 3 * Min(dlen_, 3) : 0;
-      tcx X;
-      f_sec.make(D, X);
-      f_sec.select(X);
-      if (!f_sec.bit(0, ENC && n < len)) break;
+      if (!sec_bit(D, n < len)) break;
       n++;
     }
     dig_push(E_SECT_LEN, dpl, n);
@@ -1066,20 +1073,6 @@ struct Model : tc_rc<f_DEC> {
     sec_vars(w, D, g, sfb);
     D.gc = g > 0 ? cbs[(g - 1) * wcd(w).ii.max_sfb + sfb] : 16;
   }
-  int cs_tree(H_sec_v& D, int v) {
-    tcx X;
-    f_sec.make(D, X);
-    f_sec.select(X);
-    int node = 1;
-    for (int j = 3; j >= 0; j--) node = node * 2 + f_sec.bit(node, ENC ? (v >> j) & 1 : 0);
-    return node - 16;
-  }
-  int cs_bit(H_sec_v& D, int v) {
-    tcx X;
-    f_sec.make(D, X);
-    f_sec.select(X);
-    return f_sec.bit(0, ENC && v);
-  }
 
   void cs_kinds(const Walk& w, uint8_t* kind) {
     const Ics& ii = wcd(w).ii;
@@ -1101,13 +1094,9 @@ struct Model : tc_rc<f_DEC> {
         tc_stage = STG_SEC;
         H_sec_v D;
         cs_vars(w, D, kind, g, k);
-        D.kd = 0, D.cb = 16, D.run = 0, D.fn = 0;
-        const int dpc = dig_pred(E_SECT_CB);
-        D.dm = dpc >= 0 ? 1 + Min(dlen_, 3) * 17 + Min(dpc, 16) : 0;
-        const int kd = cs_tree(D, ENC ? kg[k] : 0);
-        dig_push(E_SECT_CB, dpc, kd);
-        tc_syms[STG_SEC]++;
-        if (ENC && tc_verbose) ebits_[E_SECT_CB] += bits_now() - b0, esyms_[E_SECT_CB]++, b0 = bits_now();
+        const int kd = sec_first(D, ENC ? kg[k] : 0);
+        // (-v: these bits are the sections' codebooks' and lengths', which cs_sections() counts)
+        if (ENC && tc_verbose) ebits_[E_SECT_CB] += bits_now() - b0, b0 = bits_now();
         int len = 0;
         if (ENC)
           while (k + len < msfb && kg[k + len] == kd) len++;
@@ -1120,14 +1109,14 @@ struct Model : tc_rc<f_DEC> {
           const int lc = last_cb(h, g, b);
           D.fn = lc == 16 ? 0 : 1 + (kind_of(lc) == kd ? 0 : 2) + (h->secb[g * h->max_sfb + b] ? 1 : 0);
           D.dm = dpl >= 0 ? 1 + (n < dpl ? 0 : n == dpl ? 1 : 2) + 3 * Min(dlen_, 3) : 0;
-          if (!cs_bit(D, n < len)) break;
+          if (!sec_bit(D, n < len)) break;
         }
         dig_push(E_SECT_LEN, dpl, n);
         for (int s = k; s < k + n; s++) kg[s] = (uint8_t)kd;
         c.pc = kd;
         k += n;
         tc_syms[STG_SEC]++;
-        if (ENC && tc_verbose) ebits_[E_SECT_LEN] += bits_now() - b0, esyms_[E_SECT_LEN]++;
+        if (ENC && tc_verbose) ebits_[E_SECT_LEN] += bits_now() - b0;
       }
     }
   }
@@ -1169,7 +1158,15 @@ struct Model : tc_rc<f_DEC> {
           for (int s = k; s < k + len; s++) acb[s] = (uint8_t)cbv;
           k += len;
         }
+      // (-v: where sections start and those of no bands are sect.len's bits,
+      // the codebooks sect.cb's; each section one value of both, as in -b)
       double b0 = ENC && tc_verbose ? bits_now() : 0;
+      auto book = [&](int e) {
+        if (ENC && tc_verbose) {
+          const double b1 = bits_now();
+          ebits_[e] += b1 - b0, b0 = b1;
+        }
+      };
       tc_stage = STG_SEC;
       // where sections start
       c.pc = 16;
@@ -1190,7 +1187,7 @@ struct Model : tc_rc<f_DEC> {
         D.pr = 1 + sb + 2 * agree;
         D.pt = 1 + cs.st[CS_FDK][b] + 2 * cs.st[CS_FF][b] + 4 * cs.st[CS_FAAC][b];
         D.bq = bq;
-        st[b] = (uint8_t)cs_bit(D, st[b]);
+        st[b] = (uint8_t)sec_bit(D, st[b]);
         if (st[b]) s0 = b;
         tc_syms[STG_SEC]++;
       }
@@ -1200,19 +1197,26 @@ struct Model : tc_rc<f_DEC> {
         H_sec_v D;
         cs_vars(w, D, cs_cb_, g, 0);
         D.kd = 2, D.cb = 16, D.run = 0, D.fn = 0, D.dm = 0, D.pr = 15;
-        if (cs_bit(D, !cs_zl_.empty())) {
+        const bool any = sec_bit(D, !cs_zl_.empty());
+        book(E_SECT_LEN);
+        if (any) {
           size_t zi = 0;
+          const size_t zmax = ENC ? SIZE_MAX : w.fw.cap / 7;
           for (int b = 0; b < msfb; b++) {
             if (!st[b]) continue;
             int n = 0;
             for (;;) {
               cs_vars(w, D, cs_cb_, g, b);
               D.kd = 2, D.cb = 16, D.run = 0, D.fn = 0, D.dm = 0, D.pr = 14;
-              if (!cs_bit(D, n < zl[b])) break;
-              if (++n > 4096) err_raise_s("corrupt stream: sections of no bands without end");
+              const int more = sec_bit(D, n < zl[b]);
+              book(E_SECT_LEN);
+              if (!more) break;
+              // (decoding: no more than the unit has room for, 7 bits each at least)
+              if ((size_t)++n > zmax) err_raise_s("corrupt stream: sections of no bands without end");
               cs_vars(w, D, cs_cb_, g, b);
               D.kd = 3, D.cb = 16, D.run = 0, D.fn = 0, D.dm = 0, D.pr = 0;
-              const int z = cs_tree(D, ENC ? cs_zl_[zi] : 0);
+              const int z = sec_tree(D, ENC ? cs_zl_[zi] : 0);
+              book(E_SECT_CB);
               if (!ENC) cs_zl_.push_back((uint8_t)z);
               zi++;
             }
@@ -1237,15 +1241,16 @@ struct Model : tc_rc<f_DEC> {
           D.pt = 1 + agree + 3 * same;
           D.ch = 1 + cs.cheapest(b, e);
           D.bq = bq;
-          v = cs_tree(D, ENC ? acb[b] : 0);
+          v = sec_tree(D, ENC ? acb[b] : 0);
+          book(E_SECT_CB);
           tc_syms[STG_SEC]++;
         }
         for (int s = b; s < e; s++) acb[s] = (uint8_t)v;
         c.pc = v;
         b = e;
       }
-      if (ENC && tc_verbose) ebits_[E_SECT_LEN] += bits_now() - b0;
       // the sections, as the bitstream has them
+      const size_t n0 = out.size();
       for (int b = 0, zi = 0; b < msfb;) {
         for (int z = 0; z < zl[b]; z++) out.add(g, cs_zl_[zi++], 0);
         int e = b + 1;
@@ -1253,6 +1258,7 @@ struct Model : tc_rc<f_DEC> {
         out.add(g, acb[b], e - b);
         b = e;
       }
+      if (ENC && tc_verbose) esyms_[E_SECT_CB] += out.size() - n0, esyms_[E_SECT_LEN] += out.size() - n0;
       // what the encoders got right
       for (int b = 0; b < msfb; b++) {
         cs_cb_[g * msfb + b] = acb[b];
@@ -1277,7 +1283,7 @@ struct Model : tc_rc<f_DEC> {
     const Ics& ii = cd.ii;
     CurChan& c = cur(w);
     const int g = w.at.g, cb = w.at.cb, idx = g * ii.max_sfb + sfb;
-    const int kd = cb == 13 ? 2 : cb >= 14 ? 1 : 0;
+    const int kd = sf_kind(cb);
     const ChanHist* h = last_of(w);
     const ChanData* o = other_of(w);
     H_scf_v D;
@@ -1286,12 +1292,12 @@ struct Model : tc_rc<f_DEC> {
     D.d1 = sq2(c.d1[kd]);
     D.d2 = sq2(c.d2[kd]);
     int lb = h && g < h->num_groups && sfb < h->max_sfb ? h->bt[g * h->max_sfb + sfb] : -1;
-    bool same = lb >= 0 && (lb == 13 ? 2 : lb >= 14 ? 1 : lb ? 0 : -1) == kd;
+    bool same = lb > 0 && sf_kind(lb) == kd;
     int pa = same ? h->sf[g * h->max_sfb + sfb] - c.off[kd] : 0;
     D.pd = same ? 1 + sq2(h->sfd[g * h->max_sfb + sfb]) : 0;
     D.pa = same ? 1 + sq2(pa) : 0;
     D.cb = cb;
-    D.oc = o && o->bt[idx] && ((o->bt[idx] == 13 ? 2 : o->bt[idx] >= 14 ? 1 : 0) == kd) ? 1 + sq2(cc_[0].sfd[idx]) : 0;
+    D.oc = o && o->bt[idx] && sf_kind(o->bt[idx]) == kd ? 1 + sq2(cc_[0].sfd[idx]) : 0;
     D.ws = ii.ws;
     D.gr = g;
     D.gd = h ? 1 + sq2(cd.gg - h->gg) : 0;
@@ -1299,8 +1305,8 @@ struct Model : tc_rc<f_DEC> {
     // the first of its kind in the frame (and the last frame's first delta), the bands skipped since the last
     D.fb = c.nsf[kd] ? 0 : 1 + (h ? 1 + sq2(hist_[c.slot].first_d[kd]) : 0);
     {
-      const int lb = c.lastb[kd] >= 0 && (c.lastb[kd] >> 8) == g ? c.lastb[kd] & 255 : -1;
-      D.sk = lb >= 0 ? tc_qlog(sfb - lb - 1) : 15;
+      const int lk = c.lastb[kd] >= 0 && (c.lastb[kd] >> 8) == g ? c.lastb[kd] & 255 : -1;
+      D.sk = lk >= 0 ? tc_qlog(sfb - lk - 1) : 15;
     }
     // the band's ms_used (a CPE's: 1 L/R, 2 M/S; 0 none)
     D.mu = w.at.type == TYPE_CPE ? 1 + (cd.ms_present == 2 || (cd.ms_present == 1 && w.cd[0].ms[idx])) : 0;
@@ -1310,10 +1316,10 @@ struct Model : tc_rc<f_DEC> {
       if (ii.ws == EIGHT_SHORT_SEQUENCE) {
         if (g > 0) {
           const int pb = cd.bt[(g - 1) * ii.max_sfb + sfb];
-          if (pb && (pb == 13 ? 2 : pb >= 14 ? 1 : 0) == kd) pwv = cd.sf[(g - 1) * ii.max_sfb + sfb];
+          if (pb && sf_kind(pb) == kd) pwv = cd.sf[(g - 1) * ii.max_sfb + sfb];
         } else if (h && h->num_windows == 8 && sfb < h->max_sfb) {
           const int pi = (h->num_groups - 1) * h->max_sfb + sfb, pb = h->bt[pi];
-          if (pb && (pb == 13 ? 2 : pb >= 14 ? 1 : 0) == kd) pwv = h->sf[pi];
+          if (pb && sf_kind(pb) == kd) pwv = h->sf[pi];
         }
       }
       D.pw = pwv != INT_MIN ? 1 + sq2(pwv - c.off[kd]) : 0;
@@ -1355,15 +1361,13 @@ struct Model : tc_rc<f_DEC> {
     // the place in the last frame, or the window before
     const ChanHist* h = last_of(w);
     const int* pp = nullptr;  // the values at the place before, by k
+    int pend = 1024;          // (coded up to here: the window before in this group, to the band's end)
     int psf = INT_MIN;        // and the band's scalefactor there
     if (ii.ws == EIGHT_SHORT_SEQUENCE) {
       if (win > 0) {  // the window before, of this frame (its group's band)
         pp = cd.coef + (win - 1) * 128;
-        int pg = 0;
-        for (int x = 0; pg < ii.num_groups - 1; pg++) {
-          x += ii.group_len[pg];
-          if (win - 1 < x) break;
-        }
+        const int pg = group_of(ii, win - 1);
+        if (pg == g) pend = ii.swb[sfb + 1];
         int pb = cd.bt[pg * ii.max_sfb + sfb];
         if (pb && pb < 13) psf = cd.sf[pg * ii.max_sfb + sfb];
       } else if (h && h->num_windows == 8) {  // the last window of the last frame
@@ -1384,7 +1388,7 @@ struct Model : tc_rc<f_DEC> {
       if (h->bt[sfb] >= 14 && w.at.type == TYPE_CPE && w.at.chn == 1 && last0_.valid && last0_.num_windows == 1 &&
           sfb < last0_.max_sfb && last0_.bt[sfb] && last0_.bt[sfb] < 13)
         isv = (int)(((i64)iabs(last0_.coef[k]) *
-                     kScale.v[tc_clamp(last0_.sf[sfb] - h->sf[sfb] - cd.sf[g * ii.max_sfb + sfb], -60, 60) + 60] + 2048) >> 12);
+                     kScale.at(last0_.sf[sfb] - h->sf[sfb] - cd.sf[g * ii.max_sfb + sfb]) + 2048) >> 12);
     }
     const int sfc = cd.sf[g * ii.max_sfb + sfb];
     const ChanData* o = other_of(w);
@@ -1426,7 +1430,7 @@ struct Model : tc_rc<f_DEC> {
       if (j >= a || !x || sfb == 0) return x;
       const int pi = g * ii.max_sfb + sfb - 1;
       if (!cd.bt[pi] || cd.bt[pi] >= 13) return x;
-      return (int)(((i64)x * kScale.v[tc_clamp(cd.sf[pi] - sfc, -60, 60) + 60] + 2048) >> 12);
+      return (int)(((i64)x * kScale.at(cd.sf[pi] - sfc) + 2048) >> 12);
     };
     D.a1 = k > 0 ? Min(inband(k - 1), 15) : 0;
     D.a2 = k > 1 ? Min(inband(k - 2), 15) : 0;
@@ -1437,15 +1441,14 @@ struct Model : tc_rc<f_DEC> {
     }
     D.pf = pp ? 1 + Min(iabs(pv), 14) : 0;
     const int klast = ii.ws == EIGHT_SHORT_SEQUENCE ? 127 : 1023;  // (the window's last place)
-    D.pn = pp ? 1 + tc_qlog(iabs(k > 0 ? pp[k - 1] : 0) + 2 * iabs(pv) + iabs(k < klast ? pp[k + 1] : 0)) : 0;
+    D.pn = pp ? 1 + tc_qlog(iabs(k > 0 ? pp[k - 1] : 0) + 2 * iabs(pv) + iabs(k < klast && k + 1 < pend ? pp[k + 1] : 0)) : 0;
     if (conv[1] >= 0) {  // (the values converted: their scale is this band's already)
       D.pf = 1 + Min(conv[1], 14);
       D.pn = 1 + tc_qlog(Max(conv[0], 0) + 2 * conv[1] + Max(conv[2], 0));
       D.ex = 1 + tc_qlog((i64)4 * conv[1]);
       D.ds = psf != INT_MIN ? 1 + sq2(sfc - psf) : 0;
     } else if (pp && psf != INT_MIN) {
-      int dsf = tc_clamp(psf - sfc, -60, 60);
-      D.ex = 1 + tc_qlog(((i64)4 * iabs(pv) * kScale.v[dsf + 60]) >> 12);
+      D.ex = 1 + tc_qlog(((i64)4 * iabs(pv) * kScale.at(psf - sfc)) >> 12);
       D.ds = 1 + sq2(sfc - psf);
     } else {
       D.ex = 0;
@@ -1458,21 +1461,20 @@ struct Model : tc_rc<f_DEC> {
     D.tp = f_CS ? 0 : tp;
     D.nz = Min(c.bnz, 7);
     D.qn = tc_qlog(c.bsum);
-    D.kq = tc_qlog(k);
     D.av = 0;
     i64 avs = 0, xpe = 0;
     {
       const ChanHist& hh = hist_[c.slot];
       if (ii.ws != EIGHT_SHORT_SEQUENCE && hh.av_n && hh.av_swb == ii.num_swb) {
-        i64 v = hh.av[k];
-        if (hh.avsf[sfb] != INT16_MIN) v = (v * kScale.v[tc_clamp(hh.avsf[sfb] - sfc, -60, 60) + 60]) >> 12;
-        D.av = 1 + Min(tc_qlog(v), 30);
-        avs = v;
+        i64 x = hh.av[k];
+        if (hh.avsf[sfb] != INT16_MIN) x = (x * kScale.at(hh.avsf[sfb] - sfc)) >> 12;
+        D.av = 1 + Min(tc_qlog(x), 30);
+        avs = x;
       } else if (ii.ws == EIGHT_SHORT_SEQUENCE && hh.av8_n && hh.av8_swb == ii.num_swb && sfb < 16) {
-        i64 v = hh.av8[k];
-        if (hh.av8sf[sfb] != INT16_MIN) v = (v * kScale.v[tc_clamp(hh.av8sf[sfb] - sfc, -60, 60) + 60]) >> 12;
-        D.av = 1 + Min(tc_qlog(v), 30);
-        avs = v;
+        i64 x = hh.av8[k];
+        if (hh.av8sf[sfb] != INT16_MIN) x = (x * kScale.at(hh.av8sf[sfb] - sfc)) >> 12;
+        D.av = 1 + Min(tc_qlog(x), 30);
+        avs = x;
       }
     }
     // (the last frame's value scaled by the band's scalefactor change, or in this frame's terms)
@@ -1480,7 +1482,7 @@ struct Model : tc_rc<f_DEC> {
     if (conv[1] >= 0)
       pfs = conv[1];
     else if (pp && psf != INT_MIN)
-      pfs = (int)(((i64)iabs(pv) * kScale.v[tc_clamp(psf - sfc, -60, 60) + 60]) >> 12);
+      pfs = (int)(((i64)iabs(pv) * kScale.at(psf - sfc)) >> 12);
     {
       i64 e = avs + (pp ? 16 * (i64)pfs : 0) + 8 * (i64)(k > 0 ? iabs(cc[k - 1]) : 0) + 8 * (i64)(k > 1 ? iabs(cc[k - 2]) : 0) + (o ? 16 * (i64)iabs(oval) : 0);
       D.xp = 1 + Min(tc_qlog(e), 39);
@@ -1489,12 +1491,7 @@ struct Model : tc_rc<f_DEC> {
     D.pl = tc_qlog(ii.swb[sfb + 1] - k - 1);
     // the group's window and its place in the group
     int wg0 = 0, wgl = 1;
-    if (ii.ws == EIGHT_SHORT_SEQUENCE)
-      for (int x = 0, gi = 0; gi < ii.num_groups; x += ii.group_len[gi++])
-        if (win < x + ii.group_len[gi]) {
-          wg0 = x, wgl = ii.group_len[gi];
-          break;
-        }
+    if (ii.ws == EIGHT_SHORT_SEQUENCE) wgl = ii.group_len[group_of(ii, win, &wg0)];
     {
       int z = 0;
       while (z < 64 && z < k && !cc[k - 1 - z]) z++;
@@ -1579,7 +1576,7 @@ struct Model : tc_rc<f_DEC> {
       S.s2 = k > 1 ? sgn3(cc[k - 2]) : 0;
       S.pf = pp ? sgn3(pv) : 0;
       S.mg = Min(mm, 7);
-      S.kq = D.kq;
+      S.kq = tc_qlog(k);
       S.ws = D.ws;
       tcx Z;
       f_sgn.make(S, Z);
@@ -1602,7 +1599,7 @@ struct Model : tc_rc<f_DEC> {
     int t = w.prev_che_type == TYPE_SCE ? 0 : w.prev_che_type == TYPE_CPE ? 1 : 2;
     return (t * 16 + (w.prev_che_tag & 15)) * 2 + (w.at.chn & 1);
   }
-  i64 sbr_val(const Walk& w, int e, i64 v, int band, int n) {
+  i64 sbr_val(const Walk& w, int e, i64 v, int band) {
     double b0 = ENC && tc_verbose ? bits_now() : 0;
     bool ps = e >= E_PS_HDR;
     tc_stage = ps ? STG_PS : STG_SBR;
@@ -1623,7 +1620,7 @@ struct Model : tc_rc<f_DEC> {
     D.kd = kd;
     D.bd = bd;
     D.nb = w.at.nb;
-    D.d1 = band > 0 && bd - 1 < 64 ? sq2(cur_env_[hk][bd - 1]) : 0;
+    D.d1 = band > 0 ? sq2(cur_env_[hk][bd - 1]) : 0;
     D.d2 = band > 1 ? sq2(cur_env_[hk][bd - 2]) : 0;
     D.pv = sh.have[hk] ? 1 + sq2(sh.last[hk][bd]) : 0;
     D.ar = w.at.sc ? w.at.sc->amp_res : 0;
@@ -1651,7 +1648,6 @@ struct Model : tc_rc<f_DEC> {
     i64 x;
     if (kd == 14) {
       x = f_sbr.code(X, ENC ? v : 0);
-      (void)n;
     } else {
       x = f_sbr.codes(X, v, (u32)(kd * 3 + sgn3(sh.have[hk] ? sh.last[hk][bd] : 0)));
     }
@@ -1697,7 +1693,7 @@ struct Model : tc_rc<f_DEC> {
       case E_SECT_CB: return sect_cb(w, (int)x, i);
       case E_SECT_LEN: return sect_len(w, (int)x, i);
       case E_SENV_START:
-      case E_SNOISE_START: return sbr_val(w, e, x, 0, n);
+      case E_SNOISE_START: return sbr_val(w, e, x, 0);
       case E_GLOBAL_GAIN: {
         x = hdr_val(w, e, n, x, i);
         CurChan& c = cur(w);
@@ -1707,11 +1703,9 @@ struct Model : tc_rc<f_DEC> {
       case E_NOISE_NRG: {
         // (the last frame's noise energy at the band, as this frame's first value would give it)
         const ChanHist* h = last_of(w);
-        const int b = w.at.g * wcd(w).ii.max_sfb + w.at.sfb;
         nbase_ = h && w.at.g < h->num_groups && w.at.sfb < h->max_sfb && h->bt[w.at.g * h->max_sfb + w.at.sfb] == 13
                      ? h->sf[w.at.g * h->max_sfb + w.at.sfb] - wcd(w).gg + 90 + 256
                      : INT_MIN;
-        (void)b;
         x = hdr_val(w, e, n, x, i);
         nbase_ = INT_MIN;
         cur(w).off[2] += (int)x - 256;
@@ -1736,7 +1730,7 @@ struct Model : tc_rc<f_DEC> {
       case E_PS_IID:
       case E_PS_ICC:
       case E_PS_IPD:
-      case E_PS_OPD: return (int)sbr_val(w, e, v, i, 0);
+      case E_PS_OPD: return (int)sbr_val(w, e, v, i);
       default: return (int)hdr_val(w, e, 0, v, i);
     }
   }
