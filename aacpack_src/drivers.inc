@@ -60,6 +60,7 @@ AacArgs call_start(Progress& pr, const Options& opt, const char* tag, filehandle
   AacArgs a;
   a.Init();
   a.level = opt.level;
+  a.order = opt.order;
   a.verbose = opt.verbose;
   a.strict = opt.strict;
   a.format = opt.format;
@@ -79,7 +80,7 @@ int call_end(int r, filehandle0& f, Output& o, bool keep, Progress& pr, uint64_t
   return r;
 }
 
-// A run of one model, C (AacpCoro<DEC, LV>), on the call's files, its input
+// A run of one model, C (AacpCoro<DEC, LV, CS>), on the call's files, its input
 // from f (what was read of it already, [pre, pre + npre), first): its
 // status, the stream's bytes (raw) and the compressed stream's (packed),
 // and its frames; its counts on the progress line as it goes, and what it
@@ -124,19 +125,21 @@ struct CodeLv {
     Progress pr;
     AacArgs a = call_start(pr, opt, "enc", f, in_name);
     uint64_t raw, packed, frames;
-    int r = run_model<AacpCoro<0, LV>, 0>(a, pr, f, o, nullptr, 0, raw, packed, frames);
+    int r = opt.order ? run_model<AacpCoro<0, LV, 1>, 0>(a, pr, f, o, nullptr, 0, raw, packed, frames)
+                      : run_model<AacpCoro<0, LV, 0>, 0>(a, pr, f, o, nullptr, 0, raw, packed, frames);
     return call_end(r, f, o, false, pr, raw, packed, frames);
   }
 };
-// d of one model's stream, at its level: the bytes of the input read
-// already (head, got of them) first
+// d of one model's stream, at its level and in its order: the bytes of the
+// input read already (head, got of them) first
 template <class LV>
 struct DecodeLv {
-  static int run(const char* in_name, const Options& opt, filehandle0& f, Output& o, uint8_t* head, size_t got) {
+  static int run(const char* in_name, const Options& opt, filehandle0& f, Output& o, uint8_t* head, size_t got, int order) {
     Progress pr;
     AacArgs a = call_start(pr, opt, "dec", f, in_name);
     uint64_t raw, packed, frames;
-    int r = run_model<AacpCoro<1, LV>, 1>(a, pr, f, o, head, got, raw, packed, frames);
+    int r = order ? run_model<AacpCoro<1, LV, 1>, 1>(a, pr, f, o, head, got, raw, packed, frames)
+                  : run_model<AacpCoro<1, LV, 0>, 1>(a, pr, f, o, head, got, raw, packed, frames);
     return call_end(r, f, o, raw > 0, pr, raw, packed, frames);  // (what was decoded before an error)
   }
 };
@@ -151,21 +154,22 @@ int code(const char* in_name, const char* out_name, const Options& opt) {
   return with_level<CodeLv>(opt.level, in_name, opt, f, o);
 }
 
-// d: the first bytes say its level
+// d: the first bytes say its level and order
 int decode(const char* in_name, const char* out_name, const Options& opt) {
   filehandle0 f;
   Output o;
   o.Init();
   if (!open_io(in_name, out_name, f, o)) return 1;
-  uint8_t head[sizeof kCmMagic + 1];
+  uint8_t head[sizeof kCmMagic + 2];
   size_t got = fread(head, 1, sizeof head, f.f);
   char msg[512];
-  int level = cm_level(head, got, in_name, msg, sizeof msg);
+  int order = 1;
+  int level = cm_level(head, got, in_name, msg, sizeof msg, &order);
   if (level < 0) {
     fputs(msg, stderr);
     return close_io(1, f, o, false);
   }
-  int r = with_level<DecodeLv>(level, in_name, opt, f, o, head, got);
+  int r = with_level<DecodeLv>(level, in_name, opt, f, o, head, got, order);
   if (r != kNoLevel) return r;
   fprintf(stderr, "aacpack: %s: compressed at level -%d, which this build has not\n", in_name, level);
   return close_io(1, f, o, false);

@@ -18,6 +18,8 @@ void usage() {
           "  -p          what the stream is and the progress on stderr even when it is not a terminal\n"
           "              (where it is, always)\n"
           "  -s          strict (c): fail where a frame would be stored as its bytes or partly as bits\n"
+          "  -b          (c) code each channel's section data before its spectra, as the bitstream has it\n"
+          "              (the default: after them, as the encoder's codebook selection from them)\n"
           " %s         (c) the model's level\n"
           "  -adts | -latm | -adif   (c) look for this container alone\n"
           "  -asc HEX    (c) the input is back-to-back raw_data_blocks of this AudioSpecificConfig\n"
@@ -89,6 +91,8 @@ int main(int argc, char** argv) {
             opt.strict = true;
           else if (*p == 'p')
             opt.progress = true;
+          else if (*p == 'b')
+            opt.order = 0;
           else if (*p >= '1' && *p <= '9')
             opt.level = *p - '0';
           else {

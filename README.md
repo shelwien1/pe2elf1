@@ -38,6 +38,7 @@ the same bytes too.
 | `-v` | statistics on stderr: what each part of the stream took before and after, by stage and by syntax element; what the stream is and where it changes; the units it stored as bytes, and why |
 | `-p` | what the stream is and the progress line, even when stderr is not a terminal |
 | `-s` | `c`: fail where a frame would be stored as its bytes or kept partly as bits, instead of storing it so |
+| `-b` | `c`: code each channel's section data (codebooks and section lengths) before its spectra, as the bitstream has it, instead of after them (below; `d` reads which from the stream) |
 | `-9` | `c`: the model's level (there is one, `-9`; `d` reads it from the stream) |
 | `-adts` `-latm` `-adif` | `c`: look for this container alone (default: whatever comes) |
 | `-asc HEX` | `c`: the input is back-to-back raw_data_blocks of this AudioSpecificConfig, as `aac2tsv -asc` and `aacdec -asc` take them (not ER object types, whose access units have no END to tell where one ends) |
@@ -91,14 +92,20 @@ after it), the channel gets a flag and then the value.
 `c` takes the input a unit at a time (an ADTS or LOAS frame, an ADIF
 header, a raw_data_block, an access unit). It parses the unit into a log
 of values, then writes the unit back from the log. If that does not give
-the same bytes, or the same syntax state for the next unit (configuration,
-SBR headers), the unit is stored as its bytes. Otherwise it is walked a
-third time, writing again, with the model coding each value as the
-walker takes it. `d` runs that same writing walk, with the model decoding
-each value. The model therefore sees the same state at every value in
-both directions: the walker's position, the channel's bands, codebooks,
-scalefactors and spectral values so far, and the model's own records of
-earlier frames. Every unit's walk starts from the same reset state.
+the same bytes, or the same syntax state for the next unit
+(configuration, SBR headers), the unit is stored as its bytes. Otherwise
+it is walked a third time, writing again, with the model coding each
+value as the walker takes it, and the bytes it writes checked again. `d`
+runs that same writing walk, with the model decoding each value. By
+default the model takes a channel's section data after its spectral
+values (below): this walk then asks for each band's kind where the
+section data is, sets aside what it writes for the scalefactors and the
+tools after them, takes the spectral values without their codebooks,
+then the sections, and writes the channel in the bitstream's order. The
+model therefore sees the same state at every value in both directions:
+the walker's position, the channel's bands, codebooks, scalefactors and
+spectral values so far, and the model's own records of earlier frames.
+Every unit's walk starts from the same reset state.
 
 An element that does not parse in a unit that otherwise does (a broken
 SBR payload, an unknown extension, ER tools) is kept as its bits, and so
@@ -116,35 +123,55 @@ probabilities). Values are grouped into families, each with its own
 contexts and parameters (`famvars.inc`, `model.inc`):
 
 - **spectra** (`spc`, `esc`): each quantized magnitude in unary, under
-  its codebook and the magnitudes before it in the window. Other
-  contexts are the magnitudes at its place in the channel's last frame,
-  scaled by the change of the band's scalefactor; the other channel of a
-  CPE at its place; its place in the band and the tuple; the band's
+  the magnitudes before it in the window (and its codebook, with `-b`:
+  by default the codebooks come after the spectra). Other contexts are
+  the magnitudes at its place in the channel's last frame, scaled by the
+  change of the band's scalefactor; the other channel of a CPE at its
+  place; its place in the band (and with `-b` in the tuple); the band's
   magnitudes so far; and the magnitude at its place averaged over the
   earlier frames, each counting 3/4 of the one after it (mp3c's
   `av_MDCT`), which also selects mixer weights. More contexts: the
-  places left in the band, whether the section has had a magnitude
-  above the next smaller codebook's range yet, and the zeros right
-  before the place. Magnitudes from the band before are rescaled to
+  places left in the band, the zeros right before the place, and with
+  `-b` whether the section has had a magnitude above the next smaller
+  codebook's range yet. Magnitudes from the band before are rescaled to
   this band's scalefactor. A second channel's band that was intensity
-  stereo in the last frame is read as the first channel's values,
-  scaled by the position. The mixers also see the probability the
-  codebook itself gives each decision, from its code lengths and the
-  tuple so far, blended with a Laplace distribution's around a guess
-  made from those contexts. Escapes of codebook 11 are coded as
-  numbers, under the last frame's value, the average and that guess.
+  stereo in the last frame is read as the first channel's values, scaled
+  by the position. The mixers also see a Laplace distribution's
+  probability of each decision around a guess made from those contexts
+  (with `-b`, blended with the probability the codebook itself gives,
+  from its code lengths and the tuple so far). Magnitudes of 16 and up
+  (with `-b`, the escapes of codebook 11) are coded as numbers, under
+  the last frame's value, the average and that guess.
 - **signs** (`sgn`): under the signs before, the other channel's, and
   the last frame's at the place. They come out at about a bit each: the
   signs of MDCT coefficients are close to random. A per-line predictor
   across frames, as AAC Main's prediction does it, predicts strong
   stationary tones but saves only 0.2–0.4% of the sign bits of the test
   music, so it is not used.
-- **sections** (`sec`): the codebook as a tree of decisions, and the
-  section length as a decision for each band (does the section go on).
-  Both are coded under the last section's codebook, the band's codebook
-  and section start in the last frame of the channel, the other channel's
-  codebook and section start, the group before, the band's M/S flag, and
-  the codebook with the band.
+- **sections** (`sec`): an encoder chooses the section data from the
+  quantized values, by rules that can be run again on them (`cbsel.inc`,
+  after each encoder's source): fdk-aac gives each band its cheapest
+  codebook and merges neighbouring sections while a merge saves bits,
+  the one that saves the most first; ffmpeg runs a trellis over the
+  codebooks; faac gives each band the smaller codebook of the smallest
+  pair that holds its largest magnitude. So by default the section data
+  is coded after the spectra. Where it is, only each band's kind (no
+  codebook, a spectral one, noise, intensity), which the scalefactors
+  need, as runs of a kind; after the spectral values, where each section
+  starts and each coded section's codebook. Their contexts are what the
+  three encoders would choose for these values, the one that has been
+  right most often lately first, and, for the encoders that are none of
+  them, those of the section data as `-b` codes it (below). fdk-aac's
+  and faac's choices come out exactly in every stream tried, ffmpeg's in
+  99% of bands. The section data then costs about its kinds: fdkaac's
+  128 kbit/s stream's 1.3 KB instead of 16.5 KB. The spectra pay 1.1%
+  for coming without their codebooks (more for test signals, below).
+  With `-b`, the codebook is a tree of decisions, and the section length
+  a decision for each band (does the section go on). Both (and by
+  default the kinds) are coded under the last section's codebook, the
+  band's codebook and section start in the last frame of the channel,
+  the other channel's codebook and section start, the group before, the
+  band's M/S flag, and the codebook with the band.
 - **scalefactors** (`scf`): each delta under the last two deltas, the
   delta at the band in the last frame, and the last frame's value there
   relative to this band's predecessor. Intensity positions and noise
@@ -201,11 +228,13 @@ tune them (below).
 
 ### The compressed stream
 
-The magic `aacpk`, a version byte and a level byte, then one run of the
-range coder, flushed once at its end. Its contents in order: the `-asc`
-config if any; the SBR headers assumed (below); each unit's kind and the
-unit, either its values or a count of bytes and the bytes; the end; and
-the CRC-32 of the input. `d` takes data after the end for corruption.
+The magic `aacpk`, a version byte, a level byte and an order byte (1:
+each channel's section data after its spectra, 0: before, `-b`), then
+one run of the range coder, flushed once at its end. Its contents in
+order: the `-asc` config if any; the SBR headers assumed (below); each
+unit's kind and the unit, either its values or a count of bytes and the
+bytes; the end; and the CRC-32 of the input. `d` takes data after the
+end for corruption.
 
 An SBR payload can only be parsed with its element's SBR header, which
 comes every so many frames. A stream cut out of a longer one can start
@@ -216,15 +245,15 @@ header from the start, and puts it in the compressed stream's own header.
 
 ### Streaming
 
-Memory does not grow with the stream: `c` holds a window of the input
-(a unit at most 1 MB, and at the start what the read-ahead for SBR
-headers read: up to 1000 units, or 8 MB of bytes that are not AAC), and
-`d` a unit's output. The model's tables are a fixed 157 MB of address
-space, and 16 MB each for the match model's ring of the last 4M tokens
-and the bytes' order-2 table; a run touches what its stream needs (about
-43 MB of memory in all for a stereo stream). `c` and `d` are coroutines
-(h264p's Lib3) that ask their driver for input and give it output, so
-pipes of any length work.
+Memory does not grow with the stream: `c` holds a window of the input (a
+unit at most 1 MB, and at the start what the read-ahead for SBR headers
+read: up to 1000 units, or 8 MB of bytes that are not AAC), and `d` a
+unit's output. The model's tables are a fixed 194 MB of address space,
+and 16 MB each for the match model's ring of the last 4M tokens and the
+bytes' order-2 table; a run touches what its stream needs (about 38 MB
+of memory in all for a stereo stream, 47 MB with `-b`). `c` and `d` are
+coroutines (h264p's Lib3) that ask their driver for input and give it
+output, so pipes of any length work.
 
 ## Results
 
@@ -234,50 +263,57 @@ from its git, c41c3c7), the AAC encoder of ffmpeg 6.1.1 and faac 1.30:
 
 | stream | bytes | compressed | |
 |---|---:|---:|---:|
-| fdkaac LC 128 kbit/s CBR | 1922423 | 1739836 | 90.50% |
-| fdkaac LC VBR 4 | 2436321 | 2246239 | 92.20% |
-| fdkaac LC 64 kbit/s mono | 480606 | 421114 | 87.62% |
-| fdkaac HE-AAC 48 kbit/s | 722366 | 615127 | 85.15% |
-| fdkaac HE-AACv2 24 kbit/s | 361655 | 288751 | 79.84% |
-| fdkaac LD 96 kbit/s (LATM) | 720379 | 585007 | 81.21% |
-| fdkaac ELD 96 kbit/s (LATM) | 720365 | 595361 | 82.65% |
-| ffmpeg LC 128 kbit/s | 1980658 | 1747670 | 88.24% |
-| ffmpeg LC 256 kbit/s | 3952064 | 3621937 | 91.65% |
-| ffmpeg LC 96 kbit/s, PNS, IS, TNS | 743006 | 629272 | 84.69% |
-| ffmpeg Main 128 kbit/s | 990527 | 872009 | 88.03% |
-| ffmpeg LTP 128 kbit/s | 990690 | 875380 | 88.36% |
-| ffmpeg LC 64 kbit/s mono | 501742 | 441275 | 87.95% |
-| faac LC 128 kbit/s | 2016176 | 1697651 | 84.20% |
-| faac LC 64 kbit/s mono | 492284 | 399808 | 81.21% |
-| all | 19031262 | 16776437 | 88.15% |
+| fdkaac LC 128 kbit/s CBR | 1922423 | 1726772 | 89.82% |
+| fdkaac LC VBR 4 | 2436321 | 2235764 | 91.77% |
+| fdkaac LC 64 kbit/s mono | 480606 | 417727 | 86.92% |
+| fdkaac HE-AAC 48 kbit/s | 722366 | 608683 | 84.26% |
+| fdkaac HE-AACv2 24 kbit/s | 361655 | 284752 | 78.74% |
+| fdkaac LD 96 kbit/s (LATM) | 720379 | 574011 | 79.68% |
+| fdkaac ELD 96 kbit/s (LATM) | 720365 | 584703 | 81.17% |
+| ffmpeg LC 128 kbit/s | 1980658 | 1733936 | 87.54% |
+| ffmpeg LC 256 kbit/s | 3952064 | 3616316 | 91.50% |
+| ffmpeg LC 96 kbit/s, PNS, IS, TNS | 743006 | 623742 | 83.95% |
+| ffmpeg Main 128 kbit/s | 990527 | 865130 | 87.34% |
+| ffmpeg LTP 128 kbit/s | 990690 | 868602 | 87.68% |
+| ffmpeg LC 64 kbit/s mono | 501742 | 437787 | 87.25% |
+| faac LC 128 kbit/s | 2016176 | 1677323 | 83.19% |
+| faac LC 64 kbit/s mono | 492284 | 394095 | 80.05% |
+| all | 19031262 | 16649343 | 87.48% |
+
+With `-b` (the section data before the spectra), all of them come to
+16776437 (88.15%).
 
 The 39 AAC streams of FFmpeg's FATE suite (`fate-suite/aac`: conformance
 streams and bug reports; LC, Main, HE-AAC, PS, 960-sample frames, 5.1, a
 PCE, ID3 tags, LATM in MPEG-TS and MPEG-PS, whose packets are bytes to
-aacpack), 4985631 bytes, come to 2682960 (53.81%). Two are mostly the same
-frames again (al18_44 and id3v2_two_tags, to 0.4% and 0.5%); without them,
-61.15%. The conformance streams of test signals (sweeps, tones) come to
-23-30%. The SBR ones (al_sbr_*) repeat much of their material: the match
-model takes about a third off them.
+aacpack), 4985631 bytes, come to 2666311 (53.48%; with `-b`, 2682960).
+Two are mostly the same frames again (al18_44 and id3v2_two_tags, to 0.4%
+and 0.5%); without them, 60.77%. The conformance streams of test signals
+(sweeps, tones) come to 23-30%. The SBR ones (al_sbr_*) repeat much of
+their material: the match model takes about a third off them. Test
+signals are where the codebooks tell the spectra the most: al07_96 comes
+to 113988 bytes, but 106033 with `-b`.
 
 Where the bytes of fdkaac's 128 kbit/s stream go (`-v`):
 
 | part | in the stream | compressed | |
 |---|---:|---:|---:|
-| spectral magnitudes (and escapes) | 626642 | 597067 | 95.3% |
-| their signs | 209727 | 209096 | 99.7% |
-| scalefactors | 53657 | 44934 | 83.7% |
-| sections | 36080 | 16516 | 45.8% |
+| spectral magnitudes (and escapes) | 626642 | 605667 | 96.7% |
+| their signs | 209727 | 209256 | 99.8% |
+| scalefactors | 53657 | 44967 | 83.8% |
+| sections | 36080 | 1274 | 3.5% |
 | headers and other fields | 35135 | 3429 | 9.8% |
-| all | 961241 | 871057 | 90.6% |
+| all | 961241 | 864625 | 89.9% |
 
 The Huffman codes of AAC are already close to what the values carry. A
-quantized spectral magnitude is all but white noise given its codebook
-and its neighbours (in the frame, the last frame and the other channel),
-and its sign is a coin toss. So most of what is left is the spectra, and
-the gain is largest where the encoder's choices (sections, scalefactors,
-M/S, the side information) are a larger part of the stream: low rates,
-HE-AAC, ffmpeg's and faac's encoders.
+quantized spectral magnitude is all but white noise given its neighbours
+(in the frame, the last frame and the other channel), and its sign is a
+coin toss. The section data an encoder computes from the values: coded
+after them, it costs little more than which bands are zero, noise or
+intensity. So most of what is left is the spectra, and the gain is
+largest where the encoder's other choices (scalefactors, M/S, the side
+information) are a larger part of the stream: low rates, HE-AAC,
+ffmpeg's and faac's encoders.
 
 ## Limitations
 
@@ -332,6 +368,7 @@ thousands of fuzzed inputs and compressed streams.
 | `elems.inc` `chan.inc` `log.inc` | the syntax elements' ids; the channel the walk exchanges values with; the log of a unit's values |
 | `asc.inc` `syntax.inc` `units.inc` | AudioSpecificConfig; the syntax walk below the containers; ADTS, LOAS/LATM, ADIF, AUS1, raw access units |
 | `model.inc` `famvars.inc` | the model: what each family is given, and the channel the model codes through |
+| `cbsel.inc` | codebook selection: the section data fdk-aac, ffmpeg and faac would choose for a group's values |
 | `cmstream.inc` | the compressed stream: the scanner, units parsed, verified and coded |
 | `err.inc` `mem.inc` `cmbase.inc` `rc.inc` `cm.inc` `mapping.inc` `fam.inc` `famcfg.inc` `rcio.inc` | h264p's: errors, memory, the range coder, counters, mixers, APMs, the families and their configuration, the coroutine's I/O |
 | `levels.inc` `lv9.inc` `IDX/` `MOD/` | the model's level, its families' IDX sources and the code generated from them |

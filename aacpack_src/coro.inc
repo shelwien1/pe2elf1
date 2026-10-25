@@ -1,5 +1,5 @@
-// aacpack's compressor (AacpCoro<0, LV>) and decompressor (AacpCoro<1, LV>)
-// of a level as coroutines of Lib3 (coro3b.inc), in its buffer protocol
+// aacpack's compressor (AacpCoro<0, LV, CS>) and decompressor (AacpCoro<1, LV, CS>)
+// of a level and an order (CS: Model's f_CS) as coroutines of Lib3 (coro3b.inc), in its buffer protocol
 // (h264p's coro.inc): the input comes in the buffers addinp() gives, a
 // 0-length one with f_quit set at its end, and yield 1 asks for the next;
 // the output goes into the buffer addout() gave, yield 2 handing it over
@@ -20,8 +20,8 @@
 
 namespace aacpack {
 
-template <int f_DEC, class LV>
-struct AacpCoro : Model<f_DEC, LV> {
+template <int f_DEC, class LV, int f_CS>
+struct AacpCoro : Model<f_DEC, LV, f_CS> {
   typedef typename Pick<f_DEC != 0, DecompressState, CompressState>::type State;
 
   AacArgs args;
@@ -30,7 +30,7 @@ struct AacpCoro : Model<f_DEC, LV> {
 
   uint32_t Init(const AacArgs* a) {
     this->coro_init();
-    Model<f_DEC, LV>::Init();
+    Model<f_DEC, LV, f_CS>::Init();
     args = *a;
     st = nullptr;
     status = 1;
@@ -40,7 +40,7 @@ struct AacpCoro : Model<f_DEC, LV> {
     if (st) st->Quit();
     mem_free(st);
     st = nullptr;
-    Model<f_DEC, LV>::Quit();
+    Model<f_DEC, LV, f_CS>::Quit();
   }
 
   // The run, in a trap (err.inc) that an error ends it at: its note says
@@ -68,21 +68,22 @@ struct AacpCoro : Model<f_DEC, LV> {
   int run(IntTag<0>) {
     st = (CompressState*)mem_alloc(sizeof(CompressState));
     st->Init(this->source());
-    return compress_stream<LV>(*this, *st, args);
+    return compress_stream<LV, f_CS>(*this, *st, args);
   }
-  // decompressing: the magic, the version and the level (this model's),
-  // then the model on the rest
+  // decompressing: the magic, the version, the level and the order (this
+  // model's), then the model on the rest
   int run(IntTag<1>) {
     st = (DecompressState*)mem_alloc(sizeof(DecompressState));
     st->Init();
-    uint8_t head[sizeof kCmMagic + 1];
-    int level = cm_level(head, this->read(head, sizeof head), args.name, this->note, sizeof this->note);
+    uint8_t head[sizeof kCmMagic + 2];
+    int order = -1;
+    int level = cm_level(head, this->read(head, sizeof head), args.name, this->note, sizeof this->note, &order);
     if (level < 0) return 1;
-    if (level != LV::id) {
-      this->set_note("aacpack: %s: compressed at level -%d, not -%d", args.name, level, LV::id);
+    if (level != LV::id || order != f_CS) {
+      this->set_note("aacpack: %s: compressed at level -%d in order %d, not -%d in %d", args.name, level, order, LV::id, f_CS);
       return 1;
     }
-    return decompress_stream<LV>(*this, *st, args);
+    return decompress_stream<LV, f_CS>(*this, *st, args);
   }
   // after an error: decompressing, what was decoded, written
   void written(IntTag<0>) {}
@@ -128,20 +129,20 @@ uint drive(C& c, In in, Out out, Show show) {
 
 // -v's statistics of a run of codec c, at its end (kYieldStats), after the
 // progress line pr
-template <class LV>
-void show_stats(AacpCoro<0, LV>& c, Progress* pr) {
+template <class LV, int f_CS>
+void show_stats(AacpCoro<0, LV, f_CS>& c, Progress* pr) {
   c.st->st.report(pr);
   cm_report(c, c.n_in, c.n_out, pr);
 }
-template <class LV>
-void show_stats(AacpCoro<1, LV>& c, Progress* pr) {
+template <class LV, int f_CS>
+void show_stats(AacpCoro<1, LV, f_CS>& c, Progress* pr) {
   say(pr, "%" PRIu64 " units\n", c.st->units);
 }
 // What a driver shows of what its codec c, of a run with args a, tells
 // (code, each yield), after the progress line pr: the stream, a message,
 // the statistics (-v); and as the run ends, its error
-template <int f_DEC, class LV>
-void show_told(AacpCoro<f_DEC, LV>& c, uint code, Progress* pr, const AacArgs& a) {
+template <int f_DEC, class LV, int f_CS>
+void show_told(AacpCoro<f_DEC, LV, f_CS>& c, uint code, Progress* pr, const AacArgs& a) {
   if (code == kYieldAudio) {
     if (pr) pr->audio(c.audio);
   } else if (code == kYieldNote) {

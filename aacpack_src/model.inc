@@ -399,7 +399,7 @@ struct SbrHist {
   uint8_t lvn[2];       // its bands (0 none)
 };
 
-template <int f_DEC, class LV>
+template <int f_DEC, class LV, int f_CS>
 struct Model : tc_rc<f_DEC> {
   static constexpr int ENC = f_DEC == 0;
   using tc_rc<f_DEC>::tc_stage;
@@ -440,6 +440,10 @@ struct Model : tc_rc<f_DEC> {
     memset(cur_env_, 0, sizeof cur_env_);
     memset(cur_sum_, 0, sizeof cur_sum_);
     memset(lvcur_, 0, sizeof lvcur_);
+    csec_.Init();
+    cs_zl_.Init();
+    for (int s = 0; s < CS_N; s++) cs_rate_[s] = 32768;
+    cs_bands_ = 0;
   }
   void Quit() {
 #define H_QUIT(F)                                                                                \
@@ -453,6 +457,8 @@ struct Model : tc_rc<f_DEC> {
     dhash_.Quit();
     hist_.Quit();
     sbrh_.Quit();
+    csec_.Quit();
+    cs_zl_.Quit();
   }
 
   // each family's coder (f_unt ...) and tables (t_unt ...)
@@ -968,6 +974,7 @@ struct Model : tc_rc<f_DEC> {
     // the first channel (CPE) starts there (0 none, 1 no, 2 yes)
     D.mu = w.at.type == TYPE_CPE ? 1 + (cd.ms_present == 2 || (cd.ms_present == 1 && w.cd[0].ms[g * ii.max_sfb + sfb])) : 0;
     D.ob = o ? 1 + cc_[0].secb[g * ii.max_sfb + sfb] : 0;
+    D.pr = D.pt = D.ch = D.bq = 0;
   }
   int sect_cb(const Walk& w, int v, int g) {
     tc_stage = STG_SEC;
@@ -1024,6 +1031,240 @@ struct Model : tc_rc<f_DEC> {
     tc_syms[STG_SEC]++;
     if (ENC && tc_verbose) ebits_[E_SECT_LEN] += bits_now() - b0, esyms_[E_SECT_LEN]++;
     return n;
+  }
+
+  // ------------------------------------------------------------------------
+  // The section data after the spectra (f_CS, Walk::cs). Where the section
+  // data is, each band's kind (no codebook, a spectral one, noise,
+  // intensity), by runs of a kind: the kind by the codebook's tree (kd 0),
+  // then how far the run goes (kd 1), as a section is coded in the other
+  // order. After the spectral values, the sections: by groups, whether one
+  // starts at each band whose band before is of its kind (kd 2), any
+  // sections of no bands, and each coded section's codebook (kd 3), each
+  // with what the encoders would have chosen for the values (cbsel.inc)
+  static int kind_of(int cb) { return cb == 0 ? 0 : cb < 12 ? 1 : cb; }
+  Sections csec_;          // coding: the channel's sections, read ahead from the log
+  CbSel csel_;
+  uint8_t cs_cb_[8 * 64];  // the channel's codebooks, as its groups' sections are coded
+  int cs_rate_[CS_N];      // how often each encoder's choice was not the stream's lately (1/65536)
+  int cs_bands_;           // the bands they were tried on (up to 2^20)
+  Buf<uint8_t> cs_zl_;     // the codebooks of a group's sections of no bands
+
+  // coding: the channel's sections, which come first in its values
+  void cs_read(const Walk& w, ValueLog& log) {
+    const Ics& ii = wcd(w).ii;
+    csec_.clear();
+    for (int g = 0; g < ii.num_groups; g++)
+      for (int k = 0; k < ii.max_sfb;) {
+        const int cb = (int)log.get(), len = (int)log.get();
+        csec_.add(g, cb, len);
+        k += len;
+      }
+  }
+  // sec_vars() of this order: the group before's codebooks (kinds) from cbs
+  void cs_vars(const Walk& w, H_sec_v& D, const uint8_t* cbs, int g, int sfb) {
+    sec_vars(w, D, g, sfb);
+    D.gc = g > 0 ? cbs[(g - 1) * wcd(w).ii.max_sfb + sfb] : 16;
+  }
+  int cs_tree(H_sec_v& D, int v) {
+    tcx X;
+    f_sec.make(D, X);
+    f_sec.select(X);
+    int node = 1;
+    for (int j = 3; j >= 0; j--) node = node * 2 + f_sec.bit(node, ENC ? (v >> j) & 1 : 0);
+    return node - 16;
+  }
+  int cs_bit(H_sec_v& D, int v) {
+    tcx X;
+    f_sec.make(D, X);
+    f_sec.select(X);
+    return f_sec.bit(0, ENC && v);
+  }
+
+  void cs_kinds(const Walk& w, uint8_t* kind) {
+    const Ics& ii = wcd(w).ii;
+    const int msfb = ii.max_sfb;
+    const ChanHist* h = last_of(w);
+    CurChan& c = cur(w);
+    if (ENC)
+      for (size_t i = 0, k = 0; i < csec_.size(); i++) {
+        const int g = csec_.grp[i];
+        if (i && g != csec_.grp[i - 1]) k = 0;
+        for (int s = 0; s < csec_.len[i]; s++) kind[g * msfb + k + s] = (uint8_t)kind_of(csec_.cb[i]);
+        k += csec_.len[i];
+      }
+    for (int g = 0; g < ii.num_groups; g++) {
+      uint8_t* kg = kind + g * msfb;
+      c.pc = 16;
+      for (int k = 0; k < msfb;) {
+        double b0 = ENC && tc_verbose ? bits_now() : 0;
+        tc_stage = STG_SEC;
+        H_sec_v D;
+        cs_vars(w, D, kind, g, k);
+        D.kd = 0, D.cb = 16, D.run = 0, D.fn = 0;
+        const int dpc = dig_pred(E_SECT_CB);
+        D.dm = dpc >= 0 ? 1 + Min(dlen_, 3) * 17 + Min(dpc, 16) : 0;
+        const int kd = cs_tree(D, ENC ? kg[k] : 0);
+        dig_push(E_SECT_CB, dpc, kd);
+        tc_syms[STG_SEC]++;
+        if (ENC && tc_verbose) ebits_[E_SECT_CB] += bits_now() - b0, esyms_[E_SECT_CB]++, b0 = bits_now();
+        int len = 0;
+        if (ENC)
+          while (k + len < msfb && kg[k + len] == kd) len++;
+        const int dpl = dig_pred(E_SECT_LEN);
+        int n = 1;  // (a run has its first band)
+        for (; k + n < msfb; n++) {
+          const int b = k + n;
+          cs_vars(w, D, kind, g, b);
+          D.kd = 1, D.cb = kd, D.run = n;
+          const int lc = last_cb(h, g, b);
+          D.fn = lc == 16 ? 0 : 1 + (kind_of(lc) == kd ? 0 : 2) + (h->secb[g * h->max_sfb + b] ? 1 : 0);
+          D.dm = dpl >= 0 ? 1 + (n < dpl ? 0 : n == dpl ? 1 : 2) + 3 * Min(dlen_, 3) : 0;
+          if (!cs_bit(D, n < len)) break;
+        }
+        dig_push(E_SECT_LEN, dpl, n);
+        for (int s = k; s < k + n; s++) kg[s] = (uint8_t)kd;
+        c.pc = kd;
+        k += n;
+        tc_syms[STG_SEC]++;
+        if (ENC && tc_verbose) ebits_[E_SECT_LEN] += bits_now() - b0, esyms_[E_SECT_LEN]++;
+      }
+    }
+  }
+
+  void cs_sections(const Walk& w, Sections& out) {
+    const ChanData& cd = wcd(w);
+    const Ics& ii = cd.ii;
+    const int msfb = ii.max_sfb;
+    const ChanHist* h = last_of(w);
+    CurChan& c = cur(w);
+    CbSel& cs = csel_;
+    size_t ci = 0;  // (coding: the group's first in csec_)
+    out.clear();
+    for (int g = 0; g < ii.num_groups; g++) {
+      const uint8_t* kind = cd.bt + g * msfb;
+      cs.count(ii, g, cd.coef, kind);
+      cs.run_all();
+      int best = 0;
+      for (int s = 1; s < CS_N; s++)
+        if (cs_rate_[s] < cs_rate_[best]) best = s;
+      const int r = cs_rate_[best];
+      const int bq = cs_bands_ < 64 ? 0 : r < 64 ? 1 : r < 655 ? 2 : r < 6554 ? 3 : 4;
+      uint8_t st[64], acb[64];
+      int zl[64];  // the sections of no bands before the one at the band
+      memset(st, 0, sizeof st);
+      memset(acb, 0, sizeof acb);
+      memset(zl, 0, sizeof zl);
+      cs_zl_.clear();
+      if (ENC)
+        for (int k = 0; k < msfb;) {
+          const int cbv = csec_.cb[ci], len = csec_.len[ci];
+          ci++;
+          if (!len) {
+            zl[k]++;
+            cs_zl_.push_back((uint8_t)cbv);
+            continue;
+          }
+          st[k] = 1;
+          for (int s = k; s < k + len; s++) acb[s] = (uint8_t)cbv;
+          k += len;
+        }
+      double b0 = ENC && tc_verbose ? bits_now() : 0;
+      tc_stage = STG_SEC;
+      // where sections start
+      c.pc = 16;
+      st[0] = 1;
+      for (int b = 1, s0 = 0; b < msfb; b++) {
+        if (kind[b] != kind[b - 1]) {
+          st[b] = 1, s0 = b;
+          continue;
+        }
+        H_sec_v D;
+        cs_vars(w, D, cs_cb_, g, b);
+        D.kd = 2, D.cb = cs.cb[best][b - 1], D.run = b - s0, D.dm = 0;
+        const int lc = last_cb(h, g, b);
+        D.fn = lc == 16 ? 0 : 1 + (lc != last_cb(h, g, b - 1) ? 2 : 0) + (h->secb[g * h->max_sfb + b] ? 1 : 0);
+        const int sb = cs.st[best][b];
+        int agree = 0;
+        for (int s = 0; s < CS_N; s++) agree += s != best && cs.st[s][b] == sb;
+        D.pr = 1 + sb + 2 * agree;
+        D.pt = 1 + cs.st[CS_FDK][b] + 2 * cs.st[CS_FF][b] + 4 * cs.st[CS_FAAC][b];
+        D.bq = bq;
+        st[b] = (uint8_t)cs_bit(D, st[b]);
+        if (st[b]) s0 = b;
+        tc_syms[STG_SEC]++;
+      }
+      // sections of no bands: whether the group has any; then before each
+      // section, whether one more, and its codebook
+      {
+        H_sec_v D;
+        cs_vars(w, D, cs_cb_, g, 0);
+        D.kd = 2, D.cb = 16, D.run = 0, D.fn = 0, D.dm = 0, D.pr = 15;
+        if (cs_bit(D, !cs_zl_.empty())) {
+          size_t zi = 0;
+          for (int b = 0; b < msfb; b++) {
+            if (!st[b]) continue;
+            int n = 0;
+            for (;;) {
+              cs_vars(w, D, cs_cb_, g, b);
+              D.kd = 2, D.cb = 16, D.run = 0, D.fn = 0, D.dm = 0, D.pr = 14;
+              if (!cs_bit(D, n < zl[b])) break;
+              if (++n > 4096) err_raise_s("corrupt stream: sections of no bands without end");
+              cs_vars(w, D, cs_cb_, g, b);
+              D.kd = 3, D.cb = 16, D.run = 0, D.fn = 0, D.dm = 0, D.pr = 0;
+              const int z = cs_tree(D, ENC ? cs_zl_[zi] : 0);
+              if (!ENC) cs_zl_.push_back((uint8_t)z);
+              zi++;
+            }
+            zl[b] = n;
+          }
+        }
+      }
+      // each coded section's codebook
+      for (int b = 0; b < msfb;) {
+        int e = b + 1;
+        while (e < msfb && !st[e]) e++;
+        int v = kind[b];
+        if (v == 1) {
+          H_sec_v D;
+          cs_vars(w, D, cs_cb_, g, b);
+          D.kd = 3, D.cb = 16, D.run = e - b, D.fn = 0, D.dm = 0;
+          const int pc = cs.cb[best][b];
+          int agree = 0, same = cs.st[best][b] && (e == msfb || cs.st[best][e]);
+          for (int s = 0; s < CS_N; s++) agree += s != best && cs.cb[s][b] == pc;
+          for (int s = b + 1; s < e; s++) same &= !cs.st[best][s];
+          D.pr = 1 + pc;
+          D.pt = 1 + agree + 3 * same;
+          D.ch = 1 + cs.cheapest(b, e);
+          D.bq = bq;
+          v = cs_tree(D, ENC ? acb[b] : 0);
+          tc_syms[STG_SEC]++;
+        }
+        for (int s = b; s < e; s++) acb[s] = (uint8_t)v;
+        c.pc = v;
+        b = e;
+      }
+      if (ENC && tc_verbose) ebits_[E_SECT_LEN] += bits_now() - b0;
+      // the sections, as the bitstream has them
+      for (int b = 0, zi = 0; b < msfb;) {
+        for (int z = 0; z < zl[b]; z++) out.add(g, cs_zl_[zi++], 0);
+        int e = b + 1;
+        while (e < msfb && !st[e]) e++;
+        out.add(g, acb[b], e - b);
+        b = e;
+      }
+      // what the encoders got right
+      for (int b = 0; b < msfb; b++) {
+        cs_cb_[g * msfb + b] = acb[b];
+        if (st[b]) c.secb[g * msfb + b] = 1;
+        if (kind[b] != 1) continue;
+        for (int s = 0; s < CS_N; s++) {
+          const int miss = cs.cb[s][b] != acb[b] || cs.st[s][b] != st[b];
+          cs_rate_[s] += (miss ? 128 : 0) - (cs_rate_[s] >> 9);
+        }
+        cs_bands_ = Min(cs_bands_ + 1, 1 << 20);
+      }
+    }
   }
 
   // ------------------------------------------------------------------------
@@ -1176,7 +1417,7 @@ struct Model : tc_rc<f_DEC> {
 
     tc_stage = STG_SPEC;
     H_spc_v D;
-    D.cb = cb;
+    D.cb = f_CS ? 1 : cb;  // (f_CS: the codebook comes after the values)
     D.sb = sfb;
     D.bp = k - a;
     // (the magnitudes before, of the band before where they are its: in this band's scale)
@@ -1214,7 +1455,7 @@ struct Model : tc_rc<f_DEC> {
     D.oc = o ? 1 + Min(iabs(oval), 14) : 0;
     D.ms = o && o->ms_present ? o->ms[g * ii.max_sfb + sfb] : 2;
     D.ws = ii.ws == EIGHT_SHORT_SEQUENCE;
-    D.tp = tp;
+    D.tp = f_CS ? 0 : tp;
     D.nz = Min(c.bnz, 7);
     D.qn = tc_qlog(c.bsum);
     D.kq = tc_qlog(k);
@@ -1261,7 +1502,8 @@ struct Model : tc_rc<f_DEC> {
     }
     // the section: whether a magnitude above the next smaller codebook's
     // largest came yet, and the places left in it
-    {
+    D.sc = 0;
+    if (!f_CS) {
       if (c.sk_g != g || sfb < c.sk_lo || sfb >= c.sk_hi) {
         int lo = sfb, hi = sfb + 1;
         while (lo > 0 && !c.secb[g * ii.max_sfb + lo]) lo--;
@@ -1279,7 +1521,11 @@ struct Model : tc_rc<f_DEC> {
     tcx X;
     f_spc.make(D, X);
     f_spc.select(X);
-    {
+    if (f_CS) {  // (no codebook: a two-sided geometric's of the guess xp alone, over 16 steps)
+      const int nt = (D.av ? 1 : 0) + (pp ? 1 : 0) + 1 + (o ? 1 : 0), mu16 = (int)Min<i64>(4095, xpe / nt);
+      for (int j = 0; j < 16; j++) s2p_[j] = j ? kGeoPrior.g[mu16] : kGeoPrior.z[mu16];
+      f_spc.prpa = s2p_;
+    } else {
       const SpecCb& sp = spec_cb[cb - 1];
       int pre = 0;
       for (int j = k - tp; j < k; j++) {
@@ -1296,12 +1542,12 @@ struct Model : tc_rc<f_DEC> {
       f_spc.prpa = s2p_;
     }
     const int m = ENC ? iabs(v) : 0;
-    const int lim = cb == 11 ? 16 : spec_cb[cb - 1].maxval;
+    const int lim = f_CS || cb == 11 ? 16 : spec_cb[cb - 1].maxval;
     int mm = 0;
     while (mm < lim && f_spc.bit(mm, ENC && m > mm)) mm++;
     f_spc.prpa = nullptr;
     tc_syms[STG_SPEC]++;
-    if (cb == 11 && mm == 16) {  // an escape: the rest by esc
+    if ((f_CS || cb == 11) && mm == 16) {  // an escape: the rest by esc
       tc_stage = STG_ESC;
       H_esc_v E;
       E.kq = tc_qlog(k);
@@ -1326,7 +1572,7 @@ struct Model : tc_rc<f_DEC> {
     if (mm) {
       tc_stage = STG_SGN;
       H_sgn_v S;
-      S.cb = cb;
+      S.cb = f_CS ? 1 : cb;
       S.oc = o ? sgn3(oval) : 0;
       S.ms = D.ms;
       S.s1 = k > 0 ? sgn3(cc[k - 1]) : 0;
@@ -1508,10 +1754,10 @@ struct Model : tc_rc<f_DEC> {
 
 // The channel of the walk that codes (decodes) its values with the model
 // (log: coding, the values the parse logged)
-template <int f_DEC, class LV>
+template <int f_DEC, class LV, int f_CS>
 struct ModelChan : Chan {
   static constexpr int ENC = f_DEC == 0;
-  void Init(Model<f_DEC, LV>& m, LogChan* log) {
+  void Init(Model<f_DEC, LV, f_CS>& m, LogChan* log) {
     W = true;
     m_ = &m;
     log_ = log;
@@ -1530,8 +1776,13 @@ struct ModelChan : Chan {
     m_->bits(*w_, e, b, nbits);
   }
   void note(int what) override { m_->walk_note(*w_, what); }
+  void cs_kinds(uint8_t* kind) override {
+    if (ENC) m_->cs_read(*w_, *log_->l_);
+    m_->cs_kinds(*w_, kind);
+  }
+  void cs_sections(Sections& s) override { m_->cs_sections(*w_, s); }
 
-  Model<f_DEC, LV>* m_;
+  Model<f_DEC, LV, f_CS>* m_;
   LogChan* log_;
   Walk* w_;
 };

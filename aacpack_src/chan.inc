@@ -19,6 +19,18 @@ namespace aacpack {
 struct Huff;
 struct Walk;
 
+// A channel's section data: its sections in order, each with its group,
+// codebook and length in bands (0: a section of no bands, which the syntax
+// allows), as the bitstream has them
+struct Sections {
+  Buf<uint8_t> grp, cb, len;
+  void Init() { grp.Init(), cb.Init(), len.Init(); }
+  void Quit() { grp.Quit(), cb.Quit(), len.Quit(); }
+  void clear() { grp.clear(), cb.clear(), len.clear(); }
+  size_t size() const { return cb.size(); }
+  void add(int g, int c, int l) { grp.push_back((uint8_t)g), cb.push_back((uint8_t)c), len.push_back((uint8_t)l); }
+};
+
 // (A channel is made where its walk goes, and Init() of its kind sets it
 // up: the vtable aside, it is plain data, and holds no memory of its own.)
 struct Chan {
@@ -40,6 +52,12 @@ struct Chan {
   virtual void bits(int e, uint8_t* b, size_t nbits) = 0;
   // what the walk is at, for a model that follows it (Walk::Note)
   virtual void note(int what) { (void)what; }
+  // writing for a model that codes a channel's section data after its
+  // spectra (Walk::cs): the kind of each band (at g * max_sfb + sfb: 0 no
+  // codebook, 1 a spectral one, 13-15 noise or intensity) where the section
+  // data is, and the sections after the spectral values
+  virtual void cs_kinds(uint8_t* kind) { (void)kind; }
+  virtual void cs_sections(Sections& s) { (void)s; }
 
   // parsing: where the log is, and the log cut back to it (a part that does
   // not parse is taken again otherwise)

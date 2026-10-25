@@ -141,6 +141,13 @@ struct Walk {
   } at;
   ChanData cd[2];  // the channel element's channels
   int cur;         // cd[cur] is walked
+  // writing for a model that codes a channel's section data after its
+  // spectra (Model's f_CS): the bands' kinds stand for it until then, what
+  // comes between (scalefactors, pulses, TNS) is written into defer, and
+  // all of it into the unit after the spectral values (ics())
+  bool cs;
+  BitWriter defer;
+  Sections secs;
   int rests;       // rests parsed (the compressor's -s, -v)
   uint64_t ob[OB_N];  // the bits of the parts of the unit parsed (-v)
   int sbr_seen, ps_seen;  // SBR and PS payloads walked (what the stream is, -v)
@@ -165,12 +172,17 @@ struct Walk {
     memset((void*)cd, 0, sizeof cd);
     cur = 0;
     rests = sbr_seen = ps_seen = 0;
+    cs = false;
+    defer.Init();
+    secs.Init();
   }
   void Quit() {
     fw.Quit();
     for (BitWriter& b : sub) b.Quit();
     tmp.Quit();
     crcr.Quit();
+    defer.Quit();
+    secs.Quit();
   }
   // to parse bits of buf with channel c (R), or write a unit with it:
   // the walk's state the model reads as every unit starts, whichever walk
@@ -190,9 +202,10 @@ struct Walk {
     begin();
     c->begin(*this);
   }
-  void start_write(Chan* c, size_t cap_bits) {
+  void start_write(Chan* c, size_t cap_bits, bool after = false) {
     R = false;
     ch = c;
+    cs = after;
     fw.clear();
     fw.cap = cap_bits;
     w = &fw;
@@ -352,6 +365,14 @@ struct Walk {
     if (ii.max_sfb > ii.num_swb) bad("max_sfb exceeds the number of scalefactor bands");
   }
 
+  void put_section(int cb, int len, int bits, int esc) {
+    w->put(cb, 4);
+    while (len >= esc) {
+      w->put(esc, bits);
+      len -= esc;
+    }
+    w->put(len, bits);
+  }
   void section_data(ChanData& c) {
     const Ics& ii = c.ii;
     if (!ii.max_sfb) return;
@@ -377,15 +398,7 @@ struct Walk {
         if (cb == 12) bad_value(E_SECT_CB, cb);
         at.cb = cb;
         len = (int)cnt(E_SECT_LEN, len, 0, ii.max_sfb - k, g);
-        if (!R) {
-          w->put(cb, 4);
-          int l = len;
-          while (l >= esc) {
-            w->put(esc, bits);
-            l -= esc;
-          }
-          w->put(l, bits);
-        }
+        if (!R) put_section(cb, len, bits, esc);
         for (int s = k; s < k + len; s++) c.bt[g * ii.max_sfb + s] = (uint8_t)cb;
         k += len;
       }
@@ -569,6 +582,87 @@ struct Walk {
     if (R) ob[OB_SPEC] += br.pos - p0;
   }
 
+  // The order of a model that codes the section data after the spectra
+  // (writing, cs): the bands' kinds as the section data starts, for the
+  // scalefactors to come; the spectral values of the bands of a spectral
+  // codebook, without it; then the sections, and the channel written as the
+  // bitstream has it: the section data, what came between, the spectral data
+  void cs_kinds(ChanData& c) {
+    const Ics& ii = c.ii;
+    const int n = ii.num_groups * ii.max_sfb;
+    memset(c.bt, 0, sizeof c.bt);
+    uint8_t kind[8 * 64];
+    memset(kind, 0, sizeof kind);
+    ch->cs_kinds(kind);
+    for (int k = 0; k < n; k++) {
+      if (kind[k] > 1 && kind[k] < 13) bad_value(E_SECT_CB, kind[k]);
+      c.bt[k] = kind[k];
+    }
+  }
+  void cs_spectra(ChanData& c) {
+    const Ics& ii = c.ii;
+    memset(c.coef, 0, sizeof c.coef);
+    int win = 0;
+    for (int g = 0; g < ii.num_groups; g++) {
+      at.g = g;
+      for (int sfb = 0; sfb < ii.max_sfb; sfb++) {
+        if (c.bt[g * ii.max_sfb + sfb] != 1) continue;
+        const int a = ii.swb[sfb], b = ii.swb[sfb + 1];
+        at.sfb = sfb;
+        at.cb = 0;
+        for (int wi = 0; wi < ii.group_len[g]; wi++) {
+          at.win = win + wi;
+          int* cc = c.coef + (win + wi) * 128;
+          for (int k = a; k < b; k += 4) {  // (every band's width is a multiple of 4)
+            at.k = k;
+            ch->spec(0, win + wi, k, cc + k, 4);
+          }
+        }
+      }
+      win += ii.group_len[g];
+    }
+  }
+  void cs_write(ChanData& c) {
+    const Ics& ii = c.ii;
+    secs.clear();
+    ch->cs_sections(secs);
+    const int bits = ii.ws == EIGHT_SHORT_SEQUENCE ? 3 : 5, esc = (1 << bits) - 1;
+    size_t i = 0;
+    for (int g = 0; g < ii.num_groups; g++) {
+      int k = 0;
+      while (k < ii.max_sfb) {
+        if (i >= secs.size() || secs.grp[i] != g) bad("corrupt stream: the sections of a group fall short of max_sfb");
+        const int cb = secs.cb[i], len = secs.len[i];
+        i++;
+        if (cb == 12 || cb > 15) bad_value(E_SECT_CB, cb);
+        if (len > ii.max_sfb - k) bad_value(E_SECT_LEN, len);
+        const int kd = cb == 0 ? 0 : cb < 12 ? 1 : cb;
+        for (int s = k; s < k + len; s++) {
+          uint8_t& b = c.bt[g * ii.max_sfb + s];
+          if (b != kd) bad_value(E_SECT_CB, cb);  // (the kind it was coded as)
+          b = (uint8_t)cb;
+        }
+        put_section(cb, len, bits, esc);
+        k += len;
+      }
+    }
+    if (i != secs.size()) bad("corrupt stream: sections past max_sfb");
+    w->put_range(defer.b.p, 0, defer.pos);
+    int win = 0;
+    for (int g = 0; g < ii.num_groups; g++) {
+      for (int sfb = 0; sfb < ii.max_sfb; sfb++) {
+        const int cb = c.bt[g * ii.max_sfb + sfb];
+        if (!cb || cb >= 13) continue;
+        const int a = ii.swb[sfb], b = ii.swb[sfb + 1], dim = spec_cb[cb - 1].dim;
+        for (int wi = 0; wi < ii.group_len[g]; wi++) {
+          const int* cc = c.coef + (win + wi) * 128;
+          for (int k = a; k < b; k += dim) enc_tuple(cb, cc + k);
+        }
+      }
+      win += ii.group_len[g];
+    }
+  }
+
   // individual_channel_stream(common_window, 0) of the channel cd[cur]
   void ics(bool common_window) {
     ChanData& c = cd[cur];
@@ -576,7 +670,16 @@ struct Walk {
     note(N_ICS);
     c.gg = (int)u(E_GLOBAL_GAIN, 8);
     if (!common_window) ics_info(c.ii, false);
-    section_data(c);
+    const bool after = !R && cs && c.ii.max_sfb;  // (the section data after the spectra)
+    BitWriter* out = w;
+    if (after) {
+      cs_kinds(c);
+      defer.clear();
+      defer.cap = out->cap;
+      w = &defer;
+    } else {
+      section_data(c);
+    }
     scale_factor_data(c);
     if (st.er != 2 && u(E_PULSE_PRESENT, 1)) {
       c.pulse = 1;
@@ -598,7 +701,13 @@ struct Walk {
       }
       if (c.tns) tns_data(c.ii);
     }
-    spectral_data(c);
+    if (after) {
+      cs_spectra(c);
+      w = out;
+      cs_write(c);
+    } else {
+      spectral_data(c);
+    }
     note(N_ICS_END);
   }
 

@@ -1,14 +1,24 @@
 #  aacpack's sec family at level -9: section_data.  kd 0 the bits of a
 #  section's codebook (a tree: the node is where in it), 1 whether the
-#  section goes on to the next band; cb the section's codebook (16 not
-#  yet), pc the one before it in the group (16 none), fc the band's in the
-#  channel's last frame (16 not known), gc in the group before (16 none), oc
-#  of the CPE's other channel (16 none), sb the band, run the section's
-#  bands so far, rem those left to max_sfb, ws the window sequence, gr the
-#  group, fn the last frame's codebook at the next band (16 not known), mu
-#  the band's ms_used (1 L/R, 2 M/S; 0 none), ob the first channel's section
-#  start at the band (1 no, 2 yes; 0 none), dm the digest's prediction (0
-#  none).
+#  section goes on to the next band (in the order of the section data after
+#  the spectra, Model's f_CS: of a run of bands of a kind, its kind and how
+#  far it goes), 2 (f_CS) whether a section starts at the band, 3 (f_CS) a
+#  coded section's codebook after the spectra (the tree); cb the section's
+#  codebook (16 not yet), pc the one before it in the group (16 none), fc
+#  the band's in the channel's last frame (16 not known), gc in the group
+#  before (16 none), oc of the CPE's other channel (16 none), sb the band,
+#  run the section's bands so far, rem those left to max_sfb, ws the window
+#  sequence, gr the group, fn the last frame's codebook at the next band (16
+#  not known), mu the band's ms_used (1 L/R, 2 M/S; 0 none), ob the first
+#  channel's section start at the band (1 no, 2 yes; 0 none), dm the
+#  digest's prediction (0 none); f_CS: pr what the encoder the sections have
+#  been most like predicts (2: 1 + a start there + 2 x how many of the other
+#  two agree; 3: 1 + its codebook; 0 none), pt (2) 1 + the three encoders'
+#  starts as bits, (3) 1 + how many of the other two give its codebook + 3
+#  if its section is this one, ch (3) 1 + the codebook that takes the fewest
+#  bits for the section's values, bq how well that encoder has done lately
+#  (1 none of its last few hundred bands wrong, 2 under 1%, 3 under 10%, 4
+#  more; 0 none) (cbsel.inc).
 #  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates MOD/l9 from
 #  this file and family.inc.
 
@@ -17,74 +27,88 @@ Debug 1
 Const 0
 
 Index a
- a_kd: kd, 1!1
+ a_kd: kd, 1!111
  a_pc: pc, 1!1111111111111111
  a_fc: fc, 1!1111111111111111
+ a_pr: pr, 1!1111111111111111
 
 Index b
- b_kd: kd, 1!1
+ b_kd: kd, 1!111
  b_fc: fc, 1!1111111111111111
  b_sb: sb, 1!1111111
  b_dm: dm, 1!111111111111111111111111111111111111111111111111111111111111111111111
 
 Index c
- c_kd: kd, 1!1
+ c_kd: kd, 1!111
  c_cb: cb, 1!1111111111111111
  c_fn: fn, 1!1111111111111111
  c_ob: ob, 1!11
+ c_pt: pt, 1!11111111
 
 Index d
- d_kd: kd, 1!1
+ d_kd: kd, 1!111
  d_gc: gc, 1!1111111111111111
  d_ws: ws, 1!111
+ d_ch: ch, 1!111111111111
 
 Index e
- e_kd: kd, 1!1
+ e_kd: kd, 1!111
  e_oc: oc, 1!1111111111111111
  e_pc: pc, 1!111
  e_mu: mu, 1!11
+ e_pr: pr, 1!1111111111111111
 
 Index h
- h_kd: kd, 1!1
+ h_kd: kd, 1!111
  h_sb: sb, 1!11111111111111111111111111111111111111111111111111
  h_ws: ws, 1!1
  h_cb: cb, 1!1111111111111111
+ h_bq: bq, 1!1111
 
 Index i
- i_kd: kd, 1!1
+ i_kd: kd, 1!111
  i_run: run, 1!1111111111111111
  i_cb: cb, 1!1111111111111111
+ i_ch: ch, 1!111111111111
 
 Index j
- j_kd: kd, 1!1
+ j_kd: kd, 1!111
  j_rem: rem, 1!11111111
  j_fn: fn, 1!1111111111111111
+ j_pt: pt, 1!11111111
 
 Index k
- k_kd: kd, 1!1
+ k_kd: kd, 1!111
  k_gr: gr, 1!1111111
  k_pc: pc, 1!1111111111111111
  k_sb: sb, 1!0101010101010101010101010101010101010101010101010
 
 Index l
- l_kd: kd, 1!1
+ l_kd: kd, 1!111
  l_cb: cb, 1!1111111111111111
  l_fc: fc, 1!1111111111111111
  l_run: run, 1!111
+ l_pr: pr, 1!1111111111111111
 
 Index s
- s_kd: kd, 1!1
+ s_kd: kd, 1!111
  s_cb: cb, 1!1111111111111111
+ s_pr: pr, 1!1111111111111111
+ s_bq: bq, 1!1111
 
 Index f
- f_kd: kd, 1!1
+ f_kd: kd, 1!111
  f_fc: fc, 1!1111111111111111
+ f_pr: pr, 1!1111111111111111
 
 Index m
- m_kd: kd, 1!1
+ m_kd: kd, 1!111
+ m_bq: bq, 1!1111
+ m_pr: pr, 1!111111
 
 Index w
- w_kd: kd, 1!1
+ w_kd: kd, 1!111
+ w_pt: pt, 1!11111111
 
 Index t
 

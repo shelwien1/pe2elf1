@@ -39,7 +39,10 @@ constexpr int H_sbr_ND = TC_NODE, H_sbr_MND = TC_MNODE, H_sbr_NG = 64;
 //   sq2 of the value less the last; 0 none)
 #define H_hdr_VARS(X) X(tag) X(fld) X(p1) X(p2) X(p1r) X(pos) X(nb) X(ws) X(ch) X(pb) X(hx) X(ml) X(dm)
 // sec: section_data: kd 0 the codebook (its bits, a tree: nd the node),
-//   1 whether a section goes on to the next band; cb the section's
+//   1 whether a section goes on to the next band (f_CS: a run of bands of
+//   a kind, its kind and how far it goes), 2 (f_CS) whether a section
+//   starts at the band, 3 (f_CS) a coded section's codebook after the
+//   spectra (the tree); cb the section's
 //   codebook (16 not yet), pc the one before it in the group (16 none), fc
 //   the band's in the last frame of the channel (16 not known), gc in the
 //   group before (16 none), oc of the other channel of the CPE (16 none),
@@ -49,8 +52,14 @@ constexpr int H_sbr_ND = TC_NODE, H_sbr_MND = TC_MNODE, H_sbr_NG = 64;
 //   started there; 0 not known), mu the band's ms_used (CPE: 1 L/R, 2 M/S;
 //   0 none), ob the first channel's section starting at the band (CPE: 1
 //   no, 2 yes; 0 none), dm the digest's prediction (the codebook, or where
-//   the section ends against here; 0 none)
-#define H_sec_VARS(X) X(kd) X(cb) X(pc) X(fc) X(gc) X(oc) X(sb) X(run) X(rem) X(ws) X(gr) X(fn) X(mu) X(ob) X(dm)
+//   the section ends against here; 0 none); f_CS: pr what the encoder
+//   the sections have been most like predicts (2: 1 + a start there + 2 x
+//   how many of the other two agree; 3: 1 + its codebook), pt (2) 1 + the
+//   three encoders' starts as bits, (3) 1 + how many of the other two give
+//   its codebook + 3 if its section is this one, ch (3) 1 + the codebook
+//   that takes the fewest bits for the section, bq how well that encoder
+//   has done lately (1 no band wrong ... 4; 0 none) (cbsel.inc)
+#define H_sec_VARS(X) X(kd) X(cb) X(pc) X(fc) X(gc) X(oc) X(sb) X(run) X(rem) X(ws) X(gr) X(fn) X(mu) X(ob) X(dm) X(pr) X(pt) X(ch) X(bq)
 // scf: scale_factor_data: kd 0 a scalefactor, 1 an intensity position, 2
 //   a noise energy; sb the band, d1 d2 the last two deltas of the kind in
 //   the channel (sq2), pd the delta at the band in the last frame (sq2;

@@ -3,8 +3,10 @@
 // from its values before it is coded, and a CRC-32 at the end (as h264p's
 // cmstream.inc).
 //
-// The stream: the magic, the version and the model's level, then one range
-// coded run of decisions, flushed once at its end: the AudioSpecificConfig
+// The stream: the magic, the version, the model's level and its order (1:
+// each channel's section data after its spectra, as the encoder's codebook
+// selection from them; 0: before them, as the bitstream has it), then one
+// range coded run of decisions, flushed once at its end: the AudioSpecificConfig
 // of -asc, if any, and the SBR headers assumed for the elements whose first
 // SBR payloads come before their first header; then each unit's kind (the
 // end, bytes, an ADTS or LOAS frame, an ADIF header, a raw_data_block, the
@@ -16,8 +18,8 @@
 
 namespace aacpack {
 
-const char kCmMagic[] = "aacpk";  // compressed streams, followed by the version and level bytes
-const int kCmVersion = 6;
+const char kCmMagic[] = "aacpk";  // compressed streams, followed by the version, level and order bytes
+const int kCmVersion = 7;
 // The CRC-32 at the end is coded XORed with this: a decoder fed past the
 // end of its input decodes zeros, and 0 is the CRC-32 of an empty stream.
 const uint32_t kCrcXor = 0x61616370;
@@ -30,19 +32,24 @@ bool cm_version_ok(int v, const char* name, char* msg, size_t mn) {
   return false;
 }
 // The level of a compressed stream from its first bytes, n of them read
-// (the magic, the version, the level), or -1 if they are not aacpack's
-// (why in msg)
-int cm_level(const uint8_t* head, size_t n, const char* name, char* msg, size_t mn) {
+// (the magic, the version, the level, the order: into *order), or -1 if
+// they are not aacpack's (why in msg)
+int cm_level(const uint8_t* head, size_t n, const char* name, char* msg, size_t mn, int* order) {
   const size_t m = sizeof kCmMagic - 1;
   if (!n || memcmp(head, kCmMagic, Min(n, m))) {
     snprintf(msg, mn, "aacpack: %s: not a stream aacpack compressed\n", name);
     return -1;
   }
   if (n > m && !cm_version_ok(head[m], name, msg, mn)) return -1;
-  if (n < m + 2) {
+  if (n < m + 3) {
     snprintf(msg, mn, "aacpack: %s: the compressed stream is cut short\n", name);
     return -1;
   }
+  if (head[m + 2] > 1) {
+    snprintf(msg, mn, "aacpack: %s: not a stream aacpack compressed (order %d)\n", name, head[m + 2]);
+    return -1;
+  }
+  *order = head[m + 2];
   return head[m + 1];
 }
 
@@ -52,6 +59,7 @@ enum { F_AUTO, F_ADTS, F_LOAS, F_ADIF };
 // What a run of the compressor or the decompressor takes: Init() (coro.inc)
 struct AacArgs {
   int level;       // compressing: the model's level
+  int order;       // compressing: the model's order (Model's f_CS)
   bool verbose;    // statistics, and the messages they come with
   bool strict;     // compressing: fail where a frame would be stored as its bytes, or kept partly as bits
   int format;      // compressing: the container to look for (F_*; 0 any)
@@ -62,6 +70,7 @@ struct AacArgs {
 
   void Init() {
     level = 0;
+    order = 1;
     verbose = strict = false;
     format = F_AUTO;
     asc = nullptr;
@@ -310,9 +319,9 @@ struct DecompressState {
 // it finds, and between them bytes; or, with no model (the probe), the
 // same scan parsing only, for the SBR headers of the elements whose first
 // payloads come without one
-template <class LV>
+template <class LV, int f_CS>
 struct Scanner {
-  Model<0, LV>* m;  // (none: the probe)
+  Model<0, LV, f_CS>* m;  // (none: the probe)
   CompressState* s;
   const AacArgs* a;
   uint64_t pos;        // the next byte to scan
@@ -321,7 +330,7 @@ struct Scanner {
   bool stop;           // the probe is done
   uint64_t probe_units;
 
-  void Init(Model<0, LV>* mm, CompressState* ss, const AacArgs* aa) {
+  void Init(Model<0, LV, f_CS>* mm, CompressState* ss, const AacArgs* aa) {
     m = mm, s = ss, a = aa;
     pos = raw_start = 0;
     last = U_END;
@@ -474,11 +483,12 @@ struct Scanner {
     s->log.rewind();
     LogChan lw;
     lw.Init(s->log, true);
-    ModelChan<0, LV> mc;
+    ModelChan<0, LV, f_CS> mc;
     mc.Init(*m, &lw);
-    c.start_write(&mc, cap_of(kind));
+    c.start_write(&mc, cap_of(kind), f_CS != 0);
     walk_unit(c, s->rg, kind, 0, 0);
-    if (!lw.at_end() || !c.st.same(s->after)) err_raise_s("internal: the model pass did not walk the unit as it was parsed");
+    if (!lw.at_end() || !c.st.same(s->after) || c.fw.pos != end * 8 || memcmp(c.fw.b.p, p, end))
+      err_raise_s("internal: the model pass did not walk the unit as it was parsed");
     pos += end;
     raw_start = pos;
     s->st.units[kind]++;
@@ -600,11 +610,11 @@ void code_assumed(M& m, Walk& c, int count_hint, const int (*v)[kSbriFields]) {
 // coro.inc, which tells its driver what the stream is, each unit, and at the
 // end that its statistics are ready): 0. An error ends the run at its trap
 // instead (coro.inc).
-template <class LV>
-int compress_stream(Model<0, LV>& m, CompressState& s, const AacArgs& a) {
-  const uint8_t head[2] = {(uint8_t)kCmVersion, (uint8_t)LV::id};
+template <class LV, int f_CS>
+int compress_stream(Model<0, LV, f_CS>& m, CompressState& s, const AacArgs& a) {
+  const uint8_t head[3] = {(uint8_t)kCmVersion, (uint8_t)LV::id, (uint8_t)f_CS};
   m.write((const uint8_t*)kCmMagic, sizeof kCmMagic - 1);
-  m.write(head, 2);
+  m.write(head, 3);
   m.start();
   m.tc_verbose = a.verbose;
   m.rc_Init();
@@ -612,7 +622,7 @@ int compress_stream(Model<0, LV>& m, CompressState& s, const AacArgs& a) {
   if (a.asc_n) asc_config(c.st, a.asc, a.asc_n, true);
   // the probe, then the walk afresh with what it found
   {
-    Scanner<LV> pr;
+    Scanner<LV, f_CS> pr;
     pr.Init(nullptr, &s, &a);
     pr.run();
   }
@@ -633,7 +643,7 @@ int compress_stream(Model<0, LV>& m, CompressState& s, const AacArgs& a) {
   for (size_t i = 0; i < a.asc_n; i++) m.raw(a.asc[i]);
   code_assumed(m, c, na, assumed);
   s.st.assumed = (uint64_t)na;
-  Scanner<LV> sc;
+  Scanner<LV, f_CS> sc;
   sc.Init(&m, &s, &a);
   sc.run();
   m.unit(UF_KIND, sc.last, U_END);
@@ -644,12 +654,12 @@ int compress_stream(Model<0, LV>& m, CompressState& s, const AacArgs& a) {
 }
 
 // Decompresses with the model m, a new one, what is left of its input
-// after the magic, the version and the level, into its output (m is the
+// after the magic, the version, the level and the order, into its output (m is the
 // range decoder too, and the coroutine whose input it reads, coro.inc): 0.
 // An error ends the run at its trap (coro.inc), which writes what was
 // decoded (s.buf), and the error is m's note.
-template <class LV>
-int decompress_stream(Model<1, LV>& m, DecompressState& s, const AacArgs& a) {
+template <class LV, int f_CS>
+int decompress_stream(Model<1, LV, f_CS>& m, DecompressState& s, const AacArgs& a) {
   Buf<uint8_t>& buf = s.buf;
   auto flush = [&]() {
     s.crc.add(buf.data(), buf.size());
@@ -667,7 +677,7 @@ int decompress_stream(Model<1, LV>& m, DecompressState& s, const AacArgs& a) {
     s.asc.append(16, 0);
     asc_config(c.st, s.asc.data(), an, true);
   }
-  code_assumed<Model<1, LV>>(m, c, 0, nullptr);
+  code_assumed<Model<1, LV, f_CS>>(m, c, 0, nullptr);
   int last = U_END;
   for (;;) {
     int kind = (int)cm_count(m.unit(UF_KIND, last, 0), U_N - 1);
@@ -681,9 +691,9 @@ int decompress_stream(Model<1, LV>& m, DecompressState& s, const AacArgs& a) {
       else
         for (size_t j = 0; j < n; j++) buf.push_back((uint8_t)m.raw(0));
     } else {
-      ModelChan<1, LV> mc;
+      ModelChan<1, LV, f_CS> mc;
       mc.Init(m, nullptr);
-      c.start_write(&mc, cap_of(kind));
+      c.start_write(&mc, cap_of(kind), f_CS != 0);
       walk_unit(c, s.rg, kind, 0, 0);
       if (c.fw.pos & 7) err_raise_s("corrupt stream: a unit of other than whole bytes");
       buf.append(c.fw.b.p, c.fw.pos / 8);

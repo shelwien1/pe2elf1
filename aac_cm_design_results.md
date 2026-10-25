@@ -82,7 +82,7 @@ still decoded.
 | adts_buffer_fullness after the frame | SUCCESS | | | | present (see §5.1) |
 | global_gain after the section data (its coded bands as context) | FAILURE | -78 | -272 | +126 | built (the walk writes a place and patches it) |
 | ms_used after the first channel's section data (its codebook as context) | FAILURE | +35 | +259 | -3 | built; only after ch0's sections, since ch0's spectra read ms; without the context +364/+1060/+43 |
-| spectral values before the codebooks | FAILURE | | | | not built; bound: spectra with no codebook cost +65352 dev (+1.08%), sections knowing each band's largest magnitude save at most -58188 (-0.96%) |
+| spectral values before the codebooks | FAILURE | | | | not built; bound: spectra with no codebook cost +65352 dev (+1.08%), sections knowing each band's largest magnitude save at most -58188 (-0.96%). Built since, with the section data the encoders would choose as its contexts: it pays (below) |
 | spectral order group, band, window, k | SUCCESS | | | | present |
 
 ## §3 Baseline
@@ -204,3 +204,32 @@ still decoded.
 |---|---|---:|---:|---:|---|
 | whole tuples as symbols | FAILURE | +87004 | +214236 | | built as a family of its own (a tree over the tuple index, contexts of the tuple's first place): +1.4% dev, +1.1% music |
 | MSB-first binary for small integers | FAILURE | +74 | +317 | +630 | fields of 1-3 bits |
+
+## After the design: the section data after the spectra
+
+An encoder chooses its section data (codebooks and section lengths) from
+its quantized values, by rules that can be run again on them. Replayed on
+the streams' own values, fdk-aac's (libAACenc `dyn_bits.cpp`: each band
+its cheapest codebook, neighbouring sections merged while a merge saves
+bits, the best first) gives the stream's sections and codebooks in every
+channel-frame of every fdkaac stream (LC, VBR, HE, HEv2, LD, ELD, mono);
+faac's (each band the cheaper codebook of the smallest pair that holds its
+largest magnitude, equal neighbours one section) in every band of every
+faac stream; ffmpeg's trellis (`codebook_trellis_rate()`) in 99.0-99.7% of
+bands (its smallest codebook for a band comes from its quantizer search,
+before TNS and M/S change the values). So the section data is coded after
+the spectra: where it is, each band's kind (no codebook, a spectral one,
+noise, intensity), which the scalefactors need; after the spectral values,
+where sections start and each coded section's codebook, with the three
+encoders' choices as contexts (`cbsel.inc`). The spectra lose their
+codebook (+1.1%), the section data shrinks to about its kinds (fdkaac 128
+kbit/s: 16516 -> 1274 bytes). It is the default; `-b` codes the section
+data before the spectra as before. The stream version is 7 (an order
+byte after the level).
+
+| idea | verdict | dev | music | FATE | notes |
+|---|---|---:|---:|---:|---|
+| section data after the spectra, the encoders' choices as contexts | SUCCESS | -51753 | -143204 | -16649 | dev -0.85%, music -0.76%, FATE -0.62%; per stream -0.05% (ffmpeg 256 kbit/s) to -1.4% (fdkaac LD) |
+| a fourth predictor: the cheapest sectioning, and each start's bits against going on | FAILURE | +19 | -120 | -181 | 10-15% slower |
+| the spectra's codebook context: the class of the band's largest value in the last frame, rescaled | FAILURE | +270 | +2593 | +2553 | |
+| each band's largest magnitude's class coded before its values | FAILURE | +85806 | +251856 | +44648 | the class costs more than the spectra save |

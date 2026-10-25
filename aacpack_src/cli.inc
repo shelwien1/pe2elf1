@@ -11,6 +11,7 @@ struct Options {
   bool strict;
   bool progress;  // -p: progress even where stderr is not a terminal
   int level;      // c's model: -L
+  int order;      // c's model's order: 1 the section data after the spectra (codebook selection), 0 before (-b)
   int format;     // c: the container to look for (F_*: -adts, -latm, -adif)
   uint8_t asc[64];  // c: -asc, the AudioSpecificConfig of raw access units
   size_t asc_n;
@@ -19,6 +20,7 @@ struct Options {
   void Init() {
     verbose = strict = progress = false;
     level = kLevels[0];
+    order = 1;
     format = 0;
     asc_n = 0;
   }

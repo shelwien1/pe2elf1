@@ -80,6 +80,7 @@
 #include "asc.inc"
 #include "syntax.inc"
 #include "units.inc"
+#include "cbsel.inc"
 // the model: the coder and the families
 #include "rcio.inc"
 #include "rc.inc"
