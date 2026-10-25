@@ -3,8 +3,9 @@
 # default test/corpus): a test signal (chords, a chirp, plucks, noise bursts)
 # through ffmpeg's AAC encoder (LC, Main, LTP, mono, 5.1, with PNS,
 # intensity and TNS) as ADTS, LATM and MP4 (the moov box after the mdat or
-# before it, fragmented, two tracks, with a video track; and made AUS1 by
-# mp42aus1.py), and the ADTS made ADIF, LOAS of audioMuxVersion 1 and raw
+# before it, fragmented, two tracks, with a video track, ADTS frames as its
+# samples, a stsz box that is wrong; and made AUS1 by mp42aus1.py), and
+# the ADTS made ADIF, LOAS of audioMuxVersion 1 and raw
 # access units (named NAME.asc-HEX.raw, for roundtrip.sh's -asc HEX); with
 # fdkaac and faac, when they are there, HE-AAC, HE-AACv2, LD and ELD, CRCs,
 # VBR, HE-AAC in MP4. Needs ffmpeg and python3.
@@ -45,6 +46,8 @@ ff ff_frag.m4a -b:a 96k -movflags frag_keyframe+empty_moov -frag_duration 200000
 ffmpeg $q -i "$w" -i "$wm" -map 0:a -map 1:a -c:a aac -b:a 64k -f mp4 "$D/ff_two.m4a"
 ffmpeg $q -f lavfi -i testsrc=size=160x120:rate=10:duration=8 -i "$w" -c:v mpeg4 -c:a aac -b:a 64k -f mp4 "$D/ff_video.mp4"
 python3 "$T/mp42aus1.py" "$D/ff_lc128.m4a" "$D/ff_lc128.aus1" > /dev/null
+python3 "$T/mp4adts.py" "$D/ff_lc128.m4a" "$D/ff_adts_samples.m4a"
+python3 "$T/mp4adts.py" "$D/ff_lc128.m4a" "$D/ff_bad_stsz.m4a" stsz
 python3 "$T/adts2adif.py" "$D/ff_lc128.aac" "$D/ff_lc128.adif" 1 "a comment"
 python3 "$T/adts2loas.py" "$D/ff_lc128.aac" "$D/ff_lc128_v1.loas" 1 1 8 4
 python3 "$T/adts2loas.py" "$D/ff_main.aac" "$D/ff_main_v0.loas" 0 2 0 3
