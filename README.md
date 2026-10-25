@@ -184,8 +184,8 @@ header from the start, and puts it in the compressed stream's own header.
 Memory does not grow with the stream: `c` holds a window of the input
 (a unit at most 1 MB, and at the start what the read-ahead for SBR
 headers read: up to 1000 units, or 8 MB of bytes that are not AAC), and
-`d` a unit's output. The model's tables are a fixed 20 MB of address
-space, of which a run touches what its stream needs (about 11 MB of
+`d` a unit's output. The model's tables are a fixed 25 MB of address
+space, of which a run touches what its stream needs (about 13 MB of
 memory in all for a stereo stream). `c` and `d` are coroutines (h264p's
 Lib3) that ask their driver for input and give it output, so pipes of
 any length work.
@@ -196,20 +196,43 @@ Two one-minute excerpts of a live concert recording (archive.org,
 5gg 2010-08-27, tracks 1 and 6), encoded by fdkaac 1.0.0 (libfdk-aac
 from its git, c41c3c7), the AAC encoder of ffmpeg 6.1.1 and faac 1.30:
 
-<!-- TABLE1 -->
+| stream | bytes | compressed | |
+|---|---:|---:|---:|
+| fdkaac LC 128 kbit/s CBR | 1922423 | 1744029 | 90.72% |
+| fdkaac LC VBR 4 | 2436321 | 2250324 | 92.37% |
+| fdkaac LC 64 kbit/s mono | 480606 | 422162 | 87.84% |
+| fdkaac HE-AAC 48 kbit/s | 722366 | 619270 | 85.73% |
+| fdkaac HE-AACv2 24 kbit/s | 361655 | 290713 | 80.38% |
+| fdkaac LD 96 kbit/s (LATM) | 720379 | 588177 | 81.65% |
+| fdkaac ELD 96 kbit/s (LATM) | 720365 | 598392 | 83.07% |
+| ffmpeg LC 128 kbit/s | 1980658 | 1756276 | 88.67% |
+| ffmpeg LC 256 kbit/s | 3952064 | 3635260 | 91.98% |
+| ffmpeg LC 96 kbit/s, PNS, IS, TNS | 743006 | 634113 | 85.34% |
+| ffmpeg Main 128 kbit/s | 990527 | 876280 | 88.47% |
+| ffmpeg LTP 128 kbit/s | 990690 | 879640 | 88.79% |
+| ffmpeg LC 64 kbit/s mono | 501742 | 442026 | 88.10% |
+| faac LC 128 kbit/s | 2016176 | 1703725 | 84.50% |
+| faac LC 64 kbit/s mono | 492284 | 401024 | 81.46% |
+| all | 19031262 | 16841411 | 88.49% |
 
-<!-- FATE -->
+The 39 AAC streams of FFmpeg's FATE suite (`fate-suite/aac`: conformance
+streams and bug reports; LC, Main, HE-AAC, PS, 960-sample frames, 5.1, a
+PCE, ID3 tags, LATM in MPEG-TS and MPEG-PS, whose packets are bytes to
+aacpack), 4985631 bytes, come to 2935803 (58.89%). Two are mostly the same
+frames again (al18_44 and id3v2_two_tags, to 0.4% and 0.5%); without them,
+66.92%. The conformance streams of test signals (sweeps, tones) come to
+25-35%.
 
 Where the bytes of fdkaac's 128 kbit/s stream go (`-v`):
 
 | part | in the stream | compressed | |
 |---|---:|---:|---:|
-| spectral magnitudes (and escapes) | 626642 | 605420 | 96.6% |
+| spectral magnitudes (and escapes) | 626642 | 598468 | 95.5% |
 | their signs | 209727 | 209038 | 99.7% |
 | scalefactors | 53657 | 44933 | 83.7% |
 | sections | 36080 | 17201 | 47.7% |
 | headers and other fields | 35135 | 3474 | 9.9% |
-| all | 961241 | 880078 | 91.6% |
+| all | 961241 | 873127 | 90.8% |
 
 The Huffman codes of AAC are already close to what the values carry. A
 quantized spectral magnitude is all but white noise given its codebook
@@ -221,7 +244,7 @@ HE-AAC, ffmpeg's and faac's encoders.
 
 ## Limitations
 
-- One thread, about 0.5 MB/s both ways on a current x86-64 core (30
+- One thread, about 0.4 MB/s both ways on a current x86-64 core (25
   times real time at 128 kbit/s).
 - The model's parameters are part of the format, and the version byte
   says which: a stream decodes with the version that made it.
