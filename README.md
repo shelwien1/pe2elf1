@@ -254,10 +254,10 @@ header from the start, and puts it in the compressed stream's own header.
 Memory does not grow with the stream: `c` holds a window of the input (a
 unit at most 1 MB, and at the start what the read-ahead for SBR headers
 read: up to 1000 units, or 8 MB of bytes that are not AAC), and `d` a
-unit's output. The model's tables are a fixed 194 MB of address space,
+unit's output. The model's tables are a fixed 204 MB of address space,
 and 16 MB each for the match model's ring of the last 4M tokens and the
 bytes' order-2 table; a run touches what its stream needs (about 38 MB
-of memory in all for a stereo stream, 47 MB with `-b`). `c` and `d` are
+of memory in all for a stereo stream, 49 MB with `-b`). `c` and `d` are
 coroutines (h264p's Lib3) that ask their driver for input and give it
 output, so pipes of any length work.
 
@@ -269,36 +269,36 @@ from its git, c41c3c7), the AAC encoder of ffmpeg 6.1.1 and faac 1.30:
 
 | stream | bytes | compressed | |
 |---|---:|---:|---:|
-| fdkaac LC 128 kbit/s CBR | 1922423 | 1726772 | 89.82% |
-| fdkaac LC VBR 4 | 2436321 | 2235764 | 91.77% |
+| fdkaac LC 128 kbit/s CBR | 1922423 | 1726770 | 89.82% |
+| fdkaac LC VBR 4 | 2436321 | 2235762 | 91.77% |
 | fdkaac LC 64 kbit/s mono | 480606 | 417727 | 86.92% |
-| fdkaac HE-AAC 48 kbit/s | 722366 | 608683 | 84.26% |
-| fdkaac HE-AACv2 24 kbit/s | 361655 | 284752 | 78.74% |
-| fdkaac LD 96 kbit/s (LATM) | 720379 | 574011 | 79.68% |
-| fdkaac ELD 96 kbit/s (LATM) | 720365 | 584703 | 81.17% |
-| ffmpeg LC 128 kbit/s | 1980658 | 1733936 | 87.54% |
-| ffmpeg LC 256 kbit/s | 3952064 | 3616316 | 91.50% |
-| ffmpeg LC 96 kbit/s, PNS, IS, TNS | 743006 | 623742 | 83.95% |
-| ffmpeg Main 128 kbit/s | 990527 | 865130 | 87.34% |
-| ffmpeg LTP 128 kbit/s | 990690 | 868602 | 87.68% |
-| ffmpeg LC 64 kbit/s mono | 501742 | 437787 | 87.25% |
-| faac LC 128 kbit/s | 2016176 | 1677323 | 83.19% |
-| faac LC 64 kbit/s mono | 492284 | 394095 | 80.05% |
-| all | 19031262 | 16649343 | 87.48% |
+| fdkaac HE-AAC 48 kbit/s | 722366 | 608651 | 84.26% |
+| fdkaac HE-AACv2 24 kbit/s | 361655 | 284749 | 78.73% |
+| fdkaac LD 96 kbit/s (LATM) | 720379 | 574012 | 79.68% |
+| fdkaac ELD 96 kbit/s (LATM) | 720365 | 584704 | 81.17% |
+| ffmpeg LC 128 kbit/s | 1980658 | 1733859 | 87.54% |
+| ffmpeg LC 256 kbit/s | 3952064 | 3616185 | 91.50% |
+| ffmpeg LC 96 kbit/s, PNS, IS, TNS | 743006 | 623680 | 83.94% |
+| ffmpeg Main 128 kbit/s | 990527 | 865080 | 87.34% |
+| ffmpeg LTP 128 kbit/s | 990690 | 868545 | 87.67% |
+| ffmpeg LC 64 kbit/s mono | 501742 | 437779 | 87.25% |
+| faac LC 128 kbit/s | 2016176 | 1676773 | 83.17% |
+| faac LC 64 kbit/s mono | 492284 | 393989 | 80.03% |
+| all | 19031262 | 16648265 | 87.48% |
 
 With `-b` (the section data before the spectra), all of them come to
-16776437 (88.15%).
+16769766 (88.12%).
 
 The 39 AAC streams of FFmpeg's FATE suite (`fate-suite/aac`: conformance
 streams and bug reports; LC, Main, HE-AAC, PS, 960-sample frames, 5.1, a
 PCE, ID3 tags, LATM in MPEG-TS and MPEG-PS, whose packets are bytes to
-aacpack), 4985631 bytes, come to 2666311 (53.48%; with `-b`, 2682960).
+aacpack), 4985631 bytes, come to 2665965 (53.47%; with `-b`, 2680087).
 Two are mostly the same frames again (al18_44 and id3v2_two_tags, to 0.4%
-and 0.5%); without them, 60.77%. The conformance streams of test signals
+and 0.5%); without them, 60.76%. The conformance streams of test signals
 (sweeps, tones) come to 23-30%. The SBR ones (al_sbr_*) repeat much of
 their material: the match model takes about a third off them. Test
 signals are where the codebooks tell the spectra the most: al07_96 comes
-to 113988 bytes, but 106033 with `-b`.
+to 113997 bytes, but 103581 with `-b`.
 
 Where the bytes of fdkaac's 128 kbit/s stream go (`-v`):
 
@@ -306,10 +306,10 @@ Where the bytes of fdkaac's 128 kbit/s stream go (`-v`):
 |---|---:|---:|---:|
 | spectral magnitudes (and escapes) | 626642 | 605667 | 96.7% |
 | their signs | 209727 | 209256 | 99.8% |
-| scalefactors | 53657 | 44967 | 83.8% |
-| sections | 36080 | 1274 | 3.5% |
+| scalefactors | 53657 | 44965 | 83.8% |
+| sections | 36080 | 1275 | 3.5% |
 | headers and other fields | 35135 | 3429 | 9.8% |
-| all | 961241 | 864625 | 89.9% |
+| all | 961241 | 864623 | 89.9% |
 
 The Huffman codes of AAC are already close to what the values carry. A
 quantized spectral magnitude is all but white noise given its neighbours

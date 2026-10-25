@@ -65,7 +65,7 @@ constexpr int H_sbr_ND = TC_NODE, H_sbr_MND = TC_MNODE, H_sbr_NG = 64;
 //   the channel (sq2), pd the delta at the band in the last frame (sq2;
 //   0 not known), pa the last frame's value at the band less this band's
 //   predecessor's (sq2), cb the band's codebook, oc the other channel's
-//   delta at the band (CPE, sq2), ws the window sequence, gr the group,
+//   delta at the band (CPE, sq2), ws long 0, short 1, gr the group,
 //   gd global_gain less the last frame's (1 + sq2; 0 not known), pv the
 //   value so far less global_gain (intensity: the value; sq2), fb the
 //   first of its kind in the frame (1 + 1 + the last frame's first delta,

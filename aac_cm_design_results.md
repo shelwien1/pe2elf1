@@ -233,3 +233,22 @@ byte after the level).
 | a fourth predictor: the cheapest sectioning, and each start's bits against going on | FAILURE | +19 | -120 | -181 | 10-15% slower |
 | the spectra's codebook context: the class of the band's largest value in the last frame, rescaled | FAILURE | +270 | +2593 | +2553 | |
 | each band's largest magnitude's class coded before its values | FAILURE | +85806 | +251856 | +44648 | the class costs more than the spectra save |
+
+## After the review: stream version 8
+
+The code review (`aacpack_review.md`) found contexts that were not what
+they were meant to be (B3-B6: a stale SBR grid, a mean off by one band,
+codebooks and window sequences put together) and an element id that
+nothing used (A5; removing it shifts the ids the match model's digest
+hashes). Fixing them changes what the compressor writes, so the stream
+version is 8. Against version 7, with the same corpora:
+
+| set | version 7 | version 8 | | `-b`: version 7 | version 8 | |
+|---|---:|---:|---:|---:|---:|---:|
+| dev | 6022652 | 6022233 | -0.007% | 6074427 | 6071928 | -0.041% |
+| music | 18680175 | 18679079 | -0.006% | 18823404 | 18816150 | -0.039% |
+| FATE | 2666311 | 2665965 | -0.013% | 2682999 | 2680087 | -0.109% |
+
+Most of `-b`'s gain is B5 (codebooks 10 and 11 shared every context of
+the spectra and the signs); most of the default order's, the
+scalefactors' window sequence as a short-window flag (B6).

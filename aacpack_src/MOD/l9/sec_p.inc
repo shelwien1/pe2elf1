@@ -53,7 +53,7 @@ void H9_sec_make( const H_sec_v & D, tcx & X ) {
   h = 0;
   h = h*4 + H9_sec_h_kd[__min(3,__max(0,(kd)-(1-1)))];
   h = h*51 + H9_sec_h_sb[__min(50,__max(0,(sb)-(1-1)))];
-  h = h*2 + (((ws)>0+(1-1)));
+  h = h*4 + H9_sec_h_ws[__min(3,__max(0,(ws)-(1-1)))];
   h = h*17 + H9_sec_h_cb[__min(16,__max(0,(cb)-(1-1)))];
   h = h*5 + H9_sec_h_bq[__min(4,__max(0,(bq)-(1-1)))];
 

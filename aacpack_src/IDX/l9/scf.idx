@@ -4,7 +4,7 @@
 #  the band in the channel's last frame (1 + sq2; 0 not known), pa that
 #  frame's value at the band less this band's predecessor's (1 + sq2; 0 not
 #  known), cb the band's codebook, oc the CPE's other channel's delta at
-#  the band (1 + sq2; 0 none), ws the window sequence, gr the group, gd
+#  the band (1 + sq2; 0 none), ws long 0 short 1, gr the group, gd
 #  global_gain less the last frame's (1 + sq2; 0 not known), pv the band's
 #  predecessor less global_gain (sq2), fb the first of its kind in the frame
 #  (0 not), sk the bands skipped since the last of its kind (tc_qlog), mu

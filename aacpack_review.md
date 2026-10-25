@@ -4,7 +4,9 @@ A review of all of aacpack: its sources (`aacpack_src/`), the IDX
 generator and tuning tools (`aacpack_src/IDX/`, `mk.sh`), the Makefile
 and the tests (`test/`). It looked for bugs, duplicate code and unused
 code. The review is of the tree as of commit 82eb6a44 (format version 7).
-Each finding below says what was done about it.
+Each finding below says what was done about it. The fixes of B3-B6 and
+A5 change what the compressor writes, so they make format version 8; the
+rest keep version 7's output.
 
 ## How
 
@@ -88,10 +90,10 @@ The ids are the area's letter (M: the mechanical checks).
 | E18 | `test/adts2adif.py`, `adts2loas.py` | low | hung on an ADTS frame length of 0 | fixed |
 | E19 | README | low | its one-line build lacked `-ffp-contract=off` | fixed |
 | E20 | `famtune.cpp`, `ftune.py`, `idx2inc.pl` | low | stale references | fixed |
-| B3 | `model.inc` `hdr_val` | low | coupled SBR channel 1 read a stale grid | changes the format: open |
-| B4 | `model.inc` `sbr_val` | low | the mean of frequency-delta envelopes was off by one band | changes the format: open |
-| B5 | `IDX/l9/spc.idx`, `sgn.idx` | low | codebooks 10 and 11 shared every context with `-b` | changes the format: open |
-| B6 | `scf.idx`, `sec.idx`, `hdr.idx` | low | some window-sequence and hx contexts are lumped | changes the format: open |
+| B3 | `model.inc` `hdr_val` | low | coupled SBR channel 1 read a stale grid | fixed (version 8) |
+| B4 | `model.inc` `sbr_val` | low | the mean of frequency-delta envelopes was off by one band | fixed (version 8) |
+| B5 | `IDX/l9/spc.idx`, `sgn.idx` | low | codebooks 10 and 11 shared every context with `-b` | fixed (version 8) |
+| B6 | `model.inc`, `sec.idx`, `hdr.idx` | low | some window-sequence and hx contexts were lumped | fixed (version 8) |
 
 ### D1: `c` failed on valid input
 
@@ -295,25 +297,53 @@ it and renames it as the call ends well.
   `mk.sh check` ran. `make test` round-trips the corpus in both orders now,
   and `mk.sh check` compares the three builds in both orders.
 
-### Context inaccuracies: changes of the format
+### Context inaccuracies: format version 8
 
-These are symmetric, so no stream decodes wrongly. Each fix changes what
-the compressor writes, so it needs a new format version.
+These were symmetric, so no stream decoded wrongly. Each fix changes what
+the compressor writes, so together they are format version 8. `d` of a
+version 7 stream says which version made it.
 
 - **B3:** in coupled SBR the grid is coded for channel 0 only. So channel
   1's grid tracker (`sbrt_`) was never updated, and its `E_SDF_ENV` /
-  `E_SDF_NOISE` context read the last uncoupled frame's grid.
+  `E_SDF_NOISE` context read the last uncoupled frame's grid. Now the
+  model keeps the payload's `bs_coupling`, and a coupled channel 1 takes
+  channel 0's tracker at its first `E_SDF_ENV`.
 - **B4:** `D.rm` (the mean so far) divided the sum of the frequency-delta
   envelope's deltas by `band`, not `band - 1`. So band 1 read "mean 0", not
-  the first delta.
+  the first delta. Now it divides by the number of deltas, for noise
+  floors too.
 - **B5:** `cb, 1!1111111111` has 10 thresholds for codebooks 1-11. So
   codebooks 10 and 11 shared every spc and sgn context with `-b` (the
-  default order codes the values without their codebook).
+  default order codes the values without their codebook). The 19 lines
+  have 11 thresholds now.
 - **B6:**
-  - scf and sec pass the window sequence (0-3) under `1!1`, which puts
+  - scf and sec passed the window sequence (0-3) under `1!1`, which put
     LONG_START and LONG_STOP with EIGHT_SHORT (spc, esc and sgn pass a
-    short-window flag);
-  - hdr's `hx` reaches 20 for `E_WIN_SHAPE`, under 16 thresholds.
+    short-window flag). scf now passes that flag. sec's index d tells the
+    four apart already; its index h does too now (`1!111`).
+  - hdr's `hx` reaches 20 for `E_WIN_SHAPE`, under 16 thresholds. There
+    are 20 now.
+- **A5** (unused code, below) goes with them: removing the element
+  renumbers the ids after it, and the match model's digest hashes them.
+
+Each step against the one before, on the 115 streams of the
+verification below, in bytes:
+
+| step | default order | `-b` |
+|---|---:|---:|
+| version 7 | 33599492 | 33859380 |
+| B3 | -76 | -75 |
+| B4 | -85 | -97 |
+| B5 | 0 | -11318 |
+| B6: scf | -1256 | -1155 |
+| B6: hx | -39 | -38 |
+| A5 | -129 | -38 |
+| B6: sec | -372 | -955 |
+| version 8 | 33597535 (-0.006%) | 33845704 (-0.040%) |
+
+The larger indices (B5 +4 MB, hx +3 MB, sec's index h +3 MB) make the
+model's tables 204 MB of address space, from 194. A stereo stream uses
+49 MB of memory with `-b`, from 47; by default, 38 MB as before.
 
 ## Duplicate code
 
@@ -378,7 +408,7 @@ Each confirmed by grep over the sources, MOD/ and the tools.
 | B-U1 | `ChanHist::group_len` | removed |
 | B-U2 | the spc family's variable `kq`, read by no spc.idx line (sgn's `kq` is computed directly) | removed |
 | B-U3, B-U4, B-U5 | a dead local in `val()`; `sbr_val()`'s parameter `n`; a test that is always true (`bd - 1 < 64`) | removed |
-| A5 | the element `E_AU_RAW` | changes the format (the digest's tokens carry the element's number): open |
+| A5 | the element `E_AU_RAW` | removed (version 8: the digest's tokens carry the element's number) |
 | E22 | `idx2inc.pl`'s `IDX_NOCONST`, only ever set to its default | used now (E8); `IDX_USENEW` stays, documented |
 | B-U6 | variables constant in one order (spc's `cb`, `tp`, `sc` in the default order; sec's `pr`, `pt`, `ch`, `bq` with `-b`) | kept: each order uses them; tune each order |
 | B-U7 | thresholds past a variable's largest value (sec `fn`, unt `fld` and `ctx`, sbr `en`) | kept: they cost no coding; trimming them is for a tuning run |
@@ -463,6 +493,8 @@ changed (M2) and some code went, and the output did not change.
 
 ## Verification of the fixes
 
+### Version 7: the format-neutral fixes
+
 The fixes of the format-neutral findings (all but B3-B6 and A5) keep
 format version 7, and were checked against 82eb6a44:
 
@@ -496,3 +528,13 @@ format version 7, and were checked against 82eb6a44:
   - `c` takes 5.93 s, against 5.97 s before;
   - `d` takes 5.71 s, against 6.02 s;
   - at most 40 MB of memory is used, as before.
+
+### Version 8: B3-B6 and A5
+
+- **Round trips:** the 115 streams round-trip in both orders, 230 of
+  230.
+- **`make test`** passes: to 77.06% and, with `-b`, 77.29% (from
+  77.35%).
+- **`mk.sh check 9`:** the three builds code the same bytes (44 of 44).
+- **clang and gcc builds** write the same bytes (the 22 streams, both
+  orders).

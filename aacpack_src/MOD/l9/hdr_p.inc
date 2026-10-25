@@ -47,7 +47,7 @@ void H9_hdr_make( const H_hdr_v & D, tcx & X ) {
   h = (h<<8) + (((tag)&255)); // 11111111
   h = h*3 + (((ch)>0+(1-1))+((ch)>1+(1-1)));
   h = h*16 + H9_hdr_h_fld[__min(15,__max(0,(fld)-(1-1)))];
-  h = h*17 + H9_hdr_h_hx[__min(16,__max(0,(hx)-(1-1)))];
+  h = h*21 + H9_hdr_h_hx[__min(20,__max(0,(hx)-(1-1)))];
 
   i = 0;
   i = (i<<8) + (((tag)&255)); // 11111111

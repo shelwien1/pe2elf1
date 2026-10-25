@@ -19,14 +19,14 @@ void H9_sgn_make( const H_sgn_v & D, tcx & X ) {
   H_sgn_VARS(H_LOCAL)
 
   a = 0;
-  a = a*11 + H9_sgn_a_cb[__min(10,__max(0,(cb)-(1-1)))];
+  a = a*12 + H9_sgn_a_cb[__min(11,__max(0,(cb)-(1-1)))];
   a = a*3 + (((oc)>0+(1-1))+((oc)>1+(1-1)));
   a = a*3 + (((ms)>0+(1-1))+((ms)>1+(1-1)));
 
   b = 0;
   b = b*3 + (((s1)>0+(1-1))+((s1)>1+(1-1)));
   b = b*3 + (((s2)>0+(1-1))+((s2)>1+(1-1)));
-  b = b*11 + H9_sgn_b_cb[__min(10,__max(0,(cb)-(1-1)))];
+  b = b*12 + H9_sgn_b_cb[__min(11,__max(0,(cb)-(1-1)))];
 
   c = 0;
   c = c*3 + (((pf)>0+(1-1))+((pf)>1+(1-1)));
@@ -40,7 +40,7 @@ void H9_sgn_make( const H_sgn_v & D, tcx & X ) {
   e = e*20 + H9_sgn_e_kq[__min(19,__max(0,(kq)-(1-1)))];
 
   h = 0;
-  h = h*11 + H9_sgn_h_cb[__min(10,__max(0,(cb)-(1-1)))];
+  h = h*12 + H9_sgn_h_cb[__min(11,__max(0,(cb)-(1-1)))];
   h = h*8 + H9_sgn_h_mg[__min(7,__max(0,(mg)-(1-1)))];
   h = h*7 + H9_sgn_h_kq[__min(6,__max(0,(kq)-(1-1)))];
 
@@ -51,7 +51,7 @@ void H9_sgn_make( const H_sgn_v & D, tcx & X ) {
 
   j = 0;
   j = j*2 + (((ws)>0+(1-1)));
-  j = j*11 + H9_sgn_j_cb[__min(10,__max(0,(cb)-(1-1)))];
+  j = j*12 + H9_sgn_j_cb[__min(11,__max(0,(cb)-(1-1)))];
 
   k = 0;
   k = k*3 + (((s1)>0+(1-1))+((s1)>1+(1-1)));
@@ -63,13 +63,13 @@ void H9_sgn_make( const H_sgn_v & D, tcx & X ) {
   l = l*3 + (((pf)>0+(1-1))+((pf)>1+(1-1)));
 
   s = 0;
-  s = s*11 + H9_sgn_s_cb[__min(10,__max(0,(cb)-(1-1)))];
+  s = s*12 + H9_sgn_s_cb[__min(11,__max(0,(cb)-(1-1)))];
 
   f = 0;
   f = f*3 + (((oc)>0+(1-1))+((oc)>1+(1-1)));
 
   m = 0;
-  m = m*11 + H9_sgn_m_cb[__min(10,__max(0,(cb)-(1-1)))];
+  m = m*12 + H9_sgn_m_cb[__min(11,__max(0,(cb)-(1-1)))];
 
   w = 0;
   w = w*3 + (((ms)>0+(1-1))+((ms)>1+(1-1)));

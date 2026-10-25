@@ -427,6 +427,7 @@ struct Model : tc_rc<f_DEC> {
     memset(period_, 0, sizeof period_);
     memset(sbrt_, 0, sizeof sbrt_);
     sbr_hdr_now_ = 0;
+    sbr_coup_ = 0;
     lastslot_ = lastfi_ = -1, lastv_ = 0;
     res_.n = res_.bits = res_.first = 0, res_.last = -1, res_.unit = 0;
     res_.pbits = res_.prev = res_.ec = res_.ep = 0;
@@ -743,6 +744,7 @@ struct Model : tc_rc<f_DEC> {
     uint8_t fr[8], frlast;
   } sbrt_[kSlots];
   int sbr_hdr_now_;
+  int sbr_coup_;  // the SBR payload's bs_coupling (its second channel's grid is the first's)
   void sbr_seen_field(const Walk& w, int e, i64 x, int i) {
     SbrTrack& t = sbrt_[sbr_slot(w)];
     switch (e) {
@@ -885,6 +887,8 @@ struct Model : tc_rc<f_DEC> {
       }
       case E_SDF_ENV:
       case E_SDF_NOISE: {  // the first; a header in this payload; the envelope's freq_res the one before's
+        // (coupled: the second channel's grid is the first's, which the walk coded alone)
+        if (sbr_coup_ && w.at.chn == 1 && e == E_SDF_ENV && i == 0) sbrt_[sbr_slot(w)] = sbrt_[sbr_slot(w) & ~1];
         const SbrTrack& t = sbrt_[sbr_slot(w)];
         const int fr = i < 8 ? t.fr[i] : 0, ref = i > 0 ? t.fr[i - 1] : t.frlast;
         D.hx = 1 + (i == 0) + 2 * sbr_hdr_now_ + 4 * (e == E_SDF_ENV && fr == ref);
@@ -923,6 +927,8 @@ struct Model : tc_rc<f_DEC> {
     dig_push(e, dpred, x);
     if (e == E_FILL_N) fill_seen(w, x, hv0);
     if (e == E_SBR_HDR) sbr_hdr_now_ = (int)(x & 1);
+    if (e == E_SBRD_EXTRA) sbr_coup_ = 0;  // (sbr_data()'s first field)
+    if (e == E_SBRD_COUP) sbr_coup_ = (int)(x & 1);
     if (e >= E_SGRID_CLASS && e <= E_SGRID_FRB) sbr_seen_field(w, e, x, i);
     if (e == E_LOAS_SAME || e == E_SBR_HDR || e == E_PS_HDR) {
       Period& pr = period_[e == E_LOAS_SAME ? 0 : e == E_SBR_HDR ? 1 : 2][slot_of(w) & (kSlots - 1)];
@@ -1298,7 +1304,7 @@ struct Model : tc_rc<f_DEC> {
     D.pa = same ? 1 + sq2(pa) : 0;
     D.cb = cb;
     D.oc = o && o->bt[idx] && sf_kind(o->bt[idx]) == kd ? 1 + sq2(cc_[0].sfd[idx]) : 0;
-    D.ws = ii.ws;
+    D.ws = ii.ws == EIGHT_SHORT_SEQUENCE;  // (long, start and stop windows have the long bands)
     D.gr = g;
     D.gd = h ? 1 + sq2(cd.gg - h->gg) : 0;
     D.pv = sq2(c.off[kd] - (kd == 1 ? 0 : cd.gg));
@@ -1635,7 +1641,11 @@ struct Model : tc_rc<f_DEC> {
     // the design's: the mean of the envelope's values so far, the core's top
     // coded band's level (envelopes), the last envelope's shape at the band
     // (frequency deltas), and what the digest's match predicts
-    D.rm = band > 0 && kd != 14 ? 1 + Min(sq2((2 * cur_sum_[hk] + (cur_sum_[hk] >= 0 ? band : -band)) / (2 * band)), 14) : 0;
+    {
+      // (of a frequency-delta envelope or noise floor, the deltas from band 1)
+      const int nv = (e == E_SENV || e == E_SNOISE) && !w.at.dt ? band - 1 : band;
+      D.rm = nv > 0 && kd != 14 ? 1 + Min(sq2((2 * cur_sum_[hk] + (cur_sum_[hk] >= 0 ? nv : -nv)) / (2 * nv)), 14) : 0;
+    }
     {
       const ChanHist& ch = hist_[sbr_slot(w)];
       D.cl = (e == E_SENV || e == E_SENV_START) && ch.valid && ch.tl >= 0 ? 1 + Min(ch.tl / 8, 30) : 0;

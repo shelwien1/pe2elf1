@@ -26,7 +26,7 @@ namespace aacpack {
   /* ADIF, AUS1 */                                                                                          \
   X(ADIF_CIDP, "adif.cidp") X(ADIF_CID, "adif.cid") X(ADIF_ORIG, "adif.orig") X(ADIF_HOME, "adif.home")    \
   X(ADIF_BST, "adif.bst") X(ADIF_RATE, "adif.rate") X(ADIF_NPCE, "adif.npce") X(ADIF_FULL, "adif.full")    \
-  X(ASC_N, "asc.n") X(AU_RAW, "au.raw")                                                                     \
+  X(ASC_N, "asc.n")                                                                                         \
   /* raw_data_block */                                                                                      \
   X(ELEM, "elem") X(REST_N, "rest.n") X(REST, "rest") X(END_ALIGN, "end.align") X(SCE_TAG, "sce.tag")      \
   X(CPE_TAG, "cpe.tag") X(CCE_TAG, "cce.tag") X(LFE_TAG, "lfe.tag") X(CPE_CW, "cpe.cw")                    \
