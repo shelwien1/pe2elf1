@@ -37,7 +37,7 @@ enum : uint {
 // What the stream is, from its frames (cmstream.inc's audio_of()): plain
 // values, compared as bytes, all zero where it is not known
 struct AudioInfo {
-  int container;    // 1 ADTS, 2 LOAS/LATM, 3 ADIF, 4 AUS1, 5 raw access units, 6 MP4
+  int container;    // 1 ADTS, 2 LOAS/LATM, 3 ADIF, 4 AUS1, 5 raw access units
   int aot;          // the core's audio object type
   int sf_index;     // its sampling frequency index
   int chan_config;  // channel configuration (0: by a PCE)

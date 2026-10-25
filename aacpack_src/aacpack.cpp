@@ -10,9 +10,8 @@ void usage() {
   for (int n : kLevels) k += snprintf(lv + k, sizeof lv - k, " -%d", n);
   fprintf(stderr,
           "usage: aacpack c|d [options] input output\n"
-          "  c  compress an AAC stream or file: ADTS, LOAS/LATM, ADIF, MP4 (M4A, MOV) or AUS1 (found\n"
-          "     as they come), or raw access units (-asc); what is not AAC (tags, junk, video) is\n"
-          "     kept as it is\n"
+          "  c  compress an AAC stream: ADTS, LOAS/LATM, ADIF or AUS1 (found as they come), or raw\n"
+          "     access units (-asc); what is not AAC (tags, junk, other containers) is kept as it is\n"
           "  d  decompress it, bit for bit\n"
           "options:\n"
           "  -v          print statistics, and what the stream is (and where it changes)\n"

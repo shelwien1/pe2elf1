@@ -25,7 +25,7 @@ aacpack: $(SRCS)
 test: aacpack
 	@[ -d test/corpus ] || ./test/gen.sh test/corpus
 	./test/roundtrip.sh ./aacpack $(FILES)
-	./test/check.sh ./aacpack test/corpus/ff_lc128.aac test/corpus/ff_lc128.m4a
+	./test/check.sh ./aacpack test/corpus/ff_lc128.aac
 
 clean:
 	rm -f aacpack

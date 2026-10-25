@@ -8,17 +8,16 @@
 // of -asc, if any, and the SBR headers assumed for the elements whose first
 // SBR payloads come before their first header; then each unit's kind (the
 // end, bytes, an ADTS or LOAS frame, an ADIF header, a raw_data_block, the
-// AUS1 header or one of its access units, an MP4 track's config, access
-// unit or stsz entries) and the unit: its syntax through the model, or
-// (bytes) their count and the bytes; and the CRC-32 of the stream. What the
-// compressor finds of no container (tags, junk, frames that do not parse or
-// would not come out as they were, an MP4 file's boxes) is bytes, in chunks
-// of at most kChunk.
+// AUS1 header or one of its access units) and the unit: its syntax through
+// the model, or (bytes) their count and the bytes; and the CRC-32 of the
+// stream. What the compressor finds of no container (tags, junk, frames that
+// do not parse or would not come out as they were) is bytes, in chunks of at
+// most kChunk.
 
 namespace aacpack {
 
 const char kCmMagic[] = "aacpk";  // compressed streams, followed by the version and level bytes
-const int kCmVersion = 2;
+const int kCmVersion = 3;
 // The CRC-32 at the end is coded XORed with this: a decoder fed past the
 // end of its input decodes zeros, and 0 is the CRC-32 of an empty stream.
 const uint32_t kCrcXor = 0x61616370;
@@ -58,9 +57,6 @@ struct AacArgs {
   int format;      // compressing: the container to look for (F_*; 0 any)
   const uint8_t* asc;  // compressing: -asc, the AudioSpecificConfig of raw access units (asc_n bytes; none 0)
   size_t asc_n;
-  const uint8_t* moov;  // compressing: an MP4 file's moov box read ahead (its payload, moov_n bytes; none 0)
-  size_t moov_n;
-  uint64_t moov_at;     // and the payload's place in the file
   const char* name;  // the input's, for messages
   Progress* meter;   // the call's progress line, where its driver shows what the codec tells (coro.inc)
 
@@ -70,23 +66,15 @@ struct AacArgs {
     format = F_AUTO;
     asc = nullptr;
     asc_n = 0;
-    moov = nullptr;
-    moov_n = 0;
-    moov_at = 0;
     name = "";
     meter = nullptr;
   }
 };
 
-// the kinds of unit: U_ASC the MP4 track whose access units come next
-// (and its AudioSpecificConfig, the first time), U_SAMPLE an access unit of
-// an MP4 file, U_STSZ the entries of an stsz box that comes after its
-// track's access units (each entry: whether it is the length of the next
-// one coded)
-enum { U_END, U_RAW, U_ADTS, U_LOAS, U_ADIF, U_BLOCK, U_AUS1, U_AU, U_ASC, U_SAMPLE, U_STSZ, U_N };
-static const char* const kUnitName[U_N] = {"end",          "bytes",           "ADTS frames",  "LOAS frames",
-                                           "ADIF headers", "raw_data_blocks", "AUS1 headers", "access units",
-                                           "MP4 configs",  "MP4 access units", "MP4 sample size tables"};
+// the kinds of unit
+enum { U_END, U_RAW, U_ADTS, U_LOAS, U_ADIF, U_BLOCK, U_AUS1, U_AU, U_N };
+static const char* const kUnitName[U_N] = {"end", "bytes", "ADTS frames", "LOAS frames", "ADIF headers",
+                                           "raw_data_blocks", "AUS1 headers", "access units"};
 
 const size_t kChunk = (size_t)1 << 20;     // bytes coded as they are, at most at once
 const size_t kBlockMax = (size_t)1 << 20;  // a raw_data_block of ADIF or -asc, at most (a rest of one takes this much)
@@ -124,8 +112,7 @@ static size_t walk_unit(Walk& c, AdtsRegs& rg, int kind, size_t len, size_t avai
       c.raw_data_block(avail * 8, true);
       break;
     case U_AUS1: aus1_header(c, 0, len - 6); return len;
-    case U_SAMPLE: au_unit(c, 0, len, 0); return len;
-    default: au_unit(c, 0, len - 4, 4); return len;  // U_AU
+    default: au_unit(c, 0, len - 4); return len;  // U_AU
   }
   if (!c.R) return 0;
   if (c.br.pos & 7) c.bad("a unit that ends inside a byte");
@@ -136,12 +123,7 @@ static size_t walk_unit(Walk& c, AdtsRegs& rg, int kind, size_t len, size_t avai
 static AudioInfo audio_of(const Walk& c, int kind) {
   AudioInfo a;
   memset((void*)&a, 0, sizeof a);
-  a.container = kind == U_ADTS     ? 1
-                : kind == U_LOAS   ? 2
-                : kind == U_AU || kind == U_AUS1 ? 4
-                : kind == U_ADIF   ? 3
-                : kind == U_SAMPLE ? 6
-                                   : 5;
+  a.container = kind == U_ADTS ? 1 : kind == U_LOAS ? 2 : kind == U_AU || kind == U_AUS1 ? 4 : kind == U_ADIF ? 3 : 5;
   a.aot = c.st.aot;
   a.sf_index = c.st.sf_index;
   a.chan_config = kind == U_ADTS ? c.st.fixed.chan_config : c.st.chan_config;
@@ -153,7 +135,6 @@ static AudioInfo audio_of(const Walk& c, int kind) {
 // told to the driver (kYieldAudio) where it adds to what was told; and the
 // progress (kYieldTick), each unit
 static void tell_unit(CoroIo& io, const Walk& c, int kind) {
-  if (kind == U_ASC || kind == U_STSZ) return;
   if (kind != U_RAW && kind != U_AUS1) {
     AudioInfo a = audio_of(c, kind);
     if (io.audio.add(a)) io.tell(kYieldAudio);
@@ -282,8 +263,6 @@ struct CompressState {
   ValueLog log;
   SynState before, after;
   Stats st;
-  Mp4Index mp4;  // an MP4 file's AAC tracks
-  Mp4Coded mc;   // and what is coded of them
 
   void Init(ByteSource in) {
     win.Init(in);
@@ -293,16 +272,12 @@ struct CompressState {
     before.reset();
     after.reset();
     st.Init();
-    mp4.Init();
-    mc.Init();
   }
   void Quit() {
     win.Quit();
     walk.Quit();
     rg.Quit();
     log.Quit();
-    mp4.Quit();
-    mc.Quit();
   }
 };
 
@@ -314,9 +289,6 @@ struct DecompressState {
   uint64_t units;     // the units decoded (-v)
   Buf<uint8_t> buf;   // the stream decoded, not yet written
   Buf<uint8_t> asc;   // -asc's AudioSpecificConfig
-  Mp4Coded mc;        // an MP4 file's AAC tracks, as they are decoded
-  uint8_t tasc[kMp4Tracks][kMp4AscMax + 16];  // and their configs (16 zeros after each)
-  size_t tasc_n[kMp4Tracks];
 
   void Init() {
     walk.Init();
@@ -325,16 +297,12 @@ struct DecompressState {
     units = 0;
     buf.Init();
     asc.Init();
-    mc.Init();
-    memset(tasc, 0, sizeof tasc);
-    memset(tasc_n, 0, sizeof tasc_n);
   }
   void Quit() {
     walk.Quit();
     rg.Quit();
     buf.Quit();
     asc.Quit();
-    mc.Quit();
   }
 };
 
@@ -352,7 +320,6 @@ struct Scanner {
   int last;            // the kind of the last unit coded
   bool stop;           // the probe is done
   uint64_t probe_units;
-  bool track_cfg;      // an MP4 file: the walk has the config of the track (Mp4Coded::cur)
 
   void Init(Model<0, LV>* mm, CompressState* ss, const AacArgs* aa) {
     m = mm, s = ss, a = aa;
@@ -360,7 +327,6 @@ struct Scanner {
     last = U_END;
     stop = false;
     probe_units = 0;
-    track_cfg = false;
   }
   bool probe() const { return !m; }
   InWindow& win() { return s->win; }
@@ -592,120 +558,6 @@ struct Scanner {
   }
 
   // the scan: tags first, then raw access units (-asc), ADIF, AUS1, or frames
-  // An MP4 file's boxes, from pos: false (nothing done) where none starts
-  // there. The access units of its AAC tracks are units (U_SAMPLE) where
-  // its moov box came before its mdat or was read ahead (a->moov); all
-  // else is bytes
-  bool mp4() {
-    Mp4Index& x = s->mp4;
-    size_t avail = win().need(pos, 16);  // (before at(): need() moves the window)
-    if (!mp4_start(win().at(pos), avail)) return false;
-    if (!x.have && a->moov_n) x.parse(a->moov, a->moov_n, a->moov_at);
-    x.next = 0;
-    s->mc.Quit();
-    s->mc.Init();
-    while (!stop) {
-      uint64_t n;
-      uint32_t t;
-      size_t h;
-      avail = win().need(pos, 16);
-      if (!mp4_head(win().at(pos), avail, n, t, h)) break;
-      const uint64_t end = n ? pos + n : ~(uint64_t)0;  // (0: to the end)
-      if (t == fourcc("moov") && !x.have && n && n - h <= kMoovMax && win().need(pos, (size_t)n) == n)
-        x.parse(win().at(pos) + h, (size_t)(n - h), pos + h);
-      if (t == fourcc("moov") && x.have) tables(end);
-      if (t == fourcc("moof") && x.have && n && n - h <= kMoovMax && win().need(pos, (size_t)n) == n)
-        x.moof(pos, pos + n, win().at(pos) + h, win().at(pos) + n);
-      if (t == fourcc("mdat") && x.have) {
-        skip_raw(h);
-        samples(end);
-      }
-      skip_raw(end - pos);
-      if (pos < end) break;  // (the stream ended first)
-    }
-    return true;
-  }
-  // the access units in the mdat box that ends at end, from pos (an ADTS
-  // frame each, some muxers' mistake, as such: U_ADTS)
-  void samples(uint64_t end) {
-    Mp4Index& x = s->mp4;
-    while (!stop && x.next < x.s.size()) {
-      const Mp4Sample u = x.s[x.next];
-      if (u.at >= end) break;
-      x.next++;
-      if (u.at < pos || u.n > end - u.at) continue;  // (over what went before, or out of the box)
-      skip_raw(u.at - pos);
-      if (pos != u.at || win().need(pos, u.n) < u.n) break;  // (the stream ended first)
-      const int kind = adts_frame_len(win().at(pos), u.n) == u.n ? U_ADTS : U_SAMPLE;
-      if ((int)u.track != s->mc.cur || (kind == U_SAMPLE && !track_cfg)) config((int)u.track);
-      const uint64_t coded = s->st.units[kind];
-      unit(kind, u.n);
-      if (s->st.units[kind] != coded) s->mc.len[u.track].push_back(u.n);
-      if (kind == U_ADTS) track_cfg = false;  // (the walk has the frame's config)
-    }
-  }
-  // the walk configured for the access units of the MP4 track t (U_ASC)
-  void config(int t) {
-    Mp4Index& x = s->mp4;
-    Mp4Coded& mc = s->mc;
-    mc.cur = t;
-    track_cfg = true;
-    if (!probe()) {
-      flush_raw();
-      m->unit(UF_KIND, last, U_ASC);
-      last = U_ASC;
-      m->unit(UF_TRACK, 0, t);
-      if (!mc.given[t]) {
-        m->unit(UF_ASCN, 1, (i64)x.asc_n[t]);
-        for (size_t i = 0; i < x.asc_n[t]; i++) m->raw(x.asc[t][i]);
-        mc.given[t] = true;
-      }
-      s->st.units[U_ASC]++;
-    }
-    asc_config(s->walk.st, x.asc[t], x.asc_n[t], false);
-    s->walk.sbr_seen = s->walk.ps_seen = 0;  // (what the track is, -v)
-  }
-  // the stsz boxes of the AAC tracks in the moov box that ends at end, from
-  // pos, where their access units were coded before: units (U_STSZ)
-  void tables(uint64_t end) {
-    Mp4Index& x = s->mp4;
-    for (;;) {
-      int t = -1;
-      for (int k = 0; k < x.ntracks; k++)
-        if (x.stsz_n[k] && x.stsz_at[k] >= pos && x.stsz_at[k] + 4 * (uint64_t)x.stsz_n[k] <= end &&
-            !s->mc.len[k].empty() && (t < 0 || x.stsz_at[k] < x.stsz_at[t]))
-          t = k;
-      if (t < 0) return;
-      skip_raw(x.stsz_at[t] - pos);
-      const size_t nb = 4 * (size_t)x.stsz_n[t];
-      if (pos != x.stsz_at[t] || win().need(pos, nb) < nb) return;  // (the stream ended first)
-      if (!probe()) {
-        flush_raw();
-        m->unit(UF_KIND, last, U_STSZ);
-        last = U_STSZ;
-        m->unit(UF_TRACK, 1, t);
-        m->unit(UF_STSZN, 0, (i64)x.stsz_n[t]);
-        const uint8_t* p = win().at(pos);
-        const Buf<uint32_t>& len = s->mc.len[t];
-        size_t j = 0;
-        int f = 1;
-        for (uint32_t k = 0; k < x.stsz_n[t]; k++, p += 4) {
-          const int hit = j < len.size() && len[j] == be32(p);
-          m->unit(UF_STSZ, f, hit);
-          f = hit;
-          if (hit)
-            j++;
-          else
-            for (int b = 0; b < 4; b++) m->raw(p[b]);
-        }
-        s->st.units[U_STSZ]++;
-      }
-      pos += nb;
-      raw_start = pos;
-      win().release(raw_start);
-    }
-  }
-
   void run() {
     for (;;) {
       size_t avail = win().need(pos, 10);
@@ -719,7 +571,6 @@ struct Scanner {
       scan_blocks();
     } else if ((a->format == F_AUTO || a->format == F_ADIF) && avail >= 4 && !memcmp(win().at(pos), "ADIF", 4) && adif()) {
     } else if (a->format == F_AUTO && aus1()) {
-    } else if (a->format == F_AUTO && mp4()) {
     } else {
       scan_frames();
     }
@@ -829,35 +680,6 @@ int decompress_stream(Model<1, LV>& m, DecompressState& s, const AacArgs& a) {
         for (size_t j = 0; j < n; j++) buf.push_back((uint8_t)m.raw_byte(0));
       else
         for (size_t j = 0; j < n; j++) buf.push_back((uint8_t)m.raw(0));
-    } else if (kind == U_ASC) {
-      const int t = (int)cm_count(m.unit(UF_TRACK, 0, 0), kMp4Tracks - 1);
-      if (!s.mc.given[t]) {
-        size_t n = cm_count(m.unit(UF_ASCN, 1, 0), (i64)kMp4AscMax);
-        for (size_t i = 0; i < n; i++) s.tasc[t][i] = (uint8_t)m.raw(0);
-        s.tasc_n[t] = n;
-        s.mc.given[t] = true;
-      }
-      s.mc.cur = t;
-      asc_config(c.st, s.tasc[t], s.tasc_n[t], false);
-      c.sbr_seen = c.ps_seen = 0;
-    } else if (kind == U_STSZ) {
-      const int t = (int)cm_count(m.unit(UF_TRACK, 1, 0), kMp4Tracks - 1);
-      const size_t n = cm_count(m.unit(UF_STSZN, 0, 0), (i64)1 << 30);
-      const Buf<uint32_t>& len = s.mc.len[t];
-      size_t j = 0;
-      int f = 1;
-      for (size_t k = 0; k < n; k++) {
-        uint8_t e[4];
-        f = (int)cm_count(m.unit(UF_STSZ, f, 0), 1);
-        if (f && j >= len.size()) err_raise_s("corrupt stream: an MP4 sample size of no access unit");
-        if (f)
-          for (int b = 0; b < 4; b++) e[b] = (uint8_t)(len[j] >> (24 - 8 * b));
-        else
-          for (int b = 0; b < 4; b++) e[b] = (uint8_t)m.raw(0);
-        j += f;
-        buf.append(e, 4);
-        if (buf.size() > ((size_t)1 << 16)) flush();
-      }
     } else {
       ModelChan<1, LV> mc;
       mc.Init(m, nullptr);
@@ -865,7 +687,6 @@ int decompress_stream(Model<1, LV>& m, DecompressState& s, const AacArgs& a) {
       walk_unit(c, s.rg, kind, 0, 0);
       if (c.fw.pos & 7) err_raise_s("corrupt stream: a unit of other than whole bytes");
       buf.append(c.fw.b.p, c.fw.pos / 8);
-      if ((kind == U_SAMPLE || kind == U_ADTS) && s.mc.cur >= 0) s.mc.len[s.mc.cur].push_back((uint32_t)(c.fw.pos / 8));
     }
     if (buf.size() > ((size_t)1 << 16)) flush();
     tell_unit(m, c, kind);

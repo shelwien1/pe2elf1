@@ -470,17 +470,16 @@ static void aus1_header(Walk& c, size_t fs, size_t alen) {
   asc_config(c.st, t.data(), n, false);
 }
 
-// An access unit of a length known from outside: AUS1's, after its length
-// (le32, prefix 4), or an MP4 sample (prefix 0): its raw_data_block or ER
-// access unit and the bits after it, or (a configuration that is not
-// parsed) its bytes; parsing, the n bytes at byte fs + prefix
-static void au_unit(Walk& c, size_t fs, size_t n, int prefix) {
+// An AUS1 access unit: its length (le32), its raw_data_block or ER access
+// unit and the bits after it, or (a configuration that is not parsed) its
+// bytes; parsing, the n bytes at byte fs + 4
+static void au_unit(Walk& c, size_t fs, size_t n) {
   BitWriter& w = c.fw;
   size_t ae = 0;
   if (c.R) {
-    ae = (fs + prefix + n) * 8;
-    c.br.Init(c.buf, (fs + prefix) * 8, ae);
-  } else if (prefix) {
+    ae = (fs + 4 + n) * 8;
+    c.br.Init(c.buf, (fs + 4) * 8, ae);
+  } else {
     w.put(0, 32);
   }
   if (!c.st.blocks) {
@@ -490,7 +489,7 @@ static void au_unit(Walk& c, size_t fs, size_t n, int prefix) {
     bool ok = c.st.er ? c.er_frame(ae) : c.raw_data_block(ae, true);
     if (ok) paypad(c, ae);
   }
-  if (c.R || !prefix) return;
+  if (c.R) return;
   uint32_t len = (uint32_t)(w.pos / 8 - 4);
   for (int k = 0; k < 4; k++) w.patch(8 * k, (len >> (8 * k)) & 255, 8);
 }

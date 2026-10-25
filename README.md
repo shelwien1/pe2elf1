@@ -1,9 +1,9 @@
 # aacpack
 
-A lossless compressor of AAC streams and files (ADTS, LATM, ADIF, MP4/M4A
-and more). It takes the Huffman coding out of the AAC and codes the values
+A lossless compressor of AAC streams (ADTS, LOAS/LATM, ADIF, raw access
+units). It takes the Huffman coding out of the AAC and codes the values
 again with a context mixing model; `d` puts the Huffman coding back, bit
-for bit.
+for bit. MP4 (M4A) files are mp4p's: aacpack keeps them as bytes.
 
     aacpack c [options] input output     # compress
     aacpack d [options] input output     # decompress
@@ -64,10 +64,10 @@ at the end of the compressed stream, is checked by `d`.
 
 | | |
 |---|---|
-| containers | ADTS (CRC, several raw_data_blocks a frame), LOAS/LATM (AudioSyncStream: audioMuxVersion 0 and 1, one program and layer, frameLengthType 0, any number of subframes, other data, CRC), ADIF, MP4 (M4A, MOV, 3GP: the moov box before or after the mdat, fragmented files, up to 16 AAC tracks, other tracks as bytes), AUS1 (an AudioSpecificConfig and length-prefixed access units, aac2tsv's format; `test/mp42aus1.py` writes one from an MP4), raw access units (`-asc`); ADTS, LATM and other bytes one after the other in a file |
+| containers | ADTS (CRC, several raw_data_blocks a frame), LOAS/LATM (AudioSyncStream: audioMuxVersion 0 and 1, one program and layer, frameLengthType 0, any number of subframes, other data, CRC), ADIF, AUS1 (an AudioSpecificConfig and length-prefixed access units, aac2tsv's format; `test/mp42aus1.py` writes one from an MP4 file's AAC track), raw access units (`-asc`); ADTS, LATM and other bytes one after the other in a file |
 | object types | AAC Main (prediction), LC, SSR (gain control), LTP; HE-AAC (SBR) and HE-AACv2 (PS, IPD/OPD included); 1024 and 960 sample frames; ER AAC LC, LD and ELD in LATM and AUS1, without the error resilience tools |
 | syntax | SCE, CPE, CCE, LFE, DSE, PCE, FIL, END; pulse, TNS, gain control, M/S, intensity, PNS; fill payloads: SBR (with or without CRC), DRC, padding, others as bits |
-| as bytes | ER AAC with the resilience tools, ELD with LD-SBR, LTP in ER AAC LD, USAC and other object types; MPEG-TS, Matroska and other containers |
+| as bytes | ER AAC with the resilience tools, ELD with LD-SBR, LTP in ER AAC LD, USAC and other object types; MP4 (mp4p's), MPEG-TS, Matroska and other containers |
 
 The syntax follows aacdec, the FFmpeg 8.1.3 AAC decoder ported to C++.
 aac2tsv was cross-checked against decoders with it, and aacpack has its
@@ -177,58 +177,72 @@ ahead (at most 8 MB, or 1000 units with no such payload) for the first
 header of each element whose payloads come before one. It assumes that
 header from the start, and puts it in the compressed stream's own header.
 
-### MP4
-
-In an MP4 file, `c` finds the AAC tracks in the moov box: each track's
-AudioSpecificConfig (its esds), and where its access units are (stsz or
-stz2, stco or co64, stsc; in a fragmented file each moof's trun). The
-boxes are coded as bytes. Each access unit in an mdat box is coded as a
-unit under its track's config, and a unit of its own names the track where
-it changes (and gives its config the first time). An access unit that is
-an ADTS frame (some muxers store them so) is coded as one. Where the stsz
-box comes after the access units, its entries are coded as "the length of
-the track's next access unit" (or the bytes, where one is not), which
-saves what the table cost as bytes, 2.2–2.5 KB a minute at 128 kbit/s.
-`d` needs no MP4 parser: it follows the units.
-The moov box usually comes after the mdat (ffmpeg's and fdkaac's default).
-From a file, `c` reads it ahead. From a pipe, it is found where the
-read-ahead for SBR headers (below) reaches it, in the first 8 MB;
-otherwise the mdat stays bytes.
-
 ### Streaming
 
 Memory does not grow with the stream: `c` holds a window of the input
-(a unit at most 1 MB), and `d` a unit's output. The model's tables are a
+(a unit at most 1 MB, and at the start what the read-ahead for SBR
+headers read: up to 1000 units, or 8 MB of bytes that are not AAC), and
+`d` a unit's output. The model's tables are a
 fixed 20 MB of address space, of which a run touches what its stream
-needs (about 11 MB of memory in all for a stereo stream). An MP4 file
-adds its moov box (at most 64 MB) and 20 bytes for each access unit of
-its AAC tracks (at most 4M of them) to `c`, and 4 bytes an access unit to
-`d`. `c` and `d` are coroutines (h264p's Lib3) that ask their driver for
+needs (about 11 MB of memory in all for a stereo stream). `c` and `d`
+are coroutines (h264p's Lib3) that ask their driver for
 input and give it output, so pipes of any length work.
 
 ## Results
 
-<!-- RESULTS -->
+Two one-minute excerpts of a live concert recording (archive.org,
+5gg 2010-08-27, tracks 1 and 6), encoded by fdkaac 1.0.0 (libfdk-aac
+from its git, c41c3c7), the AAC encoder of ffmpeg 6.1.1 and faac 1.30:
+
+<!-- TABLE1 -->
+
+<!-- FATE -->
+
+Where the bytes of fdkaac's 128 kbit/s stream go (`-v`):
+
+| part | in the stream | compressed | |
+|---|---:|---:|---:|
+| spectral magnitudes (and escapes) | 626642 | 605420 | 96.6% |
+| their signs | 209727 | 209038 | 99.7% |
+| scalefactors | 53657 | 44933 | 83.7% |
+| sections | 36080 | 17201 | 47.7% |
+| headers and other fields | 35135 | 3474 | 9.9% |
+| all | 961241 | 880078 | 91.6% |
+
+The Huffman codes of AAC are already close to what the values carry. A
+quantized spectral magnitude is all but white noise given its codebook
+and its neighbours (in the frame, the last frame and the other channel),
+and its sign is a coin toss. So most of what is left is the spectra, and
+the gain is largest where the encoder's choices (sections, scalefactors,
+M/S, the side information) are a larger part of the stream: low rates,
+HE-AAC, ffmpeg's and faac's encoders.
+
+## Limitations
+
+- One thread, about 0.5 MB/s both ways on a current x86-64 core (30
+  times real time at 128 kbit/s).
+- The model's parameters are part of the format, and the version byte
+  says which: a stream decodes with the version that made it.
+- What is not AAC syntax (tags, other containers: MP4 is mp4p's, MPEG-TS
+  packets) is coded by a general model of bytes.
 
 ## Test
 
     make test
 
-makes a corpus in `test/corpus` (`test/gen.sh`, if it is not there: a
-test signal through ffmpeg's AAC encoder as ADTS, LATM, LOAS v1, ADIF,
-AUS1, raw access units and MP4 (the moov box after the mdat and before
-it, fragmented, two tracks, a video track), LC, Main, LTP, mono, 5.1,
+makes a corpus in `test/corpus` (`test/gen.sh`, which needs ffmpeg and
+python3, if it is not there: a test signal through ffmpeg's AAC encoder as ADTS, LATM, LOAS v1, ADIF,
+AUS1 and raw access units, LC, Main, LTP, mono, 5.1,
 PNS, intensity and TNS; with fdkaac and faac too, if present: HE-AAC,
 HE-AACv2, LD, ELD, CRC, VBR). It round-trips every file through `c` and
 `d` (`test/roundtrip.sh`, which takes any files: `test/roundtrip.sh
 ./aacpack *.aac`), then runs `test/check.sh`: no input, random bytes,
-pipes (an MP4 file's too), a stream cut short or with junk in it, strict
+pipes, a stream cut short or with junk in it, strict
 mode, and compressed streams cut short, with a byte changed, with bytes
 after them, or not compressed streams at all.
 
 `test/fuzz.py BIN WORKDIR SEED N files...` mutates inputs (random bytes,
-cuts, bit flips, junk, splices, repeats, broken frame headers, broken MP4
-tables) and checks
+cuts, bit flips, junk, splices, repeats, broken frame headers) and checks
 that they round-trip with no unit stored as bytes for not coming out as it
 was. It also mutates compressed streams, and checks that `d` fails cleanly
 on them (exit status 1, no crash, no hang). Build with
@@ -241,10 +255,8 @@ The streams checked in development: the AAC samples of FFmpeg's FATE suite
 channel configurations; ID3 tags), encodes of two one-minute music
 excerpts by fdkaac (LC, HE, HEv2, LD, ELD, VBR, CRC), ffmpeg (LC, Main, LTP,
 PNS/IS/TNS, mono) and faac, and these converted to ADIF, LOAS v0/v1 and
-AUS1; MP4 files of ffmpeg and fdkaac (M4A with the moov box first and
-last, fragmented, two tracks, with a video track, QuickTime MOV, ADTS
-frames as samples). All round-trip, and so do all of them under ASan and
-UBSan, and thousands of fuzzed inputs and compressed streams.
+AUS1. All round-trip, and so do all of them under ASan and UBSan, and
+thousands of fuzzed inputs and compressed streams.
 
 ## Sources
 
@@ -257,7 +269,6 @@ UBSan, and thousands of fuzzed inputs and compressed streams.
 | `bits.inc` `huff.inc` `tables.inc` `sbrfreq.inc` | bit reader and writer, CRCs; the Huffman codebooks; the tables of the syntax; SBR frequency bands |
 | `elems.inc` `chan.inc` `log.inc` | the syntax elements' ids; the channel the walk exchanges values with; the log of a unit's values |
 | `asc.inc` `syntax.inc` `units.inc` | AudioSpecificConfig; the syntax walk below the containers; ADTS, LOAS/LATM, ADIF, AUS1, raw access units |
-| `mp4.inc` | MP4 files (for `c`): their AAC tracks' configs and access units, from moov and moof boxes |
 | `model.inc` `famvars.inc` | the model: what each family is given, and the channel the model codes through |
 | `cmstream.inc` | the compressed stream: the scanner, units parsed, verified and coded |
 | `err.inc` `mem.inc` `cmbase.inc` `rc.inc` `cm.inc` `mapping.inc` `fam.inc` `famcfg.inc` `rcio.inc` | h264p's: errors, memory, the range coder, counters, mixers, APMs, the families and their configuration, the coroutine's I/O |

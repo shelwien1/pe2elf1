@@ -3,8 +3,7 @@
 made for (after aac2tsv's tests/fuzz.py).
 
 Half the cases mutate an input (random bytes, a cut, bit flips, junk put in,
-ranges taken out, two inputs spliced, a range repeated, an MP4 file's tables
-broken) and check that d(c(x))
+ranges taken out, two inputs spliced, a range repeated) and check that d(c(x))
 is x, and that c stored no unit as its bytes because it would not come out as
 it was (a walk that writes what it did not read: -v's "would not come out").
 The other half compress an input and mutate the compressed stream (bit flips,
@@ -35,7 +34,7 @@ def run(args, timeout=120):
 
 
 def mutate(src):
-    kind = rnd.randrange(9)
+    kind = rnd.randrange(8)
     if kind == 0:  # random bytes
         return bytes(rnd.randrange(256) for _ in range(rnd.randrange(0, 4000)))
     if kind == 1:  # a cut
@@ -69,15 +68,6 @@ def mutate(src):
             p = rnd.randrange(len(b))
             q = min(len(b), p + rnd.randrange(1, 20000))
             b[q:q] = b[p:q] * rnd.randrange(1, 4)
-        return bytes(b)
-    if kind == 8:  # an MP4 file's tables broken (bytes in its moov and moof boxes)
-        b = bytearray(src)
-        boxes = [i for t in (b'moov', b'moof', b'stsz', b'stco', b'stsc', b'trun', b'tfhd', b'esds')
-                 for i in range(len(b)) if b.startswith(t, i)][:200]
-        for _ in range(rnd.choice([1, 3, 10]) if boxes else 0):
-            q = rnd.choice(boxes) + rnd.randrange(0, 64)
-            if q < len(b):
-                b[q] = rnd.choice([0, 1, 0xff, rnd.randrange(256)])
         return bytes(b)
     # bytes flipped near frame headers (0xff 0xf?, 0x56 0xe?)
     b = bytearray(src[:200000])
