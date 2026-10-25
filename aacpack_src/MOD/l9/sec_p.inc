@@ -33,6 +33,7 @@ void H9_sec_make( const H_sec_v & D, tcx & X ) {
   c = c*2 + (((kd)>0+(1-1)));
   c = c*17 + H9_sec_c_cb[__min(16,__max(0,(cb)-(1-1)))];
   c = c*17 + H9_sec_c_fn[__min(16,__max(0,(fn)-(1-1)))];
+  c = c*3 + (((ob)>0+(1-1))+((ob)>1+(1-1)));
 
   d = 0;
   d = d*2 + (((kd)>0+(1-1)));
@@ -43,11 +44,13 @@ void H9_sec_make( const H_sec_v & D, tcx & X ) {
   e = e*2 + (((kd)>0+(1-1)));
   e = e*17 + H9_sec_e_oc[__min(16,__max(0,(oc)-(1-1)))];
   e = e*4 + H9_sec_e_pc[__min(3,__max(0,(pc)-(1-1)))];
+  e = e*3 + (((mu)>0+(1-1))+((mu)>1+(1-1)));
 
   h = 0;
   h = h*2 + (((kd)>0+(1-1)));
   h = h*51 + H9_sec_h_sb[__min(50,__max(0,(sb)-(1-1)))];
   h = h*2 + (((ws)>0+(1-1)));
+  h = h*17 + H9_sec_h_cb[__min(16,__max(0,(cb)-(1-1)))];
 
   i = 0;
   i = i*2 + (((kd)>0+(1-1)));
@@ -63,6 +66,7 @@ void H9_sec_make( const H_sec_v & D, tcx & X ) {
   k = k*2 + (((kd)>0+(1-1)));
   k = k*8 + H9_sec_k_gr[__min(7,__max(0,(gr)-(1-1)))];
   k = k*17 + H9_sec_k_pc[__min(16,__max(0,(pc)-(1-1)))];
+  k = k*25 + H9_sec_k_sb[__min(49,__max(0,(sb)-(1-1)))];
 
   l = 0;
   l = l*2 + (((kd)>0+(1-1)));

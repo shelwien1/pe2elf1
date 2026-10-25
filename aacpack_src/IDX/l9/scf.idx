@@ -38,6 +38,7 @@ Index e
  e_kd: kd, 1!11
  e_oc: oc, 1!1111111111111
  e_pa: pa, 1!11111
+ e_mu: mu, 1!11
 
 Index h
  h_kd: kd, 1!11
@@ -53,11 +54,13 @@ Index j
  j_kd: kd, 1!11
  j_gr: gr, 1!1111111
  j_ws: ws, 1!1
+ j_pw: pw, 1!1111111111111111111111111
 
 Index k
  k_kd: kd, 1!11
  k_pv: pv, 1!1111111111
  k_sb: sb, 1!11111
+ k_sk: sk, 1!111111111111111
 
 Index l
  l_kd: kd, 1!11
@@ -67,6 +70,7 @@ Index l
 Index s
  s_kd: kd, 1!11
  s_pa: pa, 1!111
+ s_fb: fb, 1!11
 
 Index f
  f_kd: kd, 1!11
@@ -74,6 +78,7 @@ Index f
 
 Index m
  m_kd: kd, 1!11
+ m_mu: mu, 1!11
 
 Index w
  w_ws: ws, 1!1

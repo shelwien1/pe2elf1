@@ -379,6 +379,19 @@ template <int f_DEC, class C> struct tc_fam {
       return 0;
     return sign(sc, x < 0) ? -m : m;
   }
+  //  The same of a value known to be in [lo, hi] (lo <= 0 <= hi): the
+  //  decisions that range leaves no choice in are not coded
+  i64 codes_in(const tcx &v, i64 x, u32 sc, i64 lo, i64 hi) {
+    const i64 mx = -lo > hi ? -lo : hi;
+    i64 m = code(v, ENC ? (x < 0 ? -x : x) : 0, mx);
+    if(!m)
+      return 0;
+    if(m > hi)
+      return -m;
+    if(m > -lo)
+      return m;
+    return sign(sc, x < 0) ? -m : m;
+  }
   //  The sign of a nonzero value, under the g index of the last select()
   //  and sign context sc: 1 negative.
   int sign(u32 sc, int s) {
@@ -645,7 +658,7 @@ template <int f_DEC, class C> struct tc_fam {
     T[bt + node] = t;
     return b;
   }
-  i64 code(const tcx &v, i64 x) {
+  i64 code(const tcx &v, i64 x, i64 mx = -1) {
     static_assert(ND >= TC_NODE, "tc_fam: code() takes nodes up to TC_NODE - 1");
     int k, p, nb = 0, hst = 0, hnb = 0;
     u64 u, hu = 0;
@@ -662,6 +675,10 @@ template <int f_DEC, class C> struct tc_fam {
         hnb++;
     }
     for(k = 0; k < 3; k++) {
+      if(k == mx) {  // (as large as it can be)
+        hs = 0;
+        return k;
+      }
       int hb = hint == k;
       hs = hst == 1 ? 1 + hb : hst;
       int b = bit_x(k, ENC && x == k);
@@ -680,7 +697,17 @@ template <int f_DEC, class C> struct tc_fam {
         t >>= 1;
       }
     }
+    int nbm = 64;  // (the longest u can be: mx's)
+    if(mx >= 3) {
+      nbm = 0;
+      for(u64 t = (u64)(mx - 3) + 1; t; t >>= 1)
+        nbm++;
+    }
     for(k = 0;; k++) {
+      if(k + 1 == nbm) {
+        nb = k + 1;
+        break;
+      }
       int hb = hnb == k + 1;
       hs = hst == 1 ? 1 + hb : hst;
       int b = bit_x(tc_node_len(k), ENC && nb == k + 1);

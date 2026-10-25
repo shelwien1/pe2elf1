@@ -345,6 +345,7 @@ struct ChanHist {
   int group_len[8];
   int gg;
   int last_esc;
+  int first_d[3];       // each kind's first scalefactor delta (0 none)
   uint8_t bt[8 * 64];   // the codebook of each band
   int16_t sf[8 * 64];   // and its scalefactor (Walk's ChanData::sf)
   int8_t sfd[8 * 64];   // its scalefactor's delta as coded (0 none)
@@ -373,6 +374,7 @@ struct CurChan {
   int8_t sfd[8 * 64];
   uint8_t secb[8 * 64];
   int sk_g, sk_lo, sk_hi, sk_max;  // the section the spectral values are in: group, bands, the largest magnitude so far
+  int nsf[3], lastb[3], first_d[3];  // scalefactors of each kind so far, the band of the last (in its group), the first's delta
 };
 static const int kSlots = 4 * 16 * 2;  // (channel element type, tag, channel)
 
@@ -406,6 +408,7 @@ struct Model : tc_rc<f_DEC> {
     raw_.Init();
     hl_.Init();
     lasttag_ = -1, runpos_ = 0;
+    nbase_ = INT_MIN;
     lastslot_ = lastfi_ = -1, lastv_ = 0;
     res_.n = res_.bits = res_.first = 0, res_.last = -1, res_.unit = 0;
     hist_.Init();
@@ -542,6 +545,7 @@ struct Model : tc_rc<f_DEC> {
       memset(c.sfd, 0, sizeof c.sfd);
       memset(c.secb, 0, sizeof c.secb);
       c.sk_g = -1;
+      for (int k = 0; k < 3; k++) c.nsf[k] = 0, c.lastb[k] = -1, c.first_d[k] = 0;
     } else if (what == N_ICS_END) {
       const CurChan& c = cur(w);
       const ChanData& d = wcd(w);
@@ -555,6 +559,7 @@ struct Model : tc_rc<f_DEC> {
       memcpy(h.group_len, d.ii.group_len, sizeof h.group_len);
       h.gg = d.gg;
       h.last_esc = c.last_esc;
+      for (int k = 0; k < 3; k++) h.first_d[k] = c.first_d[k];
       int nb = d.ii.num_groups * d.ii.max_sfb;
       memset(h.bt, 0, sizeof h.bt);
       memset(h.sf, 0, sizeof h.sf);
@@ -619,6 +624,7 @@ struct Model : tc_rc<f_DEC> {
   };
   Map32<HLast> hl_;
   int lasttag_, runpos_;
+  int nbase_;  // the first noise energy's prediction (INT_MIN none)
   int lastslot_, lastfi_;  // the last field's slot and index, and its value
   i64 lastv_;
   // ADTS's adts_buffer_fullness, an encoder's bit reservoir after the frame
@@ -684,6 +690,7 @@ struct Model : tc_rc<f_DEC> {
     // fullness against its guess)
     const i64 base = e == E_GLOBAL_GAIN && w.at.type == TYPE_CPE && w.cur == 1 ? w.cd[0].gg
                      : e == E_ADTS_FULL                                         ? fullness_guess(w)
+                     : e == E_NOISE_NRG && nbase_ != INT_MIN                    ? tc_clamp((i64)nbase_, (i64)0, (i64)511)
                                                                                 : h.v;
     // the sign by the element, and whether the value is at the bottom of its
     // range or at the top (a field's: a bit's change has one sign)
@@ -692,7 +699,10 @@ struct Model : tc_rc<f_DEC> {
     tcx X;
     f_hdr.make(D, X);
     i64 dx = ENC ? x - base : 0;
-    i64 d = f_hdr.codes(X, dx, (u32)(e * 3 + bound));
+    // (a field of n bits: the difference is in [-base, 2^n - 1 - base])
+    i64 d = n > 0 && n < 32 && base >= 0 && base < ((i64)1 << n)
+                ? f_hdr.codes_in(X, dx, (u32)(e * 3 + bound), -base, ((i64)1 << n) - 1 - base)
+                : f_hdr.codes(X, dx, (u32)(e * 3 + bound));
     x = base + d;
     h.d2 = h.d1;
     h.d1 = d;
@@ -726,6 +736,13 @@ struct Model : tc_rc<f_DEC> {
     D.rem = ii.max_sfb - sfb;
     D.ws = ii.ws;
     D.gr = g;
+    // the band's ms_used (a CPE's: 1 L/R, 2 M/S; 0 none); against the last
+    // frame's max_sfb (0 not known, 1 below, 2 at, 3 above); whether a section
+    // of the first channel (CPE) / of the group before (short) starts there (0 none, 1 no, 2 yes)
+    D.mu = w.at.type == TYPE_CPE ? 1 + (cd.ms_present == 2 || (cd.ms_present == 1 && w.cd[0].ms[g * ii.max_sfb + sfb])) : 0;
+    D.bm = h ? (sfb < h->max_sfb ? 1 : sfb == h->max_sfb ? 2 : 3) : 0;
+    D.ob = o ? 1 + cc_[0].secb[g * ii.max_sfb + sfb] : 0;
+    D.gb = g > 0 ? 1 + cur(w).secb[(g - 1) * ii.max_sfb + sfb] : 0;
   }
   int sect_cb(const Walk& w, int v, int g) {
     tc_stage = STG_SEC;
@@ -807,12 +824,37 @@ struct Model : tc_rc<f_DEC> {
     D.gr = g;
     D.gd = h ? 1 + sq2(cd.gg - h->gg) : 0;
     D.pv = sq2(c.off[kd] - (kd == 1 ? 0 : cd.gg));
+    // the first of its kind in the frame (and the last frame's first delta), the bands skipped since the last
+    D.fb = c.nsf[kd] ? 0 : 1 + (h ? 1 + sq2(hist_[c.slot].first_d[kd]) : 0);
+    {
+      const int lb = c.lastb[kd] >= 0 && (c.lastb[kd] >> 8) == g ? c.lastb[kd] & 255 : -1;
+      D.sk = lb >= 0 ? tc_qlog(sfb - lb - 1) : 15;
+    }
+    // the band's ms_used (a CPE's: 1 L/R, 2 M/S; 0 none)
+    D.mu = w.at.type == TYPE_CPE ? 1 + (cd.ms_present == 2 || (cd.ms_present == 1 && w.cd[0].ms[idx])) : 0;
+    // short windows: the group before's value at the band (or the last frame's last group's), less this one's predecessor
+    {
+      int pwv = INT_MIN;
+      if (ii.ws == EIGHT_SHORT_SEQUENCE) {
+        if (g > 0) {
+          const int pb = cd.bt[(g - 1) * ii.max_sfb + sfb];
+          if (pb && (pb == 13 ? 2 : pb >= 14 ? 1 : 0) == kd) pwv = cd.sf[(g - 1) * ii.max_sfb + sfb];
+        } else if (h && h->num_windows == 8 && sfb < h->max_sfb) {
+          const int pi = (h->num_groups - 1) * h->max_sfb + sfb, pb = h->bt[pi];
+          if (pb && (pb == 13 ? 2 : pb >= 14 ? 1 : 0) == kd) pwv = h->sf[pi];
+        }
+      }
+      D.pw = pwv != INT_MIN ? 1 + sq2(pwv - c.off[kd]) : 0;
+    }
     tcx X;
     f_scf.make(D, X);
     int d = (int)f_scf.codes(X, v, (u32)(kd * 3 + sgn3(pa)));
     c.off[kd] += d;
     c.d2[kd] = c.d1[kd];
     c.d1[kd] = d;
+    if (!c.nsf[kd]) c.first_d[kd] = d;
+    c.nsf[kd]++;
+    c.lastb[kd] = g << 8 | sfb;
     c.sfd[idx] = (int8_t)d;
     tc_syms[STG_SF]++;
     if (ENC && tc_verbose) ebits_[E_SF] += bits_now() - b0, esyms_[E_SF]++;
@@ -1164,7 +1206,15 @@ struct Model : tc_rc<f_DEC> {
         return x;
       }
       case E_NOISE_NRG: {
+        // (the last frame's noise energy at the band, as this frame's first value would give it)
+        const ChanHist* h = last_of(w);
+        const int b = w.at.g * wcd(w).ii.max_sfb + w.at.sfb;
+        nbase_ = h && w.at.g < h->num_groups && w.at.sfb < h->max_sfb && h->bt[w.at.g * h->max_sfb + w.at.sfb] == 13
+                     ? h->sf[w.at.g * h->max_sfb + w.at.sfb] - wcd(w).gg + 90 + 256
+                     : INT_MIN;
+        (void)b;
         x = hdr_val(w, e, n, x, i);
+        nbase_ = INT_MIN;
         cur(w).off[2] += (int)x - 256;
         return x;
       }
