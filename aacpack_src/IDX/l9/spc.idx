@@ -13,7 +13,12 @@
 #  short windows over the windows) as the band's scalefactor now quantizes
 #  it (1 + tc_qlog of 16 times it; 0 not known), xp a guess at the
 #  magnitude from av, the last frame's (scaled), the two before it and the
-#  other channel's (1 + tc_qlog of a weighted sum).
+#  other channel's (1 + tc_qlog of a weighted sum), pl the places left in
+#  the band (tc_qlog), sc the section so far (0 a magnitude above the next
+#  smaller codebook's largest came; else 1 + the places left, tc_qlog), zr
+#  the zeros right before the place (tc_qlog).  a1 a2 of the band before
+#  are in this band's scale.  The mixers also see the codebook's own
+#  probability of each decision, blended with a Laplace's of xp's mean.
 #  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates MOD/l9 from
 #  this file and family.inc.
 
@@ -52,6 +57,8 @@ Index h
  h_a3: a3, 1!1111111111
  h_nz: nz, 1!1111111
  h_bp: bp, 1!111
+ h_pl: pl, 1!1111
+ h_zr: zr, 1!1111111111111
 
 Index i
  i_cb: cb, 1!1111111111
@@ -68,6 +75,7 @@ Index k
  k_cb: cb, 1!1111111111
  k_qn: qn, 1!1111111111
  k_ds: ds, 1!1111111
+ k_sc: sc, 1!1111111111111111
 
 Index l
  l_cb: cb, 1!1111111111
@@ -90,6 +98,7 @@ Index m
 
 Index w
  w_a1: a1, 1!1111111
+ w_xp: xp, 1!000100010001000100010001000100010001000
 
 Index t
 

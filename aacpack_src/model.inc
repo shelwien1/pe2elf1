@@ -101,6 +101,70 @@ static INLINE int q_of_lin(i64 v) {
   return lo;
 }
 
+// What a spectral codebook itself says of each magnitude decision (P(0)
+// of "|v| > j", 12-bit): the probability its codewords (with their sign
+// and escape bits) imply, given the values of the tuple before the place
+// (cb, place tp, those values as the index's digits: prefix)
+struct SpecPrior {
+  int p[11][4][27][17];
+  void Init() {
+    for (int cb = 1; cb <= 11; cb++) {
+      const SpecCb& c = spec_cb[cb - 1];
+      const Huff& h = huff_spec[cb - 1];
+      const int n = c.dim == 4 ? 81 : c.range * c.range, lim = cb == 11 ? 16 : c.maxval;
+      for (int tp = 0; tp < c.dim; tp++) {
+        int np = 1;
+        for (int i = 0; i < tp; i++) np *= c.range;
+        for (int pre = 0; pre < np && pre < 27; pre++) {
+          double m[17] = {0};
+          for (int idx = 0; idx < n; idx++) {
+            int dg[4], x = idx;
+            for (int i = c.dim - 1; i >= 0; i--) dg[i] = x % c.range, x /= c.range;
+            int pv = 0;
+            for (int i = 0; i < tp; i++) pv = pv * c.range + dg[i];
+            if (pv != pre || !h.len[idx]) continue;
+            int bits = h.len[idx];
+            if (!c.is_signed)
+              for (int i = 0; i < c.dim; i++) bits += dg[i] != 0;
+            const int mg = c.is_signed ? (dg[tp] - c.off < 0 ? c.off - dg[tp] : dg[tp] - c.off) : dg[tp];
+            m[mg < 16 ? mg : 16] += ldexp(1.0, -bits);
+          }
+          for (int j = 0; j < 17; j++) {
+            double ge = 0;
+            for (int i = j; i <= 16; i++) ge += m[i];
+            int v = ge > 0 && j < lim ? (int)lrint(4096.0 * m[j] / ge) : 2048;
+            p[cb - 1][tp][pre][j] = v < 1 ? 1 : v > 4095 ? 4095 : v;
+          }
+        }
+      }
+    }
+  }
+};
+static SpecPrior spec_prior_make() {
+  SpecPrior t;
+  t.Init();
+  return t;
+}
+static const SpecPrior kSpecPrior = spec_prior_make();
+// and a two-sided geometric's (Laplace's) of a mean magnitude mu, in 1/16
+// (mu16 up to 4095): P(0) of |v| > 0, and of |v| > j for j > 0
+struct GeoPrior {
+  int z[4096], g[4096];
+  void Init() {
+    for (int m = 0; m < 4096; m++) {
+      const double mu = m / 16.0 + 1.0 / 64, th = (sqrt(1 + mu * mu) - 1) / mu;
+      int a = (int)lrint(4096.0 * (1 - th) / (1 + th)), b = (int)lrint(4096.0 * (1 - th));
+      z[m] = a < 1 ? 1 : a > 4095 ? 4095 : a, g[m] = b < 1 ? 1 : b > 4095 ? 4095 : b;
+    }
+  }
+};
+static GeoPrior geo_prior_make() {
+  GeoPrior t;
+  t.Init();
+  return t;
+}
+static const GeoPrior kGeoPrior = geo_prior_make();
+
 // Bytes nothing else models (h264p's RawModel, without its dictionary): an
 // order 0 and an order 1 counter and a match model mixed by a weight set
 // the bits of the byte so far select: the match finds the last three bytes
@@ -308,6 +372,7 @@ struct CurChan {
   int bkey, bnz, bsum;  // the band (window * 64 + band) the counts are of: its nonzero values and their sum so far
   int8_t sfd[8 * 64];
   uint8_t secb[8 * 64];
+  int sk_g, sk_lo, sk_hi, sk_max;  // the section the spectral values are in: group, bands, the largest magnitude so far
 };
 static const int kSlots = 4 * 16 * 2;  // (channel element type, tag, channel)
 
@@ -476,6 +541,7 @@ struct Model : tc_rc<f_DEC> {
       c.bkey = -1;
       memset(c.sfd, 0, sizeof c.sfd);
       memset(c.secb, 0, sizeof c.secb);
+      c.sk_g = -1;
     } else if (what == N_ICS_END) {
       const CurChan& c = cur(w);
       const ChanData& d = wcd(w);
@@ -794,6 +860,15 @@ struct Model : tc_rc<f_DEC> {
       pp = h->coef;
       if (sfb < h->max_sfb && h->bt[sfb] && h->bt[sfb] < 13) psf = h->sf[sfb];
     }
+    // a CPE's second channel's band of long windows that was intensity in
+    // the last frame: the first channel's value then, scaled by the position
+    int isv = -1;
+    if (ii.ws != EIGHT_SHORT_SEQUENCE && h && sfb < h->max_sfb) {
+      if (h->bt[sfb] >= 14 && w.at.type == TYPE_CPE && w.at.chn == 1 && last0_.valid && last0_.num_windows == 1 &&
+          sfb < last0_.max_sfb && last0_.bt[sfb] && last0_.bt[sfb] < 13)
+        isv = (int)(((i64)iabs(last0_.coef[k]) *
+                     kScale.v[tc_clamp(last0_.sf[sfb] - h->sf[sfb] - cd.sf[g * ii.max_sfb + sfb], -60, 60) + 60] + 2048) >> 12);
+    }
     const int sfc = cd.sf[g * ii.max_sfb + sfb];
     const ChanData* o = other_of(w);
     const int oval = o ? o->coef[win * 128 + k] : 0;
@@ -828,8 +903,16 @@ struct Model : tc_rc<f_DEC> {
     D.cb = cb;
     D.sb = sfb;
     D.bp = k - a;
-    D.a1 = k > 0 ? Min(iabs(cc[k - 1]), 15) : 0;
-    D.a2 = k > 1 ? Min(iabs(cc[k - 2]), 15) : 0;
+    // (the magnitudes before, of the band before where they are its: in this band's scale)
+    auto inband = [&](int j) -> int {
+      int x = iabs(cc[j]);
+      if (j >= a || !x || sfb == 0) return x;
+      const int pi = g * ii.max_sfb + sfb - 1;
+      if (!cd.bt[pi] || cd.bt[pi] >= 13) return x;
+      return (int)(((i64)x * kScale.v[tc_clamp(cd.sf[pi] - sfc, -60, 60) + 60] + 2048) >> 12);
+    };
+    D.a1 = k > 0 ? Min(inband(k - 1), 15) : 0;
+    D.a2 = k > 1 ? Min(inband(k - 2), 15) : 0;
     {
       int s = 0;
       for (int j = 1; j <= 4 && j <= k; j++) s += iabs(cc[k - j]);
@@ -851,6 +934,7 @@ struct Model : tc_rc<f_DEC> {
       D.ex = 0;
       D.ds = 0;
     }
+    if (isv >= 0) D.pf = 1 + Min(isv, 14), D.ex = 1 + tc_qlog((i64)4 * isv);
     D.oc = o ? 1 + Min(iabs(oval), 14) : 0;
     D.ms = o && o->ms_present ? o->ms[g * ii.max_sfb + sfb] : 2;
     D.ws = ii.ws == EIGHT_SHORT_SEQUENCE;
@@ -859,7 +943,7 @@ struct Model : tc_rc<f_DEC> {
     D.qn = tc_qlog(c.bsum);
     D.kq = tc_qlog(k);
     D.av = 0;
-    i64 avs = 0;
+    i64 avs = 0, xpe = 0;
     {
       const ChanHist& hh = hist_[c.slot];
       if (ii.ws != EIGHT_SHORT_SEQUENCE && hh.av_n && hh.av_swb == ii.num_swb) {
@@ -883,14 +967,60 @@ struct Model : tc_rc<f_DEC> {
     {
       i64 e = avs + (pp ? 16 * (i64)pfs : 0) + 8 * (i64)(k > 0 ? iabs(cc[k - 1]) : 0) + 8 * (i64)(k > 1 ? iabs(cc[k - 2]) : 0) + (o ? 16 * (i64)iabs(oval) : 0);
       D.xp = 1 + Min(tc_qlog(e), 39);
+      xpe = e;
+    }
+    D.pl = tc_qlog(ii.swb[sfb + 1] - k - 1);
+    // the group's window and its place in the group
+    int wg0 = 0, wgl = 1;
+    if (ii.ws == EIGHT_SHORT_SEQUENCE)
+      for (int x = 0, gi = 0; gi < ii.num_groups; x += ii.group_len[gi++])
+        if (win < x + ii.group_len[gi]) {
+          wg0 = x, wgl = ii.group_len[gi];
+          break;
+        }
+    {
+      int z = 0;
+      while (z < 64 && z < k && !cc[k - 1 - z]) z++;
+      D.zr = tc_qlog(z);
+    }
+    // the section: whether a magnitude above the next smaller codebook's
+    // largest came yet, and the places left in it
+    {
+      if (c.sk_g != g || sfb < c.sk_lo || sfb >= c.sk_hi) {
+        int lo = sfb, hi = sfb + 1;
+        while (lo > 0 && !c.secb[g * ii.max_sfb + lo]) lo--;
+        while (hi < ii.max_sfb && !c.secb[g * ii.max_sfb + hi]) hi++;
+        c.sk_g = g, c.sk_lo = lo, c.sk_hi = hi, c.sk_max = 0;
+      }
+      static const int kLo[11] = {0, 0, 1, 1, 2, 2, 4, 4, 7, 7, 12};
+      const int bw = ii.swb[sfb + 1] - ii.swb[sfb];
+      const int left = (ii.swb[sfb + 1] - k - 1) + (wg0 + wgl - win - 1) * bw + wgl * (ii.swb[c.sk_hi] - ii.swb[sfb + 1]);
+      D.sc = c.sk_max > kLo[cb - 1] ? 0 : 1 + Min(tc_qlog(left), 15);
     }
     tcx X;
     f_spc.make(D, X);
     f_spc.select(X);
+    {
+      const SpecCb& sp = spec_cb[cb - 1];
+      int pre = 0;
+      for (int j = k - tp; j < k; j++) {
+        const int x = cc[j];
+        pre = pre * sp.range + (sp.is_signed ? x + sp.off : Min(iabs(x), 16));
+      }
+      f_spc.prpa = kSpecPrior.p[cb - 1][tp][pre < 27 ? pre : 26];
+      // blended with a two-sided geometric's of the mean magnitude the guess
+      // xp makes (its terms' weights: 16 each)
+      const int nt = (D.av ? 1 : 0) + (pp ? 1 : 0) + 1 + (o ? 1 : 0), mu16 = (int)Min<i64>(4095, xpe / nt);
+      const int nn = cb == 11 ? 16 : sp.maxval;
+      for (int j = 0; j < nn; j++)
+        s2p_[j] = cm_squash((cm_stretch(j ? kGeoPrior.g[mu16] : kGeoPrior.z[mu16]) + cm_stretch(f_spc.prpa[j])) / 2);
+      f_spc.prpa = s2p_;
+    }
     const int m = ENC ? iabs(v) : 0;
     const int lim = cb == 11 ? 16 : spec_cb[cb - 1].maxval;
     int mm = 0;
     while (mm < lim && f_spc.bit(mm, ENC && m > mm)) mm++;
+    f_spc.prpa = nullptr;
     tc_syms[STG_SPEC]++;
     if (cb == 11 && mm == 16) {  // an escape: the rest by esc
       tc_stage = STG_ESC;
@@ -903,6 +1033,7 @@ struct Model : tc_rc<f_DEC> {
       E.la = tc_qlog(c.last_esc);
       E.sb = sfb;
       E.av = D.av;
+      E.xp = D.xp;
       tcx Y;
       f_esc.make(E, Y);
       i64 r = f_esc.code(Y, ENC ? m - 16 : 0);
@@ -911,6 +1042,7 @@ struct Model : tc_rc<f_DEC> {
       c.last_esc = mm;
       tc_syms[STG_ESC]++;
     }
+    if (mm > c.sk_max) c.sk_max = mm;
     int s = 0;
     if (mm) {
       tc_stage = STG_SGN;
@@ -1013,6 +1145,7 @@ struct Model : tc_rc<f_DEC> {
     if (ENC && tc_verbose) ebits_[e] += bits_now() - b0, esyms_[e]++;
     return x;
   }
+  int s2p_[17];
   int8_t cur_env_[8][64];  // the values of the envelope being coded, by kind
   int16_t lvcur_[2][64];
 

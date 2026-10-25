@@ -41,6 +41,7 @@ void H9_esc_make( const H_esc_v & D, tcx & X ) {
   h = 0;
   h = h*13 + H9_esc_h_a1[__min(12,__max(0,(a1)-(1-1)))];
   h = h*6 + H9_esc_h_la[__min(5,__max(0,(la)-(1-1)))];
+  h = h*40 + H9_esc_h_xp[__min(39,__max(0,(xp)-(1-1)))];
 
   i = 0;
   i = i*13 + H9_esc_i_pf[__min(12,__max(0,(pf)-(1-1)))];

@@ -18,6 +18,7 @@ static const byte H9_esc_f_av[31+1]={ 0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,1
 
 static const byte H9_esc_h_a1[12+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12 };
 static const byte H9_esc_h_la[5+1]={ 0,1,2,3,4,5 };
+static const byte H9_esc_h_xp[39+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39 };
 
 static const byte H9_esc_i_pf[12+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12 };
 static const byte H9_esc_i_oc[5+1]={ 0,1,2,3,4,5 };
@@ -98,7 +99,7 @@ static const long long H9_esc_d_Volume = tc_vmul(tc_vmul(1, 13), 6); // 78
 static const long long H9_esc_e_Volume = tc_vmul(1, 51); // 51
 static const long long H9_esc_f_Volume = tc_vmul(tc_vmul(1, 6), 17); // 102
 static const long long H9_esc_g_Volume = 1; // 1
-static const long long H9_esc_h_Volume = tc_vmul(tc_vmul(1, 13), 6); // 78
+static const long long H9_esc_h_Volume = tc_vmul(tc_vmul(tc_vmul(1, 13), 6), 40); // 3120
 static const long long H9_esc_i_Volume = tc_vmul(tc_vmul(1, 13), 6); // 78
 static const long long H9_esc_j_Volume = tc_vmul(tc_vmul(1, 20), 6); // 120
 static const long long H9_esc_k_Volume = tc_vmul(tc_vmul(1, 13), 6); // 78
@@ -109,7 +110,7 @@ static const long long H9_esc_s_Volume = tc_vmul(tc_vmul(1, 6), 32); // 192
 static const long long H9_esc_t_Volume = tc_vmul(1, 20); // 20
 static const long long H9_esc_w_Volume = tc_vmul(1, 2); // 2
 
-#define H9_esc_USES(X) X(kq) X(a1) X(pf) X(oc) X(ws) X(la) X(sb) X(av)
+#define H9_esc_USES(X) X(kq) X(a1) X(pf) X(oc) X(ws) X(la) X(sb) X(xp) X(av)
 
 struct H9_esc_T {
   cm_cnt2 H9_esc_A[tc_rows(H9_esc_a_Volume, H9_esc_hA) * H_esc_ND];

@@ -65,15 +65,19 @@ constexpr int H_sbr_ND = TC_NODE, H_sbr_MND = TC_MNODE, H_sbr_NG = 64;
 //   windows) as the band's scalefactor now quantizes it (1 + tc_qlog of 16
 //   times it; 0 not known), xp a guess at the magnitude from av, the last
 //   frame's (scaled), the two before it and the other channel's (1 +
-//   tc_qlog of a weighted sum)
+//   tc_qlog of a weighted sum), pl the places left in the band (tc_qlog),
+//   sc the section so far: 0 a magnitude above the next smaller
+//   codebook's largest came, else 1 + the places left in it (tc_qlog), zr
+//   the zeros right before the place (tc_qlog, up to 64)
 #define H_spc_VARS(X) \
-  X(cb) X(sb) X(bp) X(a1) X(a2) X(a3) X(pf) X(pn) X(ex) X(oc) X(ms) X(ws) X(tp) X(nz) X(ds) X(qn) X(kq) X(av) X(xp)
+  X(cb) X(sb) X(bp) X(a1) X(a2) X(a3) X(pf) X(pn) X(ex) X(oc) X(ms) X(ws) X(tp) X(nz) X(ds) X(qn) X(kq) X(av) X(xp) \
+  X(pl) X(sc) X(zr)
 // esc: an escaped magnitude of codebook 11, less 16: kq the place
 //   (tc_qlog), a1 the magnitude before (tc_qlog), pf the last frame's at
 //   the place (tc_qlog, 0 not known), oc the other channel's (tc_qlog + 1,
 //   0 none), ws, la the last escape of the channel's (tc_qlog), sb the
 //   band, av spc's
-#define H_esc_VARS(X) X(kq) X(a1) X(pf) X(oc) X(ws) X(la) X(sb) X(av)
+#define H_esc_VARS(X) X(kq) X(a1) X(pf) X(oc) X(ws) X(la) X(sb) X(av) X(xp)
 // sgn: the sign of a nonzero spectral value: cb, oc the other channel's
 //   at the place (0 zero or none, 1 +, 2 -), ms ms_used, s1 the value's
 //   before it (0 1 2), pf the last frame's at the place (0 1 2), mg its
