@@ -518,8 +518,9 @@ format version 7, and were checked against 82eb6a44:
   22 streams to the same bytes in both orders (44 of 44).
 - **ASan and UBSan** (gcc `-O1`):
   - the 22 streams round-trip in both orders with no report;
-  - `fuzz.py`, 300 cases on them (seed 11): none failed, and no unit
-    was stored as its bytes for not coming out as it was.
+  - `fuzz.py`, 300 cases on them (seed 11) and 300 on SBR, PS and
+    FATE's streams (seed 12): none failed, and no unit was stored as its
+    bytes for not coming out as it was.
 - **Tuning tools:** famtune's replay of `ff_mono64.aac`'s dumps gives
   `-v`'s bytes for every family: spc 32889, sgn 11782, scf 6161, sec 762,
   esc 1211, hdr 502 and unt 10.
@@ -538,3 +539,6 @@ format version 7, and were checked against 82eb6a44:
 - **`mk.sh check 9`:** the three builds code the same bytes (44 of 44).
 - **clang and gcc builds** write the same bytes (the 22 streams, both
   orders).
+- **ASan and UBSan:** eight SBR and PS streams round-trip in both orders
+  with no report. Two of them (`al_sbr_cm_48_5.1` and an fdkaac HE-AAC
+  encode) have the coupled SBR of B3.
