@@ -1,0 +1,173 @@
+
+Prefix M
+Debug 1
+
+Const 1
+
+Number mntDepth,    1,5!111
+Number mntLimit256, 1,(M_mntDepth+1)!11111111
+Number mntLimit512, 1,(M_mntLimit256+1)!00110000000
+
+Const 1
+
+#  exA = av_MDCT[j]*5 + daMDCTj*6 + caMDCTj*12;
+
+Number av_D0, 1,1!11100110
+
+Number av_C0, 1,1!010110000
+
+Number av_C1, 1,0!0000110
+Number av_C2, 1,0!0001011
+Number av_C3, 1,0!0000000
+Number av_C4, 1,0!0000010
+Number av_C5, 1,0!0000100
+
+#Number Sms1_j1, 1,0!10110111
+#Number Sms1_j2, 1,0!00100111
+#Number Sms1_j3, 1,0!10010110
+#Number Sms1_j4, 1,0!01011000
+
+Number Sms1_j1, 1,0!0000100111
+Number Sms1_j2, 1,0!0001011000
+Number Sms1_j3, 1,0!0010010110
+Number Sms1_j4, 1,0!0010110111
+Number Sms1_j5, 1,0!0111000100
+Number Sms1_j6, 1,0!0110010110
+Number Sms1_j7, 1,0!0101101101
+Number Sms1_j8, 1,0!0111011011
+
+Index av_total
+ ADD 0: M_av_C1
+ ADD 1: M_av_C2
+ ADD 1: M_av_C3
+ ADD 1: M_av_C4
+ ADD 1: M_av_C5
+
+Const 1
+
+Number  bvflag_mw,  1,0!0000001001000
+Rate    bvflag_wr,    0!11011
+
+Number  bvdump_mw,  1,0!0000001001100
+Rate    bvdump_wr,    0!11011
+
+Number  xbigval0_mw, 1,0!0001110000001
+Rate    xbigval0_wr,   0!00001
+
+Number  xbigval1_mw, 1,0!0000000010000
+Rate    xbigval1_wr,   0!10010
+
+Number  tblsel_mw, 1,0!0000000000000
+Rate    tblsel_wr,   0!11000
+
+Number  f_datlen_mw, 1,0!0000000010000
+Rate    f_datlen_wr,   0!11101
+
+Number  x_datlen_mw, 1,0!0000000000100
+Rate    x_datlen_wr,   0!11111
+
+Number  grb_b1_mw, 1,0!0000000000100
+Rate    grb_b1_wr,   0!11100
+
+Number  x_emph_mw, 1,0!0000000000000
+Rate    x_emph_wr,   0!11011
+
+Number  x_modext_mw, 1,0!0000000011010
+Rate    x_modext_wr,   0!11001
+
+Number  x_mod_mw, 1,0!0000000010001
+Rate    x_mod_wr,   0!11111
+
+Number  x_padding_mw, 1,0!0000000111000
+Rate    x_padding_wr,   0!11000
+
+Number  x_smp_mw, 1,0!0000000010000
+Rate    x_smp_wr,   0!10010
+
+Number  x_crc_mw, 1,0!0000000010000
+Rate    x_crc_wr,   0!11111
+
+Number  x_ID_mw, 1,0!0000000000100
+Rate    x_ID_wr,   0!11111
+
+Number  x_IDex_mw, 1,0!0000000010000
+Rate    x_IDex_wr,   0!10101
+
+Number  x_bitrat_mw, 1,0!0000000010000
+Rate    x_bitrat_wr,   0!11111
+
+Number  x_org_mw, 1,0!0000000001100
+Rate    x_org_wr,   0!11111
+
+Number  x_cop_mw, 1,0!0000000011000
+Rate    x_cop_wr,   0!10010
+
+Number  x_ext_mw, 1,0!0000000010000
+Rate    x_ext_wr,   0!10101
+
+Number  x_privatebits_mw, 1,0!0000000010000
+Rate    x_privatebits_wr,   0!10010
+
+Number  x_scfsi_mw, 1,0!0000000100000
+Rate    x_scfsi_wr,   0!10111
+
+Number  x_sfcomp2_mw, 1,0!0000000010000
+Rate    x_sfcomp2_wr,   0!10101
+
+Number  x_winswf_mw, 1,0!0000010000000
+Rate    x_winswf_wr,   0!10011
+
+Number  x_preflg_mw, 1,0!0000001011000
+Rate    x_preflg_wr,   0!11011
+
+Number  x_scfscl_mw, 1,0!0000010001100
+Rate    x_scfscl_wr,   0!10111
+
+Number  x_cn1tbl_mw, 1,0!0010001100110
+Rate    x_cn1tbl_wr,   0!11000
+
+Number  x_bltyp1_mw, 1,0!0000101011100
+Rate    x_bltyp1_wr,   0!10010
+
+Number  x_bltyp2_mw, 1,0!0000111100101
+Rate    x_bltyp2_wr,   0!11000
+
+Number  x_mixblk_mw, 1,0!0000000010110
+Rate    x_mixblk_wr,   0!11011
+
+Number  x_sbgain_0_mw, 1,0!0000000001001
+Rate    x_sbgain_0_wr,   0!11001
+
+Number  x_sbgain_1_mw, 1,0!0000000000000
+Rate    x_sbgain_1_wr,   0!11110
+
+Number  x_sbgain_2_mw, 1,0!0000000000000
+Rate    x_sbgain_2_wr,   0!11110
+
+Number  f_mdb_mw, 1,0!0000000100100
+Rate    f_mdb_wr,   0!10110
+
+Number  x_maindata_mw, 1,0!0000000010000
+Rate    x_maindata_wr,   0!10101
+
+Number  p23clrflag_mw, 1,0!0000000001000
+Rate    p23clrflag_wr,   0!11011
+
+Number  y_part23_mw, 1,0!0000000001111
+Rate    y_part23_wr,   0!11111
+
+Number  s_part23_mw, 1,0!0000000100100
+Rate    s_part23_wr,   0!01000
+
+Number  z_part23_mw, 1,0!0000000011001
+Rate    z_part23_wr,   0!10011
+
+Number  mixed_mw, 1,0!0000010000000
+Rate    mixed_wr,   0!10011
+
+Number  small_mw, 1,0!0000110000010
+Rate    small_wr,   0!10110
+
+Number  ylong_mw, 1,0!0000001000000
+Rate    ylong_wr,   0!10011
+

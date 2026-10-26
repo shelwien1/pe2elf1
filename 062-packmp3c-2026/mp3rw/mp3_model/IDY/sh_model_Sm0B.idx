@@ -1,0 +1,213 @@
+
+Const 1
+
+Index band_Sm0B
+ band_Sm0B_i0: j,   1!+000000000000000000000000
+ band_Sm0B_i1: j,  25!+000000000001000000000000
+ band_Sm0B_i2: j,  49!+000000000000000000000000
+ band_Sm0B_i3: j,  73!+010000000000000000000000
+ band_Sm0B_i4: j,  97!+000000000000000000000000
+ band_Sm0B_i5: j, 121!+000000000000000000000000
+ band_Sm0B_i6: j, 145!+000000000000000000000000
+ band_Sm0B_i7: j, 169!+000000010000000000000000
+ band_Sm0B_i8: j, 193!+000000000000000001000000
+ band_Sm0B_i9: j, 217!+000000000000101000000000
+ band_Sm0B_ia: j, 241!+000000010000110000000000
+ band_Sm0B_ib: j, 265!+000100000000001000000000
+ band_Sm0B_ic: j, 289!+000000000000000000000000
+ band_Sm0B_id: j, 313!+000000000100000000100000
+ band_Sm0B_ie: j, 337!+000001000010000100000010
+ band_Sm0B_if: j, 361!+001100000000100001100001
+ band_Sm0B_ig: j, 385!+010000100000000010100010
+ band_Sm0B_ih: j, 409!+101001000101000010000100
+ band_Sm0B_ii: j, 433!+100000001000100011000000
+ band_Sm0B_ij: j, 457!+000110111110001000111111
+ band_Sm0B_ik: j, 481!+111001001011010111111111
+ band_Sm0B_il: j, 505!+111111111101000110111011
+ band_Sm0B_im: j, 529!+110111000111000000000000
+ band_Sm0B_in: j, 553!+000000000000000000010000
+
+Const 1
+
+Index band_Sn0B
+ band_Sn0B_i0: j,   1!+000100000000000000000000
+ band_Sn0B_i1: j,  25!+000000000000000000000000
+ band_Sn0B_i2: j,  49!+100000010000000000000000
+ band_Sn0B_i3: j,  73!+000000000000000000000000
+ band_Sn0B_i4: j,  97!+000000000000000000000000
+ band_Sn0B_i5: j, 121!+000000000000000000000000
+ band_Sn0B_i6: j, 145!+000000000000000000000000
+ band_Sn0B_i7: j, 169!+000000000000000000000100
+ band_Sn0B_i8: j, 193!+000000000000000000000000
+ band_Sn0B_i9: j, 217!+000000000000000000000000
+ band_Sn0B_ia: j, 241!+000000000000000000000010
+ band_Sn0B_ib: j, 265!+000000000000000000000010
+ band_Sn0B_ic: j, 289!+000000000000000000000000
+ band_Sn0B_id: j, 313!+000000010000000010000000
+ band_Sn0B_ie: j, 337!+000000000000000000000000
+ band_Sn0B_if: j, 361!+000000000000000000001000
+ band_Sn0B_ig: j, 385!+000000000000000000000010
+ band_Sn0B_ih: j, 409!+100100000100000000000010
+ band_Sn0B_ii: j, 433!+000010000000000000000000
+ band_Sn0B_ij: j, 457!+000000100000000000000000
+ band_Sn0B_ik: j, 481!+000000000000000000000000
+ band_Sn0B_il: j, 505!+000000000000000000000000
+ band_Sn0B_im: j, 529!+000000000000000000000000
+ band_Sn0B_in: j, 553!+000000000000100000000000
+
+Const 1
+
+Index band_Smm0B
+ band_Smm0B_i0: j,   1!+000000000000000000001000
+ band_Smm0B_i1: j,  25!+110010000100000110001000
+ band_Smm0B_i2: j,  49!+000000000000000000000000
+ band_Smm0B_i3: j,  73!+000000000000000000001000
+ band_Smm0B_i4: j,  97!+000000000000000000000000
+ band_Smm0B_i5: j, 121!+000000000000000000000000
+ band_Smm0B_i6: j, 145!+000000000000000000000000
+ band_Smm0B_i7: j, 169!+000000000000000000000000
+ band_Smm0B_i8: j, 193!+000000000000000000000000
+ band_Smm0B_i9: j, 217!+000000000000000000000000
+ band_Smm0B_ia: j, 241!+000000000000000000000000
+ band_Smm0B_ib: j, 265!+000000000000000000000100
+ band_Smm0B_ic: j, 289!+000000000000000000000000
+ band_Smm0B_id: j, 313!+000000000000000000010000
+ band_Smm0B_ie: j, 337!+100001000000000000000000
+ band_Smm0B_if: j, 361!+000001100000000000000000
+ band_Smm0B_ig: j, 385!+000000000000000000000010
+ band_Smm0B_ih: j, 409!+100100000000010001100000
+ band_Smm0B_ii: j, 433!+000000000110000000000000
+ band_Smm0B_ij: j, 457!+010000011010100011011101
+ band_Smm0B_ik: j, 481!+101000001000010000000000
+ band_Smm0B_il: j, 505!+000000000000100000000000
+ band_Smm0B_im: j, 529!+000000000000000000000000
+ band_Smm0B_in: j, 553!+000010001101001010100100
+
+
+Const 1
+
+Index mm0B_g
+ mm0B_g_ii: gi.count1table_select, 1!0
+ mm0B_g_i0: ch,             1!0
+ mm0B_g_i2: band_j,         1!000000000000010001000
+# mm0B_g_i3: j_band,         1!000101011
+ mm0B_g_i4: curband,        1!000000000000000000000
+ mm0B_g_i6: caMDCTj,        1!01010000000000000000
+ mm0B_g_i7: daMDCTj,        1!10000000000000000000
+ mm0B_g_i8: eaMDCTj,        1!0000000000000000
+ mm0B_g_i9: caMDCTjm1,      1!0000000000000100
+ mm0B_g_ia: ctx1a,          1!0000000000000000
+ mm0B_g_ib: ctx2a,          1!0000000000000000
+ mm0B_g_ic: ctx3a,          1!0000000000000000
+ mm0B_g_id: zrun,           1!1000
+ mm0B_g_ie: byte(signs_j),   &00000000
+ mm0B_g_if: byte(zeros_j),   &00000000
+ mm0B_g_ig: recm,           1!000010
+ mm0B_g_ih: rec,             &00000000
+ ADD M_band_Smm0B_Volume: band_Smm0B
+
+#Const 1
+
+Number  mm0B_W0,  1,0!100010010001001
+Number  mm0B_wr,  1,0!1011110100000100
+Number  mm0B_wq,  1,0!0001100001100001
+
+Index n0B_e
+ n0B_e_ii: gi.count1table_select, 1!1
+ n0B_e_i0: ch,             1!1
+ n0B_e_i1: band_j,         1!000000000000000000000
+ n0B_e_i2: j_band,         1!000000000
+ n0B_e_i3: curband,        1!010000000000000000000
+ n0B_e_i5: caMDCTj,        1!1000000000000000
+ n0B_e_i6: daMDCTj,        1!0000000000000000
+ n0B_e_i7: eaMDCTj,        1!0000000000000000
+ n0B_e_i8: caMDCTjm1,      1!0000000000000000
+ n0B_e_i9: ctx1a,          1!1000000000000000
+ n0B_e_ia: ctx2a,          1!0001000000100000
+ n0B_e_ib: ctx3a,          1!0000000000000000
+ n0B_e_ic: zrun,           1!0000
+ n0B_e_id: byte(signs_j),   &00000000
+ n0B_e_ie: byte(zeros_j),   &00000000
+ n0B_e_if: recm,           1!000000
+ n0B_e_ig: rec,             &00000000
+ ADD M_band_Sn0B_Volume: band_Sn0B
+
+Number  Sn0B_j1,  1,0!00000100
+Number  Sn0B_mw0, 1,0!10000000100101
+Number  Sn0B_mw1, 1,0!00000001000000
+Rate    Sn0B_wr0,   0!10010
+Rate    Sn0B_wq0,   0!01000
+
+Const 1
+
+Index pm0B_f
+ pm0B_f_ii: gi.count1table_select, 1!1
+ pm0B_f_i0: ch,            1!0
+ pm0B_f_i1: band_j,        1!000000000000000000000
+ pm0B_f_i2: j_band,        1!000000000
+ pm0B_f_i3: curband,       1!011010000000000000000000
+ pm0B_f_i4: flag_jm1,      1!10010000
+ pm0B_f_i5: caMDCTj,       1!0101101000000000
+ pm0B_f_i6: daMDCTj,       1!0001000100001100
+ pm0B_f_i7: eaMDCTj,       1!0000000010000000
+ pm0B_f_i8: caMDCTjm1,     1!0000000000000000
+ pm0B_f_i9: ctx1a,         1!0000010000000000
+ pm0B_f_ia: ctx2a,         1!0000000000000000
+ pm0B_f_ib: ctx3a,         1!0000000000000000
+ pm0B_f_ic: zrun,          1!0000
+ pm0B_f_id: byte(signs_j), &00000000
+ pm0B_f_ie: byte(zeros_j), &00000000
+
+Index m0B_e
+ m0B_e_ii: gi.count1table_select, 1!0
+ m0B_e_i0: ch,             1!0
+ m0B_e_i1: band_j,         1!000000000000000000000
+ m0B_e_i2: j_band,         1!000000000
+ m0B_e_i3: curband,        1!101000000000000000000
+ m0B_e_i5: caMDCTj,        1!0000000000000000
+ m0B_e_i6: daMDCTj,        1!0100000000000000
+ m0B_e_i7: eaMDCTj,        1!0000000000000000
+ m0B_e_i8: caMDCTjm1,      1!0000000000000000
+ m0B_e_i9: ctx1a,          1!0000000000000000
+ m0B_e_ia: ctx2a,          1!0000000000000000
+ m0B_e_ib: ctx3a,          1!0000000000000000
+ m0B_e_ic: zrun,           1!0010
+ m0B_e_id: byte(signs_j),   &00000000
+ m0B_e_ie: byte(zeros_j),   &00000000
+ m0B_e_if: recm,           1!000000
+ m0B_e_ig: rec,           &00000000
+ ADD M_band_Sm0B_Volume: band_Sm0B
+
+Index Sm0B_d
+ Sm0B_d_ii: gi.count1table_select, 1!1
+ Sm0B_d_i0: ch,            1!1
+ Sm0B_d_i1: band_j,        1!000000000000000000000
+ Sm0B_d_i2: j_band,        1!000000011
+ Sm0B_d_i3: curband,       1!100000000000000000000
+ Sm0B_d_i5: caMDCTj,       1!1100000000000000
+ Sm0B_d_i6: daMDCTj,       1!0000000000000000
+ Sm0B_d_i7: eaMDCTj,       1!0000000000000000
+ Sm0B_d_i8: caMDCTjm1,     1!0100000000000000
+ Sm0B_d_i9: ctx1a,         1!0100000000000000
+ Sm0B_d_ia: ctx2a,         1!0000000000000000
+ Sm0B_d_ib: ctx3a,         1!0000000000000000
+ Sm0B_d_ic: zrun,          1!0000
+ Sm0B_d_id: byte(signs_j),  &00000000
+ Sm0B_d_ie: byte(zeros_j),  &00000000
+ Sm0B_d_if: recm,          1!000000
+ Sm0B_d_ig: rec,           &00000000
+
+Const 1
+
+Number  Sm0B_Q,    1,2!0101
+Number  Sm0B_wi,  4,0!0001100100111
+Number  Sm0B_ti,  1,0!0001100
+
+Number  Sm0B_jj,   1,0!11111111
+
+Number  Sm0B_mw0,  1,0!01010010001010
+Number  Sm0B_mw1,  1,0!01100010000000
+Rate    Sm0B_wr0,   0!00101
+Rate    Sm0B_wr1,   0!00010
+Rate    Sm0B_wq0,   0!10011
+Rate    Sm0B_wq1,   0!10101

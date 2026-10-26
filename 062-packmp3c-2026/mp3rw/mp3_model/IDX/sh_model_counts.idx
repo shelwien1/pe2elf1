@@ -1,0 +1,454 @@
+Prefix C
+Debug 1
+
+Const 1
+
+Index Band_smc0
+ Band_smc0_i0: j,   1!+000000000000000000000000
+ Band_smc0_i1: j,  25!+000000000000000000000000
+ Band_smc0_i2: j,  49!+000000000000000000000000
+ Band_smc0_i3: j,  73!+000000000000000000000000
+ Band_smc0_i4: j,  97!+000000000000000000000000
+ Band_smc0_i5: j, 121!+000000000000000000000000
+ Band_smc0_i6: j, 145!+000000000000000000000000
+ Band_smc0_i7: j, 169!+000000000000000000000000
+ Band_smc0_i8: j, 193!+000000000000000000000000
+ Band_smc0_i9: j, 217!+000000000000000000000000
+ Band_smc0_ia: j, 241!+000000000000000000000000
+ Band_smc0_ib: j, 265!+000000000000000000000001
+ Band_smc0_ic: j, 289!+000000000000000000000000
+ Band_smc0_id: j, 313!+000000000000000000000000
+ Band_smc0_ie: j, 337!+000000000000000000100000
+ Band_smc0_if: j, 361!+000000000000000000000000
+ Band_smc0_ig: j, 385!+000000000000000000000000
+ Band_smc0_ih: j, 409!+000100000000000000000000
+ Band_smc0_ii: j, 433!+000000000000000000000000
+ Band_smc0_ij: j, 457!+000000000000000100000000
+ Band_smc0_ik: j, 481!+000000000000000000000000
+ Band_smc0_il: j, 505!+000000000000000000000000
+ Band_smc0_im: j, 529!+000000000000000000000000
+ Band_smc0_in: j, 553!+000000001000000000000000
+                       
+Index Band_smc1
+ Band_smc1_i0: j,   1!+000000000000000000000000
+ Band_smc1_i1: j,  25!+000000000000100000000000
+ Band_smc1_i2: j,  49!+000000000000000000000000
+ Band_smc1_i3: j,  73!+000000000000000010000000
+ Band_smc1_i4: j,  97!+010000000000000001100100
+ Band_smc1_i5: j, 121!+001010000001000000000000
+ Band_smc1_i6: j, 145!+010000100100010000000000
+ Band_smc1_i7: j, 169!+000000000110000000000000
+ Band_smc1_i8: j, 193!+000000001000000000000000
+ Band_smc1_i9: j, 217!+000000000000000000000000
+ Band_smc1_ia: j, 241!+000000000000000000000000
+ Band_smc1_ib: j, 265!+000000000000000000000001
+ Band_smc1_ic: j, 289!+000010011101010101100110
+ Band_smc1_id: j, 313!+001010100010101111111100
+ Band_smc1_ie: j, 337!+001011001100001000111100
+ Band_smc1_if: j, 361!+001000001010011010001110
+ Band_smc1_ig: j, 385!+101010010101010110100111
+ Band_smc1_ih: j, 409!+111011111100001000000000
+ Band_smc1_ii: j, 433!+011010001010000000100110
+ Band_smc1_ij: j, 457!+000000000000000010000100
+ Band_smc1_ik: j, 481!+000000000000000000000000
+ Band_smc1_il: j, 505!+001000001000000000000000
+ Band_smc1_im: j, 529!+000000000000000000000000
+ Band_smc1_in: j, 553!+010001001001000100000000
+
+Const 1
+
+Index mc0_e
+ mc0_e_i0: ch,            1!0
+ mc0_e_i1: gr,            1!0
+ mc0_e_i2: i,             1!10001010
+ ADD %M%Band_smc0_Volume: Band_smc0
+
+Index mc1_e
+ mc1_e_i0: ch,            1!1
+ mc1_e_i1: gr,            1!0
+ mc1_e_i2: i,             1!00000010
+ ADD %M%Band_smc1_Volume: Band_smc1
+
+Index Smc0_d
+ Smc0_d_i0: ch,           1!0
+ Smc0_d_i1: gr,           1!0
+ Smc0_d_i2: i,            1!10000000
+
+Index Smc1_d
+ Smc1_d_i0: ch,           1!0
+ Smc1_d_i1: gr,           1!0
+ Smc1_d_i2: i,            1!10001000
+
+Const 1
+
+Index mc00_e
+ mc00_e_i0: ch,            1!0
+ mc00_e_i1: gr,            1!0
+ mc00_e_i2: i,             1!00000000
+
+Index mc10_e
+ mc10_e_i0: ch,            1!0
+ mc10_e_i1: gr,            1!0
+ mc10_e_i2: i,             1!00000000
+
+Number  count00_mw, 1,0!0000000000001
+Rate    count00_wr,   0!11111
+
+Number  count10_mw, 1,0!0000000001000
+Rate    count10_wr,   0!11100
+
+Const 1
+
+Number  count1_mw,  1,0!10111000000000
+Rate    count1_wr0,   0!11001
+Rate    count1_wr1,   0!10100
+
+Number  count0_mw,  1,0!1101111010110
+Rate    count0_wr0,   0!10111
+Rate    count0_wr1,   0!10000
+
+Number  count1_bas,  1,0!000000000
+Number  count0_bas,  1,0!011011011
+
+Const 1
+
+Index Jxlong_g
+ Jxlong_g_i1: j,     b&10000
+
+Index Jxlong_e
+ Jxlong_e_i0: old,    &0001
+ Jxlong_e_i1: j,     b&10000
+
+Index Jxlong_f
+ Jxlong_f_i0: old,    &0000
+ Jxlong_f_i1: j,     b&11001
+
+Number xlong_bas, 1,0!0000
+
+Index pxlong_e
+ pxlong_e_i0: ch,           1!1
+ pxlong_e_i1: i,            1!11111111111111111111
+ pxlong_e_i2: k,            1!000000000011000
+ pxlong_e_i3: ll,           1!100000000000000
+ pxlong_e_i4: ll,            &0000
+
+Index xlong_c
+ xlong_c_i0: ch,           1!0
+ xlong_c_i1: i,            1!11111111111110111111
+ xlong_c_i2: k,            1!111010110000000
+ xlong_c_i3: rec,          1!100000010000000
+ xlong_c_i4: ll,            &0110
+ ADD %M%Jxlong_f_Volume: 0
+
+Index pxlong_f
+ pxlong_f_i0: ch,           1!0
+ pxlong_f_i1: i,            1!11111101011101111111
+ pxlong_f_i2: k,            1!000101001000100
+ pxlong_f_i3: rec,          1!000000000000000
+ pxlong_f_i4: ll,           1!011100000000000
+ pxlong_f_i5: ll,            &0000
+ ADD %M%Jxlong_g_Volume: 0
+
+Index Sxlong_d
+ Sxlong_d_i0: ch,           1!0
+ Sxlong_d_i1: i,            1!10000100001001001111
+ Sxlong_d_i2: k,            1!000101000000000
+ Sxlong_d_i3: rec,          1!001000000000000
+ Sxlong_d_i4: ll,           1!001000000000000
+ ADD %M%Jxlong_e_Volume: 0
+
+Number  xlong_mw4, 1,0!1101000011100
+Number  xlong_mw3, 1,0!0111000100000
+Number  xlong_mw2, 1,0!0111110000000
+Number  xlong_mw1, 1,0!1110010000000
+Number  xlong_mw0, 1,0!1000010110100
+
+Rate    xlong_wr4,   0!11000
+Rate    xlong_wr3,   0!10111
+Rate    xlong_wr2,   0!11000
+Rate    xlong_wr1,   0!11001
+Rate    xlong_wr0,   0!11000
+
+Rate    xlong_wq4,   0!01111
+Rate    xlong_wq3,   0!00001
+Rate    xlong_wq2,   0!01100
+Rate    xlong_wq1,   0!11111
+Rate    xlong_wq0,   0!01111
+
+Number  Sxlong_Q,   1,2!0011
+Number  Sxlong_wi,  4,0!0000100000000
+Number  Sxlong_ti,  1,0!0010001
+
+Const 1
+
+Index Jglgain_g
+ Jglgain_g_i1: j,     b&101000000
+
+Index Jglgain_e
+ Jglgain_e_i0: old,    &00000001
+ Jglgain_e_i1: j,     b&011101000
+
+Index Jglgain_f
+ Jglgain_f_i0: old,    &00000000
+ Jglgain_f_i1: j,     b&011001000
+
+Number glgain_bas, 1,0!10101010
+
+Index pglgain_e
+ pglgain_e_i0: ch,           1!1
+ pglgain_e_i1: gr,           1!0
+
+Index glgain_c
+ glgain_c_i0: ch,            1!0
+ glgain_c_i1: gr,            1!0
+ glgain_c_i2: rec,         -12!0000000000000000000000000000
+ glgain_c_i3: ctx0,           &01111111
+ glgain_c_i4: ctx1,           &00000000
+ ADD %M%Jglgain_f_Volume: 0
+
+Index pglgain_f
+ pglgain_f_i0: ch,           1!0
+ pglgain_f_i1: gr,           1!1
+ pglgain_f_i2: rec,        -12!0000010000000000000000000000
+ pglgain_f_i3: ctx0,          &00000000
+ pglgain_f_i4: ctx1,          &00000000
+ ADD %M%Jglgain_g_Volume: 0
+
+Index Sglgain_d
+ Sglgain_d_i0: ch,           1!0
+ Sglgain_d_i1: gr,           1!0
+ Sglgain_d_i2: rec,        -12!01000000001011010001000000110000
+ Sglgain_d_i3: ctx0,          &00000000
+ Sglgain_d_i4: ctx1,          &00000000
+ ADD %M%Jglgain_e_Volume: 0
+
+Number  glgain_mw8, 1,0!01111001110100
+Number  glgain_mw7, 1,0!01111101010000
+Number  glgain_mw6, 1,0!01110010000101
+Number  glgain_mw5, 1,0!01011000110000
+Number  glgain_mw4, 1,0!00100000000100
+Number  glgain_mw3, 1,0!00101010000000
+Number  glgain_mw2, 1,0!01110000101000
+Number  glgain_mw1, 1,0!00010001101100
+Number  glgain_mw0, 1,0!00110110000000
+
+Rate    glgain_wr8,   0!11001
+Rate    glgain_wr7,   0!11001
+Rate    glgain_wr6,   0!11001
+Rate    glgain_wr5,   0!11001
+Rate    glgain_wr4,   0!10011
+Rate    glgain_wr3,   0!11011
+Rate    glgain_wr2,   0!11110
+Rate    glgain_wr1,   0!01010
+Rate    glgain_wr0,   0!11001
+
+Rate    glgain_wq8,   0!00000
+Rate    glgain_wq7,   0!00010
+Rate    glgain_wq6,   0!01111
+Rate    glgain_wq5,   0!00110
+Rate    glgain_wq4,   0!01111
+Rate    glgain_wq3,   0!11110
+Rate    glgain_wq2,   0!11111
+Rate    glgain_wq1,   0!11111
+Rate    glgain_wq0,   0!00011
+
+Number  Sglgain_Q,   1,2!0011
+Number  Sglgain_wi,  4,0!0000010100000
+Number  Sglgain_ti,  1,0!0010100
+
+Const 1
+
+#Number  x_sfcomp_mw, 1,0!0000001111111
+#Rate    x_sfcomp_wr,   0!11000
+
+Index Jsfcomp_g
+ Jsfcomp_g_i1: j,     b&00000
+
+Index Jsfcomp_e
+ Jsfcomp_e_i0: old,    &0000
+ Jsfcomp_e_i1: j,     b&00000
+
+Index Jsfcomp_f
+ Jsfcomp_f_i0: old,    &0000
+ Jsfcomp_f_i1: j,     b&00000
+
+Number sfcomp_bas, 1,0!1100
+
+Index psfcomp_e
+ psfcomp_e_i0: ch,           1!0
+
+Index sfcomp_c
+ sfcomp_c_i0: ch,            1!0
+ sfcomp_c_i2: rec,         -12!0000000000000110000011111000
+ sfcomp_c_i3: ctx0,           &1110
+ sfcomp_c_i4: ctx1,           &0000
+ ADD %M%Jsfcomp_f_Volume: 0
+
+Index psfcomp_f
+ psfcomp_d_i0: ch,           1!0
+ psfcomp_d_i2: rec,        -12!0110000000111000000000000000
+ psfcomp_d_i3: ctx0,          &1111
+ psfcomp_d_i4: ctx1,          &0000
+ ADD %M%Jsfcomp_g_Volume: 0
+
+Index Ssfcomp_d
+ Ssfcomp_d_i0: ch,           1!0
+ Ssfcomp_d_i2: rec,        -12!0001000000111000000000000000
+ Ssfcomp_d_i3: ctx0,          &1011
+ Ssfcomp_d_i4: ctx1,          &0000
+ ADD %M%Jsfcomp_e_Volume: 0
+
+Number  sfcomp_mw4, 1,0!00000000000101
+Number  sfcomp_mw3, 1,0!00110000010111
+Number  sfcomp_mw2, 1,0!01000001000000
+Number  sfcomp_mw1, 1,0!00011001101100
+Number  sfcomp_mw0, 1,0!00000000010000
+
+Rate    sfcomp_wr4,   0!11001
+Rate    sfcomp_wr3,   0!11010
+Rate    sfcomp_wr2,   0!10000
+Rate    sfcomp_wr1,   0!10110
+Rate    sfcomp_wr0,   0!11110
+
+Rate    sfcomp_wq4,   0!10000
+Rate    sfcomp_wq3,   0!00011
+Rate    sfcomp_wq2,   0!00000
+Rate    sfcomp_wq1,   0!01111
+Rate    sfcomp_wq0,   0!01100
+
+Number  Ssfcomp_Q,   1,2!0011
+Number  Ssfcomp_wi,  4,0!0010101000000
+Number  Ssfcomp_ti,  1,0!0001100
+
+Const 1
+
+#Number  x_rg0cnt_mw, 1,0!0000011010111
+#Rate    x_rg0cnt_wr,   0!11000
+
+Index Jrg0cnt_g
+ Jrg0cnt_g_i1: j,     b&00001
+
+Index Jrg0cnt_e
+ Jrg0cnt_e_i0: old,    &0000
+ Jrg0cnt_e_i1: j,     b&00001
+
+Index Jrg0cnt_f
+ Jrg0cnt_f_i0: old,    &0000
+ Jrg0cnt_f_i1: j,     b&00000
+
+Number rg0cnt_bas, 1,0!1001
+
+Index prg0cnt_e
+ prg0cnt_e_i0: ch,           1!0
+
+Index rg0cnt_c
+ rg0cnt_c_i0: ch,            1!0
+ rg0cnt_c_i2: rec,         -12!0000000000000000000000000000
+ rg0cnt_c_i3: ctx0,           &0000
+ rg0cnt_c_i4: ctx1,           &0000
+ ADD %M%Jrg0cnt_f_Volume: 0
+
+Index prg0cnt_f
+ prg0cnt_f_i0: ch,           1!1
+ prg0cnt_f_i2: rec,        -12!0001000010100101010001000000
+ prg0cnt_f_i3: ctx0,          &1000
+ prg0cnt_f_i4: ctx1,          &0000
+ ADD %M%Jrg0cnt_g_Volume: 0
+
+Index Srg0cnt_d
+ Srg0cnt_d_i0: ch,           1!1
+ Srg0cnt_d_i2: rec,        -12!0000000000000000000000000100
+ Srg0cnt_d_i3: ctx0,          &0000
+ Srg0cnt_d_i4: ctx1,          &0000
+ ADD %M%Jrg0cnt_e_Volume: 0
+
+Number  rg0cnt_mw4, 1,0!00111100000000
+Number  rg0cnt_mw3, 1,0!00100011001000
+Number  rg0cnt_mw2, 1,0!00101000011000
+Number  rg0cnt_mw1, 1,0!00110100001001
+Number  rg0cnt_mw0, 1,0!01000000100000
+
+Rate    rg0cnt_wr4,   0!11011
+Rate    rg0cnt_wr3,   0!11010
+Rate    rg0cnt_wr2,   0!11011
+Rate    rg0cnt_wr1,   0!10111
+Rate    rg0cnt_wr0,   0!11010
+
+Rate    rg0cnt_wq4,   0!00101
+Rate    rg0cnt_wq3,   0!00010
+Rate    rg0cnt_wq2,   0!10001
+Rate    rg0cnt_wq1,   0!01011
+Rate    rg0cnt_wq0,   0!00101
+
+Number  Srg0cnt_Q,   1,2!0011
+Number  Srg0cnt_wi,  4,0!0011000101000
+Number  Srg0cnt_ti,  1,0!0011100
+
+
+Const 1
+
+#Number  x_rg1cnt_mw, 1,0!0000100100110
+#Rate    x_rg1cnt_wr,   0!11001
+
+Index Jrg1cnt_g
+ Jrg1cnt_g_i1: j,     b&0001
+
+Index Jrg1cnt_e
+ Jrg1cnt_e_i0: old,    &0001
+ Jrg1cnt_e_i1: j,     b&0011
+
+Index Jrg1cnt_f
+ Jrg1cnt_f_i0: old,    &0000
+ Jrg1cnt_f_i1: j,     b&0000
+
+Number rg1cnt_bas, 1,0!001
+
+Index prg1cnt_e
+ prg1cnt_e_i0: ch,           1!0
+
+Index rg1cnt_c
+ rg1cnt_c_i0: ch,            1!0
+ rg1cnt_c_i2: rec,         -12!0000000000000000000000000000
+ rg1cnt_c_i3: ctx0,           &000
+ rg1cnt_c_i4: ctx1,           &000
+ rg1cnt_c_i5: rg0,           &1111
+# rg1cnt_c_i6: rg0,           1!0000000000000000
+ ADD %M%Jrg1cnt_f_Volume: 0
+
+Index prg1cnt_f
+ prg1cnt_f_i0: ch,           1!0
+ prg1cnt_f_i2: rec,        -12!0000000010000000000100000000
+ prg1cnt_f_i3: ctx0,          &000
+ prg1cnt_f_i4: ctx1,          &000
+ prg1cnt_f_i5: rg0,          &1111
+# prg1cnt_f_i6: rg0,          1!0000000000000000
+ ADD %M%Jrg1cnt_g_Volume: 0
+
+Index Srg1cnt_d
+ Srg1cnt_d_i0: ch,           1!0
+ Srg1cnt_d_i2: rec,        -12!0000000000000000000000000100
+ Srg1cnt_d_i3: ctx0,          &000
+ Srg1cnt_d_i4: ctx1,          &000
+# Srg1cnt_d_i5: rg0,          &1100
+ Srg1cnt_d_i6: rg0,          1!1000010101010100
+ ADD %M%Jrg1cnt_e_Volume: 0
+
+Number  rg1cnt_mw3, 1,0!00000011000000
+Number  rg1cnt_mw2, 1,0!00111000111110
+Number  rg1cnt_mw1, 1,0!01001000010000
+Number  rg1cnt_mw0, 1,0!00110010100001
+
+Rate    rg1cnt_wr3,   0!11010
+Rate    rg1cnt_wr2,   0!11010
+Rate    rg1cnt_wr1,   0!11010
+Rate    rg1cnt_wr0,   0!11011
+
+Rate    rg1cnt_wq3,   0!00010
+Rate    rg1cnt_wq2,   0!00011
+Rate    rg1cnt_wq1,   0!00011
+Rate    rg1cnt_wq0,   0!00101
+
+Number  Srg1cnt_Q,   1,2!0011
+Number  Srg1cnt_wi,  4,0!0010100011000
+Number  Srg1cnt_ti,  1,0!0010010
+

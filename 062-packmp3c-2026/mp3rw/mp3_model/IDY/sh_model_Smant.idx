@@ -1,0 +1,87 @@
+
+Const 1
+
+Index Jmant_e
+ Jmant_e_i1: j,     b&001011111
+
+Index Jmant_f
+ Jmant_f_i1: j,     b&100011110
+
+Number Jmant_bas, 1,0!11001000
+
+Const 1
+
+Number Smant1_j1, 1,0!0000011010
+Number Smant1_j2, 1,0!0001000101
+Number Smant1_j3, 1,0!0010010110
+Number Smant1_j4, 1,0!0010110111
+Number Smant1_j5, 1,0!0111001101
+Number Smant1_j6, 1,0!0110010110
+Number Smant1_j7, 1,0!0001000110
+Number Smant1_j8, 1,0!0111011010
+
+Const 1
+
+Index mant_f
+ mant_f_i0: ch,         1!0
+ mant_f_i1: j_band,     1!010000100
+ mant_f_i3: curband,    1!010000000000000000000
+ mant_f_i2: l,          1!0111111000000000
+ mant_f_i4: cblMDCTj,   1!000000000000000000000
+ mant_f_i5: dblMDCTj,   1!000000000101010000000
+ mant_f_i6: ctx1bl,     1!000000000000000000000
+ mant_f_i7: ctx2bl,     1!000000000001000000000
+ mant_f_i8: zrun,       1!0000
+ ADD %M%Jmant_f_Volume: 0
+
+Index Smant_e
+ Smant_e_i0: ch,         1!1
+ Smant_e_i1: j_band,     1!100000000
+ Smant_e_i3: curband,    1!000000000000000000000
+ Smant_e_i2: l,          1!0000000000000000
+ Smant_e_i4: cblMDCTj,   1!000000011111111000000
+ Smant_e_i5: dblMDCTj,   1!000000000000000000000
+ Smant_e_i6: ctx1bl,     1!000000010000000000000
+ Smant_e_i7: ctx2bl,     1!000000000000000000000
+ Smant_e_i8: zrun,       1!0010
+ ADD %M%Jmant_e_Volume: 0
+
+Const 1
+
+Number  Smant_Q,   1,2!0100
+Number  Smant_wi,  4,0!0000000000011
+Number  Smant_ti,  1,0!1000001
+
+Const 1
+
+Number  mant_mw8, 1,0!11010101010010
+Number  mant_mw7, 1,0!10001100000001
+Number  mant_mw6, 1,0!10010001001001
+Number  mant_mw5, 1,0!01111111000100
+Number  mant_mw4, 1,0!01001110000001
+Number  mant_mw3, 1,0!01001010000100
+Number  mant_mw2, 1,0!00010010010100
+Number  mant_mw1, 1,0!00001100100101
+Number  mant_mw0, 1,0!00011100100011
+
+Rate    mant_wr8,   0!00100
+Rate    mant_wr7,   0!00100
+Rate    mant_wr6,   0!01000
+Rate    mant_wr5,   0!01000
+Rate    mant_wr4,   0!01010
+Rate    mant_wr3,   0!01110
+Rate    mant_wr2,   0!01010
+Rate    mant_wr1,   0!01000
+Rate    mant_wr0,   0!01111
+
+Rate    mant_wq8,   0!00100
+Rate    mant_wq7,   0!00100
+Rate    mant_wq6,   0!00100
+Rate    mant_wq5,   0!01000
+Rate    mant_wq4,   0!00100
+Rate    mant_wq3,   0!01010
+Rate    mant_wq2,   0!01010
+Rate    mant_wq1,   0!00000
+Rate    mant_wq0,   0!01100
+
+
