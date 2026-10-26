@@ -12,6 +12,9 @@ check against both dumps.
 Build with `g.bat` (MinGW g++), `gc.bat` (clang++ with the MSVC headers/libs) or
 `c.bat` + `icl64.cfg` (Intel icl).
 
+`mp3c_improvement.md` measures where mp3c's output goes, part by part, and
+what would make it smaller.
+
 ## What was broken
 
 The program did not survive a build with anything newer than gcc 10.2. There
