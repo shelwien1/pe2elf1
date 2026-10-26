@@ -8,6 +8,34 @@ byte InitBand( byte* band ) {
   return band[0];
 }
 
+// The long-block scalefactor band of each place, in each of bandInfo's
+// tables (sfreq: as model_delta_regions.inc has it).  band[] above is the
+// 44.1 kHz table at every rate: its bands still pick the model's contexts,
+// but the scalefactor of a place (curband) and the mixing stage's band and
+// quantizer steps come from the frame's own table.
+byte sfbOf[9][576];
+// the quantizer step of each place in this granule and channel (the mixing
+// stage's rescaled reference, IDX/sh_model.inc), in units of 1.5 dB
+short xStep[576];
+
+void InitSfb( void ) {
+  for( int s=0; s<9; s++ ) for( int b=0; b<22; b++ )
+    for( int j=bandInfo[s][b]; j<bandInfo[s][b+1]; j++ ) sfbOf[s][j] = b;
+}
+
+//  |x| = |q|^(4/3) * 2^(step/4): global_gain less the band's scalefactor,
+//  with MPEG-1's pretab where preflag is set (in MPEG-2 preflag comes from
+//  scalefac_compress and is not part of what is coded here, so it is
+//  left out).  Short blocks get global_gain alone.
+void CalcSteps( const gr_info& gi, const ScaleFac& sf, const byte* sfb ) {
+  static const byte pretab[22] = {0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,2,2,3,3,3,2,0};
+  int lng = (gi.block_type!=2), pre = (h.ID && gi.preflag);
+  for( int j=0; j<576; j++ ) {
+    int b = sfb[j], s = (lng && b<21) ? sf.l[b] + (pre ? pretab[b] : 0) : 0;
+    xStep[j] = short( gi.global_gain - 210 - 2*(1+gi.scalefac_scale)*s );
+  }
+}
+
 int CalcTableSelect( short* MDCT, int x, int y ) {
 
 static const byte TablesToCheck[][3] =
@@ -64,6 +92,7 @@ static const byte TablesToCheck[][3] =
 
 void Init_Delta( void ) {
   InitBand(band);
+  InitSfb();
   Init_Counts();
   Init_Regions();
   for( int ch=0; ch<8; ch++ ) m_rDelta[ch].Init_RangeDelta(ch);
@@ -104,14 +133,17 @@ void ProcessDelta( void ) {
   int  dtx1[2][2] = {0,0,0,0};
 
   int j;
+  const byte* sfb = sfbOf[ h.frequency + ((h.ID==0)+(h.IDex==0))*3 ];
 
   // rate-control disabled
   for( gr=0; gr<=ngr; gr++ ) {
     for( ch=0; ch<stereo; ch++ ) {
       int i = ii[gr][ch], j;
+      CalcSteps( si.gi[gr][ch], SF[gr][ch], sfb );
+      m_rDelta[i].xstp = xStep; m_rDelta[i].xsfb = sfb;
       for( j=0; j<576; j++ ) {
         if( j<cc0[gr][ch] ) {
-          int curband = ((i==0) || (i==2) || (i==3) || (i==6) ) ? SF[gr][ch].l[ band[j] ] : 0;
+          int curband = ((i==0) || (i==2) || (i==3) || (i==6) ) ? (sfb[j]<21 ? SF[gr][ch].l[ sfb[j] ] : 0) : 0;
           m_rDelta[i].ModelMDCT( rc, MC[gr][ch][j], si.gi[gr][ch], curband, band[j], cc0[gr][ch], cc1[gr][ch], ch, j,
                                   ctext[gr][ch], ctx1[gr][ch], ctx2[gr][ch], ctx3[gr][ch], dtx1[gr][ch] );
         } else {

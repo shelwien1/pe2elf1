@@ -30,7 +30,7 @@ struct Node2ii {
 
   }
 
-  void Update( int c, const word* MTb, const int Mw ) {
+  INLINE void Update( int c, const word* MTb, const int Mw ) {
 //    Process( *(RangeCoder*)0, c, MTb, Mw, ONLYUPDATE );
     T = __min( MTb[0], T+1 );
     int wr1 = MTb[T];

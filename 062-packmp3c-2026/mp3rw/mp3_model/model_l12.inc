@@ -31,9 +31,18 @@ uint l12_ph;                         // previous layer I/II header
 uint l12_padh;
 int  l12_lseq, l12_leq;
 byte l12_pa[2][32], l12_ps[2][32], l12_pf[2][32]; // previous frame's allocation, scfsi, last scalefactor
+int  l12_ready;                      // Init_L12Tables has run
 
+// l12_frame codes whether a frame is layer III; the rest is made when the
+// first layer I/II frame comes (both sides know it then), as most streams
+// have none
 void Init_L12( void ) {
   Init_Node2ii( l12_frame );
+  l12_ready = 0;
+}
+
+void Init_L12Tables( void ) {
+  l12_ready = 1;
   Init_Node2ii( l12_lay );
   Init_Node2ii( l12_hbit );
   Init_Number1ii( l12_br );
@@ -65,7 +74,7 @@ void ProcessFrame( void ) {
   RangeCoder& rc = *this;
   int t = (h.layer!=1);
   l12_frame.Process( rc, t, TTable[24], 16 );
-  if( t ) ProcessL12(); else Process();
+  if( t ) { if( !l12_ready ) Init_L12Tables(); ProcessL12(); } else Process();
 }
 
 void ProcessHeaderL12( void ) {

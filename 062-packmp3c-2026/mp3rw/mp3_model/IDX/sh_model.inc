@@ -18,42 +18,35 @@
 Table( Node2ii,   m0A, %M%m0A_e_Volume );
 Table( byte,     pm0A, %M%pm0A_f_Volume );
 Table( SSEii<8>, Sm0A, %M%Sm0A_d_Volume );
-Table( iMixer,   mm0A, %M%mm0A_g_Volume );
 Table( Node2ii,   n0A, %M%n0A_e_Volume );
 
 Table( Node2ii,   m0B, %M%m0B_e_Volume );
 Table( byte,     pm0B, %M%pm0B_f_Volume );
 Table( SSEii<7>, Sm0B, %M%Sm0B_d_Volume );
-Table( iMixer,   mm0B, %M%mm0B_g_Volume );
 Table( Node2ii,   n0B, %M%n0B_e_Volume );
 
 Table( Node2ii,   m1, %M%m1_e_Volume );
 Table( byte,     pm1, %M%pm1_f_Volume );
 Table( SSEii<6>, Sm1, %M%Sm1_d_Volume );
-Table( iMixer,   mm1, %M%mm1_g_Volume );
 Table( Node2ii,   n1, %M%n1_e_Volume );
 
 Table( Node2ii,   m2, %M%m2_e_Volume );
 Table( byte,     pm2, %M%pm2_f_Volume );
 Table( SSEii<5>, Sm2, %M%Sm2_d_Volume );
-Table( iMixer,   mm2, %M%mm2_g_Volume );
 Table( Node2ii,   n2, %M%n2_e_Volume );
 
 Table( Node2ii,   m3, %M%m3_e_Volume );
 Table( byte,     pm3, %M%pm3_f_Volume );
 Table( SSEii<5>, Sm3, %M%Sm3_d_Volume );
-Table( iMixer,   mm3, %M%mm3_g_Volume );
 Table( Node2ii,   n3, %M%n3_e_Volume );
 
 Table( Node2ii,   m4, %M%m4_e_Volume );
 Table( byte,     pm4, %M%pm4_f_Volume );
 Table( SSEii<6>, Sm4, %M%Sm4_d_Volume );
-Table( iMixer,   mm4, %M%mm4_g_Volume );
 Table( Node2ii,   n4, %M%n4_e_Volume );
 
 Table( Node2ii,   mx, %M%mx_e_Volume );
 Table( SSEii<6>, Smx, %M%Smx_d_Volume );
-Table( iMixer,   mmx, %M%mmx_g_Volume );
 Table( Node2ii,   nx, %M%nx_e_Volume );
 
 Table( Node2ii,   ms, %M%ms_e_Volume );
@@ -76,6 +69,17 @@ Table( SSEii<5>, Sz256, %M%Sz256_d_Volume );
 
 Table( Node2ii, z512, %M%z512_e_Volume );
 Table( SSEii<7>, Sz512, %M%Sz512_d_Volume );
+
+// the mixing stage (XC): the counters of its contexts xa..xd, XND nodes a
+// row; the mixer's weight sets and their update counts, one set for each
+// of the mixer contexts of mp3c's magnitude decisions (mm0A_g .. mmx_g,
+// whose mixers the stage replaced), node after node
+Table( cm_cnt2, xA, %M%xa_Volume * XND );
+Table( cm_cnt2, xB, %M%xb_Volume * XND );
+Table( cm_cnt2, xC, %M%xc_Volume * XND );
+Table( cm_cnt2, xD, %M%xd_Volume * XND );
+Table( int,     xW, (%M%mm0A_g_Volume+%M%mm0B_g_Volume+%M%mm1_g_Volume+%M%mm2_g_Volume+%M%mm3_g_Volume+%M%mm4_g_Volume+%M%mmx_g_Volume) * XNIN );
+Table( byte,   xWN, (%M%mm0A_g_Volume+%M%mm0B_g_Volume+%M%mm1_g_Volume+%M%mm2_g_Volume+%M%mm3_g_Volume+%M%mm4_g_Volume+%M%mmx_g_Volume) );
 
 
 #define SC8(x,y) ((x*y)>>8)
@@ -114,6 +118,15 @@ Table( SSEii<7>, Sz512, %M%Sz512_d_Volume );
 
   int si; // stats instance index
 
+  // j_band's thresholds of a place (ModelMDCT adds j>=c1), made by InitData
+  byte jband[576];
+
+  // the quantizer step each place's last value (cMDCT) was coded at, and
+  // the granule's: its steps and scalefactor bands (ProcessDelta sets them)
+  short cStep[576];
+  const short* xstp;
+  const byte*  xsfb;
+
 // the tables' starting state, after M_Init() made them
 void %M%InitData( void ) {
   int i;
@@ -124,42 +137,35 @@ void %M%InitData( void ) {
   for( i=0; i<M_pm0A_f_Volume; i++ ) pm0A[i]=0;
   for( i=0; i<M_m0A_e_Volume; i++ )  m0A[i].Init_Node2i();
   for( i=0; i<M_Sm0A_d_Volume; i++ ) Sm0A[i].Init_SSEi(M_Sm0A_wi,M_Sm0A_ti);
-  InitMixers( mm0A, M_mm0A_g_Volume, M_mm0A_W0 );
   for( i=0; i<M_n0A_e_Volume; i++ )  n0A[i].Init_Node2i();
 
   for( i=0; i<M_pm0B_f_Volume; i++ ) pm0B[i]=0;
   for( i=0; i<M_m0B_e_Volume; i++ )  m0B[i].Init_Node2i();
   for( i=0; i<M_Sm0B_d_Volume; i++ ) Sm0B[i].Init_SSEi(M_Sm0B_wi,M_Sm0B_ti);
-  InitMixers( mm0B, M_mm0B_g_Volume, M_mm0B_W0 );
   for( i=0; i<M_n0B_e_Volume; i++ )  n0B[i].Init_Node2i();
 
   for( i=0; i<M_pm1_f_Volume; i++ ) pm1[i]=0;
   for( i=0; i<M_m1_e_Volume; i++ )  m1[i].Init_Node2i();
   for( i=0; i<M_Sm1_d_Volume; i++ ) Sm1[i].Init_SSEi(M_Sm1_wi,M_Sm1_ti);
-  InitMixers( mm1, M_mm1_g_Volume, M_mm1_W0 );
   for( i=0; i<M_n1_e_Volume; i++ )  n1[i].Init_Node2i();
 
   for( i=0; i<M_pm2_f_Volume; i++ ) pm2[i]=0;
   for( i=0; i<M_m2_e_Volume; i++ )  m2[i].Init_Node2i();
   for( i=0; i<M_Sm2_d_Volume; i++ ) Sm2[i].Init_SSEi(M_Sm2_wi,M_Sm2_ti);
-  InitMixers( mm2, M_mm2_g_Volume, M_mm2_W0 );
   for( i=0; i<M_n2_e_Volume; i++ )  n2[i].Init_Node2i();
 
   for( i=0; i<M_pm3_f_Volume; i++ ) pm3[i]=0;
   for( i=0; i<M_m3_e_Volume; i++ )  m3[i].Init_Node2i();
   for( i=0; i<M_Sm3_d_Volume; i++ ) Sm3[i].Init_SSEi(M_Sm3_wi,M_Sm3_ti);
-  InitMixers( mm3, M_mm3_g_Volume, M_mm3_W0 );
   for( i=0; i<M_n3_e_Volume; i++ )  n3[i].Init_Node2i();
 
   for( i=0; i<M_pm4_f_Volume; i++ ) pm4[i]=0;
   for( i=0; i<M_m4_e_Volume; i++ )  m4[i].Init_Node2i();
   for( i=0; i<M_Sm4_d_Volume; i++ ) Sm4[i].Init_SSEi(M_Sm4_wi,M_Sm4_ti);
-  InitMixers( mm4, M_mm4_g_Volume, M_mm4_W0 );
   for( i=0; i<M_n4_e_Volume; i++ )  n4[i].Init_Node2i();
 
   for( i=0; i<M_mx_e_Volume; i++ )  mx[i].Init_Node2i();
   for( i=0; i<M_Smx_d_Volume; i++ ) Smx[i].Init_SSEi();
-  InitMixers( mmx, M_mmx_g_Volume, M_mmx_W0 );
   for( i=0; i<M_nx_e_Volume; i++ )  nx[i].Init_Node2i();
 
   for( i=0; i<M_pms1_f_Volume; i++ ) pms1[i]=0;
@@ -186,6 +192,39 @@ void %M%InitData( void ) {
   for( i=0; i<M_z256_e_Volume; i++ ) z256[i].Init_Node2i();
   for( i=0; i<M_Sz256_d_Volume; i++ ) Sz256[i].Init_SSEi(M_Sz256_wi,M_Sz256_ti);
 
+  // the mixing stage: counters at 1/2, each weight set taking mp3c's two
+  // predictions half and half (M_xwa, M_xwb)
+  for( i=0; i<M_xa_Volume*XND; i++ ) xA[i].Init();
+  for( i=0; i<M_xb_Volume*XND; i++ ) xB[i].Init();
+  for( i=0; i<M_xc_Volume*XND; i++ ) xC[i].Init();
+  for( i=0; i<M_xd_Volume*XND; i++ ) xD[i].Init();
+  {
+    long long v[XND] = { M_mm0A_g_Volume, M_mm0B_g_Volume, M_mm1_g_Volume, M_mm2_g_Volume,
+                         M_mm3_g_Volume, M_mm4_g_Volume, M_mmx_g_Volume };
+    for( int n=0; n<XND; n++ ) xWo[n] = n ? xWo[n-1] + v[n-1] : 0;
+  }
+  for( i=0; i<xWo[XND-1]+M_mmx_g_Volume; i++ ) {
+    for( int k=0; k<XNIN; k++ ) xW[i*XNIN+k] = k==0 ? M_xwa : k==10 ? M_xwb : 0;
+    xWN[i] = 0;
+  }
+  for( i=0; i<576; i++ ) cStep[i]=0;
+  for( i=0; i<576; i++ ) jband[i] = (i>M_Sms1_j1) + (i>M_Sms1_j2) + (i>M_Sms1_j3) + (i>M_Sms1_j4) + (i>M_Sms1_j5) + (i>M_Sms1_j6) + (i>M_Sms1_j7) + (i>M_Sms1_j8);
+  xstp = 0; xsfb = 0;
+}
+
+// The mixing stage (freq_cm.inc: cm_code): codes the decision bit at node
+// n -- 0 and 1 the zero flags of the big_values and the count1 region,
+// 2..5 |v|==1 to |v|==4, 6 the |v|==x of the loop after them -- in place
+// of mp3c's own two-input mixer there: mp3c's two predictions (of a 0, 15
+// bits), D's and the SSE's, are mixed with the four counters of this
+// place's rows by the weight set g of the node (mp3c's mixer context).
+// The rows are ModelMDCT's, made once a place.
+int xrA, xrB, xrC, xrD;
+long long xWo[XND]; // the nodes' first weight sets
+
+void XC( RangeCoder& rc, int n, int pd, int ps, int& bit, int g ) {
+  cm_code( rc, bit, pd, ps, xA[xrA+n], xB[xrB+n], xC[xrC+n], xD[xrD+n],
+           &xW[(xWo[n]+g)*XNIN], xWN[xWo[n]+g], M_xlim, M_xmw, M_xsh, M_xlr, M_xmb );
 }
 
 void Init_RangeDelta( int instance ) {
@@ -223,7 +262,32 @@ void ModelMDCT(
 //  uint m1nus_j = m1nus[j];
 
   uint j_lt_c1 = j<c1;
-  uint j_band = (j>M_Sms1_j1) + (j>M_Sms1_j2) + (j>M_Sms1_j3) + (j>M_Sms1_j4) + (j>M_Sms1_j5) + (j>M_Sms1_j6) + (j>M_Sms1_j7) + (j>M_Sms1_j8) + (j>=c1);
+  uint j_band = jband[j] + (j>=c1);
+
+  // the mixing stage's rows of this place (XC), from:
+  //   rrl  the bit length of 16 times the last granule's |value| at j, as
+  //        this granule's quantizer step would have it (cm_tab.inc)
+  //   dS   how much coarser its step was, in 1.5 dB units (clamped to 48)
+  //   sfb  the scalefactor band of j, in the frame's own table
+  //   dc1, dk  the bit lengths of the places left before the count1
+  //        region (0 within it) and before the zeros
+  //   w5   the last granule's |values| from j-2 to j+2, and w2 those two
+  //        granules back from j-1 to j+1 (the places before j have been
+  //        shifted already: their last granule is in dMDCT, eMDCT)
+  {
+    // (unsigned, the variables that cannot be negative)
+    uint cp1 = j<575 ? l_abs(cMDCT[j+1]) : 0, cp2 = j<574 ? l_abs(cMDCT[j+2]) : 0;
+    uint w5 = (j>1 ? l_abs(dMDCT[j-2]) : 0) + caMDCTjm1 + caMDCTj + cp1 + cp2;
+    uint w2 = (j>0 ? l_abs(eMDCT[j-1]) : 0) + daMDCTj + (j<575 ? l_abs(dMDCT[j+1]) : 0);
+    int dS = cStep[j] - xstp[j]; dS = dS<-48 ? -48 : dS>48 ? 48 : dS;
+    uint rrl = cm_blen( caMDCTj*cm_resc[dS+48] );
+    uint dc1 = j<c1 ? cm_blen( c1-j ) : 0;
+    uint dk = cm_blen( k-j );
+    uint sfb = xsfb[j];
+    int xa, xb, xc, xd;
+    MakeIndex xa,xb,xc,xd
+    xrA = xa*XND; xrB = xb*XND; xrC = xc*XND; xrD = xd*XND;
+  }
 
   if( (j!=k-1) && (j!=c1-1) ) {
     int zero = (c==0);
@@ -239,7 +303,7 @@ void ModelMDCT(
       int pm0A_f, Sm0A_d, m0A_e, n0A_e, mm0A_g;
       MakeIndex pm0A_f
       byte& rec = pm0A[pm0A_f];
-      uint recm = ((rec&1)==1) + ((rec&3)==3) + ((rec&7)==7) + ((rec&15)==15) + ((rec&31)==31);
+      uint recm = cm_trail1[rec&31];
       MakeIndex m0A_e,n0A_e,mm0A_g,Sm0A_d
 
       const word* M_Sm0A_wr = j>M_Sm0A_jj ? M_Sm0A_wr0 : M_Sm0A_wq0;
@@ -249,20 +313,12 @@ void ModelMDCT(
       const uint  M_Sn0A_mw = j>M_Sn0A_j1 ? M_Sn0A_mw0 : M_Sn0A_mw1;
 
       SSEii_updstr X;
-      iMixer& M = mm0A[mm0A_g];
       Node2ii& C = m0A[m0A_e];
       Node2ii& D = n0A[n0A_e];
       auto& S = Sm0A[Sm0A_d];
       int p_sse = S.SSE_Pred( C.P, X );
 
-      int p1 = M.st( D.P );
-      int p2 = M.st( p_sse );
-      int p3 = M.Mixup( p1, p2, M_mm0A_wr );
-      int p3sq = Max<int>(1,Min<int>(SCALE-1, M.sq(p3) ));
-
-      rc.BProcess( p3sq, zero );
-
-      M.Update( zero, p1, p2, M_mm0A_wq, p3sq );
+      XC( rc, 0, D.P, p_sse, zero, mm0A_g );
       S.SSE_Update( zero, M_Sm0A_wq, X );
       C.Update( zero, M_Sm0A_wr, M_Sm0A_mw );
       D.Update( zero, M_Sn0A_wr, M_Sn0A_mw );
@@ -277,7 +333,7 @@ void ModelMDCT(
       MakeIndex band_Sm0B,band_Sn0B,band_Smm0B
       MakeIndex pm0B_f
       byte& rec = pm0B[pm0B_f];
-      uint recm = ((rec&1)==1) + ((rec&3)==3) + ((rec&7)==7) + ((rec&15)==15) + ((rec&31)==31);
+      uint recm = cm_trail1[rec&31];
       MakeIndex m0B_e,n0B_e,mm0B_g,Sm0B_d
 
       const word* M_Sm0B_wr = j>M_Sm0B_jj ? M_Sm0B_wr0 : M_Sm0B_wq0;
@@ -288,20 +344,12 @@ void ModelMDCT(
       const uint  M_Sn0B_mw = j>M_Sn0B_j1 ? M_Sn0B_mw0 : M_Sn0B_mw1;
 
       SSEii_updstr X;
-      iMixer& M = mm0B[mm0B_g];
       Node2ii& C = m0B[m0B_e];
       Node2ii& D = n0B[n0B_e];
       auto& S = Sm0B[Sm0B_d];
       int p_sse = S.SSE_Pred( C.P, X );
 
-      int p1 = M.st( D.P );
-      int p2 = M.st( p_sse );
-      int p3 = M.Mixup( p1, p2, M_mm0B_wr );
-      int p3sq = Max<int>(1,Min<int>(SCALE-1, M.sq(p3) ));
-
-      rc.BProcess( p3sq, zero );
-
-      M.Update( zero, p1, p2, M_mm0B_wq, p3sq );
+      XC( rc, 1, D.P, p_sse, zero, mm0B_g );
       S.SSE_Update( zero, M_Sm0B_wq, X );
       C.Update( zero, M_Sm0B_wr, M_Sm0B_mw );
       D.Update( zero, M_Sn0B_wr, M_Sn0B_mw );
@@ -335,20 +383,12 @@ void ModelMDCT(
       const uint  M_Sn1_mw = j>M_Sn1_j1 ? M_Sn1_mw0 : M_Sn1_mw1;
 
       SSEii_updstr X;
-      iMixer& M = mm1[mm1_g];
       Node2ii& C = m1[m1_e];
       Node2ii& D = n1[n1_e];
       auto& S = Sm1[Sm1_d];
       int p_sse = S.SSE_Pred( C.P, X );
 
-      int p1 = M.st( D.P );
-      int p2 = M.st( p_sse );
-      int p3 = M.Mixup( p1, p2, M_mm1_wr );
-      int p3sq = Max<int>(1,Min<int>(SCALE-1, M.sq(p3) ));
-
-      rc.BProcess( p3sq, abs1 );
-
-      M.Update( abs1, p1, p2, M_mm1_wq, p3sq );
+      XC( rc, 2, D.P, p_sse, abs1, mm1_g );
       S.SSE_Update( abs1, M_Sm1_wq, X );
       C.Update( abs1, M_Sm1_wr, M_Sm1_mw );
       D.Update( abs1, M_Sn1_wr, M_Sn1_mw );
@@ -384,20 +424,12 @@ void ModelMDCT(
     const uint  M_Sn2_mw = j>M_Sn2_j1 ? M_Sn2_mw0 : M_Sn2_mw1;
 
     SSEii_updstr X;
-    iMixer& M = mm2[mm2_g];
     Node2ii& C = m2[m2_e];
     Node2ii& D = n2[n2_e];
     auto& S = Sm2[Sm2_d];
     int p_sse = S.SSE_Pred( C.P, X );
 
-    int p1 = M.st( D.P );
-    int p2 = M.st( p_sse );
-    int p3 = M.Mixup( p1, p2, M_mm2_wr );
-    int p3sq = Max<int>(1,Min<int>(SCALE-1, M.sq(p3) ));
-
-    rc.BProcess( p3sq, abs2 );
-
-    M.Update( abs2, p1, p2, M_mm2_wq, p3sq );
+    XC( rc, 3, D.P, p_sse, abs2, mm2_g );
     S.SSE_Update( abs2, M_Sm2_wq, X );
     C.Update( abs2, M_Sm2_wr, M_Sm2_mw );
     D.Update( abs2, M_Sn2_wr, M_Sn2_mw );
@@ -424,20 +456,12 @@ void ModelMDCT(
     const uint  M_Sn3_mw = j>M_Sn3_j1 ? M_Sn3_mw0 : M_Sn3_mw1;
 
     SSEii_updstr X;
-    iMixer& M = mm3[mm3_g];
     Node2ii& C = m3[m3_e];
     Node2ii& D = n3[n3_e];
     auto& S = Sm3[Sm3_d];
     int p_sse = S.SSE_Pred( C.P, X );
 
-    int p1 = M.st( D.P );
-    int p2 = M.st( p_sse );
-    int p3 = M.Mixup( p1, p2, M_mm3_wr );
-    int p3sq = Max<int>(1,Min<int>(SCALE-1, M.sq(p3) ));
-
-    rc.BProcess( p3sq, abs3 );
-
-    M.Update( abs3, p1, p2, M_mm3_wq, p3sq );
+    XC( rc, 4, D.P, p_sse, abs3, mm3_g );
     S.SSE_Update( abs3, M_Sm3_wq, X );
     C.Update( abs3, M_Sm3_wr, M_Sm3_mw );
     D.Update( abs3, M_Sn3_wr, M_Sn3_mw );
@@ -464,20 +488,12 @@ void ModelMDCT(
     const uint  M_Sn4_mw = j>M_Sn4_j1 ? M_Sn4_mw0 : M_Sn4_mw1;
 
     SSEii_updstr X;
-    iMixer& M = mm4[mm4_g];
     Node2ii& C = m4[m4_e];
     Node2ii& D = n4[n4_e];
     auto& S = Sm4[Sm4_d];
     int p_sse = S.SSE_Pred( C.P, X );
 
-    int p1 = M.st( D.P );
-    int p2 = M.st( p_sse );
-    int p3 = M.Mixup( p1, p2, M_mm4_wr );
-    int p3sq = Max<int>(1,Min<int>(SCALE-1, M.sq(p3) ));
-
-    rc.BProcess( p3sq, abs4 );
-
-    M.Update( abs4, p1, p2, M_mm4_wq, p3sq );
+    XC( rc, 5, D.P, p_sse, abs4, mm4_g );
     S.SSE_Update( abs4, M_Sm4_wq, X );
     C.Update( abs4, M_Sm4_wr, M_Sm4_mw );
     D.Update( abs4, M_Sn4_wr, M_Sn4_mw );
@@ -505,20 +521,12 @@ void ModelMDCT(
       const uint  M_Snx_mw = j>M_Snx_j1 ? M_Snx_mw0 : M_Snx_mw1;
 
       SSEii_updstr X;
-      iMixer& M = mmx[mmx_g+Ammx_gx];
       Node2ii& C = mx[mx_e+Amx_ex];
       Node2ii& D = nx[nx_e+Anx_ex];
       auto& S = Smx[Smx_d+ASmx_dx];
       int p_sse = S.SSE_Pred( C.P, X );
 
-      int p1 = M.st( D.P );
-      int p2 = M.st( p_sse );
-      int p3 = M.Mixup( p1, p2, M_mmx_wr );
-      int p3sq = Max<int>(1,Min<int>(SCALE-1, M.sq(p3) ));
-
-      rc.BProcess( p3sq, abs4 );
-
-      M.Update( abs4, p1, p2, M_mmx_wq, p3sq );
+      XC( rc, 6, D.P, p_sse, abs4, mmx_g+Ammx_gx );
       S.SSE_Update( abs4, M_Smx_wq, X );
       C.Update( abs4, M_Smx_wr, M_Smx_mw );
       D.Update( abs4, M_Snx_wr, M_Snx_mw );
@@ -725,6 +733,7 @@ Processed:
 }
 
 void ShiftMDCT( int j, int c ) {
+  cStep[j]=xstp[j];
   eMDCT[j]=dMDCT[j];
   dMDCT[j]=cMDCT[j]; cMDCT[j]=c;
 }

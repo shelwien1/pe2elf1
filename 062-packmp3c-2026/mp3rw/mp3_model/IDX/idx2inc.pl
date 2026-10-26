@@ -254,7 +254,12 @@ while( <I1> ) {
       # whose coder this is, measured them).  The tuning build maps through
       # pmap[] regardless, so both builds bucket the same way.
       $bp = paren($base);
-      if( $ccount > 3 ) {
+      if( $ccount > 3 && $map =~ /^(1+)0*$/ ) {
+        # (ones, then zeros: each value its own bucket up to the last one,
+        # the rest in that -- a clamp, which the table would only repeat)
+        $k = length($1);
+        $code{$index} .= "\n$index = $index*$ccount + __min($k,__max(0,($var)-($bp-1)));";
+      } elsif( $ccount > 3 ) {
         $code{$index} .= "\n$index = $index*$ccount + ${prefix}_${tag}[__min($lmap,__max(0,($var)-($bp-1)))];";
         $j = 0; 
         $q = sprintf( "static const %s ${prefix}_${tag}[$lmap+1]={ ", (($ccount<256)?"byte":"word") );

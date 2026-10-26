@@ -427,7 +427,7 @@ void Process_sf1xlong( word& _c, int ch, int k, int ll, int i ) {
 
   pxlong_e = 0;
   pxlong_e = pxlong_e*2 + (((ch)>0+(1-1)));
-  pxlong_e = pxlong_e*21 + C_pxlong_e_i1[__min(20,__max(0,(i)-(1-1)))];
+  pxlong_e = pxlong_e*21 + __min(20,__max(0,(i)-(1-1)));
   pxlong_e = pxlong_e*3 + (((k)>10+(1-1))+((k)>11+(1-1)));
   pxlong_e = pxlong_e*2 + (((ll)>0+(1-1)));
   byte& rec = pxlong[pxlong_e];

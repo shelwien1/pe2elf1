@@ -136,7 +136,6 @@ static const byte M_n3_e_i3[16+1]={ 0,1,2,2,3,3,4,4,4,4,4,4,4,4,4,4,4 };
 static const byte M_ns1_e_i7[16+1]={ 0,0,0,0,0,0,0,1,1,2,3,3,4,4,4,4,4 };
 static const byte M_ns1_e_i8[17+1]={ 0,1,1,1,1,1,1,2,2,3,3,3,4,4,4,4,5,5 };
 
-static const byte M_ns_e_i1[21+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,11,11,11,11,11,11,11,11,11,11 };
 static const byte M_ns_e_i5[21+1]={ 0,0,0,0,0,0,0,0,1,1,1,2,2,2,2,2,2,2,3,3,3,3 };
 
 static const byte M_nx_e_i7[23+1]={ 0,0,0,0,0,0,1,2,2,3,3,4,4,4,5,5,5,5,5,5,5,5,6,6 };
@@ -162,9 +161,13 @@ static const byte M_pm4_f_i8[27+1]={ 0,0,0,1,2,3,4,4,4,5,5,5,5,6,6,6,7,8,8,9,9,9
 
 static const byte M_pms1_f_i4[40+1]={ 0,0,0,0,0,1,2,2,2,3,3,4,4,4,5,5,5,6,7,7,7,8,8,9,9,9,10,10,10,11,11,12,12,13,13,13,13,13,13,13,14 };
 
-static const byte M_pms_f_i1[21+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,15,15,15,15,15,15 };
 static const byte M_pms_f_i2[9+1]={ 0,1,2,2,2,2,3,3,3,3 };
 static const byte M_pms_f_i4[41+1]={ 0,0,0,0,0,0,0,0,0,1,1,1,1,2,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,5,5,5,5,5,5 };
+
+static const byte M_xa_i1[32+1]={ 0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,2,3,4,5,5,6,6,6,6,6,6,6,6,6,6,6,6,6 };
+
+
+
 
 static const byte M_z256_e_i3[16+1]={ 0,1,1,1,1,1,2,3,3,3,3,3,3,3,3,3,3 };
 static const byte M_z256_e_i5[25+1]={ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,3,4,4,4,5,6,6,6,6 };
@@ -276,9 +279,6 @@ static const int M_small_mw = (386+0) * (1);
 static const word* M_small_wr = TTable[22+0];
 static const int M_ylong_mw = (64+0) * (1);
 static const word* M_ylong_wr = TTable[19+0];
-static const int M_mm0A_W0 = (5388+0) * (1);
-static const int M_mm0A_wr = (44035+0) * (1);
-static const int M_mm0A_wq = (6104+0) * (1);
 static const int M_Sn0A_j1 = (32+0) * (1);
 static const int M_Sn0A_mw0 = (6403+0) * (1);
 static const int M_Sn0A_mw1 = (4917+0) * (1);
@@ -294,9 +294,6 @@ static const word* M_Sm0A_wr0 = TTable[5+0];
 static const word* M_Sm0A_wr1 = TTable[12+0];
 static const word* M_Sm0A_wq0 = TTable[5+0];
 static const word* M_Sm0A_wq1 = TTable[8+0];
-static const int M_mm0B_W0 = (17545+0) * (1);
-static const int M_mm0B_wr = (48388+0) * (1);
-static const int M_mm0B_wq = (6241+0) * (1);
 static const int M_Sn0B_j1 = (4+0) * (1);
 static const int M_Sn0B_mw0 = (8229+0) * (1);
 static const int M_Sn0B_mw1 = (64+0) * (1);
@@ -312,9 +309,6 @@ static const word* M_Sm0B_wr0 = TTable[5+0];
 static const word* M_Sm0B_wr1 = TTable[2+0];
 static const word* M_Sm0B_wq0 = TTable[19+0];
 static const word* M_Sm0B_wq1 = TTable[21+0];
-static const int M_mm1_W0 = (12178+0) * (1);
-static const int M_mm1_wr = (45579+0) * (1);
-static const int M_mm1_wq = (5889+0) * (1);
 static const int M_Sn1_j1 = (146+0) * (1);
 static const int M_Sn1_mw0 = (6753+0) * (1);
 static const int M_Sn1_mw1 = (6574+0) * (1);
@@ -331,9 +325,6 @@ static const word* M_Sm1_wr0 = TTable[18+0];
 static const word* M_Sm1_wr1 = TTable[12+0];
 static const word* M_Sm1_wq0 = TTable[20+0];
 static const word* M_Sm1_wq1 = TTable[10+0];
-static const int M_mm2_W0 = (15780+0) * (1);
-static const int M_mm2_wr = (50625+0) * (1);
-static const int M_mm2_wq = (4106+0) * (1);
 static const int M_Sn2_j1 = (3+0) * (1);
 static const int M_Sn2_mw0 = (7936+0) * (1);
 static const int M_Sn2_mw1 = (5382+0) * (1);
@@ -350,9 +341,6 @@ static const word* M_Sm2_wr0 = TTable[7+0];
 static const word* M_Sm2_wr1 = TTable[10+0];
 static const word* M_Sm2_wq0 = TTable[6+0];
 static const word* M_Sm2_wq1 = TTable[8+0];
-static const int M_mm3_W0 = (18124+0) * (1);
-static const int M_mm3_wr = (55560+0) * (1);
-static const int M_mm3_wq = (3274+0) * (1);
 static const int M_Sn3_j1 = (4+0) * (1);
 static const int M_Sn3_mw0 = (8063+0) * (1);
 static const int M_Sn3_mw1 = (7621+0) * (1);
@@ -369,9 +357,6 @@ static const word* M_Sm3_wr0 = TTable[17+0];
 static const word* M_Sm3_wr1 = TTable[8+0];
 static const word* M_Sm3_wq0 = TTable[7+0];
 static const word* M_Sm3_wq1 = TTable[8+0];
-static const int M_mm4_W0 = (7193+0) * (1);
-static const int M_mm4_wr = (42603+0) * (1);
-static const int M_mm4_wq = (6110+0) * (1);
 static const int M_Sn4_j1 = (2+0) * (1);
 static const int M_Sn4_mw0 = (6509+0) * (1);
 static const int M_Sn4_mw1 = (3986+0) * (1);
@@ -470,9 +455,6 @@ static const word* M_Snx_wr0 = TTable[15+0];
 static const word* M_Snx_wr1 = TTable[9+0];
 static const word* M_Snx_wq0 = TTable[11+0];
 static const word* M_Snx_wq1 = TTable[9+0];
-static const int M_mmx_W0 = (11112+0) * (1);
-static const int M_mmx_wr = (49280+0) * (1);
-static const int M_mmx_wq = (2697+0) * (1);
 static const int M_Smx_Q = (4+2) * (1);
 static const int M_Smx_wi = (0+0) * (4);
 static const int M_Smx_ti = (0+0) * (1);
@@ -503,6 +485,13 @@ static const word* M_Sz512_wr0 = TTable[6+0];
 static const word* M_Sz512_wr1 = TTable[3+0];
 static const word* M_Sz512_wq0 = TTable[20+0];
 static const word* M_Sz512_wq1 = TTable[19+0];
+static const int M_xlim = (255+0) * (1);
+static const int M_xmw = (32+0) * (1);
+static const int M_xsh = (4+0) * (1);
+static const int M_xwa = (32768+0) * (1);
+static const int M_xwb = (32768+0) * (1);
+static const int M_xlr = (6+0) * (1);
+static const int M_xmb = (32+0) * (1);
 
 
 static const long long M_ASmx_dx_Volume = tc_vmul(1, 4); // 4
@@ -582,45 +571,42 @@ static const long long M_pm3_f_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(
 static const long long M_pm4_f_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 5), 2), 2), 4), 2), 1), 1), 11), 2), 1), 1), 1); // 7040
 static const long long M_pms1_f_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 2), 2), 15), 1), 1), 1), 1), 1), 1), (1<<1)), (1<<1)), 1); // 240
 static const long long M_pms_f_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 16), 4), 1), 6), 2), 1), 1), 2), 1), 1), 1), (1<<1)), 1); // 6144
+static const long long M_xa_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 17), 7), 4), 22); // 10472
+static const long long M_xb_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 11), 11), 4), 3); // 1452
+static const long long M_xc_Volume = tc_vmul(tc_vmul(1, 576), 8); // 4608
+static const long long M_xd_Volume = tc_vmul(tc_vmul(tc_vmul(1, 32), 16), 3); // 1536
 static const long long M_z256_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 4), 2), 7), 7), 2), 1), 1), (M_Band_z256_e_Volume)); // ?
 static const long long M_z512_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 2), 1), 5), 4), 1), 1), (M_Band_z512_e_Volume)); // ?
 
-#define M_USES(X) X(j) X(ch) X(band_j) X(curband) X(caMDCTj) X(daMDCTj) X(eaMDCTj) X(ctx1a) X(zrun) X(ctx2a) X(ctx3a) X(j_band) X(caMDCTjm1) X(recm) X(gi) X(count1table_select) X(flag_jm1) X(rec) X(j_gt_j0) X(l) X(dblMDCTj) X(ctx2bl) X(cblMDCTj) X(ctx1bl) X(cMDCTj) X(c) X(zeros_j) X(dMDCTj) X(signs_j) X(eMDCTj) X(cMDCTjm1) X(ctx1) X(x)
+#define M_USES(X) X(j) X(ch) X(band_j) X(curband) X(caMDCTj) X(daMDCTj) X(eaMDCTj) X(ctx1a) X(zrun) X(ctx2a) X(ctx3a) X(j_band) X(caMDCTjm1) X(recm) X(gi) X(count1table_select) X(flag_jm1) X(rec) X(j_gt_j0) X(l) X(dblMDCTj) X(ctx2bl) X(cblMDCTj) X(ctx1bl) X(cMDCTj) X(c) X(zeros_j) X(dMDCTj) X(signs_j) X(eMDCTj) X(cMDCTjm1) X(ctx1) X(x) X(rrl) X(dS) X(sfb) X(dc1) X(dk) X(w5) X(w2)
 
 struct M_T {
   Node2ii m0A[M_m0A_e_Volume];
   byte pm0A[M_pm0A_f_Volume];
   SSEii<8> Sm0A[M_Sm0A_d_Volume];
-  iMixer mm0A[M_mm0A_g_Volume];
   Node2ii n0A[M_n0A_e_Volume];
   Node2ii m0B[M_m0B_e_Volume];
   byte pm0B[M_pm0B_f_Volume];
   SSEii<7> Sm0B[M_Sm0B_d_Volume];
-  iMixer mm0B[M_mm0B_g_Volume];
   Node2ii n0B[M_n0B_e_Volume];
   Node2ii m1[M_m1_e_Volume];
   byte pm1[M_pm1_f_Volume];
   SSEii<6> Sm1[M_Sm1_d_Volume];
-  iMixer mm1[M_mm1_g_Volume];
   Node2ii n1[M_n1_e_Volume];
   Node2ii m2[M_m2_e_Volume];
   byte pm2[M_pm2_f_Volume];
   SSEii<5> Sm2[M_Sm2_d_Volume];
-  iMixer mm2[M_mm2_g_Volume];
   Node2ii n2[M_n2_e_Volume];
   Node2ii m3[M_m3_e_Volume];
   byte pm3[M_pm3_f_Volume];
   SSEii<5> Sm3[M_Sm3_d_Volume];
-  iMixer mm3[M_mm3_g_Volume];
   Node2ii n3[M_n3_e_Volume];
   Node2ii m4[M_m4_e_Volume];
   byte pm4[M_pm4_f_Volume];
   SSEii<6> Sm4[M_Sm4_d_Volume];
-  iMixer mm4[M_mm4_g_Volume];
   Node2ii n4[M_n4_e_Volume];
   Node2ii mx[M_mx_e_Volume];
   SSEii<6> Smx[M_Smx_d_Volume];
-  iMixer mmx[M_mmx_g_Volume];
   Node2ii nx[M_nx_e_Volume];
   Node2ii ms[M_ms_e_Volume];
   byte pms[M_pms_f_Volume];
@@ -638,6 +624,12 @@ struct M_T {
   SSEii<5> Sz256[M_Sz256_d_Volume];
   Node2ii z512[M_z512_e_Volume];
   SSEii<7> Sz512[M_Sz512_d_Volume];
+  cm_cnt2 xA[M_xa_Volume * XND];
+  cm_cnt2 xB[M_xb_Volume * XND];
+  cm_cnt2 xC[M_xc_Volume * XND];
+  cm_cnt2 xD[M_xd_Volume * XND];
+  int xW[(M_mm0A_g_Volume+M_mm0B_g_Volume+M_mm1_g_Volume+M_mm2_g_Volume+M_mm3_g_Volume+M_mm4_g_Volume+M_mmx_g_Volume) * XNIN];
+  byte xWN[(M_mm0A_g_Volume+M_mm0B_g_Volume+M_mm1_g_Volume+M_mm2_g_Volume+M_mm3_g_Volume+M_mm4_g_Volume+M_mmx_g_Volume)];
   
   /* Total bytes this module's Table() members occupy -- a constant here, since
    * Const mode has already folded every count. */
@@ -645,36 +637,29 @@ struct M_T {
                               + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_m0A_e_Volume)
                               + (unsigned long long)sizeof(byte) * (unsigned long long)(M_pm0A_f_Volume)
                               + (unsigned long long)sizeof(SSEii<8>) * (unsigned long long)(M_Sm0A_d_Volume)
-                              + (unsigned long long)sizeof(iMixer) * (unsigned long long)(M_mm0A_g_Volume)
                               + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_n0A_e_Volume)
                               + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_m0B_e_Volume)
                               + (unsigned long long)sizeof(byte) * (unsigned long long)(M_pm0B_f_Volume)
                               + (unsigned long long)sizeof(SSEii<7>) * (unsigned long long)(M_Sm0B_d_Volume)
-                              + (unsigned long long)sizeof(iMixer) * (unsigned long long)(M_mm0B_g_Volume)
                               + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_n0B_e_Volume)
                               + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_m1_e_Volume)
                               + (unsigned long long)sizeof(byte) * (unsigned long long)(M_pm1_f_Volume)
                               + (unsigned long long)sizeof(SSEii<6>) * (unsigned long long)(M_Sm1_d_Volume)
-                              + (unsigned long long)sizeof(iMixer) * (unsigned long long)(M_mm1_g_Volume)
                               + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_n1_e_Volume)
                               + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_m2_e_Volume)
                               + (unsigned long long)sizeof(byte) * (unsigned long long)(M_pm2_f_Volume)
                               + (unsigned long long)sizeof(SSEii<5>) * (unsigned long long)(M_Sm2_d_Volume)
-                              + (unsigned long long)sizeof(iMixer) * (unsigned long long)(M_mm2_g_Volume)
                               + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_n2_e_Volume)
                               + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_m3_e_Volume)
                               + (unsigned long long)sizeof(byte) * (unsigned long long)(M_pm3_f_Volume)
                               + (unsigned long long)sizeof(SSEii<5>) * (unsigned long long)(M_Sm3_d_Volume)
-                              + (unsigned long long)sizeof(iMixer) * (unsigned long long)(M_mm3_g_Volume)
                               + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_n3_e_Volume)
                               + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_m4_e_Volume)
                               + (unsigned long long)sizeof(byte) * (unsigned long long)(M_pm4_f_Volume)
                               + (unsigned long long)sizeof(SSEii<6>) * (unsigned long long)(M_Sm4_d_Volume)
-                              + (unsigned long long)sizeof(iMixer) * (unsigned long long)(M_mm4_g_Volume)
                               + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_n4_e_Volume)
                               + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_mx_e_Volume)
                               + (unsigned long long)sizeof(SSEii<6>) * (unsigned long long)(M_Smx_d_Volume)
-                              + (unsigned long long)sizeof(iMixer) * (unsigned long long)(M_mmx_g_Volume)
                               + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_nx_e_Volume)
                               + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_ms_e_Volume)
                               + (unsigned long long)sizeof(byte) * (unsigned long long)(M_pms_f_Volume)
@@ -691,7 +676,13 @@ struct M_T {
                               + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_z256_e_Volume)
                               + (unsigned long long)sizeof(SSEii<5>) * (unsigned long long)(M_Sz256_d_Volume)
                               + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_z512_e_Volume)
-                              + (unsigned long long)sizeof(SSEii<7>) * (unsigned long long)(M_Sz512_d_Volume);
+                              + (unsigned long long)sizeof(SSEii<7>) * (unsigned long long)(M_Sz512_d_Volume)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(M_xa_Volume * XND)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(M_xb_Volume * XND)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(M_xc_Volume * XND)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(M_xd_Volume * XND)
+                              + (unsigned long long)sizeof(int) * (unsigned long long)((M_mm0A_g_Volume+M_mm0B_g_Volume+M_mm1_g_Volume+M_mm2_g_Volume+M_mm3_g_Volume+M_mm4_g_Volume+M_mmx_g_Volume) * XNIN)
+                              + (unsigned long long)sizeof(byte) * (unsigned long long)((M_mm0A_g_Volume+M_mm0B_g_Volume+M_mm1_g_Volume+M_mm2_g_Volume+M_mm3_g_Volume+M_mm4_g_Volume+M_mmx_g_Volume));
   void M_Init( void ) {}
   void M_Quit( void ) {}
 };

@@ -13,6 +13,7 @@
 #include "freq_node2.inc"
 #include "freq_SSE1.inc"
 #include "freq_SSE1_dbg.inc"
+#include "freq_cm.inc"
 
 //#pragma pack(push)
 //#pragma pack(8)
