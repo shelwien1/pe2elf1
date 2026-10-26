@@ -159,6 +159,7 @@ comma operand first.
 | `coro_fp12.inc`, `coro_fp21.inc` | second stream on `pin[2]`; `using Model::…` declarations, so gcc and clang build them without `-fms-compatibility` |
 | `mp3rw.cpp` | `#pragma pack(1)` after `common.inc`, as in `mp3c.cpp` |
 | `mp3rw/mp3_parse/parse__mp3.inc` | `getbits` / `putbits` update the bit pointer before using it |
+| `tp.bat` | new — mp3 → mp3rw → mp3c → mp3 roundtrip check |
 
 ## Verification
 
@@ -178,8 +179,26 @@ For every input `c` writes `.dmp` and `.out` byte-identical to `mp3rw0.exe`
 Linux builds need `-D'__max(a,b)=...'` / `-D'__min(a,b)=...'`; the MSVC and
 MinGW headers define those.
 
-`cat1.mp3` → `mp3rw c` → `mp3c c` (138150 bytes) → `mp3c d` → `mp3rw d` gives
-back the original mp3. `mp3c d` does not give back the `.dmp` byte for byte:
-`p23sum`, `p23len` and the unused bits of the last `Garbage` byte differ, so
-`t.bat`'s `fc /b` reports a mismatch on a fresh mp3rw dump. `mp3rw d` doesn't
-depend on those.
+## mp3rw + mp3c
+
+`tp.bat` runs the whole chain, `mp3rw c` → `mp3c c` → `mp3c d` → `mp3rw d`,
+and compares the restored mp3 with the original (`tp.bat` for `cat1.mp3`,
+`tp.bat a.mp3 b.mp3` for others). Only the mp3 has to come back: `mp3c d` does
+not reproduce the `.dmp` byte for byte (`p23sum`, `p23len` and the unused bits
+of the last `Garbage` byte differ, and `mp3rw d` doesn't use them), so `t.bat`'s
+`.dmp` comparison would report a mismatch on an mp3rw dump.
+
+On the 40 inputs above every mp3 comes back exactly with 18 mp3c builds: g++ 13
+and clang 18 at `-O2`/`-O3`/`-Ofast` with `-std=gnu++11`/`c++17`/`c++23`,
+`-m32`, and MinGW g++ / clang x86_64 PE under Wine, each paired with an mp3rw
+from the same compiler. All 18 write byte-identical `.c` files, so they can
+decode each other's output; `cat1` gives 138150 bytes, the figure above for the
+reference `mp3c.exe`.
+
+`mp3rw/mp3_model/model_scale2.inc:51`, `ylong[scf-sf0].Process( rc,*scf++,
+... )`, is the same kind of expression as the old `putbits`: before C++17 the
+context index may be computed after the increment. C++17 requires it before,
+and gcc and clang do that in every mode tried, so these builds agree. A
+pre-C++17 compiler that took the arguments first would write MPEG-2/2.5 `.c`
+files that only its own builds decode, so it's worth comparing one MPEG-2 file
+against `mp3c.exe`.
