@@ -13,7 +13,10 @@ Build with `g.bat` (MinGW g++), `gc.bat` (clang++ with the MSVC headers/libs) or
 `c.bat` + `icl64.cfg` (Intel icl).
 
 `mp3c_improvement.md` measures where mp3c's output goes, part by part, and
-what would make it smaller.
+what would make it smaller. The model's mixing stages ([Compression: mixing
+stages](#compression-mixing-stages), at the end) came of it: the `.c`
+files are 1.3% smaller on the Layer III test inputs, for about 1.4 times
+the time.
 
 ## What was broken
 
@@ -412,3 +415,108 @@ The shipping build writes byte-identical `.c` files to the old tools' on
 all 124 test inputs, and so do the MinGW g++ and clang PE builds (under
 Wine), and the tuning form with every knob made live (1451 patterns, 30249
 bits) on 39 of them.
+
+# Compression: mixing stages
+
+mp3c codes each binary decision with two counters, an SSE on one of them
+and a mixer of one weight. Most decisions now go through a **mixing
+stage** instead, aacpack's context mixing (`aacpack_src/cm.inc`) cut down
+to what the time allows: `mp3rw/mp3_model/freq_cm.inc` (`cm_code`). A
+stage mixes mp3c's own two predictions of the bit (the counter's and the
+SSE's) with four counters of its own, each with an adaptive and a fast
+rate, in a mixer of 11 inputs, and trains all of it on the bit.
+
+| decisions | the stage's counters, by | weight sets |
+| --- | --- | --- |
+| zero flags, \|v\|=1..4 and the \|v\|=x loop after them (`IDX/sh_model.inc`: `XC`), in place of mp3c's mixer there | the last granule's value at j rescaled to this granule's quantizer step (global_gain, the band's scalefactor, scalefac_scale, pretab); the places left before the count1 region and the zeros; the place; the last granule from j−2 to j+2 and the one before | mp3c's mixer contexts (`mm0A_g` .. `mmx_g`) |
+| MPEG-1 long-block scalefactors (`IDX/sh_model_counts.inc`: `Process_sf1xlong`) | the channel's last granule's value; the other channel's; the band below's; the change of global_gain; the value that would keep the band's quantizer step | band, node |
+| MPEG-1 short-block scalefactors (`Process_sf1short`) | the last short granule's value at the band and window; the window before; the band below; the other channel's | band and window, node |
+| MPEG-2 scalefactors (`Process_sf2`) | as MPEG-1's long blocks, by position and kind of block | position, node |
+| global_gain (`Process_GlGain`) | the channel's last change; the other channel's; its last value; the other channel's value | depth |
+| the counts c1 and k (`Process_cnt`) | the channel's last value; the other channel's; the change of global_gain; the block type, and c1 for k | depth |
+
+Their contexts and parameters are the `Const 0` sections at the end of
+`IDX/sh_model.idx` and `IDX/sh_model_counts.idx` (IDX-FORMAT.md §16). The
+parameters were tuned with `IDX/opt.pl` on 12 MB of eight dumps
+(different encoders, rates and stereo modes); the contexts' patterns are
+as written, untuned.
+
+Two more changes to the model:
+
+- **The scalefactor band table.** `curband`, the scalefactor of the band
+  a place is in, which most spectral decisions see, came from the 44.1
+  kHz table at every rate. It now comes from the frame's own table
+  (`bandInfo[sfreq]`, `model_delta.inc`), as do the stages' bands and
+  steps (mp3c_improvement.md §3.6).
+- **Scalefactors that are not coded are 0 on both sides.** The decoder
+  always had 0 where no group codes a scalefactor (MPEG-2's empty groups
+  and the places after them, a mixed block's first short bands, a long
+  block's short ones), the encoder whatever the dump brought, which in a
+  frame mp3rw could not parse is left over from the stream. The new
+  contexts read these places; reading such a difference made the decoder
+  lose sync on two of the test streams before this was fixed.
+
+The `.c` format is a new one again: files of the previous mp3c, and of
+the original `mp3c.exe`, do not decode with this one, nor the other way
+round.
+
+## Results
+
+The `.c` files of the model as it was before this (the build of the IDX
+port, which writes what the earlier model wrote) and now:
+
+| file | | `.c` before | now | |
+| --- | --- | ---: | ---: | ---: |
+| `path` | 224 kbps, stereo: the source of `path.dmp` | 4385282 | 4369342 | -0.36% |
+| `01_-_Charity_Case` | 320 kbps, L/R | 5796038 | 5698454 | -1.68% |
+| `Ed_Rush_-_Sabotage` | 128 kbps, L/R | 4858494 | 4745303 | -2.33% |
+| `Silent_Light` | 128 kbps, joint | 3610729 | 3568705 | -1.16% |
+| `broken-first-frame` | 192 kbps, L/R | 85905 | 85723 | -0.21% |
+| `cat1` | 64-96 kbps, mono | 138150 | 137054 | -0.79% |
+| `jpg_in_mp3` | VBR 128-192, L/R | 3634861 | 3606984 | -0.77% |
+| `mp3_misidentified` | 256 kbps, L/R | 5289936 | 5257820 | -0.61% |
+| `mp3_misidentified_2` | 192 kbps, L/R | 7031621 | 6972828 | -0.84% |
+| `mp3_with_embedded_albumart` | 320 kbps, L/R, cut at 2 MB | 487211 | 485675 | -0.32% |
+| `01_-_Charity_Case_lame_128` | LAME 3.100 -b 128, joint | 2668684 | 2632300 | -1.36% |
+| `01_-_Charity_Case_lame_V2` | LAME 3.100 -V2, joint | 4007355 | 3935983 | -1.78% |
+| `mp3_misidentified_lame_128` | LAME 3.100 -b 128, joint | 3092815 | 3061890 | -1.00% |
+| `mp3_misidentified_lame_V2` | LAME 3.100 -V2, joint | 4708613 | 4656059 | -1.12% |
+| `misid_22k_64` | LAME, 22.05 kHz 64 kbps (MPEG-2) | 1556724 | 1533464 | -1.49% |
+| `misid_32k_128` | LAME, 32 kHz 128 kbps | 3144219 | 3120740 | -0.75% |
+| `misid_48k_160` | LAME, 48 kHz 160 kbps | 3882770 | 3842407 | -1.04% |
+| all 125 test inputs | | 91640345 | 90667110 | -1.06% |
+| the 70 whose `.c` changed (those with Layer III frames) | | 73138796 | 72165561 | -1.33% |
+
+All 125 inputs restore exactly through `mp3rw c`, `mp3c c`, `mp3c d` and
+`mp3rw d`. Nine builds write the same `.c` files and decode them alike
+(4 MB of four of the dumps, `path`'s among them, and a layer I stream):
+gcc 13 at -O2, -O3, -Ofast, with -std=c++23 and with -m32; clang 18 at
+-O2, -O3 and -Ofast; and MinGW-w64 g++ for x86-64 Windows with `g.bat`'s
+flags, under Wine. (A 32-bit Windows build could not be run here: this
+Wine has no 32-bit support.)
+
+`path.mp3` gains least. Its scalefactors and global_gain are half a
+percent of its `.c`, against 4-7% in most of the others, so the stages
+there have little to work on; and it is one of the two dumps mp3c came
+with, which its model's parameters were probably tuned on.
+
+## Speed
+
+The stages cost time per decision, and replacing mp3c's mixer at the
+magnitude decisions paid for part of it: what the mixer's tuned contexts
+and its own stretch tables cost turned out to be most of what the stage
+costs. Changes that do not change what is coded paid for some more: the
+layer I/II tables are made when the first such frame comes, `j_band`'s
+thresholds and `recm` come from tables, `Node2ii::Update` is inlined,
+and `idx2inc.pl` writes a pattern of ones then zeros as a clamp instead
+of a table.
+
+| the new model's instructions over the old's, on 12 MB of | compress | decompress |
+| --- | ---: | ---: |
+| `mp3_misidentified_lame_128` | 1.401 | 1.398 |
+| `01_-_Charity_Case_lame_V2` | 1.385 | 1.381 |
+| `Ed_Rush_-_Sabotage` | 1.391 | 1.388 |
+
+These are instruction counts (cachegrind), which are repeatable; the
+machine this was measured on (a VM) varies too much in run time for
+anything finer than "about the same".

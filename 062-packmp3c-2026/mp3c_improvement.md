@@ -591,6 +591,49 @@ and a version byte would let mp3c tell which version wrote a file. The
 Layer I/II support already made this branch's `.c` files unreadable by the
 original `mp3c.exe`.
 
+## 6. What was done, and what it measured
+
+Within 1.5 times the original model's time (README: Compression):
+
+- **The band table (3.6)**, as proposed.
+- **Mixing stages (3.3, 3.4)**, not families: for the time, a stage
+  mixes mp3c's two predictions of a bit with four counters of its own, in
+  one mixer of 11 inputs (`freq_cm.inc`).
+- **Side information (3.7)**: stages at the scalefactors (MPEG-1 long and
+  short blocks, MPEG-2), global_gain and the counts.
+
+What the measurements on the way said, on eight files (four of the
+real-world set, two LAME 3.100 encodes, and LAME re-encodes of one track at
+22.05 and 48 kHz), the time on `mp3_misidentified_2`:
+
+| | `.c` |
+| --- | ---: |
+| a stage on top of mp3c's own mixer, at the zero flags and \|v\|=1, 2 | −0.59%, 1.5x the time |
+| the same in place of mp3c's mixer, weight sets by the stage's own context | −0.52%, 1.24x |
+| in place of the mixer, weight sets by mp3c's tuned mixer contexts | −0.62%, 1.29x |
+| + \|v\|=3, 4 | −0.68% |
+| + the \|v\|=x loop | −0.72% |
+| + the signs, with the same counters | −0.55%: worse |
+| + stages at the scalefactors | −1.06% |
+| + global_gain, the counts | −1.14% |
+| + the stages' parameters tuned (opt.pl) | −1.27%, about 1.37x |
+
+- In the first stage, the rescaled reference was worth 0.30 of its 0.55
+  points; each of the other three contexts about 0.05.
+- mp3c's mixer cost most of what the stage costs: its tuned contexts, its
+  stretch and squash tables and its own accesses. Replacing it saved more
+  time than the stage takes at those decisions.
+- The fast counters were worth 0.13 points, an APM after the mixer 0.04
+  (dropped, for the time it took), 16-bit weights cost 0.15, and
+  prefetching the stage's rows and weight sets gained nothing measurable.
+- At the scalefactors, the value that keeps the band's last quantizer
+  step (global_gain, scalefac_scale, preflag) beat the plain change of
+  global_gain as a context.
+
+Not done: the reservoir across other data (3.1), the match model (3.2),
+threads, and the tuning of the stages' context patterns (their sections
+are `Const 0`, ready for opt.pl).
+
 ## Appendix: how it was measured
 
 ### The accounting

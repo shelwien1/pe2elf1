@@ -531,13 +531,13 @@ Index gd
 Index gw
  gw_i0: ch,     1!1
 
-Number glim, 1,0!0011111111
-Number gmw,  1,0!000000100000
-Number gsh,  1,0!0100
-Number gwa,  1,0!01000000000000000
-Number gwb,  1,0!01000000000000000
-Number glr,  1,0!00000110
-Number gmb,  1,0!00100000
+Number glim, 1,0!0111110111
+Number gmw,  1,0!100111100101
+Number gsh,  1,0!1111
+Number gwa,  1,0!00000101100000000
+Number gwb,  1,0!00100000010000010
+Number glr,  1,0!01000000
+Number gmb,  1,0!00011000
 
 # the counts' stage (sh_model_counts.inc: Process_cnt), the same over the
 # count trees of 10 levels: rows of 1024 nodes (ca..cd), weight sets cw (and
@@ -567,10 +567,10 @@ Index cd
 Index cw
  cw_i0: cwh,    1!1
 
-Number clim, 1,0!0011111111
-Number cmw,  1,0!000000100000
+Number clim, 1,0!1110110001
+Number cmw,  1,0!001001100110
 Number csh,  1,0!0100
-Number cwa,  1,0!01000000000000000
+Number cwa,  1,0!00001000000101000
 Number cwb,  1,0!01000000000000000
-Number clr,  1,0!00000110
-Number cmb,  1,0!00100000
+Number clr,  1,0!00010100
+Number cmb,  1,0!01000000
