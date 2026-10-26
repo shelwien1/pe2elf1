@@ -26,6 +26,7 @@ struct mp3mod : mp3model<f_DEC> {
   using mp3model<f_DEC>::StartDecode;
   using mp3model<f_DEC>::FinishEncode;
   using mp3model<f_DEC>::Process;
+  using mp3model<f_DEC>::ProcessFrame;
 
   #include "frame_dump_io.inc"
 
@@ -64,7 +65,7 @@ struct mp3mod : mp3model<f_DEC> {
           len=r-1; f_EOF = len&1;
 
         } else {
-          Process(); // compress/decompress a frame
+          ProcessFrame(); // compress/decompress a frame
         }
 
         if( f_DEC==1 ) write_frame_dump(len,flag);

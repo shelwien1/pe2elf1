@@ -58,16 +58,32 @@ struct ScaleFac {
   word s[13][3];
 };
 
+// layer I/II frame contents, stored in place of si/SF/MC;
+// subbands from the joint stereo bound up use alloc[0] and smp[0] for both channels
+struct l12data {
+  byte crcok;         // CRC was there and matched (so it's recomputed on write)
+  byte alloc[2][32];  // bit allocation; layer II: index into the allocation table
+  byte scfsi[2][32];  // layer II scalefactor select info
+  byte scf[2][32][3]; // scalefactors, including the ones scfsi repeats; layer I: [0]
+  word smp[2][32][36];// sample codes, grouped ones split up; layer I: [0..11]
+};
+
 struct mp3frame0 {
   int GrbLen;
 
   header   h;
   word     CRC;
-  SideInfo si;
 
-  ScaleFac SF[2][2];
+  union {
+    struct {
+      SideInfo si;
 
-  short    MC[2][2][576];
+      ScaleFac SF[2][2];
+
+      short    MC[2][2][576];
+    };
+    l12data L;
+  };
 
   byte Garbage[4096];
 };

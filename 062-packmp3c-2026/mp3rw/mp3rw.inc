@@ -69,6 +69,8 @@ struct mp3rw : mp3parse {
           break;
         }
 
+        if( r==3 ) continue; // layer III -> I/II: that frame starts the next sequence
+
         qut(r); binlen++;
       } 
 

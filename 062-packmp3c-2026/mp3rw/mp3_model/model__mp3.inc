@@ -45,6 +45,8 @@ struct mp3model: RangeCoder_v1m<rc_ProcMode>, mp3frame, C_T {
 
   #include "model_mdb.inc"
 
+  #include "model_l12.inc"
+
   RangeDelta m_rDelta[8];
 
   void InitModel( int lossy=0, int bitrate=0 ) {
@@ -61,6 +63,7 @@ struct mp3model: RangeCoder_v1m<rc_ProcMode>, mp3frame, C_T {
     Init_Ancillary();
     Init_MDB();
     Init_Delta();
+    Init_L12();
   }
 
   void Process( void ) {

@@ -56,3 +56,4 @@ const word bandInfo[9][23] = {
 };
 
 #include "parse_huf_tbl.inc"
+#include "parse_l12tab.inc"

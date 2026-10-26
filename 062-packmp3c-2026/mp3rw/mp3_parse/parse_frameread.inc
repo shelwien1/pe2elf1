@@ -17,9 +17,9 @@
 
  int ReadFrame( void ) {
 
-   int BufPtrSaved = BufPtr;
-   int retval, i, j, hsize, SavPtr;
+   int retval, i, j, hsize, SavPtr, xtra;
    ProcMode = 1;
+   if( l12prev ) GrbLen = 0; // that frame's ancillary data went with it
 
    // 1 = break on read error (by break)
    // 0 = finished frame decoding ("loop" end reached ok)   
@@ -27,7 +27,7 @@
    for( retval=1; retval>0;  ) {
 
      if( retval==2 ) { 
-       BufPtr=BufPtrSaved;
+       BufPtr=0; // with sinf+=BufLen/8: end of the last frame, where GrbPtr counts from
        sinf+=BufLen/8; GarbageStore(0); sinf-=BufLen/8; 
        BufPtr = (BufLen-=8);
        retval = BufPtr>=0 ? -256 + sinf[BufPtr/8] : 1;
@@ -41,7 +41,17 @@
 
      if( h.syncword!=2047 ) continue;     
      if( h.ID==1 && h.IDex==0 ) continue; 
-     if( h.layer!=1 ) continue;           
+     if( h.layer!=1 ) {
+       if( h.layer==0 ) continue;
+       retval = ReadFrameL12();
+       if( retval==2 ) continue;
+       if( retval==3 ) { // store the layer III trailing bits, like for a non-frame byte
+         BufPtr=0;
+         sinf+=BufLen/8; GarbageStore(0); sinf-=BufLen/8;
+         BufPtr=BufLen;
+       }
+       break;
+     }
      if( h.bitrate==0 || h.bitrate==15 ) continue; 
      if( h.frequency==3 ) continue;       
 
@@ -79,6 +89,10 @@
      for( i=j-1; i>=0; i-- ) sinf[hsize+i]=sinf[i]; 
      sinf+=hsize;
 
+     // checking a layer I/II candidate can leave bytes past this frame in the
+     // buffer; keep them out of the way and give them back at the end
+     xtra = Max<int>( 0, j-stl );
+     sinf+=xtra; BufPtr-=xtra*8;
 
      ReadLoEnd( stl, 0 ); 
 
@@ -99,7 +113,7 @@
        SavPtr = BufPtr;
        si.main_data_begin = 0;
        for( i=0; i<4; i++ ) {
-         gr_info& gi = si.gi[0][i];
+         gr_info& gi = si.gi[i>>1][i&1]; // not gi[0][i]: gcc may stop that loop at i=2
          gi.backup_p23=gi.part2_3_length;
          gi.part2_3_length = 0;
        }
@@ -116,12 +130,14 @@
      GrbPtr = BufPtr; 
 
      BufLen=BufPtr=0; 
+     sinf-=xtra; BufLen=BufPtr=xtra*8;
 
      retval=0;
      rframe1=0;
    }
 
    if( retval<0 ) rframe1=-1;
+   l12prev = (retval==0 && h.layer!=1);
 
    return retval;
  }

@@ -34,6 +34,10 @@ struct mp3parse : Coroutine, mp3frame {
   uint Hdr1:9;
   uint Hdr2:9;
 
+  int    l12prev;    // last ReadFrame returned a layer I/II frame
+  header l12hdr;     // its header
+  int    l12crcbits; // CRC protected bits after the CRC, set by ProcL12
+
   int ReadLoEnd( int l, int flag=1 ) {
     int i,c,rv=0;
     while( BufPtr<l*8 ) {
@@ -69,7 +73,7 @@ struct mp3parse : Coroutine, mp3frame {
     
     InitSlen();
 
-    rframe1=1;
+    rframe1=1; l12prev=0;
     ProcMode=1; eofcount=0; inppos=0;
   }
 
@@ -107,5 +111,7 @@ struct mp3parse : Coroutine, mp3frame {
   #include "parse_scale2.inc"
 
   #include "parse_sideinfo.inc"
+
+  #include "parse_l12.inc"
 
 };

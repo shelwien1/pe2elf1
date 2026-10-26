@@ -192,10 +192,11 @@ of the last `Garbage` byte differ, and `mp3rw d` doesn't use them), so `t.bat`'s
 On the 40 inputs above every mp3 comes back exactly with 18 mp3c builds: g++ 13
 and clang 18 at `-O2`/`-O3`/`-Ofast` with `-std=gnu++11`/`c++17`/`c++23`,
 `-m32`, and MinGW g++ / clang x86_64 PE under Wine, each paired with an mp3rw
-from the same compiler. All 18 write `.c` files byte-identical to the original
-`mp3c.exe` (the Sep 2017 build, run under Wine) on every input, MPEG-2/2.5
-included, and `.c` files decode in both directions between `mp3c.exe` and the
-new builds, so existing archives stay readable.
+from the same compiler. Before the layer I/II support below, all 18 wrote `.c`
+files byte-identical to the original `mp3c.exe` (the Sep 2017 build, run under
+Wine) on every input, MPEG-2/2.5 included, and `.c` files decoded in both
+directions. The layer I/II support adds a bit per frame, so `.c` files of this
+version and of `mp3c.exe` no longer decode with each other.
 
 `mp3rw/mp3_model/model_scale2.inc` had the same kind of expression as the old
 `putbits`: in `ylong[scf-sf0].Process( rc,*scf++, ... )` a pre-C++17 compiler
@@ -203,3 +204,103 @@ may compute the context index after the increment, which would change the
 MPEG-2/2.5 format. `mp3c.exe` and every gcc/clang build compute it before, so
 the increment is now a separate statement after the call: same output, no
 longer up to the compiler.
+
+# Layer I / II
+
+mp3rw and mp3c also take MPEG-1 and MPEG-2 LSF Layer I and Layer II frames
+(`.mp1` / `.mp2`), alone or mixed with Layer III in one file. MPEG 2.5 and
+free format layer I/II frames stay non-frame data, as free format does for
+Layer III.
+
+## mp3rw
+
+- `mp3rw/mp3_parse/parse_l12.inc`: `ProcL12` reads or writes the audio data
+  (bit allocation, scfsi, scalefactors, samples) through `procbits`, the way
+  `ProcSideInfo` does for Layer III; `ReadFrameL12` / `WriteFrameL12` do the
+  frame around it. Grouped samples (3, 5, 9 levels) are stored split up, and
+  a group code that can't be split up means it's not a frame.
+- `parse_l12tab.inc` has the bitrate, quantization class and the five Layer II
+  bit allocation tables; they were checked against ffmpeg's, row by row.
+- The dump record keeps its layout: `l12data` overlays `si` / `SF` / `MC` (a
+  union in `parse_struct.inc`), the ancillary data goes into `Garbage` /
+  `GrbLen`. `frame_dump_io.inc` is unchanged.
+- A layer I/II frame is only taken if it follows the previous layer I/II frame
+  or the next frame header follows it. Random data, cover art in ID3 tags for
+  example, would otherwise turn up plenty of them.
+- The CRC is checked over header bits 16..31 and the allocation (Layer II:
+  and scfsi). If it doesn't match, the frame is still taken and its CRC kept.
+  For Layer I joint stereo that counts the transmitted allocations only, as
+  ISO dist10 and oxideav-mp1 do; ffmpeg checks a fixed 256 bits there.
+- When layer I/II frames follow Layer III ones, `ReadFrame` ends the Layer III
+  sequence first (it returns 3 and `mp3rw.inc` starts a new sequence), so
+  the bit reservoir code doesn't change. A Layer III frame after layer I/II
+  frames starts without a reservoir.
+
+Two things in the Layer III reader came up on the way:
+
+- It assumed no bytes past its frame end were buffered. Checking a layer I/II
+  candidate reads up to a whole frame ahead, and when that candidate is
+  rejected the bytes stay buffered; a Layer III frame found inside them then
+  dropped the rest on restore. A fake layer II header placed right before an
+  mp3 stream showed it. `ReadFrame` now keeps such bytes aside while it parses
+  the frame, and the retry after a non-frame (`retval==2`) rewinds to the end
+  of the last frame (`BufPtr=0`) instead of to `BufPtrSaved`, which assumed
+  there was nothing buffered past it.
+- The loop that clears `part2_3_length` on bad frames went through
+  `si.gi[0][i]` with i up to 3, past the inner `[2]`. gcc warns that it may
+  stop that loop at i=2; it's `si.gi[i>>1][i&1]` now.
+
+## mp3c
+
+`mp3rw/mp3_model/model_l12.inc`. Each frame record gets an adaptive bit for
+Layer III vs layer I/II (about 15 bytes over 11 MB of Layer III `.c` files);
+the Layer III modelling isn't touched. This changes the `.c` format.
+
+The layer I/II model codes:
+
+- header fields, each by the previous layer I/II header's value; padding by
+  the last 8 padding bits; for a CRC only whether it matched;
+- allocation by the previous frame's value and the subband below (channel 1:
+  channel 0's);
+- scfsi and scalefactors, each by the previous one in the subband;
+- samples as offset from the middle code: its size (bit length) by class,
+  previous size in the subband and the subband below, then the two bits below
+  the top one, the rest raw, and the sign;
+- ancillary bits order-1; their number follows from the allocation.
+
+Channel 1 is coded against channel 0: a flag for "same sample as channel 0's"
+where both have the same allocation, and channel 0's size and sign as
+context otherwise; likewise a flag for "same scalefactor". Broadcast streams
+are often mono carried as stereo, where these flags take most of the second
+channel.
+
+| file | | size | `.c` + `.out` |
+| --- | --- | --- | --- |
+| `fl1` (ISO conformance, `mp1-sample.mp1`) | L1 384 kbps 32 kHz stereo | 28224 | 54.8% |
+| `mpeg_layer1_audio.mpg`, audio stream | L1 128 kbps 44.1 kHz stereo | 880084 | 44.3% |
+| `harry-part.mp2`, audio stream | L2 224 kbps 44.1 kHz stereo | 979796 | 85.2% |
+| `mp2-bug/mpeg-adts-mp2-48hz.mp2`, audio stream | L2 320 kbps 48 kHz, mono as stereo | 5215184 | 47.2% |
+| twolame / ffmpeg encodes of test signals | L2, 32..384 kbps | | 74..87% |
+
+The first four are from samples.ffmpeg.org.
+
+## Verification
+
+97 inputs: the 40 Layer III ones above; 26 Layer II streams from twolame and
+ffmpeg (all five allocation tables, all four channel modes, CRC, MPEG-2 LSF,
+VBR, padding, energy-level and reserved-bit ancillary data); 7 synthetic
+Layer I streams (all modes and joint stereo bounds, CRC, ancillary data; ffmpeg
+decodes them without errors); the real streams above; and 20 mixed and broken
+ones (Layer I/II/III switching back and forth, junk between layers, ID3 tags,
+truncated, corrupted, a 6 MB stream, fake syncs in random data, fake headers
+right before an mp3 stream).
+
+- In every twolame / ffmpeg stream without ancillary data, the bits after the
+  audio data are all zero, and every CRC (twolame `-p`) matches: the allocation
+  tables and the bit accounting agree with those encoders.
+- `mp3rw c` output for all Layer III inputs, and for 8 real mp3s from
+  samples.ffmpeg.org (cover art, "misidentified" files, a broken first frame),
+  is byte-identical to `mp3rw0.exe`'s.
+- The whole chain restores every input exactly with each of 18 builds, as
+  above (gcc / clang, `-O2`..`-Ofast`, `-m32`, MinGW and clang PE under Wine),
+  and all of them write the same `.c` files.

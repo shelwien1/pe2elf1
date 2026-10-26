@@ -1,6 +1,8 @@
 
  int WriteFrame( void ) {
 
+   if( h.layer!=1 ) return WriteFrameL12();
+
    int retval, i, j, c, stl, SavPtr, tmp, errflag = si.p23cleared;
    ProcMode = 0; // encoding
 
