@@ -56,6 +56,7 @@ void ProcessAncillary( void ) {
   }
 
   prev_p23sum = last_p23sum;
+  if( GrbLen>=4096*8 ) BadData(); // (a broken stream: Garbage holds no more)
 
   if( GrbLen>0 ) {
 

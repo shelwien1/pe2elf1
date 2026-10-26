@@ -129,6 +129,7 @@ void ProcessL12( void ) {
   }
 
   ProcessHeaderL12();
+  if( !HeaderOk() || h.emphasis==2 ) BadData();
 
   if( h.protection==0 ) {
     t = L.crcok;

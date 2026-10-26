@@ -17,5 +17,8 @@ rem %gcc% -s -Ofast -std=gnu++17 %incs% %opts% -static mp3fr/mp3frames.cpp -o mp
 
 %gcc% -s -Ofast -std=gnu++11 %incs% %opts% -static -Imp3rw -DINC_LOG2I mp3c.cpp -o mp3c.exe
 
+rem mp3pack: mp3rw and mp3c's model in aacpack's front end (mk.sh mp3pack's flags)
+%gcc% -s -O2 -std=gnu++11 %incs% %opts% -fwrapv -Wno-invalid-offsetof -static -I. -Imp3rw mp3pack.cpp -o mp3pack.exe
+
 rem %gcc% -s -Ofast -std=gnu++17 %incs% %opts% -static -fno-fast-math pcm-distance.cpp -o pcm-distance.exe
 

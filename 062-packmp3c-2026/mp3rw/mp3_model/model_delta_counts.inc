@@ -63,6 +63,7 @@ void ProcessCounts( int i, int gr, int ch ) {
     }
   }
 
+  if( bigval>576/2 ) BadData(); // (a broken stream: the parser takes no more)
   gi.big_values = bigval;
 
   cc0[gr][ch] = k;

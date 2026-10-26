@@ -75,6 +75,7 @@ static const byte TablesToCheck[][3] =
 
   for( j=x,d=0; j<y; j++ ) d=__max(d,l_abs(MDCT[j]));
   d = (d<16) ? d : 16+log2i(l_abs(d-15))+1-1;
+  d = Min<int>( d, 28 ); // (more only in a broken stream: |x| is 8206 at most)
 //  d = (d<16) ? d : 16+ilog2(d-15)-1;
 
   c = 0; e=99999;

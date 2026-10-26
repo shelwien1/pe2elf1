@@ -8,6 +8,9 @@
 #                               sources state live (Const 0) behind "!MAP!"
 #      ./mk.sh check DUMP...    the tuning and the shipping build compress the
 #                               dumps (mp3rw c's .dmp files) to the same bytes
+#      ./mk.sh mp3pack          ./mp3pack: mp3rw and mp3c's model in aacpack's
+#                               front end (mp3pack.cpp, mp3pack_src/), MOD/ in the
+#                               shipping form
 #
 #  The model's IDX sources are mp3rw/mp3_model/IDX/<module>.idx, each with
 #  its template <module>.inc (format: mp3rw/mp3_model/IDX/IDX-FORMAT.md),
@@ -86,6 +89,14 @@ build() {
     -DNDEBUG -ILib3 -Imp3rw -DINC_LOG2I mp3c.cpp -o "$1"
 }
 
+#  $1 = the binary: mp3pack, one translation unit (mp3pack.cpp) that takes
+#  neither C++ exceptions nor RTTI, as aacpack; -fwrapv as aacpack builds
+#  (mp3c's model counts on signed integers that wrap)
+build_mp3pack() {
+  $CXX $CXXFLAGS -std=gnu++11 -fwrapv -fno-exceptions -fno-rtti -Wno-invalid-offsetof -DNDEBUG \
+    -I. -ILib3 -Imp3rw -pthread mp3pack.cpp -o "$1"
+}
+
 #  $1 = a path as given, relative to where mk.sh was run
 abspath() {
   case $1 in
@@ -114,6 +125,11 @@ case "${1:-}" in
   mod)
     generate 0 1
     ;;
+  mp3pack)
+    generate 0 1
+    build_mp3pack mp3pack
+    echo "mk.sh: ./mp3pack"
+    ;;
   check)
     shift
     [ $# -gt 0 ] || { echo "usage: ./mk.sh check DUMP..." >&2; exit 2; }
@@ -138,7 +154,7 @@ case "${1:-}" in
     exit $bad
     ;;
   *)
-    echo "usage: ./mk.sh release | mod | tuning | check DUMP..." >&2
+    echo "usage: ./mk.sh release | mod | tuning | check DUMP... | mp3pack" >&2
     exit 2
     ;;
 esac

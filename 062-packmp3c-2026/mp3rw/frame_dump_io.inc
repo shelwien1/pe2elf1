@@ -1,9 +1,15 @@
 
+// The records are padded to blocks of dump_align_size, so that none spans
+// two; FRAME_DUMP_ALIGN 0 (mp3pack, which cuts the dump into parts) pads
+// none.
+#ifndef FRAME_DUMP_ALIGN
+#define FRAME_DUMP_ALIGN (1<<20)
+#endif
 enum {
   max_frame_size = 
   (offsetof(mp3frame,Garbage) + sizeof(((mp3frame*)0)->Garbage))
  -(offsetof(mp3frame,GrbLen)  + sizeof(((mp3frame*)0)->GrbLen))+10+10,
-  dump_align_size = 1<<20
+  dump_align_size = FRAME_DUMP_ALIGN
 };
 
 qword fd_pos;
@@ -50,7 +56,7 @@ uint read_frame_dump( qword& binlen, uint& f_EOF ) {
   }
 
   // calc remaining bytes in aligned block
-  n = dump_align_size-(fd_pos%dump_align_size); 
+  n = dump_align_size ? dump_align_size-(fd_pos%(dump_align_size|!dump_align_size)) : max_frame_size;
   // pad to block size if next frame might not fit
   if( n<max_frame_size ) {
     // read n bytes to reach aligned pos
@@ -89,7 +95,7 @@ void write_frame_dump( qword binlen=0, uint f_END=0 ) {
   }
 
   // calc remaining bytes in aligned block
-  n = dump_align_size-(fd_pos%dump_align_size); 
+  n = dump_align_size ? dump_align_size-(fd_pos%(dump_align_size|!dump_align_size)) : max_frame_size;
   // pad to block size if next frame might not fit
   if( n<max_frame_size ) {
     // read n bytes to reach aligned pos

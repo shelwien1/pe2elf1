@@ -74,6 +74,17 @@ struct mp3model: RangeCoder_v1m<rc_ProcMode>, mp3frame, C_T {
     Init_L12();
   }
 
+  // whether a frame's header is one mp3rw's parser takes (a decoder that
+  // decodes another has a broken stream)
+  int HeaderOk( void ) {
+    return h.bitrate!=0 && h.bitrate!=15 && h.frequency!=3 && !(h.ID==1 && h.IDex==0);
+  }
+  // a broken stream: the run ends here, with an error (yield 3), before
+  // the frame's values are used
+  NOINLINE void BadData( void ) {
+    for(;;) yield( this, 3 );
+  }
+
   void Process( void ) {
     RangeCoder& rc = *this;
 
@@ -90,6 +101,7 @@ struct mp3model: RangeCoder_v1m<rc_ProcMode>, mp3frame, C_T {
     }
 
     ProcessHeader();
+    if( h.layer!=1 || !HeaderOk() ) BadData();
 
     uint FrameTime = (h.ID?1152:576)*44100/spfreq[h.ID][h.IDex][h.frequency];
 

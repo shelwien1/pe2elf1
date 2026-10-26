@@ -30,7 +30,8 @@ int Len_MDCT( short (&is)[576], gr_info& gi ) {
   t = gi.table_select[2]; if(t) for( i=region2Start; i<bigvalues;    i+=2 ) bits+=len_huffman(t,is[i],is[i+1]);
 
   t = 32 + gi.count1table_select;
-  for( i=bigvalues; i<rzero; i+=4 ) bits += c1tab[t-32][is[i]&3][is[i+1]&3][is[i+2]&3][is[i+3]&3]>>10;
+  // (a quadruple goes past 576 only in a broken stream: those lines are 0)
+  for( i=bigvalues; i<rzero; i+=4 ) bits += c1tab[t-32][is[i]&3][(i+1<576?is[i+1]:0)&3][(i+2<576?is[i+2]:0)&3][(i+3<576?is[i+3]:0)&3]>>10;
 
   return bits;
 }
