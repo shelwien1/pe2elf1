@@ -17,8 +17,8 @@ It is built from two earlier programs: the syntax walk of
 ## Build
 
     make                        # -> ./aacpack
-    make CXXFLAGS="-O0 -g"      # debug build
-    make PARCH=                 # plain C++, no AVX2: slower, codes identically
+    make CXXFLAGS="-O1 -g"      # debug build
+    make PARCH=                 # plain C++, no AVX2: up to 2x slower, codes identically
 
 aacpack is one translation unit: `aacpack_src/aacpack.cpp` is its command
 line and includes `aacpack_src/aacpack.inc`, which includes the rest. So
@@ -29,8 +29,11 @@ C++ library either (`mem.inc` has the few containers it needs), and its
 structs are set up by `Init()` and freed by `Quit()`, not constructors and
 destructors. The target is x86-64-v3 (AVX2); the mixers' SIMD code has
 plain C++ beside it that codes identically, and GCC and clang builds code
-the same bytes too, at any optimization. The coroutines (Lib3) are
-x86-64's (or i386's): other targets do not build.
+the same bytes too, for Linux and for Windows. The coroutines (Lib3) are
+x86-64's (or i386's): other targets do not build. They copy at most 64 KB
+of a coroutine's stack, which `-O0` frames outgrow, and clang's frames
+must not keep their pointer (clang's setjmp of Lib3 keeps only rip and
+rsp): with clang, `-O0` and `-fno-omit-frame-pointer` builds crash.
 
 ## Use
 

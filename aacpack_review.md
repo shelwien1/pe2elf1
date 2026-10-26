@@ -6,7 +6,8 @@ and the tests (`test/`). It looked for bugs, duplicate code and unused
 code. The review is of the tree as of commit 82eb6a44 (format version 7).
 Each finding below says what was done about it. The fixes of B3-B6 and
 A5 change what the compressor writes, so they make format version 8; the
-rest keep version 7's output.
+rest keep version 7's output. The fixes of C1 and M1, in Lib3's coroutine
+files, were reverted: C1's broke the Windows build.
 
 ## How
 
@@ -51,14 +52,14 @@ The ids are the area's letter (M: the mechanical checks).
 | id | where | sev | what | done |
 |---|---|---|---|---|
 | D1 | `cmstream.inc` `Scanner::unit` | high | `c` failed on valid input, see below | fixed |
-| C1 | `Lib3/coro3b.inc`, `coro3_setjmp_x64d.h` | high | clang builds crashed at `-O0` and with frame pointers, see below | fixed |
+| C1 | `Lib3/coro3b.inc`, `coro3_setjmp_x64d.h` | high | clang builds crashed at `-O0` and with frame pointers, see below | fixed, then reverted (Windows) |
 | B1 = A1 | `model.inc` `cs_sections` | high | `c` failed on a legal stream with more than 4096 zero-length sections in a group, see below | fixed |
-| M1 | `Lib3/coro3b.inc` `STKPAD` | high | the documented debug build failed on some streams, see below | fixed |
+| M1 | `Lib3/coro3b.inc` `STKPAD` | high | the documented debug build failed on some streams, see below | fixed, then reverted with C1; the README's debug build is `-O1 -g` |
 | D2 | `cli.inc` `Output::open` | medium | output `-` was not checked against the input | fixed |
 | D3 | `cli.inc` `Output::open` | medium | where the temporary file could not be made, the destination was written in place | fixed |
 | D5 | `cli.inc` `Output::open` | medium | the temporary file was opened through links | fixed |
 | D4 | `cli.inc` `Output::close` | medium | a failed `d` replaced an existing file with what it had restored | fixed |
-| D8 | `Lib3/coro3b.inc`, Makefile | medium | non-x86-64 targets failed in obscure ways; the Makefile said any target builds | fixed |
+| D8 | `Lib3/coro3b.inc`, Makefile | medium | non-x86-64 targets failed in obscure ways; the Makefile said any target builds | the Makefile and README fixed; the `#error` reverted with C1 |
 | C2 | `fam.inc` `code`, `codes_in` | medium | on damaged input, a decoded value could exceed its range | fixed |
 | E1 | `mk.sh check` | medium | with no streams given, failed when not run from `aacpack_src` | fixed |
 | E2 | `IDX/opt.pl` | medium | unquoted paths; the first measurement was not checked | fixed |
@@ -132,6 +133,16 @@ rbx either.
 - clang `-O0`, clang with frame pointers and gcc `-O0` now code the test
   corpus to the same bytes as the `-O2` builds, and fail cleanly on the
   error cases (exit status 1).
+- **Reverted.** The fix broke the Windows build, on every input. There
+  clang's frames point rbp past the frame's base (`coro_call0()`: rbp =
+  rsp + 0x80), and `__builtin_setjmp` saves the frame's base, which
+  `__builtin_longjmp` puts in rbp. So `coro_call0()`, jumped back to, read
+  its locals in the wrong place. At the maintainer's request Lib3's
+  coroutine files are back as they were before the review
+  (`coro3_setjmp_x64d.h` for clang). So clang builds at `-O0` or with
+  `-fno-omit-frame-pointer` crash again, as the README says. A setjmp of
+  every register the Win64 ABI keeps would fix both; it was tried, and
+  round-tripped the test corpus under wine, byte-identical to Linux.
 
 ### B1 = A1: zero-length sections
 
@@ -160,6 +171,9 @@ deep to yield" (`d` of `ff_mixed.bin`; `c` of `ff_lc256.aac`).
 - **Fix:** 256 KB. A yield copies only the depth in use, and pages that are
   never touched cost no memory.
 - Both `-O0` builds round-trip all 22 streams, byte-identical to `-O2`.
+- **Reverted** with C1: 64 KB again. gcc's `-O0` build fails on 3 of the
+  44 runs of `make test`'s corpus. The README's debug build is now
+  `-O1 -g`, whose deepest yield copies 7 KB.
 
 ### The output file (D2-D7, D10)
 
@@ -200,7 +214,8 @@ it and renames it as the call ends well.
   the asm). The `CORO_NOASM` fallback aborts under glibc's fortified
   longjmp. And the Makefile said `PARCH=` builds for any target. Now any
   target but x86-64 and i386 stops with `#error`, and the Makefile and
-  README say x86-64.
+  README say x86-64. The `#error` went with C1's revert: other targets
+  fail in the i386 asm again.
 - **C2:** `tc_fam::code()` bounds the unary length by `xmax`, not the top
   length's mantissa. So a damaged stream could decode a value above `xmax`
   (and `codes_in()` one outside `[lo, hi]`). The walk rejected it later,
@@ -399,8 +414,8 @@ Each confirmed by grep over the sources, MOD/ and the tools.
 | M3 = C14, E21 | famcfg's `Uses` and `FC_USE`, read by nothing; `idx2inc.pl`'s comment said the model computes only those | removed; the comment corrected. The generated `_USES` lists stay: the format has them (IDX-FORMAT.md §14) |
 | M4 | `progress_poll()` (= D17), `dump_discard()` and the dump's `discard()` with its `start` (= C14), `Huff::bits_of()` (= A4), `abs64()` (= C14), `Buf::pop_back()` | removed |
 | M5 | `tables.inc`: `#define swb_offset_768_32 swb_offset_768_48`, of a table that does not exist, and an orphaned comment | removed |
-| D15 | Lib3 files nothing includes: `coro2pair.inc`, `coro_fhp2.inc`, `win_shim.inc`; `file_api.inc`'s branch to a `file_api_win.inc` that is not there | removed; aacpack includes `file_api_std.inc` |
-| D16 | Lib3's unused parts. common.inc: `bzero`, global `Min`/`Max`, `macro_Min`/`Max`, `AlignUp`, `wc`, `for_e*`/`while_e*`, `flen`, `log2i`, `X64flag`, `sqword`, `__assume_aligned`, `restrict`. coro3b and coro3_pin: `CAPI`, `f_init`, `f_quit`, and the byte get/put and length methods. file_api_std: everything but `open`/`read`/`sread`/`writ` (its `operator int` cut a pointer to an int) | removed; `coro3_setjmp_x64d.h` too (C1) |
+| D15 | Lib3 files nothing includes: `coro2pair.inc`, `coro_fhp2.inc`, `win_shim.inc`; `file_api.inc`'s branch to a `file_api_win.inc` that is not there | removed; aacpack includes `file_api_std.inc`. `coro2pair.inc` and `coro_fhp2.inc` are back with C1's revert |
+| D16 | Lib3's unused parts. common.inc: `bzero`, global `Min`/`Max`, `macro_Min`/`Max`, `AlignUp`, `wc`, `for_e*`/`while_e*`, `flen`, `log2i`, `X64flag`, `sqword`, `__assume_aligned`, `restrict`. coro3b and coro3_pin: `CAPI`, `f_init`, `f_quit`, and the byte get/put and length methods. file_api_std: everything but `open`/`read`/`sread`/`writ` (its `operator int` cut a pointer to an int) | removed; the coro3b and coro3_pin parts are back with C1's revert, and so is `coro3_setjmp_x64d.h` |
 | D17 | `AacArgs::level`, `order`, `meter`: set, never read | removed |
 | D18 | `c.f_quit = 1` in `run_file()`: read by nothing | removed |
 | A2 = B-U8 | `Walk::Pos::win`, `k`, `ss` and `ChanData::pulse`: written, never read (`at.k`, `at.win` per coefficient) | removed |
@@ -542,3 +557,19 @@ format version 7, and were checked against 82eb6a44:
 - **ASan and UBSan:** eight SBR and PS streams round-trip in both orders
   with no report. Two of them (`al_sbr_cm_48_5.1` and an fdkaac HE-AAC
   encode) have the coupled SBR of B3.
+
+### Lib3's coroutine files restored
+
+The version 8 code, with Lib3's `coro*` files as at 82eb6a44 (C1's
+revert):
+
+- **Windows:** a clang build for Windows (`-Ofast -march=k8
+  -ffast-math`, MinGW's headers) round-trips the 22 streams in both
+  orders under wine. It writes the bytes the Linux build writes (44 of
+  44), and passes `check.sh`'s 13 cases.
+- **Linux:** `make test` and `mk.sh check 9` pass. gcc and clang at
+  `-O2`, and at `-O1 -g`, write the same bytes (44 of 44).
+- **What C1 and M1 fixed is open again:**
+  - clang at `-O0` crashes on 32 of the 44 runs, and clang `-O2
+    -fno-omit-frame-pointer` on all 44;
+  - gcc at `-O0` fails on 3 (the stack too deep to yield).
