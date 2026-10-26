@@ -156,8 +156,10 @@ struct Mp3Join : mp3parse {
   }
 
   // whether GrbLen bits, written from bit pos of the writer's buffer up
-  // (GarbageFlush()), stay in it
-  bool garbage_fits(int pos) { return GrbLen <= 0 || (pos + GrbLen) / 8 + 4 <= (int)sizeof(Out); }
+  // (GarbageFlush()), stay in it. (putbits() ors each in through 4 bytes,
+  // whose bytes past the bits are 0: a run of bits that ends at the
+  // buffer's end goes past it by those, unchanged, as it always did.)
+  bool garbage_fits(int pos) { return GrbLen <= 0 || (pos + GrbLen + 7) / 8 <= (int)sizeof(Out); }
 
   void do_process() {
     qword len;
