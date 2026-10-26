@@ -2,7 +2,8 @@
 // compressor of AAC streams (c, d), built on h264p's: the syntax of the
 // stream, with the Huffman coding removed (the syntax walk of aac2tsv), is
 // coded with a context mixing model (model.inc) and coded back by the
-// decompressor; both run as coroutines, streaming (coro.inc).
+// decompressor; both run as coroutines, streaming (coro.inc), and on
+// threads, the stream in parts (mt.inc).
 //
 // One translation unit: a program includes this file once, as aacpack.cpp
 // does, and it includes every source. Its names stay in namespace aacpack:
@@ -51,15 +52,29 @@
 #include <immintrin.h>
 #endif
 
-// The stack-copying coroutines of Lib3 (mtwrap's, as h264p has them, but
-// for what aacpack does not use of them, and clang's setjmp as gcc's),
-// which aacpack's compressor and decompressor are (coro.inc), and its
-// stdio file API. Before aacpack's own sources, which see its INLINE and
-// NOINLINE, and after the system headers, which its setjmp and longjmp
-// macros must not reach.
+// The stack-copying coroutines of Lib3 (mtwrap's, as h264p has them),
+// which aacpack's compressor and decompressor are (coro.inc), its stdio
+// file API, and the library's CoroutinePair, which chains two of them.
+// Before aacpack's own sources, which see its INLINE and NOINLINE, and
+// after the system headers, which its setjmp and longjmp macros must not
+// reach.
+#ifndef FILE_API_STD
+#define FILE_API_STD  // (its stdio file API on Windows too)
+#endif
 #include "Lib3/common.inc"
 #include "Lib3/coro3b.inc"
-#include "Lib3/file_api_std.inc"
+#include "Lib3/file_api.inc"
+#include "Lib3/coro2pair.inc"
+// MTwrap (h264p's: mtwrap's, but that it waits only on events; Lib3's
+// win_shim.inc it includes: build with -I Lib3, and -pthread), which runs
+// coroutines on threads (mt.inc). Out of memory for the blocks it puts
+// aside (dyn_buff.inc), it ends the run as aacpack does (err.inc's
+// err_fatal()), not on a trap.
+namespace aacpack {
+[[noreturn]] void err_fatal(const char* why);
+}
+#define MTWRAP_NOMEM() aacpack::err_fatal("out of memory")
+#include "MTwrap_v3/MTwrap.inc"
 
 // errors (without C++ exceptions) and memory (without the C++ library's
 // containers), the bits, the tables and codebooks of the syntax, the
@@ -89,10 +104,12 @@
 #include "model.inc"
 
 // the front end: a call's options, progress and files, the compressed
-// stream, the coroutines and the calls
+// stream, the splitter of -t, the coroutines, the threads and the calls
 #include "cli.inc"
 #include "cmstream.inc"
+#include "aacsplit.inc"
 #include "coro.inc"
+#include "mt.inc"
 #include "drivers.inc"
 
 #endif  // AACPACK_INC

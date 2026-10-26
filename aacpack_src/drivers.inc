@@ -1,6 +1,6 @@
 // The calls c and d: their coroutines (coro.inc) run on files, with a
-// progress line, at the level asked for or the stream's (h264p's
-// drivers.inc, but for its threads).
+// progress line, at the level asked for or the stream's, and on threads
+// (mt.inc) with -t (h264p's drivers.inc).
 
 namespace aacpack {
 
@@ -20,7 +20,8 @@ uint run_file(C& c, filehandle0 f, filehandle0 g, Show show, uint8_t* pre = null
       c,
       [&]() {
         uint l = f.sread(ib, kIo);
-        c.addinp(ib, l);  // (0 bytes: the end)
+        if (!l) c.f_quit = 1;  // (the end: a 0-length buffer, and f_quit, which MTwrap reads)
+        c.addinp(ib, l);
       },
       [&](bool more) {
         uint l = c.getoutsize();
@@ -64,6 +65,10 @@ AacArgs call_start(Progress& pr, const Options& opt, const char* tag, filehandle
   a.asc = opt.asc_n ? opt.asc : nullptr;
   a.asc_n = opt.asc_n;
   a.name = name;
+  a.level = opt.level;
+  a.order = opt.order;
+  a.meter = &pr;
+  a.threads = opt.threads;
   return a;
 }
 // and its end, r its status: the output committed (close_io(); keep: what
@@ -139,6 +144,70 @@ struct DecodeLv {
   }
 };
 
+// what MTwrap's Init() returned, said (false: nothing to say)
+bool mt_init_failed(uint r, int threads, Progress& pr) {
+  if (r == 7)
+    say_error(&pr, "aacpack: cannot start %d threads\n", threads);
+  else if (r)
+    say_error(&pr, "aacpack: no memory for the buffers of %d threads\n", threads);
+  return r != 0;
+}
+
+// (the counts of a run on threads on the progress line, of all its
+// workers: pr's MtEnc, MtDec)
+struct MtProg {
+  Progress* pr;
+  void* m;
+};
+void mt_enc_counts(void* c, uint64_t& raw, uint64_t& packed, uint64_t& pos, uint64_t& frames) {
+  MtWork w = mt_work(((MtEnc*)((MtProg*)c)->m)->M2);
+  pos = raw = w.in;
+  packed = kMtHead + w.out;
+  frames = w.frames;
+}
+void mt_dec_counts(void* c, uint64_t& raw, uint64_t& packed, uint64_t& pos, uint64_t& frames) {
+  MtWork w = mt_work(*(MtDec*)((MtProg*)c)->m);
+  raw = w.out;
+  pos = packed = kMtHead + w.in;
+  frames = w.frames;
+}
+
+// c -t N: the stream in parts on N threads (mt.inc), after aacpack's header
+int code_mt(const char* in_name, const Options& opt, filehandle0& f, Output& o) {
+  Progress pr;
+  AacArgs a = call_start(pr, opt, "enc", f, in_name);
+  a.verbose = false;  // (no statistics for each part)
+  MtEnc* e = coro_new<MtEnc>();
+  MtProg mp = {&pr, e};
+  pr.counts(mt_enc_counts, &mp);
+  e->M1.Init(opt.part, mt_cap(opt.part), &a);
+  if (mt_init_failed(e->M2.Init(opt.threads, kMtRing, &a, 1), opt.threads, pr)) {
+    e->M1.Quit();  // (threads already started wait on input: they end with the process, e as they have it)
+    return call_end(1, f, o, false, pr, 0, 0, 0);
+  }
+  uint8_t head[kMtHead];
+  mt_head(head, opt.threads, opt.part);
+  o.g.writ(head, sizeof head);
+  int r = run_file(*e, f, o.g, [&](uint) { pr.poll(); }) || mt_failed(e->M2);
+  if (r && !mt_failed(e->M2)) say_error(&pr, "aacpack: %s: internal: a thread stopped early\n", in_name);
+  MtCounts n = mt_counts(*e);
+  uint64_t cuts[AacSplit::CUT_N];
+  memcpy(cuts, e->M1.st->cuts, sizeof cuts);
+  e->M2.Quit();  // (the threads joined)
+  e->M1.Quit();
+  pr.counts(nullptr, nullptr);
+  coro_free(e);
+  r = call_end(r, f, o, false, pr, n.raw, n.packed, n.frames);
+  if (!r && opt.verbose)
+    fprintf(stderr,
+            "%" PRIu64 " -> %" PRIu64 " bytes (%.2f%%), %" PRIu64 " parts on %d threads: %" PRIu64
+            " cut before a unit that parses the same at a stream's start, %" PRIu64 " at a unit past the cap, %" PRIu64
+            " in bytes\n",
+            n.raw, n.packed, n.raw ? 100.0 * n.packed / n.raw : 0.0, n.parts, opt.threads, cuts[AacSplit::CUT_CLEAN],
+            cuts[AacSplit::CUT_CAP], cuts[AacSplit::CUT_BYTES]);
+  return r;
+}
+
 // c
 int code(const char* in_name, const char* out_name, const Options& opt) {
   if (!has_level(opt.level)) return 2;
@@ -146,17 +215,56 @@ int code(const char* in_name, const char* out_name, const Options& opt) {
   Output o;
   o.Init();
   if (!open_io(in_name, out_name, f, o)) return 1;
+  if (opt.threads > 1) return code_mt(in_name, opt, f, o);
   return with_level<CodeLv>(opt.level, in_name, opt, f, o);
 }
 
-// d: the first bytes say its level and order
+// d of the parts on threads: as many threads as compressed them
+int decode_mt(const char* in_name, const Options& opt, filehandle0& f, Output& o, const uint8_t* head, size_t got) {
+  int threads = got == (size_t)kMtHead ? head[sizeof kMtMagic] : 0;
+  char msg[512];
+  if (got > sizeof kMtMagic - 1 && !cm_version_ok(head[sizeof kMtMagic - 1], in_name, msg, sizeof msg)) {
+    fputs(msg, stderr);
+    return close_io(1, f, o, false);
+  }
+  if (threads < 1 || threads > 64) {
+    fprintf(stderr, "aacpack: %s: a broken or truncated stream\n", in_name);
+    return close_io(1, f, o, false);
+  }
+  Progress pr;
+  AacArgs a = call_start(pr, opt, "dec", f, in_name);
+  a.verbose = false;  // (no statistics for each part)
+  a.part_max = mt_part_max((get_le(head + sizeof kMtMagic + 1, 4) + 1) << 10);  // (the part size in KB, rounded down)
+  a.threads = threads;
+  MtDec* d = coro_new<MtDec>();
+  MtProg mp = {&pr, d};
+  pr.counts(mt_dec_counts, &mp);
+  if (mt_init_failed(d->Init(threads, kMtRing, &a, 1), threads, pr)) return call_end(1, f, o, false, pr, 0, 0, 0);
+  int r = run_file(*d, f, o.g, [&](uint) { pr.poll(); }) || mt_failed(*d) || !mt_dealt(*d);
+  if (r && !mt_failed(*d)) say_error(&pr, "aacpack: %s: a broken or truncated stream\n", in_name);
+  MtCounts n = mt_counts(*d);
+  d->Quit();
+  pr.counts(nullptr, nullptr);
+  coro_free(d);
+  r = call_end(r, f, o, n.raw > 0, pr, n.raw, n.packed, n.frames);  // (what was decoded before an error)
+  if (!r && opt.verbose) fprintf(stderr, "%" PRIu64 " bytes, %" PRIu64 " parts on %d threads\n", n.raw, n.parts, threads);
+  return r;
+}
+
+// d: the first bytes say which it is, a stream of one model (and its level
+// and order) or of parts on threads (kMtMagic)
 int decode(const char* in_name, const char* out_name, const Options& opt) {
   filehandle0 f;
   Output o;
   o.Init();
   if (!open_io(in_name, out_name, f, o)) return 1;
-  uint8_t head[sizeof kCmMagic + 2];
-  size_t got = fread(head, 1, sizeof head, f.f);
+  uint8_t head[kMtHead];
+  static_assert(sizeof head >= sizeof kCmMagic + 2, "the header read ahead holds a stream's of one model");
+  size_t got = fread(head, 1, sizeof kCmMagic + 2, f.f);
+  if (got >= sizeof kMtMagic - 1 && !memcmp(head, kMtMagic, sizeof kMtMagic - 1)) {
+    got += fread(head + got, 1, sizeof head - got, f.f);
+    return decode_mt(in_name, opt, f, o, head, got);
+  }
   char msg[512];
   int order = 1;
   int level = cm_level(head, got, in_name, msg, sizeof msg, &order);

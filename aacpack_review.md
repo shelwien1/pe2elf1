@@ -414,10 +414,10 @@ Each confirmed by grep over the sources, MOD/ and the tools.
 | M3 = C14, E21 | famcfg's `Uses` and `FC_USE`, read by nothing; `idx2inc.pl`'s comment said the model computes only those | removed; the comment corrected. The generated `_USES` lists stay: the format has them (IDX-FORMAT.md §14) |
 | M4 | `progress_poll()` (= D17), `dump_discard()` and the dump's `discard()` with its `start` (= C14), `Huff::bits_of()` (= A4), `abs64()` (= C14), `Buf::pop_back()` | removed |
 | M5 | `tables.inc`: `#define swb_offset_768_32 swb_offset_768_48`, of a table that does not exist, and an orphaned comment | removed |
-| D15 | Lib3 files nothing includes: `coro2pair.inc`, `coro_fhp2.inc`, `win_shim.inc`; `file_api.inc`'s branch to a `file_api_win.inc` that is not there | removed; aacpack includes `file_api_std.inc`. `coro2pair.inc` and `coro_fhp2.inc` are back with C1's revert |
-| D16 | Lib3's unused parts. common.inc: `bzero`, global `Min`/`Max`, `macro_Min`/`Max`, `AlignUp`, `wc`, `for_e*`/`while_e*`, `flen`, `log2i`, `X64flag`, `sqword`, `__assume_aligned`, `restrict`. coro3b and coro3_pin: `CAPI`, `f_init`, `f_quit`, and the byte get/put and length methods. file_api_std: everything but `open`/`read`/`sread`/`writ` (its `operator int` cut a pointer to an int) | removed; the coro3b and coro3_pin parts are back with C1's revert, and so is `coro3_setjmp_x64d.h` |
-| D17 | `AacArgs::level`, `order`, `meter`: set, never read | removed |
-| D18 | `c.f_quit = 1` in `run_file()`: read by nothing | removed |
+| D15 | Lib3 files nothing includes: `coro2pair.inc`, `coro_fhp2.inc`, `win_shim.inc`; `file_api.inc`'s branch to a `file_api_win.inc` that is not there | removed; aacpack includes `file_api_std.inc`. `coro2pair.inc` and `coro_fhp2.inc` are back with C1's revert, the rest with threads (below) |
+| D16 | Lib3's unused parts. common.inc: `bzero`, global `Min`/`Max`, `macro_Min`/`Max`, `AlignUp`, `wc`, `for_e*`/`while_e*`, `flen`, `log2i`, `X64flag`, `sqword`, `__assume_aligned`, `restrict`. coro3b and coro3_pin: `CAPI`, `f_init`, `f_quit`, and the byte get/put and length methods. file_api_std: everything but `open`/`read`/`sread`/`writ` (its `operator int` cut a pointer to an int) | removed; the coro3b and coro3_pin parts are back with C1's revert, and so is `coro3_setjmp_x64d.h`; the rest with threads (below) |
+| D17 | `AacArgs::level`, `order`, `meter`: set, never read | removed; back with threads (below), whose workers read them |
+| D18 | `c.f_quit = 1` in `run_file()`: read by nothing | removed; back with threads (below), whose MTwrap reads it |
 | A2 = B-U8 | `Walk::Pos::win`, `k`, `ss` and `ChanData::pulse`: written, never read (`at.k`, `at.win` per coefficient) | removed |
 | A3 | `Chan::end()` | removed |
 | B-U1 | `ChanHist::group_len` | removed |
@@ -573,3 +573,14 @@ revert):
   - clang at `-O0` crashes on 32 of the 44 runs, and clang `-O2
     -fno-omit-frame-pointer` on all 44;
   - gcc at `-O0` fails on 3 (the stack too deep to yield).
+
+## After the review: threads
+
+`c -t` (README, Threads) brings in h264p's MTwrap, with the Lib3 it is
+built on as h264p has it. So all of Lib3's files are the library's
+again: what D15 and D16 took out of `common.inc`, `file_api.inc` and
+`file_api_std.inc`, and `win_shim.inc`, is back, unchanged.
+`AacArgs::level`, `order` and `meter` (D17) are read again, by the
+workers, and `run_file()` sets `f_quit` at the input's end again (D18):
+MTwrap's coder reads it, and without it `d` of a stream on threads waits
+for input for ever.

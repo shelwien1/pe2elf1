@@ -15,6 +15,8 @@ struct Options {
   int format;     // c: the container to look for (F_*: -adts, -latm, -adif)
   uint8_t asc[64];  // c: -asc, the AudioSpecificConfig of raw access units
   size_t asc_n;
+  int threads;    // c's threads: -t (more than one: the stream in parts, mt.inc)
+  uint32_t part;  // and the size of a part, at least: -c
 
   // the defaults
   void Init() {
@@ -23,6 +25,8 @@ struct Options {
     order = 1;
     format = 0;
     asc_n = 0;
+    threads = 1;
+    part = 1 << 20;
   }
 };
 

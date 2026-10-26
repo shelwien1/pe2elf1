@@ -3,7 +3,8 @@
 # stream: no input, bytes that are not AAC, pipes, a stream cut short, with
 # junk in it or a container that is not looked for, strict mode, and
 # compressed streams that are broken (d must fail on them; what it restored
-# before it found out stays as the output). Exit status 1 if any fails.
+# before it found out stays as the output), on one thread and on threads
+# (-t). Exit status 1 if any fails.
 BIN=$1
 F=$2
 tmp=${TMPDIR:-/tmp}/aacpack.$$
@@ -58,5 +59,20 @@ dbad "d of a compressed stream with a byte changed"
 dbad "d of a compressed stream with bytes after it"
 cp "$F" "$tmp.bad"
 dbad "d of what is not a compressed stream"
+
+# on threads: the stream in parts of 64 KB
+if "$BIN" c -t 3 -c 64k - - < "$F" 2> /dev/null | "$BIN" d - - 2> /dev/null | cmp -s "$F" -; then ok "threads: pipes"; else bad "threads: pipes"; fi
+"$BIN" c -t 3 -c 64k "$F" "$tmp.apk" 2> /dev/null
+n=$(wc -c < "$tmp.apk")
+head -c $((n / 2)) "$tmp.apk" > "$tmp.bad"
+dbad "threads: d of a compressed stream cut short"
+b=$(od -An -tu1 -j $((n / 3)) -N1 "$tmp.apk")
+{ head -c $((n / 3)) "$tmp.apk"; printf "\\$(printf %o $(((b + 1) % 256)))"; tail -c +$((n / 3 + 2)) "$tmp.apk"; } > "$tmp.bad"
+dbad "threads: d of a compressed stream with a byte changed"
+{ cat "$tmp.apk"; printf 'x'; } > "$tmp.bad"
+dbad "threads: d of a compressed stream with bytes after it"
+"$BIN" c -t 65 "$F" "$tmp.apk" 2> /dev/null
+r=$?
+if [ $r -eq 2 ]; then ok "threads: -t takes 1 to 64"; else bad "threads: -t takes 1 to 64 (status $r)"; fi
 rm -f "$tmp.in" "$tmp.apk" "$tmp.out" "$tmp.bad"
 exit $fail

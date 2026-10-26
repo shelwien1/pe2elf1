@@ -10,7 +10,7 @@ for bit. MP4 (M4A) files are mp4p's: aacpack keeps them as bytes.
 
 It is built from two earlier programs: the syntax walk of
 [aac2tsv](https://github.com/shelwien1/pe2elf1/tree/claude/magical-davinci-64pswj/aac2tsv)
-(lossless AAC ⇄ TSV) and the coder, models and streaming of
+(lossless AAC ⇄ TSV) and the coder, models, streaming and threads of
 [h264p](https://github.com/shelwien1/pe2elf1/tree/claude/happy-keller-i8oles)
 (a lossless compressor of H.264 streams).
 
@@ -39,11 +39,13 @@ rsp): with clang, `-O0` and `-fno-omit-frame-pointer` builds crash.
 
 | option | |
 |---|---|
-| `-v` | statistics on stderr: what each part of the stream took before and after, by stage and by syntax element; what the stream is and where it changes; the units it stored as bytes, and why |
+| `-v` | statistics on stderr: what each part of the stream took before and after, by stage and by syntax element; what the stream is and where it changes; the units it stored as bytes, and why (on threads, instead: how many parts the stream was cut into, and how `c` cut them) |
 | `-p` | what the stream is and the progress line, even when stderr is not a terminal |
 | `-s` | `c`: fail where a frame would be stored as its bytes or kept partly as bits, instead of storing it so |
 | `-b` | `c`: code each channel's section data (codebooks and section lengths) before its spectra, as the bitstream has it, instead of after them (below; `d` reads which from the stream) |
 | `-9` | `c`: the model's level (there is one, `-9`; `d` reads it from the stream) |
+| `-t N` | `c`: compress on N threads, 1 to 64 (default 1): the stream in parts, each coded by a model of its own (Threads, below); `d` runs as many threads as the stream says |
+| `-c N` | `c -t`: the size of a part, at least: N MB, 1 to 1024, or N KB with a `k` (`-c 256k`); 1 MB by default |
 | `-adts` `-latm` `-adif` | `c`: look for this container alone (default: whatever comes) |
 | `-asc HEX` | `c`: the input is back-to-back raw_data_blocks of this AudioSpecificConfig, as `aac2tsv -asc` and `aacdec -asc` take them (not ER object types, whose access units have no END to tell where one ends) |
 
@@ -57,7 +59,8 @@ no file: it keeps what it restored before an error in the compressed
 stream. A call ended by a signal (SIGINT, SIGTERM, SIGHUP, SIGPIPE,
 SIGQUIT, SIGALRM, SIGUSR1, SIGUSR2, SIGXCPU, SIGXFSZ, ...) removes the
 temporary file. On a terminal (or with `-p`),
-`c` and `d` say what the audio is and show their progress:
+`c` and `d` say what the audio is and show their progress (on threads,
+of all the workers together; what the audio is, once):
 
     audio: ADTS, AAC LC + SBR (HE-AAC), 22050 Hz, channel configuration 2
     [enc] 9612410 > 8782155  100.0%  25860 frames  done in 19.07s  10.68M RAM at most
@@ -243,7 +246,8 @@ one run of the range coder, flushed once at its end. Its contents in
 order: the `-asc` config if any; the SBR headers assumed (below); each
 unit's kind and the unit, either its values or a count of bytes and the
 bytes; the end; and the CRC-32 of the input. `d` takes data after the
-end for corruption.
+end for corruption. On threads, the stream is another, of such streams
+(Threads, below).
 
 An SBR payload can only be parsed with its element's SBR header, which
 comes every so many frames. A stream cut out of a longer one can start
@@ -262,7 +266,82 @@ and 16 MB each for the match model's ring of the last 4M tokens and the
 bytes' order-2 table; a run touches what its stream needs (about 38 MB
 of memory in all for a stereo stream, 49 MB with `-b`). `c` and `d` are
 coroutines (h264p's Lib3) that ask their driver for input and give it
-output, so pipes of any length work.
+output, so pipes of any length work. On threads (below), each worker has
+a model of its own, and holds a part whole (at least `-c` long, and at
+most about 8 times that: twice the cap) as it codes it.
+
+### Threads
+
+`c -t N` compresses on N threads, 2 to 64, as h264p does
+(`aacpack_src/mt.inc`). A splitter (`aacsplit.inc`, on the main thread,
+with the cut points of aacsplit) cuts the stream into parts, and MTwrap
+(`MTwrap_v3`, h264p's: mtwrap's, but that it waits only on events; its
+parts mode, `MTwrap.md` section 11 in mtwrap) deals them in turn to N
+workers. A worker reads a part whole and compresses it with a model of
+its own, an `AacpCoro` run as a coroutine of the worker's, then the next
+part dealt to it. Decompressing, a worker decompresses its parts so, and
+MTwrap takes them from the workers in turn, as they were dealt. `d` knows
+such a stream by its magic and runs as many threads as it says. Without
+`-t`, or with `-t 1`, `c` writes the stream of one model in one thread,
+byte for byte as before.
+
+A part ends before the first unit at least `-c` (1 MB by default) after
+its start that parses the same at the start of a stream as in the middle
+of one: parsed from the state a stream starts with (`-asc`'s config;
+ADIF's or AUS1's header), it gives the same values and length, and leaves
+the same state, but for the SBR headers of the elements it has no SBR
+data of, which the part's probe assumes (above). In AAC LC that is any
+unit; with SBR and PS, one whose payloads come with their headers; in
+LATM, a frame with its StreamMuxConfig. A stream with none ends a part
+before the first unit at least 4 times `-c` (the cap, at most 2 GB) after
+its start, and where no unit comes within twice the cap (junk, a tag),
+there, in bytes. A part of ADIF or AUS1 after the first starts with a copy
+of the stream's header, as h264p puts the parameter sets in, which `d`
+takes out again. Whatever a part holds, it is coded losslessly: a cut
+elsewhere costs compression, never losslessness. The streams checked in
+development (below), each in parts of 64 KB, are cut 559 times: all but
+two before a unit that parses the same; those two at the cap, in two LATM
+streams of several access units a frame (each 0.5% larger than in one
+part).
+
+The stream: the magic `aacpm`, the version byte, the count of threads (a
+byte) and the part size (KB, 32 bits: `d` takes a part's record that says
+more than `c` makes at that size for broken), then MTwrap's container of
+the workers' streams, a block of up to 64 KB at a time, tagged with its
+worker. A worker's stream is a record for each of its parts (its size,
+the size of the part that was compressed, with the header put in, and
+where that header is, the part's place in the stream, worker w's k-th of
+N: w + kN, 64 bits each, little-endian, and the CRC-32 of these), then
+the part compressed, a stream of one model with its own header (`aacpk`,
+above); and at its end a record that says it ends. A worker's record goes
+out as its part is done, so that `d`, which takes the parts in turn, finds
+each within about a round of parts of the others. So `d` finds a part
+lost, added or moved, a stream cut where a part ends, and a record
+changed, which the parts' own CRCs do not see. MTwrap puts the workers'
+blocks in as they come, so two runs of `c -t` can write other bytes; `d`
+restores the same input from any of them.
+
+The 15 streams of Results concatenated (19031262 bytes), on 4 cores of
+a 2.1 GHz Xeon VM (whose times vary by up to a fifth from run to run):
+
+| | compressed | | `c` | `d` |
+|---|---:|---:|---:|---:|
+| one thread | 16635982 | | 46.9 s | 44.1 s |
+| `-t 2 -c 1` | 16658176 | +0.13% | 24.0 s | 24.5 s |
+| `-t 4 -c 256k` | 16702659 | +0.40% | 17.1 s | 15.9 s |
+| `-t 4 -c 512k` | 16675418 | +0.24% | 14.9 s | 13.8 s |
+| `-t 4 -c 1` | 16658278 | +0.13% | 14.7 s | 15.1 s |
+| `-t 4 -c 2` | 16647811 | +0.07% | 16.8 s | 15.9 s |
+| `-t 4 -c 4` | 16638428 | +0.01% | 17.6 s | 20.8 s |
+
+A part starts its model from nothing, and learns nothing from the parts
+before it: the smaller the parts, the more that costs. The larger they
+are, the fewer of them to share out: at 4 MB, this stream is 5 parts, and
+one of the 4 threads codes two. A stream shorter than a part is one part,
+on one thread, in a stream about 60 bytes and 51 a thread longer (267 on
+4 threads: the records and MTwrap's container). Each thread has a model:
+55 MB of memory at most in one thread for this stream, 105 MB on 2 and
+182 MB on 4.
 
 ## Results
 
@@ -326,8 +405,10 @@ ffmpeg's and faac's encoders.
 
 ## Limitations
 
-- One thread, about 0.37 MB/s both ways on a current x86-64 core (23
-  times real time at 128 kbit/s).
+- About 0.37 MB/s both ways on a current x86-64 core (23 times real
+  time at 128 kbit/s), a thread. `-t` codes the parts of a stream at once
+  (about 3 times as fast on 4 cores), at the cost of what a model of the
+  whole stream learns across them (0.13% in parts of 1 MB).
 - The model's parameters are part of the format, and the version byte
   says which: a stream decodes with the version that made it.
 - What is not AAC syntax (tags, other containers: MP4 is mp4p's, MPEG-TS
@@ -344,12 +425,15 @@ mono, 5.1, PNS, intensity and TNS; with fdkaac and faac too, if present:
 LD, ELD, CRC, VBR, and HE-AAC and HE-AACv2 where fdkaac's library has SBR
 -- gen.sh says what an encoder could not make, and that without them the
 test has no SBR or PS). It round-trips every file through `c` and `d`, in
-both orders of the section data (`-b`; `test/roundtrip.sh`, which takes
-any files: `test/roundtrip.sh ./aacpack *.aac`, and fails on one that is
-not there), then runs `test/check.sh`: no
-input, random bytes, pipes, a stream cut short or with junk in it, strict
-mode, and compressed streams cut short, with a byte changed, with bytes
-after them, or not compressed streams at all.
+both orders of the section data (`-b`), and on 3 threads in parts of 64 KB
+(`-t 3 -c 64k`; `test/roundtrip.sh`, which takes any files, and `c`'s
+options in `OPTS`: `OPTS=-b test/roundtrip.sh ./aacpack *.aac`, and fails
+on one that is not there), then runs `test/check.sh`: no input, random
+bytes, pipes, a stream cut short or with junk in it, strict mode, and
+compressed streams cut short, with a byte changed, with bytes after them,
+or not compressed streams at all; and on threads, pipes, compressed
+streams cut short, with a byte changed or with bytes after them, and `-t`
+out of its range.
 
 `test/fuzz.py BIN WORKDIR SEED N files...` mutates inputs (random bytes,
 cuts, bit flips, junk, splices, repeats, broken frame headers) and checks
@@ -360,6 +444,12 @@ sanitizer report on stderr (UBSan's, which go on, too). Build with
 `-fsanitize=address,undefined --param asan-use-after-return=0` (the
 coroutines copy stacks) and run with
 `ASAN_OPTIONS=detect_leaks=0:detect_stack_use_after_return=0:replace_intrin=0`.
+`c -t` does not run under ASan: it crashes in the stack copies of the two
+coroutines chained (the splitter and MTwrap's coder, `CoroutinePair`), as
+h264p's `c -t` does; `d` of its streams runs, and both run under UBSan
+alone. ThreadSanitizer reports races on MTwrap's own data: its rings, and
+its flags, which it synchronizes as volatiles and with events of its own,
+as h264p has them; none on aacpack's.
 
 The streams checked in development: the AAC samples of FFmpeg's FATE suite
 (the conformance streams al*, am*, ap*; SBR and PS ones; File1-7; PCE
@@ -367,7 +457,13 @@ channel configurations; ID3 tags), encodes of two one-minute music
 excerpts by fdkaac (LC, HE, HEv2, LD, ELD, VBR, CRC), ffmpeg (LC, Main, LTP,
 PNS/IS/TNS, mono) and faac, and these converted to ADIF, LOAS v0/v1 and
 AUS1. All round-trip, and so do all of them under ASan and UBSan, and
-thousands of fuzzed inputs and compressed streams.
+thousands of fuzzed inputs and compressed streams; and on 4 threads in
+parts of 64 KB (in both orders), with broken streams of theirs (cut,
+bytes changed, bytes after them, the threads or the part size in the
+header changed), on each of which `d` fails, or restores the input where
+the change did not matter. The Windows build (MinGW clang, under wine)
+passes `test/check.sh` and decodes as the Linux build does, on threads
+too.
 
 ## Sources
 
@@ -386,7 +482,9 @@ thousands of fuzzed inputs and compressed streams.
 | `err.inc` `mem.inc` `cmbase.inc` `rc.inc` `cm.inc` `mapping.inc` `fam.inc` `famcfg.inc` `rcio.inc` | h264p's: errors, memory, the range coder, counters, mixers, APMs, the families and their configuration, the coroutine's I/O |
 | `levels.inc` `lv9.inc` `IDX/` `MOD/` | the model's level, its families' IDX sources and the code generated from them |
 | `cli.inc` `coro.inc` `drivers.inc` | files, progress, coroutines, the drivers of `c` and `d` |
-| `Lib3/` | the stack-copying coroutines (mtwrap's, as h264p has them, but for what aacpack does not use) and the file API |
+| `aacsplit.inc` `mt.inc` | `-t`: the splitter (the stream in parts at units that parse the same at a stream's start, aacsplit's cut points; ADIF's and AUS1's header put in), the workers and their records, the stream on threads |
+| `MTwrap_v3/` | h264p's MTwrap (mtwrap's, but that it waits only on events): coroutines on threads, its parts mode |
+| `Lib3/` | the library mtwrap is built on, its files as h264p has them: the stack-copying coroutines, `CoroutinePair` (two of them chained), the file API, `win_shim.inc` (the Windows API MTwrap uses, on POSIX) |
 
 ### Tuning
 

@@ -64,6 +64,19 @@ struct AacArgs {
   const uint8_t* asc;  // compressing: -asc, the AudioSpecificConfig of raw access units (asc_n bytes; none 0)
   size_t asc_n;
   const char* name;  // the input's, for messages
+  // on threads (mt.inc): a part's model's level and order (decompressing,
+  // each part's stream says them), the progress line the workers' messages
+  // go after, the workers, and the largest part d takes a record of
+  int level, order;
+  Progress* meter;
+  int threads;
+  uint64_t part_max;
+  // compressing a part on threads: where it is in the input (at), and the
+  // bytes the splitter put in it, [ins, ins + xlen), a copy of the input's
+  // at xat (ADIF's or AUS1's header); so messages give the input's
+  // positions (where(); a stream of its own: 0, the same)
+  uint64_t at, ins, xlen, xat;
+  uint64_t where(uint64_t p) const { return p < ins ? at + p : p < ins + xlen ? xat + (p - ins) : at + (p - xlen); }
 
   void Init() {
     verbose = strict = false;
@@ -71,6 +84,12 @@ struct AacArgs {
     asc = nullptr;
     asc_n = 0;
     name = "";
+    level = kLevels[0];
+    order = 1;
+    meter = nullptr;
+    threads = 1;
+    part_max = 0;
+    at = ins = xlen = xat = 0;
   }
 };
 
@@ -394,7 +413,7 @@ struct Scanner {
   // a frame that is stored as its bytes, where it was not to be (-s)
   void strict(const char* what, const char* why) {
     if (!a->strict || probe()) return;
-    err_raise("a unit at byte %" PRIu64 " %s%s%s", pos, what, why && *why ? ": " : "", why ? why : "");
+    err_raise("a unit at byte %" PRIu64 " %s%s%s", a->where(pos), what, why && *why ? ": " : "", why ? why : "");
   }
 
   // whether a walk that wrote the unit from the log came out as it was (end
@@ -446,7 +465,8 @@ struct Scanner {
       if (!len) return false;
       s->st.bad++;
       strict("does not parse", t.why);
-      if (a->verbose) m->tell_note("aacpack: the unit at byte %" PRIu64 " does not parse, stored as its bytes: %s", pos, t.why);
+      if (a->verbose)
+        m->tell_note("aacpack: the unit at byte %" PRIu64 " does not parse, stored as its bytes: %s", a->where(pos), t.why);
       pos += len;
       after_raw();
       return true;
@@ -466,7 +486,8 @@ struct Scanner {
       c.st = before;
       s->st.unverified++;
       strict("would not come out as it was", nullptr);
-      if (a->verbose) m->tell_note("aacpack: the unit at byte %" PRIu64 " would not come out as it was, stored as its bytes", pos);
+      if (a->verbose)
+        m->tell_note("aacpack: the unit at byte %" PRIu64 " would not come out as it was, stored as its bytes", a->where(pos));
       pos += end;
       after_raw();
       return true;

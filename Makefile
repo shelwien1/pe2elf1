@@ -27,6 +27,7 @@ test: aacpack
 	@[ -f test/corpus/.done ] || ./test/gen.sh test/corpus
 	./test/roundtrip.sh ./aacpack $(FILES)
 	OPTS=-b ./test/roundtrip.sh ./aacpack $(FILES)
+	OPTS="-t 3 -c 64k" ./test/roundtrip.sh ./aacpack $(FILES)
 	./test/check.sh ./aacpack test/corpus/ff_lc128.aac
 
 clean:

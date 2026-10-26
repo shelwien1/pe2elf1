@@ -1,7 +1,7 @@
 // aacpack's compressor (AacpCoro<0, LV, CS>) and decompressor (AacpCoro<1, LV, CS>)
 // of a level and an order (CS: Model's f_CS) as coroutines of Lib3 (coro3b.inc), in its buffer protocol
 // (h264p's coro.inc): the input comes in the buffers addinp() gives, a
-// 0-length one at its end, and yield 1 asks for the next;
+// 0-length one with f_quit set at its end, and yield 1 asks for the next;
 // the output goes into the buffer addout() gave, yield 2 handing it over
 // full; yield 0 at the end (the last output in the buffer), yield 3 after
 // an error (its note says it). What else it yields with tells its driver

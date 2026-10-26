@@ -23,6 +23,11 @@ void usage() {
           " %s         (c) the model's level\n"
           "  -adts | -latm | -adif   (c) look for this container alone\n"
           "  -asc HEX    (c) the input is back-to-back raw_data_blocks of this AudioSpecificConfig\n"
+          "  -t N        (c) compress on N threads, 1 to 64 (default 1): the stream in parts that start\n"
+          "              at units that parse the same at a stream's start (at any unit past 4 times\n"
+          "              the part size), a model for each; d takes N from the stream\n"
+          "  -c N        (c with -t) the size of a part, at least: N MB (1 to 1024), or N KB with a k\n"
+          "              (default 1)\n"
           "input and output can be - for stdin and stdout, and not the same file\n",
           lv);
 }
@@ -95,7 +100,28 @@ int main(int argc, char** argv) {
             opt.order = 0;
           else if (*p >= '1' && *p <= '9')
             opt.level = *p - '0';
-          else {
+          else if ((*p == 't' || *p == 'c') && (p[1] || i + 1 < argc)) {
+            // -t N, -c N (or -tN, -cN): the rest of the argument, or the next
+            const char* v = p[1] ? p + 1 : argv[++i];
+            char* e;
+            unsigned long n = strtoul(v, &e, 10);
+            if (*p == 't') {
+              if (*e || e == v || n < 1 || n > 64) {
+                fprintf(stderr, "aacpack: -t takes 1 to 64 threads\n");
+                return 2;
+              }
+              opt.threads = (int)n;
+            } else {
+              unsigned long unit = 1 << 20;
+              if (*e == 'k' || *e == 'K') unit = 1 << 10, e++;
+              if (*e || e == v || n < 1 || n > (1024ul << 20) / unit) {
+                fprintf(stderr, "aacpack: -c takes a part size of 1 to 1024 MB, or in KB with a k\n");
+                return 2;
+              }
+              opt.part = (uint32_t)(n * unit);
+            }
+            break;
+          } else {
             usage();
             return 2;
           }
