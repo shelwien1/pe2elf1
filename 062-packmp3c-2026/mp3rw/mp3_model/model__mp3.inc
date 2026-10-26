@@ -1,5 +1,5 @@
 
-#include "sh_mapping.inc"
+#include "mapping.inc"
 
 #include "freq_sh_v1m.inc"
 
@@ -20,6 +20,13 @@
 static const int m1_e_j_max = 576/2+256/2; //M_Sm1_j1/2
 
 #include "MOD/sh_model_h.inc"
+// the types of four of sh_model_counts.inc's Table()s, which struct C_T
+// (MOD/sh_model_counts_h.inc) holds
+typedef Number2ii<10,1023> Number2c1;
+typedef SSEii<5,5,1> SSE_c1[(1024+1023)/2+1];
+typedef Number2ii<10,1023> Number2c0;
+typedef SSEii<5,5,2> SSE_c0[(1024+1023)/2+1];
+
 #include "MOD/sh_model_counts_h.inc"
 
 int l_abs( int x ) {

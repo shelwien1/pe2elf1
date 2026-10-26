@@ -53,6 +53,73 @@
 
 
 
+  // (the types of Table()s count0, Scount0, count1 and Scount1 are model__mp3.inc's,
+  // where struct C_T, which holds them, needs them)
+
+//  SSEj<*(int*)& C_Sxlong_Q,*(int*)& C_Sxlong_d_Volume> Sxlong;
+//  SSEj<*(int*)& C_Sglgain_Q,*(int*)& C_Sglgain_d_Volume> Sglgain;
+//  SSEj<*(int*)& C_Ssfcomp_Q,*(int*)& C_Ssfcomp_d_Volume> Ssfcomp;
+//  SSEj<*(int*)& C_Srg0cnt_Q,*(int*)& C_Srg0cnt_d_Volume> Srg0cnt;
+//  SSEj<*(int*)& C_Srg1cnt_Q,*(int*)& C_Srg1cnt_d_Volume> Srg1cnt;
+
+  int p_c1[8];
+  int p_c0[8];
+
+//  Number1ii<4>    x_sfcomp[2];
+//  Number1ii<4>    x_rg0cnt[2];
+//  Number1ii<3>    x_rg1cnt[32];
+
+
+// the tables' starting state, after C_Init() made them
+void C_InitData( void ) {
+
+  int i;
+
+  for( i=0; i<C_mc0_e_Volume; i++ ) count0[i].Init_Number2i();
+  for( i=0; i<C_Smc0_d_Volume; i++ ) Init_SSEii( Scount0[i] );
+  for( i=0; i<C_mc00_e_Volume; i++ ) count00[i].Init_Node2i();
+
+  for( i=0; i<C_mc1_e_Volume; i++ ) count1[i].Init_Number2i();
+  for( i=0; i<C_Smc1_d_Volume; i++ ) Init_SSEii( Scount1[i] );
+  for( i=0; i<C_mc10_e_Volume; i++ ) count10[i].Init_Node2i();
+
+  memset( &p_c0, 0, sizeof(p_c0) );
+  memset( &p_c1, 0, sizeof(p_c1) );
+
+  for( i=0; i<C_xlong_c_Volume; i++ ) xlong[i].Init_Node2i();
+  for( i=0; i<C_Sxlong_d_Volume; i++ ) Sxlong[i].Init_SSEi(C_Sxlong_wi,C_Sxlong_ti);
+  for( i=0; i<C_pxlong_e_Volume; i++ ) pxlong[i]=0;
+  for( i=0; i<C_pxlong_f_Volume; i++ ) qxlong[i]=0;
+
+//  Init_Number1ii( x_glgain );
+  for( i=0; i<C_glgain_c_Volume; i++ ) glgain[i].Init_Node2i();
+  for( i=0; i<C_Sglgain_d_Volume; i++ ) Sglgain[i].Init_SSEi(C_Sglgain_wi,C_Sglgain_ti);
+  for( i=0; i<C_pglgain_f_Volume; i++ ) qglgain[i]=0;
+  for( i=0; i<C_pglgain_e_Volume; i++ ) pglgain[i]=0;
+  for( i=0; i<C_pglgain_e_Volume; i++ ) pglgaio[i]=0;
+
+//  Init_Number1ii( x_sfcomp );
+  for( i=0; i<C_sfcomp_c_Volume; i++ ) sfcomp[i].Init_Node2i();
+  for( i=0; i<C_Ssfcomp_d_Volume; i++ ) Ssfcomp[i].Init_SSEi(C_Ssfcomp_wi,C_Ssfcomp_ti);
+  for( i=0; i<C_psfcomp_f_Volume; i++ ) qsfcomp[i]=0;
+  for( i=0; i<C_psfcomp_e_Volume; i++ ) psfcomp[i]=0;
+  for( i=0; i<C_psfcomp_e_Volume; i++ ) psfcomq[i]=0;
+
+//  Init_Number1ii( x_rg0cnt );
+  for( i=0; i<C_rg0cnt_c_Volume; i++ ) rg0cnt[i].Init_Node2i();
+  for( i=0; i<C_Srg0cnt_d_Volume; i++ ) Srg0cnt[i].Init_SSEi(C_Srg0cnt_wi,C_Srg0cnt_ti);
+  for( i=0; i<C_prg0cnt_f_Volume; i++ ) qrg0cnt[i]=0;
+  for( i=0; i<C_prg0cnt_e_Volume; i++ ) prg0cnt[i]=0;
+  for( i=0; i<C_prg0cnt_e_Volume; i++ ) prg0cnu[i]=0;
+
+//  Init_Number1ii( x_rg1cnt );
+  for( i=0; i<C_rg1cnt_c_Volume; i++ ) rg1cnt[i].Init_Node2i();
+  for( i=0; i<C_Srg1cnt_d_Volume; i++ ) Srg1cnt[i].Init_SSEi(C_Srg1cnt_wi,C_Srg1cnt_ti);
+  for( i=0; i<C_prg1cnt_f_Volume; i++ ) qrg1cnt[i]=0;
+  for( i=0; i<C_prg1cnt_e_Volume; i++ ) prg1cnt[i]=0;
+  for( i=0; i<C_prg1cnt_e_Volume; i++ ) prg1cnu[i]=0;
+
+}
 
 void Process_rgxcnt( int& c, int& _c1, int ch ) {
   RangeCoder& rc = *this;
@@ -72,17 +139,17 @@ void Process_rgxcnt( int& c, int& _c1, int ch ) {
 
 
   prg0cnt_f = 0;
-  prg0cnt_f = prg0cnt_f*2 + ((ch>0+(1-1)));
-  prg0cnt_f = prg0cnt_f*8 + ((rec>3+(-12-1))+(rec>8+(-12-1))+(rec>10+(-12-1))+(rec>13+(-12-1))+(rec>15+(-12-1))+(rec>17+(-12-1))+(rec>21+(-12-1)));
-  prg0cnt_f = (prg0cnt_f<<1) + (((ctx0)>>3)&1); // 1000
+  prg0cnt_f = prg0cnt_f*2 + (((ch)>0+(1-1)));
+  prg0cnt_f = prg0cnt_f*8 + C_prg0cnt_f_i2[__min(28,__max(0,(rec)-(-12-1)))];
+  prg0cnt_f = (prg0cnt_f<<1) + ((((ctx0)>>3)&1)); // 1000
   prg0cnt_f = prg0cnt_f*(C_Jrg0cnt_g_Volume) + (0);
 
   rg0cnt_c = 0;
   rg0cnt_c = rg0cnt_c*(C_Jrg0cnt_f_Volume) + (0);
 
   Srg0cnt_d = 0;
-  Srg0cnt_d = Srg0cnt_d*2 + ((ch>0+(1-1)));
-  Srg0cnt_d = Srg0cnt_d*2 + ((rec>25+(-12-1)));
+  Srg0cnt_d = Srg0cnt_d*2 + (((ch)>0+(1-1)));
+  Srg0cnt_d = Srg0cnt_d*2 + (((rec)>25+(-12-1)));
   Srg0cnt_d = Srg0cnt_d*(C_Jrg0cnt_e_Volume) + (0);
 
   {
@@ -143,17 +210,17 @@ void Process_rgxcnt( int& c, int& _c1, int ch ) {
 
 
   prg1cnt_f = 0;
-  prg1cnt_f = prg1cnt_f*3 + ((rec>8+(-12-1))+(rec>19+(-12-1)));
-  prg1cnt_f = (prg1cnt_f<<4) + ((rg0)&15); // 1111
+  prg1cnt_f = prg1cnt_f*3 + (((rec)>8+(-12-1))+((rec)>19+(-12-1)));
+  prg1cnt_f = (prg1cnt_f<<4) + (((rg0)&15)); // 1111
   prg1cnt_f = prg1cnt_f*(C_Jrg1cnt_g_Volume) + (0);
 
   rg1cnt_c = 0;
-  rg1cnt_c = (rg1cnt_c<<4) + ((rg0)&15); // 1111
+  rg1cnt_c = (rg1cnt_c<<4) + (((rg0)&15)); // 1111
   rg1cnt_c = rg1cnt_c*(C_Jrg1cnt_f_Volume) + (0);
 
   Srg1cnt_d = 0;
-  Srg1cnt_d = Srg1cnt_d*2 + ((rec>25+(-12-1)));
-  Srg1cnt_d = Srg1cnt_d*7 + ((rg0>0+(1-1))+(rg0>5+(1-1))+(rg0>7+(1-1))+(rg0>9+(1-1))+(rg0>11+(1-1))+(rg0>13+(1-1)));
+  Srg1cnt_d = Srg1cnt_d*2 + (((rec)>25+(-12-1)));
+  Srg1cnt_d = Srg1cnt_d*7 + C_Srg1cnt_d_i6[__min(16,__max(0,(rg0)-(1-1)))];
   Srg1cnt_d = Srg1cnt_d*(C_Jrg1cnt_e_Volume) + (0);
 
   {
@@ -177,7 +244,7 @@ void Process_rgxcnt( int& c, int& _c1, int ch ) {
         byte& old = qrg1cnt[prg1cnt_f+Jrg1cnt_g];
 
         Jrg1cnt_e = 0;
-        Jrg1cnt_e = (Jrg1cnt_e<<1) + ((old)&1); // 0001
+        Jrg1cnt_e = (Jrg1cnt_e<<1) + (((old)&1)); // 0001
         Jrg1cnt_e = (Jrg1cnt_e*11) + C_Jrg1cnt_e_i1[j]; // 0011
 
         Jrg1cnt_f = 0;
@@ -221,18 +288,18 @@ void Process_sfcomp( int& c, int ch ) {
 
 
   psfcomp_f = 0;
-  psfcomp_f = psfcomp_f*6 + ((rec>1+(-12-1))+(rec>2+(-12-1))+(rec>10+(-12-1))+(rec>11+(-12-1))+(rec>12+(-12-1)));
-  psfcomp_f = (psfcomp_f<<4) + ((ctx0)&15); // 1111
+  psfcomp_f = psfcomp_f*6 + C_psfcomp_d_i2[__min(28,__max(0,(rec)-(-12-1)))];
+  psfcomp_f = (psfcomp_f<<4) + (((ctx0)&15)); // 1111
   psfcomp_f = psfcomp_f*(C_Jsfcomp_g_Volume) + (0);
 
   sfcomp_c = 0;
-  sfcomp_c = sfcomp_c*8 + ((rec>13+(-12-1))+(rec>14+(-12-1))+(rec>20+(-12-1))+(rec>21+(-12-1))+(rec>22+(-12-1))+(rec>23+(-12-1))+(rec>24+(-12-1)));
-  sfcomp_c = (sfcomp_c<<3) + (((ctx0)>>1)&7); // 1110
+  sfcomp_c = sfcomp_c*8 + C_sfcomp_c_i2[__min(28,__max(0,(rec)-(-12-1)))];
+  sfcomp_c = (sfcomp_c<<3) + ((((ctx0)>>1)&7)); // 1110
   sfcomp_c = sfcomp_c*(C_Jsfcomp_f_Volume) + (0);
 
   Ssfcomp_d = 0;
-  Ssfcomp_d = Ssfcomp_d*5 + ((rec>3+(-12-1))+(rec>10+(-12-1))+(rec>11+(-12-1))+(rec>12+(-12-1)));
-  Ssfcomp_d = (Ssfcomp_d<<3) + (((ctx0)>>1)&~3) + ((ctx0)&3); // 1011
+  Ssfcomp_d = Ssfcomp_d*5 + C_Ssfcomp_d_i2[__min(28,__max(0,(rec)-(-12-1)))];
+  Ssfcomp_d = (Ssfcomp_d<<3) + (((((ctx0)>>3)&1)<<2) + ((ctx0)&3)); // 1011
   Ssfcomp_d = Ssfcomp_d*(C_Jsfcomp_e_Volume) + (0);
 
   {
@@ -288,7 +355,7 @@ void Process_GlGain( int& c, int ch, int gr ) {
   int glgain_c,Sglgain_d,pglgain_e,pglgain_f;
 
   pglgain_e = 0;
-  pglgain_e = pglgain_e*2 + ((ch>0+(1-1)));
+  pglgain_e = pglgain_e*2 + (((ch)>0+(1-1)));
   byte& ctx1 = pglgaio[pglgain_e];
   byte& ctx0 = pglgain[pglgain_e];
   char rec = ctx0 - ctx1;
@@ -297,16 +364,16 @@ void Process_GlGain( int& c, int ch, int gr ) {
 
 
   pglgain_f = 0;
-  pglgain_f = pglgain_f*2 + ((gr>0+(1-1)));
-  pglgain_f = pglgain_f*2 + ((rec>5+(-12-1)));
+  pglgain_f = pglgain_f*2 + (((gr)>0+(1-1)));
+  pglgain_f = pglgain_f*2 + (((rec)>5+(-12-1)));
   pglgain_f = pglgain_f*(C_Jglgain_g_Volume) + (0);
 
   glgain_c = 0;
-  glgain_c = (glgain_c<<7) + ((ctx0)&127); // 01111111
+  glgain_c = (glgain_c<<7) + (((ctx0)&127)); // 01111111
   glgain_c = glgain_c*(C_Jglgain_f_Volume) + (0);
 
   Sglgain_d = 0;
-  Sglgain_d = Sglgain_d*9 + C_Sglgain_d_i2[__min(32,__max(0,rec-(-12-1)))];
+  Sglgain_d = Sglgain_d*9 + C_Sglgain_d_i2[__min(32,__max(0,(rec)-(-12-1)))];
   Sglgain_d = Sglgain_d*(C_Jglgain_e_Volume) + (0);
 
   {
@@ -329,7 +396,7 @@ void Process_GlGain( int& c, int ch, int gr ) {
         byte& old = qglgain[pglgain_f+Jglgain_g];
 
         Jglgain_e = 0;
-        Jglgain_e = (Jglgain_e<<1) + ((old)&1); // 00000001
+        Jglgain_e = (Jglgain_e<<1) + (((old)&1)); // 00000001
         Jglgain_e = (Jglgain_e*41) + C_Jglgain_e_i1[j]; // 011101000
 
         Jglgain_f = 0;
@@ -359,30 +426,30 @@ void Process_sf1xlong( word& _c, int ch, int k, int ll, int i ) {
   int xlong_c,Sxlong_d,pxlong_e,pxlong_f, c = _c;
 
   pxlong_e = 0;
-  pxlong_e = pxlong_e*2 + ((ch>0+(1-1)));
-  pxlong_e = pxlong_e*21 + C_pxlong_e_i1[__min(20,__max(0,i-(1-1)))];
-  pxlong_e = pxlong_e*3 + ((k>10+(1-1))+(k>11+(1-1)));
-  pxlong_e = pxlong_e*2 + ((ll>0+(1-1)));
+  pxlong_e = pxlong_e*2 + (((ch)>0+(1-1)));
+  pxlong_e = pxlong_e*21 + C_pxlong_e_i1[__min(20,__max(0,(i)-(1-1)))];
+  pxlong_e = pxlong_e*3 + (((k)>10+(1-1))+((k)>11+(1-1)));
+  pxlong_e = pxlong_e*2 + (((ll)>0+(1-1)));
   byte& rec = pxlong[pxlong_e];
 
   pxlong_f = 0;
-  pxlong_f = pxlong_f*18 + C_pxlong_f_i1[__min(20,__max(0,i-(1-1)))];
-  pxlong_f = pxlong_f*5 + ((k>3+(1-1))+(k>5+(1-1))+(k>8+(1-1))+(k>12+(1-1)));
-  pxlong_f = pxlong_f*4 + ((ll>1+(1-1))+(ll>2+(1-1))+(ll>3+(1-1)));
+  pxlong_f = pxlong_f*18 + C_pxlong_f_i1[__min(20,__max(0,(i)-(1-1)))];
+  pxlong_f = pxlong_f*5 + C_pxlong_f_i2[__min(15,__max(0,(k)-(1-1)))];
+  pxlong_f = pxlong_f*4 + C_pxlong_f_i4[__min(15,__max(0,(ll)-(1-1)))];
   pxlong_f = pxlong_f*(C_Jxlong_g_Volume) + (0);
 
   xlong_c = 0;
-  xlong_c = xlong_c*20 + C_xlong_c_i1[__min(20,__max(0,i-(1-1)))];
-  xlong_c = xlong_c*7 + ((k>0+(1-1))+(k>1+(1-1))+(k>2+(1-1))+(k>4+(1-1))+(k>6+(1-1))+(k>7+(1-1)));
-  xlong_c = xlong_c*3 + ((rec>0+(1-1))+(rec>7+(1-1)));
-  xlong_c = (xlong_c<<2) + (((ll)>>1)&3); // 0110
+  xlong_c = xlong_c*20 + C_xlong_c_i1[__min(20,__max(0,(i)-(1-1)))];
+  xlong_c = xlong_c*7 + C_xlong_c_i2[__min(15,__max(0,(k)-(1-1)))];
+  xlong_c = xlong_c*3 + (((rec)>0+(1-1))+((rec)>7+(1-1)));
+  xlong_c = (xlong_c<<2) + ((((ll)>>1)&3)); // 0110
   xlong_c = xlong_c*(C_Jxlong_f_Volume) + (0);
 
   Sxlong_d = 0;
-  Sxlong_d = Sxlong_d*9 + C_Sxlong_d_i1[__min(20,__max(0,i-(1-1)))];
-  Sxlong_d = Sxlong_d*3 + ((k>3+(1-1))+(k>5+(1-1)));
-  Sxlong_d = Sxlong_d*2 + ((rec>2+(1-1)));
-  Sxlong_d = Sxlong_d*2 + ((ll>2+(1-1)));
+  Sxlong_d = Sxlong_d*9 + C_Sxlong_d_i1[__min(20,__max(0,(i)-(1-1)))];
+  Sxlong_d = Sxlong_d*3 + (((k)>3+(1-1))+((k)>5+(1-1)));
+  Sxlong_d = Sxlong_d*2 + (((rec)>2+(1-1)));
+  Sxlong_d = Sxlong_d*2 + (((ll)>2+(1-1)));
   Sxlong_d = Sxlong_d*(C_Jxlong_e_Volume) + (0);
 
 //  xlong[xlong_c].Process( rc, c, -1, 1<<ll, C_xlong_wr, C_xlong_mw, Sxlong, Sxlong_d, C_xlong_wq );
@@ -406,7 +473,7 @@ void Process_sf1xlong( word& _c, int ch, int k, int ll, int i ) {
         byte& old = qxlong[pxlong_f+Jxlong_g];
 
         Jxlong_e = 0;
-        Jxlong_e = (Jxlong_e<<1) + ((old)&1); // 0001
+        Jxlong_e = (Jxlong_e<<1) + (((old)&1)); // 0001
         Jxlong_e = (Jxlong_e*16) + C_Jxlong_e_i1[j]; // 10000
 
         Jxlong_f = 0;
@@ -438,24 +505,7 @@ void ProcessCounts1( int& k, int& c1, int i, int gr, int ch ) {
   j = p_c1[i]; 
 
   Band_smc1 = 0;
-  Band_smc1 = Band_smc1*1 + ((j>12+(25-1)));
-  Band_smc1 = Band_smc1*1 + ((j>16+(73-1)));
-  Band_smc1 = Band_smc1*1 + ((j>1+(97-1))+(j>17+(97-1))+(j>18+(97-1))+(j>21+(97-1)));
-  Band_smc1 = Band_smc1*1 + ((j>2+(121-1))+(j>4+(121-1))+(j>11+(121-1)));
-  Band_smc1 = Band_smc1*1 + ((j>1+(145-1))+(j>6+(145-1))+(j>9+(145-1))+(j>13+(145-1)));
-  Band_smc1 = Band_smc1*1 + ((j>9+(169-1))+(j>10+(169-1)));
-  Band_smc1 = Band_smc1*1 + ((j>8+(193-1)));
-  Band_smc1 = Band_smc1*1 + ((j>23+(265-1)));
-  Band_smc1 = Band_smc1*1 + C_Band_smc1_ic[__min(24,__max(0,j-(289-1)))];
-  Band_smc1 = Band_smc1*1 + C_Band_smc1_id[__min(24,__max(0,j-(313-1)))];
-  Band_smc1 = Band_smc1*1 + C_Band_smc1_ie[__min(24,__max(0,j-(337-1)))];
-  Band_smc1 = Band_smc1*1 + C_Band_smc1_if[__min(24,__max(0,j-(361-1)))];
-  Band_smc1 = Band_smc1*1 + C_Band_smc1_ig[__min(24,__max(0,j-(385-1)))];
-  Band_smc1 = Band_smc1*1 + C_Band_smc1_ih[__min(24,__max(0,j-(409-1)))];
-  Band_smc1 = Band_smc1*1 + C_Band_smc1_ii[__min(24,__max(0,j-(433-1)))];
-  Band_smc1 = Band_smc1*1 + ((j>16+(457-1))+(j>21+(457-1)));
-  Band_smc1 = Band_smc1*1 + ((j>2+(505-1))+(j>8+(505-1)));
-  Band_smc1 = Band_smc1*1 + ((j>1+(553-1))+(j>5+(553-1))+(j>8+(553-1))+(j>11+(553-1))+(j>15+(553-1)));
+  Band_smc1 = Band_smc1*101 + C_Band_smc1_i0[__min(576,__max(0,(j)-(1-1)))];
 
   flag10 = (c1==0);
 
@@ -463,12 +513,12 @@ void ProcessCounts1( int& k, int& c1, int i, int gr, int ch ) {
   count10[mc10_e].Process( rc, flag10, C_count10_wr, C_count10_mw );
 
   mc1_e = 0;
-  mc1_e = mc1_e*2 + ((ch>0+(1-1)));
-  mc1_e = mc1_e*2 + ((i>6+(1-1)));
+  mc1_e = mc1_e*2 + (((ch)>0+(1-1)));
+  mc1_e = mc1_e*2 + (((i)>6+(1-1)));
   mc1_e = mc1_e*(C_Band_smc1_Volume) + (Band_smc1);
 
   Smc1_d = 0;
-  Smc1_d = Smc1_d*3 + ((i>0+(1-1))+(i>4+(1-1)));
+  Smc1_d = Smc1_d*3 + (((i)>0+(1-1))+((i)>4+(1-1)));
   if( flag10 ) c1=0; else {
     c1 += C_count1_bas;
     count1[mc1_e].Process( rc, c1, 0+C_count1_bas, 577+C_count1_bas, C_count1_wr0, C_count1_mw, Scount1[Smc1_d], C_count1_wr1 );
@@ -478,11 +528,7 @@ void ProcessCounts1( int& k, int& c1, int i, int gr, int ch ) {
   j = c1;//p_c0[i];
 
   Band_smc0 = 0;
-  Band_smc0 = Band_smc0*1 + ((j>23+(265-1)));
-  Band_smc0 = Band_smc0*1 + ((j>18+(337-1)));
-  Band_smc0 = Band_smc0*1 + ((j>3+(409-1)));
-  Band_smc0 = Band_smc0*1 + ((j>15+(457-1)));
-  Band_smc0 = Band_smc0*1 + ((j>8+(553-1)));
+  Band_smc0 = Band_smc0*6 + C_Band_smc0_i0[__min(576,__max(0,(j)-(1-1)))];
 
   flag00 = (k==0);
 
@@ -490,11 +536,11 @@ void ProcessCounts1( int& k, int& c1, int i, int gr, int ch ) {
   count00[mc00_e].Process( rc, flag00, C_count00_wr, C_count00_mw );
 
   mc0_e = 0;
-  mc0_e = mc0_e*4 + ((i>0+(1-1))+(i>4+(1-1))+(i>6+(1-1)));
+  mc0_e = mc0_e*4 + C_mc0_e_i2[__min(8,__max(0,(i)-(1-1)))];
   mc0_e = mc0_e*(C_Band_smc0_Volume) + (Band_smc0);
 
   Smc0_d = 0;
-  Smc0_d = Smc0_d*2 + ((i>0+(1-1)));
+  Smc0_d = Smc0_d*2 + (((i)>0+(1-1)));
   if( flag00 ) k=0; else {
     k += C_count0_bas;
     count0[mc0_e].Process( rc, k, Max<int>(0,c1-1)+C_count0_bas, 577+C_count0_bas, C_count0_wr0, C_count0_mw, Scount0[Smc0_d], C_count0_wr1 );

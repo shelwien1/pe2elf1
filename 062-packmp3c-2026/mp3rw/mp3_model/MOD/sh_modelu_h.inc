@@ -35,12 +35,13 @@ static const int U_stem31 = (14265+0) * (1);
 
 
 
-struct U_T {
+#define U_USES(X)
 
+struct U_T {
   
-  void U_Init( void ) {
-  
-  }
-  void U_Quit( void ) {
-  }
+  /* Total bytes this module's Table() members occupy -- a constant here, since
+   * Const mode has already folded every count. */
+  static constexpr unsigned long long U_Size = 0;
+  void U_Init( void ) {}
+  void U_Quit( void ) {}
 };

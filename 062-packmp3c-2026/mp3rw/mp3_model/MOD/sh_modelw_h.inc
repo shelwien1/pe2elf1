@@ -35,12 +35,13 @@ static const int W_stem31 = (14850+0) * (1);
 
 
 
-struct W_T {
+#define W_USES(X)
 
+struct W_T {
   
-  void W_Init( void ) {
-  
-  }
-  void W_Quit( void ) {
-  }
+  /* Total bytes this module's Table() members occupy -- a constant here, since
+   * Const mode has already folded every count. */
+  static constexpr unsigned long long W_Size = 0;
+  void W_Init( void ) {}
+  void W_Quit( void ) {}
 };

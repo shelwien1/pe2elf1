@@ -67,12 +67,13 @@ static const int F_wq_1F = (84+16) * (1);
 
 
 
-struct F_T {
+#define F_USES(X)
 
+struct F_T {
   
-  void F_Init( void ) {
-  
-  }
-  void F_Quit( void ) {
-  }
+  /* Total bytes this module's Table() members occupy -- a constant here, since
+   * Const mode has already folded every count. */
+  static constexpr unsigned long long F_Size = 0;
+  void F_Init( void ) {}
+  void F_Quit( void ) {}
 };

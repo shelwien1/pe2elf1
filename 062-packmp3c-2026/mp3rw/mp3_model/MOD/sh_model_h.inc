@@ -1,8 +1,10 @@
 
+static const byte M_ASmx_dx_i0[8+1]={ 0,0,0,1,2,2,3,3,3 };
 
 
 
 
+static const byte M_Band_z256_d_i0[576+1]={ 0,0,0,1,2,2,3,3,4,4,4,4,5,5,5,5,5,5,5,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7 };
 
 
 static const byte M_Band_z512_d_i0[576+1]={ 0,1,1,2,3,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,5,5,6,7,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,9,9,9,9,10,10,10,10,10,10,11,11,11,11,12,12,12,12,12,12,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,17,17,17,17,17,17,18,18,18,18,18,18,18,18,18,18,18,18,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,20,20,20,20,20,20,20,20,20,20,20,20,20,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26 };
@@ -12,16 +14,31 @@ static const byte M_Jmant_e_i1[512]={ 0,0,1,2,3,4,5,6,7,7,8,8,9,9,10,10,11,12,11
 
 static const byte M_Jmant_f_i1[512]={ 0,0,1,1,2,3,2,3,4,5,6,7,4,5,6,7,8,9,10,11,12,13,14,15,8,9,10,11,12,13,14,15,16,16,17,17,18,18,19,19,20,20,21,21,22,22,23,23,16,16,17,17,18,18,19,19,20,20,21,21,22,22,23,23,24,24,24,24,25,25,25,25,26,26,26,26,27,27,27,27,28,28,28,28,29,29,29,29,30,30,30,30,31,31,31,31,24,24,24,24,25,25,25,25,26,26,26,26,27,27,27,27,28,28,28,28,29,29,29,29,30,30,30,30,31,31,31,31,32,32,32,32,32,32,32,32,33,33,33,33,33,33,33,33,34,34,34,34,34,34,34,34,35,35,35,35,35,35,35,35,36,36,36,36,36,36,36,36,37,37,37,37,37,37,37,37,38,38,38,38,38,38,38,38,39,39,39,39,39,39,39,39,32,32,32,32,32,32,32,32,33,33,33,33,33,33,33,33,34,34,34,34,34,34,34,34,35,35,35,35,35,35,35,35,36,36,36,36,36,36,36,36,37,37,37,37,37,37,37,37,38,38,38,38,38,38,38,38,39,39,39,39,39,39,39,39,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40,41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,43,43,43,43,43,43,43,43,43,43,43,43,43,43,43,43,44,44,44,44,44,44,44,44,44,44,44,44,44,44,44,44,45,45,45,45,45,45,45,45,45,45,45,45,45,45,45,45,46,46,46,46,46,46,46,46,46,46,46,46,46,46,46,46,47,47,47,47,47,47,47,47,47,47,47,47,47,47,47,47,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40,41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,41,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,43,43,43,43,43,43,43,43,43,43,43,43,43,43,43,43,44,44,44,44,44,44,44,44,44,44,44,44,44,44,44,44,45,45,45,45,45,45,45,45,45,45,45,45,45,45,45,45,46,46,46,46,46,46,46,46,46,46,46,46,46,46,46,46,47,47,47,47,47,47,47,47,47,47,47,47,47,47,47,47 };
 
+static const byte M_Sm0A_d_i5[16+1]={ 0,1,2,2,2,2,2,3,3,3,3,3,3,3,3,3,3 };
 
 
+static const byte M_Sm1_d_i7[16+1]={ 0,1,1,2,2,2,2,3,3,3,3,3,3,3,3,3,3 };
+static const byte M_Sm1_d_ia[25+1]={ 0,1,2,3,3,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,5,5,5,5,5,5 };
 
+static const byte M_Sm2_d_i5[16+1]={ 0,0,0,1,2,3,3,3,3,3,3,3,3,3,3,3,3 };
+static const byte M_Sm2_d_i9[16+1]={ 0,0,1,2,3,3,3,3,3,3,3,3,3,3,3,3,3 };
 
+static const byte M_Sm3_d_i6[16+1]={ 0,0,1,2,2,3,3,3,3,3,3,3,3,3,3,3,3 };
+static const byte M_Sm3_d_i9[16+1]={ 0,0,1,1,2,3,3,3,3,3,3,3,3,3,3,3,3 };
+static const byte M_Sm3_d_ia[16+1]={ 0,0,1,2,2,3,3,3,3,3,3,3,3,3,3,3,3 };
 
+static const byte M_Sm4_d_i5[16+1]={ 0,1,2,3,4,4,5,5,5,5,5,5,5,5,5,5,5 };
 
 static const byte M_Smant_e_i4[21+1]={ 0,0,0,0,0,0,0,0,1,2,3,4,5,6,7,8,8,8,8,8,8,8 };
 
+static const byte M_Sms1_d_i1[9+1]={ 0,1,2,2,3,3,3,4,4,4 };
+static const byte M_Sms1_d_id[21+1]={ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,3,3 };
+static const byte M_Sms1_d_i3[25+1]={ 0,0,0,0,0,1,1,1,1,2,2,2,2,3,4,4,5,5,5,5,5,5,5,5,5,5 };
 
+static const byte M_Sms_d_i1[9+1]={ 0,1,1,2,2,2,2,3,3,3 };
+static const byte M_Sms_d_i2[21+1]={ 0,1,1,2,3,4,5,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6 };
 
+static const byte M_Smx_d_i7[34+1]={ 0,0,0,0,0,0,1,2,3,3,4,4,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,6,6,6,6,6,6,6 };
 
 
 
@@ -37,6 +54,7 @@ static const byte M_band_Sm2_i0[576+1]={ 0,0,0,1,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3
 static const byte M_band_Sm3_i0[576+1]={ 0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,3,3,3,3,3,4,4,5,6,6,7,7,7,8,9,9,10,10,11,11,12,12,12,13,13,14,14,15,16,16,16,17,17,17,17,18,18,18,19,19,19,20,21,21,21,22,23,23,23,23,23,24,25,25,25,26,26,27,28,29,29,30,31,31,31,32,32,32,33,33,33,34,34,35,35,35,36,36,36,37,38,38,38,39,39,39,39,40,41,42,42,43,44,45,45,45,46,46,47,47,47,48,48,48,48,48,49,49,49,50,51,51,51,52,52,52,52,52,53,53,53,53,54,54,54,54,55,55,55,56,56,57,57,57,58,58,58,58,58,58,59,59,60,60,60,61,61,61,62,62,62,62,62,63,63,63,63,64,65,65,65,65,65,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,67,67,67,67,67,67,68,68,68,68,68,68,68,68,68,68,68,68,68,68,68,68,68,68,69,69,69,70,70,71,71,71,71,71,71,71,71,71,71,71,71,71,71,71,71,71,71,71,71,71,71,71,71,71,71,71,71,71,71,71,71,71,71,71,71,71,71,71,72,72,72,72,72,72,72,72,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,75,76,76,76,76,76,76,76,76,76,76,76,76,76,76,76,76,76,76,76,76,76,76,76,76,77,77,77,77,77,78,78,78,78,78,78,78,78,78,78,78,78,78,78,78,78,78,78,78,78,78,78,78,78,78,78,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80 };
 
 
+static const byte M_band_Smm0A_i0[576+1]={ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4 };
 
 static const byte M_band_Smm0B_i0[576+1]={ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,2,3,3,3,4,4,4,4,4,5,5,5,5,5,5,6,7,7,7,7,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,11,11,11,11,11,12,12,12,12,12,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,14,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,16,16,17,17,17,18,18,18,18,18,18,18,18,18,18,19,19,19,19,20,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,22,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,24,24,24,24,24,24,25,26,26,27,27,28,28,28,28,29,30,30,31,32,33,33,34,35,35,36,36,36,36,36,36,37,37,37,37,37,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,38,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,40,40,40,40,41,42,42,43,43,43,44,44,45,45,46,46,46,47,47,47 };
 
@@ -58,56 +76,107 @@ static const byte M_band_Sn4_i0[576+1]={ 0,1,1,1,2,3,4,4,5,5,6,7,8,8,9,9,10,10,1
 static const byte M_band_Sns_i0[576+1]={ 0,1,2,2,2,3,4,5,5,5,6,6,6,6,7,8,8,8,9,10,10,11,12,12,12,13,13,14,15,16,16,17,18,19,20,21,21,22,23,23,24,25,26,26,26,27,27,28,28,29,30,31,31,32,33,34,35,36,37,37,38,39,39,40,41,41,42,43,44,45,46,47,47,48,49,50,51,52,53,54,55,56,57,58,58,59,60,61,62,63,64,65,65,66,66,66,67,68,68,69,69,69,70,70,71,72,72,73,74,74,75,76,76,77,77,78,78,79,80,81,82,83,84,84,85,86,86,87,87,87,88,89,89,89,89,90,90,91,91,92,93,94,94,95,95,95,96,96,96,97,97,97,97,97,97,97,97,97,97,98,98,98,98,98,98,98,98,98,99,99,99,99,99,99,99,99,100,100,100,100,100,100,100,101,101,102,102,102,102,102,102,102,103,103,103,104,104,104,104,104,104,104,104,104,104,104,105,105,106,107,107,107,107,107,107,107,107,107,107,107,107,107,108,108,108,109,110,110,110,110,110,110,110,111,112,113,113,113,113,113,113,113,113,113,113,113,113,113,113,113,113,113,113,113,113,113,113,113,113,113,113,113,113,113,113,113,113,113,113,113,113,113,113,113,113,113,113,114,114,114,114,114,114,114,114,114,114,114,115,115,115,115,115,115,115,115,115,115,115,115,115,116,116,116,116,116,116,116,116,116,116,116,117,117,117,117,117,117,117,117,117,117,117,117,117,117,117,117,117,117,117,117,117,117,118,118,118,118,118,118,118,118,118,118,118,118,118,118,118,118,118,118,118,118,118,118,118,118,118,118,118,118,118,118,119,119,119,119,119,119,119,119,119,119,119,119,119,119,119,119,119,119,119,119,119,120,120,120,120,120,120,120,120,120,120,120,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,121,122,122,122,122,122,122,122,122,122,122,122,122,122,122,122,122,122 };
 
 
+static const byte M_m0A_e_i3[21+1]={ 0,1,2,2,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3 };
+static const byte M_m0A_e_i6[16+1]={ 0,0,1,1,2,2,2,2,2,2,3,3,3,3,3,3,3 };
+
+
+static const byte M_m1_e_i5[21+1]={ 0,0,1,1,2,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3 };
 
 
 
+static const byte M_m4_e_i4[16+1]={ 0,0,0,0,1,1,1,2,2,2,2,2,3,3,3,3,3 };
+static const byte M_m4_e_i7[16+1]={ 0,0,0,1,1,2,3,4,4,4,4,5,5,5,5,5,5 };
+static const byte M_m4_e_i8[16+1]={ 0,0,0,0,1,1,1,2,2,2,2,2,3,3,3,3,3 };
+
+static const byte M_mant_f_i2[16+1]={ 0,0,1,2,3,4,5,6,6,6,6,6,6,6,6,6,6 };
+static const byte M_mant_f_i5[21+1]={ 0,0,0,0,0,0,0,0,0,0,1,1,2,2,3,3,3,3,3,3,3,3 };
+
+static const byte M_mm0A_g_i7[20+1]={ 0,0,0,0,0,0,1,1,1,1,1,1,2,2,2,2,3,3,3,3,3 };
 
 
+static const byte M_mm1_g_ib[20+1]={ 0,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,3,3,3,3,3 };
+
+static const byte M_mm2_g_i1[21+1]={ 0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,2,2,2,3,3,3,3 };
+static const byte M_mm2_g_i8[21+1]={ 0,0,0,0,1,1,1,1,1,1,1,2,2,2,2,3,3,3,3,3,3,3 };
+static const byte M_mm2_g_ia[21+1]={ 0,0,1,1,1,1,1,1,2,2,2,2,2,2,2,3,3,3,3,3,3,3 };
+
+static const byte M_mm3_g_i4[16+1]={ 0,0,0,1,1,2,3,3,3,3,3,3,3,3,3,3,3 };
+static const byte M_mm3_g_i8[21+1]={ 0,0,0,0,0,1,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,3 };
 
 
+static const byte M_mms1_g_i2[21+1]={ 0,0,1,1,1,1,1,1,1,1,2,2,2,2,3,4,4,4,4,4,4,4 };
+static const byte M_mms1_g_i4[16+1]={ 0,0,0,0,0,0,0,1,2,2,2,3,3,3,3,3,3 };
 
-
-
-
-
-
-
+static const byte M_mms_g_i1[21+1]={ 0,0,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,3,3,4,4 };
 static const byte M_mms_g_i4[26+1]={ 0,0,0,1,1,1,1,1,1,2,2,3,4,4,4,5,6,6,7,7,7,7,8,8,8,8,8 };
+static const byte M_mms_g_i8[25+1]={ 0,0,0,0,0,0,0,0,0,0,0,0,1,1,2,2,2,2,2,2,2,3,3,3,3,3 };
 
+static const byte M_mmx_g_i2[21+1]={ 0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,3,3,3,3,3 };
+static const byte M_mmx_g_ib[16+1]={ 0,0,0,1,1,2,3,3,3,3,3,3,3,3,3,3,3 };
 
+static const byte M_ms1_e_i4[20+1]={ 0,0,0,0,0,0,0,1,1,1,2,3,3,3,3,3,3,3,3,3,3 };
 
+static const byte M_ms_e_i4[32+1]={ 0,0,0,0,0,0,0,1,1,1,1,1,1,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4 };
 static const byte M_ms_e_i5[32+1]={ 0,0,1,1,1,1,1,1,2,2,2,3,3,4,5,5,5,6,6,6,7,7,7,7,7,7,7,7,7,7,8,8,8 };
+static const byte M_ms_e_i6[32+1]={ 0,0,0,0,0,0,1,1,1,1,1,2,2,2,2,2,2,3,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4 };
+
+static const byte M_mx_e_ib[16+1]={ 0,0,1,2,2,3,3,3,3,3,3,3,3,3,3,3,3 };
+
+static const byte M_n0A_e_i3[21+1]={ 0,1,1,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3 };
+static const byte M_n0A_e_i9[16+1]={ 0,1,1,2,2,2,3,3,3,3,3,3,3,3,3,3,3 };
 
 
+static const byte M_n1_e_ib[16+1]={ 0,0,1,1,2,2,3,3,3,3,3,3,3,3,3,3,3 };
+
+static const byte M_n2_e_i2[21+1]={ 0,1,1,1,1,1,1,1,2,2,2,2,2,2,3,3,3,3,3,3,3,3 };
+
+static const byte M_n3_e_i3[16+1]={ 0,1,2,2,3,3,4,4,4,4,4,4,4,4,4,4,4 };
 
 
-
-
-
-
+static const byte M_ns1_e_i7[16+1]={ 0,0,0,0,0,0,0,1,1,2,3,3,4,4,4,4,4 };
+static const byte M_ns1_e_i8[17+1]={ 0,1,1,1,1,1,1,2,2,3,3,3,4,4,4,4,5,5 };
 
 static const byte M_ns_e_i1[21+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,11,11,11,11,11,11,11,11,11,11 };
-static const byte M_ns_e_ic[256]={ 0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3 };
+static const byte M_ns_e_i5[21+1]={ 0,0,0,0,0,0,0,0,1,1,1,2,2,2,2,2,2,2,3,3,3,3 };
+
+static const byte M_nx_e_i7[23+1]={ 0,0,0,0,0,0,1,2,2,3,3,4,4,4,5,5,5,5,5,5,5,5,6,6 };
 
 
+static const byte M_pm0B_f_i3[24+1]={ 0,0,1,2,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3 };
+static const byte M_pm0B_f_i5[16+1]={ 0,0,1,1,2,3,3,4,4,4,4,4,4,4,4,4,4 };
+static const byte M_pm0B_f_i6[16+1]={ 0,0,0,0,1,1,1,1,2,2,2,2,2,3,4,4,4 };
 
-
+static const byte M_pm1_f_i4[21+1]={ 0,1,2,3,3,4,4,4,5,5,6,6,6,6,6,6,6,6,6,6,6,6 };
 static const byte M_pm1_f_i9[26+1]={ 0,0,1,2,2,3,3,3,3,4,4,4,4,4,5,6,6,7,8,8,8,8,8,9,9,10,10 };
 
+static const byte M_pm2_f_i1[21+1]={ 0,1,1,1,1,1,1,1,2,2,2,2,2,3,3,4,4,4,4,4,4,4 };
+static const byte M_pm2_f_i5[25+1]={ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,2,3,3,3,3,3 };
+static const byte M_pm2_f_i8[16+1]={ 0,0,1,2,3,3,4,4,4,4,5,5,5,5,5,5,5 };
+static const byte M_pm2_f_ia[23+1]={ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,2,2,2,3,3,3,3,3 };
 
+static const byte M_pm3_f_i8[21+1]={ 0,0,1,2,3,4,4,5,5,5,5,5,5,5,5,5,5,6,6,6,7,7 };
 
+static const byte M_pm4_f_i1[21+1]={ 0,1,1,1,1,1,1,1,2,2,2,3,3,3,3,4,4,4,4,4,4,4 };
+static const byte M_pm4_f_i4[16+1]={ 0,0,0,0,1,1,1,1,2,2,3,3,3,3,3,3,3 };
 static const byte M_pm4_f_i8[27+1]={ 0,0,0,1,2,3,4,4,4,5,5,5,5,6,6,6,7,8,8,9,9,9,10,10,10,10,10,10 };
 
 static const byte M_pms1_f_i4[40+1]={ 0,0,0,0,0,1,2,2,2,3,3,4,4,4,5,5,5,6,7,7,7,8,8,9,9,9,10,10,10,11,11,12,12,13,13,13,13,13,13,13,14 };
 
 static const byte M_pms_f_i1[21+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,15,15,15,15,15,15 };
+static const byte M_pms_f_i2[9+1]={ 0,1,2,2,2,2,3,3,3,3 };
+static const byte M_pms_f_i4[41+1]={ 0,0,0,0,0,0,0,0,0,1,1,1,1,2,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,5,5,5,5,5,5 };
 
+static const byte M_z256_e_i3[16+1]={ 0,1,1,1,1,1,2,3,3,3,3,3,3,3,3,3,3 };
+static const byte M_z256_e_i5[25+1]={ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,3,4,4,4,5,6,6,6,6 };
+static const byte M_z256_e_i6[25+1]={ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,3,4,4,5,5,6,6,6,6 };
 
+static const byte M_z512_e_i5[27+1]={ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,2,3,4,4,4,4,4,4,4,4 };
+static const byte M_z512_e_i6[25+1]={ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,2,3,3,3,3,3 };
 
 
 static const int M_mntDepth = (7+5) * (1);
-static const int M_mntLimit256 = (255+(M_mntDepth+1)) * (1);
-static const int M_mntLimit512 = (384+(M_mntLimit256+1)) * (1);
+static const int M_mntLimit256 = (255+((M_mntDepth+1))) * (1);
+static const int M_mntLimit512 = (384+((M_mntLimit256+1))) * (1);
 static const int M_av_D0 = (230+1) * (1);
 static const int M_av_C0 = (176+1) * (1);
 static const int M_av_C1 = (6+0) * (1);
@@ -436,124 +505,89 @@ static const word* M_Sz512_wq0 = TTable[20+0];
 static const word* M_Sz512_wq1 = TTable[19+0];
 
 
-static const qword M_ASmx_dx_Volume = 1ULL* 4; // 4
-static const qword M_Ammx_gx_Volume = 1ULL* 1; // 1
-static const qword M_Amx_ex_Volume = 1ULL* 1; // 1
-static const qword M_Anx_ex_Volume = 1ULL* 3; // 3
-static const qword M_Band_z256_d_Volume = 1ULL* 8; // 8
-static const qword M_Band_z256_e_Volume = 1ULL* 2; // 2
-static const qword M_Band_z512_d_Volume = 1ULL* 27; // 27
-static const qword M_Band_z512_e_Volume = 1ULL* 1; // 1
-static const qword M_Jmant_e_Volume = 1ULL* 51; // 51
-static const qword M_Jmant_f_Volume = 1ULL* 48; // 48
-static const qword M_Sm0A_d_Volume = 1ULL* 2* 2* 2* 1* 1* 4* 1* 1* 3* 3* 1* 1* 2* 2; // 1152
-static const qword M_Sm0B_d_Volume = 1ULL* 2* 2* 1* 3* 2* 3* 1* 1* 2* 2* 1* 1* 1* 1; // 288
-static const qword M_Sm1_d_Volume = 1ULL* 2* 2* 2* 1* 1* 4* 1* 1* 6* 3* 1* 1* (1<<2)* 1; // 2304
-static const qword M_Sm2_d_Volume = 1ULL* 2* 2* 1* 1* 1* 4* 3* 1* 1* 4* 3* 1* 1* (1<<2)* 1; // 2304
-static const qword M_Sm3_d_Volume = 1ULL* 2* 1* 1* 1* 1* 3* 4* 1* 1* 4* 4* 1* 1* (1<<2)* 1; // 1536
-static const qword M_Sm4_d_Volume = 1ULL* 2* 2* 1* 1* 3* 6* 1* 1* 1* 2* 1* 1* 1* (1<<1)* 1; // 288
-static const qword M_Smant_e_Volume = 1ULL* 2* 2* 1* 1* 9* 1* 2* 1* 2* M_Jmant_e_Volume; // 0
-static const qword M_Sms1_d_Volume = 1ULL* 2* 5* 4* 1* 6* 1* 1* 1* 1* 1* 1* 1; // 240
-static const qword M_Sms_d_Volume = 1ULL* 2* 4* 7* 1* 3* 1* 1* 1* 2* 1* 1* 1* 1* (1<<1); // 672
-static const qword M_Smx_d_Volume = 1ULL* 2* 2* 3* 2* 1* 1* 1* 7* 1* 1* 1* 2* 1* M_ASmx_dx_Volume; // 0
-static const qword M_Sz256_d_Volume = 1ULL* 2* 2* 1* 2* 1* 1* 2* 2* M_Band_z256_d_Volume; // 0
-static const qword M_Sz512_d_Volume = 1ULL* 2* 1* 1* 2* 1* 2* 1* M_Band_z512_d_Volume; // 0
-static const qword M_av_total_Volume = 1ULL* 0* 1* 1* 1* 1; // 0
-static const qword M_band_Sm0A_Volume = 1ULL* 198; // 198
-static const qword M_band_Sm0B_Volume = 1ULL* 99; // 99
-static const qword M_band_Sm1_Volume = 1ULL* 254; // 254
-static const qword M_band_Sm2_Volume = 1ULL* 108; // 108
-static const qword M_band_Sm3_Volume = 1ULL* 81; // 81
-static const qword M_band_Sm4_Volume = 1ULL* 1; // 1
-static const qword M_band_Smm0A_Volume = 1ULL* 5; // 5
-static const qword M_band_Smm0B_Volume = 1ULL* 48; // 48
-static const qword M_band_Sms_Volume = 1ULL* 1; // 1
-static const qword M_band_Smx_Volume = 1ULL* 90; // 90
-static const qword M_band_Sn0A_Volume = 1ULL* 22; // 22
-static const qword M_band_Sn0B_Volume = 1ULL* 18; // 18
-static const qword M_band_Sn1_Volume = 1ULL* 10; // 10
-static const qword M_band_Sn2_Volume = 1ULL* 16; // 16
-static const qword M_band_Sn3_Volume = 1ULL* 9; // 9
-static const qword M_band_Sn4_Volume = 1ULL* 84; // 84
-static const qword M_band_Sns_Volume = 1ULL* 123; // 123
-static const qword M_band_Snx_Volume = 1ULL* 1; // 1
-static const qword M_m0A_e_Volume = 1ULL* 1* 2* 4* 1* 1* 4* 1* 1* 1* 1* 1* 1* 1* M_band_Sm0A_Volume; // 0
-static const qword M_m0B_e_Volume = 1ULL* 1* 1* 1* 1* 3* 1* 2* 1* 1* 1* 1* 1* 2* 1* M_band_Sm0B_Volume; // 0
-static const qword M_m1_e_Volume = 1ULL* 1* 1* 1* 4* 1* 2* 1* 1* 1* 1* 1* 1* M_band_Sm1_Volume; // 0
-static const qword M_m2_e_Volume = 1ULL* 1* 1* 3* 3* 1* 2* 1* 2* 1* 2* 1* 1* M_band_Sm2_Volume; // 0
-static const qword M_m3_e_Volume = 1ULL* 1* 1* 2* 1* 1* 2* 2* 2* 1* 2* 1* 1* M_band_Sm3_Volume; // 0
-static const qword M_m4_e_Volume = 1ULL* 2* 1* 1* 1* 4* 2* 2* 6* 4* 1* 1* (1<<2)* 1* M_band_Sm4_Volume; // 0
-static const qword M_mant_f_Volume = 1ULL* 1* 3* 2* 7* 1* 4* 1* 2* 1* M_Jmant_f_Volume; // 0
-static const qword M_mm0A_g_Volume = 1ULL* 2* 2* 2* 1* 3* 4* 3* 1* 2* 1* 1* 2* 1* M_band_Smm0A_Volume; // 0
-static const qword M_mm0B_g_Volume = 1ULL* 1* 1* 3* 1* 3* 2* 1* 2* 1* 1* 1* 2* 2* M_band_Smm0B_Volume; // 0
-static const qword M_mm1_g_Volume = 1ULL* 2* 3* 3* 2* 2* 1* 1* 3* 1* 4* 2* (1<<1)* 2; // 6912
-static const qword M_mm2_g_Volume = 1ULL* 2* 4* 2* 2* 3* 1* 2* 1* 4* 1* 4* 2* 1; // 6144
-static const qword M_mm3_g_Volume = 1ULL* 2* 3* 2* 2* 4* 1* 2* 1* 4* 1* 2* 1* 1; // 1536
-static const qword M_mm4_g_Volume = 1ULL* 2* 2* 3* 1* 3* 2* 1* 2* 2* 1* 3* 1* 1; // 864
-static const qword M_mms1_g_Volume = 1ULL* 2* 2* 5* 2* 4* 1* 1* 3* 3* 1* 1* (1<<1)* 1; // 2880
-static const qword M_mms_g_Volume = 1ULL* 2* 5* 3* 2* 9* 1* 1* 1* 4* 1* 1* 1* (1<<1)* 1; // 4320
-static const qword M_mmx_g_Volume = 1ULL* 2* 2* 4* 1* 1* 2* 2* 2* 1* 3* 2* 4* 1* M_Ammx_gx_Volume; // 0
-static const qword M_ms1_e_Volume = 1ULL* 2* 1* 1* 1* 2* 4* 3* 1* 1* 1* 1* (1<<3)* (1<<1)* 1* (1<<5); // 24576
-static const qword M_ms_e_Volume = 1ULL* 2* 1* 1* 1* 5* 9* 5* 1* 2* 1* 1* 1* (1<<5)* (1<<1)* 1* M_band_Sms_Volume; // 0
-static const qword M_mx_e_Volume = 1ULL* 1* 1* 2* 2* 1* 1* 1* 1* 1* 1* 4* 1* M_band_Smx_Volume* M_Anx_ex_Volume; // 0
-static const qword M_n0A_e_Volume = 1ULL* 1* 1* 4* 1* 2* 3* 2* 1* 4* 2* 2* 1* 1* M_band_Sn0A_Volume; // 0
-static const qword M_n0B_e_Volume = 1ULL* 2* 2* 1* 1* 2* 2* 1* 1* 1* 2* 3* 1* 1* 1* M_band_Sn0B_Volume; // 0
-static const qword M_n1_e_Volume = 1ULL* 2* 1* 1* 2* 2* 2* 2* 2* 1* 4* 2* 1* M_band_Sn1_Volume; // 0
-static const qword M_n2_e_Volume = 1ULL* 2* 1* 4* 2* 2* 1* 1* 3* 1* 1* 1* 1* M_band_Sn2_Volume; // 0
-static const qword M_n3_e_Volume = 1ULL* 2* 1* 3* 5* 2* 1* 1* 3* 1* 1* 1* 2* M_band_Sn3_Volume; // 0
-static const qword M_n4_e_Volume = 1ULL* 2* 3* 1* 1* 2* 2* 1* 2* 1* 1* 1* 1* M_band_Sn4_Volume; // 0
-static const qword M_ns1_e_Volume = 1ULL* 2* 1* 1* 1* 3* 3* 2* 5* 6* 1* 1* (1<<1)* 2; // 4320
-static const qword M_ns_e_Volume = 1ULL* 1* 12* 1* 1* 1* 4* 1* 1* 1* 1* 1* 1* (1<<2)* 1* M_band_Sns_Volume; // 0
-static const qword M_nx_e_Volume = 1ULL* 2* 2* 1* 3* 1* 2* 7* 3* 3* 2* 2* 1* M_band_Snx_Volume* M_Anx_ex_Volume; // 0
-static const qword M_pm0A_f_Volume = 1ULL* 2* 2* 1* 2* 1* 2* 1* 1* 1* 1* 1* 1* 1; // 16
-static const qword M_pm0B_f_Volume = 1ULL* 2* 1* 1* 1* 4* 3* 5* 5* 2* 1* 2* 1* 1* 1; // 2400
-static const qword M_pm1_f_Volume = 1ULL* 2* 1* 7* 3* 1* 1* 1* 11* 1* 3* 1* 1; // 1386
-static const qword M_pm2_f_Volume = 1ULL* 2* 5* 1* 2* 3* 4* 1* 1* 6* 2* 4* 2* 1; // 23040
-static const qword M_pm3_f_Volume = 1ULL* 2* 1* 3* 3* 2* 2* 1* 1* 8* 3* 3* 2* 1; // 10368
-static const qword M_pm4_f_Volume = 1ULL* 2* 5* 2* 2* 4* 2* 1* 1* 11* 2* 1* 1* 1; // 7040
-static const qword M_pms1_f_Volume = 1ULL* 1* 1* 2* 2* 15* 1* 1* 1* 1* 1* 1* (1<<1)* (1<<1)* 1; // 240
-static const qword M_pms_f_Volume = 1ULL* 2* 16* 4* 1* 6* 2* 1* 1* 2* 1* 1* 1* (1<<1)* 1; // 6144
-static const qword M_z256_e_Volume = 1ULL* 1* 4* 2* 7* 7* 2* 1* 1* M_Band_z256_e_Volume; // 0
-static const qword M_z512_e_Volume = 1ULL* 1* 2* 1* 5* 4* 1* 1* M_Band_z512_e_Volume; // 0
+static const long long M_ASmx_dx_Volume = tc_vmul(1, 4); // 4
+static const long long M_Ammx_gx_Volume = tc_vmul(1, 1); // 1
+static const long long M_Amx_ex_Volume = tc_vmul(1, 1); // 1
+static const long long M_Anx_ex_Volume = tc_vmul(1, 3); // 3
+static const long long M_Band_z256_d_Volume = tc_vmul(1, 8); // 8
+static const long long M_Band_z256_e_Volume = tc_vmul(1, 2); // 2
+static const long long M_Band_z512_d_Volume = tc_vmul(1, 27); // 27
+static const long long M_Band_z512_e_Volume = tc_vmul(1, 1); // 1
+static const long long M_Jmant_e_Volume = tc_vmul(1, 51); // 51
+static const long long M_Jmant_f_Volume = tc_vmul(1, 48); // 48
+static const long long M_Sm0A_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 2), 1), 1), 4), 1), 1), 3), 3), 1), 1), 2), 2); // 1152
+static const long long M_Sm0B_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 1), 3), 2), 3), 1), 1), 2), 2), 1), 1), 1), 1); // 288
+static const long long M_Sm1_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 2), 1), 1), 4), 1), 1), 6), 3), 1), 1), (1<<2)), 1); // 2304
+static const long long M_Sm2_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 1), 1), 1), 4), 3), 1), 1), 4), 3), 1), 1), (1<<2)), 1); // 2304
+static const long long M_Sm3_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 1), 1), 1), 1), 3), 4), 1), 1), 4), 4), 1), 1), (1<<2)), 1); // 1536
+static const long long M_Sm4_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 1), 1), 3), 6), 1), 1), 1), 2), 1), 1), 1), (1<<1)), 1); // 288
+static const long long M_Smant_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 1), 1), 9), 1), 2), 1), 2), (M_Jmant_e_Volume)); // ?
+static const long long M_Sms1_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 5), 4), 1), 6), 1), 1), 1), 1), 1), 1), 1); // 240
+static const long long M_Sms_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 4), 7), 1), 3), 1), 1), 1), 2), 1), 1), 1), 1), (1<<1)); // 672
+static const long long M_Smx_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 3), 2), 1), 1), 1), 7), 1), 1), 1), 2), 1), (M_ASmx_dx_Volume)); // ?
+static const long long M_Sz256_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 1), 2), 1), 1), 2), 2), (M_Band_z256_d_Volume)); // ?
+static const long long M_Sz512_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 1), 1), 2), 1), 2), 1), (M_Band_z512_d_Volume)); // ?
+static const long long M_av_total_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, (0)), (1)), (1)), (1)), (1)); // 0
+static const long long M_band_Sm0A_Volume = tc_vmul(1, 198); // 198
+static const long long M_band_Sm0B_Volume = tc_vmul(1, 99); // 99
+static const long long M_band_Sm1_Volume = tc_vmul(1, 254); // 254
+static const long long M_band_Sm2_Volume = tc_vmul(1, 108); // 108
+static const long long M_band_Sm3_Volume = tc_vmul(1, 81); // 81
+static const long long M_band_Sm4_Volume = tc_vmul(1, 1); // 1
+static const long long M_band_Smm0A_Volume = tc_vmul(1, 5); // 5
+static const long long M_band_Smm0B_Volume = tc_vmul(1, 48); // 48
+static const long long M_band_Sms_Volume = tc_vmul(1, 1); // 1
+static const long long M_band_Smx_Volume = tc_vmul(1, 90); // 90
+static const long long M_band_Sn0A_Volume = tc_vmul(1, 22); // 22
+static const long long M_band_Sn0B_Volume = tc_vmul(1, 18); // 18
+static const long long M_band_Sn1_Volume = tc_vmul(1, 10); // 10
+static const long long M_band_Sn2_Volume = tc_vmul(1, 16); // 16
+static const long long M_band_Sn3_Volume = tc_vmul(1, 9); // 9
+static const long long M_band_Sn4_Volume = tc_vmul(1, 84); // 84
+static const long long M_band_Sns_Volume = tc_vmul(1, 123); // 123
+static const long long M_band_Snx_Volume = tc_vmul(1, 1); // 1
+static const long long M_m0A_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 2), 4), 1), 1), 4), 1), 1), 1), 1), 1), 1), 1), (M_band_Sm0A_Volume)); // ?
+static const long long M_m0B_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 1), 1), 3), 1), 2), 1), 1), 1), 1), 1), 2), 1), (M_band_Sm0B_Volume)); // ?
+static const long long M_m1_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 1), 4), 1), 2), 1), 1), 1), 1), 1), 1), (M_band_Sm1_Volume)); // ?
+static const long long M_m2_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 3), 3), 1), 2), 1), 2), 1), 2), 1), 1), (M_band_Sm2_Volume)); // ?
+static const long long M_m3_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 2), 1), 1), 2), 2), 2), 1), 2), 1), 1), (M_band_Sm3_Volume)); // ?
+static const long long M_m4_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 1), 1), 1), 4), 2), 2), 6), 4), 1), 1), (1<<2)), 1), (M_band_Sm4_Volume)); // ?
+static const long long M_mant_f_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 3), 2), 7), 1), 4), 1), 2), 1), (M_Jmant_f_Volume)); // ?
+static const long long M_mm0A_g_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 2), 1), 3), 4), 3), 1), 2), 1), 1), 2), 1), (M_band_Smm0A_Volume)); // ?
+static const long long M_mm0B_g_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 3), 1), 3), 2), 1), 2), 1), 1), 1), 2), 2), (M_band_Smm0B_Volume)); // ?
+static const long long M_mm1_g_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 3), 3), 2), 2), 1), 1), 3), 1), 4), 2), (1<<1)), 2); // 6912
+static const long long M_mm2_g_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 4), 2), 2), 3), 1), 2), 1), 4), 1), 4), 2), 1); // 6144
+static const long long M_mm3_g_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 3), 2), 2), 4), 1), 2), 1), 4), 1), 2), 1), 1); // 1536
+static const long long M_mm4_g_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 3), 1), 3), 2), 1), 2), 2), 1), 3), 1), 1); // 864
+static const long long M_mms1_g_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 5), 2), 4), 1), 1), 3), 3), 1), 1), (1<<1)), 1); // 2880
+static const long long M_mms_g_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 5), 3), 2), 9), 1), 1), 1), 4), 1), 1), 1), (1<<1)), 1); // 4320
+static const long long M_mmx_g_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 4), 1), 1), 2), 2), 2), 1), 3), 2), 4), 1), (M_Ammx_gx_Volume)); // ?
+static const long long M_ms1_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 1), 1), 1), 2), 4), 3), 1), 1), 1), 1), (1<<3)), (1<<1)), 1), (1<<5)); // 24576
+static const long long M_ms_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 1), 1), 1), 5), 9), 5), 1), 2), 1), 1), 1), (1<<5)), (1<<1)), 1), (M_band_Sms_Volume)); // ?
+static const long long M_mx_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 2), 2), 1), 1), 1), 1), 1), 1), 4), 1), (M_band_Smx_Volume)), (M_Anx_ex_Volume)); // ?
+static const long long M_n0A_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 4), 1), 2), 3), 2), 1), 4), 2), 2), 1), 1), (M_band_Sn0A_Volume)); // ?
+static const long long M_n0B_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 1), 1), 2), 2), 1), 1), 1), 2), 3), 1), 1), 1), (M_band_Sn0B_Volume)); // ?
+static const long long M_n1_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 1), 1), 2), 2), 2), 2), 2), 1), 4), 2), 1), (M_band_Sn1_Volume)); // ?
+static const long long M_n2_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 1), 4), 2), 2), 1), 1), 3), 1), 1), 1), 1), (M_band_Sn2_Volume)); // ?
+static const long long M_n3_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 1), 3), 5), 2), 1), 1), 3), 1), 1), 1), 2), (M_band_Sn3_Volume)); // ?
+static const long long M_n4_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 3), 1), 1), 2), 2), 1), 2), 1), 1), 1), 1), (M_band_Sn4_Volume)); // ?
+static const long long M_ns1_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 1), 1), 1), 3), 3), 2), 5), 6), 1), 1), (1<<1)), 2); // 4320
+static const long long M_ns_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 12), 1), 1), 1), 4), 1), 1), 1), 1), 1), 1), (1<<2)), 1), (M_band_Sns_Volume)); // ?
+static const long long M_nx_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 1), 3), 1), 2), 7), 3), 3), 2), 2), 1), (M_band_Snx_Volume)), (M_Anx_ex_Volume)); // ?
+static const long long M_pm0A_f_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 1), 2), 1), 2), 1), 1), 1), 1), 1), 1), 1); // 16
+static const long long M_pm0B_f_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 1), 1), 1), 4), 3), 5), 5), 2), 1), 2), 1), 1), 1); // 2400
+static const long long M_pm1_f_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 1), 7), 3), 1), 1), 1), 11), 1), 3), 1), 1); // 1386
+static const long long M_pm2_f_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 5), 1), 2), 3), 4), 1), 1), 6), 2), 4), 2), 1); // 23040
+static const long long M_pm3_f_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 1), 3), 3), 2), 2), 1), 1), 8), 3), 3), 2), 1); // 10368
+static const long long M_pm4_f_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 5), 2), 2), 4), 2), 1), 1), 11), 2), 1), 1), 1); // 7040
+static const long long M_pms1_f_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 2), 2), 15), 1), 1), 1), 1), 1), 1), (1<<1)), (1<<1)), 1); // 240
+static const long long M_pms_f_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 16), 4), 1), 6), 2), 1), 1), 2), 1), 1), 1), (1<<1)), 1); // 6144
+static const long long M_z256_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 4), 2), 7), 7), 2), 1), 1), (M_Band_z256_e_Volume)); // ?
+static const long long M_z512_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 2), 1), 5), 4), 1), 1), (M_Band_z512_e_Volume)); // ?
+
+#define M_USES(X) X(j) X(ch) X(band_j) X(curband) X(caMDCTj) X(daMDCTj) X(eaMDCTj) X(ctx1a) X(zrun) X(ctx2a) X(ctx3a) X(j_band) X(caMDCTjm1) X(recm) X(gi) X(count1table_select) X(flag_jm1) X(rec) X(j_gt_j0) X(l) X(dblMDCTj) X(ctx2bl) X(cblMDCTj) X(ctx1bl) X(cMDCTj) X(c) X(zeros_j) X(dMDCTj) X(signs_j) X(eMDCTj) X(cMDCTjm1) X(ctx1) X(x)
 
 struct M_T {
-
-#define SC8(x,y) ((x*y)>>8)
-/*	
-  SSEj<*(int*)& M_Sm0A_Q,*(int*)& M_Sm0A_d_Volume> Sm0A;
-  SSEj<*(int*)& M_Sm0B_Q,*(int*)& M_Sm0B_d_Volume> Sm0B;
-
-  SSEj<*(int*)& M_Sm1_Q,*(int*)& M_Sm1_d_Volume> Sm1;
-  SSEj<*(int*)& M_Sm2_Q,*(int*)& M_Sm2_d_Volume> Sm2;
-  SSEj<*(int*)& M_Sm3_Q,*(int*)& M_Sm3_d_Volume> Sm3;
-  SSEj<*(int*)& M_Sm4_Q,*(int*)& M_Sm4_d_Volume> Sm4;
-  SSEj<*(int*)& M_Smx_Q,*(int*)& M_Smx_d_Volume> Smx;
-
-  SSEj<*(int*)& M_Sz256_Q,*(int*)& M_Sz256_d_Volume> Sz256;
-  SSEj<*(int*)& M_Sz512_Q,*(int*)& M_Sz512_d_Volume> Sz512;
-  SSEj<*(int*)& M_Smant_Q,*(int*)& M_Smant_e_Volume> Smant;
-  SSEj<*(int*)& M_Smbnt_Q,*(int*)& M_Smbnt_e_Volume> Smbnt;
-
-  SSEj<*(int*)& M_Sms_Q,*(int*)& M_Sms_d_Volume> Sms;
-  SSEj<*(int*)& M_Sms1_Q,*(int*)& M_Sms1_d_Volume> Sms1;
-*/
-
-
-
-  uint  signs[576];
-  uint  zeros[576];
-//  uint  z512s[576];
-//  uint  plus1[576];
-//  uint  m1nus[576];
-
-  int cMDCT[576];
-  int dMDCT[576];
-  int eMDCT[576];
-
-  int av_MDCT[576];
-
-  int si; // stats instance index
-
   Node2ii m0A[M_m0A_e_Volume];
   byte pm0A[M_pm0A_f_Volume];
   SSEii<8> Sm0A[M_Sm0A_d_Volume];
@@ -605,78 +639,59 @@ struct M_T {
   Node2ii z512[M_z512_e_Volume];
   SSEii<7> Sz512[M_Sz512_d_Volume];
   
-  void M_Init( void ) {
-    int i;
-  //    si = instance;
-  
-    for( i=0; i<576; i++ ) av_MDCT[i]=eMDCT[i]=dMDCT[i]=cMDCT[i]=signs[i]=zeros[i]=0; //plus1[i]=m1nus[i]=0;z512s[i]=
-  
-    for( i=0; i<M_pm0A_f_Volume; i++ ) pm0A[i]=0;
-    for( i=0; i<M_m0A_e_Volume; i++ )  m0A[i].Init_Node2i();
-    for( i=0; i<M_Sm0A_d_Volume; i++ ) Sm0A[i].Init_SSEi(M_Sm0A_wi,M_Sm0A_ti);
-    InitMixers( mm0A, M_mm0A_g_Volume, M_mm0A_W0 );
-    for( i=0; i<M_n0A_e_Volume; i++ )  n0A[i].Init_Node2i();
-  
-    for( i=0; i<M_pm0B_f_Volume; i++ ) pm0B[i]=0;
-    for( i=0; i<M_m0B_e_Volume; i++ )  m0B[i].Init_Node2i();
-    for( i=0; i<M_Sm0B_d_Volume; i++ ) Sm0B[i].Init_SSEi(M_Sm0B_wi,M_Sm0B_ti);
-    InitMixers( mm0B, M_mm0B_g_Volume, M_mm0B_W0 );
-    for( i=0; i<M_n0B_e_Volume; i++ )  n0B[i].Init_Node2i();
-  
-    for( i=0; i<M_pm1_f_Volume; i++ ) pm1[i]=0;
-    for( i=0; i<M_m1_e_Volume; i++ )  m1[i].Init_Node2i();
-    for( i=0; i<M_Sm1_d_Volume; i++ ) Sm1[i].Init_SSEi(M_Sm1_wi,M_Sm1_ti);
-    InitMixers( mm1, M_mm1_g_Volume, M_mm1_W0 );
-    for( i=0; i<M_n1_e_Volume; i++ )  n1[i].Init_Node2i();
-  
-    for( i=0; i<M_pm2_f_Volume; i++ ) pm2[i]=0;
-    for( i=0; i<M_m2_e_Volume; i++ )  m2[i].Init_Node2i();
-    for( i=0; i<M_Sm2_d_Volume; i++ ) Sm2[i].Init_SSEi(M_Sm2_wi,M_Sm2_ti);
-    InitMixers( mm2, M_mm2_g_Volume, M_mm2_W0 );
-    for( i=0; i<M_n2_e_Volume; i++ )  n2[i].Init_Node2i();
-  
-    for( i=0; i<M_pm3_f_Volume; i++ ) pm3[i]=0;
-    for( i=0; i<M_m3_e_Volume; i++ )  m3[i].Init_Node2i();
-    for( i=0; i<M_Sm3_d_Volume; i++ ) Sm3[i].Init_SSEi(M_Sm3_wi,M_Sm3_ti);
-    InitMixers( mm3, M_mm3_g_Volume, M_mm3_W0 );
-    for( i=0; i<M_n3_e_Volume; i++ )  n3[i].Init_Node2i();
-  
-    for( i=0; i<M_pm4_f_Volume; i++ ) pm4[i]=0;
-    for( i=0; i<M_m4_e_Volume; i++ )  m4[i].Init_Node2i();
-    for( i=0; i<M_Sm4_d_Volume; i++ ) Sm4[i].Init_SSEi(M_Sm4_wi,M_Sm4_ti);
-    InitMixers( mm4, M_mm4_g_Volume, M_mm4_W0 );
-    for( i=0; i<M_n4_e_Volume; i++ )  n4[i].Init_Node2i();
-  
-    for( i=0; i<M_mx_e_Volume; i++ )  mx[i].Init_Node2i();
-    for( i=0; i<M_Smx_d_Volume; i++ ) Smx[i].Init_SSEi();
-    InitMixers( mmx, M_mmx_g_Volume, M_mmx_W0 );
-    for( i=0; i<M_nx_e_Volume; i++ )  nx[i].Init_Node2i();
-  
-    for( i=0; i<M_pms1_f_Volume; i++ ) pms1[i]=0;
-    for( i=0; i<M_ms1_e_Volume; i++ )  ms1[i].Init_Node2i();
-    for( i=0; i<M_Sms1_d_Volume; i++ ) Sms1[i].Init_SSEi(M_Sms1_wi,M_Sms1_ti);
-    InitMixers( mms1, M_mms1_g_Volume, M_mms1_W0 );
-    for( i=0; i<M_ns1_e_Volume; i++ )  ns1[i].Init_Node2i();
-  
-    for( i=0; i<M_pms_f_Volume; i++ ) pms[i]=0;
-    for( i=0; i<M_ms_e_Volume; i++ )   ms[i].Init_Node2i();
-    for( i=0; i<M_Sms_d_Volume; i++ )  Sms[i].Init_SSEi(M_Sms_wi,M_Sms_ti);
-    InitMixers( mms, M_mms_g_Volume, M_mms_W0 );
-    for( i=0; i<M_ns_e_Volume; i++ )  ns[i].Init_Node2i();
-  
-    for( i=0; i<M_z512_e_Volume; i++ ) z512[i].Init_Node2i();
-    for( i=0; i<M_Sz512_d_Volume; i++ ) Sz512[i].Init_SSEi(M_Sz512_wi,M_Sz512_ti);
-  
-    for( i=0; i<M_mant_f_Volume; i++ ) mant[i].Init_Node2i();
-    for( i=0; i<M_Smant_e_Volume; i++ ) Smant[i].Init_SSEi(M_Smant_wi,M_Smant_ti);
-  
-  //  for( i=0; i<M_mbnt_f_Volume; i++ ) mbnt[i].Init_Number2i();
-  //  for( i=0; i<M_Smbnt_e_Volume; i++ ) Smbnt[i].Init_SSEi(M_Smbnt_wi,M_Smbnt_ti);
-  
-    for( i=0; i<M_z256_e_Volume; i++ ) z256[i].Init_Node2i();
-    for( i=0; i<M_Sz256_d_Volume; i++ ) Sz256[i].Init_SSEi(M_Sz256_wi,M_Sz256_ti);
-  
-  }
-  void M_Quit( void ) {
-  }
+  /* Total bytes this module's Table() members occupy -- a constant here, since
+   * Const mode has already folded every count. */
+  static constexpr unsigned long long M_Size = 0
+                              + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_m0A_e_Volume)
+                              + (unsigned long long)sizeof(byte) * (unsigned long long)(M_pm0A_f_Volume)
+                              + (unsigned long long)sizeof(SSEii<8>) * (unsigned long long)(M_Sm0A_d_Volume)
+                              + (unsigned long long)sizeof(iMixer) * (unsigned long long)(M_mm0A_g_Volume)
+                              + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_n0A_e_Volume)
+                              + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_m0B_e_Volume)
+                              + (unsigned long long)sizeof(byte) * (unsigned long long)(M_pm0B_f_Volume)
+                              + (unsigned long long)sizeof(SSEii<7>) * (unsigned long long)(M_Sm0B_d_Volume)
+                              + (unsigned long long)sizeof(iMixer) * (unsigned long long)(M_mm0B_g_Volume)
+                              + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_n0B_e_Volume)
+                              + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_m1_e_Volume)
+                              + (unsigned long long)sizeof(byte) * (unsigned long long)(M_pm1_f_Volume)
+                              + (unsigned long long)sizeof(SSEii<6>) * (unsigned long long)(M_Sm1_d_Volume)
+                              + (unsigned long long)sizeof(iMixer) * (unsigned long long)(M_mm1_g_Volume)
+                              + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_n1_e_Volume)
+                              + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_m2_e_Volume)
+                              + (unsigned long long)sizeof(byte) * (unsigned long long)(M_pm2_f_Volume)
+                              + (unsigned long long)sizeof(SSEii<5>) * (unsigned long long)(M_Sm2_d_Volume)
+                              + (unsigned long long)sizeof(iMixer) * (unsigned long long)(M_mm2_g_Volume)
+                              + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_n2_e_Volume)
+                              + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_m3_e_Volume)
+                              + (unsigned long long)sizeof(byte) * (unsigned long long)(M_pm3_f_Volume)
+                              + (unsigned long long)sizeof(SSEii<5>) * (unsigned long long)(M_Sm3_d_Volume)
+                              + (unsigned long long)sizeof(iMixer) * (unsigned long long)(M_mm3_g_Volume)
+                              + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_n3_e_Volume)
+                              + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_m4_e_Volume)
+                              + (unsigned long long)sizeof(byte) * (unsigned long long)(M_pm4_f_Volume)
+                              + (unsigned long long)sizeof(SSEii<6>) * (unsigned long long)(M_Sm4_d_Volume)
+                              + (unsigned long long)sizeof(iMixer) * (unsigned long long)(M_mm4_g_Volume)
+                              + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_n4_e_Volume)
+                              + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_mx_e_Volume)
+                              + (unsigned long long)sizeof(SSEii<6>) * (unsigned long long)(M_Smx_d_Volume)
+                              + (unsigned long long)sizeof(iMixer) * (unsigned long long)(M_mmx_g_Volume)
+                              + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_nx_e_Volume)
+                              + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_ms_e_Volume)
+                              + (unsigned long long)sizeof(byte) * (unsigned long long)(M_pms_f_Volume)
+                              + (unsigned long long)sizeof(SSEii<7>) * (unsigned long long)(M_Sms_d_Volume)
+                              + (unsigned long long)sizeof(iMixer) * (unsigned long long)(M_mms_g_Volume)
+                              + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_ns_e_Volume)
+                              + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_ms1_e_Volume)
+                              + (unsigned long long)sizeof(byte) * (unsigned long long)(M_pms1_f_Volume)
+                              + (unsigned long long)sizeof(SSEii<6>) * (unsigned long long)(M_Sms1_d_Volume)
+                              + (unsigned long long)sizeof(iMixer) * (unsigned long long)(M_mms1_g_Volume)
+                              + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_ns1_e_Volume)
+                              + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_mant_f_Volume)
+                              + (unsigned long long)sizeof(SSEii<6>) * (unsigned long long)(M_Smant_e_Volume)
+                              + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_z256_e_Volume)
+                              + (unsigned long long)sizeof(SSEii<5>) * (unsigned long long)(M_Sz256_d_Volume)
+                              + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(M_z512_e_Volume)
+                              + (unsigned long long)sizeof(SSEii<7>) * (unsigned long long)(M_Sz512_d_Volume);
+  void M_Init( void ) {}
+  void M_Quit( void ) {}
 };

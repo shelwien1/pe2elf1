@@ -2,16 +2,16 @@
 
 set CYGWIN=nodosfilewarning
 
-rem copy /b nul+mp3rw\mp3_model\IDY\*.idx mp3rw\mp3_model\IDX\sh_model.idx 
-
-cat mp3rw/mp3_model/IDY/*.idx | perl mp3rw/mp3_model/IDY/merge_bands.pl > mp3rw\mp3_model\IDX\sh_model.idx 
-
+rem MOD\ from IDX\ in the shipping form, every parameter folded, as mk.sh mod
+rem makes it (mp3rw\mp3_model\IDX\IDX-FORMAT.md)
+set IDX_NOCONST=1
 for %%a in (mp3rw\mp3_model\IDX\*.idx) do ( 
   if %%~pna.idx==%%~pnxa (
-    perl mp3rw/mp3_model/IDY/idx2inc.pl %%a >nul
+    perl mp3rw/mp3_model/IDX/idx2inc.pl %%a 0 >nul
     move /y "%%~pna_?.inc" mp3rw\mp3_model\MOD\
   )
 )
+set IDX_NOCONST=
 
 set gcc=C:\clang900\bin\clang++.exe
 set gcc=C:\clang801x\bin\clang++.exe

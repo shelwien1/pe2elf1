@@ -370,3 +370,45 @@ Layer I/II frames don't need a reservoir, but in a movie mp3rw mostly doesn't
 find them: a layer I/II frame is only taken next to another one (see
 [Layer I / II](#layer-i--ii)), and in an AVI every frame has video data on both
 sides. Of the 375 Layer II frames in `movie_l2.avi`, mp3rw takes 11.
+
+# IDX: the model's contexts and parameters
+
+mp3c's model declares its context indices and its tunable parameters in
+IDX (`mp3rw/mp3_model/IDX/*.idx`), which `IDX/idx2inc.pl` turns into C++
+(`mp3rw/mp3_model/MOD/`). The framework is aacpack's (h264p's): its
+generator, runtime (`mapping.inc`), optimizer (`IDX/opt.pl`), import
+(`IDX/import.pl`), document (`IDX/IDX-FORMAT.md`) and `mk.sh`:
+
+```
+./mk.sh mod              MOD/ again, in the shipping form (every parameter folded)
+./mk.sh release          ./mp3c, the shipping build
+./mk.sh tuning           ./mp3c.tune: the knobs the .idx sources state live behind "!MAP!", for opt.pl
+./mk.sh check DUMP...    the tuning and the shipping build compress the dumps alike
+```
+
+`MOD/` stays in the repository, so that `g.bat` and `gc.bat` need no perl;
+`gc.bat` regenerates it with the new generator first, as `mk.sh mod` does.
+
+What changed from mp3c's old IDX tools:
+
+- aacpack's generator has none of three forms mp3c's model is written in:
+  `Rate` (a row of the rate schedules `TTable`), `ADD` (a factor with no
+  mapping) and `b&` (a binary tree's node, the library's `masking_b`). They
+  are back, ported from the old generator (IDX-FORMAT.md §16).
+- `IDY/`, the spectral model's declarations split by decision with their
+  long place patterns cut in 24-bit pieces, is merged into
+  `IDX/sh_model.idx`, as `gc.bat` used to merge it before every build. The
+  pieces in `sh_model_counts.idx` are joined too: the new generator takes a
+  pattern of any length.
+- The templates' `def_Data` / `def_Init` blocks, which only the old
+  generator had, are ordinary members and an `%M%InitData()` the model
+  calls after `%M%_Init()`.
+- The tuning form has its tables allocated as the model starts and every
+  live knob a mapping object opt.pl patches in the binary. The `.idx`
+  sources keep their `Const 1` lines: the parameters tuned so far stay
+  constants in both forms until a section is made `Const 0`.
+
+The shipping build writes byte-identical `.c` files to the old tools' on
+all 124 test inputs, and so do the MinGW g++ and clang PE builds (under
+Wine), and the tuning form with every knob made live (1451 patterns, 30249
+bits) on 39 of them.

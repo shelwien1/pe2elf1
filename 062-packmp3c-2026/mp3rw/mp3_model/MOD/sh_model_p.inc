@@ -28,10 +28,119 @@
 
 
 
-//  void Init_RangeDelta( int instance ) {
+#define SC8(x,y) ((x*y)>>8)
+/*	
+  SSEj<*(int*)& M_Sm0A_Q,*(int*)& M_Sm0A_d_Volume> Sm0A;
+  SSEj<*(int*)& M_Sm0B_Q,*(int*)& M_Sm0B_d_Volume> Sm0B;
+
+  SSEj<*(int*)& M_Sm1_Q,*(int*)& M_Sm1_d_Volume> Sm1;
+  SSEj<*(int*)& M_Sm2_Q,*(int*)& M_Sm2_d_Volume> Sm2;
+  SSEj<*(int*)& M_Sm3_Q,*(int*)& M_Sm3_d_Volume> Sm3;
+  SSEj<*(int*)& M_Sm4_Q,*(int*)& M_Sm4_d_Volume> Sm4;
+  SSEj<*(int*)& M_Smx_Q,*(int*)& M_Smx_d_Volume> Smx;
+
+  SSEj<*(int*)& M_Sz256_Q,*(int*)& M_Sz256_d_Volume> Sz256;
+  SSEj<*(int*)& M_Sz512_Q,*(int*)& M_Sz512_d_Volume> Sz512;
+  SSEj<*(int*)& M_Smant_Q,*(int*)& M_Smant_e_Volume> Smant;
+  SSEj<*(int*)& M_Smbnt_Q,*(int*)& M_Smbnt_e_Volume> Smbnt;
+
+  SSEj<*(int*)& M_Sms_Q,*(int*)& M_Sms_d_Volume> Sms;
+  SSEj<*(int*)& M_Sms1_Q,*(int*)& M_Sms1_d_Volume> Sms1;
+*/
+
+
+
+  uint  signs[576];
+  uint  zeros[576];
+//  uint  z512s[576];
+//  uint  plus1[576];
+//  uint  m1nus[576];
+
+  int cMDCT[576];
+  int dMDCT[576];
+  int eMDCT[576];
+
+  int av_MDCT[576];
+
+  int si; // stats instance index
+
+// the tables' starting state, after M_Init() made them
+void M_InitData( void ) {
+  int i;
+//    si = instance;
+
+  for( i=0; i<576; i++ ) av_MDCT[i]=eMDCT[i]=dMDCT[i]=cMDCT[i]=signs[i]=zeros[i]=0; //plus1[i]=m1nus[i]=0;z512s[i]=
+
+  for( i=0; i<M_pm0A_f_Volume; i++ ) pm0A[i]=0;
+  for( i=0; i<M_m0A_e_Volume; i++ )  m0A[i].Init_Node2i();
+  for( i=0; i<M_Sm0A_d_Volume; i++ ) Sm0A[i].Init_SSEi(M_Sm0A_wi,M_Sm0A_ti);
+  InitMixers( mm0A, M_mm0A_g_Volume, M_mm0A_W0 );
+  for( i=0; i<M_n0A_e_Volume; i++ )  n0A[i].Init_Node2i();
+
+  for( i=0; i<M_pm0B_f_Volume; i++ ) pm0B[i]=0;
+  for( i=0; i<M_m0B_e_Volume; i++ )  m0B[i].Init_Node2i();
+  for( i=0; i<M_Sm0B_d_Volume; i++ ) Sm0B[i].Init_SSEi(M_Sm0B_wi,M_Sm0B_ti);
+  InitMixers( mm0B, M_mm0B_g_Volume, M_mm0B_W0 );
+  for( i=0; i<M_n0B_e_Volume; i++ )  n0B[i].Init_Node2i();
+
+  for( i=0; i<M_pm1_f_Volume; i++ ) pm1[i]=0;
+  for( i=0; i<M_m1_e_Volume; i++ )  m1[i].Init_Node2i();
+  for( i=0; i<M_Sm1_d_Volume; i++ ) Sm1[i].Init_SSEi(M_Sm1_wi,M_Sm1_ti);
+  InitMixers( mm1, M_mm1_g_Volume, M_mm1_W0 );
+  for( i=0; i<M_n1_e_Volume; i++ )  n1[i].Init_Node2i();
+
+  for( i=0; i<M_pm2_f_Volume; i++ ) pm2[i]=0;
+  for( i=0; i<M_m2_e_Volume; i++ )  m2[i].Init_Node2i();
+  for( i=0; i<M_Sm2_d_Volume; i++ ) Sm2[i].Init_SSEi(M_Sm2_wi,M_Sm2_ti);
+  InitMixers( mm2, M_mm2_g_Volume, M_mm2_W0 );
+  for( i=0; i<M_n2_e_Volume; i++ )  n2[i].Init_Node2i();
+
+  for( i=0; i<M_pm3_f_Volume; i++ ) pm3[i]=0;
+  for( i=0; i<M_m3_e_Volume; i++ )  m3[i].Init_Node2i();
+  for( i=0; i<M_Sm3_d_Volume; i++ ) Sm3[i].Init_SSEi(M_Sm3_wi,M_Sm3_ti);
+  InitMixers( mm3, M_mm3_g_Volume, M_mm3_W0 );
+  for( i=0; i<M_n3_e_Volume; i++ )  n3[i].Init_Node2i();
+
+  for( i=0; i<M_pm4_f_Volume; i++ ) pm4[i]=0;
+  for( i=0; i<M_m4_e_Volume; i++ )  m4[i].Init_Node2i();
+  for( i=0; i<M_Sm4_d_Volume; i++ ) Sm4[i].Init_SSEi(M_Sm4_wi,M_Sm4_ti);
+  InitMixers( mm4, M_mm4_g_Volume, M_mm4_W0 );
+  for( i=0; i<M_n4_e_Volume; i++ )  n4[i].Init_Node2i();
+
+  for( i=0; i<M_mx_e_Volume; i++ )  mx[i].Init_Node2i();
+  for( i=0; i<M_Smx_d_Volume; i++ ) Smx[i].Init_SSEi();
+  InitMixers( mmx, M_mmx_g_Volume, M_mmx_W0 );
+  for( i=0; i<M_nx_e_Volume; i++ )  nx[i].Init_Node2i();
+
+  for( i=0; i<M_pms1_f_Volume; i++ ) pms1[i]=0;
+  for( i=0; i<M_ms1_e_Volume; i++ )  ms1[i].Init_Node2i();
+  for( i=0; i<M_Sms1_d_Volume; i++ ) Sms1[i].Init_SSEi(M_Sms1_wi,M_Sms1_ti);
+  InitMixers( mms1, M_mms1_g_Volume, M_mms1_W0 );
+  for( i=0; i<M_ns1_e_Volume; i++ )  ns1[i].Init_Node2i();
+
+  for( i=0; i<M_pms_f_Volume; i++ ) pms[i]=0;
+  for( i=0; i<M_ms_e_Volume; i++ )   ms[i].Init_Node2i();
+  for( i=0; i<M_Sms_d_Volume; i++ )  Sms[i].Init_SSEi(M_Sms_wi,M_Sms_ti);
+  InitMixers( mms, M_mms_g_Volume, M_mms_W0 );
+  for( i=0; i<M_ns_e_Volume; i++ )  ns[i].Init_Node2i();
+
+  for( i=0; i<M_z512_e_Volume; i++ ) z512[i].Init_Node2i();
+  for( i=0; i<M_Sz512_d_Volume; i++ ) Sz512[i].Init_SSEi(M_Sz512_wi,M_Sz512_ti);
+
+  for( i=0; i<M_mant_f_Volume; i++ ) mant[i].Init_Node2i();
+  for( i=0; i<M_Smant_e_Volume; i++ ) Smant[i].Init_SSEi(M_Smant_wi,M_Smant_ti);
+
+//  for( i=0; i<M_mbnt_f_Volume; i++ ) mbnt[i].Init_Number2i();
+//  for( i=0; i<M_Smbnt_e_Volume; i++ ) Smbnt[i].Init_SSEi(M_Smbnt_wi,M_Smbnt_ti);
+
+  for( i=0; i<M_z256_e_Volume; i++ ) z256[i].Init_Node2i();
+  for( i=0; i<M_Sz256_d_Volume; i++ ) Sz256[i].Init_SSEi(M_Sz256_wi,M_Sz256_ti);
+
+}
 
 void Init_RangeDelta( int instance ) {
   M_Init();
+  M_InitData();
   si = instance;
 }
 
@@ -75,62 +184,62 @@ void ModelMDCT(
       int band_Sm0A,band_Sn0A,band_Smm0A;
 
       band_Sm0A = 0;
-      band_Sm0A = band_Sm0A*198 + M_band_Sm0A_i0[__min(576,__max(0,j-(1-1)))];
+      band_Sm0A = band_Sm0A*198 + M_band_Sm0A_i0[__min(576,__max(0,(j)-(1-1)))];
 
       band_Sn0A = 0;
-      band_Sn0A = band_Sn0A*22 + M_band_Sn0A_i0[__min(576,__max(0,j-(1-1)))];
+      band_Sn0A = band_Sn0A*22 + M_band_Sn0A_i0[__min(576,__max(0,(j)-(1-1)))];
 
       band_Smm0A = 0;
-      band_Smm0A = band_Smm0A*5 + ((j>92+(1-1))+(j>407+(1-1))+(j>431+(1-1))+(j>455+(1-1)));
+      band_Smm0A = band_Smm0A*5 + M_band_Smm0A_i0[__min(576,__max(0,(j)-(1-1)))];
 
       uint flag_jm1 = caMDCTj + 1-((j>0)&&(cMDCTjm1==0)); //((j>0)&&(cMDCTjm1==0)) && (caMDCTj==0);
 
       int pm0A_f, Sm0A_d, m0A_e, n0A_e, mm0A_g;
 
       pm0A_f = 0;
-      pm0A_f = pm0A_f*2 + ((ch>0+(1-1)));
-      pm0A_f = pm0A_f*2 + ((band_j>0+(1-1)));
-      pm0A_f = pm0A_f*2 + ((curband>1+(1-1)));
-      pm0A_f = pm0A_f*2 + ((caMDCTj>0+(1-1)));
+      pm0A_f = pm0A_f*2 + (((ch)>0+(1-1)));
+      pm0A_f = pm0A_f*2 + (((band_j)>0+(1-1)));
+      pm0A_f = pm0A_f*2 + (((curband)>1+(1-1)));
+      pm0A_f = pm0A_f*2 + (((caMDCTj)>0+(1-1)));
       byte& rec = pm0A[pm0A_f];
       uint recm = ((rec&1)==1) + ((rec&3)==3) + ((rec&7)==7) + ((rec&15)==15) + ((rec&31)==31);
 
       m0A_e = 0;
-      m0A_e = m0A_e*2 + ((band_j>9+(1-1)));
-      m0A_e = m0A_e*4 + ((curband>0+(1-1))+(curband>1+(1-1))+(curband>4+(1-1)));
-      m0A_e = m0A_e*4 + ((daMDCTj>1+(1-1))+(daMDCTj>3+(1-1))+(daMDCTj>9+(1-1)));
+      m0A_e = m0A_e*2 + (((band_j)>9+(1-1)));
+      m0A_e = m0A_e*4 + M_m0A_e_i3[__min(21,__max(0,(curband)-(1-1)))];
+      m0A_e = m0A_e*4 + M_m0A_e_i6[__min(16,__max(0,(daMDCTj)-(1-1)))];
       m0A_e = m0A_e*(M_band_Sm0A_Volume) + (band_Sm0A);
 
       n0A_e = 0;
-      n0A_e = n0A_e*4 + ((curband>0+(1-1))+(curband>2+(1-1))+(curband>3+(1-1)));
-      n0A_e = n0A_e*2 + ((caMDCTj>3+(1-1)));
-      n0A_e = n0A_e*3 + ((daMDCTj>0+(1-1))+(daMDCTj>2+(1-1)));
-      n0A_e = n0A_e*2 + ((eaMDCTj>1+(1-1)));
-      n0A_e = n0A_e*4 + ((ctx1a>0+(1-1))+(ctx1a>2+(1-1))+(ctx1a>5+(1-1)));
-      n0A_e = n0A_e*2 + ((ctx2a>1+(1-1)));
-      n0A_e = n0A_e*2 + ((ctx3a>1+(1-1)));
+      n0A_e = n0A_e*4 + M_n0A_e_i3[__min(21,__max(0,(curband)-(1-1)))];
+      n0A_e = n0A_e*2 + (((caMDCTj)>3+(1-1)));
+      n0A_e = n0A_e*3 + (((daMDCTj)>0+(1-1))+((daMDCTj)>2+(1-1)));
+      n0A_e = n0A_e*2 + (((eaMDCTj)>1+(1-1)));
+      n0A_e = n0A_e*4 + M_n0A_e_i9[__min(16,__max(0,(ctx1a)-(1-1)))];
+      n0A_e = n0A_e*2 + (((ctx2a)>1+(1-1)));
+      n0A_e = n0A_e*2 + (((ctx3a)>1+(1-1)));
       n0A_e = n0A_e*(M_band_Sn0A_Volume) + (band_Sn0A);
 
       mm0A_g = 0;
-      mm0A_g = mm0A_g*2 + ((ch>0+(1-1)));
-      mm0A_g = mm0A_g*2 + ((band_j>16+(1-1)));
-      mm0A_g = mm0A_g*2 + ((curband>0+(1-1)));
-      mm0A_g = mm0A_g*3 + ((caMDCTj>2+(1-1))+(caMDCTj>16+(1-1)));
-      mm0A_g = mm0A_g*4 + ((daMDCTj>5+(1-1))+(daMDCTj>11+(1-1))+(daMDCTj>15+(1-1)));
-      mm0A_g = mm0A_g*3 + ((eaMDCTj>5+(1-1))+(eaMDCTj>10+(1-1)));
-      mm0A_g = mm0A_g*2 + ((ctx1a>9+(1-1)));
-      mm0A_g = mm0A_g*2 + ((zrun>2+(1-1)));
+      mm0A_g = mm0A_g*2 + (((ch)>0+(1-1)));
+      mm0A_g = mm0A_g*2 + (((band_j)>16+(1-1)));
+      mm0A_g = mm0A_g*2 + (((curband)>0+(1-1)));
+      mm0A_g = mm0A_g*3 + (((caMDCTj)>2+(1-1))+((caMDCTj)>16+(1-1)));
+      mm0A_g = mm0A_g*4 + M_mm0A_g_i7[__min(20,__max(0,(daMDCTj)-(1-1)))];
+      mm0A_g = mm0A_g*3 + (((eaMDCTj)>5+(1-1))+((eaMDCTj)>10+(1-1)));
+      mm0A_g = mm0A_g*2 + (((ctx1a)>9+(1-1)));
+      mm0A_g = mm0A_g*2 + (((zrun)>2+(1-1)));
       mm0A_g = mm0A_g*(M_band_Smm0A_Volume) + (band_Smm0A);
 
       Sm0A_d = 0;
-      Sm0A_d = Sm0A_d*2 + ((ch>0+(1-1)));
-      Sm0A_d = Sm0A_d*2 + ((band_j>12+(1-1)));
-      Sm0A_d = Sm0A_d*2 + ((j_band>6+(1-1)));
-      Sm0A_d = Sm0A_d*4 + ((caMDCTj>0+(1-1))+(caMDCTj>1+(1-1))+(caMDCTj>6+(1-1)));
-      Sm0A_d = Sm0A_d*3 + ((caMDCTjm1>1+(1-1))+(caMDCTjm1>3+(1-1)));
-      Sm0A_d = Sm0A_d*3 + ((ctx1a>1+(1-1))+(ctx1a>3+(1-1)));
-      Sm0A_d = Sm0A_d*2 + ((zrun>2+(1-1)));
-      Sm0A_d = Sm0A_d*2 + ((recm>4+(1-1)));
+      Sm0A_d = Sm0A_d*2 + (((ch)>0+(1-1)));
+      Sm0A_d = Sm0A_d*2 + (((band_j)>12+(1-1)));
+      Sm0A_d = Sm0A_d*2 + (((j_band)>6+(1-1)));
+      Sm0A_d = Sm0A_d*4 + M_Sm0A_d_i5[__min(16,__max(0,(caMDCTj)-(1-1)))];
+      Sm0A_d = Sm0A_d*3 + (((caMDCTjm1)>1+(1-1))+((caMDCTjm1)>3+(1-1)));
+      Sm0A_d = Sm0A_d*3 + (((ctx1a)>1+(1-1))+((ctx1a)>3+(1-1)));
+      Sm0A_d = Sm0A_d*2 + (((zrun)>2+(1-1)));
+      Sm0A_d = Sm0A_d*2 + (((recm)>4+(1-1)));
 
       const word* M_Sm0A_wr = j>M_Sm0A_jj ? M_Sm0A_wr0 : M_Sm0A_wq0;
       const word* M_Sm0A_wq = j>M_Sm0A_jj ? M_Sm0A_wr1 : M_Sm0A_wq1;
@@ -166,57 +275,57 @@ void ModelMDCT(
 
 
       band_Sm0B = 0;
-      band_Sm0B = band_Sm0B*99 + M_band_Sm0B_i0[__min(576,__max(0,j-(1-1)))];
+      band_Sm0B = band_Sm0B*99 + M_band_Sm0B_i0[__min(576,__max(0,(j)-(1-1)))];
 
       band_Sn0B = 0;
-      band_Sn0B = band_Sn0B*18 + M_band_Sn0B_i0[__min(576,__max(0,j-(1-1)))];
+      band_Sn0B = band_Sn0B*18 + M_band_Sn0B_i0[__min(576,__max(0,(j)-(1-1)))];
 
       band_Smm0B = 0;
-      band_Smm0B = band_Smm0B*48 + M_band_Smm0B_i0[__min(576,__max(0,j-(1-1)))];
+      band_Smm0B = band_Smm0B*48 + M_band_Smm0B_i0[__min(576,__max(0,(j)-(1-1)))];
 
       pm0B_f = 0;
-      pm0B_f = pm0B_f*2 + ((gi.count1table_select>0+(1-1)));
-      pm0B_f = pm0B_f*4 + ((curband>1+(1-1))+(curband>2+(1-1))+(curband>4+(1-1)));
-      pm0B_f = pm0B_f*3 + ((flag_jm1>0+(1-1))+(flag_jm1>3+(1-1)));
-      pm0B_f = pm0B_f*5 + ((caMDCTj>1+(1-1))+(caMDCTj>3+(1-1))+(caMDCTj>4+(1-1))+(caMDCTj>6+(1-1)));
-      pm0B_f = pm0B_f*5 + ((daMDCTj>3+(1-1))+(daMDCTj>7+(1-1))+(daMDCTj>12+(1-1))+(daMDCTj>13+(1-1)));
-      pm0B_f = pm0B_f*2 + ((eaMDCTj>8+(1-1)));
-      pm0B_f = pm0B_f*2 + ((ctx1a>5+(1-1)));
+      pm0B_f = pm0B_f*2 + (((gi.count1table_select)>0+(1-1)));
+      pm0B_f = pm0B_f*4 + M_pm0B_f_i3[__min(24,__max(0,(curband)-(1-1)))];
+      pm0B_f = pm0B_f*3 + (((flag_jm1)>0+(1-1))+((flag_jm1)>3+(1-1)));
+      pm0B_f = pm0B_f*5 + M_pm0B_f_i5[__min(16,__max(0,(caMDCTj)-(1-1)))];
+      pm0B_f = pm0B_f*5 + M_pm0B_f_i6[__min(16,__max(0,(daMDCTj)-(1-1)))];
+      pm0B_f = pm0B_f*2 + (((eaMDCTj)>8+(1-1)));
+      pm0B_f = pm0B_f*2 + (((ctx1a)>5+(1-1)));
       byte& rec = pm0B[pm0B_f];
       uint recm = ((rec&1)==1) + ((rec&3)==3) + ((rec&7)==7) + ((rec&15)==15) + ((rec&31)==31);
 
       m0B_e = 0;
-      m0B_e = m0B_e*3 + ((curband>0+(1-1))+(curband>2+(1-1)));
-      m0B_e = m0B_e*2 + ((daMDCTj>1+(1-1)));
-      m0B_e = m0B_e*2 + ((zrun>2+(1-1)));
+      m0B_e = m0B_e*3 + (((curband)>0+(1-1))+((curband)>2+(1-1)));
+      m0B_e = m0B_e*2 + (((daMDCTj)>1+(1-1)));
+      m0B_e = m0B_e*2 + (((zrun)>2+(1-1)));
       m0B_e = m0B_e*(M_band_Sm0B_Volume) + (band_Sm0B);
 
       n0B_e = 0;
-      n0B_e = n0B_e*2 + ((gi.count1table_select>0+(1-1)));
-      n0B_e = n0B_e*2 + ((ch>0+(1-1)));
-      n0B_e = n0B_e*2 + ((curband>1+(1-1)));
-      n0B_e = n0B_e*2 + ((caMDCTj>0+(1-1)));
-      n0B_e = n0B_e*2 + ((ctx1a>0+(1-1)));
-      n0B_e = n0B_e*3 + ((ctx2a>3+(1-1))+(ctx2a>10+(1-1)));
+      n0B_e = n0B_e*2 + (((gi.count1table_select)>0+(1-1)));
+      n0B_e = n0B_e*2 + (((ch)>0+(1-1)));
+      n0B_e = n0B_e*2 + (((curband)>1+(1-1)));
+      n0B_e = n0B_e*2 + (((caMDCTj)>0+(1-1)));
+      n0B_e = n0B_e*2 + (((ctx1a)>0+(1-1)));
+      n0B_e = n0B_e*3 + (((ctx2a)>3+(1-1))+((ctx2a)>10+(1-1)));
       n0B_e = n0B_e*(M_band_Sn0B_Volume) + (band_Sn0B);
 
       mm0B_g = 0;
-      mm0B_g = mm0B_g*3 + ((band_j>13+(1-1))+(band_j>17+(1-1)));
-      mm0B_g = mm0B_g*3 + ((caMDCTj>1+(1-1))+(caMDCTj>3+(1-1)));
-      mm0B_g = mm0B_g*2 + ((daMDCTj>0+(1-1)));
-      mm0B_g = mm0B_g*2 + ((caMDCTjm1>13+(1-1)));
-      mm0B_g = mm0B_g*2 + ((zrun>0+(1-1)));
-      mm0B_g = mm0B_g*2 + ((recm>4+(1-1)));
+      mm0B_g = mm0B_g*3 + (((band_j)>13+(1-1))+((band_j)>17+(1-1)));
+      mm0B_g = mm0B_g*3 + (((caMDCTj)>1+(1-1))+((caMDCTj)>3+(1-1)));
+      mm0B_g = mm0B_g*2 + (((daMDCTj)>0+(1-1)));
+      mm0B_g = mm0B_g*2 + (((caMDCTjm1)>13+(1-1)));
+      mm0B_g = mm0B_g*2 + (((zrun)>0+(1-1)));
+      mm0B_g = mm0B_g*2 + (((recm)>4+(1-1)));
       mm0B_g = mm0B_g*(M_band_Smm0B_Volume) + (band_Smm0B);
 
       Sm0B_d = 0;
-      Sm0B_d = Sm0B_d*2 + ((gi.count1table_select>0+(1-1)));
-      Sm0B_d = Sm0B_d*2 + ((ch>0+(1-1)));
-      Sm0B_d = Sm0B_d*3 + ((j_band>7+(1-1))+(j_band>8+(1-1)));
-      Sm0B_d = Sm0B_d*2 + ((curband>0+(1-1)));
-      Sm0B_d = Sm0B_d*3 + ((caMDCTj>0+(1-1))+(caMDCTj>1+(1-1)));
-      Sm0B_d = Sm0B_d*2 + ((caMDCTjm1>1+(1-1)));
-      Sm0B_d = Sm0B_d*2 + ((ctx1a>1+(1-1)));
+      Sm0B_d = Sm0B_d*2 + (((gi.count1table_select)>0+(1-1)));
+      Sm0B_d = Sm0B_d*2 + (((ch)>0+(1-1)));
+      Sm0B_d = Sm0B_d*3 + (((j_band)>7+(1-1))+((j_band)>8+(1-1)));
+      Sm0B_d = Sm0B_d*2 + (((curband)>0+(1-1)));
+      Sm0B_d = Sm0B_d*3 + (((caMDCTj)>0+(1-1))+((caMDCTj)>1+(1-1)));
+      Sm0B_d = Sm0B_d*2 + (((caMDCTjm1)>1+(1-1)));
+      Sm0B_d = Sm0B_d*2 + (((ctx1a)>1+(1-1)));
 
       const word* M_Sm0B_wr = j>M_Sm0B_jj ? M_Sm0B_wr0 : M_Sm0B_wq0;
       const word* M_Sm0B_wq = j>M_Sm0B_jj ? M_Sm0B_wr1 : M_Sm0B_wq1;
@@ -270,54 +379,54 @@ void ModelMDCT(
       int m1_e,Sm1_d,pm1_f, mm1_g,n1_e, band_Sm1, band_Sn1;
 
       band_Sm1 = 0;
-      band_Sm1 = band_Sm1*254 + M_band_Sm1_i0[__min(576,__max(0,j-(1-1)))];
+      band_Sm1 = band_Sm1*254 + M_band_Sm1_i0[__min(576,__max(0,(j)-(1-1)))];
 
       band_Sn1 = 0;
-      band_Sn1 = band_Sn1*10 + M_band_Sn1_i0[__min(576,__max(0,j-(1-1)))];
+      band_Sn1 = band_Sn1*10 + M_band_Sn1_i0[__min(576,__max(0,(j)-(1-1)))];
 
       pm1_f = 0;
-      pm1_f = pm1_f*2 + ((ch>0+(1-1)));
-      pm1_f = pm1_f*7 + ((band_j>0+(1-1))+(band_j>1+(1-1))+(band_j>2+(1-1))+(band_j>4+(1-1))+(band_j>7+(1-1))+(band_j>9+(1-1)));
-      pm1_f = pm1_f*3 + ((curband>7+(1-1))+(curband>13+(1-1)));
-      pm1_f = pm1_f*11 + M_pm1_f_i9[__min(26,__max(0,caMDCTj-(1-1)))];
-      pm1_f = pm1_f*3 + ((daMDCTj>13+(1-1))+(daMDCTj>25+(1-1)));
+      pm1_f = pm1_f*2 + (((ch)>0+(1-1)));
+      pm1_f = pm1_f*7 + M_pm1_f_i4[__min(21,__max(0,(band_j)-(1-1)))];
+      pm1_f = pm1_f*3 + (((curband)>7+(1-1))+((curband)>13+(1-1)));
+      pm1_f = pm1_f*11 + M_pm1_f_i9[__min(26,__max(0,(caMDCTj)-(1-1)))];
+      pm1_f = pm1_f*3 + (((daMDCTj)>13+(1-1))+((daMDCTj)>25+(1-1)));
       byte &rec = pm1[pm1_f];
 
       Sm1_d = 0;
-      Sm1_d = Sm1_d*2 + ((ch>0+(1-1)));
-      Sm1_d = Sm1_d*2 + ((j_band>7+(1-1)));
-      Sm1_d = Sm1_d*2 + ((j_gt_j0>0+(1-1)));
-      Sm1_d = Sm1_d*4 + ((ctx1a>0+(1-1))+(ctx1a>2+(1-1))+(ctx1a>6+(1-1)));
-      Sm1_d = Sm1_d*6 + ((caMDCTj>0+(1-1))+(caMDCTj>1+(1-1))+(caMDCTj>2+(1-1))+(caMDCTj>5+(1-1))+(caMDCTj>19+(1-1)));
-      Sm1_d = Sm1_d*3 + ((caMDCTjm1>2+(1-1))+(caMDCTjm1>6+(1-1)));
-      Sm1_d = (Sm1_d<<2) + ((rec)&3); // 00000011
+      Sm1_d = Sm1_d*2 + (((ch)>0+(1-1)));
+      Sm1_d = Sm1_d*2 + (((j_band)>7+(1-1)));
+      Sm1_d = Sm1_d*2 + (((j_gt_j0)>0+(1-1)));
+      Sm1_d = Sm1_d*4 + M_Sm1_d_i7[__min(16,__max(0,(ctx1a)-(1-1)))];
+      Sm1_d = Sm1_d*6 + M_Sm1_d_ia[__min(25,__max(0,(caMDCTj)-(1-1)))];
+      Sm1_d = Sm1_d*3 + (((caMDCTjm1)>2+(1-1))+((caMDCTjm1)>6+(1-1)));
+      Sm1_d = (Sm1_d<<2) + (((rec)&3)); // 00000011
 
       m1_e = 0;
-      m1_e = m1_e*4 + ((curband>1+(1-1))+(curband>3+(1-1))+(curband>5+(1-1)));
-      m1_e = m1_e*2 + ((ctx2a>14+(1-1)));
+      m1_e = m1_e*4 + M_m1_e_i5[__min(21,__max(0,(curband)-(1-1)))];
+      m1_e = m1_e*2 + (((ctx2a)>14+(1-1)));
       m1_e = m1_e*(M_band_Sm1_Volume) + (band_Sm1);
 
       mm1_g = 0;
-      mm1_g = mm1_g*2 + ((ch>0+(1-1)));
-      mm1_g = mm1_g*3 + ((j_band>2+(1-1))+(j_band>6+(1-1)));
-      mm1_g = mm1_g*3 + ((band_j>9+(1-1))+(band_j>16+(1-1)));
-      mm1_g = mm1_g*2 + ((curband>0+(1-1)));
-      mm1_g = mm1_g*2 + ((ctx1a>11+(1-1)));
-      mm1_g = mm1_g*3 + ((caMDCTj>1+(1-1))+(caMDCTj>9+(1-1)));
-      mm1_g = mm1_g*4 + ((daMDCTj>0+(1-1))+(daMDCTj>9+(1-1))+(daMDCTj>15+(1-1)));
-      mm1_g = mm1_g*2 + ((eaMDCTj>9+(1-1)));
-      mm1_g = (mm1_g<<1) + (((rec)>>2)&1); // 00000100
-      mm1_g = mm1_g*2 + ((zrun>2+(1-1)));
+      mm1_g = mm1_g*2 + (((ch)>0+(1-1)));
+      mm1_g = mm1_g*3 + (((j_band)>2+(1-1))+((j_band)>6+(1-1)));
+      mm1_g = mm1_g*3 + (((band_j)>9+(1-1))+((band_j)>16+(1-1)));
+      mm1_g = mm1_g*2 + (((curband)>0+(1-1)));
+      mm1_g = mm1_g*2 + (((ctx1a)>11+(1-1)));
+      mm1_g = mm1_g*3 + (((caMDCTj)>1+(1-1))+((caMDCTj)>9+(1-1)));
+      mm1_g = mm1_g*4 + M_mm1_g_ib[__min(20,__max(0,(daMDCTj)-(1-1)))];
+      mm1_g = mm1_g*2 + (((eaMDCTj)>9+(1-1)));
+      mm1_g = (mm1_g<<1) + ((((rec)>>2)&1)); // 00000100
+      mm1_g = mm1_g*2 + (((zrun)>2+(1-1)));
 
       n1_e = 0;
-      n1_e = n1_e*2 + ((ch>0+(1-1)));
-      n1_e = n1_e*2 + ((curband>2+(1-1)));
-      n1_e = n1_e*2 + ((ctx1a>3+(1-1)));
-      n1_e = n1_e*2 + ((ctx2a>3+(1-1)));
-      n1_e = n1_e*2 + ((ctx3a>3+(1-1)));
-      n1_e = n1_e*2 + ((caMDCTj>3+(1-1)));
-      n1_e = n1_e*4 + ((daMDCTj>1+(1-1))+(daMDCTj>3+(1-1))+(daMDCTj>5+(1-1)));
-      n1_e = n1_e*2 + ((eaMDCTj>3+(1-1)));
+      n1_e = n1_e*2 + (((ch)>0+(1-1)));
+      n1_e = n1_e*2 + (((curband)>2+(1-1)));
+      n1_e = n1_e*2 + (((ctx1a)>3+(1-1)));
+      n1_e = n1_e*2 + (((ctx2a)>3+(1-1)));
+      n1_e = n1_e*2 + (((ctx3a)>3+(1-1)));
+      n1_e = n1_e*2 + (((caMDCTj)>3+(1-1)));
+      n1_e = n1_e*4 + M_n1_e_ib[__min(16,__max(0,(daMDCTj)-(1-1)))];
+      n1_e = n1_e*2 + (((eaMDCTj)>3+(1-1)));
       n1_e = n1_e*(M_band_Sn1_Volume) + (band_Sn1);
       const word* M_Sm1_wr = j>M_Sm1_j1 ? M_Sm1_wr0 : M_Sm1_wq0;
       const word* M_Sm1_wq = j>M_Sm1_j1 ? M_Sm1_wr1 : M_Sm1_wq1;
@@ -366,57 +475,57 @@ void ModelMDCT(
     int band_Sm2,band_Sn2;
 
     band_Sm2 = 0;
-    band_Sm2 = band_Sm2*108 + M_band_Sm2_i0[__min(576,__max(0,j-(1-1)))];
+    band_Sm2 = band_Sm2*108 + M_band_Sm2_i0[__min(576,__max(0,(j)-(1-1)))];
 
     band_Sn2 = 0;
-    band_Sn2 = band_Sn2*16 + M_band_Sn2_i0[__min(576,__max(0,j-(1-1)))];
+    band_Sn2 = band_Sn2*16 + M_band_Sn2_i0[__min(576,__max(0,(j)-(1-1)))];
 
     pm2_f = 0;
-    pm2_f = pm2_f*2 + ((ch>0+(1-1)));
-    pm2_f = pm2_f*5 + ((band_j>0+(1-1))+(band_j>7+(1-1))+(band_j>12+(1-1))+(band_j>14+(1-1)));
-    pm2_f = pm2_f*2 + ((curband>6+(1-1)));
-    pm2_f = pm2_f*3 + ((l>2+(1-1))+(l>4+(1-1)));
-    pm2_f = pm2_f*4 + ((ctx1a>17+(1-1))+(ctx1a>18+(1-1))+(ctx1a>20+(1-1)));
-    pm2_f = pm2_f*6 + ((caMDCTj>1+(1-1))+(caMDCTj>2+(1-1))+(caMDCTj>3+(1-1))+(caMDCTj>5+(1-1))+(caMDCTj>9+(1-1)));
-    pm2_f = pm2_f*2 + ((caMDCTjm1>17+(1-1)));
-    pm2_f = pm2_f*4 + ((daMDCTj>13+(1-1))+(daMDCTj>15+(1-1))+(daMDCTj>18+(1-1)));
-    pm2_f = pm2_f*2 + ((eaMDCTj>14+(1-1)));
+    pm2_f = pm2_f*2 + (((ch)>0+(1-1)));
+    pm2_f = pm2_f*5 + M_pm2_f_i1[__min(21,__max(0,(band_j)-(1-1)))];
+    pm2_f = pm2_f*2 + (((curband)>6+(1-1)));
+    pm2_f = pm2_f*3 + (((l)>2+(1-1))+((l)>4+(1-1)));
+    pm2_f = pm2_f*4 + M_pm2_f_i5[__min(25,__max(0,(ctx1a)-(1-1)))];
+    pm2_f = pm2_f*6 + M_pm2_f_i8[__min(16,__max(0,(caMDCTj)-(1-1)))];
+    pm2_f = pm2_f*2 + (((caMDCTjm1)>17+(1-1)));
+    pm2_f = pm2_f*4 + M_pm2_f_ia[__min(23,__max(0,(daMDCTj)-(1-1)))];
+    pm2_f = pm2_f*2 + (((eaMDCTj)>14+(1-1)));
     byte &rec = pm2[pm2_f];
 
     Sm2_d = 0;
-    Sm2_d = Sm2_d*2 + ((ch>0+(1-1)));
-    Sm2_d = Sm2_d*2 + ((j_gt_j0>0+(1-1)));
-    Sm2_d = Sm2_d*4 + ((l>2+(1-1))+(l>3+(1-1))+(l>4+(1-1)));
-    Sm2_d = Sm2_d*3 + ((ctx1a>1+(1-1))+(ctx1a>4+(1-1)));
-    Sm2_d = Sm2_d*4 + ((caMDCTj>1+(1-1))+(caMDCTj>2+(1-1))+(caMDCTj>3+(1-1)));
-    Sm2_d = Sm2_d*3 + ((caMDCTjm1>1+(1-1))+(caMDCTjm1>4+(1-1)));
-    Sm2_d = (Sm2_d<<2) + ((rec)&3); // 00000011
+    Sm2_d = Sm2_d*2 + (((ch)>0+(1-1)));
+    Sm2_d = Sm2_d*2 + (((j_gt_j0)>0+(1-1)));
+    Sm2_d = Sm2_d*4 + M_Sm2_d_i5[__min(16,__max(0,(l)-(1-1)))];
+    Sm2_d = Sm2_d*3 + (((ctx1a)>1+(1-1))+((ctx1a)>4+(1-1)));
+    Sm2_d = Sm2_d*4 + M_Sm2_d_i9[__min(16,__max(0,(caMDCTj)-(1-1)))];
+    Sm2_d = Sm2_d*3 + (((caMDCTjm1)>1+(1-1))+((caMDCTjm1)>4+(1-1)));
+    Sm2_d = (Sm2_d<<2) + (((rec)&3)); // 00000011
 
     m2_e = 0;
-    m2_e = m2_e*3 + ((curband>1+(1-1))+(curband>4+(1-1)));
-    m2_e = m2_e*3 + ((l>0+(1-1))+(l>6+(1-1)));
-    m2_e = m2_e*2 + ((ctx2a>3+(1-1)));
-    m2_e = m2_e*2 + ((caMDCTj>7+(1-1)));
-    m2_e = m2_e*2 + ((daMDCTj>4+(1-1)));
+    m2_e = m2_e*3 + (((curband)>1+(1-1))+((curband)>4+(1-1)));
+    m2_e = m2_e*3 + (((l)>0+(1-1))+((l)>6+(1-1)));
+    m2_e = m2_e*2 + (((ctx2a)>3+(1-1)));
+    m2_e = m2_e*2 + (((caMDCTj)>7+(1-1)));
+    m2_e = m2_e*2 + (((daMDCTj)>4+(1-1)));
     m2_e = m2_e*(M_band_Sm2_Volume) + (band_Sm2);
 
     mm2_g = 0;
-    mm2_g = mm2_g*2 + ((ch>0+(1-1)));
-    mm2_g = mm2_g*4 + ((band_j>11+(1-1))+(band_j>14+(1-1))+(band_j>17+(1-1)));
-    mm2_g = mm2_g*2 + ((j_band>7+(1-1)));
-    mm2_g = mm2_g*2 + ((curband>2+(1-1)));
-    mm2_g = mm2_g*3 + ((l>0+(1-1))+(l>5+(1-1)));
-    mm2_g = mm2_g*2 + ((ctx2a>7+(1-1)));
-    mm2_g = mm2_g*4 + ((caMDCTj>3+(1-1))+(caMDCTj>10+(1-1))+(caMDCTj>14+(1-1)));
-    mm2_g = mm2_g*4 + ((daMDCTj>1+(1-1))+(daMDCTj>7+(1-1))+(daMDCTj>14+(1-1)));
-    mm2_g = mm2_g*2 + ((eaMDCTj>7+(1-1)));
+    mm2_g = mm2_g*2 + (((ch)>0+(1-1)));
+    mm2_g = mm2_g*4 + M_mm2_g_i1[__min(21,__max(0,(band_j)-(1-1)))];
+    mm2_g = mm2_g*2 + (((j_band)>7+(1-1)));
+    mm2_g = mm2_g*2 + (((curband)>2+(1-1)));
+    mm2_g = mm2_g*3 + (((l)>0+(1-1))+((l)>5+(1-1)));
+    mm2_g = mm2_g*2 + (((ctx2a)>7+(1-1)));
+    mm2_g = mm2_g*4 + M_mm2_g_i8[__min(21,__max(0,(caMDCTj)-(1-1)))];
+    mm2_g = mm2_g*4 + M_mm2_g_ia[__min(21,__max(0,(daMDCTj)-(1-1)))];
+    mm2_g = mm2_g*2 + (((eaMDCTj)>7+(1-1)));
 
     n2_e = 0;
-    n2_e = n2_e*2 + ((ch>0+(1-1)));
-    n2_e = n2_e*4 + ((curband>0+(1-1))+(curband>7+(1-1))+(curband>13+(1-1)));
-    n2_e = n2_e*2 + ((l>1+(1-1)));
-    n2_e = n2_e*2 + ((ctx1a>8+(1-1)));
-    n2_e = n2_e*3 + ((caMDCTj>2+(1-1))+(caMDCTj>4+(1-1)));
+    n2_e = n2_e*2 + (((ch)>0+(1-1)));
+    n2_e = n2_e*4 + M_n2_e_i2[__min(21,__max(0,(curband)-(1-1)))];
+    n2_e = n2_e*2 + (((l)>1+(1-1)));
+    n2_e = n2_e*2 + (((ctx1a)>8+(1-1)));
+    n2_e = n2_e*3 + (((caMDCTj)>2+(1-1))+((caMDCTj)>4+(1-1)));
     n2_e = n2_e*(M_band_Sn2_Volume) + (band_Sn2);
     const word* M_Sm2_wr = j>M_Sm2_j1 ? M_Sm2_wr0 : M_Sm2_wq0;
     const word* M_Sm2_wq = j>M_Sm2_j1 ? M_Sm2_wr1 : M_Sm2_wq1;
@@ -456,56 +565,56 @@ void ModelMDCT(
     int band_Sm3,band_Sn3;
 
     band_Sm3 = 0;
-    band_Sm3 = band_Sm3*81 + M_band_Sm3_i0[__min(576,__max(0,j-(1-1)))];
+    band_Sm3 = band_Sm3*81 + M_band_Sm3_i0[__min(576,__max(0,(j)-(1-1)))];
 
     band_Sn3 = 0;
-    band_Sn3 = band_Sn3*9 + M_band_Sn3_i0[__min(576,__max(0,j-(1-1)))];
+    band_Sn3 = band_Sn3*9 + M_band_Sn3_i0[__min(576,__max(0,(j)-(1-1)))];
 
     pm3_f = 0;
-    pm3_f = pm3_f*2 + ((ch>0+(1-1)));
-    pm3_f = pm3_f*3 + ((j_band>0+(1-1))+(j_band>1+(1-1)));
-    pm3_f = pm3_f*3 + ((curband>0+(1-1))+(curband>1+(1-1)));
-    pm3_f = pm3_f*2 + ((l>2+(1-1)));
-    pm3_f = pm3_f*2 + ((ctx1a>16+(1-1)));
-    pm3_f = pm3_f*8 + ((caMDCTj>1+(1-1))+(caMDCTj>2+(1-1))+(caMDCTj>3+(1-1))+(caMDCTj>4+(1-1))+(caMDCTj>6+(1-1))+(caMDCTj>16+(1-1))+(caMDCTj>19+(1-1)));
-    pm3_f = pm3_f*3 + ((caMDCTjm1>21+(1-1))+(caMDCTjm1>23+(1-1)));
-    pm3_f = pm3_f*3 + ((daMDCTj>18+(1-1))+(daMDCTj>19+(1-1)));
-    pm3_f = pm3_f*2 + ((eaMDCTj>18+(1-1)));
+    pm3_f = pm3_f*2 + (((ch)>0+(1-1)));
+    pm3_f = pm3_f*3 + (((j_band)>0+(1-1))+((j_band)>1+(1-1)));
+    pm3_f = pm3_f*3 + (((curband)>0+(1-1))+((curband)>1+(1-1)));
+    pm3_f = pm3_f*2 + (((l)>2+(1-1)));
+    pm3_f = pm3_f*2 + (((ctx1a)>16+(1-1)));
+    pm3_f = pm3_f*8 + M_pm3_f_i8[__min(21,__max(0,(caMDCTj)-(1-1)))];
+    pm3_f = pm3_f*3 + (((caMDCTjm1)>21+(1-1))+((caMDCTjm1)>23+(1-1)));
+    pm3_f = pm3_f*3 + (((daMDCTj)>18+(1-1))+((daMDCTj)>19+(1-1)));
+    pm3_f = pm3_f*2 + (((eaMDCTj)>18+(1-1)));
     byte &rec = pm3[pm3_f];
 
     Sm3_d = 0;
-    Sm3_d = Sm3_d*2 + ((ch>0+(1-1)));
-    Sm3_d = Sm3_d*3 + ((l>2+(1-1))+(l>3+(1-1)));
-    Sm3_d = Sm3_d*4 + ((ctx1a>1+(1-1))+(ctx1a>2+(1-1))+(ctx1a>4+(1-1)));
-    Sm3_d = Sm3_d*4 + ((caMDCTj>1+(1-1))+(caMDCTj>3+(1-1))+(caMDCTj>4+(1-1)));
-    Sm3_d = Sm3_d*4 + ((caMDCTjm1>1+(1-1))+(caMDCTjm1>2+(1-1))+(caMDCTjm1>4+(1-1)));
-    Sm3_d = (Sm3_d<<2) + ((rec)&3); // 00000011
+    Sm3_d = Sm3_d*2 + (((ch)>0+(1-1)));
+    Sm3_d = Sm3_d*3 + (((l)>2+(1-1))+((l)>3+(1-1)));
+    Sm3_d = Sm3_d*4 + M_Sm3_d_i6[__min(16,__max(0,(ctx1a)-(1-1)))];
+    Sm3_d = Sm3_d*4 + M_Sm3_d_i9[__min(16,__max(0,(caMDCTj)-(1-1)))];
+    Sm3_d = Sm3_d*4 + M_Sm3_d_ia[__min(16,__max(0,(caMDCTjm1)-(1-1)))];
+    Sm3_d = (Sm3_d<<2) + (((rec)&3)); // 00000011
 
     m3_e = 0;
-    m3_e = m3_e*2 + ((curband>4+(1-1)));
-    m3_e = m3_e*2 + ((ctx2a>4+(1-1)));
-    m3_e = m3_e*2 + ((ctx3a>4+(1-1)));
-    m3_e = m3_e*2 + ((caMDCTj>8+(1-1)));
-    m3_e = m3_e*2 + ((daMDCTj>5+(1-1)));
+    m3_e = m3_e*2 + (((curband)>4+(1-1)));
+    m3_e = m3_e*2 + (((ctx2a)>4+(1-1)));
+    m3_e = m3_e*2 + (((ctx3a)>4+(1-1)));
+    m3_e = m3_e*2 + (((caMDCTj)>8+(1-1)));
+    m3_e = m3_e*2 + (((daMDCTj)>5+(1-1)));
     m3_e = m3_e*(M_band_Sm3_Volume) + (band_Sm3);
 
     mm3_g = 0;
-    mm3_g = mm3_g*2 + ((ch>0+(1-1)));
-    mm3_g = mm3_g*3 + ((band_j>9+(1-1))+(band_j>16+(1-1)));
-    mm3_g = mm3_g*2 + ((j_band>7+(1-1)));
-    mm3_g = mm3_g*2 + ((curband>1+(1-1)));
-    mm3_g = mm3_g*4 + ((l>2+(1-1))+(l>4+(1-1))+(l>5+(1-1)));
-    mm3_g = mm3_g*2 + ((ctx2a>8+(1-1)));
-    mm3_g = mm3_g*4 + ((caMDCTj>4+(1-1))+(caMDCTj>5+(1-1))+(caMDCTj>12+(1-1)));
-    mm3_g = mm3_g*2 + ((daMDCTj>12+(1-1)));
+    mm3_g = mm3_g*2 + (((ch)>0+(1-1)));
+    mm3_g = mm3_g*3 + (((band_j)>9+(1-1))+((band_j)>16+(1-1)));
+    mm3_g = mm3_g*2 + (((j_band)>7+(1-1)));
+    mm3_g = mm3_g*2 + (((curband)>1+(1-1)));
+    mm3_g = mm3_g*4 + M_mm3_g_i4[__min(16,__max(0,(l)-(1-1)))];
+    mm3_g = mm3_g*2 + (((ctx2a)>8+(1-1)));
+    mm3_g = mm3_g*4 + M_mm3_g_i8[__min(21,__max(0,(caMDCTj)-(1-1)))];
+    mm3_g = mm3_g*2 + (((daMDCTj)>12+(1-1)));
 
     n3_e = 0;
-    n3_e = n3_e*2 + ((ch>0+(1-1)));
-    n3_e = n3_e*3 + ((curband>0+(1-1))+(curband>7+(1-1)));
-    n3_e = n3_e*5 + ((l>0+(1-1))+(l>1+(1-1))+(l>3+(1-1))+(l>5+(1-1)));
-    n3_e = n3_e*2 + ((ctx1a>9+(1-1)));
-    n3_e = n3_e*3 + ((caMDCTj>3+(1-1))+(caMDCTj>4+(1-1)));
-    n3_e = n3_e*2 + ((zrun>2+(1-1)));
+    n3_e = n3_e*2 + (((ch)>0+(1-1)));
+    n3_e = n3_e*3 + (((curband)>0+(1-1))+((curband)>7+(1-1)));
+    n3_e = n3_e*5 + M_n3_e_i3[__min(16,__max(0,(l)-(1-1)))];
+    n3_e = n3_e*2 + (((ctx1a)>9+(1-1)));
+    n3_e = n3_e*3 + (((caMDCTj)>3+(1-1))+((caMDCTj)>4+(1-1)));
+    n3_e = n3_e*2 + (((zrun)>2+(1-1)));
     n3_e = n3_e*(M_band_Sn3_Volume) + (band_Sn3);
     const word* M_Sm3_wr = j>M_Sm3_j1 ? M_Sm3_wr0 : M_Sm3_wq0;
     const word* M_Sm3_wq = j>M_Sm3_j1 ? M_Sm3_wr1 : M_Sm3_wq1;
@@ -547,53 +656,53 @@ void ModelMDCT(
     band_Sm4 = 0;
 
     band_Sn4 = 0;
-    band_Sn4 = band_Sn4*84 + M_band_Sn4_i0[__min(576,__max(0,j-(1-1)))];
+    band_Sn4 = band_Sn4*84 + M_band_Sn4_i0[__min(576,__max(0,(j)-(1-1)))];
 
     pm4_f = 0;
-    pm4_f = pm4_f*2 + ((ch>0+(1-1)));
-    pm4_f = pm4_f*5 + ((band_j>0+(1-1))+(band_j>7+(1-1))+(band_j>10+(1-1))+(band_j>14+(1-1)));
-    pm4_f = pm4_f*2 + ((j_band>7+(1-1)));
-    pm4_f = pm4_f*2 + ((curband>0+(1-1)));
-    pm4_f = pm4_f*4 + ((l>3+(1-1))+(l>7+(1-1))+(l>9+(1-1)));
-    pm4_f = pm4_f*2 + ((ctx1a>16+(1-1)));
-    pm4_f = pm4_f*11 + M_pm4_f_i8[__min(27,__max(0,caMDCTj-(1-1)))];
-    pm4_f = pm4_f*2 + ((caMDCTjm1>21+(1-1)));
+    pm4_f = pm4_f*2 + (((ch)>0+(1-1)));
+    pm4_f = pm4_f*5 + M_pm4_f_i1[__min(21,__max(0,(band_j)-(1-1)))];
+    pm4_f = pm4_f*2 + (((j_band)>7+(1-1)));
+    pm4_f = pm4_f*2 + (((curband)>0+(1-1)));
+    pm4_f = pm4_f*4 + M_pm4_f_i4[__min(16,__max(0,(l)-(1-1)))];
+    pm4_f = pm4_f*2 + (((ctx1a)>16+(1-1)));
+    pm4_f = pm4_f*11 + M_pm4_f_i8[__min(27,__max(0,(caMDCTj)-(1-1)))];
+    pm4_f = pm4_f*2 + (((caMDCTjm1)>21+(1-1)));
     byte &rec = pm4[pm4_f];
 
     Sm4_d = 0;
-    Sm4_d = Sm4_d*2 + ((ch>0+(1-1)));
-    Sm4_d = Sm4_d*2 + ((j_gt_j0>0+(1-1)));
-    Sm4_d = Sm4_d*3 + ((curband>1+(1-1))+(curband>8+(1-1)));
-    Sm4_d = Sm4_d*6 + ((l>0+(1-1))+(l>1+(1-1))+(l>2+(1-1))+(l>3+(1-1))+(l>5+(1-1)));
-    Sm4_d = Sm4_d*2 + ((caMDCTj>4+(1-1)));
-    Sm4_d = (Sm4_d<<1) + ((rec)&1); // 00000001
+    Sm4_d = Sm4_d*2 + (((ch)>0+(1-1)));
+    Sm4_d = Sm4_d*2 + (((j_gt_j0)>0+(1-1)));
+    Sm4_d = Sm4_d*3 + (((curband)>1+(1-1))+((curband)>8+(1-1)));
+    Sm4_d = Sm4_d*6 + M_Sm4_d_i5[__min(16,__max(0,(l)-(1-1)))];
+    Sm4_d = Sm4_d*2 + (((caMDCTj)>4+(1-1)));
+    Sm4_d = (Sm4_d<<1) + (((rec)&1)); // 00000001
 
     m4_e = 0;
-    m4_e = m4_e*2 + ((ch>0+(1-1)));
-    m4_e = m4_e*4 + ((ctx1a>3+(1-1))+(ctx1a>6+(1-1))+(ctx1a>11+(1-1)));
-    m4_e = m4_e*2 + ((ctx2a>3+(1-1)));
-    m4_e = m4_e*2 + ((ctx3a>3+(1-1)));
-    m4_e = m4_e*6 + ((caMDCTj>2+(1-1))+(caMDCTj>4+(1-1))+(caMDCTj>5+(1-1))+(caMDCTj>6+(1-1))+(caMDCTj>10+(1-1)));
-    m4_e = m4_e*4 + ((caMDCTjm1>3+(1-1))+(caMDCTjm1>6+(1-1))+(caMDCTjm1>11+(1-1)));
-    m4_e = (m4_e<<2) + (((rec)>>1)&3); // 00000110
+    m4_e = m4_e*2 + (((ch)>0+(1-1)));
+    m4_e = m4_e*4 + M_m4_e_i4[__min(16,__max(0,(ctx1a)-(1-1)))];
+    m4_e = m4_e*2 + (((ctx2a)>3+(1-1)));
+    m4_e = m4_e*2 + (((ctx3a)>3+(1-1)));
+    m4_e = m4_e*6 + M_m4_e_i7[__min(16,__max(0,(caMDCTj)-(1-1)))];
+    m4_e = m4_e*4 + M_m4_e_i8[__min(16,__max(0,(caMDCTjm1)-(1-1)))];
+    m4_e = (m4_e<<2) + ((((rec)>>1)&3)); // 00000110
     m4_e = m4_e*(M_band_Sm4_Volume) + (band_Sm4);
 
     mm4_g = 0;
-    mm4_g = mm4_g*2 + ((ch>0+(1-1)));
-    mm4_g = mm4_g*2 + ((band_j>12+(1-1)));
-    mm4_g = mm4_g*3 + ((j_band>0+(1-1))+(j_band>6+(1-1)));
-    mm4_g = mm4_g*3 + ((l>4+(1-1))+(l>13+(1-1)));
-    mm4_g = mm4_g*2 + ((ctx1a>11+(1-1)));
-    mm4_g = mm4_g*2 + ((ctx3a>10+(1-1)));
-    mm4_g = mm4_g*2 + ((caMDCTj>17+(1-1)));
-    mm4_g = mm4_g*3 + ((daMDCTj>10+(1-1))+(daMDCTj>14+(1-1)));
+    mm4_g = mm4_g*2 + (((ch)>0+(1-1)));
+    mm4_g = mm4_g*2 + (((band_j)>12+(1-1)));
+    mm4_g = mm4_g*3 + (((j_band)>0+(1-1))+((j_band)>6+(1-1)));
+    mm4_g = mm4_g*3 + (((l)>4+(1-1))+((l)>13+(1-1)));
+    mm4_g = mm4_g*2 + (((ctx1a)>11+(1-1)));
+    mm4_g = mm4_g*2 + (((ctx3a)>10+(1-1)));
+    mm4_g = mm4_g*2 + (((caMDCTj)>17+(1-1)));
+    mm4_g = mm4_g*3 + (((daMDCTj)>10+(1-1))+((daMDCTj)>14+(1-1)));
 
     n4_e = 0;
-    n4_e = n4_e*2 + ((ch>0+(1-1)));
-    n4_e = n4_e*3 + ((band_j>6+(1-1))+(band_j>12+(1-1)));
-    n4_e = n4_e*2 + ((ctx1a>7+(1-1)));
-    n4_e = n4_e*2 + ((ctx2a>7+(1-1)));
-    n4_e = n4_e*2 + ((caMDCTj>7+(1-1)));
+    n4_e = n4_e*2 + (((ch)>0+(1-1)));
+    n4_e = n4_e*3 + (((band_j)>6+(1-1))+((band_j)>12+(1-1)));
+    n4_e = n4_e*2 + (((ctx1a)>7+(1-1)));
+    n4_e = n4_e*2 + (((ctx2a)>7+(1-1)));
+    n4_e = n4_e*2 + (((caMDCTj)>7+(1-1)));
     n4_e = n4_e*(M_band_Sn4_Volume) + (band_Sn4);
     const word* M_Sm4_wr = j>M_Sm4_j1 ? M_Sm4_wr0 : M_Sm4_wq0;
     const word* M_Sm4_wq = j>M_Sm4_j1 ? M_Sm4_wr1 : M_Sm4_wq1;
@@ -629,49 +738,49 @@ void ModelMDCT(
     int mx_e,Smx_d,nx_e,mmx_g,band_Smx,band_Snx;
 
     band_Smx = 0;
-    band_Smx = band_Smx*90 + M_band_Smx_i0[__min(576,__max(0,j-(1-1)))];
+    band_Smx = band_Smx*90 + M_band_Smx_i0[__min(576,__max(0,(j)-(1-1)))];
 
     band_Snx = 0;
 
     mx_e = 0;
-    mx_e = mx_e*2 + ((curband>2+(1-1)));
-    mx_e = mx_e*2 + ((ctx1a>15+(1-1)));
-    mx_e = mx_e*4 + ((l>1+(1-1))+(l>2+(1-1))+(l>4+(1-1)));
+    mx_e = mx_e*2 + (((curband)>2+(1-1)));
+    mx_e = mx_e*2 + (((ctx1a)>15+(1-1)));
+    mx_e = mx_e*4 + M_mx_e_ib[__min(16,__max(0,(l)-(1-1)))];
     mx_e = mx_e*(M_band_Smx_Volume) + (band_Smx);
     mx_e = mx_e*(M_Anx_ex_Volume) + (0);
 
     Smx_d = 0;
-    Smx_d = Smx_d*2 + ((ch>0+(1-1)));
-    Smx_d = Smx_d*2 + ((j_band>6+(1-1)));
-    Smx_d = Smx_d*3 + ((band_j>6+(1-1))+(band_j>14+(1-1)));
-    Smx_d = Smx_d*2 + ((curband>0+(1-1)));
-    Smx_d = Smx_d*7 + ((caMDCTj>5+(1-1))+(caMDCTj>6+(1-1))+(caMDCTj>7+(1-1))+(caMDCTj>9+(1-1))+(caMDCTj>11+(1-1))+(caMDCTj>27+(1-1)));
-    Smx_d = Smx_d*2 + ((l>3+(1-1)));
+    Smx_d = Smx_d*2 + (((ch)>0+(1-1)));
+    Smx_d = Smx_d*2 + (((j_band)>6+(1-1)));
+    Smx_d = Smx_d*3 + (((band_j)>6+(1-1))+((band_j)>14+(1-1)));
+    Smx_d = Smx_d*2 + (((curband)>0+(1-1)));
+    Smx_d = Smx_d*7 + M_Smx_d_i7[__min(34,__max(0,(caMDCTj)-(1-1)))];
+    Smx_d = Smx_d*2 + (((l)>3+(1-1)));
     Smx_d = Smx_d*(M_ASmx_dx_Volume) + (0);
 
     nx_e = 0;
-    nx_e = nx_e*2 + ((ch>0+(1-1)));
-    nx_e = nx_e*2 + ((band_j>17+(1-1)));
-    nx_e = nx_e*3 + ((ctx1a>5+(1-1))+(ctx1a>8+(1-1)));
-    nx_e = nx_e*2 + ((ctx3a>6+(1-1)));
-    nx_e = nx_e*7 + ((caMDCTj>5+(1-1))+(caMDCTj>6+(1-1))+(caMDCTj>8+(1-1))+(caMDCTj>10+(1-1))+(caMDCTj>13+(1-1))+(caMDCTj>21+(1-1)));
-    nx_e = nx_e*3 + ((caMDCTjm1>5+(1-1))+(caMDCTjm1>8+(1-1)));
-    nx_e = nx_e*3 + ((daMDCTj>6+(1-1))+(daMDCTj>10+(1-1)));
-    nx_e = nx_e*2 + ((eaMDCTj>7+(1-1)));
-    nx_e = nx_e*2 + ((l>0+(1-1)));
+    nx_e = nx_e*2 + (((ch)>0+(1-1)));
+    nx_e = nx_e*2 + (((band_j)>17+(1-1)));
+    nx_e = nx_e*3 + (((ctx1a)>5+(1-1))+((ctx1a)>8+(1-1)));
+    nx_e = nx_e*2 + (((ctx3a)>6+(1-1)));
+    nx_e = nx_e*7 + M_nx_e_i7[__min(23,__max(0,(caMDCTj)-(1-1)))];
+    nx_e = nx_e*3 + (((caMDCTjm1)>5+(1-1))+((caMDCTjm1)>8+(1-1)));
+    nx_e = nx_e*3 + (((daMDCTj)>6+(1-1))+((daMDCTj)>10+(1-1)));
+    nx_e = nx_e*2 + (((eaMDCTj)>7+(1-1)));
+    nx_e = nx_e*2 + (((l)>0+(1-1)));
     nx_e = nx_e*(M_band_Snx_Volume) + (band_Snx);
     nx_e = nx_e*(M_Anx_ex_Volume) + (0);
 
     mmx_g = 0;
-    mmx_g = mmx_g*2 + ((ch>0+(1-1)));
-    mmx_g = mmx_g*2 + ((j_band>7+(1-1)));
-    mmx_g = mmx_g*4 + ((band_j>0+(1-1))+(band_j>14+(1-1))+(band_j>16+(1-1)));
-    mmx_g = mmx_g*2 + ((ctx2a>9+(1-1)));
-    mmx_g = mmx_g*2 + ((ctx3a>17+(1-1)));
-    mmx_g = mmx_g*2 + ((caMDCTj>16+(1-1)));
-    mmx_g = mmx_g*3 + ((daMDCTj>17+(1-1))+(daMDCTj>27+(1-1)));
-    mmx_g = mmx_g*2 + ((eaMDCTj>21+(1-1)));
-    mmx_g = mmx_g*4 + ((l>2+(1-1))+(l>4+(1-1))+(l>5+(1-1)));
+    mmx_g = mmx_g*2 + (((ch)>0+(1-1)));
+    mmx_g = mmx_g*2 + (((j_band)>7+(1-1)));
+    mmx_g = mmx_g*4 + M_mmx_g_i2[__min(21,__max(0,(band_j)-(1-1)))];
+    mmx_g = mmx_g*2 + (((ctx2a)>9+(1-1)));
+    mmx_g = mmx_g*2 + (((ctx3a)>17+(1-1)));
+    mmx_g = mmx_g*2 + (((caMDCTj)>16+(1-1)));
+    mmx_g = mmx_g*3 + (((daMDCTj)>17+(1-1))+((daMDCTj)>27+(1-1)));
+    mmx_g = mmx_g*2 + (((eaMDCTj)>21+(1-1)));
+    mmx_g = mmx_g*4 + M_mmx_g_ib[__min(16,__max(0,(l)-(1-1)))];
     mmx_g = mmx_g*(M_Ammx_gx_Volume) + (0);
     int Ammx_gx,Anx_ex,Amx_ex,ASmx_dx;
 
@@ -683,12 +792,12 @@ void ModelMDCT(
       Ammx_gx = 0;
 
       Anx_ex = 0;
-      Anx_ex = Anx_ex*3 + (((x-4)>1+(1-1))+((x-4)>4+(1-1)));
+      Anx_ex = Anx_ex*3 + ((((x-4))>1+(1-1))+(((x-4))>4+(1-1)));
 
       Amx_ex = 0;
 
       ASmx_dx = 0;
-      ASmx_dx = ASmx_dx*4 + (((x-4)>2+(1-1))+((x-4)>3+(1-1))+((x-4)>5+(1-1)));
+      ASmx_dx = ASmx_dx*4 + M_ASmx_dx_i0[__min(8,__max(0,((x-4))-(1-1)))];
       const word* M_Smx_wr = j>M_Smx_j1 ? M_Smx_wr0 : M_Smx_wq0;
       const word* M_Smx_wq = j>M_Smx_j1 ? M_Smx_wr1 : M_Smx_wq1;
       const uint  M_Smx_mw = j>M_Smx_j1 ? M_Smx_mw0 : M_Smx_mw1;
@@ -738,20 +847,20 @@ if(0)
       int Sz512_d,z512_e,Band_z512_e,Band_z512_d;
 
       Band_z512_d = 0;
-      Band_z512_d = Band_z512_d*27 + M_Band_z512_d_i0[__min(576,__max(0,j-(1-1)))];
+      Band_z512_d = Band_z512_d*27 + M_Band_z512_d_i0[__min(576,__max(0,(j)-(1-1)))];
 
       Band_z512_e = 0;
 
       Sz512_d = 0;
-      Sz512_d = Sz512_d*2 + ((ch>0+(1-1)));
-      Sz512_d = Sz512_d*2 + ((cblMDCTj>17+(1-1)));
-      Sz512_d = Sz512_d*2 + ((ctx1bl>17+(1-1)));
+      Sz512_d = Sz512_d*2 + (((ch)>0+(1-1)));
+      Sz512_d = Sz512_d*2 + (((cblMDCTj)>17+(1-1)));
+      Sz512_d = Sz512_d*2 + (((ctx1bl)>17+(1-1)));
       Sz512_d = Sz512_d*(M_Band_z512_d_Volume) + (Band_z512_d);
 
       z512_e = 0;
-      z512_e = z512_e*2 + ((l>6+(1-1)));
-      z512_e = z512_e*5 + ((cblMDCTj>15+(1-1))+(cblMDCTj>16+(1-1))+(cblMDCTj>18+(1-1))+(cblMDCTj>19+(1-1)));
-      z512_e = z512_e*4 + ((dblMDCTj>17+(1-1))+(dblMDCTj>18+(1-1))+(dblMDCTj>20+(1-1)));
+      z512_e = z512_e*2 + (((l)>6+(1-1)));
+      z512_e = z512_e*5 + M_z512_e_i5[__min(27,__max(0,(cblMDCTj)-(1-1)))];
+      z512_e = z512_e*4 + M_z512_e_i6[__min(25,__max(0,(dblMDCTj)-(1-1)))];
       z512_e = z512_e*(M_Band_z512_e_Volume) + (Band_z512_e);
       const word* M_Sz512_wr = j>M_Sz512_j1 ? M_Sz512_wr0 : M_Sz512_wq0;
       const word* M_Sz512_wq = j>M_Sz512_j1 ? M_Sz512_wr1 : M_Sz512_wq1;
@@ -777,25 +886,25 @@ if(0)
         int Sz256_d,z256_e,Band_z256_e,Band_z256_d;
 
         Band_z256_d = 0;
-        Band_z256_d = Band_z256_d*8 + ((j>2+(1-1))+(j>3+(1-1))+(j>5+(1-1))+(j>7+(1-1))+(j>11+(1-1))+(j>18+(1-1))+(j>37+(1-1)));
+        Band_z256_d = Band_z256_d*8 + M_Band_z256_d_i0[__min(576,__max(0,(j)-(1-1)))];
 
         Band_z256_e = 0;
-        Band_z256_e = Band_z256_e*2 + ((j>574+(1-1)));
+        Band_z256_e = Band_z256_e*2 + (((j)>574+(1-1)));
 
         Sz256_d = 0;
-        Sz256_d = Sz256_d*2 + ((ch>0+(1-1)));
-        Sz256_d = Sz256_d*2 + ((l>6+(1-1)));
-        Sz256_d = Sz256_d*2 + ((cblMDCTj>13+(1-1)));
-        Sz256_d = Sz256_d*2 + ((ctx2bl>17+(1-1)));
-        Sz256_d = Sz256_d*2 + ((zrun>1+(1-1)));
+        Sz256_d = Sz256_d*2 + (((ch)>0+(1-1)));
+        Sz256_d = Sz256_d*2 + (((l)>6+(1-1)));
+        Sz256_d = Sz256_d*2 + (((cblMDCTj)>13+(1-1)));
+        Sz256_d = Sz256_d*2 + (((ctx2bl)>17+(1-1)));
+        Sz256_d = Sz256_d*2 + (((zrun)>1+(1-1)));
         Sz256_d = Sz256_d*(M_Band_z256_d_Volume) + (Band_z256_d);
 
         z256_e = 0;
-        z256_e = z256_e*4 + ((l>0+(1-1))+(l>5+(1-1))+(l>6+(1-1)));
-        z256_e = z256_e*2 + ((curband>3+(1-1)));
-        z256_e = z256_e*7 + ((cblMDCTj>14+(1-1))+(cblMDCTj>15+(1-1))+(cblMDCTj>16+(1-1))+(cblMDCTj>17+(1-1))+(cblMDCTj>20+(1-1))+(cblMDCTj>21+(1-1)));
-        z256_e = z256_e*7 + ((dblMDCTj>14+(1-1))+(dblMDCTj>15+(1-1))+(dblMDCTj>16+(1-1))+(dblMDCTj>17+(1-1))+(dblMDCTj>19+(1-1))+(dblMDCTj>21+(1-1)));
-        z256_e = z256_e*2 + ((ctx1bl>19+(1-1)));
+        z256_e = z256_e*4 + M_z256_e_i3[__min(16,__max(0,(l)-(1-1)))];
+        z256_e = z256_e*2 + (((curband)>3+(1-1)));
+        z256_e = z256_e*7 + M_z256_e_i5[__min(25,__max(0,(cblMDCTj)-(1-1)))];
+        z256_e = z256_e*7 + M_z256_e_i6[__min(25,__max(0,(dblMDCTj)-(1-1)))];
+        z256_e = z256_e*2 + (((ctx1bl)>19+(1-1)));
         z256_e = z256_e*(M_Band_z256_e_Volume) + (Band_z256_e);
         const word* M_Sz256_wr = j>M_Sz256_j1 ? M_Sz256_wr0 : M_Sz256_wq0;
         const word* M_Sz256_wq = j>M_Sz256_j1 ? M_Sz256_wr1 : M_Sz256_wq1;
@@ -816,19 +925,19 @@ if(0)
         int Smant_e,mant_f;
 
         Smant_e = 0;
-        Smant_e = Smant_e*2 + ((ch>0+(1-1)));
-        Smant_e = Smant_e*2 + ((j_band>0+(1-1)));
-        Smant_e = Smant_e*9 + M_Smant_e_i4[__min(21,__max(0,cblMDCTj-(1-1)))];
-        Smant_e = Smant_e*2 + ((ctx1bl>7+(1-1)));
-        Smant_e = Smant_e*2 + ((zrun>2+(1-1)));
+        Smant_e = Smant_e*2 + (((ch)>0+(1-1)));
+        Smant_e = Smant_e*2 + (((j_band)>0+(1-1)));
+        Smant_e = Smant_e*9 + M_Smant_e_i4[__min(21,__max(0,(cblMDCTj)-(1-1)))];
+        Smant_e = Smant_e*2 + (((ctx1bl)>7+(1-1)));
+        Smant_e = Smant_e*2 + (((zrun)>2+(1-1)));
         Smant_e = Smant_e*(M_Jmant_e_Volume) + (0);
 
         mant_f = 0;
-        mant_f = mant_f*3 + ((j_band>1+(1-1))+(j_band>6+(1-1)));
-        mant_f = mant_f*2 + ((curband>1+(1-1)));
-        mant_f = mant_f*7 + ((l>1+(1-1))+(l>2+(1-1))+(l>3+(1-1))+(l>4+(1-1))+(l>5+(1-1))+(l>6+(1-1)));
-        mant_f = mant_f*4 + ((dblMDCTj>9+(1-1))+(dblMDCTj>11+(1-1))+(dblMDCTj>13+(1-1)));
-        mant_f = mant_f*2 + ((ctx2bl>11+(1-1)));
+        mant_f = mant_f*3 + (((j_band)>1+(1-1))+((j_band)>6+(1-1)));
+        mant_f = mant_f*2 + (((curband)>1+(1-1)));
+        mant_f = mant_f*7 + M_mant_f_i2[__min(16,__max(0,(l)-(1-1)))];
+        mant_f = mant_f*4 + M_mant_f_i5[__min(21,__max(0,(dblMDCTj)-(1-1)))];
+        mant_f = mant_f*2 + (((ctx2bl)>11+(1-1)));
         mant_f = mant_f*(M_Jmant_f_Volume) + (0);
 
         const word* M_mant_wr[] = { M_mant_wr8,M_mant_wr7,M_mant_wr6,M_mant_wr5,M_mant_wr4,M_mant_wr3,M_mant_wr2,M_mant_wr1,M_mant_wr0 };
@@ -885,47 +994,47 @@ SignToProcess:
     int pms1_f, Sms1_d, ms1_e, mms1_g,ns1_e;
 
     pms1_f = 0;
-    pms1_f = pms1_f*2 + ((band_j>0+(1-1)));
-    pms1_f = pms1_f*2 + ((curband>7+(1-1)));
-    pms1_f = pms1_f*15 + M_pms1_f_i4[__min(40,__max(0,cMDCTj-(-16-1)))];
-    pms1_f = (pms1_f<<1) + ((byte(signs_j))&1); // 00000001
-    pms1_f = (pms1_f<<1) + ((byte(zeros_j))&1); // 00000001
+    pms1_f = pms1_f*2 + (((band_j)>0+(1-1)));
+    pms1_f = pms1_f*2 + (((curband)>7+(1-1)));
+    pms1_f = pms1_f*15 + M_pms1_f_i4[__min(40,__max(0,(cMDCTj)-(-16-1)))];
+    pms1_f = (pms1_f<<1) + (((byte(signs_j))&1)); // 00000001
+    pms1_f = (pms1_f<<1) + (((byte(zeros_j))&1)); // 00000001
     byte& rec = pms1[pms1_f];
 
     ms1_e = 0;
-    ms1_e = ms1_e*2 + ((ch>0+(1-1)));
-    ms1_e = ms1_e*2 + ((cMDCTj>9+(-8-1)));
-    ms1_e = ms1_e*4 + ((dMDCTj>6+(-8-1))+(dMDCTj>9+(-8-1))+(dMDCTj>10+(-8-1)));
-    ms1_e = ms1_e*3 + ((eMDCTj>6+(-8-1))+(eMDCTj>10+(-8-1)));
-    ms1_e = (ms1_e<<3) + ((byte(signs_j))&7); // 00000111
-    ms1_e = (ms1_e<<1) + (((byte(zeros_j))>>2)&1); // 00000100
-    ms1_e = (ms1_e<<5) + ((rec)&31); // 00011111
+    ms1_e = ms1_e*2 + (((ch)>0+(1-1)));
+    ms1_e = ms1_e*2 + (((cMDCTj)>9+(-8-1)));
+    ms1_e = ms1_e*4 + M_ms1_e_i4[__min(20,__max(0,(dMDCTj)-(-8-1)))];
+    ms1_e = ms1_e*3 + (((eMDCTj)>6+(-8-1))+((eMDCTj)>10+(-8-1)));
+    ms1_e = (ms1_e<<3) + (((byte(signs_j))&7)); // 00000111
+    ms1_e = (ms1_e<<1) + ((((byte(zeros_j))>>2)&1)); // 00000100
+    ms1_e = (ms1_e<<5) + (((rec)&31)); // 00011111
 
     Sms1_d = 0;
-    Sms1_d = Sms1_d*2 + ((ch>0+(1-1)));
-    Sms1_d = Sms1_d*5 + ((j_band>0+(1-1))+(j_band>1+(1-1))+(j_band>3+(1-1))+(j_band>6+(1-1)));
-    Sms1_d = Sms1_d*4 + ((band_j>17+(1-1))+(band_j>18+(1-1))+(band_j>19+(1-1)));
-    Sms1_d = Sms1_d*6 + ((cMDCTj>4+(-12-1))+(cMDCTj>8+(-12-1))+(cMDCTj>12+(-12-1))+(cMDCTj>13+(-12-1))+(cMDCTj>15+(-12-1)));
+    Sms1_d = Sms1_d*2 + (((ch)>0+(1-1)));
+    Sms1_d = Sms1_d*5 + M_Sms1_d_i1[__min(9,__max(0,(j_band)-(1-1)))];
+    Sms1_d = Sms1_d*4 + M_Sms1_d_id[__min(21,__max(0,(band_j)-(1-1)))];
+    Sms1_d = Sms1_d*6 + M_Sms1_d_i3[__min(25,__max(0,(cMDCTj)-(-12-1)))];
 
     mms1_g = 0;
-    mms1_g = mms1_g*2 + ((ch>0+(1-1)));
-    mms1_g = mms1_g*2 + ((j_band>5+(1-1)));
-    mms1_g = mms1_g*5 + ((band_j>1+(1-1))+(band_j>9+(1-1))+(band_j>13+(1-1))+(band_j>14+(1-1)));
-    mms1_g = mms1_g*2 + ((curband>9+(1-1)));
-    mms1_g = mms1_g*4 + ((cMDCTj>6+(-8-1))+(cMDCTj>7+(-8-1))+(cMDCTj>10+(-8-1)));
-    mms1_g = mms1_g*3 + ((cMDCTjm1>2+(-8-1))+(cMDCTjm1>14+(-8-1)));
-    mms1_g = mms1_g*3 + ((ctx1>2+(-8-1))+(ctx1>14+(-8-1)));
-    mms1_g = (mms1_g<<1) + ((byte(zeros_j))&1); // 00000001
+    mms1_g = mms1_g*2 + (((ch)>0+(1-1)));
+    mms1_g = mms1_g*2 + (((j_band)>5+(1-1)));
+    mms1_g = mms1_g*5 + M_mms1_g_i2[__min(21,__max(0,(band_j)-(1-1)))];
+    mms1_g = mms1_g*2 + (((curband)>9+(1-1)));
+    mms1_g = mms1_g*4 + M_mms1_g_i4[__min(16,__max(0,(cMDCTj)-(-8-1)))];
+    mms1_g = mms1_g*3 + (((cMDCTjm1)>2+(-8-1))+((cMDCTjm1)>14+(-8-1)));
+    mms1_g = mms1_g*3 + (((ctx1)>2+(-8-1))+((ctx1)>14+(-8-1)));
+    mms1_g = (mms1_g<<1) + (((byte(zeros_j))&1)); // 00000001
 
     ns1_e = 0;
-    ns1_e = ns1_e*2 + ((ch>0+(1-1)));
-    ns1_e = ns1_e*3 + ((cMDCTj>8+(-8-1))+(cMDCTj>9+(-8-1)));
-    ns1_e = ns1_e*3 + ((dMDCTj>7+(-8-1))+(dMDCTj>10+(-8-1)));
-    ns1_e = ns1_e*2 + ((eMDCTj>8+(-8-1)));
-    ns1_e = ns1_e*5 + ((cMDCTjm1>6+(-8-1))+(cMDCTjm1>8+(-8-1))+(cMDCTjm1>9+(-8-1))+(cMDCTjm1>11+(-8-1)));
-    ns1_e = ns1_e*6 + ((ctx1>0+(-8-1))+(ctx1>6+(-8-1))+(ctx1>8+(-8-1))+(ctx1>11+(-8-1))+(ctx1>15+(-8-1)));
-    ns1_e = (ns1_e<<1) + (((byte(signs_j))>>1)&1); // 00000010
-    ns1_e = ns1_e*2 + ((zrun>0+(1-1)));
+    ns1_e = ns1_e*2 + (((ch)>0+(1-1)));
+    ns1_e = ns1_e*3 + (((cMDCTj)>8+(-8-1))+((cMDCTj)>9+(-8-1)));
+    ns1_e = ns1_e*3 + (((dMDCTj)>7+(-8-1))+((dMDCTj)>10+(-8-1)));
+    ns1_e = ns1_e*2 + (((eMDCTj)>8+(-8-1)));
+    ns1_e = ns1_e*5 + M_ns1_e_i7[__min(16,__max(0,(cMDCTjm1)-(-8-1)))];
+    ns1_e = ns1_e*6 + M_ns1_e_i8[__min(17,__max(0,(ctx1)-(-8-1)))];
+    ns1_e = (ns1_e<<1) + ((((byte(signs_j))>>1)&1)); // 00000010
+    ns1_e = ns1_e*2 + (((zrun)>0+(1-1)));
 
     const word* M_Sms1_wr = j>M_Sms1_jj ? M_Sms1_wr0 : M_Sms1_wq0;
     const word* M_Sms1_wq = j>M_Sms1_jj ? M_Sms1_wr1 : M_Sms1_wq1;
@@ -959,51 +1068,51 @@ SignToProcess:
     int pms_f, Sms_d, ms_e, mms_g,ns_e, band_Sms, band_Sns;
 
     pms_f = 0;
-    pms_f = pms_f*2 + ((ch>0+(1-1)));
-    pms_f = pms_f*16 + M_pms_f_i1[__min(21,__max(0,band_j-(1-1)))];
-    pms_f = pms_f*4 + ((j_band>0+(1-1))+(j_band>1+(1-1))+(j_band>5+(1-1)));
-    pms_f = pms_f*6 + ((cMDCTj>8+(-12-1))+(cMDCTj>12+(-12-1))+(cMDCTj>13+(-12-1))+(cMDCTj>17+(-12-1))+(cMDCTj>35+(-12-1)));
-    pms_f = pms_f*2 + ((dMDCTj>5+(-12-1)));
-    pms_f = pms_f*2 + ((c>19+(-8-1)));
-    pms_f = (pms_f<<1) + (((byte(signs_j))>>2)&1); // 00000100
+    pms_f = pms_f*2 + (((ch)>0+(1-1)));
+    pms_f = pms_f*16 + M_pms_f_i1[__min(21,__max(0,(band_j)-(1-1)))];
+    pms_f = pms_f*4 + M_pms_f_i2[__min(9,__max(0,(j_band)-(1-1)))];
+    pms_f = pms_f*6 + M_pms_f_i4[__min(41,__max(0,(cMDCTj)-(-12-1)))];
+    pms_f = pms_f*2 + (((dMDCTj)>5+(-12-1)));
+    pms_f = pms_f*2 + (((c)>19+(-8-1)));
+    pms_f = (pms_f<<1) + ((((byte(signs_j))>>2)&1)); // 00000100
 
     band_Sms = 0;
 
     band_Sns = 0;
-    band_Sns = band_Sns*123 + M_band_Sns_i0[__min(576,__max(0,j-(1-1)))];
+    band_Sns = band_Sns*123 + M_band_Sns_i0[__min(576,__max(0,(j)-(1-1)))];
     byte& rec = pms[pms_f];
 
     ms_e = 0;
-    ms_e = ms_e*2 + ((ch>0+(1-1)));
-    ms_e = ms_e*5 + ((cMDCTj>6+(-12-1))+(cMDCTj>12+(-12-1))+(cMDCTj>13+(-12-1))+(cMDCTj>27+(-12-1)));
-    ms_e = ms_e*9 + M_ms_e_i5[__min(32,__max(0,dMDCTj-(-12-1)))];
-    ms_e = ms_e*5 + ((eMDCTj>5+(-12-1))+(eMDCTj>10+(-12-1))+(eMDCTj>16+(-12-1))+(eMDCTj>27+(-12-1)));
-    ms_e = ms_e*2 + ((c>14+(-8-1)));
-    ms_e = (ms_e<<5) + (((byte(signs_j))>>2)&31); // 01111100
-    ms_e = (ms_e<<1) + (((byte(zeros_j))>>2)&1); // 00000100
+    ms_e = ms_e*2 + (((ch)>0+(1-1)));
+    ms_e = ms_e*5 + M_ms_e_i4[__min(32,__max(0,(cMDCTj)-(-12-1)))];
+    ms_e = ms_e*9 + M_ms_e_i5[__min(32,__max(0,(dMDCTj)-(-12-1)))];
+    ms_e = ms_e*5 + M_ms_e_i6[__min(32,__max(0,(eMDCTj)-(-12-1)))];
+    ms_e = ms_e*2 + (((c)>14+(-8-1)));
+    ms_e = (ms_e<<5) + ((((byte(signs_j))>>2)&31)); // 01111100
+    ms_e = (ms_e<<1) + ((((byte(zeros_j))>>2)&1)); // 00000100
     ms_e = ms_e*(M_band_Sms_Volume) + (band_Sms);
 
     Sms_d = 0;
-    Sms_d = Sms_d*2 + ((ch>0+(1-1)));
-    Sms_d = Sms_d*4 + ((j_band>0+(1-1))+(j_band>2+(1-1))+(j_band>6+(1-1)));
-    Sms_d = Sms_d*7 + ((band_j>0+(1-1))+(band_j>2+(1-1))+(band_j>3+(1-1))+(band_j>4+(1-1))+(band_j>5+(1-1))+(band_j>6+(1-1)));
-    Sms_d = Sms_d*3 + ((cMDCTj>12+(-12-1))+(cMDCTj>13+(-12-1)));
-    Sms_d = Sms_d*2 + ((c>20+(-8-1)));
-    Sms_d = (Sms_d<<1) + ((rec)&1); // 00000001
+    Sms_d = Sms_d*2 + (((ch)>0+(1-1)));
+    Sms_d = Sms_d*4 + M_Sms_d_i1[__min(9,__max(0,(j_band)-(1-1)))];
+    Sms_d = Sms_d*7 + M_Sms_d_i2[__min(21,__max(0,(band_j)-(1-1)))];
+    Sms_d = Sms_d*3 + (((cMDCTj)>12+(-12-1))+((cMDCTj)>13+(-12-1)));
+    Sms_d = Sms_d*2 + (((c)>20+(-8-1)));
+    Sms_d = (Sms_d<<1) + (((rec)&1)); // 00000001
 
     mms_g = 0;
-    mms_g = mms_g*2 + ((ch>0+(1-1)));
-    mms_g = mms_g*5 + ((band_j>1+(1-1))+(band_j>10+(1-1))+(band_j>17+(1-1))+(band_j>19+(1-1)));
-    mms_g = mms_g*3 + ((j_band>1+(1-1))+(j_band>3+(1-1)));
-    mms_g = mms_g*2 + ((curband>9+(1-1)));
-    mms_g = mms_g*9 + M_mms_g_i4[__min(26,__max(0,cMDCTj-(-12-1)))];
-    mms_g = mms_g*4 + ((c>11+(-8-1))+(c>13+(-8-1))+(c>20+(-8-1)));
-    mms_g = (mms_g<<1) + ((byte(zeros_j))&1); // 00000001
+    mms_g = mms_g*2 + (((ch)>0+(1-1)));
+    mms_g = mms_g*5 + M_mms_g_i1[__min(21,__max(0,(band_j)-(1-1)))];
+    mms_g = mms_g*3 + (((j_band)>1+(1-1))+((j_band)>3+(1-1)));
+    mms_g = mms_g*2 + (((curband)>9+(1-1)));
+    mms_g = mms_g*9 + M_mms_g_i4[__min(26,__max(0,(cMDCTj)-(-12-1)))];
+    mms_g = mms_g*4 + M_mms_g_i8[__min(25,__max(0,(c)-(-8-1)))];
+    mms_g = (mms_g<<1) + (((byte(zeros_j))&1)); // 00000001
 
     ns_e = 0;
-    ns_e = ns_e*12 + M_ns_e_i1[__min(21,__max(0,band_j-(1-1)))];
-    ns_e = ns_e*4 + ((dMDCTj>7+(-8-1))+(dMDCTj>10+(-8-1))+(dMDCTj>17+(-8-1)));
-    ns_e = (ns_e<<2) + M_ns_e_ic[byte(signs_j)]; // 00101000
+    ns_e = ns_e*12 + M_ns_e_i1[__min(21,__max(0,(band_j)-(1-1)))];
+    ns_e = ns_e*4 + M_ns_e_i5[__min(21,__max(0,(dMDCTj)-(-8-1)))];
+    ns_e = (ns_e<<2) + (((((byte(signs_j))>>5)&1)<<1) + (((byte(signs_j))>>3)&1)); // 00101000
     ns_e = ns_e*(M_band_Sns_Volume) + (band_Sns);
     const word* M_Sms_wr = j>M_Sms_jj ? M_Sms_wr0 : M_Sms_wq0;
     const word* M_Sms_wq = j>M_Sms_jj ? M_Sms_wr1 : M_Sms_wq1;

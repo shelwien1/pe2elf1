@@ -77,7 +77,6 @@ Table( SSEii<5>, Sz256, %M%Sz256_d_Volume );
 Table( Node2ii, z512, %M%z512_e_Volume );
 Table( SSEii<7>, Sz512, %M%Sz512_d_Volume );
 
-def_Data
 
 #define SC8(x,y) ((x*y)>>8)
 /*	
@@ -114,10 +113,9 @@ def_Data
   int av_MDCT[576];
 
   int si; // stats instance index
-end_Data
 
-//  void Init_RangeDelta( int instance ) {
-def_Init
+// the tables' starting state, after M_Init() made them
+void %M%InitData( void ) {
   int i;
 //    si = instance;
 
@@ -188,10 +186,11 @@ def_Init
   for( i=0; i<M_z256_e_Volume; i++ ) z256[i].Init_Node2i();
   for( i=0; i<M_Sz256_d_Volume; i++ ) Sz256[i].Init_SSEi(M_Sz256_wi,M_Sz256_ti);
 
-end_Init
+}
 
 void Init_RangeDelta( int instance ) {
   M_Init();
+  M_InitData();
   si = instance;
 }
 

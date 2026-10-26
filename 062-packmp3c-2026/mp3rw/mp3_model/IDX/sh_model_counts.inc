@@ -82,12 +82,9 @@ Table( byte,     qrg1cnt, %M%prg1cnt_f_Volume );
 Table( byte,     prg1cnt, %M%prg1cnt_e_Volume );
 Table( byte,     prg1cnu, %M%prg1cnt_e_Volume );
 
-def_Data
 
-  typedef Number2ii<10,1023> Number2c1;
-  typedef SSEii<5,5,1> SSE_c1[(1024+1023)/2+1];
-  typedef Number2ii<10,1023> Number2c0;
-  typedef SSEii<5,5,2> SSE_c0[(1024+1023)/2+1];
+  // (the types of Table()s count0, Scount0, count1 and Scount1 are model__mp3.inc's,
+  // where struct C_T, which holds them, needs them)
 
 //  SSEj<*(int*)& %M%Sxlong_Q,*(int*)& %M%Sxlong_d_Volume> Sxlong;
 //  SSEj<*(int*)& %M%Sglgain_Q,*(int*)& %M%Sglgain_d_Volume> Sglgain;
@@ -102,9 +99,9 @@ def_Data
 //  Number1ii<4>    x_rg0cnt[2];
 //  Number1ii<3>    x_rg1cnt[32];
 
-end_Data
 
-def_Init
+// the tables' starting state, after C_Init() made them
+void %M%InitData( void ) {
 
   int i;
 
@@ -152,7 +149,7 @@ def_Init
   for( i=0; i<%M%prg1cnt_e_Volume; i++ ) prg1cnt[i]=0;
   for( i=0; i<%M%prg1cnt_e_Volume; i++ ) prg1cnu[i]=0;
 
-end_Init
+}
 
 void Process_rgxcnt( int& c, int& _c1, int ch ) {
   RangeCoder& rc = *this;

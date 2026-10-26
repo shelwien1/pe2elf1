@@ -10,6 +10,7 @@ Node2ii          xbigval1;
 void Init_Counts() {
 
   C_Init();
+  C_InitData();
 
   Init_Node2ii( bvflag );
   Init_Number1ii( bvdump );
