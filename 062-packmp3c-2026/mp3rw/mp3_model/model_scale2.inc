@@ -48,7 +48,8 @@ void ProcessScale2( void ) {
       if( num ) {
         for( j=0; j<int(pnt[i]); j++ ) {
 #ifndef DISABLE_s2ylong
-          ylong[scf-sf0].Process( rc,*scf++,-1,1<<num,M_ylong_wr, M_ylong_mw);
+          // index before the increment, as C++17 and the original mp3c.exe order it
+          ylong[scf-sf0].Process( rc,*scf,-1,1<<num,M_ylong_wr, M_ylong_mw); scf++;
 #endif
           gi.p23len += num;
         }
