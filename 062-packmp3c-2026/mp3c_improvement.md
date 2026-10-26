@@ -616,7 +616,11 @@ real-world set, two LAME 3.100 encodes, and LAME re-encodes of one track at
 | + the signs, with the same counters | −0.55%: worse |
 | + stages at the scalefactors | −1.06% |
 | + global_gain, the counts | −1.14% |
-| + the stages' parameters tuned (opt.pl) | −1.27%, about 1.37x |
+| + the stages' parameters tuned (opt.pl) | −1.27%, 1.25x |
+
+The times are the least of a few runs, on a machine (a VM) whose run times
+vary by several percent. In instructions, which are repeatable, the last
+row costs 1.37-1.41 times the original (README: Speed).
 
 - In the first stage, the rescaled reference was worth 0.30 of its 0.55
   points; each of the other three contexts about 0.05.

@@ -15,8 +15,8 @@ Build with `g.bat` (MinGW g++), `gc.bat` (clang++ with the MSVC headers/libs) or
 `mp3c_improvement.md` measures where mp3c's output goes, part by part, and
 what would make it smaller. The model's mixing stages ([Compression: mixing
 stages](#compression-mixing-stages), at the end) came of it: the `.c`
-files are 1.3% smaller on the Layer III test inputs, for about 1.4 times
-the time.
+files are 1.3% smaller on the Layer III test inputs, for about 1.3 times
+the run time (1.4 times the instructions).
 
 ## What was broken
 
@@ -511,12 +511,22 @@ thresholds and `recm` come from tables, `Node2ii::Update` is inlined,
 and `idx2inc.pl` writes a pattern of ones then zeros as a clamp instead
 of a table.
 
-| the new model's instructions over the old's, on 12 MB of | compress | decompress |
+| the new model's instructions over the old's, on | compress | decompress |
 | --- | ---: | ---: |
-| `mp3_misidentified_lame_128` | 1.401 | 1.398 |
-| `01_-_Charity_Case_lame_V2` | 1.385 | 1.381 |
-| `Ed_Rush_-_Sabotage` | 1.391 | 1.388 |
+| 12 MB of `mp3_misidentified_lame_128` | 1.401 | 1.398 |
+| 12 MB of `01_-_Charity_Case_lame_V2` | 1.385 | 1.381 |
+| 12 MB of `Ed_Rush_-_Sabotage` | 1.391 | 1.388 |
+| 12 MB of `Silent_Light` | 1.387 | 1.384 |
+| 12 MB of `misid_22k_64` | 1.407 | 1.405 |
+| 12 MB of `misid_48k_160` | 1.393 | 1.390 |
+| all of `path.dmp` (40 MB) | 1.368 | 1.365 |
 
-These are instruction counts (cachegrind), which are repeatable; the
-machine this was measured on (a VM) varies too much in run time for
-anything finer than "about the same".
+These are instruction counts (cachegrind), which are repeatable. The run
+time grows less, as far as this machine (a VM, whose run times vary by
+several percent) shows it: the least user time of three runs on the whole
+dump, in seconds:
+
+| | compress | | decompress | |
+| --- | ---: | ---: | ---: | ---: |
+| `path.dmp` | 2.79 → 3.64 | 1.30x | 3.06 → 3.88 | 1.27x |
+| `mp3_misidentified_2.dmp` (87 MB) | 5.11 → 6.37 | 1.25x | 5.36 → 6.84 | 1.28x |
