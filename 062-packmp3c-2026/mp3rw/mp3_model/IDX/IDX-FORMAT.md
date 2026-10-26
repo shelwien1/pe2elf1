@@ -544,6 +544,7 @@ character-for-character the same source.
 | `IDX/sh_model_freq.idx` | the rate schedules' parameters (`TTable`, `freq_tbl.inc`), Prefix `F` |
 | `IDX/sh_modelu.idx`, `sh_modelw.idx` | the stretch and squash curves of the mixers (`freq_paqmixer.inc`), Prefixes `U`, `W` |
 | `mapping.inc` | the runtime of §13, with `masking_b`, and the host functions of §6 and §9 (`tc_vmul`, `tc_map`, `tbl_n`) |
+| `freq_cm.inc`, `cm_tab.inc` | the mixing stages' counters and mixing core (`cm_code`), and their constant tables; not generated |
 | `MOD/*_h.inc`, `MOD/*_p.inc` | generated, in the shipping form |
 
 `MOD/sh_model_p.inc` is included inside `struct RangeDelta : M_T`
@@ -560,6 +561,27 @@ folded: those are constants in both builds. To tune some, make their
 section `Const 0` (or toggle a line with `-`); `./mk.sh tuning` then has
 them live, `./mk.sh check` proves both builds code alike, and import.pl
 folds opt.pl's export back.
+
+The mixing stages' sections, at the end of `sh_model.idx` (the spectral
+stage: `xa`..`xd`, `xlim`..`xmb`) and of `sh_model_counts.idx` (the
+stages of the scalefactors, global_gain and the counts: `y*`, `s*`, `z*`,
+`g*`, `c*`), are `Const 0`: `./mk.sh tuning` has all of them live. Each
+stage has four counter contexts, the rows its template computes once per
+decision group, and a section of `Number`s for its rates:
+
+| knob | what |
+|---|---|
+| `xlim` | the counters' adaptive rate ends at 1/(lim+2) (1..1023) |
+| `xmw` | the counters' probabilities stay this far (of 65536) from 0 and 1 |
+| `xsh` | the counters' fast rate, a shift |
+| `xwa`, `xwb` | a new weight set's weights of mp3c's two predictions (16.16) |
+| `xlr`, `xmb` | the mixer's rate, and its boost while a weight set is new (lr·mb/(n+2) more after n updates; at most 255 in all) |
+
+A pattern of ones then zeros (`1!111`, `1!11110000`) is the identity up
+to a clamp, and the shipping form writes it as the clamp,
+`__min(k,__max(0,var-(base-1)))`, without the table that any other
+threshold mapping of four buckets or more gets (§4): the same buckets,
+one load fewer.
 
 ### Three more forms
 

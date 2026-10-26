@@ -39,6 +39,20 @@ static const byte C_Ssfcomp_d_i2[28+1]={ 0,0,0,0,1,1,1,1,1,1,1,2,3,4,4,4,4,4,4,4
 
 static const byte C_Sxlong_d_i1[20+1]={ 0,1,1,1,1,1,2,2,2,2,2,3,3,3,4,4,4,5,6,7,8 };
 
+static const byte C_ca_i1[576+1]={ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,18 };
+
+static const byte C_cb_i1[576+1]={ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,18 };
+
+
+static const byte C_cd_i2[576+1]={ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,9 };
+
+
+
+
+static const byte C_gc_i0[255+1]={ 0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,4,4,4,4,4,4,4,4,5,5,5,5,5,5,5,5,6,6,6,6,6,6,6,6,7,7,7,7,7,7,7,7,8,8,8,8,8,8,8,8,9,9,9,9,9,9,9,9,10,10,10,10,10,10,10,10,11,11,11,11,11,11,11,11,12,12,12,12,12,12,12,12,13,13,13,13,13,13,13,13,14,14,14,14,14,14,14,14,15,15,15,15,15,15,15,15,16,16,16,16,16,16,16,16,17,17,17,17,17,17,17,17,18,18,18,18,18,18,18,18,19,19,19,19,19,19,19,19,20,20,20,20,20,20,20,20,21,21,21,21,21,21,21,21,22,22,22,22,22,22,22,22,23,23,23,23,23,23,23,23,24,24,24,24,24,24,24,24,25,25,25,25,25,25,25,25,26,26,26,26,26,26,26,26,27,27,27,27,27,27,27,27,28,28,28,28,28,28,28,28,29,29,29,29,29,29,29,29,30,30,30,30,30,30,30,30,31,31,31,31,31,31,31,31 };
+
+
+
 
 
 static const byte C_mc0_e_i2[8+1]={ 0,1,1,1,1,2,2,3,3 };
@@ -199,13 +213,27 @@ static const word* C_rg1cnt_wq0 = TTable[5+0];
 static const int C_Srg1cnt_Q = (3+2) * (1);
 static const int C_Srg1cnt_wi = (1304+0) * (4);
 static const int C_Srg1cnt_ti = (18+0) * (1);
-static const int C_ylim = (255+0) * (1);
-static const int C_ymw = (32+0) * (1);
+static const int C_ylim = (987+0) * (1);
+static const int C_ymw = (2064+0) * (1);
 static const int C_ysh = (4+0) * (1);
-static const int C_ywa = (32768+0) * (1);
+static const int C_ywa = (129+0) * (1);
 static const int C_ywb = (32768+0) * (1);
-static const int C_ylr = (6+0) * (1);
-static const int C_ymb = (32+0) * (1);
+static const int C_ylr = (37+0) * (1);
+static const int C_ymb = (55+0) * (1);
+static const int C_glim = (255+0) * (1);
+static const int C_gmw = (32+0) * (1);
+static const int C_gsh = (4+0) * (1);
+static const int C_gwa = (32768+0) * (1);
+static const int C_gwb = (32768+0) * (1);
+static const int C_glr = (6+0) * (1);
+static const int C_gmb = (32+0) * (1);
+static const int C_clim = (255+0) * (1);
+static const int C_cmw = (32+0) * (1);
+static const int C_csh = (4+0) * (1);
+static const int C_cwa = (32768+0) * (1);
+static const int C_cwb = (32768+0) * (1);
+static const int C_clr = (6+0) * (1);
+static const int C_cmb = (32+0) * (1);
 
 
 static const long long C_Band_smc0_Volume = tc_vmul(1, 6); // 6
@@ -232,7 +260,17 @@ static const long long C_Srg0cnt_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 2), (
 static const long long C_Srg1cnt_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 2), 7), (C_Jrg1cnt_e_Volume)); // ?
 static const long long C_Ssfcomp_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 5), (1<<3)), (C_Jsfcomp_e_Volume)); // ?
 static const long long C_Sxlong_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 9), 3), 2), 2), (C_Jxlong_e_Volume)); // ?
+static const long long C_ca_Volume = tc_vmul(tc_vmul(1, 2), 19); // 38
+static const long long C_cb_Volume = tc_vmul(tc_vmul(1, 2), 19); // 38
+static const long long C_cc_Volume = tc_vmul(tc_vmul(1, 2), 16); // 32
+static const long long C_cd_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 4), 10); // 80
+static const long long C_cw_Volume = tc_vmul(1, 2); // 2
+static const long long C_ga_Volume = tc_vmul(tc_vmul(1, 2), 16); // 32
+static const long long C_gb_Volume = tc_vmul(tc_vmul(1, 2), 16); // 32
+static const long long C_gc_Volume = tc_vmul(1, 32); // 32
+static const long long C_gd_Volume = tc_vmul(tc_vmul(1, 2), 32); // 64
 static const long long C_glgain_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 1), (1<<7)), (C_Jglgain_f_Volume)); // ?
+static const long long C_gw_Volume = tc_vmul(1, 2); // 2
 static const long long C_mc00_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 1); // 1
 static const long long C_mc0_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 4), (C_Band_smc0_Volume)); // ?
 static const long long C_mc10_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 1); // 1
@@ -267,7 +305,7 @@ static const long long C_zc_Volume = tc_vmul(tc_vmul(1, 17), 16); // 272
 static const long long C_zd_Volume = tc_vmul(tc_vmul(1, 17), 16); // 272
 static const long long C_zw_Volume = tc_vmul(tc_vmul(1, 39), 3); // 117
 
-#define C_USES(X) X(j) X(i) X(ch) X(old) X(k) X(ll) X(rec) X(ctx0) X(gr) X(rg0) X(yprev) X(yoth) X(ypred) X(ydg) X(p) X(zprev) X(zoth) X(zpred) X(zbelow) X(zdg) X(bk) X(b) X(sprev) X(swin) X(sbelow) X(soth)
+#define C_USES(X) X(j) X(i) X(ch) X(old) X(k) X(ll) X(rec) X(ctx0) X(gr) X(rg0) X(yprev) X(yoth) X(ypred) X(ydg) X(p) X(zprev) X(zoth) X(zpred) X(zbelow) X(zdg) X(bk) X(b) X(sprev) X(swin) X(sbelow) X(soth) X(gld) X(god) X(glast) X(gx) X(cwh) X(clast) X(coth) X(cdg) X(cbt) X(cc1)
 
 struct C_T {
   Number2c0 count0[C_mc0_e_Volume];
@@ -298,6 +336,18 @@ struct C_T {
   cm_cnt2 zD[C_zd_Volume * 64];
   int zW[C_zw_Volume * 64 * XNIN];
   byte zWN[C_zw_Volume * 64];
+  cm_cnt2 cA[C_ca_Volume * 1024];
+  cm_cnt2 cB[C_cb_Volume * 1024];
+  cm_cnt2 cC[C_cc_Volume * 1024];
+  cm_cnt2 cD[C_cd_Volume * 1024];
+  int cW[C_cw_Volume * 10 * XNIN];
+  byte cWN[C_cw_Volume * 10];
+  cm_cnt2 gA[C_ga_Volume * 512];
+  cm_cnt2 gB[C_gb_Volume * 512];
+  cm_cnt2 gC[C_gc_Volume * 512];
+  cm_cnt2 gD[C_gd_Volume * 512];
+  int gW[C_gw_Volume * 9 * XNIN];
+  byte gWN[C_gw_Volume * 9];
   Node2ii glgain[C_glgain_c_Volume];
   SSEii<5> Sglgain[C_Sglgain_d_Volume];
   byte qglgain[C_pglgain_f_Volume];
@@ -350,6 +400,18 @@ struct C_T {
                               + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(C_zd_Volume * 64)
                               + (unsigned long long)sizeof(int) * (unsigned long long)(C_zw_Volume * 64 * XNIN)
                               + (unsigned long long)sizeof(byte) * (unsigned long long)(C_zw_Volume * 64)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(C_ca_Volume * 1024)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(C_cb_Volume * 1024)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(C_cc_Volume * 1024)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(C_cd_Volume * 1024)
+                              + (unsigned long long)sizeof(int) * (unsigned long long)(C_cw_Volume * 10 * XNIN)
+                              + (unsigned long long)sizeof(byte) * (unsigned long long)(C_cw_Volume * 10)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(C_ga_Volume * 512)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(C_gb_Volume * 512)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(C_gc_Volume * 512)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(C_gd_Volume * 512)
+                              + (unsigned long long)sizeof(int) * (unsigned long long)(C_gw_Volume * 9 * XNIN)
+                              + (unsigned long long)sizeof(byte) * (unsigned long long)(C_gw_Volume * 9)
                               + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(C_glgain_c_Volume)
                               + (unsigned long long)sizeof(SSEii<5>) * (unsigned long long)(C_Sglgain_d_Volume)
                               + (unsigned long long)sizeof(byte) * (unsigned long long)(C_pglgain_f_Volume)

@@ -1573,10 +1573,10 @@ Index xd
 # probabilities' margin (of 65536), their fast rate's shift; the mixer's
 # starting weights of mp3c's two predictions (16.16), its rate and its
 # boost while a weight set is new
-Number xlim, 1,0!0011111111
+Number xlim, 1,0!1111110100
 Number xmw,  1,0!000000100000
 Number xsh,  1,0!0100
-Number xwa,  1,0!01000000000000000
+Number xwa,  1,0!01010001000100100
 Number xwb,  1,0!01000000000000000
 Number xlr,  1,0!00000110
-Number xmb,  1,0!00100000
+Number xmb,  1,0!10000010

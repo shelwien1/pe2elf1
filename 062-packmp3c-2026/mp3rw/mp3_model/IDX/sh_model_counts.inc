@@ -85,6 +85,24 @@ Table( cm_cnt2, zD, %M%zd_Volume * 64 );
 Table( int,     zW, %M%zw_Volume * 64 * XNIN );
 Table( byte,   zWN, %M%zw_Volume * 64 );
 
+// the counts' stage (Process_cnt), the same with rows of the 1024 nodes of
+// the count trees, the weight sets by cw and the depth
+Table( cm_cnt2, cA, %M%ca_Volume * 1024 );
+Table( cm_cnt2, cB, %M%cb_Volume * 1024 );
+Table( cm_cnt2, cC, %M%cc_Volume * 1024 );
+Table( cm_cnt2, cD, %M%cd_Volume * 1024 );
+Table( int,     cW, %M%cw_Volume * 10 * XNIN );
+Table( byte,   cWN, %M%cw_Volume * 10 );
+
+// global_gain's stage (Process_GlGain), the same with rows of the 512 nodes
+// of its tree, the weight sets by gw and the depth
+Table( cm_cnt2, gA, %M%ga_Volume * 512 );
+Table( cm_cnt2, gB, %M%gb_Volume * 512 );
+Table( cm_cnt2, gC, %M%gc_Volume * 512 );
+Table( cm_cnt2, gD, %M%gd_Volume * 512 );
+Table( int,     gW, %M%gw_Volume * 9 * XNIN );
+Table( byte,   gWN, %M%gw_Volume * 9 );
+
 Table( Node2ii,   glgain, %M%glgain_c_Volume );
 Table( SSEii<5>, Sglgain, %M%Sglgain_d_Volume );
 Table( byte,     qglgain, %M%pglgain_f_Volume );
@@ -135,6 +153,10 @@ Table( byte,     prg1cnu, %M%prg1cnt_e_Volume );
   // scalefac_scale (ProcessScale2 keeps them)
   byte zsf[2][3][40];
   int  zgg[2], zscs[2];
+  // each channel's last global_gain and the one before (Process_GlGain)
+  int  gcur[2], gprv[2];
+  // each channel's last c1 and k (ProcessCounts1)
+  int  ck[2][2];
 
 //  Number1ii<4>    x_sfcomp[2];
 //  Number1ii<4>    x_rg0cnt[2];
@@ -195,6 +217,26 @@ void %M%InitData( void ) {
     sWN[i] = 0;
   }
   memset( ssf, 0, sizeof(ssf) );
+
+  for( i=0; i<%M%ga_Volume*512; i++ ) gA[i].Init();
+  for( i=0; i<%M%gb_Volume*512; i++ ) gB[i].Init();
+  for( i=0; i<%M%gc_Volume*512; i++ ) gC[i].Init();
+  for( i=0; i<%M%gd_Volume*512; i++ ) gD[i].Init();
+  for( i=0; i<%M%gw_Volume*9; i++ ) {
+    for( int k=0; k<XNIN; k++ ) gW[i*XNIN+k] = k==0 ? %M%gwa : k==10 ? %M%gwb : 0;
+    gWN[i] = 0;
+  }
+  gcur[0] = gcur[1] = gprv[0] = gprv[1] = 0;
+
+  for( i=0; i<%M%ca_Volume*1024; i++ ) cA[i].Init();
+  for( i=0; i<%M%cb_Volume*1024; i++ ) cB[i].Init();
+  for( i=0; i<%M%cc_Volume*1024; i++ ) cC[i].Init();
+  for( i=0; i<%M%cd_Volume*1024; i++ ) cD[i].Init();
+  for( i=0; i<%M%cw_Volume*10; i++ ) {
+    for( int k=0; k<XNIN; k++ ) cW[i*XNIN+k] = k==0 ? %M%cwa : k==10 ? %M%cwb : 0;
+    cWN[i] = 0;
+  }
+  memset( ck, 0, sizeof(ck) );
 
 //  Init_Number1ii( x_glgain );
   for( i=0; i<%M%glgain_c_Volume; i++ ) glgain[i].Init_Node2i();
@@ -386,8 +428,29 @@ void Process_sfcomp( int& c, int ch ) {
 }
 
 
+// global_gain of granule gr, channel ch: its change from the channel's
+// last value, a binary tree of 9 levels, each bit coded by a mixing stage
+// (freq_cm.inc: cm_code) with mp3c's two predictions and four counters of
+// rows made here, from:
+//   gld   the channel's last change
+//   god   the other channel's latest change (this granule's, for the
+//         second channel)
+//   glast the channel's last value
+//   gx    the other channel's latest value less this channel's last
+// by the weight set of gw and the depth; the rows hold the tree's nodes.
 void Process_GlGain( int& c, int ch, int gr ) {
   RangeCoder& rc = *this;
+
+  int gra, grb, grc, grd, grw;
+  {
+    int o = ch^1;
+    int gld = gcur[ch] - gprv[ch], god = gcur[o] - gprv[o];
+    uint glast = gcur[ch];
+    int gx = gcur[o] - gcur[ch];
+    int ga, gb, gc, gd, gw;
+    MakeIndex ga,gb,gc,gd,gw
+    gra = ga*512; grb = gb*512; grc = gc*512; grd = gd*512; grw = gw*9;
+  }
 
 //int c0=c;
 
@@ -419,7 +482,14 @@ void Process_GlGain( int& c, int ch, int gr ) {
         MakeIndex Jglgain_g
         byte& old = qglgain[pglgain_f+Jglgain_g];
         MakeIndex Jglgain_e,Jglgain_f
-        Sglgain[Sglgain_d+Jglgain_e].Process( rc, glgain[glgain_c+Jglgain_f], glgain_wr[i], glgain_mw[i], k, glgain_wq[i] );
+        auto& S = Sglgain[Sglgain_d+Jglgain_e];
+        Node2ii& M = glgain[glgain_c+Jglgain_f];
+        SSEii_updstr X;
+        int ps = S.SSE_Pred( M.P, X );
+        cm_code( rc, k, M.P, ps, gA[gra+j], gB[grb+j], gC[grc+j], gD[grd+j],
+                 &gW[(grw+8-i)*XNIN], gWN[grw+8-i], %M%glim, %M%gmw, %M%gsh, %M%glr, %M%gmb );
+        S.SSE_Update( k, glgain_wq[i], X );
+        M.Update( k, glgain_wr[i], glgain_mw[i] );
         old = old*2 + k;
       }
       z |= (k<<i);
@@ -435,6 +505,7 @@ void Process_GlGain( int& c, int ch, int gr ) {
   //rec = c;
   ctx1 = ctx0;
   ctx0 = c;
+  gprv[ch] = gcur[ch]; gcur[ch] = c;
 }
 
 
@@ -595,6 +666,48 @@ void Process_sf1short( word& v, int ch, int gr, int i, int b, int l, Node2ii* Y,
   v = word(z);
 }
 
+// a count of granule gr, channel ch: n in [lo,hi) (Number2ii's sense of
+// them) MSB first over the tree T of 10 levels, with T's counters and the
+// SSEs S of its nodes (and their rates wr, mw, Swr) as mp3c's two
+// predictions, each bit coded by the stage (freq_cm.inc: cm_code) with
+// four counters of rows made here, from:
+//   cwh    which count: 0 c1 (the count1 region's start), 1 k (the end of
+//          the nonzero values)
+//   clast  the channel's last value of this count
+//   coth   the other channel's latest (this granule's, for the second)
+//   cdg    how much the channel's global_gain grew (Process_GlGain's)
+//   cbt    block_type, and cc1 the c1 coded just before k (0 for c1)
+// by the weight set of cw and the depth; the rows hold the tree's nodes.
+template< class NT, class SS >
+void Process_cnt( int& n, int lo, int hi, NT& T, SS* S, const word* wr, int mw, const word* Swr, int cwh, int ch, int gr, int c1 ) {
+  RangeCoder& rc = *this;
+  int cra, crb, crc, crd, crw;
+  {
+    uint clast = ck[ch][cwh], coth = ck[ch^1][cwh];
+    int cdg = gcur[ch] - gprv[ch];
+    uint cbt = si.gi[gr][ch].block_type, cc1 = cwh ? c1 : 0;
+    int ca, cb, cc, cd, cw;
+    MakeIndex ca,cb,cc,cd,cw
+    cra = ca*1024; crb = cb*1024; crc = cc*1024; crd = cd*1024; crw = cw*10;
+  }
+  int z = 0;
+  for( int i=9; i>=0; i-- ) {
+    int j = (1024+z)>>(i+1);
+    int k = (n>>i)&1;
+    if( z+(1<<i)-1<=lo ) k=1; else if( z+(1<<i) >= hi ) k=0; else {
+      Node2ii& P = T.P[j];
+      SSEii_updstr X;
+      int ps = S[j].SSE_Pred( P.P, X );
+      cm_code( rc, k, P.P, ps, cA[cra+j], cB[crb+j], cC[crc+j], cD[crd+j],
+               &cW[(crw+9-i)*XNIN], cWN[crw+9-i], %M%clim, %M%cmw, %M%csh, %M%clr, %M%cmb );
+      S[j].SSE_Update( k, Swr, X );
+      P.Update( k, wr, mw );
+    }
+    z |= (k<<i);
+  }
+  n = z;
+}
+
 void ProcessCounts1( int& k, int& c1, int i, int gr, int ch ) {
   RangeCoder& rc = *this;
 
@@ -611,7 +724,7 @@ void ProcessCounts1( int& k, int& c1, int i, int gr, int ch ) {
   MakeIndex mc1_e,Smc1_d
   if( flag10 ) c1=0; else {
     c1 += %M%count1_bas;
-    count1[mc1_e].Process( rc, c1, 0+%M%count1_bas, 577+%M%count1_bas, %M%count1_wr0, %M%count1_mw, Scount1[Smc1_d], %M%count1_wr1 );
+    Process_cnt( c1, 0+%M%count1_bas, 577+%M%count1_bas, count1[mc1_e], Scount1[Smc1_d], %M%count1_wr0, %M%count1_mw, %M%count1_wr1, 0, ch, gr, 0 );
     c1 -= %M%count1_bas;
   }
 
@@ -624,12 +737,13 @@ void ProcessCounts1( int& k, int& c1, int i, int gr, int ch ) {
   MakeIndex mc0_e,Smc0_d
   if( flag00 ) k=0; else {
     k += %M%count0_bas;
-    count0[mc0_e].Process( rc, k, Max<int>(0,c1-1)+%M%count0_bas, 577+%M%count0_bas, %M%count0_wr0, %M%count0_mw, Scount0[Smc0_d], %M%count0_wr1 );
+    Process_cnt( k, Max<int>(0,c1-1)+%M%count0_bas, 577+%M%count0_bas, count0[mc0_e], Scount0[Smc0_d], %M%count0_wr0, %M%count0_mw, %M%count0_wr1, 1, ch, gr, c1 );
     k -= %M%count0_bas;
   }
 
   p_c0[i] = k;
   p_c1[i] = c1;
+  ck[ch][0] = c1; ck[ch][1] = k;
 
 #endif
 

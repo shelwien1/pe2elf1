@@ -485,13 +485,13 @@ static const word* M_Sz512_wr0 = TTable[6+0];
 static const word* M_Sz512_wr1 = TTable[3+0];
 static const word* M_Sz512_wq0 = TTable[20+0];
 static const word* M_Sz512_wq1 = TTable[19+0];
-static const int M_xlim = (255+0) * (1);
+static const int M_xlim = (1012+0) * (1);
 static const int M_xmw = (32+0) * (1);
 static const int M_xsh = (4+0) * (1);
-static const int M_xwa = (32768+0) * (1);
+static const int M_xwa = (41508+0) * (1);
 static const int M_xwb = (32768+0) * (1);
 static const int M_xlr = (6+0) * (1);
-static const int M_xmb = (32+0) * (1);
+static const int M_xmb = (130+0) * (1);
 
 
 static const long long M_ASmx_dx_Volume = tc_vmul(1, 4); // 4
