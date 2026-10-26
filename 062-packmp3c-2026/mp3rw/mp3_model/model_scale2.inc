@@ -49,14 +49,22 @@ void ProcessScale2( void ) {
         for( j=0; j<int(pnt[i]); j++ ) {
 #ifndef DISABLE_s2ylong
           // index before the increment, as C++17 and the original mp3c.exe order it
-          ylong[scf-sf0].Process( rc,*scf,-1,1<<num,M_ylong_wr, M_ylong_mw); scf++;
+          Process_sf2( *scf, ch, int(scf-sf0), num, n, ylong[scf-sf0].P, M_ylong_wr, M_ylong_mw ); scf++;
 #endif
           gi.p23len += num;
         }
       } else {
-        for( j=0; j<int(pnt[i]); j++ ) scf++; //*scf++ = 0;
+        for( j=0; j<int(pnt[i]); j++ ) *scf++ = 0;
       }
     }
+    // A place no group codes is 0, as the decoder has it.  The encoder's
+    // came from the dump, which in a frame mp3rw could not parse holds
+    // whatever was there: the stages and CalcSteps read these.
+    while( scf < sf0+39 ) *scf++ = 0;
+
+    // (the stage's last frame, of this channel and kind of block)
+    for( i=0; i<39; i++ ) zsf[ch][n][i] = byte( sf.l[i] );
+    zgg[ch] = gi.global_gain; zscs[ch] = gi.scalefac_scale;
 
   } // for ch
  

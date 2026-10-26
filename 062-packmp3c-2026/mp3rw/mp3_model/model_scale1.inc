@@ -30,6 +30,10 @@ void ProcessScale1( void ) {
       if( gi.block_type==2 ) {
 
         if( j = (gi.mixed_block_flag ? 3 : 0) ) {
+          // (the short bands a mixed block does not code are 0, as the
+          // decoder has them -- the encoder's come from the dump, see
+          // model_scale2.inc -- since the short blocks' stage reads them)
+          for( i=0; i<3; i++ ) for( b=0; b<3; b++ ) sf.s[i][b]=0;
 #ifndef DISABLE_s1mixed
           for( i=0; i<8; i++ ) mixed[ch][i].Process( rc, sf.l[i], -1, (1<<l1), M_mixed_wr, M_mixed_mw );
 #endif
@@ -41,12 +45,17 @@ void ProcessScale1( void ) {
 
         for( i=j; i<12; i++ ) for( b=0; b<3; b++ ) {
 #ifndef DISABLE_s1small
-          small[ch+2*gi.scalefac_compress][i].Process( rc, sf.s[i][b], -1, 1<<((i<6)?l1:l2), M_small_wr, M_small_mw );
+          Process_sf1short( sf.s[i][b], ch, gr, i, b, (i<6)?l1:l2, small[ch+2*gi.scalefac_compress][i].P, M_small_wr, M_small_mw );
 #endif
           gi.p23len += (i<6)?l1:l2;
         }
+        // (the stage's last short granule, of this channel)
+        for( i=0; i<12; i++ ) for( b=0; b<3; b++ ) ssf[ch][i][b] = byte( sf.s[i][b] );
 
       } else {
+
+        // (a long block codes no short-block scalefactors: 0, as above)
+        for( i=0; i<13; i++ ) for( b=0; b<3; b++ ) sf.s[i][b]=0;
 
         for( k=0, b=0,b0=0,i=0,j=6; b<4; b++,i=j,j+=5 ) {
 
@@ -56,7 +65,7 @@ void ProcessScale1( void ) {
           if( flag==0 ) {
             for(; i<j; i++ ) {
 #ifndef DISABLE_s1xlong
-              Process_sf1xlong( sf.l[i], ch, k, ((i<11)?l1:l2), i );
+              Process_sf1xlong( sf.l[i], ch, k, ((i<11)?l1:l2), i, gr );
 #endif
               k = sf.l[i];
               gi.p23len += (i<11)?l1:l2;
@@ -69,6 +78,9 @@ void ProcessScale1( void ) {
 
         } // for
 
+        // (the stage's last granule, of this channel)
+        for( i=0; i<21; i++ ) ysf[ch][i] = byte( sf.l[i] );
+        ygg[ch] = gi.global_gain; yscs[ch] = gi.scalefac_scale; ypre[ch] = gi.preflag;
       }
 
     } // for ch

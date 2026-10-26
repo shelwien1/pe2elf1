@@ -48,6 +48,15 @@
 
 //Table( Number1ii<4>,  xlong, C_xlong_c_Volume );
 
+// the scalefactors' mixing stage (Process_sf1xlong): the counters of its
+// contexts ya..yd, a row holding the 32 nodes of a scalefactor's binary
+// tree; the mixer's weight sets (yw and the node) and their update counts
+
+// MPEG-1's short-block scalefactors' stage (Process_sf1short), the same
+// with rows of 16 nodes
+
+// MPEG-2's scalefactors' stage (Process_sf2), the same with rows of 64 nodes
+
 
 
 
@@ -64,6 +73,20 @@
 
   int p_c1[8];
   int p_c0[8];
+
+  // MPEG-1's long-block scalefactors of each channel's last granule, and
+  // its global_gain, scalefac_scale and preflag (ProcessScale1 keeps them,
+  // for the stage)
+  byte ysf[2][22];
+  int  ygg[2], yscs[2], ypre[2];
+  // MPEG-1's short-block scalefactors of each channel's last short
+  // granule (ProcessScale1 keeps them)
+  byte ssf[2][12][3];
+  // MPEG-2's scalefactors of each channel's last frame, for each kind of
+  // block (0 long, 1 short, 2 mixed), and its global_gain and
+  // scalefac_scale (ProcessScale2 keeps them)
+  byte zsf[2][3][40];
+  int  zgg[2], zscs[2];
 
 //  Number1ii<4>    x_sfcomp[2];
 //  Number1ii<4>    x_rg0cnt[2];
@@ -90,6 +113,40 @@ void C_InitData( void ) {
   for( i=0; i<C_Sxlong_d_Volume; i++ ) Sxlong[i].Init_SSEi(C_Sxlong_wi,C_Sxlong_ti);
   for( i=0; i<C_pxlong_e_Volume; i++ ) pxlong[i]=0;
   for( i=0; i<C_pxlong_f_Volume; i++ ) qxlong[i]=0;
+
+  // the scalefactors' stage: counters at 1/2, each weight set taking mp3c's
+  // two predictions half and half
+  for( i=0; i<C_ya_Volume*32; i++ ) yA[i].Init();
+  for( i=0; i<C_yb_Volume*32; i++ ) yB[i].Init();
+  for( i=0; i<C_yc_Volume*32; i++ ) yC[i].Init();
+  for( i=0; i<C_yd_Volume*32; i++ ) yD[i].Init();
+  for( i=0; i<C_yw_Volume*32; i++ ) {
+    for( int k=0; k<XNIN; k++ ) yW[i*XNIN+k] = k==0 ? C_ywa : k==10 ? C_ywb : 0;
+    yWN[i] = 0;
+  }
+  memset( ysf, 0, sizeof(ysf) );
+  ygg[0] = ygg[1] = 0; yscs[0] = yscs[1] = 0; ypre[0] = ypre[1] = 0;
+
+  for( i=0; i<C_za_Volume*64; i++ ) zA[i].Init();
+  for( i=0; i<C_zb_Volume*64; i++ ) zB[i].Init();
+  for( i=0; i<C_zc_Volume*64; i++ ) zC[i].Init();
+  for( i=0; i<C_zd_Volume*64; i++ ) zD[i].Init();
+  for( i=0; i<C_zw_Volume*64; i++ ) {
+    for( int k=0; k<XNIN; k++ ) zW[i*XNIN+k] = k==0 ? C_ywa : k==10 ? C_ywb : 0;
+    zWN[i] = 0;
+  }
+  memset( zsf, 0, sizeof(zsf) );
+  zgg[0] = zgg[1] = 0; zscs[0] = zscs[1] = 0;
+
+  for( i=0; i<C_sa_Volume*16; i++ ) sA[i].Init();
+  for( i=0; i<C_sb_Volume*16; i++ ) sB[i].Init();
+  for( i=0; i<C_sc_Volume*16; i++ ) sC[i].Init();
+  for( i=0; i<C_sd_Volume*16; i++ ) sD[i].Init();
+  for( i=0; i<C_sw_Volume*16; i++ ) {
+    for( int k=0; k<XNIN; k++ ) sW[i*XNIN+k] = k==0 ? C_ywa : k==10 ? C_ywb : 0;
+    sWN[i] = 0;
+  }
+  memset( ssf, 0, sizeof(ssf) );
 
 //  Init_Number1ii( x_glgain );
   for( i=0; i<C_glgain_c_Volume; i++ ) glgain[i].Init_Node2i();
@@ -420,7 +477,18 @@ void Process_GlGain( int& c, int ch, int gr ) {
 }
 
 
-void Process_sf1xlong( word& _c, int ch, int k, int ll, int i ) {
+// a long-block scalefactor of MPEG-1: band i of granule gr, channel ch,
+// the band below's value k, ll bits.  Its bits are coded by the
+// scalefactors' mixing stage (freq_cm.inc: cm_code), which mixes mp3c's two
+// predictions (the counter's and the SSE's) with four counters of rows
+// made here, from:
+//   yprev  the channel's last granule's value at the band
+//   yoth   the other channel's: this granule's, for the second channel
+//   ydg    how much the channel's global_gain grew since its last granule
+//   ypred  the value that would keep the band's quantizer step of the
+//          last granule (model_delta.inc: CalcSteps), 0..16
+// by the weight set of the band (yw) and the node.
+void Process_sf1xlong( word& _c, int ch, int k, int ll, int i, int gr ) {
   RangeCoder& rc = *this;
 
   int xlong_c,Sxlong_d,pxlong_e,pxlong_f, c = _c;
@@ -452,6 +520,41 @@ void Process_sf1xlong( word& _c, int ch, int k, int ll, int i ) {
   Sxlong_d = Sxlong_d*2 + (((ll)>2+(1-1)));
   Sxlong_d = Sxlong_d*(C_Jxlong_e_Volume) + (0);
 
+  int yra, yrb, yrc, yrd, yrw;
+  {
+    uint yprev = ysf[ch][i], yoth = ch ? SF[gr][0].l[i] : ysf[1][i];
+    const gr_info& g = si.gi[gr][ch];
+    int ydg = g.global_gain - ygg[ch];
+    // (the last step, less 210, is ygg - 2*(1+yscs)*(ysf + ypre*pretab);
+    // q-64 is global_gain less it, clamped, d the step of one scalefactor)
+    int q = ydg + 2*(1+yscs[ch])*(ysf[ch][i] + (ypre[ch] ? cm_pretab[i] : 0));
+    q = q<-64 ? 0 : q>128 ? 192 : q+64;
+    int d = 2*(1+g.scalefac_scale);
+    int ypred = (q + d/2)/d - 64/d - (g.preflag ? cm_pretab[i] : 0);
+    ypred = ypred<0 ? 0 : ypred>16 ? 16 : ypred;
+    int ya, yb, yc, yd, yw;
+
+    ya = 0;
+    ya = ya*21 + __min(20,__max(0,(i)-(1-1)));
+    ya = ya*16 + __min(15,__max(0,(yprev)-(1-1)));
+
+    yb = 0;
+    yb = yb*21 + __min(20,__max(0,(i)-(1-1)));
+    yb = yb*16 + __min(15,__max(0,(yoth)-(1-1)));
+
+    yc = 0;
+    yc = yc*17 + __min(16,__max(0,(ypred)-(1-1)));
+    yc = yc*16 + __min(15,__max(0,(k)-(1-1)));
+
+    yd = 0;
+    yd = yd*17 + __min(16,__max(0,(ypred)-(1-1)));
+    yd = yd*16 + __min(15,__max(0,(ydg)-(-7-1)));
+
+    yw = 0;
+    yw = yw*21 + __min(20,__max(0,(i)-(1-1)));
+    yra = ya*32; yrb = yb*32; yrc = yc*32; yrd = yd*32; yrw = yw*32;
+  }
+
 //  xlong[xlong_c].Process( rc, c, -1, 1<<ll, C_xlong_wr, C_xlong_mw, Sxlong, Sxlong_d, C_xlong_wq );
   {
     const word* xlong_wr[] = { C_xlong_wr4,C_xlong_wr3,C_xlong_wr2,C_xlong_wr1,C_xlong_wr0 };
@@ -478,7 +581,14 @@ void Process_sf1xlong( word& _c, int ch, int k, int ll, int i ) {
 
         Jxlong_f = 0;
         Jxlong_f = (Jxlong_f*9) + C_Jxlong_f_i1[j]; // 11001
-        Sxlong[Sxlong_d+Jxlong_e].Process( rc, xlong[xlong_c+Jxlong_f], xlong_wr[i], xlong_mw[i], k, xlong_wq[i] );
+        auto& S = Sxlong[Sxlong_d+Jxlong_e];
+        Node2ii& M = xlong[xlong_c+Jxlong_f];
+        SSEii_updstr X;
+        int ps = S.SSE_Pred( M.P, X );
+        cm_code( rc, k, M.P, ps, yA[yra+j], yB[yrb+j], yC[yrc+j], yD[yrd+j],
+                 &yW[(yrw+j)*XNIN], yWN[yrw+j], C_ylim, C_ymw, C_ysh, C_ylr, C_ymb );
+        S.SSE_Update( k, xlong_wq[i], X );
+        M.Update( k, xlong_wr[i], xlong_mw[i] );
         old = old*2 + k;
       }
       z |= (k<<i);
@@ -493,6 +603,124 @@ void Process_sf1xlong( word& _c, int ch, int k, int ll, int i ) {
   rec = c;
 
   _c = c;
+}
+
+// MPEG-2's scalefactor at position p (of SF[0][ch].l) of channel ch, num
+// bits, block kind bk (0 long, 1 short, 2 mixed): the binary tree of
+// Number1ii<7> Y (ProcessScale2's ylong) with its rates wr and mw, each
+// bit coded by the stage (freq_cm.inc: cm_code) with Y's counter as mp3c's
+// prediction and four counters of rows made here, from:
+//   zprev  the channel's last frame's value at p, in a block of this kind
+//   zoth   the other channel's: this frame's, for the second channel
+//   zbelow this frame's value at p-1
+//   zdg    how much the channel's global_gain grew since its last frame
+//   zpred  the value that would keep the last frame's quantizer step at p
+// by the weight set of p and bk (zw), and the node (r, 1 at the first bit
+// coded).  (The parameters are the MPEG-1 stage's, ylim .. ymb.)
+void Process_sf2( word& v, int ch, int p, int num, int bk, Node2ii* Y, const word* wr, int mw ) {
+  RangeCoder& rc = *this;
+  int zra, zrb, zrc, zrd, zrw;
+  {
+    const gr_info& g = si.gi[0][ch];
+    uint zprev = zsf[ch][bk][p], zoth = ch ? SF[0][0].l[p] : zsf[1][bk][p], zbelow = p ? SF[0][ch].l[p-1] : 0;
+    int zdg = g.global_gain - zgg[ch];
+    int q = zdg + 2*(1+zscs[ch])*int(zprev);
+    q = q<-64 ? 0 : q>128 ? 192 : q+64;
+    int d = 2*(1+g.scalefac_scale);
+    int zpred = (q + d/2)/d - 64/d;
+    zpred = zpred<0 ? 0 : zpred>16 ? 16 : zpred;
+    int za, zb, zc, zd, zw;
+
+    za = 0;
+    za = za*39 + __min(38,__max(0,(p)-(1-1)));
+    za = za*16 + __min(15,__max(0,(zprev)-(1-1)));
+
+    zb = 0;
+    zb = zb*39 + __min(38,__max(0,(p)-(1-1)));
+    zb = zb*16 + __min(15,__max(0,(zoth)-(1-1)));
+
+    zc = 0;
+    zc = zc*17 + __min(16,__max(0,(zpred)-(1-1)));
+    zc = zc*16 + __min(15,__max(0,(zbelow)-(1-1)));
+
+    zd = 0;
+    zd = zd*17 + __min(16,__max(0,(zpred)-(1-1)));
+    zd = zd*16 + __min(15,__max(0,(zdg)-(-7-1)));
+
+    zw = 0;
+    zw = zw*39 + __min(38,__max(0,(p)-(1-1)));
+    zw = zw*3 + (((bk)>0+(1-1))+((bk)>1+(1-1)));
+    zra = za*64; zrb = zb*64; zrc = zc*64; zrd = zd*64; zrw = zw*64;
+  }
+  int z = 0, n = v, top = 1<<num;
+  for( int i=6; i>=0; i-- ) {
+    int k = (n>>i)&1;
+    if( z+(1<<i) >= top ) k = 0; else {
+      Node2ii& P = Y[(128+z)>>(i+1)];
+      int r = (top+z)>>(i+1); r = r>63 ? 63 : r;
+      cm_code( rc, k, P.P, P.P, zA[zra+r], zB[zrb+r], zC[zrc+r], zD[zrd+r],
+               &zW[(zrw+r)*XNIN], zWN[zrw+r], C_ylim, C_ymw, C_ysh, C_ylr, C_ymb );
+      P.Update( k, wr, mw );
+    }
+    z |= (k<<i);
+  }
+  v = word(z);
+}
+
+// MPEG-1's short-block scalefactor of band i, window b, granule gr,
+// channel ch, l bits: the binary tree of Number1ii<4> Y (ProcessScale1's
+// small) with its rates wr and mw, each bit coded by the stage with Y's
+// counter as mp3c's prediction and four counters of rows made here, from:
+//   sprev  the channel's last short granule's value at the band and window
+//   swin   the value of the window before, at the band (16 for the first)
+//   sbelow this window's value at the band below
+//   soth   the other channel's: this granule's, for the second channel
+// by the weight set of the band and window (sw), and the node (r, 1 at
+// the first bit coded).  (The parameters are the long blocks', ylim ..)
+void Process_sf1short( word& v, int ch, int gr, int i, int b, int l, Node2ii* Y, const word* wr, int mw ) {
+  RangeCoder& rc = *this;
+  int sra, srb, src, srd, srw;
+  {
+    const ScaleFac& sf = SF[gr][ch];
+    uint sprev = ssf[ch][i][b], swin = b ? sf.s[i][b-1] : 16, sbelow = i ? sf.s[i-1][b] : 0;
+    uint soth = ch ? SF[gr][0].s[i][b] : ssf[1][i][b];
+    int sa, sb, sc, sd, sw;
+
+    sa = 0;
+    sa = sa*12 + __min(11,__max(0,(i)-(1-1)));
+    sa = sa*3 + (((b)>0+(1-1))+((b)>1+(1-1)));
+    sa = sa*16 + __min(15,__max(0,(sprev)-(1-1)));
+
+    sb = 0;
+    sb = sb*12 + __min(11,__max(0,(i)-(1-1)));
+    sb = sb*17 + __min(16,__max(0,(swin)-(1-1)));
+
+    sc = 0;
+    sc = sc*16 + __min(15,__max(0,(sbelow)-(1-1)));
+    sc = sc*17 + __min(16,__max(0,(swin)-(1-1)));
+
+    sd = 0;
+    sd = sd*12 + __min(11,__max(0,(i)-(1-1)));
+    sd = sd*16 + __min(15,__max(0,(soth)-(1-1)));
+
+    sw = 0;
+    sw = sw*12 + __min(11,__max(0,(i)-(1-1)));
+    sw = sw*3 + (((b)>0+(1-1))+((b)>1+(1-1)));
+    sra = sa*16; srb = sb*16; src = sc*16; srd = sd*16; srw = sw*16;
+  }
+  int z = 0, n = v, top = 1<<l;
+  for( int k3=3; k3>=0; k3-- ) {
+    int k = (n>>k3)&1;
+    if( z+(1<<k3) >= top ) k = 0; else {
+      Node2ii& P = Y[(16+z)>>(k3+1)];
+      int r = (top+z)>>(k3+1);
+      cm_code( rc, k, P.P, P.P, sA[sra+r], sB[srb+r], sC[src+r], sD[srd+r],
+               &sW[(srw+r)*XNIN], sWN[srw+r], C_ylim, C_ymw, C_ysh, C_ylr, C_ymb );
+      P.Update( k, wr, mw );
+    }
+    z |= (k<<k3);
+  }
+  v = word(z);
 }
 
 void ProcessCounts1( int& k, int& c1, int i, int gr, int ch ) {

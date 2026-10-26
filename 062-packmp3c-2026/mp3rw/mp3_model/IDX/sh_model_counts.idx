@@ -406,3 +406,101 @@ Number  Srg1cnt_Q,   1,2!0011
 Number  Srg1cnt_wi,  4,0!0010100011000
 Number  Srg1cnt_ti,  1,0!0010010
 
+# The scalefactors' mixing stage (sh_model_counts.inc: Process_sf1xlong;
+# freq_cm.inc), which mixes mp3c's two predictions of each bit of MPEG-1's
+# long-block scalefactors with four counters of its own: the rows of the
+# counters (ya..yd, a row holding the 32 nodes of a scalefactor's binary
+# tree) and the mixer's weight sets (yw, and the node).  The variables are
+# Process_sf1xlong's.
+
+Const 0
+
+# the channel's last value at the band, and the band
+Index ya
+ ya_i0: i,      1!11111111111111111111
+ ya_i1: yprev,  1!111111111111111
+
+# the other channel's value at the band, and the band
+Index yb
+ yb_i0: i,      1!11111111111111111111
+ yb_i1: yoth,   1!111111111111111
+
+# the value that keeps the band's last quantizer step, and the band
+# below's value in this granule
+Index yc
+ yc_i0: ypred,  1!1111111111111111
+ yc_i1: k,      1!111111111111111
+
+# the same, and the change of global_gain
+Index yd
+ yd_i0: ypred,  1!1111111111111111
+ yd_i1: ydg,   -7!111111111111111
+
+Index yw
+ yw_i0: i,      1!11111111111111111111
+
+# as the spectral stage's (sh_model.idx: xlim .. xmb)
+Number ylim, 1,0!0011111111
+Number ymw,  1,0!000000100000
+Number ysh,  1,0!0100
+Number ywa,  1,0!01000000000000000
+Number ywb,  1,0!01000000000000000
+Number ylr,  1,0!00000110
+Number ymb,  1,0!00100000
+
+# MPEG-2's scalefactors' stage (sh_model_counts.inc: Process_sf2), the same
+# over ProcessScale2's ylong trees: rows of 64 nodes (za..zd), weight sets
+# zw (and the node)
+
+# the channel's last value at the position, and the position
+Index za
+ za_i0: p,      1!11111111111111111111111111111111111111
+ za_i1: zprev,  1!111111111111111
+
+# the other channel's value, and the position
+Index zb
+ zb_i0: p,      1!11111111111111111111111111111111111111
+ zb_i1: zoth,   1!111111111111111
+
+# the value that keeps the last quantizer step, and the value before
+Index zc
+ zc_i0: zpred,  1!1111111111111111
+ zc_i1: zbelow, 1!111111111111111
+
+# the same, and the change of global_gain
+Index zd
+ zd_i0: zpred,  1!1111111111111111
+ zd_i1: zdg,   -7!111111111111111
+
+Index zw
+ zw_i0: p,      1!11111111111111111111111111111111111111
+ zw_i1: bk,     1!11
+
+# MPEG-1's short-block scalefactors' stage (sh_model_counts.inc:
+# Process_sf1short), the same over ProcessScale1's small trees: rows of 16
+# nodes (sa..sd), weight sets sw (and the node)
+
+# the channel's last value at the band and window, and the band, window
+Index sa
+ sa_i0: i,      1!11111111111
+ sa_i1: b,      1!11
+ sa_i2: sprev,  1!111111111111111
+
+# the window before at the band, and the band
+Index sb
+ sb_i0: i,      1!11111111111
+ sb_i1: swin,   1!1111111111111111
+
+# the band below in this window, and the window before
+Index sc
+ sc_i0: sbelow, 1!111111111111111
+ sc_i1: swin,   1!1111111111111111
+
+# the other channel's value, and the band
+Index sd
+ sd_i0: i,      1!11111111111
+ sd_i1: soth,   1!111111111111111
+
+Index sw
+ sw_i0: i,      1!11111111111
+ sw_i1: b,      1!11

@@ -28,10 +28,9 @@ void InitSfb( void ) {
 //  scalefac_compress and is not part of what is coded here, so it is
 //  left out).  Short blocks get global_gain alone.
 void CalcSteps( const gr_info& gi, const ScaleFac& sf, const byte* sfb ) {
-  static const byte pretab[22] = {0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,2,2,3,3,3,2,0};
   int lng = (gi.block_type!=2), pre = (h.ID && gi.preflag);
   for( int j=0; j<576; j++ ) {
-    int b = sfb[j], s = (lng && b<21) ? sf.l[b] + (pre ? pretab[b] : 0) : 0;
+    int b = sfb[j], s = (lng && b<21) ? sf.l[b] + (pre ? cm_pretab[b] : 0) : 0;
     xStep[j] = short( gi.global_gain - 210 - 2*(1+gi.scalefac_scale)*s );
   }
 }

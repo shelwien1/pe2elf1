@@ -62,10 +62,25 @@ static const byte C_pxlong_f_i4[15+1]={ 0,0,1,2,3,3,3,3,3,3,3,3,3,3,3,3 };
 
 
 
+
+
+
+
 static const byte C_sfcomp_c_i2[28+1]={ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,2,2,2,2,2,3,4,5,6,7,7,7,7 };
+
 
 static const byte C_xlong_c_i1[20+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,13,14,15,16,17,18,19 };
 static const byte C_xlong_c_i2[15+1]={ 0,1,2,3,3,4,4,5,6,6,6,6,6,6,6,6 };
+
+
+
+
+
+
+
+
+
+
 
 
 static const int C_count00_mw = (1+0) * (1);
@@ -184,6 +199,13 @@ static const word* C_rg1cnt_wq0 = TTable[5+0];
 static const int C_Srg1cnt_Q = (3+2) * (1);
 static const int C_Srg1cnt_wi = (1304+0) * (4);
 static const int C_Srg1cnt_ti = (18+0) * (1);
+static const int C_ylim = (255+0) * (1);
+static const int C_ymw = (32+0) * (1);
+static const int C_ysh = (4+0) * (1);
+static const int C_ywa = (32768+0) * (1);
+static const int C_ywb = (32768+0) * (1);
+static const int C_ylr = (6+0) * (1);
+static const int C_ymb = (32+0) * (1);
 
 
 static const long long C_Band_smc0_Volume = tc_vmul(1, 6); // 6
@@ -227,10 +249,25 @@ static const long long C_pxlong_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2)
 static const long long C_pxlong_f_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 18), 5), 1), 4), (C_Jxlong_g_Volume)); // ?
 static const long long C_rg0cnt_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 1), (C_Jrg0cnt_f_Volume)); // ?
 static const long long C_rg1cnt_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 1), (1<<4)), (C_Jrg1cnt_f_Volume)); // ?
+static const long long C_sa_Volume = tc_vmul(tc_vmul(tc_vmul(1, 12), 3), 16); // 576
+static const long long C_sb_Volume = tc_vmul(tc_vmul(1, 12), 17); // 204
+static const long long C_sc_Volume = tc_vmul(tc_vmul(1, 16), 17); // 272
+static const long long C_sd_Volume = tc_vmul(tc_vmul(1, 12), 16); // 192
 static const long long C_sfcomp_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 8), (1<<3)), (C_Jsfcomp_f_Volume)); // ?
+static const long long C_sw_Volume = tc_vmul(tc_vmul(1, 12), 3); // 36
 static const long long C_xlong_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 20), 7), 3), (1<<2)), (C_Jxlong_f_Volume)); // ?
+static const long long C_ya_Volume = tc_vmul(tc_vmul(1, 21), 16); // 336
+static const long long C_yb_Volume = tc_vmul(tc_vmul(1, 21), 16); // 336
+static const long long C_yc_Volume = tc_vmul(tc_vmul(1, 17), 16); // 272
+static const long long C_yd_Volume = tc_vmul(tc_vmul(1, 17), 16); // 272
+static const long long C_yw_Volume = tc_vmul(1, 21); // 21
+static const long long C_za_Volume = tc_vmul(tc_vmul(1, 39), 16); // 624
+static const long long C_zb_Volume = tc_vmul(tc_vmul(1, 39), 16); // 624
+static const long long C_zc_Volume = tc_vmul(tc_vmul(1, 17), 16); // 272
+static const long long C_zd_Volume = tc_vmul(tc_vmul(1, 17), 16); // 272
+static const long long C_zw_Volume = tc_vmul(tc_vmul(1, 39), 3); // 117
 
-#define C_USES(X) X(j) X(i) X(ch) X(old) X(k) X(ll) X(rec) X(ctx0) X(gr) X(rg0)
+#define C_USES(X) X(j) X(i) X(ch) X(old) X(k) X(ll) X(rec) X(ctx0) X(gr) X(rg0) X(yprev) X(yoth) X(ypred) X(ydg) X(p) X(zprev) X(zoth) X(zpred) X(zbelow) X(zdg) X(bk) X(b) X(sprev) X(swin) X(sbelow) X(soth)
 
 struct C_T {
   Number2c0 count0[C_mc0_e_Volume];
@@ -243,6 +280,24 @@ struct C_T {
   SSEii<5> Sxlong[C_Sxlong_d_Volume];
   byte pxlong[C_pxlong_e_Volume];
   byte qxlong[C_pxlong_f_Volume];
+  cm_cnt2 yA[C_ya_Volume * 32];
+  cm_cnt2 yB[C_yb_Volume * 32];
+  cm_cnt2 yC[C_yc_Volume * 32];
+  cm_cnt2 yD[C_yd_Volume * 32];
+  int yW[C_yw_Volume * 32 * XNIN];
+  byte yWN[C_yw_Volume * 32];
+  cm_cnt2 sA[C_sa_Volume * 16];
+  cm_cnt2 sB[C_sb_Volume * 16];
+  cm_cnt2 sC[C_sc_Volume * 16];
+  cm_cnt2 sD[C_sd_Volume * 16];
+  int sW[C_sw_Volume * 16 * XNIN];
+  byte sWN[C_sw_Volume * 16];
+  cm_cnt2 zA[C_za_Volume * 64];
+  cm_cnt2 zB[C_zb_Volume * 64];
+  cm_cnt2 zC[C_zc_Volume * 64];
+  cm_cnt2 zD[C_zd_Volume * 64];
+  int zW[C_zw_Volume * 64 * XNIN];
+  byte zWN[C_zw_Volume * 64];
   Node2ii glgain[C_glgain_c_Volume];
   SSEii<5> Sglgain[C_Sglgain_d_Volume];
   byte qglgain[C_pglgain_f_Volume];
@@ -277,6 +332,24 @@ struct C_T {
                               + (unsigned long long)sizeof(SSEii<5>) * (unsigned long long)(C_Sxlong_d_Volume)
                               + (unsigned long long)sizeof(byte) * (unsigned long long)(C_pxlong_e_Volume)
                               + (unsigned long long)sizeof(byte) * (unsigned long long)(C_pxlong_f_Volume)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(C_ya_Volume * 32)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(C_yb_Volume * 32)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(C_yc_Volume * 32)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(C_yd_Volume * 32)
+                              + (unsigned long long)sizeof(int) * (unsigned long long)(C_yw_Volume * 32 * XNIN)
+                              + (unsigned long long)sizeof(byte) * (unsigned long long)(C_yw_Volume * 32)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(C_sa_Volume * 16)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(C_sb_Volume * 16)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(C_sc_Volume * 16)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(C_sd_Volume * 16)
+                              + (unsigned long long)sizeof(int) * (unsigned long long)(C_sw_Volume * 16 * XNIN)
+                              + (unsigned long long)sizeof(byte) * (unsigned long long)(C_sw_Volume * 16)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(C_za_Volume * 64)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(C_zb_Volume * 64)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(C_zc_Volume * 64)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(C_zd_Volume * 64)
+                              + (unsigned long long)sizeof(int) * (unsigned long long)(C_zw_Volume * 64 * XNIN)
+                              + (unsigned long long)sizeof(byte) * (unsigned long long)(C_zw_Volume * 64)
                               + (unsigned long long)sizeof(Node2ii) * (unsigned long long)(C_glgain_c_Volume)
                               + (unsigned long long)sizeof(SSEii<5>) * (unsigned long long)(C_Sglgain_d_Volume)
                               + (unsigned long long)sizeof(byte) * (unsigned long long)(C_pglgain_f_Volume)

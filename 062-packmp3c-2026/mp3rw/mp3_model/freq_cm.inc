@@ -12,6 +12,9 @@
 // flags at this place that were set, in a row, the latest first)
 static const byte cm_trail1[32] = { 0,1,0,2,0,1,0,3, 0,1,0,2,0,1,0,4, 0,1,0,2,0,1,0,3, 0,1,0,2,0,1,0,5 };
 
+// MP3's pretab: what preflag adds to a long-block band's scalefactor
+static const byte cm_pretab[22] = {0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,2,2,3,3,3,2,0};
+
 // the bit length of x, 0 for 0
 static inline int cm_blen( uint x ) { return x ? int(log2i(x))+1 : 0; }
 
