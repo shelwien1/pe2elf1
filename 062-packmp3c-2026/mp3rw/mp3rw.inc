@@ -60,6 +60,7 @@ struct mp3rw : mp3parse {
           qutv(mp3len); f_mp3=0; binlen=0;
           //qutv(mp3num);
           write_garbage();
+          GrbLen = 0; // stored now; the next sequence's first frame would repeat it
         }
 
         if( r==1 ) {

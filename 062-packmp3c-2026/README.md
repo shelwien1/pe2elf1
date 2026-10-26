@@ -160,6 +160,7 @@ comma operand first.
 | `mp3rw.cpp` | `#pragma pack(1)` after `common.inc`, as in `mp3c.cpp` |
 | `mp3rw/mp3_parse/parse__mp3.inc` | `getbits` / `putbits` update the bit pointer before using it |
 | `mp3rw/mp3_model/model_scale2.inc` | mp3c: `scf++` moved out of the `ylong[scf-sf0].Process(...)` call (see below) |
+| `mp3rw/mp3rw.inc` | a sequence's trailing bits are stored once, not twice (see [Audio between other data](#audio-between-other-data)) |
 | `tp.bat` | new — mp3 → mp3rw → mp3c → mp3 roundtrip check |
 
 ## Verification
@@ -167,8 +168,10 @@ comma operand first.
 40 inputs: `cat1.mp3`; lame-encoded MPEG-1/2/2.5, mono/stereo/joint stereo,
 CBR/VBR/ABR, CRC, ID3v1/v2, free format; truncated, corrupted, and concatenated
 with junk (up to 6.4 MB, a 145 MB dump); empty, random, zero and 0xFF files.
-For every input `c` writes `.dmp` and `.out` byte-identical to `mp3rw0.exe`
-(run under Wine), and `d` restores the input exactly, with each of:
+For every input `c` writes `.out` byte-identical to `mp3rw0.exe` (run under
+Wine), and `.dmp` too, except for inputs with more than one frame sequence
+(see [Audio between other data](#audio-between-other-data)); `d` restores the
+input exactly, with each of:
 
 | toolchain | target | flags |
 | --- | --- | --- |
@@ -300,7 +303,67 @@ right before an mp3 stream).
   tables and the bit accounting agree with those encoders.
 - `mp3rw c` output for all Layer III inputs, and for 8 real mp3s from
   samples.ffmpeg.org (cover art, "misidentified" files, a broken first frame),
-  is byte-identical to `mp3rw0.exe`'s.
+  is byte-identical to `mp3rw0.exe`'s, except for the `.dmp` of the 6 inputs
+  with more than one frame sequence (see below).
 - The whole chain restores every input exactly with each of 18 builds, as
   above (gcc / clang, `-O2`..`-Ofast`, `-m32`, MinGW and clang PE under Wine),
   and all of them write the same `.c` files.
+
+# Audio between other data
+
+In a movie the audio frames alternate with video data: AVI and MKV put every
+frame in a chunk of its own, MP4 a few frames per chunk. For mp3rw each run of
+frames between two pieces of video is a frame sequence of its own.
+
+## Bits stored twice
+
+At the end of a sequence `mp3rw.inc` writes the bits after the last frame's
+main data (`Garbage` / `GrbLen`) to `.out`, and it left them set. The first
+frame of the next sequence has nothing of its own to put there (nothing is
+pending for `GarbageStore`), so its `.dmp` record carried the same bits again.
+`mp3rw d` doesn't use them, so files still restored; the copy only took space.
+`mp3rw0.exe` does the same.
+
+In a plain mp3 that's nothing, or tens to hundreds of bytes where files were
+concatenated. In a movie it's most of the audio: a frame that starts a
+sequence has lost the bit reservoir it was encoded with, so when its main data
+starts in the reservoir (`main_data_begin` > 0), mp3rw keeps the whole frame
+body as garbage, and every frame body ended up in both files. `mp3rw.inc` now
+clears `GrbLen` after `write_garbage()`:
+
+| file | size | before: `.c` + `.out` | now |
+| --- | --- | --- | --- |
+| `movie_l3.avi`: MPEG-4 video, mp3 128 kbps | 2583452 | 1031345 + 2509862 | 61945 + 2509862 |
+| same, MKV | 2505327 | 1033928 + 2432655 | 62645 + 2432655 |
+| same, MP4 | 2510138 | 1034843 + 2097108 | 427424 + 2097108 |
+| `lowvideo.avi`: mp3 320 kbps | 1782112 | 1696126 + 1732223 | 36362 + 1732223 |
+
+Only the first frame record of each sequence after the first changes, so
+`.out` is the same as before and so is `.dmp` for a file with one sequence.
+`mp3rw0.exe d` restores the new dumps. Of the 40 Layer III test inputs, 6 have
+more than one sequence (concatenated files, junk, random data). The whole chain
+restores all 97 inputs from above, the 5 movies, 8 real mp3s and 3 MPEG
+program/transport streams exactly. The fix changes the dumps of 14 of them, and
+for those all 18 builds restore them and write the same `.c` files.
+
+## Not done: the bit reservoir across other data
+
+The movies still hardly shrink: as above, a frame after video data has no
+reservoir, so most frame bodies stay raw, now in `.out` only. The same audio
+packed on its own (`ffmpeg -c:a copy`) shows what that costs:
+
+| file | now | audio on its own, packed, + the rest of the file |
+| --- | --- | --- |
+| `movie_l3.avi` | 2571807 | 822235 + 1625603 = 2447838 |
+| `movie_l3.mkv` | 2495300 | 822235 + 1547478 = 2369713 |
+| `movie_l3.mp4` | 2524532 | 822235 + 1552289 = 2374524 |
+| `lowvideo.avi` | 1768585 | 1229802 + 180284 = 1410086 |
+
+Getting there means continuing the sequence across the other data: `mp3rw c`
+would join the frames up as a demuxer does and record where the other data
+goes, which changes the `.dmp` / `.out` format.
+
+Layer I/II frames don't need a reservoir, but in a movie mp3rw mostly doesn't
+find them: a layer I/II frame is only taken next to another one (see
+[Layer I / II](#layer-i--ii)), and in an AVI every frame has video data on both
+sides. Of the 375 Layer II frames in `movie_l2.avi`, mp3rw takes 11.
