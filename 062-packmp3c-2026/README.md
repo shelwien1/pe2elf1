@@ -12,6 +12,10 @@ check against both dumps.
 Build with `g.bat` (MinGW g++), `gc.bat` (clang++ with the MSVC headers/libs) or
 `c.bat` + `icl64.cfg` (Intel icl).
 
+`mp3pack` ([mp3pack](#mp3pack), at the end) is mp3rw and mp3c in one
+program, with aacpack's command line and threads: `mp3pack c in.mp3 out
+outside` and `mp3pack d out outside in.mp3`.
+
 `mp3c_improvement.md` measures where mp3c's output goes, part by part, and
 what would make it smaller. The model's mixing stages ([Compression: mixing
 stages](#compression-mixing-stages), at the end) came of it: the `.c`
@@ -530,3 +534,154 @@ dump, in seconds:
 | --- | ---: | ---: | ---: | ---: |
 | `path.dmp` | 2.79 → 3.64 | 1.30x | 3.06 → 3.88 | 1.27x |
 | `mp3_misidentified_2.dmp` (87 MB) | 5.11 → 6.37 | 1.25x | 5.36 → 6.84 | 1.28x |
+
+# mp3pack
+
+mp3rw and mp3c in one program, with the front end of
+[aacpack](https://github.com/shelwien1/pe2elf1/tree/claude/aacpack-lossless-compressor-rlba00):
+its command line, files, progress line and threads (MTwrap).
+
+```
+mp3pack c [options] input output outside      compress
+mp3pack d [options] input outside output      decompress
+```
+
+`c` parses the input as `mp3rw c` does, codes its frames with mp3c's model
+into `output`, and writes what is not frames into `outside`: the bytes
+between runs of frames, each run's length and the bits after its last frame.
+That file is mp3rw's `.out`, byte for byte, and is not compressed (whatever
+compresses the rest of an archive takes it). `d` restores the input from
+the two. Any input goes: a file with no frames comes out as 17 bytes and
+the file itself as its outside data.
+
+| option | |
+| --- | --- |
+| `-v` | statistics on stderr: the sizes, the outside data, the frames and their runs; on threads, the parts |
+| `-p` | the progress line even when stderr is not a terminal (where it is, always) |
+| `-t N` | `c`: compress on N threads, 1 to 64 (default 1): the frames in parts (Threads, below); `d` takes N from the stream |
+| `-c N` | `c -t`: the size of a part of the input, at least: N MB, 1 to 1024, or N KB with a `k`; 1 MB by default |
+
+As in aacpack: input, output and outside can be `-` (stdin, stdout; one of
+each at most), and no two the same file. An output is written under a
+temporary name beside it (`name.PID.tmp`) and renamed when the call is done,
+so a call that fails, or is ended by a signal (SIGINT, SIGTERM, SIGHUP,
+SIGPIPE, ...), leaves what was there; `c` keeps both of its outputs or
+neither. Exit status: 0 done, 1 an error (said on stderr), 2 a bad command
+line. On a terminal (or with `-p`) `c` and `d` show their progress:
+
+```
+[enc] 4206720 > 3568720  100.0%  10086 frames  done in 3.74s  38.09M RAM at most
+```
+
+```
+./mk.sh mp3pack           ./mp3pack (g.bat: mp3pack.exe, with MinGW g++)
+```
+
+mp3pack is one translation unit, `mp3pack.cpp` (its command line) and
+`mp3pack_src/` (the rest), on Lib3, MTwrap (`MTwrap_v3/`, aacpack's, and
+Lib3's `win_shim.inc`) and mp3rw's and mp3c's sources as they are.
+
+## How it works
+
+The parser (`mp3pack_src/split.inc`) is mp3rw's: a coroutine whose output
+is mp3rw's dump, the frames' records, and which writes the outside data
+straight to its file, through a buffer, as it comes, not through a second
+output of the coroutine (mp3rw's pin 2). The dump goes to mp3c's model in
+memory: the two coroutines chained (Lib3's `CoroutinePair`), and its records
+not padded to 1 MB blocks as the `.dmp` file has them (`frame_dump_io.inc`,
+`FRAME_DUMP_ALIGN`). `d` runs mp3c's model into the restorer (`join.inc`,
+mp3rs's), which reads the outside data from its file the same way.
+
+The stream: the magic `mp3pk`, a version byte, the threads (1: one model)
+and the part size in KB (u32), then the stream of mp3c's model, the bytes
+`mp3c c` writes for the dump (with one model the stream is mp3c's `.c` and
+15 bytes), or on threads MTwrap's container of the workers' streams; and the
+CRC-32 of the input, which `d` checks.
+
+## Threads
+
+As aacpack's `-t` (`mt.inc`): the parser, on the main thread, writes the
+outside data and puts the frames' records out in parts, and MTwrap deals the
+parts in turn to N workers, each with mp3c's model. A part ends before the
+first frame at least `-c` of the input after its start, or at 16 times that
+of records (a frame's record is about 5.5 KB: 5 to 80 times the frame). A
+worker reads a part whole, codes it, and writes a record (the part's size
+compressed, its records' size and its place in the file) and the part
+compressed. A worker's model goes on from one of its parts to the next:
+`d` deals the parts to the workers in the same turns, so each worker
+decodes the parts it coded, in that order, and its model learns from all of
+them (aacpack's starts from nothing in each part: Results, below). `d` runs as many threads as the stream says, and
+MTwrap takes the parts' records from the workers in turn into the restorer,
+on the main thread.
+
+## Broken streams
+
+`d` takes the last 4 bytes of its input for the CRC and the rest for the
+stream. It fails, with exit status 1 and its output removed, where:
+
+- the stream does not end where its input does (a model that ends before
+  it, or wants more than 8 bytes past it: those are 0xFF, past which a
+  range coder never reads more than 4), or a part's record does not match
+  its part (on threads);
+- mp3c's model decodes a frame mp3rw's parser would not take: a header with
+  no bit rate or the reserved sampling rate, `big_values` past 288, more
+  bits after the frame than mp3rw keeps (`BadData()`, which ends the
+  model's run: these checks, and two reads now bounded, are the model's
+  only change, and none touches what a valid stream codes);
+- the restorer gets a frame its writer has no tables for, or whose bits
+  after it would go past the writer's buffer, or the outside data ends
+  before the dump does, or goes on after it;
+- the file restored is not the one compressed (the CRC): another file's
+  outside data, a stream changed.
+
+## Results
+
+Six of the test files end to end (`01_-_Charity_Case`, `Ed_Rush_-_Sabotage`,
+`Silent_Light`, `jpg_in_mp3`, `mp3_misidentified` and `path`: 35679367
+bytes, 58188 frames), on 4 cores of the VM the rest was measured on:
+
+| | compressed | | `c` | `d` | memory |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `mp3rw c` + `mp3c c` (and back) | 27259506 and 82523 of `.out` | | 28.4 s | 28.9 s | |
+| one model | 27259521 and the same `.out` | | 28.6 s | 28.3 s | 38 MB |
+| `-t 2` | 27303105 | +0.16% | 14.3 s | 14.2 s | 123 MB |
+| `-t 4` | 27352027 | +0.34% | 7.8 s | 7.8 s | 227 MB |
+| `-t 4 -c 256k` | 27369982 | +0.41% | 7.5 s | 7.6 s | 174 MB |
+| `-t 4 -c 4` | 27300196 | +0.15% | 8.3 s | 11.0 s | 417 MB |
+
+With one model, mp3pack takes the time `mp3rw` and `mp3c` take, without
+the dump between them (about 280 MB of it here). On threads the stream is
+larger by what a model learns from the frames the other workers have: a
+worker's model sees a quarter of them on 4. That its model goes on from
+part to part keeps small parts cheap: on `Silent_Light` in parts of 256 KB
+on 3 threads, +0.42%, where models started from nothing in each part cost
++1.27%. With few parts a worker can be left with more than the others: at
+4 MB this file is 9 parts. Each worker has a model (40 MB) and holds a part
+whole, its records: up to 16 times the part size.
+
+## Tests
+
+- The 125 test inputs round-trip, with one model and on 3 threads in parts
+  of 64 KB. Their outside data is mp3rw's `.out`, and with one model the
+  stream is mp3c's `.c`, byte for byte.
+- gcc and clang builds write the same streams; so does the MinGW g++ build
+  under Wine (x86-64), with and without threads, and each decodes the
+  other's.
+- Streams cut short, with bytes changed or after them, with another file's
+  outside data or with outside data cut short or longer; pipes; an input
+  and an output that are the same file; a signal mid-call (the temporary
+  files go, a file that was there stays).
+- `test/fuzz.py BIN WORKDIR SEED N files...` (as aacpack's): streams and
+  outside data cut, with bits flipped, bytes inserted, deleted or repeated,
+  of each file compressed with one model and on 2 threads. On ten small
+  files (MPEG-1, 2 and 2.5 layer III, layers I and II, with CRCs, runs
+  between other data), 12000 of them, 6000 with a UBSan build
+  (`-fsanitize=undefined`, but for alignment and shifts of negative values,
+  which mp3c's parser and its CRC make on purpose): `d` ends with 0 (the
+  file back) or 1 on each, no crash, no hang, no report. The runs before
+  found the frames mp3c's model and the restorer now refuse (above). ASan
+  cannot run the chained coroutines, as aacpack's `c -t`: it crashes in
+  their stack copies.
+- `test/roundtrip.sh BIN files...` round-trips files with one model and
+  with `OPTS` (default `-t 3 -c 64k`), and checks the outside data against
+  `mp3rw c`'s `.out` where `MP3RW` names one.
