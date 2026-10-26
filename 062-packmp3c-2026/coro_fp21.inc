@@ -1,9 +1,18 @@
 
-#define xInp (this->pin[3])
-#define xOut (this->pin[2])
+// coro3 pin[i] yields 1+i when its buffer needs service, so the second input
+// has to be pin[2] to arrive here as r==3; must match xInp in mp3rs.inc.
+#define xInp (this->pin[2])
+#define xOut (this->pin[3])
 
 template < class Model, int inpbufsize=1<<16, int in2bufsize=1<<16, int outbufsize = 1<<16 > 
 struct CoroFileProc21 : Model {
+
+  using Model::f_quit;
+  using Model::outptr;
+  using Model::coro_init;
+  using Model::coro_call;
+  using Model::addinp;
+  using Model::addout;
 
   ALIGN(4096) byte inpbuf[inpbufsize];
   ALIGN(4096) byte in2buf[in2bufsize];

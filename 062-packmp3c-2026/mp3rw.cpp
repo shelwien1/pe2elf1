@@ -1,6 +1,13 @@
 
 #include "common.inc"
 
+// The dump written by mp3rw/frame_dump_io.inc is the raw bytes of struct
+// mp3frame between &GrbLen and &Garbage, so it has to be built with the same
+// packing as mp3c.cpp (and as the original Lib/common.inc imposed globally).
+// Without it every frame record gets 2 bytes of padding after CRC and the 1MB
+// block padding moves, so the dump is no longer the format of mp3rw0.exe/mp3c.
+#pragma pack(1)
+
 #include "coro3b.inc"
 //#include "coro2_pin.inc"
 

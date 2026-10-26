@@ -107,3 +107,79 @@ back to the original.
 
 The Windows binaries were exercised under Wine. gcc builds no longer need
 `-fpermissive`.
+
+# mp3rw — MP3 frame dump / restore
+
+```
+mp3rw c cat1.mp3 .dmp .out      split into frame dump + everything else
+mp3rw d .dmp .out cat1.unp      restore
+```
+
+`mp3rw0.exe` is the original (coro2) build; `.dmp` and `.out` are its output
+for `cat1.mp3` (`trw.bat`). `gc.bat` builds `mp3rw.exe`.
+
+## What was broken
+
+After the port to `coro3b` there were three separate bugs.
+
+### 1. The `.out` stream was on the wrong pin
+
+In coro3b `pin[i]` yields `1+i`. `mp3rw.inc` writes `.out` through `pin[2]`
+and `mp3rs.inc` reads it from `pin[2]` — the `r==3` the frontends handle — but
+`coro_fp12.inc` / `coro_fp21.inc` gave their second buffer to `pin[3]`. `c`
+crashed on the first `.out` byte (`pin[2].ptr` was NULL), and `d` hung asking
+for `.out` data that kept going to `pin[3]`.
+
+### 2. `#pragma pack(1)`
+
+Same as for mp3c above: the dump is the raw bytes of `struct mp3frame`. Built
+unpacked, every frame record has 2 bytes of padding after `CRC` (cat1:
+3622909 bytes instead of 3622739), which is not the format of `mp3rw0.exe` and
+mp3c.
+
+### 3. `putbits` evaluation order
+
+```
+#define putbits( c,l ) ( ((uint&)Out[(OutPtr-=l)>>3])|=((c)<<(OutPtr&7)) )
+```
+
+decrements `OutPtr` in the left operand of `|=` and reads it in the right one.
+That is unsequenced before C++17, and C++17 evaluates the right operand first.
+clang does so in every `-std` mode, so `d` wrote every field at the wrong bit
+offset; gcc does it when the right operand has a side effect, which is
+`procbits( *scf++, num )` in `parse_scale2.inc`, so MPEG-2/2.5 files did not
+restore. `c` was unaffected: `getbits` uses a shift, whose operands C++17
+sequences left to right. Both macros now update the bit pointer in a separate
+comma operand first.
+
+## Changes
+
+| file | change |
+| --- | --- |
+| `coro_fp12.inc`, `coro_fp21.inc` | second stream on `pin[2]`; `using Model::…` declarations, so gcc and clang build them without `-fms-compatibility` |
+| `mp3rw.cpp` | `#pragma pack(1)` after `common.inc`, as in `mp3c.cpp` |
+| `mp3rw/mp3_parse/parse__mp3.inc` | `getbits` / `putbits` update the bit pointer before using it |
+
+## Verification
+
+40 inputs: `cat1.mp3`; lame-encoded MPEG-1/2/2.5, mono/stereo/joint stereo,
+CBR/VBR/ABR, CRC, ID3v1/v2, free format; truncated, corrupted, and concatenated
+with junk (up to 6.4 MB, a 145 MB dump); empty, random, zero and 0xFF files.
+For every input `c` writes `.dmp` and `.out` byte-identical to `mp3rw0.exe`
+(run under Wine), and `d` restores the input exactly, with each of:
+
+| toolchain | target | flags |
+| --- | --- | --- |
+| g++ 13 | x86-64 ELF, i386 (`-m32`) | `-O2`, `-O3`, `-Ofast`; `-std=gnu++11`, `-std=c++23` |
+| clang 18 | x86-64 ELF, i386 (`-m32`) | `-O2`, `-O3`, `-Ofast`; `-std=c++17`, `-std=c++23` |
+| MinGW-w64 g++ 13 | x86_64 PE | `g.bat` flags |
+| clang 18 | x86_64 PE (`--target=x86_64-w64-mingw32`) | `gc.bat` flags with MinGW instead of MSVC headers and no `-fms-compatibility`; with and without `-flto` |
+
+Linux builds need `-D'__max(a,b)=...'` / `-D'__min(a,b)=...'`; the MSVC and
+MinGW headers define those.
+
+`cat1.mp3` → `mp3rw c` → `mp3c c` (138150 bytes) → `mp3c d` → `mp3rw d` gives
+back the original mp3. `mp3c d` does not give back the `.dmp` byte for byte:
+`p23sum`, `p23len` and the unused bits of the last `Garbage` byte differ, so
+`t.bat`'s `fc /b` reports a mismatch on a fresh mp3rw dump. `mp3rw d` doesn't
+depend on those.

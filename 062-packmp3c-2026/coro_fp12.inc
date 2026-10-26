@@ -1,9 +1,18 @@
 
-#define xInp (this->pin[2])
-#define xOut (this->pin[3])
+// coro3 pin[i] yields 1+i when its buffer needs service, so the second output
+// has to be pin[2] to arrive here as r==3; must match xOut in mp3rw.inc.
+#define xInp (this->pin[3])
+#define xOut (this->pin[2])
 
 template < class Model, int inpbufsize=1<<16, int outbufsize = 1<<16, int ou2bufsize=1<<16 > 
 struct CoroFileProc12 : Model {
+
+  using Model::f_quit;
+  using Model::coro_init;
+  using Model::coro_call;
+  using Model::addinp;
+  using Model::addout;
+  using Model::getoutsize;
 
 //  enum { inpbufsize = 1<<16, outbufsize = 1<<16 };
 

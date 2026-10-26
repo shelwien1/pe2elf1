@@ -9,8 +9,14 @@ struct mp3parse : Coroutine, mp3frame {
   
   word cCRC;
 
-  #define getbits( buf, l )   ((((uint&)buf[(BufPtr-=l)>>3])>>(BufPtr&7)) & ((1<<l)-1))
-  #define putbits( c,l )      ( ((uint&)Out[(OutPtr-=l)>>3])|=((c)<<(OutPtr&7)) )
+  // The pointer has to be decremented before (BufPtr&7)/(OutPtr&7) is read,
+  // so do it as a separate comma operand. putbits used to decrement OutPtr in
+  // the left operand of |= and read it in the right one: unsequenced before
+  // C++17, right operand first since. clang always took the right operand
+  // first, gcc did for procbits(*scf++,num) in parse_scale2.inc (MPEG-2/2.5),
+  // and the decoder wrote those bits at the wrong offset.
+  #define getbits( buf, l )   ( BufPtr-=l, (((uint&)buf[BufPtr>>3])>>(BufPtr&7)) & ((1<<l)-1) )
+  #define putbits( c,l )      ( OutPtr-=l, ((uint&)Out[OutPtr>>3])|=((c)<<(OutPtr&7)) )
   #define procbits( c,l )     (ProcMode?c=getbits(sinf,l):putbits(c,l))
 
   byte Buf[2*BufSiz];
