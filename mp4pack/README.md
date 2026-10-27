@@ -1,8 +1,9 @@
 # mp4pack
 
-Lossless compression of whole mp4/mkv/avi files, for Windows. `mp4pack.exe` is a
-wrapper: it takes the container apart with `avip`, gives each stream to the
-packer made for it, and stores the results in one `shar a0` archive.
+Lossless compression of whole mp4/mkv/avi files, for Windows and Linux (see
+[Linux](#linux)). `mp4pack.exe` is a wrapper: it takes the container apart with
+`avip`, gives each stream to the packer made for it, and stores the results in
+one `shar a0` archive.
 
 ```
 mp4pack c [options] input output     compress
@@ -257,15 +258,79 @@ g++ -std=c++11 -O2 -s -static -municode -o mp4pack.exe mp4pack.cpp
 ```
 
 clang++ works the same way (for the MSVC target `wmain` needs no `-municode`).
+For the Linux build see below.
+
+## Linux
+
+The same `mp4pack.cpp` builds for Linux (x86-64, glibc), with `g++` or `clang++`:
+
+```
+./build_linux.sh        # g++ -std=c++11 -O2 -pthread -o mp4pack mp4pack.cpp
+```
+
+There `winapi_posix.h` takes the place of `<windows.h>`. It implements the Win32
+functions mp4pack calls on POSIX, so the program is the same one as on Windows.
+The functions cover files, pipes, processes, threads and waits, the console,
+Ctrl+C and the CPU.
+
+The tools are the Windows ones, converted to Linux programs by
+[pe2elf](https://github.com/shelwien1/pe2elf). They run with its
+`winapi_shim.so`, loaded from their own directory. This needs the fixes in
+[shelwien1/pe2elf#28](https://github.com/shelwien1/pe2elf/pull/28) (until that
+is merged, its branch `claude/mp4pack-tools`). `tools_linux.sh PE2ELF_DIR
+TOOLS_DIR [OUT_DIR]` converts each `<tool>.exe` in TOOLS_DIR to
+`OUT_DIR/<tool>` and puts `winapi_shim.so` beside them:
+
+```
+git clone -b claude/mp4pack-tools https://github.com/shelwien1/pe2elf
+make -C pe2elf
+./tools_linux.sh pe2elf mp4pack_v0 bin   # mp4pack_v0/h264p_avx2.exe -> bin/h264p_avx2 ...
+cp mp4pack bin/
+bin/mp4pack c movie.mkv movie.mpk
+bin/mp4pack d movie.mpk movie2.mkv
+```
+
+The tools are looked up as on Windows, without the `.exe`: `h264p_avx2`,
+`h264p` ... (rename the `mp4pack_v0` builds to `<tool>_avx2.exe` first, as for
+Windows). Everything else works as described above, with these differences:
+
+- The work directory goes in `$TMPDIR`, or `/tmp`.
+- Any file name works, also one that is not UTF-8. The tools take UTF-8 names
+  and treat `\` as `/`. So a name with a `\` or with bytes that are not UTF-8
+  never reaches them. The input is then given to avip as a link in the work
+  directory (a hard link, or a symbolic one across file systems). The output is
+  written in the work directory and then moved.
+- Ctrl+C, SIGTERM, SIGHUP and SIGQUIT stop mp4pack as Ctrl+C does on Windows:
+  the tools are stopped, the work directory is removed, and the exit code is 5.
+  The tools die with mp4pack however it ends (`PR_SET_PDEATHSIG`, in place of
+  the job object).
+- The threads are the processors mp4pack may run on (its affinity, e.g. with
+  `taskset`); the cores are counted from sysfs, and `-f` reads `/proc/stat`.
+- A tool killed by a signal shows as exit code 128+N (e.g. 139 for SIGSEGV).
+
+The archives are the same on both systems: an archive made on one decompresses
+on the other. The index's `tools` line lists the builds (`h264p_avx2` or
+`h264p_avx2.exe`). Apart from that line, only mp3pack's output with more than
+one thread differs, and it differs from run to run on Windows too.
+
+Tested on Linux as on Windows: the sample files with the `-t`/`-c`/`-l`
+combinations, and archives from the Windows build decompressed by the Linux one
+and the other way round. Names with spaces, quotes, `\`, Cyrillic and bytes
+that are not UTF-8; paths of 389 characters; relative paths; a new nested `-w`
+directory on another file system (`/dev/shm`). Tools that are missing, fail,
+crash or cannot be run (they fall back to shar). Damaged and foreign archives.
+SIGINT to the process group, SIGTERM, and SIGKILL (then the tools end at once
+and only the work directory is left). And the movie, below.
 
 ## Testing
 
 `test\roundtrip.bat MP4PACK "OPTIONS" FILE...` (Windows) and
-`test/roundtrip.sh BINDIR OUTDIR "OPTIONS" FILE...` (under wine) compress each
-file with the options, decompress it and compare, a line per file. E.g.
+`test/roundtrip.sh BINDIR OUTDIR "OPTIONS" FILE...` (BINDIR with `mp4pack.exe`:
+under wine; else the Linux `mp4pack`) compress each file with the options,
+decompress it and compare, a line per file. E.g.
 `test\roundtrip.bat c:\mp4pack_v0\mp4pack.exe "-t 50%+50%-1" a.mkv b.mp4`.
 `test/parse_test.cpp` checks the `-t`/`-c`/`-l` parsing (build it like
-mp4pack.exe and run it).
+mp4pack.exe and run it; on Linux `g++ -std=c++11 -pthread test/parse_test.cpp`).
 
 Done here with wine 9 on Linux: the `003` mkv/mp4 test files, synthetic files
 with every kind of stream (h264, aac, mp3, vorbis, ac3, opus, flac, xvid,

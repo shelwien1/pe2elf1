@@ -1,6 +1,8 @@
 // Tests of mp4pack's -t, -c and -l parsing. Build like mp4pack.exe (with
 // -municode) and run: parse_test.exe prints the failures, exits with 1 if any.
+// On Linux: g++ -std=c++11 -pthread -o parse_test test/parse_test.cpp
 #define wmain mp4pack_wmain
+#define WINAPI_POSIX_NO_MAIN // (Linux: the main below)
 #include "../mp4pack.cpp"
 #undef wmain
 
@@ -106,3 +108,7 @@ int wmain( int, wchar_t** ) {
   printf( fails ? "%d failed\n" : "all passed\n", fails );
   return fails!=0;
 }
+
+#ifndef _WIN32
+int main() { return wmain( 0, 0 ); }
+#endif

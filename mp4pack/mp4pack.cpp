@@ -1,4 +1,5 @@
-// mp4pack.cpp -- lossless compression of whole mp4/mkv/avi files (Windows)
+// mp4pack.cpp -- lossless compression of whole mp4/mkv/avi files (Windows;
+// Linux with winapi_posix.h, the Win32 functions used here on POSIX)
 //
 //   mp4pack c [options] input output     compress
 //   mp4pack d [options] input output     decompress
@@ -15,13 +16,22 @@
 // there for this CPU (h264p_avx2.exe, h264p.exe, ...: GetTool), with the work
 // directory as their current one and relative paths on their command lines:
 // they take ANSI command lines, so only names that survive that reach them
-// (ToolName).
+// (ToolName). On Linux they are the Windows tools converted by pe2elf (named
+// without .exe: h264p_avx2), which take '\' for '/', and UTF-8.
 
+#ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
 #include <windows.h>
+#define DS "\\"        // the directory separator, in literals: L"u" DS
+#define EXE ".exe"     // the tools' extension
+#else
+#include "winapi_posix.h"
+#define DS "/"
+#define EXE ""
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -72,8 +82,8 @@ static vector< vector<int> > stages;  // -t: groups run at once ('+'), stage aft
 static int f_dec, f_verbose, f_keep, f_free;
 static wstring w_base;                // -w
 
-static wstring exe_dir;               // ours and the tools', with a trailing '\'
-static wstring work;                  // the work directory, with a trailing '\'
+static wstring exe_dir;               // ours and the tools', with a trailing separator
+static wstring work;                  // the work directory, with a trailing separator
 static HANDLE h_err, h_jobobj, ev_abort, ev_done;
 static volatile LONG f_abort;
 static int f_con;                     // stderr is a console: there is a status line
@@ -148,7 +158,9 @@ static string Quote( const string& a ) {
 static void Put( string s ) {
   DWORD n;
   if( f_con ) { wstring w = W(s); WriteConsoleW( h_err, w.data(), DWORD(w.size()), &n, 0 ); return; }
+#ifdef _WIN32
   for( size_t i=0; (i=s.find('\n',i))!=string::npos; i+=2 ) s.insert( i, "\r" ); // (a file or pipe)
+#endif
   WriteFile( h_err, s.data(), DWORD(s.size()), &n, 0 );
 }
 
@@ -202,16 +214,31 @@ static wstring FullPath( const wstring& p ) {
 
 // our own calls take long paths in the \\?\ form
 static wstring LongPath( const wstring& p ) {
+#ifdef _WIN32
   if( (p.size()<MAX_PATH-12) || (p.compare(0,4,L"\\\\?\\")==0) ) return p;
   if( p.compare(0,2,L"\\\\")==0 ) return L"\\\\?\\UNC\\"+p.substr(2);
   return L"\\\\?\\"+p;
+#else
+  return p;
+#endif
 }
 
-static wstring FileName( const wstring& p ) { return p.substr( p.find_last_of( L"\\/" )+1 ); }
+// a directory separator: '\' or '/' (on Linux '/' only)
+static int IsSep( wchar_t c ) { return (c==L'/') || ((c==L'\\') && (DS[0]=='\\')); }
 
-// 1 if a tool's ANSI command line carries the name as it is
+static wstring FileName( const wstring& p ) {
+  size_t i = p.size();
+  while( i && !IsSep( p[i-1] ) ) i--;
+  return p.substr( i );
+}
+
+// 1 if a tool's ANSI command line carries the name as it is (on Linux it is
+// UTF-8: a name with no '\' in it, and no byte that is not UTF-8)
 static int AnsiOK( const wstring& w ) {
   if( w.empty() || (w.size()>=MAX_PATH-4) ) return 0;
+#ifndef _WIN32
+  for( size_t i=0; i<w.size(); i++ ) if( (w[i]==L'\\') || ((w[i]>=0xDC80) && (w[i]<=0xDCFF)) ) return 0;
+#endif
   if( GetACP()==CP_UTF8 ) return 1;
   BOOL bad = 0;
   int n = WideCharToMultiByte( CP_ACP, WC_NO_BEST_FIT_CHARS, w.c_str(), int(w.size()), 0, 0, 0, &bad );
@@ -342,14 +369,14 @@ static int MakeFile( const wstring& path, qword size ) {
   return r;
 }
 
-static void MakeDirs( const wstring& d ) { // d ends with '\'
-  for( size_t i=1; i<d.size(); i++ ) if( ((d[i]=='\\') || (d[i]=='/')) && (d[i-1]!=':') && (d[i-1]!='\\') ) CreateDirectoryW( d.substr(0,i).c_str(), 0 );
+static void MakeDirs( const wstring& d ) { // d ends with a separator
+  for( size_t i=1; i<d.size(); i++ ) if( IsSep(d[i]) && (d[i-1]!=':') && !IsSep(d[i-1]) ) CreateDirectoryW( d.substr(0,i).c_str(), 0 );
 }
 
-// a file, or a directory (named with a trailing '\') and all in it
+// a file, or a directory (named with a trailing separator) and all in it
 static void Remove( const wstring& p ) {
   if( p.empty() ) return;
-  if( p[p.size()-1]!='\\' ) {
+  if( !IsSep( p[p.size()-1] ) ) {
     if( !DeleteFileW( p.c_str() ) ) { SetFileAttributesW( p.c_str(), FILE_ATTRIBUTE_NORMAL ); DeleteFileW( p.c_str() ); }
     return;
   }
@@ -359,7 +386,7 @@ static void Remove( const wstring& p ) {
     do {
       wstring n = fd.cFileName;
       if( (n==L".") || (n==L"..") ) continue;
-      if( (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && !(fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) ) Remove( p+n+L"\\" );
+      if( (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && !(fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) ) Remove( p+n+L"" DS );
       else if( fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY ) RemoveDirectoryW( (p+n).c_str() ); // (a link: not into it)
       else Remove( p+n );
     } while( FindNextFileW( h, &fd ) );
@@ -381,7 +408,7 @@ static bool NameLess( const wstring& a, const wstring& b ) {
   return (x!=y) ? (x<y) : (a<b);
 }
 
-static qword DirSize( const wstring& dir ) { // dir ends with '\'
+static qword DirSize( const wstring& dir ) { // dir ends with a separator
   qword n = 0;
   WIN32_FIND_DATAW fd;
   HANDLE h = FindFirstFileW( (dir+L"*").c_str(), &fd );
@@ -389,7 +416,7 @@ static qword DirSize( const wstring& dir ) { // dir ends with '\'
     do {
       wstring f = fd.cFileName;
       if( !(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ) n += (qword(fd.nFileSizeHigh)<<32) | fd.nFileSizeLow;
-      else if( (f!=L".") && (f!=L"..") ) n += DirSize( dir+f+L"\\" );
+      else if( (f!=L".") && (f!=L"..") ) n += DirSize( dir+f+L"" DS );
     } while( FindNextFileW( h, &fd ) );
     FindClose( h );
   }
@@ -411,7 +438,8 @@ static vector<wstring> ListFiles( const wstring& dir ) {
 //---- the CPU, and the tool builds for it
 
 // Builds of a tool for instruction sets are named by a suffix: h264p_avx2.exe;
-// h264p.exe is taken to run anywhere. The best one the CPU can run is used.
+// h264p.exe is taken to run anywhere (on Linux: h264p_avx2, h264p). The best
+// one the CPU can run is used.
 enum { L_X64, L_SSE3, L_SSSE3, L_SSE41, L_SSE42, L_AVX, L_AVX2, L_AVX512, N_LEVEL };
 static const char* l_name[N_LEVEL] = { "x64", "sse3", "ssse3", "sse41", "sse42", "avx", "avx2", "avx512" };
 
@@ -434,8 +462,9 @@ static int Level( const string& suffix ) {
 static int cpu_threads, cpu_cores, cpu_level, cpu_isa;
 
 #if (defined(_M_X64) && !defined(_M_ARM64EC)) || defined(__x86_64__)
-// CPUID and XGETBV as machine code (Microsoft x64 calling convention), not a
-// compiler's intrinsics
+// CPUID and XGETBV as machine code (the Microsoft x64 calling convention; on
+// Linux the System V one), not a compiler's intrinsics
+#ifdef _WIN32
 static const byte x_cpuid[] = {  // void f( uint leaf, uint subleaf, uint r[4] )
   0x53,                          // push rbx
   0x89,0xC8,                     // mov eax,ecx
@@ -452,6 +481,26 @@ static const byte x_xgetbv[] = { // qword f( uint xcr )
   0x48,0xC1,0xE2,0x20,           // shl rdx,32
   0x48,0x09,0xD0,                // or rax,rdx
   0xC3 };                        // ret
+#else
+static const byte x_cpuid[] = {  // void f( uint leaf, uint subleaf, uint r[4] )
+  0x53,                          // push rbx
+  0x49,0x89,0xD0,                // mov r8,rdx
+  0x89,0xF8,                     // mov eax,edi
+  0x89,0xF1,                     // mov ecx,esi
+  0x0F,0xA2,                     // cpuid
+  0x41,0x89,0x00,                // mov [r8],eax
+  0x41,0x89,0x58,0x04,           // mov [r8+4],ebx
+  0x41,0x89,0x48,0x08,           // mov [r8+8],ecx
+  0x41,0x89,0x50,0x0C,           // mov [r8+12],edx
+  0x5B,                          // pop rbx
+  0xC3 };                        // ret
+static const byte x_xgetbv[] = { // qword f( uint xcr )
+  0x89,0xF9,                     // mov ecx,edi
+  0x0F,0x01,0xD0,                // xgetbv
+  0x48,0xC1,0xE2,0x20,           // shl rdx,32
+  0x48,0x09,0xD0,                // or rax,rdx
+  0xC3 };                        // ret
+#endif
 typedef void (*cpuid_t)( uint, uint, uint* );
 typedef qword (*xgetbv_t)( uint );
 
@@ -492,8 +541,9 @@ static int CpuidLevel() {
 static int CpuidLevel() { return -1; }
 #endif
 
-// the level as Windows tells it, where CPUID cannot be run; before Windows 10
-// it does not know the newer features (PF_SSE3_.. to PF_AVX512F_INSTRUCTIONS_AVAILABLE)
+// the level as the system tells it, where CPUID cannot be run; before Windows
+// 10 it does not know the newer features (PF_SSE3_.. to PF_AVX512F_INSTRUCTIONS_AVAILABLE;
+// on Linux: /proc/cpuinfo)
 static int OsLevel() {
   static const DWORD pf[] = { 13, 36, 37, 38, 39, 40, 41 };
   int l = L_X64;
@@ -541,20 +591,21 @@ static Tool tools[16];
 static int n_tools;
 
 // the best build of a tool in our directory: base.exe or base_<level>.exe
+// (on Linux base or base_<level>)
 static const Tool& GetTool( const string& base ) {
   for( int i=0; i<n_tools; i++ ) if( tools[i].base==base ) return tools[i];
   Tool& t = tools[n_tools++];
   t.base = base; t.used = 0;
   int best = -1;
-  string b = Lower( base );
+  string b = Lower( base ), e = EXE;
   WIN32_FIND_DATAW fd;
-  HANDLE h = FindFirstFileW( (exe_dir+W(base)+L"*.exe").c_str(), &fd );
+  HANDLE h = FindFirstFileW( (exe_dir+W(base)+L"*" EXE).c_str(), &fd );
   if( h!=INVALID_HANDLE_VALUE ) {
     do {
       if( fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY ) continue;
       string n = U(fd.cFileName), l = Lower(n);
-      if( (l.size()<b.size()+4) || (l.compare( 0, b.size(), b )!=0) || (l.compare( l.size()-4, 4, ".exe" )!=0) ) continue;
-      string x = l.substr( b.size(), l.size()-4-b.size() ); // "" or "_avx2"
+      if( (l.size()<b.size()+e.size()) || (l.compare( 0, b.size(), b )!=0) || (l.compare( l.size()-e.size(), e.size(), e )!=0) ) continue;
+      string x = l.substr( b.size(), l.size()-e.size()-b.size() ); // "" or "_avx2"
       int v = x.empty() ? L_X64 : (x[0]=='_') ? Level( x.substr(1) ) : -1;
       if( v<0 ) continue; // (another tool's)
       if( v>cpu_level ) { t.later += (t.later.size() ? ", " : "") + n; continue; }
@@ -586,11 +637,11 @@ static int MakeWork() {
     if( (n==0) || (n>MAX_PATH) ) { Msg( "no temp directory; give one with -w" ); return 1; }
     base.assign( t, n );
   }
-  if( (base[base.size()-1]!='\\') && (base[base.size()-1]!='/') ) base += L'\\';
+  if( !IsSep( base[base.size()-1] ) ) base += L"" DS;
   MakeDirs( base );
   for( uint i=0; i<1000; i++ ) {
     wstring d = base + L"mp4pack_" + W(Hex(GetCurrentProcessId())) + L"_" + W(Num(i));
-    if( CreateDirectoryW( d.c_str(), 0 ) ) { work = d+L"\\"; break; }
+    if( CreateDirectoryW( d.c_str(), 0 ) ) { work = d+L"" DS; break; }
     if( GetLastError()!=ERROR_ALREADY_EXISTS ) break;
   }
   if( work.empty() ) { Msg( "cannot make a work directory in " + U(base) ); return 1; }
@@ -719,7 +770,7 @@ static int Start( Job& j ) {
   if( err.empty() ) {
     if( f_verbose && !j.quiet ) c_err = Inheritable( h_err );
     else {
-      j.log = work + L"log\\" + W(Num(++n_log)) + L"_" + W(j.tool) + L".txt";
+      j.log = work + L"log" DS + W(Num(++n_log)) + L"_" + W(j.tool) + L".txt";
       c_err = CreateFileW( j.log.c_str(), GENERIC_WRITE, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, &sa, CREATE_ALWAYS, 0, 0 );
       if( c_err==INVALID_HANDLE_VALUE ) c_err = 0;
     }
@@ -946,13 +997,13 @@ static long long Probe( const string& tool, const string& args ) {
 
 struct Part {
   qword off, len;   // what of the stream it holds
-  string pk;        // the packed file in p\, or the archive it is in ("-": p\store\<name>)
+  string pk;        // the packed file in p, or the archive it is in ("-": p/store/<name>)
   string pk2;       // mp3pack's "outside" file; its name in a shar archive
   Part( qword o, qword l, const string& a, const string& b ) : off(o), len(l), pk(a), pk2(b) {}
 };
 
 struct Stream {
-  string name;      // as avip named it, in u\ (from the index: checked by SafeName)
+  string name;      // as avip named it, in u (from the index: checked by SafeName)
   qword size;
   uint crc;
   int m;            // method
@@ -968,8 +1019,8 @@ static string src_name;
 static qword src_size;
 static uint src_crc;
 
-static wstring UPath( const string& name ) { return work + L"u\\" + W(name); }
-static wstring PPath( const string& name ) { return work + L"p\\" + W(name); }
+static wstring UPath( const string& name ) { return work + L"u" DS + W(name); }
+static wstring PPath( const string& name ) { return work + L"p" DS + W(name); }
 
 static Job* NewJob( int g, int w, const string& label, const string& tool ) {
   Job* j = new Job;
@@ -1289,14 +1340,14 @@ static qword AdtsCut( HANDLE f, qword t, qword size ) {
 static int PackJobs() {
   for( size_t i=0; i<S.size(); i++ ) {
     Stream& s = S[i];
-    string u = Quote( "u\\"+s.name );
+    string u = Quote( "u" DS+s.name );
     int si = int(i);
     if( s.m==M_H264P ) {
       int n = th[G_VIDEO];
       string pk = s.name + ".h264p";
       Job* j = NewJob( G_VIDEO, n, "h264p " + s.name, "h264p" );
       j->args = "c" + LevelSp(M_H264P) + " -t " + Num(n) + (((n>1) && ch[G_VIDEO]) ? " -c "+ChunkArg(ch[G_VIDEO]) : string()) + (f_verbose ? "" : " -p")
-              + " " + u + " " + Quote("p\\"+pk);
+              + " " + u + " " + Quote("p" DS+pk);
       j->prog = 1; j->work = s.size; j->sids.push_back( si ); j->outs.push_back( PPath(pk) );
       s.part.push_back( Part( 0, s.size, pk, "" ) );
     } else if( s.m==M_AACPACK ) {
@@ -1318,7 +1369,7 @@ static int PackJobs() {
       for( size_t q=0; q+1<cut.size(); q++ ) {
         string pk = s.name + ((cut.size()>2) ? "."+Num(q) : string()) + ".aacp";
         Job* j = NewJob( G_AUDIO, 1, "aacpack " + s.name + ((cut.size()>2) ? "#"+Num(q) : string()), "aacpack" );
-        j->args = "c" + LevelSp(M_AACPACK) + " - " + Quote("p\\"+pk);
+        j->args = "c" + LevelSp(M_AACPACK) + " - " + Quote("p" DS+pk);
         j->in.path = UPath(s.name); j->in.off = cut[q]; j->in.len = cut[q+1]-cut[q];
         j->prog = 2; j->work = j->in.len; j->sids.push_back( si ); j->outs.push_back( PPath(pk) );
         s.part.push_back( Part( cut[q], cut[q+1]-cut[q], pk, "" ) );
@@ -1328,18 +1379,18 @@ static int PackJobs() {
       string pk = s.name + ".mp3p", pk2 = s.name + ".mp3o";
       Job* j = NewJob( G_AUDIO, n, "mp3pack " + s.name, "mp3pack" );
       j->args = "c -t " + Num(n) + (((n>1) && ch[G_AUDIO]) ? " -c "+ChunkArg(ch[G_AUDIO]) : string()) + (f_verbose ? "" : " -p")
-              + " " + u + " " + Quote("p\\"+pk) + " " + Quote("p\\"+pk2);
+              + " " + u + " " + Quote("p" DS+pk) + " " + Quote("p" DS+pk2);
       j->prog = 1; j->work = s.size; j->sids.push_back( si ); j->outs.push_back( PPath(pk) ); j->outs.push_back( PPath(pk2) );
       s.part.push_back( Part( 0, s.size, pk, pk2 ) );
     } else if( s.m==M_OGGCOMP ) {
       string pk = s.name + ".oggc";
       Job* j = NewJob( G_AUDIO, 1, "oggcomp " + s.name, "oggcomp" );
-      j->args = "c " + u + " " + Quote("p\\"+pk);
+      j->args = "c " + u + " " + Quote("p" DS+pk);
       j->work = s.size; j->sids.push_back( si ); j->outs.push_back( PPath(pk) );
       s.part.push_back( Part( 0, s.size, pk, "" ) );
     } else if( s.m==M_STORE ) {
-      CreateDirectoryW( (work+L"p\\store").c_str(), 0 );
-      if( !MoveFileW( UPath(s.name).c_str(), (work+L"p\\store\\"+W(s.name)).c_str() ) ) { Msg( "cannot move " + U(UPath(s.name)) ); return 2; }
+      CreateDirectoryW( (work+L"p" DS "store").c_str(), 0 );
+      if( !MoveFileW( UPath(s.name).c_str(), (work+L"p" DS "store" DS+W(s.name)).c_str() ) ) { Msg( "cannot move " + U(UPath(s.name)) ); return 2; }
       s.part.push_back( Part( 0, s.size, "-", "" ) );
     }
   }
@@ -1352,7 +1403,7 @@ static int PackJobs() {
     if( !f ) {
       string pk = nf++ ? "fonts" + Num(nf) + ".ttfc" : "fonts.ttfc";
       f = NewJob( G_FONT, 1, "ttfcomp", "ttfcomp" );
-      f->cwd = "u\\"; f->args = "a " + Quote("..\\p\\"+pk); f->outs.push_back( PPath(pk) );
+      f->cwd = "u" DS; f->args = "a " + Quote(".." DS "p" DS+pk); f->outs.push_back( PPath(pk) );
     }
     f->args += " " + Quote( S[i].name );
     f->work += S[i].size; f->sids.push_back( int(i) );
@@ -1371,14 +1422,14 @@ static int PackJobs() {
       for( qword q=0; q<k; q++ ) {
         qword a = s.size*q/k, b = s.size*(q+1)/k;
         string d = "other" + Num(++na), pk = d + ".shar", mem = s.name + ".part" + Num(q);
-        wstring wd = work + W(d) + L"\\";
+        wstring wd = work + W(d) + L"" DS;
         CreateDirectoryW( wd.c_str(), 0 );
         HANDLE h = OpenWrite( wd+W(mem), CREATE_ALWAYS );
         int r = (h==INVALID_HANDLE_VALUE) || CopyRange( UPath(s.name), a, b-a, h );
         if( h!=INVALID_HANDLE_VALUE ) CloseHandle( h );
         if( r ) return Fail( "cannot write " + U(wd+W(mem)), 2 );
         Job* j = NewJob( G_OTHER, 1, "shar " + s.name + "#" + Num(q), "shar" );
-        j->args = LevelArg(M_SHAR) + " " + Quote("p\\"+pk) + " " + Quote(d+"\\");
+        j->args = LevelArg(M_SHAR) + " " + Quote("p" DS+pk) + " " + Quote(d+DS);
         j->prog = 1; j->work = b-a; j->outs.push_back( PPath(pk) ); j->del.push_back( wd );
         s.part.push_back( Part( a, b-a, pk, mem ) );
       }
@@ -1387,9 +1438,9 @@ static int PackJobs() {
       if( !o ) {
         o = NewJob( G_OTHER, 1, "shar", "shar" );
         CreateDirectoryW( (work+L"other").c_str(), 0 );
-        o->args = LevelArg(M_SHAR) + " p\\other.shar other\\"; o->prog = 1; o->outs.push_back( PPath("other.shar") ); o->del.push_back( work+L"other\\" );
+        o->args = LevelArg(M_SHAR) + " p" DS "other.shar other" DS; o->prog = 1; o->outs.push_back( PPath("other.shar") ); o->del.push_back( work+L"other" DS );
       }
-      if( !MoveFileW( UPath(s.name).c_str(), (work+L"other\\"+W(s.name)).c_str() ) ) { Msg( "cannot move " + U(UPath(s.name)) ); return 2; }
+      if( !MoveFileW( UPath(s.name).c_str(), (work+L"other" DS+W(s.name)).c_str() ) ) { Msg( "cannot move " + U(UPath(s.name)) ); return 2; }
       o->work += s.size; o->sids.push_back( int(i) );
       s.part.push_back( Part( 0, s.size, "other.shar", s.name ) );
     }
@@ -1412,17 +1463,17 @@ static int PackFailed() {
     }
     s.part.clear();
     if( th[G_OTHER]==0 ) {
-      CreateDirectoryW( (work+L"p\\store").c_str(), 0 );
-      if( !MoveFileW( UPath(s.name).c_str(), (work+L"p\\store\\"+W(s.name)).c_str() ) ) { Msg( "cannot move " + U(UPath(s.name)) ); return 2; }
+      CreateDirectoryW( (work+L"p" DS "store").c_str(), 0 );
+      if( !MoveFileW( UPath(s.name).c_str(), (work+L"p" DS "store" DS+W(s.name)).c_str() ) ) { Msg( "cannot move " + U(UPath(s.name)) ); return 2; }
       s.m = M_STORE; s.part.push_back( Part( 0, s.size, "-", "" ) );
       continue;
     }
     if( !x ) {
       x = NewJob( G_OTHER, 1, "shar (fallback)", "shar" );
       CreateDirectoryW( (work+L"fallback").c_str(), 0 );
-      x->args = LevelArg(M_SHAR) + " p\\fallback.shar fallback\\"; x->prog = 1; x->outs.push_back( PPath("fallback.shar") ); x->del.push_back( work+L"fallback\\" );
+      x->args = LevelArg(M_SHAR) + " p" DS "fallback.shar fallback" DS; x->prog = 1; x->outs.push_back( PPath("fallback.shar") ); x->del.push_back( work+L"fallback" DS );
     }
-    if( !MoveFileW( UPath(s.name).c_str(), (work+L"fallback\\"+W(s.name)).c_str() ) ) { Msg( "cannot move " + U(UPath(s.name)) ); return 2; }
+    if( !MoveFileW( UPath(s.name).c_str(), (work+L"fallback" DS+W(s.name)).c_str() ) ) { Msg( "cannot move " + U(UPath(s.name)) ); return 2; }
     x->work += s.size;
     s.m = M_SHAR; s.part.push_back( Part( 0, s.size, "fallback.shar", s.name ) );
   }
@@ -1463,7 +1514,11 @@ static int Compress( const wstring& in, const wstring& out ) {
     wstring e = FileName( in );
     e = (e.rfind('.')!=wstring::npos) ? e.substr( e.rfind('.') ) : L"";
     ip = L"input" + (AnsiOK(e) && (e.size()<16) ? e : wstring());
-    if( !CreateHardLinkW( (work+ip).c_str(), LongPath(in).c_str(), 0 ) ) {
+    int linked = CreateHardLinkW( (work+ip).c_str(), LongPath(in).c_str(), 0 );
+#ifndef _WIN32
+    if( !linked ) linked = CreateSymbolicLinkW( (work+ip).c_str(), LongPath(in).c_str(), 0 ); // (another file system)
+#endif
+    if( !linked ) {
       Msg( "note: avip cannot take the input's name: copying it to the work directory" );
       if( !CopyFileW( LongPath(in).c_str(), (work+ip).c_str(), FALSE ) ) { Msg( "cannot copy the input to " + U(work+ip) ); return 2; }
     }
@@ -1471,7 +1526,7 @@ static int Compress( const wstring& in, const wstring& out ) {
   CrcTask ct; ct.path = LongPath(in); ct.err = 1;
   HANDLE cth = CreateThread( 0, 0, CrcThread, &ct, 0, 0 );
   if( !cth ) CrcThread( &ct );
-  Job a; a.label = "avip c"; a.tool = "avip"; a.args = "c " + Quote(U(ip)) + " u\\s";
+  Job a; a.label = "avip c"; a.tool = "avip"; a.args = "c " + Quote(U(ip)) + " u" DS "s";
   int r = RunOne( a );
   if( cth ) { WaitForSingleObject( cth, INFINITE ); CloseHandle( cth ); }
   if( r ) { return (r==2) ? 5 : 3; }
@@ -1479,7 +1534,7 @@ static int Compress( const wstring& in, const wstring& out ) {
   src_crc = ct.crc;
   if( FileName(ip)==ip ) Remove( work+ip ); // (our link or copy)
 
-  vector<wstring> names = ListFiles( work+L"u\\" );
+  vector<wstring> names = ListFiles( work+L"u" DS );
   string nobuild[N_METHOD];
   if( names.empty() ) { Msg( "avip c made no files" ); return 3; }
   Msg( "avip c: " + Num(names.size()) + ((names.size()==1) ? " file, " : " files, ") + Clock(a.t) );
@@ -1521,9 +1576,9 @@ static int Compress( const wstring& in, const wstring& out ) {
 
   // the index and all packed, stored as they are: the output
   if( WriteAll( PPath("mp4pack.idx"), IndexText() ) ) { Msg( "cannot write " + U(PPath("mp4pack.idx")) ); return 2; }
-  Job f; f.label = "shar a0"; f.tool = "shar"; f.args = "a0 - p\\";
+  Job f; f.label = "shar a0"; f.tool = "shar"; f.args = "a0 - p" DS;
   f.out.path = LongPath(out); f.out.create = 1; f.out.len = ALL; f.prog = 3;
-  f.work = DirSize( work+L"p\\" );
+  f.work = DirSize( work+L"p" DS );
   r = RunOne( f );
   if( r ) { Remove( LongPath(out) ); return (r==2) ? 5 : 3; }
   qword osz = f.out.done;
@@ -1540,7 +1595,7 @@ static int Decompress( const wstring& in, const wstring& out ) {
   Msg( "mp4pack d: " + U(in) + " -> " + U(out) );
   if( MakeWork() ) return 2;
 
-  Job x; x.label = "shar x"; x.tool = "shar"; x.args = "x - p\\";
+  Job x; x.label = "shar x"; x.tool = "shar"; x.args = "x - p" DS;
   x.in.path = LongPath(in); x.in.len = isz; x.prog = 2; x.work = isz;
   int r = RunOne( x );
   if( r ) { return (r==2) ? 5 : 3; }
@@ -1557,31 +1612,31 @@ static int Decompress( const wstring& in, const wstring& out ) {
   vector<string> ttf, sha; // archives, in their order
   for( size_t i=0; i<S.size(); i++ ) {
     Stream& s = S[i];
-    string u = Quote( "u\\"+s.name );
+    string u = Quote( "u" DS+s.name );
     const Part& p0 = s.part[0];
     if( s.m==M_H264P ) {
       Job* j = NewJob( G_VIDEO, th[G_VIDEO], "h264p " + s.name, "h264p" );
-      j->args = string("d") + (f_verbose ? "" : " -p") + " " + Quote("p\\"+p0.pk) + " " + u;
+      j->args = string("d") + (f_verbose ? "" : " -p") + " " + Quote("p" DS+p0.pk) + " " + u;
       j->prog = 1; j->work = s.size; j->outs.push_back( UPath(s.name) ); j->del.push_back( PPath(p0.pk) );
     } else if( s.m==M_AACPACK ) {
       if( MakeFile( UPath(s.name), s.size ) ) { Msg( "cannot write " + U(UPath(s.name)) ); return 2; }
       for( size_t k=0; k<s.part.size(); k++ ) {
         const Part& p = s.part[k];
         Job* j = NewJob( G_AUDIO, 1, "aacpack " + s.name + ((s.part.size()>1) ? "#"+Num(k) : string()), "aacpack" );
-        j->args = "d " + Quote("p\\"+p.pk) + " -";
+        j->args = "d " + Quote("p" DS+p.pk) + " -";
         j->out.path = UPath(s.name); j->out.off = p.off; j->out.len = p.len;
         j->prog = 3; j->work = p.len; j->del.push_back( PPath(p.pk) );
       }
     } else if( s.m==M_MP3PACK ) {
       Job* j = NewJob( G_AUDIO, th[G_AUDIO], "mp3pack " + s.name, "mp3pack" );
-      j->args = string("d") + (f_verbose ? "" : " -p") + " " + Quote("p\\"+p0.pk) + " " + Quote("p\\"+p0.pk2) + " " + u;
+      j->args = string("d") + (f_verbose ? "" : " -p") + " " + Quote("p" DS+p0.pk) + " " + Quote("p" DS+p0.pk2) + " " + u;
       j->prog = 1; j->work = s.size; j->outs.push_back( UPath(s.name) ); j->del.push_back( PPath(p0.pk) ); j->del.push_back( PPath(p0.pk2) );
     } else if( s.m==M_OGGCOMP ) {
       Job* j = NewJob( G_AUDIO, 1, "oggcomp " + s.name, "oggcomp" );
-      j->args = "d " + Quote("p\\"+p0.pk) + " " + u;
+      j->args = "d " + Quote("p" DS+p0.pk) + " " + u;
       j->work = s.size; j->outs.push_back( UPath(s.name) ); j->del.push_back( PPath(p0.pk) );
     } else if( s.m==M_STORE ) {
-      if( !MoveFileW( (work+L"p\\store\\"+W(s.name)).c_str(), UPath(s.name).c_str() ) ) { Msg( "missing from the archive: " + s.name ); return 4; }
+      if( !MoveFileW( (work+L"p" DS "store" DS+W(s.name)).c_str(), UPath(s.name).c_str() ) ) { Msg( "missing from the archive: " + s.name ); return 4; }
     } else {
       vector<string>& v = (s.m==M_TTFCOMP) ? ttf : sha;
       for( size_t k=0; k<s.part.size(); k++ ) if( std::find( v.begin(), v.end(), s.part[k].pk )==v.end() ) v.push_back( s.part[k].pk );
@@ -1589,14 +1644,14 @@ static int Decompress( const wstring& in, const wstring& out ) {
   }
   for( size_t a=0; a<ttf.size(); a++ ) { // the fonts under their names, in the archive's order
     Job* j = NewJob( G_FONT, 1, "ttfcomp " + ttf[a], "ttfcomp" );
-    j->cwd = "u\\"; j->args = "x " + Quote("..\\p\\"+ttf[a]); j->del.push_back( PPath(ttf[a]) );
+    j->cwd = "u" DS; j->args = "x " + Quote(".." DS "p" DS+ttf[a]); j->del.push_back( PPath(ttf[a]) );
     for( size_t i=0; i<S.size(); i++ ) if( (S[i].m==M_TTFCOMP) && (S[i].part[0].pk==ttf[a]) ) {
       j->args += " " + Quote(S[i].name); j->work += S[i].size; j->outs.push_back( UPath(S[i].name) );
     }
   }
   for( size_t a=0; a<sha.size(); a++ ) {
     Job* j = NewJob( G_OTHER, 1, "shar " + sha[a], "shar" );
-    j->args = "x " + Quote("p\\"+sha[a]) + " u\\"; j->prog = 1; j->del.push_back( PPath(sha[a]) );
+    j->args = "x " + Quote("p" DS+sha[a]) + " u" DS; j->prog = 1; j->del.push_back( PPath(sha[a]) );
     for( size_t i=0; i<S.size(); i++ ) if( S[i].m==M_SHAR ) for( size_t k=0; k<S[i].part.size(); k++ ) if( S[i].part[k].pk==sha[a] ) {
       j->work += S[i].part[k].len; j->outs.push_back( UPath(S[i].part[k].pk2) );
     }
@@ -1637,7 +1692,7 @@ static int Decompress( const wstring& in, const wstring& out ) {
     op = ToolName( out );
     if( op.empty() ) { op = L"output.tmp"; tmp = 1; }
   }
-  Job a; a.label = "avip d"; a.tool = "avip"; a.args = "d u\\s " + Quote(U(op));
+  Job a; a.label = "avip d"; a.tool = "avip"; a.args = "d u" DS "s " + Quote(U(op));
   r = RunOne( a );
   if( r ) { Remove( LongPath(out) ); return (r==2) ? 5 : 3; }
   if( tmp && !MoveFileExW( (work+op).c_str(), LongPath(out).c_str(), MOVEFILE_REPLACE_EXISTING|MOVEFILE_COPY_ALLOWED ) ) {
@@ -1666,8 +1721,8 @@ static BOOL WINAPI CtrlHandler( DWORD t ) {
 
 static const char usage[] =
 "mp4pack - lossless compression of mp4/mkv/avi files with avip, h264p, aacpack,\n"
-"mp3pack, oggcomp, ttfcomp and shar, from mp4pack.exe's own directory: the best\n"
-"build of each for this CPU, <tool>.exe or <tool>_<level>.exe (h264p_avx2.exe)\n"
+"mp3pack, oggcomp, ttfcomp and shar, from mp4pack's own directory: the best\n"
+"build of each for this CPU, <tool>" EXE " or <tool>_<level>" EXE " (h264p_avx2" EXE ")\n"
 "usage: mp4pack c [options] input output   compress\n"
 "       mp4pack d [options] input output   decompress\n"
 "options:\n"
@@ -1695,7 +1750,11 @@ static const char usage[] =
 "  -f    count the threads free now (the CPUs' idle share over a second)\n"
 "  -i L  use tool builds up to level L: x64 sse3 ssse3 sse41 sse42 avx avx2\n"
 "        avx512 (default: what the CPU has)\n"
+#ifdef _WIN32
 "  -w D  make the work directory in D (default: %TEMP%)\n"
+#else
+"  -w D  make the work directory in D (default: $TMPDIR, or /tmp)\n"
+#endif
 "  -k    keep the work directory\n"
 "  -v    show the tools' command lines and output\n";
 
@@ -1710,7 +1769,7 @@ int wmain( int argc, wchar_t** argv ) {
     vector<wchar_t> b( 32768 );
     DWORD n = GetModuleFileNameW( 0, &b[0], DWORD(b.size()) );
     exe_dir.assign( &b[0], n );
-    exe_dir.erase( exe_dir.find_last_of( L"\\/" )+1 );
+    exe_dir.erase( exe_dir.size()-FileName( exe_dir ).size() );
   }
 
   int mode = 0, nio = 0, f_t = 0, f_c = 0, cap = L_AVX512;
@@ -1749,14 +1808,14 @@ int wmain( int argc, wchar_t** argv ) {
   cpu_isa = (cpu_level>=0);
   if( cpu_level<0 ) cpu_level = OsLevel();
   string c = "cpu: " + Num(cpu_threads) + " threads" + (cpu_cores ? ", " + Num(cpu_cores) + " cores" : string()) + ", " + l_name[cpu_level]
-           + (cpu_isa ? "" : " (as Windows says)");
+           + (cpu_isa ? "" : " (as the system says)");
   if( cap<cpu_level ) { cpu_level = cap; c += ", builds up to " + string(l_name[cap]); }
   int n = cpu_threads;
   if( f_free ) { n = FreeThreads(); c += ", " + Num(n) + " free"; }
   if( ParseThreads( f_t ? ts : string(), n ) ) { Msg( "bad -t " + ts + " (up to 4 of N or N% joined by + or , and maybe a -N)" ); return 1; }
   if( f_c && ParseChunks( cs.c_str() ) ) { Msg( "bad -c " + cs ); return 1; }
   Msg( c + "; -t " + (f_t ? ts+" = " : string()) + ThreadText() );
-  const char* all[] = { "avip", "shar", "h264p", "aacpack", "mp3pack", "oggcomp", "ttfcomp" };
+  const string all[] = { "avip", "shar", "h264p", "aacpack", "mp3pack", "oggcomp", "ttfcomp" };
   string tl;
   for( int i=0; i<7; i++ ) { const Tool& t = GetTool( all[i] ); if( t.path.size() ) tl += " " + t.file; }
   Msg( "tools:" + (tl.size() ? tl : string(" none")) );
