@@ -247,12 +247,11 @@ damaged, truncated and foreign archives, an empty input; tool builds for
 several levels, `-i` limits, builds missing for the level. Not under wine:
 Ctrl+C (wine's console ends a program on it at once, without its handler).
 
-The movie, with the defaults on a 4-thread Xeon VM under wine (the d run shared
-the CPU with other tests):
+The movie, with the defaults (`-t 4+4,1,1`) on a 4-thread Xeon VM under wine:
 
 | | size | time |
 |---|---|---|
 | TBB_04.mkv | 901,752,304 | |
-| h264 track, h264p -t 4 | 648,922,836 -> 564,620,814 (87.0%) | 20:00 |
-| aac tracks, aacpack in 7 parts | 253,612,715 -> 185,034,562 (73.0%) | (alongside) |
-| archive | 749,662,667 (83.1%) | c 21:22, d 30:14 |
+| h264 track, h264p -t 4 | 648,922,836 -> 564,620,814 (87.0%) | 15:18 |
+| aac tracks, aacpack in 8 parts | 253,612,715 -> 185,021,554 (73.0%) | alongside |
+| archive | 749,649,784 (83.1%) | c 16:32, d 23:57 |
