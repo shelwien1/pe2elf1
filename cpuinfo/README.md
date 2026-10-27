@@ -48,11 +48,14 @@ cpuinfo [options]
   -n       the best target name
   -a       all targets: the usable ones ranked, the others with what they lack
   -t NAME  one target: its features per compiler, and whether it runs here
+           (NAME-32: its x86-32 build)
   -f       the features, one per line: here or not, class, compiler flags
   -c C     the targets of one compiler: gcc or clang (default: both; a name
            counts when its code runs here with every compiler that knows it)
-  -32      targets for x86-32 builds (all names; default when the CPU is not 64-bit)
-  -64      targets for x64 builds (default)
+  -32      targets for x86-32 builds (default in x86-32 cpuinfo, or when the CPU
+           is not 64-bit): all names; those that are x64 targets too get "-32"
+           (haswell-32), the x86-32-only ones stay (pentium4)
+  -64      targets for x64 builds (default in x64 cpuinfo)
   -s       strict: also need the features compilers only use by intrinsics
            (aes sha sgx ...: class I), not only those they use on their own
   -d FILE  a CPUID dump (from -D, or AIDA64/InstLatx64 text) instead of this CPU
@@ -61,6 +64,18 @@ cpuinfo [options]
 
 Exit code: 0; 1 for `-l`/`-n` when no target runs, or a bad option; 2 when
 there is no CPUID (or the dump can not be read).
+
+x64 and x86-32 builds: `cpuinfo` lists the builds of its own kind, so the
+x64 one (`cpuinfo`, `cpuinfo64.exe`) gives x64 targets and the x86-32 one
+(`cpuinfo32`, `cpuinfo32.exe`) x86-32 targets; its `code` line says which it
+is, and on a 64-bit CPU that `-64` lists the x64 builds. In x86-32 lists the
+names are build names, unique across both kinds: a target that is an x64
+target too gets `-32` (`haswell-32`, `x86-64-v3-32`: `-march=haswell` with
+`-m32`), while the x86-32-only targets keep their names (`pentium4`, `k6`).
+So `tool_haswell.exe` and `tool_haswell-32.exe` can sit side by side, and
+the x86-32 `cpuinfo -n` names the one of the x86-32 builds to start.
+`-t` takes either (`-t haswell` is the x64 build, `-t haswell-32` the
+x86-32 one).
 
 A Zen 4 (from an InstLatx64 dump, Windows: PKU off):
 
@@ -124,7 +139,7 @@ not usable here:
 
 Scripting: `cpuinfo -n` prints the best name; `cpuinfo -l -c gcc` the
 usable gcc names in order. A compiler older than the table does not know
-every name; keep the ones it takes:
+every name; keep the ones it takes (for `-32` lists: `-m32 -march=${t%-32}`):
 
 ```
 for t in $(cpuinfo -l -c gcc); do
@@ -381,10 +396,13 @@ static x86::Cpu c;
 static x86::Match m[x86::N_TARGET];
 if( x86::ReadCpuid( d ) ) {      // or x86::ParseCpuid( d, text ) for a dump
   x86::Analyze( d, c );          // c.f features, c.gcc / c.clang native names, c.level
-  int nall, n = x86::RankTargets( c, x86::C_GCC, 64, false, m, &nall );
+  int bits = x86::CodeBits();    // 64 or 32: this program's own kind of code
+  if( !x86::Has( c.f, x86::F_LM ) ) bits = 32;
+  int nall, n = x86::RankTargets( c, x86::C_GCC, bits, false, m, &nall );
   for( int i=0; i<n; i++ ) {     // usable, best first
     const char* name = x86::x86_target[m[i].t].name;
-    // e.g. pick the first tool_<name>.exe that exists
+    const char* sfx = x86::BuildSuffix( m[i].t, bits );  // "-32" or ""
+    // e.g. pick the first tool_<name><sfx>.exe that exists
   }
 }
 ```
@@ -392,7 +410,8 @@ if( x86::ReadCpuid( d ) ) {      // or x86::ParseCpuid( d, text ) for a dump
 `RankTargets( cpu, compilers, bits, strict, out, &count )` returns the number
 of usable targets; `out[0..count)` has all targets of those compilers for
 those builds, usable ones first. `Match::miss` is what the target lacks
-(class C ones make it unusable). Other: `FindTarget()`, `TargetSet()`,
+(class C ones make it unusable). `FindBuild( name, &bits )` reads a build
+name back (`haswell-32`: haswell, 32). Other: `FindTarget()`, `TargetSet()`,
 `Has()`, `x86_feat[]` (names, classes, flags), `ClangName()`, `GccName()`,
 `PrintCpuid()`. All in `namespace x86`; CPUID/XGETBV by `__cpuidex`/`_xgetbv`
 under MSVC, inline asm elsewhere (with the EFLAGS.ID check on x86-32, and an
@@ -442,8 +461,9 @@ the release sources), with the 590 CPUID dumps of InstLatx64
 * MSVC 2019 (19.20, `cl /O2 /W4 /EHsc /MT`), x64 and x86: no warnings (also
   for a program of two files that both include `x86targets.h`, without
   `_CRT_SECURE_NO_WARNINGS`), and under wine the output is byte for byte
-  that of the Linux builds, for every option on the host CPU (`__cpuidex`/
-  `_xgetbv` there) and for all 590 dumps with `-a`.
+  that of the Linux build of the same kind (x64 or x86-32), for every option
+  on the host CPU (`__cpuidex`/`_xgetbv` there) and for all 590 dumps with
+  `-a`; the x64 `-32` list is the x86-32 default one, and back.
 
 Run against a dump:
 

@@ -1018,6 +1018,35 @@ inline bool Known( int t, int comp ) {
   return ((comp&C_GCC) && (x86_target[t].flags&T_GCC)) || ((comp&C_CLANG) && (x86_target[t].flags&T_CLANG));
 }
 
+// the code this is compiled to: 64 (x64, also x32) or 32 (x86-32)
+inline int CodeBits() {
+#if defined(__x86_64__) || defined(_M_X64) || defined(_M_AMD64)
+  return 64;
+#else
+  return 32;
+#endif
+}
+
+// build names: the x86-32 build of a target that is an x64 target too is
+// NAME-32 (haswell-32; haswell is the x64 build); the x86-32-only names
+// (pentium4) are unique as they are
+inline const char* BuildSuffix( int t, int bits ) { return ((bits==32) && (x86_target[t].flags&T_64)) ? "-32" : ""; }
+
+// a build name's target and bits (haswell: 64, haswell-32: 32, pentium4: 32);
+// -1 for none
+inline int FindBuild( const char* name, int* bits ) {
+  int t = FindTarget( name );
+  if( t>=0 ) { if( bits ) *bits = (x86_target[t].flags&T_64) ? 64 : 32; return t; }
+  size_t n = strlen( name );
+  char b[64];
+  if( (n<4) || (n-3>=sizeof(b)) || strcmp( name+n-3, "-32" ) ) return -1;
+  memcpy( b, name, n-3 ); b[n-3] = 0;
+  t = FindTarget( b );
+  if( (t<0) || !(x86_target[t].flags&T_64) ) return -1;
+  if( bits ) *bits = 32;
+  return t;
+}
+
 // the vector ISA tier, highest first in the ranking
 enum { TIER_X87, TIER_MMX, TIER_SSE, TIER_SSE2, TIER_SSE3, TIER_SSSE3, TIER_SSE41, TIER_SSE42, TIER_AVX, TIER_AVX2,
        TIER_AVX512, TIER_APX };

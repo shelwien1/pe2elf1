@@ -110,10 +110,11 @@ static string Join( const std::vector<string>& v, const char* sep=" " ) {
   return s;
 }
 
-// a target's name, with the compiler for a name only one of the chosen knows
-static string Label( int t, int comp ) {
+// a target's build name (-32: see BuildSuffix), with the compiler for a name
+// only one of the chosen knows
+static string Label( int t, int comp, int bits ) {
   const X86Target& x = x86_target[t];
-  string s = x.name;
+  string s = string( x.name ) + BuildSuffix( t, bits );
   if( comp==C_BOTH ) {
     if( !(x.flags&T_GCC) ) s += "(clang)";
     if( !(x.flags&T_CLANG) ) s += "(gcc)";
@@ -163,11 +164,14 @@ static void Usage() {
 "  -n       the best target name\n"
 "  -a       all targets: the usable ones ranked, the others with what they lack\n"
 "  -t NAME  one target: its features per compiler, and whether it runs here\n"
+"           (NAME-32: its x86-32 build)\n"
 "  -f       the features, one per line: here or not, class, compiler flags\n"
 "  -c C     the targets of one compiler: gcc or clang (default: both; a name\n"
 "           counts when its code runs here with every compiler that knows it)\n"
-"  -32      targets for x86-32 builds (all names; default when the CPU is not 64-bit)\n"
-"  -64      targets for x64 builds (default)\n"
+"  -32      targets for x86-32 builds (default in x86-32 cpuinfo, or when the CPU\n"
+"           is not 64-bit): all names; those that are x64 targets too get \"-32\"\n"
+"           (haswell-32), the x86-32-only ones stay (pentium4)\n"
+"  -64      targets for x64 builds (default in x64 cpuinfo)\n"
 "  -s       strict: also need the features compilers only use by intrinsics\n"
 "           (aes sha sgx ...: class I), not only those they use on their own\n"
 "  -d FILE  a CPUID dump (from -D, or AIDA64/InstLatx64 text) instead of this CPU\n"
@@ -209,7 +213,14 @@ int main( int argc, char** argv ) {
 
   static Cpu c;
   Analyze( d, c );
-  if( !bits ) bits = Has( c.f, F_LM ) ? 64 : 32;
+  int t1 = -1, bitsopt = bits;
+  if( mode=='t' ) {
+    int tb;
+    t1 = FindBuild( tname, &tb );
+    if( t1<0 ) { fprintf( stderr, "cpuinfo: no target %s (-a lists them)\n", tname ); return 1; }
+    if( strcmp( tname, x86_target[t1].name ) || !bits ) bits = tb;  // NAME-32, or no -32/-64
+  }
+  if( !bits ) bits = (Has( c.f, F_LM ) && (CodeBits()==64)) ? 64 : 32;
   static Match m[N_TARGET];
   int nall, nok = RankTargets( c, comp, bits, strict!=0, m, &nall );
 
@@ -221,11 +232,11 @@ int main( int argc, char** argv ) {
       int need = ((comp&C_GCC) ? T_GCC : 0) | ((comp&C_CLANG) ? T_CLANG : 0);
       if( (x86_target[t].flags&need)==need ) { best = t; break; }
     }
-    printf( "%s\n", x86_target[best].name );
+    printf( "%s%s\n", x86_target[best].name, BuildSuffix( best, bits ) );
     return 0;
   }
   if( mode=='l' ) {
-    for( int i=0; i<nok; i++ ) printf( "%s\n", x86_target[m[i].t].name );
+    for( int i=0; i<nok; i++ ) printf( "%s%s\n", x86_target[m[i].t].name, BuildSuffix( m[i].t, bits ) );
     return nok ? 0 : 1;
   }
   if( mode=='f' ) {
@@ -237,11 +248,10 @@ int main( int argc, char** argv ) {
     return 0;
   }
   if( mode=='t' ) {
-    int t = FindTarget( tname );
-    if( t<0 ) { fprintf( stderr, "cpuinfo: no target %s (-a lists them)\n", tname ); return 1; }
+    int t = t1;
     const X86Target& x = x86_target[t];
     std::vector<string> al;
-    for( int u=0; u<N_TARGET; u++ ) if( (u!=t) && (x86_target[u].group==x.group) ) al.push_back( Label( u, C_BOTH ) );
+    for( int u=0; u<N_TARGET; u++ ) if( (u!=t) && (x86_target[u].group==x.group) ) al.push_back( Label( u, C_BOTH, bits ) );
     printf( "target    %s: %s%s%s, %s, %s %d\n", x.name, (x.flags&T_GCC) ? "gcc" : "", ((x.flags&T_GCC) && (x.flags&T_CLANG)) ? " " : "",
             (x.flags&T_CLANG) ? "clang" : "", (x.flags&T_64) ? "x86-32 and x64" : "x86-32 only", VendorName( x.vendor ), x.year );
     if( al.size() ) printf( "same as   %s\n", Join( al ).c_str() );
@@ -261,7 +271,7 @@ int main( int argc, char** argv ) {
       // the rank of its group, as the list counts them
       int gr = 0, ng = 0;
       for( int i=0; i<nok; i++ ) if( !i || (x86_target[m[i].t].group!=x86_target[m[i-1].t].group) ) { ng++; if( i<=r ) gr = ng; }
-      printf( "here      runs: rank %d of %d for %s builds\n", gr, ng, (bits==64) ? "x64" : "x86-32" );
+      printf( "here      runs: rank %d of %d for %s builds (%s%s)\n", gr, ng, (bits==64) ? "x64" : "x86-32", x.name, BuildSuffix( t, bits ) );
       if( !Empty( m[r].miss ) ) Words( "", { "without " + Join( Names( m[r].miss ) ) + " (intrinsics only)" } );
     } else {
       printf( "here      does not run: lacks %s", Join( Names( m[r].miss, 'C' ) ).c_str() );
@@ -308,6 +318,8 @@ int main( int argc, char** argv ) {
     }
     Words( "os", w );
   }
+  if( !dump ) printf( "code      %s%s\n", (CodeBits()==64) ? "x64" : "x86-32",
+                      ((bits==32) && Has( c.f, F_LM ) && !bitsopt) ? " (the CPU is 64-bit: -64 lists the x64 builds)" : "" );
   printf( "level     %s\n", c.level ? ("x86-64-v" + std::to_string( c.level )).c_str() : "x86-32 only" );
   Words( "features", Names( c.f ) );
   FSet off = Sub( c.hw, c.f );
@@ -338,7 +350,7 @@ int main( int argc, char** argv ) {
     char b[64]; snprintf( b, sizeof(b), "%4d  %-7s %-3s ", rank+1, TierName( m[i].tier ), lv ? ("v" + std::to_string( lv )).c_str() : "-" );
     std::vector<string> w;
     int j = i;
-    for( ; (j<nok) && (x86_target[m[j].t].group==x86_target[m[i].t].group); j++ ) w.push_back( Label( m[j].t, comp ) );
+    for( ; (j<nok) && (x86_target[m[j].t].group==x86_target[m[i].t].group); j++ ) w.push_back( Label( m[j].t, comp, bits ) );
     if( !Empty( m[i].miss ) ) w.push_back( "[no " + Join( Names( m[i].miss ) ) + "]" );
     Words( b, w, 19 );
     i = j;
@@ -348,14 +360,14 @@ int main( int argc, char** argv ) {
     static Match m3[N_TARGET];
     int n3all, n3 = RankTargets( c, comp, 32, strict!=0, m3, &n3all );
     std::vector<string> w;
-    for( int i=0; i<n3; i++ ) if( !(x86_target[m3[i].t].flags&T_64) ) w.push_back( Label( m3[i].t, comp ) );
+    for( int i=0; i<n3; i++ ) if( !(x86_target[m3[i].t].flags&T_64) ) w.push_back( Label( m3[i].t, comp, 32 ) );
     if( w.size() ) { printf( "x86-32 builds can also use:\n" ); Words( "", w, 6 ); }
   }
   if( mode=='a' ) {
     printf( "not usable here:\n" );
     for( int i=nok; i<nall; i++ ) {
       std::vector<string> cm = Names( m[i].miss, 'C' ), im = Names( m[i].miss, 'I' );
-      printf( "  %-22s lacks %s%s%s%s\n", Label( m[i].t, comp ).c_str(), Join( cm ).c_str(), im.size() ? " [" : "", Join( im ).c_str(),
+      printf( "  %-22s lacks %s%s%s%s\n", Label( m[i].t, comp, bits ).c_str(), Join( cm ).c_str(), im.size() ? " [" : "", Join( im ).c_str(),
               im.size() ? "]" : "" );
     }
   }
