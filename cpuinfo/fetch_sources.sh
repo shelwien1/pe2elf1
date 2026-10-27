@@ -1,10 +1,12 @@
 #!/bin/sh
-# fetch_sources.sh [DIR] -- the LLVM and GCC files gen_targets.py reads, from
-# llvm-project main and gcc master, into DIR/llvm and DIR/gcc (default DIR: src)
+# fetch_sources.sh [DIR] -- the LLVM and GCC files gen_targets.py reads, into
+# DIR/llvm and DIR/gcc (default DIR: src), from llvm-project main and gcc
+# master, or from the tags/branches in LLVM_REF and GCC_REF:
+#   LLVM_REF=llvmorg-23.1.4 GCC_REF=releases/gcc-16.2.0 ./fetch_sources.sh src
 # Then: python3 gen_targets.py DIR/llvm DIR/gcc x86targets.h
 d=${1:-src}
-L=https://raw.githubusercontent.com/llvm/llvm-project/main
-G=https://raw.githubusercontent.com/gcc-mirror/gcc/master
+L=https://raw.githubusercontent.com/llvm/llvm-project/${LLVM_REF:-main}
+G=https://raw.githubusercontent.com/gcc-mirror/gcc/${GCC_REF:-master}
 mkdir -p "$d/llvm" "$d/gcc" || exit 1
 for f in llvm/include/llvm/TargetParser/X86TargetParser.def llvm/lib/TargetParser/X86TargetParser.cpp \
          llvm/lib/Target/X86/X86.td llvm/lib/TargetParser/Host.cpp; do

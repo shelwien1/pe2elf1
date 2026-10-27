@@ -107,8 +107,8 @@ x86-32 builds can also use:
 * `-march=native = ...`: what `-march=native` passes is that name plus every
   feature flag; shown are only the flags that differ from the name's own
   set, each by that compiler's own reading of CPUID (see
-  [Which targets run](#which-targets-run)). Not modelled: gcc's
-  `-mrtm`/`-mhle`/`-mabm`/`-mavx10v2aux`/`-macev1` (or their `-mno-`), clang's
+  [Which targets run](#which-targets-run)). Not modelled: `rtm` (both),
+  gcc's `-mhle`/`-mabm`/`-mavx10v2aux`/`-macev1` (or their `-mno-`), clang's
   `avx10v2aux`, and gcc's cache sizes (`--param l1-cache-size=...`) for its
   `-mtune=native`.
 
@@ -194,6 +194,10 @@ and model only for Intel, AMD, Hygon and Zhaoxin, so for VIA they stay 0
 and the generic fallback decides; `cpuinfo` does the same. With no CPUID
 leaf 1 gcc says `i386`, clang "generic".
 
+gcc 16.2 reads AVX512BMM from basic leaf 21h (gcc master and LLVM: 80000021h
+EAX bit 23), so where only 80000021h has it, gcc 16.2 calls a Zen 6
+`znver5` and passes `-mno-avx512bmm`; `cpuinfo` follows master here.
+
 Where they name the same CPU differently (gcc folds more models into one
 name; most of these are one group, see [Targets](#targets)): Raptor Lake,
 Meteor Lake: clang `raptorlake`, `meteorlake`, gcc `alderlake`; Alder Lake-N:
@@ -226,7 +230,9 @@ puts `alderlake` first. (The B7h Bartlett Lake is a known model: `raptorlake`.)
 ## Targets
 
 `x86targets.h` has 123 names (108 clang, 118 gcc; `TARGETS.md` lists them),
-generated from llvm-project main and gcc master of 2026-10-27. Per name:
+generated from clang 23.1.4 and gcc 16.2.0 (`llvmorg-23.1.4`,
+`releases/gcc-16.2.0`); llvm-project main and gcc master of 2026-10-27 give
+the same table. Per name:
 
 * the ISA features `-march=NAME` enables in each compiler, with the implied
   ones (`avx512bw` brings `avx512f`, `avx2`, `avx` ...): from LLVM's
@@ -384,10 +390,12 @@ under MSVC, inline asm elsewhere (with the EFLAGS.ID check on x86-32, and an
 
 ```
 ./fetch_sources.sh src                              # LLVM and GCC files, from their main branches
+LLVM_REF=llvmorg-23.1.4 GCC_REF=releases/gcc-16.2.0 ./fetch_sources.sh src   # or from releases
 python3 gen_targets.py src/llvm src/gcc x86targets.h
 ```
 
-`gen_targets.py` also takes llvm-project and gcc checkouts. It rewrites the
+`gen_targets.py` also takes llvm-project and gcc checkouts, and both forms of
+X86.td (23.x lists aliases in `foreach` blocks, main as `ProcessorAlias`). It rewrites the
 part of `x86targets.h` between the `generated` lines and `TARGETS.md`, and
 prints the gcc/clang differences. A feature it does not know (a new one in
 the sources) stops it: add it to `FEATURES` (with its class and flags), and

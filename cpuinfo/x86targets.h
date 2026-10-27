@@ -607,6 +607,7 @@ inline void Features( const Cpuid& d, Cpu& c, FSet& hw, FSet& f ) {
   uint av10 = Bit( r71[3], 19 ) ? ((c.max_leaf>=0x24) ? (d.R( 0x24, 0, 1 )&0xff) : 0) : 0;
   X86T_F( F_AVX10_1, av10>=1, avx512 );  X86T_F( F_AVX10_2, av10>=2, avx512 );
   #undef X86T_F
+  c.cnat = c.gnat = f;  // (the compilers keep what lacks its prerequisites)
   Consistent( f );
 }
 
@@ -619,13 +620,13 @@ inline void NativeSets( const Cpuid& d, Cpu& c ) {
   uint d71 = (c.max_leaf>=7) && (d.R( 7, 0, 0 )>=1) ? d.R( 7, 1, 3 ) : 0;
   uint av10 = (c.max_leaf>=0x24) ? (d.R( 0x24, 0, 1 )&0xff) : 0;
   bool xs = c.osxsave && d.xcr0_set, avx = xs && Bit( c1, 28 ) && ((c.xcr0&6)==6), avx512 = avx && ((c.xcr0&0xE0)==0xE0);
-  FSet& k = c.cnat; k = c.f;
+  FSet& k = c.cnat;
   Set( k, F_PRFCHW, Bit( e1c, 8 )!=0 );                         // the bit only
   Set( k, F_XSAVE, Bit( c1, 26 ) && avx );                       // xsave*: with the ymm state
   Set( k, F_XSAVEOPT, Bit( xd, 0 ) && avx ); Set( k, F_XSAVEC, Bit( xd, 1 ) && avx ); Set( k, F_XSAVES, Bit( xd, 3 ) && avx );
   Set( k, F_AVX10_1, Bit( d71, 19 ) && (av10>=1) );              // avx10: no OS check
   Set( k, F_AVX10_2, Bit( d71, 19 ) && (av10>=2) );
-  FSet& g = c.gnat; g = c.f;
+  FSet& g = c.gnat;
   Set( g, F_PRFCHW, Bit( e1c, 8 )!=0 );
   Set( g, F_XSAVE, Bit( c1, 26 )!=0 );                           // xsave*: no OS check
   Set( g, F_XSAVEOPT, Bit( xd, 0 )!=0 ); Set( g, F_XSAVEC, Bit( xd, 1 )!=0 ); Set( g, F_XSAVES, Bit( xd, 3 )!=0 );

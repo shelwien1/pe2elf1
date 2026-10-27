@@ -351,14 +351,37 @@ def parse_llvm(d):
   tdfeat = {}
   def add_model(n, mod, feats, tune):
     model[n] = (mod, re.sub(r"\s+", " ", tune).strip(), re.sub(r"\s+", " ", feats).strip())
-  for m in re.finditer(r"def\s*:\s*ProcModel\s*<\s*\"([^\"]+)\"\s*,\s*(\w+)\s*,\s*(\[[^\]]*\]|[\w.]+)\s*,\s*(\[[^\]]*\]|[\w.]+)\s*>", td, re.S):
-    add_model(m.group(1), m.group(2), m.group(3), m.group(4))
-    if m.group(3).startswith("["): tdfeat[m.group(1)] = re.findall(r"\w+", m.group(3))
-  for m in re.finditer(r"def\s*:\s*Proc\s*<\s*\"([^\"]+)\"\s*,\s*(\[[^\]]*\]|[\w.]+)\s*,\s*(\[[^\]]*\]|[\w.]+)\s*>", td, re.S):
-    add_model(m.group(1), "GenericModel", m.group(2), m.group(3))
-    if m.group(2).startswith("["): tdfeat[m.group(1)] = re.findall(r"\w+", m.group(2))
-  for m in re.finditer(r"foreach\s+P\s*=\s*\[([^\]]*)\]\s*in\s*\{\s*def\s*:\s*ProcModel\s*<\s*P\s*,\s*(\w+)\s*,\s*([\w.]+)\s*,\s*([\w.]+)\s*>", td, re.S):
-    for n in re.findall(r"\"([^\"]+)\"", m.group(1)): add_model(n, m.group(2), m.group(3), m.group(4))
+  # def : ProcModel<"name", Model, features, tuning> / Proc<"name", features,
+  # tuning>, also as foreach P = ["a", "b"] in { def : Proc...<P, ...> }
+  def args(t, i):          # the top-level arguments of the <...> at t[i]
+    out, cur, dep = [], "", 0
+    i += 1
+    while True:
+      ch = t[i]
+      if ch in "[(<": dep += 1
+      elif ch in "])>":
+        if dep == 0: out.append(cur.strip()); return out, i
+        dep -= 1
+      if ch == "," and dep == 0: out.append(cur.strip()); cur = ""
+      else: cur += ch
+      i += 1
+  def defs(t, names_of_p):
+    for m in re.finditer(r"def\s*:\s*(ProcModel|Proc)\s*<", t):
+      a, _ = args(t, m.end() - 1)
+      if m.group(1) == "ProcModel": nm, mod, feats, tune = a[0], a[1], a[2], a[3]
+      else: nm, mod, feats, tune = a[0], "GenericModel", a[1], a[2]
+      for n in (names_of_p if nm == "P" else [nm.strip('"')]):
+        add_model(n, mod, feats, tune)
+        if feats.startswith("["): tdfeat[n] = re.findall(r"\w+", feats)
+  body, pos = "", 0
+  for m in re.finditer(r"foreach\s+P\s*=\s*\[([^\]]*)\]\s*in\s*\{", td):
+    body += td[pos:m.start()]
+    dep, j = 1, m.end()
+    while dep:
+      dep += {"{": 1, "}": -1}.get(td[j], 0); j += 1
+    defs(td[m.end():j-1], re.findall(r"\"([^\"]+)\"", m.group(1)))
+    pos = j
+  defs(body + td[pos:], [])
   for m in re.finditer(r"def\s*:\s*ProcessorAlias\s*<\s*\"([^\"]+)\"\s*,\s*\"([^\"]+)\"\s*>", td):
     alias[m.group(1)] = m.group(2)
   res = {}
