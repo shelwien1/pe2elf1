@@ -12,11 +12,12 @@ mp4pack d [options] input output     decompress
 
 The tools are looked up in the directory of `mp4pack.exe` itself, so put it next
 to them: `avip`, `h264p`, `aacpack`, `mp3pack`, `oggcomp`, `ttfcomp`, `shar`. Each
-can be there in builds for several instruction sets, named by a suffix:
-`h264p_avx2.exe`, `h264p_avx512.exe`, `h264p.exe` ... mp4pack runs the best one
-the CPU can run (see [Tool builds](#tool-builds-and-the-cpu)). Only `avip` and
-`shar` are required; a stream whose packer is missing (or has no build for this
-CPU) goes to shar, with a note.
+can be there in builds for several CPUs, named by the gcc/clang `-march` target
+they were made for: `h264p_haswell.exe`, `h264p_x86-64-v3.exe`,
+`h264p_znver4.exe`, `h264p.exe` ... mp4pack runs the best one of those that run
+on the CPU (see [Tool builds](#tool-builds-and-the-cpu)). Only `avip` and
+`shar` are required; a stream whose packer is missing (or has no build that
+runs here) goes to shar, with a note.
 
 ## What happens
 
@@ -92,7 +93,7 @@ decompression threads from the stream, so for d, `-t` only sets how many things
 run at once.
 
 mp4pack shows what `-t` came to on its first line, e.g.
-`cpu: 8 threads, 4 cores, avx2, 7 free; -t 50%+50%-2 = 3+3,1+1`.
+`cpu: 8 threads, 4 cores, haswell (x86-64-v3), 7 free; -t 50%+50%-2 = 3+3,1+1`.
 
 `-c C` &mdash; part sizes, in the same order (separators as in `-t`, they make no
 difference here): MB, or KB with a `k` (`g`: GB). `0` or a missing number: the
@@ -145,8 +146,10 @@ On a 5-second h264 sample (304,970 bytes), h264p's levels on one thread came to:
 defaults of `-t`: the CPUs' idle share, measured over a second when mp4pack
 starts, times their number (at least 1). For when something else is running.
 
-`-i L` &mdash; use tool builds up to level `L` only (see below), e.g. `-i avx2` on
-an AVX-512 machine. Default: what the CPU has.
+`-i T` &mdash; use only the tool builds whose code also runs on the `-march`
+target `T` (see below). E.g. `-i x86-64-v3` (or `-i haswell`) on an AVX-512
+machine leaves the AVX-512 builds out; `-i znver4` takes only builds that would
+run on a Zen 4 too. Default: every build that runs on this CPU.
 
 `-w D` &mdash; make the work directory in `D` (created if needed); default
 `%TEMP%`. The work directory itself is a new `mp4pack_<pid>_<n>` in it, removed
@@ -167,44 +170,69 @@ estimate of the time left, and each running job with its progress.
 At the start mp4pack says what it found:
 
 ```
-cpu: 16 threads, 8 cores, avx2, 12 free; -t 12,12,1+1
-tools: avip_avx2.exe shar_avx2.exe h264p_avx2.exe aacpack_avx2.exe ...
+cpu: 16 threads, 8 cores, znver4 (x86-64-v4), 12 free; -t 12,12,1+1
+tools: avip_avx2.exe shar_avx2.exe h264p_znver4.exe aacpack_avx2.exe ...
 ```
 
 The threads are the logical processors in all processor groups
 (`GetActiveProcessorCount`), the cores are counted by
-`GetLogicalProcessorInformationEx`. The instruction sets come from CPUID (and
-XGETBV, for whether the OS saves the AVX/AVX-512 registers), run from a few
-bytes of x64 machine code put in executable memory: no compiler intrinsics or
-inline assembly. Where that is not allowed, `IsProcessorFeaturePresent` tells
-it instead (older Windows versions do not know the newer features there, so it
-can only err low).
+`GetLogicalProcessorInformationEx`. The CPU is read by `x86targets.h`, the
+header of [cpuinfo](../cpuinfo): CPUID, and XGETBV for the registers the OS
+saves. It knows gcc's and clang's `-march` targets (the names, and the features
+each one lets the compilers use), works out which of them run on this CPU, and
+ranks those as cpuinfo lists them. The `cpu` line names the first (here
+`znver4`) and the CPU's x86-64 level.
 
-A build's suffix names its level; the CPU's level is the highest whose features
-it has all of:
+A tool's builds are named by their targets: the tool, `_`, and a name gcc or
+clang take for `-march`. E.g. `h264p_haswell.exe` (made with `-march=haswell`),
+`h264p_x86-64-v3.exe`, `h264p_znver4.exe`, `h264p_skylake-avx512.exe`. These
+are cpuinfo's build names, so an x86-32 build of an x64 target gets `-32`
+(`h264p_haswell-32.exe`: `-m32 -march=haswell`), and the x86-32-only targets
+keep their names (`h264p_pentium4.exe`). `h264p.exe`, with no target, is taken
+to run anywhere. The level names of earlier mp4pack versions stand for these
+targets:
 
-| level | suffixes | needs |
-|---|---|---|
-| x64 | none (`h264p.exe`), `_x64`, `_sse2` | any x64 CPU |
-| sse3 | `_sse3` | SSE3 |
-| ssse3 | `_ssse3` | SSSE3 |
-| sse41 | `_sse41`, `_sse4`, `_sse4.1` | SSE4.1 |
-| sse42 | `_sse42`, `_sse4.2`, `_v2` | SSE4.2, POPCNT |
-| avx | `_avx` | AVX, and the OS saving YMM |
-| avx2 | `_avx2`, `_v3` | AVX2, FMA, BMI1, BMI2, LZCNT, MOVBE, F16C (x86-64-v3, Haswell) |
-| avx512 | `_avx512`, `_v4` | AVX-512 F, CD, BW, DQ, VL, and the OS saving ZMM (x86-64-v4) |
+| suffix | target |
+|---|---|
+| `_x64`, `_sse2`, `_v1` | x86-64 |
+| `_sse3` | nocona |
+| `_ssse3` | core2 |
+| `_sse4`, `_sse41`, `_sse4.1` | penryn |
+| `_sse42`, `_sse4.2`, `_v2` | x86-64-v2 |
+| `_avx` | sandybridge |
+| `_avx2`, `_v3` | x86-64-v3 |
+| `_avx512`, `_v4` | x86-64-v4 |
 
-The tools of `mp4pack_v0` are AVX2 builds, so they go in as `<tool>_avx2.exe`;
-in their directory, on Windows:
+A build runs here when the CPU has every feature of its target that compilers
+use on their own (class C in `x86targets.h`; for a name both compilers know,
+those of both). The ones only used through intrinsics (`aes`, `sha` ...) do
+not count, as in cpuinfo without `-s`. Of the builds that run, the one whose
+target cpuinfo ranks first is used. The ranking goes by the highest vector ISA
+(AVX-512 over AVX2 ...), then the target `-march=native` names, the x86-64
+level, the same tuning, more features, the CPU's vendor, newer targets. x64
+builds go before x86-32 ones. A build with no target ranks as an `x86-64` one
+(and, where that does not run, after all the others). When no build of a tool
+runs, mp4pack says what each one needs that the CPU lacks, e.g. on a Haswell:
+
+```
+no h264p build that runs here (h264p_avx512.exe lacks avx512f avx512cd
+avx512dq avx512bw avx512vl; h264p_znver5.exe lacks sse4a prfchw gfni ...)
+```
+
+The tools of `mp4pack_v0` are AVX2 builds (`x86-64-v3`), so they go in as
+`<tool>_avx2.exe` (or `<tool>_x86-64-v3.exe`); in their directory, on Windows:
 
 ```
 for %f in (avip aacpack h264p mp3pack oggcomp shar ttfcomp) do ren %f.exe %f_avx2.exe
 ```
 
-For each tool the highest level at or below the CPU's (or `-i`'s) is run. The
-archive's index lists the builds it was made with (`mp4pack d -v` shows them).
-The builds of a tool are taken to be interchangeable: the CRC checks of d would
-catch it if they were not.
+With `-i T` a build has to run on `T` as well: the CPU's features are cut down
+to `T`'s before the builds are checked. Without CPUID, only the builds with no
+target are run (an x86 mp4pack always has it; this is for an mp4pack built for
+another CPU, with the tools run under emulation). The archive's index lists the
+builds it was made with (`mp4pack d -v` shows them). The builds of a tool are
+taken to be interchangeable: the CRC checks of d would catch it if they were
+not.
 
 ## Errors
 
@@ -212,7 +240,7 @@ catch it if they were not.
 |---|---|
 | 0 | done |
 | 1 | bad command line |
-| 2 | a file cannot be read or written, a tool is missing (or has no build for the CPU) |
+| 2 | a file cannot be read or written, a tool is missing (or has no build that runs on the CPU) |
 | 3 | a tool failed (the end of its log is shown) |
 | 4 | d: not an mp4pack archive, or a stream or the result is not as it was |
 | 5 | aborted with Ctrl+C |
@@ -260,7 +288,9 @@ g++ -std=c++11 -O2 -s -static -municode -o mp4pack.exe mp4pack.cpp
 ```
 
 clang++ works the same way (for the MSVC target `wmain` needs no `-municode`).
-For the Linux build see below.
+`mp4pack.cpp` includes `../cpuinfo/x86targets.h`, so build it in this
+repository (or keep the two directories side by side). For the Linux build see
+below.
 
 ## Linux
 
@@ -273,7 +303,7 @@ The same `mp4pack.cpp` builds for Linux (x86-64, glibc), with `g++` or `clang++`
 There `winapi_posix.h` takes the place of `<windows.h>`. It implements the Win32
 functions mp4pack calls on POSIX, so the program is the same one as on Windows.
 The functions cover files, pipes, processes, threads and waits, the console,
-Ctrl+C and the CPU.
+Ctrl+C and the processor counts.
 
 The tools are the Windows ones, converted to Linux programs by
 [pe2elf](https://github.com/shelwien1/pe2elf). They run with its
@@ -333,6 +363,12 @@ decompress it and compare, a line per file. E.g.
 `test\roundtrip.bat c:\mp4pack_v0\mp4pack.exe "-t 50%+50%-1" a.mkv b.mp4`.
 `test/parse_test.cpp` checks the `-t`/`-c`/`-l` parsing (build it like
 mp4pack.exe and run it; on Linux `g++ -std=c++11 -pthread test/parse_test.cpp`).
+`test/builds_test.cpp` (built the same way) shows which builds mp4pack would
+run on other CPUs: `builds_test [-i T] TOOLDIR DUMP...` reads CPUID dumps in
+cpuinfo's format (InstLatx64's `*CPUID*.txt`, or `cpuinfo -D`), and prints for
+each the CPU's best target and the build of each tool in TOOLDIR that would
+run there, or why none would. The builds can be empty files: only their names
+count.
 
 Done here with wine 9 on Linux: the `003` mkv/mp4 test files, synthetic files
 with every kind of stream (h264, aac, mp3, vorbis, ac3, opus, flac, xvid,
@@ -340,9 +376,12 @@ ASS/SRT/tx3g subtitles, ttf attachments; mkv, mp4, avi), and a whole movie;
 `-t` and `-c` in sequence, in parallel and mixed, with zeros, percentages and
 `-N`, with parts and pieces; packers that fail or crash (they fall back to
 shar); Cyrillic paths, a new nested `-w` directory, paths over 260 characters;
-damaged, truncated and foreign archives, an empty input; tool builds for
-several levels, `-i` limits, builds missing for the level. Not under wine:
-Ctrl+C (wine's console ends a program on it at once, without its handler).
+damaged, truncated and foreign archives, an empty input; tool builds named by
+targets and by the old level names, `-i`, no build that runs. With
+builds_test, the builds chosen for 19 InstLatx64 dumps (K8 to Zen 5, Pentium 4
+and Core 2 to Sapphire Rapids, VIA Nano, Zhaoxin), with and without `-i`. Not
+under wine: Ctrl+C (wine's console ends a program on it at once, without its
+handler).
 
 The movie, with `-t 4+4,1,1` (the default then) on a 4-thread Xeon VM under
 wine:

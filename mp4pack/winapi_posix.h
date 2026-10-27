@@ -109,10 +109,7 @@ typedef void* FARPROC;
 #define MEM_COMMIT 0x1000u
 #define MEM_RESERVE 0x2000u
 #define MEM_RELEASE 0x8000u
-#define PAGE_READONLY 0x2u
 #define PAGE_READWRITE 0x4u
-#define PAGE_EXECUTE_READ 0x20u
-#define PAGE_EXECUTE_READWRITE 0x40u
 
 #define HANDLE_FLAG_INHERIT 1u
 #define STARTF_USESTDHANDLES 0x100u
@@ -702,17 +699,13 @@ inline BOOL FindClose( HANDLE h ) { return CloseHandle( h ); }
 
 //---- memory
 
-// the size goes in a page before the block
-inline void* VirtualAlloc( void*, size_t n, DWORD, DWORD prot ) {
+// read/write blocks only; the size goes in a page before the block
+inline void* VirtualAlloc( void*, size_t n, DWORD, DWORD ) {
   size_t pg = size_t( sysconf( _SC_PAGESIZE ) );
-  int p = (prot==PAGE_READONLY) ? PROT_READ : (prot==PAGE_EXECUTE_READ) ? PROT_READ|PROT_EXEC
-        : (prot==PAGE_EXECUTE_READWRITE) ? PROT_READ|PROT_WRITE|PROT_EXEC : PROT_READ|PROT_WRITE;
   void* m = mmap( 0, n+pg, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0 );
   if( m==MAP_FAILED ) { SetLastError( ERROR_NOT_ENOUGH_MEMORY ); return 0; }
   *(size_t*)m = n+pg;
-  char* b = (char*)m+pg;
-  if( (p!=(PROT_READ|PROT_WRITE)) && mprotect( b, n, p ) ) { munmap( m, n+pg ); WpFail( errno ); return 0; }
-  return b;
+  return (char*)m+pg;
 }
 
 inline BOOL VirtualFree( void* b, size_t, DWORD ) {
@@ -721,16 +714,6 @@ inline BOOL VirtualFree( void* b, size_t, DWORD ) {
   if( munmap( m, *(size_t*)m ) ) return WpFail( errno );
   return TRUE;
 }
-
-inline BOOL VirtualProtect( void* b, size_t n, DWORD prot, DWORD* old ) {
-  int p = (prot==PAGE_READONLY) ? PROT_READ : (prot==PAGE_EXECUTE_READ) ? PROT_READ|PROT_EXEC
-        : (prot==PAGE_EXECUTE_READWRITE) ? PROT_READ|PROT_WRITE|PROT_EXEC : PROT_READ|PROT_WRITE;
-  if( old ) *old = PAGE_READWRITE;
-  if( mprotect( b, n, p ) ) return WpFail( errno );
-  return TRUE;
-}
-
-inline BOOL FlushInstructionCache( HANDLE, const void*, size_t ) { return TRUE; } // (x86)
 
 //---- time
 
@@ -831,24 +814,6 @@ inline BOOL GetSystemTimes( FILETIME* idle, FILETIME* kernel, FILETIME* user ) {
   ULONGLONG x[3] = { i, k, s };
   for( int j=0; j<3; j++ ) if( t[j] ) { t[j]->dwLowDateTime = DWORD(x[j]); t[j]->dwHighDateTime = DWORD(x[j]>>32); }
   return TRUE;
-}
-
-// PF_SSE3_INSTRUCTIONS_AVAILABLE (13), PF_SSSE3_ (36) .. PF_AVX512F_ (41), by
-// the flags in /proc/cpuinfo (the kernel leaves out what it does not enable)
-inline BOOL IsProcessorFeaturePresent( DWORD pf ) {
-  static std::string flags = [] {
-    std::string r;
-    if( FILE* f = fopen( "/proc/cpuinfo", "r" ) ) {
-      char l[8192];
-      while( fgets( l, sizeof(l), f ) ) if( !strncmp( l, "flags", 5 ) ) { r = l; break; }
-      fclose( f );
-    }
-    for( size_t i=0; i<r.size(); i++ ) if( (r[i]=='\t') || (r[i]=='\n') || (r[i]==':') ) r[i] = ' ';
-    return r + " ";
-  }();
-  const char* f = (pf==13) ? "pni" : (pf==36) ? "ssse3" : (pf==37) ? "sse4_1" : (pf==38) ? "sse4_2"
-                : (pf==39) ? "avx" : (pf==40) ? "avx2" : (pf==41) ? "avx512f" : 0;
-  return f && (flags.find( " " + std::string(f) + " " )!=std::string::npos);
 }
 
 inline UINT SetErrorMode( UINT ) { return 0; }

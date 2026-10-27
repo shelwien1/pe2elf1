@@ -13,7 +13,8 @@
 // against the sizes and CRC32s in the index.
 //
 // The tools are run from the directory of mp4pack.exe, each in the best build
-// there for this CPU (h264p_avx2.exe, h264p.exe, ...: GetTool), with the work
+// there for this CPU (h264p_znver4.exe, h264p_avx2.exe, h264p.exe, ...: by the
+// -march target in the name, ranked by x86targets.h: GetTool), with the work
 // directory as their current one and relative paths on their command lines:
 // they take ANSI command lines, so only names that survive that reach them
 // (ToolName). On Linux they are the Windows tools converted by pe2elf (named
@@ -38,6 +39,7 @@
 #include <string>
 #include <vector>
 #include <algorithm>
+#include "../cpuinfo/x86targets.h" // the CPU, and the -march targets whose code runs on it
 
 typedef unsigned char byte;
 typedef unsigned int uint;
@@ -437,118 +439,73 @@ static vector<wstring> ListFiles( const wstring& dir ) {
 
 //---- the CPU, and the tool builds for it
 
-// Builds of a tool for instruction sets are named by a suffix: h264p_avx2.exe;
-// h264p.exe is taken to run anywhere (on Linux: h264p_avx2, h264p). The best
-// one the CPU can run is used.
-enum { L_X64, L_SSE3, L_SSSE3, L_SSE41, L_SSE42, L_AVX, L_AVX2, L_AVX512, N_LEVEL };
-static const char* l_name[N_LEVEL] = { "x64", "sse3", "ssse3", "sse41", "sse42", "avx", "avx2", "avx512" };
+// Builds of a tool are named by the -march target they are made for, gcc's
+// and clang's names as x86targets.h has them: h264p_haswell.exe,
+// h264p_x86-64-v3.exe, h264p_znver4.exe; x86-32 builds by their build names
+// (h264p_haswell-32.exe, h264p_pentium4.exe); h264p.exe is taken to run
+// anywhere (on Linux: h264p_haswell, h264p). The targets whose code runs on
+// this CPU are ranked by x86targets.h (RankTargets: the vector ISA, what
+// -march=native picks, the x86-64 level ...), and the build of the best one
+// there is is used, x64 builds before x86-32 ones.
 
 static string Lower( string s ) {
   for( size_t i=0; i<s.size(); i++ ) if( (s[i]>='A') && (s[i]<='Z') ) s[i] += 'a'-'A';
   return s;
 }
 
-// the level a suffix names, -1 if none
-static int Level( const string& suffix ) {
-  static const struct { const char* s; int l; } alias[] = {
-    { "sse2", L_X64 }, { "sse4", L_SSE41 }, { "sse4.1", L_SSE41 }, { "sse4.2", L_SSE42 },
-    { "v2", L_SSE42 }, { "v3", L_AVX2 }, { "v4", L_AVX512 } };
-  string s = Lower( suffix );
-  for( int l=0; l<N_LEVEL; l++ ) if( s==l_name[l] ) return l;
-  for( size_t i=0; i<sizeof(alias)/sizeof(alias[0]); i++ ) if( s==alias[i].s ) return alias[i].l;
+static int cpu_threads, cpu_cores;
+static x86::Cpu cpu;                    // this CPU (its features less what -i leaves out)
+static int cpu_ok;                      // its CPUID was read
+static string cpu_best;                 // the best target for it
+static int cap = -1;                    // -i: only builds that run on this target
+static x86::Match rk[2][x86::N_TARGET]; // the targets of x64 and x86-32 builds, usable ones first, best first
+static int rk_n[2], rk_all[2];          // how many usable, how many in all
+
+// the target a build name names, and its bits: haswell (x64), haswell-32 and
+// pentium4 (x86-32); also the level names of earlier mp4pack versions (avx2:
+// x86-64-v3 ...). -1: none
+static int BuildOf( string s, int& bits ) {
+  static const char* const alias[][2] = {
+    { "x64", "x86-64" }, { "sse2", "x86-64" }, { "v1", "x86-64" }, { "sse3", "nocona" }, { "ssse3", "core2" },
+    { "sse4", "penryn" }, { "sse41", "penryn" }, { "sse4.1", "penryn" }, { "sse42", "x86-64-v2" },
+    { "sse4.2", "x86-64-v2" }, { "v2", "x86-64-v2" }, { "avx", "sandybridge" }, { "avx2", "x86-64-v3" },
+    { "v3", "x86-64-v3" }, { "avx512", "x86-64-v4" }, { "v4", "x86-64-v4" } };
+  s = Lower( s );
+  for( size_t i=0; i<sizeof(alias)/sizeof(alias[0]); i++ ) if( s==alias[i][0] ) s = alias[i][1];
+  return x86::FindBuild( s.c_str(), &bits );
+}
+
+// a build's place among the ones that run here (lower is better); -1: it does not
+static int BuildRank( int t, int bits ) {
+  int k = (bits==32);
+  for( int i=0; i<rk_n[k]; i++ ) if( rk[k][i].t==t ) return k*x86::N_TARGET+i;
   return -1;
 }
 
-static int cpu_threads, cpu_cores, cpu_level, cpu_isa;
-
-#if (defined(_M_X64) && !defined(_M_ARM64EC)) || defined(__x86_64__)
-// CPUID and XGETBV as machine code (the Microsoft x64 calling convention; on
-// Linux the System V one), not a compiler's intrinsics
-#ifdef _WIN32
-static const byte x_cpuid[] = {  // void f( uint leaf, uint subleaf, uint r[4] )
-  0x53,                          // push rbx
-  0x89,0xC8,                     // mov eax,ecx
-  0x89,0xD1,                     // mov ecx,edx
-  0x0F,0xA2,                     // cpuid
-  0x41,0x89,0x00,                // mov [r8],eax
-  0x41,0x89,0x58,0x04,           // mov [r8+4],ebx
-  0x41,0x89,0x48,0x08,           // mov [r8+8],ecx
-  0x41,0x89,0x50,0x0C,           // mov [r8+12],edx
-  0x5B,                          // pop rbx
-  0xC3 };                        // ret
-static const byte x_xgetbv[] = { // qword f( uint xcr )
-  0x0F,0x01,0xD0,                // xgetbv
-  0x48,0xC1,0xE2,0x20,           // shl rdx,32
-  0x48,0x09,0xD0,                // or rax,rdx
-  0xC3 };                        // ret
-#else
-static const byte x_cpuid[] = {  // void f( uint leaf, uint subleaf, uint r[4] )
-  0x53,                          // push rbx
-  0x49,0x89,0xD0,                // mov r8,rdx
-  0x89,0xF8,                     // mov eax,edi
-  0x89,0xF1,                     // mov ecx,esi
-  0x0F,0xA2,                     // cpuid
-  0x41,0x89,0x00,                // mov [r8],eax
-  0x41,0x89,0x58,0x04,           // mov [r8+4],ebx
-  0x41,0x89,0x48,0x08,           // mov [r8+8],ecx
-  0x41,0x89,0x50,0x0C,           // mov [r8+12],edx
-  0x5B,                          // pop rbx
-  0xC3 };                        // ret
-static const byte x_xgetbv[] = { // qword f( uint xcr )
-  0x89,0xF9,                     // mov ecx,edi
-  0x0F,0x01,0xD0,                // xgetbv
-  0x48,0xC1,0xE2,0x20,           // shl rdx,32
-  0x48,0x09,0xD0,                // or rax,rdx
-  0xC3 };                        // ret
-#endif
-typedef void (*cpuid_t)( uint, uint, uint* );
-typedef qword (*xgetbv_t)( uint );
-
-static uint Bit( uint x, int n ) { return (x>>n)&1; }
-
-// the level by CPUID; -1 if the code cannot be run
-static int CpuidLevel() {
-  byte* m = (byte*)VirtualAlloc( 0, 4096, MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE );
-  DWORD old;
-  if( !m ) return -1;
-  memcpy( m, x_cpuid, sizeof(x_cpuid) );
-  memcpy( m+64, x_xgetbv, sizeof(x_xgetbv) );
-  if( !VirtualProtect( m, 4096, PAGE_EXECUTE_READ, &old ) ) { VirtualFree( m, 0, MEM_RELEASE ); return -1; }
-  FlushInstructionCache( GetCurrentProcess(), m, 4096 );
-  cpuid_t cpuid = (cpuid_t)(void*)m;
-  xgetbv_t xgetbv = (xgetbv_t)(void*)(m+64);
-  uint r0[4], r1[4], r7[4] = { 0,0,0,0 }, e0[4], e1[4] = { 0,0,0,0 };
-  cpuid( 0, 0, r0 );
-  cpuid( 1, 0, r1 );
-  if( r0[0]>=7 ) cpuid( 7, 0, r7 );
-  cpuid( 0x80000000u, 0, e0 );
-  if( e0[0]>=0x80000001u ) cpuid( 0x80000001u, 0, e1 );
-  qword xcr0 = Bit( r1[2], 27 ) ? xgetbv( 0 ) : 0; // OSXSAVE: XCR0 says what state the OS saves
-  VirtualFree( m, 0, MEM_RELEASE );
-  uint c = r1[2], b = r7[1];
-  if( !Bit(c,0) ) return L_X64;                                 // SSE3
-  if( !Bit(c,9) ) return L_SSE3;                                // SSSE3
-  if( !Bit(c,19) ) return L_SSSE3;                              // SSE4.1
-  if( !Bit(c,20) || !Bit(c,23) ) return L_SSE41;                // SSE4.2, POPCNT
-  if( !Bit(c,28) || ((xcr0&6)!=6) ) return L_SSE42;             // AVX, with the OS saving YMM
-  // AVX2 and the rest of x86-64-v3: FMA, BMI1, BMI2, LZCNT, MOVBE, F16C
-  if( !Bit(b,5) || !Bit(c,12) || !Bit(b,3) || !Bit(b,8) || !Bit(e1[2],5) || !Bit(c,22) || !Bit(c,29) ) return L_AVX;
-  // AVX-512 F, DQ, CD, BW, VL (x86-64-v4), with the OS saving ZMM and the masks
-  if( !Bit(b,16) || !Bit(b,17) || !Bit(b,28) || !Bit(b,30) || !Bit(b,31) || ((xcr0&0xE6)!=0xE6) ) return L_AVX2;
-  return L_AVX512;
+// what a build needs that the CPU (or -i's target) lacks: the features the
+// compilers use on their own
+static string Lacks( int t, int bits ) {
+  int k = (bits==32);
+  string s;
+  for( int i=0; i<rk_all[k]; i++ ) if( rk[k][i].t==t ) {
+    for( int f=0; f<x86::N_FEAT; f++ ) if( x86::Has( rk[k][i].miss, f ) && (x86::x86_feat[f].cls=='C') ) s += string( s.size() ? " " : "" ) + x86::x86_feat[f].name;
+    break;
+  }
+  return s;
 }
-#else
-static int CpuidLevel() { return -1; }
-#endif
 
-// the level as the system tells it, where CPUID cannot be run; before Windows
-// 10 it does not know the newer features (PF_SSE3_.. to PF_AVX512F_INSTRUCTIONS_AVAILABLE;
-// on Linux: /proc/cpuinfo)
-static int OsLevel() {
-  static const DWORD pf[] = { 13, 36, 37, 38, 39, 40, 41 };
-  int l = L_X64;
-  for( int i=0; (i<7) && IsProcessorFeaturePresent( pf[i] ); i++ ) l = i+1;
-  return l;
+// the CPU by CPUID, and the targets of the builds it runs, ranked (-i: those
+// that run on its target too)
+static void CpuTargets() {
+  static x86::Cpuid d;
+  cpu_ok = x86::ReadCpuid( d );
+  if( !cpu_ok ) return; // (none runs, as far as we know)
+  x86::Analyze( d, cpu );
+  for( int pass=0; pass<1+(cap>=0); pass++ ) {
+    if( pass ) cpu.f = x86::And( cpu.f, x86::TargetSet( cap, x86::C_BOTH ) );
+    for( int k=0; k<2; k++ ) rk_n[k] = x86::RankTargets( cpu, x86::C_BOTH, k ? 32 : 64, false, rk[k], &rk_all[k] );
+    if( !pass && (rk_n[0] || rk_n[1]) ) cpu_best = x86::x86_target[rk[rk_n[0] ? 0 : 1][0].t].name;
+  }
 }
 
 // logical processors in all processor groups, and cores
@@ -585,13 +542,13 @@ static int FreeThreads() {
   return std::max( 1, std::min( cpu_threads, int( cpu_threads*idle/all+0.5 ) ) );
 }
 
-// a tool: its build to run (path empty: none this CPU can run), and the ones it cannot
+// a tool: its build to run (path empty: none that runs here), and the ones that do not
 struct Tool { string base, file, later; wstring path; int used; };
 static Tool tools[16];
 static int n_tools;
 
-// the best build of a tool in our directory: base.exe or base_<level>.exe
-// (on Linux base or base_<level>)
+// the best build of a tool in our directory: base.exe or base_<target>.exe
+// (on Linux base or base_<target>)
 static const Tool& GetTool( const string& base ) {
   for( int i=0; i<n_tools; i++ ) if( tools[i].base==base ) return tools[i];
   Tool& t = tools[n_tools++];
@@ -605,11 +562,13 @@ static const Tool& GetTool( const string& base ) {
       if( fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY ) continue;
       string n = U(fd.cFileName), l = Lower(n);
       if( (l.size()<b.size()+e.size()) || (l.compare( 0, b.size(), b )!=0) || (l.compare( l.size()-e.size(), e.size(), e )!=0) ) continue;
-      string x = l.substr( b.size(), l.size()-e.size()-b.size() ); // "" or "_avx2"
-      int v = x.empty() ? L_X64 : (x[0]=='_') ? Level( x.substr(1) ) : -1;
-      if( v<0 ) continue; // (another tool's)
-      if( v>cpu_level ) { t.later += (t.later.size() ? ", " : "") + n; continue; }
-      if( v>best ) { best = v; t.file = n; t.path = exe_dir + fd.cFileName; }
+      string x = l.substr( b.size(), l.size()-e.size()-b.size() ); // "" or "_haswell"
+      int bits = 64, tg = x.empty() ? x86::FindTarget( "x86-64" ) : (x[0]=='_') ? BuildOf( x.substr(1), bits ) : -1;
+      if( tg<0 ) continue; // (another tool's)
+      int r = BuildRank( tg, bits );
+      if( x.empty() && (r<0) ) r = 2*x86::N_TARGET; // (taken to run anywhere)
+      if( r<0 ) { t.later += (t.later.size() ? "; " : "") + n + (cpu_ok ? " lacks " + Lacks( tg, bits ) : string()); continue; }
+      if( (best<0) || (r<best) ) { best = r; t.file = n; t.path = exe_dir + fd.cFileName; }
     } while( FindNextFileW( h, &fd ) );
     FindClose( h );
   }
@@ -618,7 +577,8 @@ static const Tool& GetTool( const string& base ) {
 
 static string NoTool( const Tool& t ) {
   if( t.later.empty() ) return "no " + t.base + " in " + U(exe_dir);
-  return "no " + t.base + " build for " + l_name[cpu_level] + " (only " + t.later + ")";
+  if( !cpu_ok ) return "no " + t.base + " build without a target, the only kind run with no CPUID (only " + t.later + ")";
+  return "no " + t.base + " build that runs here" + ((cap>=0) ? " and on " + string( x86::x86_target[cap].name ) : string()) + " (" + t.later + ")";
 }
 
 // a warning when the work directory's disk has less than this free
@@ -1724,7 +1684,8 @@ static BOOL WINAPI CtrlHandler( DWORD t ) {
 static const char usage[] =
 "mp4pack - lossless compression of mp4/mkv/avi files with avip, h264p, aacpack,\n"
 "mp3pack, oggcomp, ttfcomp and shar, from mp4pack's own directory: the best\n"
-"build of each for this CPU, <tool>" EXE " or <tool>_<level>" EXE " (h264p_avx2" EXE ")\n"
+"build of each for this CPU, <tool>_<target>" EXE " by -march target names\n"
+"(h264p_haswell" EXE ", h264p_x86-64-v3" EXE ", h264p_znver4" EXE ") or <tool>" EXE "\n"
 "usage: mp4pack c [options] input output   compress\n"
 "       mp4pack d [options] input output   decompress\n"
 "options:\n"
@@ -1752,8 +1713,8 @@ static const char usage[] =
 "        and the default); shar: zstd's, -131072 to 22 (default 22; 0 stores).\n"
 "        ttfcomp, mp3pack and oggcomp have none. E.g. -l 5,9,,19\n"
 "  -f    count the threads free now (the CPUs' idle share over a second)\n"
-"  -i L  use tool builds up to level L: x64 sse3 ssse3 sse41 sse42 avx avx2\n"
-"        avx512 (default: what the CPU has)\n"
+"  -i T  use only tool builds whose code runs on the -march target T as well\n"
+"        (haswell, x86-64-v3 ...; default: any that runs on this CPU)\n"
 #ifdef _WIN32
 "  -w D  make the work directory in D (default: %TEMP%)\n"
 #else
@@ -1776,7 +1737,7 @@ int wmain( int argc, wchar_t** argv ) {
     exe_dir.erase( exe_dir.size()-FileName( exe_dir ).size() );
   }
 
-  int mode = 0, nio = 0, f_t = 0, f_c = 0, cap = L_AVX512;
+  int mode = 0, nio = 0, f_t = 0, f_c = 0, bits;
   wstring io[2];
   string ts, cs, ls;
   for( int i=1; i<argc; i++ ) {
@@ -1793,7 +1754,7 @@ int wmain( int argc, wchar_t** argv ) {
         if( o=='t' ) { ts = U(v); f_t = 1; } else if( o=='c' ) { cs = U(v); f_c = 1; }
         else if( o=='l' ) { ls = U(v); if( ParseLevels( ls.c_str() ) ) { Msg( "bad -l " + ls + " (up to 4 levels joined by ,: h264p and aacpack 1 to 9, shar -131072 to 22)" ); return 1; } }
         else if( o=='w' ) w_base = v;
-        else if( (cap = Level( U(v) ))<0 ) { Msg( "bad -i " + U(v) ); return 1; }
+        else if( (cap = BuildOf( U(v), bits ))<0 ) { Msg( "bad -i " + U(v) + " (a -march target: haswell, x86-64-v3, znver4 ...)" ); return 1; }
       } else if( a==L"-v" ) f_verbose = 1;
       else if( a==L"-f" ) f_free = 1;
       else if( a==L"-k" ) f_keep = 1;
@@ -1806,14 +1767,13 @@ int wmain( int argc, wchar_t** argv ) {
   if( !mode || (nio!=2) ) { Put( usage ); return 1; }
   f_dec = (mode=='d');
 
-  // the CPU: its threads (or the free ones), and the tool builds it can run
+  // the CPU: its threads (or the free ones), and the tool builds it runs
   CpuThreads();
-  cpu_level = CpuidLevel();
-  cpu_isa = (cpu_level>=0);
-  if( cpu_level<0 ) cpu_level = OsLevel();
-  string c = "cpu: " + Num(cpu_threads) + " threads" + (cpu_cores ? ", " + Num(cpu_cores) + " cores" : string()) + ", " + l_name[cpu_level]
-           + (cpu_isa ? "" : " (as the system says)");
-  if( cap<cpu_level ) { cpu_level = cap; c += ", builds up to " + string(l_name[cap]); }
+  CpuTargets();
+  string c = "cpu: " + Num(cpu_threads) + " threads" + (cpu_cores ? ", " + Num(cpu_cores) + " cores" : string());
+  if( !cpu_ok ) c += ", no CPUID (builds without a target only)";
+  else if( cpu_best.size() ) c += ", " + cpu_best + (cpu.level ? " (x86-64-v" + Num(cpu.level) + ")" : string());
+  if( cap>=0 ) c += ", builds for " + string( x86::x86_target[cap].name );
   int n = cpu_threads;
   if( f_free ) { n = FreeThreads(); c += ", " + Num(n) + " free"; }
   if( ParseThreads( f_t ? ts : string(), n ) ) { Msg( "bad -t " + ts + " (up to 4 of N or N% joined by + or , and maybe a -N)" ); return 1; }
