@@ -68,7 +68,7 @@ time, by `,` one after the other:
 | `-t 3+3` | ttfcomp and shar get 1 thread each when not given, one after the other: `3+3,1,1` |
 | `-t 4` | a missing audio number is the video's, after it: `4,4,1,1` |
 | `-t 50%+50%-2` | with 8 threads: 8-2 = 6, half of it each: `3+3,1,1` |
-| `-t -2` | the default with 2 threads left out: `6+6,1,1` with 8 threads |
+| `-t -2` | the default with 2 threads left out: `6,6,1+1` with 8 threads |
 
 Instead of a number, `N%` is that share of the threads there are, rounded up
 (at least 1 unless it is `0%`). The threads there are: all of the CPU's, or the
@@ -85,9 +85,11 @@ pieces of big files (`-c`).
 for shar stores the other files as they are (so `-t 0,0,0,0` stores
 everything).
 
-Default: `100%+100%`, that is `N+N,1,1` with N threads. h264p and mp3pack take
-their decompression threads from the stream, so for d, `-t` only sets how many
-things run at once.
+Default: `100%,100%,1+1`, that is `N,N,1+1` with N threads: h264p with all of
+them, then the audio with all of them, then ttfcomp and shar together, one
+thread each; no thread is given out twice. h264p and mp3pack take their
+decompression threads from the stream, so for d, `-t` only sets how many things
+run at once.
 
 mp4pack shows what `-t` came to on its first line, e.g.
 `cpu: 8 threads, 4 cores, avx2, 7 free; -t 50%+50%-2 = 3+3,1,1`.
@@ -165,7 +167,7 @@ estimate of the time left, and each running job with its progress.
 At the start mp4pack says what it found:
 
 ```
-cpu: 16 threads, 8 cores, avx2, 12 free; -t 12+12,1,1
+cpu: 16 threads, 8 cores, avx2, 12 free; -t 12,12,1+1
 tools: avip_avx2.exe shar_avx2.exe h264p_avx2.exe aacpack_avx2.exe ...
 ```
 
@@ -342,7 +344,8 @@ damaged, truncated and foreign archives, an empty input; tool builds for
 several levels, `-i` limits, builds missing for the level. Not under wine:
 Ctrl+C (wine's console ends a program on it at once, without its handler).
 
-The movie, with the defaults (`-t 4+4,1,1`) on a 4-thread Xeon VM under wine:
+The movie, with `-t 4+4,1,1` (the default then) on a 4-thread Xeon VM under
+wine:
 
 | | size | time |
 |---|---|---|

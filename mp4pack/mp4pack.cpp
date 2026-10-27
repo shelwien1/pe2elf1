@@ -1178,7 +1178,8 @@ static int ReadIndex( string& why ) {
 // together with the ones before it, ',' after them. Missing ones: the audio's
 // is the video's, after it; ttfcomp and shar get 1, one after the other ("4" =
 // "4,4,1,1", "3+3" = "3+3,1,1"). A "-N" at the end takes N from the threads
-// there are, for the percentages; alone, for the default (100%+100%).
+// there are, for the percentages; alone, for the default (100%,100%,1+1: all
+// of them for h264p, then for the audio, then ttfcomp and shar at once).
 static int ParseThreads( string spec, int all ) {
   int sub = 0;
   size_t m = spec.rfind( '-' );
@@ -1187,7 +1188,7 @@ static int ParseThreads( string spec, int all ) {
     for( size_t i=m+1; i<spec.size(); i++ ) { if( (spec[i]<'0') || (spec[i]>'9') ) return 1; sub = sub*10+(spec[i]-'0'); }
     spec.erase( m );
   }
-  if( spec.empty() ) spec = "100%+100%";
+  if( spec.empty() ) spec = "100%,100%,1+1";
   int max = std::max( 1, all-sub ), g = 0;
   const char* s = spec.c_str();
   char sep = ',';
@@ -1733,7 +1734,8 @@ static const char usage[] =
 "        (-t 4 = 4,4,1,1; -t 3+3 = 3+3,1,1). N% is that share of the threads\n"
 "        there are (all, or the free ones: -f), rounded up; a -N at the end\n"
 "        leaves N of them out first: -t 50%+50%-2 = 3+3,1,1 with 8 threads.\n"
-"        Alone, -N works on the default, 100%+100%.\n"
+"        Alone, -N works on the default, 100%,100%,1+1 (all the threads\n"
+"        for h264p, then for the audio, then ttfcomp and shar at once).\n"
 "        0: no packer for that group, its files go to shar (for shar\n"
 "        itself: they are stored as they are)\n"
 "  -c C  part sizes, in the same order: MB, or KB with k (e.g. -c 4,512k);\n"
