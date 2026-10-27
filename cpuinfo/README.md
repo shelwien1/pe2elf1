@@ -108,7 +108,7 @@ x86-32 builds can also use:
   feature flag; shown are only the flags that differ from the name's own
   set, each by that compiler's own reading of CPUID (see
   [Which targets run](#which-targets-run)). Not modelled: `rtm` (both),
-  gcc's `-mhle`/`-mabm`/`-mavx10v2aux`/`-macev1` (or their `-mno-`), clang's
+  gcc's `-mhle`/`-mabm`/`-mamx-tf32` (16.x)/`-mavx10v2aux`/`-macev1` (or their `-mno-`), clang's
   `avx10v2aux`, and gcc's cache sizes (`--param l1-cache-size=...`) for its
   `-mtune=native`.
 
@@ -406,16 +406,30 @@ with `getHostCPUName` in `Host.cpp` and `GccName()` with
 
 ## Testing
 
-Checked against the 590 CPUID dumps of InstLatx64
-(<https://github.com/InstLatx64/InstLatx64>, the `*CPUID*.txt` files): all
-parse, and the gcc and clang names agree with the CPU names in the file
-names (as far as each compiler knows them), with ASan/UBSan clean for every
-option. The feature sets were compared with the predefined macros of local
-gcc 13 and clang 18 (`-march=X -dM -E`): equal, except where the compilers
-changed since (gcc dropped `cldemote` from `alderlake`, LLVM 3DNow! for
-`prfchw` and Key Locker from some targets ...). The native
-names match `gcc -march=native` and `clang -march=native` on the machine it
-was built on. Run against a dump:
+Against clang 23.1.4 (the LLVM release binary) and gcc 16.2.0 (built from
+the release sources), with the 590 CPUID dumps of InstLatx64
+(<https://github.com/InstLatx64/InstLatx64>, the `*CPUID*.txt` files):
+
+* the target table: the names each compiler takes for `-march` (x64 and
+  x86-32) are exactly the table's (clang 79/108, gcc 86/118); per name,
+  gcc's own `-march=X -Q --help=target` gives exactly the table's set over
+  all the ISA options modelled (118 names), and clang's predefined macros
+  (`-march=X -dM -E`) exactly the table's over the features that have one
+  (108 names);
+* the detection: `test/harness.sh` builds gcc 16.2's `host_detect_local_cpu`
+  (driver-i386.cc over cpuinfo.h) and LLVM 23.1.4's x86 `getHostCPUName`/
+  `getHostCPUFeatures` (Host.cpp) unchanged except that CPUID and XGETBV come
+  from a dump, and `test/run.sh` compares them with `GccName()`/`gnat` and
+  `ClangName()`/`cnat`: same names and same features on all 590 dumps
+  (LLVM does not report x87, mmxext or 3DNow!; `rtm` is not modelled);
+* the host it was built on: `-march=native` of both compilers is what the
+  `native` lines say (plus `rtm`, `hle`, `abm`, `amx-tf32`, not modelled);
+* `cpuinfo` itself: every option over all dumps, ASan/UBSan clean; builds
+  warning-free with gcc 13, clang 18 and 23 (`-Wall -Wextra -Wshadow`),
+  x86-32 and x64, Linux and MinGW (the `.exe`s run under wine). Not
+  compiled with MSVC.
+
+Run against a dump:
 
 ```
 cpuinfo -d GenuineIntel/GenuineIntel0090672_AlderLake_02_CPUID.txt
@@ -428,10 +442,10 @@ format back, with an `XCR0:` line.
 
 ## Limits
 
-* The table is for today's compilers; older ones lack newer names and some
-  had other features for the same name (gcc 14 still has `knl`/`knm`; gcc 13
-  gives `alderlake` `cldemote`; LLVM before 19 gave `k8` 3DNow!). Class I
-  differences do not change which targets run.
+* The table is that of clang 23.1.4 and gcc 16.2; older compilers lack newer
+  names and some had other features for the same name (gcc 14 still has
+  `knl`/`knm`; gcc 13 gives `alderlake` `cldemote`; LLVM before 19 gave `k8`
+  3DNow!). Class I differences do not change which targets run.
 * The ranking is a guess at speed, not a measurement.
 * A CPU's features may change with the BIOS (AVX-512 on early Alder Lake),
   microcode (TSX), the OS (AVX-512 state, PKU) and hypervisors; the answer is
