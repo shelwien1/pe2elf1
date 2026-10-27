@@ -65,9 +65,9 @@ time, by `,` one after the other:
 | `-t 3,3,1,1` | h264p with 3 threads; when it is done, the audio with 3; then ttfcomp; then shar |
 | `-t 3+3,1,1` | h264p and audio at once, then ttfcomp, then shar |
 | `-t 3+3,1+1` | h264p and audio at once, then ttfcomp and shar at once |
-| `-t 3+3` | ttfcomp and shar get 1 thread each when not given, one after the other: `3+3,1,1` |
-| `-t 4` | a missing audio number is the video's, after it: `4,4,1,1` |
-| `-t 50%+50%-2` | with 8 threads: 8-2 = 6, half of it each: `3+3,1,1` |
+| `-t 3+3` | ttfcomp and shar get 1 thread each when not given, both at once, after the rest: `3+3,1+1` |
+| `-t 4` | a missing audio number is the video's, after it: `4,4,1+1` |
+| `-t 50%+50%-2` | with 8 threads: 8-2 = 6, half of it each: `3+3,1+1` |
 | `-t -2` | the default with 2 threads left out: `6,6,1+1` with 8 threads |
 
 Instead of a number, `N%` is that share of the threads there are, rounded up
@@ -85,14 +85,14 @@ pieces of big files (`-c`).
 for shar stores the other files as they are (so `-t 0,0,0,0` stores
 everything).
 
-Default: `100%,100%,1+1`, that is `N,N,1+1` with N threads: h264p with all of
-them, then the audio with all of them, then ttfcomp and shar together, one
-thread each; no thread is given out twice. h264p and mp3pack take their
+Default: `100%,100%`, that is `N,N,1+1` with N threads: h264p with all of them,
+then the audio with all of them, then ttfcomp and shar together, one thread
+each; no thread is given out twice. h264p and mp3pack take their
 decompression threads from the stream, so for d, `-t` only sets how many things
 run at once.
 
 mp4pack shows what `-t` came to on its first line, e.g.
-`cpu: 8 threads, 4 cores, avx2, 7 free; -t 50%+50%-2 = 3+3,1,1`.
+`cpu: 8 threads, 4 cores, avx2, 7 free; -t 50%+50%-2 = 3+3,1+1`.
 
 `-c C` &mdash; part sizes, in the same order (separators as in `-t`, they make no
 difference here): MB, or KB with a `k` (`g`: GB). `0` or a missing number: the
