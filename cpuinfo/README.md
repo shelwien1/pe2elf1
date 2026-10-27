@@ -281,15 +281,15 @@ compiler emit on its own. Features are of two classes (`-f` shows them):
 
 * class C, the compiler emits them by itself: `x87 cx8 cmov mmx mmxext sse
   .. sse4.2 sse4a popcnt lzcnt cx16 sahf 64bit movbe prfchw avx f16c fma fma4
-  xop tbm bmi bmi2 adx avx2 gfni avx512*` (but vp2intersect) `avxvnni avxifma
-  avxvnniint8 avxvnniint16 avxneconvert avx10.1 avx10.2 apxf raoint avx512bmm`
+  xop tbm bmi bmi2 avx2 gfni avx512*` (but vp2intersect) `avxvnni avxifma
+  avxvnniint8 avxvnniint16 avxneconvert avx10.1 avx10.2 apxf avx512bmm`
   (avx10.1 is not needed, see above);
 * class I, only through intrinsics/builtins (or used by an OS): `3dnow 3dnowa
-  fxsr crc32 pclmul aes xsave* lwp fsgsbase rdrnd rdseed invpcid clflushopt clwb
-  clzero mwaitx rdpid rdpru wbnoinvd sha sgx pku vaes vpclmulqdq
+  fxsr crc32 pclmul aes xsave* lwp adx fsgsbase rdrnd rdseed invpcid
+  clflushopt clwb clzero mwaitx rdpid rdpru wbnoinvd sha sgx pku vaes vpclmulqdq
   avx512vp2intersect movdiri movdir64b waitpkg cldemote ptwrite serialize
   tsxldtrk enqcmd uintr hreset pconfig kl widekl shstk cmpccxadd prefetchi
-  sha512 sm3 sm4 usermsr movrs amx-*`.
+  raoint sha512 sm3 sm4 usermsr movrs amx-*`.
 
 A target is usable when it lacks no class C feature. Its missing class I
 features are shown as `[no ...]`: code built for it runs unless its source
@@ -300,13 +300,25 @@ many BIOSes and was dropped from later client CPUs, PKU is off under Windows
 (the compilers go by OSPKE), hypervisors hide features. Without the split,
 `-march=skylake` would not "run" on a Skylake with SGX off.
 
-Some class C choices: `gfni` (LLVM and gcc use GF2P8AFFINEQB for byte shifts
-and rotates), `prfchw` (PREFETCHW for `__builtin_prefetch(p,1)`), `f16c` and
-`avxneconvert` (half/bf16 conversions), `avxvnni`, `avxifma`, `avxvnniint*`
-(LLVM's EVEX-to-VEX compression turns AVX-512 VNNI/IFMA into the VEX forms
-where those exist: why a `znver5` build may not run on Zen 4, which has
-AVX512-VNNI but not AVX-VNNI). `raoint` and `avx512bmm` are class C only for
-safety.
+The borderline ones were checked by compiling plain C (no intrinsics) with
+gcc 16.2 and clang 23.1.4 and looking at the code. Class C, then:
+* `gfni`: both use GF2P8AFFINEQB for byte vectors: `a[i] = b[i] >> 3` on
+  `uint8_t` with `-march=alderlake`, `icelake-server` or `znver5` (shifts by a
+  constant, rotates, bit reversal; gcc also `b[i]*5`, clang also variable
+  shifts, byte popcount and clz). A build with it crashes on Haswell..Cascade
+  Lake and Zen 1-3 if the program has such a loop.
+* `avx512bmm`: clang turns bit-reversal code into VBITREVB for `znver6`.
+* `prfchw` (PREFETCHW for `__builtin_prefetch(p,1)`), `f16c` and
+  `avxneconvert` (half/bf16 conversions), `avxvnni`, `avxifma`, `avxvnniint*`
+  (LLVM's EVEX-to-VEX compression turns AVX-512 VNNI/IFMA into the VEX forms
+  where those exist: why a `znver5` build may not run on Zen 4, which has
+  AVX512-VNNI but not AVX-VNNI; `test/bench.c`'s int8 kernel built for
+  `alderlake` stops at a VEX VPDPBUSD on a CPU without AVX-VNNI).
+
+Class I by the same test: `adx` (neither emits ADCX/ADOX, not even for
+`_addcarryx_u64`, which both compile to ADC), `raoint` (atomics stay
+LOCK-prefixed; AADD and the rest come only from intrinsics), `3dnow`/`3dnowa`
+(no 3DNow! code from either, for any target).
 
 For x86-32 builds the 64-bit-only features (`64bit sahf cx16 apxf uintr`)
 are not needed.
@@ -440,13 +452,87 @@ states leaf 0Dh lists; old AIDA64 dumps without `[SL nn]` give subleaves as
 repeated lines of the same leaf, read in order. `cpuinfo -D` writes the
 format back, with an `XCR0:` line.
 
+## A practical check: test/bench.c
+
+`test/bench.c` is three small matrix products in plain C, no intrinsics,
+written so that the compilers vectorize them: float (FMA, vector width),
+int8 (u8 x s8 -> int32 dot products, where VNNI fits) and a bit-matrix
+product (AND and a SWAR popcount, which both compilers recognize).
+`test/bench.sh [TARGET...]` builds it with `-O3 -march=TARGET` with each
+compiler and runs every kernel of every build on its own, so a SIGILL shows
+which kernel hit a missing instruction (and gdb shows which instruction).
+`test/isa_used.py` lists the features the code of each function actually uses
+(needs `pip install iced-x86`); with `-c ./cpuinfo` it marks those this CPU
+lacks.
+
+Run on a KVM guest whose CPUID is a Cascade Lake (`cpuinfo`: 1 cascadelake,
+2 skx, 3 x86-64-v4, ... 9 haswell, 10 x86-64-v3, ... 28 k8; icelake-server,
+alderlake, znver5 and znver6 not usable), with clang 23.1.4 and gcc 16.2,
+in milliseconds, best of 5 x 7
+runs (a second pass agreed within 3%, except gcc's int8 times under 2 ms,
+within 20%):
+
+```
+       -march            float    int8    bits   beyond the CPUID
+clang  k8                 7.19   13.10   17.12
+clang  x86-64             7.55   13.13   17.66
+clang  x86-64-v3          3.66    3.95    7.95
+clang  haswell            3.61    3.98    8.02
+clang  alderlake          3.73  SIGILL   44.83   gfni (bits), avxvnni (int8)
+clang  skx                2.91    4.14   41.23
+clang  cascadelake        2.79    5.28   40.55
+clang  x86-64-v4          2.87    4.17   41.50
+clang  icelake-server     2.78    5.15   40.88   avx512vpopcntdq (bits)
+clang  znver5             2.08    2.76   21.95   avx512vpopcntdq (bits)
+clang  znver6             2.12    2.80   22.02   avx512vpopcntdq (bits)
+gcc    k8                 4.91    6.02   30.67
+gcc    x86-64             5.58    4.92   23.75
+gcc    x86-64-v3          2.98    3.03   11.40
+gcc    haswell            2.97    3.84   11.46
+gcc    alderlake          2.93  SIGILL   11.39   avxvnni (int8)
+gcc    skx                2.93    3.84   11.83
+gcc    cascadelake        2.91    1.44   11.91
+gcc    x86-64-v4          3.02    1.70   11.40
+gcc    icelake-server     2.88    0.67    2.33   avx512vpopcntdq (bits)
+gcc    znver5             3.05    0.48    2.00   avx512vpopcntdq (bits)
+gcc    znver6             3.03    0.67    1.98   avx512vpopcntdq (bits)
+```
+
+What ran: every build `cpuinfo` calls usable. `alderlake` stopped at AVX-VNNI
+in the int8 kernel (`{vex} vpdpbusd` from gcc, `{vex} vpdpwssd` from clang).
+`icelake-server`, `znver5` and `znver6` ran, though: the silicon under this
+guest is an Ice Lake-SP, which executes VPOPCNTDQ, VBMI, VBMI2, BITALG, IFMA,
+GFNI, VAES and SHA, while the hypervisor's CPUID shows a Cascade Lake so that
+the guest can move between hosts. Their bits kernels use VPOPCNTDQ; their
+other kernels use only what the CPUID lists, and neither compiler put SSE4A,
+BF16 or AVX-VNNI in the znver ones. On a real Cascade Lake, or after a
+migration, the bits kernel crashes (and clang's `alderlake` one, on GFNI). A
+target that lacks features may crash; whether a given program does depends
+on what its code compiles to.
+
+What was fastest: not the top of the ranking. Every Intel target tunes for
+256-bit vectors in both compilers (512-bit by default: `znver4` and later,
+and gcc's `x86-64-v4`), so with gcc the float loop is the same ymm FMA loop
+for every AVX2 target (its zmm loop, in `x86-64-v4` and `znver5`, is no
+faster: it is bound by loads and stores). clang's AVX-512 targets are 20-30%
+faster there (and `znver5`'s zmm another 40%), but 5x slower on bits: they
+vectorize the popcount across rows, with gathers. Extra ISA paid where an
+instruction fits the loop: AVX512-VNNI makes gcc's `cascadelake` int8 2.7x
+faster than `skx`; VPOPCNTDQ and zmm make `znver5` the fastest build here,
+using features this guest only has unofficially. The compiler mattered as
+much as the target.
+
 ## Limits
 
 * The table is that of clang 23.1.4 and gcc 16.2; older compilers lack newer
   names and some had other features for the same name (gcc 14 still has
   `knl`/`knm`; gcc 13 gives `alderlake` `cldemote`; LLVM before 19 gave `k8`
   3DNow!). Class I differences do not change which targets run.
-* The ranking is a guess at speed, not a measurement.
+* The ranking is a guess at speed, not a measurement (see `test/bench.c`
+  for how far off it can be).
+* Hypervisors may hide features the silicon has; code using them runs but
+  is not promised to (the guest may move to an older host). `cpuinfo` goes by
+  CPUID only.
 * A CPU's features may change with the BIOS (AVX-512 on early Alder Lake),
   microcode (TSX), the OS (AVX-512 state, PKU) and hypervisors; the answer is
   for the CPU as the program sees it now. On Linux, AMX also needs an

@@ -64,7 +64,7 @@ FEATURES = [
   ("LWP","lwp","I","-mlwp","-mlwp"),
   ("BMI","bmi","C","-mbmi","-mbmi"),
   ("BMI2","bmi2","C","-mbmi2","-mbmi2"),
-  ("ADX","adx","C","-madx","-madx"),
+  ("ADX","adx","I","-madx","-madx"),          # neither compiler emits adcx/adox, even for _addcarryx_u64
   ("AVX2","avx2","C","-mavx2","-mavx2"),
   ("FSGSBASE","fsgsbase","I","-mfsgsbase","-mfsgsbase"),
   ("RDRND","rdrnd","I","-mrdrnd","-mrdrnd"),
@@ -122,7 +122,7 @@ FEATURES = [
   ("SHSTK","shstk","I","-mshstk","-mshstk"),
   ("CMPCCXADD","cmpccxadd","I","-mcmpccxadd","-mcmpccxadd"),
   ("PREFETCHI","prefetchi","I","-mprefetchi","-mprefetchi"),
-  ("RAOINT","raoint","C","-mraoint","-mraoint"),
+  ("RAOINT","raoint","I","-mraoint","-mraoint"),  # atomics stay lock-prefixed; aadd.. by intrinsics only
   ("SHA512","sha512","I","-msha512","-msha512"),
   ("SM3","sm3","I","-msm3","-msm3"),
   ("SM4","sm4","I","-msm4","-msm4"),

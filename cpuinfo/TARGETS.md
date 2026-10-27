@@ -42,32 +42,32 @@ group of names that compile to the same thing in every compiler that knows them.
 | sandybridge corei7-avx | yes | v2 | avx | avx | SandyBridgeModel | sandybridge | 2011 |
 | ivybridge core-avx-i | yes | v2 | avx | avx f16c | SandyBridgeModel | sandybridge | 2012 |
 | haswell core-avx2 | yes | v3 | avx2 |  | HaswellModel | haswell | 2013 |
-| broadwell | yes | v3 | avx2 | prfchw adx | BroadwellModel | haswell | 2014 |
-| skylake | yes | v3 | avx2 | prfchw adx | SkylakeClientModel | skylake | 2015 |
-| skylake-avx512 skx(clang) | yes | v4 | avx512 | prfchw adx | SkylakeServerModel | skylake_avx512 | 2017 |
-| cascadelake | yes | v4 | avx512 | prfchw adx avx512vnni | SkylakeServerModel | cascadelake | 2019 |
-| cooperlake | yes | v4 | avx512 | prfchw adx avx512vnni avx512bf16 | SkylakeServerModel | cooperlake | 2020 |
-| cannonlake | yes | v4 | avx512 | prfchw adx avx512ifma avx512vbmi | SkylakeServerModel | cannonlake | 2018 |
-| icelake-client | yes | v4 | avx512 | prfchw adx gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq | IceLakeModel | icelake_client | 2019 |
-| rocketlake | yes | v4 | avx512 | prfchw adx gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq | IceLakeModel | rocketlake | 2021 |
-| icelake-server | yes | v4 | avx512 | prfchw adx gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq | IceLakeModel | icelake_server | 2021 |
-| tigerlake | yes | v4 | avx512 | prfchw adx gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq | IceLakeModel | tigerlake | 2020 |
-| sapphirerapids emeraldrapids | yes | v4 | avx512 | prfchw adx gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq avx512bf16 avx512fp16 avxvnni | SapphireRapidsModel | sapphirerapids | 2023 |
-| alderlake raptorlake meteorlake | yes | v3 | avx2 | prfchw adx gfni avxvnni | AlderlakePModel | alderlake | 2021 |
-| arrowlake | yes | v3 | avx2 | prfchw adx gfni avxvnni avxifma avxvnniint8 avxneconvert | AlderlakePModel | arrowlake | 2024 |
-| arrowlake-s | yes | v3 | avx2 | prfchw adx gfni avxvnni avxifma avxvnniint8 avxvnniint16 avxneconvert | AlderlakePModel | arrowlake_s | 2024 |
-| lunarlake | yes | v3 | avx2 | prfchw adx gfni avxvnni avxifma avxvnniint8 avxvnniint16 avxneconvert | LunarlakePModel | arrowlake_s | 2024 |
-| gracemont | yes | v3 | avx2 | prfchw adx gfni avxvnni | AlderlakePModel | alderlake | 2021 |
-| pantherlake wildcatlake | yes | v3 | avx2 | prfchw adx gfni avxvnni avxifma avxvnniint8 avxvnniint16 avxneconvert | AlderlakePModel | pantherlake | 2025 |
-| novalake | yes | v4 | apx | prfchw adx gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq avx512bf16 avx512fp16 avxvnni avxifma avxvnniint8 avxvnniint16 avxneconvert avx10.1 avx10.2 apxf | AlderlakePModel | novalake | 2026 |
-| sierraforest | yes | v3 | avx2 | prfchw adx gfni avxvnni avxifma avxvnniint8 avxneconvert | AlderlakePModel | sierraforest | 2024 |
-| grandridge | yes | v3 | avx2 | prfchw adx gfni avxvnni avxifma avxvnniint8 avxneconvert | AlderlakePModel | grandridge | 2024 |
-| graniterapids | yes | v4 | avx512 | prfchw adx gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq avx512bf16 avx512fp16 avxvnni avx10.1 | SapphireRapidsModel | graniterapids | 2024 |
-| graniterapids-d | yes | v4 | avx512 | prfchw adx gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq avx512bf16 avx512fp16 avxvnni avx10.1 | SapphireRapidsModel | graniterapids_d | 2025 |
-| clearwaterforest | yes | v3 | avx2 | prfchw adx gfni avxvnni avxifma avxvnniint8 avxvnniint16 avxneconvert | AlderlakePModel | clearwaterforest | 2025 |
-| diamondrapids | yes | v4 | apx | prfchw adx gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq avx512bf16 avx512fp16 avxvnni avxifma avxvnniint8 avxvnniint16 avxneconvert avx10.1 avx10.2 apxf | SapphireRapidsModel | diamondrapids | 2026 |
-| knl(clang) | yes | v3 | avx512 | prfchw adx avx512f avx512cd | HaswellModel | - | 2016 |
-| knm(clang) | yes | v3 | avx512 | prfchw adx avx512f avx512cd avx512vpopcntdq | HaswellModel | - | 2017 |
+| broadwell | yes | v3 | avx2 | prfchw | BroadwellModel | haswell | 2014 |
+| skylake | yes | v3 | avx2 | prfchw | SkylakeClientModel | skylake | 2015 |
+| skylake-avx512 skx(clang) | yes | v4 | avx512 | prfchw | SkylakeServerModel | skylake_avx512 | 2017 |
+| cascadelake | yes | v4 | avx512 | prfchw avx512vnni | SkylakeServerModel | cascadelake | 2019 |
+| cooperlake | yes | v4 | avx512 | prfchw avx512vnni avx512bf16 | SkylakeServerModel | cooperlake | 2020 |
+| cannonlake | yes | v4 | avx512 | prfchw avx512ifma avx512vbmi | SkylakeServerModel | cannonlake | 2018 |
+| icelake-client | yes | v4 | avx512 | prfchw gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq | IceLakeModel | icelake_client | 2019 |
+| rocketlake | yes | v4 | avx512 | prfchw gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq | IceLakeModel | rocketlake | 2021 |
+| icelake-server | yes | v4 | avx512 | prfchw gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq | IceLakeModel | icelake_server | 2021 |
+| tigerlake | yes | v4 | avx512 | prfchw gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq | IceLakeModel | tigerlake | 2020 |
+| sapphirerapids emeraldrapids | yes | v4 | avx512 | prfchw gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq avx512bf16 avx512fp16 avxvnni | SapphireRapidsModel | sapphirerapids | 2023 |
+| alderlake raptorlake meteorlake | yes | v3 | avx2 | prfchw gfni avxvnni | AlderlakePModel | alderlake | 2021 |
+| arrowlake | yes | v3 | avx2 | prfchw gfni avxvnni avxifma avxvnniint8 avxneconvert | AlderlakePModel | arrowlake | 2024 |
+| arrowlake-s | yes | v3 | avx2 | prfchw gfni avxvnni avxifma avxvnniint8 avxvnniint16 avxneconvert | AlderlakePModel | arrowlake_s | 2024 |
+| lunarlake | yes | v3 | avx2 | prfchw gfni avxvnni avxifma avxvnniint8 avxvnniint16 avxneconvert | LunarlakePModel | arrowlake_s | 2024 |
+| gracemont | yes | v3 | avx2 | prfchw gfni avxvnni | AlderlakePModel | alderlake | 2021 |
+| pantherlake wildcatlake | yes | v3 | avx2 | prfchw gfni avxvnni avxifma avxvnniint8 avxvnniint16 avxneconvert | AlderlakePModel | pantherlake | 2025 |
+| novalake | yes | v4 | apx | prfchw gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq avx512bf16 avx512fp16 avxvnni avxifma avxvnniint8 avxvnniint16 avxneconvert avx10.1 avx10.2 apxf | AlderlakePModel | novalake | 2026 |
+| sierraforest | yes | v3 | avx2 | prfchw gfni avxvnni avxifma avxvnniint8 avxneconvert | AlderlakePModel | sierraforest | 2024 |
+| grandridge | yes | v3 | avx2 | prfchw gfni avxvnni avxifma avxvnniint8 avxneconvert | AlderlakePModel | grandridge | 2024 |
+| graniterapids | yes | v4 | avx512 | prfchw gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq avx512bf16 avx512fp16 avxvnni avx10.1 | SapphireRapidsModel | graniterapids | 2024 |
+| graniterapids-d | yes | v4 | avx512 | prfchw gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq avx512bf16 avx512fp16 avxvnni avx10.1 | SapphireRapidsModel | graniterapids_d | 2025 |
+| clearwaterforest | yes | v3 | avx2 | prfchw gfni avxvnni avxifma avxvnniint8 avxvnniint16 avxneconvert | AlderlakePModel | clearwaterforest | 2025 |
+| diamondrapids | yes | v4 | apx | prfchw gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq avx512bf16 avx512fp16 avxvnni avxifma avxvnniint8 avxvnniint16 avxneconvert avx10.1 avx10.2 apxf | SapphireRapidsModel | diamondrapids | 2026 |
+| knl(clang) | yes | v3 | avx512 | prfchw avx512f avx512cd | HaswellModel | - | 2016 |
+| knm(clang) | yes | v3 | avx512 | prfchw avx512f avx512cd avx512vpopcntdq | HaswellModel | - | 2017 |
 | lakemont | - | - | x87 | cx8 | GenericModel | lakemont | 2013 |
 | k6 | - | - | mmx | cx8 mmx | GenericModel | k6 | 1997 |
 | k6-2 k6-3 | - | - | mmx | cx8 mmx prfchw | GenericModel | k6 | 1998 |
@@ -82,16 +82,16 @@ group of names that compile to the same thing in every compiler that knows them.
 | bdver2 | yes | v2 | avx | sse4a lzcnt prfchw avx f16c fma fma4 xop tbm bmi | BdVer2Model | bdver2 | 2012 |
 | bdver3 | yes | v2 | avx | sse4a lzcnt prfchw avx f16c fma fma4 xop tbm bmi | BdVer2Model | bdver3 | 2014 |
 | bdver4 | yes | v3 | avx2 | sse4a prfchw fma4 xop tbm | Znver1Model | bdver4 | 2015 |
-| znver1 | yes | v3 | avx2 | sse4a prfchw adx | Znver1Model | znver1 | 2017 |
-| znver2 | yes | v3 | avx2 | sse4a prfchw adx | Znver2Model | znver2 | 2019 |
-| znver3 | yes | v3 | avx2 | sse4a prfchw adx | Znver3Model | znver3 | 2020 |
-| znver4 | yes | v4 | avx512 | sse4a prfchw adx gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq avx512bf16 | Znver4Model | znver4 | 2022 |
-| znver5 | yes | v4 | avx512 | sse4a prfchw adx gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq avx512bf16 avxvnni | Znver4Model | znver5 | 2024 |
-| znver6 | yes | v4 | avx512 | sse4a prfchw adx gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq avx512bf16 avx512fp16 avx512bmm avxvnni avxifma avxvnniint8 avxneconvert | Znver4Model | znver6 | 2026 |
-| c86-4g-m4 | yes | v3 | avx2 | sse4a prfchw adx | C864GM4Model | c86_4g_m4 | 2018 |
-| c86-4g-m6 | yes | v3 | avx2 | sse4a prfchw adx | C864GM4Model | c86_4g_m6 | 2020 |
-| c86-4g-m7 | yes | v4 | avx512 | sse4a prfchw adx gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq avx512bf16 avxvnni | C864GM7Model | c86_4g_m7 | 2023 |
-| c86-4g-m8 | yes | v4 | avx512 | sse4a prfchw adx gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq avx512bf16 avxvnni | C864GM8Model | c86_4g_m8 | 2025 |
+| znver1 | yes | v3 | avx2 | sse4a prfchw | Znver1Model | znver1 | 2017 |
+| znver2 | yes | v3 | avx2 | sse4a prfchw | Znver2Model | znver2 | 2019 |
+| znver3 | yes | v3 | avx2 | sse4a prfchw | Znver3Model | znver3 | 2020 |
+| znver4 | yes | v4 | avx512 | sse4a prfchw gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq avx512bf16 | Znver4Model | znver4 | 2022 |
+| znver5 | yes | v4 | avx512 | sse4a prfchw gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq avx512bf16 avxvnni | Znver4Model | znver5 | 2024 |
+| znver6 | yes | v4 | avx512 | sse4a prfchw gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq avx512bf16 avx512fp16 avx512bmm avxvnni avxifma avxvnniint8 avxneconvert | Znver4Model | znver6 | 2026 |
+| c86-4g-m4 | yes | v3 | avx2 | sse4a prfchw | C864GM4Model | c86_4g_m4 | 2018 |
+| c86-4g-m6 | yes | v3 | avx2 | sse4a prfchw | C864GM4Model | c86_4g_m6 | 2020 |
+| c86-4g-m7 | yes | v4 | avx512 | sse4a prfchw gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq avx512bf16 avxvnni | C864GM7Model | c86_4g_m7 | 2023 |
+| c86-4g-m8 | yes | v4 | avx512 | sse4a prfchw gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq avx512bf16 avxvnni | C864GM8Model | c86_4g_m8 | 2025 |
 | x86-64 | yes | v1 | sse2 |  | SandyBridgeModel | generic | 2003 |
 | x86-64-v2 | yes | v2 | sse4.2 |  | SandyBridgeModel | generic | 2009 |
 | x86-64-v3 | yes | v3 | avx2 |  | HaswellModel | generic | 2013 |
@@ -102,9 +102,9 @@ group of names that compile to the same thing in every compiler that knows them.
 | eden-x2(gcc) | yes | v1 | sse3 | sse3 sahf | - | k8 | 2009 |
 | nano(gcc) nano-1000(gcc) nano-2000(gcc) | yes | v1 | ssse3 | sse3 ssse3 sahf | - | k8 | 2008 |
 | nano-3000(gcc) nano-x2(gcc) eden-x4(gcc) nano-x4(gcc) | yes | v1 | sse4.1 | sse3 ssse3 sse4.1 sahf | - | k8 | 2009 |
-| lujiazui(gcc) | yes | v2 | sse4.2 | lzcnt movbe prfchw bmi bmi2 adx | - | lujiazui | 2019 |
-| yongfeng(gcc) | yes | v3 | avx2 | prfchw adx | - | yongfeng | 2021 |
-| shijidadao(gcc) | yes | v3 | avx2 | prfchw adx | - | shijidadao | 2024 |
+| lujiazui(gcc) | yes | v2 | sse4.2 | lzcnt movbe prfchw bmi bmi2 | - | lujiazui | 2019 |
+| yongfeng(gcc) | yes | v3 | avx2 | prfchw | - | yongfeng | 2021 |
+| shijidadao(gcc) | yes | v3 | avx2 | prfchw | - | shijidadao | 2024 |
 
 ## Same name, different features in gcc and clang
 
