@@ -161,6 +161,13 @@ it has all of:
 | avx2 | `_avx2`, `_v3` | AVX2, FMA, BMI1, BMI2, LZCNT, MOVBE, F16C (x86-64-v3, Haswell) |
 | avx512 | `_avx512`, `_v4` | AVX-512 F, CD, BW, DQ, VL, and the OS saving ZMM (x86-64-v4) |
 
+The tools of `mp4pack_v0` are AVX2 builds, so they go in as `<tool>_avx2.exe`;
+in their directory, on Windows:
+
+```
+for %f in (avip aacpack h264p mp3pack oggcomp shar ttfcomp) do ren %f.exe %f_avx2.exe
+```
+
 For each tool the highest level at or below the CPU's (or `-i`'s) is run. The
 archive's index lists the builds it was made with (`mp4pack d -v` shows them).
 The builds of a tool are taken to be interchangeable: the CRC checks of d would
