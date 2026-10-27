@@ -223,9 +223,12 @@ clang++ works the same way (for the MSVC target `wmain` needs no `-municode`).
 
 ## Testing
 
-`test/roundtrip.sh BINDIR OUTDIR "OPTIONS" FILE...` compresses each file with
-the options under wine, decompresses it and compares. `test/parse_test.cpp`
-checks the `-t`/`-c` parsing (build it like mp4pack.exe and run it).
+`test\roundtrip.bat MP4PACK "OPTIONS" FILE...` (Windows) and
+`test/roundtrip.sh BINDIR OUTDIR "OPTIONS" FILE...` (under wine) compress each
+file with the options, decompress it and compare, a line per file. E.g.
+`test\roundtrip.bat c:\mp4pack_v0\mp4pack.exe "-t 50%+50%-1" a.mkv b.mp4`.
+`test/parse_test.cpp` checks the `-t`/`-c` parsing (build it like mp4pack.exe
+and run it).
 
 Done here with wine 9 on Linux: the `003` mkv/mp4 test files, synthetic files
 with every kind of stream (h264, aac, mp3, vorbis, ac3, opus, flac, xvid,
