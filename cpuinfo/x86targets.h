@@ -434,7 +434,8 @@ inline bool ParseCpuid( Cpuid& d, const char* text ) {
     unsigned long long x;
     if( !strncmp( s, "XCR0", 4 ) ) {
       const char* t = s+4; while( (*t==':') || (*t==' ') || (*t=='=') ) t++;
-      if( sscanf( t, "%llx", &x )==1 ) { d.xcr0 = x; d.xcr0_set = 1; }
+      char* e3; x = strtoull( t, &e3, 16 );
+      if( e3!=t ) { d.xcr0 = x; d.xcr0_set = 1; }
       continue;
     }
     if( strncmp( s, "CPUID ", 6 ) ) continue;
@@ -454,7 +455,7 @@ inline bool ParseCpuid( Cpuid& d, const char* text ) {
     // the subleaf: "[SL nn]", or, in dumps without those, the count of the
     // lines of the same leaf just before
     const char* sl = strstr( q, "[SL " );
-    if( sl ) sscanf( sl+4, "%x", &sub );
+    if( sl ) sub = uint( strtoul( sl+4, 0, 16 ) );
     else if( leaf==lastleaf ) sub = lastsub+1;
     if( (leaf==0) && (sub==0) && seen0++ ) break; // the next CPU
     d.Add( leaf, sub, r );

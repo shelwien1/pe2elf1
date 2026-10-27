@@ -79,7 +79,11 @@ static string Hex( uint x ) { char b[16]; snprintf( b, sizeof(b), "0x%X", x ); r
 static string Size( int kb ) {
   char b[32];
   if( (kb>=1024) && !(kb%1024) ) snprintf( b, sizeof(b), "%dM", kb/1024 );
-  else if( kb>=1024 ) snprintf( b, sizeof(b), "%.1fM", kb/1024.0 );
+  else if( (kb>=1024) && !(kb*100%1024) ) {  // 1.25M, 1.5M: exact, no float rounding (CRTs differ on halves)
+    int h = kb*100/1024;
+    if( h%10 ) snprintf( b, sizeof(b), "%d.%02dM", h/100, h%100 );
+    else snprintf( b, sizeof(b), "%d.%dM", h/100, h%100/10 );
+  }
   else snprintf( b, sizeof(b), "%dK", kb );
   return b;
 }

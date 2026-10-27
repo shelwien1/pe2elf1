@@ -30,7 +30,7 @@ C++11, no dependencies.
 ```
 g++ -std=c++11 -O2 -s -o cpuinfo cpuinfo.cpp                  # Linux (-m32 for x86-32)
 x86_64-w64-mingw32-g++ -std=c++11 -O2 -s -static -o cpuinfo.exe cpuinfo.cpp
-cl /O2 /EHsc cpuinfo.cpp                                         # MSVC, x64 or x86 prompt
+cl /O2 /EHsc /MT cpuinfo.cpp                                     # MSVC, x64 or x86 prompt
 ```
 
 `build.sh` builds `cpuinfo`, `cpuinfo32` and, where MinGW-w64 is installed,
@@ -438,8 +438,12 @@ the release sources), with the 590 CPUID dumps of InstLatx64
   `native` lines say (plus `rtm`, `hle`, `abm`, `amx-tf32`, not modelled);
 * `cpuinfo` itself: every option over all dumps, ASan/UBSan clean; builds
   warning-free with gcc 13, clang 18 and 23 (`-Wall -Wextra -Wshadow`),
-  x86-32 and x64, Linux and MinGW (the `.exe`s run under wine). Not
-  compiled with MSVC.
+  x86-32 and x64, Linux and MinGW (the `.exe`s run under wine);
+* MSVC 2019 (19.20, `cl /O2 /W4 /EHsc /MT`), x64 and x86: no warnings (also
+  for a program of two files that both include `x86targets.h`, without
+  `_CRT_SECURE_NO_WARNINGS`), and under wine the output is byte for byte
+  that of the Linux builds, for every option on the host CPU (`__cpuidex`/
+  `_xgetbv` there) and for all 590 dumps with `-a`.
 
 Run against a dump:
 
