@@ -11,9 +11,11 @@
 // d: "shar x", the unpackers, "avip d"; every stream and the result are checked
 // against the sizes and CRC32s in the index.
 //
-// The tools are run from the directory of mp4pack.exe, with the work directory
-// as their current one and relative paths on their command lines: they take
-// ANSI command lines, so only names that survive that reach them (ToolName).
+// The tools are run from the directory of mp4pack.exe, each in the best build
+// there for this CPU (h264p_avx2.exe, h264p.exe, ...: GetTool), with the work
+// directory as their current one and relative paths on their command lines:
+// they take ANSI command lines, so only names that survive that reach them
+// (ToolName).
 
 #define WIN32_LEAN_AND_MEAN
 #ifndef NOMINMAX
@@ -44,7 +46,7 @@ static const char* g_name[N_GROUP] = { "h264p", "audio", "ttfcomp", "shar" };
 
 enum { M_STORE, M_SHAR, M_H264P, M_AACPACK, M_MP3PACK, M_OGGCOMP, M_TTFCOMP, N_METHOD };
 static const char* m_name[N_METHOD] = { "store", "shar", "h264p", "aacpack", "mp3pack", "oggcomp", "ttfcomp" };
-static const char* m_exe[N_METHOD] = { "", "shar.exe", "h264p.exe", "aacpack.exe", "mp3pack.exe", "oggcomp.exe", "ttfcomp.exe" };
+static const char* m_tool[N_METHOD] = { "", "shar", "h264p", "aacpack", "mp3pack", "oggcomp", "ttfcomp" };
 static const int m_group[N_METHOD] = { G_OTHER, G_OTHER, G_VIDEO, G_AUDIO, G_AUDIO, G_AUDIO, G_FONT };
 
 // by the extension avip gave the stream
@@ -65,7 +67,7 @@ static int Method( const string& name ) {
 static int th[N_GROUP];               // -t: threads of each group
 static qword ch[N_GROUP];             // -c: part sizes, 0 = the default
 static vector< vector<int> > stages;  // -t: groups run at once ('+'), stage after stage (',')
-static int f_dec, f_verbose, f_keep;
+static int f_dec, f_verbose, f_keep, f_free;
 static wstring w_base;                // -w
 
 static wstring exe_dir;               // ours and the tools', with a trailing '\'
@@ -402,6 +404,168 @@ static vector<wstring> ListFiles( const wstring& dir ) {
   return r;
 }
 
+//---- the CPU, and the tool builds for it
+
+// Builds of a tool for instruction sets are named by a suffix: h264p_avx2.exe;
+// h264p.exe is taken to run anywhere. The best one the CPU can run is used.
+enum { L_X64, L_SSE3, L_SSSE3, L_SSE41, L_SSE42, L_AVX, L_AVX2, L_AVX512, N_LEVEL };
+static const char* l_name[N_LEVEL] = { "x64", "sse3", "ssse3", "sse41", "sse42", "avx", "avx2", "avx512" };
+
+static string Lower( string s ) {
+  for( size_t i=0; i<s.size(); i++ ) if( (s[i]>='A') && (s[i]<='Z') ) s[i] += 'a'-'A';
+  return s;
+}
+
+// the level a suffix names, -1 if none
+static int Level( const string& suffix ) {
+  static const struct { const char* s; int l; } alias[] = {
+    { "sse2", L_X64 }, { "sse4", L_SSE41 }, { "sse4.1", L_SSE41 }, { "sse4.2", L_SSE42 },
+    { "v2", L_SSE42 }, { "v3", L_AVX2 }, { "v4", L_AVX512 } };
+  string s = Lower( suffix );
+  for( int l=0; l<N_LEVEL; l++ ) if( s==l_name[l] ) return l;
+  for( size_t i=0; i<sizeof(alias)/sizeof(alias[0]); i++ ) if( s==alias[i].s ) return alias[i].l;
+  return -1;
+}
+
+static int cpu_threads, cpu_cores, cpu_level, cpu_isa;
+
+#if (defined(_M_X64) && !defined(_M_ARM64EC)) || defined(__x86_64__)
+// CPUID and XGETBV as machine code (Microsoft x64 calling convention), not a
+// compiler's intrinsics
+static const byte x_cpuid[] = {  // void f( uint leaf, uint subleaf, uint r[4] )
+  0x53,                          // push rbx
+  0x89,0xC8,                     // mov eax,ecx
+  0x89,0xD1,                     // mov ecx,edx
+  0x0F,0xA2,                     // cpuid
+  0x41,0x89,0x00,                // mov [r8],eax
+  0x41,0x89,0x58,0x04,           // mov [r8+4],ebx
+  0x41,0x89,0x48,0x08,           // mov [r8+8],ecx
+  0x41,0x89,0x50,0x0C,           // mov [r8+12],edx
+  0x5B,                          // pop rbx
+  0xC3 };                        // ret
+static const byte x_xgetbv[] = { // qword f( uint xcr )
+  0x0F,0x01,0xD0,                // xgetbv
+  0x48,0xC1,0xE2,0x20,           // shl rdx,32
+  0x48,0x09,0xD0,                // or rax,rdx
+  0xC3 };                        // ret
+typedef void (*cpuid_t)( uint, uint, uint* );
+typedef qword (*xgetbv_t)( uint );
+
+static uint Bit( uint x, int n ) { return (x>>n)&1; }
+
+// the level by CPUID; -1 if the code cannot be run
+static int CpuidLevel() {
+  byte* m = (byte*)VirtualAlloc( 0, 4096, MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE );
+  DWORD old;
+  if( !m ) return -1;
+  memcpy( m, x_cpuid, sizeof(x_cpuid) );
+  memcpy( m+64, x_xgetbv, sizeof(x_xgetbv) );
+  if( !VirtualProtect( m, 4096, PAGE_EXECUTE_READ, &old ) ) { VirtualFree( m, 0, MEM_RELEASE ); return -1; }
+  FlushInstructionCache( GetCurrentProcess(), m, 4096 );
+  cpuid_t cpuid = (cpuid_t)(void*)m;
+  xgetbv_t xgetbv = (xgetbv_t)(void*)(m+64);
+  uint r0[4], r1[4], r7[4] = { 0,0,0,0 }, e0[4], e1[4] = { 0,0,0,0 };
+  cpuid( 0, 0, r0 );
+  cpuid( 1, 0, r1 );
+  if( r0[0]>=7 ) cpuid( 7, 0, r7 );
+  cpuid( 0x80000000u, 0, e0 );
+  if( e0[0]>=0x80000001u ) cpuid( 0x80000001u, 0, e1 );
+  qword xcr0 = Bit( r1[2], 27 ) ? xgetbv( 0 ) : 0; // OSXSAVE: XCR0 says what state the OS saves
+  VirtualFree( m, 0, MEM_RELEASE );
+  uint c = r1[2], b = r7[1];
+  if( !Bit(c,0) ) return L_X64;                                 // SSE3
+  if( !Bit(c,9) ) return L_SSE3;                                // SSSE3
+  if( !Bit(c,19) ) return L_SSSE3;                              // SSE4.1
+  if( !Bit(c,20) || !Bit(c,23) ) return L_SSE41;                // SSE4.2, POPCNT
+  if( !Bit(c,28) || ((xcr0&6)!=6) ) return L_SSE42;             // AVX, with the OS saving YMM
+  // AVX2 and the rest of x86-64-v3: FMA, BMI1, BMI2, LZCNT, MOVBE, F16C
+  if( !Bit(b,5) || !Bit(c,12) || !Bit(b,3) || !Bit(b,8) || !Bit(e1[2],5) || !Bit(c,22) || !Bit(c,29) ) return L_AVX;
+  // AVX-512 F, DQ, CD, BW, VL (x86-64-v4), with the OS saving ZMM and the masks
+  if( !Bit(b,16) || !Bit(b,17) || !Bit(b,28) || !Bit(b,30) || !Bit(b,31) || ((xcr0&0xE6)!=0xE6) ) return L_AVX2;
+  return L_AVX512;
+}
+#else
+static int CpuidLevel() { return -1; }
+#endif
+
+// the level as Windows tells it, where CPUID cannot be run; before Windows 10
+// it does not know the newer features (PF_SSE3_.. to PF_AVX512F_INSTRUCTIONS_AVAILABLE)
+static int OsLevel() {
+  static const DWORD pf[] = { 13, 36, 37, 38, 39, 40, 41 };
+  int l = L_X64;
+  for( int i=0; (i<7) && IsProcessorFeaturePresent( pf[i] ); i++ ) l = i+1;
+  return l;
+}
+
+// logical processors in all processor groups, and cores
+static void CpuThreads() {
+  typedef DWORD (WINAPI *gapc_t)( WORD );
+  typedef BOOL (WINAPI *glpi_t)( int, void*, DWORD* );
+  HMODULE k = GetModuleHandleW( L"kernel32.dll" );
+  gapc_t gapc = (gapc_t)(void*)GetProcAddress( k, "GetActiveProcessorCount" ); // (Windows 7+)
+  glpi_t glpi = (glpi_t)(void*)GetProcAddress( k, "GetLogicalProcessorInformationEx" );
+  DWORD n = gapc ? gapc( 0xFFFF ) : 0; // ALL_PROCESSOR_GROUPS
+  if( n==0 ) { SYSTEM_INFO si; GetSystemInfo( &si ); n = si.dwNumberOfProcessors; }
+  cpu_threads = std::max<int>( n, 1 );
+  DWORD len = 0;
+  if( glpi && !glpi( 0, 0, &len ) && (GetLastError()==ERROR_INSUFFICIENT_BUFFER) && len ) { // RelationProcessorCore
+    vector<byte> b( len );
+    if( glpi( 0, &b[0], &len ) ) for( DWORD o=0; o+8<=len; cpu_cores++ ) { // records: relation, size, ...
+      DWORD sz; memcpy( &sz, &b[o+4], 4 );
+      if( sz<8 ) break;
+      o += sz;
+    }
+  }
+}
+
+static qword FT( const FILETIME& f ) { return (qword(f.dwHighDateTime)<<32) | f.dwLowDateTime; }
+
+// -f: the threads free now, by the idle share of the CPUs over a second
+static int FreeThreads() {
+  FILETIME i0, k0, u0, i1, k1, u1;
+  if( !GetSystemTimes( &i0, &k0, &u0 ) ) return cpu_threads;
+  Sleep( 1000 );
+  if( !GetSystemTimes( &i1, &k1, &u1 ) ) return cpu_threads;
+  double idle = double( FT(i1)-FT(i0) ), all = double( (FT(k1)-FT(k0)) + (FT(u1)-FT(u0)) ); // (kernel time has the idle time)
+  if( all<=0 ) return cpu_threads;
+  return std::max( 1, std::min( cpu_threads, int( cpu_threads*idle/all+0.5 ) ) );
+}
+
+// a tool: its build to run (path empty: none this CPU can run), and the ones it cannot
+struct Tool { string base, file, later; wstring path; int used; };
+static Tool tools[16];
+static int n_tools;
+
+// the best build of a tool in our directory: base.exe or base_<level>.exe
+static const Tool& GetTool( const string& base ) {
+  for( int i=0; i<n_tools; i++ ) if( tools[i].base==base ) return tools[i];
+  Tool& t = tools[n_tools++];
+  t.base = base; t.used = 0;
+  int best = -1;
+  string b = Lower( base );
+  WIN32_FIND_DATAW fd;
+  HANDLE h = FindFirstFileW( (exe_dir+W(base)+L"*.exe").c_str(), &fd );
+  if( h!=INVALID_HANDLE_VALUE ) {
+    do {
+      if( fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY ) continue;
+      string n = U(fd.cFileName), l = Lower(n);
+      if( (l.size()<b.size()+4) || (l.compare( 0, b.size(), b )!=0) || (l.compare( l.size()-4, 4, ".exe" )!=0) ) continue;
+      string x = l.substr( b.size(), l.size()-4-b.size() ); // "" or "_avx2"
+      int v = x.empty() ? L_X64 : (x[0]=='_') ? Level( x.substr(1) ) : -1;
+      if( v<0 ) continue; // (another tool's)
+      if( v>cpu_level ) { t.later += (t.later.size() ? ", " : "") + n; continue; }
+      if( v>best ) { best = v; t.file = n; t.path = exe_dir + fd.cFileName; }
+    } while( FindNextFileW( h, &fd ) );
+    FindClose( h );
+  }
+  return t;
+}
+
+static string NoTool( const Tool& t ) {
+  if( t.later.empty() ) return "no " + t.base + " in " + U(exe_dir);
+  return "no " + t.base + " build for " + l_name[cpu_level] + " (only " + t.later + ")";
+}
+
 // a warning when the work directory's disk has less than this free
 static void SpaceCheck( qword need ) {
   ULARGE_INTEGER fr;
@@ -497,7 +661,7 @@ static void PumpClose( Pump& p ) {
 
 struct Job {
   string label;           // for the messages
-  string tool;            // "h264p.exe"
+  string tool;            // "h264p": its build is found by GetTool
   string args;            // the rest of its command line
   string cwd;             // its current directory, in the work directory
   int g, w;               // group; threads it takes from the group's
@@ -530,10 +694,13 @@ static HANDLE Inheritable( HANDLE h ) {
 // are inheritable just for its own CreateProcess, so no tool holds another's
 // pipe open (which would keep that one from seeing EOF).
 static int Start( Job& j ) {
-  wstring exe = exe_dir + W(j.tool);
+  Tool& t = (Tool&)GetTool( j.tool );
+  if( t.path.empty() ) { j.why = NoTool(t); j.st = 3; return 1; }
+  t.used = 1;
+  wstring exe = t.path;
   wstring cmd = L"\"" + exe + L"\" " + W(j.args);
   wstring cwd = work + W(j.cwd);
-  if( f_verbose ) Msg( "> " + (j.cwd.size() ? "("+j.cwd+") " : string()) + j.tool + " " + j.args
+  if( f_verbose ) Msg( "> " + (j.cwd.size() ? "("+j.cwd+") " : string()) + t.file + " " + j.args
                      + (j.in.path.size() ? " < "+U(j.in.path) : string()) + (j.out.path.size() ? " > "+U(j.out.path) : string()) );
   SECURITY_ATTRIBUTES sa = { sizeof(sa), 0, TRUE };
   HANDLE c_in = 0, c_out = 0, c_err = 0;
@@ -737,6 +904,9 @@ static int RunStage( const vector<Job*>& all, const vector<int>& groups ) {
       run.erase( run.begin()+i );
       used[j.g] -= j.wu;
       if( Finish(j)==0 ) { Succeeded( j ); continue; }
+      // the tools get Ctrl+C too, and may end before our handler has run
+      if( (j.code==0xC000013Au) && !f_abort ) { f_abort = 1; SetEvent( ev_abort ); }
+      if( f_abort && !fail ) { fail = 2; for( size_t k=0; k<run.size(); k++ ) TerminateProcess( run[k]->hp, 1 ); }
       if( fail ) continue; // (we stopped it)
       if( Fallback(j) ) continue;
       Msg( "error: " + j.label + ": " + j.why );
@@ -827,8 +997,12 @@ static void Succeeded( Job& j ) {
   if( !f_keep ) for( size_t i=0; i<j.del.size(); i++ ) Remove( j.del[i] );
 }
 
+static string src_tools; // d: the tool builds the archive was made with
+
 static string IndexText() {
-  string t = "mp4pack 1\nsrc " + Num(src_size) + " " + Hex(src_crc) + " " + src_name + "\n";
+  string t = "mp4pack 1\nsrc " + Num(src_size) + " " + Hex(src_crc) + " " + src_name + "\ntools";
+  for( int i=0; i<n_tools; i++ ) if( tools[i].used || (tools[i].base=="shar") ) t += " " + tools[i].file;
+  t += "\n";
   for( size_t i=0; i<S.size(); i++ ) {
     t += "stream " + Num(S[i].size) + " " + Hex(S[i].crc) + " " + m_name[S[i].m] + " " + S[i].name + "\n";
     for( size_t k=0; k<S[i].part.size(); k++ ) {
@@ -906,7 +1080,11 @@ static int ReadIndex( string& why ) {
       if( ((a!="-") || (S.back().m!=M_STORE)) && !SafeName(a) ) return 1;
       if( b.size() && !SafeName(b) ) return 1;
       S.back().part.push_back( Part( o, z, a, b ) );
-    } else if( k=="end" ) f_end = 1;
+    } else if( k=="tools" ) { // (only shown)
+      src_tools = l.substr( i );
+      for( size_t q=0; q<src_tools.size(); q++ ) if( byte(src_tools[q])<32 ) src_tools[q] = '?';
+    }
+    else if( k=="end" ) f_end = 1;
     else if( l.size() ) return 1;
   }
   if( !f_src || !f_end ) return 1;
@@ -928,17 +1106,32 @@ static int ReadIndex( string& why ) {
 
 //---- options
 
-// "3+3,1,1": threads of h264p, the audio packers, ttfcomp and shar, in that
-// order; '+' runs a group together with the ones before it, ',' after them.
-// Missing numbers repeat the last one, with the last separator ("4" = "4,4,4,4").
-static int ParseThreads( const char* s ) {
-  int g = 0;
+// "3+3,1,1", "50%+50%-2": threads of h264p, the audio packers, ttfcomp and
+// shar, in that order. Each is a number, or a percentage of the threads there
+// are (all of the CPU's, or the free ones: -f), rounded up. '+' runs a group
+// together with the ones before it, ',' after them. Missing ones: the audio's
+// is the video's, after it; ttfcomp and shar get 1, one after the other ("4" =
+// "4,4,1,1", "3+3" = "3+3,1,1"). A "-N" at the end takes N from the threads
+// there are, for the percentages; alone, for the default (100%+100%).
+static int ParseThreads( string spec, int all ) {
+  int sub = 0;
+  size_t m = spec.rfind( '-' );
+  if( m!=string::npos ) {
+    if( (m+1>=spec.size()) || (spec.size()-m>4) ) return 1;
+    for( size_t i=m+1; i<spec.size(); i++ ) { if( (spec[i]<'0') || (spec[i]>'9') ) return 1; sub = sub*10+(spec[i]-'0'); }
+    spec.erase( m );
+  }
+  if( spec.empty() ) spec = "100%+100%";
+  int max = std::max( 1, all-sub ), g = 0;
+  const char* s = spec.c_str();
   char sep = ',';
   stages.clear();
   while(1) {
     if( (g>=N_GROUP) || (*s<'0') || (*s>'9') ) return 1;
     int v = 0;
-    while( (*s>='0') && (*s<='9') ) { v = v*10+(*s++-'0'); if( v>64 ) return 1; }
+    while( (*s>='0') && (*s<='9') ) { v = v*10+(*s++-'0'); if( v>10000 ) return 1; }
+    if( *s=='%' ) { s++; v = std::min( 64, (max*v+99)/100 ); }
+    else if( v>64 ) return 1;
     th[g] = v;
     if( (g==0) || (sep==',') ) stages.push_back( vector<int>() );
     stages.back().push_back( g++ );
@@ -947,11 +1140,18 @@ static int ParseThreads( const char* s ) {
     sep = *s++;
   }
   for(; g<N_GROUP; g++ ) {
-    th[g] = th[g-1];
-    if( sep==',' ) stages.push_back( vector<int>() );
-    stages.back().push_back( g );
+    th[g] = (g==G_AUDIO) ? th[G_VIDEO] : 1;
+    stages.push_back( vector<int>( 1, g ) );
   }
   return 0;
+}
+
+// the threads as resolved: "3+3,1,1"
+static string ThreadText() {
+  string t;
+  for( size_t s=0; s<stages.size(); s++ ) for( size_t i=0; i<stages[s].size(); i++ )
+    t += (t.empty() ? "" : i ? "+" : ",") + Num( th[stages[s][i]] );
+  return t;
 }
 
 // "4,512k": part sizes in the same order; MB, or KB with k (GB with g); 0 or
@@ -1042,7 +1242,7 @@ static int PackJobs() {
     if( s.m==M_H264P ) {
       int n = th[G_VIDEO];
       string pk = s.name + ".h264p";
-      Job* j = NewJob( G_VIDEO, n, "h264p " + s.name, "h264p.exe" );
+      Job* j = NewJob( G_VIDEO, n, "h264p " + s.name, "h264p" );
       j->args = "c -t " + Num(n) + (((n>1) && ch[G_VIDEO]) ? " -c "+ChunkArg(ch[G_VIDEO]) : string()) + (f_verbose ? "" : " -p")
               + " " + u + " " + Quote("p\\"+pk);
       j->prog = 1; j->work = s.size; j->sids.push_back( si ); j->outs.push_back( PPath(pk) );
@@ -1065,7 +1265,7 @@ static int PackJobs() {
       cut.push_back( s.size );
       for( size_t q=0; q+1<cut.size(); q++ ) {
         string pk = s.name + ((cut.size()>2) ? "."+Num(q) : string()) + ".aacp";
-        Job* j = NewJob( G_AUDIO, 1, "aacpack " + s.name + ((cut.size()>2) ? "#"+Num(q) : string()), "aacpack.exe" );
+        Job* j = NewJob( G_AUDIO, 1, "aacpack " + s.name + ((cut.size()>2) ? "#"+Num(q) : string()), "aacpack" );
         j->args = "c - " + Quote("p\\"+pk);
         j->in.path = UPath(s.name); j->in.off = cut[q]; j->in.len = cut[q+1]-cut[q];
         j->prog = 2; j->work = j->in.len; j->sids.push_back( si ); j->outs.push_back( PPath(pk) );
@@ -1074,14 +1274,14 @@ static int PackJobs() {
     } else if( s.m==M_MP3PACK ) {
       int n = th[G_AUDIO];
       string pk = s.name + ".mp3p", pk2 = s.name + ".mp3o";
-      Job* j = NewJob( G_AUDIO, n, "mp3pack " + s.name, "mp3pack.exe" );
+      Job* j = NewJob( G_AUDIO, n, "mp3pack " + s.name, "mp3pack" );
       j->args = "c -t " + Num(n) + (((n>1) && ch[G_AUDIO]) ? " -c "+ChunkArg(ch[G_AUDIO]) : string()) + (f_verbose ? "" : " -p")
               + " " + u + " " + Quote("p\\"+pk) + " " + Quote("p\\"+pk2);
       j->prog = 1; j->work = s.size; j->sids.push_back( si ); j->outs.push_back( PPath(pk) ); j->outs.push_back( PPath(pk2) );
       s.part.push_back( Part( 0, s.size, pk, pk2 ) );
     } else if( s.m==M_OGGCOMP ) {
       string pk = s.name + ".oggc";
-      Job* j = NewJob( G_AUDIO, 1, "oggcomp " + s.name, "oggcomp.exe" );
+      Job* j = NewJob( G_AUDIO, 1, "oggcomp " + s.name, "oggcomp" );
       j->args = "c " + u + " " + Quote("p\\"+pk);
       j->work = s.size; j->sids.push_back( si ); j->outs.push_back( PPath(pk) );
       s.part.push_back( Part( 0, s.size, pk, "" ) );
@@ -1099,7 +1299,7 @@ static int PackJobs() {
     if( f && (f->args.size()+S[i].name.size()>30000) ) f = 0;
     if( !f ) {
       string pk = nf++ ? "fonts" + Num(nf) + ".ttfc" : "fonts.ttfc";
-      f = NewJob( G_FONT, 1, "ttfcomp", "ttfcomp.exe" );
+      f = NewJob( G_FONT, 1, "ttfcomp", "ttfcomp" );
       f->cwd = "u\\"; f->args = "a " + Quote("..\\p\\"+pk); f->outs.push_back( PPath(pk) );
     }
     f->args += " " + Quote( S[i].name );
@@ -1125,7 +1325,7 @@ static int PackJobs() {
         int r = (h==INVALID_HANDLE_VALUE) || CopyRange( UPath(s.name), a, b-a, h );
         if( h!=INVALID_HANDLE_VALUE ) CloseHandle( h );
         if( r ) return Fail( "cannot write " + U(wd+W(mem)), 2 );
-        Job* j = NewJob( G_OTHER, 1, "shar " + s.name + "#" + Num(q), "shar.exe" );
+        Job* j = NewJob( G_OTHER, 1, "shar " + s.name + "#" + Num(q), "shar" );
         j->args = "a22 " + Quote("p\\"+pk) + " " + Quote(d+"\\");
         j->prog = 1; j->work = b-a; j->outs.push_back( PPath(pk) ); j->del.push_back( wd );
         s.part.push_back( Part( a, b-a, pk, mem ) );
@@ -1133,7 +1333,7 @@ static int PackJobs() {
       if( !f_keep ) Remove( UPath(s.name) );
     } else {
       if( !o ) {
-        o = NewJob( G_OTHER, 1, "shar", "shar.exe" );
+        o = NewJob( G_OTHER, 1, "shar", "shar" );
         CreateDirectoryW( (work+L"other").c_str(), 0 );
         o->args = "a22 p\\other.shar other\\"; o->prog = 1; o->outs.push_back( PPath("other.shar") ); o->del.push_back( work+L"other\\" );
       }
@@ -1144,7 +1344,7 @@ static int PackJobs() {
   }
   if( o ) o->label = "shar " + Num( o->sids.size() ) + ((o->sids.size()>1) ? " files" : " file");
   // the files the shar jobs pack are in their own directories now, not in u
-  for( size_t i=0; i<J.size(); i++ ) if( J[i]->tool=="shar.exe" ) J[i]->sids.clear();
+  for( size_t i=0; i<J.size(); i++ ) if( J[i]->tool=="shar" ) J[i]->sids.clear();
   for( size_t i=0; i<J.size(); i++ ) for( size_t k=0; k<J[i]->sids.size(); k++ ) S[J[i]->sids[k]].refs++;
   return 0;
 }
@@ -1166,7 +1366,7 @@ static int PackFailed() {
       continue;
     }
     if( !x ) {
-      x = NewJob( G_OTHER, 1, "shar (fallback)", "shar.exe" );
+      x = NewJob( G_OTHER, 1, "shar (fallback)", "shar" );
       CreateDirectoryW( (work+L"fallback").c_str(), 0 );
       x->args = "a22 p\\fallback.shar fallback\\"; x->prog = 1; x->outs.push_back( PPath("fallback.shar") ); x->del.push_back( work+L"fallback\\" );
     }
@@ -1202,7 +1402,7 @@ static int Compress( const wstring& in, const wstring& out ) {
   CrcTask ct; ct.path = LongPath(in); ct.err = 1;
   HANDLE cth = CreateThread( 0, 0, CrcThread, &ct, 0, 0 );
   if( !cth ) CrcThread( &ct );
-  Job a; a.label = "avip c"; a.tool = "avip.exe"; a.args = "c " + Quote(U(ip)) + " u\\s";
+  Job a; a.label = "avip c"; a.tool = "avip"; a.args = "c " + Quote(U(ip)) + " u\\s";
   int r = RunOne( a );
   if( cth ) { WaitForSingleObject( cth, INFINITE ); CloseHandle( cth ); }
   if( r ) { return (r==2) ? 5 : 3; }
@@ -1211,6 +1411,7 @@ static int Compress( const wstring& in, const wstring& out ) {
   if( FileName(ip)==ip ) Remove( work+ip ); // (our link or copy)
 
   vector<wstring> names = ListFiles( work+L"u\\" );
+  string nobuild[N_METHOD];
   if( names.empty() ) { Msg( "avip c made no files" ); return 3; }
   Msg( "avip c: " + Num(names.size()) + ((names.size()==1) ? " file, " : " files, ") + Clock(a.t) );
   for( size_t i=0; i<names.size(); i++ ) {
@@ -1220,13 +1421,15 @@ static int Compress( const wstring& in, const wstring& out ) {
     if( FileCrc( UPath(s.name), s.crc, s.size ) ) return Fail( "cannot read " + U(UPath(s.name)), 2 );
     s.m = s.size ? Method(s.name) : M_STORE;
     if( (s.m>=M_H264P) && (th[m_group[s.m]]==0) ) s.m = M_SHAR;
-    if( (s.m>=M_H264P) && !Exists( exe_dir+W(m_exe[s.m]) ) ) {
-      Msg( "note: no " + string(m_exe[s.m]) + ", " + s.name + " goes to shar a22" );
+    if( (s.m>=M_H264P) && GetTool( m_tool[s.m] ).path.empty() ) {
+      string& n = nobuild[s.m];
+      n += (n.size() ? ", " : "") + s.name;
       s.m = M_SHAR;
     }
     if( (s.m==M_SHAR) && (th[G_OTHER]==0) ) s.m = M_STORE;
     S.push_back( s );
   }
+  for( int m=0; m<N_METHOD; m++ ) if( nobuild[m].size() ) Msg( "note: " + NoTool( GetTool( m_tool[m] ) ) + "; to shar a22: " + nobuild[m] );
   if( (r = PackJobs())!=0 ) return r;
 
   for( size_t i=0; i<S.size(); i++ ) {
@@ -1248,7 +1451,7 @@ static int Compress( const wstring& in, const wstring& out ) {
 
   // the index and all packed, stored as they are: the output
   if( WriteAll( PPath("mp4pack.idx"), IndexText() ) ) { Msg( "cannot write " + U(PPath("mp4pack.idx")) ); return 2; }
-  Job f; f.label = "shar a0"; f.tool = "shar.exe"; f.args = "a0 - p\\";
+  Job f; f.label = "shar a0"; f.tool = "shar"; f.args = "a0 - p\\";
   f.out.path = LongPath(out); f.out.create = 1; f.out.len = ALL; f.prog = 3;
   f.work = DirSize( work+L"p\\" );
   r = RunOne( f );
@@ -1267,16 +1470,17 @@ static int Decompress( const wstring& in, const wstring& out ) {
   Msg( "mp4pack d: " + U(in) + " -> " + U(out) );
   if( MakeWork() ) return 2;
 
-  Job x; x.label = "shar x"; x.tool = "shar.exe"; x.args = "x - p\\";
+  Job x; x.label = "shar x"; x.tool = "shar"; x.args = "x - p\\";
   x.in.path = LongPath(in); x.in.len = isz; x.prog = 2; x.work = isz;
   int r = RunOne( x );
   if( r ) { return (r==2) ? 5 : 3; }
   string why;
   if( ReadIndex( why ) ) { Msg( U(in) + ": " + why ); return 4; }
   Msg( "restoring " + src_name + " (" + Num(src_size) + " bytes) from " + Num(S.size()) + ((S.size()==1) ? " file" : " files") );
+  if( f_verbose && src_tools.size() ) Msg( "packed with " + src_tools );
   SpaceCheck( src_size );
-  for( size_t i=0; i<S.size(); i++ ) if( (S[i].m!=M_STORE) && !Exists( exe_dir+W(m_exe[S[i].m]) ) ) {
-    Msg( "no " + string(m_exe[S[i].m]) + " in " + U(exe_dir) ); return 2;
+  for( size_t i=0; i<S.size(); i++ ) if( (S[i].m!=M_STORE) && GetTool( m_tool[S[i].m] ).path.empty() ) {
+    Msg( NoTool( GetTool( m_tool[S[i].m] ) ) ); return 2;
   }
 
   // the unpackers
@@ -1286,24 +1490,24 @@ static int Decompress( const wstring& in, const wstring& out ) {
     string u = Quote( "u\\"+s.name );
     const Part& p0 = s.part[0];
     if( s.m==M_H264P ) {
-      Job* j = NewJob( G_VIDEO, th[G_VIDEO], "h264p " + s.name, "h264p.exe" );
+      Job* j = NewJob( G_VIDEO, th[G_VIDEO], "h264p " + s.name, "h264p" );
       j->args = string("d") + (f_verbose ? "" : " -p") + " " + Quote("p\\"+p0.pk) + " " + u;
       j->prog = 1; j->work = s.size; j->outs.push_back( UPath(s.name) ); j->del.push_back( PPath(p0.pk) );
     } else if( s.m==M_AACPACK ) {
       if( MakeFile( UPath(s.name), s.size ) ) { Msg( "cannot write " + U(UPath(s.name)) ); return 2; }
       for( size_t k=0; k<s.part.size(); k++ ) {
         const Part& p = s.part[k];
-        Job* j = NewJob( G_AUDIO, 1, "aacpack " + s.name + ((s.part.size()>1) ? "#"+Num(k) : string()), "aacpack.exe" );
+        Job* j = NewJob( G_AUDIO, 1, "aacpack " + s.name + ((s.part.size()>1) ? "#"+Num(k) : string()), "aacpack" );
         j->args = "d " + Quote("p\\"+p.pk) + " -";
         j->out.path = UPath(s.name); j->out.off = p.off; j->out.len = p.len;
         j->prog = 3; j->work = p.len; j->del.push_back( PPath(p.pk) );
       }
     } else if( s.m==M_MP3PACK ) {
-      Job* j = NewJob( G_AUDIO, th[G_AUDIO], "mp3pack " + s.name, "mp3pack.exe" );
+      Job* j = NewJob( G_AUDIO, th[G_AUDIO], "mp3pack " + s.name, "mp3pack" );
       j->args = string("d") + (f_verbose ? "" : " -p") + " " + Quote("p\\"+p0.pk) + " " + Quote("p\\"+p0.pk2) + " " + u;
       j->prog = 1; j->work = s.size; j->outs.push_back( UPath(s.name) ); j->del.push_back( PPath(p0.pk) ); j->del.push_back( PPath(p0.pk2) );
     } else if( s.m==M_OGGCOMP ) {
-      Job* j = NewJob( G_AUDIO, 1, "oggcomp " + s.name, "oggcomp.exe" );
+      Job* j = NewJob( G_AUDIO, 1, "oggcomp " + s.name, "oggcomp" );
       j->args = "d " + Quote("p\\"+p0.pk) + " " + u;
       j->work = s.size; j->outs.push_back( UPath(s.name) ); j->del.push_back( PPath(p0.pk) );
     } else if( s.m==M_STORE ) {
@@ -1314,14 +1518,14 @@ static int Decompress( const wstring& in, const wstring& out ) {
     }
   }
   for( size_t a=0; a<ttf.size(); a++ ) { // the fonts under their names, in the archive's order
-    Job* j = NewJob( G_FONT, 1, "ttfcomp " + ttf[a], "ttfcomp.exe" );
+    Job* j = NewJob( G_FONT, 1, "ttfcomp " + ttf[a], "ttfcomp" );
     j->cwd = "u\\"; j->args = "x " + Quote("..\\p\\"+ttf[a]); j->del.push_back( PPath(ttf[a]) );
     for( size_t i=0; i<S.size(); i++ ) if( (S[i].m==M_TTFCOMP) && (S[i].part[0].pk==ttf[a]) ) {
       j->args += " " + Quote(S[i].name); j->work += S[i].size; j->outs.push_back( UPath(S[i].name) );
     }
   }
   for( size_t a=0; a<sha.size(); a++ ) {
-    Job* j = NewJob( G_OTHER, 1, "shar " + sha[a], "shar.exe" );
+    Job* j = NewJob( G_OTHER, 1, "shar " + sha[a], "shar" );
     j->args = "x " + Quote("p\\"+sha[a]) + " u\\"; j->prog = 1; j->del.push_back( PPath(sha[a]) );
     for( size_t i=0; i<S.size(); i++ ) if( S[i].m==M_SHAR ) for( size_t k=0; k<S[i].part.size(); k++ ) if( S[i].part[k].pk==sha[a] ) {
       j->work += S[i].part[k].len; j->outs.push_back( UPath(S[i].part[k].pk2) );
@@ -1363,7 +1567,7 @@ static int Decompress( const wstring& in, const wstring& out ) {
     op = ToolName( out );
     if( op.empty() ) { op = L"output.tmp"; tmp = 1; }
   }
-  Job a; a.label = "avip d"; a.tool = "avip.exe"; a.args = "d u\\s " + Quote(U(op));
+  Job a; a.label = "avip d"; a.tool = "avip"; a.args = "d u\\s " + Quote(U(op));
   r = RunOne( a );
   if( r ) { Remove( LongPath(out) ); return (r==2) ? 5 : 3; }
   if( tmp && !MoveFileExW( (work+op).c_str(), LongPath(out).c_str(), MOVEFILE_REPLACE_EXISTING|MOVEFILE_COPY_ALLOWED ) ) {
@@ -1391,16 +1595,20 @@ static BOOL WINAPI CtrlHandler( DWORD t ) {
 }
 
 static const char usage[] =
-"mp4pack - lossless compression of mp4/mkv/avi files, with avip, h264p, aacpack,\n"
-"mp3pack, oggcomp, ttfcomp and shar (from mp4pack.exe's own directory)\n"
+"mp4pack - lossless compression of mp4/mkv/avi files with avip, h264p, aacpack,\n"
+"mp3pack, oggcomp, ttfcomp and shar, from mp4pack.exe's own directory: the best\n"
+"build of each for this CPU, <tool>.exe or <tool>_<level>.exe (h264p_avx2.exe)\n"
 "usage: mp4pack c [options] input output   compress\n"
 "       mp4pack d [options] input output   decompress\n"
 "options:\n"
 "  -t T  threads of h264p, the audio packer, ttfcomp and shar (the other\n"
 "        files), in that order; joined by + they run at once, by , one after\n"
-"        another; missing numbers repeat the last one with its separator.\n"
-"        e.g. -t 3+3+1+1 (all at once), -t 3,3,1,1 (in turn), -t 3+3,1,1\n"
-"        (default: N+N+1+1 to compress, N+N+N+N to decompress; N = CPUs)\n"
+"        another: -t 3+3+1+1 (all at once), -t 3,3,1,1 (in turn), -t 3+3,1,1.\n"
+"        Missing ones: audio as video, after it; ttfcomp and shar 1, in turn\n"
+"        (-t 4 = 4,4,1,1; -t 3+3 = 3+3,1,1). N% is that share of the threads\n"
+"        there are (all, or the free ones: -f), rounded up; a -N at the end\n"
+"        leaves N of them out first: -t 50%+50%-2 = 3+3,1,1 with 8 threads.\n"
+"        Alone, -N works on the default, 100%+100%.\n"
 "        0: no packer for that group, its files go to shar a22 (for shar\n"
 "        itself: they are stored as they are)\n"
 "  -c C  part sizes, in the same order: MB, or KB with k (e.g. -c 4,512k);\n"
@@ -1409,6 +1617,9 @@ static const char usage[] =
 "        (default: one part per thread, 1MB at least); with more than one\n"
 "        thread, other files bigger than it (default 64MB) are cut into\n"
 "        pieces, an archive for each. The fonts make one solid archive.\n"
+"  -f    count the threads free now (the CPUs' idle share over a second)\n"
+"  -i L  use tool builds up to level L: x64 sse3 ssse3 sse41 sse42 avx avx2\n"
+"        avx512 (default: what the CPU has)\n"
 "  -w D  make the work directory in D (default: %TEMP%)\n"
 "  -k    keep the work directory\n"
 "  -v    show the tools' command lines and output\n";
@@ -1427,7 +1638,7 @@ int wmain( int argc, wchar_t** argv ) {
     exe_dir.erase( exe_dir.find_last_of( L"\\/" )+1 );
   }
 
-  int mode = 0, nio = 0, f_t = 0, f_c = 0;
+  int mode = 0, nio = 0, f_t = 0, f_c = 0, cap = L_AVX512;
   wstring io[2];
   string ts, cs;
   for( int i=1; i<argc; i++ ) {
@@ -1438,11 +1649,14 @@ int wmain( int argc, wchar_t** argv ) {
     }
     if( (a.size()>=2) && (a[0]=='-') ) {
       wchar_t o = a[1];
-      if( ((o=='t') || (o=='c') || (o=='w')) ) {
+      if( ((o=='t') || (o=='c') || (o=='w') || (o=='i')) ) {
         wstring v = a.substr( 2 );
         if( v.empty() ) { if( ++i>=argc ) { mode = 0; break; } v = argv[i]; }
-        if( o=='t' ) { ts = U(v); f_t = 1; } else if( o=='c' ) { cs = U(v); f_c = 1; } else w_base = v;
+        if( o=='t' ) { ts = U(v); f_t = 1; } else if( o=='c' ) { cs = U(v); f_c = 1; }
+        else if( o=='w' ) w_base = v;
+        else if( (cap = Level( U(v) ))<0 ) { Msg( "bad -i " + U(v) ); return 1; }
       } else if( a==L"-v" ) f_verbose = 1;
+      else if( a==L"-f" ) f_free = 1;
       else if( a==L"-k" ) f_keep = 1;
       else { Msg( "unknown option " + U(a) ); return 1; }
       continue;
@@ -1453,14 +1667,24 @@ int wmain( int argc, wchar_t** argv ) {
   if( !mode || (nio!=2) ) { Put( usage ); return 1; }
   f_dec = (mode=='d');
 
-  SYSTEM_INFO si;
-  GetSystemInfo( &si );
-  string n = Num( std::min<DWORD>( std::max<DWORD>( si.dwNumberOfProcessors, 1 ), 64 ) );
-  string def = f_dec ? n+"+"+n+"+"+n+"+"+n : n+"+"+n+"+1+1";
-  if( ParseThreads( f_t ? ts.c_str() : def.c_str() ) ) { Msg( "bad -t " + ts + " (up to 4 numbers 0..64, joined by + or ,)" ); return 1; }
+  // the CPU: its threads (or the free ones), and the tool builds it can run
+  CpuThreads();
+  cpu_level = CpuidLevel();
+  cpu_isa = (cpu_level>=0);
+  if( cpu_level<0 ) cpu_level = OsLevel();
+  string c = "cpu: " + Num(cpu_threads) + " threads" + (cpu_cores ? ", " + Num(cpu_cores) + " cores" : string()) + ", " + l_name[cpu_level]
+           + (cpu_isa ? "" : " (as Windows says)");
+  if( cap<cpu_level ) { cpu_level = cap; c += ", builds up to " + string(l_name[cap]); }
+  int n = cpu_threads;
+  if( f_free ) { n = FreeThreads(); c += ", " + Num(n) + " free"; }
+  if( ParseThreads( f_t ? ts : string(), n ) ) { Msg( "bad -t " + ts + " (up to 4 of N or N% joined by + or , and maybe a -N)" ); return 1; }
   if( f_c && ParseChunks( cs.c_str() ) ) { Msg( "bad -c " + cs ); return 1; }
-  const char* need[] = { "avip.exe", "shar.exe" };
-  for( int i=0; i<2; i++ ) if( !Exists( exe_dir+W(need[i]) ) ) { Msg( string("no ") + need[i] + " in " + U(exe_dir) ); return 2; }
+  Msg( c + "; -t " + (f_t ? ts+" = " : string()) + ThreadText() );
+  const char* all[] = { "avip", "shar", "h264p", "aacpack", "mp3pack", "oggcomp", "ttfcomp" };
+  string tl;
+  for( int i=0; i<7; i++ ) { const Tool& t = GetTool( all[i] ); if( t.path.size() ) tl += " " + t.file; }
+  Msg( "tools:" + (tl.size() ? tl : string(" none")) );
+  for( int i=0; i<2; i++ ) if( GetTool( all[i] ).path.empty() ) { Msg( NoTool( GetTool( all[i] ) ) ); return 2; }
 
   ev_abort = CreateEventW( 0, TRUE, FALSE, 0 );
   ev_done = CreateEventW( 0, TRUE, FALSE, 0 );

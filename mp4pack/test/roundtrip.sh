@@ -16,7 +16,7 @@ for f in "$@"; do
     echo "ok   $b: $(stat -c %s "$f") -> $(stat -c %s "$a")"
   else
     echo "FAIL $b: c=$rc d=$rd"; fail=1
-    tail -5 "$out/$b.c.log" "$out/$b.d.log"
+    tail -n 5 "$out/$b.c.log" "$out/$b.d.log"
   fi
   rm -f "$r"
 done

@@ -10,9 +10,12 @@ mp4pack d [options] input output     decompress
 ```
 
 The tools are looked up in the directory of `mp4pack.exe` itself, so put it next
-to them (the `mp4pack_v0` set): `avip.exe`, `h264p.exe`, `aacpack.exe`,
-`mp3pack.exe`, `oggcomp.exe`, `ttfcomp.exe`, `shar.exe`. Only `avip` and `shar` are
-required; a stream whose packer is missing goes to `shar a22` (with a note).
+to them: `avip`, `h264p`, `aacpack`, `mp3pack`, `oggcomp`, `ttfcomp`, `shar`. Each
+can be there in builds for several instruction sets, named by a suffix:
+`h264p_avx2.exe`, `h264p_avx512.exe`, `h264p.exe` ... mp4pack runs the best one
+the CPU can run (see [Tool builds](#tool-builds-and-the-cpu)). Only `avip` and
+`shar` are required; a stream whose packer is missing (or has no build for this
+CPU) goes to `shar a22`, with a note.
 
 ## What happens
 
@@ -60,7 +63,16 @@ time, by `,` one after the other:
 | `-t 3+3+1+1` | all four groups at once: h264p with 3 threads, the audio packer with 3, ttfcomp and shar with 1 |
 | `-t 3,3,1,1` | h264p with 3 threads; when it is done, the audio with 3; then ttfcomp; then shar |
 | `-t 3+3,1,1` | h264p and audio at once, then ttfcomp, then shar |
-| `-t 4` | missing numbers repeat the last one with its separator: `4,4,4,4` (and `-t 3+1` is `3+1+1+1`) |
+| `-t 3+3,1+1` | h264p and audio at once, then ttfcomp and shar at once |
+| `-t 3+3` | ttfcomp and shar get 1 thread each when not given, one after the other: `3+3,1,1` |
+| `-t 4` | a missing audio number is the video's, after it: `4,4,1,1` |
+| `-t 50%+50%-2` | with 8 threads: 8-2 = 6, half of it each: `3+3,1,1` |
+| `-t -2` | the default with 2 threads left out: `6+6,1,1` with 8 threads |
+
+Instead of a number, `N%` is that share of the threads there are, rounded up
+(at least 1 unless it is `0%`). The threads there are: all of the CPU's, or the
+free ones with `-f`. A `-N` at the end of `-t` leaves N of them out (for other
+work) before the percentages are taken; alone, it works on the default.
 
 Within a group, jobs run in order, as many at a time as its threads allow:
 h264p and mp3pack take all of their group's threads (`-t N`), the aacpack parts
@@ -69,11 +81,15 @@ compression), and so is the `shar a22` archive of the other files, except for
 pieces of big files (`-c`).
 
 `0` for a group means no packer for it: its files go to `shar a22` instead; `0`
-for shar stores the other files as they are (so `-t 0` stores everything).
+for shar stores the other files as they are (so `-t 0,0,0,0` stores
+everything).
 
-Default: `N+N+1+1` to compress, `N+N+N+N` to decompress, N = the number of
-logical CPUs. h264p and mp3pack take their decompression threads from the
-stream, so for d, `-t` only sets how many things run at once.
+Default: `100%+100%`, that is `N+N,1,1` with N threads. h264p and mp3pack take
+their decompression threads from the stream, so for d, `-t` only sets how many
+things run at once.
+
+mp4pack shows what `-t` came to on its first line, e.g.
+`cpu: 8 threads, 4 cores, avx2, 7 free; -t 50%+50%-2 = 3+3,1,1`.
 
 `-c C` &mdash; part sizes, in the same order (separators as in `-t`, they make no
 difference here): MB, or KB with a `k` (`g`: GB). `0` or a missing number: the
@@ -92,6 +108,13 @@ default.
   streams without a packer (hevc video, DTS audio) can be compressed in
   parallel. The other files make one solid archive.
 
+`-f` &mdash; count only the threads free now, for the percentages and the
+defaults of `-t`: the CPUs' idle share, measured over a second when mp4pack
+starts, times their number (at least 1). For when something else is running.
+
+`-i L` &mdash; use tool builds up to level `L` only (see below), e.g. `-i avx2` on
+an AVX-512 machine. Default: what the CPU has.
+
 `-w D` &mdash; make the work directory in `D` (created if needed); default
 `%TEMP%`. The work directory itself is a new `mp4pack_<pid>_<n>` in it, removed
 at the end. It needs room for the unpacked streams (about the input's size) plus
@@ -106,21 +129,59 @@ a log is shown when a tool fails).
 On a console, a status line shows the elapsed time, the overall progress and an
 estimate of the time left, and each running job with its progress.
 
+## Tool builds and the CPU
+
+At the start mp4pack says what it found:
+
+```
+cpu: 16 threads, 8 cores, avx2, 12 free; -t 12+12,1,1
+tools: avip_avx2.exe shar_avx2.exe h264p_avx2.exe aacpack_avx2.exe ...
+```
+
+The threads are the logical processors in all processor groups
+(`GetActiveProcessorCount`), the cores are counted by
+`GetLogicalProcessorInformationEx`. The instruction sets come from CPUID (and
+XGETBV, for whether the OS saves the AVX/AVX-512 registers), run from a few
+bytes of x64 machine code put in executable memory: no compiler intrinsics or
+inline assembly. Where that is not allowed, `IsProcessorFeaturePresent` tells
+it instead (older Windows versions do not know the newer features there, so it
+can only err low).
+
+A build's suffix names its level; the CPU's level is the highest whose features
+it has all of:
+
+| level | suffixes | needs |
+|---|---|---|
+| x64 | none (`h264p.exe`), `_x64`, `_sse2` | any x64 CPU |
+| sse3 | `_sse3` | SSE3 |
+| ssse3 | `_ssse3` | SSSE3 |
+| sse41 | `_sse41`, `_sse4`, `_sse4.1` | SSE4.1 |
+| sse42 | `_sse42`, `_sse4.2`, `_v2` | SSE4.2, POPCNT |
+| avx | `_avx` | AVX, and the OS saving YMM |
+| avx2 | `_avx2`, `_v3` | AVX2, FMA, BMI1, BMI2, LZCNT, MOVBE, F16C (x86-64-v3, Haswell) |
+| avx512 | `_avx512`, `_v4` | AVX-512 F, CD, BW, DQ, VL, and the OS saving ZMM (x86-64-v4) |
+
+For each tool the highest level at or below the CPU's (or `-i`'s) is run. The
+archive's index lists the builds it was made with (`mp4pack d -v` shows them).
+The builds of a tool are taken to be interchangeable: the CRC checks of d would
+catch it if they were not.
+
 ## Errors
 
 | exit code | |
 |---|---|
 | 0 | done |
 | 1 | bad command line |
-| 2 | a file cannot be read or written, a tool is missing |
+| 2 | a file cannot be read or written, a tool is missing (or has no build for the CPU) |
 | 3 | a tool failed (the end of its log is shown) |
 | 4 | d: not an mp4pack archive, or a stream or the result is not as it was |
 | 5 | aborted with Ctrl+C |
 
 When compressing, a packer that fails (or crashes) does not stop it: the
 stream it had goes to `shar a22` instead, with a warning. avip and shar
-failing do stop it. The tools run in a job object, so they end with mp4pack
-however it ends; on Ctrl+C the work directory is removed too.
+failing do stop it. On Ctrl+C mp4pack stops the tools and removes the work
+directory (unless `-k`). The tools also run in a job object that ends them
+when mp4pack ends, however that happens.
 
 ## The archive
 
@@ -143,6 +204,7 @@ store\...               -t ...+0: stored as they are
 ```
 mp4pack 1
 src <size> <crc32> <the input's name>
+tools <the tool builds used>
 stream <size> <crc32> <method> <name>          one per file from avip c
 part <offset> <length> <packed file> [<name>]  what holds it (mp3pack: the
 ...                                            "outside" file; shar: the name
@@ -162,11 +224,25 @@ clang++ works the same way (for the MSVC target `wmain` needs no `-municode`).
 ## Testing
 
 `test/roundtrip.sh BINDIR OUTDIR "OPTIONS" FILE...` compresses each file with
-the options under wine, decompresses it and compares. Done here with wine 9 on
-Linux, on the `003` mkv/mp4 test files, synthetic files with every kind of
-stream (h264, aac, mp3, vorbis, ac3, opus, flac, xvid, ASS/SRT/tx3g subtitles,
-ttf attachments; mkv, mp4, avi), and a whole movie; with `-t` and `-c` in
-sequence, in parallel and mixed, with zeros, with parts and pieces; with
-packers that fail or crash (they fall back to shar); with Cyrillic paths and a
-new nested `-w` directory; with damaged, truncated and foreign archives, and an
-empty input.
+the options under wine, decompresses it and compares. `test/parse_test.cpp`
+checks the `-t`/`-c` parsing (build it like mp4pack.exe and run it).
+
+Done here with wine 9 on Linux: the `003` mkv/mp4 test files, synthetic files
+with every kind of stream (h264, aac, mp3, vorbis, ac3, opus, flac, xvid,
+ASS/SRT/tx3g subtitles, ttf attachments; mkv, mp4, avi), and a whole movie;
+`-t` and `-c` in sequence, in parallel and mixed, with zeros, percentages and
+`-N`, with parts and pieces; packers that fail or crash (they fall back to
+shar); Cyrillic paths, a new nested `-w` directory, paths over 260 characters;
+damaged, truncated and foreign archives, an empty input; tool builds for
+several levels, `-i` limits, builds missing for the level. Not under wine:
+Ctrl+C (wine's console ends a program on it at once, without its handler).
+
+The movie, with the defaults on a 4-thread Xeon VM under wine (the d run shared
+the CPU with other tests):
+
+| | size | time |
+|---|---|---|
+| TBB_04.mkv | 901,752,304 | |
+| h264 track, h264p -t 4 | 648,922,836 -> 564,620,814 (87.0%) | 20:00 |
+| aac tracks, aacpack in 7 parts | 253,612,715 -> 185,034,562 (73.0%) | (alongside) |
+| archive | 749,662,667 (83.1%) | c 21:22, d 30:14 |
