@@ -203,14 +203,14 @@ static const X86Target x86_target[] = {
   { "gracemont",         T_GCC|T_CLANG|T_64,   1, 2021,  43, 11, 25, {0x01F937F0FFFFBF9FULL,0x000000001E370100ULL}, {0x01F93FF0FFFFBF9FULL,0x000000003E370100ULL} },
   { "pantherlake",       T_GCC|T_CLANG|T_64,   1, 2025,  44, 11, 28, {0x01F937F0FFFFBF9FULL,0x0000000E47371F00ULL}, {0x01F93FF0FFFFBF9FULL,0x0000000E67B71F00ULL} },
   { "wildcatlake",       T_GCC|T_CLANG|T_64,   1, 2026,  44, 11, 28, {0x01F937F0FFFFBF9FULL,0x0000000E47371F00ULL}, {0x01F93FF0FFFFBF9FULL,0x0000000E67B71F00ULL} },
-  { "novalake",          T_GCC|T_CLANG|T_64,   1, 2026,  45, 11, 29, {0xFFF937F0FFFFBF9FULL,0x0000002EC737DF3FULL}, {0xFFF93FF0FFFFBF9FULL,0x0000002EE7B7DF3FULL} },
+  { "novalake",          T_GCC|T_CLANG|T_64,   1, 2026,  45, 11, 29, {0xFFF937F0FFFFBF9FULL,0x0000002EC737FF3FULL}, {0xFFF93FF0FFFFBF9FULL,0x0000002EE7B7FF3FULL} },
   { "sierraforest",      T_GCC|T_CLANG|T_64,   1, 2024,  46, 11, 30, {0x01F937F0FFFFBF9FULL,0x000000005FBF1700ULL}, {0x01F93FF0FFFFBF9FULL,0x000000007FBF1700ULL} },
   { "grandridge",        T_GCC|T_CLANG|T_64,   1, 2024,  47, 11, 31, {0x01F937F0FFFFBF9FULL,0x000000005FBF1700ULL}, {0x01F93FF0FFFFBF9FULL,0x000000007FBF1700ULL} },
-  { "graniterapids",     T_GCC|T_CLANG|T_64,   1, 2024,  48, 10, 32, {0xFFFD37F0FFFFBF9FULL,0x000003C085FF013FULL}, {0xFFFD3FF0FFFFBF9FULL,0x000003C0A5FF013FULL} },
-  { "graniterapids-d",   T_GCC|T_CLANG|T_64,   1, 2025,  49, 10, 33, {0xFFFD37F0FFFFBF9FULL,0x000007C085FF013FULL}, {0xFFFD3FF0FFFFBF9FULL,0x000007C0A5FF013FULL} },
+  { "graniterapids",     T_GCC|T_CLANG|T_64,   1, 2024,  48, 10, 32, {0xFFFD37F0FFFFBF9FULL,0x000003C085FF213FULL}, {0xFFFD3FF0FFFFBF9FULL,0x000003C0A5FF013FULL} },
+  { "graniterapids-d",   T_GCC|T_CLANG|T_64,   1, 2025,  49, 10, 33, {0xFFFD37F0FFFFBF9FULL,0x000007C085FF213FULL}, {0xFFFD3FF0FFFFBF9FULL,0x000007C0A5FF013FULL} },
   { "emeraldrapids",     T_GCC|T_CLANG|T_64,   1, 2023,  38, 10, 24, {0xFFFD37F0FFFFBF9FULL,0x000001C005FF013FULL}, {0xFFFD3FF0FFFFBF9FULL,0x000001C025FF013FULL} },
   { "clearwaterforest",  T_GCC|T_CLANG|T_64,   1, 2025,  50, 11, 34, {0x01F937F0FFFFBF9FULL,0x0000001EC7BF1F00ULL}, {0x01F93FF0FFFFBF9FULL,0x0000001EE7BF1F00ULL} },
-  { "diamondrapids",     T_GCC|T_CLANG|T_64,   1, 2026,  51, 10, 35, {0xFFFD37F0FFFFBF9FULL,0x00003FEEC5FFDF3FULL}, {0xFFFD3FF0FFFFBF9FULL,0x00003FEEE5FFDF3FULL} },
+  { "diamondrapids",     T_GCC|T_CLANG|T_64,   1, 2026,  51, 10, 35, {0xFFFD37F0FFFFBF9FULL,0x00003FEEC5FFFF3FULL}, {0xFFFD3FF0FFFFBF9FULL,0x00003FEEE5FFFF3FULL} },
   { "knl",               T_CLANG|T_64,         1, 2016,  52,  5, -1, {0x0000000000000000ULL,0x0000000000000000ULL}, {0x06000FF0E7FFBF9FULL,0x0000000000000000ULL} },
   { "knm",               T_CLANG|T_64,         1, 2017,  53,  5, -1, {0x0000000000000000ULL,0x0000000000000000ULL}, {0x06000FF0E7FFBF9FULL,0x0000000000000008ULL} },
   { "lakemont",          T_GCC|T_CLANG,        1, 2013,  54,  0, 36, {0x0000000000000002ULL,0x0000000000000000ULL}, {0x0000000000000002ULL,0x0000000000000000ULL} },
@@ -492,7 +492,8 @@ struct Cpu {
   bool osxsave, hypervisor, hybrid;
   FSet hw;                  // what the CPU has
   FSet f;                   // what can be used: hw, where the OS saves the registers
-  FSet nat;                 // f as the compilers' -march=native has it (prfchw by its bit only)
+  FSet cnat, gnat;          // the features as clang's (getHostCPUFeatures) and gcc's
+                            // (get_available_features) -march=native read them
   int level;                // x86-64-v level: 0 (not 64-bit), 1 .. 4
   const char* clang;        // clang's -march=native ("generic": no named cpu)
   const char* gcc;          // gcc's -march=native; 0: gcc refuses (Xeon Phi, gcc 15+)
@@ -606,17 +607,43 @@ inline void Features( const Cpuid& d, Cpu& c, FSet& hw, FSet& f ) {
   uint av10 = Bit( r71[3], 19 ) ? ((c.max_leaf>=0x24) ? (d.R( 0x24, 0, 1 )&0xff) : 0) : 0;
   X86T_F( F_AVX10_1, av10>=1, avx512 );  X86T_F( F_AVX10_2, av10>=2, avx512 );
   #undef X86T_F
-  // Zhaoxin Lujiazui: gcc takes its avx and f16c away (cpuinfo.h)
-  if( (c.vid==V_ZHAOXIN) && (((r1[0]>>8)&15)==7) && ((((r1[0]>>4)&15)|((r1[0]>>12)&0xf0))==0x3b) ) {
-    Set( f, F_AVX, false ); Set( f, F_F16C, false );
-  }
   Consistent( f );
+}
+
+// the features as each compiler's -march=native reads them, where that
+// differs from f (which is about what runs): clang's getHostCPUFeatures and
+// gcc's get_available_features
+inline void NativeSets( const Cpuid& d, Cpu& c ) {
+  uint c1 = d.R( 1, 0, 2 ), e1c = (c.max_ext>=0x80000001u) ? d.R( 0x80000001u, 0, 2 ) : 0;
+  uint xd = (c.max_leaf>=0xd) ? d.R( 0xd, 1, 0 ) : 0;
+  uint d71 = (c.max_leaf>=7) && (d.R( 7, 0, 0 )>=1) ? d.R( 7, 1, 3 ) : 0;
+  uint av10 = (c.max_leaf>=0x24) ? (d.R( 0x24, 0, 1 )&0xff) : 0;
+  bool xs = c.osxsave && d.xcr0_set, avx = xs && Bit( c1, 28 ) && ((c.xcr0&6)==6), avx512 = avx && ((c.xcr0&0xE0)==0xE0);
+  FSet& k = c.cnat; k = c.f;
+  Set( k, F_PRFCHW, Bit( e1c, 8 )!=0 );                         // the bit only
+  Set( k, F_XSAVE, Bit( c1, 26 ) && avx );                       // xsave*: with the ymm state
+  Set( k, F_XSAVEOPT, Bit( xd, 0 ) && avx ); Set( k, F_XSAVEC, Bit( xd, 1 ) && avx ); Set( k, F_XSAVES, Bit( xd, 3 ) && avx );
+  Set( k, F_AVX10_1, Bit( d71, 19 ) && (av10>=1) );              // avx10: no OS check
+  Set( k, F_AVX10_2, Bit( d71, 19 ) && (av10>=2) );
+  FSet& g = c.gnat; g = c.f;
+  Set( g, F_PRFCHW, Bit( e1c, 8 )!=0 );
+  Set( g, F_XSAVE, Bit( c1, 26 )!=0 );                           // xsave*: no OS check
+  Set( g, F_XSAVEOPT, Bit( xd, 0 )!=0 ); Set( g, F_XSAVEC, Bit( xd, 1 )!=0 ); Set( g, F_XSAVES, Bit( xd, 3 )!=0 );
+  Set( g, F_AVX512BMM, Has( c.hw, F_AVX512BMM ) );               // no OS check either
+  uint b19 = (c.max_leaf>=0x19) ? d.R( 0x19, 0, 1 ) : 0;         // key locker: only with AESKLE (the OS has it on)
+  Set( g, F_KL, Has( c.hw, F_KL ) && Bit( b19, 0 ) ); Set( g, F_WIDEKL, Bit( b19, 0 ) && Bit( b19, 2 ) );
+  bool a10 = Bit( d71, 19 ) && avx512 && (c.max_leaf>=0x24);    // avx10: version 2 is 10.2, any other 10.1
+  Set( g, F_AVX10_1, a10 ); Set( g, F_AVX10_2, a10 && (av10==2) );
+  // Zhaoxin Lujiazui: gcc takes its avx and f16c away (get_zhaoxin_cpu)
+  uint a = d.R( 1, 0, 0 );
+  if( (c.vid==V_ZHAOXIN) && (((a>>8)&15)==7) && ((((a>>4)&15)|((a>>12)&0xf0))==0x3b) ) { Set( g, F_AVX, false ); Set( g, F_F16C, false ); }
 }
 
 // clang's -march=native: sys::getHostCPUName (llvm/lib/TargetParser/Host.cpp)
 inline const char* ClangName( const Cpu& c ) {
-  const FSet& f = c.f;
+  const FSet& f = c.cnat;
   uint fam = c.family, m = c.model;
+  if( c.max_leaf<1 ) return "generic";
   if( c.vid==V_INTEL ) {
     switch( fam ) {
       case 3: return "i386";
@@ -736,20 +763,26 @@ inline const char* ClangName( const Cpu& c ) {
 // over cpu_indicator_init (gcc/common/config/i386/cpuinfo.h); 0 where gcc
 // stops with an error (a Xeon Phi)
 inline const char* GccName( const Cpuid& d, const Cpu& c ) {
-  const FSet& f = c.f;
+  const FSet& f = c.gnat;
+  if( c.max_leaf<1 ) return "i386";  // (cpu_indicator_init fails)
   uint a = d.R( 1, 0, 0 );
   uint fam = (a>>8)&15, m = (a>>4)&15, xm = (a>>12)&0xf0, xf = (a>>20)&0xff;
+  // gcc tells vendors by ebx only: "Genu" (GenuineTMx86, GenuineIotel ...)
+  // is Intel to it
+  uint eb = d.R( 0, 0, 1 );
+  int v = (eb==0x756e6547) ? V_INTEL : (eb==0x68747541) ? V_AMD : (eb==0x6f677948) ? V_HYGON
+        : (eb==0x68532020) ? V_ZHAOXIN : (eb==0x746e6543) ? ((fam<7) ? V_CENTAUR : V_ZHAOXIN) : V_GENERIC;
   // gcc only sets family and model for these vendors; for the others they
   // stay 0 (so its Centaur code below never matches)
-  if( c.vid==V_INTEL ) { if( fam==15 ) { fam += xf; m += xm; } else if( fam==6 ) m += xm; }
-  else if( (c.vid==V_AMD) || (c.vid==V_HYGON) ) { if( fam==15 ) { fam += xf; m += xm; } }
-  else if( c.vid==V_ZHAOXIN ) { if( fam==7 ) m += xm; }
+  if( v==V_INTEL ) { if( fam==15 ) { fam += xf; m += xm; } else if( fam==6 ) m += xm; }
+  else if( (v==V_AMD) || (v==V_HYGON) ) { if( fam==15 ) { fam += xf; m += xm; } }
+  else if( v==V_ZHAOXIN ) { if( fam==7 ) m += xm; }
   else fam = m = 0;
   enum { P_I386, P_I486, P_PENTIUM, P_PENTIUMPRO, P_PENTIUM4, P_GEODE, P_K6, P_ATHLON, P_K8, P_AMDFAM10,
          P_BDVER1, P_BDVER2, P_BDVER3, P_BDVER4, P_BTVER1, P_BTVER2, P_ZNVER1, P_ZNVER2, P_ZNVER3, P_ZNVER4,
          P_ZNVER5, P_ZNVER6, P_LUJIAZUI, P_YONGFENG, P_SHIJIDADAO, P_M4, P_M6, P_M7, P_M8, P_GENERIC };
   int p = P_I386;
-  if( c.vid==V_AMD ) {
+  if( v==V_AMD ) {
     uint name = (c.max_ext>=0x80000002u) ? d.R( 0x80000002u, 0, 0 ) : 0;
     if( name==0x646f6547 ) p = P_GEODE;   // "Geode by NSC"
     else if( Has( f, F_MOVBE ) && (fam==22) ) p = P_BTVER2;
@@ -769,13 +802,13 @@ inline const char* GccName( const Cpuid& d, const Cpu& c ) {
     else if( Has( f, F_3DNOWA ) && (fam==6) ) p = P_ATHLON;
     else if( Has( f, F_MMX ) ) p = P_K6;
     else p = P_PENTIUM;
-  } else if( c.vid==V_HYGON ) {
+  } else if( v==V_HYGON ) {
     p = (m==4) ? P_M4 : (m==6) ? P_M6 : (m==7) ? P_M7 : (m>=8) ? P_M8 : P_GENERIC;
-  } else if( c.vid==V_CENTAUR ) {
+  } else if( v==V_CENTAUR ) {
     p = P_GENERIC;
     if( fam==5 ) { if( Has( f, F_3DNOW ) || Has( f, F_MMX ) ) p = P_I486; }
     else if( fam==6 ) { if( Has( f, F_LM ) ) p = P_K8; else if( m>=9 ) p = P_PENTIUMPRO; else if( m>=6 ) p = P_I486; }
-  } else if( c.vid==V_ZHAOXIN ) {
+  } else if( v==V_ZHAOXIN ) {
     p = P_GENERIC;
     if( fam==7 ) { if( m>=0x6b ) p = P_SHIJIDADAO; else if( m==0x5b ) p = P_YONGFENG; else if( m==0x3b ) p = P_LUJIAZUI; }
   } else {
@@ -785,7 +818,7 @@ inline const char* GccName( const Cpuid& d, const Cpu& c ) {
   switch( p ) {
     case P_I386: return "i386";
     case P_I486:
-      if( c.vid==V_CENTAUR ) return (m>=6) ? "c3" : Has( f, F_3DNOW ) ? "winchip2" : "winchip-c6";
+      if( v==V_CENTAUR ) return (m>=6) ? "c3" : Has( f, F_3DNOW ) ? "winchip2" : "winchip-c6";
       return "i486";
     case P_PENTIUM: return Has( f, F_MMX ) ? "pentium-mmx" : "pentium";
     case P_PENTIUMPRO: {
@@ -858,9 +891,9 @@ inline const char* GccName( const Cpuid& d, const Cpu& c ) {
       }
       if( Has( f, F_SSSE3 ) ) return Has( f, F_MOVBE ) ? "bonnell" : "core2";
       if( Has( f, F_LM ) ) return "x86-64";
-      if( Has( f, F_SSE3 ) ) return (c.vid==V_CENTAUR) ? "c7" : "pentium-m";
+      if( Has( f, F_SSE3 ) ) return (v==V_CENTAUR) ? "c7" : "pentium-m";
       if( Has( f, F_SSE2 ) ) return "pentium-m";
-      if( Has( f, F_SSE ) ) return (c.vid==V_CENTAUR) ? ((m>=9) ? "nehemiah" : "c3-2") : "pentium3";
+      if( Has( f, F_SSE ) ) return (v==V_CENTAUR) ? ((m>=9) ? "nehemiah" : "c3-2") : "pentium3";
       if( Has( f, F_MMX ) ) return "pentium2";
       return "pentiumpro";
     }
@@ -869,7 +902,7 @@ inline const char* GccName( const Cpuid& d, const Cpu& c ) {
     case P_K6: return Has( f, F_3DNOW ) ? "k6-3" : "k6";
     case P_ATHLON: return Has( f, F_SSE ) ? "athlon-4" : "athlon";
     case P_K8:
-      if( c.vid==V_CENTAUR ) return Has( f, F_SSE41 ) ? "nano-3000" : Has( f, F_SSSE3 ) ? "nano" : Has( f, F_SSE3 ) ? "eden-x2" : "k8";
+      if( v==V_CENTAUR ) return Has( f, F_SSE41 ) ? "nano-3000" : Has( f, F_SSSE3 ) ? "nano" : Has( f, F_SSE3 ) ? "eden-x2" : "k8";
       return Has( f, F_SSE3 ) ? "k8-sse3" : "k8";
     case P_AMDFAM10: return "amdfam10";
     case P_BDVER1: return "bdver1"; case P_BDVER2: return "bdver2"; case P_BDVER3: return "bdver3"; case P_BDVER4: return "bdver4";
@@ -954,8 +987,7 @@ inline void Analyze( const Cpuid& d, Cpu& c ) {
   c.xcr0 = d.xcr0;
   c.hybrid = (c.max_leaf>=7) && Bit( d.R( 7, 0, 3 ), 15 );
   Features( d, c, c.hw, c.f );
-  c.nat = c.f;
-  if( !Bit( d.R( 0x80000001u, 0, 2 ), 8 ) || (c.max_ext<0x80000001u) ) Set( c.nat, F_PRFCHW, false );
+  NativeSets( d, c );
   c.level = LevelOf( c.f );
   c.clang = ClangName( c );
   c.gcc = GccName( d, c );
@@ -1040,7 +1072,7 @@ inline int RankTargets( const Cpu& c, int comp, int bits, bool strict, Match* m,
     gneed[x.group] = Or( gneed[x.group], TargetSet( t, comp ) );
     for( int i=0; i<2; i++ ) if( nat[i]>=0 ) {
       const X86Target& y = x86_target[nat[i]];
-      if( (i==1) && (x.model>=0) && (y.model>=0) && (x.model==y.model) && strcmp( x86_model[x.model], "generic" ) ) gsame[x.group] = 1;
+      if( (i==1) && (x.model>=0) && (y.model>=0) && (x.model==y.model) && strncmp( x86_model[x.model], "Generic", 7 ) ) gsame[x.group] = 1;
       if( (i==0) && (x.gproc>=0) && (y.gproc>=0) && (x.gproc==y.gproc) && strcmp( x86_gproc[x.gproc], "generic" ) ) gsame[x.group] = 1;
     }
   }
@@ -1051,6 +1083,7 @@ inline int RankTargets( const Cpu& c, int comp, int bits, bool strict, Match* m,
     Match& k = m[n++];
     k.t = t;
     k.need = gneed[x.group];
+    Set( k.need, F_AVX10_1, false );  // (no instructions of its own: the avx512 set it implies stands for it)
     if( bits==32 ) k.need = Sub( k.need, o64 );
     k.miss = Sub( k.need, c.f );
     k.strict = Empty( k.miss );

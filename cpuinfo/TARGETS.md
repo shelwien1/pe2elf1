@@ -59,13 +59,13 @@ group of names that compile to the same thing in every compiler that knows them.
 | lunarlake | yes | v3 | avx2 | prfchw adx gfni avxvnni avxifma avxvnniint8 avxvnniint16 avxneconvert | LunarlakePModel | arrowlake_s | 2024 |
 | gracemont | yes | v3 | avx2 | prfchw adx gfni avxvnni | AlderlakePModel | alderlake | 2021 |
 | pantherlake wildcatlake | yes | v3 | avx2 | prfchw adx gfni avxvnni avxifma avxvnniint8 avxvnniint16 avxneconvert | AlderlakePModel | pantherlake | 2025 |
-| novalake | yes | v4 | apx | prfchw adx gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq avx512bf16 avx512fp16 avxvnni avxifma avxvnniint8 avxvnniint16 avxneconvert avx10.2 apxf | AlderlakePModel | novalake | 2026 |
+| novalake | yes | v4 | apx | prfchw adx gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq avx512bf16 avx512fp16 avxvnni avxifma avxvnniint8 avxvnniint16 avxneconvert avx10.1 avx10.2 apxf | AlderlakePModel | novalake | 2026 |
 | sierraforest | yes | v3 | avx2 | prfchw adx gfni avxvnni avxifma avxvnniint8 avxneconvert | AlderlakePModel | sierraforest | 2024 |
 | grandridge | yes | v3 | avx2 | prfchw adx gfni avxvnni avxifma avxvnniint8 avxneconvert | AlderlakePModel | grandridge | 2024 |
-| graniterapids | yes | v4 | avx512 | prfchw adx gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq avx512bf16 avx512fp16 avxvnni | SapphireRapidsModel | graniterapids | 2024 |
-| graniterapids-d | yes | v4 | avx512 | prfchw adx gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq avx512bf16 avx512fp16 avxvnni | SapphireRapidsModel | graniterapids_d | 2025 |
+| graniterapids | yes | v4 | avx512 | prfchw adx gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq avx512bf16 avx512fp16 avxvnni avx10.1 | SapphireRapidsModel | graniterapids | 2024 |
+| graniterapids-d | yes | v4 | avx512 | prfchw adx gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq avx512bf16 avx512fp16 avxvnni avx10.1 | SapphireRapidsModel | graniterapids_d | 2025 |
 | clearwaterforest | yes | v3 | avx2 | prfchw adx gfni avxvnni avxifma avxvnniint8 avxvnniint16 avxneconvert | AlderlakePModel | clearwaterforest | 2025 |
-| diamondrapids | yes | v4 | apx | prfchw adx gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq avx512bf16 avx512fp16 avxvnni avxifma avxvnniint8 avxvnniint16 avxneconvert avx10.2 apxf | SapphireRapidsModel | diamondrapids | 2026 |
+| diamondrapids | yes | v4 | apx | prfchw adx gfni avx512ifma avx512vbmi avx512vbmi2 avx512vnni avx512bitalg avx512vpopcntdq avx512bf16 avx512fp16 avxvnni avxifma avxvnniint8 avxvnniint16 avxneconvert avx10.1 avx10.2 apxf | SapphireRapidsModel | diamondrapids | 2026 |
 | knl(clang) | yes | v3 | avx512 | prfchw adx avx512f avx512cd | HaswellModel | - | 2016 |
 | knm(clang) | yes | v3 | avx512 | prfchw adx avx512f avx512cd avx512vpopcntdq | HaswellModel | - | 2017 |
 | lakemont | - | - | x87 | cx8 | GenericModel | lakemont | 2013 |
@@ -141,8 +141,8 @@ wildcatlake      clang only:  [enqcmd invpcid shstk]; gcc only:
 novalake         clang only:  [enqcmd invpcid shstk]; gcc only:
 sierraforest     clang only:  [invpcid shstk]; gcc only:
 grandridge       clang only:  [invpcid shstk]; gcc only:
-graniterapids    clang only:  [invpcid shstk]; gcc only:
-graniterapids-d  clang only:  [invpcid shstk]; gcc only:
+graniterapids    clang only:  [invpcid shstk]; gcc only: avx10.1
+graniterapids-d  clang only:  [invpcid shstk]; gcc only: avx10.1
 emeraldrapids    clang only:  [invpcid shstk]; gcc only:
 clearwaterforest clang only:  [invpcid shstk]; gcc only:
 diamondrapids    clang only:  [invpcid shstk]; gcc only:

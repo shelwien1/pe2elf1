@@ -477,7 +477,6 @@ def normalize(s):
     for f in s: n |= set(IMPLY.get(f, "").split())
     if n == s: break
     s = n
-  s.discard("avx10.1")     # no instructions of its own: its avx512 set stands for it
   return s
 
 def needs(f):

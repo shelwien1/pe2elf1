@@ -106,8 +106,11 @@ x86-32 builds can also use:
   that compilers only use through intrinsics (see below);
 * `-march=native = ...`: what `-march=native` passes is that name plus every
   feature flag; shown are only the flags that differ from the name's own
-  set. gcc also passes `-mrtm`/`-mhle` (or `-mno-`), which are not modelled
-  here, and cache sizes (`--param l1-cache-size=...`) for its `-mtune=native`.
+  set, each by that compiler's own reading of CPUID (see
+  [Which targets run](#which-targets-run)). Not modelled: gcc's
+  `-mrtm`/`-mhle`/`-mabm`/`-mavx10v2aux`/`-macev1` (or their `-mno-`), clang's
+  `avx10v2aux`, and gcc's cache sizes (`--param l1-cache-size=...`) for its
+  `-mtune=native`.
 
 `-a` adds the targets that do not run, e.g. on that Zen 4:
 
@@ -183,9 +186,13 @@ How each compiler names the CPU:
 | Zhaoxin | "generic" | family 7 models 3Bh/5Bh/6Bh+: lujiazui/yongfeng/shijidadao (lujiazui with AVX and F16C off) |
 | VIA, others | "generic" | the generic fallback by features (core2, nocona/prescott, x86-64, pentium4, pentiumpro ...) |
 
+clang tells vendors by the whole 12-byte string, gcc by its first word (ebx)
+only: any "Genu..." (GenuineTMx86, GenuineIotel, "Genuine  RDC") is Intel to
+gcc, so a Transmeta Crusoe is `pentium-mmx` to it and "generic" to clang.
 gcc's driver has VIA (Centaur) cases, but `cpu_indicator_init` sets family
 and model only for Intel, AMD, Hygon and Zhaoxin, so for VIA they stay 0
-and the generic fallback decides; `cpuinfo` does the same.
+and the generic fallback decides; `cpuinfo` does the same. With no CPUID
+leaf 1 gcc says `i386`, clang "generic".
 
 Where they name the same CPU differently (gcc folds more models into one
 name; most of these are one group, see [Targets](#targets)): Raptor Lake,
@@ -210,10 +217,11 @@ x64 targets for gcc and clang, best first:
 ```
 
 (model B5h, "Arrow Lake U", is a Meteor Lake refresh, without Arrow Lake's
-AVX-IFMA etc.). An unknown model gets a guess: a Bartlett Lake (model D7h) is
+AVX-IFMA etc.). An unknown model gets a guess: the Bartlett Lake of
+InstLatx64's `GenuineIntel00D0670_BartlettLake_01_CPUID.txt` (model D7h) is
 `goldmont` to clang (AVX-less, plus every feature as a flag) and
 `sierraforest` to gcc, of which neither runs as a bare `-march`; the list
-puts `alderlake` first.
+puts `alderlake` first. (The B7h Bartlett Lake is a known model: `raptorlake`.)
 
 ## Targets
 
@@ -241,10 +249,13 @@ generated from llvm-project main and gcc master of 2026-10-27. Per name:
   in the `alderlake` group: clang tunes it differently;
 * vendor and year (by hand, in `gen_targets.py`), for the ranking.
 
-`avx10.1` is not kept as a feature of its own: it has no instructions past
-the AVX-512 set it implies (F CD BW DQ VL IFMA VBMI VBMI2 VNNI BF16 VPOPCNTDQ
-BITALG FP16), which stands for it; `avx10.2` (new instructions) is kept. The
-APX subfeatures (egpr, ndd, ...) are one feature, `apxf`, as CPUID has them.
+`avx10.1` is in the sets (gcc's `graniterapids`, both compilers'
+`diamondrapids` and `novalake`), and detected, but not needed for a target
+to run: it has no instructions past the AVX-512 set it implies (F CD BW DQ
+VL IFMA VBMI VBMI2 VNNI BF16 VPOPCNTDQ BITALG FP16), which stands for it, so
+a Granite Rapids that does not enumerate AVX10 still runs `graniterapids`;
+`avx10.2` (new instructions) is needed. The APX subfeatures (egpr, ndd, ...)
+are one feature, `apxf`, as CPUID has them.
 RTM and HLE are left out (in no current `-march` set but gcc's HLE, whose
 prefixes older CPUs ignore).
 
@@ -265,7 +276,8 @@ compiler emit on its own. Features are of two classes (`-f` shows them):
 * class C, the compiler emits them by itself: `x87 cx8 cmov mmx mmxext sse
   .. sse4.2 sse4a popcnt lzcnt cx16 sahf 64bit movbe prfchw avx f16c fma fma4
   xop tbm bmi bmi2 adx avx2 gfni avx512*` (but vp2intersect) `avxvnni avxifma
-  avxvnniint8 avxvnniint16 avxneconvert avx10.2 apxf raoint avx512bmm`;
+  avxvnniint8 avxvnniint16 avxneconvert avx10.1 avx10.2 apxf raoint avx512bmm`
+  (avx10.1 is not needed, see above);
 * class I, only through intrinsics/builtins (or used by an OS): `3dnow 3dnowa
   fxsr crc32 pclmul aes xsave* lwp fsgsbase rdrnd rdseed invpcid clflushopt clwb
   clzero mwaitx rdpid rdpru wbnoinvd sha sgx pku vaes vpclmulqdq
@@ -293,12 +305,26 @@ safety.
 For x86-32 builds the 64-bit-only features (`64bit sahf cx16 apxf uintr`)
 are not needed.
 
-The CPU's features are what LLVM and gcc detect: CPUID bits, with the
+The CPU's features (`features` line, `Cpu::f`) are the CPUID bits, with the
 registers' OS state from XGETBV (XCR0) for AVX (YMM), AVX-512 (opmask, ZMM),
-AMX (tile) and APX; then what lacks its prerequisites is dropped. Two
-departures, both towards "runs": `prfchw` is also taken from 3DNow! and from
-AMD x86-64 (K8 has PREFETCHW without the 3DNowPrefetch bit); `-march=native`
-lines use the CPUID bit only, as the compilers do.
+AMX (tile) and APX, as LLVM's `getHostCPUFeatures` reads them, except:
+
+* `prfchw` is also taken from 3DNow! and from AMD x86-64 (K8 has PREFETCHW
+  without the 3DNowPrefetch bit);
+* `xsave*` need only OSXSAVE (LLVM: the YMM state), `avx10.*` the AVX-512
+  state (LLVM: none);
+* `pku` is OSPKE (the OS has it on; both compilers do so), the CPU's own PKU
+  bit only shows on the `off` line;
+* what lacks its prerequisites is dropped (avx2 without avx ...), which
+  neither compiler does to its list.
+
+The names and the `-march=native` lines use each compiler's own reading
+(`Cpu::cnat`, `Cpu::gnat`): clang's as LLVM has it; gcc's (`cpuinfo.h`) with
+`prfchw` by its bit, `xsave*` and `avx512bmm` with no OS check, Key Locker
+only with AESKLE (the OS has it on: off under Linux), `avx10.1` also for an
+AVX10 version other than 1 and 2, and AVX/F16C off on a Lujiazui. Which
+targets run goes by `f`: a Lujiazui runs AVX targets that gcc's own native
+leaves AVX out of.
 
 ## Ranking
 

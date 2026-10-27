@@ -123,10 +123,11 @@ static void Native( const Cpu& c, const char* comp, const char* name, int bits )
   if( !name ) { printf( "          %-5s -march=native: none (gcc 15+ stops: Xeon Phi ISAs)\n", comp ); return; }
   int t = FindTarget( name );
   if( (t<0) || !(x86_target[t].flags&(g ? T_GCC : T_CLANG)) ) {
-    printf( "          %-5s -march=native = -march=%s (no named cpu: generic tuning) and the features\n", comp, name );
+    if( g ) printf( "          gcc   -march=native = -march=%s and the features\n", name );
+    else printf( "          clang -march=native = clang's default cpu (%s) and the features\n", (bits==64) ? "x86-64" : "pentium4 or so" );
     return;
   }
-  FSet ts = g ? x86_target[t].g : x86_target[t].c, host = c.nat;
+  FSet ts = g ? x86_target[t].g : x86_target[t].c, host = g ? c.gnat : c.cnat;
   if( bits==32 ) { ts = Sub( ts, Only64() ); host = Sub( host, Only64() ); }
   string s = string( "-march=" ) + name;
   FSet minus = Sub( ts, host ), plus = Sub( host, ts );
