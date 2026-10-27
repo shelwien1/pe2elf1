@@ -15,7 +15,7 @@ can be there in builds for several instruction sets, named by a suffix:
 `h264p_avx2.exe`, `h264p_avx512.exe`, `h264p.exe` ... mp4pack runs the best one
 the CPU can run (see [Tool builds](#tool-builds-and-the-cpu)). Only `avip` and
 `shar` are required; a stream whose packer is missing (or has no build for this
-CPU) goes to `shar a22`, with a note.
+CPU) goes to shar, with a note.
 
 ## What happens
 
@@ -27,14 +27,14 @@ CPU) goes to `shar a22`, with a note.
    CRC32 is computed meanwhile.
 2. Each of avip's files goes to a packer, by its extension:
 
-   | files | packer | group (`-t`/`-c` position) |
+   | files | packer | group (`-t`/`-c`/`-l` position) |
    |---|---|---|
-   | `.h264` | `h264p c -t N [-c C]` | 1 |
-   | `.aac` | `aacpack c`, one process per part (below) | 2 |
+   | `.h264` | `h264p c [-L] -t N [-c C]` | 1 |
+   | `.aac` | `aacpack c [-L]`, one process per part (below) | 2 |
    | `.mp3` `.mp2` `.mp1` `.mpa` | `mp3pack c -t N [-c C]` | 2 |
    | `.ogg` `.oga` | `oggcomp c` | 2 |
    | `.ttf` `.otf` `.ttc` | `ttfcomp a`, all fonts in one solid archive | 3 |
-   | everything else: `s.meta`, subtitles, ac3, flac, opus, xvid/hevc video, ... | `shar a22` | 4 |
+   | everything else: `s.meta`, subtitles, ac3, flac, opus, xvid/hevc video, ... | `shar a22` (`aL` with `-l`) | 4 |
 
 3. `shar a0` stores the packed files and an index, `mp4pack.idx`, as the
    output.
@@ -77,10 +77,10 @@ work) before the percentages are taken; alone, it works on the default.
 Within a group, jobs run in order, as many at a time as its threads allow:
 h264p and mp3pack take all of their group's threads (`-t N`), the aacpack parts
 and oggcomp one each. ttfcomp is always one process with all the fonts (solid
-compression), and so is the `shar a22` archive of the other files, except for
+compression), and so is the shar archive of the other files, except for
 pieces of big files (`-c`).
 
-`0` for a group means no packer for it: its files go to `shar a22` instead; `0`
+`0` for a group means no packer for it: its files go to shar instead; `0`
 for shar stores the other files as they are (so `-t 0,0,0,0` stores
 everything).
 
@@ -104,9 +104,39 @@ default.
   compression. With 1 thread there is one part.
 - ttfcomp: no part size; one solid archive.
 - shar: with more than one thread, files bigger than the part size (default
-  64MB) are cut into pieces, each its own `shar a22` archive, so that big
+  64MB) are cut into pieces, each its own shar archive, so that big
   streams without a packer (hevc video, DTS audio) can be compressed in
   parallel. The other files make one solid archive.
+
+`-l L` &mdash; compression levels, in the same order (separators as in `-t`,
+they make no difference here). A missing or empty one: the tool's default.
+
+| group | packer | levels | default |
+|---|---|---|---|
+| 1 | h264p | `-N`, 1 to 9, the ones its build has: `mp4pack_v0`'s has 9 7 5 3 1, from the strongest to the fastest | 9 |
+| 2 | aacpack | `-N`, 1 to 9 as with h264p; `mp4pack_v0`'s has only 9 | 9 |
+| 2 | mp3pack, oggcomp | none | |
+| 3 | ttfcomp | none | |
+| 4 | shar | `aN`: zstd's levels, -131072 to 22. 1 to 19 as usual, 20 to 22 the "ultra" ones (more memory), below 0 the fast ones; 0 stores | 22 |
+
+E.g. `-l 5,9,,19`: `h264p c -5`, `aacpack c -9`, `shar a19`; ttfcomp takes no
+level, so its place is left empty (a number there would not be used, nor one
+for the audio when the audio is mp3 or vorbis). The levels are for c; d needs
+none. The final `shar a0` stays a0.
+
+Which levels h264p and aacpack have depends on the build, so mp4pack asks it
+before using one: after `avip c`, for the packers the streams need, it runs the
+tool on a file that is not there with the level (`h264p c -4 mp4pack.none
+...`); a build without the level says so (exit code 2) before it looks for its
+input. Then mp4pack stops (exit code 1) and names the levels the build has:
+`error: h264p_avx2.exe has no level 4 (its levels: 1 3 5 7 9); see -l`.
+
+On a 5-second h264 sample (304,970 bytes), h264p's levels on one thread came to:
+
+| | -9 | -7 | -5 | -3 | -1 |
+|---|---|---|---|---|---|
+| size | 76.8% | 77.8% | 80.7% | 81.8% | 84.4% |
+| time | 1.08 s | 0.88 s | 0.58 s | 0.55 s | 0.30 s |
 
 `-f` &mdash; count only the threads free now, for the percentages and the
 defaults of `-t`: the CPUs' idle share, measured over a second when mp4pack
@@ -185,7 +215,7 @@ catch it if they were not.
 | 5 | aborted with Ctrl+C |
 
 When compressing, a packer that fails (or crashes) does not stop it: the
-stream it had goes to `shar a22` instead, with a warning. avip and shar
+stream it had goes to shar instead, with a warning. avip and shar
 failing do stop it. On Ctrl+C mp4pack stops the tools and removes the work
 directory (unless `-k`). The tools also run in a job object that ends them
 when mp4pack ends, however that happens.
@@ -201,8 +231,8 @@ s.0.h264.h264p          h264p
 s.1.aac.0.aacp ...      aacpack parts
 s.2.mp3.mp3p, .mp3o     mp3pack (frames, and what is not frames)
 fonts.ttfc              ttfcomp
-other.shar              shar a22: s.meta, subtitles, ...
-other1.shar ...         shar a22: pieces of big files
+other.shar              shar a22 (or -l's level): s.meta, subtitles, ...
+other1.shar ...         the same: pieces of big files
 store\...               -t ...+0: stored as they are
 ```
 
@@ -234,8 +264,8 @@ clang++ works the same way (for the MSVC target `wmain` needs no `-municode`).
 `test/roundtrip.sh BINDIR OUTDIR "OPTIONS" FILE...` (under wine) compress each
 file with the options, decompress it and compare, a line per file. E.g.
 `test\roundtrip.bat c:\mp4pack_v0\mp4pack.exe "-t 50%+50%-1" a.mkv b.mp4`.
-`test/parse_test.cpp` checks the `-t`/`-c` parsing (build it like mp4pack.exe
-and run it).
+`test/parse_test.cpp` checks the `-t`/`-c`/`-l` parsing (build it like
+mp4pack.exe and run it).
 
 Done here with wine 9 on Linux: the `003` mkv/mp4 test files, synthetic files
 with every kind of stream (h264, aac, mp3, vorbis, ac3, opus, flac, xvid,

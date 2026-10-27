@@ -6,8 +6,8 @@
 // c: "avip c" splits the container into its streams and a .meta file in a work
 // directory; each stream goes to its packer -- h264p (video), aacpack, mp3pack
 // or oggcomp (audio), ttfcomp (fonts, all in one solid archive), "shar a22"
-// (the rest) -- and "shar a0" stores the packed files and an index
-// (mp4pack.idx) as the output.
+// (the rest; a22 or the level -l gives) -- and "shar a0" stores the packed
+// files and an index (mp4pack.idx) as the output.
 // d: "shar x", the unpackers, "avip d"; every stream and the result are checked
 // against the sizes and CRC32s in the index.
 //
@@ -66,6 +66,8 @@ static int Method( const string& name ) {
 
 static int th[N_GROUP];               // -t: threads of each group
 static qword ch[N_GROUP];             // -c: part sizes, 0 = the default
+static const int NO_LEVEL = -1000000;
+static int lv[N_GROUP] = { NO_LEVEL, NO_LEVEL, NO_LEVEL, NO_LEVEL }; // -l: levels (NO_LEVEL: the tool's default)
 static vector< vector<int> > stages;  // -t: groups run at once ('+'), stage after stage (',')
 static int f_dec, f_verbose, f_keep, f_free;
 static wstring w_base;                // -w
@@ -103,6 +105,8 @@ static string Num( qword v ) {
   do b[--i] = char('0'+v%10); while( v/=10 );
   return b+i;
 }
+
+static string INum( int v ) { return (v<0) ? "-"+Num( qword(-(long long)v) ) : Num( qword(v) ); }
 
 static string Hex( uint v ) { char b[16]; snprintf( b, sizeof(b), "%08X", v ); return b; }
 
@@ -667,6 +671,7 @@ struct Job {
   int g, w;               // group; threads it takes from the group's
   int prog;               // its progress: 0 -, 1 the last "NN%" in its log, 2 its stdin, 3 its stdout
   int report;             // a line when it is done
+  int quiet;              // its output to its log even with -v, its command line not shown
   qword work;             // the bytes it packs (c) or unpacks (d), for the progress
   vector<int> sids;       // c: the streams it packs
   vector<wstring> outs;   // files it has to make (c: their sizes are reported)
@@ -681,7 +686,7 @@ struct Job {
   qword t0, t;
   double frac;
   string why;
-  Job() : g(G_OTHER), w(1), prog(0), report(1), work(0), st(0), wu(0), hp(0), exited(0), code(0), t0(0), t(0), frac(0) { out.dir = 1; }
+  Job() : g(G_OTHER), w(1), prog(0), report(1), quiet(0), work(0), st(0), wu(0), hp(0), exited(0), code(0), t0(0), t(0), frac(0) { out.dir = 1; }
 };
 
 static HANDLE Inheritable( HANDLE h ) {
@@ -700,7 +705,7 @@ static int Start( Job& j ) {
   wstring exe = t.path;
   wstring cmd = L"\"" + exe + L"\" " + W(j.args);
   wstring cwd = work + W(j.cwd);
-  if( f_verbose ) Msg( "> " + (j.cwd.size() ? "("+j.cwd+") " : string()) + t.file + " " + j.args
+  if( f_verbose && !j.quiet ) Msg( "> " + (j.cwd.size() ? "("+j.cwd+") " : string()) + t.file + " " + j.args
                      + (j.in.path.size() ? " < "+U(j.in.path) : string()) + (j.out.path.size() ? " > "+U(j.out.path) : string()) );
   SECURITY_ATTRIBUTES sa = { sizeof(sa), 0, TRUE };
   HANDLE c_in = 0, c_out = 0, c_err = 0;
@@ -712,7 +717,7 @@ static int Start( Job& j ) {
   }
   if( err.empty() && j.out.path.size() && PumpOpen( j.out, c_out ) ) err = "cannot write " + U(j.out.path);
   if( err.empty() ) {
-    if( f_verbose ) c_err = Inheritable( h_err );
+    if( f_verbose && !j.quiet ) c_err = Inheritable( h_err );
     else {
       j.log = work + L"log\\" + W(Num(++n_log)) + L"_" + W(j.tool) + L".txt";
       c_err = CreateFileW( j.log.c_str(), GENERIC_WRITE, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, &sa, CREATE_ALWAYS, 0, 0 );
@@ -862,6 +867,7 @@ static void Status( const vector<Job*>& all, const vector<Job*>& run ) {
 static int Fallback( Job& j );
 static int Skip( const Job& j );
 static void Succeeded( Job& j );
+static string LevelArg( int m );
 
 // Runs the waiting jobs of these groups, the groups at once, each group's in
 // its order within its threads (a job waits for the ones before it). 0: all
@@ -927,6 +933,15 @@ static int RunOne( Job& j ) {
   return RunStage( v, g );
 }
 
+// a tool's exit code for this command line, run quietly; -1: it did not run
+static long long Probe( const string& tool, const string& args ) {
+  Job j; j.tool = tool; j.args = args; j.quiet = 1;
+  if( Start( j ) ) return -1;
+  if( WaitForSingleObject( j.hp, 10000 )!=WAIT_OBJECT_0 ) { TerminateProcess( j.hp, 1 ); WaitForSingleObject( j.hp, 5000 ); }
+  Finish( j );
+  return j.code;
+}
+
 //---- streams and the index
 
 struct Part {
@@ -943,7 +958,7 @@ struct Stream {
   int m;            // method
   vector<Part> part;
   int refs;         // c: jobs yet to read it
-  int failed;       // c: its packer failed; it goes to shar a22 instead
+  int failed;       // c: its packer failed; it goes to shar instead
   Stream() : size(0), crc(0), m(M_SHAR), refs(0), failed(0) {}
 };
 
@@ -970,12 +985,12 @@ static int Skip( const Job& j ) {
   return 0;
 }
 
-// c: a packer failed; its streams get packed by shar a22 at the end instead
+// c: a packer failed; its streams get packed by shar at the end instead
 static int Fallback( Job& j ) {
   if( f_dec || j.sids.empty() || f_abort ) return 0;
   string n;
   for( size_t i=0; i<j.sids.size(); i++ ) { n += (i ? ", " : "") + S[j.sids[i]].name; S[j.sids[i]].failed = 1; S[j.sids[i]].refs--; }
-  Msg( "warning: " + j.label + ": " + j.why + "; " + n + " will be packed with shar a22 instead" );
+  Msg( "warning: " + j.label + ": " + j.why + "; " + n + " will be packed with shar " + LevelArg(M_SHAR) + " instead" );
   LogTail( j );
   return 1;
 }
@@ -1174,6 +1189,43 @@ static int ParseChunks( const char* s ) {
   return 0;
 }
 
+// "5,9,,20": levels of h264p, the audio packer, ttfcomp and shar, in that
+// order ('+' as ','); missing or empty: the tool's default. h264p and aacpack
+// take 1 to 9 (-N; which of them, their builds say: CheckLevels), shar zstd's
+// -131072 to 22 (aN; 0 stores); ttfcomp, mp3pack and oggcomp take none, theirs
+// is not used.
+static int ParseLevels( const char* s ) {
+  for( int g=0; g<N_GROUP; g++ ) lv[g] = NO_LEVEL;
+  for( int g=0; ; g++ ) {
+    if( g>=N_GROUP ) return 1;
+    if( *s && (*s!=',') && (*s!='+') ) {
+      int neg = (*s=='-');
+      s += neg;
+      if( (*s<'0') || (*s>'9') ) return 1;
+      int v = 0;
+      while( (*s>='0') && (*s<='9') ) { v = v*10+(*s++-'0'); if( v>1000000 ) return 1; }
+      lv[g] = neg ? -v : v;
+    }
+    if( *s==0 ) break;
+    if( (*s!='+') && (*s!=',') ) return 1;
+    s++;
+  }
+  for( int g=G_VIDEO; g<=G_AUDIO; g++ ) if( (lv[g]!=NO_LEVEL) && ((lv[g]<1) || (lv[g]>9)) ) return 1;
+  return (lv[G_OTHER]!=NO_LEVEL) && ((lv[G_OTHER]<-131072) || (lv[G_OTHER]>22));
+}
+
+// a packer's switch for its group's level: h264p's and aacpack's -N (none for
+// their default), shar's aN (a22 by default); none for the others
+static string LevelArg( int m ) {
+  int l = lv[m_group[m]];
+  if( m==M_SHAR ) return "a" + INum( (l==NO_LEVEL) ? 22 : l );
+  if( (l==NO_LEVEL) || ((m!=M_H264P) && (m!=M_AACPACK)) ) return string();
+  return "-" + Num(l);
+}
+
+// the same with a space before it, if there is one
+static string LevelSp( int m ) { string a = LevelArg(m); return a.size() ? " "+a : a; }
+
 // a part size for h264p's and mp3pack's -c: MB, or KB with a k
 static string ChunkArg( qword c ) {
   c = std::min<qword>( std::max<qword>( c, 1<<10 ), 1u<<30 );
@@ -1243,7 +1295,7 @@ static int PackJobs() {
       int n = th[G_VIDEO];
       string pk = s.name + ".h264p";
       Job* j = NewJob( G_VIDEO, n, "h264p " + s.name, "h264p" );
-      j->args = "c -t " + Num(n) + (((n>1) && ch[G_VIDEO]) ? " -c "+ChunkArg(ch[G_VIDEO]) : string()) + (f_verbose ? "" : " -p")
+      j->args = "c" + LevelSp(M_H264P) + " -t " + Num(n) + (((n>1) && ch[G_VIDEO]) ? " -c "+ChunkArg(ch[G_VIDEO]) : string()) + (f_verbose ? "" : " -p")
               + " " + u + " " + Quote("p\\"+pk);
       j->prog = 1; j->work = s.size; j->sids.push_back( si ); j->outs.push_back( PPath(pk) );
       s.part.push_back( Part( 0, s.size, pk, "" ) );
@@ -1266,7 +1318,7 @@ static int PackJobs() {
       for( size_t q=0; q+1<cut.size(); q++ ) {
         string pk = s.name + ((cut.size()>2) ? "."+Num(q) : string()) + ".aacp";
         Job* j = NewJob( G_AUDIO, 1, "aacpack " + s.name + ((cut.size()>2) ? "#"+Num(q) : string()), "aacpack" );
-        j->args = "c - " + Quote("p\\"+pk);
+        j->args = "c" + LevelSp(M_AACPACK) + " - " + Quote("p\\"+pk);
         j->in.path = UPath(s.name); j->in.off = cut[q]; j->in.len = cut[q+1]-cut[q];
         j->prog = 2; j->work = j->in.len; j->sids.push_back( si ); j->outs.push_back( PPath(pk) );
         s.part.push_back( Part( cut[q], cut[q+1]-cut[q], pk, "" ) );
@@ -1326,7 +1378,7 @@ static int PackJobs() {
         if( h!=INVALID_HANDLE_VALUE ) CloseHandle( h );
         if( r ) return Fail( "cannot write " + U(wd+W(mem)), 2 );
         Job* j = NewJob( G_OTHER, 1, "shar " + s.name + "#" + Num(q), "shar" );
-        j->args = "a22 " + Quote("p\\"+pk) + " " + Quote(d+"\\");
+        j->args = LevelArg(M_SHAR) + " " + Quote("p\\"+pk) + " " + Quote(d+"\\");
         j->prog = 1; j->work = b-a; j->outs.push_back( PPath(pk) ); j->del.push_back( wd );
         s.part.push_back( Part( a, b-a, pk, mem ) );
       }
@@ -1335,7 +1387,7 @@ static int PackJobs() {
       if( !o ) {
         o = NewJob( G_OTHER, 1, "shar", "shar" );
         CreateDirectoryW( (work+L"other").c_str(), 0 );
-        o->args = "a22 p\\other.shar other\\"; o->prog = 1; o->outs.push_back( PPath("other.shar") ); o->del.push_back( work+L"other\\" );
+        o->args = LevelArg(M_SHAR) + " p\\other.shar other\\"; o->prog = 1; o->outs.push_back( PPath("other.shar") ); o->del.push_back( work+L"other\\" );
       }
       if( !MoveFileW( UPath(s.name).c_str(), (work+L"other\\"+W(s.name)).c_str() ) ) { Msg( "cannot move " + U(UPath(s.name)) ); return 2; }
       o->work += s.size; o->sids.push_back( int(i) );
@@ -1349,7 +1401,7 @@ static int PackJobs() {
   return 0;
 }
 
-// streams whose packer failed: into one more shar a22 archive (stored with -t ...+0)
+// streams whose packer failed: into one more shar archive (stored with -t ...+0)
 static int PackFailed() {
   Job* x = 0;
   for( size_t i=0; i<S.size(); i++ ) if( S[i].failed ) {
@@ -1368,7 +1420,7 @@ static int PackFailed() {
     if( !x ) {
       x = NewJob( G_OTHER, 1, "shar (fallback)", "shar" );
       CreateDirectoryW( (work+L"fallback").c_str(), 0 );
-      x->args = "a22 p\\fallback.shar fallback\\"; x->prog = 1; x->outs.push_back( PPath("fallback.shar") ); x->del.push_back( work+L"fallback\\" );
+      x->args = LevelArg(M_SHAR) + " p\\fallback.shar fallback\\"; x->prog = 1; x->outs.push_back( PPath("fallback.shar") ); x->del.push_back( work+L"fallback\\" );
     }
     if( !MoveFileW( UPath(s.name).c_str(), (work+L"fallback\\"+W(s.name)).c_str() ) ) { Msg( "cannot move " + U(UPath(s.name)) ); return 2; }
     x->work += s.size;
@@ -1378,6 +1430,23 @@ static int PackFailed() {
   vector<int> g( 1, G_OTHER );
   int r = RunStage( J, g );
   return r ? ((r==2) ? 5 : 3) : 0;
+}
+
+// c: the levels -l gives h264p and aacpack, if their streams are here: their
+// builds have to have them (a build without the level exits with 2 before it
+// opens its input, else with 1 as the input is not there)
+static int CheckLevels() {
+  const int ms[2] = { M_H264P, M_AACPACK };
+  for( int i=0; i<2; i++ ) {
+    int m = ms[i], l = lv[m_group[m]], any = 0;
+    for( size_t k=0; k<S.size(); k++ ) any |= (S[k].m==m);
+    if( !any || (l==NO_LEVEL) || (Probe( m_tool[m], "c -" + Num(l) + " mp4pack.none mp4pack.none.out" )!=2) ) continue;
+    string has;
+    for( int k=1; k<=9; k++ ) if( Probe( m_tool[m], "c -" + Num(k) + " mp4pack.none mp4pack.none.out" )==1 ) has += " " + Num(k);
+    Msg( "error: " + GetTool( m_tool[m] ).file + " has no level " + Num(l) + (has.size() ? " (its levels:" + has + ")" : string()) + "; see -l" );
+    return 1;
+  }
+  return 0;
 }
 
 static int Compress( const wstring& in, const wstring& out ) {
@@ -1429,16 +1498,17 @@ static int Compress( const wstring& in, const wstring& out ) {
     if( (s.m==M_SHAR) && (th[G_OTHER]==0) ) s.m = M_STORE;
     S.push_back( s );
   }
-  for( int m=0; m<N_METHOD; m++ ) if( nobuild[m].size() ) Msg( "note: " + NoTool( GetTool( m_tool[m] ) ) + "; to shar a22: " + nobuild[m] );
+  for( int m=0; m<N_METHOD; m++ ) if( nobuild[m].size() ) Msg( "note: " + NoTool( GetTool( m_tool[m] ) ) + "; to shar " + LevelArg(M_SHAR) + ": " + nobuild[m] );
+  if( (r = CheckLevels())!=0 ) return r;
   if( (r = PackJobs())!=0 ) return r;
 
   for( size_t i=0; i<S.size(); i++ ) {
     const Stream& s = S[i];
     string d = m_name[s.m];
-    if( s.m==M_H264P ) d += " -t " + Num(th[G_VIDEO]) + (((th[G_VIDEO]>1) && ch[G_VIDEO]) ? " -c "+ChunkArg(ch[G_VIDEO]) : string());
+    if( s.m==M_H264P ) d += LevelSp(M_H264P) + " -t " + Num(th[G_VIDEO]) + (((th[G_VIDEO]>1) && ch[G_VIDEO]) ? " -c "+ChunkArg(ch[G_VIDEO]) : string());
     if( s.m==M_MP3PACK ) d += " -t " + Num(th[G_AUDIO]) + (((th[G_AUDIO]>1) && ch[G_AUDIO]) ? " -c "+ChunkArg(ch[G_AUDIO]) : string());
-    if( s.m==M_AACPACK ) d += (s.part.size()>1) ? ", " + Num(s.part.size()) + " parts" : string();
-    if( s.m==M_SHAR ) d += " (" + s.part[0].pk + ((s.part.size()>1) ? ", " + Num(s.part.size()) + " pieces" : string()) + ")";
+    if( s.m==M_AACPACK ) d += LevelSp(M_AACPACK) + ((s.part.size()>1) ? ", " + Num(s.part.size()) + " parts" : string());
+    if( s.m==M_SHAR ) d += LevelSp(M_SHAR) + " (" + s.part[0].pk + ((s.part.size()>1) ? ", " + Num(s.part.size()) + " pieces" : string()) + ")";
     string n = "  " + s.name;
     if( n.size()<20 ) n.append( 20-n.size(), ' ' );
     string z = Num(s.size);
@@ -1609,7 +1679,7 @@ static const char usage[] =
 "        there are (all, or the free ones: -f), rounded up; a -N at the end\n"
 "        leaves N of them out first: -t 50%+50%-2 = 3+3,1,1 with 8 threads.\n"
 "        Alone, -N works on the default, 100%+100%.\n"
-"        0: no packer for that group, its files go to shar a22 (for shar\n"
+"        0: no packer for that group, its files go to shar (for shar\n"
 "        itself: they are stored as they are)\n"
 "  -c C  part sizes, in the same order: MB, or KB with k (e.g. -c 4,512k);\n"
 "        0 or missing: the default. h264p and mp3pack get it as their -c;\n"
@@ -1617,6 +1687,11 @@ static const char usage[] =
 "        (default: one part per thread, 1MB at least); with more than one\n"
 "        thread, other files bigger than it (default 64MB) are cut into\n"
 "        pieces, an archive for each. The fonts make one solid archive.\n"
+"  -l L  compression levels, in the same order, joined by , (or +); missing\n"
+"        or empty: the tool's default. h264p and aacpack: 1 to 9, as their\n"
+"        builds have them (now h264p 9 7 5 3 1, aacpack 9; 9 is the strongest\n"
+"        and the default); shar: zstd's, -131072 to 22 (default 22; 0 stores).\n"
+"        ttfcomp, mp3pack and oggcomp have none. E.g. -l 5,9,,19\n"
 "  -f    count the threads free now (the CPUs' idle share over a second)\n"
 "  -i L  use tool builds up to level L: x64 sse3 ssse3 sse41 sse42 avx avx2\n"
 "        avx512 (default: what the CPU has)\n"
@@ -1640,7 +1715,7 @@ int wmain( int argc, wchar_t** argv ) {
 
   int mode = 0, nio = 0, f_t = 0, f_c = 0, cap = L_AVX512;
   wstring io[2];
-  string ts, cs;
+  string ts, cs, ls;
   for( int i=1; i<argc; i++ ) {
     wstring a = argv[i];
     if( !mode ) {
@@ -1649,10 +1724,11 @@ int wmain( int argc, wchar_t** argv ) {
     }
     if( (a.size()>=2) && (a[0]=='-') ) {
       wchar_t o = a[1];
-      if( ((o=='t') || (o=='c') || (o=='w') || (o=='i')) ) {
+      if( ((o=='t') || (o=='c') || (o=='l') || (o=='w') || (o=='i')) ) {
         wstring v = a.substr( 2 );
         if( v.empty() ) { if( ++i>=argc ) { mode = 0; break; } v = argv[i]; }
         if( o=='t' ) { ts = U(v); f_t = 1; } else if( o=='c' ) { cs = U(v); f_c = 1; }
+        else if( o=='l' ) { ls = U(v); if( ParseLevels( ls.c_str() ) ) { Msg( "bad -l " + ls + " (up to 4 levels joined by ,: h264p and aacpack 1 to 9, shar -131072 to 22)" ); return 1; } }
         else if( o=='w' ) w_base = v;
         else if( (cap = Level( U(v) ))<0 ) { Msg( "bad -i " + U(v) ); return 1; }
       } else if( a==L"-v" ) f_verbose = 1;
