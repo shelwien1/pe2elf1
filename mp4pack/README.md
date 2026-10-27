@@ -320,7 +320,7 @@ that are not UTF-8; paths of 389 characters; relative paths; a new nested `-w`
 directory on another file system (`/dev/shm`). Tools that are missing, fail,
 crash or cannot be run (they fall back to shar). Damaged and foreign archives.
 SIGINT to the process group, SIGTERM, and SIGKILL (then the tools end at once
-and only the work directory is left). And the movie, below.
+and only the work directory is left). And the movie (see [Testing](#testing)).
 
 ## Testing
 
@@ -350,3 +350,10 @@ The movie, with the defaults (`-t 4+4,1,1`) on a 4-thread Xeon VM under wine:
 | h264 track, h264p -t 4 | 648,922,836 -> 564,620,814 (87.0%) | 15:18 |
 | aac tracks, aacpack in 8 parts | 253,612,715 -> 185,021,554 (73.0%) | alongside |
 | archive | 749,649,784 (83.1%) | c 16:32, d 23:57 |
+
+The same on Linux, on the same VM, with the Linux mp4pack and the tools
+converted by pe2elf. The streams pack to the same sizes. The archive is
+749,649,768 bytes, 16 smaller only because its index names the builds without
+`.exe`. c took 17:40 (h264p 17:19), d 26:31 (h264p 26:15); the result was
+identical to the input. The Windows build under wine decompressed the Linux
+archive to an identical file too.
