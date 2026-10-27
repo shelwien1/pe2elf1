@@ -254,7 +254,10 @@ int main( int argc, char** argv ) {
     for( int i=0; i<nall; i++ ) if( m[i].t==t ) r = i;
     if( r<0 ) printf( "here      not for %s builds%s\n", (bits==64) ? "x64" : "x86-32", Known( t, comp ) ? "" : " (or the compiler chosen)" );
     else if( r<nok ) {
-      printf( "here      runs: rank %d of %d for %s builds\n", r+1, nok, (bits==64) ? "x64" : "x86-32" );
+      // the rank of its group, as the list counts them
+      int gr = 0, ng = 0;
+      for( int i=0; i<nok; i++ ) if( !i || (x86_target[m[i].t].group!=x86_target[m[i-1].t].group) ) { ng++; if( i<=r ) gr = ng; }
+      printf( "here      runs: rank %d of %d for %s builds\n", gr, ng, (bits==64) ? "x64" : "x86-32" );
       if( !Empty( m[r].miss ) ) Words( "", { "without " + Join( Names( m[r].miss ) ) + " (intrinsics only)" } );
     } else {
       printf( "here      does not run: lacks %s", Join( Names( m[r].miss, 'C' ) ).c_str() );
