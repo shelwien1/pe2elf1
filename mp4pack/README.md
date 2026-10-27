@@ -3,7 +3,8 @@
 Lossless compression of whole mp4/mkv/avi files, for Windows and Linux (see
 [Linux](#linux)). `mp4pack.exe` is a wrapper: it takes the container apart with
 `avip`, gives each stream to the packer made for it, and stores the results in
-one `shar a0` archive.
+one `shar a0` archive. `mp4gui.exe` is the same with a window, on Windows (see
+[mp4gui](#mp4gui)).
 
 ```
 mp4pack c [options] input output     compress
@@ -234,6 +235,49 @@ builds it was made with (`mp4pack d -v` shows them). The builds of a tool are
 taken to be interchangeable: the CRC checks of d would catch it if they were
 not.
 
+## mp4gui
+
+`mp4gui.exe` is mp4pack in a window, for Windows: `mp4pack.cpp` compiled in,
+run on a thread of its own instead of from a console. It goes next to the
+tools, as `mp4pack.exe` does.
+
+- **Input, Output**: typed, chosen with `...` (the Open and Save dialogs), or
+  the input dropped on the window, or given on mp4gui's command line
+  (`mp4gui.exe input [output]`, as when a file is dropped on mp4gui.exe). An
+  input ending in `.mpk` selects Decompress. The output is named after the
+  input (`x.mkv` -> `x.mkv.mpk`, and back) until you choose one; an existing
+  output is replaced only after asking.
+- **Options**, as on the command line: Threads (`-t`; "keep free" adds a `-N`,
+  "count only the free ones" is `-f`), and under it what they come to, e.g.
+  `= 4,4,1+1: h264p 4, then audio 4, then ttfcomp 1 + shar 1`; Levels (`-l`,
+  for h264p, aacpack and shar); Part sizes (`-c`); Tool builds (`-i`: any that
+  runs here, or a `-march` target; the list has those whose code runs here,
+  best first); Work dir (`-w`) and "keep it" (`-k`). Levels and part sizes
+  are off for Decompress; a bad value is shown in red.
+- **CPU and tool builds**: the CPU (name, threads and cores, x86-64 level, its
+  best target) and the build of each tool that would run, with Tool builds as
+  set. Details... opens a window with what cpuinfo says of the CPU (caches,
+  features, what `-march=native` picks, the targets whose code runs here,
+  ranked) and every build of every tool here: the one that runs (`*`), the
+  others that could, and what the CPU lacks for those that cannot.
+- **Start** (or Enter) runs it. The log gets mp4pack's messages, the command
+  line it amounts to first. Progress shows the whole run's share done (avip
+  and the final shar take 3% each, packing or unpacking the rest), the time
+  so far and about how much is left of the phase, and a bar for each job
+  running (up to four; with more, three and the rest together). The taskbar button shows the
+  progress too, and flashes at the end if the window is in the background.
+- **Stop** ends it as Ctrl+C does: the tools are stopped and the work
+  directory is removed (unless kept). Closing the window while it runs asks
+  first, then stops it.
+- The options and the window's place are kept in `mp4gui.ini` next to it.
+
+The tools run without a console (`DETACHED_PROCESS`), so none opens a window;
+the rest is as with mp4pack.exe, whose console output comes to the window
+instead (mp4pack's `msg_hook` and `status_hook`). mp4gui.exe has no manifest
+(it is one .cpp file): the themed look comes from an activation context made
+from the one in shell32.dll, as programs without one do; where that fails, the
+controls look classic.
+
 ## Errors
 
 | exit code | |
@@ -291,6 +335,12 @@ clang++ works the same way (for the MSVC target `wmain` needs no `-municode`).
 `mp4pack.cpp` includes `../cpuinfo/x86targets.h`, so build it in this
 repository (or keep the two directories side by side). For the Linux build see
 below.
+
+mp4gui (`./build.sh` makes it too), plain Win32 with its common dialogs:
+
+```
+g++ -std=c++11 -O2 -s -static -municode -mwindows -o mp4gui.exe mp4gui.cpp -lcomdlg32 -lole32 -lshell32 -lgdi32
+```
 
 ## Linux
 
@@ -382,6 +432,16 @@ builds_test, the builds chosen for 19 InstLatx64 dumps (K8 to Zen 5, Pentium 4
 and Core 2 to Sapphire Rapids, VIA Nano, Zhaoxin), with and without `-i`. Not
 under wine: Ctrl+C (wine's console ends a program on it at once, without its
 handler).
+
+mp4gui was run under wine on a virtual X display (Xvfb), driven by a small
+program sending it the messages a user's clicks and typing would, with a
+screenshot at each step: compress and decompress (the archive the same as
+mp4pack.exe's, the result identical), Stop during packing, closing the window
+while it runs, a bad option, the replace question (no, then yes), Cyrillic
+names, Tool builds set to a target no build runs on, the settings kept in
+mp4gui.ini, and no work directory left in any case. Not on Windows itself: the
+look there (Segoe UI, the themed controls) and the taskbar's progress were not
+seen.
 
 The movie, with `-t 4+4,1,1` (the default then) on a 4-thread Xeon VM under
 wine:

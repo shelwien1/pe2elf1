@@ -19,6 +19,10 @@
 // they take ANSI command lines, so only names that survive that reach them
 // (ToolName). On Linux they are the Windows tools converted by pe2elf (named
 // without .exe: h264p_avx2), which take '\' for '/', and UTF-8.
+//
+// mp4gui.cpp, a Windows GUI, is this file too (with MP4PACK_NO_MAIN): it
+// calls Init and Run as wmain does, and gets the messages and the progress
+// through msg_hook and status_hook instead of the console.
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -82,11 +86,13 @@ static const int NO_LEVEL = -1000000;
 static int lv[N_GROUP] = { NO_LEVEL, NO_LEVEL, NO_LEVEL, NO_LEVEL }; // -l: levels (NO_LEVEL: the tool's default)
 static vector< vector<int> > stages;  // -t: groups run at once ('+'), stage after stage (',')
 static int f_dec, f_verbose, f_keep, f_free;
+static string t_spec, c_spec;         // -t and -c as given ("": none)
 static wstring w_base;                // -w
 
 static wstring exe_dir;               // ours and the tools', with a trailing separator
 static wstring work;                  // the work directory, with a trailing separator
-static HANDLE h_err, h_jobobj, ev_abort, ev_done;
+static HANDLE h_err, h_jobobj, ev_abort;
+static DWORD tool_flags;              // the tools' CreateProcess flags: DETACHED_PROCESS from a GUI (else each opens a console)
 static volatile LONG f_abort;
 static int f_con;                     // stderr is a console: there is a status line
 static size_t status_len;             // its length on the screen
@@ -166,7 +172,11 @@ static void Put( string s ) {
   WriteFile( h_err, s.data(), DWORD(s.size()), &n, 0 );
 }
 
+// a frontend in this program (mp4gui) takes the messages here instead
+static void (*msg_hook)( const string& s );
+
 static void Msg( const string& s ) {
+  if( msg_hook ) { msg_hook( s ); return; }
   if( status_len ) { Put( "\r"+string(status_len,' ')+"\r" ); status_len = 0; }
   Put( s+"\n" );
 }
@@ -277,6 +287,11 @@ static int GetSize( const wstring& p, qword& sz ) {
 }
 
 static int Exists( const wstring& p ) { qword s; return GetSize( p, s )==0; }
+
+static int IsDir( const wstring& p ) {
+  WIN32_FILE_ATTRIBUTE_DATA a;
+  return GetFileAttributesExW( p.c_str(), GetFileExInfoStandard, &a ) && (a.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY);
+}
 
 static HANDLE OpenRead( const wstring& p ) {
   return CreateFileW( p.c_str(), GENERIC_READ, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, 0, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, 0 );
@@ -518,6 +533,7 @@ static void CpuThreads() {
   DWORD n = gapc ? gapc( 0xFFFF ) : 0; // ALL_PROCESSOR_GROUPS
   if( n==0 ) { SYSTEM_INFO si; GetSystemInfo( &si ); n = si.dwNumberOfProcessors; }
   cpu_threads = std::max<int>( n, 1 );
+  cpu_cores = 0;
   DWORD len = 0;
   if( glpi && !glpi( 0, 0, &len ) && (GetLastError()==ERROR_INSUFFICIENT_BUFFER) && len ) { // RelationProcessorCore
     vector<byte> b( len );
@@ -547,6 +563,18 @@ struct Tool { string base, file, later; wstring path; int used; };
 static Tool tools[16];
 static int n_tools;
 
+// a file's place among the builds of a tool that run here (lower is better),
+// and its target and bits; -1: it does not run here, -2: not a build of base
+static int BuildPlace( const string& base, const string& file, int& tg, int& bits ) {
+  string b = Lower( base ), e = EXE, l = Lower( file );
+  if( (l.size()<b.size()+e.size()) || (l.compare( 0, b.size(), b )!=0) || (l.compare( l.size()-e.size(), e.size(), e )!=0) ) return -2;
+  string x = l.substr( b.size(), l.size()-e.size()-b.size() ); // "" or "_haswell"
+  bits = 64; tg = x.empty() ? x86::FindTarget( "x86-64" ) : (x[0]=='_') ? BuildOf( x.substr(1), bits ) : -1;
+  if( tg<0 ) return -2; // (another tool's)
+  int r = BuildRank( tg, bits );
+  return (x.empty() && (r<0)) ? 2*x86::N_TARGET : r; // (taken to run anywhere)
+}
+
 // the best build of a tool in our directory: base.exe or base_<target>.exe
 // (on Linux base or base_<target>)
 static const Tool& GetTool( const string& base ) {
@@ -554,19 +582,14 @@ static const Tool& GetTool( const string& base ) {
   Tool& t = tools[n_tools++];
   t.base = base; t.used = 0;
   int best = -1;
-  string b = Lower( base ), e = EXE;
   WIN32_FIND_DATAW fd;
   HANDLE h = FindFirstFileW( (exe_dir+W(base)+L"*" EXE).c_str(), &fd );
   if( h!=INVALID_HANDLE_VALUE ) {
     do {
       if( fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY ) continue;
-      string n = U(fd.cFileName), l = Lower(n);
-      if( (l.size()<b.size()+e.size()) || (l.compare( 0, b.size(), b )!=0) || (l.compare( l.size()-e.size(), e.size(), e )!=0) ) continue;
-      string x = l.substr( b.size(), l.size()-e.size()-b.size() ); // "" or "_haswell"
-      int bits = 64, tg = x.empty() ? x86::FindTarget( "x86-64" ) : (x[0]=='_') ? BuildOf( x.substr(1), bits ) : -1;
-      if( tg<0 ) continue; // (another tool's)
-      int r = BuildRank( tg, bits );
-      if( x.empty() && (r<0) ) r = 2*x86::N_TARGET; // (taken to run anywhere)
+      string n = U(fd.cFileName);
+      int tg, bits, r = BuildPlace( base, n, tg, bits );
+      if( r==-2 ) continue;
       if( r<0 ) { t.later += (t.later.size() ? "; " : "") + n + (cpu_ok ? " lacks " + Lacks( tg, bits ) : string()); continue; }
       if( (best<0) || (r<best) ) { best = r; t.file = n; t.path = exe_dir + fd.cFileName; }
     } while( FindNextFileW( h, &fd ) );
@@ -745,7 +768,7 @@ static int Start( Job& j ) {
     si.hStdError = c_err;
     vector<wchar_t> cl( cmd.begin(), cmd.end() ); cl.push_back( 0 );
     // suspended until it is in our job object: it dies with us
-    if( !CreateProcessW( exe.c_str(), &cl[0], 0, 0, TRUE, CREATE_SUSPENDED, 0, cwd.c_str(), &si, &pi ) )
+    if( !CreateProcessW( exe.c_str(), &cl[0], 0, 0, TRUE, CREATE_SUSPENDED|tool_flags, 0, cwd.c_str(), &si, &pi ) )
       err = "cannot run " + U(exe) + " (error " + Num(GetLastError()) + ")";
   }
   if( c_in ) CloseHandle( c_in );
@@ -848,11 +871,17 @@ static double Frac( Job& j ) {
   return j.frac;
 }
 
-// [elapsed] overall%, eta, and what runs; on a console only
+// what runs now ("avip c", "packing" ...), and a frontend's hook for the
+// progress, called instead of the status line: the share done (-1: no job
+// tells), the time left in ms (0: not known yet), the jobs running
+static string phase;
+static void (*status_hook)( double frac, qword eta, const vector<Job*>& run );
+
+// [elapsed] overall%, eta, and what runs; on a console only (or status_hook)
 static void Status( const vector<Job*>& all, const vector<Job*>& run ) {
   static qword last;
-  if( !f_con || f_verbose ) return;
-  if( status_len && (GetTickCount64()-last<500) ) return;
+  if( !status_hook && (!f_con || f_verbose) ) return;
+  if( (status_len || status_hook) && (GetTickCount64()-last<500) ) return;
   last = GetTickCount64();
   double tot = 0, done = 0;
   int any = 0; // a job that tells its progress
@@ -861,10 +890,13 @@ static void Status( const vector<Job*>& all, const vector<Job*>& run ) {
     tot += w; done += w*Frac( *all[i] );
     any |= all[i]->prog;
   }
+  int eta = any && (done>0) && (done<tot) && (done>tot/200);
+  qword left = eta ? qword( double(GetTickCount64()-t_run)*(tot-done)/done ) : 0;
+  if( status_hook ) { status_hook( any ? done/tot : -1, left, run ); return; }
   qword el = GetTickCount64()-t_start;
   string s = "[" + Clock(el) + "]";
   if( any ) s += " " + Pct( done, tot );
-  if( any && (done>0) && (done<tot) && (done>tot/200) ) s += " eta " + Clock( qword( double(GetTickCount64()-t_run)*(tot-done)/done ) );
+  if( eta ) s += " eta " + Clock( left );
   for( size_t i=0; i<run.size(); i++ ) s += "  " + run[i]->label + (run[i]->prog ? " "+Pct( Frac(*run[i]), 1 ) : string());
   size_t w = ConWidth()-1;
   wstring ws = W(s);
@@ -906,7 +938,7 @@ static int RunStage( const vector<Job*>& all, const vector<int>& groups ) {
         run.push_back( &j );
       }
     }
-    if( run.empty() ) break;
+    if( run.empty() ) { if( f_abort && !fail ) fail = 2; break; } // (stopped before it began)
     vector<HANDLE> h( 1, ev_abort ); // what has not finished yet
     for( size_t i=0; i<run.size(); i++ ) {
       if( !run[i]->exited ) h.push_back( run[i]->hp );
@@ -941,6 +973,7 @@ static int RunOne( Job& j ) {
   vector<int> g( 1, j.g );
   j.report = 0;
   t_run = GetTickCount64();
+  phase = j.label;
   return RunStage( v, g );
 }
 
@@ -1261,6 +1294,7 @@ static string StageText() {
 
 static int RunStages() {
   t_run = GetTickCount64();
+  phase = f_dec ? "unpacking" : "packing";
   for( size_t s=0; s<stages.size(); s++ ) {
     int r = RunStage( J, stages[s] );
     if( r ) return (r==2) ? 5 : 3;
@@ -1673,6 +1707,84 @@ static int Decompress( const wstring& in, const wstring& out ) {
 
 //---- main
 
+// what runs need once: stderr (a console?), the CRC table, our directory
+// (the tools'), the abort event, and the job object the tools die with
+static void Init() {
+  h_err = GetStdHandle( STD_ERROR_HANDLE );
+  DWORD cm;
+  f_con = GetConsoleMode( h_err, &cm ) ? 1 : 0;
+  // no "has stopped working" dialogs from a tool that crashes (inherited)
+  SetErrorMode( SEM_FAILCRITICALERRORS|SEM_NOGPFAULTERRORBOX|SEM_NOOPENFILEERRORBOX );
+  CrcInit();
+  vector<wchar_t> b( 32768 );
+  DWORD n = GetModuleFileNameW( 0, &b[0], DWORD(b.size()) );
+  exe_dir.assign( &b[0], n );
+  exe_dir.erase( exe_dir.size()-FileName( exe_dir ).size() );
+  ev_abort = CreateEventW( 0, TRUE, FALSE, 0 );
+  // the tools die with us, however we end
+  h_jobobj = CreateJobObjectW( 0, 0 );
+  if( h_jobobj ) {
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION li;
+    memset( &li, 0, sizeof(li) );
+    li.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+    if( !SetInformationJobObject( h_jobobj, JobObjectExtendedLimitInformation, &li, sizeof(li) ) ) { CloseHandle( h_jobobj ); h_jobobj = 0; }
+  }
+}
+
+// a run's state as before it (mp4gui makes one run after another); not
+// f_abort, which the caller clears
+static void NewRun() {
+  for( size_t i=0; i<J.size(); i++ ) delete J[i];
+  J.clear(); S.clear();
+  for( int i=0; i<n_tools; i++ ) tools[i] = Tool();
+  n_tools = 0;
+  src_name.clear(); src_size = 0; src_crc = 0; src_tools.clear();
+  work.clear(); n_log = 0; status_len = 0; phase.clear();
+}
+
+// c or d (f_dec) of in to out, with the options as set: t_spec, c_spec, the
+// levels (ParseLevels), cap (-i), w_base and the flags; the exit code
+static int Run( const wstring& in, const wstring& out ) {
+  NewRun();
+  // the CPU: its threads (or the free ones), and the tool builds it runs
+  CpuThreads();
+  CpuTargets();
+  string c = "cpu: " + Num(cpu_threads) + " threads" + (cpu_cores ? ", " + Num(cpu_cores) + " cores" : string());
+  if( !cpu_ok ) c += ", no CPUID (builds without a target only)";
+  else if( cpu_best.size() ) c += ", " + cpu_best + (cpu.level ? " (x86-64-v" + Num(cpu.level) + ")" : string());
+  if( cap>=0 ) c += ", builds for " + string( x86::x86_target[cap].name );
+  int n = cpu_threads;
+  if( f_free ) { n = FreeThreads(); c += ", " + Num(n) + " free"; }
+  if( ParseThreads( t_spec, n ) ) { Msg( "bad -t " + t_spec + " (up to 4 of N or N% joined by + or , and maybe a -N)" ); return 1; }
+  for( int g=0; g<N_GROUP; g++ ) ch[g] = 0;
+  if( c_spec.size() && ParseChunks( c_spec.c_str() ) ) { Msg( "bad -c " + c_spec ); return 1; }
+  Msg( c + "; -t " + (t_spec.size() ? t_spec+" = " : string()) + ThreadText() );
+  const string all[] = { "avip", "shar", "h264p", "aacpack", "mp3pack", "oggcomp", "ttfcomp" };
+  string tl;
+  for( int i=0; i<7; i++ ) { const Tool& t = GetTool( all[i] ); if( t.path.size() ) tl += " " + t.file; }
+  Msg( "tools:" + (tl.size() ? tl : string(" none")) );
+  for( int i=0; i<2; i++ ) if( GetTool( all[i] ).path.empty() ) { Msg( NoTool( GetTool( all[i] ) ) ); return 2; }
+  t_start = GetTickCount64();
+
+  wstring fi = FullPath( in ), fo = FullPath( out );
+  int r = f_dec ? Decompress( fi, fo ) : Compress( fi, fo );
+  if( f_abort ) { Msg( "aborted" ); r = 5; }
+  if( work.size() ) {
+    if( f_keep ) Msg( "work directory kept: " + U(work) );
+    else for( int i=0; i<20; i++ ) { // (a virus scanner may hold on to a file for a moment)
+      Remove( work );
+      if( !IsDir( work ) ) break;
+      if( i==19 ) Msg( "note: cannot remove the work directory " + U(work) );
+      else Sleep( 100 );
+    }
+  }
+  return r;
+}
+
+#ifndef MP4PACK_NO_MAIN
+
+static HANDLE ev_done;
+
 static BOOL WINAPI CtrlHandler( DWORD t ) {
   f_abort = 1;
   SetEvent( ev_abort );
@@ -1724,22 +1836,9 @@ static const char usage[] =
 "  -v    show the tools' command lines and output\n";
 
 int wmain( int argc, wchar_t** argv ) {
-  h_err = GetStdHandle( STD_ERROR_HANDLE );
-  DWORD cm;
-  f_con = GetConsoleMode( h_err, &cm ) ? 1 : 0;
-  // no "has stopped working" dialogs from a tool that crashes (inherited)
-  SetErrorMode( SEM_FAILCRITICALERRORS|SEM_NOGPFAULTERRORBOX|SEM_NOOPENFILEERRORBOX );
-  CrcInit();
-  {
-    vector<wchar_t> b( 32768 );
-    DWORD n = GetModuleFileNameW( 0, &b[0], DWORD(b.size()) );
-    exe_dir.assign( &b[0], n );
-    exe_dir.erase( exe_dir.size()-FileName( exe_dir ).size() );
-  }
-
-  int mode = 0, nio = 0, f_t = 0, f_c = 0, bits;
+  Init();
+  int mode = 0, nio = 0, bits;
   wstring io[2];
-  string ts, cs, ls;
   for( int i=1; i<argc; i++ ) {
     wstring a = argv[i];
     if( !mode ) {
@@ -1751,8 +1850,8 @@ int wmain( int argc, wchar_t** argv ) {
       if( ((o=='t') || (o=='c') || (o=='l') || (o=='w') || (o=='i')) ) {
         wstring v = a.substr( 2 );
         if( v.empty() ) { if( ++i>=argc ) { mode = 0; break; } v = argv[i]; }
-        if( o=='t' ) { ts = U(v); f_t = 1; } else if( o=='c' ) { cs = U(v); f_c = 1; }
-        else if( o=='l' ) { ls = U(v); if( ParseLevels( ls.c_str() ) ) { Msg( "bad -l " + ls + " (up to 4 levels joined by ,: h264p and aacpack 1 to 9, shar -131072 to 22)" ); return 1; } }
+        if( o=='t' ) t_spec = U(v); else if( o=='c' ) c_spec = U(v);
+        else if( o=='l' ) { string ls = U(v); if( ParseLevels( ls.c_str() ) ) { Msg( "bad -l " + ls + " (up to 4 levels joined by ,: h264p and aacpack 1 to 9, shar -131072 to 22)" ); return 1; } }
         else if( o=='w' ) w_base = v;
         else if( (cap = BuildOf( U(v), bits ))<0 ) { Msg( "bad -i " + U(v) + " (a -march target: haswell, x86-64-v3, znver4 ...)" ); return 1; }
       } else if( a==L"-v" ) f_verbose = 1;
@@ -1766,45 +1865,11 @@ int wmain( int argc, wchar_t** argv ) {
   }
   if( !mode || (nio!=2) ) { Put( usage ); return 1; }
   f_dec = (mode=='d');
-
-  // the CPU: its threads (or the free ones), and the tool builds it runs
-  CpuThreads();
-  CpuTargets();
-  string c = "cpu: " + Num(cpu_threads) + " threads" + (cpu_cores ? ", " + Num(cpu_cores) + " cores" : string());
-  if( !cpu_ok ) c += ", no CPUID (builds without a target only)";
-  else if( cpu_best.size() ) c += ", " + cpu_best + (cpu.level ? " (x86-64-v" + Num(cpu.level) + ")" : string());
-  if( cap>=0 ) c += ", builds for " + string( x86::x86_target[cap].name );
-  int n = cpu_threads;
-  if( f_free ) { n = FreeThreads(); c += ", " + Num(n) + " free"; }
-  if( ParseThreads( f_t ? ts : string(), n ) ) { Msg( "bad -t " + ts + " (up to 4 of N or N% joined by + or , and maybe a -N)" ); return 1; }
-  if( f_c && ParseChunks( cs.c_str() ) ) { Msg( "bad -c " + cs ); return 1; }
-  Msg( c + "; -t " + (f_t ? ts+" = " : string()) + ThreadText() );
-  const string all[] = { "avip", "shar", "h264p", "aacpack", "mp3pack", "oggcomp", "ttfcomp" };
-  string tl;
-  for( int i=0; i<7; i++ ) { const Tool& t = GetTool( all[i] ); if( t.path.size() ) tl += " " + t.file; }
-  Msg( "tools:" + (tl.size() ? tl : string(" none")) );
-  for( int i=0; i<2; i++ ) if( GetTool( all[i] ).path.empty() ) { Msg( NoTool( GetTool( all[i] ) ) ); return 2; }
-
-  ev_abort = CreateEventW( 0, TRUE, FALSE, 0 );
   ev_done = CreateEventW( 0, TRUE, FALSE, 0 );
   SetConsoleCtrlHandler( CtrlHandler, TRUE );
-  // the tools die with us, however we end
-  h_jobobj = CreateJobObjectW( 0, 0 );
-  if( h_jobobj ) {
-    JOBOBJECT_EXTENDED_LIMIT_INFORMATION li;
-    memset( &li, 0, sizeof(li) );
-    li.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-    if( !SetInformationJobObject( h_jobobj, JobObjectExtendedLimitInformation, &li, sizeof(li) ) ) { CloseHandle( h_jobobj ); h_jobobj = 0; }
-  }
-  t_start = GetTickCount64();
-
-  wstring in = FullPath( io[0] ), out = FullPath( io[1] );
-  int r = f_dec ? Decompress( in, out ) : Compress( in, out );
-  if( f_abort ) { Msg( "aborted" ); r = 5; }
-  if( work.size() ) {
-    if( f_keep ) Msg( "work directory kept: " + U(work) );
-    else Remove( work );
-  }
+  int r = Run( io[0], io[1] );
   SetEvent( ev_done );
   return r;
 }
+
+#endif
