@@ -78,7 +78,7 @@ static CRITICAL_SECTION qlock;    // for what the run's thread hands over:
 static string log_q;              //   messages (UTF-8 lines)
 struct JobRow { string label; int st; double frac; int est, gain; qword work, made; }; // frac -1: not known; est: a guess; gain: c's or d's
 struct Prog { string phase; double frac; qword eta; vector<JobRow> jobs; };
-static Prog prog_q;               //   the progress
+static vector<Prog> prog_q;       //   the progress: each change of a job's state or the phase (none lost when they come faster than the window looks)
 static int log_posted, prog_posted;
 static Prog prog;                 // the progress shown
 static qword prog_at;             // when it came
@@ -109,7 +109,10 @@ static void HookStatus( double frac, qword eta, const vector<Job*>& all ) {
     p.jobs.push_back( r );
   }
   EnterCriticalSection( &qlock );
-  std::swap( prog_q, p );
+  int same = prog_q.size() && (prog_q.back().phase==p.phase) && (prog_q.back().jobs.size()==p.jobs.size());
+  for( size_t i=0; same && (i<p.jobs.size()); i++ ) same = (prog_q.back().jobs[i].label==p.jobs[i].label) && (prog_q.back().jobs[i].st==p.jobs[i].st);
+  if( same ) std::swap( prog_q.back(), p ); // (only further on: the latest will do)
+  else prog_q.push_back( p );
   int post = !prog_posted; prog_posted = 1;
   LeaveCriticalSection( &qlock );
   if( post ) PostMessageW( hwnd, WM_PROG, 0, 0 );
@@ -803,15 +806,16 @@ static void ShowLog() {
   SendMessageW( c_log, EM_REPLACESEL, FALSE, (LPARAM)W(s).c_str() );
 }
 
-static int Verifying( const string& ph ) { return run_verify && ((ph=="shar x") || (ph=="unpacking") || (ph=="avip d")); }
+static int Verifying( const string& ph ) { return run_verify && ((ph=="extract") || (ph=="unpacking") || (ph=="avip d")); }
 
 // the whole run's share done, from its phase's (-1: no phase): c is mostly
 // packing (avip c and the archive go at the disk's speed), d mostly
-// unpacking; whole: with Verify, c in the first half, its d in the second
+// unpacking (extracting the archive and avip d at the disk's); whole: with
+// Verify, c in the first half, its d in the second
 static double Total( const string& ph, double f, int whole ) {
   static const struct { const char* ph; double a, b; } map[] = {
     { "avip c", 0, .03 }, { "packing", .03, .97 }, { "archive", .97, 1 },
-    { "shar x", 0, .03 }, { "unpacking", .03, .97 }, { "avip d", .97, 1 } };
+    { "extract", 0, .03 }, { "unpacking", .03, .97 }, { "avip d", .97, 1 } };
   for( size_t i=0; i<sizeof(map)/sizeof(map[0]); i++ ) if( ph==map[i].ph ) {
     double t = map[i].a + (map[i].b-map[i].a)*std::max( f, 0.0 );
     if( whole && run_verify ) t = (i<3) ? t/2 : .5+t/2;
@@ -947,17 +951,22 @@ static void ShowTime() {
 }
 
 static void ShowProg() {
+  vector<Prog> q;
   EnterCriticalSection( &qlock );
-  prog = prog_q; prog_posted = 0;
+  q.swap( prog_q ); prog_posted = 0;
   LeaveCriticalSection( &qlock );
+  if( q.empty() ) return;
+  for( size_t i=0; i<q.size(); i++ ) { // (each change, in its order)
+    Tasks( q[i] );
+    double t = Total( q[i].phase, q[i].frac, 1 );
+    if( t>=0 ) shown = std::max( shown, t );
+  }
+  prog = q.back();
   if( !f_pause ) prog_at = GetTickCount64();
-  double t = Total( prog.phase, prog.frac, 1 );
-  if( t>=0 ) shown = std::max( shown, t );
   Marquee( c_bar, (shown==0) && (prog.frac<0) ); // (nothing known yet: avip c)
   SetText( c_phase, W( (Verifying( prog.phase ) ? "verify: " : "") + prog.phase ) );
   SendMessageW( c_bar, PBM_SETPOS, int( shown*1000 ), 0 );
   SetText( c_pct, Percent( shown ) );
-  Tasks( prog );
   ShowRows();
   Title();
   RunStatus();
@@ -990,7 +999,7 @@ static void OnStart() {
   Save();
   run_in = in; run_out = out; run_dec = f_dec; run_verify = f_verify;
   SetText( c_log, L"" ); ClearProg(); result.clear();
-  EnterCriticalSection( &qlock ); log_q.clear(); prog_q = Prog(); LeaveCriticalSection( &qlock );
+  EnterCriticalSection( &qlock ); log_q.clear(); prog_q.clear(); LeaveCriticalSection( &qlock );
   f_abort = 0; f_pause = 0; ResetEvent( ev_abort );
   running = 1; run_t0 = prog_at = GetTickCount64();
   HookMsg( "> " + CommandText() );

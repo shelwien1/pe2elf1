@@ -8,10 +8,10 @@
 // directory; each stream goes to its packer -- h264p (video), aacpack, mp3pack
 // or oggcomp (audio), ttfcomp (fonts, all in one solid archive), "shar a22"
 // (the rest; a22 or the level -l gives) -- and the packed files and an index
-// (mp4pack.idx) are stored as the output, a Shar2 archive as "shar a0" makes
-// it (WriteArchive).
-// d: "shar x", the unpackers, "avip d"; every stream and the result are checked
-// against the sizes and CRC32s in the index.
+// (mp4pack.idx) are stored as the output, mp4pack's own archive
+// (WriteArchive).
+// d: the archive's files (ReadArchive), the unpackers, "avip d"; every stream
+// and the result are checked against the sizes and CRC32s in the index.
 //
 // The tools are run from the directory of mp4pack.exe, each in the best build
 // there for this CPU (h264p_znver4.exe, h264p_avx2.exe, h264p.exe, ...: by the
@@ -192,36 +192,31 @@ static size_t ConWidth() {
   return 80;
 }
 
-//---- CRC32 and CRC-32C (slicing by 8)
+//---- CRC32 (slicing by 8)
 
-static uint crc_t[8][256], crcc_t[8][256]; // CRC32 (zip's: the index's), CRC-32C (Castagnoli's: Shar2's)
+static uint crc_t[8][256];
 
-static void CrcTable( uint t[8][256], uint poly ) {
+static void CrcInit() {
   for( uint i=0; i<256; i++ ) {
     uint c = i;
-    for( int k=0; k<8; k++ ) c = (c>>1) ^ (poly & (0u-(c&1)));
-    t[0][i] = c;
+    for( int k=0; k<8; k++ ) c = (c>>1) ^ (0xEDB88320u & (0u-(c&1)));
+    crc_t[0][i] = c;
   }
-  for( uint i=0; i<256; i++ ) for( int k=1; k<8; k++ ) t[k][i] = (t[k-1][i]>>8) ^ t[0][t[k-1][i]&255];
+  for( uint i=0; i<256; i++ ) for( int t=1; t<8; t++ ) crc_t[t][i] = (crc_t[t-1][i]>>8) ^ crc_t[0][crc_t[t-1][i]&255];
 }
 
-static void CrcInit() { CrcTable( crc_t, 0xEDB88320u ); CrcTable( crcc_t, 0x82F63B78u ); }
-
-static uint CrcOf( uint t[8][256], uint crc, const byte* p, size_t n ) {
+static uint Crc( uint crc, const byte* p, size_t n ) {
   crc = ~crc;
-  for(; n && (size_t(p)&7); n-- ) crc = (crc>>8) ^ t[0][(crc^*p++)&255];
+  for(; n && (size_t(p)&7); n-- ) crc = (crc>>8) ^ crc_t[0][(crc^*p++)&255];
   for(; n>=8; n-=8, p+=8 ) {
     uint a = crc ^ (p[0] | (p[1]<<8) | (p[2]<<16) | (uint(p[3])<<24));
     uint b = p[4] | (p[5]<<8) | (p[6]<<16) | (uint(p[7])<<24);
-    crc = t[7][a&255] ^ t[6][(a>>8)&255] ^ t[5][(a>>16)&255] ^ t[4][a>>24]
-        ^ t[3][b&255] ^ t[2][(b>>8)&255] ^ t[1][(b>>16)&255] ^ t[0][b>>24];
+    crc = crc_t[7][a&255] ^ crc_t[6][(a>>8)&255] ^ crc_t[5][(a>>16)&255] ^ crc_t[4][a>>24]
+        ^ crc_t[3][b&255] ^ crc_t[2][(b>>8)&255] ^ crc_t[1][(b>>16)&255] ^ crc_t[0][b>>24];
   }
-  for(; n; n-- ) crc = (crc>>8) ^ t[0][(crc^*p++)&255];
+  for(; n; n-- ) crc = (crc>>8) ^ crc_t[0][(crc^*p++)&255];
   return ~crc;
 }
-
-static uint Crc( uint crc, const byte* p, size_t n ) { return CrcOf( crc_t, crc, p, n ); }
-static uint Crc32c( uint crc, const byte* p, size_t n ) { return CrcOf( crcc_t, crc, p, n ); }
 
 //---- files and paths
 
@@ -380,6 +375,10 @@ static int CopyRange( const wstring& from, qword off, qword len, HANDLE to ) {
   CloseHandle( f );
   return r;
 }
+
+// n bytes, all of them: 0, or 1 (an error, or fewer)
+static int ReadN( HANDLE f, void* p, DWORD n ) { DWORD k = 0; return !ReadFile( f, p, n, &k, 0 ) || (k!=n); }
+static int WriteN( HANDLE f, const void* p, size_t n ) { DWORD k = 0; return !WriteFile( f, p, DWORD(n), &k, 0 ) || (k!=n); }
 
 static int ReadAll( const wstring& path, string& t, qword limit ) {
   qword sz;
@@ -1165,7 +1164,7 @@ static string src_tools; // d: the tool builds the archive was made with
 
 static string IndexText() {
   string t = "mp4pack 1\nsrc " + Num(src_size) + " " + Hex(src_crc) + " " + src_name + "\ntools";
-  for( int i=0; i<n_tools; i++ ) if( tools[i].used || (tools[i].base=="shar") ) t += " " + tools[i].file;
+  for( int i=0; i<n_tools; i++ ) if( tools[i].used ) t += " " + tools[i].file;
   t += "\n";
   for( size_t i=0; i<S.size(); i++ ) {
     t += "stream " + Num(S[i].size) + " " + Hex(S[i].crc) + " " + m_name[S[i].m] + " " + S[i].name + "\n";
@@ -1429,135 +1428,146 @@ static int RunStages() {
   return 0;
 }
 
-//---- the archive: Shar2, as "shar a0" makes it
+//---- the archive
 
-// The output is the packed files and the index in a Shar2 archive with them
-// stored, as "shar a0" makes it, so that shar x (d) and shar l read it:
-//   "Shar2\n\x1A\0", 'C'
-//   each file's bytes, escaped, then 99 19 D3 FF
-//   9A 19 D3 FF
-//   the index, escaped (only by 9A 19 D3), then 9A 19 D3 FF
-// Escaped: an FE before an FE or FF that follows 99 19 D3 or 9A 19 D3 (in a
-// file's own bytes). The index: for each entry its parent's number (LEB128:
-// 0 the top, else the directory's place in the index, from 1), 'F' or 'D',
-// the name (UTF-8) and a 0, what is in a directory right after it; then 0,
-// 'X' and the CRC-32C (little-endian) of all the files' bytes and the index
-// up to the X. In a directory the entries go by name, ignoring case, as shar
-// takes them: the archive is the one shar a0 makes.
+// The output: the packed files and the index, stored as they are, one after
+// another (the numbers little-endian):
+//   "mp4pack" (7 bytes), the format's version (1 byte: ARC_VERSION), the
+//   number of files (4 bytes); then for each file the length of its name (2
+//   bytes), the name (UTF-8, '/' between directories: store/s.0.h264), its
+//   size (8 bytes) and its bytes.
+// mp4pack.idx goes first, then the rest by name.
 
-struct ArcEntry { wstring path; string name; int dir, parent; };
+static const int ARC_VERSION = 1;
 
-static string Upper( string s ) { for( size_t i=0; i<s.size(); i++ ) if( (s[i]>='a') && (s[i]<='z') ) s[i] -= 32; return s; }
+static void PutLE( string& s, qword v, int n ) { for( int i=0; i<n; i++ ) s += char( byte( v>>(8*i) ) ); }
+static qword GetLE( const byte* p, int n ) { qword v = 0; for( int i=n-1; i>=0; i-- ) v = (v<<8) | p[i]; return v; }
 
-static void ArcList( const wstring& dir, int parent, vector<ArcEntry>& v ) { // dir ends with a separator
-  vector<ArcEntry> e;
+// the files under dir (ending with a separator), by names relative to it
+static void ListAll( const wstring& dir, const string& pre, vector<string>& v ) {
   WIN32_FIND_DATAW fd;
   HANDLE h = FindFirstFileW( (dir+L"*").c_str(), &fd );
-  if( h!=INVALID_HANDLE_VALUE ) {
-    do {
-      wstring n = fd.cFileName;
-      if( (n==L".") || (n==L"..") ) continue;
-      ArcEntry a; a.path = dir+n; a.name = U(n); a.dir = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)!=0; a.parent = parent;
-      e.push_back( a );
-    } while( FindNextFileW( h, &fd ) );
-    FindClose( h );
-  }
-  std::sort( e.begin(), e.end(), []( const ArcEntry& a, const ArcEntry& b ) { return Upper(a.name)<Upper(b.name); } );
-  for( size_t i=0; i<e.size(); i++ ) {
-    v.push_back( e[i] );
-    if( e[i].dir ) ArcList( e[i].path+L"" DS, int(v.size()), v );
+  if( h==INVALID_HANDLE_VALUE ) return;
+  do {
+    wstring n = fd.cFileName;
+    if( (n==L".") || (n==L"..") ) continue;
+    if( fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY ) ListAll( dir+n+L"" DS, pre+U(n)+"/", v );
+    else v.push_back( pre+U(n) );
+  } while( FindNextFileW( h, &fd ) );
+  FindClose( h );
+}
+
+// a name in the archive as a path under dir
+static wstring ArcPath( const wstring& dir, const string& n ) {
+  wstring p = dir+W(n);
+  for( size_t i=dir.size(); i<p.size(); i++ ) if( p[i]=='/' ) p[i] = DS[0];
+  return p;
+}
+
+// a name from an archive: plain names (SafeName's) joined by '/'
+static int ArcName( const string& n ) {
+  for( size_t a=0; ; ) {
+    size_t b = n.find( '/', a );
+    if( !SafeName( n.substr( a, (b==string::npos) ? string::npos : b-a ) ) ) return 0;
+    if( b==string::npos ) return 1;
+    a = b+1;
   }
 }
 
-// n bytes escaped into o (room for n+n/4+1); h: the three bytes before them;
-// both: after 99 19 D3 too (a file's bytes; the index has only 9A 19 D3).
-// The bytes in o
-static size_t Escape( const byte* p, size_t n, byte* o, uint& h, int both ) {
-  byte* q = o;
-  size_t c = 0; // p is in o up to here
-  for( ; (c<n) && (c<3); c++ ) { // (with the bytes before p)
-    if( (p[c]>=0xFE) && ((h==0x9A19D3) || (both && (h==0x9919D3))) ) *q++ = 0xFE;
-    *q++ = p[c];
-    h = ((h<<8)|p[c]) & 0xFFFFFF;
-  }
-  // after that, only an FE or FF that follows a D3 in p
-  for( size_t m=2; m+1<n; m++ ) {
-    const byte* d = (const byte*)memchr( p+m, 0xD3, n-1-m );
-    if( !d ) break;
-    m = size_t(d-p);
-    if( (p[m+1]>=0xFE) && (p[m-1]==0x19) && ((p[m-2]==0x9A) || (both && (p[m-2]==0x99))) ) {
-      memcpy( q, p+c, m+1-c ); q += m+1-c; c = m+1;
-      *q++ = 0xFE;
-    }
-  }
-  memcpy( q, p+c, n-c ); q += n-c;
-  if( n>=3 ) h = (uint(p[n-3])<<16) | (uint(p[n-2])<<8) | p[n-1];
-  return size_t(q-o);
+// the archive's progress shown, and a wait while Pause holds; 1 when it is to
+// stop (Ctrl+C)
+static int ArcWait( Job& j ) {
+  vector<Job*> jv( 1, &j );
+  Status( jv, jv );
+  if( f_pause ) j.t0 += PauseWait();
+  return f_abort!=0;
 }
-
-struct ArcOut {
-  HANDLE f; qword n; int err;
-  void Put( const void* p, size_t k ) { DWORD w = 0; if( !err && (!WriteFile( f, p, DWORD(k), &w, 0 ) || (w!=k)) ) err = 1; n += k; }
-};
 
 // the archive of what is in dir (ending with a separator) as out, each file
 // removed once it is in (unless -k); job j shows it (its work: the files'
 // bytes; out.done: those in so far; made: the archive's size). 0, or 2
 // (cannot read or write), 5 (stopped)
 static int WriteArchive( const wstring& dir, const wstring& out, Job& j ) {
-  static const byte sig[9] = { 'S','h','a','r','2','\n',0x1A,0,'C' }, eof[4] = { 0x99,0x19,0xD3,0xFF }, end[4] = { 0x9A,0x19,0xD3,0xFF };
-  vector<ArcEntry> v;
-  ArcList( dir, 0, v );
-  vector<Job*> jv( 1, &j );
+  vector<string> v;
+  ListAll( dir, "", v );
+  std::sort( v.begin(), v.end(), []( const string& a, const string& b ) { return (a=="mp4pack.idx") || ((b!="mp4pack.idx") && (a<b)); } );
   phase = j.label; t_run = j.t0 = GetTickCount64(); j.st = 1;
   HANDLE f = OpenWrite( LongPath(out), CREATE_ALWAYS );
   if( f==INVALID_HANDLE_VALUE ) { j.st = 3; Msg( "cannot write " + U(out) ); return 2; }
-  IOBuf in( 1<<20 ), eb( (1<<20)+(1<<18)+16 );
-  ArcOut o = { f, 0, (in.p==0) || (eb.p==0) };
-  uint crc = 0;
-  int r = 0;
+  IOBuf b( 1<<20 );
+  string h = "mp4pack";
+  PutLE( h, ARC_VERSION, 1 ); PutLE( h, v.size(), 4 );
   string why;
-  o.Put( sig, 9 );
-  for( size_t i=0; (i<v.size()) && !r && !o.err; i++ ) {
-    if( v[i].dir ) continue;
-    HANDLE g = OpenRead( v[i].path );
-    if( g==INVALID_HANDLE_VALUE ) { why = "cannot read " + U(v[i].path); r = 2; break; }
-    uint h = 0;
-    while( !r && !o.err ) {
-      DWORD k = 0;
-      if( !ReadFile( g, in.p, in.n, &k, 0 ) ) { why = "cannot read " + U(v[i].path); r = 2; break; }
-      if( k==0 ) break;
-      crc = Crc32c( crc, in.p, k );
-      o.Put( eb.p, Escape( in.p, k, eb.p, h, 1 ) );
+  int r = (b.p==0) || WriteN( f, h.data(), h.size() );
+  for( size_t i=0; (i<v.size()) && !r; i++ ) {
+    wstring p = ArcPath( dir, v[i] );
+    qword size, left;
+    HANDLE g = GetSize( p, size ) ? INVALID_HANDLE_VALUE : OpenRead( p );
+    if( g==INVALID_HANDLE_VALUE ) { why = "cannot read " + U(p); r = 2; break; }
+    h.clear(); PutLE( h, v[i].size(), 2 ); h += v[i]; PutLE( h, size, 8 );
+    r = WriteN( f, h.data(), h.size() );
+    for( left = size; left && !r; ) {
+      DWORD n = DWORD( std::min<qword>( b.n, left ) ), k = 0;
+      if( !ReadFile( g, b.p, n, &k, 0 ) || (k!=n) ) { why = "cannot read " + U(p); r = 2; break; }
+      r = WriteN( f, b.p, k ); left -= k;
       j.out.done += k;
-      Status( jv, jv );
-      if( f_pause ) j.t0 += PauseWait();
-      if( f_abort ) r = 5;
+      if( !r && ArcWait( j ) ) r = 5;
     }
     CloseHandle( g );
-    o.Put( eof, 4 );
-    if( !r && !o.err && !f_keep ) Remove( v[i].path );
+    if( !r && !f_keep ) Remove( p );
   }
-  if( !r && !o.err ) {
-    o.Put( end, 4 );
-    string x;
-    for( size_t i=0; i<v.size(); i++ ) {
-      for( uint p = uint(v[i].parent); ; ) { x += char( (p&127) | ((p>>7) ? 128 : 0) ); if( !(p >>= 7) ) break; }
-      x += v[i].dir ? 'D' : 'F'; x += v[i].name; x += '\0';
-    }
-    x += '\0'; x += 'X';
-    crc = Crc32c( crc, (const byte*)x.data(), x.size() );
-    for( int k=0; k<4; k++ ) x += char( crc>>(8*k) );
-    vector<byte> e( x.size()+x.size()/4+8 );
-    uint h = 0;
-    o.Put( &e[0], Escape( (const byte*)x.data(), x.size(), &e[0], h, 0 ) );
-    o.Put( end, 4 );
-  }
+  LARGE_INTEGER z;
+  if( !r ) j.made = GetFileSizeEx( f, &z ) ? qword(z.QuadPart) : 0;
   CloseHandle( f );
-  if( !r && o.err ) { why = "cannot write " + U(out); r = 2; }
-  j.st = r ? 3 : 2; j.made = o.n; j.t = GetTickCount64()-j.t0;
-  if( status_hook ) Status( jv, jv, 1 );
+  if( (r==1) || (r==2) ) { if( why.empty() ) why = "cannot write " + U(out); r = 2; }
+  j.st = r ? 3 : 2; j.t = GetTickCount64()-j.t0;
+  if( status_hook ) { vector<Job*> jv( 1, &j ); Status( jv, jv, 1 ); }
   if( r ) { Remove( LongPath(out) ); if( why.size() ) Msg( why ); }
+  return r;
+}
+
+// the files of archive in into dir (ending with a separator); job j shows it
+// (in.len: the archive's size; in.done: read so far). 0, or 2 (cannot read
+// or write), 4 (not an mp4pack archive, or not all of one), 5 (stopped)
+static int ReadArchive( const wstring& in, const wstring& dir, Job& j ) {
+  phase = j.label; t_run = j.t0 = GetTickCount64(); j.st = 1;
+  HANDLE f = OpenRead( LongPath(in) );
+  if( f==INVALID_HANDLE_VALUE ) { j.st = 3; Msg( "cannot read " + U(in) ); return 2; }
+  IOBuf b( 1<<20 );
+  byte h[16];
+  string why;
+  int r = (b.p==0) ? 2 : 0;
+  if( !r && (ReadN( f, h, 12 ) || memcmp( h, "mp4pack", 7 )) ) { why = U(in) + ": not an mp4pack archive"; r = 4; }
+  if( !r && (h[7]!=ARC_VERSION) ) { why = U(in) + ": an mp4pack archive of another version (" + Num(h[7]) + ", not " + Num(ARC_VERSION) + ")"; r = 4; }
+  qword files = r ? 0 : GetLE( h+8, 4 );
+  j.in.done = 12;
+  for( qword i=0; (i<files) && !r; i++ ) {
+    string n;
+    if( ReadN( f, h, 2 ) ) { r = 4; break; }
+    n.resize( size_t( GetLE( h, 2 ) ) );
+    if( n.empty() || ReadN( f, &n[0], DWORD(n.size()) ) || ReadN( f, h, 8 ) ) { r = 4; break; }
+    if( !ArcName( n ) ) { why = U(in) + ": a name that is not allowed in it: " + n; r = 4; break; }
+    qword left = GetLE( h, 8 );
+    j.in.done += 10+n.size();
+    wstring p = ArcPath( dir, n );
+    MakeDirs( p.substr( 0, p.size()-FileName( p ).size() ) );
+    HANDLE g = OpenWrite( p, CREATE_NEW ); // (each name once)
+    if( g==INVALID_HANDLE_VALUE ) { why = Exists( p ) ? U(in) + ": " + n + " is in it twice" : "cannot write " + U(p); r = Exists( p ) ? 4 : 2; break; }
+    while( left && !r ) {
+      DWORD k = DWORD( std::min<qword>( b.n, left ) );
+      if( ReadN( f, b.p, k ) ) r = 4;
+      else if( WriteN( g, b.p, k ) ) { why = "cannot write " + U(p); r = 2; }
+      else { left -= k; j.in.done += k; if( ArcWait( j ) ) r = 5; }
+    }
+    CloseHandle( g );
+  }
+  DWORD extra = 0;
+  if( !r && ReadFile( f, h, 1, &extra, 0 ) && extra ) { why = U(in) + ": more after the files of an mp4pack archive (damaged?)"; r = 4; }
+  CloseHandle( f );
+  if( (r==4) && why.empty() ) why = U(in) + ": not all of an mp4pack archive (cut short, or damaged)";
+  j.st = r ? 3 : 2; j.t = GetTickCount64()-j.t0;
+  if( status_hook ) { vector<Job*> jv( 1, &j ); Status( jv, jv, 1 ); }
+  if( why.size() ) Msg( why );
   return r;
 }
 
@@ -1853,10 +1863,9 @@ static int Decompress( const wstring& in, const wstring& out ) {
   Msg( "mp4pack d: " + U(in) + " -> " + U(out) );
   if( MakeWork() ) return 2;
 
-  Job x; x.label = "shar x"; x.tool = "shar"; x.args = "x - p" DS;
-  x.in.path = LongPath(in); x.in.len = isz; x.prog = 2; x.work = isz;
-  int r = RunOne( x );
-  if( r ) { return (r==2) ? 5 : 3; }
+  Job x; x.label = "extract"; x.prog = 2; x.in.len = x.work = isz;
+  int r = ReadArchive( in, work+L"p" DS, x );
+  if( r ) return r;
   string why;
   if( ReadIndex( why ) ) { Msg( U(in) + ": " + why ); return 4; }
   Msg( "restoring " + src_name + " (" + Num(src_size) + " bytes) from " + Num(S.size()) + ((S.size()==1) ? " file" : " files") );
