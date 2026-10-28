@@ -22,13 +22,13 @@ static void C( const char* spec, const char* want ) {
   if( got!=want ) { printf( "FAIL -c %s: %s, not %s\n", spec, got.c_str(), want ); fails++; }
 }
 
-// the switches the packers get for these levels: h264p aacpack mp3pack ttfcomp shar
+// the switches the packers get for these levels: h264p aacpack mp3pack ttfcomp tangelo
 static void L( const char* spec, const char* want ) {
   for( int g=0; g<N_GROUP; g++ ) lv[g] = NO_LEVEL;
   string got;
   if( ParseLevels( spec ) ) got = "error";
   else {
-    const int ms[] = { M_H264P, M_AACPACK, M_MP3PACK, M_TTFCOMP, M_SHAR };
+    const int ms[] = { M_H264P, M_AACPACK, M_MP3PACK, M_TTFCOMP, M_TANGELO };
     for( int i=0; i<5; i++ ) got += (i ? "," : "") + LevelArg( ms[i] );
   }
   if( got!=want ) { printf( "FAIL -l %s: %s, not %s\n", spec, got.c_str(), want ); fails++; }
@@ -87,21 +87,20 @@ int wmain( int, wchar_t** ) {
   C( "1,2,3,4,5", "error" );
   C( "4x", "error" );
   C( ",4", "error" );
-  L( "", ",,,,a22" );                  // all the defaults
-  L( "5,9,9,20", "-5,-9,,,a20" );      // ttfcomp and mp3pack take none
-  L( "5", "-5,,,,a22" );               // missing: the default
-  L( ",,,19", ",,,,a19" );
-  L( "1+3", "-1,-3,,,a22" );           // '+' as ','
-  L( "7,,,-5", "-7,,,,a-5" );          // zstd's fast levels
-  L( ",,,0", ",,,,a0" );               // shar stores
-  L( ",,,-131072", ",,,,a-131072" );
-  L( "9,9,9,22,", "error" );           // 5 levels
-  L( "0", "error" );                   // h264p and aacpack: 1 to 9
+  L( "", ",,,," );                     // all the defaults
+  L( "5,9,9,7", "-5,-9,,,-7" );        // ttfcomp and mp3pack take none
+  L( "5", "-5,,,," );                  // missing: the default
+  L( ",,,1", ",,,,-1" );
+  L( "1+3", "-1,-3,,," );              // '+' as ','
+  L( "7,,,9", "-7,,,,-9" );
+  L( "9,9,9,9,", "error" );            // 5 levels
+  L( "0", "error" );                   // h264p, aacpack and tangelo: 1 to 9
   L( "10", "error" );
   L( ",0", "error" );
   L( "-5", "error" );
-  L( ",,,23", "error" );               // shar: up to 22
-  L( ",,,-131073", "error" );
+  L( ",,,0", "error" );                // (storing is -t ...+0)
+  L( ",,,10", "error" );
+  L( ",,,-5", "error" );
   L( "5x", "error" );
   L( "5,-", "error" );
   L( ",,,--5", "error" );

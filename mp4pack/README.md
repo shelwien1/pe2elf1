@@ -12,13 +12,13 @@ mp4pack d [options] input output     decompress
 ```
 
 The tools are looked up in the directory of `mp4pack.exe` itself, so put it next
-to them: `avip`, `h264p`, `aacpack`, `mp3pack`, `oggcomp`, `ttfcomp`, `shar`. Each
+to them: `avip`, `h264p`, `aacpack`, `mp3pack`, `oggcomp`, `ttfcomp`, `tangelo`. Each
 can be there in builds for several CPUs, named by the gcc/clang `-march` target
 they were made for: `h264p_haswell.exe`, `h264p_x86-64-v3.exe`,
 `h264p_znver4.exe`, `h264p.exe` ... mp4pack runs the best one of those that run
 on the CPU (see [Tool builds](#tool-builds-and-the-cpu)). Only `avip` and
-`shar` are required; a stream whose packer is missing (or has no build that
-runs here) goes to shar, with a note.
+`tangelo` are required; a stream whose packer is missing (or has no build that
+runs here) goes to tangelo, with a note.
 
 ## What happens
 
@@ -37,7 +37,16 @@ runs here) goes to shar, with a note.
    | `.mp3` `.mp2` `.mp1` `.mpa` | `mp3pack c -t N [-c C]` | 2 |
    | `.ogg` `.oga` | `oggcomp c` | 2 |
    | `.ttf` `.otf` `.ttc` | `ttfcomp a`, all fonts in one solid archive | 3 |
-   | everything else: `s.meta`, subtitles, ac3, flac, opus, xvid/hevc video, ... | `shar a22` (`aL` with `-l`) | 4 |
+   | everything else: `s.meta`, subtitles, ac3, flac, opus, xvid/hevc video, ... | `tangelo a [-L]`, all in one solid archive | 4 |
+
+   tangelo, a context-mixing compressor, packs the other files smaller than
+   shar's zstd -22 did (by 1% to 28% in the samples here), but slowly: about
+   0.14MB/s for each process on the Xeon VM here (2.1GHz, under wine and on
+   Linux alike), and the same in d. The 196,741 bytes of other files of a
+   sample (ac3, two subtitles, `s.meta`) came to 159,562 (`shar a22`:
+   161,577), a 3.7MB font to 1,215,439 in 26 s (`shar a22`: 1,684,315 in
+   2 s). A big stream without a packer (hevc video, DTS audio) takes long:
+   give tangelo more threads, and its pieces run in parallel (`-c`).
 
 3. mp4pack stores the packed files and an index, `mp4pack.idx`, as the
    output, one after another in its own archive (see
@@ -61,16 +70,16 @@ and reads itself.
 ## Options
 
 `-t T` &mdash; threads, for the four groups in the order of the table above:
-h264p, the audio packer, ttfcomp, shar. Numbers joined by `+` run at the same
+h264p, the audio packer, ttfcomp, tangelo. Numbers joined by `+` run at the same
 time, by `,` one after the other:
 
 | | |
 |---|---|
-| `-t 3+3+1+1` | all four groups at once: h264p with 3 threads, the audio packer with 3, ttfcomp and shar with 1 |
-| `-t 3,3,1,1` | h264p with 3 threads; when it is done, the audio with 3; then ttfcomp; then shar |
-| `-t 3+3,1,1` | h264p and audio at once, then ttfcomp, then shar |
-| `-t 3+3,1+1` | h264p and audio at once, then ttfcomp and shar at once |
-| `-t 3+3` | ttfcomp and shar get 1 thread each when not given, both at once, after the rest: `3+3,1+1` |
+| `-t 3+3+1+1` | all four groups at once: h264p with 3 threads, the audio packer with 3, ttfcomp and tangelo with 1 |
+| `-t 3,3,1,1` | h264p with 3 threads; when it is done, the audio with 3; then ttfcomp; then tangelo |
+| `-t 3+3,1,1` | h264p and audio at once, then ttfcomp, then tangelo |
+| `-t 3+3,1+1` | h264p and audio at once, then ttfcomp and tangelo at once |
+| `-t 3+3` | ttfcomp and tangelo get 1 thread each when not given, both at once, after the rest: `3+3,1+1` |
 | `-t 4` | a missing audio number is the video's, after it: `4,4,1+1` |
 | `-t 50%+50%-2` | with 8 threads: 8-2 = 6, half of it each: `3+3,1+1` |
 | `-t -2` | the default with 2 threads left out: `6,6,1+1` with 8 threads |
@@ -83,15 +92,15 @@ work) before the percentages are taken; alone, it works on the default.
 Within a group, jobs run in order, as many at a time as its threads allow:
 h264p and mp3pack take all of their group's threads (`-t N`), the aacpack parts
 and oggcomp one each. ttfcomp is always one process with all the fonts (solid
-compression), and so is the shar archive of the other files, except for
+compression), and so is the tangelo archive of the other files, except for
 pieces of big files (`-c`).
 
-`0` for a group means no packer for it: its files go to shar instead; `0`
-for shar stores the other files as they are (so `-t 0,0,0,0` stores
+`0` for a group means no packer for it: its files go to tangelo instead; `0`
+for tangelo stores the other files as they are (so `-t 0,0,0,0` stores
 everything).
 
 Default: `100%,100%`, that is `N,N,1+1` with N threads: h264p with all of them,
-then the audio with all of them, then ttfcomp and shar together, one thread
+then the audio with all of them, then ttfcomp and tangelo together, one thread
 each; no thread is given out twice. h264p and mp3pack take their
 decompression threads from the stream, so for d, `-t` only sets how many things
 run at once.
@@ -111,18 +120,18 @@ allows, below).
   default part is at most 1GB, and at most the free physical memory, 3/4 of
   it, over the threads of the groups that run at the same time as theirs,
   less 128MB, over 2 for h264p and 10 for mp3pack. (aacpack takes 38MB and
-  shar about 670MB at `a22`, whatever the part.)
+  tangelo its level's model, 1164MB at -9, whatever the part.)
 - aacpack has no threads of its own, so mp4pack cuts the `.aac` stream into
   parts at ADTS frame boundaries and runs one aacpack per part, the parts
   joined again on d. With N threads: N parts of the same size (1MB at least),
   or, with `-c`, parts of at least that size. A part boundary costs ~1KB of
   compression. With 1 thread there is one part.
 - ttfcomp: no part size; one solid archive.
-- shar: with more than one thread, files bigger than the part size (default:
-  the file's size over the threads, so a piece for each) are cut into pieces,
-  each its own shar archive, so that big streams without a packer (hevc
-  video, DTS audio) can be compressed in parallel. The other files make one
-  solid archive.
+- tangelo: with more than one thread, files bigger than the part size
+  (default: the file's size over the threads, so a piece for each) are cut
+  into pieces, each its own tangelo archive, so that big streams without a
+  packer (hevc video, DTS audio) can be compressed in parallel. The other
+  files make one solid archive.
 
 `-l L` &mdash; compression levels, in the same order (separators as in `-t`,
 they make no difference here). A missing or empty one: the tool's default.
@@ -133,9 +142,9 @@ they make no difference here). A missing or empty one: the tool's default.
 | 2 | aacpack | `-N`, 1 to 9 as with h264p; `mp4pack_v0`'s has only 9 | 9 |
 | 2 | mp3pack, oggcomp | none | |
 | 3 | ttfcomp | none | |
-| 4 | shar | `aN`: zstd's levels, -131072 to 22. 1 to 19 as usual, 20 to 22 the "ultra" ones (more memory), below 0 the fast ones; 0 stores | 22 |
+| 4 | tangelo | `-N`, 1 to 9: its model takes 17, 21, 30, 48, 84, 156, 300, 588 and 1164MB (and a 16MB window), for each process, also in d | 9 |
 
-E.g. `-l 5,9,,19`: `h264p c -5`, `aacpack c -9`, `shar a19`; ttfcomp takes no
+E.g. `-l 5,9,,7`: `h264p c -5`, `aacpack c -9`, `tangelo a -7`; ttfcomp takes no
 level, so its place is left empty (a number there would not be used, nor one
 for the audio when the audio is mp3 or vorbis). The levels are for c; d needs
 none. The archive itself stores them (no level).
@@ -182,7 +191,7 @@ needs room for the restored file and its streams. A failed check is exit code
 
 On a console, a status line shows the elapsed time, the overall progress and an
 estimate of the time left, and each running job with its progress. The jobs'
-progress comes from the tools where they tell it (h264p, mp3pack and shar: the
+progress comes from the tools where they tell it (h264p, mp3pack and tangelo: the
 percentages they write), from what mp4pack feeds them or takes from them
 (aacpack, the archive, its extraction), else from the size of what they have
 written so far: exact where the size to come is known (oggcomp, ttfcomp and
@@ -197,7 +206,7 @@ At the start mp4pack says what it found:
 
 ```
 cpu: 16 threads, 8 cores, znver4 (x86-64-v4), 12 free; -t 12,12,1+1
-tools: avip_avx2.exe shar_avx2.exe h264p_znver4.exe aacpack_avx2.exe ...
+tools: avip_avx2.exe tangelo_avx2.exe h264p_znver4.exe aacpack_avx2.exe ...
 ```
 
 The threads are the logical processors in all processor groups
@@ -249,7 +258,7 @@ The tools of `mp4pack_v0` are AVX2 builds (`x86-64-v3`), so they go in as
 `<tool>_avx2.exe` (or `<tool>_x86-64-v3.exe`); in their directory, on Windows:
 
 ```
-for %f in (avip aacpack h264p mp3pack oggcomp shar ttfcomp) do ren %f.exe %f_avx2.exe
+for %f in (avip aacpack h264p mp3pack oggcomp ttfcomp) do ren %f.exe %f_avx2.exe
 ```
 
 With `-i T` a build has to run on `T` as well: the CPU's features are cut down
@@ -258,7 +267,8 @@ target are run (an x86 mp4pack always has it; this is for an mp4pack built for
 another CPU, with the tools run under emulation). The archive's index lists the
 builds it was made with (`mp4pack d -v` shows them). The builds of a tool are
 taken to be interchangeable: the CRC checks of d would catch it if they were
-not.
+not. (tangelo checks it itself: it refuses an archive made by a build with
+other model switches.)
 
 ## mp4gui
 
@@ -289,8 +299,8 @@ tools, as `mp4pack.exe` does.
   folder; "keep it" is `-k`.
 - **Options**, as on the command line: Threads (`-t`; "keep free" adds a `-N`,
   "only currently idle threads" is `-f`), and under it what they come to, e.g.
-  `= 4,4,1+1: h264p 4, then audio 4, then ttfcomp 1 + shar 1` (in red when it
-  is not right); Levels (`-l`, for h264p, aacpack and shar; off for
+  `= 4,4,1+1: h264p 4, then audio 4, then ttfcomp 1 + tangelo 1` (in red when
+  it is not right); Levels (`-l`, for h264p, aacpack and tangelo; off for
   Decompress). The part sizes are mp4pack's defaults (a part for each thread,
   as the memory allows: `-c`), and the tool builds any that run here.
 - **Start** (or Enter) runs it. The log gets mp4pack's messages, the command
@@ -298,7 +308,7 @@ tools, as `mp4pack.exe` does.
   and the archive take 3% each, packing or unpacking the rest; with Verify,
   the compression is the first half and the check the second), the time so
   far and about how much is left of the phase, and a row for each task as it
-  comes: avip, each stream's packer (a stream's parts in one), ttfcomp, shar,
+  comes: avip, each stream's packer (a stream's parts in one), ttfcomp, tangelo,
   the archive, the verify. `~` marks a share that is a guess (in c, by a
   typical ratio), a bar that runs to and fro a task that does not tell (see
   the status line above), a gray name one that waits. When a packer is done,
@@ -359,7 +369,7 @@ controls look classic.
 | 5 | aborted with Ctrl+C |
 
 When compressing, a packer that fails (or crashes) does not stop it: the
-stream it had goes to shar instead, with a warning. avip and shar
+stream it had goes to tangelo instead, with a warning. avip and tangelo
 failing do stop it. On Ctrl+C mp4pack stops the tools and removes the work
 directory (unless `-k`). The tools also run in a job object that ends them
 when mp4pack ends, however that happens.
@@ -386,8 +396,9 @@ two aac tracks, an mp3, fonts and subtitles:
 ```
 mp4pack.idx
 fonts.ttfc              ttfcomp
-other.shar              shar a22 (or -l's level): s.meta, subtitles, ...
-other1.shar ...         the same: pieces of big files
+other.tgl               tangelo (-9, or -l's level): s.meta, subtitles, ...
+other1.tgl ...          the same: pieces of big files
+fallback.tgl            the same: streams whose packer failed
 s.0.h264.h264p          h264p
 s.1.aac.0.aacp ...      aacpack parts
 s.2.mp3.mp3o, .mp3p     mp3pack (what is not frames, and the frames)
@@ -407,7 +418,7 @@ src <size> <crc32> <the input's name>
 tools <the tool builds used>
 stream <size> <crc32> <method> <name>          one per file from avip c
 part <offset> <length> <packed file> [<name>]  what holds it (mp3pack: the
-...                                            "outside" file; shar: the name
+...                                            "outside" file; tangelo: the name
 end                                            in the archive)
 ```
 
@@ -489,7 +500,7 @@ combinations, and archives from the Windows build decompressed by the Linux one
 and the other way round. Names with spaces, quotes, `\`, Cyrillic and bytes
 that are not UTF-8; paths of 389 characters; relative paths; a new nested `-w`
 directory on another file system (`/dev/shm`). Tools that are missing, fail,
-crash or cannot be run (they fall back to shar). Damaged and foreign archives.
+crash or cannot be run (they fall back to tangelo). Damaged and foreign archives.
 SIGINT to the process group, SIGTERM, and SIGKILL (then the tools end at once
 and only the work directory is left). And the movie (see [Testing](#testing)).
 
@@ -514,13 +525,20 @@ with every kind of stream (h264, aac, mp3, vorbis, ac3, opus, flac, xvid,
 ASS/SRT/tx3g subtitles, ttf attachments; mkv, mp4, avi), and a whole movie;
 `-t` and `-c` in sequence, in parallel and mixed, with zeros, percentages and
 `-N`, with parts and pieces; packers that fail or crash (they fall back to
-shar); Cyrillic paths, a new nested `-w` directory, paths over 260 characters;
+tangelo); Cyrillic paths, a new nested `-w` directory, paths over 260 characters;
 damaged, truncated and foreign archives, an empty input; tool builds named by
 targets and by the old level names, `-i`, no build that runs. With
 builds_test, the builds chosen for 19 InstLatx64 dumps (K8 to Zen 5, Pentium 4
 and Core 2 to Sapphire Rapids, VIA Nano, Zhaoxin), with and without `-i`. Not
 under wine: Ctrl+C (wine's console ends a program on it at once, without its
 handler).
+
+tangelo in place of shar: round trips of every sample on Linux and under wine
+(with `-verify`), mp4pack with no shar beside it, the other files' archive,
+pieces of a 13MB stream in 3 tangelo processes (`-t 0+2+1+3`), `-l ,,,5` and
+`-l ,,,7` (and `,,,0` refused), and a packer made to fail, whose stream went to
+`fallback.tgl`. The Linux tangelo is the Windows one converted by pe2elf as it
+is; it makes the same archives.
 
 The archive was checked against its format by a separate reader (in Python)
 and against the files kept with `-k`, on Linux and under wine; archives made

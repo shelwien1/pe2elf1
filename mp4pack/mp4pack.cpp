@@ -6,8 +6,9 @@
 //
 // c: "avip c" splits the container into its streams and a .meta file in a work
 // directory; each stream goes to its packer -- h264p (video), aacpack, mp3pack
-// or oggcomp (audio), ttfcomp (fonts, all in one solid archive), "shar a22"
-// (the rest; a22 or the level -l gives) -- and the packed files and an index
+// or oggcomp (audio), ttfcomp (fonts, all in one solid archive), tangelo (the
+// rest, in one solid archive; its -9, or the level -l gives) -- and the packed
+// files and an index
 // (mp4pack.idx) are stored as the output, mp4pack's own archive
 // (WriteArchive).
 // d: the archive's files (ReadArchive), the unpackers, "avip d"; every stream
@@ -60,11 +61,11 @@ static const qword ALL = ~0ULL;
 
 // -t/-c positions: the order the groups are given in
 enum { G_VIDEO, G_AUDIO, G_FONT, G_OTHER, N_GROUP };
-static const char* g_name[N_GROUP] = { "h264p", "audio", "ttfcomp", "shar" };
+static const char* g_name[N_GROUP] = { "h264p", "audio", "ttfcomp", "tangelo" };
 
-enum { M_STORE, M_SHAR, M_H264P, M_AACPACK, M_MP3PACK, M_OGGCOMP, M_TTFCOMP, N_METHOD };
-static const char* m_name[N_METHOD] = { "store", "shar", "h264p", "aacpack", "mp3pack", "oggcomp", "ttfcomp" };
-static const char* m_tool[N_METHOD] = { "", "shar", "h264p", "aacpack", "mp3pack", "oggcomp", "ttfcomp" };
+enum { M_STORE, M_TANGELO, M_H264P, M_AACPACK, M_MP3PACK, M_OGGCOMP, M_TTFCOMP, N_METHOD };
+static const char* m_name[N_METHOD] = { "store", "tangelo", "h264p", "aacpack", "mp3pack", "oggcomp", "ttfcomp" };
+static const char* m_tool[N_METHOD] = { "", "tangelo", "h264p", "aacpack", "mp3pack", "oggcomp", "ttfcomp" };
 static const int m_group[N_METHOD] = { G_OTHER, G_OTHER, G_VIDEO, G_AUDIO, G_AUDIO, G_AUDIO, G_FONT };
 
 // by the extension avip gave the stream
@@ -77,7 +78,7 @@ static int Method( const string& name ) {
   if( (e=="mp3") || (e=="mp2") || (e=="mp1") || (e=="mpa") ) return M_MP3PACK;
   if( (e=="ogg") || (e=="oga") ) return M_OGGCOMP;
   if( (e=="ttf") || (e=="otf") || (e=="ttc") ) return M_TTFCOMP;
-  return M_SHAR;
+  return M_TANGELO;
 }
 
 //---- settings and state
@@ -128,8 +129,6 @@ static string Num( qword v ) {
   do b[--i] = char('0'+v%10); while( v/=10 );
   return b+i;
 }
-
-static string INum( int v ) { return (v<0) ? "-"+Num( qword(-(long long)v) ) : Num( qword(v) ); }
 
 static string Hex( uint v ) { char b[16]; snprintf( b, sizeof(b), "%08X", v ); return b; }
 
@@ -802,7 +801,7 @@ static int Start( Job& j ) {
     si.cb = sizeof(si);
     si.dwFlags = STARTF_USESTDHANDLES;
     si.hStdInput = c_in;
-    si.hStdOutput = c_out ? c_out : c_err; // shar's progress is on stdout
+    si.hStdOutput = c_out ? c_out : c_err; // (to the log too: some tools write their progress there)
     si.hStdError = c_err;
     vector<wchar_t> cl( cmd.begin(), cmd.end() ); cl.push_back( 0 );
     // suspended until it is in our job object: it dies with us
@@ -961,6 +960,7 @@ static int Fallback( Job& j );
 static int Skip( const Job& j );
 static void Succeeded( Job& j );
 static string LevelArg( int m );
+static string LevelSp( int m );
 
 static int held;                      // the tools running are held (Pause)
 static qword t_held;                  // since when
@@ -1092,7 +1092,7 @@ static long long Probe( const string& tool, const string& args ) {
 struct Part {
   qword off, len;   // what of the stream it holds
   string pk;        // the packed file in p, or the archive it is in ("-": p/store/<name>)
-  string pk2;       // mp3pack's "outside" file; its name in a shar archive
+  string pk2;       // mp3pack's "outside" file; its name in a tangelo archive
   Part( qword o, qword l, const string& a, const string& b ) : off(o), len(l), pk(a), pk2(b) {}
 };
 
@@ -1103,9 +1103,9 @@ struct Stream {
   int m;            // method
   vector<Part> part;
   int refs;         // c: jobs yet to read it
-  int failed;       // c: its packer failed; it goes to shar instead
+  int failed;       // c: its packer failed; it goes to tangelo instead
   qword cut;        // c: the part size its packer got (0: none)
-  Stream() : size(0), crc(0), m(M_SHAR), refs(0), failed(0), cut(0) {}
+  Stream() : size(0), crc(0), m(M_TANGELO), refs(0), failed(0), cut(0) {}
 };
 
 static vector<Stream> S;
@@ -1131,12 +1131,12 @@ static int Skip( const Job& j ) {
   return 0;
 }
 
-// c: a packer failed; its streams get packed by shar at the end instead
+// c: a packer failed; its streams get packed by tangelo at the end instead
 static int Fallback( Job& j ) {
   if( f_dec || j.sids.empty() || f_abort ) return 0;
   string n;
   for( size_t i=0; i<j.sids.size(); i++ ) { n += (i ? ", " : "") + S[j.sids[i]].name; S[j.sids[i]].failed = 1; S[j.sids[i]].refs--; }
-  Msg( "warning: " + j.label + ": " + j.why + "; " + n + " will be packed with shar " + LevelArg(M_SHAR) + " instead" );
+  Msg( "warning: " + j.label + ": " + j.why + "; " + n + " will be packed with tangelo" + LevelSp(M_TANGELO) + " instead" );
   LogTail( j );
   return 1;
 }
@@ -1258,11 +1258,11 @@ static int ReadIndex( string& why ) {
     for( size_t k=0; k<s.part.size(); k++ ) {
       Part& p = s.part[k];
       if( (p.off!=o) || (p.len>s.size-o) ) return 1;
-      if( ((s.m==M_MP3PACK) || (s.m==M_SHAR)) && p.pk2.empty() ) return 1;
+      if( ((s.m==M_MP3PACK) || (s.m==M_TANGELO)) && p.pk2.empty() ) return 1;
       o += p.len;
     }
     if( o!=s.size ) return 1;
-    if( (s.part.size()>1) && (s.m!=M_AACPACK) && (s.m!=M_SHAR) ) return 1;
+    if( (s.part.size()>1) && (s.m!=M_AACPACK) && (s.m!=M_TANGELO) ) return 1;
   }
   return 0;
 }
@@ -1270,13 +1270,13 @@ static int ReadIndex( string& why ) {
 //---- options
 
 // "3+3,1,1", "50%+50%-2": threads of h264p, the audio packers, ttfcomp and
-// shar, in that order. Each is a number, or a percentage of the threads there
-// are (all of the CPU's, or the free ones: -f), rounded up. '+' runs a group
-// together with the ones before it, ',' after them. Missing ones: the audio's
-// is the video's, after it; ttfcomp and shar get 1, both at once, after the
-// rest ("4" = "4,4,1+1", "3+3" = "3+3,1+1"). A "-N" at the end takes N from
-// the threads there are, for the percentages; alone, for the default
-// (100%,100% = N,N,1+1: all of them for h264p, then for the audio).
+// tangelo, in that order. Each is a number, or a percentage of the threads
+// there are (all of the CPU's, or the free ones: -f), rounded up. '+' runs a
+// group together with the ones before it, ',' after them. Missing ones: the
+// audio's is the video's, after it; ttfcomp and tangelo get 1, both at once,
+// after the rest ("4" = "4,4,1+1", "3+3" = "3+3,1+1"). A "-N" at the end
+// takes N from the threads there are, for the percentages; alone, for the
+// default (100%,100% = N,N,1+1: all of them for h264p, then for the audio).
 static int ParseThreads( string spec, int all ) {
   int sub = 0;
   size_t m = spec.rfind( '-' );
@@ -1305,7 +1305,7 @@ static int ParseThreads( string spec, int all ) {
   }
   for( int g0=g; g<N_GROUP; g++ ) {
     th[g] = (g==G_AUDIO) ? th[G_VIDEO] : 1;
-    if( (g!=G_OTHER) || (g0>G_FONT) ) stages.push_back( vector<int>() ); // (shar with a missing ttfcomp)
+    if( (g!=G_OTHER) || (g0>G_FONT) ) stages.push_back( vector<int>() ); // (tangelo with a missing ttfcomp)
     stages.back().push_back( g );
   }
   return 0;
@@ -1339,11 +1339,11 @@ static int ParseChunks( const char* s ) {
   return 0;
 }
 
-// "5,9,,20": levels of h264p, the audio packer, ttfcomp and shar, in that
-// order ('+' as ','); missing or empty: the tool's default. h264p and aacpack
-// take 1 to 9 (-N; which of them, their builds say: CheckLevels), shar zstd's
-// -131072 to 22 (aN; 0 stores); ttfcomp, mp3pack and oggcomp take none, theirs
-// is not used.
+// "5,9,,7": levels of h264p, the audio packer, ttfcomp and tangelo, in that
+// order ('+' as ','); missing or empty: the tool's default. h264p, aacpack and
+// tangelo take 1 to 9 (-N; which of them h264p's and aacpack's builds have,
+// they say: CheckLevels); ttfcomp, mp3pack and oggcomp take none, theirs is
+// not used.
 static int ParseLevels( const char* s ) {
   for( int g=0; g<N_GROUP; g++ ) lv[g] = NO_LEVEL;
   for( int g=0; ; g++ ) {
@@ -1360,21 +1360,24 @@ static int ParseLevels( const char* s ) {
     if( (*s!='+') && (*s!=',') ) return 1;
     s++;
   }
-  for( int g=G_VIDEO; g<=G_AUDIO; g++ ) if( (lv[g]!=NO_LEVEL) && ((lv[g]<1) || (lv[g]>9)) ) return 1;
-  return (lv[G_OTHER]!=NO_LEVEL) && ((lv[G_OTHER]<-131072) || (lv[G_OTHER]>22));
+  for( int g=G_VIDEO; g<N_GROUP; g++ ) if( (lv[g]!=NO_LEVEL) && ((lv[g]<1) || (lv[g]>9)) && (g!=G_FONT) ) return 1;
+  return 0;
 }
 
-// a packer's switch for its group's level: h264p's and aacpack's -N (none for
-// their default), shar's aN (a22 by default); none for the others
+// a packer's switch for its group's level: h264p's, aacpack's and tangelo's
+// -N (none for their default); none for the others
 static string LevelArg( int m ) {
   int l = lv[m_group[m]];
-  if( m==M_SHAR ) return "a" + INum( (l==NO_LEVEL) ? 22 : l );
-  if( (l==NO_LEVEL) || ((m!=M_H264P) && (m!=M_AACPACK)) ) return string();
+  if( (l==NO_LEVEL) || ((m!=M_H264P) && (m!=M_AACPACK) && (m!=M_TANGELO)) ) return string();
   return "-" + Num(l);
 }
 
 // the same with a space before it, if there is one
 static string LevelSp( int m ) { string a = LevelArg(m); return a.size() ? " "+a : a; }
+
+// tangelo's command line for an archive in p, from a directory beside p (the
+// files to go in it follow)
+static string TangeloA( const string& pk ) { return "a" + LevelSp(M_TANGELO) + (f_verbose ? "" : " -p") + " " + Quote(".." DS "p" DS+pk); }
 
 // a part size for h264p's and mp3pack's -c: MB, or KB with a k
 static string ChunkArg( qword c ) {
@@ -1385,7 +1388,7 @@ static string ChunkArg( qword c ) {
 // the part size for a stream of group g: -c's, else a part for each of the
 // group's threads (the size over them, 1MB at least). perbyte: the memory a
 // tool takes for each byte of a part (h264p about 2, mp3pack 10; aacpack and
-// shar take the same for any): then no more than its threads' share of 3/4
+// tangelo take the same for any): then no more than its threads' share of 3/4
 // of the memory free now (with the threads that run at once), and 1024MB,
 // the tools' most
 static qword PartSize( int g, qword size, int perbyte ) {
@@ -1679,12 +1682,13 @@ static int PackJobs() {
     f->label = "ttfcomp " + Num( f->sids.size() ) + ((f->sids.size()>1) ? " fonts" : " font");
     S[i].part.push_back( Part( 0, S[i].size, U(FileName(f->outs[0])), "" ) );
   }
-  // the rest: one solid archive; with more threads, files over the part size
-  // (-c, else a piece for each thread: PartSize) are cut into pieces, an archive
-  // for each
+  // the rest: one solid tangelo archive; with more threads, files over the
+  // part size (-c, else a piece for each thread: PartSize) are cut into
+  // pieces, an archive for each. tangelo takes them by name, in their own
+  // directory (other, otherN)
   int n = th[G_OTHER], na = 0;
   Job* o = 0;
-  for( size_t i=0; i<S.size(); i++ ) if( S[i].m==M_SHAR ) {
+  for( size_t i=0; i<S.size(); i++ ) if( S[i].m==M_TANGELO ) {
     Stream& s = S[i];
     qword c = PartSize( G_OTHER, s.size, 0 );
     if( (n>1) && (s.size>c) ) {
@@ -1692,38 +1696,38 @@ static int PackJobs() {
       qword k = std::min<qword>( (s.size+c-1)/c, 100000 );
       for( qword q=0; q<k; q++ ) {
         qword a = s.size*q/k, b = s.size*(q+1)/k;
-        string d = "other" + Num(++na), pk = d + ".shar", mem = s.name + ".part" + Num(q);
+        string d = "other" + Num(++na), pk = d + ".tgl", mem = s.name + ".part" + Num(q);
         wstring wd = work + W(d) + L"" DS;
         CreateDirectoryW( wd.c_str(), 0 );
         HANDLE h = OpenWrite( wd+W(mem), CREATE_ALWAYS );
         int r = (h==INVALID_HANDLE_VALUE) || CopyRange( UPath(s.name), a, b-a, h );
         if( h!=INVALID_HANDLE_VALUE ) CloseHandle( h );
         if( r ) return Fail( "cannot write " + U(wd+W(mem)), 2 );
-        Job* j = NewJob( G_OTHER, 1, "shar " + s.name + "#" + Num(q), "shar" );
-        j->args = LevelArg(M_SHAR) + " " + Quote("p" DS+pk) + " " + Quote(d+DS);
+        Job* j = NewJob( G_OTHER, 1, "tangelo " + s.name + "#" + Num(q), "tangelo" );
+        j->cwd = d + DS; j->args = TangeloA( pk ) + " " + Quote(mem);
         j->prog = 1; j->work = b-a; j->outs.push_back( PPath(pk) ); j->del.push_back( wd );
         s.part.push_back( Part( a, b-a, pk, mem ) );
       }
       if( !f_keep ) Remove( UPath(s.name) );
     } else {
       if( !o ) {
-        o = NewJob( G_OTHER, 1, "shar", "shar" );
+        o = NewJob( G_OTHER, 1, "tangelo", "tangelo" );
         CreateDirectoryW( (work+L"other").c_str(), 0 );
-        o->args = LevelArg(M_SHAR) + " p" DS "other.shar other" DS; o->prog = 1; o->outs.push_back( PPath("other.shar") ); o->del.push_back( work+L"other" DS );
+        o->cwd = "other" DS; o->args = TangeloA( "other.tgl" ); o->prog = 1; o->outs.push_back( PPath("other.tgl") ); o->del.push_back( work+L"other" DS );
       }
       if( !MoveFileW( UPath(s.name).c_str(), (work+L"other" DS+W(s.name)).c_str() ) ) { Msg( "cannot move " + U(UPath(s.name)) ); return 2; }
-      o->work += s.size; o->sids.push_back( int(i) );
-      s.part.push_back( Part( 0, s.size, "other.shar", s.name ) );
+      o->args += " " + Quote(s.name); o->work += s.size; o->sids.push_back( int(i) );
+      s.part.push_back( Part( 0, s.size, "other.tgl", s.name ) );
     }
   }
-  if( o ) o->label = "shar " + Num( o->sids.size() ) + ((o->sids.size()>1) ? " files" : " file");
-  // the files the shar jobs pack are in their own directories now, not in u
-  for( size_t i=0; i<J.size(); i++ ) if( J[i]->tool=="shar" ) J[i]->sids.clear();
+  if( o ) o->label = "tangelo " + Num( o->sids.size() ) + ((o->sids.size()>1) ? " files" : " file");
+  // the files the tangelo jobs pack are in their own directories now, not in u
+  for( size_t i=0; i<J.size(); i++ ) if( J[i]->tool=="tangelo" ) J[i]->sids.clear();
   for( size_t i=0; i<J.size(); i++ ) for( size_t k=0; k<J[i]->sids.size(); k++ ) S[J[i]->sids[k]].refs++;
   return 0;
 }
 
-// streams whose packer failed: into one more shar archive (stored with -t ...+0)
+// streams whose packer failed: into one more tangelo archive (stored with -t ...+0)
 static int PackFailed() {
   Job* x = 0;
   for( size_t i=0; i<S.size(); i++ ) if( S[i].failed ) {
@@ -1740,13 +1744,13 @@ static int PackFailed() {
       continue;
     }
     if( !x ) {
-      x = NewJob( G_OTHER, 1, "shar (fallback)", "shar" );
+      x = NewJob( G_OTHER, 1, "tangelo (fallback)", "tangelo" );
       CreateDirectoryW( (work+L"fallback").c_str(), 0 );
-      x->args = LevelArg(M_SHAR) + " p" DS "fallback.shar fallback" DS; x->prog = 1; x->outs.push_back( PPath("fallback.shar") ); x->del.push_back( work+L"fallback" DS );
+      x->cwd = "fallback" DS; x->args = TangeloA( "fallback.tgl" ); x->prog = 1; x->outs.push_back( PPath("fallback.tgl") ); x->del.push_back( work+L"fallback" DS );
     }
     if( !MoveFileW( UPath(s.name).c_str(), (work+L"fallback" DS+W(s.name)).c_str() ) ) { Msg( "cannot move " + U(UPath(s.name)) ); return 2; }
-    x->work += s.size;
-    s.m = M_SHAR; s.part.push_back( Part( 0, s.size, "fallback.shar", s.name ) );
+    x->args += " " + Quote(s.name); x->work += s.size;
+    s.m = M_TANGELO; s.part.push_back( Part( 0, s.size, "fallback.tgl", s.name ) );
   }
   if( !x ) return 0;
   vector<int> g( 1, G_OTHER );
@@ -1815,16 +1819,16 @@ static int Compress( const wstring& in, const wstring& out ) {
     if( !SafeName(s.name) ) { Msg( "avip c made an unexpected file: " + s.name ); return 3; }
     if( FileCrc( UPath(s.name), s.crc, s.size ) ) return Fail( "cannot read " + U(UPath(s.name)), 2 );
     s.m = s.size ? Method(s.name) : M_STORE;
-    if( (s.m>=M_H264P) && (th[m_group[s.m]]==0) ) s.m = M_SHAR;
+    if( (s.m>=M_H264P) && (th[m_group[s.m]]==0) ) s.m = M_TANGELO;
     if( (s.m>=M_H264P) && GetTool( m_tool[s.m] ).path.empty() ) {
       string& n = nobuild[s.m];
       n += (n.size() ? ", " : "") + s.name;
-      s.m = M_SHAR;
+      s.m = M_TANGELO;
     }
-    if( (s.m==M_SHAR) && (th[G_OTHER]==0) ) s.m = M_STORE;
+    if( (s.m==M_TANGELO) && (th[G_OTHER]==0) ) s.m = M_STORE;
     S.push_back( s );
   }
-  for( int m=0; m<N_METHOD; m++ ) if( nobuild[m].size() ) Msg( "note: " + NoTool( GetTool( m_tool[m] ) ) + "; to shar " + LevelArg(M_SHAR) + ": " + nobuild[m] );
+  for( int m=0; m<N_METHOD; m++ ) if( nobuild[m].size() ) Msg( "note: " + NoTool( GetTool( m_tool[m] ) ) + "; to tangelo" + LevelSp(M_TANGELO) + ": " + nobuild[m] );
   if( (r = CheckLevels())!=0 ) return r;
   if( (r = PackJobs())!=0 ) return r;
 
@@ -1834,7 +1838,7 @@ static int Compress( const wstring& in, const wstring& out ) {
     if( s.m==M_H264P ) d += LevelSp(M_H264P) + " -t " + Num(th[G_VIDEO]) + (s.cut ? " -c "+ChunkArg(s.cut) : string());
     if( s.m==M_MP3PACK ) d += " -t " + Num(th[G_AUDIO]) + (s.cut ? " -c "+ChunkArg(s.cut) : string());
     if( s.m==M_AACPACK ) d += LevelSp(M_AACPACK) + ((s.part.size()>1) ? ", " + Num(s.part.size()) + " parts" : string());
-    if( s.m==M_SHAR ) d += LevelSp(M_SHAR) + " (" + s.part[0].pk + ((s.part.size()>1) ? ", " + Num(s.part.size()) + " pieces" : string()) + ")";
+    if( s.m==M_TANGELO ) d += LevelSp(M_TANGELO) + " (" + s.part[0].pk + ((s.part.size()>1) ? ", " + Num(s.part.size()) + " pieces" : string()) + ")";
     string n = "  " + s.name;
     if( n.size()<20 ) n.append( 20-n.size(), ' ' );
     string z = Num(s.size);
@@ -1876,7 +1880,7 @@ static int Decompress( const wstring& in, const wstring& out ) {
   }
 
   // the unpackers
-  vector<string> ttf, sha; // archives, in their order
+  vector<string> ttf, tgl; // archives, in their order
   for( size_t i=0; i<S.size(); i++ ) {
     Stream& s = S[i];
     string u = Quote( "u" DS+s.name );
@@ -1906,7 +1910,7 @@ static int Decompress( const wstring& in, const wstring& out ) {
     } else if( s.m==M_STORE ) {
       if( !MoveFileW( (work+L"p" DS "store" DS+W(s.name)).c_str(), UPath(s.name).c_str() ) ) { Msg( "missing from the archive: " + s.name ); return 4; }
     } else {
-      vector<string>& v = (s.m==M_TTFCOMP) ? ttf : sha;
+      vector<string>& v = (s.m==M_TTFCOMP) ? ttf : tgl;
       for( size_t k=0; k<s.part.size(); k++ ) if( std::find( v.begin(), v.end(), s.part[k].pk )==v.end() ) v.push_back( s.part[k].pk );
     }
   }
@@ -1918,11 +1922,11 @@ static int Decompress( const wstring& in, const wstring& out ) {
     }
     j->prog = 4; j->expect = j->work;
   }
-  for( size_t a=0; a<sha.size(); a++ ) {
-    Job* j = NewJob( G_OTHER, 1, "shar " + sha[a], "shar" );
-    j->args = "x " + Quote("p" DS+sha[a]) + " u" DS; j->prog = 1; j->del.push_back( PPath(sha[a]) );
-    for( size_t i=0; i<S.size(); i++ ) if( S[i].m==M_SHAR ) for( size_t k=0; k<S[i].part.size(); k++ ) if( S[i].part[k].pk==sha[a] ) {
-      j->work += S[i].part[k].len; j->outs.push_back( UPath(S[i].part[k].pk2) );
+  for( size_t a=0; a<tgl.size(); a++ ) { // the files under their names, in the archive's order (the streams')
+    Job* j = NewJob( G_OTHER, 1, "tangelo " + tgl[a], "tangelo" );
+    j->cwd = "u" DS; j->args = string("x") + (f_verbose ? "" : " -p") + " " + Quote(".." DS "p" DS+tgl[a]); j->prog = 1; j->del.push_back( PPath(tgl[a]) );
+    for( size_t i=0; i<S.size(); i++ ) if( S[i].m==M_TANGELO ) for( size_t k=0; k<S[i].part.size(); k++ ) if( S[i].part[k].pk==tgl[a] ) {
+      j->args += " " + Quote(S[i].part[k].pk2); j->work += S[i].part[k].len; j->outs.push_back( UPath(S[i].part[k].pk2) );
     }
   }
   for( size_t i=0; i<J.size(); i++ ) { // what each unpacks (the files it removes when done)
@@ -1932,10 +1936,10 @@ static int Decompress( const wstring& in, const wstring& out ) {
   if( J.size() ) Msg( "running " + StageText() );
   if( (r = RunStages())!=0 ) return r;
 
-  // shar pieces together; then every stream as it was
+  // tangelo's pieces together; then every stream as it was
   for( size_t i=0; i<S.size(); i++ ) {
     Stream& s = S[i];
-    if( (s.m!=M_SHAR) || ((s.part.size()==1) && (s.part[0].pk2==s.name)) ) continue;
+    if( (s.m!=M_TANGELO) || ((s.part.size()==1) && (s.part[0].pk2==s.name)) ) continue;
     HANDLE h = OpenWrite( UPath(s.name), CREATE_ALWAYS );
     r = (h==INVALID_HANDLE_VALUE);
     for( size_t k=0; (k<s.part.size()) && !r; k++ ) {
@@ -2071,7 +2075,7 @@ static int Run( const wstring& in, const wstring& out ) {
   for( int g=0; g<N_GROUP; g++ ) ch[g] = 0;
   if( c_spec.size() && ParseChunks( c_spec.c_str() ) ) { Msg( "bad -c " + c_spec ); return 1; }
   Msg( c + "; -t " + (t_spec.size() ? t_spec+" = " : string()) + ThreadText() );
-  const string all[] = { "avip", "shar", "h264p", "aacpack", "mp3pack", "oggcomp", "ttfcomp" };
+  const string all[] = { "avip", "tangelo", "h264p", "aacpack", "mp3pack", "oggcomp", "ttfcomp" };
   string tl;
   for( int i=0; i<7; i++ ) { const Tool& t = GetTool( all[i] ); if( t.path.size() ) tl += " " + t.file; }
   Msg( "tools:" + (tl.size() ? tl : string(" none")) );
@@ -2107,7 +2111,7 @@ static int ParseArgs( int argc, wchar_t** argv, int gui, int& mode, vector<wstri
         wstring v = a.substr( 2 );
         if( v.empty() ) { if( ++i>=argc ) return 1; v = argv[i]; }
         if( o=='t' ) t_spec = U(v); else if( o=='c' ) c_spec = U(v);
-        else if( o=='l' ) { string ls = U(v); if( ParseLevels( ls.c_str() ) ) { why = "bad -l " + ls + " (up to 4 levels joined by ,: h264p and aacpack 1 to 9, shar -131072 to 22)"; return 1; } }
+        else if( o=='l' ) { string ls = U(v); if( ParseLevels( ls.c_str() ) ) { why = "bad -l " + ls + " (up to 4 levels joined by ,: h264p, aacpack and tangelo 1 to 9)"; return 1; } }
         else if( o=='w' ) w_base = v;
         else if( (cap = BuildOf( U(v), bits ))<0 ) { why = "bad -i " + U(v) + " (a -march target: haswell, x86-64-v3, znver4 ...)"; return 1; }
         seen += char(o);
@@ -2139,23 +2143,23 @@ static BOOL WINAPI CtrlHandler( DWORD t ) {
 
 static const char usage[] =
 "mp4pack - lossless compression of mp4/mkv/avi files with avip, h264p, aacpack,\n"
-"mp3pack, oggcomp, ttfcomp and shar, from mp4pack's own directory: the best\n"
+"mp3pack, oggcomp, ttfcomp and tangelo, from mp4pack's own directory: the best\n"
 "build of each for this CPU, <tool>_<target>" EXE " by -march target names\n"
 "(h264p_haswell" EXE ", h264p_x86-64-v3" EXE ", h264p_znver4" EXE ") or <tool>" EXE "\n"
 "usage: mp4pack c [options] input output   compress\n"
 "       mp4pack d [options] input output   decompress\n"
 "options:\n"
-"  -t T  threads of h264p, the audio packer, ttfcomp and shar (the other\n"
+"  -t T  threads of h264p, the audio packer, ttfcomp and tangelo (the other\n"
 "        files), in that order; joined by + they run at once, by , one after\n"
 "        another: -t 3+3+1+1 (all at once), -t 3,3,1,1 (in turn), -t 3+3,1,1.\n"
-"        Missing ones: audio as video, after it; ttfcomp and shar 1, both\n"
+"        Missing ones: audio as video, after it; ttfcomp and tangelo 1, both\n"
 "        at once, after the rest (-t 4 = 4,4,1+1; -t 3+3 = 3+3,1+1). N% is\n"
 "        that share of the threads there are (all, or the free ones: -f),\n"
 "        rounded up; a -N at the end leaves N of them out first:\n"
 "        -t 50%+50%-2 = 3+3,1+1 with 8 threads. Alone, -N works on the\n"
 "        default, 100%,100% (= N,N,1+1: all the threads for h264p, then for\n"
 "        the audio).\n"
-"        0: no packer for that group, its files go to shar (for shar\n"
+"        0: no packer for that group, its files go to tangelo (for tangelo\n"
 "        itself: they are stored as they are)\n"
 "  -c C  part sizes, in the same order: MB, or KB with k (e.g. -c 4,512k);\n"
 "        0 or missing: a part for each thread, a stream's size over its\n"
@@ -2168,8 +2172,8 @@ static const char usage[] =
 "  -l L  compression levels, in the same order, joined by , (or +); missing\n"
 "        or empty: the tool's default. h264p and aacpack: 1 to 9, as their\n"
 "        builds have them (now h264p 9 7 5 3 1, aacpack 9; 9 is the strongest\n"
-"        and the default); shar: zstd's, -131072 to 22 (default 22; 0 stores).\n"
-"        ttfcomp, mp3pack and oggcomp have none. E.g. -l 5,9,,19\n"
+"        and the default); tangelo: 1 to 9 (default 9; its model takes 17 to\n"
+"        1164MB). ttfcomp, mp3pack and oggcomp have none. E.g. -l 5,9,,7\n"
 "  -f    count the threads free now (the CPUs' idle share over a second)\n"
 "  -i T  use only tool builds whose code runs on the -march target T as well\n"
 "        (haswell, x86-64-v3 ...; default: any that runs on this CPU)\n"

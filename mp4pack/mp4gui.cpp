@@ -40,7 +40,7 @@
 
 enum {
   ID_COMP = 100, ID_DEC, ID_VERIFY, ID_CPU, ID_IN, ID_INB, ID_OUT, ID_OUTB, ID_W, ID_WB, ID_WTEMP, ID_WOUT, ID_K,
-  ID_T, ID_FREE, ID_FREEUD, ID_F, ID_LH, ID_LA, ID_LS, ID_LOG, ID_START, ID_PAUSE, ID_STOP, ID_STATUS, ID_PHASE, ID_PCT
+  ID_T, ID_FREE, ID_FREEUD, ID_F, ID_LH, ID_LA, ID_LT, ID_LOG, ID_START, ID_PAUSE, ID_STOP, ID_STATUS, ID_PHASE, ID_PCT
 };
 enum { WM_LOG = WM_APP+1, WM_PROG, WM_DONE };  // from the run's thread
 enum { T_TICK = 1, T_OPTS };                    // timers: the clock while it runs; options changed
@@ -55,7 +55,7 @@ static int log_y;                 // where the log begins (the rest is above it)
 static int nrows;                 // task rows shown
 
 static HWND c_comp, c_dec, c_verify, c_cpu, l_in, c_in, c_inb, l_out, c_out, c_outb, l_w, c_w, c_wb, c_wtemp, c_wout, c_k;
-static HWND g_opt, l_t, c_t, l_free, c_free, c_freeud, c_f, c_plan, l_l, l_lh, c_lh, l_la, c_la, l_ls, c_ls;
+static HWND g_opt, l_t, c_t, l_free, c_free, c_freeud, c_f, c_plan, l_l, l_lh, c_lh, l_la, c_la, l_lt, c_lt;
 static HWND g_prog, c_phase, c_bar, c_pct, c_time, c_jl[NJ], c_jb[NJ], c_jp[NJ];
 static HWND c_log, c_status, c_start, c_pause, c_stop;
 static int jl_gray[NJ], jp_color[NJ], pct_blue; // colors: a task waiting (gray); a gain (1, blue), failed (2, red)
@@ -89,7 +89,7 @@ static qword prog_at;             // when it came
 static double shown;              // the overall bar (it does not go back)
 static string result;             // the sizes and the time, when all went well
 
-// a task: a job, or a stream's parts (aacpack's, shar's pieces) together
+// a task: a job, or a stream's parts (aacpack's, tangelo's pieces) together
 struct Task { string key, label; int st, est, gain; double frac; qword work, made; }; // made: the packed bytes
 static vector<Task> tasks;        // this run's, as they came
 
@@ -287,7 +287,6 @@ static int TextWidth( const wchar_t* t ) {
 
 static const char* const t_items[] = { "100%,100%", "50%+50%", "75%+25%", "1" };
 static const char* const l_items[] = { "default", "9", "8", "7", "6", "5", "4", "3", "2", "1" };
-static const char* const s_items[] = { "default", "22", "20", "19", "15", "9", "5", "1", "0", "-1", "-5" };
 
 static void MakeControls() {
   for( int i=0; i<=NJ; i++ ) split[i] = -1;
@@ -309,7 +308,7 @@ static void MakeControls() {
   l_l = Label( L"&Levels" );
   l_lh = Label( L"h264p" ); c_lh = Combo( ID_LH, CBS_DROPDOWNLIST, l_items, 10 );
   l_la = Label( L"aacpack" ); c_la = Combo( ID_LA, CBS_DROPDOWNLIST, l_items, 10 );
-  l_ls = Label( L"shar" ); c_ls = Combo( ID_LS, CBS_DROPDOWN, s_items, 11 );
+  l_lt = Label( L"tangelo" ); c_lt = Combo( ID_LT, CBS_DROPDOWNLIST, l_items, 10 );
 
   g_prog = Group( L"Progress" );
   c_phase = Note( ID_PHASE ); c_bar = Bar(); c_pct = Make( L"STATIC", L"", SS_RIGHT|SS_CENTERIMAGE, ID_PCT );
@@ -362,12 +361,12 @@ static void Layout() {
   a = xc+tcw+sp*4+lfw+fw;
   Place( c_f, a, y, x+w-a, rh ); y += rh;
   Place( c_plan, xc, y, x+w-xc, by+DY(3) ); y += by+DY(3)+gap;
-  int lc = DX(50), w1 = TextWidth( L"h264p" )+sp, w2 = TextWidth( L"aacpack" )+sp, w3 = TextWidth( L"shar" )+sp;
+  int lc = DX(50), w1 = TextWidth( L"h264p" )+sp, w2 = TextWidth( L"aacpack" )+sp, w3 = TextWidth( L"tangelo" )+sp;
   a = xc;
   Place( l_l, x, y, lw, rh );
   Place( l_lh, a, y, w1, rh ); a += w1; Place( c_lh, a, y, lc, rh+DY(100) ); a += lc+sp*3;
   Place( l_la, a, y, w2, rh ); a += w2; Place( c_la, a, y, lc, rh+DY(100) ); a += lc+sp*3;
-  Place( l_ls, a, y, w3, rh ); a += w3; Place( c_ls, a, y, lc, rh+DY(100) ); y += rh+DY(4);
+  Place( l_lt, a, y, w3, rh ); a += w3; Place( c_lt, a, y, lc, rh+DY(100) ); y += rh+DY(4);
   Place( g_opt, x0, gy, wl, y-gy ); y += gap;
 
   gy = y; y += gc;
@@ -422,11 +421,12 @@ static void Load() {
   Check( c_f, IniGet( L"count_free", L"0" )==L"1" );
   SendMessageW( c_lh, CB_SELECTSTRING, (WPARAM)-1, (LPARAM)IniGet( L"level_h264p", L"default" ).c_str() );
   SendMessageW( c_la, CB_SELECTSTRING, (WPARAM)-1, (LPARAM)IniGet( L"level_aacpack", L"default" ).c_str() );
-  SetText( c_ls, IniGet( L"level_shar", L"default" ) );
+  SendMessageW( c_lt, CB_SELECTSTRING, (WPARAM)-1, (LPARAM)IniGet( L"level_tangelo", L"default" ).c_str() );
   SetText( c_w, IniGet( L"work", L"" ) );
   Check( c_k, IniGet( L"keep", L"0" )==L"1" );
   if( SendMessageW( c_lh, CB_GETCURSEL, 0, 0 )<0 ) SendMessageW( c_lh, CB_SETCURSEL, 0, 0 );
   if( SendMessageW( c_la, CB_GETCURSEL, 0, 0 )<0 ) SendMessageW( c_la, CB_SETCURSEL, 0, 0 );
+  if( SendMessageW( c_lt, CB_GETCURSEL, 0, 0 )<0 ) SendMessageW( c_lt, CB_SETCURSEL, 0, 0 );
   // the window where it was, if that is on a screen
   RECT r;
   if( swscanf( IniGet( L"window", L"" ).c_str(), L"%ld %ld %ld %ld", &r.left, &r.top, &r.right, &r.bottom )==4
@@ -444,7 +444,7 @@ static void Save() {
   IniSet( L"count_free", Checked( c_f ) ? L"1" : L"0" );
   IniSet( L"level_h264p", Text( c_lh ) );
   IniSet( L"level_aacpack", Text( c_la ) );
-  IniSet( L"level_shar", Text( c_ls ) );
+  IniSet( L"level_tangelo", Text( c_lt ) );
   IniSet( L"work", Text( c_w ) );
   IniSet( L"keep", Checked( c_k ) ? L"1" : L"0" );
   WINDOWPLACEMENT wp; wp.length = sizeof(wp);
@@ -464,12 +464,10 @@ static string TSpec() {
   return (k>0) ? t + "-" + Num(k) : t;
 }
 
-// -l: "5,9,,19" ("" for the defaults)
+// -l: "5,9,,7" ("" for the defaults)
 static string LSpec() {
-  int h = int( SendMessageW( c_lh, CB_GETCURSEL, 0, 0 ) ), a = int( SendMessageW( c_la, CB_GETCURSEL, 0, 0 ) );
-  string s = U( Text( c_ls ) );
-  if( s.empty() || ((s[0]|32)=='d') ) s.clear(); // ("default")
-  return ((h>0) ? Num(10-h) : string()) + "," + ((a>0) ? Num(10-a) : string()) + ",," + s;
+  int h = int( SendMessageW( c_lh, CB_GETCURSEL, 0, 0 ) ), a = int( SendMessageW( c_la, CB_GETCURSEL, 0, 0 ) ), t = int( SendMessageW( c_lt, CB_GETCURSEL, 0, 0 ) );
+  return ((h>0) ? Num(10-h) : string()) + "," + ((a>0) ? Num(10-a) : string()) + ",," + ((t>0) ? Num(10-t) : string());
 }
 
 // the work directory's field, with %VARIABLES% as they are now
@@ -494,7 +492,7 @@ static int Options( string& why ) {
   if( ParseThreads( t_spec, cpu_threads ) ) { why = "Threads: " + t_spec + " is not N or N% (up to 4, joined by + or ,), with a -N at the end maybe."; return 1; }
   c_spec = cl_c;
   string l = f_dec ? string() : LSpec();
-  if( ParseLevels( l.c_str() ) ) { why = "Levels: shar's is -131072 to 22 (0 stores)."; return 1; }
+  if( ParseLevels( l.c_str() ) ) { why = "Levels: 1 to 9."; return 1; }
   cap = cl_cap;
   w_base = WorkDir();
   return 0;
@@ -519,7 +517,7 @@ static string CommandText() {
 
 //---- the CPU and the tool builds
 
-static const string tool_names[] = { "avip", "shar", "h264p", "aacpack", "mp3pack", "oggcomp", "ttfcomp" };
+static const string tool_names[] = { "avip", "tangelo", "h264p", "aacpack", "mp3pack", "oggcomp", "ttfcomp" };
 
 static string Pad( string s, size_t n ) { if( s.size()<n ) s.append( n-s.size(), ' ' ); return s; }
 
@@ -783,7 +781,7 @@ static void Enable() {
   HWND all[] = { c_comp, c_dec, l_in, c_in, c_inb, l_out, c_out, c_outb, l_w, c_w, c_wb, c_wtemp, c_wout, c_k,
                  l_t, c_t, l_free, c_free, c_freeud, c_f, c_start };
   for( size_t i=0; i<sizeof(all)/sizeof(all[0]); i++ ) EnableWindow( all[i], idle );
-  HWND copt[] = { c_verify, l_l, l_lh, c_lh, l_la, c_la, l_ls, c_ls }; // (c only)
+  HWND copt[] = { c_verify, l_l, l_lh, c_lh, l_la, c_la, l_lt, c_lt }; // (c only)
   for( size_t i=0; i<sizeof(copt)/sizeof(copt[0]); i++ ) EnableWindow( copt[i], idle && !dec );
   EnableWindow( c_pause, running && !f_abort );
   EnableWindow( c_stop, running && !f_abort );
@@ -1123,7 +1121,7 @@ static int CommandLine() {
     if( seen.find( 'l' )!=string::npos ) {
       SendMessageW( c_lh, CB_SETCURSEL, (lv[G_VIDEO]==NO_LEVEL) ? 0 : 10-lv[G_VIDEO], 0 );
       SendMessageW( c_la, CB_SETCURSEL, (lv[G_AUDIO]==NO_LEVEL) ? 0 : 10-lv[G_AUDIO], 0 );
-      SetText( c_ls, (lv[G_OTHER]==NO_LEVEL) ? L"default" : W(INum(lv[G_OTHER])) );
+      SendMessageW( c_lt, CB_SETCURSEL, (lv[G_OTHER]==NO_LEVEL) ? 0 : 10-lv[G_OTHER], 0 );
     }
     if( seen.find( 'w' )!=string::npos ) SetText( c_w, w_base );
     if( seen.find( 'k' )!=string::npos ) Check( c_k, 1 );

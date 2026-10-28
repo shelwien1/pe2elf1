@@ -25,7 +25,7 @@ int wmain( int argc, wchar_t** argv ) {
   if( argc<a+2 ) { printf( "usage: builds_test [-i T] TOOLDIR DUMP...\n" ); return 1; }
   exe_dir = FullPath( argv[a] );
   if( !IsSep( exe_dir[exe_dir.size()-1] ) ) exe_dir += L"" DS;
-  const string all[] = { "avip", "shar", "h264p", "aacpack", "mp3pack", "oggcomp", "ttfcomp" };
+  const string all[] = { "avip", "tangelo", "h264p", "aacpack", "mp3pack", "oggcomp", "ttfcomp" };
   for( int i=a+1; i<argc; i++ ) {
     string text;
     if( ReadAll( FullPath( argv[i] ), text, 1<<24 ) ) { printf( "cannot read %s\n", U(argv[i]).c_str() ); return 2; }
