@@ -98,20 +98,28 @@ mp4pack shows what `-t` came to on its first line, e.g.
 
 `-c C` &mdash; part sizes, in the same order (separators as in `-t`, they make no
 difference here): MB, or KB with a `k` (`g`: GB). `0` or a missing number: the
-default.
+default, a part for each thread: the stream's size over its group's threads,
+rounded up, 1MB at least (for h264p and mp3pack no more than the memory
+allows, below).
 
 - h264p and mp3pack get it as their own `-c` (only with more than one thread,
-  as they take it).
+  as they take it). Their memory grows with the part: per thread, h264p takes
+  about 0.1GB + 1.6 times the part size, mp3pack about 9 times it. So their
+  default part is at most 1GB, and at most the free physical memory, 3/4 of
+  it, over the threads of the groups that run at the same time as theirs,
+  less 128MB, over 2 for h264p and 10 for mp3pack. (aacpack takes 38MB and
+  shar about 670MB at `a22`, whatever the part.)
 - aacpack has no threads of its own, so mp4pack cuts the `.aac` stream into
   parts at ADTS frame boundaries and runs one aacpack per part, the parts
   joined again on d. With N threads: N parts of the same size (1MB at least),
   or, with `-c`, parts of at least that size. A part boundary costs ~1KB of
   compression. With 1 thread there is one part.
 - ttfcomp: no part size; one solid archive.
-- shar: with more than one thread, files bigger than the part size (default
-  64MB) are cut into pieces, each its own shar archive, so that big
-  streams without a packer (hevc video, DTS audio) can be compressed in
-  parallel. The other files make one solid archive.
+- shar: with more than one thread, files bigger than the part size (default:
+  the file's size over the threads, so a piece for each) are cut into pieces,
+  each its own shar archive, so that big streams without a packer (hevc
+  video, DTS audio) can be compressed in parallel. The other files make one
+  solid archive.
 
 `-l L` &mdash; compression levels, in the same order (separators as in `-t`,
 they make no difference here). A missing or empty one: the tool's default.
@@ -185,8 +193,8 @@ tools: avip_avx2.exe shar_avx2.exe h264p_znver4.exe aacpack_avx2.exe ...
 
 The threads are the logical processors in all processor groups
 (`GetActiveProcessorCount`), the cores are counted by
-`GetLogicalProcessorInformationEx`. The CPU is read by `x86targets.h`, the
-header of [cpuinfo](../cpuinfo): CPUID, and XGETBV for the registers the OS
+`GetLogicalProcessorInformationEx`. The CPU is read by `x86targets.h` (a copy
+of the header of [cpuinfo](../cpuinfo), beside mp4pack.cpp): CPUID, and XGETBV for the registers the OS
 saves. It knows gcc's and clang's `-march` targets (the names, and the features
 each one lets the compilers use), works out which of them run on this CPU, and
 ranks those as cpuinfo lists them. The `cpu` line names the first (here
@@ -249,36 +257,52 @@ not.
 run on a thread of its own instead of from a console. It goes next to the
 tools, as `mp4pack.exe` does.
 
-- **Input, Output**: typed, chosen with `...` (the Open and Save dialogs), or
-  the input dropped on the window, or given on mp4gui's command line
-  (`mp4gui.exe input [output]`, as when a file is dropped on mp4gui.exe). An
-  input ending in `.mpk` selects Decompress. The output is named after the
+- **Compress** or **Decompress**, and **Verify** for Compress: once the
+  archive is made, it is decompressed into a temporary file beside the work
+  directories, and that is checked by the index's CRCs (each stream's and the
+  whole file's), as d checks; the file is removed after. When the check
+  fails, the archive is kept and the run ends with an error.
+- **CPU Info** opens a window with what cpuinfo says of the CPU (name, threads
+  and cores, memory, caches, features, what `-march=native` picks, the targets
+  whose code runs here, ranked) and every build of every tool here: the one
+  that runs (`*`), the others that could, and what the CPU lacks for those
+  that cannot.
+- **Input, Output**: typed or pasted (quotes around a path, as Explorer's "Copy
+  as path" gives it, are taken off), chosen with `...` (the Open and Save
+  dialogs), or the input dropped on the window, or given on mp4gui's command
+  line (`mp4gui.exe input [output]`, as when a file is dropped on mp4gui.exe).
+  An input ending in `.mpk` selects Decompress. The output is named after the
   input (`x.mkv` -> `x.mkv.mpk`, and back) until you choose one; an existing
   output is replaced only after asking.
+- **Work dir** (`-w`; empty: the temp directory): `...` chooses a folder,
+  `%TEMP%` puts that in (expanded when it runs), Output dir the output's
+  folder; "keep it" is `-k`.
 - **Options**, as on the command line: Threads (`-t`; "keep free" adds a `-N`,
-  "count only the free ones" is `-f`), and under it what they come to, e.g.
-  `= 4,4,1+1: h264p 4, then audio 4, then ttfcomp 1 + shar 1`; Levels (`-l`,
-  for h264p, aacpack and shar); Part sizes (`-c`); Tool builds (`-i`: any that
-  runs here, or a `-march` target; the list has those whose code runs here,
-  best first); Work dir (`-w`) and "keep it" (`-k`). Levels and part sizes
-  are off for Decompress; a bad value is shown in red.
-- **CPU and tool builds**: the CPU (name, threads and cores, x86-64 level, its
-  best target) and the build of each tool that would run, with Tool builds as
-  set. Details... opens a window with what cpuinfo says of the CPU (caches,
-  features, what `-march=native` picks, the targets whose code runs here,
-  ranked) and every build of every tool here: the one that runs (`*`), the
-  others that could, and what the CPU lacks for those that cannot.
+  "only currently idle threads" is `-f`), and under it what they come to, e.g.
+  `= 4,4,1+1: h264p 4, then audio 4, then ttfcomp 1 + shar 1` (in red when it
+  is not right); Levels (`-l`, for h264p, aacpack and shar; off for
+  Decompress). The part sizes are mp4pack's defaults (a part for each thread,
+  as the memory allows: `-c`), and the tool builds any that run here.
 - **Start** (or Enter) runs it. The log gets mp4pack's messages, the command
   line it amounts to first. Progress shows the whole run's share done (avip
-  and the final shar take 3% each, packing or unpacking the rest), the time
-  so far and about how much is left of the phase, and a bar for each job
-  running (up to four; with more, three and the rest together): `~` marks a
-  share that is a guess (in c, by a typical ratio), and a bar that runs to and
-  fro a job that does not tell (see the status line above). The taskbar button shows the
-  progress too, and flashes at the end if the window is in the background.
+  and the final shar take 3% each, packing or unpacking the rest; with Verify,
+  the compression is the first half and the check the second), the time so
+  far and about how much is left of the phase, and a row for each task as it
+  comes: avip, each stream's packer (a stream's parts in one), ttfcomp, shar,
+  the final shar, the verify. `~` marks a share that is a guess (in c, by a
+  typical ratio), a bar that runs to and fro a task that does not tell (see
+  the status line above), a gray name one that waits. A packer's row shows its
+  gain in blue when it is done (1 - packed size / stream size: 20.7% for an
+  h264 stream packed to 79.3%), and the overall row the archive's gain on the
+  input at the end; a task that failed says so in red. The taskbar button
+  shows the progress too, and flashes at the end if the window is in the
+  background.
+- **Pause** holds the run until **Resume**: the tools running are suspended
+  (all their threads), none starts, and the clock stops. Nothing is ended;
+  Stop works while it is paused.
 - **Stop** ends it as Ctrl+C does: the tools are stopped and the work
-  directory is removed (unless kept). Closing the window while it runs asks
-  first, then stops it.
+  directory is removed (unless kept); their rows say "stopped". Closing the
+  window while it runs asks first, then stops it.
 - The options and the window's place are kept in `mp4gui.ini` next to it.
 
 The tools run without a console (`DETACHED_PROCESS`), so none opens a window;
@@ -342,9 +366,9 @@ g++ -std=c++11 -O2 -s -static -municode -o mp4pack.exe mp4pack.cpp
 ```
 
 clang++ works the same way (for the MSVC target `wmain` needs no `-municode`).
-`mp4pack.cpp` includes `../cpuinfo/x86targets.h`, so build it in this
-repository (or keep the two directories side by side). For the Linux build see
-below.
+`mp4pack.cpp` includes `x86targets.h`, a copy of cpuinfo's
+(`../cpuinfo/x86targets.h`; copy a newer one over it), so this directory
+builds on its own. For the Linux build see below.
 
 mp4gui (`./build.sh` makes it too), plain Win32 with its common dialogs:
 
@@ -446,10 +470,13 @@ handler).
 mp4gui was run under wine on a virtual X display (Xvfb), driven by a small
 program sending it the messages a user's clicks and typing would, with a
 screenshot at each step: compress and decompress (the archive the same as
-mp4pack.exe's, the result identical), Stop during packing, closing the window
-while it runs, a bad option, the replace question (no, then yes), Cyrillic
-names, Tool builds set to a target no build runs on, the settings kept in
-mp4gui.ini, and no work directory left in any case. Not on Windows itself: the
+mp4pack.exe's, the result identical), with Verify (and with an avip build
+made to change a byte of what it writes in d: the check failed, as it
+should), Pause (the tools got no CPU time while held) and Resume, Stop during
+packing and while paused, closing the window while it runs, a bad option, the
+replace question (no, then yes), Cyrillic names, quoted paths pasted, the
+Work dir buttons, the settings kept in mp4gui.ini, and no work directory or
+temporary file left in any case. Not on Windows itself: the
 look there (Segoe UI, the themed controls) and the taskbar's progress were not
 seen.
 

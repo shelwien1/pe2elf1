@@ -43,7 +43,7 @@
 #include <string>
 #include <vector>
 #include <algorithm>
-#include "../cpuinfo/x86targets.h" // the CPU, and the -march targets whose code runs on it
+#include "x86targets.h"  // the CPU, and the -march targets whose code runs on it (cpuinfo's)
 
 typedef unsigned char byte;
 typedef unsigned int uint;
@@ -94,6 +94,9 @@ static wstring work;                  // the work directory, with a trailing sep
 static HANDLE h_err, h_jobobj, ev_abort;
 static DWORD tool_flags;              // the tools' CreateProcess flags: DETACHED_PROCESS from a GUI (else each opens a console)
 static volatile LONG f_abort;
+static volatile LONG f_pause;         // a frontend's Pause: no tool starts, those running are held
+static HANDLE ev_wake;                // set with it, for the run to act at once
+static int f_verify;                  // c, then d of the archive into a temporary file, as a check (mp4gui)
 static int f_con;                     // stderr is a console: there is a status line
 static size_t status_len;             // its length on the screen
 static qword t_start;
@@ -627,17 +630,24 @@ static void SpaceCheck( qword need ) {
     Msg( "warning: " + Num(fr.QuadPart>>20) + "MB free for the work directory, about " + Num(need>>20) + "MB may be needed (-w)" );
 }
 
-static int MakeWork() {
+// where work directories go: -w's, else the temp directory ("": none)
+static wstring WorkBase() {
   wstring base;
   if( w_base.size() ) base = FullPath( w_base );
   else {
     wchar_t t[MAX_PATH+2];
     DWORD n = GetTempPathW( MAX_PATH+1, t );
-    if( (n==0) || (n>MAX_PATH) ) { Msg( "no temp directory; give one with -w" ); return 1; }
+    if( (n==0) || (n>MAX_PATH) ) { Msg( "no temp directory; give one with -w" ); return wstring(); }
     base.assign( t, n );
   }
   if( !IsSep( base[base.size()-1] ) ) base += L"" DS;
   MakeDirs( base );
+  return base;
+}
+
+static int MakeWork() {
+  wstring base = WorkBase();
+  if( base.empty() ) return 1;
   for( uint i=0; i<1000; i++ ) {
     wstring d = base + L"mp4pack_" + W(Hex(GetCurrentProcessId())) + L"_" + W(Num(i));
     if( CreateDirectoryW( d.c_str(), 0 ) ) { work = d+L"" DS; break; }
@@ -728,11 +738,12 @@ struct Job {
   int quiet;              // its output to its log even with -v, its command line not shown
   qword work;             // the bytes it packs (c) or unpacks (d), for the progress
   qword expect;           // prog 4: the bytes it makes (d: exact; c: by a typical ratio)
+  qword made;             // when done: the bytes of its outs
   vector<int> sids;       // c: the streams it packs
   vector<wstring> outs;   // files it has to make (c: their sizes are reported)
   vector<wstring> del;    // removed once it is done (unless -k)
   Pump in, out;           // in.path/out.path empty: none
-  int st;                 // 0 waiting, 1 running, 2 done, 3 failed, 4 skipped
+  int st;                 // 0 waiting, 1 running, 2 done, 3 failed, 4 skipped, 5 stopped (by us: Ctrl+C, or another failed)
   int wu;                 // threads it took
   HANDLE hp;
   int exited;             // hp is signaled
@@ -741,7 +752,7 @@ struct Job {
   qword t0, t;
   double frac;
   string why;
-  Job() : g(G_OTHER), w(1), prog(0), report(1), quiet(0), work(0), expect(0), st(0), wu(0), hp(0), exited(0), code(0), t0(0), t(0), frac(0) { out.dir = 1; }
+  Job() : g(G_OTHER), w(1), prog(0), report(1), quiet(0), work(0), expect(0), made(0), st(0), wu(0), hp(0), exited(0), code(0), t0(0), t(0), frac(0) { out.dir = 1; }
 };
 
 static HANDLE Inheritable( HANDLE h ) {
@@ -899,15 +910,16 @@ static double Frac( Job& j ) {
 
 // what runs now ("avip c", "packing" ...), and a frontend's hook for the
 // progress, called instead of the status line: the share done (-1: no job
-// tells), the time left in ms (0: not known yet), the jobs running
+// tells), the time left in ms (0: not known yet), the jobs (st: which run)
 static string phase;
-static void (*status_hook)( double frac, qword eta, const vector<Job*>& run );
+static void (*status_hook)( double frac, qword eta, const vector<Job*>& all );
 
-// [elapsed] overall%, eta, and what runs; on a console only (or status_hook)
-static void Status( const vector<Job*>& all, const vector<Job*>& run ) {
+// [elapsed] overall%, eta, and what runs; on a console only (or status_hook;
+// force: now, as when a stage ends)
+static void Status( const vector<Job*>& all, const vector<Job*>& run, int force = 0 ) {
   static qword last;
   if( !status_hook && (!f_con || f_verbose) ) return;
-  if( (status_len || status_hook) && (GetTickCount64()-last<500) ) return;
+  if( !force && (status_len || status_hook) && (GetTickCount64()-last<500) ) return;
   last = GetTickCount64();
   double tot = 0, done = 0;
   int any = 0; // a job that tells its progress
@@ -924,7 +936,7 @@ static void Status( const vector<Job*>& all, const vector<Job*>& run ) {
     const Job& j = *run[i];
     if( j.prog && ((j.prog!=4) || f_dec) && (j.frac>0.02) && (j.frac<1) ) left = std::max( left, qword( double(now-j.t0)*(1-j.frac)/j.frac ) );
   }
-  if( status_hook ) { status_hook( any ? done/tot : -1, left, run ); return; }
+  if( status_hook ) { status_hook( any ? done/tot : -1, left, all ); return; }
   qword el = GetTickCount64()-t_start;
   string s = "[" + Clock(el) + "]";
   if( any ) s += " " + Pct( done, tot );
@@ -944,6 +956,34 @@ static int Skip( const Job& j );
 static void Succeeded( Job& j );
 static string LevelArg( int m );
 
+static int held;                      // the tools running are held (Pause)
+static qword t_held;                  // since when
+
+// a tool's process held (all its threads suspended), or let go on
+static void Hold( HANDLE hp, int on ) {
+#ifdef _WIN32
+  typedef LONG (WINAPI *nt_t)( HANDLE );
+  nt_t f = (nt_t)(void*)GetProcAddress( GetModuleHandleW( L"ntdll.dll" ), on ? "NtSuspendProcess" : "NtResumeProcess" );
+  if( f ) f( hp );
+#else
+  kill( pid_t( GetProcessId( hp ) ), on ? SIGSTOP : SIGCONT );
+#endif
+}
+
+// Pause, or on again: the tools running held or let go, and the clocks set
+// back by the pause
+static void HoldAll( const vector<Job*>& run ) {
+  held = !held;
+  qword now = GetTickCount64();
+  for( size_t i=0; i<run.size(); i++ ) Hold( run[i]->hp, held );
+  if( held ) t_held = now;
+  else {
+    qword d = now-t_held;
+    t_start += d; t_run += d;
+    for( size_t i=0; i<run.size(); i++ ) run[i]->t0 += d;
+  }
+}
+
 // Runs the waiting jobs of these groups, the groups at once, each group's in
 // its order within its threads (a job waits for the ones before it). 0: all
 // done (failed packers fell back), 1: one failed, 2: Ctrl+C.
@@ -951,7 +991,8 @@ static int RunStage( const vector<Job*>& all, const vector<int>& groups ) {
   vector<Job*> run;
   int used[N_GROUP] = { 0 }, fail = 0;
   while(1) {
-    for( size_t gi=0; gi<groups.size() && !fail && !f_abort; gi++ ) {
+    if( (held!=(f_pause!=0)) && !fail && !f_abort ) HoldAll( run );
+    for( size_t gi=0; gi<groups.size() && !fail && !f_abort && !held; gi++ ) {
       int g = groups[gi], budget = std::max( th[g], 1 );
       for( size_t i=0; i<all.size(); i++ ) {
         Job& j = *all[i];
@@ -970,8 +1011,18 @@ static int RunStage( const vector<Job*>& all, const vector<int>& groups ) {
         run.push_back( &j );
       }
     }
-    if( run.empty() ) { if( f_abort && !fail ) fail = 2; break; } // (stopped before it began)
+    if( run.empty() ) {
+      if( held && !f_abort && !fail ) { // (paused before the next one starts)
+        HANDLE w[2] = { ev_abort, ev_wake };
+        WaitForMultipleObjects( 2, w, FALSE, 1000 );
+        Status( all, run );
+        continue;
+      }
+      if( f_abort && !fail ) fail = 2; // (stopped before it began)
+      break;
+    }
     vector<HANDLE> h( 1, ev_abort ); // what has not finished yet
+    h.push_back( ev_wake );
     for( size_t i=0; i<run.size(); i++ ) {
       if( !run[i]->exited ) h.push_back( run[i]->hp );
       if( run[i]->in.th ) h.push_back( run[i]->in.th );
@@ -988,7 +1039,7 @@ static int RunStage( const vector<Job*>& all, const vector<int>& groups ) {
       // the tools get Ctrl+C too, and may end before our handler has run
       if( (j.code==0xC000013Au) && !f_abort ) { f_abort = 1; SetEvent( ev_abort ); }
       if( f_abort && !fail ) { fail = 2; for( size_t k=0; k<run.size(); k++ ) TerminateProcess( run[k]->hp, 1 ); }
-      if( fail ) continue; // (we stopped it)
+      if( fail ) { j.st = 5; continue; } // (we stopped it)
       if( Fallback(j) ) continue;
       Msg( "error: " + j.label + ": " + j.why );
       LogTail( j );
@@ -997,6 +1048,7 @@ static int RunStage( const vector<Job*>& all, const vector<int>& groups ) {
     }
     Status( all, run );
   }
+  if( status_hook ) Status( all, run, 1 ); // (how it ended)
   return fail;
 }
 
@@ -1035,7 +1087,8 @@ struct Stream {
   vector<Part> part;
   int refs;         // c: jobs yet to read it
   int failed;       // c: its packer failed; it goes to shar instead
-  Stream() : size(0), crc(0), m(M_SHAR), refs(0), failed(0) {}
+  qword cut;        // c: the part size its packer got (0: none)
+  Stream() : size(0), crc(0), m(M_SHAR), refs(0), failed(0), cut(0) {}
 };
 
 static vector<Stream> S;
@@ -1072,13 +1125,13 @@ static int Fallback( Job& j ) {
 }
 
 static void Succeeded( Job& j ) {
+  qword sz;
+  j.made = 0;
+  for( size_t i=0; i<j.outs.size(); i++ ) if( !GetSize( j.outs[i], sz ) ) j.made += sz;
   if( j.report ) {
     string s = "  " + j.label + ": ";
-    if( !f_dec ) {
-      qword o = 0, sz;
-      for( size_t i=0; i<j.outs.size(); i++ ) if( !GetSize( j.outs[i], sz ) ) o += sz;
-      s += Num(j.work) + " -> " + Num(o) + " (" + Pct( double(o), double(j.work) ) + ")";
-    } else s += Num(j.work);
+    if( !f_dec ) s += Num(j.work) + " -> " + Num(j.made) + " (" + Pct( double(j.made), double(j.work) ) + ")";
+    else s += Num(j.work);
     Msg( s + ", " + Clock(j.t) );
   }
   for( size_t i=0; i<j.sids.size(); i++ ) {
@@ -1310,6 +1363,28 @@ static string ChunkArg( qword c ) {
   return (c&((1<<20)-1)) ? Num(c>>10)+"k" : Num(c>>20);
 }
 
+// the part size for a stream of group g: -c's, else a part for each of the
+// group's threads (the size over them, 1MB at least). perbyte: the memory a
+// tool takes for each byte of a part (h264p about 2, mp3pack 10; aacpack and
+// shar take the same for any): then no more than its threads' share of 3/4
+// of the memory free now (with the threads that run at once), and 1024MB,
+// the tools' most
+static qword PartSize( int g, qword size, int perbyte ) {
+  if( ch[g] ) return ch[g];
+  qword n = qword( std::max( th[g], 1 ) ), p = std::max<qword>( (size+n-1)/n, 1<<20 );
+  if( perbyte ) {
+    int t = 0;
+    for( size_t s=0; s<stages.size(); s++ ) if( std::find( stages[s].begin(), stages[s].end(), g )!=stages[s].end() )
+      for( size_t i=0; i<stages[s].size(); i++ ) t += th[stages[s][i]];
+    MEMORYSTATUSEX ms; ms.dwLength = sizeof(ms);
+    qword avail = GlobalMemoryStatusEx( &ms ) ? ms.ullAvailPhys : (qword(1)<<32);
+    qword share = avail/4*3/qword( std::max( t, 1 ) ), base = 128<<20; // (the rest of what a tool takes)
+    p = std::min( p, std::max<qword>( (share>base) ? (share-base)/perbyte : 0, 1<<20 ) );
+    p = std::min<qword>( p, 1u<<30 );
+  }
+  return p;
+}
+
 static string StageText() {
   string t;
   for( size_t s=0; s<stages.size(); s++ ) {
@@ -1374,12 +1449,13 @@ static int PackJobs() {
       int n = th[G_VIDEO];
       string pk = s.name + ".h264p";
       Job* j = NewJob( G_VIDEO, n, "h264p " + s.name, "h264p" );
-      j->args = "c" + LevelSp(M_H264P) + " -t " + Num(n) + (((n>1) && ch[G_VIDEO]) ? " -c "+ChunkArg(ch[G_VIDEO]) : string()) + (f_verbose ? "" : " -p")
+      if( n>1 ) s.cut = PartSize( G_VIDEO, s.size, 2 );
+      j->args = "c" + LevelSp(M_H264P) + " -t " + Num(n) + (s.cut ? " -c "+ChunkArg(s.cut) : string()) + (f_verbose ? "" : " -p")
               + " " + u + " " + Quote("p" DS+pk);
       j->prog = 1; j->work = s.size; j->sids.push_back( si ); j->outs.push_back( PPath(pk) );
       s.part.push_back( Part( 0, s.size, pk, "" ) );
     } else if( s.m==M_AACPACK ) {
-      // with n threads: n parts (1MB at least), or parts of -c's size at least
+      // with n threads: n parts (1MB at least: PartSize's), or parts of -c's size at least
       qword n = th[G_AUDIO];
       qword k = ch[G_AUDIO] ? s.size/ch[G_AUDIO] : std::min<qword>( n, s.size>>20 );
       k = (n>1) ? std::min<qword>( std::max<qword>( k, 1 ), 4096 ) : 1;
@@ -1406,7 +1482,8 @@ static int PackJobs() {
       int n = th[G_AUDIO];
       string pk = s.name + ".mp3p", pk2 = s.name + ".mp3o";
       Job* j = NewJob( G_AUDIO, n, "mp3pack " + s.name, "mp3pack" );
-      j->args = "c -t " + Num(n) + (((n>1) && ch[G_AUDIO]) ? " -c "+ChunkArg(ch[G_AUDIO]) : string()) + (f_verbose ? "" : " -p")
+      if( n>1 ) s.cut = PartSize( G_AUDIO, s.size, 10 );
+      j->args = "c -t " + Num(n) + (s.cut ? " -c "+ChunkArg(s.cut) : string()) + (f_verbose ? "" : " -p")
               + " " + u + " " + Quote("p" DS+pk) + " " + Quote("p" DS+pk2);
       j->prog = 1; j->work = s.size; j->sids.push_back( si ); j->outs.push_back( PPath(pk) ); j->outs.push_back( PPath(pk2) );
       s.part.push_back( Part( 0, s.size, pk, pk2 ) );
@@ -1441,13 +1518,15 @@ static int PackJobs() {
     S[i].part.push_back( Part( 0, S[i].size, U(FileName(f->outs[0])), "" ) );
   }
   // the rest: one solid archive; with more threads, files over the part size
-  // (-c, default 64MB) are cut into pieces, an archive for each
+  // (-c, else a piece for each thread: PartSize) are cut into pieces, an archive
+  // for each
   int n = th[G_OTHER], na = 0;
-  qword c = ch[G_OTHER] ? ch[G_OTHER] : (64<<20);
   Job* o = 0;
   for( size_t i=0; i<S.size(); i++ ) if( S[i].m==M_SHAR ) {
     Stream& s = S[i];
+    qword c = PartSize( G_OTHER, s.size, 0 );
     if( (n>1) && (s.size>c) ) {
+      s.cut = c;
       qword k = std::min<qword>( (s.size+c-1)/c, 100000 );
       for( qword q=0; q<k; q++ ) {
         qword a = s.size*q/k, b = s.size*(q+1)/k;
@@ -1590,8 +1669,8 @@ static int Compress( const wstring& in, const wstring& out ) {
   for( size_t i=0; i<S.size(); i++ ) {
     const Stream& s = S[i];
     string d = m_name[s.m];
-    if( s.m==M_H264P ) d += LevelSp(M_H264P) + " -t " + Num(th[G_VIDEO]) + (((th[G_VIDEO]>1) && ch[G_VIDEO]) ? " -c "+ChunkArg(ch[G_VIDEO]) : string());
-    if( s.m==M_MP3PACK ) d += " -t " + Num(th[G_AUDIO]) + (((th[G_AUDIO]>1) && ch[G_AUDIO]) ? " -c "+ChunkArg(ch[G_AUDIO]) : string());
+    if( s.m==M_H264P ) d += LevelSp(M_H264P) + " -t " + Num(th[G_VIDEO]) + (s.cut ? " -c "+ChunkArg(s.cut) : string());
+    if( s.m==M_MP3PACK ) d += " -t " + Num(th[G_AUDIO]) + (s.cut ? " -c "+ChunkArg(s.cut) : string());
     if( s.m==M_AACPACK ) d += LevelSp(M_AACPACK) + ((s.part.size()>1) ? ", " + Num(s.part.size()) + " parts" : string());
     if( s.m==M_SHAR ) d += LevelSp(M_SHAR) + " (" + s.part[0].pk + ((s.part.size()>1) ? ", " + Num(s.part.size()) + " pieces" : string()) + ")";
     string n = "  " + s.name;
@@ -1758,6 +1837,7 @@ static void Init() {
   exe_dir.assign( &b[0], n );
   exe_dir.erase( exe_dir.size()-FileName( exe_dir ).size() );
   ev_abort = CreateEventW( 0, TRUE, FALSE, 0 );
+  ev_wake = CreateEventW( 0, FALSE, FALSE, 0 );
   // the tools die with us, however we end
   h_jobobj = CreateJobObjectW( 0, 0 );
   if( h_jobobj ) {
@@ -1766,6 +1846,19 @@ static void Init() {
     li.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
     if( !SetInformationJobObject( h_jobobj, JobObjectExtendedLimitInformation, &li, sizeof(li) ) ) { CloseHandle( h_jobobj ); h_jobobj = 0; }
   }
+}
+
+// the work directory removed (or kept: -k)
+static void DropWork() {
+  if( work.empty() ) return;
+  if( f_keep ) Msg( "work directory kept: " + U(work) );
+  else for( int i=0; i<20; i++ ) { // (a virus scanner may hold on to a file for a moment)
+    Remove( work );
+    if( !IsDir( work ) ) break;
+    if( i==19 ) Msg( "note: cannot remove the work directory " + U(work) );
+    else Sleep( 100 );
+  }
+  work.clear();
 }
 
 // a run's state as before it (mp4gui makes one run after another); not
@@ -1779,10 +1872,30 @@ static void NewRun() {
   work.clear(); n_log = 0; status_len = 0; phase.clear();
 }
 
+// the archive just made, d into a temporary file beside the work
+// directories, which Decompress checks (each stream and the whole, by the
+// index's CRCs); the file is removed after (mp4gui's Verify)
+static int Verify( const wstring& archive ) {
+  wstring base = WorkBase();
+  if( base.empty() ) return 2;
+  wstring tmp = base + L"mp4pack_" + W(Hex(GetCurrentProcessId())) + L"_verify.tmp";
+  Msg( "verify: d into " + U(tmp) );
+  NewRun();
+  t_start = GetTickCount64(); // (its own time)
+  f_dec = 1;
+  int r = Decompress( archive, tmp );
+  f_dec = 0;
+  Remove( LongPath(tmp) );
+  DropWork();
+  if( !f_abort ) Msg( r ? "verify failed" : "verified" );
+  return r;
+}
+
 // c or d (f_dec) of in to out, with the options as set: t_spec, c_spec, the
 // levels (ParseLevels), cap (-i), w_base and the flags; the exit code
 static int Run( const wstring& in, const wstring& out ) {
   NewRun();
+  held = 0;
   // the CPU: its threads (or the free ones), and the tool builds it runs
   CpuThreads();
   CpuTargets();
@@ -1805,16 +1918,9 @@ static int Run( const wstring& in, const wstring& out ) {
 
   wstring fi = FullPath( in ), fo = FullPath( out );
   int r = f_dec ? Decompress( fi, fo ) : Compress( fi, fo );
+  DropWork();
+  if( (r==0) && f_verify && !f_dec && !f_abort ) r = Verify( fo );
   if( f_abort ) { Msg( "aborted" ); r = 5; }
-  if( work.size() ) {
-    if( f_keep ) Msg( "work directory kept: " + U(work) );
-    else for( int i=0; i<20; i++ ) { // (a virus scanner may hold on to a file for a moment)
-      Remove( work );
-      if( !IsDir( work ) ) break;
-      if( i==19 ) Msg( "note: cannot remove the work directory " + U(work) );
-      else Sleep( 100 );
-    }
-  }
   return r;
 }
 
@@ -1851,11 +1957,13 @@ static const char usage[] =
 "        0: no packer for that group, its files go to shar (for shar\n"
 "        itself: they are stored as they are)\n"
 "  -c C  part sizes, in the same order: MB, or KB with k (e.g. -c 4,512k);\n"
-"        0 or missing: the default. h264p and mp3pack get it as their -c;\n"
-"        aacpack's input is cut at ADTS frames into parts of at least that\n"
-"        (default: one part per thread, 1MB at least); with more than one\n"
-"        thread, other files bigger than it (default 64MB) are cut into\n"
-"        pieces, an archive for each. The fonts make one solid archive.\n"
+"        0 or missing: a part for each thread, a stream's size over its\n"
+"        group's threads (1MB at least), h264p's and mp3pack's no bigger\n"
+"        than their share of the free memory (they take about 2 and 10\n"
+"        times a part). h264p and mp3pack get it as their -c; aacpack's\n"
+"        input is cut at ADTS frames into parts of at least that; with more\n"
+"        than one thread, other files bigger than it are cut into pieces,\n"
+"        an archive for each. The fonts make one solid archive.\n"
 "  -l L  compression levels, in the same order, joined by , (or +); missing\n"
 "        or empty: the tool's default. h264p and aacpack: 1 to 9, as their\n"
 "        builds have them (now h264p 9 7 5 3 1, aacpack 9; 9 is the strongest\n"

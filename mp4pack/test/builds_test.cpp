@@ -5,7 +5,7 @@
 // TOOLDIR that would run there (as mp4pack's "tools:" line), or why none.
 // The builds can be empty files: only their names count. Build like
 // parse_test (on Linux: g++ -std=c++11 -pthread -o builds_test test/builds_test.cpp).
-#include "../../cpuinfo/x86targets.h"
+#include "../x86targets.h"
 namespace x86 {
 static const char* dump;
 inline bool ReadDump( Cpuid& d ) { return ParseCpuid( d, dump ); }

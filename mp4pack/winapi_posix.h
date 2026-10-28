@@ -179,6 +179,10 @@ struct BY_HANDLE_FILE_INFORMATION {
   DWORD dwFileAttributes; FILETIME ftCreationTime, ftLastAccessTime, ftLastWriteTime;
   DWORD dwVolumeSerialNumber, nFileSizeHigh, nFileSizeLow, nNumberOfLinks, nFileIndexHigh, nFileIndexLow;
 };
+struct MEMORYSTATUSEX {
+  DWORD dwLength, dwMemoryLoad; ULONGLONG ullTotalPhys, ullAvailPhys, ullTotalPageFile, ullAvailPageFile,
+  ullTotalVirtual, ullAvailVirtual, ullAvailExtendedVirtual;
+};
 struct SYSTEM_INFO {
   WORD wProcessorArchitecture, wReserved; DWORD dwPageSize; void *lpMinimumApplicationAddress, *lpMaximumApplicationAddress;
   uintptr_t dwActiveProcessorMask; DWORD dwNumberOfProcessors, dwProcessorType, dwAllocationGranularity; WORD wProcessorLevel, wProcessorRevision;
@@ -799,6 +803,25 @@ inline void GetSystemInfo( SYSTEM_INFO* si ) {
   si->dwAllocationGranularity = 65536;
 }
 
+// the physical memory, all and available, from /proc/meminfo (the rest 0)
+inline BOOL GlobalMemoryStatusEx( MEMORYSTATUSEX* m ) {
+  ULONGLONG total = 0, avail = 0;
+  unsigned long long kb;
+  char k[64];
+  FILE* f = fopen( "/proc/meminfo", "r" );
+  if( !f ) { SetLastError( ERROR_NOT_SUPPORTED ); return FALSE; }
+  while( fscanf( f, "%63s %llu kB ", k, &kb )==2 ) {
+    if( !strcmp( k, "MemTotal:" ) ) total = ULONGLONG(kb)<<10;
+    if( !strcmp( k, "MemAvailable:" ) ) avail = ULONGLONG(kb)<<10;
+  }
+  fclose( f );
+  DWORD n = m->dwLength;
+  memset( m, 0, sizeof(*m) );
+  m->dwLength = n; m->ullTotalPhys = total; m->ullAvailPhys = avail;
+  m->dwMemoryLoad = total ? DWORD( 100-avail*100/total ) : 0;
+  return total!=0;
+}
+
 // the times of all CPUs together from /proc/stat, in 100ns; the kernel time
 // includes the idle time (as on Windows)
 inline BOOL GetSystemTimes( FILETIME* idle, FILETIME* kernel, FILETIME* user ) {
@@ -1049,6 +1072,11 @@ inline BOOL CreateProcessW( const wchar_t* app, wchar_t* cmd, SECURITY_ATTRIBUTE
 }
 
 inline DWORD ResumeThread( HANDLE ) { return 0; }
+
+inline DWORD GetProcessId( HANDLE h ) {
+  WpObj* o = (WpObj*)h;
+  return (o && (o->kind==WP_PROCESS)) ? DWORD( o->pid ) : 0;
+}
 
 inline BOOL GetExitCodeProcess( HANDLE h, DWORD* code ) {
   WpObj* o = (WpObj*)h;

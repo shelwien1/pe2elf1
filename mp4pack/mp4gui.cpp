@@ -1,11 +1,14 @@
 // mp4gui.cpp -- mp4pack in a window (Windows): mp4pack.cpp itself, with the
-// files (Open/Save dialogs, or dropped on the window), its options, the CPU
-// and the tool builds it would run, and while it runs the progress (overall,
-// per job, in the taskbar) and its messages, in place of the command line.
+// files (Open/Save dialogs, or dropped on the window), its options, and while
+// it runs the progress of each of its tasks (each stream's packer, avip, the
+// final shar) and of the whole (also in the taskbar), the gain of each task
+// when it is done, and its messages, in place of the command line. CPU Info
+// shows the CPU and the tool builds.
 //
 // Run, mp4pack's whole run, works on a thread of its own here; msg_hook and
-// status_hook bring its messages and progress over, and Stop sets its abort
-// flag as Ctrl+C does. The settings are kept in mp4gui.ini beside it.
+// status_hook bring its messages and progress over. Stop sets its abort flag
+// as Ctrl+C does, Pause its f_pause (the tools are held, not ended). The
+// settings are kept in mp4gui.ini beside it.
 //
 // Plain Win32 (MinGW-w64; the same with the MSVC target, without -municode):
 //   g++ -std=c++11 -O2 -s -static -municode -mwindows -o mp4gui.exe mp4gui.cpp
@@ -33,48 +36,53 @@
 #include <shobjidl.h>
 
 enum {
-  ID_COMP = 100, ID_DEC, ID_IN, ID_INB, ID_OUT, ID_OUTB, ID_T, ID_FREE, ID_FREEUD, ID_F, ID_LH, ID_LA, ID_LS,
-  ID_C, ID_I, ID_W, ID_WB, ID_K, ID_CPU, ID_DETAILS, ID_LOG, ID_START, ID_STOP, ID_STATUS, ID_PHASE, ID_PCT
+  ID_COMP = 100, ID_DEC, ID_VERIFY, ID_CPU, ID_IN, ID_INB, ID_OUT, ID_OUTB, ID_W, ID_WB, ID_WTEMP, ID_WOUT, ID_K,
+  ID_T, ID_FREE, ID_FREEUD, ID_F, ID_LH, ID_LA, ID_LS, ID_LOG, ID_START, ID_PAUSE, ID_STOP, ID_STATUS, ID_PHASE, ID_PCT
 };
 enum { WM_LOG = WM_APP+1, WM_PROG, WM_DONE };  // from the run's thread
 enum { T_TICK = 1, T_OPTS };                    // timers: the clock while it runs; options changed
-static const int NJ = 4;                        // job rows
+static const int NJ = 12;                       // task rows, at most
 
 static HINSTANCE hinst;
-static HWND hwnd, hcpu;           // the window; the CPU details window
+static HWND hwnd, hcpu;           // the window; the CPU Info window
 static HFONT font, mono;          // the system's message font; a fixed one
 static int bx, by;                // the font's average character width and height
 static int rh, lw;                // a row's height; the labels' width
 static int log_y;                 // where the log begins (the rest is above it)
+static int nrows;                 // task rows shown
 
-static HWND c_comp, c_dec, l_in, c_in, c_inb, l_out, c_out, c_outb;
-static HWND g_opt, l_t, c_t, l_free, c_free, c_freeud, c_f, c_plan;
-static HWND l_l, l_lh, c_lh, l_la, c_la, l_ls, c_ls, l_c, c_c, h_c, l_i, c_i, h_i, l_w, c_w, c_wb, c_k;
-static HWND g_cpu, c_cpu, c_details;
+static HWND c_comp, c_dec, c_verify, c_cpu, l_in, c_in, c_inb, l_out, c_out, c_outb, l_w, c_w, c_wb, c_wtemp, c_wout, c_k;
+static HWND g_opt, l_t, c_t, l_free, c_free, c_freeud, c_f, c_plan, l_l, l_lh, c_lh, l_la, c_la, l_ls, c_ls;
 static HWND g_prog, c_phase, c_bar, c_pct, c_time, c_jl[NJ], c_jb[NJ], c_jp[NJ];
-static HWND c_log, c_status, c_start, c_stop;
+static HWND c_log, c_status, c_start, c_pause, c_stop;
+static int jl_gray[NJ], jp_color[NJ], pct_blue; // colors: a task waiting (gray); a gain (1, blue), failed (2, red)
 
 static wstring out_auto;          // the output name we made from the input's (else the user's)
 static wstring out_ok;            // an existing output the user chose to overwrite
-static int plan_bad, c_bad, i_bad;
-static string details;            // the CPU details window's text (made when idle)
+static int plan_bad;
+static string details;            // the CPU Info window's text (made when idle)
 
 //---- the run
 
 static HANDLE h_run;              // its thread
 static int running, closing;      // closing: the window goes when it ends
 static wstring run_in, run_out;
-static qword run_t0;
+static int run_dec, run_verify;   // d; c, then Verify's d
+static qword run_t0, paused_at;
 static CRITICAL_SECTION qlock;    // for what the run's thread hands over:
 static string log_q;              //   messages (UTF-8 lines)
-struct JobRow { string label; double frac; int est; }; // frac -1: not known; est: a guess
+struct JobRow { string label; int st; double frac; int est, pack; qword work, made; }; // frac -1: not known; est: a guess
 struct Prog { string phase; double frac; qword eta; vector<JobRow> jobs; };
 static Prog prog_q;               //   the progress
 static int log_posted, prog_posted;
 static Prog prog;                 // the progress shown
 static qword prog_at;             // when it came
 static double shown;              // the overall bar (it does not go back)
-static string result;             // the last message: the sizes and the time when all went well
+static string result;             // the sizes and the time, when all went well
+
+// a task: a job, or a stream's parts (aacpack's, shar's pieces) together
+struct Task { string key, label; int st, est, pack; double frac; qword work, made; };
+static vector<Task> tasks;        // this run's, as they came
 
 static void HookMsg( const string& s ) {
   EnterCriticalSection( &qlock );
@@ -84,13 +92,15 @@ static void HookMsg( const string& s ) {
   if( post ) PostMessageW( hwnd, WM_LOG, 0, 0 );
 }
 
-static void HookStatus( double frac, qword eta, const vector<Job*>& run ) {
+static void HookStatus( double frac, qword eta, const vector<Job*>& all ) {
   Prog p;
   p.phase = phase; p.frac = frac; p.eta = eta;
-  for( size_t i=0; i<run.size(); i++ ) {
-    double f = run[i]->prog ? Frac( *run[i] ) : -1;
-    if( (run[i]->prog==4) && (f==0) ) f = -1; // (measured by what it has written, and nothing yet: ttfcomp x writes at the end)
-    JobRow r = { run[i]->label, f, (run[i]->prog==4) && !f_dec };
+  int pack = !f_dec && (phase=="packing");
+  for( size_t i=0; i<all.size(); i++ ) {
+    Job& j = *all[i];
+    double f = (j.st==2) ? 1 : (j.st==5) ? j.frac : (j.st!=1) ? 0 : j.prog ? Frac( j ) : -1; // (stopped: where it was)
+    if( (j.st==1) && (j.prog==4) && (f==0) ) f = -1; // (measured by what it has written, and nothing yet: ttfcomp x writes at the end)
+    JobRow r = { j.label, j.st, f, (j.prog==4) && !f_dec, pack, j.work, j.made };
     p.jobs.push_back( r );
   }
   EnterCriticalSection( &qlock );
@@ -125,7 +135,7 @@ static void TaskbarInit() {
 static void TaskbarShow( TBPFLAG st, double f ) {
   if( !taskbar ) return;
   taskbar->SetProgressState( hwnd, st );
-  if( st==TBPF_NORMAL ) taskbar->SetProgressValue( hwnd, ULONGLONG(f*1000), 1000 );
+  if( (st==TBPF_NORMAL) || (st==TBPF_PAUSED) ) taskbar->SetProgressValue( hwnd, ULONGLONG(f*1000), 1000 );
 }
 
 //---- controls
@@ -146,6 +156,19 @@ static void SetText( HWND h, const wstring& s ) {
   if( Text( h )!=s ) SetWindowTextW( h, s.c_str() ); // (no flicker for the same)
 }
 
+// a path pasted in quotes (as Explorer's "Copy as path" gives it): without
+// them, as no file name has any; 1 if there were
+static int Unquote( HWND h ) {
+  int n = GetWindowTextLengthW( h );
+  vector<wchar_t> b( n+1 );
+  wstring s( &b[0], GetWindowTextW( h, &b[0], n+1 ) );
+  if( s.find( L'"' )==wstring::npos ) return 0;
+  s.erase( std::remove( s.begin(), s.end(), L'"' ), s.end() );
+  SetWindowTextW( h, s.c_str() );
+  SendMessageW( h, EM_SETSEL, s.size(), s.size() );
+  return 1;
+}
+
 static int Checked( HWND h ) { return SendMessageW( h, BM_GETCHECK, 0, 0 )==BST_CHECKED; }
 static void Check( HWND h, int on ) { SendMessageW( h, BM_SETCHECK, on ? BST_CHECKED : BST_UNCHECKED, 0 ); }
 
@@ -156,7 +179,7 @@ static HWND Make( const wchar_t* cls, const wchar_t* text, DWORD style, int id =
 }
 
 static HWND Label( const wchar_t* t ) { return Make( L"STATIC", t, SS_LEFT|SS_CENTERIMAGE ); }
-static HWND Note() { return Make( L"STATIC", L"", SS_LEFTNOWORDWRAP|SS_NOPREFIX|SS_CENTERIMAGE|SS_ENDELLIPSIS ); }
+static HWND Note( int id = 0 ) { return Make( L"STATIC", L"", SS_LEFTNOWORDWRAP|SS_NOPREFIX|SS_CENTERIMAGE|SS_ENDELLIPSIS, id ); }
 static HWND Edit( int id, DWORD st = 0 ) { return Make( L"EDIT", L"", WS_TABSTOP|ES_AUTOHSCROLL|st, id, WS_EX_CLIENTEDGE ); }
 static HWND Button( const wchar_t* t, int id, DWORD st = BS_PUSHBUTTON ) { return Make( L"BUTTON", t, WS_TABSTOP|st, id ); }
 static HWND Group( const wchar_t* t ) { return Make( L"BUTTON", t, BS_GROUPBOX ); }
@@ -186,108 +209,114 @@ static const char* const s_items[] = { "default", "22", "20", "19", "15", "9", "
 static void MakeControls() {
   c_comp = Button( L"&Compress", ID_COMP, BS_AUTORADIOBUTTON|WS_GROUP );
   c_dec = Button( L"&Decompress", ID_DEC, BS_AUTORADIOBUTTON );
-  l_in = Label( L"&Input" ); c_in = Edit( ID_IN, WS_GROUP ); c_inb = Button( L"...", ID_INB );
+  c_verify = Button( L"&Verify", ID_VERIFY, BS_AUTOCHECKBOX|WS_GROUP );
+  c_cpu = Button( L"CPU I&nfo", ID_CPU );
+  l_in = Label( L"&Input" ); c_in = Edit( ID_IN ); c_inb = Button( L"...", ID_INB );
   l_out = Label( L"&Output" ); c_out = Edit( ID_OUT ); c_outb = Button( L"...", ID_OUTB );
+  l_w = Label( L"&Work dir" ); c_w = Edit( ID_W ); c_wb = Button( L"...", ID_WB );
+  c_wtemp = Button( L"%TEMP%", ID_WTEMP ); c_wout = Button( L"Output dir", ID_WOUT ); c_k = Button( L"&keep it", ID_K, BS_AUTOCHECKBOX );
 
   g_opt = Group( L"Options" );
   l_t = Label( L"&Threads" ); c_t = Combo( ID_T, CBS_DROPDOWN|CBS_AUTOHSCROLL, t_items, 4 );
   l_free = Label( L"keep free" ); c_free = Edit( ID_FREE, ES_NUMBER|ES_RIGHT );
   c_freeud = Make( UPDOWN_CLASSW, L"", UDS_SETBUDDYINT|UDS_ALIGNRIGHT|UDS_ARROWKEYS|UDS_NOTHOUSANDS, ID_FREEUD );
-  c_f = Button( L"count only the &free ones (-f)", ID_F, BS_AUTOCHECKBOX );
+  c_f = Button( L"only currently idle t&hreads", ID_F, BS_AUTOCHECKBOX );
   c_plan = Note();
   l_l = Label( L"&Levels" );
   l_lh = Label( L"h264p" ); c_lh = Combo( ID_LH, CBS_DROPDOWNLIST, l_items, 10 );
   l_la = Label( L"aacpack" ); c_la = Combo( ID_LA, CBS_DROPDOWNLIST, l_items, 10 );
   l_ls = Label( L"shar" ); c_ls = Combo( ID_LS, CBS_DROPDOWN, s_items, 11 );
-  l_c = Label( L"P&art sizes" ); c_c = Edit( ID_C ); h_c = Note();
-  l_i = Label( L"Tool &builds" ); c_i = Combo( ID_I, CBS_DROPDOWN|CBS_AUTOHSCROLL, 0, 0 ); h_i = Note();
-  l_w = Label( L"&Work dir" ); c_w = Edit( ID_W ); c_wb = Button( L"...", ID_WB ); c_k = Button( L"&keep it", ID_K, BS_AUTOCHECKBOX );
-
-  g_cpu = Group( L"CPU and tool builds" );
-  c_cpu = Make( L"EDIT", L"", ES_MULTILINE|ES_READONLY|WS_VSCROLL, ID_CPU );
-  c_details = Button( L"D&etails...", ID_DETAILS );
 
   g_prog = Group( L"Progress" );
-  c_phase = Make( L"STATIC", L"", SS_LEFTNOWORDWRAP|SS_NOPREFIX|SS_CENTERIMAGE|SS_ENDELLIPSIS, ID_PHASE );
-  c_bar = Bar(); c_pct = Make( L"STATIC", L"", SS_RIGHT|SS_CENTERIMAGE, ID_PCT );
+  c_phase = Note( ID_PHASE ); c_bar = Bar(); c_pct = Make( L"STATIC", L"", SS_RIGHT|SS_CENTERIMAGE, ID_PCT );
   c_time = Note();
   for( int i=0; i<NJ; i++ ) { c_jl[i] = Note(); c_jb[i] = Bar(); c_jp[i] = Make( L"STATIC", L"", SS_RIGHT|SS_CENTERIMAGE ); }
 
   c_log = Make( L"EDIT", L"", WS_TABSTOP|ES_MULTILINE|ES_READONLY|WS_VSCROLL|WS_HSCROLL|ES_AUTOVSCROLL|ES_AUTOHSCROLL, ID_LOG, WS_EX_CLIENTEDGE );
   SendMessageW( c_log, WM_SETFONT, (WPARAM)mono, FALSE );
   SendMessageW( c_log, EM_SETLIMITTEXT, 0x7FFFFFFE, 0 );
-  c_status = Make( L"STATIC", L"", SS_LEFTNOWORDWRAP|SS_NOPREFIX|SS_CENTERIMAGE|SS_ENDELLIPSIS, ID_STATUS );
+  c_status = Note( ID_STATUS );
   c_start = Button( L"&Start", ID_START, BS_DEFPUSHBUTTON );
+  c_pause = Button( L"P&ause", ID_PAUSE );
   c_stop = Button( L"Sto&p", ID_STOP );
 
   SendMessageW( c_freeud, UDM_SETBUDDY, (WPARAM)c_free, 0 );
   SendMessageW( c_freeud, UDM_SETRANGE32, 0, std::max( cpu_threads-1, 0 ) );
   SendMessageW( c_w, EM_SETCUEBANNER, TRUE, (LPARAM)L"the temp directory" ); // (comctl32 6)
-  SendMessageW( c_c, EM_SETCUEBANNER, TRUE, (LPARAM)L"the defaults" );
-  DWORD ts = 44; // the CPU box's tab stop, in dialog units
-  SendMessageW( c_cpu, EM_SETTABSTOPS, 1, (LPARAM)&ts );
-  const wchar_t* lab[] = { L"&Input", L"&Output", L"&Threads", L"&Levels", L"P&art sizes", L"Tool &builds", L"&Work dir" };
+  const wchar_t* lab[] = { L"&Input", L"&Output", L"&Work dir", L"&Threads", L"&Levels" };
   lw = 0;
-  for( int i=0; i<7; i++ ) lw = std::max( lw, TextWidth( lab[i] ) );
+  for( int i=0; i<5; i++ ) lw = std::max( lw, TextWidth( lab[i] ) );
   lw += DX(6);
 }
 
-// a row of controls is rh high; the rest follows from the font
+// a row of controls is rh high; the rest follows from the font, and the
+// task rows from how many tasks there are
 static void Layout() {
   RECT rc; GetClientRect( hwnd, &rc );
   int W = rc.right, H = rc.bottom;
   int m = DX(6), gap = DY(3), pad = DX(6), gc = by+DY(1), sp = DX(4); // gc: a group box's caption
-  int rw = DX(176), xr = W-m-rw;    // the CPU column
-  int x0 = m, wl = xr-sp-m;         // the left one
-  int bw = DX(18), y = m;
-  Place( c_comp, x0, y, DX(52), rh ); Place( c_dec, x0+DX(56), y, DX(60), rh ); y += rh+gap;
-  Place( l_in, x0, y, lw, rh ); Place( c_in, x0+lw, y, wl-lw-bw-sp, rh ); Place( c_inb, x0+wl-bw, y, bw, rh ); y += rh+gap;
-  Place( l_out, x0, y, lw, rh ); Place( c_out, x0+lw, y, wl-lw-bw-sp, rh ); Place( c_outb, x0+wl-bw, y, bw, rh ); y += rh+gap;
+  int x0 = m, wl = W-2*m, xr = x0+wl, bw = DX(18), y = m;
+  int cw = TextWidth( L"CPU Info" )+DX(12);
+  Place( c_comp, x0, y, DX(52), rh ); Place( c_dec, x0+DX(56), y, DX(60), rh );
+  Place( c_verify, x0+DX(124), y, TextWidth( L"Verify" )+DX(16), rh );
+  Place( c_cpu, xr-cw, y, cw, rh ); y += rh+gap;
+  Place( l_in, x0, y, lw, rh ); Place( c_in, x0+lw, y, wl-lw-bw-sp, rh ); Place( c_inb, xr-bw, y, bw, rh ); y += rh+gap;
+  Place( l_out, x0, y, lw, rh ); Place( c_out, x0+lw, y, wl-lw-bw-sp, rh ); Place( c_outb, xr-bw, y, bw, rh ); y += rh+gap;
+  int kw = TextWidth( L"keep it" )+DX(16), ow = TextWidth( L"Output dir" )+DX(10), tw = TextWidth( L"%TEMP%" )+DX(10), a = xr;
+  Place( c_k, a-kw, y, kw, rh ); a -= kw+sp;
+  Place( c_wout, a-ow, y, ow, rh ); a -= ow+sp;
+  Place( c_wtemp, a-tw, y, tw, rh ); a -= tw+sp;
+  Place( c_wb, a-bw, y, bw, rh ); a -= bw+sp;
+  Place( l_w, x0, y, lw, rh ); Place( c_w, x0+lw, y, a-x0-lw, rh ); y += rh+gap;
 
   int gy = y, x = x0+pad, w = wl-2*pad, xc = x+lw;
   y += gc;
-  int tw = DX(64), fw = DX(30), lfw = TextWidth( L"keep free" )+sp;
-  Place( l_t, x, y, lw, rh ); Place( c_t, xc, y, tw, rh+DY(80) );
-  Place( l_free, xc+tw+sp*2, y, lfw, rh ); Place( c_free, xc+tw+sp*2+lfw, y, fw, rh );
+  int tcw = DX(64), fw = DX(30), lfw = TextWidth( L"keep free" )+sp;
+  Place( l_t, x, y, lw, rh ); Place( c_t, xc, y, tcw, rh+DY(80) );
+  Place( l_free, xc+tcw+sp*2, y, lfw, rh ); Place( c_free, xc+tcw+sp*2+lfw, y, fw, rh );
   SendMessageW( c_freeud, UDM_SETBUDDY, (WPARAM)c_free, 0 ); // (it moves with it)
-  Place( c_f, xc+tw+sp*4+lfw+fw, y, x+w-(xc+tw+sp*4+lfw+fw), rh ); y += rh;
+  a = xc+tcw+sp*4+lfw+fw;
+  Place( c_f, a, y, x+w-a, rh ); y += rh;
   Place( c_plan, xc, y, x+w-xc, by+DY(3) ); y += by+DY(3)+gap;
-  int lc = DX(50), a = xc;
-  int w1 = TextWidth( L"h264p" )+sp, w2 = TextWidth( L"aacpack" )+sp, w3 = TextWidth( L"shar" )+sp;
+  int lc = DX(50), w1 = TextWidth( L"h264p" )+sp, w2 = TextWidth( L"aacpack" )+sp, w3 = TextWidth( L"shar" )+sp;
+  a = xc;
   Place( l_l, x, y, lw, rh );
   Place( l_lh, a, y, w1, rh ); a += w1; Place( c_lh, a, y, lc, rh+DY(100) ); a += lc+sp*3;
   Place( l_la, a, y, w2, rh ); a += w2; Place( c_la, a, y, lc, rh+DY(100) ); a += lc+sp*3;
-  Place( l_ls, a, y, w3, rh ); a += w3; Place( c_ls, a, y, lc, rh+DY(100) ); y += rh+gap;
-  Place( l_c, x, y, lw, rh ); Place( c_c, xc, y, tw, rh ); Place( h_c, xc+tw+sp*2, y, x+w-(xc+tw+sp*2), rh ); y += rh+gap;
-  Place( l_i, x, y, lw, rh ); Place( c_i, xc, y, DX(100), rh+DY(120) );
-  Place( h_i, xc+DX(100)+sp*2, y, x+w-(xc+DX(100)+sp*2), rh ); y += rh+gap;
-  int kw = TextWidth( L"keep it" )+DX(16);
-  Place( l_w, x, y, lw, rh ); Place( c_w, xc, y, x+w-xc-bw-kw-sp*2, rh ); Place( c_wb, x+w-kw-bw-sp, y, bw, rh );
-  Place( c_k, x+w-kw, y, kw, rh ); y += rh+DY(4);
+  Place( l_ls, a, y, w3, rh ); a += w3; Place( c_ls, a, y, lc, rh+DY(100) ); y += rh+DY(4);
   Place( g_opt, x0, gy, wl, y-gy ); y += gap;
 
-  Place( g_cpu, xr, m, rw, y-gap-m );
-  Place( c_cpu, xr+pad, m+gc, rw-2*pad, y-gap-m-gc-rh-DY(8) );
-  Place( c_details, xr+rw-pad-DX(50), y-gap-rh-DY(4), DX(50), rh );
-
   gy = y; y += gc;
-  int pw = DX(30), jw = DX(116), bx0 = x0+pad+jw, bw0 = W-m-pad-pw-sp-bx0, jh = by+DY(4);
-  Place( c_phase, x0+pad, y, jw, rh ); Place( c_bar, bx0, y+DY(2), bw0, rh-DY(4) ); Place( c_pct, W-m-pad-pw, y, pw, rh ); y += rh;
-  Place( c_time, x0+pad, y, W-2*m-2*pad, jh ); y += jh+gap;
+  int pw = DX(30), jw = DX(116), bx0 = x0+pad+jw, bw0 = xr-pad-pw-sp-bx0, jh = by+DY(4);
+  Place( c_phase, x0+pad, y, jw, rh ); Place( c_bar, bx0, y+DY(2), bw0, rh-DY(4) ); Place( c_pct, xr-pad-pw, y, pw, rh ); y += rh;
+  Place( c_time, x0+pad, y, wl-2*pad, jh ); y += jh+gap;
   for( int i=0; i<NJ; i++ ) {
-    Place( c_jl[i], x0+pad+DX(8), y, jw-DX(8), jh ); Place( c_jb[i], bx0, y+DY(2), bw0, jh-DY(4) ); Place( c_jp[i], W-m-pad-pw, y, pw, jh );
-    y += jh;
+    int yi = y+std::min( i, nrows )*jh; // (the hidden ones at the end)
+    Place( c_jl[i], x0+pad+DX(8), yi, jw-DX(8), jh ); Place( c_jb[i], bx0, yi+DY(2), bw0, jh-DY(4) ); Place( c_jp[i], xr-pad-pw, yi, pw, jh );
   }
-  y += DY(4);
-  Place( g_prog, x0, gy, W-2*m, y-gy ); y += gap;
+  y += nrows*jh+DY(4);
+  Place( g_prog, x0, gy, wl, y-gy ); y += gap;
 
   log_y = y;
   int yb = H-m-rh, bb = DX(52);
-  Place( c_log, x0, y, W-2*m, yb-gap-y );
-  Place( c_status, x0, yb, W-2*m-2*bb-3*sp, rh );
-  Place( c_start, W-m-2*bb-sp, yb, bb, rh );
-  Place( c_stop, W-m-bb, yb, bb, rh );
+  Place( c_log, x0, y, wl, yb-gap-y );
+  Place( c_status, x0, yb, wl-3*bb-4*sp, rh );
+  Place( c_start, xr-3*bb-2*sp, yb, bb, rh );
+  Place( c_pause, xr-2*bb-sp, yb, bb, rh );
+  Place( c_stop, xr-bb, yb, bb, rh );
   InvalidateRect( hwnd, 0, TRUE );
+}
+
+// the window taller when the log would be too short (more task rows)
+static void Fit() {
+  RECT rc, wr, wa;
+  GetClientRect( hwnd, &rc );
+  int need = log_y+DY(36)+DY(3)+rh+DX(6);
+  if( (rc.bottom>=need) || IsZoomed( hwnd ) ) return;
+  GetWindowRect( hwnd, &wr );
+  int h = wr.bottom-wr.top+need-rc.bottom;
+  if( SystemParametersInfoW( SPI_GETWORKAREA, 0, &wa, 0 ) ) h = std::min<int>( h, wa.bottom-wr.top );
+  SetWindowPos( hwnd, 0, 0, 0, wr.right-wr.left, h, SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE );
 }
 
 //---- settings: mp4gui.ini beside us
@@ -303,14 +332,13 @@ static wstring IniGet( const wchar_t* k, const wchar_t* def ) {
 static void IniSet( const wchar_t* k, const wstring& v ) { WritePrivateProfileStringW( L"mp4gui", k, v.c_str(), Ini().c_str() ); }
 
 static void Load() {
+  Check( c_verify, IniGet( L"verify", L"0" )==L"1" );
   SetText( c_t, IniGet( L"threads", L"100%,100%" ) );
   SetText( c_free, IniGet( L"free", L"0" ) );
   Check( c_f, IniGet( L"count_free", L"0" )==L"1" );
   SendMessageW( c_lh, CB_SELECTSTRING, (WPARAM)-1, (LPARAM)IniGet( L"level_h264p", L"default" ).c_str() );
   SendMessageW( c_la, CB_SELECTSTRING, (WPARAM)-1, (LPARAM)IniGet( L"level_aacpack", L"default" ).c_str() );
   SetText( c_ls, IniGet( L"level_shar", L"default" ) );
-  SetText( c_c, IniGet( L"parts", L"" ) );
-  SetText( c_i, IniGet( L"builds", L"any that runs here" ) );
   SetText( c_w, IniGet( L"work", L"" ) );
   Check( c_k, IniGet( L"keep", L"0" )==L"1" );
   if( SendMessageW( c_lh, CB_GETCURSEL, 0, 0 )<0 ) SendMessageW( c_lh, CB_SETCURSEL, 0, 0 );
@@ -326,14 +354,13 @@ static void Load() {
 }
 
 static void Save() {
+  IniSet( L"verify", Checked( c_verify ) ? L"1" : L"0" );
   IniSet( L"threads", Text( c_t ) );
   IniSet( L"free", Text( c_free ) );
   IniSet( L"count_free", Checked( c_f ) ? L"1" : L"0" );
   IniSet( L"level_h264p", Text( c_lh ) );
   IniSet( L"level_aacpack", Text( c_la ) );
   IniSet( L"level_shar", Text( c_ls ) );
-  IniSet( L"parts", Text( c_c ) );
-  IniSet( L"builds", Text( c_i ) );
   IniSet( L"work", Text( c_w ) );
   IniSet( L"keep", Checked( c_k ) ? L"1" : L"0" );
   WINDOWPLACEMENT wp; wp.length = sizeof(wp);
@@ -345,8 +372,6 @@ static void Save() {
 }
 
 //---- the options
-
-static int Any( const wstring& s ) { return s.empty() || (_wcsnicmp( s.c_str(), L"any", 3 )==0); }
 
 // -t: the threads, and -N for those to keep free
 static string TSpec() {
@@ -363,21 +388,30 @@ static string LSpec() {
   return ((h>0) ? Num(10-h) : string()) + "," + ((a>0) ? Num(10-a) : string()) + ",," + s;
 }
 
-// the options into mp4pack's settings, as wmain sets them; 1 (and why) if one is bad
+// the work directory's field, with %VARIABLES% as they are now
+static wstring WorkDir() {
+  wstring s = Text( c_w );
+  DWORD n = ExpandEnvironmentStringsW( s.c_str(), 0, 0 );
+  if( !n ) return s;
+  vector<wchar_t> b( n+1 );
+  ExpandEnvironmentStringsW( s.c_str(), &b[0], n+1 );
+  return &b[0];
+}
+
+// the options into mp4pack's settings, as wmain sets them; 1 (and why) if one
+// is bad. The part sizes are mp4pack's own (a part for each thread, as the
+// memory allows: PartSize), the tool builds any that run here.
 static int Options( string& why ) {
   f_dec = Checked( c_dec );
+  f_verify = !f_dec && Checked( c_verify );
   f_free = Checked( c_f ); f_keep = Checked( c_k ); f_verbose = 0;
   t_spec = TSpec();
   if( ParseThreads( t_spec, cpu_threads ) ) { why = "Threads: " + t_spec + " is not N or N% (up to 4, joined by + or ,), with a -N at the end maybe."; return 1; }
-  c_spec = f_dec ? string() : U( Text( c_c ) ); // (c only)
-  if( c_spec.size() && ParseChunks( c_spec.c_str() ) ) { why = "Part sizes: " + c_spec + " is not MB (or KB with k) numbers joined by , (up to 4)."; return 1; }
+  c_spec.clear();
   string l = f_dec ? string() : LSpec();
   if( ParseLevels( l.c_str() ) ) { why = "Levels: shar's is -131072 to 22 (0 stores)."; return 1; }
-  wstring i = Text( c_i );
-  int bits;
-  cap = Any( i ) ? -1 : BuildOf( U(i), bits );
-  if( !Any( i ) && (cap<0) ) { why = "Tool builds: " + U(i) + " is not a -march target (haswell, x86-64-v3, znver4 ...)."; return 1; }
-  w_base = Text( c_w );
+  cap = -1;
+  w_base = WorkDir();
   return 0;
 }
 
@@ -387,14 +421,12 @@ static string CommandText() {
   if( t_spec.size() && (t_spec!="100%,100%") ) s += " -t " + Quote( t_spec );
   if( f_free ) s += " -f";
   if( !f_dec ) {
-    if( c_spec.size() ) s += " -c " + Quote( c_spec );
     string l = LSpec();
     if( l!=",,," ) s += " -l " + Quote( l );
   }
-  if( cap>=0 ) s += string( " -i " ) + x86::x86_target[cap].name;
   if( w_base.size() ) s += " -w " + Quote( U(w_base) );
   if( f_keep ) s += " -k";
-  return s + " " + Quote( U(run_in) ) + " " + Quote( U(run_out) );
+  return s + " " + Quote( U(run_in) ) + " " + Quote( U(run_out) ) + (f_verify ? "  (and Verify)" : "");
 }
 
 //---- the CPU and the tool builds
@@ -440,6 +472,8 @@ static string CpuText() {
   if( c.hybrid ) o += ", hybrid";
   if( c.hypervisor ) o += string( ", hypervisor " ) + (c.hv[0] ? c.hv : "?");
   o += "\r\nthreads   " + Num(cpu_threads) + (cpu_cores ? ", " + Num(cpu_cores) + " cores" : string()) + "\r\n";
+  MEMORYSTATUSEX ms; ms.dwLength = sizeof(ms);
+  if( GlobalMemoryStatusEx( &ms ) ) o += "memory    " + Num(ms.ullTotalPhys>>20) + "MB, " + Num(ms.ullAvailPhys>>20) + "MB free\r\n";
   vector<string> w;
   for( int i=0; i<c.ncache; i++ ) {
     const x86::Cache& k = c.cache[i];
@@ -478,7 +512,7 @@ static string CpuText() {
 // each tool's builds here: the one run (*), the others that run, those that
 // do not and why
 static string BuildsText() {
-  string o = "tool builds in " + U(exe_dir) + (cap>=0 ? string( ", those that run on " ) + x86::x86_target[cap].name + " too" : string()) + ":\r\n";
+  string o = "tool builds in " + U(exe_dir) + ":\r\n";
   for( int i=0; i<7; i++ ) {
     const Tool& t = GetTool( tool_names[i] );
     vector< std::pair<int,string> > v;
@@ -503,36 +537,17 @@ static string BuildsText() {
   return o;
 }
 
-// the options' effects, while nothing runs: the CPU box (the tool builds that
-// would run), the threads as they come out, and what is not right
+// the options' effects, while nothing runs: the threads as they come out (or
+// what is not right), and the CPU Info window's text
 static void Refresh() {
   if( running ) return;
-  wstring i = Text( c_i );
-  int bits;
-  cap = Any( i ) ? -1 : BuildOf( U(i), bits );
-  i_bad = !Any( i ) && (cap<0);
+  cap = -1;
   NewRun(); // (the tool builds found before)
   CpuTargets();
-  string o;
-  if( cpu_ok ) {
-    if( cpu.brand[0] ) o += string( cpu.brand ) + "\r\n";
-    o += Num(cpu_threads) + " threads" + (cpu_cores ? ", " + Num(cpu_cores) + " cores" : string());
-    o += cpu.level ? ", x86-64-v" + Num(cpu.level) : string( ", x86-32" );
-    o += "\r\nbest target: " + cpu_best + "\r\n";
-  } else o += "no CPUID: only builds without a target\r\n";
-  if( cap>=0 ) o += string( "builds that run on " ) + x86::x86_target[cap].name + " too\r\n";
-  o += "\r\n";
-  for( int k=0; k<7; k++ ) {
-    const Tool& t = GetTool( tool_names[k] );
-    o += tool_names[k] + "\t" + (t.path.size() ? t.file : t.later.size() ? string( "none runs here" ) : string( "none" )) + "\r\n";
-  }
-  SetText( c_cpu, W(o) );
   details = CpuText() + "\r\n" + BuildsText();
-  SetText( h_i, i_bad ? L"not a -march target" : L"only those that run on it too (-i)" );
-
-  string ts = TSpec();
+  if( hcpu ) SetText( GetDlgItem( hcpu, 1 ), W(details) );
+  string ts = TSpec(), p;
   plan_bad = ParseThreads( ts, cpu_threads );
-  string p;
   if( plan_bad ) p = "bad: N or N% (up to 4) joined by + or ,";
   else {
     p = "= " + ThreadText() + ": ";
@@ -540,27 +555,13 @@ static void Refresh() {
       p += s ? ", then " : "";
       for( size_t k=0; k<stages[s].size(); k++ ) p += string( k ? " + " : "" ) + g_name[stages[s][k]] + " " + Num(th[stages[s][k]]);
     }
-    if( Checked( c_f ) ) p += " (of the free ones then)";
+    if( Checked( c_f ) ) p += " (of the idle ones then)";
   }
   SetText( c_plan, W(p) );
-  string c = U( Text( c_c ) );
-  c_bad = c.size() && ParseChunks( c.c_str() );
-  SetText( h_c, c_bad ? L"bad: MB, or KB with k, joined by ," : L"MB, or KB with k: 4,512k" );
-  InvalidateRect( c_plan, 0, TRUE ); InvalidateRect( h_c, 0, TRUE ); InvalidateRect( h_i, 0, TRUE );
-  if( hcpu ) SetText( GetDlgItem( hcpu, 1 ), W(details) );
+  InvalidateRect( c_plan, 0, TRUE );
 }
 
-// the -i list: the x64 targets whose code runs here, best first
-static void FillTargets() {
-  wstring t = Text( c_i );
-  cap = -1;
-  CpuTargets();
-  SendMessageW( c_i, CB_ADDSTRING, 0, (LPARAM)L"any that runs here" );
-  for( int i=0; i<rk_n[0]; i++ ) SendMessageW( c_i, CB_ADDSTRING, 0, (LPARAM)W(x86::x86_target[rk[0][i].t].name).c_str() );
-  SetText( c_i, t );
-}
-
-//---- the details window
+//---- the CPU Info window
 
 static LRESULT CALLBACK CpuProc( HWND h, UINT msg, WPARAM wp, LPARAM lp ) {
   switch( msg ) {
@@ -577,7 +578,7 @@ static LRESULT CALLBACK CpuProc( HWND h, UINT msg, WPARAM wp, LPARAM lp ) {
   return DefWindowProcW( h, msg, wp, lp );
 }
 
-static void ShowDetails() {
+static void ShowCpu() {
   if( hcpu ) { ShowWindow( hcpu, SW_SHOWNORMAL ); SetForegroundWindow( hcpu ); return; }
   HDC dc = GetDC( hwnd );
   HGDIOBJ o = SelectObject( dc, mono );
@@ -586,7 +587,7 @@ static void ShowDetails() {
   RECT r = { 0, 0, tm.tmAveCharWidth*92, tm.tmHeight*40 };
   AdjustWindowRectEx( &r, WS_OVERLAPPEDWINDOW, FALSE, 0 );
   r.right += GetSystemMetrics( SM_CXVSCROLL );
-  hcpu = CreateWindowExW( 0, L"mp4gui_cpu", L"CPU and tool builds - mp4gui", WS_OVERLAPPEDWINDOW|WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT,
+  hcpu = CreateWindowExW( 0, L"mp4gui_cpu", L"CPU Info - mp4gui", WS_OVERLAPPEDWINDOW|WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT,
                           r.right-r.left, r.bottom-r.top, hwnd, 0, hinst, 0 );
 }
 
@@ -604,11 +605,14 @@ static void AutoOut() {
   SetText( c_out, n );
 }
 
+static void Enable();
+
 // a new input: the mode by its name (.mpk: d), and its output
 static void InputChanged() {
   wstring f = Text( c_in );
   if( f.size() ) { Check( c_dec, IsArchive( f ) ); Check( c_comp, !IsArchive( f ) ); }
   AutoOut();
+  Enable(); // (Verify and the levels: c only)
 }
 
 static void SetInput( const wstring& f ) { SetText( c_in, f ); SetFocus( c_start ); }
@@ -653,14 +657,25 @@ static void BrowseWork() {
   CoTaskMemFree( p );
 }
 
+// the work directory where the output goes (or the input, without one)
+static void WorkByOutput() {
+  wstring f = Text( c_out );
+  if( f.empty() ) f = Text( c_in );
+  if( f.empty() ) return;
+  f = FullPath( f );
+  SetText( c_w, f.substr( 0, f.size()-FileName( f ).size() ) );
+}
+
 //---- running
 
 static void Enable() {
   int idle = !running, dec = Checked( c_dec );
-  HWND all[] = { c_comp, c_dec, l_in, c_in, c_inb, l_out, c_out, c_outb, l_t, c_t, l_free, c_free, c_freeud, c_f, l_i, c_i, l_w, c_w, c_wb, c_k, c_start };
+  HWND all[] = { c_comp, c_dec, l_in, c_in, c_inb, l_out, c_out, c_outb, l_w, c_w, c_wb, c_wtemp, c_wout, c_k,
+                 l_t, c_t, l_free, c_free, c_freeud, c_f, c_start };
   for( size_t i=0; i<sizeof(all)/sizeof(all[0]); i++ ) EnableWindow( all[i], idle );
-  HWND copt[] = { l_l, l_lh, c_lh, l_la, c_la, l_ls, c_ls, l_c, c_c, h_c }; // (c only)
+  HWND copt[] = { c_verify, l_l, l_lh, c_lh, l_la, c_la, l_ls, c_ls }; // (c only)
   for( size_t i=0; i<sizeof(copt)/sizeof(copt[0]); i++ ) EnableWindow( copt[i], idle && !dec );
+  EnableWindow( c_pause, running && !f_abort );
   EnableWindow( c_stop, running && !f_abort );
 }
 
@@ -672,8 +687,9 @@ static void ShowLog() {
   s.swap( log_q ); log_posted = 0;
   LeaveCriticalSection( &qlock );
   if( s.empty() ) return;
-  // the result: "5939468 -> 2020271 (34.01%), 0:00:21" (c), "... -> ..., CRC ... OK, ..." (d)
-  for( size_t i=0; i<s.size(); ) {
+  // the result, the first of: "5939468 -> 2020271 (34.01%), 0:00:21" (c),
+  // "... -> ..., CRC ... OK, ..." (d; Verify's comes after c's)
+  for( size_t i=0; (i<s.size()) && result.empty(); ) {
     size_t e = s.find( "\r\n", i );
     if( e==string::npos ) e = s.size();
     if( (s[i]>='0') && (s[i]<='9') && (s.substr( i, e-i ).find( " -> " )!=string::npos) ) result = s.substr( i, e-i );
@@ -684,14 +700,21 @@ static void ShowLog() {
   SendMessageW( c_log, EM_REPLACESEL, FALSE, (LPARAM)W(s).c_str() );
 }
 
-// the whole run's share done, from its phase's: c is mostly packing (avip c
-// and shar a0 go at the disk's speed), d mostly unpacking
-static double Total( const string& ph, double f ) {
+static int Verifying( const string& ph ) { return run_verify && ((ph=="shar x") || (ph=="unpacking") || (ph=="avip d")); }
+
+// the whole run's share done, from its phase's (-1: no phase): c is mostly
+// packing (avip c and shar a0 go at the disk's speed), d mostly unpacking;
+// whole: with Verify, c in the first half, its d in the second
+static double Total( const string& ph, double f, int whole ) {
   static const struct { const char* ph; double a, b; } map[] = {
     { "avip c", 0, .03 }, { "packing", .03, .97 }, { "shar a0", .97, 1 },
     { "shar x", 0, .03 }, { "unpacking", .03, .97 }, { "avip d", .97, 1 } };
-  for( size_t i=0; i<sizeof(map)/sizeof(map[0]); i++ ) if( ph==map[i].ph ) return map[i].a + (map[i].b-map[i].a)*std::max( f, 0.0 );
-  return 0;
+  for( size_t i=0; i<sizeof(map)/sizeof(map[0]); i++ ) if( ph==map[i].ph ) {
+    double t = map[i].a + (map[i].b-map[i].a)*std::max( f, 0.0 );
+    if( whole && run_verify ) t = (i<3) ? t/2 : .5+t/2;
+    return t;
+  }
+  return -1;
 }
 
 static wstring Percent( double f ) { wchar_t b[16]; swprintf( b, 16, L"%.1f%%", 100*f ); return b; }
@@ -705,21 +728,108 @@ static void Marquee( HWND b, int on ) {
   if( on ) SendMessageW( b, PBM_SETMARQUEE, TRUE, 40 );
 }
 
-// job row i: shown with a label (else hidden), its share done (f<0: not known)
-static void JobRowShow( int i, const string& label, double f, int est ) {
-  int on = label.size()>0;
-  SetText( c_jl[i], W(label) );
-  Marquee( c_jb[i], on && (f<0) );
-  if( f>=0 ) SendMessageW( c_jb[i], PBM_SETPOS, int( f*1000 ), 0 );
-  SetText( c_jp[i], (on && (f>=0)) ? (est ? L"~" : L"") + Percent( f ) : wstring() );
+static Task* TaskOf( const string& key ) {
+  for( size_t i=0; i<tasks.size(); i++ ) if( tasks[i].key==key ) return &tasks[i];
+  Task t = Task();
+  t.key = t.label = key;
+  tasks.push_back( t );
+  return &tasks.back();
+}
+
+// the progress's jobs into this run's tasks: a stream's parts (label#N) as
+// one; Verify's d as one
+static void Tasks( const Prog& p ) {
+  if( Verifying( p.phase ) ) {
+    Task* t = TaskOf( "verify" );
+    t->label = "verify: d, the CRCs";
+    t->st = 1; t->frac = Total( p.phase, p.frac, 0 );
+    return;
+  }
+  struct Sum { string key; int n, wait, run, known, done, fail, stop, est, pack; double w, f; qword work, made; };
+  vector<Sum> v;
+  for( size_t i=0; i<p.jobs.size(); i++ ) {
+    const JobRow& j = p.jobs[i];
+    string k = j.label.substr( 0, j.label.find( '#' ) );
+    size_t s = 0;
+    while( (s<v.size()) && (v[s].key!=k) ) s++;
+    if( s==v.size() ) { Sum z = Sum(); z.key = k; v.push_back( z ); }
+    Sum& a = v[s];
+    double w = double( std::max<qword>( j.work, 1 ) );
+    a.n++; a.w += w; a.work += j.work; a.made += j.made; a.est |= j.est; a.pack |= j.pack;
+    if( j.st==0 ) a.wait++;
+    else if( j.st==1 ) { a.run++; if( j.frac>=0 ) { a.known++; a.f += w*j.frac; } }
+    else if( j.st==2 ) { a.done++; a.f += w; }
+    else if( j.st==3 ) a.fail++;
+    else if( j.st==5 ) { a.stop++; a.f += w*j.frac; }
+  }
+  for( size_t i=0; i<v.size(); i++ ) {
+    const Sum& a = v[i];
+    Task* t = TaskOf( a.key );
+    t->label = a.key + ((a.n>1) ? " (" + Num(a.n) + " parts)" : string());
+    t->st = a.fail ? 3 : a.stop ? 5 : (a.run || (a.done && a.wait)) ? 1 : a.wait ? 0 : 2;
+    t->frac = ((t->st==1) && !a.known && !a.done) ? -1 : a.f/a.w;
+    t->est = a.est; t->pack = a.pack; t->work = a.work; t->made = a.made;
+  }
+}
+
+// row i: a task (0: hidden), its bar, and its share done; when done its gain
+// (blue; Verify: OK), or that it failed (red) or was stopped
+static void RowShow( int i, const Task* t ) {
   HWND c[3] = { c_jl[i], c_jb[i], c_jp[i] };
-  for( int k=0; k<3; k++ ) ShowWindow( c[k], on ? SW_SHOWNA : SW_HIDE );
+  if( !t ) { for( int k=0; k<3; k++ ) ShowWindow( c[k], SW_HIDE ); return; }
+  int unknown = (t->st==1) && (t->frac<0), color = 0;
+  SetText( c_jl[i], W(t->label) );
+  Marquee( c_jb[i], unknown );
+  if( !unknown ) SendMessageW( c_jb[i], PBM_SETPOS, int( std::max( t->frac, 0.0 )*1000 ), 0 );
+  wstring p;
+  if( t->st==2 ) {
+    if( t->key=="verify" ) { p = L"OK"; color = 1; }
+    else if( t->pack && t->work ) { p = Percent( 1-double(t->made)/double(t->work) ); color = 1; }
+    else p = Percent( 1 );
+  } else if( t->st==3 ) { p = L"failed"; color = 2; }
+  else if( t->st==5 ) p = L"stopped";
+  else if( (t->st==1) && !unknown ) p = (t->est ? L"~" : L"") + Percent( t->frac );
+  SetText( c_jp[i], p );
+  if( (color!=jp_color[i]) || ((t->st==0)!=jl_gray[i]) ) {
+    jp_color[i] = color; jl_gray[i] = (t->st==0);
+    InvalidateRect( c_jp[i], 0, TRUE ); InvalidateRect( c_jl[i], 0, TRUE );
+  }
+  for( int k=0; k<3; k++ ) ShowWindow( c[k], SW_SHOWNA );
+}
+
+static void ShowRows() {
+  int n = int( std::min<size_t>( tasks.size(), size_t(NJ) ) );
+  if( n!=nrows ) { nrows = n; Layout(); Fit(); }
+  for( int i=0; i<NJ; i++ ) {
+    if( (i==NJ-1) && (tasks.size()>size_t(NJ)) ) { // the rest in one row
+      Task r = Task();
+      int st[6] = { 0 };
+      double f = 0;
+      for( size_t j=i; j<tasks.size(); j++ ) { st[tasks[j].st]++; f += std::max( tasks[j].frac, 0.0 ); }
+      r.label = "+" + Num(tasks.size()-i) + " more"; r.st = st[3] ? 3 : st[5] ? 5 : st[1] ? 1 : st[0] ? 0 : 2; r.frac = f/double(tasks.size()-i);
+      RowShow( i, &r );
+    } else RowShow( i, (i<n) ? &tasks[i] : 0 );
+  }
+}
+
+static void Title() {
+  wchar_t t[128];
+  if( running ) swprintf( t, 128, L"%.0f%% %ls - mp4gui", 100*shown, f_pause ? L"paused" : W( (Verifying( prog.phase ) ? "verify: " : "") + prog.phase ).c_str() );
+  SetText( hwnd, running ? t : L"mp4gui" );
+}
+
+// the status line while it runs
+static void RunStatus() {
+  SetStatus( f_abort ? "Stopping..." : f_pause ? "Paused: the tools are held." : Verifying( prog.phase ) ? "Verifying: d of the archive..."
+             : run_dec ? "Decompressing..." : "Compressing..." );
 }
 
 static void ShowTime() {
+  if( f_pause ) return; // (the clock stops)
   qword now = GetTickCount64();
   string s = "elapsed " + Clock( now-run_t0 );
-  if( prog.eta ) s += ", about " + Clock( std::max<long long>( (long long)(prog.eta)-(long long)(now-prog_at), 0 ) ) + " left of " + prog.phase;
+  if( running && prog.eta ) s += ", about " + Clock( std::max<long long>( (long long)(prog.eta)-(long long)(now-prog_at), 0 ) ) + " left of "
+                                 + (Verifying( prog.phase ) ? "verify: " : "") + prog.phase;
   SetText( c_time, W(s) );
 }
 
@@ -727,34 +837,27 @@ static void ShowProg() {
   EnterCriticalSection( &qlock );
   prog = prog_q; prog_posted = 0;
   LeaveCriticalSection( &qlock );
-  prog_at = GetTickCount64();
-  shown = std::max( shown, Total( prog.phase, prog.frac ) );
-  SetText( c_phase, W(prog.phase) );
+  if( !f_pause ) prog_at = GetTickCount64();
+  double t = Total( prog.phase, prog.frac, 1 );
+  if( t>=0 ) shown = std::max( shown, t );
+  Marquee( c_bar, (shown==0) && (prog.frac<0) ); // (nothing known yet: avip c)
+  SetText( c_phase, W( (Verifying( prog.phase ) ? "verify: " : "") + prog.phase ) );
   SendMessageW( c_bar, PBM_SETPOS, int( shown*1000 ), 0 );
   SetText( c_pct, Percent( shown ) );
-  size_t n = prog.jobs.size();
-  for( size_t i=0; i<size_t(NJ); i++ ) {
-    string l;
-    double f = -1;
-    int est = 0;
-    if( (i+1==size_t(NJ)) && (n>size_t(NJ)) ) { // the rest in one row
-      double s = 0; int k = 0;
-      for( size_t j=i; j<n; j++ ) if( prog.jobs[j].frac>=0 ) { s += prog.jobs[j].frac; k++; est |= prog.jobs[j].est; }
-      l = "+" + Num(n-i) + " more"; f = k ? s/k : -1;
-    } else if( i<n ) { l = prog.jobs[i].label; f = prog.jobs[i].frac; est = prog.jobs[i].est; }
-    JobRowShow( int(i), l, f, est );
-  }
-  wchar_t t[128]; swprintf( t, 128, L"%.0f%% %ls - mp4gui", 100*shown, W(prog.phase).c_str() );
-  SetText( hwnd, t );
-  TaskbarShow( TBPF_NORMAL, shown );
+  Tasks( prog );
+  ShowRows();
+  Title();
+  RunStatus();
+  TaskbarShow( f_pause ? TBPF_PAUSED : TBPF_NORMAL, shown );
   ShowTime();
 }
 
 static void ClearProg() {
-  prog = Prog(); shown = 0;
+  prog = Prog(); shown = 0; tasks.clear(); pct_blue = 0;
   SetText( c_phase, L"" ); SetText( c_pct, L"" ); SetText( c_time, L"" );
+  Marquee( c_bar, 0 );
   SendMessageW( c_bar, PBM_SETPOS, 0, 0 );
-  for( int i=0; i<NJ; i++ ) { JobRowShow( i, "", 0, 0 ); SendMessageW( c_jb[i], PBM_SETPOS, 0, 0 ); }
+  ShowRows();
 }
 
 static void Problem( const wstring& s ) { MessageBoxW( hwnd, s.c_str(), L"mp4gui", MB_OK|MB_ICONWARNING ); }
@@ -771,48 +874,78 @@ static void OnStart() {
   if( (out!=out_ok) && Exists( LongPath(out) )
       && (MessageBoxW( hwnd, (out + L" exists. Replace it?").c_str(), L"mp4gui", MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 )!=IDYES) ) return;
   Save();
-  run_in = in; run_out = out;
+  run_in = in; run_out = out; run_dec = f_dec; run_verify = f_verify;
   SetText( c_log, L"" ); ClearProg(); result.clear();
   EnterCriticalSection( &qlock ); log_q.clear(); prog_q = Prog(); LeaveCriticalSection( &qlock );
-  f_abort = 0; ResetEvent( ev_abort );
+  f_abort = 0; f_pause = 0; ResetEvent( ev_abort );
   running = 1; run_t0 = prog_at = GetTickCount64();
   HookMsg( "> " + CommandText() );
   h_run = CreateThread( 0, 0, RunThread, 0, 0, 0 );
   if( !h_run ) { running = 0; Problem( L"Cannot start a thread." ); return; }
   Enable(); SetFocus( c_stop );
-  SetStatus( f_dec ? "Decompressing..." : "Compressing..." );
+  RunStatus();
   SetTimer( hwnd, T_TICK, 1000, 0 );
   TaskbarShow( TBPF_NORMAL, 0 );
+  Title();
+}
+
+// Pause: mp4pack holds the tools (and starts none) until Resume; the clock
+// leaves the pause out
+static void OnPause() {
+  if( !running || f_abort ) return;
+  int on = !f_pause;
+  f_pause = on; SetEvent( ev_wake );
+  if( on ) paused_at = GetTickCount64();
+  else { qword d = GetTickCount64()-paused_at; run_t0 += d; prog_at += d; }
+  SetText( c_pause, on ? L"&Resume" : L"P&ause" );
+  RunStatus();
+  TaskbarShow( on ? TBPF_PAUSED : TBPF_NORMAL, shown );
+  Title();
 }
 
 static void OnStop() {
   if( !running || f_abort ) return;
-  f_abort = 1; SetEvent( ev_abort ); // (as mp4pack's Ctrl+C)
-  SetStatus( "Stopping..." );
+  f_abort = 1; SetEvent( ev_abort ); // (as mp4pack's Ctrl+C; held tools end too)
+  RunStatus();
   Enable();
 }
 
 static void OnDone( int r ) {
   WaitForSingleObject( h_run, INFINITE );
   CloseHandle( h_run ); h_run = 0;
-  running = 0;
+  running = 0; f_pause = 0;
   KillTimer( hwnd, T_TICK );
+  SetText( c_pause, L"P&ause" );
   ShowLog();
   static const char* what[] = { "", "bad options", "a file cannot be read or written, or a tool is missing", "a tool failed",
                                 "not an mp4pack archive, or what came out is not as it was", "stopped" };
+  int vf = 0; // Verify's d failed: the archive was made, but not right
+  for( size_t i=0; i<tasks.size(); i++ ) if( tasks[i].key=="verify" ) {
+    tasks[i].st = !r ? 2 : (r==5) ? 5 : 3; tasks[i].frac = r ? tasks[i].frac : 1;
+    vf = (tasks[i].st==3);
+  }
   if( r==0 ) {
+    qword a, b;
     shown = 1;
-    SendMessageW( c_bar, PBM_SETPOS, 1000, 0 ); SetText( c_pct, Percent( 1 ) ); SetText( c_phase, L"done" );
-    SetStatus( "Done: " + result );
+    Marquee( c_bar, 0 );
+    SendMessageW( c_bar, PBM_SETPOS, 1000, 0 );
+    pct_blue = !run_dec && !GetSize( LongPath(run_in), a ) && !GetSize( LongPath(run_out), b ) && a; // (c: the gain of it all)
+    SetText( c_pct, pct_blue ? Percent( 1-double(b)/double(a) ) : Percent( 1 ) );
+    InvalidateRect( c_pct, 0, TRUE );
+    SetText( c_phase, run_verify ? L"done, verified" : L"done" );
+    SetStatus( "Done: " + result + (run_verify ? "; verified" : "") );
     TaskbarShow( TBPF_NOPROGRESS, 0 );
   } else {
-    SetText( c_phase, (r==5) ? L"stopped" : L"failed" );
-    SetStatus( (r==5) ? string( "Stopped." ) : "Failed: " + string( ((r>0) && (r<5)) ? what[r] : "exit code " + Num(r) ) + " (see the log)" );
+    string why = ((r>0) && (r<5)) ? what[r] : "exit code " + Num(r);
+    if( vf && (r==4) ) why = "the archive does not decompress to the input";
+    SetText( c_phase, (r==5) ? L"stopped" : vf ? L"verify failed" : L"failed" );
+    SetStatus( (r==5) ? string( "Stopped." ) : vf ? "Verify failed: " + why + " (see the log). The archive: " + result + "."
+                                                  : "Failed: " + why + " (see the log)" );
     TaskbarShow( (r==5) ? TBPF_NOPROGRESS : TBPF_ERROR, 0 );
   }
-  for( int i=0; i<NJ; i++ ) JobRowShow( i, "", 0, 0 );
+  ShowRows();
   ShowTime();
-  SetText( hwnd, L"mp4gui" );
+  Title();
   Enable();
   SetFocus( c_start );
   if( GetForegroundWindow()!=hwnd ) { // (it may have taken long)
@@ -831,7 +964,7 @@ static LRESULT CALLBACK WndProc( HWND h, UINT msg, WPARAM wp, LPARAM lp ) {
     case WM_SIZE: if( c_stop ) Layout(); return 0;
     case WM_GETMINMAXINFO: {
       if( !bx ) break;
-      RECT r = { 0, 0, DX(460), log_y+DY(36)+rh+DX(6) };
+      RECT r = { 0, 0, DX(380), log_y+DY(36)+rh+DX(6) };
       AdjustWindowRectEx( &r, GetWindowLongW( h, GWL_STYLE ), FALSE, GetWindowLongW( h, GWL_EXSTYLE ) );
       MINMAXINFO* mm = (MINMAXINFO*)lp;
       mm->ptMinTrackSize.x = r.right-r.left; mm->ptMinTrackSize.y = r.bottom-r.top;
@@ -841,14 +974,19 @@ static LRESULT CALLBACK WndProc( HWND h, UINT msg, WPARAM wp, LPARAM lp ) {
       int id = LOWORD(wp), code = HIWORD(wp);
       switch( id ) {
         case IDOK: case ID_START: OnStart(); return 0; // (Enter)
+        case ID_PAUSE: OnPause(); return 0;
         case ID_STOP: OnStop(); return 0;
+        case ID_CPU: ShowCpu(); return 0;
         case ID_INB: { wstring f = FileDialog( 0 ); if( f.size() ) SetInput( f ); return 0; }
         case ID_OUTB: { wstring f = FileDialog( 1 ); if( f.size() ) { out_ok = f; SetText( c_out, f ); } return 0; }
         case ID_WB: BrowseWork(); return 0;
-        case ID_DETAILS: ShowDetails(); return 0;
+        case ID_WTEMP: SetText( c_w, L"%TEMP%" ); return 0;
+        case ID_WOUT: WorkByOutput(); return 0;
         case ID_COMP: case ID_DEC: if( code==BN_CLICKED ) { AutoOut(); Enable(); } return 0;
-        case ID_IN: if( code==EN_CHANGE ) InputChanged(); return 0;
-        case ID_T: case ID_FREE: case ID_C: case ID_I: case ID_F: case ID_LS:
+        case ID_IN: if( (code==EN_CHANGE) && !Unquote( c_in ) ) InputChanged(); return 0;
+        case ID_OUT: if( code==EN_CHANGE ) Unquote( c_out ); return 0;
+        case ID_W: if( code==EN_CHANGE ) Unquote( c_w ); return 0;
+        case ID_T: case ID_FREE: case ID_F:
           if( (code==EN_CHANGE) || (code==CBN_EDITCHANGE) || (code==CBN_SELCHANGE) || (code==BN_CLICKED) ) SetTimer( h, T_OPTS, 150, 0 );
           return 0;
       }
@@ -860,9 +998,16 @@ static LRESULT CALLBACK WndProc( HWND h, UINT msg, WPARAM wp, LPARAM lp ) {
       return 0;
     case WM_CTLCOLORSTATIC: {
       HWND c = (HWND)lp;
-      if( ((c==c_plan) && plan_bad) || ((c==h_c) && c_bad) || ((c==h_i) && i_bad) ) {
+      COLORREF col = CLR_INVALID;
+      if( (c==c_plan) && plan_bad ) col = RGB( 192, 0, 0 );
+      if( (c==c_pct) && pct_blue ) col = RGB( 0, 0, 208 );
+      for( int i=0; i<NJ; i++ ) {
+        if( (c==c_jp[i]) && jp_color[i] ) col = (jp_color[i]==1) ? RGB( 0, 0, 208 ) : RGB( 192, 0, 0 );
+        if( (c==c_jl[i]) && jl_gray[i] ) col = GetSysColor( COLOR_GRAYTEXT );
+      }
+      if( col!=CLR_INVALID ) {
         HDC dc = (HDC)wp;
-        SetTextColor( dc, RGB( 192, 0, 0 ) ); SetBkColor( dc, GetSysColor( COLOR_BTNFACE ) );
+        SetTextColor( dc, col ); SetBkColor( dc, GetSysColor( COLOR_BTNFACE ) );
         return (LRESULT)GetSysColorBrush( COLOR_BTNFACE );
       }
       break;
@@ -964,20 +1109,19 @@ int WINAPI wWinMain( HINSTANCE hi, HINSTANCE, LPWSTR, int show ) {
   RegisterClassExW( &wc );
 
   hwnd = CreateWindowExW( WS_EX_CONTROLPARENT|WS_EX_ACCEPTFILES, L"mp4gui", L"mp4gui", WS_OVERLAPPEDWINDOW|WS_CLIPSIBLINGS, CW_USEDEFAULT, CW_USEDEFAULT,
-                          DX(500), DY(400), 0, 0, hi, 0 );
+                          DX(420), DY(400), 0, 0, hi, 0 );
   if( !hwnd ) return 1;
   wm_taskbar = RegisterWindowMessageW( L"TaskbarButtonCreated" );
   MakeControls();
   Layout();
-  { // as big as the controls need, and a log of about 12 lines
-    RECT r = { 0, 0, DX(530), log_y+DY(8*12)+DY(3)+rh+DX(6) }, wa;
+  { // as big as the controls need, with room for 6 task rows and a log of about 10 lines
+    RECT r = { 0, 0, DX(420), log_y+(by+DY(4))*6+DY(8*10)+DY(3)+rh+DX(6) }, wa;
     AdjustWindowRectEx( &r, WS_OVERLAPPEDWINDOW, FALSE, WS_EX_CONTROLPARENT|WS_EX_ACCEPTFILES );
     int w = r.right-r.left, ht = r.bottom-r.top;
     if( SystemParametersInfoW( SPI_GETWORKAREA, 0, &wa, 0 ) ) { w = std::min<int>( w, wa.right-wa.left ); ht = std::min<int>( ht, wa.bottom-wa.top ); }
     SetWindowPos( hwnd, 0, 0, 0, w, ht, SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE );
   }
   Load();
-  FillTargets();
   Check( c_comp, 1 );
   int argc = 0; // mp4gui.exe input [output] (a file dropped on it, "Open with")
   wchar_t** argv = CommandLineToArgvW( GetCommandLineW(), &argc );
