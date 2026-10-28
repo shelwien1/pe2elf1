@@ -7,8 +7,9 @@
 // c: "avip c" splits the container into its streams and a .meta file in a work
 // directory; each stream goes to its packer -- h264p (video), aacpack, mp3pack
 // or oggcomp (audio), ttfcomp (fonts, all in one solid archive), "shar a22"
-// (the rest; a22 or the level -l gives) -- and "shar a0" stores the packed
-// files and an index (mp4pack.idx) as the output.
+// (the rest; a22 or the level -l gives) -- and the packed files and an index
+// (mp4pack.idx) are stored as the output, a Shar2 archive as "shar a0" makes
+// it (WriteArchive).
 // d: "shar x", the unpackers, "avip d"; every stream and the result are checked
 // against the sizes and CRC32s in the index.
 //
@@ -21,8 +22,9 @@
 // without .exe: h264p_avx2), which take '\' for '/', and UTF-8.
 //
 // mp4gui.cpp, a Windows GUI, is this file too (with MP4PACK_NO_MAIN): it
-// calls Init and Run as wmain does, and gets the messages and the progress
-// through msg_hook and status_hook instead of the console.
+// calls Init, ParseArgs (its command line is mp4pack's) and Run as wmain
+// does, and gets the messages and the progress through msg_hook and
+// status_hook instead of the console.
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -96,7 +98,7 @@ static DWORD tool_flags;              // the tools' CreateProcess flags: DETACHE
 static volatile LONG f_abort;
 static volatile LONG f_pause;         // a frontend's Pause: no tool starts, those running are held
 static HANDLE ev_wake;                // set with it, for the run to act at once
-static int f_verify;                  // c, then d of the archive into a temporary file, as a check (mp4gui)
+static int f_verify;                  // -verify: c, then d of the archive into a temporary file, as a check
 static int f_con;                     // stderr is a console: there is a status line
 static size_t status_len;             // its length on the screen
 static qword t_start;
@@ -190,31 +192,36 @@ static size_t ConWidth() {
   return 80;
 }
 
-//---- CRC32 (slicing by 8)
+//---- CRC32 and CRC-32C (slicing by 8)
 
-static uint crc_t[8][256];
+static uint crc_t[8][256], crcc_t[8][256]; // CRC32 (zip's: the index's), CRC-32C (Castagnoli's: Shar2's)
 
-static void CrcInit() {
+static void CrcTable( uint t[8][256], uint poly ) {
   for( uint i=0; i<256; i++ ) {
     uint c = i;
-    for( int k=0; k<8; k++ ) c = (c>>1) ^ (0xEDB88320u & (0u-(c&1)));
-    crc_t[0][i] = c;
+    for( int k=0; k<8; k++ ) c = (c>>1) ^ (poly & (0u-(c&1)));
+    t[0][i] = c;
   }
-  for( uint i=0; i<256; i++ ) for( int t=1; t<8; t++ ) crc_t[t][i] = (crc_t[t-1][i]>>8) ^ crc_t[0][crc_t[t-1][i]&255];
+  for( uint i=0; i<256; i++ ) for( int k=1; k<8; k++ ) t[k][i] = (t[k-1][i]>>8) ^ t[0][t[k-1][i]&255];
 }
 
-static uint Crc( uint crc, const byte* p, size_t n ) {
+static void CrcInit() { CrcTable( crc_t, 0xEDB88320u ); CrcTable( crcc_t, 0x82F63B78u ); }
+
+static uint CrcOf( uint t[8][256], uint crc, const byte* p, size_t n ) {
   crc = ~crc;
-  for(; n && (size_t(p)&7); n-- ) crc = (crc>>8) ^ crc_t[0][(crc^*p++)&255];
+  for(; n && (size_t(p)&7); n-- ) crc = (crc>>8) ^ t[0][(crc^*p++)&255];
   for(; n>=8; n-=8, p+=8 ) {
     uint a = crc ^ (p[0] | (p[1]<<8) | (p[2]<<16) | (uint(p[3])<<24));
     uint b = p[4] | (p[5]<<8) | (p[6]<<16) | (uint(p[7])<<24);
-    crc = crc_t[7][a&255] ^ crc_t[6][(a>>8)&255] ^ crc_t[5][(a>>16)&255] ^ crc_t[4][a>>24]
-        ^ crc_t[3][b&255] ^ crc_t[2][(b>>8)&255] ^ crc_t[1][(b>>16)&255] ^ crc_t[0][b>>24];
+    crc = t[7][a&255] ^ t[6][(a>>8)&255] ^ t[5][(a>>16)&255] ^ t[4][a>>24]
+        ^ t[3][b&255] ^ t[2][(b>>8)&255] ^ t[1][(b>>16)&255] ^ t[0][b>>24];
   }
-  for(; n; n-- ) crc = (crc>>8) ^ crc_t[0][(crc^*p++)&255];
+  for(; n; n-- ) crc = (crc>>8) ^ t[0][(crc^*p++)&255];
   return ~crc;
 }
+
+static uint Crc( uint crc, const byte* p, size_t n ) { return CrcOf( crc_t, crc, p, n ); }
+static uint Crc32c( uint crc, const byte* p, size_t n ) { return CrcOf( crcc_t, crc, p, n ); }
 
 //---- files and paths
 
@@ -738,7 +745,7 @@ struct Job {
   int quiet;              // its output to its log even with -v, its command line not shown
   qword work;             // the bytes it packs (c) or unpacks (d), for the progress
   qword expect;           // prog 4: the bytes it makes (d: exact; c: by a typical ratio)
-  qword made;             // when done: the bytes of its outs
+  qword made;             // the packed bytes: c, those of its outs when it is done; d, those it unpacks
   vector<int> sids;       // c: the streams it packs
   vector<wstring> outs;   // files it has to make (c: their sizes are reported)
   vector<wstring> del;    // removed once it is done (unless -k)
@@ -984,6 +991,17 @@ static void HoldAll( const vector<Job*>& run ) {
   }
 }
 
+// while Pause holds, for work of our own (not a tool's): how long it held,
+// the clocks set back by that
+static qword PauseWait() {
+  if( !f_pause || f_abort ) return 0;
+  qword t = GetTickCount64();
+  while( f_pause && !f_abort ) { HANDLE w[2] = { ev_abort, ev_wake }; WaitForMultipleObjects( 2, w, FALSE, 1000 ); }
+  qword d = GetTickCount64()-t;
+  t_start += d; t_run += d;
+  return d;
+}
+
 // Runs the waiting jobs of these groups, the groups at once, each group's in
 // its order within its threads (a job waits for the ones before it). 0: all
 // done (failed packers fell back), 1: one failed, 2: Ctrl+C.
@@ -1126,8 +1144,10 @@ static int Fallback( Job& j ) {
 
 static void Succeeded( Job& j ) {
   qword sz;
-  j.made = 0;
-  for( size_t i=0; i<j.outs.size(); i++ ) if( !GetSize( j.outs[i], sz ) ) j.made += sz;
+  if( !f_dec ) {
+    j.made = 0;
+    for( size_t i=0; i<j.outs.size(); i++ ) if( !GetSize( j.outs[i], sz ) ) j.made += sz;
+  }
   if( j.report ) {
     string s = "  " + j.label + ": ";
     if( !f_dec ) s += Num(j.work) + " -> " + Num(j.made) + " (" + Pct( double(j.made), double(j.work) ) + ")";
@@ -1409,6 +1429,138 @@ static int RunStages() {
   return 0;
 }
 
+//---- the archive: Shar2, as "shar a0" makes it
+
+// The output is the packed files and the index in a Shar2 archive with them
+// stored, as "shar a0" makes it, so that shar x (d) and shar l read it:
+//   "Shar2\n\x1A\0", 'C'
+//   each file's bytes, escaped, then 99 19 D3 FF
+//   9A 19 D3 FF
+//   the index, escaped (only by 9A 19 D3), then 9A 19 D3 FF
+// Escaped: an FE before an FE or FF that follows 99 19 D3 or 9A 19 D3 (in a
+// file's own bytes). The index: for each entry its parent's number (LEB128:
+// 0 the top, else the directory's place in the index, from 1), 'F' or 'D',
+// the name (UTF-8) and a 0, what is in a directory right after it; then 0,
+// 'X' and the CRC-32C (little-endian) of all the files' bytes and the index
+// up to the X. In a directory the entries go by name, ignoring case, as shar
+// takes them: the archive is the one shar a0 makes.
+
+struct ArcEntry { wstring path; string name; int dir, parent; };
+
+static string Upper( string s ) { for( size_t i=0; i<s.size(); i++ ) if( (s[i]>='a') && (s[i]<='z') ) s[i] -= 32; return s; }
+
+static void ArcList( const wstring& dir, int parent, vector<ArcEntry>& v ) { // dir ends with a separator
+  vector<ArcEntry> e;
+  WIN32_FIND_DATAW fd;
+  HANDLE h = FindFirstFileW( (dir+L"*").c_str(), &fd );
+  if( h!=INVALID_HANDLE_VALUE ) {
+    do {
+      wstring n = fd.cFileName;
+      if( (n==L".") || (n==L"..") ) continue;
+      ArcEntry a; a.path = dir+n; a.name = U(n); a.dir = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)!=0; a.parent = parent;
+      e.push_back( a );
+    } while( FindNextFileW( h, &fd ) );
+    FindClose( h );
+  }
+  std::sort( e.begin(), e.end(), []( const ArcEntry& a, const ArcEntry& b ) { return Upper(a.name)<Upper(b.name); } );
+  for( size_t i=0; i<e.size(); i++ ) {
+    v.push_back( e[i] );
+    if( e[i].dir ) ArcList( e[i].path+L"" DS, int(v.size()), v );
+  }
+}
+
+// n bytes escaped into o (room for n+n/4+1); h: the three bytes before them;
+// both: after 99 19 D3 too (a file's bytes; the index has only 9A 19 D3).
+// The bytes in o
+static size_t Escape( const byte* p, size_t n, byte* o, uint& h, int both ) {
+  byte* q = o;
+  size_t c = 0; // p is in o up to here
+  for( ; (c<n) && (c<3); c++ ) { // (with the bytes before p)
+    if( (p[c]>=0xFE) && ((h==0x9A19D3) || (both && (h==0x9919D3))) ) *q++ = 0xFE;
+    *q++ = p[c];
+    h = ((h<<8)|p[c]) & 0xFFFFFF;
+  }
+  // after that, only an FE or FF that follows a D3 in p
+  for( size_t m=2; m+1<n; m++ ) {
+    const byte* d = (const byte*)memchr( p+m, 0xD3, n-1-m );
+    if( !d ) break;
+    m = size_t(d-p);
+    if( (p[m+1]>=0xFE) && (p[m-1]==0x19) && ((p[m-2]==0x9A) || (both && (p[m-2]==0x99))) ) {
+      memcpy( q, p+c, m+1-c ); q += m+1-c; c = m+1;
+      *q++ = 0xFE;
+    }
+  }
+  memcpy( q, p+c, n-c ); q += n-c;
+  if( n>=3 ) h = (uint(p[n-3])<<16) | (uint(p[n-2])<<8) | p[n-1];
+  return size_t(q-o);
+}
+
+struct ArcOut {
+  HANDLE f; qword n; int err;
+  void Put( const void* p, size_t k ) { DWORD w = 0; if( !err && (!WriteFile( f, p, DWORD(k), &w, 0 ) || (w!=k)) ) err = 1; n += k; }
+};
+
+// the archive of what is in dir (ending with a separator) as out, each file
+// removed once it is in (unless -k); job j shows it (its work: the files'
+// bytes; out.done: those in so far; made: the archive's size). 0, or 2
+// (cannot read or write), 5 (stopped)
+static int WriteArchive( const wstring& dir, const wstring& out, Job& j ) {
+  static const byte sig[9] = { 'S','h','a','r','2','\n',0x1A,0,'C' }, eof[4] = { 0x99,0x19,0xD3,0xFF }, end[4] = { 0x9A,0x19,0xD3,0xFF };
+  vector<ArcEntry> v;
+  ArcList( dir, 0, v );
+  vector<Job*> jv( 1, &j );
+  phase = j.label; t_run = j.t0 = GetTickCount64(); j.st = 1;
+  HANDLE f = OpenWrite( LongPath(out), CREATE_ALWAYS );
+  if( f==INVALID_HANDLE_VALUE ) { j.st = 3; Msg( "cannot write " + U(out) ); return 2; }
+  IOBuf in( 1<<20 ), eb( (1<<20)+(1<<18)+16 );
+  ArcOut o = { f, 0, (in.p==0) || (eb.p==0) };
+  uint crc = 0;
+  int r = 0;
+  string why;
+  o.Put( sig, 9 );
+  for( size_t i=0; (i<v.size()) && !r && !o.err; i++ ) {
+    if( v[i].dir ) continue;
+    HANDLE g = OpenRead( v[i].path );
+    if( g==INVALID_HANDLE_VALUE ) { why = "cannot read " + U(v[i].path); r = 2; break; }
+    uint h = 0;
+    while( !r && !o.err ) {
+      DWORD k = 0;
+      if( !ReadFile( g, in.p, in.n, &k, 0 ) ) { why = "cannot read " + U(v[i].path); r = 2; break; }
+      if( k==0 ) break;
+      crc = Crc32c( crc, in.p, k );
+      o.Put( eb.p, Escape( in.p, k, eb.p, h, 1 ) );
+      j.out.done += k;
+      Status( jv, jv );
+      if( f_pause ) j.t0 += PauseWait();
+      if( f_abort ) r = 5;
+    }
+    CloseHandle( g );
+    o.Put( eof, 4 );
+    if( !r && !o.err && !f_keep ) Remove( v[i].path );
+  }
+  if( !r && !o.err ) {
+    o.Put( end, 4 );
+    string x;
+    for( size_t i=0; i<v.size(); i++ ) {
+      for( uint p = uint(v[i].parent); ; ) { x += char( (p&127) | ((p>>7) ? 128 : 0) ); if( !(p >>= 7) ) break; }
+      x += v[i].dir ? 'D' : 'F'; x += v[i].name; x += '\0';
+    }
+    x += '\0'; x += 'X';
+    crc = Crc32c( crc, (const byte*)x.data(), x.size() );
+    for( int k=0; k<4; k++ ) x += char( crc>>(8*k) );
+    vector<byte> e( x.size()+x.size()/4+8 );
+    uint h = 0;
+    o.Put( &e[0], Escape( (const byte*)x.data(), x.size(), &e[0], h, 0 ) );
+    o.Put( end, 4 );
+  }
+  CloseHandle( f );
+  if( !r && o.err ) { why = "cannot write " + U(out); r = 2; }
+  j.st = r ? 3 : 2; j.made = o.n; j.t = GetTickCount64()-j.t0;
+  if( status_hook ) Status( jv, jv, 1 );
+  if( r ) { Remove( LongPath(out) ); if( why.size() ) Msg( why ); }
+  return r;
+}
+
 //---- c
 
 // the frame length of an ADTS header, or 0
@@ -1685,12 +1837,9 @@ static int Compress( const wstring& in, const wstring& out ) {
 
   // the index and all packed, stored as they are: the output
   if( WriteAll( PPath("mp4pack.idx"), IndexText() ) ) { Msg( "cannot write " + U(PPath("mp4pack.idx")) ); return 2; }
-  Job f; f.label = "shar a0"; f.tool = "shar"; f.args = "a0 - p" DS;
-  f.out.path = LongPath(out); f.out.create = 1; f.out.len = ALL; f.prog = 3;
-  f.work = DirSize( work+L"p" DS );
-  r = RunOne( f );
-  if( r ) { Remove( LongPath(out) ); return (r==2) ? 5 : 3; }
-  qword osz = f.out.done;
+  Job f; f.label = "archive"; f.prog = 3; f.work = DirSize( work+L"p" DS );
+  if( (r = WriteArchive( work+L"p" DS, out, f ))!=0 ) return r;
+  qword osz = f.made;
   Msg( Num(src_size) + " -> " + Num(osz) + " (" + Pct( double(osz), double(src_size) ) + "), " + Clock( GetTickCount64()-t_start ) );
   return 0;
 }
@@ -1766,6 +1915,10 @@ static int Decompress( const wstring& in, const wstring& out ) {
     for( size_t i=0; i<S.size(); i++ ) if( S[i].m==M_SHAR ) for( size_t k=0; k<S[i].part.size(); k++ ) if( S[i].part[k].pk==sha[a] ) {
       j->work += S[i].part[k].len; j->outs.push_back( UPath(S[i].part[k].pk2) );
     }
+  }
+  for( size_t i=0; i<J.size(); i++ ) { // what each unpacks (the files it removes when done)
+    qword z;
+    for( size_t k=0; k<J[i]->del.size(); k++ ) if( !GetSize( J[i]->del[k], z ) ) J[i]->made += z;
   }
   if( J.size() ) Msg( "running " + StageText() );
   if( (r = RunStages())!=0 ) return r;
@@ -1924,6 +2077,43 @@ static int Run( const wstring& in, const wstring& out ) {
   return r;
 }
 
+// a command line (after the program's name): c or d (C and D too with caps,
+// as mp4gui takes them), options into their settings (t_spec, c_spec, the
+// levels, cap, w_base, the flags), at most two files into io; seen: the
+// options given (t c l w i v f k, V for -verify). 1 when it is not right: why
+// (empty when the usage tells it)
+static int ParseArgs( int argc, wchar_t** argv, int caps, int& mode, vector<wstring>& io, string& seen, string& why ) {
+  int bits;
+  mode = 0; io.clear(); seen.clear(); why.clear();
+  for( int i=1; i<argc; i++ ) {
+    wstring a = argv[i];
+    if( !mode ) {
+      if( (a==L"c") || (a==L"d") || (caps && ((a==L"C") || (a==L"D"))) ) { mode = int(a[0]); continue; }
+      return 1;
+    }
+    if( (a.size()>=2) && (a[0]=='-') ) {
+      wchar_t o = a[1];
+      if( a==L"-verify" ) { f_verify = 1; seen += 'V'; }
+      else if( (o=='t') || (o=='c') || (o=='l') || (o=='w') || (o=='i') ) {
+        wstring v = a.substr( 2 );
+        if( v.empty() ) { if( ++i>=argc ) return 1; v = argv[i]; }
+        if( o=='t' ) t_spec = U(v); else if( o=='c' ) c_spec = U(v);
+        else if( o=='l' ) { string ls = U(v); if( ParseLevels( ls.c_str() ) ) { why = "bad -l " + ls + " (up to 4 levels joined by ,: h264p and aacpack 1 to 9, shar -131072 to 22)"; return 1; } }
+        else if( o=='w' ) w_base = v;
+        else if( (cap = BuildOf( U(v), bits ))<0 ) { why = "bad -i " + U(v) + " (a -march target: haswell, x86-64-v3, znver4 ...)"; return 1; }
+        seen += char(o);
+      } else if( a==L"-v" ) { f_verbose = 1; seen += 'v'; }
+      else if( a==L"-f" ) { f_free = 1; seen += 'f'; }
+      else if( a==L"-k" ) { f_keep = 1; seen += 'k'; }
+      else { why = "unknown option " + U(a); return 1; }
+      continue;
+    }
+    if( io.size()>=2 ) return 1;
+    io.push_back( a );
+  }
+  return !mode;
+}
+
 #ifndef MP4PACK_NO_MAIN
 
 static HANDLE ev_done;
@@ -1978,37 +2168,19 @@ static const char usage[] =
 "  -w D  make the work directory in D (default: $TMPDIR, or /tmp)\n"
 #endif
 "  -k    keep the work directory\n"
-"  -v    show the tools' command lines and output\n";
+"  -v    show the tools' command lines and output\n"
+"  -verify  c, then d of the archive into a temporary file beside the work\n"
+"        directory, checked as d checks (each stream's and the whole CRC)\n";
 
 int wmain( int argc, wchar_t** argv ) {
   Init();
-  int mode = 0, nio = 0, bits;
-  wstring io[2];
-  for( int i=1; i<argc; i++ ) {
-    wstring a = argv[i];
-    if( !mode ) {
-      if( (a==L"c") || (a==L"d") ) { mode = a[0]; continue; }
-      break;
-    }
-    if( (a.size()>=2) && (a[0]=='-') ) {
-      wchar_t o = a[1];
-      if( ((o=='t') || (o=='c') || (o=='l') || (o=='w') || (o=='i')) ) {
-        wstring v = a.substr( 2 );
-        if( v.empty() ) { if( ++i>=argc ) { mode = 0; break; } v = argv[i]; }
-        if( o=='t' ) t_spec = U(v); else if( o=='c' ) c_spec = U(v);
-        else if( o=='l' ) { string ls = U(v); if( ParseLevels( ls.c_str() ) ) { Msg( "bad -l " + ls + " (up to 4 levels joined by ,: h264p and aacpack 1 to 9, shar -131072 to 22)" ); return 1; } }
-        else if( o=='w' ) w_base = v;
-        else if( (cap = BuildOf( U(v), bits ))<0 ) { Msg( "bad -i " + U(v) + " (a -march target: haswell, x86-64-v3, znver4 ...)" ); return 1; }
-      } else if( a==L"-v" ) f_verbose = 1;
-      else if( a==L"-f" ) f_free = 1;
-      else if( a==L"-k" ) f_keep = 1;
-      else { Msg( "unknown option " + U(a) ); return 1; }
-      continue;
-    }
-    if( nio>=2 ) { mode = 0; break; }
-    io[nio++] = a;
+  int mode;
+  vector<wstring> io;
+  string seen, why;
+  if( ParseArgs( argc, argv, 0, mode, io, seen, why ) || (io.size()!=2) ) {
+    if( why.size() ) Msg( why ); else Put( usage );
+    return 1;
   }
-  if( !mode || (nio!=2) ) { Put( usage ); return 1; }
   f_dec = (mode=='d');
   ev_done = CreateEventW( 0, TRUE, FALSE, 0 );
   SetConsoleCtrlHandler( CtrlHandler, TRUE );

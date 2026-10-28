@@ -1,9 +1,10 @@
 // mp4gui.cpp -- mp4pack in a window (Windows): mp4pack.cpp itself, with the
 // files (Open/Save dialogs, or dropped on the window), its options, and while
-// it runs the progress of each of its tasks (each stream's packer, avip, the
-// final shar) and of the whole (also in the taskbar), the gain of each task
-// when it is done, and its messages, in place of the command line. CPU Info
-// shows the CPU and the tool builds.
+// it runs the progress of each of its tasks (avip, each stream's packer, the
+// archive) and of the whole (also in the taskbar), the gain of each task when
+// it is done (its bar green, then blue for the gain), and its messages, in
+// place of the console. CPU Info shows the CPU and the tool builds. It takes
+// mp4pack's command line too: c or d sets everything up, C or D starts it.
 //
 // Run, mp4pack's whole run, works on a thread of its own here; msg_hook and
 // status_hook bring its messages and progress over. Stop sets its abort flag
@@ -59,6 +60,10 @@ static int jl_gray[NJ], jp_color[NJ], pct_blue; // colors: a task waiting (gray)
 
 static wstring out_auto;          // the output name we made from the input's (else the user's)
 static wstring out_ok;            // an existing output the user chose to overwrite
+static int mode_dec;              // the mode as last set: a click that changes it swaps the files
+static int swapping;              // (the input set by that: not a new one)
+static string cl_c;               // -c and -i from the command line (no fields for them): for every run
+static int cl_cap = -1;
 static int plan_bad;
 static string details;            // the CPU Info window's text (made when idle)
 
@@ -71,7 +76,7 @@ static int run_dec, run_verify;   // d; c, then Verify's d
 static qword run_t0, paused_at;
 static CRITICAL_SECTION qlock;    // for what the run's thread hands over:
 static string log_q;              //   messages (UTF-8 lines)
-struct JobRow { string label; int st; double frac; int est, pack; qword work, made; }; // frac -1: not known; est: a guess
+struct JobRow { string label; int st; double frac; int est, gain; qword work, made; }; // frac -1: not known; est: a guess; gain: c's or d's
 struct Prog { string phase; double frac; qword eta; vector<JobRow> jobs; };
 static Prog prog_q;               //   the progress
 static int log_posted, prog_posted;
@@ -81,7 +86,7 @@ static double shown;              // the overall bar (it does not go back)
 static string result;             // the sizes and the time, when all went well
 
 // a task: a job, or a stream's parts (aacpack's, shar's pieces) together
-struct Task { string key, label; int st, est, pack; double frac; qword work, made; };
+struct Task { string key, label; int st, est, gain; double frac; qword work, made; }; // made: the packed bytes
 static vector<Task> tasks;        // this run's, as they came
 
 static void HookMsg( const string& s ) {
@@ -95,12 +100,12 @@ static void HookMsg( const string& s ) {
 static void HookStatus( double frac, qword eta, const vector<Job*>& all ) {
   Prog p;
   p.phase = phase; p.frac = frac; p.eta = eta;
-  int pack = !f_dec && (phase=="packing");
+  int gain = (phase=="packing") || (phase=="unpacking"); // (made: what it packed into, or unpacks)
   for( size_t i=0; i<all.size(); i++ ) {
     Job& j = *all[i];
     double f = (j.st==2) ? 1 : (j.st==5) ? j.frac : (j.st!=1) ? 0 : j.prog ? Frac( j ) : -1; // (stopped: where it was)
     if( (j.st==1) && (j.prog==4) && (f==0) ) f = -1; // (measured by what it has written, and nothing yet: ttfcomp x writes at the end)
-    JobRow r = { j.label, j.st, f, (j.prog==4) && !f_dec, pack, j.work, j.made };
+    JobRow r = { j.label, j.st, f, (j.prog==4) && !f_dec, gain, j.work, j.made };
     p.jobs.push_back( r );
   }
   EnterCriticalSection( &qlock );
@@ -183,7 +188,78 @@ static HWND Note( int id = 0 ) { return Make( L"STATIC", L"", SS_LEFTNOWORDWRAP|
 static HWND Edit( int id, DWORD st = 0 ) { return Make( L"EDIT", L"", WS_TABSTOP|ES_AUTOHSCROLL|st, id, WS_EX_CLIENTEDGE ); }
 static HWND Button( const wchar_t* t, int id, DWORD st = BS_PUSHBUTTON ) { return Make( L"BUTTON", t, WS_TABSTOP|st, id ); }
 static HWND Group( const wchar_t* t ) { return Make( L"BUTTON", t, BS_GROUPBOX ); }
-static HWND Bar() { HWND h = Make( PROGRESS_CLASSW, L"", PBS_SMOOTH ); SendMessageW( h, PBM_SETRANGE32, 0, 1000 ); return h; }
+//---- bars: when a task is done with a gain, |green|blue|
+
+static double split[NJ+1];        // a bar's green share when done (what it came to; the rest, blue: the gain); -1: as the control draws it. [NJ]: the overall bar
+static WNDPROC bar_proc;          // the progress bar's own
+
+// a pixel (0xRRGGBB) in c's hue, its brightness and saturation kept (its
+// channels' max and min): a gray one stays as it is
+static DWORD Hue( DWORD v, COLORREF c ) {
+  int r = (v>>16)&255, g = (v>>8)&255, b = v&255, x = std::max( r, std::max( g, b ) ), n = std::min( r, std::min( g, b ) );
+  int cr = GetRValue(c), cg = GetGValue(c), cb = GetBValue(c), cx = std::max( cr, std::max( cg, cb ) ), cn = std::min( cr, std::min( cg, cb ) );
+  r = n+(x-n)*(cr-cn)/(cx-cn); g = n+(x-n)*(cg-cn)/(cx-cn); b = n+(x-n)*(cb-cn)/(cx-cn);
+  return (v&0xFF000000) | (r<<16) | (g<<8) | b;
+}
+
+// the bar as the control draws it (full: its theme's look, in its color),
+// in green up to g of its fill and blue after
+static void PaintSplit( HWND h, HDC dc, double g ) {
+  RECT r; GetClientRect( h, &r );
+  int w = r.right, ht = r.bottom;
+  if( (w<=0) || (ht<=0) ) return;
+  BITMAPINFO bi; memset( &bi, 0, sizeof(bi) );
+  bi.bmiHeader.biSize = sizeof(bi.bmiHeader); bi.bmiHeader.biWidth = w; bi.bmiHeader.biHeight = -ht;
+  bi.bmiHeader.biPlanes = 1; bi.bmiHeader.biBitCount = 32; bi.bmiHeader.biCompression = BI_RGB;
+  DWORD* px = 0;
+  HBITMAP bm = CreateDIBSection( dc, &bi, DIB_RGB_COLORS, (void**)&px, 0, 0 );
+  if( !bm || !px ) { if( bm ) DeleteObject( bm ); CallWindowProcW( bar_proc, h, WM_PRINTCLIENT, (WPARAM)dc, PRF_CLIENT ); return; }
+  HDC m = CreateCompatibleDC( dc );
+  HGDIOBJ o = SelectObject( m, bm );
+  FillRect( m, &r, GetSysColorBrush( COLOR_BTNFACE ) ); // (under rounded corners)
+  CallWindowProcW( bar_proc, h, WM_PRINTCLIENT, (WPARAM)m, PRF_CLIENT );
+  GdiFlush();
+  // the fill: where the middle row has color (not the frame's gray)
+  int a = -1, z = -1;
+  for( int x=0; x<w; x++ ) {
+    DWORD v = px[size_t(ht/2)*w+x];
+    int c[3] = { int((v>>16)&255), int((v>>8)&255), int(v&255) };
+    if( std::max( c[0], std::max( c[1], c[2] ) )-std::min( c[0], std::min( c[1], c[2] ) )>=32 ) { if( a<0 ) a = x; z = x; }
+  }
+  if( a<0 ) { a = 0; z = w-1; }
+  int x0 = a+int( (z-a+1)*g+.5 );
+  for( int y=0; y<ht; y++ ) for( int x=0; x<w; x++ ) {
+    DWORD& v = px[size_t(y)*w+x];
+    v = Hue( v, (x<x0) ? RGB( 6, 176, 37 ) : RGB( 6, 37, 176 ) );
+  }
+  BitBlt( dc, 0, 0, w, ht, m, 0, 0, SRCCOPY );
+  SelectObject( m, o ); DeleteDC( m ); DeleteObject( bm );
+}
+
+static LRESULT CALLBACK BarProc( HWND h, UINT msg, WPARAM wp, LPARAM lp ) {
+  int i = 0;
+  while( (i<NJ) && (c_jb[i]!=h) ) i++; // (none of them: the overall bar)
+  if( split[i]>=0 ) {
+    if( msg==WM_ERASEBKGND ) return 1;
+    if( msg==WM_PAINT ) {
+      PAINTSTRUCT ps;
+      HDC dc = BeginPaint( h, &ps );
+      PaintSplit( h, dc, split[i] );
+      EndPaint( h, &ps );
+      return 0;
+    }
+  }
+  return CallWindowProcW( bar_proc, h, msg, wp, lp );
+}
+
+static HWND Bar() {
+  HWND h = Make( PROGRESS_CLASSW, L"", PBS_SMOOTH );
+  SendMessageW( h, PBM_SETRANGE32, 0, 1000 );
+  SendMessageW( h, PBM_SETBARCOLOR, 0, RGB( 6, 176, 37 ) ); // (classic bars: green, as in Windows' themes; a theme keeps its own)
+  WNDPROC p = (WNDPROC)SetWindowLongPtrW( h, GWLP_WNDPROC, (LONG_PTR)BarProc );
+  if( !bar_proc ) bar_proc = p;
+  return h;
+}
 
 static HWND Combo( int id, DWORD st, const char* const* items, int n ) {
   HWND h = Make( L"COMBOBOX", L"", WS_TABSTOP|WS_VSCROLL|st, id );
@@ -207,6 +283,7 @@ static const char* const l_items[] = { "default", "9", "8", "7", "6", "5", "4", 
 static const char* const s_items[] = { "default", "22", "20", "19", "15", "9", "5", "1", "0", "-1", "-5" };
 
 static void MakeControls() {
+  for( int i=0; i<=NJ; i++ ) split[i] = -1;
   c_comp = Button( L"&Compress", ID_COMP, BS_AUTORADIOBUTTON|WS_GROUP );
   c_dec = Button( L"&Decompress", ID_DEC, BS_AUTORADIOBUTTON );
   c_verify = Button( L"&Verify", ID_VERIFY, BS_AUTOCHECKBOX|WS_GROUP );
@@ -400,17 +477,18 @@ static wstring WorkDir() {
 
 // the options into mp4pack's settings, as wmain sets them; 1 (and why) if one
 // is bad. The part sizes are mp4pack's own (a part for each thread, as the
-// memory allows: PartSize), the tool builds any that run here.
+// memory allows: PartSize), the tool builds any that run here, unless the
+// command line gave -c or -i.
 static int Options( string& why ) {
   f_dec = Checked( c_dec );
   f_verify = !f_dec && Checked( c_verify );
   f_free = Checked( c_f ); f_keep = Checked( c_k ); f_verbose = 0;
   t_spec = TSpec();
   if( ParseThreads( t_spec, cpu_threads ) ) { why = "Threads: " + t_spec + " is not N or N% (up to 4, joined by + or ,), with a -N at the end maybe."; return 1; }
-  c_spec.clear();
+  c_spec = cl_c;
   string l = f_dec ? string() : LSpec();
   if( ParseLevels( l.c_str() ) ) { why = "Levels: shar's is -131072 to 22 (0 stores)."; return 1; }
-  cap = -1;
+  cap = cl_cap;
   w_base = WorkDir();
   return 0;
 }
@@ -424,9 +502,12 @@ static string CommandText() {
     string l = LSpec();
     if( l!=",,," ) s += " -l " + Quote( l );
   }
+  if( c_spec.size() ) s += " -c " + Quote( c_spec );
+  if( cap>=0 ) s += string( " -i " ) + x86::x86_target[cap].name;
   if( w_base.size() ) s += " -w " + Quote( U(w_base) );
   if( f_keep ) s += " -k";
-  return s + " " + Quote( U(run_in) ) + " " + Quote( U(run_out) ) + (f_verify ? "  (and Verify)" : "");
+  if( f_verify ) s += " -verify";
+  return s + " " + Quote( U(run_in) ) + " " + Quote( U(run_out) );
 }
 
 //---- the CPU and the tool builds
@@ -541,7 +622,7 @@ static string BuildsText() {
 // what is not right), and the CPU Info window's text
 static void Refresh() {
   if( running ) return;
-  cap = -1;
+  cap = cl_cap;
   NewRun(); // (the tool builds found before)
   CpuTargets();
   details = CpuText() + "\r\n" + BuildsText();
@@ -556,6 +637,8 @@ static void Refresh() {
       for( size_t k=0; k<stages[s].size(); k++ ) p += string( k ? " + " : "" ) + g_name[stages[s][k]] + " " + Num(th[stages[s][k]]);
     }
     if( Checked( c_f ) ) p += " (of the idle ones then)";
+    if( cl_c.size() ) p += "; -c " + cl_c;
+    if( cl_cap>=0 ) p += string( "; -i " ) + x86::x86_target[cl_cap].name;
   }
   SetText( c_plan, W(p) );
   InvalidateRect( c_plan, 0, TRUE );
@@ -595,24 +678,44 @@ static void ShowCpu() {
 
 static int IsArchive( const wstring& f ) { return (f.size()>4) && (lstrcmpiW( f.c_str()+f.size()-4, L".mpk" )==0); }
 
-// the output from the input, unless the user chose one: x.mkv -> x.mkv.mpk
-// (c), x.mkv.mpk -> x.mkv (d)
+// the output named after the input: x.mkv -> x.mkv.mpk (c), x.mkv.mpk ->
+// x.mkv (d)
+static wstring AutoName( const wstring& f ) {
+  return f.empty() ? f : !Checked( c_dec ) ? f + L".mpk" : IsArchive( f ) ? f.substr( 0, f.size()-4 ) : f + L".out";
+}
+
+// the output from the input, unless the user chose one
 static void AutoOut() {
-  wstring o = Text( c_out ), f = Text( c_in ), n;
+  wstring o = Text( c_out );
   if( o.size() && (o!=out_auto) ) return;
-  if( f.size() ) n = !Checked( c_dec ) ? f + L".mpk" : IsArchive( f ) ? f.substr( 0, f.size()-4 ) : f + L".out";
-  out_auto = n;
-  SetText( c_out, n );
+  out_auto = AutoName( Text( c_in ) );
+  SetText( c_out, out_auto );
 }
 
 static void Enable();
 
 // a new input: the mode by its name (.mpk: d), and its output
 static void InputChanged() {
+  if( swapping ) return;
   wstring f = Text( c_in );
   if( f.size() ) { Check( c_dec, IsArchive( f ) ); Check( c_comp, !IsArchive( f ) ); }
+  mode_dec = Checked( c_dec );
   AutoOut();
   Enable(); // (Verify and the levels: c only)
+}
+
+// Compress or Decompress clicked: when that changes the mode, the files swap
+// places (x.mkv -> x.mkv.mpk, then back: x.mkv.mpk -> x.mkv)
+static void ModeClicked() {
+  int dec = Checked( c_dec );
+  if( dec!=mode_dec ) {
+    wstring i = Text( c_in ), o = Text( c_out );
+    swapping = 1; SetText( c_in, o ); SetText( c_out, i ); swapping = 0;
+    out_auto = (i.size() && (AutoName( o )==i)) ? i : wstring(); // (named after it still: so it goes on)
+    mode_dec = dec;
+  }
+  AutoOut();
+  Enable();
 }
 
 static void SetInput( const wstring& f ) { SetText( c_in, f ); SetFocus( c_start ); }
@@ -703,11 +806,11 @@ static void ShowLog() {
 static int Verifying( const string& ph ) { return run_verify && ((ph=="shar x") || (ph=="unpacking") || (ph=="avip d")); }
 
 // the whole run's share done, from its phase's (-1: no phase): c is mostly
-// packing (avip c and shar a0 go at the disk's speed), d mostly unpacking;
-// whole: with Verify, c in the first half, its d in the second
+// packing (avip c and the archive go at the disk's speed), d mostly
+// unpacking; whole: with Verify, c in the first half, its d in the second
 static double Total( const string& ph, double f, int whole ) {
   static const struct { const char* ph; double a, b; } map[] = {
-    { "avip c", 0, .03 }, { "packing", .03, .97 }, { "shar a0", .97, 1 },
+    { "avip c", 0, .03 }, { "packing", .03, .97 }, { "archive", .97, 1 },
     { "shar x", 0, .03 }, { "unpacking", .03, .97 }, { "avip d", .97, 1 } };
   for( size_t i=0; i<sizeof(map)/sizeof(map[0]); i++ ) if( ph==map[i].ph ) {
     double t = map[i].a + (map[i].b-map[i].a)*std::max( f, 0.0 );
@@ -717,7 +820,7 @@ static double Total( const string& ph, double f, int whole ) {
   return -1;
 }
 
-static wstring Percent( double f ) { wchar_t b[16]; swprintf( b, 16, L"%.1f%%", 100*f ); return b; }
+static wstring Percent( double f ) { wchar_t b[16]; swprintf( b, 16, L"%.1f%%", ((f>-0.0005) && (f<0.0005)) ? 0.0 : 100*f ); return b; }
 
 // a bar that runs to and fro (comctl32 6) for what does not tell how far it is
 static void Marquee( HWND b, int on ) {
@@ -745,7 +848,7 @@ static void Tasks( const Prog& p ) {
     t->st = 1; t->frac = Total( p.phase, p.frac, 0 );
     return;
   }
-  struct Sum { string key; int n, wait, run, known, done, fail, stop, est, pack; double w, f; qword work, made; };
+  struct Sum { string key; int n, wait, run, known, done, fail, stop, est, gain; double w, f; qword work, made; };
   vector<Sum> v;
   for( size_t i=0; i<p.jobs.size(); i++ ) {
     const JobRow& j = p.jobs[i];
@@ -755,7 +858,7 @@ static void Tasks( const Prog& p ) {
     if( s==v.size() ) { Sum z = Sum(); z.key = k; v.push_back( z ); }
     Sum& a = v[s];
     double w = double( std::max<qword>( j.work, 1 ) );
-    a.n++; a.w += w; a.work += j.work; a.made += j.made; a.est |= j.est; a.pack |= j.pack;
+    a.n++; a.w += w; a.work += j.work; a.made += j.made; a.est |= j.est; a.gain |= j.gain;
     if( j.st==0 ) a.wait++;
     else if( j.st==1 ) { a.run++; if( j.frac>=0 ) { a.known++; a.f += w*j.frac; } }
     else if( j.st==2 ) { a.done++; a.f += w; }
@@ -768,28 +871,38 @@ static void Tasks( const Prog& p ) {
     t->label = a.key + ((a.n>1) ? " (" + Num(a.n) + " parts)" : string());
     t->st = a.fail ? 3 : a.stop ? 5 : (a.run || (a.done && a.wait)) ? 1 : a.wait ? 0 : 2;
     t->frac = ((t->st==1) && !a.known && !a.done) ? -1 : a.f/a.w;
-    t->est = a.est; t->pack = a.pack; t->work = a.work; t->made = a.made;
+    t->est = a.est; t->gain = a.gain; t->work = a.work; t->made = a.made;
   }
 }
 
+// a bar's split: green to g, blue after it (-1: none); [NJ]: the overall bar
+static void Split( int i, double g ) {
+  if( g==split[i] ) return;
+  split[i] = g;
+  InvalidateRect( (i<NJ) ? c_jb[i] : c_bar, 0, TRUE );
+}
+
 // row i: a task (0: hidden), its bar, and its share done; when done its gain
-// (blue; Verify: OK), or that it failed (red) or was stopped
+// (in blue, and its bar green for what it came to, blue for the gain;
+// Verify: OK), or that it failed (red) or was stopped
 static void RowShow( int i, const Task* t ) {
   HWND c[3] = { c_jl[i], c_jb[i], c_jp[i] };
-  if( !t ) { for( int k=0; k<3; k++ ) ShowWindow( c[k], SW_HIDE ); return; }
+  if( !t ) { for( int k=0; k<3; k++ ) ShowWindow( c[k], SW_HIDE ); Split( i, -1 ); return; }
   int unknown = (t->st==1) && (t->frac<0), color = 0;
+  double g = -1;
   SetText( c_jl[i], W(t->label) );
   Marquee( c_jb[i], unknown );
   if( !unknown ) SendMessageW( c_jb[i], PBM_SETPOS, int( std::max( t->frac, 0.0 )*1000 ), 0 );
   wstring p;
   if( t->st==2 ) {
     if( t->key=="verify" ) { p = L"OK"; color = 1; }
-    else if( t->pack && t->work ) { p = Percent( 1-double(t->made)/double(t->work) ); color = 1; }
+    else if( t->gain && t->work ) { g = double(t->made)/double(t->work); p = Percent( 1-g ); color = 1; g = std::min( g, 1.0 ); }
     else p = Percent( 1 );
   } else if( t->st==3 ) { p = L"failed"; color = 2; }
   else if( t->st==5 ) p = L"stopped";
   else if( (t->st==1) && !unknown ) p = (t->est ? L"~" : L"") + Percent( t->frac );
   SetText( c_jp[i], p );
+  Split( i, g );
   if( (color!=jp_color[i]) || ((t->st==0)!=jl_gray[i]) ) {
     jp_color[i] = color; jl_gray[i] = (t->st==0);
     InvalidateRect( c_jp[i], 0, TRUE ); InvalidateRect( c_jl[i], 0, TRUE );
@@ -820,7 +933,7 @@ static void Title() {
 
 // the status line while it runs
 static void RunStatus() {
-  SetStatus( f_abort ? "Stopping..." : f_pause ? "Paused: the tools are held." : Verifying( prog.phase ) ? "Verifying: d of the archive..."
+  SetStatus( f_abort ? "Stopping..." : f_pause ? "Paused." : Verifying( prog.phase ) ? "Verifying: d of the archive..."
              : run_dec ? "Decompressing..." : "Compressing..." );
 }
 
@@ -854,6 +967,7 @@ static void ShowProg() {
 
 static void ClearProg() {
   prog = Prog(); shown = 0; tasks.clear(); pct_blue = 0;
+  Split( NJ, -1 );
   SetText( c_phase, L"" ); SetText( c_pct, L"" ); SetText( c_time, L"" );
   Marquee( c_bar, 0 );
   SendMessageW( c_bar, PBM_SETPOS, 0, 0 );
@@ -929,8 +1043,11 @@ static void OnDone( int r ) {
     shown = 1;
     Marquee( c_bar, 0 );
     SendMessageW( c_bar, PBM_SETPOS, 1000, 0 );
-    pct_blue = !run_dec && !GetSize( LongPath(run_in), a ) && !GetSize( LongPath(run_out), b ) && a; // (c: the gain of it all)
-    SetText( c_pct, pct_blue ? Percent( 1-double(b)/double(a) ) : Percent( 1 ) );
+    // the gain of it all: the archive against the file (c: out to in; d: in to out)
+    pct_blue = !GetSize( LongPath(run_in), a ) && !GetSize( LongPath(run_out), b ) && a && b;
+    double g = !pct_blue ? -1 : run_dec ? double(a)/double(b) : double(b)/double(a);
+    SetText( c_pct, pct_blue ? Percent( 1-g ) : Percent( 1 ) );
+    Split( NJ, pct_blue ? std::min( g, 1.0 ) : -1 );
     InvalidateRect( c_pct, 0, TRUE );
     SetText( c_phase, run_verify ? L"done, verified" : L"done" );
     SetStatus( "Done: " + result + (run_verify ? "; verified" : "") );
@@ -954,6 +1071,58 @@ static void OnDone( int r ) {
   }
   if( closing ) DestroyWindow( hwnd );
   else Refresh();
+}
+
+//---- the command line
+
+// mp4gui's command line: mp4pack's (c or d, its options, input [output]) sets
+// the mode, the options given and the files; C or D starts it too (an
+// existing output replaced without asking, as mp4pack does). Else input
+// [output]: a file dropped on mp4gui.exe, "Open with". 1: start
+static int CommandLine() {
+  int argc = 0, mode = 0;
+  wchar_t** argv = CommandLineToArgvW( GetCommandLineW(), &argc );
+  if( !argv ) return 0;
+  vector<wstring> io;
+  string seen, why;
+  wstring a1 = (argc>1) ? argv[1] : L"";
+  if( (a1==L"c") || (a1==L"d") || (a1==L"C") || (a1==L"D") ) {
+    t_spec.clear(); c_spec.clear(); w_base.clear(); cap = -1; f_free = f_keep = f_verify = f_verbose = 0;
+    if( ParseArgs( argc, argv, 1, mode, io, seen, why ) || (c_spec.size() && ParseChunks( c_spec.c_str() )) ) {
+      if( why.empty() ) why = c_spec.size() ? "bad -c " + c_spec : "mp4gui [c|d|C|D [options] input [output]]";
+      Problem( L"The command line: " + W(why) + L"\n\nmp4pack's: c or d, its options, the input and maybe the output (C or D: started at once)." );
+      mode = 0; io.clear();
+    }
+  } else for( int i=1; (i<argc) && (i<3); i++ ) io.push_back( argv[i] );
+  LocalFree( argv );
+  if( mode ) {
+    if( seen.find( 't' )!=string::npos ) { // a -N at the end: keep free
+      string t = t_spec;
+      int k = 0;
+      size_t m = t.rfind( '-' );
+      if( (m!=string::npos) && (m+1<t.size()) && (t.find_first_not_of( "0123456789", m+1 )==string::npos) ) { k = atoi( t.c_str()+m+1 ); t.erase( m ); }
+      SetText( c_t, W( t.size() ? t : string( "100%,100%" ) ) );
+      SetText( c_free, W(Num(k)) );
+    }
+    if( seen.find( 'f' )!=string::npos ) Check( c_f, 1 );
+    if( seen.find( 'l' )!=string::npos ) {
+      SendMessageW( c_lh, CB_SETCURSEL, (lv[G_VIDEO]==NO_LEVEL) ? 0 : 10-lv[G_VIDEO], 0 );
+      SendMessageW( c_la, CB_SETCURSEL, (lv[G_AUDIO]==NO_LEVEL) ? 0 : 10-lv[G_AUDIO], 0 );
+      SetText( c_ls, (lv[G_OTHER]==NO_LEVEL) ? L"default" : W(INum(lv[G_OTHER])) );
+    }
+    if( seen.find( 'w' )!=string::npos ) SetText( c_w, w_base );
+    if( seen.find( 'k' )!=string::npos ) Check( c_k, 1 );
+    if( seen.find( 'V' )!=string::npos ) Check( c_verify, 1 );
+    if( seen.find( 'c' )!=string::npos ) cl_c = c_spec;
+    if( seen.find( 'i' )!=string::npos ) cl_cap = cap;
+  }
+  if( io.size() ) SetInput( FullPath( io[0] ) ); // (the mode by its name...)
+  if( mode ) { Check( c_dec, (mode|32)=='d' ); Check( c_comp, (mode|32)=='c' ); mode_dec = Checked( c_dec ); } // (...unless it is given)
+  if( io.size()>1 ) SetText( c_out, FullPath( io[1] ) );
+  else AutoOut();
+  int go = ((mode=='C') || (mode=='D')) && io.size();
+  if( go ) out_ok = FullPath( Text( c_out ) );
+  return go;
 }
 
 //---- the window
@@ -982,7 +1151,7 @@ static LRESULT CALLBACK WndProc( HWND h, UINT msg, WPARAM wp, LPARAM lp ) {
         case ID_WB: BrowseWork(); return 0;
         case ID_WTEMP: SetText( c_w, L"%TEMP%" ); return 0;
         case ID_WOUT: WorkByOutput(); return 0;
-        case ID_COMP: case ID_DEC: if( code==BN_CLICKED ) { AutoOut(); Enable(); } return 0;
+        case ID_COMP: case ID_DEC: if( code==BN_CLICKED ) ModeClicked(); return 0;
         case ID_IN: if( (code==EN_CHANGE) && !Unquote( c_in ) ) InputChanged(); return 0;
         case ID_OUT: if( code==EN_CHANGE ) Unquote( c_out ); return 0;
         case ID_W: if( code==EN_CHANGE ) Unquote( c_w ); return 0;
@@ -1123,11 +1292,7 @@ int WINAPI wWinMain( HINSTANCE hi, HINSTANCE, LPWSTR, int show ) {
   }
   Load();
   Check( c_comp, 1 );
-  int argc = 0; // mp4gui.exe input [output] (a file dropped on it, "Open with")
-  wchar_t** argv = CommandLineToArgvW( GetCommandLineW(), &argc );
-  if( argv && (argc>1) ) SetInput( FullPath( argv[1] ) );
-  if( argv && (argc>2) ) SetText( c_out, FullPath( argv[2] ) );
-  if( argv ) LocalFree( argv );
+  int go = CommandLine();
   Refresh();
   Enable();
   ClearProg();
@@ -1135,6 +1300,7 @@ int WINAPI wWinMain( HINSTANCE hi, HINSTANCE, LPWSTR, int show ) {
   ShowWindow( hwnd, show );
   UpdateWindow( hwnd );
   if( !running ) SetFocus( Text( c_in ).empty() ? c_in : c_start );
+  if( go ) PostMessageW( hwnd, WM_COMMAND, ID_START, 0 ); // (C, D)
 
   MSG m;
   while( GetMessageW( &m, 0, 0, 0 )>0 ) {

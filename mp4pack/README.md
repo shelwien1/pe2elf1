@@ -3,7 +3,8 @@
 Lossless compression of whole mp4/mkv/avi files, for Windows and Linux (see
 [Linux](#linux)). `mp4pack.exe` is a wrapper: it takes the container apart with
 `avip`, gives each stream to the packer made for it, and stores the results in
-one `shar a0` archive. `mp4gui.exe` is the same with a window, on Windows (see
+one archive in shar's format, written by mp4pack itself (what `shar a0` would
+make). `mp4gui.exe` is the same with a window, on Windows (see
 [mp4gui](#mp4gui)).
 
 ```
@@ -39,8 +40,10 @@ runs here) goes to shar, with a note.
    | `.ttf` `.otf` `.ttc` | `ttfcomp a`, all fonts in one solid archive | 3 |
    | everything else: `s.meta`, subtitles, ac3, flac, opus, xvid/hevc video, ... | `shar a22` (`aL` with `-l`) | 4 |
 
-3. `shar a0` stores the packed files and an index, `mp4pack.idx`, as the
-   output.
+3. mp4pack stores the packed files and an index, `mp4pack.idx`, as the
+   output: a Shar2 archive with them stored, the same bytes `shar a0` makes of
+   them (see [The archive](#the-archive)). Each packed file is removed from
+   the work directory once it is in (unless `-k`).
 
 **d** undoes it: `shar x`, the unpackers, then `avip d`. Every stream is checked
 against the size and CRC32 the index has for it before `avip d`, and the result
@@ -52,8 +55,8 @@ relative paths. They take ANSI command lines, so a path that does not survive
 the conversion to the ANSI code page (e.g. Cyrillic names on a Western system)
 never reaches them: avip gets the input's 8.3 name, or a hard link to it in the
 work directory (a copy as the last resort); the output of `avip d` goes to its
-8.3 name, or to the work directory and is moved; `shar a0`/`shar x` write and
-read the archive through a pipe.
+8.3 name, or to the work directory and is moved; mp4pack writes the archive
+itself, and `shar x` reads it through a pipe.
 
 ## Options
 
@@ -135,7 +138,7 @@ they make no difference here). A missing or empty one: the tool's default.
 E.g. `-l 5,9,,19`: `h264p c -5`, `aacpack c -9`, `shar a19`; ttfcomp takes no
 level, so its place is left empty (a number there would not be used, nor one
 for the audio when the audio is mp3 or vorbis). The levels are for c; d needs
-none. The final `shar a0` stays a0.
+none. The archive itself stores them (no level).
 
 Which levels h264p and aacpack have depends on the build, so mp4pack asks it
 before using one: after `avip c`, for the packers the streams need, it runs the
@@ -171,11 +174,17 @@ the packed ones; streams are removed as soon as they are packed (or restored).
 (otherwise their output goes to log files in the work directory, and the end of
 a log is shown when a tool fails).
 
+`-verify` &mdash; after c, decompress the archive into a temporary file beside
+the work directories (`-w`) and check it as d does (each stream, and the whole
+file, against the index's sizes and CRC32s); the file is removed after. It
+needs room for the restored file and its streams. A failed check is exit code
+4; the archive is kept.
+
 On a console, a status line shows the elapsed time, the overall progress and an
 estimate of the time left, and each running job with its progress. The jobs'
 progress comes from the tools where they tell it (h264p, mp3pack and shar: the
 percentages they write), from what mp4pack feeds them or takes from them
-(aacpack, shar x, shar a0), else from the size of what they have written so
+(aacpack, shar x, the archive), else from the size of what they have written so
 far: exact where the size to come is known (oggcomp, ttfcomp and avip in d),
 by a typical ratio in c (oggcomp about 87%, ttfcomp about a third). avip c
 and ttfcomp x write only at the end, so they tell nothing. The time left is
@@ -257,11 +266,13 @@ not.
 run on a thread of its own instead of from a console. It goes next to the
 tools, as `mp4pack.exe` does.
 
-- **Compress** or **Decompress**, and **Verify** for Compress: once the
-  archive is made, it is decompressed into a temporary file beside the work
-  directories, and that is checked by the index's CRCs (each stream's and the
-  whole file's), as d checks; the file is removed after. When the check
-  fails, the archive is kept and the run ends with an error.
+- **Compress** or **Decompress**: switching from one to the other swaps Input
+  and Output (`x.mkv` -> `x.mkv.mpk`, then the archive back to `x.mkv`).
+  **Verify** (for Compress) is `-verify`: once the archive is made, it is
+  decompressed into a temporary file beside the work directories, and that is
+  checked by the index's CRCs (each stream's and the whole file's), as d
+  checks; the file is removed after. When the check fails, the archive is kept
+  and the run ends with an error.
 - **CPU Info** opens a window with what cpuinfo says of the CPU (name, threads
   and cores, memory, caches, features, what `-march=native` picks, the targets
   whose code runs here, ranked) and every build of every tool here: the one
@@ -270,10 +281,9 @@ tools, as `mp4pack.exe` does.
 - **Input, Output**: typed or pasted (quotes around a path, as Explorer's "Copy
   as path" gives it, are taken off), chosen with `...` (the Open and Save
   dialogs), or the input dropped on the window, or given on mp4gui's command
-  line (`mp4gui.exe input [output]`, as when a file is dropped on mp4gui.exe).
-  An input ending in `.mpk` selects Decompress. The output is named after the
-  input (`x.mkv` -> `x.mkv.mpk`, and back) until you choose one; an existing
-  output is replaced only after asking.
+  line (below). An input ending in `.mpk` selects Decompress. The output is
+  named after the input (`x.mkv` -> `x.mkv.mpk`, and back) until you choose
+  one; an existing output is replaced only after asking.
 - **Work dir** (`-w`; empty: the temp directory): `...` chooses a folder,
   `%TEMP%` puts that in (expanded when it runs), Output dir the output's
   folder; "keep it" is `-k`.
@@ -285,18 +295,22 @@ tools, as `mp4pack.exe` does.
   as the memory allows: `-c`), and the tool builds any that run here.
 - **Start** (or Enter) runs it. The log gets mp4pack's messages, the command
   line it amounts to first. Progress shows the whole run's share done (avip
-  and the final shar take 3% each, packing or unpacking the rest; with Verify,
+  and the archive take 3% each, packing or unpacking the rest; with Verify,
   the compression is the first half and the check the second), the time so
   far and about how much is left of the phase, and a row for each task as it
   comes: avip, each stream's packer (a stream's parts in one), ttfcomp, shar,
-  the final shar, the verify. `~` marks a share that is a guess (in c, by a
+  the archive, the verify. `~` marks a share that is a guess (in c, by a
   typical ratio), a bar that runs to and fro a task that does not tell (see
-  the status line above), a gray name one that waits. A packer's row shows its
-  gain in blue when it is done (1 - packed size / stream size: 20.7% for an
-  h264 stream packed to 79.3%), and the overall row the archive's gain on the
-  input at the end; a task that failed says so in red. The taskbar button
-  shows the progress too, and flashes at the end if the window is in the
-  background.
+  the status line above), a gray name one that waits. When a packer is done,
+  its bar shows what the stream came to in green and what it saved in blue,
+  and the gain beside it in blue: an h264 stream packed to 79.3% is
+  `|green 79.3%|blue 20.7%| 20.7%`. In d the unpackers' rows show the same
+  (the packed files against what they restore), and at the end the overall
+  bar shows the archive against the input (c) or the output (d). A task that
+  failed says so in red. (The bars are green on the classic look; with a
+  visual style they are as it draws them while they run, and a finished one
+  takes the green and the blue in its shading.) The taskbar button shows the
+  progress too, and flashes at the end if the window is in the background.
 - **Pause** holds the run until **Resume**: the tools running are suspended
   (all their threads), none starts, and the clock stops. Nothing is ended;
   Stop works while it is paused.
@@ -304,6 +318,19 @@ tools, as `mp4pack.exe` does.
   directory is removed (unless kept); their rows say "stopped". Closing the
   window while it runs asks first, then stops it.
 - The options and the window's place are kept in `mp4gui.ini` next to it.
+
+mp4gui takes mp4pack's command line too: `mp4gui c [options] input [output]`
+(or `d`) sets the mode, the options given and the files (the output named
+after the input if not given), and waits for Start; `C` and `D` start it at
+once, an existing output replaced without asking, as mp4pack does. E.g.
+`mp4gui.exe C -t 50%+50% -verify "%1"` for a "Send To" or a file association.
+The options are mp4pack's: `-t` (a `-N` at its end goes to "keep free"),
+`-f`, `-l`, `-w`, `-k`, `-verify`; `-c` and `-i`, which have no fields, are
+used for every run until mp4gui is closed and show on the line under
+Threads; `-v` is ignored. What is not given stays as kept in mp4gui.ini. A
+command line that is not right is shown, and none of it is used. Without `c`
+or `d`, `mp4gui input [output]` takes the files only (as when a file is
+dropped on mp4gui.exe).
 
 The tools run without a console (`DETACHED_PROCESS`), so none opens a window;
 the rest is as with mp4pack.exe, whose console output comes to the window
@@ -320,7 +347,7 @@ controls look classic.
 | 1 | bad command line |
 | 2 | a file cannot be read or written, a tool is missing (or has no build that runs on the CPU) |
 | 3 | a tool failed (the end of its log is shown) |
-| 4 | d: not an mp4pack archive, or a stream or the result is not as it was |
+| 4 | d (or `-verify`'s check): not an mp4pack archive, or a stream or the result is not as it was |
 | 5 | aborted with Ctrl+C |
 
 When compressing, a packer that fails (or crashes) does not stop it: the
@@ -331,8 +358,10 @@ when mp4pack ends, however that happens.
 
 ## The archive
 
-The output is a plain `shar a0` archive, so `shar x archive dir\` shows what is
-in it, e.g. for an mkv with h264, two aac tracks, an mp3, fonts and subtitles:
+The output is a Shar2 archive with the files stored, what `shar a0` makes
+(mp4pack writes it itself), so `shar x archive dir\` or `shar l archive` shows
+what is in it, e.g. for an mkv with h264, two aac tracks, an mp3, fonts and
+subtitles:
 
 ```
 mp4pack.idx
@@ -356,6 +385,23 @@ part <offset> <length> <packed file> [<name>]  what holds it (mp3pack: the
 ...                                            "outside" file; shar: the name
 end                                            in the archive)
 ```
+
+The archive's own format, as shar 2 writes it with a0, and mp4pack the same
+way, byte for byte:
+
+```
+"Shar2\n\x1A\0" "C"
+each file's bytes, escaped, then 99 19 D3 FF
+9A 19 D3 FF
+the index, escaped (by 9A 19 D3 only), then 9A 19 D3 FF
+```
+
+Escaped: an FE goes before an FE or FF that follows 99 19 D3 or 9A 19 D3
+within a file. The index has, for each entry, its parent's number (LEB128: 0
+for the top, else the directory's place in the index, from 1), `F` or `D`, the
+name (UTF-8) and a 0, the entries of a directory right after it, by name
+ignoring case; then 0, `X` and the CRC-32C (Castagnoli) of all the files' bytes
+and of the index up to the `X`, little-endian. `shar x` checks that CRC.
 
 ## Building
 
@@ -426,8 +472,9 @@ Windows). Everything else works as described above, with these differences:
 
 The archives are the same on both systems: an archive made on one decompresses
 on the other. The index's `tools` line lists the builds (`h264p_avx2` or
-`h264p_avx2.exe`). Apart from that line, only mp3pack's output with more than
-one thread differs, and it differs from run to run on Windows too.
+`h264p_avx2.exe`). Apart from that line, only the output of mp3pack and h264p
+with more than one thread differs (their parts come out in the order they are
+done), and it differs from run to run on Windows too.
 
 Tested on Linux as on Windows: the sample files with the `-t`/`-c`/`-l`
 combinations, and archives from the Windows build decompressed by the Linux one
@@ -467,16 +514,31 @@ and Core 2 to Sapphire Rapids, VIA Nano, Zhaoxin), with and without `-i`. Not
 under wine: Ctrl+C (wine's console ends a program on it at once, without its
 handler).
 
+The archive mp4pack writes was compared with what `shar a0` makes of the same
+work directory (kept with `-k`), on Linux and under wine, with packed files
+and with a `store\` directory: the same bytes. The format was worked out from
+shar's output; a reference writer in Python made the same bytes as shar a0 for
+test directories with the escape sequences in files and across files, CRCs
+forced to the marker values, more than 255 entries, empty files and
+directories. The escaping in C++ was checked against a byte-at-a-time version
+on 40,000 random cases cut at random places. With the same options the
+archives are those the previous version made with shar a0 (but for the order
+of h264p's and mp3pack's parts, which varies from run to run), and the old
+archives decompress as before.
+
 mp4gui was run under wine on a virtual X display (Xvfb), driven by a small
 program sending it the messages a user's clicks and typing would, with a
 screenshot at each step: compress and decompress (the archive the same as
 mp4pack.exe's, the result identical), with Verify (and with an avip build
 made to change a byte of what it writes in d: the check failed, as it
-should), Pause (the tools got no CPU time while held) and Resume, Stop during
-packing and while paused, closing the window while it runs, a bad option, the
-replace question (no, then yes), Cyrillic names, quoted paths pasted, the
-Work dir buttons, the settings kept in mp4gui.ini, and no work directory or
-temporary file left in any case. Not on Windows itself: the
+should), Pause (the tools got no CPU time while held) and Resume, Pause and
+Stop in the archive step (a 1GB file stored), Stop during packing and while
+paused, closing the window while it runs, a bad option, the replace question
+(no, then yes), Cyrillic names, quoted paths pasted, the Work dir buttons,
+the files swapping with the mode, the command line (c, C over an existing
+output, one that is not right), the green and blue bars with wine's own
+visual style and with the classic look, the settings kept in mp4gui.ini, and
+no work directory or temporary file left in any case. Not on Windows itself: the
 look there (Segoe UI, the themed controls) and the taskbar's progress were not
 seen.
 
