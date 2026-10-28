@@ -288,6 +288,22 @@ static int GetSize( const wstring& p, qword& sz ) {
 
 static int Exists( const wstring& p ) { qword s; return GetSize( p, s )==0; }
 
+// the size of a file another process is writing (on Windows a directory
+// entry's size lags until the writer closes it: this asks the file itself)
+static int LiveSize( const wstring& p, qword& sz ) {
+#ifdef _WIN32
+  HANDLE f = CreateFileW( p.c_str(), FILE_READ_ATTRIBUTES, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, 0, OPEN_EXISTING, 0, 0 );
+  if( f==INVALID_HANDLE_VALUE ) return 1;
+  LARGE_INTEGER s;
+  int r = !GetFileSizeEx( f, &s );
+  CloseHandle( f );
+  sz = r ? 0 : qword(s.QuadPart);
+  return r;
+#else
+  return GetSize( p, sz );
+#endif
+}
+
 static int IsDir( const wstring& p ) {
   WIN32_FILE_ATTRIBUTE_DATA a;
   return GetFileAttributesExW( p.c_str(), GetFileExInfoStandard, &a ) && (a.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY);
@@ -659,10 +675,13 @@ static DWORD WINAPI PumpThread( void* arg ) {
   if( !SetFilePointerEx( p.file, o, 0, FILE_BEGIN ) ) p.err = 1;
   if( p.dir==0 ) {
     while( !p.err && (p.done<p.len) ) {
-      DWORD n = DWORD( std::min<qword>( bn, p.len-p.done ) ), k = 0, w = 0;
+      DWORD n = DWORD( std::min<qword>( bn, p.len-p.done ) ), k = 0;
       if( !ReadFile( p.file, buf, n, &k, 0 ) || (k==0) ) { p.err = 1; break; }
-      if( !WriteFile( p.pipe, buf, k, &w, 0 ) || (w!=k) ) { p.err = 2; break; } // it closed its stdin
-      p.done += k;
+      for( DWORD o=0; o<k; ) { // in 64K pieces: done follows what the tool has taken (the progress)
+        DWORD m = std::min<DWORD>( k-o, 1<<16 ), w = 0;
+        if( !WriteFile( p.pipe, buf+o, m, &w, 0 ) || (w!=m) ) { p.err = 2; break; } // it closed its stdin
+        o += m; p.done += m;
+      }
     }
   } else {
     while(1) { // until it closes its stdout; after an error, only drained so that it can finish
@@ -703,10 +722,12 @@ struct Job {
   string args;            // the rest of its command line
   string cwd;             // its current directory, in the work directory
   int g, w;               // group; threads it takes from the group's
-  int prog;               // its progress: 0 -, 1 the last "NN%" in its log, 2 its stdin, 3 its stdout
+  int prog;               // its progress: 0 -, 1 the last "NN%" in its log, 2 its stdin, 3 its stdout,
+                          // 4 the size of its outs against expect
   int report;             // a line when it is done
   int quiet;              // its output to its log even with -v, its command line not shown
   qword work;             // the bytes it packs (c) or unpacks (d), for the progress
+  qword expect;           // prog 4: the bytes it makes (d: exact; c: by a typical ratio)
   vector<int> sids;       // c: the streams it packs
   vector<wstring> outs;   // files it has to make (c: their sizes are reported)
   vector<wstring> del;    // removed once it is done (unless -k)
@@ -720,7 +741,7 @@ struct Job {
   qword t0, t;
   double frac;
   string why;
-  Job() : g(G_OTHER), w(1), prog(0), report(1), quiet(0), work(0), st(0), wu(0), hp(0), exited(0), code(0), t0(0), t(0), frac(0) { out.dir = 1; }
+  Job() : g(G_OTHER), w(1), prog(0), report(1), quiet(0), work(0), expect(0), st(0), wu(0), hp(0), exited(0), code(0), t0(0), t(0), frac(0) { out.dir = 1; }
 };
 
 static HANDLE Inheritable( HANDLE h ) {
@@ -867,6 +888,11 @@ static double Frac( Job& j ) {
   if( j.prog==1 ) f = j.log.size() ? LogPct( j.log ) : -1;
   if( (j.prog==2) && j.in.len ) f = double(j.in.done)/double(j.in.len);
   if( (j.prog==3) && j.work ) f = std::min( 1.0, double(j.out.done)/double(j.work) );
+  if( (j.prog==4) && j.expect ) {
+    qword n = 0, z;
+    for( size_t i=0; i<j.outs.size(); i++ ) if( !LiveSize( j.outs[i], z ) ) n += z;
+    f = std::min( 0.99, double(n)/double(j.expect) ); // (all of it only when it is done)
+  }
   if( f>=0 ) j.frac = f;
   return j.frac;
 }
@@ -891,7 +917,13 @@ static void Status( const vector<Job*>& all, const vector<Job*>& run ) {
     any |= all[i]->prog;
   }
   int eta = any && (done>0) && (done<tot) && (done>tot/200);
-  qword left = eta ? qword( double(GetTickCount64()-t_run)*(tot-done)/done ) : 0;
+  qword now = GetTickCount64(), left = eta ? qword( double(now-t_run)*(tot-done)/done ) : 0;
+  // and no sooner than the job running that has the most left, at its own
+  // pace (h264p is much slower by the byte than the rest; not by a guess)
+  if( eta ) for( size_t i=0; i<run.size(); i++ ) {
+    const Job& j = *run[i];
+    if( j.prog && ((j.prog!=4) || f_dec) && (j.frac>0.02) && (j.frac<1) ) left = std::max( left, qword( double(now-j.t0)*(1-j.frac)/j.frac ) );
+  }
   if( status_hook ) { status_hook( any ? done/tot : -1, left, run ); return; }
   qword el = GetTickCount64()-t_start;
   string s = "[" + Clock(el) + "]";
@@ -1382,6 +1414,7 @@ static int PackJobs() {
       string pk = s.name + ".oggc";
       Job* j = NewJob( G_AUDIO, 1, "oggcomp " + s.name, "oggcomp" );
       j->args = "c " + u + " " + Quote("p" DS+pk);
+      j->prog = 4; j->expect = s.size/100*87; // (it writes as it goes; vorbis comes to about 87%)
       j->work = s.size; j->sids.push_back( si ); j->outs.push_back( PPath(pk) );
       s.part.push_back( Part( 0, s.size, pk, "" ) );
     } else if( s.m==M_STORE ) {
@@ -1403,6 +1436,7 @@ static int PackJobs() {
     }
     f->args += " " + Quote( S[i].name );
     f->work += S[i].size; f->sids.push_back( int(i) );
+    f->prog = 4; f->expect = f->work/100*32; // (fonts come to about a third)
     f->label = "ttfcomp " + Num( f->sids.size() ) + ((f->sids.size()>1) ? " fonts" : " font");
     S[i].part.push_back( Part( 0, S[i].size, U(FileName(f->outs[0])), "" ) );
   }
@@ -1630,6 +1664,7 @@ static int Decompress( const wstring& in, const wstring& out ) {
     } else if( s.m==M_OGGCOMP ) {
       Job* j = NewJob( G_AUDIO, 1, "oggcomp " + s.name, "oggcomp" );
       j->args = "d " + Quote("p" DS+p0.pk) + " " + u;
+      j->prog = 4; j->expect = s.size;
       j->work = s.size; j->outs.push_back( UPath(s.name) ); j->del.push_back( PPath(p0.pk) );
     } else if( s.m==M_STORE ) {
       if( !MoveFileW( (work+L"p" DS "store" DS+W(s.name)).c_str(), UPath(s.name).c_str() ) ) { Msg( "missing from the archive: " + s.name ); return 4; }
@@ -1644,6 +1679,7 @@ static int Decompress( const wstring& in, const wstring& out ) {
     for( size_t i=0; i<S.size(); i++ ) if( (S[i].m==M_TTFCOMP) && (S[i].part[0].pk==ttf[a]) ) {
       j->args += " " + Quote(S[i].name); j->work += S[i].size; j->outs.push_back( UPath(S[i].name) );
     }
+    j->prog = 4; j->expect = j->work;
   }
   for( size_t a=0; a<sha.size(); a++ ) {
     Job* j = NewJob( G_OTHER, 1, "shar " + sha[a], "shar" );
@@ -1689,6 +1725,7 @@ static int Decompress( const wstring& in, const wstring& out ) {
     if( op.empty() ) { op = L"output.tmp"; tmp = 1; }
   }
   Job a; a.label = "avip d"; a.tool = "avip"; a.args = "d u" DS "s " + Quote(U(op));
+  a.prog = 4; a.expect = src_size; a.outs.push_back( tmp ? work+op : LongPath(op) );
   r = RunOne( a );
   if( r ) { Remove( LongPath(out) ); return (r==2) ? 5 : 3; }
   if( tmp && !MoveFileExW( (work+op).c_str(), LongPath(out).c_str(), MOVEFILE_REPLACE_EXISTING|MOVEFILE_COPY_ALLOWED ) ) {

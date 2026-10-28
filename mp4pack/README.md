@@ -164,7 +164,15 @@ the packed ones; streams are removed as soon as they are packed (or restored).
 a log is shown when a tool fails).
 
 On a console, a status line shows the elapsed time, the overall progress and an
-estimate of the time left, and each running job with its progress.
+estimate of the time left, and each running job with its progress. The jobs'
+progress comes from the tools where they tell it (h264p, mp3pack and shar: the
+percentages they write), from what mp4pack feeds them or takes from them
+(aacpack, shar x, shar a0), else from the size of what they have written so
+far: exact where the size to come is known (oggcomp, ttfcomp and avip in d),
+by a typical ratio in c (oggcomp about 87%, ttfcomp about a third). avip c
+and ttfcomp x write only at the end, so they tell nothing. The time left is
+that of the whole, but no less than what the slowest job running still needs
+at its own pace (h264p is far slower by the byte than the rest).
 
 ## Tool builds and the CPU
 
@@ -264,7 +272,9 @@ tools, as `mp4pack.exe` does.
   line it amounts to first. Progress shows the whole run's share done (avip
   and the final shar take 3% each, packing or unpacking the rest), the time
   so far and about how much is left of the phase, and a bar for each job
-  running (up to four; with more, three and the rest together). The taskbar button shows the
+  running (up to four; with more, three and the rest together): `~` marks a
+  share that is a guess (in c, by a typical ratio), and a bar that runs to and
+  fro a job that does not tell (see the status line above). The taskbar button shows the
   progress too, and flashes at the end if the window is in the background.
 - **Stop** ends it as Ctrl+C does: the tools are stopped and the work
   directory is removed (unless kept). Closing the window while it runs asks

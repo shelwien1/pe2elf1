@@ -67,7 +67,7 @@ static wstring run_in, run_out;
 static qword run_t0;
 static CRITICAL_SECTION qlock;    // for what the run's thread hands over:
 static string log_q;              //   messages (UTF-8 lines)
-struct JobRow { string label; double frac; };
+struct JobRow { string label; double frac; int est; }; // frac -1: not known; est: a guess
 struct Prog { string phase; double frac; qword eta; vector<JobRow> jobs; };
 static Prog prog_q;               //   the progress
 static int log_posted, prog_posted;
@@ -88,7 +88,9 @@ static void HookStatus( double frac, qword eta, const vector<Job*>& run ) {
   Prog p;
   p.phase = phase; p.frac = frac; p.eta = eta;
   for( size_t i=0; i<run.size(); i++ ) {
-    JobRow r = { run[i]->label, run[i]->prog ? Frac( *run[i] ) : -1 };
+    double f = run[i]->prog ? Frac( *run[i] ) : -1;
+    if( (run[i]->prog==4) && (f==0) ) f = -1; // (measured by what it has written, and nothing yet: ttfcomp x writes at the end)
+    JobRow r = { run[i]->label, f, (run[i]->prog==4) && !f_dec };
     p.jobs.push_back( r );
   }
   EnterCriticalSection( &qlock );
@@ -694,6 +696,26 @@ static double Total( const string& ph, double f ) {
 
 static wstring Percent( double f ) { wchar_t b[16]; swprintf( b, 16, L"%.1f%%", 100*f ); return b; }
 
+// a bar that runs to and fro (comctl32 6) for what does not tell how far it is
+static void Marquee( HWND b, int on ) {
+  LONG_PTR st = GetWindowLongPtrW( b, GWL_STYLE );
+  if( !(st&PBS_MARQUEE)==!on ) return;
+  if( !on ) SendMessageW( b, PBM_SETMARQUEE, FALSE, 0 ); // (stopped while it has the style)
+  SetWindowLongPtrW( b, GWL_STYLE, on ? (st|PBS_MARQUEE) : (st&~LONG_PTR(PBS_MARQUEE)) );
+  if( on ) SendMessageW( b, PBM_SETMARQUEE, TRUE, 40 );
+}
+
+// job row i: shown with a label (else hidden), its share done (f<0: not known)
+static void JobRowShow( int i, const string& label, double f, int est ) {
+  int on = label.size()>0;
+  SetText( c_jl[i], W(label) );
+  Marquee( c_jb[i], on && (f<0) );
+  if( f>=0 ) SendMessageW( c_jb[i], PBM_SETPOS, int( f*1000 ), 0 );
+  SetText( c_jp[i], (on && (f>=0)) ? (est ? L"~" : L"") + Percent( f ) : wstring() );
+  HWND c[3] = { c_jl[i], c_jb[i], c_jp[i] };
+  for( int k=0; k<3; k++ ) ShowWindow( c[k], on ? SW_SHOWNA : SW_HIDE );
+}
+
 static void ShowTime() {
   qword now = GetTickCount64();
   string s = "elapsed " + Clock( now-run_t0 );
@@ -714,14 +736,13 @@ static void ShowProg() {
   for( size_t i=0; i<size_t(NJ); i++ ) {
     string l;
     double f = -1;
+    int est = 0;
     if( (i+1==size_t(NJ)) && (n>size_t(NJ)) ) { // the rest in one row
       double s = 0; int k = 0;
-      for( size_t j=i; j<n; j++ ) if( prog.jobs[j].frac>=0 ) { s += prog.jobs[j].frac; k++; }
+      for( size_t j=i; j<n; j++ ) if( prog.jobs[j].frac>=0 ) { s += prog.jobs[j].frac; k++; est |= prog.jobs[j].est; }
       l = "+" + Num(n-i) + " more"; f = k ? s/k : -1;
-    } else if( i<n ) { l = prog.jobs[i].label; f = prog.jobs[i].frac; }
-    SetText( c_jl[i], W(l) );
-    SendMessageW( c_jb[i], PBM_SETPOS, (f>=0) ? int( f*1000 ) : 0, 0 );
-    SetText( c_jp[i], (f>=0) ? Percent( f ) : wstring() );
+    } else if( i<n ) { l = prog.jobs[i].label; f = prog.jobs[i].frac; est = prog.jobs[i].est; }
+    JobRowShow( int(i), l, f, est );
   }
   wchar_t t[128]; swprintf( t, 128, L"%.0f%% %ls - mp4gui", 100*shown, W(prog.phase).c_str() );
   SetText( hwnd, t );
@@ -733,7 +754,7 @@ static void ClearProg() {
   prog = Prog(); shown = 0;
   SetText( c_phase, L"" ); SetText( c_pct, L"" ); SetText( c_time, L"" );
   SendMessageW( c_bar, PBM_SETPOS, 0, 0 );
-  for( int i=0; i<NJ; i++ ) { SetText( c_jl[i], L"" ); SetText( c_jp[i], L"" ); SendMessageW( c_jb[i], PBM_SETPOS, 0, 0 ); }
+  for( int i=0; i<NJ; i++ ) { JobRowShow( i, "", 0, 0 ); SendMessageW( c_jb[i], PBM_SETPOS, 0, 0 ); }
 }
 
 static void Problem( const wstring& s ) { MessageBoxW( hwnd, s.c_str(), L"mp4gui", MB_OK|MB_ICONWARNING ); }
@@ -789,7 +810,7 @@ static void OnDone( int r ) {
     SetStatus( (r==5) ? string( "Stopped." ) : "Failed: " + string( ((r>0) && (r<5)) ? what[r] : "exit code " + Num(r) ) + " (see the log)" );
     TaskbarShow( (r==5) ? TBPF_NOPROGRESS : TBPF_ERROR, 0 );
   }
-  for( int i=0; i<NJ; i++ ) { SetText( c_jl[i], L"" ); SetText( c_jp[i], L"" ); SendMessageW( c_jb[i], PBM_SETPOS, 0, 0 ); }
+  for( int i=0; i<NJ; i++ ) JobRowShow( i, "", 0, 0 );
   ShowTime();
   SetText( hwnd, L"mp4gui" );
   Enable();
@@ -965,6 +986,7 @@ int WINAPI wWinMain( HINSTANCE hi, HINSTANCE, LPWSTR, int show ) {
   if( argv ) LocalFree( argv );
   Refresh();
   Enable();
+  ClearProg();
   SetStatus( GetTool( "avip" ).path.size() ? "Ready." : "No avip here: mp4gui.exe goes next to the tools." );
   ShowWindow( hwnd, show );
   UpdateWindow( hwnd );
