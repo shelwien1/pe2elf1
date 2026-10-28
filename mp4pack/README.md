@@ -322,15 +322,23 @@ tools, as `mp4pack.exe` does.
 mp4gui takes mp4pack's command line too: `mp4gui c [options] input [output]`
 (or `d`) sets the mode, the options given and the files (the output named
 after the input if not given), and waits for Start; `C` and `D` start it at
-once, an existing output replaced without asking, as mp4pack does. E.g.
-`mp4gui.exe C -t 50%+50% -verify "%1"` for a "Send To" or a file association.
-The options are mp4pack's: `-t` (a `-N` at its end goes to "keep free"),
-`-f`, `-l`, `-w`, `-k`, `-verify`; `-c` and `-i`, which have no fields, are
-used for every run until mp4gui is closed and show on the line under
-Threads; `-v` is ignored. What is not given stays as kept in mp4gui.ini. A
-command line that is not right is shown, and none of it is used. Without `c`
-or `d`, `mp4gui input [output]` takes the files only (as when a file is
-dropped on mp4gui.exe).
+once. The options are mp4pack's: `-t` (a `-N` at its end goes to "keep
+free"), `-f`, `-l`, `-w`, `-k`, `-verify`; `-c` and `-i`, which have no
+fields, are used for every run until mp4gui is closed and show on the line
+under Threads; `-v` is ignored. Two more are mp4gui's own:
+
+- `-quit`: mp4gui quits when a run ends well (the one `C` or `D` starts, or
+  with `c` or `d` the one Start starts), with `-verify` after its check. When
+  the run fails or is stopped, the window stays, with the log.
+- `-overwrite`: an existing output is replaced without asking (else mp4gui
+  asks first, with `C` and `D` too).
+
+E.g. `mp4gui.exe C -verify -quit -overwrite "%1"` for a "Send To" or a file
+association. mp4gui's exit code is its last run's, as mp4pack's (0: done), for
+`start /wait mp4gui ...` in a batch file. What is not given stays as kept in
+mp4gui.ini. A command line that is not right is shown, and none of it is
+used. Without `c` or `d`, `mp4gui input [output]` takes the files only (as
+when a file is dropped on mp4gui.exe).
 
 The tools run without a console (`DETACHED_PROCESS`), so none opens a window;
 the rest is as with mp4pack.exe, whose console output comes to the window
@@ -531,11 +539,12 @@ archive step and in extracting it (a 1GB file stored), every task's row
 finished after runs whose steps follow at once, Stop during packing and while
 paused, closing the window while it runs, a bad option, the replace question
 (no, then yes), Cyrillic names, quoted paths pasted, the Work dir buttons, the
-files swapping with the mode, the command line (c, C over an existing output,
-one that is not right), the green and blue bars with wine's own visual style
-and with the classic look, the settings kept in mp4gui.ini, and no work
-directory or temporary file left in any case. Not on Windows itself: the look
-there (Segoe UI, the themed controls) and the taskbar's progress were not seen.
+files swapping with the mode, the command line (c, C, -quit after a run and not
+after a failed verify, -overwrite, and the question without it, one that is not
+right), the green and blue bars with wine's own visual style and with the
+classic look, the settings kept in mp4gui.ini, and no work directory or
+temporary file left in any case. Not on Windows itself: the look there (Segoe
+UI, the themed controls) and the taskbar's progress were not seen.
 
 The movie, with `-t 4+4,1,1` (the default then) on a 4-thread Xeon VM under
 wine:

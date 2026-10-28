@@ -4,7 +4,9 @@
 // archive) and of the whole (also in the taskbar), the gain of each task when
 // it is done (its bar green, then blue for the gain), and its messages, in
 // place of the console. CPU Info shows the CPU and the tool builds. It takes
-// mp4pack's command line too: c or d sets everything up, C or D starts it.
+// mp4pack's command line too: c or d sets everything up, C or D starts it;
+// -quit: it quits when that is done, -overwrite: an existing output is
+// replaced without asking.
 //
 // Run, mp4pack's whole run, works on a thread of its own here; msg_hook and
 // status_hook bring its messages and progress over. Stop sets its abort flag
@@ -60,6 +62,8 @@ static int jl_gray[NJ], jp_color[NJ], pct_blue; // colors: a task waiting (gray)
 
 static wstring out_auto;          // the output name we made from the input's (else the user's)
 static wstring out_ok;            // an existing output the user chose to overwrite
+static int f_overwrite, f_quit;   // -overwrite: any, without asking; -quit: quit when a run ends well
+static int exit_code;             // the last run's, as mp4pack's
 static int mode_dec;              // the mode as last set: a click that changes it swaps the files
 static int swapping;              // (the input set by that: not a new one)
 static string cl_c;               // -c and -i from the command line (no fields for them): for every run
@@ -994,7 +998,7 @@ static void OnStart() {
   if( !Exists( LongPath(in) ) ) { Problem( L"There is no file " + in + L"." ); SetFocus( c_in ); return; }
   string why;
   if( Options( why ) ) { Problem( W(why) ); return; }
-  if( (out!=out_ok) && Exists( LongPath(out) )
+  if( !f_overwrite && (out!=out_ok) && Exists( LongPath(out) )
       && (MessageBoxW( hwnd, (out + L" exists. Replace it?").c_str(), L"mp4gui", MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 )!=IDYES) ) return;
   Save();
   run_in = in; run_out = out; run_dec = f_dec; run_verify = f_verify;
@@ -1074,20 +1078,21 @@ static void OnDone( int r ) {
   Title();
   Enable();
   SetFocus( c_start );
+  exit_code = r;
+  if( closing || (f_quit && !r) ) { DestroyWindow( hwnd ); return; } // (-quit: done, verified too with Verify)
   if( GetForegroundWindow()!=hwnd ) { // (it may have taken long)
     FLASHWINFO fw = { sizeof(fw), hwnd, FLASHW_ALL|FLASHW_TIMERNOFG, 0, 0 };
     FlashWindowEx( &fw );
   }
-  if( closing ) DestroyWindow( hwnd );
-  else Refresh();
+  Refresh();
 }
 
 //---- the command line
 
 // mp4gui's command line: mp4pack's (c or d, its options, input [output]) sets
-// the mode, the options given and the files; C or D starts it too (an
-// existing output replaced without asking, as mp4pack does). Else input
-// [output]: a file dropped on mp4gui.exe, "Open with". 1: start
+// the mode, the options given and the files; C or D starts it too. -quit and
+// -overwrite are mp4gui's own. Else input [output]: a file dropped on
+// mp4gui.exe, "Open with". 1: start
 static int CommandLine() {
   int argc = 0, mode = 0;
   wchar_t** argv = CommandLineToArgvW( GetCommandLineW(), &argc );
@@ -1099,7 +1104,8 @@ static int CommandLine() {
     t_spec.clear(); c_spec.clear(); w_base.clear(); cap = -1; f_free = f_keep = f_verify = f_verbose = 0;
     if( ParseArgs( argc, argv, 1, mode, io, seen, why ) || (c_spec.size() && ParseChunks( c_spec.c_str() )) ) {
       if( why.empty() ) why = c_spec.size() ? "bad -c " + c_spec : "mp4gui [c|d|C|D [options] input [output]]";
-      Problem( L"The command line: " + W(why) + L"\n\nmp4pack's: c or d, its options, the input and maybe the output (C or D: started at once)." );
+      Problem( L"The command line: " + W(why) + L"\n\nmp4pack's: c or d, its options, the input and maybe the output. C or D starts at once; "
+               L"-quit quits when it is done, -overwrite replaces an existing output without asking." );
       mode = 0; io.clear();
     }
   } else for( int i=1; (i<argc) && (i<3); i++ ) io.push_back( argv[i] );
@@ -1124,14 +1130,14 @@ static int CommandLine() {
     if( seen.find( 'V' )!=string::npos ) Check( c_verify, 1 );
     if( seen.find( 'c' )!=string::npos ) cl_c = c_spec;
     if( seen.find( 'i' )!=string::npos ) cl_cap = cap;
+    f_quit = seen.find( 'Q' )!=string::npos;
+    f_overwrite = seen.find( 'O' )!=string::npos;
   }
   if( io.size() ) SetInput( FullPath( io[0] ) ); // (the mode by its name...)
   if( mode ) { Check( c_dec, (mode|32)=='d' ); Check( c_comp, (mode|32)=='c' ); mode_dec = Checked( c_dec ); } // (...unless it is given)
   if( io.size()>1 ) SetText( c_out, FullPath( io[1] ) );
   else AutoOut();
-  int go = ((mode=='C') || (mode=='D')) && io.size();
-  if( go ) out_ok = FullPath( Text( c_out ) );
-  return go;
+  return ((mode=='C') || (mode=='D')) && io.size();
 }
 
 //---- the window
@@ -1319,5 +1325,5 @@ int WINAPI wWinMain( HINSTANCE hi, HINSTANCE, LPWSTR, int show ) {
   }
   if( taskbar ) taskbar->Release();
   CoUninitialize();
-  return 0;
+  return exit_code;
 }

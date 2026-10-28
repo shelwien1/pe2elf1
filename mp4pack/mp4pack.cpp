@@ -2086,18 +2086,18 @@ static int Run( const wstring& in, const wstring& out ) {
   return r;
 }
 
-// a command line (after the program's name): c or d (C and D too with caps,
-// as mp4gui takes them), options into their settings (t_spec, c_spec, the
-// levels, cap, w_base, the flags), at most two files into io; seen: the
-// options given (t c l w i v f k, V for -verify). 1 when it is not right: why
-// (empty when the usage tells it)
-static int ParseArgs( int argc, wchar_t** argv, int caps, int& mode, vector<wstring>& io, string& seen, string& why ) {
+// a command line (after the program's name): c or d, options into their
+// settings (t_spec, c_spec, the levels, cap, w_base, the flags), at most two
+// files into io; seen: the options given (t c l w i v f k, V for -verify).
+// gui: mp4gui's, which takes C and D too, and -quit (Q) and -overwrite (O).
+// 1 when it is not right: why (empty when the usage tells it)
+static int ParseArgs( int argc, wchar_t** argv, int gui, int& mode, vector<wstring>& io, string& seen, string& why ) {
   int bits;
   mode = 0; io.clear(); seen.clear(); why.clear();
   for( int i=1; i<argc; i++ ) {
     wstring a = argv[i];
     if( !mode ) {
-      if( (a==L"c") || (a==L"d") || (caps && ((a==L"C") || (a==L"D"))) ) { mode = int(a[0]); continue; }
+      if( (a==L"c") || (a==L"d") || (gui && ((a==L"C") || (a==L"D"))) ) { mode = int(a[0]); continue; }
       return 1;
     }
     if( (a.size()>=2) && (a[0]=='-') ) {
@@ -2114,6 +2114,8 @@ static int ParseArgs( int argc, wchar_t** argv, int caps, int& mode, vector<wstr
       } else if( a==L"-v" ) { f_verbose = 1; seen += 'v'; }
       else if( a==L"-f" ) { f_free = 1; seen += 'f'; }
       else if( a==L"-k" ) { f_keep = 1; seen += 'k'; }
+      else if( gui && (a==L"-quit") ) seen += 'Q';
+      else if( gui && (a==L"-overwrite") ) seen += 'O';
       else { why = "unknown option " + U(a); return 1; }
       continue;
     }
