@@ -3,9 +3,12 @@
 // Usage: m4vpack c|d [options] input output
 //   c    compress
 //   d    decompress, restoring the original stream byte for byte
-//   -v   (c) afterwards decompress the output in memory and compare it with the input
+//   -v   (c) afterwards decompress the output and compare it with the input
 //   -s   (c) input and output sizes per kind of syntax element
 //   -q   no statistics
+//   -t N (c) compress on N threads (1 to 64): the stream in parts, a model for each
+//   -c N (c with -t) the size of a part, at least: N MB, or N KB with a k (default 4 MB)
+// input and output can be - for stdin and stdout.
 //
 // The bitstream syntax follows m4vdec.cpp, a port of FFmpeg's MPEG-4 Part 2 decoder, so this file
 // is licensed under the GNU Lesser General Public License 2.1 or later.
@@ -42,29 +45,57 @@
 // two weight sets), coefficient decisions then pass an APM (SSE). Probabilities adapt with a rate
 // of 1/n up to n = PLIMIT.
 //
-// File format: "m4vpack" 01, input size (8 bytes, little endian), CRC-32 of the input, then the
-// arithmetic coded chunks: kind (end, VOP as records, bytes), then the records or a length and the
-// bytes (order 0 and 1 contexts, mixed).
+// Streaming. The compressor and the decompressor are coroutines (Lib3's, as h264p's): each takes
+// its input and gives its output a buffer at a time, so they run on files, pipes or memory alike,
+// and any number of them at once. Memory grows with the longest chunk and the largest picture.
+//
+// Threads (-t). The stream is cut into parts that start at a VOP header (VOS, VO, VOL) or an
+// I-VOP, with the headers before them copied in, so that each part is a stream of its own; the
+// parts are dealt in turn to N workers (MTwrap), each part coded by a model of its own.
+//
+// File format: "m4vpack" 02, then the arithmetic coded chunks: kind (end, VOP as records, bytes),
+// then the records or a length and the bytes (order 0 and 1 contexts, mixed); after the end, the
+// CRC-32 of the stream. On threads: "m4vpm" 02, the threads, the part size in KB (4 bytes), then
+// MTwrap's container of the workers' streams, a record for each part (its size, where the headers
+// copied in are, its place, a CRC), each part as a stream of the first kind.
 //
 // Kept as bytes: as in m4vtsv, VOPs using data partitioning (B-VOPs don't), non-rectangular
 // shapes, static sprites, sprite brightness change, newpred, reduced resolution, scalability or the
 // studio profile; VOPs that don't parse (damaged data); VOPs longer than 64 MiB or with more than
 // 1 MiB after the last macroblock.
 //
-// Build:
-//   x86_64-w64-mingw32-g++ -O2 -s -static -o m4vpack.exe m4vpack.cpp
-//   g++ -O2 -o m4vpack m4vpack.cpp
-// Plain C (compiles as C or C++), no dependencies. No malloc: all buffers are static (about
-// 150 MiB of .bss, touched as far as the data needs it). Integer arithmetic only where it matters
-// for decoding, so files are portable between platforms.
+// Build (Lib3/ and MTwrap_v3/ next to this file):
+//   x86_64-w64-mingw32-g++ -O2 -s -static -ILib3 -o m4vpack.exe m4vpack.cpp
+//   g++ -O2 -ILib3 -pthread -o m4vpack m4vpack.cpp
+// C++11 without exceptions or RTTI. Integer arithmetic only where it matters for decoding, so
+// files are portable between platforms.
 
 #ifndef _WIN32
 #define _FILE_OFFSET_BITS 64
 #endif
+#include <math.h>
+#include <stdarg.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#endif
+
+// Lib3's stack-copying coroutines and its CoroutinePair, which chains two of them; then MTwrap,
+// which runs coroutines on threads (its win_shim.inc: build with -ILib3). After the system headers,
+// which Lib3's setjmp and longjmp must not reach.
+#include "Lib3/common.inc"
+#include "Lib3/coro3b.inc"
+#include "Lib3/coro2pair.inc"
+static void no_memory(void) {  // (MTwrap's buffers)
+  fprintf(stderr, "m4vpack: out of memory\n");
+  exit(5);
+}
+#define MTWRAP_NOMEM() no_memory()
+#include "MTwrap_v3/MTwrap.inc"
 
 typedef unsigned char U8;
 typedef signed char S8;
@@ -78,7 +109,6 @@ typedef long long S64;
 #ifndef IBUF_SIZE
 #define IBUF_SIZE (64u << 20)    // longest chunk handled at once (longer ones are kept raw)
 #endif
-#define OBUF_SIZE (IBUF_SIZE + 4096)
 #ifndef IREAD
 #define IREAD (1u << 20)         // input read size
 #endif
@@ -112,7 +142,17 @@ static inline int gb_xbits(GB* g, int n) {  // FFmpeg get_xbits: MSB set -> posi
 
 //--- bit writer ------------------------------------------------------------------------------
 
-typedef struct PB { U8* buf; size_t cap, len; U64 acc; int n, err; } PB;  // n bits pending in acc
+// n bits pending in acc; a full buffer goes to flush, where there is one (else what doesn't fit is
+// an error), done counting the bytes it took
+typedef struct PB {
+  U8* buf;
+  size_t cap, len;
+  U64 acc;
+  int n, err;
+  void (*flush)(void* ctx, const U8* p, size_t n);
+  void* ctx;
+  U64 done;
+} PB;
 
 static void pb_init(PB* p, U8* buf, size_t cap) { memset(p, 0, sizeof(*p)); p->buf = buf; p->cap = cap; }
 static void pb_put(PB* p, U32 v, int n) {  // 0 <= n <= 32
@@ -120,9 +160,13 @@ static void pb_put(PB* p, U32 v, int n) {  // 0 <= n <= 32
   p->acc = (p->acc << n) | (n < 32 ? v & ((1u << n) - 1) : v);
   for (p->n += n; p->n >= 8;) {
     p->n -= 8;
+    if (p->len == p->cap && p->flush) { p->flush(p->ctx, p->buf, p->len); p->done += p->len; p->len = 0; }
     if (p->len < p->cap) p->buf[p->len++] = (U8)(p->acc >> p->n);
     else p->err = 1;
   }
+}
+static void pb_finish(PB* p) {  // the bytes in the buffer to flush
+  if (p->flush && p->len) { p->flush(p->ctx, p->buf, p->len); p->done += p->len; p->len = 0; }
 }
 static void pb_xbits(PB* p, int v, int n) { pb_put(p, (U32)(v > 0 ? v : v + (1 << n) - 1), n); }
 
@@ -350,17 +394,42 @@ typedef struct Ctx {
   int divx_version, divx_build, xvid_build;
   int time_res;              // vop_time_increment_resolution
   int qpel;                  // quarter_sample
+  // c: skip flags of the last anchor VOP and of the one being parsed (a B-VOP macroblock whose
+  // co-located macroblock in the backward reference was skipped has no bits), skip_cap entries
+  U8 *skip_ref, *skip_cur;
+  int skip_cap;
+  U8 hbuf[(32 << 10) + 64];  // a header chunk being parsed
 } Ctx;
 
-// c: skip flags of the last anchor VOP and of the one being parsed (a B-VOP macroblock whose
-// co-located macroblock in the backward reference was skipped has no bits)
-static U8 skip_ref[MAX_MBS + 1], skip_cur[MAX_MBS + 1];
-
-static void ctx_init(Ctx* c) {
+static void ctx_init(Ctx* c) {  // (the skip flags stay: ctx_quit() frees them)
+  U8 *r = c->skip_ref, *u = c->skip_cur;
+  const int cap = c->skip_cap;
   memset(c, 0, sizeof(*c));
+  c->skip_ref = r;
+  c->skip_cur = u;
+  c->skip_cap = cap;
   c->divx_version = c->divx_build = c->xvid_build = -1;
   c->time_inc_bits = 4;
   c->quant_precision = 5;
+}
+static void ctx_quit(Ctx* c) {
+  free(c->skip_ref);
+  free(c->skip_cur);
+  c->skip_ref = c->skip_cur = 0;
+  c->skip_cap = 0;
+}
+// room for the skip flags of n macroblocks and one more (0: no memory)
+static int ctx_skip_room(Ctx* c, int n) {
+  U8 *r, *u;
+  if (++n <= c->skip_cap) return 1;
+  if (!(r = (U8*)realloc(c->skip_ref, n))) return 0;
+  c->skip_ref = r;
+  if (!(u = (U8*)realloc(c->skip_cur, n))) return 0;
+  c->skip_cur = u;
+  memset(r + c->skip_cap, 0, n - c->skip_cap);
+  memset(u + c->skip_cap, 0, n - c->skip_cap);
+  c->skip_cap = n;
+  return 1;
 }
 
 // VOL header, as m4vdec's decode_vol_header: records what the VOP syntax depends on
@@ -487,16 +556,14 @@ static void parse_user_data(Ctx* c, GB* gb) {
   if (sscanf(buf, "XviD%d", &build) == 1) c->xvid_build = build;
 }
 
-static U8 hbuf[(32 << 10) + 64];
-
 // a chunk (the first 32 KiB of it) that isn't a VOP: VOL headers and user data matter
 static void parse_header_chunk(Ctx* c, const U8* p, size_t n) {
   GB gb;
   if (n < 4 || p[0] || p[1] || p[2] != 1) return;
   if (n > (32 << 10)) n = 32 << 10;
-  memcpy(hbuf, p, n);
-  memset(hbuf + n, 0, 64);
-  gb.buf = hbuf + 4;
+  memcpy(c->hbuf, p, n);
+  memset(c->hbuf + n, 0, 64);
+  gb.buf = c->hbuf + 4;
   gb.size = (int)(n - 4) * 8;
   gb.pos = 0;
   if (p[3] >= 0x20 && p[3] <= 0x2F) parse_vol(c, &gb);
@@ -608,7 +675,7 @@ static int parse_vop_hdr(Ctx* c, GB* gb, VopHdr* h) {
   return gb_left(gb) < 0 ? -1 : 0;
 }
 
-static double pbits[3];  // statistics: bits of motion vectors, intra DCs, coefficients parsed
+static thread_local double pbits[3];  // statistics: bits of motion vectors, intra DCs, coefficients parsed
 
 static int parse_block(GB* gb, Blk* b, int n, int coded, int intra, int dcvlc) {
   const RL* rl = intra ? &rl_intra : &rl_inter;
@@ -745,7 +812,7 @@ static int parse_mb(const Ctx* c, GB* gb, Vop* v, MB* m, int idx) {
     return parse_blocks(gb, m, cbp, 0, 0);
   }
   // B-VOP
-  if (skip_ref[idx]) { m->sk = 1; return 0; }
+  if (c->skip_ref[idx]) { m->sk = 1; return 0; }
   if (gb_get1(gb)) { m->mb = 0; m->t = 0; return parse_blocks(gb, m, 0, 0, 0); }
   m->mb = gb_get1(gb) ? 1 : 2;
   if ((m->t = vlc_get(gb, &vlc_mb_type_b)) < 0) return -1;
@@ -1049,44 +1116,141 @@ static int put_mb(const Ctx* c, PB* pb, Vop* v, const MB* m) {
   return put_blocks(pb, m, 0, 0);
 }
 
-//--- input and output buffers ---------------------------------------------------------------------
+//--- streams: coroutines -----------------------------------------------------------------------
 
-static U8 ibuf[IBUF_SIZE + 64];
-static U8 obuf[OBUF_SIZE];
+// m4vpack's compressor and decompressor are coroutines of Lib3 (Lib3/coro3b.inc), in its buffer
+// protocol: the input comes in the buffers addinp() gives, a 0-length one with f_quit set at its
+// end, and yield Y_IN asks for the next; the output goes into the buffer addout() gave, yield
+// Y_OUT handing it over full; Y_END ends a run (its last output in the buffer), Y_FAIL after an
+// error (the run's note says it). Y_PART is MTwrap's: a worker's part is done (threads, below).
+enum { Y_END = 0, Y_IN = 1, Y_OUT = 2, Y_FAIL = 3, Y_PART = 4 };
 
+// A coroutine's input and output as runs of bytes. Plain data: io_init() sets it up as the run
+// starts (MTwrap's workers are never constructed).
+struct CoIo : Coroutine {
+  int eof;          // the input has ended
+  U64 n_in, n_out;  // the bytes read and written
+  U64 over;         // bytes asked for past the end of the input (getb(): the range decoder's)
+  int code;         // the exit status an error stands for (4 bad data, 5 internal)
+  char note[256];   // the error, a line
+
+  void io_init(void) {
+    eof = 0;
+    n_in = n_out = over = 0;
+    code = 0;
+    note[0] = 0;
+  }
+  // an error (exit status c): its note, and c to return
+  int fail(int c, const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(note, sizeof note, fmt, ap);
+    va_end(ap);
+    code = c;
+    return c;
+  }
+  // the next input buffer (0: the input has ended)
+  int next_input(void) {
+    if (eof) return 0;
+    chkinp();
+    if (inpptr >= inpend) eof = 1;  // a 0-length buffer: the end
+    return !eof;
+  }
+  // up to n bytes of the input, fewer only at its end
+  size_t read(U8* p, size_t n) {
+    size_t k = 0;
+    while (k < n) {
+      size_t l;
+      if (inpptr >= inpend && !next_input()) break;
+      l = n - k < (size_t)(inpend - inpptr) ? n - k : (size_t)(inpend - inpptr);
+      memcpy(p + k, inpptr, l);
+      inpptr += l;
+      k += l;
+    }
+    n_in += k;
+    return k;
+  }
+  // all n bytes into the output
+  void write(const U8* p, size_t n) {
+    while (n) {
+      size_t l;
+      if (outptr >= outend) chkout();
+      l = n < (size_t)(outend - outptr) ? n : (size_t)(outend - outptr);
+      memcpy(outptr, p, l);
+      outptr += l;
+      p += l;
+      n -= l;
+      n_out += l;
+    }
+  }
+  INLINE int getb(void) {  // a byte of the input, -1 after its end
+    if (inpptr >= inpend && !next_input()) {
+      over++;
+      return -1;
+    }
+    n_in++;
+    return *inpptr++;
+  }
+  INLINE void putb(int c) {
+    if (outptr >= outend) chkout();
+    *outptr++ = (U8)c;
+    n_out++;
+  }
+};
+
+// The input cut into chunks at start codes, read into buf: grown as a chunk needs, to IBUF_SIZE
+// bytes (and 64 of padding after them). A longer chunk comes in pieces, and so does one that
+// would need more memory than there is.
 typedef struct Reader {
-  FILE* f;
-  size_t lo, hi;   // ibuf[lo, hi): data not returned yet
+  CoIo* io;
+  U8* buf;
+  size_t cap;      // buf's size, less the padding
+  size_t lo, hi;   // buf[lo, hi): data not returned yet
   int eof, cont;   // cont: the last chunk didn't fit and continues
   U8* pad;         // the 64 bytes after the last chunk, zeroed while it is parsed
   U8 saved[64];
 } Reader;
 
+static int rd_init(Reader* r, CoIo* io) {  // 0: no memory
+  memset(r, 0, sizeof(*r));
+  r->io = io;
+  r->cap = IREAD < IBUF_SIZE ? IREAD : IBUF_SIZE;
+  r->buf = (U8*)malloc(r->cap + 64);
+  return r->buf != 0;
+}
+
 static int rd_fill(Reader* r) {  // moves the data not returned yet to the buffer start and reads more
-  size_t n;
-  if (r->lo) { memmove(ibuf, ibuf + r->lo, r->hi - r->lo); r->hi -= r->lo; r->lo = 0; }
-  if (r->eof || r->hi == IBUF_SIZE) return 0;
-  n = fread(ibuf + r->hi, 1, IBUF_SIZE - r->hi < IREAD ? IBUF_SIZE - r->hi : IREAD, r->f);
+  size_t n, want;
+  if (r->lo) { memmove(r->buf, r->buf + r->lo, r->hi - r->lo); r->hi -= r->lo; r->lo = 0; }
+  if (r->eof) return 0;
+  if (r->hi == r->cap && r->cap < IBUF_SIZE) {  // full: twice the room, if there is the memory
+    const size_t c = r->cap < IBUF_SIZE / 2 ? 2 * r->cap : IBUF_SIZE;
+    U8* b = (U8*)realloc(r->buf, c + 64);
+    if (b) r->buf = b, r->cap = c;
+  }
+  if (r->hi == r->cap) return 0;
+  want = r->cap - r->hi < IREAD ? r->cap - r->hi : IREAD;
+  n = r->io->read(r->buf + r->hi, want);
   r->hi += n;
-  if (!n) r->eof = 1;
+  if (n < want) r->eof = 1;
   return n != 0;
 }
 
-static int find_sc(size_t* pi, size_t end) {  // 00 00 01 in ibuf[*pi, end); else *pi = where to resume
+static int find_sc(const U8* b, size_t* pi, size_t end) {  // 00 00 01 in b[*pi, end); else *pi = where to resume
   size_t i = *pi;
   while (i + 3 <= end) {
-    if (ibuf[i + 2] > 1) i += 3;
-    else if (!ibuf[i + 2]) i++;
-    else if (!ibuf[i] && !ibuf[i + 1]) { *pi = i; return 1; }
+    if (b[i + 2] > 1) i += 3;
+    else if (!b[i + 2]) i++;
+    else if (!b[i] && !b[i + 1]) { *pi = i; return 1; }
     else i += 3;
   }
   *pi = i;
   return 0;
 }
 
-// Next chunk: from a start code (or the file start) up to the next start code, in
-// ibuf[*pos, *pos + *len), followed by 64 zero bytes until the next call. *part: 0 whole chunk,
-// 1 first piece of a chunk longer than IBUF_SIZE, 2 a later piece. 0 at the end of the input.
+// Next chunk: from a start code (or the stream start) up to the next start code, in
+// buf[*pos, *pos + *len), followed by 64 zero bytes until the next call. *part: 0 whole chunk,
+// 1 first piece of a chunk longer than the buffer, 2 a later piece. 0 at the end of the input.
 static int rd_chunk(Reader* r, size_t* pos, size_t* len, int* part) {
   size_t i;
   int found;
@@ -1094,7 +1258,7 @@ static int rd_chunk(Reader* r, size_t* pos, size_t* len, int* part) {
   if (r->lo == r->hi && !rd_fill(r)) return 0;
   *part = r->cont ? 2 : 0;
   for (i = r->lo + !r->cont;;) {
-    if ((found = find_sc(&i, r->hi))) {
+    if ((found = find_sc(r->buf, &i, r->hi))) {
       if (i == r->lo) { *part = 0; r->cont = 0; i++; continue; }   // a continued chunk ended at the piece boundary
       r->cont = 0;
       break;
@@ -1111,39 +1275,29 @@ static int rd_chunk(Reader* r, size_t* pos, size_t* len, int* part) {
   *pos = r->lo;
   *len = i - r->lo;
   r->lo = i;
-  r->pad = ibuf + i;
+  r->pad = r->buf + i;
   memcpy(r->saved, r->pad, 64);
   memset(r->pad, 0, 64);
   return 1;
 }
 
-typedef struct Sink {  // output file, or the original input to compare with (c -v)
-  FILE* f;
-  int compare;
-  U64 pos, diff_at;
-  int differs;
-} Sink;
+//--- CRC-32 -------------------------------------------------------------------------------------
 
-static int sink_write(Sink* s, const U8* p, size_t n) {
-  if (!s->compare) return fwrite(p, 1, n, s->f) == n;
-  while (n && !s->differs) {
-    static U8 cmp[1 << 16];
-    const size_t k = n < sizeof(cmp) ? n : sizeof(cmp);
-    const size_t got = fread(cmp, 1, k, s->f);
-    size_t i;
-    for (i = 0; i < got && cmp[i] == p[i]; i++) {}
-    if (i < k) { s->differs = 1; s->diff_at = s->pos + i; return 1; }
-    s->pos += k;
-    p += k;
-    n -= k;
+static U32 crc_tab[256];
+static void crc_init(void) {
+  U32 i, k, v;
+  for (i = 0; i < 256; i++) {
+    for (v = i, k = 0; k < 8; k++) v = (v >> 1) ^ (0xEDB88320u & (0u - (v & 1)));
+    crc_tab[i] = v;
   }
-  return 1;
+}
+static U32 crc32_upd(U32 crc, const U8* p, size_t n) {
+  crc = ~crc;
+  while (n--) crc = crc_tab[(crc ^ *p++) & 0xFF] ^ (crc >> 8);
+  return ~crc;
 }
 
 //--- binary arithmetic coder (carryless 32-bit range coder as in lpaq) ----------------------------
-
-#define IOBUF (1u << 20)
-static U8 cbuf[IOBUF];
 
 enum { CAT_RAW, CAT_HDR, CAT_MB, CAT_CBP, CAT_MV, CAT_DC, CAT_SIG, CAT_LEV, CAT_SIGN, CAT_ESC, NCAT };
 static const char* cat_name[NCAT] = { "raw chunks", "VOP and video packet headers, tails", "types, flags, dquant",
@@ -1153,45 +1307,27 @@ static const char* cat_name[NCAT] = { "raw chunks", "VOP and video packet header
 typedef struct Coder {
   int enc;
   U32 x1, x2, x;
-  FILE* f;
-  size_t n, pos;      // cbuf: bytes pending (enc), bytes available / read position (dec)
-  U64 bytes;          // written (enc), read past the end of the input (dec)
-  int err;
+  CoIo* io;           // where its bytes go (enc) or come from (dec)
   int cat;            // statistics: category of the bits coded now
   double cost[NCAT];  // bits spent per category (enc)
   double orig[NCAT];  // bits they took in the input (CAT_MB includes CAT_CBP, CAT_SIG all coefficient bits)
   int stats;
 } Coder;
 
-static void co_put(Coder* c, int b) {
-  c->bytes++;
-  cbuf[c->n++] = (U8)b;
-  if (c->n == IOBUF) {
-    c->err |= fwrite(cbuf, 1, IOBUF, c->f) != IOBUF;
-    c->n = 0;
-  }
+static INLINE void co_put(Coder* c, int b) { c->io->putb(b); }
+static INLINE int co_get(Coder* c) {  // after the end of the input: 255, which continues the flushed lower bound
+  const int v = c->io->getb();
+  return v < 0 ? 255 : v;
 }
-static int co_get(Coder* c) {
-  if (c->pos == c->n) {
-    c->n = fread(cbuf, 1, IOBUF, c->f);
-    c->pos = 0;
-    if (!c->n) { c->bytes++; return 255; }  // after the end: continues the flushed lower bound
-  }
-  return cbuf[c->pos++];
-}
-static void co_init(Coder* c, FILE* f, int enc) {
+static void co_init(Coder* c, CoIo* io, int enc) {
   int i;
   memset(c, 0, sizeof(*c));
   c->enc = enc;
-  c->f = f;
+  c->io = io;
   c->x2 = 0xFFFFFFFF;
   if (!enc) for (i = 0; i < 4; i++) c->x = (c->x << 8) | (U32)co_get(c);
 }
-static void co_flush(Coder* c) {
-  co_put(c, (int)(c->x1 >> 24));
-  if (c->n) c->err |= fwrite(cbuf, 1, c->n, c->f) != c->n;
-  c->n = 0;
-}
+static void co_flush(Coder* c) { co_put(c, (int)(c->x1 >> 24)); }
 
 // adaptive probability of a 1 bit (16 bits) with a count for the adaptation rate
 typedef struct Prob { U16 p, n; } Prob;
@@ -1344,6 +1480,30 @@ static int code_seg(Coder* c, Prob* t, int v) {  // signed: zero flag, sign, mag
   return cbit(c, &t[1], v < 0) ? -a : a;
 }
 
+// the tables the coder and the mixers read: made once as the program starts, then only read (by
+// every run at once, on threads)
+static void coder_tables_init(void) {
+  static const int t[33] = { 1,    2,    3,    6,    10,   16,   27,   45,   73,   120,  194,
+                             310,  488,  747,  1101, 1546, 2047, 2549, 2994, 3348, 3607, 3785,
+                             3901, 3975, 4022, 4050, 4068, 4079, 4085, 4089, 4092, 4093, 4094 };
+  int i, d, pi = 0, j;
+  for (i = 0; i <= PLIMIT; i++) rate[i] = (int)(65536.0 / (i + 1.5));
+  bitcost[0] = 16;
+  for (i = 1; i <= 4096; i++) bitcost[i] = (float)(-log((double)i / 4096) / log(2.0));
+  // squash: interpolated from a table, stretch: its inverse (integers only, as in lpaq)
+  squash_t[0] = 1;
+  for (d = -2047; d <= 2047; d++) {
+    const int w = d & 127, k = (d >> 7) + 16;
+    squash_t[d + 2048] = (short)((t[k] * (128 - w) + t[k + 1] * w + 64) >> 7);
+  }
+  for (d = -2047; d <= 2047; d++) {
+    const int v = squash_t[d + 2048];
+    for (j = pi; j <= v; j++) stretch_t[j] = (short)d;
+    pi = v + 1;
+  }
+  for (j = pi; j < 4096; j++) stretch_t[j] = 2047;
+}
+
 //--- context models -------------------------------------------------------------------------------
 
 #ifndef LUN
@@ -1401,8 +1561,6 @@ typedef struct Last {  // previous values the models predict from
   int pp_time, pb_time;                       // anchor to anchor, anchor to B-VOP
 } Last;
 
-static Model model;
-static Last last;
 
 typedef struct Mixers {  // weight sets: a bias weight, then MAXIN input weights
   int sig[NCLS][64][MAXIN + 1], last[NCLS][64][MAXIN + 1], lev1[NCLS][6][5][MAXIN + 1];
@@ -1411,10 +1569,8 @@ typedef struct Mixers {  // weight sets: a bias weight, then MAXIN input weights
   int raw[8][MAXIN + 1], mbt[8][MAXIN + 1], cbp[3][6][MAXIN + 1], dcs[2][9][MAXIN + 1];
   int mvz[NMVK][2][MAXIN + 1], mvu[NMVK][2][12][MAXIN + 1], mvs[NMVK][2][MAXIN + 1];
 } Mixers;
-static Mixers mixw;
 
 typedef struct Apms { Apm sig[NCLS][64], last[NCLS][64], lev1[NCLS][6][4]; } Apms;
-static Apms apms;
 
 // Coefficient magnitudes of the blocks coded last in each column of macroblocks: the left and
 // above neighbours of a block (a macroblock's blocks replace those of the one above it as they are
@@ -1423,22 +1579,13 @@ static Apms apms;
 // last one (-1 none), dcs: size of the intra DC difference (-1 none)
 typedef struct BlkCtx { U8 mag[64], sgn[64], suf[65]; S8 last, dcs; U8 n; } BlkCtx;
 #define MAX_MB_W 512
-static BlkCtx rowb[MAX_MB_W][6];
-
-static void rowb_clear(int x) {
-  int i;
-  memset(rowb[x], 0, sizeof(rowb[x]));
-  for (i = 0; i < 6; i++) rowb[x][i].last = rowb[x][i].dcs = -1;
-}
 
 // macroblock state the contexts of later macroblocks use
 enum { C_NONE, C_SKIP, C_INTER, C_4MV, C_INTRA, C_GMC, C_BDIR0, C_BDIR, C_BFWD, C_BBWD, C_BBI };
 // mva: magnitudes of the first motion vector difference in VLC code units, mvs: its signs (0, 1 +, 2 -);
 // bsk: B-VOPs skip the macroblock at this position
 typedef struct MBCtx { U8 cls, cbp, nz[6], mva[2], mvs[2], ac, dt, fp, bsk; } MBCtx;
-static MBCtx mbcur[MAX_MBS], mbref[MAX_MBS];  // current VOP, last anchor VOP
-static S16 mvcur[MAX_MBS][4][2], mvref[MAX_MBS][4][2];  // motion vectors per 8x8 block, as decoded
-static int ref_mbs;                            // size of the VOP in mbref, 0 if none
+typedef S16 MV4[4][2];  // a macroblock's motion vectors, per 8x8 block
 
 typedef struct VState {  // the coding side of the current VOP
   Vop v;
@@ -1467,7 +1614,59 @@ static const U8 pos_bucket[64] = {
   0, 1, 1, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
   5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5 };
 
-static void model_init(void) {
+#define TAIL_MAX (1u << 20)  // the most bytes after a VOP's last macroblock it codes
+
+enum { W_VERIFY, W_ENCODE, W_DECODE };  // what vop_walk() does
+
+// The models and the state of a run: what codes and decodes the records
+struct Codec {
+  Model model;
+  Last last;
+  Mixers mixw;
+  Apms apms;
+  BlkCtx rowb[MAX_MB_W][6];
+  // per macroblock, mb_cap of them: the current VOP's and the last anchor VOP's
+  MBCtx *mbcur, *mbref;
+  MV4 *mvcur, *mvref;
+  int mb_cap;
+  int ref_mbs;  // size of the VOP in mbref, 0 if none
+  U8 tailbuf[TAIL_MAX];
+  MB mrec;      // the macroblock vop_walk() has
+
+  void Quit(void) {
+    free(mbcur);
+    free(mbref);
+    free(mvcur);
+    free(mvref);
+    mbcur = mbref = 0;
+    mvcur = mvref = 0;
+    mb_cap = 0;
+  }
+  // room for n macroblocks (0: no memory)
+  int mb_room(int n) {
+    void* q;
+    if (n <= mb_cap) return 1;
+    if (!(q = realloc(mbcur, n * sizeof(MBCtx)))) return 0;
+    mbcur = (MBCtx*)q;
+    if (!(q = realloc(mbref, n * sizeof(MBCtx)))) return 0;
+    mbref = (MBCtx*)q;
+    if (!(q = realloc(mvcur, n * sizeof(MV4)))) return 0;
+    mvcur = (MV4*)q;
+    if (!(q = realloc(mvref, n * sizeof(MV4)))) return 0;
+    mvref = (MV4*)q;
+    memset(mbref + mb_cap, 0, (n - mb_cap) * sizeof(MBCtx));
+    memset(mvref + mb_cap, 0, (n - mb_cap) * sizeof(MV4));
+    mb_cap = n;
+    return 1;
+  }
+
+  void rowb_clear(int x) {
+    int i;
+    memset(rowb[x], 0, sizeof(rowb[x]));
+    for (i = 0; i < 6; i++) rowb[x][i].last = rowb[x][i].dcs = -1;
+  }
+
+void model_init(void) {
   Prob* p = (Prob*)&model;
   size_t i;
   for (i = 0; i < sizeof(model) / sizeof(Prob); i++) { p[i].p = 32768; p[i].n = 0; }
@@ -1475,26 +1674,6 @@ static void model_init(void) {
   last.tib = 1;
   for (i = 0; i < 5; i++) { last.quant[i] = 4; last.fcode[i] = 1; }
   last.bcode = 1;
-  for (i = 0; i <= PLIMIT; i++) rate[i] = (int)(65536.0 / (i + 1.5));
-  bitcost[0] = 16;
-  for (i = 1; i <= 4096; i++) bitcost[i] = (float)(-log((double)i / 4096) / log(2.0));
-  {  // squash: interpolated from a table, stretch: its inverse (integers only, as in lpaq)
-    static const int t[33] = { 1,    2,    3,    6,    10,   16,   27,   45,   73,   120,  194,
-                               310,  488,  747,  1101, 1546, 2047, 2549, 2994, 3348, 3607, 3785,
-                               3901, 3975, 4022, 4050, 4068, 4079, 4085, 4089, 4092, 4093, 4094 };
-    int d, pi = 0, j;
-    squash_t[0] = 1;
-    for (d = -2047; d <= 2047; d++) {
-      const int w = d & 127, k = (d >> 7) + 16;
-      squash_t[d + 2048] = (short)((t[k] * (128 - w) + t[k + 1] * w + 64) >> 7);
-    }
-    for (d = -2047; d <= 2047; d++) {
-      const int v = squash_t[d + 2048];
-      for (j = pi; j <= v; j++) stretch_t[j] = (short)d;
-      pi = v + 1;
-    }
-    for (j = pi; j < 4096; j++) stretch_t[j] = 2047;
-  }
   {
     int* w = (int*)&mixw;
     for (i = 0; i < sizeof(mixw) / sizeof(int); i++) w[i] = i % (MAXIN + 1) ? MIX_W0 : 0;
@@ -1503,19 +1682,23 @@ static void model_init(void) {
   ref_mbs = 0;
 }
 
-static int code_kind(Coder* c, int k) {  // 0 end, 1 VOP as records, 2 raw bytes
+int code_kind(Coder* c, int k) {  // 0 end, 1 VOP as records, 2 raw bytes
   Prob* t = model.kind[last.kind];
   c->cat = CAT_RAW;
   k = cbit(c, &t[0], k == 1) ? 1 : cbit(c, &t[1], k == 2) ? 2 : 0;
   return last.kind = k;
 }
 
-static size_t code_raw(Coder* c, U8* p, size_t n, size_t max) {  // a chunk kept as bytes; 0 on errors
+// a chunk kept as bytes: its length, then the bytes (order 0 and order 1 contexts, mixed), which
+// may come a piece at a time
+size_t code_raw_len(Coder* c, size_t n) {
+  c->cat = CAT_RAW;
+  return (size_t)code_eg(c, model.rawlen, 4, (int)n);
+}
+void code_raw_bytes(Coder* c, U8* p, size_t n) {
   size_t i;
   c->cat = CAT_RAW;
-  n = (size_t)code_eg(c, model.rawlen, 4, (int)n);
-  if (n > max) return 0;
-  for (i = 0; i < n; i++) {  // bytes: order 0 and order 1 contexts, mixed
+  for (i = 0; i < n; i++) {
     int x = 1, k;
     for (k = 7; k >= 0; k--) {
       Prob* in[2];
@@ -1525,10 +1708,18 @@ static size_t code_raw(Coder* c, U8* p, size_t n, size_t max) {  // a chunk kept
     }
     last.rawprev = p[i] = (U8)(x - 256);
   }
-  return n;
 }
 
-static void code_vop_hdr(Coder* c, const Ctx* cx, VopHdr* h) {
+// 32 bits at a probability of 1/2 each (the CRC)
+U32 code_u32(Coder* c, U32 v) {
+  U32 x = 0;
+  int i;
+  c->cat = CAT_HDR;
+  for (i = 31; i >= 0; i--) x |= (U32)code_bit(c, 32768, (int)(v >> i) & 1) << i;
+  return x;
+}
+
+void code_vop_hdr(Coder* c, const Ctx* cx, VopHdr* h) {
   Model* M = &model;
   const int t0 = last.type;
   int i, d, mask;
@@ -1592,7 +1783,7 @@ static void code_vop_hdr(Coder* c, const Ctx* cx, VopHdr* h) {
   }
 }
 
-static void code_vp(Coder* c, const Ctx* cx, VState* s, VpHdr* k, int expect) {
+void code_vp(Coder* c, const Ctx* cx, VState* s, VpHdr* k, int expect) {
   Model* M = &model;
   Vop* v = &s->v;
   int i;
@@ -1616,7 +1807,7 @@ static void code_vp(Coder* c, const Ctx* cx, VState* s, VpHdr* k, int expect) {
 }
 
 // what follows the last macroblock: nb bits up to the byte boundary, then *n bytes
-static int code_tail(Coder* c, int nb, int* bits, int* n, U8* bytes, int max) {
+int code_tail(Coder* c, int nb, int* bits, int* n, U8* bytes, int max) {
   Model* M = &model;
   int i, canon = 0;
   c->cat = CAT_HDR;
@@ -1635,7 +1826,7 @@ static int code_tail(Coder* c, int nb, int* bits, int* n, U8* bytes, int max) {
 
 // intra DC difference: size, the bits below its leading one, sign. Contexts for the size: the
 // previous block's, the left and above blocks', whether the block has AC coefficients.
-static int code_dc(Coder* c, VState* s, int lc, int v, const BlkCtx* Lb, const BlkCtx* Ab, int coded,
+int code_dc(Coder* c, VState* s, int lc, int v, const BlkCtx* Lb, const BlkCtx* Ab, int coded,
                    int qctx) {
   Model* M = &model;
   const int ctx = s->dc_prev[lc] < 7 ? s->dc_prev[lc] : 7, a = v < 0 ? -v : v;
@@ -1661,7 +1852,7 @@ static int code_dc(Coder* c, VState* s, int lc, int v, const BlkCtx* Lb, const B
 // coefficients found so far, and the left and above blocks' coefficients at the same position.
 // cls: block class, nctx: neighbours' counts, qctx/q8: quantiser, mvc: motion vector size, rnz: the
 // co-located block's count; Lb, Ab: left and above blocks or 0; out (which may be Ab) gets this one
-static void code_block(Coder* c, VState* s, Blk* b, int n, int intra, int dcvlc, int coded, int cls, int nctx,
+void code_block(Coder* c, VState* s, Blk* b, int n, int intra, int dcvlc, int coded, int cls, int nctx,
                        int qctx, int q8, int mvc, int rnz, const BlkCtx* Lb, const BlkCtx* Ab, BlkCtx* out) {
   Model* M = &model;
   const RL* rl = intra ? &rl_intra : &rl_inter;
@@ -1809,7 +2000,7 @@ static void code_block(Coder* c, VState* s, Blk* b, int n, int intra, int dcvlc,
 // macroblock or a neighbour), the size of the motion vector differences (mvc, 6 for none), which
 // components of the vector are sub-pel (frac, 4 for none), the co-located macroblock of the last
 // anchor VOP, the blocks coded so far.
-static int code_cbp(Coder* c, int cls3, const MBCtx* L, const MBCtx* A, const MBCtx* R, int mvc, int frac,
+int code_cbp(Coder* c, int cls3, const MBCtx* L, const MBCtx* A, const MBCtx* R, int mvc, int frac,
                     int cbp) {
   Model* M = &model;
   Prob* in[MAXIN];
@@ -1835,7 +2026,7 @@ static int code_cbp(Coder* c, int cls3, const MBCtx* L, const MBCtx* A, const MB
 }
 
 // neighbouring blocks' coefficient counts (CAVLC's nC)
-static int nz_ctx(const MBCtx* me, const MBCtx* L, const MBCtx* A, int b) {
+int nz_ctx(const MBCtx* me, const MBCtx* L, const MBCtx* A, int b) {
   int na, nb, m;
   if (b < 4) {
     na = (b & 1) ? me->nz[b - 1] : L ? L->nz[b + 1] : -1;
@@ -1849,14 +2040,14 @@ static int nz_ctx(const MBCtx* me, const MBCtx* L, const MBCtx* A, int b) {
   return m == 0 ? 1 : m <= 2 ? 2 : m <= 5 ? 3 : m <= 10 ? 4 : 5;
 }
 
-static int mv_bucket(int q) { return q < 3 ? q : q < 5 ? 3 : q < 9 ? 4 : 5; }
+int mv_bucket(int q) { return q < 3 ? q : q < 5 ? 3 : q < 9 ? 4 : 5; }
 
 // A motion vector difference as coded, like CABAC's mvd: a zero flag, the sign, the magnitude in
 // units of the VLC code (so f_code doesn't change its statistics) in unary, the f_code residual
 // bits. Contexts: the neighbours' magnitudes, the other component (oth: of this vector for y, of
 // the previous one for x, 6 for none), the co-located macroblock of the last anchor VOP, and d:
 // the difference that would give this vector the co-located one's value (dok 0: none).
-static int code_mvd(Coder* c, int kind, int comp, int fcode, const MBCtx* L, const MBCtx* A, const MBCtx* R,
+int code_mvd(Coder* c, int kind, int comp, int fcode, const MBCtx* L, const MBCtx* A, const MBCtx* R,
                     int oth, int dok, int d, int sp, int v, int* q) {
   Model* M = &model;
   const int shift = fcode - 1, a = v < 0 ? -v : v;
@@ -1894,12 +2085,12 @@ static int code_mvd(Coder* c, int kind, int comp, int fcode, const MBCtx* L, con
   return neg ? -x : x;
 }
 
-static int mv_wrap(int v, int fcode) { return sign_extend(v, 5 + fcode); }  // as the decoder adds them
+int mv_wrap(int v, int fcode) { return sign_extend(v, 5 + fcode); }  // as the decoder adds them
 
 // The decoder's prediction of the vector of block b (FFmpeg's h263_pred_motion): the median of the
 // left, above and above-right blocks. A candidate outside the picture or before the start of the
 // video packet is invalid: it counts as 0, and if only one is valid, that one is the prediction.
-static void pred_mv(const VState* s, int idx, int b, int* px, int* py, int* sx, int* sy) {
+void pred_mv(const VState* s, int idx, int b, int* px, int* py, int* sx, int* sy) {
   static const S8 nb[4][3][2] = {  // [block][left, above, above-right]: macroblock (-1 left, -2 above,
     { { -1, 1 }, { -2, 2 }, { -3, 2 } },  // -3 above right, 0 this one), block
     { { 0, 0 }, { -2, 3 }, { -3, 2 } },
@@ -1934,13 +2125,13 @@ static void pred_mv(const VState* s, int idx, int b, int* px, int* py, int* sx, 
   }
 }
 
-static int spread_bucket(int s, int fcode) {  // spread of the prediction candidates, in VLC code units
+int spread_bucket(int s, int fcode) {  // spread of the prediction candidates, in VLC code units
   return s < 0 ? 6 : mv_bucket(s ? ((s - 1) >> (fcode - 1)) + 1 : 0);
 }
 
 // one vector (x, y) of kind kind, predicted by (px, py) from candidates with spreads (sx, sy) (-1:
 // none), with the co-located vector (tx, ty) if tok
-static void code_mv(Coder* c, MB* m, int* mvi, int kind, int fcode, const MBCtx* L, const MBCtx* A,
+void code_mv(Coder* c, MB* m, int* mvi, int kind, int fcode, const MBCtx* L, const MBCtx* A,
                     const MBCtx* R, MBCtx* me, int* sumq, int px, int py, int sx, int sy, int tok, int tx, int ty,
                     int* mx, int* my) {
   const int first = *mvi == 0;
@@ -1960,7 +2151,7 @@ static void code_mv(Coder* c, MB* m, int* mvi, int kind, int fcode, const MBCtx*
 }
 
 // one macroblock record; in decoding mode m is filled in
-static void code_mb(Coder* c, const Ctx* cx, VState* s, MB* m, int idx) {
+void code_mb(Coder* c, const Ctx* cx, VState* s, MB* m, int idx) {
   Model* M = &model;
   Vop* v = &s->v;
   const int mb_x = idx % s->mb_w;
@@ -2152,7 +2343,7 @@ static void code_mb(Coder* c, const Ctx* cx, VState* s, MB* m, int idx) {
 }
 
 // can the models code everything in this macroblock (escape mode 3 allows a level of 0)
-static int mb_codable(const MB* m) {
+int mb_codable(const MB* m) {
   int i, j;
   for (i = 0; i < 6; i++)
     for (j = 0; j < m->b[i].n; j++)
@@ -2162,12 +2353,8 @@ static int mb_codable(const MB* m) {
 
 //--- VOPs ----------------------------------------------------------------------------------------
 
-#define TAIL_MAX (1u << 20)
-static U8 tailbuf[TAIL_MAX];
 
-enum { W_VERIFY, W_ENCODE, W_DECODE };
-
-static void vop_state(Vop* v, const Ctx* cx, const VopHdr* h) {
+void vop_state(Vop* v, const Ctx* cx, const VopHdr* h) {
   v->type = h->type;
   v->gmc = h->type == PT_S && cx->sprite_usage == GMC_SPRITE;
   v->fcode = h->fcode == NA ? 1 : h->fcode;
@@ -2179,8 +2366,9 @@ static void vop_state(Vop* v, const Ctx* cx, const VopHdr* h) {
 
 // One VOP (after its start code). W_VERIFY: parse it and write it again (into pb); W_ENCODE: parse
 // it and code the records; W_DECODE: decode the records and write the VOP (with its start code).
-static int vop_walk(Ctx* cx, int mode, GB* gb, PB* pb, Coder* c) {
-  static MB m;
+// -1: it can't be (parsed, written: unsupported or damaged data), -2: no memory.
+int vop_walk(Ctx* cx, int mode, GB* gb, PB* pb, Coder* c) {
+  MB& m = mrec;
   VopHdr h;
   Vop vp, vw;
   VState s;
@@ -2193,12 +2381,13 @@ static int vop_walk(Ctx* cx, int mode, GB* gb, PB* pb, Coder* c) {
   if (mode != W_ENCODE && put_vop_hdr(cx, pb, &h) < 0) return -1;
   if (h.coded) {
     if (!cx->have_vol || cx->unsupported || !cx->mb_num || cx->mb_num > MAX_MBS) return -1;
+    if (!ctx_skip_room(cx, cx->mb_num) || !mb_room(cx->mb_num)) return -2;
     vop_state(&vp, cx, &h);
     vw = s.v = vp;
     s.mb_w = cx->mb_w;
     s.scan = h.alt == 1 ? alternate_vertical_scan : zigzag_direct;
     anchor = h.type != PT_B;
-    if (mode != W_DECODE && anchor) memset(skip_cur, 0, cx->mb_num + 1);
+    if (mode != W_DECODE && anchor) memset(cx->skip_cur, 0, cx->mb_num + 1);
     if (mode != W_VERIFY) {
       memset(mbcur, 0, cx->mb_num * sizeof(*mbcur));
       memset(mvcur, 0, cx->mb_num * sizeof(*mvcur));
@@ -2222,11 +2411,11 @@ static int vop_walk(Ctx* cx, int mode, GB* gb, PB* pb, Coder* c) {
           c->orig[CAT_MB] += gb->pos - p0 - (pbits[0] - b0) - (pbits[1] - b1) - (pbits[2] - b2);
           mb_bits += gb->pos - p0;
         }
-        if (anchor) skip_cur[idx] = (U8)(m.sk == 1 && !vp.gmc);
+        if (anchor) cx->skip_cur[idx] = (U8)(m.sk == 1 && !vp.gmc);
       }
       if (mode != W_VERIFY) code_mb(c, cx, &s, &m, idx);
       if (mode != W_ENCODE && put_mb(cx, pb, &vw, &m) < 0) { ret = -1; break; }
-      if (mode == W_DECODE && (pb->err || c->bytes > 16)) { ret = -1; break; }  // damaged data
+      if (mode == W_DECODE && (pb->err || c->io->over > 16)) { ret = -1; break; }  // damaged data
       if (++mb_x == cx->mb_w) { mb_x = 0; mb_y++; }
       if (mb_y >= cx->mb_h) break;
       {
@@ -2234,7 +2423,7 @@ static int vop_walk(Ctx* cx, int mode, GB* gb, PB* pb, Coder* c) {
         int vpf = 0, nstuff = 0, next;
         if (mode != W_DECODE) {
           next = resync_ahead(cx, gb, &vp, &nstuff);
-          vpf = next && !(idx + 1 < next && vp.type == PT_B && skip_ref[idx + 1]);
+          vpf = next && !(idx + 1 < next && vp.type == PT_B && cx->skip_ref[idx + 1]);
         }
         if (mode != W_VERIFY) { c->cat = CAT_HDR; vpf = cbit(c, &model.vpflag, vpf); }
         if (!vpf) continue;
@@ -2260,7 +2449,7 @@ static int vop_walk(Ctx* cx, int mode, GB* gb, PB* pb, Coder* c) {
         mb_y = k.mbnum / cx->mb_w;
       }
     }
-    if (mode != W_DECODE && anchor) memcpy(skip_ref, skip_cur, cx->mb_num + 1);
+    if (mode != W_DECODE && anchor) memcpy(cx->skip_ref, cx->skip_cur, cx->mb_num + 1);
     if (ret < 0) return -1;
     if (mode != W_VERIFY && anchor) {
       memcpy(mbref, mbcur, cx->mb_num * sizeof(*mbcur));
@@ -2286,235 +2475,1066 @@ static int vop_walk(Ctx* cx, int mode, GB* gb, PB* pb, Coder* c) {
   }
   return 0;
 }
+};
 
-//--- container -----------------------------------------------------------------------------------
+//--- the compressor and the decompressor --------------------------------------------------------
 
-static U32 crc_tab[256];
-static void crc_init(void) {
-  U32 i, k, v;
-  for (i = 0; i < 256; i++) {
-    for (v = i, k = 0; k < 8; k++) v = (v >> 1) ^ (0xEDB88320u & (0u - (v & 1)));
-    crc_tab[i] = v;
-  }
-}
-static U32 crc32_upd(U32 crc, const U8* p, size_t n) {
-  crc = ~crc;
-  while (n--) crc = crc_tab[(crc ^ *p++) & 0xFF] ^ (crc >> 8);
-  return ~crc;
-}
+// The stream: the magic, its last byte the format's version, then the arithmetic coded data: the
+// chunks (kind, then the records of a VOP or a raw chunk's length and bytes), the end, and the
+// CRC-32 of the stream (32 bits at 1/2 each).
+static const U8 magic[8] = { 'm', '4', 'v', 'p', 'a', 'c', 'k', 2 };
 
+// a compression's statistics (its summary line)
 typedef struct Stats {
   U32 vops, packed, by_type[5], raw_unsup, raw_long, raw_parse, raw_verify;
   double in_bytes, raw_bytes, vop_bytes;
+  U64 parts;    // -t: the parts
+  int threads;  // and the threads
 } Stats;
 
-static const U8 magic[8] = { 'm', '4', 'v', 'p', 'a', 'c', 'k', 1 };
+// what W_VERIFY's VOP written back is compared with, as its writer flushes it
+typedef struct Cmp {
+  const U8* p;
+  size_t n, at;
+  int differs;
+} Cmp;
+static void cmp_flush(void* ctx, const U8* p, size_t n) {
+  Cmp* c = (Cmp*)ctx;
+  if (c->differs || n > c->n - c->at || memcmp(c->p + c->at, p, n)) c->differs = 1;
+  else c->at += n;
+}
+
+// A run of m4vpack: compressing (f_DEC 0) or decompressing (1) a stream, as a coroutine. Plain
+// data, mapped (coro_new(), zeroed) and never constructed: Init() sets it up, Quit() frees what
+// it holds. A run shares nothing with another but the constant tables, so any number of them can
+// go at once, on as many threads.
+template <int f_DEC>
+struct M4vCoro : CoIo {
+  int stats;   // c -s: the bits by kind of syntax element (co.cost, co.orig)
+  int status;  // the run's: 0, or the exit status of its error (note); 1 until it has ended
+  Stats st;    // c's
+  U32 crc;     // of the stream: c's input, d's output
+  Coder co;
+  Reader rd;   // c: the input
+  Ctx cx;
+  Codec k;
+  U8 pbuf[1 << 16];  // a VOP written back (W_VERIFY, W_DECODE), a buffer at a time
+
+  void Init(int s) {
+    coro_init();
+    stats = s;
+    status = 1;
+  }
+  void Quit(void) {
+    ctx_quit(&cx);
+    k.Quit();
+    free(rd.buf);
+    rd.buf = 0;
+  }
+
+  void do_process(void) {
+    int r;
+    io_init();
+    r = f_DEC ? run_d() : run_c();
+    Quit();
+    status = r;
+    for (;;) yield(static_cast<Coroutine*>(this), r ? Y_FAIL : Y_END);
+  }
+
+  int run_c(void) {
+    size_t pos, len;
+    int part, r;
+    memset(&st, 0, sizeof st);
+    crc = 0;
+    ctx_init(&cx);
+    k.model_init();
+    if (!rd_init(&rd, this)) return fail(5, "out of memory");
+    write(magic, sizeof magic);
+    co_init(&co, this, 1);
+    co.stats = stats;
+    while (rd_chunk(&rd, &pos, &len, &part)) {
+      U8* p = rd.buf + pos;
+      const int is_vop = len >= 4 && !p[0] && !p[1] && p[2] == 1 && p[3] == 0xB6;
+      crc = crc32_upd(crc, p, len);
+      st.in_bytes += (double)len;
+      if (is_vop && part != 2) {
+        st.vops++;
+        if (len >= 5) st.by_type[(p[4] >> 6) + PT_I]++;
+        if (part) st.raw_long++;
+        else if (!cx.have_vol || cx.unsupported || (cx.dp && (len < 5 || (p[4] >> 6) != 2))) st.raw_unsup++;
+        else {
+          const int tib = cx.time_inc_bits;
+          GB gb;
+          PB pb;
+          Cmp cm;
+          gb.buf = p + 4;
+          gb.size = (int)(len - 4) * 8;
+          gb.pos = 0;
+          pb_init(&pb, pbuf, sizeof pbuf);
+          cm.p = p;
+          cm.n = len;
+          cm.at = 0;
+          cm.differs = 0;
+          pb.flush = cmp_flush;
+          pb.ctx = &cm;
+          r = k.vop_walk(&cx, W_VERIFY, &gb, &pb, 0);
+          if (r == -2) return fail(5, "out of memory");
+          if (r < 0) st.raw_parse++;
+          else {
+            pb_finish(&pb);
+            if (pb.err || pb.n || cm.differs || cm.at != len) st.raw_verify++;
+            else {
+              cx.time_inc_bits = tib;  // the parse again sees the same state
+              gb.pos = 0;
+              k.code_kind(&co, 1);
+              r = k.vop_walk(&cx, W_ENCODE, &gb, 0, &co);
+              if (r == -2) return fail(5, "out of memory");
+              if (r < 0) return fail(5, "internal error: a verified VOP couldn't be coded");
+              st.packed++;
+              st.vop_bytes += (double)len;
+              continue;
+            }
+          }
+        }
+      }
+      if (is_vop) st.raw_bytes += (double)len;
+      co.orig[CAT_RAW] += 8.0 * len;
+      k.code_kind(&co, 2);
+      k.code_raw_len(&co, len);
+      k.code_raw_bytes(&co, p, len);
+      parse_header_chunk(&cx, p, len);
+    }
+    k.code_kind(&co, 0);
+    k.code_u32(&co, crc);
+    co_flush(&co);
+    return 0;
+  }
+
+  static void out_flush(void* ctx, const U8* p, size_t n) {  // d: a VOP's bytes, out
+    M4vCoro* c = (M4vCoro*)ctx;
+    c->write(p, n);
+    c->crc = crc32_upd(c->crc, p, n);
+  }
+
+  int run_d(void) {
+    U8 h[sizeof magic];
+    int kind, r;
+    crc = 0;
+    if (read(h, sizeof h) != sizeof h || memcmp(h, magic, sizeof magic - 1)) return fail(4, "not an m4vpack file");
+    if (h[sizeof h - 1] != magic[sizeof magic - 1])
+      return fail(4, "format version %d, which this m4vpack (version %d) doesn't read", h[sizeof h - 1],
+                  magic[sizeof magic - 1]);
+    ctx_init(&cx);
+    k.model_init();
+    co_init(&co, this, 0);
+    while ((kind = k.code_kind(&co, 0)) != 0) {
+      if (kind == 1) {
+        PB pb;
+        pb_init(&pb, pbuf, sizeof pbuf);
+        pb.flush = out_flush;
+        pb.ctx = this;
+        r = k.vop_walk(&cx, W_DECODE, 0, &pb, &co);
+        if (r == -2) return fail(5, "out of memory");
+        if (r < 0 || pb.err || pb.n) return fail(4, "damaged data");
+        pb_finish(&pb);
+      } else {
+        size_t n = k.code_raw_len(&co, 0), done = 0;
+        if (!n || n > IBUF_SIZE) return fail(4, "damaged data");
+        while (done < n) {  // a buffer at a time; the first has what parse_header_chunk() reads
+          const size_t l = n - done < sizeof pbuf ? n - done : sizeof pbuf;
+          k.code_raw_bytes(&co, pbuf, l);
+          if (!done) parse_header_chunk(&cx, pbuf, n);
+          write(pbuf, l);
+          crc = crc32_upd(crc, pbuf, l);
+          done += l;
+          if (over > 16) return fail(4, "damaged data");
+        }
+      }
+      if (over > 16) return fail(4, "damaged data");
+    }
+    if (k.code_u32(&co, 0) != crc || over > 16) return fail(4, "damaged data");
+    return 0;
+  }
+};
+
+// A run's coroutine, on pages of its own: zeroed, and taking memory only where the run touches
+// them (its tables for the largest pictures). coro_new() makes it (plain data: then Init()),
+// coro_free() frees it after its Quit().
+template <class T>
+T* coro_new(void) {
+  return (T*)VirtualAlloc(0, sizeof(T), MEM_COMMIT, PAGE_READWRITE);
+}
+template <class T>
+void coro_free(T* p) {
+  if (p) VirtualFree(p, 0, MEM_RELEASE);
+}
+
+// The output of a call: a file, or (c -v) the input to compare with
+typedef struct Sink {
+  FILE* f;
+  int compare;
+  U64 pos, diff_at;
+  int differs, err;
+} Sink;
+static void sink_write(Sink* s, const U8* p, size_t n) {
+  static U8 cmp[1 << 16];  // (the main thread's)
+  if (!s->compare) {
+    if (n && fwrite(p, 1, n, s->f) != n) s->err = 1;
+    s->pos += n;
+    return;
+  }
+  while (n && !s->differs) {
+    const size_t k = n < sizeof(cmp) ? n : sizeof(cmp);
+    const size_t got = fread(cmp, 1, k, s->f);
+    size_t i;
+    for (i = 0; i < got && cmp[i] == p[i]; i++) {}
+    if (i < k) { s->differs = 1; s->diff_at = s->pos + i; return; }
+    s->pos += k;
+    p += k;
+    n -= k;
+  }
+}
+
+// Runs the coroutine c in the buffer protocol to its end: in() gives it its next input when it
+// asks (Y_IN), out(more) takes what it put in its output buffer when that is full (Y_OUT, more:
+// and gives it the next) or as it ends (Y_END, or Y_FAIL after an error: what drive() returns)
+template <class C, class In, class Out>
+uint drive(C& c, In in, Out out) {
+  for (;;) {
+    const uint r = c.coro_call(&c);
+    if (r == Y_IN) {
+      in();
+      continue;
+    }
+    out(r == Y_OUT);
+    if (r != Y_OUT) return r;
+  }
+}
+
+// c on files: its input from f (the n bytes at pre read already, first), its output to s
+static U8 io_bufs[2][1 << 16];  // (the main thread's)
+template <class C>
+uint run_file(C& c, FILE* f, Sink* s, const U8* pre = 0, size_t n = 0) {
+  const uint kIo = sizeof io_bufs[0];
+  U8 *ib = io_bufs[0], *ob = io_bufs[1];
+  c.addout(ob, kIo);
+  if (n) c.addinp((byte*)pre, (uint)n);
+  return drive(
+      c,
+      [&]() {
+        const uint l = (uint)fread(ib, 1, kIo, f);
+        if (!l) c.f_quit = 1;
+        c.addinp(ib, l);
+      },
+      [&](bool more) {
+        sink_write(s, c.outbeg, c.getoutsize());
+        if (more) c.addout(ob, kIo);
+      });
+}
+
+//--- threads (-t) --------------------------------------------------------------------------------
+
+// c -t N: the stream cut into parts by M4vSplit (on the main thread), each part a stream by itself,
+// and the parts dealt in turn to N workers by MTwrap (MTwrap_v3, its parts mode), a model for each
+// part (M4vPart runs an M4vCoro on it). A part ends:
+//   - before the first I-VOP at least -c's part size after the part's start, or before the run of
+//     headers (VOS, VO, VOL, user data, GOV) right before that I-VOP;
+//   - where no I-VOP comes, before the first VOP but a B-VOP at least mt_cap() after its start (a
+//     B-VOP's syntax depends on the VOP before it);
+//   - where no VOP comes within half again of the cap, at any start code, and where none comes
+//     within twice the cap, there.
+// VOPs that aren't coded (vop_coded 0: the placeholders packed B-VOPs leave) don't count as I-VOPs
+// or other VOPs here. The headers m4vpack's parser reads (the last VOL, the last DivX and XviD
+// user data), as defined before a part, are copied in at its start (their first 32 KB, which is
+// what the parser reads), unless the part defines them itself before its first VOP: so each part
+// parses as it would in the whole stream, but where the parser guessed the VOP header's time
+// increment size.
+//
+// A worker's stream is a record for each of its parts:
+//   u64 g_size  the record's size, these MT_REC (48) bytes included
+//   u64 plen    the size of the part as compressed (with the headers copied in)
+//   u64 ins     where in it those are: [ins, ins + xlen), removed after decoding
+//   u64 xlen
+//   u64 part    its place in the stream, from 0: worker w's k-th part is w + kN
+//   u32 crc     the CRC-32 of these 40 bytes; u32 0
+//   g_size - 48 bytes: the part compressed, a stream of the single kind (magic, chunks, CRC)
+// and its end, a record of the 48 bytes alone, whose part is the place its next part would have
+// had (little endian). So d finds a part lost, added or moved, or a worker's stream cut short.
+// MTwrap's container holds the N streams, after m4vpack's header: mt_magic, the format version,
+// the threads, the part size in KB (4 bytes). d needs as many threads as c had; each part ends a
+// round of MTwrap's decoder (Y_PART), which takes the parts from the workers in turn, as dealt.
+
+static const U8 mt_magic[5] = { 'm', '4', 'v', 'p', 'm' };
+enum {
+  MT_HEAD = 11,     // mt_magic, the version, the threads, the part size in KB
+  MT_REC = 48,      // a worker's record
+  MT_FRAME = 24     // a part as the splitter frames it: u64 L, u64 ins, u64 xlen, then L - 16 bytes
+};
+#define MT_RING (1u << 20)      // MTwrap's buffers to and from each worker
+#define MT_COPY_MAX (32u << 10) // the bytes of a header copied in, at most
 
 static void put_le(U8* p, U64 v, int n) { int i; for (i = 0; i < n; i++) p[i] = (U8)(v >> (8 * i)); }
 static U64 get_le(const U8* p, int n) { U64 v = 0; int i; for (i = n - 1; i >= 0; i--) v = (v << 8) | p[i]; return v; }
 
-// header: magic, input size (8 bytes), CRC-32 of the input; then the arithmetic coded data
-static int compress(FILE* in, FILE* out, Ctx* cx, Stats* st, Coder* c, int stats) {
-  static Reader rd;
-  U8 hdr[20];
-  size_t pos, len;
-  int part;
-  U32 crc = 0;
-  memset(&rd, 0, sizeof(rd));
-  rd.f = in;
-  memset(hdr, 0, sizeof(hdr));
-  if (fwrite(hdr, 1, sizeof(hdr), out) != sizeof(hdr)) return -1;
-  co_init(c, out, 1);
-  c->stats = stats;
-  while (rd_chunk(&rd, &pos, &len, &part)) {
-    U8* p = ibuf + pos;
-    const int is_vop = len >= 4 && !p[0] && !p[1] && p[2] == 1 && p[3] == 0xB6;
-    crc = crc32_upd(crc, p, len);
-    st->in_bytes += (double)len;
-    if (is_vop && part != 2) {
-      st->vops++;
-      if (len >= 5) st->by_type[(p[4] >> 6) + PT_I]++;
-      if (part) st->raw_long++;
-      else if (!cx->have_vol || cx->unsupported || (cx->dp && (len < 5 || (p[4] >> 6) != 2))) st->raw_unsup++;
-      else {
-        const int tib = cx->time_inc_bits;
-        GB gb;
-        PB pb;
-        gb.buf = p + 4;
-        gb.size = (int)(len - 4) * 8;
-        gb.pos = 0;
-        pb_init(&pb, obuf, OBUF_SIZE);
-        if (vop_walk(cx, W_VERIFY, &gb, &pb, 0) < 0) st->raw_parse++;
-        else if (pb.err || pb.n || pb.len != len || memcmp(obuf, p, len)) st->raw_verify++;
-        else {
-          cx->time_inc_bits = tib;  // the parse again sees the same state
-          gb.pos = 0;
-          code_kind(c, 1);
-          if (vop_walk(cx, W_ENCODE, &gb, 0, c) < 0) return -2;  // can't happen: verified above
-          st->packed++;
-          st->vop_bytes += (double)len;
-          continue;
-        }
-      }
-    }
-    if (is_vop) st->raw_bytes += (double)len;
-    c->orig[CAT_RAW] += 8.0 * len;
-    code_kind(c, 2);
-    code_raw(c, p, len, len);
-    parse_header_chunk(cx, p, len);
-  }
-  code_kind(c, 0);
-  co_flush(c);
-  if (c->err || ferror(in)) return -1;
-  memcpy(hdr, magic, 8);
-  put_le(hdr + 8, (U64)st->in_bytes, 8);
-  put_le(hdr + 16, crc, 4);
-  if (fseek(out, 0, SEEK_SET) || fwrite(hdr, 1, sizeof(hdr), out) != sizeof(hdr)) return -1;
-  return 0;
+// the size past which a part ends at any VOP but a B-VOP
+static U64 mt_cap(U64 part) { return 4 * part < (1ull << 31) ? 4 * part : 1ull << 31; }
+// The most a part can be, as the splitter cuts it: twice the cap, and the headers copied in. d
+// takes a record of a larger part to be broken, which bounds the memory a part's output takes.
+static U64 mt_part_max(U64 part) { return 2 * mt_cap(part) + 3 * (U64)MT_COPY_MAX; }
+
+static void mt_head(U8* h, int threads, U32 part) {
+  memcpy(h, mt_magic, sizeof mt_magic);
+  h[5] = magic[sizeof magic - 1];
+  h[6] = (U8)threads;
+  put_le(h + 7, part >> 10, 4);
 }
 
-static int decompress(FILE* in, Sink* out, Ctx* cx, Coder* c) {
-  U8 hdr[20];
-  U64 size, done = 0;
-  U32 crc = 0;
-  int kind;
-  if (fread(hdr, 1, sizeof(hdr), in) != sizeof(hdr) || memcmp(hdr, magic, 8)) return -1;
-  size = get_le(hdr + 8, 8);
-  co_init(c, in, 0);
-  while ((kind = code_kind(c, 0)) != 0) {
-    const U64 left = size - done;  // what the header announces; more means damaged data
-    if (kind == 1) {
-      PB pb;
-      pb_init(&pb, obuf, left < OBUF_SIZE ? (size_t)left : OBUF_SIZE);
-      if (vop_walk(cx, W_DECODE, 0, &pb, c) < 0 || pb.err || pb.n) return -2;
-      if (!sink_write(out, obuf, pb.len)) return -3;
-      crc = crc32_upd(crc, obuf, pb.len);
-      done += pb.len;
-    } else {
-      const size_t n = code_raw(c, ibuf, 0, left < IBUF_SIZE ? (size_t)left : IBUF_SIZE);
-      if (!n || c->bytes > 16) return -2;
-      memset(ibuf + n, 0, 64);
-      parse_header_chunk(cx, ibuf, n);
-      if (!sink_write(out, ibuf, n)) return -3;
-      crc = crc32_upd(crc, ibuf, n);
-      done += n;
-    }
-    if (done > size || c->bytes > 16) return -2;
-  }
-  if (ferror(in)) return -4;
-  if (done != size || crc != (U32)get_le(hdr + 16, 4)) return -2;
-  return 0;
+static U32 mt_rec_crc(const U8* h) { return crc32_upd(0, h, 40); }
+static void mt_rec(U8* h, U64 g_size, U64 plen, U64 ins, U64 xlen, U64 part) {
+  put_le(h, g_size, 8);
+  put_le(h + 8, plen, 8);
+  put_le(h + 16, ins, 8);
+  put_le(h + 24, xlen, 8);
+  put_le(h + 32, part, 8);
+  put_le(h + 40, mt_rec_crc(h), 4);
+  put_le(h + 44, 0, 4);
 }
 
-//--- frontend ------------------------------------------------------------------------------------
+// room for n bytes at *p (*room of them now): 0 if there is no memory
+static int grow(U8** p, size_t* room, size_t n) {
+  size_t r = *room ? *room : 1 << 16;
+  U8* q;
+  if (n <= *room) return 1;
+  while (r < n) r = r < ((size_t)-1) / 2 ? 2 * r : n;
+  if (!(q = (U8*)realloc(*p, r))) return 0;
+  *p = q;
+  *room = r;
+  return 1;
+}
 
-static char obuf_file[1 << 20];
+// Whether the VOP at p (n bytes from its start code on) is coded (vop_coded), as the parser reads it
+// with the VOL c has (and its guess of the time increment's length, kept in c); -1 if its header
+// doesn't parse
+static int vop_is_coded(Ctx* c, const U8* p, size_t n) {
+  U8 b[64 + 64];
+  GB gb;
+  VopHdr h;
+  const size_t k = n - 4 < 64 ? n - 4 : 64;
+  memset(b, 0, sizeof b);
+  memcpy(b, p + 4, k);
+  gb.buf = b;
+  gb.size = (int)k * 8;
+  gb.pos = 0;
+  h.coded = -1;
+  parse_vop_hdr(c, &gb, &h);  // (coded as far as it got: the rest of the header doesn't matter here)
+  return h.coded;
+}
 
-int main(int argc, char** argv) {
-  static Ctx ctx;
-  static Stats st;
-  static Coder co;
-  FILE *in, *out;
-  int a = 2, quiet = 0, verify = 0, stats = 0, mode, r, i;
-  if (argc < 2 || (strcmp(argv[1], "c") && strcmp(argv[1], "d"))) a = argc;
-  for (; a < argc && argv[a][0] == '-' && argv[a][1]; a++) {
-    if (!strcmp(argv[a], "-q")) quiet = 1;
-    else if (!strcmp(argv[a], "-v")) verify = 1;
-    else if (!strcmp(argv[a], "-s")) stats = 1;
-    else break;
+// The splitter: the stream in, its parts out as frames for MTwrap's parts mode (u64 L, u64 ins,
+// u64 xlen, the part with the headers copied in at ins), on the main thread. Plain data (a part of
+// MtEnc, mapped by coro_new()): Init() sets it up, Quit() frees what it holds.
+enum { K_VOL, K_DIVX, K_XVID, NKEY };  // the headers copied in
+struct M4vSplit : Coroutine {
+  U64 chunksize, cap;  // -c's part size; mt_cap() of it
+  U8* buf;             // the stream from begin on: the part under way
+  size_t len, room;
+  U64 begin, scan;     // the part's start; where to look for start codes next (stream offsets)
+  U64 total, parts;    // the stream's size (at its end), the parts
+  int eof;
+  // the chunk under way (from its start code at chunk_at), and the run of headers it may be in
+  U64 chunk_at, run_at;
+  int chunk_code, run;  // chunk_code: the start code's last byte, -1 (none, or the part started in it)
+  // the headers to copy in: as defined before the run under way (copy) and in it (pend, keys in
+  // pend_has); the copies of the part under way (extra, xlen bytes)
+  U8 copy[NKEY][MT_COPY_MAX], pend[NKEY][MT_COPY_MAX];
+  U32 copy_len[NKEY], pend_len[NKEY];
+  int pend_has;
+  U8 extra[NKEY * MT_COPY_MAX];
+  U32 xlen;
+  Ctx cx;  // the last VOL's (whether a VOP is coded)
+
+  void Init(U64 part) {
+    coro_init();
+    ctx_init(&cx);
+    chunksize = part;
+    cap = mt_cap(part);
+    buf = 0;
+    len = room = 0;
+    begin = scan = total = parts = 0;
+    eof = 0;
+    chunk_at = run_at = 0;
+    chunk_code = -1;
+    run = 0;
+    memset(copy_len, 0, sizeof copy_len);
+    memset(pend_len, 0, sizeof pend_len);
+    pend_has = 0;
+    xlen = 0;
   }
-  if (argc < 2 || a != argc - 2) {
-    fprintf(stderr, "m4vpack - lossless compressor for MPEG-4 Part 2 video streams (XviD, DivX 4+)\n"
-                    "Usage: m4vpack c|d [options] input output\n"
-                    "  c   compress a raw .m4v stream\n"
-                    "  d   decompress\n"
-                    "  -v  (c) decompress the result again and compare it with the input\n"
-                    "  -s  (c) bits spent per kind of syntax element\n"
-                    "  -q  no statistics\n");
-    return 1;
+  void Quit(void) {
+    free(buf);
+    buf = 0;
+    len = room = 0;
+    ctx_quit(&cx);
   }
-  mode = argv[1][0];
-  tables_init();
-  crc_init();
-  model_init();
-  ctx_init(&ctx);
-  if (!(in = fopen(argv[a], "rb"))) { fprintf(stderr, "can't open %s\n", argv[a]); return 2; }
-  if (!(out = fopen(argv[a + 1], mode == 'c' ? "w+b" : "wb"))) {
-    fprintf(stderr, "can't create %s\n", argv[a + 1]);
-    return 3;
-  }
-  setvbuf(out, obuf_file, _IOFBF, sizeof(obuf_file));
-  if (mode == 'c') {
-    double out_bytes;
-    r = compress(in, out, &ctx, &st, &co, stats);
-    out_bytes = 20.0 + (double)co.bytes;
-    if (fclose(out) != 0 && r >= 0) r = -1;
-    if (r == -2) { fprintf(stderr, "internal error: a verified VOP couldn't be coded\n"); return 5; }
-    if (r < 0) { fprintf(stderr, "%s error\n", ferror(in) ? "read" : "write"); return ferror(in) ? 2 : 3; }
-    if (!quiet) {
-      fprintf(stderr, "%s: %.0f -> %.0f bytes (%.2f%%); %u VOPs (I %u, P %u, B %u, S %u), %u packed", argv[a],
-              st.in_bytes, out_bytes, st.in_bytes ? 100.0 * out_bytes / st.in_bytes : 0.0, st.vops, st.by_type[1],
-              st.by_type[2], st.by_type[3], st.by_type[4], st.packed);
-      if (st.vops > st.packed)
-        fprintf(stderr, ", %u kept as bytes (%u unsupported, %u too long, %u unparsable, %u not reproduced)",
-                st.vops - st.packed, st.raw_unsup, st.raw_long, st.raw_parse, st.raw_verify);
-      fprintf(stderr, "\n");
-      if (stats) {
-        static const char* const grp_name[5] = { "headers, raw chunks", "macroblock types, cbp, dquant",
-                                                 "motion vectors", "intra DC", "coefficients" };
-        static const int grp_first[6] = { CAT_RAW, CAT_MB, CAT_MV, CAT_DC, CAT_SIG, NCAT };
-        double o = 0, p = 0;
-        int g;
-        fprintf(stderr, "  %-33s %10s %10s\n", "bytes", "input", "packed");
-        for (g = 0; g < 5; g++) {
-          double og = 0, pg = 0;
-          for (i = grp_first[g]; i < grp_first[g + 1]; i++) { og += co.orig[i]; pg += co.cost[i]; }
-          fprintf(stderr, "  %-33s %10.0f %10.0f %6.2f%%\n", grp_name[g], og / 8, pg / 8, og ? 100 * pg / og : 0.0);
-          if (grp_first[g + 1] - grp_first[g] > 1)
-            for (i = grp_first[g]; i < grp_first[g + 1]; i++)
-              fprintf(stderr, "    %-42s %10.0f\n", cat_name[i], co.cost[i] / 8);
-          o += og;
-          p += pg;
-        }
-        fprintf(stderr, "  %-33s %10.0f %10.0f %6.2f%%\n", "total", o / 8, p / 8, o ? 100 * p / o : 0.0);
-      }
+
+  void put(const U8* p, size_t n) {
+    while (n) {
+      uint l;
+      chkout();
+      l = (uint)(n < getoutleft() ? n : getoutleft());
+      memcpy(outptr, p, l);
+      outptr += l;
+      p += l;
+      n -= l;
     }
-    if (verify) {
-      static Ctx ctx2;
-      Sink s;
-      FILE* t = fopen(argv[a + 1], "rb");
-      if (!t) { fprintf(stderr, "can't open %s\n", argv[a + 1]); return 3; }
-      rewind(in);
-      memset(&s, 0, sizeof(s));
-      s.f = in;
-      s.compare = 1;
-      model_init();
-      ctx_init(&ctx2);
-      r = decompress(t, &s, &ctx2, &co);
-      fclose(t);
-      if (r == 0 && !s.differs && fgetc(in) != EOF) { s.differs = 1; s.diff_at = s.pos; }
-      if (r < 0 || s.differs) {
-        fprintf(stderr, "verify: FAILED (%s at byte %.0f)\n", r < 0 ? "decoding error" : "difference", (double)s.diff_at);
-        return 5;
+  }
+
+  // the part under way, up to the stream offset x, as a frame; the next starts at x
+  void emit(U64 x) {
+    const size_t n = (size_t)(x - begin);
+    U8 h[MT_FRAME];
+    put_le(h, MT_FRAME - 8 + (U64)xlen + n, 8);
+    put_le(h + 8, 0, 8);
+    put_le(h + 16, xlen, 8);
+    put(h, MT_FRAME);
+    put(extra, xlen);
+    put(buf, n);
+    memmove(buf, buf + n, len - n);
+    len -= n;
+    begin = x;
+    parts++;
+  }
+  // a cut at x: the part before it out, and the copies for the one after it (the headers defined
+  // before x, but those its run of headers so far defines)
+  void cut(U64 x) {
+    int k;
+    emit(x);
+    xlen = 0;
+    for (k = 0; k < NKEY; k++)
+      if (copy_len[k] && !(pend_has >> k & 1)) {
+        memcpy(extra + xlen, copy[k], copy_len[k]);
+        xlen += copy_len[k];
       }
-      if (!quiet) fprintf(stderr, "verify: OK\n");
+    if (chunk_at < x) chunk_code = -1;  // (a cut inside a chunk: its start is gone)
+    if (run_at < x) run_at = x;
+  }
+  // the run of headers ends: what it defined is defined before the next run
+  void commit(void) {
+    int k;
+    for (k = 0; k < NKEY; k++)
+      if (pend_has >> k & 1) {
+        memcpy(copy[k], pend[k], pend_len[k]);
+        copy_len[k] = pend_len[k];
+      }
+    pend_has = 0;
+    run = 0;
+  }
+  static int is_header(int c) { return c == 0xB0 || c == 0xB5 || c == 0xB2 || c == 0xB3 || (c >= 0 && c < 0x30); }
+  // the chunk under way ends at the stream offset a: a header to copy into pend
+  void end_chunk(U64 a) {
+    const U8* p = buf + (chunk_at - begin);
+    const size_t n = (size_t)(a - chunk_at);
+    int k = -1;
+    if (chunk_code < 0) return;
+    if (chunk_code >= 0x20 && chunk_code < 0x30) parse_header_chunk(&cx, p, n);
+    if (chunk_code >= 0x20 && chunk_code < 0x30) k = K_VOL;
+    else if (chunk_code == 0xB2 && n >= 8 && !memcmp(p + 4, "DivX", 4)) k = K_DIVX;
+    else if (chunk_code == 0xB2 && n >= 8 && !memcmp(p + 4, "XviD", 4)) k = K_XVID;
+    if (k < 0) return;
+    pend_len[k] = (U32)(n < MT_COPY_MAX ? n : MT_COPY_MAX);
+    memcpy(pend[k], p, pend_len[k]);
+    pend_has |= 1 << k;
+  }
+  // a start code at the stream offset a: the chunk before it ends, and a cut before this one (or
+  // before its run of headers) if one is due. A VOP that isn't coded (as packed B-VOPs leave) is no
+  // place to cut: the B-VOPs after it depend on the coded VOP before it.
+  void start_code(U64 a) {
+    const size_t i = (size_t)(a - begin);
+    const int code = i + 3 < len ? buf[i + 3] : -1;
+    int type = code == 0xB6 && i + 4 < len ? buf[i + 4] >> 6 : -1;  // a VOP's: I 0, P 1, B 2, S 3
+    U64 x;
+    end_chunk(a);
+    if (type >= 0 && !vop_is_coded(&cx, buf + i, len - i)) type = -1;
+    if (is_header(code) && !run) {
+      run = 1;
+      run_at = a;
     }
-    fclose(in);
+    x = run ? run_at : a;
+    if (x > begin && ((type == 0 && x - begin >= chunksize) || (type >= 0 && type != 2 && x - begin >= cap) ||
+                      a - begin >= cap + cap / 2))
+      cut(x);
+    if (!is_header(code)) commit();
+    chunk_at = a;
+    chunk_code = code;
+  }
+
+  void do_process(void) {
+    for (;;) {
+      uint l;
+      chkinp();
+      l = getinplen();
+      if (!l) break;  // the end
+      if (!grow(&buf, &room, len + l + 64)) no_memory();
+      memcpy(buf + len, inpptr, l);
+      inpptr += l;
+      len += l;
+      scan_input();
+    }
+    eof = 1;
+    scan_input();
+    total = begin + len;
+    end_chunk(total);
+    commit();
+    if (total > begin) emit(total);
+    yield(this, Y_END);
+  }
+  // the start codes in what came of the input, but one whose code (and VOP type) is to come; and
+  // where a stretch without one reaches past twice the cap, a cut there
+  void scan_input(void) {
+    for (;;) {
+      size_t i = (size_t)(scan - begin);
+      const int found = find_sc(buf, &i, len);
+      const U64 a = begin + i;  // the start code, or where to look on
+      while (a - begin > 2 * cap) cut(begin + 2 * cap);
+      i = (size_t)(a - begin);
+      if (!found || (i + 64 > len && !eof)) {  // (a VOP's header to come)
+        scan = a;
+        return;
+      }
+      scan = a + 3;
+      start_code(a);
+    }
+  }
+};
+
+typedef struct MtArgs {
+  int threads, stats;
+  U64 part_max;  // d: the largest part a record can have (mt_part_max())
+} MtArgs;
+
+// MTwrap's Enc_class: a worker, coding the parts it is dealt one after the other, each by a model
+// of its own (M4vCoro, a coroutine of the worker's, on the part in memory). Plain data, never
+// constructed (MTwrap maps its workers): Init() sets it up, do_process() frees what it took as it
+// ends. What a part's run fails with is the worker's error (its note).
+template <int f_DEC>
+struct M4vPart : CoIo {
+  MtArgs args;
+  U32 worker;      // its place among the workers, dealt the parts in turn
+  U64 parts;       // the parts done
+  Stats st;        // c: its parts', added up (-s: and the bits by kind of syntax element)
+  double cost[NCAT], orig[NCAT];
+  U8 *in_, *out_;  // c: a part, all of it; d: 64 KB of its record at a time. The part's run's output
+  size_t in_room, out_room, out_len;
+
+  uint Init(const MtArgs* a, uint w) {
+    coro_init();
+    args = *a;
+    worker = w;
+    parts = 0;
+    memset(&st, 0, sizeof st);
+    memset(cost, 0, sizeof cost);
+    memset(orig, 0, sizeof orig);
+    in_ = out_ = 0;
+    in_room = out_room = out_len = 0;
     return 0;
   }
-  {
-    Sink s;
-    memset(&s, 0, sizeof(s));
-    s.f = out;
-    r = decompress(in, &s, &ctx, &co);
-    fclose(in);
-    if (fclose(out) != 0 && r == 0) r = -3;
-    switch (r) {
-    case 0: return 0;
-    case -1: fprintf(stderr, "%s: not an m4vpack file\n", argv[a]); return 4;
-    case -3: fprintf(stderr, "write error %s\n", argv[a + 1]); return 3;
-    case -4: fprintf(stderr, "read error %s\n", argv[a]); return 2;
-    default: fprintf(stderr, "%s: damaged data\n", argv[a]); return 4;
+  void Quit(void) {
+    free(in_);
+    free(out_);
+    in_ = out_ = 0;
+    in_room = out_room = 0;
+  }
+
+  void do_process(void) {
+    int r;
+    io_init();
+    r = f_DEC ? run_d() : run_c();
+    Quit();
+    for (;;) yield(static_cast<Coroutine*>(this), r ? Y_FAIL : Y_END);
+  }
+
+  // the place of the next part it has (worker w's k-th: w + kN)
+  U64 next_part(void) const { return worker + parts * (U64)args.threads; }
+
+  // A part's run: the coroutine c on the input feed() gives (feed(&p): the next piece at p, its size;
+  // 0 at the end), its output into out_ (out_len bytes; most at most, one more fails the part); its
+  // status (0, or the exit status of its error, its note copied to the worker's)
+  template <class C, class Feed>
+  int run_part(C* c, Feed feed, U64 most) {
+    int r;
+    uint y;
+    out_len = 0;
+    if (!grow(&out_, &out_room, 1 << 16)) return fail(5, "out of memory");
+    c->addout(out_, 1 << 16);
+    for (;;) {
+      y = c->coro_call(c);
+      if (y == Y_IN) {
+        const U8* p = 0;
+        const size_t l = feed(&p);
+        if (!l) c->f_quit = 1;
+        c->addinp((byte*)(l ? p : out_), (uint)l);
+        continue;
+      }
+      out_len += c->getoutsize();
+      if (y != Y_OUT) break;
+      if (out_len > most) {  // (a part that comes out longer than its record says: d only)
+        c->Quit();
+        return fail(4, "damaged data: a part comes out longer than its record says");
+      }
+      if (!grow(&out_, &out_room, out_len + (1 << 16))) {
+        c->Quit();
+        return fail(5, "out of memory");
+      }
+      c->addout(out_ + out_len, 1 << 16);
+    }
+    r = c->status;
+    if (r) fail(r, "%s", c->note);
+    return r;
+  }
+
+  // c: each part as the splitter frames it (u64 L, u64 ins, u64 xlen, then the part, L - 16
+  // bytes) into its record, and as the parts end, the record of the worker's end
+  int run_c(void) {
+    for (;;) {
+      U8 h[MT_FRAME], rec[MT_REC];
+      const size_t n = read(h, MT_FRAME);
+      U64 L, ins, xlen, plen, pos = 0;
+      M4vCoro<0>* c;
+      int r, i;
+      if (!n) {
+        mt_rec(rec, MT_REC, 0, 0, 0, next_part());
+        write(rec, MT_REC);
+        return 0;
+      }
+      L = get_le(h, 8);
+      ins = get_le(h + 8, 8);
+      xlen = get_le(h + 16, 8);
+      plen = L - (MT_FRAME - 8);
+      if (n < MT_FRAME || L < MT_FRAME - 8 || ins > plen || xlen > plen - ins || plen != (size_t)plen)
+        return fail(5, "internal error: a part framed wrong");
+      if (!grow(&in_, &in_room, (size_t)plen + 1)) return fail(5, "out of memory");
+      if (read(in_, (size_t)plen) != plen) return fail(5, "internal error: a part cut short");
+      if (!(c = coro_new<M4vCoro<0> >())) return fail(5, "out of memory");
+      c->Init(args.stats);
+      r = run_part(c, [&](const U8** p) {  // in_, a gigabyte at most at a time (addinp() takes 32 bits)
+        const size_t l = plen - pos < (1u << 30) ? (size_t)(plen - pos) : 1u << 30;
+        *p = in_ + pos;
+        pos += l;
+        return l;
+      }, ~0ull);
+      if (!r) {
+        st.vops += c->st.vops;
+        st.packed += c->st.packed;
+        for (i = 0; i < 5; i++) st.by_type[i] += c->st.by_type[i];
+        st.raw_unsup += c->st.raw_unsup;
+        st.raw_long += c->st.raw_long;
+        st.raw_parse += c->st.raw_parse;
+        st.raw_verify += c->st.raw_verify;
+        st.raw_bytes += c->st.raw_bytes;
+        st.vop_bytes += c->st.vop_bytes;
+        for (i = 0; i < NCAT; i++) cost[i] += c->co.cost[i], orig[i] += c->co.orig[i];
+      }
+      coro_free(c);
+      if (r) return r;
+      mt_rec(rec, MT_REC + out_len, plen, ins, xlen, next_part());
+      write(rec, MT_REC);
+      write(out_, out_len);
+      parts++;
+      // the record handed over now, its last buffer as far as it is filled (a round's end): so
+      // MTwrap puts each record in the container as its part is done, and d, which takes the
+      // parts in turn, finds the next within about a round of the others
+      yield(static_cast<Coroutine*>(this), Y_PART);
     }
   }
+
+  // d: each record into its part, the headers copied in removed, after which MTwrap takes the
+  // next part from the next worker; to the record of the worker's end, after which nothing
+  int run_d(void) {
+    for (;;) {
+      U8 h[MT_REC];
+      U64 g_size, plen, ins, xlen, left;
+      M4vCoro<1>* c;
+      int r;
+      if (read(h, MT_REC) < MT_REC) return fail(4, "damaged data: a worker's records cut short");
+      g_size = get_le(h, 8);
+      plen = get_le(h + 8, 8);
+      ins = get_le(h + 16, 8);
+      xlen = get_le(h + 24, 8);
+      if (get_le(h + 40, 4) != mt_rec_crc(h) || get_le(h + 44, 4) || get_le(h + 32, 8) != next_part())
+        return fail(4, "damaged data: a part's record broken, or a part lost, added or moved");
+      if (g_size == MT_REC) {  // the worker's end
+        U8 x;
+        if (plen || ins || xlen) return fail(4, "damaged data: a part's record broken");
+        if (read(&x, 1)) return fail(4, "damaged data after a worker's end");
+        return 0;
+      }
+      if (plen > args.part_max || ins > plen || xlen > plen - ins || g_size < MT_REC)
+        return fail(4, "damaged data: a part's record broken");
+      // the part compressed, read as its run asks for it, 64 KB at a time
+      left = g_size - MT_REC;
+      if (!grow(&in_, &in_room, 1 << 16)) return fail(5, "out of memory");
+      if (!(c = coro_new<M4vCoro<1> >())) return fail(5, "out of memory");
+      c->Init(0);
+      r = run_part(c, [&](const U8** p) {
+        const size_t got = read(in_, left < (1u << 16) ? (size_t)left : 1u << 16);
+        left -= got;
+        *p = in_;
+        return got;
+      }, plen);
+      coro_free(c);
+      if (r) return r;
+      if (left) return fail(4, "damaged data: a part's record broken");  // (its stream ended before it)
+      if (out_len != plen) return fail(4, "damaged data: a part comes out shorter than its record says");
+      write(out_, (size_t)ins);
+      write(out_ + ins + xlen, (size_t)(plen - ins - xlen));
+      parts++;
+      yield(static_cast<Coroutine*>(this), Y_PART);
+    }
+  }
+};
+
+// c: the splitter into MTwrap's coder; d: MTwrap's decoder
+typedef CoroutinePair<M4vSplit, MTwrap<0, M4vPart<0>, const MtArgs*> > MtEnc;
+typedef MTwrap<1, M4vPart<1>, const MtArgs*> MtDec;
+
+// whether a worker failed: the first one's exit status, its note copied to note (the workers go
+// with MTwrap's Quit())
+template <class M>
+int mt_failed(M& m, char* note, size_t n) {
+  uint i;
+  for (i = 0; i < m.th_N; i++)
+    if (m.C1[i].f_fail) {
+      snprintf(note, n, "%s", m.C1[i].note);
+      return m.C1[i].code ? m.C1[i].code : 5;
+    }
+  return 0;
+}
+// whether d's workers had the parts as c deals them, in turn: of P in all, worker i the i-th of each
+// round of N, one more where P % N is past it
+static int mt_dealt(MtDec& d) {
+  U64 P = 0, N = d.th_N;
+  uint i;
+  for (i = 0; i < d.th_N; i++) P += d.C1[i].parts;
+  for (i = 0; i < d.th_N; i++)
+    if (d.C1[i].parts != P / N + (i < P % N)) return 0;
+  return 1;
+}
+//--- the calls -----------------------------------------------------------------------------------
+
+typedef struct Opts {
+  int quiet, verify, stats;
+  int threads;  // -t
+  U32 part;     // -c: a part's size, at least
+} Opts;
+
+// a call's file, "-" for stdin or stdout
+static FILE* open_file(const char* name, int out) {
+  if (!strcmp(name, "-")) return out ? stdout : stdin;
+  return fopen(name, out ? "wb" : "rb");
+}
+
+// c's summary line (out_bytes: the compressed size), and with -s the bits by kind of syntax element
+static void report(const char* name, const Stats* st, const double* cost, const double* orig, double out_bytes,
+                   int stats) {
+  int i;
+  fprintf(stderr, "%s: %.0f -> %.0f bytes (%.2f%%); %u VOPs (I %u, P %u, B %u, S %u), %u packed", name,
+          st->in_bytes, out_bytes, st->in_bytes ? 100.0 * out_bytes / st->in_bytes : 0.0, st->vops, st->by_type[1],
+          st->by_type[2], st->by_type[3], st->by_type[4], st->packed);
+  if (st->vops > st->packed)
+    fprintf(stderr, ", %u kept as bytes (%u unsupported, %u too long, %u unparsable, %u not reproduced)",
+            st->vops - st->packed, st->raw_unsup, st->raw_long, st->raw_parse, st->raw_verify);
+  if (st->threads) fprintf(stderr, "; %.0f parts on %d threads", (double)st->parts, st->threads);
+  fprintf(stderr, "\n");
+  if (stats) {
+    static const char* const grp_name[5] = { "headers, raw chunks", "macroblock types, cbp, dquant", "motion vectors",
+                                             "intra DC", "coefficients" };
+    static const int grp_first[6] = { CAT_RAW, CAT_MB, CAT_MV, CAT_DC, CAT_SIG, NCAT };
+    double o = 0, p = 0;
+    int g;
+    fprintf(stderr, "  %-33s %10s %10s\n", "bytes", "input", "packed");
+    for (g = 0; g < 5; g++) {
+      double og = 0, pg = 0;
+      for (i = grp_first[g]; i < grp_first[g + 1]; i++) { og += orig[i]; pg += cost[i]; }
+      fprintf(stderr, "  %-33s %10.0f %10.0f %6.2f%%\n", grp_name[g], og / 8, pg / 8, og ? 100 * pg / og : 0.0);
+      if (grp_first[g + 1] - grp_first[g] > 1)
+        for (i = grp_first[g]; i < grp_first[g + 1]; i++) fprintf(stderr, "    %-42s %10.0f\n", cat_name[i], cost[i] / 8);
+      o += og;
+      p += pg;
+    }
+    fprintf(stderr, "  %-33s %10.0f %10.0f %6.2f%%\n", "total", o / 8, p / 8, o ? 100 * p / o : 0.0);
+  }
+}
+
+// the end of a run on the files f (input) and s (output): its status r (0, or the exit status of an
+// error the run's note says), unless reading or writing failed
+static int run_end(int r, const char* note, FILE* f, const char* in_name, Sink* s, const char* out_name) {
+  if (ferror(f)) {
+    fprintf(stderr, "m4vpack: %s: read error\n", in_name);
+    return 2;
+  }
+  if (s->err) {
+    fprintf(stderr, "m4vpack: %s: write error\n", out_name);
+    return 3;
+  }
+  if (r) fprintf(stderr, "m4vpack: %s: %s\n", in_name, note);
+  return r;
+}
+
+// what MTwrap's Init() returned, said (0: nothing to say)
+static int mt_init_failed(uint r, int threads) {
+  if (r == 7) fprintf(stderr, "m4vpack: can't start %d threads\n", threads);
+  else if (r) fprintf(stderr, "m4vpack: no memory for the buffers of %d threads\n", threads);
+  return r != 0;
+}
+
+// d of a stream of parts (the bytes at head, got of them, read already)
+static int decode_mt(FILE* f, const char* in_name, Sink* s, const char* out_name, const U8* head, size_t got) {
+  const int threads = got >= MT_HEAD ? head[6] : 0;
+  char note[256] = "damaged data";
+  MtArgs a;
+  MtDec* d;
+  uint y;
+  int r;
+  if (got > 5 && head[5] != magic[sizeof magic - 1]) {
+    fprintf(stderr, "m4vpack: %s: format version %d, which this m4vpack (version %d) doesn't read\n", in_name, head[5],
+            magic[sizeof magic - 1]);
+    return 4;
+  }
+  if (threads < 1 || threads > 64) return run_end(4, note, f, in_name, s, out_name);
+  a.threads = threads;
+  a.stats = 0;
+  a.part_max = mt_part_max((get_le(head + 7, 4) + 1) << 10);  // (the part size in KB, rounded down)
+  if (!(d = coro_new<MtDec>())) no_memory();
+  if (mt_init_failed(d->Init(threads, MT_RING, &a, 1), threads)) return 5;
+  y = run_file(*d, f, s, head + MT_HEAD, got - MT_HEAD);
+  if (!(r = mt_failed(*d, note, sizeof note)) && (y != Y_END || !mt_dealt(*d))) r = 4;
+  d->Quit();  // (the threads joined)
+  coro_free(d);
+  return run_end(r, note, f, in_name, s, out_name);
+}
+
+// d of the stream in f into s: 0, or the exit status of an error (said)
+static int decode_to(FILE* f, const char* in_name, Sink* s, const char* out_name) {
+  U8 head[16];
+  const size_t got = fread(head, 1, sizeof head, f);
+  M4vCoro<1>* c;
+  int r;
+  if (got >= sizeof mt_magic && !memcmp(head, mt_magic, sizeof mt_magic))
+    return decode_mt(f, in_name, s, out_name, head, got);
+  if (!(c = coro_new<M4vCoro<1> >())) no_memory();
+  c->Init(0);
+  run_file(*c, f, s, head, got);
+  r = run_end(c->status, c->note, f, in_name, s, out_name);
+  coro_free(c);
+  return r;
+}
+
+// c -v: d of the output, compared with the input
+static int verify(FILE* in, const char* in_name, const char* out_name, int quiet) {
+  Sink s;
+  FILE* t = fopen(out_name, "rb");
+  int r;
+  if (!t) {
+    fprintf(stderr, "m4vpack: can't open %s\n", out_name);
+    return 3;
+  }
+  rewind(in);
+  memset(&s, 0, sizeof(s));
+  s.f = in;
+  s.compare = 1;
+  r = decode_to(t, out_name, &s, in_name);
+  fclose(t);
+  if (!r && !s.differs && fgetc(in) != EOF) {
+    s.differs = 1;
+    s.diff_at = s.pos;
+  }
+  if (r || s.differs) {
+    fprintf(stderr, "verify: FAILED (%s at byte %.0f)\n", r ? "decoding error" : "difference", (double)s.diff_at);
+    return 5;
+  }
+  if (!quiet) fprintf(stderr, "verify: OK\n");
+  return 0;
+}
+
+// c on one model: its statistics into st, cost and orig
+static int compress_one(FILE* in, const char* in_name, Sink* s, const char* out_name, const Opts* o, Stats* st,
+                        double* cost, double* orig) {
+  M4vCoro<0>* c;
+  int r;
+  if (!(c = coro_new<M4vCoro<0> >())) no_memory();
+  c->Init(o->stats);
+  run_file(*c, in, s);
+  *st = c->st;
+  memcpy(cost, c->co.cost, sizeof c->co.cost);
+  memcpy(orig, c->co.orig, sizeof c->co.orig);
+  r = run_end(c->status, c->note, in, in_name, s, out_name);
+  coro_free(c);
+  return r;
+}
+
+// c -t N: the stream in parts on N threads, its statistics the parts' added up
+static int compress_mt(FILE* in, const char* in_name, Sink* s, const char* out_name, const Opts* o, Stats* st,
+                       double* cost, double* orig) {
+  char note[256] = "internal error: a thread stopped early";
+  U8 head[MT_HEAD];
+  MtArgs a;
+  MtEnc* e;
+  uint y, i;
+  int r, k;
+  a.threads = o->threads;
+  a.stats = o->stats;
+  a.part_max = 0;
+  if (!(e = coro_new<MtEnc>())) no_memory();
+  e->coro_init();
+  e->M1.Init(o->part);
+  if (mt_init_failed(e->M2.Init(o->threads, MT_RING, &a, 1), o->threads)) return 5;  // (started threads wait: they end with the process)
+  mt_head(head, o->threads, o->part);
+  sink_write(s, head, sizeof head);
+  y = run_file(*e, in, s);
+  if (!(r = mt_failed(e->M2, note, sizeof note)) && y != Y_END) r = 5;
+  memset(st, 0, sizeof *st);
+  memset(cost, 0, NCAT * sizeof *cost);
+  memset(orig, 0, NCAT * sizeof *orig);
+  for (i = 0; i < e->M2.th_N; i++) {
+    const M4vPart<0>& w = e->M2.C1[i];
+    st->vops += w.st.vops;
+    st->packed += w.st.packed;
+    for (k = 0; k < 5; k++) st->by_type[k] += w.st.by_type[k];
+    st->raw_unsup += w.st.raw_unsup;
+    st->raw_long += w.st.raw_long;
+    st->raw_parse += w.st.raw_parse;
+    st->raw_verify += w.st.raw_verify;
+    st->raw_bytes += w.st.raw_bytes;
+    st->vop_bytes += w.st.vop_bytes;
+    for (k = 0; k < NCAT; k++) cost[k] += w.cost[k], orig[k] += w.orig[k];
+  }
+  st->in_bytes = (double)e->M1.total;  // (the parts have the headers copied in)
+  st->parts = e->M1.parts;
+  st->threads = o->threads;
+  e->M2.Quit();  // (the threads joined, the workers freed)
+  e->M1.Quit();
+  coro_free(e);
+  return run_end(r, note, in, in_name, s, out_name);
+}
+
+static int compress(const char* in_name, const char* out_name, const Opts* o) {
+  FILE *in, *out;
+  Sink s;
+  Stats st;
+  double cost[NCAT], orig[NCAT];
+  int r;
+  if (!(in = open_file(in_name, 0))) {
+    fprintf(stderr, "m4vpack: can't open %s\n", in_name);
+    return 2;
+  }
+  if (!(out = open_file(out_name, 1))) {
+    fprintf(stderr, "m4vpack: can't create %s\n", out_name);
+    return 3;
+  }
+  memset(&s, 0, sizeof(s));
+  s.f = out;
+  r = (o->threads > 1 ? compress_mt : compress_one)(in, in_name, &s, out_name, o, &st, cost, orig);
+  if ((fflush(out) || (out != stdout && fclose(out))) && !r) {
+    fprintf(stderr, "m4vpack: %s: write error\n", out_name);
+    r = 3;
+  }
+  if (!r && !o->quiet) report(in_name, &st, cost, orig, (double)s.pos, o->stats);
+  if (!r && o->verify) r = verify(in, in_name, out_name, o->quiet);
+  if (in != stdin) fclose(in);
+  return r;
+}
+
+static int decompress(const char* in_name, const char* out_name) {
+  FILE *in, *out;
+  Sink s;
+  int r;
+  if (!(in = open_file(in_name, 0))) {
+    fprintf(stderr, "m4vpack: can't open %s\n", in_name);
+    return 2;
+  }
+  if (!(out = open_file(out_name, 1))) {
+    fprintf(stderr, "m4vpack: can't create %s\n", out_name);
+    return 3;
+  }
+  memset(&s, 0, sizeof(s));
+  s.f = out;
+  r = decode_to(in, in_name, &s, out_name);
+  if (!r && fflush(out)) r = (fprintf(stderr, "m4vpack: %s: write error\n", out_name), 3);
+  if (out != stdout && fclose(out) && !r) r = (fprintf(stderr, "m4vpack: %s: write error\n", out_name), 3);
+  if (in != stdin) fclose(in);
+  return r;
+}
+
+static void usage(void) {
+  fprintf(stderr, "m4vpack - lossless compressor for MPEG-4 Part 2 video streams (XviD, DivX 4+)\n"
+                  "Usage: m4vpack c|d [options] input output\n"
+                  "  c     compress a raw .m4v stream\n"
+                  "  d     decompress\n"
+                  "  -v    (c) decompress the result again and compare it with the input\n"
+                  "  -s    (c) bits spent per kind of syntax element\n"
+                  "  -q    no statistics\n"
+                  "  -t N  (c) compress on N threads, 1 to 64 (default 1): the stream in parts that\n"
+                  "        start at I-VOPs (where there are none, at others past 4 times the part\n"
+                  "        size), a model for each; d takes N from the stream\n"
+                  "  -c N  (c with -t) the size of a part, at least: N MB (1 to 1024), or N KB with\n"
+                  "        a k (default 4)\n"
+                  "input and output can be - for stdin and stdout (not with -v)\n");
+}
+
+int main(int argc, char** argv) {
+  Opts o;
+  int a;
+  memset(&o, 0, sizeof(o));
+  o.threads = 1;
+  o.part = 4u << 20;
+  if (argc < 2 || (strcmp(argv[1], "c") && strcmp(argv[1], "d"))) {
+    usage();
+    return 1;
+  }
+  for (a = 2; a < argc && argv[a][0] == '-' && argv[a][1]; a++) {
+    if (!strcmp(argv[a], "-q")) o.quiet = 1;
+    else if (!strcmp(argv[a], "-v")) o.verify = 1;
+    else if (!strcmp(argv[a], "-s")) o.stats = 1;
+    else if ((argv[a][1] == 't' || argv[a][1] == 'c') && (argv[a][2] || a + 1 < argc)) {
+      // -t N, -c N (or -tN, -cN)
+      const char opt = argv[a][1];
+      const char* v = argv[a][2] ? argv[a] + 2 : argv[++a];
+      char* e;
+      const unsigned long n = strtoul(v, &e, 10);
+      if (opt == 't') {
+        if (*e || e == v || n < 1 || n > 64) {
+          fprintf(stderr, "m4vpack: -t takes 1 to 64 threads\n");
+          return 1;
+        }
+        o.threads = (int)n;
+      } else {
+        unsigned long unit = 1ul << 20;
+        if (*e == 'k' || *e == 'K') unit = 1ul << 10, e++;
+        if (*e || e == v || n < 1 || n > (1024ul << 20) / unit) {
+          fprintf(stderr, "m4vpack: -c takes a part size of 1 to 1024 MB, or in KB with a k\n");
+          return 1;
+        }
+        o.part = (U32)(n * unit);
+      }
+    } else {
+      usage();
+      return 1;
+    }
+  }
+  if (a != argc - 2) {
+    usage();
+    return 1;
+  }
+  if (o.verify && (!strcmp(argv[a], "-") || !strcmp(argv[a + 1], "-"))) {
+    fprintf(stderr, "m4vpack: -v reads the input and the output again: they can't be stdin or stdout\n");
+    return 1;
+  }
+#ifdef _WIN32
+  _setmode(_fileno(stdin), _O_BINARY);
+  _setmode(_fileno(stdout), _O_BINARY);
+#endif
+  tables_init();
+  crc_init();
+  coder_tables_init();
+  return argv[1][0] == 'c' ? compress(argv[a], argv[a + 1], &o) : decompress(argv[a], argv[a + 1]);
 }
