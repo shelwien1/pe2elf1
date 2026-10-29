@@ -434,10 +434,11 @@ std::vector<size_t> choose_cuts(const std::vector<uint64_t>& x, size_t N) {
 }
 
 // The cost of processing a part, for balancing: kByteCost per byte plus 1 per macroblock (of the
-// coded VOPs, at the size of the last VOL). m4vpack c takes 0.76 us per byte plus 0.16 us per
-// macroblock (fitted over 12 streams of 90 KB to 5.9 MB), so a macroblock costs about a fifth of a
-// byte, as in h264split: a part of many small pictures takes longer than one of the same size
-// with few large ones.
+// coded VOPs, at the size of the last VOL). m4vpack c (format 2) took 0.76 us per byte plus 0.16 us
+// per macroblock (fitted over 12 streams of 90 KB to 5.9 MB), so a macroblock costs about a fifth
+// of a byte, as in h264split: a part of many small pictures takes longer than one of the same size
+// with few large ones. (Format 3 spends more per byte, 1.1 us, and the fit no longer tells the
+// macroblock's cost from noise: this weighs macroblocks a little more than it does.)
 const uint64_t kByteCost = 5;
 
 std::string part_name(const std::string& prefix, size_t i) {

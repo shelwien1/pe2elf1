@@ -34,13 +34,19 @@
 //     vectors are reconstructed as the decoder does (median prediction, B-VOP predictors, direct
 //     mode scaling by the display times).
 //   - Coded block pattern: per 8x8 block, by the left/above blocks, the motion vector size, whether
-//     the motion is sub-pel, and the co-located macroblock.
-//   - Intra DC differences: size (by the previous and neighbouring blocks' sizes), lower bits, sign.
+//     the motion is sub-pel, the co-located macroblock, the blocks coded so far, the quantiser.
+//   - Intra DC differences: size (by the previous and neighbouring blocks' sizes and counts), lower
+//     bits (the top ones by the bits above them), sign (by the neighbours' and the previous one's).
 //   - Coefficients as CABAC's residual: a significance map with "last" flags in scan order, then the
 //     levels in reverse order (|level| > 1, unary, then size and bits), signs, and the escape mode
 //     where it isn't the usual one. Contexts: position, the neighbouring blocks' counts (CAVLC's
 //     nC), the coefficients coded so far, the left and above blocks' coefficients at the same scan
-//     position, the frequency neighbours (as HEVC's template), quantiser, motion vector size.
+//     position, the frequency neighbours (as HEVC's template), quantiser, motion vector size (an
+//     intra block's DC size), and for a Cr block the Cb block. As in h264p, histories: the
+//     significance flags before (the last 8 by position, 16 hashed), the magnitudes coded before
+//     and their sum. The signs go by the signs coded before them, those of the frequency
+//     neighbours left and above (zigzag codes them first), weighted by their magnitudes, and the
+//     signs of the neighbouring blocks at the same position: an edge leaves sign patterns.
 // Each of these decisions mixes the predictions of several contexts (logistic mixing as in lpaq,
 // two weight sets), coefficient decisions then pass an APM (SSE). Probabilities adapt with a rate
 // of 1/n up to n = PLIMIT.
@@ -53,9 +59,9 @@
 // I-VOP, with the headers before them copied in, so that each part is a stream of its own; the
 // parts are dealt in turn to N workers (MTwrap), each part coded by a model of its own.
 //
-// File format: "m4vpack" 02, then the arithmetic coded chunks: kind (end, VOP as records, bytes),
+// File format: "m4vpack" 03, then the arithmetic coded chunks: kind (end, VOP as records, bytes),
 // then the records or a length and the bytes (order 0 and 1 contexts, mixed); after the end, the
-// CRC-32 of the stream. On threads: "m4vpm" 02, the threads, the part size in KB (4 bytes), then
+// CRC-32 of the stream. On threads: "m4vpm" 03, the threads, the part size in KB (4 bytes), then
 // MTwrap's container of the workers' streams, a record for each part (its size, where the headers
 // copied in are, its place, a CRC), each part as a stream of the first kind.
 //
@@ -65,8 +71,8 @@
 // 1 MiB after the last macroblock.
 //
 // Build (Lib3/ and MTwrap_v3/ next to this file):
-//   x86_64-w64-mingw32-g++ -O2 -s -static -ILib3 -o m4vpack.exe m4vpack.cpp
-//   g++ -O2 -ILib3 -pthread -o m4vpack m4vpack.cpp
+//   x86_64-w64-mingw32-g++ -O3 -s -static -ILib3 -o m4vpack.exe m4vpack.cpp
+//   g++ -O3 -ILib3 -pthread -o m4vpack m4vpack.cpp
 // C++11 without exceptions or RTTI. Integer arithmetic only where it matters for decoding, so
 // files are portable between platforms.
 
@@ -111,6 +117,12 @@ typedef long long S64;
 #endif
 #ifndef IREAD
 #define IREAD (1u << 20)         // input read size
+#endif
+
+#if defined(__GNUC__) || defined(__clang__)
+#define PREFETCH(p) __builtin_prefetch(p)
+#else
+#define PREFETCH(p) ((void)0)
 #endif
 
 static inline int clipi(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
@@ -1373,7 +1385,7 @@ static int cbit(Coder* c, Prob* q, int bit) {
 // Logistic mixing (as in lpaq): the predictions of several contexts, in the logistic domain, are
 // added with weights that are trained to minimise the coding cost. A weight set is chosen by a
 // small context of its own.
-#define MAXIN 8
+#define MAXIN 11
 static short stretch_t[4096];  // ln(p / (1 - p)) * 256, p in 12 bits
 static short squash_t[4096];   // the inverse, for -2048..2047
 
@@ -1514,6 +1526,8 @@ static void coder_tables_init(void) {
 #endif
 #define NMVK 6  // kinds of motion vectors: P, P field, B forward, B backward, B direct, P 4MV
 #define NCLS 8  // coefficient block classes: inter, B inter, intra, intra with AC prediction; x luma/chroma
+#define HTB 18  // the hashed tables of significance histories: 2^HTB entries
+#define HBITS 16  // the significance flags they hash
 
 typedef struct Model {  // only Prob members: all start at 1/2
   Prob kind[3][2];
@@ -1531,27 +1545,34 @@ typedef struct Model {  // only Prob members: all start at 1/2
   Prob pintra[6], pintra2[5][3];
   Prob p4mv[6], p4mv2[5][3], mcsel[3], bskip[3], modb0[9], modb02[6][5], modb03[11][3], modb2[3];
   Prob btype[3][9], btype2[3][11], ac[2][3];
-  Prob cbp1[3][6][9], cbp2[3][6][7], cbp3[3][6][3][6], cbp4[3][6][5];
+  Prob cbp1[3][6][9], cbp2[3][6][7], cbp3[3][6][3][6], cbp4[3][6][5], cbp5[3][6][32], cbp6[3][6][32];
+  Prob cbp7[3][6][9][3];
   Prob dqz[3][2], dqv[3][4], bdqz[2], bdqs;
   Prob dt[2][3], fp[2][3], fs[4];
   // motion vector differences: [kind][component]
   Prob mvz[NMVK][2][6], mvz2[NMVK][2][7], mvz3[NMVK][2][7], mvz4[NMVK][2][7], mvz5[NMVK][2][7];
+  Prob mvz6[NMVK][2][7][7], mvu6[NMVK][2][12][7][7];
   Prob mvu[NMVK][2][12][6], mvu2[NMVK][2][12][7], mvu3[NMVK][2][12][7], mvu4[NMVK][2][12][5];
   Prob mvu5[NMVK][2][12][7];
   Prob mvr[NMVK][2][6][3], mvs[NMVK][2][3][3], mvs2[NMVK][2][3][7];
   // blocks
-  Prob dcs[2][8][9], dcs2[2][9][9][9], dcs3[2][2][3][9], dcm[2][10][9], dcsign[2][2];
+  Prob dcs[2][8][9], dcs2[2][9][9][9], dcs3[2][2][3][9], dcs4[2][6][6][9], dcm[2][10][9], dcmt[2][10][8];
+  Prob dcsign[2][2], dcsg2[2][3][3][3], dcsg3[2][10][3];
   Prob sig[NCLS][6][3][64], sig2[NCLS][8][64], sig3[NCLS][9][64], sig4[NCLS][9][3][64];
-  Prob sig5[NCLS][6][64], sig6[NCLS][4][64], sig7[NCLS][7][64], sig8[NCLS][7][64];
+  Prob sig5[NCLS][6][64], sig6[NCLS][4][64], sig7[NCLS][16][64], sig8[NCLS][7][64];
+  Prob sig9[NCLS][256][64], sigp[NCLS][32][64], sigx[NCLS][3][64];
   Prob last[NCLS][6][3][64], last2[NCLS][8][64], last3[NCLS][9][64], last4[NCLS][9][3][64];
-  Prob last5[NCLS][6][64], last6[NCLS][7][64], last7[NCLS][7][64], last8[NCLS][6][6][6];
+  Prob last5[NCLS][6][64], last6[NCLS][16][64], last7[NCLS][7][64], last8[NCLS][6][6][6], last9[NCLS][256][64];
   Prob lev1[NCLS][5][6][3], lev1b[NCLS][5][6], lev1c[NCLS][5][8], lev1d[NCLS][4][6][3];
-  Prob lev1e[NCLS][5][6], lev1f[NCLS][5][6], lev1g[NCLS][7][6], lev1q[NCLS][8][6];
+  Prob lev1e[NCLS][5][6], lev1f[NCLS][5][6], lev1g[NCLS][16][6], lev1q[NCLS][8][6], levh[NCLS][64][64], levf[NCLS][16][64];
+  Prob levs[NCLS][8][6];
   Prob levn[NCLS][5][3][LUN], levnb[NCLS][5][LUN], levnc[NCLS][5][LUN], levnd[NCLS][6][LUN];
-  Prob levne[NCLS][5][LUN], levnq[NCLS][8][LUN];
+  Prob levne[NCLS][5][LUN], levnq[NCLS][8][LUN], levnh[NCLS][64][LUN], levns[NCLS][8][LUN];
   Prob lexp[NCLS][3][12], lexp2[NCLS][5][12], lexp3[NCLS][6][12], lman[NCLS][13][12];
-  Prob sign[NCLS][2], sign2[NCLS][9][6];
+  Prob sign[NCLS][2], sign2[NCLS][9][6], sgnh[NCLS][27][6], sgnh2[NCLS][64][2], sgnf[NCLS][9][64];
+  Prob sgnf2[NCLS][9][9], sgnv[NCLS][15][6], sgnd[NCLS][27][6], sgnx[NCLS][3][64], sgnm[NCLS][25][6];
   Prob escd[4], escm[4][4];
+  Prob sigh[1 << HTB], lasth[1 << HTB];  // the significance flags before, hashed with the class and position
 } Model;
 
 typedef struct Last {  // previous values the models predict from
@@ -1566,18 +1587,21 @@ typedef struct Mixers {  // weight sets: a bias weight, then MAXIN input weights
   int sig[NCLS][64][MAXIN + 1], last[NCLS][64][MAXIN + 1], lev1[NCLS][6][5][MAXIN + 1];
   int sigb[NCLS][8][3][MAXIN + 1], lastb[NCLS][8][3][MAXIN + 1], lev1b[NCLS][5][3][MAXIN + 1];
   int levn[NCLS][LUN][5][MAXIN + 1], lexp[NCLS][12][MAXIN + 1], sign[NCLS][6][MAXIN + 1];
-  int raw[8][MAXIN + 1], mbt[8][MAXIN + 1], cbp[3][6][MAXIN + 1], dcs[2][9][MAXIN + 1];
+  int raw[8][MAXIN + 1], mbt[8][MAXIN + 1], cbp[3][6][MAXIN + 1], dcs[2][9][MAXIN + 1], dcsg[2][3][MAXIN + 1];
+  int levnb[NCLS][LUN][8][MAXIN + 1];
   int mvz[NMVK][2][MAXIN + 1], mvu[NMVK][2][12][MAXIN + 1], mvs[NMVK][2][MAXIN + 1];
+  int sign2[NCLS][15][MAXIN + 1], cbpb[3][6][9][MAXIN + 1], mvzb[NMVK][2][7][MAXIN + 1];
+  int mvub[NMVK][2][12][7][MAXIN + 1];
 } Mixers;
 
-typedef struct Apms { Apm sig[NCLS][64], last[NCLS][64], lev1[NCLS][6][4]; } Apms;
+typedef struct Apms { Apm sig[NCLS][64], last[NCLS][64], lev1[NCLS][6][4], sign[NCLS][15][6]; } Apms;
 
 // Coefficient magnitudes of the blocks coded last in each column of macroblocks: the left and
 // above neighbours of a block (a macroblock's blocks replace those of the one above it as they are
 // coded).
 // mag: |level| (at most 255), sgn: 1 for negative, suf: coefficients at i..63, last: position of the
-// last one (-1 none), dcs: size of the intra DC difference (-1 none)
-typedef struct BlkCtx { U8 mag[64], sgn[64], suf[65]; S8 last, dcs; U8 n; } BlkCtx;
+// last one (-1 none), dcs: size of the intra DC difference (-1 none), dcsg: 1 for a negative one
+typedef struct BlkCtx { U8 mag[64], sgn[64], suf[65]; S8 last, dcs, dcsg; U8 n; } BlkCtx;
 #define MAX_MB_W 512
 
 // macroblock state the contexts of later macroblocks use
@@ -1589,7 +1613,7 @@ typedef S16 MV4[4][2];  // a macroblock's motion vectors, per 8x8 block
 
 typedef struct VState {  // the coding side of the current VOP
   Vop v;
-  int mb_w, prev_dq, dc_prev[2], run;  // run: macroblocks of the same kind (skip, direct) before this one
+  int mb_w, prev_dq, dc_prev[2], dc_sgn[2], run;  // dc_sgn: the last intra DC difference's sign (0 none, 1 +, 2 -)  // run: macroblocks of the same kind (skip, direct) before this one
   int vp_start;          // first macroblock of the video packet
   int lmv[2][2][2];      // B-VOP vector predictors: [forward, backward][field][x, y]
   int trb, trd;          // B-VOP: time from the past anchor, between the anchors
@@ -1825,35 +1849,54 @@ int code_tail(Coder* c, int nb, int* bits, int* n, U8* bytes, int max) {
 }
 
 // intra DC difference: size, the bits below its leading one, sign. Contexts for the size: the
-// previous block's, the left and above blocks', whether the block has AC coefficients.
+// previous block's, the left and above blocks' (and their coefficient counts), whether the block
+// has AC coefficients. The top bits below the leading one go by the bits above them, the sign by
+// the left and above blocks' and the previous one's.
 int code_dc(Coder* c, VState* s, int lc, int v, const BlkCtx* Lb, const BlkCtx* Ab, int coded,
                    int qctx) {
   Model* M = &model;
   const int ctx = s->dc_prev[lc] < 7 ? s->dc_prev[lc] : 7, a = v < 0 ? -v : v;
   const int ls = Lb && Lb->dcs >= 0 ? Lb->dcs : 9, as = Ab && Ab->dcs >= 0 ? Ab->dcs : 9;
+  const int ls2 = Lb && Lb->dcs > 0 ? 1 + Lb->dcsg : 0, as2 = Ab && Ab->dcs > 0 ? 1 + Ab->dcsg : 0;
   Prob* in[MAXIN];
-  int size = bitlen(a), k, x;
+  int size = bitlen(a), k, x, node;
   for (k = 0; k < 9; k++) {
     in[0] = &M->dcs[lc][ctx][k];
     in[1] = &M->dcs2[lc][ls < 8 ? ls : 8][as < 8 ? as : 8][k];
     in[2] = &M->dcs3[lc][coded][qctx][k];
-    if (!mbit(c, in, 3, mixw.dcs[lc][k], size > k)) break;
+    in[3] = &M->dcs4[lc][Lb ? few_bucket(Lb->n) : 5][Ab ? few_bucket(Ab->n) : 5][k];
+    if (!mbit(c, in, 4, mixw.dcs[lc][k], size > k)) break;
   }
   s->dc_prev[lc] = size = k;
   if (!size) return 0;
   x = 1 << (size - 1);
-  for (k = size - 2; k >= 0; k--) x |= cbit(c, &M->dcm[lc][size][k], (a >> k) & 1) << k;
-  return cbit(c, &M->dcsign[lc][size > 4], v < 0) ? -x : x;
+  for (k = size - 2, node = 1; k >= 0; k--) {  // the top bits by the bits above them, the rest by position
+    const int bit = cbit(c, node < 8 ? &M->dcmt[lc][size][node] : &M->dcm[lc][size][k], (a >> k) & 1);
+    x |= bit << k;
+    node = node * 2 + bit;
+  }
+  in[0] = &M->dcsign[lc][size > 4];
+  in[1] = &M->dcsg2[lc][ls2][as2][s->dc_sgn[lc]];
+  in[2] = &M->dcsg3[lc][size][s->dc_sgn[lc]];
+  k = mbit(c, in, 3, mixw.dcsg[lc][s->dc_sgn[lc]], v < 0);
+  s->dc_sgn[lc] = 1 + k;
+  return k ? -x : x;
 }
 
 // Coefficients of a block, coded like H.264's CABAC residual: significance map in scan order,
 // then the levels in reverse order, signs, and the escape modes where they aren't the default.
 // Each decision mixes contexts: the neighbouring blocks' coefficient counts (CAVLC's nC), the
 // coefficients found so far, and the left and above blocks' coefficients at the same position.
+// The significance and last flags also see the flags before them (the last 8, and 16 hashed), and
+// the frequency neighbours left and above in the block; the levels, the magnitudes coded before
+// them and the neighbours right and below; the signs, the signs coded before them and those of
+// the frequency neighbours (a block's coefficients come in patterns, as an edge leaves them).
 // cls: block class, nctx: neighbours' counts, qctx/q8: quantiser, mvc: motion vector size, rnz: the
-// co-located block's count; Lb, Ab: left and above blocks or 0; out (which may be Ab) gets this one
+// co-located block's count; Lb, Ab: left and above blocks or 0; out (which may be Ab) gets this one;
+// Xb: for a Cr block, the Cb block of its macroblock (0 else)
 void code_block(Coder* c, VState* s, Blk* b, int n, int intra, int dcvlc, int coded, int cls, int nctx,
-                       int qctx, int q8, int mvc, int rnz, const BlkCtx* Lb, const BlkCtx* Ab, BlkCtx* out) {
+                       int qctx, int q8, int mvc, int rnz, const BlkCtx* Lb, const BlkCtx* Ab, BlkCtx* out,
+                       const BlkCtx* Xb) {
   Model* M = &model;
   const RL* rl = intra ? &rl_intra : &rl_inter;
   Prob* in[MAXIN];
@@ -1862,6 +1905,7 @@ void code_block(Coder* c, VState* s, Blk* b, int n, int intra, int dcvlc, int co
   U8 rm[64];  // coefficients coded so far by raster position: 1 in the significance map, then magnitudes
   U8 nzr[64];  // the significance map by raster position
   int pos[64], lev[64], k = 0, i, j, start, prev;
+  U32 sh = 0;  // the significance flags so far, the last in bit 0
   memset(&o, 0, sizeof(o));
   memset(rm, 0, sizeof(rm));
   o.last = o.dcs = -1;
@@ -1869,10 +1913,12 @@ void code_block(Coder* c, VState* s, Blk* b, int n, int intra, int dcvlc, int co
     c->cat = CAT_DC;
     b->dc = code_dc(c, s, n < 4 ? 0 : 1, b->dc, Lb, Ab, coded, qctx);
     o.dcs = (S8)bitlen(b->dc);
+    o.dcsg = b->dc < 0;
   } else if (!c->enc)
     b->dc = 0;
   if (!coded) { b->n = 0; *out = o; return; }
   start = dcvlc ? 1 : 0;
+  if (dcvlc) mvc = 7 + (o.dcs < 8 ? o.dcs : 8);  // (an intra block has no vector: the DC difference's size)
   if (c->enc)
     for (j = 0, prev = start - 1; j < b->n; j++) { pos[j] = prev += b->run[j] + 1; lev[j] = b->level[j]; }
   c->cat = CAT_SIG;
@@ -1880,22 +1926,34 @@ void code_block(Coder* c, VState* s, Blk* b, int n, int intra, int dcvlc, int co
     const int kb = k < 7 ? k : 7, pb = pos_bucket[i], run = i - prev - 1;
     const int nz = (Lb ? Lb->mag[i] != 0 : 2) * 3 + (Ab ? Ab->mag[i] != 0 : 2);
     const int past = (Lb ? i > Lb->last : 2) * 3 + (Ab ? i > Ab->last : 2);  // beyond their last coefficient
+    const int hist = (int)(sh & 255);
+    const U32 hh = (((U32)(cls * 64 + i) * 0x9E3779B1u) ^ ((sh & ((1u << HBITS) - 1)) * 0x85EBCA6Bu)) >> (32 - HTB);
+    PREFETCH(&M->sigh[hh]);  // (a hashed table's rows are far apart: asked for early, they are in cache when read)
+    PREFETCH(&M->lasth[hh]);
+    const int r = sc[i], u = r & 7, v = r >> 3;
+    // the frequency neighbours left, above and above left (their sum, and with those 2 away a pattern)
+    const int fsum = (u ? rm[r - 1] : 0) + (v ? rm[r - 8] : 0) + (u && v ? rm[r - 9] : 0);
+    const int fpat = (u ? rm[r - 1] : 0) | (v ? rm[r - 8] : 0) << 1 | (u && v ? rm[r - 9] : 0) << 2 |
+                     (u > 1 ? rm[r - 2] : 0) << 3 | (v > 1 ? rm[r - 16] : 0) << 4;
     in[0] = &M->sig[cls][nctx][qctx][i];
     in[1] = &M->sig2[cls][kb][i];
     in[2] = &M->sig3[cls][nz][i];
     in[3] = &M->sig4[cls][past][qctx][i];
     in[4] = &M->sig5[cls][run < 3 ? run : run < 5 ? 3 : run < 9 ? 4 : 5][i];
-    {  // the frequency neighbours left, above and above left
-      const int r = sc[i], u = r & 7, v = r >> 3;
-      in[5] = &M->sig6[cls][(u ? rm[r - 1] : 0) + (v ? rm[r - 8] : 0) + (u && v ? rm[r - 9] : 0)][i];
-    }
+    in[5] = &M->sig6[cls][fsum][i];
     in[6] = &M->sig7[cls][mvc][i];
-    in[7] = &M->sig8[cls][rnz][i];
-    if (!mbit2(c, in, 8, mixw.sig[cls][i], mixw.sigb[cls][kb][qctx], &apms.sig[cls][i],
-               c->enc && k < b->n && pos[k] == i))
+    in[7] = Xb ? &M->sigx[cls][Xb->mag[i] < 2 ? Xb->mag[i] : 2][i] : &M->sig8[cls][rnz][i];
+    in[8] = &M->sig9[cls][hist][i];
+    in[9] = &M->sigh[hh];
+    in[10] = &M->sigp[cls][fpat][i];
+    if (!mbit2(c, in, 11, mixw.sig[cls][i], mixw.sigb[cls][kb][qctx], &apms.sig[cls][i],
+               c->enc && k < b->n && pos[k] == i)) {
+      sh <<= 1;
       continue;
+    }
+    sh = sh << 1 | 1;
     pos[k] = prev = i;
-    rm[sc[i]] = 1;
+    rm[r] = 1;
     in[0] = &M->last[cls][nctx][qctx][i];
     in[1] = &M->last2[cls][kb][i];
     in[2] = &M->last3[cls][nz][i];
@@ -1904,7 +1962,9 @@ void code_block(Coder* c, VState* s, Blk* b, int n, int intra, int dcvlc, int co
     in[5] = &M->last6[cls][mvc][i];
     in[6] = &M->last7[cls][rnz][i];
     in[7] = &M->last8[cls][Lb ? few_bucket(Lb->suf[i + 1]) : 5][Ab ? few_bucket(Ab->suf[i + 1]) : 5][pb];
-    if (mbit2(c, in, 8, mixw.last[cls][i], mixw.lastb[cls][kb][qctx], &apms.last[cls][i], c->enc && k == b->n - 1)) {
+    in[8] = &M->last9[cls][hist][i];
+    in[9] = &M->lasth[hh];
+    if (mbit2(c, in, 10, mixw.last[cls][i], mixw.lastb[cls][kb][qctx], &apms.last[cls][i], c->enc && k == b->n - 1)) {
       k++;
       break;
     }
@@ -1916,13 +1976,14 @@ void code_block(Coder* c, VState* s, Blk* b, int n, int intra, int dcvlc, int co
   memset(rm, 0, sizeof(rm));
   c->cat = CAT_LEV;
   {
-    int ngt1 = 0, neq1 = 0, pm = 0;
+    int ngt1 = 0, neq1 = 0, pm = 0, lh = 0, ssum = 0;  // lh: the magnitudes coded before, up to 3, 2 bits each; ssum: their sum
     const int kc = k < 4 ? k - 1 : k < 6 ? 3 : k < 10 ? 4 : k < 16 ? 5 : k < 24 ? 6 : 7;
     for (j = k - 1; j >= 0; j--) {
       const int a = c->enc ? (lev[j] < 0 ? -lev[j] : lev[j]) - 1 : 0, p = pos[j], pb = pos_bucket[p];
       const int nm = (Lb ? Lb->mag[p] : 0) + (Ab ? Ab->mag[p] : 0);
       const int nmb = nm < 3 ? nm : nm < 5 ? 3 : 4;
       const int g = ngt1 ? 0 : 1 + (neq1 < 3 ? neq1 : 3);
+      const int ssb = !ssum ? 0 : ssum < 2 ? 1 : ssum < 4 ? 2 : ssum < 8 ? 3 : ssum < 16 ? 4 : ssum < 32 ? 5 : ssum < 64 ? 6 : 7;
       int t, nb2, den;
       in[0] = &M->lev1[cls][g][pb][qctx];
       in[1] = &M->lev1b[cls][nmb][pb];
@@ -1931,14 +1992,18 @@ void code_block(Coder* c, VState* s, Blk* b, int n, int intra, int dcvlc, int co
       {  // the frequency neighbours right, below and below right, coded already
         const int r = sc[p], u = r & 7, v = r >> 3;
         const int sum = (u < 7 ? rm[r + 1] : 0) + (v < 7 ? rm[r + 8] : 0) + (u < 7 && v < 7 ? rm[r + 9] : 0);
+        const int ra = u < 7 ? (rm[r + 1] < 3 ? rm[r + 1] : 3) : 0, ba = v < 7 ? (rm[r + 8] < 3 ? rm[r + 8] : 3) : 0;
         den = (u < 7 ? nzr[r + 1] : 0) + (v < 7 ? nzr[r + 8] : 0) + (u ? nzr[r - 1] : 0) + (v ? nzr[r - 8] : 0);
         in[4] = &M->lev1e[cls][sum < 3 ? sum : sum < 5 ? 3 : 4][pb];
         in[5] = &M->lev1f[cls][den][pb];
+        in[9] = &M->levf[cls][ra * 4 + ba][p];
         nb2 = sum < 3 ? sum : sum < 5 ? 3 : 4;
       }
       in[6] = &M->lev1g[cls][mvc][pb];
       in[7] = &M->lev1q[cls][q8][pb];
-      t = mbit2(c, in, 8, mixw.lev1[cls][pb][g], mixw.lev1b[cls][g][qctx], &apms.lev1[cls][pb][g < 3 ? g : 3], a > 0);
+      in[8] = &M->levh[cls][lh][p];
+      in[10] = &M->levs[cls][ssb][pb];
+      t = mbit2(c, in, 11, mixw.lev1[cls][pb][g], mixw.lev1b[cls][g][qctx], &apms.lev1[cls][pb][g < 3 ? g : 3], a > 0);
       if (t) {  // |level| - 1 in unary up to LUNARY, then the size of a - LUNARY + 2 and its lower bits
         for (t = 1; t < LUNARY - 1; t++) {
           const int u = t <= LUN ? t - 1 : LUN - 1;
@@ -1948,7 +2013,9 @@ void code_block(Coder* c, VState* s, Blk* b, int n, int intra, int dcvlc, int co
           in[3] = &M->levnd[cls][pb][u];
           in[4] = &M->levne[cls][den][u];
           in[5] = &M->levnq[cls][q8][u];
-          if (!mbit(c, in, 6, mixw.levn[cls][u][nb2], a > t)) break;
+          in[6] = &M->levnh[cls][lh][u];
+          in[7] = &M->levns[cls][ssb][u];
+          if (!mbit2(c, in, 8, mixw.levn[cls][u][nb2], mixw.levnb[cls][u][ssb], 0, a > t)) break;
         }
         if (t == LUNARY - 1) {
           const int v = a - LUNARY + 2;
@@ -1968,22 +2035,50 @@ void code_block(Coder* c, VState* s, Blk* b, int n, int intra, int dcvlc, int co
         neq1++;
       lev[j] = t + 1;
       pm = t < 3 ? t + 1 : 3;
+      lh = (lh * 4 + pm) & 63;
+      ssum += lev[j];
       rm[sc[p]] = o.mag[p] = (U8)(lev[j] < 255 ? lev[j] : 255);
     }
   }
   o.last = (S8)pos[k - 1];
   o.n = (U8)k;
   for (i = 63; i >= 0; i--) o.suf[i] = (U8)(o.suf[i + 1] + (o.mag[i] != 0));
-  *out = o;
   c->cat = CAT_SIGN;
-  for (j = 0; j < k; j++) {
-    const int p = pos[j];
-    const int ls = Lb && Lb->mag[p] ? Lb->sgn[p] : 2, as = Ab && Ab->mag[p] ? Ab->sgn[p] : 2;
-    in[0] = &M->sign[cls][j == 0];
-    in[1] = &M->sign2[cls][ls * 3 + as][pos_bucket[p]];
-    if (mbit(c, in, 2, mixw.sign[cls][pos_bucket[p]], c->enc && b->level[j] < 0)) lev[j] = -lev[j];
-    o.sgn[p] = lev[j] < 0;
+  {
+    U8 srs[64];  // the signs coded so far by raster position: 0 none, 1 +, 2 -
+    int sgh = 0;  // the last 3 signs (1 +, 2 -) in base 3
+    memset(srs, 0, sizeof(srs));
+    for (j = 0; j < k; j++) {
+      const int p = pos[j], pb = pos_bucket[p], r = sc[p], u = r & 7, v = r >> 3;
+      const int ls = Lb && Lb->mag[p] ? Lb->sgn[p] : 2, as = Ab && Ab->mag[p] ? Ab->sgn[p] : 2;
+      // the frequency neighbours left, above (and 2 away), above left: coded before, in zigzag order
+      const int fl = u ? srs[r - 1] : 0, fu = v ? srs[r - 8] : 0, fd = u && v ? srs[r - 9] : 0;
+      const int fl2 = u > 1 ? srs[r - 2] : 0, fu2 = v > 1 ? srs[r - 16] : 0;
+      int vote = 0;  // their signs, weighted by their magnitudes
+      if (fl) vote += (fl == 1 ? 2 : -2) * (rm[r - 1] > 1 ? 2 : 1);
+      if (fu) vote += (fu == 1 ? 2 : -2) * (rm[r - 8] > 1 ? 2 : 1);
+      if (fd) vote += fd == 1 ? -1 : 1;
+      vote = (vote < -7 ? -7 : vote > 7 ? 7 : vote) + 7;
+      in[0] = &M->sign[cls][j == 0];
+      in[1] = &M->sign2[cls][ls * 3 + as][pb];
+      in[2] = &M->sgnh[cls][sgh][pb];
+      in[3] = &M->sgnh2[cls][p][j && lev[j - 1] < 0];
+      in[4] = &M->sgnf[cls][fl * 3 + fu][p];
+      in[5] = &M->sgnf2[cls][fl * 3 + fu][fl2 * 3 + fu2];
+      in[6] = &M->sgnv[cls][vote][pb];
+      in[7] = &M->sgnd[cls][fd * 9 + fl * 3 + fu][pb];
+      in[8] = &M->sgnx[cls][Xb && Xb->mag[p] ? 1 + Xb->sgn[p] : 0][p];
+      in[9] = &M->sgnm[cls][(Lb && Lb->mag[p] ? 1 + Lb->sgn[p] * 2 + (Lb->mag[p] > 1) : 0) * 5 +
+                            (Ab && Ab->mag[p] ? 1 + Ab->sgn[p] * 2 + (Ab->mag[p] > 1) : 0)][pb];
+      if (mbit2(c, in, 10, mixw.sign[cls][pb], mixw.sign2[cls][vote], &apms.sign[cls][vote][pb],
+                c->enc && b->level[j] < 0))
+        lev[j] = -lev[j];
+      o.sgn[p] = lev[j] < 0;
+      srs[r] = (U8)(1 + (lev[j] < 0));
+      sgh = sgh * 3 % 27 + 1 + (lev[j] < 0);
+    }
   }
+  *out = o;  // (after the signs: out may be Ab)
   c->cat = CAT_ESC;
   for (j = 0, prev = start - 1; j < k; j++) {
     const int run = pos[j] - prev - 1, al = lev[j] < 0 ? -lev[j] : lev[j];
@@ -1999,9 +2094,11 @@ void code_block(Coder* c, VState* s, Blk* b, int n, int intra, int dcvlc, int co
 // coded block pattern, block 0 in bit 5. Contexts: the left and above 8x8 blocks (in this
 // macroblock or a neighbour), the size of the motion vector differences (mvc, 6 for none), which
 // components of the vector are sub-pel (frac, 4 for none), the co-located macroblock of the last
-// anchor VOP, the blocks coded so far.
+// anchor VOP, the blocks coded so far, the quantiser (q8: before this macroblock's dquant, which
+// comes after the pattern), and lq: whether the left and above macroblocks agree on having coded
+// blocks (0), else 1 + whether the co-located one has some.
 int code_cbp(Coder* c, int cls3, const MBCtx* L, const MBCtx* A, const MBCtx* R, int mvc, int frac,
-                    int cbp) {
+                    int q8, int lq, int cbp) {
   Model* M = &model;
   Prob* in[MAXIN];
   int b, v = 0, n = 0;
@@ -2018,7 +2115,10 @@ int code_cbp(Coder* c, int cls3, const MBCtx* L, const MBCtx* A, const MBCtx* R,
     in[1] = &M->cbp2[cls3][b][mvc];
     in[2] = &M->cbp3[cls3][b][R ? (R->cbp >> (5 - b)) & 1 : 2][n];
     in[3] = &M->cbp4[cls3][b][frac];
-    bit = mbit(c, in, 4, mixw.cbp[cls3][b], (cbp >> (5 - b)) & 1);
+    in[4] = &M->cbp5[cls3][b][q8 * 4 + (n < 3 ? n : 3)];
+    in[5] = &M->cbp6[cls3][b][v >> (6 - b) & 31];
+    in[6] = &M->cbp7[cls3][b][l * 3 + u][lq];
+    bit = mbit2(c, in, 7, mixw.cbp[cls3][b], mixw.cbpb[cls3][b][l * 3 + u], 0, (cbp >> (5 - b)) & 1);
     v |= bit << (5 - b);
     n += bit;
   }
@@ -2044,9 +2144,10 @@ int mv_bucket(int q) { return q < 3 ? q : q < 5 ? 3 : q < 9 ? 4 : 5; }
 
 // A motion vector difference as coded, like CABAC's mvd: a zero flag, the sign, the magnitude in
 // units of the VLC code (so f_code doesn't change its statistics) in unary, the f_code residual
-// bits. Contexts: the neighbours' magnitudes, the other component (oth: of this vector for y, of
-// the previous one for x, 6 for none), the co-located macroblock of the last anchor VOP, and d:
-// the difference that would give this vector the co-located one's value (dok 0: none).
+// bits. Contexts: the neighbours' magnitudes (their sum, and each), the other component (oth: of
+// this vector for y, of the previous one for x, 6 for none; it also picks a second weight set), the
+// co-located macroblock of the last anchor VOP, and d: the difference that would give this vector
+// the co-located one's value (dok 0: none).
 int code_mvd(Coder* c, int kind, int comp, int fcode, const MBCtx* L, const MBCtx* A, const MBCtx* R,
                     int oth, int dok, int d, int sp, int v, int* q) {
   Model* M = &model;
@@ -2055,6 +2156,7 @@ int code_mvd(Coder* c, int kind, int comp, int fcode, const MBCtx* L, const MBCt
   const int rs = R ? mv_bucket(R->mva[comp]) : 6;
   const int ad = (d < 0 ? -d : d) - 1, dq = d ? (ad >> shift) + 1 : 0, dz = dok ? mv_bucket(dq) : 6;
   const int ds = !dok || !d ? 0 : d > 0 ? 1 : 2;
+  const int lq = L ? mv_bucket(L->mva[comp]) : 6, aq = A ? mv_bucket(A->mva[comp]) : 6;
   Prob* in[MAXIN];
   int k, x, neg, r, i;
   in[0] = &M->mvz[kind][comp][ns];
@@ -2062,7 +2164,8 @@ int code_mvd(Coder* c, int kind, int comp, int fcode, const MBCtx* L, const MBCt
   in[2] = &M->mvz3[kind][comp][rs];
   in[3] = &M->mvz4[kind][comp][dz];
   in[4] = &M->mvz5[kind][comp][sp];
-  if (!mbit(c, in, 5, mixw.mvz[kind][comp], a != 0)) { *q = 0; return 0; }
+  in[5] = &M->mvz6[kind][comp][lq][aq];
+  if (!mbit2(c, in, 6, mixw.mvz[kind][comp], mixw.mvzb[kind][comp][oth], 0, a != 0)) { *q = 0; return 0; }
   in[0] = &M->mvs[kind][comp][L ? L->mvs[comp] : 0][A ? A->mvs[comp] : 0];
   in[1] = &M->mvs2[kind][comp][ds][dz];
   neg = mbit(c, in, 2, mixw.mvs[kind][comp], v < 0);
@@ -2074,7 +2177,8 @@ int code_mvd(Coder* c, int kind, int comp, int fcode, const MBCtx* L, const MBCt
     in[2] = &M->mvu3[kind][comp][u][rs];
     in[3] = &M->mvu4[kind][comp][u][!ds ? 0 : ds != 1 + neg ? 1 : k < dq ? 2 : k == dq ? 3 : 4];
     in[4] = &M->mvu5[kind][comp][u][sp];
-    if (!mbit(c, in, 5, mixw.mvu[kind][comp][u], x > k)) break;
+    in[5] = &M->mvu6[kind][comp][u][lq][aq];
+    if (!mbit2(c, in, 6, mixw.mvu[kind][comp][u], mixw.mvub[kind][comp][u][oth], 0, x > k)) break;
   }
   *q = k;
   for (i = shift - 1, r = 0; i >= 0; i--) {  // residual bits, predicted by d's while they agree so far
@@ -2305,7 +2409,10 @@ void code_mb(Coder* c, const Ctx* cx, VState* s, MB* m, int idx) {
   }
   c->cat = CAT_CBP;
   cbp = v->type == PT_B && m->mb == 1 ? 0
-      : code_cbp(c, cls3, L, A, R, mvi ? mv_bucket(sumq) : 6, frac, c->enc ? cbp_of(m) : 0);
+      : code_cbp(c, cls3, L, A, R, mvi ? mv_bucket(sumq) : 6, frac,
+                 v->qscale < 3 ? 0 : v->qscale < 5 ? 1 : v->qscale < 7 ? 2 : v->qscale < 9 ? 3 : v->qscale < 12 ? 4
+                 : v->qscale < 17 ? 5 : v->qscale < 24 ? 6 : 7,
+                 (L ? L->cbp != 0 : 2) == (A ? A->cbp != 0 : 2) ? 0 : 1 + (R && R->cbp), c->enc ? cbp_of(m) : 0);
   c->cat = CAT_MB;
   if (v->type != PT_B) {
     k = cbit(c, &M->dqz[cls3][s->prev_dq], m->dq != 0);
@@ -2329,7 +2436,8 @@ void code_mb(Coder* c, const Ctx* cx, VState* s, MB* m, int idx) {
       const BlkCtx* Lb = i == 1 || i == 3 ? &rowb[mb_x][i - 1] : !L ? 0 : &rowb[mb_x - 1][i < 4 ? i + 1 : i];
       const BlkCtx* Ab = i == 2 || i == 3 ? &rowb[mb_x][i - 2] : !A ? 0 : &rowb[mb_x][i < 4 ? i + 2 : i];
       code_block(c, s, &m->b[i], i, intra, intra && dcvlc, (cbp >> (5 - i)) & 1, cls, nz_ctx(me, L, A, i), qctx, q8,
-                 mvi ? mv_bucket(sumq) : 6, R ? nz_bucket(R->nz[i]) : 6, Lb, Ab, &rowb[mb_x][i]);
+                 mvi ? mv_bucket(sumq) : 6, R ? nz_bucket(R->nz[i]) : 6, Lb, Ab, &rowb[mb_x][i],
+                 i == 5 ? &rowb[mb_x][4] : 0);
       me->nz[i] = (U8)(m->b[i].n < 63 ? m->b[i].n : 63);
     }
   }
@@ -2482,7 +2590,7 @@ int vop_walk(Ctx* cx, int mode, GB* gb, PB* pb, Coder* c) {
 // The stream: the magic, its last byte the format's version, then the arithmetic coded data: the
 // chunks (kind, then the records of a VOP or a raw chunk's length and bytes), the end, and the
 // CRC-32 of the stream (32 bits at 1/2 each).
-static const U8 magic[8] = { 'm', '4', 'v', 'p', 'a', 'c', 'k', 2 };
+static const U8 magic[8] = { 'm', '4', 'v', 'p', 'a', 'c', 'k', 3 };
 
 // a compression's statistics (its summary line)
 typedef struct Stats {

@@ -46,10 +46,11 @@ picture to show.
 
 **Balancing.** Among the cut points, m4vsplit chooses the ones that make the largest part as small
 as possible (h264split's search). Then, within that bound, it picks the cuts nearest to an even
-split. A part's cost is 5 per byte plus 1 per macroblock of its coded VOPs. m4vpack takes about
-0.76 µs per byte and 0.16 µs per macroblock (fitted over 12 streams), so a macroblock costs about
-a fifth of a byte. A part of many small pictures takes longer than one of the same size with few
-large ones.
+split. A part's cost is 5 per byte plus 1 per macroblock of its coded VOPs. m4vpack (format 2)
+took about 0.76 µs per byte and 0.16 µs per macroblock (fitted over 12 streams), so a macroblock
+costs about a fifth of a byte, and a part of many small pictures takes longer than one of the same
+size with few large ones. The model of format 3 spends more per byte (1.1 µs), and the same fit no
+longer separates the macroblocks' share from the noise, so the weight now overstates it a little.
 
 **Headers copied in.** A part gets copies of the headers known at its start that its own first run
 of headers doesn't define. These go at its start, in this order:
