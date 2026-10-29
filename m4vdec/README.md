@@ -5,7 +5,8 @@ A standalone MPEG-4 Part 2 video decoder (DivX 4/5/6, XviD, libavcodec `mpeg4`, 
 
 The decoder core is a C port of FFmpeg's MPEG-4 Part 2 decoder. Decoded pictures are bit-exact with
 FFmpeg's C code path. The frontend follows bik2dec: worker threads write the PNGs, frame `f` goes to
-worker `f % nw`, and there are `nw = cpus-1` workers (at most 32).
+worker `f % nw`, and there are `nw = cpus-1` workers. There are at most 32 workers, and at most as
+many as the 96 MiB frame-copy buffer holds: 32 at 1080p, 8 at 4K.
 
 ## Usage
 
@@ -30,11 +31,11 @@ Exit codes:
 |---|---|
 | 0 | OK |
 | 1 | usage |
-| 2 | input can't be read |
+| 2 | input can't be read, or isn't a seekable file |
 | 3 | no VOPs found |
 | 4 | unsupported stream feature |
 | 6 | output can't be written |
-| 7 | out of memory |
+| 7 | worker threads can't be started |
 | 8 | frame size changed mid-stream |
 
 ## Build
@@ -46,6 +47,29 @@ x86_64-w64-mingw32-g++ -O2 -s -static -o m4vdec.exe m4vdec.cpp -lz
 g++ -O2 -o m4vdec m4vdec.cpp -lz -lpthread
 gcc -x c -O2 -o m4vdec m4vdec.cpp -lz -lpthread
 ```
+
+## Memory
+
+m4vdec doesn't allocate memory dynamically. zlib's allocations come from static per-worker arenas too.
+Every buffer is a static table sized for the largest frame the format allows (13-bit width and height,
+so 8191x8191). Together they take about 590 MiB of `.bss`:
+
+| Buffer | Size |
+|---|---|
+| 3 decoded pictures | 3 x 96 MiB |
+| frame copies for the PNG workers | 96 MiB |
+| PNG workers: RGB rows, IDAT buffer, zlib arena | 32 x 2.2 MiB |
+| input buffer | 64 MiB |
+| prediction tables (AC/DC values, motion vectors, ...) | 70 MiB |
+
+Only the part needed for the actual frame size is ever touched, so physical memory use follows the
+frame size: the peak RSS is about 11 MiB for the 512x384 sample. On Windows the `.bss` still counts
+against the commit limit when the program starts. A build for smaller frames can lower the limits,
+for example `-DMAX_MB_W=120 -DMAX_MB_H=68` for 1920x1088.
+
+The input is read twice through the 64 MiB buffer: first to count the VOPs and B-VOPs, then to
+decode. It therefore has to be a seekable file, not a pipe. A unit (headers plus one VOP) longer than
+64 MiB, which only happens in damaged streams, is truncated with a warning.
 
 ## Supported
 

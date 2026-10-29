@@ -19,6 +19,10 @@
 //   x86_64-w64-mingw32-g++ -O2 -s -static -o m4vdec.exe m4vdec.cpp -lz
 //   g++ -O2 -o m4vdec m4vdec.cpp -lz -lpthread
 // Plain C (compiles as C or C++): C runtime, zlib, Win32 threads or pthreads.
+// Memory: no malloc (zlib's allocations come from static arenas too). Every buffer is static, sized
+// for the largest VOL (8191x8191: ~590 MiB of .bss, of which only the part for the actual frame
+// size gets touched). The input is read twice (VOP count, then decoding) through a 64 MiB buffer,
+// so it has to be a seekable file; a VOP longer than that is truncated.
 
 #ifdef _WIN32
 #include <windows.h>
@@ -84,11 +88,12 @@ static inline int gb_xbits(GB* g, int n) {  // FFmpeg get_xbits: MSB set -> posi
 
 typedef struct VLCE { S16 sym; S16 len; } VLCE;
 typedef struct VLC { VLCE* tab; int bits; } VLC;
+// a VLC with its static (1 << bits)-entry lookup table
+#define VLC_DEF(name, nbits) static VLCE name##_tab[1 << (nbits)]; static VLC name = { name##_tab, nbits }
 
-static void vlc_build(VLC* v, int bits, int n, const U32* codes, const U8* lens, const S16* syms) {
+static void vlc_build(VLC* v, int n, const U32* codes, const U8* lens, const S16* syms) {
+  const int bits = v->bits;
   int i;
-  v->bits = bits;
-  v->tab = (VLCE*)calloc((size_t)1 << bits, sizeof(VLCE));
   for (i = 0; i < n; i++) {
     U32 j, first, cnt;
     if (!lens[i]) continue;
@@ -223,9 +228,17 @@ typedef struct RL {
   VLC v;
 } RL;
 
-static RL rl_intra = { 102, 67, intra_vlc, intra_run, intra_level };
-static RL rl_inter = { 102, 58, inter_vlc, inter_run, inter_level };
-static VLC vlc_intra_mcbpc, vlc_inter_mcbpc, vlc_cbpy, vlc_mv, vlc_dc_lum, vlc_dc_chrom, vlc_mb_type_b, vlc_sprite_traj;
+static VLCE rl_intra_tab[1 << 12], rl_inter_tab[1 << 12];
+static RL rl_intra = { 102, 67, intra_vlc, intra_run, intra_level, {{0}}, {{0}}, { rl_intra_tab, 12 } };
+static RL rl_inter = { 102, 58, inter_vlc, inter_run, inter_level, {{0}}, {{0}}, { rl_inter_tab, 12 } };
+VLC_DEF(vlc_intra_mcbpc, 9);
+VLC_DEF(vlc_inter_mcbpc, 13);
+VLC_DEF(vlc_cbpy, 6);
+VLC_DEF(vlc_mv, 12);
+VLC_DEF(vlc_dc_lum, 11);
+VLC_DEF(vlc_dc_chrom, 12);
+VLC_DEF(vlc_mb_type_b, 4);
+VLC_DEF(vlc_sprite_traj, 12);
 
 static void rl_init(RL* rl) {
   int last, i;
@@ -241,7 +254,7 @@ static void rl_init(RL* rl) {
     }
   }
   for (i = 0; i <= rl->n; i++) { codes[i] = rl->vlc[i][0]; lens[i] = (U8)rl->vlc[i][1]; }
-  vlc_build(&rl->v, 12, rl->n + 1, codes, lens, 0);
+  vlc_build(&rl->v, rl->n + 1, codes, lens, 0);
 }
 
 static void tables_init(void) {
@@ -250,22 +263,22 @@ static void tables_init(void) {
   if (done) return;
   done = 1;
   for (i = 0; i < 9; i++) { c[i] = intra_mcbpc_code[i]; l[i] = intra_mcbpc_bits[i]; }
-  vlc_build(&vlc_intra_mcbpc, 9, 9, c, l, 0);
+  vlc_build(&vlc_intra_mcbpc, 9, c, l, 0);
   {
     U32 c2[28]; U8 l2[28];
     for (i = 0; i < 28; i++) { c2[i] = inter_mcbpc_code[i]; l2[i] = inter_mcbpc_bits[i]; }
-    vlc_build(&vlc_inter_mcbpc, 13, 28, c2, l2, 0);
+    vlc_build(&vlc_inter_mcbpc, 28, c2, l2, 0);
   }
   for (i = 0; i < 16; i++) { c[i] = cbpy_tab[i][0]; l[i] = cbpy_tab[i][1]; }
-  vlc_build(&vlc_cbpy, 6, 16, c, l, 0);
+  vlc_build(&vlc_cbpy, 16, c, l, 0);
   for (i = 0; i < 33; i++) { c[i] = mv_tab[i][0]; l[i] = mv_tab[i][1]; }
-  vlc_build(&vlc_mv, 12, 33, c, l, 0);
+  vlc_build(&vlc_mv, 33, c, l, 0);
   for (i = 0; i < 13; i++) { c[i] = DCtab_lum[i][0]; l[i] = DCtab_lum[i][1]; }
-  vlc_build(&vlc_dc_lum, 11, 13, c, l, 0);
+  vlc_build(&vlc_dc_lum, 13, c, l, 0);
   for (i = 0; i < 13; i++) { c[i] = DCtab_chrom[i][0]; l[i] = DCtab_chrom[i][1]; }
-  vlc_build(&vlc_dc_chrom, 12, 13, c, l, 0);
+  vlc_build(&vlc_dc_chrom, 13, c, l, 0);
   for (i = 0; i < 4; i++) { c[i] = mb_type_b_tab[i][0]; l[i] = mb_type_b_tab[i][1]; s[i] = (S16)i; }
-  vlc_build(&vlc_mb_type_b, 4, 4, c, l, s);
+  vlc_build(&vlc_mb_type_b, 4, c, l, s);
   {  // canonical codes from lengths, in listed order (as ff_vlc_init_from_lengths)
     U32 code = 0;
     for (i = 0; i < 15; i++) {
@@ -273,7 +286,7 @@ static void tables_init(void) {
       c[i] = code >> (32 - l[i]);
       code += 1u << (32 - l[i]);
     }
-    vlc_build(&vlc_sprite_traj, 12, 15, c, l, 0);
+    vlc_build(&vlc_sprite_traj, 15, c, l, 0);
   }
   rl_init(&rl_intra);
   rl_init(&rl_inter);
@@ -369,9 +382,9 @@ typedef struct Dec {
   S16 (*p_field_mv)[2][2];   // [mb_xy][field][xy], forward field MVs of the last P-VOP
   U8* mb_done;
   // pictures
-  Pic pics[4];
+  Pic pics[3];
   Pic *cur, *last, *next;
-  int alloc_w, alloc_h;
+  int layout_w, layout_h;
   int errors;
   const char* unsupported;  // set when the stream uses a feature this decoder lacks
 } Dec;
@@ -384,28 +397,39 @@ static void set_qscale(Dec* d, int q) {
   d->c_dc_scale = c_dc_scale_table[q];
 }
 
-static void pic_free(Pic* p) {
-  free(p->y); free(p->mbskip); free(p->mbtype); free(p->mvbase); free(p->ref_index);
-  memset(p, 0, sizeof(*p));
-}
+// Frame buffers and per-macroblock tables are static, sized for the largest VOL: width and height
+// are 13-bit fields, so up to 512x512 macroblocks. Only the part for the actual size gets touched.
+// Builds limited to smaller frames can lower the limits, e.g. -DMAX_MB_W=120 -DMAX_MB_H=68 (1080p).
+#ifndef MAX_MB_W
+#define MAX_MB_W 512
+#endif
+#ifndef MAX_MB_H
+#define MAX_MB_H 512
+#endif
+#define MAX_MB_ARRAY ((MAX_MB_W + 1) * MAX_MB_H + 2)        // mb_stride * mb_h + 2
+#define MAX_B8_ARRAY ((MAX_MB_W * 2 + 1) * MAX_MB_H * 2 + 4)  // b8_stride * mb_h * 2 + 4
+#define MAX_YC_SIZE ((MAX_MB_W * 2 + 1) * (MAX_MB_H * 2 + 1) + 2 * (MAX_MB_W + 1) * (MAX_MB_H + 1))
+#define MAX_PIC_SIZE ((size_t)MAX_MB_W * MAX_MB_H * 256 * 3 / 2)  // Y, U, V planes (96 MiB at 512x512)
 
-static void dec_free_buffers(Dec* d) {
-  int i;
-  for (i = 0; i < 4; i++) pic_free(&d->pics[i]);
-  free(d->dc_val_base); free(d->ac_val_base); free(d->mbintra_table); free(d->qscale_table);
-  free(d->p_field_mv); free(d->mb_done);
-  d->dc_val_base = d->dc_val = 0; d->ac_val_base = d->ac_val = 0;
-  d->mbintra_table = 0; d->qscale_table = 0; d->p_field_mv = 0; d->mb_done = 0;
-  d->cur = d->last = d->next = 0;
-  d->alloc_w = d->alloc_h = 0;
-}
+static S16 dc_val_mem[MAX_YC_SIZE];
+static S16 ac_val_mem[MAX_YC_SIZE][16];  // 48 MiB at 512x512
+static U8 mbintra_mem[MAX_MB_ARRAY], mb_done_mem[MAX_MB_ARRAY];
+static S8 qscale_mem[MAX_MB_ARRAY];
+static S16 p_field_mv_mem[MAX_MB_ARRAY][2][2];
+static U8 plane_mem[3][MAX_PIC_SIZE];
+static U8 mbskip_mem[3][MAX_MB_ARRAY];
+static U16 mbtype_mem[3][MAX_MB_ARRAY];
+static S16 mv_mem[3][MAX_B8_ARRAY][2];
+static U8 ref_index_mem[3][4 * MAX_MB_ARRAY];
 
-static int dec_alloc(Dec* d) {
+// lays the static buffers out for the current frame size, cleared like freshly allocated ones
+static int dec_layout(Dec* d) {
   int i, y_size, c_size, yc_size, mb_array, b8_array;
-  if (d->alloc_w == d->width && d->alloc_h == d->height) return 0;
-  dec_free_buffers(d);
+  if (d->layout_w == d->width && d->layout_h == d->height) return 0;
+  d->cur = d->last = d->next = 0;
   d->mb_w = (d->width + 15) >> 4;
   d->mb_h = (d->height + 15) >> 4;
+  if (d->mb_w > MAX_MB_W || d->mb_h > MAX_MB_H) return -1;
   d->mb_num = d->mb_w * d->mb_h;
   d->mb_stride = d->mb_w + 1;
   d->b8_stride = d->mb_w * 2 + 1;
@@ -414,34 +438,41 @@ static int dec_alloc(Dec* d) {
   y_size = d->b8_stride * (2 * d->mb_h + 1);
   c_size = d->mb_stride * (d->mb_h + 1);
   yc_size = y_size + 2 * c_size;
-  mb_array = d->mb_stride * d->mb_h;
-  b8_array = d->b8_stride * d->mb_h * 2;
-  d->dc_val_base = (S16*)malloc(sizeof(S16) * yc_size);
-  d->ac_val_base = (S16(*)[16])calloc(yc_size, sizeof(*d->ac_val_base));
-  d->mbintra_table = (U8*)calloc(mb_array + 2, 1);
-  d->qscale_table = (S8*)calloc(mb_array + 2, 1);
-  d->p_field_mv = (S16(*)[2][2])calloc(mb_array + 2, sizeof(*d->p_field_mv));
-  d->mb_done = (U8*)calloc(mb_array + 2, 1);
-  if (!d->dc_val_base || !d->ac_val_base || !d->mbintra_table || !d->qscale_table || !d->p_field_mv || !d->mb_done)
-    return -1;
+  mb_array = d->mb_stride * d->mb_h + 2;
+  b8_array = d->b8_stride * d->mb_h * 2 + 4;
+  d->dc_val_base = dc_val_mem;
+  d->ac_val_base = ac_val_mem;
+  d->mbintra_table = mbintra_mem;
+  d->qscale_table = qscale_mem;
+  d->p_field_mv = p_field_mv_mem;
+  d->mb_done = mb_done_mem;
   for (i = 0; i < yc_size; i++) d->dc_val_base[i] = 1024;
+  memset(d->ac_val_base, 0, yc_size * sizeof(*d->ac_val_base));
+  memset(d->mbintra_table, 0, mb_array);
+  memset(d->qscale_table, 0, mb_array);
+  memset(d->p_field_mv, 0, mb_array * sizeof(*d->p_field_mv));
+  memset(d->mb_done, 0, mb_array);
   d->dc_val = d->dc_val_base + d->b8_stride + 1;
   d->ac_val = d->ac_val_base + d->b8_stride + 1;
-  for (i = 0; i < 4; i++) {
+  for (i = 0; i < 3; i++) {
     Pic* p = &d->pics[i];
     size_t ysz = (size_t)d->ly * d->mb_h * 16, csz = (size_t)d->lc * d->mb_h * 8;
-    p->y = (U8*)malloc(ysz + 2 * csz);
-    p->mbskip = (U8*)calloc(mb_array + 2, 1);
-    p->mbtype = (U16*)calloc(mb_array + 2, sizeof(U16));
-    p->mvbase = (S16(*)[2])calloc(b8_array + 4, sizeof(*p->mvbase));
-    p->ref_index = (U8*)calloc(4 * (mb_array + 2), 1);
-    if (!p->y || !p->mbskip || !p->mbtype || !p->mvbase || !p->ref_index) return -1;
+    memset(p, 0, sizeof(*p));
+    p->y = plane_mem[i];
     p->u = p->y + ysz;
     p->v = p->u + csz;
+    p->mbskip = mbskip_mem[i];
+    p->mbtype = mbtype_mem[i];
+    p->mvbase = mv_mem[i];
     p->mv = p->mvbase + 4;
+    p->ref_index = ref_index_mem[i];
+    memset(p->mbskip, 0, mb_array);
+    memset(p->mbtype, 0, mb_array * sizeof(U16));
+    memset(p->mvbase, 0, b8_array * sizeof(*p->mvbase));
+    memset(p->ref_index, 0, 4 * mb_array);
   }
-  d->alloc_w = d->width;
-  d->alloc_h = d->height;
+  d->layout_w = d->width;
+  d->layout_h = d->height;
   return 0;
 }
 
@@ -2572,8 +2603,9 @@ static Pic* free_pic(Dec* d) {
   return &d->pics[0];
 }
 
+// gray stand-in forward reference for a P/S-VOP that has none, in a buffer the VOP doesn't use
 static Pic* gray_pic(Dec* d) {
-  Pic* p = &d->pics[3];
+  Pic* p = &d->pics[&d->pics[0] == d->cur ? 1 : 0];
   size_t ysz = (size_t)d->ly * d->mb_h * 16, csz = (size_t)d->lc * d->mb_h * 8;
   memset(p->y, 0x80, ysz + 2 * csz);
   memset(p->mbskip, 0, d->mb_stride * d->mb_h + 2);
@@ -2653,7 +2685,7 @@ static int dec_decode_unit(Dec* d, const U8* buf, int size) {
   ret = parse_picture_header(d);
   if (ret) return ret;
   if (d->width <= 0 || d->height <= 0) return -1;
-  if (dec_alloc(d) < 0) { fprintf(stderr, "out of memory\n"); exit(7); }
+  if (dec_layout(d) < 0) { d->unsupported = "a frame size above MAX_MB_W x MAX_MB_H macroblocks"; return -1; }
   for (i = 0; i < 4; i++) d->block_wrap[i] = d->b8_stride;
   d->block_wrap[4] = d->block_wrap[5] = d->mb_stride;
   return decode_picture(d);
@@ -2664,34 +2696,29 @@ static int dec_decode_unit(Dec* d, const U8* buf, int size) {
 #ifdef _WIN32
 typedef HANDLE Event;
 typedef HANDLE Thread;
-static Event ev_create(int initial) { return CreateEventA(0, FALSE, initial ? TRUE : FALSE, 0); }
-static void ev_set(Event e) { SetEvent(e); }
-static void ev_wait(Event e) { WaitForSingleObject(e, INFINITE); }
-static void ev_free(Event e) { CloseHandle(e); }
+static int ev_init(Event* e, int initial) { return (*e = CreateEventA(0, FALSE, initial ? TRUE : FALSE, 0)) != 0; }
+static void ev_set(Event* e) { SetEvent(*e); }
+static void ev_wait(Event* e) { WaitForSingleObject(*e, INFINITE); }
+static void ev_free(Event* e) { CloseHandle(*e); }
 static int ncpu(void) { SYSTEM_INFO si; GetSystemInfo(&si); return (int)si.dwNumberOfProcessors; }
 #define THREAD_RET DWORD WINAPI
 static int thread_start(Thread* t, LPTHREAD_START_ROUTINE fn, void* arg) { return (*t = CreateThread(0, 0, fn, arg, 0, 0)) != 0; }
 static void thread_join(Thread t) { WaitForSingleObject(t, INFINITE); CloseHandle(t); }
 #else
-typedef struct EventS { pthread_mutex_t m; pthread_cond_t c; int s; } EventS;
-typedef EventS* Event;
+typedef struct Event { pthread_mutex_t m; pthread_cond_t c; int s; } Event;
 typedef pthread_t Thread;
-static Event ev_create(int initial) {
-  Event e = (Event)malloc(sizeof(EventS));
-  if (!e) return 0;
-  pthread_mutex_init(&e->m, 0);
-  pthread_cond_init(&e->c, 0);
+static int ev_init(Event* e, int initial) {
   e->s = initial;
-  return e;
+  return !pthread_mutex_init(&e->m, 0) && !pthread_cond_init(&e->c, 0);
 }
-static void ev_set(Event e) { pthread_mutex_lock(&e->m); e->s = 1; pthread_cond_signal(&e->c); pthread_mutex_unlock(&e->m); }
-static void ev_wait(Event e) {  // auto-reset
+static void ev_set(Event* e) { pthread_mutex_lock(&e->m); e->s = 1; pthread_cond_signal(&e->c); pthread_mutex_unlock(&e->m); }
+static void ev_wait(Event* e) {  // auto-reset
   pthread_mutex_lock(&e->m);
   while (!e->s) pthread_cond_wait(&e->c, &e->m);
   e->s = 0;
   pthread_mutex_unlock(&e->m);
 }
-static void ev_free(Event e) { pthread_mutex_destroy(&e->m); pthread_cond_destroy(&e->c); free(e); }
+static void ev_free(Event* e) { pthread_mutex_destroy(&e->m); pthread_cond_destroy(&e->c); }
 static int ncpu(void) { long n = sysconf(_SC_NPROCESSORS_ONLN); return n > 0 ? (int)n : 1; }
 #define THREAD_RET void*
 static int thread_start(Thread* t, void* (*fn)(void*), void* arg) { return pthread_create(t, 0, fn, arg) == 0; }
@@ -2707,65 +2734,81 @@ static const CSC csc_601_pc = { 65536, 0, 91881, 22554, 46802, 116130 };
 static const CSC csc_709_tv = { 76309, 16, 117489, 13975, 34925, 138438 };
 static const CSC csc_709_pc = { 65536, 0, 103206, 12276, 30679, 121609 };
 
+#define MAX_W (MAX_MB_W * 16)
+
+// Converts row y of a w x h I420 image to RGB; chroma: 2 * ((w + 1) / 2) ints of scratch.
 // Chroma is upsampled bilinearly: horizontally co-sited with even luma columns (MPEG-4 "left"
 // siting, as FFmpeg reports), vertically between luma rows; per field for interlaced VOLs.
-static void yuv_to_rgb(U8* rgb, const U8* Y, const U8* U, const U8* V, int w, int h, int interlaced, const CSC* m) {
+static void yuv_row_to_rgb(U8* o, int y, const U8* Y, const U8* U, const U8* V, int w, int h, int interlaced,
+                           const CSC* m, int* chroma) {
   const int cw = (w + 1) >> 1, ch = (h + 1) >> 1;
-  int x, y;
-  int* cu = (int*)malloc(sizeof(int) * cw * 2);
-  int* cv = cu + cw;
-  for (y = 0; y < h; y++) {
-    int r0, r1;
-    const U8 *u0, *u1, *v0, *v1, *yl = Y + (size_t)y * w;
-    U8* o = rgb + (size_t)y * w * 3;
-    if (!interlaced) {
-      r0 = y >> 1;
-      r1 = clipi((y & 1) ? r0 + 1 : r0 - 1, 0, ch - 1);
-    } else {
-      const int f = y & 1, yf = y >> 1, fc = (ch - f + 1) >> 1;
-      int k0 = yf >> 1, k1 = (yf & 1) ? k0 + 1 : k0 - 1;
-      k0 = clipi(k0, 0, fc - 1);
-      k1 = clipi(k1, 0, fc - 1);
-      r0 = 2 * k0 + f;
-      r1 = 2 * k1 + f;
-    }
-    r0 = clipi(r0, 0, ch - 1);
-    u0 = U + (size_t)r0 * cw; u1 = U + (size_t)r1 * cw;
-    v0 = V + (size_t)r0 * cw; v1 = V + (size_t)r1 * cw;
-    for (x = 0; x < cw; x++) { cu[x] = 3 * u0[x] + u1[x]; cv[x] = 3 * v0[x] + v1[x]; }
-    for (x = 0; x < w; x++) {
-      const int cx = x >> 1, cx1 = cx + 1 < cw ? cx + 1 : cw - 1;
-      const int u = ((x & 1) ? cu[cx] + cu[cx1] : 2 * cu[cx]) - 1024;   // x8 scale
-      const int v = ((x & 1) ? cv[cx] + cv[cx1] : 2 * cv[cx]) - 1024;
-      const int yy = m->ycoef * (yl[x] - m->yoff) * 8 + (1 << 18);
-      o[0] = clip8((yy + m->rv * v) >> 19);
-      o[1] = clip8((yy - m->gu * u - m->gv * v) >> 19);
-      o[2] = clip8((yy + m->bu * u) >> 19);
-      o += 3;
-    }
+  int x, r0, r1;
+  int *cu = chroma, *cv = chroma + cw;
+  const U8 *u0, *u1, *v0, *v1, *yl = Y + (size_t)y * w;
+  if (!interlaced) {
+    r0 = y >> 1;
+    r1 = clipi((y & 1) ? r0 + 1 : r0 - 1, 0, ch - 1);
+  } else {
+    const int f = y & 1, yf = y >> 1, fc = (ch - f + 1) >> 1;
+    int k0 = yf >> 1, k1 = (yf & 1) ? k0 + 1 : k0 - 1;
+    k0 = clipi(k0, 0, fc - 1);
+    k1 = clipi(k1, 0, fc - 1);
+    r0 = 2 * k0 + f;
+    r1 = 2 * k1 + f;
   }
-  free(cu);
+  r0 = clipi(r0, 0, ch - 1);
+  u0 = U + (size_t)r0 * cw; u1 = U + (size_t)r1 * cw;
+  v0 = V + (size_t)r0 * cw; v1 = V + (size_t)r1 * cw;
+  for (x = 0; x < cw; x++) { cu[x] = 3 * u0[x] + u1[x]; cv[x] = 3 * v0[x] + v1[x]; }
+  for (x = 0; x < w; x++) {
+    const int cx = x >> 1, cx1 = cx + 1 < cw ? cx + 1 : cw - 1;
+    const int u = ((x & 1) ? cu[cx] + cu[cx1] : 2 * cu[cx]) - 1024;   // x8 scale
+    const int v = ((x & 1) ? cv[cx] + cv[cx1] : 2 * cv[cx]) - 1024;
+    const int yy = m->ycoef * (yl[x] - m->yoff) * 8 + (1 << 18);
+    o[0] = clip8((yy + m->rv * v) >> 19);
+    o[1] = clip8((yy - m->gu * u - m->gv * v) >> 19);
+    o[2] = clip8((yy + m->bu * u) >> 19);
+    o += 3;
+  }
 }
 
 //--- PNG writer (from bik2dec) ---------------------------------------------------------------
 
 #define IDAT_MAX (1u << 20)
+#define ZMEM_SIZE (1u << 20)  // zlib's deflate state (about 400 KB at memLevel 9)
+#define FN_MAX 4096
+#define MAX_WORKERS 32
 
 typedef struct Worker {
   Thread th;
-  Event go, idle;        // auto-reset events
-  U32 w, h, bpp; int level;
-  U8 *yuv;               // w*h + 2*cw*ch input planes
+  Event go, idle;               // auto-reset events
+  U32 w, h; int level;
+  U8* yuv;                      // w*h + 2*cw*ch input planes, a slice of frame_pool
   int interlaced;
   const CSC* csc;
-  U8* img;               // w*h*bpp
-  U8* cand;              // 5 filtered rows, each rb+1
-  U8* zero;              // rb zeros (row above row 0)
-  U8* out;               // IDAT_MAX deflate output
-  char* fn;
+  int chroma[MAX_W];            // yuv_row_to_rgb scratch
+  U8 rgb[2][MAX_W * 3];         // current and previous RGB row
+  U8 cand[5][MAX_W * 3 + 1];    // filtered rows
+  U8 out[IDAT_MAX];             // deflate output
+  char fn[FN_MAX];
+  U64 zmem[ZMEM_SIZE / 8];      // zlib's allocations, reset for every image
+  size_t zused;
   volatile int quit;
   int errors;
 } Worker;
+
+static Worker workers[MAX_WORKERS];
+static U8 frame_pool[MAX_PIC_SIZE];  // frame copies for the workers; holds at least one frame
+static const U8 zero_row[MAX_W * 3] = { 0 };  // row above row 0
+
+static voidpf z_alloc(voidpf opaque, uInt items, uInt size) {
+  Worker* wk = (Worker*)opaque;
+  const size_t n = ((size_t)items * size + 15) & ~(size_t)15;
+  if (n > sizeof(wk->zmem) - wk->zused) return Z_NULL;
+  wk->zused += n;
+  return (U8*)wk->zmem + wk->zused - n;
+}
+static void z_free(voidpf opaque, voidpf p) { (void)opaque; (void)p; }
 
 static void put32be(U8* p, U32 v) { p[0] = (U8)(v >> 24); p[1] = (U8)(v >> 16); p[2] = (U8)(v >> 8); p[3] = (U8)v; }
 
@@ -2784,10 +2827,11 @@ static U8 paeth(int a, int b, int c) {
   return (U8)((pa <= pb && pa <= pc) ? a : (pb <= pc ? b : c));
 }
 
-// adaptive per-row filter (min sum of |signed residual|), zlib deflate, IDAT chunks of IDAT_MAX
+// RGB rows converted on the fly; adaptive per-row filter (min sum of |signed residual|),
+// zlib deflate, IDAT chunks of IDAT_MAX
 static int write_png(Worker* wk) {
-  const U32 w = wk->w, h = wk->h, bpp = wk->bpp;
-  const size_t rb = (size_t)w * bpp;
+  const U32 w = wk->w, h = wk->h, bpp = 3;
+  const size_t rb = (size_t)w * bpp, npix = (size_t)w * h, cpix = (size_t)((w + 1) >> 1) * ((h + 1) >> 1);
   static const U8 sig[8] = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
   U8 ihdr[13];
   z_stream zs;
@@ -2797,19 +2841,23 @@ static int write_png(Worker* wk) {
 
   if (!(f = fopen(wk->fn, "wb"))) return 0;
   put32be(ihdr, w); put32be(ihdr + 4, h);
-  ihdr[8] = 8; ihdr[9] = bpp == 4 ? 6 : 2; ihdr[10] = ihdr[11] = ihdr[12] = 0;
+  ihdr[8] = 8; ihdr[9] = 2; ihdr[10] = ihdr[11] = ihdr[12] = 0;
   ok = fwrite(sig, 1, 8, f) == 8 && png_chunk(f, "IHDR", ihdr, 13);
 
   memset(&zs, 0, sizeof(zs));
+  zs.zalloc = z_alloc; zs.zfree = z_free; zs.opaque = wk;
+  wk->zused = 0;
   if (ok && deflateInit2(&zs, wk->level, Z_DEFLATED, 15, 9, Z_DEFAULT_STRATEGY) != Z_OK) ok = 0;
   zs.next_out = wk->out; zs.avail_out = IDAT_MAX;
 
   for (y = 0; ok && y < h; y++) {
-    const U8* cur = wk->img + y * rb;
-    const U8* up = y ? cur - rb : wk->zero;
+    U8* cur = wk->rgb[y & 1];
+    const U8* up = y ? wk->rgb[(y - 1) & 1] : zero_row;
     U32 best = ~0u; int bi = 0, t;
+    yuv_row_to_rgb(cur, (int)y, wk->yuv, wk->yuv + npix, wk->yuv + npix + cpix, (int)w, (int)h, wk->interlaced,
+                   wk->csc, wk->chroma);
     for (t = 0; t < 5; t++) {
-      U8* d = wk->cand + t * (rb + 1);
+      U8* d = wk->cand[t];
       U32 s = 0; size_t i;
       *d++ = (U8)t;
       for (i = 0; i < rb; i++) {
@@ -2827,7 +2875,7 @@ static int write_png(Worker* wk) {
       if (s < best) { best = s; bi = t; }
       if (!y && t == 1) break;  // row 0: up/paeth degenerate to none/sub
     }
-    zs.next_in = wk->cand + bi * (rb + 1); zs.avail_in = (uInt)(rb + 1);
+    zs.next_in = wk->cand[bi]; zs.avail_in = (uInt)(rb + 1);
     {
       const int flush = y + 1 == h ? Z_FINISH : Z_NO_FLUSH;
       do {
@@ -2849,26 +2897,113 @@ static int write_png(Worker* wk) {
 
 static THREAD_RET worker_proc(void* p) {
   Worker* wk = (Worker*)p;
-  const size_t npix = (size_t)wk->w * wk->h, cpix = (size_t)((wk->w + 1) >> 1) * ((wk->h + 1) >> 1);
   for (;;) {
-    ev_wait(wk->go);
+    ev_wait(&wk->go);
     if (wk->quit) break;
-    yuv_to_rgb(wk->img, wk->yuv, wk->yuv + npix, wk->yuv + npix + cpix, (int)wk->w, (int)wk->h, wk->interlaced, wk->csc);
     if (!write_png(wk)) { fprintf(stderr, "\nerror writing %s\n", wk->fn); wk->errors++; }
-    ev_set(wk->idle);
+    ev_set(&wk->idle);
   }
   return 0;
+}
+
+//--- input: units of headers + one VOP, streamed through a static buffer ----------------------
+
+#define IBUF_SIZE (64u << 20)  // largest unit; a longer one (only in damaged streams) is truncated
+#define IREAD (1u << 20)
+
+static U8 ibuf[IBUF_SIZE + 64];
+
+typedef struct Reader {
+  FILE* f;
+  size_t lo, hi;   // ibuf[lo, hi): data not returned yet
+  int eof, skip;   // skip: drop data up to the next start code (after a truncated unit)
+  int truncated;   // the last unit was truncated
+  U8* pad;         // the 64 bytes after the last unit, zeroed while it is decoded
+  U8 saved[64];
+  U64 bytes;
+} Reader;
+
+static void rd_start(Reader* r, FILE* f) { memset(r, 0, sizeof(*r)); r->f = f; }
+
+// moves the data not returned yet to the buffer start and reads more; 0 at EOF or on a full buffer
+static int rd_fill(Reader* r) {
+  size_t n;
+  if (r->lo) { memmove(ibuf, ibuf + r->lo, r->hi - r->lo); r->hi -= r->lo; r->lo = 0; }
+  if (r->eof || r->hi == IBUF_SIZE) return 0;
+  n = fread(ibuf + r->hi, 1, IBUF_SIZE - r->hi < IREAD ? IBUF_SIZE - r->hi : IREAD, r->f);
+  r->hi += n;
+  r->bytes += n;
+  if (!n) r->eof = 1;
+  return n != 0;
+}
+
+// Looks for 00 00 01 (followed by `code` if code >= 0) in ibuf[*pi, end). Returns 1 with *pi at the
+// match, or 0 with *pi at the first position where a match could still start.
+static int find_sc(size_t* pi, size_t end, int code) {
+  const size_t n = code < 0 ? 3 : 4;
+  size_t i = *pi;
+  while (i + n <= end) {
+    if (ibuf[i + 2] > 1) i += 3;
+    else if (!ibuf[i + 2]) i++;
+    else if (!ibuf[i] && !ibuf[i + 1] && (code < 0 || ibuf[i + 3] == code)) { *pi = i; return 1; }
+    else i += 3;
+  }
+  *pi = i;
+  return 0;
+}
+
+// Next unit, in ibuf[*pos, *pos + *len) and followed by 64 zero bytes until the next call. Returns
+// 1 for headers + one VOP, which ends at the next start code or EOF (*bvop: it is a B-VOP),
+// 2 for headers only (when more than IBUF_SIZE bytes precede a VOP), 0 when no VOPs are left.
+static int rd_unit(Reader* r, size_t* pos, size_t* len, int* bvop) {
+  size_t i, v;
+  int ret = 1;
+  if (r->pad) { memcpy(r->pad, r->saved, 64); r->pad = 0; }
+  r->truncated = 0;
+  *bvop = 0;
+  while (r->skip) {
+    i = r->lo;
+    r->skip = !find_sc(&i, r->hi, -1);
+    r->lo = i;
+    if (r->skip && !rd_fill(r)) return 0;
+  }
+  for (i = r->lo; !find_sc(&i, r->hi, 0xB6); i += r->lo) {  // VOP start code
+    i -= r->lo;
+    if (!rd_fill(r)) {
+      if (r->eof) return 0;
+      ret = 2;
+      break;
+    }
+  }
+  if (ret == 1) {
+    for (v = i, i += 4; !find_sc(&i, r->hi, -1); i += r->lo, v += r->lo) {  // end of the VOP
+      i -= r->lo;
+      v -= r->lo;
+      if (!rd_fill(r)) {
+        if (!r->eof) r->skip = r->truncated = 1;
+        i = r->hi;
+        break;
+      }
+    }
+    *bvop = v + 4 < i && (ibuf[v + 4] >> 6) == 2;
+  }
+  *pos = r->lo;
+  *len = i - r->lo;
+  r->lo = i;
+  r->pad = ibuf + i;
+  memcpy(r->saved, r->pad, 64);
+  memset(r->pad, 0, 64);
+  return ret;
 }
 
 //--- frontend ---------------------------------------------------------------------------------
 
 typedef struct Output {
   int yuv_mode, nw, digits, w, h, interlaced, rc;
+  size_t fsize;  // one cropped I420 frame
   const CSC* csc;
   FILE* yuvf;
-  Worker* wk;
   const char* pre;
-  size_t plen;
   U32 frames;
 } Output;
 
@@ -2882,11 +3017,21 @@ static void copy_planes(U8* dst, const Dec* d, const Pic* p) {  // crop to w x h
   for (y = 0; y < ch; y++) memcpy(dst + (size_t)y * cw, p->v + (size_t)y * d->lc, cw);
 }
 
+static int write_planes(FILE* f, const Dec* d, const Pic* p) {  // same layout as copy_planes
+  const size_t w = (size_t)d->width, h = (size_t)d->height, cw = (w + 1) >> 1, ch = (h + 1) >> 1;
+  size_t y;
+  int ok = 1;
+  for (y = 0; y < h; y++) ok &= fwrite(p->y + y * d->ly, 1, w, f) == w;
+  for (y = 0; y < ch; y++) ok &= fwrite(p->u + y * d->lc, 1, cw, f) == cw;
+  for (y = 0; y < ch; y++) ok &= fwrite(p->v + y * d->lc, 1, cw, f) == cw;
+  return ok;
+}
+
 static int output_init(Output* o, const Dec* d) {
-  const size_t npix = (size_t)d->width * d->height, ysz = npix + 2 * (size_t)((d->width + 1) >> 1) * ((d->height + 1) >> 1);
   int i;
   o->w = d->width;
   o->h = d->height;
+  o->fsize = (size_t)o->w * o->h + 2 * (size_t)((o->w + 1) >> 1) * ((o->h + 1) >> 1);
   o->interlaced = !d->progressive;
   if (d->color_matrix == 1) o->csc = d->full_range ? &csc_709_pc : &csc_709_tv;
   else o->csc = d->full_range ? &csc_601_pc : &csc_601_tv;
@@ -2894,36 +3039,26 @@ static int output_init(Output* o, const Dec* d) {
     if (!(o->yuvf = fopen(o->pre, "wb"))) { fprintf(stderr, "can't create %s\n", o->pre); return 6; }
     return 0;
   }
-  o->nw = ncpu() > 1 ? ncpu() - 1 : 1;
-  if (o->nw > 32) o->nw = 32;
-  o->wk = (Worker*)calloc(o->nw, sizeof(Worker));
-  if (!o->wk) return 7;
-  for (i = 0; i < o->nw; i++) {
-    Worker* w = &o->wk[i];
-    w->w = (U32)d->width; w->h = (U32)d->height; w->bpp = 3; w->level = 6;
-    w->interlaced = o->interlaced; w->csc = o->csc;
-    w->yuv  = (U8*)malloc(ysz);
-    w->img  = (U8*)malloc(npix * 3);
-    w->cand = (U8*)malloc(5 * ((size_t)d->width * 3 + 1));
-    w->zero = (U8*)calloc((size_t)d->width * 3 + 1, 1);
-    w->out  = (U8*)malloc(IDAT_MAX);
-    w->fn   = (char*)malloc(o->plen + 32);
-    w->go   = ev_create(0);
-    w->idle = ev_create(1);
-    if (!w->yuv || !w->img || !w->cand || !w->zero || !w->out || !w->fn || !w->go || !w->idle ||
-        !thread_start(&w->th, worker_proc, w)) {
-      fprintf(stderr, "out of memory/resources\n");
-      return 7;
-    }
-  }
   {  // fail early on an unwritable prefix
-    char* fn = (char*)malloc(o->plen + 32);
+    char fn[FN_MAX];
     FILE* t;
     sprintf(fn, "%s%0*u.png", o->pre, o->digits, 0u);
-    if (!(t = fopen(fn, "wb"))) { fprintf(stderr, "can't create %s\n", fn); free(fn); return 6; }
+    if (!(t = fopen(fn, "wb"))) { fprintf(stderr, "can't create %s\n", fn); return 6; }
     fclose(t);
     remove(fn);
-    free(fn);
+  }
+  o->nw = ncpu() > 1 ? ncpu() - 1 : 1;
+  if (o->nw > MAX_WORKERS) o->nw = MAX_WORKERS;
+  if ((size_t)o->nw > sizeof(frame_pool) / o->fsize) o->nw = (int)(sizeof(frame_pool) / o->fsize);
+  for (i = 0; i < o->nw; i++) {
+    Worker* w = &workers[i];
+    w->w = (U32)o->w; w->h = (U32)o->h; w->level = 6;
+    w->interlaced = o->interlaced; w->csc = o->csc;
+    w->yuv = frame_pool + i * o->fsize;
+    if (!ev_init(&w->go, 0) || !ev_init(&w->idle, 1) || !thread_start(&w->th, worker_proc, w)) {
+      fprintf(stderr, "can't start worker threads\n");
+      return 7;
+    }
   }
   return 0;
 }
@@ -2936,18 +3071,14 @@ static void output_frame(Output* o, const Dec* d, const Pic* p) {
     return;
   }
   if (o->yuv_mode) {
-    const size_t sz = (size_t)o->w * o->h + 2 * (size_t)((o->w + 1) >> 1) * ((o->h + 1) >> 1);
-    U8* buf = (U8*)malloc(sz);
-    copy_planes(buf, d, p);
-    if (fwrite(buf, 1, sz, o->yuvf) != sz) { fprintf(stderr, "write error %s\n", o->pre); o->rc = 6; }
-    free(buf);
+    if (!write_planes(o->yuvf, d, p)) { fprintf(stderr, "write error %s\n", o->pre); o->rc = 6; }
   } else {
-    Worker* w = &o->wk[o->frames % o->nw];
-    ev_wait(w->idle);
+    Worker* w = &workers[o->frames % o->nw];
+    ev_wait(&w->idle);
     if (w->errors) o->rc = 6;
     copy_planes(w->yuv, d, p);
     sprintf(w->fn, "%s%0*u.png", o->pre, o->digits, o->frames);
-    ev_set(w->go);
+    ev_set(&w->go);
   }
   o->frames++;
 }
@@ -2955,29 +3086,26 @@ static void output_frame(Output* o, const Dec* d, const Pic* p) {
 static void output_close(Output* o) {
   int i;
   if (o->yuvf && fclose(o->yuvf) != 0) o->rc = 6;
-  for (i = 0; o->wk && i < o->nw; i++) {  // drain and stop workers
-    Worker* w = &o->wk[i];
-    ev_wait(w->idle);
+  for (i = 0; i < o->nw; i++) {  // drain and stop workers
+    Worker* w = &workers[i];
+    ev_wait(&w->idle);
     if (w->errors) o->rc = 6;
     w->quit = 1;
-    ev_set(w->go);
+    ev_set(&w->go);
     thread_join(w->th);
-    ev_free(w->go); ev_free(w->idle);
-    free(w->yuv); free(w->img); free(w->cand); free(w->zero); free(w->out); free(w->fn);
+    ev_free(&w->go); ev_free(&w->idle);
   }
-  free(o->wk);
 }
 
 int main(int argc, char** argv) {
+  static Dec dec;
+  Dec* d = &dec;
   const char *in, *pre;
   FILE* f;
-  U8 *data, *ubuf;
-  S64 fsize;
-  size_t nvop = 0, nb = 0, i, unit_start = 0, nunits = 0, cap = 1024, maxunit = 0, u;
-  size_t *ustart, *uend;
-  int repeat = 1, yuv_mode = 0, a = 1, rc = 0, delayed, out_ready = 0;
-  U32 nvop_repeats = 0, placeholders = 0, skipped = 0;
-  Dec* d;
+  Reader rd;
+  size_t pos, len;
+  U32 nvop = 0, nb = 0, u = 0, i, nvop_repeats = 0, placeholders = 0, skipped = 0;
+  int repeat = 1, yuv_mode = 0, a = 1, rc = 0, t, isb, delayed, out_ready = 0;
   Output out;
   const Pic* pending = 0;
 
@@ -2995,68 +3123,37 @@ int main(int argc, char** argv) {
     return 1;
   }
   in = argv[a]; pre = argv[a + 1];
-
+  if (strlen(pre) > FN_MAX - 16) { fprintf(stderr, "output prefix too long\n"); return 1; }
   if (!(f = fopen(in, "rb"))) { fprintf(stderr, "can't open %s\n", in); return 2; }
-#ifdef _WIN32
-  _fseeki64(f, 0, SEEK_END); fsize = _ftelli64(f); _fseeki64(f, 0, SEEK_SET);
-#else
-  fseeko(f, 0, SEEK_END); fsize = ftello(f); fseeko(f, 0, SEEK_SET);
-#endif
-  if (fsize <= 0) { fprintf(stderr, "empty input\n"); fclose(f); return 2; }
-  if ((U64)fsize > (size_t)-1 - 64 || !(data = (U8*)calloc((size_t)fsize + 64, 1))) {
-    fprintf(stderr, "out of memory (input is %lld bytes)\n", (long long)fsize);
-    return 7;
-  }
-  if (fread(data, 1, (size_t)fsize, f) != (size_t)fsize) { fprintf(stderr, "read error %s\n", in); return 2; }
-  fclose(f);
 
-  // split into units: everything up to and including one VOP (ends at the next start code)
-  ustart = (size_t*)malloc(cap * sizeof(size_t));
-  uend = (size_t*)malloc(cap * sizeof(size_t));
-  if (!ustart || !uend) { fprintf(stderr, "out of memory\n"); return 7; }
-  for (i = 0; i + 3 < (size_t)fsize; i++) {
-    if (data[i] == 0 && data[i + 1] == 0 && data[i + 2] == 1 && data[i + 3] == 0xB6) {
-      size_t j = i + 4;
-      while (j + 2 < (size_t)fsize && !(data[j] == 0 && data[j + 1] == 0 && data[j + 2] == 1)) j++;
-      if (j + 2 >= (size_t)fsize) j = (size_t)fsize;
-      if (nunits == cap) {
-        cap *= 2;
-        ustart = (size_t*)realloc(ustart, cap * sizeof(size_t));
-        uend = (size_t*)realloc(uend, cap * sizeof(size_t));
-        if (!ustart || !uend) { fprintf(stderr, "out of memory\n"); return 7; }
-      }
-      ustart[nunits] = unit_start;
-      uend[nunits] = j;
-      if (j - unit_start > maxunit) maxunit = j - unit_start;
-      nunits++;
-      nvop++;
-      if (i + 4 < (size_t)fsize && (data[i + 4] >> 6) == 2) nb++;
-      unit_start = j;
-      i = j - 1;
-    }
-  }
+  // pass 1: count the VOPs (file name digits) and B-VOPs (B-VOPs present: output in display order
+  // with one reference of delay)
+  rd_start(&rd, f);
+  while ((t = rd_unit(&rd, &pos, &len, &isb)) != 0)
+    if (t == 1) { nvop++; nb += isb; }
+  if (ferror(f)) { fprintf(stderr, "read error %s\n", in); return 2; }
+  if (!rd.bytes) { fprintf(stderr, "empty input\n"); return 2; }
   if (!nvop) { fprintf(stderr, "%s: no MPEG-4 VOPs found\n", in); return 3; }
-  delayed = nb > 0;  // B-VOPs present: output in display order with one reference of delay
-  ubuf = (U8*)malloc(maxunit + 64);
-  d = (Dec*)malloc(sizeof(Dec));
-  if (!ubuf || !d) { fprintf(stderr, "out of memory\n"); return 7; }
+  delayed = nb > 0;
   dec_init(d);
   memset(&out, 0, sizeof(out));
   out.yuv_mode = yuv_mode;
   out.pre = pre;
-  out.plen = strlen(pre);
   out.digits = 5;
   for (i = nvop; i >= 100000; i /= 10) out.digits++;
 
-  for (u = 0; u < nunits && !rc && !out.rc; u++) {
-    const size_t len = uend[u] - ustart[u];
+  // pass 2: decode
+  if (fseek(f, 0, SEEK_SET)) { fprintf(stderr, "can't seek in %s\n", in); return 2; }
+  rd_start(&rd, f);
+  while (!rc && !out.rc && (t = rd_unit(&rd, &pos, &len, &isb)) != 0) {
+    const U32 vi = u;  // index of this unit's VOP
     int r;
-    memcpy(ubuf, data + ustart[u], len);
-    memset(ubuf + len, 0, 64);
-    r = dec_decode_unit(d, ubuf, (int)len);
+    if (t == 1) u++;
+    if (rd.truncated) fprintf(stderr, "\nVOP %u: longer than %u MiB, truncated\n", vi, IBUF_SIZE >> 20);
+    r = dec_decode_unit(d, ibuf + pos, (int)len);
     if (r < 0) {
       if (d->unsupported) { fprintf(stderr, "\n%s: %s is not supported\n", in, d->unsupported); rc = 4; break; }
-      fprintf(stderr, "\nVOP %u: decode error\n", (unsigned)u);
+      fprintf(stderr, "\nVOP %u: decode error\n", vi);
       continue;
     }
     if (r == 1) continue;
@@ -3064,7 +3161,7 @@ int main(int argc, char** argv) {
       fprintf(stderr, "%s: %dx%d, vo_type %d, %s%s%s%s, %u VOPs (%u B)",
               in, d->width, d->height, d->vo_type, d->qpel ? "qpel" : "hpel",
               d->progressive ? "" : ", interlaced", d->mpeg_quant ? ", mpeg quant" : "",
-              d->sprite_usage == GMC_SPRITE ? ", gmc" : "", (unsigned)nvop, (unsigned)nb);
+              d->sprite_usage == GMC_SPRITE ? ", gmc" : "", nvop, nb);
       if (d->xvid_build >= 0) fprintf(stderr, ", XviD build %d", d->xvid_build);
       if (d->divx_version >= 0) fprintf(stderr, ", DivX %d build %d", d->divx_version, d->divx_build);
       if (d->lavc_build >= 0) fprintf(stderr, ", lavc build %d", d->lavc_build);
@@ -3089,17 +3186,17 @@ int main(int argc, char** argv) {
       if (pending) output_frame(&out, d, pending);
       pending = d->cur;
     }
-    if ((u & 31) == 31 || u + 1 == nunits) fprintf(stderr, "\rVOP %u/%u, %u frames", (unsigned)(u + 1), (unsigned)nunits, out.frames);
+    if (!(u & 31) || u == nvop) fprintf(stderr, "\rVOP %u/%u, %u frames", u, nvop, out.frames);
   }
+  if (!rc && ferror(f)) { fprintf(stderr, "\nread error %s\n", in); rc = 2; }
+  fclose(f);
   if (pending && out_ready) output_frame(&out, d, pending);
-  if (!rc) fprintf(stderr, "\rVOP %u/%u, %u frames\n", (unsigned)u, (unsigned)nunits, out.frames);
+  if (!rc) fprintf(stderr, "\rVOP %u/%u, %u frames\n", u, nvop, out.frames);
   if (out_ready) output_close(&out);
   if (placeholders) fprintf(stderr, "%u packed-bitstream placeholder VOPs dropped\n", placeholders);
   if (nvop_repeats) fprintf(stderr, "%u not-coded VOPs output as repeated frames\n", nvop_repeats);
   if (skipped) fprintf(stderr, "%u VOPs skipped (not coded or missing references)\n", skipped);
   if (d->errors) fprintf(stderr, "%d frames had decoding errors (concealed)\n", d->errors);
   if (!rc) rc = out.rc;
-  dec_free_buffers(d);
-  free(d); free(ubuf); free(data); free(ustart); free(uend);
   return rc;
 }
