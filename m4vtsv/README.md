@@ -8,7 +8,7 @@ what that decoder (and FFmpeg) parses.
 ## Usage
 
 ```
-m4vtsv c|d [options] input output
+m4vtsc c|d [options] input output
 ```
 
 - `c` converts `.m4v` to `.tsv`.

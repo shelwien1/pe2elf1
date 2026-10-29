@@ -1,6 +1,6 @@
 // m4vtsv - lossless converter between MPEG-4 Part 2 video elementary streams (.m4v: DivX 4/5/6,
 // XviD, libavcodec mpeg4, ...) and TSV text listing their syntax elements
-// Usage: m4vtsv c|d [options] input output
+// Usage: m4vtsc c|d [options] input output
 //   c    .m4v -> .tsv
 //   d    .tsv -> .m4v, restoring the original stream byte for byte
 //   -v   (c) afterwards convert the written TSV back in memory and compare it with the input
@@ -1786,7 +1786,7 @@ int main(int argc, char** argv) {
   }
   if (argc < 2 || a != argc - 2) {
     fprintf(stderr, "m4vtsv - lossless MPEG-4 Part 2 video (.m4v) <-> TSV converter\n"
-                    "Usage: m4vtsv c|d [options] input output\n"
+                    "Usage: m4vtsc c|d [options] input output\n"
                     "  c   .m4v -> .tsv\n"
                     "  d   .tsv -> .m4v\n"
                     "  -v  (c) convert the TSV back afterwards and compare it with the input\n"
