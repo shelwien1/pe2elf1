@@ -22,12 +22,16 @@
 // The models take H.264's CABAC as the template (see m4vtsv/h264-counterparts.md): binarised syntax
 // elements with adaptive probabilities chosen by neighbouring macroblocks and blocks.
 //   - Macroblock types: skip, intra, 4MV, B modes by the left, above, above-left, above-right and
-//     co-located (last anchor VOP) macroblocks and the run of skipped / direct macroblocks.
-//   - Motion vector differences: zero flag, magnitude in units of the VLC code (independent of
-//     f_code) in unary, the f_code residual bits, sign; contexts are the neighbours' magnitudes
-//     (as CABAC's mvd), the other component and the co-located macroblock.
-//   - Coded block pattern: per 8x8 block, by the left/above blocks, the motion vector size and the
-//     co-located macroblock.
+//     co-located (last anchor VOP) macroblocks, the run of skipped / direct macroblocks, and
+//     whether the predicted vector is zero.
+//   - Motion vector differences: zero flag, sign, magnitude in units of the VLC code (independent
+//     of f_code) in unary, the f_code residual bits; contexts are the neighbours' magnitudes (as
+//     CABAC's mvd), the other component, the co-located macroblock, the spread of the median's
+//     candidates and the difference that would repeat the co-located vector. For these, the
+//     vectors are reconstructed as the decoder does (median prediction, B-VOP predictors, direct
+//     mode scaling by the display times).
+//   - Coded block pattern: per 8x8 block, by the left/above blocks, the motion vector size, whether
+//     the motion is sub-pel, and the co-located macroblock.
 //   - Intra DC differences: size (by the previous and neighbouring blocks' sizes), lower bits, sign.
 //   - Coefficients as CABAC's residual: a significance map with "last" flags in scan order, then the
 //     levels in reverse order (|level| > 1, unary, then size and bits), signs, and the escape mode
@@ -344,6 +348,8 @@ typedef struct Ctx {
   int interlaced, sprite_usage, warp_points, quant_precision, time_inc_bits;
   int cplx_i, cplx_p, cplx_b;
   int divx_version, divx_build, xvid_build;
+  int time_res;              // vop_time_increment_resolution
+  int qpel;                  // quarter_sample
 } Ctx;
 
 // c: skip flags of the last anchor VOP and of the one being parsed (a B-VOP macroblock whose
@@ -380,6 +386,7 @@ static void parse_vol(Ctx* c, GB* gb) {
   gb_skip(gb, 1);
   time_res = (int)gb_get(gb, 16);
   if (!time_res) { c->unsupported = "a time resolution of 0"; return; }
+  c->time_res = time_res;
   c->time_inc_bits = ilog2(time_res - 1) + 1;
   if (c->time_inc_bits < 1) c->time_inc_bits = 1;
   gb_skip(gb, 1);
@@ -420,7 +427,7 @@ static void parse_vol(Ctx* c, GB* gb) {
       }
     }
   }
-  if (vo_ver_id != 1) gb_skip(gb, 1);   // quarter_sample
+  c->qpel = vo_ver_id != 1 ? gb_get1(gb) : 0;
   if (gb_left(gb) < 4) { c->unsupported = "a damaged VOL header"; return; }
   c->cplx_i = c->cplx_p = c->cplx_b = 0;
   if (!gb_get1(gb)) {                   // complexity estimation
@@ -1360,15 +1367,18 @@ typedef struct Model {  // only Prob members: all start at 1/2
   Prob hdcthr[8], hwarp[SEG_CTX], hfcode[8], hbcode[8];
   Prob tail_canon, tailb[8], tailn[EG_CTX], tailbyte[256];
   // macroblock layer
-  Prob st[2][EG_CTX], skip[2][6], skip2[2][5][6], skip3[2][11][3], pintra[6], pintra2[5][3];
+  Prob st[2][EG_CTX], skip[2][6], skip2[2][5][6], skip3[2][11][3], skip4[2][2][3];
+  Prob pintra[6], pintra2[5][3];
   Prob p4mv[6], p4mv2[5][3], mcsel[3], bskip[3], modb0[9], modb02[6][5], modb03[11][3], modb2[3];
   Prob btype[3][9], btype2[3][11], ac[2][3];
-  Prob cbp1[3][6][9], cbp2[3][6][7], cbp3[3][6][3][6];
+  Prob cbp1[3][6][9], cbp2[3][6][7], cbp3[3][6][3][6], cbp4[3][6][5];
   Prob dqz[3][2], dqv[3][4], bdqz[2], bdqs;
   Prob dt[2][3], fp[2][3], fs[4];
   // motion vector differences: [kind][component]
-  Prob mvz[NMVK][2][6], mvz2[NMVK][2][7], mvz3[NMVK][2][7];
-  Prob mvu[NMVK][2][12][6], mvu2[NMVK][2][12][7], mvu3[NMVK][2][12][7], mvr[NMVK][2][6], mvs[NMVK][2][3][3];
+  Prob mvz[NMVK][2][6], mvz2[NMVK][2][7], mvz3[NMVK][2][7], mvz4[NMVK][2][7], mvz5[NMVK][2][7];
+  Prob mvu[NMVK][2][12][6], mvu2[NMVK][2][12][7], mvu3[NMVK][2][12][7], mvu4[NMVK][2][12][5];
+  Prob mvu5[NMVK][2][12][7];
+  Prob mvr[NMVK][2][6][3], mvs[NMVK][2][3][3], mvs2[NMVK][2][3][7];
   // blocks
   Prob dcs[2][8][9], dcs2[2][9][9][9], dcs3[2][2][3][9], dcm[2][10][9], dcsign[2][2];
   Prob sig[NCLS][6][3][64], sig2[NCLS][8][64], sig3[NCLS][9][64], sig4[NCLS][9][3][64];
@@ -1387,6 +1397,8 @@ typedef struct Model {  // only Prob members: all start at 1/2
 typedef struct Last {  // previous values the models predict from
   int kind, rawprev;
   int type, tib, tinc, dinc[5], rnd, dcthr, tff, alt, quant[5], fcode[5], bcode;
+  S64 time_base, last_time_base, last_non_b;  // display times as FFmpeg computes them
+  int pp_time, pb_time;                       // anchor to anchor, anchor to B-VOP
 } Last;
 
 static Model model;
@@ -1397,7 +1409,7 @@ typedef struct Mixers {  // weight sets: a bias weight, then MAXIN input weights
   int sigb[NCLS][8][3][MAXIN + 1], lastb[NCLS][8][3][MAXIN + 1], lev1b[NCLS][5][3][MAXIN + 1];
   int levn[NCLS][LUN][5][MAXIN + 1], lexp[NCLS][12][MAXIN + 1], sign[NCLS][6][MAXIN + 1];
   int raw[8][MAXIN + 1], mbt[8][MAXIN + 1], cbp[3][6][MAXIN + 1], dcs[2][9][MAXIN + 1];
-  int mvz[NMVK][2][MAXIN + 1], mvu[NMVK][2][12][MAXIN + 1];
+  int mvz[NMVK][2][MAXIN + 1], mvu[NMVK][2][12][MAXIN + 1], mvs[NMVK][2][MAXIN + 1];
 } Mixers;
 static Mixers mixw;
 
@@ -1425,11 +1437,15 @@ enum { C_NONE, C_SKIP, C_INTER, C_4MV, C_INTRA, C_GMC, C_BDIR0, C_BDIR, C_BFWD, 
 // bsk: B-VOPs skip the macroblock at this position
 typedef struct MBCtx { U8 cls, cbp, nz[6], mva[2], mvs[2], ac, dt, fp, bsk; } MBCtx;
 static MBCtx mbcur[MAX_MBS], mbref[MAX_MBS];  // current VOP, last anchor VOP
+static S16 mvcur[MAX_MBS][4][2], mvref[MAX_MBS][4][2];  // motion vectors per 8x8 block, as decoded
 static int ref_mbs;                            // size of the VOP in mbref, 0 if none
 
 typedef struct VState {  // the coding side of the current VOP
   Vop v;
   int mb_w, prev_dq, dc_prev[2], run;  // run: macroblocks of the same kind (skip, direct) before this one
+  int vp_start;          // first macroblock of the video packet
+  int lmv[2][2][2];      // B-VOP vector predictors: [forward, backward][field][x, y]
+  int trb, trd;          // B-VOP: time from the past anchor, between the anchors
   const U8* scan;  // scan order (as far as known: intra blocks with AC prediction use other ones)
 } VState;
 
@@ -1529,6 +1545,22 @@ static void code_vop_hdr(Coder* c, const Ctx* cx, VopHdr* h) {
   last.tib = h->tib;
   last.tinc = h->tinc;
   last.dinc[h->type] = d;
+  {  // display times (FFmpeg's decode_vop_header) for the B-VOP vector contexts
+    const S64 res = cx->time_res > 0 ? cx->time_res : 1;
+    S64 t;
+    if (h->type != PT_B) {
+      last.last_time_base = last.time_base;
+      last.time_base += h->mtb;
+      t = last.time_base * res + h->tinc;
+      t -= last.last_non_b;
+      last.pp_time = (int)(t < -(1 << 30) ? -(1 << 30) : t > 1 << 30 ? 1 << 30 : t);
+      last.last_non_b = last.time_base * res + h->tinc;
+    } else {
+      t = (last.last_time_base + h->mtb) * res + h->tinc;
+      t = last.pp_time - (last.last_non_b - t);
+      last.pb_time = (int)(t < -(1 << 30) ? -(1 << 30) : t > 1 << 30 ? 1 << 30 : t);
+    }
+  }
   h->coded = cbit(c, &M->coded[h->type], h->coded);
   if (!c->enc) {
     h->rnd = h->dcthr = h->tff = h->alt = h->quant = h->fcode = h->bcode = NA;
@@ -1774,9 +1806,11 @@ static void code_block(Coder* c, VState* s, Blk* b, int n, int intra, int dcvlc,
 }
 
 // coded block pattern, block 0 in bit 5. Contexts: the left and above 8x8 blocks (in this
-// macroblock or a neighbour), the size of the motion vector differences (mvc, 6 for none), the
-// co-located macroblock of the last anchor VOP, the blocks coded so far.
-static int code_cbp(Coder* c, int cls3, const MBCtx* L, const MBCtx* A, const MBCtx* R, int mvc, int cbp) {
+// macroblock or a neighbour), the size of the motion vector differences (mvc, 6 for none), which
+// components of the vector are sub-pel (frac, 4 for none), the co-located macroblock of the last
+// anchor VOP, the blocks coded so far.
+static int code_cbp(Coder* c, int cls3, const MBCtx* L, const MBCtx* A, const MBCtx* R, int mvc, int frac,
+                    int cbp) {
   Model* M = &model;
   Prob* in[MAXIN];
   int b, v = 0, n = 0;
@@ -1792,7 +1826,8 @@ static int code_cbp(Coder* c, int cls3, const MBCtx* L, const MBCtx* A, const MB
     in[0] = &M->cbp1[cls3][b][l * 3 + u];
     in[1] = &M->cbp2[cls3][b][mvc];
     in[2] = &M->cbp3[cls3][b][R ? (R->cbp >> (5 - b)) & 1 : 2][n];
-    bit = mbit(c, in, 3, mixw.cbp[cls3][b], (cbp >> (5 - b)) & 1);
+    in[3] = &M->cbp4[cls3][b][frac];
+    bit = mbit(c, in, 4, mixw.cbp[cls3][b], (cbp >> (5 - b)) & 1);
     v |= bit << (5 - b);
     n += bit;
   }
@@ -1816,50 +1851,112 @@ static int nz_ctx(const MBCtx* me, const MBCtx* L, const MBCtx* A, int b) {
 
 static int mv_bucket(int q) { return q < 3 ? q : q < 5 ? 3 : q < 9 ? 4 : 5; }
 
-// A motion vector difference as coded, like CABAC's mvd: a zero flag, the magnitude in units of
-// the VLC code (so f_code doesn't change its statistics) in unary, the f_code residual bits, the
-// sign. Contexts: the neighbours' magnitudes, the other component (oth: of this vector for y, of
-// the previous one for x, 6 for none), the co-located macroblock of the last anchor VOP.
+// A motion vector difference as coded, like CABAC's mvd: a zero flag, the sign, the magnitude in
+// units of the VLC code (so f_code doesn't change its statistics) in unary, the f_code residual
+// bits. Contexts: the neighbours' magnitudes, the other component (oth: of this vector for y, of
+// the previous one for x, 6 for none), the co-located macroblock of the last anchor VOP, and d:
+// the difference that would give this vector the co-located one's value (dok 0: none).
 static int code_mvd(Coder* c, int kind, int comp, int fcode, const MBCtx* L, const MBCtx* A, const MBCtx* R,
-                    int oth, int v, int* q) {
+                    int oth, int dok, int d, int sp, int v, int* q) {
   Model* M = &model;
   const int shift = fcode - 1, a = v < 0 ? -v : v;
   const int ns = mv_bucket((L ? L->mva[comp] : 0) + (A ? A->mva[comp] : 0));
   const int rs = R ? mv_bucket(R->mva[comp]) : 6;
+  const int ad = (d < 0 ? -d : d) - 1, dq = d ? (ad >> shift) + 1 : 0, dz = dok ? mv_bucket(dq) : 6;
+  const int ds = !dok || !d ? 0 : d > 0 ? 1 : 2;
   Prob* in[MAXIN];
-  int k, x;
+  int k, x, neg, r, i;
   in[0] = &M->mvz[kind][comp][ns];
   in[1] = &M->mvz2[kind][comp][oth];
   in[2] = &M->mvz3[kind][comp][rs];
-  if (!mbit(c, in, 3, mixw.mvz[kind][comp], a != 0)) { *q = 0; return 0; }
+  in[3] = &M->mvz4[kind][comp][dz];
+  in[4] = &M->mvz5[kind][comp][sp];
+  if (!mbit(c, in, 5, mixw.mvz[kind][comp], a != 0)) { *q = 0; return 0; }
+  in[0] = &M->mvs[kind][comp][L ? L->mvs[comp] : 0][A ? A->mvs[comp] : 0];
+  in[1] = &M->mvs2[kind][comp][ds][dz];
+  neg = mbit(c, in, 2, mixw.mvs[kind][comp], v < 0);
   x = a ? ((a - 1) >> shift) + 1 : 0;
   for (k = 1; k < 32; k++) {
     const int u = k < 12 ? k - 1 : 11;
     in[0] = &M->mvu[kind][comp][u][ns];
     in[1] = &M->mvu2[kind][comp][u][oth];
     in[2] = &M->mvu3[kind][comp][u][rs];
-    if (!mbit(c, in, 3, mixw.mvu[kind][comp][u], x > k)) break;
+    in[3] = &M->mvu4[kind][comp][u][!ds ? 0 : ds != 1 + neg ? 1 : k < dq ? 2 : k == dq ? 3 : 4];
+    in[4] = &M->mvu5[kind][comp][u][sp];
+    if (!mbit(c, in, 5, mixw.mvu[kind][comp][u], x > k)) break;
   }
   *q = k;
-  x = (((k - 1) << shift) | code_bitsi(c, M->mvr[kind][comp], shift, a ? (a - 1) & ((1 << shift) - 1) : 0)) + 1;
-  return cbit(c, &M->mvs[kind][comp][L ? L->mvs[comp] : 0][A ? A->mvs[comp] : 0], v < 0) ? -x : x;
+  for (i = shift - 1, r = 0; i >= 0; i--) {  // residual bits, predicted by d's while they agree so far
+    const int same = ds == 1 + neg && k == dq && ad >> (i + 1) == ((k - 1) << (shift - i - 1) | r);
+    r |= cbit(c, &M->mvr[kind][comp][i][same ? 1 + ((ad >> i) & 1) : 0], ((a - 1) >> i) & 1) << i;
+  }
+  x = ((k - 1) << shift | r) + 1;
+  return neg ? -x : x;
 }
 
-static void code_mvs(Coder* c, MB* m, int* mvi, int n, int kind, int fcode, const MBCtx* L, const MBCtx* A,
-                     const MBCtx* R, MBCtx* me, int* sumq) {
-  int i, q, qx = 6;
-  for (i = 0; i < n; i++) {
-    const int first = *mvi == 0;
-    int v = code_mvd(c, kind, 0, fcode, L, A, R, qx, m->mv[*mvi], &q);
-    m->mv[(*mvi)++] = v;
-    *sumq += q;
-    qx = mv_bucket(q);
-    if (first) { me->mva[0] = (U8)q; me->mvs[0] = (U8)(v > 0 ? 1 : v < 0 ? 2 : 0); }
-    v = code_mvd(c, kind, 1, fcode, L, A, R, qx, m->mv[*mvi], &q);
-    m->mv[(*mvi)++] = v;
-    *sumq += q;
-    if (first) { me->mva[1] = (U8)q; me->mvs[1] = (U8)(v > 0 ? 1 : v < 0 ? 2 : 0); }
+static int mv_wrap(int v, int fcode) { return sign_extend(v, 5 + fcode); }  // as the decoder adds them
+
+// The decoder's prediction of the vector of block b (FFmpeg's h263_pred_motion): the median of the
+// left, above and above-right blocks. A candidate outside the picture or before the start of the
+// video packet is invalid: it counts as 0, and if only one is valid, that one is the prediction.
+static void pred_mv(const VState* s, int idx, int b, int* px, int* py, int* sx, int* sy) {
+  static const S8 nb[4][3][2] = {  // [block][left, above, above-right]: macroblock (-1 left, -2 above,
+    { { -1, 1 }, { -2, 2 }, { -3, 2 } },  // -3 above right, 0 this one), block
+    { { 0, 0 }, { -2, 3 }, { -3, 2 } },
+    { { -1, 3 }, { 0, 0 }, { 0, 1 } },
+    { { 0, 2 }, { 0, 1 }, { 0, 0 } } };
+  const int w = s->mb_w, x = idx % w, y = idx / w;
+  int cx[3], cy[3], nv = 0, i;
+  for (i = 0; i < 3; i++) {
+    const int k = nb[b][i][0];
+    int j = idx, ok = 1;
+    if (k == -1) { j = idx - 1; ok = x > 0; }
+    else if (k == -2) { j = idx - w; ok = y > 0; }
+    else if (k == -3) { j = idx - w + 1; ok = y > 0 && x + 1 < w; }
+    if (ok && k && j < s->vp_start) ok = 0;
+    cx[i] = ok ? mvcur[j][nb[b][i][1]][0] : 0;
+    cy[i] = ok ? mvcur[j][nb[b][i][1]][1] : 0;
+    nv += ok;
   }
+  if (nv == 1) {
+    *px = cx[0] + cx[1] + cx[2];
+    *py = cy[0] + cy[1] + cy[2];
+    *sx = *sy = -1;
+  } else {
+    *sx = (cx[0] > cx[1] ? (cx[0] > cx[2] ? cx[0] : cx[2]) : (cx[1] > cx[2] ? cx[1] : cx[2])) -
+          (cx[0] < cx[1] ? (cx[0] < cx[2] ? cx[0] : cx[2]) : (cx[1] < cx[2] ? cx[1] : cx[2]));
+    *sy = (cy[0] > cy[1] ? (cy[0] > cy[2] ? cy[0] : cy[2]) : (cy[1] > cy[2] ? cy[1] : cy[2])) -
+          (cy[0] < cy[1] ? (cy[0] < cy[2] ? cy[0] : cy[2]) : (cy[1] < cy[2] ? cy[1] : cy[2]));
+    *px = cx[0] > cx[1] ? (cx[1] > cx[2] ? cx[1] : cx[0] > cx[2] ? cx[2] : cx[0])
+                        : (cx[0] > cx[2] ? cx[0] : cx[1] > cx[2] ? cx[2] : cx[1]);
+    *py = cy[0] > cy[1] ? (cy[1] > cy[2] ? cy[1] : cy[0] > cy[2] ? cy[2] : cy[0])
+                        : (cy[0] > cy[2] ? cy[0] : cy[1] > cy[2] ? cy[2] : cy[1]);
+  }
+}
+
+static int spread_bucket(int s, int fcode) {  // spread of the prediction candidates, in VLC code units
+  return s < 0 ? 6 : mv_bucket(s ? ((s - 1) >> (fcode - 1)) + 1 : 0);
+}
+
+// one vector (x, y) of kind kind, predicted by (px, py) from candidates with spreads (sx, sy) (-1:
+// none), with the co-located vector (tx, ty) if tok
+static void code_mv(Coder* c, MB* m, int* mvi, int kind, int fcode, const MBCtx* L, const MBCtx* A,
+                    const MBCtx* R, MBCtx* me, int* sumq, int px, int py, int sx, int sy, int tok, int tx, int ty,
+                    int* mx, int* my) {
+  const int first = *mvi == 0;
+  int v, q;
+  v = code_mvd(c, kind, 0, fcode, L, A, R, first ? 6 : mv_bucket(me->mva[0]), tok, mv_wrap(tx - px, fcode),
+               spread_bucket(sx, fcode), m->mv[*mvi], &q);
+  m->mv[(*mvi)++] = v;
+  *sumq += q;
+  *mx = mv_wrap(px + v, fcode);
+  if (first) { me->mva[0] = (U8)q; me->mvs[0] = (U8)(v > 0 ? 1 : v < 0 ? 2 : 0); }
+  v = code_mvd(c, kind, 1, fcode, L, A, R, mv_bucket(q), tok, mv_wrap(ty - py, fcode), spread_bucket(sy, fcode),
+               m->mv[*mvi], &q);
+  m->mv[(*mvi)++] = v;
+  *sumq += q;
+  *my = mv_wrap(py + v, fcode);
+  if (first) { me->mva[1] = (U8)q; me->mvs[1] = (U8)(v > 0 ? 1 : v < 0 ? 2 : 0); }
 }
 
 // one macroblock record; in decoding mode m is filled in
@@ -1877,7 +1974,7 @@ static void code_mb(Coder* c, const Ctx* cx, VState* s, MB* m, int idx) {
   MBCtx* me = &mbcur[idx];
   Prob* in[MAXIN];
   const int dcvlc = v->qscale < v->dcthr;
-  int intra = 0, cbp, cls3, i, k, mvi = 0, sumq = 0;
+  int intra = 0, cbp, cls3, i, k, mvi = 0, sumq = 0, px = 0, py = 0, sx = -1, sy = -1, frac = 4;
   if (!c->enc) {
     m->st = m->sk = 0;
     m->mb = m->t = m->mc = m->ac = m->dq = m->dt = m->fp = NA;
@@ -1885,6 +1982,8 @@ static void code_mb(Coder* c, const Ctx* cx, VState* s, MB* m, int idx) {
   }
   memset(me, 0, sizeof(*me));
   c->cat = CAT_MB;
+  if (v->type == PT_B && mb_x == 0) memset(s->lmv, 0, sizeof(s->lmv));
+  if (v->type != PT_I && v->type != PT_B) pred_mv(s, idx, 0, &px, &py, &sx, &sy);
   if (v->type == PT_I) {
     m->st = code_eg(c, M->st[0], 0, m->st);
     m->t = 2;
@@ -1897,7 +1996,8 @@ static void code_mb(Coder* c, const Ctx* cx, VState* s, MB* m, int idx) {
     in[1] = &M->skip2[v->gmc][(L && L->cls == C_SKIP) + (A && A->cls == C_SKIP) + (AL && AL->cls == C_SKIP) +
                               (AR && AR->cls == C_SKIP)][rb];
     in[2] = &M->skip3[v->gmc][R ? R->cls : 0][(L && L->cls == C_SKIP) + (A && A->cls == C_SKIP)];
-    if ((m->sk = mbit(c, in, 3, mixw.mbt[0], m->sk))) {
+    in[3] = &M->skip4[v->gmc][px || py][!R ? 2 : mvref[idx][0][0] || mvref[idx][0][1]];
+    if ((m->sk = mbit(c, in, 4, mixw.mbt[0], m->sk))) {
       me->cls = C_SKIP;
       me->bsk = !v->gmc;
       rowb_clear(mb_x);
@@ -1966,18 +2066,55 @@ static void code_mb(Coder* c, const Ctx* cx, VState* s, MB* m, int idx) {
   }
   c->cat = CAT_MV;
   if (!intra) {
-    if (v->type != PT_B) {
-      if (m->t == 1) code_mvs(c, m, &mvi, 4, 5, v->fcode, L, A, R, me, &sumq);
-      else if (m->mc != 1) code_mvs(c, m, &mvi, m->fp == 1 ? 2 : 1, m->fp == 1, v->fcode, L, A, R, me, &sumq);
-    } else if (m->t) {
-      if (fwd_dir(m->t)) code_mvs(c, m, &mvi, m->fp == 1 ? 2 : 1, 2, v->fcode, L, A, R, me, &sumq);
-      if (bwd_dir(m->t)) code_mvs(c, m, &mvi, m->fp == 1 ? 2 : 1, 3, v->bcode, L, A, R, me, &sumq);
+    const int tok = R != 0, fm = cx->qpel ? 3 : 1;
+    int mx = 0, my = 0, mx2, my2;
+    if (v->type != PT_B) {  // the vectors as the decoder gets them; their prediction
+      if (m->t == 1)
+        for (i = 0; i < 4; i++) {
+          if (i) pred_mv(s, idx, i, &px, &py, &sx, &sy);
+          code_mv(c, m, &mvi, 5, v->fcode, L, A, R, me, &sumq, px, py, sx, sy, tok, mvref[idx][i][0],
+                  mvref[idx][i][1], &mx, &my);
+          mvcur[idx][i][0] = (S16)mx;
+          mvcur[idx][i][1] = (S16)my;
+        }
+      else {
+        if (m->mc == 1) mx = px, my = py;  // GMC: the prediction stands in for the warped vector
+        else if (m->fp == 1) {
+          code_mv(c, m, &mvi, 1, v->fcode, L, A, R, me, &sumq, px, py / 2, sx, sy, tok, mvref[idx][0][0],
+                  mvref[idx][0][1] / 2, &mx, &my);
+          code_mv(c, m, &mvi, 1, v->fcode, L, A, R, me, &sumq, px, py / 2, sx, sy, tok, mvref[idx][0][0],
+                  mvref[idx][0][1] / 2, &mx2, &my2);
+          mx = ((mx + mx2) >> 1) | ((mx + mx2) & 1);
+          my = my + my2;
+        } else
+          code_mv(c, m, &mvi, 0, v->fcode, L, A, R, me, &sumq, px, py, sx, sy, tok, mvref[idx][0][0],
+                  mvref[idx][0][1], &mx, &my);
+        for (i = 0; i < 4; i++) { mvcur[idx][i][0] = (S16)mx; mvcur[idx][i][1] = (S16)my; }
+      }
+    } else if (m->t) {  // B-VOP: predicted by the last vector in the row; the co-located one scaled as in
+                        // direct mode
+      const int n = m->fp == 1 ? 2 : 1, cx0 = R ? mvref[idx][0][0] : 0, cy0 = R ? mvref[idx][0][1] : 0;
+      const int tfx = (int)((S64)cx0 * s->trb / s->trd), tfy = (int)((S64)cy0 * s->trb / s->trd);
+      int dir;
+      for (dir = 0; dir < 2; dir++) {
+        const int code = dir ? v->bcode : v->fcode, tx = dir ? tfx - cx0 : tfx, ty = dir ? tfy - cy0 : tfy;
+        if (!(dir ? bwd_dir(m->t) : fwd_dir(m->t))) continue;
+        for (i = 0; i < n; i++) {
+          const int ppx = s->lmv[dir][i][0], ppy = n == 2 ? s->lmv[dir][i][1] / 2 : s->lmv[dir][i][1];
+          code_mv(c, m, &mvi, 2 + dir, code, L, A, R, me, &sumq, ppx, ppy, -1, -1, tok, tx, n == 2 ? ty / 2 : ty,
+                  &mx, &my);
+          if (n == 1) s->lmv[dir][0][0] = s->lmv[dir][1][0] = mx, s->lmv[dir][0][1] = s->lmv[dir][1][1] = my;
+          else s->lmv[dir][i][0] = mx, s->lmv[dir][i][1] = my * 2;
+        }
+      }
     } else
-      code_mvs(c, m, &mvi, 1, 4, 1, L, A, R, me, &sumq);
+      code_mv(c, m, &mvi, 4, 1, L, A, R, me, &sumq, 0, 0, -1, -1, 0, 0, 0, &mx, &my);
+    if (v->type != PT_B && m->mc != 1) mx = mvcur[idx][0][0], my = mvcur[idx][0][1];
+    if ((v->type != PT_B && m->mc != 1) || (v->type == PT_B && m->t)) frac = ((mx & fm) != 0) + 2 * ((my & fm) != 0);
   }
   c->cat = CAT_CBP;
   cbp = v->type == PT_B && m->mb == 1 ? 0
-      : code_cbp(c, cls3, L, A, R, mvi ? mv_bucket(sumq) : 6, c->enc ? cbp_of(m) : 0);
+      : code_cbp(c, cls3, L, A, R, mvi ? mv_bucket(sumq) : 6, frac, c->enc ? cbp_of(m) : 0);
   c->cat = CAT_MB;
   if (v->type != PT_B) {
     k = cbit(c, &M->dqz[cls3][s->prev_dq], m->dq != 0);
@@ -2064,7 +2201,11 @@ static int vop_walk(Ctx* cx, int mode, GB* gb, PB* pb, Coder* c) {
     if (mode != W_DECODE && anchor) memset(skip_cur, 0, cx->mb_num + 1);
     if (mode != W_VERIFY) {
       memset(mbcur, 0, cx->mb_num * sizeof(*mbcur));
+      memset(mvcur, 0, cx->mb_num * sizeof(*mvcur));
       if (ref_mbs != cx->mb_num) ref_mbs = 0;
+      s.trb = last.pb_time;
+      s.trd = last.pp_time;
+      if (s.trb <= 0 || s.trb >= s.trd) s.trb = 1, s.trd = 2;
     }
     for (;;) {
       const int idx = mb_y * cx->mb_w + mb_x;
@@ -2106,7 +2247,11 @@ static int vop_walk(Ctx* cx, int mode, GB* gb, PB* pb, Coder* c) {
           if (parse_vp(cx, gb, &vp, &k) < 0) { ret = -1; break; }
           vp.qscale = clipi(vp.qscale, 1, 31);
         }
-        if (mode != W_VERIFY) code_vp(c, cx, &s, &k, idx + 1);
+        if (mode != W_VERIFY) {
+          code_vp(c, cx, &s, &k, idx + 1);
+          s.vp_start = k.mbnum;
+          memset(s.lmv, 0, sizeof(s.lmv));
+        }
         if ((mode != W_ENCODE && put_vp(cx, pb, &vw, &k) < 0) || k.mbnum < 1 || k.mbnum >= cx->mb_num) {
           ret = -1;
           break;
@@ -2119,6 +2264,7 @@ static int vop_walk(Ctx* cx, int mode, GB* gb, PB* pb, Coder* c) {
     if (ret < 0) return -1;
     if (mode != W_VERIFY && anchor) {
       memcpy(mbref, mbcur, cx->mb_num * sizeof(*mbcur));
+      memcpy(mvref, mvcur, cx->mb_num * sizeof(*mvcur));
       ref_mbs = cx->mb_num;
     }
   }

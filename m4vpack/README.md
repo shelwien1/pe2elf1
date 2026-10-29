@@ -18,7 +18,7 @@ m4vpack c|d [options] input output
 - `-q` turns off the statistics.
 
 ```
-aq_cm.m4v: 3875193 -> 3035099 bytes (78.32%); 1258 VOPs (I 18, P 666, B 574, S 0), 1258 packed
+aq_cm.m4v: 3875193 -> 3026965 bytes (78.11%); 1258 VOPs (I 18, P 666, B 574, S 0), 1258 packed
 verify: OK
 ```
 
@@ -63,11 +63,16 @@ an APM (secondary estimation).
 
 | Syntax | MPEG-4 Part 2 coding | m4vpack |
 |---|---|---|
-| macroblock type | not_coded, MCBPC, modb, mb_type VLCs | binary decisions by the left, above, above-left, above-right and co-located macroblocks (last anchor VOP), and the run of skipped or direct macroblocks before |
-| coded block pattern | in MCBPC and CBPY, or 6 bits in B-VOPs | per 8x8 block, by the left and above blocks, the size of the motion vector differences, the co-located macroblock |
-| motion vector difference | VLC of the f_code-scaled magnitude, sign, residual bits | zero flag by the neighbours' magnitudes (as CABAC's mvd), magnitude in VLC code units in unary, residual bits, sign; also by the other component and the co-located macroblock |
+| macroblock type | not_coded, MCBPC, modb, mb_type VLCs | binary decisions by the left, above, above-left, above-right and co-located macroblocks (last anchor VOP), the run of skipped or direct macroblocks before, and whether the predicted vector is zero |
+| coded block pattern | in MCBPC and CBPY, or 6 bits in B-VOPs | per 8x8 block, by the left and above blocks, the size of the motion vector differences, whether the motion is sub-pel, the co-located macroblock |
+| motion vector difference | VLC of the f_code-scaled magnitude, sign, residual bits | zero flag by the neighbours' magnitudes (as CABAC's mvd), sign, magnitude in VLC code units in unary, residual bits; also by the other component, the co-located macroblock, the spread of the prediction candidates, and the difference that would repeat the co-located vector |
 | intra DC difference | size VLC, bits | size by the previous and neighbouring blocks' sizes and whether the block has AC coefficients, then bits and sign |
 | coefficients | 3-D VLC (last, run, level), escapes | CABAC's residual coding: significance map with "last" flags in scan order, levels in reverse order (greater than 1, unary, then size and bits), signs, the escape mode where it isn't the usual one |
+
+For the vector contexts, m4vpack reconstructs the motion vectors as a decoder does: the median
+prediction of P-VOPs with its video packet rules, field and 4MV vectors, and the B-VOP predictors
+(a check against m4vdec's decoded vectors found no differences). In B-VOPs the co-located vector is
+scaled by the display times, as in direct mode.
 
 The coefficient contexts are the scan position and block class (inter, B, intra, intra with AC
 prediction; luma or chroma), the neighbouring blocks' coefficient counts (CAVLC's nC), the
@@ -107,40 +112,42 @@ three with packed B-frames) and two DivX streams. The others were made with FFmp
 
 | Stream | Size | xz -9e | m4vpack |
 |---|---:|---:|---:|
-| aq_cm.m4v | 3875193 | 97.2% | 78.3% |
-| aria_cm.m4v | 5097686 | 98.9% | 81.4% |
-| ispure03.m4v | 5864104 | 95.8% | 75.3% |
-| sdova_ed.m4v | 4717732 | 89.6% | 67.4% |
-| susi_small1_divx.m4v | 90887 | 100.1% | 83.8% |
-| susi_small2_divx.m4v | 1556817 | 100.0% | 85.7% |
-| xvid.m4v | 257813 | 97.7% | 79.2% |
-| lavc_ilace.m4v (interlaced) | 1015896 | 90.9% | 73.1% |
-| xvid_gmc.m4v (GMC) | 833291 | 99.8% | 80.5% |
-| xvid_qpel_4mv.m4v (quarter-pel, 4MV) | 383624 | 95.5% | 78.0% |
+| aq_cm.m4v | 3875193 | 97.2% | 78.1% |
+| aria_cm.m4v | 5097686 | 98.9% | 80.5% |
+| ispure03.m4v | 5864104 | 95.8% | 74.5% |
+| sdova_ed.m4v | 4717732 | 89.6% | 66.7% |
+| susi_small1_divx.m4v | 90887 | 100.1% | 83.7% |
+| susi_small2_divx.m4v | 1556817 | 100.0% | 85.6% |
+| xvid.m4v | 257813 | 97.7% | 79.0% |
+| lavc_ilace.m4v (interlaced) | 1015896 | 90.9% | 73.0% |
+| xvid_gmc.m4v (GMC) | 833291 | 99.8% | 80.3% |
+| xvid_qpel_4mv.m4v (quarter-pel, 4MV) | 383624 | 95.5% | 77.9% |
 
 Where the bits go in `aq_cm.m4v` (`-s`; the packed sizes are the model's estimates):
 
 ```
   bytes                                  input     packed
   headers, raw chunks                    11752       2616  22.26%
-  macroblock types, cbp, dquant         357692     150388  42.04%
-    types, flags, dquant                            66303
-    coded block patterns                            84086
-  motion vectors                        191806     160849  83.86%
+    raw chunks                                        315
+    VOP and video packet headers, tails              2301
+  macroblock types, cbp, dquant         357692     150345  42.03%
+    types, flags, dquant                            66279
+    coded block patterns                            84066
+  motion vectors                        191806     152749  79.64%
   intra DC                              256787     210596  82.01%
   coefficients                         3057155    2510868  82.13%
     positions                                      964495
     levels                                        1062589
     signs                                          482075
     escape modes                                     1710
-  total                                3875193    3035317  78.33%
+  total                                3875193    3027174  78.12%
 ```
 
 Coefficients make up most of a stream (79% of this one). Their signs are 11-18% of the output on
 the samples, and the syntax alone can't predict them. Macroblock headers shrink the most: to 42%
 here, and to 48% in `sdova_ed.m4v`, where they are a third of the input.
 
-`c` and `d` each run at about 1.3-1.5 MB of stream per second (one core), and use about 11 MiB.
+`c` and `d` each run at about 1.2-1.3 MB of stream per second (one core), and use about 11 MiB.
 
 ## Build
 
