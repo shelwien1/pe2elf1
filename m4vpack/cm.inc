@@ -39,9 +39,54 @@ static INLINE int cm_squash(int x) {
   return cm_sq[x + CM_STMAX];
 }
 static INLINE int cm_stretch(int p) { return cm_st[p]; }
-#include "cm_cnt.inc"  // cm_cnt: an adaptive counter
-#include "cm_cnt2.inc"  // cm_cnt2: with a fast probability
-#include "cm_cnt2s.inc"  // cm_cnt2s: kept stretched
+// an adaptive counter: its rate 1/count, down to its limit's
+struct cm_cnt {
+  u16 p, t;
+  INLINE int P() const {
+    int v = t ? p >> (CM_CBITS - CM_PBITS) : CM_PHALF;
+    return v < 1 ? 1 : v > CM_PONE - 1 ? CM_PONE - 1 : v;
+  }
+  INLINE void upd(int bit, int lim, int mw) {
+    int target = bit ? mw : CM_CONE - 1 - mw;
+    int cur = t ? (int)p : CM_CONE / 2;
+    t = (u16)(t + (t < lim));
+    p = (u16)(cur + (((target - cur) * cm_rec[t]) >> CM_CBITS));
+  }
+};
+// a counter of a family's main tables: the adaptive-rate probability of
+// cm_cnt and one more with a fixed fast rate (1/8)
+struct cm_cnt2 {
+  u16 p, t, q;
+  INLINE int P() const {
+    int v = t ? p >> (CM_CBITS - CM_PBITS) : CM_PHALF;
+    return v < 1 ? 1 : v > CM_PONE - 1 ? CM_PONE - 1 : v;
+  }
+  INLINE int Q() const {
+    int v = t ? q >> (CM_CBITS - CM_PBITS) : CM_PHALF;
+    return v < 1 ? 1 : v > CM_PONE - 1 ? CM_PONE - 1 : v;
+  }
+  INLINE void upd(int bit, int lim, int mw) {
+    int target = bit ? mw : CM_CONE - 1 - mw;
+    int cur = t ? (int)p : CM_CONE / 2, cq = t ? (int)q : CM_CONE / 2;
+    t = (u16)(t + (t < lim));
+    p = (u16)(cur + (((target - cur) * cm_rec[t]) >> CM_CBITS));
+    q = (u16)(cq + ((target - cq) >> CM_FAST_SHIFT));
+  }
+};
+// cm_cnt2 with its two probabilities kept stretched, written at each update:
+// a decision reads them with the counter instead of looking them up on its
+// way to the mixer (the counters of the levels whose families have four)
+struct cm_cnt2s {
+  cm_cnt2 c;
+  i16 sp, sq;  // cm_stretch(P()), cm_stretch(Q())
+  INLINE int P() const { return c.P(); }
+  INLINE int Q() const { return c.Q(); }
+  INLINE void upd(int bit, int lim, int mw) {
+    c.upd(bit, lim, mw);
+    sp = cm_st[c.P()];
+    sq = cm_st[c.Q()];
+  }
+};
 #include "cm_apm.inc"  // cm_apm: an interpolated APM
 
 #if defined(__clang__)

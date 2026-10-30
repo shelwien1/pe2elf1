@@ -64,9 +64,9 @@
 // studio profile; VOPs that don't parse (damaged data); VOPs longer than 64 MiB or with more than
 // 1 MiB after the last macroblock.
 //
-// The source: this file includes the parts in order (below); each class, and each function over
-// 100 lines, is in a file of its own named after it (m4vcoro.inc, code_block.inc, ...), which the
-// file of its part includes where it belongs.
+// The source: this file includes the parts in order (below); each class (but cm.inc's small
+// counters), and each function over 100 lines, is in a file of its own named after it
+// (m4vcoro.inc, code_block.inc, ...), which the file of its part includes where it belongs.
 //
 // Build (Lib3/, MTwrap_v3/ and MOD/ next to this file): ./mk.sh release, or
 //   g++ -O3 -march=x86-64-v3 -ffp-contract=off -std=c++11 -ILib3 -pthread -o m4vpack m4vpack.cpp
