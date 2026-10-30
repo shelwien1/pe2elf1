@@ -111,9 +111,9 @@ sees what the hint's own binarisation decides there.
 
 `famvars.inc` lists the variables the model gives each family. A level's context indices over those
 variables, and every parameter of its families (adaptation rates, mixer learning rates, table sizes,
-how each variable is bucketed), are declared in `IDX/l<L>/<family>.idx` (the format: `IDX/IDX-FORMAT.md`,
-from h264p). `IDX/idx2inc.pl` turns them into `MOD/l<L>/`, which the build includes; `levels.inc`
-and `lv<L>.inc` put each level's families together.
+how each variable is bucketed), are declared in `IDX/l<L>/<family>.idx` (the format:
+`IDX/IDX-FORMAT.md`, from h264p). `IDX/idx2inc.pl` turns them into `MOD/l<L>/`, which the build
+includes; `levels.inc` and `lv<L>.inc` put each level's families together.
 
 The model gives the variables as they are: counts, runs and magnitudes capped where few values lie
 above the cap, values of a wide range on half octaves. So every split of a variable is a threshold
@@ -133,7 +133,10 @@ The variables, in short (`famvars.inc` has them all):
 | coefficients | CABAC's residual coding (significance with "last" flags in scan order, levels in reverse order, signs, the escape mode where it isn't the usual one), by position and block class, the neighbouring blocks' counts (CAVLC's nC), the coefficients coded so far (histories of significance flags and magnitudes, as h264p), the left and above blocks' coefficients at the same position, the frequency neighbours already coded (as HEVC), the quantiser, the vector size, the co-located block, and for Cr the Cb block; signs by the signs coded before them, the frequency neighbours' (weighted by their magnitudes) and the neighbouring blocks' |
 
 The vectors the contexts use are reconstructed as a decoder does (median prediction with its video
-packet rules, field and 4MV vectors, B-VOP predictors, direct mode scaling by the display times).
+packet rules, field and 4MV vectors, B-VOP predictors, direct mode scaling by the display times),
+by the model's own copy of those rules: it differs from FFmpeg's in rare cases (a stored vector
+FFmpeg zeroes at a video packet's start, display time differences past 16 bits), which costs a
+little compression there and nothing else.
 
 ### The decoder in the loop (level -9)
 
@@ -185,8 +188,8 @@ four passes over each family, then `-7` from `-9`'s values (two passes over the 
 contexts differ). When the model's variables became raw (every split a threshold in the `.idx`
 files), both were tuned again, the two largest families (sig and lvl) for about a pass and the
 others for two. `-5`, `-3` and `-1` were then cut from `-7`: `-5` keeps its ten counters, `-3` and
-`-1` the six and four whose loss (each switched off in turn) costs each of `-7`'s families most; then
-each was tuned for a pass.
+`-1` the six and four whose loss (each switched off in turn) costs each of `-7`'s families most;
+then each was tuned for a pass.
 
 ### Streaming
 
@@ -329,16 +332,53 @@ C++11 compiler.
 The source is C++11 that builds without exceptions or RTTI and has no dependencies besides the C
 library. `m4vpack.cpp` includes the parts in order; each class (but the small counters of
 `cm.inc`), and each function over 100 lines, is in a file of its own named after it (`m4vcoro.inc`,
-`code_block.inc`, ...), which the file of its part includes where it belongs. `Lib3/` (the coroutines), `MTwrap_v3/` (the threads), the counters,
-mixers and families (`cmbase.inc`, `buf.inc`, `cm.inc` and `cm_*.inc`, `fam.inc` and `tc_*.inc`,
-`famcfg.inc`), `mapping.inc`, `masking.inc` and the tools in `IDX/` come from h264p. MTwrap
-includes `win_shim.inc` by name, hence `-ILib3`. On POSIX, `win_shim.inc` emulates the few Windows calls it makes. The arithmetic that
-decides what is coded is integer arithmetic (the one table computed with `exp()` rounds with a
+`code_block.inc`, ...), which the file of its part includes where it belongs. `Lib3/` (the
+coroutines), `MTwrap_v3/` (the threads), the counters, mixers and families (`cmbase.inc`,
+`buf.inc`, `cm.inc` and `cm_*.inc`, `fam.inc` and `tc_*.inc`, `famcfg.inc`), `mapping.inc`,
+`masking.inc` and the tools in `IDX/` come from h264p. MTwrap includes `win_shim.inc` by name,
+hence `-ILib3`. On POSIX, `win_shim.inc` emulates the few Windows calls it makes. The arithmetic
+that decides what is coded is integer arithmetic (the one table computed with `exp()` rounds with a
 wide margin), so files are portable between platforms.
 
 ## Verification
 
-«VERIFICATION»
+These 54 streams all compress and decompress to identical bytes at every level, with `-v` passing:
+- the 6 avip samples;
+- the 40 synthetic, FFmpeg-made and workaround test streams used for m4vdec and m4vtsv
+  (I/P/B/S-VOPs, GMC with 1-3 points, quarter-pel, 4MV, interlacing, MPEG quantisation with custom
+  matrices, video packets, packed B-frames, N-VOPs, odd frame sizes, the DivX, XviD and libavcodec
+  bugs m4vdec works around);
+- a stream with junk inserted, an empty file, 300 KB of random bytes, and short or truncated
+  files.
+
+On threads, all of them also round-trip with `-t 2 -c 1k`, `-t 3 -c 16k`, `-t 4 -c 64k`, `-t 7 -c 1`
+and `-t 64 -c 4k` (each at another level, `-9` to `-1`). The tiny part sizes force cuts at P-VOPs,
+at bare start codes, and inside VOPs.
+
+Other checks:
+- **Builds:** at each level, the tuning build (every parameter patchable), the shipping build (every
+  parameter folded) and the build without AVX2 write the same files (`./mk.sh check`).
+- **The decoder in the loop:** its pictures are bit-exact with m4vdec's on 45 test streams (9,758
+  frames).
+- **Fuzzing,** at every level, under AddressSanitizer and UBSan (ASan's checks of the heap and the
+  globals: the coroutines copy their stacks, which its stack checks take for errors):
+  - 200 damaged streams (bit flips, truncation, inserted garbage and fake start codes) all
+    round-tripped exactly with `-v`;
+  - 400 damaged compressed files (bit flips, truncation, garbage, runs of bytes, a changed level)
+    each decoded to the original stream (its CRC holds) or were rejected with exit code 4, without
+    crashes or hangs;
+  - on threads, 120 damaged streams round-tripped with `-t 3 -c 4k -v`, and 300 damaged files of
+    parts (the same damage, plus changed header fields and moved blocks) ended with exit code 0 or
+    4.
+
+  MemorySanitizer found nothing either: round trips of 8 streams at every level and on threads,
+  and 42 damaged files. Decoding checks every decoded value before writing it, and stops when it
+  reads past the end of the input.
+- **Chunk splitting:** a build with a 64 KiB input buffer and 7-byte reads round-trips every stream.
+- **Pipes:** `c` and `d` give the same results through stdin and stdout, also on threads.
+- **Portability:** the Windows build (mingw, run under wine) writes the same compressed files as the
+  Linux build at every level, and each decompresses the other's, files of parts too. clang and gcc
+  builds write the same files.
 
 ## License
 
