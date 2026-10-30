@@ -317,8 +317,9 @@ struct M4vSplit : Coroutine {
 
 typedef struct MtArgs {
   int threads, stats;
-  int level;     // c: the model's
-  U64 part_max;  // d: the largest part a record can have (mt_part_max())
+  int level;        // c: the model's
+  U64 part_max;     // d: the largest part a record can have (mt_part_max())
+  Progress* meter;  // the call's progress line, which the workers' runs tell and poll (0: none)
 } MtArgs;
 
 // A part's run at the level LV, by a worker W (M4vPart): c of the part in its in_ (plen bytes),
@@ -384,6 +385,11 @@ struct M4vPart : CoIo {
   double cost[NCAT], orig[NCAT];
   U8 *in_, *out_;  // c: a part, all of it; d: IO_BUF of its record at a time. The part's run's output
   size_t in_room, out_room, out_len;
+  // its counts on the progress line: the stream's bytes, the compressed stream's and the VOPs of its
+  // parts done (done_*, the worker's own), and with the part under way (prog_*: read from any
+  // thread)
+  U64 done_raw, done_packed, done_vops;
+  U64 prog_raw, prog_packed, prog_vops;
 
   uint Init(const MtArgs* a, uint w) {
     coro_init();
@@ -395,7 +401,19 @@ struct M4vPart : CoIo {
     memset(orig, 0, sizeof orig);
     in_ = out_ = 0;
     in_room = out_room = out_len = 0;
+    done_raw = done_packed = done_vops = 0;
+    prog_set(0, 0, 0);
     return 0;
+  }
+  void prog_set(U64 raw, U64 packed, U64 vops) {
+    __atomic_store_n(&prog_raw, raw, __ATOMIC_RELAXED);
+    __atomic_store_n(&prog_packed, packed, __ATOMIC_RELAXED);
+    __atomic_store_n(&prog_vops, vops, __ATOMIC_RELAXED);
+  }
+  void prog_get(U64& raw, U64& packed, U64& vops) const {
+    raw += __atomic_load_n(&prog_raw, __ATOMIC_RELAXED);
+    packed += __atomic_load_n(&prog_packed, __ATOMIC_RELAXED);
+    vops += __atomic_load_n(&prog_vops, __ATOMIC_RELAXED);
   }
   void Quit(void) {
     free(in_);
@@ -432,7 +450,9 @@ struct M4vPart : CoIo {
 
   // A part's run: the coroutine c on the input feed() gives (feed(&p): the next piece at p, its size;
   // 0 at the end), its output into out_ (out_len bytes; most at most, one more fails the part); its
-  // status (0, or the exit status of its error, its note copied to the worker's)
+  // status (0, or the exit status of its error, its note copied to the worker's). As it goes, its
+  // counts are the worker's (from done_* on), what it tells is shown, and a line of progress may be
+  // due.
   template <class C, class Feed>
   int run_part(C* c, Feed feed, U64 most) {
     int r;
@@ -442,6 +462,12 @@ struct M4vPart : CoIo {
     c->addout(out_, IO_BUF);
     for (;;) {
       y = c->coro_call(c);
+      if (args.meter) {
+        if (y == Y_VIDEO) args.meter->video(c->video);
+        prog_set(done_raw + c->raw_done(), done_packed + c->packed_done(), done_vops + c->nvop);
+        args.meter->poll();
+      }
+      if (y == Y_VIDEO) continue;
       if (y == Y_IN) {
         const U8* p = 0;
         const size_t l = feed(&p);
@@ -463,6 +489,9 @@ struct M4vPart : CoIo {
     }
     r = c->status;
     if (r) fail(r, "%s", c->note);
+    done_raw += c->raw_done();
+    done_packed += c->packed_done();
+    done_vops += c->nvop;
     return r;
   }
 
@@ -494,6 +523,8 @@ struct M4vPart : CoIo {
       write(rec, MT_REC);
       write(out_, out_len);
       parts++;
+      done_packed += MT_REC;
+      done_raw -= xlen;  // (the headers copied in are not the stream's)
       // the record handed over now, its last buffer as far as it is filled (a round's end): so
       // MTwrap puts each record in the container as its part is done, and d, which takes the
       // parts in turn, finds the next within about a round of the others
@@ -542,6 +573,9 @@ struct M4vPart : CoIo {
       write(out_, (size_t)ins);
       write(out_ + ins + xlen, (size_t)(plen - ins - xlen));
       parts++;
+      done_packed += MT_REC;
+      done_raw -= xlen;  // (the headers copied in are not the stream's)
+
       yield(static_cast<Coroutine*>(this), Y_PART);
     }
   }

@@ -19,7 +19,8 @@ m4vpack c|d [options] input output
   default) to the fastest (`-1`). `d` takes the level from the file.
 - `-v` (with `c`) decompresses the output afterwards and compares it with the input.
 - `-s` (with `c`) shows the input and output size of each kind of syntax element.
-- `-q` turns off the statistics.
+- `-q` turns off the statistics and the progress line.
+- `-p` shows the progress line even where stderr is not a terminal.
 - `-t N` (with `c`) compresses on N threads (1 to 64): the stream in parts, a model for each.
   `d` takes the number of threads from the stream.
 - `-c N` (with `c -t`) sets the size of a part, at least: N MB (1 to 1024), or N KB with a `k`.
@@ -27,6 +28,12 @@ m4vpack c|d [options] input output
 
 `input` and `output` can be `-` for stdin and stdout, except with `-v`, which reads both files
 again.
+
+Where stderr is a terminal (or with `-p`), a call shows its progress as h264p does: first what the
+video is, then a line put over itself every half second with the bytes of the stream and of the
+compressed stream so far, how far through its input it is, the VOPs, the speed and the memory the
+process has, and at the end how long it took and the most memory it had. `-v`'s check shows a line
+of its own (`[ver]`).
 
 ```
 «EXAMPLE»

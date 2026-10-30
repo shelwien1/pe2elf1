@@ -432,6 +432,7 @@ typedef struct Ctx {
   int cplx_i, cplx_p, cplx_b;
   int divx_version, divx_build, xvid_build;
   int time_res;              // vop_time_increment_resolution
+  int fixed_inc;             // fixed_vop_time_increment (0: none, the VOPs' times vary)
   int qpel;                  // quarter_sample
   // what the reconstruction (recon.inc) needs beyond the syntax: the VOL's quantiser matrices
   // (natural order) and warping accuracy, the libavcodec build of the user data (its bugs), how many
@@ -504,7 +505,7 @@ static void parse_vol(Ctx* c, GB* gb) {
   c->time_inc_bits = ilog2(time_res - 1) + 1;
   if (c->time_inc_bits < 1) c->time_inc_bits = 1;
   gb_skip(gb, 1);
-  if (gb_get1(gb)) gb_skip(gb, c->time_inc_bits);  // fixed_vop_time_increment
+  c->fixed_inc = gb_get1(gb) ? (int)gb_get(gb, c->time_inc_bits) : 0;  // fixed_vop_time_increment
   gb_skip(gb, 1);
   w = (int)gb_get(gb, VOL_SIZE_BITS);
   gb_skip(gb, 1);

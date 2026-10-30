@@ -121,16 +121,16 @@ static int mv_wrap(int v, int fcode) { return sign_extend(v, MV_WRAP_BITS + fcod
 
 // a chunk's start code, as the raw family's code
 enum ChunkClass {
-  CC_UNKNOWN,  // (its first bytes not coded yet)
-  CC_VOS, CC_VOS_END, CC_USER_DATA, CC_GOV, CC_VISOBJ, CC_VOP, CC_VO, CC_VOL,
-  CC_SYSTEM,  // reserved and system start codes
-  CC_OTHER,   // other reserved ones
-  CC_NONE     // no start code
+  SCC_UNKNOWN,  // (its first bytes not coded yet)
+  SCC_VOS, SCC_VOS_END, SCC_USER_DATA, SCC_GOV, SCC_VISOBJ, SCC_VOP, SCC_VO, SCC_VOL,
+  SCC_SYSTEM,  // reserved and system start codes
+  SCC_OTHER,   // other reserved ones
+  SCC_NONE     // no start code
 };
 static int sc_class(int b) {
-  return b == SC_VOS ? CC_VOS : b == SC_VOS_END ? CC_VOS_END : b == SC_USER_DATA ? CC_USER_DATA : b == SC_GOV ? CC_GOV
-       : b == SC_VISOBJ ? CC_VISOBJ : b == SC_VOP ? CC_VOP : b < SC_VOL ? CC_VO : b < SC_VOL_END ? CC_VOL
-       : b >= SC_RESERVED ? CC_SYSTEM : CC_OTHER;
+  return b == SC_VOS ? SCC_VOS : b == SC_VOS_END ? SCC_VOS_END : b == SC_USER_DATA ? SCC_USER_DATA : b == SC_GOV ? SCC_GOV
+       : b == SC_VISOBJ ? SCC_VISOBJ : b == SC_VOP ? SCC_VOP : b < SC_VOL ? SCC_VO : b < SC_VOL_END ? SCC_VOL
+       : b >= SC_RESERVED ? SCC_SYSTEM : SCC_OTHER;
 }
 
 constexpr U32 TAIL_MAX = 1 * MIB;  // the most bytes after a VOP's last macroblock it codes
@@ -334,7 +334,7 @@ struct Model {
       last.rawprev2 = last.rawprev;
       last.rawprev = p[i];
       if (last.rawat < SC_PREFIX) last.rawhd = last.rawhd << BYTE_BITS | p[i];
-      else if (last.rawat == SC_PREFIX) last.rawcode = last.rawhd == SC_START ? sc_class(p[i]) : CC_NONE;
+      else if (last.rawat == SC_PREFIX) last.rawcode = last.rawhd == SC_START ? sc_class(p[i]) : SCC_NONE;
       last.rawat++;
     }
   }

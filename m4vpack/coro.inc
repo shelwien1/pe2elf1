@@ -34,6 +34,7 @@ static void cmp_flush(void* ctx, const U8* p, size_t n) {
 // any number of them can go at once, on as many threads.
 template <int f_DEC, class LV>
 struct M4vCoro : CoIo {
+  static constexpr int f_dec = f_DEC;
   int stats;   // c -s: the bits by kind of syntax element (co.cost, co.orig)
   int status;  // the run's: 0, or the exit status of its error (note); 1 until it has ended
   Stats st;    // c's
@@ -43,12 +44,33 @@ struct M4vCoro : CoIo {
   Ctx cx;
   Model<f_DEC, LV> k;
   U8 pbuf[IO_BUF];  // a VOP written back (W_VERIFY, W_DECODE), a buffer at a time
+  // what the progress line shows: the VOPs so far, and the video as told (Y_VIDEO) with the VOL it
+  // was told for (Ctx::vol_count)
+  U64 nvop;
+  VideoInfo video;
+  int told_vol;
 
   void Init(int s) {
     coro_init();
     stats = s;
     status = 1;
+    nvop = 0;
+    told_vol = 0;
+    memset((void*)&video, 0, sizeof video);
     k.Init();
+  }
+  // the stream's bytes and the compressed stream's done so far (c: the chunks taken, as they start)
+  U64 raw_done(void) const { return f_DEC ? n_out : (U64)st.in_bytes; }
+  U64 packed_done(void) const { return f_DEC ? n_in : n_out; }
+  // a VOP comes: counted, and where it is the first of a VOL (by then the encoder's user data has
+  // come too), what the video is told
+  void vop_comes(void) {
+    nvop++;
+    if (cx.have_vol && cx.vol_count != told_vol) {
+      told_vol = cx.vol_count;
+      video.set(&cx);
+      yield(static_cast<Coroutine*>(this), Y_VIDEO);
+    }
   }
   void Quit(void) {
     ctx_quit(&cx);
@@ -87,6 +109,7 @@ struct M4vCoro : CoIo {
       crc = crc32_upd(crc, p, len);
       st.in_bytes += (double)len;
       if (is_vop && part != PC_MORE) {
+        vop_comes();
         st.vops++;
         if (len > SC_LEN) st.by_type[vop_type(p)]++;
         if (part) st.raw_long++;
@@ -162,6 +185,7 @@ struct M4vCoro : CoIo {
       if (co.err) return fail(E_DATA, "damaged data");
       if (kind == CK_VOP) {
         PB pb;
+        vop_comes();
         pb_init(&pb, pbuf, sizeof pbuf);
         pb.flush = out_flush;
         pb.ctx = this;
@@ -175,7 +199,10 @@ struct M4vCoro : CoIo {
         while (done < n) {  // a buffer at a time; the first has what parse_header_chunk() reads
           const size_t l = n - done < sizeof pbuf ? n - done : sizeof pbuf;
           k.code_raw_bytes(pbuf, l);
-          if (!done) parse_header_chunk(&cx, pbuf, n);
+          if (!done) {
+            parse_header_chunk(&cx, pbuf, n);
+            if (l >= SC_LEN && sc_code(pbuf) == SC_VOP) vop_comes();
+          }
           write(pbuf, l);
           crc = crc32_upd(crc, pbuf, l);
           done += l;
@@ -229,24 +256,24 @@ static void sink_write(Sink* s, const U8* p, size_t n) {
 
 // Runs the coroutine c in the buffer protocol to its end: in() gives it its next input when it
 // asks (Y_IN), out(more) takes what it put in its output buffer when that is full (Y_OUT, more:
-// and gives it the next) or as it ends (Y_END, or Y_FAIL after an error: what drive() returns)
-template <class C, class In, class Out>
-uint drive(C& c, In in, Out out) {
+// and gives it the next) or as it ends (Y_END, or Y_FAIL after an error: what drive() returns);
+// show(code) after each yield (what it tells, Y_VIDEO; the progress line)
+template <class C, class In, class Out, class Show>
+uint drive(C& c, In in, Out out, Show show) {
   for (;;) {
     const uint r = c.coro_call(&c);
-    if (r == Y_IN) {
-      in();
-      continue;
-    }
-    out(r == Y_OUT);
-    if (r != Y_OUT) return r;
+    if (r == Y_IN) in();
+    else if (r != Y_VIDEO) out(r == Y_OUT);
+    show(r);
+    if (r != Y_IN && r != Y_OUT && r != Y_VIDEO) return r;
   }
 }
 
-// c on files: its input from f (the n bytes at pre read already, first), its output to s
+// c on files: its input from f (the n bytes at pre read already, first), its output to s, and
+// show(code) after each yield
 static U8 io_bufs[2][IO_BUF];  // (the main thread's: input, output)
-template <class C>
-uint run_file(C& c, FILE* f, Sink* s, const U8* pre = 0, size_t n = 0) {
+template <class C, class Show>
+uint run_file(C& c, FILE* f, Sink* s, Show show, const U8* pre = 0, size_t n = 0) {
   const uint kIo = sizeof io_bufs[0];
   U8 *ib = io_bufs[0], *ob = io_bufs[1];
   c.addout(ob, kIo);
@@ -261,6 +288,8 @@ uint run_file(C& c, FILE* f, Sink* s, const U8* pre = 0, size_t n = 0) {
       [&](bool more) {
         sink_write(s, c.outbeg, c.getoutsize());
         if (more) c.addout(ob, kIo);
-      });
+      },
+      show);
 }
+
 
