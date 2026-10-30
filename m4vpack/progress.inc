@@ -120,7 +120,7 @@ struct Progress {
       char b[LINE * 2];
       const bool first = !shown.width;
       shown = v;
-      video_words(v, b, sizeof b);
+      v.words(b, sizeof b);
       cut();
       fprintf(stderr, "[%s] %s: %s\n", tag, first ? "video" : "the video now", b);
     }
