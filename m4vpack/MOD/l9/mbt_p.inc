@@ -16,20 +16,21 @@ void M9_mbt_make( const M_mbt_v & D, tcx & X ) {
   M_mbt_VARS(M_LOCAL)
 
   a = 0;
+  a = a*2 + (((st)>2+(1-1)));
   a = a*2 + (((cl)>0+(1-1)));
   a = a*2 + (((rt)>0+(1-1)));
 
   b = 0;
-  b = b*3 + (((st)>0+(1-1))+((st)>1+(1-1)));
+  b = b*2 + (((st)>0+(1-1)));
   b = b*2 + (((c4)>3+(1-1)));
   b = b*4 + M9_mbt_b_rt[__min(3,__max(0,(rt)-(1-1)))];
 
   c = 0;
   c = c*4 + M9_mbt_c_st[__min(3,__max(0,(st)-(1-1)))];
-  c = c*3 + (((rc)>2+(1-1))+((rc)>4+(1-1)));
+  c = c*4 + M9_mbt_c_rc[__min(10,__max(0,(rc)-(1-1)))];
 
   d = 0;
-  d = d*2 + (((st)>0+(1-1)));
+  d = d*3 + (((st)>0+(1-1))+((st)>1+(1-1)));
   d = d*3 + (((cd)>0+(1-1))+((cd)>1+(1-1)));
 
   e = 0;
@@ -57,8 +58,8 @@ void M9_mbt_make( const M_mbt_v & D, tcx & X ) {
   k = k*4 + M9_mbt_k_c4[__min(4,__max(0,(c4)-(1-1)))];
 
   l = 0;
-  l = l*6 + M9_mbt_l_zt[__min(24,__max(0,(zt)-(1-1)))];
-  l = l*9 + M9_mbt_l_ze[__min(24,__max(0,(ze)-(1-1)))];
+  l = l*9 + M9_mbt_l_zt[__min(24,__max(0,(zt)-(1-1)))];
+  l = l*14 + M9_mbt_l_ze[__min(24,__max(0,(ze)-(1-1)))];
 
   s = 0;
   s = s*4 + M9_mbt_s_st[__min(3,__max(0,(st)-(1-1)))];
@@ -71,6 +72,7 @@ void M9_mbt_make( const M_mbt_v & D, tcx & X ) {
   m = m*2 + (((st)>0+(1-1)));
 
   w = 0;
+  w = w*2 + (((st)>0+(1-1)));
   w = w*4 + M9_mbt_w_rt[__min(3,__max(0,(rt)-(1-1)))];
 
   t = 0;

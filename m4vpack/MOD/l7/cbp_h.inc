@@ -1,48 +1,48 @@
 
-static const byte M7_cbp_a_lu[8+1]={ 0,1,2,2,3,3,4,5,6 };
+static const byte M7_cbp_a_lu[8+1]={ 0,0,1,1,1,2,3,3,3 };
 
 
 static const byte M7_cbp_c_cnt[5+1]={ 0,1,2,3,4,5 };
 
 static const byte M7_cbp_d_frac[4+1]={ 0,1,2,3,4 };
 
-static const byte M7_cbp_e_qs[32+1]={ 0,0,0,1,1,1,1,2,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3 };
+static const byte M7_cbp_e_qs[32+1]={ 0,0,0,1,1,1,1,2,3,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4 };
 
 
 
 
 static const byte M7_cbp_i_lu[8+1]={ 0,1,2,2,3,4,5,6,6 };
 
-static const byte M7_cbp_j_lu[8+1]={ 0,1,2,3,4,5,6,7,8 };
-static const byte M7_cbp_j_mvc[17+1]={ 0,1,2,3,3,4,4,4,4,5,5,5,5,5,5,5,6,6 };
+static const byte M7_cbp_j_lu[8+1]={ 0,1,2,3,3,3,4,5,5 };
+static const byte M7_cbp_j_mvc[17+1]={ 0,1,2,3,4,5,5,5,6,6,6,6,6,6,7,7,8,8 };
 
-static const byte M7_cbp_k_lu[8+1]={ 0,1,2,3,4,5,6,7,8 };
-
-
+static const byte M7_cbp_k_lu[8+1]={ 0,1,2,3,4,5,6,7,7 };
 
 
 
 
-static const byte M7_cbp_w_lu[8+1]={ 0,1,2,3,4,4,5,6,6 };
 
 
-static const int M7_cbp_rA = (129+0) * (1);
+static const byte M7_cbp_w_lu[8+1]={ 0,1,2,3,4,5,6,7,7 };
+
+
+static const int M7_cbp_rA = (128+0) * (1);
 static const int M7_cbp_mwA = (255+0) * (1);
-static const int M7_cbp_rB = (41+0) * (1);
+static const int M7_cbp_rB = (38+0) * (1);
 static const int M7_cbp_mwB = (2+0) * (1);
 static const int M7_cbp_rC = (255+0) * (1);
 static const int M7_cbp_mwC = (4+0) * (1);
 static const int M7_cbp_rD = (255+0) * (1);
 static const int M7_cbp_mwD = (16+0) * (1);
-static const int M7_cbp_rE = (204+0) * (1);
-static const int M7_cbp_mwE = (84+0) * (1);
-static const int M7_cbp_rH = (207+0) * (1);
+static const int M7_cbp_rE = (137+0) * (1);
+static const int M7_cbp_mwE = (68+0) * (1);
+static const int M7_cbp_rH = (216+0) * (1);
 static const int M7_cbp_mwH = (64+0) * (1);
 static const int M7_cbp_rI = (255+0) * (1);
-static const int M7_cbp_mwI = (66+0) * (1);
-static const int M7_cbp_rJ = (220+0) * (1);
-static const int M7_cbp_mwJ = (64+0) * (1);
-static const int M7_cbp_rK = (253+0) * (1);
+static const int M7_cbp_mwI = (64+0) * (1);
+static const int M7_cbp_rJ = (223+0) * (1);
+static const int M7_cbp_mwJ = (74+0) * (1);
+static const int M7_cbp_rK = (255+0) * (1);
 static const int M7_cbp_mwK = (32+0) * (1);
 static const int M7_cbp_rL = (0+0) * (1);
 static const int M7_cbp_mwL = (128+0) * (1);
@@ -50,7 +50,7 @@ static const int M7_cbp_lr = (13+0) * (1);
 static const int M7_cbp_mb = (31+0) * (1);
 static const int M7_cbp_rS1 = (8+0) * (1);
 static const int M7_cbp_rS2 = (16+0) * (1);
-static const int M7_cbp_qs = (1+3) * (1);
+static const int M7_cbp_qs = (0+3) * (1);
 static const int M7_cbp_qf = (64+3) * (1);
 static const int M7_cbp_bw = (14+0) * (1);
 static const int M7_cbp_rT = (0+0) * (1);
@@ -77,23 +77,23 @@ static const int M7_cbp_hS = (22+0) * (1);
 static const int M7_cbp_hF = (22+0) * (1);
 
 
-static const long long M7_cbp_a_Volume = tc_vmul(tc_vmul(1, 1), 7); // 7
+static const long long M7_cbp_a_Volume = tc_vmul(tc_vmul(1, 1), 4); // 4
 static const long long M7_cbp_b_Volume = tc_vmul(tc_vmul(1, 2), 2); // 4
 static const long long M7_cbp_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 3), 6); // 54
-static const long long M7_cbp_d_Volume = tc_vmul(tc_vmul(1, 3), 5); // 15
-static const long long M7_cbp_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 4), 3); // 36
+static const long long M7_cbp_d_Volume = tc_vmul(tc_vmul(1, 2), 5); // 10
+static const long long M7_cbp_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 5), 3); // 30
 static const long long M7_cbp_f_Volume = tc_vmul(1, 3); // 3
 static const long long M7_cbp_g_Volume = 1; // 1
 static const long long M7_cbp_h_Volume = tc_vmul(tc_vmul(1, 2), (1<<5)); // 64
 static const long long M7_cbp_i_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 7), 3); // 63
-static const long long M7_cbp_j_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 9), 7); // 189
-static const long long M7_cbp_k_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 3), 9); // 27
+static const long long M7_cbp_j_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 6), 9); // 162
+static const long long M7_cbp_k_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 3), 8); // 24
 static const long long M7_cbp_l_Volume = tc_vmul(1, 1); // 1
 static const long long M7_cbp_m_Volume = tc_vmul(1, 2); // 2
 static const long long M7_cbp_n_Volume = 1; // 1
 static const long long M7_cbp_s_Volume = tc_vmul(tc_vmul(1, 1), 2); // 2
 static const long long M7_cbp_t_Volume = 1; // 1
-static const long long M7_cbp_w_Volume = tc_vmul(tc_vmul(1, 2), 7); // 14
+static const long long M7_cbp_w_Volume = tc_vmul(tc_vmul(1, 2), 8); // 16
 
 #define M7_cbp_USES(X) X(lu) X(c3) X(mvc) X(rbit) X(cnt) X(frac) X(qs) X(pat) X(lq)
 

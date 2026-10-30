@@ -1,49 +1,50 @@
 
-static const byte M5_sig_a_nc[17+1]={ 0,1,2,2,3,3,3,4,4,4,4,4,5,5,5,5,5,5 };
-
-static const byte M5_sig_b_kb[16+1]={ 0,1,2,3,4,5,6,7,7,7,7,7,7,7,7,7,7 };
-
-static const byte M5_sig_c_nz[8+1]={ 0,1,2,3,4,5,6,7,8 };
-
-static const byte M5_sig_d_past[8+1]={ 0,1,2,3,4,5,6,7,8 };
-
-static const byte M5_sig_e_run[16+1]={ 0,1,2,3,3,4,4,4,4,5,5,5,5,5,5,5,5 };
+static const byte M5_sig_a_nc[17+1]={ 0,1,1,2,3,4,5,6,6,6,6,6,6,6,6,6,6,6 };
+static const byte M5_sig_a_qs[32+1]={ 0,0,0,1,2,2,3,4,5,5,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6 };
 
 
+static const byte M5_sig_c_nz[8+1]={ 0,1,2,3,4,4,5,6,7 };
 
-static const byte M5_sig_i_mvc[30+1]={ 0,1,2,3,3,4,4,4,4,5,5,5,5,5,5,5,6,7,8,9,10,11,12,13,14,15,15,15,15,15,15 };
+static const byte M5_sig_d_past[8+1]={ 0,1,2,3,4,5,6,6,7 };
+static const byte M5_sig_d_qs[32+1]={ 0,0,0,0,0,0,1,2,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3 };
 
-static const byte M5_sig_j_rnz[17+1]={ 0,1,2,3,3,3,4,4,4,4,4,5,5,5,5,5,6,6 };
-static const byte M5_sig_j_xm[9+1]={ 0,1,2,2,2,2,2,2,3,3 };
+static const byte M5_sig_e_run[16+1]={ 0,1,2,3,3,4,4,4,5,6,7,8,9,10,11,12,12 };
 
 
 
+static const byte M5_sig_i_mvc[30+1]={ 0,1,2,2,3,4,4,4,4,5,5,5,6,7,7,7,7,7,8,9,10,11,12,13,13,13,13,13,13,13,13 };
+
+static const byte M5_sig_j_rnz[17+1]={ 0,1,2,3,3,3,4,4,4,4,4,5,5,5,5,6,6,6 };
+static const byte M5_sig_j_xm[9+1]={ 0,1,2,2,2,2,3,3,4,4 };
 
 
 
 
-static const int M5_sig_rA = (254+0) * (1);
-static const int M5_sig_mwA = (31+0) * (1);
-static const int M5_sig_rB = (123+0) * (1);
+
+
+
+static const int M5_sig_rA = (255+0) * (1);
+static const int M5_sig_mwA = (115+0) * (1);
+static const int M5_sig_rB = (255+0) * (1);
 static const int M5_sig_mwB = (128+0) * (1);
-static const int M5_sig_rC = (250+0) * (1);
-static const int M5_sig_mwC = (4+0) * (1);
-static const int M5_sig_rD = (255+0) * (1);
-static const int M5_sig_mwD = (64+0) * (1);
-static const int M5_sig_rE = (255+0) * (1);
-static const int M5_sig_mwE = (4+0) * (1);
-static const int M5_sig_rH = (248+0) * (1);
-static const int M5_sig_mwH = (63+0) * (1);
-static const int M5_sig_rI = (254+0) * (1);
-static const int M5_sig_mwI = (33+0) * (1);
-static const int M5_sig_rJ = (253+0) * (1);
-static const int M5_sig_mwJ = (65+0) * (1);
-static const int M5_sig_rK = (196+0) * (1);
-static const int M5_sig_mwK = (7+0) * (1);
-static const int M5_sig_rL = (243+0) * (1);
-static const int M5_sig_mwL = (32+0) * (1);
+static const int M5_sig_rC = (255+0) * (1);
+static const int M5_sig_mwC = (63+0) * (1);
+static const int M5_sig_rD = (214+0) * (1);
+static const int M5_sig_mwD = (14+0) * (1);
+static const int M5_sig_rE = (254+0) * (1);
+static const int M5_sig_mwE = (1+0) * (1);
+static const int M5_sig_rH = (255+0) * (1);
+static const int M5_sig_mwH = (39+0) * (1);
+static const int M5_sig_rI = (255+0) * (1);
+static const int M5_sig_mwI = (95+0) * (1);
+static const int M5_sig_rJ = (255+0) * (1);
+static const int M5_sig_mwJ = (1+0) * (1);
+static const int M5_sig_rK = (254+0) * (1);
+static const int M5_sig_mwK = (41+0) * (1);
+static const int M5_sig_rL = (253+0) * (1);
+static const int M5_sig_mwL = (10+0) * (1);
 static const int M5_sig_lr = (12+0) * (1);
-static const int M5_sig_mb = (88+0) * (1);
+static const int M5_sig_mb = (64+0) * (1);
 static const int M5_sig_rT = (0+0) * (1);
 static const int M5_sig_mwT = (0+0) * (1);
 static const int M5_sig_mt = (0+0) * (1);
@@ -66,22 +67,22 @@ static const int M5_sig_hT = (22+0) * (1);
 static const int M5_sig_hN = (22+0) * (1);
 
 
-static const long long M5_sig_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), 6), 3), (1<<6)); // 9216
-static const long long M5_sig_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), 8), (1<<6)); // 4096
-static const long long M5_sig_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), 9), (1<<6)); // 4608
-static const long long M5_sig_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), 9), 3), (1<<6)); // 13824
-static const long long M5_sig_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), 6), (1<<6)); // 3072
+static const long long M5_sig_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<2)), 7), 7); // 196
+static const long long M5_sig_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), 2), (1<<6)); // 1024
+static const long long M5_sig_c_Volume = tc_vmul(tc_vmul(1, (1<<1)), 8); // 16
+static const long long M5_sig_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), 8), 4), (1<<6)); // 16384
+static const long long M5_sig_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), 13), (1<<6)); // 6656
 static const long long M5_sig_g_Volume = 1; // 1
-static const long long M5_sig_h_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), (1<<5)), (1<<6)); // 16384
-static const long long M5_sig_i_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), 16), (1<<6)); // 8192
-static const long long M5_sig_j_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), 7), 4), (1<<6)); // 14336
+static const long long M5_sig_h_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<1)), (1<<5)), (1<<6)); // 4096
+static const long long M5_sig_i_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), 14), (1<<6)); // 7168
+static const long long M5_sig_j_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<2)), 7), 5); // 140
 static const long long M5_sig_k_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), (1<<8)), (1<<6)); // 131072
-static const long long M5_sig_l_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), (1<<6)), (1<<16)); // 33554432
-static const long long M5_sig_m_Volume = tc_vmul(tc_vmul(1, (1<<3)), (1<<6)); // 512
+static const long long M5_sig_l_Volume = tc_vmul(tc_vmul(1, (1<<6)), (1<<14)); // 1048576
+static const long long M5_sig_m_Volume = tc_vmul(tc_vmul(1, (1<<2)), (1<<2)); // 16
 static const long long M5_sig_n_Volume = 1; // 1
 static const long long M5_sig_t_Volume = 1; // 1
 
-#define M5_sig_USES(X) X(cls) X(nc) X(qs) X(pos) X(kb) X(nz) X(past) X(run) X(fp) X(mvc) X(rnz) X(xm) X(h8) X(h16)
+#define M5_sig_USES(X) X(cls) X(nc) X(qs) X(kb) X(pos) X(nz) X(past) X(run) X(fp) X(mvc) X(rnz) X(xm) X(h8) X(h16)
 
 struct M5_sig_T {
   cm_cnt2 M5_sig_A[tc_rows(M5_sig_a_Volume, M5_sig_hA) * M_sig_ND];

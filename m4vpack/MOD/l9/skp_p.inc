@@ -20,9 +20,10 @@ void M9_skp_make( const M_skp_v & D, tcx & X ) {
   a = a*3 + (((rt)>0+(1-1))+((rt)>1+(1-1)));
 
   b = 0;
-  b = b*4 + M9_skp_b_run[__min(16,__max(0,(run)-(1-1)))];
+  b = b*7 + M9_skp_b_run[__min(16,__max(0,(run)-(1-1)))];
 
   c = 0;
+  c = c*2 + (((st)>0+(1-1)));
   c = c*11 + M9_skp_c_rc[__min(10,__max(0,(rc)-(1-1)))];
 
   d = 0;
@@ -45,7 +46,7 @@ void M9_skp_make( const M_skp_v & D, tcx & X ) {
   j = 0;
   j = j*4 + M9_skp_j_st[__min(3,__max(0,(st)-(1-1)))];
   j = j*11 + M9_skp_j_rc[__min(10,__max(0,(rc)-(1-1)))];
-  j = j*6 + M9_skp_j_run[__min(16,__max(0,(run)-(1-1)))];
+  j = j*14 + M9_skp_j_run[__min(16,__max(0,(run)-(1-1)))];
 
   k = 0;
   k = k*3 + (((cl)>0+(1-1))+((cl)>1+(1-1)));
@@ -54,8 +55,8 @@ void M9_skp_make( const M_skp_v & D, tcx & X ) {
 
   l = 0;
   l = l*4 + M9_skp_l_st[__min(3,__max(0,(st)-(1-1)))];
-  l = l*5 + M9_skp_l_zt[__min(24,__max(0,(zt)-(1-1)))];
-  l = l*7 + M9_skp_l_ze[__min(24,__max(0,(ze)-(1-1)))];
+  l = l*4 + M9_skp_l_zt[__min(24,__max(0,(zt)-(1-1)))];
+  l = l*9 + M9_skp_l_ze[__min(24,__max(0,(ze)-(1-1)))];
 
   s = 0;
 
@@ -63,7 +64,7 @@ void M9_skp_make( const M_skp_v & D, tcx & X ) {
 
   m = 0;
   m = m*3 + (((cl)>0+(1-1))+((cl)>1+(1-1)));
-  m = m*7 + M9_skp_m_ze[__min(24,__max(0,(ze)-(1-1)))];
+  m = m*14 + M9_skp_m_ze[__min(24,__max(0,(ze)-(1-1)))];
 
   w = 0;
   w = w*3 + (((rt)>0+(1-1))+((rt)>1+(1-1)));

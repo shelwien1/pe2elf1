@@ -1,34 +1,33 @@
 
-static const byte M3_qpd_a_qs[32+1]={ 0,0,0,1,1,2,2,3,3,4,4,4,5,5,5,5,5,6,6,6,6,6,6,6,7,7,7,7,7,7,7,7,7 };
+static const byte M3_qpd_a_qs[32+1]={ 0,0,0,0,0,1,2,3,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4 };
 
-static const byte M3_qpd_b_qs[32+1]={ 0,0,0,1,1,2,2,3,3,4,4,4,5,5,5,5,5,6,6,6,6,6,6,6,7,7,7,7,7,7,7,7,7 };
+static const byte M3_qpd_b_qs[32+1]={ 0,0,0,0,0,1,1,2,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4 };
 
-static const byte M3_qpd_c_qs[32+1]={ 0,0,0,1,1,2,2,3,3,4,4,4,5,5,5,5,5,6,6,6,6,6,6,6,7,7,7,7,7,7,7,7,7 };
-
-static const byte M3_qpd_d_qs[32+1]={ 0,0,0,1,1,2,2,3,3,4,4,4,5,5,5,5,5,6,6,6,6,6,6,6,7,7,7,7,7,7,7,7,7 };
-
-static const byte M3_qpd_e_qs[32+1]={ 0,0,0,1,1,2,2,3,3,4,4,4,5,5,5,5,5,6,6,6,6,6,6,6,7,7,7,7,7,7,7,7,7 };
+static const byte M3_qpd_c_qs[32+1]={ 0,0,0,0,0,0,1,2,3,4,4,4,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5 };
 
 
 
 
+static const byte M3_qpd_h_qs[32+1]={ 0,0,0,0,0,1,2,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4 };
 
 
 
-static const int M3_qpd_rA = (234+0) * (1);
-static const int M3_qpd_mwA = (8+0) * (1);
-static const int M3_qpd_rB = (130+0) * (1);
-static const int M3_qpd_mwB = (32+0) * (1);
-static const int M3_qpd_rC = (255+0) * (1);
-static const int M3_qpd_mwC = (224+0) * (1);
-static const int M3_qpd_rD = (244+0) * (1);
-static const int M3_qpd_mwD = (17+0) * (1);
-static const int M3_qpd_rE = (255+0) * (1);
-static const int M3_qpd_mwE = (12+0) * (1);
-static const int M3_qpd_rH = (255+0) * (1);
-static const int M3_qpd_mwH = (23+0) * (1);
-static const int M3_qpd_lr = (24+0) * (1);
-static const int M3_qpd_mb = (15+0) * (1);
+
+
+static const int M3_qpd_rA = (248+0) * (1);
+static const int M3_qpd_mwA = (0+0) * (1);
+static const int M3_qpd_rB = (0+0) * (1);
+static const int M3_qpd_mwB = (2+0) * (1);
+static const int M3_qpd_rC = (0+0) * (1);
+static const int M3_qpd_mwC = (36+0) * (1);
+static const int M3_qpd_rD = (0+0) * (1);
+static const int M3_qpd_mwD = (1+0) * (1);
+static const int M3_qpd_rE = (193+0) * (1);
+static const int M3_qpd_mwE = (0+0) * (1);
+static const int M3_qpd_rH = (168+0) * (1);
+static const int M3_qpd_mwH = (112+0) * (1);
+static const int M3_qpd_lr = (31+0) * (1);
+static const int M3_qpd_mb = (32+0) * (1);
 static const int M3_qpd_rT = (0+0) * (1);
 static const int M3_qpd_mwT = (0+0) * (1);
 static const int M3_qpd_mt = (0+0) * (1);
@@ -47,14 +46,14 @@ static const int M3_qpd_hT = (22+0) * (1);
 static const int M3_qpd_hN = (22+0) * (1);
 
 
-static const long long M3_qpd_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 2), 8); // 48
-static const long long M3_qpd_b_Volume = tc_vmul(1, 8); // 8
-static const long long M3_qpd_c_Volume = tc_vmul(tc_vmul(1, 2), 8); // 16
-static const long long M3_qpd_d_Volume = tc_vmul(tc_vmul(1, 3), 8); // 24
-static const long long M3_qpd_e_Volume = tc_vmul(tc_vmul(1, 3), 8); // 24
+static const long long M3_qpd_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 2), 5); // 30
+static const long long M3_qpd_b_Volume = tc_vmul(1, 5); // 5
+static const long long M3_qpd_c_Volume = tc_vmul(tc_vmul(1, 2), 6); // 12
+static const long long M3_qpd_d_Volume = tc_vmul(tc_vmul(1, 1), 2); // 2
+static const long long M3_qpd_e_Volume = tc_vmul(tc_vmul(1, 3), 2); // 6
 static const long long M3_qpd_g_Volume = 1; // 1
-static const long long M3_qpd_h_Volume = tc_vmul(tc_vmul(1, 3), 2); // 6
-static const long long M3_qpd_m_Volume = tc_vmul(1, 3); // 3
+static const long long M3_qpd_h_Volume = tc_vmul(tc_vmul(1, 3), 5); // 15
+static const long long M3_qpd_m_Volume = tc_vmul(1, 1); // 1
 static const long long M3_qpd_n_Volume = 1; // 1
 static const long long M3_qpd_t_Volume = 1; // 1
 

@@ -10,7 +10,7 @@ Const 0
 
 Index a
  a_lc: lc, 1!0
- a_prev: prev, 1!0000000000000
+ a_prev: prev, 1!0000000100000
 
 Index b
  b_lc: lc, 1!1
@@ -18,14 +18,14 @@ Index b
  b_as: as, 1!11111111100000
 
 Index c
- c_lc: lc, 1!0
+ c_lc: lc, 1!1
  c_coded: coded, 1!1
- c_qs: qs, 1!00001000000000000000000000000000
+ c_qs: qs, 1!00010111100000000000000000000000
 
 Index d
- d_lc: lc, 1!0
- d_lbn: lbn, 1!11100100000000010
- d_abn: abn, 1!11100100000000010
+ d_lc: lc, 1!1
+ d_lbn: lbn, 1!11000110000100010
+ d_abn: abn, 1!11100110000000110
 
 Index e
  e_lc: lc, 1!1
@@ -35,26 +35,26 @@ Index e
 
 Index h
  h_lc: lc, 1!1
- h_sz: sz, 1!111111111111
+ h_sz: sz, 1!011110110000
  h_psg: psg, 1!11
 
 Index i
  i_lc: lc, 1!1
- i_prev: prev, 1!1110111000000
+ i_prev: prev, 1!0110110100000
  i_coded: coded, 1!1
 
 Index j
  j_lc: lc, 1!1
  j_ls: ls, 1!01111111100000
- j_prev: prev, 1!0011111000000
+ j_prev: prev, 1!0011111100000
 
 Index k
  k_lc: lc, 1!0
- k_as: as, 1!11111001100000
- k_prev: prev, 1!0101000000000
+ k_as: as, 1!11111100000000
+ k_prev: prev, 1!0000000000000
 
 Index l
- l_lc: lc, 1!0
+ l_lc: lc, 1!1
 
 Index m
  m_lc: lc, 1!0
@@ -66,14 +66,14 @@ Index w
 
 Index s
  s_lc: lc, 1!1
- s_prev: prev, 1!1011101000000
+ s_prev: prev, 1!1111111100000
 
 Index f
  f_lc: lc, 1!1
 
 Index t
  t_lc: lc, 1!1
- t_prev: prev, 1!1000111000000
+ t_prev: prev, 1!1000111100000
 
 Index n
  n_lc: lc, 1!0
@@ -82,27 +82,27 @@ Index g
 
 Number rA, 1, 0!00000000
 Number mwA, 1, 0!10001101
-Number rB, 1, 0!11111101
+Number rB, 1, 0!11111110
 Number mwB, 1, 0!00000000
-Number rC, 1, 0!11111111
-Number mwC, 1, 0!01010011
+Number rC, 1, 0!11111100
+Number mwC, 1, 0!01000001
 Number rD, 1, 0!11111101
 Number mwD, 1, 0!00010000
-Number rE, 1, 0!11111110
+Number rE, 1, 0!10000110
 Number mwE, 1, 0!01000000
-Number rH, 1, 0!11111110
-Number mwH, 1, 0!01000000
-Number rI, 1, 0!11111101
-Number mwI, 1, 0!01010001
-Number rJ, 1, 0!11111000
+Number rH, 1, 0!11111101
+Number mwH, 1, 0!01000010
+Number rI, 1, 0!11111111
+Number mwI, 1, 0!01111111
+Number rJ, 1, 0!11111001
 Number mwJ, 1, 0!01001011
-Number rK, 1, 0!11111010
+Number rK, 1, 0!11111110
 Number mwK, 1, 0!00101100
-Number rL, 1, 0!11110111
-Number mwL, 1, 0!10000101
+Number rL, 1, 0!00111111
+Number mwL, 1, 0!10000000
 Number lr, 1, 0!11100
 Number mb, 1, 0!00100000
-Number rT, 1, 0!11111111
+Number rT, 1, 0!11111110
 Number mwT, 1, 0!10000000
 Number mt, 1, 0!110
 Number rS1, 1, 0!01000

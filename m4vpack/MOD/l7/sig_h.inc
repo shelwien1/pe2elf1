@@ -1,26 +1,27 @@
 
+static const byte M7_sig_a_qs[32+1]={ 0,0,0,1,2,3,3,4,5,6,7,8,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9 };
 
 
 static const byte M7_sig_c_nz[8+1]={ 0,1,2,3,4,5,6,7,8 };
 
 static const byte M7_sig_d_past[8+1]={ 0,1,2,3,4,5,6,6,7 };
 
-static const byte M7_sig_e_run[16+1]={ 0,1,2,3,3,4,4,4,4,5,5,5,5,5,5,5,5 };
+static const byte M7_sig_e_run[16+1]={ 0,1,2,3,4,5,5,5,6,7,8,9,10,11,12,13,13 };
 
 
 
 
-static const byte M7_sig_i_mvc[30+1]={ 0,1,2,3,3,4,4,4,4,5,5,5,5,5,5,5,6,6,7,8,9,10,11,12,13,14,14,14,14,14,14 };
+static const byte M7_sig_i_mvc[30+1]={ 0,1,2,3,4,5,5,5,5,6,6,6,7,8,8,8,8,8,9,10,11,12,13,14,15,16,16,16,16,16,16 };
 
-static const byte M7_sig_j_rnz[17+1]={ 0,1,2,3,3,3,4,4,4,4,4,5,5,5,5,5,5,5 };
-static const byte M7_sig_j_xm[9+1]={ 0,1,2,2,2,2,2,2,3,3 };
-
-
+static const byte M7_sig_j_rnz[17+1]={ 0,1,2,3,3,3,4,4,4,4,4,5,5,5,5,6,6,6 };
+static const byte M7_sig_j_xm[9+1]={ 0,1,2,2,2,2,3,3,4,4 };
 
 
 
-static const byte M7_sig_s_sl[17+1]={ 0,0,1,1,1,1,2,2,2,2,2,2,2,2,2,2,3,3 };
-static const byte M7_sig_s_sa[17+1]={ 0,1,1,2,2,2,3,3,3,3,3,3,3,3,3,3,4,4 };
+
+
+static const byte M7_sig_s_sl[17+1]={ 0,0,1,1,1,1,2,2,2,2,2,2,2,2,2,3,4,4 };
+static const byte M7_sig_s_sa[17+1]={ 0,1,1,2,2,2,2,2,3,3,3,3,3,3,3,3,4,4 };
 
 
 
@@ -29,27 +30,27 @@ static const int M7_sig_rA = (3+0) * (1);
 static const int M7_sig_mwA = (3+0) * (1);
 static const int M7_sig_rB = (255+0) * (1);
 static const int M7_sig_mwB = (128+0) * (1);
-static const int M7_sig_rC = (255+0) * (1);
-static const int M7_sig_mwC = (46+0) * (1);
+static const int M7_sig_rC = (254+0) * (1);
+static const int M7_sig_mwC = (45+0) * (1);
 static const int M7_sig_rD = (252+0) * (1);
-static const int M7_sig_mwD = (5+0) * (1);
+static const int M7_sig_mwD = (14+0) * (1);
 static const int M7_sig_rE = (254+0) * (1);
 static const int M7_sig_mwE = (1+0) * (1);
 static const int M7_sig_rH = (254+0) * (1);
-static const int M7_sig_mwH = (19+0) * (1);
+static const int M7_sig_mwH = (18+0) * (1);
 static const int M7_sig_rI = (255+0) * (1);
 static const int M7_sig_mwI = (32+0) * (1);
 static const int M7_sig_rJ = (255+0) * (1);
 static const int M7_sig_mwJ = (4+0) * (1);
-static const int M7_sig_rK = (255+0) * (1);
+static const int M7_sig_rK = (254+0) * (1);
 static const int M7_sig_mwK = (32+0) * (1);
-static const int M7_sig_rL = (254+0) * (1);
+static const int M7_sig_rL = (253+0) * (1);
 static const int M7_sig_mwL = (4+0) * (1);
 static const int M7_sig_lr = (12+0) * (1);
-static const int M7_sig_mb = (66+0) * (1);
+static const int M7_sig_mb = (65+0) * (1);
 static const int M7_sig_rS1 = (16+0) * (1);
 static const int M7_sig_rS2 = (0+0) * (1);
-static const int M7_sig_qs = (67+3) * (1);
+static const int M7_sig_qs = (65+3) * (1);
 static const int M7_sig_qf = (0+3) * (1);
 static const int M7_sig_bw = (16+0) * (1);
 static const int M7_sig_rT = (0+0) * (1);
@@ -76,23 +77,23 @@ static const int M7_sig_hS = (22+0) * (1);
 static const int M7_sig_hF = (22+0) * (1);
 
 
-static const long long M7_sig_a_Volume = tc_vmul(tc_vmul(1, 1), 3); // 3
+static const long long M7_sig_a_Volume = tc_vmul(tc_vmul(1, 1), 10); // 10
 static const long long M7_sig_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), 1), (1<<2)); // 32
 static const long long M7_sig_c_Volume = tc_vmul(tc_vmul(1, (1<<1)), 9); // 18
-static const long long M7_sig_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), 8), 1), (1<<6)); // 4096
-static const long long M7_sig_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<2)), 6), (1<<6)); // 1536
+static const long long M7_sig_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), 8), 3), (1<<6)); // 12288
+static const long long M7_sig_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<2)), 14), (1<<6)); // 3584
 static const long long M7_sig_f_Volume = tc_vmul(tc_vmul(1, (1<<3)), (1<<6)); // 512
 static const long long M7_sig_g_Volume = 1; // 1
 static const long long M7_sig_h_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<1)), (1<<5)), (1<<6)); // 4096
-static const long long M7_sig_i_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), 15), (1<<6)); // 7680
-static const long long M7_sig_j_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<2)), 6), 4); // 96
+static const long long M7_sig_i_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), 17), (1<<6)); // 8704
+static const long long M7_sig_j_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<2)), 7), 5); // 140
 static const long long M7_sig_k_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), (1<<8)), (1<<6)); // 131072
 static const long long M7_sig_l_Volume = tc_vmul(tc_vmul(1, (1<<6)), (1<<14)); // 1048576
 static const long long M7_sig_m_Volume = tc_vmul(tc_vmul(1, (1<<1)), (1<<5)); // 64
 static const long long M7_sig_n_Volume = 1; // 1
-static const long long M7_sig_s_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, (1<<1)), 4), 5), 3); // 120
+static const long long M7_sig_s_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, (1<<1)), 5), 5), 3); // 150
 static const long long M7_sig_t_Volume = 1; // 1
-static const long long M7_sig_w_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<1)), 3), 1); // 6
+static const long long M7_sig_w_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<1)), 3), 2); // 12
 
 #define M7_sig_USES(X) X(qs) X(cls) X(pos) X(nz) X(past) X(run) X(fp) X(mvc) X(rnz) X(xm) X(h8) X(h16) X(kb) X(sl) X(sa)
 

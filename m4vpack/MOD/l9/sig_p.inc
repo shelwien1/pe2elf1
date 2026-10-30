@@ -17,9 +17,9 @@ void M9_sig_make( const M_sig_v & D, tcx & X ) {
 
   a = 0;
   a = (a<<1) + (((cls)&1)); // 001
-  a = a*9 + M9_sig_a_tx[__min(24,__max(0,(tx)-(1-1)))];
+  a = a*12 + M9_sig_a_tx[__min(24,__max(0,(tx)-(1-1)))];
   a = a*3 + (((pos)>9+(1-1))+((pos)>20+(1-1)));
-  a = a*5 + M9_sig_a_pf[__min(30,__max(0,(pf)-(1-1)))];
+  a = a*7 + M9_sig_a_pf[__min(30,__max(0,(pf)-(1-1)))];
   a = a*4 + M9_sig_a_td[__min(3,__max(0,(td)-(1-1)))];
 
   b = 0;
@@ -34,12 +34,12 @@ void M9_sig_make( const M_sig_v & D, tcx & X ) {
   d = d*7 + M9_sig_d_past[__min(8,__max(0,(past)-(1-1)))];
   d = (d<<6) + (((pos)&63)); // 111111
   d = d*4 + M9_sig_d_ie[__min(18,__max(0,(ie)-(1-1)))];
-  d = d*5 + M9_sig_d_pe[__min(18,__max(0,(pe)-(1-1)))];
-  d = d*5 + M9_sig_d_tq[__min(64,__max(0,(tq)-(1-1)))];
+  d = d*6 + M9_sig_d_pe[__min(18,__max(0,(pe)-(1-1)))];
+  d = d*9 + M9_sig_d_tq[__min(64,__max(0,(tq)-(1-1)))];
 
   e = 0;
   e = (e<<1) + ((((cls)>>1)&1)); // 010
-  e = e*6 + M9_sig_e_run[__min(16,__max(0,(run)-(1-1)))];
+  e = e*14 + M9_sig_e_run[__min(16,__max(0,(run)-(1-1)))];
   e = (e<<6) + (((pos)&63)); // 111111
 
   h = 0;
@@ -48,13 +48,13 @@ void M9_sig_make( const M_sig_v & D, tcx & X ) {
 
   i = 0;
   i = (i<<3) + (((cls)&7)); // 111
-  i = i*12 + M9_sig_i_mvc[__min(30,__max(0,(mvc)-(1-1)))];
+  i = i*14 + M9_sig_i_mvc[__min(30,__max(0,(mvc)-(1-1)))];
   i = (i<<6) + (((pos)&63)); // 111111
 
   j = 0;
   j = (j<<1) + (((cls)&1)); // 001
   j = j*6 + M9_sig_j_rnz[__min(17,__max(0,(rnz)-(1-1)))];
-  j = j*4 + M9_sig_j_xm[__min(9,__max(0,(xm)-(1-1)))];
+  j = j*5 + M9_sig_j_xm[__min(9,__max(0,(xm)-(1-1)))];
 
   k = 0;
   k = (k<<3) + (((cls)&7)); // 111

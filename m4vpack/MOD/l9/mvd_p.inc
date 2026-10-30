@@ -16,65 +16,64 @@ void M9_mvd_make( const M_mvd_v & D, tcx & X ) {
   M_mvd_VARS(M_LOCAL)
 
   a = 0;
-  a = a*2 + (((ns)>4+(1-1)));
+  a = a*5 + M9_mvd_a_ns[__min(16,__max(0,(ns)-(1-1)))];
 
   b = 0;
   b = b*3 + (((kind)>2+(1-1))+((kind)>3+(1-1)));
   b = b*2 + (((comp)>0+(1-1)));
-  b = b*6 + M9_mvd_b_oth[__min(17,__max(0,(oth)-(1-1)))];
+  b = b*9 + M9_mvd_b_oth[__min(17,__max(0,(oth)-(1-1)))];
 
   c = 0;
-  c = c*4 + M9_mvd_c_kind[__min(5,__max(0,(kind)-(1-1)))];
-  c = c*5 + M9_mvd_c_rs[__min(17,__max(0,(rs)-(1-1)))];
+  c = c*5 + M9_mvd_c_kind[__min(5,__max(0,(kind)-(1-1)))];
+  c = c*6 + M9_mvd_c_rs[__min(17,__max(0,(rs)-(1-1)))];
 
   d = 0;
   d = d*5 + M9_mvd_d_kind[__min(5,__max(0,(kind)-(1-1)))];
   d = d*2 + (((comp)>0+(1-1)));
-  d = d*7 + M9_mvd_d_dz[__min(17,__max(0,(dz)-(1-1)))];
+  d = d*9 + M9_mvd_d_dz[__min(17,__max(0,(dz)-(1-1)))];
   d = d*3 + (((ds)>0+(1-1))+((ds)>1+(1-1)));
 
   e = 0;
-  e = e*2 + (((kind)>0+(1-1)));
-  e = e*7 + M9_mvd_e_sp[__min(17,__max(0,(sp)-(1-1)))];
+  e = e*11 + M9_mvd_e_sp[__min(17,__max(0,(sp)-(1-1)))];
 
   h = 0;
   h = h*4 + M9_mvd_h_kind[__min(5,__max(0,(kind)-(1-1)))];
   h = h*2 + (((comp)>0+(1-1)));
-  h = h*7 + M9_mvd_h_lq[__min(17,__max(0,(lq)-(1-1)))];
-  h = h*7 + M9_mvd_h_aq[__min(17,__max(0,(aq)-(1-1)))];
+  h = h*10 + M9_mvd_h_lq[__min(17,__max(0,(lq)-(1-1)))];
+  h = h*8 + M9_mvd_h_aq[__min(17,__max(0,(aq)-(1-1)))];
 
   i = 0;
-  i = i*6 + M9_mvd_i_kind[__min(5,__max(0,(kind)-(1-1)))];
+  i = i*5 + M9_mvd_i_kind[__min(5,__max(0,(kind)-(1-1)))];
   i = i*2 + (((comp)>0+(1-1)));
   i = i*7 + M9_mvd_i_fc[__min(6,__max(0,(fc)-(1-1)))];
 
   j = 0;
-  j = j*2 + (((kind)>2+(1-1)));
+  j = j*3 + (((kind)>1+(1-1))+((kind)>2+(1-1)));
   j = j*6 + M9_mvd_j_rbi[__min(5,__max(0,(rbi)-(1-1)))];
   j = j*3 + (((rsame)>0+(1-1))+((rsame)>1+(1-1)));
 
   k = 0;
   k = k*3 + (((kind)>0+(1-1))+((kind)>2+(1-1)));
   k = k*2 + (((comp)>0+(1-1)));
-  k = k*4 + M9_mvd_k_ns[__min(16,__max(0,(ns)-(1-1)))];
-  k = k*6 + M9_mvd_k_oth[__min(17,__max(0,(oth)-(1-1)))];
+  k = k*5 + M9_mvd_k_ns[__min(16,__max(0,(ns)-(1-1)))];
+  k = k*10 + M9_mvd_k_oth[__min(17,__max(0,(oth)-(1-1)))];
 
   l = 0;
   l = l*2 + (((comp)>0+(1-1)));
-  l = l*7 + M9_mvd_l_tz[__min(17,__max(0,(tz)-(1-1)))];
+  l = l*8 + M9_mvd_l_tz[__min(17,__max(0,(tz)-(1-1)))];
   l = l*3 + (((ts)>0+(1-1))+((ts)>1+(1-1)));
 
   s = 0;
   s = s*3 + (((oth)>2+(1-1))+((oth)>15+(1-1)));
 
   f = 0;
-  f = f*3 + (((kind)>3+(1-1))+((kind)>4+(1-1)));
+  f = f*2 + (((kind)>4+(1-1)));
   f = f*2 + (((comp)>0+(1-1)));
-  f = f*4 + M9_mvd_f_ns[__min(16,__max(0,(ns)-(1-1)))];
+  f = f*5 + M9_mvd_f_ns[__min(16,__max(0,(ns)-(1-1)))];
 
   m = 0;
   m = m*3 + (((kind)>1+(1-1))+((kind)>3+(1-1)));
-  m = m*7 + M9_mvd_m_tz[__min(17,__max(0,(tz)-(1-1)))];
+  m = m*6 + M9_mvd_m_tz[__min(17,__max(0,(tz)-(1-1)))];
 
   w = 0;
   w = w*5 + M9_mvd_w_kind[__min(5,__max(0,(kind)-(1-1)))];

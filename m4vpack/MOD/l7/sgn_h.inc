@@ -1,9 +1,10 @@
 
 
 static const byte M7_sgn_b_lsa[8+1]={ 0,1,2,3,4,5,6,7,8 };
-static const byte M7_sgn_b_pb[64+1]={ 0,1,1,2,2,2,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5 };
+static const byte M7_sgn_b_pb[64+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,48,49,50,51,52,53,54,55,55,55,56,57,57,58,59,59 };
 
 static const byte M7_sgn_c_gh[26+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26 };
+static const byte M7_sgn_c_pb[64+1]={ 0,1,2,3,4,5,6,7,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8 };
 
 
 static const byte M7_sgn_e_flu[8+1]={ 0,1,2,3,4,5,6,7,8 };
@@ -14,47 +15,46 @@ static const byte M7_sgn_f_pb[64+1]={ 0,1,1,2,2,2,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4,
 static const byte M7_sgn_h_flu[8+1]={ 0,1,1,2,3,3,4,5,5 };
 static const byte M7_sgn_h_flu2[8+1]={ 0,1,2,3,4,5,6,7,8 };
 
-static const byte M7_sgn_i_vote[19+1]={ 0,0,0,0,0,0,0,0,1,2,2,3,3,3,3,3,3,3,3,3 };
 
-static const byte M7_sgn_j_fdlu[26+1]={ 0,1,2,2,3,4,5,5,6,7,7,7,7,8,9,10,11,12,13,13,13,13,14,15,16,17,18 };
-
-
-static const byte M7_sgn_l_lam[24+1]={ 0,1,1,2,2,3,4,4,5,5,6,7,8,9,9,10,11,11,12,12,13,14,14,15,16 };
+static const byte M7_sgn_j_fdlu[26+1]={ 0,1,2,2,3,4,5,5,5,6,6,6,6,7,8,9,10,11,12,12,12,12,13,14,15,16,17 };
 
 
+static const byte M7_sgn_l_lam[24+1]={ 0,1,1,2,2,3,4,4,5,5,6,7,7,8,8,9,10,10,11,11,12,13,13,14,14 };
 
-static const byte M7_sgn_s_vote[19+1]={ 0,0,0,0,0,1,2,3,4,5,6,7,8,9,10,10,10,10,10,10 };
-static const byte M7_sgn_s_pb[64+1]={ 0,1,1,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4 };
+
+
+static const byte M7_sgn_s_vote[19+1]={ 0,1,1,1,1,2,3,4,5,6,7,8,9,10,11,12,12,12,13,13 };
+static const byte M7_sgn_s_pb[64+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23 };
 
 
 static const byte M7_sgn_w_vote[19+1]={ 0,0,0,0,1,2,3,4,5,6,7,8,9,10,11,12,12,12,12,12 };
 
 
 static const int M7_sgn_rA = (16+0) * (1);
-static const int M7_sgn_mwA = (4+0) * (1);
+static const int M7_sgn_mwA = (1+0) * (1);
 static const int M7_sgn_rB = (255+0) * (1);
-static const int M7_sgn_mwB = (6+0) * (1);
+static const int M7_sgn_mwB = (4+0) * (1);
 static const int M7_sgn_rC = (255+0) * (1);
-static const int M7_sgn_mwC = (55+0) * (1);
-static const int M7_sgn_rD = (255+0) * (1);
-static const int M7_sgn_mwD = (66+0) * (1);
-static const int M7_sgn_rE = (253+0) * (1);
-static const int M7_sgn_mwE = (5+0) * (1);
+static const int M7_sgn_mwC = (16+0) * (1);
+static const int M7_sgn_rD = (250+0) * (1);
+static const int M7_sgn_mwD = (64+0) * (1);
+static const int M7_sgn_rE = (254+0) * (1);
+static const int M7_sgn_mwE = (6+0) * (1);
 static const int M7_sgn_rH = (255+0) * (1);
 static const int M7_sgn_mwH = (5+0) * (1);
 static const int M7_sgn_rI = (0+0) * (1);
-static const int M7_sgn_mwI = (63+0) * (1);
+static const int M7_sgn_mwI = (51+0) * (1);
 static const int M7_sgn_rJ = (255+0) * (1);
 static const int M7_sgn_mwJ = (15+0) * (1);
-static const int M7_sgn_rK = (100+0) * (1);
-static const int M7_sgn_mwK = (6+0) * (1);
-static const int M7_sgn_rL = (255+0) * (1);
-static const int M7_sgn_mwL = (2+0) * (1);
+static const int M7_sgn_rK = (105+0) * (1);
+static const int M7_sgn_mwK = (4+0) * (1);
+static const int M7_sgn_rL = (254+0) * (1);
+static const int M7_sgn_mwL = (3+0) * (1);
 static const int M7_sgn_lr = (31+0) * (1);
-static const int M7_sgn_mb = (97+0) * (1);
+static const int M7_sgn_mb = (52+0) * (1);
 static const int M7_sgn_rS1 = (16+0) * (1);
 static const int M7_sgn_rS2 = (0+0) * (1);
-static const int M7_sgn_qs = (124+3) * (1);
+static const int M7_sgn_qs = (127+3) * (1);
 static const int M7_sgn_qf = (0+3) * (1);
 static const int M7_sgn_bw = (16+0) * (1);
 static const int M7_sgn_rT = (0+0) * (1);
@@ -81,21 +81,21 @@ static const int M7_sgn_hS = (22+0) * (1);
 static const int M7_sgn_hF = (22+0) * (1);
 
 
-static const long long M7_sgn_a_Volume = tc_vmul(tc_vmul(1, (1<<2)), 1); // 4
-static const long long M7_sgn_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), 9), 6); // 432
-static const long long M7_sgn_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<2)), 27), 3); // 324
+static const long long M7_sgn_a_Volume = tc_vmul(tc_vmul(1, (1<<1)), 1); // 2
+static const long long M7_sgn_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), 9), 60); // 4320
+static const long long M7_sgn_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<2)), 27), 9); // 972
 static const long long M7_sgn_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), (1<<6)), 2); // 1024
 static const long long M7_sgn_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), 9), (1<<6)); // 4608
 static const long long M7_sgn_f_Volume = tc_vmul(tc_vmul(1, (1<<3)), 6); // 48
 static const long long M7_sgn_g_Volume = 1; // 1
 static const long long M7_sgn_h_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), 6), 9); // 432
-static const long long M7_sgn_i_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<1)), 4), 2); // 16
-static const long long M7_sgn_j_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<2)), 19), 1); // 76
+static const long long M7_sgn_i_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<1)), 3), 2); // 12
+static const long long M7_sgn_j_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<2)), 18), 1); // 72
 static const long long M7_sgn_k_Volume = tc_vmul(1, 3); // 3
-static const long long M7_sgn_l_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<1)), 17), 1); // 34
+static const long long M7_sgn_l_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<1)), 15), 2); // 60
 static const long long M7_sgn_m_Volume = tc_vmul(tc_vmul(1, (1<<3)), 3); // 24
 static const long long M7_sgn_n_Volume = 1; // 1
-static const long long M7_sgn_s_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<1)), 11), 5); // 110
+static const long long M7_sgn_s_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<1)), 14), 24); // 672
 static const long long M7_sgn_t_Volume = 1; // 1
 static const long long M7_sgn_w_Volume = tc_vmul(1, 13); // 13
 

@@ -15,19 +15,18 @@ void M1_esc_make( const M_esc_v & D, tcx & X ) {
   M_esc_VARS(M_LOCAL)
 
   a = 0;
-  a = a*4 + M1_esc_a_dm[__min(3,__max(0,(dm)-(1-1)))];
 
   b = 0;
-  b = b*4 + M1_esc_b_dm[__min(3,__max(0,(dm)-(1-1)))];
+  b = b*2 + (((dm)>0+(1-1)));
 
   c = 0;
-  c = c*4 + M1_esc_c_dm[__min(3,__max(0,(dm)-(1-1)))];
+  c = c*3 + (((dm)>0+(1-1))+((dm)>1+(1-1)));
 
   d = 0;
-  d = d*4 + M1_esc_d_dm[__min(3,__max(0,(dm)-(1-1)))];
+  d = d*3 + (((dm)>0+(1-1))+((dm)>1+(1-1)));
 
   m = 0;
-  m = m*4 + M1_esc_m_dm[__min(3,__max(0,(dm)-(1-1)))];
+  m = m*3 + (((dm)>0+(1-1))+((dm)>1+(1-1)));
 
   t = 0;
 

@@ -9,17 +9,17 @@ Debug 1
 Const 0
 
 Index a
- a_dm: dm, 1!111
+ a_dm: dm, 1!110
 
 Index b
 
 Index c
- c_dm: dm, 1!111
+ c_dm: dm, 1!110
 
 Index d
 
 Index e
- e_dm: dm, 1!111
+ e_dm: dm, 1!100
 
 Index h
 
@@ -29,12 +29,12 @@ Index i
 Index j
 
 Index k
- k_dm: dm, 1!111
+ k_dm: dm, 1!110
 
 Index l
 
 Index m
- m_dm: dm, 1!111
+ m_dm: dm, 1!110
 
 Index t
 
@@ -42,28 +42,28 @@ Index n
 
 Index g
 
-Number rA, 1, 0!11111111
-Number mwA, 1, 0!00010111
-Number rB, 1, 0!11111111
-Number mwB, 1, 0!00001100
-Number rC, 1, 0!11111100
-Number mwC, 1, 0!00001111
-Number rD, 1, 0!11111111
-Number mwD, 1, 0!11100000
-Number rE, 1, 0!11101010
+Number rA, 1, 0!00000000
+Number mwA, 1, 0!11001010
+Number rB, 1, 0!10111111
+Number mwB, 1, 0!11110101
+Number rC, 1, 0!10000101
+Number mwC, 1, 0!00001000
+Number rD, 1, 0!01100011
+Number mwD, 1, 0!00000100
+Number rE, 1, 0!00001100
 Number mwE, 1, 0!00001000
-Number rH, 1, 0!11110110
-Number mwH, 1, 0!01000000
-Number rI, 1, 0!10000010
-Number mwI, 1, 0!00100000
-Number rJ, 1, 0!11111110
-Number mwJ, 1, 0!00100010
-Number rK, 1, 0!11011101
-Number mwK, 1, 0!00110001
-Number rL, 1, 0!11110100
-Number mwL, 1, 0!00010001
+Number rH, 1, 0!01110110
+Number mwH, 1, 0!10011001
+Number rI, 1, 0!00000000
+Number mwI, 1, 0!11111111
+Number rJ, 1, 0!11110110
+Number mwJ, 1, 0!11110111
+Number rK, 1, 0!00000000
+Number mwK, 1, 0!10000101
+Number rL, 1, 0!10111111
+Number mwL, 1, 0!10101001
 Number lr, 1, 0!11000
-Number mb, 1, 0!00001111
+Number mb, 1, 0!01001001
 
 #  Frozen: what esc never reads, which live would only take opt.pl's trials.
 ! Number rT, 1, 0!00000000

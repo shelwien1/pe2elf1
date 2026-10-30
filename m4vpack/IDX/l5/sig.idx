@@ -9,47 +9,47 @@ Debug 1
 Const 0
 
 Index a
- a_cls: cls, &111
- a_nc: nc, 1!11010010000100000
- a_qs: qs, 1!00001000001000000000000000000000
- a_pos: pos, &111111
+ a_cls: cls, &101
+ a_nc: nc, 1!10111110000000000
+ a_qs: qs, 1!00110111010000000000000000000000
+ a_pos: pos, &000000
 
 Index b
  b_cls: cls, &111
- b_kb: kb, 1!1111111000000000
+ b_kb: kb, 1!0000000000000100
  b_pos: pos, &111111
 
 Index c
- c_cls: cls, &111
- c_nz: nz, 1!11111111
- c_pos: pos, &111111
+ c_cls: cls, &100
+ c_nz: nz, 1!11110111
+ c_pos: pos, &000000
 
 Index d
  d_cls: cls, &111
- d_past: past, 1!11111111
- d_qs: qs, 1!00001000001000000000000000000000
+ d_past: past, 1!11111101
+ d_qs: qs, 1!00000110100000000000000000000000
  d_pos: pos, &111111
 
 Index e
  e_cls: cls, &111
- e_run: run, 1!1110100010000000
+ e_run: run, 1!1110100111111110
  e_pos: pos, &111111
 
 Index h
- h_cls: cls, &111
+ h_cls: cls, &010
  h_fp: fp, &11111
  h_pos: pos, &111111
 
 Index i
  i_cls: cls, &111
- i_mvc: mvc, 1!111010001000000111111111100000
+ i_mvc: mvc, 1!110110001001100001111110000000
  i_pos: pos, &111111
 
 Index j
- j_cls: cls, &111
- j_rnz: rnz, 1!11100100001000010
- j_xm: xm, 1!110000010
- j_pos: pos, &111111
+ j_cls: cls, &101
+ j_rnz: rnz, 1!11100100001000100
+ j_xm: xm, 1!110001010
+ j_pos: pos, &000000
 
 Index k
  k_cls: cls, &111
@@ -57,13 +57,13 @@ Index k
  k_pos: pos, &111111
 
 Index l
- l_cls: cls, &111
+ l_cls: cls, &000
  l_pos: pos, &111111
- l_h16: h16, &1111111111111111
+ l_h16: h16, &1111111101111011
 
 Index m
- m_cls: cls, &111
- m_pos: pos, &111111
+ m_cls: cls, &101
+ m_pos: pos, &110000
 
 Index t
 
@@ -71,28 +71,28 @@ Index n
 
 Index g
 
-Number rA, 1, 0!11111110
-Number mwA, 1, 0!00011111
-Number rB, 1, 0!01111011
+Number rA, 1, 0!11111111
+Number mwA, 1, 0!01110011
+Number rB, 1, 0!11111111
 Number mwB, 1, 0!10000000
-Number rC, 1, 0!11111010
-Number mwC, 1, 0!00000100
-Number rD, 1, 0!11111111
-Number mwD, 1, 0!01000000
-Number rE, 1, 0!11111111
-Number mwE, 1, 0!00000100
-Number rH, 1, 0!11111000
-Number mwH, 1, 0!00111111
-Number rI, 1, 0!11111110
-Number mwI, 1, 0!00100001
-Number rJ, 1, 0!11111101
-Number mwJ, 1, 0!01000001
-Number rK, 1, 0!11000100
-Number mwK, 1, 0!00000111
-Number rL, 1, 0!11110011
-Number mwL, 1, 0!00100000
+Number rC, 1, 0!11111111
+Number mwC, 1, 0!00111111
+Number rD, 1, 0!11010110
+Number mwD, 1, 0!00001110
+Number rE, 1, 0!11111110
+Number mwE, 1, 0!00000001
+Number rH, 1, 0!11111111
+Number mwH, 1, 0!00100111
+Number rI, 1, 0!11111111
+Number mwI, 1, 0!01011111
+Number rJ, 1, 0!11111111
+Number mwJ, 1, 0!00000001
+Number rK, 1, 0!11111110
+Number mwK, 1, 0!00101001
+Number rL, 1, 0!11111101
+Number mwL, 1, 0!00001010
 Number lr, 1, 0!01100
-Number mb, 1, 0!01011000
+Number mb, 1, 0!01000000
 
 #  Frozen: what sig never reads, which live would only take opt.pl's trials.
 ! Number rT, 1, 0!00000000

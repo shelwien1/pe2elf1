@@ -2,7 +2,7 @@
 
 
 
-static const byte M9_raw_d_code[11+1]={ 0,1,1,2,3,4,5,6,6,6,6,6 };
+static const byte M9_raw_d_code[11+1]={ 0,1,1,2,3,3,4,5,5,5,5,5 };
 
 static const byte M9_raw_e_code[11+1]={ 0,1,2,2,3,3,4,5,5,5,5,5 };
 static const byte M9_raw_e_at[11+1]={ 0,0,1,2,2,2,3,3,4,4,5,6 };
@@ -18,10 +18,10 @@ static const byte M9_raw_j_at[11+1]={ 0,0,1,2,3,3,4,5,6,6,7,8 };
 
 static const byte M9_raw_l_code[11+1]={ 0,1,1,2,2,3,4,4,5,5,5,5 };
 
-static const byte M9_raw_m_at[11+1]={ 0,0,1,2,3,3,3,4,5,5,5,6 };
+static const byte M9_raw_m_at[11+1]={ 0,0,1,2,3,3,3,4,5,5,6,7 };
 
 
-static const byte M9_raw_s_code[11+1]={ 0,1,2,2,3,3,4,5,5,5,5,5 };
+static const byte M9_raw_s_code[11+1]={ 0,1,2,2,3,4,5,6,6,6,6,6 };
 
 
 static const byte M9_raw_w_code[11+1]={ 0,1,2,2,2,3,4,5,5,5,5,5 };
@@ -31,11 +31,11 @@ static const int M9_raw_rA = (234+0) * (1);
 static const int M9_raw_rB = (41+0) * (1);
 static const int M9_raw_rC = (0+0) * (1);
 static const int M9_raw_rD = (247+0) * (1);
-static const int M9_raw_rE = (246+0) * (1);
-static const int M9_raw_rH = (226+0) * (1);
-static const int M9_raw_rI = (238+0) * (1);
+static const int M9_raw_rE = (250+0) * (1);
+static const int M9_raw_rH = (245+0) * (1);
+static const int M9_raw_rI = (250+0) * (1);
 static const int M9_raw_rJ = (236+0) * (1);
-static const int M9_raw_rK = (142+0) * (1);
+static const int M9_raw_rK = (174+0) * (1);
 static const int M9_raw_rL = (51+0) * (1);
 static const int M9_raw_rS1 = (8+0) * (1);
 static const int M9_raw_rS2 = (16+0) * (1);
@@ -81,7 +81,7 @@ static const int M9_raw_hN = (22+0) * (1);
 static const long long M9_raw_a_Volume = 1; // 1
 static const long long M9_raw_b_Volume = tc_vmul(1, (1<<8)); // 256
 static const long long M9_raw_c_Volume = tc_vmul(tc_vmul(1, (1<<8)), (1<<4)); // 4096
-static const long long M9_raw_d_Volume = tc_vmul(1, 7); // 7
+static const long long M9_raw_d_Volume = tc_vmul(1, 6); // 6
 static const long long M9_raw_e_Volume = tc_vmul(tc_vmul(1, 6), 7); // 42
 static const long long M9_raw_f_Volume = 1; // 1
 static const long long M9_raw_g_Volume = 1; // 1
@@ -90,9 +90,9 @@ static const long long M9_raw_i_Volume = tc_vmul(tc_vmul(1, (1<<4)), 5); // 80
 static const long long M9_raw_j_Volume = tc_vmul(1, 9); // 9
 static const long long M9_raw_k_Volume = tc_vmul(1, (1<<7)); // 128
 static const long long M9_raw_l_Volume = tc_vmul(tc_vmul(1, (1<<7)), 6); // 768
-static const long long M9_raw_m_Volume = tc_vmul(1, 7); // 7
+static const long long M9_raw_m_Volume = tc_vmul(1, 8); // 8
 static const long long M9_raw_n_Volume = 1; // 1
-static const long long M9_raw_s_Volume = tc_vmul(1, 6); // 6
+static const long long M9_raw_s_Volume = tc_vmul(1, 7); // 7
 static const long long M9_raw_t_Volume = 1; // 1
 static const long long M9_raw_w_Volume = tc_vmul(1, 6); // 6
 

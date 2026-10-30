@@ -29,7 +29,7 @@ void M9_hdr_make( const M_hdr_v & D, tcx & X ) {
   c = c*2 + (((ty)>1+(1-1)));
 
   d = 0;
-  d = d*12 + M9_hdr_d_fld[__min(39,__max(0,(fld)-(1-1)))];
+  d = d*11 + M9_hdr_d_fld[__min(39,__max(0,(fld)-(1-1)))];
 
   e = 0;
   e = e*11 + M9_hdr_e_fld[__min(39,__max(0,(fld)-(1-1)))];
@@ -37,7 +37,7 @@ void M9_hdr_make( const M_hdr_v & D, tcx & X ) {
   h = 0;
   h = h*13 + M9_hdr_h_fld[__min(39,__max(0,(fld)-(1-1)))];
   h = h*3 + (((ty)>1+(1-1))+((ty)>3+(1-1)));
-  h = h*4 + M9_hdr_h_pos[__min(31,__max(0,(pos)-(1-1)))];
+  h = h*2 + (((pos)>0+(1-1)));
 
   i = 0;
   i = i*2 + (((ty)>1+(1-1)));
@@ -56,10 +56,10 @@ void M9_hdr_make( const M_hdr_v & D, tcx & X ) {
   l = l*3 + (((pos)>0+(1-1))+((pos)>1+(1-1)));
 
   s = 0;
-  s = s*17 + M9_hdr_s_fld[__min(39,__max(0,(fld)-(1-1)))];
+  s = s*16 + M9_hdr_s_fld[__min(39,__max(0,(fld)-(1-1)))];
 
   f = 0;
-  f = f*14 + M9_hdr_f_fld[__min(39,__max(0,(fld)-(1-1)))];
+  f = f*13 + M9_hdr_f_fld[__min(39,__max(0,(fld)-(1-1)))];
 
   m = 0;
   m = m*11 + M9_hdr_m_fld[__min(39,__max(0,(fld)-(1-1)))];

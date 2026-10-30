@@ -16,8 +16,8 @@ void M3_dcs_make( const M_dcs_v & D, tcx & X ) {
 
   a = 0;
   a = a*2 + (((lc)>0+(1-1)));
-  a = a*6 + M3_dcs_a_lbn[__min(17,__max(0,(lbn)-(1-1)))];
-  a = a*6 + M3_dcs_a_abn[__min(17,__max(0,(abn)-(1-1)))];
+  a = a*7 + M3_dcs_a_lbn[__min(17,__max(0,(lbn)-(1-1)))];
+  a = a*9 + M3_dcs_a_abn[__min(17,__max(0,(abn)-(1-1)))];
 
   b = 0;
   b = b*2 + (((lc)>0+(1-1)));
@@ -31,30 +31,27 @@ void M3_dcs_make( const M_dcs_v & D, tcx & X ) {
   c = c*3 + (((psg)>0+(1-1))+((psg)>1+(1-1)));
 
   d = 0;
-  d = d*2 + (((lc)>0+(1-1)));
-  d = d*13 + M3_dcs_d_sz[__min(12,__max(0,(sz)-(1-1)))];
-  d = d*3 + (((psg)>0+(1-1))+((psg)>1+(1-1)));
+  d = d*4 + M3_dcs_d_as[__min(14,__max(0,(as)-(1-1)))];
+  d = d*6 + M3_dcs_d_prev[__min(13,__max(0,(prev)-(1-1)))];
 
   e = 0;
   e = e*2 + (((lc)>0+(1-1)));
-  e = e*2 + (((coded)>0+(1-1)));
-  e = e*3 + (((qs)>4+(1-1))+((qs)>10+(1-1)));
+  e = e*7 + M3_dcs_e_sz[__min(12,__max(0,(sz)-(1-1)))];
+  e = e*2 + (((psg)>1+(1-1)));
 
   h = 0;
   h = h*2 + (((lc)>0+(1-1)));
-  h = h*10 + M3_dcs_h_as[__min(14,__max(0,(as)-(1-1)))];
-  h = h*8 + M3_dcs_h_prev[__min(13,__max(0,(prev)-(1-1)))];
+  h = h*2 + (((coded)>0+(1-1)));
+  h = h*6 + M3_dcs_h_qs[__min(32,__max(0,(qs)-(1-1)))];
 
   m = 0;
-  m = m*2 + (((lc)>0+(1-1)));
   m = m*2 + (((coded)>0+(1-1)));
 
   t = 0;
   t = t*2 + (((lc)>0+(1-1)));
-  t = t*8 + M3_dcs_t_prev[__min(13,__max(0,(prev)-(1-1)))];
+  t = t*6 + M3_dcs_t_prev[__min(13,__max(0,(prev)-(1-1)))];
 
   n = 0;
-  n = n*2 + (((lc)>0+(1-1)));
 
   g = 0;
   X.c[0] = a;  X.c[1] = b;  X.c[2] = c;  X.c[3] = d;  X.c[4] = e;  X.c[5] = h;  X.m = m;  X.t = t;

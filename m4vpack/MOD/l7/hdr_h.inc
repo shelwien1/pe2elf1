@@ -3,26 +3,26 @@ static const byte M7_hdr_a_fld[39+1]={ 0,0,0,1,2,2,2,2,3,3,3,4,4,4,5,5,5,5,5,5,5
 static const byte M7_hdr_a_ty[4+1]={ 0,1,2,2,3 };
 static const byte M7_hdr_a_p1[64+1]={ 0,1,2,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3 };
 
-static const byte M7_hdr_b_fld[39+1]={ 0,1,2,2,2,2,2,3,3,3,4,5,5,5,6,6,7,7,7,7,7,8,8,8,8,8,8,9,9,9,9,9,9,9,10,10,10,10,10,10 };
+static const byte M7_hdr_b_fld[39+1]={ 0,1,2,2,2,2,2,3,3,3,4,5,5,5,6,6,7,7,7,7,7,8,8,8,8,8,8,9,9,9,9,9,10,10,11,11,11,11,11,11 };
 static const byte M7_hdr_b_p1[64+1]={ 0,1,2,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3 };
 
 static const byte M7_hdr_c_fld[39+1]={ 0,0,1,1,1,2,2,3,3,3,3,3,3,3,3,4,4,4,4,4,4,5,5,5,5,5,5,5,5,6,7,7,7,7,8,8,8,8,8,8 };
 
-static const byte M7_hdr_d_fld[39+1]={ 0,1,2,2,3,4,5,5,6,7,7,8,8,8,9,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,11,11,11,11,11,11 };
+static const byte M7_hdr_d_fld[39+1]={ 0,1,2,2,3,4,5,5,5,6,6,7,7,7,8,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,10,10,10,10,10,10 };
 
 static const byte M7_hdr_e_fld[39+1]={ 0,1,2,3,4,4,4,5,5,5,5,5,5,5,5,6,6,6,7,7,7,8,9,9,9,9,9,9,9,9,9,9,9,9,10,10,10,10,10,10 };
 
-static const byte M7_hdr_f_fld[39+1]={ 0,1,2,3,4,5,6,7,7,7,7,8,8,9,9,9,9,10,10,10,10,11,11,12,12,12,12,12,12,12,12,12,12,12,13,13,13,13,13,13 };
+static const byte M7_hdr_f_fld[39+1]={ 0,1,2,3,4,5,6,7,7,7,7,8,8,8,8,8,8,9,9,9,9,10,10,11,11,11,11,11,11,11,11,11,11,11,12,12,12,12,12,12 };
 
 static const byte M7_hdr_g_fld[39+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39 };
 
-static const byte M7_hdr_h_fld[39+1]={ 0,1,2,3,4,5,6,7,7,7,7,8,9,9,9,9,10,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,12,12,12,12,12,12 };
-static const byte M7_hdr_h_pos[31+1]={ 0,1,1,2,2,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3 };
+static const byte M7_hdr_h_fld[39+1]={ 0,1,2,3,4,5,6,7,7,7,7,8,8,8,8,8,9,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,11,11,11,11,11,11 };
+static const byte M7_hdr_h_pos[31+1]={ 0,1,1,2,2,2,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4 };
 
 
 static const byte M7_hdr_j_fld[39+1]={ 0,0,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,3,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,5,5,5,5,5,5 };
 static const byte M7_hdr_j_p1[64+1]={ 0,1,2,2,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4 };
-static const byte M7_hdr_j_pos[31+1]={ 0,1,1,2,3,3,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4 };
+static const byte M7_hdr_j_pos[31+1]={ 0,1,2,3,4,4,5,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6 };
 
 
 static const byte M7_hdr_l_fld[39+1]={ 0,1,1,2,2,2,2,2,2,2,3,3,4,4,4,5,5,5,6,6,7,7,7,7,7,7,7,7,7,7,7,7,8,8,9,9,9,9,9,9 };
@@ -50,13 +50,13 @@ static const int M7_hdr_rE = (0+0) * (1);
 static const int M7_hdr_mwE = (78+0) * (1);
 static const int M7_hdr_rH = (109+0) * (1);
 static const int M7_hdr_mwH = (1+0) * (1);
-static const int M7_hdr_rI = (183+0) * (1);
+static const int M7_hdr_rI = (185+0) * (1);
 static const int M7_hdr_mwI = (81+0) * (1);
 static const int M7_hdr_rJ = (138+0) * (1);
 static const int M7_hdr_mwJ = (1+0) * (1);
-static const int M7_hdr_rK = (231+0) * (1);
+static const int M7_hdr_rK = (247+0) * (1);
 static const int M7_hdr_mwK = (0+0) * (1);
-static const int M7_hdr_rL = (48+0) * (1);
+static const int M7_hdr_rL = (49+0) * (1);
 static const int M7_hdr_mwL = (4+0) * (1);
 static const int M7_hdr_lr = (31+0) * (1);
 static const int M7_hdr_mb = (49+0) * (1);
@@ -64,7 +64,7 @@ static const int M7_hdr_rT = (254+0) * (1);
 static const int M7_hdr_mwT = (0+0) * (1);
 static const int M7_hdr_mt = (6+0) * (1);
 static const int M7_hdr_rG = (64+0) * (1);
-static const int M7_hdr_mwG = (252+0) * (1);
+static const int M7_hdr_mwG = (253+0) * (1);
 static const int M7_hdr_rS1 = (16+0) * (1);
 static const int M7_hdr_rS2 = (8+0) * (1);
 static const int M7_hdr_qs = (127+3) * (1);
@@ -90,17 +90,17 @@ static const int M7_hdr_hF = (22+0) * (1);
 
 
 static const long long M7_hdr_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 8), 4), 4); // 128
-static const long long M7_hdr_b_Volume = tc_vmul(tc_vmul(1, 11), 4); // 44
+static const long long M7_hdr_b_Volume = tc_vmul(tc_vmul(1, 12), 4); // 48
 static const long long M7_hdr_c_Volume = tc_vmul(tc_vmul(1, 9), 2); // 18
-static const long long M7_hdr_d_Volume = tc_vmul(tc_vmul(1, 12), 1); // 12
+static const long long M7_hdr_d_Volume = tc_vmul(tc_vmul(1, 11), 1); // 11
 static const long long M7_hdr_e_Volume = tc_vmul(1, 11); // 11
-static const long long M7_hdr_f_Volume = tc_vmul(1, 14); // 14
+static const long long M7_hdr_f_Volume = tc_vmul(1, 13); // 13
 static const long long M7_hdr_g_Volume = tc_vmul(1, 40); // 40
-static const long long M7_hdr_h_Volume = tc_vmul(tc_vmul(tc_vmul(1, 13), 3), 4); // 156
+static const long long M7_hdr_h_Volume = tc_vmul(tc_vmul(tc_vmul(1, 12), 3), 5); // 180
 static const long long M7_hdr_i_Volume = tc_vmul(1, 2); // 2
-static const long long M7_hdr_j_Volume = tc_vmul(tc_vmul(tc_vmul(1, 6), 5), 5); // 150
+static const long long M7_hdr_j_Volume = tc_vmul(tc_vmul(tc_vmul(1, 6), 5), 7); // 210
 static const long long M7_hdr_k_Volume = 1; // 1
-static const long long M7_hdr_l_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 3), 2), 3); // 180
+static const long long M7_hdr_l_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 10), 3), 2), 2); // 120
 static const long long M7_hdr_m_Volume = tc_vmul(1, 11); // 11
 static const long long M7_hdr_n_Volume = tc_vmul(1, 40); // 40
 static const long long M7_hdr_s_Volume = tc_vmul(1, 17); // 17

@@ -17,28 +17,28 @@ void M9_lvl_make( const M_lvl_v & D, tcx & X ) {
 
   a = 0;
   a = (a<<2) + (((((cls)>>2)&1)<<1) + ((cls)&1)); // 101
-  a = a*2 + (((gs)>0+(1-1)));
+  a = a*2 + (((qs)>5+(1-1)));
 
   b = 0;
-  b = (b<<1) + (((cls)&1)); // 001
   b = b*5 + M9_lvl_b_nmb[__min(8,__max(0,(nmb)-(1-1)))];
-  b = b*4 + M9_lvl_b_ngt[__min(8,__max(0,(ngt)-(1-1)))];
-  b = b*3 + (((pos)>2+(1-1))+((pos)>9+(1-1)));
+  b = b*5 + M9_lvl_b_ngt[__min(8,__max(0,(ngt)-(1-1)))];
+  b = b*30 + M9_lvl_b_pb[__min(64,__max(0,(pos)-(1-1)))];
 
   c = 0;
-  c = (c<<2) + ((((cls)>>1)&3)); // 110
-  c = c*4 + M9_lvl_c_gs[__min(9,__max(0,(gs)-(1-1)))];
-  c = c*7 + M9_lvl_c_kc[__min(32,__max(0,(kc)-(1-1)))];
+  c = (c<<1) + ((((cls)>>2)&1)); // 100
+  c = c*5 + M9_lvl_c_gs[__min(9,__max(0,(gs)-(1-1)))];
+  c = c*14 + M9_lvl_c_kc[__min(32,__max(0,(kc)-(1-1)))];
 
   d = 0;
   d = (d<<1) + (((cls)&1)); // 001
-  d = d*3 + (((pos)>0+(1-1))+((pos)>5+(1-1)));
-  d = d*6 + M9_lvl_d_tx[__min(24,__max(0,(tx)-(1-1)))];
+  d = d*2 + (((pm)>5+(1-1)));
+  d = d*2 + (((pos)>0+(1-1)));
+  d = d*8 + M9_lvl_d_tx[__min(24,__max(0,(tx)-(1-1)))];
   d = d*6 + M9_lvl_d_em[__min(24,__max(0,(em)-(1-1)))];
-  d = d*7 + M9_lvl_d_pf[__min(30,__max(0,(pf)-(1-1)))];
+  d = d*10 + M9_lvl_d_pf[__min(30,__max(0,(pf)-(1-1)))];
 
   e = 0;
-  e = e*5 + M9_lvl_e_nb2[__min(8,__max(0,(nb2)-(1-1)))];
+  e = e*8 + M9_lvl_e_nb2[__min(8,__max(0,(nb2)-(1-1)))];
 
   h = 0;
   h = h*5 + M9_lvl_h_den[__min(4,__max(0,(den)-(1-1)))];
@@ -46,15 +46,15 @@ void M9_lvl_make( const M_lvl_v & D, tcx & X ) {
 
   i = 0;
   i = (i<<2) + (((cls)&3)); // 011
-  i = i*14 + M9_lvl_i_mvc[__min(30,__max(0,(mvc)-(1-1)))];
-  i = i*5 + M9_lvl_i_pb[__min(64,__max(0,(pos)-(1-1)))];
+  i = i*19 + M9_lvl_i_mvc[__min(30,__max(0,(mvc)-(1-1)))];
+  i = i*21 + M9_lvl_i_pb[__min(64,__max(0,(pos)-(1-1)))];
 
   j = 0;
   j = (j<<1) + ((((cls)>>2)&1)); // 100
-  j = j*4 + M9_lvl_j_qs[__min(32,__max(0,(qs)-(1-1)))];
+  j = j*8 + M9_lvl_j_qs[__min(32,__max(0,(qs)-(1-1)))];
   j = j*7 + M9_lvl_j_ie[__min(18,__max(0,(ie)-(1-1)))];
-  j = j*7 + M9_lvl_j_tq[__min(64,__max(0,(tq)-(1-1)))];
-  j = j*4 + M9_lvl_j_pe[__min(18,__max(0,(pe)-(1-1)))];
+  j = j*16 + M9_lvl_j_tq[__min(64,__max(0,(tq)-(1-1)))];
+  j = j*5 + M9_lvl_j_pe[__min(18,__max(0,(pe)-(1-1)))];
 
   k = 0;
   k = (k<<3) + (((cls)&7)); // 111
@@ -67,7 +67,7 @@ void M9_lvl_make( const M_lvl_v & D, tcx & X ) {
   l = (l<<6) + (((pos)&63)); // 111111
 
   s = 0;
-  s = s*2 + (((pos)>5+(1-1)));
+  s = s*2 + (((pos)>6+(1-1)));
 
   f = 0;
   f = (f<<3) + (((cls)&7)); // 111
@@ -75,19 +75,19 @@ void M9_lvl_make( const M_lvl_v & D, tcx & X ) {
   f = f*6 + M9_lvl_f_pb[__min(64,__max(0,(pos)-(1-1)))];
 
   m = 0;
-  m = (m<<1) + ((((cls)>>1)&1)); // 010
-  m = m*5 + M9_lvl_m_pb[__min(64,__max(0,(pos)-(1-1)))];
+  m = (m<<2) + ((((cls)>>1)&3)); // 110
+  m = m*19 + M9_lvl_m_pb[__min(64,__max(0,(pos)-(1-1)))];
   m = m*3 + (((gs)>0+(1-1))+((gs)>3+(1-1)));
-  m = m*5 + M9_lvl_m_ie[__min(18,__max(0,(ie)-(1-1)))];
+  m = m*4 + M9_lvl_m_ie[__min(18,__max(0,(ie)-(1-1)))];
 
   w = 0;
   w = (w<<2) + (((((cls)>>2)&1)<<1) + ((cls)&1)); // 101
   w = w*3 + (((gs)>0+(1-1))+((gs)>1+(1-1)));
-  w = w*2 + (((qs)>4+(1-1)));
+  w = w*3 + (((qs)>5+(1-1))+((qs)>6+(1-1)));
 
   t = 0;
   t = (t<<2) + (((((cls)>>2)&1)<<1) + ((cls)&1)); // 101
-  t = t*2 + (((qs)>4+(1-1)));
+  t = t*4 + M9_lvl_t_qs[__min(32,__max(0,(qs)-(1-1)))];
 
   n = 0;
 

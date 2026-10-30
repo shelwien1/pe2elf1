@@ -9,23 +9,23 @@ Debug 1
 Const 0
 
 Index a
- a_lc: lc, 1!1
- a_prev: prev, 1!1111111000000
+ a_lc: lc, 1!0
+ a_prev: prev, 1!0000000000000
 
 Index b
  b_lc: lc, 1!1
- b_ls: ls, 1!11111111100000
+ b_ls: ls, 1!11111010100000
  b_as: as, 1!11111111100000
 
 Index c
  c_lc: lc, 1!1
  c_coded: coded, 1!1
- c_qs: qs, 1!00001000001000000000000000000000
+ c_qs: qs, 1!00010111100000000000000000000000
 
 Index d
  d_lc: lc, 1!1
- d_lbn: lbn, 1!11100100000000010
- d_abn: abn, 1!11100100000000010
+ d_lbn: lbn, 1!11000110000100010
+ d_abn: abn, 1!11100111000000110
 
 Index e
  e_lc: lc, 1!1
@@ -35,23 +35,23 @@ Index e
 
 Index h
  h_lc: lc, 1!1
- h_sz: sz, 1!111111111111
+ h_sz: sz, 1!011110110000
  h_psg: psg, 1!11
 
 Index i
  i_lc: lc, 1!1
- i_prev: prev, 1!1111111000000
+ i_prev: prev, 1!1111111100000
  i_coded: coded, 1!1
 
 Index j
  j_lc: lc, 1!1
- j_ls: ls, 1!11111111100000
- j_prev: prev, 1!1111111000000
+ j_ls: ls, 1!01111111100000
+ j_prev: prev, 1!0111111100000
 
 Index k
- k_lc: lc, 1!1
- k_as: as, 1!11111111100000
- k_prev: prev, 1!1111111000000
+ k_lc: lc, 1!0
+ k_as: as, 1!11111000000000
+ k_prev: prev, 1!0010100000000
 
 Index l
  l_lc: lc, 1!1
@@ -62,42 +62,42 @@ Index m
 
 Index t
  t_lc: lc, 1!1
- t_prev: prev, 1!1111111000000
+ t_prev: prev, 1!1000111100000
 
 Index n
- n_lc: lc, 1!1
+ n_lc: lc, 1!0
 
 Index g
 
-Number rA, 1, 0!10000010
-Number mwA, 1, 0!10000000
-Number rB, 1, 0!11110010
-Number mwB, 1, 0!00000100
-Number rC, 1, 0!11111111
-Number mwC, 1, 0!00000100
+Number rA, 1, 0!00000000
+Number mwA, 1, 0!11111111
+Number rB, 1, 0!11111010
+Number mwB, 1, 0!00001000
+Number rC, 1, 0!11111100
+Number mwC, 1, 0!01000000
 Number rD, 1, 0!11111111
-Number mwD, 1, 0!00011011
+Number mwD, 1, 0!00011000
 Number rE, 1, 0!11111111
-Number mwE, 1, 0!00010000
+Number mwE, 1, 0!01010111
 Number rH, 1, 0!11111111
-Number mwH, 1, 0!00001000
-Number rI, 1, 0!10001001
-Number mwI, 1, 0!00000001
-Number rJ, 1, 0!11111110
-Number mwJ, 1, 0!00010100
-Number rK, 1, 0!11111111
-Number mwK, 1, 0!00110011
-Number rL, 1, 0!11111101
-Number mwL, 1, 0!00111110
-Number lr, 1, 0!01111
-Number mb, 1, 0!00100001
-Number rT, 1, 0!10000000
-Number mwT, 1, 0!00000000
-Number mt, 1, 0!000
+Number mwH, 1, 0!01111111
+Number rI, 1, 0!11111111
+Number mwI, 1, 0!01101111
+Number rJ, 1, 0!11111010
+Number mwJ, 1, 0!01101101
+Number rK, 1, 0!11111110
+Number mwK, 1, 0!10000000
+Number rL, 1, 0!01011110
+Number mwL, 1, 0!11000101
+Number lr, 1, 0!11111
+Number mb, 1, 0!00100000
+Number rT, 1, 0!11111110
+Number mwT, 1, 0!10000000
+Number mt, 1, 0!110
 
 #  Frozen: what dcs never reads, which live would only take opt.pl's trials.
-! Number lrm, 1, 0!00000
-! Number mbm, 1, 0!00000000
+! Number lrm, 1, 0!11000
+! Number mbm, 1, 0!10000000
 ! Number rG, 1, 0!00000000
 ! Number mwG, 1, 0!00000000
 

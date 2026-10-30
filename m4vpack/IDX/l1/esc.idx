@@ -9,19 +9,19 @@ Debug 1
 Const 0
 
 Index a
- a_dm: dm, 1!111
+ a_dm: dm, 1!000
 
 Index b
- b_dm: dm, 1!111
+ b_dm: dm, 1!100
 
 Index c
- c_dm: dm, 1!111
+ c_dm: dm, 1!110
 
 Index d
- d_dm: dm, 1!111
+ d_dm: dm, 1!110
 
 Index m
- m_dm: dm, 1!111
+ m_dm: dm, 1!110
 
 Index t
 
@@ -30,15 +30,15 @@ Index n
 Index g
 
 Number rA, 1, 0!11111111
-Number mwA, 1, 0!00010111
-Number rB, 1, 0!11111100
-Number mwB, 1, 0!00001111
-Number rC, 1, 0!11101010
-Number mwC, 1, 0!00001000
-Number rD, 1, 0!10000010
-Number mwD, 1, 0!00100000
-Number lr, 1, 0!11000
-Number mb, 1, 0!00001111
+Number mwA, 1, 0!00110001
+Number rB, 1, 0!01000100
+Number mwB, 1, 0!00000000
+Number rC, 1, 0!10010101
+Number mwC, 1, 0!00000001
+Number rD, 1, 0!01001011
+Number mwD, 1, 0!00000010
+Number lr, 1, 0!10010
+Number mb, 1, 0!01100000
 
 #  Frozen: what esc never reads, which live would only take opt.pl's trials.
 ! Number rT, 1, 0!00000000

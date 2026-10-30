@@ -1,19 +1,20 @@
 
 
+static const byte M9_qpd_b_qs[32+1]={ 0,0,0,0,0,1,2,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4 };
 
 
-static const byte M9_qpd_d_qs[32+1]={ 0,0,0,0,0,1,1,2,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3 };
+static const byte M9_qpd_d_qs[32+1]={ 0,0,0,0,0,0,1,2,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4 };
 
 static const byte M9_qpd_e_qs[32+1]={ 0,0,0,0,0,1,1,2,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3 };
 
 
 
 
-static const byte M9_qpd_i_qs[32+1]={ 0,0,0,0,0,1,1,2,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3 };
+static const byte M9_qpd_i_qs[32+1]={ 0,0,0,0,0,1,1,2,3,4,4,4,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5 };
 
 
 
-static const byte M9_qpd_l_qs[32+1]={ 0,0,0,0,0,1,1,1,1,2,2,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3 };
+static const byte M9_qpd_l_qs[32+1]={ 0,0,0,0,0,1,2,2,2,3,3,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4 };
 
 
 
@@ -22,29 +23,29 @@ static const byte M9_qpd_l_qs[32+1]={ 0,0,0,0,0,1,1,1,1,2,2,2,3,3,3,3,3,3,3,3,3,
 
 
 static const int M9_qpd_rA = (94+0) * (1);
-static const int M9_qpd_rB = (183+0) * (1);
-static const int M9_qpd_rC = (243+0) * (1);
+static const int M9_qpd_rB = (224+0) * (1);
+static const int M9_qpd_rC = (246+0) * (1);
 static const int M9_qpd_rD = (0+0) * (1);
-static const int M9_qpd_rE = (81+0) * (1);
-static const int M9_qpd_rH = (163+0) * (1);
-static const int M9_qpd_rI = (2+0) * (1);
-static const int M9_qpd_rJ = (166+0) * (1);
-static const int M9_qpd_rK = (201+0) * (1);
-static const int M9_qpd_rL = (0+0) * (1);
-static const int M9_qpd_rS1 = (8+0) * (1);
+static const int M9_qpd_rE = (94+0) * (1);
+static const int M9_qpd_rH = (240+0) * (1);
+static const int M9_qpd_rI = (0+0) * (1);
+static const int M9_qpd_rJ = (96+0) * (1);
+static const int M9_qpd_rK = (253+0) * (1);
+static const int M9_qpd_rL = (4+0) * (1);
+static const int M9_qpd_rS1 = (0+0) * (1);
 static const int M9_qpd_rS2 = (4+0) * (1);
-static const int M9_qpd_lr = (29+0) * (1);
-static const int M9_qpd_mwA = (21+0) * (1);
-static const int M9_qpd_mwB = (11+0) * (1);
-static const int M9_qpd_mwC = (7+0) * (1);
-static const int M9_qpd_mwD = (10+0) * (1);
-static const int M9_qpd_mwE = (9+0) * (1);
-static const int M9_qpd_mwH = (132+0) * (1);
+static const int M9_qpd_lr = (31+0) * (1);
+static const int M9_qpd_mwA = (17+0) * (1);
+static const int M9_qpd_mwB = (15+0) * (1);
+static const int M9_qpd_mwC = (5+0) * (1);
+static const int M9_qpd_mwD = (9+0) * (1);
+static const int M9_qpd_mwE = (28+0) * (1);
+static const int M9_qpd_mwH = (136+0) * (1);
 static const int M9_qpd_mwI = (0+0) * (1);
 static const int M9_qpd_mwJ = (0+0) * (1);
-static const int M9_qpd_mwK = (130+0) * (1);
+static const int M9_qpd_mwK = (65+0) * (1);
 static const int M9_qpd_mwL = (0+0) * (1);
-static const int M9_qpd_bw = (8+0) * (1);
+static const int M9_qpd_bw = (9+0) * (1);
 static const int M9_qpd_qs = (5+3) * (1);
 static const int M9_qpd_qf = (57+3) * (1);
 static const int M9_qpd_mb = (15+0) * (1);
@@ -73,17 +74,17 @@ static const int M9_qpd_hN = (22+0) * (1);
 
 
 static const long long M9_qpd_a_Volume = tc_vmul(tc_vmul(1, 3), 2); // 6
-static const long long M9_qpd_b_Volume = tc_vmul(tc_vmul(1, 3), 2); // 6
+static const long long M9_qpd_b_Volume = tc_vmul(tc_vmul(1, 3), 5); // 15
 static const long long M9_qpd_c_Volume = tc_vmul(1, 1); // 1
-static const long long M9_qpd_d_Volume = tc_vmul(tc_vmul(1, 2), 4); // 8
+static const long long M9_qpd_d_Volume = tc_vmul(tc_vmul(1, 2), 5); // 10
 static const long long M9_qpd_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 2), 4); // 24
 static const long long M9_qpd_f_Volume = tc_vmul(1, 1); // 1
 static const long long M9_qpd_g_Volume = 1; // 1
 static const long long M9_qpd_h_Volume = tc_vmul(1, 2); // 2
-static const long long M9_qpd_i_Volume = tc_vmul(1, 4); // 4
+static const long long M9_qpd_i_Volume = tc_vmul(1, 6); // 6
 static const long long M9_qpd_j_Volume = 1; // 1
 static const long long M9_qpd_k_Volume = tc_vmul(tc_vmul(1, 3), 2); // 6
-static const long long M9_qpd_l_Volume = tc_vmul(tc_vmul(1, 3), 4); // 12
+static const long long M9_qpd_l_Volume = tc_vmul(tc_vmul(1, 3), 5); // 15
 static const long long M9_qpd_m_Volume = tc_vmul(1, 3); // 3
 static const long long M9_qpd_n_Volume = 1; // 1
 static const long long M9_qpd_s_Volume = tc_vmul(1, 1); // 1

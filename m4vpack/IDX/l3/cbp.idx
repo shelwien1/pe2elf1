@@ -11,33 +11,33 @@ Const 0
 Index a
  a_c3: c3, 1!11
  a_rbit: rbit, 1!11
- a_cnt: cnt, 1!11111
+ a_cnt: cnt, 1!11101
 
 Index b
- b_c3: c3, 1!11
+ b_c3: c3, 1!00
  b_rbit: rbit, 1!11
- b_lu: lu, 1!11111111
+ b_lu: lu, 1!11111110
 
 Index c
- c_c3: c3, 1!11
- c_pat: pat, &11111
+ c_c3: c3, 1!10
+ c_frac: frac, 1!1111
 
 Index d
- d_c3: c3, 1!11
- d_frac: frac, 1!1111
+ d_c3: c3, 1!01
+ d_lu: lu, 1!11011110
+ d_lq: lq, 1!11
 
 Index e
- e_c3: c3, 1!11
- e_lu: lu, 1!11111111
- e_lq: lq, 1!11
+ e_c3: c3, 1!01
+ e_pat: pat, &11111
 
 Index h
  h_c3: c3, 1!11
- h_qs: qs, 1!00101010100100001000000100000000
- h_cnt: cnt, 1!11111
+ h_lu: lu, 1!11110111
+ h_mvc: mvc, 1!11111001000001010
 
 Index m
- m_c3: c3, 1!11
+ m_c3: c3, 1!00
 
 Index t
 
@@ -45,20 +45,20 @@ Index n
 
 Index g
 
-Number rA, 1, 0!11111101
-Number mwA, 1, 0!00000010
-Number rB, 1, 0!11111000
-Number mwB, 1, 0!00001011
-Number rC, 1, 0!11111101
+Number rA, 1, 0!11111111
+Number mwA, 1, 0!00000110
+Number rB, 1, 0!11111111
+Number mwB, 1, 0!00100000
+Number rC, 1, 0!11111110
 Number mwC, 1, 0!00010000
-Number rD, 1, 0!11111110
-Number mwD, 1, 0!00111001
-Number rE, 1, 0!11110001
+Number rD, 1, 0!11111111
+Number mwD, 1, 0!01000000
+Number rE, 1, 0!10000000
 Number mwE, 1, 0!01000000
 Number rH, 1, 0!11111111
-Number mwH, 1, 0!00010011
-Number lr, 1, 0!01111
-Number mb, 1, 0!00010001
+Number mwH, 1, 0!01000000
+Number lr, 1, 0!01100
+Number mb, 1, 0!00010011
 
 #  Frozen: what cbp never reads, which live would only take opt.pl's trials.
 ! Number rT, 1, 0!00000000

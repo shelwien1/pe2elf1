@@ -10,8 +10,8 @@ Const 0
 
 Index a
  a_lc: lc, 1!1
- a_lbn: lbn, 1!11100100000000010
- a_abn: abn, 1!11100100000000010
+ a_lbn: lbn, 1!11000110000100010
+ a_abn: abn, 1!10100110000000110
 
 Index b
  b_lc: lc, 1!1
@@ -25,40 +25,40 @@ Index c
  c_psg: psg, 1!11
 
 Index d
- d_lc: lc, 1!1
- d_sz: sz, 1!111111111111
- d_psg: psg, 1!11
+ d_lc: lc, 1!0
+ d_as: as, 1!00110000000000
+ d_prev: prev, 1!1110000000000
 
 Index m
- m_lc: lc, 1!1
+ m_lc: lc, 1!0
  m_coded: coded, 1!1
 
 Index t
  t_lc: lc, 1!1
- t_prev: prev, 1!1111111000000
+ t_prev: prev, 1!1000111100000
 
 Index n
- n_lc: lc, 1!1
+ n_lc: lc, 1!0
 
 Index g
 
-Number rA, 1, 0!11111111
-Number mwA, 1, 0!00011011
-Number rB, 1, 0!11110010
-Number mwB, 1, 0!00000100
+Number rA, 1, 0!11111101
+Number mwA, 1, 0!00011111
+Number rB, 1, 0!11111110
+Number mwB, 1, 0!00000101
 Number rC, 1, 0!11111111
-Number mwC, 1, 0!00010000
-Number rD, 1, 0!11111111
-Number mwD, 1, 0!00001000
-Number lr, 1, 0!01111
-Number mb, 1, 0!00100001
-Number rT, 1, 0!10000000
-Number mwT, 1, 0!00000000
-Number mt, 1, 0!000
+Number mwC, 1, 0!01000000
+Number rD, 1, 0!11111101
+Number mwD, 1, 0!00101110
+Number lr, 1, 0!11111
+Number mb, 1, 0!00100000
+Number rT, 1, 0!11111111
+Number mwT, 1, 0!10000000
+Number mt, 1, 0!110
 
 #  Frozen: what dcs never reads, which live would only take opt.pl's trials.
-! Number lrm, 1, 0!00000
-! Number mbm, 1, 0!00000000
+! Number lrm, 1, 0!11000
+! Number mbm, 1, 0!10000000
 ! Number rG, 1, 0!00000000
 ! Number mwG, 1, 0!00000000
 

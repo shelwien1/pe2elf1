@@ -10,57 +10,57 @@ Debug 1
 Const 0
 
 Index a
- a_st: st, 1!111
- a_cl: cl, 1!11
- a_rt: rt, 1!11
+ a_st: st, 1!000
+ a_cl: cl, 1!00
+ a_rt: rt, 1!10
 
 Index b
- b_st: st, 1!111
- b_c4: c4, 1!1111
- b_run: run, 1!1110010000010000
+ b_st: st, 1!000
+ b_c4: c4, 1!0110
+ b_run: run, 1!0100000000000000
 
 Index c
- c_st: st, 1!111
+ c_st: st, 1!100
  c_rc: rc, 1!1111111111
- c_cl: cl, 1!11
+ c_cl: cl, 1!00
 
 Index d
- d_st: st, 1!111
+ d_st: st, 1!000
  d_pz: pz, 1!1
  d_rz: rz, 1!11
 
 Index e
- e_st: st, 1!111
+ e_st: st, 1!000
  e_bsk: bsk, 1!11
 
 Index h
- h_st: st, 1!111
+ h_st: st, 1!000
  h_cl: cl, 1!11
  h_rr: rr, 1!11
 
 Index i
  i_st: st, 1!111
- i_run: run, 1!1110010000010000
+ i_run: run, 1!1111110011111110
  i_c4: c4, 1!1111
  i_cl: cl, 1!11
 
 Index j
  j_st: st, 1!111
  j_rc: rc, 1!1111111111
- j_run: run, 1!1110010000010000
+ j_run: run, 1!1111111111010010
 
 Index k
- k_st: st, 1!111
+ k_st: st, 1!000
  k_cl: cl, 1!11
- k_c4: c4, 1!1111
+ k_c4: c4, 1!1110
  k_rt: rt, 1!11
 
 Index l
- l_st: st, 1!111
+ l_st: st, 1!000
 
 Index m
- m_st: st, 1!111
- m_cl: cl, 1!11
+ m_st: st, 1!000
+ m_cl: cl, 1!00
 
 Index t
 
@@ -68,28 +68,28 @@ Index n
 
 Index g
 
-Number rA, 1, 0!01001010
-Number mwA, 1, 0!11000000
-Number rB, 1, 0!11110001
-Number mwB, 1, 0!00000111
-Number rC, 1, 0!11110011
-Number mwC, 1, 0!00000100
-Number rD, 1, 0!11111110
-Number mwD, 1, 0!00001000
-Number rE, 1, 0!11111111
-Number mwE, 1, 0!00001000
-Number rH, 1, 0!11111000
-Number mwH, 1, 0!00010101
-Number rI, 1, 0!11010101
-Number mwI, 1, 0!01010100
-Number rJ, 1, 0!11111010
-Number mwJ, 1, 0!01001010
-Number rK, 1, 0!01111110
-Number mwK, 1, 0!00000111
-Number rL, 1, 0!11110111
-Number mwL, 1, 0!00101000
+Number rA, 1, 0!00000000
+Number mwA, 1, 0!10010011
+Number rB, 1, 0!00000000
+Number mwB, 1, 0!01111110
+Number rC, 1, 0!11111111
+Number mwC, 1, 0!00100000
+Number rD, 1, 0!11111100
+Number mwD, 1, 0!00000011
+Number rE, 1, 0!10000000
+Number mwE, 1, 0!00000000
+Number rH, 1, 0!11111111
+Number mwH, 1, 0!01101100
+Number rI, 1, 0!11111000
+Number mwI, 1, 0!01000000
+Number rJ, 1, 0!11111011
+Number mwJ, 1, 0!01010001
+Number rK, 1, 0!10110011
+Number mwK, 1, 0!00010000
+Number rL, 1, 0!11111101
+Number mwL, 1, 0!11111110
 Number lr, 1, 0!01111
-Number mb, 1, 0!00100000
+Number mb, 1, 0!00101111
 
 #  Frozen: what skp never reads, which live would only take opt.pl's trials.
 ! Number rT, 1, 0!00000000

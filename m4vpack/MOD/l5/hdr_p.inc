@@ -15,51 +15,51 @@ void M5_hdr_make( const M_hdr_v & D, tcx & X ) {
   M_hdr_VARS(M_LOCAL)
 
   a = 0;
-  a = a*40 + M5_hdr_a_fld[__min(39,__max(0,(fld)-(1-1)))];
-  a = a*5 + M5_hdr_a_ty[__min(4,__max(0,(ty)-(1-1)))];
-  a = a*16 + M5_hdr_a_p1[__min(64,__max(0,(p1)-(1-1)))];
+  a = a*10 + M5_hdr_a_fld[__min(39,__max(0,(fld)-(1-1)))];
+  a = a*3 + (((ty)>0+(1-1))+((ty)>1+(1-1)));
+  a = a*4 + M5_hdr_a_p1[__min(64,__max(0,(p1)-(1-1)))];
 
   b = 0;
-  b = b*40 + M5_hdr_b_fld[__min(39,__max(0,(fld)-(1-1)))];
-  b = b*16 + M5_hdr_b_p1[__min(64,__max(0,(p1)-(1-1)))];
+  b = b*10 + M5_hdr_b_fld[__min(39,__max(0,(fld)-(1-1)))];
+  b = b*3 + (((p1)>1+(1-1))+((p1)>3+(1-1)));
 
   c = 0;
-  c = c*40 + M5_hdr_c_fld[__min(39,__max(0,(fld)-(1-1)))];
-  c = c*5 + M5_hdr_c_ty[__min(4,__max(0,(ty)-(1-1)))];
+  c = c*8 + M5_hdr_c_fld[__min(39,__max(0,(fld)-(1-1)))];
+  c = c*4 + M5_hdr_c_ty[__min(4,__max(0,(ty)-(1-1)))];
 
   d = 0;
-  d = d*40 + M5_hdr_d_fld[__min(39,__max(0,(fld)-(1-1)))];
-  d = d*32 + M5_hdr_d_pos[__min(31,__max(0,(pos)-(1-1)))];
+  d = d*9 + M5_hdr_d_fld[__min(39,__max(0,(fld)-(1-1)))];
+  d = d*2 + (((pos)>6+(1-1)));
 
   e = 0;
-  e = e*40 + M5_hdr_e_fld[__min(39,__max(0,(fld)-(1-1)))];
+  e = e*11 + M5_hdr_e_fld[__min(39,__max(0,(fld)-(1-1)))];
 
   h = 0;
-  h = h*40 + M5_hdr_h_fld[__min(39,__max(0,(fld)-(1-1)))];
-  h = h*5 + M5_hdr_h_ty[__min(4,__max(0,(ty)-(1-1)))];
-  h = h*32 + M5_hdr_h_pos[__min(31,__max(0,(pos)-(1-1)))];
+  h = h*12 + M5_hdr_h_fld[__min(39,__max(0,(fld)-(1-1)))];
+  h = h*3 + (((ty)>1+(1-1))+((ty)>3+(1-1)));
+  h = h*2 + (((pos)>0+(1-1)));
 
   i = 0;
-  i = i*5 + M5_hdr_i_ty[__min(4,__max(0,(ty)-(1-1)))];
+  i = i*3 + (((ty)>0+(1-1))+((ty)>1+(1-1)));
 
   j = 0;
-  j = j*40 + M5_hdr_j_fld[__min(39,__max(0,(fld)-(1-1)))];
-  j = j*16 + M5_hdr_j_p1[__min(64,__max(0,(p1)-(1-1)))];
-  j = j*32 + M5_hdr_j_pos[__min(31,__max(0,(pos)-(1-1)))];
+  j = j*11 + M5_hdr_j_fld[__min(39,__max(0,(fld)-(1-1)))];
+  j = j*5 + M5_hdr_j_p1[__min(64,__max(0,(p1)-(1-1)))];
+  j = j*7 + M5_hdr_j_pos[__min(31,__max(0,(pos)-(1-1)))];
 
   k = 0;
 
   l = 0;
-  l = l*40 + M5_hdr_l_fld[__min(39,__max(0,(fld)-(1-1)))];
-  l = l*5 + M5_hdr_l_ty[__min(4,__max(0,(ty)-(1-1)))];
-  l = l*16 + M5_hdr_l_p1[__min(64,__max(0,(p1)-(1-1)))];
-  l = l*32 + M5_hdr_l_pos[__min(31,__max(0,(pos)-(1-1)))];
+  l = l*8 + M5_hdr_l_fld[__min(39,__max(0,(fld)-(1-1)))];
+  l = l*2 + (((ty)>1+(1-1)));
+  l = l*2 + (((p1)>0+(1-1)));
+  l = l*2 + (((pos)>0+(1-1)));
 
   m = 0;
-  m = m*40 + M5_hdr_m_fld[__min(39,__max(0,(fld)-(1-1)))];
+  m = m*17 + M5_hdr_m_fld[__min(39,__max(0,(fld)-(1-1)))];
 
   t = 0;
-  t = t*40 + M5_hdr_t_fld[__min(39,__max(0,(fld)-(1-1)))];
+  t = t*5 + M5_hdr_t_fld[__min(39,__max(0,(fld)-(1-1)))];
 
   n = 0;
   n = n*40 + M5_hdr_n_fld[__min(39,__max(0,(fld)-(1-1)))];

@@ -16,17 +16,17 @@ void M7_sgn_make( const M_sgn_v & D, tcx & X ) {
   M_sgn_VARS(M_LOCAL)
 
   a = 0;
-  a = (a<<2) + ((((cls)>>1)&3)); // 110
+  a = (a<<1) + ((((cls)>>1)&1)); // 010
 
   b = 0;
   b = (b<<3) + (((cls)&7)); // 111
   b = b*9 + M7_sgn_b_lsa[__min(8,__max(0,(lsa)-(1-1)))];
-  b = b*6 + M7_sgn_b_pb[__min(64,__max(0,(pos)-(1-1)))];
+  b = b*60 + M7_sgn_b_pb[__min(64,__max(0,(pos)-(1-1)))];
 
   c = 0;
   c = (c<<2) + ((((cls)>>1)&3)); // 110
   c = c*27 + M7_sgn_c_gh[__min(26,__max(0,(gh)-(1-1)))];
-  c = c*3 + (((pos)>2+(1-1))+((pos)>5+(1-1)));
+  c = c*9 + M7_sgn_c_pb[__min(64,__max(0,(pos)-(1-1)))];
 
   d = 0;
   d = (d<<3) + (((cls)&7)); // 111
@@ -45,24 +45,25 @@ void M7_sgn_make( const M_sgn_v & D, tcx & X ) {
 
   i = 0;
   i = (i<<1) + ((((cls)>>1)&1)); // 010
-  i = i*4 + M7_sgn_i_vote[__min(19,__max(0,(vote)-(1-1)))];
+  i = i*3 + (((vote)>8+(1-1))+((vote)>10+(1-1)));
   i = i*2 + (((pos)>0+(1-1)));
 
   j = 0;
   j = (j<<2) + ((((cls)>>1)&3)); // 110
-  j = j*19 + M7_sgn_j_fdlu[__min(26,__max(0,(fdlu)-(1-1)))];
+  j = j*18 + M7_sgn_j_fdlu[__min(26,__max(0,(fdlu)-(1-1)))];
 
   k = 0;
   k = k*3 + (((xs)>0+(1-1))+((xs)>1+(1-1)));
 
   l = 0;
-  l = (l<<1) + ((((cls)>>2)&1)); // 100
-  l = l*17 + M7_sgn_l_lam[__min(24,__max(0,(lam)-(1-1)))];
+  l = (l<<1) + (((cls)&1)); // 001
+  l = l*15 + M7_sgn_l_lam[__min(24,__max(0,(lam)-(1-1)))];
+  l = l*2 + (((pos)>0+(1-1)));
 
   s = 0;
   s = (s<<1) + (((cls)&1)); // 001
-  s = s*11 + M7_sgn_s_vote[__min(19,__max(0,(vote)-(1-1)))];
-  s = s*5 + M7_sgn_s_pb[__min(64,__max(0,(pos)-(1-1)))];
+  s = s*14 + M7_sgn_s_vote[__min(19,__max(0,(vote)-(1-1)))];
+  s = s*24 + M7_sgn_s_pb[__min(64,__max(0,(pos)-(1-1)))];
 
   f = 0;
   f = (f<<3) + (((cls)&7)); // 111
@@ -70,7 +71,7 @@ void M7_sgn_make( const M_sgn_v & D, tcx & X ) {
 
   m = 0;
   m = (m<<3) + (((cls)&7)); // 111
-  m = m*3 + (((pos)>0+(1-1))+((pos)>5+(1-1)));
+  m = m*3 + (((pos)>0+(1-1))+((pos)>6+(1-1)));
 
   w = 0;
   w = w*13 + M7_sgn_w_vote[__min(19,__max(0,(vote)-(1-1)))];

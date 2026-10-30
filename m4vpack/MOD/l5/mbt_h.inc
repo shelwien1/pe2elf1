@@ -1,61 +1,48 @@
 
-static const byte M5_mbt_a_st[3+1]={ 0,1,2,3 };
-static const byte M5_mbt_a_rt[3+1]={ 0,1,2,3 };
 
-static const byte M5_mbt_b_st[3+1]={ 0,1,2,3 };
-static const byte M5_mbt_b_c4[4+1]={ 0,1,2,3,4 };
 static const byte M5_mbt_b_rt[3+1]={ 0,1,2,3 };
 
 static const byte M5_mbt_c_st[3+1]={ 0,1,2,3 };
-static const byte M5_mbt_c_rc[10+1]={ 0,1,2,3,4,5,6,7,8,9,10 };
-
-static const byte M5_mbt_d_st[3+1]={ 0,1,2,3 };
-
-static const byte M5_mbt_e_st[3+1]={ 0,1,2,3 };
 
 
-static const byte M5_mbt_h_st[3+1]={ 0,1,2,3 };
+
+
 static const byte M5_mbt_h_fsn[3+1]={ 0,1,2,3 };
 
 static const byte M5_mbt_i_st[3+1]={ 0,1,2,3 };
 static const byte M5_mbt_i_c4[4+1]={ 0,1,2,3,4 };
 
-static const byte M5_mbt_j_st[3+1]={ 0,1,2,3 };
-static const byte M5_mbt_j_rc[10+1]={ 0,1,2,3,4,5,6,7,8,9,10 };
+static const byte M5_mbt_j_rc[10+1]={ 0,1,2,3,4,4,4,4,4,4,4 };
 
-static const byte M5_mbt_k_st[3+1]={ 0,1,2,3 };
-static const byte M5_mbt_k_rt[3+1]={ 0,1,2,3 };
-static const byte M5_mbt_k_c4[4+1]={ 0,1,2,3,4 };
-
-static const byte M5_mbt_l_st[3+1]={ 0,1,2,3 };
-
-static const byte M5_mbt_m_st[3+1]={ 0,1,2,3 };
+static const byte M5_mbt_k_c4[4+1]={ 0,1,2,3,3 };
 
 
 
 
-static const int M5_mbt_rA = (250+0) * (1);
-static const int M5_mbt_mwA = (16+0) * (1);
+
+
+static const int M5_mbt_rA = (255+0) * (1);
+static const int M5_mbt_mwA = (244+0) * (1);
 static const int M5_mbt_rB = (0+0) * (1);
-static const int M5_mbt_mwB = (29+0) * (1);
-static const int M5_mbt_rC = (255+0) * (1);
-static const int M5_mbt_mwC = (16+0) * (1);
-static const int M5_mbt_rD = (141+0) * (1);
-static const int M5_mbt_mwD = (17+0) * (1);
-static const int M5_mbt_rE = (254+0) * (1);
-static const int M5_mbt_mwE = (0+0) * (1);
-static const int M5_mbt_rH = (196+0) * (1);
-static const int M5_mbt_mwH = (1+0) * (1);
+static const int M5_mbt_mwB = (79+0) * (1);
+static const int M5_mbt_rC = (0+0) * (1);
+static const int M5_mbt_mwC = (63+0) * (1);
+static const int M5_mbt_rD = (255+0) * (1);
+static const int M5_mbt_mwD = (128+0) * (1);
+static const int M5_mbt_rE = (233+0) * (1);
+static const int M5_mbt_mwE = (255+0) * (1);
+static const int M5_mbt_rH = (242+0) * (1);
+static const int M5_mbt_mwH = (249+0) * (1);
 static const int M5_mbt_rI = (253+0) * (1);
-static const int M5_mbt_mwI = (3+0) * (1);
-static const int M5_mbt_rJ = (252+0) * (1);
-static const int M5_mbt_mwJ = (11+0) * (1);
-static const int M5_mbt_rK = (103+0) * (1);
-static const int M5_mbt_mwK = (10+0) * (1);
-static const int M5_mbt_rL = (241+0) * (1);
-static const int M5_mbt_mwL = (64+0) * (1);
+static const int M5_mbt_mwI = (53+0) * (1);
+static const int M5_mbt_rJ = (255+0) * (1);
+static const int M5_mbt_mwJ = (0+0) * (1);
+static const int M5_mbt_rK = (255+0) * (1);
+static const int M5_mbt_mwK = (32+0) * (1);
+static const int M5_mbt_rL = (254+0) * (1);
+static const int M5_mbt_mwL = (224+0) * (1);
 static const int M5_mbt_lr = (15+0) * (1);
-static const int M5_mbt_mb = (27+0) * (1);
+static const int M5_mbt_mb = (31+0) * (1);
 static const int M5_mbt_rT = (0+0) * (1);
 static const int M5_mbt_mwT = (0+0) * (1);
 static const int M5_mbt_mt = (0+0) * (1);
@@ -78,22 +65,22 @@ static const int M5_mbt_hT = (22+0) * (1);
 static const int M5_mbt_hN = (22+0) * (1);
 
 
-static const long long M5_mbt_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 3), 4); // 48
-static const long long M5_mbt_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 5), 4); // 80
-static const long long M5_mbt_c_Volume = tc_vmul(tc_vmul(1, 4), 11); // 44
-static const long long M5_mbt_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 3), 3); // 36
-static const long long M5_mbt_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 3); // 24
+static const long long M5_mbt_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 3), 3); // 9
+static const long long M5_mbt_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 2), 4); // 8
+static const long long M5_mbt_c_Volume = tc_vmul(tc_vmul(1, 4), 3); // 12
+static const long long M5_mbt_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 3), 3); // 18
+static const long long M5_mbt_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 2), 2); // 4
 static const long long M5_mbt_g_Volume = 1; // 1
-static const long long M5_mbt_h_Volume = tc_vmul(tc_vmul(1, 4), 4); // 16
+static const long long M5_mbt_h_Volume = tc_vmul(tc_vmul(1, 3), 4); // 12
 static const long long M5_mbt_i_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 3), 5); // 60
-static const long long M5_mbt_j_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 11), 3); // 132
-static const long long M5_mbt_k_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 4), 5); // 80
-static const long long M5_mbt_l_Volume = tc_vmul(1, 4); // 4
-static const long long M5_mbt_m_Volume = tc_vmul(1, 4); // 4
+static const long long M5_mbt_j_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 5), 3); // 30
+static const long long M5_mbt_k_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 3), 4); // 36
+static const long long M5_mbt_l_Volume = tc_vmul(1, 1); // 1
+static const long long M5_mbt_m_Volume = tc_vmul(1, 1); // 1
 static const long long M5_mbt_n_Volume = 1; // 1
 static const long long M5_mbt_t_Volume = 1; // 1
 
-#define M5_mbt_USES(X) X(st) X(cl) X(rt) X(c4) X(rc) X(cd) X(intra) X(fsn)
+#define M5_mbt_USES(X) X(cl) X(rt) X(c4) X(st) X(rc) X(cd) X(intra) X(fsn)
 
 struct M5_mbt_T {
   cm_cnt2 M5_mbt_A[tc_rows(M5_mbt_a_Volume, M5_mbt_hA) * M_mbt_ND];

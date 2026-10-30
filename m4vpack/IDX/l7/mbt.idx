@@ -9,7 +9,7 @@ Debug 1
 Const 0
 
 Index a
- a_st: st, 1!000
+ a_st: st, 1!001
  a_cl: cl, 1!10
  a_rt: rt, 1!110
 
@@ -23,7 +23,7 @@ Index c
  c_rc: rc, 1!1010100000
 
 Index d
- d_st: st, 1!100
+ d_st: st, 1!110
  d_cd: cd, 1!11
  d_cl: cl, 1!10
 
@@ -75,17 +75,17 @@ Index n
 Index g
 
 Number rA, 1, 0!11111111
-Number mwA, 1, 0!10111011
+Number mwA, 1, 0!10111110
 Number rB, 1, 0!00000000
 Number mwB, 1, 0!00011110
 Number rC, 1, 0!00000000
 Number mwC, 1, 0!00011001
 Number rD, 1, 0!11111101
 Number mwD, 1, 0!10000000
-Number rE, 1, 0!11111111
+Number rE, 1, 0!11111101
 Number mwE, 1, 0!11111111
-Number rH, 1, 0!11111100
-Number mwH, 1, 0!11010110
+Number rH, 1, 0!11111010
+Number mwH, 1, 0!11000111
 Number rI, 1, 0!11111011
 Number mwI, 1, 0!00100110
 Number rJ, 1, 0!11111111

@@ -1,13 +1,13 @@
 
 static const byte M7_mvg_a_kind[5+1]={ 0,1,2,3,3,3 };
 
-static const byte M7_mvg_b_kind[5+1]={ 0,1,2,3,4,5 };
-static const byte M7_mvg_b_dz[17+1]={ 0,1,2,3,3,4,4,4,4,5,5,5,5,5,5,5,6,6 };
+static const byte M7_mvg_b_kind[5+1]={ 0,1,2,3,3,3 };
+static const byte M7_mvg_b_dz[17+1]={ 0,0,1,2,2,3,3,4,5,6,7,8,8,9,9,10,10,10 };
 
 
 static const byte M7_mvg_d_kind[5+1]={ 0,1,2,3,3,3 };
 
-static const byte M7_mvg_e_kind[5+1]={ 0,0,1,2,2,3 };
+static const byte M7_mvg_e_kind[5+1]={ 0,1,2,3,3,4 };
 static const byte M7_mvg_e_hm[3+1]={ 0,1,2,3 };
 
 static const byte M7_mvg_f_kind[5+1]={ 0,1,2,3,3,4 };
@@ -16,7 +16,7 @@ static const byte M7_mvg_f_kind[5+1]={ 0,1,2,3,3,4 };
 
 
 static const byte M7_mvg_j_kind[5+1]={ 0,0,0,1,2,3 };
-static const byte M7_mvg_j_mag[16+1]={ 0,0,1,2,2,2,2,2,2,3,3,3,3,3,3,3,3 };
+static const byte M7_mvg_j_mag[16+1]={ 0,0,1,2,3,3,3,3,3,4,4,4,4,4,4,4,4 };
 
 static const byte M7_mvg_k_kind[5+1]={ 0,0,1,2,3,3 };
 
@@ -26,29 +26,28 @@ static const byte M7_mvg_m_kind[5+1]={ 0,0,0,1,2,3 };
 
 
 
-static const byte M7_mvg_w_kind[5+1]={ 0,1,2,2,3,3 };
 
 
-static const int M7_mvg_rA = (255+0) * (1);
-static const int M7_mvg_mwA = (25+0) * (1);
+static const int M7_mvg_rA = (254+0) * (1);
+static const int M7_mvg_mwA = (31+0) * (1);
 static const int M7_mvg_rB = (0+0) * (1);
-static const int M7_mvg_mwB = (68+0) * (1);
+static const int M7_mvg_mwB = (66+0) * (1);
 static const int M7_mvg_rC = (0+0) * (1);
 static const int M7_mvg_mwC = (77+0) * (1);
 static const int M7_mvg_rD = (79+0) * (1);
-static const int M7_mvg_mwD = (5+0) * (1);
+static const int M7_mvg_mwD = (1+0) * (1);
 static const int M7_mvg_rE = (255+0) * (1);
 static const int M7_mvg_mwE = (0+0) * (1);
-static const int M7_mvg_rH = (254+0) * (1);
-static const int M7_mvg_mwH = (142+0) * (1);
-static const int M7_mvg_rI = (251+0) * (1);
+static const int M7_mvg_rH = (253+0) * (1);
+static const int M7_mvg_mwH = (137+0) * (1);
+static const int M7_mvg_rI = (247+0) * (1);
 static const int M7_mvg_mwI = (254+0) * (1);
-static const int M7_mvg_rJ = (157+0) * (1);
+static const int M7_mvg_rJ = (133+0) * (1);
 static const int M7_mvg_mwJ = (0+0) * (1);
 static const int M7_mvg_rK = (248+0) * (1);
-static const int M7_mvg_mwK = (111+0) * (1);
+static const int M7_mvg_mwK = (104+0) * (1);
 static const int M7_mvg_rL = (0+0) * (1);
-static const int M7_mvg_mwL = (78+0) * (1);
+static const int M7_mvg_mwL = (74+0) * (1);
 static const int M7_mvg_lr = (16+0) * (1);
 static const int M7_mvg_mb = (129+0) * (1);
 static const int M7_mvg_rS1 = (8+0) * (1);
@@ -81,22 +80,22 @@ static const int M7_mvg_hF = (22+0) * (1);
 
 
 static const long long M7_mvg_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 3), 3); // 72
-static const long long M7_mvg_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 6), 2), 3), 7); // 252
+static const long long M7_mvg_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 3), 11); // 264
 static const long long M7_mvg_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 2), 3); // 18
 static const long long M7_mvg_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 1), 2); // 8
-static const long long M7_mvg_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 1), 3), 4); // 48
+static const long long M7_mvg_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 5), 1), 3), 4); // 60
 static const long long M7_mvg_f_Volume = tc_vmul(1, 5); // 5
 static const long long M7_mvg_g_Volume = 1; // 1
 static const long long M7_mvg_h_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 1), 3); // 9
-static const long long M7_mvg_i_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 2); // 2
-static const long long M7_mvg_j_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 3), 4); // 96
+static const long long M7_mvg_i_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 2), 3); // 6
+static const long long M7_mvg_j_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 3), 5); // 120
 static const long long M7_mvg_k_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 3), 3), 2); // 72
 static const long long M7_mvg_l_Volume = tc_vmul(tc_vmul(1, 3), 2); // 6
 static const long long M7_mvg_m_Volume = tc_vmul(tc_vmul(1, 4), 1); // 4
 static const long long M7_mvg_n_Volume = 1; // 1
 static const long long M7_mvg_s_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 3); // 3
 static const long long M7_mvg_t_Volume = 1; // 1
-static const long long M7_mvg_w_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 1), 2), 2); // 16
+static const long long M7_mvg_w_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 1), 2), 2); // 12
 
 #define M7_mvg_USES(X) X(kind) X(comp) X(ls) X(as) X(ds) X(dz) X(mag) X(hm)
 

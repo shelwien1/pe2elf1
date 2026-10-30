@@ -1,28 +1,23 @@
 
-static const byte M1_esc_a_dm[3+1]={ 0,1,2,3 };
-
-static const byte M1_esc_b_dm[3+1]={ 0,1,2,3 };
-
-static const byte M1_esc_c_dm[3+1]={ 0,1,2,3 };
-
-static const byte M1_esc_d_dm[3+1]={ 0,1,2,3 };
 
 
-static const byte M1_esc_m_dm[3+1]={ 0,1,2,3 };
+
+
+
 
 
 
 
 static const int M1_esc_rA = (255+0) * (1);
-static const int M1_esc_mwA = (23+0) * (1);
-static const int M1_esc_rB = (252+0) * (1);
-static const int M1_esc_mwB = (15+0) * (1);
-static const int M1_esc_rC = (234+0) * (1);
-static const int M1_esc_mwC = (8+0) * (1);
-static const int M1_esc_rD = (130+0) * (1);
-static const int M1_esc_mwD = (32+0) * (1);
-static const int M1_esc_lr = (24+0) * (1);
-static const int M1_esc_mb = (15+0) * (1);
+static const int M1_esc_mwA = (49+0) * (1);
+static const int M1_esc_rB = (68+0) * (1);
+static const int M1_esc_mwB = (0+0) * (1);
+static const int M1_esc_rC = (149+0) * (1);
+static const int M1_esc_mwC = (1+0) * (1);
+static const int M1_esc_rD = (75+0) * (1);
+static const int M1_esc_mwD = (2+0) * (1);
+static const int M1_esc_lr = (18+0) * (1);
+static const int M1_esc_mb = (96+0) * (1);
 static const int M1_esc_rT = (0+0) * (1);
 static const int M1_esc_mwT = (0+0) * (1);
 static const int M1_esc_mt = (0+0) * (1);
@@ -39,12 +34,12 @@ static const int M1_esc_hT = (22+0) * (1);
 static const int M1_esc_hN = (22+0) * (1);
 
 
-static const long long M1_esc_a_Volume = tc_vmul(1, 4); // 4
-static const long long M1_esc_b_Volume = tc_vmul(1, 4); // 4
-static const long long M1_esc_c_Volume = tc_vmul(1, 4); // 4
-static const long long M1_esc_d_Volume = tc_vmul(1, 4); // 4
+static const long long M1_esc_a_Volume = tc_vmul(1, 1); // 1
+static const long long M1_esc_b_Volume = tc_vmul(1, 2); // 2
+static const long long M1_esc_c_Volume = tc_vmul(1, 3); // 3
+static const long long M1_esc_d_Volume = tc_vmul(1, 3); // 3
 static const long long M1_esc_g_Volume = 1; // 1
-static const long long M1_esc_m_Volume = tc_vmul(1, 4); // 4
+static const long long M1_esc_m_Volume = tc_vmul(1, 3); // 3
 static const long long M1_esc_n_Volume = 1; // 1
 static const long long M1_esc_t_Volume = 1; // 1
 

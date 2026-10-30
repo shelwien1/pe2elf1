@@ -25,7 +25,7 @@ void M9_raw_make( const M_raw_v & D, tcx & X ) {
   c = (c<<4) + (((c2)&15)); // 00001111
 
   d = 0;
-  d = d*7 + M9_raw_d_code[__min(11,__max(0,(code)-(1-1)))];
+  d = d*6 + M9_raw_d_code[__min(11,__max(0,(code)-(1-1)))];
 
   e = 0;
   e = e*6 + M9_raw_e_code[__min(11,__max(0,(code)-(1-1)))];
@@ -50,12 +50,12 @@ void M9_raw_make( const M_raw_v & D, tcx & X ) {
   l = l*6 + M9_raw_l_code[__min(11,__max(0,(code)-(1-1)))];
 
   s = 0;
-  s = s*6 + M9_raw_s_code[__min(11,__max(0,(code)-(1-1)))];
+  s = s*7 + M9_raw_s_code[__min(11,__max(0,(code)-(1-1)))];
 
   f = 0;
 
   m = 0;
-  m = m*7 + M9_raw_m_at[__min(11,__max(0,(at)-(1-1)))];
+  m = m*8 + M9_raw_m_at[__min(11,__max(0,(at)-(1-1)))];
 
   w = 0;
   w = w*6 + M9_raw_w_code[__min(11,__max(0,(code)-(1-1)))];

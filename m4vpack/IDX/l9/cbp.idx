@@ -13,7 +13,7 @@ Index a
  a_lu: lu, 1!10010110
 
 Index b
- b_c3: c3, 1!00
+ b_c3: c3, 1!10
  b_mvc: mvc, 1!00000000000000010
 
 Index c
@@ -27,7 +27,7 @@ Index d
 
 Index e
  e_c3: c3, 1!11
- e_qs: qs, 1!00100010000000000000000000000000
+ e_qs: qs, 1!00110011101100000000000000000000
  e_cnt: cnt, 1!11000
 
 Index h
@@ -42,18 +42,18 @@ Index i
 Index j
  j_c3: c3, 1!11
  j_lu: lu, 1!11111111
- j_mvc: mvc, 1!11101000100000010
+ j_mvc: mvc, 1!11111001000011010
 
 Index k
  k_c3: c3, 1!00
  k_rbit: rbit, 1!11
- k_lu: lu, 1!11111010
+ k_lu: lu, 1!11111011
 
 Index l
  l_c3: c3, 1!10
- l_ie: ie, 1!01110100010000000
- l_tq: tq, 1!0100010000000100000000000000000000000000000000000000000000000000
- l_tx: tx, 1!011010101010000000000000
+ l_ie: ie, 1!01110101000001000
+ l_tq: tq, 1!0100010000000100010110000000000000000000000000000000000000000000
+ l_tx: tx, 1!011111111010000000000000
  l_em: em, 1!101010001000000000000000
 
 Index s
@@ -65,7 +65,7 @@ Index f
 
 Index m
  m_c3: c3, 1!11
- m_em: em, 1!010010100010000000000000
+ m_em: em, 1!010100100000011001010000
 
 Index w
  w_c3: c3, 1!10
@@ -80,32 +80,32 @@ Index n
 #  (frozen: what cbp never reads; see the parameters below)
 Index g
 
-Number rA, 1, 0!10000001
+Number rA, 1, 0!10001011
 Number rB, 1, 0!00110000
 Number rC, 1, 0!11111111
-Number rD, 1, 0!11111100
-Number rE, 1, 0!11111000
-Number rH, 1, 0!11111111
-Number rI, 1, 0!11111110
-Number rJ, 1, 0!11111101
+Number rD, 1, 0!11111111
+Number rE, 1, 0!11111001
+Number rH, 1, 0!11111110
+Number rI, 1, 0!11111111
+Number rJ, 1, 0!11111010
 Number rK, 1, 0!11111111
-Number rL, 1, 0!11111111
+Number rL, 1, 0!11111110
 Number rS1, 1, 0!01000
 Number rS2, 1, 0!10000
 Number lr, 1, 0!01111
-Number mwA, 1, 0!11111110
+Number mwA, 1, 0!11111111
 Number mwB, 1, 0!00000110
 Number mwC, 1, 0!00000110
-Number mwD, 1, 0!00111110
-Number mwE, 1, 0!01110000
+Number mwD, 1, 0!00111100
+Number mwE, 1, 0!01101100
 Number mwH, 1, 0!01000000
-Number mwI, 1, 0!01110110
-Number mwJ, 1, 0!01100010
-Number mwK, 1, 0!00101101
+Number mwI, 1, 0!01111111
+Number mwJ, 1, 0!01101001
+Number mwK, 1, 0!00111100
 Number mwL, 1, 0!00000100
 Number bw, 1, 0!01111
-Number qs, 1, 3!1110110
-Number qf, 1, 3!1001110
+Number qs, 1, 3!1100100
+Number qf, 1, 3!1000000
 Number mb, 1, 0!00011111
 
 #  Frozen: what cbp never reads, which live would only take opt.pl's trials:

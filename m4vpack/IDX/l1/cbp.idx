@@ -14,20 +14,21 @@ Index a
  a_cnt: cnt, 1!11111
 
 Index b
- b_c3: c3, 1!11
- b_rbit: rbit, 1!11
+ b_c3: c3, 1!00
+ b_rbit: rbit, 1!10
  b_lu: lu, 1!11111111
 
 Index c
- c_c3: c3, 1!11
- c_pat: pat, &11111
+ c_c3: c3, 1!10
+ c_frac: frac, 1!1111
 
 Index d
  d_c3: c3, 1!11
- d_frac: frac, 1!1111
+ d_lu: lu, 1!11111110
+ d_lq: lq, 1!11
 
 Index m
- m_c3: c3, 1!11
+ m_c3: c3, 1!00
 
 Index t
 
@@ -35,16 +36,16 @@ Index n
 
 Index g
 
-Number rA, 1, 0!11111101
-Number mwA, 1, 0!00000010
-Number rB, 1, 0!11111000
-Number mwB, 1, 0!00001011
-Number rC, 1, 0!11111101
+Number rA, 1, 0!11111110
+Number mwA, 1, 0!00000111
+Number rB, 1, 0!11111111
+Number mwB, 1, 0!00100000
+Number rC, 1, 0!11111111
 Number mwC, 1, 0!00010000
-Number rD, 1, 0!11111110
-Number mwD, 1, 0!00111001
-Number lr, 1, 0!01111
-Number mb, 1, 0!00010001
+Number rD, 1, 0!11111111
+Number mwD, 1, 0!01000000
+Number lr, 1, 0!01100
+Number mb, 1, 0!00011111
 
 #  Frozen: what cbp never reads, which live would only take opt.pl's trials.
 ! Number rT, 1, 0!00000000

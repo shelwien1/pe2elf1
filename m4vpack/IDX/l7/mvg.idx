@@ -15,10 +15,10 @@ Index a
  a_as: as, 1!11
 
 Index b
- b_kind: kind, 1!11111
+ b_kind: kind, 1!11100
  b_comp: comp, 1!1
  b_ds: ds, 1!11
- b_dz: dz, 1!11101000100000010
+ b_dz: dz, 1!01101011111010100
 
 Index c
  c_kind: kind, 1!01010
@@ -31,26 +31,26 @@ Index d
  d_hm: hm, 1!100
 
 Index e
- e_kind: kind, 1!01101
+ e_kind: kind, 1!11101
  e_comp: comp, 1!0
  e_ds: ds, 1!11
  e_hm: hm, 1!111
 
 Index h
- h_kind: kind, 1!01100
+ h_kind: kind, 1!11000
  h_comp: comp, 1!0
  h_ls: ls, 1!11
 
 Index i
  i_kind: kind, 1!00000
- i_comp: comp, 1!0
- i_as: as, 1!01
+ i_comp: comp, 1!1
+ i_as: as, 1!11
 
 Index j
  j_kind: kind, 1!00111
  j_comp: comp, 1!1
  j_ds: ds, 1!11
- j_mag: mag, 1!0110000010000000
+ j_mag: mag, 1!0111000010000000
 
 Index k
  k_kind: kind, 1!01110
@@ -67,7 +67,7 @@ Index m
  m_comp: comp, 1!0
 
 Index w
- w_kind: kind, 1!11010
+ w_kind: kind, 1!01010
  w_comp: comp, 1!0
  w_ls: ls, 1!10
  w_as: as, 1!10
@@ -86,26 +86,26 @@ Index n
 
 Index g
 
-Number rA, 1, 0!11111111
-Number mwA, 1, 0!00011001
+Number rA, 1, 0!11111110
+Number mwA, 1, 0!00011111
 Number rB, 1, 0!00000000
-Number mwB, 1, 0!01000100
+Number mwB, 1, 0!01000010
 Number rC, 1, 0!00000000
 Number mwC, 1, 0!01001101
 Number rD, 1, 0!01001111
-Number mwD, 1, 0!00000101
+Number mwD, 1, 0!00000001
 Number rE, 1, 0!11111111
 Number mwE, 1, 0!00000000
-Number rH, 1, 0!11111110
-Number mwH, 1, 0!10001110
-Number rI, 1, 0!11111011
+Number rH, 1, 0!11111101
+Number mwH, 1, 0!10001001
+Number rI, 1, 0!11110111
 Number mwI, 1, 0!11111110
-Number rJ, 1, 0!10011101
+Number rJ, 1, 0!10000101
 Number mwJ, 1, 0!00000000
 Number rK, 1, 0!11111000
-Number mwK, 1, 0!01101111
+Number mwK, 1, 0!01101000
 Number rL, 1, 0!00000000
-Number mwL, 1, 0!01001110
+Number mwL, 1, 0!01001010
 Number lr, 1, 0!10000
 Number mb, 1, 0!10000001
 Number rS1, 1, 0!01000

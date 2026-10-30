@@ -29,17 +29,17 @@ static const byte M7_mbt_w_rt[3+1]={ 0,1,2,3 };
 
 
 static const int M7_mbt_rA = (255+0) * (1);
-static const int M7_mbt_mwA = (187+0) * (1);
+static const int M7_mbt_mwA = (190+0) * (1);
 static const int M7_mbt_rB = (0+0) * (1);
 static const int M7_mbt_mwB = (30+0) * (1);
 static const int M7_mbt_rC = (0+0) * (1);
 static const int M7_mbt_mwC = (25+0) * (1);
 static const int M7_mbt_rD = (253+0) * (1);
 static const int M7_mbt_mwD = (128+0) * (1);
-static const int M7_mbt_rE = (255+0) * (1);
+static const int M7_mbt_rE = (253+0) * (1);
 static const int M7_mbt_mwE = (255+0) * (1);
-static const int M7_mbt_rH = (252+0) * (1);
-static const int M7_mbt_mwH = (214+0) * (1);
+static const int M7_mbt_rH = (250+0) * (1);
+static const int M7_mbt_mwH = (199+0) * (1);
 static const int M7_mbt_rI = (251+0) * (1);
 static const int M7_mbt_mwI = (38+0) * (1);
 static const int M7_mbt_rJ = (255+0) * (1);
@@ -79,10 +79,10 @@ static const int M7_mbt_hS = (22+0) * (1);
 static const int M7_mbt_hF = (22+0) * (1);
 
 
-static const long long M7_mbt_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 2), 3); // 6
+static const long long M7_mbt_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 3); // 12
 static const long long M7_mbt_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 2), 4); // 24
 static const long long M7_mbt_c_Volume = tc_vmul(tc_vmul(1, 4), 4); // 16
-static const long long M7_mbt_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 3), 2); // 12
+static const long long M7_mbt_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 3), 2); // 18
 static const long long M7_mbt_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 2), 2); // 4
 static const long long M7_mbt_f_Volume = tc_vmul(1, 4); // 4
 static const long long M7_mbt_g_Volume = 1; // 1
@@ -97,7 +97,7 @@ static const long long M7_mbt_s_Volume = tc_vmul(tc_vmul(1, 4), 3); // 12
 static const long long M7_mbt_t_Volume = 1; // 1
 static const long long M7_mbt_w_Volume = tc_vmul(tc_vmul(1, 2), 4); // 8
 
-#define M7_mbt_USES(X) X(cl) X(rt) X(st) X(c4) X(rc) X(cd) X(intra) X(fsn)
+#define M7_mbt_USES(X) X(st) X(cl) X(rt) X(c4) X(rc) X(cd) X(intra) X(fsn)
 
 struct M7_mbt_T {
   cm_cnt2 M7_mbt_A[tc_rows(M7_mbt_a_Volume, M7_mbt_hA) * M_mbt_ND];

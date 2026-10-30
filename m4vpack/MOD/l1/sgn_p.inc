@@ -15,28 +15,27 @@ void M1_sgn_make( const M_sgn_v & D, tcx & X ) {
   M_sgn_VARS(M_LOCAL)
 
   a = 0;
-  a = (a<<3) + (((cls)&7)); // 111
-  a = a*9 + M1_sgn_a_flu[__min(8,__max(0,(flu)-(1-1)))];
-  a = a*9 + M1_sgn_a_flu2[__min(8,__max(0,(flu2)-(1-1)))];
+  a = (a<<1) + (((cls)&1)); // 001
+  a = a*3 + (((xs)>0+(1-1))+((xs)>1+(1-1)));
 
   b = 0;
-  b = (b<<3) + (((cls)&7)); // 111
-  b = b*27 + M1_sgn_b_fdlu[__min(26,__max(0,(fdlu)-(1-1)))];
-  b = b*6 + M1_sgn_b_pb[__min(64,__max(0,(pos)-(1-1)))];
+  b = (b<<2) + ((((cls)>>1)&3)); // 110
+  b = b*18 + M1_sgn_b_fdlu[__min(26,__max(0,(fdlu)-(1-1)))];
+  b = b*2 + (((pos)>0+(1-1)));
 
   c = 0;
   c = (c<<3) + (((cls)&7)); // 111
-  c = c*3 + (((xs)>0+(1-1))+((xs)>1+(1-1)));
-  c = (c<<6) + (((pos)&63)); // 111111
+  c = c*9 + M1_sgn_c_flu[__min(8,__max(0,(flu)-(1-1)))];
+  c = c*9 + M1_sgn_c_flu2[__min(8,__max(0,(flu2)-(1-1)))];
 
   d = 0;
-  d = (d<<3) + (((cls)&7)); // 111
-  d = d*27 + M1_sgn_d_gh[__min(26,__max(0,(gh)-(1-1)))];
-  d = d*6 + M1_sgn_d_pb[__min(64,__max(0,(pos)-(1-1)))];
+  d = (d<<1) + ((((cls)>>1)&1)); // 010
+  d = d*4 + M1_sgn_d_vote[__min(19,__max(0,(vote)-(1-1)))];
+  d = d*2 + (((pos)>0+(1-1)));
 
   m = 0;
   m = (m<<3) + (((cls)&7)); // 111
-  m = m*6 + M1_sgn_m_pb[__min(64,__max(0,(pos)-(1-1)))];
+  m = m*10 + M1_sgn_m_pb[__min(64,__max(0,(pos)-(1-1)))];
 
   t = 0;
 

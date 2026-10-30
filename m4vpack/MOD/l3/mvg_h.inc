@@ -1,40 +1,36 @@
 
-static const byte M3_mvg_a_kind[5+1]={ 0,1,2,3,4,5 };
-static const byte M3_mvg_a_mag[16+1]={ 0,1,2,3,3,4,4,4,4,5,5,5,5,5,5,5,5 };
+static const byte M3_mvg_a_mag[16+1]={ 0,0,1,2,3,3,3,3,3,4,4,4,4,4,4,4,4 };
 
-static const byte M3_mvg_b_kind[5+1]={ 0,1,2,3,4,5 };
-static const byte M3_mvg_b_dz[17+1]={ 0,1,2,3,3,4,4,4,4,5,5,5,5,5,5,5,6,6 };
+static const byte M3_mvg_b_kind[5+1]={ 0,0,1,2,2,3 };
+static const byte M3_mvg_b_hm[3+1]={ 0,1,2,3 };
 
-static const byte M3_mvg_c_kind[5+1]={ 0,1,2,3,4,5 };
-static const byte M3_mvg_c_hm[3+1]={ 0,1,2,3 };
+static const byte M3_mvg_c_kind[5+1]={ 0,1,2,3,3,3 };
+static const byte M3_mvg_c_dz[17+1]={ 0,0,0,1,1,2,2,3,3,4,5,6,6,7,7,8,8,8 };
 
-static const byte M3_mvg_d_kind[5+1]={ 0,1,2,3,4,5 };
-
-static const byte M3_mvg_e_kind[5+1]={ 0,1,2,3,4,5 };
-
-
-static const byte M3_mvg_h_kind[5+1]={ 0,1,2,3,4,5 };
-static const byte M3_mvg_h_mag[16+1]={ 0,1,2,3,3,4,4,4,4,5,5,5,5,5,5,5,5 };
-
-static const byte M3_mvg_m_kind[5+1]={ 0,1,2,3,4,5 };
+static const byte M3_mvg_d_kind[5+1]={ 0,0,1,2,2,3 };
 
 
 
 
-static const int M3_mvg_rA = (129+0) * (1);
-static const int M3_mvg_mwA = (11+0) * (1);
-static const int M3_mvg_rB = (0+0) * (1);
-static const int M3_mvg_mwB = (69+0) * (1);
-static const int M3_mvg_rC = (255+0) * (1);
-static const int M3_mvg_mwC = (70+0) * (1);
-static const int M3_mvg_rD = (251+0) * (1);
-static const int M3_mvg_mwD = (7+0) * (1);
-static const int M3_mvg_rE = (237+0) * (1);
-static const int M3_mvg_mwE = (14+0) * (1);
-static const int M3_mvg_rH = (254+0) * (1);
-static const int M3_mvg_mwH = (77+0) * (1);
-static const int M3_mvg_lr = (12+0) * (1);
-static const int M3_mvg_mb = (129+0) * (1);
+static const byte M3_mvg_m_kind[5+1]={ 0,0,1,2,3,4 };
+
+
+
+
+static const int M3_mvg_rA = (128+0) * (1);
+static const int M3_mvg_mwA = (0+0) * (1);
+static const int M3_mvg_rB = (255+0) * (1);
+static const int M3_mvg_mwB = (0+0) * (1);
+static const int M3_mvg_rC = (0+0) * (1);
+static const int M3_mvg_mwC = (64+0) * (1);
+static const int M3_mvg_rD = (255+0) * (1);
+static const int M3_mvg_mwD = (2+0) * (1);
+static const int M3_mvg_rE = (0+0) * (1);
+static const int M3_mvg_mwE = (75+0) * (1);
+static const int M3_mvg_rH = (252+0) * (1);
+static const int M3_mvg_mwH = (51+0) * (1);
+static const int M3_mvg_lr = (19+0) * (1);
+static const int M3_mvg_mb = (44+0) * (1);
 static const int M3_mvg_rT = (0+0) * (1);
 static const int M3_mvg_mwT = (0+0) * (1);
 static const int M3_mvg_mt = (0+0) * (1);
@@ -53,18 +49,18 @@ static const int M3_mvg_hT = (22+0) * (1);
 static const int M3_mvg_hN = (22+0) * (1);
 
 
-static const long long M3_mvg_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 6), 2), 3), 6); // 216
-static const long long M3_mvg_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 6), 2), 3), 7); // 252
-static const long long M3_mvg_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 6), 2), 3), 4); // 144
-static const long long M3_mvg_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 6), 3), 3), 3); // 162
-static const long long M3_mvg_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 6), 2), 3), 3); // 108
+static const long long M3_mvg_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 2), 3), 5); // 90
+static const long long M3_mvg_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 1), 3), 4); // 48
+static const long long M3_mvg_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 3), 9); // 216
+static const long long M3_mvg_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 3), 3); // 72
+static const long long M3_mvg_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 2); // 8
 static const long long M3_mvg_g_Volume = 1; // 1
-static const long long M3_mvg_h_Volume = tc_vmul(tc_vmul(tc_vmul(1, 6), 2), 6); // 72
-static const long long M3_mvg_m_Volume = tc_vmul(tc_vmul(1, 6), 2); // 12
+static const long long M3_mvg_h_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 3), 3), 3); // 81
+static const long long M3_mvg_m_Volume = tc_vmul(tc_vmul(1, 5), 1); // 5
 static const long long M3_mvg_n_Volume = 1; // 1
 static const long long M3_mvg_t_Volume = 1; // 1
 
-#define M3_mvg_USES(X) X(kind) X(comp) X(ds) X(mag) X(dz) X(hm) X(ls) X(as)
+#define M3_mvg_USES(X) X(kind) X(comp) X(ds) X(mag) X(hm) X(dz) X(ls) X(as)
 
 struct M3_mvg_T {
   cm_cnt2 M3_mvg_A[tc_rows(M3_mvg_a_Volume, M3_mvg_hA) * M_mvg_ND];

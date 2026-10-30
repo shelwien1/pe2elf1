@@ -14,25 +14,25 @@ Index a
 
 Index b
  b_c3: c3, 1!11
- b_qs: qs, 1!00101010100100001000000100000000
+ b_qs: qs, 1!00001110000000000000000000000000
 
 Index c
- c_c3: c3, 1!11
+ c_c3: c3, 1!10
 
 Index d
  d_pdq: pdq, 1!1
- d_qs: qs, 1!00101010100100001000000100000000
+ d_qs: qs, 1!00001111100000000000000000000000
 
 Index e
  e_c3: c3, 1!11
  e_pdq: pdq, 1!1
- e_qs: qs, 1!00101010100100001000000100000000
+ e_qs: qs, 1!00001110100000000000000000000000
 
 Index h
  h_pdq: pdq, 1!1
 
 Index i
- i_qs: qs, 1!00101010100100001000000100000000
+ i_qs: qs, 1!00001111100100000000000000000000
 
 Index j
 
@@ -42,10 +42,10 @@ Index k
 
 Index l
  l_c3: c3, 1!11
- l_qs: qs, 1!00101010100100001000000100000000
+ l_qs: qs, 1!00001111000000000000000000000000
 
 Index m
- m_c3: c3, 1!11
+ m_c3: c3, 1!00
 
 Index t
 
@@ -53,27 +53,27 @@ Index n
 
 Index g
 
-Number rA, 1, 0!11111111
-Number mwA, 1, 0!00010111
-Number rB, 1, 0!11111111
-Number mwB, 1, 0!00001100
-Number rC, 1, 0!11111100
-Number mwC, 1, 0!00001111
-Number rD, 1, 0!11111111
-Number mwD, 1, 0!11100000
-Number rE, 1, 0!11101010
-Number mwE, 1, 0!00001000
-Number rH, 1, 0!11110110
-Number mwH, 1, 0!01000000
-Number rI, 1, 0!10000010
-Number mwI, 1, 0!00100000
-Number rJ, 1, 0!11111110
-Number mwJ, 1, 0!00100010
-Number rK, 1, 0!11011101
-Number mwK, 1, 0!00110001
-Number rL, 1, 0!11110100
-Number mwL, 1, 0!00010001
-Number lr, 1, 0!11000
+Number rA, 1, 0!01101001
+Number mwA, 1, 0!00000111
+Number rB, 1, 0!00000000
+Number mwB, 1, 0!10011110
+Number rC, 1, 0!00010111
+Number mwC, 1, 0!00000000
+Number rD, 1, 0!01010101
+Number mwD, 1, 0!00001010
+Number rE, 1, 0!01011110
+Number mwE, 1, 0!00011000
+Number rH, 1, 0!00000000
+Number mwH, 1, 0!00000110
+Number rI, 1, 0!00000000
+Number mwI, 1, 0!00000100
+Number rJ, 1, 0!00000000
+Number mwJ, 1, 0!00000000
+Number rK, 1, 0!00000000
+Number mwK, 1, 0!00001100
+Number rL, 1, 0!00000000
+Number mwL, 1, 0!10010110
+Number lr, 1, 0!11111
 Number mb, 1, 0!00001111
 
 #  Frozen: what qpd never reads, which live would only take opt.pl's trials.

@@ -1,33 +1,33 @@
 
-static const byte M3_sig_a_rnz[17+1]={ 0,1,2,3,3,3,4,4,4,4,4,5,5,5,5,5,6,6 };
-static const byte M3_sig_a_xm[9+1]={ 0,1,2,2,2,2,2,2,3,3 };
+static const byte M3_sig_a_rnz[17+1]={ 0,1,2,3,3,3,4,4,4,4,4,5,5,5,5,6,6,6 };
+static const byte M3_sig_a_xm[9+1]={ 0,1,2,2,2,2,3,3,4,4 };
+
+
+
+static const byte M3_sig_d_nz[8+1]={ 0,1,2,3,4,5,6,7,7 };
+
+
+
+static const byte M3_sig_h_run[16+1]={ 0,1,2,3,3,4,4,4,5,6,7,8,9,10,11,12,12 };
 
 
 
 
-static const byte M3_sig_e_run[16+1]={ 0,1,2,3,3,4,4,4,4,5,5,5,5,5,5,5,5 };
 
-
-static const byte M3_sig_h_nz[8+1]={ 0,1,2,3,4,5,6,7,8 };
-
-
-
-
-
-static const int M3_sig_rA = (253+0) * (1);
-static const int M3_sig_mwA = (65+0) * (1);
-static const int M3_sig_rB = (248+0) * (1);
-static const int M3_sig_mwB = (63+0) * (1);
-static const int M3_sig_rC = (243+0) * (1);
-static const int M3_sig_mwC = (32+0) * (1);
-static const int M3_sig_rD = (196+0) * (1);
-static const int M3_sig_mwD = (7+0) * (1);
+static const int M3_sig_rA = (255+0) * (1);
+static const int M3_sig_mwA = (1+0) * (1);
+static const int M3_sig_rB = (254+0) * (1);
+static const int M3_sig_mwB = (23+0) * (1);
+static const int M3_sig_rC = (255+0) * (1);
+static const int M3_sig_mwC = (13+0) * (1);
+static const int M3_sig_rD = (255+0) * (1);
+static const int M3_sig_mwD = (46+0) * (1);
 static const int M3_sig_rE = (255+0) * (1);
-static const int M3_sig_mwE = (4+0) * (1);
-static const int M3_sig_rH = (250+0) * (1);
-static const int M3_sig_mwH = (4+0) * (1);
+static const int M3_sig_mwE = (32+0) * (1);
+static const int M3_sig_rH = (254+0) * (1);
+static const int M3_sig_mwH = (1+0) * (1);
 static const int M3_sig_lr = (12+0) * (1);
-static const int M3_sig_mb = (88+0) * (1);
+static const int M3_sig_mb = (64+0) * (1);
 static const int M3_sig_rT = (0+0) * (1);
 static const int M3_sig_mwT = (0+0) * (1);
 static const int M3_sig_mt = (0+0) * (1);
@@ -46,18 +46,18 @@ static const int M3_sig_hT = (22+0) * (1);
 static const int M3_sig_hN = (22+0) * (1);
 
 
-static const long long M3_sig_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), 7), 4), (1<<6)); // 14336
-static const long long M3_sig_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), (1<<5)), (1<<6)); // 16384
-static const long long M3_sig_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), (1<<6)), (1<<16)); // 33554432
-static const long long M3_sig_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), (1<<8)), (1<<6)); // 131072
-static const long long M3_sig_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), 6), (1<<6)); // 3072
+static const long long M3_sig_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<2)), 7), 5); // 140
+static const long long M3_sig_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<2)), (1<<5)), (1<<6)); // 8192
+static const long long M3_sig_c_Volume = tc_vmul(tc_vmul(1, (1<<6)), (1<<14)); // 1048576
+static const long long M3_sig_d_Volume = tc_vmul(tc_vmul(1, (1<<1)), 8); // 16
+static const long long M3_sig_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), (1<<8)), (1<<6)); // 131072
 static const long long M3_sig_g_Volume = 1; // 1
-static const long long M3_sig_h_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), 9), (1<<6)); // 4608
-static const long long M3_sig_m_Volume = tc_vmul(tc_vmul(1, (1<<3)), (1<<6)); // 512
+static const long long M3_sig_h_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<2)), 13), (1<<6)); // 3328
+static const long long M3_sig_m_Volume = tc_vmul(tc_vmul(1, (1<<2)), (1<<2)); // 16
 static const long long M3_sig_n_Volume = 1; // 1
 static const long long M3_sig_t_Volume = 1; // 1
 
-#define M3_sig_USES(X) X(cls) X(rnz) X(xm) X(pos) X(fp) X(h16) X(h8) X(run) X(nz)
+#define M3_sig_USES(X) X(cls) X(rnz) X(xm) X(fp) X(pos) X(h16) X(nz) X(h8) X(run)
 
 struct M3_sig_T {
   cm_cnt2 M3_sig_A[tc_rows(M3_sig_a_Volume, M3_sig_hA) * M_sig_ND];

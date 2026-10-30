@@ -2,7 +2,7 @@
 
 
 
-static const byte M7_raw_d_code[11+1]={ 0,1,1,2,3,4,5,6,6,6,6,6 };
+static const byte M7_raw_d_code[11+1]={ 0,1,1,2,3,3,4,5,5,5,5,5 };
 
 static const byte M7_raw_e_code[11+1]={ 0,1,2,2,3,3,4,5,5,5,5,5 };
 static const byte M7_raw_e_at[11+1]={ 0,0,1,2,2,2,3,3,4,4,5,6 };
@@ -16,18 +16,18 @@ static const byte M7_raw_i_code[11+1]={ 0,1,2,2,2,2,3,3,4,4,4,4 };
 static const byte M7_raw_j_at[11+1]={ 0,0,1,2,3,3,4,5,6,6,7,8 };
 
 
-static const byte M7_raw_l_code[11+1]={ 0,1,1,2,2,3,4,4,5,5,5,5 };
+static const byte M7_raw_l_code[11+1]={ 0,1,1,2,3,4,5,5,6,6,6,6 };
 
 static const byte M7_raw_m_at[11+1]={ 0,0,1,2,3,3,3,4,5,5,5,6 };
 
 
-static const byte M7_raw_s_code[11+1]={ 0,1,2,2,3,3,4,5,5,5,5,5 };
+static const byte M7_raw_s_code[11+1]={ 0,1,2,2,3,4,5,6,6,6,6,6 };
 
 
 static const byte M7_raw_w_code[11+1]={ 0,1,2,2,2,3,4,5,5,5,5,5 };
 
 
-static const int M7_raw_rA = (234+0) * (1);
+static const int M7_raw_rA = (232+0) * (1);
 static const int M7_raw_mwA = (255+0) * (1);
 static const int M7_raw_rB = (41+0) * (1);
 static const int M7_raw_mwB = (0+0) * (1);
@@ -35,18 +35,18 @@ static const int M7_raw_rC = (0+0) * (1);
 static const int M7_raw_mwC = (0+0) * (1);
 static const int M7_raw_rD = (247+0) * (1);
 static const int M7_raw_mwD = (255+0) * (1);
-static const int M7_raw_rE = (246+0) * (1);
+static const int M7_raw_rE = (254+0) * (1);
 static const int M7_raw_mwE = (0+0) * (1);
-static const int M7_raw_rH = (226+0) * (1);
-static const int M7_raw_mwH = (2+0) * (1);
-static const int M7_raw_rI = (238+0) * (1);
-static const int M7_raw_mwI = (0+0) * (1);
-static const int M7_raw_rJ = (236+0) * (1);
+static const int M7_raw_rH = (255+0) * (1);
+static const int M7_raw_mwH = (0+0) * (1);
+static const int M7_raw_rI = (239+0) * (1);
+static const int M7_raw_mwI = (1+0) * (1);
+static const int M7_raw_rJ = (192+0) * (1);
 static const int M7_raw_mwJ = (241+0) * (1);
-static const int M7_raw_rK = (142+0) * (1);
+static const int M7_raw_rK = (140+0) * (1);
 static const int M7_raw_mwK = (206+0) * (1);
-static const int M7_raw_rL = (51+0) * (1);
-static const int M7_raw_mwL = (127+0) * (1);
+static const int M7_raw_rL = (59+0) * (1);
+static const int M7_raw_mwL = (124+0) * (1);
 static const int M7_raw_lr = (31+0) * (1);
 static const int M7_raw_mb = (22+0) * (1);
 static const int M7_raw_rS1 = (8+0) * (1);
@@ -81,7 +81,7 @@ static const int M7_raw_hF = (22+0) * (1);
 static const long long M7_raw_a_Volume = 1; // 1
 static const long long M7_raw_b_Volume = tc_vmul(1, (1<<8)); // 256
 static const long long M7_raw_c_Volume = tc_vmul(tc_vmul(1, (1<<8)), (1<<4)); // 4096
-static const long long M7_raw_d_Volume = tc_vmul(1, 7); // 7
+static const long long M7_raw_d_Volume = tc_vmul(1, 6); // 6
 static const long long M7_raw_e_Volume = tc_vmul(tc_vmul(1, 6), 7); // 42
 static const long long M7_raw_f_Volume = 1; // 1
 static const long long M7_raw_g_Volume = 1; // 1
@@ -89,10 +89,10 @@ static const long long M7_raw_h_Volume = tc_vmul(tc_vmul(1, (1<<5)), 6); // 192
 static const long long M7_raw_i_Volume = tc_vmul(tc_vmul(1, (1<<4)), 5); // 80
 static const long long M7_raw_j_Volume = tc_vmul(1, 9); // 9
 static const long long M7_raw_k_Volume = tc_vmul(1, (1<<7)); // 128
-static const long long M7_raw_l_Volume = tc_vmul(tc_vmul(1, (1<<7)), 6); // 768
+static const long long M7_raw_l_Volume = tc_vmul(tc_vmul(1, (1<<7)), 7); // 896
 static const long long M7_raw_m_Volume = tc_vmul(1, 7); // 7
 static const long long M7_raw_n_Volume = 1; // 1
-static const long long M7_raw_s_Volume = tc_vmul(1, 6); // 6
+static const long long M7_raw_s_Volume = tc_vmul(1, 7); // 7
 static const long long M7_raw_t_Volume = 1; // 1
 static const long long M7_raw_w_Volume = tc_vmul(1, 6); // 6
 

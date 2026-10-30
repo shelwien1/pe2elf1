@@ -16,7 +16,7 @@ void M7_sig_make( const M_sig_v & D, tcx & X ) {
   M_sig_VARS(M_LOCAL)
 
   a = 0;
-  a = a*3 + (((qs)>4+(1-1))+((qs)>10+(1-1)));
+  a = a*10 + M7_sig_a_qs[__min(32,__max(0,(qs)-(1-1)))];
 
   b = 0;
   b = (b<<3) + (((cls)&7)); // 111
@@ -29,11 +29,12 @@ void M7_sig_make( const M_sig_v & D, tcx & X ) {
   d = 0;
   d = (d<<3) + (((cls)&7)); // 111
   d = d*8 + M7_sig_d_past[__min(8,__max(0,(past)-(1-1)))];
+  d = d*3 + (((qs)>2+(1-1))+((qs)>8+(1-1)));
   d = (d<<6) + (((pos)&63)); // 111111
 
   e = 0;
   e = (e<<2) + ((((cls)>>1)&3)); // 110
-  e = e*6 + M7_sig_e_run[__min(16,__max(0,(run)-(1-1)))];
+  e = e*14 + M7_sig_e_run[__min(16,__max(0,(run)-(1-1)))];
   e = (e<<6) + (((pos)&63)); // 111111
 
   h = 0;
@@ -43,13 +44,13 @@ void M7_sig_make( const M_sig_v & D, tcx & X ) {
 
   i = 0;
   i = (i<<3) + (((cls)&7)); // 111
-  i = i*15 + M7_sig_i_mvc[__min(30,__max(0,(mvc)-(1-1)))];
+  i = i*17 + M7_sig_i_mvc[__min(30,__max(0,(mvc)-(1-1)))];
   i = (i<<6) + (((pos)&63)); // 111111
 
   j = 0;
   j = (j<<2) + (((((cls)>>2)&1)<<1) + ((cls)&1)); // 101
-  j = j*6 + M7_sig_j_rnz[__min(17,__max(0,(rnz)-(1-1)))];
-  j = j*4 + M7_sig_j_xm[__min(9,__max(0,(xm)-(1-1)))];
+  j = j*7 + M7_sig_j_rnz[__min(17,__max(0,(rnz)-(1-1)))];
+  j = j*5 + M7_sig_j_xm[__min(9,__max(0,(xm)-(1-1)))];
 
   k = 0;
   k = (k<<3) + (((cls)&7)); // 111
@@ -62,7 +63,7 @@ void M7_sig_make( const M_sig_v & D, tcx & X ) {
 
   s = 0;
   s = (s<<1) + (((cls)&1)); // 001
-  s = s*4 + M7_sig_s_sl[__min(17,__max(0,(sl)-(1-1)))];
+  s = s*5 + M7_sig_s_sl[__min(17,__max(0,(sl)-(1-1)))];
   s = s*5 + M7_sig_s_sa[__min(17,__max(0,(sa)-(1-1)))];
   s = s*3 + (((pos)>2+(1-1))+((pos)>20+(1-1)));
 
@@ -77,6 +78,7 @@ void M7_sig_make( const M_sig_v & D, tcx & X ) {
   w = 0;
   w = (w<<1) + ((((cls)>>2)&1)); // 100
   w = w*3 + (((kb)>0+(1-1))+((kb)>5+(1-1)));
+  w = w*2 + (((qs)>6+(1-1)));
 
   t = 0;
 

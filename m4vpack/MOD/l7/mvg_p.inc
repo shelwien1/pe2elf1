@@ -22,10 +22,10 @@ void M7_mvg_make( const M_mvg_v & D, tcx & X ) {
   a = a*3 + (((as)>0+(1-1))+((as)>1+(1-1)));
 
   b = 0;
-  b = b*6 + M7_mvg_b_kind[__min(5,__max(0,(kind)-(1-1)))];
+  b = b*4 + M7_mvg_b_kind[__min(5,__max(0,(kind)-(1-1)))];
   b = b*2 + (((comp)>0+(1-1)));
   b = b*3 + (((ds)>0+(1-1))+((ds)>1+(1-1)));
-  b = b*7 + M7_mvg_b_dz[__min(17,__max(0,(dz)-(1-1)))];
+  b = b*11 + M7_mvg_b_dz[__min(17,__max(0,(dz)-(1-1)))];
 
   c = 0;
   c = c*3 + (((kind)>1+(1-1))+((kind)>3+(1-1)));
@@ -37,22 +37,23 @@ void M7_mvg_make( const M_mvg_v & D, tcx & X ) {
   d = d*2 + (((hm)>0+(1-1)));
 
   e = 0;
-  e = e*4 + M7_mvg_e_kind[__min(5,__max(0,(kind)-(1-1)))];
+  e = e*5 + M7_mvg_e_kind[__min(5,__max(0,(kind)-(1-1)))];
   e = e*3 + (((ds)>0+(1-1))+((ds)>1+(1-1)));
   e = e*4 + M7_mvg_e_hm[__min(3,__max(0,(hm)-(1-1)))];
 
   h = 0;
-  h = h*3 + (((kind)>1+(1-1))+((kind)>2+(1-1)));
+  h = h*3 + (((kind)>0+(1-1))+((kind)>1+(1-1)));
   h = h*3 + (((ls)>0+(1-1))+((ls)>1+(1-1)));
 
   i = 0;
-  i = i*2 + (((as)>1+(1-1)));
+  i = i*2 + (((comp)>0+(1-1)));
+  i = i*3 + (((as)>0+(1-1))+((as)>1+(1-1)));
 
   j = 0;
   j = j*4 + M7_mvg_j_kind[__min(5,__max(0,(kind)-(1-1)))];
   j = j*2 + (((comp)>0+(1-1)));
   j = j*3 + (((ds)>0+(1-1))+((ds)>1+(1-1)));
-  j = j*4 + M7_mvg_j_mag[__min(16,__max(0,(mag)-(1-1)))];
+  j = j*5 + M7_mvg_j_mag[__min(16,__max(0,(mag)-(1-1)))];
 
   k = 0;
   k = k*4 + M7_mvg_k_kind[__min(5,__max(0,(kind)-(1-1)))];
@@ -74,7 +75,7 @@ void M7_mvg_make( const M_mvg_v & D, tcx & X ) {
   m = m*4 + M7_mvg_m_kind[__min(5,__max(0,(kind)-(1-1)))];
 
   w = 0;
-  w = w*4 + M7_mvg_w_kind[__min(5,__max(0,(kind)-(1-1)))];
+  w = w*3 + (((kind)>1+(1-1))+((kind)>3+(1-1)));
   w = w*2 + (((ls)>0+(1-1)));
   w = w*2 + (((as)>0+(1-1)));
 

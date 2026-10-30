@@ -19,7 +19,7 @@ Index c
  c_c2: c2, &00001111
 
 Index d
- d_code: code, 1!10111110000
+ d_code: code, 1!10110110000
 
 Index e
  e_code: code, 1!11010110000
@@ -41,7 +41,7 @@ Index k
 
 Index l
  l_c2: c2, &11110111
- l_code: code, 1!10101101000
+ l_code: code, 1!10111101000
 
 Index m
  m_at: at, 1!01110011001
@@ -50,7 +50,7 @@ Index w
  w_code: code, 1!11001110000
 
 Index s
- s_code: code, 1!11010110000
+ s_code: code, 1!11011110000
 
 Index f
 
@@ -60,7 +60,7 @@ Index n
 
 Index g
 
-Number rA, 1, 0!11101010
+Number rA, 1, 0!11101000
 Number mwA, 1, 0!11111111
 Number rB, 1, 0!00101001
 Number mwB, 1, 0!00000000
@@ -68,18 +68,18 @@ Number rC, 1, 0!00000000
 Number mwC, 1, 0!00000000
 Number rD, 1, 0!11110111
 Number mwD, 1, 0!11111111
-Number rE, 1, 0!11110110
+Number rE, 1, 0!11111110
 Number mwE, 1, 0!00000000
-Number rH, 1, 0!11100010
-Number mwH, 1, 0!00000010
-Number rI, 1, 0!11101110
-Number mwI, 1, 0!00000000
-Number rJ, 1, 0!11101100
+Number rH, 1, 0!11111111
+Number mwH, 1, 0!00000000
+Number rI, 1, 0!11101111
+Number mwI, 1, 0!00000001
+Number rJ, 1, 0!11000000
 Number mwJ, 1, 0!11110001
-Number rK, 1, 0!10001110
+Number rK, 1, 0!10001100
 Number mwK, 1, 0!11001110
-Number rL, 1, 0!00110011
-Number mwL, 1, 0!01111111
+Number rL, 1, 0!00111011
+Number mwL, 1, 0!01111100
 Number lr, 1, 0!11111
 Number mb, 1, 0!00010110
 Number rS1, 1, 0!01000

@@ -16,8 +16,8 @@ Index a
 
 Index b
  b_st: st, 1!000
- b_c4: c4, 1!1110
- b_run: run, 1!0100010000000000
+ b_c4: c4, 1!0110
+ b_run: run, 1!0100000000000000
 
 Index c
  c_st: st, 1!100
@@ -34,25 +34,25 @@ Index e
  e_bsk: bsk, 1!11
 
 Index h
- h_st: st, 1!100
+ h_st: st, 1!000
  h_cl: cl, 1!01
  h_rr: rr, 1!11
 
 Index i
  i_st: st, 1!111
- i_run: run, 1!1110000000010000
+ i_run: run, 1!1111110011111110
  i_c4: c4, 1!1111
  i_cl: cl, 1!11
 
 Index j
  j_st: st, 1!111
  j_rc: rc, 1!1111111111
- j_run: run, 1!1110010000010000
+ j_run: run, 1!1011111111110010
 
 Index k
  k_st: st, 1!000
  k_cl: cl, 1!01
- k_c4: c4, 1!1110
+ k_c4: c4, 1!1111
  k_rt: rt, 1!11
 
 Index l
@@ -85,19 +85,19 @@ Number rB, 1, 0!00000000
 Number mwB, 1, 0!01111101
 Number rC, 1, 0!11111111
 Number mwC, 1, 0!00100000
-Number rD, 1, 0!11111111
+Number rD, 1, 0!11111110
 Number mwD, 1, 0!00000011
-Number rE, 1, 0!10000001
+Number rE, 1, 0!10000000
 Number mwE, 1, 0!00000000
 Number rH, 1, 0!11111111
-Number mwH, 1, 0!10000010
-Number rI, 1, 0!10111100
+Number mwH, 1, 0!11000110
+Number rI, 1, 0!11111001
 Number mwI, 1, 0!01000000
-Number rJ, 1, 0!11111110
+Number rJ, 1, 0!11111011
 Number mwJ, 1, 0!01000000
 Number rK, 1, 0!11111111
-Number mwK, 1, 0!00010100
-Number rL, 1, 0!11111110
+Number mwK, 1, 0!00010111
+Number rL, 1, 0!11111101
 Number mwL, 1, 0!11000001
 Number lr, 1, 0!01111
 Number mb, 1, 0!00100010

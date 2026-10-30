@@ -15,21 +15,20 @@ void M5_sgn_make( const M_sgn_v & D, tcx & X ) {
   M_sgn_VARS(M_LOCAL)
 
   a = 0;
-  a = (a<<3) + (((cls)&7)); // 111
-  a = a*2 + (((first)>0+(1-1)));
+  a = (a<<2) + ((((cls)>>1)&3)); // 110
 
   b = 0;
   b = (b<<3) + (((cls)&7)); // 111
   b = b*9 + M5_sgn_b_lsa[__min(8,__max(0,(lsa)-(1-1)))];
-  b = b*6 + M5_sgn_b_pb[__min(64,__max(0,(pos)-(1-1)))];
+  b = b*58 + M5_sgn_b_pb[__min(64,__max(0,(pos)-(1-1)))];
 
   c = 0;
-  c = (c<<3) + (((cls)&7)); // 111
+  c = (c<<2) + ((((cls)>>1)&3)); // 110
   c = c*27 + M5_sgn_c_gh[__min(26,__max(0,(gh)-(1-1)))];
-  c = c*6 + M5_sgn_c_pb[__min(64,__max(0,(pos)-(1-1)))];
+  c = c*9 + M5_sgn_c_pb[__min(64,__max(0,(pos)-(1-1)))];
 
   d = 0;
-  d = (d<<3) + (((cls)&7)); // 111
+  d = (d<<2) + (((cls)&3)); // 011
   d = (d<<6) + (((pos)&63)); // 111111
   d = d*2 + (((ps)>0+(1-1)));
 
@@ -40,28 +39,24 @@ void M5_sgn_make( const M_sgn_v & D, tcx & X ) {
 
   h = 0;
   h = (h<<3) + (((cls)&7)); // 111
-  h = h*9 + M5_sgn_h_flu[__min(8,__max(0,(flu)-(1-1)))];
+  h = h*6 + M5_sgn_h_flu[__min(8,__max(0,(flu)-(1-1)))];
   h = h*9 + M5_sgn_h_flu2[__min(8,__max(0,(flu2)-(1-1)))];
 
   i = 0;
-  i = (i<<3) + (((cls)&7)); // 111
-  i = i*15 + M5_sgn_i_vote[__min(19,__max(0,(vote)-(1-1)))];
-  i = i*6 + M5_sgn_i_pb[__min(64,__max(0,(pos)-(1-1)))];
+  i = i*3 + (((vote)>8+(1-1))+((vote)>10+(1-1)));
 
   j = 0;
-  j = (j<<3) + (((cls)&7)); // 111
-  j = j*27 + M5_sgn_j_fdlu[__min(26,__max(0,(fdlu)-(1-1)))];
-  j = j*6 + M5_sgn_j_pb[__min(64,__max(0,(pos)-(1-1)))];
+  j = (j<<2) + ((((cls)>>1)&3)); // 110
+  j = j*18 + M5_sgn_j_fdlu[__min(26,__max(0,(fdlu)-(1-1)))];
+  j = j*2 + (((pos)>0+(1-1)));
 
   k = 0;
-  k = (k<<3) + (((cls)&7)); // 111
   k = k*3 + (((xs)>0+(1-1))+((xs)>1+(1-1)));
-  k = (k<<6) + (((pos)&63)); // 111111
 
   l = 0;
-  l = (l<<3) + (((cls)&7)); // 111
-  l = l*25 + M5_sgn_l_lam[__min(24,__max(0,(lam)-(1-1)))];
-  l = l*6 + M5_sgn_l_pb[__min(64,__max(0,(pos)-(1-1)))];
+  l = (l<<1) + (((cls)&1)); // 001
+  l = l*15 + M5_sgn_l_lam[__min(24,__max(0,(lam)-(1-1)))];
+  l = l*3 + (((pos)>0+(1-1))+((pos)>1+(1-1)));
 
   m = 0;
   m = (m<<3) + (((cls)&7)); // 111

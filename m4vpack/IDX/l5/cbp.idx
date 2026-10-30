@@ -9,17 +9,17 @@ Debug 1
 Const 0
 
 Index a
- a_c3: c3, 1!11
- a_lu: lu, 1!11111111
+ a_c3: c3, 1!00
+ a_lu: lu, 1!01000100
 
 Index b
  b_c3: c3, 1!11
- b_mvc: mvc, 1!11101000100000010
+ b_mvc: mvc, 1!00000000000000010
 
 Index c
  c_c3: c3, 1!11
  c_rbit: rbit, 1!11
- c_cnt: cnt, 1!11111
+ c_cnt: cnt, 1!11101
 
 Index d
  d_c3: c3, 1!11
@@ -27,33 +27,33 @@ Index d
 
 Index e
  e_c3: c3, 1!11
- e_qs: qs, 1!00101010100100001000000100000000
- e_cnt: cnt, 1!11111
+ e_qs: qs, 1!00100011000000000000000000000000
+ e_cnt: cnt, 1!11000
 
 Index h
- h_c3: c3, 1!11
+ h_c3: c3, 1!01
  h_pat: pat, &11111
 
 Index i
  i_c3: c3, 1!11
- i_lu: lu, 1!11111111
+ i_lu: lu, 1!11011110
  i_lq: lq, 1!11
 
 Index j
  j_c3: c3, 1!11
- j_lu: lu, 1!11111111
- j_mvc: mvc, 1!11101000100000010
+ j_lu: lu, 1!11110110
+ j_mvc: mvc, 1!11111001000001010
 
 Index k
- k_c3: c3, 1!11
+ k_c3: c3, 1!00
  k_rbit: rbit, 1!11
  k_lu: lu, 1!11111111
 
 Index l
- l_c3: c3, 1!11
+ l_c3: c3, 1!01
 
 Index m
- m_c3: c3, 1!11
+ m_c3: c3, 1!00
 
 Index t
 
@@ -61,28 +61,28 @@ Index n
 
 Index g
 
-Number rA, 1, 0!11111110
-Number mwA, 1, 0!00000010
-Number rB, 1, 0!11111101
-Number mwB, 1, 0!00001000
-Number rC, 1, 0!11111101
-Number mwC, 1, 0!00000010
-Number rD, 1, 0!11111110
-Number mwD, 1, 0!00111001
-Number rE, 1, 0!11111111
-Number mwE, 1, 0!00010011
-Number rH, 1, 0!11111101
-Number mwH, 1, 0!00010000
-Number rI, 1, 0!11110001
+Number rA, 1, 0!11111111
+Number mwA, 1, 0!11111111
+Number rB, 1, 0!00100110
+Number mwB, 1, 0!00000011
+Number rC, 1, 0!11111111
+Number mwC, 1, 0!00000110
+Number rD, 1, 0!11111111
+Number mwD, 1, 0!00010000
+Number rE, 1, 0!00000000
+Number mwE, 1, 0!01000000
+Number rH, 1, 0!11010000
+Number mwH, 1, 0!01000000
+Number rI, 1, 0!11111111
 Number mwI, 1, 0!01000000
-Number rJ, 1, 0!11111110
-Number mwJ, 1, 0!00000100
-Number rK, 1, 0!11111000
-Number mwK, 1, 0!00001011
-Number rL, 1, 0!11011110
-Number mwL, 1, 0!00100000
-Number lr, 1, 0!01111
-Number mb, 1, 0!00010001
+Number rJ, 1, 0!11110111
+Number mwJ, 1, 0!01000100
+Number rK, 1, 0!11111111
+Number mwK, 1, 0!00100000
+Number rL, 1, 0!00000000
+Number mwL, 1, 0!10001010
+Number lr, 1, 0!01101
+Number mb, 1, 0!00011111
 
 #  Frozen: what cbp never reads, which live would only take opt.pl's trials.
 ! Number rT, 1, 0!00000000

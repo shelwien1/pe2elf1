@@ -21,13 +21,13 @@ void M9_qpd_make( const M_qpd_v & D, tcx & X ) {
 
   b = 0;
   b = b*3 + (((c3)>0+(1-1))+((c3)>1+(1-1)));
-  b = b*2 + (((qs)>6+(1-1)));
+  b = b*5 + M9_qpd_b_qs[__min(32,__max(0,(qs)-(1-1)))];
 
   c = 0;
 
   d = 0;
   d = d*2 + (((pdq)>0+(1-1)));
-  d = d*4 + M9_qpd_d_qs[__min(32,__max(0,(qs)-(1-1)))];
+  d = d*5 + M9_qpd_d_qs[__min(32,__max(0,(qs)-(1-1)))];
 
   e = 0;
   e = e*3 + (((c3)>0+(1-1))+((c3)>1+(1-1)));
@@ -38,7 +38,7 @@ void M9_qpd_make( const M_qpd_v & D, tcx & X ) {
   h = h*2 + (((pdq)>0+(1-1)));
 
   i = 0;
-  i = i*4 + M9_qpd_i_qs[__min(32,__max(0,(qs)-(1-1)))];
+  i = i*6 + M9_qpd_i_qs[__min(32,__max(0,(qs)-(1-1)))];
 
   j = 0;
 
@@ -48,7 +48,7 @@ void M9_qpd_make( const M_qpd_v & D, tcx & X ) {
 
   l = 0;
   l = l*3 + (((c3)>0+(1-1))+((c3)>1+(1-1)));
-  l = l*4 + M9_qpd_l_qs[__min(32,__max(0,(qs)-(1-1)))];
+  l = l*5 + M9_qpd_l_qs[__min(32,__max(0,(qs)-(1-1)))];
 
   s = 0;
 

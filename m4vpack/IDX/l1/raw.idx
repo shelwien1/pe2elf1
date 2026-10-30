@@ -11,20 +11,21 @@ Const 0
 
 Index a
  a_c1: c1, &11111111
- a_at: at, 1!11111111111
+ a_c2: c2, &01111111
 
 Index b
  b_c1: c1, &11111111
- b_c2: c2, &11111111
 
 Index c
- c_c1: c1, &11111111
+ c_c1: c1, &00011111
+ c_at: at, 1!01001111010
 
 Index d
- d_at: at, 1!11111111111
+ d_c1: c1, &00000000
+ d_code: code, 1!11010101000
 
 Index m
- m_at: at, 1!11111111111
+ m_at: at, 1!01110001011
 
 Index t
 
@@ -33,15 +34,15 @@ Index n
 Index g
 
 Number rA, 1, 0!00000000
-Number mwA, 1, 0!00000000
-Number rB, 1, 0!01101100
+Number mwA, 1, 0!00000001
+Number rB, 1, 0!00101010
 Number mwB, 1, 0!00000001
-Number rC, 1, 0!11100000
+Number rC, 1, 0!11011111
 Number mwC, 1, 0!00000000
-Number rD, 1, 0!00000000
+Number rD, 1, 0!11111001
 Number mwD, 1, 0!00000000
 Number lr, 1, 0!11111
-Number mb, 1, 0!00011110
+Number mb, 1, 0!00011111
 
 #  Frozen: what raw never reads, which live would only take opt.pl's trials.
 ! Number rT, 1, 0!00000000
@@ -54,8 +55,8 @@ Number mb, 1, 0!00011110
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is direct, one that
 #  does not is hashed into 2^h rows and contexts share them.  Frozen: left live these only grow.
-! Number hA, 1, 0!10110
-! Number hB, 1, 0!10100
+! Number hA, 1, 0!10100
+! Number hB, 1, 0!10110
 ! Number hC, 1, 0!10110
 ! Number hD, 1, 0!10110
 ! Number hM, 1, 0!10110

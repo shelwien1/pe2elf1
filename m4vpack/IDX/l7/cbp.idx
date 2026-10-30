@@ -10,7 +10,7 @@ Const 0
 
 Index a
  a_c3: c3, 1!00
- a_lu: lu, 1!11010111
+ a_lu: lu, 1!01001100
 
 Index b
  b_c3: c3, 1!01
@@ -22,12 +22,12 @@ Index c
  c_cnt: cnt, 1!11111
 
 Index d
- d_c3: c3, 1!11
+ d_c3: c3, 1!01
  d_frac: frac, 1!1111
 
 Index e
- e_c3: c3, 1!11
- e_qs: qs, 1!00100010100000000000000000000000
+ e_c3: c3, 1!10
+ e_qs: qs, 1!00100011010000000000000000000000
  e_cnt: cnt, 1!11000
 
 Index h
@@ -41,13 +41,13 @@ Index i
 
 Index j
  j_c3: c3, 1!11
- j_lu: lu, 1!11111111
- j_mvc: mvc, 1!11101000100000010
+ j_lu: lu, 1!11100110
+ j_mvc: mvc, 1!11111001000001010
 
 Index k
  k_c3: c3, 1!00
  k_rbit: rbit, 1!11
- k_lu: lu, 1!11111111
+ k_lu: lu, 1!11111110
 
 Index l
  l_c3: c3, 1!00
@@ -57,7 +57,7 @@ Index m
 
 Index w
  w_c3: c3, 1!01
- w_lu: lu, 1!11110110
+ w_lu: lu, 1!11111110
 
 Index s
  s_c3: c3, 1!00
@@ -72,23 +72,23 @@ Index n
 
 Index g
 
-Number rA, 1, 0!10000001
+Number rA, 1, 0!10000000
 Number mwA, 1, 0!11111111
-Number rB, 1, 0!00101001
+Number rB, 1, 0!00100110
 Number mwB, 1, 0!00000010
 Number rC, 1, 0!11111111
 Number mwC, 1, 0!00000100
 Number rD, 1, 0!11111111
 Number mwD, 1, 0!00010000
-Number rE, 1, 0!11001100
-Number mwE, 1, 0!01010100
-Number rH, 1, 0!11001111
+Number rE, 1, 0!10001001
+Number mwE, 1, 0!01000100
+Number rH, 1, 0!11011000
 Number mwH, 1, 0!01000000
 Number rI, 1, 0!11111111
-Number mwI, 1, 0!01000010
-Number rJ, 1, 0!11011100
-Number mwJ, 1, 0!01000000
-Number rK, 1, 0!11111101
+Number mwI, 1, 0!01000000
+Number rJ, 1, 0!11011111
+Number mwJ, 1, 0!01001010
+Number rK, 1, 0!11111111
 Number mwK, 1, 0!00100000
 Number rL, 1, 0!00000000
 Number mwL, 1, 0!10000000
@@ -96,7 +96,7 @@ Number lr, 1, 0!01101
 Number mb, 1, 0!00011111
 Number rS1, 1, 0!01000
 Number rS2, 1, 0!10000
-Number qs, 1, 3!0000001
+Number qs, 1, 3!0000000
 Number qf, 1, 3!1000000
 Number bw, 1, 0!01110
 

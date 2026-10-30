@@ -15,17 +15,17 @@ void M5_esc_make( const M_esc_v & D, tcx & X ) {
   M_esc_VARS(M_LOCAL)
 
   a = 0;
-  a = a*4 + M5_esc_a_dm[__min(3,__max(0,(dm)-(1-1)))];
+  a = a*3 + (((dm)>0+(1-1))+((dm)>1+(1-1)));
 
   b = 0;
 
   c = 0;
-  c = c*4 + M5_esc_c_dm[__min(3,__max(0,(dm)-(1-1)))];
+  c = c*3 + (((dm)>0+(1-1))+((dm)>1+(1-1)));
 
   d = 0;
 
   e = 0;
-  e = e*4 + M5_esc_e_dm[__min(3,__max(0,(dm)-(1-1)))];
+  e = e*2 + (((dm)>0+(1-1)));
 
   h = 0;
 
@@ -35,12 +35,12 @@ void M5_esc_make( const M_esc_v & D, tcx & X ) {
   j = 0;
 
   k = 0;
-  k = k*4 + M5_esc_k_dm[__min(3,__max(0,(dm)-(1-1)))];
+  k = k*3 + (((dm)>0+(1-1))+((dm)>1+(1-1)));
 
   l = 0;
 
   m = 0;
-  m = m*4 + M5_esc_m_dm[__min(3,__max(0,(dm)-(1-1)))];
+  m = m*3 + (((dm)>0+(1-1))+((dm)>1+(1-1)));
 
   t = 0;
 

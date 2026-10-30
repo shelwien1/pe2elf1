@@ -21,16 +21,16 @@ void M9_dcs_make( const M_dcs_v & D, tcx & X ) {
 
   b = 0;
   b = b*2 + (((lc)>0+(1-1)));
-  b = b*8 + M9_dcs_b_ls[__min(14,__max(0,(ls)-(1-1)))];
-  b = b*8 + M9_dcs_b_as[__min(14,__max(0,(as)-(1-1)))];
+  b = b*10 + M9_dcs_b_ls[__min(14,__max(0,(ls)-(1-1)))];
+  b = b*9 + M9_dcs_b_as[__min(14,__max(0,(as)-(1-1)))];
 
   c = 0;
   c = c*2 + (((coded)>0+(1-1)));
-  c = c*3 + (((qs)>4+(1-1))+((qs)>10+(1-1)));
+  c = c*8 + M9_dcs_c_qs[__min(32,__max(0,(qs)-(1-1)))];
 
   d = 0;
   d = d*6 + M9_dcs_d_lbn[__min(17,__max(0,(lbn)-(1-1)))];
-  d = d*5 + M9_dcs_d_abn[__min(17,__max(0,(abn)-(1-1)))];
+  d = d*7 + M9_dcs_d_abn[__min(17,__max(0,(abn)-(1-1)))];
 
   e = 0;
   e = e*2 + (((lc)>0+(1-1)));
@@ -45,38 +45,38 @@ void M9_dcs_make( const M_dcs_v & D, tcx & X ) {
 
   i = 0;
   i = i*2 + (((lc)>0+(1-1)));
-  i = i*8 + M9_dcs_i_prev[__min(13,__max(0,(prev)-(1-1)))];
+  i = i*7 + M9_dcs_i_prev[__min(13,__max(0,(prev)-(1-1)))];
   i = i*2 + (((coded)>0+(1-1)));
 
   j = 0;
   j = j*2 + (((lc)>0+(1-1)));
-  j = j*6 + M9_dcs_j_ls[__min(14,__max(0,(ls)-(1-1)))];
-  j = j*5 + M9_dcs_j_prev[__min(13,__max(0,(prev)-(1-1)))];
+  j = j*8 + M9_dcs_j_ls[__min(14,__max(0,(ls)-(1-1)))];
+  j = j*7 + M9_dcs_j_prev[__min(13,__max(0,(prev)-(1-1)))];
 
   k = 0;
-  k = k*2 + (((lc)>0+(1-1)));
   k = k*6 + M9_dcs_k_as[__min(14,__max(0,(as)-(1-1)))];
   k = k*5 + M9_dcs_k_prev[__min(13,__max(0,(prev)-(1-1)))];
 
   l = 0;
-  l = l*7 + M9_dcs_l_ie[__min(26,__max(0,(ie)-(1-1)))];
-  l = l*6 + M9_dcs_l_tq[__min(64,__max(0,(tq)-(1-1)))];
+  l = l*13 + M9_dcs_l_ie[__min(26,__max(0,(ie)-(1-1)))];
+  l = l*12 + M9_dcs_l_tq[__min(64,__max(0,(tq)-(1-1)))];
 
   s = 0;
   s = s*2 + (((lc)>0+(1-1)));
-  s = s*2 + (((prev)>4+(1-1)));
+  s = s*5 + M9_dcs_s_prev[__min(13,__max(0,(prev)-(1-1)))];
 
   f = 0;
   f = f*2 + (((lc)>0+(1-1)));
 
   m = 0;
+  m = m*2 + (((lc)>0+(1-1)));
   m = m*2 + (((coded)>0+(1-1)));
 
   w = 0;
-  w = w*2 + (((lc)>0+(1-1)));
-  w = w*3 + (((psg)>0+(1-1))+((psg)>1+(1-1)));
+  w = w*2 + (((psg)>0+(1-1)));
 
   t = 0;
+  t = t*2 + (((prev)>7+(1-1)));
 
   n = 0;
 

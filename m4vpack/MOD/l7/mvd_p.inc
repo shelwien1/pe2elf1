@@ -16,16 +16,16 @@ void M7_mvd_make( const M_mvd_v & D, tcx & X ) {
   M_mvd_VARS(M_LOCAL)
 
   a = 0;
-  a = a*3 + (((ns)>4+(1-1))+((ns)>8+(1-1)));
+  a = a*12 + M7_mvd_a_ns[__min(16,__max(0,(ns)-(1-1)))];
 
   b = 0;
-  b = b*4 + M7_mvd_b_kind[__min(5,__max(0,(kind)-(1-1)))];
+  b = b*3 + (((kind)>2+(1-1))+((kind)>3+(1-1)));
   b = b*2 + (((comp)>0+(1-1)));
-  b = b*5 + M7_mvd_b_oth[__min(17,__max(0,(oth)-(1-1)))];
+  b = b*9 + M7_mvd_b_oth[__min(17,__max(0,(oth)-(1-1)))];
 
   c = 0;
   c = c*5 + M7_mvd_c_kind[__min(5,__max(0,(kind)-(1-1)))];
-  c = c*6 + M7_mvd_c_rs[__min(17,__max(0,(rs)-(1-1)))];
+  c = c*7 + M7_mvd_c_rs[__min(17,__max(0,(rs)-(1-1)))];
 
   d = 0;
   d = d*5 + M7_mvd_d_kind[__min(5,__max(0,(kind)-(1-1)))];
@@ -34,17 +34,17 @@ void M7_mvd_make( const M_mvd_v & D, tcx & X ) {
   d = d*3 + (((ds)>0+(1-1))+((ds)>1+(1-1)));
 
   e = 0;
-  e = e*2 + (((kind)>0+(1-1)));
-  e = e*7 + M7_mvd_e_sp[__min(17,__max(0,(sp)-(1-1)))];
+  e = e*4 + M7_mvd_e_kind[__min(5,__max(0,(kind)-(1-1)))];
+  e = e*10 + M7_mvd_e_sp[__min(17,__max(0,(sp)-(1-1)))];
 
   h = 0;
-  h = h*6 + M7_mvd_h_kind[__min(5,__max(0,(kind)-(1-1)))];
+  h = h*5 + M7_mvd_h_kind[__min(5,__max(0,(kind)-(1-1)))];
   h = h*2 + (((comp)>0+(1-1)));
-  h = h*7 + M7_mvd_h_lq[__min(17,__max(0,(lq)-(1-1)))];
-  h = h*7 + M7_mvd_h_aq[__min(17,__max(0,(aq)-(1-1)))];
+  h = h*12 + M7_mvd_h_lq[__min(17,__max(0,(lq)-(1-1)))];
+  h = h*8 + M7_mvd_h_aq[__min(17,__max(0,(aq)-(1-1)))];
 
   i = 0;
-  i = i*6 + M7_mvd_i_kind[__min(5,__max(0,(kind)-(1-1)))];
+  i = i*5 + M7_mvd_i_kind[__min(5,__max(0,(kind)-(1-1)))];
   i = i*2 + (((comp)>0+(1-1)));
   i = i*3 + (((fc)>1+(1-1))+((fc)>2+(1-1)));
 
@@ -55,13 +55,14 @@ void M7_mvd_make( const M_mvd_v & D, tcx & X ) {
 
   k = 0;
   k = k*2 + (((comp)>0+(1-1)));
-  k = k*4 + M7_mvd_k_ns[__min(16,__max(0,(ns)-(1-1)))];
+  k = k*6 + M7_mvd_k_ns[__min(16,__max(0,(ns)-(1-1)))];
   k = k*7 + M7_mvd_k_oth[__min(17,__max(0,(oth)-(1-1)))];
 
   l = 0;
   l = l*2 + (((comp)>0+(1-1)));
 
   s = 0;
+  s = s*2 + (((kind)>4+(1-1)));
   s = s*2 + (((comp)>0+(1-1)));
   s = s*4 + M7_mvd_s_oth[__min(17,__max(0,(oth)-(1-1)))];
 

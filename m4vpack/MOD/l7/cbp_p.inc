@@ -16,7 +16,7 @@ void M7_cbp_make( const M_cbp_v & D, tcx & X ) {
   M_cbp_VARS(M_LOCAL)
 
   a = 0;
-  a = a*7 + M7_cbp_a_lu[__min(8,__max(0,(lu)-(1-1)))];
+  a = a*4 + M7_cbp_a_lu[__min(8,__max(0,(lu)-(1-1)))];
 
   b = 0;
   b = b*2 + (((c3)>1+(1-1)));
@@ -28,12 +28,12 @@ void M7_cbp_make( const M_cbp_v & D, tcx & X ) {
   c = c*6 + M7_cbp_c_cnt[__min(5,__max(0,(cnt)-(1-1)))];
 
   d = 0;
-  d = d*3 + (((c3)>0+(1-1))+((c3)>1+(1-1)));
+  d = d*2 + (((c3)>1+(1-1)));
   d = d*5 + M7_cbp_d_frac[__min(4,__max(0,(frac)-(1-1)))];
 
   e = 0;
-  e = e*3 + (((c3)>0+(1-1))+((c3)>1+(1-1)));
-  e = e*4 + M7_cbp_e_qs[__min(32,__max(0,(qs)-(1-1)))];
+  e = e*2 + (((c3)>0+(1-1)));
+  e = e*5 + M7_cbp_e_qs[__min(32,__max(0,(qs)-(1-1)))];
   e = e*3 + (((cnt)>0+(1-1))+((cnt)>1+(1-1)));
 
   h = 0;
@@ -47,12 +47,12 @@ void M7_cbp_make( const M_cbp_v & D, tcx & X ) {
 
   j = 0;
   j = j*3 + (((c3)>0+(1-1))+((c3)>1+(1-1)));
-  j = j*9 + M7_cbp_j_lu[__min(8,__max(0,(lu)-(1-1)))];
-  j = j*7 + M7_cbp_j_mvc[__min(17,__max(0,(mvc)-(1-1)))];
+  j = j*6 + M7_cbp_j_lu[__min(8,__max(0,(lu)-(1-1)))];
+  j = j*9 + M7_cbp_j_mvc[__min(17,__max(0,(mvc)-(1-1)))];
 
   k = 0;
   k = k*3 + (((rbit)>0+(1-1))+((rbit)>1+(1-1)));
-  k = k*9 + M7_cbp_k_lu[__min(8,__max(0,(lu)-(1-1)))];
+  k = k*8 + M7_cbp_k_lu[__min(8,__max(0,(lu)-(1-1)))];
 
   l = 0;
 
@@ -67,7 +67,7 @@ void M7_cbp_make( const M_cbp_v & D, tcx & X ) {
 
   w = 0;
   w = w*2 + (((c3)>1+(1-1)));
-  w = w*7 + M7_cbp_w_lu[__min(8,__max(0,(lu)-(1-1)))];
+  w = w*8 + M7_cbp_w_lu[__min(8,__max(0,(lu)-(1-1)))];
 
   t = 0;
 

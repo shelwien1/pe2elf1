@@ -3,24 +3,25 @@ static const byte M1_cbp_a_cnt[5+1]={ 0,1,2,3,4,5 };
 
 static const byte M1_cbp_b_lu[8+1]={ 0,1,2,3,4,5,6,7,8 };
 
+static const byte M1_cbp_c_frac[4+1]={ 0,1,2,3,4 };
 
-static const byte M1_cbp_d_frac[4+1]={ 0,1,2,3,4 };
-
-
-
+static const byte M1_cbp_d_lu[8+1]={ 0,1,2,3,4,5,6,7,7 };
 
 
 
-static const int M1_cbp_rA = (253+0) * (1);
-static const int M1_cbp_mwA = (2+0) * (1);
-static const int M1_cbp_rB = (248+0) * (1);
-static const int M1_cbp_mwB = (11+0) * (1);
-static const int M1_cbp_rC = (253+0) * (1);
+
+
+
+static const int M1_cbp_rA = (254+0) * (1);
+static const int M1_cbp_mwA = (7+0) * (1);
+static const int M1_cbp_rB = (255+0) * (1);
+static const int M1_cbp_mwB = (32+0) * (1);
+static const int M1_cbp_rC = (255+0) * (1);
 static const int M1_cbp_mwC = (16+0) * (1);
-static const int M1_cbp_rD = (254+0) * (1);
-static const int M1_cbp_mwD = (57+0) * (1);
-static const int M1_cbp_lr = (15+0) * (1);
-static const int M1_cbp_mb = (17+0) * (1);
+static const int M1_cbp_rD = (255+0) * (1);
+static const int M1_cbp_mwD = (64+0) * (1);
+static const int M1_cbp_lr = (12+0) * (1);
+static const int M1_cbp_mb = (31+0) * (1);
 static const int M1_cbp_rT = (0+0) * (1);
 static const int M1_cbp_mwT = (0+0) * (1);
 static const int M1_cbp_mt = (0+0) * (1);
@@ -38,15 +39,15 @@ static const int M1_cbp_hN = (22+0) * (1);
 
 
 static const long long M1_cbp_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 3), 6); // 54
-static const long long M1_cbp_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 3), 9); // 81
-static const long long M1_cbp_c_Volume = tc_vmul(tc_vmul(1, 3), (1<<5)); // 96
-static const long long M1_cbp_d_Volume = tc_vmul(tc_vmul(1, 3), 5); // 15
+static const long long M1_cbp_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 2), 9); // 18
+static const long long M1_cbp_c_Volume = tc_vmul(tc_vmul(1, 2), 5); // 10
+static const long long M1_cbp_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 8), 3); // 72
 static const long long M1_cbp_g_Volume = 1; // 1
-static const long long M1_cbp_m_Volume = tc_vmul(1, 3); // 3
+static const long long M1_cbp_m_Volume = tc_vmul(1, 1); // 1
 static const long long M1_cbp_n_Volume = 1; // 1
 static const long long M1_cbp_t_Volume = 1; // 1
 
-#define M1_cbp_USES(X) X(c3) X(rbit) X(cnt) X(lu) X(pat) X(frac)
+#define M1_cbp_USES(X) X(c3) X(rbit) X(cnt) X(lu) X(frac) X(lq)
 
 struct M1_cbp_T {
   cm_cnt2s M1_cbp_A[tc_rows(M1_cbp_a_Volume, M1_cbp_hA) * M_cbp_ND];

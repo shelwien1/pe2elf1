@@ -1,27 +1,26 @@
 
-static const byte M1_qpd_a_qs[32+1]={ 0,0,0,1,1,2,2,3,3,4,4,4,5,5,5,5,5,6,6,6,6,6,6,6,7,7,7,7,7,7,7,7,7 };
+static const byte M1_qpd_a_qs[32+1]={ 0,0,0,0,0,1,2,3,4,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5 };
 
-static const byte M1_qpd_b_qs[32+1]={ 0,0,0,1,1,2,2,3,3,4,4,4,5,5,5,5,5,6,6,6,6,6,6,6,7,7,7,7,7,7,7,7,7 };
+static const byte M1_qpd_b_qs[32+1]={ 0,0,0,0,0,1,1,2,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4 };
 
-static const byte M1_qpd_c_qs[32+1]={ 0,0,0,1,1,2,2,3,3,4,4,4,5,5,5,5,5,6,6,6,6,6,6,6,7,7,7,7,7,7,7,7,7 };
-
-static const byte M1_qpd_d_qs[32+1]={ 0,0,0,1,1,2,2,3,3,4,4,4,5,5,5,5,5,6,6,6,6,6,6,6,7,7,7,7,7,7,7,7,7 };
+static const byte M1_qpd_c_qs[32+1]={ 0,0,0,0,0,0,1,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3 };
 
 
 
 
 
 
-static const int M1_qpd_rA = (234+0) * (1);
-static const int M1_qpd_mwA = (8+0) * (1);
-static const int M1_qpd_rB = (130+0) * (1);
-static const int M1_qpd_mwB = (32+0) * (1);
-static const int M1_qpd_rC = (255+0) * (1);
-static const int M1_qpd_mwC = (224+0) * (1);
-static const int M1_qpd_rD = (244+0) * (1);
-static const int M1_qpd_mwD = (17+0) * (1);
-static const int M1_qpd_lr = (24+0) * (1);
-static const int M1_qpd_mb = (15+0) * (1);
+
+static const int M1_qpd_rA = (107+0) * (1);
+static const int M1_qpd_mwA = (1+0) * (1);
+static const int M1_qpd_rB = (0+0) * (1);
+static const int M1_qpd_mwB = (0+0) * (1);
+static const int M1_qpd_rC = (0+0) * (1);
+static const int M1_qpd_mwC = (14+0) * (1);
+static const int M1_qpd_rD = (0+0) * (1);
+static const int M1_qpd_mwD = (0+0) * (1);
+static const int M1_qpd_lr = (31+0) * (1);
+static const int M1_qpd_mb = (43+0) * (1);
 static const int M1_qpd_rT = (0+0) * (1);
 static const int M1_qpd_mwT = (0+0) * (1);
 static const int M1_qpd_mt = (0+0) * (1);
@@ -38,12 +37,12 @@ static const int M1_qpd_hT = (22+0) * (1);
 static const int M1_qpd_hN = (22+0) * (1);
 
 
-static const long long M1_qpd_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 2), 8); // 48
-static const long long M1_qpd_b_Volume = tc_vmul(1, 8); // 8
-static const long long M1_qpd_c_Volume = tc_vmul(tc_vmul(1, 2), 8); // 16
-static const long long M1_qpd_d_Volume = tc_vmul(tc_vmul(1, 3), 8); // 24
+static const long long M1_qpd_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 2), 6); // 36
+static const long long M1_qpd_b_Volume = tc_vmul(1, 5); // 5
+static const long long M1_qpd_c_Volume = tc_vmul(tc_vmul(1, 2), 4); // 8
+static const long long M1_qpd_d_Volume = tc_vmul(tc_vmul(1, 1), 2); // 2
 static const long long M1_qpd_g_Volume = 1; // 1
-static const long long M1_qpd_m_Volume = tc_vmul(1, 3); // 3
+static const long long M1_qpd_m_Volume = tc_vmul(1, 1); // 1
 static const long long M1_qpd_n_Volume = 1; // 1
 static const long long M1_qpd_t_Volume = 1; // 1
 

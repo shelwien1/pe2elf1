@@ -16,6 +16,7 @@ void M7_mbt_make( const M_mbt_v & D, tcx & X ) {
   M_mbt_VARS(M_LOCAL)
 
   a = 0;
+  a = a*2 + (((st)>2+(1-1)));
   a = a*2 + (((cl)>0+(1-1)));
   a = a*3 + (((rt)>0+(1-1))+((rt)>1+(1-1)));
 
@@ -29,7 +30,7 @@ void M7_mbt_make( const M_mbt_v & D, tcx & X ) {
   c = c*4 + M7_mbt_c_rc[__min(10,__max(0,(rc)-(1-1)))];
 
   d = 0;
-  d = d*2 + (((st)>0+(1-1)));
+  d = d*3 + (((st)>0+(1-1))+((st)>1+(1-1)));
   d = d*3 + (((cd)>0+(1-1))+((cd)>1+(1-1)));
   d = d*2 + (((cl)>0+(1-1)));
 

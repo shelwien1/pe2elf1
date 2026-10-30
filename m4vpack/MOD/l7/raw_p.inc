@@ -25,7 +25,7 @@ void M7_raw_make( const M_raw_v & D, tcx & X ) {
   c = (c<<4) + (((c2)&15)); // 00001111
 
   d = 0;
-  d = d*7 + M7_raw_d_code[__min(11,__max(0,(code)-(1-1)))];
+  d = d*6 + M7_raw_d_code[__min(11,__max(0,(code)-(1-1)))];
 
   e = 0;
   e = e*6 + M7_raw_e_code[__min(11,__max(0,(code)-(1-1)))];
@@ -47,10 +47,10 @@ void M7_raw_make( const M_raw_v & D, tcx & X ) {
 
   l = 0;
   l = (l<<7) + (((((c2)>>4)&15)<<3) + ((c2)&7)); // 11110111
-  l = l*6 + M7_raw_l_code[__min(11,__max(0,(code)-(1-1)))];
+  l = l*7 + M7_raw_l_code[__min(11,__max(0,(code)-(1-1)))];
 
   s = 0;
-  s = s*6 + M7_raw_s_code[__min(11,__max(0,(code)-(1-1)))];
+  s = s*7 + M7_raw_s_code[__min(11,__max(0,(code)-(1-1)))];
 
   f = 0;
 
