@@ -299,7 +299,14 @@ points better on the FFmpeg streams.
 
 On threads, with five of the avip samples concatenated (21 MB, four cores):
 
-«MT TABLE»
+| | Size | `c` | `d` |
+|---|---:|---:|---:|
+| one thread | 14580923 (69.07%) | 111.4 s, 37 MiB | 120.7 s, 36 MiB |
+| `-t 2` | 14607602 (69.19%) | 60.6 s, 96 MiB | 59.2 s, 82 MiB |
+| `-t 4` | 14607704 (69.19%) | 36.6 s, 175 MiB | 48.2 s, 150 MiB |
+
+At `-9` (the default), with the default 4 MB parts: the stream has 5 parts, which cost 0.18% of
+the size, each part's model starting afresh.
 
 ## Build
 
