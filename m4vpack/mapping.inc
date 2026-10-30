@@ -1,6 +1,6 @@
 /*  IDX's runtime, from Shelwien's psrc tree by way of oggcomp and h264p (mapping.inc there):
-    `mapping`, the threshold quantization, and `masking`, the bit selection, which the code
-    IDX/idx2inc.pl generates builds its maps with.  See IDX/IDX-FORMAT.md sec.13.
+    `mapping`, the threshold quantization, and `masking` (masking.inc), the bit selection, which
+    the code IDX/idx2inc.pl generates builds its maps with.  See IDX/IDX-FORMAT.md sec.13.
 
     `mapping` is handed a descriptor string and, after it, the pattern -- `S += strlen(S)+1`
     steps over the first to reach the second -- and builds the bucket map from the '1'
@@ -49,63 +49,16 @@ struct mapping {
 
 };
 
-// the selected bits of a value, in order (an index's "&" line)
-struct masking {
-  int  Size, SMSize, bits;
-  int* pmap;
-
-  void Init(const char* S1) {
-    const char* S = S1;
-    S += strlen(S) + 1;
-    int MSize = strlen(S);
-    unsigned int mask; // Fixed undefined 'uint'
-    int i, j;
-    mask = 0;
-    bits = 0;
-    for (i = 0; i < MSize; i++) {
-      mask <<= 1;
-      mask += (S[i] & 1); 
-      bits += (S[i] & 1);
-    }
-    SMSize = 1 << MSize;
-    pmap = (int*)xmalloc(SMSize * sizeof(int));
-    Size = 1 << bits;
-    for (i = 0, j = 0; i < Size; i++) {
-      pmap[j] = i;
-      j = ((j | (~mask)) + 1) & mask;
-    }
-    for (i = 0; i < SMSize; i++) pmap[i] = pmap[i & mask];
-  }
-
-  int map(int x) {
-    if (x < 0) x = 0;
-    if (x >= SMSize) x = SMSize - 1;
-    return pmap[x];
-  }
-
-  void inc(int& y, int r) {
-    r &= SMSize - 1;
-    y <<= bits;
-    y += pmap[r];
-  }
-};
-
 // (one made, for a map's static: its maps last as long as the program)
 NOINLINE mapping mapping_make(int L, const char* S1) {
   mapping m;
   m.Init(L, S1);
   return m;
 }
-NOINLINE masking masking_make(const char* S1) {
-  masking m;
-  m.Init(S1);
-  return m;
-}
 
 // Tunable: the descriptor starts with "!MAP!", so IDX/opt.pl's scan of the
 // executable finds the pattern and hill-climbs it in place.
 #define pdesc(Desc, Ofs, Map) mapping Desc = mapping_make(Ofs, "!MAP!" #Desc "!" #Ofs "\x00" Map)
-#define pmask(Desc, Map) masking Desc = masking_make("!MAP!" #Desc "!0\x00" Map)
 
 // Frozen (IDX-FORMAT.md sec.10): the same object built from the same
 // pattern, but the descriptor carries no "!MAP!" marker, so the optimizer's
@@ -115,4 +68,3 @@ NOINLINE masking masking_make(const char* S1) {
 // zeroes -- and Init() still steps over the descriptor with
 // S += strlen(S)+1, so both strings must be there.
 #define mdesc(Desc, Ofs, Map) mapping Desc = mapping_make(Ofs, #Desc "!" #Ofs "\x00" Map)
-#define mmask(Desc, Map) masking Desc = masking_make(#Desc "!0\x00" Map)

@@ -64,6 +64,10 @@
 // studio profile; VOPs that don't parse (damaged data); VOPs longer than 64 MiB or with more than
 // 1 MiB after the last macroblock.
 //
+// The source: this file includes the parts in order (below); each class, and each function over
+// 100 lines, is in a file of its own named after it (m4vcoro.inc, code_block.inc, ...), which the
+// file of its part includes where it belongs.
+//
 // Build (Lib3/, MTwrap_v3/ and MOD/ next to this file): ./mk.sh release, or
 //   g++ -O3 -march=x86-64-v3 -ffp-contract=off -std=c++11 -ILib3 -pthread -o m4vpack m4vpack.cpp
 //   x86_64-w64-mingw32-g++ -O3 -s -static -std=c++11 -ILib3 -o m4vpack.exe m4vpack.cpp
@@ -118,12 +122,17 @@ static void no_memory(void) {  // (MTwrap's buffers)
 #include "coder.inc"
 #include "cm.inc"
 #include "mapping.inc"
+#include "masking.inc"
 #include "fam.inc"
 #include "famvars.inc"
 #include "levels.inc"
 // the model, the runs (coroutines) and the threads
 #include "recon.inc"
+#include "modelbase.inc"
 #include "model.inc"
+#include "sys.inc"
+#include "lock.inc"
+#include "videoinfo.inc"
 #include "progress.inc"
 #include "coro.inc"
 #include "mt.inc"
@@ -288,28 +297,7 @@ static int decode_mt(FILE* f, const char* in_name, Sink* s, const char* out_name
   return run_end(r, note, f, in_name, s, out_name, &pr);
 }
 
-// d of one model's stream, at its level LV: the bytes of the input read already (head, got of
-// them) first; its counts into n
-template <class LV>
-struct DecodeOne {
-  static int run(FILE* f, const char* in_name, Sink* s, const char* out_name, const U8* head, size_t got,
-                 Progress& pr, RunCounts* n) {
-    typedef M4vCoro<1, LV> C;
-    C* c;
-    int r;
-    if (!(c = coro_new<C>())) no_memory();
-    c->Init(0);
-    pr.counts(coro_counts<C>, c);
-    run_file(*c, f, s, [&](uint code) { run_show(pr, c, code); }, head, got);
-    pr.counts(nullptr, nullptr);
-    n->raw = c->raw_done();
-    n->packed = c->packed_done();
-    n->vops = c->nvop;
-    r = run_end(c->status, c->note, f, in_name, s, out_name, &pr);
-    coro_free(c);
-    return r;
-  }
-};
+#include "decodeone.inc"  // DecodeOne: d of one model's stream
 
 // d of the stream in f into s: 0, or the exit status of an error (said, after the progress line pr);
 // its counts into n. Its first bytes say which it is, a stream of one model (and its level) or of
@@ -369,30 +357,7 @@ static int verify(FILE* in, const char* in_name, const char* out_name, const Opt
   return r;
 }
 
-// c on one model: its statistics into st, cost and orig, its counts into n
-template <class LV>
-struct CompressOne {
-  static int run(FILE* in, const char* in_name, Sink* s, const char* out_name, const Opts* o, Stats* st, double* cost,
-                 double* orig, Progress& pr, RunCounts* n) {
-    typedef M4vCoro<0, LV> C;
-    C* c;
-    int r;
-    if (!(c = coro_new<C>())) no_memory();
-    c->Init(o->stats);
-    pr.counts(coro_counts<C>, c);
-    run_file(*c, in, s, [&](uint code) { run_show(pr, c, code); });
-    pr.counts(nullptr, nullptr);
-    *st = c->st;
-    memcpy(cost, c->co.cost, sizeof c->co.cost);
-    memcpy(orig, c->co.orig, sizeof c->co.orig);
-    n->raw = c->raw_done();
-    n->packed = c->packed_done();
-    n->vops = c->nvop;
-    r = run_end(c->status, c->note, in, in_name, s, out_name, &pr);
-    coro_free(c);
-    return r;
-  }
-};
+#include "compressone.inc"  // CompressOne: c on one model
 static int compress_one(FILE* in, const char* in_name, Sink* s, const char* out_name, const Opts* o, Stats* st,
                         double* cost, double* orig, Progress& pr, RunCounts* n) {
   return with_level<CompressOne>(o->level, in, in_name, s, out_name, o, st, cost, orig, pr, n);

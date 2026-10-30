@@ -20,6 +20,7 @@ constexpr U32 BYTE_MASK = BYTE_VALUES - 1;
 constexpr int U32_BYTES = sizeof(U32), U64_BYTES = sizeof(U64);
 constexpr int U32_BITS = U32_BYTES * BYTE_BITS, U64_BITS = U64_BYTES * BYTE_BITS;
 constexpr U32 KIB = 1u << 10, MIB = 1u << 20;
+constexpr double PERCENT = 100.0;  // (a share in percent)
 
 // the exit statuses, and those of a run's errors (CoIo::fail()); E_INTERNAL: or out of memory
 enum { E_USAGE = 1, E_READ = 2, E_WRITE = 3, E_DATA = 4, E_INTERNAL = 5 };
