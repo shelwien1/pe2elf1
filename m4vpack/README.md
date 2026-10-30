@@ -168,12 +168,12 @@ its own, gets 71.24%.)
 | **sign prediction**: a block's first 8 signs (in scan order) are searched for the combination whose block continues the decoded samples above and left of it best: the sum over its top row and left column of the distance from 2 R1 − R2, and from R1 (R1, R2 the two decoded rows or columns beyond it; MPEG-4 has no deblocking, so the extrapolation is noisy where the samples are); the other signs go first, then these, with the sign each of the two searches prefers, by how much, and their rank | signs | 69.50% (+0.79) |
 | **the intra estimate**: an intra macroblock's blocks as the reference has them where its neighbours' motion (refined by matching the decoded samples above and left of it, the template) puts it, transformed and quantised as the encoder would, the intra prediction taken off: the DC difference's hint and sign, the level at each position (the levels' hint), its sign, the AC coefficients per block for the coded block pattern; trusted by the template's match, then by how far the macroblock's blocks so far were from it | intra DC, coefficients, coded block pattern | 69.32% (+0.61) |
 | **an inter block's prediction**: its texture, and how far its edges are from the decoded samples next to them, against the quantiser | coded block pattern, coefficients | 69.14% (+0.43) |
-| intra blocks with AC prediction in their own scan (vertical or horizontal, by the DC prediction), which the decoder knows before their coefficients | coefficients | 69.01% (+0.31) |
-| the prediction's spectrum: its transform at each position against the quantiser, and which way its texture runs | coefficients | 68.97% (+0.26) |
+| intra blocks with AC prediction in their own scan (vertical or horizontal, by the DC prediction), which the decoder knows before their coefficients | coefficients | 69.02% (+0.31) |
+| the prediction's spectrum: its transform at each position against the quantiser, and which way its texture runs | coefficients | 68.98% (+0.26) |
 | skipping: how much the area changed since the reference (the decoded samples around the macroblock against the reference's), how well the reference's macroblock (in B-VOPs the direct prediction) continues them | skip, macroblock type | 68.79% (+0.08) |
-| the vector the template matches best (a search around the vector's prediction, the co-located vector and none, then half samples) | vector differences, their signs | 68.78% (+0.08) |
+| the vector the template matches best (a search around the vector's prediction, the co-located vector and none, then half samples) | vector differences, their signs | 68.79% (+0.08) |
 | the levels an inter block's edges ask for: their miss projected onto each coefficient's pattern | coefficients | 68.78% (+0.07) |
-| all of them | | 71.40% (+2.70) |
+| all of them | | 71.41% (+2.70) |
 
 Signs, which neither MPEG-4 nor CABAC models, gain most: on the samples, the sign a search prefers
 is right for 64-80% of the signs it covers (by stream and by which of the two).
