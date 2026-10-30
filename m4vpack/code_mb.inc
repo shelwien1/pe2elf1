@@ -1,8 +1,8 @@
-// code_mb.inc -- model.inc's Model::code_mb(): one macroblock record; in decoding mode m is
+// code_mb.inc -- model_mb.inc's ModelMb::code_mb(): one macroblock record; in decoding mode m is
 // filled in.
 
 template <int f_DEC, class LV>
-void Model<f_DEC, LV>::code_mb(const Ctx* cx, VState* s, MB* m, int idx) {
+void ModelMb<f_DEC, LV>::code_mb(const Ctx* cx, VState* s, MB* m, int idx) {
   Vop* v = &s->v;
   const int mb_x = idx % s->mb_w;
   const MBCtx* L = mb_x > 0 && mbcur[idx - 1].cls ? &mbcur[idx - 1] : 0;
@@ -13,6 +13,7 @@ void Model<f_DEC, LV>::code_mb(const Ctx* cx, VState* s, MB* m, int idx) {
       mb_x + 1 < s->mb_w && idx >= s->mb_w && mbcur[idx - s->mb_w + 1].cls ? &mbcur[idx - s->mb_w + 1] : 0;
   const int rb = cap(s->run, kCap);
   const int ty = v->type - PT_I;
+  const Around n = { L, A, AL, AR, R };
   MBCtx* me = &mbcur[idx];
   const int dcvlc = v->qscale < v->dcthr;
   int intra = 0, cbp, cls3, i, k, mvi = 0, sumq = 0, px = 0, py = 0, sx = -1, sy = -1, frac = kFracNone;
@@ -38,9 +39,7 @@ void Model<f_DEC, LV>::code_mb(const Ctx* cx, VState* s, MB* m, int idx) {
     M_skp_v K;
     m->st = (int)checked(hdr_val(F_MBST, ty, 0, 0, m->st), 0, RUN_MAX);
     K.st = v->gmc ? SKS_GMC : SKS_P;
-    K.cl = count_of(C_SKIP, L, A);
-    K.c4 = K.cl + count_of(C_SKIP, AL, AR);
-    K.rt = R ? R->cls == C_SKIP : kTriNone;
+    around(K, n, C_SKIP, tri_of(R, C_SKIP));
     K.rc = R ? R->cls : 0;
     K.run = rb;
     K.pz = px || py;
@@ -52,32 +51,21 @@ void Model<f_DEC, LV>::code_mb(const Ctx* cx, VState* s, MB* m, int idx) {
     T.ze = K.ze;
     sel(f_skp, K);
     if ((m->sk = f_skp.bit(SKP_P, ENC && m->sk))) {
-      me->cls = C_SKIP;
       me->bsk = !v->gmc;
-      rowb_clear(mb_x);
       s->run++;
-      mo_kind(&mo, m);
-      mo_mb_end(&mo);
-      if (LV::recon && rec.on) rc_mb_inter(&rec), rc_mb_end(&rec);
-      return;
+      return mb_bare(me, m, C_SKIP, mb_x);
     }
     s->run = 0;
-    T.cl = count_of(C_INTRA, L, A);
-    T.c4 = T.cl + count_of(C_INTRA, AL, AR);
-    T.rt = !R ? RT_NONE : R->cls == C_INTRA ? RT_SAME : R->cls == C_SKIP ? RT_NEXT : RT_OTHER;
+    around(T, n, C_INTRA, rt_of(R, C_INTRA, C_SKIP));
     if (mbt_bit(MBN_INTRA, T, m->t == MB_INTRA)) {
       m->t = MB_INTRA;
       intra = 1;
       cls3 = C3_INTRA;
     } else {
-      T.cl = count_of(C_4MV, L, A);
-      T.c4 = T.cl + count_of(C_4MV, AL, AR);
-      T.rt = !R ? RT_NONE : R->cls == C_4MV ? RT_SAME : R->cls == C_INTER ? RT_NEXT : RT_OTHER;
+      around(T, n, C_4MV, rt_of(R, C_4MV, C_INTER));
       m->t = mbt_bit(MBN_4MV, T, m->t == MB_4MV) ? MB_4MV : MB_INTER;
       if (v->gmc && m->t == MB_INTER) {
-        T.cl = count_of(C_GMC, L, A);
-        T.c4 = T.cl + count_of(C_GMC, AL, AR);
-        T.rt = !R ? RT_NONE : R->cls == C_GMC ? RT_SAME : RT_OTHER;
+        around(T, n, C_GMC, rt_of(R, C_GMC, C_GMC));
         m->mc = mbt_bit(MBN_GMC, T, m->mc);
       }
       cls3 = C3_P;
@@ -89,16 +77,8 @@ void Model<f_DEC, LV>::code_mb(const Ctx* cx, VState* s, MB* m, int idx) {
     K.rc = R ? R->cls : 0;
     K.bsk = R ? R->bsk : kTriNone;
     sel(f_skp, K);
-    if ((m->sk = f_skp.bit(SKP_B, ENC && m->sk))) {
-      me->cls = C_SKIP;
-      rowb_clear(mb_x);
-      mo_kind(&mo, m);
-      if (LV::recon && rec.on) rc_mb_inter(&rec), rc_mb_end(&rec);
-      return;
-    }
-    K.cl = count_of(C_BDIR0, L, A);
-    K.c4 = K.cl + count_of(C_BDIR0, AL, AR);
-    K.rt = R ? R->cls == C_BDIR0 : kTriNone;
+    if ((m->sk = f_skp.bit(SKP_B, ENC && m->sk))) return mb_bare(me, m, C_SKIP, mb_x);
+    around(K, n, C_BDIR0, tri_of(R, C_BDIR0));
     K.run = rb;
     K.rr = !R || R->cls == C_SKIP ? RR_NONE : R->cls == C_INTRA ? RR_INTRA : RR_CODED;
     if (LV::recon && rec.on) skip_vars(&K.zt, &K.ze);
@@ -109,13 +89,8 @@ void Model<f_DEC, LV>::code_mb(const Ctx* cx, VState* s, MB* m, int idx) {
       m->mb = MODB_NONE;
       m->t = MB_DIRECT;
       for (i = 0; i < MB_BLOCKS; i++) m->b[i].n = 0;
-      me->cls = C_BDIR0;
-      rowb_clear(mb_x);
       s->run++;
-      mo_kind(&mo, m);
-      mo_direct(&mo, 0, 0);
-      if (LV::recon && rec.on) rc_mb_inter(&rec), rc_mb_end(&rec);
-      return;
+      return mb_bare(me, m, C_BDIR0, mb_x);
     }
     s->run = 0;
     T.cl = (L && L->cbp) + (A && A->cbp);
@@ -123,15 +98,11 @@ void Model<f_DEC, LV>::code_mb(const Ctx* cx, VState* s, MB* m, int idx) {
     T.rt = R ? R->cbp != 0 : kTriNone;
     m->mb = mbt_bit(MBN_BCBP, T, m->mb == MODB_CBP) ? MODB_CBP : MODB_NOCBP;
     T.cd = count_of(C_BDIR, L, A);
-    T.cl = count_of(C_BFWD, L, A);
-    T.c4 = T.cl + count_of(C_BFWD, AL, AR);
-    T.rt = R ? R->cls == C_BFWD : kTriNone;
+    around(T, n, C_BFWD, tri_of(R, C_BFWD));
     if (mbt_bit(MBN_BDIRECT, T, m->t == MB_DIRECT)) m->t = MB_DIRECT;
     else if (mbt_bit(MBN_BFWD, T, m->t == MB_FWD)) m->t = MB_FWD;
     else {
-      T.cl = count_of(C_BBWD, L, A);
-      T.c4 = T.cl + count_of(C_BBWD, AL, AR);
-      T.rt = R ? R->cls == C_BBWD : kTriNone;
+      around(T, n, C_BBWD, tri_of(R, C_BBWD));
       m->t = mbt_bit(MBN_BBWD, T, m->t == MB_BWD) ? MB_BWD : MB_BI;
     }
     cls3 = C3_B;

@@ -1,4 +1,4 @@
-// code_block.inc -- model.inc's Model::code_block(): a block's coefficients.
+// code_block.inc -- model_res.inc's ModelRes::code_block(): a block's coefficients.
 
 // Coefficients of a block, coded like H.264's CABAC residual: significance map in scan order
 // (the sig family), then the levels in reverse order (lvl), signs (sgn), and the escape modes
@@ -12,7 +12,7 @@
 // co-located block's count; Lb, Ab: left and above blocks or 0; out (which may be Ab) gets this one;
 // Xb: for a Cr block, the Cb block of its macroblock (0 else)
 template <int f_DEC, class LV>
-void Model<f_DEC, LV>::code_block(VState* s, Blk* b, int n, int intra, int dcvlc, int coded, int cls, int nctx,
+void ModelRes<f_DEC, LV>::code_block(VState* s, Blk* b, int n, int intra, int dcvlc, int coded, int cls, int nctx,
                                   int qs, int mvc, int rnz, const BlkCtx* Lb, const BlkCtx* Ab, BlkCtx* out,
                                   const BlkCtx* Xb) {
   const RL* rl = intra ? &rl_intra : &rl_inter;
