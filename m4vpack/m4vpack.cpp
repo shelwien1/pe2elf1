@@ -12,9 +12,9 @@
 //   -c N (c with -t) the size of a part, at least: N MB, or N KB with a k (default 4 MB)
 // input and output can be - for stdin and stdout.
 //
-// The bitstream syntax and the reconstruction of level -9 follow m4vdec.cpp, a port of FFmpeg's
-// MPEG-4 Part 2 decoder, so m4vpack is licensed under the GNU Lesser General Public License 2.1 or
-// later.
+// The bitstream syntax, the vectors and the reconstruction of level -9 follow m4vdec.cpp, a port of
+// FFmpeg's MPEG-4 Part 2 decoder, so m4vpack is licensed under the GNU Lesser General Public License
+// 2.1 or later.
 //
 // How it works. The stream is cut at start codes (00 00 01 xx). Each VOP is parsed into the
 // syntax records m4vtsv writes as text (VOP and video packet headers, one record per macroblock
@@ -22,9 +22,9 @@
 // macroblock), and the records are written back as bits and compared with the input. If that
 // reproduces the VOP, the records are coded with a binary arithmetic coder; otherwise (unsupported
 // features, damaged data) the VOP is kept as bytes, so compression is always lossless. Headers and
-// user data are kept as bytes too. The same functions code and decode every record (model.inc), and
-// one walk per record reads it and writes it back (syntax.inc), so the two directions can't
-// disagree.
+// user data are kept as bytes too. The same functions code and decode every record (model.inc, by
+// element: headers, residual, vectors, macroblocks), and one walk per record reads it and writes it
+// back (syntax.inc), so the two directions can't disagree.
 //
 // The model. Each syntax element is binarised (as H.264's CABAC; see m4vtsv/h264-counterparts.md),
 // and each decision goes to one of 13 families (fam.inc, h264p's): counters chosen by context
@@ -37,6 +37,8 @@
 //   -5  ten counters, one mixer
 //   -3  six counters, one mixer
 //   -1  four counters, one mixer
+// The vectors are the decoder's at every level (motion.inc: m4vdec's vector prediction, B-VOP
+// predictors, direct mode, GMC's vector and display times, one state for the model and the decoder).
 // Level -9 reconstructs the pictures as it codes them (recon.inc: m4vdec's decoder, driven by the
 // records), so its contexts can look at the samples: the first signs of a block predicted by how
 // well the block continues the decoded samples above and left of it; an intra macroblock's

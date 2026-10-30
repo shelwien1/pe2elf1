@@ -68,11 +68,11 @@ Exit codes:
 
 | Level | Model | Tuning set | `c` | `d` | Memory |
 |---|---|---:|---:|---:|---:|
-| `-9` | the decoder in the loop; per decision ten counters, three mixers and a final one, two APMs | 68.72% | 0.25 MiB/s | 0.26 MiB/s | 32 MiB |
-| `-7` | the same mixing without the decoder | 71.24% | 0.40 MiB/s | 0.39 MiB/s | 22 MiB |
-| `-5` | ten counters, one mixer | 71.81% | 0.54 MiB/s | 0.50 MiB/s | 20 MiB |
-| `-3` | six counters, one mixer | 72.19% | 0.72 MiB/s | 0.64 MiB/s | 20 MiB |
-| `-1` | four counters (keeping their probabilities stretched), one mixer | 73.01% | 0.87 MiB/s | 0.92 MiB/s | 22 MiB |
+| `-9` | the decoder in the loop; per decision ten counters, three mixers and a final one, two APMs | 68.71% | 0.25 MiB/s | 0.26 MiB/s | 32 MiB |
+| `-7` | the same mixing without the decoder | 71.24% | 0.39 MiB/s | 0.39 MiB/s | 22 MiB |
+| `-5` | ten counters, one mixer | 71.80% | 0.56 MiB/s | 0.55 MiB/s | 20 MiB |
+| `-3` | six counters, one mixer | 72.18% | 0.71 MiB/s | 0.71 MiB/s | 20 MiB |
+| `-1` | four counters (keeping their probabilities stretched), one mixer | 73.00% | 0.93 MiB/s | 1.01 MiB/s | 22 MiB |
 
 The tuning set is the first 256 KB of each of the 12 streams the levels were tuned on (2.8 MiB);
 its size compressed is given as a share of its size. `c` and `d` are the MiB of stream per second
@@ -92,11 +92,13 @@ don't, or the VOP uses a feature the parser doesn't handle, the VOP is stored as
 (VOS, VO, VOL), user data and anything else that isn't a VOP are stored as bytes too. So any input
 round-trips, including damaged streams and files that aren't video at all.
 
-One set of functions (`model.inc`) codes and decodes every record. Each function takes the values
-when compressing and returns them when decompressing, so the two directions can't drift apart (the
-same idea as h264p's symmetric syntax coder). The bits are handled the same way: one walk per record
-(`syntax.inc`) both reads it from the bits and writes it back, so the parser and the writer can't
-disagree either, and the model asks the same helpers which fields a record has.
+One set of functions codes and decodes every record: the model (`model.inc`), whose elements go as
+its families do, each in a file of its own (the headers `model_hdr.inc`, the residual
+`model_res.inc`, the vectors `model_mv.inc`, the macroblocks `model_mb.inc`). Each function takes
+the values when compressing and returns them when decompressing, so the two directions can't drift
+apart (the same idea as h264p's symmetric syntax coder). The bits are handled the same way: one walk
+per record (`syntax.inc`) both reads it from the bits and writes it back, so the parser and the
+writer can't disagree either, and the model asks the same helpers which fields a record has.
 
 ### The model
 
@@ -155,21 +157,21 @@ workarounds (DivX, XviD and libavcodec builds, read from the user data). Its pic
 bit-exact with m4vdec's on 45 test streams (9,758 frames).
 
 The contexts it gives, and what each is worth: the tuning set's size with the context switched off
-in the tuned model, against 68.72% with all of them. (A model tuned with a context loses a little
+in the tuned model, against 68.71% with all of them. (A model tuned with a context loses a little
 more without it than one tuned without it: `-7`, the same model without the decoder and tuned on
 its own, gets 71.24%.)
 
 | Context | Elements | Without it |
 |---|---|---:|
-| **sign prediction**: a block's first 8 signs (in scan order) are searched for the combination whose block continues the decoded samples above and left of it best: the sum over its top row and left column of the distance from 2 R1 − R2, and from R1 (R1, R2 the two decoded rows or columns beyond it; MPEG-4 has no deblocking, so the extrapolation is noisy where the samples are); the other signs go first, then these, with the sign each of the two searches prefers, by how much, and their rank | signs | 69.51% (+0.79) |
+| **sign prediction**: a block's first 8 signs (in scan order) are searched for the combination whose block continues the decoded samples above and left of it best: the sum over its top row and left column of the distance from 2 R1 − R2, and from R1 (R1, R2 the two decoded rows or columns beyond it; MPEG-4 has no deblocking, so the extrapolation is noisy where the samples are); the other signs go first, then these, with the sign each of the two searches prefers, by how much, and their rank | signs | 69.50% (+0.79) |
 | **the intra estimate**: an intra macroblock's blocks as the reference has them where its neighbours' motion (refined by matching the decoded samples above and left of it, the template) puts it, transformed and quantised as the encoder would, the intra prediction taken off: the DC difference's hint and sign, the level at each position (the levels' hint), its sign, the AC coefficients per block for the coded block pattern; trusted by the template's match, then by how far the macroblock's blocks so far were from it | intra DC, coefficients, coded block pattern | 69.32% (+0.61) |
 | **an inter block's prediction**: its texture, and how far its edges are from the decoded samples next to them, against the quantiser | coded block pattern, coefficients | 69.14% (+0.43) |
-| intra blocks with AC prediction in their own scan (vertical or horizontal, by the DC prediction), which the decoder knows before their coefficients | coefficients | 69.02% (+0.31) |
-| the prediction's spectrum: its transform at each position against the quantiser, and which way its texture runs | coefficients | 68.98% (+0.26) |
+| intra blocks with AC prediction in their own scan (vertical or horizontal, by the DC prediction), which the decoder knows before their coefficients | coefficients | 69.01% (+0.31) |
+| the prediction's spectrum: its transform at each position against the quantiser, and which way its texture runs | coefficients | 68.97% (+0.26) |
 | skipping: how much the area changed since the reference (the decoded samples around the macroblock against the reference's), how well the reference's macroblock (in B-VOPs the direct prediction) continues them | skip, macroblock type | 68.79% (+0.08) |
-| the vector the template matches best (a search around the vector's prediction, the co-located vector and none, then half samples) | vector differences, their signs | 68.79% (+0.08) |
-| the levels an inter block's edges ask for: their miss projected onto each coefficient's pattern | coefficients | 68.79% (+0.07) |
-| all of them | | 71.41% (+2.69) |
+| the vector the template matches best (a search around the vector's prediction, the co-located vector and none, then half samples) | vector differences, their signs | 68.78% (+0.08) |
+| the levels an inter block's edges ask for: their miss projected onto each coefficient's pattern | coefficients | 68.78% (+0.07) |
+| all of them | | 71.40% (+2.70) |
 
 Signs, which neither MPEG-4 nor CABAC models, gain most: on the samples, the sign a search prefers
 is right for 64-80% of the signs it covers (by stream and by which of the two).
@@ -265,13 +267,13 @@ three with packed B-frames) and two DivX streams. The others were made with FFmp
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | aq_cm.m4v | 3875193 | 97.2% | 76.3% | 70.7% | 74.8% | 75.5% | 75.9% | 76.7% |
 | aria_cm.m4v | 5097686 | 98.9% | 79.0% | 73.8% | 78.0% | 78.7% | 79.0% | 80.0% |
-| ispure03.m4v | 5864104 | 95.8% | 73.0% | 67.5% | 71.7% | 72.3% | 72.6% | 73.4% |
+| ispure03.m4v | 5864104 | 95.8% | 73.0% | 67.5% | 71.6% | 72.3% | 72.6% | 73.3% |
 | sdova_ed.m4v | 4717732 | 89.6% | 65.7% | 60.1% | 65.0% | 65.7% | 65.9% | 66.5% |
 | susi_small1_divx.m4v | 90887 | 100.1% | 83.4% | 77.4% | 81.9% | 82.3% | 82.5% | 83.1% |
 | susi_small2_divx.m4v | 1556817 | 100.0% | 85.1% | 83.1% | 84.6% | 85.1% | 85.2% | 85.5% |
 | xvid.m4v | 257813 | 97.7% | 74.4% | 68.9% | 70.2% | 71.1% | 71.6% | 72.6% |
 | lavc_ilace.m4v (interlaced) | 1015896 | 90.9% | 68.6% | 62.9% | 64.5% | 65.4% | 65.8% | 67.1% |
-| xvid_gmc.m4v (GMC) | 833291 | 99.8% | 76.9% | 70.8% | 73.8% | 74.4% | 75.1% | 76.0% |
+| xvid_gmc.m4v (GMC) | 833291 | 99.8% | 76.9% | 70.7% | 73.7% | 74.3% | 75.0% | 75.8% |
 | xvid_qpel_4mv.m4v (quarter-pel, 4MV) | 383624 | 95.5% | 74.0% | 68.9% | 70.3% | 70.8% | 71.3% | 72.1% |
 
 Where the bits go in `aq_cm.m4v` at `-9` (`-s`; the packed sizes are the model's estimates):
@@ -284,14 +286,14 @@ Where the bits go in `aq_cm.m4v` at `-9` (`-s`; the packed sizes are the model's
   macroblock types, cbp, dquant         357692     130322  36.43%
     types, flags, dquant                            55598
     coded block patterns                            74724
-  motion vectors                        191806     142083  74.08%
+  motion vectors                        191806     141983  74.02%
   intra DC                              256787     195482  76.13%
   coefficients                         3057155    2270169  74.26%
     positions                                      921642
     levels                                        1020004
     signs                                          328352
     escape modes                                      171
-  total                                3875193    2739690  70.70%
+  total                                3875193    2739590  70.70%
 ```
 
 `-9` writes 2.4-8.5% less than format 3, 7.3% less on this stream. Coefficients make up most of a
@@ -306,9 +308,9 @@ On threads, with five of the avip samples concatenated (21 MB, four cores):
 
 | | Size | `c` | `d` |
 |---|---:|---:|---:|
-| one thread | 14580923 (69.07%) | 111.4 s, 37 MiB | 120.7 s, 36 MiB |
-| `-t 2` | 14607602 (69.19%) | 60.6 s, 96 MiB | 59.2 s, 82 MiB |
-| `-t 4` | 14607704 (69.19%) | 36.6 s, 175 MiB | 48.2 s, 150 MiB |
+| one thread | 14580473 (69.06%) | 104.0 s, 38 MiB | 107.6 s, 37 MiB |
+| `-t 2` | 14607143 (69.19%) | 58.3 s, 96 MiB | 61.2 s, 82 MiB |
+| `-t 4` | 14607245 (69.19%) | 38.4 s, 174 MiB | 42.1 s, 149 MiB |
 
 At `-9` (the default), with the default 4 MB parts: the stream has 5 parts, which cost 0.18% of
 the size, each part's model starting afresh.
@@ -384,7 +386,8 @@ Other checks:
 
 ## License
 
-The parsing code (`syntax.inc`) and the reconstruction (`recon.inc`) are derived from FFmpeg's
-libavcodec through m4vdec, so m4vpack is licensed under the GNU Lesser General Public License,
-version 2.1 or later, not under this repository's MIT license. `Lib3/`, `MTwrap_v3/` and the parts
-from h264p are h264p's.
+The parsing code (`syntax.inc`, `parse_vol.inc`), the motion state (`motion.inc`, `mo_sprite.inc`)
+and the reconstruction (`recon.inc`, `rc_vop_begin.inc`) are derived from FFmpeg's libavcodec
+through m4vdec, so m4vpack is licensed under the GNU Lesser General Public License, version 2.1 or
+later, not under this repository's MIT license (the contexts drawn from the reconstruction,
+`reconctx.inc`, are m4vpack's own). `Lib3/`, `MTwrap_v3/` and the parts from h264p are h264p's.
