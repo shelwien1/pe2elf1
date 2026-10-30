@@ -1,4 +1,4 @@
-// parse_vol.inc -- syntax.inc's Ctx::parse_vol(): the VOL header (included in Ctx's body).
+// parse_vol.inc -- ctx.inc's Ctx::parse_vol(): the VOL header (included in Ctx's body).
 
   // VOL header, as m4vdec's decode_vol_header: records what the VOP syntax depends on
   void parse_vol(GB& gb) {

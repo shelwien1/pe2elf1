@@ -1,4 +1,4 @@
-// compressone.inc -- m4vpack.cpp's Call::CompressOne: c on one model, at a level (included in Call's
+// compressone.inc -- call.inc's Call::CompressOne: c on one model, at a level (included in Call's
 // body).
 
   // c on one model on the call k: its statistics into st, cost and orig

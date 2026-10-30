@@ -1,4 +1,4 @@
-// decodeone.inc -- m4vpack.cpp's Call::DecodeOne: d of a stream of one model, at its level (included
+// decodeone.inc -- call.inc's Call::DecodeOne: d of a stream of one model, at its level (included
 // in Call's body).
 
   // d of one model's stream on the call k, at its level LV: the bytes of the input read already

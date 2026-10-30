@@ -103,12 +103,12 @@ static void mt_rec(U8* h, U64 g_size, U64 plen, U64 ins, U64 xlen, U64 part) {
 
 #include "m4vsplit.inc"  // M4vSplit: c -t's splitter
 
-typedef struct MtArgs {
+struct MtArgs {
   int threads, stats;
   int level;        // c: the model's
   U64 part_max;     // d: the largest part a record can have (mt_part_max())
   Progress* meter;  // the call's progress line, which the workers' runs tell and poll (0: none)
-} MtArgs;
+};
 
 #include "partc.inc"  // PartC: a worker's c of a part
 #include "partd.inc"  // PartD: a worker's d of a part

@@ -334,15 +334,18 @@ x86_64-w64-mingw32-g++ -O3 -s -static -std=c++11 -ILib3 -o m4vpack.exe m4vpack.c
 C++11 compiler.
 
 The source is C++11 that builds without exceptions or RTTI and has no dependencies besides the C
-library. `m4vpack.cpp` includes the parts in order; each class (but the small counters of
-`cm.inc`), and each function over 100 lines, is in a file of its own named after it (`m4vcoro.inc`,
-`code_block.inc`, ...), which the file of its part includes where it belongs. `Lib3/` (the
-coroutines), `MTwrap_v3/` (the threads), the counters, mixers and families (`cmbase.inc`,
-`buf.inc`, `cm.inc` and `cm_*.inc`, `fam.inc` and `tc_*.inc`, `famcfg.inc`), `mapping.inc`,
-`masking.inc` and the tools in `IDX/` come from h264p. MTwrap includes `win_shim.inc` by name,
-hence `-ILib3`. On POSIX, `win_shim.inc` emulates the few Windows calls it makes. The arithmetic
-that decides what is coded is integer arithmetic (the one table computed with `exp()` rounds with a
-wide margin), so files are portable between platforms.
+library. It is classes with their methods defined in their bodies (the records read and write
+themselves, the motion state and the decoder step through a VOP, the model codes the records, a call
+runs c or d), and the free functions that serve them (the transforms, the interpolation, the
+tables). `m4vpack.cpp` includes the parts in order; each class over 100 lines, and each method over
+100 lines, is in a file of its own named after it (`m4vcoro.inc`, `mb.inc`, `code_block.inc`, ...):
+a class's where its part includes it, a method's in its class's body. `Lib3/` (the coroutines),
+`MTwrap_v3/` (the threads), the counters, mixers and families (`cmbase.inc`, `buf.inc`, `cm.inc` and
+`cm_*.inc`, `fam.inc` and `tc_*.inc`, `famcfg.inc`), `mapping.inc`, `masking.inc` and the tools in
+`IDX/` come from h264p. MTwrap includes `win_shim.inc` by name, hence `-ILib3`. On POSIX,
+`win_shim.inc` emulates the few Windows calls it makes. The arithmetic that decides what is coded is
+integer arithmetic (the one table computed with `exp()` rounds with a wide margin), so files are
+portable between platforms.
 
 ## Verification
 
