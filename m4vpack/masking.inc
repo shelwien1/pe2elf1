@@ -29,11 +29,7 @@ struct masking {
     for (i = 0; i < SMSize; i++) pmap[i] = pmap[i & mask];
   }
 
-  int map(int x) {
-    if (x < 0) x = 0;
-    if (x >= SMSize) x = SMSize - 1;
-    return pmap[x];
-  }
+  int map(int x) { return pmap[clip(x, 0, SMSize - 1)]; }
 
   void inc(int& y, int r) {
     r &= SMSize - 1;

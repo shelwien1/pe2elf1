@@ -137,7 +137,6 @@ template <int f_DEC, class C> struct tc_fam {
       fatal("internal: decision node %d of a family of %d", node, ND);
     return bit_x(node, b);
   }
-  void dump_discard() { TC_DUMP(discard()); }
   i64 codes(const tcx &v, i64 x, u32 sc) {
     i64 m = code(v, ENC ? (x < 0 ? -x : x) : 0);
     if(!m)
@@ -325,7 +324,7 @@ template <int f_DEC, class C> struct tc_fam {
     int pf = C::NAPM && C::bw < TC_BW_ONE
                  ? (C::bw * pm + (TC_BW_ONE - C::bw) * ap2.pp(pm, bf + (u32)node) + TC_BW_ONE / 2) >> TC_BW_BITS
                  : pm;
-    b = tc_bit(rc, pf < 1 ? 1 : pf > CM_PONE - 1 ? CM_PONE - 1 : pf, b);
+    b = tc_bit(rc, cm_pclip(pf), b);
     mx.upd(b, C::lr, C::mb, mx.x, xq);
     if(C::NMIX > 1) {
       mx2.upd(b, C::lr, C::mb, mx.x, xq);
@@ -403,7 +402,7 @@ template <int f_DEC, class C> struct tc_fam {
       mxm.set(1, cm_stretch(z.P()));
       mxm.set(2, TC_BIAS);
       int pm = mxm.mix(bn + (u32)node);
-      b = tc_bit(rc, pm < 1 ? 1 : pm > CM_PONE - 1 ? CM_PONE - 1 : pm, b);
+      b = tc_bit(rc, cm_pclip(pm), b);
       mxm.upd(b, C::lrm, C::mbm);
       t.upd(b, C::rT, C::mwT);
       T[bt + node] = t;

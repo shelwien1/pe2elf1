@@ -17,11 +17,9 @@ typedef int64_t i64;
 typedef size_t sz;
 
 #if defined(__GNUC__) || defined(__clang__)
-#define LIKELY(x) __builtin_expect(!!(x), 1)
 #define UNLIKELY(x) __builtin_expect(!!(x), 0)
 #define CM_PREFETCH(p) __builtin_prefetch(p)
 #else
-#define LIKELY(x) (x)
 #define UNLIKELY(x) (x)
 #define CM_PREFETCH(p)
 #endif
@@ -53,16 +51,6 @@ static void* xrealloc(void* p, size_t n) {
   return q;
 }
 
-// the place of u's top bit (u > 0)
-static INLINE int tc_top_bit(u64 u) {
-#if defined(__GNUC__) || defined(__clang__)
-  return U64_BITS - 1 - __builtin_clzll(u);
-#else
-  int n = 0;
-  while (u >>= 1) n++;
-  return n;
-#endif
-}
 // 0..TC_QLOG_LIN - 1 as they are, then two buckets per octave (by the bit below the top one): a
 // magnitude class
 constexpr int TC_QLOG_LIN = 4;
@@ -70,10 +58,9 @@ static INLINE i32 tc_qlog(i64 x) {
   u64 u = (u64)(x < 0 ? -x : x);
   int t;
   if (u < TC_QLOG_LIN) return (i32)u;
-  t = tc_top_bit(u);
+  t = ilog2(u);
   return 2 * t + (i32)((u >> (t - 1)) & 1);
 }
-constexpr int tc_clamp(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
 
 // Tables are mapped, not allocated and filled: a table costs address space when it is made and
 // memory only where the coder reaches it (zeroed pages).
@@ -110,7 +97,7 @@ static INLINE u64 tbl_n(u64 n) {
 // Rows of a table: the Volume when it fits in 2^h rows, else 2^h rows into which the contexts
 // are hashed (tc_hrow).
 constexpr int TC_HBITS_MAX = U32_BITS - 1;
-constexpr int tc_hbits(int h) { return h < 1 ? 1 : h > TC_HBITS_MAX ? TC_HBITS_MAX : h; }
+constexpr int tc_hbits(int h) { return clip(h, 1, TC_HBITS_MAX); }
 constexpr sz tc_rows(long long vol, int h) { return vol <= (1LL << tc_hbits(h)) ? (sz)vol : (sz)1 << tc_hbits(h); }
 // A hashed table's row for a context: the index multiplied out (by 2^32 over the golden ratio),
 // taken from the top. No tag and no check: contexts that land on the same row share it.

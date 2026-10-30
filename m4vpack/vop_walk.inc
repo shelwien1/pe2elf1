@@ -75,7 +75,7 @@ int Model<f_DEC, LV>::vop_walk(Ctx* cx, int mode, GB* gb, PB* pb) {
           gb_skip(gb, 1);
           gb_align(gb);
           if (parse_vp(cx, gb, &vp, &k) < 0) { ret = W_FAIL; break; }
-          vp.qscale = clipi(vp.qscale, QS_MIN, QS_MAX);
+          vp.qscale = clip(vp.qscale, QS_MIN, QS_MAX);
         }
         if (mode != W_VERIFY) {
           code_vp(cx, &s, &k, idx + 1);

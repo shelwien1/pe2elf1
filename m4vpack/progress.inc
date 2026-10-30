@@ -7,8 +7,8 @@
 //
 // counts() gives what to show (a function of the run's state, read from the thread that polls);
 // poll() puts a line if one is due, from any thread (on threads, the workers', as they code: the
-// main thread waits on them). Messages go through say() (below), which puts them after the line,
-// under the same lock: an error ends the lines.
+// main thread waits on them). An error's message goes through say_error() (below), which ends the
+// line first, under the same lock: no line comes after it.
 
 #ifdef _WIN32
 #define PSAPI_VERSION 2  // (GetProcessMemoryInfo from kernel32)
@@ -116,11 +116,11 @@ struct Progress {
     }
     lk.unlock();
   }
-  // a message (stop: an error, after which no line comes, and no other error: on threads, what
-  // follows from the first)
-  void say(bool stop, const char* fmt, va_list ap) {
+  // an error's message, after which no line comes, and no other error's (on threads, what follows
+  // from the first)
+  void error(const char* fmt, va_list ap) {
     lk.lock();
-    if (!stop || !__atomic_exchange_n(&halted, 1, __ATOMIC_SEQ_CST)) {
+    if (!__atomic_exchange_n(&halted, 1, __ATOMIC_SEQ_CST)) {
       cut();
       vfprintf(stderr, fmt, ap);
     }
@@ -173,21 +173,11 @@ struct Progress {
   }
 };
 
-// A message on stderr, after the progress line of the call (p, if any); and an error's, which ends
-// the call: no progress line after it
-static void say_v(Progress* p, bool stop, const char* fmt, va_list ap) {
-  if (p) p->say(stop, fmt, ap);
-  else vfprintf(stderr, fmt, ap);
-}
-static void say(Progress* p, const char* fmt, ...) {
-  va_list ap;
-  va_start(ap, fmt);
-  say_v(p, false, fmt, ap);
-  va_end(ap);
-}
+// An error's message on stderr, after the progress line of the call (p, if any), which it ends
 static void say_error(Progress* p, const char* fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  say_v(p, true, fmt, ap);
+  if (p) p->error(fmt, ap);
+  else vfprintf(stderr, fmt, ap);
   va_end(ap);
 }

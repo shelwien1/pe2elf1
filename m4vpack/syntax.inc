@@ -3,8 +3,6 @@
 // and each record parsed from the bits (VOP headers, macroblocks, video packet headers) and
 // written back.
 
-static inline int clipi(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
-static inline int ilog2(U32 v) { int n = 0; while (v >>= 1) n++; return n; }
 static inline int sign_extend(int val, int bits) { int sh = U32_BITS - bits; return (int)((U32)val << sh) >> sh; }
 static int bitlen(int v) { U32 a = v < 0 ? 0u - (U32)v : (U32)v; int n = 0; while (a) { n++; a >>= 1; } return n; }
 static inline int stuffing_bits(int nb) { return (1 << (nb - 1)) - 1; }  // nb bits of the usual stuffing: 0, then 1s
@@ -115,6 +113,8 @@ constexpr int DCTHR_MAX = 7;
 constexpr int WARP_MAX = (1 << 14) - 1;
 constexpr int MV_VLC_MAX = 32;
 constexpr int MV_WRAP_BITS = 5;  // + f_code: the bits a vector component wraps around at (as decoders add)
+// a vector component as the decoder adds it up, wrapped (f_code fcode)
+static int mv_wrap(int v, int fcode) { return sign_extend(v, MV_WRAP_BITS + fcode); }
 constexpr int DQ_B = 2;
 constexpr int RUN_MAX = 1000;
 // MCBPC: the chroma blocks' bits (2), dquant (intra: in the I-VOP table, else in the P-VOP one),
@@ -126,7 +126,7 @@ constexpr int DQUANT_BITS = 2;                         // dquant: its index into
 enum { DBQUANT_ZERO = 0, DBQUANT_NEG = 2, DBQUANT_POS = 3, DBQUANT_BITS = 2 };  // a B-VOP's dbquant: 0, 10, 11
 // a coefficient's escape modes: plain VLC, the level offset, the run offset, fixed length (mode 3:
 // last, run, marker, level, marker); the escape code is a symbol of the VLC, then the mode's bits
-enum { ESC_VLC, ESC_LEVEL, ESC_RUN, ESC_FIXED, NESC };
+enum { ESC_VLC, ESC_LEVEL, ESC_RUN, ESC_FIXED };
 constexpr U8 ESC_DEFAULT = UINT8_MAX;  // a record's escape mode left to esc_default()
 enum { ESC_LEVEL_CODE = 0, ESC_LEVEL_BITS = 1, ESC_RUN_CODE = 2, ESC_FIXED_CODE = 3, ESC_MODE_BITS = 2 };
 constexpr int SIGN_BITS = 1, MARKER_BITS = 1;
@@ -732,7 +732,7 @@ static int parse_intra(const Ctx* c, GB* gb, Vop* v, MB* m, int cbpc, int dquant
   if ((cbpy = vlc_get(gb, &vlc_cbpy)) < 0) return -1;
   dcvlc = v->qscale < v->dcthr;
   m->dq = 0;
-  if (dquant) { m->dq = quant_tab[gb_get(gb, DQUANT_BITS)]; v->qscale = clipi(v->qscale + m->dq, QS_MIN, QS_MAX); }
+  if (dquant) { m->dq = quant_tab[gb_get(gb, DQUANT_BITS)]; v->qscale = clip(v->qscale + m->dq, QS_MIN, QS_MAX); }
   m->dt = c->interlaced ? gb_get1(gb) : NA;
   return parse_blocks(gb, m, (cbpc & MCBPC_CHROMA) | (cbpy << CBP_CHROMA_BITS), 1, dcvlc);
 }
@@ -776,7 +776,7 @@ static int parse_mb(const Ctx* c, GB* gb, Vop* v, MB* m, int idx) {
     m->dq = 0;
     if (cbpc & MCBPC_DQUANT) {
       m->dq = quant_tab[gb_get(gb, DQUANT_BITS)];
-      v->qscale = clipi(v->qscale + m->dq, QS_MIN, QS_MAX);
+      v->qscale = clip(v->qscale + m->dq, QS_MIN, QS_MAX);
     }
     if (c->interlaced && cbp) m->dt = gb_get1(gb);
     if (m->t == MB_4MV) {
@@ -796,7 +796,7 @@ static int parse_mb(const Ctx* c, GB* gb, Vop* v, MB* m, int idx) {
   cbp = m->mb == MODB_CBP ? (int)gb_get(gb, MB_BLOCKS) : 0;
   if (m->t != MB_DIRECT && cbp) {
     m->dq = gb_get1(gb) ? (gb_get1(gb) ? DQ_B : -DQ_B) : 0;
-    v->qscale = clipi(v->qscale + m->dq, QS_MIN, QS_MAX);
+    v->qscale = clip(v->qscale + m->dq, QS_MIN, QS_MAX);
   }
   if (c->interlaced) {
     if (cbp) m->dt = gb_get1(gb);
@@ -990,7 +990,7 @@ static int put_intra(const Ctx* c, PB* pb, Vop* v, const MB* m) {  // after the 
   pb_put(pb, cbpy_tab[cbp >> CBP_CHROMA_BITS][0], cbpy_tab[cbp >> CBP_CHROMA_BITS][1]);
   if (m->dq) {
     pb_put(pb, (U32)dq_index(m->dq), DQUANT_BITS);
-    v->qscale = clipi(v->qscale + m->dq, QS_MIN, QS_MAX);
+    v->qscale = clip(v->qscale + m->dq, QS_MIN, QS_MAX);
   }
   if (c->interlaced) pb_put(pb, (U32)m->dt, 1);
   return put_blocks(pb, m, 1, dcvlc);
@@ -1035,7 +1035,7 @@ static int put_vp(const Ctx* c, PB* pb, Vop* v, const VpHdr* k) {  // stuffing a
   pb_put(pb, (U32)k->quant, c->quant_precision);
   pb_put(pb, (U32)k->hec, 1);
   if (k->quant) v->qscale = k->quant;
-  v->qscale = clipi(v->qscale, QS_MIN, QS_MAX);
+  v->qscale = clip(v->qscale, QS_MIN, QS_MAX);
   if (!k->hec) return 0;
   if (k->mtb > RUN_MAX) return -1;
   for (i = 0; i < k->mtb; i++) pb_put(pb, 1, 1);
@@ -1077,7 +1077,7 @@ static int put_mb(const Ctx* c, PB* pb, Vop* v, const MB* m) {
     pb_put(pb, cbpy_tab[cy][0], cbpy_tab[cy][1]);
     if (m->dq) {
       pb_put(pb, (U32)dq_index(m->dq), DQUANT_BITS);
-      v->qscale = clipi(v->qscale + m->dq, QS_MIN, QS_MAX);
+      v->qscale = clip(v->qscale + m->dq, QS_MIN, QS_MAX);
     }
     if (m->dt != NA) pb_put(pb, (U32)m->dt, 1);
     if (m->fp != NA) pb_put(pb, (U32)m->fp, 1);
@@ -1097,7 +1097,7 @@ static int put_mb(const Ctx* c, PB* pb, Vop* v, const MB* m) {
   if (m->dq != NA) {
     if (!m->dq) pb_put(pb, DBQUANT_ZERO, 1);
     else pb_put(pb, m->dq > 0 ? DBQUANT_POS : DBQUANT_NEG, DBQUANT_BITS);
-    v->qscale = clipi(v->qscale + m->dq, QS_MIN, QS_MAX);
+    v->qscale = clip(v->qscale + m->dq, QS_MIN, QS_MAX);
   }
   if (m->dt != NA) pb_put(pb, (U32)m->dt, 1);
   if (m->fp != NA) pb_put(pb, (U32)m->fp, 1);

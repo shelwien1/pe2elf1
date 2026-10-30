@@ -3,10 +3,10 @@
 // and macroblocks around; VState: the VOP's), the caps on its variables, and its small functions.
 
 // the kinds of motion vectors (mvd's and mvg's kind)
-enum { MVK_P, MVK_PFIELD, MVK_BFWD, MVK_BBWD, MVK_BDIR, MVK_P4, NMVK };
+enum { MVK_P, MVK_PFIELD, MVK_BFWD, MVK_BBWD, MVK_BDIR, MVK_P4 };
 // the classes of coefficient blocks (sig's, lvl's and sgn's cls): inter, B inter, intra, intra with
 // AC prediction, each + 1 for chroma
-enum { CL_INTER = 0, CL_B = 2, CL_INTRA = 4, CL_INTRA_AC = 6, NCLS = 8 };
+enum { CL_INTER = 0, CL_B = 2, CL_INTRA = 4, CL_INTRA_AC = 6 };
 
 typedef struct Last {  // previous values the models predict from
   int kind;
@@ -87,7 +87,7 @@ constexpr int kHpelMask = 1, kQpelMask = 3;  // a vector component's sub-sample 
 
 // a three-state pair (3x3) as one variable
 static INLINE int tri2(int a, int b) { return a * kTri + b; }
-static int time_clamp(S64 t) { return (int)(t < -kTimeMax ? -kTimeMax : t > kTimeMax ? kTimeMax : t); }
+static int time_clamp(S64 t) { return (int)clip(t, -kTimeMax, kTimeMax); }
 // sig's fp: the bits of the frequency neighbours left, above, above left, 2 left, 2 above
 enum { FP_L, FP_A, FP_AL, FP_L2, FP_A2 };
 // mbt's rt: the co-located macroblock another kind, of the kind the decision asks of, none, of the
@@ -115,7 +115,6 @@ static INLINE int qlog1(i64 v) { return 1 + cap(tc_qlog(v), kQlogCap); }
 static INLINE int mvq(int q) { return cap(q, kCap); }
 // the spread of the vector prediction's candidates (s < 0: none) in VLC units of f_code
 static int mv_spread(int s, int fcode) { return s < 0 ? kNone : mvq(s ? ((s - 1) >> (fcode - 1)) + 1 : 0); }
-static int mv_wrap(int v, int fcode) { return sign_extend(v, MV_WRAP_BITS + fcode); }  // as the decoder adds them
 
 // a chunk's start code, as the raw family's code
 enum ChunkClass {
@@ -152,7 +151,7 @@ static void vop_state(Vop* v, const Ctx* cx, const VopHdr* h) {
   v->gmc = h->type == PT_S && cx->sprite_usage == GMC_SPRITE;
   v->fcode = h->fcode == NA ? 1 : h->fcode;
   v->bcode = h->bcode == NA ? 1 : h->bcode;
-  v->qscale = clipi(h->quant, QS_MIN, QS_MAX);
+  v->qscale = clip(h->quant, QS_MIN, QS_MAX);
   v->dcthr = dc_threshold[h->dcthr];
   v->tib = h->tib;
 }

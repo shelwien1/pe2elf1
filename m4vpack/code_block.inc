@@ -154,7 +154,7 @@ void Model<f_DEC, LV>::code_block(VState* s, Blk* b, int n, int intra, int dcvlc
         const int ea = E4[sc[p]] < 0 ? -E4[sc[p]] : E4[sc[p]];
         f_lvl.hint = q4_round(ea) > 1 ? q4_round(ea) - 1 : 0;
       }
-      t = bound(f_lvl.code(X, a), 0, kLevelMax);
+      t = checked(f_lvl.code(X, a), 0, kLevelMax);
       f_lvl.hint = -1;
       if (t) ngt1++;
       else neq1++;

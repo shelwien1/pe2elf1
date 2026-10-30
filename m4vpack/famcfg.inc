@@ -109,24 +109,24 @@ struct FC_NAME {
 // a hashed index's bits: 0 where the Volume fits the 2^h rows (direct)
 #define FC_HASH(v, h) ((v) > (1LL << tc_hbits(h)) ? tc_hbits(h) : 0)
 #define set const int FC_NAME::
-#define FC_LIM(U, l) tc_clamp(FCX(r##U), 1, CM_TMAX),
+#define FC_LIM(U, l) clip(FCX(r##U), 1, CM_TMAX),
 set lim[FC_NC] = {FC_CNT(FC_LIM)};
 #undef FC_LIM
-#define FC_TG(U, l) tc_clamp(FCX(mw##U) * TC_MW_UNIT, 0, TC_MW_MAX),
+#define FC_TG(U, l) clip(FCX(mw##U) * TC_MW_UNIT, 0, TC_MW_MAX),
 set tg[FC_NC] = {FC_CNT(FC_TG)};
 #undef FC_TG
 #define FC_HC(U, l) FC_HASH(FCX(l##_Volume), FCX(h##U)),
 set hc[FC_NC] = {FC_CNT(FC_HC)};
 #undef FC_HC
-set rT = tc_clamp(FCX(rT), 1, CM_TMAX);
-set mwT = tc_clamp(FCX(mwT) * TC_MW_UNIT, 0, TC_MW_MAX);
-set mt = tc_clamp(FCX(mt), 0, TC_MTREE);
-set rG = tc_clamp(FCX(rG), 1, CM_TMAX);
-set mwG = tc_clamp(FCX(mwG) * TC_MW_UNIT, 0, TC_MW_MAX);
-set lr = tc_clamp(FCX(lr), 1, TC_LR_MAX);
-set mb = tc_clamp(FCX(mb), 0, TC_MB_MAX);
-set lrm = tc_clamp(FCX(lrm), 1, TC_LR_MAX);
-set mbm = tc_clamp(FCX(mbm), 0, TC_MB_MAX);
+set rT = clip(FCX(rT), 1, CM_TMAX);
+set mwT = clip(FCX(mwT) * TC_MW_UNIT, 0, TC_MW_MAX);
+set mt = clip(FCX(mt), 0, TC_MTREE);
+set rG = clip(FCX(rG), 1, CM_TMAX);
+set mwG = clip(FCX(mwG) * TC_MW_UNIT, 0, TC_MW_MAX);
+set lr = clip(FCX(lr), 1, TC_LR_MAX);
+set mb = clip(FCX(mb), 0, TC_MB_MAX);
+set lrm = clip(FCX(lrm), 1, TC_LR_MAX);
+set mbm = clip(FCX(mbm), 0, TC_MB_MAX);
 set hM = FC_HASH(FCX(m_Volume), FCX(hM));
 set hT = FC_HASH(FCX(t_Volume), FCX(hT));
 set hN = FC_HASH(FCX(n_Volume), FCX(hN));
@@ -137,11 +137,11 @@ set hS = 0;
 #endif
 #if FC_NAPM
 set hF = FC_HASH(FCX(f_Volume), FCX(hF));
-set rS1 = cm_apm_limit(tc_clamp(FCX(rS1), 1, CM_APM_RATE_MAX));
-set rS2 = cm_apm_limit(tc_clamp(FCX(rS2), 1, CM_APM_RATE_MAX));
+set rS1 = cm_apm_limit(clip(FCX(rS1), 1, CM_APM_RATE_MAX));
+set rS2 = cm_apm_limit(clip(FCX(rS2), 1, CM_APM_RATE_MAX));
 set qs = cm_apm_q(FCX(qs));
 set qf = cm_apm_q(FCX(qf));
-set bw = tc_clamp(FCX(bw), 0, TC_BW_ONE);
+set bw = clip(FCX(bw), 0, TC_BW_ONE);
 
 #else
 set hF = 0;

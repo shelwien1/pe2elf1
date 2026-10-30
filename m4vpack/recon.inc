@@ -19,7 +19,7 @@ enum {
   MBT_BWD = 0x0400, MBT_BIDIR = MBT_FWD | MBT_BWD
 };
 enum {
-  BUG_AUTODETECT = 1, BUG_XVID_ILACE = 4, BUG_AMV = 32, BUG_QPEL_CHROMA = 64, BUG_STD_QPEL = 128,
+  BUG_AMV = 32, BUG_QPEL_CHROMA = 64, BUG_STD_QPEL = 128,
   BUG_QPEL_CHROMA2 = 256, BUG_DIRECT_BLOCKSIZE = 512, BUG_EDGE = 1024, BUG_HPEL_CHROMA = 2048,
   BUG_DC_CLIP = 4096, BUG_IEDGE = 32768
 };
@@ -55,7 +55,7 @@ static constexpr U8 h263_chroma_roundtab[] = { 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 
 static inline int round_chroma(int x) {
   return h263_chroma_roundtab[x & (countof(h263_chroma_roundtab) - 1)] + (x >> CHROMA_ROUND_SHIFT);
 }
-static inline U8 clip8(int v) { return (U8)(v < 0 ? 0 : v > PIX_MAX ? PIX_MAX : v); }
+static inline U8 clip8(int v) { return (U8)clip(v, 0, PIX_MAX); }
 static inline int mid_pred(int a, int b, int c) {
   if (a > b) {
     if (c > b) b = c > a ? a : c;
@@ -128,7 +128,7 @@ typedef struct Recon {
 } Recon;
 
 static void rc_set_qscale(Recon* d, int q) {
-  q = clipi(q, QS_MIN, QS_MAX);
+  q = clip(q, QS_MIN, QS_MAX);
   d->qscale = q;
   d->chroma_qscale = q;
   d->y_dc_scale = y_dc_scale_table[q];
@@ -721,7 +721,7 @@ static S16* rc_pred_motion(Recon* d, int block, int* px, int* py) {
 }
 
 // a vector from its prediction and its difference as coded (m4vdec's decode_motion)
-static int rc_motion(int pred, int diff, int f_code) { return diff ? sign_extend(pred + diff, MV_WRAP_BITS + f_code) : pred; }
+static int rc_motion(int pred, int diff, int f_code) { return diff ? mv_wrap(pred + diff, f_code) : pred; }
 
 static void rc_update_motion_val(Recon* d) {
   const int mb_xy = d->mb_y * d->mb_stride + d->mb_x, wrap = d->b8_stride, xy = d->block_index[0];
@@ -877,8 +877,8 @@ static const U8* rc_fetch(U8* buf, int bs, const U8* plane, int ps, int x, int y
     return plane + (ptrdiff_t)y * ps + x;
   }
   for (i = 0; i < h; i++) {
-    const U8* row = plane + (ptrdiff_t)clipi(y + i * ystep, 0, eh - 1) * ps;
-    for (j = 0; j < w; j++) buf[i * bs + j] = row[clipi(x + j, 0, ew - 1)];
+    const U8* row = plane + (ptrdiff_t)clip(y + i * ystep, 0, eh - 1) * ps;
+    for (j = 0; j < w; j++) buf[i * bs + j] = row[clip(x + j, 0, ew - 1)];
   }
   *stride = bs;
   return buf;
@@ -891,12 +891,12 @@ static const U8* rc_fetch_cb_iedge(U8* buf, const U8* u, const U8* v, int lc, in
                                    int rows, int ew, int eh, int* stride) {
   int k, j;
   for (k = 0; k < rows; k++) {
-    const U8* row = u + (ptrdiff_t)clipi(2 * y + field_select + 2 * k, 0, eh - 1) * lc;
-    for (j = 0; j < MC_B; j++) buf[k * MC_B + j] = row[clipi(x + j, 0, ew - 1)];
+    const U8* row = u + (ptrdiff_t)clip(2 * y + field_select + 2 * k, 0, eh - 1) * lc;
+    for (j = 0; j < MC_B; j++) buf[k * MC_B + j] = row[clip(x + j, 0, ew - 1)];
   }
   if (field_select && rows > IEDGE_ROW) {
-    const U8* row = v + (ptrdiff_t)clipi(2 * y, 0, eh - 1) * lc;
-    for (j = 0; j < MC_B; j++) buf[IEDGE_ROW * MC_B + j] = row[clipi(x + j, 0, ew - 1)];
+    const U8* row = v + (ptrdiff_t)clip(2 * y, 0, eh - 1) * lc;
+    for (j = 0; j < MC_B; j++) buf[IEDGE_ROW * MC_B + j] = row[clip(x + j, 0, ew - 1)];
   }
   *stride = MC_B;
   return buf;
@@ -1072,15 +1072,15 @@ static void rc_gmc_dsp(U8* dst, int stride, const U8* src, int h, int ox, int oy
                                       (src[index + stride] * (s - frac_x) + src[index + stride + 1] * frac_x) * frac_y +
                                       r) >> (shift * 2));
         } else {
-          index = src_x + clipi(src_y, 0, height) * stride;
+          index = src_x + clip(src_y, 0, height) * stride;
           dst[y * stride + x] = (U8)(((src[index] * (s - frac_x) + src[index + 1] * frac_x) * s + r) >> (shift * 2));
         }
       } else {
         if ((unsigned)src_y < (unsigned)height) {
-          index = clipi(src_x, 0, width) + src_y * stride;
+          index = clip(src_x, 0, width) + src_y * stride;
           dst[y * stride + x] = (U8)(((src[index] * (s - frac_y) + src[index + stride] * frac_y) * s + r) >> (shift * 2));
         } else {
-          index = clipi(src_x, 0, width) + clipi(src_y, 0, height) * stride;
+          index = clip(src_x, 0, width) + clip(src_y, 0, height) * stride;
           dst[y * stride + x] = src[index];
         }
       }
@@ -1103,9 +1103,9 @@ static void rc_gmc1_motion(Recon* d, U8* dest_y, U8* dest_cb, U8* dest_cr, const
   src_y = d->mb_y * MB_W + (motion_y >> (d->warp_acc + 1));
   motion_x *= 1 << (GMC1_SUB - d->warp_acc);
   motion_y *= 1 << (GMC1_SUB - d->warp_acc);
-  src_x = clipi(src_x, -MB_W, d->width);
+  src_x = clip(src_x, -MB_W, d->width);
   if (src_x == d->width) motion_x = 0;
-  src_y = clipi(src_y, -MB_W, d->height);
+  src_y = clip(src_y, -MB_W, d->height);
   if (src_y == d->height) motion_y = 0;
   src = rc_fetch(buf, MC_MB, ref->y, d->ly, src_x, src_y, 1, MC_MB, MC_MB, d->h_edge, d->v_edge, &ss);
   if ((motion_x | motion_y) & (HALF - 1)) {
@@ -1121,9 +1121,9 @@ static void rc_gmc1_motion(Recon* d, U8* dest_y, U8* dest_cb, U8* dest_cr, const
   src_y = d->mb_y * BLK_W + (motion_y >> (d->warp_acc + 1));
   motion_x *= 1 << (GMC1_SUB - d->warp_acc);
   motion_y *= 1 << (GMC1_SUB - d->warp_acc);
-  src_x = clipi(src_x, -BLK_W, d->width >> 1);
+  src_x = clip(src_x, -BLK_W, d->width >> 1);
   if (src_x == d->width >> 1) motion_x = 0;
-  src_y = clipi(src_y, -BLK_W, d->height >> 1);
+  src_y = clip(src_y, -BLK_W, d->height >> 1);
   if (src_y == d->height >> 1) motion_y = 0;
   src = rc_fetch(buf, MC_B, ref->u, d->lc, src_x, src_y, 1, MC_B, MC_B, d->h_edge >> 1, d->v_edge >> 1, &ss);
   rc_gmc1_dsp(dest_cb, d->lc, src, ss, BLK_W, motion_x & F, motion_y & F, RND - d->no_rounding);
@@ -1268,9 +1268,9 @@ static void rc_chroma_4mv_motion(Recon* d, U8* dest_cb, U8* dest_cr, const RPic*
   my >>= 1;
   src_x = d->mb_x * BLK_W + mx;
   src_y = d->mb_y * BLK_W + my;
-  src_x = clipi(src_x, -BLK_W, d->width >> 1);
+  src_x = clip(src_x, -BLK_W, d->width >> 1);
   if (src_x == (d->width >> 1)) dxy &= ~HP_H;
-  src_y = clipi(src_y, -BLK_W, d->height >> 1);
+  src_y = clip(src_y, -BLK_W, d->height >> 1);
   if (src_y == (d->height >> 1)) dxy &= ~HP_V;
   src = rc_fetch(buf, MC_B, ref->u, d->lc, src_x, src_y, 1, MC_B, MC_B, d->h_edge >> 1, d->v_edge >> 1, &ss);
   rc_hpel(dest_cb, d->lc, src, ss, BLK_W, BLK_W, dxy, op);
@@ -1289,9 +1289,9 @@ static void rc_apply_8x8(Recon* d, U8* dest_y, U8* dest_cb, U8* dest_cr, int dir
       dxy = qp(motion_x & QPEL_MASK, motion_y & QPEL_MASK);
       src_x = d->mb_x * MB_W + (motion_x >> QPEL_BITS) + (i & 1) * BLK_W;
       src_y = d->mb_y * MB_W + (motion_y >> QPEL_BITS) + (i >> 1) * BLK_W;
-      src_x = clipi(src_x, -MB_W, d->width);
+      src_x = clip(src_x, -MB_W, d->width);
       if (src_x == d->width) dxy &= ~qp(QPEL_MASK, 0);
-      src_y = clipi(src_y, -MB_W, d->height);
+      src_y = clip(src_y, -MB_W, d->height);
       if (src_y == d->height) dxy &= ~qp(0, QPEL_MASK);
       src = rc_fetch(buf, MC_B, ref->y, d->ly, src_x, src_y, 1, MC_B, MC_B, d->h_edge, d->v_edge, &ss);
       rc_qpel_mc(dest, d->ly, src, ss, BLK_W, dxy, op, (d->bugs & BUG_STD_QPEL) != 0);
@@ -1301,9 +1301,9 @@ static void rc_apply_8x8(Recon* d, U8* dest_y, U8* dest_cb, U8* dest_cr, int dir
       dxy = 0;
       src_x = d->mb_x * MB_W + (i & 1) * BLK_W + (motion_x >> HPEL_BITS);
       src_y = d->mb_y * MB_W + (i >> 1) * BLK_W + (motion_y >> HPEL_BITS);
-      src_x = clipi(src_x, -MB_W, d->width);
+      src_x = clip(src_x, -MB_W, d->width);
       if (src_x != d->width) dxy |= motion_x & 1;
-      src_y = clipi(src_y, -MB_W, d->height);
+      src_y = clip(src_y, -MB_W, d->height);
       if (src_y != d->height) dxy |= (motion_y & 1) << 1;
       src = rc_fetch(buf, MC_B, ref->y, d->ly, src_x, src_y, 1, MC_B, MC_B, d->h_edge, d->v_edge, &ss);
       rc_hpel(dest, d->ly, src, ss, BLK_W, BLK_W, dxy, op);
@@ -1776,7 +1776,7 @@ constexpr int RC_TM_N = 2 * RC_TM_T * MB_W;    // its samples, all decoded
 
 // a sample of plane p (w x h, stride s) at (x, y), clamped into it
 static inline int rc_px(const U8* p, int s, int w, int h, int x, int y) {
-  return p[(ptrdiff_t)clipi(y, 0, h - 1) * s + clipi(x, 0, w - 1)];
+  return p[(ptrdiff_t)clip(y, 0, h - 1) * s + clip(x, 0, w - 1)];
 }
 
 // the summed difference between 16 samples c and the reference's at a (b: the row below), at

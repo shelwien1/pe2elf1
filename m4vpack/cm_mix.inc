@@ -57,8 +57,7 @@ template <int N> struct cm_mix {
         s += (i64)(w[row + i] + W0) * xi[i];
     }
     pr = cm_squash((int)(s >> CM_WBITS));
-    pr = pr < 1 ? 1 : pr > CM_PONE - 1 ? CM_PONE - 1 : pr;
-    return pr;
+    return cm_pclip(pr);
   }
   INLINE void upd(int bit, int lr, int mb) { upd(bit, lr, mb, x, nullptr); }
   INLINE void upd(int bit, int lr, int mb, const int *xi, const cm_x16<N> *xp) {
@@ -119,7 +118,7 @@ template <int N> struct cm_mix {
     CM_UNROLL
     for(i = 0; i < N; i++) {
       i64 v = (i64)ww[i] + (((i64)xi[i] * err) >> CM_WBITS);
-      ww[i] = (i32)(v < -CM_WMAX ? -CM_WMAX : v > CM_WMAX ? CM_WMAX : v);
+      ww[i] = (i32)clip(v, -CM_WMAX, CM_WMAX);
     }
 
   }

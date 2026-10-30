@@ -25,7 +25,7 @@ static void parse_vol(Ctx* c, GB* gb) {
   time_res = (int)gb_get(gb, TIME_RES_BITS);
   if (!time_res) { c->unsupported = "a time resolution of 0"; return; }
   c->time_res = time_res;
-  c->time_inc_bits = ilog2(time_res - 1) + 1;
+  c->time_inc_bits = ilog2((U32)(time_res - 1)) + 1;
   if (c->time_inc_bits < 1) c->time_inc_bits = 1;
   gb_skip(gb, 1);
   c->fixed_inc = gb_get1(gb) ? (int)gb_get(gb, c->time_inc_bits) : 0;  // fixed_vop_time_increment
@@ -116,5 +116,5 @@ no_cplx:
   c->mb_h = (c->height + MB_W - 1) >> MB_SHIFT;
   c->mb_num = c->mb_w * c->mb_h;
   if (!c->mb_num) c->unsupported = "a frame size of 0";
-  c->mb_num_bits = c->mb_num > 1 ? ilog2(c->mb_num - 1) + 1 : 1;
+  c->mb_num_bits = c->mb_num > 1 ? ilog2((U32)(c->mb_num - 1)) + 1 : 1;
 }

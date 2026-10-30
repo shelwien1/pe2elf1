@@ -4,10 +4,8 @@
 //  decompressor's, fam null)
 struct tc_dump {
   FILE *f;
-  long start;  // where this model's records begin
   void Init(const char *fam) {
     f = nullptr;
-    start = 0;
     const char *dir = getenv("M4VPACK_DUMP");
     if(!fam || !dir || !*dir)
       return;
@@ -18,27 +16,12 @@ struct tc_dump {
     if(!f)
       fatal("cannot write %s", fn);
     free(fn);
-    fseek(f, 0, SEEK_END);
-    start = ftell(f);
     putc('R', f);
   }
   void Quit() {
     if(f)
       fclose(f);
     f = nullptr;
-  }
-  //  a model whose compression starts over (kRestart): its records go
-  void discard() {
-    if(!f)
-      return;
-    fflush(f);
-#ifdef _WIN32
-    _chsize_s(_fileno(f), start);
-#else
-    if(ftruncate(fileno(f), start))
-      fatal("cannot cut a dump short");
-#endif
-    putc('R', f);  // (appended: at the end, where it was cut)
   }
   template <class... A> void rec(char tag, A... a) {
     if(!f)

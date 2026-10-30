@@ -33,13 +33,13 @@ void Model<f_DEC, LV>::code_mb(const Ctx* cx, VState* s, MB* m, int idx) {
   if (v->type == PT_B && mb_x == 0) memset(s->lmv, 0, sizeof(s->lmv));
   if (v->type != PT_I && v->type != PT_B) pred_mv(s, idx, 0, &px, &py, &sx, &sy);
   if (v->type == PT_I) {
-    m->st = (int)bound(hdr_val(F_MBST, ty, 0, 0, m->st), 0, RUN_MAX);
+    m->st = (int)checked(hdr_val(F_MBST, ty, 0, 0, m->st), 0, RUN_MAX);
     m->t = MB_INTRA;
     intra = 1;
     cls3 = C3_INTRA;
   } else if (v->type != PT_B) {
     M_skp_v K;
-    m->st = (int)bound(hdr_val(F_MBST, ty, 0, 0, m->st), 0, RUN_MAX);
+    m->st = (int)checked(hdr_val(F_MBST, ty, 0, 0, m->st), 0, RUN_MAX);
     K.st = v->gmc ? SKS_GMC : SKS_P;
     K.cl = count_of(C_SKIP, L, A);
     K.c4 = K.cl + count_of(C_SKIP, AL, AR);
@@ -256,7 +256,7 @@ void Model<f_DEC, LV>::code_mb(const Ctx* cx, VState* s, MB* m, int idx) {
     } else
       m->dq = f_qpd.bit(QPD_BSIGN, ENC && m->dq > 0) ? DQ_B : -DQ_B;
     s->prev_dq = k;
-    v->qscale = clipi(v->qscale + m->dq, QS_MIN, QS_MAX);
+    v->qscale = clip(v->qscale + m->dq, QS_MIN, QS_MAX);
     if (LV::recon && rec.on) rc_set_qscale(&rec, v->qscale);
   }
   if (cx->interlaced && (intra || cbp)) {

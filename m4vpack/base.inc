@@ -22,6 +22,27 @@ constexpr int U32_BITS = U32_BYTES * BYTE_BITS, U64_BITS = U64_BYTES * BYTE_BITS
 constexpr U32 KIB = 1u << 10, MIB = 1u << 20;
 constexpr double PERCENT = 100.0;  // (a share in percent)
 
+// v clamped to [lo, hi]: v of a signed type of int's size or more, the bounds converted to it
+template <class T>
+struct NoDeduce {
+  typedef T type;
+};
+template <class T>
+constexpr T clip(T v, typename NoDeduce<T>::type lo, typename NoDeduce<T>::type hi) {
+  static_assert(sizeof(T) >= sizeof(int) && T(-1) < T(0), "clip(): a signed type of int's size or more");
+  return v < lo ? lo : v > hi ? hi : v;
+}
+// floor(log2(v)): the place of v's top bit (0 for 0)
+static INLINE int ilog2(U64 v) {
+#if defined(__GNUC__) || defined(__clang__)
+  return v ? U64_BITS - 1 - __builtin_clzll(v) : 0;
+#else
+  int n = 0;
+  while (v >>= 1) n++;
+  return n;
+#endif
+}
+
 // the exit statuses, and those of a run's errors (CoIo::fail()); E_INTERNAL: or out of memory
 enum { E_USAGE = 1, E_READ = 2, E_WRITE = 3, E_DATA = 4, E_INTERNAL = 5 };
 

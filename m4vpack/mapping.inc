@@ -38,12 +38,7 @@ struct mapping {
     value += L;
   }
 
-  int map(int x) {
-    x -= left;
-    if (x < 0) x = 0;
-    if (x > MSize) x = MSize;
-    return pmap[x];
-  }
+  int map(int x) { return pmap[clip(x - left, 0, MSize)]; }
 
   template<class INT> void inc(INT& y, int r) { y = y * Size + map(r); }
 

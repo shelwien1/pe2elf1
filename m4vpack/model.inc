@@ -105,8 +105,9 @@ struct Model {
     f.make(D, X);
     f.select(X);
   }
-  // a value decompressed outside what it can be: the data is damaged (the walk fails the chunk)
-  INLINE i64 bound(i64 x, i64 lo, i64 hi) {
+  // x, checked: a value decompressed outside [lo, hi] is damaged data (the coder's error set: the
+  // walk fails the chunk), lo then
+  INLINE i64 checked(i64 x, i64 lo, i64 hi) {
     if (UNLIKELY(x < lo || x > hi)) {
       c->err = 1;
       return lo;
@@ -119,7 +120,7 @@ struct Model {
   INLINE void hdr_vars(M_hdr_v& D, int fld, int ty, i64 p1, int pos) {
     D.fld = fld;
     D.ty = ty;
-    D.p1 = (int)(p1 < 0 ? 0 : p1 > kHdrCap ? kHdrCap : p1);
+    D.p1 = (int)clip(p1, 0, kHdrCap);
     D.pos = pos;
   }
   i64 hdr_val(int fld, int ty, i64 p1, int pos, i64 x) {  // x >= 0
@@ -145,7 +146,7 @@ struct Model {
 
   int code_kind(int k) {  // CK_*
     c->cat = CAT_RAW;
-    k = (int)bound(hdr_val(F_KIND, TY_NONE, last.kind, 0, k), CK_END, CK_RAW);
+    k = (int)checked(hdr_val(F_KIND, TY_NONE, last.kind, 0, k), CK_END, CK_RAW);
     return last.kind = k;
   }
 
@@ -155,7 +156,7 @@ struct Model {
     c->cat = CAT_RAW;
     last.rawat = last.rawcode = 0;
     last.rawhd = 0;
-    return (size_t)bound(hdr_val(F_RAWLEN, TY_NONE, 0, 0, (i64)n), 0, kRawLenMax);
+    return (size_t)checked(hdr_val(F_RAWLEN, TY_NONE, 0, 0, (i64)n), 0, kRawLenMax);
   }
   void code_raw_bytes(U8* p, size_t n) {
     M_raw_v D;
@@ -182,14 +183,14 @@ struct Model {
     const int ty0 = last.type ? last.type - PT_I : TY_NONE;
     int i, d, mask, ty;
     c->cat = CAT_HDR;
-    h->type = PT_I + (int)bound(hdr_val(F_VTYPE, ty0, ty0, 0, h->type - PT_I), 0, PT_S - PT_I);
+    h->type = PT_I + (int)checked(hdr_val(F_VTYPE, ty0, ty0, 0, h->type - PT_I), 0, PT_S - PT_I);
     ty = h->type - PT_I;
-    h->mtb = (int)bound(hdr_val(F_MTB, ty, last.mtb, 0, h->mtb), 0, RUN_MAX);
-    h->tib = (int)bound(hdr_val(F_TIB, ty, last.tib, 0, h->tib), TIB_MIN, TIB_MAX);
+    h->mtb = (int)checked(hdr_val(F_MTB, ty, last.mtb, 0, h->mtb), 0, RUN_MAX);
+    h->tib = (int)checked(hdr_val(F_TIB, ty, last.tib, 0, h->tib), TIB_MIN, TIB_MAX);
     mask = (int)((1u << h->tib) - 1);
     d = (h->tinc - last.tinc) & mask;
     if (hdr_flag(F_TSAME, ty, 0, 0, d == (last.dinc[h->type] & mask))) d = last.dinc[h->type] & mask;
-    else d = (int)bound(hdr_val(F_TINC, ty, 0, 0, d), 0, mask);
+    else d = (int)checked(hdr_val(F_TINC, ty, 0, 0, d), 0, mask);
     h->tinc = (last.tinc + d) & mask;
     last.type = h->type;
     last.mtb = h->mtb;
@@ -223,23 +224,23 @@ struct Model {
     h->ncplx = cx->cplx_i + (h->type != PT_I ? cx->cplx_p : 0) + (h->type == PT_B ? cx->cplx_b : 0);
     for (i = 0; i < h->ncplx; i++)
       h->cplx[i] = (char)('0' + hdr_flag(F_CPLX, ty, 0, cap(i, kPosCap), h->cplx[i] == '1'));
-    last.dcthr = h->dcthr = (int)bound(hdr_val(F_DCTHR, ty, last.dcthr, 0, h->dcthr), 0, DCTHR_MAX);
+    last.dcthr = h->dcthr = (int)checked(hdr_val(F_DCTHR, ty, last.dcthr, 0, h->dcthr), 0, DCTHR_MAX);
     if (cx->interlaced) {
       last.tff = h->tff = hdr_flag(F_TFF, ty, last.tff, 0, h->tff);
       last.alt = h->alt = hdr_flag(F_ALT, ty, last.alt, 0, h->alt);
     }
     if (h->type == PT_S && cx->sprite_usage == GMC_SPRITE)
       for (i = 0; i < 2 * cx->warp_points; i++)
-        h->warp[i] = (int)bound(hdr_sval(F_WARP, ty, 0, i & 1, h->warp[i]), -WARP_MAX, WARP_MAX);
+        h->warp[i] = (int)checked(hdr_sval(F_WARP, ty, 0, i & 1, h->warp[i]), -WARP_MAX, WARP_MAX);
     h->quant = last.quant[h->type] + (int)hdr_sval(F_QUANT, ty, 0, 0, h->quant - last.quant[h->type]);
-    h->quant = (int)bound(h->quant, QS_MIN, QUANT_MAX);
+    h->quant = (int)checked(h->quant, QS_MIN, QUANT_MAX);
     last.quant[h->type] = h->quant;
     if (h->type != PT_I) {
-      h->fcode = (int)bound(hdr_val(F_FCODE, ty, last.fcode[h->type], 0, h->fcode), FCODE_MIN, FCODE_MAX);
+      h->fcode = (int)checked(hdr_val(F_FCODE, ty, last.fcode[h->type], 0, h->fcode), FCODE_MIN, FCODE_MAX);
       last.fcode[h->type] = h->fcode;
     }
     if (h->type == PT_B) {
-      h->bcode = (int)bound(hdr_val(F_BCODE, ty, last.bcode, 0, h->bcode), FCODE_MIN, FCODE_MAX);
+      h->bcode = (int)checked(hdr_val(F_BCODE, ty, last.bcode, 0, h->bcode), FCODE_MIN, FCODE_MAX);
       last.bcode = h->bcode;
     }
   }
@@ -249,24 +250,24 @@ struct Model {
     const int ty = v->type - PT_I;
     int i;
     c->cat = CAT_HDR;
-    k->st = (int)bound(hdr_val(F_VPST, ty, 0, 0, k->st), 0, RUN_MAX);
+    k->st = (int)checked(hdr_val(F_VPST, ty, 0, 0, k->st), 0, RUN_MAX);
     if (hdr_flag(F_VPMBSAME, ty, 0, 0, k->mbnum == expect)) k->mbnum = expect;
-    else k->mbnum = (int)bound(hdr_val(F_VPMB, ty, 0, 0, k->mbnum), 0, MAX_MBS);
-    k->quant = (int)bound(v->qscale + hdr_sval(F_VPQ, ty, 0, 0, k->quant - v->qscale), 0, QUANT_MAX);
+    else k->mbnum = (int)checked(hdr_val(F_VPMB, ty, 0, 0, k->mbnum), 0, MAX_MBS);
+    k->quant = (int)checked(v->qscale + hdr_sval(F_VPQ, ty, 0, 0, k->quant - v->qscale), 0, QUANT_MAX);
     k->hec = hdr_flag(F_HEC, ty, 0, 0, k->hec);
     if (k->quant) v->qscale = k->quant;
-    v->qscale = clipi(v->qscale, QS_MIN, QS_MAX);
+    v->qscale = clip(v->qscale, QS_MIN, QS_MAX);
     if (!ENC) k->mtb = k->tinc = k->type = k->dcthr = k->fcode = k->bcode = NA;
     if (!k->hec) return;
-    k->mtb = (int)bound(hdr_val(F_HMTB, ty, 0, 0, k->mtb), 0, RUN_MAX);
-    k->tinc = (int)bound(hdr_val(F_HTINC, ty, 0, 0, k->tinc), 0, (1 << v->tib) - 1);
-    k->type = (int)bound(hdr_val(F_HTYPE, ty, 0, 0, k->type), 0, PT_S - PT_I);
-    k->dcthr = (int)bound(hdr_val(F_HDCTHR, ty, 0, 0, k->dcthr), 0, DCTHR_MAX);
+    k->mtb = (int)checked(hdr_val(F_HMTB, ty, 0, 0, k->mtb), 0, RUN_MAX);
+    k->tinc = (int)checked(hdr_val(F_HTINC, ty, 0, 0, k->tinc), 0, (1 << v->tib) - 1);
+    k->type = (int)checked(hdr_val(F_HTYPE, ty, 0, 0, k->type), 0, PT_S - PT_I);
+    k->dcthr = (int)checked(hdr_val(F_HDCTHR, ty, 0, 0, k->dcthr), 0, DCTHR_MAX);
     if (v->gmc)
       for (i = 0; i < 2 * cx->warp_points; i++)
-        k->warp[i] = (int)bound(hdr_sval(F_HWARP, ty, 0, i & 1, k->warp[i]), -WARP_MAX, WARP_MAX);
-    if (v->type != PT_I) k->fcode = (int)bound(hdr_val(F_HFCODE, ty, 0, 0, k->fcode), FCODE_MIN, FCODE_MAX);
-    if (v->type == PT_B) k->bcode = (int)bound(hdr_val(F_HBCODE, ty, 0, 0, k->bcode), FCODE_MIN, FCODE_MAX);
+        k->warp[i] = (int)checked(hdr_sval(F_HWARP, ty, 0, i & 1, k->warp[i]), -WARP_MAX, WARP_MAX);
+    if (v->type != PT_I) k->fcode = (int)checked(hdr_val(F_HFCODE, ty, 0, 0, k->fcode), FCODE_MIN, FCODE_MAX);
+    if (v->type == PT_B) k->bcode = (int)checked(hdr_val(F_HBCODE, ty, 0, 0, k->bcode), FCODE_MIN, FCODE_MAX);
   }
 
 
@@ -280,11 +281,11 @@ struct Model {
       else { *bits = 0; *n = 1; bytes[0] = (U8)stuffing_bits(BYTE_BITS); }
       return 0;
     }
-    *bits = (int)bound(hdr_val(F_TAILB, TY_NONE, 0, nb, *bits), 0, (1 << nb) - 1);
-    *n = (int)bound(hdr_val(F_TAILN, TY_NONE, 0, 0, *n), 0, max + 1);
+    *bits = (int)checked(hdr_val(F_TAILB, TY_NONE, 0, nb, *bits), 0, (1 << nb) - 1);
+    *n = (int)checked(hdr_val(F_TAILN, TY_NONE, 0, 0, *n), 0, max + 1);
     if (*n > max) return -1;
     for (i = 0; i < *n; i++)
-      bytes[i] = (U8)bound(hdr_val(F_TAILBYTE, TY_NONE, i ? bytes[i - 1] >> kTailCtx : 0, 0, bytes[i]), 0, BYTE_MASK);
+      bytes[i] = (U8)checked(hdr_val(F_TAILBYTE, TY_NONE, i ? bytes[i - 1] >> kTailCtx : 0, 0, bytes[i]), 0, BYTE_MASK);
     return 0;
   }
 
@@ -316,7 +317,7 @@ struct Model {
     D.tq = tq;
     f_dcs.make(D, X);
     f_dcs.hint = eok ? cap(q4_round(ea), kDcMax) : -1;
-    a = bound(f_dcs.code(X, ENC ? (v < 0 ? -v : v) : 0), 0, kDcMax);
+    a = checked(f_dcs.code(X, ENC ? (v < 0 ? -v : v) : 0), 0, kDcMax);
     f_dcs.hint = -1;
     s->dc_prev[lc] = bitlen((int)a);
     if (!a) return 0;
@@ -450,7 +451,7 @@ struct Model {
     D.ts = ts;
     f_mvd.make(D, X);
     f_mvd.hint = ds ? dq : tok ? tq : -1;  // (the magnitude that repeats the co-located vector, or the template's)
-    x = bound(f_mvd.code(X, ENC ? (a ? ((a - 1) >> shift) + 1 : 0) : 0), 0, MV_VLC_MAX);
+    x = checked(f_mvd.code(X, ENC ? (a ? ((a - 1) >> shift) + 1 : 0) : 0), 0, MV_VLC_MAX);
     f_mvd.hint = -1;
     *q = (int)x;
     if (!x) return 0;
