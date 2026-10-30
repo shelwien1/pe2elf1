@@ -13,8 +13,8 @@
       c.Init(o.stats);
       r = k.run_one(c, nullptr, 0);
       st = c.st;
-      memcpy(cost, c.co.cost, sizeof c.co.cost);
-      memcpy(orig, c.co.orig, sizeof c.co.orig);
+      memcpy(cost, c.cost, sizeof c.cost);
+      memcpy(orig, c.orig, sizeof c.orig);
       coro_free(p);
       return r;
     }

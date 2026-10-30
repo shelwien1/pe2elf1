@@ -73,7 +73,7 @@ int hint_state(const char*& p, const char* e) {
 // tc_table maps them), the hint's counters made at once (code() makes them at its first hint,
 // zero too).
 template <class C>
-void replay(char** files, int n, Coder& rc) {
+void replay(char** files, int n, Coder<0>& rc) {
   typedef tc_fam<0, C> F;
   static const int any = 0;  // (prpa only set: what bitm() asks of it)
   F* f = nullptr;              // the family (the last stream's), on zeroed pages
@@ -159,7 +159,7 @@ int main(int argc, char** argv) {
   r.Init(argc, argv);
   r.addout(out, sizeof out);
   while (r.coro_call(&r) == Y_OUT) r.addout(out, sizeof out);
-  for (int i = 0; i < NCAT; i++) bits += r.co.cost[i];
+  for (int i = 0; i < NCAT; i++) bits += r.cost[i];
   printf("%.3f\n", bits / BYTE_BITS);
 
   return 0;

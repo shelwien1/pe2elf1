@@ -8,9 +8,10 @@
 // value has its own counters (G). prp, when set, is one more prediction for the mixer; hint, a
 // magnitude the value is expected near, one more set of counters.
 //
-// Changed from h264p's: the bits go through m4vpack's range coder (Coder, coder.inc), a value
-// too long to be one marks the coder's error (damaged data: the walk fails its chunk) instead of
-// jumping to a trap, and what can only be a bug ends the program (fatal()).
+// Changed from h264p's: the bits go through m4vpack's Coder (coder.inc: rc.inc's range coder, as
+// h264p's do, with m4vpack's statistics), a value too long to be one marks the coder's error
+// (damaged data: the walk fails its chunk) instead of jumping to a trap, and what can only be a bug
+// ends the program (fatal()).
 
 //  A value's cascade: the values below TC_SMALL decided one by one (zero? one? two?), then the
 //  rest's length in unary (its first TC_ULEN decisions by their own nodes, the rest by one more),
@@ -71,7 +72,8 @@ struct tcx {
 #include "tc_tabs.inc"  // tc_tabs: a family's tables
 
 //  One bit through the coder of the run (coder.inc), p the probability of a 0 (12 bits)
-static INLINE int tc_bit(Coder *rc, int p, int bit) { return rc->code_bit((U32)(CM_PONE - p) << (CO_PBITS - CM_PBITS), bit); }
+template <int f_DEC>
+static INLINE int tc_bit(Coder<f_DEC> *rc, int p, int bit) { return rc->code_bit((U32)p << (CO_PBITS - CM_PBITS), bit); }
 
 //  The dump (IDX/famtune.cpp): what each family is asked to code as the
 //  compressor runs, written by a build with M4VPACK_DUMP to

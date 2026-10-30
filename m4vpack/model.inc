@@ -63,7 +63,7 @@ struct Model : ModelMb<f_DEC, LV> {
     B::core_quit(LV::recon);
   }
   // the run starts: the families' tables mapped and wired to the coder co
-  void start(Coder* co) {
+  void start(Coder<f_DEC>* co) {
     c = co;
 #define M_MAP(F)                            \
   B::t_##F = tc_table<typename LV::F::T>(); \

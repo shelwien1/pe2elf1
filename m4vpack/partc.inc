@@ -20,7 +20,7 @@ struct PartC {
       pos += l;
       return l;
     }, ~0ull);
-    if (!r) w.add_stats(c.st, c.co.cost, c.co.orig);
+    if (!r) w.add_stats(c.st, c.cost, c.orig);
     coro_free(q);
     return r;
   }

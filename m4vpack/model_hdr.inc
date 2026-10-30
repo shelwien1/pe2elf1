@@ -4,9 +4,21 @@
 template <int f_DEC, class LV>
 struct ModelHdr : ModelCore {
   static constexpr int ENC = f_DEC == 0;
+  Coder<f_DEC>* c;  // the run's coder (which the families have too)
   M_FAM(hdr)
   M_FAM(raw)
   Last last;  // the values before
+
+  void cat(int k) { c->cat = k; }  // what is coded next counts as category k (the statistics': -s)
+  // x, checked: a value decompressed outside [lo, hi] is damaged data (the coder's error set: the
+  // walk fails the chunk), lo then
+  INLINE i64 checked(i64 x, i64 lo, i64 hi) {
+    if (UNLIKELY(x < lo || x > hi)) {
+      c->err = 1;
+      return lo;
+    }
+    return x;
+  }
 
   // as the run starts
   void hdr_start(void) {

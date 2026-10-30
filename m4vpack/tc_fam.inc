@@ -10,7 +10,7 @@ template <int f_DEC, class C> struct tc_fam {
   static_assert(C::NMIX == 1 || C::NMIX == TC_FIN - 1, "tc_fam: one mixer, or three and the final one");
   static_assert(C::NAPM == 0 || C::NAPM == 2, "tc_fam: no APM, or two");
   typedef typename C::Cnt Cnt;  // cm_cnt2, or cm_cnt2s
-  Coder *rc;  // the coder of the run it belongs to
+  Coder<f_DEC> *rc;  // the coder of the run it belongs to
 #ifdef M4VPACK_DUMP
   tc_dump dump_;
 #endif
@@ -56,7 +56,7 @@ template <int f_DEC, class C> struct tc_fam {
     dump_.Quit();
 #endif
   }
-  void wire(typename C::T &t, Coder *r) {
+  void wire(typename C::T &t, Coder<f_DEC> *r) {
     rc = r;
     tc_tabs<Cnt> b;
     b.Init();

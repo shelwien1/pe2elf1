@@ -2,7 +2,7 @@
 // decoded and written (model.inc says how it is called; included in Model's body).
 
   int vop_walk(Ctx& cx, int mode, GB& gb, PB& pb) {
-    Coder& co = *c;
+    Coder<f_DEC>& co = *c;
     MB& m = mrec;
     VopHdr h;
     Vop vp, vw;

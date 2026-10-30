@@ -110,8 +110,10 @@ DC differences, significance, levels, signs and escape modes. A family predicts 
 to ten adaptive counters, each chosen by a context index, mixes their predictions in the logistic
 domain with up to three weight sets (and a final mixer over those), and refines the result with up
 to two APMs. Where the model has a guess at a number (a hint: the magnitude that would repeat the
-co-located vector, the intra estimate's level), each decision of the number's binarisation also
-sees what the hint's own binarisation decides there.
+co-located vector, the intra estimate's level), each decision of the number's binarisation also sees
+what the hint's own binarisation decides there. The decisions are range coded with oggcomp's coder
+as h264p has it (`rc.inc`; format 4 had a carryless 32-bit coder), whose decoder reads exactly the
+bytes the coder wrote, so a compressed stream cut short, or with bytes after it, is rejected.
 
 `famvars.inc` lists the variables the model gives each family. A level's context indices over those
 variables, and every parameter of its families (adaptation rates, mixer learning rates, table sizes,
@@ -226,15 +228,15 @@ streams.
 
 | Bytes | Content |
 |---|---|
-| 9 | `m4vpack`, the format version 4 and the level |
-| rest | arithmetic coded data: a sequence of chunks, each a kind (VOP as records, bytes, or end) followed by its content, and after the end the CRC-32 of the stream |
+| 9 | `m4vpack`, the format version 5 and the level |
+| rest | range coded data: a sequence of chunks, each a kind (VOP as records, bytes, or end) followed by its content, and after the end the CRC-32 of the stream |
 
 On threads:
 
 | Bytes | Content |
 |---|---|
 | 5 | `m4vpm` |
-| 1 | the format version 4 |
+| 1 | the format version 5 |
 | 1 | the threads |
 | 4 | the part size in KB, little endian |
 | rest | MTwrap's container of the workers' streams |
@@ -341,11 +343,11 @@ tables). `m4vpack.cpp` includes the parts in order; each class over 100 lines, a
 100 lines, is in a file of its own named after it (`m4vcoro.inc`, `mb.inc`, `code_block.inc`, ...):
 a class's where its part includes it, a method's in its class's body. `Lib3/` (the coroutines),
 `MTwrap_v3/` (the threads), the counters, mixers and families (`cmbase.inc`, `buf.inc`, `cm.inc` and
-`cm_*.inc`, `fam.inc` and `tc_*.inc`, `famcfg.inc`), `mapping.inc`, `masking.inc` and the tools in
-`IDX/` come from h264p. MTwrap includes `win_shim.inc` by name, hence `-ILib3`. On POSIX,
-`win_shim.inc` emulates the few Windows calls it makes. The arithmetic that decides what is coded is
-integer arithmetic (the one table computed with `exp()` rounds with a wide margin), so files are
-portable between platforms.
+`cm_*.inc`, `fam.inc` and `tc_*.inc`, `famcfg.inc`), the range coder (`rc.inc`), `mapping.inc`,
+`masking.inc` and the tools in `IDX/` come from h264p. MTwrap includes `win_shim.inc` by name, hence
+`-ILib3`. On POSIX, `win_shim.inc` emulates the few Windows calls it makes. The arithmetic that
+decides what is coded is integer arithmetic (the one table computed with `exp()` rounds with a wide
+margin), so files are portable between platforms.
 
 ## Verification
 
@@ -379,8 +381,8 @@ Other checks:
     4.
 
   MemorySanitizer found nothing either: round trips of 8 streams at every level and on threads,
-  and 42 damaged files. Decoding checks every decoded value before writing it, and stops when it
-  reads past the end of the input.
+  and 42 damaged files. Decoding checks every decoded value before writing it, stops when it reads
+  past the end of the input, and fails on bytes after the end of the stream.
 - **Chunk splitting:** a build with a 64 KiB input buffer and 7-byte reads round-trips every stream.
 - **Pipes:** `c` and `d` give the same results through stdin and stdout, also on threads.
 - **Portability:** the Windows build (mingw, run under wine) writes the same compressed files as the

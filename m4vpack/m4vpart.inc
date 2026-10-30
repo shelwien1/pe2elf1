@@ -5,7 +5,7 @@
 // constructed (MTwrap maps its workers): Init() sets it up, do_process() frees what it took as it
 // ends. What a part's run fails with is the worker's error (its note).
 template <int f_DEC>
-struct M4vPart : CoIo {
+struct M4vPart : CoIo<Coroutine> {
   MtArgs args;
   U32 worker;      // its place among the workers, dealt the parts in turn
   U64 parts;       // the parts done
@@ -21,6 +21,7 @@ struct M4vPart : CoIo {
 
   uint Init(const MtArgs* a, uint w) {
     coro_init();
+    io_init();
     args = *a;
     worker = w;
     parts = 0;
@@ -52,7 +53,6 @@ struct M4vPart : CoIo {
 
   void do_process(void) {
     int r;
-    io_init();
     r = f_DEC ? run_d() : run_c();
     Quit();
     for (;;) yield(static_cast<Coroutine*>(this), r ? Y_FAIL : Y_END);

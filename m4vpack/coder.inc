@@ -1,13 +1,14 @@
-// coder.inc -- the binary arithmetic coder (a carryless 32-bit range coder as in lpaq) every
-// family codes its decisions with (fam.inc's tc_bit), and where the bits go (-s).
+// coder.inc -- the range coder of a run, as m4vpack codes through it: rc.inc's (oggcomp's, as h264p
+// has it), every family's decisions (fam.inc's tc_bit) and the stream's CRC, with where the bits go
+// (-s) and whether what it decodes is damaged.
+
+#include "rc.inc"  // h264p::Rangecoder: the coder, on the bytes of the coroutine it is
 
 enum { CAT_RAW, CAT_HDR, CAT_MB, CAT_CBP, CAT_MV, CAT_DC, CAT_SIG, CAT_LEV, CAT_SIGN, CAT_ESC, NCAT };
 
-constexpr int CO_PBITS = 16;                            // a probability's bits (code_bit()'s p)
+constexpr int CO_PBITS = h264p::SCALElog;               // a probability's bits (code_bit()'s p)
 constexpr U32 CO_ONE = 1u << CO_PBITS;                  // (certain)
-constexpr int CO_TOP = U32_BITS - BYTE_BITS;            // the shift of the range's top byte
-constexpr U32 CO_TOP_MASK = BYTE_MASK << CO_TOP;
-constexpr int CO_COST_SHIFT = 4;                        // bitcost[] by a probability's top bits
+constexpr int CO_COST_SHIFT = 3;                        // bitcost[] by a probability's top bits
 constexpr int CO_COSTS = 1 << (CO_PBITS - CO_COST_SHIFT);
 
 // -log2(i / CO_COSTS): a bit's cost by its probability, made as the program starts (as cm.inc's tables
@@ -25,62 +26,50 @@ static CoCosts co_make_costs(void) {
 static const CoCosts bitcost_ = co_make_costs();
 static const float (&bitcost)[CO_COSTS + 1] = bitcost_.c;
 
-struct Coder {
-  int enc;
-  U32 x1, x2, x;
-  CoIo* io;           // where its bytes go (enc) or come from (dec)
+// The range coder of a run, coding (f_DEC 0) or decoding (1): the coroutine itself, which its base
+// is (rc.inc's Rangecoder: its bytes go to the coroutine's output, or come from its input), with
+// where its bits went by category and whether the data decoded is damaged. Plain data, on its run's
+// zeroed pages: coder_start() as the coded data starts (decoding, its first bytes read then),
+// coder_end() after the last decision (coding, the flush).
+template <int f_DEC>
+struct Coder : h264p::Rangecoder<f_DEC> {
+  typedef h264p::Rangecoder<f_DEC> RC;
+  using RC::f_quit;
   int err;            // dec: the data is damaged (a value no encoder writes)
   int cat;            // statistics: category of the bits coded now
+  int stats;          // enc: count them (-s)
   double cost[NCAT];  // bits spent per category (enc)
   double orig[NCAT];  // bits they took in the input (CAT_MB includes CAT_CBP, CAT_SIG all coefficient bits)
-  int stats;
 
-  void init(CoIo* to, int encode) {  // coding into to (encode), or decoding from it
-    int i;
-    memset(this, 0, sizeof *this);
-    enc = encode;
-    io = to;
-    x2 = UINT32_MAX;
-    if (!enc) for (i = 0; i < U32_BYTES; i++) x = (x << BYTE_BITS) | (U32)get();
+  void coder_start() {
+    err = cat = 0;
+    memset(cost, 0, sizeof cost);
+    memset(orig, 0, sizeof orig);
+    RC::rc_Init();
   }
-  INLINE void put(int b) { io->putb(b); }
-  INLINE int get() {  // after the end of the input: 255, which continues the flushed lower bound
-    const int v = io->getb();
-    return v < 0 ? (int)BYTE_MASK : v;
-  }
-  void flush() { put((int)(x1 >> CO_TOP)); }
-  // dec: the data is damaged (a value no encoder writes, or more read past the input's end than the
-  // range decoder may ask for)
-  int damaged() const { return err || io->over > OVER_MAX; }
+  void coder_end() { RC::rc_Quit(); }
+  // dec: the data is damaged: a value no encoder writes, or the stream cut short (the decoder asked
+  // for bytes past the input's end, where the driver has set f_quit: the coder reads exactly the
+  // bytes it wrote)
+  int damaged() const { return err || f_quit; }
 
-  int code_bit(U32 p, int bit) {  // p: probability of a 1 bit, CO_PBITS bits
-    const U32 xmid = x1 + (U32)(((U64)(x2 - x1) * p) >> CO_PBITS);
-    if (enc) {
-      if (stats) cost[cat] += bitcost[(bit ? p : CO_ONE - p) >> CO_COST_SHIFT];
-      if (bit) x2 = xmid; else x1 = xmid + 1;
-      while (!((x1 ^ x2) & CO_TOP_MASK)) {
-        put((int)(x2 >> CO_TOP));
-        x1 <<= BYTE_BITS;
-        x2 = (x2 << BYTE_BITS) | BYTE_MASK;
-      }
-    } else {
-      bit = x <= xmid;
-      if (bit) x2 = xmid; else x1 = xmid + 1;
-      while (!((x1 ^ x2) & CO_TOP_MASK)) {
-        x1 <<= BYTE_BITS;
-        x2 = (x2 << BYTE_BITS) | BYTE_MASK;
-        x = (x << BYTE_BITS) | (U32)get();
-      }
-    }
-    return bit;
+  // a decision, p the probability of a 0 (CO_PBITS bits)
+  INLINE int code_bit(U32 p, int bit) {
+    uint b = (uint)bit;
+    if (!f_DEC && stats) cost[cat] += bitcost[(bit ? CO_ONE - p : p) >> CO_COST_SHIFT];
+    RC::rc_Process(p, b);
+    return (int)b;
   }
 
-  // 32 bits at a probability of 1/2 each (the CRC)
+  // 32 bits as they are (the CRC), a byte at a time, each value of each as likely
   U32 code_u32(U32 v) {
     U32 r = 0;
     int i;
     cat = CAT_HDR;
-    for (i = U32_BITS - 1; i >= 0; i--) r |= (U32)code_bit(CO_ONE / 2, (int)(v >> i) & 1) << i;
+    for (i = U32_BYTES - 1; i >= 0; i--) {
+      if (!f_DEC && stats) cost[cat] += BYTE_BITS;
+      r |= (U32)RC::rc_Byte((v >> (i * BYTE_BITS)) & BYTE_MASK) << (i * BYTE_BITS);
+    }
     return r;
   }
 };

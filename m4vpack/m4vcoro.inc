@@ -1,17 +1,34 @@
 // m4vcoro.inc -- coro.inc's M4vCoro: a run of c or d, at a level.
 
 // A run of m4vpack: compressing (f_DEC 0) or decompressing (1) a stream, as a coroutine, by the
-// model of level LV. Plain data, mapped (coro_new(), zeroed) and never constructed: Init() sets it
-// up, Quit() frees what it holds. A run shares nothing with another but the constant tables, so
-// any number of them can go at once, on as many threads.
+// model of level LV; the coroutine is the range coder too (coder.inc), whose bytes go through its
+// output or come from its input. Plain data, mapped (coro_new(), zeroed) and never constructed:
+// Init() sets it up, Quit() frees what it holds. A run shares nothing with another but the constant
+// tables, so any number of them can go at once, on as many threads.
 template <int f_DEC, class LV>
-struct M4vCoro : CoIo {
+struct M4vCoro : CoIo<Coder<f_DEC> > {
+  typedef CoIo<Coder<f_DEC> > B;  // (the run's input and output, and its coder)
+  using B::coro_init;
+  using B::io_init;
+  using B::read;
+  using B::write;
+  using B::fail;
+  using B::next_input;
+  using B::in_taken;
+  using B::out_put;
+  using B::inpptr;
+  using B::inpend;
+  using B::stats;
+  using B::orig;
+  using B::coder_start;
+  using B::coder_end;
+  using B::damaged;
+  using B::code_u32;
+  using B::f_quit;
   static constexpr int f_dec = f_DEC;
-  int stats;   // c -s: the bits by kind of syntax element (co.cost, co.orig)
   int status;  // the run's: 0, or the exit status of its error (note); 1 until it has ended
   Stats st;    // c's
   U32 crc;     // of the stream: c's input, d's output
-  Coder co;
   Reader rd;   // c: the input
   Ctx cx;
   Model<f_DEC, LV> k;
@@ -22,8 +39,9 @@ struct M4vCoro : CoIo {
   VideoInfo video;
   int told_vol;
 
-  void Init(int s) {
+  void Init(int s) {  // (s: c -s, the bits by kind of syntax element: the coder's cost and orig)
     coro_init();
+    io_init();
     stats = s;
     status = 1;
     nvop = 0;
@@ -32,8 +50,8 @@ struct M4vCoro : CoIo {
     k.Init();
   }
   // the stream's bytes and the compressed stream's done so far (c: the chunks taken, as they start)
-  U64 raw_done(void) const { return f_DEC ? n_out : (U64)st.in_bytes; }
-  U64 packed_done(void) const { return f_DEC ? n_in : n_out; }
+  U64 raw_done(void) const { return f_DEC ? out_put() : (U64)st.in_bytes; }
+  U64 packed_done(void) const { return f_DEC ? in_taken() : out_put(); }
   // a VOP comes: counted, and where it is the first of a VOL (by then the encoder's user data has
   // come too), what the video is told
   void vop_comes(void) {
@@ -52,7 +70,6 @@ struct M4vCoro : CoIo {
 
   void do_process(void) {
     int r;
-    io_init();
     r = f_DEC ? run_d() : run_c();
     Quit();
     status = r;
@@ -66,15 +83,14 @@ struct M4vCoro : CoIo {
     crc = 0;
     U8 head[M4V_HEAD];
     cx.init();
-    if (!rd.init(this)) return fail(E_INTERNAL, "out of memory");
+    if (!rd.init()) return fail(E_INTERNAL, "out of memory");
     memcpy(head, magic, sizeof magic);
     head[M4V_AT_VERSION] = M4V_VERSION;
     head[M4V_AT_LEVEL] = (U8)LV::id;
     write(head, sizeof head);
-    co.init(this, 1);
-    co.stats = stats;
-    k.start(&co);
-    while (rd.chunk(&pos, &len, &part)) {
+    coder_start();
+    k.start(this);
+    while (rd.chunk(*this, &pos, &len, &part)) {
       U8* p = rd.buf + pos;
       const int is_vop = len >= SC_LEN && sc_code(p) == SC_VOP;
       crc = crc32_upd(crc, p, len);
@@ -119,16 +135,21 @@ struct M4vCoro : CoIo {
         }
       }
       if (is_vop) st.raw_bytes += (double)len;
-      co.orig[CAT_RAW] += (double)BYTE_BITS * len;
+      orig[CAT_RAW] += (double)BYTE_BITS * len;
       k.code_kind(CK_RAW);
       k.code_raw_len(len);
       k.code_raw_bytes(p, len);
       cx.parse_header_chunk(p, len);
     }
     k.code_kind(CK_END);
-    co.code_u32(crc);
-    co.flush();
+    code_u32(crc);
+    coder_end();
     return 0;
+  }
+
+  // d: the data is damaged (said: the stream cut short, where the coder had to read past its end)
+  int damaged_data(void) {
+    return fail(E_DATA, f_quit ? "damaged data: the stream is cut short" : "damaged data");
   }
 
   static void out_flush(void* ctx, const U8* p, size_t n) {  // d: a VOP's bytes, out
@@ -148,10 +169,10 @@ struct M4vCoro : CoIo {
     if (h[M4V_AT_LEVEL] != LV::id)
       return fail(E_INTERNAL, "internal error: a stream of level -%d run at level -%d", h[M4V_AT_LEVEL], LV::id);
     cx.init();
-    co.init(this, 0);
-    k.start(&co);
+    coder_start();
+    k.start(this);
     while ((kind = k.code_kind(CK_END)) != CK_END) {
-      if (co.err) return fail(E_DATA, "damaged data");
+      if (damaged()) return damaged_data();
       if (kind == CK_VOP) {
         GB gb = GB();  // (decoding reads no bits: the VOP comes out of the model)
         PB pb;
@@ -161,11 +182,11 @@ struct M4vCoro : CoIo {
         pb.ctx = this;
         r = k.vop_walk(cx, W_DECODE, gb, pb);
         if (r == W_NOMEM) return fail(E_INTERNAL, "out of memory");
-        if (r < 0 || pb.err || pb.n) return fail(E_DATA, "damaged data");
+        if (r < 0 || pb.err || pb.n) return damaged_data();
         pb.finish();
       } else {
         size_t n = k.code_raw_len(0), done = 0;
-        if (!n || n > IBUF_SIZE || co.err) return fail(E_DATA, "damaged data");
+        if (!n || n > IBUF_SIZE || damaged()) return damaged_data();
         while (done < n) {  // a buffer at a time; the first has what parse_header_chunk() reads
           const size_t l = n - done < sizeof pbuf ? n - done : sizeof pbuf;
           k.code_raw_bytes(pbuf, l);
@@ -176,12 +197,16 @@ struct M4vCoro : CoIo {
           write(pbuf, l);
           crc = crc32_upd(crc, pbuf, l);
           done += l;
-          if (over > OVER_MAX) return fail(E_DATA, "damaged data");
+          if (damaged()) return damaged_data();
         }
       }
-      if (over > OVER_MAX) return fail(E_DATA, "damaged data");
+      if (damaged()) return damaged_data();
     }
-    if (co.err || co.code_u32(0) != crc || over > OVER_MAX) return fail(E_DATA, "damaged data");
+    // the CRC, the stream's last bytes: the coder has then read all it wrote, and nothing more is
+    // there (bytes after it: damaged data too)
+    if (code_u32(0) != crc || damaged()) return damaged_data();
+    if (inpptr < inpend || next_input())
+      return fail(E_DATA, "damaged data: bytes after the end of the stream");
     return 0;
   }
 };

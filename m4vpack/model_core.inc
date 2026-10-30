@@ -1,6 +1,7 @@
-// model_core.inc -- what the model's elements share (model.inc): the coder, the state of the
-// macroblocks and blocks around the one being coded, the motion state (motion.inc), the decoder in
-// the loop (recon.inc) with its intra estimate and template matches; and the helpers they all use.
+// model_core.inc -- what the model's elements share (model.inc): the state of the macroblocks and
+// blocks around the one being coded, the motion state (motion.inc), the decoder in the loop
+// (recon.inc) with its intra estimate and template matches; and the helpers they all use. (The
+// coder, whose type is the direction's, is the headers' element's: model_hdr.inc.)
 
 // a family F of the level, in an element of the model: its coder (f_F) and its tables (t_F)
 #define M_FAM(F)                       \
@@ -8,7 +9,6 @@
   typename LV::F::T* t_##F;
 
 struct ModelCore {
-  Coder* c;  // the run's coder
   BlkCtx rowb[MAX_MB_W][MB_BLOCKS];
   // per macroblock, mb_cap of them: the current VOP's and the last anchor VOP's
   MBCtx *mbcur, *mbref;
@@ -56,16 +56,6 @@ struct ModelCore {
     tcx X;
     f.make(D, X);
     f.select(X);
-  }
-  void cat(int k) { c->cat = k; }  // what is coded next counts as category k (the statistics': -s)
-  // x, checked: a value decompressed outside [lo, hi] is damaged data (the coder's error set: the
-  // walk fails the chunk), lo then
-  INLINE i64 checked(i64 x, i64 lo, i64 hi) {
-    if (UNLIKELY(x < lo || x > hi)) {
-      c->err = 1;
-      return lo;
-    }
-    return x;
   }
 
   // (level -9) an estimated level (quarter levels, signed) as a variable: 1 + its magnitude, capped

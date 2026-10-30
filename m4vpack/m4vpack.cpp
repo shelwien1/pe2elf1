@@ -28,10 +28,11 @@
 //
 // The model. Each syntax element is binarised (as H.264's CABAC; see m4vtsv/h264-counterparts.md),
 // and each decision goes to one of 13 families (fam.inc, h264p's): counters chosen by context
-// indices, mixed in the logistic domain, refined by APMs. famvars.inc lists what the model gives
-// each family; IDX/l<L>/<family>.idx declares a level's indices over those variables and their
-// tunable parameters, which IDX/idx2inc.pl turns into MOD/l<L>/ (mk.sh). The levels (levels.inc,
-// lv<L>.inc) differ in how much each family mixes:
+// indices, mixed in the logistic domain, refined by APMs, the decision then range coded (rc.inc,
+// oggcomp's coder as h264p has it, which the run's coroutine is: coder.inc). famvars.inc lists what
+// the model gives each family; IDX/l<L>/<family>.idx declares a level's indices over those
+// variables and their tunable parameters, which IDX/idx2inc.pl turns into MOD/l<L>/ (mk.sh). The
+// levels (levels.inc, lv<L>.inc) differ in how much each family mixes:
 //   -9  ten counters, three mixers and a final one, two APMs, and the decoder in the loop
 //   -7  the same without the decoder
 //   -5  ten counters, one mixer
@@ -56,9 +57,9 @@
 // I-VOP, with the headers before them copied in, so that each part is a stream of its own; the
 // parts are dealt in turn to N workers (MTwrap), each part coded by a model of its own.
 //
-// File format: "m4vpack", the format version 04 and the level, then the arithmetic coded chunks:
+// File format: "m4vpack", the format version 05 and the level, then the range coded chunks:
 // kind (end, VOP as records, bytes), then the records or a length and the bytes; after the end, the
-// CRC-32 of the stream. On threads: "m4vpm" 04, the threads, the part size in KB (4 bytes), then
+// CRC-32 of the stream. On threads: "m4vpm" 05, the threads, the part size in KB (4 bytes), then
 // MTwrap's container of the workers' streams, a record for each part (its size, where the headers
 // copied in are, its place, a CRC), each part as a stream of the first kind (with its level).
 //
@@ -67,9 +68,10 @@
 // studio profile; VOPs that don't parse (damaged data); VOPs longer than 64 MiB or with more than
 // 1 MiB after the last macroblock.
 //
-// The source: this file includes the parts in order (below); each class (but cm.inc's small
-// counters), and each function over 100 lines, is in a file of its own named after it
-// (m4vcoro.inc, code_block.inc, ...), which the file of its part includes where it belongs.
+// The source: classes with their methods defined in their bodies, and the free functions that serve
+// them. This file includes the parts in order (below); each class over 100 lines, and each method
+// over 100 lines, is in a file of its own named after it (m4vcoro.inc, mb.inc, code_block.inc, ...):
+// a class's where its part includes it, a method's in its class's body.
 //
 // Build (Lib3/, MTwrap_v3/ and MOD/ next to this file): ./mk.sh release, or
 //   g++ -O3 -march=x86-64-v3 -ffp-contract=off -std=c++11 -ILib3 -pthread -o m4vpack m4vpack.cpp
