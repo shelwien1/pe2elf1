@@ -8,33 +8,33 @@ enum { MVK_P, MVK_PFIELD, MVK_BFWD, MVK_BBWD, MVK_BDIR, MVK_P4 };
 // AC prediction, each + 1 for chroma
 enum { CL_INTER = 0, CL_B = 2, CL_INTRA = 4, CL_INTRA_AC = 6 };
 
-typedef struct Last {  // previous values the models predict from
+struct Last {  // previous values the models predict from
   int kind;
   int rawprev, rawprev2;  // the bytes kept as bytes before (of any chunk)
   int rawat, rawcode;     // the place in the chunk kept as bytes, its start code (raw family's code)
   U32 rawhd;              // its first bytes
   int type, mtb, tib, tinc, dinc[PT_N], rnd, dcthr, tff, alt, quant[PT_N], fcode[PT_N], bcode;
-} Last;
+};
 
 // Coefficient magnitudes of the blocks coded last in each column of macroblocks: the left and
 // above neighbours of a block (a macroblock's blocks replace those of the one above it as they are
 // coded).
 // mag: |level| (at most 255), sgn: 1 for negative, suf: coefficients at i..63, last: position of the
 // last one (-1 none), dcs: size of the intra DC difference (-1 none), dcsg: 1 for a negative one
-typedef struct BlkCtx { U8 mag[BLK_COEFS], sgn[BLK_COEFS], suf[BLK_COEFS + 1]; S8 last, dcs, dcsg; U8 n; } BlkCtx;
+struct BlkCtx { U8 mag[BLK_COEFS], sgn[BLK_COEFS], suf[BLK_COEFS + 1]; S8 last, dcs, dcsg; U8 n; };
 
 // macroblock state the contexts of later macroblocks use
 enum { C_NONE, C_SKIP, C_INTER, C_4MV, C_INTRA, C_GMC, C_BDIR0, C_BDIR, C_BFWD, C_BBWD, C_BBI };
 // mva: magnitudes of the first motion vector difference in VLC code units, mvs: its signs (0, 1 +, 2 -);
 // bsk: B-VOPs skip the macroblock at this position
-typedef struct MBCtx { U8 cls, cbp, nz[MB_BLOCKS], mva[2], mvs[2], ac, dt, fp, bsk; } MBCtx;
+struct MBCtx { U8 cls, cbp, nz[MB_BLOCKS], mva[2], mvs[2], ac, dt, fp, bsk; };
 
-typedef struct VState {  // the coding side of the current VOP
+struct VState {  // the coding side of the current VOP
   Vop v;
   int mb_w, prev_dq, run;    // run: macroblocks of the same kind (skip, direct) before this one
   int dc_prev[2], dc_sgn[2];  // the last intra DC difference's size, and its sign (0 none, 1 +, 2 -)
   const U8* scan;             // scan order (as far as known: intra blocks with AC prediction use other ones)
-} VState;
+};
 
 // The families get the variables as they are: where to split a variable's values is the .idx files'
 // (each index's thresholds), which tuning moves. The model only caps a variable where the values
@@ -126,26 +126,6 @@ constexpr U32 TAIL_MAX = 1 * MIB;  // the most bytes after a VOP's last macroblo
 enum { W_VERIFY, W_ENCODE, W_DECODE };  // what vop_walk() does
 enum { W_FAIL = -1, W_NOMEM = -2 };     // and how it fails (the data, or out of memory)
 enum { CK_END, CK_VOP, CK_RAW };        // a chunk's kind (code_kind()): the end, a VOP as records, bytes
-
-
-// can the models code everything in this macroblock (escape mode 3 allows a level of 0)
-static int mb_codable(const MB* m) {
-  int i, j;
-  for (i = 0; i < MB_BLOCKS; i++)
-    for (j = 0; j < m->b[i].n; j++)
-      if (!m->b[i].level[j]) return 0;
-  return 1;
-}
-
-static void vop_state(Vop* v, const Ctx* cx, const VopHdr* h) {
-  v->type = h->type;
-  v->gmc = cx->vop_gmc(h->type);
-  v->fcode = h->fcode == NA ? 1 : h->fcode;
-  v->bcode = h->bcode == NA ? 1 : h->bcode;
-  v->qscale = clip(h->quant, QS_MIN, QS_MAX);
-  v->dcthr = dc_threshold[h->dcthr];
-  v->tib = h->tib;
-}
 
 // the tables of a level's family, mapped as a run starts (zeroed pages)
 template <class T>

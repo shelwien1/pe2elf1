@@ -79,21 +79,21 @@ struct ModelMv : ModelRes<f_DEC, LV> {
   // one vector (x, y) of kind kind, predicted by (px, py) from candidates with spreads (sx, sy) (-1:
   // none), with the co-located vector (tx, ty) if tok; tm: the template's vector (tmk[], tmx[], tmy[])
   // of that direction, or -1
-  void code_mv(MB* m, int* mvi, int kind, int fcode, const MBCtx* L, const MBCtx* A, const MBCtx* R, MBCtx* me, int* sumq,
+  void code_mv(MB& m, int* mvi, int kind, int fcode, const MBCtx* L, const MBCtx* A, const MBCtx* R, MBCtx& me, int* sumq,
                int px, int py, int sx, int sy, int tok, int tx, int ty, int* mx, int* my, int tm = -1) {
     const int first = *mvi == 0, mk = tm >= 0 && tmk[tm];
     int v, q;
-    v = code_mvd(kind, 0, fcode, L, A, R, first ? kNone : mvq(me->mva[0]), tok, mv_wrap(tx - px, fcode),
-                 mv_spread(sx, fcode), m->mv[*mvi], &q, mk, mk ? mv_wrap(tmx[tm] - px, fcode) : 0);
-    m->mv[(*mvi)++] = v;
+    v = code_mvd(kind, 0, fcode, L, A, R, first ? kNone : mvq(me.mva[0]), tok, mv_wrap(tx - px, fcode),
+                 mv_spread(sx, fcode), m.mv[*mvi], &q, mk, mk ? mv_wrap(tmx[tm] - px, fcode) : 0);
+    m.mv[(*mvi)++] = v;
     *sumq += q;
     *mx = Motion::vector(px, v, fcode);
-    if (first) { me->mva[0] = (U8)q; me->mvs[0] = (U8)(v > 0 ? 1 : v < 0 ? 2 : 0); }
+    if (first) { me.mva[0] = (U8)q; me.mvs[0] = (U8)(v > 0 ? 1 : v < 0 ? 2 : 0); }
     v = code_mvd(kind, 1, fcode, L, A, R, mvq(q), tok, mv_wrap(ty - py, fcode), mv_spread(sy, fcode),
-                 m->mv[*mvi], &q, mk, mk ? mv_wrap(tmy[tm] - py, fcode) : 0);
-    m->mv[(*mvi)++] = v;
+                 m.mv[*mvi], &q, mk, mk ? mv_wrap(tmy[tm] - py, fcode) : 0);
+    m.mv[(*mvi)++] = v;
     *sumq += q;
     *my = Motion::vector(py, v, fcode);
-    if (first) { me->mva[1] = (U8)q; me->mvs[1] = (U8)(v > 0 ? 1 : v < 0 ? 2 : 0); }
+    if (first) { me.mva[1] = (U8)q; me.mvs[1] = (U8)(v > 0 ? 1 : v < 0 ? 2 : 0); }
   }
 };

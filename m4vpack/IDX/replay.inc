@@ -12,7 +12,7 @@ struct Replay : CoIo {
   }
   void do_process() {
     io_init();
-    co_init(&co, this, 1);
+    co.init(this, 1);
     co.stats = 1;
 #define FT_FAM(F) !strcmp(argv[1], #F) ? replay<FtLv::F>(argv + 2, argc - 2, co) :
     M4V_FAMS(FT_FAM) fatal("no family %s", argv[1]);

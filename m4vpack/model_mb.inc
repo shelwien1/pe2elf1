@@ -6,7 +6,7 @@ template <int f_DEC, class LV>
 struct ModelMb : ModelMv<f_DEC, LV> {
   typedef ModelMv<f_DEC, LV> B;  // (what this element takes of those below)
   using B::ENC;
-  using B::c;
+  using B::cat;
   using B::mbcur;
   using B::mbref;
   using B::ref_mbs;
@@ -74,11 +74,11 @@ struct ModelMb : ModelMv<f_DEC, LV> {
   }
 
   // neighbouring blocks' coefficient counts (CAVLC's nC)
-  static int nz_ctx(const MBCtx* me, const MBCtx* L, const MBCtx* A, int b) {
+  static int nz_ctx(const MBCtx& me, const MBCtx* L, const MBCtx* A, int b) {
     int na, nb, m;
     if (b < MB_LUMA) {
-      na = (b & 1) ? me->nz[b - 1] : L ? L->nz[b + 1] : -1;
-      nb = (b & 2) ? me->nz[b - 2] : A ? A->nz[b + 2] : -1;
+      na = (b & 1) ? me.nz[b - 1] : L ? L->nz[b + 1] : -1;
+      nb = (b & 2) ? me.nz[b - 2] : A ? A->nz[b + 2] : -1;
     } else {
       na = L ? L->nz[b] : -1;
       nb = A ? A->nz[b] : -1;
@@ -120,25 +120,22 @@ struct ModelMb : ModelMv<f_DEC, LV> {
   // (level -9) skipping's variables, zt and ze (0 none)
   void skip_vars(int* zt, int* ze) {
     int a, b;
-    if (mo.pict_type == PT_B) mo.direct(0, 0);  // (what rc_skip_feat() predicts by)
-    rc_skip_feat(&rec, &a, &b);
+    if (mo.pict_type == PT_B) mo.direct(0, 0);  // (what skip_feat() predicts by)
+    rec.skip_feat(&a, &b);
     *zt = a < 0 ? 0 : qlog1(a);
     *ze = b < 0 ? 0 : qlog1(b);
   }
 
   // a macroblock with no vectors or blocks of its own ends (skipped; a B-VOP's direct one without a
   // vector): of class cls, its blocks none, its vectors the motion state's, its prediction in the picture
-  void mb_bare(MBCtx* me, const MB* m, int cls, int mb_x) {
-    me->cls = (U8)cls;
+  void mb_bare(MBCtx& me, const MB& m, int cls, int mb_x) {
+    me.cls = (U8)cls;
     rowb_clear(mb_x);
-    mo.kind(*m);
-    if (m->mb == MODB_NONE) mo.direct(0, 0);
+    mo.kind(m);
+    if (m.mb == MODB_NONE) mo.direct(0, 0);
     mo.mb_end();
-    if (LV::recon && rec.on) rc_mb_inter(&rec), rc_mb_end(&rec);
+    if (LV::recon && rec.on) rec.mb_inter(), rec.mb_end();
   }
 
-  // one macroblock record; in decoding mode m is filled in (code_mb.inc)
-  void code_mb(const Ctx* cx, VState* s, MB* m, int idx);
+#include "code_mb.inc"  // code_mb(): one macroblock record; in decoding mode m is filled in
 };
-
-#include "code_mb.inc"

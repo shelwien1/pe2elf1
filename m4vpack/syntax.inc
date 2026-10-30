@@ -786,8 +786,59 @@ static int mv_walk(IO& io, int* d, int f_code) {
 
 //--- records ------------------------------------------------------------------------------------
 
+struct VopHdr {
+  int type, mtb, tib, tinc, coded, rnd, dcthr, tff, alt, quant, fcode, bcode;
+  int warp[2 * WARP_POINTS_MAX];
+  int ncplx; char cplx[CPLX_BITS_MAX];
+
+  void clear() {  // the optional fields absent (NA): where one read or decoded starts
+    rnd = dcthr = tff = alt = quant = fcode = bcode = NA;
+    ncplx = 0;
+  }
+
+  // A VOP's header after its start code (FFmpeg's decode_vop_header): vop_coding_type,
+  // modulo_time_base, vop_time_increment, vop_coded; then the rounding type, the complexity
+  // estimates, intra_dc_vlc_thr, the field flags, the trajectory, the quantiser and the f_codes.
+  // Reading it keeps FFmpeg's guess of the time increment's length in c.
+  template <class IO>
+  int walk(IO& io, Ctx& c) {
+    int i, t = type - PT_I;
+    if (!IO::W) clear();
+    if (!io.bits(&t, VOP_TYPE_BITS)) return 0;
+    type = PT_I + t;
+    if (!io.ones(&mtb) || !io.marker() || !io.time_bits(c, type, &tib)) return 0;
+    if (!io.bits(&tinc, tib) || !io.marker() || !io.bit(&coded)) return 0;
+    if (!coded) return 1;
+    if (c.dp && type != PT_B) return 0;  // (data partitioning: B-VOPs only)
+    if (c.vop_has_rnd(type) && !io.bit(&rnd)) return 0;
+    ncplx = c.vop_ncplx(type);
+    for (i = 0; i < ncplx; i++) {
+      int b = cplx[i] - '0';
+      if (!io.bit(&b)) return 0;
+      cplx[i] = (char)('0' + b);
+    }
+    if (io.short_of(DCTHR_BITS) || !io.bits(&dcthr, DCTHR_BITS)) return 0;
+    if (c.interlaced && (!io.bit(&tff) || !io.bit(&alt))) return 0;
+    if (c.vop_gmc(type) && !c.traj_walk(io, warp)) return 0;
+    if (!io.bits(&quant, c.quant_precision) || !quant) return 0;
+    if (type != PT_I && (!io.bits(&fcode, FCODE_BITS) || !fcode)) return 0;
+    if (type == PT_B && (!io.bits(&bcode, FCODE_BITS) || !bcode)) return 0;
+    return !io.over();
+  }
+};
+
 struct Vop {  // a VOP's state as a walk goes through it (the quantiser follows dquant)
   int type, gmc, fcode, bcode, qscale, dcthr, tib;
+
+  void start(const Ctx& c, const VopHdr& h) {  // as its header has it
+    type = h.type;
+    gmc = c.vop_gmc(h.type);
+    fcode = h.fcode == NA ? 1 : h.fcode;
+    bcode = h.bcode == NA ? 1 : h.bcode;
+    qscale = clip(h.quant, QS_MIN, QS_MAX);
+    dcthr = dc_threshold[h.dcthr];
+    tib = h.tib;
+  }
 
   int prefix_length() const {  // zeros of a resync marker
     switch (type) {
@@ -829,47 +880,6 @@ struct Vop {  // a VOP's state as a walk goes through it (the quantiser follows 
       }
     }
     return 0;
-  }
-};
-
-struct VopHdr {
-  int type, mtb, tib, tinc, coded, rnd, dcthr, tff, alt, quant, fcode, bcode;
-  int warp[2 * WARP_POINTS_MAX];
-  int ncplx; char cplx[CPLX_BITS_MAX];
-
-  void clear() {  // the optional fields absent (NA): where one read or decoded starts
-    rnd = dcthr = tff = alt = quant = fcode = bcode = NA;
-    ncplx = 0;
-  }
-
-  // A VOP's header after its start code (FFmpeg's decode_vop_header): vop_coding_type,
-  // modulo_time_base, vop_time_increment, vop_coded; then the rounding type, the complexity
-  // estimates, intra_dc_vlc_thr, the field flags, the trajectory, the quantiser and the f_codes.
-  // Reading it keeps FFmpeg's guess of the time increment's length in c.
-  template <class IO>
-  int walk(IO& io, Ctx& c) {
-    int i, t = type - PT_I;
-    if (!IO::W) clear();
-    if (!io.bits(&t, VOP_TYPE_BITS)) return 0;
-    type = PT_I + t;
-    if (!io.ones(&mtb) || !io.marker() || !io.time_bits(c, type, &tib)) return 0;
-    if (!io.bits(&tinc, tib) || !io.marker() || !io.bit(&coded)) return 0;
-    if (!coded) return 1;
-    if (c.dp && type != PT_B) return 0;  // (data partitioning: B-VOPs only)
-    if (c.vop_has_rnd(type) && !io.bit(&rnd)) return 0;
-    ncplx = c.vop_ncplx(type);
-    for (i = 0; i < ncplx; i++) {
-      int b = cplx[i] - '0';
-      if (!io.bit(&b)) return 0;
-      cplx[i] = (char)('0' + b);
-    }
-    if (io.short_of(DCTHR_BITS) || !io.bits(&dcthr, DCTHR_BITS)) return 0;
-    if (c.interlaced && (!io.bit(&tff) || !io.bit(&alt))) return 0;
-    if (c.vop_gmc(type) && !c.traj_walk(io, warp)) return 0;
-    if (!io.bits(&quant, c.quant_precision) || !quant) return 0;
-    if (type != PT_I && (!io.bits(&fcode, FCODE_BITS) || !fcode)) return 0;
-    if (type == PT_B && (!io.bits(&bcode, FCODE_BITS) || !bcode)) return 0;
-    return !io.over();
   }
 };
 
@@ -979,6 +989,13 @@ struct MB {
     int i, cbp = 0;
     for (i = 0; i < MB_BLOCKS; i++) cbp = cbp * 2 + (b[i].n > 0);
     return cbp;
+  }
+  int has_zero_level() const {  // a level of 0 (which escape mode 3 allows: the model codes none)
+    int i, j;
+    for (i = 0; i < MB_BLOCKS; i++)
+      for (j = 0; j < b[i].n; j++)
+        if (!b[i].level[j]) return 1;
+    return 0;
   }
 
   // n vectors' differences (x, y), into mv from *k on

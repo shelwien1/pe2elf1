@@ -23,6 +23,7 @@ template <int f_DEC, class LV>
 struct Model : ModelMb<f_DEC, LV> {
   typedef ModelMb<f_DEC, LV> B;  // (what the VOP takes of the elements)
   using B::c;
+  using B::cat;
   using B::mbcur;
   using B::mbref;
   using B::ref_mbs;
@@ -77,8 +78,5 @@ struct Model : ModelMb<f_DEC, LV> {
   // One VOP (after its start code). W_VERIFY: parse it and write it again (into pb); W_ENCODE:
   // parse it and code the records; W_DECODE: decode the records and write the VOP (with its start
   // code). W_FAIL: it can't be (parsed, written: unsupported or damaged data), W_NOMEM: no memory.
-  // (vop_walk.inc)
-  int vop_walk(Ctx& cx, int mode, GB& gb, PB& pb);
-};
-
 #include "vop_walk.inc"
+};

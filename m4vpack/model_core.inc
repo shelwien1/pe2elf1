@@ -15,7 +15,7 @@ struct ModelCore {
   size_t mb_cap;
   int ref_mbs;  // size of the VOP in mbref, 0 if none
   Motion mo;    // the vectors as the decoder makes them (motion.inc)
-  Recon rec;    // the decoder in the loop (the levels that have it: recon)
+  ReconCtx rec;  // the decoder in the loop (the levels that have it: recon), as the contexts read it
   RcEst est;    // its intra estimate for the macroblock (est.ok: there is one)
   int tmk[2], tmx[2], tmy[2];  // its vectors by template matching, forward and backward (tmk: found)
   int est_err, est_nb;         // how far the macroblock's blocks so far were from the estimate (quarter levels)
@@ -25,7 +25,7 @@ struct ModelCore {
     mbcur = mbref = 0;
     mb_cap = 0;
     mo.init();
-    if (recon) rc_init(&rec), rec.mo = &mo;
+    if (recon) rec.init(), rec.mo = &mo;
   }
   void core_quit(int recon) {
     free(mbcur);
@@ -33,7 +33,7 @@ struct ModelCore {
     mbcur = mbref = 0;
     mb_cap = 0;
     mo.quit();
-    if (recon) rc_quit(&rec);
+    if (recon) rec.quit();
   }
   // room for n macroblocks (0: no memory)
   int mb_room(int n) {
@@ -57,6 +57,7 @@ struct ModelCore {
     f.make(D, X);
     f.select(X);
   }
+  void cat(int k) { c->cat = k; }  // what is coded next counts as category k (the statistics': -s)
   // x, checked: a value decompressed outside [lo, hi] is damaged data (the coder's error set: the
   // walk fails the chunk), lo then
   INLINE i64 checked(i64 x, i64 lo, i64 hi) {

@@ -72,7 +72,7 @@ struct M4vCoro : CoIo {
     head[M4V_AT_VERSION] = M4V_VERSION;
     head[M4V_AT_LEVEL] = (U8)LV::id;
     write(head, sizeof head);
-    co_init(&co, this, 1);
+    co.init(this, 1);
     co.stats = stats;
     k.start(&co);
     while (rd_chunk(&rd, &pos, &len, &part)) {
@@ -127,8 +127,8 @@ struct M4vCoro : CoIo {
       cx.parse_header_chunk(p, len);
     }
     k.code_kind(CK_END);
-    code_u32(&co, crc);
-    co_flush(&co);
+    co.code_u32(crc);
+    co.flush();
     return 0;
   }
 
@@ -149,7 +149,7 @@ struct M4vCoro : CoIo {
     if (h[M4V_AT_LEVEL] != LV::id)
       return fail(E_INTERNAL, "internal error: a stream of level -%d run at level -%d", h[M4V_AT_LEVEL], LV::id);
     cx.init();
-    co_init(&co, this, 0);
+    co.init(this, 0);
     k.start(&co);
     while ((kind = k.code_kind(CK_END)) != CK_END) {
       if (co.err) return fail(E_DATA, "damaged data");
@@ -182,7 +182,7 @@ struct M4vCoro : CoIo {
       }
       if (over > OVER_MAX) return fail(E_DATA, "damaged data");
     }
-    if (co.err || code_u32(&co, 0) != crc || over > OVER_MAX) return fail(E_DATA, "damaged data");
+    if (co.err || co.code_u32(0) != crc || over > OVER_MAX) return fail(E_DATA, "damaged data");
     return 0;
   }
 };
