@@ -101,26 +101,6 @@ static void mt_rec(U8* h, U64 g_size, U64 plen, U64 ins, U64 xlen, U64 part) {
   put_le(h + MT_R_ZERO, 0, U32_BYTES);
 }
 
-// room for n bytes at *p (*room of them now): 0 if there is no memory
-
-// Whether the VOP at p (n bytes from its start code on) is coded (vop_coded), as the parser reads it
-// with the VOL c has (and its guess of the time increment's length, kept in c); -1 if its header
-// doesn't parse
-constexpr size_t VOP_PEEK = 64;  // the bytes of a VOP's header (from its start code on) vop_is_coded() reads
-static int vop_is_coded(Ctx& c, const U8* p, size_t n) {
-  U8 b[VOP_PEEK + GB_PAD];
-  GB gb;
-  VopHdr h;
-  Rd rd = {gb};
-  const size_t k = n - SC_LEN < VOP_PEEK ? n - SC_LEN : VOP_PEEK;
-  memset(b, 0, sizeof b);
-  memcpy(b, p + SC_LEN, k);
-  gb.init(b, k);
-  h.coded = -1;
-  h.walk(rd, c);  // (coded as far as it got: the rest of the header doesn't matter here)
-  return h.coded;
-}
-
 #include "m4vsplit.inc"  // M4vSplit: c -t's splitter
 
 typedef struct MtArgs {

@@ -62,9 +62,9 @@ struct FC_NAME {
   // the counters' type (the level's template of the family declares their
   // tables): cm_cnt2, or cm_cnt2s with their probabilities kept stretched
   typedef typename NoRef<decltype(((T*)nullptr)->FCX(A)[0])>::type Cnt;
-  static void init(T* t) { t->FCX(Init)(); }
-  static void quit(T* t) { t->FCX(Quit)(); }  // (the tuning build: its tables unmapped)
-  static u64 bytes(const T* t) { return t->FCX(Size); }
+  static void init(T& t) { t.FCX(Init)(); }
+  static void quit(T& t) { t.FCX(Quit)(); }  // (the tuning build: its tables unmapped)
+  static u64 bytes(const T& t) { return t.FCX(Size); }
   static const int ND = FCF(_ND), MND = FCF(_MND), NG = FCF(_NG);
   static const int NC = FC_NC, NMIX = FC_NMIX, NAPM = FC_NAPM;
   // the mixers' inputs: two per counter, the APM's refinement of A's (A's
@@ -87,21 +87,21 @@ struct FC_NAME {
   static const sz kF;
   static const int rS1, rS2, qs, qf, bw;  // the APMs' rates and widths, and the last one's share
   // the tables, in the order tc_fam takes them
-  static void tables(T* t, tc_tabs<Cnt>& b) {
+  static void tables(T& t, tc_tabs<Cnt>& b) {
 #define FC_TAB(U, l)                                                                                 \
-  static_assert(SameType<decltype(+t->FCX(U)), Cnt*>::value, "a family's counters of one type"); \
-  b.cnt[i++] = t->FCX(U);
+  static_assert(SameType<decltype(+t.FCX(U)), Cnt*>::value, "a family's counters of one type"); \
+  b.cnt[i++] = t.FCX(U);
     int i = 0;
     FC_CNT(FC_TAB)
 #undef FC_TAB
-    b.T = t->FCX(MT), b.G = t->FCX(G);
-    b.W = t->FCX(W), b.WC = t->FCX(WC), b.WM = t->FCX(WM), b.WMC = t->FCX(WMC);
+    b.T = t.FCX(MT), b.G = t.FCX(G);
+    b.W = t.FCX(W), b.WC = t.FCX(WC), b.WM = t.FCX(WM), b.WMC = t.FCX(WMC);
 #if FC_NMIX > 1
-    b.W2 = t->FCX(W2), b.W2C = t->FCX(W2C), b.W3 = t->FCX(W3), b.W3C = t->FCX(W3C);
-    b.WF = t->FCX(WF), b.WFC = t->FCX(WFC);
+    b.W2 = t.FCX(W2), b.W2C = t.FCX(W2C), b.W3 = t.FCX(W3), b.W3C = t.FCX(W3C);
+    b.WF = t.FCX(WF), b.WFC = t.FCX(WFC);
 #endif
 #if FC_NAPM
-    b.S = t->FCX(S), b.SC = t->FCX(SC), b.F = t->FCX(F), b.FC = t->FCX(FC);
+    b.S = t.FCX(S), b.SC = t.FCX(SC), b.F = t.FCX(F), b.FC = t.FCX(FC);
 #endif
   }
 };

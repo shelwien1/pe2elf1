@@ -171,15 +171,15 @@
           mo.set(0, 0, mx, my);
         }
       } else if (m.t != MB_DIRECT) {  // B-VOP: each predicted by the last of its direction in the row
-        const int n = m.fp == 1 ? 2 : 1;
+        const int nf = m.fp == 1 ? 2 : 1;  // (its fields' vectors, or one)
         int dir, ppx, ppy;
         for (dir = 0; dir < 2; dir++) {
           if (!(dir ? bwd_dir(m.t) : fwd_dir(m.t))) continue;
-          for (i = 0; i < n; i++) {
-            mo.bpred(dir, i, n, &ppx, &ppy);
+          for (i = 0; i < nf; i++) {
+            mo.bpred(dir, i, nf, &ppx, &ppy);
             code_mv(m, &mvi, MVK_BFWD + dir, dir ? v.bcode : v.fcode, L, A, R, me, &sumq, ppx, ppy, -1, -1, tok,
-                    col[dir][0], n == 2 ? col[dir][1] / 2 : col[dir][1], &mx, &my, n == 1 ? dir : -1);
-            mo.bset(dir, i, n, mx, my);
+                    col[dir][0], nf == 2 ? col[dir][1] / 2 : col[dir][1], &mx, &my, nf == 1 ? dir : -1);
+            mo.bset(dir, i, nf, mx, my);
           }
         }
       } else {  // direct mode's delta

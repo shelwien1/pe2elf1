@@ -45,33 +45,33 @@ struct Model : ModelMb<f_DEC, LV> {
   MB mrec;  // the macroblock vop_walk() has
 
   void Init(void) {
-#define M_INIT(F) this->f_##F.Init(), this->t_##F = nullptr;
+#define M_INIT(F) B::f_##F.Init(), B::t_##F = nullptr;
     M4V_FAMS(M_INIT)
 #undef M_INIT
-    this->core_init(LV::recon);
+    B::core_init(LV::recon);
   }
   void Quit(void) {
 #define M_QUIT(F)                                                           \
-  if (this->t_##F) {                                                        \
-    LV::F::quit(this->t_##F);                                               \
-    tc_unmap(this->t_##F, sizeof(typename LV::F::T));                       \
-    this->t_##F = nullptr;                                                  \
+  if (B::t_##F) {                                                           \
+    LV::F::quit(*B::t_##F);                                                 \
+    tc_unmap(B::t_##F, sizeof(typename LV::F::T));                          \
+    B::t_##F = nullptr;                                                     \
   }                                                                         \
-  this->f_##F.Quit();
+  B::f_##F.Quit();
     M4V_FAMS(M_QUIT)
 #undef M_QUIT
-    this->core_quit(LV::recon);
+    B::core_quit(LV::recon);
   }
   // the run starts: the families' tables mapped and wired to the coder co
   void start(Coder* co) {
     c = co;
-#define M_MAP(F)                               \
-  this->t_##F = tc_table<typename LV::F::T>(); \
-  LV::F::init(this->t_##F);                    \
-  this->f_##F.wire(this->t_##F, c);
+#define M_MAP(F)                            \
+  B::t_##F = tc_table<typename LV::F::T>(); \
+  LV::F::init(*B::t_##F);                   \
+  B::f_##F.wire(*B::t_##F, c);
     M4V_FAMS(M_MAP)
 #undef M_MAP
-    this->hdr_start();
+    B::hdr_start();
     ref_mbs = 0;
   }
 

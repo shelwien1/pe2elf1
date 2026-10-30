@@ -56,7 +56,7 @@ template <int f_DEC, class C> struct tc_fam {
     dump_.Quit();
 #endif
   }
-  void wire(typename C::T *t, Coder *r) {
+  void wire(typename C::T &t, Coder *r) {
     rc = r;
     tc_tabs<Cnt> b;
     b.Init();

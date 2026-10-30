@@ -130,7 +130,7 @@ struct M4vSplit : Coroutine {
     int type = code == SC_VOP && i + SC_LEN < len ? vop_type(buf + i) : 0;  // a VOP's (PT_I ...), 0 none
     U64 x;
     end_chunk(a);
-    if (type && !vop_is_coded(cx, buf + i, len - i)) type = 0;
+    if (type && !VopHdr::coded_at(cx, buf + i, len - i)) type = 0;
     if (is_header(code) && !run) {
       run = 1;
       run_at = a;

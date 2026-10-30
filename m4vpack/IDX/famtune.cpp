@@ -87,18 +87,20 @@ void replay(char** files, int n, Coder& rc) {
     while (p < e) {
       char tag = *p++;
       if (tag == 'R') {
-        if (t) C::quit(t), tc_unmap(t, sizeof(typename C::T));
+        if (t) C::quit(*t), tc_unmap(t, sizeof(typename C::T));
         t = (typename C::T*)tc_map(sizeof(typename C::T));
-        C::init(t);
+        C::init(*t);
         if (f) f->Quit(), tc_unmap(f, sizeof(F));
         f = (F*)tc_map(sizeof(F), "a family");
-        f->Init();
-        f->wire(t, &rc);
-        f->Z.fill(C::kT * (sz)C::ND * HS_N, cm_cnt2{});
-        f->ZM.fill(C::kT * (sz)C::MND * HS_N, cm_cnt{});
+        F& g = *f;
+        g.Init();
+        g.wire(*t, &rc);
+        g.Z.fill(C::kT * (sz)C::ND * HS_N, cm_cnt2{});
+        g.ZM.fill(C::kT * (sz)C::MND * HS_N, cm_cnt{});
         continue;
       }
       if (!f) fatal("a dump that does not start with a stream");
+      F& g = *f;
       switch (tag) {
         case 'M': {
           int* v = reinterpret_cast<int*>(&D);
@@ -107,28 +109,28 @@ void replay(char** files, int n, Coder& rc) {
           break;
         }
         case 'S':
-          f->select(X);
+          g.select(X);
           break;
         case 'B': {
           int node = (int)tc_dump_get(p, e), b = (int)tc_dump_get(p, e);
-          f->prp = (int)tc_dump_get(p, e);
-          f->prpa = nullptr;
-          f->hs = hint_state(p, e);
-          f->bit(node, b);  // (its node checked: a dump of another shape fails, not writes past a table)
+          g.prp = (int)tc_dump_get(p, e);
+          g.prpa = nullptr;
+          g.hs = hint_state(p, e);
+          g.bit(node, b);  // (its node checked: a dump of another shape fails, not writes past a table)
           break;
         }
         case 'm': {
           int nb = (int)tc_dump_get(p, e), q = (int)tc_dump_get(p, e), b = (int)tc_dump_get(p, e);
-          f->hs = hint_state(p, e);
-          f->prp = (int)tc_dump_get(p, e);
-          f->prpa = tc_dump_get(p, e) ? &any : nullptr;
+          g.hs = hint_state(p, e);
+          g.prp = (int)tc_dump_get(p, e);
+          g.prpa = tc_dump_get(p, e) ? &any : nullptr;
           u64 pref = (u64)tc_dump_get(p, e);
-          f->bitm(tc_node_man(nb, q, pref, C::mt), b);
+          g.bitm(tc_node_man(nb, q, pref, C::mt), b);
           break;
         }
         case 'G': {
           u32 sc = (u32)tc_dump_get(p, e);
-          f->sign(sc, (int)tc_dump_get(p, e));
+          g.sign(sc, (int)tc_dump_get(p, e));
           break;
         }
         default:
@@ -138,7 +140,7 @@ void replay(char** files, int n, Coder& rc) {
     free(d);
   }
   if (f) f->Quit(), tc_unmap(f, sizeof(F));
-  if (t) C::quit(t), tc_unmap(t, sizeof(typename C::T));
+  if (t) C::quit(*t), tc_unmap(t, sizeof(typename C::T));
 }
 
 #include "replay.inc"  // Replay: the replay as a coroutine
@@ -151,13 +153,13 @@ int main(int argc, char** argv) {
     return E_USAGE;
   }
   // (on pages of its own, zeroed: a coroutine's jmp_bufs are aligned)
-  Replay* r = (Replay*)tc_map(sizeof(Replay), "the replay");
+  Replay& r = *(Replay*)tc_map(sizeof(Replay), "the replay");
   static uint8_t out[IO_BUF];
   double bits = 0;
-  r->Init(argc, argv);
-  r->addout(out, sizeof out);
-  while (r->coro_call(r) == Y_OUT) r->addout(out, sizeof out);
-  for (int i = 0; i < NCAT; i++) bits += r->co.cost[i];
+  r.Init(argc, argv);
+  r.addout(out, sizeof out);
+  while (r.coro_call(&r) == Y_OUT) r.addout(out, sizeof out);
+  for (int i = 0; i < NCAT; i++) bits += r.co.cost[i];
   printf("%.3f\n", bits / BYTE_BITS);
 
   return 0;

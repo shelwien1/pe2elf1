@@ -786,6 +786,8 @@ static int mv_walk(IO& io, int* d, int f_code) {
 
 //--- records ------------------------------------------------------------------------------------
 
+constexpr size_t VOP_PEEK = 64;  // the bytes of a VOP's header (from its start code on) VopHdr::coded_at() reads
+
 struct VopHdr {
   int type, mtb, tib, tinc, coded, rnd, dcthr, tff, alt, quant, fcode, bcode;
   int warp[2 * WARP_POINTS_MAX];
@@ -824,6 +826,23 @@ struct VopHdr {
     if (type != PT_I && (!io.bits(&fcode, FCODE_BITS) || !fcode)) return 0;
     if (type == PT_B && (!io.bits(&bcode, FCODE_BITS) || !bcode)) return 0;
     return !io.over();
+  }
+
+  // Whether the VOP at p (n bytes from its start code on) is coded (vop_coded), as its header reads
+  // with the VOL c has (and its guess of the time increment's length, kept in c); -1 if the header
+  // doesn't parse as far
+  static int coded_at(Ctx& c, const U8* p, size_t n) {
+    U8 b[VOP_PEEK + GB_PAD];
+    GB gb;
+    VopHdr h;
+    Rd rd = {gb};
+    const size_t k = n - SC_LEN < VOP_PEEK ? n - SC_LEN : VOP_PEEK;
+    memset(b, 0, sizeof b);
+    memcpy(b, p + SC_LEN, k);
+    gb.init(b, k);
+    h.coded = -1;
+    h.walk(rd, c);  // (coded as far as it got: the rest of the header doesn't matter here)
+    return h.coded;
   }
 };
 
