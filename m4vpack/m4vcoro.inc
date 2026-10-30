@@ -45,7 +45,7 @@ struct M4vCoro : CoIo {
     }
   }
   void Quit(void) {
-    ctx_quit(&cx);
+    cx.quit();
     k.Quit();
     free(rd.buf);
     rd.buf = 0;
@@ -66,7 +66,7 @@ struct M4vCoro : CoIo {
     memset(&st, 0, sizeof st);
     crc = 0;
     U8 head[M4V_HEAD];
-    ctx_init(&cx);
+    cx.init();
     if (!rd_init(&rd, this)) return fail(E_INTERNAL, "out of memory");
     memcpy(head, magic, sizeof magic);
     head[M4V_AT_VERSION] = M4V_VERSION;
@@ -91,27 +91,25 @@ struct M4vCoro : CoIo {
           GB gb;
           PB pb;
           Cmp cm;
-          gb.buf = p + SC_LEN;
-          gb.size = (int)(len - SC_LEN) * BYTE_BITS;
-          gb.pos = 0;
-          pb_init(&pb, pbuf, sizeof pbuf);
+          gb.init(p + SC_LEN, len - SC_LEN);
+          pb.init(pbuf, sizeof pbuf);
           cm.p = p;
           cm.n = len;
           cm.at = 0;
           cm.differs = 0;
           pb.flush = cmp_flush;
           pb.ctx = &cm;
-          r = k.vop_walk(&cx, W_VERIFY, &gb, &pb);
+          r = k.vop_walk(cx, W_VERIFY, gb, pb);
           if (r == W_NOMEM) return fail(E_INTERNAL, "out of memory");
           if (r < 0) st.raw_parse++;
           else {
-            pb_finish(&pb);
+            pb.finish();
             if (pb.err || pb.n || cm.differs || cm.at != len) st.raw_verify++;
             else {
               cx.time_inc_bits = tib;  // the parse again sees the same state
               gb.pos = 0;
               k.code_kind(CK_VOP);
-              r = k.vop_walk(&cx, W_ENCODE, &gb, 0);
+              r = k.vop_walk(cx, W_ENCODE, gb, pb);
               if (r == W_NOMEM) return fail(E_INTERNAL, "out of memory");
               if (r < 0) return fail(E_INTERNAL, "internal error: a verified VOP couldn't be coded");
               st.packed++;
@@ -126,7 +124,7 @@ struct M4vCoro : CoIo {
       k.code_kind(CK_RAW);
       k.code_raw_len(len);
       k.code_raw_bytes(p, len);
-      parse_header_chunk(&cx, p, len);
+      cx.parse_header_chunk(p, len);
     }
     k.code_kind(CK_END);
     code_u32(&co, crc);
@@ -150,21 +148,22 @@ struct M4vCoro : CoIo {
                   M4V_VERSION);
     if (h[M4V_AT_LEVEL] != LV::id)
       return fail(E_INTERNAL, "internal error: a stream of level -%d run at level -%d", h[M4V_AT_LEVEL], LV::id);
-    ctx_init(&cx);
+    cx.init();
     co_init(&co, this, 0);
     k.start(&co);
     while ((kind = k.code_kind(CK_END)) != CK_END) {
       if (co.err) return fail(E_DATA, "damaged data");
       if (kind == CK_VOP) {
+        GB gb = GB();  // (decoding reads no bits: the VOP comes out of the model)
         PB pb;
         vop_comes();
-        pb_init(&pb, pbuf, sizeof pbuf);
+        pb.init(pbuf, sizeof pbuf);
         pb.flush = out_flush;
         pb.ctx = this;
-        r = k.vop_walk(&cx, W_DECODE, 0, &pb);
+        r = k.vop_walk(cx, W_DECODE, gb, pb);
         if (r == W_NOMEM) return fail(E_INTERNAL, "out of memory");
         if (r < 0 || pb.err || pb.n) return fail(E_DATA, "damaged data");
-        pb_finish(&pb);
+        pb.finish();
       } else {
         size_t n = k.code_raw_len(0), done = 0;
         if (!n || n > IBUF_SIZE || co.err) return fail(E_DATA, "damaged data");
@@ -172,7 +171,7 @@ struct M4vCoro : CoIo {
           const size_t l = n - done < sizeof pbuf ? n - done : sizeof pbuf;
           k.code_raw_bytes(pbuf, l);
           if (!done) {
-            parse_header_chunk(&cx, pbuf, n);
+            cx.parse_header_chunk(pbuf, n);
             if (l >= SC_LEN && sc_code(pbuf) == SC_VOP) vop_comes();
           }
           write(pbuf, l);

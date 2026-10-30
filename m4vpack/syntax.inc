@@ -9,89 +9,114 @@ static inline int stuffing_bits(int nb) { return (1 << (nb - 1)) - 1; }  // nb b
 
 //--- bit reader (from m4vdec; buffers carry 64 bytes of zero padding) -------------------------
 
-typedef struct GB { const U8* buf; int size; int pos; } GB;  // size, pos in bits
+struct GB {
+  const U8* buf;
+  int size, pos;  // in bits
 
-static inline U32 gb_show(const GB* g, int n) {  // 0 <= n <= 32
-  const U8* p = g->buf + (g->pos >> BYTE_SHIFT);
-  U64 v = 0;
-  int i;
-  for (i = 0; i < U64_BYTES; i++) v = v << BYTE_BITS | p[i];  // (the next 8 bytes, big endian)
-  v <<= (g->pos & (BYTE_BITS - 1));
-  return n ? (U32)(v >> (U64_BITS - n)) : 0;
-}
-static inline U32 gb_get(GB* g, int n) { U32 v = gb_show(g, n); g->pos += n; return v; }
-static inline int gb_get1(GB* g) { return (int)gb_get(g, 1); }
-static inline void gb_skip(GB* g, int n) { g->pos += n; }
-static inline int gb_left(const GB* g) { return g->size - g->pos; }
-static inline void gb_align(GB* g) { g->pos += to_byte(g->pos); }
-static inline int gb_sget(GB* g, int n) { return sign_extend((int)gb_get(g, n), n); }
-static inline int gb_xbits(GB* g, int n) {  // FFmpeg get_xbits: MSB set -> positive, else negative
-  int v = (int)gb_get(g, n);
-  return (v >> (n - 1)) ? v : v - (1 << n) + 1;
-}
+  void init(const U8* p, size_t n) { buf = p; size = (int)n * BYTE_BITS; pos = 0; }  // the n bytes at p
+  U32 show(int n) const {  // 0 <= n <= 32
+    const U8* p = buf + (pos >> BYTE_SHIFT);
+    U64 v = 0;
+    int i;
+    for (i = 0; i < U64_BYTES; i++) v = v << BYTE_BITS | p[i];  // (the next 8 bytes, big endian)
+    v <<= (pos & (BYTE_BITS - 1));
+    return n ? (U32)(v >> (U64_BITS - n)) : 0;
+  }
+  U32 get(int n) { U32 v = show(n); pos += n; return v; }
+  int get1() { return (int)get(1); }
+  void skip(int n) { pos += n; }
+  int left() const { return size - pos; }
+  void align() { pos += to_byte(pos); }
+  int sget(int n) { return sign_extend((int)get(n), n); }
+  int xbits(int n) {  // FFmpeg get_xbits: MSB set -> positive, else negative
+    int v = (int)get(n);
+    return (v >> (n - 1)) ? v : v - (1 << n) + 1;
+  }
+};
 
 //--- bit writer ------------------------------------------------------------------------------
 
-// n bits pending in acc; a full buffer goes to flush, where there is one (else what doesn't fit is
-// an error), done counting the bytes it took
-typedef struct PB {
+// n bits pending in acc; a full buffer goes to flush (with ctx), where there is one (else what
+// doesn't fit is an error), done counting the bytes it took
+struct PB {
   U8* buf;
   size_t cap, len;
   U64 acc;
   int n, err;
-  void (*flush)(void* ctx, const U8* p, size_t n);
+  void (*flush)(void*, const U8*, size_t);
   void* ctx;
   U64 done;
-} PB;
 
-static void pb_init(PB* p, U8* buf, size_t cap) { memset(p, 0, sizeof(*p)); p->buf = buf; p->cap = cap; }
-static void pb_put(PB* p, U32 v, int n) {  // 0 <= n <= 32
-  if (n <= 0) return;
-  p->acc = (p->acc << n) | (n < U32_BITS ? v & ((1u << n) - 1) : v);
-  for (p->n += n; p->n >= BYTE_BITS;) {
-    p->n -= BYTE_BITS;
-    if (p->len == p->cap && p->flush) { p->flush(p->ctx, p->buf, p->len); p->done += p->len; p->len = 0; }
-    if (p->len < p->cap) p->buf[p->len++] = (U8)(p->acc >> p->n);
-    else p->err = 1;
+  void init(U8* b, size_t c) { *this = PB(); buf = b; cap = c; }
+  void put(U32 v, int k) {  // 0 <= k <= 32
+    if (k <= 0) return;
+    acc = (acc << k) | (k < U32_BITS ? v & ((1u << k) - 1) : v);
+    for (n += k; n >= BYTE_BITS;) {
+      n -= BYTE_BITS;
+      if (len == cap && flush) { flush(ctx, buf, len); done += len; len = 0; }
+      if (len < cap) buf[len++] = (U8)(acc >> n);
+      else err = 1;
+    }
   }
-}
-static void pb_finish(PB* p) {  // the bytes in the buffer to flush
-  if (p->flush && p->len) { p->flush(p->ctx, p->buf, p->len); p->done += p->len; p->len = 0; }
-}
-static void pb_xbits(PB* p, int v, int n) { pb_put(p, (U32)(v > 0 ? v : v + (1 << n) - 1), n); }
+  void finish() {  // the bytes in the buffer to flush
+    if (flush && len) { flush(ctx, buf, len); done += len; len = 0; }
+  }
+  void xbits(int v, int k) { put((U32)(v > 0 ? v : v + (1 << k) - 1), k); }
+};
 
 //--- VLC (from m4vdec) -------------------------------------------------------------------------
 
 // A VLC both ways: for the reader a lookup table of 1 << bits entries, by a code's first bits (its
 // symbol and length; 0: no code starts so), for the writer each of its n symbols' code and length
 // (0: none)
-typedef struct VLCE { S16 sym; S16 len; } VLCE;
+struct VLCE { S16 sym, len; };
 constexpr int VLC_SYMS_MAX = 128;  // a VLC's symbols, at most (the RL tables have the most)
-typedef struct VLC { VLCE* tab; int bits, n; U32 code[VLC_SYMS_MAX]; U8 len[VLC_SYMS_MAX]; } VLC;
+struct VLC {
+  VLCE* tab;
+  int bits, n;
+  U32 code[VLC_SYMS_MAX];
+  U8 len[VLC_SYMS_MAX];
+
+  void build(int count, const U32* codes, const U8* lens) {
+    int i;
+    n = count;
+    for (i = 0; i < count; i++) {
+      U32 j, first, cnt;
+      code[i] = codes[i];
+      len[i] = lens[i];
+      if (!lens[i]) continue;
+      first = codes[i] << (bits - lens[i]);
+      cnt = 1u << (bits - lens[i]);
+      for (j = 0; j < cnt; j++) { tab[first + j].sym = (S16)i; tab[first + j].len = lens[i]; }
+    }
+  }
+  // from a table of codes and one of their lengths
+  template <size_t N>
+  void from(const U8 (&codes)[N], const U8 (&lens)[N]) {
+    U32 c[N];
+    U8 l[N];
+    size_t i;
+    for (i = 0; i < N; i++) { c[i] = codes[i]; l[i] = lens[i]; }
+    build((int)N, c, l);
+  }
+  // ... and from a table of (code, length) pairs
+  template <size_t N>
+  void from2(const U8 (&t)[N][2]) {
+    U32 c[N];
+    U8 l[N];
+    size_t i;
+    for (i = 0; i < N; i++) { c[i] = t[i][0]; l[i] = t[i][1]; }
+    build((int)N, c, l);
+  }
+  int get(GB& g) const {  // the symbol read, -1 where no code starts
+    const VLCE& e = tab[g.show(bits)];
+    if (!e.len) return -1;
+    g.skip(e.len);
+    return e.sym;
+  }
+};
 // a VLC with its static lookup table
 #define VLC_DEF(name, nbits) static VLCE name##_tab[1 << (nbits)]; static VLC name = { name##_tab, nbits, 0, {0}, {0} }
-
-static void vlc_build(VLC* v, int n, const U32* codes, const U8* lens) {
-  const int bits = v->bits;
-  int i;
-  v->n = n;
-  for (i = 0; i < n; i++) {
-    U32 j, first, cnt;
-    v->code[i] = codes[i];
-    v->len[i] = lens[i];
-    if (!lens[i]) continue;
-    first = codes[i] << (bits - lens[i]);
-    cnt = 1u << (bits - lens[i]);
-    for (j = 0; j < cnt; j++) { v->tab[first + j].sym = (S16)i; v->tab[first + j].len = lens[i]; }
-  }
-}
-
-static inline int vlc_get(GB* g, const VLC* v) {
-  const VLCE* e = &v->tab[gb_show(g, v->bits)];
-  if (!e->len) return -1;
-  g->pos += e->len;
-  return e->sym;
-}
 
 // a table's entries; the longest of its codes (a VLC's lookup width: the lengths l[], or the
 // second column of t[][2])
@@ -301,28 +326,6 @@ static constexpr S8 dbquant_dq[] = { 0, -DQ_B, DQ_B };
 // the escape modes' codes after the escape code: ESC_LEVEL 0, ESC_RUN 10, ESC_FIXED 11
 static constexpr U8 esc_tab[][2] = { {0, 0}, {0, 1}, {2, 2}, {3, 2} };
 
-// FFmpeg's RLTable: the symbols (n of them; then the escape code), the first with last = 1 (last)
-constexpr int RL_MAX_RUN = 64, RL_MAX_LEVEL = 64;  // (FFmpeg's MAX_RUN, MAX_LEVEL)
-typedef struct RL {
-  int n, last;
-  const U16 (*vlc)[2];
-  const S8* run;
-  const S8* level;
-  U8 max_level[2][RL_MAX_RUN + 1], max_run[2][RL_MAX_LEVEL + 1];
-  VLC v;
-  S16 index[2][RL_MAX_RUN][RL_MAX_LEVEL + 1];  // [last][run][level] -> symbol, -1 if there is none
-} RL;
-constexpr int RL_INTRA_LAST = 67, RL_INTER_LAST = 58;
-constexpr int RL_VLC_BITS = max2(max_len2(intra_vlc), max_len2(inter_vlc));
-static_assert(countof(intra_vlc) == countof(intra_run) + 1 && countof(inter_vlc) == countof(inter_run) + 1 &&
-              countof(intra_vlc) == countof(inter_vlc), "the RL tables: their symbols and the escape code");
-static_assert(countof(intra_vlc) <= VLC_SYMS_MAX, "a VLC's symbols");
-
-static VLCE rl_intra_tab[1 << RL_VLC_BITS], rl_inter_tab[1 << RL_VLC_BITS];
-static RL rl_intra = { countof(intra_run), RL_INTRA_LAST, intra_vlc, intra_run, intra_level, {{0}}, {{0}},
-                       { rl_intra_tab, RL_VLC_BITS, 0, {0}, {0} }, {{{0}}} };
-static RL rl_inter = { countof(inter_run), RL_INTER_LAST, inter_vlc, inter_run, inter_level, {{0}}, {{0}},
-                       { rl_inter_tab, RL_VLC_BITS, 0, {0}, {0} }, {{{0}}} };
 VLC_DEF(vlc_intra_mcbpc, max_len(intra_mcbpc_bits));
 VLC_DEF(vlc_inter_mcbpc, max_len(inter_mcbpc_bits));
 VLC_DEF(vlc_cbpy, max_len2(cbpy_tab));
@@ -334,100 +337,142 @@ VLC_DEF(vlc_sprite_traj, max_len(sprite_trajectory_lens));
 VLC_DEF(vlc_dbquant, max_len2(dbquant_tab));
 VLC_DEF(vlc_esc, max_len2(esc_tab));
 
-static void rl_init(RL* rl) {
-  int last, i;
-  U32 codes[countof(intra_vlc)]; U8 lens[countof(intra_vlc)];
-  memset(rl->max_level, 0, sizeof(rl->max_level));
-  memset(rl->max_run, 0, sizeof(rl->max_run));
-  memset(rl->index, -1, sizeof(rl->index));
-  for (last = 0; last < 2; last++) {
-    int start = last ? rl->last : 0, end = last ? rl->n : rl->last;
-    for (i = start; i < end; i++) {
-      int run = rl->run[i], level = rl->level[i];
-      if (level > rl->max_level[last][run]) rl->max_level[last][run] = (U8)level;
-      if (run > rl->max_run[last][level]) rl->max_run[last][level] = (U8)run;
-      rl->index[last][run][level] = (S16)i;
+// FFmpeg's RLTable: the symbols (n of them; then the escape code) as codes (vlc), their runs and
+// levels, the first with last = 1 (first_last)
+constexpr int RL_MAX_RUN = 64, RL_MAX_LEVEL = 64;  // (FFmpeg's MAX_RUN, MAX_LEVEL)
+struct RL {
+  int n, first_last;
+  const U16 (*vlc)[2];
+  const S8* run_of;
+  const S8* level_of;
+  U8 max_level[2][RL_MAX_RUN + 1], max_run[2][RL_MAX_LEVEL + 1];
+  VLC v;
+  S16 index[2][RL_MAX_RUN][RL_MAX_LEVEL + 1];  // [last][run][level] -> symbol, -1 if there is none
+
+  void init() {  // the rest from the symbols
+    int last, i;
+    U32 codes[countof(intra_vlc)];
+    U8 lens[countof(intra_vlc)];
+    memset(max_level, 0, sizeof max_level);
+    memset(max_run, 0, sizeof max_run);
+    memset(index, -1, sizeof index);
+    for (last = 0; last < 2; last++) {
+      const int start = last ? first_last : 0, end = last ? n : first_last;
+      for (i = start; i < end; i++) {
+        const int run = run_of[i], level = level_of[i];
+        if (level > max_level[last][run]) max_level[last][run] = (U8)level;
+        if (run > max_run[last][level]) max_run[last][level] = (U8)run;
+        index[last][run][level] = (S16)i;
+      }
+    }
+    for (i = 0; i <= n; i++) { codes[i] = vlc[i][0]; lens[i] = (U8)vlc[i][1]; }
+    v.build(n + 1, codes, lens);
+  }
+
+  // Length of an event (last, run, |level|) coded in an escape mode (ESC_VLC: plain VLC), 0 if that
+  // mode can't code it.
+  int esc_bits(int mode, int last, int run, int alevel) const {
+    const int esc = vlc[n][1];  // (the escape code's length)
+    int s, k;
+    if (run < 0 || run > BLK_LAST) return 0;
+    switch (mode) {
+    case ESC_VLC:
+      if (alevel < 1 || alevel > RL_MAX_LEVEL || (s = index[last][run][alevel]) < 0) return 0;
+      return vlc[s][1] + SIGN_BITS;
+    case ESC_LEVEL:
+      k = alevel - max_level[last][run];
+      if (k < 1 || k > RL_MAX_LEVEL || (s = index[last][run][k]) < 0) return 0;
+      return esc + esc_tab[ESC_LEVEL][1] + vlc[s][1] + SIGN_BITS;
+    case ESC_RUN:
+      if (alevel < 1 || alevel > RL_MAX_LEVEL) return 0;
+      k = run - max_run[last][alevel] - 1;
+      if (k < 0 || (s = index[last][k][alevel]) < 0) return 0;
+      return esc + esc_tab[ESC_RUN][1] + vlc[s][1] + SIGN_BITS;
+    default:
+      return alevel <= ESC3_MAX ? esc + esc_tab[ESC_FIXED][1] + ESC3_LEN : 0;
     }
   }
-  for (i = 0; i <= rl->n; i++) { codes[i] = rl->vlc[i][0]; lens[i] = (U8)rl->vlc[i][1]; }
-  vlc_build(&rl->v, rl->n + 1, codes, lens);
-}
 
-// a VLC from a table of codes and one of their lengths
-template <size_t N>
-static void vlc_from(VLC* v, const U8 (&code)[N], const U8 (&len)[N]) {
-  U32 c[N];
-  U8 l[N];
-  size_t i;
-  for (i = 0; i < N; i++) { c[i] = code[i]; l[i] = len[i]; }
-  vlc_build(v, (int)N, c, l);
-}
-// ... and from a table of (code, length) pairs
-template <size_t N>
-static void vlc_from2(VLC* v, const U8 (&t)[N][2]) {
-  U32 c[N];
-  U8 l[N];
-  size_t i;
-  for (i = 0; i < N; i++) { c[i] = t[i][0]; l[i] = t[i][1]; }
-  vlc_build(v, (int)N, c, l);
-}
+  // default escape mode: plain VLC when possible, else the first escape mode that can code it
+  int esc_default(int last, int run, int alevel) const {
+    int m;
+    for (m = ESC_VLC; m < ESC_FIXED; m++)
+      if (esc_bits(m, last, run, alevel)) return m;
+    return ESC_FIXED;
+  }
+
+  // A coefficient event (last, run, level) both ways (the walks below say how): a symbol and the
+  // sign, or the escape code, the mode's code (esc_tab) and the event as the mode has it: ESC_LEVEL,
+  // a symbol of the level less the run's largest; ESC_RUN, a symbol of the run less the level's
+  // longest, less 1 (each with the sign); ESC_FIXED, last, run, a marker, the level, a marker
+  template <class IO>
+  int event_walk(IO& io, int* last, int* run, int* level, int* mode) const {
+    int sym = n, s, neg = *level < 0, r, l;
+    if (IO::W) {
+      const int al = neg ? -*level : *level;
+      if (!esc_bits(*mode, *last, *run, al)) return 0;  // (one its mode can't code)
+      if (*mode == ESC_VLC) sym = index[*last][*run][al];
+      else if (*mode == ESC_LEVEL) sym = index[*last][*run][al - max_level[*last][*run]];
+      else if (*mode == ESC_RUN) sym = index[*last][*run - max_run[*last][al] - 1][al];
+    }
+    s = IO::W && *mode == ESC_VLC ? sym : n;
+    if (!io.vlc(&s, v)) return 0;
+    if (s != n) {
+      *mode = ESC_VLC;
+      sym = s;
+    } else {
+      if (!io.vlc(mode, vlc_esc)) return 0;
+      if (*mode == ESC_FIXED)
+        return io.bit(last) && io.bits(run, ESC3_RUN) && io.marker() && io.sbits(level, ESC3_LEVEL) && io.marker();
+      if (!io.vlc(&sym, v) || sym == n) return 0;
+    }
+    *last = sym >= first_last;
+    r = run_of[sym];
+    l = level_of[sym];
+    if (*mode == ESC_LEVEL) l += max_level[*last][r];
+    else if (*mode == ESC_RUN) r += max_run[*last][l] + 1;
+    if (!io.bit(&neg)) return 0;
+    *run = r;
+    *level = neg ? -l : l;
+    return 1;
+  }
+};
+constexpr int RL_INTRA_LAST = 67, RL_INTER_LAST = 58;
+constexpr int RL_VLC_BITS = max2(max_len2(intra_vlc), max_len2(inter_vlc));
+static_assert(countof(intra_vlc) == countof(intra_run) + 1 && countof(inter_vlc) == countof(inter_run) + 1 &&
+              countof(intra_vlc) == countof(inter_vlc), "the RL tables: their symbols and the escape code");
+static_assert(countof(intra_vlc) <= VLC_SYMS_MAX, "a VLC's symbols");
+
+static VLCE rl_intra_tab[1 << RL_VLC_BITS], rl_inter_tab[1 << RL_VLC_BITS];
+static RL rl_intra = { countof(intra_run), RL_INTRA_LAST, intra_vlc, intra_run, intra_level, {{0}}, {{0}},
+                       { rl_intra_tab, RL_VLC_BITS, 0, {0}, {0} }, {{{0}}} };
+static RL rl_inter = { countof(inter_run), RL_INTER_LAST, inter_vlc, inter_run, inter_level, {{0}}, {{0}},
+                       { rl_inter_tab, RL_VLC_BITS, 0, {0}, {0} }, {{{0}}} };
 
 static int tables_init(void) {  // (the VLC and RL tables above)
   constexpr int NTRAJ = countof(sprite_trajectory_lens);
   U32 c[NTRAJ]; U8 l[NTRAJ]; int i;
   U32 code = 0;
-  vlc_from(&vlc_intra_mcbpc, intra_mcbpc_code, intra_mcbpc_bits);
-  vlc_from(&vlc_inter_mcbpc, inter_mcbpc_code, inter_mcbpc_bits);
-  vlc_from2(&vlc_cbpy, cbpy_tab);
-  vlc_from2(&vlc_mv, mv_tab);
-  vlc_from2(&vlc_dc_lum, DCtab_lum);
-  vlc_from2(&vlc_dc_chrom, DCtab_chrom);
-  vlc_from2(&vlc_mb_type_b, mb_type_b_tab);
-  vlc_from2(&vlc_dbquant, dbquant_tab);
-  vlc_from2(&vlc_esc, esc_tab);
+  vlc_intra_mcbpc.from(intra_mcbpc_code, intra_mcbpc_bits);
+  vlc_inter_mcbpc.from(inter_mcbpc_code, inter_mcbpc_bits);
+  vlc_cbpy.from2(cbpy_tab);
+  vlc_mv.from2(mv_tab);
+  vlc_dc_lum.from2(DCtab_lum);
+  vlc_dc_chrom.from2(DCtab_chrom);
+  vlc_mb_type_b.from2(mb_type_b_tab);
+  vlc_dbquant.from2(dbquant_tab);
+  vlc_esc.from2(esc_tab);
   for (i = 0; i < NTRAJ; i++) {  // canonical codes from lengths, in listed order (as ff_vlc_init_from_lengths)
     l[i] = sprite_trajectory_lens[i];
     c[i] = code >> (U32_BITS - l[i]);
     code += 1u << (U32_BITS - l[i]);
   }
-  vlc_build(&vlc_sprite_traj, NTRAJ, c, l);
-  rl_init(&rl_intra);
-  rl_init(&rl_inter);
+  vlc_sprite_traj.build(NTRAJ, c, l);
+  rl_intra.init();
+  rl_inter.init();
   return 1;
 }
 static const int tables_made = tables_init();  // (as the program starts, as cm.inc's tables)
-
-// Length of an event (last, run, |level|) coded in an escape mode (ESC_VLC: plain VLC), 0 if that
-// mode can't code it.
-static int esc_bits(const RL* rl, int mode, int last, int run, int alevel) {
-  const int esc = rl->vlc[rl->n][1];  // (the escape code's length)
-  int s, k;
-  if (run < 0 || run > BLK_LAST) return 0;
-  switch (mode) {
-  case ESC_VLC:
-    if (alevel < 1 || alevel > RL_MAX_LEVEL || (s = rl->index[last][run][alevel]) < 0) return 0;
-    return rl->vlc[s][1] + SIGN_BITS;
-  case ESC_LEVEL:
-    k = alevel - rl->max_level[last][run];
-    if (k < 1 || k > RL_MAX_LEVEL || (s = rl->index[last][run][k]) < 0) return 0;
-    return esc + esc_tab[ESC_LEVEL][1] + rl->vlc[s][1] + SIGN_BITS;
-  case ESC_RUN:
-    if (alevel < 1 || alevel > RL_MAX_LEVEL) return 0;
-    k = run - rl->max_run[last][alevel] - 1;
-    if (k < 0 || (s = rl->index[last][k][alevel]) < 0) return 0;
-    return esc + esc_tab[ESC_RUN][1] + rl->vlc[s][1] + SIGN_BITS;
-  default:
-    return alevel <= ESC3_MAX ? esc + esc_tab[ESC_FIXED][1] + ESC3_LEN : 0;
-  }
-}
-
-// default escape mode: plain VLC when possible, else the first escape mode that can code it
-static int esc_default(const RL* rl, int last, int run, int alevel) {
-  int m;
-  for (m = ESC_VLC; m < ESC_FIXED; m++)
-    if (esc_bits(rl, m, last, run, alevel)) return m;
-  return ESC_FIXED;
-}
 
 //--- stream context ----------------------------------------------------------------------------
 
@@ -439,7 +484,9 @@ constexpr int VOP_TYPE_SHIFT = 6;
 static inline int vop_type(const U8* p) { return PT_I + (p[SC_LEN] >> VOP_TYPE_SHIFT); }
 enum { STATIC_SPRITE = 1, GMC_SPRITE = 2 };
 
-typedef struct Ctx {
+// The stream's state the syntax depends on (the VOL, the encoder's build in the user data, the GOP's
+// time), and the parsers of the headers that set it
+struct Ctx {
   int have_vol;
   const char* unsupported;   // why VOPs of the current VOL are kept raw
   int dp;                    // data partitioning: only B-VOPs are supported
@@ -460,124 +507,117 @@ typedef struct Ctx {
   U8 *skip_ref, *skip_cur;
   size_t skip_cap;
   U8 hbuf[HDR_PEEK + GB_PAD];  // a header chunk being parsed
-} Ctx;
 
-static void ctx_init(Ctx* c) {  // (the skip flags stay: ctx_quit() frees them)
-  U8 *r = c->skip_ref, *u = c->skip_cur;
-  const size_t cap = c->skip_cap;
-  memset(c, 0, sizeof(*c));
-  c->skip_ref = r;
-  c->skip_cur = u;
-  c->skip_cap = cap;
-  c->divx_version = c->divx_build = c->xvid_build = c->lavc_build = -1;
-  c->time_inc_bits = TIB_DEFAULT;
-  c->quant_precision = QUANT_PREC_DEFAULT;
-}
-static void ctx_quit(Ctx* c) {
-  free(c->skip_ref);
-  free(c->skip_cur);
-  c->skip_ref = c->skip_cur = 0;
-  c->skip_cap = 0;
-}
-// room for the skip flags of n macroblocks and one more (0: no memory)
-static int ctx_skip_room(Ctx* c, int n) {
-  size_t r = c->skip_cap, u = c->skip_cap;
-  if ((size_t)++n <= c->skip_cap) return 1;
-  if (!grow(&c->skip_ref, &r, n) || !grow(&c->skip_cur, &u, n)) return 0;
-  memset(c->skip_ref + c->skip_cap, 0, r - c->skip_cap);
-  memset(c->skip_cur + c->skip_cap, 0, u - c->skip_cap);
-  c->skip_cap = r;
-  return 1;
-}
+  void init() {  // (the skip flags stay: quit() frees them)
+    U8 *r = skip_ref, *u = skip_cur;
+    const size_t cap = skip_cap;
+    memset(this, 0, sizeof *this);
+    skip_ref = r;
+    skip_cur = u;
+    skip_cap = cap;
+    divx_version = divx_build = xvid_build = lavc_build = -1;
+    time_inc_bits = TIB_DEFAULT;
+    quant_precision = QUANT_PREC_DEFAULT;
+  }
+  void quit() {
+    free(skip_ref);
+    free(skip_cur);
+    skip_ref = skip_cur = 0;
+    skip_cap = 0;
+  }
+  // room for the skip flags of n macroblocks and one more (0: no memory)
+  int skip_room(int n) {
+    size_t r = skip_cap, u = skip_cap;
+    if ((size_t)++n <= skip_cap) return 1;
+    if (!grow(&skip_ref, &r, n) || !grow(&skip_cur, &u, n)) return 0;
+    memset(skip_ref + skip_cap, 0, r - skip_cap);
+    memset(skip_cur + skip_cap, 0, u - skip_cap);
+    skip_cap = r;
+    return 1;
+  }
 
 #include "parse_vol.inc"  // parse_vol(): the VOL header
 
-// user data: encoder identification (m4vdec's decode_user_data, the parts the syntax depends on)
-static void parse_user_data(Ctx* c, GB* gb) {
-  char buf[USER_DATA_MAX + 1], last;
-  int i, e, ver = 0, build = 0;
-  for (i = 0; i < USER_DATA_MAX && gb->pos < gb->size; i++) {
-    if (gb_show(gb, SC_ZEROS) == 0) break;
-    buf[i] = (char)gb_get(gb, BYTE_BITS);
-  }
-  buf[i] = 0;
-  e = sscanf(buf, "DivX%dBuild%d%c", &ver, &build, &last);
-  if (e < 2) e = sscanf(buf, "DivX%db%d%c", &ver, &build, &last);
-  if (e >= 2) { c->divx_version = ver; c->divx_build = build; }
-  {  // libavcodec's build (m4vdec's decode_user_data)
-    int v2 = 0, v3 = 0, lb = 0;
-    constexpr int ALL = 4;  // (the fields of the longest format, matched: sscanf()'s count, made up to it)
-    e = sscanf(buf, "FFmpe%*[^b]b%d", &lb) + ALL - 1;
-    if (e != ALL) e = sscanf(buf, "FFmpeg v%d.%d.%d / libavcodec build: %d", &ver, &v2, &v3, &lb);
-    if (e != ALL) {
-      e = sscanf(buf, "Lavc%d.%d.%d", &ver, &v2, &v3) + 1;
-      if (e > 1) lb = lavc_version(ver, v2, v3);
+  // user data: encoder identification (m4vdec's decode_user_data, the parts the syntax depends on)
+  void parse_user_data(GB& gb) {
+    char buf[USER_DATA_MAX + 1], last;
+    int i, e, ver = 0, build = 0;
+    for (i = 0; i < USER_DATA_MAX && gb.pos < gb.size; i++) {
+      if (gb.show(SC_ZEROS) == 0) break;
+      buf[i] = (char)gb.get(BYTE_BITS);
     }
-    if (e != ALL) { if (strcmp(buf, "ffmpeg") == 0) c->lavc_build = LAVC_BUILD_FFMPEG; }
-    if (e == ALL) c->lavc_build = lb;
+    buf[i] = 0;
+    e = sscanf(buf, "DivX%dBuild%d%c", &ver, &build, &last);
+    if (e < 2) e = sscanf(buf, "DivX%db%d%c", &ver, &build, &last);
+    if (e >= 2) { divx_version = ver; divx_build = build; }
+    {  // libavcodec's build (m4vdec's decode_user_data)
+      int v2 = 0, v3 = 0, lb = 0;
+      constexpr int ALL = 4;  // (the fields of the longest format, matched: sscanf()'s count, made up to it)
+      e = sscanf(buf, "FFmpe%*[^b]b%d", &lb) + ALL - 1;
+      if (e != ALL) e = sscanf(buf, "FFmpeg v%d.%d.%d / libavcodec build: %d", &ver, &v2, &v3, &lb);
+      if (e != ALL) {
+        e = sscanf(buf, "Lavc%d.%d.%d", &ver, &v2, &v3) + 1;
+        if (e > 1) lb = lavc_version(ver, v2, v3);
+      }
+      if (e != ALL) { if (strcmp(buf, "ffmpeg") == 0) lavc_build = LAVC_BUILD_FFMPEG; }
+      if (e == ALL) lavc_build = lb;
+    }
+    if (sscanf(buf, "XviD%d", &build) == 1) xvid_build = build;
   }
-  if (sscanf(buf, "XviD%d", &build) == 1) c->xvid_build = build;
-}
 
-// GOP header: its time code resets the time base (m4vdec's decode_gop_header)
-static void parse_gop(Ctx* c, GB* gb) {
-  int hours, minutes, seconds;
-  if (!gb_show(gb, SC_ZEROS)) return;
-  hours = (int)gb_get(gb, HOURS_BITS);
-  minutes = (int)gb_get(gb, MINUTES_BITS);
-  gb_skip(gb, 1);
-  seconds = (int)gb_get(gb, SECONDS_BITS);
-  c->gop_time = seconds + MINUTE_SECS * (minutes + HOUR_MINUTES * hours);
-  c->gop_count++;
-}
+  // GOP header: its time code resets the time base (m4vdec's decode_gop_header)
+  void parse_gop(GB& gb) {
+    int hours, minutes, seconds;
+    if (!gb.show(SC_ZEROS)) return;
+    hours = (int)gb.get(HOURS_BITS);
+    minutes = (int)gb.get(MINUTES_BITS);
+    gb.skip(1);
+    seconds = (int)gb.get(SECONDS_BITS);
+    gop_time = seconds + MINUTE_SECS * (minutes + HOUR_MINUTES * hours);
+    gop_count++;
+  }
 
-// a chunk (the first 32 KiB of it) that isn't a VOP: VOL headers and user data matter
-static void parse_header_chunk(Ctx* c, const U8* p, size_t n) {
-  GB gb;
-  int code;
-  if (n < SC_LEN || (code = sc_code(p)) < 0) return;
-  if (n > HDR_PEEK) n = HDR_PEEK;
-  memcpy(c->hbuf, p, n);
-  memset(c->hbuf + n, 0, GB_PAD);
-  gb.buf = c->hbuf + SC_LEN;
-  gb.size = (int)(n - SC_LEN) * BYTE_BITS;
-  gb.pos = 0;
-  if (sc_is_vol(code)) parse_vol(c, &gb);
-  else if (code == SC_USER_DATA) parse_user_data(c, &gb);
-  else if (code == SC_GOV) parse_gop(c, &gb);
-}
+  // a chunk (the first 32 KiB of it) that isn't a VOP: VOL headers and user data matter
+  void parse_header_chunk(const U8* p, size_t n) {
+    GB gb;
+    int code;
+    if (n < SC_LEN || (code = sc_code(p)) < 0) return;
+    if (n > HDR_PEEK) n = HDR_PEEK;
+    memcpy(hbuf, p, n);
+    memset(hbuf + n, 0, GB_PAD);
+    gb.init(hbuf + SC_LEN, n - SC_LEN);
+    if (sc_is_vol(code)) parse_vol(gb);
+    else if (code == SC_USER_DATA) parse_user_data(gb);
+    else if (code == SC_GOV) parse_gop(gb);
+  }
 
-static int divx413(const Ctx* c) {
-  return c->divx_version == DIVX413_VERSION && c->divx_build == DIVX413_BUILD && c->xvid_build < 0;
-}
+  int divx413() const { return divx_version == DIVX413_VERSION && divx_build == DIVX413_BUILD && xvid_build < 0; }
 
-//--- records ------------------------------------------------------------------------------------
+  // Which fields a VOP of a type has, for the walks below and the model alike: global motion
+  // compensation (an S-VOP of a GMC sprite), vop_rounding_type (P-VOPs, GMC S-VOPs), the complexity
+  // estimates' bits (as the VOL asks); and whether a macroblock has a dct_type (interlaced: intra, or
+  // with coded blocks)
+  int vop_gmc(int type) const { return type == PT_S && sprite_usage == GMC_SPRITE; }
+  int vop_has_rnd(int type) const { return type == PT_P || vop_gmc(type); }
+  int vop_ncplx(int type) const { return cplx_i + (type != PT_I ? cplx_p : 0) + (type == PT_B ? cplx_b : 0); }
+  int mb_has_dt(int intra, int cbp) const { return interlaced && (intra || cbp); }
 
-typedef struct VopHdr {
-  int type, mtb, tib, tinc, coded, rnd, dcthr, tff, alt, quant, fcode, bcode;
-  int warp[2 * WARP_POINTS_MAX];
-  int ncplx; char cplx[CPLX_BITS_MAX];
-} VopHdr;
+  // a sprite trajectory (GMC) both ways (the walks below say how): each warping point's du, dv as a
+  // length's code, the value (FFmpeg's xbits) and a marker (DivX 4.13 leaves out a point's first one)
+  template <class IO>
+  int traj_walk(IO& io, int* w) const {
+    int i;
+    for (i = 0; i < 2 * warp_points; i++) {
+      int len = IO::W ? bitlen(w[i]) : 0;
+      if (!io.vlc(&len, vlc_sprite_traj)) return 0;
+      if (!len) w[i] = 0;
+      else if (!io.xbits(&w[i], len)) return 0;
+      if (((i & 1) || !divx413()) && !io.marker()) return 0;
+    }
+    return 1;
+  }
+};
 
-typedef struct VpHdr { int st, mbnum, quant, hec, mtb, tinc, type, dcthr, warp[2 * WARP_POINTS_MAX], fcode, bcode; } VpHdr;
-
-typedef struct Blk {
-  int dc;          // intra DC difference (when the DC is coded separately)
-  int n;           // events, 0 = not coded
-  U8 run[BLK_COEFS], esc[BLK_COEFS];
-  S16 level[BLK_COEFS];
-} Blk;
-
-typedef struct MB {
-  int x, y, st, sk, mb, t, mc, ac, dq, dt, fp;
-  int nfs, fs;     // field selects: count, bits (first one in the highest bit)
-  int nmv, mv[2 * MB_MVS];
-  Blk b[MB_BLOCKS];
-} MB;
-
-typedef struct Vop {  // a VOP's state as a walk goes through it (the quantiser follows dquant)
-  int type, gmc, fcode, bcode, qscale, dcthr, tib;
-} Vop;
 // a macroblock record's codes (m4vtsv's): t, its type (P-VOP, S-VOP: MB_INTER, MB_4MV, MB_INTRA;
 // B-VOP, mb_type's VLC: MB_DIRECT, MB_BI, MB_BWD, MB_FWD), and mb, a B-VOP's modb (MODB_NONE:
 // direct without a vector or coefficients, MODB_NOCBP: no coded block pattern, MODB_CBP)
@@ -587,42 +627,6 @@ enum { MODB_NONE, MODB_NOCBP, MODB_CBP };
 static int fwd_dir(int t) { return t == MB_BI || t == MB_FWD; }   // B-VOP macroblock types using the forward / backward reference
 static int bwd_dir(int t) { return t == MB_BI || t == MB_BWD; }
 
-// a record's optional fields absent (NA): where one read or decoded starts
-static void vop_hdr_clear(VopHdr* h) {
-  h->rnd = h->dcthr = h->tff = h->alt = h->quant = h->fcode = h->bcode = NA;
-  h->ncplx = 0;
-}
-static void vp_clear(VpHdr* k) { k->mtb = k->tinc = k->type = k->dcthr = k->fcode = k->bcode = NA; }
-static void mb_clear(MB* m) {
-  m->st = m->sk = 0;
-  m->mb = m->t = m->mc = m->ac = m->dq = m->dt = m->fp = NA;
-  m->nfs = m->fs = m->nmv = 0;
-}
-
-// Which fields a record has, for the walks below and the model alike: a VOP's global motion
-// compensation (an S-VOP of a GMC sprite), its vop_rounding_type (P-VOPs, GMC S-VOPs), its
-// complexity estimates' bits (as the VOL asks); a macroblock's field_prediction (interlaced, an
-// inter macroblock with a vector of its own: not direct, not GMC) and the field selects after it,
-// whether it says its dquant (I-, P- and S-VOPs: in MCBPC; a B-VOP's dbquant: a macroblock not
-// direct, with coded blocks), and its dct_type (interlaced: intra, or with coded blocks)
-static int vop_gmc(const Ctx* c, int type) { return type == PT_S && c->sprite_usage == GMC_SPRITE; }
-static int vop_has_rnd(const Ctx* c, int type) { return type == PT_P || vop_gmc(c, type); }
-static int vop_ncplx(const Ctx* c, int type) {
-  return c->cplx_i + (type != PT_I ? c->cplx_p : 0) + (type == PT_B ? c->cplx_b : 0);
-}
-static int mb_has_fp(const Ctx* c, const Vop* v, const MB* m) {
-  return c->interlaced && (v->type == PT_B ? m->t != MB_DIRECT : m->t == MB_INTER && m->mc != 1);
-}
-static int mb_nfs(const Vop* v, const MB* m) { return v->type == PT_B ? 2 * (fwd_dir(m->t) + bwd_dir(m->t)) : 2; }
-static int mb_has_dq(const Vop* v, const MB* m, int cbp) { return v->type != PT_B || (m->t != MB_DIRECT && cbp); }
-static int mb_has_dt(const Ctx* c, int intra, int cbp) { return c->interlaced && (intra || cbp); }
-
-static int cbp_of(const MB* m) {  // coded flags, block 0 in the top bit (of MB_BLOCKS)
-  int i, cbp = 0;
-  for (i = 0; i < MB_BLOCKS; i++) cbp = cbp * 2 + (m->b[i].n > 0);
-  return cbp;
-}
-
 // the place of v in t (-1: none)
 template <size_t N>
 static int index_of(const S8 (&t)[N], int v) {
@@ -630,14 +634,6 @@ static int index_of(const S8 (&t)[N], int v) {
   for (i = 0; i < (int)N; i++)
     if (t[i] == v) return i;
   return -1;
-}
-
-static int prefix_length(const Vop* v) {  // zeros of a resync marker
-  switch (v->type) {
-  case PT_I: return RESYNC_ZEROS;
-  case PT_P: case PT_S: return RESYNC_ZEROS + v->fcode - 1;
-  default: { int m = v->fcode > v->bcode ? v->fcode : v->bcode; return RESYNC_ZEROS + max2(m, RESYNC_B_MIN) - 1; }
-  }
 }
 
 // an MCBPC stuffing code before a macroblock (in a P- or S-VOP after a not_coded 0): its bits, and
@@ -661,7 +657,7 @@ static thread_local double pbits[NPB];  // statistics: bits of motion vectors, i
 
 //--- the records' bits, both ways ----------------------------------------------------------------
 
-// Each record's syntax is one walk for both directions: vop_hdr_io(), vp_io(), mb_io() and the parts
+// Each record's syntax is one walk for both directions: the walk() of VopHdr, VpHdr, MB and the parts
 // of a macroblock take Rd, which reads the fields from the bits into the record, or Wr, which writes
 // the record's fields as bits. The walk says which fields there are, in what order, of what length,
 // and what they may be; an element's two directions are side by side in Rd and Wr. An element
@@ -672,100 +668,100 @@ static thread_local double pbits[NPB];  // statistics: bits of motion vectors, i
 
 struct Rd {  // the bits read into a record
   static constexpr bool W = false;
-  GB* g;
-  int pos() const { return g->pos; }
-  int over() const { return g->pos > g->size; }      // past the end (where the walks stop)
-  int short_of(int n) const { return gb_left(g) < n; }  // fewer than n bits left
-  void count(int k, int p0) const { pbits[k] += g->pos - p0; }
-  int bits(int* v, int n) { *v = (int)gb_get(g, n); return 1; }
+  GB& g;
+  int pos() const { return g.pos; }
+  int over() const { return g.pos > g.size; }      // past the end (where the walks stop)
+  int short_of(int n) const { return g.left() < n; }  // fewer than n bits left
+  void count(int k, int p0) const { pbits[k] += g.pos - p0; }
+  int bits(int* v, int n) { *v = (int)g.get(n); return 1; }
   int bit(int* v) { return bits(v, 1); }
-  int sbits(int* v, int n) { *v = gb_sget(g, n); return 1; }   // two's complement
-  int xbits(int* v, int n) { *v = gb_xbits(g, n); return 1; }  // FFmpeg's get_xbits
-  int marker() { return gb_get1(g); }
-  int vlc(int* s, const VLC* v) { return (*s = vlc_get(g, v)) >= 0; }
+  int sbits(int* v, int n) { *v = g.sget(n); return 1; }   // two's complement
+  int xbits(int* v, int n) { *v = g.xbits(n); return 1; }  // FFmpeg's get_xbits
+  int marker() { return g.get1(); }
+  int vlc(int* s, const VLC& v) { return (*s = v.get(g)) >= 0; }
   int ones(int* n) {  // 1s, then a 0 (modulo_time_base)
-    for (*n = 0; gb_get1(g);)
-      if (++*n > RUN_MAX || gb_left(g) <= 0) return 0;
+    for (*n = 0; g.get1();)
+      if (++*n > RUN_MAX || g.left() <= 0) return 0;
     return 1;
   }
   int stuffing(int* n, int type) {  // MCBPC stuffing codes, counted
-    for (*n = 0; gb_show(g, mcbpc_stuff_len(type)) == mcbpc_stuff_code(type);) {
-      gb_skip(g, mcbpc_stuff_len(type));
+    for (*n = 0; g.show(mcbpc_stuff_len(type)) == mcbpc_stuff_code(type);) {
+      g.skip(mcbpc_stuff_len(type));
       if (++*n > RUN_MAX) return 0;
     }
     return 1;
   }
-  void byte_stuffing() { gb_skip(g, 1); gb_align(g); }  // (a 0, then 1s up to the byte boundary)
+  void byte_stuffing() { g.skip(1); g.align(); }  // (a 0, then 1s up to the byte boundary)
   // vop_time_increment's length: the VOL's, or where it has none or what follows doesn't fit it,
   // FFmpeg's guess from the header's next fields (P-VOPs and GMC S-VOPs: vop_rounding_type among
   // them), kept in c
-  int time_bits(Ctx* c, int type, int* tib) {
-    if (c->time_inc_bits == 0 || !(gb_show(g, c->time_inc_bits + 1) & 1)) {
-      for (c->time_inc_bits = TIB_MIN; c->time_inc_bits < TIB_MAX; c->time_inc_bits++) {
-        if (vop_has_rnd(c, type)) {
-          if ((gb_show(g, c->time_inc_bits + TIB_GUESS_P_BITS) & TIB_GUESS_P_MASK) == TIB_GUESS_P) break;
-        } else if ((gb_show(g, c->time_inc_bits + TIB_GUESS_BITS) & TIB_GUESS_MASK) == TIB_GUESS)
+  int time_bits(Ctx& c, int type, int* tib) {
+    if (c.time_inc_bits == 0 || !(g.show(c.time_inc_bits + 1) & 1)) {
+      for (c.time_inc_bits = TIB_MIN; c.time_inc_bits < TIB_MAX; c.time_inc_bits++) {
+        if (c.vop_has_rnd(type)) {
+          if ((g.show(c.time_inc_bits + TIB_GUESS_P_BITS) & TIB_GUESS_P_MASK) == TIB_GUESS_P) break;
+        } else if ((g.show(c.time_inc_bits + TIB_GUESS_BITS) & TIB_GUESS_MASK) == TIB_GUESS)
           break;
       }
     }
-    *tib = c->time_inc_bits;
+    *tib = c.time_inc_bits;
     return 1;
   }
 };
 
 struct Wr {  // a record written as bits
   static constexpr bool W = true;
-  PB* p;
+  PB& p;
   int pos() const { return 0; }
   int over() const { return 0; }
   int short_of(int) const { return 0; }
   void count(int, int) const {}
   int bits(int* v, int n) {
     if (n < U32_BITS && (U32)*v >> n) return 0;
-    pb_put(p, (U32)*v, n);
+    p.put((U32)*v, n);
     return 1;
   }
   int bit(int* v) { return bits(v, 1); }
   int sbits(int* v, int n) {
     if (*v < -(1 << (n - 1)) || *v >= 1 << (n - 1)) return 0;
-    pb_put(p, (U32)*v & ((1u << n) - 1), n);
+    p.put((U32)*v & ((1u << n) - 1), n);
     return 1;
   }
   int xbits(int* v, int n) {  // (n: the value's length)
     if (bitlen(*v) != n) return 0;
-    pb_xbits(p, *v, n);
+    p.xbits(*v, n);
     return 1;
   }
-  int marker() { pb_put(p, 1, MARKER_BITS); return 1; }
-  int vlc(int* s, const VLC* v) {
-    if (*s < 0 || *s >= v->n || !v->len[*s]) return 0;
-    pb_put(p, v->code[*s], v->len[*s]);
+  int marker() { p.put(1, MARKER_BITS); return 1; }
+  int vlc(int* s, const VLC& v) {
+    if (*s < 0 || *s >= v.n || !v.len[*s]) return 0;
+    p.put(v.code[*s], v.len[*s]);
     return 1;
   }
   int ones(int* n) {
     int i;
     if (*n < 0 || *n > RUN_MAX) return 0;
-    for (i = 0; i < *n; i++) pb_put(p, 1, 1);
-    pb_put(p, 0, 1);
+    for (i = 0; i < *n; i++) p.put(1, 1);
+    p.put(0, 1);
     return 1;
   }
   int stuffing(int* n, int type) {
     int i;
     if (*n < 0 || *n > RUN_MAX) return 0;
-    for (i = 0; i < *n; i++) pb_put(p, mcbpc_stuff_code(type), mcbpc_stuff_len(type));
+    for (i = 0; i < *n; i++) p.put(mcbpc_stuff_code(type), mcbpc_stuff_len(type));
     return 1;
   }
   void byte_stuffing() {
-    pb_put(p, 0, 1);
-    while (p->n) pb_put(p, 1, 1);
+    p.put(0, 1);
+    while (p.n) p.put(1, 1);
   }
-  int time_bits(Ctx*, int, int*) { return 1; }  // (the record's)
+  int time_bits(Ctx&, int, int*) { return 1; }  // (the record's)
 };
 
 // a vector difference (FFmpeg's h263 decode_motion, without the prediction): its magnitude's code
 // (vlc_mv), a sign and f_code - 1 low bits
 template <class IO>
-static int mv_io(IO& io, int* d, int f_code) {
+static int mv_walk(IO& io, int* d, int f_code) {
   const int shift = f_code - 1;
   int code = 0, neg = 0, lo = 0;
   if (IO::W) {
@@ -777,7 +773,7 @@ static int mv_io(IO& io, int* d, int f_code) {
       lo = a & ((1 << shift) - 1);
     }
   }
-  if (!io.vlc(&code, &vlc_mv)) return 0;
+  if (!io.vlc(&code, vlc_mv)) return 0;
   if (!code) {
     *d = 0;
     return 1;
@@ -788,300 +784,316 @@ static int mv_io(IO& io, int* d, int f_code) {
   return 1;
 }
 
-// n vectors' differences (x, y), into m->mv from *k on
-template <class IO>
-static int mvs_io(IO& io, MB* m, int* k, int n, int f_code) {
-  const int p0 = io.pos();
-  int i;
-  for (i = 0; i < 2 * n; i++, ++*k)
-    if (!mv_io(io, &m->mv[*k], f_code)) return 0;
-  io.count(PB_MV, p0);
-  return 1;
-}
+//--- records ------------------------------------------------------------------------------------
 
-// a sprite trajectory (GMC): each warping point's du, dv as a length's code, the value (FFmpeg's
-// xbits) and a marker (DivX 4.13 leaves out a point's first one)
-template <class IO>
-static int traj_io(IO& io, const Ctx* c, int* w) {
-  int i;
-  for (i = 0; i < 2 * c->warp_points; i++) {
-    int len = IO::W ? bitlen(w[i]) : 0;
-    if (!io.vlc(&len, &vlc_sprite_traj)) return 0;
-    if (!len) w[i] = 0;
-    else if (!io.xbits(&w[i], len)) return 0;
-    if (((i & 1) || !divx413(c)) && !io.marker()) return 0;
-  }
-  return 1;
-}
+struct Vop {  // a VOP's state as a walk goes through it (the quantiser follows dquant)
+  int type, gmc, fcode, bcode, qscale, dcthr, tib;
 
-// A coefficient event (last, run, level): a symbol of rl's VLC and the sign, or the escape code, the
-// mode's code (esc_tab) and the event as the mode has it: ESC_LEVEL, a symbol of the level less the
-// run's largest; ESC_RUN, a symbol of the run less the level's longest, less 1 (each with the sign);
-// ESC_FIXED, last, run, a marker, the level, a marker
-template <class IO>
-static int event_io(IO& io, const RL* rl, int* last, int* run, int* level, int* mode) {
-  int sym = rl->n, s, neg = *level < 0, r, l;
-  if (IO::W) {
-    const int al = neg ? -*level : *level;
-    if (!esc_bits(rl, *mode, *last, *run, al)) return 0;  // (one its mode can't code)
-    if (*mode == ESC_VLC) sym = rl->index[*last][*run][al];
-    else if (*mode == ESC_LEVEL) sym = rl->index[*last][*run][al - rl->max_level[*last][*run]];
-    else if (*mode == ESC_RUN) sym = rl->index[*last][*run - rl->max_run[*last][al] - 1][al];
-  }
-  s = IO::W && *mode == ESC_VLC ? sym : rl->n;
-  if (!io.vlc(&s, &rl->v)) return 0;
-  if (s != rl->n) {
-    *mode = ESC_VLC;
-    sym = s;
-  } else {
-    if (!io.vlc(mode, &vlc_esc)) return 0;
-    if (*mode == ESC_FIXED)
-      return io.bit(last) && io.bits(run, ESC3_RUN) && io.marker() && io.sbits(level, ESC3_LEVEL) && io.marker();
-    if (!io.vlc(&sym, &rl->v) || sym == rl->n) return 0;
-  }
-  *last = sym >= rl->last;
-  r = rl->run[sym];
-  l = rl->level[sym];
-  if (*mode == ESC_LEVEL) l += rl->max_level[*last][r];
-  else if (*mode == ESC_RUN) r += rl->max_run[*last][l] + 1;
-  if (!io.bit(&neg)) return 0;
-  *run = r;
-  *level = neg ? -l : l;
-  return 1;
-}
-
-// A block (n: 0-3 luma, 4-5 chroma): an intra DC coded apart (dcvlc) as its size's code, the
-// difference and a marker after a long one; then, if coded, its events up to the last.
-template <class IO>
-static int block_io(IO& io, Blk* b, int n, int coded, int intra, int dcvlc) {
-  const RL* rl = intra ? &rl_intra : &rl_inter;
-  int i = -1, j, p0 = io.pos();
-  if (!IO::W) b->n = b->dc = 0;
-  if (intra && dcvlc) {
-    int size = bitlen(b->dc);
-    if (!io.vlc(&size, n < MB_LUMA ? &vlc_dc_lum : &vlc_dc_chrom) || size > DC_SIZE_MAX) return 0;
-    if (size && (!io.xbits(&b->dc, size) || (size > DC_MARKER_SIZE && !io.marker()))) return 0;
-    i = 0;
-  }
-  io.count(PB_DC, p0);
-  p0 = io.pos();
-  if (!coded) return 1;
-  for (j = 0;; j++) {  // (i, the coefficient's position, keeps j within the block)
-    int last = 0, run = 0, level = 0, mode = ESC_VLC;
-    if (io.over()) return 0;
-    if (IO::W) {
-      last = j + 1 == b->n;
-      run = b->run[j];
-      level = b->level[j];
-      mode = b->esc[j];
-    }
-    if (!event_io(io, rl, &last, &run, &level, &mode)) return 0;
-    i += run + 1;
-    if (i > (last ? BLK_LAST : BLK_LAST - 1)) return 0;
-    b->run[j] = (U8)run;
-    b->level[j] = (S16)level;
-    b->esc[j] = (U8)mode;
-    if (last) {
-      b->n = j + 1;
-      io.count(PB_COEF, p0);
-      return 1;
+  int prefix_length() const {  // zeros of a resync marker
+    switch (type) {
+    case PT_I: return RESYNC_ZEROS;
+    case PT_P: case PT_S: return RESYNC_ZEROS + fcode - 1;
+    default: { int m = fcode > bcode ? fcode : bcode; return RESYNC_ZEROS + max2(m, RESYNC_B_MIN) - 1; }
     }
   }
-}
 
-template <class IO>
-static int blocks_io(IO& io, MB* m, int cbp, int intra, int dcvlc) {
-  int i;
-  for (i = 0; i < MB_BLOCKS; i++, cbp += cbp)
-    if (!block_io(io, &m->b[i], i, cbp & 1 << (MB_BLOCKS - 1), intra, dcvlc)) return 0;
-  return 1;
-}
-
-// dquant (I-, P- and S-VOPs: 2 bits, an index into quant_tab) or a B-VOP's dbquant (a code of
-// dbquant_tab); the quantiser in v follows it
-template <class IO>
-static int dquant_io(IO& io, Vop* v, MB* m) {
-  const int b = v->type == PT_B;
-  int s = IO::W ? (b ? index_of(dbquant_dq, m->dq) : index_of(quant_tab, m->dq)) : 0;
-  if (b ? !io.vlc(&s, &vlc_dbquant) : !io.bits(&s, DQUANT_BITS)) return 0;
-  m->dq = b ? dbquant_dq[s] : quant_tab[s];
-  v->qscale = clip(v->qscale + m->dq, QS_MIN, QS_MAX);
-  return 1;
-}
-
-// an intra macroblock after its MCBPC (cbpc; dquant: whether it says one): ac_pred_flag, cbpy,
-// dquant, dct_type, the blocks (the DCs coded apart below the VOP's threshold, as the quantiser was)
-template <class IO>
-static int intra_io(IO& io, const Ctx* c, Vop* v, MB* m, int cbpc, int dquant) {
-  const int dcvlc = v->qscale < v->dcthr;
-  int cbpy = IO::W ? cbp_of(m) >> CBP_CHROMA_BITS : 0;
-  if (!io.bit(&m->ac) || !io.vlc(&cbpy, &vlc_cbpy)) return 0;
-  if (!dquant) m->dq = 0;
-  else if (!dquant_io(io, v, m)) return 0;
-  if (mb_has_dt(c, 1, 0) && !io.bit(&m->dt)) return 0;
-  return blocks_io(io, m, (cbpc & MCBPC_CHROMA) | cbpy << CBP_CHROMA_BITS, 1, dcvlc);
-}
-
-// A macroblock (the idx-th; FFmpeg's mpeg4_decode_mb): MCBPC stuffing; in a P- or S-VOP not_coded;
-// MCBPC (I-, P-, S-VOPs) or modb, mb_type and the coded pattern (B-VOPs), and the fields they say;
-// the vectors; the blocks. The quantiser in v follows its dquant.
-template <class IO>
-static int mb_io(IO& io, const Ctx* c, Vop* v, MB* m, int idx) {
-  const int cbp0 = IO::W ? cbp_of(m) : 0;  // (the writer's coded pattern)
-  int cbpc = 0, cbpy = 0, cbp = cbp0, s = 0, nmv = 0;
-  if (!IO::W) mb_clear(m);
-  if (io.over()) return 0;
-  if (v->type == PT_I) {
-    if (IO::W) cbpc = (m->dq ? MCBPC_IQUANT : 0) | (cbp0 & MCBPC_CHROMA);
-    if (!io.stuffing(&m->st, v->type) || !io.vlc(&cbpc, &vlc_intra_mcbpc)) return 0;
-    m->t = MB_INTRA;
-    return intra_io(io, c, v, m, cbpc, cbpc & MCBPC_IQUANT);
-  }
-  if (v->type != PT_B) {  // P- and S-VOPs
-    if (!io.stuffing(&m->st, v->type) || !io.bit(&m->sk)) return 0;
-    if (m->sk) return 1;
-    if (IO::W)
-      cbpc = (m->t == MB_INTRA ? MCBPC_INTRA : m->t == MB_4MV ? MCBPC_4MV : 0) | (m->dq ? MCBPC_DQUANT : 0) |
-             (cbp0 & MCBPC_CHROMA);
-    if (!io.vlc(&cbpc, &vlc_inter_mcbpc)) return 0;
-    if (cbpc & MCBPC_INTRA) {
-      m->t = MB_INTRA;
-      return intra_io(io, c, v, m, cbpc, cbpc & MCBPC_DQUANT);
+  // FFmpeg's mpeg4_is_resync on g, a copy of the reader: the number of the macroblock a resync
+  // marker right after the current position announces (the number of macroblocks for the end of
+  // the VOP), or 0. *nstuff: MCBPC stuffing codes FFmpeg skips first.
+  int resync_ahead(const Ctx& c, GB g, int* nstuff) const {
+    constexpr int B = BYTE_BITS - 1;  // (a bit's place in its byte: & B)
+    int bits_count = g.pos, w = (int)g.show(RESYNC_WIN);
+    *nstuff = 0;
+    while (w <= (int)BYTE_MASK) {  // (its first byte's bits 0)
+      if (type == PT_B || (w >> (RESYNC_WIN - stuffing_len(type)) != 1)) break;
+      g.skip(stuffing_len(type));
+      bits_count += stuffing_len(type);
+      w = (int)g.show(RESYNC_WIN);
+      ++*nstuff;
     }
-    m->t = cbpc & MCBPC_4MV ? MB_4MV : MB_INTER;
-    if (v->gmc && m->t == MB_INTER && !io.bit(&m->mc)) return 0;
-    if (IO::W) cbpy = (cbp0 >> CBP_CHROMA_BITS) ^ CBPY_INTER;
-    if (!io.vlc(&cbpy, &vlc_cbpy)) return 0;
-    cbp = (cbpc & MCBPC_CHROMA) | (cbpy ^ CBPY_INTER) << CBP_CHROMA_BITS;
-    if (!(cbpc & MCBPC_DQUANT)) m->dq = 0;
-    else if (!dquant_io(io, v, m)) return 0;
-  } else {  // B-VOPs: no bits where the co-located macroblock of the backward reference was skipped
-    if (!IO::W) m->sk = c->skip_ref[idx];
-    if (m->sk) return 1;
-    if (IO::W) s = m->mb == MODB_NONE;
-    if (!io.bit(&s)) return 0;
-    if (s) {
-      m->mb = MODB_NONE;
-      m->t = MB_DIRECT;
-      return blocks_io(io, m, 0, 0, 0);
+    if (bits_count + BYTE_BITS >= g.size) {  // the end: the usual stuffing up to the byte boundary?
+      w >>= BYTE_BITS;
+      w |= stuffing_bits(BYTE_BITS) >> (B - (bits_count & B));
+      if (w == stuffing_bits(BYTE_BITS)) return c.mb_num;
+    } else {
+      static const U16 resync_prefix[BYTE_BITS] = { 0x7F00, 0x7E00, 0x7C00, 0x7800, 0x7000, 0x6000, 0x4000, 0x0000 };
+      if (w == resync_prefix[bits_count & B]) {
+        int len, mb_num;
+        g.skip(1);
+        g.align();
+        for (len = 0; len < ZEROS_MAX; len++)
+          if (g.get1()) break;
+        mb_num = (int)g.get(c.mb_num_bits);
+        if (!mb_num || mb_num > c.mb_num || g.pos + RESYNC_TAIL > g.size) mb_num = -1;
+        if (len >= prefix_length()) return mb_num;
+      }
     }
-    if (IO::W) s = m->mb == MODB_NOCBP;
-    if (!io.bit(&s)) return 0;
-    m->mb = s ? MODB_NOCBP : MODB_CBP;
-    if (!io.vlc(&m->t, &vlc_mb_type_b)) return 0;
-    if (m->mb == MODB_NOCBP) cbp = 0;
-    else if (!io.bits(&cbp, MB_BLOCKS)) return 0;
-    if (mb_has_dq(v, m, cbp) && !dquant_io(io, v, m)) return 0;
-  }
-  if (mb_has_dt(c, 0, cbp) && !io.bit(&m->dt)) return 0;
-  if (mb_has_fp(c, v, m) && !io.bit(&m->fp)) return 0;
-  if (m->fp == 1) {
-    m->nfs = mb_nfs(v, m);
-    if (!io.bits(&m->fs, m->nfs)) return 0;
-  }
-  if (v->type != PT_B) {  // a vector, a field's each, or a block's each (4MV); none in GMC
-    if (m->t == MB_4MV) {
-      if (!mvs_io(io, m, &nmv, MB_LUMA, v->fcode)) return 0;
-    } else if (m->mc != 1 && !mvs_io(io, m, &nmv, m->fp == 1 ? 2 : 1, v->fcode))
-      return 0;
-  } else if (m->t != MB_DIRECT) {  // forward, then backward
-    const int n = m->fp == 1 ? 2 : 1;
-    if (fwd_dir(m->t) && !mvs_io(io, m, &nmv, n, v->fcode)) return 0;
-    if (bwd_dir(m->t) && !mvs_io(io, m, &nmv, n, v->bcode)) return 0;
-  } else if (!mvs_io(io, m, &nmv, 1, FCODE_MIN))  // direct mode's delta vector
     return 0;
-  m->nmv = nmv;
-  return blocks_io(io, m, cbp, 0, 0);
-}
-
-// FFmpeg's mpeg4_is_resync on a copy of the reader: the number of the macroblock a resync marker
-// right after the current position announces (the number of macroblocks for the end of the VOP),
-// or 0. *nstuff: MCBPC stuffing codes FFmpeg skips first.
-static int resync_ahead(const Ctx* c, const GB* gb0, const Vop* v, int* nstuff) {
-  constexpr int B = BYTE_BITS - 1;  // (a bit's place in its byte: & B)
-  GB g = *gb0, *gb = &g;
-  int bits_count = gb->pos, w = (int)gb_show(gb, RESYNC_WIN);
-  *nstuff = 0;
-  while (w <= (int)BYTE_MASK) {  // (its first byte's bits 0)
-    if (v->type == PT_B || (w >> (RESYNC_WIN - stuffing_len(v->type)) != 1)) break;
-    gb_skip(gb, stuffing_len(v->type));
-    bits_count += stuffing_len(v->type);
-    w = (int)gb_show(gb, RESYNC_WIN);
-    ++*nstuff;
   }
-  if (bits_count + BYTE_BITS >= gb->size) {  // the end: the usual stuffing up to the byte boundary?
-    w >>= BYTE_BITS;
-    w |= stuffing_bits(BYTE_BITS) >> (B - (bits_count & B));
-    if (w == stuffing_bits(BYTE_BITS)) return c->mb_num;
-  } else {
-    static const U16 resync_prefix[BYTE_BITS] = { 0x7F00, 0x7E00, 0x7C00, 0x7800, 0x7000, 0x6000, 0x4000, 0x0000 };
-    if (w == resync_prefix[bits_count & B]) {
-      int len, mb_num;
-      gb_skip(gb, 1);
-      gb_align(gb);
-      for (len = 0; len < ZEROS_MAX; len++)
-        if (gb_get1(gb)) break;
-      mb_num = (int)gb_get(gb, c->mb_num_bits);
-      if (!mb_num || mb_num > c->mb_num || gb->pos + RESYNC_TAIL > gb->size) mb_num = -1;
-      if (len >= prefix_length(v)) return mb_num;
+};
+
+struct VopHdr {
+  int type, mtb, tib, tinc, coded, rnd, dcthr, tff, alt, quant, fcode, bcode;
+  int warp[2 * WARP_POINTS_MAX];
+  int ncplx; char cplx[CPLX_BITS_MAX];
+
+  void clear() {  // the optional fields absent (NA): where one read or decoded starts
+    rnd = dcthr = tff = alt = quant = fcode = bcode = NA;
+    ncplx = 0;
+  }
+
+  // A VOP's header after its start code (FFmpeg's decode_vop_header): vop_coding_type,
+  // modulo_time_base, vop_time_increment, vop_coded; then the rounding type, the complexity
+  // estimates, intra_dc_vlc_thr, the field flags, the trajectory, the quantiser and the f_codes.
+  // Reading it keeps FFmpeg's guess of the time increment's length in c.
+  template <class IO>
+  int walk(IO& io, Ctx& c) {
+    int i, t = type - PT_I;
+    if (!IO::W) clear();
+    if (!io.bits(&t, VOP_TYPE_BITS)) return 0;
+    type = PT_I + t;
+    if (!io.ones(&mtb) || !io.marker() || !io.time_bits(c, type, &tib)) return 0;
+    if (!io.bits(&tinc, tib) || !io.marker() || !io.bit(&coded)) return 0;
+    if (!coded) return 1;
+    if (c.dp && type != PT_B) return 0;  // (data partitioning: B-VOPs only)
+    if (c.vop_has_rnd(type) && !io.bit(&rnd)) return 0;
+    ncplx = c.vop_ncplx(type);
+    for (i = 0; i < ncplx; i++) {
+      int b = cplx[i] - '0';
+      if (!io.bit(&b)) return 0;
+      cplx[i] = (char)('0' + b);
+    }
+    if (io.short_of(DCTHR_BITS) || !io.bits(&dcthr, DCTHR_BITS)) return 0;
+    if (c.interlaced && (!io.bit(&tff) || !io.bit(&alt))) return 0;
+    if (c.vop_gmc(type) && !c.traj_walk(io, warp)) return 0;
+    if (!io.bits(&quant, c.quant_precision) || !quant) return 0;
+    if (type != PT_I && (!io.bits(&fcode, FCODE_BITS) || !fcode)) return 0;
+    if (type == PT_B && (!io.bits(&bcode, FCODE_BITS) || !bcode)) return 0;
+    return !io.over();
+  }
+};
+
+struct VpHdr {
+  int st, mbnum, quant, hec, mtb, tinc, type, dcthr, warp[2 * WARP_POINTS_MAX], fcode, bcode;
+
+  void clear() { mtb = tinc = type = dcthr = fcode = bcode = NA; }  // (as VopHdr's)
+
+  // A video packet's header after the macroblock before it (FFmpeg's
+  // mpeg4_decode_video_packet_header): MCBPC stuffing (in an S-VOP, as FFmpeg skips it, there's
+  // none), the stuffing up to the byte boundary, the resync marker, the macroblock's number, the
+  // quantiser (0: as it was) and header_extension_code, after which the VOP's times, type, DC
+  // threshold, trajectory and f_codes again. The quantiser in v follows it.
+  template <class IO>
+  int walk(IO& io, const Ctx& c, Vop& v) {
+    int mk = 1;
+    if (!IO::W) clear();
+    if (v.type == PT_S ? st != 0 : !io.stuffing(&st, v.type)) return 0;
+    io.byte_stuffing();
+    if (io.short_of(VP_HDR_MIN)) return 0;
+    if (!io.bits(&mk, v.prefix_length() + 1) || mk != 1) return 0;  // (its 0s, then a 1)
+    if (!io.bits(&mbnum, c.mb_num_bits) || !mbnum || mbnum >= c.mb_num) return 0;
+    if (!io.bits(&quant, c.quant_precision) || !io.bit(&hec)) return 0;
+    if (quant) v.qscale = quant;
+    v.qscale = clip(v.qscale, QS_MIN, QS_MAX);
+    if (hec) {
+      if (!io.ones(&mtb) || !io.marker() || !io.bits(&tinc, v.tib) || !io.marker()) return 0;
+      if (!io.bits(&type, VOP_TYPE_BITS) || !io.bits(&dcthr, DCTHR_BITS)) return 0;
+      if (v.gmc && !c.traj_walk(io, warp)) return 0;
+      if (v.type != PT_I && !io.bits(&fcode, FCODE_BITS)) return 0;
+      if (v.type == PT_B && !io.bits(&bcode, FCODE_BITS)) return 0;
+    }
+    return !io.over();
+  }
+};
+
+struct Blk {
+  int dc;          // intra DC difference (when the DC is coded separately)
+  int n;           // events, 0 = not coded
+  U8 run[BLK_COEFS], esc[BLK_COEFS];
+  S16 level[BLK_COEFS];
+
+  // A block (the k-th of its macroblock: 0-3 luma, 4-5 chroma): an intra DC coded apart (dcvlc) as
+  // its size's code, the difference and a marker after a long one; then, if coded, its events up to
+  // the last.
+  template <class IO>
+  int walk(IO& io, int k, int coded, int intra, int dcvlc) {
+    const RL& rl = intra ? rl_intra : rl_inter;
+    int i = -1, j, p0 = io.pos();
+    if (!IO::W) n = dc = 0;
+    if (intra && dcvlc) {
+      int size = bitlen(dc);
+      if (!io.vlc(&size, k < MB_LUMA ? vlc_dc_lum : vlc_dc_chrom) || size > DC_SIZE_MAX) return 0;
+      if (size && (!io.xbits(&dc, size) || (size > DC_MARKER_SIZE && !io.marker()))) return 0;
+      i = 0;
+    }
+    io.count(PB_DC, p0);
+    p0 = io.pos();
+    if (!coded) return 1;
+    for (j = 0;; j++) {  // (i, the coefficient's position, keeps j within the block)
+      int last = 0, r = 0, l = 0, mode = ESC_VLC;  // (the event's run and level)
+      if (io.over()) return 0;
+      if (IO::W) {
+        last = j + 1 == n;
+        r = run[j];
+        l = level[j];
+        mode = esc[j];
+      }
+      if (!rl.event_walk(io, &last, &r, &l, &mode)) return 0;
+      i += r + 1;
+      if (i > (last ? BLK_LAST : BLK_LAST - 1)) return 0;
+      run[j] = (U8)r;
+      level[j] = (S16)l;
+      esc[j] = (U8)mode;
+      if (last) {
+        n = j + 1;
+        io.count(PB_COEF, p0);
+        return 1;
+      }
     }
   }
-  return 0;
-}
+};
 
-// A video packet's header after the macroblock before it (FFmpeg's
-// mpeg4_decode_video_packet_header): MCBPC stuffing (in an S-VOP, as FFmpeg skips it, there's
-// none), the stuffing up to the byte boundary, the resync marker, the macroblock's number, the
-// quantiser (0: as it was) and header_extension_code, after which the VOP's times, type, DC
-// threshold, trajectory and f_codes again. The quantiser in v follows it.
-template <class IO>
-static int vp_io(IO& io, const Ctx* c, Vop* v, VpHdr* k) {
-  int mk = 1;
-  if (!IO::W) vp_clear(k);
-  if (v->type == PT_S ? k->st != 0 : !io.stuffing(&k->st, v->type)) return 0;
-  io.byte_stuffing();
-  if (io.short_of(VP_HDR_MIN)) return 0;
-  if (!io.bits(&mk, prefix_length(v) + 1) || mk != 1) return 0;  // (its 0s, then a 1)
-  if (!io.bits(&k->mbnum, c->mb_num_bits) || !k->mbnum || k->mbnum >= c->mb_num) return 0;
-  if (!io.bits(&k->quant, c->quant_precision) || !io.bit(&k->hec)) return 0;
-  if (k->quant) v->qscale = k->quant;
-  v->qscale = clip(v->qscale, QS_MIN, QS_MAX);
-  if (k->hec) {
-    if (!io.ones(&k->mtb) || !io.marker() || !io.bits(&k->tinc, v->tib) || !io.marker()) return 0;
-    if (!io.bits(&k->type, VOP_TYPE_BITS) || !io.bits(&k->dcthr, DCTHR_BITS)) return 0;
-    if (v->gmc && !traj_io(io, c, k->warp)) return 0;
-    if (v->type != PT_I && !io.bits(&k->fcode, FCODE_BITS)) return 0;
-    if (v->type == PT_B && !io.bits(&k->bcode, FCODE_BITS)) return 0;
-  }
-  return !io.over();
-}
+struct MB {
+  int x, y, st, sk, mb, t, mc, ac, dq, dt, fp;
+  int nfs, fs;     // field selects: count, bits (first one in the highest bit)
+  int nmv, mv[2 * MB_MVS];
+  Blk b[MB_BLOCKS];
 
-// A VOP's header after its start code (FFmpeg's decode_vop_header): vop_coding_type,
-// modulo_time_base, vop_time_increment, vop_coded; then the rounding type, the complexity
-// estimates, intra_dc_vlc_thr, the field flags, the trajectory, the quantiser and the f_codes.
-// Reading it keeps FFmpeg's guess of the time increment's length in c.
-template <class IO>
-static int vop_hdr_io(IO& io, Ctx* c, VopHdr* h) {
-  int i, t = h->type - PT_I;
-  if (!IO::W) vop_hdr_clear(h);
-  if (!io.bits(&t, VOP_TYPE_BITS)) return 0;
-  h->type = PT_I + t;
-  if (!io.ones(&h->mtb) || !io.marker() || !io.time_bits(c, h->type, &h->tib)) return 0;
-  if (!io.bits(&h->tinc, h->tib) || !io.marker() || !io.bit(&h->coded)) return 0;
-  if (!h->coded) return 1;
-  if (c->dp && h->type != PT_B) return 0;  // (data partitioning: B-VOPs only)
-  if (vop_has_rnd(c, h->type) && !io.bit(&h->rnd)) return 0;
-  h->ncplx = vop_ncplx(c, h->type);
-  for (i = 0; i < h->ncplx; i++) {
-    int b = h->cplx[i] - '0';
-    if (!io.bit(&b)) return 0;
-    h->cplx[i] = (char)('0' + b);
+  void clear() {  // the optional fields absent (NA): where one read or decoded starts
+    st = sk = 0;
+    mb = t = mc = ac = dq = dt = fp = NA;
+    nfs = fs = nmv = 0;
   }
-  if (io.short_of(DCTHR_BITS) || !io.bits(&h->dcthr, DCTHR_BITS)) return 0;
-  if (c->interlaced && (!io.bit(&h->tff) || !io.bit(&h->alt))) return 0;
-  if (vop_gmc(c, h->type) && !traj_io(io, c, h->warp)) return 0;
-  if (!io.bits(&h->quant, c->quant_precision) || !h->quant) return 0;
-  if (h->type != PT_I && (!io.bits(&h->fcode, FCODE_BITS) || !h->fcode)) return 0;
-  if (h->type == PT_B && (!io.bits(&h->bcode, FCODE_BITS) || !h->bcode)) return 0;
-  return !io.over();
-}
+
+  // Which fields a macroblock has, for the walks below and the model alike: field_prediction
+  // (interlaced, an inter macroblock with a vector of its own: not direct, not GMC) and the field
+  // selects after it, and whether it says its dquant (I-, P- and S-VOPs: in MCBPC; a B-VOP's
+  // dbquant: a macroblock not direct, with coded blocks)
+  int has_fp(const Ctx& c, const Vop& v) const {
+    return c.interlaced && (v.type == PT_B ? t != MB_DIRECT : t == MB_INTER && mc != 1);
+  }
+  int fs_count(const Vop& v) const { return v.type == PT_B ? 2 * (fwd_dir(t) + bwd_dir(t)) : 2; }
+  int has_dq(const Vop& v, int cbp) const { return v.type != PT_B || (t != MB_DIRECT && cbp); }
+
+  int pattern() const {  // coded flags, block 0 in the top bit (of MB_BLOCKS)
+    int i, cbp = 0;
+    for (i = 0; i < MB_BLOCKS; i++) cbp = cbp * 2 + (b[i].n > 0);
+    return cbp;
+  }
+
+  // n vectors' differences (x, y), into mv from *k on
+  template <class IO>
+  int mvs_walk(IO& io, int* k, int n, int f_code) {
+    const int p0 = io.pos();
+    int i;
+    for (i = 0; i < 2 * n; i++, ++*k)
+      if (!mv_walk(io, &mv[*k], f_code)) return 0;
+    io.count(PB_MV, p0);
+    return 1;
+  }
+
+  template <class IO>
+  int blocks_walk(IO& io, int cbp, int intra, int dcvlc) {
+    int i;
+    for (i = 0; i < MB_BLOCKS; i++, cbp += cbp)
+      if (!b[i].walk(io, i, cbp & 1 << (MB_BLOCKS - 1), intra, dcvlc)) return 0;
+    return 1;
+  }
+
+  // dquant (I-, P- and S-VOPs: 2 bits, an index into quant_tab) or a B-VOP's dbquant (a code of
+  // dbquant_tab); the quantiser in v follows it
+  template <class IO>
+  int dquant_walk(IO& io, Vop& v) {
+    const int bvop = v.type == PT_B;
+    int s = IO::W ? (bvop ? index_of(dbquant_dq, dq) : index_of(quant_tab, dq)) : 0;
+    if (bvop ? !io.vlc(&s, vlc_dbquant) : !io.bits(&s, DQUANT_BITS)) return 0;
+    dq = bvop ? dbquant_dq[s] : quant_tab[s];
+    v.qscale = clip(v.qscale + dq, QS_MIN, QS_MAX);
+    return 1;
+  }
+
+  // an intra macroblock after its MCBPC (cbpc; dquant: whether it says one): ac_pred_flag, cbpy,
+  // dquant, dct_type, the blocks (the DCs coded apart below the VOP's threshold, as the quantiser was)
+  template <class IO>
+  int intra_walk(IO& io, const Ctx& c, Vop& v, int cbpc, int dquant) {
+    const int dcvlc = v.qscale < v.dcthr;
+    int cbpy = IO::W ? pattern() >> CBP_CHROMA_BITS : 0;
+    if (!io.bit(&ac) || !io.vlc(&cbpy, vlc_cbpy)) return 0;
+    if (!dquant) dq = 0;
+    else if (!dquant_walk(io, v)) return 0;
+    if (c.mb_has_dt(1, 0) && !io.bit(&dt)) return 0;
+    return blocks_walk(io, (cbpc & MCBPC_CHROMA) | cbpy << CBP_CHROMA_BITS, 1, dcvlc);
+  }
+
+  // A macroblock (the idx-th; FFmpeg's mpeg4_decode_mb): MCBPC stuffing; in a P- or S-VOP not_coded;
+  // MCBPC (I-, P-, S-VOPs) or modb, mb_type and the coded pattern (B-VOPs), and the fields they say;
+  // the vectors; the blocks. The quantiser in v follows its dquant.
+  template <class IO>
+  int walk(IO& io, const Ctx& c, Vop& v, int idx) {
+    const int cbp0 = IO::W ? pattern() : 0;  // (the writer's coded pattern)
+    int cbpc = 0, cbpy = 0, cbp = cbp0, s = 0, k = 0;  // (k: the vectors so far)
+    if (!IO::W) clear();
+    if (io.over()) return 0;
+    if (v.type == PT_I) {
+      if (IO::W) cbpc = (dq ? MCBPC_IQUANT : 0) | (cbp0 & MCBPC_CHROMA);
+      if (!io.stuffing(&st, v.type) || !io.vlc(&cbpc, vlc_intra_mcbpc)) return 0;
+      t = MB_INTRA;
+      return intra_walk(io, c, v, cbpc, cbpc & MCBPC_IQUANT);
+    }
+    if (v.type != PT_B) {  // P- and S-VOPs
+      if (!io.stuffing(&st, v.type) || !io.bit(&sk)) return 0;
+      if (sk) return 1;
+      if (IO::W)
+        cbpc = (t == MB_INTRA ? MCBPC_INTRA : t == MB_4MV ? MCBPC_4MV : 0) | (dq ? MCBPC_DQUANT : 0) |
+               (cbp0 & MCBPC_CHROMA);
+      if (!io.vlc(&cbpc, vlc_inter_mcbpc)) return 0;
+      if (cbpc & MCBPC_INTRA) {
+        t = MB_INTRA;
+        return intra_walk(io, c, v, cbpc, cbpc & MCBPC_DQUANT);
+      }
+      t = cbpc & MCBPC_4MV ? MB_4MV : MB_INTER;
+      if (v.gmc && t == MB_INTER && !io.bit(&mc)) return 0;
+      if (IO::W) cbpy = (cbp0 >> CBP_CHROMA_BITS) ^ CBPY_INTER;
+      if (!io.vlc(&cbpy, vlc_cbpy)) return 0;
+      cbp = (cbpc & MCBPC_CHROMA) | (cbpy ^ CBPY_INTER) << CBP_CHROMA_BITS;
+      if (!(cbpc & MCBPC_DQUANT)) dq = 0;
+      else if (!dquant_walk(io, v)) return 0;
+    } else {  // B-VOPs: no bits where the co-located macroblock of the backward reference was skipped
+      if (!IO::W) sk = c.skip_ref[idx];
+      if (sk) return 1;
+      if (IO::W) s = mb == MODB_NONE;
+      if (!io.bit(&s)) return 0;
+      if (s) {
+        mb = MODB_NONE;
+        t = MB_DIRECT;
+        return blocks_walk(io, 0, 0, 0);
+      }
+      if (IO::W) s = mb == MODB_NOCBP;
+      if (!io.bit(&s)) return 0;
+      mb = s ? MODB_NOCBP : MODB_CBP;
+      if (!io.vlc(&t, vlc_mb_type_b)) return 0;
+      if (mb == MODB_NOCBP) cbp = 0;
+      else if (!io.bits(&cbp, MB_BLOCKS)) return 0;
+      if (has_dq(v, cbp) && !dquant_walk(io, v)) return 0;
+    }
+    if (c.mb_has_dt(0, cbp) && !io.bit(&dt)) return 0;
+    if (has_fp(c, v) && !io.bit(&fp)) return 0;
+    if (fp == 1) {
+      nfs = fs_count(v);
+      if (!io.bits(&fs, nfs)) return 0;
+    }
+    if (v.type != PT_B) {  // a vector, a field's each, or a block's each (4MV); none in GMC
+      if (t == MB_4MV) {
+        if (!mvs_walk(io, &k, MB_LUMA, v.fcode)) return 0;
+      } else if (mc != 1 && !mvs_walk(io, &k, fp == 1 ? 2 : 1, v.fcode))
+        return 0;
+    } else if (t != MB_DIRECT) {  // forward, then backward
+      const int n = fp == 1 ? 2 : 1;
+      if (fwd_dir(t) && !mvs_walk(io, &k, n, v.fcode)) return 0;
+      if (bwd_dir(t) && !mvs_walk(io, &k, n, v.bcode)) return 0;
+    } else if (!mvs_walk(io, &k, 1, FCODE_MIN))  // direct mode's delta vector
+      return 0;
+    nmv = k;
+    return blocks_walk(io, cbp, 0, 0);
+  }
+};

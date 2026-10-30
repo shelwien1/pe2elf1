@@ -100,10 +100,10 @@ struct ModelHdr : ModelCore {
     last.tinc = h->tinc;
     last.dinc[h->type] = d;
     h->coded = hdr_flag(F_CODED, ty, 0, 0, h->coded);
-    if (!ENC) vop_hdr_clear(h);
+    if (!ENC) h->clear();
     if (!h->coded) return;
-    if (vop_has_rnd(cx, h->type)) last.rnd = h->rnd = hdr_flag(F_RND, ty, last.rnd, 0, h->rnd);
-    h->ncplx = vop_ncplx(cx, h->type);
+    if (cx->vop_has_rnd(h->type)) last.rnd = h->rnd = hdr_flag(F_RND, ty, last.rnd, 0, h->rnd);
+    h->ncplx = cx->vop_ncplx(h->type);
     for (i = 0; i < h->ncplx; i++)
       h->cplx[i] = (char)('0' + hdr_flag(F_CPLX, ty, 0, cap(i, kPosCap), h->cplx[i] == '1'));
     last.dcthr = h->dcthr = (int)checked(hdr_val(F_DCTHR, ty, last.dcthr, 0, h->dcthr), 0, DCTHR_MAX);
@@ -111,7 +111,7 @@ struct ModelHdr : ModelCore {
       last.tff = h->tff = hdr_flag(F_TFF, ty, last.tff, 0, h->tff);
       last.alt = h->alt = hdr_flag(F_ALT, ty, last.alt, 0, h->alt);
     }
-    if (vop_gmc(cx, h->type))
+    if (cx->vop_gmc(h->type))
       for (i = 0; i < 2 * cx->warp_points; i++)
         h->warp[i] = (int)checked(hdr_sval(F_WARP, ty, 0, i & 1, h->warp[i]), -WARP_MAX, WARP_MAX);
     h->quant = last.quant[h->type] + (int)hdr_sval(F_QUANT, ty, 0, 0, h->quant - last.quant[h->type]);
@@ -139,7 +139,7 @@ struct ModelHdr : ModelCore {
     k->hec = hdr_flag(F_HEC, ty, 0, 0, k->hec);
     if (k->quant) v->qscale = k->quant;
     v->qscale = clip(v->qscale, QS_MIN, QS_MAX);
-    if (!ENC) vp_clear(k);
+    if (!ENC) k->clear();
     if (!k->hec) return;
     k->mtb = (int)checked(hdr_val(F_HMTB, ty, 0, 0, k->mtb), 0, RUN_MAX);
     k->tinc = (int)checked(hdr_val(F_HTINC, ty, 0, 0, k->tinc), 0, (1 << v->tib) - 1);

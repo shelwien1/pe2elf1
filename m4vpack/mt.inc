@@ -107,19 +107,17 @@ static void mt_rec(U8* h, U64 g_size, U64 plen, U64 ins, U64 xlen, U64 part) {
 // with the VOL c has (and its guess of the time increment's length, kept in c); -1 if its header
 // doesn't parse
 constexpr size_t VOP_PEEK = 64;  // the bytes of a VOP's header (from its start code on) vop_is_coded() reads
-static int vop_is_coded(Ctx* c, const U8* p, size_t n) {
+static int vop_is_coded(Ctx& c, const U8* p, size_t n) {
   U8 b[VOP_PEEK + GB_PAD];
   GB gb;
   VopHdr h;
-  Rd rd = {&gb};
+  Rd rd = {gb};
   const size_t k = n - SC_LEN < VOP_PEEK ? n - SC_LEN : VOP_PEEK;
   memset(b, 0, sizeof b);
   memcpy(b, p + SC_LEN, k);
-  gb.buf = b;
-  gb.size = (int)k * BYTE_BITS;
-  gb.pos = 0;
+  gb.init(b, k);
   h.coded = -1;
-  vop_hdr_io(rd, c, &h);  // (coded as far as it got: the rest of the header doesn't matter here)
+  h.walk(rd, c);  // (coded as far as it got: the rest of the header doesn't matter here)
   return h.coded;
 }
 

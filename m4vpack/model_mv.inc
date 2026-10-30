@@ -87,13 +87,13 @@ struct ModelMv : ModelRes<f_DEC, LV> {
                  mv_spread(sx, fcode), m->mv[*mvi], &q, mk, mk ? mv_wrap(tmx[tm] - px, fcode) : 0);
     m->mv[(*mvi)++] = v;
     *sumq += q;
-    *mx = mo_vector(px, v, fcode);
+    *mx = Motion::vector(px, v, fcode);
     if (first) { me->mva[0] = (U8)q; me->mvs[0] = (U8)(v > 0 ? 1 : v < 0 ? 2 : 0); }
     v = code_mvd(kind, 1, fcode, L, A, R, mvq(q), tok, mv_wrap(ty - py, fcode), mv_spread(sy, fcode),
                  m->mv[*mvi], &q, mk, mk ? mv_wrap(tmy[tm] - py, fcode) : 0);
     m->mv[(*mvi)++] = v;
     *sumq += q;
-    *my = mo_vector(py, v, fcode);
+    *my = Motion::vector(py, v, fcode);
     if (first) { me->mva[1] = (U8)q; me->mvs[1] = (U8)(v > 0 ? 1 : v < 0 ? 2 : 0); }
   }
 };

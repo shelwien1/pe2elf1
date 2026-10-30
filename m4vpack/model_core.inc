@@ -24,7 +24,7 @@ struct ModelCore {
   void core_init(int recon) {
     mbcur = mbref = 0;
     mb_cap = 0;
-    mo_init(&mo);
+    mo.init();
     if (recon) rc_init(&rec), rec.mo = &mo;
   }
   void core_quit(int recon) {
@@ -32,7 +32,7 @@ struct ModelCore {
     free(mbref);
     mbcur = mbref = 0;
     mb_cap = 0;
-    mo_quit(&mo);
+    mo.quit();
     if (recon) rc_quit(&rec);
   }
   // room for n macroblocks (0: no memory)

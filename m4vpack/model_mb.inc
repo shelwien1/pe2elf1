@@ -120,7 +120,7 @@ struct ModelMb : ModelMv<f_DEC, LV> {
   // (level -9) skipping's variables, zt and ze (0 none)
   void skip_vars(int* zt, int* ze) {
     int a, b;
-    if (mo.pict_type == PT_B) mo_direct(&mo, 0, 0);  // (what rc_skip_feat() predicts by)
+    if (mo.pict_type == PT_B) mo.direct(0, 0);  // (what rc_skip_feat() predicts by)
     rc_skip_feat(&rec, &a, &b);
     *zt = a < 0 ? 0 : qlog1(a);
     *ze = b < 0 ? 0 : qlog1(b);
@@ -131,9 +131,9 @@ struct ModelMb : ModelMv<f_DEC, LV> {
   void mb_bare(MBCtx* me, const MB* m, int cls, int mb_x) {
     me->cls = (U8)cls;
     rowb_clear(mb_x);
-    mo_kind(&mo, m);
-    if (m->mb == MODB_NONE) mo_direct(&mo, 0, 0);
-    mo_mb_end(&mo);
+    mo.kind(*m);
+    if (m->mb == MODB_NONE) mo.direct(0, 0);
+    mo.mb_end();
     if (LV::recon && rec.on) rc_mb_inter(&rec), rc_mb_end(&rec);
   }
 

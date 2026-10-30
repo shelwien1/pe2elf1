@@ -78,7 +78,7 @@ struct Model : ModelMb<f_DEC, LV> {
   // parse it and code the records; W_DECODE: decode the records and write the VOP (with its start
   // code). W_FAIL: it can't be (parsed, written: unsupported or damaged data), W_NOMEM: no memory.
   // (vop_walk.inc)
-  int vop_walk(Ctx* cx, int mode, GB* gb, PB* pb);
+  int vop_walk(Ctx& cx, int mode, GB& gb, PB& pb);
 };
 
 #include "vop_walk.inc"

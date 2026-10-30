@@ -388,7 +388,7 @@ static void rc_est_luma(const Recon* d, RcEst* e, int field) {
 // template matches best, refined by a search of RC_EST_RANGE samples around it
 static void rc_intra_est(const Recon* d, RcEst* e) {
   const RPic* ref = d->last;
-  const S16 (*mv)[2] = d->mo->cur->mv, (*rmv)[2] = d->mo->ref->mv;  // (the motion state's: this VOP's, the reference's)
+  const S16 (*mv)[2] = d->mo->cur.mv, (*rmv)[2] = d->mo->ref.mv;  // (the motion state's: this VOP's, the reference's)
   const int qs = 1 + d->qpel, wrap = d->b8_stride, bi = d->block_index[0];
   int cand[RC_EST_CANDS][2], nc = 0, i, bx, by, best = -1, bn = 0, bs = 0, dx, dy;
   e->ok = 0;

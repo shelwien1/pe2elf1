@@ -24,7 +24,7 @@ struct M4vSplit : Coroutine {
 
   void Init(U64 part) {
     coro_init();
-    ctx_init(&cx);
+    cx.init();
     chunksize = part;
     cap = mt_cap(part);
     buf = 0;
@@ -43,7 +43,7 @@ struct M4vSplit : Coroutine {
     free(buf);
     buf = 0;
     len = room = 0;
-    ctx_quit(&cx);
+    cx.quit();
   }
 
   void put(const U8* p, size_t n) {
@@ -112,7 +112,7 @@ struct M4vSplit : Coroutine {
     const size_t n = (size_t)(a - chunk_at);
     int k = -1;
     if (chunk_code < 0) return;
-    if (sc_is_vol(chunk_code)) parse_header_chunk(&cx, p, n);
+    if (sc_is_vol(chunk_code)) cx.parse_header_chunk(p, n);
     if (sc_is_vol(chunk_code)) k = K_VOL;
     else if (chunk_code == SC_USER_DATA && tagged(p, n, "DivX")) k = K_DIVX;
     else if (chunk_code == SC_USER_DATA && tagged(p, n, "XviD")) k = K_XVID;
@@ -130,7 +130,7 @@ struct M4vSplit : Coroutine {
     int type = code == SC_VOP && i + SC_LEN < len ? vop_type(buf + i) : 0;  // a VOP's (PT_I ...), 0 none
     U64 x;
     end_chunk(a);
-    if (type && !vop_is_coded(&cx, buf + i, len - i)) type = 0;
+    if (type && !vop_is_coded(cx, buf + i, len - i)) type = 0;
     if (is_header(code) && !run) {
       run = 1;
       run_at = a;

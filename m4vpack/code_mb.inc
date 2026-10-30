@@ -22,14 +22,14 @@ void ModelMb<f_DEC, LV>::code_mb(const Ctx* cx, VState* s, MB* m, int idx) {
   memset(&T, 0, sizeof(T));
   T.st = v->type - PT_I;
   T.rc = R ? R->cls : 0;
-  if (!ENC) mb_clear(m);
+  if (!ENC) m->clear();
   memset(me, 0, sizeof(*me));
   est.ok = 0;
   tmk[0] = tmk[1] = 0;
-  mo_mb_begin(&mo, idx);
+  mo.mb_begin(idx);
   if (LV::recon && rec.on) rc_mb_begin(&rec, idx);
   c->cat = CAT_MB;
-  if (v->type != PT_I && v->type != PT_B) mo_pred(&mo, 0, &px, &py, &sx, &sy);
+  if (v->type != PT_I && v->type != PT_B) mo.pred(0, &px, &py, &sx, &sy);
   if (v->type == PT_I) {
     m->st = (int)checked(hdr_val(F_MBST, ty, 0, 0, m->st), 0, RUN_MAX);
     m->t = MB_INTRA;
@@ -43,7 +43,7 @@ void ModelMb<f_DEC, LV>::code_mb(const Ctx* cx, VState* s, MB* m, int idx) {
     K.rc = R ? R->cls : 0;
     K.run = rb;
     K.pz = px || py;
-    K.rz = !R ? kTriNone : mo_ref_mv(&mo, 0)[0] || mo_ref_mv(&mo, 0)[1];
+    K.rz = !R ? kTriNone : mo.ref_mv(0)[0] || mo.ref_mv(0)[1];
     K.bsk = K.rr = 0;
     K.zt = K.ze = 0;
     if (LV::recon && rec.on) skip_vars(&K.zt, &K.ze);
@@ -116,12 +116,12 @@ void ModelMb<f_DEC, LV>::code_mb(const Ctx* cx, VState* s, MB* m, int idx) {
     m->ac = mbt_bit(MBN_AC, T, m->ac);
     if (LV::recon && rec.on) rc_mb_intra(&rec, m->ac), rc_intra_est(&rec, &est), est_err = est_nb = 0;
   }
-  if (mb_has_fp(cx, v, m)) {
+  if (m->has_fp(*cx, *v)) {
     T.cl = (L && L->fp) + (A && A->fp);
     T.c4 = T.cl;
     m->fp = mbt_bit(MBN_FIELD, T, m->fp);
     if (m->fp == 1) {
-      m->nfs = mb_nfs(v, m);  // (a select per field)
+      m->nfs = m->fs_count(*v);  // (a select per field)
       for (i = m->nfs - 1, k = 0; i >= 0; i--) {
         T.fsn = cap(i, kFsnCap);
         k |= mbt_bit(MBN_FSEL, T, (m->fs >> i) & 1) << i;
@@ -131,20 +131,20 @@ void ModelMb<f_DEC, LV>::code_mb(const Ctx* cx, VState* s, MB* m, int idx) {
     }
   }
   c->cat = CAT_MV;
-  mo_kind(&mo, m);
-  if (v->type == PT_B && !intra) mo_colocated(&mo, &col[0][0], &col[0][1], &col[1][0], &col[1][1]);
+  mo.kind(*m);
+  if (v->type == PT_B && !intra) mo.colocated(&col[0][0], &col[0][1], &col[1][0], &col[1][1]);
   if (LV::recon && rec.on && !intra) {  // the vectors the template matches best
     if (v->type != PT_B) {
       if (m->t == MB_4MV || (m->mc != 1 && m->fp != 1))
-        tmk[0] = rc_tm_search(&rec, rec.last, px, py, mo_ref_mv(&mo, 0)[0], mo_ref_mv(&mo, 0)[1], &tmx[0], &tmy[0]);
+        tmk[0] = rc_tm_search(&rec, rec.last, px, py, mo.ref_mv(0)[0], mo.ref_mv(0)[1], &tmx[0], &tmy[0]);
     } else if (m->t != MB_DIRECT && m->fp != 1) {
       int ppx, ppy;
       if (fwd_dir(m->t)) {
-        mo_bpred(&mo, 0, 0, 1, &ppx, &ppy);
+        mo.bpred(0, 0, 1, &ppx, &ppy);
         tmk[0] = rc_tm_search(&rec, rec.last, ppx, ppy, col[0][0], col[0][1], &tmx[0], &tmy[0]);
       }
       if (bwd_dir(m->t)) {
-        mo_bpred(&mo, 1, 0, 1, &ppx, &ppy);
+        mo.bpred(1, 0, 1, &ppx, &ppy);
         tmk[1] = rc_tm_search(&rec, rec.next, ppx, ppy, col[1][0], col[1][1], &tmx[1], &tmy[1]);
       }
     }
@@ -155,21 +155,21 @@ void ModelMb<f_DEC, LV>::code_mb(const Ctx* cx, VState* s, MB* m, int idx) {
     if (v->type != PT_B) {
       if (m->t == MB_4MV)
         for (i = 0; i < MB_LUMA; i++) {
-          if (i) mo_pred(&mo, i, &px, &py, &sx, &sy);
-          code_mv(m, &mvi, MVK_P4, v->fcode, L, A, R, me, &sumq, px, py, sx, sy, tok, mo_ref_mv(&mo, i)[0],
-                  mo_ref_mv(&mo, i)[1], &mx, &my, 0);
-          mo_set(&mo, 0, i, mx, my);
+          if (i) mo.pred(i, &px, &py, &sx, &sy);
+          code_mv(m, &mvi, MVK_P4, v->fcode, L, A, R, me, &sumq, px, py, sx, sy, tok, mo.ref_mv(i)[0],
+                  mo.ref_mv(i)[1], &mx, &my, 0);
+          mo.set(0, i, mx, my);
         }
       else if (m->fp == 1)
         for (i = 0; i < 2; i++) {
-          code_mv(m, &mvi, MVK_PFIELD, v->fcode, L, A, R, me, &sumq, px, py / 2, sx, sy, tok, mo_ref_mv(&mo, 0)[0],
-                  mo_ref_mv(&mo, 0)[1] / 2, &mx, &my);
-          mo_set(&mo, 0, i, mx, my);
+          code_mv(m, &mvi, MVK_PFIELD, v->fcode, L, A, R, me, &sumq, px, py / 2, sx, sy, tok, mo.ref_mv(0)[0],
+                  mo.ref_mv(0)[1] / 2, &mx, &my);
+          mo.set(0, i, mx, my);
         }
       else if (m->mc != 1) {
-        code_mv(m, &mvi, MVK_P, v->fcode, L, A, R, me, &sumq, px, py, sx, sy, tok, mo_ref_mv(&mo, 0)[0],
-                mo_ref_mv(&mo, 0)[1], &mx, &my, 0);
-        mo_set(&mo, 0, 0, mx, my);
+        code_mv(m, &mvi, MVK_P, v->fcode, L, A, R, me, &sumq, px, py, sx, sy, tok, mo.ref_mv(0)[0],
+                mo.ref_mv(0)[1], &mx, &my, 0);
+        mo.set(0, 0, mx, my);
       }
     } else if (m->t != MB_DIRECT) {  // B-VOP: each predicted by the last of its direction in the row
       const int n = m->fp == 1 ? 2 : 1;
@@ -177,26 +177,26 @@ void ModelMb<f_DEC, LV>::code_mb(const Ctx* cx, VState* s, MB* m, int idx) {
       for (dir = 0; dir < 2; dir++) {
         if (!(dir ? bwd_dir(m->t) : fwd_dir(m->t))) continue;
         for (i = 0; i < n; i++) {
-          mo_bpred(&mo, dir, i, n, &ppx, &ppy);
+          mo.bpred(dir, i, n, &ppx, &ppy);
           code_mv(m, &mvi, MVK_BFWD + dir, dir ? v->bcode : v->fcode, L, A, R, me, &sumq, ppx, ppy, -1, -1, tok,
                   col[dir][0], n == 2 ? col[dir][1] / 2 : col[dir][1], &mx, &my, n == 1 ? dir : -1);
-          mo_bset(&mo, dir, i, n, mx, my);
+          mo.bset(dir, i, n, mx, my);
         }
       }
     } else {  // direct mode's delta
       code_mv(m, &mvi, MVK_BDIR, FCODE_MIN, L, A, R, me, &sumq, 0, 0, -1, -1, 0, 0, 0, &mx, &my);
-      mo_direct(&mo, mx, my);
+      mo.direct(mx, my);
     }
-    mo_mb_end(&mo);
+    mo.mb_end();
     if (v->type != PT_B && m->mc != 1) {  // (the macroblock's vector as the grid has it)
-      mx = mo.cur->mv[mo.block_index[0]][0];
-      my = mo.cur->mv[mo.block_index[0]][1];
+      mx = mo.cur.mv[mo.block_index[0]][0];
+      my = mo.cur.mv[mo.block_index[0]][1];
     }
     if ((v->type != PT_B && m->mc != 1) || (v->type == PT_B && m->t != MB_DIRECT))
       frac = ((mx & fm) != 0) + 2 * ((my & fm) != 0);
     if (LV::recon && rec.on) rc_mb_inter(&rec);  // (its prediction in the picture)
   } else
-    mo_mb_end(&mo);
+    mo.mb_end();
   c->cat = CAT_CBP;
   int cie[MB_BLOCKS] = {0}, ctx[MB_BLOCKS] = {0}, cem[MB_BLOCKS] = {0};
   if (LV::recon && est.ok)
@@ -215,10 +215,10 @@ void ModelMb<f_DEC, LV>::code_mb(const Ctx* cx, VState* s, MB* m, int idx) {
   cbp = v->type == PT_B && m->mb == MODB_NOCBP
             ? 0
             : code_cbp(cls3, L, A, R, mvi ? mvq(sumq) : kNone, frac, v->qscale,
-                       (L ? L->cbp != 0 : kTriNone) == (A ? A->cbp != 0 : kTriNone) ? 0 : 1 + (R && R->cbp), ENC ? cbp_of(m) : 0,
+                       (L ? L->cbp != 0 : kTriNone) == (A ? A->cbp != 0 : kTriNone) ? 0 : 1 + (R && R->cbp), ENC ? m->pattern() : 0,
                        cie, est_trust(), ctx, cem);
   c->cat = CAT_MB;
-  if (mb_has_dq(v, m, cbp)) {
+  if (m->has_dq(*v, cbp)) {
     M_qpd_v Q;
     const int node = v->type == PT_B ? QPD_B : QPD_P;
     Q.c3 = cls3;
@@ -236,7 +236,7 @@ void ModelMb<f_DEC, LV>::code_mb(const Ctx* cx, VState* s, MB* m, int idx) {
     v->qscale = clip(v->qscale + m->dq, QS_MIN, QS_MAX);
     if (LV::recon && rec.on) rc_set_qscale(&rec, v->qscale);
   }
-  if (mb_has_dt(cx, intra, cbp)) {
+  if (cx->mb_has_dt(intra, cbp)) {
     T.cl = (L && L->dt) + (A && A->dt);
     T.c4 = T.cl;
     T.intra = intra;

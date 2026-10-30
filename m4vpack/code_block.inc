@@ -15,7 +15,7 @@ template <int f_DEC, class LV>
 void ModelRes<f_DEC, LV>::code_block(VState* s, Blk* b, int n, int intra, int dcvlc, int coded, int cls, int nctx,
                                   int qs, int mvc, int rnz, const BlkCtx* Lb, const BlkCtx* Ab, BlkCtx* out,
                                   const BlkCtx* Xb) {
-  const RL* rl = intra ? &rl_intra : &rl_inter;
+  const RL& rl = intra ? rl_intra : rl_inter;
   const U8* sc = LV::recon && rec.on ? rc_scan(&rec, n, intra) : s->scan;  // (-9: an AC predicted block's own)
   BlkCtx o;
   U8 rm[BLK_COEFS];   // coefficients coded so far by raster position: 1 in the significance map, then magnitudes
@@ -235,7 +235,7 @@ void ModelRes<f_DEC, LV>::code_block(VState* s, Blk* b, int n, int intra, int dc
   c->cat = CAT_ESC;
   for (j = 0, prev = start - 1; j < k; j++) {
     const int run = pos[j] - prev - 1, al = lev[j] < 0 ? -lev[j] : lev[j];
-    const int d = esc_default(rl, j == k - 1, run, al);
+    const int d = rl.esc_default(j == k - 1, run, al);
     int e = ENC ? b->esc[j] : d;
     M_esc_v E;
     E.dm = d;
