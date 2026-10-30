@@ -1,0 +1,60 @@
+#  m4vpack's esc family at level -1: its context indices and its tunable parameters.
+#  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates MOD/l1/esc_h.inc and _p.inc from
+#  this file and family.inc.  famvars.inc says what each variable is.
+#
+#  Which escape a coefficient took where it is not the usual one (rare).
+
+Prefix M1_esc
+Debug 1
+Const 0
+
+Index a
+ a_dm: dm, 1!111
+
+Index b
+ b_dm: dm, 1!111
+
+Index c
+ c_dm: dm, 1!111
+
+Index d
+ d_dm: dm, 1!111
+
+Index m
+ m_dm: dm, 1!111
+
+Index t
+
+Index n
+
+Index g
+
+Number rA, 1, 0!11111111
+Number mwA, 1, 0!00010111
+Number rB, 1, 0!11111100
+Number mwB, 1, 0!00001111
+Number rC, 1, 0!11101010
+Number mwC, 1, 0!00001000
+Number rD, 1, 0!10000010
+Number mwD, 1, 0!00100000
+Number lr, 1, 0!11000
+Number mb, 1, 0!00001111
+
+#  Frozen: what esc never reads, which live would only take opt.pl's trials.
+! Number rT, 1, 0!00000000
+! Number mwT, 1, 0!00000000
+! Number mt, 1, 0!000
+! Number lrm, 1, 0!00000
+! Number mbm, 1, 0!00000000
+! Number rG, 1, 0!00000000
+! Number mwG, 1, 0!00000000
+
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is direct, one that
+#  does not is hashed into 2^h rows and contexts share them.  Frozen: left live these only grow.
+! Number hA, 1, 0!10110
+! Number hB, 1, 0!10110
+! Number hC, 1, 0!10110
+! Number hD, 1, 0!10110
+! Number hM, 1, 0!10110
+! Number hT, 1, 0!10110
+! Number hN, 1, 0!10110

@@ -1,0 +1,75 @@
+#  m4vpack's mvd family at level -1: its context indices and its tunable parameters.
+#  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates MOD/l1/mvd_h.inc and _p.inc from
+#  this file and family.inc.  famvars.inc says what each variable is.
+#
+#  A motion vector difference in units of the VLC code (code(): nodes 0-12) and the f_code residual
+#  bits below them (nodes 13-18).
+
+Prefix M1_mvd
+Debug 1
+Const 0
+
+Index a
+ a_kind: kind, 1!11111
+ a_comp: comp, 1!1
+ a_dz: dz, 1!11101000100000010
+ a_ds: ds, 1!11
+
+Index b
+ b_kind: kind, 1!11111
+ b_comp: comp, 1!1
+ b_sp: sp, 1!11101000100000010
+
+Index c
+ c_kind: kind, 1!11111
+ c_comp: comp, 1!1
+ c_rs: rs, 1!11101000100000010
+
+Index d
+ d_kind: kind, 1!11111
+ d_comp: comp, 1!1
+ d_lq: lq, 1!11101000100000010
+ d_aq: aq, 1!11101000100000010
+
+Index m
+ m_kind: kind, 1!11111
+ m_comp: comp, 1!1
+
+Index t
+ t_kind: kind, 1!11111
+ t_comp: comp, 1!1
+
+Index n
+ n_kind: kind, 1!11111
+
+Index g
+
+Number rA, 1, 0!11111001
+Number mwA, 1, 0!00100101
+Number rB, 1, 0!11111111
+Number mwB, 1, 0!00000011
+Number rC, 1, 0!11111100
+Number mwC, 1, 0!00000101
+Number rD, 1, 0!11111111
+Number mwD, 1, 0!00001110
+Number lr, 1, 0!01111
+Number mb, 1, 0!00101101
+Number rT, 1, 0!00011100
+Number mwT, 1, 0!00001001
+Number mt, 1, 0!110
+Number lrm, 1, 0!11111
+Number mbm, 1, 0!00100010
+
+#  Frozen: what mvd never reads, which live would only take opt.pl's trials.
+! Number rG, 1, 0!00000000
+! Number mwG, 1, 0!00000000
+
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is direct, one that
+#  does not is hashed into 2^h rows and contexts share them.  Frozen: left live these only grow.
+! Number hA, 1, 0!10110
+! Number hB, 1, 0!10110
+! Number hC, 1, 0!10110
+! Number hD, 1, 0!10110
+! Number hM, 1, 0!10110
+! Number hT, 1, 0!10110
+! Number hN, 1, 0!10110

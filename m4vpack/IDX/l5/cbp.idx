@@ -1,0 +1,110 @@
+#  m4vpack's cbp family at level -5: its context indices and its tunable parameters.
+#  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates MOD/l5/cbp_h.inc and _p.inc from
+#  this file and family.inc.  famvars.inc says what each variable is.
+#
+#  A bit of the coded block pattern, the 8x8 block its node (0-5).
+
+Prefix M5_cbp
+Debug 1
+Const 0
+
+Index a
+ a_c3: c3, 1!11
+ a_lu: lu, 1!11111111
+
+Index b
+ b_c3: c3, 1!11
+ b_mvc: mvc, 1!11101000100000010
+
+Index c
+ c_c3: c3, 1!11
+ c_rbit: rbit, 1!11
+ c_cnt: cnt, 1!11111
+
+Index d
+ d_c3: c3, 1!11
+ d_frac: frac, 1!1111
+
+Index e
+ e_c3: c3, 1!11
+ e_qs: qs, 1!00101010100100001000000100000000
+ e_cnt: cnt, 1!11111
+
+Index h
+ h_c3: c3, 1!11
+ h_pat: pat, &11111
+
+Index i
+ i_c3: c3, 1!11
+ i_lu: lu, 1!11111111
+ i_lq: lq, 1!11
+
+Index j
+ j_c3: c3, 1!11
+ j_lu: lu, 1!11111111
+ j_mvc: mvc, 1!11101000100000010
+
+Index k
+ k_c3: c3, 1!11
+ k_rbit: rbit, 1!11
+ k_lu: lu, 1!11111111
+
+Index l
+ l_c3: c3, 1!11
+
+Index m
+ m_c3: c3, 1!11
+
+Index t
+
+Index n
+
+Index g
+
+Number rA, 1, 0!11111110
+Number mwA, 1, 0!00000010
+Number rB, 1, 0!11111101
+Number mwB, 1, 0!00001000
+Number rC, 1, 0!11111101
+Number mwC, 1, 0!00000010
+Number rD, 1, 0!11111110
+Number mwD, 1, 0!00111001
+Number rE, 1, 0!11111111
+Number mwE, 1, 0!00010011
+Number rH, 1, 0!11111101
+Number mwH, 1, 0!00010000
+Number rI, 1, 0!11110001
+Number mwI, 1, 0!01000000
+Number rJ, 1, 0!11111110
+Number mwJ, 1, 0!00000100
+Number rK, 1, 0!11111000
+Number mwK, 1, 0!00001011
+Number rL, 1, 0!11011110
+Number mwL, 1, 0!00100000
+Number lr, 1, 0!01111
+Number mb, 1, 0!00010001
+
+#  Frozen: what cbp never reads, which live would only take opt.pl's trials.
+! Number rT, 1, 0!00000000
+! Number mwT, 1, 0!00000000
+! Number mt, 1, 0!000
+! Number lrm, 1, 0!00000
+! Number mbm, 1, 0!00000000
+! Number rG, 1, 0!00000000
+! Number mwG, 1, 0!00000000
+
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is direct, one that
+#  does not is hashed into 2^h rows and contexts share them.  Frozen: left live these only grow.
+! Number hA, 1, 0!10110
+! Number hB, 1, 0!10110
+! Number hC, 1, 0!10110
+! Number hD, 1, 0!10110
+! Number hE, 1, 0!10110
+! Number hH, 1, 0!10110
+! Number hI, 1, 0!10110
+! Number hJ, 1, 0!10110
+! Number hK, 1, 0!10110
+! Number hL, 1, 0!10110
+! Number hM, 1, 0!10110
+! Number hT, 1, 0!10110
+! Number hN, 1, 0!10110

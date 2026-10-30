@@ -1,0 +1,66 @@
+#  m4vpack's cbp family at level -1: its context indices and its tunable parameters.
+#  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates MOD/l1/cbp_h.inc and _p.inc from
+#  this file and family.inc.  famvars.inc says what each variable is.
+#
+#  A bit of the coded block pattern, the 8x8 block its node (0-5).
+
+Prefix M1_cbp
+Debug 1
+Const 0
+
+Index a
+ a_c3: c3, 1!11
+ a_rbit: rbit, 1!11
+ a_cnt: cnt, 1!11111
+
+Index b
+ b_c3: c3, 1!11
+ b_rbit: rbit, 1!11
+ b_lu: lu, 1!11111111
+
+Index c
+ c_c3: c3, 1!11
+ c_pat: pat, &11111
+
+Index d
+ d_c3: c3, 1!11
+ d_frac: frac, 1!1111
+
+Index m
+ m_c3: c3, 1!11
+
+Index t
+
+Index n
+
+Index g
+
+Number rA, 1, 0!11111101
+Number mwA, 1, 0!00000010
+Number rB, 1, 0!11111000
+Number mwB, 1, 0!00001011
+Number rC, 1, 0!11111101
+Number mwC, 1, 0!00010000
+Number rD, 1, 0!11111110
+Number mwD, 1, 0!00111001
+Number lr, 1, 0!01111
+Number mb, 1, 0!00010001
+
+#  Frozen: what cbp never reads, which live would only take opt.pl's trials.
+! Number rT, 1, 0!00000000
+! Number mwT, 1, 0!00000000
+! Number mt, 1, 0!000
+! Number lrm, 1, 0!00000
+! Number mbm, 1, 0!00000000
+! Number rG, 1, 0!00000000
+! Number mwG, 1, 0!00000000
+
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is direct, one that
+#  does not is hashed into 2^h rows and contexts share them.  Frozen: left live these only grow.
+! Number hA, 1, 0!10110
+! Number hB, 1, 0!10110
+! Number hC, 1, 0!10110
+! Number hD, 1, 0!10110
+! Number hM, 1, 0!10110
+! Number hT, 1, 0!10110
+! Number hN, 1, 0!10110

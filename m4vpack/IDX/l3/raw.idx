@@ -1,0 +1,76 @@
+#  m4vpack's raw family at level -3: its context indices and its tunable parameters.
+#  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates MOD/l3/raw_h.inc and _p.inc from
+#  this file and family.inc.  famvars.inc says what each variable is.
+#
+#  The bytes of a chunk kept as bytes, a bit at a time by its place in the byte's binary tree
+#  (nodes 1-255).
+
+Prefix M3_raw
+Debug 1
+Const 0
+
+Index a
+ a_c1: c1, &11111111
+ a_at: at, 1!11111111111
+
+Index b
+ b_c1: c1, &11111111
+ b_c2: c2, &11111111
+
+Index c
+ c_c1: c1, &11111111
+
+Index d
+ d_at: at, 1!11111111111
+
+Index e
+ e_c2: c2, &11111111
+
+Index h
+ h_c1: c1, &11111111
+ h_code: code, 1!11111111111
+
+Index m
+ m_at: at, 1!11111111111
+
+Index t
+
+Index n
+
+Index g
+
+Number rA, 1, 0!00000000
+Number mwA, 1, 0!00000000
+Number rB, 1, 0!01101100
+Number mwB, 1, 0!00000001
+Number rC, 1, 0!11100000
+Number mwC, 1, 0!00000000
+Number rD, 1, 0!00000000
+Number mwD, 1, 0!00000000
+Number rE, 1, 0!00100110
+Number mwE, 1, 0!00000010
+Number rH, 1, 0!10000010
+Number mwH, 1, 0!10000100
+Number lr, 1, 0!11111
+Number mb, 1, 0!00011110
+
+#  Frozen: what raw never reads, which live would only take opt.pl's trials.
+! Number rT, 1, 0!00000000
+! Number mwT, 1, 0!00000000
+! Number mt, 1, 0!000
+! Number lrm, 1, 0!00000
+! Number mbm, 1, 0!00000000
+! Number rG, 1, 0!00000000
+! Number mwG, 1, 0!00000000
+
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is direct, one that
+#  does not is hashed into 2^h rows and contexts share them.  Frozen: left live these only grow.
+! Number hA, 1, 0!10110
+! Number hB, 1, 0!10100
+! Number hC, 1, 0!10110
+! Number hD, 1, 0!10110
+! Number hE, 1, 0!10110
+! Number hH, 1, 0!10110
+! Number hM, 1, 0!10110
+! Number hT, 1, 0!10110
+! Number hN, 1, 0!10110

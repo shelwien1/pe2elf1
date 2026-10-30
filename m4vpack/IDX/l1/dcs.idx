@@ -1,0 +1,73 @@
+#  m4vpack's dcs family at level -1: its context indices and its tunable parameters.
+#  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates MOD/l1/dcs_h.inc and _p.inc from
+#  this file and family.inc.  famvars.inc says what each variable is.
+#
+#  An intra block's DC difference: its magnitude (code(): nodes 0-12), then its sign (node 13).
+
+Prefix M1_dcs
+Debug 1
+Const 0
+
+Index a
+ a_lc: lc, 1!1
+ a_lbn: lbn, 1!11100100000000010
+ a_abn: abn, 1!11100100000000010
+
+Index b
+ b_lc: lc, 1!1
+ b_ls: ls, 1!11111111100000
+ b_as: as, 1!11111111100000
+
+Index c
+ c_lc: lc, 1!1
+ c_ls2: ls2, 1!11
+ c_as2: as2, 1!11
+ c_psg: psg, 1!11
+
+Index d
+ d_lc: lc, 1!1
+ d_sz: sz, 1!111111111111
+ d_psg: psg, 1!11
+
+Index m
+ m_lc: lc, 1!1
+ m_coded: coded, 1!1
+
+Index t
+ t_lc: lc, 1!1
+ t_prev: prev, 1!1111111000000
+
+Index n
+ n_lc: lc, 1!1
+
+Index g
+
+Number rA, 1, 0!11111111
+Number mwA, 1, 0!00011011
+Number rB, 1, 0!11110010
+Number mwB, 1, 0!00000100
+Number rC, 1, 0!11111111
+Number mwC, 1, 0!00010000
+Number rD, 1, 0!11111111
+Number mwD, 1, 0!00001000
+Number lr, 1, 0!01111
+Number mb, 1, 0!00100001
+Number rT, 1, 0!10000000
+Number mwT, 1, 0!00000000
+Number mt, 1, 0!000
+
+#  Frozen: what dcs never reads, which live would only take opt.pl's trials.
+! Number lrm, 1, 0!00000
+! Number mbm, 1, 0!00000000
+! Number rG, 1, 0!00000000
+! Number mwG, 1, 0!00000000
+
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is direct, one that
+#  does not is hashed into 2^h rows and contexts share them.  Frozen: left live these only grow.
+! Number hA, 1, 0!10110
+! Number hB, 1, 0!10110
+! Number hC, 1, 0!10110
+! Number hD, 1, 0!10110
+! Number hM, 1, 0!10110
+! Number hT, 1, 0!10110
+! Number hN, 1, 0!10110

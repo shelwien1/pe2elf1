@@ -1,0 +1,71 @@
+#  m4vpack's hdr family at level -1: its context indices and its tunable parameters.
+#  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates MOD/l1/hdr_h.inc and _p.inc from
+#  this file and family.inc.  famvars.inc says what each variable is.
+#
+#  The headers: a VOP's, a video packet's, what follows the last macroblock, and the container's
+#  kinds and lengths, each field its own values (fld).
+
+Prefix M1_hdr
+Debug 1
+Const 0
+
+Index a
+ a_fld: fld, 1!111111111111111111111111111111111111111
+ a_ty: ty, 1!1111
+ a_p1: p1, 1!1111111111111110000000000000000000000000000000000000000000000000
+
+Index b
+ b_fld: fld, 1!111111111111111111111111111111111111111
+ b_ty: ty, 1!1111
+ b_pos: pos, 1!1111111111111111111111111111111
+
+Index c
+ c_fld: fld, 1!111111111111111111111111111111111111111
+ c_p1: p1, 1!1111111111111110000000000000000000000000000000000000000000000000
+ c_pos: pos, 1!1111111111111111111111111111111
+
+Index d
+ d_fld: fld, 1!111111111111111111111111111111111111111
+ d_ty: ty, 1!1111
+
+Index m
+ m_fld: fld, 1!111111111111111111111111111111111111111
+
+Index t
+ t_fld: fld, 1!111111111111111111111111111111111111111
+
+Index n
+ n_fld: fld, 1!111111111111111111111111111111111111111
+
+Index g
+ g_fld: fld, 1!111111111111111111111111111111111111111
+
+Number rA, 1, 0!00000000
+Number mwA, 1, 0!00000001
+Number rB, 1, 0!00101011
+Number mwB, 1, 0!00000001
+Number rC, 1, 0!10001011
+Number mwC, 1, 0!00000001
+Number rD, 1, 0!00000000
+Number mwD, 1, 0!00100000
+Number lr, 1, 0!11111
+Number mb, 1, 0!00100000
+Number rT, 1, 0!00000100
+Number mwT, 1, 0!00000010
+Number mt, 1, 0!000
+Number rG, 1, 0!01000000
+Number mwG, 1, 0!00000000
+
+#  Frozen: what hdr never reads, which live would only take opt.pl's trials.
+! Number lrm, 1, 0!00000
+! Number mbm, 1, 0!00000000
+
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is direct, one that
+#  does not is hashed into 2^h rows and contexts share them.  Frozen: left live these only grow.
+! Number hA, 1, 0!10110
+! Number hB, 1, 0!10110
+! Number hC, 1, 0!10110
+! Number hD, 1, 0!10110
+! Number hM, 1, 0!10110
+! Number hT, 1, 0!10110
+! Number hN, 1, 0!10110

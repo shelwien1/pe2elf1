@@ -1,0 +1,111 @@
+#  m4vpack's hdr family at level -5: its context indices and its tunable parameters.
+#  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates MOD/l5/hdr_h.inc and _p.inc from
+#  this file and family.inc.  famvars.inc says what each variable is.
+#
+#  The headers: a VOP's, a video packet's, what follows the last macroblock, and the container's
+#  kinds and lengths, each field its own values (fld).
+
+Prefix M5_hdr
+Debug 1
+Const 0
+
+Index a
+ a_fld: fld, 1!111111111111111111111111111111111111111
+ a_ty: ty, 1!1111
+ a_p1: p1, 1!1111111111111110000000000000000000000000000000000000000000000000
+
+Index b
+ b_fld: fld, 1!111111111111111111111111111111111111111
+ b_p1: p1, 1!1111111111111110000000000000000000000000000000000000000000000000
+
+Index c
+ c_fld: fld, 1!111111111111111111111111111111111111111
+ c_ty: ty, 1!1111
+
+Index d
+ d_fld: fld, 1!111111111111111111111111111111111111111
+ d_pos: pos, 1!1111111111111111111111111111111
+
+Index e
+ e_fld: fld, 1!111111111111111111111111111111111111111
+
+Index h
+ h_fld: fld, 1!111111111111111111111111111111111111111
+ h_ty: ty, 1!1111
+ h_pos: pos, 1!1111111111111111111111111111111
+
+Index i
+ i_ty: ty, 1!1111
+
+Index j
+ j_fld: fld, 1!111111111111111111111111111111111111111
+ j_p1: p1, 1!1111111111111110000000000000000000000000000000000000000000000000
+ j_pos: pos, 1!1111111111111111111111111111111
+
+Index k
+
+Index l
+ l_fld: fld, 1!111111111111111111111111111111111111111
+ l_ty: ty, 1!1111
+ l_p1: p1, 1!1111111111111110000000000000000000000000000000000000000000000000
+ l_pos: pos, 1!1111111111111111111111111111111
+
+Index m
+ m_fld: fld, 1!111111111111111111111111111111111111111
+
+Index t
+ t_fld: fld, 1!111111111111111111111111111111111111111
+
+Index n
+ n_fld: fld, 1!111111111111111111111111111111111111111
+
+Index g
+ g_fld: fld, 1!111111111111111111111111111111111111111
+
+Number rA, 1, 0!00000000
+Number mwA, 1, 0!00000001
+Number rB, 1, 0!00000000
+Number mwB, 1, 0!00000101
+Number rC, 1, 0!00000000
+Number mwC, 1, 0!00100000
+Number rD, 1, 0!11111100
+Number mwD, 1, 0!00000110
+Number rE, 1, 0!00000000
+Number mwE, 1, 0!00000001
+Number rH, 1, 0!00101011
+Number mwH, 1, 0!00000001
+Number rI, 1, 0!01000010
+Number mwI, 1, 0!00000001
+Number rJ, 1, 0!10001011
+Number mwJ, 1, 0!00000001
+Number rK, 1, 0!10110111
+Number mwK, 1, 0!00000000
+Number rL, 1, 0!00000000
+Number mwL, 1, 0!11101100
+Number lr, 1, 0!11111
+Number mb, 1, 0!00100000
+Number rT, 1, 0!00000100
+Number mwT, 1, 0!00000010
+Number mt, 1, 0!000
+Number rG, 1, 0!01000000
+Number mwG, 1, 0!00000000
+
+#  Frozen: what hdr never reads, which live would only take opt.pl's trials.
+! Number lrm, 1, 0!00000
+! Number mbm, 1, 0!00000000
+
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is direct, one that
+#  does not is hashed into 2^h rows and contexts share them.  Frozen: left live these only grow.
+! Number hA, 1, 0!10110
+! Number hB, 1, 0!10110
+! Number hC, 1, 0!10110
+! Number hD, 1, 0!10110
+! Number hE, 1, 0!10110
+! Number hH, 1, 0!10110
+! Number hI, 1, 0!10110
+! Number hJ, 1, 0!10110
+! Number hK, 1, 0!10110
+! Number hL, 1, 0!10110
+! Number hM, 1, 0!10110
+! Number hT, 1, 0!10110
+! Number hN, 1, 0!10110

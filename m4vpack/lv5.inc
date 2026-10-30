@@ -1,0 +1,39 @@
+// lv5.inc -- level -5: in each family the ten counters and one mixer, no APM.
+// Its families as IDX/l5 declares them, generated into MOD/l5: each family's constants and tables
+// (_h.inc), its index builder and its configuration class C5_<family> (_p.inc, by
+// IDX/l5/family.inc and famcfg.inc); and the level's class, which Model<f_DEC, Lv5> takes.
+#include "MOD/l5/hdr_h.inc"
+#include "MOD/l5/hdr_p.inc"
+#include "MOD/l5/raw_h.inc"
+#include "MOD/l5/raw_p.inc"
+#include "MOD/l5/skp_h.inc"
+#include "MOD/l5/skp_p.inc"
+#include "MOD/l5/mbt_h.inc"
+#include "MOD/l5/mbt_p.inc"
+#include "MOD/l5/cbp_h.inc"
+#include "MOD/l5/cbp_p.inc"
+#include "MOD/l5/qpd_h.inc"
+#include "MOD/l5/qpd_p.inc"
+#include "MOD/l5/mvd_h.inc"
+#include "MOD/l5/mvd_p.inc"
+#include "MOD/l5/mvg_h.inc"
+#include "MOD/l5/mvg_p.inc"
+#include "MOD/l5/dcs_h.inc"
+#include "MOD/l5/dcs_p.inc"
+#include "MOD/l5/sig_h.inc"
+#include "MOD/l5/sig_p.inc"
+#include "MOD/l5/lvl_h.inc"
+#include "MOD/l5/lvl_p.inc"
+#include "MOD/l5/sgn_h.inc"
+#include "MOD/l5/sgn_p.inc"
+#include "MOD/l5/esc_h.inc"
+#include "MOD/l5/esc_p.inc"
+
+struct Lv5 {
+  static constexpr int id = 5;  // the header's level byte
+  // the model's parts: no decoder in the loop
+  static constexpr bool recon = false;
+#define LV_FAM(F) typedef C5_##F F;
+  M4V_FAMS(LV_FAM)
+#undef LV_FAM
+};

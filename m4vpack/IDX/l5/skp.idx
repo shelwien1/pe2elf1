@@ -1,0 +1,117 @@
+#  m4vpack's skp family at level -5: its context indices and its tunable parameters.
+#  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates MOD/l5/skp_h.inc and _p.inc from
+#  this file and family.inc.  famvars.inc says what each variable is.
+#
+#  Whether a macroblock is skipped: not coded in a P-VOP (node 0), skipped with its co-located one
+#  in a B-VOP (1), direct with nothing coded (2).
+
+Prefix M5_skp
+Debug 1
+Const 0
+
+Index a
+ a_st: st, 1!111
+ a_cl: cl, 1!11
+ a_rt: rt, 1!11
+
+Index b
+ b_st: st, 1!111
+ b_c4: c4, 1!1111
+ b_run: run, 1!1110010000010000
+
+Index c
+ c_st: st, 1!111
+ c_rc: rc, 1!1111111111
+ c_cl: cl, 1!11
+
+Index d
+ d_st: st, 1!111
+ d_pz: pz, 1!1
+ d_rz: rz, 1!11
+
+Index e
+ e_st: st, 1!111
+ e_bsk: bsk, 1!11
+
+Index h
+ h_st: st, 1!111
+ h_cl: cl, 1!11
+ h_rr: rr, 1!11
+
+Index i
+ i_st: st, 1!111
+ i_run: run, 1!1110010000010000
+ i_c4: c4, 1!1111
+ i_cl: cl, 1!11
+
+Index j
+ j_st: st, 1!111
+ j_rc: rc, 1!1111111111
+ j_run: run, 1!1110010000010000
+
+Index k
+ k_st: st, 1!111
+ k_cl: cl, 1!11
+ k_c4: c4, 1!1111
+ k_rt: rt, 1!11
+
+Index l
+ l_st: st, 1!111
+
+Index m
+ m_st: st, 1!111
+ m_cl: cl, 1!11
+
+Index t
+
+Index n
+
+Index g
+
+Number rA, 1, 0!01001010
+Number mwA, 1, 0!11000000
+Number rB, 1, 0!11110001
+Number mwB, 1, 0!00000111
+Number rC, 1, 0!11110011
+Number mwC, 1, 0!00000100
+Number rD, 1, 0!11111110
+Number mwD, 1, 0!00001000
+Number rE, 1, 0!11111111
+Number mwE, 1, 0!00001000
+Number rH, 1, 0!11111000
+Number mwH, 1, 0!00010101
+Number rI, 1, 0!11010101
+Number mwI, 1, 0!01010100
+Number rJ, 1, 0!11111010
+Number mwJ, 1, 0!01001010
+Number rK, 1, 0!01111110
+Number mwK, 1, 0!00000111
+Number rL, 1, 0!11110111
+Number mwL, 1, 0!00101000
+Number lr, 1, 0!01111
+Number mb, 1, 0!00100000
+
+#  Frozen: what skp never reads, which live would only take opt.pl's trials.
+! Number rT, 1, 0!00000000
+! Number mwT, 1, 0!00000000
+! Number mt, 1, 0!000
+! Number lrm, 1, 0!00000
+! Number mbm, 1, 0!00000000
+! Number rG, 1, 0!00000000
+! Number mwG, 1, 0!00000000
+
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is direct, one that
+#  does not is hashed into 2^h rows and contexts share them.  Frozen: left live these only grow.
+! Number hA, 1, 0!10110
+! Number hB, 1, 0!10110
+! Number hC, 1, 0!10110
+! Number hD, 1, 0!10110
+! Number hE, 1, 0!10110
+! Number hH, 1, 0!10110
+! Number hI, 1, 0!10110
+! Number hJ, 1, 0!10110
+! Number hK, 1, 0!10110
+! Number hL, 1, 0!10110
+! Number hM, 1, 0!10110
+! Number hT, 1, 0!10110
+! Number hN, 1, 0!10110

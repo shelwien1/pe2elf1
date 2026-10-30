@@ -1,0 +1,146 @@
+#  m4vpack's lvl family at level -7: its context indices and its tunable parameters.
+#  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates MOD/l7/lvl_h.inc and _p.inc from
+#  this file and family.inc.  famvars.inc says what each variable is.
+#
+#  A coefficient's magnitude less one, coded in reverse scan order (code(): its cascade).
+
+Prefix M7_lvl
+Debug 1
+Const 0
+
+Index a
+ a_cls: cls, &111
+ a_gs: gs, 1!100000000
+ a_pb: pos, 1!0000000000000000000000000000000000000000000000000000000000000000
+ a_qs: qs, 1!00000000001000000000000000000000
+
+Index b
+ b_cls: cls, &001
+ b_nmb: nmb, 1!11101000
+ b_ngt: ngt, 1!10110000
+ b_pb: pos, 1!1000000001000000000010000000000000000000000000000000000000000000
+
+Index c
+ c_cls: cls, &100
+ c_gs: gs, 1!111000000
+ c_kc: kc, 1!01110100010000010000000100000000
+
+Index d
+ d_cls: cls, &001
+ d_pm: pm, 1!00100000
+ d_pb: pos, 1!0000000000000000000000000000000000000000000000000000000000000000
+ d_qs: qs, 1!00000000001000000000000000000000
+
+Index e
+ e_cls: cls, &010
+ e_nb2: nb2, 1!01001000
+ e_pb: pos, 1!0000000000000000000000000000000000000000000000000000000000000000
+
+Index h
+ h_cls: cls, &111
+ h_den: den, 1!1111
+ h_pb: pos, 1!1010000000000000000000000000000000000000000000000000000000000000
+
+Index i
+ i_cls: cls, &011
+ i_mvc: mvc, 1!111010001000000111111111100000
+ i_pb: pos, 1!0010010000000000000000000000000000000000000000000000000000000000
+
+Index j
+ j_cls: cls, &111
+ j_qs: qs, 1!00000010100100000000000000000000
+ j_pb: pos, 1!1010010001000000000010000000000000000000000000000000000000000000
+
+Index k
+ k_cls: cls, &111
+ k_lh: lh, &111111
+ k_pos: pos, &111111
+
+Index l
+ l_cls: cls, &111
+ l_rb: rb, &1111
+ l_pos: pos, &111111
+
+Index m
+ m_cls: cls, &110
+ m_pb: pos, 1!1010000001000000000010000000000000000000000000000000000000000000
+ m_gs: gs, 1!100100000
+
+Index w
+ w_cls: cls, &101
+ w_gs: gs, 1!110000000
+ w_qs: qs, 1!00001000000000000000000000000000
+
+Index s
+ s_cls: cls, &000
+ s_pb: pos, 1!0000010000000000000000000000000000000000000000000000000000000000
+ s_gs: gs, 1!000000000
+
+Index f
+ f_cls: cls, &111
+ f_ssb: ssb, 1!101010101010100000000000000000000000
+ f_pb: pos, 1!1010010001000000000010000000000000000000000000000000000000000000
+
+Index t
+ t_cls: cls, &101
+ t_qs: qs, 1!00001000000000000000000000000000
+
+Index n
+ n_cls: cls, &111
+
+Index g
+
+Number rA, 1, 0!10101100
+Number mwA, 1, 0!10000000
+Number rB, 1, 0!11111111
+Number mwB, 1, 0!00001111
+Number rC, 1, 0!11111011
+Number mwC, 1, 0!00000101
+Number rD, 1, 0!11111111
+Number mwD, 1, 0!10000100
+Number rE, 1, 0!11111111
+Number mwE, 1, 0!00111011
+Number rH, 1, 0!11111111
+Number mwH, 1, 0!00101111
+Number rI, 1, 0!11111111
+Number mwI, 1, 0!01000000
+Number rJ, 1, 0!11111110
+Number mwJ, 1, 0!00111111
+Number rK, 1, 0!11111101
+Number mwK, 1, 0!00000111
+Number rL, 1, 0!10110000
+Number mwL, 1, 0!00001000
+Number lr, 1, 0!01111
+Number mb, 1, 0!00110011
+Number rT, 1, 0!11111111
+Number mwT, 1, 0!00101000
+Number mt, 1, 0!110
+Number lrm, 1, 0!11001
+Number mbm, 1, 0!10000000
+Number rS1, 1, 0!01000
+Number rS2, 1, 0!00000
+Number qs, 1, 3!0010111
+Number qf, 1, 3!0000000
+Number bw, 1, 0!10000
+
+#  Frozen: what lvl never reads, which live would only take opt.pl's trials.
+! Number rG, 1, 0!00000000
+! Number mwG, 1, 0!00000000
+
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is direct, one that
+#  does not is hashed into 2^h rows and contexts share them.  Frozen: left live these only grow.
+! Number hA, 1, 0!10110
+! Number hB, 1, 0!10110
+! Number hC, 1, 0!10110
+! Number hD, 1, 0!10110
+! Number hE, 1, 0!10110
+! Number hH, 1, 0!10110
+! Number hI, 1, 0!10110
+! Number hJ, 1, 0!10110
+! Number hK, 1, 0!10110
+! Number hL, 1, 0!10110
+! Number hM, 1, 0!10110
+! Number hT, 1, 0!10110
+! Number hN, 1, 0!10110
+! Number hS, 1, 0!10110
+! Number hF, 1, 0!10110
