@@ -70,9 +70,9 @@ Exit codes:
 |---|---|---:|---:|---:|---:|
 | `-9` | the decoder in the loop; per decision ten counters, three mixers and a final one, two APMs | 68.71% | 0.25 MiB/s | 0.26 MiB/s | 32 MiB |
 | `-7` | the same mixing without the decoder | 71.24% | 0.39 MiB/s | 0.39 MiB/s | 22 MiB |
-| `-5` | ten counters, one mixer | 71.80% | 0.56 MiB/s | 0.55 MiB/s | 20 MiB |
-| `-3` | six counters, one mixer | 72.18% | 0.71 MiB/s | 0.71 MiB/s | 20 MiB |
-| `-1` | four counters (keeping their probabilities stretched), one mixer | 73.00% | 0.93 MiB/s | 1.01 MiB/s | 22 MiB |
+| `-5` | ten counters, one mixer | 71.81% | 0.56 MiB/s | 0.55 MiB/s | 20 MiB |
+| `-3` | six counters, one mixer | 72.19% | 0.71 MiB/s | 0.71 MiB/s | 20 MiB |
+| `-1` | four counters (keeping their probabilities stretched), one mixer | 73.01% | 0.93 MiB/s | 1.01 MiB/s | 22 MiB |
 
 The tuning set is the first 256 KB of each of the 12 streams the levels were tuned on (2.8 MiB);
 its size compressed is given as a share of its size. `c` and `d` are the MiB of stream per second
@@ -310,9 +310,9 @@ On threads, with five of the avip samples concatenated (21 MB, four cores):
 
 | | Size | `c` | `d` |
 |---|---:|---:|---:|
-| one thread | 14580473 (69.06%) | 104.0 s, 38 MiB | 107.6 s, 37 MiB |
-| `-t 2` | 14607143 (69.19%) | 58.3 s, 96 MiB | 61.2 s, 82 MiB |
-| `-t 4` | 14607245 (69.19%) | 38.4 s, 174 MiB | 42.1 s, 149 MiB |
+| one thread | 14581304 (69.07%) | 104.0 s, 38 MiB | 107.6 s, 37 MiB |
+| `-t 2` | 14607976 (69.19%) | 58.3 s, 96 MiB | 61.2 s, 82 MiB |
+| `-t 4` | 14608078 (69.19%) | 38.4 s, 174 MiB | 42.1 s, 149 MiB |
 
 At `-9` (the default), with the default 4 MB parts: the stream has 5 parts, which cost 0.18% of
 the size, each part's model starting afresh.
