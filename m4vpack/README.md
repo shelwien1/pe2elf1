@@ -131,19 +131,21 @@ workarounds (DivX, XviD and libavcodec builds, read from the user data). Its pic
 bit-exact with m4vdec's on 45 test streams (9,758 frames).
 
 The contexts it gives, and what each is worth: the tuning set's size with the context switched off
-in the tuned model, against 68.76% with all of them.
+in the tuned model, against 68.72% with all of them. (A model tuned with a context loses a little
+more without it than one tuned without it: `-7`, the same model without the decoder and tuned on
+its own, gets «L7TS».)
 
 | Context | Elements | Without it |
 |---|---|---:|
-| **sign prediction**: a block's first 8 signs (in scan order) are searched for the combination whose block continues the decoded samples above and left of it best: the sum over its top row and left column of the distance from 2 R1 − R2, and from R1 (R1, R2 the two decoded rows or columns beyond it; MPEG-4 has no deblocking, so the extrapolation is noisy where the samples are); the other signs go first, then these, with the sign each of the two searches prefers, by how much, and their rank | signs | 69.95% (+1.20) |
-| **the intra estimate**: an intra macroblock's blocks as the reference has them where its neighbours' motion (refined by matching the decoded samples above and left of it, the template) puts it, transformed and quantised as the encoder would, the intra prediction taken off: the DC difference's hint and sign, the level at each position (the levels' hint), its sign, the AC coefficients per block for the coded block pattern; trusted by the template's match, then by how far the macroblock's blocks so far were from it | intra DC, coefficients, coded block pattern | 69.62% (+0.87) |
-| **an inter block's prediction**: its texture, and how far its edges are from the decoded samples next to them, against the quantiser | coded block pattern, coefficients | 69.56% (+0.80) |
-| intra blocks with AC prediction in their own scan (vertical or horizontal, by the DC prediction), which the decoder knows before their coefficients | coefficients | 69.11% (+0.35) |
-| the prediction's spectrum: its transform at each position against the quantiser, and which way its texture runs | coefficients | 69.09% (+0.34) |
-| the vector the template matches best (a search around the vector's prediction, the co-located vector and none, then half samples) | vector differences, their signs | 68.92% (+0.17) |
-| skipping: how much the area changed since the reference (the decoded samples around the macroblock against the reference's), how well the reference's macroblock (in B-VOPs the direct prediction) continues them | skip, macroblock type | 68.92% (+0.16) |
-| the levels an inter block's edges ask for: their miss projected onto each coefficient's pattern | coefficients | 68.83% (+0.07) |
-| all of them | | 72.80% (+4.05) |
+| **sign prediction**: a block's first 8 signs (in scan order) are searched for the combination whose block continues the decoded samples above and left of it best: the sum over its top row and left column of the distance from 2 R1 − R2, and from R1 (R1, R2 the two decoded rows or columns beyond it; MPEG-4 has no deblocking, so the extrapolation is noisy where the samples are); the other signs go first, then these, with the sign each of the two searches prefers, by how much, and their rank | signs | 69.51% (+0.79) |
+| **the intra estimate**: an intra macroblock's blocks as the reference has them where its neighbours' motion (refined by matching the decoded samples above and left of it, the template) puts it, transformed and quantised as the encoder would, the intra prediction taken off: the DC difference's hint and sign, the level at each position (the levels' hint), its sign, the AC coefficients per block for the coded block pattern; trusted by the template's match, then by how far the macroblock's blocks so far were from it | intra DC, coefficients, coded block pattern | 69.32% (+0.61) |
+| **an inter block's prediction**: its texture, and how far its edges are from the decoded samples next to them, against the quantiser | coded block pattern, coefficients | 69.14% (+0.43) |
+| intra blocks with AC prediction in their own scan (vertical or horizontal, by the DC prediction), which the decoder knows before their coefficients | coefficients | 69.02% (+0.31) |
+| the prediction's spectrum: its transform at each position against the quantiser, and which way its texture runs | coefficients | 68.98% (+0.26) |
+| skipping: how much the area changed since the reference (the decoded samples around the macroblock against the reference's), how well the reference's macroblock (in B-VOPs the direct prediction) continues them | skip, macroblock type | 68.79% (+0.08) |
+| the vector the template matches best (a search around the vector's prediction, the co-located vector and none, then half samples) | vector differences, their signs | 68.79% (+0.08) |
+| the levels an inter block's edges ask for: their miss projected onto each coefficient's pattern | coefficients | 68.79% (+0.07) |
+| all of them | | 71.41% (+2.69) |
 
 Signs, which neither MPEG-4 nor CABAC models, gain most: on the samples, the sign a search prefers
 is right for 64-80% of the signs it covers (by stream and by which of the two).
@@ -161,8 +163,11 @@ build without AVX2 write the same files.
 
 The levels were tuned on the first 256 KB of each of the 12 streams of the tuning set: `-9` for
 four passes over each family, then `-7` from `-9`'s values (two passes over the families whose
-contexts differ), and `-5`, `-3` and `-1` cut from `-7` (their counters' indices the ones whose loss
-costs `-7` most) and tuned for two passes each.
+contexts differ). When the model's variables became raw (every split a threshold in the `.idx`
+files), both were tuned again, the two largest families (sig and lvl) for about a pass and the
+others for two. `-5`, `-3` and `-1` were then cut from `-7`: `-5` keeps its ten counters, `-3` and
+`-1` the six and four whose loss (each switched off in turn) costs each of `-7`'s families most; then
+each was tuned for a pass.
 
 ### Streaming
 
