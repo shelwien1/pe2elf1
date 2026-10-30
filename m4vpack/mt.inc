@@ -102,16 +102,6 @@ static void mt_rec(U8* h, U64 g_size, U64 plen, U64 ins, U64 xlen, U64 part) {
 }
 
 // room for n bytes at *p (*room of them now): 0 if there is no memory
-static int grow(U8** p, size_t* room, size_t n) {
-  size_t r = *room ? *room : IO_BUF;
-  U8* q;
-  if (n <= *room) return 1;
-  while (r < n) r = r < ((size_t)-1) / 2 ? 2 * r : n;
-  if (!(q = (U8*)realloc(*p, r))) return 0;
-  *p = q;
-  *room = r;
-  return 1;
-}
 
 // Whether the VOP at p (n bytes from its start code on) is coded (vop_coded), as the parser reads it
 // with the VOL c has (and its guess of the time increment's length, kept in c); -1 if its header
@@ -147,7 +137,8 @@ typedef struct MtArgs {
 #include "m4vpart.inc"  // M4vPart: a worker of c -t and d
 
 // c: the splitter into MTwrap's coder; d: MTwrap's decoder
-typedef CoroutinePair<M4vSplit, MTwrap<0, M4vPart<0>, const MtArgs*> > MtEnc;
+typedef MTwrap<0, M4vPart<0>, const MtArgs*> MtEncWorkers;  // (c's workers)
+typedef CoroutinePair<M4vSplit, MtEncWorkers> MtEnc;
 typedef MTwrap<1, M4vPart<1>, const MtArgs*> MtDec;
 
 // whether a worker failed: the first one's exit status, its note copied to note (the workers go

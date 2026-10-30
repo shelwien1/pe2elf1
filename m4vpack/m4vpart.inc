@@ -86,7 +86,7 @@ struct M4vPart : CoIo {
     int r;
     uint y;
     out_len = 0;
-    if (!grow(&out_, &out_room, IO_BUF)) return fail(E_INTERNAL, "out of memory");
+    if (!grow(&out_, &out_room, IO_BUF, IO_BUF)) return fail(E_INTERNAL, "out of memory");
     c->addout(out_, IO_BUF);
     for (;;) {
       y = c->coro_call(c);
@@ -109,7 +109,7 @@ struct M4vPart : CoIo {
         c->Quit();
         return fail(E_DATA, "damaged data: a part comes out longer than its record says");
       }
-      if (!grow(&out_, &out_room, out_len + IO_BUF)) {
+      if (!grow(&out_, &out_room, out_len + IO_BUF, IO_BUF)) {
         c->Quit();
         return fail(E_INTERNAL, "out of memory");
       }
@@ -142,7 +142,7 @@ struct M4vPart : CoIo {
       plen = L - MT_F_PAST;
       if (n < MT_FRAME || L < MT_F_PAST || ins > plen || xlen > plen - ins || plen != (size_t)plen)
         return fail(E_INTERNAL, "internal error: a part framed wrong");
-      if (!grow(&in_, &in_room, (size_t)plen + 1)) return fail(E_INTERNAL, "out of memory");
+      if (!grow(&in_, &in_room, (size_t)plen + 1, IO_BUF)) return fail(E_INTERNAL, "out of memory");
       if (read(in_, (size_t)plen) != plen) return fail(E_INTERNAL, "internal error: a part cut short");
       r = with_level<PartC>(args.level, *this, plen);
       if (r == kNoLevel) return fail(E_INTERNAL, "no level -%d in this build", args.level);
@@ -191,7 +191,7 @@ struct M4vPart : CoIo {
       nh = (size_t)(left < (U64)M4V_HEAD ? left : (U64)M4V_HEAD);
       if (read(head, nh) < nh || nh < M4V_HEAD) return fail(E_DATA, "damaged data: a part's record cut short");
       left -= nh;
-      if (!grow(&in_, &in_room, IO_BUF)) return fail(E_INTERNAL, "out of memory");
+      if (!grow(&in_, &in_room, IO_BUF, IO_BUF)) return fail(E_INTERNAL, "out of memory");
       r = with_level<PartD>(head[M4V_AT_LEVEL], *this, (const U8*)head, nh, plen, left);
       if (r == kNoLevel)
         return fail(E_DATA, "a part compressed at level -%d, which this build has not", head[M4V_AT_LEVEL]);

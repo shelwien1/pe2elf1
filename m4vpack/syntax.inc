@@ -360,7 +360,7 @@ static void vlc_from2(VLC* v, const U8 (&t)[N][2]) {
   vlc_build(v, (int)N, c, l);
 }
 
-static void tables_init(void) {
+static int tables_init(void) {  // (the VLC and RL tables above)
   constexpr int NTRAJ = countof(sprite_trajectory_lens);
   U32 c[NTRAJ]; U8 l[NTRAJ]; int i;
   U32 code = 0;
@@ -379,7 +379,9 @@ static void tables_init(void) {
   vlc_build(&vlc_sprite_traj, NTRAJ, c, l);
   rl_init(&rl_intra);
   rl_init(&rl_inter);
+  return 1;
 }
+static const int tables_made = tables_init();  // (as the program starts, as cm.inc's tables)
 
 // Length of an event (last, run, |level|) coded in an escape mode (ESC_VLC: plain VLC), 0 if that
 // mode can't code it.
@@ -442,13 +444,13 @@ typedef struct Ctx {
   // c: skip flags of the last anchor VOP and of the one being parsed (a B-VOP macroblock whose
   // co-located macroblock in the backward reference was skipped has no bits), skip_cap entries
   U8 *skip_ref, *skip_cur;
-  int skip_cap;
+  size_t skip_cap;
   U8 hbuf[HDR_PEEK + GB_PAD];  // a header chunk being parsed
 } Ctx;
 
 static void ctx_init(Ctx* c) {  // (the skip flags stay: ctx_quit() frees them)
   U8 *r = c->skip_ref, *u = c->skip_cur;
-  const int cap = c->skip_cap;
+  const size_t cap = c->skip_cap;
   memset(c, 0, sizeof(*c));
   c->skip_ref = r;
   c->skip_cur = u;
@@ -465,15 +467,12 @@ static void ctx_quit(Ctx* c) {
 }
 // room for the skip flags of n macroblocks and one more (0: no memory)
 static int ctx_skip_room(Ctx* c, int n) {
-  U8 *r, *u;
-  if (++n <= c->skip_cap) return 1;
-  if (!(r = (U8*)realloc(c->skip_ref, n))) return 0;
-  c->skip_ref = r;
-  if (!(u = (U8*)realloc(c->skip_cur, n))) return 0;
-  c->skip_cur = u;
-  memset(r + c->skip_cap, 0, n - c->skip_cap);
-  memset(u + c->skip_cap, 0, n - c->skip_cap);
-  c->skip_cap = n;
+  size_t r = c->skip_cap, u = c->skip_cap;
+  if ((size_t)++n <= c->skip_cap) return 1;
+  if (!grow(&c->skip_ref, &r, n) || !grow(&c->skip_cur, &u, n)) return 0;
+  memset(c->skip_ref + c->skip_cap, 0, r - c->skip_cap);
+  memset(c->skip_cur + c->skip_cap, 0, u - c->skip_cap);
+  c->skip_cap = r;
   return 1;
 }
 

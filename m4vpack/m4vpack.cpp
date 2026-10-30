@@ -89,7 +89,9 @@
 #ifdef _WIN32
 #include <fcntl.h>
 #include <io.h>
+#include <windows.h>
 #else
+#include <sys/mman.h>
 #include <sys/resource.h>
 #include <unistd.h>
 #endif
@@ -106,28 +108,21 @@
 #include "Lib3/coro3b.inc"
 #include "Lib3/coro2pair.inc"
 #include "base.inc"
-static void no_memory(void) {  // (MTwrap's buffers)
-  fprintf(stderr, "m4vpack: out of memory\n");
-  exit(E_INTERNAL);
-}
-#define MTWRAP_NOMEM() no_memory()
+#include "mem.inc"
+#define MTWRAP_NOMEM() no_memory()  // (MTwrap's buffers)
 #include "MTwrap_v3/MTwrap.inc"
 
 // the syntax and the streams
 #include "syntax.inc"
 #include "io.inc"
+#include "reader.inc"
+#include "crc.inc"
 // the coder and the families of the model, and the levels (each its families as IDX/l<L>
 // declares them, generated into MOD/l<L>)
-#include "cmbase.inc"
-#include "coder.inc"
-#include "cm.inc"
-#include "mapping.inc"
-#include "masking.inc"
-#include "fam.inc"
-#include "famvars.inc"
 #include "levels.inc"
 // the model, the runs (coroutines) and the threads
 #include "recon.inc"
+#include "reconctx.inc"
 #include "modelbase.inc"
 #include "model.inc"
 #include "sys.inc"
@@ -152,6 +147,11 @@ static FILE* open_file(const char* name, int out) {
   if (!strcmp(name, "-")) return out ? stdout : stdin;
   return fopen(name, out ? "wb" : "rb");
 }
+
+// the kinds of syntax element, as -s names them (coder.inc's CAT_*)
+static const char* cat_name[NCAT] = { "raw chunks", "VOP and video packet headers, tails", "types, flags, dquant",
+                                      "coded block patterns", "motion vectors", "intra DC", "positions",
+                                      "levels", "signs", "escape modes" };
 
 // c's summary line (out_bytes: the compressed size, at the level), and with -s the bits by kind of
 // syntax element
@@ -190,15 +190,66 @@ static void report(const char* name, const Stats* st, const double* cost, const 
   }
 }
 
-// A call's progress line pr (progress.inc), tagged tag, through the input f: shown with -p, or where
-// stderr is a terminal, but not with -q
-static void progress_start(Progress& pr, const Opts* o, const char* tag, FILE* f) {
-  pr.Init();
-  if (o->progress || (!o->quiet && stderr_tty())) pr.start(tag, file_size(f));
-}
+// --- a call: its files, its progress line, its run ---------------------------------------------
+
 // what a run did, for its progress line's end: the stream's bytes (raw), the compressed stream's
 // (packed), the VOPs
 typedef struct RunCounts { U64 raw, packed, vops; } RunCounts;
+
+// A call's input (in, named in_name), its output (the sink s, named out_name: a file, or for -v's
+// check the input to compare with), its progress line and what its run did
+typedef struct Call {
+  FILE* in;
+  const char* in_name;
+  Sink s;
+  const char* out_name;
+  Progress pr;
+  RunCounts n;
+} Call;
+
+// the call k from the file in to out (compare: s compares with out instead of writing it), its
+// progress line tagged tag: shown with -p, or where stderr is a terminal, but not with -q
+static void call_init(Call* k, FILE* in, const char* in_name, FILE* out, const char* out_name, int compare,
+                      const Opts* o, const char* tag) {
+  k->in = in;
+  k->in_name = in_name;
+  memset(&k->s, 0, sizeof k->s);
+  k->s.f = out;
+  k->s.compare = compare;
+  k->out_name = out_name;
+  memset(&k->n, 0, sizeof k->n);
+  k->pr.Init();
+  if (o->progress || (!o->quiet && stderr_tty())) k->pr.start(tag, file_size(in));
+}
+// c's or d's call from the file in_name to out_name: 0, or the exit status of an error (said)
+static int call_open(Call* k, const char* in_name, const char* out_name, const Opts* o, const char* tag) {
+  FILE *in, *out;
+  if (!(in = open_file(in_name, 0))) {
+    fprintf(stderr, "m4vpack: can't open %s\n", in_name);
+    return E_READ;
+  }
+  if (!(out = open_file(out_name, 1))) {
+    fprintf(stderr, "m4vpack: can't create %s\n", out_name);
+    if (in != stdin) fclose(in);
+    return E_WRITE;
+  }
+  call_init(k, in, in_name, out, out_name, 0, o, tag);
+  return 0;
+}
+// the end of the call's progress line, its run's status r
+static void call_end(Call* k, int r) {
+  k->pr.end(r, k->n.raw, k->n.packed, k->n.vops);
+  k->pr.Quit();
+}
+// the end of c's or d's call, its run's status r: the output flushed and closed (the input stays
+// open: -v reads it again), the progress line ended; r, or the exit status of an error writing
+// (said)
+static int call_close(Call* k, int r) {
+  const int flushed = fflush(k->s.f) == 0, closed = k->s.f == stdout || fclose(k->s.f) == 0;
+  if (!(flushed && closed) && !r) r = (say_error(&k->pr, "m4vpack: %s: write error\n", k->out_name), E_WRITE);
+  call_end(k, r);
+  return r;
+}
 
 // a run's counts as it goes (C: M4vCoro): what its progress line shows
 template <class C>
@@ -217,19 +268,10 @@ static void mt_sums(const M& m, U64& raw, U64& packed, U64& vops) {
   packed = MT_HEAD;
   for (i = 0; i < m.th_N; i++) m.C1[i].prog_get(raw, packed, vops);
 }
-typedef struct MtProg {
-  Progress* pr;
-  void* m;
-} MtProg;
-static void mt_enc_counts(void* p, U64& raw, U64& packed, U64& pos, U64& vops) {
-  const MtProg& q = *(const MtProg*)p;
-  mt_sums(((const MtEnc*)q.m)->M2, raw, packed, vops);
-  pos = raw;
-}
-static void mt_dec_counts(void* p, U64& raw, U64& packed, U64& pos, U64& vops) {
-  const MtProg& q = *(const MtProg*)p;
-  mt_sums(*(const MtDec*)q.m, raw, packed, vops);
-  pos = packed;
+template <class M, int f_DEC>
+static void mt_counts(void* p, U64& raw, U64& packed, U64& pos, U64& vops) {
+  mt_sums(*(const M*)p, raw, packed, vops);
+  pos = f_DEC ? packed : raw;
 }
 // a run's show(): what it tells, and the progress line as it goes
 template <class C>
@@ -238,20 +280,38 @@ static void run_show(Progress& pr, const C* c, uint code) {
   pr.poll();
 }
 
-// the end of a run on the files f (input) and s (output): its status r (0, or the exit status of an
-// error the run's note says), unless reading or writing failed; said after its progress line pr
-static int run_end(int r, const char* note, FILE* f, const char* in_name, Sink* s, const char* out_name,
-                   Progress* pr) {
-  if (ferror(f)) {
-    say_error(pr, "m4vpack: %s: read error\n", in_name);
+// The run c (a coroutine) on the call's files, the bytes at head (got of them) read already first:
+// its progress line's counts f(ctx) as it goes, show(code) after each yield; what run_file() returns
+template <class C, class Show>
+static uint run_call(Call* k, C& c, ProgressCounts f, void* ctx, Show show, const U8* head = 0, size_t got = 0) {
+  uint y;
+  k->pr.counts(f, ctx);
+  y = run_file(c, k->in, &k->s, show, head, got);
+  k->pr.counts(nullptr, nullptr);
+  return y;
+}
+// the end of a run on the call's files: its status r (0, or the exit status of an error the run's
+// note says), unless reading or writing failed; said after the progress line
+static int run_end(Call* k, int r, const char* note) {
+  if (ferror(k->in)) {
+    say_error(&k->pr, "m4vpack: %s: read error\n", k->in_name);
     return E_READ;
   }
-  if (s->err) {
-    say_error(pr, "m4vpack: %s: write error\n", out_name);
+  if (k->s.err) {
+    say_error(&k->pr, "m4vpack: %s: write error\n", k->out_name);
     return E_WRITE;
   }
-  if (r) say_error(pr, "m4vpack: %s: %s\n", in_name, note);
+  if (r) say_error(&k->pr, "m4vpack: %s: %s\n", k->in_name, note);
   return r;
+}
+// a run of one model (C: M4vCoro) on the call's files: its counts into k->n, its status (said)
+template <class C>
+static int run_one(Call* k, C* c, const U8* head, size_t got) {
+  run_call(k, *c, coro_counts<C>, c, [&](uint code) { run_show(k->pr, c, code); }, head, got);
+  k->n.raw = c->raw_done();
+  k->n.packed = c->packed_done();
+  k->n.vops = c->nvop;
+  return run_end(k, c->status, c->note);
 }
 
 // what MTwrap's Init() returned, said (0: nothing to say)
@@ -261,75 +321,68 @@ static int mt_init_failed(uint r, int threads, Progress* pr) {
   return r != 0;
 }
 
-// d of a stream of parts (the bytes at head, got of them, read already), its counts into n
-static int decode_mt(FILE* f, const char* in_name, Sink* s, const char* out_name, const U8* head, size_t got,
-                     Progress& pr, RunCounts* n) {
+// --- d -----------------------------------------------------------------------------------------
+
+// d of a stream of parts (the bytes at head, got of them, read already)
+static int decode_mt(Call* k, const U8* head, size_t got) {
   const int threads = got >= MT_HEAD ? head[MT_AT_THREADS] : 0;
   char note[NOTE_MAX] = "damaged data";
   MtArgs a;
   MtDec* d;
-  MtProg mp;
   uint y;
   int r;
   if (got > MT_AT_VERSION && head[MT_AT_VERSION] != M4V_VERSION) {
-    say_error(&pr, "m4vpack: %s: format version %d, which this m4vpack (version %d) doesn't read\n", in_name,
+    say_error(&k->pr, "m4vpack: %s: format version %d, which this m4vpack (version %d) doesn't read\n", k->in_name,
               head[MT_AT_VERSION], M4V_VERSION);
     return E_DATA;
   }
-  if (threads < 1 || threads > MAX_THREADS) return run_end(E_DATA, note, f, in_name, s, out_name, &pr);
+  if (threads < 1 || threads > MAX_THREADS) return run_end(k, E_DATA, note);
   a.threads = threads;
   a.stats = 0;
   a.level = 0;
   a.part_max = mt_part_max((get_le(head + MT_AT_PART, MT_PART_BYTES) + 1) * KIB);  // (the part size in KB, rounded down)
-  a.meter = &pr;
+  a.meter = &k->pr;
   if (!(d = coro_new<MtDec>())) no_memory();
-  if (mt_init_failed(d->Init(threads, MT_RING, &a, 1), threads, &pr)) return E_INTERNAL;
-  mp.pr = &pr;
-  mp.m = d;
-  pr.counts(mt_dec_counts, &mp);
-  y = run_file(*d, f, s, [&](uint) { pr.poll(); }, head + MT_HEAD, got - MT_HEAD);
-  pr.counts(nullptr, nullptr);
+  if (mt_init_failed(d->Init(threads, MT_RING, &a, 1), threads, &k->pr)) return E_INTERNAL;
+  y = run_call(k, *d, mt_counts<MtDec, 1>, d, [&](uint) { k->pr.poll(); }, head + MT_HEAD, got - MT_HEAD);
   if (!(r = mt_failed(*d, note, sizeof note)) && (y != Y_END || !mt_dealt(*d))) r = E_DATA;
-  mt_sums(*d, n->raw, n->packed, n->vops);
-  n->packed = d->c_inp + MT_HEAD;
+  mt_sums(*d, k->n.raw, k->n.packed, k->n.vops);
+  k->n.packed = d->c_inp + MT_HEAD;
   d->Quit();  // (the threads joined)
   coro_free(d);
-  return run_end(r, note, f, in_name, s, out_name, &pr);
+  return run_end(k, r, note);
 }
 
 #include "decodeone.inc"  // DecodeOne: d of one model's stream
 
-// d of the stream in f into s: 0, or the exit status of an error (said, after the progress line pr);
-// its counts into n. Its first bytes say which it is, a stream of one model (and its level) or of
-// parts on threads (mt_magic).
-static int decode_to(FILE* f, const char* in_name, Sink* s, const char* out_name, Progress& pr, RunCounts* n) {
+// d of the call's input into its output: 0, or the exit status of an error (said). Its first bytes
+// say which it is, a stream of one model (and its level) or of parts on threads (mt_magic).
+static int decode_to(Call* k) {
   U8 head[HEAD_MAX];
-  const size_t got = fread(head, 1, sizeof head, f);
+  const size_t got = fread(head, 1, sizeof head, k->in);
   int r;
-  memset(n, 0, sizeof *n);
-  if (got >= sizeof mt_magic && !memcmp(head, mt_magic, sizeof mt_magic))
-    return decode_mt(f, in_name, s, out_name, head, got, pr, n);
+  memset(&k->n, 0, sizeof k->n);
+  if (got >= sizeof mt_magic && !memcmp(head, mt_magic, sizeof mt_magic)) return decode_mt(k, head, got);
   if (got < M4V_HEAD || memcmp(head, magic, sizeof magic)) {
-    if (ferror(f)) return run_end(0, "", f, in_name, s, out_name, &pr);
-    say_error(&pr, "m4vpack: %s: not an m4vpack file\n", in_name);
+    if (ferror(k->in)) return run_end(k, 0, "");
+    say_error(&k->pr, "m4vpack: %s: not an m4vpack file\n", k->in_name);
     return E_DATA;
   }
   if (head[M4V_AT_VERSION] != M4V_VERSION) {
-    say_error(&pr, "m4vpack: %s: format version %d, which this m4vpack (version %d) doesn't read\n", in_name,
+    say_error(&k->pr, "m4vpack: %s: format version %d, which this m4vpack (version %d) doesn't read\n", k->in_name,
               head[M4V_AT_VERSION], M4V_VERSION);
     return E_DATA;
   }
-  r = with_level<DecodeOne>(head[M4V_AT_LEVEL], f, in_name, s, out_name, (const U8*)head, got, pr, n);
+  r = with_level<DecodeOne>(head[M4V_AT_LEVEL], k, (const U8*)head, got);
   if (r != kNoLevel) return r;
-  say_error(&pr, "m4vpack: %s: compressed at level -%d, which this build has not\n", in_name, head[M4V_AT_LEVEL]);
+  say_error(&k->pr, "m4vpack: %s: compressed at level -%d, which this build has not\n", k->in_name,
+            head[M4V_AT_LEVEL]);
   return E_DATA;
 }
 
 // c -v: d of the output, compared with the input (its own progress line, ver)
 static int verify(FILE* in, const char* in_name, const char* out_name, const Opts* o) {
-  Sink s;
-  Progress pr;
-  RunCounts n;
+  Call k;
   FILE* t = fopen(out_name, "rb");
   int r;
   if (!t) {
@@ -337,59 +390,50 @@ static int verify(FILE* in, const char* in_name, const char* out_name, const Opt
     return E_WRITE;
   }
   rewind(in);
-  memset(&s, 0, sizeof(s));
-  s.f = in;
-  s.compare = 1;
-  progress_start(pr, o, "ver", t);
-  r = decode_to(t, out_name, &s, in_name, pr, &n);
+  call_init(&k, t, out_name, in, in_name, 1, o, "ver");
+  r = decode_to(&k);
   fclose(t);
-  if (!r && !s.differs && fgetc(in) != EOF) {
-    s.differs = 1;
-    s.diff_at = s.pos;
+  if (!r && !k.s.differs && fgetc(in) != EOF) {
+    k.s.differs = 1;
+    k.s.diff_at = k.s.pos;
   }
-  if (r || s.differs) {
-    say_error(&pr, "verify: FAILED (%s at byte %.0f)\n", r ? "decoding error" : "difference", (double)s.diff_at);
+  if (r || k.s.differs) {
+    say_error(&k.pr, "verify: FAILED (%s at byte %.0f)\n", r ? "decoding error" : "difference", (double)k.s.diff_at);
     r = E_INTERNAL;
   }
-  pr.end(r, n.raw, n.packed, n.vops);
-  pr.Quit();
+  call_end(&k, r);
   if (!r && !o->quiet) fprintf(stderr, "verify: OK\n");
   return r;
 }
 
+// --- c -----------------------------------------------------------------------------------------
+
 #include "compressone.inc"  // CompressOne: c on one model
-static int compress_one(FILE* in, const char* in_name, Sink* s, const char* out_name, const Opts* o, Stats* st,
-                        double* cost, double* orig, Progress& pr, RunCounts* n) {
-  return with_level<CompressOne>(o->level, in, in_name, s, out_name, o, st, cost, orig, pr, n);
+static int compress_one(Call* k, const Opts* o, Stats* st, double* cost, double* orig) {
+  return with_level<CompressOne>(o->level, k, o, st, cost, orig);
 }
 
 // c -t N: the stream in parts on N threads, its statistics the parts' added up
-static int compress_mt(FILE* in, const char* in_name, Sink* s, const char* out_name, const Opts* o, Stats* st,
-                       double* cost, double* orig, Progress& pr, RunCounts* n) {
+static int compress_mt(Call* k, const Opts* o, Stats* st, double* cost, double* orig) {
   char note[NOTE_MAX] = "internal error: a thread stopped early";
   U8 head[MT_HEAD];
   MtArgs a;
   MtEnc* e;
-  MtProg mp;
   uint y, i;
-  int r, k;
+  int r, j;
   a.threads = o->threads;
   a.stats = o->stats;
   a.level = o->level;
   a.part_max = 0;
-  a.meter = &pr;
+  a.meter = &k->pr;
   if (!(e = coro_new<MtEnc>())) no_memory();
   e->coro_init();
   e->M1.Init(o->part);
-  if (mt_init_failed(e->M2.Init(o->threads, MT_RING, &a, 1), o->threads, &pr))
+  if (mt_init_failed(e->M2.Init(o->threads, MT_RING, &a, 1), o->threads, &k->pr))
     return E_INTERNAL;  // (started threads wait: they end with the process)
   mt_head(head, o->threads, o->part);
-  sink_write(s, head, sizeof head);
-  mp.pr = &pr;
-  mp.m = e;
-  pr.counts(mt_enc_counts, &mp);
-  y = run_file(*e, in, s, [&](uint) { pr.poll(); });
-  pr.counts(nullptr, nullptr);
+  sink_write(&k->s, head, sizeof head);
+  y = run_call(k, *e, mt_counts<MtEncWorkers, 0>, &e->M2, [&](uint) { k->pr.poll(); });
   if (!(r = mt_failed(e->M2, note, sizeof note)) && y != Y_END) r = E_INTERNAL;
   memset(st, 0, sizeof *st);
   memset(cost, 0, NCAT * sizeof *cost);
@@ -398,83 +442,46 @@ static int compress_mt(FILE* in, const char* in_name, Sink* s, const char* out_n
     const M4vPart<0>& w = e->M2.C1[i];
     st->vops += w.st.vops;
     st->packed += w.st.packed;
-    for (k = 0; k < PT_N; k++) st->by_type[k] += w.st.by_type[k];
+    for (j = 0; j < PT_N; j++) st->by_type[j] += w.st.by_type[j];
     st->raw_unsup += w.st.raw_unsup;
     st->raw_long += w.st.raw_long;
     st->raw_parse += w.st.raw_parse;
     st->raw_verify += w.st.raw_verify;
     st->raw_bytes += w.st.raw_bytes;
     st->vop_bytes += w.st.vop_bytes;
-    for (k = 0; k < NCAT; k++) cost[k] += w.cost[k], orig[k] += w.orig[k];
+    for (j = 0; j < NCAT; j++) cost[j] += w.cost[j], orig[j] += w.orig[j];
   }
   st->in_bytes = (double)e->M1.total;  // (the parts have the headers copied in)
   st->parts = e->M1.parts;
   st->threads = o->threads;
-  mt_sums(e->M2, n->raw, n->packed, n->vops);
-  n->raw = e->M1.total;
-  n->packed = s->pos;
+  mt_sums(e->M2, k->n.raw, k->n.packed, k->n.vops);
+  k->n.raw = e->M1.total;
+  k->n.packed = k->s.pos;
   e->M2.Quit();  // (the threads joined, the workers freed)
   e->M1.Quit();
   coro_free(e);
-  return run_end(r, note, in, in_name, s, out_name, &pr);
+  return run_end(k, r, note);
 }
 
 static int compress(const char* in_name, const char* out_name, const Opts* o) {
-  FILE *in, *out;
-  Sink s;
+  Call k;
   Stats st;
-  Progress pr;
-  RunCounts n;
   double cost[NCAT], orig[NCAT];
-  int r;
-  if (!(in = open_file(in_name, 0))) {
-    fprintf(stderr, "m4vpack: can't open %s\n", in_name);
-    return E_READ;
-  }
-  if (!(out = open_file(out_name, 1))) {
-    fprintf(stderr, "m4vpack: can't create %s\n", out_name);
-    return E_WRITE;
-  }
-  memset(&s, 0, sizeof(s));
-  s.f = out;
-  memset(&n, 0, sizeof n);
-  progress_start(pr, o, "enc", in);
-  r = (o->threads > 1 ? compress_mt : compress_one)(in, in_name, &s, out_name, o, &st, cost, orig, pr, &n);
-  if ((fflush(out) || (out != stdout && fclose(out))) && !r) {
-    say_error(&pr, "m4vpack: %s: write error\n", out_name);
-    r = E_WRITE;
-  }
-  pr.end(r, n.raw, n.packed, n.vops);
-  pr.Quit();
-  if (!r && !o->quiet) report(in_name, &st, cost, orig, (double)s.pos, o->level, o->stats);
-  if (!r && o->verify) r = verify(in, in_name, out_name, o);
-  if (in != stdin) fclose(in);
+  int r = call_open(&k, in_name, out_name, o, "enc");
+  if (r) return r;
+  r = call_close(&k, (o->threads > 1 ? compress_mt : compress_one)(&k, o, &st, cost, orig));
+  if (!r && !o->quiet) report(in_name, &st, cost, orig, (double)k.s.pos, o->level, o->stats);
+  if (!r && o->verify) r = verify(k.in, in_name, out_name, o);
+  if (k.in != stdin) fclose(k.in);
   return r;
 }
 
 static int decompress(const char* in_name, const char* out_name, const Opts* o) {
-  FILE *in, *out;
-  Sink s;
-  Progress pr;
-  RunCounts n;
-  int r;
-  if (!(in = open_file(in_name, 0))) {
-    fprintf(stderr, "m4vpack: can't open %s\n", in_name);
-    return E_READ;
-  }
-  if (!(out = open_file(out_name, 1))) {
-    fprintf(stderr, "m4vpack: can't create %s\n", out_name);
-    return E_WRITE;
-  }
-  memset(&s, 0, sizeof(s));
-  s.f = out;
-  progress_start(pr, o, "dec", in);
-  r = decode_to(in, in_name, &s, out_name, pr, &n);
-  if (!r && fflush(out)) r = (say_error(&pr, "m4vpack: %s: write error\n", out_name), E_WRITE);
-  if (out != stdout && fclose(out) && !r) r = (say_error(&pr, "m4vpack: %s: write error\n", out_name), E_WRITE);
-  pr.end(r, n.raw, n.packed, n.vops);
-  pr.Quit();
-  if (in != stdin) fclose(in);
+  Call k;
+  int r = call_open(&k, in_name, out_name, o, "dec");
+  if (r) return r;
+  r = call_close(&k, decode_to(&k));
+  if (k.in != stdin) fclose(k.in);
   return r;
 }
 
@@ -569,8 +576,5 @@ int main(int argc, char** argv) {
   _setmode(_fileno(stdin), _O_BINARY);
   _setmode(_fileno(stdout), _O_BINARY);
 #endif
-  tables_init();
-  crc_init();
-  coder_tables_init();
   return argv[1][0] == 'c' ? compress(argv[a], argv[a + 1], &o) : decompress(argv[a], argv[a + 1], &o);
 }

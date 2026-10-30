@@ -35,11 +35,11 @@ static void cmp_flush(void* ctx, const U8* p, size_t n) {
 // coro_free() frees it after its Quit().
 template <class T>
 T* coro_new(void) {
-  return (T*)VirtualAlloc(0, sizeof(T), MEM_COMMIT, PAGE_READWRITE);
+  return (T*)map_pages(sizeof(T));
 }
 template <class T>
 void coro_free(T* p) {
-  if (p) VirtualFree(p, 0, MEM_RELEASE);
+  unmap_pages(p, sizeof(T));
 }
 
 // The output of a call: a file, or (c -v) the input to compare with

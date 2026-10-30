@@ -28,28 +28,6 @@ typedef size_t sz;
 #define __max(a, b) ((a) > (b) ? (a) : (b))
 #endif
 
-// An error that ends the program: a bug (an "internal" one), or a tuning build's parameters
-// grown past what the tables can be (the optimizer then takes the run for the worst). Damaged
-// data never comes here: the coder notes it (Coder::err) and the walk fails the chunk.
-[[noreturn]] static void fatal(const char* fmt, ...) {
-  va_list ap;
-  va_start(ap, fmt);
-  fputs("m4vpack: ", stderr);
-  vfprintf(stderr, fmt, ap);
-  fputc('\n', stderr);
-  va_end(ap);
-  exit(E_INTERNAL);
-}
-static void* xmalloc(size_t n) {
-  void* p = malloc(n ? n : 1);
-  if (!p) fatal("out of memory");
-  return p;
-}
-static void* xrealloc(void* p, size_t n) {
-  void* q = realloc(p, n ? n : 1);
-  if (!q) fatal("out of memory");
-  return q;
-}
 
 // 0..TC_QLOG_LIN - 1 as they are, then two buckets per octave (by the bit below the top one): a
 // magnitude class
@@ -63,27 +41,14 @@ static INLINE i32 tc_qlog(i64 x) {
 }
 
 // Tables are mapped, not allocated and filled: a table costs address space when it is made and
-// memory only where the coder reaches it (zeroed pages).
+// memory only where the coder reaches it (zeroed pages). tc_map() and tc_unmap() are what the
+// generated tables of a tuning build call (IDX/idx2inc.pl, UseNew 1).
 static void* tc_map(sz n, const char* what = "a model table") {
-  void* p;
-#ifdef _WIN32
-  p = VirtualAlloc(nullptr, n, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-#else
-  p = mmap(nullptr, n, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
-  if (p == MAP_FAILED) p = nullptr;
-#endif
+  void* p = map_pages(n);
   if (!p) fatal("cannot map %llu KB for %s", (unsigned long long)((n + KIB - 1) / KIB), what);
   return p;
 }
-static inline void tc_unmap(void* p, sz n) {
-  if (!p) return;
-#ifdef _WIN32
-  (void)n;
-  VirtualFree(p, 0, MEM_RELEASE);
-#else
-  munmap(p, n);
-#endif
-}
+static void tc_unmap(void* p, sz n) { unmap_pages(p, n); }
 
 // A Volume is a product of factor sizes; saturating, so that a check downstream sees at least
 // what was asked for (IDX-FORMAT.md sec.6).

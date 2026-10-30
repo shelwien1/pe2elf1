@@ -150,7 +150,7 @@ struct M4vSplit : Coroutine {
       chkinp();
       l = getinplen();
       if (!l) break;  // the end
-      if (!grow(&buf, &room, len + l + GB_PAD)) no_memory();
+      if (!grow(&buf, &room, len + l + GB_PAD, IO_BUF)) no_memory();
       memcpy(buf + len, inpptr, l);
       inpptr += l;
       len += l;

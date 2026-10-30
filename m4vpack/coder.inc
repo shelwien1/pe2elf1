@@ -2,9 +2,6 @@
 // family codes its decisions with (fam.inc's tc_bit), and where the bits go (-s).
 
 enum { CAT_RAW, CAT_HDR, CAT_MB, CAT_CBP, CAT_MV, CAT_DC, CAT_SIG, CAT_LEV, CAT_SIGN, CAT_ESC, NCAT };
-static const char* cat_name[NCAT] = { "raw chunks", "VOP and video packet headers, tails", "types, flags, dquant",
-                                      "coded block patterns", "motion vectors", "intra DC", "positions",
-                                      "levels", "signs", "escape modes" };
 
 typedef struct Coder {
   int enc;
@@ -37,9 +34,22 @@ static void co_init(Coder* c, CoIo* io, int enc) {
   c->x2 = UINT32_MAX;
   if (!enc) for (i = 0; i < U32_BYTES; i++) c->x = (c->x << BYTE_BITS) | (U32)co_get(c);
 }
-static void co_flush(Coder* c) { co_put(c, (int)(c->x1 >> CO_TOP)); }
+static inline void co_flush(Coder* c) { co_put(c, (int)(c->x1 >> CO_TOP)); }
 
-static float bitcost[CO_COSTS + 1];  // -log2(i / CO_COSTS)
+// -log2(i / CO_COSTS): a bit's cost by its probability, made as the program starts (as cm.inc's tables
+// are)
+struct CoCosts {
+  float c[CO_COSTS + 1];
+};
+static CoCosts co_make_costs(void) {
+  CoCosts t;
+  int i;
+  t.c[0] = CO_PBITS;  // (a probability of 0 as one of the least)
+  for (i = 1; i <= CO_COSTS; i++) t.c[i] = (float)(-log((double)i / CO_COSTS) / log(2.0));
+  return t;
+}
+static const CoCosts bitcost_ = co_make_costs();
+static const float (&bitcost)[CO_COSTS + 1] = bitcost_.c;
 
 static int code_bit(Coder* c, U32 p, int bit) {  // p: probability of a 1 bit, CO_PBITS bits
   const U32 xmid = c->x1 + (U32)(((U64)(c->x2 - c->x1) * p) >> CO_PBITS);
@@ -64,17 +74,10 @@ static int code_bit(Coder* c, U32 p, int bit) {  // p: probability of a 1 bit, C
 }
 
 // 32 bits at a probability of 1/2 each (the CRC)
-static U32 code_u32(Coder* c, U32 v) {
+static inline U32 code_u32(Coder* c, U32 v) {
   U32 x = 0;
   int i;
   c->cat = CAT_HDR;
   for (i = U32_BITS - 1; i >= 0; i--) x |= (U32)code_bit(c, CO_ONE / 2, (int)(v >> i) & 1) << i;
   return x;
-}
-
-// the coder's table, made once as the program starts, then only read (by every run at once)
-static void coder_tables_init(void) {
-  int i;
-  bitcost[0] = CO_PBITS;  // (a probability of 0 as one of the least)
-  for (i = 1; i <= CO_COSTS; i++) bitcost[i] = (float)(-log((double)i / CO_COSTS) / log(2.0));
 }

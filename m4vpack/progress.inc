@@ -20,6 +20,11 @@ constexpr S64 PROGRESS_EVERY = NS / 2;  // a line every half second
 // a call's counts: raw, packed, pos (of the input's total: raw or packed) and the VOPs
 typedef void (*ProgressCounts)(void* ctx, U64& raw, U64& packed, U64& pos, U64& vops);
 
+// the call's progress line, which progress_die() ends before die()'s message (mem.inc's die_hook)
+struct Progress;
+static Progress* progress_now = nullptr;
+static void progress_die(void);
+
 struct Progress {
   constexpr static int LINE = 192;  // a line's room
   const char* tag;  // enc, dec, ver; none: no progress
@@ -46,12 +51,17 @@ struct Progress {
     len = 0;
     up = false;
   }
-  void Quit() { lk.Quit(); }
+  void Quit() {
+    if (progress_now == this) progress_now = nullptr;
+    lk.Quit();
+  }
 
   void start(const char* t, U64 size) {
     tag = t;
     total = size;
     t0 = clock_ns();
+    progress_now = this;
+    die_hook = progress_die;
   }
   // the counts (none: no lines), from the thread that sets them
   void counts(ProgressCounts f, void* ctx) {
@@ -172,6 +182,10 @@ struct Progress {
 #endif
   }
 };
+
+static void progress_die(void) {
+  if (progress_now) progress_now->end_line();
+}
 
 // An error's message on stderr, after the progress line of the call (p, if any), which it ends
 static void say_error(Progress* p, const char* fmt, ...) {

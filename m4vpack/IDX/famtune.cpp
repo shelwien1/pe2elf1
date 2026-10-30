@@ -35,36 +35,13 @@
 #include "../Lib3/coro3b.inc"
 
 #include "../base.inc"
+#include "../mem.inc"
 #include "../io.inc"
-#include "../cmbase.inc"
-#include "../coder.inc"
-#include "../cm.inc"
-#include "../mapping.inc"
-#include "../masking.inc"
-#include "../fam.inc"
-#include "../famvars.inc"
-
 #ifndef M4V_ONLY
 #error "famtune.cpp: build it for one level, -DM4V_ONLY=L (mk.sh famtune L)"
 #endif
-#if M4V_ONLY == 9
-#include "../lv9.inc"
-typedef Lv9 FtLv;
-#elif M4V_ONLY == 7
-#include "../lv7.inc"
-typedef Lv7 FtLv;
-#elif M4V_ONLY == 5
-#include "../lv5.inc"
-typedef Lv5 FtLv;
-#elif M4V_ONLY == 3
-#include "../lv3.inc"
-typedef Lv3 FtLv;
-#elif M4V_ONLY == 1
-#include "../lv1.inc"
-typedef Lv1 FtLv;
-#else
-#error "famtune.cpp: no such level"
-#endif
+#include "../levels.inc"
+typedef LvOnly FtLv;
 
 namespace {
 
@@ -76,7 +53,7 @@ char* slurp(const char* fn, size_t& n) {
   n = 0;
   if (!f) fatal("cannot read %s", fn);
   for (;;) {
-    if (n + IO_BUF > cap) d = (char*)xrealloc(d, cap = 2 * cap + IO_BUF);
+    if (!grow(&d, &cap, n + IO_BUF, IO_BUF)) no_memory();
     size_t k = fread(d + n, 1, IO_BUF, f);
     if (!k) break;
     n += k;
@@ -173,7 +150,6 @@ int main(int argc, char** argv) {
     fprintf(stderr, "usage: famtune FAMILY DUMP...   (level -%d)\n", FtLv::id);
     return E_USAGE;
   }
-  coder_tables_init();
   // (on pages of its own, zeroed: a coroutine's jmp_bufs are aligned)
   Replay* r = (Replay*)tc_map(sizeof(Replay), "the replay");
   static uint8_t out[IO_BUF];

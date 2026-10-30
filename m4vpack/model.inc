@@ -29,7 +29,7 @@ struct Model {
   // per macroblock, mb_cap of them: the current VOP's and the last anchor VOP's
   MBCtx *mbcur, *mbref;
   MV4 *mvcur, *mvref;
-  int mb_cap;
+  size_t mb_cap;
   int ref_mbs;  // size of the VOP in mbref, 0 if none
   U8 tailbuf[TAIL_MAX];
   MB mrec;      // the macroblock vop_walk() has
@@ -77,19 +77,13 @@ struct Model {
   }
   // room for n macroblocks (0: no memory)
   int mb_room(int n) {
-    void* q;
-    if (n <= mb_cap) return 1;
-    if (!(q = realloc(mbcur, n * sizeof(MBCtx)))) return 0;
-    mbcur = (MBCtx*)q;
-    if (!(q = realloc(mbref, n * sizeof(MBCtx)))) return 0;
-    mbref = (MBCtx*)q;
-    if (!(q = realloc(mvcur, n * sizeof(MV4)))) return 0;
-    mvcur = (MV4*)q;
-    if (!(q = realloc(mvref, n * sizeof(MV4)))) return 0;
-    mvref = (MV4*)q;
-    memset(mbref + mb_cap, 0, (n - mb_cap) * sizeof(MBCtx));
-    memset(mvref + mb_cap, 0, (n - mb_cap) * sizeof(MV4));
-    mb_cap = n;
+    size_t r[4] = { mb_cap, mb_cap, mb_cap, mb_cap };  // (the four the same: the same growth)
+    if ((size_t)n <= mb_cap) return 1;
+    if (!grow(&mbcur, &r[0], n) || !grow(&mbref, &r[1], n) || !grow(&mvcur, &r[2], n) || !grow(&mvref, &r[3], n))
+      return 0;
+    memset(mbref + mb_cap, 0, (r[1] - mb_cap) * sizeof(MBCtx));
+    memset(mvref + mb_cap, 0, (r[3] - mb_cap) * sizeof(MV4));
+    mb_cap = r[0];
     return 1;
   }
   void rowb_clear(int x) {

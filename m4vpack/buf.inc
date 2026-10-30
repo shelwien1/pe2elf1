@@ -17,10 +17,7 @@ struct Buf {
   size_t size() const { return n; }
   T& operator[](size_t i) { return p[i]; }
   void fill(size_t m, const T& v) {
-    if (m > cap) {
-      p = (T*)xrealloc(p, m * sizeof(T));
-      cap = m;
-    }
+    if (!grow(&p, &cap, m)) no_memory();
     for (size_t i = 0; i < m; i++) p[i] = v;
     n = m;
   }
