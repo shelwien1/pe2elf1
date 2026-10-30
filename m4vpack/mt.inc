@@ -59,7 +59,7 @@ enum {
   MT_F_PAST = MT_FRAME - MT_F_INS
 };
 constexpr U32 MT_RING = 1 * MIB;       // MTwrap's buffers to and from each worker
-constexpr U32 MT_COPY_MAX = 32 * KIB;  // the bytes of a header copied in, at most
+constexpr U32 MT_COPY_MAX = HDR_PEEK;  // the bytes of a header copied in, at most (what the parser reads)
 constexpr unsigned MTW_NO_THREAD = 7;  // MTwrap's Init(): a thread didn't start (1-6: no memory)
 
 static void put_le(U8* p, U64 v, int n) { int i; for (i = 0; i < n; i++) p[i] = (U8)(v >> (BYTE_BITS * i)); }

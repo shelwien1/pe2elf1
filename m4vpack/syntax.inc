@@ -134,7 +134,7 @@ constexpr int ESC3_RUN = 6, ESC3_LEVEL = 12;
 constexpr int ESC3_LEN = ESC_MODE_BITS + 1 + ESC3_RUN + MARKER_BITS + ESC3_LEVEL + MARKER_BITS;  // (after the code)
 constexpr int ESC3_MAX = 1 << (ESC3_LEVEL - 1);        // a level's magnitude in mode 3, at most
 // intra DC: the sizes 8-bit video has, at most, and those with a marker after the difference
-constexpr int DC_SIZE_MAX = 9, DC_MARKER_SIZE = BYTE_BITS;
+constexpr int DC_SIZE_MAX = 9, DC_MARKER_SIZE = 8;
 // the VOP header: vop_coding_type, intra_dc_vlc_thr, vop_fcode
 constexpr int VOP_TYPE_BITS = 2, DCTHR_BITS = 3, FCODE_BITS = 3;
 // the time increment's length, before a VOL says (FFmpeg's), and FFmpeg's guess of it from what
