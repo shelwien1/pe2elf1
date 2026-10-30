@@ -46,11 +46,11 @@ and when it is done:
 ```
 $ m4vpack c aq_cm.m4v aq_cm.m4p
 [enc] video: 512x384, progressive, 30.01 fps, XviD build 47
-[enc] 3875193 > 2739700  100.0%  1258 VOPs  done in 16.87s  32.09M RAM at most
-aq_cm.m4v: 3875193 -> 2739700 bytes (70.70%, -9); 1258 VOPs (I 18, P 666, B 574, S 0), 1258 packed
+[enc] 3875193 > 2739670  100.0%  1258 VOPs  done in 16.87s  32.09M RAM at most
+aq_cm.m4v: 3875193 -> 2739670 bytes (70.70%, -9); 1258 VOPs (I 18, P 666, B 574, S 0), 1258 packed
 $ m4vpack d aq_cm.m4p aq_cm.m4v
 [dec] video: 512x384, progressive, 30.01 fps, XviD build 47
-[dec] 3875193 > 2739700  100.0%  1258 VOPs  done in 15.89s  30.73M RAM at most
+[dec] 3875193 > 2739670  100.0%  1258 VOPs  done in 15.89s  30.73M RAM at most
 ```
 
 Exit codes:
