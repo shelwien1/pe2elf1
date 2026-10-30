@@ -16,6 +16,7 @@ void Model<f_DEC, LV>::code_mb(const Ctx* cx, VState* s, MB* m, int idx) {
   MBCtx* me = &mbcur[idx];
   const int dcvlc = v->qscale < v->dcthr;
   int intra = 0, cbp, cls3, i, k, mvi = 0, sumq = 0, px = 0, py = 0, sx = -1, sy = -1, frac = kFracNone;
+  int col[2][2] = { { 0, 0 }, { 0, 0 } };  // (B-VOP: the co-located vector as direct mode scales it, each way)
   M_mbt_v T;
   memset(&T, 0, sizeof(T));
   T.st = v->type - PT_I;
@@ -24,10 +25,10 @@ void Model<f_DEC, LV>::code_mb(const Ctx* cx, VState* s, MB* m, int idx) {
   memset(me, 0, sizeof(*me));
   est.ok = 0;
   tmk[0] = tmk[1] = 0;
+  mo_mb_begin(&mo, idx);
   if (LV::recon && rec.on) rc_mb_begin(&rec, idx);
   c->cat = CAT_MB;
-  if (v->type == PT_B && mb_x == 0) memset(s->lmv, 0, sizeof(s->lmv));
-  if (v->type != PT_I && v->type != PT_B) pred_mv(s, idx, 0, &px, &py, &sx, &sy);
+  if (v->type != PT_I && v->type != PT_B) mo_pred(&mo, 0, &px, &py, &sx, &sy);
   if (v->type == PT_I) {
     m->st = (int)checked(hdr_val(F_MBST, ty, 0, 0, m->st), 0, RUN_MAX);
     m->t = MB_INTRA;
@@ -43,7 +44,7 @@ void Model<f_DEC, LV>::code_mb(const Ctx* cx, VState* s, MB* m, int idx) {
     K.rc = R ? R->cls : 0;
     K.run = rb;
     K.pz = px || py;
-    K.rz = !R ? kTriNone : mvref[idx][0][0] || mvref[idx][0][1];
+    K.rz = !R ? kTriNone : mo_ref_mv(&mo, 0)[0] || mo_ref_mv(&mo, 0)[1];
     K.bsk = K.rr = 0;
     K.zt = K.ze = 0;
     if (LV::recon && rec.on) skip_vars(&K.zt, &K.ze);
@@ -55,7 +56,9 @@ void Model<f_DEC, LV>::code_mb(const Ctx* cx, VState* s, MB* m, int idx) {
       me->bsk = !v->gmc;
       rowb_clear(mb_x);
       s->run++;
-      if (LV::recon && rec.on) rc_mb_inter(&rec, m), rc_mb_end(&rec);
+      mo_kind(&mo, m);
+      mo_mb_end(&mo);
+      if (LV::recon && rec.on) rc_mb_inter(&rec), rc_mb_end(&rec);
       return;
     }
     s->run = 0;
@@ -89,7 +92,8 @@ void Model<f_DEC, LV>::code_mb(const Ctx* cx, VState* s, MB* m, int idx) {
     if ((m->sk = f_skp.bit(SKP_B, ENC && m->sk))) {
       me->cls = C_SKIP;
       rowb_clear(mb_x);
-      if (LV::recon && rec.on) rc_mb_inter(&rec, m), rc_mb_end(&rec);
+      mo_kind(&mo, m);
+      if (LV::recon && rec.on) rc_mb_inter(&rec), rc_mb_end(&rec);
       return;
     }
     K.cl = count_of(C_BDIR0, L, A);
@@ -108,7 +112,9 @@ void Model<f_DEC, LV>::code_mb(const Ctx* cx, VState* s, MB* m, int idx) {
       me->cls = C_BDIR0;
       rowb_clear(mb_x);
       s->run++;
-      if (LV::recon && rec.on) rc_mb_inter(&rec, m), rc_mb_end(&rec);
+      mo_kind(&mo, m);
+      mo_direct(&mo, 0, 0);
+      if (LV::recon && rec.on) rc_mb_inter(&rec), rc_mb_end(&rec);
       return;
     }
     s->run = 0;
@@ -154,68 +160,72 @@ void Model<f_DEC, LV>::code_mb(const Ctx* cx, VState* s, MB* m, int idx) {
     }
   }
   c->cat = CAT_MV;
+  mo_kind(&mo, m);
+  if (v->type == PT_B && !intra) mo_colocated(&mo, &col[0][0], &col[0][1], &col[1][0], &col[1][1]);
   if (LV::recon && rec.on && !intra) {  // the vectors the template matches best
     if (v->type != PT_B) {
       if (m->t == MB_4MV || (m->mc != 1 && m->fp != 1))
-        tmk[0] = rc_tm_search(&rec, rec.last, px, py, mvref[idx][0][0], mvref[idx][0][1], &tmx[0], &tmy[0]);
+        tmk[0] = rc_tm_search(&rec, rec.last, px, py, mo_ref_mv(&mo, 0)[0], mo_ref_mv(&mo, 0)[1], &tmx[0], &tmy[0]);
     } else if (m->t != MB_DIRECT && m->fp != 1) {
-      const int cx0 = R ? mvref[idx][0][0] : 0, cy0 = R ? mvref[idx][0][1] : 0;
-      const int tfx = (int)((S64)cx0 * s->trb / s->trd), tfy = (int)((S64)cy0 * s->trb / s->trd);
-      if (fwd_dir(m->t))
-        tmk[0] = rc_tm_search(&rec, rec.last, s->lmv[0][0][0], s->lmv[0][0][1], tfx, tfy, &tmx[0], &tmy[0]);
-      if (bwd_dir(m->t))
-        tmk[1] = rc_tm_search(&rec, rec.next, s->lmv[1][0][0], s->lmv[1][0][1], tfx - cx0, tfy - cy0, &tmx[1], &tmy[1]);
+      int ppx, ppy;
+      if (fwd_dir(m->t)) {
+        mo_bpred(&mo, 0, 0, 1, &ppx, &ppy);
+        tmk[0] = rc_tm_search(&rec, rec.last, ppx, ppy, col[0][0], col[0][1], &tmx[0], &tmy[0]);
+      }
+      if (bwd_dir(m->t)) {
+        mo_bpred(&mo, 1, 0, 1, &ppx, &ppy);
+        tmk[1] = rc_tm_search(&rec, rec.next, ppx, ppy, col[1][0], col[1][1], &tmx[1], &tmy[1]);
+      }
     }
   }
-  if (!intra) {
+  if (!intra) {  // the vectors as the decoder gets them, from their predictions (motion.inc)
     const int tok = R != 0, fm = cx->qpel ? kQpelMask : kHpelMask;
-    int mx = 0, my = 0, mx2, my2;
-    if (v->type != PT_B) {  // the vectors as the decoder gets them; their prediction
+    int mx = 0, my = 0;
+    if (v->type != PT_B) {
       if (m->t == MB_4MV)
         for (i = 0; i < MB_LUMA; i++) {
-          if (i) pred_mv(s, idx, i, &px, &py, &sx, &sy);
-          code_mv(m, &mvi, MVK_P4, v->fcode, L, A, R, me, &sumq, px, py, sx, sy, tok, mvref[idx][i][0],
-                  mvref[idx][i][1], &mx, &my, 0);
-          mvcur[idx][i][0] = (S16)mx;
-          mvcur[idx][i][1] = (S16)my;
+          if (i) mo_pred(&mo, i, &px, &py, &sx, &sy);
+          code_mv(m, &mvi, MVK_P4, v->fcode, L, A, R, me, &sumq, px, py, sx, sy, tok, mo_ref_mv(&mo, i)[0],
+                  mo_ref_mv(&mo, i)[1], &mx, &my, 0);
+          mo_set(&mo, 0, i, mx, my);
         }
-      else {
-        if (m->mc == 1) mx = px, my = py;  // GMC: the prediction stands in for the warped vector
-        else if (m->fp == 1) {
-          code_mv(m, &mvi, MVK_PFIELD, v->fcode, L, A, R, me, &sumq, px, py / 2, sx, sy, tok, mvref[idx][0][0],
-                  mvref[idx][0][1] / 2, &mx, &my);
-          code_mv(m, &mvi, MVK_PFIELD, v->fcode, L, A, R, me, &sumq, px, py / 2, sx, sy, tok, mvref[idx][0][0],
-                  mvref[idx][0][1] / 2, &mx2, &my2);
-          mx = ((mx + mx2) >> 1) | ((mx + mx2) & 1);
-          my = my + my2;
-        } else
-          code_mv(m, &mvi, MVK_P, v->fcode, L, A, R, me, &sumq, px, py, sx, sy, tok, mvref[idx][0][0],
-                  mvref[idx][0][1], &mx, &my, 0);
-        for (i = 0; i < MB_LUMA; i++) { mvcur[idx][i][0] = (S16)mx; mvcur[idx][i][1] = (S16)my; }
+      else if (m->fp == 1)
+        for (i = 0; i < 2; i++) {
+          code_mv(m, &mvi, MVK_PFIELD, v->fcode, L, A, R, me, &sumq, px, py / 2, sx, sy, tok, mo_ref_mv(&mo, 0)[0],
+                  mo_ref_mv(&mo, 0)[1] / 2, &mx, &my);
+          mo_set(&mo, 0, i, mx, my);
+        }
+      else if (m->mc != 1) {
+        code_mv(m, &mvi, MVK_P, v->fcode, L, A, R, me, &sumq, px, py, sx, sy, tok, mo_ref_mv(&mo, 0)[0],
+                mo_ref_mv(&mo, 0)[1], &mx, &my, 0);
+        mo_set(&mo, 0, 0, mx, my);
       }
-    } else if (m->t != MB_DIRECT) {  // B-VOP: predicted by the last vector in the row; the co-located one scaled as in
-                        // direct mode
-      const int n = m->fp == 1 ? 2 : 1, cx0 = R ? mvref[idx][0][0] : 0, cy0 = R ? mvref[idx][0][1] : 0;
-      const int tfx = (int)((S64)cx0 * s->trb / s->trd), tfy = (int)((S64)cy0 * s->trb / s->trd);
-      int dir;
+    } else if (m->t != MB_DIRECT) {  // B-VOP: each predicted by the last of its direction in the row
+      const int n = m->fp == 1 ? 2 : 1;
+      int dir, ppx, ppy;
       for (dir = 0; dir < 2; dir++) {
-        const int code = dir ? v->bcode : v->fcode, tx = dir ? tfx - cx0 : tfx, tyv = dir ? tfy - cy0 : tfy;
         if (!(dir ? bwd_dir(m->t) : fwd_dir(m->t))) continue;
         for (i = 0; i < n; i++) {
-          const int ppx = s->lmv[dir][i][0], ppy = n == 2 ? s->lmv[dir][i][1] / 2 : s->lmv[dir][i][1];
-          code_mv(m, &mvi, MVK_BFWD + dir, code, L, A, R, me, &sumq, ppx, ppy, -1, -1, tok, tx, n == 2 ? tyv / 2 : tyv,
-                  &mx, &my, n == 1 ? dir : -1);
-          if (n == 1) s->lmv[dir][0][0] = s->lmv[dir][1][0] = mx, s->lmv[dir][0][1] = s->lmv[dir][1][1] = my;
-          else s->lmv[dir][i][0] = mx, s->lmv[dir][i][1] = my * 2;
+          mo_bpred(&mo, dir, i, n, &ppx, &ppy);
+          code_mv(m, &mvi, MVK_BFWD + dir, dir ? v->bcode : v->fcode, L, A, R, me, &sumq, ppx, ppy, -1, -1, tok,
+                  col[dir][0], n == 2 ? col[dir][1] / 2 : col[dir][1], &mx, &my, n == 1 ? dir : -1);
+          mo_bset(&mo, dir, i, n, mx, my);
         }
       }
-    } else
+    } else {  // direct mode's delta
       code_mv(m, &mvi, MVK_BDIR, FCODE_MIN, L, A, R, me, &sumq, 0, 0, -1, -1, 0, 0, 0, &mx, &my);
-    if (v->type != PT_B && m->mc != 1) mx = mvcur[idx][0][0], my = mvcur[idx][0][1];
+      mo_direct(&mo, mx, my);
+    }
+    mo_mb_end(&mo);
+    if (v->type != PT_B && m->mc != 1) {  // (the macroblock's vector as the grid has it)
+      mx = mo.cur->mv[mo.block_index[0]][0];
+      my = mo.cur->mv[mo.block_index[0]][1];
+    }
     if ((v->type != PT_B && m->mc != 1) || (v->type == PT_B && m->t != MB_DIRECT))
       frac = ((mx & fm) != 0) + 2 * ((my & fm) != 0);
-    if (LV::recon && rec.on) rc_mb_inter(&rec, m);  // (its prediction in the picture)
-  }
+    if (LV::recon && rec.on) rc_mb_inter(&rec);  // (its prediction in the picture)
+  } else
+    mo_mb_end(&mo);
   c->cat = CAT_CBP;
   int cie[MB_BLOCKS] = {0}, ctx[MB_BLOCKS] = {0}, cem[MB_BLOCKS] = {0};
   if (LV::recon && est.ok)

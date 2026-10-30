@@ -122,6 +122,7 @@
 // declares them, generated into MOD/l<L>)
 #include "levels.inc"
 // the model, the runs (coroutines) and the threads
+#include "motion.inc"
 #include "recon.inc"
 #include "reconctx.inc"
 #include "modelbase.inc"

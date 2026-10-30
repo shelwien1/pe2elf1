@@ -1,6 +1,7 @@
 // recon.inc -- the decoder in the loop of level -9: m4vdec's reconstruction of the pictures (a
 // port of FFmpeg's MPEG-4 Part 2 decoder, bit-exact with its C code), driven by the records the
-// model codes instead of the bits. The model calls it as it codes a macroblock: at its start
+// model codes instead of the bits, and by the vectors of the motion state (motion.inc), which the
+// model keeps at every level. The model calls it as it codes a macroblock: at its start
 // (mb_begin), once its kind and vectors are known (mb_inter, mb_intra: the motion compensated
 // prediction is then in the picture), after each block's coefficients (block: the block
 // reconstructed), and at its end (mb_end). So when a block is coded, the samples above and left of
@@ -11,21 +12,12 @@
 // same on both sides whatever they are; m4vdec's are what they aim at (M4VPACK_RECON=file writes
 // them in coding order, for comparing with a decoder; a run on one thread).
 
-// FFmpeg's flags: a motion's directions, a macroblock's type (MB_TYPE_*), the encoders' bugs it
-// works around (FF_BUG_*)
-enum { MV_DIR_FORWARD = 1, MV_DIR_BACKWARD = 2, MV_DIRECT = 4 };
+// the encoders' bugs FFmpeg works around (FF_BUG_*; its FF_BUG_AMV, which m4vdec never sets, the
+// motion state leaves out)
 enum {
-  MBT_INTRA = 0x0001, MBT_16x16 = 0x0002, MBT_16x8 = 0x0004, MBT_8x8 = 0x0008, MBT_INTERLACED = 0x0010,
-  MBT_DIRECT2 = 0x0020, MBT_ACPRED = 0x0040, MBT_GMC = 0x0080, MBT_SKIP = 0x0100, MBT_FWD = 0x0200,
-  MBT_BWD = 0x0400, MBT_BIDIR = MBT_FWD | MBT_BWD
+  BUG_QPEL_CHROMA = 64, BUG_STD_QPEL = 128, BUG_QPEL_CHROMA2 = 256, BUG_DIRECT_BLOCKSIZE = 512, BUG_EDGE = 1024,
+  BUG_HPEL_CHROMA = 2048, BUG_DC_CLIP = 4096, BUG_IEDGE = 32768
 };
-enum {
-  BUG_AMV = 32, BUG_QPEL_CHROMA = 64, BUG_STD_QPEL = 128,
-  BUG_QPEL_CHROMA2 = 256, BUG_DIRECT_BLOCKSIZE = 512, BUG_EDGE = 1024, BUG_HPEL_CHROMA = 2048,
-  BUG_DC_CLIP = 4096, BUG_IEDGE = 32768
-};
-
-enum { MV_16X16 = 0, MV_8X8 = 1, MV_FIELD = 2 };
 
 enum { OP_PUT = 0, OP_PUT_NORND = 1, OP_AVG = 2 };
 
@@ -33,8 +25,6 @@ enum { OP_PUT = 0, OP_PUT_NORND = 1, OP_AVG = 2 };
 // start from (mid gray, times the DC scale of 8)
 constexpr int PIX_MAX = UINT8_MAX, GRAY = 1 << (BYTE_BITS - 1);
 constexpr int DC_RESET = 1024;
-// the field times FFmpeg falls back on, where the field distances come out wrong
-constexpr int FIELD_PB_TIME = 2, FIELD_PP_TIME = 4;
 
 // an intra DC as reconstructed: 11 bits, clipped (unless BUG_DC_CLIP)
 constexpr int DC_MAX = 2047;
@@ -51,69 +41,39 @@ static inline int round_chroma(int x) {
   return h263_chroma_roundtab[x & (countof(h263_chroma_roundtab) - 1)] + (x >> CHROMA_ROUND_SHIFT);
 }
 static inline U8 clip8(int v) { return (U8)clip(v, 0, PIX_MAX); }
-static inline int mid_pred(int a, int b, int c) {
-  if (a > b) {
-    if (c > b) b = c > a ? a : c;
-  } else if (b > c)
-    b = c > a ? c : a;
-  return b;
-}
-// FFmpeg's ROUNDED_DIV and RSHIFT
-static inline S64 rounded_div(S64 a, S64 b) { return (a >= 0 ? a + (b >> 1) : a - (b >> 1)) / b; }
-static inline int rshift(int a, int b) { return a > 0 ? (a + ((1 << b) >> 1)) >> b : (a + ((1 << b) >> 1) - 1) >> b; }
 
-// FFmpeg's MpegEncContext's layout: a row of macroblocks' entries and one more (mb_stride), a row
-// of 8x8 blocks' and one more (b8_stride); the tables' padding (MB_PAD entries after the
-// macroblocks, MV_PAD vectors before the 8x8 blocks'); a macroblock's field selects (ref_index)
-constexpr int MB_PAD = 2, MV_PAD = 4, REF_INDEX = 4;
 // the AC predictors of a block: its left column, then its top row (BLK_W each, the first unused)
 constexpr int ACV = 2 * BLK_W;
-// direct mode: the co-located vectors' components whose scalings are made once per VOP (-32..31)
-constexpr int DIRECT_MVS = 64;
 // the pictures: the current, the last and the next anchor
 constexpr int NPICS = 3;
 
-// a picture: its planes (rows of mb_w * MB_W luma and mb_w * BLK_W chroma samples) and what B-VOPs
-// read of an anchor
+// a picture: its planes (rows of mb_w * MB_W luma and mb_w * BLK_W chroma samples)
 typedef struct RPic {
   U8 *y, *u, *v;
-  U8* mbskip;          // [mb_stride * mb_h + MB_PAD]
-  U16* mbtype;         // [mb_stride * mb_h + MB_PAD]
-  S16 (*mvbase)[2];    // motion vectors on the 8x8 grid (b8_stride), MV_PAD entries of padding first
-  S16 (*mv)[2];
-  U8* ref_index;       // [REF_INDEX * (mb_stride * mb_h + MB_PAD)] field selects of field macroblocks
 } RPic;
 
 typedef struct Recon {
   int on;              // this VOP is reconstructed
-  // stream
+  const Motion* mo;    // the vectors (the model's motion state)
+  // stream (the layout FFmpeg's: motion.inc)
   int width, height, mb_w, mb_h, mb_num, mb_stride, b8_stride, ly, lc;
-  int progressive, mpeg_quant, qpel, sprite_usage, warp_points, warp_acc;
+  int progressive, mpeg_quant, qpel;
   U16 intra_matrix[BLK_COEFS], inter_matrix[BLK_COEFS];
   int divx_version, divx_build, xvid_build, lavc_build;
   int bugs, idct_xvid, h_edge, v_edge;
-  int vol_seen, gop_seen;  // the Ctx's counts applied
   // VOP
-  int pict_type, no_rounding, top_field_first, alternate_scan;
-  int qscale, chroma_qscale, y_dc_scale, c_dc_scale, f_code, b_code, mcsel;
-  int time_base, last_time_base;
-  S64 time, last_non_b_time;
-  U16 pp_time, pb_time, pp_field_time, pb_field_time;
-  int t_frame;
-  S16 direct_scale_mv[2][DIRECT_MVS];
-  int sprite_offset[2][2], sprite_delta[2][2], sprite_shift[2], real_warp_points;
+  int pict_type, no_rounding, alternate_scan;
+  int qscale, chroma_qscale, y_dc_scale, c_dc_scale;
   const U8 *intra_scan, *intra_h_scan, *intra_v_scan;
   // macroblock
-  int mb_x, mb_y, resync_mb_x, resync_mb_y, first_slice_line;
-  int mb_intra, ac_pred, interlaced_dct, mv_dir, mv_type, mb_skipped;
-  int mv[2][MB_LUMA][2], field_select[2][2], last_mv[2][2][2];
+  int mb_x, mb_y;
+  int mb_intra, ac_pred, interlaced_dct;
   int block_index[MB_BLOCKS], block_wrap[MB_BLOCKS];
   // prediction state (FFmpeg's MpegEncContext's layout)
   S16 *dc_val_base, *dc_val;
   S16 (*ac_val_base)[ACV], (*ac_val)[ACV];
   U8* mbintra_table;
   S8* qscale_table;
-  S16 (*p_field_mv)[2][2];  // [mb_xy][field][xy]: the forward field vectors of the last P-VOP
   U8* mb_done;
   // pictures
   RPic pics[NPICS];
@@ -130,30 +90,30 @@ static void rc_set_qscale(Recon* d, int q) {
   d->c_dc_scale = c_dc_scale_table[q];
 }
 
-// the tables for a picture of w x h, cleared as freshly allocated ones (m4vdec's dec_layout); 0 if
-// there is no memory for them
-static int rc_layout(Recon* d, int w, int h) {
-  int i, pass, y_size, c_size, yc_size, mb_array, b8_array;
+// the tables for the motion state's picture size, cleared as freshly allocated ones (m4vdec's
+// dec_layout); 0 if there is no memory for them
+static int rc_layout(Recon* d) {
+  const Motion* o = d->mo;
+  int i, pass, y_size, c_size, yc_size, mb_array;
   size_t ysz, csz, at = 0;
   U8* m = 0;
-  if (d->mem && d->width == w && d->height == h) return 1;
+  if (d->mem && d->width == o->width && d->height == o->height) return 1;
   free(d->mem);
   d->mem = 0;
   d->cur = d->last = d->next = 0;
-  d->width = w;
-  d->height = h;
-  d->mb_w = (w + MB_W - 1) >> MB_SHIFT;
-  d->mb_h = (h + MB_W - 1) >> MB_SHIFT;
-  d->mb_num = d->mb_w * d->mb_h;
-  d->mb_stride = d->mb_w + 1;
-  d->b8_stride = d->mb_w * 2 + 1;  // (2 8x8 blocks in a macroblock's row)
+  d->width = o->width;
+  d->height = o->height;
+  d->mb_w = o->mb_w;
+  d->mb_h = o->mb_h;
+  d->mb_num = o->mb_num;
+  d->mb_stride = o->mb_stride;
+  d->b8_stride = o->b8_stride;
   d->ly = d->mb_w * MB_W;
   d->lc = d->mb_w * BLK_W;
   y_size = d->b8_stride * (2 * d->mb_h + 1);
   c_size = d->mb_stride * (d->mb_h + 1);
   yc_size = y_size + 2 * c_size;
   mb_array = d->mb_stride * d->mb_h + MB_PAD;
-  b8_array = d->b8_stride * d->mb_h * 2 + MV_PAD;
   ysz = (size_t)d->ly * d->mb_h * MB_W;
   csz = (size_t)d->lc * d->mb_h * BLK_W;
   for (pass = 0; pass < 2; pass++) {  // the size, then the tables in it
@@ -172,7 +132,6 @@ static int rc_layout(Recon* d, int w, int h) {
     };
     d->ac_val_base = (S16(*)[ACV])take((size_t)yc_size * ACV * sizeof(S16));
     d->dc_val_base = (S16*)take((size_t)yc_size * sizeof(S16));
-    d->p_field_mv = (S16(*)[2][2])take((size_t)mb_array * 2 * 2 * sizeof(S16));
     d->mbintra_table = (U8*)take((size_t)mb_array);
     d->qscale_table = (S8*)take((size_t)mb_array);
     d->mb_done = (U8*)take((size_t)mb_array);
@@ -181,11 +140,6 @@ static int rc_layout(Recon* d, int w, int h) {
       p->y = (U8*)take(ysz + 2 * csz);
       p->u = p->y + ysz;
       p->v = p->u + csz;
-      p->mbskip = (U8*)take((size_t)mb_array);
-      p->mbtype = (U16*)take((size_t)mb_array * sizeof(U16));
-      p->mvbase = (S16(*)[2])take((size_t)b8_array * 2 * sizeof(S16));
-      p->mv = p->mvbase + MV_PAD;
-      p->ref_index = (U8*)take((size_t)REF_INDEX * mb_array);
     }
   }
   for (i = 0; i < yc_size; i++) d->dc_val_base[i] = DC_RESET;
@@ -196,26 +150,16 @@ static int rc_layout(Recon* d, int w, int h) {
   return 1;
 }
 
-// the blocks' entries in the tables of the 8x8 grid (luma) and of the chroma planes' (FFmpeg's
-// ff_init_block_index)
+// the blocks' entries in the tables of the 8x8 grid (luma: the motion state's) and of the chroma
+// planes' (FFmpeg's ff_init_block_index)
 static void rc_set_block_index(Recon* d) {
   const int bs = d->b8_stride, ms = d->mb_stride;
-  d->block_index[0] = bs * (d->mb_y * 2) + d->mb_x * 2;
-  d->block_index[1] = d->block_index[0] + 1;
-  d->block_index[2] = bs * (d->mb_y * 2 + 1) + d->mb_x * 2;
-  d->block_index[3] = d->block_index[2] + 1;
+  int i;
+  for (i = 0; i < MB_LUMA; i++) d->block_index[i] = d->mo->block_index[i];
   d->block_index[BLK_CB] = ms * (d->mb_y + 1) + bs * d->mb_h * 2 + d->mb_x;
   d->block_index[BLK_CR] = ms * (d->mb_y + d->mb_h + 2) + bs * d->mb_h * 2 + d->mb_x;
 }
 
-
-// the sprite's warping: the virtual points' precision (sixteenths of a sample: SPR_SUB), the
-// warp's fixed point (FFmpeg's 16 - shift), FFmpeg's rho (3 - the warping accuracy)
-constexpr int SPR_SUB = 16, SPR_FIX = 16, SPR_RHO = 3;
-// a warp's corners (the VOP's), the number of them
-constexpr int SPR_CORNERS = 4;
-
-#include "rc_sprite.inc"  // rc_sprite(): GMC's warping
 
 // the encoders' builds with the bugs FFmpeg works around (h263dec.c's ff_mpeg4_workaround_bugs)
 constexpr int DIVX5_VERSION = 500, DIVX502_VERSION = 502, DIVX_QPEL_FIXED = 1814;
@@ -582,14 +526,15 @@ static void rc_unquant_inter_mpeg(const Recon* d, S16* block, int qscale) {
 //--- intra prediction --------------------------------------------------------------------------------
 
 static int rc_pred_dc(const Recon* d, int n, int* dir_ptr) {
+  const Motion* o = d->mo;  // (the video packet's start: the motion state's)
   const S16* dc_val = d->dc_val + d->block_index[n];
   const int wrap = d->block_wrap[n];
   int a = dc_val[-1], b = dc_val[-1 - wrap], c = dc_val[-wrap];
-  if (d->first_slice_line && n != 3) {
+  if (o->first_slice_line && n != 3) {
     if (n != 2) b = c = DC_RESET;
-    if (n != 1 && d->mb_x == d->resync_mb_x) b = a = DC_RESET;
+    if (n != 1 && d->mb_x == o->resync_mb_x) b = a = DC_RESET;
   }
-  if (d->mb_x == d->resync_mb_x && d->mb_y == d->resync_mb_y + 1) {
+  if (d->mb_x == o->resync_mb_x && d->mb_y == o->resync_mb_y + 1) {
     if (n == 0 || n == BLK_CB || n == BLK_CR) b = DC_RESET;
   }
   if (abs(a - b) < abs(b - c)) {
@@ -662,187 +607,6 @@ static void rc_clean_buffers(Recon* d) {  // ff_mpeg4_clean_buffers, at the star
   memset(d->ac_val + l_xy, 0, (l_wrap * 2 + 1) * sizeof(*d->ac_val));
   memset(d->ac_val + u_xy, 0, (c_wrap + 1) * sizeof(*d->ac_val));
   memset(d->ac_val + v_xy, 0, (c_wrap + 1) * sizeof(*d->ac_val));
-  d->last_mv[0][0][0] = d->last_mv[0][0][1] = d->last_mv[1][0][0] = d->last_mv[1][0][1] = 0;
-}
-
-//--- motion vectors --------------------------------------------------------------------------------
-
-static S16* rc_pred_motion(Recon* d, int block, int* px, int* py) {
-  static const int off[MB_LUMA] = { 2, 1, 1, -1 };  // (the above right candidate's place)
-  const int wrap = d->b8_stride;
-  S16 (*mot_val)[2] = d->cur->mv + d->block_index[block];
-  S16 *A, *B, *C;
-  A = mot_val[-1];
-  if (d->first_slice_line && block < 3) {
-    if (block == 0) {
-      if (d->mb_x == d->resync_mb_x) {
-        *px = *py = 0;
-      } else if (d->mb_x + 1 == d->resync_mb_x) {
-        C = mot_val[off[block] - wrap];
-        if (d->mb_x == 0) {
-          *px = C[0];
-          *py = C[1];
-        } else {
-          *px = mid_pred(A[0], 0, C[0]);
-          *py = mid_pred(A[1], 0, C[1]);
-        }
-      } else {
-        *px = A[0];
-        *py = A[1];
-      }
-    } else if (block == 1) {
-      if (d->mb_x + 1 == d->resync_mb_x) {
-        C = mot_val[off[block] - wrap];
-        *px = mid_pred(A[0], 0, C[0]);
-        *py = mid_pred(A[1], 0, C[1]);
-      } else {
-        *px = A[0];
-        *py = A[1];
-      }
-    } else {
-      B = mot_val[-wrap];
-      C = mot_val[off[block] - wrap];
-      if (d->mb_x == d->resync_mb_x) A[0] = A[1] = 0;
-      *px = mid_pred(A[0], B[0], C[0]);
-      *py = mid_pred(A[1], B[1], C[1]);
-    }
-  } else {
-    B = mot_val[-wrap];
-    C = mot_val[off[block] - wrap];
-    *px = mid_pred(A[0], B[0], C[0]);
-    *py = mid_pred(A[1], B[1], C[1]);
-  }
-  return *mot_val;
-}
-
-// a vector from its prediction and its difference as coded (m4vdec's decode_motion)
-static int rc_motion(int pred, int diff, int f_code) { return diff ? mv_wrap(pred + diff, f_code) : pred; }
-
-static void rc_update_motion_val(Recon* d) {
-  const int mb_xy = d->mb_y * d->mb_stride + d->mb_x, wrap = d->b8_stride, xy = d->block_index[0];
-  S16 (*mv)[2] = d->cur->mv;
-  if (d->mv_type != MV_8X8) {
-    int motion_x, motion_y;
-    if (d->mb_intra) {
-      motion_x = motion_y = 0;
-    } else if (d->mv_type == MV_16X16) {
-      motion_x = d->mv[0][0][0];
-      motion_y = d->mv[0][0][1];
-    } else {
-      int i;
-      motion_x = d->mv[0][0][0] + d->mv[0][1][0];
-      motion_y = d->mv[0][0][1] + d->mv[0][1][1];
-      motion_x = (motion_x >> 1) | (motion_x & 1);
-      for (i = 0; i < 2; i++) {
-        d->p_field_mv[mb_xy][i][0] = (S16)d->mv[0][i][0];
-        d->p_field_mv[mb_xy][i][1] = (S16)d->mv[0][i][1];
-      }
-      U8* ri = d->cur->ref_index + REF_INDEX * mb_xy;
-      ri[0] = ri[1] = (U8)d->field_select[0][0];
-      ri[2] = ri[3] = (U8)d->field_select[0][1];
-    }
-    mv[xy][0] = mv[xy + 1][0] = mv[xy + wrap][0] = mv[xy + 1 + wrap][0] = (S16)motion_x;
-    mv[xy][1] = mv[xy + 1][1] = mv[xy + wrap][1] = mv[xy + 1 + wrap][1] = (S16)motion_y;
-  }
-}
-
-static int rc_get_amv(const Recon* d, int n) {
-  int x, y, mb_v, sum, dx, dy, shift;
-  int len = MV_VLC_MAX << (d->f_code - FCODE_MIN);
-  const int a = d->warp_acc;
-  if (d->bugs & BUG_AMV) len >>= d->qpel;
-  if (d->real_warp_points == 1) {
-    if (d->divx_version == DIVX413_VERSION && d->divx_build == DIVX413_BUILD && a >= d->qpel)
-      sum = d->sprite_offset[0][n] / (1 << (a - d->qpel));
-    else
-      sum = rshift(d->sprite_offset[0][n] * (1 << d->qpel), a);
-  } else {
-    dx = d->sprite_delta[n][0];
-    dy = d->sprite_delta[n][1];
-    shift = d->sprite_shift[0];
-    if (n) dy -= 1 << (shift + a + 1);
-    else dx -= 1 << (shift + a + 1);
-    mb_v = (int)(d->sprite_offset[0][n] + dx * d->mb_x * (unsigned)MB_W + dy * d->mb_y * (unsigned)MB_W);
-    sum = 0;
-    for (y = 0; y < MB_W; y++) {
-      int v = (int)(mb_v + (unsigned)dy * y);
-      for (x = 0; x < MB_W; x++) {
-        sum += v >> shift;
-        v += dx;
-      }
-    }
-    sum = rshift(sum, a + 2 * MB_SHIFT - d->qpel);  // (the mean of the macroblock's samples' vectors)
-  }
-  if (sum < -len) sum = -len;
-  else if (sum >= len) sum = len - 1;
-  return sum;
-}
-
-static void rc_set_one_direct_mv(Recon* d, int mx, int my, int i) {
-  const int xy = d->block_index[i];
-  const U16 time_pp = d->pp_time, time_pb = d->pb_time;
-  const S16* p = d->next->mv[xy];
-  int p_mx = p[0], p_my = p[1];
-  constexpr int H = DIRECT_MVS / 2;
-  if ((unsigned)(p_mx + H) < DIRECT_MVS) {
-    d->mv[0][i][0] = d->direct_scale_mv[0][p_mx + H] + mx;
-    d->mv[1][i][0] = mx ? d->mv[0][i][0] - p_mx : d->direct_scale_mv[1][p_mx + H];
-  } else {
-    d->mv[0][i][0] = p_mx * time_pb / time_pp + mx;
-    d->mv[1][i][0] = mx ? d->mv[0][i][0] - p_mx : p_mx * (time_pb - time_pp) / time_pp;
-  }
-  if ((unsigned)(p_my + H) < DIRECT_MVS) {
-    d->mv[0][i][1] = d->direct_scale_mv[0][p_my + H] + my;
-    d->mv[1][i][1] = my ? d->mv[0][i][1] - p_my : d->direct_scale_mv[1][p_my + H];
-  } else {
-    d->mv[0][i][1] = p_my * time_pb / time_pp + my;
-    d->mv[1][i][1] = my ? d->mv[0][i][1] - p_my : p_my * (time_pb - time_pp) / time_pp;
-  }
-}
-
-static int rc_set_direct_mv(Recon* d, int mx, int my) {
-  const int mb_index = d->mb_x + d->mb_y * d->mb_stride;
-  const int colocated = d->next->mbtype[mb_index];
-  int i;
-  if (colocated & MBT_8x8) {
-    d->mv_type = MV_8X8;
-    for (i = 0; i < MB_LUMA; i++) rc_set_one_direct_mv(d, mx, my, i);
-    return MBT_DIRECT2 | MBT_8x8 | MBT_BIDIR;
-  } else if (colocated & MBT_INTERLACED) {
-    d->mv_type = MV_FIELD;
-    for (i = 0; i < 2; i++) {
-      int field_select = d->next->ref_index[REF_INDEX * mb_index + 2 * i];
-      U16 time_pp, time_pb;
-      const S16* pf = d->p_field_mv[mb_index][i];
-      d->field_select[0][i] = field_select;
-      d->field_select[1][i] = i;
-      if (d->top_field_first) {
-        time_pp = (U16)(d->pp_field_time - field_select + i);
-        time_pb = (U16)(d->pb_field_time - field_select + i);
-      } else {
-        time_pp = (U16)(d->pp_field_time + field_select - i);
-        time_pb = (U16)(d->pb_field_time + field_select - i);
-      }
-      if (!time_pp) time_pp = 1;  // (only in streams FFmpeg would not decode: kept from dividing by 0)
-      d->mv[0][i][0] = pf[0] * time_pb / time_pp + mx;
-      d->mv[0][i][1] = pf[1] * time_pb / time_pp + my;
-      d->mv[1][i][0] = mx ? d->mv[0][i][0] - pf[0] : pf[0] * (time_pb - time_pp) / time_pp;
-      d->mv[1][i][1] = my ? d->mv[0][i][1] - pf[1] : pf[1] * (time_pb - time_pp) / time_pp;
-    }
-    return MBT_DIRECT2 | MBT_16x8 | MBT_BIDIR | MBT_INTERLACED;
-  } else {
-    rc_set_one_direct_mv(d, mx, my, 0);
-    for (i = 1; i < MB_LUMA; i++) {
-      d->mv[0][i][0] = d->mv[0][0][0];
-      d->mv[0][i][1] = d->mv[0][0][1];
-      d->mv[1][i][0] = d->mv[1][0][0];
-      d->mv[1][i][1] = d->mv[1][0][1];
-    }
-    // FFmpeg tests avctx->workaround_bugs here (the user option), not the autodetected flags, so the
-    // detected FF_BUG_DIRECT_BLOCKSIZE never takes effect; m4vdec matches that
-    d->mv_type = !d->qpel ? MV_16X16 : MV_8X8;
-    return MBT_DIRECT2 | MBT_16x16 | MBT_BIDIR;
-  }
 }
 
 //--- motion compensation --------------------------------------------------------------------------
@@ -1089,15 +853,16 @@ static void rc_gmc_dsp(U8* dst, int stride, const U8* src, int h, int ox, int oy
 
 static void rc_gmc1_motion(Recon* d, U8* dest_y, U8* dest_cb, U8* dest_cr, const RPic* ref) {
   constexpr int F = GMC1_ONE - 1, HALF = GMC1_ONE / 2, RND = 1 << (GMC1_SHIFT - 1);
+  const Motion* o = d->mo;
   U8 buf[MC_MB * MC_MB];
   const U8* src;
   int src_x, src_y, motion_x, motion_y, ss;
-  motion_x = d->sprite_offset[0][0];
-  motion_y = d->sprite_offset[0][1];
-  src_x = d->mb_x * MB_W + (motion_x >> (d->warp_acc + 1));
-  src_y = d->mb_y * MB_W + (motion_y >> (d->warp_acc + 1));
-  motion_x *= 1 << (GMC1_SUB - d->warp_acc);
-  motion_y *= 1 << (GMC1_SUB - d->warp_acc);
+  motion_x = o->sprite_offset[0][0];
+  motion_y = o->sprite_offset[0][1];
+  src_x = d->mb_x * MB_W + (motion_x >> (o->warp_acc + 1));
+  src_y = d->mb_y * MB_W + (motion_y >> (o->warp_acc + 1));
+  motion_x *= 1 << (GMC1_SUB - o->warp_acc);
+  motion_y *= 1 << (GMC1_SUB - o->warp_acc);
   src_x = clip(src_x, -MB_W, d->width);
   if (src_x == d->width) motion_x = 0;
   src_y = clip(src_y, -MB_W, d->height);
@@ -1110,12 +875,12 @@ static void rc_gmc1_motion(Recon* d, U8* dest_y, U8* dest_cb, U8* dest_cr, const
     int dxy = ((motion_x / HALF) & 1) | ((motion_y / HALF) & 1) << 1;
     rc_hpel(dest_y, d->ly, src, ss, MB_W, MB_W, dxy, d->no_rounding ? OP_PUT_NORND : OP_PUT);
   }
-  motion_x = d->sprite_offset[1][0];
-  motion_y = d->sprite_offset[1][1];
-  src_x = d->mb_x * BLK_W + (motion_x >> (d->warp_acc + 1));
-  src_y = d->mb_y * BLK_W + (motion_y >> (d->warp_acc + 1));
-  motion_x *= 1 << (GMC1_SUB - d->warp_acc);
-  motion_y *= 1 << (GMC1_SUB - d->warp_acc);
+  motion_x = o->sprite_offset[1][0];
+  motion_y = o->sprite_offset[1][1];
+  src_x = d->mb_x * BLK_W + (motion_x >> (o->warp_acc + 1));
+  src_y = d->mb_y * BLK_W + (motion_y >> (o->warp_acc + 1));
+  motion_x *= 1 << (GMC1_SUB - o->warp_acc);
+  motion_y *= 1 << (GMC1_SUB - o->warp_acc);
   src_x = clip(src_x, -BLK_W, d->width >> 1);
   if (src_x == d->width >> 1) motion_x = 0;
   src_y = clip(src_y, -BLK_W, d->height >> 1);
@@ -1127,24 +892,25 @@ static void rc_gmc1_motion(Recon* d, U8* dest_y, U8* dest_cb, U8* dest_cr, const
 }
 
 static void rc_gmc_motion(Recon* d, U8* dest_y, U8* dest_cb, U8* dest_cr, const RPic* ref) {
-  const int a = d->warp_acc;
+  const Motion* o = d->mo;
+  const int a = o->warp_acc;
   const int dl = d->ly, dc = d->lc;
   int ox, oy;
   // (FFmpeg calls the gmc dsp with the destination's stride for the source too: the same)
-  ox = d->sprite_offset[0][0] + d->sprite_delta[0][0] * d->mb_x * MB_W + d->sprite_delta[0][1] * d->mb_y * MB_W;
-  oy = d->sprite_offset[0][1] + d->sprite_delta[1][0] * d->mb_x * MB_W + d->sprite_delta[1][1] * d->mb_y * MB_W;
-  rc_gmc_dsp(dest_y, dl, ref->y, MB_W, ox, oy, d->sprite_delta[0][0], d->sprite_delta[0][1], d->sprite_delta[1][0],
-             d->sprite_delta[1][1], a + 1, (1 << (2 * a + 1)) - d->no_rounding, d->h_edge, d->v_edge);
-  rc_gmc_dsp(dest_y + BLK_W, dl, ref->y, MB_W, ox + d->sprite_delta[0][0] * BLK_W, oy + d->sprite_delta[1][0] * BLK_W,
-             d->sprite_delta[0][0], d->sprite_delta[0][1], d->sprite_delta[1][0], d->sprite_delta[1][1], a + 1,
+  ox = o->sprite_offset[0][0] + o->sprite_delta[0][0] * d->mb_x * MB_W + o->sprite_delta[0][1] * d->mb_y * MB_W;
+  oy = o->sprite_offset[0][1] + o->sprite_delta[1][0] * d->mb_x * MB_W + o->sprite_delta[1][1] * d->mb_y * MB_W;
+  rc_gmc_dsp(dest_y, dl, ref->y, MB_W, ox, oy, o->sprite_delta[0][0], o->sprite_delta[0][1], o->sprite_delta[1][0],
+             o->sprite_delta[1][1], a + 1, (1 << (2 * a + 1)) - d->no_rounding, d->h_edge, d->v_edge);
+  rc_gmc_dsp(dest_y + BLK_W, dl, ref->y, MB_W, ox + o->sprite_delta[0][0] * BLK_W, oy + o->sprite_delta[1][0] * BLK_W,
+             o->sprite_delta[0][0], o->sprite_delta[0][1], o->sprite_delta[1][0], o->sprite_delta[1][1], a + 1,
              (1 << (2 * a + 1)) - d->no_rounding, d->h_edge, d->v_edge);
-  ox = d->sprite_offset[1][0] + d->sprite_delta[0][0] * d->mb_x * BLK_W + d->sprite_delta[0][1] * d->mb_y * BLK_W;
-  oy = d->sprite_offset[1][1] + d->sprite_delta[1][0] * d->mb_x * BLK_W + d->sprite_delta[1][1] * d->mb_y * BLK_W;
-  rc_gmc_dsp(dest_cb, dc, ref->u, BLK_W, ox, oy, d->sprite_delta[0][0], d->sprite_delta[0][1], d->sprite_delta[1][0],
-             d->sprite_delta[1][1], a + 1, (1 << (2 * a + 1)) - d->no_rounding, (d->h_edge + 1) >> 1,
+  ox = o->sprite_offset[1][0] + o->sprite_delta[0][0] * d->mb_x * BLK_W + o->sprite_delta[0][1] * d->mb_y * BLK_W;
+  oy = o->sprite_offset[1][1] + o->sprite_delta[1][0] * d->mb_x * BLK_W + o->sprite_delta[1][1] * d->mb_y * BLK_W;
+  rc_gmc_dsp(dest_cb, dc, ref->u, BLK_W, ox, oy, o->sprite_delta[0][0], o->sprite_delta[0][1], o->sprite_delta[1][0],
+             o->sprite_delta[1][1], a + 1, (1 << (2 * a + 1)) - d->no_rounding, (d->h_edge + 1) >> 1,
              (d->v_edge + 1) >> 1);
-  rc_gmc_dsp(dest_cr, dc, ref->v, BLK_W, ox, oy, d->sprite_delta[0][0], d->sprite_delta[0][1], d->sprite_delta[1][0],
-             d->sprite_delta[1][1], a + 1, (1 << (2 * a + 1)) - d->no_rounding, (d->h_edge + 1) >> 1,
+  rc_gmc_dsp(dest_cr, dc, ref->v, BLK_W, ox, oy, o->sprite_delta[0][0], o->sprite_delta[0][1], o->sprite_delta[1][0],
+             o->sprite_delta[1][1], a + 1, (1 << (2 * a + 1)) - d->no_rounding, (d->h_edge + 1) >> 1,
              (d->v_edge + 1) >> 1);
 }
 
@@ -1278,7 +1044,7 @@ static void rc_apply_8x8(Recon* d, U8* dest_y, U8* dest_cb, U8* dest_cr, int dir
   const U8* src;
   int dxy, mx = 0, my = 0, src_x, src_y, i, ss;
   for (i = 0; i < MB_LUMA; i++) {  // (block i: i & 1 its column, i >> 1 its row)
-    const int motion_x = d->mv[dir][i][0], motion_y = d->mv[dir][i][1];
+    const int motion_x = d->mo->mv[dir][i][0], motion_y = d->mo->mv[dir][i][1];
     U8* dest = dest_y + ((i & 1) * BLK_W) + (i >> 1) * BLK_W * d->ly;
     if (d->qpel) {
       dxy = qp(motion_x & QPEL_MASK, motion_y & QPEL_MASK);
@@ -1310,16 +1076,17 @@ static void rc_apply_8x8(Recon* d, U8* dest_y, U8* dest_cb, U8* dest_cr, int dir
 }
 
 static void rc_mpv_motion(Recon* d, U8* dest_y, U8* dest_cb, U8* dest_cr, int dir, const RPic* ref, int op) {
+  const Motion* o = d->mo;
   int i;
-  switch (d->mv_type) {
+  switch (o->mv_type) {
   case MV_16X16:
-    if (d->mcsel) {
-      if (d->real_warp_points == 1) rc_gmc1_motion(d, dest_y, dest_cb, dest_cr, ref);
+    if (o->mcsel) {
+      if (o->real_warp_points == 1) rc_gmc1_motion(d, dest_y, dest_cb, dest_cr, ref);
       else rc_gmc_motion(d, dest_y, dest_cb, dest_cr, ref);
     } else if (d->qpel)
-      rc_qpel_motion(d, dest_y, dest_cb, dest_cr, 0, 0, 0, ref, op, d->mv[dir][0][0], d->mv[dir][0][1], MB_W);
+      rc_qpel_motion(d, dest_y, dest_cb, dest_cr, 0, 0, 0, ref, op, o->mv[dir][0][0], o->mv[dir][0][1], MB_W);
     else
-      rc_mpeg_motion(d, dest_y, dest_cb, dest_cr, 0, 0, 0, ref, op, d->mv[dir][0][0], d->mv[dir][0][1], MB_W);
+      rc_mpeg_motion(d, dest_y, dest_cb, dest_cr, 0, 0, 0, ref, op, o->mv[dir][0][0], o->mv[dir][0][1], MB_W);
     break;
   case MV_8X8:
     rc_apply_8x8(d, dest_y, dest_cb, dest_cr, dir, ref, op);
@@ -1327,11 +1094,11 @@ static void rc_mpv_motion(Recon* d, U8* dest_y, U8* dest_cb, U8* dest_cr, int di
   case MV_FIELD:
     for (i = 0; i < 2; i++) {
       if (d->qpel)
-        rc_qpel_motion(d, dest_y, dest_cb, dest_cr, 1, i, d->field_select[dir][i], ref, op, d->mv[dir][i][0],
-                       d->mv[dir][i][1], MB_W / 2);
+        rc_qpel_motion(d, dest_y, dest_cb, dest_cr, 1, i, o->field_select[dir][i], ref, op, o->mv[dir][i][0],
+                       o->mv[dir][i][1], MB_W / 2);
       else
-        rc_mpeg_motion(d, dest_y, dest_cb, dest_cr, 1, i, d->field_select[dir][i], ref, op, d->mv[dir][i][0],
-                       d->mv[dir][i][1], MB_W / 2);
+        rc_mpeg_motion(d, dest_y, dest_cb, dest_cr, 1, i, o->field_select[dir][i], ref, op, o->mv[dir][i][0],
+                       o->mv[dir][i][1], MB_W / 2);
 
     }
     break;
@@ -1380,52 +1147,55 @@ static RPic* rc_gray_pic(Recon* d) {
   RPic* p = &d->pics[&d->pics[0] == d->cur ? 1 : 0];
   const size_t ysz = (size_t)d->ly * d->mb_h * MB_W, csz = (size_t)d->lc * d->mb_h * BLK_W;
   memset(p->y, GRAY, ysz + 2 * csz);
-  memset(p->mbskip, 0, d->mb_stride * d->mb_h + MB_PAD);
-  memset(p->mbtype, 0, (d->mb_stride * d->mb_h + MB_PAD) * sizeof(U16));
-  memset(p->mvbase, 0, (d->b8_stride * d->mb_h * 2 + MV_PAD) * sizeof(*p->mvbase));
   return p;
 }
 
 #include "rc_vop_begin.inc"  // rc_vop_begin(): a VOP's header
 
-// a video packet starting at macroblock mbnum (m4vdec's decode_video_packet_header and resync)
+// a video packet starting at macroblock mbnum (m4vdec's decode_video_packet_header and resync,
+// after the motion state's)
 static void rc_vp_begin(Recon* d, const VpHdr* k) {
   if (!d->on) return;
   d->mb_x = k->mbnum % d->mb_w;
   d->mb_y = k->mbnum / d->mb_w;
   if (k->quant) d->chroma_qscale = d->qscale = k->quant;
-  if (k->hec && d->pict_type == PT_S && d->sprite_usage == GMC_SPRITE && !rc_sprite(d, k->warp)) {
+  if (k->hec && d->pict_type == PT_S && d->mo->sprite_usage == GMC_SPRITE && !d->mo->sprite_ok) {
     d->on = 0;  // (FFmpeg would drop the packet)
     return;
   }
   rc_clean_buffers(d);
-  d->first_slice_line = 1;
-  d->resync_mb_x = d->mb_x;
-  d->resync_mb_y = d->mb_y;
   rc_set_qscale(d, d->qscale);
 }
 
-// macroblock idx starts (decode_slice's part)
+// macroblock idx starts (decode_slice's part, after the motion state's)
 static void rc_mb_begin(Recon* d, int idx) {
   d->mb_x = idx % d->mb_w;
   d->mb_y = idx / d->mb_w;
   rc_set_block_index(d);
-  if (d->resync_mb_x == d->mb_x && d->resync_mb_y + 1 == d->mb_y) d->first_slice_line = 0;
-  d->mv_dir = MV_DIR_FORWARD;
-  d->mv_type = MV_16X16;
   d->mb_intra = 0;
   d->ac_pred = 0;
 }
 
-#include "rc_mb_inter.inc"  // rc_mb_inter(): an inter macroblock's prediction
+// An inter macroblock (or a skipped one): its prediction made in the picture, by the vectors the
+// motion state has for it (reconstruct_mb's part)
+static void rc_mb_inter(Recon* d) {
+  RPic* cur = d->cur;
+  U8* dest_y = cur->y + (size_t)d->mb_y * MB_W * d->ly + d->mb_x * MB_W;
+  U8* dest_cb = cur->u + (size_t)d->mb_y * BLK_W * d->lc + d->mb_x * BLK_W;
+  U8* dest_cr = cur->v + (size_t)d->mb_y * BLK_W * d->lc + d->mb_x * BLK_W;
+  int op = (!d->no_rounding || d->pict_type == PT_B) ? OP_PUT : OP_PUT_NORND;
+  d->mb_intra = 0;
+  if (d->mo->mv_dir & MV_DIR_FORWARD) {
+    rc_mpv_motion(d, dest_y, dest_cb, dest_cr, 0, d->last, op);
+    op = OP_AVG;
+  }
+  if (d->mo->mv_dir & MV_DIR_BACKWARD) rc_mpv_motion(d, dest_y, dest_cb, dest_cr, 1, d->next, op);
+}
 
-// an intra macroblock of m (ac: its AC prediction flag)
+// an intra macroblock (ac: its AC prediction flag)
 static void rc_mb_intra(Recon* d, int ac) {
-  const int xy = d->mb_x + d->mb_y * d->mb_stride;
   d->mb_intra = 1;
-  d->mcsel = 0;
   d->ac_pred = ac == 1;
-  d->cur->mbtype[xy] = d->ac_pred ? (MBT_INTRA | MBT_ACPRED) : MBT_INTRA;
 }
 
 // Block n of the macroblock, its coefficients b known: reconstructed (decode_block's dequantisation
@@ -1485,7 +1255,6 @@ static void rc_mb_end(Recon* d) {
   const int mb_xy = d->mb_y * d->mb_stride + d->mb_x;
   if (!d->mb_intra) rc_clean_intra_table_entries(d, mb_xy);
   else d->mbintra_table[mb_xy] = 1;
-  if (d->pict_type != PT_B) rc_update_motion_val(d);
   d->qscale_table[mb_xy] = (S8)d->qscale;
   d->mb_done[mb_xy] = 1;
 }

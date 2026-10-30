@@ -388,18 +388,19 @@ static void rc_est_luma(const Recon* d, RcEst* e, int field) {
 // template matches best, refined by a search of RC_EST_RANGE samples around it
 static void rc_intra_est(const Recon* d, RcEst* e) {
   const RPic* ref = d->last;
+  const S16 (*mv)[2] = d->mo->cur->mv, (*rmv)[2] = d->mo->ref->mv;  // (the motion state's: this VOP's, the reference's)
   const int qs = 1 + d->qpel, wrap = d->b8_stride, bi = d->block_index[0];
   int cand[RC_EST_CANDS][2], nc = 0, i, bx, by, best = -1, bn = 0, bs = 0, dx, dy;
   e->ok = 0;
   if (!ref) return;
   cand[nc][0] = cand[nc][1] = 0, nc++;
-  if (d->mb_x > 0) cand[nc][0] = d->cur->mv[bi - 1][0] >> qs, cand[nc][1] = d->cur->mv[bi - 1][1] >> qs, nc++;
+  if (d->mb_x > 0) cand[nc][0] = mv[bi - 1][0] >> qs, cand[nc][1] = mv[bi - 1][1] >> qs, nc++;
   if (d->mb_y > 0) {
-    cand[nc][0] = d->cur->mv[bi - wrap][0] >> qs, cand[nc][1] = d->cur->mv[bi - wrap][1] >> qs, nc++;
+    cand[nc][0] = mv[bi - wrap][0] >> qs, cand[nc][1] = mv[bi - wrap][1] >> qs, nc++;
     if (d->mb_x + 1 < d->mb_w)
-      cand[nc][0] = d->cur->mv[bi + 2 - wrap][0] >> qs, cand[nc][1] = d->cur->mv[bi + 2 - wrap][1] >> qs, nc++;
+      cand[nc][0] = mv[bi + 2 - wrap][0] >> qs, cand[nc][1] = mv[bi + 2 - wrap][1] >> qs, nc++;
   }
-  cand[nc][0] = ref->mv[bi][0] >> qs, cand[nc][1] = ref->mv[bi][1] >> qs, nc++;
+  cand[nc][0] = rmv[bi][0] >> qs, cand[nc][1] = rmv[bi][1] >> qs, nc++;
   bx = by = 0;
   for (i = 0; i < nc; i++) {
     int n;
@@ -527,10 +528,11 @@ static int rc_edge_proj(const Recon* d, int n, int P4[BLK_COEFS]) {
 //--- what the reference says of skipping ----------------------------------------------------------
 
 // The current macroblock as a P-VOP skips it (the reference's, unmoved) or a B-VOP's direct mode
-// without a vector predicts it: zt how far the decoded samples above and left of it are from the
-// reference's there (P: the area changed since; 0 none decoded), ze how far the prediction's edges
-// are from them (-1 none); both rc_qratio(). A B-VOP's direct prediction is made in the
-// picture, where the macroblock's own replaces it.
+// without a vector predicts it (the motion state's vectors, which the model has set so): zt how
+// far the decoded samples above and left of it are from the reference's there (P: the area changed
+// since; 0 none decoded), ze how far the prediction's edges are from them (-1 none); both
+// rc_qratio(). A B-VOP's direct prediction is made in the picture, where the macroblock's own
+// replaces it.
 static void rc_skip_feat(Recon* d, int* zt, int* ze) {
   constexpr int T = RC_TM_T;
   const int bx = d->mb_x * MB_W, by = d->mb_y * MB_W, ly = d->ly;
@@ -542,7 +544,6 @@ static void rc_skip_feat(Recon* d, int* zt, int* ze) {
     U8* dy = d->cur->y + (ptrdiff_t)by * ly + bx;
     U8* du = d->cur->u + (ptrdiff_t)d->mb_y * BLK_W * d->lc + d->mb_x * BLK_W;
     U8* dv = d->cur->v + (ptrdiff_t)d->mb_y * BLK_W * d->lc + d->mb_x * BLK_W;
-    rc_set_direct_mv(d, 0, 0);
     rc_mpv_motion(d, dy, du, dv, 0, d->last, OP_PUT);
     rc_mpv_motion(d, dy, du, dv, 1, d->next, OP_AVG);
     ref = cur;  // (the prediction in place)

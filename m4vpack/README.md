@@ -134,11 +134,11 @@ The variables, in short (`famvars.inc` has them all):
 | intra DC difference | the previous and neighbouring blocks' sizes, counts and signs, whether the block has AC coefficients |
 | coefficients | CABAC's residual coding (significance with "last" flags in scan order, levels in reverse order, signs, the escape mode where it isn't the usual one), by position and block class, the neighbouring blocks' counts (CAVLC's nC), the coefficients coded so far (histories of significance flags and magnitudes, as h264p), the left and above blocks' coefficients at the same position, the frequency neighbours already coded (as HEVC), the quantiser, the vector size, the co-located block, and for Cr the Cb block; signs by the signs coded before them, the frequency neighbours' (weighted by their magnitudes) and the neighbouring blocks' |
 
-The vectors the contexts use are reconstructed as a decoder does (median prediction with its video
-packet rules, field and 4MV vectors, B-VOP predictors, direct mode scaling by the display times),
-by the model's own copy of those rules: it differs from FFmpeg's in rare cases (a stored vector
-FFmpeg zeroes at a video packet's start, display time differences past 16 bits), which costs a
-little compression there and nothing else.
+The vectors the contexts use are the decoder's own: one motion state (`motion.inc`, m4vdec's code)
+makes them at every level from the differences coded, with FFmpeg's median prediction and its video
+packet rules (down to the stored vector it zeroes at a packet's start), field and 4MV vectors, GMC's
+warped vector, the B-VOP predictors, and direct mode scaled by the display times as FFmpeg keeps
+them (16 bits). The decoder in the loop of `-9` moves its predictions by the same vectors.
 
 ### The decoder in the loop (level -9)
 

@@ -14,8 +14,6 @@ typedef struct Last {  // previous values the models predict from
   int rawat, rawcode;     // the place in the chunk kept as bytes, its start code (raw family's code)
   U32 rawhd;              // its first bytes
   int type, mtb, tib, tinc, dinc[PT_N], rnd, dcthr, tff, alt, quant[PT_N], fcode[PT_N], bcode;
-  S64 time_base, last_time_base, last_non_b;  // display times as FFmpeg computes them
-  int pp_time, pb_time;                       // anchor to anchor, anchor to B-VOP
 } Last;
 
 // Coefficient magnitudes of the blocks coded last in each column of macroblocks: the left and
@@ -30,15 +28,11 @@ enum { C_NONE, C_SKIP, C_INTER, C_4MV, C_INTRA, C_GMC, C_BDIR0, C_BDIR, C_BFWD, 
 // mva: magnitudes of the first motion vector difference in VLC code units, mvs: its signs (0, 1 +, 2 -);
 // bsk: B-VOPs skip the macroblock at this position
 typedef struct MBCtx { U8 cls, cbp, nz[MB_BLOCKS], mva[2], mvs[2], ac, dt, fp, bsk; } MBCtx;
-typedef S16 MV4[MB_LUMA][2];  // a macroblock's motion vectors, per 8x8 block
 
 typedef struct VState {  // the coding side of the current VOP
   Vop v;
   int mb_w, prev_dq, run;    // run: macroblocks of the same kind (skip, direct) before this one
   int dc_prev[2], dc_sgn[2];  // the last intra DC difference's size, and its sign (0 none, 1 +, 2 -)
-  int vp_start;               // first macroblock of the video packet
-  int lmv[2][2][2];           // B-VOP vector predictors: [forward, backward][field][x, y]
-  int trb, trd;               // B-VOP: time from the past anchor, between the anchors
   const U8* scan;             // scan order (as far as known: intra blocks with AC prediction use other ones)
 } VState;
 
@@ -78,16 +72,13 @@ static_assert(kVoteMax == 2 * kVoteNb * kVoteBig + kVoteDiag, "sgn's vote: its r
 // the hdr family's ty: a VOP's type less PT_I, or none
 constexpr int TY_NONE = PT_N - PT_I;
 constexpr int kQuantStart = 4;  // the quantiser the header model predicts before the first VOP
-constexpr int kTimeMax = 1 << 30;  // the display times' differences, clamped
 constexpr i64 kRawLenMax = (i64)1 << 40;  // a raw chunk's length as decoded (more: damaged data)
 constexpr int kTailCtx = 4;  // the tail's bytes: in the context of the byte before's top 4 bits
 
-constexpr int kMvCands = 3;     // the candidates of a vector's prediction
 constexpr int kHpelMask = 1, kQpelMask = 3;  // a vector component's sub-sample bits
 
 // a three-state pair (3x3) as one variable
 static INLINE int tri2(int a, int b) { return a * kTri + b; }
-static int time_clamp(S64 t) { return (int)clip(t, -kTimeMax, kTimeMax); }
 // sig's fp: the bits of the frequency neighbours left, above, above left, 2 left, 2 above
 enum { FP_L, FP_A, FP_AL, FP_L2, FP_A2 };
 // mbt's rt: the co-located macroblock another kind, of the kind the decision asks of, none, of the

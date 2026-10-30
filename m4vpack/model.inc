@@ -28,11 +28,11 @@ struct Model {
   BlkCtx rowb[MAX_MB_W][MB_BLOCKS];
   // per macroblock, mb_cap of them: the current VOP's and the last anchor VOP's
   MBCtx *mbcur, *mbref;
-  MV4 *mvcur, *mvref;
   size_t mb_cap;
   int ref_mbs;  // size of the VOP in mbref, 0 if none
   U8 tailbuf[TAIL_MAX];
   MB mrec;      // the macroblock vop_walk() has
+  Motion mo;    // the vectors as the decoder makes them (motion.inc)
   Recon rec;    // the decoder in the loop (LV::recon)
   RcEst est;    // its intra estimate for the macroblock (est.ok: there is one)
   int tmk[2], tmx[2], tmy[2];  // its vectors by template matching, forward and backward (tmk: found)
@@ -43,9 +43,9 @@ struct Model {
     M4V_FAMS(M_INIT)
 #undef M_INIT
     mbcur = mbref = 0;
-    mvcur = mvref = 0;
     mb_cap = 0;
-    if (LV::recon) rc_init(&rec);
+    mo_init(&mo);
+    if (LV::recon) rc_init(&rec), rec.mo = &mo;
   }
   void Quit(void) {
 #define M_QUIT(F)                                                                                    \
@@ -55,11 +55,9 @@ struct Model {
 #undef M_QUIT
     free(mbcur);
     free(mbref);
-    free(mvcur);
-    free(mvref);
     mbcur = mbref = 0;
-    mvcur = mvref = 0;
     mb_cap = 0;
+    mo_quit(&mo);
     if (LV::recon) rc_quit(&rec);
   }
   // the run starts: the families' tables mapped and wired to the coder co
@@ -77,12 +75,10 @@ struct Model {
   }
   // room for n macroblocks (0: no memory)
   int mb_room(int n) {
-    size_t r[4] = { mb_cap, mb_cap, mb_cap, mb_cap };  // (the four the same: the same growth)
+    size_t r[2] = { mb_cap, mb_cap };  // (the two the same: the same growth)
     if ((size_t)n <= mb_cap) return 1;
-    if (!grow(&mbcur, &r[0], n) || !grow(&mbref, &r[1], n) || !grow(&mvcur, &r[2], n) || !grow(&mvref, &r[3], n))
-      return 0;
+    if (!grow(&mbcur, &r[0], n) || !grow(&mbref, &r[1], n)) return 0;
     memset(mbref + mb_cap, 0, (r[1] - mb_cap) * sizeof(MBCtx));
-    memset(mvref + mb_cap, 0, (r[3] - mb_cap) * sizeof(MV4));
     mb_cap = r[0];
     return 1;
   }
@@ -191,22 +187,6 @@ struct Model {
     last.tib = h->tib;
     last.tinc = h->tinc;
     last.dinc[h->type] = d;
-    {  // display times (FFmpeg's decode_vop_header) for the B-VOP vector contexts
-      const S64 res = cx->time_res > 0 ? cx->time_res : 1;
-      S64 t;
-      if (h->type != PT_B) {
-        last.last_time_base = last.time_base;
-        last.time_base += h->mtb;
-        t = last.time_base * res + h->tinc;
-        t -= last.last_non_b;
-        last.pp_time = time_clamp(t);
-        last.last_non_b = last.time_base * res + h->tinc;
-      } else {
-        t = (last.last_time_base + h->mtb) * res + h->tinc;
-        t = last.pp_time - (last.last_non_b - t);
-        last.pb_time = time_clamp(t);
-      }
-    }
     h->coded = hdr_flag(F_CODED, ty, 0, 0, h->coded);
     if (!ENC) vop_hdr_clear(h);
     if (!h->coded) return;
@@ -334,6 +314,7 @@ struct Model {
   // (level -9) skipping's variables, zt and ze (0 none)
   void skip_vars(int* zt, int* ze) {
     int a, b;
+    if (mo.pict_type == PT_B) mo_direct(&mo, 0, 0);  // (what rc_skip_feat() predicts by)
     rc_skip_feat(&rec, &a, &b);
     *zt = a < 0 ? 0 : qlog1(a);
     *ze = b < 0 ? 0 : qlog1(b);
@@ -471,45 +452,6 @@ struct Model {
     return neg ? -(int)x : (int)x;
   }
 
-  // The decoder's prediction of the vector of block b (FFmpeg's h263_pred_motion): the median of the
-  // left, above and above-right blocks. A candidate outside the picture or before the start of the
-  // video packet is invalid: it counts as 0, and if only one is valid, that one is the prediction.
-  void pred_mv(const VState* s, int idx, int b, int* px, int* py, int* sx, int* sy) {
-    enum { NB_HERE = 0, NB_LEFT = -1, NB_ABOVE = -2, NB_ABOVE_RIGHT = -3 };
-    static const S8 nb[MB_LUMA][kMvCands][2] = {  // [block][left, above, above-right]: macroblock, block
-      { { NB_LEFT, 1 }, { NB_ABOVE, 2 }, { NB_ABOVE_RIGHT, 2 } },
-      { { NB_HERE, 0 }, { NB_ABOVE, 3 }, { NB_ABOVE_RIGHT, 2 } },
-      { { NB_LEFT, 3 }, { NB_HERE, 0 }, { NB_HERE, 1 } },
-      { { NB_HERE, 2 }, { NB_HERE, 1 }, { NB_HERE, 0 } } };
-    const int w = s->mb_w, x = idx % w, y = idx / w;
-    int cx[kMvCands], cy[kMvCands], nv = 0, i;
-    for (i = 0; i < kMvCands; i++) {
-      const int k = nb[b][i][0];
-      int j = idx, ok = 1;
-      if (k == NB_LEFT) { j = idx - 1; ok = x > 0; }
-      else if (k == NB_ABOVE) { j = idx - w; ok = y > 0; }
-      else if (k == NB_ABOVE_RIGHT) { j = idx - w + 1; ok = y > 0 && x + 1 < w; }
-      if (ok && k && j < s->vp_start) ok = 0;
-      cx[i] = ok ? mvcur[j][nb[b][i][1]][0] : 0;
-      cy[i] = ok ? mvcur[j][nb[b][i][1]][1] : 0;
-      nv += ok;
-    }
-    if (nv == 1) {
-      *px = cx[0] + cx[1] + cx[2];
-      *py = cy[0] + cy[1] + cy[2];
-      *sx = *sy = -1;
-    } else {
-      *sx = (cx[0] > cx[1] ? (cx[0] > cx[2] ? cx[0] : cx[2]) : (cx[1] > cx[2] ? cx[1] : cx[2])) -
-            (cx[0] < cx[1] ? (cx[0] < cx[2] ? cx[0] : cx[2]) : (cx[1] < cx[2] ? cx[1] : cx[2]));
-      *sy = (cy[0] > cy[1] ? (cy[0] > cy[2] ? cy[0] : cy[2]) : (cy[1] > cy[2] ? cy[1] : cy[2])) -
-            (cy[0] < cy[1] ? (cy[0] < cy[2] ? cy[0] : cy[2]) : (cy[1] < cy[2] ? cy[1] : cy[2]));
-      *px = cx[0] > cx[1] ? (cx[1] > cx[2] ? cx[1] : cx[0] > cx[2] ? cx[2] : cx[0])
-                          : (cx[0] > cx[2] ? cx[0] : cx[1] > cx[2] ? cx[2] : cx[1]);
-      *py = cy[0] > cy[1] ? (cy[1] > cy[2] ? cy[1] : cy[0] > cy[2] ? cy[2] : cy[0])
-                          : (cy[0] > cy[2] ? cy[0] : cy[1] > cy[2] ? cy[2] : cy[1]);
-    }
-  }
-
   // one vector (x, y) of kind kind, predicted by (px, py) from candidates with spreads (sx, sy) (-1:
   // none), with the co-located vector (tx, ty) if tok; tm: the template's vector (tmk[], tmx[], tmy[])
   // of that direction, or -1
@@ -521,13 +463,13 @@ struct Model {
                  mv_spread(sx, fcode), m->mv[*mvi], &q, mk, mk ? mv_wrap(tmx[tm] - px, fcode) : 0);
     m->mv[(*mvi)++] = v;
     *sumq += q;
-    *mx = mv_wrap(px + v, fcode);
+    *mx = mo_vector(px, v, fcode);
     if (first) { me->mva[0] = (U8)q; me->mvs[0] = (U8)(v > 0 ? 1 : v < 0 ? 2 : 0); }
     v = code_mvd(kind, 1, fcode, L, A, R, mvq(q), tok, mv_wrap(ty - py, fcode), mv_spread(sy, fcode),
                  m->mv[*mvi], &q, mk, mk ? mv_wrap(tmy[tm] - py, fcode) : 0);
     m->mv[(*mvi)++] = v;
     *sumq += q;
-    *my = mv_wrap(py + v, fcode);
+    *my = mo_vector(py, v, fcode);
     if (first) { me->mva[1] = (U8)q; me->mvs[1] = (U8)(v > 0 ? 1 : v < 0 ? 2 : 0); }
   }
 

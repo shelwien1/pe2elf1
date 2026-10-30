@@ -16,7 +16,8 @@ int Model<f_DEC, LV>::vop_walk(Ctx* cx, int mode, GB* gb, PB* pb) {
   if (mode != W_DECODE && !vop_hdr_io(rd, cx, &h)) return W_FAIL;
   if (mode != W_VERIFY) code_vop_hdr(cx, &h);
   if (mode == W_DECODE && c->err) return W_FAIL;
-  if (LV::recon && mode != W_VERIFY && rc_vop_begin(&rec, cx, &h) < 0) return W_NOMEM;
+  if (mode != W_VERIFY && (mo_vop_begin(&mo, cx, &h) < 0 || (LV::recon && rc_vop_begin(&rec, cx, &h) < 0)))
+    return W_NOMEM;
   if (mode != W_ENCODE) {
     pb_put(pb, SC_START << BYTE_BITS | SC_VOP, SC_LEN * BYTE_BITS);  // (its start code: the reader's comes after it)
     if (!vop_hdr_io(wr, cx, &h)) return W_FAIL;
@@ -32,11 +33,7 @@ int Model<f_DEC, LV>::vop_walk(Ctx* cx, int mode, GB* gb, PB* pb) {
     if (mode != W_DECODE && anchor) memset(cx->skip_cur, 0, cx->mb_num + 1);
     if (mode != W_VERIFY) {
       memset(mbcur, 0, cx->mb_num * sizeof(*mbcur));
-      memset(mvcur, 0, cx->mb_num * sizeof(*mvcur));
       if (ref_mbs != cx->mb_num) ref_mbs = 0;
-      s.trb = last.pb_time;
-      s.trd = last.pp_time;
-      if (s.trb <= 0 || s.trb >= s.trd) s.trb = 1, s.trd = 2;  // (inconsistent times: halfway)
     }
     for (;;) {
       const int idx = mb_y * cx->mb_w + mb_x;
@@ -79,8 +76,7 @@ int Model<f_DEC, LV>::vop_walk(Ctx* cx, int mode, GB* gb, PB* pb) {
         }
         if (mode != W_VERIFY) {
           code_vp(cx, &s, &k, idx + 1);
-          s.vp_start = k.mbnum;
-          memset(s.lmv, 0, sizeof(s.lmv));
+          mo_vp_begin(&mo, &k);
           if (LV::recon && rec.on && k.mbnum > 0 && k.mbnum < cx->mb_num) rc_vp_begin(&rec, &k);
         }
         if (mode != W_ENCODE && !vp_io(wr, cx, &vw, &k)) { ret = W_FAIL; break; }
@@ -93,7 +89,7 @@ int Model<f_DEC, LV>::vop_walk(Ctx* cx, int mode, GB* gb, PB* pb) {
     if (ret < 0) return W_FAIL;
     if (mode != W_VERIFY && anchor) {
       memcpy(mbref, mbcur, cx->mb_num * sizeof(*mbcur));
-      memcpy(mvref, mvcur, cx->mb_num * sizeof(*mvcur));
+      mo_vop_end(&mo);
       ref_mbs = cx->mb_num;
     }
   }
