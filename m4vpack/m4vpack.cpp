@@ -22,8 +22,9 @@
 // macroblock), and the records are written back as bits and compared with the input. If that
 // reproduces the VOP, the records are coded with a binary arithmetic coder; otherwise (unsupported
 // features, damaged data) the VOP is kept as bytes, so compression is always lossless. Headers and
-// user data are kept as bytes too. The same functions code and decode every record (model.inc), so
-// the two directions can't disagree.
+// user data are kept as bytes too. The same functions code and decode every record (model.inc), and
+// one walk per record reads it and writes it back (syntax.inc), so the two directions can't
+// disagree.
 //
 // The model. Each syntax element is binarised (as H.264's CABAC; see m4vtsv/h264-counterparts.md),
 // and each decision goes to one of 13 families (fam.inc, h264p's): counters chosen by context

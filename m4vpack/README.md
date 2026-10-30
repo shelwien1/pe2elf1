@@ -94,7 +94,9 @@ round-trips, including damaged streams and files that aren't video at all.
 
 One set of functions (`model.inc`) codes and decodes every record. Each function takes the values
 when compressing and returns them when decompressing, so the two directions can't drift apart (the
-same idea as h264p's symmetric syntax coder).
+same idea as h264p's symmetric syntax coder). The bits are handled the same way: one walk per record
+(`syntax.inc`) both reads it from the bits and writes it back, so the parser and the writer can't
+disagree either, and the model asks the same helpers which fields a record has.
 
 ### The model
 

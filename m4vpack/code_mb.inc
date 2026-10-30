@@ -20,11 +20,7 @@ void Model<f_DEC, LV>::code_mb(const Ctx* cx, VState* s, MB* m, int idx) {
   memset(&T, 0, sizeof(T));
   T.st = v->type - PT_I;
   T.rc = R ? R->cls : 0;
-  if (!ENC) {
-    m->st = m->sk = 0;
-    m->mb = m->t = m->mc = m->ac = m->dq = m->dt = m->fp = NA;
-    m->nfs = m->fs = m->nmv = 0;
-  }
+  if (!ENC) mb_clear(m);
   memset(me, 0, sizeof(*me));
   est.ok = 0;
   tmk[0] = tmk[1] = 0;
@@ -143,12 +139,12 @@ void Model<f_DEC, LV>::code_mb(const Ctx* cx, VState* s, MB* m, int idx) {
     m->ac = mbt_bit(MBN_AC, T, m->ac);
     if (LV::recon && rec.on) rc_mb_intra(&rec, m->ac), rc_intra_est(&rec, &est), est_err = est_nb = 0;
   }
-  if (!intra && cx->interlaced && (v->type == PT_B ? m->t != MB_DIRECT : m->t == MB_INTER && m->mc != 1)) {
+  if (mb_has_fp(cx, v, m)) {
     T.cl = (L && L->fp) + (A && A->fp);
     T.c4 = T.cl;
     m->fp = mbt_bit(MBN_FIELD, T, m->fp);
     if (m->fp == 1) {
-      m->nfs = v->type == PT_B ? 2 * (fwd_dir(m->t) + bwd_dir(m->t)) : 2;  // (a select per field)
+      m->nfs = mb_nfs(v, m);  // (a select per field)
       for (i = m->nfs - 1, k = 0; i >= 0; i--) {
         T.fsn = cap(i, kFsnCap);
         k |= mbt_bit(MBN_FSEL, T, (m->fs >> i) & 1) << i;
@@ -241,7 +237,7 @@ void Model<f_DEC, LV>::code_mb(const Ctx* cx, VState* s, MB* m, int idx) {
                        (L ? L->cbp != 0 : kTriNone) == (A ? A->cbp != 0 : kTriNone) ? 0 : 1 + (R && R->cbp), ENC ? cbp_of(m) : 0,
                        cie, est_trust(), ctx, cem);
   c->cat = CAT_MB;
-  if (v->type != PT_B || (m->t != MB_DIRECT && cbp)) {
+  if (mb_has_dq(v, m, cbp)) {
     M_qpd_v Q;
     const int node = v->type == PT_B ? QPD_B : QPD_P;
     Q.c3 = cls3;
@@ -251,7 +247,7 @@ void Model<f_DEC, LV>::code_mb(const Ctx* cx, VState* s, MB* m, int idx) {
     k = f_qpd.bit(node, ENC && m->dq != 0);
     if (!k) m->dq = 0;
     else if (v->type != PT_B) {  // which of -1, -2, 1, 2 (quant_tab), in a tree of two bits
-      const int x = ENC ? dq_index(m->dq) : 0, b1 = f_qpd.bit(QPD_IDX, x >> 1);
+      const int x = ENC ? index_of(quant_tab, m->dq) : 0, b1 = f_qpd.bit(QPD_IDX, x >> 1);
       m->dq = quant_tab[b1 * 2 + f_qpd.bit(QPD_IDX_LO + b1, x & 1)];
     } else
       m->dq = f_qpd.bit(QPD_BSIGN, ENC && m->dq > 0) ? DQ_B : -DQ_B;
@@ -259,7 +255,7 @@ void Model<f_DEC, LV>::code_mb(const Ctx* cx, VState* s, MB* m, int idx) {
     v->qscale = clip(v->qscale + m->dq, QS_MIN, QS_MAX);
     if (LV::recon && rec.on) rc_set_qscale(&rec, v->qscale);
   }
-  if (cx->interlaced && (intra || cbp)) {
+  if (mb_has_dt(cx, intra, cbp)) {
     T.cl = (L && L->dt) + (A && A->dt);
     T.c4 = T.cl;
     T.intra = intra;

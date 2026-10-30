@@ -208,14 +208,10 @@ struct Model {
       }
     }
     h->coded = hdr_flag(F_CODED, ty, 0, 0, h->coded);
-    if (!ENC) {
-      h->rnd = h->dcthr = h->tff = h->alt = h->quant = h->fcode = h->bcode = NA;
-      h->ncplx = 0;
-    }
+    if (!ENC) vop_hdr_clear(h);
     if (!h->coded) return;
-    if (h->type == PT_P || (h->type == PT_S && cx->sprite_usage == GMC_SPRITE))
-      last.rnd = h->rnd = hdr_flag(F_RND, ty, last.rnd, 0, h->rnd);
-    h->ncplx = cx->cplx_i + (h->type != PT_I ? cx->cplx_p : 0) + (h->type == PT_B ? cx->cplx_b : 0);
+    if (vop_has_rnd(cx, h->type)) last.rnd = h->rnd = hdr_flag(F_RND, ty, last.rnd, 0, h->rnd);
+    h->ncplx = vop_ncplx(cx, h->type);
     for (i = 0; i < h->ncplx; i++)
       h->cplx[i] = (char)('0' + hdr_flag(F_CPLX, ty, 0, cap(i, kPosCap), h->cplx[i] == '1'));
     last.dcthr = h->dcthr = (int)checked(hdr_val(F_DCTHR, ty, last.dcthr, 0, h->dcthr), 0, DCTHR_MAX);
@@ -223,7 +219,7 @@ struct Model {
       last.tff = h->tff = hdr_flag(F_TFF, ty, last.tff, 0, h->tff);
       last.alt = h->alt = hdr_flag(F_ALT, ty, last.alt, 0, h->alt);
     }
-    if (h->type == PT_S && cx->sprite_usage == GMC_SPRITE)
+    if (vop_gmc(cx, h->type))
       for (i = 0; i < 2 * cx->warp_points; i++)
         h->warp[i] = (int)checked(hdr_sval(F_WARP, ty, 0, i & 1, h->warp[i]), -WARP_MAX, WARP_MAX);
     h->quant = last.quant[h->type] + (int)hdr_sval(F_QUANT, ty, 0, 0, h->quant - last.quant[h->type]);
@@ -251,7 +247,7 @@ struct Model {
     k->hec = hdr_flag(F_HEC, ty, 0, 0, k->hec);
     if (k->quant) v->qscale = k->quant;
     v->qscale = clip(v->qscale, QS_MIN, QS_MAX);
-    if (!ENC) k->mtb = k->tinc = k->type = k->dcthr = k->fcode = k->bcode = NA;
+    if (!ENC) vp_clear(k);
     if (!k->hec) return;
     k->mtb = (int)checked(hdr_val(F_HMTB, ty, 0, 0, k->mtb), 0, RUN_MAX);
     k->tinc = (int)checked(hdr_val(F_HTINC, ty, 0, 0, k->tinc), 0, (1 << v->tib) - 1);

@@ -148,7 +148,7 @@ static int mb_codable(const MB* m) {
 
 static void vop_state(Vop* v, const Ctx* cx, const VopHdr* h) {
   v->type = h->type;
-  v->gmc = h->type == PT_S && cx->sprite_usage == GMC_SPRITE;
+  v->gmc = vop_gmc(cx, h->type);
   v->fcode = h->fcode == NA ? 1 : h->fcode;
   v->bcode = h->bcode == NA ? 1 : h->bcode;
   v->qscale = clip(h->quant, QS_MIN, QS_MAX);

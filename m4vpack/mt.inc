@@ -111,6 +111,7 @@ static int vop_is_coded(Ctx* c, const U8* p, size_t n) {
   U8 b[VOP_PEEK + GB_PAD];
   GB gb;
   VopHdr h;
+  Rd rd = {&gb};
   const size_t k = n - SC_LEN < VOP_PEEK ? n - SC_LEN : VOP_PEEK;
   memset(b, 0, sizeof b);
   memcpy(b, p + SC_LEN, k);
@@ -118,7 +119,7 @@ static int vop_is_coded(Ctx* c, const U8* p, size_t n) {
   gb.size = (int)k * BYTE_BITS;
   gb.pos = 0;
   h.coded = -1;
-  parse_vop_hdr(c, &gb, &h);  // (coded as far as it got: the rest of the header doesn't matter here)
+  vop_hdr_io(rd, c, &h);  // (coded as far as it got: the rest of the header doesn't matter here)
   return h.coded;
 }
 

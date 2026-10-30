@@ -7,15 +7,20 @@ int Model<f_DEC, LV>::vop_walk(Ctx* cx, int mode, GB* gb, PB* pb) {
   VopHdr h;
   Vop vp, vw;
   VState s;
+  Rd rd = {gb};  // (the VOP read, written: as mode has it)
+  Wr wr = {pb};
   int mb_x = 0, mb_y = 0, anchor, ret = 0, nb, tbits = 0, tn = 0, i;
   double mb_bits = 0;
   memset(&h, 0, sizeof(h));
   memset(&s, 0, sizeof(s));
-  if (mode != W_DECODE && parse_vop_hdr(cx, gb, &h) < 0) return W_FAIL;
+  if (mode != W_DECODE && !vop_hdr_io(rd, cx, &h)) return W_FAIL;
   if (mode != W_VERIFY) code_vop_hdr(cx, &h);
   if (mode == W_DECODE && c->err) return W_FAIL;
   if (LV::recon && mode != W_VERIFY && rc_vop_begin(&rec, cx, &h) < 0) return W_NOMEM;
-  if (mode != W_ENCODE && put_vop_hdr(cx, pb, &h) < 0) return W_FAIL;
+  if (mode != W_ENCODE) {
+    pb_put(pb, SC_START << BYTE_BITS | SC_VOP, SC_LEN * BYTE_BITS);  // (its start code: the reader's comes after it)
+    if (!vop_hdr_io(wr, cx, &h)) return W_FAIL;
+  }
   if (h.coded) {
     if (!cx->have_vol || cx->unsupported || !cx->mb_num || cx->mb_num > MAX_MBS) return W_FAIL;
     if (!ctx_skip_room(cx, cx->mb_num) || !mb_room(cx->mb_num)) return W_NOMEM;
@@ -40,7 +45,7 @@ int Model<f_DEC, LV>::vop_walk(Ctx* cx, int mode, GB* gb, PB* pb) {
       if (mode != W_DECODE) {
         const double b0 = pbits[PB_MV], b1 = pbits[PB_DC], b2 = pbits[PB_COEF];
         const int p0 = gb->pos;
-        if (parse_mb(cx, gb, &vp, &m, idx) < 0 || (mode == W_VERIFY && !mb_codable(&m))) { ret = W_FAIL; break; }
+        if (!mb_io(rd, cx, &vp, &m, idx) || (mode == W_VERIFY && !mb_codable(&m))) { ret = W_FAIL; break; }
         if (mode == W_ENCODE && c->stats) {
           c->orig[CAT_MV] += pbits[PB_MV] - b0;
           c->orig[CAT_DC] += pbits[PB_DC] - b1;
@@ -52,7 +57,7 @@ int Model<f_DEC, LV>::vop_walk(Ctx* cx, int mode, GB* gb, PB* pb) {
       }
       if (mode != W_VERIFY) code_mb(cx, &s, &m, idx);
       if (mode == W_DECODE && (c->err || c->io->over > OVER_MAX)) { ret = W_FAIL; break; }  // damaged data
-      if (mode != W_ENCODE && put_mb(cx, pb, &vw, &m) < 0) { ret = W_FAIL; break; }
+      if (mode != W_ENCODE && !mb_io(wr, cx, &vw, &m, idx)) { ret = W_FAIL; break; }
       if (mode == W_DECODE && pb->err) { ret = W_FAIL; break; }
       if (++mb_x == cx->mb_w) { mb_x = 0; mb_y++; }
       if (mb_y >= cx->mb_h) break;
@@ -70,12 +75,7 @@ int Model<f_DEC, LV>::vop_walk(Ctx* cx, int mode, GB* gb, PB* pb) {
         if (!vpf) continue;
         if (mode != W_DECODE) {
           if (nstuff && vp.type == PT_S) { ret = W_FAIL; break; }  // not MCBPC stuffing there
-          k.st = nstuff;
-          gb_skip(gb, nstuff * stuffing_len(vp.type));
-          gb_skip(gb, 1);
-          gb_align(gb);
-          if (parse_vp(cx, gb, &vp, &k) < 0) { ret = W_FAIL; break; }
-          vp.qscale = clip(vp.qscale, QS_MIN, QS_MAX);
+          if (!vp_io(rd, cx, &vp, &k)) { ret = W_FAIL; break; }
         }
         if (mode != W_VERIFY) {
           code_vp(cx, &s, &k, idx + 1);
@@ -83,10 +83,7 @@ int Model<f_DEC, LV>::vop_walk(Ctx* cx, int mode, GB* gb, PB* pb) {
           memset(s.lmv, 0, sizeof(s.lmv));
           if (LV::recon && rec.on && k.mbnum > 0 && k.mbnum < cx->mb_num) rc_vp_begin(&rec, &k);
         }
-        if ((mode != W_ENCODE && put_vp(cx, pb, &vw, &k) < 0) || k.mbnum < 1 || k.mbnum >= cx->mb_num) {
-          ret = W_FAIL;
-          break;
-        }
+        if (mode != W_ENCODE && !vp_io(wr, cx, &vw, &k)) { ret = W_FAIL; break; }
         mb_x = k.mbnum % cx->mb_w;
         mb_y = k.mbnum / cx->mb_w;
       }
