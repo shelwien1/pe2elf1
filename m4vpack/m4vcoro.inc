@@ -40,15 +40,14 @@ struct M4vCoro : CoIo {
     nvop++;
     if (cx.have_vol && cx.vol_count != told_vol) {
       told_vol = cx.vol_count;
-      video.set(&cx);
+      video.set(cx);
       yield(static_cast<Coroutine*>(this), Y_VIDEO);
     }
   }
   void Quit(void) {
     cx.quit();
     k.Quit();
-    free(rd.buf);
-    rd.buf = 0;
+    rd.quit();
   }
 
   void do_process(void) {
@@ -67,7 +66,7 @@ struct M4vCoro : CoIo {
     crc = 0;
     U8 head[M4V_HEAD];
     cx.init();
-    if (!rd_init(&rd, this)) return fail(E_INTERNAL, "out of memory");
+    if (!rd.init(this)) return fail(E_INTERNAL, "out of memory");
     memcpy(head, magic, sizeof magic);
     head[M4V_AT_VERSION] = M4V_VERSION;
     head[M4V_AT_LEVEL] = (U8)LV::id;
@@ -75,7 +74,7 @@ struct M4vCoro : CoIo {
     co.init(this, 1);
     co.stats = stats;
     k.start(&co);
-    while (rd_chunk(&rd, &pos, &len, &part)) {
+    while (rd.chunk(&pos, &len, &part)) {
       U8* p = rd.buf + pos;
       const int is_vop = len >= SC_LEN && sc_code(p) == SC_VOP;
       crc = crc32_upd(crc, p, len);
@@ -97,7 +96,7 @@ struct M4vCoro : CoIo {
           cm.n = len;
           cm.at = 0;
           cm.differs = 0;
-          pb.flush = cmp_flush;
+          pb.flush = Cmp::flush;
           pb.ctx = &cm;
           r = k.vop_walk(cx, W_VERIFY, gb, pb);
           if (r == W_NOMEM) return fail(E_INTERNAL, "out of memory");
@@ -133,9 +132,9 @@ struct M4vCoro : CoIo {
   }
 
   static void out_flush(void* ctx, const U8* p, size_t n) {  // d: a VOP's bytes, out
-    M4vCoro* c = (M4vCoro*)ctx;
-    c->write(p, n);
-    c->crc = crc32_upd(c->crc, p, n);
+    M4vCoro& c = *(M4vCoro*)ctx;
+    c.write(p, n);
+    c.crc = crc32_upd(c.crc, p, n);
   }
 
   int run_d(void) {

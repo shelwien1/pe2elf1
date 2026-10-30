@@ -7,20 +7,20 @@ struct VideoInfo {
   int time_res, fixed_inc;  // vop_time_increment_resolution, fixed_vop_time_increment (0: none)
   int divx_version, divx_build, xvid_build, lavc_build;  // (-1: none)
 
-  void set(const Ctx* c) {
-    width = c->width;
-    height = c->height;
-    interlaced = c->interlaced;
-    qpel = c->qpel;
-    gmc = c->sprite_usage == GMC_SPRITE ? c->warp_points : -1;
-    mpeg_quant = c->mpeg_quant;
-    data_part = c->dp;
-    time_res = c->time_res;
-    fixed_inc = c->fixed_inc;
-    divx_version = c->divx_version;
-    divx_build = c->divx_build;
-    xvid_build = c->xvid_build;
-    lavc_build = c->lavc_build;
+  void set(const Ctx& c) {
+    width = c.width;
+    height = c.height;
+    interlaced = c.interlaced;
+    qpel = c.qpel;
+    gmc = c.sprite_usage == GMC_SPRITE ? c.warp_points : -1;
+    mpeg_quant = c.mpeg_quant;
+    data_part = c.dp;
+    time_res = c.time_res;
+    fixed_inc = c.fixed_inc;
+    divx_version = c.divx_version;
+    divx_build = c.divx_build;
+    xvid_build = c.xvid_build;
+    lavc_build = c.lavc_build;
   }
   bool same(const VideoInfo& v) const { return !memcmp(this, &v, sizeof v); }
 };

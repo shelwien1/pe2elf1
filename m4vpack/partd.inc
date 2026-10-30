@@ -7,10 +7,12 @@ template <class LV>
 struct PartD {
   template <class W>
   static int run(W& w, const U8* head, size_t nh, U64 plen, U64& left) {
-    M4vCoro<1, LV>* c = coro_new<M4vCoro<1, LV> >();
+    typedef M4vCoro<1, LV> C;
+    C* q = coro_new<C>();
     int first = 1, r;
-    if (!c) return w.fail(E_INTERNAL, "out of memory");
-    c->Init(0);
+    if (!q) return w.fail(E_INTERNAL, "out of memory");
+    C& c = *q;
+    c.Init(0);
     r = w.run_part(c, [&](const U8** p) {
       size_t got;
       if (first) {
@@ -23,7 +25,7 @@ struct PartD {
       *p = w.in_;
       return got;
     }, plen);
-    coro_free(c);
+    coro_free(q);
     return r;
   }
 };

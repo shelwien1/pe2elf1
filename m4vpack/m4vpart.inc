@@ -64,15 +64,7 @@ struct M4vPart : CoIo {
   // c: a part's statistics, added to the worker's
   void add_stats(const Stats& s, const double* c, const double* o) {
     int i;
-    st.vops += s.vops;
-    st.packed += s.packed;
-    for (i = 0; i < PT_N; i++) st.by_type[i] += s.by_type[i];
-    st.raw_unsup += s.raw_unsup;
-    st.raw_long += s.raw_long;
-    st.raw_parse += s.raw_parse;
-    st.raw_verify += s.raw_verify;
-    st.raw_bytes += s.raw_bytes;
-    st.vop_bytes += s.vop_bytes;
+    st.add(s);
     for (i = 0; i < NCAT; i++) cost[i] += c[i], orig[i] += o[i];
   }
 
@@ -82,44 +74,45 @@ struct M4vPart : CoIo {
   // counts are the worker's (from done_* on), what it tells is shown, and a line of progress may be
   // due.
   template <class C, class Feed>
-  int run_part(C* c, Feed feed, U64 most) {
+  int run_part(C& c, Feed feed, U64 most) {
     int r;
     uint y;
     out_len = 0;
     if (!grow(&out_, &out_room, IO_BUF, IO_BUF)) return fail(E_INTERNAL, "out of memory");
-    c->addout(out_, IO_BUF);
+    c.addout(out_, IO_BUF);
     for (;;) {
-      y = c->coro_call(c);
+      y = c.coro_call(&c);
       if (args.meter) {
-        if (y == Y_VIDEO) args.meter->video(c->video);
-        prog_set(done_raw + c->raw_done(), done_packed + c->packed_done(), done_vops + c->nvop);
-        args.meter->poll();
+        Progress& m = *args.meter;
+        if (y == Y_VIDEO) m.video(c.video);
+        prog_set(done_raw + c.raw_done(), done_packed + c.packed_done(), done_vops + c.nvop);
+        m.poll();
       }
       if (y == Y_VIDEO) continue;
       if (y == Y_IN) {
         const U8* p = 0;
         const size_t l = feed(&p);
-        if (!l) c->f_quit = 1;
-        c->addinp((byte*)(l ? p : out_), (uint)l);
+        if (!l) c.f_quit = 1;
+        c.addinp((byte*)(l ? p : out_), (uint)l);
         continue;
       }
-      out_len += c->getoutsize();
+      out_len += c.getoutsize();
       if (y != Y_OUT) break;
       if (out_len > most) {  // (a part that comes out longer than its record says: d only)
-        c->Quit();
+        c.Quit();
         return fail(E_DATA, "damaged data: a part comes out longer than its record says");
       }
       if (!grow(&out_, &out_room, out_len + IO_BUF, IO_BUF)) {
-        c->Quit();
+        c.Quit();
         return fail(E_INTERNAL, "out of memory");
       }
-      c->addout(out_ + out_len, IO_BUF);
+      c.addout(out_ + out_len, IO_BUF);
     }
-    r = c->status;
-    if (r) fail(r, "%s", c->note);
-    done_raw += c->raw_done();
-    done_packed += c->packed_done();
-    done_vops += c->nvop;
+    r = c.status;
+    if (r) fail(r, "%s", c.note);
+    done_raw += c.raw_done();
+    done_packed += c.packed_done();
+    done_vops += c.nvop;
     return r;
   }
 

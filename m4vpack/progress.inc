@@ -7,7 +7,7 @@
 //
 // counts() gives what to show (a function of the run's state, read from the thread that polls);
 // poll() puts a line if one is due, from any thread (on threads, the workers', as they code: the
-// main thread waits on them). An error's message goes through say_error() (below), which ends the
+// main thread waits on them). An error's message goes through say() (below), which ends the
 // line first, under the same lock: no line comes after it.
 
 #ifdef _WIN32
@@ -136,6 +136,13 @@ struct Progress {
     }
     lk.unlock();
   }
+  // an error's message on stderr, after the line, which it ends
+  void say(const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    error(fmt, ap);
+    va_end(ap);
+  }
   // the line ended after an error (none comes after it)
   void end_line() {
     lk.lock();
@@ -187,11 +194,3 @@ static void progress_die(void) {
   if (progress_now) progress_now->end_line();
 }
 
-// An error's message on stderr, after the progress line of the call (p, if any), which it ends
-static void say_error(Progress* p, const char* fmt, ...) {
-  va_list ap;
-  va_start(ap, fmt);
-  if (p) p->error(fmt, ap);
-  else vfprintf(stderr, fmt, ap);
-  va_end(ap);
-}
