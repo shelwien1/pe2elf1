@@ -17,6 +17,11 @@
 //   - block timestamps       : model x*scale+offset, x = H.264 display index, Vorbis
 //                              sample position or frame index; only residuals are stored
 //   - ReferenceBlock         : predicted as ts(previous block) - ts(this)
+//   - SimpleBlock or BlockGroup : the track's most common kind, or one kind for predicted
+//                              key frames and one for the others (muxers that write key
+//                              frames as BlockGroups among SimpleBlocks or the other way
+//                              round); BlockGroup children likewise relative to the key
+//                              prediction (none on key frames, a ReferenceBlock on others)
 //   - block order of tracks  : predicted by smallest next timestamp (or decode-order
 //                              time, with a per-track bias)
 //   - cluster Timestamp      : predicted as the time of the cluster's first block

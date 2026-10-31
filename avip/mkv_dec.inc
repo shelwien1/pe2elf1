@@ -178,6 +178,7 @@ static bool Restore( Meta& M, std::vector<const Buf*> S, Sink& out, const char**
       } else {
         if( gi[ti]>=t.gmode.size() ) FAIL("group columns underflow");
         qword gm = t.gmode[size_t(gi[ti]++)];
+        if( t.grel && gm<2 && !(fi[ti]<t.kf.size() && t.kf[size_t(fi[ti])]) ) gm ^= 1;
         cb.clear();
         if( gm==1 ) {                                 // predicted ReferenceBlock
           int n = MinSLen( pred );
@@ -335,7 +336,9 @@ static bool Restore( Meta& M, std::vector<const Buf*> S, Sink& out, const char**
         for( qword j=0; j<d.n; j++ ) {
           size_t bt = predict( false );
           if( bt==nt ) FAIL("no block to predict");
-          if( !block( M.trk[bt].dkind==0 ? OP_SB : M.trk[bt].dkind==1 ? OP_GB : OP_BLOCK, bt ) ) return false;
+          const DTrack& g = M.trk[bt];
+          int dk = g.dkey && fi[bt]<g.kf.size() && g.kf[size_t(fi[bt])] ? g.dkey-1 : g.dkind;
+          if( !block( dk==0 ? OP_SB : dk==1 ? OP_GB : OP_BLOCK, bt ) ) return false;
         }
       } else if( !block( d.code, size_t(d.t) ) ) return false;
     }

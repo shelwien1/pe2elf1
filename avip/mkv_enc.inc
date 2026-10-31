@@ -1,6 +1,27 @@
 // MKV: encoder
 namespace mkv {
 
+// the most common block op kind of the counts (ties: SimpleBlock, then BlockGroup)
+static int MajorKind( const qword* kc ) { return kc[1]>kc[0] && kc[1]>=kc[2] ? 1 : kc[2]>kc[0] && kc[2]>kc[1] ? 2 : 0; }
+
+// estimated meta bytes of a track with blocks of more than one kind that depend on its key
+// prediction kf (empty: none): the flags column (SimpleBlock key bits relative to kf), the group
+// column (as is, or relative to kf if shorter: no children on key frames, the predicted
+// ReferenceBlock on the others) and an op per block not of the default kind (one kind, or one
+// per predicted key if fewer blocks differ)
+static size_t KeyCost( const Track& t, const std::vector<byte>& kf ) {
+  std::vector<qword> fl, ga, gr; qword kc[2][3] = {{0}}, kt[3] = {0,0,0};
+  for( size_t k=0; k<t.bkk.size(); k++ ) {
+    const Track::BKind& b = t.bkk[k]; int key = b.f<kf.size() && kf[size_t(b.f)];
+    fl.push_back( b.fl ^ (b.kind==0 && key ? 0x80 : 0) );
+    kc[key][b.kind]++; kt[b.kind]++;
+    if( b.kind==1 ) ga.push_back( b.gm ), gr.push_back( b.gm<2 && !key ? b.gm^1 : b.gm );
+  }
+  qword m1 = t.bkk.size()-kt[MajorKind( kt )], m2 = 0;
+  for( int key=0; key<2; key++ ) m2 += kc[key][0]+kc[key][1]+kc[key][2]-kc[key][MajorKind( kc[key] )];
+  return RunsCost( fl ) + std::min( RunsCost( ga ), RunsCost( gr ) ) + 3*size_t( std::min( m1, m2 ) );
+}
+
 static bool Encode1( const Buf& in, bool usexf, bool feat, Buf& meta, std::vector<Buf>& streams, std::vector<std::string>& names,
                      int& nxf, const char** why, std::string& log ) {
   const byte* d = in.data(); qword fs = in.size();
@@ -58,7 +79,7 @@ static bool Encode1( const Buf& in, bool usexf, bool feat, Buf& meta, std::vecto
       Track& t = T[i];
       t.bcts.clear(); t.gmode.clear(); t.bflx.clear(); t.lcnt.clear(); t.nbe = t.nfe = 0; t.haslast = false; t.lastabs = 0;
       t.nsb = t.ngb = t.nlb = 0; t.privcut = false;
-      if( mode==0 ) t.kc[0] = t.kc[1] = t.kc[2] = 0, t.ksb.clear(), t.km = 0;
+      if( mode==0 ) t.kc[0] = t.kc[1] = t.kc[2] = 0, t.ksb.clear(), t.km = 0, t.dkey = t.grel = 0, t.bkk.clear();
     }
     std::vector<qword> opened; long long nmark = 0, prevmi = 0; qword cts = 0, segst = 0; bool inseg = false; int curseg = 0, nsegop = 0;
     // emitted blocks, for OP_CUE: time, track number, cluster mark, relative position, duration
@@ -187,7 +208,7 @@ static bool Encode1( const Buf& in, bool usexf, bool feat, Buf& meta, std::vecto
         if( mode==1 ) phit += pt==size_t(b.trk), pall++;
         // op for this block: extend/start an OP_PRUN when predicted, else explicit
         auto blkop = [&]() {
-          if( !dry && usepred && pt==size_t(b.trk) && kind==t.dkind ) {
+          if( !dry && usepred && pt==size_t(b.trk) && kind==t.DefKind( t.nfe ) ) {
             if( prun_open ) { prun_n++; op.b.resize( prun_at ); }
             else prun_at = op.b.size(), prun_n = 1;
             op.u8(OP_PRUN); op.vint(prun_n); prun_open = true;
@@ -208,6 +229,7 @@ static bool Encode1( const Buf& in, bool usexf, bool feat, Buf& meta, std::vecto
         }
         t.bflx.push_back( byte(fl) );
         if( laced && b.regen ) t.lcnt.push_back( qword(b.nf-1) );
+        qword gmv = 0;
         if( gb ) {
           raw( b.gpos ); blkop();
           if( laced && !b.regen ) st.insert( st.end(), d+b.lpos, d+b.hend );
@@ -227,7 +249,7 @@ static bool Encode1( const Buf& in, bool usexf, bool feat, Buf& meta, std::vecto
                 for( qword j=0; j<y.size; j++ ) st.push_back( byte( v>>(8*(y.size-1-j)) ) );
               } else st.insert( st.end(), d+y.pos+y.hdr, d+y.end );
             }
-          t.gmode.push_back( gm ); cur = b.gend; t.ngb++;
+          gmv = gm; t.gmode.push_back( t.grel && gm<2 && !t.KeyAt( t.nfe ) ? gm^1 : gm ); cur = b.gend; t.ngb++;
         } else if( sb ) {
           raw( b.pos ); blkop();
           if( laced && !b.regen ) st.insert( st.end(), d+b.lpos, d+b.hend );
@@ -252,6 +274,7 @@ static bool Encode1( const Buf& in, bool usexf, bool feat, Buf& meta, std::vecto
               if( ch[c].id==0x9B && ch[c].size<=8 && t.gmode.back()>=2 ) e.dur = ReadUintBE( d+ch[c].pos+ch[c].hdr, ch[c].size ), e.hasdur = true;
           ebk[std::make_pair( abs, t.num )].push_back( eb.size() ); eb.push_back( e );
         }
+        if( mode==0 ) { Track::BKind x = { t.nfe, gmv, kind, t.bfl[size_t(t.nbe)] }; t.bkk.push_back( x ); }
         t.lastabs = abs; t.haslast = true; t.bcts.push_back( cts ); t.nbe++; t.nfe += b.nf;
       } break;
       }
@@ -267,10 +290,13 @@ static bool Encode1( const Buf& in, bool usexf, bool feat, Buf& meta, std::vecto
     if( opened.size() ) bad = true;
   };
   run( 0 );
-  // key prediction model per track: fewest mismatches with the SimpleBlock key bits
+  // key prediction model per track: fewest mismatches with the SimpleBlock key bits; with blocks
+  // of other kinds (key frames may be BlockGroups among SimpleBlocks, or the other way round),
+  // the shortest meta parts that depend on it (see KeyCost)
   for( size_t i=0; i<T.size(); i++ ) {
     Track& t = T[i]; t.km = 0; t.kp = 0; t.kf.clear();
-    if( !t.ok || t.blob || t.ksb.empty() ) continue;
+    bool mixed = t.kc[1] || t.kc[2];
+    if( !t.ok || t.blob || (!mixed && t.ksb.empty()) ) continue;
     std::vector<const byte*> fp( size_t(t.nsamp) ); std::vector<qword> fz( size_t(t.nsamp) );
     for( size_t k=0; k<t.nsamp; k++ ) fp[k] = t.FB(d)+t.FO()[k], fz[k] = t.Size(k);
     int cand[4][2]; int nc = 0;
@@ -278,11 +304,14 @@ static bool Encode1( const Buf& in, bool usexf, bool feat, Buf& meta, std::vecto
     if( t.codec=="V_MPEG4/ISO/AVC" && !t.enc && t.lensize ) cand[nc][0] = 2, cand[nc++][1] = t.lensize;
     if( t.codec=="V_MPEGH/ISO/HEVC" && !t.enc && t.lensize ) cand[nc][0] = 3, cand[nc++][1] = t.lensize;
     if( t.fck>0 ) cand[nc][0] = 16+t.fck, cand[nc++][1] = int(t.fckp);
-    size_t best = 0; for( size_t k=0; k<t.ksb.size(); k++ ) best += t.ksb[k].second;
+    size_t best = 0;
+    if( mixed ) best = KeyCost( t, std::vector<byte>() );
+    else for( size_t k=0; k<t.ksb.size(); k++ ) best += t.ksb[k].second;
     for( int c=0; c<nc; c++ ) {
       std::vector<byte> kf; KeyPred( cand[c][0], cand[c][1], fp.data(), fz.data(), t.nsamp, kf );
       size_t mis = 0;
-      for( size_t k=0; k<t.ksb.size(); k++ ) mis += t.ksb[k].first<kf.size() && kf[size_t(t.ksb[k].first)]!=t.ksb[k].second;
+      if( mixed ) mis = KeyCost( t, kf );
+      else for( size_t k=0; k<t.ksb.size(); k++ ) mis += t.ksb[k].first<kf.size() && kf[size_t(t.ksb[k].first)]!=t.ksb[k].second;
       if( mis<best ) best = mis, t.km = cand[c][0], t.kp = cand[c][1], t.kf.swap( kf );
     }
   }
@@ -290,7 +319,20 @@ static bool Encode1( const Buf& in, bool usexf, bool feat, Buf& meta, std::vecto
   for( size_t i=0; i<T.size(); i++ ) {
     Track& t = T[i];
     if( t.ok && !t.blob && t.nbe!=t.btc.size() ) { *why = "block skipped"; return false; }
-    t.dkind = t.kc[1]>t.kc[0] && t.kc[1]>=t.kc[2] ? 1 : t.kc[2]>t.kc[0] && t.kc[2]>t.kc[1] ? 2 : 0;
+    qword kc[2][3] = {{0}}, kt[3];
+    for( size_t k=0; k<t.bkk.size(); k++ ) kc[t.KeyAt( t.bkk[k].f )][t.bkk[k].kind]++;
+    for( int j=0; j<3; j++ ) kt[j] = kc[0][j]+kc[1][j];
+    t.dkind = MajorKind( kt ); t.dkey = 0; t.grel = 0;
+    if( t.km ) {                                     // key frames as blocks of their own kind
+      int d0 = kc[0][0]+kc[0][1]+kc[0][2] ? MajorKind( kc[0] ) : t.dkind, d1 = kc[1][0]+kc[1][1]+kc[1][2] ? MajorKind( kc[1] ) : d0;
+      if( d1!=d0 ) t.dkind = d0, t.dkey = d1+1;
+      std::vector<qword> a, b;                       // the group column as is / relative to the key prediction
+      for( size_t k=0; k<t.bkk.size(); k++ ) {
+        const Track::BKind& x = t.bkk[k]; if( x.kind!=1 ) continue;
+        a.push_back( x.gm ); b.push_back( x.gm<2 && !t.KeyAt( x.f ) ? x.gm^1 : x.gm );
+      }
+      if( RunsCost( b )<RunsCost( a ) ) t.grel = 1;
+    }
   }
   // streams: frames in block order, converted to an elementary stream format if possible;
   // timestamp models (they need the cluster timestamps from the layout pass)
@@ -361,7 +403,7 @@ static bool Encode1( const Buf& in, bool usexf, bool feat, Buf& meta, std::vecto
     std::string suf = TrackSuffix( names.size(), h.ext ); names.push_back( suf );
     w.u8( uint(t.tvb.size()) | (t.strip.size() ? 0x80 : 0) ); w.bytes( t.tvb.data(), t.tvb.size() );
     if( t.strip.size() ) w.u8( uint(t.strip.size()) ), w.bytes( t.strip.data(), t.strip.size() );
-    w.vint( t.btc.size() ); w.u8( uint( t.dkind | t.kmode<<2 ) ); w.vint( ZigZag( t.kbias ) ); w.vint( t.seg );
+    w.vint( t.btc.size() ); w.u8( uint( t.dkind | t.kmode<<2 | t.dkey<<3 | t.grel<<5 ) ); w.vint( ZigZag( t.kbias ) ); w.vint( t.seg );
     w.u8( uint(t.km) ); if( t.km>=2 ) w.u8( uint(t.kp) );
     WriteTs( t, w );
     std::vector<qword> v( t.bflx.begin(), t.bflx.end() ); PutCol( w, v );
@@ -380,6 +422,9 @@ static bool Encode1( const Buf& in, bool usexf, bool feat, Buf& meta, std::vecto
         snprintf( l, sizeof(l), " laced=%llu/%llu", (unsigned long long)nr, (unsigned long long)t.breg.size() ), log += l;
       }
       snprintf( l, sizeof(l), " %s blocks=%d+%d+%d(sb+gb+raw)", t.tsinfo.c_str(), t.nsb, t.ngb, t.nlb ), log += l;
+      static const char* const kn[3] = { "sb", "gb", "raw" };
+      if( t.dkey ) snprintf( l, sizeof(l), " kinds=%s,key:%s", kn[t.dkind], kn[t.dkey-1] ), log += l;
+      if( t.grel ) log += " groups=keyrel";
       if( t.xform==XF_ANNEXB ) snprintf( l, sizeof(l), "  -> annexb hdr=%llu raw=%llu expl=%llu",
         (unsigned long long)t.xhdr.size(), (unsigned long long)t.xa.size(), (unsigned long long)t.xb.size() ), log += l;
       if( t.xform==XF_ADTS ) snprintf( l, sizeof(l), "  -> adts esc=%llu", (unsigned long long)t.xa.size() ), log += l;

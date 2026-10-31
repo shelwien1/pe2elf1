@@ -53,6 +53,11 @@ struct Track {
   int kmode; long long kbias; int seg;             // interleave key; segment
   std::vector<qword> tcol, cpos, lcnt; std::vector<uint> r16v;   // ts column, codec positions, lace counts, residuals
   int km, kp; std::vector<byte> kf;                // key prediction model (see KeyPred), per frame
+  int dkey, grel;                                  // OP_PRUN kind of predicted key frames + 1 (0: dkind); group column relative to kf
+  struct BKind { qword f, gm; int kind; uint fl; };   // per block (layout pass 0): first frame, group column value, op kind, flags
+  std::vector<BKind> bkk;
+  bool KeyAt( qword f ) const { return km && f<kf.size() && kf[size_t(f)]; }
+  int DefKind( qword f ) const { return dkey && KeyAt( f ) ? dkey-1 : dkind; }
   std::vector<std::pair<qword,byte> > ksb;         // SimpleBlocks: first frame, key bit
   Buf stream; bool conv;                           // output stream, converted
   int nsb, ngb, nlb; std::string tsinfo;           // statistics

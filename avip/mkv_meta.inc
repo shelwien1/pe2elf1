@@ -10,8 +10,14 @@ namespace mkv {
 //                             (after the inverse transform) holds the frames with the prefix,
 //                             the size model applies to them, blocks store them without it
 //   vint nblocks              block header columns follow
-//   u8   dkind | kmode<<2     dkind: block op of this track used by 0xFD: 0 = SimpleBlock,
-//                             1 = BlockGroup, 2 = non-canonical block
+//   u8   dkind | kmode<<2 | dkey<<3 | grel<<5
+//                             dkind: block op of this track used by 0xFD: 0 = SimpleBlock,
+//                             1 = BlockGroup, 2 = non-canonical block; dkey (needs km): 0 =
+//                             dkind for all blocks, else blocks whose first frame is a predicted
+//                             key frame use op dkey-1 (key frames as other blocks than the rest);
+//                             grel (needs km): group column values 0 and 1 swapped for blocks
+//                             whose first frame is not a predicted key frame (no children on key
+//                             frames, the predicted ReferenceBlock on the others: all 0)
 //   vint zigzag kbias         interleave key of the track's next block (0xFD, 0xF9):
 //                             no model: cluster timestamp + int16(timestamp); model, kmode 0:
 //                             predicted time + int16(residual); kmode 1: round((f*m+c)/2^k),
@@ -109,6 +115,7 @@ struct DTrack {
   int tsmode, ckind, cparam, sk; qword sm, sc;      // timestamp model
   std::vector<qword> tsk, tsmv, tst;                // piecewise model: scales (k, m), state per block
   int dkind, kmode; long long kbias; qword seg;     // default block op, interleave key, segment (OP_PRUN)
+  int dkey, grel;                                   // default op of predicted key frames + 1; group column relative to kf
   qword tnum;                                       // track number
   std::vector<uint> te;                             // per block: int16 delta (timestamp or residual)
   std::vector<qword> gmode, cpos, lcnt;             // group children column; codec positions; lace counts
@@ -163,7 +170,7 @@ static bool ParseMeta( const Buf& m, Meta& M ) {
     if( !GetHead( r, t.h ) || t.h.szmode==SZ_TABLES ) return false;
     t.xform = t.h.xform; t.lensize = t.h.lensize; t.nhdr = t.h.nhdr; t.hdrlen = t.h.hdrlen; t.xa = t.h.xa; t.xb = t.h.xb;
     t.nsamp = 0; t.szmode = 0; t.ptype = t.pparam = 0;
-    t.tsmode = 0; t.ckind = t.cparam = t.sk = 0; t.sm = t.sc = 0; t.dkind = t.kmode = 0; t.kbias = 0; t.seg = 0;
+    t.tsmode = 0; t.ckind = t.cparam = t.sk = 0; t.sm = t.sc = 0; t.dkind = t.kmode = t.dkey = t.grel = 0; t.kbias = 0; t.seg = 0;
     if( t.xform==XF_BLOB ) continue;
     t.nsamp = t.h.nf; t.szmode = t.h.szmode;
     if( t.szmode==SZ_EXPLICIT ) t.sz.assign( t.h.col.begin(), t.h.col.end() );
@@ -178,10 +185,12 @@ static bool ParseMeta( const Buf& m, Meta& M ) {
     t.te.resize( size_t(nb) ); t.bfl.resize( size_t(nb) );
     qword nl = 0;
     std::vector<qword> v;
-    uint dk = r.u8(); t.dkind = int(dk&3); t.kmode = int(dk>>2); t.kbias = UnZigZag( r.vint() ); t.seg = r.vint();
-    if( t.dkind>2 || t.kmode>1 ) return false;
+    uint dk = r.u8(); t.dkind = int(dk&3); t.kmode = int((dk>>2)&1); t.dkey = int((dk>>3)&3); t.grel = int((dk>>5)&1);
+    t.kbias = UnZigZag( r.vint() ); t.seg = r.vint();
+    if( t.dkind>2 || dk>63 ) return false;
     t.km = r.u8(); t.kp = t.km>=2 ? int(r.u8()) : 0;
     if( (t.km>3 && t.km<16) || t.km>16+CK_VC1 || ((t.km==2 || t.km==3) && (t.kp<1 || t.kp>4)) ) return false;
+    if( (t.dkey || t.grel) && !t.km ) return false;
     t.tsmode = r.u8();
     if( t.tsmode==1 || t.tsmode==2 ) {
       t.ckind = r.u8();
