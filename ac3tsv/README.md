@@ -126,7 +126,7 @@ exponents. The `M` lines' `bap` runs from 5 at the bottom to 1 near the top of t
 
 ## Verification
 
-The corpus is [samples/](../samples): 43 streams, 144 MB (AC-3 in every channel mode FFmpeg
+The corpus is [samples/](../samples): 43 streams, 136 MB (AC-3 in every channel mode FFmpeg
 writes, with coupling, the alternate bit stream syntax, 32 and 44.1 kHz; E-AC-3 with AHT, SPX,
 1/2/3/6 blocks a frame, dependent substreams, Dolby's own encodes). Every one converts back to
 itself, and every frame converts as records, but for the last frame of `casablanca_aht_mono_64`,

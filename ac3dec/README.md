@@ -113,7 +113,7 @@ The decoder is FFmpeg's (`libavcodec/ac3dec.c`, `eac3dec.c`, `ac3.c`), in two pa
 
 The corpus is [samples/](../samples): the eight AC-3 test files, the 14 downloaded E-AC-3 streams
 (samples.ffmpeg.org, the Dolby DD+ Online Delivery Kit) and 21 streams made with FFmpeg, 43 in
-all, 144 MB, 1.9 hours of audio.
+all, 136 MB, 49 minutes of audio.
 
 - **Bit for bit:** `ac3dec -x -f` writes the same floats as `ffmpeg -cpuflags 0 -i input -f
   f32le` (FFmpeg 6.1.1, its C code) on all 43: AC-3 in every channel mode FFmpeg encodes, with

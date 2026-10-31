@@ -564,6 +564,9 @@ struct Walk {
   Run r;
   int pos;
   int gpos[3], gn[3], gv[3][3];  // the open mantissa groups of the block (bap 1, 2, 4): where (BitOut), how full, the values
+  // where the walk is, for a model's contexts: the block (-1 the frame's header), the channel,
+  // the bin and its bap; an exponent delta's strategy and the exponent before it
+  int cur_blk, cur_ch, cur_bin, cur_bap, cur_es, cur_exp;
 
   Walk(IO& i, Frame& fr, CB& c) : io(i), f(fr), cb(c) {}
 
@@ -609,6 +612,7 @@ struct Walk {
   }
   void begin() {
     memset(&r, 0, sizeof r);
+    cur_blk = -1, cur_ch = cur_bin = cur_bap = cur_es = cur_exp = 0;
     if (g_ffmpeg) {
       memcpy(r.cplbndstrc, g_ff_cplbndstrc, sizeof r.cplbndstrc);
       memcpy(r.spxbndstrc, g_ff_spxbndstrc, sizeof r.spxbndstrc);
@@ -1032,6 +1036,7 @@ struct Walk {
     const Bsi& b = f.b;
     const int nfch = f.nfch, eac3 = f.eac3, acmod = b.acmod;
     int ch;
+    cur_blk = blk;
     io.open(K_B, blk);
     for (ch = 1; ch <= nfch; ch++) {
       if (!eac3 || a.blkswe) U(blksw, 1, k.blksw[ch]);
@@ -1346,10 +1351,13 @@ struct Walk {
           U(exps, 7, c);
         }
       } else {
+        cur_ch = ch, cur_es = es, cur_exp = prev;
         for (int i = 0; i < 3; i++) {  // (the group's 7 bits counted with its first)
           int v = d[i];
+          cur_bin = j + i * gsz;
           if (!rv(F_dexp, 0, 4, i ? 0 : 7, v)) return false;
           d[i] = (U8)v;
+          cur_exp += v - 2;
         }
       }
       if (d[0] * 25 + d[1] * 5 + d[2] >= 125) return bad("exponent group 125-127");
@@ -1433,6 +1441,7 @@ struct Walk {
   bool mant(int ch, int bin, int bap) {
     S16& q = f.k[cur_blk].q[ch][bin];
     if (bap == 0) return true;
+    cur_ch = ch, cur_bin = bin, cur_bap = bap;
     if (bap == 1 || bap == 2 || bap == 4) {
       const int g = bap == 1 ? 0 : bap == 2 ? 1 : 2, L = glevels(g), h = (L - 1) / 2, n = gsize(g);
       if (!IO::BITS) {
@@ -1519,7 +1528,6 @@ struct Walk {
     }
     return true;
   }
-  int cur_blk;
   bool mantissas(Blk& k, int blk) {
     cur_blk = blk;
     gn[0] = gn[1] = gn[2] = 0;
@@ -1580,6 +1588,7 @@ struct Walk {
   // A channel's AHT data, for the six blocks (A/52 Annex E section 3.4)
   bool aht(int ch) {
     Aht& h = f.aht[ch];
+    cur_ch = ch;
     io.open(K_Q, ch);
     io.baps(r.bap[ch], r.strtmant[ch], r.endmant[ch]);
     U(gaqmod, 2, h.gaqmod);
@@ -1590,6 +1599,7 @@ struct Walk {
       for (bin = start; bin < end; bin++)
         if (r.bap[ch][bin] > 7 && r.bap[ch][bin] < endbap) {
           int v = h.gain[bin];
+          cur_bin = bin, cur_bap = r.bap[ch][bin];
           U(gaqgain, 1, v);
           h.gain[bin] = (S8)v;
         }
@@ -1597,6 +1607,7 @@ struct Walk {
       int n = 0, gp = 0, vals[3] = {0, 0, 0};
       for (bin = start; bin < end; bin++) {
         if (!(r.bap[ch][bin] > 7 && r.bap[ch][bin] < 17)) continue;
+        cur_bin = bin, cur_bap = r.bap[ch][bin];
         if (!gain3(h.gain[bin], n, gp, vals, n == 0 ? 5 : 0, F_gain)) return false;
         n = (n + 1) % 3;
       }
@@ -1609,6 +1620,7 @@ struct Walk {
     for (bin = start; bin < end; bin++) {
       const int hebap = r.bap[ch][bin], bits = bits_vs_hebap[hebap];
       if (hebap == 0) continue;
+      cur_bin = bin, cur_bap = hebap;
       if (hebap < 8) {
         int v = h.vq[bin];
         U(vq, bits, v);
@@ -1618,8 +1630,10 @@ struct Walk {
       int log_gain = 0;
       if (h.gaqmod && hebap < endbap) log_gain = h.gaqmod == 3 ? h.gain[bin] : h.gain[bin] << (h.gaqmod - 1);
       const int gb = bits - log_gain;
+      cur_es = log_gain;  // (AHT: the gain, for a model)
       for (int blk = 0; blk < 6; blk++) {
         int v = h.m[bin][blk];
+        cur_exp = blk;  // (and the block)
         S(gaqmant, gb, v);
         h.m[bin][blk] = (S16)v;
         if (log_gain && v == -(1 << (gb - 1))) {
