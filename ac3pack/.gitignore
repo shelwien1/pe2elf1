@@ -1,0 +1,12 @@
+# builds, and what tuning leaves in the working directory (mk.sh, IDX/opt.pl, IDX/ftune.py)
+/ac3pack
+/ac3pack.exe
+/famtune
+/famtune.exe
+/ftune_*
+export.!!!
+opttimes.!!!
+ftune.log
+IDX/l*/*-const.idx
+IDX/l*/*_h.inc
+IDX/l*/*_p.inc

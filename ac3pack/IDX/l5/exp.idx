@@ -1,0 +1,122 @@
+#  ac3pack's exp family at level -5: its context indices and its tunable parameters.
+#  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates MOD/l5/exp_h.inc and _p.inc from
+#  this file and family.inc.  famvars.inc says what each variable is.
+#
+#  An exponent's delta (a tree of four nodes), against the last block's exponents
+#  there, the partner channel's, and the deltas before.
+#  (Cut from level -9: its ten counters, mixer 1 and the mantissa plane.)
+
+Prefix A5_exp
+Debug 1
+Const 0
+
+Index a
+ a_es: es, 1!111
+ a_cc: cc, 1!111
+ a_pd: pd, 1!111111111
+
+Index b
+ b_pd: pd, 1!111111111
+ b_d1: d1, 1!11111
+ b_es: es, 1!111
+
+Index c
+ c_pd: pd, 1!111111111
+ c_po: po, 1!010111101
+ c_es: es, 1!111
+
+Index d
+ d_po: po, 1!111111000
+ d_d1: d1, 1!00001
+ d_cc: cc, 1!111
+
+Index e
+ e_d1: d1, 1!11111
+ e_d2: d2, 1!11111
+ e_es: es, 1!111
+ e_cc: cc, 1!101
+
+Index h
+ h_pd: pd, 1!111111111
+ h_pl: pl, 1!11111
+ h_d1: d1, 1!11111
+
+Index i
+ i_bin: bin, 1!010101001001001001001000100010001000100010001
+ i_pd: pd, 1!111111111
+ i_es: es, 1!111
+
+Index j
+ j_ex: ex, 1!000111111101101111111111
+ j_d1: d1, 1!11111
+ j_pd: pd, 1!111111111
+
+Index k
+ k_ht: ht, 1!1111111
+ k_pd: pd, 1!111111111
+ k_po: po, 1!011110010
+
+Index l
+ l_bs: bs, 1!1
+ l_bk: bk, 1!11111
+ l_pd: pd, 1!111111111
+ l_d1: d1, 1!11111
+ l_gi: gi, 1!11
+
+Index m
+ m_es: es, 1!000
+ m_cc: cc, 1!111
+
+Index t
+
+Index n
+
+Index g
+#  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
+
+#  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
+Number rA, 1, 0!00000010
+Number mwA, 1, 0!01111110
+Number rB, 1, 0!01001010
+Number mwB, 1, 0!00000100
+Number rC, 1, 0!11111110
+Number mwC, 1, 0!00100101
+Number rD, 1, 0!11111111
+Number mwD, 1, 0!00000100
+Number rE, 1, 0!11111111
+Number mwE, 1, 0!00000001
+Number rH, 1, 0!11111111
+Number mwH, 1, 0!00000100
+Number rI, 1, 0!11111111
+Number mwI, 1, 0!00000100
+Number rJ, 1, 0!11111111
+Number mwJ, 1, 0!00000100
+Number rK, 1, 0!11111111
+Number mwK, 1, 0!00000100
+Number rL, 1, 0!11111111
+Number mwL, 1, 0!01101111
+Number lr, 1, 0!01111
+Number mb, 1, 0!00110011
+! Number rT, 1, 0!00000000
+! Number mwT, 1, 0!00000000
+! Number mt, 1, 0!000
+! Number lrm, 1, 0!00000
+! Number mbm, 1, 0!00000000
+! Number rG, 1, 0!00000000
+! Number mwG, 1, 0!00000000
+
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is direct, one that
+#  does not is hashed into 2^h rows and contexts share them.  Frozen: left live these only grow.
+! Number hA, 1, 0!10110
+! Number hB, 1, 0!10110
+! Number hC, 1, 0!10110
+! Number hD, 1, 0!10110
+! Number hE, 1, 0!10110
+! Number hH, 1, 0!10110
+! Number hI, 1, 0!10110
+! Number hJ, 1, 0!10110
+! Number hK, 1, 0!10110
+! Number hL, 1, 0!10110
+! Number hM, 1, 0!10110
+! Number hT, 1, 0!10110
+! Number hN, 1, 0!10110

@@ -1,0 +1,74 @@
+#  ac3pack's mag family at level -1: its context indices and its tunable parameters.
+#  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates MOD/l1/mag_h.inc and _p.inc from
+#  this file and family.inc.  famvars.inc says what each variable is.
+#
+#  A mantissa's magnitude (bap 1-5: above k?, 6-15: its length, then its bits) and its sign, against
+#  the estimates of its neighbours: the bins before, the last block's, the partner channel's.
+#  (Cut from level -9: four of its counters (b, c, d, k as a-d), mixer 1 and the mantissa plane.)
+
+Prefix A1_mag
+Debug 1
+Const 0
+
+Index a
+ a_bap: bap, 1!000000111000000
+ a_e1: e1, 1!11111111111111111111111
+
+Index b
+ b_bap: bap, 1!111111111111111
+ b_ep: ep, 1!11111111111111111111111
+
+Index c
+ c_bap: bap, 1!111111111111111
+ c_e1: e1, 1!1101010101010101
+ c_e2: e2, 1!1101010101010101
+
+Index d
+ d_bap: bap, 1!111111111111111
+ d_e1: e1, 1!1101010101010101
+ d_ew: ew, 1!1101010101010101
+ d_ow: ow, 1!1101010101010101
+
+Index m
+ m_bap: bap, 1!111111111111111
+
+Index t
+ t_bap: bap, 1!111111111111111
+
+Index n
+ n_bap: bap, 1!111111111111111
+
+Index g
+ g_s1: s1, 1!11
+ g_sp: sp, 1!11
+ g_so: so, 1!11
+#  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
+
+#  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
+Number rA, 1, 0!11111100
+Number mwA, 1, 0!00000100
+Number rB, 1, 0!11111111
+Number mwB, 1, 0!00000100
+Number rC, 1, 0!11111111
+Number mwC, 1, 0!00000100
+Number rD, 1, 0!11111111
+Number mwD, 1, 0!00000100
+Number lr, 1, 0!01101
+Number mb, 1, 0!00110011
+Number rT, 1, 0!10000000
+Number mwT, 1, 0!00000010
+Number mt, 1, 0!110
+Number lrm, 1, 0!11111
+Number mbm, 1, 0!00011001
+Number rG, 1, 0!11111111
+Number mwG, 1, 0!00000000
+
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is direct, one that
+#  does not is hashed into 2^h rows and contexts share them.  Frozen: left live these only grow.
+! Number hA, 1, 0!10110
+! Number hB, 1, 0!10110
+! Number hC, 1, 0!10110
+! Number hD, 1, 0!10110
+! Number hM, 1, 0!10110
+! Number hT, 1, 0!10110
+! Number hN, 1, 0!10110

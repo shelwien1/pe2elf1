@@ -1,0 +1,132 @@
+#  ac3pack's raw family at level -9: its context indices and its tunable parameters.
+#  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates MOD/l9/raw_h.inc and _p.inc from
+#  this file and family.inc.  famvars.inc says what each variable is.
+#
+#  Bytes kept as bytes and the raw fields (addbsi, mixdata, blkstrtinfo, skip
+#  fields, the bits after the last block), a bit at a time by its place in the byte's binary
+#  tree (nodes 1-255).
+
+Prefix A9_raw
+Debug 1
+Const 0
+
+Index a
+ a_code: code, 1!111111
+
+Index b
+ b_code: code, 1!111111
+ b_c1: c1, &11111111
+
+Index c
+ c_code: code, 1!111111
+ c_c1: c1, &11111111
+ c_c2: c2, &11110000
+
+Index d
+ d_code: code, 1!111111
+ d_cl: cl, 1!1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111
+
+Index e
+ e_code: code, 1!111111
+ e_at: at, 1!111111111111111
+
+Index h
+ h_code: code, 1!111111
+ h_cl: cl, 1!11000000000000000100000000000000010000000000000001000000000000000100000000000000010000000000000001000000000000000100000000000000010000000000000001000000000000000100000000000000010000000000000001000000000000000100000000000000010000000000000001
+ h_c1: c1, &11110000
+
+Index i
+ i_code: code, 1!111111
+ i_c1: c1, &11111100
+ i_at: at, 1!1111111
+
+Index j
+ j_code: code, 1!111111
+ j_cl: cl, 1!1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111
+ j_at: at, 1!1111111
+
+Index k
+ k_c1: c1, &11111111
+ k_c2: c2, &11111111
+
+Index l
+ l_code: code, 1!111111
+ l_sk: sk, 1!1111
+ l_c1: c1, &11111111
+
+Index s
+ s_code: code, 1!111111
+ s_at: at, 1!1111111
+
+Index f
+ f_code: code, 1!111111
+ f_c1: c1, &11100000
+
+Index m
+ m_code: code, 1!111111
+
+Index w
+ w_at: at, 1!111
+
+Index t
+
+Index n
+
+Index g
+
+#  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
+Number rA, 1, 0!11111111
+Number mwA, 1, 0!00000100
+Number rB, 1, 0!11111111
+Number mwB, 1, 0!00000100
+Number rC, 1, 0!11111111
+Number mwC, 1, 0!00000100
+Number rD, 1, 0!11111111
+Number mwD, 1, 0!00000100
+Number rE, 1, 0!11111111
+Number mwE, 1, 0!00000100
+Number rH, 1, 0!11111111
+Number mwH, 1, 0!00000100
+Number rI, 1, 0!11111111
+Number mwI, 1, 0!00000100
+Number rJ, 1, 0!11111111
+Number mwJ, 1, 0!00000100
+Number rK, 1, 0!11111111
+Number mwK, 1, 0!00000100
+Number rL, 1, 0!11111111
+Number mwL, 1, 0!00000100
+Number lr, 1, 0!01111
+Number mb, 1, 0!00110011
+Number rS1, 1, 0!01000
+Number rS2, 1, 0!01000
+Number qs, 1, 3!0111101
+Number qf, 1, 3!0011110
+Number bw, 1, 0!01100
+
+#  Frozen: what raw never reads, which live would only take opt.pl's trials:
+#  no mantissa (rT, mwT, mt, lrm, mbm); no signs of its own (rG, mwG).
+! Number rT, 1, 0!00000000
+! Number mwT, 1, 0!00000000
+! Number mt, 1, 0!000
+! Number lrm, 1, 0!00000
+! Number mbm, 1, 0!00000000
+! Number rG, 1, 0!00000000
+! Number mwG, 1, 0!00000000
+
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is direct, one that
+#  does not is hashed into 2^h rows and contexts share them.  Frozen: left live these only grow.
+! Number hA, 1, 0!10100
+! Number hB, 1, 0!10100
+! Number hC, 1, 0!10100
+! Number hD, 1, 0!10100
+! Number hE, 1, 0!10100
+! Number hH, 1, 0!10100
+! Number hI, 1, 0!10100
+! Number hJ, 1, 0!10100
+! Number hK, 1, 0!10100
+! Number hL, 1, 0!10100
+! Number hS, 1, 0!10100
+! Number hF, 1, 0!10100
+! Number hM, 1, 0!10100
+! Number hT, 1, 0!10100
+! Number hN, 1, 0!10100
