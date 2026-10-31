@@ -123,7 +123,7 @@ struct Model : ModelMant<f_DEC, LV> {
       v = hdr_field(fid, n, v);
       if (fid == F_bsid && v <= 10) h = H_AC3, sk = 0;  // (the frame's substream: known now)
       else if (fid == F_strmtyp) strmtyp = v;
-      else if (fid == F_substreamid) h = H_EAC3 + 8 * cap(strmtyp, 2) + v, sk = 1 + strmtyp;
+      else if (fid == F_substreamid) h = H_EAC3 + 8 * imin(strmtyp, 2) + v, sk = 1 + strmtyp;
       return good();
     }
     if (fnums.sid[fid] >= 0) {
@@ -176,30 +176,23 @@ struct Model : ModelMant<f_DEC, LV> {
   }
   bool raw(int fid, int n, U8* p) {
     Hist& H = hist[h];
-    switch (fid) {
-      case F_tail:
-        account(CAT_TAIL);
-        B::code_tail(p, n);
-        break;
-      case F_skipfld:
-        account(CAT_SKIP);
-        B::raw_field(p, n, RC_SKIP, H.skip[blk], &H.skipn[blk], SKIP_MAX);
-        break;
-      case F_addbsi:
-        account(CAT_HDR);
-        B::raw_field(p, n, RC_ADDBSI, H.addbsi, &H.addbsin, ADDBSI_MAX);
-        break;
-      case F_mixdata:
-        account(CAT_HDR);
-        B::raw_field(p, n, RC_MIXDATA, H.mixdata, &H.mixdatan, MIXDATA_MAX);
-        break;
-      case F_blkstrtinfo:
-        account(CAT_HDR);
-        B::raw_field(p, n, RC_BLKSTRT, H.blkstrt, &H.blkstrtn, BLKSTRT_MAX);
-        break;
-      default:
-        fatal("internal error: raw bits of %s", field_name[fid]);
+    U8* last;  // a raw field's: the last of its kind (the history's), its bytes, their room
+    S16* nlast;
+    int code, max;
+    if (fid == F_tail) {
+      account(CAT_TAIL);
+      B::code_tail(p, n);
+      return good();
     }
+    switch (fid) {
+      case F_skipfld: code = RC_SKIP, last = H.skip[blk], nlast = &H.skipn[blk], max = SKIP_MAX; break;
+      case F_addbsi: code = RC_ADDBSI, last = H.addbsi, nlast = &H.addbsin, max = ADDBSI_MAX; break;
+      case F_mixdata: code = RC_MIXDATA, last = H.mixdata, nlast = &H.mixdatan, max = MIXDATA_MAX; break;
+      case F_blkstrtinfo: code = RC_BLKSTRT, last = H.blkstrt, nlast = &H.blkstrtn, max = BLKSTRT_MAX; break;
+      default: fatal("internal error: raw bits of %s", field_name[fid]);
+    }
+    account(fid == F_skipfld ? CAT_SKIP : CAT_HDR);
+    B::raw_field(p, n, code, last, nlast, max);
     return good();
   }
   int peek_bsid() const { return 0; }
@@ -223,10 +216,10 @@ struct Model : ModelMant<f_DEC, LV> {
         B::exp_open(arg, fr->expstr[w->cur_blk][arg]);
         break;
       case K_M:
-        B::mant_open(arg);
+        B::mant_open();
         break;
       case K_Q:
-        B::aht_open(arg);
+        B::aht_open();
         break;
       case K_T:
         B::unit_reset();

@@ -75,13 +75,11 @@ struct Ac3Split : Coroutine {
   void scan_input(void) {
     for (;;) {
       size_t i = (size_t)(scan - begin);
-      int n = 0;
       if (i + RD_AHEAD > len && !eof) return;  // (what a frame at i needs, to come)
       if (i >= len) return;
-      if (buf[i] == 0x0B && i + 1 < len && buf[i + 1] == 0x77) n = frame_at(buf + i, len - i, eof);
+      const int n = frame_at(buf + i, len - i, eof);
       if (n) {
-        // the first substream's frame (AC-3, or E-AC-3's independent substream 0)
-        const int first = (buf[i + 5] >> 3) <= 10 || (buf[i + 2] >> 3) == 0;
+        const int first = frame_first(buf + i);  // (where a part may start)
         if (scan > begin && ((first && scan - begin >= chunksize) || scan - begin >= cap)) emit(scan);
         scan += (U64)n;
       } else {

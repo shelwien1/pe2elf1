@@ -11,7 +11,7 @@ constexpr int AC3P_VERSION = 1;  // the format's
 // a compression's statistics (its summary line)
 struct Stats {
   U64 frames, ac3, eac3, dep, packed, raw_parse, raw_verify;
-  double in_bytes, raw_bytes, frame_bytes;
+  double in_bytes, raw_bytes;
   U64 parts;    // -t: the parts
   int threads;  // and the threads
 
@@ -25,7 +25,6 @@ struct Stats {
     raw_verify += s.raw_verify;
     in_bytes += s.in_bytes;
     raw_bytes += s.raw_bytes;
-    frame_bytes += s.frame_bytes;
   }
 
   // c's summary line (out_bytes: the compressed size, at the level), and with -s the bytes by kind

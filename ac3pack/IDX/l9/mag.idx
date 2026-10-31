@@ -79,7 +79,9 @@ Index t
  t_bap: bap, 1!111111111111111
 
 Index n
- n_bap: bap, 1!111111111111111
+#  Frozen, as lrm and mbm: the mantissa mixer they are for mixes only by a hint, and nothing
+#  gives this family one.
+! n_bap: bap, 1!111111111111111
 
 Index g
  g_s1: s1, 1!11
@@ -117,8 +119,9 @@ Number bw, 1, 0!01100
 Number rT, 1, 0!10000000
 Number mwT, 1, 0!00000010
 Number mt, 1, 0!110
-Number lrm, 1, 0!11111
-Number mbm, 1, 0!00011001
+#  the mantissa mixer's rates: frozen (Index n)
+! Number lrm, 1, 0!11111
+! Number mbm, 1, 0!00011001
 Number rG, 1, 0!11111111
 Number mwG, 1, 0!00000000
 

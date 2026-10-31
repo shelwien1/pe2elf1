@@ -2,6 +2,9 @@
 // and the blocks' side information (sid), each value against its substream's last ones; the bytes
 // kept as bytes and the raw fields (raw); the bits after the last block; the container's chunks.
 
+static_assert((int)SN_SAME == HN_SAME && (int)SN_SAMEP == HN_SAME2 && (int)SN_BIT == HN_BIT,
+              "sid's nodes are hdr's (code_val())");
+
 template <int f_DEC, class LV>
 struct ModelHdr {
   static constexpr int ENC = f_DEC == 0;
@@ -80,6 +83,17 @@ struct ModelHdr {
     return k;
   }
 
+  // A value v of family f's (hdr's or sid's: their nodes are the same), its contexts X selected: a
+  // flag where bit1, else whether it is c1 - 1, whether c2 - 1 (1 + those values, 0 none), else its
+  // difference from base (codes(), by sign context sc), in lo..hi
+  template <class F>
+  INLINE i64 code_val(F& f, const tcx& X, int bit1, i64 v, S32 c1, S32 c2, i64 base, u32 sc, i64 lo, i64 hi) {
+    if (bit1) return f.bit(HN_BIT, ENC && v);
+    if (c1 && f.bit(HN_SAME, ENC && v == c1 - 1)) return c1 - 1;
+    if (c2 && c2 != c1 && f.bit(HN_SAME2, ENC && v == c2 - 1)) return c2 - 1;
+    return checked(base + f.codes(X, ENC ? v - base : 0, sc), lo, hi);
+  }
+
   // The hdr family's value of field fld (a flag where bit1, else in 0..hi), its last values A and
   // A2 (1 + them, 0 none), at place pos
   i64 hdr_code(int fld, int bit1, i64 v, S32 A, S32 A2, int pos, i64 hi) {
@@ -88,19 +102,13 @@ struct ModelHdr {
     D.fld = fld;
     D.lv = vvar(A, kVal);
     D.l2 = !A2 ? 0 : A2 == A ? 1 : 2;
-    D.pos = cap(pos, 31);
+    D.pos = imin(pos, 31);
     D.st = st;
-    D.nch = cap(nch, 3);
+    D.nch = imin(nch, 3);
     D.sk = sk;
     f_hdr.make(D, X);
     f_hdr.select(X);
-    if (bit1) v = f_hdr.bit(HN_BIT, ENC && v);
-    else if (A && f_hdr.bit(HN_SAME, ENC && v == A - 1)) v = A - 1;
-    else if (A2 && A2 != A && f_hdr.bit(HN_SAME2, ENC && v == A2 - 1)) v = A2 - 1;
-    else {
-      const i64 base = A ? A - 1 : 0;
-      v = checked(base + f_hdr.codes(X, ENC ? v - base : 0, (u32)fld), 0, hi);
-    }
+    v = code_val(f_hdr, X, bit1, v, A, A2, A ? A - 1 : 0, (u32)fld, 0, hi);
     kept(A, v);
     return v;
   }
@@ -115,7 +123,7 @@ struct ModelHdr {
   // a field of the frame's header or trailer (fid) at its next place: the frame's first ones
   // (bsid, strmtyp, substreamid) against the frames' before, whatever their substream
   int hdr_field(int fid, int n, int v) {
-    const int o = cap(occ[fid], HOCC - 1);
+    const int o = imin(occ[fid], HOCC - 1);
     if (occ[fid] < UINT8_MAX) occ[fid]++;
     const int g = fid == F_bsid || fid == F_strmtyp || fid == F_substreamid;
     return hdr_hist(fnums.hdr[fid], o, g ? H_GLOBAL : h, n, v);
@@ -134,16 +142,16 @@ struct ModelHdr {
   // A block's field of the sid family (fid) at its next place, n bits (in lo..hi): against the last
   // block's value there and the field's place before in the block
   int sid_code(int fid, int n, int v, int lo, int hi) {
-    const int fld = fnums.sid[fid], o = cap(occ[fid], SOCC - 1);
+    const int fld = fnums.sid[fid], o = imin(occ[fid], SOCC - 1);
     if (occ[fid] < UINT8_MAX) occ[fid]++;
     const S32 A = hist[h].s1[fld][o], B = o ? scur[fld][o - 1] : 0;
     M_sid_v D;
     tcx X;
     D.fld = fld;
     D.lv = vvar(A, kVal);
-    D.pos = cap(o, 31);
+    D.pos = imin(o, 31);
     D.st = st;
-    D.nch = cap(nch, 3);
+    D.nch = imin(nch, 3);
     D.sk = sk;
     D.blk = blk;
     D.pq = vvar(B, kVal);
@@ -151,13 +159,7 @@ struct ModelHdr {
     D.lb = !A || !B ? 0 : A == B ? 1 : 2;
     f_sid.make(D, X);
     f_sid.select(X);
-    if (n == 1) v = f_sid.bit(SN_BIT, ENC && v);
-    else if (A && f_sid.bit(SN_SAME, ENC && v == A - 1)) v = A - 1;
-    else if (B && B != A && f_sid.bit(SN_SAMEP, ENC && v == B - 1)) v = B - 1;
-    else {
-      const int base = A ? A - 1 : B ? B - 1 : 0;
-      v = (int)checked(base + f_sid.codes(X, ENC ? v - base : 0, (u32)fld), lo, hi);
-    }
+    v = (int)code_val(f_sid, X, n == 1, v, A, B, A ? A - 1 : B ? B - 1 : 0, (u32)fld, lo, hi);
     sstate[fld] = (S8)kept(A, v);
     if (!scur[fld][o] && nspend < SPEND_MAX) spend[nspend++] = SPend{(U8)fld, (U8)o};
     scur[fld][o] = v + 1;
@@ -234,7 +236,7 @@ struct ModelHdr {
   // the container: a chunk's kind (CK_*), the length of one kept as bytes, its bytes
   int code_kind(int k) {
     cat(CAT_RAW);
-    k = (int)checked(hdr_code(NHFRAME + HX_KIND, 0, k, lastkind, lastkind2, 0, CK_N - 1), CK_END, CK_N - 1);
+    k = (int)hdr_code(NHFRAME + HX_KIND, 0, k, lastkind, lastkind2, 0, CK_N - 1);
     lastkind2 = lastkind;
     lastkind = k + 1;
     return k;
@@ -242,7 +244,7 @@ struct ModelHdr {
   size_t code_raw_len(size_t n) {
     cat(CAT_RAW);
     rawat = 0;
-    return (size_t)checked(hdr_code(NHFRAME + HX_RAWLEN, 0, (i64)n, 0, 0, 0, kRawLenMax), 0, kRawLenMax);
+    return (size_t)hdr_code(NHFRAME + HX_RAWLEN, 0, (i64)n, 0, 0, 0, kRawLenMax);
   }
   // n bytes at p of a chunk of the kind k (CK_RAW, CK_BAD), which may come a piece at a time (at:
   // the bytes before in the chunk)

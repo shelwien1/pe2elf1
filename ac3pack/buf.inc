@@ -14,7 +14,6 @@ struct Buf {
     Init();
   }
   bool empty() const { return !n; }
-  size_t size() const { return n; }
   T& operator[](size_t i) { return p[i]; }
   void fill(size_t m, const T& v) {
     if (!grow(&p, &cap, m)) no_memory();

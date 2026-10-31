@@ -85,13 +85,20 @@ struct Ac3Coro : CoIo<Coder<f_DEC> > {
     Walk<BitIn, NoBlockCb> w(io, f, nb);
     if (!w.frame() || f.fbytes != n) return 1;
     get_crcs(fb, n, f);
-    const int tailbits = f.tailbits;
+    if (!write_back(n)) return 2;
+    return memcmp(back, fb, (size_t)n) ? 2 : 0;
+  }
+  // f written back into back, its CRCs too: false where it doesn't fill the n bytes exactly, or
+  // takes another number of bits after its last block
+  bool write_back(int n) {
+    NoBlockCb nb;
     BitOut bo;
+    const int tailbits = f.tailbits;
     bo.init(back, n * BYTE_BITS);
     Walk<BitOut, NoBlockCb> wb(bo, f, nb);
-    if (!wb.frame() || bo.pos != n * BYTE_BITS || f.tailbits != tailbits) return 2;
+    if (!wb.frame() || bo.pos != n * BYTE_BITS || f.tailbits != tailbits) return false;
     put_crcs(back, n, f);
-    return memcmp(back, fb, (size_t)n) ? 2 : 0;
+    return true;
   }
 
   int run_c(void) {
@@ -119,14 +126,13 @@ struct Ac3Coro : CoIo<Coder<f_DEC> > {
         memcpy(fb, p, len);
         memset(fb + len, 0, PAD);
         why = parse((int)len);
-        if ((p[5] >> 3) > 10) st.eac3++, st.dep += ((p[2] >> 6) == 1);
+        if (frame_eac3(p)) st.eac3++, st.dep += frame_dependent(p);
         else st.ac3++;
         if (!why) {
           frame_comes(f);
           k.code_kind(CK_FRAME);
           if (!k.frame(f)) return fail(E_INTERNAL, "internal error: a frame parsed couldn't be coded");
           st.packed++;
-          st.frame_bytes += (double)len;
           continue;
         }
         if (why == 1) st.raw_parse++;
@@ -166,15 +172,10 @@ struct Ac3Coro : CoIo<Coder<f_DEC> > {
     while ((kind = k.code_kind(CK_END)) != CK_END) {
       if (damaged()) return damaged_data();
       if (kind == CK_FRAME) {
-        NoBlockCb nb;
-        BitOut bo;
         memset((void*)&f, 0, sizeof f);
         if (!k.frame(f) || f.fbytes < 1 || f.fbytes > MAX_FRAME) return damaged_data();
-        const int n = f.fbytes, tailbits = f.tailbits;
-        bo.init(back, n * BYTE_BITS);
-        Walk<BitOut, NoBlockCb> wb(bo, f, nb);
-        if (!wb.frame() || bo.pos != n * BYTE_BITS || f.tailbits != tailbits) return damaged_data();
-        put_crcs(back, n, f);
+        const int n = f.fbytes;
+        if (!write_back(n)) return damaged_data();
         nframe++;
         frame_comes(f);
         write(back, (size_t)n);

@@ -24,7 +24,6 @@
 #define FC_CAT(a, b) FC_CAT2(a, b)
 #define FCX(n) FC_CAT(FC_PFX, n)              // A9_mag_rA
 #define FCF(n) FC_CAT(FC_CAT(M_, FC_FAM), n)  // M_mag_v, M_mag_ND
-#define FC_USE(f) | 1ull << offsetof(V, f) / sizeof(int)
 #define FC_STR2(a) #a
 #define FC_STR(a) FC_STR2(a)  // "mag"
 
@@ -64,14 +63,12 @@ struct FC_NAME {
   typedef typename NoRef<decltype(((T*)nullptr)->FCX(A)[0])>::type Cnt;
   static void init(T& t) { t.FCX(Init)(); }
   static void quit(T& t) { t.FCX(Quit)(); }  // (the tuning build: its tables unmapped)
-  static u64 bytes(const T& t) { return t.FCX(Size); }
   static const int ND = FCF(_ND), MND = FCF(_MND), NG = FCF(_NG);
   static const int NC = FC_NC, NMIX = FC_NMIX, NAPM = FC_NAPM;
   // the mixers' inputs: two per counter, the APM's refinement of A's (A's
   // own without APMs), the outside prediction, the bias and the hint's
   // counter, in lanes of 8
   static const int NIN = tc_nin(NC);
-  static const u64 Uses = 0 FCX(USES)(FC_USE);  // the variables the indices read
   static const int lim[NC], tg[NC];             // the counters' limits and targets
   static const int hc[NC];                      // a counter's index: 0 direct, else hashed into 2^h rows
   static const sz kc[NC];                       // its rows
@@ -193,7 +190,6 @@ static_assert(Extent<decltype(FC_NAME::T::FCX(A))>::value == 0 ||
 
 #undef FC_LASTC
 #undef FC_CNT
-#undef FC_USE
 #undef FCF
 #undef FCX
 #undef FC_CAT

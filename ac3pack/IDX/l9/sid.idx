@@ -76,7 +76,9 @@ Index t
  t_fld: fld, &111011
 
 Index n
- n_fld: fld, &111111
+#  Frozen, as lrm and mbm: the mantissa mixer they are for mixes only by a hint, and nothing
+#  gives this family one.
+! n_fld: fld, &111111
 
 Index g
  g_fld: fld, &111111
@@ -112,8 +114,9 @@ Number bw, 1, 0!01100
 Number rT, 1, 0!10000000
 Number mwT, 1, 0!00000000
 Number mt, 1, 0!100
-Number lrm, 1, 0!11111
-Number mbm, 1, 0!00011001
+#  the mantissa mixer's rates: frozen (Index n)
+! Number lrm, 1, 0!11111
+! Number mbm, 1, 0!00011001
 Number rG, 1, 0!11111111
 Number mwG, 1, 0!10111100
 

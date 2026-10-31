@@ -9,12 +9,18 @@ constexpr size_t RD_AHEAD = MAX_FRAME + 8;
 // The size of the frame at p (avail bytes there, eof: they are the last of the input), where it is
 // taken for one: a sync word and a header that parses, and where the next frame follows it, the
 // input ends after it, or its CRCs hold (as ac3tsv takes them); 0 where it isn't
-static int frame_at(pcU8 p, size_t avail, int eof) {
+static INLINE int frame_at(pcU8 p, size_t avail, int eof) {
+  if (avail < 2 || p[0] != 0x0B || p[1] != 0x77) return 0;  // (most bytes don't start a sync word)
   const int n = frame_bytes(p, avail);
   if (!n || (size_t)n > avail) return 0;
   if (((size_t)n == avail && eof) || frame_bytes(p + n, avail - n)) return n;
   return frame_crc_ok(p, n) ? n : 0;
 }
+// the frame at p, as its header tells: E-AC-3 (bsid 11-16), E-AC-3's dependent substream, the
+// stream's first substream (AC-3, or E-AC-3's independent substream 0)
+static INLINE int frame_eac3(pcU8 p) { return (p[5] >> 3) > 10; }
+static INLINE int frame_dependent(pcU8 p) { return frame_eac3(p) && (p[2] >> 6) == 1; }
+static INLINE int frame_first(pcU8 p) { return !frame_eac3(p) || (p[2] >> 3) == 0; }
 
 // The input cut into frames and the bytes between them, read into buf (from io, CoIo's: what
 // next() takes): grown as the input needs, to IBUF_SIZE bytes. A run of bytes longer than the
@@ -74,15 +80,13 @@ struct Reader {
         fatal("internal error: the reader's buffer can't hold a frame");
       }
       if (i >= hi) break;
-      if (buf[i] == 0x0B && i + 1 < hi && buf[i + 1] == 0x77) {
-        const int n = frame_at(buf + i, hi - i, eof);
-        if (n) {
-          if (i > lo) break;  // the bytes before it first
-          *pos = i;
-          *len = (size_t)n;
-          lo = i + n;
-          return RD_FRAME;
-        }
+      const int n = frame_at(buf + i, hi - i, eof);
+      if (n) {
+        if (i > lo) break;  // the bytes before it first
+        *pos = i;
+        *len = (size_t)n;
+        lo = i + n;
+        return RD_FRAME;
       }
       i++;
     }

@@ -72,9 +72,8 @@ static_assert(sizeof(cm_cnt2) == 3 * sizeof(u16), "cm_cnt2: p, t, q, as tc_fam's
 // way to the mixer (the counters of the levels whose families have four)
 struct cm_cnt2s {
   cm_cnt2 c;
-  i16 sp, sq;  // cm_stretch(P()), cm_stretch(Q())
+  i16 sp, sq;  // cm_stretch() of c's P and Q
   INLINE int P() const { return c.P(); }
-  INLINE int Q() const { return c.Q(); }
   INLINE void upd(int bit, int lim, int mw) {
     c.upd(bit, lim, mw);
     sp = cm_st[c.P()];

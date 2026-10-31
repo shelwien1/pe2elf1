@@ -11,10 +11,9 @@ constexpr int SOCC = 128;  // sid: in a block
 constexpr int kCap = 15;
 constexpr int kVal = 62;   // a field's value as a variable (lv, pq): 1 + it, to 1 + kVal
 constexpr int kEst = 21;   // an estimate as a variable: 2 + its quarter levels on est_var()'s scale, to 2 + kEst
-static INLINE int cap(int v, int c) { return v < c ? v : c; }
 constexpr int SKIP_MAX = 512, ADDBSI_MAX = 64, MIXDATA_MAX = 40, BLKSTRT_MAX = 16;
 // what raw bytes are (raw's code)
-enum { RC_CHUNK, RC_BAD, RC_ADDBSI, RC_MIXDATA, RC_BLKSTRT, RC_SKIP, RC_TAIL, RC_N };
+enum { RC_CHUNK, RC_BAD, RC_ADDBSI, RC_MIXDATA, RC_BLKSTRT, RC_SKIP, RC_TAIL };
 // a chunk's kind (code_kind()): the end, a frame as records, bytes between frames, a frame kept as
 // bytes
 enum { CK_END, CK_FRAME, CK_RAW, CK_BAD, CK_N };
@@ -93,22 +92,43 @@ static INLINE U32 mant_amp(int b, int q) { return q ? (U32)(q < 0 ? -q : q) * ms
 static INLINE int est_var(U64 x) {
   if (x < 8) return 2 + (int)x;
   const int t = ilog2(x);
-  return 2 + cap(2 * t + (int)((x >> (t - 1)) & 1) + 2, kEst);
+  return 2 + imin(2 * t + (int)((x >> (t - 1)) & 1) + 2, kEst);
 }
-// that magnitude (at exponent e) in quarter levels of the quantiser of bap b at exponent ec, as an
-// estimate
-static INLINE int mant_est(U32 amp, int e, int b, int ec) {
-  U64 num = (U64)amp * 4, den = msteps.s[b];
-  const int d = ec - e;
+// num / den, doubled d times (halved where d < 0), as an estimate
+static INLINE int est_scaled(U64 num, U64 den, int d) {
   if (d >= 0) num <<= d;
   else den <<= -d;
   return est_var(num / den);
 }
+// that magnitude (at exponent e) in quarter levels of the quantiser of bap b at exponent ec, as an
+// estimate
+static INLINE int mant_est(U32 amp, int e, int b, int ec) { return est_scaled((U64)amp * 4, msteps.s[b], ec - e); }
+// the estimate a bin (bap bap2, level q2, exponent e2) gives the bin with bap b at exponent ec: 1
+// where it has no mantissa
+static INLINE int est_of(int bap2, S16 q2, int e2, int b, int ec) {
+  return bap2 ? mant_est(mant_amp(bap2, q2), e2, b, ec) : 1;
+}
+// the mean of estimates, as an estimate: of those of bins with mantissas (2 on), none where none
+struct EstMean {
+  int s = 0, n = 0;
+  void add(int e) {
+    if (e >= 2) s += e - 2, n++;
+  }
+  int get(int none) const { return n ? 2 + s / n : none; }
+};
 
 // a value as a variable: 0 none (v 0), else 1 + it, to 1 + c (v as Hist keeps it: 1 + the value)
 static INLINE int vvar(S32 v, int c) { return v ? 1 + (v - 1 < c ? v - 1 : c) : 0; }
 // a sign as a variable: 0 none or 0, 1 +, 2 -
 static INLINE int svar(int v) { return v > 0 ? 1 : v < 0 ? 2 : 0; }
+// a difference as a variable: -4..4 (clipped) as 0-8
+static INLINE int dvar(int d) { return clip(d, -4, 4) + 4; }
+// a channel's class: 0 the coupling channel, 1 the first full bandwidth one, 2 the others, 3 the LFE
+static INLINE int chan_class(const Frame& f, int ch) { return ch == CPL ? 0 : ch == f.lfech ? 3 : ch == 1 ? 1 : 2; }
+// channel ch's block switch flag in block blk (0: the coupling channel, the LFE)
+static INLINE int blksw_of(const Frame& f, int blk, int ch) { return ch >= 1 && ch <= f.nfch ? f.k[blk].blksw[ch] : 0; }
+// a bin's band (the bins past bin_to_band_tab's: its last)
+static INLINE int band_of(int bin) { return bin_to_band_tab[bin < NBIN - 3 ? bin : NBIN - 4]; }
 
 // A magnitude x of maxnb bits at most (maxnb 1-16), by the family f whose contexts are selected:
 // its length (the bits it takes, 0 for 0) as a tree of decisions (nodes len0 + the bits so far:

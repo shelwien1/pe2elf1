@@ -34,13 +34,13 @@ struct ModelExp : ModelHdr<f_DEC, LV> {
     const Hist& H = hist[h];
     M_exp_v D;
     D.es = es;
-    D.cc = ch == CPL ? 0 : ch == f.lfech ? 3 : ch == 1 ? 1 : 2;
+    D.cc = chan_class(f, ch);
     D.pd = 9;
     D.pl = 5;
     if (H.has[ch]) {
       const int lo = bin > H.strt[ch] ? bin : H.strt[ch], hi = bin + gsz < H.end[ch] ? bin + gsz : H.end[ch];
       if (lo < hi) {
-        D.pd = clip(least(H.exps[ch], lo, hi) - ex, -4, 4) + 4;
+        D.pd = dvar(least(H.exps[ch], lo, hi) - ex);
         if (bin - gsz >= H.strt[ch] && bin < H.end[ch]) D.pl = clip(H.exps[ch][bin] - H.exps[ch][bin - gsz], -2, 2) + 2;
       }
     }
@@ -48,13 +48,13 @@ struct ModelExp : ModelHdr<f_DEC, LV> {
     const int pc = partner(f.b.acmod, f.nfch, ch);
     if (pc > 0 && bin >= r.strtmant[pc] && bin < r.endmant[pc]) {
       const int hi = bin + gsz < r.endmant[pc] ? bin + gsz : r.endmant[pc];
-      D.po = clip(least(r.exps[pc], bin, hi) - ex, -4, 4) + 4;
+      D.po = dvar(least(r.exps[pc], bin, hi) - ex);
     }
     D.d1 = e_d1;
     D.d2 = e_d2;
-    D.bin = bin_to_band_tab[bin < NBIN - 3 ? bin : NBIN - 4];
-    D.ex = cap(ex, 31);
-    D.bs = ch >= 1 && ch <= f.nfch ? f.k[blk].blksw[ch] : 0;
+    D.bin = band_of(bin);
+    D.ex = imin(ex, 31);
+    D.bs = blksw_of(f, blk, ch);
     D.ht = e_ht;
     D.gi = e_gi;
     D.bk = blk;

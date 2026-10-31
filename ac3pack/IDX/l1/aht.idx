@@ -40,7 +40,9 @@ Index t
  t_hb: hb, 1!1111111111111111111
 
 Index n
- n_kd: kd, 1!1111
+#  Frozen, as lrm and mbm: the mantissa mixer they are for mixes only by a hint, and nothing
+#  gives this family one.
+! n_kd: kd, 1!1111
 
 Index g
  g_hb: hb, 1!1111111111111111111
@@ -60,8 +62,8 @@ Number mb, 1, 0!00110011
 Number rT, 1, 0!11111111
 Number mwT, 1, 0!00000010
 Number mt, 1, 0!110
-Number lrm, 1, 0!11111
-Number mbm, 1, 0!00011001
+! Number lrm, 1, 0!11111
+! Number mbm, 1, 0!00011001
 Number rG, 1, 0!11111111
 Number mwG, 1, 0!00000000
 

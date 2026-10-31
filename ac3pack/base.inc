@@ -12,15 +12,13 @@ typedef long long S64;
 
 // Restrict pointers (__restrict): while one is in use, what it points at is reached through it
 // alone, so the compiler may keep values in registers across stores through other pointers. rp<T>
-// for any T; the common ones by name (pU8: U8*, pcU8: const U8*, ...).
+// for any T; the common ones by name (pU8: U8*, pcU8: const U8*, pcInt: const int*).
 template <class T>
 using rp = T* __restrict;
 typedef rp<U8> pU8;
 typedef rp<const U8> pcU8;
-typedef rp<int> pInt;
 typedef rp<const int> pcInt;
 
-#define countof(a) (int)(sizeof(a) / sizeof((a)[0]))
 static inline int imin(int a, int b) { return a < b ? a : b; }
 static inline int imax(int a, int b) { return a > b ? a : b; }
 
