@@ -312,16 +312,21 @@ on the avip samples (but 1.8% on `susi_small2_divx.m4v`), and 2-4% on the FFmpeg
 fastest level, is within a point of format 3 on the avip samples (worse on five of the six) and 1-2
 points better on the FFmpeg streams.
 
-On threads, with five of the avip samples concatenated (21 MB, four cores):
+On threads, with five of the avip samples concatenated (21 MB, four cores of the same machine,
+which ran about 1.3 times slower when this was measured than for the levels table):
 
 | | Size | `c` | `d` |
 |---|---:|---:|---:|
-| one thread | 14581304 (69.07%) | 104.0 s, 38 MiB | 107.6 s, 37 MiB |
-| `-t 2` | 14607976 (69.19%) | 58.3 s, 96 MiB | 61.2 s, 82 MiB |
-| `-t 4` | 14608078 (69.19%) | 38.4 s, 174 MiB | 42.1 s, 149 MiB |
+| one thread | 14581304 (69.07%) | 134.3 s, 38 MiB | 130.1 s, 37 MiB |
+| `-t 2` | 14607920 (69.19%) | 73.9 s, 90 MiB | 71.4 s, 82 MiB |
+| `-t 4` | 14608006 (69.19%) | 45.4 s, 167 MiB | 46.9 s, 152 MiB |
 
 At `-9` (the default), with the default 4 MB parts: the stream has 5 parts, which cost 0.18% of
-the size, each part's model starting afresh.
+the size, each part's model starting afresh. `d`'s workers get their input from the container in
+MTwrap's 2 MB buffers; since the container has the parts' streams interleaved as they were coded,
+they keep busy however long the parts are. With 12 MB parts (`-1 -t 4 -c 12`, a 58 MB stream in 5
+parts), format 5's `d` took 48.9 s against `c`'s 27.5 s, reading one part at a time; format 6's
+takes 25.0 s (`c` 27.8 s).
 
 ## Build
 
