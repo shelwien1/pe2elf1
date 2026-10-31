@@ -11,7 +11,7 @@ struct M4vPart : CoIo<Coroutine> {
   U64 parts;       // the parts done
   Stats st;        // c: its parts', added up (-s: and the bits by kind of syntax element)
   double cost[NCAT], orig[NCAT];
-  U8 *in_, *out_;  // c: a part, all of it; d: IO_BUF of its record at a time. The part's run's output
+  U8 *in_, *out_;  // c: a part, all of it. The part's run's output: c, IO_BUF at a time; d, all of it
   size_t in_room, out_room, out_len;
   // its counts on the progress line: the stream's bytes, the compressed stream's and the VOPs of its
   // parts done (done_*, the worker's own), and with the part under way (prog_*: read from any
@@ -69,10 +69,10 @@ struct M4vPart : CoIo<Coroutine> {
   }
 
   // A part's run: the coroutine c on the input feed() gives (feed(&p): the next piece at p, its size;
-  // 0 at the end), its output into out_ (out_len bytes; most at most, one more fails the part); its
-  // status (0, or the exit status of its error, its note copied to the worker's). As it goes, its
-  // counts are the worker's (from done_* on), what it tells is shown, and a line of progress may be
-  // due.
+  // 0 at the end), its output (c) into the worker's output a buffer at a time, as it comes, or (d)
+  // into out_ (out_len bytes; most at most, one more fails the part); its status (0, or the exit
+  // status of its error, its note copied to the worker's). As it goes, its counts are the worker's
+  // (from done_* on), what it tells is shown, and a line of progress may be due.
   template <class C, class Feed>
   int run_part(C& c, Feed feed, U64 most) {
     int r;
@@ -96,9 +96,15 @@ struct M4vPart : CoIo<Coroutine> {
         c.addinp((byte*)(l ? p : out_), (uint)l);
         continue;
       }
+      if (!f_DEC) {  // c: on to the container as it comes (MTwrap puts each block of the worker's in it)
+        write(out_, c.getoutsize());
+        if (y != Y_OUT) break;
+        c.addout(out_, IO_BUF);
+        continue;
+      }
       out_len += c.getoutsize();
       if (y != Y_OUT) break;
-      if (out_len > most) {  // (a part that comes out longer than its record says: d only)
+      if (out_len > most) {  // (a part that comes out longer than its record says)
         c.Quit();
         return fail(E_DATA, "damaged data: a part comes out longer than its record says");
       }
@@ -117,7 +123,8 @@ struct M4vPart : CoIo<Coroutine> {
   }
 
   // c: each part as the splitter frames it (u64 L, u64 ins, u64 xlen, then the part, L - MT_F_PAST
-  // bytes) into its record, and as the parts end, the record of the worker's end
+  // bytes) into its record, the part compressed as it comes; and as the parts end, the record of
+  // the worker's end
   int run_c(void) {
     for (;;) {
       U8 h[MT_FRAME], rec[MT_REC];
@@ -125,7 +132,7 @@ struct M4vPart : CoIo<Coroutine> {
       U64 L, ins, xlen, plen;
       int r;
       if (!n) {
-        mt_rec(rec, MT_REC, 0, 0, 0, next_part());
+        mt_rec(rec, 0, 0, 0, next_part());
         write(rec, MT_REC);
         return 0;
       }
@@ -133,24 +140,38 @@ struct M4vPart : CoIo<Coroutine> {
       ins = get_le(h + MT_F_INS, U64_BYTES);
       xlen = get_le(h + MT_F_XLEN, U64_BYTES);
       plen = L - MT_F_PAST;
-      if (n < MT_FRAME || L < MT_F_PAST || ins > plen || xlen > plen - ins || plen != (size_t)plen)
-        return fail(E_INTERNAL, "internal error: a part framed wrong");
+      if (n < MT_FRAME || L <= MT_F_PAST || ins > plen || xlen > plen - ins || plen != (size_t)plen)
+        return fail(E_INTERNAL, "internal error: a part framed wrong");  // (plen 0 is the worker's end)
       if (!grow(&in_, &in_room, (size_t)plen + 1, IO_BUF)) return fail(E_INTERNAL, "out of memory");
       if (read(in_, (size_t)plen) != plen) return fail(E_INTERNAL, "internal error: a part cut short");
+      mt_rec(rec, plen, ins, xlen, next_part());
+      write(rec, MT_REC);
       r = with_level<PartC>(args.level, *this, plen);
       if (r == kNoLevel) return fail(E_INTERNAL, "no level -%d in this build", args.level);
       if (r) return r;
-      mt_rec(rec, MT_REC + out_len, plen, ins, xlen, next_part());
-      write(rec, MT_REC);
-      write(out_, out_len);
       parts++;
       done_packed += MT_REC;
       done_raw -= xlen;  // (the headers copied in are not the stream's)
-      // the record handed over now, its last buffer as far as it is filled (a round's end): so
-      // MTwrap puts each record in the container as its part is done, and d, which takes the
-      // parts in turn, finds the next within about a round of the others
+      // the part's last buffer handed over now, as far as it is filled (a round's end): so the
+      // part's end is in the container as it is done, not after some of the next part
       yield(static_cast<Coroutine*>(this), Y_PART);
     }
+  }
+
+  // d: a part's run reads the worker's input where it is: lend() hands it the rest of the input
+  // buffer (*p, its size; 0: the input has ended) as if it were read, and take_back() takes back
+  // what the run left of it (past the part's stream: the next record)
+  size_t lend(const U8** p) {
+    size_t l;
+    if (inpptr >= inpend && !next_input()) return 0;
+    *p = inpptr;
+    l = (size_t)(inpend - inpptr);
+    inpptr = inpend;
+    return l;
+  }
+  template <class C>
+  void take_back(const C& c) {
+    if (c.inpend == inpend && c.inpptr <= inpend) inpptr = c.inpptr;
   }
 
   // d: each record into its part, the headers copied in removed, after which MTwrap takes the
@@ -159,37 +180,29 @@ struct M4vPart : CoIo<Coroutine> {
     for (;;) {
       U8 h[MT_REC];
       U8 head[M4V_HEAD];
-      U64 g_size, plen, ins, xlen, left;
-      size_t nh;
+      U64 plen, ins, xlen;
       int r;
       if (read(h, MT_REC) < MT_REC) return fail(E_DATA, "damaged data: a worker's records cut short");
-      g_size = get_le(h + MT_R_SIZE, U64_BYTES);
       plen = get_le(h + MT_R_PLEN, U64_BYTES);
       ins = get_le(h + MT_R_INS, U64_BYTES);
       xlen = get_le(h + MT_R_XLEN, U64_BYTES);
       if (get_le(h + MT_R_CRC, U32_BYTES) != mt_rec_crc(h) || get_le(h + MT_R_ZERO, U32_BYTES) ||
           get_le(h + MT_R_PART, U64_BYTES) != next_part())
         return fail(E_DATA, "damaged data: a part's record broken, or a part lost, added or moved");
-      if (g_size == MT_REC) {  // the worker's end
+      if (!plen) {  // the worker's end
         U8 x;
-        if (plen || ins || xlen) return fail(E_DATA, "damaged data: a part's record broken");
+        if (ins || xlen) return fail(E_DATA, "damaged data: a part's record broken");
         if (read(&x, 1)) return fail(E_DATA, "damaged data after a worker's end");
         return 0;
       }
-      if (plen > args.part_max || ins > plen || xlen > plen - ins || g_size < MT_REC)
+      if (plen > args.part_max || ins > plen || xlen > plen - ins)
         return fail(E_DATA, "damaged data: a part's record broken");
-      // the part compressed, read as its run asks for it, IO_BUF at a time: its header here (its
-      // level), then the rest of g_size from the input
-      left = g_size - MT_REC;
-      nh = (size_t)(left < (U64)M4V_HEAD ? left : (U64)M4V_HEAD);
-      if (read(head, nh) < nh || nh < M4V_HEAD) return fail(E_DATA, "damaged data: a part's record cut short");
-      left -= nh;
-      if (!grow(&in_, &in_room, IO_BUF, IO_BUF)) return fail(E_INTERNAL, "out of memory");
-      r = with_level<PartD>(head[M4V_AT_LEVEL], *this, (const U8*)head, nh, plen, left);
+      // the part compressed: its header here (its level), the rest read by its run where it is
+      if (read(head, M4V_HEAD) < M4V_HEAD) return fail(E_DATA, "damaged data: a part's record cut short");
+      r = with_level<PartD>(head[M4V_AT_LEVEL], *this, (const U8*)head, plen);
       if (r == kNoLevel)
         return fail(E_DATA, "a part compressed at level -%d, which this build has not", head[M4V_AT_LEVEL]);
       if (r) return r;
-      if (left) return fail(E_DATA, "damaged data: a part's record broken");  // (its stream ended before it)
       if (out_len != plen) return fail(E_DATA, "damaged data: a part comes out shorter than its record says");
       write(out_, (size_t)ins);
       write(out_ + ins + xlen, (size_t)(plen - ins - xlen));

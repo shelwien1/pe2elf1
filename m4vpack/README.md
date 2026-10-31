@@ -228,7 +228,7 @@ streams.
 
 | Bytes | Content |
 |---|---|
-| 9 | `m4vpack`, the format version 5 and the level |
+| 9 | `m4vpack`, the format version 6 and the level |
 | rest | range coded data: a sequence of chunks, each a kind (VOP as records, bytes, or end) followed by its content, and after the end the CRC-32 of the stream |
 
 On threads:
@@ -236,19 +236,25 @@ On threads:
 | Bytes | Content |
 |---|---|
 | 5 | `m4vpm` |
-| 1 | the format version 5 |
+| 1 | the format version 6 |
 | 1 | the threads |
 | 4 | the part size in KB, little endian |
 | rest | MTwrap's container of the workers' streams |
 
-A worker's stream holds a 48-byte record for each of its parts: the record's size, the part's size,
-where the headers copied into it are, the part's place in the stream, and a CRC-32 of these fields.
-The compressed part follows, as a stream of the first kind (with its level). An empty record ends
-the worker's stream. `d` checks the CRC of each part and each record, and that no part is lost,
-added or moved.
+A worker's stream holds a 40-byte record for each of its parts: the part's size, where the headers
+copied into it are, the part's place in the stream, and a CRC-32 of these fields. The compressed
+part follows, as a stream of the first kind (with its level), which ends where its decoder stops
+reading (the coder's decoder reads exactly the bytes its coder wrote). A record of size 0 ends the
+worker's stream. `d` checks the CRC of each part and each record, and that no part is lost, added
+or moved.
 
-MTwrap writes the workers' blocks in the order they finish, so two runs on threads can write
-different bytes. The files have the same size and decompress to the same stream.
+Each worker writes its stream as it codes it, 64 KB at a time, and MTwrap puts the blocks in its
+container in the order they come: so the container has the workers' streams interleaved as they
+were made, and `d`, whose workers decode about as fast as `c`'s coded, finds each worker's input
+about when it needs it. (Format 5 wrote a part's stream when the part was done, behind its size:
+`d` then read the container one part at a time while the other workers waited for theirs.) Two
+runs on threads can write different bytes. The files have the same size and decompress to the
+same stream.
 
 ### Kept as bytes
 

@@ -6,7 +6,7 @@
 // the CRC-32 of the stream (32 bits at 1/2 each).
 enum { M4V_MAGIC = 7, M4V_AT_VERSION = M4V_MAGIC, M4V_AT_LEVEL, M4V_HEAD };  // the header's bytes
 static const U8 magic[M4V_MAGIC] = { 'm', '4', 'v', 'p', 'a', 'c', 'k' };
-constexpr int M4V_VERSION = 5;  // the format's
+constexpr int M4V_VERSION = 6;  // the format's
 
 // a compression's statistics (its summary line)
 struct Stats {

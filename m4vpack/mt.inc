@@ -17,19 +17,23 @@
 // increment size.
 //
 // A worker's stream is a record for each of its parts:
-//   u64 g_size  the record's size, these MT_REC (48) bytes included
-//   u64 plen    the size of the part as compressed (with the headers copied in)
-//   u64 ins     where in it those are: [ins, ins + xlen), removed after decoding
+//   u64 plen   the size of the part as compressed (with the headers copied in; never 0)
+//   u64 ins    where in it those are: [ins, ins + xlen), removed after decoding
 //   u64 xlen
-//   u64 part    its place in the stream, from 0: worker w's k-th part is w + kN
-//   u32 crc     the CRC-32 of these 40 bytes; u32 0
-//   g_size - 48 bytes: the part compressed, a stream of the single kind (magic, version, level,
-//               chunks, CRC)
-// and its end, a record of the 48 bytes alone, whose part is the place its next part would have
-// had (little endian). So d finds a part lost, added or moved, or a worker's stream cut short.
-// MTwrap's container holds the N streams, after m4vpack's header: mt_magic, the format version,
-// the threads, the part size in KB (4 bytes). d needs as many threads as c had; each part ends a
-// round of MTwrap's decoder (Y_PART), which takes the parts from the workers in turn, as dealt.
+//   u64 part   its place in the stream, from 0: worker w's k-th part is w + kN
+//   u32 crc    the CRC-32 of these 32 bytes; u32 0
+//   then the part compressed, a stream of the single kind (magic, version, level, chunks, CRC),
+//   which ends where its decoder stops reading (rc.inc's decoder reads exactly the bytes its coder
+//   wrote): the next record follows it
+// and its end, a record of plen 0 (ins and xlen 0) alone, whose part is the place its next part
+// would have had (little endian). So d finds a part lost, added or moved, or a worker's stream cut
+// short. A worker writes its stream as it codes it, 64 KB at a time (and the rest of a part as it
+// ends), and MTwrap puts each block in its container as it comes: so the container has the
+// workers' streams interleaved as they were made, and d, whose workers decode about as fast as c's
+// coded, finds each worker's input about when it needs it. MTwrap's container holds the N streams,
+// after m4vpack's header: mt_magic, the format version, the threads, the part size in KB (4
+// bytes). d needs as many threads as c had; each part ends a round of MTwrap's decoder (Y_PART),
+// which takes the parts from the workers in turn, as dealt.
 
 // the header: mt_magic, the version, the threads, the part size in KB (MT_PART_BYTES)
 enum { MT_MAGIC = 5, MT_AT_VERSION = MT_MAGIC, MT_AT_THREADS, MT_AT_PART, MT_PART_BYTES = U32_BYTES,
@@ -40,8 +44,7 @@ constexpr int HEAD_MAX = (int)MT_HEAD > (int)M4V_HEAD ? (int)MT_HEAD : (int)M4V_
 constexpr int MAX_THREADS = 64;  // (-t)
 // a worker's record: its fields' places, and its size
 enum {
-  MT_R_SIZE = 0,                        // u64 g_size
-  MT_R_PLEN = MT_R_SIZE + U64_BYTES,    // u64 plen
+  MT_R_PLEN = 0,                        // u64 plen
   MT_R_INS = MT_R_PLEN + U64_BYTES,     // u64 ins
   MT_R_XLEN = MT_R_INS + U64_BYTES,     // u64 xlen
   MT_R_PART = MT_R_XLEN + U64_BYTES,    // u64 part
@@ -91,8 +94,7 @@ static void mt_head(U8* h, int threads, U32 part) {
 }
 
 static U32 mt_rec_crc(const U8* h) { return crc32_upd(0, h, MT_R_CRC); }
-static void mt_rec(U8* h, U64 g_size, U64 plen, U64 ins, U64 xlen, U64 part) {
-  put_le(h + MT_R_SIZE, g_size, U64_BYTES);
+static void mt_rec(U8* h, U64 plen, U64 ins, U64 xlen, U64 part) {
   put_le(h + MT_R_PLEN, plen, U64_BYTES);
   put_le(h + MT_R_INS, ins, U64_BYTES);
   put_le(h + MT_R_XLEN, xlen, U64_BYTES);

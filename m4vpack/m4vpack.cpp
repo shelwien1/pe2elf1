@@ -57,11 +57,12 @@
 // I-VOP, with the headers before them copied in, so that each part is a stream of its own; the
 // parts are dealt in turn to N workers (MTwrap), each part coded by a model of its own.
 //
-// File format: "m4vpack", the format version 05 and the level, then the range coded chunks:
+// File format: "m4vpack", the format version 06 and the level, then the range coded chunks:
 // kind (end, VOP as records, bytes), then the records or a length and the bytes; after the end, the
-// CRC-32 of the stream. On threads: "m4vpm" 05, the threads, the part size in KB (4 bytes), then
-// MTwrap's container of the workers' streams, a record for each part (its size, where the headers
-// copied in are, its place, a CRC), each part as a stream of the first kind (with its level).
+// CRC-32 of the stream. On threads: "m4vpm" 06, the threads, the part size in KB (4 bytes), then
+// MTwrap's container of the workers' streams, interleaved as they were coded: a record for each
+// part (its size, where the headers copied in are, its place, a CRC), then the part as a stream of
+// the first kind (with its level), which ends where its decoder stops reading.
 //
 // Kept as bytes: as in m4vtsv, VOPs using data partitioning (B-VOPs don't), non-rectangular
 // shapes, static sprites, sprite brightness change, newpred, reduced resolution, scalability or the

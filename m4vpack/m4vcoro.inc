@@ -38,6 +38,7 @@ struct M4vCoro : CoIo<Coder<f_DEC> > {
   U64 nvop;
   VideoInfo video;
   int told_vol;
+  int is_part;  // d: the stream is a part's (mt.inc's records), which ends where it stops reading
 
   void Init(int s) {  // (s: c -s, the bits by kind of syntax element: the coder's cost and orig)
     coro_init();
@@ -46,6 +47,7 @@ struct M4vCoro : CoIo<Coder<f_DEC> > {
     status = 1;
     nvop = 0;
     told_vol = 0;
+    is_part = 0;
     memset((void*)&video, 0, sizeof video);
     k.Init();
   }
@@ -203,9 +205,9 @@ struct M4vCoro : CoIo<Coder<f_DEC> > {
       if (damaged()) return damaged_data();
     }
     // the CRC, the stream's last bytes: the coder has then read all it wrote, and nothing more is
-    // there (bytes after it: damaged data too)
+    // there (bytes after it: damaged data too), but in a part's stream, the worker's next record
     if (code_u32(0) != crc || damaged()) return damaged_data();
-    if (inpptr < inpend || next_input())
+    if (!is_part && (inpptr < inpend || next_input()))
       return fail(E_DATA, "damaged data: bytes after the end of the stream");
     return 0;
   }
