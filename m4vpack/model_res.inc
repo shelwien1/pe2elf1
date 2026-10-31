@@ -23,7 +23,7 @@ struct ModelRes : ModelHdr<f_DEC, LV> {
   // block's size, the left and above blocks' (and their coefficient counts), whether the block has
   // AC coefficients, the quantiser; for the sign, the left and above blocks' and the previous one's
   // (e4: the intra estimate's difference, quarter levels, if eok; tq how far to trust it)
-  int code_dc(VState& s, int lc, int v, const BlkCtx* Lb, const BlkCtx* Ab, int coded, int qs, int eok, int e4,
+  int code_dc(VState& s, int lc, int v, rp<const BlkCtx> Lb, rp<const BlkCtx> Ab, int coded, int qs, int eok, int e4,
               int tq) {
     M_dcs_v D;
     tcx X;

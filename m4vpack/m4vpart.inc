@@ -21,7 +21,7 @@ struct M4vPart : CoIo<Coroutine> {
   U64 done_raw, done_packed, done_vops;
   U64 prog_raw, prog_packed, prog_vops;
 
-  uint Init(const MtArgs* a, uint w) {
+  uint Init(rp<const MtArgs> a, uint w) {
     coro_init();
     io_init();
     args = *a;
@@ -64,7 +64,7 @@ struct M4vPart : CoIo<Coroutine> {
   U64 next_part(void) const { return worker + parts * (U64)args.threads; }
 
   // c: a part's statistics, added to the worker's
-  void add_stats(const Stats& s, const double* c, const double* o) {
+  void add_stats(const Stats& s, rp<const double> c, rp<const double> o) {
     int i;
     st.add(s);
     for (i = 0; i < NCAT; i++) cost[i] += c[i], orig[i] += o[i];
@@ -163,7 +163,7 @@ struct M4vPart : CoIo<Coroutine> {
   // d: a part's run reads the worker's input where it is: lend() hands it the rest of the input
   // buffer (*p, its size; 0: the input has ended) as if it were read, and take_back() takes back
   // what the run left of it (past the part's stream: the next record)
-  size_t lend(const U8** p) {
+  size_t lend(rp<const U8*> p) {
     size_t l;
     if (inpptr >= inpend && !next_input()) return 0;
     *p = inpptr;

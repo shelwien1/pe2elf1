@@ -95,7 +95,7 @@ struct Ctx {
   }
 
   // a chunk (the first 32 KiB of it) that isn't a VOP: VOL headers and user data matter
-  void parse_header_chunk(const U8* p, size_t n) {
+  void parse_header_chunk(pcU8 p, size_t n) {
     GB gb;
     int code;
     if (n < SC_LEN || (code = sc_code(p)) < 0) return;
@@ -122,7 +122,7 @@ struct Ctx {
   // a sprite trajectory (GMC) both ways (the walks below say how): each warping point's du, dv as a
   // length's code, the value (FFmpeg's xbits) and a marker (DivX 4.13 leaves out a point's first one)
   template <class IO>
-  int traj_walk(IO& io, int* w) const {
+  int traj_walk(IO& io, pInt w) const {
     int i;
     for (i = 0; i < 2 * warp_points; i++) {
       int len = IO::W ? bitlen(w[i]) : 0;

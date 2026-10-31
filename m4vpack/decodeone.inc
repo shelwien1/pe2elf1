@@ -5,7 +5,7 @@
   // (head, got of them) first
   template <class LV>
   struct DecodeOne {
-    static int run(Call& k, const U8* head, size_t got) {
+    static int run(Call& k, pcU8 head, size_t got) {
       typedef M4vCoro<1, LV> C;
       C* p = coro_new<C>();
       int r;

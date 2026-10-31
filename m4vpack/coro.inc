@@ -30,7 +30,7 @@ struct Stats {
 
   // c's summary line (out_bytes: the compressed size, at the level), and with -s the bits by kind of
   // syntax element, the coder's cost and orig (CAT_*)
-  void report(const char* name, const double* cost, const double* orig, double out_bytes, int level, int stats) const {
+  void report(const char* name, rp<const double> cost, rp<const double> orig, double out_bytes, int level, int stats) const {
     static const char* const cat_name[NCAT] = { "raw chunks", "VOP and video packet headers, tails",
                                                  "types, flags, dquant", "coded block patterns", "motion vectors",
                                                  "intra DC", "positions", "levels", "signs", "escape modes" };
@@ -70,11 +70,11 @@ struct Stats {
 
 // what W_VERIFY's VOP written back is compared with, as its writer flushes it (PB's flush, ctx a Cmp)
 struct Cmp {
-  const U8* p;
+  pcU8 p;  // (the VOP, which nothing writes while it is compared)
   size_t n, at;
   int differs;
 
-  static void flush(void* ctx, const U8* q, size_t k) {
+  static void flush(void* ctx, pcU8 q, size_t k) {
     Cmp& c = *(Cmp*)ctx;
     if (c.differs || k > c.n - c.at || memcmp(c.p + c.at, q, k)) c.differs = 1;
     else c.at += k;
@@ -102,7 +102,7 @@ struct Sink {
   U64 pos, diff_at;
   int differs, err;
 
-  void write(const U8* p, size_t n) {
+  void write(pcU8 p, size_t n) {
     static U8 cmp[IO_BUF];  // (the main thread's)
     if (!compare) {
       if (n && fwrite(p, 1, n, f) != n) err = 1;
@@ -141,7 +141,7 @@ uint drive(C& c, In in, Out out, Show show) {
 // show(code) after each yield
 static U8 io_bufs[2][IO_BUF];  // (the main thread's: input, output)
 template <class C, class Show>
-uint run_file(C& c, FILE* f, Sink& s, Show show, const U8* pre = 0, size_t n = 0) {
+uint run_file(C& c, FILE* f, Sink& s, Show show, pcU8 pre = 0, size_t n = 0) {
   const uint kIo = sizeof io_bufs[0];
   U8 *ib = io_bufs[0], *ob = io_bufs[1];
   c.addout(ob, kIo);

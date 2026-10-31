@@ -72,7 +72,7 @@ constexpr int IDCT_W1 = 22725, IDCT_W2 = 21407, IDCT_W3 = 19266, IDCT_W4 = 16383
             IDCT_W6 = 8867, IDCT_W7 = 4520;
 constexpr int IDCT_ROW_SHIFT = 11, IDCT_COL_SHIFT = 20, IDCT_DC_SHIFT = 3;
 
-static void simple_idct_row(S16* row) {
+static void simple_idct_row(pS16 row) {
   U32 a0, a1, a2, a3, b0, b1, b2, b3;
   if (!(row[1] | row[2] | row[3] | row[4] | row[5] | row[6] | row[7])) {
     S16 t = (S16)((U32)(row[0] * (1 << IDCT_DC_SHIFT)) & UINT16_MAX);
@@ -106,7 +106,7 @@ static void simple_idct_row(S16* row) {
   row[4] = (S16)((int)(a3 - b3) >> IDCT_ROW_SHIFT);
 }
 
-static void simple_idct_col(const S16* col, int out[BLK_W]) {
+static void simple_idct_col(pcS16 col, pInt out) {  // (out: BLK_W)
   U32 a0, a1, a2, a3, b0, b1, b2, b3;
   a0 = (U32)IDCT_W4 * (col[BLK_W * 0] + ((1 << (IDCT_COL_SHIFT - 1)) / IDCT_W4));
   a1 = a0; a2 = a0; a3 = a0;
@@ -128,7 +128,7 @@ static void simple_idct_col(const S16* col, int out[BLK_W]) {
   out[7] = (int)(a0 - b0) >> IDCT_COL_SHIFT;
 }
 
-static void simple_idct_put_add(U8* dest, int stride, S16* block, int add) {
+static void simple_idct_put_add(pU8 dest, int stride, pS16 block, int add) {
   int i, j, o[BLK_W];
   for (i = 0; i < BLK_W; i++) simple_idct_row(block + i * BLK_W);
   for (i = 0; i < BLK_W; i++) {
@@ -147,7 +147,7 @@ static const int TAB17[] = { 31521, 29692, 26722, 22725, 17855, 12299, 6270 };
 static const int TAB26[] = { 29692, 27969, 25172, 21407, 16819, 11585, 5906 };
 static const int TAB35[] = { 26722, 25172, 22654, 19266, 15137, 10426, 5315 };
 
-static int xvid_idct_row(S16* in, const int* tab, int rnd) {
+static int xvid_idct_row(pS16 in, pcInt tab, int rnd) {
   const U32 c1 = tab[0], c2 = tab[1], c3 = tab[2], c4 = tab[3], c5 = tab[4], c6 = tab[5], c7 = tab[6];
   const int right = in[5] | in[6] | in[7];
   const int left = in[1] | in[2] | in[3];
@@ -211,7 +211,7 @@ static inline void butterfly(int& a, int& b) {
   a = t;
 }
 
-static void xvid_idct_col_8(S16* in) {
+static void xvid_idct_col_8(pS16 in) {
   int mm0, mm1, mm2, mm3, mm4, mm5, mm6, mm7;
   mm4 = in[7 * BLK_W]; mm5 = in[5 * BLK_W]; mm6 = in[3 * BLK_W]; mm7 = in[1 * BLK_W];
   mm0 = xmult(XVID_TAN1, mm4) + mm7;
@@ -248,7 +248,7 @@ static void xvid_idct_col_8(S16* in) {
   in[BLK_W * 5] = (S16)(mm5 >> XVID_COL_SHIFT);
 }
 
-static void xvid_idct_col_4(S16* in) {
+static void xvid_idct_col_4(pS16 in) {
   int mm0, mm1, mm2, mm3, mm4, mm5, mm6, mm7;
   mm0 = in[1 * BLK_W];
   mm2 = in[3 * BLK_W];
@@ -281,7 +281,7 @@ static void xvid_idct_col_4(S16* in) {
   in[BLK_W * 5] = (S16)(mm5 >> XVID_COL_SHIFT);
 }
 
-static void xvid_idct_col_3(S16* in) {
+static void xvid_idct_col_3(pS16 in) {
   int mm0, mm1, mm2, mm3, mm4, mm5, mm6, mm7;
   mm7 = in[1 * BLK_W];
   mm4 = xmult(XVID_TAN1, mm7);
@@ -311,7 +311,7 @@ static void xvid_idct_col_3(S16* in) {
 // the rows (each with its basis and rounder; the first XVID_ROWS3 always taken as nonzero), then the
 // columns, with as many rows as are nonzero (3, 4 or all)
 enum { XVID_ROWS3 = 3, XVID_ROWS4 = 4 };
-static void xvid_idct(S16* in) {
+static void xvid_idct(pS16 in) {
   static const int* const tab[BLK_W] = { TAB04, TAB17, TAB26, TAB35, TAB04, TAB35, TAB26, TAB17 };
   static const int rnd[BLK_W] = { 65536, 3597, 2260, 1203, 0, 120, 512, 512 };
   int i, rows = 0;
@@ -349,8 +349,8 @@ constexpr int GMC1_ONE = 16, GMC1_SUB = 3, GMC1_SHIFT = 8;
 // a w x h block at (x, y) (rows y, y+ystep, ...) of a plane with coordinates clamped to the
 // [0, ew-1] x [0, eh-1] reference area (FFmpeg's emulated_edge_mc in every case); in place when
 // inside it (*stride = ps*ystep), else built in buf (stride bs)
-static const U8* rc_fetch(U8* buf, int bs, const U8* plane, int ps, int x, int y, int ystep, int w, int h, int ew,
-                          int eh, int* stride) {
+static const U8* rc_fetch(pU8 buf, int bs, pcU8 plane, int ps, int x, int y, int ystep, int w, int h, int ew,
+                          int eh, pInt stride) {
   int i, j;
   if (x >= 0 && x + w <= ew && y >= 0 && y + (h - 1) * ystep < eh) {
     *stride = ps * ystep;
@@ -367,8 +367,8 @@ static const U8* rc_fetch(U8* buf, int bs, const U8* plane, int ps, int x, int y
 // FF_BUG_IEDGE (libavcodec 55.66-57.65 encoders): where field MC needs edge emulation, FFmpeg builds
 // the Cr block in a scratch buffer overlapping the last row of the Cb one, so row 9 of the emulated
 // Cb window (5th row of the bottom field) is Cr's first row. Returns the Cb block (stride 9).
-static const U8* rc_fetch_cb_iedge(U8* buf, const U8* u, const U8* v, int lc, int x, int y, int field_select,
-                                   int rows, int ew, int eh, int* stride) {
+static const U8* rc_fetch_cb_iedge(pU8 buf, pcU8 u, pcU8 v, int lc, int x, int y, int field_select, int rows,
+                                   int ew, int eh, pInt stride) {
   int k, j;
   for (k = 0; k < rows; k++) {
     const U8* row = u + (ptrdiff_t)clip(2 * y + field_select + 2 * k, 0, eh - 1) * lc;
@@ -385,7 +385,7 @@ static const U8* rc_fetch_cb_iedge(U8* buf, const U8* u, const U8* v, int lc, in
 // half-pel interpolation: put (rounding), put_no_rnd, avg (FFmpeg's hpeldsp), of the samples
 // f(s, x) gives from the row s
 template <class F>
-static inline void rc_hpel_loop(U8* dst, int ds, const U8* src, int ss, int w, int h, int op, F f) {
+static inline void rc_hpel_loop(pU8 dst, int ds, pcU8 src, int ss, int w, int h, int op, F f) {
   int x, y;
   for (y = 0; y < h; y++, src += ss, dst += ds)
     if (op == OP_AVG)
@@ -393,32 +393,32 @@ static inline void rc_hpel_loop(U8* dst, int ds, const U8* src, int ss, int w, i
     else
       for (x = 0; x < w; x++) dst[x] = (U8)f(src, x);
 }
-static void rc_hpel(U8* dst, int ds, const U8* src, int ss, int w, int h, int dxy, int op) {
+static void rc_hpel(pU8 dst, int ds, pcU8 src, int ss, int w, int h, int dxy, int op) {
   const int r1 = op == OP_PUT_NORND ? 0 : 1, r2 = op == OP_PUT_NORND ? 1 : 2;
   switch (dxy) {
-  case HP_FULL: rc_hpel_loop(dst, ds, src, ss, w, h, op, [](const U8* s, int x) { return (int)s[x]; }); break;
+  case HP_FULL: rc_hpel_loop(dst, ds, src, ss, w, h, op, [](pcU8 s, int x) { return (int)s[x]; }); break;
   case HP_H:
-    rc_hpel_loop(dst, ds, src, ss, w, h, op, [=](const U8* s, int x) { return (s[x] + s[x + 1] + r1) >> 1; });
+    rc_hpel_loop(dst, ds, src, ss, w, h, op, [=](pcU8 s, int x) { return (s[x] + s[x + 1] + r1) >> 1; });
     break;
   case HP_V:
-    rc_hpel_loop(dst, ds, src, ss, w, h, op, [=](const U8* s, int x) { return (s[x] + s[x + ss] + r1) >> 1; });
+    rc_hpel_loop(dst, ds, src, ss, w, h, op, [=](pcU8 s, int x) { return (s[x] + s[x + ss] + r1) >> 1; });
     break;
   default:
     rc_hpel_loop(dst, ds, src, ss, w, h, op,
-                 [=](const U8* s, int x) { return (s[x] + s[x + 1] + s[x + ss] + s[x + ss + 1] + r2) >> 2; });
+                 [=](pcU8 s, int x) { return (s[x] + s[x + 1] + s[x + ss] + s[x + ss + 1] + r2) >> 2; });
     break;
   }
 }
 
 // MPEG-4 quarter-pel (FFmpeg's qpeldsp.c). n = 8 or 16. The filters mirror at the block's edge.
-static inline void rc_qpel_store(U8* p, int v, int op) {
+static inline void rc_qpel_store(pU8 p, int v, int op) {
   constexpr int R = 1 << (QPEL_SHIFT - 1);
   if (op == OP_PUT) *p = clip8((v + R) >> QPEL_SHIFT);
   else if (op == OP_PUT_NORND) *p = clip8((v + R - 1) >> QPEL_SHIFT);
   else *p = (U8)((*p + clip8((v + R) >> QPEL_SHIFT) + 1) >> 1);
 }
 
-static void rc_qpel_line(U8* dst, int dstep, const U8* src, int sstep, int n, int op) {
+static void rc_qpel_line(pU8 dst, int dstep, pcU8 src, int sstep, int n, int op) {
   constexpr int H = QPEL_HALF;
   int e[MB_W + 2 * (H + 1)], i;
   for (i = 0; i <= n; i++) e[H + i] = src[i * sstep];
@@ -427,23 +427,23 @@ static void rc_qpel_line(U8* dst, int dstep, const U8* src, int sstep, int n, in
     e[H + n + i] = e[H + n + 1 - i];
   }
   for (i = 0; i < n; i++) {
-    const int* s = e + H + i;
+    const pcInt s = e + H + i;
     int v = (s[0] + s[1]) * QPEL_T0 - (s[-1] + s[2]) * QPEL_T1 + (s[-2] + s[3]) * QPEL_T2 - (s[-3] + s[4]);
     rc_qpel_store(dst + i * dstep, v, op);
   }
 }
 
-static void rc_qpel_h(U8* dst, int ds, const U8* src, int ss, int n, int h, int op) {
+static void rc_qpel_h(pU8 dst, int ds, pcU8 src, int ss, int n, int h, int op) {
   int y;
   for (y = 0; y < h; y++) rc_qpel_line(dst + y * ds, 1, src + y * ss, 1, n, op);
 }
 
-static void rc_qpel_v(U8* dst, int ds, const U8* src, int ss, int n, int op) {
+static void rc_qpel_v(pU8 dst, int ds, pcU8 src, int ss, int n, int op) {
   int x;
   for (x = 0; x < n; x++) rc_qpel_line(dst + x, ds, src + x, ss, n, op);
 }
 
-static void rc_avg2(U8* dst, int ds, const U8* a, int as, const U8* b, int bs, int n, int h, int op) {
+static void rc_avg2(pU8 dst, int ds, pcU8 a, int as, pcU8 b, int bs, int n, int h, int op) {
   int x, y;
   for (y = 0; y < h; y++)
     for (x = 0; x < n; x++) {
@@ -455,8 +455,8 @@ static void rc_avg2(U8* dst, int ds, const U8* a, int as, const U8* b, int bs, i
     }
 }
 
-static void rc_avg4(U8* dst, int ds, const U8* a, int as, const U8* b, int bs, const U8* c, int cs, const U8* e,
-                    int es, int n, int h, int op) {
+static void rc_avg4(pU8 dst, int ds, pcU8 a, int as, pcU8 b, int bs, pcU8 c, int cs, pcU8 e, int es, int n, int h,
+                    int op) {
   int x, y;
   for (y = 0; y < h; y++)
     for (x = 0; x < n; x++) {
@@ -468,14 +468,15 @@ static void rc_avg4(U8* dst, int ds, const U8* a, int as, const U8* b, int bs, c
     }
 }
 
-// src: (n+1) x (n+1) samples with stride ss
-static void rc_qpel_mc(U8* dst, int ds, const U8* src, int ss, int n, int dxy, int op, int std_qpel_bug) {
-  U8 halfH[MC_MB * MB_W], halfV[MB_W * MB_W], halfHV[MB_W * MB_W], half[MB_W * MB_W];
+// src: (n+1) x (n+1) samples with stride ss. (Each step writes a buffer it does not read: the
+// averages of halfH with the source go to half, n+1 rows.)
+static void rc_qpel_mc(pU8 dst, int ds, pcU8 src, int ss, int n, int dxy, int op, int std_qpel_bug) {
+  U8 halfH[MC_MB * MB_W], halfV[MB_W * MB_W], halfHV[MB_W * MB_W], half[MC_MB * MB_W];
   const int ri = op == OP_PUT_NORND ? OP_PUT_NORND : OP_PUT;  // intermediate rounding
   const int qx = dxy & QPEL_MASK, qy = dxy >> QPEL_BITS;      // (in quarter samples)
   if (std_qpel_bug && (qx & 1) && qy) {
     // old lavc qpel (FF_BUG_STD_QPEL): qpel*_mc{11,31,13,33,12,32}_old_c
-    const U8* full = src;
+    pcU8 full = src;
     const int fx = qx == 3 ? 1 : 0;
     rc_qpel_h(halfH, n, full, ss, n, n + 1, ri);
     rc_qpel_v(halfV, n, full + fx, ss, n, ri);
@@ -496,9 +497,9 @@ static void rc_qpel_mc(U8* dst, int ds, const U8* src, int ss, int n, int dxy, i
   case qp(1, 1): case qp(3, 1): case qp(1, 3): case qp(3, 3): {
     const int fx = qx == 3 ? 1 : 0, fy = qy == 3 ? n : 0;
     rc_qpel_h(halfH, n, src, ss, n, n + 1, ri);
-    rc_avg2(halfH, n, halfH, n, src + fx, ss, n, n + 1, ri);
-    rc_qpel_v(halfHV, n, halfH, n, n, ri);
-    rc_avg2(dst, ds, halfH + fy, n, halfHV, n, n, n, op);
+    rc_avg2(half, n, halfH, n, src + fx, ss, n, n + 1, ri);
+    rc_qpel_v(halfHV, n, half, n, n, ri);
+    rc_avg2(dst, ds, half + fy, n, halfHV, n, n, n, op);
     break;
   }
   case qp(2, 1): case qp(2, 3):
@@ -508,8 +509,8 @@ static void rc_qpel_mc(U8* dst, int ds, const U8* src, int ss, int n, int dxy, i
     break;
   case qp(1, 2): case qp(3, 2):
     rc_qpel_h(halfH, n, src, ss, n, n + 1, ri);
-    rc_avg2(halfH, n, halfH, n, src + (qx == 3 ? 1 : 0), ss, n, n + 1, ri);
-    rc_qpel_v(dst, ds, halfH, n, n, op);
+    rc_avg2(half, n, halfH, n, src + (qx == 3 ? 1 : 0), ss, n, n + 1, ri);
+    rc_qpel_v(dst, ds, half, n, n, op);
     break;
   case qp(2, 2):
     rc_qpel_h(halfH, n, src, ss, n, n + 1, ri);
@@ -518,7 +519,7 @@ static void rc_qpel_mc(U8* dst, int ds, const U8* src, int ss, int n, int dxy, i
   }
 }
 
-static void rc_gmc1_dsp(U8* dst, int ds, const U8* src, int ss, int h, int x16, int y16, int rounder) {
+static void rc_gmc1_dsp(pU8 dst, int ds, pcU8 src, int ss, int h, int x16, int y16, int rounder) {
   constexpr int O = GMC1_ONE;
   const int A = (O - x16) * (O - y16), B = x16 * (O - y16), C = (O - x16) * y16, D = x16 * y16;
   int i, j;
@@ -530,7 +531,7 @@ static void rc_gmc1_dsp(U8* dst, int ds, const U8* src, int ss, int h, int x16, 
   }
 }
 
-static void rc_gmc_dsp(U8* dst, int stride, const U8* src, int h, int ox, int oy, int dxx, int dxy, int dyx, int dyy,
+static void rc_gmc_dsp(pU8 dst, int stride, pcU8 src, int h, int ox, int oy, int dxx, int dxy, int dyx, int dyy,
                        int shift, int r, int width, int height) {
   int y, vx, vy;
   const int s = 1 << shift;
@@ -591,7 +592,7 @@ struct Recon {
   // VOP
   int pict_type, no_rounding, alternate_scan;
   int qscale, chroma_qscale, y_dc_scale, c_dc_scale;
-  const U8 *intra_scan, *intra_h_scan, *intra_v_scan;
+  pcU8 intra_scan, intra_h_scan, intra_v_scan;
   // macroblock
   int mb_x, mb_y;
   int is_intra, ac_pred, interlaced_dct;
@@ -725,7 +726,7 @@ struct Recon {
 
   //--- the transform: XviD's IDCT for XviD's streams, else FFmpeg's simple_idct ----------------------
 
-  void idct_put(U8* dest, int stride, S16* blk) const {
+  void idct_put(pU8 dest, int stride, pS16 blk) const {
     if (idct_xvid) {
       int i, j;
       xvid_idct(blk);
@@ -735,7 +736,7 @@ struct Recon {
       simple_idct_put_add(dest, stride, blk, 0);
   }
 
-  void idct_add(U8* dest, int stride, S16* blk) const {
+  void idct_add(pU8 dest, int stride, pS16 blk) const {
     if (idct_xvid) {
       int i, j;
       xvid_idct(blk);
@@ -747,7 +748,7 @@ struct Recon {
 
   //--- dequantisation ---------------------------------------------------------------------------
 
-  void unquant_intra(S16* blk, int n, int qs) const {
+  void unquant_intra(pS16 blk, int n, int qs) const {
     int i, level;
     blk[0] = (S16)(blk[0] * (n < MB_LUMA ? y_dc_scale : c_dc_scale));
     if (mpeg_quant) {  // MPEG-2 style, with mismatch control (FFmpeg's bitexact variant)
@@ -772,7 +773,7 @@ struct Recon {
     }
   }
 
-  void unquant_inter_mpeg(S16* blk, int qs) const {
+  void unquant_inter_mpeg(pS16 blk, int qs) const {
     int i, level, sum = -1, q2 = qs << 1;
     for (i = 0; i < BLK_COEFS; i++) {
       level = blk[i];
@@ -788,9 +789,9 @@ struct Recon {
 
   //--- intra prediction ------------------------------------------------------------------------
 
-  int pred_dc(int n, int* dir_ptr) const {
+  int pred_dc(int n, pInt dir_ptr) const {
     const Motion& o = *mo;  // (the video packet's start: the motion state's)
-    const S16* dv = dc_val + block_index[n];
+    pcS16 dv = dc_val + block_index[n];
     const int wrap = block_wrap[n];
     int a = dv[-1], b = dv[-1 - wrap], c = dv[-wrap];
     if (o.first_slice_line && n != 3) {
@@ -822,31 +823,31 @@ struct Recon {
     return ret;
   }
 
-  void pred_ac(S16* blk, int n, int dir) {
+  void pred_ac(pS16 blk, int n, int dir) {
     int i;
-    S16 *av = ac_val[block_index[n]], *av1 = av;
-    const S8* qt = qscale_table;
+    const pS16 av = ac_val[block_index[n]];  // the block's predictors (written); its neighbour's: pv (read)
+    rp<const S8> qt = qscale_table;
     if (ac_pred) {
       if (dir == 0) {
         const int xy = mb_x - 1 + mb_y * mb_stride;
-        av -= ACV;
+        const pcS16 pv = ac_val[block_index[n] - 1];
         if (mb_x == 0 || qscale == qt[xy] || n == 1 || n == 3) {
-          for (i = 1; i < BLK_W; i++) blk[i << BLK_SHIFT] += av[i];
+          for (i = 1; i < BLK_W; i++) blk[i << BLK_SHIFT] += pv[i];
         } else {
-          for (i = 1; i < BLK_W; i++) blk[i << BLK_SHIFT] += rounded_div(av[i] * qt[xy], qscale);
+          for (i = 1; i < BLK_W; i++) blk[i << BLK_SHIFT] += rounded_div(pv[i] * qt[xy], qscale);
         }
       } else {
         const int xy = mb_x + mb_y * mb_stride - mb_stride;
-        av -= ACV * block_wrap[n];
+        const pcS16 pv = ac_val[block_index[n] - block_wrap[n]];
         if (mb_y == 0 || qscale == qt[xy] || n == 2 || n == 3) {
-          for (i = 1; i < BLK_W; i++) blk[i] += av[i + BLK_W];
+          for (i = 1; i < BLK_W; i++) blk[i] += pv[i + BLK_W];
         } else {
-          for (i = 1; i < BLK_W; i++) blk[i] += rounded_div(av[i + BLK_W] * qt[xy], qscale);
+          for (i = 1; i < BLK_W; i++) blk[i] += rounded_div(pv[i + BLK_W] * qt[xy], qscale);
         }
       }
     }
-    for (i = 1; i < BLK_W; i++) av1[i] = blk[i << BLK_SHIFT];
-    for (i = 1; i < BLK_W; i++) av1[BLK_W + i] = blk[i];
+    for (i = 1; i < BLK_W; i++) av[i] = blk[i << BLK_SHIFT];
+    for (i = 1; i < BLK_W; i++) av[BLK_W + i] = blk[i];
   }
 
   void clean_intra_table_entries(int xy) {
@@ -874,11 +875,11 @@ struct Recon {
 
   //--- motion compensation ---------------------------------------------------------------------
 
-  void gmc1_motion(U8* dest_y, U8* dest_cb, U8* dest_cr, const RPic& ref) const {
+  void gmc1_motion(pU8 dest_y, pU8 dest_cb, pU8 dest_cr, const RPic& ref) const {
     constexpr int F = GMC1_ONE - 1, HALF = GMC1_ONE / 2, RND = 1 << (GMC1_SHIFT - 1);
     const Motion& o = *mo;
     U8 buf[MC_MB * MC_MB];
-    const U8* src;
+    pcU8 src;
     int src_x, src_y, motion_x, motion_y, ss;
     motion_x = o.sprite_offset[0][0];
     motion_y = o.sprite_offset[0][1];
@@ -914,7 +915,7 @@ struct Recon {
     rc_gmc1_dsp(dest_cr, lc, src, ss, BLK_W, motion_x & F, motion_y & F, RND - no_rounding);
   }
 
-  void gmc_motion(U8* dest_y, U8* dest_cb, U8* dest_cr, const RPic& ref) const {
+  void gmc_motion(pU8 dest_y, pU8 dest_cb, pU8 dest_cr, const RPic& ref) const {
     const Motion& o = *mo;
     const int a = o.warp_acc;
     const int dl = ly, dc = lc;
@@ -938,10 +939,10 @@ struct Recon {
   }
 
   // mpeg_motion_internal for H.263/MPEG-4 (a frame or one field)
-  void mpeg_motion(U8* dest_y, U8* dest_cb, U8* dest_cr, int field_based, int bottom_field, int field_select,
+  void mpeg_motion(pU8 dest_y, pU8 dest_cb, pU8 dest_cr, int field_based, int bottom_field, int field_select,
                    const RPic& ref, int op, int motion_x, int motion_y, int h) const {
     U8 buf[(MC_MB + 1) * MC_MB];
-    const U8* src;
+    pcU8 src;
     int dxy, uvdxy, mx, my, src_x, src_y, uvsrc_x, uvsrc_y, ss;
     const int linesize = ly << field_based, uvlinesize = lc << field_based;
     dxy = ((motion_y & 1) << 1) | (motion_x & 1);
@@ -981,10 +982,10 @@ struct Recon {
     rc_hpel(dest_cr, uvlinesize, src, ss, BLK_W, h >> 1, uvdxy, op);
   }
 
-  void qpel_motion(U8* dest_y, U8* dest_cb, U8* dest_cr, int field_based, int bottom_field, int field_select,
+  void qpel_motion(pU8 dest_y, pU8 dest_cb, pU8 dest_cr, int field_based, int bottom_field, int field_select,
                    const RPic& ref, int op, int motion_x, int motion_y, int h) const {
     U8 buf[MC_MB * MC_MB];
-    const U8* src;
+    pcU8 src;
     int dxy, uvdxy, mx, my, src_x, src_y, uvsrc_x, uvsrc_y, ss;
     const int linesize = ly << field_based, uvlinesize = lc << field_based;
     const int std_bug = (bugs & BUG_STD_QPEL) != 0;
@@ -1041,9 +1042,9 @@ struct Recon {
     rc_hpel(dest_cb, uvlinesize, src, ss, BLK_W, h >> 1, uvdxy, op);
   }
 
-  void chroma_4mv_motion(U8* dest_cb, U8* dest_cr, const RPic& ref, int op, int mx, int my) const {
+  void chroma_4mv_motion(pU8 dest_cb, pU8 dest_cr, const RPic& ref, int op, int mx, int my) const {
     U8 buf[MC_B * MC_B];
-    const U8* src;
+    pcU8 src;
     int src_x, src_y, dxy, ss;
     mx = round_chroma(mx);
     my = round_chroma(my);
@@ -1062,10 +1063,10 @@ struct Recon {
     rc_hpel(dest_cr, lc, src, ss, BLK_W, BLK_W, dxy, op);
   }
 
-  void apply_8x8(U8* dest_y, U8* dest_cb, U8* dest_cr, int dir, const RPic& ref, int op) const {
+  void apply_8x8(pU8 dest_y, pU8 dest_cb, pU8 dest_cr, int dir, const RPic& ref, int op) const {
     const Motion& o = *mo;
     U8 buf[MC_MB * MC_MB];
-    const U8* src;
+    pcU8 src;
     int dxy, mx = 0, my = 0, src_x, src_y, i, ss;
     for (i = 0; i < MB_LUMA; i++) {  // (block i: i & 1 its column, i >> 1 its row)
       const int motion_x = o.mv[dir][i][0], motion_y = o.mv[dir][i][1];
@@ -1099,7 +1100,7 @@ struct Recon {
     chroma_4mv_motion(dest_cb, dest_cr, ref, op, mx, my);
   }
 
-  void mpv_motion(U8* dest_y, U8* dest_cb, U8* dest_cr, int dir, const RPic& ref, int op) const {
+  void mpv_motion(pU8 dest_y, pU8 dest_cb, pU8 dest_cr, int dir, const RPic& ref, int op) const {
     const Motion& o = *mo;
     int i;
     switch (o.mv_type) {
@@ -1133,7 +1134,7 @@ struct Recon {
 
   // the luma (plane 0) or chroma (1, 2) samples of the current picture at block n of the macroblock,
   // and their stride
-  U8* block_at(int n, int* stride) const {
+  U8* block_at(int n, pInt stride) const {
     if (n < MB_LUMA) {
       const int ls = ly << interlaced_dct, off = interlaced_dct ? ly : ly * BLK_W;
       *stride = ls;
@@ -1190,9 +1191,9 @@ struct Recon {
   // motion state has for it (reconstruct_mb's part)
   void mb_inter() {
     const Motion& o = *mo;
-    U8* dest_y = cur.y + (size_t)mb_y * MB_W * ly + mb_x * MB_W;
-    U8* dest_cb = cur.u + (size_t)mb_y * BLK_W * lc + mb_x * BLK_W;
-    U8* dest_cr = cur.v + (size_t)mb_y * BLK_W * lc + mb_x * BLK_W;
+    const pU8 dest_y = cur.y + (size_t)mb_y * MB_W * ly + mb_x * MB_W;
+    const pU8 dest_cb = cur.u + (size_t)mb_y * BLK_W * lc + mb_x * BLK_W;
+    const pU8 dest_cr = cur.v + (size_t)mb_y * BLK_W * lc + mb_x * BLK_W;
     int op = (!no_rounding || pict_type == PT_B) ? OP_PUT : OP_PUT_NORND;
     is_intra = 0;
     if (o.mv_dir & MV_DIR_FORWARD) {
@@ -1212,9 +1213,9 @@ struct Recon {
   // and prediction, reconstruct_mb's transform)
   void block(int n, const Blk& b, int intra, int dcvlc) {
     S16 blk[BLK_COEFS];
-    const U8* scan;
+    pcU8 scan;
     int i, j, stride, dir;
-    U8* dst = block_at(n, &stride);
+    const pU8 dst = block_at(n, &stride);
     memset(blk, 0, sizeof blk);
     if (intra) {
       const int pred = pred_dc(n, &dir);

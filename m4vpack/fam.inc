@@ -171,6 +171,6 @@ static INLINE void tc_put_sq(cm_cnt2s *const *c, bool four, __m256i sn) {
 #endif
 //  counter A's P stretched, as the mixers see it without APMs (p1 = its P)
 static INLINE int tc_x20(const cm_cnt2 *, int p1) { return cm_stretch(p1); }
-static INLINE int tc_x20(const cm_cnt2s *c, int) { return c->sp; }
+static INLINE int tc_x20(rp<const cm_cnt2s> c, int) { return c->sp; }
 
 #include "tc_fam.inc"  // tc_fam: a family of a level

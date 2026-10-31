@@ -93,7 +93,7 @@ struct M4vCoro : CoIo<Coder<f_DEC> > {
     coder_start();
     k.start(this);
     while (rd.chunk(*this, &pos, &len, &part)) {
-      U8* p = rd.buf + pos;
+      const pU8 p = rd.buf + pos;  // (the chunk, reached through p alone while it is coded)
       const int is_vop = len >= SC_LEN && sc_code(p) == SC_VOP;
       crc = crc32_upd(crc, p, len);
       st.in_bytes += (double)len;
@@ -154,7 +154,7 @@ struct M4vCoro : CoIo<Coder<f_DEC> > {
     return fail(E_DATA, f_quit ? "damaged data: the stream is cut short" : "damaged data");
   }
 
-  static void out_flush(void* ctx, const U8* p, size_t n) {  // d: a VOP's bytes, out
+  static void out_flush(void* ctx, pcU8 p, size_t n) {  // d: a VOP's bytes, out
     M4vCoro& c = *(M4vCoro*)ctx;
     c.write(p, n);
     c.crc = crc32_upd(c.crc, p, n);

@@ -272,7 +272,7 @@ struct Motion {
   // one per field: their field selects, one per block; in a B-VOP forward, backward or both, or direct
   // mode)
   void kind(const MB& m) {
-    U16* mbtype = &cur.mbtype[mb_x + mb_y * mb_stride];
+    const rp<U16> mbtype = &cur.mbtype[mb_x + mb_y * mb_stride];
     mv_dir = MV_DIR_FORWARD;
     mv_type = MV_16X16;
     if (pict_type != PT_B) {
@@ -328,7 +328,7 @@ struct Motion {
   // left out: the left one, or none); at the packet's start, block 2 zeroes the left macroblock's
   // vector in the grid, as FFmpeg does (direct mode reads it later). *sx, *sy: the spread of the
   // median's candidates (-1: the prediction is one of them, or none), for the model's contexts.
-  void pred(int block, int* px, int* py, int* sx, int* sy) {
+  void pred(int block, pInt px, pInt py, pInt sx, pInt sy) {
     static const int off[MB_LUMA] = { 2, 1, 1, -1 };  // (the above right candidate's place)
     static const S16 zero[2] = { 0, 0 };
     const int wrap = b8_stride;
@@ -378,7 +378,7 @@ struct Motion {
     mv[dir][i][0] = mx;
     mv[dir][i][1] = my;
     if (mv_type == MV_8X8) {
-      S16* g = cur.mv[block_index[i]];
+      const rp<S16> g = cur.mv[block_index[i]];
       g[0] = (S16)mx;
       g[1] = (S16)my;
     }
@@ -387,7 +387,7 @@ struct Motion {
   // a B-VOP's prediction of the vector of direction dir, field i of n (1: the macroblock's): the last
   // one of that direction in the row (a field's y in frame lines); and the vector coded, which then
   // predicts the next
-  void bpred(int dir, int i, int n, int* px, int* py) const {
+  void bpred(int dir, int i, int n, pInt px, pInt py) const {
     *px = last_mv[dir][i][0];
     *py = n == 2 ? last_mv[dir][i][1] / 2 : last_mv[dir][i][1];
   }
@@ -405,7 +405,7 @@ struct Motion {
 
   // direct mode's vectors of block i: the co-located block's (p) scaled by the times, plus the delta
   // (mx, my) forward; backward the forward less p where there is a delta, else p scaled the other way
-  void one_direct(int mx, int my, const S16* p, int* f, int* b) const {
+  void one_direct(int mx, int my, pcS16 p, pInt f, pInt b) const {
     constexpr int H = DIRECT_MVS / 2;
     int k;
     for (k = 0; k < 2; k++) {
@@ -422,7 +422,7 @@ struct Motion {
 
   // the co-located macroblock's vector scaled as direct mode does without a delta: forward (*fx, *fy)
   // and backward (*bx, *by), for the model's contexts
-  void colocated(int* fx, int* fy, int* bx, int* by) const {
+  void colocated(pInt fx, pInt fy, pInt bx, pInt by) const {
     int f[2], b[2];
     one_direct(0, 0, ref_mv(0), f, b);
     *fx = f[0], *fy = f[1], *bx = b[0], *by = b[1];
@@ -434,7 +434,7 @@ struct Motion {
   void direct(int mx, int my) {
     const int mb_index = mb_x + mb_y * mb_stride;
     const int coloc = ref.mbtype[mb_index];  // (the co-located macroblock's type)
-    U16* mbtype = &cur.mbtype[mb_index];
+    const rp<U16> mbtype = &cur.mbtype[mb_index];
     int i;
     if (coloc & MBT_8x8) {
       mv_type = MV_8X8;
@@ -444,7 +444,7 @@ struct Motion {
       mv_type = MV_FIELD;
       for (i = 0; i < 2; i++) {
         const int fsel = ref.ref_index[REF_INDEX * mb_index + 2 * i];
-        const S16* pf = p_field_mv[mb_index][i];
+        const pcS16 pf = p_field_mv[mb_index][i];
         U16 time_pp, time_pb;
         field_select[0][i] = fsel;
         field_select[1][i] = i;
@@ -482,7 +482,7 @@ struct Motion {
   // their sum down, and the field vectors and selects kept for direct mode)
   void mb_end() {
     const int mb_xy = mb_y * mb_stride + mb_x, wrap = b8_stride, xy = block_index[0];
-    S16 (*grid)[2] = cur.mv;
+    const rp<S16[2]> grid = cur.mv;
     int motion_x, motion_y, i;
     if (pict_type == PT_B || mv_type == MV_8X8) return;
     if (intra) {
@@ -491,7 +491,7 @@ struct Motion {
       motion_x = mv[0][0][0];
       motion_y = mv[0][0][1];
     } else {
-      U8* ri = cur.ref_index + REF_INDEX * mb_xy;
+      const pU8 ri = cur.ref_index + REF_INDEX * mb_xy;
       motion_x = mv[0][0][0] + mv[0][1][0];
       motion_y = mv[0][0][1] + mv[0][1][1];
       motion_x = (motion_x >> 1) | (motion_x & 1);

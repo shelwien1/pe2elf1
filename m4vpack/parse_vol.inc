@@ -62,7 +62,7 @@
       }
       for (k = 0; k < 2; k++) {
         if (gb.get1()) {
-          U16* q = k ? inter_matrix : intra_matrix;
+          const rp<U16> q = k ? inter_matrix : intra_matrix;
           int i, v, last = 0;
           for (i = 0; i < BLK_COEFS; i++) {
             if (gb.left() < MATRIX_BITS) { unsupported = "a damaged VOL header"; return; }

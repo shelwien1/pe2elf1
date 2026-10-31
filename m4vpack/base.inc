@@ -9,6 +9,19 @@ typedef unsigned int U32;
 typedef unsigned long long U64;
 typedef long long S64;
 
+// Restrict pointers (__restrict): while one is in use, what it points at is reached through it
+// alone -- nothing else in its scope writes that memory, or reads what it writes -- so the compiler
+// may keep values in registers across stores through other pointers, and vectorise. rp<T> for any
+// T; the common ones by name (pU8: U8*, pcU8: const U8*, ...).
+template <class T>
+using rp = T* __restrict;
+typedef rp<U8> pU8;
+typedef rp<const U8> pcU8;
+typedef rp<S16> pS16;
+typedef rp<const S16> pcS16;
+typedef rp<int> pInt;
+typedef rp<const int> pcInt;
+
 constexpr int NA = -1000;  // a field not present
 
 // units

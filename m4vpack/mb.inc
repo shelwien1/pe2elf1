@@ -39,7 +39,7 @@ struct MB {
 
   // n vectors' differences (x, y), into mv from *k on
   template <class IO>
-  int mvs_walk(IO& io, int* k, int n, int f_code) {
+  int mvs_walk(IO& io, pInt k, int n, int f_code) {
     const int p0 = io.pos();
     int i;
     for (i = 0; i < 2 * n; i++, ++*k)

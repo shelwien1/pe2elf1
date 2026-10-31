@@ -33,7 +33,7 @@ struct VState {  // the coding side of the current VOP
   Vop v;
   int mb_w, prev_dq, run;    // run: macroblocks of the same kind (skip, direct) before this one
   int dc_prev[2], dc_sgn[2];  // the last intra DC difference's size, and its sign (0 none, 1 +, 2 -)
-  const U8* scan;             // scan order (as far as known: intra blocks with AC prediction use other ones)
+  pcU8 scan;                  // scan order (as far as known: intra blocks with AC prediction use other ones)
 };
 
 // The families get the variables as they are: where to split a variable's values is the .idx files'
@@ -95,7 +95,7 @@ enum { HM_NONE, HM_BELOW, HM_EQUAL, HM_ABOVE };
 // block b's bit of a coded block pattern (block 0 in the top bit)
 static INLINE int cbp_bit(int cbp, int b) { return (cbp >> (MB_BLOCKS - 1 - b)) & 1; }
 // a block's coefficient at p as sgn's lam has it: 0 none, else 1 + its sign (x2) + its magnitude above 1
-static INLINE int sign_mag(const BlkCtx* b, int p) { return b && b->mag[p] ? 1 + b->sgn[p] * 2 + (b->mag[p] > 1) : 0; }
+static INLINE int sign_mag(rp<const BlkCtx> b, int p) { return b && b->mag[p] ? 1 + b->sgn[p] * 2 + (b->mag[p] > 1) : 0; }
 
 static INLINE int cap(int v, int c) { return v < c ? v : c; }
 // quarter levels to levels, rounded

@@ -4,11 +4,12 @@
   void code_mb(const Ctx& cx, VState& s, MB& m, int idx) {
     Vop& v = s.v;
     const int mb_x = idx % s.mb_w;
-    const MBCtx* L = mb_x > 0 && mbcur[idx - 1].cls ? &mbcur[idx - 1] : 0;
-    const MBCtx* A = idx >= s.mb_w && mbcur[idx - s.mb_w].cls ? &mbcur[idx - s.mb_w] : 0;
-    const MBCtx* R = ref_mbs ? &mbref[idx] : 0;
-    const MBCtx* AL = mb_x > 0 && idx > s.mb_w && mbcur[idx - s.mb_w - 1].cls ? &mbcur[idx - s.mb_w - 1] : 0;
-    const MBCtx* AR =
+    // (the macroblocks around, read; the one coded, me, alone written)
+    const rp<const MBCtx> L = mb_x > 0 && mbcur[idx - 1].cls ? &mbcur[idx - 1] : 0;
+    const rp<const MBCtx> A = idx >= s.mb_w && mbcur[idx - s.mb_w].cls ? &mbcur[idx - s.mb_w] : 0;
+    const rp<const MBCtx> R = ref_mbs ? &mbref[idx] : 0;
+    const rp<const MBCtx> AL = mb_x > 0 && idx > s.mb_w && mbcur[idx - s.mb_w - 1].cls ? &mbcur[idx - s.mb_w - 1] : 0;
+    const rp<const MBCtx> AR =
         mb_x + 1 < s.mb_w && idx >= s.mb_w && mbcur[idx - s.mb_w + 1].cls ? &mbcur[idx - s.mb_w + 1] : 0;
     const int rb = cap(s.run, kCap);
     const int ty = v.type - PT_I;
@@ -248,7 +249,8 @@
       for (i = 0; i < MB_BLOCKS; i++) {
         const int luma = i < MB_LUMA;  // (a luma block: i & 1 the right column, i & 2 the lower row)
         const int cls = (intra ? (m.ac == 1 ? CL_INTRA_AC : CL_INTRA) : v.type == PT_B ? CL_B : CL_INTER) + !luma;
-        const BlkCtx* Lb = luma && (i & 1) ? &rowb[mb_x][i - 1] : !L ? 0 : &rowb[mb_x - 1][luma ? i + 1 : i];
+        const rp<const BlkCtx> Lb = luma && (i & 1) ? &rowb[mb_x][i - 1] : !L ? 0 : &rowb[mb_x - 1][luma ? i + 1 : i];
+        // (no restrict: a chroma block's Ab is the entry code_block() writes this one to)
         const BlkCtx* Ab = luma && (i & 2) ? &rowb[mb_x][i - 2] : !A ? 0 : &rowb[mb_x][luma ? i + 2 : i];
         code_block(s, m.b[i], i, intra, intra && dcvlc, cbp_bit(cbp, i), cls, nz_ctx(me, L, A, i), v.qscale,
                    mvi ? mvq(sumq) : kMvcNone, R ? cap(R->nz[i], kCap) : kNone, Lb, Ab, rowb[mb_x][i],

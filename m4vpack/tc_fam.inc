@@ -15,7 +15,7 @@ template <int f_DEC, class C> struct tc_fam {
   tc_dump dump_;
 #endif
   Cnt *cnt[NC];  // the counters' tables: A-E, H-L, the first NC
-  cm_cnt *G, *T;
+  rp<cm_cnt> G, T;  // (tables of their own, each counter by itself)
   cm_apm ap, ap2;                  // (with APMs)
   cm_mix<NIN> mx, mx2, mx3;        // (mx2, mx3: three mixers)
   cm_mix<TC_FIN> mxf;              // (three mixers)
@@ -219,7 +219,7 @@ template <int f_DEC, class C> struct tc_fam {
     if(p1 > CM_PONE - 1)
       p1 = CM_PONE - 1;
     int pp = prpa ? prpa[node] : prp;
-    cm_cnt2 *zc = hs ? &Z[((sz)bz * ND + (u32)node) * HS_N + (u32)hs] : nullptr;
+    const rp<cm_cnt2> zc = hs ? &Z[((sz)bz * ND + (u32)node) * HS_N + (u32)hs] : nullptr;
     const int x20 = C::NAPM ? cm_stretch(p1) : tc_x20(r.cp[0], p1), x21 = pp >= 0 ? cm_stretch(pp) : 0,
               x23 = zc ? cm_stretch(zc->P()) : 0;
     cm_x16<NIN> xp;

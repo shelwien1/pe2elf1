@@ -10,12 +10,12 @@
 // them and the neighbours right and below; for the signs, the signs coded before them and those
 // of the frequency neighbours (a block's coefficients come in patterns, as an edge leaves them).
 // cls: block class, nctx: neighbours' counts, qs: quantiser, mvc: motion vector size, rnz: the
-// co-located block's count; Lb, Ab: left and above blocks or 0; out (which may be Ab) gets this one;
-// Xb: for a Cr block, the Cb block of its macroblock (0 else)
+// co-located block's count; Lb, Ab: left and above blocks or 0; out (which may be Ab: so Ab has no
+// restrict) gets this one; Xb: for a Cr block, the Cb block of its macroblock (0 else)
   void code_block(VState& s, Blk& b, int n, int intra, int dcvlc, int coded, int cls, int nctx, int qs, int mvc,
-                  int rnz, const BlkCtx* Lb, const BlkCtx* Ab, BlkCtx& out, const BlkCtx* Xb) {
+                  int rnz, rp<const BlkCtx> Lb, const BlkCtx* Ab, BlkCtx& out, rp<const BlkCtx> Xb) {
     const RL& rl = intra ? rl_intra : rl_inter;
-    const U8* sc = LV::recon && rec.on ? rec.scan(n, intra) : s.scan;  // (-9: an AC predicted block's own)
+    const pcU8 sc = LV::recon && rec.on ? rec.scan(n, intra) : s.scan;  // (-9: an AC predicted block's own)
     BlkCtx o;
     U8 rm[BLK_COEFS];   // coefficients coded so far by raster position: 1 in the significance map, then magnitudes
     U8 nzr[BLK_COEFS];  // the significance map by raster position

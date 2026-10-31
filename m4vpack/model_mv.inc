@@ -20,8 +20,8 @@ struct ModelMv : ModelRes<f_DEC, LV> {
   // of the last anchor VOP, and d: the difference that would give this vector the co-located one's
   // value (dok 0: none), whose magnitude is the magnitude's hint; with the decoder, td the difference
   // that would give it the vector the template matches best (tok 0: none), the hint then.
-  int code_mvd(int kind, int comp, int fcode, const MBCtx* L, const MBCtx* A, const MBCtx* R, int oth, int dok, int d,
-               int sp, int v, int* q, int tok, int td) {
+  int code_mvd(int kind, int comp, int fcode, rp<const MBCtx> L, rp<const MBCtx> A, rp<const MBCtx> R, int oth, int dok,
+               int d, int sp, int v, pInt q, int tok, int td) {
     const int shift = fcode - 1, a = v < 0 ? -v : v;
     const int ad = (d < 0 ? -d : d) - 1, dq = d ? (ad >> shift) + 1 : 0;
     const int ds = !dok || !d ? 0 : d > 0 ? 1 : 2;
@@ -79,8 +79,8 @@ struct ModelMv : ModelRes<f_DEC, LV> {
   // one vector (x, y) of kind kind, predicted by (px, py) from candidates with spreads (sx, sy) (-1:
   // none), with the co-located vector (tx, ty) if tok; tm: the template's vector (tmk[], tmx[], tmy[])
   // of that direction, or -1
-  void code_mv(MB& m, int* mvi, int kind, int fcode, const MBCtx* L, const MBCtx* A, const MBCtx* R, MBCtx& me, int* sumq,
-               int px, int py, int sx, int sy, int tok, int tx, int ty, int* mx, int* my, int tm = -1) {
+  void code_mv(MB& m, pInt mvi, int kind, int fcode, rp<const MBCtx> L, rp<const MBCtx> A, rp<const MBCtx> R, MBCtx& me,
+               pInt sumq, int px, int py, int sx, int sy, int tok, int tx, int ty, pInt mx, pInt my, int tm = -1) {
     const int first = *mvi == 0, mk = tm >= 0 && tmk[tm];
     int v, q;
     v = code_mvd(kind, 0, fcode, L, A, R, first ? kNone : mvq(me.mva[0]), tok, mv_wrap(tx - px, fcode),

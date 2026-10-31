@@ -58,7 +58,7 @@ struct Call {
   // The run c (a coroutine) on the call's files, the bytes at head (got of them) read already first:
   // its progress line's counts f(ctx) as it goes, show(code) after each yield; what run_file() returns
   template <class C, class Show>
-  uint run(C& c, ProgressCounts f, void* ctx, Show show, const U8* head = 0, size_t got = 0) {
+  uint run(C& c, ProgressCounts f, void* ctx, Show show, pcU8 head = 0, size_t got = 0) {
     uint y;
     pr.counts(f, ctx);
     y = run_file(c, in, s, show, head, got);
@@ -81,7 +81,7 @@ struct Call {
   }
   // a run of one model (C: M4vCoro) on the call's files: its counts into n, its status (said)
   template <class C>
-  int run_one(C& c, const U8* head, size_t got) {
+  int run_one(C& c, pcU8 head, size_t got) {
     run(c, coro_counts<C>, &c, [&](uint code) { run_show(pr, c, code); }, head, got);
     n.raw = c.raw_done();
     n.packed = c.packed_done();
@@ -98,7 +98,7 @@ struct Call {
   // --- d
 
   // d of a stream of parts (the bytes at head, got of them, read already)
-  int decode_mt(const U8* head, size_t got) {
+  int decode_mt(pcU8 head, size_t got) {
     const int threads = got >= MT_HEAD ? head[MT_AT_THREADS] : 0;
     char note[NOTE_MAX] = "damaged data";
     MtArgs a;
@@ -157,12 +157,12 @@ struct Call {
   // --- c
 
 #include "compressone.inc"  // CompressOne: c on one model
-  int compress_one(const Opts& o, Stats& st, double* cost, double* orig) {
+  int compress_one(const Opts& o, Stats& st, rp<double> cost, rp<double> orig) {
     return with_level<CompressOne>(o.level, *this, o, st, cost, orig);
   }
 
   // c -t N: the stream in parts on N threads, its statistics the parts' added up
-  int compress_mt(const Opts& o, Stats& st, double* cost, double* orig) {
+  int compress_mt(const Opts& o, Stats& st, rp<double> cost, rp<double> orig) {
     char note[NOTE_MAX] = "internal error: a thread stopped early";
     U8 head[MT_HEAD];
     MtArgs a;

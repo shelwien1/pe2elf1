@@ -72,7 +72,7 @@ struct ModelHdr : ModelCore {
     last.rawhd = 0;
     return (size_t)checked(hdr_val(F_RAWLEN, TY_NONE, 0, 0, (i64)n), 0, kRawLenMax);
   }
-  void code_raw_bytes(U8* p, size_t n) {
+  void code_raw_bytes(pU8 p, size_t n) {
     M_raw_v D;
     size_t i;
     cat(CAT_RAW);
@@ -165,7 +165,7 @@ struct ModelHdr : ModelCore {
   }
 
   // what follows the last macroblock: nb bits up to the byte boundary, then *n bytes
-  int code_tail(int nb, int* bits, int* n, U8* bytes, int max) {
+  int code_tail(int nb, pInt bits, pInt n, pU8 bytes, int max) {
     int i, canon = 0;
     cat(CAT_HDR);
     if (ENC) canon = nb ? *bits == stuffing_bits(nb) && !*n : *n == 1 && bytes[0] == stuffing_bits(BYTE_BITS);

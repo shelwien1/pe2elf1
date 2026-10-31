@@ -46,7 +46,7 @@ struct M4vSplit : Coroutine {
     cx.quit();
   }
 
-  void put(const U8* p, size_t n) {
+  void put(pcU8 p, size_t n) {
     while (n) {
       uint l;
       chkout();
@@ -102,13 +102,13 @@ struct M4vSplit : Coroutine {
     return c == SC_VOS || c == SC_VISOBJ || c == SC_USER_DATA || c == SC_GOV || (c >= SC_VO && c < SC_VOL_END);
   }
   // user data (n bytes from the start code on) that starts with tag
-  static int tagged(const U8* p, size_t n, const char* tag) {
+  static int tagged(pcU8 p, size_t n, const char* tag) {
     const size_t l = strlen(tag);
     return n >= SC_LEN + l && !memcmp(p + SC_LEN, tag, l);
   }
   // the chunk under way ends at the stream offset a: a header to copy into pend
   void end_chunk(U64 a) {
-    const U8* p = buf + (chunk_at - begin);
+    const pcU8 p = buf + (chunk_at - begin);
     const size_t n = (size_t)(a - chunk_at);
     int k = -1;
     if (chunk_code < 0) return;

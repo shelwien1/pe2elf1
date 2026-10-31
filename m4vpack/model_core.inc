@@ -72,7 +72,7 @@ struct ModelCore {
   }
 
   // how far an intra block's levels as coded (cl, by raster position) were from the estimate (E4)
-  void est_account(const int* E4, const int* cl) {
+  void est_account(pcInt E4, pcInt cl) {
     int i, e = 0;
     for (i = 0; i < BLK_COEFS; i++) e += abs(kQ * cl[i] - E4[i]);
     est_err += e;

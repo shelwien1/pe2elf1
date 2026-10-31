@@ -4,7 +4,7 @@
   // c on one model on the call k: its statistics into st, cost and orig
   template <class LV>
   struct CompressOne {
-    static int run(Call& k, const Opts& o, Stats& st, double* cost, double* orig) {
+    static int run(Call& k, const Opts& o, Stats& st, rp<double> cost, rp<double> orig) {
       typedef M4vCoro<0, LV> C;
       C* p = coro_new<C>();
       int r;

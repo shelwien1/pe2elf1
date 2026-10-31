@@ -4,7 +4,7 @@
 enum { PC_WHOLE, PC_FIRST, PC_MORE };
 
 // 00 00 01 in b[*pi, end); else *pi = where to resume
-static int find_sc(const U8* b, size_t* pi, size_t end) {
+static int find_sc(pcU8 b, rp<size_t> pi, size_t end) {
   size_t i = *pi;
   while (i + SC_PREFIX <= end) {  // (b[i + 2]: the prefix's last byte, if it starts at i)
     if (b[i + 2] > 1) i += SC_PREFIX;
@@ -60,7 +60,7 @@ struct Reader {
   // PC_FIRST, the first piece of a chunk longer than the buffer, PC_MORE a later piece. 0 at the end
   // of the input.
   template <class IO>
-  int chunk(IO& io, size_t* pos, size_t* len, int* part) {
+  int chunk(IO& io, rp<size_t> pos, rp<size_t> len, pInt part) {
     size_t i;
     int found;
     if (pad) { memcpy(pad, saved, GB_PAD); pad = 0; }

@@ -39,8 +39,8 @@ struct ModelMb : ModelMv<f_DEC, LV> {
   // above macroblocks agree on having coded blocks (0), else 1 + whether the co-located one has some.
   // (level -9: cie, the intra estimate's AC coefficients per block; tq its trust; ctx, cem an inter
   // block's prediction's texture and its edge miss)
-  int code_cbp(int cls3, const MBCtx* L, const MBCtx* A, const MBCtx* R, int mvc, int frac, int qs, int lq, int cbp,
-               const int* cie, int tq, const int* ctx, const int* cem) {
+  int code_cbp(int cls3, rp<const MBCtx> L, rp<const MBCtx> A, rp<const MBCtx> R, int mvc, int frac, int qs, int lq,
+               int cbp, pcInt cie, int tq, pcInt ctx, pcInt cem) {
     M_cbp_v D;
     int b, v = 0, n = 0;
     D.tq = tq;
@@ -74,7 +74,7 @@ struct ModelMb : ModelMv<f_DEC, LV> {
   }
 
   // neighbouring blocks' coefficient counts (CAVLC's nC)
-  static int nz_ctx(const MBCtx& me, const MBCtx* L, const MBCtx* A, int b) {
+  static int nz_ctx(const MBCtx& me, rp<const MBCtx> L, rp<const MBCtx> A, int b) {
     int na, nb, m;
     if (b < MB_LUMA) {
       na = (b & 1) ? me.nz[b - 1] : L ? L->nz[b + 1] : -1;
@@ -95,12 +95,12 @@ struct ModelMb : ModelMv<f_DEC, LV> {
     return f_mbt.bit(node, ENC && b);
   }
   // how many of the macroblocks are of the kind k
-  static int count_of(int k, const MBCtx* a, const MBCtx* b) { return (a && a->cls == k) + (b && b->cls == k); }
+  static int count_of(int k, rp<const MBCtx> a, rp<const MBCtx> b) { return (a && a->cls == k) + (b && b->cls == k); }
 
   // the macroblocks around the one being coded: left, above, above left, above right (0: none, or
   // not coded), and the co-located one of the last anchor VOP (0: none)
   struct Around {
-    const MBCtx *L, *A, *AL, *AR, *R;
+    rp<const MBCtx> L, A, AL, AR, R;  // (never the macroblock coded, which alone is written)
   };
   // a kind decision's variables of the macroblocks around (mbt's and skp's cl, c4, rt): how many of
   // the left and above, and of all four, are of kind k; how the co-located one is (rt_of(), tri_of())
@@ -112,13 +112,13 @@ struct ModelMb : ModelMv<f_DEC, LV> {
   }
   // the co-located macroblock R against kind k: RT_SAME, RT_NEXT (of kind next, the one beside k; k
   // where there is none), RT_OTHER, RT_NONE (none); or whether it is of kind k (kTriNone: none)
-  static int rt_of(const MBCtx* R, int k, int next) {
+  static int rt_of(rp<const MBCtx> R, int k, int next) {
     return !R ? RT_NONE : R->cls == k ? RT_SAME : R->cls == next ? RT_NEXT : RT_OTHER;
   }
-  static int tri_of(const MBCtx* R, int k) { return R ? R->cls == k : kTriNone; }
+  static int tri_of(rp<const MBCtx> R, int k) { return R ? R->cls == k : kTriNone; }
 
   // (level -9) skipping's variables, zt and ze (0 none)
-  void skip_vars(int* zt, int* ze) {
+  void skip_vars(pInt zt, pInt ze) {
     int a, b;
     if (mo.pict_type == PT_B) mo.direct(0, 0);  // (what skip_feat() predicts by)
     rec.skip_feat(&a, &b);

@@ -13,7 +13,7 @@ struct PartC {
     if (!q) return w.fail(E_INTERNAL, "out of memory");
     C& c = *q;
     c.Init(w.args.stats);
-    r = w.run_part(c, [&](const U8** p) {  // in_, FEED_MAX at most at a time (addinp() takes 32 bits)
+    r = w.run_part(c, [&](rp<const U8*> p) {  // in_, FEED_MAX at most at a time (addinp() takes 32 bits)
       constexpr U32 FEED_MAX = 1024 * MIB;
       const size_t l = plen - pos < FEED_MAX ? (size_t)(plen - pos) : FEED_MAX;
       *p = w.in_ + pos;

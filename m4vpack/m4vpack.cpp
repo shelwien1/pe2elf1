@@ -72,7 +72,8 @@
 // The source: classes with their methods defined in their bodies, and the free functions that serve
 // them. This file includes the parts in order (below); each class over 100 lines, and each method
 // over 100 lines, is in a file of its own named after it (m4vcoro.inc, mb.inc, code_block.inc, ...):
-// a class's where its part includes it, a method's in its class's body.
+// a class's where its part includes it, a method's in its class's body. Pointers through which
+// alone their data is reached while they are in use are restrict (base.inc's rp<T>, pU8, ...).
 //
 // Build (Lib3/, MTwrap_v3/ and MOD/ next to this file): ./mk.sh release, or
 //   g++ -O3 -march=x86-64-v3 -ffp-contract=off -std=c++11 -ILib3 -pthread -o m4vpack m4vpack.cpp

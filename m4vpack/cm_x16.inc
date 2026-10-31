@@ -9,7 +9,7 @@ template <int N> struct cm_x16 {
 #ifdef M4V_AVX2
   __m256i v[N / CM_V16 ? N / CM_V16 : 1];
   __m128i t;
-  INLINE void pack(const int *x) {
+  INLINE void pack(pcInt x) {
     for(int i = 0; i + CM_V16 <= N; i += CM_V16)
       v[i / CM_V16] = _mm256_packs_epi32(_mm256_loadu_si256((const __m256i *)(x + i)),
                                          _mm256_loadu_si256((const __m256i *)(x + i + CM_V32)));

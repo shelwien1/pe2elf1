@@ -16,7 +16,7 @@ static CrcTab crc_make_tab(void) {
 }
 static const CrcTab crc_tab_ = crc_make_tab();
 static const U32 (&crc_tab)[BYTE_VALUES] = crc_tab_.t;
-static U32 crc32_upd(U32 crc, const U8* p, size_t n) {
+static U32 crc32_upd(U32 crc, pcU8 p, size_t n) {
   crc = ~crc;
   while (n--) crc = crc_tab[(crc ^ *p++) & BYTE_MASK] ^ (crc >> BYTE_BITS);
   return ~crc;

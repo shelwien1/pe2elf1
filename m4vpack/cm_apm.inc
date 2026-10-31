@@ -5,11 +5,11 @@ constexpr int cm_apm_limit(int rate) {
   return rate >= CM_APM_RATE_FULL ? CM_AMAX : (1 << rate) - 2 < 1 ? 1 : (1 << rate) - 2;
 }
 struct cm_apm {
-  i16 *__restrict t;
-  u8 *__restrict c;
+  rp<i16> t;
+  rp<u8> c;
   int idx, bkt, q;
   u16 ident[CM_QMAX];
-  void init(i16 *tab, u8 *cnt, int qq) {
+  void init(rp<i16> tab, rp<u8> cnt, int qq) {
     int j;
     t = tab;
     c = cnt;
@@ -31,8 +31,8 @@ struct cm_apm {
            CM_APM_WBITS;
   }
   INLINE void upd1(int i, int b, int g, int lim) {
-    u8 *__restrict cc = c;
-    i16 *__restrict tt = t;
+    const rp<u8> cc = c;
+    const rp<i16> tt = t;
     int k = cc[i];
     int v = (int)ident[b] + tt[i];
     cc[i] = (u8)(k + (k < lim));

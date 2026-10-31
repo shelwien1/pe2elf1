@@ -13,7 +13,7 @@ struct GB {
   const U8* buf;
   int size, pos;  // in bits
 
-  void init(const U8* p, size_t n) { buf = p; size = (int)n * BYTE_BITS; pos = 0; }  // the n bytes at p
+  void init(pcU8 p, size_t n) { buf = p; size = (int)n * BYTE_BITS; pos = 0; }  // the n bytes at p
   U32 show(int n) const {  // 0 <= n <= 32
     const U8* p = buf + (pos >> BYTE_SHIFT);
     U64 v = 0;
@@ -43,11 +43,11 @@ struct PB {
   size_t cap, len;
   U64 acc;
   int n, err;
-  void (*flush)(void*, const U8*, size_t);
+  void (*flush)(void*, pcU8, size_t);
   void* ctx;
   U64 done;
 
-  void init(U8* b, size_t c) { *this = PB(); buf = b; cap = c; }
+  void init(pU8 b, size_t c) { *this = PB(); buf = b; cap = c; }
   void put(U32 v, int k) {  // 0 <= k <= 32
     if (k <= 0) return;
     acc = (acc << k) | (k < U32_BITS ? v & ((1u << k) - 1) : v);
@@ -72,12 +72,12 @@ struct PB {
 struct VLCE { S16 sym, len; };
 constexpr int VLC_SYMS_MAX = 128;  // a VLC's symbols, at most (the RL tables have the most)
 struct VLC {
-  VLCE* tab;
+  rp<VLCE> tab;  // (each VLC's a table of its own)
   int bits, n;
   U32 code[VLC_SYMS_MAX];
   U8 len[VLC_SYMS_MAX];
 
-  void build(int count, const U32* codes, const U8* lens) {
+  void build(int count, rp<const U32> codes, pcU8 lens) {
     int i;
     n = count;
     for (i = 0; i < count; i++) {
@@ -342,9 +342,9 @@ VLC_DEF(vlc_esc, max_len2(esc_tab));
 constexpr int RL_MAX_RUN = 64, RL_MAX_LEVEL = 64;  // (FFmpeg's MAX_RUN, MAX_LEVEL)
 struct RL {
   int n, first_last;
-  const U16 (*vlc)[2];
-  const S8* run_of;
-  const S8* level_of;
+  rp<const U16[2]> vlc;
+  rp<const S8> run_of;
+  rp<const S8> level_of;
   U8 max_level[2][RL_MAX_RUN + 1], max_run[2][RL_MAX_LEVEL + 1];
   VLC v;
   S16 index[2][RL_MAX_RUN][RL_MAX_LEVEL + 1];  // [last][run][level] -> symbol, -1 if there is none
@@ -406,7 +406,7 @@ struct RL {
   // a symbol of the level less the run's largest; ESC_RUN, a symbol of the run less the level's
   // longest, less 1 (each with the sign); ESC_FIXED, last, run, a marker, the level, a marker
   template <class IO>
-  int event_walk(IO& io, int* last, int* run, int* level, int* mode) const {
+  int event_walk(IO& io, pInt last, pInt run, pInt level, pInt mode) const {
     int sym = n, s, neg = *level < 0, r, l;
     if (IO::W) {
       const int al = neg ? -*level : *level;
@@ -478,10 +478,10 @@ static const int tables_made = tables_init();  // (as the program starts, as cm.
 
 enum { PT_I = 1, PT_P = 2, PT_B = 3, PT_S = 4, PT_N };  // same values as AVPictureType (FFmpeg relies on them)
 // the start code at p (SC_LEN bytes): its code, -1 if there is none
-static inline int sc_code(const U8* p) { return !p[0] && !p[1] && p[2] == SC_START ? p[SC_PREFIX] : -1; }
+static inline int sc_code(pcU8 p) { return !p[0] && !p[1] && p[2] == SC_START ? p[SC_PREFIX] : -1; }
 // a VOP's type (PT_*) from its vop_coding_type, the top bits of the byte after the start code at p
 constexpr int VOP_TYPE_SHIFT = 6;
-static inline int vop_type(const U8* p) { return PT_I + (p[SC_LEN] >> VOP_TYPE_SHIFT); }
+static inline int vop_type(pcU8 p) { return PT_I + (p[SC_LEN] >> VOP_TYPE_SHIFT); }
 enum { STATIC_SPRITE = 1, GMC_SPRITE = 2 };
 
 #include "ctx.inc"  // Ctx: the stream's state the syntax depends on (the VOL, user data, GOP)
@@ -541,18 +541,18 @@ struct Rd {  // the bits read into a record
   int over() const { return g.pos > g.size; }      // past the end (where the walks stop)
   int short_of(int n) const { return g.left() < n; }  // fewer than n bits left
   void count(int k, int p0) const { pbits[k] += g.pos - p0; }
-  int bits(int* v, int n) { *v = (int)g.get(n); return 1; }
-  int bit(int* v) { return bits(v, 1); }
-  int sbits(int* v, int n) { *v = g.sget(n); return 1; }   // two's complement
-  int xbits(int* v, int n) { *v = g.xbits(n); return 1; }  // FFmpeg's get_xbits
+  int bits(pInt v, int n) { *v = (int)g.get(n); return 1; }
+  int bit(pInt v) { return bits(v, 1); }
+  int sbits(pInt v, int n) { *v = g.sget(n); return 1; }   // two's complement
+  int xbits(pInt v, int n) { *v = g.xbits(n); return 1; }  // FFmpeg's get_xbits
   int marker() { return g.get1(); }
-  int vlc(int* s, const VLC& v) { return (*s = v.get(g)) >= 0; }
-  int ones(int* n) {  // 1s, then a 0 (modulo_time_base)
+  int vlc(pInt s, const VLC& v) { return (*s = v.get(g)) >= 0; }
+  int ones(pInt n) {  // 1s, then a 0 (modulo_time_base)
     for (*n = 0; g.get1();)
       if (++*n > RUN_MAX || g.left() <= 0) return 0;
     return 1;
   }
-  int stuffing(int* n, int type) {  // MCBPC stuffing codes, counted
+  int stuffing(pInt n, int type) {  // MCBPC stuffing codes, counted
     for (*n = 0; g.show(mcbpc_stuff_len(type)) == mcbpc_stuff_code(type);) {
       g.skip(mcbpc_stuff_len(type));
       if (++*n > RUN_MAX) return 0;
@@ -563,7 +563,7 @@ struct Rd {  // the bits read into a record
   // vop_time_increment's length: the VOL's, or where it has none or what follows doesn't fit it,
   // FFmpeg's guess from the header's next fields (P-VOPs and GMC S-VOPs: vop_rounding_type among
   // them), kept in c
-  int time_bits(Ctx& c, int type, int* tib) {
+  int time_bits(Ctx& c, int type, pInt tib) {
     if (c.time_inc_bits == 0 || !(g.show(c.time_inc_bits + 1) & 1)) {
       for (c.time_inc_bits = TIB_MIN; c.time_inc_bits < TIB_MAX; c.time_inc_bits++) {
         if (c.vop_has_rnd(type)) {
@@ -584,36 +584,36 @@ struct Wr {  // a record written as bits
   int over() const { return 0; }
   int short_of(int) const { return 0; }
   void count(int, int) const {}
-  int bits(int* v, int n) {
+  int bits(pInt v, int n) {
     if (n < U32_BITS && (U32)*v >> n) return 0;
     p.put((U32)*v, n);
     return 1;
   }
-  int bit(int* v) { return bits(v, 1); }
-  int sbits(int* v, int n) {
+  int bit(pInt v) { return bits(v, 1); }
+  int sbits(pInt v, int n) {
     if (*v < -(1 << (n - 1)) || *v >= 1 << (n - 1)) return 0;
     p.put((U32)*v & ((1u << n) - 1), n);
     return 1;
   }
-  int xbits(int* v, int n) {  // (n: the value's length)
+  int xbits(pInt v, int n) {  // (n: the value's length)
     if (bitlen(*v) != n) return 0;
     p.xbits(*v, n);
     return 1;
   }
   int marker() { p.put(1, MARKER_BITS); return 1; }
-  int vlc(int* s, const VLC& v) {
+  int vlc(pInt s, const VLC& v) {
     if (*s < 0 || *s >= v.n || !v.len[*s]) return 0;
     p.put(v.code[*s], v.len[*s]);
     return 1;
   }
-  int ones(int* n) {
+  int ones(pInt n) {
     int i;
     if (*n < 0 || *n > RUN_MAX) return 0;
     for (i = 0; i < *n; i++) p.put(1, 1);
     p.put(0, 1);
     return 1;
   }
-  int stuffing(int* n, int type) {
+  int stuffing(pInt n, int type) {
     int i;
     if (*n < 0 || *n > RUN_MAX) return 0;
     for (i = 0; i < *n; i++) p.put(mcbpc_stuff_code(type), mcbpc_stuff_len(type));
@@ -623,13 +623,13 @@ struct Wr {  // a record written as bits
     p.put(0, 1);
     while (p.n) p.put(1, 1);
   }
-  int time_bits(Ctx&, int, int*) { return 1; }  // (the record's)
+  int time_bits(Ctx&, int, pInt) { return 1; }  // (the record's)
 };
 
 // a vector difference (FFmpeg's h263 decode_motion, without the prediction): its magnitude's code
 // (vlc_mv), a sign and f_code - 1 low bits
 template <class IO>
-static int mv_walk(IO& io, int* d, int f_code) {
+static int mv_walk(IO& io, pInt d, int f_code) {
   const int shift = f_code - 1;
   int code = 0, neg = 0, lo = 0;
   if (IO::W) {
@@ -699,7 +699,7 @@ struct VopHdr {
   // Whether the VOP at p (n bytes from its start code on) is coded (vop_coded), as its header reads
   // with the VOL c has (and its guess of the time increment's length, kept in c); -1 if the header
   // doesn't parse as far
-  static int coded_at(Ctx& c, const U8* p, size_t n) {
+  static int coded_at(Ctx& c, pcU8 p, size_t n) {
     U8 b[VOP_PEEK + GB_PAD];
     GB gb;
     VopHdr h;
@@ -738,7 +738,7 @@ struct Vop {  // a VOP's state as a walk goes through it (the quantiser follows 
   // FFmpeg's mpeg4_is_resync on g, a copy of the reader: the number of the macroblock a resync
   // marker right after the current position announces (the number of macroblocks for the end of
   // the VOP), or 0. *nstuff: MCBPC stuffing codes FFmpeg skips first.
-  int resync_ahead(const Ctx& c, GB g, int* nstuff) const {
+  int resync_ahead(const Ctx& c, GB g, pInt nstuff) const {
     constexpr int B = BYTE_BITS - 1;  // (a bit's place in its byte: & B)
     int bits_count = g.pos, w = (int)g.show(RESYNC_WIN);
     *nstuff = 0;

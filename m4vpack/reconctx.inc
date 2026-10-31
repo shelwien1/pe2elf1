@@ -68,7 +68,7 @@ struct RcSign {
     }
     for (i = 0, mask = 0; i < 1 << nsigns; i++) {
       if (i) {  // Gray code: one sign flips
-        const S64* q = dd[j = __builtin_ctz((unsigned)i)];
+        const rp<const S64> q = dd[j = __builtin_ctz((unsigned)i)];
         if (mask >> j & 1)
           for (e = 0; e < RC_EDGE; e++) xs[e] -= q[e];
         else
@@ -90,8 +90,8 @@ struct RcSign {
 
   // the predicted sign of searched coefficient j (1 negative) by target w, given the ones decided,
   // and by how much the other one costs more (quarter samples)
-  int predict(int w, int j, int* margin) const {
-    const S64* cw = cost[w];
+  int predict(int w, int j, pInt margin) const {
+    const rp<const S64> cw = cost[w];
     S64 c0 = RC_COST_MAX, c1 = RC_COST_MAX, dd;
     int m, f;
     if (fixed_mask == (1 << j) - 1)  // (the signs before j decided, as the model codes them: the rest free)
@@ -122,8 +122,8 @@ struct RcSign {
 };
 
 // the contribution of the value v at raster position r to the edge samples, added to x
-static void rc_edge_add(S64* x, int r, S64 v) {
-  const short *bv = rc_basis[r >> BLK_SHIFT], *bh = rc_basis[r & (BLK_W - 1)];
+static void rc_edge_add(rp<S64> x, int r, S64 v) {
+  const rp<const short> bv = rc_basis[r >> BLK_SHIFT], bh = rc_basis[r & (BLK_W - 1)];
   int e;
   if (!v) return;
   for (e = 0; e < BLK_W; e++) x[e] += v * bv[0] * bh[e];
@@ -137,14 +137,14 @@ constexpr int RC_TM_T = 2;                     // its thickness
 constexpr int RC_TM_N = 2 * RC_TM_T * MB_W;    // its samples, all decoded
 
 // a sample of plane p (w x h, stride s) at (x, y), clamped into it
-static inline int rc_px(const U8* p, int s, int w, int h, int x, int y) {
+static inline int rc_px(pcU8 p, int s, int w, int h, int x, int y) {
   return p[(ptrdiff_t)clip(y, 0, h - 1) * s + clip(x, 0, w - 1)];
 }
 
 // the summed difference between 16 samples c and the reference's at a (b: the row below), at
 // half-sample offsets (fx, fy), as ReconCtx::tm_sad() takes them (SSE2's averages round the same: of four,
 // (sum + 2) >> 2)
-static INLINE int rc_sad16(const U8* c, const U8* a, const U8* b, int fx, int fy) {
+static INLINE int rc_sad16(pcU8 c, pcU8 a, pcU8 b, int fx, int fy) {
 #if defined(__SSE2__)
   static_assert(MB_W == sizeof(__m128i), "rc_sad16(): a row of a macroblock, a 128-bit vector");
   const __m128i cv = _mm_loadu_si128((const __m128i*)c);
@@ -195,9 +195,9 @@ struct RcEst {
 // one's), the search around the best (full samples)
 constexpr int RC_EST_CANDS = 5, RC_EST_RANGE = 2;
 
-// the 8x8 forward DCT of the samples at (x, y) of plane p (rows ystep apart), clamped into it,
-// as the decoder's transform scales it
-static void rc_fdct(int F[BLK_COEFS], const U8* p, int s, int w, int h, int x, int y, int ystep) {
+// the 8x8 forward DCT (F, BLK_COEFS) of the samples at (x, y) of plane p (rows ystep apart), clamped
+// into it, as the decoder's transform scales it
+static void rc_fdct(pInt F, pcU8 p, int s, int w, int h, int x, int y, int ystep) {
   S64 t[BLK_W][BLK_W];
   int i, j, u, v;
   for (i = 0; i < BLK_W; i++)
@@ -245,10 +245,10 @@ struct ReconCtx : Recon {
   // What an intra block n adds to its coded levels (as block() will; changes nothing): its DC
   // prediction (in levels) at 0, its AC prediction at the first column (*dir 0, the vertical scan)
   // or row (1, the horizontal one)
-  void intra_pred(int n, int* dir, int P[BLK_COEFS]) const {
+  void intra_pred(int n, pInt dir, pInt P) const {  // (P: BLK_COEFS)
     const int pred = pred_dc(n, dir), scale = n < MB_LUMA ? y_dc_scale : c_dc_scale;
-    const S16* av = ac_val[block_index[n]];
-    const S8* qt = qscale_table;
+    pcS16 av = ac_val[block_index[n]];
+    const rp<const S8> qt = qscale_table;
     int i;
     memset(P, 0, BLK_COEFS * sizeof(int));
     P[0] = (pred + (scale >> 1)) / scale;
@@ -285,7 +285,7 @@ struct ReconCtx : Recon {
 
   // block n's top left sample, in its plane (field: the luma of a field DCT macroblock, whose blocks'
   // rows are a field's: by its first row's)
-  void blk_xy(int n, int field, int* bx, int* by) const {
+  void blk_xy(int n, int field, pInt bx, pInt by) const {
     if (n < MB_LUMA) {
       *bx = mb_x * MB_W + (n & 1) * BLK_W;
       *by = mb_y * MB_W + (n >> 1) * (field ? 1 : BLK_W);
@@ -299,9 +299,9 @@ struct ReconCtx : Recon {
   // whose k coefficients are at the scan positions pos[] with the levels lev[], of which the first nc
   // signs are not known (lev[] their magnitudes there): its edges, then each combination's cost. 0:
   // no prediction.
-  int sign_init(RcSign& sp, int n, int intra, int dcvlc, int dc, int k, const int* pos, const int* lev,
-                int nc) const {
-    const U8 *plane, *sc, *q;
+  int sign_init(RcSign& sp, int n, int intra, int dcvlc, int dc, int k, pcInt pos, pcInt lev, int nc) const {
+    const U8* plane;
+    pcU8 sc, q;
     int P[BLK_COEFS], C[BLK_COEFS], cand[BLK_COEFS], stride, bx, by, e, j, r, dir = 0;
     sp.nc = 0;
     if (nc <= 0 || !sign_can(n)) return 0;
@@ -360,9 +360,9 @@ struct ReconCtx : Recon {
 
   // the template's (the decoded samples above and left of the macroblock) summed difference from
   // ref at a displacement of (hx, hy) half samples; *n its samples (0: none decoded)
-  int tm_sad(const U8* ref, int hx, int hy, int* n) const {
+  int tm_sad(pcU8 ref, int hx, int hy, pInt n) const {
     constexpr int T = RC_TM_T;
-    const U8* cy = cur.y;
+    const pcU8 cy = cur.y;
     const int w = mb_w * MB_W, h = mb_h * MB_W, bx = mb_x * MB_W, by = mb_y * MB_W;
     const int ix = hx >> 1, iy = hy >> 1, fx = hx & 1, fy = hy & 1;
     int x, y, k = 0, s = 0;
@@ -416,7 +416,7 @@ struct ReconCtx : Recon {
   void intra_est(RcEst& e) const {
     const RPic& ref = last;
     const Motion& o = *mo;
-    const S16 (*mv)[2] = o.cur.mv, (*rmv)[2] = o.ref.mv;  // (the motion state's: this VOP's, the reference's)
+    const rp<const S16[2]> mv = o.cur.mv, rmv = o.ref.mv;  // (the motion state's: this VOP's, the reference's)
     const int qs = 1 + qpel, wrap = b8_stride, bi = block_index[0];
     int cand[RC_EST_CANDS][2], nc = 0, i, bx, by, best = -1, bn = 0, bs = 0, dx, dy;
     e.ok = 0;
@@ -485,9 +485,9 @@ struct ReconCtx : Recon {
   // samples next to them (-1 no edge decoded), both qratio(); full: every edge decoded so far, else
   // only those on other macroblocks (as the coded block pattern is coded, before any block of the macroblock);
   // field: the luma in fields (a field DCT macroblock's blocks)
-  void pred_feat(int n, int full, int field, int* tx, int* em) const {
+  void pred_feat(int n, int full, int field, pInt tx, pInt em) const {
     const U8* plane = cur.plane(n);
-    const U8* q;
+    pcU8 q;
     int stride, bx, by, x, y, s = 0, e = 0, ne = 0, top, left;
     blk_xy(n, field, &bx, &by);
     if (n < MB_LUMA) {
@@ -517,9 +517,9 @@ struct ReconCtx : Recon {
   // column are from the decoded samples next to them, projected onto each coefficient's pattern there
   // (least squares, a coefficient at a time), in quarter levels (signed) by raster position; 0 if no
   // edge of the block is decoded
-  int edge_proj(int n, int P4[BLK_COEFS]) const {
+  int edge_proj(int n, pInt P4) const {  // (P4: BLK_COEFS)
     const U8* plane = cur.plane(n);
-    const U8* q;
+    pcU8 q;
     S64 dd[RC_EDGE];
     int stride, bx, by, e, r, top, left, field = n < MB_LUMA && interlaced_dct;
     blk_xy(n, field, &bx, &by);
@@ -538,7 +538,7 @@ struct ReconCtx : Recon {
       dd[BLK_W + e] = left ? q[e * stride - 1] - q[e * stride] : 0;
     }
     for (r = 0; r < BLK_COEFS; r++) {
-      const short *bv = rc_basis[r >> BLK_SHIFT], *bh = rc_basis[r & (BLK_W - 1)];
+      const rp<const short> bv = rc_basis[r >> BLK_SHIFT], bh = rc_basis[r & (BLK_W - 1)];
       S64 num = 0, den = 0, c;
       for (e = 0; e < BLK_W; e++) {
         const S64 bt = (S64)bv[0] * bh[e], bl = (S64)bv[e] * bh[0];
@@ -559,9 +559,10 @@ struct ReconCtx : Recon {
   // since; 0 none decoded), ze how far the prediction's edges are from them (-1 none); both
   // qratio(). A B-VOP's direct prediction is made in the picture, where the macroblock's own
   // replaces it.
-  void skip_feat(int* zt, int* ze) {
+  void skip_feat(pInt zt, pInt ze) {
     constexpr int T = RC_TM_T;
     const int bx = mb_x * MB_W, by = mb_y * MB_W;
+    // (no restrict on these: in a B-VOP, cp reads the samples dy has written the prediction to)
     const U8 *cp = cur.y + (ptrdiff_t)by * ly + bx, *ref;
     int n = 0, s = 0, ne = 0, e = 0, x, y;
     *zt = *ze = -1;
@@ -597,7 +598,7 @@ struct ReconCtx : Recon {
   // among none, (ax, ay) and (bx, by) (in the stream's units; the vector's prediction and the
   // co-located one), in full samples, then RC_TM_RANGE around the best, then its half samples. 0:
   // no template.
-  int tm_search(const RPic& ref, int ax, int ay, int bx_, int by_, int* mx, int* my) const {
+  int tm_search(const RPic& ref, int ax, int ay, int bx_, int by_, pInt mx, pInt my) const {
     constexpr int R = 2 * RC_TM_RANGE;  // (in half samples)
     const int sh = qpel;  // (to half samples)
     int c[RC_TM_CANDS][2], i, n, best = 0, bcx, bcy, cx, cy, dx, dy, s;
@@ -635,8 +636,8 @@ struct ReconCtx : Recon {
   // it), and which way its texture runs (*td: RC_TD_COLS its samples change more down the columns (at
   // least RC_TD_RATIO times), the residual's energy then in the first column; RC_TD_ROWS along the
   // rows; RC_TD_NEITHER)
-  void pred_spec(int n, int field, int F[BLK_COEFS], int* td) const {
-    const U8* q;
+  void pred_spec(int n, int field, pInt F, pInt td) const {  // (F: BLK_COEFS)
+    pcU8 q;
     int x, y, bx, by, sh = 0, sv = 0;
     blk_xy(n, field, &bx, &by);
     if (n < MB_LUMA) {

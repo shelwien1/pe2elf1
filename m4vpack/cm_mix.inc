@@ -2,12 +2,12 @@
 
 template <int N> struct cm_mix {
   static_assert(N <= CM_MIX_MAX, "cm_mix: its AVX2 sum is exact for 32 inputs at most");
-  i32 *__restrict w;
-  u8 *__restrict c;
+  rp<i32> w;
+  rp<u8> c;
   int x[N], pr, row, ctxn;
   enum { W0 = (1 << CM_WBITS) / N };
   static constexpr int LO = 15;  // (the AVX2 sum: a weight as hi 2^LO + lo)
-  void init(i32 *wt, u8 *cnt) {
+  void init(rp<i32> wt, rp<u8> cnt) {
     w = wt;
     c = cnt;
     row = 0;
@@ -17,7 +17,7 @@ template <int N> struct cm_mix {
   INLINE void set(int k, int st) { x[k] = st; }
   INLINE int mix(u32 ctx) { return mix(ctx, x, nullptr); }
   // with the inputs xi (packed in xp, N a multiple of 8, or null)
-  INLINE int mix(u32 ctx, const int *xi, const cm_x16<N> *xp) {
+  INLINE int mix(u32 ctx, pcInt xi, rp<const cm_x16<N>> xp) {
     i64 s = 0;
     int i;
     ctxn = (int)ctx;
@@ -26,7 +26,7 @@ template <int N> struct cm_mix {
     if(xp) {
       // exactly the sum below: each weight (with W0, under 2^29) as hi 2^15
       // + lo, lo in 0..32767, so that both sums of products stay in 32 bits
-      const i32 *ww = w + row;
+      const rp<const i32> ww = w + row;
       const __m256i w0 = _mm256_set1_epi32(W0), mlo = _mm256_set1_epi32((1 << LO) - 1);
       __m256i sh = _mm256_setzero_si256(), sl = sh;
       for(i = 0; i + CM_V16 <= N; i += CM_V16) {
@@ -60,11 +60,11 @@ template <int N> struct cm_mix {
     return cm_pclip(pr);
   }
   INLINE void upd(int bit, int lr, int mb) { upd(bit, lr, mb, x, nullptr); }
-  INLINE void upd(int bit, int lr, int mb, const int *xi, const cm_x16<N> *xp) {
+  INLINE void upd(int bit, int lr, int mb, pcInt xi, rp<const cm_x16<N>> xp) {
     int err, i, n;
-    i32 *__restrict ww = w + row;
+    const rp<i32> ww = w + row;
     if(mb) {
-      u8 *__restrict cc = c;
+      const rp<u8> cc = c;
       n = cc[ctxn];
       cc[ctxn] = (u8)(n + (n < CM_AMAX));
       lr += (int)(((i64)mb * lr * cm_mrec[n]) >> CM_CBITS);

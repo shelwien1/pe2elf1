@@ -3,7 +3,7 @@
 
   // the sprite's warping from the warp points' differences w (m4vdec's decode_sprite_trajectory); 0
   // where it overflows
-  int sprite(const int* w) {
+  int sprite(pcInt w) {
     int a = 2 << warp_acc, rho = SPR_RHO - warp_acc, r = SPR_SUB / a;
     int alpha = 1, beta = 0, wd = width, ht = height, min_ab, i, w2, h2, w3, h3;
     int sprite_ref[SPR_CORNERS][2], virtual_ref[2][2];

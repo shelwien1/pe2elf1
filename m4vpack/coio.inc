@@ -54,7 +54,7 @@ struct CoIo : B {
     return !eof;
   }
   // up to n bytes of the input, fewer only at its end
-  size_t read(U8* p, size_t n) {
+  size_t read(pU8 p, size_t n) {
     size_t k = 0;
     while (k < n) {
       size_t l;
@@ -67,7 +67,7 @@ struct CoIo : B {
     return k;
   }
   // all n bytes into the output
-  void write(const U8* p, size_t n) {
+  void write(pcU8 p, size_t n) {
     while (n) {
       size_t l;
       if (outptr >= outend) chkout();

@@ -65,8 +65,8 @@ constexpr U32 MT_RING = 1 * MIB;       // MTwrap's buffers to and from each work
 constexpr U32 MT_COPY_MAX = HDR_PEEK;  // the bytes of a header copied in, at most (what the parser reads)
 constexpr unsigned MTW_NO_THREAD = 7;  // MTwrap's Init(): a thread didn't start (1-6: no memory)
 
-static void put_le(U8* p, U64 v, int n) { int i; for (i = 0; i < n; i++) p[i] = (U8)(v >> (BYTE_BITS * i)); }
-static U64 get_le(const U8* p, int n) {
+static void put_le(pU8 p, U64 v, int n) { int i; for (i = 0; i < n; i++) p[i] = (U8)(v >> (BYTE_BITS * i)); }
+static U64 get_le(pcU8 p, int n) {
   U64 v = 0;
   int i;
   for (i = n - 1; i >= 0; i--) v = (v << BYTE_BITS) | p[i];
@@ -86,15 +86,15 @@ static U64 mt_hard(U64 cap) { return 2 * cap; }
 // record of a larger part to be broken, which bounds the memory a part's output takes.
 static U64 mt_part_max(U64 part) { return mt_hard(mt_cap(part)) + NKEY * (U64)MT_COPY_MAX; }
 
-static void mt_head(U8* h, int threads, U32 part) {
+static void mt_head(pU8 h, int threads, U32 part) {
   memcpy(h, mt_magic, sizeof mt_magic);
   h[MT_AT_VERSION] = M4V_VERSION;
   h[MT_AT_THREADS] = (U8)threads;
   put_le(h + MT_AT_PART, part / KIB, MT_PART_BYTES);
 }
 
-static U32 mt_rec_crc(const U8* h) { return crc32_upd(0, h, MT_R_CRC); }
-static void mt_rec(U8* h, U64 plen, U64 ins, U64 xlen, U64 part) {
+static U32 mt_rec_crc(pcU8 h) { return crc32_upd(0, h, MT_R_CRC); }
+static void mt_rec(pU8 h, U64 plen, U64 ins, U64 xlen, U64 part) {
   put_le(h + MT_R_PLEN, plen, U64_BYTES);
   put_le(h + MT_R_INS, ins, U64_BYTES);
   put_le(h + MT_R_XLEN, xlen, U64_BYTES);

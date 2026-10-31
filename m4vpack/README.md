@@ -365,7 +365,10 @@ themselves, the motion state and the decoder step through a VOP, the model codes
 runs c or d), and the free functions that serve them (the transforms, the interpolation, the
 tables). `m4vpack.cpp` includes the parts in order; each class over 100 lines, and each method over
 100 lines, is in a file of its own named after it (`m4vcoro.inc`, `mb.inc`, `code_block.inc`, ...):
-a class's where its part includes it, a method's in its class's body. `Lib3/` (the coroutines),
+a class's where its part includes it, a method's in its class's body. A pointer through which alone
+its data is reached while it is in use is a restrict pointer (`base.inc`'s `rp<T>`, and `pU8`,
+`pcU8`, ... by name); those that share their data with another way to it stay plain (said where it
+is not plain to see). `Lib3/` (the coroutines),
 `MTwrap_v3/` (the threads), the counters, mixers and families (`cmbase.inc`, `buf.inc`, `cm.inc` and
 `cm_*.inc`, `fam.inc` and `tc_*.inc`, `famcfg.inc`), the range coder (`rc.inc`), `mapping.inc`,
 `masking.inc` and the tools in `IDX/` come from h264p. MTwrap includes `win_shim.inc` by name, hence

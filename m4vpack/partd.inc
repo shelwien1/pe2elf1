@@ -7,7 +7,7 @@
 template <class LV>
 struct PartD {
   template <class W>
-  static int run(W& w, const U8* head, U64 plen) {
+  static int run(W& w, pcU8 head, U64 plen) {
     typedef M4vCoro<1, LV> C;
     C* q = coro_new<C>();
     int first = 1, r;
@@ -15,7 +15,7 @@ struct PartD {
     C& c = *q;
     c.Init(0);
     c.is_part = 1;
-    r = w.run_part(c, [&](const U8** p) -> size_t {
+    r = w.run_part(c, [&](rp<const U8*> p) -> size_t {
       if (first) {
         first = 0;
         *p = head;

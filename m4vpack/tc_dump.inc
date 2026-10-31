@@ -30,7 +30,7 @@ struct tc_dump {
     int unused[] = {0, (tc_dump_put(f, (i64)a), 0)...};
     (void)unused;
   }
-  void vars(const int *v, int n) {  // M
+  void vars(pcInt v, int n) {  // M
     if(!f)
       return;
     putc('M', f);
