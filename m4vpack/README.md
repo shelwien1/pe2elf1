@@ -324,7 +324,7 @@ which ran about 1.3 times slower when this was measured than for the levels tabl
 At `-9` (the default), with the default 4 MB parts: the stream has 5 parts, which cost 0.18% of
 the size, each part's model starting afresh. `d`'s workers get their input from the container in
 MTwrap's 2 MB buffers; since the container has the parts' streams interleaved as they were coded,
-they keep busy however long the parts are. With 12 MB parts (`-1 -t 4 -c 12`, a 58 MB stream in 5
+and a part decodes about as fast as it was coded, they keep busy with long parts too. With 12 MB parts (`-1 -t 4 -c 12`, a 58 MB stream in 5
 parts), format 5's `d` took 48.9 s against `c`'s 27.5 s, reading one part at a time; format 6's
 takes 25.0 s (`c` 27.8 s).
 
