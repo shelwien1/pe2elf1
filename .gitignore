@@ -1,0 +1,6 @@
+# builds and test output
+ac3dec/ac3dec
+ac3dec/ac3dec.exe
+ac3tsv/ac3tsv
+ac3tsv/ac3tsv.exe
+samples/corpus/

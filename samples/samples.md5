@@ -1,0 +1,46 @@
+# AC-3 test files (005-ac3.tar.xz)
+4c693afb3f418d2ec898c295c30b8d09  aamss_pv.ac3
+934c6b0660b5fd5c25f87ec54040f6b6  cg_mj6.ac3
+2cfe7fbf6a5ce3be30270b8b5a178f14  cg_mj8.ac3
+2ffeaf86714d4c3bbdbead12b10701c4  cg_mj9.ac3
+a2c0b9b95c597255baa7791597a5fa7d  cg_mjed.ac3
+18396543eaabef3340c4fff7d3a73e00  sd_nced.ac3
+69c55057badf3e576f2b60ddffd6c8ec  ss_sp3.ac3
+9dd7a2ed97c0a1813202c1e9d2001f41  ss_sp5.ac3
+# downloaded: samples.ffmpeg.org and the Dolby DD+ Online Delivery Kit v1.5 (get_samples.sh)
+8e74c076299692e3ec2f61c50e1af865  00007.ac3
+7e24e5942200b77e432840216d125ae2  7_pt_1.eac3
+1612e41f26ba4c88f2023253fdc51422  buggy_aht_5.1_384.eac3
+ea7ec76b8eb185bc902caacc1e3f1308  casablanca_aht_mono_64.eac3
+5720901b884faf2fad3ba64d7dbf08a8  csi_miami_5.1_256_spx.eac3
+36fa554a512b149f4ba191a42780841d  csi_miami_stereo_128_spx.eac3
+99937fd13b4ada4d3f5ca97365b812b5  matrix2_commentary1_stereo_192.eac3
+0d52c4037c4a65ea2fe30dbbb5f3ccb0  matrix2_english_5.1_640.eac3
+ab471356974aa78ad5563ec18a2b0325  rio_bravo_mono_64_spx.ac3
+892b5a4cf0d176bb1668ea0ac182ebc8  serenity_english_5.1_1536.eac3
+f948cf9737e654970825dde1213df372  dolby_Holi_en_2ch_128kbps_ddp.eac3
+10cc2258d557aa633d20f6ad580f9759  dolby_Holi_en_514ch_448kbps_ddp.eac3
+d511165c7649e97518e43209820819e8  dolby_Holi_en_6ch_256kbps_ddp.eac3
+6a2591e12dc0d9e565a4637357421b4e  dolby_Holi_en_6ch_640kbps_ddp_joc.eac3
+# made by make_samples.sh with ffmpeg 6.1.1
+d37f0a0202057054e39cc9503c8a91e4  ff_ac3_21_192k.ac3
+da4321c1e57ea945c7591fe223d0e47b  ff_ac3_21b_256k.ac3
+953a6408ec067b01c6642b30006f6726  ff_ac3_22_320k.ac3
+636cd8afee78326e6d40f2c88d765aff  ff_ac3_30_256k.ac3
+c09ccbd76d68812bc6922d1fd844f929  ff_ac3_31_320k.ac3
+75976b219bf3f43c3f53fc1d468d8ae8  ff_ac3_32_st_96k.ac3
+beab22dd5c8c4e83328cf1420d25968e  ff_ac3_441_st_192k.ac3
+d87347dcd189f8eb78862ec12c72352a  ff_ac3_50_384k.ac3
+bc15127cba1df98d03e083070c646ddd  ff_ac3_51_448k.ac3
+c1fc9c4cafc51afdcad72c1508e2f94f  ff_ac3_51_640k.ac3
+7f757ab449fdf966a5b897a218e4c4ba  ff_ac3_mono_96k.ac3
+61bce76187ff5b3d47d2489f3b6b7220  ff_ac3_st_cpl_96k.ac3
+b0cd2b0dff313b39f9cecb7511d44fdd  ff_ac3_st_xbsi_256k.ac3
+ed5e29653cccf0a92c15623375f173d0  ff_eac3_32_st_128k.eac3
+4d3163a168f6413cf2c22510f79ff617  ff_eac3_441_st_192k.eac3
+3b8c935771e78d0e988830d9b5eab893  ff_eac3_51_3072k.eac3
+a19f5d83cc243bb8002d9e367196dea8  ff_eac3_51_448k.eac3
+cb427c97950f8d2e03517040b4be7853  ff_eac3_51_6144k.eac3
+97a338d0a6597e434c99c914e98f40cc  ff_eac3_mono_64k.eac3
+110e2c0208f54a7c216b2239df41f8e4  ff_eac3_st_1536k.eac3
+6685041a7ed639acbb9f969b3b48393f  ff_eac3_st_96k.eac3
