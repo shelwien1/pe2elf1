@@ -127,6 +127,41 @@ static void SdtpFit( TimeModel& tm, const TimeIn& ti, const Buf& sd ) {
   for( size_t k=0; k<sd.size(); k++ ) if( sd[k]!=tm.smap[SdtpClass( ti, k )] ) tm.sdexc.push_back( k ), tm.sdval.push_back( sd[k] );
 }
 
+// trun sample_flags derived from the sample class (tflags 16): a value per class (as sdtp),
+// exceptions. Key frames have flags of their own (sync, depends on no other sample)
+struct FlagMap { uint v[8]; std::vector<qword> exc, val; };
+
+static void FlagsApply( const FlagMap& fm, const TimeIn& ti, qword N, std::vector<uint>& f ) {
+  f.resize( size_t(N) );
+  for( qword n=0; n<N; n++ ) f[size_t(n)] = fm.v[SdtpClass( ti, n )];
+  for( size_t i=0; i<fm.exc.size(); i++ ) f[size_t(fm.exc[i])] = uint(fm.val[i]);
+}
+
+// sv: (sample index, flags) of the samples whose flags are derived, ascending
+static void FlagsFit( FlagMap& fm, const TimeIn& ti, const std::vector<std::pair<qword,uint> >& sv ) {
+  std::map<uint,qword> h[8];
+  for( size_t k=0; k<sv.size(); k++ ) h[SdtpClass( ti, sv[k].first )][sv[k].second]++;
+  for( int c=0; c<8; c++ ) {
+    qword bc = 0; fm.v[c] = 0;
+    for( std::map<uint,qword>::iterator it=h[c].begin(); it!=h[c].end(); ++it ) if( it->second>bc ) bc = it->second, fm.v[c] = it->first;
+  }
+  fm.exc.clear(); fm.val.clear();
+  for( size_t k=0; k<sv.size(); k++ )
+    if( sv[k].second!=fm.v[SdtpClass( ti, sv[k].first )] ) fm.exc.push_back( sv[k].first ), fm.val.push_back( sv[k].second );
+}
+
+static void PutFlagMap( Writer& w, const FlagMap& fm ) {
+  for( int c=0; c<8; c++ ) w.vint( fm.v[c] );
+  PutIdxCol( w, fm.exc ); PutCol( w, fm.val );
+}
+
+static bool GetFlagMap( Reader& r, FlagMap& fm, qword N ) {
+  for( int c=0; c<8; c++ ) { qword v = r.vint(); if( v>0xFFFFFFFFu ) return false; fm.v[c] = uint(v); }
+  if( r.err || !GetIdxCol( r, fm.exc, N ) || !GetCol( r, fm.val, fm.exc.size() ) ) return false;
+  for( size_t i=0; i<fm.val.size(); i++ ) if( fm.val[i]>0xFFFFFFFFu ) return false;
+  return true;
+}
+
 // encoder: fit the model to actual durations / offsets / sync flags
 static void TimeFit( TimeModel& tm, const TimeIn& ti, qword N, const std::vector<qword>& dur,
                      const std::vector<long long>* cto, const std::vector<byte>* sync ) {

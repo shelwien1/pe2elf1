@@ -16,6 +16,10 @@ namespace mp4 {
 //                   2 = trun sample_duration fields derived (with 1, szmode>=2)
 //                   4 = trun sample_composition_time_offset fields derived (with 1, szmode>=2)
 //                   8 = tfdt base: vint zigzag(base)
+//                  16 = trun sample_flags fields derived (with 1, szmode>=2): from the sample
+//                       class (key | intra<<1 | non-reference<<2, as sdtp; ckind 4 without stss
+//                       too); after the tfdt base: 8 x vint flags per class, exception index
+//                       column, column of the exception values
 //     timing model (if 1):
 //       u8 ckind: 0 none, 1 H.264, 2 HEVC (+u8 NAL length size), 3 Vorbis sample positions,
 //         4 key frames by frame class (+u8 class kind, vint class parameter; see FrameClass)
@@ -64,7 +68,9 @@ namespace mp4 {
 //                  11=tfdt baseMediaDecodeTime (v7+): base + dts of the first sample of
 //                    the track's next trun (32/64 bit by the tfdt version)
 //                  4 (v7+): trun records without the derived fields (size if szmode>=2,
-//                    duration / composition offset by tflags)
+//                    duration / composition offset / sample_flags by tflags) of the trun
+//                    whose payload is the last before this point of the struct (a trun
+//                    with no derived field has no op)
 //      0xF2 5      tfhd base_data_offset: struct holds pos-value (u64)
 //                  (pos = output position of the field; residuals are ~constant)
 //      0xF4        mark: the current output position (top-level boxes except mdat, from the
@@ -98,10 +104,11 @@ struct DTrack {
   Buf xhdr;                                           // Annex B: parameter set header
   qword pcur;                                         // TB_PSET cursor into xhdr
   int tflags; TimeModel tm; long long tbase;          // timing model (v7)
+  FlagMap fm;                                         // trun sample_flags per sample class (tflags 16)
   int cflags, cmode, crule; qword csdi, cmaster, csj, csm; long long ca, cO, cb;   // chunk model (v7)
   std::vector<qword> ccol;                            // spc runs / aligned residuals
   // derived
-  std::vector<qword> dur, dts; std::vector<long long> cto; std::vector<byte> sync; Buf sdtp;
+  std::vector<qword> dur, dts; std::vector<long long> cto; std::vector<byte> sync; Buf sdtp; std::vector<uint> sfl;
   uint csize; qword nconst; std::vector<uint> sz;     // sizes: [0,nconst) = csize, rest in sz
   std::vector<qword> spc, cfirst, csz, cso, cpos;
   uint Size( qword i ) const { return i<nconst ? csize : sz[size_t(i-nconst)]; }
@@ -149,10 +156,11 @@ static bool ParseMeta( const Buf& m, Meta& M ) {
       if( t.szmode==0 ) t.tdef[k] = r.vint();
     }
     t.tflags = r.u8();
-    if( t.tflags>15 || ((t.tflags&14) && !(t.tflags&1)) || ((t.tflags&6) && t.szmode<2) ) return false;
+    if( t.tflags>31 || ((t.tflags&30) && !(t.tflags&1)) || ((t.tflags&22) && t.szmode<2) ) return false;
     if( (t.tflags&1) && !GetTimeModel( r, t.tm, t.nsamp ) ) return false;
     if( (t.tflags&4) && !t.tm.hascto ) return false;
     if( t.tflags&8 ) t.tbase = UnZigZag( r.vint() );
+    if( (t.tflags&16) && !GetFlagMap( r, t.fm, t.nsamp ) ) return false;
     t.cflags = r.u8();
     if( t.cflags>7 || ((t.cflags&1) && !t.has_stbl) || ((t.cflags&4) && !(t.cflags&1)) ) return false;
     if( t.cflags&1 ) {

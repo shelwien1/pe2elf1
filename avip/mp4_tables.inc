@@ -22,6 +22,8 @@
 //                                   IDR/IRAP pictures (other video: I-VOP / I-picture /
 //                                   intra frame classes); sdtp from key/intra/non-reference
 //                                   class; only residuals are stored
+//   - trun sample_flags           : a value per key/intra/non-reference class (key frames
+//                                   have their own), exceptions stored
 //   - stsc                        : runs of samples-per-chunk, or aligned to another
 //                                   track's chunk start times (interleaving muxers)
 //   - chunk order in the file     : round-robin prediction over the tracks

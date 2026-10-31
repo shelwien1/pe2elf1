@@ -126,15 +126,15 @@ static bool Restore( Meta& M, const std::vector<const Buf*>& S, Sink& out, const
       if( !TimeInputs( t.tm.ckind, t.tm.lensize, t.xform==XF_ANNEXB ? t.xhdr : none, t.priv, s.data(), fo, t.nsamp, ti, t.tm.fck, t.tm.fckp ) ) FAIL("bad timing model");
       TimeApply( t.tm, ti, t.nsamp, t.dur, t.dts, t.cto, t.sync );
       if( t.tm.hassdtp ) SdtpApply( t.tm, ti, nsp, t.sdtp );
+      if( t.tflags&16 ) FlagsApply( t.fm, ti, t.nsamp, t.sfl );
     }
   }
   // pass 0: layout and checks, pass 1: emit
-  std::vector<qword> next( M.trk.size() ), ntrun( M.trk.size() ), marks;
+  std::vector<qword> next( M.trk.size() ), marks;
   Buf tb;
   for( int pass=0; pass<2; pass++ ) {
     qword pos=0, sp=0;
     std::fill( next.begin(), next.end(), 0 );
-    std::fill( ntrun.begin(), ntrun.end(), 0 );
     for( size_t i=0; i<M.trk.size(); i++ ) M.trk[i].pcur = 0;
     for( size_t i=0; i<M.ops.size(); i++ ) {
       const DOp& d = M.ops[i];
@@ -279,14 +279,17 @@ static bool Restore( Meta& M, const std::vector<const Buf*>& S, Sink& out, const
           n = v==1 ? 8 : 4;
           if( pass ) { tb.resize( size_t(n) ); if( v==1 ) PutBE64( &tb[0], val ); else PutBE32( &tb[0], uint(val) ); }
         } else if( d.n==TB_TRUN ) {
-          if( ntrun[d.t]>=t.trun.size() ) FAIL("bad table");
-          size_t k = size_t(ntrun[d.t]++), c = size_t(t.npc+k);
+          // the trun whose payload is the last before sp: a trun with no derived field has no op
+          size_t k = std::upper_bound( t.trun.begin(), t.trun.end(), sp ) - t.trun.begin(), c;
+          if( !k-- ) FAIL("bad trun ref");
+          c = size_t(t.npc+k);
           TrunHdr h; ParseTrunHdr( st+t.trun[k], M.stlen-t.trun[k], h );
           if( c>=t.spc.size() || t.spc[c]!=h.count ) FAIL("bad trun");
-          bool dsz = (h.flags&0x200) && t.szmode>=2, ddur = (h.flags&0x100) && (t.tflags&2), dcto = (h.flags&0x800) && (t.tflags&4);
-          if( M.ver<7 ) ddur = dcto = false;
-          if( !(dsz||ddur||dcto) ) FAIL("bad trun");
-          qword rs = h.recsize-4*(int(dsz)+int(ddur)+int(dcto));
+          bool dsz = (h.flags&0x200) && t.szmode>=2, ddur = (h.flags&0x100) && (t.tflags&2), dcto = (h.flags&0x800) && (t.tflags&4),
+               dfl = (h.flags&0x400) && (t.tflags&16);
+          if( M.ver<7 ) ddur = dcto = dfl = false;
+          if( !(dsz||ddur||dcto||dfl) ) FAIL("bad trun");
+          qword rs = h.recsize-4*(int(dsz)+int(ddur)+int(dcto)+int(dfl));
           n = qword(h.recsize)*h.count; ns = rs*h.count;
           if( ns>M.stlen-sp ) FAIL("struct overrun");
           if( pass ) {
@@ -296,10 +299,11 @@ static bool Restore( Meta& M, const std::vector<const Buf*>& S, Sink& out, const
               qword si = t.cfirst[c]+j;
               for( uint fb=0x100; fb<=0x800; fb<<=1 ) {
                 if( !(h.flags&fb) ) continue;
-                bool der = fb==0x100 ? ddur : fb==0x200 ? dsz : fb==0x800 ? dcto : false;
+                bool der = fb==0x100 ? ddur : fb==0x200 ? dsz : fb==0x400 ? dfl : dcto;
                 if( !der ) { memcpy( q, r, 4 ); r += 4; }
                 else if( fb==0x100 ) { if( t.dur[size_t(si)]>>32 ) FAIL("duration overflow"); PutBE32( q, uint(t.dur[size_t(si)]) ); }
                 else if( fb==0x200 ) PutBE32( q, t.Size(si) );
+                else if( fb==0x400 ) PutBE32( q, t.sfl[size_t(si)] );
                 else PutBE32( q, uint(t.cto[size_t(si)]) );
                 q += 4;
               }

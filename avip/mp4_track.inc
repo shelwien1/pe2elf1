@@ -70,7 +70,7 @@ struct Track {
   bool fcto;                              // a trun has composition offsets
   struct Tfdt { qword pos; int ver; qword val; size_t trun; };
   std::vector<Tfdt> tfdt;
-  bool tmok; int tflags; long long tbase; TimeModel tm; std::string tinfo;
+  bool tmok; int tflags; long long tbase; TimeModel tm; FlagMap fm; std::string tinfo;
   bool cstsc, cslast; qword sdi, ts;      // stsc regenerable (canonical, one sdi), last chunk split; mdhd timescale
   PosLen psets;                           // avcC/hvcC parameter set NAL payloads (file positions)
   Box sdtp; bool hsdtp; Buf sdv;          // sdtp box, values per stbl sample

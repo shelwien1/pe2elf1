@@ -38,7 +38,11 @@ static bool Encode1( const Buf& in, bool usexf, bool timing, Buf& meta, std::vec
     t.tflags = 0;
     if( t.tmok ) {
       t.tflags = 1;
-      if( t.szmode>=2 ) t.tflags |= 2 | ((t.hctts || t.fcto) ? 4 : 0);
+      if( t.szmode>=2 ) {
+        t.tflags |= 2 | ((t.hctts || t.fcto) ? 4 : 0);
+        for( size_t k=0; k<t.trun.size(); k++ )         // per-sample flags: from the sample class
+          if( (t.trun[k].h.flags&0x400) && t.trun[k].h.count && t.spc[size_t(t.npc+k)]==t.trun[k].h.count ) t.tflags |= 16;
+      }
     }
   }
   // chunk model: stsc entries regenerated, plain runs or aligned to a master track
@@ -149,7 +153,8 @@ static bool Encode1( const Buf& in, bool usexf, bool timing, Buf& meta, std::vec
       if( t.szmode>=2 )
         for( size_t k=0; k<t.trun.size(); k++ ) {
           const TrunInfo& r = t.trun[k];
-          int nd = int( (r.h.flags&0x200)!=0 ) + int( (r.h.flags&0x100) && (t.tflags&2) ) + int( (r.h.flags&0x800) && (t.tflags&4) );
+          int nd = int( (r.h.flags&0x200)!=0 ) + int( (r.h.flags&0x100) && (t.tflags&2) ) + int( (r.h.flags&0x800) && (t.tflags&4) ) +
+                   int( (r.h.flags&0x400) && (t.tflags&16) );
           if( !nd || !r.h.count || t.spc[size_t(t.npc+k)]!=r.h.count ) continue;
           Item z = { r.b.pay()+r.h.hlen, qword(r.h.recsize)*r.h.count, 4*qword(nd)*r.h.count, TB_TRUN, int(i), k };
           it.push_back(z);
@@ -360,7 +365,7 @@ static bool Encode1( const Buf& in, bool usexf, bool timing, Buf& meta, std::vec
           const byte* r = d+x.off+j*h.recsize;
           for( uint fb=0x100; fb<=0x800; fb<<=1 ) {
             if( !(h.flags&fb) ) continue;
-            bool der = fb==0x200 || (fb==0x100 && (t.tflags&2)) || (fb==0x800 && (t.tflags&4));
+            bool der = fb==0x200 || (fb==0x100 && (t.tflags&2)) || (fb==0x800 && (t.tflags&4)) || (fb==0x400 && (t.tflags&16));
             if( !der ) st.insert( st.end(), r, r+4 );
             r += 4;
           }
@@ -398,7 +403,7 @@ static bool Encode1( const Buf& in, bool usexf, bool timing, Buf& meta, std::vec
     }
     if( t.tmok ) {                            // timing model, from the inputs the decoder will have
       int ck = t.xform==XF_OGG ? 3 : t.lensize && t.xext=="h264" ? 1 : t.lensize && t.xext=="hevc" ? 2 :
-               t.hstss && t.fck!=CK_RAW && t.fck!=CK_AUDIO ? 4 : 0;
+               (t.hstss || (t.tflags&16)) && t.fck!=CK_RAW && t.fck!=CK_AUDIO ? 4 : 0;
       std::vector<qword> fo( size_t(t.nsamp+1), 0 );
       for( qword k=0; k<t.nsamp; k++ ) fo[size_t(k+1)] = fo[size_t(k)]+t.Size(k);
       Buf pv, none;
@@ -409,7 +414,7 @@ static bool Encode1( const Buf& in, bool usexf, bool timing, Buf& meta, std::vec
       if( t.hstss ) { sy = t.ssync; sy.resize( size_t(t.nsamp), 2 ); }
       t.tm.ckind = ck; t.tm.lensize = ck==1 || ck==2 ? t.lensize : 0; t.tm.fck = ck==4 ? t.fck : 0; t.tm.fckp = ck==4 ? t.fckp : 0;
       TimeFit( t.tm, ti, t.nsamp, t.sdur, (t.hctts || t.fcto) ? &t.scto : 0, t.hstss ? &sy : 0 );
-      if( ck==4 ) {                           // frame classes worse than no sync prediction: drop them
+      if( ck==4 && t.hstss && !(t.tflags&16) ) {   // frame classes worse than no sync prediction: drop them
         qword ns = 0; for( size_t k=0; k<sy.size(); k++ ) ns += sy[k]==1;
         if( t.tm.sexc.size()>=ns ) {
           ck = 0; TimeInputs( 0, 0, none, none, s.data(), fo, t.nsamp, ti ); t.tm.ckind = 0; t.tm.fck = 0; t.tm.fckp = 0;
@@ -417,6 +422,16 @@ static bool Encode1( const Buf& in, bool usexf, bool timing, Buf& meta, std::vec
         }
       }
       if( t.hsdtp && t.sdv.size() ) SdtpFit( t.tm, ti, t.sdv );
+      if( t.tflags&16 ) {                     // the flags of the truns with a TB_TRUN op
+        std::vector<std::pair<qword,uint> > sv;
+        for( size_t k=0; k<t.trun.size(); k++ ) {
+          const TrunInfo& r = t.trun[k];
+          if( !(r.h.flags&0x400) || !r.h.count || t.spc[size_t(t.npc+k)]!=r.h.count ) continue;
+          const byte* q = d+r.b.pay()+r.h.hlen+4*( ((r.h.flags>>8)&1)+((r.h.flags>>9)&1) );
+          for( qword j=0; j<r.h.count; j++ ) sv.push_back( std::make_pair( t.cfirst[size_t(t.npc+k)]+j, BE32(q+j*r.h.recsize) ) );
+        }
+        FlagsFit( t.fm, ti, sv );
+      }
       if( verbose ) {
         char l[160]; size_t nz = 0, nc = 0;
         for( size_t k=0; k<t.tm.rdur.size(); k++ ) nz += t.tm.rdur[k]!=0;
@@ -425,10 +440,11 @@ static bool Encode1( const Buf& in, bool usexf, bool timing, Buf& meta, std::vec
           (unsigned long long)t.tm.q, ldexp( double(t.tm.m), -t.tm.k ), (unsigned long long)nz );
         else snprintf( l, sizeof(l), " time=durations" );   // no model: the duration column is cheaper
         t.tinfo = l;
-        if( ck==4 ) t.tinfo += " sync=class";
+        if( ck==4 ) t.tinfo += t.tm.hassync ? " sync=class" : " class=frame";
         if( t.tm.hascto ) snprintf( l, sizeof(l), " cto_resid=%llu", (unsigned long long)nc ), t.tinfo += l;
         if( t.tm.hassync ) snprintf( l, sizeof(l), " sync_exc=%llu", (unsigned long long)t.tm.sexc.size() ), t.tinfo += l;
         if( t.tm.hassdtp ) snprintf( l, sizeof(l), " sdtp_exc=%llu", (unsigned long long)t.tm.sdexc.size() ), t.tinfo += l;
+        if( t.tflags&16 ) snprintf( l, sizeof(l), " flags_exc=%llu", (unsigned long long)t.fm.exc.size() ), t.tinfo += l;
       }
     }
     if( conv ) s.swap( x ), nxf++;
@@ -463,6 +479,7 @@ static bool Encode1( const Buf& in, bool usexf, bool timing, Buf& meta, std::vec
     w.u8( t.tflags );
     if( t.tflags&1 ) PutTimeModel( w, t.tm );
     if( t.tflags&8 ) w.vint( ZigZag( t.tbase ) );
+    if( t.tflags&16 ) PutFlagMap( w, t.fm );
     w.u8( t.cflags );
     if( t.cflags&1 ) {
       w.vint( t.sdi ); w.u8( t.cmode );
