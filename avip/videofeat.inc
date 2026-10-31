@@ -36,3 +36,32 @@ static void VideoFeat( const byte* hdr, qword hl, const byte* s, const std::vect
 static bool SyncPred( byte f, int mask ) {
   return (f&VF_KEY) || ((mask&2) && (f&VF_RP)) || ((mask&4) && (f&VF_I)) || ((mask&8) && (f&VF_RP) && (f&VF_I));
 }
+
+// feature flags of one sample of length-prefixed NALs (ls bytes) that need no parameter sets:
+// VF_KEY H.264 IDR / HEVC IRAP NAL, VF_RP recovery point SEI, VF_I H.264 I or SI first slice
+static byte NalFeat( bool hevc, int ls, const byte* s, qword n ) {
+  byte f = 0; bool first = true;
+  if( ls<1 ) return 0;
+  for( qword o=0; n-o>=qword(ls); ) {
+    qword L = 0; for( int i=0; i<ls; i++ ) L = (L<<8)|s[o+i];
+    o += ls;
+    if( L>n-o ) break;
+    const byte* p = s+o; o += L;
+    if( L<2 ) continue;
+    if( hevc ) {
+      int ty = (p[0]>>1)&63;
+      if( ty>=16 && ty<=23 ) f |= VF_KEY;
+      else if( ty==39 && SeiRecovery( p+2, size_t(L-2) ) ) f |= VF_RP;
+      continue;
+    }
+    int ty = p[0]&31;
+    if( ty==5 ) f |= VF_KEY;
+    else if( ty==6 && SeiRecovery( p+1, size_t(L-1) ) ) f |= VF_RP;
+    if( (ty==1 || ty==5) && first ) {            // first_mb_in_slice, slice_type
+      BitsMSB r; r.Load( p+1, size_t(L-1), 16 ); r.ue(); uint st = r.ue();
+      if( !r.err && (st%5==2 || st%5==4) ) f |= VF_I;
+      first = false;
+    }
+  }
+  return f;
+}

@@ -17,6 +17,9 @@
 //   - block timestamps       : model x*scale+offset, x = H.264 display index, Vorbis
 //                              sample position or frame index; only residuals are stored
 //   - ReferenceBlock         : predicted as ts(previous block) - ts(this)
+//   - SimpleBlock key flags  : from a key frame prediction (frame class; H.264 / HEVC: IDR
+//                              / IRAP NALs, recovery points, by NAL type: the parameter
+//                              sets are in CodecPrivate)
 //   - SimpleBlock or BlockGroup : the track's most common kind, or one kind for predicted
 //                              key frames and one for the others (muxers that write key
 //                              frames as BlockGroups among SimpleBlocks or the other way

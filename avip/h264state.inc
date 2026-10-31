@@ -92,17 +92,8 @@ struct H264State {                           // POC per picture (types 0/1/2; MM
     int ty = p[0]&31;
     if( ty==7 ) Sps_( p, n );
     else if( ty==8 ) Pps_( p, n );
-    else if( ty==6 ) {                       // SEI: recovery point?
-      BitsMSB r; r.Load( p+1, n-1, 256 );
-      while( !r.err && r.pos+16<=8*r.b.size() ) {
-        uint t = 0, s = 0, c;
-        do { c = r.u(8); t += c; } while( c==255 && !r.err );
-        do { c = r.u(8); s += c; } while( c==255 && !r.err );
-        if( r.err ) break;
-        if( t==6 ) { fl |= VF_RP; break; }
-        r.skip( size_t(s)*8 );
-      }
-    } else if( (ty==1 || ty==5) && !vcl ) {
+    else if( ty==6 ) { if( SeiRecovery( p+1, n-1 ) ) fl |= VF_RP; }
+    else if( (ty==1 || ty==5) && !vcl ) {
       long long q; bool in = false;
       if( Slice( p, n, q, in ) ) {
         vcl = true; poc = q;

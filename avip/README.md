@@ -106,6 +106,15 @@ in the stream; this is about the meta's size:
 | non-key frames as BlockGroups | 1,584 | 1,360 |
 | all BlockGroups | 1,525 | 1,360 |
 
+For H.264 and HEVC, the key prediction (also behind the SimpleBlock key flags) found no key frames
+in a Matroska file: it parsed slice headers, which needs the SPS/PPS, and Matroska keeps those in
+CodecPrivate rather than in the frames. It now also finds them by NAL type, which needs no
+parameter sets: H.264 IDR, HEVC IRAP, optionally recovery point SEIs (open GOP, intra refresh) and
+I slices. On ffmpeg/x264 and x265 test files of 20 seconds with 10 key frames, the meta shrinks
+by 25 to 45 bytes (SimpleBlocks only: closed GOP 932 -> 887, open GOP 967 -> 922, intra refresh
+963 -> 918, HEVC 3,295 -> 3,250); files that have their parameter sets in the frames keep the
+old prediction and the same meta.
+
 ### MP4: fragments
 
 In a fragmented MP4 the key frames are flagged in the `trun` boxes: the first sample's flags of a

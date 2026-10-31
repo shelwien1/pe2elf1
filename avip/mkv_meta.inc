@@ -133,8 +133,10 @@ struct Meta {
 };
 
 // key frame prediction for SimpleBlock flags (bit 0x80 is coded relative to it):
-// km 0 none, 1 every frame, 2 H.264 / 3 HEVC: IDR/IRAP from the length-prefixed NALs
-// (kp = NAL length size), 16+ck: frame class ck (kp = class parameter)
+// km 0 none, 1 every frame, 2 H.264 / 3 HEVC: IDR/IRAP from the length-prefixed NALs as
+// H264State / HevcState see them (they need parameter sets in the frames; kp = NAL length
+// size), 4 H.264 / 5 HEVC: by NAL type, no parameter sets needed (kp = NAL length size |
+// sync mask<<3, see NalFeat and SyncPred), 16+ck: frame class ck (kp = class parameter)
 static void KeyPred( int km, int kp, const byte* const* fp, const qword* fz, qword nf, std::vector<byte>& kf ) {
   kf.assign( size_t(nf), byte(km==1) );
   if( km==2 || km==3 ) {
@@ -151,7 +153,9 @@ static void KeyPred( int km, int kp, const byte* const* fp, const qword* fz, qwo
       }
       kf[size_t(k)] = (f0&VF_KEY)!=0;
     }
-  } else if( km>=16 )
+  } else if( km==4 || km==5 )
+    for( qword k=0; k<nf; k++ ) kf[size_t(k)] = SyncPred( NalFeat( km==5, kp&7, fp[k], fz[k] ), kp>>3 );
+  else if( km>=16 )
     for( qword k=0; k<nf; k++ ) kf[size_t(k)] = (FrameClass( km-16, fp[k], fz[k], uint(kp) )&FC_KEY)!=0;
 }
 
@@ -189,7 +193,8 @@ static bool ParseMeta( const Buf& m, Meta& M ) {
     t.kbias = UnZigZag( r.vint() ); t.seg = r.vint();
     if( t.dkind>2 || dk>63 ) return false;
     t.km = r.u8(); t.kp = t.km>=2 ? int(r.u8()) : 0;
-    if( (t.km>3 && t.km<16) || t.km>16+CK_VC1 || ((t.km==2 || t.km==3) && (t.kp<1 || t.kp>4)) ) return false;
+    if( (t.km>5 && t.km<16) || t.km>16+CK_VC1 || ((t.km==2 || t.km==3) && (t.kp<1 || t.kp>4)) ) return false;
+    if( (t.km==4 || t.km==5) && ((t.kp&7)<1 || (t.kp&7)>4 || ((t.kp>>3)&~14)) ) return false;
     if( (t.dkey || t.grel) && !t.km ) return false;
     t.tsmode = r.u8();
     if( t.tsmode==1 || t.tsmode==2 ) {

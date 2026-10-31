@@ -39,17 +39,8 @@ struct HevcState {                           // POC per picture (layer 0)
     if( layer ) return;
     if( ty==33 ) Sps_( p, n );
     else if( ty==34 ) Pps_( p, n );
-    else if( ty==39 ) {                      // prefix SEI: recovery point?
-      BitsMSB r; r.Load( p+2, n-2, 256 );
-      while( !r.err && r.pos+16<=8*r.b.size() ) {
-        uint t = 0, s = 0, c;
-        do { c = r.u(8); t += c; } while( c==255 && !r.err );
-        do { c = r.u(8); s += c; } while( c==255 && !r.err );
-        if( r.err ) break;
-        if( t==6 ) { fl |= VF_RP; break; }
-        r.skip( size_t(s)*8 );
-      }
-    } else if( ty<32 && !vcl ) {
+    else if( ty==39 ) { if( SeiRecovery( p+2, n-2 ) ) fl |= VF_RP; }   // prefix SEI
+    else if( ty<32 && !vcl ) {
       BitsMSB r; r.Load( p+2, n-2, 64 );
       if( !r.u(1) ) return;                  // not the first slice segment of a picture
       bool irap = ty>=16 && ty<=23, idr = ty==19 || ty==20;

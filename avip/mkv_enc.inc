@@ -299,10 +299,17 @@ static bool Encode1( const Buf& in, bool usexf, bool feat, Buf& meta, std::vecto
     if( !t.ok || t.blob || (!mixed && t.ksb.empty()) ) continue;
     std::vector<const byte*> fp( size_t(t.nsamp) ); std::vector<qword> fz( size_t(t.nsamp) );
     for( size_t k=0; k<t.nsamp; k++ ) fp[k] = t.FB(d)+t.FO()[k], fz[k] = t.Size(k);
-    int cand[4][2]; int nc = 0;
+    int cand[10][2]; int nc = 0;
+    static const int masks[5] = { 0, 2, 4, 8, 6 };   // NAL type models: + recovery points / I frames (SyncPred)
     cand[nc][0] = 1, cand[nc++][1] = 0;
-    if( t.codec=="V_MPEG4/ISO/AVC" && !t.enc && t.lensize ) cand[nc][0] = 2, cand[nc++][1] = t.lensize;
-    if( t.codec=="V_MPEGH/ISO/HEVC" && !t.enc && t.lensize ) cand[nc][0] = 3, cand[nc++][1] = t.lensize;
+    if( t.codec=="V_MPEG4/ISO/AVC" && !t.enc && t.lensize ) {
+      cand[nc][0] = 2, cand[nc++][1] = t.lensize;
+      for( int m=0; m<5; m++ ) cand[nc][0] = 4, cand[nc++][1] = t.lensize | masks[m]<<3;
+    }
+    if( t.codec=="V_MPEGH/ISO/HEVC" && !t.enc && t.lensize ) {
+      cand[nc][0] = 3, cand[nc++][1] = t.lensize;
+      for( int m=0; m<2; m++ ) cand[nc][0] = 5, cand[nc++][1] = t.lensize | masks[m]<<3;
+    }
     if( t.fck>0 ) cand[nc][0] = 16+t.fck, cand[nc++][1] = int(t.fckp);
     size_t best = 0;
     if( mixed ) best = KeyCost( t, std::vector<byte>() );
@@ -422,6 +429,10 @@ static bool Encode1( const Buf& in, bool usexf, bool feat, Buf& meta, std::vecto
         snprintf( l, sizeof(l), " laced=%llu/%llu", (unsigned long long)nr, (unsigned long long)t.breg.size() ), log += l;
       }
       snprintf( l, sizeof(l), " %s blocks=%d+%d+%d(sb+gb+raw)", t.tsinfo.c_str(), t.nsb, t.ngb, t.nlb ), log += l;
+      if( t.km ) {                                   // key prediction: model, sync mask of the NAL type models
+        snprintf( l, sizeof(l), " keys=%s", t.km==1 ? "all" : t.km==2 ? "h264" : t.km==3 ? "hevc" : t.km==4 ? "h264nal" : t.km==5 ? "hevcnal" : "class" ), log += l;
+        if( t.km==4 || t.km==5 ) snprintf( l, sizeof(l), "/%d", t.kp>>3 ), log += l;
+      }
       static const char* const kn[3] = { "sb", "gb", "raw" };
       if( t.dkey ) snprintf( l, sizeof(l), " kinds=%s,key:%s", kn[t.dkind], kn[t.dkey-1] ), log += l;
       if( t.grel ) log += " groups=keyrel";
