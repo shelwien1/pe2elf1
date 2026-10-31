@@ -77,7 +77,8 @@
 //   g++ -O3 -march=x86-64-v3 -ffp-contract=off -std=c++11 -ILib3 -pthread -o m4vpack m4vpack.cpp
 //   x86_64-w64-mingw32-g++ -O3 -s -static -std=c++11 -ILib3 -o m4vpack.exe m4vpack.cpp
 // (AVX2 or not, the files are the same.) C++11 without exceptions or RTTI; integer arithmetic
-// wherever it decides what is coded, so files are portable between platforms.
+// wherever it decides what is coded, so files are portable between platforms. -DMTWRAP_DBG builds
+// it with MTwrap_v3_dbg, which writes what the threads did to dbg.txt (MTwrap_v3_dbg/mtdbg.py).
 
 #ifndef _WIN32
 #define _FILE_OFFSET_BITS 64
@@ -115,7 +116,11 @@
 #include "base.inc"
 #include "mem.inc"
 #define MTWRAP_NOMEM() no_memory()  // (MTwrap's buffers)
+#ifdef MTWRAP_DBG  // MTwrap_v3_dbg instead: with statistics, written to dbg.txt as a run on threads quits
+#include "MTwrap_v3_dbg/MTwrap.inc"
+#else
 #include "MTwrap_v3/MTwrap.inc"
+#endif
 
 // the syntax and the streams
 #include "syntax.inc"

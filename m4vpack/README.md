@@ -335,6 +335,19 @@ x86_64-w64-mingw32-g++ -O3 -s -static -std=c++11 -ILib3 -o m4vpack.exe m4vpack.c
 `./mk.sh mod` (it needs perl) and is kept in the repository, so a plain build needs nothing but a
 C++11 compiler.
 
+`-DMTWRAP_DBG` (`CXXFLAGS="-O3 -DMTWRAP_DBG" ./mk.sh release`) builds with `MTwrap_v3_dbg/` instead
+of `MTwrap_v3/`: the same threads, with statistics. Each run on threads (`c -t`, `d` of its files;
+`c -t -v` makes both) writes what its main loop and each worker did, and when, to `dbg.txt` in the
+current directory (TSV, an event per row; `MTwrap_v3_dbg/mtdbg.inc` has the columns and the
+events), and
+
+```
+python3 MTwrap_v3_dbg/mtdbg.py dbg.txt
+```
+
+shows where the time went: each worker's coding and waits, what held the main loop, how many workers
+coded at once, each part, a timeline of the threads, the container's layout and dynbuff.
+
 The source is C++11 that builds without exceptions or RTTI and has no dependencies besides the C
 library. It is classes with their methods defined in their bodies (the records read and write
 themselves, the motion state and the decoder step through a VOP, the model codes the records, a call
