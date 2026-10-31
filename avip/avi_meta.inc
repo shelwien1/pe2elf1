@@ -5,7 +5,9 @@
 // (codec headers from strf prepended when the stream lacks them); MPEG audio, AC-3,
 // DTS, ADTS are elementary streams already; raw AAC -> ADTS; PCM/ADPCM/G.711/... ->
 // .wav (WAV header from strf prepended). Regenerated on restore:
-//   - chunk headers (id, size) and pad bytes of stream chunks
+//   - chunk headers (id, size) and pad bytes of stream chunks; a stream with chunks of
+//     two ids ('dc' and 'db': some files have the key frames as '00db'): the id from a
+//     map over the frame class + exceptions
 //   - chunk sizes            : from self-delimiting data (H.264 access units, MPEG-4
 //                              VOPs, JPEG images, MPEG-1/2 pictures, MPEG audio, AC-3,
 //                              ADTS, raw AAC syntax) or from the ADTS transform;
@@ -37,6 +39,9 @@ namespace avi {
 //               empty<<2) follow, else the default (0x10 for key classes, 0 otherwise);
 //               exception index column, column of the exception values
 //               16 ix## map: u8 non-key bit per frame class, exception index column (bit flipped)
+//               32 second chunk id (chunks of either id are the track's frames): u8 its type
+//               (as in ck, 1..5; the stream number is the first id's), u8 bit per frame class:
+//               the class's chunks have the second id, exception index column (id flipped)
 //
 // ops: 0x00..0x3F  chunk of track #code: id, size, data, pad byte regenerated
 //      0xF0 n      copy n bytes from struct
@@ -69,6 +74,14 @@ enum { OP_RAW=0xF0, OP_CHUNK=0xF1, OP_ZERO=0xF2, OP_LIST=0xF3, OP_LEND=0xF4, OP_
        OP_IDX1=0xF6, OP_IX=0xF7, OP_INDX=0xF8, OP_REP=0xF9, OP_RLIST=0xFA, OP_FLD=0xFB, OP_END=0xFF };
 static const char* const ck_types[] = { "", "dc", "db", "wb", "pc", "tx" };
 
+// type of a chunk id: its last two characters as an index into ck_types (0: none of them)
+static uint CkType( uint id ) {
+  for( uint q=1; q<=5; q++ ) if( ((id>>16)&255)==byte(ck_types[q][0]) && (id>>24)==byte(ck_types[q][1]) ) return q;
+  return 0;
+}
+// id of type ty (1..5) with the stream number (first two characters) of id
+static uint CkWithType( uint id, uint ty ) { return (id&0xFFFF) | uint(byte(ck_types[ty][0]))<<16 | uint(byte(ck_types[ty][1]))<<24; }
+
 //--- decoder -----------------------------------------------------------------
 
 struct IxRec { qword pos, total, n, bytes; };
@@ -80,8 +93,9 @@ struct DTrack {
   bool grp; qword scale, rate, ssize, start; long long bias;
   bool himap; qword imap[8]; std::vector<qword> iexc, ival;
   bool hxmap; int xmap; std::vector<qword> xexc;
+  bool hamap; uint ckid2; int amap; std::vector<qword> aexc;
   // derived
-  std::vector<uint> sz, xsz; std::vector<qword> fo; std::vector<byte> cls;
+  std::vector<uint> sz, xsz; std::vector<qword> fo; std::vector<byte> cls, alt;   // alt: chunk id ckid2
   std::vector<qword> cpos; std::vector<long long> cmovi; std::vector<IxRec> ix;
 };
 
@@ -111,11 +125,11 @@ static bool ParseMeta( const Buf& m, Meta& M ) {
     else {
       if( ck&8 ) sn = r.u8();
       if( sn>99 ) return false;
-      t.ckid = uint('0'+sn/10) | uint('0'+sn%10)<<8 | uint(byte(ck_types[ty][0]))<<16 | uint(byte(ck_types[ty][1]))<<24;
+      t.ckid = CkWithType( uint('0'+sn/10) | uint('0'+sn%10)<<8, ty );
     }
     if( t.ckind==CK_VC1 ) t.ckparam = r.u8();
     uint fl = r.u8();
-    if( r.err || fl>31 ) return false;
+    if( r.err || fl>63 ) return false;
     t.padv = 0; t.pexc.clear(); t.pval.clear();
     if( fl&1 ) {
       t.padv = int(r.u8());
@@ -135,6 +149,12 @@ static bool ParseMeta( const Buf& m, Meta& M ) {
     }
     t.hxmap = (fl&16)!=0; t.xmap = 0;
     if( t.hxmap ) { t.xmap = r.u8(); if( !GetIdxCol( r, t.xexc, t.nf ) ) return false; }
+    t.hamap = (fl&32)!=0; t.ckid2 = t.ckid; t.amap = 0;
+    if( t.hamap ) {
+      uint ty2 = r.u8(); if( ty2<1 || ty2>5 ) return false;
+      t.ckid2 = CkWithType( t.ckid, ty2 ); t.amap = r.u8();
+      if( !GetIdxCol( r, t.aexc, t.nf ) ) return false;
+    }
     if( r.err ) return false;
   }
   M.ops.clear();

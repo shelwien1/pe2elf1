@@ -14,10 +14,11 @@ static bool Encode1( const Buf& in, bool usexf, bool regen, Buf& meta, std::vect
     t.fcc = t.ok ? LE32(d+r.strh) : 0; t.handler = t.ok ? LE32(d+r.strh+4) : 0;
     t.scale = t.ok ? LE32(d+r.strh+20) : 0; t.rate = t.ok ? LE32(d+r.strh+24) : 0;
     t.start = t.ok ? LE32(d+r.strh+28) : 0; t.ssize = t.ok ? LE32(d+r.strh+44) : 0;
-    t.strf = d+r.strf; t.strfl = r.strfl; t.ckid = 0; t.bytes = 0;
-    t.grp = false; t.bias = 0; t.himap = t.hxmap = false; t.xmap = 0; t.padv = 0;
+    t.strf = d+r.strf; t.strfl = r.strfl; t.ckid = t.ckid2 = 0; t.bytes = 0;
+    t.grp = false; t.bias = 0; t.himap = t.hxmap = false; t.xmap = t.amap = 0; t.padv = 0;
   }
-  // chunk ids: the most common id per stream number
+  // chunk ids: the most common id per stream number; with 'dc' or 'db', chunks of the other
+  // of the two are frames too (some files have the key frames as '00db' among '00dc' ones)
   {
     std::vector<std::map<uint,qword> > cnt( T.size() );
     for( size_t k=0; k<P.mch.size(); k++ ) {
@@ -30,6 +31,8 @@ static bool Encode1( const Buf& in, bool usexf, bool regen, Buf& meta, std::vect
       qword bc = 0;
       for( std::map<uint,qword>::iterator it=cnt[i].begin(); it!=cnt[i].end(); ++it ) if( it->second>bc ) bc = it->second, T[i].ckid = it->first;
       if( !bc ) T[i].ok = false;
+      uint ty = CkType( T[i].ckid ), id2 = ty==1 || ty==2 ? CkWithType( T[i].ckid, 3-ty ) : 0;
+      if( id2 && cnt[i].count( id2 ) ) T[i].ckid2 = id2;
     }
   }
   for( size_t k=0; k<P.mch.size(); k++ ) {
@@ -37,10 +40,10 @@ static bool Encode1( const Buf& in, bool usexf, bool regen, Buf& meta, std::vect
     int c0 = int(c.id&255)-'0', c1 = int((c.id>>8)&255)-'0';
     if( c0<0 || c0>9 || c1<0 || c1>9 || !c.padok ) continue;
     size_t sn = size_t(c0*10+c1);
-    if( sn>=T.size() || !T[sn].ok || T[sn].ckid!=c.id || c.size>0x7FFFFFFFu ) continue;
+    if( sn>=T.size() || !T[sn].ok || !T[sn].Has( c.id ) || c.size>0x7FFFFFFFu ) continue;
     Track& t = T[sn];
     c.trk = int(sn); c.idx = t.fsz.size();
-    t.foff.push_back( c.pos+8 ); t.fsz.push_back( uint(c.size) ); t.cidx.push_back( k );
+    t.foff.push_back( c.pos+8 ); t.fsz.push_back( uint(c.size) ); t.cidx.push_back( k ); t.alt.push_back( c.id==t.ckid2 );
     t.fpad.push_back( (c.size&1) ? d[c.pos+8+c.size] : -1 ); t.bytes += c.size;
   }
   for( size_t i=0; i<T.size(); i++ ) {
@@ -51,6 +54,12 @@ static bool Encode1( const Buf& in, bool usexf, bool regen, Buf& meta, std::vect
     if( !usexf ) t.xform = XF_NONE, t.xhdr.clear();
     t.cls.resize( t.fsz.size() );
     for( size_t k=0; k<t.fsz.size(); k++ ) t.cls[k] = byte( FrameClass( t.ckind, d+t.foff[k], t.fsz[k], t.ckparam ) );
+    if( t.ckid2 ) {                                              // second id: per frame class, the id of most of its chunks
+      qword h[8][2] = {};
+      for( size_t k=0; k<t.fsz.size(); k++ ) h[t.cls[k]][t.alt[k]]++;
+      for( int c=0; c<8; c++ ) if( h[c][1]>h[c][0] ) t.amap |= 1<<c;
+      for( size_t k=0; k<t.fsz.size(); k++ ) if( t.alt[k]!=((t.amap>>t.cls[k])&1) ) t.aexc.push_back( k );
+    }
     // pad bytes
     qword h[256] = {0};
     for( size_t k=0; k<t.fpad.size(); k++ ) if( t.fpad[k]>=0 ) h[t.fpad[k]]++;
@@ -193,7 +202,7 @@ static bool Encode1( const Buf& in, bool usexf, bool regen, Buf& meta, std::vect
       qword n = LE32(h+4); uint cid = LE32(h+8); qword base = LE64(h+12);
       if( 24+8*n>x.size ) continue;
       size_t ti = T.size();
-      for( size_t i=0; i<T.size(); i++ ) if( T[i].ok && T[i].ckid==cid ) ti = i;
+      for( size_t i=0; i<T.size(); i++ ) if( T[i].ok && T[i].Has( cid ) ) ti = i;
       if( ti==T.size() ) continue;
       Track& t = T[ti]; qword nf = t.fsz.size();
       qword first = ixcur[ti];
@@ -241,7 +250,7 @@ static bool Encode1( const Buf& in, bool usexf, bool regen, Buf& meta, std::vect
       Track& t = T[i]; qword p = P.strl[i].indx;
       if( !t.ok || !p ) continue;
       qword size = LE32(d+p+4); const byte* h = d+p+8;
-      if( size<24 || LE16(h)!=4 || h[2]!=0 || h[3]!=0 || LE32(h+8)!=t.ckid ) continue;
+      if( size<24 || LE16(h)!=4 || h[2]!=0 || h[3]!=0 || !t.Has( LE32(h+8) ) ) continue;
       qword n = LE32(h+4);
       if( 24+16*n>size || n>ixl[i].size() ) continue;
       bool ok = true;
@@ -462,14 +471,14 @@ static bool Encode1( const Buf& in, bool usexf, bool regen, Buf& meta, std::vect
     PutHead( w, t.h );
     // chunk id
     size_t ti = size_t(tm[i]);
-    uint sn = uint( ((t.ckid&255)-'0')*10 + (((t.ckid>>8)&255)-'0') ), ty = 0;
-    for( uint q=1; q<=5; q++ ) if( ((t.ckid>>16)&255)==byte(ck_types[q][0]) && (t.ckid>>24)==byte(ck_types[q][1]) ) ty = q;
+    uint sn = uint( ((t.ckid&255)-'0')*10 + (((t.ckid>>8)&255)-'0') ), ty = CkType( t.ckid );
     if( ty ) w.u8( ty | (sn!=ti ? 8 : 0) | uint(t.ckind)<<4 ), sn!=ti ? w.u8( sn ) : (void)0;
     else { w.u8( uint(t.ckind)<<4 ); byte ck[4]; PutLE32( ck, t.ckid ); w.bytes( ck, 4 ); }
     if( t.ckind==CK_VC1 ) w.u8( t.ckparam );
     bool defmap = true;
     for( int c=0; c<8; c++ ) if( t.imap[c]!=qword(c&FC_KEY ? 0x10 : 0) ) defmap = false;
-    uint fl = (t.padv || t.pexc.size() ? 1 : 0) | (t.grp ? 2 : 0) | (t.himap ? 4 : 0) | (t.himap && !defmap ? 8 : 0) | (t.hxmap ? 16 : 0);
+    uint fl = (t.padv || t.pexc.size() ? 1 : 0) | (t.grp ? 2 : 0) | (t.himap ? 4 : 0) | (t.himap && !defmap ? 8 : 0) | (t.hxmap ? 16 : 0) |
+              (t.ckid2 ? 32 : 0);
     w.u8( fl );
     if( fl&1 ) { w.u8( t.padv ); PutIdxCol( w, t.pexc ); for( size_t k=0; k<t.pval.size(); k++ ) w.u8( uint(t.pval[k]) ); }
     if( t.grp ) w.vint( t.scale ), w.vint( t.rate ), w.vint( t.ssize ), w.vint( t.start ), w.vint( ZigZag( t.bias ) );
@@ -478,14 +487,15 @@ static bool Encode1( const Buf& in, bool usexf, bool regen, Buf& meta, std::vect
       PutIdxCol( w, t.iexc ); PutCol( w, t.ival );
     }
     if( t.hxmap ) w.u8( uint(t.xmap) ), PutIdxCol( w, t.xexc );
+    if( t.ckid2 ) w.u8( CkType( t.ckid2 ) ), w.u8( uint(t.amap) ), PutIdxCol( w, t.aexc );
     if( verbose ) {
       char l[300];
-      snprintf( l, sizeof(l), "stream %d: %-4s %-4s %8llu chunks %11llu bytes  sizes=%s%s pad=%02x/%llu idx1=%s/%llu ix=%s/%llu -> %s\n",
+      snprintf( l, sizeof(l), "stream %d: %-4s %-4s %8llu chunks %11llu bytes  sizes=%s%s pad=%02x/%llu idx1=%s/%llu ix=%s/%llu id2=%s/%llu -> %s\n",
         t.idx, FccStr(t.fcc).c_str(), t.fcc==FCC_LE('v','i','d','s') ? FccStr(LE32(t.strf+16)).c_str() : t.ext.c_str(),
         (unsigned long long)t.fsz.size(), (unsigned long long)t.bytes,
         t.h.szmode==SZ_XFORM ? "adts" : t.h.szmode==SZ_UNITS ? ptname[t.h.ptype] : "explicit", t.h.szmode==SZ_UNITS ? (std::string(" esc=")+std::to_string(t.h.esc.size())).c_str() : "",
         t.padv, (unsigned long long)t.pexc.size(), t.himap ? "map" : "-", (unsigned long long)t.iexc.size(),
-        t.hxmap ? "map" : "-", (unsigned long long)t.xexc.size(), suf.c_str() );
+        t.hxmap ? "map" : "-", (unsigned long long)t.xexc.size(), t.ckid2 ? FccStr(t.ckid2).c_str() : "-", (unsigned long long)t.aexc.size(), suf.c_str() );
       log += l;
     }
   }

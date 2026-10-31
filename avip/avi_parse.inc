@@ -4,18 +4,20 @@ namespace avi {
 //--- encoder -----------------------------------------------------------------
 
 struct Track {
-  int idx; bool ok; uint ckid;
+  int idx; bool ok; uint ckid, ckid2;                  // ckid2: chunks of this id are frames too (0: none)
   uint fcc, handler; qword scale, rate, start, ssize;   // strh
   const byte* strf; qword strfl;
   std::string ext, xext; int ckind; uint ckparam; int cptype, cpparam, xform; Buf xhdr; byte adts[7];
-  std::vector<qword> foff; std::vector<uint> fsz; std::vector<int> fpad; std::vector<byte> cls;
+  std::vector<qword> foff; std::vector<uint> fsz; std::vector<int> fpad; std::vector<byte> cls, alt;   // alt: id ckid2
   std::vector<qword> cidx;                              // movi chunk index per frame
   TrackHead h;                                          // head written to the meta
   int padv; std::vector<qword> pexc, pval;
   bool grp; long long bias;
   bool himap; qword imap[8]; std::vector<qword> iexc, ival;
   bool hxmap; int xmap; std::vector<qword> xexc;
+  int amap; std::vector<qword> aexc;
   qword bytes;
+  bool Has( uint id ) const { return id==ckid || (ckid2 && id==ckid2); }   // chunks of id are frames
 };
 
 

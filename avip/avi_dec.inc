@@ -12,8 +12,13 @@ static bool Restore( Meta& M, const std::vector<const Buf*>& S, Sink& out, const
     for( size_t k=0; k<t.nf; k++ ) t.fo[k+1] = t.fo[k]+t.sz[k];
     if( t.fo[size_t(t.nf)]!=s.size() ) FAIL("stream size mismatch");
     t.cls.assign( size_t(t.nf), 0 );
-    if( t.himap || t.hxmap )
+    if( t.himap || t.hxmap || t.hamap )
       for( size_t k=0; k<t.nf; k++ ) t.cls[k] = byte( FrameClass( t.ckind, s.data()+t.fo[k], t.sz[k], t.ckparam ) );
+    t.alt.assign( size_t(t.nf), 0 );
+    if( t.hamap ) {
+      ExcCur a; a.Reset( &t.aexc );
+      for( size_t k=0; k<t.nf; k++ ) t.alt[k] = byte( ((t.amap>>t.cls[k])&1) ^ (a.At( k ) ? 1 : 0) );
+    }
     t.cpos.assign( size_t(t.nf), 0 ); t.cmovi.assign( size_t(t.nf), -1 ); t.ix.clear();
   }
   std::vector<qword> next( nt ), ixcur( nt ), key( nt ), lsize, lpos, mpos;
@@ -57,7 +62,7 @@ static bool Restore( Meta& M, const std::vector<const Buf*>& S, Sink& out, const
     auto chunk = [&]( size_t ti ) -> bool {
       DTrack& t = M.trk[ti]; qword k = next[ti];
       if( k>=t.nf ) FAIL("chunk overrun");
-      byte h[8]; PutLE32( h, t.ckid ); PutLE32( h+4, t.sz[size_t(k)] );
+      byte h[8]; PutLE32( h, t.alt[size_t(k)] ? t.ckid2 : t.ckid ); PutLE32( h+4, t.sz[size_t(k)] );
       if( !pass ) {
         t.cpos[size_t(k)] = pos; t.cmovi[size_t(k)] = curmovi;
         if( curmovi>=0 ) mch[size_t(curmovi)].push_back( std::make_pair( ti, k ) );
@@ -168,7 +173,7 @@ static bool Restore( Meta& M, const std::vector<const Buf*>& S, Sink& out, const
           if( !t.himap ) FAIL("no idx1 map");
           qword fl = t.imap[t.cls[size_t(k)]];
           if( ic[ch[j].first].At( k ) ) fl = t.ival[ic[ch[j].first].i];
-          byte e[16]; PutLE32( e, t.ckid ); PutLE32( e+4, uint(fl) ); PutLE32( e+8, uint(t.cpos[size_t(k)]-base) ); PutLE32( e+12, t.sz[size_t(k)] );
+          byte e[16]; PutLE32( e, t.alt[size_t(k)] ? t.ckid2 : t.ckid ); PutLE32( e+4, uint(fl) ); PutLE32( e+8, uint(t.cpos[size_t(k)]-base) ); PutLE32( e+12, t.sz[size_t(k)] );
           emit( e, 16 );
         }
       } else if( d.code==OP_IX ) {
