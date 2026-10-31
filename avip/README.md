@@ -70,5 +70,10 @@ m4vpack could parse none of its VOPs. touka19.avi (156,679,746 bytes, DX50 video
 | before | 6,682,688 | 115,482,649: P-VOPs only, no VOL | 111,221,889 (96.31%: all VOPs kept as bytes) |
 | after | 47,238 | 120,932,559: 384 I-VOPs, 33,657 P-VOPs | 96,021,170 (79.40%) |
 
-With the chunks of both ids in one track, the idx1 entries, the OpenDML `ix##`/`indx` entries and
-the chunk order are regenerated again too (before, those of such streams were left in the struct).
+At m4vpack's default level, `-9`, the new `.m4v` compresses to 87,672,614 bytes (72.50%). Most of
+what is left in the meta is the size column of the MP3 chunks: they are cut at arbitrary points of
+the MP3 stream, not at frame boundaries, so their sizes can't be derived from the data.
+
+With the chunks of both ids in one track, the idx1 entries and the OpenDML `ix##`/`indx` entries
+of such a stream are regenerated again (before, they stayed in the struct), and the chunk order is
+predicted again: 67,918 of touka19.avi's 68,082 chunks (before, 34,386 of 67,698).
