@@ -1,9 +1,11 @@
 // m4vpart.inc -- mt.inc's M4vPart: a worker of c -t and of d.
 
 // MTwrap's Enc_class: a worker, coding the parts it is dealt one after the other, each by a model
-// of its own (M4vCoro, a coroutine of the worker's, on the part in memory). Plain data, never
-// constructed (MTwrap maps its workers): Init() sets it up, do_process() frees what it took as it
-// ends. What a part's run fails with is the worker's error (its note).
+// of its own (M4vCoro, a coroutine of the worker's): c on the part in memory, its output written as
+// it comes; d on the worker's input as it comes, its output in memory until the part is done (the
+// parts go out in turn). Plain data, never constructed (MTwrap maps its workers): Init() sets it
+// up, do_process() frees what it took as it ends. What a part's run fails with is the worker's
+// error (its note).
 template <int f_DEC>
 struct M4vPart : CoIo<Coroutine> {
   MtArgs args;
