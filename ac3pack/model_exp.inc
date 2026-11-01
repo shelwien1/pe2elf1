@@ -52,6 +52,8 @@ struct ModelExp : ModelHdr<f_DEC, LV> {
     }
     D.d1 = e_d1;
     D.d2 = e_d2;
+    D.dz = imin((r.endmant[ch] - bin + gsz - 1) / gsz, 31);
+    D.nr = f.eac3 || blk == f.nblk - 1 ? reuse_after(f, blk, ch) : 6;
     D.bin = band_of(bin);
     D.ex = imin(ex, 31);
     D.bs = blksw_of(f, blk, ch);
@@ -59,9 +61,11 @@ struct ModelExp : ModelHdr<f_DEC, LV> {
     D.gi = e_gi;
     D.bk = blk;
     B::sel(f_exp, D);
+    // (an exponent stays in 0..24, or the frame doesn't parse: the deltas it would leave are none)
+    const int down = ex >= 1, up = ex <= 23;
     if (f_exp.bit(EXN_ZERO, ENC && v == 2)) v = 2;
-    else if (f_exp.bit(EXN_DOWN, ENC && v < 2)) v = f_exp.bit(EXN_DOWN2, ENC && v == 0) ? 0 : 1;
-    else v = f_exp.bit(EXN_UP2, ENC && v == 4) ? 4 : 3;
+    else if (up && (!down || !f_exp.bit(EXN_DOWN, ENC && v < 2))) v = ex <= 22 && f_exp.bit(EXN_UP2, ENC && v == 4) ? 4 : 3;
+    else v = ex >= 2 && f_exp.bit(EXN_DOWN2, ENC && v == 0) ? 0 : 1;
     e_ht = ((e_ht << 1) | (D.pd != 9 && clip(D.pd - 4, -2, 2) == v - 2)) & 7;
     e_d2 = e_d1;
     e_d1 = v;

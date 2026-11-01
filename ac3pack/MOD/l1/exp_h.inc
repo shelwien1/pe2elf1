@@ -17,6 +17,7 @@ static const byte A1_exp_d_po[9+1]={ 0,0,1,2,3,4,4,4,5,5 };
 
 
 static const byte A1_exp_m_cc[3+1]={ 0,1,2,3 };
+static const byte A1_exp_m_nr[6+1]={ 0,1,2,3,4,5,6 };
 
 
 
@@ -52,11 +53,11 @@ static const long long A1_exp_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 10), 7), 4);
 static const long long A1_exp_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 10), 6), 6); // 360
 static const long long A1_exp_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, 8), 10), 6); // 480
 static const long long A1_exp_g_Volume = 1; // 1
-static const long long A1_exp_m_Volume = tc_vmul(tc_vmul(1, 1), 4); // 4
+static const long long A1_exp_m_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 4), 7); // 28
 static const long long A1_exp_n_Volume = 1; // 1
 static const long long A1_exp_t_Volume = 1; // 1
 
-#define A1_exp_USES(X) X(pd) X(d1) X(es) X(po) X(pl) X(ht) X(cc)
+#define A1_exp_USES(X) X(pd) X(d1) X(es) X(po) X(pl) X(ht) X(cc) X(nr)
 
 struct A1_exp_T {
   cm_cnt2s A1_exp_A[tc_rows(A1_exp_a_Volume, A1_exp_hA) * M_exp_ND];

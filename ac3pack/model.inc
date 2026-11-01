@@ -214,6 +214,7 @@ struct Model : ModelMant<f_DEC, LV> {
         break;
       case K_E:
         B::exp_open(arg, fr->expstr[w->cur_blk][arg]);
+        B::tile_open(arg, fr->expstr[w->cur_blk][arg]);
         break;
       case K_M:
         B::mant_open();
@@ -234,6 +235,8 @@ struct Model : ModelMant<f_DEC, LV> {
   void block(const Frame& f, const Run& r, int b) {
     Hist& H = hist[h];
     B::sid_commit();
+    B::tile_block(f, r, b);
+    if (b == 0) B::aht_commit(f, r);
     for (int ch = 0; ch <= f.nch; ch++) {
       if (ch == CPL && !r.cplinu) {
         H.has[ch] = 0;

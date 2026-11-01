@@ -13,34 +13,49 @@ Const 0
 Index a
  a_bap: bap, 1!111111111111111
  a_gr: gr, 1!111
+ a_tx: tx, 1!1111
+ a_tb: tb, 1!11
+ a_tc: tc, 1!111
+ a_tr: tr, 1!1111111
 
 Index b
  b_bap: bap, 1!000000111000000
  b_e1: e1, 1!11111111111111111111111
+ b_ts: ts, 1!11
+ b_et: et, 1!11111111111111111111111
+ b_tq: tq, 1!1111
 
 Index c
  c_bap: bap, 1!111111111111111
  c_ep: ep, 1!11111111111111111111111
+ c_sp: sp, 1!11
 
 Index d
  d_bap: bap, 1!111111111111111
  d_e1: e1, 1!1101010101010101
  d_e2: e2, 1!1101010101010101
+ d_s1: s1, 1!11
+ d_s2: s2, 1!11
 
 Index e
  e_bap: bap, 1!111111111111111
  e_eo: eo, 1!11111111111111111111111
+ e_so: so, 1!11
+ e_rm: rm, 1!11
 
 Index h
  h_bap: bap, 1!111111111111111
  h_sm: sm, 1!11111111111111111111111
  h_m1: m1, 1!11111111111111111
+ h_ts: ts, 1!11
+ h_sp: sp, 1!11
 
 Index i
  i_bap: bap, 1!111111111111111
  i_dx: dx, 1!111111111
  i_dn: dn, 1!111111111
  i_gs: gs, 1!111
+ i_tb: tb, 1!11
 
 Index j
  j_bap: bap, 1!010000101000111
@@ -53,6 +68,10 @@ Index k
  k_e1: e1, 1!1101010101010101
  k_ew: ew, 1!1101010101010101
  k_ow: ow, 1!1101010101010101
+ k_s1: s1, 1!11
+ k_sp: sp, 1!11
+ k_so: so, 1!11
+ k_rm: rm, 1!11
 
 Index l
  l_bap: bap, 1!111111111111111
@@ -60,9 +79,15 @@ Index l
  l_bs: bs, 1!1
  l_gr: gr, 1!111
  l_gs: gs, 1!111
+ l_s1: s1, 1!11
+ l_s2: s2, 1!11
 
 Index m
  m_bap: bap, 1!111111111111111
+ m_tx: tx, 1!1111
+ m_tb: tb, 1!11
+ m_tr: tr, 1!1111111
+ m_ts: ts, 1!11
 
 Index t
  t_bap: bap, 1!111111111111111
@@ -76,6 +101,8 @@ Index g
  g_s1: s1, 1!11
  g_sp: sp, 1!11
  g_so: so, 1!11
+ g_ts: ts, 1!11
+ g_tq: tq, 1!1111
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
 
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)

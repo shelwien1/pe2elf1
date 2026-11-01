@@ -34,7 +34,7 @@ constexpr int MAG_SMALL = 8;   // mag: the nodes of bap 1-5's magnitudes, "above
 constexpr int LEN_NODES = 32;  // a length's tree: its nodes by the bits so far (1-31)
 constexpr int LEN_TOP = 2;     // and the bits below the top one that follow it, by the length and the bits before them
 constexpr int LEN_TOPN = ((1 << LEN_TOP) - 1) * 17;  // (lengths 0-16)
-enum { MN_U = 0, MN_LEN = MN_U + MAG_SMALL, MN_N = MN_LEN + LEN_NODES + LEN_TOPN };
+enum { MN_U = 0, MN_LEN = MN_U + MAG_SMALL, MN_SIGN = MN_LEN + LEN_NODES + LEN_TOPN, MN_N };
 constexpr int AHT_VQTREE = 4;  // aht: a vector index's top bits, coded as a tree
 enum { AN_GAIN, AN_G3A, AN_G3B, AN_VQ, AN_VQPOS = AN_VQ + (1 << AHT_VQTREE), AN_LEN = AN_VQPOS + 16,
        AN_N = AN_LEN + LEN_NODES + LEN_TOPN };
@@ -77,7 +77,8 @@ constexpr int M_aht_ND = AN_N, M_aht_MND = TC_MNODE, M_aht_NG = AG_N;
 //      the deltas before (0-4, 5 none), bin the delta's first bin, ex the exponent before the
 //      delta (0-24), bs the block switch flag, ht whether the last three deltas were pd's (a bit
 //      each), gi the delta's place in its group (0-2), bk the block, pl the last block's delta there
-//      (0-4, 5 none)
+//      (0-4, 5 none), dz how many deltas to the channel's last mantissa (to 31), nr how many blocks
+//      after it reuse the exponents (0-5, where known: E-AC-3's, the last block; else 6)
 // mag: bap the bin's (1-15), gr where it is in its group (0 the first of bap 1, 2, 4, 1 another,
 //      2 bap 3 and 5, 3 bap 6-15), ex the bin's exponent, dx the bin's exponent less the one before
 //      (4 + it, -4..4; 9 none), dn the next bin's less the bin's (the same), gs the exponents'
@@ -87,8 +88,20 @@ constexpr int M_aht_ND = AN_N, M_aht_MND = TC_MNODE, M_aht_NG = AG_N;
 //      last block's bins around the bin (the one before, it, the one after), ow that of the
 //      partner's, m1 the last
 //      magnitude (to 15, 16 the bin before has no mantissa, 17 none), nz how many of the four
-//      mantissas before are not 0; for the signs (the g index), s1 the sign of the bin before, sp
-//      the last block's at the bin, so the partner's (0 none or 0, 1 +, 2 -)
+//      mantissas before are not 0; the bin's tile (model_mant.inc: its exponent group over the
+//      blocks that reuse its exponents, whose largest coefficient its exponent makes big, |m| >=
+//      1/2): tx its exponent (0 capped: 24, or 15 at the first bin of a full bandwidth channel; 1
+//      +2 above the group before's and 2 above the next's, 2 only the first, 3 only the second,
+//      4 neither), tb whether a mantissa of the tile was big (2), else whether one of its bins had
+//      none (1), tc how many of its mantissas came before (to 3), tr how many come after it (0-3,
+//      3 or more), where the blocks after it that reuse the exponents are known (E-AC-3's, the
+//      last block), else 4 + how many come after it in the block (to 3); the tonal predictor's
+//      (model_mant.inc: a bin's coefficients over the blocks as a steady tone makes them, a sampled
+//      sinusoid): et its estimate (as e1's), tq how near it came lately (0 none, 1-4: its error to
+//      the coefficients, under 1/4, 1/2, 1, more); rm the bin's rematrixing band (2/0: 1 there, 2
+//      rematrixed; 0 none); for the signs (the g index), s1 the sign of the
+//      bin before, sp the last block's at the bin, so the partner's, ts the predictor's (0 none or
+//      0, 1 +, 2 -), s2 that of the bin before it
 // aht: kd what (0 a vector index, 1 a gain of modes 1-2, 2 one of mode 3, 3 a gain adaptive
 //      mantissa, 4 an escape's large mantissa), hb the hebap (0-19), lg the gain (log2, 0-2), gm
 //      gaqmod, bk the block of a mantissa (0-5), pm the magnitude of the bin's mantissa in the
@@ -97,15 +110,16 @@ constexpr int M_aht_ND = AN_N, M_aht_MND = TC_MNODE, M_aht_NG = AG_N;
 //      exponent, bin; the estimates (as mag's, of the mantissas' step, 2^(1 - bits), and the
 //      exponent): q1, q2 those of the block's mantissas of the two bins before with gain adaptive
 //      mantissas, q0 that of the bin's mantissa in block 0 (0 none: block 0), qa the mean of the
-//      bin's blocks before
+//      bin's blocks before; pf the estimate the last frame's mantissa at the bin and block gives
+//      (the substream's, where it had gain adaptive mantissas there; 0 none)
 #define M_hdr_VARS(X) X(fld) X(lv) X(l2) X(pos) X(st) X(nch) X(sk)
 #define M_sid_VARS(X) X(fld) X(lv) X(pos) X(st) X(nch) X(sk) X(blk) X(pq) X(pr) X(lb)
 #define M_raw_VARS(X) X(c1) X(c2) X(code) X(at) X(cl) X(sk)
-#define M_exp_VARS(X) X(es) X(cc) X(pd) X(po) X(d1) X(d2) X(bin) X(ex) X(bs) X(ht) X(gi) X(bk) X(pl)
+#define M_exp_VARS(X) X(es) X(cc) X(pd) X(po) X(d1) X(d2) X(bin) X(ex) X(bs) X(ht) X(gi) X(bk) X(pl) X(dz) X(nr)
 #define M_mag_VARS(X)                                                                                   \
   X(bap) X(gr) X(ex) X(dx) X(dn) X(gs) X(bs) X(cc) X(bin) X(e1) X(e2) X(ep) X(eo) X(sm) X(ew) X(ow) X(m1) \
-  X(nz) X(s1) X(sp) X(so)
-#define M_aht_VARS(X) X(kd) X(hb) X(lg) X(gm) X(bk) X(pm) X(pb) X(pg) X(ex) X(bin) X(q1) X(q2) X(q0) X(qa)
+  X(nz) X(tx) X(tb) X(tc) X(tr) X(et) X(tq) X(rm) X(s1) X(s2) X(sp) X(so) X(ts)
+#define M_aht_VARS(X) X(kd) X(hb) X(lg) X(gm) X(bk) X(pm) X(pb) X(pg) X(ex) X(bin) X(q1) X(q2) X(q0) X(qa) X(pf)
 
 // the variables as the model gives them to a family
 #define M_FIELD(f) int f;

@@ -129,7 +129,9 @@ allocation and mantissas.
 - **exp: the exponents** (`model_exp.inc`). Each delta (-2..2) as a tree of up to three
   decisions, by the last block's exponent at its bins (the least of them, against the exponent
   before the delta), the partner channel's in the block (the first full bandwidth channel, or a
-  right surround's left), the deltas before, the strategy, the channel, the bin.
+  right surround's left), the deltas before, the strategy, the channel, the bin, how many deltas
+  are left to the channel's last mantissa (encoders' low-pass lifts the last ones), and how many
+  blocks after this one reuse the exponents (E-AC-3 sends every block's strategy first).
 - **mag: the mantissas** (`model_mant.inc`). A mantissa is a level of its quantiser (`q` in
   ac3tsv's text): bap 1-5 are the symmetric quantisers of 3, 5, 7, 11 and 15 levels, coded as their
   magnitude ("above 0? above 1? ..."), bap 6-15 two's complement of 5-16 bits, coded as the
@@ -138,12 +140,23 @@ allocation and mantissas.
   each rescaled to this bin's quantiser step and exponent (in quarter levels): the bins before it in
   the block, the last block's coefficient at the bin and around it, the partner channel's at the
   bin and around it; with the bap, the exponent, the exponents' shape around the bin, the strategy,
-  the block switch flag.
+  the block switch flag. Then the mantissa's tile: its exponent group over the blocks that reuse its
+  exponents. An encoder sets the exponent by the tile's largest coefficient, so that one comes out
+  big (|m| at least 1/2), unless A/52's deltas of at most 2 lowered it or it was capped; so the
+  contexts have whether the exponent may have been lowered, whether one of the tile's mantissas was
+  big yet, how many came before and how many are still to come. A mantissa that comes last in its
+  tile with none big yet is big: 99.8% of them in the corpus, by every encoder. And a tonal
+  predictor's coefficient: a steady tone makes each bin's coefficients over the blocks a sampled
+  sinusoid (x = a x1 - x2, a = 2 cos of its phase advance a block), which a per-bin predictor (integer
+  arithmetic, a its running estimate) follows; its estimate and how close it came lately. The sign
+  is a decision of the family too, mixed like the others, by the signs of the bins before, the
+  last block's at the bin, the partner channel's, the predictor's, and whether the bin's band is
+  rematrixed (2/0).
 - **aht: E-AC-3's adaptive hybrid transform** (`model_mant.inc`): the vector indices (hebap 1-7,
   the top bits as a tree), the gains of the gain adaptive quantiser, its mantissas (each bin's six,
   one for each block) and the large mantissas after an escape, as mag's magnitudes; by the hebap,
   the gain, the block, the magnitudes of the bin's mantissa in the block before and of the block's
-  at the bin before.
+  at the bin before, and that of the last frame's at the bin and block.
 - **raw: bytes** (`model_hdr.inc`): bytes kept as bytes, `addbsi`, `mixdata`, `blkstrtinfo`, the skip
   fields (in Dolby's Atmos streams, EMDF payloads: against the last skip field of the block) and the
   bits after the last block (a flag for all zero, else the bytes from the first that isn't, against
@@ -195,7 +208,7 @@ frame, so each part is coded as it would be in the whole stream, but by a model 
 
 | Bytes | Content |
 |---|---|
-| 9 | `ac3pack`, the format version 1 and the level |
+| 9 | `ac3pack`, the format version 2 and the level |
 | rest | range coded data: a sequence of chunks, each a kind (a frame as records, bytes between frames, a frame kept as bytes, or the end) followed by its content, and after the end the CRC-32 of the stream |
 
 On threads:
@@ -203,7 +216,7 @@ On threads:
 | Bytes | Content |
 |---|---|
 | 5 | `ac3pm` |
-| 1 | the format version 1 |
+| 1 | the format version 2 |
 | 1 | the threads |
 | 4 | the part size in KB, little endian |
 | rest | MTwrap's container of the workers' streams |

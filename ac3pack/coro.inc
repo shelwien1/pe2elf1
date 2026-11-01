@@ -6,7 +6,7 @@
 // bytes), the end, and the CRC-32 of the stream (32 bits at 1/2 each).
 enum { AC3P_MAGIC = 7, AC3P_AT_VERSION = AC3P_MAGIC, AC3P_AT_LEVEL, AC3P_HEAD };  // the header's bytes
 static const U8 magic[AC3P_MAGIC] = {'a', 'c', '3', 'p', 'a', 'c', 'k'};
-constexpr int AC3P_VERSION = 1;  // the format's
+constexpr int AC3P_VERSION = 2;  // the format's
 
 // a compression's statistics (its summary line)
 struct Stats {

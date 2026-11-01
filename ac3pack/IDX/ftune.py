@@ -15,7 +15,8 @@ pass until a pass gains less than 0.01% of the family's size, or a byte
 than a byte (no decisions: aht on a stream without AHT) is left as it is, not
 zeroed; a trial that fails counts as the worst (logged).  The families do not
 interact, so four are tuned at once, the largest first, each trial a
-process per stream.  Writes the
+process per stream.  With FTUNE_PATS=REGEX only the patterns whose names
+(A9_mag_a_bap, say) it matches are flipped.  Writes the
 winners to export.!!! (mdesc lines, for IDX/import.pl; every pattern of
 the level) at each gain, and the progress to ftune.log, both in the
 current directory; with FTUNE_FROM=EXPORT it starts from that export's
@@ -44,9 +45,10 @@ if os.environ.get('FTUNE_FROM'):
         f.write(bytes(data))
     print('ftune.py: %d patterns from %s' % (n, os.environ['FTUNE_FROM']), file=sys.stderr)
 fams = {}
+only_pats = os.environ.get('FTUNE_PATS')  # (a regex: the patterns to flip; every one where unset)
 for k in pats:
     m = re.match(r'A\d+_([a-z0-9]+)_', k)
-    if m:
+    if m and (not only_pats or re.search(only_pats, k)):
         fams.setdefault(m.group(1), []).append(k)
 lock = threading.Lock()
 log = open('ftune.log', 'a')

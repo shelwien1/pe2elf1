@@ -15,26 +15,41 @@ void A1_mag_make( const M_mag_v & D, tcx & X ) {
   M_mag_VARS(M_LOCAL)
 
   a = 0;
-  a = a*4 + A1_mag_a_bap[__min(15,__max(0,(bap)-(1-1)))];
-  a = a*24 + A1_mag_a_e1[__min(23,__max(0,(e1)-(1-1)))];
+  a = a*16 + A1_mag_a_bap[__min(15,__max(0,(bap)-(1-1)))];
+  a = a*4 + A1_mag_a_gr[__min(3,__max(0,(gr)-(1-1)))];
+  a = a*5 + A1_mag_a_tx[__min(4,__max(0,(tx)-(1-1)))];
+  a = a*3 + (((tb)>0+(1-1))+((tb)>1+(1-1)));
+  a = a*4 + A1_mag_a_tc[__min(3,__max(0,(tc)-(1-1)))];
+  a = a*8 + A1_mag_a_tr[__min(7,__max(0,(tr)-(1-1)))];
 
   b = 0;
-  b = b*16 + A1_mag_b_bap[__min(15,__max(0,(bap)-(1-1)))];
-  b = b*24 + A1_mag_b_ep[__min(23,__max(0,(ep)-(1-1)))];
+  b = b*4 + A1_mag_b_bap[__min(15,__max(0,(bap)-(1-1)))];
+  b = b*24 + A1_mag_b_e1[__min(23,__max(0,(e1)-(1-1)))];
+  b = b*3 + (((ts)>0+(1-1))+((ts)>1+(1-1)));
+  b = b*24 + A1_mag_b_et[__min(23,__max(0,(et)-(1-1)))];
+  b = b*5 + A1_mag_b_tq[__min(4,__max(0,(tq)-(1-1)))];
 
   c = 0;
   c = c*16 + A1_mag_c_bap[__min(15,__max(0,(bap)-(1-1)))];
-  c = c*10 + A1_mag_c_e1[__min(16,__max(0,(e1)-(1-1)))];
-  c = c*10 + A1_mag_c_e2[__min(16,__max(0,(e2)-(1-1)))];
+  c = c*24 + A1_mag_c_ep[__min(23,__max(0,(ep)-(1-1)))];
+  c = c*3 + (((sp)>0+(1-1))+((sp)>1+(1-1)));
 
   d = 0;
   d = d*16 + A1_mag_d_bap[__min(15,__max(0,(bap)-(1-1)))];
   d = d*10 + A1_mag_d_e1[__min(16,__max(0,(e1)-(1-1)))];
   d = d*10 + A1_mag_d_ew[__min(16,__max(0,(ew)-(1-1)))];
   d = d*10 + A1_mag_d_ow[__min(16,__max(0,(ow)-(1-1)))];
+  d = d*3 + (((s1)>0+(1-1))+((s1)>1+(1-1)));
+  d = d*3 + (((sp)>0+(1-1))+((sp)>1+(1-1)));
+  d = d*3 + (((so)>0+(1-1))+((so)>1+(1-1)));
+  d = d*3 + (((rm)>0+(1-1))+((rm)>1+(1-1)));
 
   m = 0;
   m = m*16 + A1_mag_m_bap[__min(15,__max(0,(bap)-(1-1)))];
+  m = m*5 + A1_mag_m_tx[__min(4,__max(0,(tx)-(1-1)))];
+  m = m*3 + (((tb)>0+(1-1))+((tb)>1+(1-1)));
+  m = m*8 + A1_mag_m_tr[__min(7,__max(0,(tr)-(1-1)))];
+  m = m*3 + (((ts)>0+(1-1))+((ts)>1+(1-1)));
 
   t = 0;
   t = t*16 + A1_mag_t_bap[__min(15,__max(0,(bap)-(1-1)))];
@@ -46,6 +61,8 @@ void A1_mag_make( const M_mag_v & D, tcx & X ) {
   g = g*3 + (((s1)>0+(1-1))+((s1)>1+(1-1)));
   g = g*3 + (((sp)>0+(1-1))+((sp)>1+(1-1)));
   g = g*3 + (((so)>0+(1-1))+((so)>1+(1-1)));
+  g = g*3 + (((ts)>0+(1-1))+((ts)>1+(1-1)));
+  g = g*5 + A1_mag_g_tq[__min(4,__max(0,(tq)-(1-1)))];
   X.c[0] = a;  X.c[1] = b;  X.c[2] = c;  X.c[3] = d;  X.m = m;  X.t = t;
   X.n = n;  X.g = g;
 }

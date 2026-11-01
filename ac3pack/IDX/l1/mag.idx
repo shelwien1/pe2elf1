@@ -4,33 +4,48 @@
 #
 #  A mantissa's magnitude (bap 1-5: above k?, 6-15: its length, then its bits) and its sign, against
 #  the estimates of its neighbours: the bins before, the last block's, the partner channel's.
-#  (Cut from level -9: four of its counters (b, c, d, k as a-d), mixer 1 and the mantissa plane.)
+#  (Cut from level -9: four of its counters (a, b, c, k as a-d), mixer 1 and the mantissa plane.)
 
 Prefix A1_mag
 Debug 1
 Const 0
 
 Index a
- a_bap: bap, 1!000000111000000
- a_e1: e1, 1!11111111111111111111111
+ a_bap: bap, 1!111111111111111
+ a_gr: gr, 1!111
+ a_tx: tx, 1!1111
+ a_tb: tb, 1!11
+ a_tc: tc, 1!111
+ a_tr: tr, 1!1111111
 
 Index b
- b_bap: bap, 1!111111111111111
- b_ep: ep, 1!11111111111111111111111
+ b_bap: bap, 1!000000111000000
+ b_e1: e1, 1!11111111111111111111111
+ b_ts: ts, 1!11
+ b_et: et, 1!11111111111111111111111
+ b_tq: tq, 1!1111
 
 Index c
  c_bap: bap, 1!111111111111111
- c_e1: e1, 1!1101010101010101
- c_e2: e2, 1!1101010101010101
+ c_ep: ep, 1!11111111111111111111111
+ c_sp: sp, 1!11
 
 Index d
  d_bap: bap, 1!111111111111111
  d_e1: e1, 1!1101010101010101
  d_ew: ew, 1!1101010101010101
  d_ow: ow, 1!1101010101010101
+ d_s1: s1, 1!11
+ d_sp: sp, 1!11
+ d_so: so, 1!11
+ d_rm: rm, 1!11
 
 Index m
  m_bap: bap, 1!111111111111111
+ m_tx: tx, 1!1111
+ m_tb: tb, 1!11
+ m_tr: tr, 1!1111111
+ m_ts: ts, 1!11
 
 Index t
  t_bap: bap, 1!111111111111111
@@ -44,12 +59,14 @@ Index g
  g_s1: s1, 1!11
  g_sp: sp, 1!11
  g_so: so, 1!11
+ g_ts: ts, 1!11
+ g_tq: tq, 1!1111
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
 
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
-Number rA, 1, 0!11111100
-Number mwA, 1, 0!00000100
-Number rB, 1, 0!11111111
+Number rA, 1, 0!11111111
+Number mwA, 1, 0!01001100
+Number rB, 1, 0!11111100
 Number mwB, 1, 0!00000100
 Number rC, 1, 0!11111111
 Number mwC, 1, 0!00000100

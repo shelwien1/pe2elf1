@@ -28,11 +28,13 @@ void A5_aht_make( const M_aht_v & D, tcx & X ) {
   c = c*5 + A5_aht_c_kd[__min(4,__max(0,(kd)-(1-1)))];
   c = c*20 + A5_aht_c_hb[__min(19,__max(0,(hb)-(1-1)))];
   c = c*24 + A5_aht_c_q1[__min(23,__max(0,(q1)-(1-1)))];
+  c = c*24 + A5_aht_c_pf[__min(23,__max(0,(pf)-(1-1)))];
 
   d = 0;
   d = d*5 + A5_aht_d_kd[__min(4,__max(0,(kd)-(1-1)))];
   d = d*20 + A5_aht_d_hb[__min(19,__max(0,(hb)-(1-1)))];
   d = d*14 + A5_aht_d_q0[__min(23,__max(0,(q0)-(1-1)))];
+  d = d*24 + A5_aht_d_pf[__min(23,__max(0,(pf)-(1-1)))];
 
   e = 0;
   e = e*5 + A5_aht_e_kd[__min(4,__max(0,(kd)-(1-1)))];
@@ -61,6 +63,7 @@ void A5_aht_make( const M_aht_v & D, tcx & X ) {
   k = k*6 + A5_aht_k_bk[__min(5,__max(0,(bk)-(1-1)))];
   k = k*24 + A5_aht_k_qa[__min(23,__max(0,(qa)-(1-1)))];
   k = k*3 + (((lg)>0+(1-1))+((lg)>1+(1-1)));
+  k = k*24 + A5_aht_k_pf[__min(23,__max(0,(pf)-(1-1)))];
 
   l = 0;
   l = l*5 + A5_aht_l_kd[__min(4,__max(0,(kd)-(1-1)))];

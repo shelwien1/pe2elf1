@@ -36,6 +36,7 @@ void A1_exp_make( const M_exp_v & D, tcx & X ) {
 
   m = 0;
   m = m*4 + A1_exp_m_cc[__min(3,__max(0,(cc)-(1-1)))];
+  m = m*7 + A1_exp_m_nr[__min(6,__max(0,(nr)-(1-1)))];
 
   t = 0;
 

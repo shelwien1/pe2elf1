@@ -9,10 +9,12 @@ static const byte A5_aht_b_bk[5+1]={ 0,1,2,3,4,5 };
 static const byte A5_aht_c_kd[4+1]={ 0,1,2,3,4 };
 static const byte A5_aht_c_hb[19+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19 };
 static const byte A5_aht_c_q1[23+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23 };
+static const byte A5_aht_c_pf[23+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23 };
 
 static const byte A5_aht_d_kd[4+1]={ 0,1,2,3,4 };
 static const byte A5_aht_d_hb[19+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19 };
 static const byte A5_aht_d_q0[23+1]={ 0,1,1,1,1,1,2,2,3,3,3,4,5,5,6,7,8,9,10,10,11,12,13,13 };
+static const byte A5_aht_d_pf[23+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23 };
 
 static const byte A5_aht_e_kd[4+1]={ 0,1,2,3,4 };
 static const byte A5_aht_e_hb[19+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19 };
@@ -37,6 +39,7 @@ static const byte A5_aht_j_hb[19+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,1
 static const byte A5_aht_k_kd[4+1]={ 0,1,2,3,4 };
 static const byte A5_aht_k_bk[5+1]={ 0,1,2,3,4,5 };
 static const byte A5_aht_k_qa[23+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23 };
+static const byte A5_aht_k_pf[23+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23 };
 
 static const byte A5_aht_l_kd[4+1]={ 0,1,2,3,4 };
 static const byte A5_aht_l_hb[19+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19 };
@@ -99,20 +102,20 @@ static const int A5_aht_hN = (22+0) * (1);
 
 static const long long A5_aht_a_Volume = tc_vmul(tc_vmul(1, 5), 14); // 70
 static const long long A5_aht_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 5), 20), 3), 6); // 1800
-static const long long A5_aht_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 5), 20), 24); // 2400
-static const long long A5_aht_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, 5), 20), 14); // 1400
+static const long long A5_aht_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 5), 20), 24), 24); // 57600
+static const long long A5_aht_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 5), 20), 14), 24); // 33600
 static const long long A5_aht_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 5), 20), 10), 10); // 10000
 static const long long A5_aht_g_Volume = tc_vmul(1, 20); // 20
 static const long long A5_aht_h_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 5), 4), 4), 20); // 1600
 static const long long A5_aht_i_Volume = tc_vmul(tc_vmul(tc_vmul(1, 5), 8), 6); // 240
 static const long long A5_aht_j_Volume = tc_vmul(tc_vmul(tc_vmul(1, 5), 15), 20); // 1500
-static const long long A5_aht_k_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 5), 6), 24), 3); // 2160
+static const long long A5_aht_k_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 5), 6), 24), 3), 24); // 51840
 static const long long A5_aht_l_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 5), 20), 6), 10), 10); // 60000
 static const long long A5_aht_m_Volume = tc_vmul(tc_vmul(1, 5), 20); // 100
 static const long long A5_aht_n_Volume = tc_vmul(1, 5); // 5
 static const long long A5_aht_t_Volume = tc_vmul(tc_vmul(1, 5), 20); // 100
 
-#define A5_aht_USES(X) X(kd) X(hb) X(lg) X(bk) X(q1) X(q0) X(q2) X(gm) X(pg) X(ex) X(bin) X(qa) X(pm) X(pb)
+#define A5_aht_USES(X) X(kd) X(hb) X(lg) X(bk) X(q1) X(pf) X(q0) X(q2) X(gm) X(pg) X(ex) X(bin) X(qa) X(pm) X(pb)
 
 struct A5_aht_T {
   cm_cnt2 A5_aht_A[tc_rows(A5_aht_a_Volume, A5_aht_hA) * M_aht_ND];

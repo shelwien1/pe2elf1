@@ -5,7 +5,7 @@ IDX/l9/*.idx. -5 keeps -9's ten counters, mixer 1 and the mantissa plane (no APM
 it in ac3pack/ as  python3 IDX/derive.py IDX  after tuning -9, then ./mk.sh mod."""
 import os, re, sys
 idx = sys.argv[1]
-FOUR = {'hdr': 'abck', 'sid': 'abhd', 'raw': 'bcdk', 'exp': 'bchk', 'mag': 'bcdk', 'aht': 'abck'}
+FOUR = {'hdr': 'abck', 'sid': 'abhd', 'raw': 'bcdk', 'exp': 'bchk', 'mag': 'abck', 'aht': 'abck'}
 for fn in sorted(os.listdir(os.path.join(idx, 'l9'))):
     if not fn.endswith('.idx'): continue
     fam = fn[:-4]

@@ -36,6 +36,17 @@ struct Hist {
   S16 addbsin, mixdatan, blkstrtn;
   U8 tail[MAX_FRAME];                // the last tail's bytes that aren't 0, at its end (tailn of them)
   S32 tailn;
+  // the tonal predictor (model_mant.inc), per channel and bin: the last two coefficients (in 2^-40
+  // of full scale), a tone's step a block (2 cos of its phase advance, Q14), the running |error|
+  // and |coefficient|, the state (0 none, 1 one coefficient, 2 two, 3 and a step)
+  S64 tn_x1[NCH][NBIN], tn_x2[NCH][NBIN], tn_e[NCH][NBIN], tn_m[NCH][NBIN];
+  S32 tn_a[NCH][NBIN];
+  U8 tn_n[NCH][NBIN];
+  // AHT's (model_mant.inc): the last frame's, of each channel that had it, by bin: the hebap, the
+  // exponent, the gain adaptive mantissas
+  U8 ah_has[NCH], ah_hb[NCH][NBIN];
+  S8 ah_ex[NCH][NBIN];
+  S16 ah_m[NCH][NBIN][NBLK];
 };
 
 // a field's number in the hdr and sid families (-1: neither's), made as the program starts
@@ -129,6 +140,16 @@ static INLINE int chan_class(const Frame& f, int ch) { return ch == CPL ? 0 : ch
 static INLINE int blksw_of(const Frame& f, int blk, int ch) { return ch >= 1 && ch <= f.nfch ? f.k[blk].blksw[ch] : 0; }
 // a bin's band (the bins past bin_to_band_tab's: its last)
 static INLINE int band_of(int bin) { return bin_to_band_tab[bin < NBIN - 3 ? bin : NBIN - 4]; }
+
+// How many blocks after blk reuse channel ch's exponents (the coupling channel's: where it is
+// in use; E-AC-3's strategies, in audfrm, say 0 for a block without coupling)
+static INLINE int reuse_after(const Frame& f, int blk, int ch) {
+  int n = 0;
+  while (blk + 1 + n < f.nblk && f.expstr[blk + 1 + n][ch] == EXP_REUSE &&
+         (ch != CPL || !f.eac3 || f.a.cplinu[blk + 1 + n]))
+    n++;
+  return n;
+}
 
 // A magnitude x of maxnb bits at most (maxnb 1-16), by the family f whose contexts are selected:
 // its length (the bits it takes, 0 for 0) as a tree of decisions (nodes len0 + the bits so far:
