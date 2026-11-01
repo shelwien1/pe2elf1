@@ -347,7 +347,10 @@ tools, as `mp4pack.exe` does.
   27 s here), at a lower priority; a new input stops it. Start stops it too,
   as it would compete with the run for the file, and the description is made
   when the run ends. The last four are kept, so switching between Compress
-  and Decompress shows them at once.
+  and Decompress shows them at once. The box has no scroll bars: hold the
+  left mouse button on it and move the mouse, and the text follows it (by
+  lines and characters, up to its ends); the wheel scrolls it too, and its
+  right-click menu copies it.
 - **Start** (or Enter) runs it. The log gets mp4pack's messages, the command
   line it amounts to first. Progress shows the whole run's share done (avip
   and the archive take 3% each, packing or unpacking the rest; with Verify,
@@ -656,6 +659,11 @@ file (empty), a cut mkv and a cut archive, a Cyrillic name in a Cyrillic
 directory (avip got its 8.3 name) and a plain one in it (by its name, from
 there), a 1GB file replaced while avip read it (that avip stopped) and Start
 while it read (stopped, then read when the run ended), and `C ... -quit`.
+Dragging it, with the mouse itself (`SendInput`) and with the messages sent
+to it: up, down, left, right and past each end (it stops with the last line
+at the bottom and the longest one's end at the right edge), no text
+selected; the cursor over it (X's: a hand, the four arrows while it drags),
+the wheel, and the bottom of the box drawn anew as the text moves.
 
 The movie, with `-t 4+4,1,1` (the default then) on a 4-thread Xeon VM under
 wine:

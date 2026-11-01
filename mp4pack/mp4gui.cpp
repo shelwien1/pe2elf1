@@ -51,7 +51,7 @@ static HINSTANCE hinst;
 static HWND hwnd, hcpu;           // the window; the CPU Info window
 static HFONT font, mono;          // the system's message font; a fixed one
 static int bx, by;                // the font's average character width and height
-static int mh;                    // the fixed font's line height
+static int mh, mw;                // the fixed font's line height and character width
 static int rh, lw;                // a row's height; the labels' width
 static int log_y;                 // where the log begins (the rest is above it)
 static int nrows;                 // task rows shown
@@ -262,6 +262,68 @@ static LRESULT CALLBACK BarProc( HWND h, UINT msg, WPARAM wp, LPARAM lp ) {
   return CallWindowProcW( bar_proc, h, msg, wp, lp );
 }
 
+//---- the Container box: no scroll bars; the left button drags its text
+
+static WNDPROC info_edit;         // the edit control's own procedure
+static int drag;                  // the left button holds the box's text
+static POINT drag_at;             // where it took it
+static int drag_line, drag_x;     // its first line shown and its offset to the left then (pixels)
+static int info_w;                // its longest line's width (pixels)
+
+// how far its text is scrolled to the left, in pixels: where the start of
+// the first line shown is, from where it is when not scrolled
+static int InfoX( HWND h ) {
+  RECT r;
+  SendMessageW( h, EM_GETRECT, 0, (LPARAM)&r );
+  LRESULT i = SendMessageW( h, EM_LINEINDEX, SendMessageW( h, EM_GETFIRSTVISIBLELINE, 0, 0 ), 0 );
+  LRESULT p = (i<0) ? -1 : SendMessageW( h, EM_POSFROMCHAR, WPARAM(i), 0 );
+  return (p==-1) ? 0 : int(r.left)-short( LOWORD(p) );
+}
+
+// The text follows the mouse while the left button holds it (by lines and
+// characters: EM_LINESCROLL), from where it was when taken, so it is where
+// the mouse says after it stops at an end too: the last line at the bottom,
+// the longest one's end at the right edge. No selection with the mouse then
+// (the keyboard selects, the right button's menu copies); the wheel scrolls
+// as ever.
+static LRESULT CALLBACK InfoProc( HWND h, UINT msg, WPARAM wp, LPARAM lp ) {
+  switch( msg ) {
+    case WM_LBUTTONDOWN: case WM_LBUTTONDBLCLK:
+      SetFocus( h ); SetCapture( h );
+      drag = 1; drag_at.x = short( LOWORD(lp) ); drag_at.y = short( HIWORD(lp) );
+      drag_line = int( SendMessageW( h, EM_GETFIRSTVISIBLELINE, 0, 0 ) ); drag_x = InfoX( h );
+      SetCursor( LoadCursorW( 0, (LPCWSTR)IDC_SIZEALL ) );
+      return 0;
+    case WM_MOUSEMOVE:
+      if( !drag ) break;
+      if( (mh>0) && (mw>0) ) {
+        RECT r;
+        SendMessageW( h, EM_GETRECT, 0, (LPARAM)&r );
+        int lines = int( SendMessageW( h, EM_GETLINECOUNT, 0, 0 ) ), shown = std::max( int(r.bottom-r.top)/mh, 1 );
+        int line = drag_line-(short( HIWORD(lp) )-drag_at.y)/mh, x = drag_x-(short( LOWORD(lp) )-drag_at.x);
+        line = std::max( 0, std::min( line, lines-shown ) );
+        x = std::max( 0, std::min( x, info_w-int(r.right-r.left) ) );
+        int dl = line-int( SendMessageW( h, EM_GETFIRSTVISIBLELINE, 0, 0 ) ), dc = (x-InfoX( h ))/mw;
+        if( dl || dc ) {
+          SendMessageW( h, EM_LINESCROLL, WPARAM(dc), LPARAM(dl) );
+          RECT c; GetClientRect( h, &c ); // (below the lines: drawn anew, not left as it was)
+          if( c.bottom>r.bottom ) { c.top = r.bottom; InvalidateRect( h, &c, TRUE ); }
+        }
+      }
+      return 0;
+    case WM_LBUTTONUP:
+      if( !drag ) break;
+      drag = 0;
+      if( GetCapture()==h ) ReleaseCapture();
+      return 0;
+    case WM_CAPTURECHANGED: drag = 0; break;
+    case WM_SETCURSOR:
+      if( LOWORD(lp)==HTCLIENT ) { SetCursor( LoadCursorW( 0, (LPCWSTR)(drag ? IDC_SIZEALL : IDC_HAND) ) ); return TRUE; }
+      break;
+  }
+  return CallWindowProcW( info_edit, h, msg, wp, lp );
+}
+
 static HWND Bar() {
   HWND h = Make( PROGRESS_CLASSW, L"", PBS_SMOOTH );
   SendMessageW( h, PBM_SETRANGE32, 0, 1000 );
@@ -344,8 +406,9 @@ static void MakeControls() {
   l_lt = Label( L"tangelo" ); c_lt = Combo( ID_LT, CBS_DROPDOWNLIST, l_items, 10 );
 
   g_info = Group( L"Container" );
-  c_info = Make( L"EDIT", L"", WS_TABSTOP|ES_MULTILINE|ES_READONLY|WS_VSCROLL|WS_HSCROLL|ES_AUTOVSCROLL|ES_AUTOHSCROLL|ES_NOHIDESEL, ID_INFO, WS_EX_CLIENTEDGE );
+  c_info = Make( L"EDIT", L"", WS_TABSTOP|ES_MULTILINE|ES_READONLY|ES_AUTOVSCROLL|ES_AUTOHSCROLL, ID_INFO, WS_EX_CLIENTEDGE );
   SendMessageW( c_info, WM_SETFONT, (WPARAM)mono, FALSE );
+  info_edit = (WNDPROC)SetWindowLongPtrW( c_info, GWLP_WNDPROC, (LONG_PTR)InfoProc ); // (dragged to scroll)
 
   g_prog = Group( L"Progress" );
   c_phase = Note( ID_PHASE ); c_bar = Bar(); c_pct = Make( L"STATIC", L"", SS_RIGHT|SS_CENTERIMAGE, ID_PCT );
@@ -407,7 +470,7 @@ static void Layout() {
   Place( g_opt, x0, gy, wl, y-gy ); y += gap;
 
   gy = y; y += gc; // the input's container: 6 lines
-  int ih = 6*mh+GetSystemMetrics( SM_CYHSCROLL )+2*GetSystemMetrics( SM_CYEDGE )+DY(2);
+  int ih = 6*mh+2*GetSystemMetrics( SM_CYEDGE )+2; // (the edit's 1 pixel above and below them; no part of a 7th: what is below the lines is not scrolled with them)
   Place( c_info, x0+pad, y, wl-2*pad, ih ); y += ih+DY(5);
   Place( g_info, x0, gy, wl, y-gy ); y += gap;
 
@@ -830,7 +893,21 @@ static void InfoShow() {
     else s = info.text;
   }
   wstring w = W(s);
-  if( w!=info_shown ) { info_shown = w; SetWindowTextW( c_info, w.c_str() ); }
+  if( w==info_shown ) return;
+  info_shown = w;
+  SetWindowTextW( c_info, w.c_str() );
+  info_w = 0;
+  HDC dc = GetDC( c_info );
+  HGDIOBJ f0 = SelectObject( dc, mono );
+  for( size_t i=0; i<w.size(); ) {
+    size_t e = w.find( L'\r', i );
+    if( e==wstring::npos ) e = w.size();
+    SIZE z;
+    if( (e>i) && GetTextExtentPoint32W( dc, w.c_str()+i, int(e-i), &z ) ) info_w = std::max( info_w, int(z.cx) );
+    i = e+2;
+  }
+  SelectObject( dc, f0 );
+  ReleaseDC( c_info, dc );
 }
 
 static DWORD WINAPI InfoThread( void* a ) {
@@ -1612,7 +1689,7 @@ static void Fonts() {
   TEXTMETRICW tm; GetTextMetricsW( dc, &tm );
   SIZE sz; GetTextExtentPoint32W( dc, L"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", 52, &sz );
   bx = (sz.cx/26+1)/2; by = tm.tmHeight;
-  SelectObject( dc, mono ); GetTextMetricsW( dc, &tm ); mh = tm.tmHeight;
+  SelectObject( dc, mono ); GetTextMetricsW( dc, &tm ); mh = tm.tmHeight; mw = tm.tmAveCharWidth;
   SelectObject( dc, o ); ReleaseDC( 0, dc );
   rh = by+DY(6);
 }
