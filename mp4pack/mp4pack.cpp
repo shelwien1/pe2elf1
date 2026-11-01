@@ -196,7 +196,10 @@ static void Put( string s ) {
 // a frontend in this program (mp4gui) takes the messages here instead
 static void (*msg_hook)( const string& s );
 static string last_msg;   // the last message that is not indented (not a tool's output: "  | ...")
-static string run_err;    // what made a run fail: the last such message when it did (mp4gui shows it)
+static string run_err;    // what made a run fail: the last such message when it did (the first file's that failed; mp4gui shows it)
+static string run_summary;// a list's: how it went (its last line)
+static qword bytes_in, bytes_out; // a list's: the bytes of the inputs and outputs that went well
+static int out_failed;    // the output cannot be written: a list stops
 
 static void Msg( const string& s ) {
   if( s.size() && (s[0]!=' ') ) last_msg = s;
@@ -1497,15 +1500,18 @@ static int RunStages() {
 
 //---- the archive
 
-// The output: the packed files and the index, stored as they are, one after
-// another (the numbers little-endian):
+// The output: an archive of one or more members, one after another, a
+// member for each file packed into it (c of a list into one file). A member
+// is the packed files and the index, stored as they are, one after another
+// (the numbers little-endian):
 //   "mp4pack" (7 bytes), the format's version (1 byte: ARC_VERSION), the
 //   number of files (4 bytes); then for each file the length of its name (2
 //   bytes), the name (UTF-8, '/' between directories: store/s.0.h264), its
 //   size (8 bytes) and its bytes.
-// mp4pack.idx goes first, then the rest by name.
+// mp4pack.idx goes first, then the rest by name. Version 1 had no more than
+// one member (its archives are read as well).
 
-static const int ARC_VERSION = 1;
+static const int ARC_VERSION = 2;
 
 static void PutLE( string& s, qword v, int n ) { for( int i=0; i<n; i++ ) s += char( byte( v>>(8*i) ) ); }
 static qword GetLE( const byte* p, int n ) { qword v = 0; for( int i=n-1; i>=0; i-- ) v = (v<<8) | p[i]; return v; }
@@ -1550,17 +1556,27 @@ static int ArcWait( Job& j ) {
   return f_abort!=0;
 }
 
-// the archive of what is in dir (ending with a separator) as out, each file
-// removed once it is in (unless -k); job j shows it (its work: the files'
-// bytes; out.done: those in so far; made: the archive's size). 0, or 2
-// (cannot read or write), 5 (stopped)
-static int WriteArchive( const wstring& dir, const wstring& out, Job& j ) {
+// a member of an archive: where it is and its size, its index, its files
+// (their names and sizes), and the file it was made of (the index's src)
+struct Member { qword off, size, src_size; int ver; string idx, src; vector<string> names; vector<qword> sizes; Member() : off(0), size(0), src_size(0), ver(0) {} };
+
+// the archive of what is in dir (ending with a separator) as out, or a
+// member of it added to the archive out (append), each file removed once it
+// is in (unless -k); job j shows it (its work: the files' bytes; out.done:
+// those in so far; made: the member's size); m: where it went. 0, or 2
+// (cannot read or write: out_failed when out cannot be written), 5
+// (stopped). What failed is taken off again (the archive removed, or what
+// it was before it got more)
+static int WriteArchive( const wstring& dir, const wstring& out, Job& j, int append, Member& m ) {
   vector<string> v;
   ListAll( dir, "", v );
   std::sort( v.begin(), v.end(), []( const string& a, const string& b ) { return (a=="mp4pack.idx") || ((b!="mp4pack.idx") && (a<b)); } );
   phase = j.label; t_run = j.t0 = GetTickCount64(); j.st = 1;
-  HANDLE f = OpenWrite( LongPath(out), CREATE_ALWAYS );
-  if( f==INVALID_HANDLE_VALUE ) { DWORD e = GetLastError(); j.st = 3; Msg( "cannot write " + U(out) + SysErr(e) ); return 2; }
+  HANDLE f = OpenWrite( LongPath(out), append ? OPEN_EXISTING : CREATE_ALWAYS );
+  if( f==INVALID_HANDLE_VALUE ) { DWORD e = GetLastError(); j.st = 3; out_failed = 1; Msg( "cannot write " + U(out) + SysErr(e) ); return 2; }
+  LARGE_INTEGER at; at.QuadPart = 0;
+  if( append ) { LARGE_INTEGER z0; z0.QuadPart = 0; SetFilePointerEx( f, z0, &at, FILE_END ); }
+  m = Member(); m.off = qword(at.QuadPart);
   IOBuf b( 1<<20 );
   string h = "mp4pack";
   PutLE( h, ARC_VERSION, 1 ); PutLE( h, v.size(), 4 );
@@ -1587,29 +1603,92 @@ static int WriteArchive( const wstring& dir, const wstring& out, Job& j ) {
     if( !r && !f_keep ) Remove( p );
   }
   LARGE_INTEGER z;
-  if( !r ) j.made = GetFileSizeEx( f, &z ) ? qword(z.QuadPart) : 0;
+  if( !r ) j.made = GetFileSizeEx( f, &z ) ? qword(z.QuadPart)-m.off : 0;
+  if( r && append ) { SetFilePointerEx( f, at, 0, FILE_BEGIN ); SetEndOfFile( f ); } // (as it was)
   CloseHandle( f );
-  if( (r==1) || (r==2) ) { if( why.empty() ) why = "cannot write " + U(out) + SysErr(e); r = 2; }
+  if( (r==1) || (r==2) ) { if( why.empty() ) { why = "cannot write " + U(out) + SysErr(e); out_failed = 1; } r = 2; }
   j.st = r ? 3 : 2; j.t = GetTickCount64()-j.t0;
   if( status_hook ) { vector<Job*> jv( 1, &j ); Status( jv, jv, 1 ); }
-  if( r ) { Remove( LongPath(out) ); if( why.size() ) Msg( why ); }
+  if( r && !append ) Remove( LongPath(out) );
+  if( r && why.size() ) Msg( why );
+  m.size = j.made;
   return r;
 }
 
-// the files of archive in into dir (ending with a separator); job j shows it
-// (in.len: the archive's size; in.done: read so far). 0, or 2 (cannot read
-// or write), 4 (not an mp4pack archive, or not all of one), 5 (stopped)
-static int ReadArchive( const wstring& in, const wstring& dir, Job& j ) {
+// the members of an archive (each one's files listed and its index read,
+// the rest passed over). 0, or 2 (cannot read it), 4 (not an mp4pack
+// archive, or not all of one: v has the members whole before what is
+// wrong); why: what is wrong with it
+static int ScanArchive( const wstring& path, vector<Member>& v, string& why ) {
+  v.clear(); why.clear();
+  HANDLE f = OpenRead( LongPath(path) );
+  if( f==INVALID_HANDLE_VALUE ) { DWORD e = GetLastError(); why = "cannot read it" + SysErr(e); return 2; }
+  LARGE_INTEGER z, o; z.QuadPart = 0;
+  GetFileSizeEx( f, &z );
+  qword end = qword(z.QuadPart), off = 0;
+  byte h[16];
+  int r = 0;
+  while( !r && ((off<end) || v.empty()) ) {
+    Member m; m.off = off;
+    o.QuadPart = LONGLONG(off);
+    if( !SetFilePointerEx( f, o, 0, FILE_BEGIN ) || ReadN( f, h, 12 ) || memcmp( h, "mp4pack", 7 ) ) {
+      why = v.empty() ? "not an mp4pack archive" : "damaged after its " + Num(v.size()) + ((v.size()==1) ? " file" : " files");
+      r = 4; break;
+    }
+    if( (h[7]<1) || (h[7]>ARC_VERSION) ) { why = "an mp4pack archive of another version (" + Num(h[7]) + ", not " + Num(ARC_VERSION) + ")"; r = 4; break; }
+    m.ver = h[7];
+    qword n = GetLE( h+8, 4 ), pos = off+12;
+    for( qword i=0; (i<n) && !r; i++ ) {
+      string a;
+      if( !ReadN( f, h, 2 ) ) a.resize( size_t( GetLE( h, 2 ) ) );
+      if( a.empty() || ReadN( f, &a[0], DWORD(a.size()) ) || ReadN( f, h, 8 ) ) { r = 4; break; }
+      qword len = GetLE( h, 8 );
+      pos += 10+a.size();
+      if( (len>end) || (pos+len>end) ) { r = 4; break; }
+      o.QuadPart = LONGLONG(len);
+      if( (a=="mp4pack.idx") && m.idx.empty() && (len<(1u<<20)) ) { m.idx.resize( size_t(len) ); if( len && ReadN( f, &m.idx[0], DWORD(len) ) ) r = 4; }
+      else if( !SetFilePointerEx( f, o, 0, FILE_CURRENT ) ) r = 4;
+      pos += len;
+      m.names.push_back( a ); m.sizes.push_back( len );
+    }
+    if( r ) { why = "not all of an mp4pack archive (cut short, or damaged)"; break; }
+    if( m.idx.empty() ) { why = "no index in its file " + Num(v.size()+1) + ": not an mp4pack archive?"; r = 4; break; }
+    // its src line: size, CRC32, name
+    for( size_t i=0; i<m.idx.size(); ) {
+      size_t e = m.idx.find( '\n', i ), k = i;
+      if( e==string::npos ) e = m.idx.size();
+      string l = m.idx.substr( i, e-i );
+      if( l.size() && (l[l.size()-1]=='\r') ) l.erase( l.size()-1 );
+      i = e+1; k = 0;
+      if( Field( l, k )!="src" ) continue;
+      Number( Field( l, k ), m.src_size ); Field( l, k );
+      m.src = l.substr( k );
+      break;
+    }
+    m.size = pos-off;
+    v.push_back( m );
+    off = pos;
+  }
+  CloseHandle( f );
+  return r;
+}
+
+// the files of the member of archive in at off into dir (ending with a
+// separator); job j shows it (in.len: the member's size; in.done: read so
+// far). 0, or 2 (cannot read or write), 4 (not an mp4pack archive, or not
+// all of one), 5 (stopped)
+static int ReadArchive( const wstring& in, qword off, const wstring& dir, Job& j ) {
   phase = j.label; t_run = j.t0 = GetTickCount64(); j.st = 1;
   HANDLE f = OpenRead( LongPath(in) );
   if( f==INVALID_HANDLE_VALUE ) { DWORD e = GetLastError(); j.st = 3; Msg( "cannot read " + U(in) + SysErr(e) ); return 2; }
   IOBuf b( 1<<20 );
   byte h[16];
   string why;
+  LARGE_INTEGER o; o.QuadPart = LONGLONG(off);
   int r = (b.p==0) ? 2 : 0;
   if( r ) why = "cannot read " + U(in) + SysErr( ERROR_NOT_ENOUGH_MEMORY );
-  if( !r && (ReadN( f, h, 12 ) || memcmp( h, "mp4pack", 7 )) ) { why = U(in) + ": not an mp4pack archive"; r = 4; }
-  if( !r && (h[7]!=ARC_VERSION) ) { why = U(in) + ": an mp4pack archive of another version (" + Num(h[7]) + ", not " + Num(ARC_VERSION) + ")"; r = 4; }
+  if( !r && (!SetFilePointerEx( f, o, 0, FILE_BEGIN ) || ReadN( f, h, 12 ) || memcmp( h, "mp4pack", 7 )) ) { why = U(in) + ": not an mp4pack archive"; r = 4; }
+  if( !r && ((h[7]<1) || (h[7]>ARC_VERSION)) ) { why = U(in) + ": an mp4pack archive of another version (" + Num(h[7]) + ", not " + Num(ARC_VERSION) + ")"; r = 4; }
   qword files = r ? 0 : GetLE( h+8, 4 );
   j.in.done = 12;
   for( qword i=0; (i<files) && !r; i++ ) {
@@ -1637,8 +1716,6 @@ static int ReadArchive( const wstring& in, const wstring& dir, Job& j ) {
     }
     CloseHandle( g );
   }
-  DWORD extra = 0;
-  if( !r && ReadFile( f, h, 1, &extra, 0 ) && extra ) { why = U(in) + ": more after the files of an mp4pack archive (damaged?)"; r = 4; }
   CloseHandle( f );
   if( (r==4) && why.empty() ) why = U(in) + ": not all of an mp4pack archive (cut short, or damaged)";
   j.st = r ? 3 : 2; j.t = GetTickCount64()-j.t0;
@@ -1883,17 +1960,19 @@ static int OutputCheck( const wstring& out ) {
   if( d.size() && !IsDir( LongPath(d) ) ) {
     DWORD e = MakeDirs( LongPath(d) );
     if( IsDir( LongPath(d) ) ) Msg( "made the directory " + U(d) );
-    else if( e ) { Msg( "cannot make the directory " + U(d) + DirErr( d, e ) ); return 2; } // (else: no drive? as the file's open tells)
+    else if( e ) { Msg( "cannot make the directory " + U(d) + DirErr( d, e ) ); out_failed = 1; return 2; } // (else: no drive? as the file's open tells)
   }
   int had = Exists( lp );
   HANDLE f = OpenWrite( lp, had ? OPEN_EXISTING : CREATE_NEW );
-  if( f==INVALID_HANDLE_VALUE ) { DWORD e = GetLastError(); Msg( "cannot write " + U(out) + SysErr(e) ); return 2; }
+  if( f==INVALID_HANDLE_VALUE ) { DWORD e = GetLastError(); Msg( "cannot write " + U(out) + SysErr(e) ); out_failed = 1; return 2; }
   CloseHandle( f );
   if( !had ) Remove( lp );
   return 0;
 }
 
-static int Compress( const wstring& in, const wstring& out ) {
+// c of in to out (append: as a member added to the archive out); m: where
+// it went in out
+static int Compress( const wstring& in, const wstring& out, int append, Member& m ) {
   if( InputSize( in, src_size ) ) return 2;
   if( SameFile( LongPath(in), LongPath(out) ) ) { Msg( "the output is the input" ); return 1; }
   src_name = U( FileName(in) );
@@ -1965,7 +2044,7 @@ static int Compress( const wstring& in, const wstring& out ) {
   // the index and all packed, stored as they are: the output
   if( WriteAll( PPath("mp4pack.idx"), IndexText() ) ) { DWORD e = GetLastError(); Msg( "cannot write " + U(PPath("mp4pack.idx")) + SysErr(e) ); return 2; }
   Job f; f.label = "archive"; f.prog = 3; f.work = DirSize( work+L"p" DS );
-  if( (r = WriteArchive( work+L"p" DS, out, f ))!=0 ) return r;
+  if( (r = WriteArchive( work+L"p" DS, out, f, append, m ))!=0 ) return r;
   qword osz = f.made;
   Msg( Num(src_size) + " -> " + Num(osz) + " (" + Pct( double(osz), double(src_size) ) + "), " + Clock( GetTickCount64()-t_start ) );
   return 0;
@@ -1973,15 +2052,15 @@ static int Compress( const wstring& in, const wstring& out ) {
 
 //---- d
 
-static int Decompress( const wstring& in, const wstring& out ) {
-  qword isz;
-  if( InputSize( in, isz ) ) return 2;
+// d of the member m of archive in to out
+static int Decompress( const wstring& in, const Member& m, const wstring& out ) {
+  qword isz = m.size;
   if( SameFile( LongPath(in), LongPath(out) ) ) { Msg( "the output is the input" ); return 1; }
-  Msg( "mp4pack d: " + U(in) + " -> " + U(out) );
+  Msg( "mp4pack d: " + U(in) + (m.off ? " (from " + Num(m.off) + ")" : string()) + " -> " + U(out) );
   if( OutputCheck( out ) || MakeWork() ) return 2;
 
   Job x; x.label = "extract"; x.prog = 2; x.in.len = x.work = isz;
-  int r = ReadArchive( in, work+L"p" DS, x );
+  int r = ReadArchive( in, m.off, work+L"p" DS, x );
   if( r ) return r;
   string why;
   if( ReadIndex( why ) ) { Msg( U(in) + ": " + why ); return 4; }
@@ -2151,13 +2230,12 @@ static void NewRun() {
   n_tools = 0;
   src_name.clear(); src_size = 0; src_crc = 0; src_tools.clear();
   work.clear(); n_log = 0; status_len = 0; phase.clear();
-  last_msg.clear(); run_err.clear();
 }
 
-// the archive just made, d into a temporary file beside the work
+// the archive member just made, d into a temporary file beside the work
 // directories, which Decompress checks (each stream and the whole, by the
-// index's CRCs); the file is removed after (mp4gui's Verify)
-static int Verify( const wstring& archive ) {
+// index's CRCs); the file is removed after (-verify)
+static int Verify( const wstring& archive, const Member& m ) {
   wstring base = WorkBase();
   if( base.empty() ) return 2;
   wstring tmp = base + L"mp4pack_" + W(Hex(GetCurrentProcessId())) + L"_verify.tmp";
@@ -2165,8 +2243,8 @@ static int Verify( const wstring& archive ) {
   NewRun();
   t_start = GetTickCount64(); // (its own time)
   f_dec = 1;
-  int r = Decompress( archive, tmp );
-  if( r ) run_err = last_msg;
+  int r = Decompress( archive, m, tmp );
+  if( r && run_err.empty() ) run_err = last_msg;
   f_dec = 0;
   Remove( LongPath(tmp) );
   DropWork();
@@ -2174,12 +2252,190 @@ static int Verify( const wstring& archive ) {
   return r;
 }
 
-// c or d (f_dec) of in to out, with the options as set: t_spec, c_spec, the
-// levels (ParseLevels), cap (-i), w_base and the flags; the exit code
-static int Run( const wstring& in, const wstring& out ) {
-  NewRun();
-  held = 0;
-  // the CPU: its threads (or the free ones), and the tool builds it runs
+//---- lists, and the files of a run
+
+// the files of a list (@list): one on each line, as on the command line
+// (relative names: from the current directory). UTF-8, or UTF-16 with its
+// BOM; else (on Windows) the ANSI code page, or the OEM one where only that
+// names a file that is there ("dir /b > list" in a console writes that).
+// Blank lines are left out, and spaces and quotes around a name. 0, or 1
+// with why
+static int ReadList( const wstring& path, vector<wstring>& v, string& why ) {
+  string t;
+  qword sz;
+  v.clear();
+  if( GetSize( LongPath(path), sz ) ) { DWORD e = GetLastError(); why = "cannot read the list " + U(path) + SysErr(e); return 1; }
+  if( sz>(64u<<20) ) { why = "the list " + U(path) + " is too big for one (" + Num(sz) + " bytes)"; return 1; }
+  if( ReadAll( LongPath(path), t, 64u<<20 ) ) { DWORD e = GetLastError(); why = "cannot read the list " + U(path) + SysErr(e); return 1; }
+  vector<wstring> raw;      // its lines
+  vector<string> bytes;     // the same as they are (ANSI), to try the OEM code page on
+  int u16 = (t.size()>=2) && (byte(t[0])+byte(t[1])==0xFF+0xFE) && ((byte(t[0])==0xFF) || (byte(t[0])==0xFE));
+  if( u16 ) { // UTF-16 (LE: FF FE, BE: FE FF), to UTF-8 and on
+    int be = (byte(t[0])==0xFE);
+    wstring w;
+    for( size_t i=2; i+1<t.size(); i+=2 ) {
+      unsigned c = be ? (byte(t[i])<<8)|byte(t[i+1]) : byte(t[i])|(byte(t[i+1])<<8);
+      if( (sizeof(wchar_t)==4) && (c>=0xD800) && (c<0xDC00) && (i+3<t.size()) ) { // (Linux: a pair is one)
+        unsigned d = be ? (byte(t[i+2])<<8)|byte(t[i+3]) : byte(t[i+2])|(byte(t[i+3])<<8);
+        if( (d>=0xDC00) && (d<0xE000) ) { c = 0x10000+((c-0xD800)<<10)+(d-0xDC00); i += 2; }
+      }
+      w += wchar_t(c);
+    }
+    t = U(w);
+  } else if( (t.size()>=3) && (byte(t[0])==0xEF) && (byte(t[1])==0xBB) && (byte(t[2])==0xBF) ) t.erase( 0, 3 );
+  // UTF-8 when it is that (on Linux: always, as the names are)
+  int utf8 = 1;
+#ifdef _WIN32
+  if( !u16 ) utf8 = MultiByteToWideChar( CP_UTF8, MB_ERR_INVALID_CHARS, t.data(), int(t.size()), 0, 0 )>0 || t.empty();
+#endif
+  for( size_t i=0; i<t.size(); ) {
+    size_t e = t.find( '\n', i );
+    if( e==string::npos ) e = t.size();
+    string l = t.substr( i, e-i );
+    i = e+1;
+    while( l.size() && strchr( "\r\t ", l[l.size()-1] ) ) l.erase( l.size()-1 );
+    while( l.size() && strchr( "\t ", l[0] ) ) l.erase( 0, 1 );
+    if( (l.size()>=2) && (l[0]=='"') && (l[l.size()-1]=='"') ) l = l.substr( 1, l.size()-2 );
+    if( l.empty() ) continue;
+    bytes.push_back( l );
+    if( utf8 ) raw.push_back( W(l) );
+#ifdef _WIN32
+    else {
+      UINT cp[2] = { CP_ACP, CP_OEMCP };
+      wstring w[2];
+      for( int k=0; k<2; k++ ) {
+        int n = MultiByteToWideChar( cp[k], 0, l.data(), int(l.size()), 0, 0 );
+        w[k].assign( std::max( n, 0 ), 0 );
+        if( n>0 ) MultiByteToWideChar( cp[k], 0, l.data(), int(l.size()), &w[k][0], n );
+      }
+      raw.push_back( (!Exists( LongPath( FullPath(w[0]) ) ) && Exists( LongPath( FullPath(w[1]) ) )) ? w[1] : w[0] );
+    }
+#endif
+  }
+  v = raw;
+  return 0;
+}
+
+// name, unless it is in used already (an output of this run in a directory,
+// which the next would write over): then "name (2).ext" ...; added to used
+static wstring UniqueName( const wstring& name, vector<wstring>& used ) {
+  wstring r = name;
+  size_t d = name.rfind( L'.' );
+  if( (d==wstring::npos) || (d==0) ) d = name.size();
+  for( int k=2; ; k++ ) {
+    int in = 0;
+    for( size_t i=0; (i<used.size()) && !in; i++ ) in = (lstrcmpiW( used[i].c_str(), r.c_str() )==0);
+    if( !in ) break;
+    r = name.substr( 0, d ) + L" (" + W(Num(k)) + L")" + name.substr( d );
+  }
+  used.push_back( r );
+  return r;
+}
+
+static void (*file_hook)( int k, int r ); // a frontend's: file k of a run begins (r -1), or has ended (r: how)
+
+// d of archive in: its member to out (a file), or each of its members into
+// the directory out (dir; and always when it has more than one): named after
+// the archive when it has one (x.mkv.mpk -> x.mkv), else as each was (its
+// index: their names in a list's archive). units, ok: the files restored or
+// not, and well
+static int DecompressArchive( const wstring& in, const wstring& out, int dir, vector<wstring>& used, int& units, int& ok ) {
+  qword isz;
+  if( InputSize( in, isz ) ) { units++; return 2; } // (a file not restored: of how many, not known)
+  vector<Member> v;
+  string why;
+  int r = ScanArchive( in, v, why ), bad = r;
+  if( r && v.empty() ) { units++; Msg( U(in) + ": " + why ); return r; }
+  if( r ) Msg( U(in) + ": " + why + "; the " + Num(v.size()) + ((v.size()==1) ? " file" : " files") + " before that are restored" );
+  if( v.size()>1 ) {
+    dir = 1;
+    Msg( U(in) + ": " + Num(v.size()) + " files" );
+  }
+  wstring d = out;
+  if( dir && !IsSep( d[d.size()-1] ) ) d += L"" DS;
+  int r0 = 0;
+  for( size_t i=0; (i<v.size()) && !f_abort && !out_failed; i++ ) {
+    wstring o = out, name = FileName( in );
+    if( dir ) {
+      if( (v.size()==1) && (name.size()>4) && !lstrcmpiW( name.c_str()+name.size()-4, L".mpk" ) ) name.erase( name.size()-4 );
+      else {
+        string a = v[i].src;
+        for( size_t q=0; q<a.size(); q++ ) if( byte(a[q])<32 ) a[q] = '_';
+        name = SafeName( a ) ? W(a) : W( "file" + Num(i+1) );
+      }
+      o = d + UniqueName( name, used );
+    }
+    if( v.size()>1 ) Msg( "file " + Num(i+1) + " of " + Num(v.size()) + " in it: " + v[i].src );
+    NewRun();
+    last_msg.clear();
+    t_start = GetTickCount64();
+    units++;
+    int k = Decompress( in, v[i], o );
+    if( k && run_err.empty() ) run_err = last_msg;
+    DropWork();
+    if( k ) { if( !r0 ) r0 = k; continue; }
+    ok++; bytes_in += v[i].size; bytes_out += src_size;
+  }
+  if( bad ) { units++; if( !r0 ) r0 = bad; if( run_err.empty() ) run_err = U(in) + ": " + why; } // (what is lost: one more not restored)
+  return f_abort ? 5 : r0;
+}
+
+// c or d (f_dec) of each of ins in turn, to out: a directory (out ends with
+// a separator, or is one; d of a list: always) for an output of each,
+// named after it (x.mkv -> x.mkv.mpk; d: x.mkv.mpk -> x.mkv); else c makes
+// one archive of them all (a member for each; append: added to the one
+// there), d makes out of its one. A file that fails is told and left; the
+// rest go on, unless the output cannot be written (out_failed) or Ctrl+C.
+// The exit code: the first that failed's
+static int RunFiles( const vector<wstring>& ins, const wstring& out0, int append ) {
+  int n = int( ins.size() ), units = 0, ok = 0, r0 = 0, started = append, tried = 0;
+  wstring out = FullPath( out0 );
+  int dir = (out0.size() && IsSep( out0[out0.size()-1] )) || IsDir( LongPath(out) ) || (f_dec && (n>1));
+  if( dir && out.size() && !IsSep( out[out.size()-1] ) ) out += L"" DS;
+  vector<wstring> used;
+  string failed;
+  qword t0 = GetTickCount64();
+  bytes_in = bytes_out = 0; out_failed = 0;
+  for( int k=0; (k<n) && !f_abort && !out_failed; k++ ) {
+    wstring in = FullPath( ins[k] );
+    if( n>1 ) Msg( "== file " + Num(k+1) + " of " + Num(n) + ": " + U(in) );
+    if( file_hook ) file_hook( k, -1 );
+    tried++;
+    int r, u = units, o = ok;
+    if( !f_dec ) {
+      wstring to = dir ? out + UniqueName( FileName(in), used ) + L".mpk" : out;
+      Member m;
+      NewRun();
+      last_msg.clear();
+      t_start = GetTickCount64();
+      units++;
+      r = Compress( in, to, !dir && started, m );
+      if( r && run_err.empty() ) run_err = last_msg; // (before DropWork's notes)
+      if( !r && !dir ) started = 1;
+      DropWork();
+      if( !r && f_verify && !f_abort ) r = Verify( to, m );
+      if( !r ) { ok++; bytes_in += src_size; bytes_out += m.size; }
+    } else r = DecompressArchive( in, out, dir, used, units, ok );
+    if( r && !r0 ) r0 = r;
+    if( (ok-o<units-u) && (r!=5) ) failed += (failed.size() ? ", " : "") + U( FileName(in) );
+    if( file_hook ) file_hook( k, r );
+  }
+  if( (n>1) || (units>1) ) { // how it all went
+    string a = Num(units) + " files: ";
+    if( f_abort ) a += "stopped; ";
+    if( ok<units ) a += Num(ok) + " done, " + Num(units-ok) + " not" + (failed.size() ? " (" + failed + ")" : string()) + "; ";
+    if( tried<n ) a += Num(n-tried) + " not tried" + (out_failed ? string( " (the output cannot be written)" ) : string()) + "; ";
+    if( ok ) a += Num(bytes_in) + " -> " + Num(bytes_out) + (f_dec ? string() : " (" + Pct( double(bytes_out), double(bytes_in) ) + ")") + ", ";
+    a += Clock( GetTickCount64()-t0 );
+    Msg( a );
+    run_summary = a;
+  }
+  return f_abort ? 5 : r0;
+}
+
+// what a run needs once, with the options as set: the CPU's threads (or the
+// free ones: -f), -t and -c, the tool builds; 0, or the exit code
+static int Setup() {
   CpuThreads();
   CpuTargets();
   string c = "cpu: " + Num(cpu_threads) + " threads" + (cpu_cores ? ", " + Num(cpu_cores) + " cores" : string());
@@ -2197,16 +2453,24 @@ static int Run( const wstring& in, const wstring& out ) {
   for( size_t i=0; i<sizeof(all)/sizeof(all[0]); i++ ) { const Tool& t = GetTool( all[i] ); if( t.path.size() ) tl += " " + t.file; }
   Msg( "tools:" + (tl.size() ? tl : string(" none")) );
   for( int i=0; i<2; i++ ) if( GetTool( all[i] ).path.empty() ) { Msg( NoTool( GetTool( all[i] ) ) ); run_err = last_msg; return 2; }
-  t_start = GetTickCount64();
+  return 0;
+}
 
-  wstring fi = FullPath( in ), fo = FullPath( out );
-  int r = f_dec ? Decompress( fi, fo ) : Compress( fi, fo );
-  if( r ) run_err = last_msg; // (before DropWork's notes)
-  DropWork();
-  if( (r==0) && f_verify && !f_dec && !f_abort ) r = Verify( fo );
+// c or d (f_dec) of the files ins to out (RunFiles), with the options as
+// set: t_spec, c_spec, the levels (ParseLevels), cap (-i), w_base and the
+// flags; the exit code
+static int RunList( const vector<wstring>& ins, const wstring& out, int append ) {
+  NewRun();
+  held = 0;
+  last_msg.clear(); run_err.clear(); run_summary.clear();
+  int r = Setup();
+  if( r ) return r;
+  t_start = GetTickCount64();
+  r = RunFiles( ins, out, append );
   if( f_abort ) { Msg( "aborted" ); r = 5; }
   return r;
 }
+
 
 // a command line (after the program's name): c or d, options into their
 // settings (t_spec, c_spec, the levels, cap, w_base, the flags), at most two
@@ -2249,6 +2513,17 @@ static int ParseArgs( int argc, wchar_t** argv, int gui, int& mode, vector<wstri
 
 #ifndef MP4PACK_NO_MAIN
 
+// c or d of in (a file, or @list) to out
+static int Run( const wstring& in, const wstring& out ) {
+  vector<wstring> ins;
+  if( in.size() && (in[0]=='@') ) {
+    string why;
+    if( ReadList( in.substr( 1 ), ins, why ) ) { Msg( why ); run_err = why; return 2; }
+    if( ins.empty() ) { Msg( "no files in the list " + U( in.substr( 1 ) ) ); run_err = last_msg; return 1; }
+  } else ins.push_back( in );
+  return RunList( ins, out, 0 );
+}
+
 static HANDLE ev_done;
 
 static BOOL WINAPI CtrlHandler( DWORD t ) {
@@ -2267,6 +2542,14 @@ static const char usage[] =
 "<tool>" EXE "\n"
 "usage: mp4pack c [options] input output   compress\n"
 "       mp4pack d [options] input output   decompress\n"
+"input: a file, or @list: a text file with a file on each line (UTF-8, or\n"
+"  UTF-16 with its BOM, or the ANSI code page; names relative to the current\n"
+"  directory), done one after another (one that fails is left, the rest go on)\n"
+"output: a file, or a directory (ending with \\ or /, or one that is there),\n"
+"  made if needed, for an output of each file there: c x.mkv -> x.mkv.mpk,\n"
+"  d x.mkv.mpk -> x.mkv. c of a list to a file: one archive of them all; d\n"
+"  of it (an archive of more than one file): the files under the names they\n"
+"  had, in the directory output (made if needed)\n"
 "options:\n"
 "  -t T  threads of the video packer (h264p, m4vpack), the audio packer\n"
 "        (aacpack, ac3pack, mp3pack, oggcomp), ttfcomp and tangelo (the other\n"

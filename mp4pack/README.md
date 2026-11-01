@@ -11,6 +11,10 @@ mp4pack c [options] input output     compress
 mp4pack d [options] input output     decompress
 ```
 
+The input is a file, or `@list`: a text file with a file on each line (see
+[Lists](#lists)). The output is a file, or a directory: one that ends with `\`
+or `/`, or one that is there.
+
 The tools are looked up in the directory of `mp4pack.exe` itself, so put it
 next to them: `avip`, `h264p`, `m4vpack`, `aacpack`, `ac3pack`, `mp3pack`,
 `oggcomp`, `ttfcomp`, `tangelo`. Each can be there in builds for several CPUs,
@@ -225,6 +229,37 @@ tell nothing. The time left is that of the whole, but no less than what the
 slowest job running still needs at its own pace (h264p is far slower by the
 byte than the rest).
 
+## Lists
+
+`mp4pack c @list.txt out\` compresses each file of the list in turn, each
+into its own archive in `out\` (made if needed), named after it:
+`x.mkv` -> `out\x.mkv.mpk`. `mp4pack d @archives.txt out\` does the same
+backwards: `x.mkv.mpk` -> `out\x.mkv`. The same works for one file:
+`mp4pack c x.mkv out\`. Two files of one name (from two directories) do not
+write over each other: the second becomes `x (2).mkv.mpk`.
+
+`mp4pack c @list.txt all.mpk` (an output that is not a directory) makes one
+archive of all of them, a member for each, one after another (see
+[The archive](#the-archive)). `mp4pack d all.mpk out` restores each file under
+the name it had, in the directory `out` (made if needed; with no separator at
+its end too, as there is more than one file); an archive of one file goes to
+the output as it is named, as ever.
+
+The list: a file on each line, as it would be on the command line (relative
+names are from the current directory). UTF-8, or UTF-16 with its BOM
+(PowerShell's `>`); else, on Windows, the ANSI code page, or the OEM one for
+a name that only that finds (`dir /b > list.txt` in a console writes OEM).
+Blank lines are left out, and spaces and quotes around a name.
+
+A file that fails is told (with why) and left; the rest go on, and a line at
+the end says how it all went: `5 files: 4 done, 1 not (y.mkv); 1246023 ->
+688677 (55.27%), 0:00:04`. The exit code is then the first that failed's (5
+after Ctrl+C). An output that cannot be written (a directory that cannot be
+made, a full disk) stops the list: the files after it are not tried. An
+archive member is only added when its file went well, and one that fails
+while it is written is taken off again, so the archive holds the files that
+went well. `-verify` checks each member as soon as it is written.
+
 ## Tool builds and the CPU
 
 At the start mp4pack says what it found:
@@ -317,6 +352,25 @@ tools, as `mp4pack.exe` does.
   whose code runs here, ranked) and every build of every tool here: the one
   that runs (`*`), the others that could, and what the CPU lacks for those
   that cannot.
+- **List**: files to do one after another, as mp4pack's `@list`. The row
+  shows how many there are and how far it got (`5 files: 2 done, 1
+  failed`); a click on it shows them all, the next to be done (or the one
+  running) highlighted, those done in gray, those that failed in red with
+  "(failed)". `...` adds files (the Open dialog, more at once; they come
+  sorted by name), and so does dropping more than one file on the window
+  (one goes to Input, unless there is a list); Clear takes them all away.
+  Adding files sets the mode when they say it (all archives: Decompress,
+  none: Compress), and the output, unless you chose one: the directory of
+  the first file, an output of each beside it. The output is as mp4pack's:
+  a directory (ending with `\`) for an output of each file, or a file for
+  one archive of them all (d: the files under the names they had). With a
+  list, Start does the files not done yet, in order (when all are done, all
+  of them again), each in Input as it comes, its progress in the rows
+  below, and at the end says how it all went. One that fails is marked and
+  left, the rest go on. Stopped, the one running is left to do: Start goes
+  on from it, and into one archive it adds the rest to the one made so far.
+  Before it starts, the outputs it would replace are asked about (all in
+  one question).
 - **Input, Output**: typed or pasted (quotes around a path, as Explorer's "Copy
   as path" gives it, are taken off), chosen with `...` (the Open and Save
   dialogs), or the input dropped on the window, or given on mp4gui's command
@@ -387,8 +441,8 @@ tools, as `mp4pack.exe` does.
 
 mp4gui takes mp4pack's command line too: `mp4gui c [options] input [output]`
 (or `d`) sets the mode, the options given and the files (the output named
-after the input if not given), and waits for Start; `C` and `D` start it at
-once. The options are mp4pack's: `-t` (a `-N` at its end goes to "keep
+after the input if not given; an input `@list` fills the List), and waits
+for Start; `C` and `D` start it at once. The options are mp4pack's: `-t` (a `-N` at its end goes to "keep
 free"), `-f`, `-l`, `-w`, `-k`, `-verify`; `-c` and `-i`, which have no
 fields, are used for every run until mp4gui is closed and show on the line
 under Threads; `-v` is ignored. Two more are mp4gui's own:
@@ -438,12 +492,14 @@ when mp4pack ends, however that happens.
 
 ## The archive
 
-The output is mp4pack's own archive: the packed files and the index, stored
-as they are, one after another (the numbers little-endian):
+The output is mp4pack's own archive: one or more members, one after another,
+a member for each file packed into it (more than one only from a list, see
+[Lists](#lists)). A member is the packed files and the index, stored as they
+are, one after another (the numbers little-endian):
 
 ```
 "mp4pack"           7 bytes
-version             1 byte: 1
+version             1 byte: 2 (1: of an archive that may have one member only; read too)
 number of files     4 bytes
 then for each file:
   name length       2 bytes
@@ -468,10 +524,12 @@ s.3.ac3.ac3p            ac3pack (.eac3: s.3.eac3.ac3p)
 store/...               -t ...+0: stored as they are
 ```
 
-d takes an archive only with the signature and this version, all of it and
-nothing after it, every name a plain one (no `..`, no root or drive) and each
-once; else it stops with exit code 4. `mp4pack d -k` keeps the work
-directory, with the archive's files in its `p\`.
+d takes an archive only with the signature and these versions, all of each
+member and nothing after the last (else it restores the members whole before
+what is wrong, and stops with exit code 4), every name a plain one (no `..`,
+no root or drive) and each once in its member; else it stops with exit code
+4. `mp4pack d -k` keeps the work directory, with the member's files in its
+`p\`.
 
 `mp4pack.idx` is text:
 
@@ -653,6 +711,23 @@ right), the green and blue bars with wine's own visual style and with the
 classic look, the settings kept in mp4gui.ini, and no work directory or
 temporary file left in any case. Not on Windows itself: the look there (Segoe
 UI, the themed controls) and the taskbar's progress were not seen.
+
+Lists (on Linux and under wine): `c @list out\` and `d` of the archives
+back to another directory (the files the same; two named `x.mp4`: the second
+`x (2).mp4.mpk`, and back), one archive of a list (4 members, each verified
+with `-verify`; a file in the list that is not there left out, exit code 2)
+and `d` of it into a directory with no separator at its end, an archive of
+one file to a file as before, an archive of version 1, one cut in its last
+member (the 3 whole ones restored, exit code 4), an empty list and one that
+is not there; lists in UTF-16, in UTF-8 with Cyrillic and accented names,
+in the ANSI code page and in the OEM one (the name found by it); archives of
+the Windows build read by the Linux one and the other way round. mp4gui: a
+list from the command line (`c @list out\`), the row closed and open, Input
+and the highlight going on while it ran, Start again when all were done (all
+again, into one archive), files added with the Open dialog (sorted), Stop on
+the third and Start again (the archive got the third added: its 3 files the
+same), `D @archives` with one not there (marked failed, the summary saying
+so), and `C @list ... -quit` (exit code 0).
 
 The Container box, under wine: an mkv with fonts (its tracks, attachments
 and files with their packers), its archive after the switch to Decompress

@@ -3,9 +3,10 @@
 // it runs the progress of each of its tasks (avip, each stream's packer, the
 // archive) and of the whole (also in the taskbar), the gain of each task when
 // it is done (its bar green, then blue for the gain), and its messages, in
-// place of the console. The Container box shows what the input holds
-// (avip's description of it, or an archive's index). CPU Info shows the CPU
-// and the tool builds. It takes mp4pack's command line too: c or d sets
+// place of the console. The List row holds files to do one after another
+// (mp4pack's @list); the Container box shows what the input holds (avip's
+// description of it, or an archive's index). CPU Info shows the CPU and
+// the tool builds. It takes mp4pack's command line too: c or d sets
 // everything up, C or D starts it; -quit: it quits when that is done,
 // -overwrite: an existing output is replaced without asking.
 //
@@ -41,7 +42,8 @@
 
 enum {
   ID_COMP = 100, ID_DEC, ID_VERIFY, ID_CPU, ID_IN, ID_INB, ID_OUT, ID_OUTB, ID_W, ID_WB, ID_WTEMP, ID_WOUT, ID_K,
-  ID_T, ID_FREE, ID_FREEUD, ID_F, ID_LH, ID_LA, ID_LT, ID_LOG, ID_START, ID_PAUSE, ID_STOP, ID_STATUS, ID_PHASE, ID_PCT, ID_INFO
+  ID_T, ID_FREE, ID_FREEUD, ID_F, ID_LH, ID_LA, ID_LT, ID_LOG, ID_START, ID_PAUSE, ID_STOP, ID_STATUS, ID_PHASE, ID_PCT, ID_INFO,
+  ID_LIST, ID_LISTB, ID_LISTCLR
 };
 enum { WM_LOG = WM_APP+1, WM_PROG, WM_DONE, WM_INFO }; // from the run's thread; from the input's description's
 enum { T_TICK = 1, T_OPTS, T_INFO };            // timers: the clock while it runs; options changed; the input changed
@@ -57,6 +59,7 @@ static int log_y;                 // where the log begins (the rest is above it)
 static int nrows;                 // task rows shown
 
 static HWND c_comp, c_dec, c_verify, c_cpu, l_in, c_in, c_inb, l_out, c_out, c_outb, l_w, c_w, c_wb, c_wtemp, c_wout, c_k;
+static HWND l_list, c_list, c_listb, c_listclr; // the list: its files, "...", Clear
 static HWND g_opt, l_t, c_t, l_free, c_free, c_freeud, c_f, c_plan, l_l, l_lh, c_lh, l_la, c_la, l_lt, c_lt;
 static HWND g_info, c_info;       // the input's container (the box above Progress)
 static HWND g_prog, c_phase, c_bar, c_pct, c_time, c_jl[NJ], c_jb[NJ], c_jp[NJ];
@@ -79,12 +82,19 @@ static string details;            // the CPU Info window's text (made when idle)
 static HANDLE h_run;              // its thread
 static int running, closing;      // closing: the window goes when it ends
 static wstring run_in, run_out;
+// the list: files done one after another (Start does those not done yet)
+struct LItem { wstring path; int st; };      // st: 0 waiting, 1 running, 2 done, 3 failed
+static vector<LItem> list;
+static int list_run;              // the run is the list's
+static vector<int> run_list;      // its files: their places in list
+static vector<wstring> run_ins;   // and their paths
+static int run_append, run_k;     // c into one archive, added to the one there; the file of the run now
 static int run_dec, run_verify;   // d; c, then Verify's d
 static qword run_t0, paused_at;
 static CRITICAL_SECTION qlock;    // for what the run's thread hands over:
 static string log_q;              //   messages (UTF-8 lines)
 struct JobRow { string label; int st; double frac; int est, gain; qword work, made; }; // frac -1: not known; est: a guess; gain: c's or d's
-struct Prog { string phase; double frac; qword eta; vector<JobRow> jobs; };
+struct Prog { string phase; double frac; qword eta; vector<JobRow> jobs; int file, fr; Prog() : frac(0), eta(0), file(-1), fr(0) {} }; // file>=0: a file of a list begins (fr -1) or ends (fr: how)
 static vector<Prog> prog_q;       //   the progress: each change of a job's state or the phase (none lost when they come faster than the window looks)
 static int log_posted, prog_posted;
 static Prog prog;                 // the progress shown
@@ -116,7 +126,7 @@ static void HookStatus( double frac, qword eta, const vector<Job*>& all ) {
     p.jobs.push_back( r );
   }
   EnterCriticalSection( &qlock );
-  int same = prog_q.size() && (prog_q.back().phase==p.phase) && (prog_q.back().jobs.size()==p.jobs.size());
+  int same = prog_q.size() && (prog_q.back().file<0) && (prog_q.back().phase==p.phase) && (prog_q.back().jobs.size()==p.jobs.size());
   for( size_t i=0; same && (i<p.jobs.size()); i++ ) same = (prog_q.back().jobs[i].label==p.jobs[i].label) && (prog_q.back().jobs[i].st==p.jobs[i].st);
   if( same ) std::swap( prog_q.back(), p ); // (only further on: the latest will do)
   else prog_q.push_back( p );
@@ -125,8 +135,20 @@ static void HookStatus( double frac, qword eta, const vector<Job*>& all ) {
   if( post ) PostMessageW( hwnd, WM_PROG, 0, 0 );
 }
 
+// a file of the list's run begins (r -1) or ends (r): in the progress's
+// order, as a change of it
+static void HookFile( int k, int r ) {
+  Prog p;
+  p.file = k; p.fr = r;
+  EnterCriticalSection( &qlock );
+  prog_q.push_back( p );
+  int post = !prog_posted; prog_posted = 1;
+  LeaveCriticalSection( &qlock );
+  if( post ) PostMessageW( hwnd, WM_PROG, 0, 0 );
+}
+
 static DWORD WINAPI RunThread( void* ) {
-  int r = Run( run_in, run_out );
+  int r = list_run ? RunList( run_ins, run_out, run_append ) : RunList( vector<wstring>( 1, run_in ), run_out, 0 );
   PostMessageW( hwnd, WM_DONE, WPARAM(r), 0 );
   return 0;
 }
@@ -430,6 +452,9 @@ static void MakeControls() {
   c_dec = Button( L"&Decompress", ID_DEC, BS_AUTORADIOBUTTON );
   c_verify = Button( L"&Verify", ID_VERIFY, BS_AUTOCHECKBOX|WS_GROUP );
   c_cpu = Button( L"CPU I&nfo", ID_CPU );
+  l_list = Label( L"List" );
+  c_list = Make( L"COMBOBOX", L"", WS_TABSTOP|WS_VSCROLL|CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS|CBS_NOINTEGRALHEIGHT, ID_LIST );
+  c_listclr = Button( L"Cl&ear", ID_LISTCLR ); c_listb = Button( L"...", ID_LISTB );
   l_in = Label( L"&Input" ); c_in = Edit( ID_IN ); c_inb = Button( L"...", ID_INB );
   l_out = Label( L"&Output" ); c_out = Edit( ID_OUT ); c_outb = Button( L"...", ID_OUTB );
   l_w = Label( L"&Work dir" ); c_w = Edit( ID_W ); c_wb = Button( L"...", ID_WB );
@@ -467,9 +492,9 @@ static void MakeControls() {
   SendMessageW( c_freeud, UDM_SETBUDDY, (WPARAM)c_free, 0 );
   SendMessageW( c_freeud, UDM_SETRANGE32, 0, std::max( cpu_threads-1, 0 ) );
   SendMessageW( c_w, EM_SETCUEBANNER, TRUE, (LPARAM)L"the temp directory" ); // (comctl32 6)
-  const wchar_t* lab[] = { L"&Input", L"&Output", L"&Work dir", L"&Threads", L"&Levels" };
+  const wchar_t* lab[] = { L"&Input", L"&Output", L"&Work dir", L"&Threads", L"&Levels", L"List" };
   lw = 0;
-  for( int i=0; i<5; i++ ) lw = std::max( lw, TextWidth( lab[i] ) );
+  for( int i=0; i<6; i++ ) lw = std::max( lw, TextWidth( lab[i] ) );
   lw += DX(6);
 }
 
@@ -484,6 +509,9 @@ static void Layout() {
   Place( c_comp, x0, y, DX(52), rh ); Place( c_dec, x0+DX(56), y, DX(60), rh );
   Place( c_verify, x0+DX(124), y, TextWidth( L"Verify" )+DX(16), rh );
   Place( c_cpu, xr-cw, y, cw, rh ); y += rh+gap;
+  int clw = TextWidth( L"Clear" )+DX(12);
+  Place( l_list, x0, y, lw, rh ); Place( c_list, x0+lw, y, wl-lw-bw-clw-2*sp, rh+DY(160) );
+  Place( c_listclr, xr-bw-sp-clw, y, clw, rh ); Place( c_listb, xr-bw, y, bw, rh ); y += rh+gap;
   Place( l_in, x0, y, lw, rh ); Place( c_in, x0+lw, y, wl-lw-bw-sp, rh ); Place( c_inb, xr-bw, y, bw, rh ); y += rh+gap;
   Place( l_out, x0, y, lw, rh ); Place( c_out, x0+lw, y, wl-lw-bw-sp, rh ); Place( c_outb, xr-bw, y, bw, rh ); y += rh+gap;
   int kw = TextWidth( L"keep it" )+DX(16), ow = TextWidth( L"Output dir" )+DX(10), tw = TextWidth( L"%TEMP%" )+DX(10), a = xr;
@@ -659,7 +687,7 @@ static string CommandText() {
   if( w_base.size() ) s += " -w " + Quote( U(w_base) );
   if( f_keep ) s += " -k";
   if( f_verify ) s += " -verify";
-  return s + " " + Quote( U(run_in) ) + " " + Quote( U(run_out) );
+  return s + " " + (list_run ? "@(" + Num(run_ins.size()) + ((run_ins.size()==1) ? " file" : " files") + " of the list" + (run_append ? ", added to the archive" : "") + ")" : Quote( U(run_in) )) + " " + Quote( U(run_out) );
 }
 
 //---- the CPU and the tool builds
@@ -809,41 +837,37 @@ static string Right( const string& s, size_t n ) { return (s.size()<n) ? string(
 // what it came to with its method (the streams in a solid archive together),
 // the tools (on the thread: nothing of the run's)
 static string ArchiveText( const wstring& path ) {
-  HANDLE f = OpenRead( LongPath(path) );
-  if( f==INVALID_HANDLE_VALUE ) { DWORD e = GetLastError(); return "cannot read it" + SysErr(e); }
-  byte h[16];
-  string idx, why;
-  vector<string> fn; vector<qword> fz; // its files
-  LARGE_INTEGER z, o, pos; z.QuadPart = 0; o.QuadPart = 0;
-  GetFileSizeEx( f, &z );
-  if( ReadN( f, h, 12 ) || memcmp( h, "mp4pack", 7 ) ) why = "not an mp4pack archive";
-  else if( h[7]!=ARC_VERSION ) why = "an mp4pack archive of another version (" + Num(h[7]) + ", not " + Num(ARC_VERSION) + ")";
-  qword n = why.size() ? 0 : GetLE( h+8, 4 );
-  for( qword i=0; (i<n) && why.empty(); i++ ) {
-    string a;
-    if( !ReadN( f, h, 2 ) ) a.resize( size_t( GetLE( h, 2 ) ) );
-    if( a.empty() || ReadN( f, &a[0], DWORD(a.size()) ) || ReadN( f, h, 8 ) ) { why = "x"; break; }
-    qword len = GetLE( h, 8 );
-    o.QuadPart = LONGLONG(len);
-    if( (a=="mp4pack.idx") && idx.empty() && (len<(1u<<20)) ) { idx.resize( size_t(len) ); if( len && ReadN( f, &idx[0], DWORD(len) ) ) why = "x"; }
-    else if( !SetFilePointerEx( f, o, 0, FILE_CURRENT ) ) why = "x";
-    fn.push_back( a ); fz.push_back( len );
+  vector<Member> v;
+  string why;
+  int bad = ScanArchive( path, v, why );
+  if( v.empty() ) return why;
+  qword all = 0, src = 0;
+  for( size_t i=0; i<v.size(); i++ ) { all += v[i].size; src += v[i].src_size; }
+  if( (v.size()>1) || bad ) { // more files: a line for each (what each was and came to)
+    string r = "mp4pack archive, version " + Num(v[0].ver) + ": " + Num(v.size()) + " files, " + Num(all) + " bytes"
+             + (src ? " (" + Pct( double(all), double(src) ) + ")" : string()) + "\r\n";
+    size_t w = 0, wz = 0;
+    for( size_t i=0; i<v.size(); i++ ) { w = std::max( w, v[i].src.size() ); wz = std::max( wz, Num( v[i].src_size ).size() ); }
+    for( size_t i=0; i<v.size(); i++ )
+      r += Pad( v[i].src, w ) + "  " + Right( Num(v[i].src_size), wz ) + " -> " + Right( Num(v[i].size), wz )
+         + (v[i].src_size ? " (" + Pct( double(v[i].size), double(v[i].src_size) ) + ")" : string()) + "\r\n";
+    if( bad ) r += why + " after these\r\n";
+    return r;
   }
-  o.QuadPart = 0;
-  if( why.empty() && (!SetFilePointerEx( f, o, &pos, FILE_CURRENT ) || (pos.QuadPart!=z.QuadPart)) ) why = "x";
-  CloseHandle( f );
-  if( why=="x" ) why = "not all of an mp4pack archive (cut short, or damaged)";
-  if( why.empty() && idx.empty() ) why = "an mp4pack archive without its index";
-  if( why.size() ) return why;
+  const Member& m = v[0];
+  const string& idx = m.idx;
+  const vector<string>& fn = m.names;
+  const vector<qword>& fz = m.sizes;
+  LARGE_INTEGER z; z.QuadPart = LONGLONG(m.size);
 
   struct St { string name, method; qword size; int parts; vector<string> files; }; // files: its parts' in the archive
   vector<St> st;
-  string src, tools;
+  string tools, srcl;
   vector<string> l = Lines( idx );
   for( size_t k=0; k<l.size(); k++ ) {
     size_t i = 0;
     string key = Field( l[k], i );
-    if( key=="src" ) src = l[k].substr( i );
+    if( key=="src" ) srcl = l[k].substr( i );
     else if( key=="tools" ) tools = l[k].substr( i );
     else if( key=="stream" ) { St s; qword v = 0; Number( Field( l[k], i ), v ); s.size = v; s.parts = 0; Field( l[k], i ); s.method = Field( l[k], i ); s.name = l[k].substr( i ); st.push_back( s ); }
     else if( (key=="part") && st.size() ) {
@@ -857,12 +881,12 @@ static string ArchiveText( const wstring& path ) {
     }
   }
   size_t i0 = 0;
-  string a = Field( src, i0 ), c = Field( src, i0 );
+  string a = Field( srcl, i0 ), c = Field( srcl, i0 );
   qword ssz = 0;
   int ok = !Number( a, ssz );
-  string r = "mp4pack archive, version " + Num(ARC_VERSION) + ": " + Num(fn.size()) + " files, " + Num(z.QuadPart) + " bytes"
+  string r = "mp4pack archive, version " + Num(m.ver) + ": " + Num(z.QuadPart) + " bytes"
            + (ok ? " (" + Pct( double(z.QuadPart), double(ssz) ) + ")" : string()) + "\r\n";
-  if( ok ) r += "of " + src.substr( i0 ) + ": " + a + " bytes, CRC32 " + c + "\r\n";
+  if( ok ) r += "of " + srcl.substr( i0 ) + ": " + a + " bytes, CRC32 " + c + "\r\n";
   // a stream alone in its files: its line; those in a solid archive: the archive's
   size_t w = 0, wz = 0;
   for( size_t k=0; k<st.size(); k++ ) { w = std::max( w, st[k].name.size() ); wz = std::max( wz, Num( st[k].size ).size() ); }
@@ -1137,11 +1161,13 @@ static wstring AutoName( const wstring& f ) {
   return f.empty() ? f : !Checked( c_dec ) ? f + L".mpk" : IsArchive( f ) ? f.substr( 0, f.size()-4 ) : f + L".out";
 }
 
-// the output from the input, unless the user chose one
+// the output from the input (with a list: the directory of its first file,
+// an output of each there), unless the user chose one
 static void AutoOut() {
   wstring o = Text( c_out );
   if( o.size() && (o!=out_auto) ) return;
-  out_auto = AutoName( Text( c_in ) );
+  if( list.size() ) { const wstring& f = list[0].path; out_auto = f.substr( 0, f.size()-FileName( f ).size() ); }
+  else out_auto = AutoName( Text( c_in ) );
   SetText( c_out, out_auto );
 }
 
@@ -1151,7 +1177,7 @@ static void Enable();
 static void InputChanged() {
   if( swapping ) return;
   wstring f = Text( c_in );
-  if( f.size() ) { Check( c_dec, IsArchive( f ) ); Check( c_comp, !IsArchive( f ) ); }
+  if( f.size() && list.empty() ) { Check( c_dec, IsArchive( f ) ); Check( c_comp, !IsArchive( f ) ); } // (a list's files say it)
   mode_dec = Checked( c_dec );
   AutoOut();
   Enable(); // (Verify and the levels: c only)
@@ -1161,7 +1187,7 @@ static void InputChanged() {
 // places (x.mkv -> x.mkv.mpk, then back: x.mkv.mpk -> x.mkv)
 static void ModeClicked() {
   int dec = Checked( c_dec );
-  if( dec!=mode_dec ) {
+  if( (dec!=mode_dec) && list.empty() ) { // (a list stays as it is)
     wstring i = Text( c_in ), o = Text( c_out );
     swapping = 1; SetText( c_in, o ); SetText( c_out, i ); swapping = 0;
     out_auto = (i.size() && (AutoName( o )==i)) ? i : wstring(); // (named after it still: so it goes on)
@@ -1172,6 +1198,137 @@ static void ModeClicked() {
 }
 
 static void SetInput( const wstring& f ) { SetText( c_in, f ); SetFocus( c_start ); }
+
+//---- the list (the List row)
+
+// The files of the list are done one after another, when Start is clicked
+// with them there: those not done yet (all, when all are). The row shows how
+// many there are; its drop-down shows them, the next to be done (or the one
+// running) highlighted, those done gray, those failed red. "..." adds files
+// (the Open dialog, more at once), Clear takes them all away.
+
+// the next to be done (the one running): the first not done; -1: none
+static int ListNext() {
+  for( size_t i=0; i<list.size(); i++ ) if( list[i].st!=2 ) return int(i);
+  return -1;
+}
+
+// the row as it is closed: how many, and how far
+static wstring ListSummary() {
+  if( list.empty() ) return L"no files (\"...\" adds some, or drop them here)";
+  int n[4] = { 0, 0, 0, 0 };
+  for( size_t i=0; i<list.size(); i++ ) n[list[i].st&3]++;
+  string t = Num(list.size()) + ((list.size()==1) ? " file" : " files");
+  string a;
+  if( n[2] ) a += Num(n[2]) + " done";
+  if( n[3] ) a += (a.size() ? ", " : "") + Num(n[3]) + " failed";
+  if( n[1] ) a += (a.size() ? ", " : "") + string( "the " ) + Num(ListNext()+1) + (((ListNext()+1)%10==1) && ((ListNext()+1)%100!=11) ? "st" :
+                  ((ListNext()+1)%10==2) && ((ListNext()+1)%100!=12) ? "nd" : ((ListNext()+1)%10==3) && ((ListNext()+1)%100!=13) ? "rd" : "th") + " running";
+  return W( a.size() ? t + ": " + a : t );
+}
+
+// the drop-down's items anew, the next one highlighted
+static void ListShow() {
+  SendMessageW( c_list, WM_SETREDRAW, FALSE, 0 );
+  if( int( SendMessageW( c_list, CB_GETCOUNT, 0, 0 ) )!=int( list.size() ) ) {
+    SendMessageW( c_list, CB_RESETCONTENT, 0, 0 );
+    for( size_t i=0; i<list.size(); i++ ) SendMessageW( c_list, CB_ADDSTRING, 0, (LPARAM)list[i].path.c_str() );
+  }
+  SendMessageW( c_list, CB_SETCURSEL, WPARAM( ListNext() ), 0 );
+  SendMessageW( c_list, WM_SETREDRAW, TRUE, 0 );
+  InvalidateRect( c_list, 0, TRUE );
+}
+
+// an item of the drop-down, or the row closed (ODS_COMBOBOXEDIT: how many)
+static void ListDraw( const DRAWITEMSTRUCT* d ) {
+  int closed = (d->itemState & ODS_COMBOBOXEDIT) || (int(d->itemID)<0) || (d->itemID>=list.size());
+  int sel = (d->itemState & ODS_SELECTED) && !(closed && !(d->itemState & ODS_FOCUS));
+  COLORREF fg = GetSysColor( sel ? COLOR_HIGHLIGHTTEXT : COLOR_WINDOWTEXT );
+  wstring t;
+  if( closed ) {
+    t = ListSummary();
+    if( list.empty() || !IsWindowEnabled( c_list ) ) fg = GetSysColor( COLOR_GRAYTEXT );
+  } else {
+    const LItem& e = list[d->itemID];
+    t = e.path + ((e.st==3) ? L"  (failed)" : (e.st==1) ? L"  (running)" : L"");
+    if( !sel && (e.st==2) ) fg = GetSysColor( COLOR_GRAYTEXT );
+    if( !sel && (e.st==3) ) fg = RGB( 192, 0, 0 );
+  }
+  FillRect( d->hDC, &d->rcItem, GetSysColorBrush( sel ? COLOR_HIGHLIGHT : COLOR_WINDOW ) );
+  RECT r = d->rcItem; r.left += DX(2); r.right -= DX(1);
+  SetBkMode( d->hDC, TRANSPARENT );
+  SetTextColor( d->hDC, fg );
+  vector<wchar_t> b( t.begin(), t.end() ); b.push_back( 0 ); // (DT_PATH_ELLIPSIS: in the middle of the path, the name kept)
+  DrawTextW( d->hDC, &b[0], -1, &r, DT_SINGLELINE|DT_VCENTER|DT_NOPREFIX|(closed ? DT_END_ELLIPSIS : DT_PATH_ELLIPSIS) );
+  if( closed && (d->itemState & ODS_FOCUS) && !(d->itemState & ODS_NOFOCUSRECT) ) DrawFocusRect( d->hDC, &d->rcItem );
+}
+
+// files added to the list (each once), in the order given; the mode by
+// them (all archives: Decompress; none: Compress), and the output
+static void ListAdd( const vector<wstring>& f ) {
+  for( size_t i=0; i<f.size(); i++ ) {
+    wstring p = FullPath( f[i] );
+    int in = 0;
+    for( size_t k=0; (k<list.size()) && !in; k++ ) in = !lstrcmpiW( list[k].path.c_str(), p.c_str() );
+    if( !in ) { LItem e = { p, 0 }; list.push_back( e ); }
+  }
+  size_t arc = 0;
+  for( size_t k=0; k<list.size(); k++ ) arc += IsArchive( list[k].path );
+  if( list.size() && ((arc==list.size()) || !arc) ) { Check( c_dec, arc!=0 ); Check( c_comp, !arc ); }
+  mode_dec = Checked( c_dec );
+  ListShow();
+  AutoOut();
+  Enable();
+}
+
+static void ListClear() {
+  list.clear();
+  ListShow();
+  AutoOut(); // (the input's again)
+  Enable();
+}
+
+// "...": files for the list, from the Open dialog (more at once), sorted by
+// name (the dialog gives them in an order of its own)
+static void ListBrowse() {
+  vector<wchar_t> f( 1<<20, 0 );
+  wstring dir = list.size() ? list.back().path : Text( c_in );
+  if( dir.size() ) { dir = FullPath( dir ); dir = dir.substr( 0, dir.size()-FileName( dir ).size() ); }
+  OPENFILENAMEW o; memset( &o, 0, sizeof(o) );
+  o.lStructSize = sizeof(o); o.hwndOwner = hwnd; o.lpstrFile = &f[0]; o.nMaxFile = DWORD(f.size());
+  o.lpstrInitialDir = dir.size() ? dir.c_str() : 0;
+  o.lpstrFilter = L"Video files and mp4pack archives\0*.mp4;*.m4v;*.mkv;*.avi;*.mpk\0Video files (mp4, mkv, avi)\0*.mp4;*.m4v;*.mkv;*.avi\0"
+                  L"mp4pack archives (*.mpk)\0*.mpk\0All files\0*.*\0";
+  o.lpstrTitle = L"Files to add to the list";
+  o.Flags = OFN_EXPLORER|OFN_HIDEREADONLY|OFN_ENABLESIZING|OFN_PATHMUSTEXIST|OFN_FILEMUSTEXIST|OFN_NOCHANGEDIR|OFN_ALLOWMULTISELECT;
+  if( !GetOpenFileNameW( &o ) ) return;
+  // one: its path; more: the directory, then their names, each ending with 0, and a 0 after them
+  vector<wstring> v;
+  wstring first = &f[0];
+  const wchar_t* p = &f[0]+first.size()+1;
+  if( !*p ) v.push_back( first );
+  else {
+    if( first.size() && !IsSep( first[first.size()-1] ) ) first += L"\\";
+    for( ; *p; p += wcslen( p )+1 ) v.push_back( first + p );
+    std::sort( v.begin(), v.end(), []( const wstring& a, const wstring& b ) { return lstrcmpiW( a.c_str(), b.c_str() )<0; } );
+  }
+  ListAdd( v );
+}
+
+static void ClearProg();
+
+// a file of the list's run begins (r -1: it is the next, in Input; the
+// progress anew) or has ended (r: done, failed, or waiting again: stopped)
+static void ListFile( int k, int r ) {
+  if( !list_run || (k<0) || (k>=int( run_list.size() )) || (run_list[k]>=int( list.size() )) ) return;
+  LItem& e = list[run_list[k]];
+  if( r<0 ) {
+    e.st = 1; run_k = k;
+    swapping = 1; SetText( c_in, e.path ); swapping = 0;
+    if( k ) ClearProg();
+  } else e.st = !r ? 2 : (r==5) ? 0 : 3;
+  ListShow();
+}
 
 static wstring FileDialog( int save ) {
   vector<wchar_t> f( 32768, 0 );
@@ -1227,7 +1384,7 @@ static void WorkByOutput() {
 static void Enable() {
   int idle = !running, dec = Checked( c_dec );
   HWND all[] = { c_comp, c_dec, l_in, c_in, c_inb, l_out, c_out, c_outb, l_w, c_w, c_wb, c_wtemp, c_wout, c_k,
-                 l_t, c_t, l_free, c_free, c_freeud, c_f, c_start };
+                 l_t, c_t, l_free, c_free, c_freeud, c_f, c_start, c_listb, c_listclr }; // (the list's row shows it while it runs)
   for( size_t i=0; i<sizeof(all)/sizeof(all[0]); i++ ) EnableWindow( all[i], idle );
   HWND copt[] = { c_verify, l_l, l_lh, c_lh, l_la, c_la, l_lt, c_lt }; // (c only)
   for( size_t i=0; i<sizeof(copt)/sizeof(copt[0]); i++ ) EnableWindow( copt[i], idle && !dec );
@@ -1385,15 +1542,17 @@ static void ShowRows() {
 }
 
 static void Title() {
-  wchar_t t[128];
-  if( running ) swprintf( t, 128, L"%.0f%% %ls - mp4gui", 100*shown, f_pause ? L"paused" : W( (Verifying( prog.phase ) ? "verify: " : "") + prog.phase ).c_str() );
+  wchar_t t[160];
+  string k = list_run ? Num(run_k+1) + "/" + Num(run_list.size()) + " " : string();
+  if( running ) swprintf( t, 160, L"%ls%.0f%% %ls - mp4gui", W(k).c_str(), 100*shown, f_pause ? L"paused" : W( (Verifying( prog.phase ) ? "verify: " : "") + prog.phase ).c_str() );
   SetText( hwnd, running ? t : L"mp4gui" );
 }
 
 // the status line while it runs
 static void RunStatus() {
-  SetStatus( f_abort ? "Stopping..." : f_pause ? "Paused." : Verifying( prog.phase ) ? "Verifying: d of the archive..."
-             : run_dec ? "Decompressing..." : "Compressing..." );
+  string k = (list_run && !f_abort) ? "File " + Num(run_k+1) + " of " + Num(run_list.size()) + ": " : string();
+  SetStatus( k + (f_abort ? "Stopping..." : f_pause ? "Paused." : Verifying( prog.phase ) ? "Verifying: d of the archive..."
+                  : run_dec ? "Decompressing..." : "Compressing...") );
 }
 
 static void ShowTime() {
@@ -1411,12 +1570,16 @@ static void ShowProg() {
   q.swap( prog_q ); prog_posted = 0;
   LeaveCriticalSection( &qlock );
   if( q.empty() ) return;
+  int last = -1;
   for( size_t i=0; i<q.size(); i++ ) { // (each change, in its order)
+    if( q[i].file>=0 ) { ListFile( q[i].file, q[i].fr ); continue; } // (a list's file begins or ends)
     Tasks( q[i] );
     double t = Total( q[i].phase, q[i].frac, 1 );
     if( t>=0 ) shown = std::max( shown, t );
+    last = int(i);
   }
-  prog = q.back();
+  if( last<0 ) { RunStatus(); return; }
+  prog = q[last];
   if( !f_pause ) prog_at = GetTickCount64();
   Marquee( c_bar, (shown==0) && (prog.frac<0) ); // (nothing known yet: avip c)
   SetText( c_phase, W( (Verifying( prog.phase ) ? "verify: " : "") + prog.phase ) );
@@ -1440,17 +1603,72 @@ static void ClearProg() {
 
 static void Problem( const wstring& s ) { MessageBoxW( hwnd, s.c_str(), L"mp4gui", MB_OK|MB_ICONWARNING ); }
 
+// the outputs of a run that are there already: as RunFiles names them (in
+// a directory: after each file; d of an archive of more files: the names in
+// it)
+static vector<wstring> OutputsThere( const vector<wstring>& ins, const wstring& out, int dir ) {
+  vector<wstring> v, used;
+  wstring d = out;
+  if( dir && d.size() && !IsSep( d[d.size()-1] ) ) d += L"\\";
+  for( size_t i=0; i<ins.size(); i++ ) {
+    vector<wstring> o;
+    if( !f_dec ) o.push_back( dir ? d + UniqueName( FileName( ins[i] ), used ) + L".mpk" : out );
+    else {
+      vector<Member> m;
+      string why;
+      ScanArchive( ins[i], m, why );
+      wstring name = FileName( ins[i] );
+      if( !dir && (m.size()<=1) ) o.push_back( out );
+      else if( (m.size()==1) && IsArchive( name ) ) o.push_back( d + UniqueName( name.substr( 0, name.size()-4 ), used ) );
+      else for( size_t k=0; k<m.size(); k++ ) { string a = m[k].src; o.push_back( d + UniqueName( SafeName( a ) ? W(a) : W( "file" + Num(k+1) ), used ) ); }
+    }
+    for( size_t k=0; k<o.size(); k++ ) if( Exists( LongPath( o[k] ) ) ) v.push_back( o[k] );
+  }
+  return v;
+}
+
 static void OnStart() {
   if( running ) return;
   wstring in = Text( c_in ), out = Text( c_out );
-  if( in.empty() ) { Problem( L"Choose the file to compress or decompress (Input)." ); SetFocus( c_in ); return; }
-  if( out.empty() ) { Problem( L"Choose the output file." ); SetFocus( c_out ); return; }
-  in = FullPath( in ); out = FullPath( out );
-  if( !Exists( LongPath(in) ) ) { Problem( L"There is no file " + in + L"." ); SetFocus( c_in ); return; }
+  if( list.empty() && (in.size()>1) && (in[0]=='@') ) { // (a list typed in, as mp4pack's @list: to the List)
+    vector<wstring> v;
+    string why;
+    if( ReadList( in.substr( 1 ), v, why ) || v.empty() ) { Problem( v.empty() && why.empty() ? L"No files in the list " + in.substr( 1 ) + L"." : W(why) ); return; }
+    ListAdd( v );
+    out = Text( c_out );
+  }
+  int lst = !list.empty();
+  if( !lst && in.empty() ) { Problem( L"Choose the file to compress or decompress (Input), or files for the List." ); SetFocus( c_in ); return; }
+  if( out.empty() ) {
+    Problem( lst ? L"Choose the output: a directory (ending with \\) for an output of each file, or a file for one archive of them all." : L"Choose the output file." );
+    SetFocus( c_out ); return;
+  }
   string why;
   if( Options( why ) ) { Problem( W(why) ); return; }
-  if( !f_overwrite && (out!=out_ok) && Exists( LongPath(out) )
-      && (MessageBoxW( hwnd, (out + L" exists. Replace it?").c_str(), L"mp4gui", MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 )!=IDYES) ) return;
+  vector<wstring> ins;
+  run_list.clear();
+  int done = 0;
+  if( lst ) { // those not done yet (all, when all are)
+    if( ListNext()<0 ) for( size_t i=0; i<list.size(); i++ ) list[i].st = 0;
+    for( size_t i=0; i<list.size(); i++ ) if( list[i].st!=2 ) { run_list.push_back( int(i) ); ins.push_back( list[i].path ); } else done++;
+  } else {
+    in = FullPath( in );
+    if( !Exists( LongPath(in) ) ) { Problem( L"There is no file " + in + L"." ); SetFocus( c_in ); return; }
+    ins.push_back( in );
+  }
+  wstring fo = FullPath( out );
+  int dir = IsSep( out[out.size()-1] ) || IsDir( LongPath(fo) ) || (f_dec && (ins.size()>1)); // (as RunFiles has it)
+  int append = lst && !dir && !f_dec && done && Exists( LongPath(fo) ); // (c into one archive, some done: added to it)
+  if( !f_overwrite && !append ) {
+    vector<wstring> there = OutputsThere( ins, fo, dir );
+    if( there.size() && !((there.size()==1) && (there[0]==out_ok)) ) {
+      wstring q = there[0];
+      for( size_t i=1; (i<there.size()) && (i<4); i++ ) q += L"\n" + there[i];
+      if( there.size()>4 ) q += L"\n...";
+      q = (there.size()==1) ? q + L" exists. Replace it?" : W(Num(there.size())) + L" of the files to make are there already:\n" + q + L"\nReplace them?";
+      if( MessageBoxW( hwnd, q.c_str(), L"mp4gui", MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 )!=IDYES ) return;
+    }
+  }
   Save();
   if( info.path.size() && (info.kind==0) ) { // (its avip would vie with the run's for the file)
     InfoStop();
@@ -1458,7 +1676,9 @@ static void OnStart() {
     info_held = 1;
     InfoShow();
   }
-  run_in = in; run_out = out; run_dec = f_dec; run_verify = f_verify;
+  list_run = lst; run_ins = ins; run_append = append; run_k = 0;
+  run_in = ins[0]; run_out = fo; run_dec = f_dec; run_verify = f_verify;
+  if( lst ) { swapping = 1; SetText( c_in, ins[0] ); swapping = 0; }
   SetText( c_log, L"" ); ClearProg(); result.clear();
   EnterCriticalSection( &qlock ); log_q.clear(); prog_q.clear(); LeaveCriticalSection( &qlock );
   f_abort = 0; f_pause = 0; ResetEvent( ev_abort );
@@ -1497,7 +1717,14 @@ static void OnStop() {
 static void OnDone( int r ) {
   WaitForSingleObject( h_run, INFINITE );
   CloseHandle( h_run ); h_run = 0;
+  ShowProg(); // (the last of it: a list's last file's end)
   running = 0; f_pause = 0;
+  int lr = list_run;
+  if( lr ) {
+    list_run = 0;
+    for( size_t i=0; i<list.size(); i++ ) if( list[i].st==1 ) list[i].st = 0; // (stopped before its end came)
+    ListShow();
+  }
   KillTimer( hwnd, T_TICK );
   SetText( c_pause, L"P&ause" );
   ShowLog();
@@ -1508,7 +1735,20 @@ static void OnDone( int r ) {
     tasks[i].st = !r ? 2 : (r==5) ? 5 : 3; tasks[i].frac = r ? tasks[i].frac : 1;
     vf = (tasks[i].st==3);
   }
-  if( r==0 ) {
+  if( lr ) { // a list's: how it all went (mp4pack's last line), the gain of what went well
+    string sum = run_summary.size() ? run_summary : result.size() ? result : run_err; // (one file: its own line)
+    double g = (bytes_in && bytes_out) ? (run_dec ? double(bytes_in)/double(bytes_out) : double(bytes_out)/double(bytes_in)) : -1;
+    shown = (r==5) ? shown : 1;
+    Marquee( c_bar, 0 );
+    SendMessageW( c_bar, PBM_SETPOS, int( shown*1000 ), 0 );
+    pct_blue = !r && (g>=0);
+    SetText( c_pct, pct_blue ? Percent( 1-g ) : r ? L"" : Percent( 1 ) );
+    Split( NJ, pct_blue ? std::min( g, 1.0 ) : -1 );
+    InvalidateRect( c_pct, 0, TRUE );
+    SetText( c_phase, !r ? (run_verify ? L"all done, verified" : L"all done") : (r==5) ? L"stopped" : L"not all done" );
+    SetStatus( !r ? "Done: " + sum : (r==5) ? "Stopped: " + sum : "Not all done: " + sum, r && (r!=5) );
+    TaskbarShow( (!r || (r==5)) ? TBPF_NOPROGRESS : TBPF_ERROR, 0 );
+  } else if( r==0 ) {
     qword a, b;
     shown = 1;
     Marquee( c_bar, 0 );
@@ -1594,7 +1834,11 @@ static int CommandLine() {
     f_quit = seen.find( 'Q' )!=string::npos;
     f_overwrite = seen.find( 'O' )!=string::npos;
   }
-  if( io.size() ) SetInput( FullPath( io[0] ) ); // (the mode by its name...)
+  if( io.size() && (io[0].size()>1) && (io[0][0]=='@') ) { // a list: to the List
+    vector<wstring> v;
+    if( ReadList( io[0].substr( 1 ), v, why ) || v.empty() ) { Problem( L"The command line: " + (v.empty() && why.empty() ? L"no files in the list " + io[0].substr( 1 ) : W(why)) ); io.clear(); mode = 0; }
+    else ListAdd( v );
+  } else if( io.size() ) SetInput( FullPath( io[0] ) ); // (the mode by its name...)
   if( mode ) { Check( c_dec, (mode|32)=='d' ); Check( c_comp, (mode|32)=='c' ); mode_dec = Checked( c_dec ); } // (...unless it is given)
   if( io.size()>1 ) SetText( c_out, FullPath( io[1] ) );
   else AutoOut();
@@ -1628,6 +1872,11 @@ static LRESULT CALLBACK WndProc( HWND h, UINT msg, WPARAM wp, LPARAM lp ) {
         case ID_WTEMP: SetText( c_w, L"%TEMP%" ); return 0;
         case ID_WOUT: WorkByOutput(); return 0;
         case ID_COMP: case ID_DEC: if( code==BN_CLICKED ) ModeClicked(); return 0;
+        case ID_LIST: // (a view of it: the next one stays the one highlighted)
+          if( (code==CBN_CLOSEUP) || ((code==CBN_SELCHANGE) && !SendMessageW( c_list, CB_GETDROPPEDSTATE, 0, 0 )) ) SendMessageW( c_list, CB_SETCURSEL, WPARAM( ListNext() ), 0 );
+          return 0;
+        case ID_LISTB: ListBrowse(); return 0;
+        case ID_LISTCLR: ListClear(); return 0;
         case ID_IN: if( code==EN_CHANGE ) { SetTimer( h, T_INFO, 300, 0 ); if( !Unquote( c_in ) ) InputChanged(); } return 0;
         case ID_OUT: if( code==EN_CHANGE ) Unquote( c_out ); return 0;
         case ID_W: if( code==EN_CHANGE ) Unquote( c_w ); return 0;
@@ -1658,17 +1907,31 @@ static LRESULT CALLBACK WndProc( HWND h, UINT msg, WPARAM wp, LPARAM lp ) {
       }
       break;
     }
-    case WM_DROPFILES: {
+    case WM_DROPFILES: { // one: the input (unless there is a list); more: to the list
       HDROP d = (HDROP)wp;
-      UINT n = DragQueryFileW( d, 0, 0, 0 );
-      if( n && !running ) {
+      UINT k = DragQueryFileW( d, 0xFFFFFFFF, 0, 0 );
+      vector<wstring> v;
+      for( UINT i=0; (i<k) && !running; i++ ) {
+        UINT n = DragQueryFileW( d, i, 0, 0 );
         vector<wchar_t> f( n+1 );
-        DragQueryFileW( d, 0, &f[0], n+1 );
-        SetInput( &f[0] );
+        DragQueryFileW( d, i, &f[0], n+1 );
+        v.push_back( &f[0] );
       }
       DragFinish( d );
+      if( (v.size()==1) && list.empty() ) SetInput( v[0] );
+      else if( v.size() ) ListAdd( v );
       return 0;
     }
+    case WM_MEASUREITEM: {
+      MEASUREITEMSTRUCT* m = (MEASUREITEMSTRUCT*)lp;
+      if( m->CtlID!=ID_LIST ) break;
+      m->itemHeight = (int(m->itemID)==-1) ? std::max( rh-6, by ) : by+DY(3); // (closed: as high as the rest of a row)
+      return TRUE;
+    }
+    case WM_DRAWITEM:
+      if( ((DRAWITEMSTRUCT*)lp)->CtlID!=ID_LIST ) break;
+      ListDraw( (DRAWITEMSTRUCT*)lp );
+      return TRUE;
     case WM_LOG: ShowLog(); return 0;
     case WM_PROG: if( running ) ShowProg(); return 0;
     case WM_DONE: OnDone( int(wp) ); return 0;
@@ -1750,7 +2013,7 @@ int WINAPI wWinMain( HINSTANCE hi, HINSTANCE, LPWSTR, int show ) {
   InitializeCriticalSection( &qlock );
   Init(); // mp4pack's
   tool_flags = DETACHED_PROCESS; // (no console for each tool: it has none of ours to share)
-  msg_hook = HookMsg; status_hook = HookStatus;
+  msg_hook = HookMsg; status_hook = HookStatus; file_hook = HookFile;
   CpuThreads();
   Fonts();
 
@@ -1777,6 +2040,7 @@ int WINAPI wWinMain( HINSTANCE hi, HINSTANCE, LPWSTR, int show ) {
   }
   Load();
   Check( c_comp, 1 );
+  ListShow();
   int go = CommandLine();
   Refresh();
   Enable();
