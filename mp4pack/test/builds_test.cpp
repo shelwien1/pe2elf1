@@ -11,10 +11,9 @@ static const char* dump;
 inline bool ReadDump( Cpuid& d ) { return ParseCpuid( d, dump ); }
 }
 #define ReadCpuid ReadDump // (CpuTargets reads the dump, not this CPU)
-#define wmain mp4pack_wmain
 #define WINAPI_POSIX_NO_MAIN // (Linux: the main below)
-#include "../mp4pack.cpp"
-#undef wmain
+#pragma GCC diagnostic ignored "-Wunused-function" // (the engine's run: not used here)
+#include "../inc/mp4pack.inc"
 
 int wmain( int argc, wchar_t** argv ) {
   int a = 1, ic = -1, bits;

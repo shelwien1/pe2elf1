@@ -336,7 +336,7 @@ other model switches.)
 
 ## mp4gui
 
-`mp4gui.exe` is mp4pack in a window, for Windows: `mp4pack.cpp` compiled in,
+`mp4gui.exe` is mp4pack in a window, for Windows: mp4pack's engine compiled in,
 run on a thread of its own instead of from a console. It goes next to the
 tools, as `mp4pack.exe` does.
 
@@ -552,7 +552,7 @@ g++ -std=c++11 -O2 -s -static -municode -o mp4pack.exe mp4pack.cpp
 ```
 
 clang++ works the same way (for the MSVC target `wmain` needs no `-municode`).
-`mp4pack.cpp` includes `x86targets.h`, a copy of cpuinfo's
+The engine includes `x86targets.h`, a copy of cpuinfo's
 (`../cpuinfo/x86targets.h`; copy a newer one over it), so this directory
 builds on its own. For the Linux build see below.
 
@@ -561,6 +561,21 @@ mp4gui (`./build.sh` makes it too), plain Win32 with its common dialogs:
 ```
 g++ -std=c++11 -O2 -s -static -municode -mwindows -o mp4gui.exe mp4gui.cpp -lcomdlg32 -lole32 -lshell32 -lgdi32
 ```
+
+The sources: each program is one file, its main (`mp4pack.cpp`: the command
+line; `mp4gui.cpp`: the window), which includes the rest from `inc/`, a part
+for each purpose. Both include the engine, `inc/mp4pack.inc`, which includes
+its parts in order: the platform (`base.inc`), what goes where
+(`methods.inc`), the settings (`state.inc`), `strings.inc`, `messages.inc`,
+`crc32.inc`, `files.inc`, the CPU and the tool builds (`builds.inc`),
+`work.inc`, a tool's process (`tools.inc`), running the jobs (`stages.inc`),
+the streams and the index (`streams.inc`), `-t`/`-c`/`-l` (`options.inc`),
+`archive.inc`, `compress.inc`, `decompress.inc`, `lists.inc`, the run
+(`run.inc`) and the command line (`cmdline.inc`). mp4gui's own parts are
+`inc/gui_*.inc` (its controls, the Container box, the list, the progress, a
+run ...). The parts are no headers: each takes what those before it have,
+so they are included in their order, and only through these two files (and
+the tests, which include the engine).
 
 ## Linux
 
@@ -636,8 +651,9 @@ and only the work directory is left). And the movie (see [Testing](#testing)).
 under wine; else the Linux `mp4pack`) compress each file with the options,
 decompress it and compare, a line per file. E.g.
 `test\roundtrip.bat c:\mp4pack_v0\mp4pack.exe "-t 50%+50%-1" a.mkv b.mp4`.
-`test/parse_test.cpp` checks the `-t`/`-c`/`-l` parsing (build it like
-mp4pack.exe and run it; on Linux `g++ -std=c++11 -pthread test/parse_test.cpp`).
+`test/parse_test.cpp` checks the `-t`/`-c`/`-l` parsing (it includes the
+engine; build it like mp4pack.exe and run it; on Linux `g++ -std=c++11
+-pthread test/parse_test.cpp`).
 `test/builds_test.cpp` (built the same way) shows which builds mp4pack would
 run on other CPUs: `builds_test [-i T] TOOLDIR DUMP...` reads CPUID dumps in
 cpuinfo's format (InstLatx64's `*CPUID*.txt`, or `cpuinfo -D`), and prints for
