@@ -333,6 +333,21 @@ tools, as `mp4pack.exe` does.
   tangelo; off for Decompress). The part sizes are mp4pack's defaults (a part
   for each thread, as the memory allows: `-c`), and the tool builds any that
   run here.
+- **Container**: what the input holds. A moment after the input is set, avip
+  describes it (`avip <file>`, its info mode: nothing is written): the
+  container and its size, each track (codec, frames, bytes, and further right
+  avip's own details of it), the attachments, then the files `avip c` would
+  make, each with what would pack it as the options stand (h264p, tangelo,
+  ...; e.g. `tangelo (no h264p build runs here)`), and last avip's notes on
+  the container's layout. An mp4pack archive (avip cannot read those) is
+  described by its index instead: the file it was made of (name, size,
+  CRC32), each stream with its size, what it came to and its method (the
+  fonts in `fonts.ttfc`, the files in a tangelo archive, together), and the
+  tool builds it was made with. avip runs in the background (a 1GB mkv took
+  27 s here), at a lower priority; a new input stops it. Start stops it too,
+  as it would compete with the run for the file, and the description is made
+  when the run ends. The last four are kept, so switching between Compress
+  and Decompress shows them at once.
 - **Start** (or Enter) runs it. The log gets mp4pack's messages, the command
   line it amounts to first. Progress shows the whole run's share done (avip
   and the archive take 3% each, packing or unpacking the rest; with Verify,
@@ -632,6 +647,15 @@ right), the green and blue bars with wine's own visual style and with the
 classic look, the settings kept in mp4gui.ini, and no work directory or
 temporary file left in any case. Not on Windows itself: the look there (Segoe
 UI, the themed controls) and the taskbar's progress were not seen.
+
+The Container box, under wine: an mkv with fonts (its tracks, attachments
+and files with their packers), its archive after the switch to Decompress
+(and back: kept), `-t 0+2` (the h264 to tangelo), the tools without h264p
+(`tangelo (no h264p build runs here)`), a text file (`unknown format`), no
+file (empty), a cut mkv and a cut archive, a Cyrillic name in a Cyrillic
+directory (avip got its 8.3 name) and a plain one in it (by its name, from
+there), a 1GB file replaced while avip read it (that avip stopped) and Start
+while it read (stopped, then read when the run ended), and `C ... -quit`.
 
 The movie, with `-t 4+4,1,1` (the default then) on a 4-thread Xeon VM under
 wine:

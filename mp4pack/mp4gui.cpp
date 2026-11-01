@@ -3,10 +3,11 @@
 // it runs the progress of each of its tasks (avip, each stream's packer, the
 // archive) and of the whole (also in the taskbar), the gain of each task when
 // it is done (its bar green, then blue for the gain), and its messages, in
-// place of the console. CPU Info shows the CPU and the tool builds. It takes
-// mp4pack's command line too: c or d sets everything up, C or D starts it;
-// -quit: it quits when that is done, -overwrite: an existing output is
-// replaced without asking.
+// place of the console. The Container box shows what the input holds
+// (avip's description of it, or an archive's index). CPU Info shows the CPU
+// and the tool builds. It takes mp4pack's command line too: c or d sets
+// everything up, C or D starts it; -quit: it quits when that is done,
+// -overwrite: an existing output is replaced without asking.
 //
 // Run, mp4pack's whole run, works on a thread of its own here; msg_hook and
 // status_hook bring its messages and progress over. Stop sets its abort flag
@@ -40,22 +41,24 @@
 
 enum {
   ID_COMP = 100, ID_DEC, ID_VERIFY, ID_CPU, ID_IN, ID_INB, ID_OUT, ID_OUTB, ID_W, ID_WB, ID_WTEMP, ID_WOUT, ID_K,
-  ID_T, ID_FREE, ID_FREEUD, ID_F, ID_LH, ID_LA, ID_LT, ID_LOG, ID_START, ID_PAUSE, ID_STOP, ID_STATUS, ID_PHASE, ID_PCT
+  ID_T, ID_FREE, ID_FREEUD, ID_F, ID_LH, ID_LA, ID_LT, ID_LOG, ID_START, ID_PAUSE, ID_STOP, ID_STATUS, ID_PHASE, ID_PCT, ID_INFO
 };
-enum { WM_LOG = WM_APP+1, WM_PROG, WM_DONE };  // from the run's thread
-enum { T_TICK = 1, T_OPTS };                    // timers: the clock while it runs; options changed
+enum { WM_LOG = WM_APP+1, WM_PROG, WM_DONE, WM_INFO }; // from the run's thread; from the input's description's
+enum { T_TICK = 1, T_OPTS, T_INFO };            // timers: the clock while it runs; options changed; the input changed
 static const int NJ = 12;                       // task rows, at most
 
 static HINSTANCE hinst;
 static HWND hwnd, hcpu;           // the window; the CPU Info window
 static HFONT font, mono;          // the system's message font; a fixed one
 static int bx, by;                // the font's average character width and height
+static int mh;                    // the fixed font's line height
 static int rh, lw;                // a row's height; the labels' width
 static int log_y;                 // where the log begins (the rest is above it)
 static int nrows;                 // task rows shown
 
 static HWND c_comp, c_dec, c_verify, c_cpu, l_in, c_in, c_inb, l_out, c_out, c_outb, l_w, c_w, c_wb, c_wtemp, c_wout, c_k;
 static HWND g_opt, l_t, c_t, l_free, c_free, c_freeud, c_f, c_plan, l_l, l_lh, c_lh, l_la, c_la, l_lt, c_lt;
+static HWND g_info, c_info;       // the input's container (the box above Progress)
 static HWND g_prog, c_phase, c_bar, c_pct, c_time, c_jl[NJ], c_jb[NJ], c_jp[NJ];
 static HWND c_log, c_status, c_start, c_pause, c_stop;
 static int jl_gray[NJ], jp_color[NJ], pct_blue; // colors: a task waiting (gray); a gain (1, blue), failed (2, red)
@@ -340,6 +343,10 @@ static void MakeControls() {
   l_la = Label( L"audio" ); c_la = Combo( ID_LA, CBS_DROPDOWNLIST, l_items, 10 );
   l_lt = Label( L"tangelo" ); c_lt = Combo( ID_LT, CBS_DROPDOWNLIST, l_items, 10 );
 
+  g_info = Group( L"Container" );
+  c_info = Make( L"EDIT", L"", WS_TABSTOP|ES_MULTILINE|ES_READONLY|WS_VSCROLL|WS_HSCROLL|ES_AUTOVSCROLL|ES_AUTOHSCROLL|ES_NOHIDESEL, ID_INFO, WS_EX_CLIENTEDGE );
+  SendMessageW( c_info, WM_SETFONT, (WPARAM)mono, FALSE );
+
   g_prog = Group( L"Progress" );
   c_phase = Note( ID_PHASE ); c_bar = Bar(); c_pct = Make( L"STATIC", L"", SS_RIGHT|SS_CENTERIMAGE, ID_PCT );
   c_time = Note();
@@ -398,6 +405,11 @@ static void Layout() {
   Place( l_la, a, y, w2, rh ); a += w2; Place( c_la, a, y, lc, rh+DY(100) ); a += lc+sp*3;
   Place( l_lt, a, y, w3, rh ); a += w3; Place( c_lt, a, y, lc, rh+DY(100) ); y += rh+DY(4);
   Place( g_opt, x0, gy, wl, y-gy ); y += gap;
+
+  gy = y; y += gc; // the input's container: 6 lines
+  int ih = 6*mh+GetSystemMetrics( SM_CYHSCROLL )+2*GetSystemMetrics( SM_CYEDGE )+DY(2);
+  Place( c_info, x0+pad, y, wl-2*pad, ih ); y += ih+DY(5);
+  Place( g_info, x0, gy, wl, y-gy ); y += gap;
 
   gy = y; y += gc;
   int pw = DX(30), jw = DX(116), bx0 = x0+pad+jw, bw0 = xr-pad-pw-sp-bx0, jh = by+DY(4);
@@ -654,6 +666,292 @@ static string BuildsText() {
   return o;
 }
 
+//---- the input's container: the box above Progress
+
+// A moment after the input is set (T_INFO), avip describes it in its "file"
+// mode (the container, its tracks, the files c would make of it), run in the
+// background; an mp4pack archive is described by its index instead. The
+// files avip would make are shown with what packs each, as the options stand
+// (StreamMethod). The last few inputs' descriptions are kept (the mode switch
+// swaps the files). Only while no run runs: Start stops a description still
+// being made, and it is made when the run ends.
+
+struct Info { wstring path; qword size, time; int kind; string text, arg; }; // kind: 0 being made, 1 avip's (arg: the input as it got it), 2 an archive's, 3 a note
+struct InfoJob { LONG gen; wstring path; HANDLE proc, out; };              // for the thread: proc 0: an archive
+struct InfoMsg { LONG gen; int kind; string text; };                       // from it
+static Info info;                 // the input's
+static vector<Info> info_kept;    // the last few made
+static volatile LONG info_gen;    // the request's now (an older one's result is dropped)
+static HANDLE info_proc;          // its avip
+static int info_held;             // to be made when the run ends
+static wstring info_shown;        // the box's text
+
+static vector<string> Lines( const string& t ) {
+  vector<string> l;
+  for( size_t i=0; i<t.size(); ) {
+    size_t e = t.find( '\n', i );
+    if( e==string::npos ) e = t.size();
+    string s = t.substr( i, e-i );
+    if( s.size() && (s[s.size()-1]=='\r') ) s.erase( s.size()-1 );
+    if( s.size() ) l.push_back( s );
+    i = e+1;
+  }
+  return l;
+}
+
+static string Right( const string& s, size_t n ) { return (s.size()<n) ? string( n-s.size(), ' ' )+s : s; }
+
+// an mp4pack archive by its index: the file it was made of, each stream and
+// what it came to with its method (the streams in a solid archive together),
+// the tools (on the thread: nothing of the run's)
+static string ArchiveText( const wstring& path ) {
+  HANDLE f = OpenRead( LongPath(path) );
+  if( f==INVALID_HANDLE_VALUE ) { DWORD e = GetLastError(); return "cannot read it" + SysErr(e); }
+  byte h[16];
+  string idx, why;
+  vector<string> fn; vector<qword> fz; // its files
+  LARGE_INTEGER z, o, pos; z.QuadPart = 0; o.QuadPart = 0;
+  GetFileSizeEx( f, &z );
+  if( ReadN( f, h, 12 ) || memcmp( h, "mp4pack", 7 ) ) why = "not an mp4pack archive";
+  else if( h[7]!=ARC_VERSION ) why = "an mp4pack archive of another version (" + Num(h[7]) + ", not " + Num(ARC_VERSION) + ")";
+  qword n = why.size() ? 0 : GetLE( h+8, 4 );
+  for( qword i=0; (i<n) && why.empty(); i++ ) {
+    string a;
+    if( !ReadN( f, h, 2 ) ) a.resize( size_t( GetLE( h, 2 ) ) );
+    if( a.empty() || ReadN( f, &a[0], DWORD(a.size()) ) || ReadN( f, h, 8 ) ) { why = "x"; break; }
+    qword len = GetLE( h, 8 );
+    o.QuadPart = LONGLONG(len);
+    if( (a=="mp4pack.idx") && idx.empty() && (len<(1u<<20)) ) { idx.resize( size_t(len) ); if( len && ReadN( f, &idx[0], DWORD(len) ) ) why = "x"; }
+    else if( !SetFilePointerEx( f, o, 0, FILE_CURRENT ) ) why = "x";
+    fn.push_back( a ); fz.push_back( len );
+  }
+  o.QuadPart = 0;
+  if( why.empty() && (!SetFilePointerEx( f, o, &pos, FILE_CURRENT ) || (pos.QuadPart!=z.QuadPart)) ) why = "x";
+  CloseHandle( f );
+  if( why=="x" ) why = "not all of an mp4pack archive (cut short, or damaged)";
+  if( why.empty() && idx.empty() ) why = "an mp4pack archive without its index";
+  if( why.size() ) return why;
+
+  struct St { string name, method; qword size; int parts; vector<string> files; }; // files: its parts' in the archive
+  vector<St> st;
+  string src, tools;
+  vector<string> l = Lines( idx );
+  for( size_t k=0; k<l.size(); k++ ) {
+    size_t i = 0;
+    string key = Field( l[k], i );
+    if( key=="src" ) src = l[k].substr( i );
+    else if( key=="tools" ) tools = l[k].substr( i );
+    else if( key=="stream" ) { St s; qword v = 0; Number( Field( l[k], i ), v ); s.size = v; s.parts = 0; Field( l[k], i ); s.method = Field( l[k], i ); s.name = l[k].substr( i ); st.push_back( s ); }
+    else if( (key=="part") && st.size() ) {
+      Field( l[k], i ); Field( l[k], i );
+      string pk = Field( l[k], i ), pk2 = l[k].substr( i );
+      vector<string>& v = st.back().files;
+      st.back().parts++;
+      if( pk=="-" ) pk = "store/" + st.back().name;
+      if( std::find( v.begin(), v.end(), pk )==v.end() ) v.push_back( pk );
+      if( pk2.size() && (std::find( fn.begin(), fn.end(), pk2 )!=fn.end()) ) v.push_back( pk2 ); // (mp3pack's: a file; tangelo's: a name in its archive)
+    }
+  }
+  size_t i0 = 0;
+  string a = Field( src, i0 ), c = Field( src, i0 );
+  qword ssz = 0;
+  int ok = !Number( a, ssz );
+  string r = "mp4pack archive, version " + Num(ARC_VERSION) + ": " + Num(fn.size()) + " files, " + Num(z.QuadPart) + " bytes"
+           + (ok ? " (" + Pct( double(z.QuadPart), double(ssz) ) + ")" : string()) + "\r\n";
+  if( ok ) r += "of " + src.substr( i0 ) + ": " + a + " bytes, CRC32 " + c + "\r\n";
+  // a stream alone in its files: its line; those in a solid archive: the archive's
+  size_t w = 0, wz = 0;
+  for( size_t k=0; k<st.size(); k++ ) { w = std::max( w, st[k].name.size() ); wz = std::max( wz, Num( st[k].size ).size() ); }
+  for( size_t k=0; k<fn.size(); k++ ) w = std::max( w, fn[k].size() );
+  vector<string> done;
+  for( size_t k=0; k<st.size(); k++ ) {
+    qword p = 0;
+    string shared;
+    for( size_t q=0; q<st[k].files.size(); q++ ) {
+      const string& x = st[k].files[q];
+      for( size_t e=0; e<fn.size(); e++ ) if( fn[e]==x ) p += fz[e];
+      for( size_t s=0; s<st.size(); s++ ) if( (s!=k) && (std::find( st[s].files.begin(), st[s].files.end(), x )!=st[s].files.end()) ) shared = x;
+    }
+    if( shared.empty() ) {
+      r += Pad( st[k].name, w ) + "  " + Right( Num(st[k].size), wz ) + " -> " + Right( Num(p), wz ) + "  " + st[k].method
+         + ((st[k].parts>1) ? ", " + Num(st[k].parts) + " parts" : string()) + "\r\n";
+      continue;
+    }
+    if( std::find( done.begin(), done.end(), shared )!=done.end() ) continue;
+    done.push_back( shared );
+    qword u = 0, sz = 0;
+    string names;
+    for( size_t s=0; s<st.size(); s++ ) if( std::find( st[s].files.begin(), st[s].files.end(), shared )!=st[s].files.end() ) { u += st[s].size; names += " " + st[s].name; }
+    for( size_t e=0; e<fn.size(); e++ ) if( fn[e]==shared ) sz = fz[e];
+    r += Pad( shared, w ) + "  " + Right( Num(u), wz ) + " -> " + Right( Num(sz), wz ) + "  " + st[k].method + ":" + names + "\r\n";
+  }
+  if( tools.size() ) r += "made with " + tools + "\r\n";
+  return r;
+}
+
+// avip's description, its lines in this order: the container (without the
+// path avip got), what it says of the tracks (and attachments), the files c
+// would make, each with what would pack it (packers: as the options stand),
+// and last what it says of the container's layout
+static string AvipText( const string& t, const string& arg, int packers ) {
+  vector<string> l = Lines( t ), fn;
+  vector<qword> fz;
+  string head, total, body, tail;
+  for( size_t i=0; i<l.size(); i++ ) {
+    string s = l[i];
+    size_t c = s.find( ": " ), d = s.find( " -> " );
+    qword v, v2;
+    if( i==0 ) { if( s.compare( 0, arg.size()+2, arg+": " )==0 ) s.erase( 0, arg.size()+2 ); head = s; }
+    else if( (c!=string::npos) && (s.find( ' ' )==c+1) && !Number( s.substr( c+2 ), v ) ) { fn.push_back( s.substr( 0, c ) ); fz.push_back( v ); } // "0.h264: 41182"
+    else if( (d!=string::npos) && !Number( s.substr( 0, d ), v ) && !Number( s.substr( d+4 ), v2 ) ) total = s.substr( d+4 ); // "239558 -> 234618"
+    else if( !s.compare( 0, 7, "layout:" ) || !s.compare( 0, 7, "struct:" ) || !s.compare( 0, 10, "chunk ops:" ) ) tail += s + "\r\n";
+    else body += s + "\r\n";
+  }
+  string r = head;
+  if( total.size() ) r += "; avip c: " + Num(fn.size()) + ((fn.size()==1) ? " file, " : " files, ") + total + " bytes";
+  r += "\r\n" + body;
+  size_t w = 0, wz = 0;
+  for( size_t i=0; i<fn.size(); i++ ) { w = std::max( w, fn[i].size() ); wz = std::max( wz, Num(fz[i]).size() ); }
+  for( size_t i=0; i<fn.size(); i++ ) {
+    r += Pad( fn[i], w ) + "  " + Right( Num(fz[i]), wz );
+    int nb = 0, m = packers ? StreamMethod( "s."+fn[i], fz[i], &nb ) : -1;
+    if( m>=0 ) r += "  " + string( m_name[m] ) + (nb ? string( " (no " ) + m_tool[Method( "s."+fn[i] )] + " build runs here)" : string());
+    r += "\r\n";
+  }
+  return r + tail;
+}
+
+// the input's description into the box (the packers as the options stand)
+static void InfoShow() {
+  string s;
+  if( info.path.size() ) {
+    if( info.kind==0 ) s = "reading " + U( FileName( info.path ) ) + " ...";
+    else if( info.kind==1 ) s = AvipText( info.text, info.arg, !running && !plan_bad );
+    else s = info.text;
+  }
+  wstring w = W(s);
+  if( w!=info_shown ) { info_shown = w; SetWindowTextW( c_info, w.c_str() ); }
+}
+
+static DWORD WINAPI InfoThread( void* a ) {
+  InfoJob* j = (InfoJob*)a;
+  InfoMsg* m = new InfoMsg;
+  m->gen = j->gen;
+  if( !j->proc ) { m->kind = 2; m->text = ArchiveText( j->path ); }
+  else {
+    string b;
+    char t[4096];
+    DWORD n = 0, code = 1;
+    while( ReadFile( j->out, t, sizeof(t), &n, 0 ) && n ) if( b.size()<(1u<<20) ) b.append( t, n );
+    WaitForSingleObject( j->proc, INFINITE );
+    GetExitCodeProcess( j->proc, &code );
+    CloseHandle( j->out ); CloseHandle( j->proc );
+    // (the tools write in the ANSI code page)
+    int k = MultiByteToWideChar( CP_ACP, 0, b.data(), int(b.size()), 0, 0 );
+    wstring u( std::max( k, 0 ), 0 );
+    if( k>0 ) MultiByteToWideChar( CP_ACP, 0, b.data(), int(b.size()), &u[0], k );
+    m->kind = code ? 3 : 1; m->text = U(u);
+    if( code && m->text.empty() ) m->text = "avip ended with exit code " + ExitCode( code );
+  }
+  if( !PostMessageW( hwnd, WM_INFO, 0, (LPARAM)m ) ) delete m;
+  delete j;
+  return 0;
+}
+
+static void InfoStop() {
+  InterlockedIncrement( &info_gen );
+  if( info_proc ) { TerminateProcess( info_proc, 1 ); CloseHandle( info_proc ); info_proc = 0; }
+}
+
+// avip's description of info.path begun (or the archive's): avip takes it
+// on its command line (ANSI) by its path, else by its name in its directory
+// (avip's current one), else by its 8.3 name
+static void InfoStart() {
+  InfoJob* j = new InfoJob;
+  j->gen = info_gen; j->path = info.path; j->proc = 0; j->out = 0;
+  byte sig[8];
+  HANDLE f = OpenRead( LongPath(info.path) );
+  int arc = (f!=INVALID_HANDLE_VALUE) && !ReadN( f, sig, 7 ) && !memcmp( sig, "mp4pack", 7 );
+  if( f!=INVALID_HANDLE_VALUE ) CloseHandle( f );
+  if( !arc ) {
+    const Tool& t = GetTool( "avip" );
+    wstring dir = exe_dir, name = FileName( info.path ), a;
+    if( AnsiOK( info.path ) ) a = info.path;
+    else if( AnsiOK( name ) && (info.path.size()-name.size()<MAX_PATH-2) ) { a = L"." DS + name; dir = info.path.substr( 0, info.path.size()-name.size() ); } // (".\": not "c" or "d", avip's commands)
+    else a = ToolName( info.path );
+    string why = t.path.empty() ? NoTool( t ) : a.empty() ? "avip cannot take this file's name on its command line (not in the ANSI code page, and no 8.3 name)" : string();
+    if( why.empty() ) {
+      SECURITY_ATTRIBUTES sa = { sizeof(sa), 0, TRUE };
+      HANDLE r = 0, w = 0, nul = CreateFileW( L"NUL", GENERIC_READ, FILE_SHARE_READ|FILE_SHARE_WRITE, &sa, OPEN_EXISTING, 0, 0 );
+      PROCESS_INFORMATION pi; memset( &pi, 0, sizeof(pi) );
+      if( !CreatePipe( &r, &w, 0, 1<<16 ) ) { DWORD e = GetLastError(); why = "cannot make a pipe" + SysErr(e); r = w = 0; }
+      else {
+        SetHandleInformation( w, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT ); // (no run runs: no tool starts meanwhile to get it too)
+        STARTUPINFOW si; memset( &si, 0, sizeof(si) );
+        si.cb = sizeof(si); si.dwFlags = STARTF_USESTDHANDLES;
+        si.hStdInput = (nul==INVALID_HANDLE_VALUE) ? 0 : nul; si.hStdOutput = w; si.hStdError = w;
+        wstring cmd = L"\"" + t.path + L"\" " + W( Quote( U(a) ) );
+        vector<wchar_t> cl( cmd.begin(), cmd.end() ); cl.push_back( 0 );
+        if( CreateProcessW( t.path.c_str(), &cl[0], 0, 0, TRUE, CREATE_SUSPENDED|BELOW_NORMAL_PRIORITY_CLASS|tool_flags, 0, dir.c_str(), &si, &pi ) ) {
+          if( h_jobobj ) AssignProcessToJobObject( h_jobobj, pi.hProcess ); // (it dies with us)
+          ResumeThread( pi.hThread ); CloseHandle( pi.hThread );
+          DuplicateHandle( GetCurrentProcess(), pi.hProcess, GetCurrentProcess(), &info_proc, 0, FALSE, DUPLICATE_SAME_ACCESS );
+          j->proc = pi.hProcess; j->out = r; r = 0;
+          info.arg = U(a);
+        } else { DWORD e = GetLastError(); why = "cannot run " + U(t.path) + SysErr(e); }
+      }
+      if( w ) CloseHandle( w );
+      if( r ) CloseHandle( r );
+      if( nul!=INVALID_HANDLE_VALUE ) CloseHandle( nul );
+    }
+    if( why.size() ) { delete j; info.kind = 3; info.text = why; InfoShow(); return; }
+  }
+  HANDLE th = CreateThread( 0, 0, InfoThread, j, 0, 0 );
+  if( th ) CloseHandle( th );
+  else {
+    if( j->proc ) { TerminateProcess( j->proc, 1 ); CloseHandle( j->proc ); CloseHandle( j->out ); }
+    if( info_proc ) { CloseHandle( info_proc ); info_proc = 0; }
+    delete j;
+    info.kind = 3; info.text = "cannot start a thread";
+  }
+  InfoShow();
+}
+
+// T_INFO, the input set: its description made, unless it is there for it as
+// it is (its path, size and time); while a run runs, when it ends
+static void InfoRequest() {
+  if( running ) { info_held = 1; return; }
+  info_held = 0;
+  wstring t = Text( c_in ), p = t.size() ? FullPath( t ) : t;
+  WIN32_FILE_ATTRIBUTE_DATA a;
+  int ok = p.size() && GetFileAttributesExW( LongPath(p).c_str(), GetFileExInfoStandard, &a ) && !(a.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY);
+  qword size = ok ? (qword(a.nFileSizeHigh)<<32) | a.nFileSizeLow : 0, time = ok ? FT( a.ftLastWriteTime ) : 0;
+  if( ok && (p==info.path) && (size==info.size) && (time==info.time) && (info.kind!=3) ) return;
+  InfoStop();
+  info = Info();
+  if( ok ) {
+    info.path = p; info.size = size; info.time = time;
+    for( size_t i=0; i<info_kept.size(); i++ ) if( (info_kept[i].path==p) && (info_kept[i].size==size) && (info_kept[i].time==time) ) { info = info_kept[i]; break; }
+    if( info.kind==0 ) { InfoStart(); return; }
+  }
+  InfoShow(); // (none: an empty box)
+}
+
+// WM_INFO: a description made (dropped if another is asked for now)
+static void InfoDone( InfoMsg* m ) {
+  if( m->gen==info_gen ) {
+    if( info_proc ) { CloseHandle( info_proc ); info_proc = 0; }
+    info.kind = m->kind; info.text = m->text;
+    if( m->kind!=3 ) {
+      for( size_t i=0; i<info_kept.size(); i++ ) if( info_kept[i].path==info.path ) { info_kept.erase( info_kept.begin()+i ); break; }
+      info_kept.insert( info_kept.begin(), info );
+      if( info_kept.size()>4 ) info_kept.pop_back();
+    }
+    InfoShow();
+  }
+  delete m;
+}
+
 // the options' effects, while nothing runs: the threads as they come out (or
 // what is not right), and the CPU Info window's text
 static void Refresh() {
@@ -678,6 +976,7 @@ static void Refresh() {
   }
   SetText( c_plan, W(p) );
   InvalidateRect( c_plan, 0, TRUE );
+  InfoShow(); // (what packs what)
 }
 
 //---- the CPU Info window
@@ -1035,6 +1334,12 @@ static void OnStart() {
   if( !f_overwrite && (out!=out_ok) && Exists( LongPath(out) )
       && (MessageBoxW( hwnd, (out + L" exists. Replace it?").c_str(), L"mp4gui", MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 )!=IDYES) ) return;
   Save();
+  if( info.path.size() && (info.kind==0) ) { // (its avip would vie with the run's for the file)
+    InfoStop();
+    info.kind = 3; info.text = "(not read: the run came first; it is when the run ends)";
+    info_held = 1;
+    InfoShow();
+  }
   run_in = in; run_out = out; run_dec = f_dec; run_verify = f_verify;
   SetText( c_log, L"" ); ClearProg(); result.clear();
   EnterCriticalSection( &qlock ); log_q.clear(); prog_q.clear(); LeaveCriticalSection( &qlock );
@@ -1117,6 +1422,7 @@ static void OnDone( int r ) {
   SetFocus( c_start );
   exit_code = r;
   if( closing || (f_quit && !r) ) { DestroyWindow( hwnd ); return; } // (-quit: done, verified too with Verify)
+  if( info_held ) InfoRequest(); // (the input's description, put off by the run)
   if( GetForegroundWindow()!=hwnd ) { // (it may have taken long)
     FLASHWINFO fw = { sizeof(fw), hwnd, FLASHW_ALL|FLASHW_TIMERNOFG, 0, 0 };
     FlashWindowEx( &fw );
@@ -1204,7 +1510,7 @@ static LRESULT CALLBACK WndProc( HWND h, UINT msg, WPARAM wp, LPARAM lp ) {
         case ID_WTEMP: SetText( c_w, L"%TEMP%" ); return 0;
         case ID_WOUT: WorkByOutput(); return 0;
         case ID_COMP: case ID_DEC: if( code==BN_CLICKED ) ModeClicked(); return 0;
-        case ID_IN: if( (code==EN_CHANGE) && !Unquote( c_in ) ) InputChanged(); return 0;
+        case ID_IN: if( code==EN_CHANGE ) { SetTimer( h, T_INFO, 300, 0 ); if( !Unquote( c_in ) ) InputChanged(); } return 0;
         case ID_OUT: if( code==EN_CHANGE ) Unquote( c_out ); return 0;
         case ID_W: if( code==EN_CHANGE ) Unquote( c_w ); return 0;
         case ID_T: case ID_FREE: case ID_F:
@@ -1216,6 +1522,7 @@ static LRESULT CALLBACK WndProc( HWND h, UINT msg, WPARAM wp, LPARAM lp ) {
     case WM_TIMER:
       if( wp==T_TICK ) ShowTime();
       if( wp==T_OPTS ) { KillTimer( h, T_OPTS ); Refresh(); }
+      if( wp==T_INFO ) { KillTimer( h, T_INFO ); InfoRequest(); }
       return 0;
     case WM_CTLCOLORSTATIC: {
       HWND c = (HWND)lp;
@@ -1247,6 +1554,7 @@ static LRESULT CALLBACK WndProc( HWND h, UINT msg, WPARAM wp, LPARAM lp ) {
     case WM_LOG: ShowLog(); return 0;
     case WM_PROG: if( running ) ShowProg(); return 0;
     case WM_DONE: OnDone( int(wp) ); return 0;
+    case WM_INFO: InfoDone( (InfoMsg*)lp ); return 0;
     case WM_CLOSE:
       if( running ) {
         if( !closing && (MessageBoxW( h, L"mp4pack is running. Stop it and quit?", L"mp4gui", MB_YESNO|MB_ICONQUESTION )==IDYES) ) { closing = 1; OnStop(); }
@@ -1255,6 +1563,7 @@ static LRESULT CALLBACK WndProc( HWND h, UINT msg, WPARAM wp, LPARAM lp ) {
       DestroyWindow( h );
       return 0;
     case WM_DESTROY:
+      InfoStop();
       Save();
       PostQuitMessage( 0 );
       return 0;
@@ -1303,6 +1612,7 @@ static void Fonts() {
   TEXTMETRICW tm; GetTextMetricsW( dc, &tm );
   SIZE sz; GetTextExtentPoint32W( dc, L"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", 52, &sz );
   bx = (sz.cx/26+1)/2; by = tm.tmHeight;
+  SelectObject( dc, mono ); GetTextMetricsW( dc, &tm ); mh = tm.tmHeight;
   SelectObject( dc, o ); ReleaseDC( 0, dc );
   rh = by+DY(6);
 }

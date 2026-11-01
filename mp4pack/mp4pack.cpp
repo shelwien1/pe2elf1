@@ -1853,6 +1853,18 @@ static int CheckLevels() {
   return 0;
 }
 
+// c: what packs a file of avip's: its packer by the extension, if its group
+// has threads (-t) and the packer a build that runs here (else tangelo;
+// nobuild: 1 when for want of a build), tangelo if that has threads, else
+// it is stored as it is (an empty one too). mp4gui shows it before a run.
+static int StreamMethod( const string& name, qword size, int* nobuild = 0 ) {
+  int m = size ? Method(name) : M_STORE;
+  if( (m>=M_H264P) && (th[m_group[m]]==0) ) m = M_TANGELO;
+  if( (m>=M_H264P) && GetTool( m_tool[m] ).path.empty() ) { if( nobuild ) *nobuild = 1; m = M_TANGELO; }
+  if( (m==M_TANGELO) && (th[G_OTHER]==0) ) m = M_STORE;
+  return m;
+}
+
 // c and d: the input's size; 2 (with the reason) when it cannot be opened
 static int InputSize( const wstring& in, qword& size ) {
   if( !GetSize( LongPath(in), size ) ) return 0;
@@ -1924,14 +1936,9 @@ static int Compress( const wstring& in, const wstring& out ) {
     s.name = U(names[i]);
     if( !SafeName(s.name) ) { Msg( "avip c made an unexpected file: " + s.name ); return 3; }
     if( FileCrc( UPath(s.name), s.crc, s.size ) ) { DWORD e = GetLastError(); return Fail( "cannot read " + U(UPath(s.name)) + SysErr(e), 2 ); }
-    s.m = s.size ? Method(s.name) : M_STORE;
-    if( (s.m>=M_H264P) && (th[m_group[s.m]]==0) ) s.m = M_TANGELO;
-    if( (s.m>=M_H264P) && GetTool( m_tool[s.m] ).path.empty() ) {
-      string& n = nobuild[s.m];
-      n += (n.size() ? ", " : "") + s.name;
-      s.m = M_TANGELO;
-    }
-    if( (s.m==M_TANGELO) && (th[G_OTHER]==0) ) s.m = M_STORE;
+    int nb = 0;
+    s.m = StreamMethod( s.name, s.size, &nb );
+    if( nb ) { string& n = nobuild[Method(s.name)]; n += (n.size() ? ", " : "") + s.name; }
     S.push_back( s );
   }
   for( int m=0; m<N_METHOD; m++ ) if( nobuild[m].size() ) Msg( "note: " + NoTool( GetTool( m_tool[m] ) ) + "; to tangelo" + LevelSp(M_TANGELO) + ": " + nobuild[m] );
