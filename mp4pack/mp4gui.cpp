@@ -280,36 +280,77 @@ static int InfoX( HWND h ) {
   return (p==-1) ? 0 : int(r.left)-short( LOWORD(p) );
 }
 
-// The text follows the mouse while the left button holds it (by lines and
-// characters: EM_LINESCROLL), from where it was when taken, so it is where
-// the mouse says after it stops at an end too: the last line at the bottom,
-// the longest one's end at the right edge. No selection with the mouse then
-// (the keyboard selects, the right button's menu copies); the wheel scrolls
-// as ever.
+// the box's text scrolled to this first line and this offset to the left
+// (pixels), as far as they go: the last line at the bottom, the longest
+// line's end at the right edge (by lines and characters: EM_LINESCROLL)
+static void InfoScroll( HWND h, int line, int x ) {
+  if( (mh<=0) || (mw<=0) ) return;
+  RECT r;
+  SendMessageW( h, EM_GETRECT, 0, (LPARAM)&r );
+  int lines = int( SendMessageW( h, EM_GETLINECOUNT, 0, 0 ) ), shown = std::max( int(r.bottom-r.top)/mh, 1 );
+  line = std::max( 0, std::min( line, lines-shown ) );
+  x = std::max( 0, std::min( x, info_w-int(r.right-r.left) ) );
+  int dl = line-int( SendMessageW( h, EM_GETFIRSTVISIBLELINE, 0, 0 ) ), dc = (x-InfoX( h ))/mw;
+  if( !dl && !dc ) return;
+  SendMessageW( h, EM_LINESCROLL, WPARAM(dc), LPARAM(dl) );
+  RECT c; GetClientRect( h, &c ); // (below the lines: drawn anew, not left as it was)
+  if( c.bottom>r.bottom ) { c.top = r.bottom; InvalidateRect( h, &c, TRUE ); }
+}
+
+// the box's selection set, its text staying where it is (EM_SETSEL brings
+// the caret's place into view)
+static void InfoSelect( HWND h, int a, int z ) {
+  int line = int( SendMessageW( h, EM_GETFIRSTVISIBLELINE, 0, 0 ) ), x = InfoX( h );
+  SendMessageW( h, EM_SETSEL, WPARAM(a), LPARAM(z) );
+  InfoScroll( h, line, x );
+}
+
+// The text follows the mouse while the left button holds it, from where it
+// was when taken (so it is where the mouse says after it stops at an end
+// too). The box has no caret: it shows text, nothing is typed or selected in
+// it (no selection with the mouse, nor all of it when the Tab key comes to
+// it; Ctrl+A selects it all, and Ctrl+C or the right button's menu copies
+// it; a click ends the selection).
+// The keys move the text, as the wheel does: the arrows and Page Up/Down,
+// Home and End (with Ctrl: the top and the bottom).
 static LRESULT CALLBACK InfoProc( HWND h, UINT msg, WPARAM wp, LPARAM lp ) {
   switch( msg ) {
-    case WM_LBUTTONDOWN: case WM_LBUTTONDBLCLK:
-      SetFocus( h ); SetCapture( h );
+    case WM_SETFOCUS: { LRESULT r = CallWindowProcW( info_edit, h, msg, wp, lp ); DestroyCaret(); return r; } // (the one it makes)
+    case WM_GETDLGCODE: return CallWindowProcW( info_edit, h, msg, wp, lp ) & ~LRESULT(DLGC_HASSETSEL);
+    case WM_KEYDOWN: {
+      int line = int( SendMessageW( h, EM_GETFIRSTVISIBLELINE, 0, 0 ) ), x = InfoX( h ), ctrl = GetKeyState( VK_CONTROL )<0;
+      RECT r;
+      SendMessageW( h, EM_GETRECT, 0, (LPARAM)&r );
+      int page = std::max( int(r.bottom-r.top)/std::max( mh, 1 )-1, 1 ), end = 1<<30;
+      switch( wp ) {
+        case VK_UP: line--; break;
+        case VK_DOWN: line++; break;
+        case VK_PRIOR: line -= page; break;
+        case VK_NEXT: line += page; break;
+        case VK_LEFT: x -= 8*mw; break;
+        case VK_RIGHT: x += 8*mw; break;
+        case VK_HOME: if( ctrl ) line = 0; else x = 0; break;
+        case VK_END: if( ctrl ) line = end; else x = end; break;
+        case 'A': if( ctrl ) { InfoSelect( h, 0, -1 ); return 0; } // (else its own: none in wine's)
+        default: return CallWindowProcW( info_edit, h, msg, wp, lp ); // (Tab, Ctrl+C ...)
+      }
+      InfoScroll( h, line, x );
+      return 0;
+    }
+    case WM_LBUTTONDOWN: case WM_LBUTTONDBLCLK: {
+      DWORD a = 0, z = 0;
+      SetFocus( h );
+      SendMessageW( h, EM_GETSEL, (WPARAM)&a, (LPARAM)&z );
+      if( a!=z ) InfoSelect( h, 0, 0 );
+      SetCapture( h );
       drag = 1; drag_at.x = short( LOWORD(lp) ); drag_at.y = short( HIWORD(lp) );
       drag_line = int( SendMessageW( h, EM_GETFIRSTVISIBLELINE, 0, 0 ) ); drag_x = InfoX( h );
       SetCursor( LoadCursorW( 0, (LPCWSTR)IDC_SIZEALL ) );
       return 0;
+    }
     case WM_MOUSEMOVE:
       if( !drag ) break;
-      if( (mh>0) && (mw>0) ) {
-        RECT r;
-        SendMessageW( h, EM_GETRECT, 0, (LPARAM)&r );
-        int lines = int( SendMessageW( h, EM_GETLINECOUNT, 0, 0 ) ), shown = std::max( int(r.bottom-r.top)/mh, 1 );
-        int line = drag_line-(short( HIWORD(lp) )-drag_at.y)/mh, x = drag_x-(short( LOWORD(lp) )-drag_at.x);
-        line = std::max( 0, std::min( line, lines-shown ) );
-        x = std::max( 0, std::min( x, info_w-int(r.right-r.left) ) );
-        int dl = line-int( SendMessageW( h, EM_GETFIRSTVISIBLELINE, 0, 0 ) ), dc = (x-InfoX( h ))/mw;
-        if( dl || dc ) {
-          SendMessageW( h, EM_LINESCROLL, WPARAM(dc), LPARAM(dl) );
-          RECT c; GetClientRect( h, &c ); // (below the lines: drawn anew, not left as it was)
-          if( c.bottom>r.bottom ) { c.top = r.bottom; InvalidateRect( h, &c, TRUE ); }
-        }
-      }
+      if( mh>0 ) InfoScroll( h, drag_line-(short( HIWORD(lp) )-drag_at.y)/mh, drag_x-(short( LOWORD(lp) )-drag_at.x) );
       return 0;
     case WM_LBUTTONUP:
       if( !drag ) break;
@@ -1632,6 +1673,11 @@ static LRESULT CALLBACK WndProc( HWND h, UINT msg, WPARAM wp, LPARAM lp ) {
     case WM_PROG: if( running ) ShowProg(); return 0;
     case WM_DONE: OnDone( int(wp) ); return 0;
     case WM_INFO: InfoDone( (InfoMsg*)lp ); return 0;
+    case WM_NEXTDLGCTL: { // (the Tab key in a multiline edit, the log or the box: on, as in a dialog)
+      HWND n = LOWORD(lp) ? (HWND)wp : GetNextDlgTabItem( h, GetFocus(), wp!=0 );
+      if( n ) SetFocus( n );
+      return 0;
+    }
     case WM_CLOSE:
       if( running ) {
         if( !closing && (MessageBoxW( h, L"mp4pack is running. Stop it and quit?", L"mp4gui", MB_YESNO|MB_ICONQUESTION )==IDYES) ) { closing = 1; OnStop(); }
