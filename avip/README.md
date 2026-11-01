@@ -1,10 +1,12 @@
 # avip
 
-A lossless splitter for MP4/MOV, Matroska/WebM and AVI files (it calls itself `vp`). It cuts a
-file into the streams of its tracks, each in a standalone format that a compressor for that kind
-of data can take (a raw MPEG-4 Part 2 `.m4v` for m4vpack, Annex B `.h264`/`.hevc`, ADTS `.aac`,
-`.mp3`, Ogg Vorbis, `.wav`, ...), plus a small `.meta` file with everything else. `avip d` puts
-the original file back together, byte for byte.
+A lossless splitter for MP4/MOV, Matroska/WebM, AVI and MPEG files (program streams: `.mpg`,
+VCD, DVD `.vob`; transport streams: `.ts`, `.m2ts`; raw video elementary streams). It calls
+itself `vp`. It cuts a file into the streams of its tracks, each in a standalone format that a
+compressor for that kind of data can take (a raw MPEG-4 Part 2 `.m4v` for m4vpack, Annex B
+`.h264`/`.hevc`, MPEG-1/2 video `.m1v`/`.m2v`, ADTS `.aac`, `.mp3`, AC-3, Ogg Vorbis, `.wav`,
+...), plus a small `.meta` file with everything else. `avip d` puts the original file back
+together, byte for byte.
 
 ## Usage
 
@@ -47,9 +49,11 @@ regenerated on restore: the headers and sizes of chunks, boxes and elements, the
 self-delimiting streams, sample tables and index entries, timestamps (as residuals of a model),
 the interleaving of the tracks, runs of zeros. `c` checks its output by running the decoder on it
 in memory, and when that fails, falls back to raw track streams, then to simpler layouts, then to
-a copy. What each container regenerates is listed at the top of `mp4_tables.inc`, `mkv_ebml.inc`
-and `avi_meta.inc`; the meta format is described in `meta.inc` (framing, common track head) and
-`mp4_meta.inc`, `mkv_meta.inc`, `avi_meta.inc` (each container's track part and ops).
+a copy. What each container regenerates is listed at the top of `mp4_tables.inc`, `mkv_ebml.inc`,
+`avi_meta.inc`, `ps.inc` and `ts.inc`; the meta format is described in `meta.inc` (framing, common
+track head) and `mp4_meta.inc`, `mkv_meta.inc`, `avi_meta.inc`, `ps.inc`, `ts.inc`, `es.inc`
+(each container's track part and ops), with the PES model shared by the MPEG formats in
+`mpg_pes.inc`.
 
 ## Key frames stored apart
 
@@ -155,3 +159,64 @@ op. Sizes of samples in fragments without per-sample sizes now come from the fra
 | x264 + AAC, 10 s | 92,741 | 2,897 |
 | x265 + AAC, 10 s | 92,786 | 2,943 |
 | AAC only, 10 s | 57,019 | 996 |
+
+## MPEG program and transport streams
+
+MPEG-1 system streams and MPEG-2 program streams (`ps.inc`) are a sequence of pack headers and
+PES packets; transport streams (`ts.inc`) cut the PES packets into 188-byte packets, with a
+4-byte arrival timestamp in front of each in M2TS (Blu-ray, AVCHD). A track is a stream id (for
+DVD's private_stream_1, a sub-stream id) or a PID. Its stream holds the PES payloads; what kind of
+data they are (MPEG-1/2 video, MPEG-4 Part 2, H.264, HEVC, MPEG audio, AAC, AC-3, DTS, LPCM,
+DVD subpictures) is found from the data, which names the stream file. The containers are rebuilt
+from small models:
+
+- PES headers: per track, templates of the header bytes with the timestamps blanked, an index per
+  PES, and PTS/DTS as differences to the track's previous ones. The length field is derived.
+- Program streams: muxers write packets of a fixed size (DVD 2048 bytes, VCD/SVCD 2324), a pack
+  header counted in, so the size of a packet that ends where the next one is due is derived; pack
+  headers come from the SCR (last SCR plus a constant step, or plus the last step), the mux rate
+  and the stuffing; padding packets from their size. For DVD AC-3, the frame count and first
+  access unit pointer after the sub-stream id come from the AC-3 frames.
+- Transport streams: a track's packets take its PES bytes in turn. Their headers (PUSI, continuity
+  counter) are derived, the adaptation field of a PES's first packet is a template (a PCR in it
+  comes from a model: last PCR plus its step, DTS minus a delay, or the byte position at a
+  constant rate), the packet where a PES ends gets the stuffing that makes it fit. Runs of a
+  track's packets take one op. PAT/PMT/SDT packets that repeat the PID's last one with the
+  counter + 1 are an op, null packets are an op per run, PCR-only PIDs (Blu-ray, AVCHD) are
+  modeled like a track's adaptation fields, and M2TS timestamps are residuals of the last step.
+- Frame sizes: one PES per frame in transport streams, so the sizes mostly come from the frame
+  data (access units, pictures, audio frames per PES), as for the other containers.
+
+Anything that doesn't fit stays in the struct as it is: system headers, PSI, DVD navigation
+packets, the header of a packet that breaks the model, packets of a PES that doesn't parse. A
+stream cut anywhere, truncated or damaged still splits, and restores exactly; packets before the
+first PES start of a PID (cut streams) stay in the struct.
+
+A raw video elementary stream (`.m4v`, `.m1v`, `.m2v`, `.h264`, `.hevc`) is a file of one track:
+the meta is a few bytes and names the stream for its compressor.
+
+Test files: 20 s of touka19.avi converted by ffmpeg 6.1 (`-f mpeg`, `-target pal-vcd`,
+`-target pal-svcd`, `-target pal-dvd`, `-f vob` with `pcm_dvd`, `-f mpegts`, `-muxrate 5M`,
+`-mpegts_m2ts_mode 1`; the MPEG-4 Part 2 + MP3 ones with the AVI's streams copied). The meta is
+meant to be compressed along with the streams; the last column shows how far it shrinks:
+
+| file | size | streams | meta | meta, xz -9 |
+|---|---:|---|---:|---:|
+| MPEG-1 system stream | 4,141,056 | m1v, mp2 | 6,693 | 1,028 |
+| VCD | 3,492,972 | m1v, mp2 | 17,564 | 760 |
+| SVCD | 5,856,480 | m2v, mp2 | 7,547 | 1,388 |
+| MPEG-2 video in an MPEG-1 system stream | 8,656,896 | m2v, mp2 | 9,677 | 1,928 |
+| DVD | 13,355,008 | m2v, ac3 | 81,438 | 2,584 |
+| DVD, LPCM audio | 7,315,456 | m2v, pcm | 27,853 | 1,664 |
+| MPEG-4 Part 2 + MP3, program stream | 7,188,480 | m4v, mp3 | 7,608 | 792 |
+| H.264 + MP2, program stream | 3,182,592 | h264, mp2 | 7,252 | 1,272 |
+| MPEG-2 + MP2, transport stream | 8,958,576 | m2v, mp2 | 2,620 | 420 |
+| the same, CBR 5 Mbit/s (null and PCR-only packets) | 12,516,476 | m2v, mp2 | 9,588 | 2,920 |
+| MPEG-4 Part 2 + MP3, transport stream | 7,477,888 | m4v, mp3 | 2,514 | 464 |
+| H.264 + AAC, transport stream | 2,721,300 | h264, aac | 3,876 | 764 |
+| HEVC + AAC, transport stream | 1,492,156 | hevc, aac | 5,149 | 1,660 |
+| H.264 + AC-3, M2TS | 2,942,976 | h264, ac3 | 4,163 | 820 |
+
+Most of the DVD meta is the navigation packets (2 KB per half second, mostly zeros from ffmpeg),
+most of the VCD one the zeros that end each audio sector. The metas of these formats need this
+version of avip: an older one restores them as a plain copy, that is, writes the meta itself.

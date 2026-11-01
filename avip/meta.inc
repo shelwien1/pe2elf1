@@ -1,7 +1,8 @@
 //--- vp metainfo framing ---------------------------------------------------------
 //
-//   u8   hdr        bits 0..1 container (1 MP4, 2 MKV, 3 AVI), bits 2..7 format version (1);
-//                   0x00: stored copy, the rest of the meta is the output
+//   u8   hdr        bits 0..1 container c, bits 2..7 format version v: v 1: c 1 MP4, 2 MKV,
+//                   3 AVI; v 2: c 1 MPEG program stream, 2 MPEG transport stream, 3 elementary
+//                   stream; 0x00: stored copy, the rest of the meta is the output
 //   vint ntracks
 //   per track: common head (below), then the container's track part
 //   ops        container op program, ends with its END op
@@ -21,23 +22,25 @@
 //                      prepended: vint hdrlen; 5 Ogg: u8 header packets
 //                idxlen: vint n, n x {vint index delta, vint length}
 //   vint nf    frames
-//   sizes      szmode 0 explicit: column; 1 container tables (the struct holds them);
+//   sizes      szmode 0 explicit: column; 1 from the container (its tables in the struct,
+//                or its track part);
 //              2 units: u8 ptype, [u8 pparam for NAL/AAC], column of v = units+1 or
 //                0 = escape, column of the escape sizes (one per v==0);
 //              3 from the transform (ADTS frame_length, Ogg packet lengths)
 
-enum { FMT_STORED=0, FMT_MP4=1, FMT_MKV=2, FMT_AVI=3 };
+enum { FMT_STORED=0, FMT_MP4=1, FMT_MKV=2, FMT_AVI=3, FMT_PS=5, FMT_TS=6, FMT_ES=7 };   // FMT_x = c + 4*(v-1)
 enum { SZ_EXPLICIT=0, SZ_TABLES=1, SZ_UNITS=2, SZ_XFORM=3 };
 static const int META_VER = 1;
 
-static void PutMetaHdr( Writer& w, int fmt ) { w.u8( uint( fmt | META_VER<<2 ) ); }
+static void PutMetaHdr( Writer& w, int fmt ) { w.u8( uint( (fmt&3) | (META_VER+(fmt>>2))<<2 ) ); }
 
 // container of a meta by its header byte: FMT_*, or -1 (not a meta: plain copy)
 static int MetaFormat( const byte* m, qword n ) {
   if( !n ) return -1;
   if( m[0]==0 ) return FMT_STORED;
-  if( (m[0]>>2)!=META_VER || !(m[0]&3) ) return -1;
-  return m[0]&3;
+  int v = m[0]>>2, c = m[0]&3;
+  if( !c || (v!=META_VER && v!=META_VER+1) ) return -1;
+  return c + 4*(v-META_VER);
 }
 
 static const char* const ext_tab[] = { "",

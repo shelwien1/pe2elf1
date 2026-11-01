@@ -7,7 +7,28 @@ static int Probe( const byte* h, qword n ) {
   if( n>=12 && !memcmp(h,"RIFF",4) && (!memcmp(h+8,"AVI ",4) || !memcmp(h+8,"AVIX",4)) ) return FMT_AVI;
   static const char* bx[] = { "ftyp","styp","moov","mdat","free","skip","wide","moof","sidx","pnot",0 };
   if( n>=8 ) for( int i=0; bx[i]; i++ ) if( !memcmp(h+4,bx[i],4) ) return FMT_MP4;
+  if( ts::PacketSize( h, n ) ) return FMT_TS;
+  if( ps::Detect( h, n ) ) return FMT_PS;
+  if( !es::Kind( h, n ).empty() ) return FMT_ES;
   return FMT_NONE;
+}
+
+static const char* FmtName( int f ) {
+  static const char* fname[] = { "unknown", "MP4/MOV", "Matroska/WebM", "AVI", "", "MPEG program stream", "MPEG transport stream",
+                                 "elementary stream" };
+  return f>=0 && f<8 ? fname[f] : "";
+}
+
+static bool EncodeAs( int f, const Buf& in, Buf& meta, std::vector<Buf>& S, std::vector<std::string>& N ) {
+  switch( f ) {
+  case FMT_MKV: return mkv::Encode( in, meta, S, N );
+  case FMT_AVI: return avi::Encode( in, meta, S, N );
+  case FMT_MP4: return mp4::Encode( in, meta, S, N );
+  case FMT_PS:  return ps::Encode( in, meta, S, N );
+  case FMT_TS:  return ts::Encode( in, meta, S, N );
+  case FMT_ES:  return es::Encode( in, meta, S, N );
+  }
+  return false;
 }
 
 template<class M, bool (*Parse)( const Buf&, M& ), std::string (*Name)( const M&, size_t ),
@@ -37,6 +58,9 @@ static bool ParsesAsMeta( const Buf& x ) {
   if( f==FMT_AVI ) { avi::Meta m; return avi::ParseMeta( x, m ); }
   if( f==FMT_MP4 ) { mp4::Meta m; return mp4::ParseMeta( x, m ); }
   if( f==FMT_MKV ) { mkv::Meta m; return mkv::ParseMeta( x, m ); }
+  if( f==FMT_PS ) { ps::Meta m; return ps::ParseMeta( x, m ); }
+  if( f==FMT_TS ) { ts::Meta m; return ts::ParseMeta( x, m ); }
+  if( f==FMT_ES ) { es::Meta m; return es::ParseMeta( x, m ); }
   return false;
 }
 
@@ -80,7 +104,6 @@ static int Info( const char* fn ) {
   Buf in;
   if( !LoadFile(fn,in) ) { fprintf( stderr, "can't read %s\n", fn ); return 2; }
   int f = Probe( in.data(), in.size() );
-  static const char* fname[] = { "unknown", "MP4/MOV", "Matroska/WebM", "AVI" };
   if( f==FMT_NONE ) {
     if( !ParsesAsMeta( in ) ) { printf( "%s: unknown format, %llu bytes (stored as a plain copy)\n", fn, (unsigned long long)in.size() ); return 0; }
     printf( "%s: ", fn );
@@ -88,14 +111,17 @@ static int Info( const char* fn ) {
     if( mf==FMT_STORED ) printf( "vp meta: stored copy, %llu bytes\n", (unsigned long long)in.size()-1 );
     else if( mf==FMT_AVI ) MetaInfo<avi::Meta,avi::ParseMeta>( in, "AVI" );
     else if( mf==FMT_MP4 ) MetaInfo<mp4::Meta,mp4::ParseMeta>( in, "MP4/MOV" );
-    else MetaInfo<mkv::Meta,mkv::ParseMeta>( in, "Matroska/WebM" );
+    else if( mf==FMT_MKV ) MetaInfo<mkv::Meta,mkv::ParseMeta>( in, "Matroska/WebM" );
+    else if( mf==FMT_PS ) MetaInfo<ps::Meta,ps::ParseMeta>( in, FmtName( mf ) );
+    else if( mf==FMT_TS ) MetaInfo<ts::Meta,ts::ParseMeta>( in, FmtName( mf ) );
+    else if( mf==FMT_ES ) MetaInfo<es::Meta,es::ParseMeta>( in, FmtName( mf ) );
     return 0;
   }
-  printf( "%s: %s, %llu bytes\n", fn, fname[f], (unsigned long long)in.size() );
+  printf( "%s: %s, %llu bytes\n", fn, FmtName( f ), (unsigned long long)in.size() );
   fflush( stdout );
   int v0 = verbose; verbose = 1;
   Buf meta; std::vector<Buf> S; std::vector<std::string> N;
-  bool ok = f==FMT_MKV ? mkv::Encode( in, meta, S, N ) : f==FMT_AVI ? avi::Encode( in, meta, S, N ) : mp4::Encode( in, meta, S, N );
+  bool ok = EncodeAs( f, in, meta, S, N );
   verbose = v0;
   if( ok && S.empty() && meta.size()>=in.size() ) ok = false;
   if( !ok ) { printf( "no gain or not restorable: stored as a plain copy\n" ); return 0; }
@@ -126,7 +152,7 @@ static int Main( int argc, char** argv ) {
   }
   if( !ok || argc-a!=2 ) {
     fprintf( stderr,
-      "vp - lossless mp4/mkv/avi dump/restore\n"
+      "vp - lossless mp4/mkv/avi/mpeg dump/restore\n"
       "  vp c [-v] input out_prefix   split into out_prefix.meta + per-track streams\n"
       "  vp d [-v] inp_prefix output  restore\n"
       "  vp file                      info: container, tracks, what c would write (nothing is written)\n" );
@@ -138,10 +164,7 @@ static int Main( int argc, char** argv ) {
     if( !LoadFile(f1,in) ) { fprintf( stderr, "can't read %s\n", f1 ); return 2; }
     std::vector<Buf> S; std::vector<std::string> N;
     int f = Probe( in.data(), in.size() );
-    bool ok = false;
-    if( f==FMT_MKV ) ok = mkv::Encode( in, meta, S, N );
-    else if( f==FMT_AVI ) ok = avi::Encode( in, meta, S, N );
-    else if( f==FMT_MP4 ) ok = mp4::Encode( in, meta, S, N );
+    bool ok = EncodeAs( f, in, meta, S, N );
     if( ok && S.empty() && meta.size()>=in.size() ) ok = false;     // nothing gained over a copy
     else if( !ok && f!=FMT_NONE ) fprintf( stderr, "warning: storing as a plain copy\n" );
     if( !ok ) { PlainCopy( in, meta ); S.clear(); N.clear(); }
@@ -165,6 +188,9 @@ static int Main( int argc, char** argv ) {
     if( f==FMT_AVI && ParsesAsMeta( meta ) ) return DecodeWith<avi::Meta,avi::ParseMeta,avi::TrackName,avi::Decode>( meta, f1, f2 );
     if( f==FMT_MP4 && ParsesAsMeta( meta ) ) return DecodeWith<mp4::Meta,mp4::ParseMeta,mp4::TrackName,mp4::Decode>( meta, f1, f2 );
     if( f==FMT_MKV && ParsesAsMeta( meta ) ) return DecodeWith<mkv::Meta,mkv::ParseMeta,mkv::TrackName,mkv::Decode>( meta, f1, f2 );
+    if( f==FMT_PS && ParsesAsMeta( meta ) ) return DecodeWith<ps::Meta,ps::ParseMeta,ps::TrackName,ps::Decode>( meta, f1, f2 );
+    if( f==FMT_TS && ParsesAsMeta( meta ) ) return DecodeWith<ts::Meta,ts::ParseMeta,ts::TrackName,ts::Decode>( meta, f1, f2 );
+    if( f==FMT_ES && ParsesAsMeta( meta ) ) return DecodeWith<es::Meta,es::ParseMeta,es::TrackName,es::Decode>( meta, f1, f2 );
     return SaveOut( f2, meta.data(), meta.size() ) ? 0 : 3;     // plain copy
   }
   return 0;

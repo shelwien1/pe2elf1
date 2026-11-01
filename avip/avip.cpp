@@ -1,4 +1,4 @@
-// vp - lossless MP4/MOV, Matroska/WebM and AVI container splitter
+// vp - lossless MP4/MOV, Matroska/WebM, AVI and MPEG (PS, TS, elementary stream) splitter
 //
 //   vp c [-v] input out_prefix   -> out_prefix.meta + out_prefix.<i>.<ext> per track
 //   vp d [-v] inp_prefix output  -> restores the original file byte-exact
@@ -73,6 +73,11 @@
 #include "avi_dec.inc"
 #include "avi_parse.inc"
 #include "avi_enc.inc"
+
+#include "mpg_pes.inc"
+#include "ps.inc"
+#include "ts.inc"
+#include "es.inc"
 
 #include "driver.inc"
 
