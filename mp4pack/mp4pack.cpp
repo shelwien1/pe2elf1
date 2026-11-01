@@ -112,11 +112,13 @@ static uint n_log;
 
 //---- strings
 
-static wstring W( const string& s ) {
+// UTF-8 (or another code page: CP_ACP, the tools' output and ANSI lists) to
+// wide (on Linux UTF-8 only: the names are that)
+static wstring W( const string& s, UINT cp = CP_UTF8 ) {
   if( s.empty() ) return wstring();
-  int n = MultiByteToWideChar( CP_UTF8, 0, s.data(), int(s.size()), 0, 0 );
-  wstring w( n, 0 );
-  if( n>0 ) MultiByteToWideChar( CP_UTF8, 0, s.data(), int(s.size()), &w[0], n );
+  int n = MultiByteToWideChar( cp, 0, s.data(), int(s.size()), 0, 0 );
+  wstring w( std::max( n, 0 ), 0 );
+  if( n>0 ) MultiByteToWideChar( cp, 0, s.data(), int(s.size()), &w[0], n );
   return w;
 }
 
@@ -137,6 +139,24 @@ static string Num( qword v ) {
 static string Hex( uint v ) { char b[16]; snprintf( b, sizeof(b), "%08X", v ); return b; }
 
 static string Pct( double a, double b ) { char s[32]; snprintf( s, sizeof(s), "%.2f%%", (b>0) ? 100*a/b : 0.0 ); return s; }
+
+// the lines of a text (LF or CRLF), the empty ones left out
+static vector<string> Lines( const string& t ) {
+  vector<string> l;
+  for( size_t i=0; i<t.size(); ) {
+    size_t e = t.find( '\n', i );
+    if( e==string::npos ) e = t.size();
+    string s = t.substr( i, e-i );
+    if( s.size() && (s[s.size()-1]=='\r') ) s.erase( s.size()-1 );
+    if( s.size() ) l.push_back( s );
+    i = e+1;
+  }
+  return l;
+}
+
+// s in a column n wide: on the left, on the right
+static string Pad( string s, size_t n ) { if( s.size()<n ) s.append( n-s.size(), ' ' ); return s; }
+static string Right( const string& s, size_t n ) { return (s.size()<n) ? string( n-s.size(), ' ' )+s : s; }
 
 static string Clock( qword ms ) {
   uint s = uint( ms/1000 ); char b[32];
@@ -314,6 +334,9 @@ static int GetSize( const wstring& p, qword& sz ) {
 }
 
 static int Exists( const wstring& p ) { qword s; return GetSize( p, s )==0; }
+
+// an archive's name: x.mpk
+static int IsArchive( const wstring& f ) { return (f.size()>4) && (lstrcmpiW( f.c_str()+f.size()-4, L".mpk" )==0); }
 
 // the size of a file another process is writing (on Windows a directory
 // entry's size lags until the writer closes it: this asks the file itself)
@@ -682,6 +705,10 @@ static const Tool& GetTool( const string& base ) {
   return t;
 }
 
+// the tools, in the order they are told of (the first two are needed)
+static const string tool_names[] = { "avip", "tangelo", "h264p", "m4vpack", "aacpack", "ac3pack", "mp3pack", "oggcomp", "ttfcomp" };
+static const int N_TOOLS = int( sizeof(tool_names)/sizeof(tool_names[0]) );
+
 static string NoTool( const Tool& t ) {
   if( t.later.empty() ) return "no " + t.base + " in " + U(exe_dir);
   if( !cpu_ok ) return "no " + t.base + " build without a target, the only kind run with no CPUID (only " + t.later + ")";
@@ -830,6 +857,29 @@ static HANDLE Inheritable( HANDLE h ) {
   return d;
 }
 
+// a tool's process: exe with these arguments (its command line: "exe"
+// args) in the directory cwd, with these handles as its stdin, stdout and
+// stderr (inheritable: none else is meanwhile), in our job object (it dies
+// with us: suspended until it is in); flags: more of CreateProcess's. Its
+// handle, or 0 (why)
+static HANDLE Spawn( const wstring& exe, const string& args, const wstring& cwd, HANDLE in, HANDLE out, HANDLE err, DWORD flags, string& why ) {
+  wstring cmd = L"\"" + exe + L"\" " + W(args);
+  vector<wchar_t> cl( cmd.begin(), cmd.end() ); cl.push_back( 0 );
+  STARTUPINFOW si; memset( &si, 0, sizeof(si) );
+  si.cb = sizeof(si); si.dwFlags = STARTF_USESTDHANDLES;
+  si.hStdInput = in; si.hStdOutput = out; si.hStdError = err;
+  PROCESS_INFORMATION pi; memset( &pi, 0, sizeof(pi) );
+  if( !CreateProcessW( exe.c_str(), &cl[0], 0, 0, TRUE, CREATE_SUSPENDED|flags|tool_flags, 0, cwd.c_str(), &si, &pi ) ) {
+    DWORD e = GetLastError();
+    why = "cannot run " + U(exe) + SysErr(e) + " (error " + Num(e) + ")";
+    return 0;
+  }
+  if( h_jobobj ) AssignProcessToJobObject( h_jobobj, pi.hProcess );
+  ResumeThread( pi.hThread );
+  CloseHandle( pi.hThread );
+  return pi.hProcess;
+}
+
 // Only this thread starts processes, and the tool's ends of its pipes and log
 // are inheritable just for its own CreateProcess, so no tool holds another's
 // pipe open (which would keep that one from seeing EOF).
@@ -838,7 +888,6 @@ static int Start( Job& j ) {
   if( t.path.empty() ) { j.why = NoTool(t); j.st = 3; return 1; }
   t.used = 1;
   wstring exe = t.path;
-  wstring cmd = L"\"" + exe + L"\" " + W(j.args);
   wstring cwd = work + W(j.cwd);
   if( f_verbose && !j.quiet ) Msg( "> " + (j.cwd.size() ? "("+j.cwd+") " : string()) + t.file + " " + j.args
                      + (j.in.path.size() ? " < "+U(j.in.path) : string()) + (j.out.path.size() ? " > "+U(j.out.path) : string()) );
@@ -859,29 +908,13 @@ static int Start( Job& j ) {
       if( c_err==INVALID_HANDLE_VALUE ) c_err = 0;
     }
   }
-  PROCESS_INFORMATION pi; memset( &pi, 0, sizeof(pi) );
-  if( err.empty() ) {
-    STARTUPINFOW si; memset( &si, 0, sizeof(si) );
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_USESTDHANDLES;
-    si.hStdInput = c_in;
-    si.hStdOutput = c_out ? c_out : c_err; // (to the log too: some tools write their progress there)
-    si.hStdError = c_err;
-    vector<wchar_t> cl( cmd.begin(), cmd.end() ); cl.push_back( 0 );
-    // suspended until it is in our job object: it dies with us
-    if( !CreateProcessW( exe.c_str(), &cl[0], 0, 0, TRUE, CREATE_SUSPENDED|tool_flags, 0, cwd.c_str(), &si, &pi ) ) {
-      DWORD e = GetLastError();
-      err = "cannot run " + U(exe) + SysErr(e) + " (error " + Num(e) + ")";
-    }
-  }
+  HANDLE hp = 0;
+  if( err.empty() ) hp = Spawn( exe, j.args, cwd, c_in, c_out ? c_out : c_err, c_err, 0, err ); // (stdout to the log too: some tools write their progress there)
   if( c_in ) CloseHandle( c_in );
   if( c_out ) CloseHandle( c_out );
   if( c_err ) CloseHandle( c_err );
   if( err.size() ) { PumpClose( j.in ); PumpClose( j.out ); j.why = err; j.st = 3; return 1; }
-  if( h_jobobj ) AssignProcessToJobObject( h_jobobj, pi.hProcess );
-  ResumeThread( pi.hThread );
-  CloseHandle( pi.hThread );
-  j.hp = pi.hProcess; j.exited = 0; j.st = 1; j.t0 = GetTickCount64(); j.frac = 0;
+  j.hp = hp; j.exited = 0; j.st = 1; j.t0 = GetTickCount64(); j.frac = 0;
   if( j.in.pipe ) j.in.th = CreateThread( 0, 0, PumpThread, &j.in, 0, 0 );
   if( j.out.pipe ) j.out.th = CreateThread( 0, 0, PumpThread, &j.out, 0, 0 );
   if( (j.in.pipe && !j.in.th) || (j.out.pipe && !j.out.th) ) {
@@ -1269,19 +1302,15 @@ static int HexNum( const string& s, uint& v ) {
   return 0;
 }
 
-// p\mp4pack.idx into S; the names are checked, so that none leads out of the work directory
-static int ReadIndex( string& why ) {
-  string t;
-  if( ReadAll( PPath("mp4pack.idx"), t, 1<<26 ) ) { why = "no mp4pack.idx in it: not an mp4pack archive?"; return 1; }
-  vector<string> L;
-  for( size_t i=0; i<t.size(); ) {
-    size_t e = t.find( '\n', i );
-    if( e==string::npos ) e = t.size();
-    string l = t.substr( i, e-i );
-    if( l.size() && (l[l.size()-1]=='\r') ) l.erase( l.size()-1 );
-    L.push_back( l );
-    i = e+1;
-  }
+// an index (mp4pack.idx): the file it was made of, the tool builds, the
+// streams with their parts
+struct Index { string src_name, tools; qword src_size; uint src_crc; vector<Stream> s; Index() : src_size(0), src_crc(0) {} };
+
+// an index's text into x; the names are checked, so that none leads out of
+// a directory (d: the work directory). 0, or 1 (why)
+static int ParseIndex( const string& t, Index& x, string& why ) {
+  vector<string> L = Lines( t );
+  vector<Stream>& S = x.s;
   why = "bad mp4pack.idx";
   if( L.empty() || (L[0]!="mp4pack 1") ) { why = "not an mp4pack archive, or a later version"; return 1; }
   int f_src = 0, f_end = 0;
@@ -1290,9 +1319,9 @@ static int ReadIndex( string& why ) {
     size_t i = 0;
     string k = Field( l, i );
     if( k=="src" ) {
-      if( Number( Field(l,i), src_size ) || HexNum( Field(l,i), src_crc ) ) return 1;
-      src_name = l.substr( i ); f_src = 1;
-      for( size_t q=0; q<src_name.size(); q++ ) if( byte(src_name[q])<32 ) src_name[q] = '?'; // (only shown)
+      if( Number( Field(l,i), x.src_size ) || HexNum( Field(l,i), x.src_crc ) ) return 1;
+      x.src_name = l.substr( i ); f_src = 1;
+      for( size_t q=0; q<x.src_name.size(); q++ ) if( byte(x.src_name[q])<32 ) x.src_name[q] = '?'; // (only shown)
     } else if( k=="stream" ) {
       Stream s;
       if( Number( Field(l,i), s.size ) || HexNum( Field(l,i), s.crc ) ) return 1;
@@ -1310,11 +1339,11 @@ static int ReadIndex( string& why ) {
       if( b.size() && !SafeName(b) ) return 1;
       S.back().part.push_back( Part( o, z, a, b ) );
     } else if( k=="tools" ) { // (only shown)
-      src_tools = l.substr( i );
-      for( size_t q=0; q<src_tools.size(); q++ ) if( byte(src_tools[q])<32 ) src_tools[q] = '?';
+      x.tools = l.substr( i );
+      for( size_t q=0; q<x.tools.size(); q++ ) if( byte(x.tools[q])<32 ) x.tools[q] = '?';
     }
     else if( k=="end" ) f_end = 1;
-    else if( l.size() ) return 1;
+    else return 1;
   }
   if( !f_src || !f_end ) return 1;
   for( size_t i=0; i<S.size(); i++ ) {
@@ -1330,6 +1359,16 @@ static int ReadIndex( string& why ) {
     if( o!=s.size ) return 1;
     if( (s.part.size()>1) && (s.m!=M_AACPACK) && (s.m!=M_TANGELO) ) return 1;
   }
+  return 0;
+}
+
+// p\mp4pack.idx into S and src_*
+static int ReadIndex( string& why ) {
+  string t;
+  Index x;
+  if( ReadAll( PPath("mp4pack.idx"), t, 1<<26 ) ) { why = "no mp4pack.idx in it: not an mp4pack archive?"; return 1; }
+  if( ParseIndex( t, x, why ) ) return 1;
+  S = x.s; src_name = x.src_name; src_size = x.src_size; src_crc = x.src_crc; src_tools = x.tools;
   return 0;
 }
 
@@ -1653,18 +1692,9 @@ static int ScanArchive( const wstring& path, vector<Member>& v, string& why ) {
     }
     if( r ) { why = "not all of an mp4pack archive (cut short, or damaged)"; break; }
     if( m.idx.empty() ) { why = "no index in its file " + Num(v.size()+1) + ": not an mp4pack archive?"; r = 4; break; }
-    // its src line: size, CRC32, name
-    for( size_t i=0; i<m.idx.size(); ) {
-      size_t e = m.idx.find( '\n', i ), k = i;
-      if( e==string::npos ) e = m.idx.size();
-      string l = m.idx.substr( i, e-i );
-      if( l.size() && (l[l.size()-1]=='\r') ) l.erase( l.size()-1 );
-      i = e+1; k = 0;
-      if( Field( l, k )!="src" ) continue;
-      Number( Field( l, k ), m.src_size ); Field( l, k );
-      m.src = l.substr( k );
-      break;
-    }
+    Index x; // (the file it was made of; a bad index: none, as d tells)
+    if( !ParseIndex( m.idx, x, why ) ) { m.src = x.src_name; m.src_size = x.src_size; }
+    why.clear();
     m.size = pos-off;
     v.push_back( m );
     off = pos;
@@ -2031,11 +2061,7 @@ static int Compress( const wstring& in, const wstring& out, int append, Member& 
     if( s.m==M_MP3PACK ) d += " -t " + Num(th[G_AUDIO]) + (s.cut ? " -c "+ChunkArg(s.cut) : string());
     if( s.m==M_AACPACK ) d += LevelSp(M_AACPACK) + ((s.part.size()>1) ? ", " + Num(s.part.size()) + " parts" : string());
     if( s.m==M_TANGELO ) d += LevelSp(M_TANGELO) + " (" + s.part[0].pk + ((s.part.size()>1) ? ", " + Num(s.part.size()) + " pieces" : string()) + ")";
-    string n = "  " + s.name;
-    if( n.size()<20 ) n.append( 20-n.size(), ' ' );
-    string z = Num(s.size);
-    if( z.size()<12 ) z.insert( 0, 12-z.size(), ' ' );
-    Msg( n + z + "  " + d );
+    Msg( Pad( "  " + s.name, 20 ) + Right( Num(s.size), 12 ) + "  " + d );
   }
   if( J.size() ) Msg( "running " + StageText() );
   if( (r = RunStages())!=0 ) return r;
@@ -2301,13 +2327,7 @@ static int ReadList( const wstring& path, vector<wstring>& v, string& why ) {
     if( utf8 ) raw.push_back( W(l) );
 #ifdef _WIN32
     else {
-      UINT cp[2] = { CP_ACP, CP_OEMCP };
-      wstring w[2];
-      for( int k=0; k<2; k++ ) {
-        int n = MultiByteToWideChar( cp[k], 0, l.data(), int(l.size()), 0, 0 );
-        w[k].assign( std::max( n, 0 ), 0 );
-        if( n>0 ) MultiByteToWideChar( cp[k], 0, l.data(), int(l.size()), &w[k][0], n );
-      }
+      wstring w[2] = { W( l, CP_ACP ), W( l, CP_OEMCP ) };
       raw.push_back( (!Exists( LongPath( FullPath(w[0]) ) ) && Exists( LongPath( FullPath(w[1]) ) )) ? w[1] : w[0] );
     }
 #endif
@@ -2332,7 +2352,44 @@ static wstring UniqueName( const wstring& name, vector<wstring>& used ) {
   return r;
 }
 
+// c: the archive of in: out, or in the directory out (dir; ending with a
+// separator) one named after it (x.mkv -> x.mkv.mpk); used: the names given
+// there in the run, so that none is given twice
+static wstring ArchiveOut( const wstring& in, const wstring& out, int dir, vector<wstring>& used ) {
+  return dir ? out + UniqueName( FileName(in), used ) + L".mpk" : out;
+}
+
+// d: the outputs of the members v of archive in: out (one member), or files
+// in the directory out (dir; always for more members): named after the
+// archive when it has one (x.mkv.mpk -> x.mkv), else as each was (its index;
+// file<k> for a name that is not allowed)
+static vector<wstring> MemberOuts( const wstring& in, const vector<Member>& v, const wstring& out, int dir, vector<wstring>& used ) {
+  vector<wstring> o;
+  wstring d = out;
+  if( v.size()>1 ) dir = 1;
+  if( dir && d.size() && !IsSep( d[d.size()-1] ) ) d += L"" DS;
+  for( size_t k=0; k<v.size(); k++ ) {
+    wstring name = FileName( in );
+    if( !dir ) { o.push_back( out ); continue; }
+    if( (v.size()==1) && IsArchive( name ) ) name.erase( name.size()-4 );
+    else name = SafeName( v[k].src ) ? W( v[k].src ) : W( "file" + Num(k+1) );
+    o.push_back( d + UniqueName( name, used ) );
+  }
+  return o;
+}
+
 static void (*file_hook)( int k, int r ); // a frontend's: file k of a run begins (r -1), or has ended (r: how)
+
+// a run's output is a directory, for an output of each file: it ends with a
+// separator, or it is one (d of more files: always)
+static int OutIsDir( const wstring& out, size_t n ) {
+  return (out.size() && IsSep( out[out.size()-1] )) || IsDir( LongPath( FullPath(out) ) ) || (f_dec && (n>1));
+}
+
+// a file of a run: its state anew, its clock; and after it its error, if it
+// is the run's first (before DropWork's notes), and its work directory away
+static void FileBegin( int& units ) { NewRun(); last_msg.clear(); t_start = GetTickCount64(); units++; }
+static void FileEnd( int r ) { if( r && run_err.empty() ) run_err = last_msg; DropWork(); }
 
 // d of archive in: its member to out (a file), or each of its members into
 // the directory out (dir; and always when it has more than one): named after
@@ -2347,32 +2404,15 @@ static int DecompressArchive( const wstring& in, const wstring& out, int dir, ve
   int r = ScanArchive( in, v, why ), bad = r;
   if( r && v.empty() ) { units++; Msg( U(in) + ": " + why ); return r; }
   if( r ) Msg( U(in) + ": " + why + "; the " + Num(v.size()) + ((v.size()==1) ? " file" : " files") + " before that are restored" );
-  if( v.size()>1 ) {
-    dir = 1;
-    Msg( U(in) + ": " + Num(v.size()) + " files" );
-  }
-  wstring d = out;
-  if( dir && !IsSep( d[d.size()-1] ) ) d += L"" DS;
+  if( v.size()>1 ) Msg( U(in) + ": " + Num(v.size()) + " files" );
+  vector<wstring> outs = MemberOuts( in, v, out, dir, used );
   int r0 = 0;
   for( size_t i=0; (i<v.size()) && !f_abort && !out_failed; i++ ) {
-    wstring o = out, name = FileName( in );
-    if( dir ) {
-      if( (v.size()==1) && (name.size()>4) && !lstrcmpiW( name.c_str()+name.size()-4, L".mpk" ) ) name.erase( name.size()-4 );
-      else {
-        string a = v[i].src;
-        for( size_t q=0; q<a.size(); q++ ) if( byte(a[q])<32 ) a[q] = '_';
-        name = SafeName( a ) ? W(a) : W( "file" + Num(i+1) );
-      }
-      o = d + UniqueName( name, used );
-    }
+    const wstring& o = outs[i];
     if( v.size()>1 ) Msg( "file " + Num(i+1) + " of " + Num(v.size()) + " in it: " + v[i].src );
-    NewRun();
-    last_msg.clear();
-    t_start = GetTickCount64();
-    units++;
+    FileBegin( units );
     int k = Decompress( in, v[i], o );
-    if( k && run_err.empty() ) run_err = last_msg;
-    DropWork();
+    FileEnd( k );
     if( k ) { if( !r0 ) r0 = k; continue; }
     ok++; bytes_in += v[i].size; bytes_out += src_size;
   }
@@ -2390,7 +2430,7 @@ static int DecompressArchive( const wstring& in, const wstring& out, int dir, ve
 static int RunFiles( const vector<wstring>& ins, const wstring& out0, int append ) {
   int n = int( ins.size() ), units = 0, ok = 0, r0 = 0, started = append, tried = 0;
   wstring out = FullPath( out0 );
-  int dir = (out0.size() && IsSep( out0[out0.size()-1] )) || IsDir( LongPath(out) ) || (f_dec && (n>1));
+  int dir = OutIsDir( out0, n );
   if( dir && out.size() && !IsSep( out[out.size()-1] ) ) out += L"" DS;
   vector<wstring> used;
   string failed;
@@ -2403,16 +2443,12 @@ static int RunFiles( const vector<wstring>& ins, const wstring& out0, int append
     tried++;
     int r, u = units, o = ok;
     if( !f_dec ) {
-      wstring to = dir ? out + UniqueName( FileName(in), used ) + L".mpk" : out;
+      wstring to = ArchiveOut( in, out, dir, used );
       Member m;
-      NewRun();
-      last_msg.clear();
-      t_start = GetTickCount64();
-      units++;
+      FileBegin( units );
       r = Compress( in, to, !dir && started, m );
-      if( r && run_err.empty() ) run_err = last_msg; // (before DropWork's notes)
       if( !r && !dir ) started = 1;
-      DropWork();
+      FileEnd( r );
       if( !r && f_verify && !f_abort ) r = Verify( to, m );
       if( !r ) { ok++; bytes_in += src_size; bytes_out += m.size; }
     } else r = DecompressArchive( in, out, dir, used, units, ok );
@@ -2448,11 +2484,10 @@ static int Setup() {
   for( int g=0; g<N_GROUP; g++ ) ch[g] = 0;
   if( c_spec.size() && ParseChunks( c_spec.c_str() ) ) { Msg( "bad -c " + c_spec ); run_err = last_msg; return 1; }
   Msg( c + "; -t " + (t_spec.size() ? t_spec+" = " : string()) + ThreadText() );
-  const string all[] = { "avip", "tangelo", "h264p", "m4vpack", "aacpack", "ac3pack", "mp3pack", "oggcomp", "ttfcomp" };
   string tl;
-  for( size_t i=0; i<sizeof(all)/sizeof(all[0]); i++ ) { const Tool& t = GetTool( all[i] ); if( t.path.size() ) tl += " " + t.file; }
+  for( int i=0; i<N_TOOLS; i++ ) { const Tool& t = GetTool( tool_names[i] ); if( t.path.size() ) tl += " " + t.file; }
   Msg( "tools:" + (tl.size() ? tl : string(" none")) );
-  for( int i=0; i<2; i++ ) if( GetTool( all[i] ).path.empty() ) { Msg( NoTool( GetTool( all[i] ) ) ); run_err = last_msg; return 2; }
+  for( int i=0; i<2; i++ ) if( GetTool( tool_names[i] ).path.empty() ) { Msg( NoTool( GetTool( tool_names[i] ) ) ); run_err = last_msg; return 2; }
   return 0;
 }
 

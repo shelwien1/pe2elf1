@@ -692,10 +692,6 @@ static string CommandText() {
 
 //---- the CPU and the tool builds
 
-static const string tool_names[] = { "avip", "tangelo", "h264p", "m4vpack", "aacpack", "ac3pack", "mp3pack", "oggcomp", "ttfcomp" };
-
-static string Pad( string s, size_t n ) { if( s.size()<n ) s.append( n-s.size(), ' ' ); return s; }
-
 // words after a label, wrapped at 78 columns
 static void Words( string& o, const string& label, const vector<string>& w, size_t ind = 10 ) {
   string l = Pad( label, ind );
@@ -774,7 +770,7 @@ static string CpuText() {
 // do not and why
 static string BuildsText() {
   string o = "tool builds in " + U(exe_dir) + ":\r\n";
-  for( size_t i=0; i<sizeof(tool_names)/sizeof(tool_names[0]); i++ ) {
+  for( int i=0; i<N_TOOLS; i++ ) {
     const Tool& t = GetTool( tool_names[i] );
     vector< std::pair<int,string> > v;
     WIN32_FIND_DATAW fd;
@@ -818,21 +814,6 @@ static HANDLE info_proc;          // its avip
 static int info_held;             // to be made when the run ends
 static wstring info_shown;        // the box's text
 
-static vector<string> Lines( const string& t ) {
-  vector<string> l;
-  for( size_t i=0; i<t.size(); ) {
-    size_t e = t.find( '\n', i );
-    if( e==string::npos ) e = t.size();
-    string s = t.substr( i, e-i );
-    if( s.size() && (s[s.size()-1]=='\r') ) s.erase( s.size()-1 );
-    if( s.size() ) l.push_back( s );
-    i = e+1;
-  }
-  return l;
-}
-
-static string Right( const string& s, size_t n ) { return (s.size()<n) ? string( n-s.size(), ' ' )+s : s; }
-
 // an mp4pack archive by its index: the file it was made of, each stream and
 // what it came to with its method (the streams in a solid archive together),
 // the tools (on the thread: nothing of the run's)
@@ -855,38 +836,27 @@ static string ArchiveText( const wstring& path ) {
     return r;
   }
   const Member& m = v[0];
-  const string& idx = m.idx;
   const vector<string>& fn = m.names;
   const vector<qword>& fz = m.sizes;
-  LARGE_INTEGER z; z.QuadPart = LONGLONG(m.size);
-
-  struct St { string name, method; qword size; int parts; vector<string> files; }; // files: its parts' in the archive
+  Index x;
+  if( ParseIndex( m.idx, x, why ) ) return why;
+  // each stream's files in the archive: its parts' (stored: store/<name>;
+  // mp3pack's two; tangelo's pk2 is a name in its archive)
+  struct St { string name, method; qword size; int parts; vector<string> files; };
   vector<St> st;
-  string tools, srcl;
-  vector<string> l = Lines( idx );
-  for( size_t k=0; k<l.size(); k++ ) {
-    size_t i = 0;
-    string key = Field( l[k], i );
-    if( key=="src" ) srcl = l[k].substr( i );
-    else if( key=="tools" ) tools = l[k].substr( i );
-    else if( key=="stream" ) { St s; qword v = 0; Number( Field( l[k], i ), v ); s.size = v; s.parts = 0; Field( l[k], i ); s.method = Field( l[k], i ); s.name = l[k].substr( i ); st.push_back( s ); }
-    else if( (key=="part") && st.size() ) {
-      Field( l[k], i ); Field( l[k], i );
-      string pk = Field( l[k], i ), pk2 = l[k].substr( i );
-      vector<string>& v = st.back().files;
-      st.back().parts++;
-      if( pk=="-" ) pk = "store/" + st.back().name;
-      if( std::find( v.begin(), v.end(), pk )==v.end() ) v.push_back( pk );
-      if( pk2.size() && (std::find( fn.begin(), fn.end(), pk2 )!=fn.end()) ) v.push_back( pk2 ); // (mp3pack's: a file; tangelo's: a name in its archive)
+  for( size_t k=0; k<x.s.size(); k++ ) {
+    const Stream& a = x.s[k];
+    St e; e.name = a.name; e.method = m_name[a.m]; e.size = a.size; e.parts = int( a.part.size() );
+    for( size_t q=0; q<a.part.size(); q++ ) {
+      string pk = (a.part[q].pk=="-") ? "store/" + a.name : a.part[q].pk, pk2 = a.part[q].pk2;
+      if( std::find( e.files.begin(), e.files.end(), pk )==e.files.end() ) e.files.push_back( pk );
+      if( pk2.size() && (std::find( fn.begin(), fn.end(), pk2 )!=fn.end()) ) e.files.push_back( pk2 );
     }
+    st.push_back( e );
   }
-  size_t i0 = 0;
-  string a = Field( srcl, i0 ), c = Field( srcl, i0 );
-  qword ssz = 0;
-  int ok = !Number( a, ssz );
-  string r = "mp4pack archive, version " + Num(m.ver) + ": " + Num(z.QuadPart) + " bytes"
-           + (ok ? " (" + Pct( double(z.QuadPart), double(ssz) ) + ")" : string()) + "\r\n";
-  if( ok ) r += "of " + srcl.substr( i0 ) + ": " + a + " bytes, CRC32 " + c + "\r\n";
+  string r = "mp4pack archive, version " + Num(m.ver) + ": " + Num(m.size) + " bytes"
+           + (x.src_size ? " (" + Pct( double(m.size), double(x.src_size) ) + ")" : string()) + "\r\n"
+           + "of " + x.src_name + ": " + Num(x.src_size) + " bytes, CRC32 " + Hex(x.src_crc) + "\r\n";
   // a stream alone in its files: its line; those in a solid archive: the archive's
   size_t w = 0, wz = 0;
   for( size_t k=0; k<st.size(); k++ ) { w = std::max( w, st[k].name.size() ); wz = std::max( wz, Num( st[k].size ).size() ); }
@@ -913,7 +883,7 @@ static string ArchiveText( const wstring& path ) {
     for( size_t e=0; e<fn.size(); e++ ) if( fn[e]==shared ) sz = fz[e];
     r += Pad( shared, w ) + "  " + Right( Num(u), wz ) + " -> " + Right( Num(sz), wz ) + "  " + st[k].method + ":" + names + "\r\n";
   }
-  if( tools.size() ) r += "made with " + tools + "\r\n";
+  if( x.tools.size() ) r += "made with " + x.tools + "\r\n";
   return r;
 }
 
@@ -988,11 +958,7 @@ static DWORD WINAPI InfoThread( void* a ) {
     WaitForSingleObject( j->proc, INFINITE );
     GetExitCodeProcess( j->proc, &code );
     CloseHandle( j->out ); CloseHandle( j->proc );
-    // (the tools write in the ANSI code page)
-    int k = MultiByteToWideChar( CP_ACP, 0, b.data(), int(b.size()), 0, 0 );
-    wstring u( std::max( k, 0 ), 0 );
-    if( k>0 ) MultiByteToWideChar( CP_ACP, 0, b.data(), int(b.size()), &u[0], k );
-    m->kind = code ? 3 : 1; m->text = U(u);
+    m->kind = code ? 3 : 1; m->text = U( W( b, CP_ACP ) ); // (the tools write in the ANSI code page)
     if( code && m->text.empty() ) m->text = "avip ended with exit code " + ExitCode( code );
   }
   if( !PostMessageW( hwnd, WM_INFO, 0, (LPARAM)m ) ) delete m;
@@ -1025,22 +991,15 @@ static void InfoStart() {
     if( why.empty() ) {
       SECURITY_ATTRIBUTES sa = { sizeof(sa), 0, TRUE };
       HANDLE r = 0, w = 0, nul = CreateFileW( L"NUL", GENERIC_READ, FILE_SHARE_READ|FILE_SHARE_WRITE, &sa, OPEN_EXISTING, 0, 0 );
-      PROCESS_INFORMATION pi; memset( &pi, 0, sizeof(pi) );
       if( !CreatePipe( &r, &w, 0, 1<<16 ) ) { DWORD e = GetLastError(); why = "cannot make a pipe" + SysErr(e); r = w = 0; }
       else {
         SetHandleInformation( w, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT ); // (no run runs: no tool starts meanwhile to get it too)
-        STARTUPINFOW si; memset( &si, 0, sizeof(si) );
-        si.cb = sizeof(si); si.dwFlags = STARTF_USESTDHANDLES;
-        si.hStdInput = (nul==INVALID_HANDLE_VALUE) ? 0 : nul; si.hStdOutput = w; si.hStdError = w;
-        wstring cmd = L"\"" + t.path + L"\" " + W( Quote( U(a) ) );
-        vector<wchar_t> cl( cmd.begin(), cmd.end() ); cl.push_back( 0 );
-        if( CreateProcessW( t.path.c_str(), &cl[0], 0, 0, TRUE, CREATE_SUSPENDED|BELOW_NORMAL_PRIORITY_CLASS|tool_flags, 0, dir.c_str(), &si, &pi ) ) {
-          if( h_jobobj ) AssignProcessToJobObject( h_jobobj, pi.hProcess ); // (it dies with us)
-          ResumeThread( pi.hThread ); CloseHandle( pi.hThread );
-          DuplicateHandle( GetCurrentProcess(), pi.hProcess, GetCurrentProcess(), &info_proc, 0, FALSE, DUPLICATE_SAME_ACCESS );
-          j->proc = pi.hProcess; j->out = r; r = 0;
+        HANDLE hp = Spawn( t.path, Quote( U(a) ), dir, (nul==INVALID_HANDLE_VALUE) ? 0 : nul, w, w, BELOW_NORMAL_PRIORITY_CLASS, why );
+        if( hp ) {
+          DuplicateHandle( GetCurrentProcess(), hp, GetCurrentProcess(), &info_proc, 0, FALSE, DUPLICATE_SAME_ACCESS );
+          j->proc = hp; j->out = r; r = 0;
           info.arg = U(a);
-        } else { DWORD e = GetLastError(); why = "cannot run " + U(t.path) + SysErr(e); }
+        }
       }
       if( w ) CloseHandle( w );
       if( r ) CloseHandle( r );
@@ -1152,8 +1111,6 @@ static void ShowCpu() {
 }
 
 //---- the files
-
-static int IsArchive( const wstring& f ) { return (f.size()>4) && (lstrcmpiW( f.c_str()+f.size()-4, L".mpk" )==0); }
 
 // the output named after the input: x.mkv -> x.mkv.mpk (c), x.mkv.mpk ->
 // x.mkv (d)
@@ -1290,29 +1247,11 @@ static void ListClear() {
 
 // "...": files for the list, from the Open dialog (more at once), sorted by
 // name (the dialog gives them in an order of its own)
+static vector<wstring> FileDialog( int kind );
+
 static void ListBrowse() {
-  vector<wchar_t> f( 1<<20, 0 );
-  wstring dir = list.size() ? list.back().path : Text( c_in );
-  if( dir.size() ) { dir = FullPath( dir ); dir = dir.substr( 0, dir.size()-FileName( dir ).size() ); }
-  OPENFILENAMEW o; memset( &o, 0, sizeof(o) );
-  o.lStructSize = sizeof(o); o.hwndOwner = hwnd; o.lpstrFile = &f[0]; o.nMaxFile = DWORD(f.size());
-  o.lpstrInitialDir = dir.size() ? dir.c_str() : 0;
-  o.lpstrFilter = L"Video files and mp4pack archives\0*.mp4;*.m4v;*.mkv;*.avi;*.mpk\0Video files (mp4, mkv, avi)\0*.mp4;*.m4v;*.mkv;*.avi\0"
-                  L"mp4pack archives (*.mpk)\0*.mpk\0All files\0*.*\0";
-  o.lpstrTitle = L"Files to add to the list";
-  o.Flags = OFN_EXPLORER|OFN_HIDEREADONLY|OFN_ENABLESIZING|OFN_PATHMUSTEXIST|OFN_FILEMUSTEXIST|OFN_NOCHANGEDIR|OFN_ALLOWMULTISELECT;
-  if( !GetOpenFileNameW( &o ) ) return;
-  // one: its path; more: the directory, then their names, each ending with 0, and a 0 after them
-  vector<wstring> v;
-  wstring first = &f[0];
-  const wchar_t* p = &f[0]+first.size()+1;
-  if( !*p ) v.push_back( first );
-  else {
-    if( first.size() && !IsSep( first[first.size()-1] ) ) first += L"\\";
-    for( ; *p; p += wcslen( p )+1 ) v.push_back( first + p );
-    std::sort( v.begin(), v.end(), []( const wstring& a, const wstring& b ) { return lstrcmpiW( a.c_str(), b.c_str() )<0; } );
-  }
-  ListAdd( v );
+  vector<wstring> v = FileDialog( 2 );
+  if( v.size() ) ListAdd( v );
 }
 
 static void ClearProg();
@@ -1330,33 +1269,47 @@ static void ListFile( int k, int r ) {
   ListShow();
 }
 
-static wstring FileDialog( int save ) {
-  vector<wchar_t> f( 32768, 0 );
-  wstring cur = Text( save ? c_out : c_in ), dir;
-  if( cur.size() && (cur.size()<f.size()) ) { // start where the file is: its directory, its name
+// the Open dialog (kind 0: the input; 2: files for the list, more at once)
+// or the Save one (1: the output), starting where the file is; the files
+// chosen (none: cancelled), more sorted by name (the dialog gives them in an
+// order of its own)
+static vector<wstring> FileDialog( int kind ) {
+  vector<wchar_t> f( (kind==2) ? 1<<20 : 32768, 0 );
+  wstring cur = (kind==1) ? Text( c_out ) : ((kind==2) && list.size()) ? list.back().path : Text( c_in ), dir;
+  if( cur.size() && (cur.size()<f.size()) ) { // its directory, and its name (but for the list)
     wstring full = FullPath( cur ), name = FileName( full );
     dir = full.substr( 0, full.size()-name.size() );
-    wcsncpy( &f[0], name.c_str(), f.size()-1 );
+    if( kind!=2 ) wcsncpy( &f[0], name.c_str(), f.size()-1 );
   }
   OPENFILENAMEW o; memset( &o, 0, sizeof(o) );
   o.lStructSize = sizeof(o); o.hwndOwner = hwnd; o.lpstrFile = &f[0]; o.nMaxFile = DWORD(f.size());
   o.lpstrInitialDir = dir.size() ? dir.c_str() : 0;
   o.Flags = OFN_EXPLORER|OFN_HIDEREADONLY|OFN_ENABLESIZING|OFN_PATHMUSTEXIST|OFN_NOCHANGEDIR;
-  if( !save ) {
+  vector<wstring> v;
+  if( kind!=1 ) {
     o.lpstrFilter = L"Video files and mp4pack archives\0*.mp4;*.m4v;*.mkv;*.avi;*.mpk\0Video files (mp4, mkv, avi)\0*.mp4;*.m4v;*.mkv;*.avi\0"
                     L"mp4pack archives (*.mpk)\0*.mpk\0All files\0*.*\0";
-    o.lpstrTitle = L"The file to compress or decompress";
-    o.Flags |= OFN_FILEMUSTEXIST;
-    if( !GetOpenFileNameW( &o ) ) return wstring();
+    o.lpstrTitle = kind ? L"Files to add to the list" : L"The file to compress or decompress";
+    o.Flags |= OFN_FILEMUSTEXIST|(kind ? OFN_ALLOWMULTISELECT : 0);
+    if( !GetOpenFileNameW( &o ) ) return v;
   } else {
     int dec = Checked( c_dec );
     o.lpstrFilter = dec ? L"All files\0*.*\0" : L"mp4pack archives (*.mpk)\0*.mpk\0All files\0*.*\0";
     o.lpstrDefExt = dec ? 0 : L"mpk";
     o.lpstrTitle = dec ? L"The file to restore" : L"The archive to make";
     o.Flags |= OFN_OVERWRITEPROMPT;
-    if( !GetSaveFileNameW( &o ) ) return wstring();
+    if( !GetSaveFileNameW( &o ) ) return v;
   }
-  return &f[0];
+  // one: its path; more: the directory, then their names, each ending with 0, and a 0 after them
+  wstring first = &f[0];
+  const wchar_t* p = &f[0]+first.size()+1;
+  if( (kind!=2) || !*p ) v.push_back( first );
+  else {
+    if( first.size() && !IsSep( first[first.size()-1] ) ) first += L"\\";
+    for( ; *p; p += wcslen( p )+1 ) v.push_back( first + p );
+    std::sort( v.begin(), v.end(), []( const wstring& a, const wstring& b ) { return lstrcmpiW( a.c_str(), b.c_str() )<0; } );
+  }
+  return v;
 }
 
 static void BrowseWork() {
@@ -1603,24 +1556,20 @@ static void ClearProg() {
 
 static void Problem( const wstring& s ) { MessageBoxW( hwnd, s.c_str(), L"mp4gui", MB_OK|MB_ICONWARNING ); }
 
-// the outputs of a run that are there already: as RunFiles names them (in
-// a directory: after each file; d of an archive of more files: the names in
-// it)
+// the outputs of a run that are there already: as RunFiles names them
+// (ArchiveOut, MemberOuts)
 static vector<wstring> OutputsThere( const vector<wstring>& ins, const wstring& out, int dir ) {
   vector<wstring> v, used;
   wstring d = out;
-  if( dir && d.size() && !IsSep( d[d.size()-1] ) ) d += L"\\";
+  if( dir && d.size() && !IsSep( d[d.size()-1] ) ) d += L"" DS;
   for( size_t i=0; i<ins.size(); i++ ) {
     vector<wstring> o;
-    if( !f_dec ) o.push_back( dir ? d + UniqueName( FileName( ins[i] ), used ) + L".mpk" : out );
+    if( !f_dec ) o.push_back( ArchiveOut( ins[i], d, dir, used ) );
     else {
       vector<Member> m;
       string why;
       ScanArchive( ins[i], m, why );
-      wstring name = FileName( ins[i] );
-      if( !dir && (m.size()<=1) ) o.push_back( out );
-      else if( (m.size()==1) && IsArchive( name ) ) o.push_back( d + UniqueName( name.substr( 0, name.size()-4 ), used ) );
-      else for( size_t k=0; k<m.size(); k++ ) { string a = m[k].src; o.push_back( d + UniqueName( SafeName( a ) ? W(a) : W( "file" + Num(k+1) ), used ) ); }
+      o = MemberOuts( ins[i], m, d, dir, used );
     }
     for( size_t k=0; k<o.size(); k++ ) if( Exists( LongPath( o[k] ) ) ) v.push_back( o[k] );
   }
@@ -1657,7 +1606,7 @@ static void OnStart() {
     ins.push_back( in );
   }
   wstring fo = FullPath( out );
-  int dir = IsSep( out[out.size()-1] ) || IsDir( LongPath(fo) ) || (f_dec && (ins.size()>1)); // (as RunFiles has it)
+  int dir = OutIsDir( out, ins.size() ); // (as RunFiles has it)
   int append = lst && !dir && !f_dec && done && Exists( LongPath(fo) ); // (c into one archive, some done: added to it)
   if( !f_overwrite && !append ) {
     vector<wstring> there = OutputsThere( ins, fo, dir );
@@ -1866,8 +1815,8 @@ static LRESULT CALLBACK WndProc( HWND h, UINT msg, WPARAM wp, LPARAM lp ) {
         case ID_PAUSE: OnPause(); return 0;
         case ID_STOP: OnStop(); return 0;
         case ID_CPU: ShowCpu(); return 0;
-        case ID_INB: { wstring f = FileDialog( 0 ); if( f.size() ) SetInput( f ); return 0; }
-        case ID_OUTB: { wstring f = FileDialog( 1 ); if( f.size() ) { out_ok = f; SetText( c_out, f ); } return 0; }
+        case ID_INB: { vector<wstring> f = FileDialog( 0 ); if( f.size() ) SetInput( f[0] ); return 0; }
+        case ID_OUTB: { vector<wstring> f = FileDialog( 1 ); if( f.size() ) { out_ok = f[0]; SetText( c_out, f[0] ); } return 0; }
         case ID_WB: BrowseWork(); return 0;
         case ID_WTEMP: SetText( c_w, L"%TEMP%" ); return 0;
         case ID_WOUT: WorkByOutput(); return 0;
