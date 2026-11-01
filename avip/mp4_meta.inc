@@ -5,13 +5,15 @@ namespace mp4 {
 //
 // Common head: szmode 1 = sizes from the stsz/stz2/trun tables in struct, 2 = derived
 // from sample data, 3 = from the transform. Blob records (cover art) end after the head.
-//   u8   has_stbl
+//   u8   has_stbl | 2 (tflags 32: one-sample fragments from templates)
 //     vint nchunks, stsc_ptr, stsc_len                  (ptr/len into struct)
 //     szmode 1: u8 stz2, vint sz_ptr, sz_len
 //     nsamples < stbl+trun samples (v4+): truncated file, only the stbl chunks holding
 //     the first nsamples-trun samples are present; stco/stsz are regenerated for those
-//   vint ntrun, per trun: vint ptr delta (trun payload in struct)
-//     szmode 1: vint default_size (used if the trun has no size field)
+//   vint ntrun; with has_stbl&2: index column of the truns regenerated from a template
+//   per trun: vint ptr delta (trun payload in struct; none for a trun from a template, its
+//     ptr is the one before), szmode 1: vint default_size (used if the trun has no size
+//     field; the sample's size for a trun from a template)
 //   u8 tflags: 1 = timing model (all samples: durations, composition offsets, sync)
 //                   2 = trun sample_duration fields derived (with 1, szmode>=2)
 //                   4 = trun sample_composition_time_offset fields derived (with 1, szmode>=2)
@@ -20,6 +22,9 @@ namespace mp4 {
 //                       class (key | intra<<1 | non-reference<<2, as sdtp; ckind 4 without stss
 //                       too); after the tfdt base: 8 x vint flags per class, exception index
 //                       column, column of the exception values
+//                  32 = one-sample fragments (with 1, has_stbl&2; ops 0xF5..0xF7, see FragTmpl):
+//                       after the above, vint timescale, column of zigzag(tfdt - (tbase +
+//                       decode time)) for the truns from templates
 //     timing model (if 1):
 //       u8 ckind: 0 none, 1 H.264, 2 HEVC (+u8 NAL length size), 3 Vorbis sample positions,
 //         4 key frames by frame class (+u8 class kind, vint class parameter; see FrameClass)
@@ -47,6 +52,15 @@ namespace mp4 {
 //         exception index column, one byte value per exception
 //
 // ops: 0x00..0xEF  next chunk of track #code (stbl chunks first, then one chunk per trun)
+//      0xF5 n      n fragments (see FragTmpl), each from the current template of the track
+//                  whose next sample comes first: (tbase + its decode time + its tfdt
+//                  residual) / timescale, ties: lower track; then its sample (the next chunk)
+//      0xF6 v      a fragment of track v>>2 from its template v&3 (now its current one), then
+//                  its sample. The moof of a fragment from a template is a mark (as 0xF4)
+//      0xF7 v L    template definition: the last L bytes from the struct (a moof and the
+//                  header of its mdat) become template v&3 of track v>>2 (now its current
+//                  one); the sequence numbers of later fragments count on from its; then the
+//                  next chunk of the track
 //      0xF0 n      copy n bytes from struct
 //      0xF3 n      n chunks (v7+), each the next chunk of the group track with the smallest
 //                  (next chunk index - b, track index)
@@ -85,7 +99,7 @@ namespace mp4 {
 //      0xF2 18     mfro size: output position after it - the last mark
 //      0xFF        copy rest of struct, end
 
-enum { OP_RAW=0xF0, OP_CHUNK=0xF1, OP_TABLE=0xF2, OP_CRUN=0xF3, OP_MARK=0xF4, OP_END=0xFF };
+enum { OP_RAW=0xF0, OP_CHUNK=0xF1, OP_TABLE=0xF2, OP_CRUN=0xF3, OP_MARK=0xF4, OP_FRUN=0xF5, OP_FRAG=0xF6, OP_FDEF=0xF7, OP_END=0xFF };
 enum { TB_STCO=1, TB_CO64=2, TB_STSZ=3, TB_TRUN=4, TB_BDO=5, TB_DOFF=6, TB_DSI=7, TB_STTS=8, TB_CTTS=9, TB_STSS=10, TB_TFDT=11, TB_STSC=12, TB_PSET=13, TB_SDTP=14,
        TB_MARK=15, TB_SIDX=16, TB_TFRA=17, TB_MFRO=18 };
 static bool TbNoTrack( qword k ) { return k==TB_BDO || k==TB_MARK || k==TB_SIDX || k==TB_TFRA || k==TB_MFRO; }
@@ -105,6 +119,8 @@ struct DTrack {
   qword pcur;                                         // TB_PSET cursor into xhdr
   int tflags; TimeModel tm; long long tbase;          // timing model (v7)
   FlagMap fm;                                         // trun sample_flags per sample class (tflags 16)
+  qword fts; std::vector<byte> tfrag;                 // one-sample fragments (tflags 32): timescale; per trun: from a template,
+  std::vector<long long> tfr;                         //   its tfdt residual
   int cflags, cmode, crule; qword csdi, cmaster, csj, csm; long long ca, cO, cb;   // chunk model (v7)
   std::vector<qword> ccol;                            // spc runs / aligned residuals
   // derived
@@ -134,6 +150,7 @@ static bool ParseMeta( const Buf& m, Meta& M ) {
     if( !GetHead( r, t.h ) || t.h.szmode==SZ_EXPLICIT ) return false;
     t.xform = t.h.xform; t.lensize = t.h.lensize; t.nhdr = t.h.nhdr; t.hdrlen = t.h.hdrlen; t.xa = t.h.xa; t.xb = t.h.xb;
     t.tflags = 0; t.tbase = 0; t.cflags = t.cmode = t.crule = 0; t.csdi = t.cmaster = t.csj = t.csm = 0; t.ca = t.cO = t.cb = 0;
+    t.fts = 0; t.tfrag.clear(); t.tfr.clear();
     if( t.xform==XF_BLOB ) {
       t.nsamp=0; t.szmode=0; t.has_stbl=false; t.nch_stbl=t.npc=t.stsc_ptr=t.stsc_len=t.sz_ptr=t.sz_len=0;
       t.stz2=0; t.ptype=t.pparam=0; t.trun.clear(); t.tdef.clear(); t.ucnt.clear(); t.esc.clear();
@@ -142,7 +159,8 @@ static bool ParseMeta( const Buf& m, Meta& M ) {
     t.nsamp = t.h.nf; t.szmode = t.h.szmode==SZ_TABLES ? 0 : t.h.szmode;
     t.ptype = t.h.ptype; t.pparam = t.h.pparam;
     t.ucnt.assign( t.h.col.begin(), t.h.col.end() ); t.esc = t.h.esc;
-    t.has_stbl = r.u8()!=0;
+    uint hs = r.u8(); t.has_stbl = (hs&1)!=0;
+    if( hs>3 ) return false;
     t.nch_stbl=t.stsc_ptr=t.stsc_len=t.sz_ptr=t.sz_len=0; t.stz2=0;
     if( t.has_stbl ) {
       t.nch_stbl = r.vint(); t.stsc_ptr = r.vint(); t.stsc_len = r.vint();
@@ -150,17 +168,28 @@ static bool ParseMeta( const Buf& m, Meta& M ) {
     }
     qword ntr = r.vint(); if( r.err || ntr>MAXCOUNT ) return false;
     t.trun.resize( size_t(ntr) ); t.tdef.assign( size_t(ntr), 0 );
+    t.tfrag.assign( size_t(ntr), 0 ); t.tfr.assign( size_t(ntr), 0 );
+    std::vector<qword> fx;                              // truns from templates
+    if( (hs&2) && !GetIdxCol( r, fx, ntr ) ) return false;
+    for( size_t k=0; k<fx.size(); k++ ) t.tfrag[size_t(fx[k])] = 1;
     qword p=0;
     for( size_t k=0; k<t.trun.size() && !r.err; k++ ) {
-      p += r.vint(); t.trun[k] = p;
+      if( !t.tfrag[k] ) p += r.vint();
+      t.trun[k] = p;
       if( t.szmode==0 ) t.tdef[k] = r.vint();
     }
     t.tflags = r.u8();
-    if( t.tflags>31 || ((t.tflags&30) && !(t.tflags&1)) || ((t.tflags&22) && t.szmode<2) ) return false;
+    if( t.tflags>63 || ((t.tflags&62) && !(t.tflags&1)) || ((t.tflags&22) && t.szmode<2) ) return false;
     if( (t.tflags&1) && !GetTimeModel( r, t.tm, t.nsamp ) ) return false;
     if( (t.tflags&4) && !t.tm.hascto ) return false;
     if( t.tflags&8 ) t.tbase = UnZigZag( r.vint() );
     if( (t.tflags&16) && !GetFlagMap( r, t.fm, t.nsamp ) ) return false;
+    if( ((t.tflags&32)!=0)!=((hs&2)!=0) ) return false;
+    if( t.tflags&32 ) {
+      std::vector<qword> rc; t.fts = r.vint();
+      if( r.err || !t.fts || t.fts>0xFFFFFFFFu || !GetCol( r, rc, fx.size() ) ) return false;
+      for( size_t k=0; k<fx.size(); k++ ) t.tfr[size_t(fx[k])] = UnZigZag( rc[k] );
+    }
     t.cflags = r.u8();
     if( t.cflags>7 || ((t.cflags&1) && !t.has_stbl) || ((t.cflags&4) && !(t.cflags&1)) ) return false;
     if( t.cflags&1 ) {
@@ -184,18 +213,23 @@ static bool ParseMeta( const Buf& m, Meta& M ) {
     if( d.code<OP_RAW ) d.t = d.code;
     else if( d.code==OP_RAW ) d.n = r.vint();
     else if( d.code==OP_CHUNK ) d.t = int(r.vint()), d.c = r.vint();
-    else if( d.code==OP_CRUN ) { d.n = r.vint(); if( d.n==0 || d.n>MAXCOUNT ) return false; }
+    else if( d.code==OP_CRUN || d.code==OP_FRUN ) { d.n = r.vint(); if( d.n==0 || d.n>MAXCOUNT ) return false; }
+    else if( d.code==OP_FRAG || d.code==OP_FDEF ) {
+      qword v = r.vint(); d.t = int( std::min( v>>2, qword(0xFFFFFF) ) ); d.c = v&3;
+      if( d.code==OP_FDEF ) d.n = r.vint();
+    }
     else if( d.code==OP_MARK ) { d.code = OP_TABLE; d.n = TB_MARK; }
     else if( d.code==OP_TABLE ) { d.n = r.u8(); if( d.n<TB_STCO || d.n>TB_MFRO ) return false; if( !TbNoTrack( d.n ) ) d.t = int(r.vint()); }
     else if( d.code!=OP_END ) return false;
     if( r.err ) return false;
-    if( d.code!=OP_RAW && d.code!=OP_END && d.code!=OP_CRUN && !(d.code==OP_TABLE && TbNoTrack( d.n )) && size_t(d.t)>=M.trk.size() ) return false;
+    if( d.code!=OP_RAW && d.code!=OP_END && d.code!=OP_CRUN && d.code!=OP_FRUN && !(d.code==OP_TABLE && TbNoTrack( d.n )) && size_t(d.t)>=M.trk.size() ) return false;
     M.ops.push_back( d );
     if( d.code==OP_END ) break;
   }
   M.st = r.p; M.stlen = qword(r.e-r.p);
-  for( size_t i=0; i<M.trk.size(); i++ )                 // trun headers live in the struct
+  for( size_t i=0; i<M.trk.size(); i++ )                 // trun headers live in the struct (but those from templates)
     for( size_t k=0; k<M.trk[i].trun.size(); k++ ) {
+      if( k<M.trk[i].tfrag.size() && M.trk[i].tfrag[k] ) continue;
       qword p = M.trk[i].trun[k]; TrunHdr h;
       if( p>M.stlen || !ParseTrunHdr(M.st+p,M.stlen-p,h) ) return false;
     }

@@ -129,8 +129,29 @@ are now predicted from the sample's class (key / intra / non-reference), with ex
 
 | 2 minutes, fragmented MP4 | meta before | meta after |
 |---|---:|---:|
-| a fragment per key frame (`frag_keyframe`) | 28,437,301 (a copy) | 18,412 |
-| fragments of 1 s (`frag_duration`) | 28,698 | 25,836 |
+| a fragment per key frame (`frag_keyframe`) | 28,437,301 (a copy) | 18,251 |
+| fragments of 1 s (`frag_duration`) | 28,698 | 25,599 |
 
 Most of what is left is the fragments' box headers (`moof`, `traf`, `tfhd`, `trun`), about 200
 bytes per fragment.
+
+### MP4: a fragment per frame
+
+With a fragment per frame (ffmpeg's `frag_every_frame`), those headers were about 130 bytes of
+meta per frame: 1 MB for two minutes. A fragment of one sample is now a template: its `moof` and
+`mdat` header bytes, from the track's previous fragment of the same shape (up to 4 per track, such
+as key and other frames). The fields that change from fragment to fragment are regenerated: the
+sequence number, `base_data_offset` (from the fragment's position), the sample's duration, size,
+decode time and composition offset, the `mdat` size. The decode time stored in `tfdt` is kept as a
+residual against the durations (ffmpeg's MP3 fragments state durations that don't add up to it).
+Which track's fragment comes next is predicted from the decode times, so runs of fragments take one
+op. Sizes of samples in fragments without per-sample sizes now come from the frame data as well.
+
+| fragment per frame | meta before | meta after |
+|---|---:|---:|
+| touka19.avi, 2 minutes (DivX + MP3) | 1,041,414 | 5,253 |
+| the same, `default_base_moof` (1 minute) | 474,085 | 3,544 |
+| the same, first samples in `moov` (1 minute) | 521,106 | 3,584 |
+| x264 + AAC, 10 s | 92,741 | 2,897 |
+| x265 + AAC, 10 s | 92,786 | 2,943 |
+| AAC only, 10 s | 57,019 | 996 |

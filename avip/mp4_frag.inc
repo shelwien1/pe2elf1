@@ -14,6 +14,7 @@ static void ParseFragments( const byte* d, qword fs, const std::vector<Box>& top
     if( top[m].type!=FCC_BE('m','o','o','f') ) continue;
     qword mpos = top[m].pos, prevend = mpos; bool firsttraf = true;
     std::vector<Box> tf = Children( d, top[m].pay(), top[m].end() );
+    size_t ntraf = 0; for( size_t f=0; f<tf.size(); f++ ) ntraf += tf[f].type==FCC_BE('t','r','a','f');
     for( size_t f=0; f<tf.size(); f++ ) {
       if( tf[f].type!=FCC_BE('t','r','a','f') ) continue;
       Box tfhd;
@@ -35,9 +36,10 @@ static void ParseFragments( const byte* d, qword fs, const std::vector<Box>& top
       qword base = (fl&1) ? bdo : ((fl&0x20000) || firsttraf) ? mpos : prevend;
       qword pos = base;
       std::vector<Box> tr = Children( d, tf[f].pay(), tf[f].end() );
+      size_t ntr = 0; for( size_t r=0; r<tr.size(); r++ ) ntr += tr[r].type==FCC_BE('t','r','u','n');
       for( size_t r=0; r<tr.size(); r++ ) {
         if( tr[r].type!=FCC_BE('t','r','u','n') ) continue;
-        TrunInfo ti; ti.b = tr[r];
+        TrunInfo ti; ti.b = tr[r]; ti.mi = m; ti.solo = ntraf==1 && ntr==1;
         const byte* q = d+tr[r].pay();
         bool good = ParseTrunHdr( q, tr[r].plen(), ti.h ) && qword(ti.h.recsize)*ti.h.count<=tr[r].plen()-ti.h.hlen;
         if( good && (ti.h.flags&1) ) {
@@ -88,9 +90,9 @@ static void ParseFragments( const byte* d, qword fs, const std::vector<Box>& top
 static void ChooseSizeMode( const byte* d, Track& t ) {
   t.szmode = 0; t.ptype = PT_NONE; t.pparam = 0;
   qword n = t.nsamp;
-  if( n==0 || (t.has_stbl && t.ss.count && (t.ss.csize || t.stz2)) ) return;
-  bool cut = t.has_stbl && t.nstp;                    // something to deduplicate?
-  for( size_t k=0; k<t.trun.size(); k++ ) if( (t.trun[k].h.flags&0x200) && t.trun[k].h.count ) cut = true;
+  if( n==0 || (t.has_stbl && t.ss.count && (t.stz2 || (t.ss.csize && t.trun.empty()))) ) return;
+  bool cut = t.has_stbl && t.nstp;                    // something to deduplicate? (trun sizes, or tfhd defaults)
+  for( size_t k=0; k<t.trun.size(); k++ ) if( t.trun[k].h.count ) cut = true;
   if( !cut ) return;
   if( t.xform==XF_ADTS || t.xform==XF_OGG ) { t.szmode = 3; return; }   // ADTS frame_length / Ogg lacing carry the sizes
   if( t.cpt==PT_VOP || t.cpt==PT_M2V || t.cpt==PT_JPEG || t.cpt==PT_AU264 ) {   // start code units: sizes checked in stream context

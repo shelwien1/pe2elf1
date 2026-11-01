@@ -1,6 +1,75 @@
 // MP4: encoder
 namespace mp4 {
 
+enum { KI_FRAG=32, KI_FDEF=33 };   // items: a fragment from a template; the sample of a template definition
+
+// tfdt base of a track: its first tfdt (before the trun) minus the decode time of the traf's first sample
+static bool TfdtBase( const Track& t, const std::vector<qword>& dts, long long& base ) {
+  for( size_t k=0; k<t.tfdt.size(); k++ ) {
+    const Track::Tfdt& x = t.tfdt[k];
+    if( x.trun>=t.trun.size() || x.pos>=t.trun[x.trun].b.pos ) continue;
+    base = (long long)( x.val-dts[size_t(t.cfirst[size_t(t.npc+x.trun)])] );
+    return true;
+  }
+  return false;
+}
+
+// one-sample fragments (see FragTmpl), in file order: from a template of the track (up to 4,
+// the most recently used tried first) where FragRegen gives the fragment's bytes, else a
+// template definition. Sequence numbers count on from the last fragment of either kind (the
+// decoder sees no others), so the first one is a definition. dts: decode times per track
+static void FragPlan( const byte* d, const std::vector<Box>& top, std::vector<Track>& T, const std::vector<std::vector<qword> >& dts, bool timing ) {
+  struct Cand { qword pos; size_t i, k; };
+  std::vector<Cand> cs;
+  for( size_t i=0; i<T.size(); i++ ) {
+    Track& t = T[i];
+    t.fk.assign( t.trun.size(), 0 ); t.fslot.assign( t.trun.size(), 0 ); t.ftr.assign( t.trun.size(), 0 ); t.fbase = false;
+    if( !timing || !t.ok || t.blob || !t.tmok || !t.ts || dts[i].size()!=t.nsamp+1 ) continue;
+    for( size_t k=0; k<t.trun.size(); k++ ) {
+      const TrunInfo& r = t.trun[k]; size_t c = size_t(t.npc+k);
+      if( !r.solo || r.h.count!=1 || c>=t.spc.size() || t.spc[c]!=1 || r.mi+1>=top.size() ) continue;
+      const Box& md = top[r.mi+1];
+      if( md.type!=FCC_BE('m','d','a','t') || md.pay()!=t.coff[c] || md.end()!=t.coff[c]+t.csz[c] ) continue;
+      Cand x = { top[r.mi].pos, i, k }; cs.push_back( x );
+    }
+  }
+  std::sort( cs.begin(), cs.end(), []( const Cand& a, const Cand& b ) { return a.pos<b.pos; } );
+  std::vector<FragTmpl> slot( 4*T.size() ); std::vector<qword> used( 4*T.size(), 0 );
+  std::vector<long long> base( T.size(), 0 );
+  for( size_t i=0; i<T.size(); i++ ) if( dts[i].size() && !TfdtBase( T[i], dts[i], base[i] ) ) base[i] = 0;
+  qword lastseq = 0, clock = 0; bool seqok = false; Buf o;
+  for( size_t q=0; q<cs.size(); q++ ) {
+    const Cand& x = cs[q]; Track& t = T[x.i]; qword* u = &used[4*x.i];
+    const TrunInfo& r = t.trun[x.k]; size_t c = size_t(t.npc+x.k);
+    qword mp = top[r.mi].pos, n = top[r.mi+1].pay()-mp, s = t.cfirst[c];
+    qword tdec = qword(base[x.i]) + dts[x.i][size_t(s)];
+    int ord[4], no = 0, hit = -1; long long tr = 0;
+    for( int j=0; j<4; j++ ) if( u[j] ) {             // used slots, the most recently used first
+      int a = no++; while( a && u[ord[a-1]]<u[j] ) ord[a] = ord[a-1], a--;
+      ord[a] = j;
+    }
+    for( int j=0; j<no && seqok && hit<0; j++ ) {
+      const FragTmpl& f = slot[4*x.i+size_t(ord[j])];
+      if( f.b.size()!=n ) continue;
+      tr = 0;                                           // the tfdt as stated: a residual
+      if( f.tfdto ) tr = f.tfdtv ? (long long)( BE64(d+mp+f.tfdto)-tdec ) : (long long)int32_t( BE32(d+mp+f.tfdto)-uint(tdec) );
+      FragRegen( f, mp, lastseq+1, t.sdur[size_t(s)], t.Size(s), tdec+qword(tr), t.scto[size_t(s)], o );
+      if( !memcmp( o.data(), d+mp, size_t(n) ) ) hit = ord[j];
+    }
+    if( hit>=0 ) {
+      t.fk[x.k] = 2; t.fslot[x.k] = byte(hit); t.ftr[x.k] = tr; u[hit] = ++clock; lastseq++;
+      if( slot[4*x.i+size_t(hit)].tfdto ) t.fbase = true;
+      continue;
+    }
+    FragTmpl f;
+    if( !FragParse( d+mp, n, mp, f ) ) continue;
+    int j = 0; for( int v=1; v<4; v++ ) if( u[v]<u[j] ) j = v;   // free, else least recently used
+    slot[4*x.i+size_t(j)] = f; u[j] = ++clock;
+    t.fk[x.k] = 1; t.fslot[x.k] = byte(j);
+    lastseq = BE32( d+mp+f.seqo ); seqok = true;
+  }
+}
+
 static bool Encode1( const Buf& in, bool usexf, bool timing, Buf& meta, std::vector<Buf>& streams, std::vector<std::string>& names, int& nxf, const char** why, std::string& log ) {
   const byte* d = in.data(); qword fs = in.size();
   std::vector<Track> T; std::vector<qword> bdo_pos; std::vector<char> bdo_ok;
@@ -132,30 +201,57 @@ static bool Encode1( const Buf& in, bool usexf, bool timing, Buf& meta, std::vec
   }
   // resolve overlaps: drop offending tracks until the cut set is clean
   std::vector<Item> it; std::vector<qword> cut;
+  std::vector<std::vector<qword> > fdts( T.size() );   // decode times (fragment templates, their order)
+  for( size_t i=0; i<T.size(); i++ ) {
+    const Track& t = T[i];
+    if( !t.tmok || t.sdur.size()!=t.nsamp ) continue;
+    fdts[i].assign( size_t(t.nsamp+1), 0 );
+    for( qword n=0; n<t.nsamp; n++ ) fdts[i][size_t(n+1)] = fdts[i][size_t(n)]+t.sdur[size_t(n)];
+  }
   bdo_ok.assign( bdo_pos.size(), 1 );
   for(;;) {
     it.clear();
+    FragPlan( d, top, T, fdts, timing );
+    std::vector<std::pair<qword,qword> > fr;           // moofs of the template fragments: no items inside
+    for( size_t i=0; i<T.size(); i++ )
+      for( size_t k=0; k<T[i].fk.size(); k++ ) if( T[i].fk[k] ) fr.push_back( std::make_pair( top[T[i].trun[k].mi].pos, top[T[i].trun[k].mi].end() ) );
+    std::sort( fr.begin(), fr.end() );
+    auto infrag = [&]( qword p ) {
+      size_t j = size_t( std::upper_bound( fr.begin(), fr.end(), std::make_pair( p, ~qword(0) ) ) - fr.begin() );
+      return j && p<fr[j-1].second;
+    };
     for( size_t k=0; k<bdo_pos.size(); k++ )
-      if( bdo_ok[k] ) { Item x = { bdo_pos[k], 8, 0, TB_BDO, -1, k }; it.push_back(x); }
-    for( size_t k=0; k<marks.size(); k++ ) { Item x = { marks[k], 0, 0, TB_MARK, -1, k }; it.push_back(x); }
+      if( bdo_ok[k] && !infrag( bdo_pos[k] ) ) { Item x = { bdo_pos[k], 8, 0, TB_BDO, -1, k }; it.push_back(x); }
+    std::vector<qword> fm;                              // moofs of fragments from templates: marked by their op
+    for( size_t i=0; i<T.size(); i++ )
+      for( size_t k=0; k<T[i].fk.size(); k++ ) if( T[i].fk[k]==2 ) fm.push_back( top[T[i].trun[k].mi].pos );
+    std::sort( fm.begin(), fm.end() );
+    for( size_t k=0; k<marks.size(); k++ )
+      if( !std::binary_search( fm.begin(), fm.end(), marks[k] ) ) { Item x = { marks[k], 0, 0, TB_MARK, -1, k }; it.push_back(x); }
     for( size_t k=0; k<fx.size(); k++ ) if( fx[k].ok ) { Item x = { fx[k].off, fx[k].size, fx[k].size, fx[k].kind, -1, k }; it.push_back(x); }
     for( size_t i=0; i<T.size(); i++ ) {
       Track& t = T[i]; if( !t.ok ) continue;
-      for( size_t c=0; c<t.coff.size(); c++ ) { Item x = { t.coff[c], t.csz[c], t.csz[c], 0, int(i), c }; it.push_back(x); }
+      for( size_t c=0; c<t.coff.size(); c++ ) {
+        int fk = c>=t.npc && c-t.npc<t.fk.size() ? t.fk[c-t.npc] : 0;
+        if( fk==2 ) {                                   // the whole fragment
+          qword mp = top[t.trun[c-t.npc].mi].pos, n = t.coff[c]+t.csz[c]-mp;
+          Item x = { mp, n, n, KI_FRAG, int(i), c }; it.push_back(x);
+        } else { Item x = { t.coff[c], t.csz[c], t.csz[c], fk ? KI_FDEF : 0, int(i), c }; it.push_back(x); }
+      }
       if( t.has_stbl ) {
         qword n = (t.co64?8:4)*t.npc;
         Item s = { t.stco.pay()+8, n, n, t.co64?TB_CO64:TB_STCO, int(i), 0 }; it.push_back(s);
-        if( t.szmode>=2 && t.nstp ) { Item z = { t.stsz.pay()+12, 4*t.nstp, 4*t.nstp, TB_STSZ, int(i), 0 }; it.push_back(z); }
+        if( t.szmode>=2 && t.nstp && !t.ss.csize ) { Item z = { t.stsz.pay()+12, 4*t.nstp, 4*t.nstp, TB_STSZ, int(i), 0 }; it.push_back(z); }
       }
       for( size_t k=0; k<t.trun.size(); k++ )
-        if( t.trun[k].h.flags&1 ) { Item x = { t.trun[k].b.pay()+8, 4, 0, TB_DOFF, int(i), k }; it.push_back(x); }
+        if( (t.trun[k].h.flags&1) && !t.fk[k] ) { Item x = { t.trun[k].b.pay()+8, 4, 0, TB_DOFF, int(i), k }; it.push_back(x); }
       if( (t.xform==XF_OGG || t.xform==XF_HDR) && t.dsilen ) { Item x = { t.dsipos, t.dsilen, t.dsilen, TB_DSI, int(i), 0 }; it.push_back(x); }
       if( t.szmode>=2 )
         for( size_t k=0; k<t.trun.size(); k++ ) {
           const TrunInfo& r = t.trun[k];
           int nd = int( (r.h.flags&0x200)!=0 ) + int( (r.h.flags&0x100) && (t.tflags&2) ) + int( (r.h.flags&0x800) && (t.tflags&4) ) +
                    int( (r.h.flags&0x400) && (t.tflags&16) );
-          if( !nd || !r.h.count || t.spc[size_t(t.npc+k)]!=r.h.count ) continue;
+          if( !nd || !r.h.count || t.spc[size_t(t.npc+k)]!=r.h.count || t.fk[k] ) continue;
           Item z = { r.b.pay()+r.h.hlen, qword(r.h.recsize)*r.h.count, 4*qword(nd)*r.h.count, TB_TRUN, int(i), k };
           it.push_back(z);
         }
@@ -172,20 +268,21 @@ static bool Encode1( const Buf& in, bool usexf, bool timing, Buf& meta, std::vec
       }
       t.tflags &= ~8;
       if( t.tmok && t.tfdt.size() ) {                   // tfdt = base + dts of the traf's first sample
-        std::vector<qword> dts( size_t(t.nsamp+1), 0 );
-        for( qword n=0; n<t.nsamp; n++ ) dts[size_t(n+1)] = dts[size_t(n)]+t.sdur[size_t(n)];
+        const std::vector<qword>& dts = fdts[i];
         bool hb = false;
         for( size_t k=0; k<t.tfdt.size(); k++ ) {
           const Track::Tfdt& x = t.tfdt[k];
           if( x.trun>=t.trun.size() || x.pos>=t.trun[x.trun].b.pos ) continue;
           qword s0 = dts[size_t(t.cfirst[size_t(t.npc+x.trun)])];
-          if( !hb ) t.tbase = (long long)(x.val-s0), hb = true;
+          if( !hb ) t.tbase = (long long)(x.val-s0), hb = true;   // (as TfdtBase)
+          if( t.fk[x.trun] ) continue;                    // in a template fragment
           qword pv = qword(t.tbase)+s0;
           if( (x.ver ? pv : (pv&0xFFFFFFFFu))!=x.val ) continue;
           qword n = x.ver ? 8 : 4;
           Item z = { x.pos, n, n, TB_TFDT, int(i), k }; it.push_back(z); t.tflags |= 8;
         }
       }
+      if( t.fbase ) t.tflags |= 8;
     }
     std::sort( it.begin(), it.end() );
     bool bad=false;
@@ -206,6 +303,7 @@ static bool Encode1( const Buf& in, bool usexf, bool timing, Buf& meta, std::vec
         if( t.has_stbl && t.szmode==0 && Intersects( t.stsz.pay(), t.stsz.end(), it ) ) t.ok=false, bad=true;
         for( size_t k=0; k<t.trun.size(); k++ ) {
           const TrunInfo& r = t.trun[k];
+          if( t.fk[k]==2 ) continue;                    // regenerated from its template
           qword e = t.szmode==0 ? r.b.end() : r.b.pay()+r.h.hlen;
           if( Intersects( r.b.pay(), e, it ) ) t.ok=false, bad=true;
         }
@@ -213,6 +311,10 @@ static bool Encode1( const Buf& in, bool usexf, bool timing, Buf& meta, std::vec
     }
     if( !bad ) break;
     if( verbose ) log += "overlapping sample data/tables, dropping tracks\n";
+  }
+  for( size_t i=0; i<T.size(); i++ ) {                // tracks with template fragments
+    Track& t = T[i]; t.tflags &= ~32;
+    for( size_t k=0; k<t.fk.size(); k++ ) if( t.ok && t.fk[k] ) t.tflags |= 32;
   }
   // fragment index blobs (track set is final now): residuals vs the decoder's predictions
   {
@@ -264,7 +366,8 @@ static bool Encode1( const Buf& in, bool usexf, bool timing, Buf& meta, std::vec
       if( w.b.size()<f.size ) f.blob.swap( w.b ), x.rem = f.size-f.blob.size();
       else f.ok = false;
     }
-    long long gain = -3*(long long)marks.size();       // a mark costs its op and a split raw op
+    long long gain = 0;                                 // a mark costs its op and a split raw op
+    for( size_t q=0; q<it.size(); q++ ) if( it[q].kind==TB_MARK ) gain -= 3;
     for( size_t q=0; q<it.size(); q++ )
       if( it[q].kind==TB_SIDX || it[q].kind==TB_TFRA || it[q].kind==TB_MFRO ) {
         const FragIdx& f = fx[size_t(it[q].idx)];
@@ -282,8 +385,9 @@ static bool Encode1( const Buf& in, bool usexf, bool timing, Buf& meta, std::vec
   }
   // chunk order group: chunk ops predicted as the group track with the smallest (next-b, index)
   {
-    std::vector<std::pair<int,qword> > seq;
-    for( size_t k=0; k<it.size(); k++ ) if( it[k].kind==0 ) seq.push_back( std::make_pair( it[k].trk, it[k].idx ) );
+    std::vector<std::pair<int,qword> > seq; std::vector<char> isc;   // chunk consumers; chunk ops among them
+    for( size_t k=0; k<it.size(); k++ )
+      if( it[k].kind==0 || it[k].kind==KI_FRAG || it[k].kind==KI_FDEF ) seq.push_back( std::make_pair( it[k].trk, it[k].idx ) ), isc.push_back( it[k].kind==0 );
     std::vector<char> grp( T.size() ); std::vector<long long> b( T.size(), 0 );
     for( size_t i=0; i<T.size(); i++ ) grp[i] = timing && T[i].ok && !T[i].blob && T[i].coff.size();
     auto sim = [&]() {
@@ -295,7 +399,7 @@ static bool Encode1( const Buf& in, bool usexf, bool timing, Buf& meta, std::vec
           long long key = (long long)nx[u]-b[u];
           if( p==T.size() || key<bk ) p = u, bk = key;
         }
-        h += p==size_t(seq[k].first) && seq[k].second==nx[size_t(seq[k].first)];
+        h += isc[k] && p==size_t(seq[k].first) && seq[k].second==nx[size_t(seq[k].first)];
         nx[size_t(seq[k].first)] = seq[k].second+1;
       }
       return h;
@@ -308,7 +412,8 @@ static bool Encode1( const Buf& in, bool usexf, bool timing, Buf& meta, std::vec
         for( long long v=-2; v<=2; v++ ) { b[i] = v; size_t h = sim(); if( h>best ) best = h, bb = v; }
         b[i] = bb;
       }
-    bool use = best*2>=seq.size() && best;
+    size_t nc = 0; for( size_t k=0; k<isc.size(); k++ ) nc += isc[k];
+    bool use = best*2>=nc && best;
     for( size_t i=0; i<T.size(); i++ ) if( grp[i] && use ) T[i].cflags |= 2, T[i].cb = b[i];
   }
 
@@ -319,10 +424,24 @@ static bool Encode1( const Buf& in, bool usexf, bool timing, Buf& meta, std::vec
   Writer op; Buf st; st.reserve( size_t(fs - cut.back()) );
   std::vector<qword> next( T.size(), 0 );
   qword cur=0; size_t prun_at = 0; qword prun_n = 0; bool prun_open = false; qword npred = 0, nchops = 0;
+  size_t frun_at = 0; qword frun_n = 0; bool frun_open = false; qword nfrag = 0, nfrun = 0, nfdef = 0;
+  for( size_t i=0; i<T.size(); i++ ) T[i].fcur = 0;
+  auto fpred = [&]() {                                // next template fragment: the track whose next sample is first in time
+    size_t b = T.size(); long long bk = 0; qword bts = 1;
+    for( size_t u=0; u<T.size(); u++ ) {
+      const Track& g = T[u];
+      if( !g.ok || !(g.tflags&32) || next[u]>=g.coff.size() ) continue;
+      size_t c = size_t(next[u]); qword k = qword(g.tflags&8 ? g.tbase : 0) + fdts[u][size_t(g.cfirst[c])];   // (as the decoder)
+      if( c>=g.npc && g.fk[c-g.npc]==2 ) k += qword(g.ftr[c-g.npc]);
+      if( b==T.size() || TimeLess( (long long)k, g.ts, bk, bts ) ) b = u, bk = (long long)k, bts = g.ts;
+    }
+    return b;
+  };
   for( size_t k=0; k<it.size(); k++ ) {
     const Item& x = it[k];
-    if( x.off>cur ) { prun_open = false; op.u8(OP_RAW); op.vint(x.off-cur); st.insert( st.end(), d+cur, d+x.off ); cur=x.off; }
+    if( x.off>cur ) { prun_open = frun_open = false; op.u8(OP_RAW); op.vint(x.off-cur); st.insert( st.end(), d+cur, d+x.off ); cur=x.off; }
     if( x.kind!=0 ) prun_open = false;
+    if( x.kind!=KI_FRAG ) frun_open = false;
     int ti = x.trk<0 ? -1 : tm[x.trk];
     if( x.kind==TB_BDO ) {
       byte b[8]; PutBE64( b, x.off-BE64(d+x.off) );
@@ -338,6 +457,16 @@ static bool Encode1( const Buf& in, bool usexf, bool timing, Buf& meta, std::vec
       const Track& t = T[x.trk];
       byte b[4]; PutBE32( b, uint(x.off) - uint(t.coff[size_t(t.npc+x.idx)]) + BE32(d+x.off) );
       op.u8(OP_TABLE); op.u8(TB_DOFF); op.vint(ti); st.insert( st.end(), b, b+4 );
+    } else if( x.kind==KI_FRAG || x.kind==KI_FDEF ) {
+      Track& t = T[x.trk]; size_t q = size_t(x.idx-t.npc); int s = t.fslot[q];
+      if( x.kind==KI_FDEF ) { op.u8(OP_FDEF); op.vint( qword(ti)<<2 | qword(s) ); op.vint( x.off-top[t.trun[q].mi].pos ); nfdef++; }
+      else if( fpred()==size_t(x.trk) && s==t.fcur ) {
+        if( frun_open ) op.b.resize( frun_at ), frun_n++;
+        else frun_at = op.b.size(), frun_n = 1;
+        op.u8(OP_FRUN); op.vint(frun_n); frun_open = true; nfrun++;
+      } else frun_open = false, op.u8(OP_FRAG), op.vint( qword(ti)<<2 | qword(s) );
+      if( x.kind==KI_FRAG ) nfrag++;
+      t.fcur = s; next[x.trk] = x.idx+1;
     } else if( x.kind==0 ) {
       size_t p = T.size(); long long bk = 0;            // predicted chunk (as OP_CRUN)
       for( size_t u=0; u<T.size(); u++ ) {
@@ -464,22 +593,26 @@ static bool Encode1( const Buf& in, bool usexf, bool timing, Buf& meta, std::vec
     if( t.szmode==2 ) h.ptype = t.ptype, h.pparam = t.pparam, h.col.assign( t.ucnt.begin(), t.ucnt.end() ), h.esc = t.esc;
     PutHead( w, h );
     std::string suf = TrackSuffix( names.size(), h.ext ); names.push_back( suf );
-    w.u8( t.has_stbl );
+    std::vector<qword> fx, rc;                          // truns from templates (not in the struct), their tfdt residuals
+    for( size_t k=0; k<t.fk.size(); k++ ) if( t.fk[k]==2 ) fx.push_back( k ), rc.push_back( ZigZag( t.ftr[k] ) );
+    w.u8( uint(t.has_stbl) | (t.tflags&32 ? 2 : 0) );
     if( t.has_stbl ) {
       w.vint( t.nch_stbl ); w.vint( StructOff(t.stsc.pay(),it,cut) ); w.vint( t.stsc.plen() );
       if( t.szmode==0 ) w.u8( t.stz2 ), w.vint( StructOff(t.stsz.pay(),it,cut) ), w.vint( t.stsz.plen() );
     }
     w.vint( t.trun.size() );
+    if( t.tflags&32 ) PutIdxCol( w, fx );
     qword prev=0;
     for( size_t k=0; k<t.trun.size(); k++ ) {
-      qword p = StructOff( t.trun[k].b.pay(), it, cut );
-      w.vint( p-prev ); prev=p;
-      if( t.szmode==0 ) w.vint( !(t.trun[k].h.flags&0x200) && t.trun[k].h.count ? t.fsz[size_t(t.cfirst[size_t(t.npc+k)]-t.ss.count)] : 0 );
+      bool fr = t.fk[k]==2;                             // from a template: not in the struct
+      if( !fr ) { qword p = StructOff( t.trun[k].b.pay(), it, cut ); w.vint( p-prev ); prev=p; }
+      if( t.szmode==0 ) w.vint( fr || (!(t.trun[k].h.flags&0x200) && t.trun[k].h.count) ? t.fsz[size_t(t.cfirst[size_t(t.npc+k)]-t.ss.count)] : 0 );
     }
     w.u8( t.tflags );
     if( t.tflags&1 ) PutTimeModel( w, t.tm );
     if( t.tflags&8 ) w.vint( ZigZag( t.tbase ) );
     if( t.tflags&16 ) PutFlagMap( w, t.fm );
+    if( t.tflags&32 ) w.vint( t.ts ), PutCol( w, rc );
     w.u8( t.cflags );
     if( t.cflags&1 ) {
       w.vint( t.sdi ); w.u8( t.cmode );
@@ -498,6 +631,10 @@ static bool Encode1( const Buf& in, bool usexf, bool timing, Buf& meta, std::vec
       log += l;
       if( t.szmode==2 ) snprintf( l, sizeof(l), " esc=%llu", (unsigned long long)t.esc.size() ), log += l;
       log += t.tinfo;
+      if( t.tflags&32 ) {
+        qword nf = 0, nd = 0; for( size_t k=0; k<t.fk.size(); k++ ) nf += t.fk[k]==2, nd += t.fk[k]==1;
+        snprintf( l, sizeof(l), " frags=%llu+%llu", (unsigned long long)nf, (unsigned long long)nd ), log += l;
+      }
       if( t.cflags&1 ) {
         size_t nz = 0; for( size_t k=0; k<t.ccol.size(); k++ ) nz += t.cmode==1 && t.ccol[k]!=0;
         if( t.cmode==1 ) snprintf( l, sizeof(l), " stsc=aligned(trak%d,resid=%llu)", T[t.cmaster].idx, (unsigned long long)nz );
@@ -518,6 +655,11 @@ static bool Encode1( const Buf& in, bool usexf, bool timing, Buf& meta, std::vec
     snprintf( l, sizeof(l), "chunk ops: %llu of %llu predicted; struct %llu, ops %llu\n", (unsigned long long)npred, (unsigned long long)nchops,
       (unsigned long long)st.size(), (unsigned long long)op.b.size() );
     log += l;
+    if( nfrag || nfdef ) {
+      snprintf( l, sizeof(l), "fragments: %llu from templates (%llu predicted), %llu template definitions\n",
+        (unsigned long long)nfrag, (unsigned long long)nfrun, (unsigned long long)nfdef );
+      log += l;
+    }
   }
   w.bytes( op.b.data(), op.b.size() ); w.bytes( st.data(), st.size() );
   meta.swap( w.b );

@@ -17,7 +17,11 @@ static bool Restore( Meta& M, const std::vector<const Buf*>& S, Sink& out, const
       std::vector<qword> dm, dj;
       if( !EarlyDts( m, *S[size_t(t.cmaster)], dm ) || !EarlyDts( t, *S[i], dj ) ) FAIL("bad chunk model");
       qword ntr = 0;                          // stbl samples = all - trun samples
-      for( size_t k=0; k<t.trun.size(); k++ ) { TrunHdr h; ParseTrunHdr( st+t.trun[k], M.stlen-t.trun[k], h ); ntr += h.count; }
+      for( size_t k=0; k<t.trun.size(); k++ ) {
+        TrunHdr h; h.count = 1;                         // (one-sample fragments from templates)
+        if( !t.tfrag[k] ) ParseTrunHdr( st+t.trun[k], M.stlen-t.trun[k], h );
+        ntr += h.count;
+      }
       if( ntr>t.nsamp ) FAIL("bad chunk model");
       std::vector<qword> B; qword a = 0;
       for( size_t c=0; c<cspc[size_t(t.cmaster)].size(); c++ ) {
@@ -55,7 +59,8 @@ static bool Restore( Meta& M, const std::vector<const Buf*>& S, Sink& out, const
       for( size_t c=0; c<spc.size(); c++ ) nst+=spc[c];
     }
     for( size_t k=0; k<t.trun.size(); k++ ) {
-      TrunHdr h; ParseTrunHdr( st+t.trun[k], M.stlen-t.trun[k], h );
+      TrunHdr h; h.count = 1;                           // (one-sample fragments from templates)
+      if( !t.tfrag[k] ) ParseTrunHdr( st+t.trun[k], M.stlen-t.trun[k], h );
       spc.push_back( h.count );
     }
     t.spc.clear();
@@ -79,7 +84,8 @@ static bool Restore( Meta& M, const std::vector<const Buf*>& S, Sink& out, const
         if( si.csize ) t.csize=si.csize, t.nconst=nsp; else si.v.resize( size_t(nsp) ), t.sz.swap( si.v );
       }
       for( size_t k=0; k<ntp; k++ ) {
-        const byte* p = st+t.trun[k]; TrunHdr h; ParseTrunHdr( p, M.stlen-t.trun[k], h );
+        const byte* p = st+t.trun[k]; TrunHdr h; h.flags = 0;
+        if( !t.tfrag[k] ) ParseTrunHdr( p, M.stlen-t.trun[k], h );   // (from a template: the size in tdef)
         if( h.flags&0x200 ) {
           if( qword(h.recsize)*h.count > M.stlen-t.trun[k]-h.hlen ) FAIL("trun overrun");
           for( qword j=0; j<t.spc[t.npc+k]; j++ ) t.sz.push_back( BE32(p+h.hlen+j*h.recsize+h.szoff) );
@@ -132,9 +138,49 @@ static bool Restore( Meta& M, const std::vector<const Buf*>& S, Sink& out, const
   // pass 0: layout and checks, pass 1: emit
   std::vector<qword> next( M.trk.size() ), marks;
   Buf tb;
+  std::vector<FragTmpl> fsl( 4*nt ); std::vector<char> fok( 4*nt ); std::vector<int> fcur( nt );   // fragment templates
   for( int pass=0; pass<2; pass++ ) {
-    qword pos=0, sp=0;
-    std::fill( next.begin(), next.end(), 0 );
+    qword pos=0, sp=0, lastseq=0; bool seqok=false;
+    std::fill( next.begin(), next.end(), 0 ); std::fill( fok.begin(), fok.end(), 0 ); std::fill( fcur.begin(), fcur.end(), 0 );
+    // a one-sample fragment of track ti: from template s, or (def) defining it from the last L
+    // struct bytes; then its sample
+    auto frag = [&]( size_t ti, int s, bool def, qword L ) -> bool {
+      DTrack& t = M.trk[ti]; qword c = next[ti];
+      if( !(t.tflags&32) || c<t.npc || c>=t.spc.size() || c-t.npc>=t.tfrag.size() || t.spc[size_t(c)]!=1 ) FAIL("bad fragment");
+      bool fr = t.tfrag[size_t(c-t.npc)]!=0; FragTmpl& f = fsl[4*ti+size_t(s)];
+      if( def ) {
+        if( fr || L>sp || L>pos || !FragParse( st+sp-L, L, pos-L, f ) ) FAIL("bad fragment template");
+        lastseq = BE32( f.b.data()+f.seqo ); seqok = true; fok[4*ti+size_t(s)] = 1;
+      } else {
+        if( !fr || !seqok || !fok[4*ti+size_t(s)] ) FAIL("bad fragment");
+        qword smp = t.cfirst[size_t(c)];
+        lastseq++;
+        if( !pass ) { if( marks.size() && pos<marks.back() ) FAIL("bad mark"); marks.push_back( pos ); }   // its moof is a mark
+        if( pass ) {
+          FragRegen( f, pos, lastseq, t.dur[size_t(smp)], t.Size(smp),
+                     qword(t.tflags&8 ? t.tbase : 0) + t.dts[size_t(smp)] + qword(t.tfr[size_t(c-t.npc)]), t.cto[size_t(smp)], tb );
+          out.put( tb.data(), tb.size() );
+        }
+        pos += f.b.size();
+      }
+      fcur[ti] = s; next[ti] = c+1;
+      qword n = t.csz[size_t(c)];
+      if( pass==0 ) t.cpos[size_t(c)] = pos;
+      else out.put( S[ti]->data()+t.cso[size_t(c)], n );
+      pos += n;
+      return true;
+    };
+    auto fpred = [&]() {                              // the track whose next sample comes first
+      size_t b = nt; long long bk = 0; qword bts = 1;
+      for( size_t u=0; u<nt; u++ ) {
+        const DTrack& g = M.trk[u];
+        if( !(g.tflags&32) || next[u]>=g.spc.size() ) continue;
+        size_t c = size_t(next[u]); qword k = qword(g.tflags&8 ? g.tbase : 0) + g.dts[size_t(g.cfirst[c])];   // (wrapping)
+        if( c>=g.npc && g.tfrag[c-g.npc] ) k += qword(g.tfr[c-g.npc]);
+        if( b==nt || TimeLess( (long long)k, g.fts, bk, bts ) ) b = u, bk = (long long)k, bts = g.fts;
+      }
+      return b;
+    };
     for( size_t i=0; i<M.trk.size(); i++ ) M.trk[i].pcur = 0;
     for( size_t i=0; i<M.ops.size(); i++ ) {
       const DOp& d = M.ops[i];
@@ -143,6 +189,14 @@ static bool Restore( Meta& M, const std::vector<const Buf*>& S, Sink& out, const
         if( n>M.stlen-sp ) FAIL("struct overrun");
         if( pass ) out.put( st+sp, n );
         pos+=n; sp+=n;
+      } else if( d.code==OP_FRUN ) {
+        for( qword j=0; j<d.n; j++ ) {
+          size_t ti = fpred();
+          if( ti==nt ) FAIL("no fragment to predict");
+          if( !frag( ti, fcur[ti], false, 0 ) ) return false;
+        }
+      } else if( d.code==OP_FRAG || d.code==OP_FDEF ) {
+        if( !frag( size_t(d.t), int(d.c), d.code==OP_FDEF, d.n ) ) return false;
       } else if( d.code==OP_TABLE && d.n==TB_BDO ) {
         if( 8>M.stlen-sp ) FAIL("struct overrun");
         if( pass ) { byte b[8]; PutBE64( b, pos-BE64(st+sp) ); out.put( b, 8 ); }
@@ -211,7 +265,7 @@ static bool Restore( Meta& M, const std::vector<const Buf*>& S, Sink& out, const
         } else if( d.n==TB_DOFF ) {
           if( 4>M.stlen-sp || sp<8 ) FAIL("struct overrun");
           size_t k = std::lower_bound( t.trun.begin(), t.trun.end(), sp-8 ) - t.trun.begin();
-          if( k>=t.trun.size() || t.trun[k]!=sp-8 || t.npc+k>=t.spc.size() ) FAIL("bad data_offset ref");
+          if( k>=t.trun.size() || t.trun[k]!=sp-8 || t.tfrag[k] || t.npc+k>=t.spc.size() ) FAIL("bad data_offset ref");
           n = ns = 4;
           if( pass ) { tb.resize(4); PutBE32( &tb[0], uint(t.cpos[size_t(t.npc+k)]) - uint(pos) + BE32(st+sp) ); }
         } else if( d.n==TB_STCO || d.n==TB_CO64 ) {
@@ -274,7 +328,7 @@ static bool Restore( Meta& M, const std::vector<const Buf*>& S, Sink& out, const
           if( !(t.tflags&8) || sp<4 ) FAIL("bad table");
           int v = st[sp-4];
           size_t k = std::lower_bound( t.trun.begin(), t.trun.end(), sp ) - t.trun.begin();
-          if( k>=t.spc.size()-t.npc ) FAIL("bad tfdt ref");
+          if( k>=t.spc.size()-t.npc || t.tfrag[k] ) FAIL("bad tfdt ref");
           qword val = qword(t.tbase) + t.dts[size_t(t.cfirst[size_t(t.npc+k)])];
           n = v==1 ? 8 : 4;
           if( pass ) { tb.resize( size_t(n) ); if( v==1 ) PutBE64( &tb[0], val ); else PutBE32( &tb[0], uint(val) ); }
@@ -282,6 +336,8 @@ static bool Restore( Meta& M, const std::vector<const Buf*>& S, Sink& out, const
           // the trun whose payload is the last before sp: a trun with no derived field has no op
           size_t k = std::upper_bound( t.trun.begin(), t.trun.end(), sp ) - t.trun.begin(), c;
           if( !k-- ) FAIL("bad trun ref");
+          while( k && t.tfrag[k] ) k--;                   // (truns from templates share the pointer before them)
+          if( t.tfrag[k] ) FAIL("bad trun ref");
           c = size_t(t.npc+k);
           TrunHdr h; ParseTrunHdr( st+t.trun[k], M.stlen-t.trun[k], h );
           if( c>=t.spc.size() || t.spc[c]!=h.count ) FAIL("bad trun");

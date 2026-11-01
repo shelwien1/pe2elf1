@@ -42,7 +42,7 @@ static std::string FourccStr( uint t ) {
   return s;
 }
 
-struct TrunInfo { Box b; TrunHdr h; };
+struct TrunInfo { Box b; TrunHdr h; size_t mi; bool solo; };   // mi: its moof in the top-level boxes; solo: its moof's only traf and trun
 
 struct Track {
   int idx; uint tid; bool ok;
@@ -71,6 +71,9 @@ struct Track {
   struct Tfdt { qword pos; int ver; qword val; size_t trun; };
   std::vector<Tfdt> tfdt;
   bool tmok; int tflags; long long tbase; TimeModel tm; FlagMap fm; std::string tinfo;
+  std::vector<byte> fk, fslot; int fcur; bool fbase;   // per trun: 1 template definition, 2 fragment from a template (else 0), its slot;
+                                                       // current slot; templates with a tfdt
+  std::vector<long long> ftr;                          // per trun from a template: tfdt - (tbase + decode time)
   bool cstsc, cslast; qword sdi, ts;      // stsc regenerable (canonical, one sdi), last chunk split; mdhd timescale
   PosLen psets;                           // avcC/hvcC parameter set NAL payloads (file positions)
   Box sdtp; bool hsdtp; Buf sdv;          // sdtp box, values per stbl sample

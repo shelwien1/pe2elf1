@@ -30,6 +30,9 @@
 //   - avcC/hvcC parameter sets    : from the Annex B stream header
 //   - tfhd base_data_offset,
 //     trun data_offset            : stored as residuals vs field/chunk position (~0)
+//   - fragments of one sample     : the whole moof and mdat header from the track's
+//                                   previous fragment of the same shape (see FragTmpl),
+//                                   the tracks' fragments in decode time order
 // stsc/stsz/trun (when kept) are read back by the decoder directly from the struct.
 // The encoder runs the decoder in memory and falls back to raw track streams, then to
 // no timing/chunk models, then to a plain copy.
@@ -146,6 +149,94 @@ static void TfraPredict( const std::vector<qword>& marks, qword n, size_t npc, c
     if( j ) poff[size_t(k)] = marks[j-1];
     if( dts ) ptime[size_t(k)] = qword(tbase) + dts[size_t(cfirst[c])] + qword( cto ? cto[size_t(cfirst[c])] : 0 );
   }
+}
+
+// a/ta < b/tb: signed times in timescales ta, tb > 0
+static bool TimeLess( long long a, qword ta, long long b, qword tb ) {
+  if( (a<0)!=(b<0) ) return a<0;
+  if( a>=0 ) return U128::Mul( qword(a), tb ).Lt( U128::Mul( qword(b), ta ) );
+  return U128::Mul( qword(-(b+1))+1, ta ).Lt( U128::Mul( qword(-(a+1))+1, tb ) );
+}
+
+//--- one-sample fragments (ops 0xF5..0xF7) --------------------------------------
+//
+// A fragment of one sample: a moof with an mfhd and one traf (a tfhd, at most one tfdt, one
+// trun of one sample, any other boxes), then an mdat holding just that sample. Its template is
+// the bytes of the moof and of the mdat header; a fragment from a template is those bytes with
+// regenerated fields: sequence number, base_data_offset (the template's distance to the moof
+// position), the sample's duration and size (tfhd defaults when the trun has no such field,
+// else the trun record), its decode time (tfdt), composition offset (trun), the mdat size.
+// Everything else (flags, track id, data_offset, sample flags, other boxes) is the template's.
+struct FragTmpl {
+  Buf b; qword msz; int hl;                      // moof + mdat header; moof size; mdat header length (8, 16)
+  qword seqo, bdoo, duro, szo, tfdto, reco;      // field offsets in b (0: none)
+  int tfdtv; uint rfl; long long relbdo;         // tfdt version, trun flags, base_data_offset - moof position
+};
+
+// box at o in [o,e) of p, with a 32-bit size
+static bool FragBox( const byte* p, qword o, qword e, qword& sz, uint& ty ) {
+  if( e-o<8 ) return false;
+  sz = BE32(p+o); ty = BE32(p+o+4);
+  return sz>=8 && sz<=e-o;
+}
+
+// template of the n bytes at p (moof + mdat header, the moof at stream position pos)
+static bool FragParse( const byte* p, qword n, qword pos, FragTmpl& f ) {
+  qword msz, ms; uint ty;
+  if( !FragBox( p, 0, n, msz, ty ) || ty!=FCC_BE('m','o','o','f') || n-msz<8 ) return false;
+  ms = BE32(p+msz); f.hl = ms==1 ? 16 : 8;
+  if( BE32(p+msz+4)!=FCC_BE('m','d','a','t') || (ms>1 && ms<8) || !ms || n-msz!=qword(f.hl) ) return false;
+  f.b.assign( p, p+n ); f.msz = msz;
+  f.seqo = f.bdoo = f.duro = f.szo = f.tfdto = f.reco = 0; f.tfdtv = 0; f.rfl = 0; f.relbdo = 0;
+  int nmfhd = 0, ntraf = 0, ntfhd = 0, ntfdt = 0, ntrun = 0;
+  for( qword o=8, sz; o<msz; o+=sz ) {
+    if( !FragBox( p, o, msz, sz, ty ) ) return false;
+    if( ty==FCC_BE('m','f','h','d') ) { if( sz!=16 ) return false; f.seqo = o+12; nmfhd++; }
+    if( ty!=FCC_BE('t','r','a','f') ) continue;
+    ntraf++;
+    for( qword a=o+8, s2; a<o+sz; a+=s2 ) {
+      if( !FragBox( p, a, o+sz, s2, ty ) ) return false;
+      const byte* q = p+a+8; qword pl = s2-8;
+      if( ty==FCC_BE('t','f','h','d') ) {
+        if( pl<8 ) return false;
+        uint fl = BE32(q)&0xFFFFFF; qword fo = a+16;       // after version/flags and track_ID
+        if( fl&1 ) f.bdoo = fo, fo += 8;
+        if( fl&2 ) fo += 4;
+        if( fl&8 ) f.duro = fo, fo += 4;
+        if( fl&0x10 ) f.szo = fo, fo += 4;
+        if( fl&0x20 ) fo += 4;
+        if( fo>a+s2 ) return false;
+        ntfhd++;
+      } else if( ty==FCC_BE('t','f','d','t') ) {
+        if( pl<8 || q[0]>1 || (q[0] && pl<12) ) return false;
+        f.tfdtv = q[0]; f.tfdto = a+12; ntfdt++;
+      } else if( ty==FCC_BE('t','r','u','n') ) {
+        TrunHdr h;
+        if( !ParseTrunHdr( q, pl, h ) || h.count!=1 || h.hlen+h.recsize>pl ) return false;
+        f.rfl = h.flags; f.reco = a+8+h.hlen; ntrun++;
+      }
+    }
+  }
+  if( nmfhd!=1 || ntraf!=1 || ntfhd!=1 || ntfdt>1 || ntrun!=1 ) return false;
+  if( f.bdoo ) f.relbdo = (long long)( BE64(p+f.bdoo)-pos );
+  return true;
+}
+
+// the fragment from template f at stream position pos, sequence number seq, of a sample of
+// duration dur, size size, decode time tdec, composition offset cto
+static void FragRegen( const FragTmpl& f, qword pos, qword seq, qword dur, qword size, qword tdec, long long cto, Buf& o ) {
+  o = f.b; byte* p = o.data();
+  PutBE32( p+f.seqo, uint(seq) );
+  if( f.bdoo ) PutBE64( p+f.bdoo, pos+qword(f.relbdo) );
+  if( f.duro && !(f.rfl&0x100) ) PutBE32( p+f.duro, uint(dur) );
+  if( f.szo && !(f.rfl&0x200) ) PutBE32( p+f.szo, uint(size) );
+  if( f.tfdto ) { if( f.tfdtv ) PutBE64( p+f.tfdto, tdec ); else PutBE32( p+f.tfdto, uint(tdec) ); }
+  qword r = f.reco;
+  if( f.rfl&0x100 ) PutBE32( p+r, uint(dur) ), r += 4;
+  if( f.rfl&0x200 ) PutBE32( p+r, uint(size) ), r += 4;
+  if( f.rfl&0x400 ) r += 4;
+  if( f.rfl&0x800 ) PutBE32( p+r, uint(cto) );
+  if( f.hl==8 ) PutBE32( p+f.msz, uint(8+size) ); else PutBE64( p+f.msz+8, 16+size );
 }
 
 } // namespace mp4
