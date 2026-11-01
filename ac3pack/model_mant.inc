@@ -43,14 +43,10 @@ struct ModelMant : ModelExp<f_DEC, LV> {
     return *n = gsz, strt + o + (bin - strt - o) / gsz * gsz;
   }
   // a block done: its bins without mantissas, in their tiles (the largest coefficient may be one)
-  void tile_block(const Frame& f, const Run& r, int blk) {
-    Hist& H = hist[h];
+  void tile_block(const Frame& f, const Run& r) {
+    hist[h].tn_blk++;  // (the tonal predictor goes on in the bins that had a long block's mantissa)
     for (int ch = 0; ch <= f.nch; ch++) {
-      const int off = (ch == CPL && !r.cplinu) || r.chahtinu[ch], sw = ch >= 1 && ch <= f.nfch && f.k[blk].blksw[ch];
-      // the tonal predictor goes on in the bins that had a mantissa, a long block's
-      for (int bin = 0; bin < NBIN; bin++)
-        if (off || sw || bin < r.strtmant[ch] || bin >= r.endmant[ch] || !r.bap[ch][bin])
-          H.tn_n[ch][bin] = 0, H.tn_e[ch][bin] = H.tn_m[ch][bin] = 0;
+      const int off = (ch == CPL && !r.cplinu) || r.chahtinu[ch];
       if (off || !t_es[ch]) continue;
       for (int bin = r.strtmant[ch]; bin < r.endmant[ch]; bin++) {
         int n;
@@ -71,11 +67,11 @@ struct ModelMant : ModelExp<f_DEC, LV> {
     const Hist& H = hist[h];
     D.et = D.ts = D.tq = 0;
     *p = 0;
-    if (sw || H.tn_n[ch][bin] < 3) return;
+    if (sw || H.tn_t[ch][bin] != H.tn_blk || H.tn_n[ch][bin] < 3) return;
     const S64 x1 = H.tn_x1[ch][bin], st = tn_step(b, e), em = H.tn_e[ch][bin], mm = H.tn_m[ch][bin];
     *p = H.tn_a[ch][bin] * x1 / 16384 - H.tn_x2[ch][bin];
     const S64 ap = *p < 0 ? -*p : *p;
-    D.et = est_var((U64)(ap / st * 4 + ap % st * 4 / st));
+    D.et = est_var((U64)(4 * ap / st));
     D.ts = 2 * ap < st ? 0 : *p > 0 ? 1 : 2;
     D.tq = 1 + (4 * em < mm ? 0 : 2 * em < mm ? 1 : em < mm ? 2 : 3);
   }
@@ -83,6 +79,8 @@ struct ModelMant : ModelExp<f_DEC, LV> {
   void tn_update(int ch, int bin, S64 x, S64 p, S64 st) {
     Hist& H = hist[h];
     U8& n = H.tn_n[ch][bin];
+    if (H.tn_t[ch][bin] != H.tn_blk) n = 0, H.tn_e[ch][bin] = H.tn_m[ch][bin] = 0;  // (none in the block before)
+    H.tn_t[ch][bin] = H.tn_blk + 1;
     const S64 x1 = H.tn_x1[ch][bin], x2 = H.tn_x2[ch][bin];
     if (n >= 3) {
       const S64 e = x - p;
@@ -230,7 +228,7 @@ struct ModelMant : ModelExp<f_DEC, LV> {
     m_nzh = ((m_nzh << 1) | (v != 0)) & 15;
     if (t_cnt[ch][g0] < UINT8_MAX) t_cnt[ch][g0]++;
     if (is_big(v, b)) t_big[ch][g0] = 1;
-    {
+    if (!(ch >= 1 && ch <= f.nfch && f.k[blk].blksw[ch])) {  // (a short block's: none)
       const S64 st = tn_step(b, ec);
       tn_update(ch, bin, v * st, tp, st);
     }

@@ -38,10 +38,12 @@ struct Hist {
   S32 tailn;
   // the tonal predictor (model_mant.inc), per channel and bin: the last two coefficients (in 2^-40
   // of full scale), a tone's step a block (2 cos of its phase advance, Q14), the running |error|
-  // and |coefficient|, the state (0 none, 1 one coefficient, 2 two, 3 and a step)
+  // and |coefficient|, the state (0 none, 1 one coefficient, 2 two, 3 and a step), the block that
+  // left it (1 + the substream's blocks then: one block before none goes on); the blocks so far
   S64 tn_x1[NCH][NBIN], tn_x2[NCH][NBIN], tn_e[NCH][NBIN], tn_m[NCH][NBIN];
   S32 tn_a[NCH][NBIN];
   U8 tn_n[NCH][NBIN];
+  U32 tn_t[NCH][NBIN], tn_blk;
   // AHT's (model_mant.inc): the last frame's, of each channel that had it, by bin: the hebap, the
   // exponent, the gain adaptive mantissas
   U8 ah_has[NCH], ah_hb[NCH][NBIN];

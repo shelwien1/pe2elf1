@@ -50,15 +50,15 @@ static const int A1_mag_hN = (22+0) * (1);
 
 
 static const long long A1_mag_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 16), 4), 3), 2), 3), 7); // 8064
-static const long long A1_mag_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 24), 3), 7), 3); // 6048
-static const long long A1_mag_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 16), 24), 3); // 1152
-static const long long A1_mag_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 16), 10), 10), 10), 2), 2), 3), 2); // 384000
+static const long long A1_mag_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 4), 24), 7), 3); // 6048
+static const long long A1_mag_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 16), 24); // 1152
+static const long long A1_mag_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 16), 10), 10), 10), 2); // 32000
 static const long long A1_mag_g_Volume = 1; // 1
-static const long long A1_mag_m_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 16), 2), 2), 1), 3); // 192
+static const long long A1_mag_m_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 16), 2), 2), 1); // 192
 static const long long A1_mag_n_Volume = tc_vmul(1, 16); // 16
 static const long long A1_mag_t_Volume = tc_vmul(1, 16); // 16
 
-#define A1_mag_USES(X) X(bap) X(gr) X(tx) X(tb) X(tc) X(tr) X(e1) X(ts) X(et) X(tq) X(ep) X(sp) X(ew) X(ow) X(s1) X(so) X(rm)
+#define A1_mag_USES(X) X(bap) X(gr) X(tx) X(tb) X(tc) X(tr) X(ts) X(e1) X(et) X(tq) X(sp) X(ep) X(ew) X(ow) X(rm)
 
 struct A1_mag_T {
   cm_cnt2s A1_mag_A[tc_rows(A1_mag_a_Volume, A1_mag_hA) * M_mag_ND];

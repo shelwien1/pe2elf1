@@ -235,7 +235,7 @@ struct Model : ModelMant<f_DEC, LV> {
   void block(const Frame& f, const Run& r, int b) {
     Hist& H = hist[h];
     B::sid_commit();
-    B::tile_block(f, r, b);
+    B::tile_block(f, r);
     if (b == 0) B::aht_commit(f, r);
     for (int ch = 0; ch <= f.nch; ch++) {
       if (ch == CPL && !r.cplinu) {
