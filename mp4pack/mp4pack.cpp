@@ -61,12 +61,12 @@ static const qword ALL = ~0ULL;
 
 // -t/-c positions: the order the groups are given in
 enum { G_VIDEO, G_AUDIO, G_FONT, G_OTHER, N_GROUP };
-static const char* g_name[N_GROUP] = { "h264p", "audio", "ttfcomp", "tangelo" };
+static const char* g_name[N_GROUP] = { "video", "audio", "ttfcomp", "tangelo" };
 
-enum { M_STORE, M_TANGELO, M_H264P, M_AACPACK, M_MP3PACK, M_OGGCOMP, M_TTFCOMP, N_METHOD };
-static const char* m_name[N_METHOD] = { "store", "tangelo", "h264p", "aacpack", "mp3pack", "oggcomp", "ttfcomp" };
-static const char* m_tool[N_METHOD] = { "", "tangelo", "h264p", "aacpack", "mp3pack", "oggcomp", "ttfcomp" };
-static const int m_group[N_METHOD] = { G_OTHER, G_OTHER, G_VIDEO, G_AUDIO, G_AUDIO, G_AUDIO, G_FONT };
+enum { M_STORE, M_TANGELO, M_H264P, M_AACPACK, M_MP3PACK, M_OGGCOMP, M_TTFCOMP, M_M4VPACK, M_AC3PACK, N_METHOD };
+static const char* m_name[N_METHOD] = { "store", "tangelo", "h264p", "aacpack", "mp3pack", "oggcomp", "ttfcomp", "m4vpack", "ac3pack" };
+static const char* m_tool[N_METHOD] = { "", "tangelo", "h264p", "aacpack", "mp3pack", "oggcomp", "ttfcomp", "m4vpack", "ac3pack" };
+static const int m_group[N_METHOD] = { G_OTHER, G_OTHER, G_VIDEO, G_AUDIO, G_AUDIO, G_AUDIO, G_FONT, G_VIDEO, G_AUDIO };
 
 // by the extension avip gave the stream
 static int Method( const string& name ) {
@@ -74,7 +74,9 @@ static int Method( const string& name ) {
   string e = (d==string::npos) ? string() : name.substr( d+1 );
   for( size_t i=0; i<e.size(); i++ ) if( (e[i]>='A') && (e[i]<='Z') ) e[i] += 'a'-'A';
   if( (e=="h264") || (e=="264") ) return M_H264P;
+  if( e=="m4v" ) return M_M4VPACK; // (MPEG-4 Part 2: XviD, DivX)
   if( e=="aac" ) return M_AACPACK;
+  if( (e=="ac3") || (e=="eac3") ) return M_AC3PACK;
   if( (e=="mp3") || (e=="mp2") || (e=="mp1") || (e=="mpa") ) return M_MP3PACK;
   if( (e=="ogg") || (e=="oga") ) return M_OGGCOMP;
   if( (e=="ttf") || (e=="otf") || (e=="ttc") ) return M_TTFCOMP;
@@ -1269,7 +1271,7 @@ static int ReadIndex( string& why ) {
 
 //---- options
 
-// "3+3,1,1", "50%+50%-2": threads of h264p, the audio packers, ttfcomp and
+// "3+3,1,1", "50%+50%-2": threads of the video packers, the audio packers, ttfcomp and
 // tangelo, in that order. Each is a number, or a percentage of the threads
 // there are (all of the CPU's, or the free ones: -f), rounded up. '+' runs a
 // group together with the ones before it, ',' after them. Missing ones: the
@@ -1339,11 +1341,11 @@ static int ParseChunks( const char* s ) {
   return 0;
 }
 
-// "5,9,,7": levels of h264p, the audio packer, ttfcomp and tangelo, in that
-// order ('+' as ','); missing or empty: the tool's default. h264p, aacpack and
-// tangelo take 1 to 9 (-N; which of them h264p's and aacpack's builds have,
-// they say: CheckLevels); ttfcomp, mp3pack and oggcomp take none, theirs is
-// not used.
+// "5,9,,7": levels of the video packer, the audio packer, ttfcomp and tangelo,
+// in that order ('+' as ','); missing or empty: the tool's default. h264p,
+// m4vpack, aacpack, ac3pack and tangelo take 1 to 9 (-N; which of them their
+// builds have, they say: CheckLevels); ttfcomp, mp3pack and oggcomp take none,
+// theirs is not used.
 static int ParseLevels( const char* s ) {
   for( int g=0; g<N_GROUP; g++ ) lv[g] = NO_LEVEL;
   for( int g=0; ; g++ ) {
@@ -1364,11 +1366,11 @@ static int ParseLevels( const char* s ) {
   return 0;
 }
 
-// a packer's switch for its group's level: h264p's, aacpack's and tangelo's
-// -N (none for their default); none for the others
+// a packer's switch for its group's level: -N (none for its default) for those
+// that take one; none for the others
 static string LevelArg( int m ) {
   int l = lv[m_group[m]];
-  if( (l==NO_LEVEL) || ((m!=M_H264P) && (m!=M_AACPACK) && (m!=M_TANGELO)) ) return string();
+  if( (l==NO_LEVEL) || (m==M_STORE) || (m==M_MP3PACK) || (m==M_OGGCOMP) || (m==M_TTFCOMP) ) return string();
   return "-" + Num(l);
 }
 
@@ -1387,8 +1389,9 @@ static string ChunkArg( qword c ) {
 
 // the part size for a stream of group g: -c's, else a part for each of the
 // group's threads (the size over them, 1MB at least). perbyte: the memory a
-// tool takes for each byte of a part (h264p about 2, mp3pack 10; aacpack and
-// tangelo take the same for any): then no more than its threads' share of 3/4
+// tool takes for each byte of a part (h264p about 2, m4vpack and ac3pack less,
+// mp3pack 10; aacpack and tangelo take the same for any): then no more than
+// its threads' share of 3/4
 // of the memory free now (with the threads that run at once), and 1024MB,
 // the tools' most
 static qword PartSize( int g, qword size, int perbyte ) {
@@ -1610,12 +1613,12 @@ static int PackJobs() {
     Stream& s = S[i];
     string u = Quote( "u" DS+s.name );
     int si = int(i);
-    if( s.m==M_H264P ) {
-      int n = th[G_VIDEO];
-      string pk = s.name + ".h264p";
-      Job* j = NewJob( G_VIDEO, n, "h264p " + s.name, "h264p" );
-      if( n>1 ) s.cut = PartSize( G_VIDEO, s.size, 2 );
-      j->args = "c" + LevelSp(M_H264P) + " -t " + Num(n) + (s.cut ? " -c "+ChunkArg(s.cut) : string()) + (f_verbose ? "" : " -p")
+    if( (s.m==M_H264P) || (s.m==M_M4VPACK) || (s.m==M_AC3PACK) ) { // one process on its group's threads, in parts (-c)
+      int g = m_group[s.m], n = th[g];
+      string pk = s.name + ((s.m==M_H264P) ? ".h264p" : (s.m==M_M4VPACK) ? ".m4vp" : ".ac3p");
+      Job* j = NewJob( g, n, string(m_name[s.m]) + " " + s.name, m_tool[s.m] );
+      if( n>1 ) s.cut = PartSize( g, s.size, 2 );
+      j->args = "c" + LevelSp(s.m) + " -t " + Num(n) + (s.cut ? " -c "+ChunkArg(s.cut) : string()) + (f_verbose ? "" : " -p")
               + " " + u + " " + Quote("p" DS+pk);
       j->prog = 1; j->work = s.size; j->sids.push_back( si ); j->outs.push_back( PPath(pk) );
       s.part.push_back( Part( 0, s.size, pk, "" ) );
@@ -1758,17 +1761,21 @@ static int PackFailed() {
   return r ? ((r==2) ? 5 : 3) : 0;
 }
 
-// c: the levels -l gives h264p and aacpack, if their streams are here: their
-// builds have to have them (a build without the level exits with 2 before it
-// opens its input, else with 1 as the input is not there)
+// c: the levels -l gives the packers that take one, if their streams are
+// here: their builds have to have them. A build without the level ends
+// otherwise on an input that is not there than with its default level, before
+// it looks for it (h264p and aacpack with 2 instead of 1, m4vpack and ac3pack
+// with 1 instead of 2)
 static int CheckLevels() {
-  const int ms[2] = { M_H264P, M_AACPACK };
-  for( int i=0; i<2; i++ ) {
+  const int ms[] = { M_H264P, M_M4VPACK, M_AACPACK, M_AC3PACK };
+  for( size_t i=0; i<sizeof(ms)/sizeof(ms[0]); i++ ) {
     int m = ms[i], l = lv[m_group[m]], any = 0;
     for( size_t k=0; k<S.size(); k++ ) any |= (S[k].m==m);
-    if( !any || (l==NO_LEVEL) || (Probe( m_tool[m], "c -" + Num(l) + " mp4pack.none mp4pack.none.out" )!=2) ) continue;
+    if( !any || (l==NO_LEVEL) ) continue;
+    long long base = Probe( m_tool[m], "c mp4pack.none mp4pack.none.out" ); // (its default level: the input is not there)
+    if( (base<0) || (Probe( m_tool[m], "c -" + Num(l) + " mp4pack.none mp4pack.none.out" )==base) ) continue;
     string has;
-    for( int k=1; k<=9; k++ ) if( Probe( m_tool[m], "c -" + Num(k) + " mp4pack.none mp4pack.none.out" )==1 ) has += " " + Num(k);
+    for( int k=1; k<=9; k++ ) if( Probe( m_tool[m], "c -" + Num(k) + " mp4pack.none mp4pack.none.out" )==base ) has += " " + Num(k);
     Msg( "error: " + GetTool( m_tool[m] ).file + " has no level " + Num(l) + (has.size() ? " (its levels:" + has + ")" : string()) + "; see -l" );
     return 1;
   }
@@ -1835,7 +1842,7 @@ static int Compress( const wstring& in, const wstring& out ) {
   for( size_t i=0; i<S.size(); i++ ) {
     const Stream& s = S[i];
     string d = m_name[s.m];
-    if( s.m==M_H264P ) d += LevelSp(M_H264P) + " -t " + Num(th[G_VIDEO]) + (s.cut ? " -c "+ChunkArg(s.cut) : string());
+    if( (s.m==M_H264P) || (s.m==M_M4VPACK) || (s.m==M_AC3PACK) ) d += LevelSp(s.m) + " -t " + Num(th[m_group[s.m]]) + (s.cut ? " -c "+ChunkArg(s.cut) : string());
     if( s.m==M_MP3PACK ) d += " -t " + Num(th[G_AUDIO]) + (s.cut ? " -c "+ChunkArg(s.cut) : string());
     if( s.m==M_AACPACK ) d += LevelSp(M_AACPACK) + ((s.part.size()>1) ? ", " + Num(s.part.size()) + " parts" : string());
     if( s.m==M_TANGELO ) d += LevelSp(M_TANGELO) + " (" + s.part[0].pk + ((s.part.size()>1) ? ", " + Num(s.part.size()) + " pieces" : string()) + ")";
@@ -1885,8 +1892,9 @@ static int Decompress( const wstring& in, const wstring& out ) {
     Stream& s = S[i];
     string u = Quote( "u" DS+s.name );
     const Part& p0 = s.part[0];
-    if( s.m==M_H264P ) {
-      Job* j = NewJob( G_VIDEO, th[G_VIDEO], "h264p " + s.name, "h264p" );
+    if( (s.m==M_H264P) || (s.m==M_M4VPACK) || (s.m==M_AC3PACK) ) {
+      int g = m_group[s.m];
+      Job* j = NewJob( g, th[g], string(m_name[s.m]) + " " + s.name, m_tool[s.m] );
       j->args = string("d") + (f_verbose ? "" : " -p") + " " + Quote("p" DS+p0.pk) + " " + u;
       j->prog = 1; j->work = s.size; j->outs.push_back( UPath(s.name) ); j->del.push_back( PPath(p0.pk) );
     } else if( s.m==M_AACPACK ) {
@@ -2075,9 +2083,9 @@ static int Run( const wstring& in, const wstring& out ) {
   for( int g=0; g<N_GROUP; g++ ) ch[g] = 0;
   if( c_spec.size() && ParseChunks( c_spec.c_str() ) ) { Msg( "bad -c " + c_spec ); return 1; }
   Msg( c + "; -t " + (t_spec.size() ? t_spec+" = " : string()) + ThreadText() );
-  const string all[] = { "avip", "tangelo", "h264p", "aacpack", "mp3pack", "oggcomp", "ttfcomp" };
+  const string all[] = { "avip", "tangelo", "h264p", "m4vpack", "aacpack", "ac3pack", "mp3pack", "oggcomp", "ttfcomp" };
   string tl;
-  for( int i=0; i<7; i++ ) { const Tool& t = GetTool( all[i] ); if( t.path.size() ) tl += " " + t.file; }
+  for( size_t i=0; i<sizeof(all)/sizeof(all[0]); i++ ) { const Tool& t = GetTool( all[i] ); if( t.path.size() ) tl += " " + t.file; }
   Msg( "tools:" + (tl.size() ? tl : string(" none")) );
   for( int i=0; i<2; i++ ) if( GetTool( all[i] ).path.empty() ) { Msg( NoTool( GetTool( all[i] ) ) ); return 2; }
   t_start = GetTickCount64();
@@ -2111,7 +2119,7 @@ static int ParseArgs( int argc, wchar_t** argv, int gui, int& mode, vector<wstri
         wstring v = a.substr( 2 );
         if( v.empty() ) { if( ++i>=argc ) return 1; v = argv[i]; }
         if( o=='t' ) t_spec = U(v); else if( o=='c' ) c_spec = U(v);
-        else if( o=='l' ) { string ls = U(v); if( ParseLevels( ls.c_str() ) ) { why = "bad -l " + ls + " (up to 4 levels joined by ,: h264p, aacpack and tangelo 1 to 9)"; return 1; } }
+        else if( o=='l' ) { string ls = U(v); if( ParseLevels( ls.c_str() ) ) { why = "bad -l " + ls + " (up to 4 levels joined by ,: video, audio and tangelo 1 to 9)"; return 1; } }
         else if( o=='w' ) w_base = v;
         else if( (cap = BuildOf( U(v), bits ))<0 ) { why = "bad -i " + U(v) + " (a -march target: haswell, x86-64-v3, znver4 ...)"; return 1; }
         seen += char(o);
@@ -2142,14 +2150,16 @@ static BOOL WINAPI CtrlHandler( DWORD t ) {
 }
 
 static const char usage[] =
-"mp4pack - lossless compression of mp4/mkv/avi files with avip, h264p, aacpack,\n"
-"mp3pack, oggcomp, ttfcomp and tangelo, from mp4pack's own directory: the best\n"
-"build of each for this CPU, <tool>_<target>" EXE " by -march target names\n"
-"(h264p_haswell" EXE ", h264p_x86-64-v3" EXE ", h264p_znver4" EXE ") or <tool>" EXE "\n"
+"mp4pack - lossless compression of mp4/mkv/avi files with avip, h264p, m4vpack,\n"
+"aacpack, ac3pack, mp3pack, oggcomp, ttfcomp and tangelo, from mp4pack's own\n"
+"directory: the best build of each for this CPU, <tool>_<target>" EXE " by -march\n"
+"target names (h264p_haswell" EXE ", h264p_x86-64-v3" EXE ", h264p_znver4" EXE "), or\n"
+"<tool>" EXE "\n"
 "usage: mp4pack c [options] input output   compress\n"
 "       mp4pack d [options] input output   decompress\n"
 "options:\n"
-"  -t T  threads of h264p, the audio packer, ttfcomp and tangelo (the other\n"
+"  -t T  threads of the video packer (h264p, m4vpack), the audio packer\n"
+"        (aacpack, ac3pack, mp3pack, oggcomp), ttfcomp and tangelo (the other\n"
 "        files), in that order; joined by + they run at once, by , one after\n"
 "        another: -t 3+3+1+1 (all at once), -t 3,3,1,1 (in turn), -t 3+3,1,1.\n"
 "        Missing ones: audio as video, after it; ttfcomp and tangelo 1, both\n"
@@ -2157,23 +2167,24 @@ static const char usage[] =
 "        that share of the threads there are (all, or the free ones: -f),\n"
 "        rounded up; a -N at the end leaves N of them out first:\n"
 "        -t 50%+50%-2 = 3+3,1+1 with 8 threads. Alone, -N works on the\n"
-"        default, 100%,100% (= N,N,1+1: all the threads for h264p, then for\n"
-"        the audio).\n"
+"        default, 100%,100% (= N,N,1+1: all the threads for the video, then\n"
+"        for the audio).\n"
 "        0: no packer for that group, its files go to tangelo (for tangelo\n"
 "        itself: they are stored as they are)\n"
 "  -c C  part sizes, in the same order: MB, or KB with k (e.g. -c 4,512k);\n"
 "        0 or missing: a part for each thread, a stream's size over its\n"
-"        group's threads (1MB at least), h264p's and mp3pack's no bigger\n"
-"        than their share of the free memory (they take about 2 and 10\n"
-"        times a part). h264p and mp3pack get it as their -c; aacpack's\n"
-"        input is cut at ADTS frames into parts of at least that; with more\n"
-"        than one thread, other files bigger than it are cut into pieces,\n"
-"        an archive for each. The fonts make one solid archive.\n"
+"        group's threads (1MB at least), no bigger than the packer's share of\n"
+"        the free memory (h264p, m4vpack and ac3pack take about 2 times a\n"
+"        part, mp3pack 10). They get it as their -c; aacpack's input is cut\n"
+"        at ADTS frames into parts of at least that; with more than one\n"
+"        thread, other files bigger than it are cut into pieces, an archive\n"
+"        for each. The fonts make one solid archive.\n"
 "  -l L  compression levels, in the same order, joined by , (or +); missing\n"
-"        or empty: the tool's default. h264p and aacpack: 1 to 9, as their\n"
-"        builds have them (now h264p 9 7 5 3 1, aacpack 9; 9 is the strongest\n"
-"        and the default); tangelo: 1 to 9 (default 9; its model takes 17 to\n"
-"        1164MB). ttfcomp, mp3pack and oggcomp have none. E.g. -l 5,9,,7\n"
+"        or empty: the tool's default. Video and audio: 1 to 9, as the builds\n"
+"        have them (now h264p and m4vpack 9 7 5 3 1, aacpack 9, ac3pack 9 5 1;\n"
+"        9 is the strongest and the default); tangelo: 1 to 9 (default 9; its\n"
+"        model takes 17 to 1164MB). ttfcomp, mp3pack and oggcomp have none.\n"
+"        E.g. -l 5,9,,7\n"
 "  -f    count the threads free now (the CPUs' idle share over a second)\n"
 "  -i T  use only tool builds whose code runs on the -march target T as well\n"
 "        (haswell, x86-64-v3 ...; default: any that runs on this CPU)\n"

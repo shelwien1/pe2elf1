@@ -25,7 +25,7 @@ int wmain( int argc, wchar_t** argv ) {
   if( argc<a+2 ) { printf( "usage: builds_test [-i T] TOOLDIR DUMP...\n" ); return 1; }
   exe_dir = FullPath( argv[a] );
   if( !IsSep( exe_dir[exe_dir.size()-1] ) ) exe_dir += L"" DS;
-  const string all[] = { "avip", "tangelo", "h264p", "aacpack", "mp3pack", "oggcomp", "ttfcomp" };
+  const string all[] = { "avip", "tangelo", "h264p", "m4vpack", "aacpack", "ac3pack", "mp3pack", "oggcomp", "ttfcomp" };
   for( int i=a+1; i<argc; i++ ) {
     string text;
     if( ReadAll( FullPath( argv[i] ), text, 1<<24 ) ) { printf( "cannot read %s\n", U(argv[i]).c_str() ); return 2; }
@@ -34,7 +34,7 @@ int wmain( int argc, wchar_t** argv ) {
     n_tools = 0; rk_n[0] = rk_n[1] = 0; cpu_best.clear(); cap = ic;
     CpuTargets();
     string s = U( FileName( argv[i] ) ) + ": " + (!cpu_ok ? string( "not a CPUID dump" ) : cpu_best + (cpu.level ? " (x86-64-v" + Num(cpu.level) + ")" : string())) + "\n ";
-    for( int j=0; j<7; j++ ) {
+    for( size_t j=0; j<sizeof(all)/sizeof(all[0]); j++ ) {
       const Tool& t = GetTool( all[j] );
       if( t.path.size() ) s += " " + t.file;
       else if( t.later.size() ) s += " [" + NoTool( t ) + "]";

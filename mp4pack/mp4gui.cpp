@@ -306,8 +306,8 @@ static void MakeControls() {
   c_f = Button( L"only currently idle t&hreads", ID_F, BS_AUTOCHECKBOX );
   c_plan = Note();
   l_l = Label( L"&Levels" );
-  l_lh = Label( L"h264p" ); c_lh = Combo( ID_LH, CBS_DROPDOWNLIST, l_items, 10 );
-  l_la = Label( L"aacpack" ); c_la = Combo( ID_LA, CBS_DROPDOWNLIST, l_items, 10 );
+  l_lh = Label( L"video" ); c_lh = Combo( ID_LH, CBS_DROPDOWNLIST, l_items, 10 );
+  l_la = Label( L"audio" ); c_la = Combo( ID_LA, CBS_DROPDOWNLIST, l_items, 10 );
   l_lt = Label( L"tangelo" ); c_lt = Combo( ID_LT, CBS_DROPDOWNLIST, l_items, 10 );
 
   g_prog = Group( L"Progress" );
@@ -361,7 +361,7 @@ static void Layout() {
   a = xc+tcw+sp*4+lfw+fw;
   Place( c_f, a, y, x+w-a, rh ); y += rh;
   Place( c_plan, xc, y, x+w-xc, by+DY(3) ); y += by+DY(3)+gap;
-  int lc = DX(50), w1 = TextWidth( L"h264p" )+sp, w2 = TextWidth( L"aacpack" )+sp, w3 = TextWidth( L"tangelo" )+sp;
+  int lc = DX(50), w1 = TextWidth( L"video" )+sp, w2 = TextWidth( L"audio" )+sp, w3 = TextWidth( L"tangelo" )+sp;
   a = xc;
   Place( l_l, x, y, lw, rh );
   Place( l_lh, a, y, w1, rh ); a += w1; Place( c_lh, a, y, lc, rh+DY(100) ); a += lc+sp*3;
@@ -419,8 +419,8 @@ static void Load() {
   SetText( c_t, IniGet( L"threads", L"100%,100%" ) );
   SetText( c_free, IniGet( L"free", L"0" ) );
   Check( c_f, IniGet( L"count_free", L"0" )==L"1" );
-  SendMessageW( c_lh, CB_SELECTSTRING, (WPARAM)-1, (LPARAM)IniGet( L"level_h264p", L"default" ).c_str() );
-  SendMessageW( c_la, CB_SELECTSTRING, (WPARAM)-1, (LPARAM)IniGet( L"level_aacpack", L"default" ).c_str() );
+  SendMessageW( c_lh, CB_SELECTSTRING, (WPARAM)-1, (LPARAM)IniGet( L"level_video", L"default" ).c_str() );
+  SendMessageW( c_la, CB_SELECTSTRING, (WPARAM)-1, (LPARAM)IniGet( L"level_audio", L"default" ).c_str() );
   SendMessageW( c_lt, CB_SELECTSTRING, (WPARAM)-1, (LPARAM)IniGet( L"level_tangelo", L"default" ).c_str() );
   SetText( c_w, IniGet( L"work", L"" ) );
   Check( c_k, IniGet( L"keep", L"0" )==L"1" );
@@ -442,8 +442,8 @@ static void Save() {
   IniSet( L"threads", Text( c_t ) );
   IniSet( L"free", Text( c_free ) );
   IniSet( L"count_free", Checked( c_f ) ? L"1" : L"0" );
-  IniSet( L"level_h264p", Text( c_lh ) );
-  IniSet( L"level_aacpack", Text( c_la ) );
+  IniSet( L"level_video", Text( c_lh ) );
+  IniSet( L"level_audio", Text( c_la ) );
   IniSet( L"level_tangelo", Text( c_lt ) );
   IniSet( L"work", Text( c_w ) );
   IniSet( L"keep", Checked( c_k ) ? L"1" : L"0" );
@@ -517,7 +517,7 @@ static string CommandText() {
 
 //---- the CPU and the tool builds
 
-static const string tool_names[] = { "avip", "tangelo", "h264p", "aacpack", "mp3pack", "oggcomp", "ttfcomp" };
+static const string tool_names[] = { "avip", "tangelo", "h264p", "m4vpack", "aacpack", "ac3pack", "mp3pack", "oggcomp", "ttfcomp" };
 
 static string Pad( string s, size_t n ) { if( s.size()<n ) s.append( n-s.size(), ' ' ); return s; }
 
@@ -599,7 +599,7 @@ static string CpuText() {
 // do not and why
 static string BuildsText() {
   string o = "tool builds in " + U(exe_dir) + ":\r\n";
-  for( int i=0; i<7; i++ ) {
+  for( size_t i=0; i<sizeof(tool_names)/sizeof(tool_names[0]); i++ ) {
     const Tool& t = GetTool( tool_names[i] );
     vector< std::pair<int,string> > v;
     WIN32_FIND_DATAW fd;
