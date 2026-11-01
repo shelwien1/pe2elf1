@@ -26,6 +26,7 @@ Index b
  b_tq: tq, 1!0011
 
 Index c
+ c_so: so, 1!11
  c_sp: sp, 1!11
  c_bap: bap, 1!111111111111111
  c_ep: ep, 1!11111111111111111111111
