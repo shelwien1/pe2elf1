@@ -24,14 +24,14 @@ Index c
  c_kd: kd, 1!1111
  c_hb: hb, 1!1111111111111111111
  c_q1: q1, 1!11111111111111111111111
- c_pf: pf, 1!11111111111111111111111
+ c_pf: pf, 1!01000000100101010010001
 
 Index d
  d_kd: kd, 1!1111
  d_bk: bk, 1!11111
  d_qa: qa, 1!11111111111111111111111
  d_lg: lg, 1!11
- d_pf: pf, 1!11111111111111111111111
+ d_pf: pf, 1!00001000001010000100101
 
 Index m
  m_kd: kd, 1!1111
@@ -51,23 +51,23 @@ Index g
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
 
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
-Number rA, 1, 0!11111111
-Number mwA, 1, 0!00000100
-Number rB, 1, 0!11111111
-Number mwB, 1, 0!00000100
+Number rA, 1, 0!00111100
+Number mwA, 1, 0!00110111
+Number rB, 1, 0!11111110
+Number mwB, 1, 0!00000000
 Number rC, 1, 0!11111111
-Number mwC, 1, 0!00000100
-Number rD, 1, 0!11111111
-Number mwD, 1, 0!00000100
+Number mwC, 1, 0!10010000
+Number rD, 1, 0!11111110
+Number mwD, 1, 0!10000001
 Number lr, 1, 0!01111
-Number mb, 1, 0!00110011
-Number rT, 1, 0!11111111
-Number mwT, 1, 0!00000010
+Number mb, 1, 0!00100100
+Number rT, 1, 0!11111110
+Number mwT, 1, 0!10001100
 Number mt, 1, 0!110
 ! Number lrm, 1, 0!11111
 ! Number mbm, 1, 0!00011001
 Number rG, 1, 0!11111111
-Number mwG, 1, 0!00000000
+Number mwG, 1, 0!10100000
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is direct, one that
 #  does not is hashed into 2^h rows and contexts share them.  Frozen: left live these only grow.

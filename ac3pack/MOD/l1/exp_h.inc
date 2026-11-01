@@ -17,21 +17,21 @@ static const byte A1_exp_d_po[9+1]={ 0,0,1,2,3,4,4,4,5,5 };
 
 
 static const byte A1_exp_m_cc[3+1]={ 0,1,2,3 };
-static const byte A1_exp_m_nr[6+1]={ 0,1,2,3,4,5,6 };
+static const byte A1_exp_m_nr[6+1]={ 0,0,0,1,1,2,3 };
 
 
 
 
 static const int A1_exp_rA = (74+0) * (1);
-static const int A1_exp_mwA = (4+0) * (1);
-static const int A1_exp_rB = (254+0) * (1);
-static const int A1_exp_mwB = (37+0) * (1);
+static const int A1_exp_mwA = (135+0) * (1);
+static const int A1_exp_rB = (255+0) * (1);
+static const int A1_exp_mwB = (61+0) * (1);
 static const int A1_exp_rC = (255+0) * (1);
-static const int A1_exp_mwC = (4+0) * (1);
-static const int A1_exp_rD = (255+0) * (1);
-static const int A1_exp_mwD = (4+0) * (1);
-static const int A1_exp_lr = (15+0) * (1);
-static const int A1_exp_mb = (51+0) * (1);
+static const int A1_exp_mwC = (32+0) * (1);
+static const int A1_exp_rD = (251+0) * (1);
+static const int A1_exp_mwD = (126+0) * (1);
+static const int A1_exp_lr = (13+0) * (1);
+static const int A1_exp_mb = (49+0) * (1);
 static const int A1_exp_rT = (0+0) * (1);
 static const int A1_exp_mwT = (0+0) * (1);
 static const int A1_exp_mt = (0+0) * (1);
@@ -53,7 +53,7 @@ static const long long A1_exp_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 10), 7), 4);
 static const long long A1_exp_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 10), 6), 6); // 360
 static const long long A1_exp_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, 8), 10), 6); // 480
 static const long long A1_exp_g_Volume = 1; // 1
-static const long long A1_exp_m_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 4), 7); // 28
+static const long long A1_exp_m_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 4), 4); // 16
 static const long long A1_exp_n_Volume = 1; // 1
 static const long long A1_exp_t_Volume = 1; // 1
 

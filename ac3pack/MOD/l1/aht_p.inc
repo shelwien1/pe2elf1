@@ -28,14 +28,14 @@ void A1_aht_make( const M_aht_v & D, tcx & X ) {
   c = c*5 + A1_aht_c_kd[__min(4,__max(0,(kd)-(1-1)))];
   c = c*20 + A1_aht_c_hb[__min(19,__max(0,(hb)-(1-1)))];
   c = c*24 + A1_aht_c_q1[__min(23,__max(0,(q1)-(1-1)))];
-  c = c*24 + A1_aht_c_pf[__min(23,__max(0,(pf)-(1-1)))];
+  c = c*8 + A1_aht_c_pf[__min(23,__max(0,(pf)-(1-1)))];
 
   d = 0;
   d = d*5 + A1_aht_d_kd[__min(4,__max(0,(kd)-(1-1)))];
   d = d*6 + A1_aht_d_bk[__min(5,__max(0,(bk)-(1-1)))];
   d = d*24 + A1_aht_d_qa[__min(23,__max(0,(qa)-(1-1)))];
   d = d*3 + (((lg)>0+(1-1))+((lg)>1+(1-1)));
-  d = d*24 + A1_aht_d_pf[__min(23,__max(0,(pf)-(1-1)))];
+  d = d*7 + A1_aht_d_pf[__min(23,__max(0,(pf)-(1-1)))];
 
   m = 0;
   m = m*5 + A1_aht_m_kd[__min(4,__max(0,(kd)-(1-1)))];

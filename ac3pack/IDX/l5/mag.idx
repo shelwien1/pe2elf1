@@ -3,7 +3,8 @@
 #  this file and family.inc.  famvars.inc says what each variable is.
 #
 #  A mantissa's magnitude (bap 1-5: above k?, 6-15: its length, then its bits) and its sign, against
-#  the estimates of its neighbours: the bins before, the last block's, the partner channel's.
+#  the estimates of its neighbours: the bins before, the last block's, the partner channel's; its
+#  tile (whose largest coefficient set its exponent) and a tonal predictor's coefficient.
 #  (Cut from level -9: its ten counters, mixer 1 and the mantissa plane.)
 
 Prefix A5_mag
@@ -13,17 +14,17 @@ Const 0
 Index a
  a_bap: bap, 1!111111111111111
  a_gr: gr, 1!111
- a_tx: tx, 1!1111
- a_tb: tb, 1!11
- a_tc: tc, 1!111
- a_tr: tr, 1!1111111
+ a_tx: tx, 1!1001
+ a_tb: tb, 1!10
+ a_tc: tc, 1!011
+ a_tr: tr, 1!1101111
 
 Index b
  b_bap: bap, 1!000000111000000
  b_e1: e1, 1!11111111111111111111111
  b_ts: ts, 1!11
- b_et: et, 1!11111111111111111111111
- b_tq: tq, 1!1111
+ b_et: et, 1!00100001000100100100010
+ b_tq: tq, 1!0011
 
 Index c
  c_bap: bap, 1!111111111111111
@@ -34,8 +35,8 @@ Index d
  d_bap: bap, 1!111111111111111
  d_e1: e1, 1!1101010101010101
  d_e2: e2, 1!1101010101010101
- d_s1: s1, 1!11
- d_s2: s2, 1!11
+ d_s1: s1, 1!10
+ d_s2: s2, 1!01
 
 Index e
  e_bap: bap, 1!111111111111111
@@ -55,7 +56,7 @@ Index i
  i_dx: dx, 1!111111111
  i_dn: dn, 1!111111111
  i_gs: gs, 1!111
- i_tb: tb, 1!11
+ i_tb: tb, 1!01
 
 Index j
  j_bap: bap, 1!010000101000111
@@ -68,10 +69,10 @@ Index k
  k_e1: e1, 1!1101010101010101
  k_ew: ew, 1!1101010101010101
  k_ow: ow, 1!1101010101010101
- k_s1: s1, 1!11
- k_sp: sp, 1!11
+ k_s1: s1, 1!01
+ k_sp: sp, 1!01
  k_so: so, 1!11
- k_rm: rm, 1!11
+ k_rm: rm, 1!01
 
 Index l
  l_bap: bap, 1!111111111111111
@@ -84,9 +85,9 @@ Index l
 
 Index m
  m_bap: bap, 1!111111111111111
- m_tx: tx, 1!1111
- m_tb: tb, 1!11
- m_tr: tr, 1!1111111
+ m_tx: tx, 1!0001
+ m_tb: tb, 1!01
+ m_tr: tr, 1!0000000
  m_ts: ts, 1!11
 
 Index t
@@ -98,38 +99,34 @@ Index n
 ! n_bap: bap, 1!111111111111111
 
 Index g
- g_s1: s1, 1!11
- g_sp: sp, 1!11
- g_so: so, 1!11
- g_ts: ts, 1!11
- g_tq: tq, 1!1111
+#  (No sign counters: the sign is a decision node, MN_SIGN.)
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
 
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
-Number rA, 1, 0!11111111
-Number mwA, 1, 0!01001100
-Number rB, 1, 0!11111100
+Number rA, 1, 0!11111110
+Number mwA, 1, 0!00000000
+Number rB, 1, 0!11111111
 Number mwB, 1, 0!00000100
-Number rC, 1, 0!11111111
-Number mwC, 1, 0!00000100
-Number rD, 1, 0!11111111
-Number mwD, 1, 0!00000100
-Number rE, 1, 0!11111111
+Number rC, 1, 0!11001101
+Number mwC, 1, 0!01001111
+Number rD, 1, 0!11101001
+Number mwD, 1, 0!01000001
+Number rE, 1, 0!11111110
 Number mwE, 1, 0!00000100
-Number rH, 1, 0!11111111
-Number mwH, 1, 0!00110011
+Number rH, 1, 0!11111101
+Number mwH, 1, 0!00111110
 Number rI, 1, 0!11111111
 Number mwI, 1, 0!00000100
 Number rJ, 1, 0!11111111
-Number mwJ, 1, 0!00000100
+Number mwJ, 1, 0!00000000
 Number rK, 1, 0!11111111
-Number mwK, 1, 0!00000100
-Number rL, 1, 0!11111111
+Number mwK, 1, 0!01000000
+Number rL, 1, 0!11110011
 Number mwL, 1, 0!10000000
-Number lr, 1, 0!01101
-Number mb, 1, 0!00110011
-Number rT, 1, 0!10000000
-Number mwT, 1, 0!00000010
+Number lr, 1, 0!01111
+Number mb, 1, 0!00100011
+Number rT, 1, 0!10000111
+Number mwT, 1, 0!00000000
 Number mt, 1, 0!110
 ! Number lrm, 1, 0!11111
 ! Number mbm, 1, 0!00011001

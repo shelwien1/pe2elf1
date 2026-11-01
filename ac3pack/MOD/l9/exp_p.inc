@@ -19,7 +19,7 @@ void A9_exp_make( const M_exp_v & D, tcx & X ) {
   a = a*4 + A9_exp_a_es[__min(3,__max(0,(es)-(1-1)))];
   a = a*4 + A9_exp_a_cc[__min(3,__max(0,(cc)-(1-1)))];
   a = a*10 + A9_exp_a_pd[__min(9,__max(0,(pd)-(1-1)))];
-  a = a*7 + A9_exp_a_nr[__min(6,__max(0,(nr)-(1-1)))];
+  a = a*5 + A9_exp_a_nr[__min(6,__max(0,(nr)-(1-1)))];
 
   b = 0;
   b = b*10 + A9_exp_b_pd[__min(9,__max(0,(pd)-(1-1)))];
@@ -41,7 +41,7 @@ void A9_exp_make( const M_exp_v & D, tcx & X ) {
   e = e*6 + A9_exp_e_d2[__min(5,__max(0,(d2)-(1-1)))];
   e = e*4 + A9_exp_e_es[__min(3,__max(0,(es)-(1-1)))];
   e = e*3 + (((cc)>0+(1-1))+((cc)>2+(1-1)));
-  e = e*32 + A9_exp_e_dz[__min(31,__max(0,(dz)-(1-1)))];
+  e = e*12 + A9_exp_e_dz[__min(31,__max(0,(dz)-(1-1)))];
 
   h = 0;
   h = h*10 + A9_exp_h_pd[__min(9,__max(0,(pd)-(1-1)))];
@@ -81,7 +81,7 @@ void A9_exp_make( const M_exp_v & D, tcx & X ) {
 
   m = 0;
   m = m*4 + A9_exp_m_cc[__min(3,__max(0,(cc)-(1-1)))];
-  m = m*7 + A9_exp_m_nr[__min(6,__max(0,(nr)-(1-1)))];
+  m = m*4 + A9_exp_m_nr[__min(6,__max(0,(nr)-(1-1)))];
 
   w = 0;
   w = w*8 + A9_exp_w_ht[__min(7,__max(0,(ht)-(1-1)))];

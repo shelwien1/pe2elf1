@@ -9,12 +9,12 @@ static const byte A1_aht_b_bk[5+1]={ 0,1,2,3,4,5 };
 static const byte A1_aht_c_kd[4+1]={ 0,1,2,3,4 };
 static const byte A1_aht_c_hb[19+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19 };
 static const byte A1_aht_c_q1[23+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23 };
-static const byte A1_aht_c_pf[23+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23 };
+static const byte A1_aht_c_pf[23+1]={ 0,0,1,1,1,1,1,1,1,2,2,2,3,3,4,4,5,5,5,6,6,6,6,7 };
 
 static const byte A1_aht_d_kd[4+1]={ 0,1,2,3,4 };
 static const byte A1_aht_d_bk[5+1]={ 0,1,2,3,4,5 };
 static const byte A1_aht_d_qa[23+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23 };
-static const byte A1_aht_d_pf[23+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23 };
+static const byte A1_aht_d_pf[23+1]={ 0,0,0,0,0,1,1,1,1,1,1,2,2,3,3,3,3,3,4,4,4,5,5,6 };
 
 static const byte A1_aht_g_hb[19+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19 };
 
@@ -27,23 +27,23 @@ static const byte A1_aht_t_kd[4+1]={ 0,1,2,3,4 };
 static const byte A1_aht_t_hb[19+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19 };
 
 
-static const int A1_aht_rA = (255+0) * (1);
-static const int A1_aht_mwA = (4+0) * (1);
-static const int A1_aht_rB = (255+0) * (1);
-static const int A1_aht_mwB = (4+0) * (1);
+static const int A1_aht_rA = (60+0) * (1);
+static const int A1_aht_mwA = (55+0) * (1);
+static const int A1_aht_rB = (254+0) * (1);
+static const int A1_aht_mwB = (0+0) * (1);
 static const int A1_aht_rC = (255+0) * (1);
-static const int A1_aht_mwC = (4+0) * (1);
-static const int A1_aht_rD = (255+0) * (1);
-static const int A1_aht_mwD = (4+0) * (1);
+static const int A1_aht_mwC = (144+0) * (1);
+static const int A1_aht_rD = (254+0) * (1);
+static const int A1_aht_mwD = (129+0) * (1);
 static const int A1_aht_lr = (15+0) * (1);
-static const int A1_aht_mb = (51+0) * (1);
-static const int A1_aht_rT = (255+0) * (1);
-static const int A1_aht_mwT = (2+0) * (1);
+static const int A1_aht_mb = (36+0) * (1);
+static const int A1_aht_rT = (254+0) * (1);
+static const int A1_aht_mwT = (140+0) * (1);
 static const int A1_aht_mt = (6+0) * (1);
 static const int A1_aht_lrm = (31+0) * (1);
 static const int A1_aht_mbm = (25+0) * (1);
 static const int A1_aht_rG = (255+0) * (1);
-static const int A1_aht_mwG = (0+0) * (1);
+static const int A1_aht_mwG = (160+0) * (1);
 static const int A1_aht_hA = (22+0) * (1);
 static const int A1_aht_hB = (22+0) * (1);
 static const int A1_aht_hC = (22+0) * (1);
@@ -55,8 +55,8 @@ static const int A1_aht_hN = (22+0) * (1);
 
 static const long long A1_aht_a_Volume = tc_vmul(tc_vmul(1, 5), 14); // 70
 static const long long A1_aht_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 5), 20), 3), 6); // 1800
-static const long long A1_aht_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 5), 20), 24), 24); // 57600
-static const long long A1_aht_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 5), 6), 24), 3), 24); // 51840
+static const long long A1_aht_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 5), 20), 24), 8); // 19200
+static const long long A1_aht_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 5), 6), 24), 3), 7); // 15120
 static const long long A1_aht_g_Volume = tc_vmul(1, 20); // 20
 static const long long A1_aht_m_Volume = tc_vmul(tc_vmul(1, 5), 20); // 100
 static const long long A1_aht_n_Volume = tc_vmul(1, 5); // 5

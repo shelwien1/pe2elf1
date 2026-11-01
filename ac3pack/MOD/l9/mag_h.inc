@@ -1,14 +1,11 @@
 
 static const byte A9_mag_a_bap[15+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
 static const byte A9_mag_a_gr[3+1]={ 0,1,2,3 };
-static const byte A9_mag_a_tx[4+1]={ 0,1,2,3,4 };
-static const byte A9_mag_a_tc[3+1]={ 0,1,2,3 };
-static const byte A9_mag_a_tr[7+1]={ 0,1,2,3,4,5,6,7 };
+static const byte A9_mag_a_tr[7+1]={ 0,1,2,2,3,4,5,6 };
 
 static const byte A9_mag_b_bap[15+1]={ 0,0,0,0,0,0,0,1,2,3,3,3,3,3,3,3 };
 static const byte A9_mag_b_e1[23+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23 };
-static const byte A9_mag_b_et[23+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23 };
-static const byte A9_mag_b_tq[4+1]={ 0,1,2,3,4 };
+static const byte A9_mag_b_et[23+1]={ 0,0,0,1,1,1,1,1,2,2,2,2,3,3,3,4,4,4,5,5,5,5,6,6 };
 
 static const byte A9_mag_c_bap[15+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
 static const byte A9_mag_c_ep[23+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23 };
@@ -24,7 +21,6 @@ static const byte A9_mag_f_bap[15+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
 static const byte A9_mag_f_ep[16+1]={ 0,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9 };
 static const byte A9_mag_f_eo[14+1]={ 0,1,2,2,2,2,3,3,3,3,4,4,5,5,6 };
 
-static const byte A9_mag_g_tq[4+1]={ 0,1,2,3,4 };
 
 static const byte A9_mag_h_bap[15+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
 static const byte A9_mag_h_sm[23+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23 };
@@ -50,8 +46,6 @@ static const byte A9_mag_l_gr[3+1]={ 0,1,2,3 };
 static const byte A9_mag_l_gs[3+1]={ 0,1,2,3 };
 
 static const byte A9_mag_m_bap[15+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
-static const byte A9_mag_m_tx[4+1]={ 0,1,2,3,4 };
-static const byte A9_mag_m_tr[7+1]={ 0,1,2,3,4,5,6,7 };
 
 static const byte A9_mag_n_bap[15+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
 
@@ -63,35 +57,35 @@ static const byte A9_mag_t_bap[15+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
 
 
 
-static const int A9_mag_rA = (255+0) * (1);
-static const int A9_mag_mwA = (76+0) * (1);
-static const int A9_mag_rB = (252+0) * (1);
+static const int A9_mag_rA = (254+0) * (1);
+static const int A9_mag_mwA = (0+0) * (1);
+static const int A9_mag_rB = (255+0) * (1);
 static const int A9_mag_mwB = (4+0) * (1);
-static const int A9_mag_rC = (255+0) * (1);
-static const int A9_mag_mwC = (4+0) * (1);
-static const int A9_mag_rD = (255+0) * (1);
-static const int A9_mag_mwD = (4+0) * (1);
-static const int A9_mag_rE = (255+0) * (1);
+static const int A9_mag_rC = (205+0) * (1);
+static const int A9_mag_mwC = (79+0) * (1);
+static const int A9_mag_rD = (233+0) * (1);
+static const int A9_mag_mwD = (65+0) * (1);
+static const int A9_mag_rE = (254+0) * (1);
 static const int A9_mag_mwE = (4+0) * (1);
-static const int A9_mag_rH = (255+0) * (1);
-static const int A9_mag_mwH = (51+0) * (1);
+static const int A9_mag_rH = (253+0) * (1);
+static const int A9_mag_mwH = (62+0) * (1);
 static const int A9_mag_rI = (255+0) * (1);
 static const int A9_mag_mwI = (4+0) * (1);
 static const int A9_mag_rJ = (255+0) * (1);
-static const int A9_mag_mwJ = (4+0) * (1);
+static const int A9_mag_mwJ = (0+0) * (1);
 static const int A9_mag_rK = (255+0) * (1);
-static const int A9_mag_mwK = (4+0) * (1);
-static const int A9_mag_rL = (255+0) * (1);
+static const int A9_mag_mwK = (64+0) * (1);
+static const int A9_mag_rL = (243+0) * (1);
 static const int A9_mag_mwL = (128+0) * (1);
-static const int A9_mag_lr = (13+0) * (1);
-static const int A9_mag_mb = (51+0) * (1);
+static const int A9_mag_lr = (15+0) * (1);
+static const int A9_mag_mb = (35+0) * (1);
 static const int A9_mag_rS1 = (8+0) * (1);
 static const int A9_mag_rS2 = (8+0) * (1);
 static const int A9_mag_qs = (17+3) * (1);
 static const int A9_mag_qf = (30+3) * (1);
 static const int A9_mag_bw = (12+0) * (1);
-static const int A9_mag_rT = (128+0) * (1);
-static const int A9_mag_mwT = (2+0) * (1);
+static const int A9_mag_rT = (135+0) * (1);
+static const int A9_mag_mwT = (0+0) * (1);
 static const int A9_mag_mt = (6+0) * (1);
 static const int A9_mag_lrm = (31+0) * (1);
 static const int A9_mag_mbm = (25+0) * (1);
@@ -114,21 +108,21 @@ static const int A9_mag_hT = (22+0) * (1);
 static const int A9_mag_hN = (22+0) * (1);
 
 
-static const long long A9_mag_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 16), 4), 5), 3), 4), 8); // 30720
-static const long long A9_mag_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 24), 3), 24), 5); // 34560
+static const long long A9_mag_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 16), 4), 3), 2), 3), 7); // 8064
+static const long long A9_mag_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 24), 3), 7), 3); // 6048
 static const long long A9_mag_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 16), 24), 3); // 1152
-static const long long A9_mag_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 16), 10), 10), 3), 3); // 14400
+static const long long A9_mag_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 16), 10), 10), 2), 2); // 6400
 static const long long A9_mag_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 16), 24), 3), 3); // 3456
-static const long long A9_mag_f_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 16), 10), 7), 3), 3); // 10080
-static const long long A9_mag_g_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 3), 3), 3), 5); // 405
+static const long long A9_mag_f_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 16), 10), 7), 2), 2); // 4480
+static const long long A9_mag_g_Volume = 1; // 1
 static const long long A9_mag_h_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 16), 24), 18), 3), 3); // 62208
-static const long long A9_mag_i_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 16), 10), 10), 4), 3); // 19200
+static const long long A9_mag_i_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 16), 10), 10), 4), 2); // 12800
 static const long long A9_mag_j_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 7), 8), 15), 3); // 2520
-static const long long A9_mag_k_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 16), 10), 10), 10), 3), 3), 3), 3); // 1296000
+static const long long A9_mag_k_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 16), 10), 10), 10), 2), 2), 3), 2); // 384000
 static const long long A9_mag_l_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 16), 5), 2), 4), 4), 3), 3); // 23040
-static const long long A9_mag_m_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 16), 5), 3), 8), 3); // 5760
+static const long long A9_mag_m_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 16), 2), 2), 1), 3); // 192
 static const long long A9_mag_n_Volume = tc_vmul(1, 16); // 16
-static const long long A9_mag_s_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 5), 10), 3), 8); // 1200
+static const long long A9_mag_s_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 5), 10), 2), 8); // 800
 static const long long A9_mag_t_Volume = tc_vmul(1, 16); // 16
 static const long long A9_mag_w_Volume = tc_vmul(1, 2); // 2
 

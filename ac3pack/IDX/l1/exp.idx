@@ -33,7 +33,7 @@ Index d
 Index m
  m_es: es, 1!000
  m_cc: cc, 1!111
- m_nr: nr, 1!111111
+ m_nr: nr, 1!001011
 
 Index t
 
@@ -44,15 +44,15 @@ Index g
 
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
 Number rA, 1, 0!01001010
-Number mwA, 1, 0!00000100
-Number rB, 1, 0!11111110
-Number mwB, 1, 0!00100101
+Number mwA, 1, 0!10000111
+Number rB, 1, 0!11111111
+Number mwB, 1, 0!00111101
 Number rC, 1, 0!11111111
-Number mwC, 1, 0!00000100
-Number rD, 1, 0!11111111
-Number mwD, 1, 0!00000100
-Number lr, 1, 0!01111
-Number mb, 1, 0!00110011
+Number mwC, 1, 0!00100000
+Number rD, 1, 0!11111011
+Number mwD, 1, 0!01111110
+Number lr, 1, 0!01101
+Number mb, 1, 0!00110001
 ! Number rT, 1, 0!00000000
 ! Number mwT, 1, 0!00000000
 ! Number mt, 1, 0!000

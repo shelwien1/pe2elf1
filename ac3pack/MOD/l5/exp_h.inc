@@ -2,7 +2,7 @@
 static const byte A5_exp_a_es[3+1]={ 0,1,2,3 };
 static const byte A5_exp_a_cc[3+1]={ 0,1,2,3 };
 static const byte A5_exp_a_pd[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
-static const byte A5_exp_a_nr[6+1]={ 0,1,2,3,4,5,6 };
+static const byte A5_exp_a_nr[6+1]={ 0,0,1,1,2,3,4 };
 
 static const byte A5_exp_b_pd[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 static const byte A5_exp_b_d1[5+1]={ 0,1,2,3,4,5 };
@@ -18,7 +18,7 @@ static const byte A5_exp_d_cc[3+1]={ 0,1,2,3 };
 static const byte A5_exp_e_d1[5+1]={ 0,1,2,3,4,5 };
 static const byte A5_exp_e_d2[5+1]={ 0,1,2,3,4,5 };
 static const byte A5_exp_e_es[3+1]={ 0,1,2,3 };
-static const byte A5_exp_e_dz[31+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31 };
+static const byte A5_exp_e_dz[31+1]={ 0,0,1,2,3,4,5,6,7,7,8,8,8,8,9,9,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,11 };
 
 
 static const byte A5_exp_h_pd[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
@@ -43,7 +43,7 @@ static const byte A5_exp_l_pd[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 static const byte A5_exp_l_d1[5+1]={ 0,1,2,3,4,5 };
 
 static const byte A5_exp_m_cc[3+1]={ 0,1,2,3 };
-static const byte A5_exp_m_nr[6+1]={ 0,1,2,3,4,5,6 };
+static const byte A5_exp_m_nr[6+1]={ 0,0,0,1,1,2,3 };
 
 
 
@@ -51,25 +51,25 @@ static const byte A5_exp_m_nr[6+1]={ 0,1,2,3,4,5,6 };
 static const int A5_exp_rA = (2+0) * (1);
 static const int A5_exp_mwA = (126+0) * (1);
 static const int A5_exp_rB = (74+0) * (1);
-static const int A5_exp_mwB = (4+0) * (1);
-static const int A5_exp_rC = (254+0) * (1);
-static const int A5_exp_mwC = (37+0) * (1);
-static const int A5_exp_rD = (255+0) * (1);
-static const int A5_exp_mwD = (4+0) * (1);
+static const int A5_exp_mwB = (135+0) * (1);
+static const int A5_exp_rC = (255+0) * (1);
+static const int A5_exp_mwC = (61+0) * (1);
+static const int A5_exp_rD = (253+0) * (1);
+static const int A5_exp_mwD = (12+0) * (1);
 static const int A5_exp_rE = (255+0) * (1);
 static const int A5_exp_mwE = (1+0) * (1);
 static const int A5_exp_rH = (255+0) * (1);
-static const int A5_exp_mwH = (4+0) * (1);
-static const int A5_exp_rI = (255+0) * (1);
-static const int A5_exp_mwI = (4+0) * (1);
-static const int A5_exp_rJ = (255+0) * (1);
+static const int A5_exp_mwH = (32+0) * (1);
+static const int A5_exp_rI = (254+0) * (1);
+static const int A5_exp_mwI = (0+0) * (1);
+static const int A5_exp_rJ = (128+0) * (1);
 static const int A5_exp_mwJ = (4+0) * (1);
-static const int A5_exp_rK = (255+0) * (1);
-static const int A5_exp_mwK = (4+0) * (1);
-static const int A5_exp_rL = (255+0) * (1);
-static const int A5_exp_mwL = (111+0) * (1);
-static const int A5_exp_lr = (15+0) * (1);
-static const int A5_exp_mb = (51+0) * (1);
+static const int A5_exp_rK = (251+0) * (1);
+static const int A5_exp_mwK = (126+0) * (1);
+static const int A5_exp_rL = (247+0) * (1);
+static const int A5_exp_mwL = (98+0) * (1);
+static const int A5_exp_lr = (13+0) * (1);
+static const int A5_exp_mb = (49+0) * (1);
 static const int A5_exp_rT = (0+0) * (1);
 static const int A5_exp_mwT = (0+0) * (1);
 static const int A5_exp_mt = (0+0) * (1);
@@ -92,18 +92,18 @@ static const int A5_exp_hT = (22+0) * (1);
 static const int A5_exp_hN = (22+0) * (1);
 
 
-static const long long A5_exp_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 4), 10), 7); // 1120
+static const long long A5_exp_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 4), 10), 5); // 800
 static const long long A5_exp_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 10), 6), 4); // 240
 static const long long A5_exp_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 10), 7), 4); // 280
 static const long long A5_exp_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, 7), 2), 4); // 56
-static const long long A5_exp_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 6), 6), 4), 3), 32); // 13824
+static const long long A5_exp_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 6), 6), 4), 3), 12); // 5184
 static const long long A5_exp_g_Volume = 1; // 1
 static const long long A5_exp_h_Volume = tc_vmul(tc_vmul(tc_vmul(1, 10), 6), 6); // 360
 static const long long A5_exp_i_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 15), 10), 4), 32); // 19200
 static const long long A5_exp_j_Volume = tc_vmul(tc_vmul(tc_vmul(1, 20), 6), 10); // 1200
 static const long long A5_exp_k_Volume = tc_vmul(tc_vmul(tc_vmul(1, 8), 10), 6); // 480
 static const long long A5_exp_l_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 6), 10), 6), 3); // 2160
-static const long long A5_exp_m_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 4), 7); // 28
+static const long long A5_exp_m_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 4), 4); // 16
 static const long long A5_exp_n_Volume = 1; // 1
 static const long long A5_exp_t_Volume = 1; // 1
 

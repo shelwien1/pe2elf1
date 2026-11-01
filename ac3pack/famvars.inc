@@ -22,8 +22,7 @@ enum { HX_KIND, HX_RAWLEN, HX_TAILZ, HX_TAILNZ, HX_N };
 //   exp  an exponent's delta: 0 none?, 1 down?, 2 down by 2?, 3 up by 2?
 //   mag  a mantissa's magnitude: bap 1-5 0 + k (k 0-7): above k?; bap 6-15 8-39 its length (the
 //        bits it takes) as a tree (model_core.inc's code_len()), 40-90 its two bits below the top
-//        one by the length and the bits before them, the rest in the mantissa plane; the sign by
-//        bap
+//        one by the length and the bits before them, the rest in the mantissa plane; 91 the sign
 //   aht  0 a gain of modes 1-2 (gaqgain); 1-2 one of mode 3 (0?, 1?); 3-18 a vector index's top 4
 //        bits (a tree), 19-34 the bits below them by place; 35-117 a gain adaptive mantissa's
 //        magnitude as mag's of bap 6-15 (the sign 0, of an escape's large mantissa 1)
@@ -43,7 +42,7 @@ constexpr int M_hdr_ND = HN_N, M_hdr_MND = TC_MNODE, M_hdr_NG = NHF;
 constexpr int M_sid_ND = SN_N, M_sid_MND = TC_MNODE, M_sid_NG = NSF;
 constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 constexpr int M_exp_ND = EXN_N, M_exp_MND = 1, M_exp_NG = 1;
-constexpr int M_mag_ND = MN_N, M_mag_MND = TC_MNODE, M_mag_NG = 16;
+constexpr int M_mag_ND = MN_N, M_mag_MND = TC_MNODE, M_mag_NG = 1;
 constexpr int M_aht_ND = AN_N, M_aht_MND = TC_MNODE, M_aht_NG = AG_N;
 
 // Each family's variables, X(name) each, as M_<family>_v has them: what the model fills and the
