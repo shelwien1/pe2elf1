@@ -23,6 +23,13 @@ tangelo, with a note.
 
 ## What happens
 
+Before anything else, c and d make the output's directory if it is not there
+(and say so), and try the output: a file that is there is opened for writing
+(and left as it is), else one is made and removed. An output that cannot be
+written (on a drive that is not there, without permission, held open by
+another program) ends the run at once, exit code 2, with the system's reason,
+not after all the work.
+
 **c**
 
 1. A work directory is made (see `-w`), and `avip c input u\s` splits the
@@ -344,6 +351,11 @@ tools, as `mp4pack.exe` does.
   visual style they are as it draws them while they run, and a finished one
   takes the green and the blue in its shading.) The taskbar button shows the
   progress too, and flashes at the end if the window is in the background.
+  When a run fails, the status line says what went wrong, mp4pack's message:
+  `Failed: cannot write D:\x\a.mkv.mpk: There is not enough space on the
+  disk`. When that does not fit, its middle is cut out (`Failed: cannot write
+  D:...a.mkv.mpk: There is not enough space on the disk`), so that the
+  reason at its end shows; the log has all of it.
 - **Pause** holds the run until **Resume**: the tools running are suspended
   (all their threads), none starts, and the clock stops. Nothing is ended;
   Stop works while it is paused.
@@ -390,6 +402,12 @@ controls look classic.
 | 3 | a tool failed (the end of its log is shown) |
 | 4 | d (or `-verify`'s check): not an mp4pack archive (or one of another version, or not all of one), or a stream or the result is not as it was |
 | 5 | aborted with Ctrl+C |
+
+A message of a file that cannot be read or written, a directory that cannot
+be made or a file that cannot be moved ends with the system's reason: `cannot
+write D:\x\a.mkv.mpk: There is not enough space on the disk` (in the system's
+language; on Linux strerror's: `No space left on device`). When a directory
+cannot be made because a file is in the way, the message names that file.
 
 When compressing, a packer that fails (or crashes) does not stop it: the
 stream it had goes to tangelo instead, with a warning. avip and tangelo
@@ -476,7 +494,8 @@ The same `mp4pack.cpp` builds for Linux (x86-64, glibc), with `g++` or `clang++`
 There `winapi_posix.h` takes the place of `<windows.h>`. It implements the Win32
 functions mp4pack calls on POSIX, so the program is the same one as on Windows.
 The functions cover files, pipes, processes, threads and waits, the console,
-Ctrl+C and the processor counts.
+Ctrl+C, the processor counts and the errors (an errno becomes the Windows
+error code for it, and `FormatMessageW` gives strerror's text for it).
 
 The tools are the Windows ones, converted to Linux programs by
 [pe2elf](https://github.com/shelwien1/pe2elf). They run with its
@@ -513,6 +532,8 @@ Windows). Everything else works as described above, with these differences:
 - The threads are the processors mp4pack may run on (its affinity, e.g. with
   `taskset`); the cores are counted from sysfs, and `-f` reads `/proc/stat`.
 - A tool killed by a signal shows as exit code 128+N (e.g. 139 for SIGSEGV).
+- The reasons in the error messages are strerror's (`No such file or
+  directory`, `Permission denied`).
 
 The archives are the same on both systems: an archive made on one decompresses
 on the other. The index's `tools` line lists the builds (`h264p_avx2` or
@@ -573,6 +594,20 @@ pieces of a 13MB stream in 3 tangelo processes (`-t 0+2+1+3`), `-l ,,,5` and
 `-l ,,,7` (and `,,,0` refused), and a packer made to fail, whose stream went to
 `fallback.tgl`. The Linux tangelo is the Windows one converted by pe2elf as it
 is; it makes the same archives.
+
+Errors: outputs in new nested directories (c and d; mp4pack, and mp4gui with
+`C ... -quit`), with a long name with spaces, brackets and a backtick in it;
+outputs that cannot be written: on a drive that is not there (wine), under a
+file in the way, a read-only file and directory, and a `-w` in that directory
+(on Linux, as root without its override of file permissions: `setpriv
+--bounding-set=-dac_override,-dac_read_search,-fowner`), a file another
+program holds open without sharing (wine: refused at the start, the file left
+as it was), a full disk (a 128KB tmpfs: the archive in c, the files taken
+out of it in d with `-w` there); a missing input, a directory as the input or
+the output. Each ended with the system's reason (avip, run out of room in a
+full `-w`, with its exit code and the end of its log), at the start where the
+output could be tried; mp4gui's status line showed it (cut in the middle at
+the window's 640 pixels, the reason at its end in view).
 
 The archive was checked against its format by a separate reader (in Python)
 and against the files kept with `-k`, on Linux and under wine; archives made

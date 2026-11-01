@@ -21,6 +21,8 @@
 //   their own: main blocks them before anything else runs (WinapiPosixInit),
 //   and the other threads inherit that. SIGPIPE is ignored: writing to a pipe
 //   nobody reads fails instead;
+// - an errno becomes the Windows error code for it (GetLastError), and
+//   FormatMessageW gives strerror's text for it;
 // - main converts the arguments and calls wmain (unless WINAPI_POSIX_NO_MAIN).
 
 #ifndef WINAPI_POSIX_H
@@ -203,8 +205,10 @@ typedef BOOL (*PHANDLER_ROUTINE)( DWORD );
 //---- errors
 
 inline DWORD& WpLastError() { static thread_local DWORD e; return e; }
+// for each error code (below 256), the errno it last came from (0: it was set as it is)
+inline int* WpErrnoOf() { static thread_local int e[256]; return e; }
 inline DWORD GetLastError() { return WpLastError(); }
-inline void SetLastError( DWORD e ) { WpLastError() = e; }
+inline void SetLastError( DWORD e ) { WpLastError() = e; if( e<256 ) WpErrnoOf()[e] = 0; }
 
 inline DWORD WpError( int e ) {
   switch( e ) {
@@ -229,7 +233,13 @@ inline DWORD WpError( int e ) {
   return ERROR_GEN_FAILURE;
 }
 
-inline BOOL WpFail( int e ) { SetLastError( WpError(e) ); return FALSE; }
+// the error of an errno; code: another error code for it than WpError's
+inline BOOL WpFail( int e, DWORD code = 0 ) {
+  DWORD c = code ? code : WpError(e);
+  SetLastError( c );
+  if( c<256 ) WpErrnoOf()[c] = e;
+  return FALSE;
+}
 
 //---- strings: UTF-8 and wide
 
@@ -300,6 +310,40 @@ inline int lstrcmpiW( const wchar_t* a, const wchar_t* b ) {
     if( x!=y ) return (x<y) ? -1 : 1;
     if( !x ) return 0;
   }
+}
+
+//---- error texts
+
+#define FORMAT_MESSAGE_IGNORE_INSERTS 0x200u
+#define FORMAT_MESSAGE_FROM_SYSTEM 0x1000u
+
+// FORMAT_MESSAGE_FROM_SYSTEM only: an error code's text, strerror's for the
+// errno it last came from (this thread's), else Windows' for the codes these
+// functions set; 0 for others
+inline DWORD FormatMessageW( DWORD, const void*, DWORD id, DWORD, wchar_t* buf, DWORD n, void* ) {
+  static const struct { DWORD id; const char* t; } tx[] = {
+    { ERROR_INVALID_FUNCTION, "Incorrect function." }, { ERROR_FILE_NOT_FOUND, "The system cannot find the file specified." },
+    { ERROR_PATH_NOT_FOUND, "The system cannot find the path specified." }, { ERROR_TOO_MANY_OPEN_FILES, "The system cannot open the file." },
+    { ERROR_ACCESS_DENIED, "Access is denied." }, { ERROR_INVALID_HANDLE, "The handle is invalid." },
+    { ERROR_NOT_ENOUGH_MEMORY, "Not enough memory resources are available to process this command." },
+    { ERROR_BAD_FORMAT, "An attempt was made to load a program with an incorrect format." },
+    { ERROR_NOT_SAME_DEVICE, "The system cannot move the file to a different disk drive." }, { ERROR_NO_MORE_FILES, "There are no more files." },
+    { ERROR_WRITE_PROTECT, "The media is write protected." }, { ERROR_GEN_FAILURE, "A device attached to the system is not functioning." },
+    { ERROR_NOT_SUPPORTED, "The request is not supported." }, { ERROR_FILE_EXISTS, "The file exists." },
+    { ERROR_INVALID_PARAMETER, "The parameter is incorrect." }, { ERROR_BROKEN_PIPE, "The pipe has been ended." },
+    { ERROR_DISK_FULL, "There is not enough space on the disk." }, { ERROR_CALL_NOT_IMPLEMENTED, "This function is not supported on this system." },
+    { ERROR_INSUFFICIENT_BUFFER, "The data area passed to a system call is too small." },
+    { ERROR_INVALID_NAME, "The filename, directory name, or volume label syntax is incorrect." },
+    { ERROR_DIR_NOT_EMPTY, "The directory is not empty." }, { ERROR_ALREADY_EXISTS, "Cannot create a file when that file already exists." },
+    { ERROR_FILENAME_EXCED_RANGE, "The filename or extension is too long." } };
+  std::string t;
+  if( (id<256) && WpErrnoOf()[id] ) t = strerror( WpErrnoOf()[id] );
+  else for( size_t i=0; i<sizeof(tx)/sizeof(tx[0]); i++ ) if( tx[i].id==id ) t = tx[i].t;
+  std::wstring w = WpWide( t );
+  if( w.empty() || !buf || (n<2) ) return 0;
+  if( w.size()>=n ) w.resize( n-1 );
+  wmemcpy( buf, w.c_str(), w.size()+1 );
+  return DWORD(w.size());
 }
 
 //---- handles
@@ -422,10 +466,7 @@ inline HANDLE CreateFileW( const wchar_t* name, DWORD access, DWORD, SECURITY_AT
   else if( disp==TRUNCATE_EXISTING ) o |= O_TRUNC;
   int fd;
   do fd = open( p.c_str(), o, 0666 ); while( (fd<0) && (errno==EINTR) );
-  if( fd<0 ) {
-    SetLastError( ((errno==EEXIST) && (disp==CREATE_NEW)) ? ERROR_FILE_EXISTS : WpError(errno) );
-    return INVALID_HANDLE_VALUE;
-  }
+  if( fd<0 ) { int e = errno; WpFail( e, ((e==EEXIST) && (disp==CREATE_NEW)) ? ERROR_FILE_EXISTS : 0 ); return INVALID_HANDLE_VALUE; }
   struct stat st;
   if( (fstat( fd, &st )==0) && S_ISDIR(st.st_mode) ) { close( fd ); SetLastError( ERROR_ACCESS_DENIED ); return INVALID_HANDLE_VALUE; } // (as Windows)
   if( flags & FILE_FLAG_SEQUENTIAL_SCAN ) posix_fadvise( fd, 0, 0, POSIX_FADV_SEQUENTIAL );
@@ -688,7 +729,7 @@ inline HANDLE FindFirstFileW( const wchar_t* spec, WIN32_FIND_DATAW* fd ) {
     o->pat = p;
   }
   o->dir = opendir( o->dpath.c_str() );
-  if( !o->dir ) { DWORD e = (errno==ENOENT) ? ERROR_PATH_NOT_FOUND : WpError(errno); delete o; SetLastError( e ); return INVALID_HANDLE_VALUE; }
+  if( !o->dir ) { int e = errno; delete o; WpFail( e, (e==ENOENT) ? ERROR_PATH_NOT_FOUND : 0 ); return INVALID_HANDLE_VALUE; }
   if( !WpNext( o, fd ) ) { closedir( o->dir ); o->dir = 0; delete o; SetLastError( ERROR_FILE_NOT_FOUND ); return INVALID_HANDLE_VALUE; }
   return o;
 }

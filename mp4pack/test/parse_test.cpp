@@ -40,10 +40,10 @@ int wmain( int, wchar_t** ) {
   T( "3+3,1,1", 8, 0, "3+3,1,1" );
   T( "3,3+1,1", 8, 0, "3,3+1,1" );
   T( "3+3,1+1", 8, 0, "3+3,1+1" );
-  T( "4", 8, 0, "4,4,1+1" );           // missing: audio as video, after it; ttfcomp and shar 1, at once
+  T( "4", 8, 0, "4,4,1+1" );           // missing: audio as video, after it; ttfcomp and tangelo 1, at once
   T( "3+1", 8, 0, "3+1,1+1" );
   T( "3+3", 8, 0, "3+3,1+1" );
-  T( "3+3,2", 8, 0, "3+3,2,1" );       // (ttfcomp given: shar after it)
+  T( "3+3,2", 8, 0, "3+3,2,1" );       // (ttfcomp given: tangelo after it)
   T( "3+3+2", 8, 0, "3+3+2,1" );
   T( "0", 8, 0, "0,0,1+1" );
   T( "0,0,0,0", 8, 0, "0,0,0,0" );

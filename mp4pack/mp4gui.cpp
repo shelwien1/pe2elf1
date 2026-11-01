@@ -276,6 +276,36 @@ static HWND Combo( int id, DWORD st, const char* const* items, int n ) {
 
 static void Place( HWND h, int x, int y, int w, int ht ) { SetWindowPos( h, 0, x, y, std::max( w, 0 ), std::max( ht, 0 ), SWP_NOZORDER|SWP_NOACTIVATE ); }
 
+static wstring status_text;       // the status line as set (SetStatus), for Layout to fit again
+static int status_cut;            // it is cut in the middle to fit
+
+// s, its middle cut out ("...") when it is wider than h: its start, up to a
+// third of the width, and as much of its end as fits
+static wstring MiddleCut( HWND h, const wstring& s ) {
+  RECT rc;
+  GetClientRect( h, &rc );
+  int w = rc.right-rc.left;
+  HDC dc = GetDC( h );
+  HGDIOBJ f0 = SelectObject( dc, (HGDIOBJ)SendMessageW( h, WM_GETFONT, 0, 0 ) );
+  SIZE z;
+  wstring r = s;
+  if( (w>0) && GetTextExtentPoint32W( dc, s.c_str(), int(s.size()), &z ) && (z.cx>w) ) {
+    int a = 0;
+    GetTextExtentExPointW( dc, s.c_str(), int(s.size()), w/3, &a, 0, &z );
+    size_t head = size_t( std::max( a, 0 ) ), tail = 0;
+    if( head && IS_HIGH_SURROGATE( s[head-1] ) ) head--;
+    for( ; head+tail<s.size(); tail++ ) { // (one more character of the end, while it fits)
+      wstring t = s.substr( 0, head ) + L"..." + s.substr( s.size()-tail-1 );
+      if( !GetTextExtentPoint32W( dc, t.c_str(), int(t.size()), &z ) || (z.cx>w) ) break;
+    }
+    if( tail && IS_LOW_SURROGATE( s[s.size()-tail] ) ) tail--;
+    r = s.substr( 0, head ) + L"..." + s.substr( s.size()-tail );
+  }
+  SelectObject( dc, f0 );
+  ReleaseDC( h, dc );
+  return r;
+}
+
 static int TextWidth( const wchar_t* t ) {
   HDC dc = GetDC( hwnd );
   HGDIOBJ o = SelectObject( dc, font );
@@ -384,6 +414,7 @@ static void Layout() {
   int yb = H-m-rh, bb = DX(52);
   Place( c_log, x0, y, wl, yb-gap-y );
   Place( c_status, x0, yb, wl-3*bb-4*sp, rh );
+  if( status_cut ) SetText( c_status, MiddleCut( c_status, status_text ) );
   Place( c_start, xr-3*bb-2*sp, yb, bb, rh );
   Place( c_pause, xr-2*bb-sp, yb, bb, rh );
   Place( c_stop, xr-bb, yb, bb, rh );
@@ -787,7 +818,12 @@ static void Enable() {
   EnableWindow( c_stop, running && !f_abort );
 }
 
-static void SetStatus( const string& s ) { SetText( c_status, W(s) ); }
+// the status line; cut: a failure's, whose end (the reason) is to be seen:
+// cut in the middle when it does not fit (else at the end, by the control)
+static void SetStatus( const string& s, int cut = 0 ) {
+  status_text = W(s); status_cut = cut;
+  SetText( c_status, cut ? MiddleCut( c_status, status_text ) : status_text );
+}
 
 static void ShowLog() {
   string s;
@@ -1064,11 +1100,14 @@ static void OnDone( int r ) {
     SetStatus( "Done: " + result + (run_verify ? "; verified" : "") );
     TaskbarShow( TBPF_NOPROGRESS, 0 );
   } else {
-    string why = ((r>0) && (r<5)) ? what[r] : "exit code " + Num(r);
-    if( vf && (r==4) ) why = "the archive does not decompress to the input";
+    // mp4pack's message of what went wrong; else what its exit code means
+    string why = run_err;
+    if( why.compare( 0, 7, "error: " )==0 ) why.erase( 0, 7 );
+    if( why.empty() ) why = ((r>0) && (r<5)) ? what[r] : "exit code " + Num(r);
+    if( vf && (r==4) && run_err.empty() ) why = "the archive does not decompress to the input";
     SetText( c_phase, (r==5) ? L"stopped" : vf ? L"verify failed" : L"failed" );
-    SetStatus( (r==5) ? string( "Stopped." ) : vf ? "Verify failed: " + why + " (see the log). The archive: " + result + "."
-                                                  : "Failed: " + why + " (see the log)" );
+    SetStatus( (r==5) ? string( "Stopped." ) : vf ? "Verify failed: " + why + ". The archive: " + result + "."
+                                                  : "Failed: " + why, (r!=5) && !vf );
     TaskbarShow( (r==5) ? TBPF_NOPROGRESS : TBPF_ERROR, 0 );
   }
   ShowRows();

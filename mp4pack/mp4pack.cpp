@@ -13,6 +13,8 @@
 // (WriteArchive).
 // d: the archive's files (ReadArchive), the unpackers, "avip d"; every stream
 // and the result are checked against the sizes and CRC32s in the index.
+// Before either, the output's directory is made if it is not there, and the
+// output tried (OutputCheck); the errors end with the system's reason (SysErr).
 //
 // The tools are run from the directory of mp4pack.exe, each in the best build
 // there for this CPU (h264p_znver4.exe, h264p_avx2.exe, h264p.exe, ...: by the
@@ -153,6 +155,19 @@ static int Fail( const string& m, int code ) {
 
 static string ExitCode( DWORD c ) { return (c>=0xC0000000u) ? "0x"+Hex(c) : Num(c); }
 
+// the system's reason for error e (GetLastError's, taken right after the
+// call that failed), as ": reason" to end a message with; "" for none
+static string SysErr( DWORD e ) {
+  if( e==0 ) return string();
+  wchar_t b[512];
+  DWORD n = FormatMessageW( FORMAT_MESSAGE_FROM_SYSTEM|FORMAT_MESSAGE_IGNORE_INSERTS, 0, e, 0, b, 512, 0 );
+  if( n>511 ) n = 0;
+  while( n && ((b[n-1]==L'\r') || (b[n-1]==L'\n') || (b[n-1]==L' ') || (b[n-1]==L'.')) ) n--;
+  wstring w( b, n );
+  for( size_t i; (i = w.find( L"%1" ))!=wstring::npos; ) w.replace( i, 2, L"it" ); // ("%1 is not a valid Win32 application")
+  return ": " + (n ? U(w) : "error " + Num(e));
+}
+
 // a command line argument, as the MS C runtime splits them
 static string Quote( const string& a ) {
   if( !a.empty() && (a.find_first_of( " \t\"" )==string::npos) ) return a;
@@ -180,8 +195,11 @@ static void Put( string s ) {
 
 // a frontend in this program (mp4gui) takes the messages here instead
 static void (*msg_hook)( const string& s );
+static string last_msg;   // the last message that is not indented (not a tool's output: "  | ...")
+static string run_err;    // what made a run fail: the last such message when it did (mp4gui shows it)
 
 static void Msg( const string& s ) {
+  if( s.size() && (s[0]!=' ') ) last_msg = s;
   if( msg_hook ) { msg_hook( s ); return; }
   if( status_len ) { Put( "\r"+string(status_len,' ')+"\r" ); status_len = 0; }
   Put( s+"\n" );
@@ -341,45 +359,61 @@ struct IOBuf {
   ~IOBuf() { if( p ) VirtualFree( p, 0, MEM_RELEASE ); }
 };
 
-// CRC32 and size of a file; 1 on an error
+// CRC32 and size of a file; 1 on an error (GetLastError's then)
 static int FileCrc( const wstring& path, uint& crc, qword& size ) {
   crc = 0; size = 0;
   HANDLE f = OpenRead( path );
   if( f==INVALID_HANDLE_VALUE ) return 1;
   IOBuf b( 1<<20 );
   int r = (b.p==0);
+  DWORD e = r ? ERROR_NOT_ENOUGH_MEMORY : 0;
   while( !r ) {
     DWORD n = 0;
-    if( f_abort || !ReadFile( f, b.p, b.n, &n, 0 ) ) { r = 1; break; }
+    if( f_abort || !ReadFile( f, b.p, b.n, &n, 0 ) ) { e = f_abort ? 0 : GetLastError(); r = 1; break; }
     if( n==0 ) break;
     crc = Crc( crc, b.p, n ); size += n;
   }
   CloseHandle( f );
+  SetLastError( e );
   return r;
 }
 
-struct CrcTask { wstring path; uint crc; qword size; int err; };
-static DWORD WINAPI CrcThread( void* a ) { CrcTask& t = *(CrcTask*)a; t.err = FileCrc( t.path, t.crc, t.size ); return 0; }
+struct CrcTask { wstring path; uint crc; qword size; int err; DWORD sys; };
+static DWORD WINAPI CrcThread( void* a ) { CrcTask& t = *(CrcTask*)a; t.err = FileCrc( t.path, t.crc, t.size ); t.sys = t.err ? GetLastError() : 0; return 0; }
 
-// len bytes from off of one file to the end of another
+// n bytes, all of them: 0, or 1 (an error, or fewer). A write that wrote
+// less is tried again for the rest, which tells the error (wine writes what
+// fits on a full disk, and says it went well)
+static int ReadN( HANDLE f, void* p, DWORD n ) { DWORD k = 0; return !ReadFile( f, p, n, &k, 0 ) || (k!=n); }
+static int WriteN( HANDLE f, const void* p, size_t n ) {
+  for( const byte* b = (const byte*)p; n; ) {
+    DWORD k = 0;
+    if( !WriteFile( f, b, DWORD(n), &k, 0 ) ) return 1;
+    if( k==0 ) { SetLastError( 0 ); return 1; } // (none, and no error: not known why)
+    b += k; n -= k;
+  }
+  return 0;
+}
+
+// len bytes from off of one file to the end of another; 0, or 1 (an error:
+// GetLastError's, 0 if the file ended first)
 static int CopyRange( const wstring& from, qword off, qword len, HANDLE to ) {
   HANDLE f = OpenRead( from );
   if( f==INVALID_HANDLE_VALUE ) return 1;
   IOBuf b( 1<<20 );
   LARGE_INTEGER o; o.QuadPart = LONGLONG(off);
   int r = (b.p==0) || !SetFilePointerEx( f, o, 0, FILE_BEGIN );
+  DWORD e = !r ? 0 : b.p ? GetLastError() : ERROR_NOT_ENOUGH_MEMORY;
   while( !r && len ) {
-    DWORD n = DWORD( std::min<qword>( b.n, len ) ), k = 0, w = 0;
-    if( f_abort || !ReadFile( f, b.p, n, &k, 0 ) || (k!=n) || !WriteFile( to, b.p, k, &w, 0 ) || (w!=k) ) r = 1;
+    DWORD n = DWORD( std::min<qword>( b.n, len ) ), k = 0;
+    SetLastError( 0 );
+    if( f_abort || !ReadFile( f, b.p, n, &k, 0 ) || (k!=n) || WriteN( to, b.p, k ) ) { e = GetLastError(); r = 1; }
     len -= n;
   }
   CloseHandle( f );
+  SetLastError( e );
   return r;
 }
-
-// n bytes, all of them: 0, or 1 (an error, or fewer)
-static int ReadN( HANDLE f, void* p, DWORD n ) { DWORD k = 0; return !ReadFile( f, p, n, &k, 0 ) || (k!=n); }
-static int WriteN( HANDLE f, const void* p, size_t n ) { DWORD k = 0; return !WriteFile( f, p, DWORD(n), &k, 0 ) || (k!=n); }
 
 static int ReadAll( const wstring& path, string& t, qword limit ) {
   qword sz;
@@ -393,12 +427,14 @@ static int ReadAll( const wstring& path, string& t, qword limit ) {
   return r;
 }
 
+// (these two: 1 on an error, GetLastError's)
 static int WriteAll( const wstring& path, const string& t ) {
   HANDLE f = OpenWrite( path, CREATE_ALWAYS );
   if( f==INVALID_HANDLE_VALUE ) return 1;
-  DWORD n = 0;
-  int r = !t.empty() && (!WriteFile( f, t.data(), DWORD(t.size()), &n, 0 ) || (n!=t.size()));
+  int r = WriteN( f, t.data(), t.size() );
+  DWORD e = r ? GetLastError() : 0;
   CloseHandle( f );
+  SetLastError( e );
   return r;
 }
 
@@ -408,12 +444,31 @@ static int MakeFile( const wstring& path, qword size ) {
   if( f==INVALID_HANDLE_VALUE ) return 1;
   LARGE_INTEGER o; o.QuadPart = LONGLONG(size);
   int r = !SetFilePointerEx( f, o, 0, FILE_BEGIN ) || !SetEndOfFile( f );
+  DWORD e = r ? GetLastError() : 0;
   CloseHandle( f );
+  SetLastError( e );
   return r;
 }
 
-static void MakeDirs( const wstring& d ) { // d ends with a separator
-  for( size_t i=1; i<d.size(); i++ ) if( IsSep(d[i]) && (d[i-1]!=':') && !IsSep(d[i-1]) ) CreateDirectoryW( d.substr(0,i).c_str(), 0 );
+// d (ending with a separator) and the directories above it, those that are
+// not there; 0, or the error of the first that could not be made (one that
+// cannot be made is followed by ones that cannot be, for want of it)
+static DWORD MakeDirs( const wstring& d ) {
+  DWORD e = 0;
+  for( size_t i=1; i<d.size(); i++ ) if( IsSep(d[i]) && (d[i-1]!=':') && !IsSep(d[i-1]) ) {
+    wstring p = d.substr( 0, i );
+    if( CreateDirectoryW( p.c_str(), 0 ) ) { e = 0; continue; }
+    DWORD x = GetLastError();
+    e = IsDir( p ) ? 0 : e ? e : x; // (\\server, \\? are not directories, and fail)
+  }
+  return e;
+}
+
+// why directory d (ending with a separator) could not be made, MakeDirs's
+// error e: as ": reason", or ": <file> is a file" when one is in the way
+static string DirErr( const wstring& d, DWORD e ) {
+  for( size_t i=1; i<d.size(); i++ ) if( IsSep(d[i]) && Exists( LongPath( d.substr( 0, i ) ) ) ) return ": " + U( d.substr( 0, i ) ) + " is a file";
+  return SysErr(e);
 }
 
 // a file, or a directory (named with a trailing separator) and all in it
@@ -648,22 +703,24 @@ static wstring WorkBase() {
     base.assign( t, n );
   }
   if( !IsSep( base[base.size()-1] ) ) base += L"" DS;
-  MakeDirs( base );
+  DWORD e = MakeDirs( LongPath(base) );
+  if( !IsDir( LongPath(base) ) ) { Msg( "cannot make the " + string( w_base.size() ? "-w" : "temp" ) + " directory " + U(base) + DirErr( base, e ) ); return wstring(); }
   return base;
 }
 
 static int MakeWork() {
   wstring base = WorkBase();
   if( base.empty() ) return 1;
+  DWORD e = 0;
   for( uint i=0; i<1000; i++ ) {
     wstring d = base + L"mp4pack_" + W(Hex(GetCurrentProcessId())) + L"_" + W(Num(i));
     if( CreateDirectoryW( d.c_str(), 0 ) ) { work = d+L"" DS; break; }
-    if( GetLastError()!=ERROR_ALREADY_EXISTS ) break;
+    if( (e = GetLastError())!=ERROR_ALREADY_EXISTS ) break;
   }
-  if( work.empty() ) { Msg( "cannot make a work directory in " + U(base) ); return 1; }
+  if( work.empty() ) { Msg( "cannot make a work directory in " + U(base) + SysErr(e) ); return 1; }
   if( work.size()>MAX_PATH-64 ) { Msg( "the work directory's path is too long: " + U(work) ); return 1; }
   const wchar_t* sub[] = { L"u", L"p", L"log" };
-  for( int i=0; i<3; i++ ) if( !CreateDirectoryW( (work+sub[i]).c_str(), 0 ) ) { Msg( "cannot make " + U(work+sub[i]) ); return 1; }
+  for( int i=0; i<3; i++ ) if( !CreateDirectoryW( (work+sub[i]).c_str(), 0 ) ) { e = GetLastError(); Msg( "cannot make " + U(work+sub[i]) + SysErr(e) ); return 1; }
   Msg( "work directory: " + U(work) );
   return 0;
 }
@@ -679,7 +736,8 @@ struct Pump {
   HANDLE pipe, file, th;  // our end; the file; the thread
   volatile qword done;
   volatile LONG err;      // 1: file I/O, 2: the tool did not read all of it, 3: it wrote more than len
-  Pump() : off(0), len(0), dir(0), create(0), pipe(0), file(0), th(0), done(0), err(0) {}
+  DWORD sys;              // err 1: the system's error (0: none, the file ended)
+  Pump() : off(0), len(0), dir(0), create(0), pipe(0), file(0), th(0), done(0), err(0), sys(0) {}
 };
 
 static DWORD WINAPI PumpThread( void* arg ) {
@@ -689,11 +747,12 @@ static DWORD WINAPI PumpThread( void* arg ) {
   byte* buf = b.p ? b.p : tmp;
   DWORD bn = b.p ? b.n : DWORD(sizeof(tmp));
   LARGE_INTEGER o; o.QuadPart = LONGLONG(p.off);
-  if( !SetFilePointerEx( p.file, o, 0, FILE_BEGIN ) ) p.err = 1;
+  if( !SetFilePointerEx( p.file, o, 0, FILE_BEGIN ) ) { p.sys = GetLastError(); p.err = 1; }
   if( p.dir==0 ) {
     while( !p.err && (p.done<p.len) ) {
       DWORD n = DWORD( std::min<qword>( bn, p.len-p.done ) ), k = 0;
-      if( !ReadFile( p.file, buf, n, &k, 0 ) || (k==0) ) { p.err = 1; break; }
+      BOOL ok = ReadFile( p.file, buf, n, &k, 0 );
+      if( !ok || (k==0) ) { p.sys = ok ? 0 : GetLastError(); p.err = 1; break; }
       for( DWORD o=0; o<k; ) { // in 64K pieces: done follows what the tool has taken (the progress)
         DWORD m = std::min<DWORD>( k-o, 1<<16 ), w = 0;
         if( !WriteFile( p.pipe, buf+o, m, &w, 0 ) || (w!=m) ) { p.err = 2; break; } // it closed its stdin
@@ -702,11 +761,11 @@ static DWORD WINAPI PumpThread( void* arg ) {
     }
   } else {
     while(1) { // until it closes its stdout; after an error, only drained so that it can finish
-      DWORD k = 0, w = 0;
+      DWORD k = 0;
       if( !ReadFile( p.pipe, buf, bn, &k, 0 ) ) break;
       if( p.err || (k==0) ) continue;
       if( k>p.len-p.done ) { p.err = 3; continue; }
-      if( !WriteFile( p.file, buf, k, &w, 0 ) || (w!=k) ) { p.err = 1; continue; }
+      if( WriteN( p.file, buf, k ) ) { p.sys = GetLastError(); p.err = 1; continue; }
       p.done += k;
     }
   }
@@ -718,10 +777,10 @@ static DWORD WINAPI PumpThread( void* arg ) {
 // the pipe and the file; child = the pipe's end for the tool (inheritable)
 static int PumpOpen( Pump& p, HANDLE& child ) {
   HANDLE r, w;
-  p.done = 0; p.err = 0; p.th = 0;
+  p.done = 0; p.err = 0; p.sys = 0; p.th = 0;
   p.file = p.dir ? OpenWrite( p.path, p.create ? CREATE_ALWAYS : OPEN_EXISTING ) : OpenRead( p.path );
-  if( p.file==INVALID_HANDLE_VALUE ) { p.file = 0; return 1; }
-  if( !CreatePipe( &r, &w, 0, 1<<16 ) ) { CloseHandle( p.file ); p.file = 0; return 1; }
+  if( p.file==INVALID_HANDLE_VALUE ) { p.sys = GetLastError(); p.file = 0; return 1; }
+  if( !CreatePipe( &r, &w, 0, 1<<16 ) ) { p.sys = GetLastError(); CloseHandle( p.file ); p.file = 0; return 1; }
   child = p.dir ? w : r;
   p.pipe = p.dir ? r : w;
   SetHandleInformation( child, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT );
@@ -783,12 +842,12 @@ static int Start( Job& j ) {
   SECURITY_ATTRIBUTES sa = { sizeof(sa), 0, TRUE };
   HANDLE c_in = 0, c_out = 0, c_err = 0;
   string err;
-  if( j.in.path.size() ) { if( PumpOpen( j.in, c_in ) ) err = "cannot read " + U(j.in.path); }
+  if( j.in.path.size() ) { if( PumpOpen( j.in, c_in ) ) err = "cannot read " + U(j.in.path) + SysErr(j.in.sys); }
   else {
     c_in = CreateFileW( L"NUL", GENERIC_READ, FILE_SHARE_READ|FILE_SHARE_WRITE, &sa, OPEN_EXISTING, 0, 0 );
     if( c_in==INVALID_HANDLE_VALUE ) c_in = 0;
   }
-  if( err.empty() && j.out.path.size() && PumpOpen( j.out, c_out ) ) err = "cannot write " + U(j.out.path);
+  if( err.empty() && j.out.path.size() && PumpOpen( j.out, c_out ) ) err = "cannot write " + U(j.out.path) + SysErr(j.out.sys);
   if( err.empty() ) {
     if( f_verbose && !j.quiet ) c_err = Inheritable( h_err );
     else {
@@ -807,8 +866,10 @@ static int Start( Job& j ) {
     si.hStdError = c_err;
     vector<wchar_t> cl( cmd.begin(), cmd.end() ); cl.push_back( 0 );
     // suspended until it is in our job object: it dies with us
-    if( !CreateProcessW( exe.c_str(), &cl[0], 0, 0, TRUE, CREATE_SUSPENDED|tool_flags, 0, cwd.c_str(), &si, &pi ) )
-      err = "cannot run " + U(exe) + " (error " + Num(GetLastError()) + ")";
+    if( !CreateProcessW( exe.c_str(), &cl[0], 0, 0, TRUE, CREATE_SUSPENDED|tool_flags, 0, cwd.c_str(), &si, &pi ) ) {
+      DWORD e = GetLastError();
+      err = "cannot run " + U(exe) + SysErr(e) + " (error " + Num(e) + ")";
+    }
   }
   if( c_in ) CloseHandle( c_in );
   if( c_out ) CloseHandle( c_out );
@@ -848,9 +909,9 @@ static int Finish( Job& j ) {
   string why;
   if( code ) why = "exit code " + ExitCode(code);
   else if( j.in.path.size() && (j.in.err==2) ) why = "it did not read all of its input";
-  else if( j.in.path.size() && (j.in.err || (j.in.done!=j.in.len)) ) why = "cannot read " + U(j.in.path);
+  else if( j.in.path.size() && (j.in.err || (j.in.done!=j.in.len)) ) why = "cannot read " + U(j.in.path) + SysErr( j.in.err ? j.in.sys : 0 );
   else if( j.out.path.size() && (j.out.err==3) ) why = "it wrote more than expected";
-  else if( j.out.path.size() && j.out.err ) why = "cannot write " + U(j.out.path);
+  else if( j.out.path.size() && j.out.err ) why = "cannot write " + U(j.out.path) + SysErr(j.out.sys);
   else if( j.out.path.size() && (j.out.len!=ALL) && (j.out.done!=j.out.len) ) why = "it wrote less than expected";
   else for( size_t i=0; i<j.outs.size(); i++ ) if( !Exists(j.outs[i]) ) { why = "it did not make " + U(j.outs[i]); break; }
   j.why = why;
@@ -1499,25 +1560,28 @@ static int WriteArchive( const wstring& dir, const wstring& out, Job& j ) {
   std::sort( v.begin(), v.end(), []( const string& a, const string& b ) { return (a=="mp4pack.idx") || ((b!="mp4pack.idx") && (a<b)); } );
   phase = j.label; t_run = j.t0 = GetTickCount64(); j.st = 1;
   HANDLE f = OpenWrite( LongPath(out), CREATE_ALWAYS );
-  if( f==INVALID_HANDLE_VALUE ) { j.st = 3; Msg( "cannot write " + U(out) ); return 2; }
+  if( f==INVALID_HANDLE_VALUE ) { DWORD e = GetLastError(); j.st = 3; Msg( "cannot write " + U(out) + SysErr(e) ); return 2; }
   IOBuf b( 1<<20 );
   string h = "mp4pack";
   PutLE( h, ARC_VERSION, 1 ); PutLE( h, v.size(), 4 );
   string why;
+  DWORD e = 0; // a write's error
   int r = (b.p==0) || WriteN( f, h.data(), h.size() );
+  if( r ) e = b.p ? GetLastError() : ERROR_NOT_ENOUGH_MEMORY;
   for( size_t i=0; (i<v.size()) && !r; i++ ) {
     wstring p = ArcPath( dir, v[i] );
     qword size, left;
     HANDLE g = GetSize( p, size ) ? INVALID_HANDLE_VALUE : OpenRead( p );
-    if( g==INVALID_HANDLE_VALUE ) { why = "cannot read " + U(p); r = 2; break; }
+    if( g==INVALID_HANDLE_VALUE ) { DWORD x = GetLastError(); why = "cannot read " + U(p) + SysErr(x); r = 2; break; }
     h.clear(); PutLE( h, v[i].size(), 2 ); h += v[i]; PutLE( h, size, 8 );
-    r = WriteN( f, h.data(), h.size() );
+    if( (r = WriteN( f, h.data(), h.size() ))!=0 ) e = GetLastError();
     for( left = size; left && !r; ) {
       DWORD n = DWORD( std::min<qword>( b.n, left ) ), k = 0;
-      if( !ReadFile( g, b.p, n, &k, 0 ) || (k!=n) ) { why = "cannot read " + U(p); r = 2; break; }
-      r = WriteN( f, b.p, k ); left -= k;
-      j.out.done += k;
-      if( !r && ArcWait( j ) ) r = 5;
+      BOOL ok = ReadFile( g, b.p, n, &k, 0 );
+      if( !ok || (k!=n) ) { DWORD x = ok ? 0 : GetLastError(); why = "cannot read " + U(p) + SysErr(x); r = 2; break; }
+      if( (r = WriteN( f, b.p, k ))!=0 ) { e = GetLastError(); break; }
+      left -= k; j.out.done += k;
+      if( ArcWait( j ) ) r = 5;
     }
     CloseHandle( g );
     if( !r && !f_keep ) Remove( p );
@@ -1525,7 +1589,7 @@ static int WriteArchive( const wstring& dir, const wstring& out, Job& j ) {
   LARGE_INTEGER z;
   if( !r ) j.made = GetFileSizeEx( f, &z ) ? qword(z.QuadPart) : 0;
   CloseHandle( f );
-  if( (r==1) || (r==2) ) { if( why.empty() ) why = "cannot write " + U(out); r = 2; }
+  if( (r==1) || (r==2) ) { if( why.empty() ) why = "cannot write " + U(out) + SysErr(e); r = 2; }
   j.st = r ? 3 : 2; j.t = GetTickCount64()-j.t0;
   if( status_hook ) { vector<Job*> jv( 1, &j ); Status( jv, jv, 1 ); }
   if( r ) { Remove( LongPath(out) ); if( why.size() ) Msg( why ); }
@@ -1538,11 +1602,12 @@ static int WriteArchive( const wstring& dir, const wstring& out, Job& j ) {
 static int ReadArchive( const wstring& in, const wstring& dir, Job& j ) {
   phase = j.label; t_run = j.t0 = GetTickCount64(); j.st = 1;
   HANDLE f = OpenRead( LongPath(in) );
-  if( f==INVALID_HANDLE_VALUE ) { j.st = 3; Msg( "cannot read " + U(in) ); return 2; }
+  if( f==INVALID_HANDLE_VALUE ) { DWORD e = GetLastError(); j.st = 3; Msg( "cannot read " + U(in) + SysErr(e) ); return 2; }
   IOBuf b( 1<<20 );
   byte h[16];
   string why;
   int r = (b.p==0) ? 2 : 0;
+  if( r ) why = "cannot read " + U(in) + SysErr( ERROR_NOT_ENOUGH_MEMORY );
   if( !r && (ReadN( f, h, 12 ) || memcmp( h, "mp4pack", 7 )) ) { why = U(in) + ": not an mp4pack archive"; r = 4; }
   if( !r && (h[7]!=ARC_VERSION) ) { why = U(in) + ": an mp4pack archive of another version (" + Num(h[7]) + ", not " + Num(ARC_VERSION) + ")"; r = 4; }
   qword files = r ? 0 : GetLE( h+8, 4 );
@@ -1558,11 +1623,16 @@ static int ReadArchive( const wstring& in, const wstring& dir, Job& j ) {
     wstring p = ArcPath( dir, n );
     MakeDirs( p.substr( 0, p.size()-FileName( p ).size() ) );
     HANDLE g = OpenWrite( p, CREATE_NEW ); // (each name once)
-    if( g==INVALID_HANDLE_VALUE ) { why = Exists( p ) ? U(in) + ": " + n + " is in it twice" : "cannot write " + U(p); r = Exists( p ) ? 4 : 2; break; }
+    if( g==INVALID_HANDLE_VALUE ) {
+      DWORD e = GetLastError();
+      if( Exists( p ) ) { why = U(in) + ": " + n + " is in it twice"; r = 4; }
+      else { why = "cannot write " + U(p) + SysErr(e); r = 2; }
+      break;
+    }
     while( left && !r ) {
       DWORD k = DWORD( std::min<qword>( b.n, left ) );
       if( ReadN( f, b.p, k ) ) r = 4;
-      else if( WriteN( g, b.p, k ) ) { why = "cannot write " + U(p); r = 2; }
+      else if( WriteN( g, b.p, k ) ) { DWORD e = GetLastError(); why = "cannot write " + U(p) + SysErr(e); r = 2; }
       else { left -= k; j.in.done += k; if( ArcWait( j ) ) r = 5; }
     }
     CloseHandle( g );
@@ -1630,7 +1700,7 @@ static int PackJobs() {
       vector<qword> cut( 1, 0 );
       if( k>1 ) {
         HANDLE f = OpenRead( UPath(s.name) );
-        if( f==INVALID_HANDLE_VALUE ) { Msg( "cannot read " + U(UPath(s.name)) ); return 2; }
+        if( f==INVALID_HANDLE_VALUE ) { DWORD e = GetLastError(); Msg( "cannot read " + U(UPath(s.name)) + SysErr(e) ); return 2; }
         for( qword q=1; q<k; q++ ) {
           qword p = AdtsCut( f, s.size*q/k, s.size );
           if( (p>cut.back()) && (p<s.size) ) cut.push_back( p );
@@ -1664,7 +1734,7 @@ static int PackJobs() {
       s.part.push_back( Part( 0, s.size, pk, "" ) );
     } else if( s.m==M_STORE ) {
       CreateDirectoryW( (work+L"p" DS "store").c_str(), 0 );
-      if( !MoveFileW( UPath(s.name).c_str(), (work+L"p" DS "store" DS+W(s.name)).c_str() ) ) { Msg( "cannot move " + U(UPath(s.name)) ); return 2; }
+      if( !MoveFileW( UPath(s.name).c_str(), (work+L"p" DS "store" DS+W(s.name)).c_str() ) ) { DWORD e = GetLastError(); Msg( "cannot move " + U(UPath(s.name)) + SysErr(e) ); return 2; }
       s.part.push_back( Part( 0, s.size, "-", "" ) );
     }
   }
@@ -1704,8 +1774,9 @@ static int PackJobs() {
         CreateDirectoryW( wd.c_str(), 0 );
         HANDLE h = OpenWrite( wd+W(mem), CREATE_ALWAYS );
         int r = (h==INVALID_HANDLE_VALUE) || CopyRange( UPath(s.name), a, b-a, h );
+        DWORD e = r ? GetLastError() : 0;
         if( h!=INVALID_HANDLE_VALUE ) CloseHandle( h );
-        if( r ) return Fail( "cannot write " + U(wd+W(mem)), 2 );
+        if( r ) return Fail( "cannot write " + U(wd+W(mem)) + SysErr(e), 2 );
         Job* j = NewJob( G_OTHER, 1, "tangelo " + s.name + "#" + Num(q), "tangelo" );
         j->cwd = d + DS; j->args = TangeloA( pk ) + " " + Quote(mem);
         j->prog = 1; j->work = b-a; j->outs.push_back( PPath(pk) ); j->del.push_back( wd );
@@ -1718,7 +1789,7 @@ static int PackJobs() {
         CreateDirectoryW( (work+L"other").c_str(), 0 );
         o->cwd = "other" DS; o->args = TangeloA( "other.tgl" ); o->prog = 1; o->outs.push_back( PPath("other.tgl") ); o->del.push_back( work+L"other" DS );
       }
-      if( !MoveFileW( UPath(s.name).c_str(), (work+L"other" DS+W(s.name)).c_str() ) ) { Msg( "cannot move " + U(UPath(s.name)) ); return 2; }
+      if( !MoveFileW( UPath(s.name).c_str(), (work+L"other" DS+W(s.name)).c_str() ) ) { DWORD e = GetLastError(); Msg( "cannot move " + U(UPath(s.name)) + SysErr(e) ); return 2; }
       o->args += " " + Quote(s.name); o->work += s.size; o->sids.push_back( int(i) );
       s.part.push_back( Part( 0, s.size, "other.tgl", s.name ) );
     }
@@ -1742,7 +1813,7 @@ static int PackFailed() {
     s.part.clear();
     if( th[G_OTHER]==0 ) {
       CreateDirectoryW( (work+L"p" DS "store").c_str(), 0 );
-      if( !MoveFileW( UPath(s.name).c_str(), (work+L"p" DS "store" DS+W(s.name)).c_str() ) ) { Msg( "cannot move " + U(UPath(s.name)) ); return 2; }
+      if( !MoveFileW( UPath(s.name).c_str(), (work+L"p" DS "store" DS+W(s.name)).c_str() ) ) { DWORD e = GetLastError(); Msg( "cannot move " + U(UPath(s.name)) + SysErr(e) ); return 2; }
       s.m = M_STORE; s.part.push_back( Part( 0, s.size, "-", "" ) );
       continue;
     }
@@ -1751,7 +1822,7 @@ static int PackFailed() {
       CreateDirectoryW( (work+L"fallback").c_str(), 0 );
       x->cwd = "fallback" DS; x->args = TangeloA( "fallback.tgl" ); x->prog = 1; x->outs.push_back( PPath("fallback.tgl") ); x->del.push_back( work+L"fallback" DS );
     }
-    if( !MoveFileW( UPath(s.name).c_str(), (work+L"fallback" DS+W(s.name)).c_str() ) ) { Msg( "cannot move " + U(UPath(s.name)) ); return 2; }
+    if( !MoveFileW( UPath(s.name).c_str(), (work+L"fallback" DS+W(s.name)).c_str() ) ) { DWORD e = GetLastError(); Msg( "cannot move " + U(UPath(s.name)) + SysErr(e) ); return 2; }
     x->args += " " + Quote(s.name); x->work += s.size;
     s.m = M_TANGELO; s.part.push_back( Part( 0, s.size, "fallback.tgl", s.name ) );
   }
@@ -1782,12 +1853,40 @@ static int CheckLevels() {
   return 0;
 }
 
+// c and d: the input's size; 2 (with the reason) when it cannot be opened
+static int InputSize( const wstring& in, qword& size ) {
+  if( !GetSize( LongPath(in), size ) ) return 0;
+  DWORD e = GetLastError();
+  Msg( IsDir( LongPath(in) ) ? "the input is a directory: " + U(in) : "cannot open " + U(in) + SysErr(e) );
+  return 2;
+}
+
+// c and d: the output's directory made if it is not there, and the output
+// tried (a file there is opened for writing, not changed; else one is made
+// and removed), so that a run that cannot write its output ends now, not
+// after all the work. 0, or 2
+static int OutputCheck( const wstring& out ) {
+  wstring lp = LongPath(out), d = out.substr( 0, out.size()-FileName(out).size() );
+  if( FileName(out).empty() || IsDir( lp ) ) { Msg( "the output is a directory: " + U(out) ); return 2; }
+  if( d.size() && !IsDir( LongPath(d) ) ) {
+    DWORD e = MakeDirs( LongPath(d) );
+    if( IsDir( LongPath(d) ) ) Msg( "made the directory " + U(d) );
+    else if( e ) { Msg( "cannot make the directory " + U(d) + DirErr( d, e ) ); return 2; } // (else: no drive? as the file's open tells)
+  }
+  int had = Exists( lp );
+  HANDLE f = OpenWrite( lp, had ? OPEN_EXISTING : CREATE_NEW );
+  if( f==INVALID_HANDLE_VALUE ) { DWORD e = GetLastError(); Msg( "cannot write " + U(out) + SysErr(e) ); return 2; }
+  CloseHandle( f );
+  if( !had ) Remove( lp );
+  return 0;
+}
+
 static int Compress( const wstring& in, const wstring& out ) {
-  if( GetSize( LongPath(in), src_size ) ) { Msg( "cannot open " + U(in) ); return 2; }
+  if( InputSize( in, src_size ) ) return 2;
   if( SameFile( LongPath(in), LongPath(out) ) ) { Msg( "the output is the input" ); return 1; }
   src_name = U( FileName(in) );
   Msg( "mp4pack c: " + U(in) + " (" + Num(src_size) + " bytes) -> " + U(out) );
-  if( MakeWork() ) return 2;
+  if( OutputCheck( out ) || MakeWork() ) return 2;
   SpaceCheck( 2*src_size ); // the streams, and what they are packed into
 
   // avip c, with the input as it can take its name; meanwhile its CRC32
@@ -1802,7 +1901,7 @@ static int Compress( const wstring& in, const wstring& out ) {
 #endif
     if( !linked ) {
       Msg( "note: avip cannot take the input's name: copying it to the work directory" );
-      if( !CopyFileW( LongPath(in).c_str(), (work+ip).c_str(), FALSE ) ) { Msg( "cannot copy the input to " + U(work+ip) ); return 2; }
+      if( !CopyFileW( LongPath(in).c_str(), (work+ip).c_str(), FALSE ) ) { DWORD e = GetLastError(); Msg( "cannot copy the input to " + U(work+ip) + SysErr(e) ); return 2; }
     }
   }
   CrcTask ct; ct.path = LongPath(in); ct.err = 1;
@@ -1812,7 +1911,7 @@ static int Compress( const wstring& in, const wstring& out ) {
   int r = RunOne( a );
   if( cth ) { WaitForSingleObject( cth, INFINITE ); CloseHandle( cth ); }
   if( r ) { return (r==2) ? 5 : 3; }
-  if( ct.err || (ct.size!=src_size) ) return Fail( "cannot read " + U(in), 2 );
+  if( ct.err || (ct.size!=src_size) ) return Fail( "cannot read " + U(in) + SysErr( ct.err ? ct.sys : 0 ), 2 );
   src_crc = ct.crc;
   if( FileName(ip)==ip ) Remove( work+ip ); // (our link or copy)
 
@@ -1824,7 +1923,7 @@ static int Compress( const wstring& in, const wstring& out ) {
     Stream s;
     s.name = U(names[i]);
     if( !SafeName(s.name) ) { Msg( "avip c made an unexpected file: " + s.name ); return 3; }
-    if( FileCrc( UPath(s.name), s.crc, s.size ) ) return Fail( "cannot read " + U(UPath(s.name)), 2 );
+    if( FileCrc( UPath(s.name), s.crc, s.size ) ) { DWORD e = GetLastError(); return Fail( "cannot read " + U(UPath(s.name)) + SysErr(e), 2 ); }
     s.m = s.size ? Method(s.name) : M_STORE;
     if( (s.m>=M_H264P) && (th[m_group[s.m]]==0) ) s.m = M_TANGELO;
     if( (s.m>=M_H264P) && GetTool( m_tool[s.m] ).path.empty() ) {
@@ -1857,7 +1956,7 @@ static int Compress( const wstring& in, const wstring& out ) {
   if( (r = PackFailed())!=0 ) return r;
 
   // the index and all packed, stored as they are: the output
-  if( WriteAll( PPath("mp4pack.idx"), IndexText() ) ) { Msg( "cannot write " + U(PPath("mp4pack.idx")) ); return 2; }
+  if( WriteAll( PPath("mp4pack.idx"), IndexText() ) ) { DWORD e = GetLastError(); Msg( "cannot write " + U(PPath("mp4pack.idx")) + SysErr(e) ); return 2; }
   Job f; f.label = "archive"; f.prog = 3; f.work = DirSize( work+L"p" DS );
   if( (r = WriteArchive( work+L"p" DS, out, f ))!=0 ) return r;
   qword osz = f.made;
@@ -1869,10 +1968,10 @@ static int Compress( const wstring& in, const wstring& out ) {
 
 static int Decompress( const wstring& in, const wstring& out ) {
   qword isz;
-  if( GetSize( LongPath(in), isz ) ) { Msg( "cannot open " + U(in) ); return 2; }
+  if( InputSize( in, isz ) ) return 2;
   if( SameFile( LongPath(in), LongPath(out) ) ) { Msg( "the output is the input" ); return 1; }
   Msg( "mp4pack d: " + U(in) + " -> " + U(out) );
-  if( MakeWork() ) return 2;
+  if( OutputCheck( out ) || MakeWork() ) return 2;
 
   Job x; x.label = "extract"; x.prog = 2; x.in.len = x.work = isz;
   int r = ReadArchive( in, work+L"p" DS, x );
@@ -1898,7 +1997,7 @@ static int Decompress( const wstring& in, const wstring& out ) {
       j->args = string("d") + (f_verbose ? "" : " -p") + " " + Quote("p" DS+p0.pk) + " " + u;
       j->prog = 1; j->work = s.size; j->outs.push_back( UPath(s.name) ); j->del.push_back( PPath(p0.pk) );
     } else if( s.m==M_AACPACK ) {
-      if( MakeFile( UPath(s.name), s.size ) ) { Msg( "cannot write " + U(UPath(s.name)) ); return 2; }
+      if( MakeFile( UPath(s.name), s.size ) ) { DWORD e = GetLastError(); Msg( "cannot write " + U(UPath(s.name)) + SysErr(e) ); return 2; }
       for( size_t k=0; k<s.part.size(); k++ ) {
         const Part& p = s.part[k];
         Job* j = NewJob( G_AUDIO, 1, "aacpack " + s.name + ((s.part.size()>1) ? "#"+Num(k) : string()), "aacpack" );
@@ -1950,12 +2049,13 @@ static int Decompress( const wstring& in, const wstring& out ) {
     if( (s.m!=M_TANGELO) || ((s.part.size()==1) && (s.part[0].pk2==s.name)) ) continue;
     HANDLE h = OpenWrite( UPath(s.name), CREATE_ALWAYS );
     r = (h==INVALID_HANDLE_VALUE);
+    DWORD e = r ? GetLastError() : 0;
     for( size_t k=0; (k<s.part.size()) && !r; k++ ) {
-      r = CopyRange( UPath(s.part[k].pk2), 0, s.part[k].len, h );
+      if( (r = CopyRange( UPath(s.part[k].pk2), 0, s.part[k].len, h ))!=0 ) e = GetLastError();
       if( !f_keep ) Remove( UPath(s.part[k].pk2) );
     }
     if( h!=INVALID_HANDLE_VALUE ) CloseHandle( h );
-    if( r ) return Fail( "cannot put " + s.name + " together", 2 );
+    if( r ) return Fail( "cannot put " + s.name + " together" + SysErr(e), 2 );
   }
   for( size_t i=0; i<S.size(); i++ ) {
     uint c; qword z;
@@ -1982,10 +2082,10 @@ static int Decompress( const wstring& in, const wstring& out ) {
   r = RunOne( a );
   if( r ) { Remove( LongPath(out) ); return (r==2) ? 5 : 3; }
   if( tmp && !MoveFileExW( (work+op).c_str(), LongPath(out).c_str(), MOVEFILE_REPLACE_EXISTING|MOVEFILE_COPY_ALLOWED ) ) {
-    Msg( "cannot move the output to " + U(out) ); return 2;
+    DWORD e = GetLastError(); Msg( "cannot move the output to " + U(out) + SysErr(e) ); return 2;
   }
   uint c; qword z;
-  if( FileCrc( LongPath(out), c, z ) ) return Fail( "cannot read " + U(out), 2 );
+  if( FileCrc( LongPath(out), c, z ) ) { DWORD e = GetLastError(); return Fail( "cannot read " + U(out) + SysErr(e), 2 ); }
   if( (z!=src_size) || (c!=src_crc) ) {
     Msg( "error: the output is not as the input was: " + Num(z) + " bytes, CRC " + Hex(c) + " instead of " + Num(src_size) + ", " + Hex(src_crc) );
     if( !f_keep ) Remove( LongPath(out) );
@@ -2044,6 +2144,7 @@ static void NewRun() {
   n_tools = 0;
   src_name.clear(); src_size = 0; src_crc = 0; src_tools.clear();
   work.clear(); n_log = 0; status_len = 0; phase.clear();
+  last_msg.clear(); run_err.clear();
 }
 
 // the archive just made, d into a temporary file beside the work
@@ -2058,6 +2159,7 @@ static int Verify( const wstring& archive ) {
   t_start = GetTickCount64(); // (its own time)
   f_dec = 1;
   int r = Decompress( archive, tmp );
+  if( r ) run_err = last_msg;
   f_dec = 0;
   Remove( LongPath(tmp) );
   DropWork();
@@ -2079,19 +2181,20 @@ static int Run( const wstring& in, const wstring& out ) {
   if( cap>=0 ) c += ", builds for " + string( x86::x86_target[cap].name );
   int n = cpu_threads;
   if( f_free ) { n = FreeThreads(); c += ", " + Num(n) + " free"; }
-  if( ParseThreads( t_spec, n ) ) { Msg( "bad -t " + t_spec + " (up to 4 of N or N% joined by + or , and maybe a -N)" ); return 1; }
+  if( ParseThreads( t_spec, n ) ) { Msg( "bad -t " + t_spec + " (up to 4 of N or N% joined by + or , and maybe a -N)" ); run_err = last_msg; return 1; }
   for( int g=0; g<N_GROUP; g++ ) ch[g] = 0;
-  if( c_spec.size() && ParseChunks( c_spec.c_str() ) ) { Msg( "bad -c " + c_spec ); return 1; }
+  if( c_spec.size() && ParseChunks( c_spec.c_str() ) ) { Msg( "bad -c " + c_spec ); run_err = last_msg; return 1; }
   Msg( c + "; -t " + (t_spec.size() ? t_spec+" = " : string()) + ThreadText() );
   const string all[] = { "avip", "tangelo", "h264p", "m4vpack", "aacpack", "ac3pack", "mp3pack", "oggcomp", "ttfcomp" };
   string tl;
   for( size_t i=0; i<sizeof(all)/sizeof(all[0]); i++ ) { const Tool& t = GetTool( all[i] ); if( t.path.size() ) tl += " " + t.file; }
   Msg( "tools:" + (tl.size() ? tl : string(" none")) );
-  for( int i=0; i<2; i++ ) if( GetTool( all[i] ).path.empty() ) { Msg( NoTool( GetTool( all[i] ) ) ); return 2; }
+  for( int i=0; i<2; i++ ) if( GetTool( all[i] ).path.empty() ) { Msg( NoTool( GetTool( all[i] ) ) ); run_err = last_msg; return 2; }
   t_start = GetTickCount64();
 
   wstring fi = FullPath( in ), fo = FullPath( out );
   int r = f_dec ? Decompress( fi, fo ) : Compress( fi, fo );
+  if( r ) run_err = last_msg; // (before DropWork's notes)
   DropWork();
   if( (r==0) && f_verify && !f_dec && !f_abort ) r = Verify( fo );
   if( f_abort ) { Msg( "aborted" ); r = 5; }
