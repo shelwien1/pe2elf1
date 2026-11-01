@@ -5,7 +5,7 @@ Digital and Dolby Digital Plus). It parses each syncframe down to its exponents 
 the syntax of [ac3dec](../ac3dec) and [ac3tsv](../ac3tsv), and codes the elements again with
 context-mixing binary arithmetic coding, in the style of m4vpack and h264p. Decompression restores
 the original stream byte for byte. The 43 streams of the [corpus](../samples) shrink to
-71.23% of their size at the default level, while `xz -9e` gets 84.70%.
+70.29% of their size at the default level, while `xz -9e` gets 84.70%.
 
 ## Usage
 
@@ -38,7 +38,7 @@ own (`[ver]`).
 ```
 $ ac3pack c 7_pt_1.eac3 7_pt_1.a3p
 [enc] audio: E-AC-3 (bsid 16), 48000 Hz, 3/2+LFE, 930 kbps, 1 block a frame
-[enc] 10588668 > 4587520   53.9%  19113 frames   0.54 MB/s  48.86M RAM
+[enc] 10514432 > 4521984   53.6%  18979 frames   0.52 MB/s  75.12M RAM
 ```
 
 and when it is done:
@@ -46,11 +46,11 @@ and when it is done:
 ```
 $ ac3pack c 7_pt_1.eac3 7_pt_1.a3p
 [enc] audio: E-AC-3 (bsid 16), 48000 Hz, 3/2+LFE, 930 kbps, 1 block a frame
-[enc] 19632652 > 9147827  100.0%  35438 frames  done in 37.58s  57.94M RAM at most
-7_pt_1.eac3: 19632652 -> 9147827 bytes (46.59%, -9); 35438 frames (AC-3 0, E-AC-3 35438, 17719 of them dependent), 35438 packed; 0 bytes between frames
+[enc] 19632652 > 9077922  100.0%  35438 frames  done in 40.12s  85.73M RAM at most
+7_pt_1.eac3: 19632652 -> 9077922 bytes (46.24%, -9); 35438 frames (AC-3 0, E-AC-3 35438, 17719 of them dependent), 35438 packed; 0 bytes between frames
 $ ac3pack d 7_pt_1.a3p 7_pt_1.eac3
 [dec] audio: E-AC-3 (bsid 16), 48000 Hz, 3/2+LFE, 930 kbps, 1 block a frame
-[dec] 19632652 > 9147827  100.0%  35438 frames  done in 40.73s  56.43M RAM at most
+[dec] 19632652 > 9077922  100.0%  35438 frames  done in 40.84s  83.85M RAM at most
 ```
 
 Exit codes:
@@ -68,9 +68,9 @@ Exit codes:
 
 | Level | Model | Corpus | `c` | `d` | Memory |
 |---|---|---:|---:|---:|---:|
-| `-9` | per decision ten counters, three mixers and a final one, two APMs | 71.23% | 0.48 MB/s | 0.47 MB/s | 105 MB |
-| `-5` | ten counters, one mixer | 71.47% | 0.65 MB/s | 0.66 MB/s | 97 MB |
-| `-1` | four counters (keeping their probabilities stretched), one mixer | 72.74% | 1.23 MB/s | 1.22 MB/s | 112 MB |
+| `-9` | per decision ten counters, three mixers and a final one, two APMs | 70.29% | 0.37 MB/s | 0.34 MB/s | 136 MB |
+| `-5` | ten counters, one mixer | 70.53% | 0.53 MB/s | 0.56 MB/s | 111 MB |
+| `-1` | four counters (keeping their probabilities stretched), one mixer | 71.33% | 0.91 MB/s | 0.97 MB/s | 124 MB |
 
 The corpus is the 43 streams of [samples/](../samples) (136 MB); its size compressed is given as
 a share of its size. `c` and `d` are the MB of stream per second on `sd_nced.ac3` (7.0 MB, AC-3
@@ -184,6 +184,22 @@ kbps stereo stream, not in the tuning set, 5%. `-5` and `-1` were then cut from 
 (`IDX/derive.py`): `-5` keeps its ten counters, mixer 1 and the mantissa plane, `-1` four of the
 counters, each with `-9`'s parameters. Each `.idx` says where it was cut from.
 
+Version 2 adds what the design notes `ac3_cm_design.md` suggested and a statistics build confirmed
+on the corpus: the tiles (a mantissa that comes last in its tile with none big yet was big 99.8% of
+the time, but the old contexts already knew most of that where tiles were one bin and one block),
+the tonal predictor, the sign as a decision of the mag family, the exponents' distance to the last
+mantissa and their reuse, the deltas that would leave 0..24 not coded, and AHT's last frame. Each
+new line went where it paid on the tuning set (`./mk.sh famtune` against dumps of it), and two
+passes of `IDX/ftune.py` (`FTUNE_PATS` keeping them to the new lines and the three families' counter
+and mixer parameters; 83 minutes) tuned them. The pass set mag's `mt` to 0 again, which cost
+`ff_eac3_st_1536k` 4.9%, and it went back to 6. The signs' variables stay out of mag's largest
+indices: each context has a row for each of the family's 92 decisions, so they multiplied those
+indices' memory for 0.06% of the output. `-1` keeps mag's counters a (the tile), b, c and k. The
+families' output on the tuning set went from 3968072 to 3920612 bytes (1.20%), and the corpus's at
+`-9` from 97007561 to 95737227 bytes (1.31%), each stream by -0.4% to -3.9% at every level. It costs
+time: `-9` compresses 0.37 MB/s rather than 0.48 (136 MB rather than 105), `-1` 0.91 rather than
+1.23. Version 1's files are not read (`d` says which version a file is).
+
 ### Streaming
 
 The compressor and the decompressor are coroutines, built on Lib3's stack-copying coroutines as in
@@ -245,57 +261,57 @@ kit's).
 
 | Stream | Size | `-9` | `-5` | `-1` | `xz -9e` |
 |---|---:|---:|---:|---:|---:|
-| `aamss_pv` | 3361792 | 89.59% | 89.75% | 90.25% | 97.55% |
-| `cg_mj6` | 3516800 | 70.72% | 71.11% | 74.89% | 97.24% |
-| `cg_mj8` | 602112 | 70.97% | 71.18% | 72.17% | 88.98% |
-| `cg_mj9` | 2143232 | 78.32% | 78.75% | 79.64% | 96.59% |
-| `cg_mjed` | 2564352 | 77.41% | 77.71% | 78.86% | 96.62% |
-| `sd_nced` | 6997760 | 90.92% | 91.17% | 91.42% | 98.61% |
-| `ss_sp3` | 1344896 | 70.01% | 70.29% | 71.66% | 88.36% |
-| `ss_sp5` | 2087680 | 78.87% | 79.15% | 79.70% | 95.37% |
-| `ff_ac3_21_192k` | 480000 | 80.48% | 80.69% | 81.50% | 98.63% |
-| `ff_ac3_21b_256k` | 640000 | 81.28% | 81.50% | 82.16% | 98.79% |
-| `ff_ac3_22_320k` | 800000 | 81.23% | 81.45% | 82.11% | 98.89% |
-| `ff_ac3_30_256k` | 640000 | 79.46% | 79.69% | 80.51% | 98.94% |
-| `ff_ac3_31_320k` | 800000 | 80.37% | 80.62% | 81.31% | 98.96% |
-| `ff_ac3_32_st_96k` | 240192 | 71.23% | 71.48% | 72.47% | 87.64% |
-| `ff_ac3_441_st_192k` | 480652 | 70.96% | 71.21% | 71.95% | 89.71% |
-| `ff_ac3_50_384k` | 960000 | 80.79% | 81.03% | 81.76% | 99.08% |
-| `ff_ac3_51_448k` | 1120000 | 81.55% | 81.79% | 82.47% | 98.98% |
-| `ff_ac3_51_640k` | 1600000 | 84.51% | 84.73% | 85.28% | 99.55% |
-| `ff_ac3_mono_96k` | 240000 | 67.80% | 68.00% | 68.74% | 84.58% |
-| `ff_ac3_st_cpl_96k` | 240000 | 65.53% | 65.80% | 66.88% | 84.57% |
-| `ff_ac3_st_xbsi_256k` | 640000 | 68.62% | 68.89% | 69.85% | 85.45% |
-| `ff_eac3_32_st_128k` | 320256 | 69.71% | 69.98% | 70.70% | 87.40% |
-| `ff_eac3_441_st_192k` | 480652 | 71.85% | 72.10% | 72.63% | 89.56% |
-| `ff_eac3_51_3072k` | 7680000 | 72.52% | 72.62% | 74.24% | 90.79% |
-| `ff_eac3_51_448k` | 1120000 | 82.79% | 83.03% | 83.64% | 98.93% |
-| `ff_eac3_51_6144k` | 15360000 | 40.57% | 40.63% | 42.60% | 49.70% |
-| `ff_eac3_mono_64k` | 160000 | 66.11% | 66.28% | 66.77% | 82.58% |
-| `ff_eac3_st_1536k` | 3840000 | 58.92% | 58.92% | 60.14% | 64.40% |
-| `ff_eac3_st_96k` | 240000 | 67.27% | 67.55% | 68.21% | 83.92% |
-| `00007` | 1464320 | 87.94% | 88.08% | 88.48% | 96.46% |
-| `7_pt_1` | 19632652 | 46.59% | 46.93% | 48.34% | 59.32% |
-| `buggy_aht_5.1_384` | 7014912 | 85.77% | 86.06% | 86.63% | 97.73% |
-| `casablanca_aht_mono_64` | 6013664 | 82.13% | 82.37% | 83.21% | 94.80% |
-| `csi_miami_5.1_256_spx` | 667490 | 84.24% | 84.44% | 85.31% | 97.88% |
-| `csi_miami_stereo_128_spx` | 333664 | 84.02% | 84.20% | 84.91% | 97.33% |
-| `dolby_Holi_en_2ch_128kbps_ddp` | 1362432 | 80.13% | 80.31% | 80.93% | 95.55% |
-| `dolby_Holi_en_514ch_448kbps_ddp` | 4766720 | 77.53% | 77.85% | 78.60% | 94.03% |
-| `dolby_Holi_en_6ch_256kbps_ddp` | 2724864 | 84.09% | 84.30% | 84.85% | 97.94% |
-| `dolby_Holi_en_6ch_640kbps_ddp_joc` | 6809600 | 79.03% | 79.41% | 80.22% | 94.74% |
-| `matrix2_commentary1_stereo_192` | 2191872 | 80.12% | 80.42% | 82.44% | 97.30% |
-| `matrix2_english_5.1_640` | 7306240 | 87.15% | 87.56% | 87.93% | 98.60% |
-| `rio_bravo_mono_64_spx` | 2097408 | 81.43% | 81.60% | 82.39% | 93.96% |
-| `serenity_english_5.1_1536` | 13108224 | 84.64% | 84.83% | 87.47% | 98.35% |
+| `aamss_pv` | 3361792 | 88.56% | 88.78% | 89.54% | 97.55% |
+| `cg_mj6` | 3516800 | 69.18% | 69.82% | 73.96% | 97.24% |
+| `cg_mj8` | 602112 | 69.96% | 70.29% | 71.51% | 88.98% |
+| `cg_mj9` | 2143232 | 76.70% | 77.13% | 78.40% | 96.59% |
+| `cg_mjed` | 2564352 | 76.30% | 76.68% | 78.03% | 96.62% |
+| `sd_nced` | 6997760 | 90.12% | 90.34% | 90.73% | 98.61% |
+| `ss_sp3` | 1344896 | 68.89% | 69.34% | 70.99% | 88.36% |
+| `ss_sp5` | 2087680 | 77.80% | 78.10% | 78.81% | 95.37% |
+| `ff_ac3_21_192k` | 480000 | 78.02% | 78.37% | 79.28% | 98.63% |
+| `ff_ac3_21b_256k` | 640000 | 78.69% | 79.03% | 79.70% | 98.79% |
+| `ff_ac3_22_320k` | 800000 | 78.50% | 78.83% | 79.56% | 98.89% |
+| `ff_ac3_30_256k` | 640000 | 76.83% | 77.21% | 78.06% | 98.94% |
+| `ff_ac3_31_320k` | 800000 | 77.63% | 78.00% | 78.81% | 98.96% |
+| `ff_ac3_32_st_96k` | 240192 | 70.17% | 70.66% | 71.90% | 87.64% |
+| `ff_ac3_441_st_192k` | 480652 | 69.90% | 70.28% | 71.44% | 89.71% |
+| `ff_ac3_50_384k` | 960000 | 78.02% | 78.38% | 79.14% | 99.08% |
+| `ff_ac3_51_448k` | 1120000 | 78.73% | 79.06% | 79.82% | 98.98% |
+| `ff_ac3_51_640k` | 1600000 | 82.00% | 82.30% | 82.94% | 99.55% |
+| `ff_ac3_mono_96k` | 240000 | 66.31% | 66.69% | 67.91% | 84.58% |
+| `ff_ac3_st_cpl_96k` | 240000 | 64.14% | 64.69% | 65.93% | 84.57% |
+| `ff_ac3_st_xbsi_256k` | 640000 | 66.86% | 67.39% | 68.77% | 85.45% |
+| `ff_eac3_32_st_128k` | 320256 | 68.58% | 69.06% | 70.08% | 87.40% |
+| `ff_eac3_441_st_192k` | 480652 | 70.69% | 71.10% | 72.06% | 89.56% |
+| `ff_eac3_51_3072k` | 7680000 | 71.24% | 71.34% | 72.06% | 90.79% |
+| `ff_eac3_51_448k` | 1120000 | 79.85% | 80.17% | 80.83% | 98.93% |
+| `ff_eac3_51_6144k` | 15360000 | 40.40% | 40.42% | 40.93% | 49.70% |
+| `ff_eac3_mono_64k` | 160000 | 64.95% | 65.29% | 65.84% | 82.58% |
+| `ff_eac3_st_1536k` | 3840000 | 57.95% | 58.01% | 59.05% | 64.40% |
+| `ff_eac3_st_96k` | 240000 | 65.79% | 66.37% | 67.18% | 83.92% |
+| `00007` | 1464320 | 86.83% | 87.00% | 87.45% | 96.46% |
+| `7_pt_1` | 19632652 | 46.24% | 46.52% | 46.89% | 59.32% |
+| `buggy_aht_5.1_384` | 7014912 | 85.04% | 85.30% | 85.96% | 97.73% |
+| `casablanca_aht_mono_64` | 6013664 | 81.61% | 81.80% | 82.75% | 94.80% |
+| `csi_miami_5.1_256_spx` | 667490 | 83.68% | 83.88% | 84.81% | 97.88% |
+| `csi_miami_stereo_128_spx` | 333664 | 83.56% | 83.80% | 84.57% | 97.33% |
+| `dolby_Holi_en_2ch_128kbps_ddp` | 1362432 | 79.64% | 79.84% | 80.51% | 95.55% |
+| `dolby_Holi_en_514ch_448kbps_ddp` | 4766720 | 76.24% | 76.57% | 77.52% | 94.03% |
+| `dolby_Holi_en_6ch_256kbps_ddp` | 2724864 | 83.56% | 83.74% | 84.31% | 97.94% |
+| `dolby_Holi_en_6ch_640kbps_ddp_joc` | 6809600 | 77.77% | 78.10% | 79.23% | 94.74% |
+| `matrix2_commentary1_stereo_192` | 2191872 | 78.06% | 78.44% | 81.42% | 97.30% |
+| `matrix2_english_5.1_640` | 7306240 | 85.22% | 85.58% | 86.09% | 98.60% |
+| `rio_bravo_mono_64_spx` | 2097408 | 81.02% | 81.14% | 81.94% | 93.96% |
+| `serenity_english_5.1_1536` | 13108224 | 84.19% | 84.34% | 84.77% | 98.35% |
 
 | Group | Streams | Size | `-9` | `-5` | `-1` | `xz -9e` |
 |---|---:|---:|---:|---:|---:|---:|
-| AC-3 test files | 8 | 22618624 | 81.97% | 82.26% | 83.37% | 96.66% |
-| AC-3 by FFmpeg | 13 | 8880844 | 79.05% | 79.28% | 80.01% | 96.48% |
-| E-AC-3 by FFmpeg | 8 | 29200908 | 54.20% | 54.28% | 55.94% | 65.86% |
-| E-AC-3 by Dolby | 14 | 75494062 | 73.67% | 73.97% | 75.20% | 87.02% |
-| all | 43 | 136194438 | 71.23% | 71.47% | 72.74% | 84.70% |
+| AC-3 test files | 8 | 22618624 | 80.86% | 81.21% | 82.55% | 96.66% |
+| AC-3 by FFmpeg | 13 | 8880844 | 76.65% | 77.02% | 77.87% | 96.48% |
+| E-AC-3 by FFmpeg | 8 | 29200908 | 53.48% | 53.56% | 54.21% | 65.86% |
+| E-AC-3 by Dolby | 14 | 75494062 | 72.89% | 73.14% | 73.82% | 87.02% |
+| all | 43 | 136194438 | 70.29% | 70.53% | 71.33% | 84.70% |
 
 Where the bytes go at `-9` (`-s`, added up over each group): each kind's share of the group's
 input, and what it compresses to, as a share of the input too (the packed sizes are the model's
@@ -305,38 +321,38 @@ estimates):
 |---|---:|---:|---:|---:|
 | header, CRCs, trailer | 1.0% -> 0.0% | 1.0% -> 0.0% | 0.5% -> 0.0% | 2.6% -> 0.2% |
 | side information | 1.6% -> 0.2% | 4.1% -> 1.1% | 0.4% -> 0.1% | 2.6% -> 0.9% |
-| exponents | 11.2% -> 7.0% | 18.5% -> 12.7% | 9.2% -> 7.3% | 27.4% -> 14.6% |
-| mantissas | 84.0% -> 74.6% | 75.4% -> 65.3% | 67.8% -> 46.8% | 50.8% -> 43.6% |
-| of them the signs | (15.1%) | (15.5%) | (5.3%) | (9.7%) |
-| AHT | - | - | - | 13.7% -> 12.9% |
+| exponents | 11.2% -> 6.9% | 18.5% -> 12.5% | 9.2% -> 7.3% | 27.4% -> 14.5% |
+| mantissas | 84.0% -> 73.6% | 75.4% -> 63.0% | 67.8% -> 46.1% | 50.8% -> 43.0% |
+| of them the signs | (14.6%) | (14.3%) | (5.1%) | (9.5%) |
+| AHT | - | - | - | 13.7% -> 12.8% |
 | skip fields | 0.3% -> 0.2% | 0.1% -> 0.0% | - | 2.1% -> 1.2% |
 | bits after the last block | 1.9% -> 0.0% | 1.0% -> 0.0% | 22.1% -> 0.0% | 0.9% -> 0.2% |
 | bytes kept as bytes | - | - | - | 0.0% -> 0.0% |
-| total | 100.0% -> 82.0% | 100.0% -> 79.0% | 100.0% -> 54.2% | 100.0% -> 73.7% |
+| total | 100.0% -> 80.9% | 100.0% -> 76.6% | 100.0% -> 53.5% | 100.0% -> 72.9% |
 
-The mantissas are most of every stream and stay most of the output: they come to 86-89% of their
-bytes (69% in FFmpeg's E-AC-3, whose high rates leave them far below their range), and a fifth to a
-quarter of what is left (a ninth in FFmpeg's E-AC-3) is their signs, a bit each, which nothing here
-predicts. AHT's data comes to 94%. The exponents come to 53-80% of their bytes, the side
-information to 10-35%, and the headers, the CRCs and the bits after the last block to almost
-nothing, but in Dolby's streams (8% and 21%: their headers change more, and the 16-bit word their
-encoders write before `auxdatae` looks random). So the streams come to 41%
-(`ff_eac3_51_6144k`, whose frames are 39% unused) to 91% (`sd_nced`, DVD stereo at 448 kbps).
-ac3model.md's estimate from single tables of the same contexts (~87%, ~85%, ~58% and ~82% for the
-four groups) is 4-8 points above what mixing them gets.
+The mantissas are most of every stream and stay most of the output: they come to 84-88% of their
+bytes (68% in FFmpeg's E-AC-3, whose high rates leave them far below their range), and 20-23% of
+what is left (11% in FFmpeg's E-AC-3) is their signs. Those were a bit each in version 1; the
+partner channel's sign, the last block's and the tonal predictor's now save 2-8% of them. AHT's
+data comes to 93%. The exponents come to 53-79% of their bytes, the side information to 10-35%, and
+the headers, the CRCs and the bits after the last block to almost nothing, but in Dolby's streams
+(8% and 21%: their headers change more, and the 16-bit word their encoders write before `auxdatae`
+looks random). So the streams come to 40% (`ff_eac3_51_6144k`, whose frames are 39% unused) to 90%
+(`sd_nced`, DVD stereo at 448 kbps). ac3model.md's estimate from single tables of the same contexts
+(~87%, ~85%, ~58% and ~82% for the four groups) is 5-9 points above what mixing them gets.
 
-`-5` writes 0.3% more than `-9`, and `-1` 2.1% more, at 2.6 times `-9`'s speed (`-5` at 1.4 times).
+`-5` writes 0.3% more than `-9`, and `-1` 1.5% more, at 2.5 times `-9`'s speed (`-5` at 1.4 times).
 
 On threads, `7_pt_1.eac3` (19.6 MB, the largest stream), with the default 4 MB parts, on four
 cores of the same machine:
 
 | | Size | `c` | `d` |
 |---|---:|---:|---:|
-| one thread | 9147827 (46.59%) | 37.6 s, 58 MB | 40.7 s, 56 MB |
-| `-t 2` (5 parts) | 9150650 (46.61%) | 22.3 s, 94 MB | 19.4 s, 87 MB |
-| `-t 4` (5 parts) | 9150704 (46.61%) | 13.4 s, 178 MB | 13.7 s, 160 MB |
+| one thread | 9077922 (46.24%) | 40.1 s, 86 MB | 40.8 s, 84 MB |
+| `-t 2` (5 parts) | 9078525 (46.24%) | 25.8 s, 143 MB | 26.6 s, 136 MB |
+| `-t 4` (5 parts) | 9078579 (46.24%) | 15.6 s, 270 MB | 16.6 s, 252 MB |
 
-Each part's model starts afresh: the parts cost 0.03% of the size.
+Each part's model starts afresh: the parts cost 0.01% of the size.
 
 ## Build
 
@@ -376,7 +392,7 @@ between platforms.
   every level. All their frames are coded as records; the only bytes kept as
   bytes are the cut frames that start the csi_miami streams (352 and 866 bytes) and the one that
   ends `casablanca_aht_mono_64` (224 bytes), as in ac3tsv.
-- **Threads:** the 43 streams round-trip with `-t 4 -c 1` (153 parts in all, which cost 0.1% at
+- **Threads:** the 43 streams round-trip with `-t 4 -c 1` (153 parts in all, which cost 0.2% at
   `-5`), some with `-t 3 -c 64k` and `-t 3 -c 4k` (the smallest parts cut between any two frames),
   and through pipes.
 - **Edge cases:** an empty file, 300 KB of random bytes (100.15%: kept as bytes), a binary, input

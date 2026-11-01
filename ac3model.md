@@ -180,13 +180,14 @@ saved:
 | unused bits after the blocks | 1.9% | 1.0% | 22.1% | 0.6% |
 | sync, CRCs, header, side information (most of it) | ~2% | ~3% | ~0.5% | ~4% |
 | the size left | ~87% | ~85% | ~58% | ~82% |
-| ac3pack `-9`, measured | 81.97% | 79.05% | 54.20% | 73.67% |
+| ac3pack `-9`, measured | 80.86% | 76.65% | 53.48% | 72.89% |
 
 A context-mixing coder (ac3pack's: several contexts per decision, mixed, then refined) does
 better than these single tables: ac3pack's model gives each mantissa the coefficients of its
 neighbours rescaled to its own quantiser (the bins before it, the last block's, the partner
-channel's) and mixes them, and each exponent delta the last block's exponents and the partner's,
-and leaves 71.23% of the corpus. What it can't change is the bulk of the mantissas, which the bit
+channel's), its tile's state (whether the coefficient that set its exponent has come yet) and a
+tonal predictor's coefficient, and mixes them, and each exponent delta the last block's exponents
+and the partner's, and leaves 70.29% of the corpus. What it can't change is the bulk of the mantissas, which the bit
 allocation has already made nearly uniform. For comparison, `xz -9e` leaves 96.7% of the DVD
 streams, 96.5% of FFmpeg's AC-3, 65.9% of FFmpeg's E-AC-3 and 87.0% of Dolby's (the zero padding,
 the repeated headers and side information).
