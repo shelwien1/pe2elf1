@@ -19,7 +19,7 @@
 namespace aacpack {
 
 const char kCmMagic[] = "aacpk";  // compressed streams, followed by the version, level and order bytes
-const int kCmVersion = 8;
+const int kCmVersion = 9;
 // The CRC-32 at the end is coded XORed with this: a decoder fed past the
 // end of its input decodes zeros, and 0 is the CRC-32 of an empty stream.
 const uint32_t kCrcXor = 0x61616370;
@@ -56,6 +56,8 @@ int cm_level(const uint8_t* head, size_t n, const char* name, char* msg, size_t 
 // the containers c can be told to look for alone
 enum { F_AUTO, F_ADTS, F_LOAS, F_ADIF };
 
+struct RunStats;
+
 // What a run of the compressor or the decompressor takes: Init() (coro.inc)
 struct AacArgs {
   bool verbose;    // statistics, and the messages they come with
@@ -77,6 +79,11 @@ struct AacArgs {
   // positions (where(); a stream of its own: 0, the same)
   uint64_t at, ins, xlen, xat;
   uint64_t where(uint64_t p) const { return p < ins ? at + p : p < ins + xlen ? xat + (p - ins) : at + (p - xlen); }
+  // on threads: decompressing, a part, whose stream another's record
+  // follows (its run stops at its end); where a run's statistics go, added
+  // up, instead of said (-v: a worker's, mt.inc)
+  bool part;
+  RunStats* stats;
 
   void Init() {
     verbose = strict = false;
@@ -90,6 +97,8 @@ struct AacArgs {
     threads = 1;
     part_max = 0;
     at = ins = xlen = xat = 0;
+    part = false;
+    stats = nullptr;
   }
 };
 
@@ -181,6 +190,11 @@ struct Stats {
   uint64_t ob[OB_N];    // the bits of the parts of the units coded, as they were (Walk::ob)
 
   void Init() { memset((void*)this, 0, sizeof *this); }
+  void add(const Stats& o) {
+    for (int k = 0; k < U_N; k++) units[k] += o.units[k];
+    raw_bytes += o.raw_bytes, bad += o.bad, unverified += o.unverified, rests += o.rests, assumed += o.assumed;
+    for (int k = 0; k < OB_N; k++) ob[k] += o.ob[k];
+  }
   void report(Progress* p) const {
     say(p, "units:");
     for (int k = U_RAW; k < U_N; k++)
@@ -195,26 +209,60 @@ struct Stats {
   }
 };
 
-// -v's statistics of a compression's coder (said after the progress line,
-// meter's, if any), and where the bits of each element went
-template <class M>
-void cm_report(const M& e, u64 in_bytes, u64 out_bytes, Progress* meter) {
-  double tot = 0;
-  for (int i = 0; i < STG_N; i++) tot += e.tc_bits[i];
-  say(meter, "%" PRIu64 " -> %" PRIu64 " bytes (%.2f%%), %" PRIu64 " MB of model tables\n", in_bytes, out_bytes,
-      in_bytes ? 100.0 * out_bytes / in_bytes : 0.0, e.table_bytes() >> 20);
-  for (int i = 0; i < STG_N; i++) {
-    if (!e.tc_syms[i]) continue;
-    say(meter, "  %-13s %11.0f bytes %6.2f%%  %10" PRIu64 " values or decisions, %.3f bits each\n", kStage[i],
-        e.tc_bits[i] / 8, tot > 0 ? 100.0 * e.tc_bits[i] / tot : 0.0, e.tc_syms[i],
-        e.tc_bits[i] / (double)e.tc_syms[i]);
+// What -v says of a run, as numbers: the stream's (compressing, Stats;
+// decompressing, the units), its coder's bits and decisions by stage and by
+// element, its model's tables and the stack its yields copied out -- so
+// that those of the parts on threads add up (mt.inc)
+struct RunStats {
+  Stats st;
+  uint64_t units;
+  double bits[STG_N], ebits[E_N];
+  uint64_t syms[STG_N], esyms[E_N];
+  uint64_t table_bytes;
+  size_t depth;
+
+  void Init() { memset((void*)this, 0, sizeof *this); }
+  // the coder's of the model m, at its end
+  template <class M>
+  void coder(const M& m) {
+    for (int i = 0; i < STG_N; i++) bits[i] = m.tc_bits[i], syms[i] = m.tc_syms[i];
+    for (int k = 0; k < E_N; k++) ebits[k] = m.ebits_[k], esyms[k] = m.esyms_[k];
+    table_bytes = m.table_bytes();
   }
-  say(meter, "  by element:\n");
-  for (int k = 0; k < E_N; k++)
-    if (e.esyms_[k] && e.ebits_[k] >= 8 * 16)
-      say(meter, "    %-14s %11.0f bytes %6.2f%%  %10" PRIu64 " values, %.3f bits each\n", kElemName[k],
-          e.ebits_[k] / 8, tot > 0 ? 100.0 * e.ebits_[k] / tot : 0.0, e.esyms_[k], e.ebits_[k] / (double)e.esyms_[k]);
-}
+  void add(const RunStats& o) {
+    st.add(o.st);
+    units += o.units;
+    for (int i = 0; i < STG_N; i++) bits[i] += o.bits[i], syms[i] += o.syms[i];
+    for (int k = 0; k < E_N; k++) ebits[k] += o.ebits[k], esyms[k] += o.esyms[k];
+    table_bytes = Max(table_bytes, o.table_bytes);
+    depth = Max(depth, o.depth);
+  }
+  // said after the progress line (meter's, if any): compressing, what the
+  // stream was and where the bits of each stage and element went, the
+  // stream's bytes in_bytes, the compressed stream's out_bytes;
+  // decompressing, the units
+  void report(bool dec, u64 in_bytes, u64 out_bytes, Progress* meter) const {
+    if (dec) {
+      say(meter, "%" PRIu64 " units\n", units);
+      return;
+    }
+    st.report(meter);
+    double tot = 0;
+    for (int i = 0; i < STG_N; i++) tot += bits[i];
+    say(meter, "%" PRIu64 " -> %" PRIu64 " bytes (%.2f%%), %" PRIu64 " MB of model tables\n", in_bytes, out_bytes,
+        in_bytes ? 100.0 * out_bytes / in_bytes : 0.0, table_bytes >> 20);
+    for (int i = 0; i < STG_N; i++) {
+      if (!syms[i]) continue;
+      say(meter, "  %-13s %11.0f bytes %6.2f%%  %10" PRIu64 " values or decisions, %.3f bits each\n", kStage[i],
+          bits[i] / 8, tot > 0 ? 100.0 * bits[i] / tot : 0.0, syms[i], bits[i] / (double)syms[i]);
+    }
+    say(meter, "  by element:\n");
+    for (int k = 0; k < E_N; k++)
+      if (esyms[k] && ebits[k] >= 8 * 16)
+        say(meter, "    %-14s %11.0f bytes %6.2f%%  %10" PRIu64 " values, %.3f bits each\n", kElemName[k],
+            ebits[k] / 8, tot > 0 ? 100.0 * ebits[k] / tot : 0.0, esyms[k], ebits[k] / (double)esyms[k]);
+  }
+};
 
 // The input of a compression, read as it is needed: the bytes [base,
 // base + b.n) of the stream, and kPad zeros after them (the bit reader
@@ -723,7 +771,7 @@ int decompress_stream(Model<1, LV, f_CS>& m, DecompressState& s, const AacArgs& 
   }
   flush();
   if (m.unit(UF_CRC, 0, 0) != (s.crc.value() ^ kCrcXor)) err_raise_s("CRC mismatch: the stream did not decompress correctly");
-  if (!m.input_done()) err_raise_s("corrupt stream: data after its end");
+  if (!a.part && !m.input_done()) err_raise_s("corrupt stream: data after its end");
   m.tell(kYieldStats);
   return 0;
 }

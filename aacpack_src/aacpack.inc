@@ -74,7 +74,11 @@ namespace aacpack {
 [[noreturn]] void err_fatal(const char* why);
 }
 #define MTWRAP_NOMEM() aacpack::err_fatal("out of memory")
+#ifdef MTWRAP_DBG  // m4vpack's MTwrap_v3_dbg instead: with statistics, written to dbg.txt as a run on threads quits
+#include "MTwrap_v3_dbg/MTwrap.inc"
+#else
 #include "MTwrap_v3/MTwrap.inc"
+#endif
 
 // errors (without C++ exceptions) and memory (without the C++ library's
 // containers), the bits, the tables and codebooks of the syntax, the

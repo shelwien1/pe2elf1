@@ -1,0 +1,79 @@
+#  aacpack's sgn family at level -3: the sign of a nonzero spectral value.
+#  cb its codebook, oc the CPE's other channel's at the place (0 zero or
+#  none, 1 +, 2 -), ms ms_used (2 none), s1 the sign of the value before it
+#  (0 zero, 1 +, 2 -), s2 of the one before that, pf the channel's last
+#  frame's at the place (0 1 2), mg its magnitude (up to 7), kq its place
+#  (tc_qlog), ws long 0 short 1.
+#  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates MOD/l9 from
+#  this file and family.inc.
+
+Prefix H3_sgn
+Debug 1
+Const 0
+
+Index a
+ a_s1: s1, 1!11
+ a_s2: s2, 1!11
+ a_cb: cb, 1!11111111111
+
+Index b
+ b_oc: oc, 1!11
+ b_mg: mg, 1!1111
+
+Index c
+ c_s1: s1, 1!11
+ c_mg: mg, 1!1111111
+
+Index d
+ d_oc: oc, 1!11
+ d_s1: s1, 1!11
+ d_pf: pf, 1!11
+
+Index e
+ e_cb: cb, 1!11111111111
+ e_oc: oc, 1!11
+ e_ms: ms, 1!11
+
+Index h
+ h_oc: oc, 1!11
+ h_ms: ms, 1!11
+ h_pf: pf, 1!11
+
+Index m
+ m_cb: cb, 1!11111111111
+
+Index t
+
+Index g
+
+Number rA, 1, 0!10011111
+Number rB, 1, 0!11111111
+Number rC, 1, 0!11111111
+Number rD, 1, 0!11101010
+Number rE, 1, 0!11111110
+Number rH, 1, 0!11111110
+Number lr, 1, 0!01111
+Number mwA, 1, 0!00000100
+Number mwB, 1, 0!00011111
+Number mwC, 1, 0!00011101
+Number mwD, 1, 0!00000000
+Number mwE, 1, 0!00001000
+Number mwH, 1, 0!00000010
+Number mb, 1, 0!00100000
+#  Frozen: what a family of bit() decisions never reads: no mantissa, no
+#  hint, no signs.
+! Number rT, 1, 0!00000000
+! Number mwT, 1, 0!00000000
+! Number mt, 1, 0!000
+! Number rG, 1, 0!00000000
+! Number mwG, 1, 0!00000000
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
+#  direct, one that does not is hashed into 2^h rows.  Frozen.
+! Number hA, 1, 0!11000
+! Number hB, 1, 0!11000
+! Number hC, 1, 0!11000
+! Number hD, 1, 0!11000
+! Number hE, 1, 0!11000
+! Number hH, 1, 0!11000
+! Number hM, 1, 0!11000
+! Number hT, 1, 0!11000

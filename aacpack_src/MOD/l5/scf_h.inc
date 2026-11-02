@@ -1,0 +1,130 @@
+
+static const byte H5_scf_a_pa[14+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14 };
+static const byte H5_scf_a_d1[5+1]={ 0,1,2,3,4,5 };
+
+static const byte H5_scf_b_pd[14+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14 };
+static const byte H5_scf_b_d1[3+1]={ 0,1,2,3 };
+
+static const byte H5_scf_c_sb[50+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50 };
+
+static const byte H5_scf_d_d1[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
+static const byte H5_scf_d_d2[5+1]={ 0,1,2,3,4,5 };
+static const byte H5_scf_d_dm[60+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60 };
+
+static const byte H5_scf_e_oc[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
+static const byte H5_scf_e_pa[5+1]={ 0,1,2,3,4,5 };
+
+static const byte H5_scf_g_d1[5+1]={ 0,1,2,3,4,5 };
+
+static const byte H5_scf_h_cb[15+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
+static const byte H5_scf_h_pa[3+1]={ 0,1,2,3 };
+
+static const byte H5_scf_i_gd[7+1]={ 0,1,2,3,4,5,6,7 };
+static const byte H5_scf_i_pa[7+1]={ 0,1,2,3,4,5,6,7 };
+
+static const byte H5_scf_j_gr[7+1]={ 0,1,2,3,4,5,6,7 };
+static const byte H5_scf_j_pw[25+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25 };
+
+static const byte H5_scf_k_pv[10+1]={ 0,1,2,3,4,5,6,7,8,9,10 };
+static const byte H5_scf_k_sb[5+1]={ 0,1,2,3,4,5 };
+static const byte H5_scf_k_sk[15+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
+
+static const byte H5_scf_l_pa[12+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12 };
+static const byte H5_scf_l_pd[5+1]={ 0,1,2,3,4,5 };
+
+
+
+
+static const int H5_scf_rA = (130+0) * (1);
+static const int H5_scf_rB = (242+0) * (1);
+static const int H5_scf_rC = (255+0) * (1);
+static const int H5_scf_rD = (255+0) * (1);
+static const int H5_scf_rE = (255+0) * (1);
+static const int H5_scf_rH = (255+0) * (1);
+static const int H5_scf_rI = (137+0) * (1);
+static const int H5_scf_rJ = (254+0) * (1);
+static const int H5_scf_rK = (255+0) * (1);
+static const int H5_scf_rL = (253+0) * (1);
+static const int H5_scf_rT = (128+0) * (1);
+static const int H5_scf_rG = (64+0) * (1);
+static const int H5_scf_lr = (15+0) * (1);
+static const int H5_scf_mwA = (128+0) * (1);
+static const int H5_scf_mwB = (4+0) * (1);
+static const int H5_scf_mwC = (4+0) * (1);
+static const int H5_scf_mwD = (27+0) * (1);
+static const int H5_scf_mwE = (16+0) * (1);
+static const int H5_scf_mwH = (8+0) * (1);
+static const int H5_scf_mwI = (1+0) * (1);
+static const int H5_scf_mwJ = (20+0) * (1);
+static const int H5_scf_mwK = (51+0) * (1);
+static const int H5_scf_mwL = (62+0) * (1);
+static const int H5_scf_mwT = (0+0) * (1);
+static const int H5_scf_mwG = (0+0) * (1);
+static const int H5_scf_mt = (2+0) * (1);
+static const int H5_scf_mb = (8+0) * (1);
+static const int H5_scf_hA = (24+0) * (1);
+static const int H5_scf_hB = (24+0) * (1);
+static const int H5_scf_hC = (24+0) * (1);
+static const int H5_scf_hD = (24+0) * (1);
+static const int H5_scf_hE = (24+0) * (1);
+static const int H5_scf_hH = (24+0) * (1);
+static const int H5_scf_hI = (24+0) * (1);
+static const int H5_scf_hJ = (24+0) * (1);
+static const int H5_scf_hK = (24+0) * (1);
+static const int H5_scf_hL = (24+0) * (1);
+static const int H5_scf_hM = (24+0) * (1);
+static const int H5_scf_hT = (24+0) * (1);
+
+
+static const long long H5_scf_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 15), 6); // 270
+static const long long H5_scf_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 15), 4); // 180
+static const long long H5_scf_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 51), 2); // 306
+static const long long H5_scf_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 14), 6), 61); // 15372
+static const long long H5_scf_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 14), 6), 3); // 756
+static const long long H5_scf_g_Volume = tc_vmul(1, 6); // 6
+static const long long H5_scf_h_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 16), 4); // 192
+static const long long H5_scf_i_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 8), 8); // 192
+static const long long H5_scf_j_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 8), 2), 26); // 1248
+static const long long H5_scf_k_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 11), 6), 16); // 3168
+static const long long H5_scf_l_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 13), 6); // 234
+static const long long H5_scf_m_Volume = tc_vmul(tc_vmul(1, 3), 3); // 9
+static const long long H5_scf_t_Volume = tc_vmul(1, 3); // 3
+
+#define H5_scf_USES(X) X(kd) X(pa) X(d1) X(pd) X(sb) X(ws) X(d2) X(dm) X(oc) X(mu) X(cb) X(gd) X(gr) X(pw) X(pv) X(sk)
+
+struct H5_scf_T {
+  cm_cnt2 H5_scf_A[tc_rows(H5_scf_a_Volume, H5_scf_hA) * H_scf_ND];
+  cm_cnt2 H5_scf_B[tc_rows(H5_scf_b_Volume, H5_scf_hB) * H_scf_ND];
+  cm_cnt2 H5_scf_C[tc_rows(H5_scf_c_Volume, H5_scf_hC) * H_scf_ND];
+  cm_cnt2 H5_scf_D[tc_rows(H5_scf_d_Volume, H5_scf_hD) * H_scf_ND];
+  cm_cnt2 H5_scf_E[tc_rows(H5_scf_e_Volume, H5_scf_hE) * H_scf_ND];
+  cm_cnt2 H5_scf_H[tc_rows(H5_scf_h_Volume, H5_scf_hH) * H_scf_ND];
+  cm_cnt2 H5_scf_I[tc_rows(H5_scf_i_Volume, H5_scf_hI) * H_scf_ND];
+  cm_cnt2 H5_scf_J[tc_rows(H5_scf_j_Volume, H5_scf_hJ) * H_scf_ND];
+  cm_cnt2 H5_scf_K[tc_rows(H5_scf_k_Volume, H5_scf_hK) * H_scf_ND];
+  cm_cnt2 H5_scf_L[tc_rows(H5_scf_l_Volume, H5_scf_hL) * H_scf_ND];
+  cm_cnt H5_scf_MT[tc_rows(H5_scf_t_Volume, H5_scf_hT) * H_scf_MND];
+  i32 H5_scf_W[tc_rows(H5_scf_m_Volume, H5_scf_hM) * H_scf_ND * tc_nin(10)];
+  u8 H5_scf_WC[tc_rows(H5_scf_m_Volume, H5_scf_hM) * H_scf_ND];
+  cm_cnt H5_scf_G[H5_scf_g_Volume * H_scf_NG];
+  
+  /* Total bytes this module's Table() members occupy -- a constant here, since
+   * Const mode has already folded every count. */
+  static constexpr unsigned long long H5_scf_Size = 0
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H5_scf_a_Volume, H5_scf_hA) * H_scf_ND)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H5_scf_b_Volume, H5_scf_hB) * H_scf_ND)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H5_scf_c_Volume, H5_scf_hC) * H_scf_ND)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H5_scf_d_Volume, H5_scf_hD) * H_scf_ND)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H5_scf_e_Volume, H5_scf_hE) * H_scf_ND)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H5_scf_h_Volume, H5_scf_hH) * H_scf_ND)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H5_scf_i_Volume, H5_scf_hI) * H_scf_ND)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H5_scf_j_Volume, H5_scf_hJ) * H_scf_ND)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H5_scf_k_Volume, H5_scf_hK) * H_scf_ND)
+                              + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(H5_scf_l_Volume, H5_scf_hL) * H_scf_ND)
+                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(tc_rows(H5_scf_t_Volume, H5_scf_hT) * H_scf_MND)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(H5_scf_m_Volume, H5_scf_hM) * H_scf_ND * tc_nin(10))
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(H5_scf_m_Volume, H5_scf_hM) * H_scf_ND)
+                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(H5_scf_g_Volume * H_scf_NG);
+  void H5_scf_Init( void ) {}
+  void H5_scf_Quit( void ) {}
+};

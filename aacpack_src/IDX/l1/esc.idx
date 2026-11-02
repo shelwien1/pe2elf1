@@ -1,0 +1,60 @@
+#  aacpack's esc family at level -1: an escaped magnitude of codebook 11,
+#  less 16.  kq its place (tc_qlog), a1 the magnitude before it (tc_qlog), pf
+#  the channel's last frame's at the place (1 + tc_qlog; 0 not known), oc
+#  the CPE's other channel's (1 + tc_qlog; 0 none), ws long 0 short 1, la the
+#  channel's last escape (tc_qlog), sb the band, av spc's: the place's
+#  magnitude averaged over the frames, xp spc's guess at the magnitude.
+#  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates MOD/l9 from
+#  this file and family.inc.
+
+Prefix H1_esc
+Debug 1
+Const 0
+
+Index a
+ a_a1: a1, 1!111111111111
+ a_la: la, 1!11111
+ a_xp: xp, 1!111111111111111111111111111111111111111
+
+Index b
+ b_sb: sb, 1!11111111111111111111111111111111111111111111111111
+
+Index c
+ c_la: la, 1!111111111111
+ c_kq: kq, 1!11111
+
+Index d
+ d_pf: pf, 1!111111111111
+ d_oc: oc, 1!11111
+
+Index m
+ m_ws: ws, 1!1
+
+Index t
+ t_kq: kq, 1!1111111111111111111
+
+Index g
+
+Number rA, 1, 0!11111111
+Number rB, 1, 0!11111111
+Number rC, 1, 0!11111111
+Number rD, 1, 0!10001001
+Number rT, 1, 0!10000000
+Number rG, 1, 0!01000000
+Number lr, 1, 0!01111
+Number mwA, 1, 0!00001000
+Number mwB, 1, 0!00010000
+Number mwC, 1, 0!00011011
+Number mwD, 1, 0!00000001
+Number mwT, 1, 0!00000000
+Number mwG, 1, 0!00000000
+Number mt, 1, 0!010
+Number mb, 1, 0!00001000
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
+#  direct, one that does not is hashed into 2^h rows.  Frozen.
+! Number hA, 1, 0!11000
+! Number hB, 1, 0!11000
+! Number hC, 1, 0!11000
+! Number hD, 1, 0!11000
+! Number hM, 1, 0!11000
+! Number hT, 1, 0!11000

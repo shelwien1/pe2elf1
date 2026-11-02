@@ -1,10 +1,11 @@
 // A model family (oggcomp's tc_fam, balrogg-P-hash tc_fam.inc): the integer
 // coder every IDX family is. A value is a cascade of binary decisions --
 // zero? one? two? then the length of the rest in unary and its bits below
-// the top one -- and each decision is predicted from ten counters (tables
-// A-E, H-L under as many contexts), an APM, three mixers and a second APM,
-// all indexed by the decision's node in the cascade (the shape of every
-// family of aacpack's level: famcfg.inc). Decisions outside the cascade use
+// the top one -- and each decision is predicted from up to ten counters
+// (tables A-E, H-L under as many contexts), an APM, three mixers and a
+// second APM, all indexed by the decision's node in the cascade; a level's
+// families may have fewer (four counters and one mixer at -1: the shape is
+// the family's class's, famcfg.inc). Decisions outside the cascade use
 // bit() with nodes of their own, and the sign of a value has its own
 // counters (G). prp, when set, is one more prediction for the mixer.
 //
@@ -15,7 +16,11 @@
 
 namespace aacpack {
 
-constexpr int TC_MIXN = 24;
+//  The mixers' inputs of a family of nc counters: two per counter, the
+//  APM's refinement of A's (A's own without APMs), the outside prediction
+//  and the bias, in lanes of 8 (famcfg.inc's NIN); 24 of ten (-9's, -7's)
+constexpr int tc_nin(int nc) { return (2 * nc + 3 + 7) / 8 * 8; }
+constexpr int TC_MIXN = tc_nin(10);
 constexpr int TC_NODE = 13;
 constexpr int TC_MTREE = 6;
 constexpr int TC_MPER = (1 << TC_MTREE) - 1 + 13;
@@ -44,9 +49,11 @@ struct tcx {
   int s, f, m, w, t, g;
 };
 //  A family's tables, in the order tc_fam takes them (its class's
-//  tables(), famcfg.inc): those its shape has
+//  tables(), famcfg.inc): those its shape has (the counters' of its
+//  class's type, C::Cnt)
+template <class Cnt>
 struct tc_tabs {
-  cm_cnt2 *cnt[10];
+  Cnt *cnt[10];
   cm_cnt *T, *G;
   i32 *W, *W2, *W3, *WF;
   u8 *WC, *W2C, *W3C, *WFC;
@@ -165,20 +172,54 @@ struct tc_dump {
   } while(0)
 #endif
 
-//  A counter's probabilities stretched
+//  A counter's probabilities stretched: looked up (cm_cnt2), or as the
+//  counter keeps them (cm_cnt2s)
 static INLINE int tc_sp(const cm_cnt2 &c) { return cm_stretch(c.P()); }
 static INLINE int tc_sq(const cm_cnt2 &c) { return cm_stretch(c.Q()); }
+static INLINE int tc_sp(const cm_cnt2s &c) { return c.sp; }
+static INLINE int tc_sq(const cm_cnt2s &c) { return c.sq; }
 #ifdef AACPACK_AVX2
-//  The same of four counters at once, as the 32-bit lanes P and Q of each
-//  in turn (v: P and Q so)
-static INLINE __m256i tc_st4(__m256i v) {
+//  The same of four counters at once (four false: two, the upper lanes 0),
+//  as the 32-bit lanes P and Q of each in turn (v: P and Q so)
+static INLINE __m256i tc_st4(cm_cnt2 *const *, bool, __m256i v) {
   return _mm256_srai_epi32(_mm256_slli_epi32(_mm256_i32gather_epi32((const int *)cm_st, v, 2), 16), 16);
 }
+static INLINE __m256i tc_st4(cm_cnt2s *const *c, bool four, __m256i) {
+  auto ld = [&](int k) {
+    int v;
+    memcpy(&v, &c[k]->sp, 4);
+    return v;
+  };
+  return _mm256_cvtepi16_epi32(four ? _mm_setr_epi32(ld(0), ld(1), ld(2), ld(3)) : _mm_setr_epi32(ld(0), ld(1), 0, 0));
+}
 //  At their update, what a counter's 8-byte store writes above its q, in
-//  the odd lanes' upper halves: the next counter's p as it was (from cv,
-//  the counters as read)
-static INLINE __m256i tc_upper(__m256i cv) { return _mm256_andnot_si256(_mm256_set1_epi32(0xFFFF), cv); }
+//  the odd lanes' upper halves: the next counter's p as it was (cm_cnt2,
+//  from cv, the counters as read), or its new P stretched (cm_cnt2s, from
+//  nv, the new p and q, and t1, the new counts; sn: P and Q stretched)
+static INLINE __m256i tc_upper(cm_cnt2 *const *, __m256i cv, __m256i, __m256i, __m256i &) {
+  return _mm256_andnot_si256(_mm256_set1_epi32(0xFFFF), cv);
+}
+static INLINE __m256i tc_upper(cm_cnt2s *const *, __m256i, __m256i nv, __m256i t1, __m256i &sn) {
+  const __m256i m16 = _mm256_set1_epi32(0xFFFF);
+  __m256i v = _mm256_max_epi32(_mm256_srli_epi32(_mm256_and_si256(nv, m16), CM_CBITS - CM_PBITS), _mm256_set1_epi32(1));
+  v = _mm256_blendv_epi8(v, _mm256_set1_epi32(CM_PHALF), _mm256_cmpeq_epi32(t1, _mm256_setzero_si256()));
+  sn = _mm256_and_si256(_mm256_i32gather_epi32((const int *)cm_st, v, 2), m16);
+  return _mm256_slli_epi64(_mm256_and_si256(sn, _mm256_set1_epi64x(0xFFFF)), 48);
+}
+//  and cm_cnt2s's Q stretched, after the store
+static INLINE void tc_put_sq(cm_cnt2 *const *, bool, __m256i) {}
+static INLINE void tc_put_sq(cm_cnt2s *const *c, bool four, __m256i sn) {
+  c[0]->sq = (i16)_mm256_extract_epi16(sn, 2);
+  c[1]->sq = (i16)_mm256_extract_epi16(sn, 6);
+  if(four) {
+    c[2]->sq = (i16)_mm256_extract_epi16(sn, 10);
+    c[3]->sq = (i16)_mm256_extract_epi16(sn, 14);
+  }
+}
 #endif
+//  counter A's P stretched, as the mixers see it without APMs (p1 = its P)
+static INLINE int tc_x20(const cm_cnt2 *, int p1) { return cm_stretch(p1); }
+static INLINE int tc_x20(const cm_cnt2s *c, int) { return c->sp; }
 
 //  A family of a level: C is its configuration class (famcfg.inc), whose
 //  constants (the shape, the rates, which indices are hashed) shape the
@@ -187,11 +228,14 @@ template <int f_DEC, class C> struct tc_fam {
   static constexpr int ENC = (f_DEC == 0);
   static const int NC = C::NC, NIN = C::NIN, ND = C::ND, MND = C::MND;
   static_assert(NC % 2 == 0 && NC >= 2 && NC <= 10, "tc_fam: an even count of counters, up to 10");
+  static_assert(C::NMIX == 1 || C::NMIX == 3, "tc_fam: one mixer, or three and the final one");
+  static_assert(C::NAPM == 0 || C::NAPM == 2, "tc_fam: no APM, or two");
+  typedef typename C::Cnt Cnt;  // cm_cnt2, or cm_cnt2s
   tc_rc<f_DEC> *rc;  // the coder of the model it belongs to
 #ifdef AACPACK_DUMP
   tc_dump dump_;
 #endif
-  cm_cnt2 *cnt[NC];  // the counters' tables: A-E, H-L, the first NC
+  Cnt *cnt[NC];  // the counters' tables: A-E, H-L, the first NC
   cm_cnt *G, *T;
   cm_apm ap, ap2;                  // (with APMs)
   cm_mix<NIN> mx, mx2, mx3;        // (mx2, mx3: three mixers)
@@ -219,7 +263,7 @@ template <int f_DEC, class C> struct tc_fam {
   }
   void wire(typename C::T *t, tc_rc<f_DEC> *r) {
     rc = r;
-    tc_tabs b;
+    tc_tabs<Cnt> b;
     b.Init();
     C::tables(t, b);
     for(int k = 0; k < NC; k++)
@@ -236,15 +280,19 @@ template <int f_DEC, class C> struct tc_fam {
       tc_ifits("counter G", C::kG, C::NG);
       tc_ifits("mixer", C::kM, (sz)ND * NIN);
       mx.init(b.W, b.WC);
-      tc_ifits("mixer 2", C::kW, (sz)ND * NIN);
-      tc_ifits("mixer 3", C::kS, (sz)ND * NIN);
-      mx2.init(b.W2, b.W2C);
-      mx3.init(b.W3, b.W3C);
-      mxf.init(b.WF, b.WFC);
-      tc_ifits("APM 1", C::kS, (sz)ND * C::qs);
-      tc_ifits("APM 2", C::kF, (sz)ND * C::qf);
-      ap.init(b.S, b.SC, C::qs);
-      ap2.init(b.F, b.FC, C::qf);
+      if(C::NMIX > 1) {
+        tc_ifits("mixer 2", C::kW, (sz)ND * NIN);
+        tc_ifits("mixer 3", C::kS, (sz)ND * NIN);
+        mx2.init(b.W2, b.W2C);
+        mx3.init(b.W3, b.W3C);
+        mxf.init(b.WF, b.WFC);
+      }
+      if(C::NAPM) {
+        tc_ifits("APM 1", C::kS, (sz)ND * C::qs);
+        tc_ifits("APM 2", C::kF, (sz)ND * C::qf);
+        ap.init(b.S, b.SC, C::qs);
+        ap2.init(b.F, b.FC, C::qf);
+      }
     }
     //  (the inputs past the last are 0 for good)
     for(int i = 0; i < NIN; i++)
@@ -272,10 +320,13 @@ template <int f_DEC, class C> struct tc_fam {
     TC_DUMP(rec('S'));
     for(int k = 0; k < NC; k++)
       cb[k] = (sz)(C::hc[k] ? tc_hrow((u32)x.c[k], C::hc[k]) : (u32)x.c[k]) * ND;
-    bs = (C::hS ? tc_hrow((u32)x.s, C::hS) : (u32)x.s) * ND;
-    bf = (C::hF ? tc_hrow((u32)x.f, C::hF) : (u32)x.f) * ND;
+    if(C::NMIX > 1 || C::NAPM)
+      bs = (C::hS ? tc_hrow((u32)x.s, C::hS) : (u32)x.s) * ND;
+    if(C::NAPM)
+      bf = (C::hF ? tc_hrow((u32)x.f, C::hF) : (u32)x.f) * ND;
     bm = (C::hM ? tc_hrow((u32)x.m, C::hM) : (u32)x.m) * ND;
-    bw2 = (u32)x.w * ND;
+    if(C::NMIX > 1)
+      bw2 = (u32)x.w * ND;
     bt = (C::hT ? tc_hrow((u32)x.t, C::hT) : (u32)x.t) * MND;
     bg = (u32)x.g;
     fetch(0);
@@ -321,22 +372,29 @@ template <int f_DEC, class C> struct tc_fam {
   INLINE void fetch(int node) {
     for(int k = 0; k < NC; k++)
       CM_PREFETCH(cnt[k] + cb[k] + node);
-    CM_PREFETCH(ap.t + (sz)(bs + node) * (u32)ap.q);
-    CM_PREFETCH(ap.c + (sz)(bs + node) * (u32)ap.q);
-    if(C::bw < 16) {
-      CM_PREFETCH(ap2.t + (sz)(bf + node) * (u32)ap2.q);
-      CM_PREFETCH(ap2.c + (sz)(bf + node) * (u32)ap2.q);
+    if(C::NAPM) {
+      CM_PREFETCH(ap.t + (sz)(bs + node) * (u32)ap.q);
+      CM_PREFETCH(ap.c + (sz)(bs + node) * (u32)ap.q);
+      if(C::bw < 16) {
+        CM_PREFETCH(ap2.t + (sz)(bf + node) * (u32)ap2.q);
+        CM_PREFETCH(ap2.c + (sz)(bf + node) * (u32)ap2.q);
+      }
     }
-    const i32 *w1 = mx.w + (sz)(bm + node) * NIN, *w2 = mx2.w + (sz)(bw2 + node) * NIN, *w3 = mx3.w + (sz)(bs + node) * NIN;
+    const i32 *w1 = mx.w + (sz)(bm + node) * NIN;
     CM_PREFETCH(w1);
     CM_PREFETCH(w1 + NIN - 1);
-    CM_PREFETCH(w2);
-    CM_PREFETCH(w2 + NIN - 1);
-    CM_PREFETCH(w3);
-    CM_PREFETCH(w3 + NIN - 1);
+    if(C::NMIX > 1) {
+      const i32 *w2 = mx2.w + (sz)(bw2 + node) * NIN, *w3 = mx3.w + (sz)(bs + node) * NIN;
+      CM_PREFETCH(w2);
+      CM_PREFETCH(w2 + NIN - 1);
+      CM_PREFETCH(w3);
+      CM_PREFETCH(w3 + NIN - 1);
+    }
     CM_PREFETCH(mx.c + bm + node);
-    CM_PREFETCH(mx2.c + bw2 + node);
-    CM_PREFETCH(mx3.c + bs + node);
+    if(C::NMIX > 1) {
+      CM_PREFETCH(mx2.c + bw2 + node);
+      CM_PREFETCH(mx3.c + bs + node);
+    }
   }
   //  (No -Wmaybe-uninitialized here: cnt_inputs sets the counters' vectors
   //  and cnt_update reads them, both where cn_v, but GCC at -O3 with AVX2
@@ -352,8 +410,8 @@ template <int f_DEC, class C> struct tc_fam {
   //  each P and Q) and probabilities stretched (st), where cn_v, else
   //  copies of them (cn)
   struct CntRows {
-    cm_cnt2 *cp[NC];
-    cm_cnt2 cn[NC];
+    Cnt *cp[NC];
+    Cnt cn[NC];
 #ifdef AACPACK_AVX2
     __m256i cv[(NC + 3) / 4], ct[(NC + 3) / 4], st[(NC + 3) / 4];
 #endif
@@ -366,15 +424,15 @@ template <int f_DEC, class C> struct tc_fam {
     for(int k = 0; k < NC; k++)
       r.cp[k] = cnt[k] + cb[k] + node;
     //  The mixers' inputs: the counters' two probabilities each (in the
-    //  order of the arrays), the APM's refinement of A's, the outside
-    //  prediction and the bias (stretched), then zeros to a multiple of 8;
-    //  the mixers' are the same, packed once
+    //  order of the arrays), the APM's refinement of A's (A's own without
+    //  APMs), the outside prediction and the bias (stretched), then zeros
+    //  to a multiple of 8; the mixers' are the same, packed once
     int pa = cnt_inputs(r);
-    int p1 = ap.pp(pa, bs + (u32)node);
+    int p1 = C::NAPM ? ap.pp(pa, bs + (u32)node) : pa;
     if(p1 > CM_PONE - 1)
       p1 = CM_PONE - 1;
     int pp = prpa ? prpa[node] : prp;
-    const int x20 = cm_stretch(p1), x21 = pp >= 0 ? cm_stretch(pp) : 0;
+    const int x20 = C::NAPM ? cm_stretch(p1) : tc_x20(r.cp[0], p1), x21 = pp >= 0 ? cm_stretch(pp) : 0;
     cm_x16<NIN> xp;
     mix_inputs(r, x20, x21, xp);
     b = mix_code(node, b, xp);
@@ -388,8 +446,8 @@ template <int f_DEC, class C> struct tc_fam {
     constexpr int NV = (NC + 3) / 4;  // the counters' vectors: four in each, the last two or four
 #ifdef AACPACK_AVX2
     //  (cn_v: the counters all at once, as 64-bit lanes p, t, q and the next
-    //  counter's p, four to a vector; their probabilities as 32-bit lanes,
-    //  P and Q of each in turn)
+    //  counter's p, cm_cnt2s's own P stretched, four to a vector; their
+    //  probabilities as 32-bit lanes, P and Q of each in turn)
     if(cn_v) {
       auto ld2 = [&](int k) {
         return _mm_unpacklo_epi64(_mm_loadl_epi64((const __m128i *)r.cp[k]), _mm_loadl_epi64((const __m128i *)r.cp[k + 1]));
@@ -399,13 +457,13 @@ template <int f_DEC, class C> struct tc_fam {
                                : _mm256_inserti128_si256(_mm256_setzero_si256(), ld2(4 * j), 0);
       const __m256i m16 = _mm256_set1_epi32(0xFFFF), z = _mm256_setzero_si256();
       for(int j = 0; j < NV; j++) {
-        // (cm_cnt2::P and Q, then cm_stretch)
+        // (cm_cnt2::P and Q, then cm_stretch, or as cm_cnt2s keeps them)
         const __m256i t = r.ct[j] = _mm256_srli_epi32(_mm256_shuffle_epi32(r.cv[j], 0xA0), 16);
         __m256i v = _mm256_max_epi32(_mm256_srli_epi32(_mm256_and_si256(r.cv[j], m16), CM_CBITS - CM_PBITS), _mm256_set1_epi32(1));
         v = _mm256_blendv_epi8(v, _mm256_set1_epi32(CM_PHALF), _mm256_cmpeq_epi32(t, z));
         if(!j)
           pa = _mm256_cvtsi256_si32(v);
-        r.st[j] = tc_st4(v);
+        r.st[j] = tc_st4(r.cp + 4 * j, 4 * j + 2 < NC, v);
       }
     } else
 #endif
@@ -460,22 +518,31 @@ template <int f_DEC, class C> struct tc_fam {
 #else
     const cm_x16<NIN> *xq = nullptr;
 #endif
-    mxf.set(0, cm_stretch(mx.mix(bm + (u32)node, mx.x, xq)));
-    mxf.set(1, cm_stretch(mx2.mix(bw2 + (u32)node, mx.x, xq)));
-    mxf.set(2, cm_stretch(mx3.mix(bs + (u32)node, mx.x, xq)));
-    mxf.set(3, 256);
-    const int pm = mxf.mix((u32)node);  // (by node)
-    int pf = C::bw < 16 ? (C::bw * pm + (16 - C::bw) * ap2.pp(pm, bf + (u32)node) + 8) >> 4 : pm;
+    int pm;
+    if(C::NMIX > 1) {
+      mxf.set(0, cm_stretch(mx.mix(bm + (u32)node, mx.x, xq)));
+      mxf.set(1, cm_stretch(mx2.mix(bw2 + (u32)node, mx.x, xq)));
+      mxf.set(2, cm_stretch(mx3.mix(bs + (u32)node, mx.x, xq)));
+      mxf.set(3, 256);
+      pm = mxf.mix((u32)node);  // (by node)
+    } else {
+      pm = mx.mix(bm + (u32)node, mx.x, xq);
+    }
+    int pf = C::NAPM && C::bw < 16 ? (C::bw * pm + (16 - C::bw) * ap2.pp(pm, bf + (u32)node) + 8) >> 4 : pm;
     b = tc_bit(rc, pf < 1 ? 1 : pf > CM_PONE - 1 ? CM_PONE - 1 : pf, b);
     mx.upd(b, C::lr, C::mb, mx.x, xq);
-    mx2.upd(b, C::lr, C::mb, mx.x, xq);
-    mx3.upd(b, C::lr, C::mb, mx.x, xq);
-    mxf.upd(b, C::lr, C::mb);
+    if(C::NMIX > 1) {
+      mx2.upd(b, C::lr, C::mb, mx.x, xq);
+      mx3.upd(b, C::lr, C::mb, mx.x, xq);
+      mxf.upd(b, C::lr, C::mb);
+    }
     //  (APM 2 with no share, bw 16, is neither read nor trained: what it
     //  would give goes nowhere)
-    ap.upd(b, C::rS1);
-    if(C::bw < 16)
-      ap2.upd(b, C::rS2);
+    if(C::NAPM) {
+      ap.upd(b, C::rS1);
+      if(C::bw < 16)
+        ap2.upd(b, C::rS2);
+    }
     return b;
   }
   //  the counters, trained
@@ -486,7 +553,8 @@ template <int f_DEC, class C> struct tc_fam {
       // as cm_cnt2::upd, each counter's q through its p's arithmetic with
       // the rate 8192 / 65536; written back in the order of the arrays,
       // each with the next counter's p as it was (rewritten after, where
-      // the next counter is one of these: tc_upper)
+      // the next counter is one of these), or cm_cnt2s with its new P and
+      // Q stretched (tc_upper, tc_put_sq)
       const __m256i m16 = _mm256_set1_epi32(0xFFFF), z = _mm256_setzero_si256();
       const __m256i even = _mm256_setr_epi32(-1, 0, -1, 0, -1, 0, -1, 0);
       for(int j = 0; j < NV; j++) {
@@ -496,7 +564,8 @@ template <int f_DEC, class C> struct tc_fam {
         __m256i rec = _mm256_and_si256(_mm256_mask_i32gather_epi32(_mm256_set1_epi32(8192), (const int *)cm_rec, t1, even, 2), m16);
         __m256i tg = _mm256_loadu_si256((const __m256i *)(cn_tg[b] + 8 * j));
         __m256i nv = _mm256_add_epi32(cur, _mm256_srai_epi32(_mm256_mullo_epi32(_mm256_sub_epi32(tg, cur), rec), CM_CBITS));
-        __m256i up = _mm256_blend_epi32(_mm256_slli_epi32(t1, 16), tc_upper(r.cv[j]), 0xAA);
+        __m256i sn = z;
+        __m256i up = _mm256_blend_epi32(_mm256_slli_epi32(t1, 16), tc_upper(r.cp + 4 * j, r.cv[j], nv, t1, sn), 0xAA);
         __m256i o = _mm256_or_si256(_mm256_and_si256(nv, m16), up);
         __m128i lo = _mm256_castsi256_si128(o);
         _mm_storel_epi64((__m128i *)r.cp[4 * j], lo);
@@ -506,6 +575,7 @@ template <int f_DEC, class C> struct tc_fam {
           _mm_storel_epi64((__m128i *)r.cp[4 * j + 2], hi);
           _mm_storel_epi64((__m128i *)r.cp[4 * j + 3], _mm_unpackhi_epi64(hi, hi));
         }
+        tc_put_sq(r.cp + 4 * j, 4 * j + 2 < NC, sn);
       }
     } else
 #endif

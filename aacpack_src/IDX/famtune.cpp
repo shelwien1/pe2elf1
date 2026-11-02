@@ -53,6 +53,18 @@ namespace aacpack {
 #if AACPACK_ONLY == 9
 #include "../lv9.inc"
 typedef Lv9 FtLv;
+#elif AACPACK_ONLY == 7
+#include "../lv7.inc"
+typedef Lv7 FtLv;
+#elif AACPACK_ONLY == 5
+#include "../lv5.inc"
+typedef Lv5 FtLv;
+#elif AACPACK_ONLY == 3
+#include "../lv3.inc"
+typedef Lv3 FtLv;
+#elif AACPACK_ONLY == 1
+#include "../lv1.inc"
+typedef Lv1 FtLv;
 #else
 #error "famtune.cpp: no such level"
 #endif

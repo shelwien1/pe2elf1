@@ -2,8 +2,8 @@
 // C++ library (it takes none; h264p's mem.inc): mem_alloc() and its kin end the run when
 // there is no memory (err_fatal(), err.inc), Buf<T> is a growable array of
 // plain data and Map32<V> a map of 32-bit keys; Min() and Max() are
-// std::min's and std::max's, and IntTag, Pick, SameType and Extent what it
-// uses of <type_traits>.
+// std::min's and std::max's, and IntTag, Pick, NoRef, SameType and Extent
+// what it uses of <type_traits>.
 //
 // Like aacpack's other structs, a Buf has no constructor or destructor:
 // Init() sets it up empty, Quit() frees it (and leaves it empty, set up
@@ -35,6 +35,14 @@ struct Pick {
 template <class T, class F>
 struct Pick<false, T, F> {
   typedef F type;
+};
+template <class T>
+struct NoRef {
+  typedef T type;
+};
+template <class T>
+struct NoRef<T&> {
+  typedef T type;
 };
 template <class A, class B>
 struct SameType {

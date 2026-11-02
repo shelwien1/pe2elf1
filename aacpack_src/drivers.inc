@@ -172,18 +172,35 @@ void mt_dec_counts(void* c, uint64_t& raw, uint64_t& packed, uint64_t& pos, uint
   frames = w.frames;
 }
 
+// -v's statistics of a run on threads, as one model's run says them: the
+// workers' (one each, threads of them), added up, after the threads ended
+// (dec: decompressing; the stream's bytes raw, the compressed stream's
+// packed)
+void mt_report(const RunStats* ws, int threads, bool dec, uint64_t raw, uint64_t packed, Progress& pr) {
+  RunStats s;
+  s.Init();
+  for (int i = 0; i < threads; i++) s.add(ws[i]);
+  s.report(dec, dec ? packed : raw, dec ? raw : packed, &pr);
+  say(&pr, "coroutine: %zu bytes of stack copied out at a yield, at most (room for %d)\n", s.depth,
+      (int)Coroutine::STKPAD);
+}
+
 // c -t N: the stream in parts on N threads (mt.inc), after aacpack's header
 int code_mt(const char* in_name, const Options& opt, filehandle0& f, Output& o) {
   Progress pr;
   AacArgs a = call_start(pr, opt, "enc", f, in_name);
-  a.verbose = false;  // (no statistics for each part)
+  Buf<RunStats> ws;  // (-v: the workers' statistics, one each)
+  ws.Init();
+  ws.resize((size_t)opt.threads);
+  for (int i = 0; i < opt.threads; i++) ws[i].Init();
+  a.stats = ws.data();
   MtEnc* e = coro_new<MtEnc>();
   MtProg mp = {&pr, e};
   pr.counts(mt_enc_counts, &mp);
   e->M1.Init(opt.part, mt_cap(opt.part), &a);
   if (mt_init_failed(e->M2.Init(opt.threads, kMtRing, &a, 1), opt.threads, pr)) {
     e->M1.Quit();  // (threads already started wait on input: they end with the process, e as they have it)
-    return call_end(1, f, o, false, pr, 0, 0, 0);
+    return call_end(1, f, o, false, pr, 0, 0, 0);  // (and so does ws, which they hold)
   }
   uint8_t head[kMtHead];
   mt_head(head, opt.threads, opt.part);
@@ -197,15 +214,15 @@ int code_mt(const char* in_name, const Options& opt, filehandle0& f, Output& o) 
   e->M1.Quit();
   pr.counts(nullptr, nullptr);
   coro_free(e);
-  r = call_end(r, f, o, false, pr, n.raw, n.packed, n.frames);
-  if (!r && opt.verbose)
-    fprintf(stderr,
-            "%" PRIu64 " -> %" PRIu64 " bytes (%.2f%%), %" PRIu64 " parts on %d threads: %" PRIu64
-            " cut before a unit that parses the same at a stream's start, %" PRIu64 " at a unit past the cap, %" PRIu64
-            " in bytes\n",
-            n.raw, n.packed, n.raw ? 100.0 * n.packed / n.raw : 0.0, n.parts, opt.threads, cuts[AacSplit::CUT_CLEAN],
-            cuts[AacSplit::CUT_CAP], cuts[AacSplit::CUT_BYTES]);
-  return r;
+  if (!r && opt.verbose) {
+    mt_report(ws.data(), opt.threads, false, n.raw, n.packed, pr);
+    say(&pr,
+        "%" PRIu64 " parts on %d threads: %" PRIu64 " cut before a unit that parses the same at a stream's start, %" PRIu64
+        " at a unit past the cap, %" PRIu64 " in bytes\n",
+        n.parts, opt.threads, cuts[AacSplit::CUT_CLEAN], cuts[AacSplit::CUT_CAP], cuts[AacSplit::CUT_BYTES]);
+  }
+  ws.Quit();
+  return call_end(r, f, o, false, pr, n.raw, n.packed, n.frames);
 }
 
 // c
@@ -233,22 +250,32 @@ int decode_mt(const char* in_name, const Options& opt, filehandle0& f, Output& o
   }
   Progress pr;
   AacArgs a = call_start(pr, opt, "dec", f, in_name);
-  a.verbose = false;  // (no statistics for each part)
+  Buf<RunStats> ws;  // (-v: the workers' statistics, one each)
+  ws.Init();
+  ws.resize((size_t)threads);
+  for (int i = 0; i < threads; i++) ws[i].Init();
+  a.stats = ws.data();
   a.part_max = mt_part_max((get_le(head + sizeof kMtMagic + 1, 4) + 1) << 10);  // (the part size in KB, rounded down)
   a.threads = threads;
   MtDec* d = coro_new<MtDec>();
   MtProg mp = {&pr, d};
   pr.counts(mt_dec_counts, &mp);
-  if (mt_init_failed(d->Init(threads, kMtRing, &a, 1), threads, pr)) return call_end(1, f, o, false, pr, 0, 0, 0);
+  if (mt_init_failed(d->Init(threads, kMtRing, &a, 1), threads, pr)) {
+    ws.Quit();
+    return call_end(1, f, o, false, pr, 0, 0, 0);
+  }
   int r = run_file(*d, f, o.g, [&](uint) { pr.poll(); }) || mt_failed(*d) || !mt_dealt(*d);
   if (r && !mt_failed(*d)) say_error(&pr, "aacpack: %s: a broken or truncated stream\n", in_name);
   MtCounts n = mt_counts(*d);
-  d->Quit();
+  d->Quit();  // (the threads joined)
   pr.counts(nullptr, nullptr);
   coro_free(d);
-  r = call_end(r, f, o, n.raw > 0, pr, n.raw, n.packed, n.frames);  // (what was decoded before an error)
-  if (!r && opt.verbose) fprintf(stderr, "%" PRIu64 " bytes, %" PRIu64 " parts on %d threads\n", n.raw, n.parts, threads);
-  return r;
+  if (!r && opt.verbose) {
+    mt_report(ws.data(), threads, true, n.raw, n.packed, pr);
+    say(&pr, "%" PRIu64 " bytes, %" PRIu64 " parts on %d threads\n", n.raw, n.parts, threads);
+  }
+  ws.Quit();
+  return call_end(r, f, o, n.raw > 0, pr, n.raw, n.packed, n.frames);  // (what was decoded before an error)
 }
 
 // d: the first bytes say which it is, a stream of one model (and its level

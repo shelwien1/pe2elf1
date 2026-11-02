@@ -28,6 +28,7 @@ test: aacpack
 	./test/roundtrip.sh ./aacpack $(FILES)
 	OPTS=-b ./test/roundtrip.sh ./aacpack $(FILES)
 	OPTS="-t 3 -c 64k" ./test/roundtrip.sh ./aacpack $(FILES)
+	for l in 7 5 3 1; do OPTS=-$$l ./test/roundtrip.sh ./aacpack $(FILES) || exit 1; done
 	./test/check.sh ./aacpack test/corpus/ff_lc128.aac
 
 clean:

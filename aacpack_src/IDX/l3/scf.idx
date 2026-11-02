@@ -1,0 +1,92 @@
+#  aacpack's scf family at level -3: scale_factor_data, the deltas.  kd 0 a
+#  scalefactor, 1 an intensity position, 2 a noise energy; sb the band, d1
+#  d2 the last two deltas of the kind in the channel (sq2), pd the delta at
+#  the band in the channel's last frame (1 + sq2; 0 not known), pa that
+#  frame's value at the band less this band's predecessor's (1 + sq2; 0 not
+#  known), cb the band's codebook, oc the CPE's other channel's delta at
+#  the band (1 + sq2; 0 none), ws long 0 short 1, gr the group, gd
+#  global_gain less the last frame's (1 + sq2; 0 not known), pv the band's
+#  predecessor less global_gain (sq2), fb the first of its kind in the frame
+#  (0 not), sk the bands skipped since the last of its kind (tc_qlog), mu
+#  the band's ms_used (1 L/R, 2 M/S; 0 none), pw short windows' group before
+#  at the band less the value so far (1 + sq2; 0 none), dm the digest's
+#  prediction (0 none).
+#  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates MOD/l9 from
+#  this file and family.inc.
+
+Prefix H3_scf
+Debug 1
+Const 0
+
+Index a
+ a_kd: kd, 1!11
+ a_oc: oc, 1!1111111111111
+ a_pa: pa, 1!11111
+ a_mu: mu, 1!11
+
+Index b
+ b_kd: kd, 1!11
+ b_sb: sb, 1!11111111111111111111111111111111111111111111111111
+ b_ws: ws, 1!1
+
+Index c
+ c_kd: kd, 1!11
+ c_pa: pa, 1!11111111111111
+ c_d1: d1, 1!11111
+
+Index d
+ d_kd: kd, 1!11
+ d_pv: pv, 1!1111111111
+ d_sb: sb, 1!11111
+ d_sk: sk, 1!111111111111111
+
+Index e
+ e_kd: kd, 1!11
+ e_d1: d1, 1!1111111111111
+ e_d2: d2, 1!11111
+! e_dm: dm, 1!111111111111111111111111111111111111111111111111111111111111
+
+Index h
+ h_kd: kd, 1!11
+ h_pa: pa, 1!111111111111
+ h_pd: pd, 1!11111
+
+Index m
+ m_kd: kd, 1!11
+ m_mu: mu, 1!11
+
+Index t
+ t_kd: kd, 1!11
+
+Index g
+ g_d1: d1, 1!11111
+
+Number rA, 1, 0!11111111
+Number rB, 1, 0!11111111
+Number rC, 1, 0!10000010
+Number rD, 1, 0!11111111
+Number rE, 1, 0!11111111
+Number rH, 1, 0!11111101
+Number rT, 1, 0!10000000
+Number rG, 1, 0!01000000
+Number lr, 1, 0!01111
+Number mwA, 1, 0!00010000
+Number mwB, 1, 0!00000100
+Number mwC, 1, 0!10000000
+Number mwD, 1, 0!00110011
+Number mwE, 1, 0!00011011
+Number mwH, 1, 0!00111110
+Number mwT, 1, 0!00000000
+Number mwG, 1, 0!00000000
+Number mt, 1, 0!010
+Number mb, 1, 0!00001000
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
+#  direct, one that does not is hashed into 2^h rows.  Frozen.
+! Number hA, 1, 0!11000
+! Number hB, 1, 0!11000
+! Number hC, 1, 0!11000
+! Number hD, 1, 0!11000
+! Number hE, 1, 0!11000
+! Number hH, 1, 0!11000
+! Number hM, 1, 0!11000
+! Number hT, 1, 0!11000

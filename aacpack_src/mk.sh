@@ -60,7 +60,7 @@ CXXFLAGS=${CXXFLAGS:--O2}
 PARCH=${PARCH--march=x86-64-v3 -ffp-contract=off}  # as the Makefile's
 FAMS=$(sed -n 's/^#define AAC_FAMS(X) //p' famvars.inc | sed 's/X(\([a-z0-9]*\))/\1/g')  # (the model's list)
 [ -n "$FAMS" ] || { echo "mk.sh: no AAC_FAMS in famvars.inc" >&2; exit 1; }
-LEVELS="9"
+LEVELS="9 7 5 3 1"
 
 cleanup() {
   for l in $LEVELS; do

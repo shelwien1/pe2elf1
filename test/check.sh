@@ -4,7 +4,7 @@
 # junk in it or a container that is not looked for, strict mode, and
 # compressed streams that are broken (d must fail on them; what it restored
 # before it found out stays as the output), on one thread and on threads
-# (-t). Exit status 1 if any fails.
+# (-t), and at a level the build has not. Exit status 1 if any fails.
 BIN=$1
 F=$2
 tmp=${TMPDIR:-/tmp}/aacpack.$$
@@ -74,5 +74,10 @@ dbad "threads: d of a compressed stream with bytes after it"
 "$BIN" c -t 65 "$F" "$tmp.apk" 2> /dev/null
 r=$?
 if [ $r -eq 2 ]; then ok "threads: -t takes 1 to 64"; else bad "threads: -t takes 1 to 64 (status $r)"; fi
+# the levels: a stream on threads at each (the parts' streams say it), and one the build has not
+rt "levels: -1 on threads" "$F" -1 -t 2 -c 64k
+"$BIN" c -2 "$F" "$tmp.apk" 2> /dev/null
+r=$?
+if [ $r -eq 2 ]; then ok "levels: c fails on a level the build has not"; else bad "levels: c fails on a level the build has not (status $r)"; fi
 rm -f "$tmp.in" "$tmp.apk" "$tmp.out" "$tmp.bad"
 exit $fail

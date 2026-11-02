@@ -1,0 +1,76 @@
+#  aacpack's hdr family at level -1: a field of the AAC syntax (every value
+#  of the walk the other families do not code), as the difference to its
+#  last value at the same index in the same channel: tag the element (E_*,
+#  elems.inc), fld its index in a run (a band, an envelope: up to 63), p1
+#  p2 the last two differences there (sq2), p1r the last value's low byte,
+#  pos the values in a row the element has had (tc_qlog), nb its bits (0 a
+#  count), ws the channel's window sequence (4 none), ch the channel
+#  element's channel (2 none), pb the element's value at the index before
+#  where that was the value before (1 + its low 3 bits; 0 not), hx a
+#  context of the field's own (window_shape, headers now and then, SBR
+#  dt/df flags; 0 the rest), ml the fields in a row equal to their last
+#  value (1 + tc_qlog), dm the digest's prediction (0 none).  Fields of n
+#  bits skip the decisions their range leaves no choice in;
+#  ics_info's grouping bits go one at a time.
+#  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates MOD/l9 from
+#  this file and family.inc.
+
+Prefix H1_hdr
+Debug 1
+Const 0
+
+Index a
+ a_tag: tag, &11111111
+ a_fld: fld, 1!1111111
+ a_p1: p1, 1!111111
+! a_dm: dm, 1!111111111111111111111111111111111111111111111111111111111111
+
+Index b
+ b_tag: tag, &11111111
+ b_ch: ch, 1!11
+ b_fld: fld, 1!111111111111111
+ b_hx: hx, 1!11111111111111111111
+
+Index c
+ c_tag: tag, &11111111
+ c_pb: pb, 1!11111111
+ c_p1r: p1r, &00000111
+
+Index d
+ d_tag: tag, &11111111
+ d_ws: ws, 1!1111
+ d_fld: fld, 1!1111111
+ d_ml: ml, 1!1111111
+
+Index m
+ m_tag: tag, &11111111
+
+Index t
+ t_tag: tag, &11111111
+
+Index g
+ g_p1: p1, 1!111111
+
+Number rA, 1, 0!11111111
+Number rB, 1, 0!11111111
+Number rC, 1, 0!10001001
+Number rD, 1, 0!11111111
+Number rT, 1, 0!10000000
+Number rG, 1, 0!01000000
+Number lr, 1, 0!01111
+Number mwA, 1, 0!00011011
+Number mwB, 1, 0!00001000
+Number mwC, 1, 0!00000001
+Number mwD, 1, 0!00010000
+Number mwT, 1, 0!00000000
+Number mwG, 1, 0!00000000
+Number mt, 1, 0!010
+Number mb, 1, 0!00001000
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
+#  direct, one that does not is hashed into 2^h rows.  Frozen.
+! Number hA, 1, 0!11000
+! Number hB, 1, 0!11000
+! Number hC, 1, 0!11000
+! Number hD, 1, 0!11000
+! Number hM, 1, 0!11000
+! Number hT, 1, 0!11000

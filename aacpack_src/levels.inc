@@ -15,7 +15,31 @@
 #else
 #define AACPACK_L9(X)
 #endif
-#define AACPACK_LEVELS(X) AACPACK_L9(X)
+#if AACPACK_LV(7)
+#include "lv7.inc"
+#define AACPACK_L7(X) X(7)
+#else
+#define AACPACK_L7(X)
+#endif
+#if AACPACK_LV(5)
+#include "lv5.inc"
+#define AACPACK_L5(X) X(5)
+#else
+#define AACPACK_L5(X)
+#endif
+#if AACPACK_LV(3)
+#include "lv3.inc"
+#define AACPACK_L3(X) X(3)
+#else
+#define AACPACK_L3(X)
+#endif
+#if AACPACK_LV(1)
+#include "lv1.inc"
+#define AACPACK_L1(X) X(1)
+#else
+#define AACPACK_L1(X)
+#endif
+#define AACPACK_LEVELS(X) AACPACK_L9(X) AACPACK_L7(X) AACPACK_L5(X) AACPACK_L3(X) AACPACK_L1(X)
 #define AACPACK_FIRST(n) n,
 const int kLevels[] = {AACPACK_LEVELS(AACPACK_FIRST)};
 #undef AACPACK_FIRST

@@ -121,20 +121,20 @@ uint drive(C& c, In in, Out out, Show show) {
   }
 }
 
-// -v's statistics of a run of codec c, at its end (kYieldStats), after the
-// progress line pr
+// -v's statistics of a run of codec c, at its end (kYieldStats)
 template <class LV, int f_CS>
-void show_stats(AacpCoro<0, LV, f_CS>& c, Progress* pr) {
-  c.st->st.report(pr);
-  cm_report(c, c.n_in, c.n_out, pr);
+void run_stats(AacpCoro<0, LV, f_CS>& c, RunStats& s) {
+  s.st = c.st->st;
+  s.coder(c);
 }
 template <class LV, int f_CS>
-void show_stats(AacpCoro<1, LV, f_CS>& c, Progress* pr) {
-  say(pr, "%" PRIu64 " units\n", c.st->units);
+void run_stats(AacpCoro<1, LV, f_CS>& c, RunStats& s) {
+  s.units = c.st->units;
 }
 // What a driver shows of what its codec c, of a run with args a, tells
 // (code, each yield), after the progress line pr: the stream, a message,
-// the statistics (-v); and as the run ends, its error
+// the statistics (-v: said, or on threads added to the worker's, a.stats);
+// and as the run ends, its error
 template <int f_DEC, class LV, int f_CS>
 void show_told(AacpCoro<f_DEC, LV, f_CS>& c, uint code, Progress* pr, const AacArgs& a) {
   if (code == kYieldAudio) {
@@ -144,7 +144,13 @@ void show_told(AacpCoro<f_DEC, LV, f_CS>& c, uint code, Progress* pr, const AacA
   } else if (code == kYieldFail && c.status == 1) {
     say_error(pr, "%s", c.note);
   } else if (code == kYieldStats && a.verbose) {
-    show_stats(c, pr);
+    RunStats s;
+    s.Init();
+    run_stats(c, s);
+    if (a.stats)
+      a.stats->add(s);
+    else
+      s.report(f_DEC != 0, c.n_in, c.n_out, pr);
   }
 }
 

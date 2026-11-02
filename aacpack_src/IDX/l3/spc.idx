@@ -1,0 +1,103 @@
+#  aacpack's spc family at level -3: the magnitude of a spectral value,
+#  in unary (the node j: whether it is above j).  cb its codebook, sb its
+#  band, bp its place in the band, a1 a2 the magnitudes before it in the
+#  window (up to 15), a3 the sum of the four before (tc_qlog), pf the
+#  magnitude at its place in the channel's last frame (1 +; 0 not known), pn
+#  the sum about it there (1 + tc_qlog), ex that scaled by the change of
+#  the band's scalefactor (1 + tc_qlog of 4x), oc the CPE's other channel's
+#  at the place (1 +; 0 none), ms ms_used (2 none), ws long 0 short 1, tp the
+#  place in the codebook's tuple, nz the nonzero ones so far in the band (up
+#  to 7), ds the band's scalefactor less the last frame's (1 + sq2; 0 not
+#  known), qn the band's magnitudes so far (tc_qlog of the sum), av the
+#  place's magnitude averaged over the frames (of short windows over the
+#  windows) as the band's scalefactor now quantizes it (1 + tc_qlog of 16
+#  times it; 0 not known), xp a guess at the magnitude from av, the last
+#  frame's (scaled), the two before it and the other channel's (1 +
+#  tc_qlog of a weighted sum), pl the places left in the band (tc_qlog),
+#  sc the section so far (0 a magnitude above the next smaller codebook's
+#  largest came; else 1 + the places left, tc_qlog), zr the zeros right
+#  before the place (tc_qlog), dg the digest's prediction (once right 16
+#  times; 0 none).  a1 a2 of the band before are in this
+#  band's scale.  The mixers also see the codebook's own
+#  probability of each decision, blended with a Laplace's of xp's mean.
+#  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates MOD/l9 from
+#  this file and family.inc.
+
+Prefix H3_spc
+Debug 1
+Const 0
+
+Index a
+ a_cb: cb, 1!11111111111
+ a_a1: a1, 1!111111111111111
+ a_a2: a2, 1!1111111
+
+Index b
+ b_cb: cb, 1!11111111111
+ b_sb: sb, 1!11111111111111111111111111111111111111111111111111
+ b_ws: ws, 1!1
+
+Index c
+ c_cb: cb, 1!11111111111
+ c_pn: pn, 1!111111111111
+ c_pf: pf, 1!11111
+
+Index d
+ d_cb: cb, 1!11111111111
+ d_pf: pf, 1!111111111111111
+ d_a1: a1, 1!1111111
+! d_dg: dg, 1!111111111111111111111111111111111111111111111111111111111111111111111
+
+Index e
+ e_cb: cb, 1!11111111111
+ e_av: av, 1!1111111111111111111111111111111
+ e_a1: a1, 1!111
+
+Index h
+ h_cb: cb, 1!11111111111
+ h_a3: a3, 1!1111111111
+ h_nz: nz, 1!1111111
+ h_bp: bp, 1!111
+ h_pl: pl, 1!1111
+ h_zr: zr, 1!1111111111111
+
+Index m
+ m_cb: cb, 1!11111111111
+ m_ws: ws, 1!1
+ m_av: av, 1!0001000100010001000100010001
+
+Index t
+
+Index g
+
+Number rA, 1, 0!11111110
+Number rB, 1, 0!11111110
+Number rC, 1, 0!11101010
+Number rD, 1, 0!11111111
+Number rE, 1, 0!10011111
+Number rH, 1, 0!10111101
+Number lr, 1, 0!01111
+Number mwA, 1, 0!00001000
+Number mwB, 1, 0!00000010
+Number mwC, 1, 0!00000000
+Number mwD, 1, 0!10000011
+Number mwE, 1, 0!00000100
+Number mwH, 1, 0!00100000
+Number mb, 1, 0!00100000
+#  Frozen: what a family of bit() decisions never reads: no mantissa, no
+#  hint, no signs.
+! Number rT, 1, 0!00000000
+! Number mwT, 1, 0!00000000
+! Number mt, 1, 0!000
+! Number rG, 1, 0!00000000
+! Number mwG, 1, 0!00000000
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
+#  direct, one that does not is hashed into 2^h rows.  Frozen.
+! Number hA, 1, 0!11000
+! Number hB, 1, 0!11000
+! Number hC, 1, 0!11000
+! Number hD, 1, 0!11000
+! Number hE, 1, 0!11000
+! Number hH, 1, 0!11000
+! Number hM, 1, 0!11000
+! Number hT, 1, 0!11000
