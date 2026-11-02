@@ -74,7 +74,7 @@ families (The model, below): what each decision is predicted from.
 
 | level | each family | tuning set | `c` | `d` | memory |
 |---|---|---:|---:|---:|---:|
-| `-9` | ten counters, three mixers and a final one, two APMs | 80.26% | 0.28 MB/s | 0.29 MB/s | 49 MB |
+| `-9` | ten counters, three mixers and a final one, two APMs | 79.85% | 0.28 MB/s | 0.29 MB/s | 49 MB |
 | `-7` | the same without the APMs | 79.97% | 0.29 MB/s | 0.30 MB/s | 42 MB |
 | `-5` | ten counters, one mixer | 80.28% | 0.35 MB/s | 0.36 MB/s | 39 MB |
 | `-3` | six counters, one mixer | 80.43% | 0.41 MB/s | 0.47 MB/s | 36 MB |
@@ -91,7 +91,7 @@ process had. On the other sets of streams:
 
 | level | dev | Results' | FATE | test corpus |
 |---|---:|---:|---:|---:|
-| `-9` | 85.50% | 87.63% | 53.47% | 77.06% |
+| `-9` | 85.31% | 87.47% | 53.18% | 76.73% |
 | `-7` | 85.36% | 87.49% | 53.34% | 76.90% |
 | `-5` | 85.59% | 87.73% | 53.66% | 77.25% |
 | `-3` | 85.68% | 87.77% | 54.09% | 77.61% |
@@ -105,13 +105,13 @@ other variants, 21.3 MB; FATE's 39, 5.0 MB; `test/corpus`, 2.9 MB.)
 -3 and -1 keep the six and four counters of -5 whose loss, each switched
 off in turn in the tuning set's dumps, costs each family most (the most
 costly first: the counter A that stands for the APM's refinement where
-there is none). Each of them then started from -9's parameters and was
-tuned for a pass (`IDX/ftune.py`, against the dumps of the tuning set),
-and each family's new parameters were kept where they made the streams
-outside the tuning set (dev, FATE, the test corpus; in both orders)
-smaller: so every family's but `sec`'s, whose tuning, in the default
-order, cost more with `-b` than it saved, and but `esc`'s below -7. -9 is
-as it was. The speed is the families': the rest of the time, the
+there is none). Each level, -9 too, then started from -9's parameters
+(version 8's) and was tuned for a pass (`IDX/ftune.py`, against the dumps
+of the tuning set), and each family's new parameters were kept where they
+made the streams outside the tuning set (dev, FATE, the test corpus; in
+both orders) smaller: so every family's but `sec`'s, whose tuning, in the
+default order, cost more with `-b` than it saved, and but `esc`'s below
+-7. The speed is the families': the rest of the time, the
 codebook selection, the spectra's contexts, the match model and the
 walks, every level spends alike, so that -1 is only twice as fast as -9.
 

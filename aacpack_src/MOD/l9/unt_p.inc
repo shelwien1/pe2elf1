@@ -19,39 +19,32 @@ void H9_unt_make( const H_unt_v & D, tcx & X ) {
   H_unt_VARS(H_LOCAL)
 
   a = 0;
-  a = a*16 + H9_unt_a_fld[__min(15,__max(0,(fld)-(1-1)))];
-  a = a*8 + H9_unt_a_ctx[__min(7,__max(0,(ctx)-(1-1)))];
+  a = a*4 + H9_unt_a_fld[__min(15,__max(0,(fld)-(1-1)))];
 
   b = 0;
-  b = b*16 + H9_unt_b_fld[__min(15,__max(0,(fld)-(1-1)))];
-  b = b*7 + H9_unt_b_p1[__min(6,__max(0,(p1)-(1-1)))];
+  b = b*4 + H9_unt_b_fld[__min(15,__max(0,(fld)-(1-1)))];
 
   c = 0;
-  c = c*16 + H9_unt_c_fld[__min(15,__max(0,(fld)-(1-1)))];
-  c = c*16 + H9_unt_c_ctx[__min(15,__max(0,(ctx)-(1-1)))];
+  c = c*3 + (((fld)>1+(1-1))+((fld)>4+(1-1)));
 
   d = 0;
-  d = d*16 + H9_unt_d_fld[__min(15,__max(0,(fld)-(1-1)))];
+  d = d*3 + (((fld)>1+(1-1))+((fld)>4+(1-1)));
 
   e = 0;
-  e = e*16 + H9_unt_e_fld[__min(15,__max(0,(fld)-(1-1)))];
-  e = e*4 + H9_unt_e_p2[__min(3,__max(0,(p2)-(1-1)))];
+  e = e*4 + H9_unt_e_fld[__min(15,__max(0,(fld)-(1-1)))];
 
   h = 0;
-  h = h*16 + H9_unt_h_fld[__min(15,__max(0,(fld)-(1-1)))];
-  h = h*4 + H9_unt_h_p1[__min(3,__max(0,(p1)-(1-1)))];
-  h = h*4 + H9_unt_h_p2[__min(3,__max(0,(p2)-(1-1)))];
+  h = h*3 + (((fld)>1+(1-1))+((fld)>4+(1-1)));
 
   i = 0;
   i = i*16 + H9_unt_i_ctx[__min(15,__max(0,(ctx)-(1-1)))];
   i = i*7 + H9_unt_i_p1[__min(6,__max(0,(p1)-(1-1)))];
 
   j = 0;
-  j = j*16 + H9_unt_j_fld[__min(15,__max(0,(fld)-(1-1)))];
-  j = j*11 + H9_unt_j_p1[__min(10,__max(0,(p1)-(1-1)))];
+  j = j*3 + (((fld)>1+(1-1))+((fld)>3+(1-1)));
 
   k = 0;
-  k = k*16 + H9_unt_k_fld[__min(15,__max(0,(fld)-(1-1)))];
+  k = k*3 + (((fld)>1+(1-1))+((fld)>4+(1-1)));
   k = k*8 + H9_unt_k_ctx[__min(7,__max(0,(ctx)-(1-1)))];
   k = k*3 + (((p1)>0+(1-1))+((p1)>1+(1-1)));
 
@@ -60,16 +53,16 @@ void H9_unt_make( const H_unt_v & D, tcx & X ) {
   l = l*4 + H9_unt_l_p2[__min(3,__max(0,(p2)-(1-1)))];
 
   s = 0;
-  s = s*16 + H9_unt_s_fld[__min(15,__max(0,(fld)-(1-1)))];
+  s = s*4 + H9_unt_s_fld[__min(15,__max(0,(fld)-(1-1)))];
 
   f = 0;
-  f = f*16 + H9_unt_f_fld[__min(15,__max(0,(fld)-(1-1)))];
+  f = f*4 + H9_unt_f_fld[__min(15,__max(0,(fld)-(1-1)))];
 
   m = 0;
-  m = m*16 + H9_unt_m_fld[__min(15,__max(0,(fld)-(1-1)))];
+  m = m*4 + H9_unt_m_fld[__min(15,__max(0,(fld)-(1-1)))];
 
   w = 0;
-  w = w*8 + H9_unt_w_fld[__min(7,__max(0,(fld)-(1-1)))];
+  w = w*4 + H9_unt_w_fld[__min(7,__max(0,(fld)-(1-1)))];
 
   t = 0;
   t = t*16 + H9_unt_t_fld[__min(15,__max(0,(fld)-(1-1)))];

@@ -13,32 +13,32 @@ Const 0
 
 Index a
  a_cb: cb, 1!11111111111
- a_oc: oc, 1!11
+ a_oc: oc, 1!10
  a_ms: ms, 1!11
 
 Index b
- b_s1: s1, 1!11
+ b_s1: s1, 1!00
  b_s2: s2, 1!11
  b_cb: cb, 1!11111111111
 
 Index c
- c_pf: pf, 1!11
- c_mg: mg, 1!1111111
+ c_pf: pf, 1!10
+ c_mg: mg, 1!0001000
 
 Index d
  d_oc: oc, 1!11
  d_mg: mg, 1!1111
 
 Index e
- e_kq: kq, 1!1111111111111111111
+ e_kq: kq, 1!0011111111111000111
 
 Index h
  h_cb: cb, 1!11111111111
  h_mg: mg, 1!1111111
- h_kq: kq, 1!111111
+ h_kq: kq, 1!101100
 
 Index i
- i_oc: oc, 1!11
+ i_oc: oc, 1!00
  i_s1: s1, 1!11
  i_pf: pf, 1!11
 
@@ -48,12 +48,12 @@ Index j
 
 Index k
  k_s1: s1, 1!11
- k_mg: mg, 1!1111111
+ k_mg: mg, 1!0000010
 
 Index l
  l_oc: oc, 1!11
  l_ms: ms, 1!11
- l_pf: pf, 1!11
+ l_pf: pf, 1!01
 
 Index s
  s_cb: cb, 1!11111111111
@@ -72,32 +72,32 @@ Index t
 Index g
 
 Number rA, 1, 0!11111110
-Number rB, 1, 0!10011111
+Number rB, 1, 0!11111111
 Number rC, 1, 0!11111111
 Number rD, 1, 0!11111111
-Number rE, 1, 0!11111111
-Number rH, 1, 0!10111101
-Number rI, 1, 0!11101010
-Number rJ, 1, 0!11111110
-Number rK, 1, 0!11111111
-Number rL, 1, 0!11111110
+Number rE, 1, 0!11101111
+Number rH, 1, 0!00010100
+Number rI, 1, 0!11111111
+Number rJ, 1, 0!10000000
+Number rK, 1, 0!00110101
+Number rL, 1, 0!11101111
 Number rS1, 1, 0!10000
-Number rS2, 1, 0!00110
-Number lr, 1, 0!01111
-Number mwA, 1, 0!00001000
-Number mwB, 1, 0!00000100
-Number mwC, 1, 0!10000011
-Number mwD, 1, 0!00011111
-Number mwE, 1, 0!00010100
-Number mwH, 1, 0!00100000
-Number mwI, 1, 0!00000000
-Number mwJ, 1, 0!00001110
-Number mwK, 1, 0!00011101
-Number mwL, 1, 0!00000010
-Number bw, 1, 0!01100
-Number qs, 1, 3!0010111
-Number qf, 1, 3!0010001
-Number mb, 1, 0!00100000
+Number rS2, 1, 0!00101
+Number lr, 1, 0!11101
+Number mwA, 1, 0!00000001
+Number mwB, 1, 0!00000110
+Number mwC, 1, 0!10100011
+Number mwD, 1, 0!00000000
+Number mwE, 1, 0!01100001
+Number mwH, 1, 0!11111101
+Number mwI, 1, 0!00001000
+Number mwJ, 1, 0!10100011
+Number mwK, 1, 0!00000001
+Number mwL, 1, 0!00100000
+Number bw, 1, 0!01111
+Number qs, 1, 3!1000001
+Number qf, 1, 3!1110100
+Number mb, 1, 0!00100001
 #  Frozen: what a family of bit() decisions never reads: no mantissa, no
 #  hint, no signs.
 ! Number rT, 1, 0!00000000
