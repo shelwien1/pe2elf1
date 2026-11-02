@@ -26,8 +26,12 @@ struct filehandle0 {
 
   FILE* f;
 
+  //  Whether a stream is open: f!=0, and not f's address cut to an int,
+  //  which is 0 for a FILE that sits at a multiple of 4 GB -- as a
+  //  ThreadSanitizer build's first fopen() does, so that the open that
+  //  worked read as one that failed.
   operator int( void ) {
-    return ((byte*)f)-((byte*)0);
+    return f!=0;
   }
 
   //  Set when f is stdin or stdout rather than a file this struct opened.
@@ -41,7 +45,7 @@ struct filehandle0 {
     borrowed = 0;
     if( strcmp(name,"-")==0 ) { f = stdin; borrowed = 1; FILE_API_SETBIN(f); } else
     f = fopen( name, "rb" );
-    return ((byte*)f)-((byte*)0);
+    return f!=0;
   }
 
   template< typename CHAR >
@@ -49,7 +53,7 @@ struct filehandle0 {
     borrowed = 0;
     if( strcmp(name,"-")==0 ) { f = stdout; borrowed = 1; FILE_API_SETBIN(f); } else
     f = fopen( name, "wb" ); 
-    return ((byte*)f)-((byte*)0);
+    return f!=0;
   }
 
   int close( void ) {
