@@ -43,7 +43,7 @@ rsp): with clang, `-O0` and `-fno-omit-frame-pointer` builds crash.
 | `-p` | what the stream is and the progress line, even when stderr is not a terminal |
 | `-s` | `c`: fail where a frame would be stored as its bytes or kept partly as bits, instead of storing it so |
 | `-b` | `c`: code each channel's section data (codebooks and section lengths) before its spectra, as the bitstream has it, instead of after them (below; `d` reads which from the stream) |
-| `-9` | `c`: the model's level (there is one, `-9`; `d` reads it from the stream) |
+| `-9` `-7` `-5` `-3` `-1` | `c`: the model's level, from the strongest (`-9`, the default) to the fastest (Levels, below); `d` reads it from the stream |
 | `-t N` | `c`: compress on N threads, 1 to 64 (default 1): the stream in parts, each coded by a model of its own (Threads, below); `d` runs as many threads as the stream says |
 | `-c N` | `c -t`: the size of a part, at least: N MB, 1 to 1024, or N KB with a `k` (`-c 256k`); 1 MB by default |
 | `-adts` `-latm` `-adif` | `c`: look for this container alone (default: whatever comes) |
@@ -66,6 +66,30 @@ of all the workers together; what the audio is, once):
     [enc] 9612410 > 8782155  100.0%  25860 frames  done in 19.07s  10.68M RAM at most
 
 Exit status: 0 done, 1 an error (said on stderr), 2 a bad command line.
+
+## Levels
+
+As m4vpack's (and h264p's), the levels differ in the shape of the model's
+families (The model, below): what each decision is predicted from.
+
+| level | each family | size | `c` | `d` | memory |
+|---|---|---:|---:|---:|---:|
+| `-9` | ten counters, three mixers and a final one, two APMs | 87.99% | 0.25 MB/s | 0.27 MB/s | 49 MB |
+| `-7` | the same without the APMs | +0.01% | 0.29 MB/s | 0.32 MB/s | 47 MB |
+| `-5` | ten counters, one mixer | +0.48% | 0.34 MB/s | 0.40 MB/s | 46 MB |
+| `-3` | six counters, one mixer | +0.36% | 0.41 MB/s | 0.48 MB/s | 41 MB |
+| `-1` | four counters, keeping their probabilities stretched, one mixer | +0.56% | 0.52 MB/s | 0.59 MB/s | 35 MB |
+
+(size: of a 2.3 MB stream, three of Results' joined: fdkaac LC 128 and
+HE-AAC 48, ffmpeg LC 128; `c` and `d`: MB of it a second on one thread of
+a 2.1 GHz Xeon; memory: the most the process had.) -7 is -9 without the
+APMs; -5 keeps -9's ten counters with one mixer; -3 and -1 keep the six
+and four counters of -5 whose loss, each switched off in turn in its
+tuning set's dumps, costs each family most (the most costly first: the
+counter A that stands for the APM's refinement where there is none). The
+new levels have -9's parameters for now; the speed is the families'
+time, the rest (the codebook selection, the spectra's contexts, the
+match model, the walks) every level spends alike.
 
 ## What it compresses
 
@@ -272,18 +296,21 @@ most about 8 times that: twice the cap) as it codes it.
 
 ### Threads
 
-`c -t N` compresses on N threads, 2 to 64, as h264p does
-(`aacpack_src/mt.inc`). A splitter (`aacsplit.inc`, on the main thread,
-with the cut points of aacsplit) cuts the stream into parts, and MTwrap
-(`MTwrap_v3`, h264p's: mtwrap's, but that it waits only on events; its
-parts mode, `MTwrap.md` section 11 in mtwrap) deals them in turn to N
-workers. A worker reads a part whole and compresses it with a model of
-its own, an `AacpCoro` run as a coroutine of the worker's, then the next
-part dealt to it. Decompressing, a worker decompresses its parts so, and
-MTwrap takes them from the workers in turn, as they were dealt. `d` knows
-such a stream by its magic and runs as many threads as it says. Without
-`-t`, or with `-t 1`, `c` writes the stream of one model in one thread,
-byte for byte as before.
+`c -t N` compresses on N threads, 2 to 64, as m4vpack does
+(`aacpack_src/mt.inc`, after m4vpack's and h264p's). A splitter
+(`aacsplit.inc`, on the main thread, with the cut points of aacsplit)
+cuts the stream into parts, and MTwrap (`MTwrap_v3`, h264p's: mtwrap's,
+but that it waits only on events; its parts mode, `MTwrap.md` section 11
+in mtwrap) deals them in turn to N workers. A worker reads a part whole
+and compresses it with a model of its own, an `AacpCoro` run as a
+coroutine of the worker's, at the level of `c` (each part's stream says
+it), writing the compressed part as it comes; then the next part dealt to
+it. Decompressing, a worker decompresses its parts so, reading each from
+its input where it is, and MTwrap takes them from the workers in turn, as
+they were dealt. `d` knows such a stream by its magic and runs as many
+threads as it says. Without `-t`, or with `-t 1`, `c` writes the stream
+of one model in one thread. With `-v`, the statistics of the parts add up
+to those of one model's run (the parts' restarts show in them).
 
 A part ends before the first unit at least `-c` (1 MB by default) after
 its start that parses the same at the start of a stream as in the middle
@@ -308,18 +335,28 @@ The stream: the magic `aacpm`, the version byte, the count of threads (a
 byte) and the part size (KB, 32 bits: `d` takes a part's record that says
 more than `c` makes at that size for broken), then MTwrap's container of
 the workers' streams, a block of up to 64 KB at a time, tagged with its
-worker. A worker's stream is a record for each of its parts (its size,
-the size of the part that was compressed, with the header put in, and
+worker. A worker's stream is a record of 40 bytes for each of its parts
+(the size of the part that was compressed, with the header put in, and
 where that header is, the part's place in the stream, worker w's k-th of
 N: w + kN, 64 bits each, little-endian, and the CRC-32 of these), then
 the part compressed, a stream of one model with its own header (`aacpk`,
-above); and at its end a record that says it ends. A worker's record goes
-out as its part is done, so that `d`, which takes the parts in turn, finds
-each within about a round of parts of the others. So `d` finds a part
+above), which ends where its decoder stops reading (the range coder's
+decoder reads exactly the bytes its coder wrote): the next record follows
+it. A record of size 0 ends the worker's stream. So `d` finds a part
 lost, added or moved, a stream cut where a part ends, and a record
-changed, which the parts' own CRCs do not see. MTwrap puts the workers'
-blocks in as they come, so two runs of `c -t` can write other bytes; `d`
-restores the same input from any of them.
+changed, which the parts' own CRCs do not see. A worker writes its stream
+as it codes it, 64 KB at a time, and MTwrap puts each block in its
+container as it comes: so the container has the workers' streams
+interleaved as they were made, and `d`, whose workers decode about as
+fast as `c`'s coded, finds each worker's input about when it needs it.
+(Version 8 wrote a part's stream when the part was done, behind its
+size: `d` then read the container about a part at a time while the other
+workers waited for theirs, as m4vpack's format 5 did.) Two runs of `c -t`
+can write other bytes, since MTwrap puts the blocks in as they come; `d`
+restores the same input from any of them. `-DMTWRAP_DBG` builds with
+m4vpack's `MTwrap_v3_dbg/` instead, which writes what each thread did,
+and when, to `dbg.txt` (`python3 MTwrap_v3_dbg/mtdbg.py dbg.txt` shows
+where the time went).
 
 The 15 streams of Results concatenated (19031262 bytes), on 4 cores of
 a 2.1 GHz Xeon VM (whose times vary by up to a fifth from run to run):
@@ -433,7 +470,8 @@ bytes, pipes, a stream cut short or with junk in it, strict mode, and
 compressed streams cut short, with a byte changed, with bytes after them,
 or not compressed streams at all; and on threads, pipes, compressed
 streams cut short, with a byte changed or with bytes after them, and `-t`
-out of its range.
+out of its range; a stream at `-1` on threads, and `c` at a level the
+build has not. The round trips run at `-7`, `-5`, `-3` and `-1` too.
 
 `test/fuzz.py BIN WORKDIR SEED N files...` mutates inputs (random bytes,
 cuts, bit flips, junk, splices, repeats, broken frame headers) and checks
@@ -480,23 +518,30 @@ too.
 | `cbsel.inc` | codebook selection: the section data fdk-aac, ffmpeg and faac would choose for a group's values |
 | `cmstream.inc` | the compressed stream: the scanner, units parsed, verified and coded |
 | `err.inc` `mem.inc` `cmbase.inc` `rc.inc` `cm.inc` `mapping.inc` `fam.inc` `famcfg.inc` `rcio.inc` | h264p's: errors, memory, the range coder, counters, mixers, APMs, the families and their configuration, the coroutine's I/O |
-| `levels.inc` `lv9.inc` `IDX/` `MOD/` | the model's level, its families' IDX sources and the code generated from them |
+| `levels.inc` `lv9.inc` `lv7.inc` `lv5.inc` `lv3.inc` `lv1.inc` `IDX/` `MOD/` | the levels: each its families' shape, IDX sources (`IDX/l<L>/`) and the code generated from them (`MOD/l<L>/`) |
 | `cli.inc` `coro.inc` `drivers.inc` | files, progress, coroutines, the drivers of `c` and `d` |
 | `aacsplit.inc` `mt.inc` | `-t`: the splitter (the stream in parts at units that parse the same at a stream's start, aacsplit's cut points; ADIF's and AUS1's header put in), the workers and their records, the stream on threads |
 | `MTwrap_v3/` | h264p's MTwrap (mtwrap's, but that it waits only on events): coroutines on threads, its parts mode |
+| `MTwrap_v3_dbg/` | m4vpack's: the same with statistics of what the threads did (`-DMTWRAP_DBG`) |
 | `Lib3/` | the library mtwrap is built on, its files as h264p has them: the stack-copying coroutines, `CoroutinePair` (two of them chained), the file API, `win_shim.inc` (the Windows API MTwrap uses, on POSIX) |
 
 ### Tuning
 
-`aacpack_src/mk.sh` regenerates `MOD/` from `IDX/` (`./mk.sh mod`), builds a
-tuning binary whose parameters `IDX/opt.pl` hill-climbs in place
-(`./mk.sh tuning 9`), and, faster, dumps each family's decisions while
-compressing streams (`./mk.sh dump 9 DIR streams...`) so that
-`IDX/ftune.py` can tune one family at a time by replaying them
-(`./mk.sh famtune 9` builds the replayer). `./mk.sh check 9` checks that
-the tuning, shipping and plain C++ builds code the same bytes. The
-parameters are part of the format: a stream compressed by a patched
-binary decodes only with that binary.
+`aacpack_src/mk.sh` regenerates `MOD/` from `IDX/` (`./mk.sh mod`, every
+level), builds a tuning binary of a level whose parameters `IDX/opt.pl`
+hill-climbs in place (`./mk.sh tuning L`), and, faster, dumps each
+family's decisions while compressing streams (`./mk.sh dump 9 DIR
+streams...`) so that `IDX/ftune.py` can tune one family at a time by
+replaying them (`./mk.sh famtune L` builds a level's replayer). The dumps
+do not depend on the level (every level computes the same variables and
+decisions, only its families code them differently), so one set of dumps
+serves every level. `./mk.sh check L` checks that the tuning, shipping and
+plain C++ builds of a level code the same bytes. The parameters are part
+of the format: a stream compressed by a patched binary decodes only with
+that binary. In the levels below -9, the lines of the match model's
+digest contexts (`dm`, `dg`) are frozen (`!`): a tuning set without
+repeated material would take them out. `-DAACPACK_ONLY=L` builds level -L
+alone, in a fifth of the time.
 
 ## License
 

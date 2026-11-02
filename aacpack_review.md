@@ -407,8 +407,8 @@ Each confirmed by grep over the sources, MOD/ and the tools.
 | id | what | done |
 |---|---|---|
 | C12 | the hint of `tc_fam` (h264p's): `hint` is always -1 in aacpack. That leaves the members `hint`, `hs`, `Z`, `ZM`, `bz`, `bn` and the mixer `mxm` without use. So are the hint's mixer input (always 0) and the hint states in `code()`, `bitm()` and the dump records. Then famcfg's `lrm`, `mbm`, `hN`, `kN`, IDX/l9/family.inc's tables WM and WMC, and the 5-fold rows of WF and WFC. Last, every family's index `n` and its knobs `lrm`, `mbm`, `hN`. | removed, with famtune's replay of it. Coding unchanged: the input was 0, so its weight never moved, and the final mixer read row `node * 5 + 0` |
-| C13 | `cm_cnt2s` (h264p's -1 counters) and the overloads that chose between it and `cm_cnt2`: `tc_sp`, `tc_sq`, `tc_st4`, `tc_upper`, `tc_put_sq`, `tc_x20`; `NoRef` | removed |
-| C14 | the shapes no family has: 2-8 counters, one mixer, no APMs | removed; famcfg checks the shape. Kept: APM 2's `bw == 16` path, since `bw` is tunable |
+| C13 | `cm_cnt2s` (h264p's -1 counters) and the overloads that chose between it and `cm_cnt2`: `tc_sp`, `tc_sq`, `tc_st4`, `tc_upper`, `tc_put_sq`, `tc_x20`; `NoRef` | removed; back with the levels (below) |
+| C14 | the shapes no family has: 2-8 counters, one mixer, no APMs | removed; famcfg checks the shape. Kept: APM 2's `bw == 16` path, since `bw` is tunable. Back with the levels (below) |
 | C14 | `ErrTrap::code` and `err_jump()`'s code; `tc_sq(i32)`; `CM_PREFETCHW`; `Buf::back`, `Buf::same`; `masking::map` | removed |
 | C14 | `rc_Byte()`'s second renormalization never runs: range is at least 2^12 before any | kept: it guards the coder's invariant for one predicted branch |
 | M3 = C14, E21 | famcfg's `Uses` and `FC_USE`, read by nothing; `idx2inc.pl`'s comment said the model computes only those | removed; the comment corrected. The generated `_USES` lists stay: the format has them (IDX-FORMAT.md §14) |
@@ -584,3 +584,11 @@ again: what D15 and D16 took out of `common.inc`, `file_api.inc` and
 workers, and `run_file()` sets `f_quit` at the input's end again (D18):
 MTwrap's coder reads it, and without it `d` of a stream on threads waits
 for input for ever.
+
+## After the review: levels
+
+Levels -7, -5, -3 and -1 (README, Levels) have the shapes C14 took out:
+no APMs, one mixer, six or four counters; and -1's counters keep their
+probabilities stretched (C13's `cm_cnt2s`). So both are back, as they
+were before the review, but for the hint (C12), which no level of
+aacpack has. -9 codes as it did.
