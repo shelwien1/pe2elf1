@@ -3,9 +3,9 @@ template <int f_DEC> u32 oc_model<f_DEC>::mode(u32 md, u32 nmd) {
   md = (u32)auxc(F_MODE, (i32)tc_prevmode, ENC ? (i64)md : 0, 0);
   FATAL_UNLESS(md < nmd, "coded stream: audio names mode %" PRIu64, (u64)md);
   tc_prevmode = md;
-  hist.tc_blk = vb->cur->blockflag[md];
-  oc_nextW = hist.tc_blk;
-  if(!hist.tc_blk)
+  hist->tc_blk = vb->cur->blockflag[md];
+  oc_nextW = hist->tc_blk;
+  if(!hist->tc_blk)
     tc_prevW = 0;
   return md;
 }

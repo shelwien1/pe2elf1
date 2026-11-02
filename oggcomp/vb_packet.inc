@@ -2,8 +2,9 @@ constexpr u32 VB_MAXBLK = 8192;
 constexpr u32 VB_MAXDIM = 0xFFFF;
 constexpr sz VB_YSMAX = (sz)VB_MAXCH * VB_MAXPOST;
 constexpr sz VB_CSMAX = (sz)VB_MAXCH * (VB_MAXBLK / 2 + VB_MAXDIM);
-static u32 vb_ys[VB_YSMAX];
-static u32 vb_cs[VB_CSMAX];
+static OC_TLS u32 vb_ys[VB_YSMAX];
+static OC_TLS u32 *vb_cs;  // VB_CSMAX of them, mapped (oc_api.inc)
+
 constexpr u32 QUANT[4] = {256, 128, 86, 64};
 //  The sink is a type parameter so that the same parser runs against the
 //  model (io) and against null_sink, which is how the encoder finds out
@@ -161,9 +162,9 @@ template <class S> struct io_t {
     VB_UNLESS(k->dim > 0, "vorbis: codebook %" PRIu64 " has dimension 0", (u64)j);
     VB_UNLESS(k->ent <= ((u32)1 << 20), "vorbis: codebook %" PRIu64 " has %" PRIu64 " entries", (u64)j, (u64)k->ent);
     VB_UNLESS(ogc_ilog(k->dim) + ogc_ilog(k->ent) <= 24, "vorbis: codebook %" PRIu64 " size %" PRIu64 " x %" PRIu64 " is unsupported", (u64)j, (u64)k->dim, (u64)k->ent);
-    k->len = vb_ar.take<u8>(k->ent);
+    k->len = vb_ar->take<u8>(k->ent);
     memset(k->len, 0, k->ent);
-    k->code = vb_ar.take<u32>(k->ent);
+    k->code = vb_ar->take<u32>(k->ent);
     lengths(k);
     k->words();
     k->tree();
@@ -177,7 +178,7 @@ template <class S> struct io_t {
     vb = fld("cb.valbits", 4, 4) + 1;
     fld("cb.sequence", 1, 1);
     k->nv = lk1(k->ent, k->dim);
-    k->mult = vb_ar.take<u32>(k->nv ? k->nv : 1);
+    k->mult = vb_ar->take<u32>(k->nv ? k->nv : 1);
     Fi(k->nv, k->mult[i] = fld("cb.mult", (int)vb, (int)vb));
     VB_UNLESS(k->nv > 0, "vorbis: codebook %" PRIu64 " has an empty lookup table", (u64)j);
     k->grid();
@@ -341,12 +342,12 @@ template <class S> struct io_t {
   //  fields are wanted and its bits are not.  Returns 1 then, with the
   //  packet whole; 0 when it is to be coded.
   int seen(int which) {
-    u32 same = enc ? oc_hc.find(b, len) : 0;
+    u32 same = enc ? oc_hc->find(b, len) : 0;
     same = val(which == 1 ? "cmt.same" : "setup.same", same, OC_HCMAX + 1);
     if(!same)
       return 0;
     if(!enc)
-      memcpy(b, oc_hc.get(same - 1, len), len);
+      memcpy(b, oc_hc->get(same - 1, len), len);
     if(which == 2) {
       null_sink ns;
       io_t<null_sink> z(v, ns, b, len);
@@ -377,7 +378,7 @@ template <class S> struct io_t {
     tail();
     //  Whole now on both sides, and this is the real pass, not a dry one.
     if(which && !S::DRY)
-      oc_hc.add(b, len);
+      oc_hc->add(b, len);
   }
   int fl_get(vb_floor *f, u32 *y) {
     vb_setup *s = v.cur;

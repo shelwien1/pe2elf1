@@ -466,7 +466,8 @@ struct tc_ptabs {
   }
   void build(const vb_setup &su);
 };
-static tc_ptabs tcp;
+static OC_TLS tc_ptabs *tcp;
+
 void tc_ptabs::build(const vb_setup &su) {
   i32 v[TCP_SYMMAX];
   u32 i, j;

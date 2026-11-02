@@ -20,7 +20,7 @@ struct vb_arena {
   }
   void reset() { used = 0; }
 };
-static vb_arena vb_ar;
+static OC_TLS vb_arena *vb_ar;
 struct vb_book {
   u32 dim, ent;
   u8 look;
@@ -53,7 +53,7 @@ struct vb_book {
     i32 t;
     Fi(ent, if(len[i]) u++);
     cap = u + 2;
-    nd = vb_ar.take<i32>(2 * cap);
+    nd = vb_ar->take<i32>(2 * cap);
     memset(nd, 0, 2 * cap * sizeof *nd);
     Fi(
         ent, if(!len[i]) continue; idx = 0; for(k = len[i]; k > 1; k--) {
@@ -74,7 +74,7 @@ struct vb_book {
     Fi(nv, if(mult[i] > mx) mx = mult[i]);
     base = mx + 1;
     off = base >> 1;
-    inv = vb_ar.take<u32>(base);
+    inv = vb_ar->take<u32>(base);
     Fi(base, inv[i] = (u32)-1);
     Fi(nv, VB_UNLESS(inv[mult[i]] == (u32)-1, "vorbis: duplicate codebook multiplicand %" PRIu64, (u64)mult[i]); inv[mult[i]] = i);
     np = 1;
@@ -154,17 +154,18 @@ struct vb_setup {
     Fi(nmp, Fj(mp[i].sub, VB_UNLESS(mp[i].fl[j] < nfl, "vorbis: submap floor %d", mp[i].fl[j]); VB_UNLESS(mp[i].rs[j] < nrs, "vorbis: submap residue %d", mp[i].rs[j])));
   }
 };
-static vb_setup vb_su;
+static OC_TLS vb_setup vb_su;
+
 struct vb_ctx {
   vb_info i;
   vb_setup *cur;
   void init() {
     memset(&i, 0, sizeof i);
     cur = nullptr;
-    vb_ar.reset();
+    vb_ar->reset();
   }
   void link() {
     cur = nullptr;
-    vb_ar.reset();
+    vb_ar->reset();
   }
 };

@@ -3,12 +3,17 @@ constexpr int OGG_MAXSEG = 255;
 constexpr sz MAXPAY = (sz)OGG_MAXSEG * OGG_MAXSEG;
 constexpr sz PAGE_MAX = OGG_HDRMIN + OGG_MAXSEG + MAXPAY;
 static u32 CRC[256];
-static void crcinit(void) {
+static int crcfill(void) {
   u32 i, j, c;
-  if(CRC[1])
-    return;
   Fi(256, c = i << 24; Fj(8, c = (c & (u32)0x80000000) ? (c << 1) ^ (u32)0x04C11DB7 : c << 1); CRC[i] = c);
+  return 1;
 }
+//  Filled once, by whichever thread comes first, before any reads it.
+static void crcinit(void) {
+  static const int filled = crcfill();
+  (void)filled;
+}
+
 static u32 crcrun(u32 c, const u8 *d, sz n) {
   sz i;
   Fi(n, c = (c << 8) ^ CRC[((c >> 24) ^ d[i]) & 0xFF]);

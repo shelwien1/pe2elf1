@@ -47,9 +47,10 @@ template <int f_DEC> static void oc_next(oc_coro<f_DEC> &co, const char *in) {
   co.t.vb = nullptr;
   tc_zero(&vb_su, sizeof vb_su, 0);
   tc_zero(vb_ys, sizeof vb_ys, 0);
-  tc_zero(vb_cs, sizeof vb_cs, 0);
-  tc_zero(in_win, sizeof in_win, 0);
-  tc_zero(jb, sizeof jb, 0);
+  tc_zero(vb_cs, VB_CSMAX * sizeof *vb_cs, 1);
+  tc_zero(in_win, IN_WIN, 1);
+  tc_zero(jb, JB_MAX, 1);
+
   tc_zero(pgbuf, sizeof pgbuf, 0);
   tc_zero(body, sizeof body, 0);
   rc_over = 0;

@@ -65,11 +65,11 @@ static i32 vd_unfold(i32 val, i32 pred, i32 quant) {
 }
 template <int f_DEC> void oc_model<f_DEC>::floor(u32 k, u32 fno, const vb_floor *f, u32 *y, int &used) {
   const oc_floor *fd = oc_fl + fno;
-  sz row = (sz)hist.tc_blk * hist.tc_nchan + k;
-  i16 *hp = hist.fl_hist + row * VB_MAXPOST;
-  i16 *hy = hist.fl_yhist + row * VB_MAXPOST;
-  int mine = hist.fl_who[row] == (i32)fno;
-  int hasn = k && tc_used[k - 1] && hist.fl_who[row - 1] == (i32)oc_fno[k - 1];
+  sz row = (sz)hist->tc_blk * hist->tc_nchan + k;
+  i16 *hp = hist->fl_hist + row * VB_MAXPOST;
+  i16 *hy = hist->fl_yhist + row * VB_MAXPOST;
+  int mine = hist->fl_who[row] == (i32)fno;
+  int hasn = k && tc_used[k - 1] && hist->fl_who[row - 1] == (i32)oc_fno[k - 1];
   u32 u, p;
   i32 quant = (i32)f->quant;
   oc_fno[k] = (u8)fno;
@@ -96,7 +96,7 @@ template <int f_DEC> void oc_model<f_DEC>::floor(u32 k, u32 fno, const vb_floor 
       i32 hiroom, lowroom;
       u32 c = fd->pcl[p];
       if(!fd->ppos[p])
-        fam_flr.pc.start(tcp.flr[fno][c].ok ? &tcp.flr[fno][c] : nullptr);
+        fam_flr.pc.start(tcp->flr[fno][c].ok ? &tcp->flr[fno][c] : nullptr);
       pred = vd_render((i32)f->x[l], (i32)f->x[h], fl_fy[l], fl_fy[h], (i32)f->x[p]);
       if(pred < 0)
         pred = 0;
@@ -112,7 +112,7 @@ template <int f_DEC> void oc_model<f_DEC>::floor(u32 k, u32 fno, const vb_floor 
       if(ep < 0)
         ep = 0;
     }
-    tc_make_flr((int)fno, (int)fd->rnk[p], tc_qlog(mine ? hp[p] : 0), tc_qlog(mine ? hy[p] : 0), p < 2, (int)hist.tc_blk, tc_qlog(o1), tc_qlog(pred), tc_sq(od), (int)k, tc_qlog(room), hl, tc_qlog(lov), tc_qlog(hiv), fam_flr.pc.axis(), tc_qlog(ep), v);
+    tc_make_flr((int)fno, (int)fd->rnk[p], tc_qlog(mine ? hp[p] : 0), tc_qlog(mine ? hy[p] : 0), p < 2, (int)hist->tc_blk, tc_qlog(o1), tc_qlog(pred), tc_sq(od), (int)k, tc_qlog(room), hl, tc_qlog(lov), tc_qlog(hiv), fam_flr.pc.axis(), tc_qlog(ep), v);
     yy = ENC ? fl_cur[p] : 0;
     yy = fam_flr.codes(v, yy, 0);
     FATAL_UNLESS(yy >= 0 && yy < 32768, "coded stream: floor post %" PRId64, yy);
@@ -130,5 +130,5 @@ template <int f_DEC> void oc_model<f_DEC>::floor(u32 k, u32 fno, const vb_floor 
     hp[p] = fl_cur[p];
     hy[p] = fl_fy[p];
   }
-  hist.fl_who[row] = (i32)fno;
+  hist->fl_who[row] = (i32)fno;
 }

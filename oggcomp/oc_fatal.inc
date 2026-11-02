@@ -42,14 +42,19 @@ static inline void ogc_set_prog(const char *argv0) {
 //  API instead of ending the process: the two hooks below, set for the
 //  length of an API call and clear otherwise, so that a program's own
 //  FATAL -- a file it cannot open -- still exits as it always did.
-static char *ogc_msg_dst;
-static sz ogc_msg_cap;
-static void (*ogc_die_hook)(int code);
+static OC_TLS char *ogc_msg_dst;
+static OC_TLS sz ogc_msg_cap;
+static OC_TLS void (*ogc_die_hook)(int code);
+//  Called before a message goes to stderr: whatever is on the line it
+//  would land on -- a progress line -- ends first (oc_progress.inc).
+static void (*ogc_msg_hook)(void);
 static void message(const char *fmt, va_list ap) {
   if(ogc_msg_dst) {
     vsnprintf(ogc_msg_dst, ogc_msg_cap, fmt, ap);
     return;
   }
+  if(ogc_msg_hook)
+    ogc_msg_hook();
   fputs(ogc_prog, stderr);
   fputs(": ", stderr);
   vfprintf(stderr, fmt, ap);
@@ -132,7 +137,8 @@ void ogc_fatal_unless(int cond, const char *fmt, ...) {
 //  coded as bytes instead -- so it unwinds to page_fits() and stops there.
 //  Outside a dry run these are FATAL, as they were.
 struct vb_dry_refusal {};
-static int vb_dry;
+static OC_TLS int vb_dry;
+
 NORETURN void vb_refuse(const char *fmt, ...) OGC_PRINTF(1, 2);
 void vb_refuse_unless(int cond, const char *fmt, ...) OGC_PRINTF(2, 3);
 #define VB_REFUSE vb_refuse

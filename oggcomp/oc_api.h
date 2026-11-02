@@ -1,12 +1,12 @@
 /*  oggcomp as a library: the model behind `oggcomp c` and `oggcomp d`, one
-    instance at a time, driven by whoever holds the files.
+    instance per thread, driven by whoever holds the files.
 
     The same functions come two ways -- linked into a program, and exported
     by a loadable library, oggcompN.dll on Windows and oggcompN.so elsewhere,
     each built from an IDX model of its own -- and a program that takes them
     as a table of pointers (oc_load.inc) runs either without knowing which.
 
-      p = oggcomp_Alloc();                          one instance per library
+      p = oggcomp_Alloc();                          one instance per thread
       oggcomp_Init(p, OC_ENCODE, 0, "in.ogg");      or OC_DECODE; flags below
       oggcomp_addout(p, obuf, sizeof obuf);         somewhere for output to go
       for(;;) {
@@ -28,7 +28,14 @@
     on the same instance for the next stream; with OC_F_SOLID the model is
     kept from the one before, which is what `oggdet -S` does, and without
     it the model starts over, so that every stream codes as `oggcomp c`
-    would code it alone.  */
+    would code it alone.
+
+    The model's state is the thread's, so a thread has one instance, and
+    the thread that allocated it is the one that drives it; threads that
+    each allocate one run at once, each with tables of its own, which is
+    how `oggcomp c -t N` runs.  oggcomp_Free() gives back what the thread
+    mapped for it -- the tables, the history, the buffers -- so the next
+    Alloc on that thread starts from nothing.  */
 #ifndef OC_API_H
 #define OC_API_H
 #ifdef _WIN32
@@ -61,7 +68,8 @@ extern "C" {
 /*  4 and above: an error, 4 + the exit status `oggcomp` would have given
     (5 a stream it refuses, 7 something the system said, 8 internal), and
     oggcomp_Error() says what.  */
-OC_API void *OC_CALL oggcomp_Alloc(void);          /*  0 when the library's instance is out already  */
+OC_API void *OC_CALL oggcomp_Alloc(void);          /*  0 when the thread's instance is out already, or no memory  */
+
 OC_API void OC_CALL oggcomp_Free(void *p);
 OC_API int OC_CALL oggcomp_Init(void *p, int dir, int flags, const char *name); /*  0, or an error as Loop gives them; name is for messages  */
 OC_API int OC_CALL oggcomp_Loop(void *p);

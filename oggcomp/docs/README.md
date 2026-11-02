@@ -224,10 +224,13 @@ the library on their own; a `-N` given there must agree.
 
 The library is the shipping form of whatever `IDX/` it was built from,
 `oggcomp_dll.cpp` compiled with `-shared` and the API exported, its own
-366 MB of tables, its own coroutine stacks, and one instance: the model is
-static, so `oggcomp_Alloc()` hands out the instance once and `0` while it
-is out, and two models loaded at once are two libraries and twice the
-tables.  What goes through it is the coded stream without its seven-byte
+366 MB of tables, its own coroutine stacks, and one instance per thread:
+the model's state is the thread's, so `oggcomp_Alloc()` hands a thread its
+instance once and `0` while it is out, and that thread drives it.  Threads
+that each take one run at once, each with tables of its own -- which is
+how `-t` runs -- and two models loaded at once are two libraries and twice
+the tables.
+  What goes through it is the coded stream without its seven-byte
 file header, which the caller writes and checks with
 `oggcomp_StreamVersion()` and the model's number.  `OC_F_SOLID` on `Init`
 keeps the model from the run before on that instance, which is `-S`; a

@@ -78,4 +78,5 @@ struct oc_hist {
     memset(this, 0, offsetof(oc_hist, pool));
   }
 };
-static oc_hist hist;
+static OC_TLS oc_hist *hist;
+

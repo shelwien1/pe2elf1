@@ -53,6 +53,15 @@ template <class T, int N> constexpr uint DIM(T (&)[N]) { return N; }
 #if defined(__x86_64) || defined(_M_X64)
 #define X64
 #endif
+//  The model's state is the thread's: each thread that runs the model --
+//  the main thread, or each worker of a run on threads (oc_mt.inc) -- has
+//  its own, as a process had before.  What was a static object is a
+//  thread_local one, or for the largest, a thread_local pointer to a
+//  mapping that the thread's first oggcomp_Init() makes (oc_api.inc),
+//  demand-zero as the static objects were.  What only reads, once it is
+//  filled -- the CRC table, the squash tables, the parameters -- is shared.
+#define OC_TLS thread_local
+
 #if (defined(__GNUC__) || defined(__clang__)) && !defined(OGC_NO_ATTRS)
 #define INLINE inline __attribute__((__always_inline__))
 #define NOINLINE __attribute__((__noinline__))

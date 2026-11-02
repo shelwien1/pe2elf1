@@ -1,6 +1,6 @@
 constexpr sz IN_LOW = (sz)20 << 20;
 constexpr sz IN_WIN = (sz)32 << 20;
-static u8 in_win[IN_WIN];
+static OC_TLS u8 *in_win;  // IN_WIN bytes, mapped (oc_api.inc)
 //  The input, as a window over the coroutine's input pin: what the walker
 //  reads is in_win, refilled from the pin when it runs low.
 struct source {
@@ -110,7 +110,7 @@ struct source {
   }
 };
 constexpr sz JB_MAX = MAXPAY * (OGG_MAXSEG + 1);
-static u8 jb[JB_MAX];
+static OC_TLS u8 *jb;  // JB_MAX bytes, mapped (oc_api.inc)
 
 //  A group of pages: what the v3 stream calls a link.  It starts at a page
 //  and runs to the next beginning-of-stream page that arrives after the
@@ -169,8 +169,9 @@ static sz page_start(const u8 *b, sz n, int eof) {
   return lim;
 }
 
-static u8 pgbuf[PAGE_MAX];
-static u8 body[MAXPAY];
+static OC_TLS u8 pgbuf[PAGE_MAX];
+static OC_TLS u8 body[MAXPAY];
+
 //  Where the decoder's bytes go -- the coroutine's output pin -- and the
 //  CRC of everything that went.
 struct out_sink {
@@ -254,7 +255,7 @@ template <class M> struct og_packer {
   int page_fits(const ogg_page &p, sz got) {
     null_sink ns;
     vb_ctx vsave = v;
-    sz usave = vb_ar.used;
+    sz usave = vb_ar->used;
     int cont = g.cont, w = g.w;
     sz spill = g.spill;
     int ok = 0;
@@ -267,7 +268,7 @@ template <class M> struct og_packer {
     }
     vb_dry = 0;
     v = vsave;
-    vb_ar.used = usave;
+    vb_ar->used = usave;
     return ok;
   }
 

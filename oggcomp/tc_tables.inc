@@ -64,7 +64,7 @@ constexpr sz tc_rows(long long vol, int h) { return vol <= (1LL << tc_hbits(h)) 
 constexpr sz TC_STATIC_MAX = (sz)256 << 20;
 template <class T, bool S = (sizeof(T) <= TC_STATIC_MAX)> struct tc_home;
 template <class T> struct tc_home<T, true> {
-  static T obj;
+  static OC_TLS T obj;
   static T *get() { return &obj; }
   static void zero() { tc_zero(&obj, sizeof(T), 0); }
 };
@@ -72,7 +72,7 @@ template <class T> struct tc_home<T, false> {
   static T *get() { return (T *)tc_map(sizeof(T)); }
   static void zero() {}
 };
-template <class T> T tc_home<T, true>::obj;
+template <class T> OC_TLS T tc_home<T, true>::obj;
 #ifndef TC_MEMCAP
 #define TC_MEMCAP ((u64)64 << 30)
 #endif
@@ -121,7 +121,7 @@ struct oc_tables {
 #endif
   }
 };
-static oc_tables tabs;
+static OC_TLS oc_tables tabs;
 struct tc_dv {
   int rno, pass, band, col, vpos, q1, q2, q1s, q2s, t1, t1s, t2, n1, w1, p0, p0s, pn, cls, zrun, blk, bkq, ax, mg, pq, sq, ps, chn, crun, cm, x1, x1s, pmx, psm, prm;
 };
@@ -136,6 +136,7 @@ struct tcx {
 #include "MOD/tsvcomp-sgn_p.inc"
 enum { STG_HDR, STG_PAGE, STG_AUD, STG_FLOOR, STG_CLASS, STG_DIGIT, STG_RAW, STG_N };
 static const char *const TC_STAGE[STG_N] = {"headers", "pages", "packets", "floor", "class", "digits", "raw"};
-static double tc_bits[STG_N];
-static u64 tc_syms[STG_N];
-static int tc_stage, tc_verbose;
+static OC_TLS double tc_bits[STG_N];
+static OC_TLS u64 tc_syms[STG_N];
+static OC_TLS int tc_stage, tc_verbose;
+

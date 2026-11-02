@@ -1,8 +1,9 @@
-//  oc_api.h, implemented over oc_coro: the one instance a library holds --
-//  one, because the model is static and there is one of it -- with its
-//  encoder and decoder coroutines and what FATAL becomes under the API.
-//  Included by the programs, whose model 0 this is, and by oggcomp_dll.cpp,
-//  where it is the library.
+//  oc_api.h, implemented over oc_coro: the instance a thread holds -- one
+//  per thread, because the model's state is the thread's (OC_TLS,
+//  oc_platform.inc) and a thread has one of it -- with its encoder and
+//  decoder coroutines and what FATAL becomes under the API.  Included by
+//  the programs, whose model 0 this is, and by oggcomp_dll.cpp, where it is
+//  the library.
 #include "oc_api.h"
 struct oc_api_unwind {};
 //  `used` is per direction: what a solid Init keeps is the direction's
@@ -17,9 +18,44 @@ struct oc_inst {
   oc_coro<0> enc;
   oc_coro<1> dec;
 };
-static oc_inst oc_the;
-static oc_inst *oc_cur;
-static int oc_api_ready;
+static OC_TLS oc_inst *oc_the;  // the thread's instance, mapped by its first Alloc
+static OC_TLS oc_inst *oc_cur;
+static OC_TLS int oc_api_ready;  // the thread's tables are mapped and wired
+//  The thread's largest state, mapped at its first Init -- in the try of
+//  Init, so a mapping refused is an error the API returns -- and given
+//  back, with the tables and the instance, when it frees the instance.
+template <class T> static void oc_block(T *&p) {
+  if(!p)
+    p = new(oc_map_block(sizeof(T))) T;
+}
+template <class T> static void oc_block(T *&p, sz n) {
+  if(!p)
+    p = (T *)oc_map_block(n * sizeof(T));
+}
+static void oc_blocks_map(void) {
+  oc_block(hist);
+  oc_block(tcp);
+  oc_block(vb_ar);
+  oc_block(oc_hc);
+  oc_block(vb_cs, VB_CSMAX);
+  oc_block(in_win, IN_WIN);
+  oc_block(jb, JB_MAX);
+}
+template <class T> static void oc_unblock(T *&p, sz n) {
+  oc_unmap_block(p, n);
+  p = nullptr;
+}
+static void oc_blocks_unmap(void) {
+  oc_unblock(hist, sizeof *hist);
+  oc_unblock(tcp, sizeof *tcp);
+  oc_unblock(vb_ar, sizeof *vb_ar);
+  oc_unblock(oc_hc, sizeof *oc_hc);
+  oc_unblock(vb_cs, VB_CSMAX * sizeof *vb_cs);
+  oc_unblock(in_win, IN_WIN);
+  oc_unblock(jb, JB_MAX);
+  tc_unmap_all();
+  oc_api_ready = 0;
+}
 //  FATAL under the API: no exit and no file to drop.  Inside the coroutine
 //  the error is yielded and never returned from -- a call after it finds
 //  the same yield -- and outside it, in Init, it unwinds to the API
@@ -45,24 +81,42 @@ static void oc_api_leave(void) {
 }
 extern "C" {
 OC_API void *OC_CALL oggcomp_Alloc(void) {
-  if(oc_the.busy)
+  if(oc_the && oc_the->busy)
     return nullptr;
-  oc_the.busy = 1;
-  oc_the.err = 0;
-  oc_the.used[0] = oc_the.used[1] = 0;
-  oc_the.in_coro = 0;
-  oc_the.co = nullptr;
-  oc_the.msg[0] = 0;
-  return &oc_the;
+  if(!oc_the) {
+    void *m;
+#ifdef _WIN32
+    m = VirtualAlloc(nullptr, sizeof(oc_inst), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+#else
+    m = mmap(nullptr, sizeof(oc_inst), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+    if(m == MAP_FAILED)
+      m = nullptr;
+#endif
+    if(!m)
+      return nullptr;
+    oc_the = new(m) oc_inst;
+  }
+  oc_the->busy = 1;
+  oc_the->err = 0;
+  oc_the->used[0] = oc_the->used[1] = 0;
+  oc_the->in_coro = 0;
+  oc_the->co = nullptr;
+  oc_the->msg[0] = 0;
+  return oc_the;
 }
+//  The instance back, and with it everything the thread mapped for the
+//  model: its next Alloc and Init start from nothing, as a new process.
 OC_API void OC_CALL oggcomp_Free(void *pp) {
-  if(pp == &oc_the)
-    oc_the.busy = 0;
+  if(!pp || pp != oc_the)
+    return;
+  oc_blocks_unmap();
+  oc_unmap_block(oc_the, sizeof(oc_inst));
+  oc_the = nullptr;
 }
 OC_API int OC_CALL oggcomp_Init(void *pp, int dir, int flags, const char *name) {
   oc_inst *p = (oc_inst *)pp;
   int keep;
-  if(p != &oc_the || !p->busy)
+  if(!p || p != oc_the || !p->busy)
     return 8;
   p->err = 0;
   p->msg[0] = 0;
@@ -76,6 +130,7 @@ OC_API int OC_CALL oggcomp_Init(void *pp, int dir, int flags, const char *name) 
   oc_api_enter(p);
   try {
     if(!oc_api_ready) {
+      oc_blocks_map();
       p->enc.t.init();
       oc_api_ready = 1;
     }
@@ -104,7 +159,7 @@ OC_API int OC_CALL oggcomp_Init(void *pp, int dir, int flags, const char *name) 
 OC_API int OC_CALL oggcomp_Loop(void *pp) {
   oc_inst *p = (oc_inst *)pp;
   uint r;
-  if(p != &oc_the || !p->co)
+  if(!p || p != oc_the || !p->co)
     return 8;
   //  Nowhere for the output to go.  The coroutine's pin writes a byte and
   //  then asks whether it has run out, which is right for a buffer and a
@@ -124,11 +179,11 @@ OC_API int OC_CALL oggcomp_Loop(void *pp) {
 }
 OC_API int OC_CALL oggcomp_getoutlen(void *pp) {
   oc_inst *p = (oc_inst *)pp;
-  return p == &oc_the && p->co ? (int)p->co->getoutsize() : 0;
+  return p && p == oc_the && p->co ? (int)p->co->getoutsize() : 0;
 }
 OC_API void OC_CALL oggcomp_addinp(void *pp, void *buf, int size) {
   oc_inst *p = (oc_inst *)pp;
-  if(p != &oc_the || !p->co)
+  if(!p || p != oc_the || !p->co)
     return;
   if(size <= 0) {
     p->co->f_quit = 1;
@@ -138,12 +193,12 @@ OC_API void OC_CALL oggcomp_addinp(void *pp, void *buf, int size) {
 }
 OC_API void OC_CALL oggcomp_addout(void *pp, void *buf, int size) {
   oc_inst *p = (oc_inst *)pp;
-  if(p == &oc_the && p->co && size > 0)
+  if(p && p == oc_the && p->co && size > 0)
     p->co->addout((byte *)buf, (uint)size);
 }
 OC_API const char *OC_CALL oggcomp_Error(void *pp) {
   oc_inst *p = (oc_inst *)pp;
-  return p == &oc_the ? p->msg : "";
+  return p && p == oc_the ? p->msg : "";
 }
 OC_API int OC_CALL oggcomp_StreamVersion(void) { return OC_VER; }
 OC_API unsigned long long OC_CALL oggcomp_TableBytes(void) { return oc_api_ready ? (unsigned long long)tabs.bytes() : 0; }
@@ -156,7 +211,7 @@ OC_API void OC_CALL oggcomp_Report(void *pp) {
   oc_inst *p = (oc_inst *)pp;
   int i;
   double tot = 0;
-  if(p != &oc_the)
+  if(!p || p != oc_the)
     return;
   for(i = 0; i < STG_N; i++)
     tot += tc_bits[i];

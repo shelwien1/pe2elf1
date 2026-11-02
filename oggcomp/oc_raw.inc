@@ -14,12 +14,13 @@
 constexpr int RAW_RATE0 = 250;
 constexpr int RAW_RATE1 = 60;
 constexpr int RAW_LR = 24;
-static cm_cnt raw_o0[256];
-static cm_cnt raw_o1[256][256];
-static i32 raw_w[256 * 3];
-static u8 raw_wc[256];
-static cm_mix<3> raw_mx;
-static u32 raw_prev;
+static OC_TLS cm_cnt raw_o0[256];
+static OC_TLS cm_cnt raw_o1[256][256];
+static OC_TLS i32 raw_w[256 * 3];
+static OC_TLS u8 raw_wc[256];
+static OC_TLS cm_mix<3> raw_mx;
+static OC_TLS u32 raw_prev;
+
 static INLINE void oc_raw_zero(void) {
   memset(raw_o0, 0, sizeof raw_o0);
   memset(raw_o1, 0, sizeof raw_o1);

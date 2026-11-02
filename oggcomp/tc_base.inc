@@ -26,7 +26,7 @@ static INLINE i32 tc_qlog(i64 x) {
 }
 static INLINE i32 tc_abs(i32 v) { return v < 0 ? -v : v; }
 static INLINE int tc_clamp(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
-static int tc_huge;
+static OC_TLS int tc_huge;
 //  Every mapping tc_map made, so that tc_zero can give the tables their
 //  initial state back: a frontend that codes several streams in one run
 //  (oggdet) wants each to see the model a fresh process would.
@@ -35,8 +35,8 @@ struct tc_mapped {
   sz n;
 };
 constexpr int TC_MAPMAX = 128;
-static tc_mapped tc_maps[TC_MAPMAX];
-static int tc_nmaps;
+static OC_TLS tc_mapped tc_maps[TC_MAPMAX];
+static OC_TLS int tc_nmaps;
 static void *tc_map(sz n) {
   void *p;
 #ifdef _WIN32
@@ -61,7 +61,47 @@ static void *tc_map(sz n) {
   tc_nmaps++;
   return p;
 }
+//  Every table tc_map made for this thread, given back: the next Init maps
+//  them again, as a fresh process would (oggcomp_Free).
+static void tc_unmap_all(void) {
+  int i;
+  for(i = 0; i < tc_nmaps; i++) {
+#ifdef _WIN32
+    VirtualFree(tc_maps[i].p, 0, MEM_RELEASE);
+#else
+    munmap(tc_maps[i].p, tc_maps[i].n);
+#endif
+  }
+  tc_nmaps = 0;
+}
+//  A block of the thread's state (OC_TLS, oc_platform.inc): mapped
+//  demand-zero, as a static object is, and kept until the thread gives
+//  its instance back.  Not one of tc_maps, which the tables' reset zeroes.
+static void *oc_map_block(sz n) {
+  void *p;
+#ifdef _WIN32
+  p = VirtualAlloc(nullptr, n, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+#else
+  p = mmap(nullptr, n, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+  if(p == MAP_FAILED)
+    p = nullptr;
+#endif
+  if(!p)
+    FATAL_CODE(OGC_EXIT_IO, "cannot map %" PRIu64 " MB for the model's state", (u64)(n >> 20));
+  return p;
+}
+static void oc_unmap_block(void *p, sz n) {
+  if(!p)
+    return;
+#ifdef _WIN32
+  (void)n;
+  VirtualFree(p, 0, MEM_RELEASE);
+#else
+  munmap(p, n);
+#endif
+}
 //  Zero a region the way a fresh process has it: for a mapping, or for a
+
 //  static object's whole pages, by giving the pages back to the kernel, so
 //  what was never touched stays untouched and what was is dropped rather
 //  than written; the edges of a static object, and everything on Windows

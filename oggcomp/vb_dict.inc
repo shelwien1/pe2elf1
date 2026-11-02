@@ -50,7 +50,7 @@ constexpr u32 VG_NSET = (u32)(sizeof vg_sets / sizeof *vg_sets);
 //  The widest book in the table packs to 33,511 bits; vg_pack checks
 //  rather than trusts.
 constexpr sz VG_PACKMAX = (sz)1 << 16;
-static u8 vg_buf[VG_PACKMAX];
+static OC_TLS u8 vg_buf[VG_PACKMAX];
 //  The spec's lookup1_values: the largest v with v^dim <= entries.
 static u32 lk1(u32 entries, u32 dim) {
   u32 v = 0, i, p;
@@ -205,7 +205,8 @@ struct vg_dict {
   }
   const vg_book *book(const vg_set *g, u32 k) const { return vg_books + vg_idx[g->first + (i32)k]; }
 };
-static vg_dict vg_d;
+static OC_TLS vg_dict vg_d;
+
 //  One more than the distinct row whose books the packet's books, from
 //  pos, are the bits of for the longest run; 0 when no row's first book
 //  is.  The packet holds nb books; a row may list more or fewer.

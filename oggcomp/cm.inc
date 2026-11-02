@@ -12,7 +12,7 @@ static u16 cm_mrec[CM_AMAX + 2];
 static i16 cm_st[CM_PONE];
 static u16 cm_sq[2 * CM_STMAX + 1];
 constexpr int CM_QMAX = 130;
-static void cm_tables(void) {
+static int cm_fill(void) {
   int i;
   for(i = 0; i <= CM_TMAX + 1; i++)
     cm_rec[i] = (u16)(CM_CONE / (i + 2));
@@ -37,7 +37,14 @@ static void cm_tables(void) {
       cm_st[i] = (i16)(j - CM_STMAX);
     }
   }
+  return 1;
 }
+//  Filled once, by whichever thread comes first, before any reads them.
+static void cm_tables(void) {
+  static const int filled = cm_fill();
+  (void)filled;
+}
+
 static INLINE int cm_squash(int x) {
   x = x < -CM_STMAX ? -CM_STMAX : x > CM_STMAX ? CM_STMAX : x;
   return cm_sq[x + CM_STMAX];

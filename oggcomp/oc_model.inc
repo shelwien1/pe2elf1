@@ -106,7 +106,7 @@ struct oc_hcache {
     used = 0;
   }
 };
-static oc_hcache oc_hc;
+static OC_TLS oc_hcache *oc_hc;
 //  The header tags, in the order they get their ids.  tagid() hands ids
 //  out in order of first use, and the header family's tag factors are
 //  threshold lists over the id -- tuned, so an id is a meaning.  Left to
@@ -134,7 +134,7 @@ static const char *const oc_tagorder[] = {
 template <int f_DEC> struct oc_model {
   static constexpr int ENC = (f_DEC == 0);
   static constexpr int DRY = 0;
-  static Rangecoder<f_DEC, OC_CARRYLESS> rc;
+  static OC_TLS Rangecoder<f_DEC, OC_CARRYLESS> rc;
   tc_fam<f_DEC> fam_dig, fam_sgn, fam_flr, fam_cls, fam_aux, fam_hdr;
   i64 tc_last[F_N], tc_last2[F_N];
   vb_ctx *vb;
@@ -198,7 +198,8 @@ template <int f_DEC> struct oc_model {
   void vec_begin() { fam_dig.pc.start(P.pt); }
   i64 digit(i64 dg);
 };
-template <int f_DEC> Rangecoder<f_DEC, OC_CARRYLESS> oc_model<f_DEC>::rc;
+template <int f_DEC> OC_TLS Rangecoder<f_DEC, OC_CARRYLESS> oc_model<f_DEC>::rc;
+
 template <int f_DEC> void oc_model<f_DEC>::init() {
   cm_tables();
   tabs.init();
@@ -227,11 +228,11 @@ template <int f_DEC> void oc_model<f_DEC>::wire_all() {
 //  each .oc to be what `oggcomp c` would have written for it.
 template <int f_DEC> void oc_model<f_DEC>::reset() {
   tabs.reset();
-  hist.clear();
-  tcp.reset();
-  vb_ar.reset();
+  hist->clear();
+  tcp->reset();
+  vb_ar->reset();
   oc_raw_zero();
-  oc_hc.clear();
+  oc_hc->clear();
   *this = oc_model();
   wire_all();
   tags_init();
@@ -251,41 +252,41 @@ template <int f_DEC> void oc_model<f_DEC>::setup_done(vb_ctx &vv) {
   vb = &vv;
   s = vb->cur;
   u32 i;
-  hist.reset();
-  tcp.build(*vb->cur);
-  hist.tc_nchan = vb->i.ch;
+  hist->reset();
+  tcp->build(*vb->cur);
+  hist->tc_nchan = vb->i.ch;
   for(i = 0; i < s->nrs; i++) {
     const vb_res *r = s->rs + i;
     sz span = r->end > r->beg ? r->end - r->beg : 0;
     sz need;
     if(span > TC_SPANMAX)
       span = 0;
-    need = (sz)2 * 8 * hist.tc_nchan * span;
+    need = (sz)2 * 8 * hist->tc_nchan * span;
     if(need > TC_HISTMAX)
       span = 0;
-    hist.dg_span[i] = span;
+    hist->dg_span[i] = span;
     if(span) {
-      hist.dg_hist[i] = (i16 *)hist.take((sz)2 * 8 * hist.tc_nchan * span * sizeof(i16));
-      hist.dg_hist2[i] = (i16 *)hist.take((sz)2 * 8 * hist.tc_nchan * span * sizeof(i16));
-      hist.dg_avg[i] = (u32 *)hist.take((sz)2 * 8 * hist.tc_nchan * span * sizeof(u32));
-      hist.dg_pp[i] = (i16 *)hist.take((sz)hist.tc_nchan * span * sizeof(i16));
-      hist.dg_ps[i] = (i16 *)hist.take((sz)hist.tc_nchan * span * sizeof(i16));
-      hist.dg_pn[i] = (u8 *)hist.take((sz)hist.tc_nchan * span);
+      hist->dg_hist[i] = (i16 *)hist->take((sz)2 * 8 * hist->tc_nchan * span * sizeof(i16));
+      hist->dg_hist2[i] = (i16 *)hist->take((sz)2 * 8 * hist->tc_nchan * span * sizeof(i16));
+      hist->dg_avg[i] = (u32 *)hist->take((sz)2 * 8 * hist->tc_nchan * span * sizeof(u32));
+      hist->dg_pp[i] = (i16 *)hist->take((sz)hist->tc_nchan * span * sizeof(i16));
+      hist->dg_ps[i] = (i16 *)hist->take((sz)hist->tc_nchan * span * sizeof(i16));
+      hist->dg_pn[i] = (u8 *)hist->take((sz)hist->tc_nchan * span);
     }
-    hist.cl_np[i] = span ? span / r->psz + 2 : 0;
-    if(hist.cl_np[i])
-      hist.cl_hist[i] = (u8 *)hist.take((sz)2 * hist.tc_nchan * hist.cl_np[i]);
-    memset(hist.cl_last[i], 0, sizeof hist.cl_last[i]);
-    memset(hist.cl_last2[i], 0, sizeof hist.cl_last2[i]);
+    hist->cl_np[i] = span ? span / r->psz + 2 : 0;
+    if(hist->cl_np[i])
+      hist->cl_hist[i] = (u8 *)hist->take((sz)2 * hist->tc_nchan * hist->cl_np[i]);
+    memset(hist->cl_last[i], 0, sizeof hist->cl_last[i]);
+    memset(hist->cl_last2[i], 0, sizeof hist->cl_last2[i]);
   }
-  hist.dg_q1 = (i32 *)hist.take((sz)s->nrs * 8 * hist.tc_nchan * sizeof(i32));
-  hist.dg_q2 = (i32 *)hist.take((sz)s->nrs * 8 * hist.tc_nchan * sizeof(i32));
-  hist.dg_zr = (i32 *)hist.take((sz)s->nrs * 8 * hist.tc_nchan * sizeof(i32));
-  hist.fl_hist = (i16 *)hist.take((sz)2 * hist.tc_nchan * VB_MAXPOST * sizeof(i16));
-  hist.fl_yhist = (i16 *)hist.take((sz)2 * hist.tc_nchan * VB_MAXPOST * sizeof(i16));
-  hist.fl_who = (i32 *)hist.take((sz)2 * hist.tc_nchan * sizeof(i32));
-  for(i = 0; i < 2 * hist.tc_nchan; i++)
-    hist.fl_who[i] = -1;
+  hist->dg_q1 = (i32 *)hist->take((sz)s->nrs * 8 * hist->tc_nchan * sizeof(i32));
+  hist->dg_q2 = (i32 *)hist->take((sz)s->nrs * 8 * hist->tc_nchan * sizeof(i32));
+  hist->dg_zr = (i32 *)hist->take((sz)s->nrs * 8 * hist->tc_nchan * sizeof(i32));
+  hist->fl_hist = (i16 *)hist->take((sz)2 * hist->tc_nchan * VB_MAXPOST * sizeof(i16));
+  hist->fl_yhist = (i16 *)hist->take((sz)2 * hist->tc_nchan * VB_MAXPOST * sizeof(i16));
+  hist->fl_who = (i32 *)hist->take((sz)2 * hist->tc_nchan * sizeof(i32));
+  for(i = 0; i < 2 * hist->tc_nchan; i++)
+    hist->fl_who[i] = -1;
   for(i = 0; i < s->nfl; i++)
     oc_fl[i].build(s->fl[i]);
 }

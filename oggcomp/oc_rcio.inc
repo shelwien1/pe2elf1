@@ -3,8 +3,9 @@
 //  every stream.  Many more is a stream cut short, and the decoder would
 //  otherwise go on turning them into output for as long as they came --
 //  a cut in the middle of a run of bytes has no parser check to stop it.
-static const char *oc_in;
-static u32 rc_over;
+static OC_TLS const char *oc_in;
+static OC_TLS u32 rc_over;
+
 constexpr u32 RC_OVER_MAX = 48;
 template <class RC> struct rc_pin_io {
   Coroutine *co;
