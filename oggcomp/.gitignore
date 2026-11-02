@@ -1,0 +1,14 @@
+# builds
+/oggcomp
+/oggcomp.exe
+/oggdet
+/oggdet.exe
+/oggcomp[1-9].so
+/oggcomp[1-9].dll
+/oc_api_test
+/oc_api_test.exe
+# what tuning leaves behind (IDX/opt.pl), and the run log
+export.!!!
+opttimes.!!!
+*.rar
+log.txt
