@@ -1,36 +1,36 @@
 
 static const byte H1_spc_a_cb[11+1]={ 0,1,2,3,4,5,6,7,8,9,10,11 };
-static const byte H1_spc_a_a1[15+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
+static const byte H1_spc_a_a1[15+1]={ 0,1,2,3,3,4,4,5,6,7,8,9,10,11,11,12 };
 static const byte H1_spc_a_a2[7+1]={ 0,1,2,3,4,5,6,7 };
 
 static const byte H1_spc_b_cb[11+1]={ 0,1,2,3,4,5,6,7,8,9,10,11 };
-static const byte H1_spc_b_sb[50+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50 };
+static const byte H1_spc_b_sb[50+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,16,17,17,18,18,19,20,21,22,22,23,24,25,26,26,26,27,27,27,27,27,27,28,28,29,30,30,31,32,32,32,33,33,33 };
 
 static const byte H1_spc_c_cb[11+1]={ 0,1,2,3,4,5,6,7,8,9,10,11 };
-static const byte H1_spc_c_pn[12+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12 };
+static const byte H1_spc_c_pn[12+1]={ 0,0,1,2,3,4,5,6,7,8,9,9,9 };
 static const byte H1_spc_c_pf[5+1]={ 0,1,2,3,4,5 };
 
 static const byte H1_spc_d_cb[11+1]={ 0,1,2,3,4,5,6,7,8,9,10,11 };
-static const byte H1_spc_d_pf[15+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
-static const byte H1_spc_d_a1[7+1]={ 0,1,2,3,4,5,6,7 };
+static const byte H1_spc_d_pf[15+1]={ 0,1,1,2,3,4,5,6,7,8,9,10,11,12,13,14 };
+static const byte H1_spc_d_a1[7+1]={ 0,0,0,0,1,1,2,3 };
 static const byte H1_spc_d_dg[69+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69 };
 
 
 static const byte H1_spc_m_cb[11+1]={ 0,1,2,3,4,5,6,7,8,9,10,11 };
-static const byte H1_spc_m_av[28+1]={ 0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6,7 };
+static const byte H1_spc_m_av[28+1]={ 0,0,1,1,1,1,1,2,3,3,4,4,5,5,6,7,8,8,8,8,9,9,9,9,9,9,9,9,9 };
 
 
 
-static const int H1_spc_rA = (254+0) * (1);
-static const int H1_spc_rB = (254+0) * (1);
-static const int H1_spc_rC = (234+0) * (1);
+static const int H1_spc_rA = (255+0) * (1);
+static const int H1_spc_rB = (255+0) * (1);
+static const int H1_spc_rC = (255+0) * (1);
 static const int H1_spc_rD = (255+0) * (1);
 static const int H1_spc_lr = (15+0) * (1);
-static const int H1_spc_mwA = (8+0) * (1);
-static const int H1_spc_mwB = (2+0) * (1);
-static const int H1_spc_mwC = (0+0) * (1);
-static const int H1_spc_mwD = (131+0) * (1);
-static const int H1_spc_mb = (32+0) * (1);
+static const int H1_spc_mwA = (22+0) * (1);
+static const int H1_spc_mwB = (12+0) * (1);
+static const int H1_spc_mwC = (128+0) * (1);
+static const int H1_spc_mwD = (16+0) * (1);
+static const int H1_spc_mb = (33+0) * (1);
 static const int H1_spc_rT = (0+0) * (1);
 static const int H1_spc_mwT = (0+0) * (1);
 static const int H1_spc_mt = (0+0) * (1);
@@ -44,12 +44,12 @@ static const int H1_spc_hM = (24+0) * (1);
 static const int H1_spc_hT = (24+0) * (1);
 
 
-static const long long H1_spc_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 12), 16), 8); // 1536
-static const long long H1_spc_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 12), 51), 2); // 1224
-static const long long H1_spc_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 12), 13), 6); // 936
-static const long long H1_spc_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 12), 16), 8), 70); // 107520
+static const long long H1_spc_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 12), 13), 8); // 1248
+static const long long H1_spc_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 12), 34), 2); // 816
+static const long long H1_spc_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 12), 10), 6); // 720
+static const long long H1_spc_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 12), 15), 4), 70); // 50400
 static const long long H1_spc_g_Volume = 1; // 1
-static const long long H1_spc_m_Volume = tc_vmul(tc_vmul(tc_vmul(1, 12), 2), 8); // 192
+static const long long H1_spc_m_Volume = tc_vmul(tc_vmul(tc_vmul(1, 12), 2), 10); // 240
 static const long long H1_spc_t_Volume = 1; // 1
 
 #define H1_spc_USES(X) X(cb) X(a1) X(a2) X(sb) X(ws) X(pn) X(pf) X(dg) X(av)

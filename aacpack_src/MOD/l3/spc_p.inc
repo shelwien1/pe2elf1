@@ -19,29 +19,29 @@ void H3_spc_make( const H_spc_v & D, tcx & X ) {
 
   a = 0;
   a = a*12 + H3_spc_a_cb[__min(11,__max(0,(cb)-(1-1)))];
-  a = a*16 + H3_spc_a_a1[__min(15,__max(0,(a1)-(1-1)))];
+  a = a*2 + (((a1)>14+(1-1)));
   a = a*8 + H3_spc_a_a2[__min(7,__max(0,(a2)-(1-1)))];
 
   b = 0;
   b = b*12 + H3_spc_b_cb[__min(11,__max(0,(cb)-(1-1)))];
-  b = b*51 + H3_spc_b_sb[__min(50,__max(0,(sb)-(1-1)))];
+  b = b*36 + H3_spc_b_sb[__min(50,__max(0,(sb)-(1-1)))];
   b = b*2 + (((ws)>0+(1-1)));
 
   c = 0;
   c = c*12 + H3_spc_c_cb[__min(11,__max(0,(cb)-(1-1)))];
-  c = c*13 + H3_spc_c_pn[__min(12,__max(0,(pn)-(1-1)))];
+  c = c*10 + H3_spc_c_pn[__min(12,__max(0,(pn)-(1-1)))];
   c = c*6 + H3_spc_c_pf[__min(5,__max(0,(pf)-(1-1)))];
 
   d = 0;
   d = d*12 + H3_spc_d_cb[__min(11,__max(0,(cb)-(1-1)))];
   d = d*16 + H3_spc_d_pf[__min(15,__max(0,(pf)-(1-1)))];
-  d = d*8 + H3_spc_d_a1[__min(7,__max(0,(a1)-(1-1)))];
+  d = d*5 + H3_spc_d_a1[__min(7,__max(0,(a1)-(1-1)))];
   d = d*70 + H3_spc_d_dg[__min(69,__max(0,(dg)-(1-1)))];
 
   e = 0;
   e = e*12 + H3_spc_e_cb[__min(11,__max(0,(cb)-(1-1)))];
-  e = e*32 + H3_spc_e_av[__min(31,__max(0,(av)-(1-1)))];
-  e = e*4 + H3_spc_e_a1[__min(3,__max(0,(a1)-(1-1)))];
+  e = e*22 + H3_spc_e_av[__min(31,__max(0,(av)-(1-1)))];
+  e = e*3 + (((a1)>1+(1-1))+((a1)>2+(1-1)));
 
   h = 0;
   h = h*12 + H3_spc_h_cb[__min(11,__max(0,(cb)-(1-1)))];
@@ -49,12 +49,12 @@ void H3_spc_make( const H_spc_v & D, tcx & X ) {
   h = h*8 + H3_spc_h_nz[__min(7,__max(0,(nz)-(1-1)))];
   h = h*4 + H3_spc_h_bp[__min(3,__max(0,(bp)-(1-1)))];
   h = h*5 + H3_spc_h_pl[__min(4,__max(0,(pl)-(1-1)))];
-  h = h*14 + H3_spc_h_zr[__min(13,__max(0,(zr)-(1-1)))];
+  h = h*10 + H3_spc_h_zr[__min(13,__max(0,(zr)-(1-1)))];
 
   m = 0;
   m = m*12 + H3_spc_m_cb[__min(11,__max(0,(cb)-(1-1)))];
   m = m*2 + (((ws)>0+(1-1)));
-  m = m*8 + H3_spc_m_av[__min(28,__max(0,(av)-(1-1)))];
+  m = m*7 + H3_spc_m_av[__min(28,__max(0,(av)-(1-1)))];
 
   t = 0;
 

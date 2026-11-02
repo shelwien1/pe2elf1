@@ -18,51 +18,51 @@ Debug 1
 Const 0
 
 Index a
- a_kd: kd, 1!11111111111111
- a_bd: bd, 1!111111111111111111111111111111
+ a_kd: kd, 1!11110100111100
+ a_bd: bd, 1!101010110100011101000000000000
  a_ar: ar, 1!1
 
 Index b
- b_kd: kd, 1!11111111111111
- b_lv: lv, 1!11111111111
- b_ch: ch, 1!1
+ b_kd: kd, 1!01100000000001
+ b_lv: lv, 1!01000011010
+ b_ch: ch, 1!0
 
 Index c
- c_kd: kd, 1!11111111111111
- c_d1: d1, 1!1111111111
+ c_kd: kd, 1!11000010111010
+ c_d1: d1, 1!1111000000
  c_d2: d2, 1!111111
- c_rm: rm, 1!11111111111111
+ c_rm: rm, 1!10111111000001
 
 Index d
- d_kd: kd, 1!11111111111111
+ d_kd: kd, 1!11010000000100
  d_ar: ar, 1!1
  d_fr: fr, 1!1
- d_bd: bd, 1!111111111111
+ d_bd: bd, 1!010110011001
 
 Index m
- m_kd: kd, 1!11111111111111
+ m_kd: kd, 1!11010100000010
 
 Index t
- t_kd: kd, 1!11111111111111
+ t_kd: kd, 1!01000000000001
 
 Index g
  g_d1: d1, 1!11111
 
-Number rA, 1, 0!11111111
-Number rB, 1, 0!11111111
+Number rA, 1, 0!11111110
+Number rB, 1, 0!11100111
 Number rC, 1, 0!11111111
-Number rD, 1, 0!11111101
+Number rD, 1, 0!11110111
 Number rT, 1, 0!10000000
 Number rG, 1, 0!01000000
-Number lr, 1, 0!01111
+Number lr, 1, 0!01101
 Number mwA, 1, 0!00000100
-Number mwB, 1, 0!00010000
-Number mwC, 1, 0!00011011
-Number mwD, 1, 0!00111110
+Number mwB, 1, 0!00001000
+Number mwC, 1, 0!00001000
+Number mwD, 1, 0!00111000
 Number mwT, 1, 0!00000000
-Number mwG, 1, 0!00000000
-Number mt, 1, 0!010
-Number mb, 1, 0!00001000
+Number mwG, 1, 0!00100000
+Number mt, 1, 0!100
+Number mb, 1, 0!11000001
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
 #  direct, one that does not is hashed into 2^h rows.  Frozen.
 ! Number hA, 1, 0!11000

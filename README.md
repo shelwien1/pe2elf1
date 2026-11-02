@@ -72,24 +72,48 @@ Exit status: 0 done, 1 an error (said on stderr), 2 a bad command line.
 As m4vpack's (and h264p's), the levels differ in the shape of the model's
 families (The model, below): what each decision is predicted from.
 
-| level | each family | size | `c` | `d` | memory |
+| level | each family | tuning set | `c` | `d` | memory |
 |---|---|---:|---:|---:|---:|
-| `-9` | ten counters, three mixers and a final one, two APMs | 87.99% | 0.25 MB/s | 0.27 MB/s | 49 MB |
-| `-7` | the same without the APMs | +0.01% | 0.29 MB/s | 0.32 MB/s | 47 MB |
-| `-5` | ten counters, one mixer | +0.48% | 0.34 MB/s | 0.40 MB/s | 46 MB |
-| `-3` | six counters, one mixer | +0.36% | 0.41 MB/s | 0.48 MB/s | 41 MB |
-| `-1` | four counters, keeping their probabilities stretched, one mixer | +0.56% | 0.52 MB/s | 0.59 MB/s | 35 MB |
+| `-9` | ten counters, three mixers and a final one, two APMs | 80.26% | 0.28 MB/s | 0.29 MB/s | 49 MB |
+| `-7` | the same without the APMs | 79.97% | 0.29 MB/s | 0.30 MB/s | 42 MB |
+| `-5` | ten counters, one mixer | 80.28% | 0.35 MB/s | 0.36 MB/s | 39 MB |
+| `-3` | six counters, one mixer | 80.43% | 0.41 MB/s | 0.47 MB/s | 36 MB |
+| `-1` | four counters, keeping their probabilities stretched, one mixer | 80.78% | 0.52 MB/s | 0.57 MB/s | 32 MB |
 
-(size: of a 2.3 MB stream, three of Results' joined: fdkaac LC 128 and
-HE-AAC 48, ffmpeg LC 128; `c` and `d`: MB of it a second on one thread of
-a 2.1 GHz Xeon; memory: the most the process had.) -7 is -9 without the
-APMs; -5 keeps -9's ten counters with one mixer; -3 and -1 keep the six
-and four counters of -5 whose loss, each switched off in turn in its
-tuning set's dumps, costs each family most (the most costly first: the
-counter A that stands for the APM's refinement where there is none). The
-new levels have -9's parameters for now; the speed is the families'
-time, the rest (the codebook selection, the spectra's contexts, the
-match model, the walks) every level spends alike.
+The tuning set: 17 excerpts of about 90 KB, 1.52 MB: the 14 cut from the
+streams of Results (fdkaac, ffmpeg and faac; LC, HE-AAC, HE-AACv2, LD,
+ELD, mono) and FATE's File1.aac, and three test signals (FATE's al07_96
+and al17_44, the test corpus's ff_lc128); its size compressed is given as
+a share of its size. `c` and `d`: MB of a 2.3 MB stream a second (three
+of Results' joined: fdkaac LC 128 and HE-AAC 48, ffmpeg LC 128), the best
+of three runs on one thread of a 2.1 GHz Xeon; memory: the most the
+process had. On the other sets of streams:
+
+| level | dev | Results' | FATE | test corpus |
+|---|---:|---:|---:|---:|
+| `-9` | 85.50% | 87.63% | 53.47% | 77.06% |
+| `-7` | 85.36% | 87.49% | 53.34% | 76.90% |
+| `-5` | 85.59% | 87.73% | 53.66% | 77.25% |
+| `-3` | 85.68% | 87.77% | 54.09% | 77.61% |
+| `-1` | 85.90% | 87.93% | 55.10% | 78.01% |
+
+(dev: 22 streams of the same encoders of other excerpts of the same
+recording, 7.0 MB; Results': the 15 streams and their LATM, CRC and
+other variants, 21.3 MB; FATE's 39, 5.0 MB; `test/corpus`, 2.9 MB.)
+
+-7 is -9 without the APMs; -5 keeps -9's ten counters with one mixer;
+-3 and -1 keep the six and four counters of -5 whose loss, each switched
+off in turn in the tuning set's dumps, costs each family most (the most
+costly first: the counter A that stands for the APM's refinement where
+there is none). Each of them then started from -9's parameters and was
+tuned for a pass (`IDX/ftune.py`, against the dumps of the tuning set),
+and each family's new parameters were kept where they made the streams
+outside the tuning set (dev, FATE, the test corpus; in both orders)
+smaller: so every family's but `sec`'s, whose tuning, in the default
+order, cost more with `-b` than it saved, and but `esc`'s below -7. -9 is
+as it was. The speed is the families': the rest of the time, the
+codebook selection, the spectra's contexts, the match model and the
+walks, every level spends alike, so that -1 is only twice as fast as -9.
 
 ## What it compresses
 

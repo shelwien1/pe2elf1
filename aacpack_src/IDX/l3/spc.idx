@@ -29,29 +29,29 @@ Const 0
 
 Index a
  a_cb: cb, 1!11111111111
- a_a1: a1, 1!111111111111111
+ a_a1: a1, 1!000000000000001
  a_a2: a2, 1!1111111
 
 Index b
  b_cb: cb, 1!11111111111
- b_sb: sb, 1!11111111111111111111111111111111111111111111111111
+ b_sb: sb, 1!11111111110111110101101110111111101000101101100100
  b_ws: ws, 1!1
 
 Index c
  c_cb: cb, 1!11111111111
- c_pn: pn, 1!111111111111
+ c_pn: pn, 1!011111111100
  c_pf: pf, 1!11111
 
 Index d
  d_cb: cb, 1!11111111111
  d_pf: pf, 1!111111111111111
- d_a1: a1, 1!1111111
+ d_a1: a1, 1!0001111
 ! d_dg: dg, 1!111111111111111111111111111111111111111111111111111111111111111111111
 
 Index e
  e_cb: cb, 1!11111111111
- e_av: av, 1!1111111111111111111111111111111
- e_a1: a1, 1!111
+ e_av: av, 1!1001111011101100000111111110111
+ e_a1: a1, 1!011
 
 Index h
  h_cb: cb, 1!11111111111
@@ -59,30 +59,30 @@ Index h
  h_nz: nz, 1!1111111
  h_bp: bp, 1!111
  h_pl: pl, 1!1111
- h_zr: zr, 1!1111111111111
+ h_zr: zr, 1!1011101011110
 
 Index m
  m_cb: cb, 1!11111111111
  m_ws: ws, 1!1
- m_av: av, 1!0001000100010001000100010001
+ m_av: av, 1!0100000100010011000100000000
 
 Index t
 
 Index g
 
-Number rA, 1, 0!11111110
+Number rA, 1, 0!11111111
 Number rB, 1, 0!11111110
-Number rC, 1, 0!11101010
+Number rC, 1, 0!11111111
 Number rD, 1, 0!11111111
-Number rE, 1, 0!10011111
-Number rH, 1, 0!10111101
-Number lr, 1, 0!01111
-Number mwA, 1, 0!00001000
-Number mwB, 1, 0!00000010
-Number mwC, 1, 0!00000000
-Number mwD, 1, 0!10000011
-Number mwE, 1, 0!00000100
-Number mwH, 1, 0!00100000
+Number rE, 1, 0!11111111
+Number rH, 1, 0!11111111
+Number lr, 1, 0!01101
+Number mwA, 1, 0!00011111
+Number mwB, 1, 0!00000011
+Number mwC, 1, 0!10000000
+Number mwD, 1, 0!00010000
+Number mwE, 1, 0!00101100
+Number mwH, 1, 0!01100001
 Number mb, 1, 0!00100000
 #  Frozen: what a family of bit() decisions never reads: no mantissa, no
 #  hint, no signs.

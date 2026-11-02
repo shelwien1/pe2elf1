@@ -19,14 +19,14 @@ Debug 1
 Const 0
 
 Index a
- a_kd: kd, 1!11
- a_oc: oc, 1!1111111111111
- a_pa: pa, 1!11111
+ a_kd: kd, 1!00
+ a_oc: oc, 1!1101010101000
+ a_pa: pa, 1!00000
  a_mu: mu, 1!11
 
 Index b
- b_kd: kd, 1!11
- b_sb: sb, 1!11111111111111111111111111111111111111111111111111
+ b_kd: kd, 1!01
+ b_sb: sb, 1!11110111111111111100011011100101010111111111110100
  b_ws: ws, 1!1
 
 Index c
@@ -36,50 +36,50 @@ Index c
 
 Index d
  d_kd: kd, 1!11
- d_pv: pv, 1!1111111111
- d_sb: sb, 1!11111
- d_sk: sk, 1!111111111111111
+ d_pv: pv, 1!1111111101
+ d_sb: sb, 1!01001
+ d_sk: sk, 1!101000010000000
 
 Index e
- e_kd: kd, 1!11
- e_d1: d1, 1!1111111111111
- e_d2: d2, 1!11111
+ e_kd: kd, 1!00
+ e_d1: d1, 1!0111111100001
+ e_d2: d2, 1!00001
 ! e_dm: dm, 1!111111111111111111111111111111111111111111111111111111111111
 
 Index h
  h_kd: kd, 1!11
- h_pa: pa, 1!111111111111
- h_pd: pd, 1!11111
+ h_pa: pa, 1!011111111101
+ h_pd: pd, 1!10111
 
 Index m
- m_kd: kd, 1!11
- m_mu: mu, 1!11
+ m_kd: kd, 1!01
+ m_mu: mu, 1!01
 
 Index t
- t_kd: kd, 1!11
+ t_kd: kd, 1!01
 
 Index g
  g_d1: d1, 1!11111
 
 Number rA, 1, 0!11111111
-Number rB, 1, 0!11111111
-Number rC, 1, 0!10000010
+Number rB, 1, 0!11111101
+Number rC, 1, 0!11111111
 Number rD, 1, 0!11111111
-Number rE, 1, 0!11111111
-Number rH, 1, 0!11111101
-Number rT, 1, 0!10000000
-Number rG, 1, 0!01000000
-Number lr, 1, 0!01111
-Number mwA, 1, 0!00010000
-Number mwB, 1, 0!00000100
-Number mwC, 1, 0!10000000
-Number mwD, 1, 0!00110011
-Number mwE, 1, 0!00011011
-Number mwH, 1, 0!00111110
-Number mwT, 1, 0!00000000
-Number mwG, 1, 0!00000000
-Number mt, 1, 0!010
-Number mb, 1, 0!00001000
+Number rE, 1, 0!11111101
+Number rH, 1, 0!11111111
+Number rT, 1, 0!10001100
+Number rG, 1, 0!01111010
+Number lr, 1, 0!11001
+Number mwA, 1, 0!00001000
+Number mwB, 1, 0!00000000
+Number mwC, 1, 0!00000000
+Number mwD, 1, 0!00011110
+Number mwE, 1, 0!00000010
+Number mwH, 1, 0!00011011
+Number mwT, 1, 0!00010001
+Number mwG, 1, 0!00001000
+Number mt, 1, 0!000
+Number mb, 1, 0!00001010
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
 #  direct, one that does not is hashed into 2^h rows.  Frozen.
 ! Number hA, 1, 0!11000

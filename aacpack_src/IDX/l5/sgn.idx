@@ -13,46 +13,46 @@ Const 0
 
 Index a
  a_cb: cb, 1!11111111111
- a_oc: oc, 1!11
- a_ms: ms, 1!11
+ a_oc: oc, 1!10
+ a_ms: ms, 1!10
 
 Index b
- b_s1: s1, 1!11
+ b_s1: s1, 1!00
  b_s2: s2, 1!11
  b_cb: cb, 1!11111111111
 
 Index c
- c_pf: pf, 1!11
- c_mg: mg, 1!1111111
+ c_pf: pf, 1!10
+ c_mg: mg, 1!0111000
 
 Index d
  d_oc: oc, 1!11
  d_mg: mg, 1!1111
 
 Index e
- e_kq: kq, 1!1111111111111111111
+ e_kq: kq, 1!0011110111000001011
 
 Index h
  h_cb: cb, 1!11111111111
- h_mg: mg, 1!1111111
- h_kq: kq, 1!111111
+ h_mg: mg, 1!0100010
+ h_kq: kq, 1!101100
 
 Index i
- i_oc: oc, 1!11
+ i_oc: oc, 1!00
  i_s1: s1, 1!11
- i_pf: pf, 1!11
+ i_pf: pf, 1!00
 
 Index j
- j_ws: ws, 1!1
+ j_ws: ws, 1!0
  j_cb: cb, 1!11111111111
 
 Index k
  k_s1: s1, 1!11
- k_mg: mg, 1!1111111
+ k_mg: mg, 1!0100010
 
 Index l
  l_oc: oc, 1!11
- l_ms: ms, 1!11
+ l_ms: ms, 1!10
  l_pf: pf, 1!11
 
 Index m
@@ -62,27 +62,27 @@ Index t
 
 Index g
 
-Number rA, 1, 0!11111110
-Number rB, 1, 0!10011111
-Number rC, 1, 0!11111111
-Number rD, 1, 0!11111111
+Number rA, 1, 0!00110000
+Number rB, 1, 0!00010001
+Number rC, 1, 0!11111101
+Number rD, 1, 0!10010001
 Number rE, 1, 0!11111111
-Number rH, 1, 0!10111101
-Number rI, 1, 0!11101010
-Number rJ, 1, 0!11111110
-Number rK, 1, 0!11111111
-Number rL, 1, 0!11111110
-Number lr, 1, 0!01111
-Number mwA, 1, 0!00001000
+Number rH, 1, 0!10000000
+Number rI, 1, 0!00101000
+Number rJ, 1, 0!11111111
+Number rK, 1, 0!01000010
+Number rL, 1, 0!10000011
+Number lr, 1, 0!11001
+Number mwA, 1, 0!01100111
 Number mwB, 1, 0!00000100
-Number mwC, 1, 0!10000011
-Number mwD, 1, 0!00011111
-Number mwE, 1, 0!00010100
-Number mwH, 1, 0!00100000
-Number mwI, 1, 0!00000000
-Number mwJ, 1, 0!00001110
-Number mwK, 1, 0!00011101
-Number mwL, 1, 0!00000010
+Number mwC, 1, 0!11010010
+Number mwD, 1, 0!00011100
+Number mwE, 1, 0!10111111
+Number mwH, 1, 0!11101010
+Number mwI, 1, 0!00000001
+Number mwJ, 1, 0!11110101
+Number mwK, 1, 0!00000100
+Number mwL, 1, 0!00001010
 Number mb, 1, 0!00100000
 #  Frozen: what a family of bit() decisions never reads: no mantissa, no
 #  hint, no signs.

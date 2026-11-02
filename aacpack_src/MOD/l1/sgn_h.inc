@@ -3,7 +3,6 @@ static const byte H1_sgn_a_cb[11+1]={ 0,1,2,3,4,5,6,7,8,9,10,11 };
 
 static const byte H1_sgn_b_mg[4+1]={ 0,1,2,3,4 };
 
-static const byte H1_sgn_c_mg[7+1]={ 0,1,2,3,4,5,6,7 };
 
 
 
@@ -11,16 +10,16 @@ static const byte H1_sgn_m_cb[11+1]={ 0,1,2,3,4,5,6,7,8,9,10,11 };
 
 
 
-static const int H1_sgn_rA = (159+0) * (1);
+static const int H1_sgn_rA = (16+0) * (1);
 static const int H1_sgn_rB = (255+0) * (1);
-static const int H1_sgn_rC = (255+0) * (1);
-static const int H1_sgn_rD = (234+0) * (1);
+static const int H1_sgn_rC = (37+0) * (1);
+static const int H1_sgn_rD = (253+0) * (1);
 static const int H1_sgn_lr = (15+0) * (1);
-static const int H1_sgn_mwA = (4+0) * (1);
-static const int H1_sgn_mwB = (31+0) * (1);
-static const int H1_sgn_mwC = (29+0) * (1);
-static const int H1_sgn_mwD = (0+0) * (1);
-static const int H1_sgn_mb = (32+0) * (1);
+static const int H1_sgn_mwA = (16+0) * (1);
+static const int H1_sgn_mwB = (0+0) * (1);
+static const int H1_sgn_mwC = (0+0) * (1);
+static const int H1_sgn_mwD = (3+0) * (1);
+static const int H1_sgn_mb = (176+0) * (1);
 static const int H1_sgn_rT = (0+0) * (1);
 static const int H1_sgn_mwT = (0+0) * (1);
 static const int H1_sgn_mt = (0+0) * (1);
@@ -34,15 +33,15 @@ static const int H1_sgn_hM = (24+0) * (1);
 static const int H1_sgn_hT = (24+0) * (1);
 
 
-static const long long H1_sgn_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 3), 12); // 108
+static const long long H1_sgn_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 3), 12); // 36
 static const long long H1_sgn_b_Volume = tc_vmul(tc_vmul(1, 3), 5); // 15
-static const long long H1_sgn_c_Volume = tc_vmul(tc_vmul(1, 3), 8); // 24
+static const long long H1_sgn_c_Volume = tc_vmul(tc_vmul(1, 3), 1); // 3
 static const long long H1_sgn_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 3), 3); // 27
 static const long long H1_sgn_g_Volume = 1; // 1
 static const long long H1_sgn_m_Volume = tc_vmul(1, 12); // 12
 static const long long H1_sgn_t_Volume = 1; // 1
 
-#define H1_sgn_USES(X) X(s1) X(s2) X(cb) X(oc) X(mg) X(pf)
+#define H1_sgn_USES(X) X(s2) X(cb) X(oc) X(mg) X(s1) X(pf)
 
 struct H1_sgn_T {
   cm_cnt2s H1_sgn_A[tc_rows(H1_sgn_a_Volume, H1_sgn_hA) * H_sgn_ND];

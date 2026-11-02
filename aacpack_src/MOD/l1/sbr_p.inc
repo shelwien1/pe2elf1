@@ -18,32 +18,31 @@ void H1_sbr_make( const H_sbr_v & D, tcx & X ) {
   H_sbr_VARS(H_LOCAL)
 
   a = 0;
-  a = a*15 + H1_sbr_a_kd[__min(14,__max(0,(kd)-(1-1)))];
-  a = a*31 + H1_sbr_a_bd[__min(30,__max(0,(bd)-(1-1)))];
+  a = a*10 + H1_sbr_a_kd[__min(14,__max(0,(kd)-(1-1)))];
+  a = a*11 + H1_sbr_a_bd[__min(30,__max(0,(bd)-(1-1)))];
   a = a*2 + (((ar)>0+(1-1)));
 
   b = 0;
-  b = b*15 + H1_sbr_b_kd[__min(14,__max(0,(kd)-(1-1)))];
-  b = b*12 + H1_sbr_b_lv[__min(11,__max(0,(lv)-(1-1)))];
-  b = b*2 + (((ch)>0+(1-1)));
+  b = b*4 + H1_sbr_b_kd[__min(14,__max(0,(kd)-(1-1)))];
+  b = b*5 + H1_sbr_b_lv[__min(11,__max(0,(lv)-(1-1)))];
 
   c = 0;
-  c = c*15 + H1_sbr_c_kd[__min(14,__max(0,(kd)-(1-1)))];
-  c = c*11 + H1_sbr_c_d1[__min(10,__max(0,(d1)-(1-1)))];
+  c = c*8 + H1_sbr_c_kd[__min(14,__max(0,(kd)-(1-1)))];
+  c = c*5 + H1_sbr_c_d1[__min(10,__max(0,(d1)-(1-1)))];
   c = c*7 + H1_sbr_c_d2[__min(6,__max(0,(d2)-(1-1)))];
-  c = c*15 + H1_sbr_c_rm[__min(14,__max(0,(rm)-(1-1)))];
+  c = c*9 + H1_sbr_c_rm[__min(14,__max(0,(rm)-(1-1)))];
 
   d = 0;
-  d = d*15 + H1_sbr_d_kd[__min(14,__max(0,(kd)-(1-1)))];
+  d = d*5 + H1_sbr_d_kd[__min(14,__max(0,(kd)-(1-1)))];
   d = d*2 + (((ar)>0+(1-1)));
   d = d*2 + (((fr)>0+(1-1)));
-  d = d*13 + H1_sbr_d_bd[__min(12,__max(0,(bd)-(1-1)))];
+  d = d*7 + H1_sbr_d_bd[__min(12,__max(0,(bd)-(1-1)))];
 
   m = 0;
-  m = m*15 + H1_sbr_m_kd[__min(14,__max(0,(kd)-(1-1)))];
+  m = m*6 + H1_sbr_m_kd[__min(14,__max(0,(kd)-(1-1)))];
 
   t = 0;
-  t = t*15 + H1_sbr_t_kd[__min(14,__max(0,(kd)-(1-1)))];
+  t = t*3 + (((kd)>1+(1-1))+((kd)>13+(1-1)));
 
   g = 0;
   g = g*6 + H1_sbr_g_d1[__min(5,__max(0,(d1)-(1-1)))];

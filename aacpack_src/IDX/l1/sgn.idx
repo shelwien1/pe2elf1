@@ -12,7 +12,7 @@ Debug 1
 Const 0
 
 Index a
- a_s1: s1, 1!11
+ a_s1: s1, 1!00
  a_s2: s2, 1!11
  a_cb: cb, 1!11111111111
 
@@ -22,7 +22,7 @@ Index b
 
 Index c
  c_s1: s1, 1!11
- c_mg: mg, 1!1111111
+ c_mg: mg, 1!0000000
 
 Index d
  d_oc: oc, 1!11
@@ -36,16 +36,16 @@ Index t
 
 Index g
 
-Number rA, 1, 0!10011111
+Number rA, 1, 0!00010000
 Number rB, 1, 0!11111111
-Number rC, 1, 0!11111111
-Number rD, 1, 0!11101010
+Number rC, 1, 0!00100101
+Number rD, 1, 0!11111101
 Number lr, 1, 0!01111
-Number mwA, 1, 0!00000100
-Number mwB, 1, 0!00011111
-Number mwC, 1, 0!00011101
-Number mwD, 1, 0!00000000
-Number mb, 1, 0!00100000
+Number mwA, 1, 0!00010000
+Number mwB, 1, 0!00000000
+Number mwC, 1, 0!00000000
+Number mwD, 1, 0!00000011
+Number mb, 1, 0!10110000
 #  Frozen: what a family of bit() decisions never reads: no mantissa, no
 #  hint, no signs.
 ! Number rT, 1, 0!00000000

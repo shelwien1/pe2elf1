@@ -18,31 +18,27 @@ void H3_unt_make( const H_unt_v & D, tcx & X ) {
   H_unt_VARS(H_LOCAL)
 
   a = 0;
-  a = a*16 + H3_unt_a_fld[__min(15,__max(0,(fld)-(1-1)))];
+  a = a*4 + H3_unt_a_fld[__min(15,__max(0,(fld)-(1-1)))];
 
   b = 0;
-  b = b*16 + H3_unt_b_fld[__min(15,__max(0,(fld)-(1-1)))];
+  b = b*2 + (((fld)>3+(1-1)));
   b = b*16 + H3_unt_b_ctx[__min(15,__max(0,(ctx)-(1-1)))];
 
   c = 0;
-  c = c*16 + H3_unt_c_fld[__min(15,__max(0,(fld)-(1-1)))];
-  c = c*7 + H3_unt_c_p1[__min(6,__max(0,(p1)-(1-1)))];
+  c = c*4 + H3_unt_c_fld[__min(15,__max(0,(fld)-(1-1)))];
 
   d = 0;
-  d = d*16 + H3_unt_d_fld[__min(15,__max(0,(fld)-(1-1)))];
+  d = d*4 + H3_unt_d_fld[__min(15,__max(0,(fld)-(1-1)))];
   d = d*8 + H3_unt_d_ctx[__min(7,__max(0,(ctx)-(1-1)))];
   d = d*3 + (((p1)>0+(1-1))+((p1)>1+(1-1)));
 
   e = 0;
-  e = e*16 + H3_unt_e_fld[__min(15,__max(0,(fld)-(1-1)))];
-  e = e*11 + H3_unt_e_p1[__min(10,__max(0,(p1)-(1-1)))];
 
   h = 0;
-  h = h*16 + H3_unt_h_fld[__min(15,__max(0,(fld)-(1-1)))];
-  h = h*8 + H3_unt_h_ctx[__min(7,__max(0,(ctx)-(1-1)))];
+  h = h*4 + H3_unt_h_fld[__min(15,__max(0,(fld)-(1-1)))];
 
   m = 0;
-  m = m*16 + H3_unt_m_fld[__min(15,__max(0,(fld)-(1-1)))];
+  m = m*4 + H3_unt_m_fld[__min(15,__max(0,(fld)-(1-1)))];
 
   t = 0;
   t = t*16 + H3_unt_t_fld[__min(15,__max(0,(fld)-(1-1)))];

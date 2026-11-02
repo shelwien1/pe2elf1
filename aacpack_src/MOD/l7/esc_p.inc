@@ -18,48 +18,45 @@ void H7_esc_make( const H_esc_v & D, tcx & X ) {
   H_esc_VARS(H_LOCAL)
 
   a = 0;
-  a = a*20 + H7_esc_a_kq[__min(19,__max(0,(kq)-(1-1)))];
-  a = a*11 + H7_esc_a_a1[__min(10,__max(0,(a1)-(1-1)))];
+  a = a*12 + H7_esc_a_kq[__min(19,__max(0,(kq)-(1-1)))];
+  a = a*8 + H7_esc_a_a1[__min(10,__max(0,(a1)-(1-1)))];
 
   b = 0;
-  b = b*13 + H7_esc_b_pf[__min(12,__max(0,(pf)-(1-1)))];
-  b = b*6 + H7_esc_b_a1[__min(5,__max(0,(a1)-(1-1)))];
+  b = b*3 + (((pf)>8+(1-1))+((pf)>10+(1-1)));
 
   c = 0;
-  c = c*13 + H7_esc_c_oc[__min(12,__max(0,(oc)-(1-1)))];
+  c = c*8 + H7_esc_c_oc[__min(12,__max(0,(oc)-(1-1)))];
   c = c*2 + (((ws)>0+(1-1)));
 
   d = 0;
-  d = d*13 + H7_esc_d_la[__min(12,__max(0,(la)-(1-1)))];
-  d = d*6 + H7_esc_d_kq[__min(5,__max(0,(kq)-(1-1)))];
+  d = d*4 + H7_esc_d_la[__min(12,__max(0,(la)-(1-1)))];
+  d = d*3 + (((kq)>0+(1-1))+((kq)>4+(1-1)));
 
   e = 0;
-  e = e*51 + H7_esc_e_sb[__min(50,__max(0,(sb)-(1-1)))];
+  e = e*23 + H7_esc_e_sb[__min(50,__max(0,(sb)-(1-1)))];
 
   h = 0;
-  h = h*13 + H7_esc_h_a1[__min(12,__max(0,(a1)-(1-1)))];
+  h = h*10 + H7_esc_h_a1[__min(12,__max(0,(a1)-(1-1)))];
   h = h*6 + H7_esc_h_la[__min(5,__max(0,(la)-(1-1)))];
-  h = h*40 + H7_esc_h_xp[__min(39,__max(0,(xp)-(1-1)))];
+  h = h*13 + H7_esc_h_xp[__min(39,__max(0,(xp)-(1-1)))];
 
   i = 0;
-  i = i*13 + H7_esc_i_pf[__min(12,__max(0,(pf)-(1-1)))];
-  i = i*6 + H7_esc_i_oc[__min(5,__max(0,(oc)-(1-1)))];
+  i = i*9 + H7_esc_i_pf[__min(12,__max(0,(pf)-(1-1)))];
+  i = i*5 + H7_esc_i_oc[__min(5,__max(0,(oc)-(1-1)))];
 
   j = 0;
-  j = j*20 + H7_esc_j_kq[__min(19,__max(0,(kq)-(1-1)))];
-  j = j*6 + H7_esc_j_pf[__min(5,__max(0,(pf)-(1-1)))];
+  j = j*12 + H7_esc_j_kq[__min(19,__max(0,(kq)-(1-1)))];
+  j = j*5 + H7_esc_j_pf[__min(5,__max(0,(pf)-(1-1)))];
 
   k = 0;
-  k = k*13 + H7_esc_k_a1[__min(12,__max(0,(a1)-(1-1)))];
-  k = k*6 + H7_esc_k_oc[__min(5,__max(0,(oc)-(1-1)))];
+  k = k*3 + (((a1)>8+(1-1))+((a1)>11+(1-1)));
 
   l = 0;
-  l = l*13 + H7_esc_l_la[__min(12,__max(0,(la)-(1-1)))];
-  l = l*6 + H7_esc_l_pf[__min(5,__max(0,(pf)-(1-1)))];
+  l = l*3 + (((la)>9+(1-1))+((la)>10+(1-1)));
+  l = l*2 + (((pf)>4+(1-1)));
 
   s = 0;
-  s = s*6 + H7_esc_s_a1[__min(5,__max(0,(a1)-(1-1)))];
-  s = s*32 + H7_esc_s_av[__min(31,__max(0,(av)-(1-1)))];
+  s = s*15 + H7_esc_s_av[__min(31,__max(0,(av)-(1-1)))];
 
   m = 0;
   m = m*2 + (((ws)>0+(1-1)));
@@ -68,7 +65,6 @@ void H7_esc_make( const H_esc_v & D, tcx & X ) {
   w = w*2 + (((ws)>0+(1-1)));
 
   t = 0;
-  t = t*20 + H7_esc_t_kq[__min(19,__max(0,(kq)-(1-1)))];
 
   g = 0;
   X.c[0] = a;  X.c[1] = b;  X.c[2] = c;  X.c[3] = d;  X.c[4] = e;  X.c[5] = h;  X.c[6] = i;  X.c[7] = j;  X.c[8] = k;  X.c[9] = l;  X.s = s;  X.m = m;  X.w = w;  X.t = t;  X.g = g;

@@ -21,51 +21,51 @@ Const 0
 
 Index a
  a_tag: tag, &11111111
- a_fld: fld, 1!1111111
- a_p1: p1, 1!111111
+ a_fld: fld, 1!1000001
+ a_p1: p1, 1!111000
 ! a_dm: dm, 1!111111111111111111111111111111111111111111111111111111111111
 
 Index b
  b_tag: tag, &11111111
  b_ch: ch, 1!11
- b_fld: fld, 1!111111111111111
- b_hx: hx, 1!11111111111111111111
+ b_fld: fld, 1!111111101111011
+ b_hx: hx, 1!10101110000001111000
 
 Index c
  c_tag: tag, &11111111
- c_pb: pb, 1!11111111
- c_p1r: p1r, &00000111
+ c_pb: pb, 1!11111100
+ c_p1r: p1r, &11001111
 
 Index d
- d_tag: tag, &11111111
- d_ws: ws, 1!1111
- d_fld: fld, 1!1111111
- d_ml: ml, 1!1111111
+ d_tag: tag, &10101111
+ d_ws: ws, 1!1011
+ d_fld: fld, 1!0000000
+ d_ml: ml, 1!0111100
 
 Index m
- m_tag: tag, &11111111
+ m_tag: tag, &00000000
 
 Index t
- t_tag: tag, &11111111
+ t_tag: tag, &01000111
 
 Index g
- g_p1: p1, 1!111111
+ g_p1: p1, 1!111110
 
 Number rA, 1, 0!11111111
-Number rB, 1, 0!11111111
-Number rC, 1, 0!10001001
+Number rB, 1, 0!11111110
+Number rC, 1, 0!11111110
 Number rD, 1, 0!11111111
-Number rT, 1, 0!10000000
+Number rT, 1, 0!10001011
 Number rG, 1, 0!01000000
 Number lr, 1, 0!01111
-Number mwA, 1, 0!00011011
-Number mwB, 1, 0!00001000
-Number mwC, 1, 0!00000001
-Number mwD, 1, 0!00010000
+Number mwA, 1, 0!00000000
+Number mwB, 1, 0!00000000
+Number mwC, 1, 0!00000000
+Number mwD, 1, 0!00000011
 Number mwT, 1, 0!00000000
 Number mwG, 1, 0!00000000
-Number mt, 1, 0!010
-Number mb, 1, 0!00001000
+Number mt, 1, 0!000
+Number mb, 1, 0!01111010
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is
 #  direct, one that does not is hashed into 2^h rows.  Frozen.
 ! Number hA, 1, 0!11000
