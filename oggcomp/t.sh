@@ -40,7 +40,9 @@
 #  the compressor writes for that stream alone.  The fourth is the model
 #  as a library: oggcomp1.so, built from the tree's own IDX by `./mk.sh
 #  dll 1`, loaded by -1, has to code what -0 codes, byte for byte but for
-#  the model's number in the header.
+#  the model's number in the header.  The last is the files again on
+#  threads, -t 3 in small parts, and the refusals of a damaged stream that
+#  was coded on threads.
 
 set -e
 
@@ -670,6 +672,64 @@ if [ $refusals = 1 ] && [ -f testfiles/tiny-8k-q0.ogg ] && [ -f testfiles/oneboo
   echo
 fi
 
+#  On threads (oc_mt.inc).  The files again on three threads in parts of
+#  4 KB, so that everything past a few pages is cut, at most of the places
+#  a cut can go -- inside a Vorbis stream, where a link starts, in junk --
+#  and has to come back byte for byte.  -t 1 is not threads: it writes what
+#  the table above wrote.  d reads either kind of stream from stdin as well
+#  as from a file.  A stream on threads with a byte turned, cut short, or
+#  naming other threads than it was coded on is refused with 1, and leaves
+#  no output behind.
+bad_mt=0; nmt=0
+if [ $refusals = 1 ]; then
+  mtcheck() {  # $1 what, $2 1 if it passed, $3 what to say
+    nmt=$((nmt + 1))
+    if [ "$2" = 1 ]; then printf '  %-26s %s\n' "$1" "$3"
+    else printf '  %-26s FAILED  %s\n' "$1" "$3"; bad_mt=$((bad_mt + 1)); fi
+  }
+  printf '  %s\n' 'on threads'
+  mok=0; mn=0; mbad=
+  for f in "$@"; do
+    [ -f "$f" ] || continue
+    mn=$((mn + 1))
+    rm -f "$tmp/mt.oc" "$tmp/mt.out"
+    if "$bin" c -q -t 3 -c 4k "$f" "$tmp/mt.oc" >"$tmp/msg" 2>&1 &&
+       "$bin" d -q "$tmp/mt.oc" "$tmp/mt.out" >>"$tmp/msg" 2>&1 &&
+       cmp -s "$f" "$tmp/mt.out"; then mok=$((mok + 1))
+    else [ -n "$mbad" ] || mbad=" -- not $(basename "$f")"; fi
+  done
+  mtcheck '-t 3 -c 4k round trips' "$([ $mok = $mn ] && echo 1)" "$mok of $mn files back byte for byte$mbad"
+  tok=0
+  "$bin" c -q -t 1 "$src" "$tmp/t1.oc" >/dev/null 2>&1 && cmp -s "$tmp/t1.oc" "$tmp/good.oc" && tok=1
+  mtcheck '-t 1 is one model' $tok "$(basename "$src"): the stream the table coded"
+  if "$bin" c -q -t 3 -c 4k "$src" "$tmp/mtgood.oc" >/dev/null 2>&1; then
+    m=$(wc -c < "$tmp/mtgood.oc")
+    cp "$tmp/mtgood.oc" "$tmp/mtflip.oc"
+    printf '\001' | dd of="$tmp/mtflip.oc" bs=1 seek="$((m * 3 / 4))" count=1 conv=notrunc >/dev/null 2>&1
+    head -c "$((m / 2))" "$tmp/mtgood.oc" > "$tmp/mtcut.oc"
+    cp "$tmp/mtgood.oc" "$tmp/mtthr.oc"
+    printf '\002' | dd of="$tmp/mtthr.oc" bs=1 seek=7 count=1 conv=notrunc >/dev/null 2>&1
+    tok=0
+    "$bin" d -q - "$tmp/in1.out" < "$tmp/good.oc" >/dev/null 2>&1 && cmp -s "$src" "$tmp/in1.out" &&
+      "$bin" d -q - "$tmp/in3.out" < "$tmp/mtgood.oc" >/dev/null 2>&1 && cmp -s "$src" "$tmp/in3.out" && tok=1
+    mtcheck 'd from stdin' $tok "$(basename "$src"): one model's stream, and one on threads"
+    for c in "a byte turned:mtflip" "cut in half:mtcut" "other threads named:mtthr"; do
+      what=${c%%:*}; g=${c##*:}
+      rm -f "$tmp/no.out"
+      set +e
+      "$bin" d -q "$tmp/$g.oc" "$tmp/no.out" >"$tmp/msg" 2>&1
+      got=$?
+      set -e
+      if [ "$got" = 1 ] && [ ! -e "$tmp/no.out" ]; then mtcheck "$what" 1 "exit 1  $(sed -n 1p "$tmp/msg" | sed "s|$tmp/||g; s|^[^ ]*: ||" | cut -c1-44)"
+      elif [ -e "$tmp/no.out" ]; then mtcheck "$what" 0 "exit $got, but left an output file behind"
+      else mtcheck "$what" 0 "exit $got, wanted 1"; fi
+    done
+  else
+    mtcheck '-t 3 of the first file' 0 "did not code"
+  fi
+  echo
+fi
+
 printf 't.sh: %d/%d round-tripped byte for byte' "$ok" "$n"
 [ $twice = 1 ] && printf ', %d/%d coded identically twice' "$same" "$nsame"
 echo
@@ -682,8 +742,11 @@ echo
   printf 't.sh: %d/%d library checks passed\n' "$((nlib - bad_lib))" "$nlib"
 [ $ntab -gt 0 ] &&
   printf 't.sh: %d/%d codebook table checks passed\n' "$((ntab - bad_tab))" "$ntab"
+[ $nmt -gt 0 ] &&
+  printf 't.sh: %d/%d checks on threads passed\n' "$((nmt - bad_mt))" "$nmt"
 
-if [ $fail = 0 ] && [ $bad_any = 0 ] && [ $bad_refusal = 0 ] && [ $bad_det = 0 ] && [ $bad_lib = 0 ] && [ $bad_tab = 0 ] && [ $n -gt 0 ]; then
+if [ $fail = 0 ] && [ $bad_any = 0 ] && [ $bad_refusal = 0 ] && [ $bad_det = 0 ] && [ $bad_lib = 0 ] && [ $bad_tab = 0 ] && [ $bad_mt = 0 ] && [ $n -gt 0 ]; then
+
   echo "t.sh: PASS"
 else
   echo "t.sh: FAIL" >&2

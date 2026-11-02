@@ -207,7 +207,22 @@ OC_API const char *OC_CALL oggcomp_Describe(void) {
   snprintf(d, sizeof d, "oggcomp model, stream version %d, %llu MB of tables%s", OC_VER, (unsigned long long)(oc_api_ready ? tabs.bytes() >> 20 : 0), oc_api_ready ? "" : " (not mapped yet)");
   return d;
 }
+OC_API unsigned long long OC_CALL oggcomp_Done(void *pp) {
+  oc_inst *p = (oc_inst *)pp;
+  return p && p == oc_the ? (unsigned long long)oc_done : 0;
+}
+OC_API const char *OC_CALL oggcomp_Stage(void *pp, int i, double *bits, unsigned long long *values) {
+  oc_inst *p = (oc_inst *)pp;
+  if(!p || p != oc_the || i < 0 || i >= STG_N)
+    return nullptr;
+  if(bits)
+    *bits = tc_bits[i];
+  if(values)
+    *values = tc_syms[i];
+  return TC_STAGE[i];
+}
 OC_API void OC_CALL oggcomp_Report(void *pp) {
+
   oc_inst *p = (oc_inst *)pp;
   int i;
   double tot = 0;

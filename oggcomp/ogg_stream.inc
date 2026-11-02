@@ -1,6 +1,11 @@
 constexpr sz IN_LOW = (sz)20 << 20;
 constexpr sz IN_WIN = (sz)32 << 20;
 static OC_TLS u8 *in_win;  // IN_WIN bytes, mapped (oc_api.inc)
+//  The .ogg side's bytes done since the run began: the encoder's place in
+//  its input (source::skip), the decoder's output (out_sink::put).  What
+//  oggcomp_Done() says, for a progress line: the encoder reads up to IN_WIN
+//  ahead of where it codes, so what it has been given says little.
+static OC_TLS u64 oc_done;
 //  The input, as a window over the coroutine's input pin: what the walker
 //  reads is in_win, refilled from the pin when it runs low.
 struct source {
@@ -57,7 +62,10 @@ struct source {
       have += got;
     }
   }
-  void skip(sz n) { at += n; }
+  void skip(sz n) {
+    at += n;
+    oc_done = origin + at;
+  }
   const u8 *cur() const { return in_win + at; }
   sz avail() const { return have - at; }
   sz offset() const { return origin + at; }
@@ -180,6 +188,8 @@ struct out_sink {
   void put(const u8 *b, sz n) {
     coro3_pin &p = *out;
     crc = crcrun(crc, b, n);
+    oc_done += n;
+
     while(n) {
       sz room = (sz)(p.end - p.ptr);
       if(!room) {

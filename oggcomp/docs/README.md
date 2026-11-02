@@ -23,8 +23,10 @@ puts the original back byte for byte from what it wrote.
 
 Needs a C++ compiler and perl, on x86-64.  `c++` and `-O2` are the
 defaults; override with `CXX` and `CXXFLAGS`.  There is one translation
-unit and no library beyond libm, so there is no makefile and nothing to
-configure.  g++ and clang++ both work and produce the same stream.
+unit and no library beyond libm and the threads (`-pthread`, which
+`./mk.sh` passes; on Windows they are kernel32's), so there is no makefile
+and nothing to configure.  g++ and clang++ both work and produce the same
+stream.
 
 x86-64 is not a preference: `Lib3/coro3b.inc` switches between an x86-64
 and an i386 setjmp written in inline assembly and has no third branch, so
@@ -69,8 +71,10 @@ that stream alone.  When `./mk.sh apitest` has built `oc_api_test`, it
 also drives the API from a program the way neither `oggcomp` nor
 `oggdet` does -- both directions on one instance, solid, and a `Loop`
 with nowhere to write -- which is what a library gets from callers it
-never met.  `testfiles/README.md` says what is in the corpus and why,
-and what it does not reach; `-h` lists the options.
+never met.  Last it runs the corpus again on threads, in parts small
+enough that everything past a few pages is cut, and the refusals of a
+damaged stream coded on threads.  `testfiles/README.md` says what is in
+the corpus and why, and what it does not reach; `-h` lists the options.
 
     ./t.sh && ./mk.sh check
 
@@ -79,14 +83,30 @@ is the two binaries against each other.
 
 ## Running it
 
-    oggcomp c [-v] [-H] input.ogg output.oc
-    oggcomp d [-v] [-H] input.oc  restored.ogg
+    oggcomp c [-v] [-H] [-t N [-c SIZE]] [-p | -q] input.ogg output.oc
+    oggcomp d [-v] [-H] [-p | -q] input.oc  restored.ogg
 
 `-v` says where the bits went, by stage.  `-H` asks for huge pages, which
 costs about ten times the resident memory and is worth measuring before
 believing.  `-N`, a digit, picks the model: `-0` the one linked into the
-program, `-1` to `-9` a library beside it (below).  A lone `-` is stdin or
-stdout.
+program, `-1` to `-9` a library beside it (below).  `-t N` codes on N
+threads, in parts of at least `-c` (*On threads*, below).  A lone `-` is
+stdin or stdout -- for either, though not both: `-` named twice is a
+command line it refuses.
+
+Where stderr is a terminal, a run keeps a line there that it puts over
+itself every half second:
+
+    [enc] 501333 > 434873   54.5%  4 parts on 4 threads  0.39 MB/s  284.6M RAM
+
+-- the bytes of the `.ogg` side done and of the `.oc` side, how far through
+its input the run is (where the size is known: not from a pipe), on threads
+the parts done, the speed on the `.ogg` side, and the memory the process
+holds.  At the end it says how long the run took and the most memory it
+had.  `-p` shows the line where stderr is not a terminal too, `-q` never.
+A message on stderr ends the line first, and none comes after an error.
+An encoder reads well ahead of where it codes, so its count is what the
+model has coded (`oggcomp_Done()`), not what it has read.
 
 Two sharp edges worth knowing before scripting it.  **A run that fails
 deletes the file its output path names** -- so that a half-written `.oc`
@@ -130,11 +150,13 @@ Vorbis in it costs about eight bits a byte.
 
 The model tables and the static pools behind them reserve about 860 MB
 of address space and touch a fraction of it -- some 85 MB resident on a
-megabyte of input -- but a `ulimit -v` below the reservation turns every
-run into exit 3, and `-H`
+megabyte of input, 156 MB on 5.7 MB -- but a `ulimit -v` below the
+reservation turns every run into exit 3, and `-H`
 rounds every sparse touch up to a 2 MB page and costs about ten times the
-resident memory.  The coroutine wants ~288 kB of stack, so a `ulimit -s`
-under that, or a caller thread with a small stack, is a segfault.
+resident memory.  On threads each thread has all of that to itself.  The
+coroutine wants ~288 kB of stack, so a `ulimit -s` under that, or a caller
+thread with a small stack, is a segfault; a thread of `-t` wants twice that,
+which a thread's default stack has (8 MB on Linux, 1 MB on Windows).
 
 ### oggdet
 
@@ -190,6 +212,106 @@ read back from a pipe.  Its exit status is 1 for input it cannot restore
 from -- a `.meta` or a file that is not one or is cut short, a segment or
 stream file missing or damaged -- 2 and 3 as for `oggcomp`.
 
+## On threads
+
+    oggcomp c -t 4 in.ogg out.oc         4 threads, four parts each by default
+    oggcomp c -t 4 -c 512k in.ogg out.oc parts of 512 KB at least
+    oggcomp d out.oc back.ogg            on the 4 threads the stream names
+
+`-t N` (2 to 64) cuts the input into parts and codes them on N threads,
+each thread with a model of its own -- its own tables, its own coroutine,
+the whole of what one run has -- so a run on N threads holds N times the
+memory of one.  `d` reads N from the stream and decodes on as many; it
+takes no `-t`, and needs as many threads as `c` had whatever the machine
+has, only slower on fewer cores.  `-t 1` is not threads: it writes the
+stream of one model, the one `c` writes without `-t`, byte for byte.
+
+**Where it cuts** is where `../oggsplit` cuts, the places a part is a
+stream the model codes about as well as it codes it inside the whole:
+before a link of a chained file but the first, and inside a link that is
+one Vorbis stream at a page that starts a packet, with the stream's three
+headers put in front of the part on pages of their own -- the comment
+header with its vendor string and without the comments, which stay in the
+first part -- numbered to lead into the page at the cut, so that the part
+parses on its own.  The inserted pages are coded with the part and dropped
+by `d`.  A part ends at the first such place at least `-c` after its start.
+Where none comes -- a stream that is not Vorbis, two streams in one link,
+bytes that are not pages -- it ends anyway at eight times `-c`: before a
+page, with the headers if it is inside a Vorbis stream whose headers are
+known, or in the junk.  The model codes whatever it is given, so every cut
+is lossless; the first kind are the ones that cost next to nothing.
+
+**The parts go to the threads in turn**, through MTwrap (m4vpack's, in
+parts mode), and a thread codes its parts one after another with one model,
+solid as `oggdet -S` codes its segments: its second part starts with what
+its first taught the model, and the headers inserted in front of it, seen
+before, cost a symbol each.  A model fresh for each part cost +0.89% over
+one model on a 2.9 MB file in 12 parts, solid +0.52%, and fresh was slower
+too, 8.6 s against 5.8 s, every part paying the model's start.
+
+**`-c`** is the size of a part, at least: `-c 2` is 2 MB (1 to 1024),
+`-c 300k` 300 KB.  By default each thread gets four parts -- the input's
+size over 4N, from 64 KB to 4 MB, and 1 MB where the size is not known, as
+from a pipe.  Four, because the threads take their parts in turn and wait for
+the slowest at the end: a 5.7 MB file on 4 threads in parts of a sixth
+took 7.0 s, in parts of a sixteenth 5.5 to 5.8 s.
+
+What it costs and gives, on 4 cores, against one model:
+
+| file | threads | `c` | `d` | `.oc` | size |
+|---|---|---|---|---|---|
+| 5.7 MB | 1 | 16.0 s | 15.9 s | 5,107,032 | |
+| | 2 | 9.0 s | 8.9 s | 5,114,964 | +0.16% |
+| | 4 | 5.5 s | 5.8 s | 5,124,603 | +0.34% |
+| 0.9 MB | 1 | 3.1 s | | 774,404 | |
+| | 2 | 2.3 s | | 778,277 | +0.50% |
+| | 4 | 1.6 s | | 781,481 | +0.91% |
+
+and over the 37 files of `testfiles/` and 17 pieces of music beside them,
+11.8 MB of `.oc`: `-t 2` +0.38%, `-t 4` +0.71%, `-t 4 -c 100k` +0.73%,
+`-t 8 -c 16k` +2.0%, and `-t 3 -c 1k` +7.7%, where a part is a page or
+two and pays for its record, its CRC and the header pages in front of it
+every time.  The peak resident memory was 156, 312 and 585 MB for the
+5.7 MB file.  System time grows with the threads, because each
+thread's tables are touched fresh, page by page: 75,000 page faults for
+one model on that file and 291,000 for four, 3.5 s of system time among
+the 21 s of CPU.  `-H` is the knob for that where the kernel has 2 MB
+pages ready.
+
+**The stream** is a 12-byte header -- `oggm\x1a`, the stream version, the
+model, the threads, and the part size in KB as 4 bytes, little-endian --
+and then MTwrap's container, which holds the N threads' streams interleaved
+in blocks as they were written.  A thread's stream holds, for each part, a
+32-byte record -- the part's size as coded, the bytes of headers inserted
+in front of it, its place in the input (thread w's k-th part is w + kN), a
+CRC of those 24 bytes, and 4 zero bytes -- and then the part as the API
+codes it, what `oggcomp c` writes after its header, ending in a CRC of the
+part.  That goes in chunks of a varint length and that many bytes, with a
+varint 0 after the last, because the decoder reads ahead of where the coder
+stopped and so has to be told where the part ends.  A thread's stream
+ends in a record of size 0.  So `d` finds a part lost, added, moved or damaged, or a
+thread's stream cut short, and refuses with 1, keeping nothing, as for any
+`.oc` it cannot read.
+
+The bytes of a stream coded on threads are **not the same from one run to
+the next**: MTwrap writes the threads' blocks in the order they come, and
+that is the threads' timing.  What `d` makes of any of them is the input.
+So `t.sh`'s "coded identically twice" holds for one model and `-t 1`, not
+for `-t 2` and up.
+
+`oc_mt.inc` is the mechanism, `./t.sh` runs the corpus on three threads in
+4 KB parts, so that everything past a few pages is cut, and checks that
+`-t 1` is one model, that `d` reads either kind of stream from stdin, and
+the refusals.  Beyond that it was run under ThreadSanitizer, which reports
+MTwrap's ring buffer and its done flags -- `volatile` with fences, which it
+does not model -- and with those made atomic in a test build reports
+nothing over round trips and damaged streams; under AddressSanitizer and
+UBSan without stack instrumentation, which the stack-copying coroutines
+defeat; on 500 damaged streams, each refused -- with 1, or with 3 where
+the damage named a model whose library is not there -- or decoded to the
+input; and built with mingw and run under wine, where a stream either side
+writes the other decodes.
+
 ## The model as a library
 
 The compressor is one translation unit and one model, and a second model
@@ -235,7 +357,14 @@ file header, which the caller writes and checks with
 `oggcomp_StreamVersion()` and the model's number.  `OC_F_SOLID` on `Init`
 keeps the model from the run before on that instance, which is `-S`; a
 run's errors come back as `Loop` results of 4 and up with the message in
-`oggcomp_Error()`, never as an exit.  `./t.sh` builds nothing, but with
+`oggcomp_Error()`, never as an exit.  Two calls came with threads:
+`oggcomp_Done(p)`, the bytes of the `.ogg` side done -- for an encoder,
+coded, which is behind what it has read -- for the progress line, and
+`oggcomp_Stage(p, i, &bits, &values)`, the numbers `oggcomp_Report()`
+prints, which `-v` on threads adds up over the threads.  A library may
+leave them out, as one built before them does: it still loads, the
+progress line then counts the bytes fed to it, and `-v` on threads says
+that the model does not tell.  `./t.sh` builds nothing, but with
 `oggcomp1.so` beside the binary (`./mk.sh dll 1`, or `./t.sh -B`) it
 checks that `-1` writes what `-0` writes but for the model byte, that `d`
 finds the library from the header and refuses `-0`, and that a library
@@ -274,7 +403,16 @@ WinAPI backend had no notion of it and would have made a file called `-`,
 and the stdio one handed over stdin and stdout in Windows' text mode,
 where every `0x0A` written becomes `0x0D 0x0A`.  That second one did not
 fail -- `oggcomp d in.oc - > out.ogg` exited 0 and wrote 168196 bytes for
-an input of 167685, silently not the file it was given.
+an input of 167685, silently not the file it was given.  And `d` from
+stdin, on any system, read the stream's header twice -- once in `main()`
+to learn the model, and once more to decode -- so from a pipe the second
+read had the bytes after it, and every `oggcomp d - out.ogg` was refused
+as not an oggcomp stream; `main()` now reads it once and hands it on.
+
+On Windows `-t` runs on `CreateThread`, which MTwrap is written to (on
+Linux `win_shim.inc` puts it on POSIX threads).  Built with mingw and run
+under wine, with either file backend, `-t` round-trips through files and
+pipes, and what it writes decodes on Linux, and the reverse.
 
 ## What is here
 
@@ -282,6 +420,9 @@ an input of 167685, silently not the file it was given.
 |---|---|
 | `oggcomp.cpp` | the include list and `main()`.  The program is the `.inc` files beside it, one per layer, in the order they are included: `ogg_*` the container, `vb_*` Vorbis, `oc_rcio.inc`, `rc.inc` and `cm.inc` the coder's byte I/O, the range coder and the mixing primitives, `tc_*` the model machinery, `oc_*` the six models and their assembly, and `oc_coro.inc` the coroutine that is the compressor -- what `oggdet` includes.  `REFACTOR.md` and `REFACTOR2.md` say what is in each |
 | `oggdet.cpp`, `oggart.inc` | the carver, and the cover-art extraction it uses.  `oggdet.cpp` includes the compressor's `.inc` files up to `oc_coro.inc` and drives the model through `oc_api.h` from inside its own coroutine |
+| `oc_mt.inc` | `-t`: the splitter, which cuts where `../oggsplit` cuts and puts the headers in front of a part; the thread's coroutine, which codes its parts with one model and writes the records and chunks; and the stream's format, over MTwrap |
+| `oc_progress.inc` | the progress line: the clock, the memory, the line put over itself, and the hook that ends it before a message |
+| `MTwrap_v3/`, `Lib3/coro2pair.inc` | m4vpack's MTwrap, its files as they are there -- the threads, the ring buffers to and from them, and the container their output goes in -- with `win_shim.inc`, the WinAPI it is written to on POSIX threads, from m4vpack's `Lib3/` and put beside `MTwrap.inc`, which includes it, so that no `-I` is needed; and m4vpack's pair of coroutines, which puts the splitter in front of it |
 | `oc_api.h`, `oc_api.inc`, `oc_load.inc`, `oggcomp_dll.cpp`, `oc_api_test.cpp` | the model as a library: the C interface, its implementation over the coroutine, the table of pointers the programs drive either model through, and the translation unit `./mk.sh dll N` builds into `oggcompN.so`; and the test that drives the API from a program, built by `./mk.sh apitest` |
 | `vb_dict.inc`, `vbooks_gen.inc` | the codebook table: libvorbis's static books, packed the way libvorbis packs them and matched against the setup packet bit for bit, so a setup that is one of the table's rows costs a row number and a flag per book; and the generated table itself, which is not edited by hand |
 | `IDX/` | the parameter and context declarations, and `idx2inc.pl`, which turns them into C++.  `IDX-FORMAT.md` is the format; `opt.pl` is the optimizer that drives a tuning build |

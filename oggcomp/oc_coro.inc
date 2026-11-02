@@ -54,7 +54,9 @@ template <int f_DEC> static void oc_next(oc_coro<f_DEC> &co, const char *in) {
   tc_zero(pgbuf, sizeof pgbuf, 0);
   tc_zero(body, sizeof body, 0);
   rc_over = 0;
+  oc_done = 0;
   oc_in = in;
+
   co.in = in;
   co.coro_init();
 }

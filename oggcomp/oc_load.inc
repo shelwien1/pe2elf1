@@ -21,6 +21,8 @@ struct oc_api {
   unsigned long long(OC_CALL *TableBytes)(void);
   const char *(OC_CALL *Describe)(void);
   void(OC_CALL *Report)(void *);
+  unsigned long long(OC_CALL *Done)(void *);                         // 0 in a library built before threads
+  const char *(OC_CALL *Stage)(void *, int, double *, unsigned long long *);  // likewise
 };
 static void oc_api_own(oc_api *a) {
   a->model = 0;
@@ -37,6 +39,8 @@ static void oc_api_own(oc_api *a) {
   a->TableBytes = oggcomp_TableBytes;
   a->Describe = oggcomp_Describe;
   a->Report = oggcomp_Report;
+  a->Done = oggcomp_Done;
+  a->Stage = oggcomp_Stage;
 }
 #ifdef _WIN32
 #define OC_LIB_EXT ".dll"
@@ -117,6 +121,9 @@ static void oc_api_load(oc_api *a, int model) {
   OC_SYM(Describe);
   OC_SYM(Report);
 #undef OC_SYM
+  a->Done = (decltype(a->Done))oc_dl_sym(h, "oggcomp_Done");
+  a->Stage = (decltype(a->Stage))oc_dl_sym(h, "oggcomp_Stage");
+
   a->model = model;
   a->lib = h;
 }

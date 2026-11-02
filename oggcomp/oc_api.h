@@ -81,6 +81,13 @@ OC_API int OC_CALL oggcomp_StreamVersion(void);   /*  what the stream's version 
 OC_API unsigned long long OC_CALL oggcomp_TableBytes(void); /*  the model tables, once mapped  */
 OC_API const char *OC_CALL oggcomp_Describe(void); /*  one line about the model  */
 OC_API void OC_CALL oggcomp_Report(void *p);      /*  where the bits went, on stderr, after an encode with OC_F_VERBOSE  */
+/*  Since threads: optional in a library (oc_load.inc), so that one built
+    before them still loads.  */
+OC_API unsigned long long OC_CALL oggcomp_Done(void *p); /*  the .ogg side's bytes done since Init: coded, or restored  */
+/*  Stage i's bits and values, after an encode with OC_F_VERBOSE: its name,
+    or 0 past the last stage.  What oggcomp_Report() prints, to add up.  */
+OC_API const char *OC_CALL oggcomp_Stage(void *p, int i, double *bits, unsigned long long *values);
+
 #ifdef __cplusplus
 }
 #endif

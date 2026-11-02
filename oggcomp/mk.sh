@@ -99,7 +99,7 @@ WARN=${WARN:--Wall -Wextra}
 #  after, and required before it.  -O3, -march=native and -flto were all
 #  measured and are noise: the program is bound by a gigabyte of model
 #  tables, not by code.
-REQ=-fwrapv
+REQ="-fwrapv -pthread"
 
 #  Lib3/coro3b.inc picks between an x86-64 and an i386 setjmp written in
 #  inline assembly, and there is no third branch: on aarch64 the i386 one is
@@ -381,7 +381,7 @@ case "${1:-tuning}" in
     tmp=$(mktemp -d "${TMPDIR:-/tmp}/mk-pgo.XXXXXX")
     generate 0 1
     ( cd "$tmp" && $CXX $CXXFLAGS $WARN $REQ -fprofile-generate -c -o oggcomp.o "$here/oggcomp.cpp" \
-        && $CXX -fprofile-generate -o gen oggcomp.o -lm ) || exit 1
+        && $CXX -fprofile-generate -pthread -o gen oggcomp.o -lm ) || exit 1
     "$tmp/gen" c "$pgo_in" "$tmp/p.oc" && "$tmp/gen" d "$tmp/p.oc" "$tmp/p.ogg" || exit 1
     #  The training run decodes as well as encodes, so that the profile
     #  covers both halves; while it is there, check that what came back is
@@ -394,7 +394,7 @@ case "${1:-tuning}" in
     [ -s "$tmp/oggcomp.gcda" ] ||
       { echo "mk.sh pgo: no profile was written -- $tmp/oggcomp.gcda is not there" >&2; exit 1; }
     ( cd "$tmp" && $CXX $CXXFLAGS $WARN $REQ -fprofile-use -fprofile-correction -c -o oggcomp.o "$here/oggcomp.cpp" \
-        && $CXX -o "$here/oggcomp" oggcomp.o -lm ) || exit 1
+        && $CXX -pthread -o "$here/oggcomp" oggcomp.o -lm ) || exit 1
     build_det
     ./oggcomp c "$pgo_in" "$tmp/q.oc"
     cmp -s "$tmp/p.oc" "$tmp/q.oc" || { echo "mk.sh pgo: THE PROFILED BUILD CODES DIFFERENTLY" >&2; exit 1; }
