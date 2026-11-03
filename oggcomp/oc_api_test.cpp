@@ -2,7 +2,7 @@
     not oggcomp or oggdet drives it: one instance, both directions, solid
     and not, and the calls a caller can get wrong.  Built by `./mk.sh
     apitest` over the same translation unit as the library, so it tests
-    model 0 at static addresses; ./t.sh runs it when it is there.
+    every level at static addresses; ./t.sh runs it when it is there.
 
         ./oc_api_test testfiles/tiny-8k-q0.ogg
 
@@ -149,6 +149,36 @@ int main(int argc, char **argv) {
     check(refused && guard, "Loop after NEED_OUTPUT with no buffer", how);
     r = r == OC_DONE ? drive(p, OC_DECODE, 0, out, back) : r;
     check(r == 0 && back == in, "and the run goes on once one is given", back == in ? "byte for byte" : "differs");
+    oggcomp_Free(p);
+  }
+  //  Every level of the build, through Init's flags: each round-trips, a
+  //  stream decodes at its own level and not at another, and a level the
+  //  build has not is an error, not the default.
+  {
+    std::vector<u8> l9, other;
+    p = oggcomp_Alloc();
+    for(int l : oc_levels) {
+      std::vector<u8> x;
+      r = drive(p, OC_ENCODE, OC_F_LEVEL(l), in, x);
+      if(!r)
+        r = drive(p, OC_DECODE, OC_F_LEVEL(l), x, back);
+      snprintf(how, sizeof how, "%d bytes, %s", (int)x.size(), !r && back == in ? "back byte for byte" : "FAILED");
+      char what[48];
+      snprintf(what, sizeof what, "level -%d round-trips", l);
+      check(!r && back == in, what, how);
+      if(l == oc_levels[0])
+        l9 = x;
+      else if(other.empty())
+        other = x;
+    }
+    if(!other.empty()) {
+      r = drive(p, OC_DECODE, OC_F_LEVEL(oc_levels[0]), other, back);
+      snprintf(how, sizeof how, "Loop %d", r);
+      check(r >= 4, "a stream at another level is refused", how);
+    }
+    r = oggcomp_Init(p, OC_ENCODE, OC_F_LEVEL(5), "test");
+    snprintf(how, sizeof how, "Init %d: %.150s", r, oggcomp_Error(p));
+    check(r == 5, "a level the build has not", how);
     oggcomp_Free(p);
   }
   printf("oc_api_test: %d/%d checks passed\n", checks - failed, checks);

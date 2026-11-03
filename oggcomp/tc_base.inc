@@ -27,21 +27,42 @@ static INLINE i32 tc_qlog(i64 x) {
 static INLINE i32 tc_abs(i32 v) { return v < 0 ? -v : v; }
 static INLINE int tc_clamp(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
 static OC_TLS int tc_huge;
-//  Every mapping tc_map made, so that tc_zero can give the tables their
-//  initial state back: a frontend that codes several streams in one run
-//  (oggdet) wants each to see the model a fresh process would.
+//  Every mapping tc_map made for a level's tables, so that tc_zero can give
+//  them their initial state back -- a frontend that codes several streams
+//  in one run (oggdet) wants each to see the model a fresh process would --
+//  and so that they can be given back.  One list per level (oc_tables, in
+//  levels.inc): a thread may have more than one level mapped, and what one
+//  level resets or unmaps is its own.  tc_map records into the list of the
+//  level being mapped, tc_maps_to, which only that level's init sets.
 struct tc_mapped {
   void *p;
   sz n;
 };
 constexpr int TC_MAPMAX = 128;
-static OC_TLS tc_mapped tc_maps[TC_MAPMAX];
-static OC_TLS int tc_nmaps;
+struct tc_maplist {
+  tc_mapped m[TC_MAPMAX];
+  int n;
+  //  Every table in it, given back: the next init maps them again, as a
+  //  fresh process would (oggcomp_Free, or an init that failed part way).
+  void unmap() {
+    int i;
+    for(i = 0; i < n; i++) {
+#ifdef _WIN32
+      VirtualFree(m[i].p, 0, MEM_RELEASE);
+#else
+      munmap(m[i].p, m[i].n);
+#endif
+    }
+    n = 0;
+  }
+};
+static OC_TLS tc_maplist *tc_maps_to;
 static void *tc_map(sz n) {
   void *p;
+  tc_maplist &l = *tc_maps_to;
   //  Before the mapping, not after it: a mapping made and then refused is
   //  one nothing will ever unmap.
-  FATAL_UNLESS(tc_nmaps < TC_MAPMAX, "internal: more model tables than tc_maps holds");
+  FATAL_UNLESS(l.n < TC_MAPMAX, "internal: more model tables than tc_maps holds");
 #ifdef _WIN32
   p = VirtualAlloc(nullptr, n, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 #else
@@ -56,29 +77,16 @@ static void *tc_map(sz n) {
   if(!p)
     FATAL_CODE(OGC_EXIT_IO,
                "cannot map %" PRIu64 " MB for a model table -- "
-               "IDX/tsvcomp-*.idx asks for more than this machine will map",
+               "IDX/l*/tsvcomp-*.idx asks for more than this machine will map",
                (u64)(n >> 20));
-  tc_maps[tc_nmaps].p = p;
-  tc_maps[tc_nmaps].n = n;
-  tc_nmaps++;
+  l.m[l.n].p = p;
+  l.m[l.n].n = n;
+  l.n++;
   return p;
-}
-//  Every table tc_map made for this thread, given back: the next Init maps
-//  them again, as a fresh process would (oggcomp_Free).
-static void tc_unmap_all(void) {
-  int i;
-  for(i = 0; i < tc_nmaps; i++) {
-#ifdef _WIN32
-    VirtualFree(tc_maps[i].p, 0, MEM_RELEASE);
-#else
-    munmap(tc_maps[i].p, tc_maps[i].n);
-#endif
-  }
-  tc_nmaps = 0;
 }
 //  A block of the thread's state (OC_TLS, oc_platform.inc): mapped
 //  demand-zero, as a static object is, and kept until the thread gives
-//  its instance back.  Not one of tc_maps, which the tables' reset zeroes.
+//  its instance back.  Not one of a level's maps, which its reset zeroes.
 static void *oc_map_block(sz n) {
   void *p;
 #ifdef _WIN32

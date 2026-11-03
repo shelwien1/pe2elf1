@@ -44,8 +44,6 @@ static INLINE void oc_raw_zero(void);
 #define TC_MEMCOST 10000
 #endif
 #endif
-#define TC_WIRE(f, F, g, ng, rt, mwt, rg, mwg, lrmt, mbmt) (f).wire(tabs.F->TC_##F##_A, TC_##F##_a_Volume, tabs.F->TC_##F##_B, TC_##F##_b_Volume, tabs.F->TC_##F##_C, TC_##F##_c_Volume, tabs.F->TC_##F##_D, TC_##F##_d_Volume, tabs.F->TC_##F##_MT, TC_##F##_t_Volume, tabs.F->TC_##F##_S, tabs.F->TC_##F##_SC, TC_##F##_s_Volume, tabs.F->TC_##F##_F, tabs.F->TC_##F##_FC, TC_##F##_f_Volume, tabs.F->TC_##F##_W, TC_##F##_m_Volume, (g), (ng), TC_##F##_g_Volume, tabs.F->TC_##F##_WM, TC_##F##_n_Volume, tabs.F->TC_##F##_WC, tabs.F->TC_##F##_WMC, TC_##F##_rA, TC_##F##_rB, TC_##F##_rC, TC_##F##_rD, (rt), (rg), TC_##F##_mwA, TC_##F##_mwB, TC_##F##_mwC, TC_##F##_mwD, (mwt), (mwg), TC_##F##_rS1, TC_##F##_rS2, TC_##F##_lr, TC_##F##_mb, (lrmt), (mbmt), TC_##F##_bw, TC_##F##_qs, TC_##F##_qf, TC_##F##_ND, TC_##F##_MND, TC_##F##_hA, TC_##F##_hB, TC_##F##_hD, TC_##F##_hS, TC_##F##_hF, TC_##F##_hM, TC_##F##_hT, TC_##F##_hN)
-#define TC_WIRE_ALL(f, F, g, ng) TC_WIRE(f, F, g, ng, TC_##F##_rT, TC_##F##_mwT, TC_##F##_rG, TC_##F##_mwG, TC_##F##_lrm, TC_##F##_mbm)
 //  The model: the six families and everything the coders remember between
 //  symbols.  The methods are defined in oc_frame.inc, oc_header.inc,
 //  oc_raw.inc, oc_floor.inc and oc_residue.inc, one layer each; the parser
@@ -131,10 +129,12 @@ static const char *const oc_tagorder[] = {
     "cb.ordlen", "cb.ordrun", "map.mux",
     "cb.set", "cb.same",
 };
-template <int f_DEC> struct oc_model {
+//  The model at one level (levels.inc): its families' tables, parameters and
+//  index builders are Lv's, and everything else -- what the model remembers,
+//  how it walks a page -- is the same at every level.
+template <int f_DEC, class Lv> struct oc_model {
   static constexpr int ENC = (f_DEC == 0);
   static constexpr int DRY = 0;
-  static OC_TLS Rangecoder<f_DEC, OC_CARRYLESS> rc;
   tc_fam<f_DEC> fam_dig, fam_sgn, fam_flr, fam_cls, fam_aux, fam_hdr;
   i64 tc_last[F_N], tc_last2[F_N];
   vb_ctx *vb;
@@ -198,36 +198,30 @@ template <int f_DEC> struct oc_model {
   void vec_begin() { fam_dig.pc.start(P.pt); }
   i64 digit(i64 dg);
 };
-template <int f_DEC> OC_TLS Rangecoder<f_DEC, OC_CARRYLESS> oc_model<f_DEC>::rc;
 
-template <int f_DEC> void oc_model<f_DEC>::init() {
+template <int f_DEC, class Lv> void oc_model<f_DEC, Lv>::init() {
   cm_tables();
-  tabs.init();
+  oc_tabs<Lv>().init();
   wire_all();
   tags_init();
 }
-template <int f_DEC> void oc_model<f_DEC>::tags_init() {
+template <int f_DEC, class Lv> void oc_model<f_DEC, Lv>::tags_init() {
   sz i;
   for(i = 0; i < sizeof oc_tagorder / sizeof *oc_tagorder; i++)
     tagid(oc_tagorder[i]);
   tc_lasttag = -1;
   tc_runpos = 0;
 }
-template <int f_DEC> void oc_model<f_DEC>::wire_all() {
-  TC_WIRE(fam_dig, dig, (cm_cnt *)nullptr, 0, TC_dig_rT, TC_dig_mwT, 0, 0, TC_dig_lrm, TC_dig_mbm);
-  TC_WIRE(fam_sgn, sgn, (cm_cnt *)nullptr, 0, 0, 0, 0, 0, 0, 0);
-  TC_WIRE_ALL(fam_flr, flr, tabs.flr->TC_flr_G, TC_SGN_FLR);
-  TC_WIRE(fam_cls, cls, (cm_cnt *)nullptr, 0, TC_cls_rT, TC_cls_mwT, 0, 0, TC_cls_lrm, TC_cls_mbm);
-  TC_WIRE_ALL(fam_aux, aux, tabs.aux->TC_aux_G, TC_SGN_AUX);
-  TC_WIRE_ALL(fam_hdr, hdr, tabs.hdr->TC_hdr_G, TC_SGN_HDR);
+template <int f_DEC, class Lv> void oc_model<f_DEC, Lv>::wire_all() {
+  Lv::wire(*this, oc_tabs<Lv>());
   raw_init();
 }
 //  The model as a fresh process has it, after init(): every table zero,
 //  every pool empty, every remembered value forgotten, the families wired
 //  again.  For a frontend that codes one stream after another and wants
 //  each .oc to be what `oggcomp c` would have written for it.
-template <int f_DEC> void oc_model<f_DEC>::reset() {
-  tabs.reset();
+template <int f_DEC, class Lv> void oc_model<f_DEC, Lv>::reset() {
+  oc_tabs<Lv>().reset();
   hist->clear();
   tcp->reset();
   vb_ar->reset();
@@ -237,17 +231,17 @@ template <int f_DEC> void oc_model<f_DEC>::reset() {
   wire_all();
   tags_init();
 }
-template <int f_DEC> i64 oc_model<f_DEC>::auxc(int fld, i32 c, i64 x, int sgn) {
+template <int f_DEC, class Lv> i64 oc_model<f_DEC, Lv>::auxc(int fld, i32 c, i64 x, int sgn) {
   tcx v;
   i64 r;
-  tc_make_aux(fld, c, tc_qlog(tc_last[fld]), v);
+  Lv::make_aux(fld, c, tc_qlog(tc_last[fld]), v);
   r = sgn ? fam_aux.codes(v, x, (u32)fld) : (i64)fam_aux.code(v, (u64)x);
   tc_last2[fld] = tc_last[fld];
   tc_last[fld] = r;
   return r;
 }
-template <int f_DEC> i64 oc_model<f_DEC>::aux(int fld, i64 x) { return auxc(fld, tc_qlog(tc_last2[fld]), x, 0); }
-template <int f_DEC> void oc_model<f_DEC>::setup_done(vb_ctx &vv) {
+template <int f_DEC, class Lv> i64 oc_model<f_DEC, Lv>::aux(int fld, i64 x) { return auxc(fld, tc_qlog(tc_last2[fld]), x, 0); }
+template <int f_DEC, class Lv> void oc_model<f_DEC, Lv>::setup_done(vb_ctx &vv) {
   const vb_setup *s;
   vb = &vv;
   s = vb->cur;

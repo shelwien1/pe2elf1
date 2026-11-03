@@ -1,25 +1,28 @@
 constexpr char OC_MAGIC[] = "oggc\x1a";
 constexpr int OC_VER = 6;
-//  The coroutine, one per direction: f_DEC is what Rangecoder calls it, 0
-//  to code and 1 to decode.  Each direction's walk is a member function
-//  chosen by overload on the direction's tag, and a member function of a
-//  class template is compiled only where it is called, so the decoder's
-//  binary path holds no dry run and the encoder's no page writer.
+//  The coroutine, one per direction and level: f_DEC is what Rangecoder
+//  calls it, 0 to code and 1 to decode, and Lv the level (levels.inc).
+//  Each direction's walk is a member function chosen by overload on the
+//  direction's tag, and a member function of a class template is compiled
+//  only where it is called, so the decoder's binary path holds no dry run
+//  and the encoder's no page writer.
 template <int N> struct oc_dir {};
-template <int f_DEC> struct oc_coro : Coroutine {
-  oc_model<f_DEC> t;
+template <int f_DEC, class Lv> struct oc_coro : Coroutine {
+  typedef Lv level;
+  oc_model<f_DEC, Lv> t;
   const char *in;
   void go(oc_dir<0>) {
     source src;
+    Rangecoder<f_DEC, OC_CARRYLESS> &rc = oc_coder<f_DEC>::rc;
     src.open(in, &pin[0]);
-    t.rc.co = this;
-    t.rc.rc_Init();
+    rc.co = this;
+    rc.rc_Init();
     {
-      og_packer<oc_model<f_DEC>> pk(t, src);
+      og_packer<oc_model<f_DEC, Lv>> pk(t, src);
       pk.pack();
     }
-    t.rc.rc_Quit();
-    if(t.rc.carry_lost())
+    rc.rc_Quit();
+    if(rc.carry_lost())
       FATAL_CODE(OGC_EXIT_INTERNAL,
                  "%s: the carryless coder lost a carry; "
                  "this is a measuring build, ship one with OC_CARRYLESS=0",
@@ -27,9 +30,10 @@ template <int f_DEC> struct oc_coro : Coroutine {
     src.close();
   }
   void go(oc_dir<1>) {
-    t.rc.co = this;
-    t.rc.rc_Init();
-    og_unpacker<oc_model<f_DEC>> up(t, &pin[1]);
+    Rangecoder<f_DEC, OC_CARRYLESS> &rc = oc_coder<f_DEC>::rc;
+    rc.co = this;
+    rc.rc_Init();
+    og_unpacker<oc_model<f_DEC, Lv>> up(t, &pin[1]);
     up.unpack(in);
   }
   void do_process() {
@@ -43,7 +47,7 @@ template <int f_DEC> struct oc_coro : Coroutine {
 //  started over -- the parser's scratch and setup, the pointer to them,
 //  the over-read count, the coroutine -- with the coder restarted for the
 //  new file.  Such a .oc decodes only after the ones before it, in order.
-template <int f_DEC> static void oc_next(oc_coro<f_DEC> &co, const char *in) {
+template <int f_DEC, class Lv> static void oc_next(oc_coro<f_DEC, Lv> &co, const char *in) {
   co.t.vb = nullptr;
   tc_zero(&vb_su, sizeof vb_su, 0);
   tc_zero(vb_ys, sizeof vb_ys, 0);
@@ -64,7 +68,7 @@ template <int f_DEC> static void oc_next(oc_coro<f_DEC> &co, const char *in) {
 //  runs several: the model reset (oc_model::reset) and then the rest as
 //  above.  After it, feeding this coroutine a file gives the .oc that
 //  `oggcomp c` would.
-template <int f_DEC> static void oc_fresh(oc_coro<f_DEC> &co, const char *in) {
+template <int f_DEC, class Lv> static void oc_fresh(oc_coro<f_DEC, Lv> &co, const char *in) {
   co.t.reset();
   oc_next(co, in);
 }

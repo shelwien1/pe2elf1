@@ -63,7 +63,7 @@ static i32 vd_unfold(i32 val, i32 pred, i32 quant) {
     y = pred + (val >> 1);
   return y < 0 ? 0 : y > quant - 1 ? quant - 1 : y;
 }
-template <int f_DEC> void oc_model<f_DEC>::floor(u32 k, u32 fno, const vb_floor *f, u32 *y, int &used) {
+template <int f_DEC, class Lv> void oc_model<f_DEC, Lv>::floor(u32 k, u32 fno, const vb_floor *f, u32 *y, int &used) {
   const oc_floor *fd = oc_fl + fno;
   sz row = (sz)hist->tc_blk * hist->tc_nchan + k;
   i16 *hp = hist->fl_hist + row * VB_MAXPOST;
@@ -112,7 +112,7 @@ template <int f_DEC> void oc_model<f_DEC>::floor(u32 k, u32 fno, const vb_floor 
       if(ep < 0)
         ep = 0;
     }
-    tc_make_flr((int)fno, (int)fd->rnk[p], tc_qlog(mine ? hp[p] : 0), tc_qlog(mine ? hy[p] : 0), p < 2, (int)hist->tc_blk, tc_qlog(o1), tc_qlog(pred), tc_sq(od), (int)k, tc_qlog(room), hl, tc_qlog(lov), tc_qlog(hiv), fam_flr.pc.axis(), tc_qlog(ep), v);
+    Lv::make_flr((int)fno, (int)fd->rnk[p], tc_qlog(mine ? hp[p] : 0), tc_qlog(mine ? hy[p] : 0), p < 2, (int)hist->tc_blk, tc_qlog(o1), tc_qlog(pred), tc_sq(od), (int)k, tc_qlog(room), hl, tc_qlog(lov), tc_qlog(hiv), fam_flr.pc.axis(), tc_qlog(ep), v);
     yy = ENC ? fl_cur[p] : 0;
     yy = fam_flr.codes(v, yy, 0);
     FATAL_UNLESS(yy >= 0 && yy < 32768, "coded stream: floor post %" PRId64, yy);

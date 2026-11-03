@@ -1,4 +1,4 @@
-template <int f_DEC> u32 oc_model<f_DEC>::mode(u32 md, u32 nmd) {
+template <int f_DEC, class Lv> u32 oc_model<f_DEC, Lv>::mode(u32 md, u32 nmd) {
   tc_stage = STG_AUD;
   md = (u32)auxc(F_MODE, (i32)tc_prevmode, ENC ? (i64)md : 0, 0);
   FATAL_UNLESS(md < nmd, "coded stream: audio names mode %" PRIu64, (u64)md);
@@ -9,13 +9,13 @@ template <int f_DEC> u32 oc_model<f_DEC>::mode(u32 md, u32 nmd) {
     tc_prevW = 0;
   return md;
 }
-template <int f_DEC> u32 oc_model<f_DEC>::wprev(u32 w) {
+template <int f_DEC, class Lv> u32 oc_model<f_DEC, Lv>::wprev(u32 w) {
   w = (u32)auxc(F_WPREV, (i32)tc_prevW, ENC ? (i64)w : 0, 0);
   FATAL_UNLESS(w < 2, "coded stream: aud.wprev is %u", w);
   oc_wp = w;
   return w;
 }
-template <int f_DEC> u32 oc_model<f_DEC>::wnext(u32 w) {
+template <int f_DEC, class Lv> u32 oc_model<f_DEC, Lv>::wnext(u32 w) {
   w = (u32)auxc(F_WNEXT, (i32)oc_wp, ENC ? (i64)w : 0, 0);
   FATAL_UNLESS(w < 2, "coded stream: aud.wnext is %u", w);
   tc_prevW = oc_nextW;
@@ -24,7 +24,7 @@ template <int f_DEC> u32 oc_model<f_DEC>::wnext(u32 w) {
 //  `bos` is what the caller expects of the type's beginning-of-stream bit:
 //  true while every page of the group so far has carried it, which is the
 //  first page, and after it the further streams of a multiplexed file.
-template <int f_DEC> void oc_model<f_DEC>::page(ogg_page &p, int cont, int bos) {
+template <int f_DEC, class Lv> void oc_model<f_DEC, Lv>::page(ogg_page &p, int cont, int bos) {
   u32 i;
   i64 g;
   u32 seq = oc_seq++;
@@ -83,14 +83,14 @@ template <int f_DEC> void oc_model<f_DEC>::page(ogg_page &p, int cont, int bos) 
   if(!ENC)
     p.pack();
 }
-template <int f_DEC> u32 oc_model<f_DEC>::link(u32 more) {
+template <int f_DEC, class Lv> u32 oc_model<f_DEC, Lv>::link(u32 more) {
   i64 m;
   tc_stage = STG_PAGE;
   m = aux(F_MORE, ENC ? (i64)more : 0);
   FATAL_UNLESS(m >= 0 && m < 2, "coded stream: link.more is %" PRId64, m);
   return (u32)m;
 }
-template <int f_DEC> void oc_model<f_DEC>::link_begin() {
+template <int f_DEC, class Lv> void oc_model<f_DEC, Lv>::link_begin() {
   pg_prev = 0;
   tc_prevW = 0;
   tc_prevmode = 0;
@@ -106,28 +106,28 @@ template <int f_DEC> void oc_model<f_DEC>::link_begin() {
 //  page's answer; whether its stored CRC is the one its content gives; and
 //  whether a packet has bits past its last field.  All but the run length
 //  are one binary symbol with a nearly certain answer.
-template <int f_DEC> u32 oc_model<f_DEC>::rawlen(u32 n) {
+template <int f_DEC, class Lv> u32 oc_model<f_DEC, Lv>::rawlen(u32 n) {
   i64 v;
   tc_stage = STG_RAW;
   v = aux(F_RAWLEN, ENC ? (i64)n : 0);
   FATAL_UNLESS(v >= 0 && v <= (i64)MAXPAY, "coded stream: a raw run of %" PRId64, v);
   return (u32)v;
 }
-template <int f_DEC> u32 oc_model<f_DEC>::more(u32 m, int eos) {
+template <int f_DEC, class Lv> u32 oc_model<f_DEC, Lv>::more(u32 m, int eos) {
   i64 v;
   tc_stage = STG_PAGE;
   v = auxc(F_PGMORE, eos ? 1 : 0, ENC ? (i64)m : 0, 0);
   FATAL_UNLESS(v >= 0 && v < 2, "coded stream: page.more is %" PRId64, v);
   return (u32)v;
 }
-template <int f_DEC> u32 oc_model<f_DEC>::pgraw(u32 r, int lastraw) {
+template <int f_DEC, class Lv> u32 oc_model<f_DEC, Lv>::pgraw(u32 r, int lastraw) {
   i64 v;
   tc_stage = STG_PAGE;
   v = auxc(F_PGRAW, lastraw ? 1 : 0, ENC ? (i64)r : 0, 0);
   FATAL_UNLESS(v >= 0 && v < 2, "coded stream: page.raw is %" PRId64, v);
   return (u32)v;
 }
-template <int f_DEC> u32 oc_model<f_DEC>::crcbad(u32 c) {
+template <int f_DEC, class Lv> u32 oc_model<f_DEC, Lv>::crcbad(u32 c) {
   i64 v;
   tc_stage = STG_PAGE;
   v = aux(F_CRCBAD, ENC ? (i64)c : 0);
@@ -140,7 +140,7 @@ template <int f_DEC> u32 oc_model<f_DEC>::crcbad(u32 c) {
 //  and none of it on bytes; this catches it on either, at four bytes a
 //  file.  Flat, because it is one value per file and there is nothing to
 //  learn it from.
-template <int f_DEC> u32 oc_model<f_DEC>::check(u32 c) {
+template <int f_DEC, class Lv> u32 oc_model<f_DEC, Lv>::check(u32 c) {
   u32 v = 0;
   int i;
   tc_stage = STG_PAGE;
@@ -148,14 +148,14 @@ template <int f_DEC> u32 oc_model<f_DEC>::check(u32 c) {
     v = v * 2 + (u32)tc_bit<f_DEC>(CM_PHALF, (int)(ENC && ((c >> i) & 1)));
   return v;
 }
-template <int f_DEC> u32 oc_model<f_DEC>::padnz(u32 z) {
+template <int f_DEC, class Lv> u32 oc_model<f_DEC, Lv>::padnz(u32 z) {
   i64 v;
   tc_stage = STG_AUD;
   v = aux(F_PADNZ, ENC ? (i64)z : 0);
   FATAL_UNLESS(v >= 0 && v < 2, "coded stream: packet.padding is %" PRId64, v);
   return (u32)v;
 }
-template <int f_DEC> u32 oc_model<f_DEC>::spill(u32 n) {
+template <int f_DEC, class Lv> u32 oc_model<f_DEC, Lv>::spill(u32 n) {
   i64 ex;
   tc_stage = STG_PAGE;
   ex = aux(F_SPILL, ENC ? (i64)n : 0);

@@ -9,15 +9,20 @@ takes any file: what the Vorbis parser can place is modelled, and the rest
 beside the audio, a page with a bad CRC, a file that is not Ogg at all --
 is coded as bytes.  `oggcomp c` does not refuse input.
 
+It has four levels, as m4vpack has: `-9`, the default and the strongest,
+`-7`, `-3` and `-1`, each a model of its own -- context indices, tables and
+parameters -- and all of them in the one program (*Levels*, below).
+
 Beside it is `oggdet`, the carver: it finds every Ogg stream in a file that
 holds other things too -- an archive, a disk image, a download that stopped
 -- writes each out, or with `-c` writes one file holding each stream as
 the `.oc` that `oggcomp c` would make of it and the rest coded too, and
 puts the original back byte for byte from what it wrote.
 
-    ./mk.sh          build ./oggcomp and ./oggdet
+    ./mk.sh release  build ./oggcomp, every level, and ./oggdet
     ./t.sh           round-trip the test corpus and check it came back
-    ./mk.sh check    prove the tuning and shipping builds code identically
+    ./mk.sh check    prove the tuning and shipping builds code identically,
+                     level by level
 
 ## Building
 
@@ -37,24 +42,25 @@ gigabyte of model tables, not by code.
 
 | command | what it builds |
 |---|---|
-| `./mk.sh` | the **tuning** build: every model parameter is a live object carrying a `!MAP!` marker, which is what `IDX/opt.pl` hill-climbs |
-| `./mk.sh release` | the **shipping** build: every parameter folded to a literal, no indirection, no markers |
+| `./mk.sh release` | the **shipping** build: every level, every parameter folded to a literal, no indirection, no markers |
+| `./mk.sh tuning L` | the **tuning** build of level `-L` alone (`./mk.sh` alone: of `-9`): every parameter of `IDX/lL/` a live object carrying a `!MAP!` marker, which is what `IDX/opt.pl` hill-climbs |
 | | both write `./oggdet` too, from the same `MOD/`: the carver includes the compressor, so a change to the model is a change to both |
-| `./mk.sh check [list]` | both, over one `.ogg` per line of *list* (default: `testfiles/`), compared byte for byte |
-| `./mk.sh mod [dir]` | regenerate `MOD/` in the shipping form, build nothing; from another model's directory when one is named |
-| `./mk.sh pgo f.ogg` | the shipping build, laid out from a profile of *f.ogg* |
-| `./mk.sh dll N [dir]` | `oggcompN.so`: the model in *dir* (default `IDX/`) as a library, which `-N` loads -- see *The model as a library* |
+| `./mk.sh check [L] [list]` | the tuning build of each level, or of `-L`, against the shipping build at that level, over one `.ogg` per line of *list* (default: `testfiles/`), compared byte for byte |
+| `./mk.sh mod` | regenerate `MOD/` in the shipping form, every level, build nothing |
+| `./mk.sh pgo f.ogg` | the shipping build, laid out from a profile of *f.ogg* at every level |
+| `./mk.sh lib` | `oggcomp.so`: every level as a library -- see *The levels as a library* |
 
 Both builds must produce the same stream.  That is the format's contract
 and `./mk.sh check` is the test of it; see `IDX/IDX-FORMAT.md` §1 for why
 the two exist and how one is derived from the other.
 
-`MOD/` is a build input, not an artefact: it ships generated so that a
-machine without perl can still compile, and `./mk.sh` rewrites it from
-`IDX/`.  So a tuning build leaves twelve modified files in `git status`,
+`MOD/` is a build input, not an artefact: it ships generated, in the
+shipping form, so that a machine without perl can still compile, and
+`./mk.sh` rewrites it from `IDX/`: `MOD/l9/` from `IDX/l9/`, and so on for
+each level.  So a tuning build leaves twelve modified files in `git status`,
 which is not damage -- `./mk.sh mod` writes the shipping form back.  Run
-`./mk.sh` after editing any `IDX/tsvcomp-<family>.idx` or its `.inc`: a
-stale `MOD/` compiles fine and codes differently.
+`./mk.sh mod` after editing any `IDX/l<L>/tsvcomp-<family>.idx` or its
+`.inc`: a stale `MOD/` compiles fine and codes differently.
 
 ## Testing
 
@@ -67,11 +73,13 @@ told no -- including that a refused run leaves no half-written output
 behind.  Then it carves a container of streams and other bytes with
 `oggdet`, with and without `-c`, requires the container back, and requires
 the segment `-c` wrote for a stream to be the file `oggcomp c` writes for
-that stream alone.  When `./mk.sh apitest` has built `oc_api_test`, it
-also drives the API from a program the way neither `oggcomp` nor
-`oggdet` does -- both directions on one instance, solid, and a `Loop`
-with nowhere to write -- which is what a library gets from callers it
-never met.  Last it runs the corpus again on threads, in parts small
+that stream alone.  It codes a file at each level the binary has and
+requires it back with the level in its header, `d` at another level
+refused, and a header from before the levels decoded at its level.  When
+`./mk.sh apitest` has built `oc_api_test`, it also drives the API from a
+program the way neither `oggcomp` nor `oggdet` does -- both directions on
+one instance, solid, every level, and a `Loop` with nowhere to write --
+which is what a library gets from callers it never met.  Last it runs the corpus again on threads, in parts small
 enough that everything past a few pages is cut, and the refusals of a
 damaged stream coded on threads.  `testfiles/README.md` says what is in
 the corpus and why, and what it does not reach; `-h` lists the options.
@@ -85,13 +93,14 @@ is the two binaries against each other.
 
 ## Running it
 
-    oggcomp c [-v] [-H] [-t N [-c SIZE]] [-p | -q] input.ogg output.oc
+    oggcomp c [-9|-7|-3|-1] [-v] [-H] [-t N [-c SIZE]] [-p | -q] input.ogg output.oc
     oggcomp d [-v] [-H] [-p | -q] input.oc  restored.ogg
 
-`-v` says where the bits went, by stage.  `-H` asks for huge pages, which
-costs about ten times the resident memory and is worth measuring before
-believing.  `-N`, a digit, picks the model: `-0` the one linked into the
-program, `-1` to `-9` a library beside it (below).  `-t N` codes on N
+`-9`, `-7`, `-3` and `-1` pick the level `c` codes at (*Levels*, below):
+`-9` when none is given.  `d` takes the level from the stream, and a level
+given to it must be the stream's.  `-v` says where the bits went, by stage.
+`-H` asks for huge pages, which costs about ten times the resident memory
+and is worth measuring before believing.  `-t N` codes on N
 threads, in parts of at least `-c` (*On threads*, below).  A lone `-` is
 stdin or stdout, for either or both: `oggcomp c - - < a.ogg > a.oc` is a
 pipe.  An output that is the input under another name -- `./a.ogg`, a full
@@ -151,9 +160,10 @@ command line it cannot parse, 3 for something the filesystem said.  `c`
 does not exit 1: whatever the input is, it is coded, and what is not
 Vorbis in it costs about eight bits a byte.
 
-The model tables and the static pools behind them reserve about 860 MB
-of address space and touch a fraction of it -- some 85 MB resident on a
-megabyte of input, 156 MB on 5.7 MB -- but a `ulimit -v` below the
+At `-9` the model tables and the static pools behind them reserve about
+860 MB of address space and touch a fraction of it -- some 85 MB resident
+on a megabyte of input, 156 MB on 5.7 MB; at the other levels 800 to
+930 MB, and 91 to 145 MB on the 5.7 MB -- but a `ulimit -v` below the
 reservation turns every run into exit 3, and `-H`
 rounds every sparse touch up to a 2 MB page and costs about ten times the
 resident memory.  On threads each thread has all of that to itself.  The
@@ -214,6 +224,74 @@ memory, the stack, `-`, and outputs deleted on failure holds for it too;
 read back from a pipe.  Its exit status is 1 for input it cannot restore
 from -- a `.meta` or a file that is not one or is cut short, a segment or
 stream file missing or damaged -- 2 and 3 as for `oggcomp`.
+
+## Levels
+
+    oggcomp c in.ogg out.oc              at -9, the strongest
+    oggcomp c -7 in.ogg out.oc           at -7
+    oggcomp d out.oc back.ogg            at the level the stream names
+
+A level is a model: the six families' context indices and parameters as
+`IDX/l<L>/tsvcomp-<family>.idx` declares them, and the tables they size.
+Everything around the model -- the parser, the coder, the stream's format,
+threads -- is the same at every level.  Every level is in the one binary
+under names of its own (`L9_dig_...`, `L7_dig_...`), which `levels_h.inc`
+and `levels.inc` gather into a class per level, `Lv9` to `Lv1`, that the
+model is a template on, as m4vpack's is on its `Lv` classes; so a run at
+`-7` is `IDX/l7/` compiled as if it were the only model, and the others
+cost it nothing but their share of the binary.  A level's tables are mapped
+by the first run at that level and not before.
+
+The four are the four models the tree had: the one built in, and the three
+it loaded as libraries by the number in a stream's header, `oggcomp1.dll`
+to `oggcomp3.dll` (*The levels as a library*).  The strongest is `-9`, as
+in m4vpack, and the default:
+
+| level | was | music `.oc` | ratio | `c` | `d` | peak | corpus `.oc` | ratio |
+|---|---|---|---|---|---|---|---|---|
+| `-9` | the built-in model | 11,299,954 | 88.73% | 24.1 s | 23.7 s | 156 MB | 501,190 | 69.93% |
+| `-7` | `oggcomp2` | 11,305,463 | 88.78% | 17.7 s | 17.7 s | 92 MB | 501,556 | 69.98% |
+| `-3` | `oggcomp3` | 11,320,979 | 88.90% | 21.9 s | 21.1 s | 119 MB | 504,814 | 70.43% |
+| `-1` | `oggcomp1` | 11,323,162 | 88.92% | 20.8 s | 20.3 s | 146 MB | 502,581 | 70.12% |
+
+-- the music being the 17 pieces beside the corpus, 12.7 MB of `.ogg`,
+coded and decoded a file at a time on one thread, with the most memory any
+one run held; and the corpus the 38 `.ogg` files of `testfiles/`, 0.7 MB.
+Each level codes byte for byte what its model did before it was a level,
+but for the header's level byte; that was checked on 57 files at every
+level.
+
+That is not m4vpack's curve, where each level down gives up ratio for
+speed.  `-7` is the one to have besides `-9`: 0.05% behind it, in three
+quarters of its time and 59% of its memory.  `-3` and `-1` lose to `-7` on
+all three, on both sets; they are levels because they were models, and
+streams were made with them, which decode.  To make them something else
+is what the tuning build is for (below).
+
+**The header** names the level in its seventh byte, which was the model's
+number, and the numbers were kept where they could be, so a stream from
+before the levels decodes at its level with no option: 0, the built-in
+model, is `-9` now, 2 is `-7`, and 1 and 3 are what they were
+(`oc_level_of`, `oggcomp.cpp`).  A stream coded on threads has the byte at
+the same place.  `d` reads the level from the stream; a `-N` given to it
+must be the stream's, and a stream at a level the build has not is refused
+with 1, as a byte that names no level is.  `c` at a level the build has not
+is a usage error, 2.
+
+**Tuning a level.**  `./mk.sh tuning L` builds `-L` alone (`-DOC_ONLY=L`),
+every parameter of `IDX/lL/` a live object with its `!MAP!` marker, so that
+`IDX/opt.pl` finds that level's knobs and no other's, and the build takes
+the time of one level and not four; `./mk.sh check L` codes the corpus
+under it and under the shipping build at `-L` and compares.  `opt.pl`'s
+`export.!!!` names the level's parameters (`L9_dig_...`); one from before
+the levels, which names `TC_dig_...`, is carried over as
+`IDX/IDX-FORMAT.md` §7 says.  A level retuned codes differently, and the
+streams made at it before would no longer decode: a retuning is a new
+stream version (`OC_VER`, `oc_coro.inc`), which refuses them, or a new
+level, which keeps them.  A new level is a directory, `IDX/lN/` with the
+six families' `.idx` and `.inc`, each `.idx` saying `Prefix LN_<family>`,
+and a line for it wherever the four are listed: `levels_h.inc`,
+`levels.inc`, `oc_level_of` and `mk.sh`'s `LEVELS`.
 
 ## On threads
 
@@ -282,7 +360,7 @@ the 21 s of CPU.  `-H` is the knob for that where the kernel has 2 MB
 pages ready.
 
 **The stream** is a 12-byte header -- `oggm\x1a`, the stream version, the
-model, the threads, and the part size in KB as 4 bytes, little-endian --
+level, the threads, and the part size in KB as 4 bytes, little-endian --
 and then MTwrap's container, which holds the N threads' streams interleaved
 in blocks as they were written.  A thread's stream holds, for each part, a
 32-byte record -- the part's size as coded, the bytes of headers inserted
@@ -310,20 +388,18 @@ MTwrap's ring buffer and its done flags -- `volatile` with fences, which it
 does not model -- and with those made atomic in a test build reports
 nothing over round trips and damaged streams; under AddressSanitizer and
 UBSan without stack instrumentation, which the stack-copying coroutines
-defeat; on 500 damaged streams, each refused -- with 1, or with 3 where
-the damage named a model whose library is not there -- or decoded to the
-input; and built with mingw and run under wine, where a stream either side
-writes the other decodes.
+defeat; on 500 damaged streams, each refused or decoded to the input --
+and since the levels on 800 more, at every level and on threads, each
+refused with 1 or decoded to the input; and built with mingw and run
+under wine, where a stream either side writes the other decodes.
 
-## The model as a library
+## The levels as a library
 
-The compressor is one translation unit and one model, and a second model
--- another `IDX/`, another tuning -- was until now a second program.  It
-is now a library: `oc_api.h` is a C interface over the coroutine, one
-instance per library, the shape of `raw2hif_dll.h`,
+`oc_api.h` is a C interface over the coroutine, one instance per thread,
+the shape of `raw2hif_dll.h`,
 
     p = oggcomp_Alloc();
-    oggcomp_Init(p, OC_ENCODE, flags, "in.ogg");     or OC_DECODE
+    oggcomp_Init(p, OC_ENCODE, flags, "in.ogg");     or OC_DECODE; OC_F_LEVEL(7) in flags for -7
     oggcomp_addout(p, obuf, sizeof obuf);
     for(;;) {
       r = oggcomp_Loop(p);
@@ -333,45 +409,39 @@ instance per library, the shape of `raw2hif_dll.h`,
     }
     oggcomp_Free(p);
 
-and the same functions come two ways.  Linked into `oggcomp` and
-`oggdet`, they are model 0, `-0`, the default.  Exported by
-`oggcompN.so` -- `oggcompN.dll` on Windows -- they are model N, and `-N`
-loads that file from beside the program (or from the library path) and
-drives it through the same table of pointers (`oc_load.inc`) that holds
-the static addresses for model 0.  A stream names its model in its
-header, the byte after the version, so `oggcomp d` and `oggdet d` find
-the library on their own; a `-N` given there must agree.
+Linked into `oggcomp` and `oggdet`, these functions are what they run,
+through a table of pointers (`oc_load.inc`); `./mk.sh lib` exports them as
+`oggcomp.so` -- `oggcomp.dll` on Windows -- for a program of someone
+else's.  The level goes in `Init`'s flags, `OC_F_LEVEL(7)` for `-7` and 0
+for the strongest, and a level the build has not is an error from `Init`
+(5).
 
-    ./mk.sh dll 2 ../other-model/IDX      # oggcomp2.so from that model
-    oggcomp c -2 in.ogg out.oc            # coded by it
-    oggcomp d out.oc back.ogg             # loads oggcomp2.so by the header
-    oggdet c -S -2 image.bin out          # every segment through it
+Until the levels, a model other than the program's own -- another `IDX/`,
+another tuning -- was a library of its own, `oggcompN.so`, which `-N`
+loaded from beside the program by the number in the stream's header.  The
+tree had three such models beside its own, and they are levels now
+(*Levels*, above): the program has them all and loads nothing.
 
-The library is the shipping form of whatever `IDX/` it was built from,
-`oggcomp_dll.cpp` compiled with `-shared` and the API exported, its own
-366 MB of tables, its own coroutine stacks, and one instance per thread:
+The library is the shipping form of every level, `oggcomp_dll.cpp`
+compiled with `-shared` and the API exported, and one instance per thread:
 the model's state is the thread's, so `oggcomp_Alloc()` hands a thread its
 instance once and `0` while it is out, and that thread drives it.  Threads
-that each take one run at once, each with tables of its own -- which is
-how `-t` runs -- and two models loaded at once are two libraries and twice
-the tables.
+that each take one run at once, each with tables of its own, which is how
+`-t` runs.  A level's tables are mapped by the thread's first `Init` at
+that level and kept until `oggcomp_Free()`, so a thread that codes at two
+levels holds the tables of both.
   What goes through it is the coded stream without its seven-byte
 file header, which the caller writes and checks with
-`oggcomp_StreamVersion()` and the model's number.  `OC_F_SOLID` on `Init`
-keeps the model from the run before on that instance, which is `-S`; a
-run's errors come back as `Loop` results of 4 and up with the message in
-`oggcomp_Error()`, never as an exit.  Two calls came with threads:
-`oggcomp_Done(p)`, the bytes of the `.ogg` side done -- for an encoder,
-coded, which is behind what it has read -- for the progress line, and
-`oggcomp_Stage(p, i, &bits, &values)`, the numbers `oggcomp_Report()`
-prints, which `-v` on threads adds up over the threads.  A library may
-leave them out, as one built before them does: it still loads, the
-progress line then counts the bytes fed to it, and `-v` on threads says
-that the model does not tell.  `./t.sh` builds nothing, but with
-`oggcomp1.so` beside the binary (`./mk.sh dll 1`, or `./t.sh -B`) it
-checks that `-1` writes what `-0` writes but for the model byte, that `d`
-finds the library from the header and refuses `-0`, and that a library
-that is not there is a refusal with nothing written.
+`oggcomp_StreamVersion()` and the level.  `OC_F_SOLID` on `Init` keeps the
+model from the run before on that instance at that level, which is `-S`;
+a run's errors come back as `Loop` results of 4 and up with the message in
+`oggcomp_Error()`, never as an exit.  `oggcomp_Done(p)` is the bytes of the
+`.ogg` side done -- for an encoder, coded, which is behind what it has
+read -- for the progress line, and `oggcomp_Stage(p, i, &bits, &values)`
+the numbers `oggcomp_Report()` prints, which `-v` on threads adds up over
+the threads.  `./t.sh` runs `oc_api_test` when `./mk.sh apitest` has built
+it: both directions on one instance, solid, every level through `Init`'s
+flags, and the calls a caller can get wrong.
 
 ## On Windows
 
@@ -388,18 +458,21 @@ takes nothing exotic:
 
     x86_64-w64-mingw32-g++ -O2 -fwrapv -static -o oggcomp.exe oggcomp.cpp
     x86_64-w64-mingw32-g++ -O2 -fwrapv -static -DFILE_API_WIN -o oggcomp.exe oggcomp.cpp
-    x86_64-w64-mingw32-g++ -O2 -fwrapv -static -shared -DOC_BUILD_DLL -o oggcomp1.dll oggcomp_dll.cpp
+    x86_64-w64-mingw32-g++ -O2 -fwrapv -static -shared -DOC_BUILD_DLL -o oggcomp.dll oggcomp_dll.cpp
 
 The same two lines with `oggdet.cpp` and `oggdet.exe` build the carver;
-the third is a model as a library, from whatever `MOD/` holds (`./mk.sh
-mod dir` puts another model's there).  `OC_CALL` is `__stdcall` on
-Windows, as in `raw2hif_dll.h`, which on x86-64 decorates nothing; a
-32-bit build wants `-Wl,--kill-at` so that `GetProcAddress` finds the
-plain names.  Both programs, with both file backends, load
-`oggcomp1.dll` under wine and write the bytes the Linux build writes.
-Both were built and run under wine over the whole corpus, and both produce
-the same compressed stream as the Linux build, byte for byte, including
-when either end is a pipe.
+the third is every level as a library, for a program of someone else's
+(*The levels as a library*).  `OC_CALL` is `__stdcall` on Windows, as in
+`raw2hif_dll.h`, which on x86-64 decorates nothing; a 32-bit build wants
+`-Wl,--kill-at` so that `GetProcAddress` finds the plain names.  Both
+programs were built and run under wine over the whole corpus, and both
+produce the same compressed stream as the Linux build, byte for byte,
+including when either end is a pipe.  Since the levels, on six files of
+the corpus: `oggcomp.exe` with either file backend codes at every level the
+stream the Linux build codes, and decodes it, through files and pipes; on
+threads each side decodes what the other coded; and `oggcomp.dll`, loaded
+by `GetProcAddress`, codes every level's stream as the Linux build writes
+it after its header, and decodes it.
 
 `-` means a standard stream on both, which took a fix on each side: the
 WinAPI backend had no notion of it and would have made a file called `-`,
@@ -426,10 +499,11 @@ pipes, and what it writes decodes on Linux, and the reverse.
 | `oc_mt.inc` | `-t`: the splitter, which cuts where `../oggsplit` cuts and puts the headers in front of a part; the thread's coroutine, which codes its parts with one model and writes the records and chunks; and the stream's format, over MTwrap |
 | `oc_progress.inc` | the progress line: the clock, the memory, the line put over itself, and the hook that ends it before a message |
 | `MTwrap_v3/`, `Lib3/coro2pair.inc` | m4vpack's MTwrap, its files as they are there -- the threads, the ring buffers to and from them, and the container their output goes in -- with `win_shim.inc`, the WinAPI it is written to on POSIX threads, from m4vpack's `Lib3/` and put beside `MTwrap.inc`, which includes it, so that no `-I` is needed; and m4vpack's pair of coroutines, which puts the splitter in front of it |
-| `oc_api.h`, `oc_api.inc`, `oc_load.inc`, `oggcomp_dll.cpp`, `oc_api_test.cpp` | the model as a library: the C interface, its implementation over the coroutine, the table of pointers the programs drive either model through, and the translation unit `./mk.sh dll N` builds into `oggcompN.so`; and the test that drives the API from a program, built by `./mk.sh apitest` |
+| `levels_h.inc`, `levels.inc` | the levels: which the build has (`-DOC_ONLY=L` for one alone), each level's generated headers and index builders from `MOD/l<L>/`, and its class, `Lv<L>` -- the types of its tables, its builders, its parameters and how its families are wired -- which the model, the coroutine and the API are templates on |
+| `oc_api.h`, `oc_api.inc`, `oc_load.inc`, `oggcomp_dll.cpp`, `oc_api_test.cpp` | the levels as a library: the C interface, its implementation over the coroutines of every level, the table of pointers the programs drive it through, and the translation unit `./mk.sh lib` builds into `oggcomp.so`; and the test that drives the API from a program, built by `./mk.sh apitest` |
 | `vb_dict.inc`, `vbooks_gen.inc` | the codebook table: libvorbis's static books, packed the way libvorbis packs them and matched against the setup packet bit for bit, so a setup that is one of the table's rows costs a row number and a flag per book; and the generated table itself, which is not edited by hand |
-| `IDX/` | the parameter and context declarations, and `idx2inc.pl`, which turns them into C++.  `IDX-FORMAT.md` is the format; `opt.pl` is the optimizer that drives a tuning build |
-| `MOD/` | what `idx2inc.pl` generated, checked in |
+| `IDX/` | the tools: `idx2inc.pl`, which turns a level's declarations into C++, `IDX-FORMAT.md`, the format, and `opt.pl`, the optimizer that drives a tuning build; and in `l9/`, `l7/`, `l3/` and `l1/` the declarations of each level, its parameters and contexts, a `.idx` and an `.inc` template per family |
+| `MOD/` | what `idx2inc.pl` generated, a directory per level, checked in |
 | `Lib3/` | coroutines and the file layer.  `file_api.inc` picks stdio or the WinAPI; `file_api_test.cpp` is the test that the two are one interface |
 | `testfiles/` | the corpus, and `gen.sh`, which builds it |
 | `gc.bat`, `t.bat` | the Windows equivalents of `mk.sh` and `t.sh` |

@@ -43,7 +43,7 @@
 //  worker's stream cut short.  Each worker writes its stream as it codes,
 //  64 KB at a time, and MTwrap's container holds the N streams interleaved
 //  as they were made, after the header:
-//    "oggm\x1a", the stream version, the model, the threads, the part size
+//    "oggm\x1a", the stream version, the level, the threads, the part size
 //    in KB (4 bytes, little-endian)
 //  d needs as many threads as c had, and takes the number from the header;
 //  each part ends a round of MTwrap's decoder, which takes the parts from
@@ -77,7 +77,7 @@
 #endif
 
 constexpr char OC_MT_MAGIC[] = "oggm\x1a";
-enum { MT_AT_VERSION = 5, MT_AT_MODEL = 6, MT_AT_THREADS = 7, MT_AT_PART = 8, MT_HEAD = 12 };
+enum { MT_AT_VERSION = 5, MT_AT_LEVEL = 6, MT_AT_THREADS = 7, MT_AT_PART = 8, MT_HEAD = 12 };
 constexpr int OC_MT_MAX = 64;         // threads: MTwrap's container holds 64 workers' streams
 constexpr u32 MT_RING = 1u << 20;     // MTwrap's buffers to and from each worker
 constexpr u64 MT_HARD = 8;            // where no cut comes, a part ends at this many part sizes

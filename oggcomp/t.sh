@@ -4,7 +4,7 @@
 #      ./t.sh                     the bundled corpus, ./oggcomp
 #      ./t.sh a.ogg b/*.ogg       those files instead
 #      ./t.sh -x build/oggcomp    a binary that is not ./oggcomp
-#      ./t.sh -B                  rebuild with ./mk.sh first, oggcomp1.so too
+#      ./t.sh -B                  rebuild with ./mk.sh release first, oc_api_test too
 #      ./t.sh -k                  keep the .oc and the restored .ogg
 #      ./t.sh -1                  one encode per file, no determinism check
 #      ./t.sh -n                  skip the tests after the table
@@ -37,10 +37,10 @@
 #  The third section is oggdet, the carver built beside the compressor: a
 #  container of streams and other bytes has to come back whole, with and
 #  without -c, and the segment -c writes for a stream has to be the file
-#  the compressor writes for that stream alone.  The fourth is the model
-#  as a library: oggcomp1.so, built from the tree's own IDX by `./mk.sh
-#  dll 1`, loaded by -1, has to code what -0 codes, byte for byte but for
-#  the model's number in the header.  The last is the files again on
+#  the compressor writes for that stream alone.  The fourth is the levels:
+#  each level the binary has codes and comes back, names itself in the
+#  header so that `d` needs no option, and a header from before the levels,
+#  which named the model, decodes at that model's level.  The last is the files again on
 #  threads, -t 3 in small parts, and the refusals of a damaged stream that
 #  was coded on threads.
 
@@ -68,7 +68,7 @@ usage() {
 usage: ./t.sh [options] [file.ogg ...]
 
   -x PATH  test PATH instead of ./oggcomp
-  -B       rebuild with ./mk.sh first, and oggcomp1.so with ./mk.sh dll 1
+  -B       rebuild with ./mk.sh release first, and oc_api_test with ./mk.sh apitest
   -k       keep each .oc and restored .ogg beside its input
   -1       one encode per file: skip the determinism check
   -n       skip the tests after the table: anything round-trips, refusals, oggdet
@@ -105,17 +105,15 @@ while [ $argc -gt 0 ]; do
 done
 
 #  A fresh clone has no ./oggcomp.  Build one rather than telling the reader
-#  to go and read mk.sh: the tuning build is what mk.sh makes by default, and
-#  the tuning build is the one whose parameters are still live, so it is the
-#  one a test of a change to them has to run.
+#  to go and read mk.sh: the shipping build, which has every level -- a
+#  tuning build has the one level it tunes, and is what a test of a change
+#  to that level's parameters runs, as `./mk.sh check L` does.
 if [ $build = 1 ] || { [ "$bin" = ./oggcomp ] && [ ! -x ./oggcomp ]; }; then
-  echo "t.sh: building $bin with ./mk.sh"
-  ./mk.sh
+  echo "t.sh: building $bin with ./mk.sh release"
+  ./mk.sh release
   echo
 fi
 if [ $build = 1 ]; then
-  echo "t.sh: building oggcomp1.so with ./mk.sh dll 1"
-  ./mk.sh dll 1
   echo "t.sh: building oc_api_test with ./mk.sh apitest"
   ./mk.sh apitest
   echo
@@ -641,60 +639,69 @@ elif [ $refusals = 1 ] && [ $srcok = 1 ]; then
   echo
 fi
 
-#  The model as a library.  oc_api.h's functions come linked into the
-#  program as model 0 and exported by oggcompN.so as model N, and the
-#  programs drive either through the same table of pointers (oc_load.inc),
-#  so -1 with a library built from the tree's own IDX has to write what -0
-#  writes, but for the header byte that names the model; the stream names
-#  it, so `d` finds the library on its own and refuses -0; and a library
-#  that is not there is a refusal with nothing written.  The library is
-#  the shipping form of the model, so on a tuning ./oggcomp this is also
-#  the two forms against each other, which `./mk.sh check` does at length.
+#  The levels (levels_h.inc): the four models, each a level of the one
+#  binary.  Each level the binary has codes and comes back, and writes its
+#  number in the header, so `d` needs no option; `d -N` naming another level
+#  is refused; a header from before the levels -- which named the model that
+#  coded it, 0 for the program's own -- decodes at the level that model is;
+#  and a level the binary has not is a usage error.  A tuning build has one
+#  level, the others are not there for it, and that is not a failure.  The
+#  API from a program (oc_api_test.cpp) follows when it is there.
 bad_lib=0; nlib=0
-lib=$(dirname -- "$bin")/oggcomp1.so
-if [ $refusals = 1 ] && [ $srcok = 1 ] && [ ! -f "$lib" ]; then
-  echo "t.sh: library tests skipped -- $lib is not there (./mk.sh dll 1 builds it)" >&2
-elif [ $refusals = 1 ] && [ $srcok = 1 ]; then
+if [ $refusals = 1 ] && [ $srcok = 1 ]; then
   libcheck() {  # $1 what, $2 1 if it passed, $3 what to say
     nlib=$((nlib + 1))
     if [ "$2" = 1 ]; then printf '  %-26s %s\n' "$1" "$3"
     else printf '  %-26s FAILED  %s\n' "$1" "$3"; bad_lib=$((bad_lib + 1)); fi
   }
-  printf '  %s\n' 'the model as a library'
-  lok=0
-  if "$bin" c -1 "$src" "$tmp/lib1.oc" >"$tmp/msg" 2>&1 &&
-     tail -c +8 "$tmp/good.oc" > "$tmp/lib0.body" && tail -c +8 "$tmp/lib1.oc" > "$tmp/lib1.body" &&
-     cmp -s "$tmp/lib0.body" "$tmp/lib1.body" &&
-     [ "$(head -c 7 "$tmp/lib1.oc" | tail -c 1 | od -An -tu1 | tr -d ' ')" = 1 ]; then lok=1; fi
-  libcheck 'c -1 codes as c -0' $lok "$(wc -c < "$tmp/lib1.oc") bytes, the model byte 1"
-  lok=0
-  if "$bin" d "$tmp/lib1.oc" "$tmp/lib1.ogg" >"$tmp/msg" 2>&1 && cmp -s "$src" "$tmp/lib1.ogg"; then lok=1; fi
-  libcheck 'd finds the model itself' $lok "from the header, no option given"
-  for q in 'd -0 on a model-1 stream:1:d -0 LIB1:' 'a library not there:3:c -9 SRC:'; do
-    what=${q%%:*}; rest=${q#*:}; want=${rest%%:*}; args=${rest#*:}; args=${args%:}
-    rm -f "$tmp/no.out"
+  hdrbyte() { head -c 7 "$1" | tail -c 1 | od -An -tu1 | tr -d ' '; }
+  printf '  %s\n' 'the levels'
+  have=; lok=1; sizes=
+  for l in 9 7 3 1; do
     set +e
-    case "$args" in
-      *LIB1*) "$bin" ${args%LIB1} "$tmp/lib1.oc" "$tmp/no.out" >"$tmp/msg" 2>&1;;
-      *)      "$bin" ${args%SRC} "$src" "$tmp/no.out" >"$tmp/msg" 2>&1;;
-    esac
+    "$bin" c -q -$l "$src" "$tmp/l$l.oc" >"$tmp/msg" 2>&1
     got=$?
     set -e
-    if [ "$got" = "$want" ] && [ ! -e "$tmp/no.out" ]; then libcheck "$what" 1 "exit $got  $(sed -n 1p "$tmp/msg" | sed "s|$tmp/||g; s|^[^ ]*: ||" | cut -c1-44)"
-    elif [ -e "$tmp/no.out" ]; then libcheck "$what" 0 "exit $got, but left an output file behind"
-    else libcheck "$what" 0 "exit $got, wanted $want"; fi
+    if [ "$got" = 2 ] && grep -q 'no level' "$tmp/msg"; then continue; fi
+    have="$have -$l"
+    if [ "$got" = 0 ] && [ "$(hdrbyte "$tmp/l$l.oc")" = "$l" ] &&
+       "$bin" d -q "$tmp/l$l.oc" "$tmp/l$l.ogg" >/dev/null 2>&1 && cmp -s "$src" "$tmp/l$l.ogg"; then
+      sizes="$sizes $(wc -c < "$tmp/l$l.oc")"
+    else lok=0; sizes="$sizes FAILED(-$l)"; fi
   done
-  det=$(dirname -- "$bin")/oggdet
-  if [ -x "$det" ] && [ -f "$tmp/det/box" ]; then
-    lok=0
-    if "$det" c -c -1 -A -s 0 -D "$tmp/det/box" "$tmp/det/l1" >"$tmp/msg" 2>&1 &&
-       "$det" d "$tmp/det/l1" "$tmp/det/l1.back" >/dev/null 2>&1 &&
-       cmp -s "$tmp/det/box" "$tmp/det/l1.back"; then lok=1; fi
-    libcheck 'oggdet -c -1 and back' $lok "$(sed -n '$p' "$tmp/msg" | sed "s|$tmp/||g; s|^[^ ]*: ||" | cut -c1-44)"
+  [ -n "$have" ] || lok=0
+  libcheck "c$have, then d" $lok "$(basename "$src"):$sizes bytes"
+  first=${have# -}; first=${first%% *}
+  second=$(echo "$have" | awk '{print $2}' | tr -d -- -)
+  if [ -n "$second" ]; then
+    rm -f "$tmp/no.out"
+    set +e
+    "$bin" d -q -$first "$tmp/l$second.oc" "$tmp/no.out" >"$tmp/msg" 2>&1
+    got=$?
+    set -e
+    lok=0; [ "$got" = 1 ] && [ ! -e "$tmp/no.out" ] && lok=1
+    libcheck "d -$first on a -$second stream" $lok "exit $got  $(sed -n 1p "$tmp/msg" | sed "s|$tmp/||g; s|^[^ ]*: ||" | cut -c1-44)"
   fi
+  #  The header byte as the program wrote it before the levels: 0, its own
+  #  model, which is -9.
+  if [ "$first" = 9 ]; then
+    cp "$tmp/l9.oc" "$tmp/old.oc"
+    printf '\000' | dd of="$tmp/old.oc" bs=1 seek=6 count=1 conv=notrunc >/dev/null 2>&1
+    lok=0
+    "$bin" d -q "$tmp/old.oc" "$tmp/old.ogg" >/dev/null 2>&1 && cmp -s "$src" "$tmp/old.ogg" && lok=1
+    libcheck 'a header from before' $lok "model byte 0 decodes at -9"
+  fi
+  rm -f "$tmp/no.out"
+  set +e
+  "$bin" c -q -5 "$src" "$tmp/no.out" >"$tmp/msg" 2>&1
+  got=$?
+  set -e
+  lok=0; [ "$got" = 2 ] && [ ! -e "$tmp/no.out" ] && lok=1
+  libcheck 'c -5, a level not there' $lok "exit $got  $(sed -n 1p "$tmp/msg" | sed 's|^[^ ]*: ||' | cut -c1-44)"
   #  The API from a program (oc_api_test.cpp): the call sequences oggcomp
-  #  and oggdet never make -- both directions on one instance, solid,
-  #  and a Loop with nowhere to write -- which a library exists for.
+  #  and oggdet never make -- both directions on one instance, solid, every
+  #  level through Init's flags, and a Loop with nowhere to write -- which a
+  #  library exists for.
   if [ -x ./oc_api_test ]; then
     lok=0
     if ./oc_api_test "$src" >"$tmp/msg" 2>&1; then lok=1; fi
@@ -805,7 +812,7 @@ echo
 [ $ndet -gt 0 ] &&
   printf 't.sh: %d/%d oggdet checks passed\n' "$((ndet - bad_det))" "$ndet"
 [ $nlib -gt 0 ] &&
-  printf 't.sh: %d/%d library checks passed\n' "$((nlib - bad_lib))" "$nlib"
+  printf 't.sh: %d/%d level checks passed\n' "$((nlib - bad_lib))" "$nlib"
 [ $ntab -gt 0 ] &&
   printf 't.sh: %d/%d codebook table checks passed\n' "$((ntab - bad_tab))" "$ntab"
 [ $nmt -gt 0 ] &&

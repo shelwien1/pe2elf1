@@ -1,11 +1,13 @@
 //  The direction is a template parameter, f_DEC as in Rangecoder: 0
 //  codes, 1 decodes.  One bit through the one coder there is,
-//  oc_model<f_DEC>::rc --
-//  a static member reached by type, so a family needs no pointer to the
-//  model it belongs to.  The model is defined after the families it
-//  holds; the name is dependent, so it is looked up when this is
-//  instantiated, by which time it is there.
-template <int f_DEC> struct oc_model;
+//  oc_coder<f_DEC>::rc -- a static member reached by type, so a family needs
+//  no pointer to the model it belongs to; the thread's, since the model's
+//  state is (OC_TLS); and not the model's, which has one type per level:
+//  whichever level codes, it codes through this.
+template <int f_DEC> struct oc_coder {
+  static OC_TLS Rangecoder<f_DEC, OC_CARRYLESS> rc;
+};
+template <int f_DEC> OC_TLS Rangecoder<f_DEC, OC_CARRYLESS> oc_coder<f_DEC>::rc;
 //  -1 when the prior is a probability and the decision has to be coded;
 //  otherwise the answer the prior is certain of.
 static INLINE int tcp_sure(int p) { return p == TCP_SURE1 ? 1 : p == TCP_SURE0 ? 0 : -1; }
@@ -13,7 +15,7 @@ template <int f_DEC> static INLINE int tc_bit(int p, int bit) {
   uint b = (uint)bit;
   if(!f_DEC && tc_verbose)
     tc_bits[tc_stage] -= log2(bit ? 1.0 - p / (double)CM_PONE : p / (double)CM_PONE);
-  oc_model<f_DEC>::rc.rc_Process((uint)(p << 3), b);
+  oc_coder<f_DEC>::rc.rc_Process((uint)(p << 3), b);
   return (int)b;
 }
 //  A hashed table's row for a context: the index multiplied out, taken

@@ -28,8 +28,8 @@ static INLINE void oc_raw_zero(void) {
   memset(raw_wc, 0, sizeof raw_wc);
   raw_prev = 0;
 }
-template <int f_DEC> void oc_model<f_DEC>::raw_init() { raw_mx.init(raw_w, raw_wc, 256); }
-template <int f_DEC> u32 oc_model<f_DEC>::raw(u32 b) {
+template <int f_DEC, class Lv> void oc_model<f_DEC, Lv>::raw_init() { raw_mx.init(raw_w, raw_wc, 256); }
+template <int f_DEC, class Lv> u32 oc_model<f_DEC, Lv>::raw(u32 b) {
   cm_cnt *row = raw_o1[raw_prev];
   u32 node = 1;
   int i;

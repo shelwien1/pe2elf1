@@ -1,17 +1,27 @@
 #!/bin/sh
-#  Regenerate MOD/ from IDX/ and build oggcomp, and oggdet beside it.
+#  Regenerate MOD/ from IDX/ and build oggcomp -- every level, or one -- and
+#  oggdet beside it.
 #
-#      ./mk.sh              tuning build   -- Debug 1, Const 0
-#      ./mk.sh release      shipping build -- every parameter folded
-#      ./mk.sh check [lst]  build both and prove they code identically
-#      ./mk.sh mod [IDXDIR] regenerate MOD/ in the shipping form, build nothing
-#      ./mk.sh pgo f.ogg    shipping build, laid out from a profile of f.ogg
-#      ./mk.sh dll N [IDXDIR]  oggcompN.so: the model in IDXDIR (default IDX)
+#      ./mk.sh release         shipping build of every level -- every parameter
+#                              folded -- as ./oggcomp
+#      ./mk.sh [tuning [L]]    tuning build of level -L alone (default 9) --
+#                              Debug 1, Const 0: every knob of IDX/lL live --
+#                              as ./oggcomp
+#      ./mk.sh check [L] [lst] the tuning build of -L (default: of each level in
+#                              turn) and the shipping build code identically
+#      ./mk.sh mod             regenerate MOD/ in the shipping form, build nothing
+#      ./mk.sh pgo f.ogg       shipping build, laid out from a profile of f.ogg
+#      ./mk.sh lib             oggcomp.so: every level as a library (oc_api.h)
 #      ./mk.sh apitest         oc_api_test, the API driven from a program
-#                           as a library, which `oggcomp -N` and `oggdet -N`
-#                           load from beside themselves (oc_api.h)
 #
-#  Only the first two (and pgo) write ./oggcomp and ./oggdet.  A shipping
+#  The levels are the models: IDX/l9, l7, l3 and l1 each hold one, the six
+#  families' context indices and parameters (levels_h.inc says which is
+#  which), and IDX/idx2inc.pl turns each into MOD/l<L>/, under names of the
+#  level's own (L9_dig_...), so that one program has them all and `c -L`
+#  picks one.  IDX/ itself holds the tools: the generator, the optimizer,
+#  the import script, and IDX-FORMAT.md, the format of the .idx files.
+#
+#  Only release, tuning and pgo write ./oggcomp and ./oggdet.  A shipping
 #  binary has no !MAP! markers in it, so an optimizer driving one finds no
 #  knobs and reports that nothing it tries changes anything -- which is why
 #  `check` leaves ./oggcomp alone.
@@ -19,20 +29,22 @@
 #  IDX-FORMAT.md sec.1: Debug and Const are orthogonal flags, not two modes.
 #  `Const 0` leaves each threshold a live `mapping` object; `Debug 1` makes its
 #  descriptor start with "!MAP!", which is the marker IDX/opt.pl scans the
-#  executable for.  So the tuning build is the one an optimizer can drive:
+#  executable for.  So the tuning build is the one an optimizer can drive, and
+#  it holds the one level, so that its knobs are all opt.pl finds and `c`
+#  codes at it:
 #
-#      ./mk.sh
+#      ./mk.sh tuning 9
 #      perl IDX/opt.pl opt.lst ./oggcomp        # hill-climbs the binary itself
-#      cd IDX && for f in tsvcomp-*.idx; do \
-#        perl import.pl $f ../export.\!\!\! > t && mv t $f; done
-#      ./mk.sh check                            # then ship what it found
+#      cd IDX/l9 && for f in tsvcomp-*.idx; do \
+#        perl ../import.pl $f ../../export.\!\!\! > t && mv t $f; done
+#      cd ../.. && ./mk.sh check 9              # then ship what it found
 #
 #  Widening a context is free to a search whose objective is the size of one
 #  file, which is how one arrives at a 38 GB model to save 3 kB.  Build the
 #  tuning binary with a price on memory instead of a threshold on it:
 #
-#      CXXFLAGS='-O2 -DTC_MEMCOST' ./mk.sh     # 10000 bytes per GB of tables
-#      CXXFLAGS='-O2 -DTC_MEMCOST=25000' ./mk.sh
+#      CXXFLAGS='-O2 -DTC_MEMCOST' ./mk.sh tuning 9    # 10000 bytes per GB of tables
+#      CXXFLAGS='-O2 -DTC_MEMCOST=25000' ./mk.sh tuning 9
 #
 #  The encoder then pads its output by that much, so opt.pl sees the memory in
 #  the number it is minimizing and takes a widening only when it pays for
@@ -41,21 +53,21 @@
 #  The shipping build is derived from the same source with one substitution --
 #  "Const 0" becomes "Const 1" in a copy -- so the two cannot drift apart, and
 #  `./mk.sh check` is the test that they have not: whatever the parameters are,
-#  both builds must produce byte-identical streams.  That is the format's
-#  stated contract and the only check that catches a parameter which folds to
-#  something different from what it evaluated to.  It reads one of the two
-#  streams back with the other build as well, since a parameter that folds
-#  wrong is as wrong on the way out as it was on the way in, and equal
-#  encodes say nothing about that.  With no list it uses testfiles/; a list
-#  is one file per line, blanks and #comments skipped, named relative to
-#  where you are and holding paths relative to the tree.
+#  both builds must produce byte-identical streams, level by level.  That is
+#  the format's stated contract and the only check that catches a parameter
+#  which folds to something different from what it evaluated to.  It reads
+#  one of the two streams back with the other build as well, since a
+#  parameter that folds wrong is as wrong on the way out as it was on the way
+#  in, and equal encodes say nothing about that.  With no list it uses
+#  testfiles/; a list is one file per line, blanks and #comments skipped,
+#  named relative to where you are and holding paths relative to the tree.
 #
 #  MOD/ is a build input, not a build artefact.  It ships generated -- in the
-#  shipping form, so `make` works without perl -- and this script rewrites it.
-#  A stale MOD/ compiles fine and codes differently, so run ./mk.sh after
-#  editing any IDX/tsvcomp-<family>.idx or its .inc.
+#  shipping form, so a plain compile works without perl -- and this script
+#  rewrites it.  A stale MOD/ compiles fine and codes differently, so run
+#  ./mk.sh mod after editing any IDX/l<L>/tsvcomp-<family>.idx or its .inc.
 #
-#  Which also means a tuning build leaves MOD/ holding the tuning form and
+#  Which also means a tuning build leaves MOD/l<L> holding the tuning form and
 #  `git status` showing twelve modified files.  That is not damage and there
 #  is nothing to revert: `./mk.sh mod` writes the shipping form back, and so
 #  does `./mk.sh check`, which is why it is the last thing that command does.
@@ -66,19 +78,21 @@ here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 callerpwd=$PWD
 cd "$here"
 
-#  IDX/ is a source directory and the generator writes into it: the -const
-#  copies and the _h/_p output live there for as long as generate() runs.
-#  Anything that ends the script in the middle -- a failed compile, a Ctrl-C
-#  -- leaves them behind looking like files someone checked in, so they are
-#  swept on every exit.  The traps for the signals exit, which the bare
-#  `trap ... EXIT INT TERM` they replace did not: that one deleted the
-#  scratch directory and let the script carry on using it.
+#  The levels, the strongest first, as levels.inc lists them.
+LEVELS="9 7 3 1"
+
+#  IDX/l<L>/ is a source directory and the generator writes into it: the
+#  -const copies and the _h/_p output live there for as long as generate()
+#  runs.  Anything that ends the script in the middle -- a failed compile, a
+#  Ctrl-C -- leaves them behind looking like files someone checked in, so they
+#  are swept on every exit.  The traps for the signals exit, which the bare
+#  `trap ... EXIT INT TERM` they replace did not: that one deleted the scratch
+#  directory and let the script carry on using it.
 tmp=
-IDXD=IDX
 cleanup() {
-  for d in IDX "$IDXD"; do
-    rm -f "$here/$d"/tsvcomp-*-const.idx "$here/$d"/tsvcomp-*-const.inc \
-          "$here/$d"/tsvcomp-*_h.inc "$here/$d"/tsvcomp-*_p.inc
+  for l in $LEVELS; do
+    rm -f "$here/IDX/l$l"/tsvcomp-*-const.idx "$here/IDX/l$l"/tsvcomp-*-const.inc \
+          "$here/IDX/l$l"/tsvcomp-*_h.inc "$here/IDX/l$l"/tsvcomp-*_p.inc
   done
   [ -n "$tmp" ] && rm -rf "$tmp"
   return 0
@@ -113,7 +127,7 @@ case "${1:-tuning}:$arch" in
   #  `mod` runs perl and nothing else, so the architecture it runs on does
   #  not come into it -- and putting MOD/ back the way it ships is exactly
   #  what someone on a machine that cannot build would want to do.
-  mod:* | dll:*) ;;
+  mod:*) ;;
   *:x86_64 | *:amd64 | *:i[3456]86) ;;
   *)
     [ "${OGGCOMP_ANY_ARCH:-0}" = 1 ] || {
@@ -126,47 +140,62 @@ esac
 #  One IDX module per family -- IDX-FORMAT.md sec.13.
 FAMS="dig sgn flr cls aux hdr"
 
-#  Regenerate MOD/ from all six.  $1 = UseNew (1 pointers, 0 fixed arrays),
-#  $2 = 1 to fold every parameter to a literal, which is IDX-FORMAT.md sec.1's
-#  one substitution applied to each module in turn so they cannot drift.
-#  The declarations come from $IDXD -- IDX, or another model's directory for
-#  `dll` and `mod` -- and the generator from IDX always.
+#  Is $1 one of the levels?
+is_level() {
+  case " $LEVELS " in
+    *" $1 "*) return 0 ;;
+  esac
+  return 1
+}
+
+#  Regenerate MOD/l$1 from all six of IDX/l$1.  $2 = UseNew (1 pointers, 0
+#  fixed arrays), $3 = 1 to fold every parameter to a literal, which is
+#  IDX-FORMAT.md sec.1's one substitution applied to each module in turn so
+#  they cannot drift.
 generate() {
-  mkdir -p MOD
+  lv=$1
+  d=IDX/l$lv
+  mkdir -p "MOD/l$lv"
   for f in $FAMS; do
     s="tsvcomp-$f"
-    [ -f "$IDXD/tsvcomp-$f.idx" ] ||
-      { echo "mk.sh: $IDXD/tsvcomp-$f.idx is not there -- not a model directory" >&2; exit 1; }
-    if [ "$2" = 1 ]; then
-      sed 's/^Const 0/Const 1/' "$IDXD/tsvcomp-$f.idx" > "$IDXD/tsvcomp-$f-const.idx"
-      cp -f "$IDXD/tsvcomp-$f.inc" "$IDXD/tsvcomp-$f-const.inc"
+    [ -f "$d/tsvcomp-$f.idx" ] ||
+      { echo "mk.sh: $d/tsvcomp-$f.idx is not there -- not a level's directory" >&2; exit 1; }
+    if [ "$3" = 1 ]; then
+      sed 's/^Const 0/Const 1/' "$d/tsvcomp-$f.idx" > "$d/tsvcomp-$f-const.idx"
+      cp -f "$d/tsvcomp-$f.inc" "$d/tsvcomp-$f-const.inc"
       s="tsvcomp-$f-const"
     fi
-    ( cd "$IDXD" && IDX_NOCONST=0 perl "$here/IDX/idx2inc.pl" "$s.idx" "$1" >/dev/null )
+    ( cd "$d" && IDX_NOCONST=0 perl "$here/IDX/idx2inc.pl" "$s.idx" "$2" >/dev/null )
     #  idx2inc.pl opens both its inputs without checking, has no `use strict`
     #  and no die anywhere in it, and exits 0 whatever happens: a misspelled
     #  family or a template that is not beside its .idx produces an empty _p
     #  and a stub _h, a clean compile, and a compressor with no model in it.
     #  `set -e` cannot see any of that, so the post-condition is checked here.
     for o in _h _p; do
-      if [ ! -s "$IDXD/${s}${o}.inc" ]; then
+      if [ ! -s "$d/${s}${o}.inc" ]; then
         #  The stubs and the -const copies go on the way out, in cleanup().
-        echo "mk.sh: IDX/idx2inc.pl wrote no ${s}${o}.inc -- is $IDXD/$s.inc there?" >&2
-        echo "mk.sh: MOD/ now holds part of one build and part of another;" >&2
+        echo "mk.sh: IDX/idx2inc.pl wrote no ${s}${o}.inc -- is $d/$s.inc there?" >&2
+        echo "mk.sh: MOD/l$lv now holds part of one build and part of another;" >&2
         echo "       fix that and run this again, which regenerates all six." >&2
         exit 1
       fi
     done
-    mv -f "$IDXD/${s}_h.inc" "MOD/tsvcomp-${f}_h.inc"
-    mv -f "$IDXD/${s}_p.inc" "MOD/tsvcomp-${f}_p.inc"
-    if [ "$2" = 1 ]; then rm -f "$IDXD/$s.idx" "$IDXD/$s.inc"; fi
+    mv -f "$d/${s}_h.inc" "MOD/l$lv/tsvcomp-${f}_h.inc"
+    mv -f "$d/${s}_p.inc" "MOD/l$lv/tsvcomp-${f}_p.inc"
+    if [ "$3" = 1 ]; then rm -f "$d/$s.idx" "$d/$s.inc"; fi
   done
 }
 
-#  $1 = UseNew, $2 = fold, $3 = output binary
-generate_and_build() {
-  generate "$1" "$2"
-  $CXX $CXXFLAGS $WARN $REQ -o "$3" oggcomp.cpp -lm
+#  Every level in the shipping form: what MOD/ is checked in as, and what a
+#  plain compile of oggcomp.cpp builds.
+regenerate_mod() {
+  for l in $LEVELS; do generate "$l" 0 1; done
+}
+
+#  $1 = output binary, the rest flags for the compiler (-DOC_ONLY=L)
+build() {
+  out=$1; shift
+  $CXX $CXXFLAGS $WARN $REQ "$@" -o "$out" oggcomp.cpp -lm
 }
 
 #  oggdet, the stream carver, includes the compressor -- oc_coro.inc and
@@ -184,19 +213,16 @@ build_det() {
     echo "mk.sh: no oggdet.cpp in this tree -- oggdet not built"
     return 0
   fi
-  $CXX $CXXFLAGS $WARN $REQ -o oggdet oggdet.cpp -lm
+  $CXX $CXXFLAGS $WARN $REQ "$@" -o oggdet oggdet.cpp -lm
 }
-
-#  Regenerate MOD/ in the shipping form and build nothing.  What a script wants
-#  when it has finished borrowing MOD/ and has to put it back the way it ships:
-#  building would also replace ./oggcomp, and ./oggcomp may be the tuning build
-#  someone is in the middle of optimizing.
-regenerate_mod() { generate 0 1; }
 
 case "${1:-tuning}" in
   tuning)
-    generate_and_build 1 0 oggcomp
-    build_det
+    lv=${2:-9}
+    is_level "$lv" || { echo "mk.sh: no level -$lv (levels: $LEVELS)" >&2; exit 2; }
+    generate "$lv" 1 0
+    build oggcomp -DOC_ONLY="$lv"
+    build_det -DOC_ONLY="$lv"
     #  The marker is put there by the pdesc macro, so it is the binary that
     #  has to be looked at -- which is also what opt.pl looks at.  A live
     #  descriptor reads !MAP!<name>!<offset>\0<pattern>\0 (sh_mapping.inc),
@@ -206,17 +232,18 @@ case "${1:-tuning}" in
     #  optimizer would report that nothing it tries changes anything.
     perl -e 'undef $/; $_ = <>;
              while( /!MAP!(.*?)!(.*?)\x00(.*?)\x00/gs ) { $n++; $b += length $3 }
-             printf "mk.sh: tuning build -- %d tunable bits in %d patterns, "
-                  . "visible to IDX/opt.pl\n", $b, $n;
-             exit($n ? 0 : 1)' oggcomp ||
+             printf "mk.sh: tuning build of level -%s -- %d tunable bits in %d patterns, "
+                  . "visible to IDX/opt.pl\n", $ARGV[0], $b, $n;
+             exit($n ? 0 : 1)' oggcomp "$lv" ||
       { echo "mk.sh: the tuning build carries no !MAP! markers" >&2; exit 1; }
     ;;
 
   release)
-    generate_and_build 0 1 oggcomp
+    regenerate_mod
+    build oggcomp
     build_det
-    #  Look at the binary.  Grepping MOD/*_h.inc for "!MAP!" -- which is what
-    #  this used to do -- can never find anything: the marker is not in the
+    #  Look at the binary.  Grepping MOD/ for "!MAP!" -- which is what this
+    #  used to do -- can never find anything: the marker is not in the
     #  generated header, it is in the pdesc_live macro in sh_mapping.inc that
     #  the generated header expands.  So the guard passed on a MOD/ that was
     #  entirely unfolded, and `mk.sh release` would ship a binary with live
@@ -234,15 +261,18 @@ case "${1:-tuning}" in
       echo "mk.sh: could not read ./oggcomp to check it for !MAP! markers" >&2
       exit 1
     fi
-    echo "mk.sh: release build -- every parameter folded"
+    echo "mk.sh: release build -- levels $LEVELS, every parameter folded"
     ;;
 
   check)
+    #  check [L] [list]: a level given first is the only one checked.
+    levels=$LEVELS
+    if [ -n "${2:-}" ] && is_level "$2"; then levels=$2; shift; fi
     #  Both builds, over whatever the list names, compared byte for byte.
     #  The list is named from the caller's directory, so it has to be
     #  resolved before the cd above -- which has already happened, hence the
-    #  saved OLDPWD.  Paths inside the list stay relative to the tree, which
-    #  is what an opt.lst checked in beside opt.pl wants.
+    #  saved callerpwd.  Paths inside the list stay relative to the tree,
+    #  which is what an opt.lst checked in beside opt.pl wants.
     lst=${2:-}
     case "$lst" in
       ''|/*) ;;
@@ -271,8 +301,6 @@ case "${1:-tuning}" in
         exit 2; }
     fi
     [ -f "$lst" ] || { echo "mk.sh check: no $lst -- one input per line" >&2; exit 2; }
-    generate_and_build 1 0 "$tmp/tune"
-    generate_and_build 0 1 "$tmp/rel"
     #  Normalise the list once rather than per line: strip the CR a list
     #  authored on Windows carries -- this tree ships gc.bat and t.bat from
     #  exactly such a sibling -- trim the surrounding blanks, and drop
@@ -281,43 +309,53 @@ case "${1:-tuning}" in
     sed 's/\r$//; s/^[[:space:]]*//; s/[[:space:]]*$//; /^#/d; /^$/d' \
         "$lst" > "$tmp/clean"
 
+    #  The shipping build is the one that ships: every level in one binary.
+    #  Each level's tuning build holds that level alone, as `tuning` builds it.
+    regenerate_mod
+    build "$tmp/rel"
     bad=0
     seen=0
-    while IFS= read -r f; do
-      seen=$((seen + 1))
-      #  A file neither build will code is a row, not the end of the run.
-      #  `set -e` would otherwise stop here with the compressor's message
-      #  and nothing from mk.sh, and every file after it would go
-      #  uncompared while the exit status said only "1".  The encoder takes
-      #  any bytes, so this is a file that is not there or cannot be read
-      #  -- but a list is whatever someone wrote, and both builds have to
-      #  fail on it alike.
-      ta=0; "$tmp/tune" c "$f" "$tmp/a.oc" || ta=$?
-      tb=0; "$tmp/rel"  c "$f" "$tmp/b.oc" || tb=$?
-      if [ "$ta" != 0 ] || [ "$tb" != 0 ]; then
-        if [ "$ta" = "$tb" ]; then
-          printf '  %-40s %10s  refused alike\n' "$(basename "$f")" "exit $ta"
+    for lv in $levels; do
+      generate "$lv" 1 0
+      build "$tmp/tune" -DOC_ONLY="$lv"
+      generate "$lv" 0 1
+      echo "  level -$lv"
+      while IFS= read -r f; do
+        seen=$((seen + 1))
+        #  A file neither build will code is a row, not the end of the run.
+        #  `set -e` would otherwise stop here with the compressor's message
+        #  and nothing from mk.sh, and every file after it would go
+        #  uncompared while the exit status said only "1".  The encoder takes
+        #  any bytes, so this is a file that is not there or cannot be read
+        #  -- but a list is whatever someone wrote, and both builds have to
+        #  fail on it alike.
+        ta=0; "$tmp/tune" c -q -"$lv" "$f" "$tmp/a.oc" || ta=$?
+        tb=0; "$tmp/rel"  c -q -"$lv" "$f" "$tmp/b.oc" || tb=$?
+        if [ "$ta" != 0 ] || [ "$tb" != 0 ]; then
+          if [ "$ta" = "$tb" ]; then
+            printf '  %-40s %10s  refused alike\n' "$(basename "$f")" "exit $ta"
+          else
+            printf '  %-40s REFUSED BY ONE BUILD ONLY (%s vs %s)\n' \
+                   "$(basename "$f")" "$ta" "$tb"
+            bad=1
+          fi
+        elif cmp -s "$tmp/a.oc" "$tmp/b.oc"; then
+          #  And read one of them back with the other build.  Equal encodes
+          #  say nothing about the decoders, and a parameter that folds to
+          #  something different would be just as wrong on the way out.
+          if "$tmp/rel" d -q "$tmp/a.oc" "$tmp/back.ogg" >/dev/null 2>&1 &&
+             cmp -s "$f" "$tmp/back.ogg"; then
+            printf '  %-40s %10s  identical\n' "$(basename "$f")" "$(wc -c < "$tmp/a.oc")"
+          else
+            printf '  %-40s DOES NOT READ BACK\n' "$(basename "$f")"
+            bad=1
+          fi
         else
-          printf '  %-40s REFUSED BY ONE BUILD ONLY (%s vs %s)\n' \
-                 "$(basename "$f")" "$ta" "$tb"
+          printf '  %-40s DIFFERS\n' "$(basename "$f")"
           bad=1
         fi
-      elif cmp -s "$tmp/a.oc" "$tmp/b.oc"; then
-        #  And read one of them back with the other build.  Equal encodes
-        #  say nothing about the decoders, and a parameter that folds to
-        #  something different would be just as wrong on the way out.
-        if "$tmp/rel" d "$tmp/a.oc" "$tmp/back.ogg" >/dev/null 2>&1 &&
-           cmp -s "$f" "$tmp/back.ogg"; then
-          printf '  %-40s %10s  identical\n' "$(basename "$f")" "$(wc -c < "$tmp/a.oc")"
-        else
-          printf '  %-40s DOES NOT READ BACK\n' "$(basename "$f")"
-          bad=1
-        fi
-      else
-        printf '  %-40s DIFFERS\n' "$(basename "$f")"
-        bad=1
-      fi
-    done < "$tmp/clean"
+      done < "$tmp/clean"
+    done
     #  An empty corpus is not agreement.  A glob that matched nothing or an
     #  opt.lst that moved would otherwise print the same line as a clean run.
     [ "$seen" -gt 0 ] || {
@@ -331,8 +369,7 @@ case "${1:-tuning}" in
     #  Not `A && B || C`: a failed echo -- a closed pipe, a full disk -- would
     #  then take the C branch and report the opposite of what was measured.
     if [ "$bad" = 0 ]; then
-      [ "$seen" = 1 ] && many="1 file" || many="$seen files"
-      echo "mk.sh: tuning and shipping builds agree over $many"
+      echo "mk.sh: tuning and shipping builds agree, level by level ($levels), over $seen codings"
     else
       echo "mk.sh: THE TWO BUILDS DISAGREE" >&2
       exit 1
@@ -340,64 +377,55 @@ case "${1:-tuning}" in
     ;;
 
   mod)
-    IDXD=${2:-IDX}
-    generate 0 1
-    if [ "$IDXD" = IDX ]; then echo "mk.sh: MOD/ regenerated in the shipping form; no binary built"
-    else echo "mk.sh: MOD/ now holds the model in $IDXD, in the shipping form; no binary built"
-         echo "       (./mk.sh mod puts the tree's own back)"; fi
+    regenerate_mod
+    echo "mk.sh: MOD/ regenerated in the shipping form, levels $LEVELS; no binary built"
     ;;
 
-  dll)
-    #  One model as a library: MOD/ from the directory named, the shipping
-    #  form, compiled once with the API exported (oc_api.h, oggcomp_dll.cpp),
-    #  and MOD/ put back to the tree's own model afterwards so that the next
-    #  build of the programs is what it was.  The library is the same
-    #  translation unit the programs carry for model 0, so a library built
-    #  from IDX itself codes as -0 does, which is what ./t.sh checks.
-    n=${2:-}
-    case "$n" in [1-9]) ;; *) echo "usage: ./mk.sh dll N [IDXDIR]   N in 1..9" >&2; exit 2;; esac
-    IDXD=${3:-IDX}
-    [ -d "$IDXD" ] || { echo "mk.sh: $IDXD is not a directory" >&2; exit 2; }
-    generate 0 1
+  lib)
+    #  Every level as a library: oggcomp_dll.cpp compiled with the API
+    #  exported (oc_api.h), for a program of someone else's to drive; the
+    #  level goes in Init's flags.  The program does not load it: it has the
+    #  levels itself.
+    regenerate_mod
     $CXX $CXXFLAGS $WARN $REQ -shared -fPIC -fvisibility=hidden -DOC_BUILD_DLL \
-         -o "oggcomp$n.so" oggcomp_dll.cpp -lm
-    IDXD=IDX
-    generate 0 1
-    echo "mk.sh: oggcomp$n.so -- the model in ${3:-IDX} as a library, every parameter folded"
+         -o oggcomp.so oggcomp_dll.cpp -lm
+    echo "mk.sh: oggcomp.so -- levels $LEVELS as a library, every parameter folded"
     ;;
 
   apitest)
     #  The API driven from a program: oc_api_test.cpp over the library's
-    #  translation unit, model 0 at static addresses, in the shipping form.
-    #  ./t.sh runs it when it is there, and ./t.sh -B builds it here.
-    generate 0 1
+    #  translation unit, in the shipping form.  ./t.sh runs it when it is
+    #  there, and ./t.sh -B builds it here.
+    regenerate_mod
     $CXX $CXXFLAGS $WARN $REQ -o oc_api_test oc_api_test.cpp -lm
     echo "mk.sh: oc_api_test -- run it on a corpus file"
     ;;
 
   pgo)
     #  The shipping build, laid out from a profile: the given .ogg is coded
-    #  both ways by an instrumented build first.  It was worth 1.5 to 3%
-    #  before OGGCOMP-SPEED.md section 8's changes took out the branches it
-    #  was laying out, and measures as noise after them; it is here to be
-    #  measured again when the code changes.  The stream is the same stream
-    #  -- checked, on the file it trained on.  Both compiles go through an
-    #  object of one name in one directory, which is how gcc finds the
-    #  .gcda it wrote.
+    #  both ways at every level by an instrumented build first.  It was worth
+    #  1.5 to 3% before OGGCOMP-SPEED.md section 8's changes took out the
+    #  branches it was laying out, and measures as noise after them; it is
+    #  here to be measured again when the code changes.  The stream is the
+    #  same stream -- checked, on the file it trained on.  Both compiles go
+    #  through an object of one name in one directory, which is how gcc
+    #  finds the .gcda it wrote.
     #  Not `f`: generate() loops over the families in a variable of that name.
     pgo_in=${2:-}
     [ -f "$pgo_in" ] || { echo "usage: ./mk.sh pgo file.ogg" >&2; exit 2; }
     pgo_in=$(cd -- "$(dirname -- "$pgo_in")" && pwd)/$(basename -- "$pgo_in")
     tmp=$(mktemp -d "${TMPDIR:-/tmp}/mk-pgo.XXXXXX")
-    generate 0 1
+    regenerate_mod
     ( cd "$tmp" && $CXX $CXXFLAGS $WARN $REQ -fprofile-generate -c -o oggcomp.o "$here/oggcomp.cpp" \
         && $CXX -fprofile-generate -pthread -o gen oggcomp.o -lm ) || exit 1
-    "$tmp/gen" c "$pgo_in" "$tmp/p.oc" && "$tmp/gen" d "$tmp/p.oc" "$tmp/p.ogg" || exit 1
-    #  The training run decodes as well as encodes, so that the profile
-    #  covers both halves; while it is there, check that what came back is
-    #  what went in.  Free, and it is the only round trip this branch makes.
-    cmp -s "$pgo_in" "$tmp/p.ogg" ||
-      { echo "mk.sh pgo: the instrumented build did not give the file back" >&2; exit 1; }
+    for lv in $LEVELS; do
+      "$tmp/gen" c -q -"$lv" "$pgo_in" "$tmp/p$lv.oc" && "$tmp/gen" d -q "$tmp/p$lv.oc" "$tmp/p.ogg" || exit 1
+      #  The training run decodes as well as encodes, so that the profile
+      #  covers both halves; while it is there, check that what came back is
+      #  what went in.  Free, and it is the only round trip this branch makes.
+      cmp -s "$pgo_in" "$tmp/p.ogg" ||
+        { echo "mk.sh pgo: the instrumented build did not give the file back at -$lv" >&2; exit 1; }
+    done
     #  gcc treats a missing .gcda as a warning, so without this the profiled
     #  compile would quietly be an ordinary one and the line below would say
     #  it was laid out from a profile that was never read.
@@ -406,13 +434,15 @@ case "${1:-tuning}" in
     ( cd "$tmp" && $CXX $CXXFLAGS $WARN $REQ -fprofile-use -fprofile-correction -c -o oggcomp.o "$here/oggcomp.cpp" \
         && $CXX -pthread -o "$here/oggcomp" oggcomp.o -lm ) || exit 1
     build_det
-    ./oggcomp c "$pgo_in" "$tmp/q.oc"
-    cmp -s "$tmp/p.oc" "$tmp/q.oc" || { echo "mk.sh pgo: THE PROFILED BUILD CODES DIFFERENTLY" >&2; exit 1; }
+    for lv in $LEVELS; do
+      ./oggcomp c -q -"$lv" "$pgo_in" "$tmp/q.oc"
+      cmp -s "$tmp/p$lv.oc" "$tmp/q.oc" || { echo "mk.sh pgo: THE PROFILED BUILD CODES DIFFERENTLY at -$lv" >&2; exit 1; }
+    done
     echo "mk.sh: shipping build, laid out from a profile of $(basename -- "$pgo_in") -- every parameter folded"
     ;;
 
   *)
-    echo "usage: ./mk.sh [tuning|release|check [file-list]|pgo file.ogg|mod [IDXDIR]|dll N [IDXDIR]|apitest]" >&2
+    echo "usage: ./mk.sh [release | tuning [L] | check [L] [file-list] | mod | pgo file.ogg | lib | apitest]   (levels: $LEVELS)" >&2
     exit 2
     ;;
 esac

@@ -3,9 +3,11 @@
 # Flips the bits of the "!MAP!" pattern strings the tuning build embeds in the
 # executable, keeping whatever shrinks the corpus.  It does not parse or rebuild
 # anything: the patterns are patched in the binary in place, so one build serves
-# the whole hill-climb.  The build must therefore be the tuning build -- ./mk.sh
-# with no argument.  ./mk.sh release folds every parameter to a literal and
-# there is nothing left to find.
+# the whole hill-climb.  The build must therefore be the tuning build of the
+# level being tuned -- ./mk.sh tuning L, which has that level alone, so the
+# patterns found are its and `oggcomp c` codes at it with no option (./mk.sh
+# with no argument is -9's).  ./mk.sh release folds every parameter to a
+# literal and there is nothing left to find.
 #
 #   perl IDX/opt.pl [corpus-file-list] [exe]
 #
@@ -25,20 +27,24 @@
 # every threshold it can reach and arrive at a model no machine can hold.
 # Build the binary it patches with a price on memory and the two become one
 # number:
-#   CXXFLAGS='-O2 -DTC_MEMCOST' ./mk.sh      # 10000 bytes per GB of tables
+#   CXXFLAGS='-O2 -DTC_MEMCOST' ./mk.sh tuning L  # 10000 bytes per GB of tables
 # The encoder pads its output by that much, so a widening that costs more
 # memory than it saves bytes now measures worse and this script rejects it on
 # its own.  Nothing is refused outright and there is no threshold to pick.
 #
 # Results are written continuously to export.!!! (mdesc lines) and progress to
-# opttimes.!!!.  Fold them back into the .idx source with:
-#   cd IDX && for f in tsvcomp-*.idx; do perl import.pl $f ../export.!!! > t && mv t $f; done
-# then ./mk.sh to continue tuning, or ./mk.sh check to prove the shipping build
-# still agrees and ship it.
+# opttimes.!!!.  The names in them are the level's (L9_dig_...).  Fold them
+# back into that level's .idx source with:
+#   cd IDX/l9 && for f in tsvcomp-*.idx; do perl ../import.pl $f ../../export.!!! > t && mv t $f; done
+# then ./mk.sh tuning 9 to continue tuning, or ./mk.sh check 9 to prove the
+# shipping build still agrees and ship it.  An export from before the levels
+# names TC_dig_... and so on: sed 's/\bTC_/L9_/g' makes it -9's (L7_ for a
+# tuning of what was oggcomp2, which is -7).
 #
 # One caution particular to this tree: oggcomp's parameters are part of its
 # format.  A stream coded by a patched binary decodes only under that same
-# patched binary, so throw away anything mid-hill-climb writes.
+# patched binary, so throw away anything mid-hill-climb writes; and a level
+# retuned is a new stream version, or a new level (docs/README.md, Levels).
 
 $exe     = $ARGV[1] || "./oggcomp";
 $deffile = "00.ogg";

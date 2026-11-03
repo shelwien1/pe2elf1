@@ -395,6 +395,10 @@ same, byte for byte.
   leaves PATH in.  On Linux, a library beside the program that would not
   load, for another architecture or for want of a dependency, was
   reported by the fallback's "not found".  It is now reported as itself.
+  (Since then the models have become levels of the one program, and
+  nothing is loaded: `oc_load.inc` is a table of the program's own
+  functions, and a header naming a level the build has not is refused
+  with exit 1.)
 
 ## 6. Build, tests, documentation
 

@@ -1,10 +1,11 @@
-/*  oggcomp as a library: the model behind `oggcomp c` and `oggcomp d`, one
-    instance per thread, driven by whoever holds the files.
+/*  oggcomp as a library: the models behind `oggcomp c` and `oggcomp d` --
+    its levels, -9 to -1 -- one instance per thread, driven by whoever holds
+    the files.
 
-    The same functions come two ways -- linked into a program, and exported
-    by a loadable library, oggcompN.dll on Windows and oggcompN.so elsewhere,
-    each built from an IDX model of its own -- and a program that takes them
-    as a table of pointers (oc_load.inc) runs either without knowing which.
+    The same functions are linked into the program, which takes them as a
+    table of pointers (oc_load.inc), and exported by oggcomp.so --
+    oggcomp.dll on Windows -- which `./mk.sh lib` builds: every level of the
+    program in a library, for a program of someone else's to drive.
 
       p = oggcomp_Alloc();                          one instance per thread
       oggcomp_Init(p, OC_ENCODE, 0, "in.ogg");      or OC_DECODE; flags below
@@ -23,8 +24,10 @@
 
     What goes through it is the coded stream without its file header: the
     seven bytes `oggcomp c` writes first -- "oggc\x1a", the stream version,
-    the model's number -- are the caller's to write and to check, and
-    oggcomp_StreamVersion() is what goes in the version byte.  Init again
+    the level -- are the caller's to write and to check, and
+    oggcomp_StreamVersion() is what goes in the version byte.  The level is
+    Init's to be told, in its flags (OC_F_LEVEL below), and a stream decodes
+    only at the level it was coded at.  Init again
     on the same instance for the next stream; with OC_F_SOLID the model is
     kept from the one before, which is what `oggdet -S` does, and without
     it the model starts over, so that every stream codes as `oggcomp c`
@@ -61,6 +64,10 @@ extern "C" {
 #define OC_F_SOLID 1   /*  keep the model from the run before on this instance  */
 #define OC_F_VERBOSE 2 /*  count where the bits go, for oggcomp_Report()  */
 #define OC_F_HUGE 4    /*  ask for huge pages for the tables (first Init only)  */
+/*  The level, in bits 8 to 11: OC_F_LEVEL(9) for -9.  0 is the build's
+    strongest, -9; a level the build lacks is an error from Init (5).  */
+#define OC_F_LEVEL(n) ((n) << 8)
+#define OC_LEVEL_OF(flags) (((flags) >> 8) & 15)
 /*  Loop results  */
 #define OC_DONE 0
 #define OC_NEED_INPUT 1
@@ -80,11 +87,9 @@ OC_API void OC_CALL oggcomp_addinp(void *p, void *buf, int size); /*  size 0: th
 OC_API void OC_CALL oggcomp_addout(void *p, void *buf, int size);
 OC_API const char *OC_CALL oggcomp_Error(void *p); /*  the last error's message, "" when none  */
 OC_API int OC_CALL oggcomp_StreamVersion(void);   /*  what the stream's version byte holds  */
-OC_API unsigned long long OC_CALL oggcomp_TableBytes(void); /*  the model tables, once mapped  */
-OC_API const char *OC_CALL oggcomp_Describe(void); /*  one line about the model  */
+OC_API unsigned long long OC_CALL oggcomp_TableBytes(void); /*  the tables of the level last Init'd on this thread  */
+OC_API const char *OC_CALL oggcomp_Describe(void); /*  one line about the build: its stream version and levels  */
 OC_API void OC_CALL oggcomp_Report(void *p);      /*  where the bits went, on stderr, after an encode with OC_F_VERBOSE  */
-/*  Since threads: optional in a library (oc_load.inc), so that one built
-    before them still loads.  */
 OC_API unsigned long long OC_CALL oggcomp_Done(void *p); /*  the .ogg side's bytes done since Init: coded, or restored  */
 /*  Stage i's bits and values, after an encode with OC_F_VERBOSE: its name,
     or 0 past the last stage.  What oggcomp_Report() prints, to add up.  */

@@ -63,9 +63,9 @@ static int ogc_same_file(const char *a, const char *b) {
   return !stat(a, &x) && !stat(b, &y) && x.st_dev == y.st_dev && x.st_ino == y.st_ino;
 #endif
 }
-//  The head of what d is given, as main() reads it to learn the model and
+//  The head of what d is given, as main() reads it to learn the level and
 //  whether the stream was coded on threads: the magic, the version, the
-//  model -- the whole header of a stream of one model, the first 7 bytes of
+//  level -- the whole header of a stream of one model, the first 7 bytes of
 //  12 of one coded on threads.  The run takes these bytes as read: they are
 //  not read again, since from stdin they could not be.
 constexpr uint OC_HEAD = sizeof OC_MAGIC + 1;
@@ -116,20 +116,20 @@ static int run(oc_api &api, int dir, const oc_opts &o, filehandle &f, const oc_h
       FATAL_CODE(OGC_EXIT_IO, "cannot create %s", out);
     ogc_partial.set(out, &g);
     h[0] = (u8)api.StreamVersion();
-    h[1] = (u8)api.model;
+    h[1] = (u8)api.level;
     if(g.writ((void *)OC_MAGIC, sizeof OC_MAGIC - 1) != sizeof OC_MAGIC - 1 || g.writ(h, 2) != 2)
       FATAL_CODE(OGC_EXIT_IO, "write error on %s", out);
   } else {
-    const u8 *h = hd.b + sizeof OC_MAGIC - 1;  // the version, the model
+    const u8 *h = hd.b + sizeof OC_MAGIC - 1;  // the version, the level
     FATAL_UNLESS(hd.n >= sizeof OC_MAGIC - 1 && !memcmp(hd.b, OC_MAGIC, sizeof OC_MAGIC - 1), "%s: not an oggcomp stream -- `oggcomp c` makes one", in);
     FATAL_UNLESS(hd.n == OC_HEAD, "%s: the stream ends in its header", in);
-    FATAL_UNLESS(h[0] == api.StreamVersion(), "%s: made by oggcomp version %u, model %d writes version %d", in, h[0], api.model, api.StreamVersion());
+    FATAL_UNLESS(h[0] == api.StreamVersion(), "%s: made by oggcomp's stream version %u, and this one reads version %d", in, h[0], api.StreamVersion());
     if(!g.make(out))
       FATAL_CODE(OGC_EXIT_IO, "cannot create %s", out);
     ogc_partial.set(out, &g);
   }
   p = api.Alloc();
-  FATAL_UNLESS(p != nullptr, "model %d is in use", api.model);
+  FATAL_UNLESS(p != nullptr, "the thread's instance of the model is in use");
   r = api.Init(p, dir, flags, in);
   if(r)
     run_fail(api, p, r);
@@ -265,7 +265,7 @@ template <class M> static void mt_quit_ended(M &m) {
 }
 //  -v on threads: where the bits went, the workers' added up -- what
 //  oggcomp_Report() says of one model.
-template <class M> static void mt_report(M &m, oc_api &api, u64 parts) {
+template <class M> static void mt_report(M &m, u64 parts) {
   double bits[16] = {0}, tot = 0;
   u64 values[16] = {0};
   int n = 0, i;
@@ -280,7 +280,7 @@ template <class M> static void mt_report(M &m, oc_api &api, u64 parts) {
       n = c.nstage;
   }
   if(!n) {
-    fprintf(stderr, "%s: model %d does not say where its bits went on threads\n", ogc_prog, api.model);
+    fprintf(stderr, "%s: no worker counted where its bits went\n", ogc_prog);
     return;
   }
   for(i = 0; i < n; i++)
@@ -314,7 +314,7 @@ static int run_mt_c(oc_api &api, const oc_opts &o, filehandle &f, const char *in
   ogc_partial.set(out, &g);
   memcpy(h, OC_MT_MAGIC, sizeof OC_MT_MAGIC - 1);
   h[MT_AT_VERSION] = (u8)api.StreamVersion();
-  h[MT_AT_MODEL] = (u8)api.model;
+  h[MT_AT_LEVEL] = (u8)api.level;
   h[MT_AT_THREADS] = (u8)o.threads;
   mt_put_le(h + MT_AT_PART, part >> 10, 4);
   if(g.writ(h, MT_HEAD) != MT_HEAD)
@@ -361,7 +361,7 @@ static int run_mt_c(oc_api &api, const oc_opts &o, filehandle &f, const char *in
   //  was, it read freed memory and `c -v -t N` died there.  The workers
   //  have all ended by now: MTwrap's loop ends with the last of them.
   if(o.flags & OC_F_VERBOSE)
-    mt_report(e->M2, api, parts);
+    mt_report(e->M2, parts);
   e->M2.Quit();  // (the threads joined, the workers freed)
   e->M1.Quit();
   oc_unmap_block(e, sizeof(OcMtEnc));
@@ -382,7 +382,7 @@ static int run_mt_d(oc_api &api, const oc_opts &o, filehandle &f, const oc_head 
   uint y, w;
   memcpy(h, hd.b, OC_HEAD);
   FATAL_UNLESS(f.sread(h + OC_HEAD, MT_HEAD - OC_HEAD) == MT_HEAD - OC_HEAD, "%s: the stream ends in its header", in);
-  FATAL_UNLESS(h[MT_AT_VERSION] == api.StreamVersion(), "%s: made by oggcomp version %u, model %d writes version %d", in, h[MT_AT_VERSION], api.model, api.StreamVersion());
+  FATAL_UNLESS(h[MT_AT_VERSION] == api.StreamVersion(), "%s: made by oggcomp's stream version %u, and this one reads version %d", in, h[MT_AT_VERSION], api.StreamVersion());
   threads = h[MT_AT_THREADS];
   part = mt_get_le(h + MT_AT_PART, 4) << 10;
   FATAL_UNLESS(threads >= 1 && threads <= OC_MT_MAX && part, "%s: damaged data: its header is broken", in);
@@ -438,8 +438,36 @@ static const char *opt_value(const char *o, int &a, int argc, char **argv) {
     return argv[++a];
   return nullptr;
 }
+//  The level a header's level byte names: the level itself -- 9, 7, 3, 1 --
+//  or, from a stream made before there were levels, the number of the model
+//  that coded it, which the levels are: 0, the program's own, is -9; 2, the
+//  oggcomp2 library, is -7; 1 and 3 kept their numbers.  -1 for a byte that
+//  names none.
+static int oc_level_of(int b) {
+  switch(b) {
+  case 0:
+  case 9:
+    return 9;
+  case 2:
+  case 7:
+    return 7;
+  case 3:
+    return 3;
+  case 1:
+    return 1;
+  }
+  return -1;
+}
+//  " -9 -7 -3 -1", the levels this build has, for a message.
+static const char *oc_levels_list(void) {
+  static char b[32];
+  int k = 0;
+  for(int l : oc_levels)
+    k += snprintf(b + k, sizeof b - (sz)k, " -%d", l);
+  return b;
+}
 int main(int argc, char **argv) {
-  int a = 1, model = 0, have_model = 0, dir, mt = 0;
+  int a = 1, level = 0, have_level = 0, dir, mt = 0;
   oc_opts o;
   const char *mode, *in, *out;
   oc_api api;
@@ -491,8 +519,8 @@ int main(int argc, char **argv) {
         s = " ";  // (the rest of the argument was the number)
         break;
       case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
-        model = *s - '0';
-        have_model = 1;
+        level = *s - '0';
+        have_level = 1;
         break;
       default:
         goto usage;
@@ -510,26 +538,37 @@ int main(int argc, char **argv) {
   if(!f.open(in))
     FATAL_CODE(OGC_EXIT_IO, "cannot open %s", in);
   hd.n = 0;
-  if(dir == OC_DECODE) {
-    //  The stream names its model in its header; -N given must agree.  Its
-    //  magic says whether it was coded on threads.
+  if(dir == OC_ENCODE) {
+    //  c at -N, or at the strongest level the build has.
+    if(!have_level)
+      level = OC_LEVEL_DEFAULT;
+    if(!oc_has_level(level))
+      FATAL_CODE(OGC_EXIT_USAGE, "this build has no level -%d (it has%s)", level, oc_levels_list());
+  } else {
+    //  The stream names its level in its header, and d decodes at that
+    //  level; -N given must agree.  Its magic says whether it was coded on
+    //  threads.
     hd.n = f.sread(hd.b, OC_HEAD);
     if(f.error())
       FATAL_CODE(OGC_EXIT_IO, "read error on %s", in);
     if(hd.n == OC_HEAD) {
       mt = !memcmp(hd.b, OC_MT_MAGIC, sizeof OC_MT_MAGIC - 1);
       if(mt || !memcmp(hd.b, OC_MAGIC, sizeof OC_MAGIC - 1)) {
-        //  -N is a digit, so a stream naming model 10 or more was not made
-        //  by `oggcomp c`: damage, exit 1 -- not a search for an
-        //  oggcomp128.so that ends in exit 3.
-        FATAL_UNLESS(hd.b[OC_HEAD - 1] <= 9, "%s: damaged data: its header names model %d", in, hd.b[OC_HEAD - 1]);
-        if(have_model)
-          FATAL_UNLESS(hd.b[OC_HEAD - 1] == model, "%s was coded with model %d, and -%d asks for another", in, hd.b[OC_HEAD - 1], model);
-        model = hd.b[OC_HEAD - 1];
+        const int hl = oc_level_of(hd.b[OC_HEAD - 1]);
+        //  A byte that names no level was not written by `oggcomp c`:
+        //  damage, exit 1.
+        FATAL_UNLESS(hl > 0, "%s: damaged data: its header names no level (%d)", in, hd.b[OC_HEAD - 1]);
+        if(have_level)
+          FATAL_UNLESS(hl == level, "%s was coded at level -%d, and -%d asks for another", in, hl, level);
+        FATAL_UNLESS(oc_has_level(hl), "%s was coded at level -%d, which this build has not (it has%s)", in, hl, oc_levels_list());
+        level = hl;
       }
     }
+    if(!level)
+      level = OC_LEVEL_DEFAULT;  // (not a stream: run() says so)
   }
-  oc_api_load(&api, model);
+  o.flags |= OC_F_LEVEL(level);
+  oc_api_load(&api, level);
   if(dir == OC_DECODE && mt)
     return run_mt_d(api, o, f, hd, in, out);
   if(dir == OC_ENCODE && o.threads > 1)
@@ -543,14 +582,15 @@ usage:
                   "  -v    say where the bits went, by stage\n"
                   "  -H    model tables on huge pages (Linux; faster on big files where the\n"
                   "        kernel has 2 MB pages ready, slower where it has to make them)\n"
-                  "  -N    model N: 0 the program's own, 1..9 oggcompN.dll (.so) beside it,\n"
-                  "        built from an IDX model of its own by ./mk.sh dll N.  c writes N\n"
-                  "        into the stream; d reads it back, and -N there must agree\n"
+                  "  -9 -7 -3 -1  (c) the level: -9, the default, codes best; -7 is nearly\n"
+                  "        as strong and the fastest.  d takes the level from the stream,\n"
+                  "        and -N given there must agree\n"
                   "  -t N  (c) code on N threads, 1 to %d: the input in parts, cut where\n"
                   "        oggsplit cuts, each thread coding its parts with a model of its\n"
                   "        own; d takes N from the stream\n"
                   "  -c N  (c with -t) the size of a part, at least: N MB (1 to 1024), or N KB\n"
-                  "        with a k (default: a part for each thread, 1 MB at most)\n"
+                  "        with a k (default: four parts for each thread, of 64 KB to 4 MB;\n"
+                  "        1 MB where the input's size is not known)\n"
                   "  -p    the progress line even where stderr is not a terminal\n"
                   "  -q    no progress line\n"
                   "\n",

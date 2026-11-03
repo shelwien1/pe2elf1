@@ -31,7 +31,7 @@ That gives three shapes worth naming, of which the tree uses two:
 
 | shape | flags | what it is for |
 |---|---|---|
-| **tuning** | `Debug 1, Const 0` | `./mk.sh`. Every knob live; `opt.pl` hill-climbs it |
+| **tuning** | `Debug 1, Const 0` | `./mk.sh tuning L`, one level. Every knob live; `opt.pl` hill-climbs it |
 | **shipping** | `Const 1` | `./mk.sh release`. Every knob folded; no indirection, no mapping objects |
 | frozen | `Debug 0, Const 0` | per-line, to shrink the optimizer's search space — see §10 |
 
@@ -39,8 +39,8 @@ That gives three shapes worth naming, of which the tree uses two:
 the two can never drift:
 
 ```sh
-sed 's/^Const 0/Const 1/' "$f" > "IDX/$b-const.idx"
-( cd IDX && perl idx2inc.pl "$b-const.idx" 0 )
+sed 's/^Const 0/Const 1/' "IDX/l$L/$b.idx" > "IDX/l$L/$b-const.idx"
+( cd "IDX/l$L" && perl ../idx2inc.pl "$b-const.idx" 0 )
 ```
 
 **Both builds must produce the same stream.** That is the contract, and in
@@ -284,7 +284,18 @@ Two things to get right when splitting one module into several:
   renamed its mantissa plane to `%M%MT` for this and nothing else.
 
 `import.pl` takes one `.idx` at a time, so importing an export across a split
-model is a loop — `IDX/import-all.bat` is that loop.
+model is a loop — `IDX/import-all.bat`, run in a level's directory, is that
+loop.
+
+`oggcomp` takes that one step further: it has four models, its levels, and
+each is the six families again in a directory of its own, `IDX/l9/`,
+`IDX/l7/`, `IDX/l3/` and `IDX/l1/`, generated into `MOD/l9/` and so on.  The
+level goes in the `Prefix` too — `Prefix L9_dig`, `Prefix L7_dig` — so the
+24 modules are one program, and the code that is not generated names none
+of them: `levels.inc` gathers each level's names into a class, `Lv9` and so
+on, which the model is a template on.  Unlike the split, that step renamed
+every identifier, so an export from before it says `TC_dig_...` and
+imports nothing; `sed 's/\bTC_/L9_/g'` makes it `-9`'s.
 
 ---
 
@@ -453,12 +464,12 @@ schedule and the predictor instead.
 ## 11. The tuning loop
 
 ```
-./mk.sh                                   # tuning build: Debug 1, Const 0
+./mk.sh tuning 9                          # tuning build of -9: Debug 1, Const 0
 perl IDX/opt.pl opt.lst                   # hill-climb; writes export.!!!
-cd IDX && for f in *.idx; do              # fold the results back into source
-  perl import.pl $f ../export.!!! > t && mv t $f
+cd IDX/l9 && for f in *.idx; do           # fold the results back into source
+  perl ../import.pl $f ../../export.!!! > t && mv t $f
 done
-./mk.sh          # continue tuning
+./mk.sh tuning 9 # continue tuning
 ./mk.sh release  # or ship
 ```
 

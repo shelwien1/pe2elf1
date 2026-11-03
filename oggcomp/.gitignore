@@ -3,8 +3,8 @@
 /oggcomp.exe
 /oggdet
 /oggdet.exe
-/oggcomp[1-9].so
-/oggcomp[1-9].dll
+/oggcomp.so
+/oggcomp.dll
 /oc_api_test
 /oc_api_test.exe
 # what tuning leaves behind (IDX/opt.pl), and the run log

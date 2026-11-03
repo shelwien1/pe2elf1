@@ -2,10 +2,13 @@
 
 :goto skip
 
-for %%a in (IDX\*.idx) do ( 
-  if %%~pna.idx==%%~pnxa (
-    perl IDX/idx2inc.pl %%a >nul
-    move /y "%%~pna_*.inc" MOD/
+rem every level, IDX\l9 l7 l3 l1, each into its MOD\ directory (mk.sh mod is the same on Linux)
+for %%l in (9 7 3 1) do (
+  for %%a in (IDX\l%%l\*.idx) do (
+    if %%~pna.idx==%%~pnxa (
+      perl IDX/idx2inc.pl %%a >nul
+      move /y "%%~pna_*.inc" MOD\l%%l\
+    )
   )
 )
 
@@ -87,8 +90,8 @@ rem %gcc% -s -std=c++23 -Ofast -O3 -fpermissive -Wno-format %arch% %incs% %opts%
 
 %gcc% -s -std=c++23 -Ofast -O3 -fpermissive -Wno-format %arch% %incs% %opts% %defs% -static -D_USE_MATH_DEFINES oggdet.cpp -o oggdet.exe 
 
-rem a model as a library -- oggcompN.dll for `oggcomp -N`, from whatever MOD\ holds:
-rem %gcc% -s -std=c++23 -Ofast -O3 -fpermissive -Wno-format %arch% %incs% %opts% %defs% -static -shared -DOC_BUILD_DLL -D_USE_MATH_DEFINES oggcomp_dll.cpp -o oggcomp1.dll 
+rem every level as a library -- oggcomp.dll, oc_api.h for a program of someone else's (oggcomp has the levels itself):
+rem %gcc% -s -std=c++23 -Ofast -O3 -fpermissive -Wno-format %arch% %incs% %opts% %defs% -static -shared -DOC_BUILD_DLL -D_USE_MATH_DEFINES oggcomp_dll.cpp -o oggcomp.dll 
 
 del link.exe
 

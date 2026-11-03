@@ -1,14 +1,13 @@
-/*  The model as a loadable library: everything oggcomp.cpp includes up to
-    the coroutine, and oc_api.h's functions over it, exported.  Built by
-    `./mk.sh dll N [IDXDIR]` from the IDX model named, in the shipping form,
-    as oggcompN.so -- or on Windows
+/*  oggcomp as a library: everything oggcomp.cpp includes up to the
+    coroutine, and oc_api.h's functions over it, exported -- every level of
+    the program, the level in Init's flags (OC_F_LEVEL).  Built by
+    `./mk.sh lib` as oggcomp.so, in the shipping form, or on Windows
 
         x86_64-w64-mingw32-g++ -O2 -fwrapv -static -shared -DOC_BUILD_DLL \
-            -o oggcompN.dll oggcomp_dll.cpp
+            -o oggcomp.dll oggcomp_dll.cpp
 
-    after `./mk.sh mod IDXDIR` has put that model's MOD/ in place.  A
-    program picks model N with -N and finds oggcompN.dll (.so) beside
-    itself; a stream written through it names N in its header.  */
+    for a program of someone else's to drive.  oggcomp itself does not
+    load it: it has the levels in it.  */
 #ifndef OC_BUILD_DLL
 #define OC_BUILD_DLL 1
 #endif

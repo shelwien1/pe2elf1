@@ -1,27 +1,35 @@
 //  oc_api.h, implemented over oc_coro: the instance a thread holds -- one
 //  per thread, because the model's state is the thread's (OC_TLS,
 //  oc_platform.inc) and a thread has one of it -- with its encoder and
-//  decoder coroutines and what FATAL becomes under the API.  Included by
-//  the programs, whose model 0 this is, and by oggcomp_dll.cpp, where it is
-//  the library.
+//  decoder coroutines at each level of the build and what FATAL becomes
+//  under the API.  Included by the programs, which run it through
+//  oc_load.inc, and by oggcomp_dll.cpp, where it is the library.
 #include "oc_api.h"
 struct oc_api_unwind {};
-//  `used` is per direction: what a solid Init keeps is the direction's
-//  model as its last stream left it, and a direction that has not been
-//  Init'd in this instance has nothing to keep -- its families are not
-//  even wired -- whatever the other direction has done.
+//  A level's two coroutines, the encoder and the decoder: each a model of
+//  that level, and its walk.
+template <class Lv> struct oc_lvco {
+  oc_coro<0, Lv> enc;
+  oc_coro<1, Lv> dec;
+};
+//  `used` is per direction and level: what a solid Init keeps is that
+//  model as its last stream left it, and one that has not been Init'd in
+//  this instance has nothing to keep -- its families are not even wired --
+//  whatever the others have done.
 struct oc_inst {
-  int busy, dir, flags, err, in_coro, used[2];
+  int busy, dir, level, flags, err, in_coro, used[2][10];
   int need_out;  // Loop said OC_NEED_OUTPUT, and no addout has answered it
   char msg[1024];
   char name[512];
-  Coroutine *co;
-  oc_coro<0> enc;
-  oc_coro<1> dec;
+  Coroutine *co;            // the coroutine Init chose: its direction's, at its level
+  uint (*step)(oc_inst *);  // co's next step, called as its type
+#define OC_INST_LV(n) oc_lvco<Lv##n> l##n;
+  OC_LEVELS(OC_INST_LV)
+#undef OC_INST_LV
 };
 static OC_TLS oc_inst *oc_the;  // the thread's instance, mapped by its first Alloc
 static OC_TLS oc_inst *oc_cur;
-static OC_TLS int oc_api_ready;  // the thread's tables are mapped and wired
+static OC_TLS u64 oc_tables_bytes;  // the tables of the level the thread last Init'd
 //  The thread's largest state, mapped at its first Init -- in the try of
 //  Init, so a mapping refused is an error the API returns -- and given
 //  back, with the tables and the instance, when it frees the instance.
@@ -60,8 +68,10 @@ static void oc_blocks_unmap(void) {
   oc_unblock(vb_cs, VB_CSMAX * sizeof *vb_cs);
   oc_unblock(in_win, IN_WIN);
   oc_unblock(jb, JB_MAX);
-  tc_unmap_all();
-  oc_api_ready = 0;
+#define OC_UNMAP_LV(n) oc_tabs<Lv##n>().unmap();
+  OC_LEVELS(OC_UNMAP_LV)
+#undef OC_UNMAP_LV
+  oc_tables_bytes = 0;
 }
 //  FATAL under the API: no exit and no file to drop.  Inside the coroutine
 //  the error is yielded and never returned from -- a call after it finds
@@ -86,6 +96,36 @@ static void oc_api_leave(void) {
   ogc_die_hook = nullptr;
   ogc_msg_dst = nullptr;
 }
+//  One step of the coroutine Init chose, as its own type: coro_call takes
+//  the type it is to run.
+template <class C> static uint oc_step(oc_inst *p) {
+  C *c = (C *)p->co;
+  return c->coro_call(c);
+}
+//  Init at level Lv: the level's tables mapped and the model wired at the
+//  thread's first Init of it, then the direction's coroutine of that level,
+//  fresh or (solid) as its last stream left it.
+template <class Lv> static void oc_init_lv(oc_inst *p, oc_lvco<Lv> &l, int keep) {
+  oc_blocks_map();
+  if(!oc_tabs<Lv>().mapped)
+    l.enc.t.init();
+  oc_tables_bytes = oc_tabs<Lv>().bytes();
+  if(!p->dir) {
+    if(keep)
+      oc_next(l.enc, p->name);
+    else
+      oc_fresh(l.enc, p->name);
+    p->co = &l.enc;
+    p->step = oc_step<oc_coro<0, Lv>>;
+  } else {
+    if(keep)
+      oc_next(l.dec, p->name);
+    else
+      oc_fresh(l.dec, p->name);
+    p->co = &l.dec;
+    p->step = oc_step<oc_coro<1, Lv>>;
+  }
+}
 extern "C" {
 OC_API void *OC_CALL oggcomp_Alloc(void) {
   if(oc_the && oc_the->busy)
@@ -105,7 +145,7 @@ OC_API void *OC_CALL oggcomp_Alloc(void) {
   }
   oc_the->busy = 1;
   oc_the->err = 0;
-  oc_the->used[0] = oc_the->used[1] = 0;
+  memset(oc_the->used, 0, sizeof oc_the->used);
   oc_the->in_coro = 0;
   oc_the->need_out = 0;
   oc_the->co = nullptr;
@@ -123,40 +163,35 @@ OC_API void OC_CALL oggcomp_Free(void *pp) {
 }
 OC_API int OC_CALL oggcomp_Init(void *pp, int dir, int flags, const char *name) {
   oc_inst *p = (oc_inst *)pp;
-  int keep;
+  int keep, level = OC_LEVEL_OF(flags);
   if(!p || p != oc_the || !p->busy)
     return 8;
+  if(!level)
+    level = OC_LEVEL_DEFAULT;
   p->err = 0;
   p->msg[0] = 0;
   p->dir = dir ? 1 : 0;
+  p->level = level;
   p->flags = flags;
   p->in_coro = 0;
   p->need_out = 0;
+  p->co = nullptr;
   snprintf(p->name, sizeof p->name, "%s", name && *name ? name : "the stream");
   tc_verbose = (flags & OC_F_VERBOSE) != 0;
   tc_huge = (flags & OC_F_HUGE) != 0;
-  keep = (flags & OC_F_SOLID) != 0 && p->used[p->dir];
   oc_api_enter(p);
   try {
-    if(!oc_api_ready) {
-      oc_blocks_map();
-      p->enc.t.init();
-      oc_api_ready = 1;
+    FATAL_UNLESS(level <= 9 && oc_has_level(level), "%s: this build has no level %d", p->name, level);
+    keep = (flags & OC_F_SOLID) != 0 && p->used[p->dir][level];
+    switch(level) {
+#define OC_INIT_LV(n)              \
+  case n:                          \
+    oc_init_lv(p, p->l##n, keep); \
+    break;
+      OC_LEVELS(OC_INIT_LV)
+#undef OC_INIT_LV
     }
-    if(!p->dir) {
-      if(keep)
-        oc_next(p->enc, p->name);
-      else
-        oc_fresh(p->enc, p->name);
-      p->co = &p->enc;
-    } else {
-      if(keep)
-        oc_next(p->dec, p->name);
-      else
-        oc_fresh(p->dec, p->name);
-      p->co = &p->dec;
-    }
-    p->used[p->dir] = 1;
+    p->used[p->dir][level] = 1;
   } catch(oc_api_unwind &) {
     oc_api_leave();
     p->co = nullptr;
@@ -185,7 +220,7 @@ OC_API int OC_CALL oggcomp_Loop(void *pp) {
     return p->err;
   oc_api_enter(p);
   p->in_coro = 1;
-  r = p->dir ? p->dec.coro_call(&p->dec) : p->enc.coro_call(&p->enc);
+  r = p->step(p);
   p->in_coro = 0;
   oc_api_leave();
   if(r == 3)
@@ -220,10 +255,12 @@ OC_API const char *OC_CALL oggcomp_Error(void *pp) {
   return p && p == oc_the ? p->msg : "";
 }
 OC_API int OC_CALL oggcomp_StreamVersion(void) { return OC_VER; }
-OC_API unsigned long long OC_CALL oggcomp_TableBytes(void) { return oc_api_ready ? (unsigned long long)tabs.bytes() : 0; }
+OC_API unsigned long long OC_CALL oggcomp_TableBytes(void) { return (unsigned long long)oc_tables_bytes; }
 OC_API const char *OC_CALL oggcomp_Describe(void) {
   static char d[160];
-  snprintf(d, sizeof d, "oggcomp model, stream version %d, %llu MB of tables%s", OC_VER, (unsigned long long)(oc_api_ready ? tabs.bytes() >> 20 : 0), oc_api_ready ? "" : " (not mapped yet)");
+  int k = snprintf(d, sizeof d, "oggcomp, stream version %d, levels", OC_VER);
+  for(int l : oc_levels)
+    k += snprintf(d + k, sizeof d - (sz)k, " -%d", l);
   return d;
 }
 OC_API unsigned long long OC_CALL oggcomp_Done(void *pp) {
@@ -249,7 +286,7 @@ OC_API void OC_CALL oggcomp_Report(void *pp) {
     return;
   for(i = 0; i < STG_N; i++)
     tot += tc_bits[i];
-  fprintf(stderr, "%s: %.0f bytes of model, %" PRIu64 " MB of tables\n", ogc_prog, tot / 8, (u64)(oc_api_ready ? tabs.bytes() >> 20 : 0));
+  fprintf(stderr, "%s: %.0f bytes of model at -%d, %" PRIu64 " MB of tables\n", ogc_prog, tot / 8, p->level, (u64)(oc_tables_bytes >> 20));
   if(!p->dir)
     for(i = 0; i < STG_N; i++) {
       fprintf(stderr, "  %-8s %12.0f bytes  %5.2f%%", TC_STAGE[i], tc_bits[i] / 8, tot > 0 ? 100.0 * tc_bits[i] / tot : 0.0);
