@@ -46,11 +46,11 @@ and when it is done:
 ```
 $ m4vpack c aq_cm.m4v aq_cm.m4p
 [enc] video: 512x384, progressive, 30.01 fps, XviD build 47
-[enc] 3875193 > 2739670  100.0%  1258 VOPs  done in 16.87s  32.09M RAM at most
-aq_cm.m4v: 3875193 -> 2739670 bytes (70.70%, -9); 1258 VOPs (I 18, P 666, B 574, S 0), 1258 packed
+[enc] 3875193 > 2731644  100.0%  1258 VOPs  done in 16.87s  32.09M RAM at most
+aq_cm.m4v: 3875193 -> 2731644 bytes (70.49%, -9); 1258 VOPs (I 18, P 666, B 574, S 0), 1258 packed
 $ m4vpack d aq_cm.m4p aq_cm.m4v
 [dec] video: 512x384, progressive, 30.01 fps, XviD build 47
-[dec] 3875193 > 2739670  100.0%  1258 VOPs  done in 15.89s  30.73M RAM at most
+[dec] 3875193 > 2731644  100.0%  1258 VOPs  done in 15.89s  30.73M RAM at most
 ```
 
 Exit codes:
@@ -68,16 +68,16 @@ Exit codes:
 
 | Level | Model | Tuning set | `c` | `d` | Memory |
 |---|---|---:|---:|---:|---:|
-| `-9` | the decoder in the loop; per decision ten counters, three mixers and a final one, two APMs | 68.71% | 0.25 MiB/s | 0.26 MiB/s | 32 MiB |
+| `-9` | the decoder in the loop; per decision ten counters, three mixers and a final one, two APMs | 69.01% | 0.25 MiB/s | 0.26 MiB/s | 32 MiB |
 | `-7` | the same mixing without the decoder | 71.24% | 0.39 MiB/s | 0.39 MiB/s | 22 MiB |
 | `-5` | ten counters, one mixer | 71.81% | 0.56 MiB/s | 0.55 MiB/s | 20 MiB |
 | `-3` | six counters, one mixer | 72.19% | 0.71 MiB/s | 0.71 MiB/s | 20 MiB |
 | `-1` | four counters (keeping their probabilities stretched), one mixer | 73.01% | 0.93 MiB/s | 1.01 MiB/s | 22 MiB |
 
-The tuning set is the first 256 KB of each of the 12 streams the levels were tuned on (2.8 MiB);
-its size compressed is given as a share of its size. `c` and `d` are the MiB of stream per second
-(wall time) on `aq_cm.m4v` (3.7 MiB), on one thread of a 2.8 GHz Xeon, and the memory is the most
-the process had (its resident set). The decoder in the loop takes `-9` 1.6 times as long as
+The tuning set is the first 256 KB of each of the 12 streams the levels were first tuned on
+(2.8 MiB); its size compressed is given as a share of its size. `c` and `d` are the MiB of stream
+per second (wall time) on `aq_cm.m4v` (3.7 MiB), on one thread of a 2.8 GHz Xeon, and the memory is
+the most the process had (its resident set). The decoder in the loop takes `-9` 1.6 times as long as
 `-7`; each level below is 1.2-1.45 times as fast as the one above it. Format 3's single model ran at
 about 1 MiB/s on the same machine.
 
@@ -159,9 +159,9 @@ workarounds (DivX, XviD and libavcodec builds, read from the user data). Its pic
 bit-exact with m4vdec's on 45 test streams (9,758 frames).
 
 The contexts it gives, and what each is worth: the tuning set's size with the context switched off
-in the tuned model, against 68.71% with all of them. (A model tuned with a context loses a little
-more without it than one tuned without it: `-7`, the same model without the decoder and tuned on
-its own, gets 71.24%.)
+in the tuned model, against 68.71% with all of them (measured with the parameters `-9` had before
+its current ones, see Tuning). (A model tuned with a context loses a little more without it than
+one tuned without it: `-7`, the same model without the decoder and tuned on its own, gets 71.24%.)
 
 | Context | Elements | Without it |
 |---|---|---:|
@@ -196,6 +196,15 @@ files), both were tuned again, the two largest families (sig and lvl) for about 
 others for two. `-5`, `-3` and `-1` were then cut from `-7`: `-5` keeps its ten counters, `-3` and
 `-1` the six and four whose loss (each switched off in turn) costs each of `-7`'s families most;
 then each was tuned for a pass.
+
+`-9`'s parameters were then tuned again on a 1 MB composite of XviD streams, `xvid_mix_1m.m4v`:
+twelve pieces, cut from streams in the wild (XviD builds 41 and 47, among them `aq_cm.m4v`,
+`ispure03.m4v` and `sdova_ed.m4v`) and from xvidcore 1.3.7 encodes with quarter-pel, GMC, MPEG
+quantisation, interlacing and a low rate, all with packed B-frames. With them `-9` codes that file
+0.71% smaller (735907 bytes against 741153), the avip samples 0.26-0.60% smaller (but
+`susi_small1_divx.m4v` 4 bytes larger), the FFmpeg streams 0.30-1.15% larger, and the tuning set
+0.44% larger (69.01% against 68.71%). The other levels kept theirs. A stream that `-9` compressed
+before decompresses only with a build from before: the parameters are part of the format.
 
 ### Streaming
 
@@ -273,44 +282,44 @@ three with packed B-frames) and two DivX streams. The others were made with FFmp
 
 | Stream | Size | xz -9e | format 3 | `-9` | `-7` | `-5` | `-3` | `-1` |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| aq_cm.m4v | 3875193 | 97.2% | 76.3% | 70.7% | 74.8% | 75.5% | 75.9% | 76.7% |
-| aria_cm.m4v | 5097686 | 98.9% | 79.0% | 73.8% | 78.0% | 78.7% | 79.0% | 80.0% |
-| ispure03.m4v | 5864104 | 95.8% | 73.0% | 67.5% | 71.6% | 72.3% | 72.6% | 73.3% |
-| sdova_ed.m4v | 4717732 | 89.6% | 65.7% | 60.1% | 65.0% | 65.7% | 65.9% | 66.5% |
+| aq_cm.m4v | 3875193 | 97.2% | 76.3% | 70.5% | 74.8% | 75.5% | 75.9% | 76.7% |
+| aria_cm.m4v | 5097686 | 98.9% | 79.0% | 73.5% | 78.0% | 78.7% | 79.0% | 80.0% |
+| ispure03.m4v | 5864104 | 95.8% | 73.0% | 67.1% | 71.6% | 72.3% | 72.6% | 73.3% |
+| sdova_ed.m4v | 4717732 | 89.6% | 65.7% | 59.8% | 65.0% | 65.7% | 65.9% | 66.5% |
 | susi_small1_divx.m4v | 90887 | 100.1% | 83.4% | 77.4% | 81.9% | 82.3% | 82.5% | 83.1% |
-| susi_small2_divx.m4v | 1556817 | 100.0% | 85.1% | 83.1% | 84.6% | 85.1% | 85.2% | 85.5% |
-| xvid.m4v | 257813 | 97.7% | 74.4% | 68.9% | 70.2% | 71.1% | 71.6% | 72.6% |
-| lavc_ilace.m4v (interlaced) | 1015896 | 90.9% | 68.6% | 62.9% | 64.5% | 65.4% | 65.8% | 67.1% |
-| xvid_gmc.m4v (GMC) | 833291 | 99.8% | 76.9% | 70.7% | 73.7% | 74.3% | 75.0% | 75.8% |
-| xvid_qpel_4mv.m4v (quarter-pel, 4MV) | 383624 | 95.5% | 74.0% | 68.9% | 70.3% | 70.8% | 71.3% | 72.1% |
+| susi_small2_divx.m4v | 1556817 | 100.0% | 85.1% | 82.8% | 84.6% | 85.1% | 85.2% | 85.5% |
+| xvid.m4v | 257813 | 97.7% | 74.4% | 69.6% | 70.2% | 71.1% | 71.6% | 72.6% |
+| lavc_ilace.m4v (interlaced) | 1015896 | 90.9% | 68.6% | 63.7% | 64.5% | 65.4% | 65.8% | 67.1% |
+| xvid_gmc.m4v (GMC) | 833291 | 99.8% | 76.9% | 70.9% | 73.7% | 74.3% | 75.0% | 75.8% |
+| xvid_qpel_4mv.m4v (quarter-pel, 4MV) | 383624 | 95.5% | 74.0% | 69.5% | 70.3% | 70.8% | 71.3% | 72.1% |
 
 Where the bits go in `aq_cm.m4v` at `-9` (`-s`; the packed sizes are the model's estimates):
 
 ```
   bytes                                  input     packed
-  headers, raw chunks                    11752       1633  13.90%
-    raw chunks                                        202
-    VOP and video packet headers, tails              1431
-  macroblock types, cbp, dquant         357692     130322  36.43%
-    types, flags, dquant                            55598
-    coded block patterns                            74724
-  motion vectors                        191806     141983  74.02%
-  intra DC                              256787     195482  76.13%
-  coefficients                         3057155    2270169  74.26%
-    positions                                      921642
-    levels                                        1020004
-    signs                                          328352
+  headers, raw chunks                    11752       1512  12.87%
+    raw chunks                                        168
+    VOP and video packet headers, tails              1345
+  macroblock types, cbp, dquant         357692     129955  36.33%
+    types, flags, dquant                            55488
+    coded block patterns                            74467
+  motion vectors                        191806     142003  74.03%
+  intra DC                              256787     193953  75.53%
+  coefficients                         3057155    2264138  74.06%
+    positions                                      917602
+    levels                                        1019193
+    signs                                          327171
     escape modes                                      171
-  total                                3875193    2739590  70.70%
+  total                                3875193    2731561  70.49%
 ```
 
-`-9` writes 2.4-8.5% less than format 3, 7.3% less on this stream. Coefficients make up most of a
-stream (79% of this one), and their signs change most: 27% fewer bytes than format 3's here (328352
-against 450410), from the sign prediction; the positions and levels take 2.5% and 2.8% fewer, the
-macroblock headers 12% fewer. The decoder in the loop is worth 5.4-7.5% of the output against `-7`
-on the avip samples (but 1.8% on `susi_small2_divx.m4v`), and 2-4% on the FFmpeg streams. `-1`, the
-fastest level, is within a point of format 3 on the avip samples (worse on five of the six) and 1-2
-points better on the FFmpeg streams.
+`-9` writes 2.6-9.0% less than format 3, 7.6% less on this stream. Coefficients make up most of a
+stream (79% of this one), and their signs change most: 27% fewer bytes than format 3's here (327171
+against 450410), from the sign prediction; the positions and levels take 3.0% and 2.9% fewer, the
+macroblock headers 13% fewer. The decoder in the loop is worth 5.5-8.0% of the output against `-7`
+on the avip samples (but 2.0% on `susi_small2_divx.m4v`), and 0.8-3.8% on the FFmpeg streams.
+`-1`, the fastest level, is within a point of format 3 on the avip samples (worse on five of the
+six) and 1-2 points better on the FFmpeg streams.
 
 On threads, with five of the avip samples concatenated (21 MB, four cores of the same machine,
 which ran about 1.3 times slower when this was measured than for the levels table):

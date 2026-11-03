@@ -16,7 +16,7 @@ void M9_mvg_make( const M_mvg_v & D, tcx & X ) {
   M_mvg_VARS(M_LOCAL)
 
   a = 0;
-  a = a*3 + (((kind)>0+(1-1))+((kind)>2+(1-1)));
+  a = a*5 + M9_mvg_a_kind[__min(5,__max(0,(kind)-(1-1)))];
   a = a*2 + (((comp)>0+(1-1)));
   a = a*3 + (((ls)>0+(1-1))+((ls)>1+(1-1)));
   a = a*3 + (((as)>0+(1-1))+((as)>1+(1-1)));
@@ -25,15 +25,13 @@ void M9_mvg_make( const M_mvg_v & D, tcx & X ) {
   b = b*5 + M9_mvg_b_kind[__min(5,__max(0,(kind)-(1-1)))];
   b = b*2 + (((comp)>0+(1-1)));
   b = b*2 + (((ds)>1+(1-1)));
-  b = b*11 + M9_mvg_b_dz[__min(17,__max(0,(dz)-(1-1)))];
+  b = b*6 + M9_mvg_b_dz[__min(17,__max(0,(dz)-(1-1)))];
 
   c = 0;
-  c = c*3 + (((kind)>1+(1-1))+((kind)>3+(1-1)));
   c = c*2 + (((comp)>0+(1-1)));
-  c = c*3 + (((mag)>1+(1-1))+((mag)>2+(1-1)));
 
   d = 0;
-  d = d*3 + (((kind)>1+(1-1))+((kind)>4+(1-1)));
+  d = d*5 + M9_mvg_d_kind[__min(5,__max(0,(kind)-(1-1)))];
 
   e = 0;
   e = e*4 + M9_mvg_e_kind[__min(5,__max(0,(kind)-(1-1)))];
@@ -41,19 +39,18 @@ void M9_mvg_make( const M_mvg_v & D, tcx & X ) {
   e = e*4 + M9_mvg_e_hm[__min(3,__max(0,(hm)-(1-1)))];
 
   h = 0;
+  h = h*3 + (((kind)>0+(1-1))+((kind)>4+(1-1)));
   h = h*2 + (((comp)>0+(1-1)));
   h = h*3 + (((ts)>0+(1-1))+((ts)>1+(1-1)));
   h = h*4 + M9_mvg_h_thm[__min(3,__max(0,(thm)-(1-1)))];
 
   i = 0;
-  i = i*4 + M9_mvg_i_kind[__min(5,__max(0,(kind)-(1-1)))];
-  i = i*2 + (((as)>1+(1-1)));
+  i = i*3 + (((kind)>2+(1-1))+((kind)>3+(1-1)));
 
   j = 0;
-  j = j*3 + (((kind)>2+(1-1))+((kind)>3+(1-1)));
   j = j*2 + (((comp)>0+(1-1)));
   j = j*3 + (((ds)>0+(1-1))+((ds)>1+(1-1)));
-  j = j*5 + M9_mvg_j_mag[__min(16,__max(0,(mag)-(1-1)))];
+  j = j*4 + M9_mvg_j_mag[__min(16,__max(0,(mag)-(1-1)))];
 
   k = 0;
   k = k*4 + M9_mvg_k_kind[__min(5,__max(0,(kind)-(1-1)))];
@@ -62,7 +59,7 @@ void M9_mvg_make( const M_mvg_v & D, tcx & X ) {
   k = k*2 + (((ds)>0+(1-1)));
 
   l = 0;
-  l = l*3 + (((kind)>3+(1-1))+((kind)>4+(1-1)));
+  l = l*4 + M9_mvg_l_kind[__min(5,__max(0,(kind)-(1-1)))];
   l = l*2 + (((comp)>0+(1-1)));
 
   s = 0;

@@ -1,47 +1,47 @@
 
-static const byte M9_mvd_a_ns[16+1]={ 0,0,0,0,1,2,2,2,2,2,2,2,2,2,3,4,4 };
+static const byte M9_mvd_a_ns[16+1]={ 0,0,0,0,0,1,1,1,1,2,3,4,4,4,4,5,5 };
 
-static const byte M9_mvd_b_oth[17+1]={ 0,1,2,2,3,3,3,4,5,5,5,5,6,6,6,7,8,8 };
+static const byte M9_mvd_b_oth[17+1]={ 0,0,1,1,1,2,2,2,2,2,3,4,4,4,4,5,6,6 };
 
 static const byte M9_mvd_c_kind[5+1]={ 0,0,1,2,3,4 };
 static const byte M9_mvd_c_rs[17+1]={ 0,1,2,3,4,4,4,4,5,5,5,5,5,5,5,5,5,5 };
 
 static const byte M9_mvd_d_kind[5+1]={ 0,1,2,3,3,4 };
-static const byte M9_mvd_d_dz[17+1]={ 0,0,1,2,3,4,4,5,5,5,5,6,6,6,7,8,8,8 };
+static const byte M9_mvd_d_dz[17+1]={ 0,0,1,2,3,3,4,4,5,5,5,5,5,5,6,6,6,6 };
 
 static const byte M9_mvd_e_sp[17+1]={ 0,1,2,3,4,5,6,6,7,7,7,8,8,8,8,9,10,10 };
 
 static const byte M9_mvd_f_ns[16+1]={ 0,1,1,2,2,2,2,2,2,3,3,3,3,3,3,4,4 };
 
 
-static const byte M9_mvd_h_kind[5+1]={ 0,0,1,1,2,3 };
-static const byte M9_mvd_h_lq[17+1]={ 0,1,2,3,4,5,5,5,6,7,7,8,8,8,8,8,9,9 };
+static const byte M9_mvd_h_lq[17+1]={ 0,1,2,3,3,4,5,5,5,6,6,6,7,7,7,7,8,8 };
 static const byte M9_mvd_h_aq[17+1]={ 0,1,2,3,3,4,5,5,5,5,5,5,6,6,6,6,7,7 };
 
-static const byte M9_mvd_i_kind[5+1]={ 0,1,2,3,4,4 };
-static const byte M9_mvd_i_fc[6+1]={ 0,1,2,3,4,5,6 };
+static const byte M9_mvd_i_kind[5+1]={ 0,0,1,1,2,3 };
 
+static const byte M9_mvd_j_kind[5+1]={ 0,0,1,2,3,4 };
 static const byte M9_mvd_j_rbi[5+1]={ 0,1,2,3,4,5 };
 
-static const byte M9_mvd_k_ns[16+1]={ 0,1,2,2,3,4,4,4,4,4,4,4,4,4,4,4,4 };
-static const byte M9_mvd_k_oth[17+1]={ 0,1,2,3,4,4,4,4,5,6,6,6,7,7,8,8,9,9 };
+static const byte M9_mvd_k_ns[16+1]={ 0,1,2,2,3,4,4,4,4,4,4,4,5,5,5,5,5 };
+static const byte M9_mvd_k_oth[17+1]={ 0,1,2,2,3,3,4,4,5,5,5,5,5,5,5,6,6,6 };
 
-static const byte M9_mvd_l_tz[17+1]={ 0,0,1,2,3,4,5,5,5,5,6,6,6,7,7,7,7,7 };
+static const byte M9_mvd_l_tz[17+1]={ 0,0,1,2,2,3,3,4,4,4,5,5,6,7,7,8,8,8 };
 
-static const byte M9_mvd_m_tz[17+1]={ 0,1,2,2,3,3,3,3,3,4,4,4,4,4,4,4,5,5 };
+static const byte M9_mvd_m_tz[17+1]={ 0,1,2,3,4,4,5,5,5,6,6,6,6,6,6,6,7,7 };
 
 
+static const byte M9_mvd_s_oth[17+1]={ 0,0,0,1,1,1,1,1,1,1,1,1,1,2,2,2,3,3 };
 
 static const byte M9_mvd_t_kind[5+1]={ 0,1,2,3,4,4 };
 
 static const byte M9_mvd_w_kind[5+1]={ 0,1,2,2,3,4 };
-static const byte M9_mvd_w_oth[17+1]={ 0,1,2,2,2,3,3,3,3,3,3,3,3,3,3,3,4,4 };
+static const byte M9_mvd_w_oth[17+1]={ 0,1,2,2,2,2,3,3,3,3,3,3,3,3,3,3,4,4 };
 
 
 static const int M9_mvd_rA = (241+0) * (1);
 static const int M9_mvd_rB = (0+0) * (1);
 static const int M9_mvd_rC = (255+0) * (1);
-static const int M9_mvd_rD = (252+0) * (1);
+static const int M9_mvd_rD = (180+0) * (1);
 static const int M9_mvd_rE = (255+0) * (1);
 static const int M9_mvd_rH = (255+0) * (1);
 static const int M9_mvd_rI = (255+0) * (1);
@@ -50,23 +50,23 @@ static const int M9_mvd_rK = (255+0) * (1);
 static const int M9_mvd_rL = (253+0) * (1);
 static const int M9_mvd_rS1 = (8+0) * (1);
 static const int M9_mvd_rS2 = (7+0) * (1);
-static const int M9_mvd_lr = (15+0) * (1);
-static const int M9_mvd_mwA = (252+0) * (1);
-static const int M9_mvd_mwB = (128+0) * (1);
-static const int M9_mvd_mwC = (30+0) * (1);
-static const int M9_mvd_mwD = (3+0) * (1);
-static const int M9_mvd_mwE = (16+0) * (1);
-static const int M9_mvd_mwH = (31+0) * (1);
+static const int M9_mvd_lr = (20+0) * (1);
+static const int M9_mvd_mwA = (190+0) * (1);
+static const int M9_mvd_mwB = (176+0) * (1);
+static const int M9_mvd_mwC = (80+0) * (1);
+static const int M9_mvd_mwD = (25+0) * (1);
+static const int M9_mvd_mwE = (5+0) * (1);
+static const int M9_mvd_mwH = (0+0) * (1);
 static const int M9_mvd_mwI = (34+0) * (1);
 static const int M9_mvd_mwJ = (32+0) * (1);
 static const int M9_mvd_mwK = (61+0) * (1);
 static const int M9_mvd_mwL = (19+0) * (1);
-static const int M9_mvd_bw = (12+0) * (1);
+static const int M9_mvd_bw = (13+0) * (1);
 static const int M9_mvd_qs = (0+3) * (1);
-static const int M9_mvd_qf = (31+3) * (1);
-static const int M9_mvd_mb = (52+0) * (1);
-static const int M9_mvd_rT = (0+0) * (1);
-static const int M9_mvd_mwT = (95+0) * (1);
+static const int M9_mvd_qf = (50+3) * (1);
+static const int M9_mvd_mb = (31+0) * (1);
+static const int M9_mvd_rT = (5+0) * (1);
+static const int M9_mvd_mwT = (223+0) * (1);
 static const int M9_mvd_mt = (6+0) * (1);
 static const int M9_mvd_lrm = (31+0) * (1);
 static const int M9_mvd_mbm = (46+0) * (1);
@@ -89,21 +89,21 @@ static const int M9_mvd_hT = (22+0) * (1);
 static const int M9_mvd_hN = (22+0) * (1);
 
 
-static const long long M9_mvd_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 5); // 5
-static const long long M9_mvd_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 2), 9); // 54
+static const long long M9_mvd_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 6); // 6
+static const long long M9_mvd_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 2), 7); // 42
 static const long long M9_mvd_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 5), 1), 6); // 30
-static const long long M9_mvd_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 5), 2), 9), 3); // 270
+static const long long M9_mvd_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 5), 2), 7), 3); // 210
 static const long long M9_mvd_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 11); // 11
 static const long long M9_mvd_f_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 5); // 20
 static const long long M9_mvd_g_Volume = 1; // 1
-static const long long M9_mvd_h_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 10), 8); // 640
-static const long long M9_mvd_i_Volume = tc_vmul(tc_vmul(tc_vmul(1, 5), 2), 7); // 70
-static const long long M9_mvd_j_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 1), 6), 3); // 54
-static const long long M9_mvd_k_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 2), 5), 10); // 300
-static const long long M9_mvd_l_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 2), 8), 3); // 48
-static const long long M9_mvd_m_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 1), 6); // 18
-static const long long M9_mvd_n_Volume = tc_vmul(1, 3); // 3
-static const long long M9_mvd_s_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 3); // 3
+static const long long M9_mvd_h_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 2), 9), 8); // 432
+static const long long M9_mvd_i_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 2); // 16
+static const long long M9_mvd_j_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 5), 1), 6), 3); // 90
+static const long long M9_mvd_k_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 2), 6), 7); // 84
+static const long long M9_mvd_l_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 9), 2); // 18
+static const long long M9_mvd_m_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 1), 8); // 24
+static const long long M9_mvd_n_Volume = tc_vmul(1, 1); // 1
+static const long long M9_mvd_s_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 4); // 4
 static const long long M9_mvd_t_Volume = tc_vmul(tc_vmul(1, 5), 1); // 5
 static const long long M9_mvd_w_Volume = tc_vmul(tc_vmul(tc_vmul(1, 5), 2), 5); // 50
 

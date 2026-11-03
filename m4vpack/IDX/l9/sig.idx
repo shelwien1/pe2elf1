@@ -9,36 +9,36 @@ Debug 1
 Const 0
 
 Index a
- a_cls: cls, &001
- a_tx: tx, 1!011111111110100000000000
- a_em: em, 1!000000000000000000000000
- a_pb: pos, 1!0000000001000000000010000000000000000000000000000000000000000000
- a_pf: pf, 1!011110001000000000010000000000
- a_td: td, 1!111
+ a_cls: cls, &000
+ a_tx: tx, 1!011111010100001100000000
+ a_em: em, 1!100000000000000000000000
+ a_pb: pos, 1!1111111111111100101000101010011010100011010110110010100110100100
+ a_pf: pf, 1!011101001000100000010000000000
+ a_td: td, 1!110
 
 Index b
  b_cls: cls, &101
  b_kb: kb, 1!0000000000000000
- b_pos: pos, &000000
+ b_pos: pos, &110100
 
 Index c
- c_cls: cls, &100
- c_nz: nz, 1!11111110
+ c_cls: cls, &010
+ c_nz: nz, 1!11110111
  c_pos: pos, &000000
 
 Index d
- d_cls: cls, &111
- d_past: past, 1!11111100
- d_qs: qs, 1!00000000000000000000000000000000
+ d_cls: cls, &110
+ d_past: past, 1!10110101
+ d_qs: qs, 1!00100000001000000010010000000001
  d_pos: pos, &111111
  d_ie: ie, 1!000101010000000000
- d_pe: pe, 1!100100100100000010
- d_tq: tq, 1!1000000100000000001010010000000100000010010000000000000000000000
+ d_pe: pe, 1!010110110011000010
+ d_tq: tq, 1!0101000010001000000000001000001010100000100100000000100100000000
 
 Index e
  e_cls: cls, &010
- e_run: run, 1!1111100111111110
- e_pos: pos, &111111
+ e_run: run, 1!1110110111111110
+ e_pos: pos, &111110
 
 Index h
  h_cls: cls, &000
@@ -46,45 +46,45 @@ Index h
  h_pos: pos, &111111
 
 Index i
- i_cls: cls, &111
- i_mvc: mvc, 1!111110001000000101111101000000
+ i_cls: cls, &011
+ i_mvc: mvc, 1!110100110100010101111110000000
  i_pos: pos, &111111
 
 Index j
  j_cls: cls, &001
- j_rnz: rnz, 1!11100100001000000
- j_xm: xm, 1!110000110
+ j_rnz: rnz, 1!01010100101000110
+ j_xm: xm, 1!110010010
  j_pos: pos, &000000
 
 Index k
- k_cls: cls, &111
- k_h8: h8, &11111111
+ k_cls: cls, &110
+ k_h8: h8, &10111111
  k_pos: pos, &111111
 
 Index l
- l_cls: cls, &001
+ l_cls: cls, &111
  l_pos: pos, &111111
- l_h16: h16, &1111111101111011
+ l_h16: h16, &1111111101111111
 
 Index s
- s_cls: cls, &001
- s_sl: sl, 1!10000100000000010
- s_sa: sa, 1!10100000000010010
- s_pb: pos, 1!1000000001000000000000000000000000000000000000000000000000000000
+ s_cls: cls, &101
+ s_sl: sl, 1!11010000000000010
+ s_sa: sa, 1!10100010000000010
+ s_pb: pos, 1!1000100000000000000000000000000000000000000000000000000000000100
 
 Index f
  f_cls: cls, &111
  f_pos: pos, &111111
 
 Index m
- m_cls: cls, &011
+ m_cls: cls, &111
  m_pos: pos, &111110
- m_ie: ie, 1!100100000000010000
+ m_ie: ie, 1!000010000000010000
 
 Index w
  w_cls: cls, &100
- w_kb: kb, 1!1000010000000000
- w_qs: qs, 1!00000000000000000000000000000000
+ w_kb: kb, 1!1100010000000000
+ w_qs: qs, 1!10000010000001010011000100000100
 
 #  (frozen: what sig never reads; see the parameters below)
 Index t
@@ -103,25 +103,25 @@ Number rE, 1, 0!11111110
 Number rH, 1, 0!11111111
 Number rI, 1, 0!11111111
 Number rJ, 1, 0!11111111
-Number rK, 1, 0!11111111
+Number rK, 1, 0!10010010
 Number rL, 1, 0!11111111
-Number rS1, 1, 0!10000
+Number rS1, 1, 0!00111
 Number rS2, 1, 0!00000
 Number lr, 1, 0!01101
-Number mwA, 1, 0!00000011
-Number mwB, 1, 0!00000010
+Number mwA, 1, 0!00001011
+Number mwB, 1, 0!00101100
 Number mwC, 1, 0!00110100
-Number mwD, 1, 0!00000111
-Number mwE, 1, 0!00000011
-Number mwH, 1, 0!00011001
-Number mwI, 1, 0!00100000
-Number mwJ, 1, 0!00000100
+Number mwD, 1, 0!00010000
+Number mwE, 1, 0!00111101
+Number mwH, 1, 0!00000100
+Number mwI, 1, 0!00001000
+Number mwJ, 1, 0!00000000
 Number mwK, 1, 0!00100001
 Number mwL, 1, 0!00000100
 Number bw, 1, 0!10000
-Number qs, 1, 3!0111101
+Number qs, 1, 3!0100001
 Number qf, 1, 3!0000000
-Number mb, 1, 0!01000000
+Number mb, 1, 0!00101100
 
 #  Frozen: what sig never reads, which live would only take opt.pl's trials:
 #  no mantissa (rT, mwT, mt, index t); no hint and its mixer (lrm, mbm, index n); no signs of its own (rG, mwG, index g).
