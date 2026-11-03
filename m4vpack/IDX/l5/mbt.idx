@@ -9,47 +9,47 @@ Debug 1
 Const 0
 
 Index a
- a_st: st, 1!000
- a_cl: cl, 1!11
+ a_st: st, 1!001
+ a_cl: cl, 1!00
  a_rt: rt, 1!110
 
 Index b
- b_st: st, 1!000
- b_c4: c4, 1!0001
- b_rt: rt, 1!111
+ b_st: st, 1!110
+ b_c4: c4, 1!0000
+ b_rt: rt, 1!000
 
 Index c
- c_st: st, 1!111
- c_rc: rc, 1!0010100000
+ c_st: st, 1!001
+ c_rc: rc, 1!1111000000
 
 Index d
- d_st: st, 1!010
+ d_st: st, 1!000
  d_cd: cd, 1!11
- d_cl: cl, 1!11
+ d_cl: cl, 1!00
 
 Index e
- e_st: st, 1!000
- e_intra: intra, 1!1
- e_cl: cl, 1!10
+ e_st: st, 1!001
+ e_intra: intra, 1!0
+ e_cl: cl, 1!00
 
 Index h
  h_st: st, 1!101
  h_fsn: fsn, 1!111
 
 Index i
- i_st: st, 1!111
+ i_st: st, 1!010
  i_cl: cl, 1!11
  i_c4: c4, 1!1111
 
 Index j
- j_st: st, 1!100
+ j_st: st, 1!000
  j_rc: rc, 1!1111000000
  j_cl: cl, 1!11
 
 Index k
- k_st: st, 1!110
+ k_st: st, 1!010
  k_rt: rt, 1!101
- k_c4: c4, 1!1110
+ k_c4: c4, 1!1001
 
 Index l
  l_st: st, 1!000
@@ -63,28 +63,28 @@ Index n
 
 Index g
 
-Number rA, 1, 0!11111111
-Number mwA, 1, 0!11110100
+Number rA, 1, 0!00011111
+Number mwA, 1, 0!01111100
 Number rB, 1, 0!00000000
-Number mwB, 1, 0!01001111
-Number rC, 1, 0!00000000
-Number mwC, 1, 0!00111111
+Number mwB, 1, 0!01100110
+Number rC, 1, 0!00011011
+Number mwC, 1, 0!10000000
 Number rD, 1, 0!11111111
-Number mwD, 1, 0!10000000
-Number rE, 1, 0!11101001
-Number mwE, 1, 0!11111111
-Number rH, 1, 0!11110010
-Number mwH, 1, 0!11111001
+Number mwD, 1, 0!00001010
+Number rE, 1, 0!00000000
+Number mwE, 1, 0!11000101
+Number rH, 1, 0!00000000
+Number mwH, 1, 0!11111111
 Number rI, 1, 0!11111101
-Number mwI, 1, 0!00110101
-Number rJ, 1, 0!11111111
-Number mwJ, 1, 0!00000000
-Number rK, 1, 0!11111111
-Number mwK, 1, 0!00100000
-Number rL, 1, 0!11111110
-Number mwL, 1, 0!11100000
-Number lr, 1, 0!01111
-Number mb, 1, 0!00011111
+Number mwI, 1, 0!01001110
+Number rJ, 1, 0!11111101
+Number mwJ, 1, 0!00000001
+Number rK, 1, 0!11111101
+Number mwK, 1, 0!00100100
+Number rL, 1, 0!10101011
+Number mwL, 1, 0!00000000
+Number lr, 1, 0!01100
+Number mb, 1, 0!00001111
 
 #  Frozen: what mbt never reads, which live would only take opt.pl's trials.
 ! Number rT, 1, 0!00000000

@@ -12,68 +12,68 @@ Const 0
 Index a
  a_kind: kind, 1!11101
  a_comp: comp, 1!1
- a_dz: dz, 1!01111001001000100
+ a_dz: dz, 1!01110101000001000
  a_ds: ds, 1!11
 
 Index b
  b_kind: kind, 1!00000
  b_comp: comp, 1!0
- b_sp: sp, 1!11110101010001010
+ b_sp: sp, 1!11111101011000110
 
 Index c
- c_kind: kind, 1!10011
- c_comp: comp, 1!0
- c_rs: rs, 1!11110010001000000
+ c_kind: kind, 1!00011
+ c_comp: comp, 1!1
+ c_lq: lq, 1!11100110000000010
+ c_aq: aq, 1!11101110000000110
 
 Index d
- d_kind: kind, 1!01010
+ d_kind: kind, 1!00011
  d_comp: comp, 1!1
- d_lq: lq, 1!11111101101000010
- d_aq: aq, 1!11110100001000010
+ d_rs: rs, 1!11100001001010000
 
 Index e
- e_kind: kind, 1!00001
- e_comp: comp, 1!1
- e_ns: ns, 1!1101000000000100
- e_oth: oth, 1!11100010000000010
+ e_kind: kind, 1!01110
+ e_comp: comp, 1!0
+ e_rbi: rbi, 1!11111
+ e_rsame: rsame, 1!11
 
 Index h
- h_kind: kind, 1!00110
+ h_kind: kind, 1!00100
  h_comp: comp, 1!1
- h_oth: oth, 1!01010000010000110
+ h_fc: fc, 1!000010
 
 Index m
- m_kind: kind, 1!10001
+ m_kind: kind, 1!01011
  m_comp: comp, 1!0
 
 Index t
- t_kind: kind, 1!11111
- t_comp: comp, 1!1
+ t_kind: kind, 1!10100
+ t_comp: comp, 1!0
 
 Index n
  n_kind: kind, 1!00000
 
 Index g
 
-Number rA, 1, 0!11111111
-Number mwA, 1, 0!00000100
+Number rA, 1, 0!11100001
+Number mwA, 1, 0!00101111
 Number rB, 1, 0!11111111
-Number mwB, 1, 0!00010000
-Number rC, 1, 0!11111111
-Number mwC, 1, 0!01000011
-Number rD, 1, 0!10010110
-Number mwD, 1, 0!00111111
-Number rE, 1, 0!11111111
-Number mwE, 1, 0!00010101
-Number rH, 1, 0!00000000
-Number mwH, 1, 0!10000000
-Number lr, 1, 0!01111
-Number mb, 1, 0!00100100
-Number rT, 1, 0!00000011
-Number mwT, 1, 0!01000000
+Number mwB, 1, 0!00101000
+Number rC, 1, 0!11111110
+Number mwC, 1, 0!00000000
+Number rD, 1, 0!01111111
+Number mwD, 1, 0!01111111
+Number rE, 1, 0!00000000
+Number mwE, 1, 0!01100110
+Number rH, 1, 0!11111101
+Number mwH, 1, 0!01101111
+Number lr, 1, 0!10100
+Number mb, 1, 0!00001011
+Number rT, 1, 0!00001111
+Number mwT, 1, 0!10000000
 Number mt, 1, 0!110
 Number lrm, 1, 0!11111
-Number mbm, 1, 0!00101000
+Number mbm, 1, 0!00000000
 
 #  Frozen: what mvd never reads, which live would only take opt.pl's trials.
 ! Number rG, 1, 0!00000000

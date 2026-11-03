@@ -9,31 +9,31 @@ Debug 1
 Const 0
 
 Index a
- a_kind: kind, 1!00110
+ a_kind: kind, 1!00000
  a_comp: comp, 1!1
  a_ds: ds, 1!11
- a_mag: mag, 1!0111000010000000
+ a_mag: mag, 1!0110000010000000
 
 Index b
- b_kind: kind, 1!01101
- b_comp: comp, 1!0
- b_ds: ds, 1!11
- b_hm: hm, 1!111
+ b_kind: kind, 1!11110
+ b_comp: comp, 1!1
+ b_ds: ds, 1!01
+ b_dz: dz, 1!01101001000100010
 
 Index c
- c_kind: kind, 1!11100
- c_comp: comp, 1!1
+ c_kind: kind, 1!01110
+ c_comp: comp, 1!0
  c_ds: ds, 1!11
- c_dz: dz, 1!00101111111010100
+ c_hm: hm, 1!111
 
 Index d
- d_kind: kind, 1!01101
+ d_kind: kind, 1!10110
  d_comp: comp, 1!1
  d_ls: ls, 1!11
  d_as: as, 1!11
 
 Index m
- m_kind: kind, 1!00011
+ m_kind: kind, 1!10001
  m_comp: comp, 1!0
 
 Index t
@@ -42,16 +42,16 @@ Index n
 
 Index g
 
-Number rA, 1, 0!10000000
-Number mwA, 1, 0!00000000
-Number rB, 1, 0!11111010
-Number mwB, 1, 0!00000000
-Number rC, 1, 0!00000000
-Number mwC, 1, 0!01101111
-Number rD, 1, 0!11111111
-Number mwD, 1, 0!00000011
-Number lr, 1, 0!10011
-Number mb, 1, 0!00110001
+Number rA, 1, 0!10100001
+Number mwA, 1, 0!00000010
+Number rB, 1, 0!00010011
+Number mwB, 1, 0!01000000
+Number rC, 1, 0!01000000
+Number mwC, 1, 0!00000001
+Number rD, 1, 0!10000101
+Number mwD, 1, 0!00000100
+Number lr, 1, 0!01111
+Number mb, 1, 0!00000000
 
 #  Frozen: what mvg never reads, which live would only take opt.pl's trials.
 ! Number rT, 1, 0!00000000

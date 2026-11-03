@@ -1,14 +1,10 @@
 
-static const byte M3_mbt_a_rc[10+1]={ 0,1,2,3,4,4,4,4,4,4,4 };
 
-static const byte M3_mbt_b_c4[4+1]={ 0,1,2,3,4 };
+static const byte M3_mbt_b_rc[10+1]={ 0,1,2,3,4,4,4,4,4,4,4 };
 
-static const byte M3_mbt_c_st[3+1]={ 0,1,2,3 };
-static const byte M3_mbt_c_c4[4+1]={ 0,1,2,3,3 };
+static const byte M3_mbt_c_rc[10+1]={ 0,1,2,3,4,4,4,4,4,4,4 };
 
-static const byte M3_mbt_d_rc[10+1]={ 0,1,1,2,2,3,3,3,3,3,3 };
-
-static const byte M3_mbt_e_rt[3+1]={ 0,1,2,3 };
+static const byte M3_mbt_d_c4[4+1]={ 0,1,2,3,4 };
 
 
 
@@ -16,20 +12,21 @@ static const byte M3_mbt_e_rt[3+1]={ 0,1,2,3 };
 
 
 
-static const int M3_mbt_rA = (254+0) * (1);
-static const int M3_mbt_mwA = (1+0) * (1);
+
+static const int M3_mbt_rA = (252+0) * (1);
+static const int M3_mbt_mwA = (44+0) * (1);
 static const int M3_mbt_rB = (255+0) * (1);
-static const int M3_mbt_mwB = (32+0) * (1);
-static const int M3_mbt_rC = (249+0) * (1);
-static const int M3_mbt_mwC = (38+0) * (1);
-static const int M3_mbt_rD = (0+0) * (1);
-static const int M3_mbt_mwD = (57+0) * (1);
-static const int M3_mbt_rE = (0+0) * (1);
-static const int M3_mbt_mwE = (31+0) * (1);
+static const int M3_mbt_mwB = (2+0) * (1);
+static const int M3_mbt_rC = (29+0) * (1);
+static const int M3_mbt_mwC = (128+0) * (1);
+static const int M3_mbt_rD = (255+0) * (1);
+static const int M3_mbt_mwD = (79+0) * (1);
+static const int M3_mbt_rE = (31+0) * (1);
+static const int M3_mbt_mwE = (103+0) * (1);
 static const int M3_mbt_rH = (255+0) * (1);
-static const int M3_mbt_mwH = (140+0) * (1);
+static const int M3_mbt_mwH = (10+0) * (1);
 static const int M3_mbt_lr = (12+0) * (1);
-static const int M3_mbt_mb = (31+0) * (1);
+static const int M3_mbt_mb = (15+0) * (1);
 static const int M3_mbt_rT = (0+0) * (1);
 static const int M3_mbt_mwT = (0+0) * (1);
 static const int M3_mbt_mt = (0+0) * (1);
@@ -48,18 +45,18 @@ static const int M3_mbt_hT = (22+0) * (1);
 static const int M3_mbt_hN = (22+0) * (1);
 
 
-static const long long M3_mbt_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 5), 3); // 30
-static const long long M3_mbt_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 3), 5); // 30
-static const long long M3_mbt_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 3), 4); // 48
-static const long long M3_mbt_d_Volume = tc_vmul(tc_vmul(1, 2), 4); // 8
-static const long long M3_mbt_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 2), 4); // 8
+static const long long M3_mbt_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 3), 3); // 18
+static const long long M3_mbt_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 5), 3); // 15
+static const long long M3_mbt_c_Volume = tc_vmul(tc_vmul(1, 3), 5); // 15
+static const long long M3_mbt_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 3), 5); // 15
+static const long long M3_mbt_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 1), 3); // 9
 static const long long M3_mbt_g_Volume = 1; // 1
-static const long long M3_mbt_h_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 3); // 12
+static const long long M3_mbt_h_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 3), 1); // 3
 static const long long M3_mbt_m_Volume = tc_vmul(1, 1); // 1
 static const long long M3_mbt_n_Volume = 1; // 1
 static const long long M3_mbt_t_Volume = 1; // 1
 
-#define M3_mbt_USES(X) X(st) X(rc) X(cl) X(rt) X(c4)
+#define M3_mbt_USES(X) X(st) X(rt) X(c4) X(rc) X(cl) X(cd)
 
 struct M3_mbt_T {
   cm_cnt2 M3_mbt_A[tc_rows(M3_mbt_a_Volume, M3_mbt_hA) * M_mbt_ND];

@@ -15,33 +15,33 @@ void M3_hdr_make( const M_hdr_v & D, tcx & X ) {
   M_hdr_VARS(M_LOCAL)
 
   a = 0;
-  a = a*11 + M3_hdr_a_fld[__min(39,__max(0,(fld)-(1-1)))];
-  a = a*3 + (((ty)>0+(1-1))+((ty)>1+(1-1)));
-  a = a*3 + (((p1)>1+(1-1))+((p1)>2+(1-1)));
+  a = a*10 + M3_hdr_a_fld[__min(39,__max(0,(fld)-(1-1)))];
+  a = a*2 + (((ty)>0+(1-1)));
+  a = a*5 + M3_hdr_a_p1[__min(64,__max(0,(p1)-(1-1)))];
 
   b = 0;
   b = b*10 + M3_hdr_b_fld[__min(39,__max(0,(fld)-(1-1)))];
+  b = b*5 + M3_hdr_b_ty[__min(4,__max(0,(ty)-(1-1)))];
+  b = b*2 + (((pos)>0+(1-1)));
 
   c = 0;
-  c = c*10 + M3_hdr_c_fld[__min(39,__max(0,(fld)-(1-1)))];
+  c = c*8 + M3_hdr_c_fld[__min(39,__max(0,(fld)-(1-1)))];
+  c = c*4 + M3_hdr_c_ty[__min(4,__max(0,(ty)-(1-1)))];
 
   d = 0;
-  d = d*14 + M3_hdr_d_fld[__min(39,__max(0,(fld)-(1-1)))];
-  d = d*3 + (((ty)>1+(1-1))+((ty)>3+(1-1)));
-  d = d*2 + (((pos)>0+(1-1)));
+  d = d*9 + M3_hdr_d_fld[__min(39,__max(0,(fld)-(1-1)))];
+  d = d*2 + (((ty)>2+(1-1)));
+  d = d*4 + M3_hdr_d_p1[__min(64,__max(0,(p1)-(1-1)))];
+  d = d*3 + (((pos)>0+(1-1))+((pos)>1+(1-1)));
 
   e = 0;
-  e = e*8 + M3_hdr_e_fld[__min(39,__max(0,(fld)-(1-1)))];
-  e = e*5 + M3_hdr_e_p1[__min(64,__max(0,(p1)-(1-1)))];
+  e = e*4 + M3_hdr_e_fld[__min(39,__max(0,(fld)-(1-1)))];
+  e = e*4 + M3_hdr_e_p1[__min(64,__max(0,(p1)-(1-1)))];
 
   h = 0;
-  h = h*11 + M3_hdr_h_fld[__min(39,__max(0,(fld)-(1-1)))];
-  h = h*4 + M3_hdr_h_ty[__min(4,__max(0,(ty)-(1-1)))];
-  h = h*2 + (((p1)>0+(1-1)));
-  h = h*2 + (((pos)>0+(1-1)));
 
   m = 0;
-  m = m*13 + M3_hdr_m_fld[__min(39,__max(0,(fld)-(1-1)))];
+  m = m*15 + M3_hdr_m_fld[__min(39,__max(0,(fld)-(1-1)))];
 
   t = 0;
   t = t*5 + M3_hdr_t_fld[__min(39,__max(0,(fld)-(1-1)))];

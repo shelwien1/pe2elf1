@@ -1,50 +1,50 @@
 
-static const byte M5_mvg_a_kind[5+1]={ 0,0,1,2,2,3 };
+static const byte M5_mvg_a_kind[5+1]={ 0,1,1,2,2,3 };
 
-static const byte M5_mvg_b_kind[5+1]={ 0,1,2,3,3,3 };
-static const byte M5_mvg_b_dz[17+1]={ 0,0,0,1,1,2,3,4,5,6,7,8,8,9,9,10,10,10 };
+static const byte M5_mvg_b_kind[5+1]={ 0,1,2,3,4,4 };
+static const byte M5_mvg_b_dz[17+1]={ 0,0,1,2,2,3,3,3,4,4,4,5,5,5,5,5,5,5 };
 
 
-static const byte M5_mvg_d_kind[5+1]={ 0,1,1,2,3,3 };
 
 static const byte M5_mvg_e_kind[5+1]={ 0,0,1,2,2,3 };
 static const byte M5_mvg_e_hm[3+1]={ 0,1,2,3 };
 
 
-static const byte M5_mvg_h_kind[5+1]={ 0,1,1,2,2,3 };
+static const byte M5_mvg_h_kind[5+1]={ 0,1,1,1,2,3 };
+
+static const byte M5_mvg_i_kind[5+1]={ 0,1,1,2,3,3 };
+
+static const byte M5_mvg_j_mag[16+1]={ 0,0,1,2,2,2,2,2,2,3,3,3,3,3,3,3,3 };
+
+static const byte M5_mvg_k_kind[5+1]={ 0,0,1,2,3,4 };
 
 
-static const byte M5_mvg_j_mag[16+1]={ 0,0,1,2,3,3,3,3,3,4,4,4,4,4,4,4,4 };
-
-
-static const byte M5_mvg_l_kind[5+1]={ 0,0,1,1,2,3 };
-
-static const byte M5_mvg_m_kind[5+1]={ 0,0,0,1,2,3 };
+static const byte M5_mvg_m_kind[5+1]={ 0,1,1,2,3,4 };
 
 
 
 
-static const int M5_mvg_rA = (253+0) * (1);
-static const int M5_mvg_mwA = (31+0) * (1);
-static const int M5_mvg_rB = (0+0) * (1);
-static const int M5_mvg_mwB = (92+0) * (1);
+static const int M5_mvg_rA = (130+0) * (1);
+static const int M5_mvg_mwA = (36+0) * (1);
+static const int M5_mvg_rB = (24+0) * (1);
+static const int M5_mvg_mwB = (64+0) * (1);
 static const int M5_mvg_rC = (0+0) * (1);
-static const int M5_mvg_mwC = (127+0) * (1);
-static const int M5_mvg_rD = (135+0) * (1);
-static const int M5_mvg_mwD = (0+0) * (1);
-static const int M5_mvg_rE = (206+0) * (1);
-static const int M5_mvg_mwE = (0+0) * (1);
-static const int M5_mvg_rH = (44+0) * (1);
-static const int M5_mvg_mwH = (64+0) * (1);
-static const int M5_mvg_rI = (245+0) * (1);
-static const int M5_mvg_mwI = (254+0) * (1);
+static const int M5_mvg_mwC = (64+0) * (1);
+static const int M5_mvg_rD = (1+0) * (1);
+static const int M5_mvg_mwD = (64+0) * (1);
+static const int M5_mvg_rE = (64+0) * (1);
+static const int M5_mvg_mwE = (1+0) * (1);
+static const int M5_mvg_rH = (247+0) * (1);
+static const int M5_mvg_mwH = (1+0) * (1);
+static const int M5_mvg_rI = (122+0) * (1);
+static const int M5_mvg_mwI = (40+0) * (1);
 static const int M5_mvg_rJ = (128+0) * (1);
-static const int M5_mvg_mwJ = (0+0) * (1);
-static const int M5_mvg_rK = (225+0) * (1);
-static const int M5_mvg_mwK = (102+0) * (1);
+static const int M5_mvg_mwJ = (2+0) * (1);
+static const int M5_mvg_rK = (226+0) * (1);
+static const int M5_mvg_mwK = (99+0) * (1);
 static const int M5_mvg_rL = (0+0) * (1);
-static const int M5_mvg_mwL = (107+0) * (1);
-static const int M5_mvg_lr = (16+0) * (1);
+static const int M5_mvg_mwL = (65+0) * (1);
+static const int M5_mvg_lr = (11+0) * (1);
 static const int M5_mvg_mb = (128+0) * (1);
 static const int M5_mvg_rT = (0+0) * (1);
 static const int M5_mvg_mwT = (0+0) * (1);
@@ -69,17 +69,17 @@ static const int M5_mvg_hN = (22+0) * (1);
 
 
 static const long long M5_mvg_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 3), 3); // 72
-static const long long M5_mvg_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 3), 11); // 264
-static const long long M5_mvg_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 2), 2); // 12
-static const long long M5_mvg_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 1), 2); // 8
+static const long long M5_mvg_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 5), 2), 2), 6); // 120
+static const long long M5_mvg_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 2), 2); // 4
+static const long long M5_mvg_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 1), 1); // 3
 static const long long M5_mvg_e_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 1), 3), 4); // 48
 static const long long M5_mvg_g_Volume = 1; // 1
-static const long long M5_mvg_h_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 1), 3); // 12
-static const long long M5_mvg_i_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 2), 3); // 6
-static const long long M5_mvg_j_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 2), 3), 5); // 90
-static const long long M5_mvg_k_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 3), 3), 3); // 81
-static const long long M5_mvg_l_Volume = tc_vmul(tc_vmul(1, 4), 2); // 8
-static const long long M5_mvg_m_Volume = tc_vmul(tc_vmul(1, 4), 1); // 4
+static const long long M5_mvg_h_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 3); // 24
+static const long long M5_mvg_i_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 2), 1); // 8
+static const long long M5_mvg_j_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 2), 3), 4); // 24
+static const long long M5_mvg_k_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 5), 1), 3), 1); // 15
+static const long long M5_mvg_l_Volume = tc_vmul(tc_vmul(1, 2), 2); // 4
+static const long long M5_mvg_m_Volume = tc_vmul(tc_vmul(1, 5), 1); // 5
 static const long long M5_mvg_n_Volume = 1; // 1
 static const long long M5_mvg_t_Volume = 1; // 1
 

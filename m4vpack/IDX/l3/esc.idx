@@ -15,13 +15,13 @@ Index b
  b_dm: dm, 1!100
 
 Index c
- c_dm: dm, 1!100
+ c_dm: dm, 1!010
 
 Index d
- d_dm: dm, 1!100
+ d_dm: dm, 1!110
 
 Index e
- e_dm: dm, 1!000
+ e_dm: dm, 1!111
 
 Index h
 
@@ -34,20 +34,20 @@ Index n
 
 Index g
 
-Number rA, 1, 0!00110010
-Number mwA, 1, 0!00000001
-Number rB, 1, 0!11111100
-Number mwB, 1, 0!00001000
+Number rA, 1, 0!11111110
+Number mwA, 1, 0!00010101
+Number rB, 1, 0!11101010
+Number mwB, 1, 0!00001010
 Number rC, 1, 0!00000000
-Number mwC, 1, 0!00000000
-Number rD, 1, 0!11101100
+Number mwC, 1, 0!00100001
+Number rD, 1, 0!11000111
 Number mwD, 1, 0!00001100
-Number rE, 1, 0!11101011
-Number mwE, 1, 0!01000111
+Number rE, 1, 0!00010100
+Number mwE, 1, 0!11110011
 Number rH, 1, 0!11111111
-Number mwH, 1, 0!00011000
-Number lr, 1, 0!10000
-Number mb, 1, 0!00011111
+Number mwH, 1, 0!00001100
+Number lr, 1, 0!11000
+Number mb, 1, 0!00001111
 
 #  Frozen: what esc never reads, which live would only take opt.pl's trials.
 ! Number rT, 1, 0!00000000

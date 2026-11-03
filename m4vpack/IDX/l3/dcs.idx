@@ -9,14 +9,14 @@ Debug 1
 Const 0
 
 Index a
- a_lc: lc, 1!1
- a_lbn: lbn, 1!11000110000100010
- a_abn: abn, 1!11100111000000110
+ a_lc: lc, 1!0
+ a_lbn: lbn, 1!11010001000000110
+ a_abn: abn, 1!11101010000100110
 
 Index b
  b_lc: lc, 1!1
- b_ls: ls, 1!11111111100000
- b_as: as, 1!11111111100000
+ b_ls: ls, 1!00101100100000
+ b_as: as, 1!01111111100000
 
 Index c
  c_lc: lc, 1!1
@@ -25,50 +25,50 @@ Index c
  c_psg: psg, 1!11
 
 Index d
- d_lc: lc, 1!0
- d_as: as, 1!00110100000000
- d_prev: prev, 1!1111100000000
+ d_lc: lc, 1!1
+ d_ls: ls, 1!01111000001000
+ d_prev: prev, 1!0111100000000
 
 Index e
  e_lc: lc, 1!1
- e_sz: sz, 1!011110110000
+ e_sz: sz, 1!011111110000
  e_psg: psg, 1!01
 
 Index h
- h_lc: lc, 1!1
- h_coded: coded, 1!1
- h_qs: qs, 1!00010111100000000000000000000000
+ h_lc: lc, 1!0
+ h_prev: prev, 1!0000000100000
+ h_coded: coded, 1!0
 
 Index m
- m_lc: lc, 1!0
+ m_lc: lc, 1!1
  m_coded: coded, 1!1
 
 Index t
  t_lc: lc, 1!1
- t_prev: prev, 1!1000111100000
+ t_prev: prev, 1!0001100100000
 
 Index n
- n_lc: lc, 1!0
+ n_lc: lc, 1!1
 
 Index g
 
-Number rA, 1, 0!11111101
-Number mwA, 1, 0!01000000
-Number rB, 1, 0!11111011
-Number mwB, 1, 0!00000100
-Number rC, 1, 0!10000110
-Number mwC, 1, 0!01000111
-Number rD, 1, 0!11111110
-Number mwD, 1, 0!00111101
-Number rE, 1, 0!11111101
-Number mwE, 1, 0!01011110
-Number rH, 1, 0!11111111
-Number mwH, 1, 0!01000000
-Number lr, 1, 0!11100
+Number rA, 1, 0!11111111
+Number mwA, 1, 0!00110110
+Number rB, 1, 0!11111101
+Number mwB, 1, 0!00000000
+Number rC, 1, 0!00111110
+Number mwC, 1, 0!01000000
+Number rD, 1, 0!00101100
+Number mwD, 1, 0!00100000
+Number rE, 1, 0!10000011
+Number mwE, 1, 0!00000011
+Number rH, 1, 0!00000000
+Number mwH, 1, 0!01001000
+Number lr, 1, 0!10010
 Number mb, 1, 0!00100000
-Number rT, 1, 0!11111111
+Number rT, 1, 0!00110000
 Number mwT, 1, 0!10000000
-Number mt, 1, 0!110
+Number mt, 1, 0!011
 
 #  Frozen: what dcs never reads, which live would only take opt.pl's trials.
 ! Number lrm, 1, 0!11000

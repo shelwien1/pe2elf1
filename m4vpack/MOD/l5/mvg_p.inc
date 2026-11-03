@@ -21,19 +21,17 @@ void M5_mvg_make( const M_mvg_v & D, tcx & X ) {
   a = a*3 + (((as)>0+(1-1))+((as)>1+(1-1)));
 
   b = 0;
-  b = b*4 + M5_mvg_b_kind[__min(5,__max(0,(kind)-(1-1)))];
+  b = b*5 + M5_mvg_b_kind[__min(5,__max(0,(kind)-(1-1)))];
   b = b*2 + (((comp)>0+(1-1)));
-  b = b*3 + (((ds)>0+(1-1))+((ds)>1+(1-1)));
-  b = b*11 + M5_mvg_b_dz[__min(17,__max(0,(dz)-(1-1)))];
+  b = b*2 + (((ds)>1+(1-1)));
+  b = b*6 + M5_mvg_b_dz[__min(17,__max(0,(dz)-(1-1)))];
 
   c = 0;
-  c = c*3 + (((kind)>1+(1-1))+((kind)>3+(1-1)));
   c = c*2 + (((comp)>0+(1-1)));
-  c = c*2 + (((mag)>2+(1-1)));
+  c = c*2 + (((mag)>4+(1-1)));
 
   d = 0;
-  d = d*4 + M5_mvg_d_kind[__min(5,__max(0,(kind)-(1-1)))];
-  d = d*2 + (((hm)>0+(1-1)));
+  d = d*3 + (((kind)>0+(1-1))+((kind)>4+(1-1)));
 
   e = 0;
   e = e*4 + M5_mvg_e_kind[__min(5,__max(0,(kind)-(1-1)))];
@@ -42,30 +40,28 @@ void M5_mvg_make( const M_mvg_v & D, tcx & X ) {
 
   h = 0;
   h = h*4 + M5_mvg_h_kind[__min(5,__max(0,(kind)-(1-1)))];
+  h = h*2 + (((comp)>0+(1-1)));
   h = h*3 + (((ls)>0+(1-1))+((ls)>1+(1-1)));
 
   i = 0;
+  i = i*4 + M5_mvg_i_kind[__min(5,__max(0,(kind)-(1-1)))];
   i = i*2 + (((comp)>0+(1-1)));
-  i = i*3 + (((as)>0+(1-1))+((as)>1+(1-1)));
 
   j = 0;
-  j = j*3 + (((kind)>2+(1-1))+((kind)>3+(1-1)));
   j = j*2 + (((comp)>0+(1-1)));
   j = j*3 + (((ds)>0+(1-1))+((ds)>1+(1-1)));
-  j = j*5 + M5_mvg_j_mag[__min(16,__max(0,(mag)-(1-1)))];
+  j = j*4 + M5_mvg_j_mag[__min(16,__max(0,(mag)-(1-1)))];
 
   k = 0;
-  k = k*3 + (((kind)>1+(1-1))+((kind)>4+(1-1)));
-  k = k*3 + (((ls)>0+(1-1))+((ls)>1+(1-1)));
+  k = k*5 + M5_mvg_k_kind[__min(5,__max(0,(kind)-(1-1)))];
   k = k*3 + (((as)>0+(1-1))+((as)>1+(1-1)));
-  k = k*3 + (((ds)>0+(1-1))+((ds)>1+(1-1)));
 
   l = 0;
-  l = l*4 + M5_mvg_l_kind[__min(5,__max(0,(kind)-(1-1)))];
+  l = l*2 + (((kind)>3+(1-1)));
   l = l*2 + (((comp)>0+(1-1)));
 
   m = 0;
-  m = m*4 + M5_mvg_m_kind[__min(5,__max(0,(kind)-(1-1)))];
+  m = m*5 + M5_mvg_m_kind[__min(5,__max(0,(kind)-(1-1)))];
 
   t = 0;
 

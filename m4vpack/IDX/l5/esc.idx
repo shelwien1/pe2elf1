@@ -24,12 +24,12 @@ Index e
 Index h
 
 Index i
- i_dm: dm, 1!111
+ i_dm: dm, 1!010
 
 Index j
 
 Index k
- k_dm: dm, 1!110
+ k_dm: dm, 1!111
 
 Index l
 
@@ -42,28 +42,28 @@ Index n
 
 Index g
 
-Number rA, 1, 0!00000000
-Number mwA, 1, 0!11001010
-Number rB, 1, 0!10111111
-Number mwB, 1, 0!11110101
-Number rC, 1, 0!10000101
-Number mwC, 1, 0!00001000
-Number rD, 1, 0!01100011
-Number mwD, 1, 0!00000100
-Number rE, 1, 0!00001100
-Number mwE, 1, 0!00001000
-Number rH, 1, 0!01110110
-Number mwH, 1, 0!10011001
+Number rA, 1, 0!11111110
+Number mwA, 1, 0!00010101
+Number rB, 1, 0!11111111
+Number mwB, 1, 0!00001100
+Number rC, 1, 0!11000111
+Number mwC, 1, 0!00001100
+Number rD, 1, 0!11101111
+Number mwD, 1, 0!11100001
+Number rE, 1, 0!11101010
+Number mwE, 1, 0!00001010
+Number rH, 1, 0!11110110
+Number mwH, 1, 0!01000000
 Number rI, 1, 0!00000000
-Number mwI, 1, 0!11111111
-Number rJ, 1, 0!11110110
-Number mwJ, 1, 0!11110111
-Number rK, 1, 0!00000000
-Number mwK, 1, 0!10000101
-Number rL, 1, 0!10111111
-Number mwL, 1, 0!10101001
+Number mwI, 1, 0!00100001
+Number rJ, 1, 0!11110101
+Number mwJ, 1, 0!00100000
+Number rK, 1, 0!00010100
+Number mwK, 1, 0!11110011
+Number rL, 1, 0!11110111
+Number mwL, 1, 0!10011011
 Number lr, 1, 0!11000
-Number mb, 1, 0!01001001
+Number mb, 1, 0!00001111
 
 #  Frozen: what esc never reads, which live would only take opt.pl's trials.
 ! Number rT, 1, 0!00000000

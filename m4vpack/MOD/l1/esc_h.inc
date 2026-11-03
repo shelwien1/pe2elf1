@@ -8,16 +8,16 @@
 
 
 
-static const int M1_esc_rA = (255+0) * (1);
-static const int M1_esc_mwA = (49+0) * (1);
-static const int M1_esc_rB = (68+0) * (1);
-static const int M1_esc_mwB = (0+0) * (1);
-static const int M1_esc_rC = (149+0) * (1);
-static const int M1_esc_mwC = (1+0) * (1);
-static const int M1_esc_rD = (75+0) * (1);
-static const int M1_esc_mwD = (2+0) * (1);
-static const int M1_esc_lr = (18+0) * (1);
-static const int M1_esc_mb = (96+0) * (1);
+static const int M1_esc_rA = (254+0) * (1);
+static const int M1_esc_mwA = (21+0) * (1);
+static const int M1_esc_rB = (234+0) * (1);
+static const int M1_esc_mwB = (10+0) * (1);
+static const int M1_esc_rC = (0+0) * (1);
+static const int M1_esc_mwC = (33+0) * (1);
+static const int M1_esc_rD = (199+0) * (1);
+static const int M1_esc_mwD = (12+0) * (1);
+static const int M1_esc_lr = (24+0) * (1);
+static const int M1_esc_mb = (15+0) * (1);
 static const int M1_esc_rT = (0+0) * (1);
 static const int M1_esc_mwT = (0+0) * (1);
 static const int M1_esc_mt = (0+0) * (1);
@@ -34,9 +34,9 @@ static const int M1_esc_hT = (22+0) * (1);
 static const int M1_esc_hN = (22+0) * (1);
 
 
-static const long long M1_esc_a_Volume = tc_vmul(1, 1); // 1
+static const long long M1_esc_a_Volume = tc_vmul(1, 3); // 3
 static const long long M1_esc_b_Volume = tc_vmul(1, 2); // 2
-static const long long M1_esc_c_Volume = tc_vmul(1, 3); // 3
+static const long long M1_esc_c_Volume = tc_vmul(1, 2); // 2
 static const long long M1_esc_d_Volume = tc_vmul(1, 3); // 3
 static const long long M1_esc_g_Volume = 1; // 1
 static const long long M1_esc_m_Volume = tc_vmul(1, 3); // 3

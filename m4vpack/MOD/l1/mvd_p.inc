@@ -21,24 +21,23 @@ void M1_mvd_make( const M_mvd_v & D, tcx & X ) {
   a = a*3 + (((ds)>0+(1-1))+((ds)>1+(1-1)));
 
   b = 0;
-  b = b*4 + M1_mvd_b_kind[__min(5,__max(0,(kind)-(1-1)))];
-  b = b*10 + M1_mvd_b_sp[__min(17,__max(0,(sp)-(1-1)))];
+  b = b*11 + M1_mvd_b_sp[__min(17,__max(0,(sp)-(1-1)))];
 
   c = 0;
   c = c*3 + (((kind)>3+(1-1))+((kind)>4+(1-1)));
-  c = c*5 + M1_mvd_c_rs[__min(17,__max(0,(rs)-(1-1)))];
+  c = c*2 + (((comp)>0+(1-1)));
+  c = c*7 + M1_mvd_c_lq[__min(17,__max(0,(lq)-(1-1)))];
+  c = c*7 + M1_mvd_c_aq[__min(17,__max(0,(aq)-(1-1)))];
 
   d = 0;
-  d = d*3 + (((kind)>3+(1-1))+((kind)>4+(1-1)));
-  d = d*2 + (((comp)>0+(1-1)));
-  d = d*8 + M1_mvd_d_lq[__min(17,__max(0,(lq)-(1-1)))];
-  d = d*6 + M1_mvd_d_aq[__min(17,__max(0,(aq)-(1-1)))];
+  d = d*5 + M1_mvd_d_kind[__min(5,__max(0,(kind)-(1-1)))];
+  d = d*5 + M1_mvd_d_rs[__min(17,__max(0,(rs)-(1-1)))];
 
   m = 0;
-  m = m*3 + (((kind)>0+(1-1))+((kind)>4+(1-1)));
+  m = m*4 + M1_mvd_m_kind[__min(5,__max(0,(kind)-(1-1)))];
 
   t = 0;
-  t = t*6 + M1_mvd_t_kind[__min(5,__max(0,(kind)-(1-1)))];
+  t = t*4 + M1_mvd_t_kind[__min(5,__max(0,(kind)-(1-1)))];
 
   n = 0;
 

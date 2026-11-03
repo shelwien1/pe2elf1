@@ -1,35 +1,33 @@
 
 
+static const byte M3_raw_b_code[11+1]={ 0,0,1,1,2,2,2,3,3,3,3,3 };
+static const byte M3_raw_b_at[11+1]={ 0,0,1,2,2,2,3,3,4,4,5,6 };
 
-static const byte M3_raw_c_at[11+1]={ 0,0,0,0,0,1,2,3,4,4,5,5 };
-
-static const byte M3_raw_d_code[11+1]={ 0,1,2,2,2,2,3,3,4,4,4,4 };
-
-static const byte M3_raw_e_code[11+1]={ 0,0,1,1,2,2,3,4,4,4,4,4 };
-static const byte M3_raw_e_at[11+1]={ 0,0,1,2,2,2,3,3,3,3,3,4 };
+static const byte M3_raw_c_at[11+1]={ 0,0,1,1,1,2,3,4,5,5,5,5 };
 
 
-static const byte M3_raw_h_code[11+1]={ 0,1,1,2,2,3,4,4,5,5,5,5 };
 
-static const byte M3_raw_m_at[11+1]={ 0,0,1,2,3,3,3,3,4,4,4,5 };
+
+
+static const byte M3_raw_m_at[11+1]={ 0,0,1,2,3,4,5,6,7,7,7,7 };
 
 
 
 
 static const int M3_raw_rA = (0+0) * (1);
 static const int M3_raw_mwA = (0+0) * (1);
-static const int M3_raw_rB = (40+0) * (1);
-static const int M3_raw_mwB = (8+0) * (1);
-static const int M3_raw_rC = (255+0) * (1);
-static const int M3_raw_mwC = (2+0) * (1);
-static const int M3_raw_rD = (228+0) * (1);
-static const int M3_raw_mwD = (72+0) * (1);
-static const int M3_raw_rE = (253+0) * (1);
+static const int M3_raw_rB = (250+0) * (1);
+static const int M3_raw_mwB = (0+0) * (1);
+static const int M3_raw_rC = (0+0) * (1);
+static const int M3_raw_mwC = (0+0) * (1);
+static const int M3_raw_rD = (250+0) * (1);
+static const int M3_raw_mwD = (0+0) * (1);
+static const int M3_raw_rE = (43+0) * (1);
 static const int M3_raw_mwE = (0+0) * (1);
-static const int M3_raw_rH = (57+0) * (1);
-static const int M3_raw_mwH = (126+0) * (1);
-static const int M3_raw_lr = (29+0) * (1);
-static const int M3_raw_mb = (29+0) * (1);
+static const int M3_raw_rH = (132+0) * (1);
+static const int M3_raw_mwH = (15+0) * (1);
+static const int M3_raw_lr = (31+0) * (1);
+static const int M3_raw_mb = (216+0) * (1);
 static const int M3_raw_rT = (0+0) * (1);
 static const int M3_raw_mwT = (0+0) * (1);
 static const int M3_raw_mt = (0+0) * (1);
@@ -48,18 +46,18 @@ static const int M3_raw_hT = (22+0) * (1);
 static const int M3_raw_hN = (22+0) * (1);
 
 
-static const long long M3_raw_a_Volume = tc_vmul(tc_vmul(1, (1<<8)), (1<<7)); // 32768
-static const long long M3_raw_b_Volume = tc_vmul(1, (1<<8)); // 256
-static const long long M3_raw_c_Volume = tc_vmul(tc_vmul(1, (1<<5)), 6); // 192
-static const long long M3_raw_d_Volume = tc_vmul(tc_vmul(1, (1<<4)), 5); // 80
-static const long long M3_raw_e_Volume = tc_vmul(tc_vmul(1, 5), 5); // 25
+static const long long M3_raw_a_Volume = tc_vmul(tc_vmul(1, (1<<5)), (1<<7)); // 4096
+static const long long M3_raw_b_Volume = tc_vmul(tc_vmul(1, 4), 7); // 28
+static const long long M3_raw_c_Volume = tc_vmul(tc_vmul(1, (1<<6)), 6); // 384
+static const long long M3_raw_d_Volume = tc_vmul(tc_vmul(1, (1<<3)), 3); // 24
+static const long long M3_raw_e_Volume = tc_vmul(1, (1<<7)); // 128
 static const long long M3_raw_g_Volume = 1; // 1
-static const long long M3_raw_h_Volume = tc_vmul(tc_vmul(1, (1<<8)), 6); // 1536
-static const long long M3_raw_m_Volume = tc_vmul(1, 6); // 6
+static const long long M3_raw_h_Volume = tc_vmul(1, (1<<6)); // 64
+static const long long M3_raw_m_Volume = tc_vmul(1, 8); // 8
 static const long long M3_raw_n_Volume = 1; // 1
 static const long long M3_raw_t_Volume = 1; // 1
 
-#define M3_raw_USES(X) X(c1) X(c2) X(at) X(code)
+#define M3_raw_USES(X) X(c1) X(c2) X(code) X(at)
 
 struct M3_raw_T {
   cm_cnt2 M3_raw_A[tc_rows(M3_raw_a_Volume, M3_raw_hA) * M_raw_ND];

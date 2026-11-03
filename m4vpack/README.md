@@ -70,16 +70,17 @@ Exit codes:
 |---|---|---:|---:|---:|---:|
 | `-9` | the decoder in the loop; per decision ten counters, three mixers and a final one, two APMs | 69.01% | 0.25 MiB/s | 0.26 MiB/s | 32 MiB |
 | `-7` | the same mixing without the decoder | 71.60% | 0.39 MiB/s | 0.39 MiB/s | 22 MiB |
-| `-5` | ten counters, one mixer | 71.81% | 0.56 MiB/s | 0.55 MiB/s | 20 MiB |
-| `-3` | six counters, one mixer | 72.19% | 0.71 MiB/s | 0.71 MiB/s | 20 MiB |
-| `-1` | four counters (keeping their probabilities stretched), one mixer | 73.01% | 0.93 MiB/s | 1.01 MiB/s | 22 MiB |
+| `-5` | ten counters, one mixer | 72.42% | 0.52 MiB/s | 0.54 MiB/s | 20 MiB |
+| `-3` | six counters, one mixer | 72.96% | 0.75 MiB/s | 0.76 MiB/s | 20 MiB |
+| `-1` | four counters (keeping their probabilities stretched), one mixer | 73.88% | 1.01 MiB/s | 1.18 MiB/s | 22 MiB |
 
 The tuning set is the first 256 KB of each of the 12 streams the levels were first tuned on
 (2.8 MiB); its size compressed is given as a share of its size. `c` and `d` are the MiB of stream
 per second (wall time) on `aq_cm.m4v` (3.7 MiB), on one thread of a 2.8 GHz Xeon, and the memory is
 the most the process had (its resident set). The decoder in the loop takes `-9` 1.6 times as long as
-`-7`; each level below is 1.2-1.45 times as fast as the one above it. Format 3's single model ran at
-about 1 MiB/s on the same machine.
+`-7`; each level below is 1.3-1.55 times as fast as the one above it. Format 3's single model ran at
+about 1 MiB/s on the same machine. (The speeds of `-5`, `-3` and `-1` are those of the levels as
+first cut, scaled by how the levels cut now compare with them on another machine.)
 
 ## How it works
 
@@ -211,8 +212,20 @@ before decompresses only with a build from before: the parameters are part of th
 that `-9` has as well, then two passes over the nine families whose contexts differ (all but esc,
 hdr, qpd and raw), on `xvid_mix_1m.m4v`. It codes that file 0.59% smaller (781881 bytes against
 786537), the avip samples 0.03-0.28% smaller, the FFmpeg streams 0.46-1.34% larger, and the tuning
-set 0.51% larger (71.60% against 71.24%). `-5`, `-3` and `-1` are still those cut from the previous
-`-7`.
+set 0.51% larger (71.60% against 71.24%).
+
+`-5`, `-3` and `-1` were then cut again from the new `-7` as they were first, the six and four
+counters kept by what each is worth on `xvid_mix_1m.m4v` (escape modes and dquant, which have next
+to no decisions there, kept the counters they had), and each tuned for a pass on it (but for those
+two families). Against the levels cut before:
+
+| | `xvid_mix_1m.m4v` | avip samples | FFmpeg streams | tuning set |
+|---|---:|---|---|---:|
+| `-5` | 787875 (-0.75%) | 0.02-0.49% smaller (`susi_small1_divx.m4v` +0.03%) | 0.52-1.60% larger | 72.42% (71.81% before) |
+| `-3` | 794204 (-0.57%) | 0.02-0.37% smaller (`susi_small1_divx.m4v` +0.23%, `susi_small2_divx.m4v` +0.27%) | 0.99-2.14% larger | 72.96% (72.19% before) |
+| `-1` | 800085 (-1.35%) | 0.23-0.82% smaller (`susi_small1_divx.m4v` +0.36%, `susi_small2_divx.m4v` +0.37%) | 1.34-2.93% larger | 73.88% (73.01% before) |
+
+A stream compressed at `-7`, `-5`, `-3` or `-1` before decompresses only with a build from before.
 
 ### Streaming
 
@@ -290,16 +303,16 @@ three with packed B-frames) and two DivX streams. The others were made with FFmp
 
 | Stream | Size | xz -9e | format 3 | `-9` | `-7` | `-5` | `-3` | `-1` |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| aq_cm.m4v | 3875193 | 97.2% | 76.3% | 70.5% | 74.6% | 75.5% | 75.9% | 76.7% |
-| aria_cm.m4v | 5097686 | 98.9% | 79.0% | 73.5% | 77.8% | 78.7% | 79.0% | 80.0% |
-| ispure03.m4v | 5864104 | 95.8% | 73.0% | 67.1% | 71.4% | 72.3% | 72.6% | 73.3% |
-| sdova_ed.m4v | 4717732 | 89.6% | 65.7% | 59.8% | 64.9% | 65.7% | 65.9% | 66.5% |
-| susi_small1_divx.m4v | 90887 | 100.1% | 83.4% | 77.4% | 81.9% | 82.3% | 82.5% | 83.1% |
-| susi_small2_divx.m4v | 1556817 | 100.0% | 85.1% | 82.8% | 84.6% | 85.1% | 85.2% | 85.5% |
-| xvid.m4v | 257813 | 97.7% | 74.4% | 69.6% | 71.1% | 71.1% | 71.6% | 72.6% |
-| lavc_ilace.m4v (interlaced) | 1015896 | 90.9% | 68.6% | 63.7% | 65.4% | 65.4% | 65.8% | 67.1% |
-| xvid_gmc.m4v (GMC) | 833291 | 99.8% | 76.9% | 70.9% | 74.0% | 74.3% | 75.0% | 75.8% |
-| xvid_qpel_4mv.m4v (quarter-pel, 4MV) | 383624 | 95.5% | 74.0% | 69.5% | 70.8% | 70.8% | 71.3% | 72.1% |
+| aq_cm.m4v | 3875193 | 97.2% | 76.3% | 70.5% | 74.6% | 75.1% | 75.6% | 76.2% |
+| aria_cm.m4v | 5097686 | 98.9% | 79.0% | 73.5% | 77.8% | 78.5% | 78.9% | 79.5% |
+| ispure03.m4v | 5864104 | 95.8% | 73.0% | 67.1% | 71.4% | 72.1% | 72.6% | 73.2% |
+| sdova_ed.m4v | 4717732 | 89.6% | 65.7% | 59.8% | 64.9% | 65.5% | 65.7% | 66.0% |
+| susi_small1_divx.m4v | 90887 | 100.1% | 83.4% | 77.4% | 81.9% | 82.4% | 82.7% | 83.3% |
+| susi_small2_divx.m4v | 1556817 | 100.0% | 85.1% | 82.8% | 84.6% | 85.1% | 85.4% | 85.8% |
+| xvid.m4v | 257813 | 97.7% | 74.4% | 69.6% | 71.1% | 72.3% | 73.1% | 74.7% |
+| lavc_ilace.m4v (interlaced) | 1015896 | 90.9% | 68.6% | 63.7% | 65.4% | 66.3% | 67.2% | 68.3% |
+| xvid_gmc.m4v (GMC) | 833291 | 99.8% | 76.9% | 70.9% | 74.0% | 74.7% | 75.7% | 76.8% |
+| xvid_qpel_4mv.m4v (quarter-pel, 4MV) | 383624 | 95.5% | 74.0% | 69.5% | 70.8% | 71.7% | 72.3% | 73.3% |
 
 Where the bits go in `aq_cm.m4v` at `-9` (`-s`; the packed sizes are the model's estimates):
 
@@ -326,8 +339,8 @@ stream (79% of this one), and their signs change most: 27% fewer bytes than form
 against 450410), from the sign prediction; the positions and levels take 3.0% and 2.9% fewer, the
 macroblock headers 13% fewer. The decoder in the loop is worth 5.4-7.9% of the output against `-7`
 on the avip samples (but 2.0% on `susi_small2_divx.m4v`), and 1.9-4.2% on the FFmpeg streams.
-`-1`, the fastest level, is within a point of format 3 on the avip samples (worse on five of the
-six) and 1-2 points better on the FFmpeg streams.
+`-1`, the fastest level, is within a point of format 3 on every stream: worse on four of the avip
+samples and on `xvid.m4v`, better on the others.
 
 On threads, with five of the avip samples concatenated (21 MB, four cores of the same machine,
 which ran about 1.3 times slower when this was measured than for the levels table; the sizes are

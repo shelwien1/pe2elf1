@@ -6,37 +6,37 @@
 
 
 
-static const byte M5_esc_i_dm[3+1]={ 0,1,2,3 };
+
+
+static const byte M5_esc_k_dm[3+1]={ 0,1,2,3 };
 
 
 
 
 
 
-
-
-static const int M5_esc_rA = (0+0) * (1);
-static const int M5_esc_mwA = (202+0) * (1);
-static const int M5_esc_rB = (191+0) * (1);
-static const int M5_esc_mwB = (245+0) * (1);
-static const int M5_esc_rC = (133+0) * (1);
-static const int M5_esc_mwC = (8+0) * (1);
-static const int M5_esc_rD = (99+0) * (1);
-static const int M5_esc_mwD = (4+0) * (1);
-static const int M5_esc_rE = (12+0) * (1);
-static const int M5_esc_mwE = (8+0) * (1);
-static const int M5_esc_rH = (118+0) * (1);
-static const int M5_esc_mwH = (153+0) * (1);
+static const int M5_esc_rA = (254+0) * (1);
+static const int M5_esc_mwA = (21+0) * (1);
+static const int M5_esc_rB = (255+0) * (1);
+static const int M5_esc_mwB = (12+0) * (1);
+static const int M5_esc_rC = (199+0) * (1);
+static const int M5_esc_mwC = (12+0) * (1);
+static const int M5_esc_rD = (239+0) * (1);
+static const int M5_esc_mwD = (225+0) * (1);
+static const int M5_esc_rE = (234+0) * (1);
+static const int M5_esc_mwE = (10+0) * (1);
+static const int M5_esc_rH = (246+0) * (1);
+static const int M5_esc_mwH = (64+0) * (1);
 static const int M5_esc_rI = (0+0) * (1);
-static const int M5_esc_mwI = (255+0) * (1);
-static const int M5_esc_rJ = (246+0) * (1);
-static const int M5_esc_mwJ = (247+0) * (1);
-static const int M5_esc_rK = (0+0) * (1);
-static const int M5_esc_mwK = (133+0) * (1);
-static const int M5_esc_rL = (191+0) * (1);
-static const int M5_esc_mwL = (169+0) * (1);
+static const int M5_esc_mwI = (33+0) * (1);
+static const int M5_esc_rJ = (245+0) * (1);
+static const int M5_esc_mwJ = (32+0) * (1);
+static const int M5_esc_rK = (20+0) * (1);
+static const int M5_esc_mwK = (243+0) * (1);
+static const int M5_esc_rL = (247+0) * (1);
+static const int M5_esc_mwL = (155+0) * (1);
 static const int M5_esc_lr = (24+0) * (1);
-static const int M5_esc_mb = (73+0) * (1);
+static const int M5_esc_mb = (15+0) * (1);
 static const int M5_esc_rT = (0+0) * (1);
 static const int M5_esc_mwT = (0+0) * (1);
 static const int M5_esc_mt = (0+0) * (1);
@@ -66,9 +66,9 @@ static const long long M5_esc_d_Volume = 1; // 1
 static const long long M5_esc_e_Volume = tc_vmul(1, 2); // 2
 static const long long M5_esc_g_Volume = 1; // 1
 static const long long M5_esc_h_Volume = 1; // 1
-static const long long M5_esc_i_Volume = tc_vmul(1, 4); // 4
+static const long long M5_esc_i_Volume = tc_vmul(1, 2); // 2
 static const long long M5_esc_j_Volume = 1; // 1
-static const long long M5_esc_k_Volume = tc_vmul(1, 3); // 3
+static const long long M5_esc_k_Volume = tc_vmul(1, 4); // 4
 static const long long M5_esc_l_Volume = 1; // 1
 static const long long M5_esc_m_Volume = tc_vmul(1, 3); // 3
 static const long long M5_esc_n_Volume = 1; // 1

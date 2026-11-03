@@ -9,39 +9,39 @@ Debug 1
 Const 0
 
 Index a
- a_cls: cls, &101
- a_rnz: rnz, 1!11100100001000100
- a_xm: xm, 1!110001010
- a_pos: pos, &000000
+ a_cls: cls, &001
+ a_rnz: rnz, 1!01010100001000110
+ a_xm: xm, 1!110010010
+ a_pos: pos, &111000
 
 Index b
- b_cls: cls, &011
+ b_cls: cls, &110
  b_fp: fp, &11111
- b_pos: pos, &111111
+ b_pos: pos, &111100
 
 Index c
- c_cls: cls, &000
+ c_cls: cls, &110
  c_pos: pos, &111111
- c_h16: h16, &1111111101111011
+ c_h16: h16, &0010100001111111
 
 Index d
- d_cls: cls, &100
- d_nz: nz, 1!11111110
- d_pos: pos, &000000
+ d_cls: cls, &110
+ d_mvc: mvc, 1!111110100100010001111111000000
+ d_pos: pos, &111111
 
 Index e
- e_cls: cls, &111
- e_h8: h8, &11111111
- e_pos: pos, &111111
+ e_cls: cls, &000
+ e_nz: nz, 1!11110111
+ e_pos: pos, &000000
 
 Index h
- h_cls: cls, &110
- h_run: run, 1!1110100111111110
+ h_cls: cls, &111
+ h_run: run, 1!1111010111111110
  h_pos: pos, &111111
 
 Index m
- m_cls: cls, &101
- m_pos: pos, &110000
+ m_cls: cls, &001
+ m_pos: pos, &111110
 
 Index t
 
@@ -49,20 +49,20 @@ Index n
 
 Index g
 
-Number rA, 1, 0!11111111
-Number mwA, 1, 0!00000001
-Number rB, 1, 0!11111110
-Number mwB, 1, 0!00010111
+Number rA, 1, 0!11111110
+Number mwA, 1, 0!00100000
+Number rB, 1, 0!01000110
+Number mwB, 1, 0!00001100
 Number rC, 1, 0!11111111
-Number mwC, 1, 0!00001101
-Number rD, 1, 0!11111111
-Number mwD, 1, 0!00101110
+Number mwC, 1, 0!00001000
+Number rD, 1, 0!11111110
+Number mwD, 1, 0!00001111
 Number rE, 1, 0!11111111
 Number mwE, 1, 0!00100000
-Number rH, 1, 0!11111110
-Number mwH, 1, 0!00000001
-Number lr, 1, 0!01100
-Number mb, 1, 0!01000000
+Number rH, 1, 0!11110111
+Number mwH, 1, 0!00010011
+Number lr, 1, 0!01111
+Number mb, 1, 0!00100100
 
 #  Frozen: what sig never reads, which live would only take opt.pl's trials.
 ! Number rT, 1, 0!00000000

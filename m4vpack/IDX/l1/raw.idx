@@ -10,22 +10,23 @@ Debug 1
 Const 0
 
 Index a
- a_c1: c1, &11111111
+ a_c1: c1, &11011111
  a_c2: c2, &01111111
 
 Index b
- b_c1: c1, &11111111
+ b_code: code, 1!01010010000
+ b_at: at, 1!01100101011
 
 Index c
- c_c1: c1, &00011111
- c_at: at, 1!01001111010
+ c_c1: c1, &11011111
+ c_at: at, 1!01010111000
 
 Index d
- d_c1: c1, &00000000
- d_code: code, 1!11010101000
+ d_c1: c1, &00000111
+ d_code: code, 1!11010100000
 
 Index m
- m_at: at, 1!01110001011
+ m_at: at, 1!01110011011
 
 Index t
 
@@ -34,15 +35,15 @@ Index n
 Index g
 
 Number rA, 1, 0!00000000
-Number mwA, 1, 0!00000001
-Number rB, 1, 0!00101010
-Number mwB, 1, 0!00000001
-Number rC, 1, 0!11011111
+Number mwA, 1, 0!00000000
+Number rB, 1, 0!11111010
+Number mwB, 1, 0!01000010
+Number rC, 1, 0!00000000
 Number mwC, 1, 0!00000000
-Number rD, 1, 0!11111001
+Number rD, 1, 0!00000000
 Number mwD, 1, 0!00000000
 Number lr, 1, 0!11111
-Number mb, 1, 0!00011111
+Number mb, 1, 0!11111111
 
 #  Frozen: what raw never reads, which live would only take opt.pl's trials.
 ! Number rT, 1, 0!00000000

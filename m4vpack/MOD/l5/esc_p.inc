@@ -30,12 +30,12 @@ void M5_esc_make( const M_esc_v & D, tcx & X ) {
   h = 0;
 
   i = 0;
-  i = i*4 + M5_esc_i_dm[__min(3,__max(0,(dm)-(1-1)))];
+  i = i*2 + (((dm)>1+(1-1)));
 
   j = 0;
 
   k = 0;
-  k = k*3 + (((dm)>0+(1-1))+((dm)>1+(1-1)));
+  k = k*4 + M5_esc_k_dm[__min(3,__max(0,(dm)-(1-1)))];
 
   l = 0;
 
