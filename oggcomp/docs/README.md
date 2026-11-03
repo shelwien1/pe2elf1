@@ -75,6 +75,8 @@ never met.  Last it runs the corpus again on threads, in parts small
 enough that everything past a few pages is cut, and the refusals of a
 damaged stream coded on threads.  `testfiles/README.md` says what is in
 the corpus and why, and what it does not reach; `-h` lists the options.
+`docs/REVIEW.md` is the last review of the source: what it found, how
+each was fixed, and what tests it now.
 
     ./t.sh && ./mk.sh check
 
@@ -91,8 +93,9 @@ costs about ten times the resident memory and is worth measuring before
 believing.  `-N`, a digit, picks the model: `-0` the one linked into the
 program, `-1` to `-9` a library beside it (below).  `-t N` codes on N
 threads, in parts of at least `-c` (*On threads*, below).  A lone `-` is
-stdin or stdout -- for either, though not both: `-` named twice is a
-command line it refuses.
+stdin or stdout, for either or both: `oggcomp c - - < a.ogg > a.oc` is a
+pipe.  An output that is the input under another name -- `./a.ogg`, a full
+path, a link -- is refused (exit 2) before anything is written.
 
 Where stderr is a terminal, a run keeps a line there that it puts over
 itself every half second:
@@ -288,10 +291,10 @@ CRC of those 24 bytes, and 4 zero bytes -- and then the part as the API
 codes it, what `oggcomp c` writes after its header, ending in a CRC of the
 part.  That goes in chunks of a varint length and that many bytes, with a
 varint 0 after the last, because the decoder reads ahead of where the coder
-stopped and so has to be told where the part ends.  A thread's stream
-ends in a record of size 0.  So `d` finds a part lost, added, moved or damaged, or a
-thread's stream cut short, and refuses with 1, keeping nothing, as for any
-`.oc` it cannot read.
+stopped and so has to be told where the part ends.  A thread's stream ends
+in a record of size 0.  So `d` finds a part lost, added, moved or damaged,
+or a thread's stream cut short, and refuses with 1, keeping nothing, as for
+any `.oc` it cannot read.
 
 The bytes of a stream coded on threads are **not the same from one run to
 the next**: MTwrap writes the threads' blocks in the order they come, and

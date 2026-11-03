@@ -9,8 +9,11 @@
 
     f_busy=0;
 
-    // a failed worker ends the job: stop reading input, let the others finish
-    if( f_quit==0 ) for( i=0; i<th_N; i++ ) if( C1[i].f_fail ) { f_err=1; f_quit=1; break; }
+    // a failed worker ends the job: stop reading input, let the others finish.
+    // Tested on f_err, not f_quit: the input's end sets f_quit too, and a
+    // worker that failed after it went unnoticed -- the job yielded 0, done,
+    // with that worker's stream cut short (as loop_dec.inc tests it).
+    if( f_err==0 ) for( i=0; i<th_N; i++ ) if( C1[i].f_fail ) { f_err=1; f_quit=1; break; }
 
     // worker j ended before getting EOF -> it failed (r=3); its input ring
     // would stay full forever, so skip it and end the input for the others

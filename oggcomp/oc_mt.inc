@@ -50,6 +50,11 @@
 //  the workers in turn, as they were dealt.
 
 #define AlignUp(x, r) ((x) + ((r)-1)) / (r) * (r)  // (MTwrap's)
+//  Where dyn_buff, the decoder's store of blocks a worker cannot take yet,
+//  runs out of memory -- a container whose interleaving parks a worker's
+//  whole stream, decoded under a tight limit -- it calls this, and without
+//  it __debugbreak(): SIGILL, where the promise is exit 3.
+#define MTWRAP_NOMEM() FATAL_CODE(OGC_EXIT_IO, "out of memory for the blocks of a run on threads")
 //  MTwrap as m4vpack has it, its warnings under -Wall -Wextra left to it
 #if defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic push
@@ -576,6 +581,14 @@ struct OcSplit : Coroutine {
 //  ---------------------------------------------------------------------------
 //  The workers.
 
+//  The order the workers' failures came in.  One worker failing ends the
+//  input of all, and a worker that was in the middle of a part then fails
+//  too -- "a part cut short" -- so the failure to report is the first, not
+//  the one of the lowest-numbered worker: that made an out-of-memory exit 4
+//  as an internal error, and an intact stream decoded short of memory
+//  "damaged data".
+static u64 mt_fail_clock;
+
 //  What a run on threads gives its workers.
 struct oc_mt_args {
   int threads, flags;
@@ -598,14 +611,16 @@ template <int f_DEC> struct OcPart : Coroutine {
   u64 parts;   // the parts done
   void *inst;  // the model instance of the worker's thread
   int code;    // the exit status its error stands for
+  u64 failed;  // when it failed, on mt_fail_clock; 0: it has not
   char note[1100];
   mt_bytes part;  // c: the part under way; d: its output
   u8 io[1 << 16];  // the model's output (c), or input (d), 64 KB at a time
   //  its counts on the progress line: done_* its parts' done, prog_* with
   //  the part under way (read from any thread)
   u64 done_raw, done_packed, prog_raw, prog_packed, prog_parts;
-  //  -v: where the bits went, its parts' added up
+  //  -v: where the bits went, its parts' added up, and its tables' size
   int nstage;
+  u64 tables;
   double bits[16];
   u64 values[16];
   char stage[16][16];
@@ -617,11 +632,13 @@ template <int f_DEC> struct OcPart : Coroutine {
     parts = 0;
     inst = nullptr;
     code = 0;
+    failed = 0;
     note[0] = 0;
     part.init();
     done_raw = done_packed = 0;
     prog_set(0, 0);
     nstage = 0;
+    tables = 0;
     return 0;
   }
   void Quit() { part.quit(); }
@@ -641,6 +658,7 @@ template <int f_DEC> struct OcPart : Coroutine {
     vsnprintf(note, sizeof note, fmt, ap);
     va_end(ap);
     code = c;
+    failed = __atomic_add_fetch(&mt_fail_clock, 1, __ATOMIC_SEQ_CST);
     return c;
   }
   //  up to n bytes of the worker's input, fewer only at its end
@@ -714,7 +732,10 @@ template <int f_DEC> struct OcPart : Coroutine {
   //  -v: the model's bits, added to the worker's
   void add_stages() {
     int i;
-    if(!(args.flags & OC_F_VERBOSE) || !args.api->Stage || !inst)
+    if(!(args.flags & OC_F_VERBOSE) || !inst)
+      return;
+    tables = args.api->TableBytes();
+    if(!args.api->Stage)
       return;
     for(i = 0; i < 16; i++) {
       double b = 0;
@@ -913,13 +934,14 @@ typedef MTwrap<1, OcPart<1>, const oc_mt_args *> OcMtDec;
 //  Whether a worker failed: its exit status, its note copied (the first
 //  failed worker's; the workers go with MTwrap's Quit()).
 template <class M> static int mt_failed(M &m, char *note, sz n) {
-  uint i;
+  uint i, first = m.th_N;
   for(i = 0; i < m.th_N; i++)
-    if(m.C1[i].f_fail) {
-      snprintf(note, n, "%s", m.C1[i].note);
-      return m.C1[i].code ? m.C1[i].code : OGC_EXIT_INTERNAL;
-    }
-  return 0;
+    if(m.C1[i].f_fail && (first == m.th_N || (m.C1[i].failed && (!m.C1[first].failed || m.C1[i].failed < m.C1[first].failed))))
+      first = i;
+  if(first == m.th_N)
+    return 0;
+  snprintf(note, n, "%s", m.C1[first].note);
+  return m.C1[first].code ? m.C1[first].code : OGC_EXIT_INTERNAL;
 }
 //  Whether d's workers had the parts as c deals them, in turn: of P in all,
 //  worker i the i-th of each round of N, one more where P % N is past it.

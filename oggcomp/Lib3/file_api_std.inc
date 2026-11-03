@@ -57,18 +57,26 @@ struct filehandle0 {
   }
 
   int close( void ) {
+    //  The handle goes before the stream does, and a second close finds
+    //  none: a close whose flush fails -- a full disk, `ulimit -f` -- is
+    //  an error the caller reports, and the report's way out (oc_fatal.inc,
+    //  ogc_partial.drop) closes the output again.  That was fclose() twice
+    //  on one FILE: a double free, an abort, and the half-written file left.
+    FILE* h = f;
+    f = 0;
+    if( !h ) return 0;
     //  A borrowed stream is not ours to close, but it is ours to flush:
     //  the caller asks close() whether the bytes got out, and for stdout
     //  they have not until the buffer has gone.
-    if( borrowed ) { int r = fflush(f); f = 0; return r; }
-    return fclose(f);
+    if( borrowed ) return fflush(h);
+    return fclose(h);
   }
 
   //  Has this handle seen a read or write error?  The caller wants the
   //  question, not the mechanism: the WinAPI backend has no FILE* to hand
   //  to ferror() and answers it from a flag its own read/writ keep.
   int error( void ) {
-    return ferror(f);
+    return f ? ferror(f) : 0;
   }
 
   //  Hand what is buffered to the OS, so that another handle on the same

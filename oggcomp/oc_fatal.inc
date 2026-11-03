@@ -65,6 +65,10 @@ static void message(const char *fmt, va_list ap) {
 //  the failure usually comes from inside the coroutine, with main() still
 //  holding the file open, and Windows will not remove a file anyone has
 //  open -- the remove would fail silently and the half-written file stay.
+//  "-" names stdin or stdout to the file layer, never a file: an output
+//  of "-" that fails is not a file to remove -- remove("-") took away
+//  whatever file of that name was in the current directory.
+static inline int ogc_is_stdio(const char *p) { return p[0] == '-' && !p[1]; }
 struct ogc_partial_t {
   const char *path, *path2;
   filehandle *fh, *fh2;
@@ -90,11 +94,11 @@ struct ogc_partial_t {
     kept();
     if(f)
       f->close();
-    if(p)
+    if(p && !ogc_is_stdio(p))
       remove(p);
     if(f2)
       f2->close();
-    if(p2)
+    if(p2 && !ogc_is_stdio(p2))
       remove(p2);
   }
 };
@@ -164,11 +168,16 @@ void vb_refuse_unless(int cond, const char *fmt, ...) {
   va_end(ap);
   die(OGC_EXIT_REFUSED);
 }
+//  The same name twice on a command line is an output over an input.  "-"
+//  is the exception: it is stdin as an input and stdout as an output, two
+//  streams, so `oggcomp c - - < a.ogg > a.oc` is a pipe, not a mistake.
+//  (A name that is the same file in another spelling -- ./a.ogg, a link --
+//  is caught by ogc_same_file, oggcomp.cpp, which has to look at the files.)
 static inline void ogc_paths_distinct(const char *const *v, int n) {
   int i, j;
   for(i = 0; i < n; i++)
     for(j = i + 1; j < n; j++)
-      if(!strcmp(v[i], v[j]))
+      if(!strcmp(v[i], v[j]) && !ogc_is_stdio(v[i]))
         FATAL_CODE(OGC_EXIT_USAGE,
                    "%s is named twice: an output would be "
                    "written over an input",

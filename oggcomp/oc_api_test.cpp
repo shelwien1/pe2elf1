@@ -110,6 +110,47 @@ int main(int argc, char **argv) {
   r = drive(p, OC_DECODE, 0, c, back);
   check(r == 0 && back == in, "and decodes fresh", back == in ? "byte for byte" : "differs");
   oggcomp_Free(p);
+  //  Loop again after OC_NEED_OUTPUT with no new buffer -- addout skipped,
+  //  or given a size of 0, which it ignores: an error return and the
+  //  caller's buffer untouched past its end, where the coroutine used to
+  //  resume into the write it had stopped before; and the run goes on as
+  //  if nothing had happened once a buffer is given.
+  {
+    u8 small[64];
+    std::vector<u8> out;
+    int refused = 0, guard = 1, i;
+    p = oggcomp_Alloc();
+    r = oggcomp_Init(p, OC_ENCODE, 0, "test");
+    memset(small, 0xAA, sizeof small);
+    oggcomp_addout(p, small, 16);
+    oggcomp_addinp(p, &in[0], (int)in.size());
+    while(!r) {
+      r = oggcomp_Loop(p);
+      if(r == OC_NEED_INPUT) {
+        oggcomp_addinp(p, nullptr, 0);
+        r = 0;
+      } else if(r == OC_NEED_OUTPUT || r == OC_DONE) {
+        out.insert(out.end(), small, small + oggcomp_getoutlen(p));
+        if(r == OC_DONE)
+          break;
+        if(!refused) {
+          oggcomp_addout(p, small, 0);
+          refused = oggcomp_Loop(p) == 8;
+          for(i = 16; i < (int)sizeof small; i++)
+            if(small[i] != 0xAA)
+              guard = 0;
+        }
+        memset(small, 0xAA, sizeof small);
+        oggcomp_addout(p, small, 16);
+        r = 0;
+      }
+    }
+    snprintf(how, sizeof how, "%s, %s", refused ? "8" : "not refused", guard ? "nothing past the buffer" : "WROTE PAST THE BUFFER");
+    check(refused && guard, "Loop after NEED_OUTPUT with no buffer", how);
+    r = r == OC_DONE ? drive(p, OC_DECODE, 0, out, back) : r;
+    check(r == 0 && back == in, "and the run goes on once one is given", back == in ? "byte for byte" : "differs");
+    oggcomp_Free(p);
+  }
   printf("oc_api_test: %d/%d checks passed\n", checks - failed, checks);
   return failed ? 1 : 0;
 }

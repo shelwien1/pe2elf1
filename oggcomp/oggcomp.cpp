@@ -37,6 +37,32 @@ struct oc_opts {
   int quiet;     // -q: no progress line
 };
 static int oc_show_progress(const oc_opts &o) { return o.progress || (!o.quiet && oc_stderr_tty()); }
+//  Whether the paths a and b are one file that exists: one device and
+//  inode, or on Windows one volume and file index.  ogc_paths_distinct
+//  compares names, and `oggcomp c a.ogg ./a.ogg` -- or a full path, a link,
+//  another case on Windows -- got past it: the output's creation emptied
+//  the input before a byte of it was read, and the run exited 0, a.ogg now
+//  the .oc of nothing.
+static int ogc_same_file(const char *a, const char *b) {
+  if(ogc_is_stdio(a) || ogc_is_stdio(b))
+    return 0;
+#ifdef _WIN32
+  BY_HANDLE_FILE_INFORMATION x, y;
+  int same = 0;
+  HANDLE ha = CreateFileA(a, 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+  HANDLE hb = CreateFileA(b, 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+  if(ha != INVALID_HANDLE_VALUE && hb != INVALID_HANDLE_VALUE && GetFileInformationByHandle(ha, &x) && GetFileInformationByHandle(hb, &y))
+    same = x.dwVolumeSerialNumber == y.dwVolumeSerialNumber && x.nFileIndexHigh == y.nFileIndexHigh && x.nFileIndexLow == y.nFileIndexLow;
+  if(ha != INVALID_HANDLE_VALUE)
+    CloseHandle(ha);
+  if(hb != INVALID_HANDLE_VALUE)
+    CloseHandle(hb);
+  return same;
+#else
+  struct stat x, y;
+  return !stat(a, &x) && !stat(b, &y) && x.st_dev == y.st_dev && x.st_ino == y.st_ino;
+#endif
+}
 //  The head of what d is given, as main() reads it to learn the model and
 //  whether the stream was coded on threads: the magic, the version, the
 //  model -- the whole header of a stream of one model, the first 7 bytes of
@@ -123,6 +149,11 @@ static int run(oc_api &api, int dir, const oc_opts &o, filehandle &f, const oc_h
     pr.poll();
     if(r == OC_NEED_INPUT) {
       uint n = f.sread(ibuf, sizeof ibuf);
+      //  As it happens: a read error reads as the end, and a decoder given
+      //  an end too soon refuses the stream as cut short -- exit 1 for what
+      //  the filesystem did, where the promise is 3.
+      if(f.error())
+        FATAL_CODE(OGC_EXIT_IO, "read error on %s", in);
       api.addinp(p, ibuf, (int)n);
       k.fed += n;
       continue;
@@ -254,8 +285,10 @@ template <class M> static void mt_report(M &m, oc_api &api, u64 parts) {
   }
   for(i = 0; i < n; i++)
     tot += bits[i];
-  fprintf(stderr, "%s: %.0f bytes of model, %" PRIu64 " parts on %u threads, %" PRIu64 " MB of tables each\n", ogc_prog, tot / 8, parts, m.th_N,
-          (u64)(api.TableBytes() >> 20));
+  //  (the tables' size as a worker had it: on the main thread, which runs
+  //  no model, oggcomp_TableBytes() is 0)
+  fprintf(stderr, "%s: %.0f bytes of model, %" PRIu64 " part%s on %u threads, %" PRIu64 " MB of tables each\n", ogc_prog, tot / 8, parts, parts == 1 ? "" : "s", m.th_N,
+          (u64)(m.C1[0].tables >> 20));
   for(i = 0; i < n; i++) {
     fprintf(stderr, "  %-8s %12.0f bytes  %5.2f%%", m.C1[0].stage[i], bits[i] / 8, tot > 0 ? 100.0 * bits[i] / tot : 0.0);
     if(values[i])
@@ -314,8 +347,6 @@ static int run_mt_c(oc_api &api, const oc_opts &o, filehandle &f, const char *in
     ogc_fatal_code(r, "%s: %s", in, note);
   }
   parts = e->M1.parts;
-  e->M2.Quit();  // (the threads joined, the workers freed)
-  e->M1.Quit();
   f.close();
   mt_close(g, out);
   {
@@ -326,8 +357,13 @@ static int run_mt_c(oc_api &api, const oc_opts &o, filehandle &f, const char *in
     pr.done(c);
     pr.quit();
   }
+  //  -v reads the workers, so before Quit() frees them -- after it, as it
+  //  was, it read freed memory and `c -v -t N` died there.  The workers
+  //  have all ended by now: MTwrap's loop ends with the last of them.
   if(o.flags & OC_F_VERBOSE)
     mt_report(e->M2, api, parts);
+  e->M2.Quit();  // (the threads joined, the workers freed)
+  e->M1.Quit();
   oc_unmap_block(e, sizeof(OcMtEnc));
   return OGC_EXIT_OK;
 }
@@ -469,6 +505,8 @@ int main(int argc, char **argv) {
   dir = mode[0] == 'c' ? OC_ENCODE : OC_DECODE;
   in = argv[a];
   out = argv[a + 1];
+  if(ogc_same_file(in, out))
+    FATAL_CODE(OGC_EXIT_USAGE, "%s and %s are one file: the output would be written over the input", in, out);
   if(!f.open(in))
     FATAL_CODE(OGC_EXIT_IO, "cannot open %s", in);
   hd.n = 0;
@@ -476,9 +514,15 @@ int main(int argc, char **argv) {
     //  The stream names its model in its header; -N given must agree.  Its
     //  magic says whether it was coded on threads.
     hd.n = f.sread(hd.b, OC_HEAD);
+    if(f.error())
+      FATAL_CODE(OGC_EXIT_IO, "read error on %s", in);
     if(hd.n == OC_HEAD) {
       mt = !memcmp(hd.b, OC_MT_MAGIC, sizeof OC_MT_MAGIC - 1);
       if(mt || !memcmp(hd.b, OC_MAGIC, sizeof OC_MAGIC - 1)) {
+        //  -N is a digit, so a stream naming model 10 or more was not made
+        //  by `oggcomp c`: damage, exit 1 -- not a search for an
+        //  oggcomp128.so that ends in exit 3.
+        FATAL_UNLESS(hd.b[OC_HEAD - 1] <= 9, "%s: damaged data: its header names model %d", in, hd.b[OC_HEAD - 1]);
         if(have_model)
           FATAL_UNLESS(hd.b[OC_HEAD - 1] == model, "%s was coded with model %d, and -%d asks for another", in, hd.b[OC_HEAD - 1], model);
         model = hd.b[OC_HEAD - 1];

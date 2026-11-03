@@ -173,7 +173,17 @@ generate_and_build() {
 #  every layer under it -- so that `oggdet c -c` writes the .oc that
 #  `oggcomp c` would.  It is built from the same MOD/, in whatever form the
 #  target just generated, and a change to the model is a change to both.
+#  A tree without oggdet.cpp -- this one as it came, which holds the
+#  compressor and not the carver -- builds oggcomp and says so, rather
+#  than stopping with the compiler's "no such file" after the build it was
+#  asked for has worked: `./mk.sh` exited 1 here every time, `release` and
+#  `pgo` before their checks ran, and `t.sh` skips oggdet's tests when it
+#  is not there.
 build_det() {
+  if [ ! -f oggdet.cpp ]; then
+    echo "mk.sh: no oggdet.cpp in this tree -- oggdet not built"
+    return 0
+  fi
   $CXX $CXXFLAGS $WARN $REQ -o oggdet oggdet.cpp -lm
 }
 

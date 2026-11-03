@@ -12,6 +12,7 @@ struct oc_api_unwind {};
 //  even wired -- whatever the other direction has done.
 struct oc_inst {
   int busy, dir, flags, err, in_coro, used[2];
+  int need_out;  // Loop said OC_NEED_OUTPUT, and no addout has answered it
   char msg[1024];
   char name[512];
   Coroutine *co;
@@ -46,6 +47,12 @@ template <class T> static void oc_unblock(T *&p, sz n) {
   p = nullptr;
 }
 static void oc_blocks_unmap(void) {
+  //  The history's spill -- tables past its pool, calloc'd for a setup that
+  //  asks for more -- is freed by reset(), not by unmapping the pool: a Free
+  //  without it leaked them, once per instance, and a run on threads frees
+  //  an instance per worker.
+  if(hist)
+    hist->reset();
   oc_unblock(hist, sizeof *hist);
   oc_unblock(tcp, sizeof *tcp);
   oc_unblock(vb_ar, sizeof *vb_ar);
@@ -100,6 +107,7 @@ OC_API void *OC_CALL oggcomp_Alloc(void) {
   oc_the->err = 0;
   oc_the->used[0] = oc_the->used[1] = 0;
   oc_the->in_coro = 0;
+  oc_the->need_out = 0;
   oc_the->co = nullptr;
   oc_the->msg[0] = 0;
   return oc_the;
@@ -123,6 +131,7 @@ OC_API int OC_CALL oggcomp_Init(void *pp, int dir, int flags, const char *name) 
   p->dir = dir ? 1 : 0;
   p->flags = flags;
   p->in_coro = 0;
+  p->need_out = 0;
   snprintf(p->name, sizeof p->name, "%s", name && *name ? name : "the stream");
   tc_verbose = (flags & OC_F_VERBOSE) != 0;
   tc_huge = (flags & OC_F_HUGE) != 0;
@@ -166,6 +175,12 @@ OC_API int OC_CALL oggcomp_Loop(void *pp) {
   //  null dereference for no buffer, so the check has to be here.
   if(!p->co->pin[1].beg)
     return 8;
+  //  Nor after OC_NEED_OUTPUT until a buffer has been given: the coroutine
+  //  resumes into the write it stopped before, without asking again, so a
+  //  Loop with the full buffer still attached -- addout skipped, or given
+  //  a size of 0, which it ignores -- wrote past the end of the caller's.
+  if(p->need_out)
+    return 8;
   if(p->err)
     return p->err;
   oc_api_enter(p);
@@ -175,6 +190,8 @@ OC_API int OC_CALL oggcomp_Loop(void *pp) {
   oc_api_leave();
   if(r == 3)
     return p->err ? p->err : 8;
+  if(r == OC_NEED_OUTPUT)
+    p->need_out = 1;
   return (int)r;
 }
 OC_API int OC_CALL oggcomp_getoutlen(void *pp) {
@@ -193,8 +210,10 @@ OC_API void OC_CALL oggcomp_addinp(void *pp, void *buf, int size) {
 }
 OC_API void OC_CALL oggcomp_addout(void *pp, void *buf, int size) {
   oc_inst *p = (oc_inst *)pp;
-  if(p && p == oc_the && p->co && size > 0)
+  if(p && p == oc_the && p->co && size > 0) {
     p->co->addout((byte *)buf, (uint)size);
+    p->need_out = 0;
+  }
 }
 OC_API const char *OC_CALL oggcomp_Error(void *pp) {
   oc_inst *p = (oc_inst *)pp;

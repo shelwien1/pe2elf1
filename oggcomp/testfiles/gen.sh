@@ -538,5 +538,172 @@ else
   for n in $derived; do echo "  $n  (kept)"; done
 fi
 
+#  Setup headers no encoder writes, each the shortest stream that broke the
+#  round trip until the review in docs/REVIEW.md: written bit by bit, since
+#  no oggenc command line asks for them, and needing nothing but python3.
+#  README.md says what each was; `c` has to take every one and give it back.
+crafted='cascade-long.ogg floor-post-65541.ogg mode-past-last.ogg
+         wide-book.ogg classwords-255ch.ogg'
+need=0
+for n in $crafted; do
+  [ -f "$n" ] || need=1
+done
+if [ $force = 1 ] || [ $need = 1 ]; then
+  python3 - <<'CRAFTED'
+import struct
+
+#  Vorbis packs its fields least significant bit first; a Huffman codeword
+#  goes in most significant bit first.
+class BW:
+    def __init__(self): self.bits = []
+    def put(self, v, n):
+        for i in range(n): self.bits.append((v >> i) & 1)
+    def put_msb(self, v, n):
+        for i in range(n - 1, -1, -1): self.bits.append((v >> i) & 1)
+    def bytes(self):
+        out = bytearray((len(self.bits) + 7) // 8)
+        for i, b in enumerate(self.bits): out[i >> 3] |= b << (i & 7)
+        return bytes(out)
+
+def ilog(v):
+    n = 0
+    while v: n += 1; v >>= 1
+    return n
+
+def crc32_ogg(data):
+    poly, tbl = 0x04c11db7, []
+    for i in range(256):
+        c = i << 24
+        for _ in range(8):
+            c = ((c << 1) ^ poly) & 0xffffffff if c & 0x80000000 else (c << 1) & 0xffffffff
+        tbl.append(c)
+    c = 0
+    for b in data: c = ((c << 8) & 0xffffffff) ^ tbl[(c >> 24) ^ b]
+    return c
+
+def page(packets, htype, gran, serial, seq):
+    lace, body = bytearray(), bytearray()
+    for p in packets:
+        n = len(p)
+        while n >= 255: lace.append(255); n -= 255
+        lace.append(n); body += p
+    assert len(lace) <= 255
+    pg = bytearray(b'OggS') + bytes([0, htype]) + struct.pack('<qII', gran, serial, seq) + b'\0\0\0\0' + bytes([len(lace)]) + lace + body
+    struct.pack_into('<I', pg, 22, crc32_ogg(pg))
+    return bytes(pg)
+
+def ident(ch, bs0=8, bs1=11):
+    w = BW(); w.put(1, 8)
+    for c in b'vorbis': w.put(c, 8)
+    w.put(0, 32); w.put(ch, 8); w.put(8000, 32)
+    w.put(0, 32); w.put(64000, 32); w.put(0, 32)
+    w.put(bs0 | (bs1 << 4), 8); w.put(1, 8)
+    return w.bytes()
+
+def comment():
+    v = b'crafted'
+    return b'\x03vorbis' + struct.pack('<I', len(v)) + v + struct.pack('<I', 0) + b'\x01'
+
+def book_lengths(w, dim, lens):                # every entry used, no lookup
+    w.put(0x564342, 24); w.put(dim, 16); w.put(len(lens), 24)
+    w.put(0, 1); w.put(0, 1)
+    for L in lens: w.put(L - 1, 5)
+    w.put(0, 4)
+
+def book_flat(w, dim, ent, L):                 # ordered: all `ent` entries of length L
+    w.put(0x564342, 24); w.put(dim, 16); w.put(ent, 24)
+    w.put(1, 1); w.put(L - 1, 5); w.put(ent, ilog(ent)); w.put(0, 4)
+
+def book_wide(w, dim):                         # `dim` wide, two entries, entry 0 used, one multiplicand
+    w.put(0x564342, 24); w.put(dim, 16); w.put(2, 24)
+    w.put(0, 1); w.put(1, 1); w.put(1, 1); w.put(0, 5); w.put(0, 1)
+    w.put(1, 4); w.put(0, 32); w.put(0, 32); w.put(0, 4); w.put(0, 1); w.put(0, 1)
+
+def floor1(w, pcls=(), classes=(), xs=()):
+    w.put(1, 16); w.put(len(pcls), 5)
+    for c in pcls: w.put(c, 4)
+    for (cdim, sub, master, sbooks) in classes:
+        w.put(cdim - 1, 3); w.put(sub, 2)
+        if sub: w.put(master, 8)
+        for sb in sbooks: w.put(sb, 8)
+    w.put(0, 2); w.put(4, 4)
+    for x in xs: w.put(x, 4)
+
+def residue(w, rtype, beg, end, psz, classbook, cascade=0, longform=False, book=None):
+    w.put(rtype, 16); w.put(beg, 24); w.put(end, 24); w.put(psz - 1, 24)
+    w.put(0, 6); w.put(classbook, 8)
+    w.put(cascade & 7, 3)
+    if (cascade >> 3) or longform: w.put(1, 1); w.put(cascade >> 3, 5)
+    else: w.put(0, 1)
+    if cascade & 1: w.put(book, 8)
+
+def setup(books, floors, residues, ch, nmodes=1):
+    w = BW(); w.put(5, 8)
+    for c in b'vorbis': w.put(c, 8)
+    w.put(len(books) - 1, 8)
+    for b in books: b(w)
+    w.put(0, 6); w.put(0, 16)
+    w.put(len(floors) - 1, 6)
+    for f in floors: f(w)
+    w.put(len(residues) - 1, 6)
+    for r in residues: r(w)
+    w.put(0, 6)                                 # one mapping: one submap, no coupling, floor 0, residue 0
+    w.put(0, 16); w.put(0, 1); w.put(0, 1); w.put(0, 2); w.put(0, 8); w.put(0, 8); w.put(0, 8)
+    w.put(nmodes - 1, 6)
+    for _ in range(nmodes): w.put(0, 1); w.put(0, 16); w.put(0, 16); w.put(0, 8)
+    w.put(1, 1)
+    return w.bytes()
+
+def stream(ch, su, audio, bs=(8, 11), serial=0x6372):
+    return (page([ident(ch, *bs)], 2, 0, serial, 0) + page([comment(), su], 0, 0, serial, 1)
+            + page(audio, 4, 128 * len(audio), serial, 2))
+
+two = lambda w: book_lengths(w, 1, [1, 1])
+nofloor = lambda w: floor1(w)
+
+#  A residue cascade in the long form -- the flag set -- with high bits of
+#  zero: legal, and read by libvorbis, but written back the short way by
+#  the decoder, five bits shorter, so the .oc did not restore.
+su = setup([two], [nofloor], [lambda w: residue(w, 0, 0, 0, 1, 0, longform=True)], 1)
+a = BW(); a.put(0, 1); a.put(0, 1)
+open('cascade-long.ogg', 'wb').write(stream(1, su, [a.bytes()]))
+
+#  A floor post of 65541, an entry of a 131072-entry subclass book: the
+#  model kept floor values in 16 signed bits, and 65541 came out as 5.
+fl = lambda w: floor1(w, [0], [(1, 0, 0, [1])], [8])
+su = setup([lambda w: book_flat(w, 1, 131072, 17), two], [fl], [lambda w: residue(w, 0, 0, 0, 1, 1)], 1)
+a = BW(); a.put(0, 1); a.put(1, 1); a.put(100, 8); a.put(100, 8); a.put_msb(65541, 17)
+open('floor-post-65541.ogg', 'wb').write(stream(1, su, [a.bytes()]))
+
+#  Three modes, so two bits of mode, and an audio packet naming mode 3,
+#  which is none: the dry run let it by and the model refused it.
+su = setup([two], [nofloor], [lambda w: residue(w, 0, 0, 0, 1, 0)], 1, nmodes=3)
+good = BW(); good.put(0, 1); good.put(1, 2); good.put(0, 1)
+bad = BW(); bad.put(0, 1); bad.put(3, 2); bad.put(0, 1)
+open('mode-past-last.ogg', 'wb').write(stream(1, su, [good.bytes(), bad.bytes()]))
+
+#  A residue book 65535 wide for partitions of one value: each codeword is
+#  coded as all its digits, so this one packet was 8 million symbols.
+su = setup([two, lambda w: book_wide(w, 65535)], [nofloor], [lambda w: residue(w, 1, 0, 128, 1, 0, cascade=1, book=1)], 1)
+a = BW(); a.put(0, 1); a.put(1, 1); a.put(10, 8); a.put(10, 8)
+for pc in range(128): a.put(0, 1); a.put(0, 1)
+open('wide-book.ogg', 'wb').write(stream(1, su, [a.bytes()]))
+
+#  255 channels of 4096 partitions with a classbook 64 wide: 255 x (4096 +
+#  64) classification slots, past the 2^20 the model remembers, which it
+#  refused mid-coding; it codes them now and remembers what fits.
+ch = 255
+su = setup([lambda w: book_lengths(w, 64, [1, 1])], [nofloor], [lambda w: residue(w, 1, 0, 4096, 1, 0)], ch)
+a = BW(); a.put(0, 1)
+for _ in range(ch): a.put(1, 1); a.put(10, 8); a.put(10, 8)
+for _ in range(ch):
+    for _ in range(4096 // 64): a.put(0, 1)
+open('classwords-255ch.ogg', 'wb').write(stream(ch, su, [a.bytes()], bs=(13, 13)))
+CRAFTED
+  for n in $crafted; do echo "  $n  $(wc -c < "$n") bytes"; done
+else
+  for n in $crafted; do echo "  $n  (kept)"; done
+fi
+
 rm -f ./*.wav ./bigcomment*.txt ./art.txt
 echo "gen.sh: $(ls -1 ./*.ogg ./*.bin | wc -l) files, $(cat ./*.ogg ./*.bin | wc -c) bytes"

@@ -53,15 +53,26 @@ constexpr sz tc_rows(long long vol, int h) { return vol <= (1LL << tc_hbits(h)) 
 #include "MOD/tsvcomp-hdr_h.inc"
 #include "MOD/tsvcomp-sgn_h.inc"
 //  Where the one object of each table type lives.  In the shipping build a
-//  TC_*_T is its arrays, sizeof is the whole table, and under 256 MB it is
-//  a static object -- BSS, demand-zero, no call to make -- while the digit
-//  family's 893 MB stays mapped, sparse and huge-page-able as before.  In
-//  the tuning build the struct is pointers and _Init() maps each array at
-//  a size the live mapping objects decide, so every struct is static there
-//  and the arrays are mapped, which is what that build is for.  A static
-//  member of a class template exists only where it is used, so no 893 MB
-//  object is ever declared.
-constexpr sz TC_STATIC_MAX = (sz)256 << 20;
+//  TC_*_T is its arrays and sizeof is the whole table; each is mapped, per
+//  thread, sparse and huge-page-able, as the digit family's 893 MB always
+//  was.  In the tuning build the struct is pointers and _Init() maps each
+//  array at a size the live mapping objects decide, so every struct is
+//  static there -- a few hundred bytes of it per thread -- and the arrays
+//  are mapped, which is what that build is for.  (Not mapped: reset()
+//  zeroes every mapping, and the pointers in it would go with the tables.)
+//
+//  The shipping build used to keep every table under 256 MB as a static
+//  object -- BSS, demand-zero, one per process.  With the model's state the
+//  thread's (OC_TLS), that made them 68 MB of static thread-local storage:
+//  glibc zero-fills it at every thread's start, so even one thread had it
+//  all resident, and it carves it out of each new thread's stack, so the
+//  workers of `-t N` -- started with the default stack -- were left a few
+//  kilobytes of it and died at their first call.  The tables are reached
+//  through tabs' pointers either way, so mapping them changes no code that
+//  touches them and no byte that is coded.  A static member of a class
+//  template exists only where it is used, so in the shipping build the
+//  static home is never instantiated.
+constexpr sz TC_STATIC_MAX = USE_NEW ? (sz)256 << 20 : 0;
 template <class T, bool S = (sizeof(T) <= TC_STATIC_MAX)> struct tc_home;
 template <class T> struct tc_home<T, true> {
   static OC_TLS T obj;
@@ -89,6 +100,11 @@ struct oc_tables {
   TC_hdr_T *hdr;
   u64 bytes() const { return (u64)dig->TC_dig_Size + (u64)sgn->TC_sgn_Size + (u64)flr->TC_flr_Size + (u64)cls->TC_cls_Size + (u64)aux->TC_aux_Size + (u64)hdr->TC_hdr_Size; }
   void init() {
+    //  From nothing, whatever an init before this one left: one that
+    //  failed part way -- a mapping refused, TC_MEMCAP -- left its mappings
+    //  in tc_maps, and the next Init mapped a second set beside them, until
+    //  tc_maps was full and said so as an internal error.
+    tc_unmap_all();
 #define TC_MAP(F) (F = tc_home<TC_##F##_T>::get(), F->TC_##F##_Init())
     TC_MAP(dig);
     TC_MAP(sgn);

@@ -72,6 +72,23 @@ about eight bits each, and everything else as Vorbis.
 what a working encoder writes, and the corpus of hand-made cases above
 would never show them.
 
+## Setup headers written by hand
+
+Five streams no encoder writes, built bit by bit by `gen.sh`'s last
+section: each the shortest that broke the round trip before the review in
+`../docs/REVIEW.md`.  Every one is legal Ogg with a parseable Vorbis setup,
+so `c` has to take it and give it back; what they test is that the parser
+refuses what the model cannot carry -- the page is then coded as bytes --
+rather than letting the model fail on it, or worse, code it wrong.
+
+| file | what is in it | what broke |
+|---|---|---|
+| `cascade-long.ogg` | a residue cascade in the long form with zero high bits | `c` wrote a `.oc` that `d` could not restore: the cascade came back in the short form, five bits shorter |
+| `floor-post-65541.ogg` | a floor post that is entry 65541 of a 131072-entry subclass book | the model kept floor values in 16 signed bits: 65541 came back as 5, a `.oc` that did not restore |
+| `mode-past-last.ogg` | three modes, and an audio packet naming mode 3 | the parser read the mode without checking it and the model refused it mid-coding: `c` exited 1 |
+| `wide-book.ogg` | a residue book 65535 wide for partitions of one value | each codeword is coded as all its digits: this 244-byte file took 2.6 s each way, a megabyte of such packets hours |
+| `classwords-255ch.ogg` | 255 channels, 4096 partitions each, a classbook 64 wide: 1,060,800 classification slots | the model refused more than 2^20 mid-coding: `c` exited 1; it codes them now and remembers what fits |
+
 ## Not covered
 
 Things the parser handles that nothing oggenc can produce reaches, listed
@@ -84,7 +101,8 @@ so that the corpus is not mistaken for complete:
 - **codebook lookup type 2, and residue books without a lookup table.**
   Legal Vorbis, never emitted.
 - **the internal ceilings** -- 256 codebooks, 64 floors, 2^20 entries and
-  the rest.  Real setup headers stay far inside all of them.
+  the rest.  Real setup headers stay far inside all of them; the five
+  hand-written setups above reach a few.
 
-Closing any of those needs a setup header written by hand, not a different
-oggenc command line.
+Closing the rest needs more setup headers written by hand -- `gen.sh`'s
+last section is where they go -- not a different oggenc command line.

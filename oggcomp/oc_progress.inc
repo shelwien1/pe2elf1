@@ -138,10 +138,18 @@ struct oc_progress {
     oc_progress_now = this;
     ogc_msg_hook = oc_progress_cut;
   }
-  //  What to count (none: no lines), from the thread that sets it.
+  //  What to count (none: no lines), from the thread that sets it: the
+  //  context before the function when setting, the function first when
+  //  clearing, so that a poll on another thread never pairs a function
+  //  with no context -- and poll() checks both.
   void counts(oc_count_fn f, void *ctx) {
-    __atomic_store_n(&what_ctx, ctx, __ATOMIC_SEQ_CST);
-    __atomic_store_n(&what, f, __ATOMIC_SEQ_CST);
+    if(f) {
+      __atomic_store_n(&what_ctx, ctx, __ATOMIC_SEQ_CST);
+      __atomic_store_n(&what, f, __ATOMIC_SEQ_CST);
+    } else {
+      __atomic_store_n(&what, f, __ATOMIC_SEQ_CST);
+      __atomic_store_n(&what_ctx, ctx, __ATOMIC_SEQ_CST);
+    }
   }
   int stopped() const { return __atomic_load_n(&halted, __ATOMIC_SEQ_CST) != 0; }
   void line(char *b, sz n, const oc_counts &c, i64 t, int done) {
@@ -169,7 +177,7 @@ struct oc_progress {
     oc_counts c;
     char b[LINE];
     i64 t, l;
-    if(!tag || !f || stopped())
+    if(!tag || !f || !ctx || stopped())
       return;
     t = oc_clock_ns() - t0;
     l = __atomic_load_n(&last, __ATOMIC_RELAXED);

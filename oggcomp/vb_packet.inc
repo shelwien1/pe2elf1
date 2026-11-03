@@ -15,8 +15,12 @@ template <class S> struct io_t {
   vb_ctx &v;
   u8 *b;
   sz len, pos;
-  io_t(vb_ctx &vv, S &tt, u8 *pkt, sz n) : t(tt), v(vv), b(pkt), len(n), pos(0) {
-    if(!enc)
+  sz hw;  // the decoder: how much of b it may have written -- all, until tail() knows
+  //  The decoder writes a packet into a buffer it clears first: the bits
+  //  are ORed in, and the padding after the last field is zero for nothing.
+  //  `clear` 0 is for a caller that knows the buffer is clear already.
+  io_t(vb_ctx &vv, S &tt, u8 *pkt, sz n, int clear = 1) : t(tt), v(vv), b(pkt), len(n), pos(0), hw(n) {
+    if(!enc && clear)
       memset(pkt, 0, n);
   }
   //  The bits after the last field.  A packet is whole bytes, so there are
@@ -35,9 +39,11 @@ template <class S> struct io_t {
       for(i = k + ((pos & 7) ? 1 : 0); i < len && !nz; i++)
         nz |= b[i];
     }
-    if(t.padnz(nz != 0))
+    if(t.padnz(nz != 0)) {
       for(i = k; i < len; i++)
         b[i] = (u8)t.raw(enc ? b[i] : 0);
+    } else
+      hw = (pos + 7) >> 3;  // a zero tail: nothing written past the last field
     pos = len * 8;
   }
   u32 bget(int n) {
@@ -246,8 +252,15 @@ template <class S> struct io_t {
     Fk(nr, q = s->rs + k; q->type = fld("res.type", 16, 2); VB_UNLESS(q->type <= 2, "vorbis: residue type above 2"); q->beg = fld("res.begin", 24, 24); q->end = fld("res.end", 24, 24); q->psz = fld("res.partsize", 24, 24) + 1; q->ncl = fld("res.nclass", 6, 6) + 1; VB_UNLESS(q->ncl <= VB_MAXRCL, "vorbis: residue has %" PRIu64 " classifications", (u64)q->ncl); q->cbook = fld("res.classbook", 8, 8); Fi(
            q->ncl, c = 0; if(enc) {
              c = bget(3);
-             if(bget(1))
-               c |= bget(5) << 3;
+             //  The long form with no high bits is legal and libvorbis
+             //  reads it, but the decoder writes a cascade the short way
+             //  when it can, so it would come back five bits shorter: a
+             //  .oc that does not restore.  Refused, the page is bytes.
+             if(bget(1)) {
+               u32 hi = bget(5);
+               VB_UNLESS(hi, "vorbis: residue cascade in the long form with no high bits");
+               c |= hi << 3;
+             }
            } c = val("res.cascade", c, 256);
            q->casc[i] = (u8)c; if(!enc) {
              bput(3, c & 7);
@@ -388,7 +401,12 @@ template <class S> struct io_t {
     p = ogc_ilog(f->quant - 1);
     y[0] = bget(p);
     y[1] = bget(p);
-    Fi(f->parts, u32 c = f->pcls[i], cv0; cd = f->cdim[c]; cs = f->csub[c]; cv = 0; if(cs) cv = bk_get(s->bk + f->cbook[c]); cv0 = cv; Fk(cd, i32 sb = f->csb[c][cv & (((u32)1 << cs) - 1)]; cv >>= cs; y[j + k] = sb >= 0 ? bk_get(s->bk + sb) : 0); VB_UNLESS(!(cv0 >> (cs * cd)), "vorbis: floor class codeword exceeds its dimension"); Fk(
+    Fi(f->parts, u32 c = f->pcls[i], cv0; cd = f->cdim[c]; cs = f->csub[c]; cv = 0; if(cs) cv = bk_get(s->bk + f->cbook[c]); cv0 = cv; Fk(cd, i32 sb = f->csb[c][cv & (((u32)1 << cs) - 1)]; cv >>= cs; y[j + k] = sb >= 0 ? bk_get(s->bk + sb) : 0;
+          //  An entry of a subclass book is up to 2^20, but the model keeps
+          //  a floor value in 16 signed bits (oc_floor.inc's fl_cur): 32768
+          //  and up came out negative (a refusal mid-coding) or, from 65536,
+          //  as another value (a .oc that does not restore).  Bytes, then.
+          VB_UNLESS(y[j + k] < 32768, "vorbis: floor value %" PRIu64 " past what the model holds", (u64)y[j + k])); VB_UNLESS(!(cv0 >> (cs * cd)), "vorbis: floor class codeword exceeds its dimension"); Fk(
            cd, u32 l, d = (cv0 >> (k * cs)) & (((u32)1 << cs) - 1); for(l = 0; l < d; l++) {
              u32 mx = f->csb[c][l] < 0 ? 1 : s->bk[f->csb[c][l]].ent;
              VB_UNLESS(y[j + k] >= mx, "vorbis: floor value uses a later subclass book than "
@@ -458,9 +476,18 @@ template <class S> struct io_t {
       VB_IF(st * bk->dim != r->psz)
       ("vorbis: residue 0 partition %" PRIu64 " not divisible by %" PRIu64, (u64)r->psz, (u64)bk->dim);
       Fi(st, rs_sym(bk));
-    } else
+    } else {
+      //  Each codeword is coded as all of its digits, those past the
+      //  partition's end too -- they are the entry -- so a book wider than
+      //  the partition made one value cost up to 65535 digits: a 242-byte
+      //  file took seconds each way, a megabyte of them hours.  No encoder
+      //  writes one (libvorbis's books are 8 wide at most, its partitions
+      //  16 and up); refused, a page holding one is bytes, and no
+      //  partition codes more than twice the digits it has values.
+      VB_UNLESS(bk->dim <= r->psz, "vorbis: residue book %" PRIu64 " wide for partitions of %" PRIu64, (u64)bk->dim, (u64)r->psz);
       for(i = 0; i < r->psz; i += bk->dim)
         rs_sym(bk);
+    }
   }
   void residue(u32 rno, const u8 *nz, u32 nch, u32 n) {
     vb_setup *s = v.cur;
@@ -485,6 +512,10 @@ template <class S> struct io_t {
     if(!np)
       return;
     pv = cb->dim;
+    //  The same for the classwords: each codes pv classes, those past the
+    //  last partition too.  pv over np is a short block's ordinary case, so
+    //  that is let be up to 64 classes a word, and refused past both.
+    VB_UNLESS(pv <= np || pv <= 64, "vorbis: classbook %" PRIu64 " wide for %" PRIu64 " partitions", (u64)pv, (u64)np);
     w = np + pv;
     VB_UNLESS((sz)vch * w <= VB_CSMAX, "vorbis: residue needs %" PRIu64 " classification slots, limit %" PRIu64, (u64)((sz)vch * w), (u64)VB_CSMAX);
     cl = vb_cs;
@@ -539,6 +570,11 @@ template <class S> struct io_t {
     else
       bput(1, 0);
     md = enc ? bget(d) : 0;
+    //  ilog(nmd - 1) bits can name a mode past the last: the dry run, whose
+    //  sink checks nothing, let it by and the model refused it mid-coding,
+    //  so `c` exited 1 on a file it must take.  Refused here, it is bytes.
+    if(enc)
+      VB_UNLESS(md < v.cur->nmd, "vorbis: audio names mode %" PRIu64 " of %" PRIu64, (u64)md, (u64)v.cur->nmd);
     md = t.mode(md, v.cur->nmd);
     if(!enc)
       bput(d, md);

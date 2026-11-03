@@ -67,7 +67,9 @@ extern "C" {
 #define OC_NEED_OUTPUT 2
 /*  4 and above: an error, 4 + the exit status `oggcomp` would have given
     (5 a stream it refuses, 7 something the system said, 8 internal), and
-    oggcomp_Error() says what.  */
+    oggcomp_Error() says what.  8 is also a call Loop cannot make: on an
+    instance not Init'd, with no output buffer, or after OC_NEED_OUTPUT
+    with none given since -- addout with a size of 0 gives none.  */
 OC_API void *OC_CALL oggcomp_Alloc(void);          /*  0 when the thread's instance is out already, or no memory  */
 
 OC_API void OC_CALL oggcomp_Free(void *p);

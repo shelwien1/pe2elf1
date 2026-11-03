@@ -466,6 +466,7 @@ typedef struct {
   size_t idx;                 /*  position in the original tag list  */
   bbuf name, env, img;
   const char * ext;
+  char extb[16];              /*  art_get's: ext as the metainfo spells it  */
   u32 file;                   /*  which image file holds it  */
 } artimg;
 
@@ -514,15 +515,22 @@ static void art_put(bbuf * o, const artrec * r) {
 typedef void (*art_imgfn)(void * ctx, u32 file, const char * ext, size_t len,
                           bbuf * out);
 
+/*  The counts in a record are the metainfo's, which may be damaged or made
+    up: each is held to what the bytes left can hold -- an image takes six
+    varints at least, a page a byte and three varints -- before anything is
+    sized from it.  A count of 2^59 images was 0 bytes once multiplied by
+    sizeof(artimg), and the first image was written past that.  */
 static void art_get(rdr * rd, artrec * r, art_imgfn getimg, void * ctx) {
   size_t i;
+  u64 n;
   memset(r, 0, sizeof *r);
-  r->nimg = (size_t) rd_var(rd);
+  n = rd_var(rd);
+  if (n > (rd->n - rd->p) / 6) die("corrupt image count in the metainfo");
+  r->nimg = (size_t) n;
   r->img = (artimg *) xmalloc((r->nimg ? r->nimg : 1) * sizeof *r->img);
   for (i = 0; i < r->nimg; i++) {
     artimg * a = r->img + i;
     size_t k, ilen, el;
-    static char ext[8][16];
     memset(a, 0, sizeof *a);
     a->idx = (size_t) rd_var(rd);
     k = (size_t) rd_var(rd);  bb_init(&a->name);  bb_put(&a->name, rd_bytes(rd, k), k);
@@ -530,16 +538,19 @@ static void art_get(rdr * rd, artrec * r, art_imgfn getimg, void * ctx) {
     a->file = (u32) rd_var(rd);
     ilen = (size_t) rd_var(rd);
     el = (size_t) rd_var(rd);
-    if (el >= 15) die("corrupt image extension in the metainfo");
-    { char * e = ext[i & 7];
-      memcpy(e, rd_bytes(rd, el), el);  e[el] = 0;  a->ext = e; }
+    if (el >= sizeof a->extb) die("corrupt image extension in the metainfo");
+    /*  in the image's own record: one buffer for every eighth image, as it
+        was, gave images 0 and 8 whichever extension came last  */
+    memcpy(a->extb, rd_bytes(rd, el), el);  a->extb[el] = 0;  a->ext = a->extb;
     bb_init(&a->img);
     getimg(ctx, a->file, a->ext, ilen, &a->img);
     if (a->img.n != ilen)
       die("image file %08X is %llu bytes, the metainfo says %llu",
           a->file, (unsigned long long) a->img.n, (unsigned long long) ilen);
   }
-  r->npg = (size_t) rd_var(rd);
+  n = rd_var(rd);
+  if (n > (rd->n - rd->p) / 4) die("corrupt page count in the metainfo");
+  r->npg = (size_t) n;
   r->ptype = (u8 *) xmalloc(r->npg ? r->npg : 1);
   r->pgran = (u64 *) xmalloc((r->npg ? r->npg : 1) * sizeof *r->pgran);
   r->pseq  = (u32 *) xmalloc((r->npg ? r->npg : 1) * sizeof *r->pseq);

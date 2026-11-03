@@ -74,9 +74,15 @@ struct filehandle0 {
   //  backends are one interface or they are nothing: a caller written as
   //  `if( h.close() ) failed();` -- which is how oggcomp.cpp reads it -- saw
   //  every successful close as a write error on this path.
+  //  The handle goes before it is closed, and a second close finds none,
+  //  as on the stdio side: a failed close is reported, and the report's way
+  //  out closes the output again -- CloseHandle on a value that may by then
+  //  be another file's handle.
   int close( void ) {
-    if( borrowed ) { f = 0; return 0; }
-    return file_close(f) ? 0 : 1;
+    HANDLE h = f;
+    f = 0;
+    if( !h || borrowed ) return 0;
+    return file_close(h) ? 0 : 1;
   }
 
   qword size( void ) { return file_size(f); }
@@ -97,10 +103,16 @@ struct filehandle0 {
   //  of the file, where ReadFile succeeds and leaves the code at the zero
   //  set here -- which is why the slate is cleaned first: a Windows call
   //  that succeeds does not clear what the one before it left.
+  //  A pipe whose writer has closed answers ReadFile with FALSE and
+  //  ERROR_BROKEN_PIPE, and that is its end, as the CRT reads it: taken for
+  //  an error, every `type a.ogg | oggcomp c - out.oc` ended in "read error
+  //  on -" on this backend.  (Wine gives EOF there, so it did not show.)
+  static int at_end( DWORD e ) { return e==ERROR_BROKEN_PIPE || e==ERROR_HANDLE_EOF; }
+
   uint read( void* _buf, uint len ) {
     SetLastError(0);
     uint r = file_read( f, _buf, len );
-    if( (r!=len) && (err==0) ) err = GetLastError();
+    if( (r!=len) && (err==0) ) { DWORD e = GetLastError(); if( !at_end(e) ) err = e; }
     return r;
   }
 
@@ -110,7 +122,7 @@ struct filehandle0 {
   uint sread( void* _buf, uint len ) {
     SetLastError(0);
     uint r = file_sread( f, _buf, len );
-    if( (r!=len) && (err==0) ) err = GetLastError();
+    if( (r!=len) && (err==0) ) { DWORD e = GetLastError(); if( !at_end(e) ) err = e; }
     return r;
   }
 

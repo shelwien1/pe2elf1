@@ -151,7 +151,11 @@ ParseAnyway:
 
         if( (i&0xC0)==0x80 ) { // tail mark
           p->buf[0] = a0;
-          p->buf[1] = a1;
+          // L=2 is one data byte: a1 is the length's low byte, not data, and
+          // buf[1] is past what was saved -- in dynbuff, past a node that this
+          // byte filled to 64K, one byte into the next allocation (a crafted
+          // .oc then crashed d in dyn_buff::Quit).  Only data is written.
+          if( l>2 ) p->buf[1] = a1;
         }
 
         InpBuf_l -= n;

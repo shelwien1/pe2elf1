@@ -15,11 +15,23 @@ struct source {
   sz origin;
   int eof;
   u32 crc;
+  //  join_len's last refusal.  Its walk from a page of serial jl_serial at
+  //  jl_lo went page by page to jl_end and was refused there for a reason
+  //  that does not depend on where the walk started -- an end of stream,
+  //  no page, a page that does not continue -- with the window ending at
+  //  jl_win.  A later page of the same stream before jl_end, the window as
+  //  it was, walks the same pages to the same refusal, so is refused at
+  //  once: without this a long unterminated packet cost a walk of the rest
+  //  of its pages at each of them, N^2/2 page parses (10 MB took 20 s).
+  mutable int jl_have;
+  mutable u32 jl_serial;
+  mutable u64 jl_lo, jl_end, jl_win;
   void open(const char *pth, coro3_pin *pin) {
     in = pin;
     path = pth;
     at = have = origin = 0;
     eof = 0;
+    jl_have = 0;
     crc = 0;
     crcinit();
     want();
@@ -82,16 +94,33 @@ struct source {
       k += n;
     }
   }
+  void jl_note(u32 serial, sz k) const {
+    jl_have = 1;
+    jl_serial = serial;
+    jl_lo = (u64)offset();
+    jl_end = (u64)(origin + k);
+    jl_win = (u64)(origin + have);
+  }
   sz join_len(sz got, const ogg_page &p, sz pl) const {
     int last_eos = (p.type & 4) != 0;
     sz total = pl, k = at + got, n;
     ogg_page q;
+    if(jl_have && p.serial == jl_serial && (u64)offset() >= jl_lo && (u64)offset() < jl_end && (u64)(origin + have) == jl_win)
+      VB_REFUSE("the packet at %" PRIu64 " runs on to the refusal at %" PRIu64, (u64)offset(), jl_end);
     for(;;) {
-      VB_UNLESS(!last_eos, "the packet at %" PRIu64 " exceeds its stream", (u64)offset());
+      if(last_eos) {
+        jl_note(p.serial, k);
+        VB_REFUSE("the packet at %" PRIu64 " exceeds its stream", (u64)offset());
+      }
       n = next_of(p.serial, k, q);
-      if(!n)
+      if(!n) {
+        jl_note(p.serial, k);
         VB_REFUSE("the packet at %" PRIu64 " has no continuation page", (u64)offset());
-      VB_UNLESS(q.np > 0 && (q.type & 1), "the continuation of the packet at %" PRIu64 " is missing", (u64)offset());
+      }
+      if(!(q.np > 0 && (q.type & 1))) {
+        jl_note(p.serial, k);
+        VB_REFUSE("the continuation of the packet at %" PRIu64 " is missing", (u64)offset());
+      }
       total += q.plen[0];
       VB_UNLESS(total - pl <= MAXPAY * (sz)OGG_MAXSEG, "the packet at %" PRIu64 " continues too far", (u64)offset());
       if(!(q.np == 1 && q.tail))
@@ -215,7 +244,8 @@ template <class M> struct og_packer {
   source &src;
   vb_ctx v;
   og_group g;
-  og_packer(M &tt, source &ss) : t(tt), src(ss) {}
+  u64 jclear;  // consume_junk: no page starts from the cursor up to here
+  og_packer(M &tt, source &ss) : t(tt), src(ss), jclear(0) {}
   //  One page's packets through the parser, against whichever sink.  The
   //  continuation state and the header count are the group's, but come in by
   //  pointer so that a dry run can hand copies and keep the group as it was.
@@ -298,7 +328,19 @@ template <class M> struct og_packer {
         t.rawlen(0);
         return 1;
       }
-      off = page_start(src.cur(), n, src.eof);
+      //  page_start, from where the last look stopped rather than from the
+      //  cursor: it looks only where a whole page has room after the spot,
+      //  so what it passed over is no page whatever the window holds later,
+      //  and the answer is the one a look from the cursor gives.  From the
+      //  cursor, every 64 KB of a run of junk scanned the rest of the run
+      //  again, up to the window's 32 MB: 16 MB of 'O's took 30 s.
+      {
+        const u64 here = (u64)src.offset();
+        const sz lim = src.eof ? n : (n > PAGE_MAX ? n - PAGE_MAX : 0);
+        const sz from = jclear > here ? (sz)(jclear - here) : 0;
+        off = from >= lim ? lim : from + page_start(src.cur() + from, n - from, src.eof);
+        jclear = here + off;
+      }
       if(!off)
         off = 1;
       k = off < MAXPAY ? off : MAXPAY;
@@ -399,7 +441,14 @@ template <class M> struct og_unpacker {
   out_sink o;
   vb_ctx v;
   og_group g;
-  og_unpacker(M &tt, coro3_pin *pin) : t(tt) {
+  //  jb past jb_hw is zero (oc_next clears it for every run).  A packet
+  //  that continues over pages is decoded into jb, cleared first; it was
+  //  cleared whole -- its length and its spill, up to 16.6 MB, which the
+  //  stream names -- at every such packet, so a .oc declaring the largest
+  //  spill on every page took seconds to decode a few kilobytes.  Only what
+  //  an earlier packet may have written is cleared now.
+  sz jb_hw;
+  og_unpacker(M &tt, coro3_pin *pin) : t(tt), jb_hw(0) {
     o.out = pin;
     o.crc = 0;
   }
@@ -465,13 +514,17 @@ template <class M> struct og_unpacker {
             if(j == q.np - 1 && q.tail) {
               sz ex = t.spill(0);
               sz tot = pl + ex;
-              io_t<M> z(v, t, jb, tot);
+              memset(jb, 0, tot < jb_hw ? tot : jb_hw);
+              io_t<M> z(v, t, jb, tot, 0);
               jn = tot;
               if(g.w < 3) {
                 z.hdr(g.w);
                 g.w++;
               } else
                 z.audio();
+              //  what is not zero now: what this packet wrote, and what it
+              //  left of the one before past its own end
+              jb_hw = jb_hw > tot ? jb_hw : z.hw;
               memcpy(body + at, jb, pl);
               g.spill = ex;
               g.cont = 1;

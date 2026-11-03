@@ -39,6 +39,9 @@ static OC_TLS tc_mapped tc_maps[TC_MAPMAX];
 static OC_TLS int tc_nmaps;
 static void *tc_map(sz n) {
   void *p;
+  //  Before the mapping, not after it: a mapping made and then refused is
+  //  one nothing will ever unmap.
+  FATAL_UNLESS(tc_nmaps < TC_MAPMAX, "internal: more model tables than tc_maps holds");
 #ifdef _WIN32
   p = VirtualAlloc(nullptr, n, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 #else
@@ -55,7 +58,6 @@ static void *tc_map(sz n) {
                "cannot map %" PRIu64 " MB for a model table -- "
                "IDX/tsvcomp-*.idx asks for more than this machine will map",
                (u64)(n >> 20));
-  FATAL_UNLESS(tc_nmaps < TC_MAPMAX, "internal: more model tables than tc_maps holds");
   tc_maps[tc_nmaps].p = p;
   tc_maps[tc_nmaps].n = n;
   tc_nmaps++;

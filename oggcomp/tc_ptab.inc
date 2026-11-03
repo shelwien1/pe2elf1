@@ -351,9 +351,20 @@ struct tc_ptab {
     return 1;
   }
 };
+//  The bucket of a prior's probability p for a context: 0 for none, 1 to
+//  32 by its stretch.  TCP_SURE0 is CM_PONE, one past the stretch table,
+//  and was looked up there all the same -- tc_pcur::axis() hands over the
+//  head's prior as it is -- so the bucket was whatever followed the table
+//  in memory: cm_mrec[0], 65535, in GCC's builds, 0 past the end of the
+//  .bss in clang's, both of which come out as bucket 16 -- the bucket of a
+//  stretch from -127 to 0 -- and a layout that put cm_sq[0] there would
+//  have made it 17 and coded those files differently.  The streams hold
+//  16, so 16 it is, without the read.  (TCP_SURE1 is 0, in the table.)
 static INLINE int tcp_bucket(int p) {
   if(p < 0)
     return 0;
+  if(p >= CM_PONE)
+    return 16;
   return tc_clamp((cm_stretch(p) + CM_STMAX) >> 7, 0, 31) + 1;
 }
 struct tc_pcur {

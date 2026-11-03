@@ -1,6 +1,6 @@
 
 struct my_jmpbuf {
-  qword rip,rsp;
+  qword rip,rsp,rbp;
 };
 
 #undef ASM
@@ -11,6 +11,14 @@ struct my_jmpbuf {
 // as the jumper left it, and the code after the asm must reload everything
 // from memory rather than keep anything -- the buffer pointer included -- in
 // a register across it.
+//
+// Every register but one: rbp is saved and put back, not clobbered.  Where
+// it is the frame pointer -- -fno-omit-frame-pointer, -O0, many a distro's
+// CFLAGS -- clang cannot honour a clobber of it, and the code after the
+// label reloads its locals through rbp: the jumper's rbp, as it was, so the
+// first resume read another frame's locals and crashed.  Restored, rbp is
+// this frame's again; where it is an ordinary register, the clobber keeps
+// nothing in it across the asm and putting it back costs a move.
 __attribute__((returns_twice, used))
 INLINE static int my_setjmp( my_jmpbuf* regs ) {
   int r;
@@ -19,6 +27,7 @@ INLINE static int my_setjmp( my_jmpbuf* regs ) {
    leaq 0f(%%rip), %%rax; \
    movq %%rax, 0(%%rbx);  \
    movq %%rsp, 8(%%rbx);  \
+   movq %%rbp, 16(%%rbx); \
    xorl %%eax, %%eax;     \
 0:;                        \
   " : "=a"(r) : "m"(regs) : "%rbx","%rcx","%rdx","%rsi","%rdi","%rbp","%r8","%r9","%r10","%r11","%r12","%r13","%r14","%r15",
@@ -31,12 +40,16 @@ INLINE static int my_setjmp( my_jmpbuf* regs ) {
   return r;
 }
 
+// The three values in named registers, none of them rbp: in a build where
+// rbp is allocatable an "r" operand could be put there, and the move into
+// rbp would overwrite the target before the jump.
 __attribute__((noreturn, used))
 INLINE static void my_jmp( my_jmpbuf* regs, int ) {
   ASM ("\
-  movq %0, %%rsp; \
-  jmp *%1;        \
-  " :  : "r"(regs->rsp),"r"(regs->rip),"a"(1) : "memory" );
+  movq %%rsi, %%rsp; \
+  movq %%rcx, %%rbp; \
+  jmp *%%rdi;        \
+  " :  : "S"(regs->rsp),"D"(regs->rip),"c"(regs->rbp),"a"(1) : "memory" );
   __assume(0);
 }
 

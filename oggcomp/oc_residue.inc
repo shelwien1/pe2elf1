@@ -200,7 +200,11 @@ template <int f_DEC> void oc_model<f_DEC>::residue_begin(u32 rno, const vb_res *
   R.np = end > r->beg ? (end - r->beg) / r->psz : 0;
   R.pv = cb->dim;
   R.w = R.np + R.pv;
-  FATAL_UNLESS((sz)R.vch * R.w <= sizeof hist->cl_run_buf, "residue needs %" PRIu64 " classification slots, limit %" PRIu64, (u64)((sz)R.vch * R.w), (u64)sizeof hist->cl_run_buf);
+  //  More slots than cl_run_buf and cl_same hold -- the parser allows
+  //  VB_CSMAX, 17 times more -- leaves the rest unremembered: every read
+  //  and write of either is bounds-checked (part_begin, cls), on both
+  //  sides alike.  This was a refusal, made mid-coding, after the dry run
+  //  had passed the page, so `c` exited 1 on a file it must take.
   memset(hist->dg_q1 + (sz)rno * 8 * hist->tc_nchan, 0, (sz)8 * hist->tc_nchan * sizeof(i32));
   memset(hist->dg_q2 + (sz)rno * 8 * hist->tc_nchan, 0, (sz)8 * hist->tc_nchan * sizeof(i32));
   memset(hist->dg_zr + (sz)rno * 8 * hist->tc_nchan, 0, (sz)8 * hist->tc_nchan * sizeof(i32));

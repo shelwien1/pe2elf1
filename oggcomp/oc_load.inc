@@ -45,6 +45,15 @@ static void oc_api_own(oc_api *a) {
 #ifdef _WIN32
 #define OC_LIB_EXT ".dll"
 static void *oc_dl_open(const char *path) { return (void *)LoadLibraryA(path); }
+//  The library by its bare name, as the path finds it -- but not from the
+//  current directory, which LoadLibrary searches too: the model's number
+//  comes from the header of the .oc that `d` is given, so a .oc naming
+//  model 7 beside a planted oggcomp7.dll would have run it.
+static void *oc_dl_search(const char *name) {
+  SetDllDirectoryA("");
+  return (void *)LoadLibraryA(name);
+}
+static int oc_dl_exists(const char *path) { return GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES; }
 static void *oc_dl_sym(void *h, const char *n) { return (void *)GetProcAddress((HMODULE)h, n); }
 static const char *oc_dl_error(void) {
   static char e[64];
@@ -67,6 +76,8 @@ static void oc_exe_dir(char *buf, sz cap) {
 #include <unistd.h>
 #define OC_LIB_EXT ".so"
 static void *oc_dl_open(const char *path) { return dlopen(path, RTLD_NOW | RTLD_LOCAL); }
+static void *oc_dl_search(const char *name) { return oc_dl_open(name); }
+static int oc_dl_exists(const char *path) { return access(path, F_OK) == 0; }
 static void *oc_dl_sym(void *h, const char *n) { return dlsym(h, n); }
 static const char *oc_dl_error(void) {
   const char *e = dlerror();
@@ -87,8 +98,9 @@ static void oc_exe_dir(char *buf, sz cap) {
 #endif
 //  Model `model` into `a`: the program's own for 0, else the library.
 static void oc_api_load(oc_api *a, int model) {
-  static char name[32], path[4096 + 64], dir[4096];
+  static char name[32], path[4096 + 64], dir[4096], why[512];
   void *h = nullptr;
+  int beside = 0;
   if(model == 0) {
     oc_api_own(a);
     return;
@@ -98,9 +110,16 @@ static void oc_api_load(oc_api *a, int model) {
   if(dir[0]) {
     snprintf(path, sizeof path, "%s%s", dir, name);
     h = oc_dl_open(path);
+    //  A library beside the program that will not load -- another
+    //  architecture, a missing dependency -- is that, said as that: the
+    //  search below would answer for it with its own "not found".
+    if(!h && (beside = oc_dl_exists(path)) != 0)
+      snprintf(why, sizeof why, "%s", oc_dl_error());
   }
+  if(!h && beside)
+    FATAL_CODE(OGC_EXIT_IO, "model %d: %s will not load (%s)", model, path, why);
   if(!h)
-    h = oc_dl_open(name);
+    h = oc_dl_search(name);
   if(!h)
     FATAL_CODE(OGC_EXIT_IO, "model %d: %s is not beside %s and not on the library path (%s)", model, name, ogc_prog, oc_dl_error());
 #define OC_SYM(f)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     \

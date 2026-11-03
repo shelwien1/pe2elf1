@@ -46,8 +46,22 @@
 
 set -e
 
+callerpwd=$(pwd)
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 cd "$here"
+
+#  A path named on the command line -- -x's, and the files -- is the
+#  caller's, relative to the directory t.sh was run from, which the cd
+#  above has just left: `oggcomp/t.sh oggcomp/testfiles/a.ogg` from the
+#  directory above found nothing and failed, and `-x build/oggcomp` from
+#  anywhere but here said the binary was not there.  The caller's directory
+#  wins where the path is there; else it is taken as the tree's, as it was.
+from_caller() {
+  case $1 in
+    /*) printf '%s\n' "$1";;
+    *) if [ -e "$callerpwd/$1" ]; then printf '%s\n' "$callerpwd/$1"; else printf '%s\n' "$1"; fi;;
+  esac
+}
 
 usage() {
   cat <<'END'
@@ -78,7 +92,7 @@ vflag=
 argc=$#
 while [ $argc -gt 0 ]; do
   case $1 in
-    -x) bin=${2:?t.sh: -x wants a path}; shift 2; argc=$((argc - 2));;
+    -x) bin=$(from_caller "${2:?t.sh: -x wants a path}"); shift 2; argc=$((argc - 2));;
     -B) build=1; shift; argc=$((argc - 1));;
     -k) keep=1; shift; argc=$((argc - 1));;
     -1) twice=0; shift; argc=$((argc - 1));;
@@ -86,7 +100,7 @@ while [ $argc -gt 0 ]; do
     -v) vflag=-v; shift; argc=$((argc - 1));;
     -h|--help) usage; exit 0;;
     -*) echo "t.sh: no such option: $1" >&2; usage >&2; exit 2;;
-    *)  a=$1; shift; set -- "$@" "$a"; argc=$((argc - 1));;
+    *)  a=$(from_caller "$1"); shift; set -- "$@" "$a"; argc=$((argc - 1));;
   esac
 done
 
@@ -396,6 +410,29 @@ if [ $refusals = 1 ]; then
   refuse 'wrong version byte'  1 d "$tmp/ver.oc"    "$tmp/no.out"
   refuse 'input not there'     3 c "$tmp/nothing"   "$tmp/no.out"
   refuse 'output over input'   2 c "$src"           "$src"
+  #  The same file under another name is the same file: refused before the
+  #  output's creation empties it -- `c a.ogg ./a.ogg` used to exit 0 with
+  #  a.ogg the .oc of nothing.
+  cp "$src" "$tmp/same.ogg"
+  refuse 'one file, two names'  2 c "$tmp/same.ogg"  "$tmp/./same.ogg"
+  if ! cmp -s "$src" "$tmp/same.ogg"; then
+    printf '  %-26s %s\n' 'one file, two names' 'FAILED  the input was written over'
+    bad_refusal=$((bad_refusal + 1))
+  fi
+  #  A write that fails at the close -- the last buffer's flush, on a full
+  #  disk -- is exit 3 with nothing left behind, not the double fclose that
+  #  aborted with the half-written file still there.
+  nrefusal=$((nrefusal + 1))
+  set +e
+  (trap '' XFSZ; ulimit -f 0; exec "$bin" c "$src" "$tmp/full.oc") >/dev/null 2>&1
+  got=$?
+  set -e
+  if [ "$got" = 3 ] && [ ! -e "$tmp/full.oc" ]; then
+    printf '  %-26s exit 3  nothing left behind\n' 'a write that fails'
+  else
+    printf '  %-26s exit %d%s, wanted 3 and nothing left\n' 'a write that fails' "$got" "$([ -e "$tmp/full.oc" ] && echo ', output left')"
+    bad_refusal=$((bad_refusal + 1))
+  fi
   refuse 'no arguments'        2
   refuse 'unknown mode'        2 z "$src"           "$tmp/no.out"
   refuse 'unknown option'      2 c -Z "$src"        "$tmp/no.out"
@@ -415,6 +452,30 @@ if [ $srcok = 1 ]; then
     printf '  %-26s %s\n' 'c - out.oc < in.ogg' 'FAILED'
     fail=1
   fi
+  #  Both ends at once: stdin and stdout are two streams, not one file
+  #  named twice, which is how the check for that used to read them.
+  if "$bin" c - - < "$src" > "$tmp/pipe2.oc" 2>/dev/null &&
+     "$bin" d - - < "$tmp/pipe2.oc" > "$tmp/pipe2.ogg" 2>/dev/null &&
+     cmp -s "$src" "$tmp/pipe2.ogg"; then
+    printf '  %-26s %s\n' 'c - - and d - -' 'stdin to stdout, both ways'
+  else
+    printf '  %-26s %s\n' 'c - - and d - -' 'FAILED'
+    fail=1
+  fi
+  #  A run to stdout that fails has no file to remove: it used to remove
+  #  one named "-" from the current directory.
+  #  (A stream cut short past its header, so that d has made its output
+  #  before it fails: a refusal of the header comes before there is one.)
+  binabs=$(cd -- "$(dirname -- "$bin")" && pwd)/$(basename -- "$bin")
+  "$bin" c "$src" "$tmp/dash.oc" >/dev/null 2>&1 || :
+  head -c 100 "$tmp/dash.oc" > "$tmp/short.oc"
+  if (cd "$tmp" && echo kept > ./- && ! "$binabs" d short.oc - > /dev/null 2>&1 && [ -f ./- ]); then
+    printf '  %-26s %s\n' 'd bad.oc - fails' 'and leaves a file named - alone'
+  else
+    printf '  %-26s %s\n' 'd bad.oc - fails' 'FAILED  the file named - is gone, or d did not fail'
+    fail=1
+  fi
+  rm -f "$tmp/-"
   echo
 fi
 
@@ -702,6 +763,11 @@ if [ $refusals = 1 ]; then
   tok=0
   "$bin" c -q -t 1 "$src" "$tmp/t1.oc" >/dev/null 2>&1 && cmp -s "$tmp/t1.oc" "$tmp/good.oc" && tok=1
   mtcheck '-t 1 is one model' $tok "$(basename "$src"): the stream the table coded"
+  #  -v reads the workers' counts after the run: it used to after they
+  #  were freed, and `c -v -t N` died there.
+  tok=0
+  "$bin" c -q -v -t 2 -c 4k "$src" "$tmp/v.oc" >/dev/null 2>"$tmp/v.msg" && grep -q 'bytes of model' "$tmp/v.msg" && tok=1
+  mtcheck '-v on threads' $tok "$(sed -n 1p "$tmp/v.msg" | sed 's|^[^ ]*: ||' | cut -c1-48)"
   if "$bin" c -q -t 3 -c 4k "$src" "$tmp/mtgood.oc" >/dev/null 2>&1; then
     m=$(wc -c < "$tmp/mtgood.oc")
     cp "$tmp/mtgood.oc" "$tmp/mtflip.oc"

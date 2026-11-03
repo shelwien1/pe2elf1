@@ -11,9 +11,15 @@ fixes were applied together and checked: all 34 bundled testfiles code to
 **byte-identical** `.oc` files before and after, `./t.sh` passes, and UBSan
 goes from 68 reports to 0.
 
-They are all still present in this repository's copy as well -- the PSRC
-change did not touch any of the four -- and **none of them is fixed here**.
-Applying them is a separate piece of work.
+**All four have since been fixed in this tree**, as described below:
+`used` is per direction (`oc_api.inc`, `used[2]`); `oggcomp_Loop` returns 8
+when no output buffer is attached; `tc_qlog` leaves before the shift for
+0 to 3 and takes the magnitude unsigned (`tc_base.inc`); and the value
+coder carries 64-bit magnitudes (`TC_NBMAX` 64), with the granule delta
+taken in unsigned arithmetic (`oc_frame.inc`), which
+`testfiles/granule-jump-8k.ogg` exercises.  The rest of this document is
+the record of how they were found.  `REVIEW.md` is the review that
+followed.
 
 | | what | severity |
 |---|---|---|
