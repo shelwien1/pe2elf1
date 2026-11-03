@@ -322,15 +322,16 @@ on the avip samples (but 2.0% on `susi_small2_divx.m4v`), and 0.8-3.8% on the FF
 six) and 1-2 points better on the FFmpeg streams.
 
 On threads, with five of the avip samples concatenated (21 MB, four cores of the same machine,
-which ran about 1.3 times slower when this was measured than for the levels table):
+which ran about 1.3 times slower when this was measured than for the levels table; the sizes are
+with `-9`'s current parameters, the times with the previous ones):
 
 | | Size | `c` | `d` |
 |---|---:|---:|---:|
-| one thread | 14581304 (69.07%) | 134.3 s, 38 MiB | 130.1 s, 37 MiB |
-| `-t 2` | 14607920 (69.19%) | 73.9 s, 90 MiB | 71.4 s, 82 MiB |
-| `-t 4` | 14608006 (69.19%) | 45.4 s, 167 MiB | 46.9 s, 152 MiB |
+| one thread | 14515280 (68.76%) | 134.3 s, 38 MiB | 130.1 s, 37 MiB |
+| `-t 2` | 14542323 (68.88%) | 73.9 s, 90 MiB | 71.4 s, 82 MiB |
+| `-t 4` | 14542409 (68.88%) | 45.4 s, 167 MiB | 46.9 s, 152 MiB |
 
-At `-9` (the default), with the default 4 MB parts: the stream has 5 parts, which cost 0.18% of
+At `-9` (the default), with the default 4 MB parts: the stream has 5 parts, which cost 0.19% of
 the size, each part's model starting afresh. `d`'s workers get their input from the container in
 MTwrap's 2 MB buffers; since the container has the parts' streams interleaved as they were coded,
 and a part decodes about as fast as it was coded, they keep busy with long parts too. With 12 MB parts (`-1 -t 4 -c 12`, a 58 MB stream in 5
