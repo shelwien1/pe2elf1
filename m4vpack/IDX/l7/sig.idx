@@ -10,71 +10,71 @@ Const 0
 
 Index a
  a_cls: cls, &000
- a_nc: nc, 1!00000000000000000
- a_qs: qs, 1!00111011111100000000000000000000
+ a_nc: nc, 1!10000000000000000
+ a_qs: qs, 1!00101000000000000000000000000000
  a_pos: pos, &000000
 
 Index b
- b_cls: cls, &111
- b_kb: kb, 1!0000000000000000
- b_pos: pos, &001100
+ b_cls: cls, &110
+ b_kb: kb, 1!0000000000000100
+ b_pos: pos, &110110
 
 Index c
- c_cls: cls, &010
- c_nz: nz, 1!11111111
+ c_cls: cls, &000
+ c_nz: nz, 1!11110111
  c_pos: pos, &000000
 
 Index d
  d_cls: cls, &111
- d_past: past, 1!11111101
- d_qs: qs, 1!00100000100000000000000000000000
+ d_past: past, 1!11111100
+ d_qs: qs, 1!00111000100000000000000000000000
  d_pos: pos, &111111
 
 Index e
- e_cls: cls, &110
- e_run: run, 1!1111100111111110
+ e_cls: cls, &111
+ e_run: run, 1!1111111111111110
  e_pos: pos, &111111
 
 Index h
- h_cls: cls, &001
+ h_cls: cls, &000
  h_fp: fp, &11111
- h_pos: pos, &111111
+ h_pos: pos, &111110
 
 Index i
- i_cls: cls, &111
- i_mvc: mvc, 1!111110001001100001111111100000
+ i_cls: cls, &110
+ i_mvc: mvc, 1!111111100100010001111111000000
  i_pos: pos, &111111
 
 Index j
- j_cls: cls, &101
- j_rnz: rnz, 1!11100100001000100
- j_xm: xm, 1!110001010
- j_pos: pos, &000000
+ j_cls: cls, &001
+ j_rnz: rnz, 1!01010100001000110
+ j_xm: xm, 1!110010010
+ j_pos: pos, &111100
 
 Index k
- k_cls: cls, &111
- k_h8: h8, &11111111
+ k_cls: cls, &110
+ k_h8: h8, &10110111
  k_pos: pos, &111111
 
 Index l
- l_cls: cls, &000
+ l_cls: cls, &110
  l_pos: pos, &111111
- l_h16: h16, &1111111101111011
+ l_h16: h16, &1111111101111111
 
 Index m
- m_cls: cls, &010
- m_pos: pos, &111110
+ m_cls: cls, &011
+ m_pos: pos, &111111
 
 Index w
- w_cls: cls, &100
- w_kb: kb, 1!1000010000000000
- w_qs: qs, 1!00000010000000000000000000000000
+ w_cls: cls, &101
+ w_kb: kb, 1!0100010000000000
+ w_qs: qs, 1!00000000000000000000000000000000
 
 Index s
- s_cls: cls, &001
- s_sl: sl, 1!01000100000000110
- s_sa: sa, 1!10100001000000010
- s_pb: pos, 1!0010000000000000000010000000000000000000000000000000000000000000
+ s_cls: cls, &100
+ s_sl: sl, 1!11010000000000010
+ s_sa: sa, 1!10100010000000010
+ s_pb: pos, 1!0100100010100000000000000000000000000000000000000000000001000000
 
 Index f
  f_cls: cls, &111
@@ -86,31 +86,31 @@ Index n
 
 Index g
 
-Number rA, 1, 0!00000011
-Number mwA, 1, 0!00000011
-Number rB, 1, 0!11111111
-Number mwB, 1, 0!10000000
+Number rA, 1, 0!01011011
+Number mwA, 1, 0!00000001
+Number rB, 1, 0!11111101
+Number mwB, 1, 0!00100000
 Number rC, 1, 0!11111110
-Number mwC, 1, 0!00101101
-Number rD, 1, 0!11111100
-Number mwD, 1, 0!00001110
-Number rE, 1, 0!11111110
-Number mwE, 1, 0!00000001
-Number rH, 1, 0!11111110
-Number mwH, 1, 0!00010010
+Number mwC, 1, 0!00110011
+Number rD, 1, 0!11111111
+Number mwD, 1, 0!00100111
+Number rE, 1, 0!11111111
+Number mwE, 1, 0!00011011
+Number rH, 1, 0!11111111
+Number mwH, 1, 0!00000100
 Number rI, 1, 0!11111111
-Number mwI, 1, 0!00100000
-Number rJ, 1, 0!11111111
-Number mwJ, 1, 0!00000100
-Number rK, 1, 0!11111110
-Number mwK, 1, 0!00100000
-Number rL, 1, 0!11111101
+Number mwI, 1, 0!00001110
+Number rJ, 1, 0!10111101
+Number mwJ, 1, 0!00100000
+Number rK, 1, 0!11110111
+Number mwK, 1, 0!00101001
+Number rL, 1, 0!11111111
 Number mwL, 1, 0!00000100
-Number lr, 1, 0!01100
-Number mb, 1, 0!01000001
-Number rS1, 1, 0!10000
+Number lr, 1, 0!01111
+Number mb, 1, 0!00100000
+Number rS1, 1, 0!01000
 Number rS2, 1, 0!00000
-Number qs, 1, 3!1000001
+Number qs, 1, 3!0100001
 Number qf, 1, 3!0000000
 Number bw, 1, 0!10000
 

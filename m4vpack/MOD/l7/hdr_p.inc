@@ -18,15 +18,15 @@ void M7_hdr_make( const M_hdr_v & D, tcx & X ) {
   a = 0;
   a = a*8 + M7_hdr_a_fld[__min(39,__max(0,(fld)-(1-1)))];
   a = a*4 + M7_hdr_a_ty[__min(4,__max(0,(ty)-(1-1)))];
-  a = a*4 + M7_hdr_a_p1[__min(64,__max(0,(p1)-(1-1)))];
+  a = a*13 + M7_hdr_a_p1[__min(64,__max(0,(p1)-(1-1)))];
 
   b = 0;
-  b = b*12 + M7_hdr_b_fld[__min(39,__max(0,(fld)-(1-1)))];
+  b = b*5 + M7_hdr_b_fld[__min(39,__max(0,(fld)-(1-1)))];
   b = b*4 + M7_hdr_b_p1[__min(64,__max(0,(p1)-(1-1)))];
 
   c = 0;
   c = c*9 + M7_hdr_c_fld[__min(39,__max(0,(fld)-(1-1)))];
-  c = c*2 + (((ty)>1+(1-1)));
+  c = c*3 + (((ty)>0+(1-1))+((ty)>1+(1-1)));
 
   d = 0;
   d = d*11 + M7_hdr_d_fld[__min(39,__max(0,(fld)-(1-1)))];
@@ -35,9 +35,9 @@ void M7_hdr_make( const M_hdr_v & D, tcx & X ) {
   e = e*11 + M7_hdr_e_fld[__min(39,__max(0,(fld)-(1-1)))];
 
   h = 0;
-  h = h*12 + M7_hdr_h_fld[__min(39,__max(0,(fld)-(1-1)))];
+  h = h*13 + M7_hdr_h_fld[__min(39,__max(0,(fld)-(1-1)))];
   h = h*3 + (((ty)>1+(1-1))+((ty)>3+(1-1)));
-  h = h*5 + M7_hdr_h_pos[__min(31,__max(0,(pos)-(1-1)))];
+  h = h*2 + (((pos)>0+(1-1)));
 
   i = 0;
   i = i*2 + (((ty)>1+(1-1)));
@@ -45,7 +45,7 @@ void M7_hdr_make( const M_hdr_v & D, tcx & X ) {
   j = 0;
   j = j*6 + M7_hdr_j_fld[__min(39,__max(0,(fld)-(1-1)))];
   j = j*5 + M7_hdr_j_p1[__min(64,__max(0,(p1)-(1-1)))];
-  j = j*7 + M7_hdr_j_pos[__min(31,__max(0,(pos)-(1-1)))];
+  j = j*5 + M7_hdr_j_pos[__min(31,__max(0,(pos)-(1-1)))];
 
   k = 0;
 
@@ -53,16 +53,16 @@ void M7_hdr_make( const M_hdr_v & D, tcx & X ) {
   l = l*10 + M7_hdr_l_fld[__min(39,__max(0,(fld)-(1-1)))];
   l = l*3 + (((ty)>1+(1-1))+((ty)>3+(1-1)));
   l = l*2 + (((p1)>0+(1-1)));
-  l = l*2 + (((pos)>0+(1-1)));
+  l = l*3 + (((pos)>0+(1-1))+((pos)>1+(1-1)));
 
   s = 0;
-  s = s*17 + M7_hdr_s_fld[__min(39,__max(0,(fld)-(1-1)))];
+  s = s*16 + M7_hdr_s_fld[__min(39,__max(0,(fld)-(1-1)))];
 
   f = 0;
   f = f*13 + M7_hdr_f_fld[__min(39,__max(0,(fld)-(1-1)))];
 
   m = 0;
-  m = m*11 + M7_hdr_m_fld[__min(39,__max(0,(fld)-(1-1)))];
+  m = m*12 + M7_hdr_m_fld[__min(39,__max(0,(fld)-(1-1)))];
 
   w = 0;
   w = w*5 + M7_hdr_w_ty[__min(4,__max(0,(ty)-(1-1)))];

@@ -69,7 +69,7 @@ Exit codes:
 | Level | Model | Tuning set | `c` | `d` | Memory |
 |---|---|---:|---:|---:|---:|
 | `-9` | the decoder in the loop; per decision ten counters, three mixers and a final one, two APMs | 69.01% | 0.25 MiB/s | 0.26 MiB/s | 32 MiB |
-| `-7` | the same mixing without the decoder | 71.24% | 0.39 MiB/s | 0.39 MiB/s | 22 MiB |
+| `-7` | the same mixing without the decoder | 71.60% | 0.39 MiB/s | 0.39 MiB/s | 22 MiB |
 | `-5` | ten counters, one mixer | 71.81% | 0.56 MiB/s | 0.55 MiB/s | 20 MiB |
 | `-3` | six counters, one mixer | 72.19% | 0.71 MiB/s | 0.71 MiB/s | 20 MiB |
 | `-1` | four counters (keeping their probabilities stretched), one mixer | 73.01% | 0.93 MiB/s | 1.01 MiB/s | 22 MiB |
@@ -159,9 +159,10 @@ workarounds (DivX, XviD and libavcodec builds, read from the user data). Its pic
 bit-exact with m4vdec's on 45 test streams (9,758 frames).
 
 The contexts it gives, and what each is worth: the tuning set's size with the context switched off
-in the tuned model, against 68.71% with all of them (measured with the parameters `-9` had before
-its current ones, see Tuning). (A model tuned with a context loses a little more without it than
-one tuned without it: `-7`, the same model without the decoder and tuned on its own, gets 71.24%.)
+in the tuned model, against 68.71% with all of them (measured with the parameters `-9` and `-7` had
+before their current ones, see Tuning). (A model tuned with a context loses a little more without it
+than one tuned without it: `-7`, the same model without the decoder and tuned on its own, then got
+71.24%.)
 
 | Context | Elements | Without it |
 |---|---|---:|
@@ -205,6 +206,13 @@ quantisation, interlacing and a low rate, all with packed B-frames. With them `-
 `susi_small1_divx.m4v` 4 bytes larger), the FFmpeg streams 0.30-1.15% larger, and the tuning set
 0.44% larger (69.01% against 68.71%). The other levels kept theirs. A stream that `-9` compressed
 before decompresses only with a build from before: the parameters are part of the format.
+
+`-7` was then derived from these as it was first: `-9`'s values for the 788 of its 799 parameters
+that `-9` has as well, then two passes over the nine families whose contexts differ (all but esc,
+hdr, qpd and raw), on `xvid_mix_1m.m4v`. It codes that file 0.59% smaller (781881 bytes against
+786537), the avip samples 0.03-0.28% smaller, the FFmpeg streams 0.46-1.34% larger, and the tuning
+set 0.51% larger (71.60% against 71.24%). `-5`, `-3` and `-1` are still those cut from the previous
+`-7`.
 
 ### Streaming
 
@@ -282,16 +290,16 @@ three with packed B-frames) and two DivX streams. The others were made with FFmp
 
 | Stream | Size | xz -9e | format 3 | `-9` | `-7` | `-5` | `-3` | `-1` |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| aq_cm.m4v | 3875193 | 97.2% | 76.3% | 70.5% | 74.8% | 75.5% | 75.9% | 76.7% |
-| aria_cm.m4v | 5097686 | 98.9% | 79.0% | 73.5% | 78.0% | 78.7% | 79.0% | 80.0% |
-| ispure03.m4v | 5864104 | 95.8% | 73.0% | 67.1% | 71.6% | 72.3% | 72.6% | 73.3% |
-| sdova_ed.m4v | 4717732 | 89.6% | 65.7% | 59.8% | 65.0% | 65.7% | 65.9% | 66.5% |
+| aq_cm.m4v | 3875193 | 97.2% | 76.3% | 70.5% | 74.6% | 75.5% | 75.9% | 76.7% |
+| aria_cm.m4v | 5097686 | 98.9% | 79.0% | 73.5% | 77.8% | 78.7% | 79.0% | 80.0% |
+| ispure03.m4v | 5864104 | 95.8% | 73.0% | 67.1% | 71.4% | 72.3% | 72.6% | 73.3% |
+| sdova_ed.m4v | 4717732 | 89.6% | 65.7% | 59.8% | 64.9% | 65.7% | 65.9% | 66.5% |
 | susi_small1_divx.m4v | 90887 | 100.1% | 83.4% | 77.4% | 81.9% | 82.3% | 82.5% | 83.1% |
 | susi_small2_divx.m4v | 1556817 | 100.0% | 85.1% | 82.8% | 84.6% | 85.1% | 85.2% | 85.5% |
-| xvid.m4v | 257813 | 97.7% | 74.4% | 69.6% | 70.2% | 71.1% | 71.6% | 72.6% |
-| lavc_ilace.m4v (interlaced) | 1015896 | 90.9% | 68.6% | 63.7% | 64.5% | 65.4% | 65.8% | 67.1% |
-| xvid_gmc.m4v (GMC) | 833291 | 99.8% | 76.9% | 70.9% | 73.7% | 74.3% | 75.0% | 75.8% |
-| xvid_qpel_4mv.m4v (quarter-pel, 4MV) | 383624 | 95.5% | 74.0% | 69.5% | 70.3% | 70.8% | 71.3% | 72.1% |
+| xvid.m4v | 257813 | 97.7% | 74.4% | 69.6% | 71.1% | 71.1% | 71.6% | 72.6% |
+| lavc_ilace.m4v (interlaced) | 1015896 | 90.9% | 68.6% | 63.7% | 65.4% | 65.4% | 65.8% | 67.1% |
+| xvid_gmc.m4v (GMC) | 833291 | 99.8% | 76.9% | 70.9% | 74.0% | 74.3% | 75.0% | 75.8% |
+| xvid_qpel_4mv.m4v (quarter-pel, 4MV) | 383624 | 95.5% | 74.0% | 69.5% | 70.8% | 70.8% | 71.3% | 72.1% |
 
 Where the bits go in `aq_cm.m4v` at `-9` (`-s`; the packed sizes are the model's estimates):
 
@@ -316,8 +324,8 @@ Where the bits go in `aq_cm.m4v` at `-9` (`-s`; the packed sizes are the model's
 `-9` writes 2.6-9.0% less than format 3, 7.6% less on this stream. Coefficients make up most of a
 stream (79% of this one), and their signs change most: 27% fewer bytes than format 3's here (327171
 against 450410), from the sign prediction; the positions and levels take 3.0% and 2.9% fewer, the
-macroblock headers 13% fewer. The decoder in the loop is worth 5.5-8.0% of the output against `-7`
-on the avip samples (but 2.0% on `susi_small2_divx.m4v`), and 0.8-3.8% on the FFmpeg streams.
+macroblock headers 13% fewer. The decoder in the loop is worth 5.4-7.9% of the output against `-7`
+on the avip samples (but 2.0% on `susi_small2_divx.m4v`), and 1.9-4.2% on the FFmpeg streams.
 `-1`, the fastest level, is within a point of format 3 on the avip samples (worse on five of the
 six) and 1-2 points better on the FFmpeg streams.
 

@@ -9,59 +9,59 @@ Debug 1
 Const 0
 
 Index a
- a_c3: c3, 1!00
- a_lu: lu, 1!01001100
+ a_c3: c3, 1!10
+ a_lu: lu, 1!01101100
 
 Index b
  b_c3: c3, 1!01
- b_mvc: mvc, 1!00000000000000010
+ b_mvc: mvc, 1!00000000000000000
 
 Index c
- c_c3: c3, 1!11
+ c_c3: c3, 1!01
  c_rbit: rbit, 1!11
  c_cnt: cnt, 1!11111
 
 Index d
- d_c3: c3, 1!01
+ d_c3: c3, 1!10
  d_frac: frac, 1!1111
 
 Index e
- e_c3: c3, 1!10
- e_qs: qs, 1!00100011010000000000000000000000
+ e_c3: c3, 1!11
+ e_qs: qs, 1!00111000000000000000000000000000
  e_cnt: cnt, 1!11000
 
 Index h
- h_c3: c3, 1!01
+ h_c3: c3, 1!11
  h_pat: pat, &11111
 
 Index i
- i_c3: c3, 1!11
- i_lu: lu, 1!11011110
+ i_c3: c3, 1!01
+ i_lu: lu, 1!10101110
  i_lq: lq, 1!11
 
 Index j
- j_c3: c3, 1!11
- j_lu: lu, 1!11100110
- j_mvc: mvc, 1!11111001000001010
+ j_c3: c3, 1!00
+ j_lu: lu, 1!00000010
+ j_mvc: mvc, 1!11001010000000110
 
 Index k
- k_c3: c3, 1!00
- k_rbit: rbit, 1!11
- k_lu: lu, 1!11111110
+ k_c3: c3, 1!10
+ k_rbit: rbit, 1!10
+ k_lu: lu, 1!11111111
 
 Index l
- l_c3: c3, 1!00
+ l_c3: c3, 1!10
 
 Index m
- m_c3: c3, 1!10
+ m_c3: c3, 1!11
 
 Index w
- w_c3: c3, 1!01
- w_lu: lu, 1!11111110
+ w_c3: c3, 1!11
+ w_lu: lu, 1!11110100
 
 Index s
  s_c3: c3, 1!00
- s_lu: lu, 1!00000001
+ s_lu: lu, 1!00001000
 
 Index f
  f_c3: c3, 1!11
@@ -72,32 +72,32 @@ Index n
 
 Index g
 
-Number rA, 1, 0!10000000
-Number mwA, 1, 0!11111111
-Number rB, 1, 0!00100110
-Number mwB, 1, 0!00000010
-Number rC, 1, 0!11111111
-Number mwC, 1, 0!00000100
-Number rD, 1, 0!11111111
-Number mwD, 1, 0!00010000
-Number rE, 1, 0!10001001
-Number mwE, 1, 0!01000100
-Number rH, 1, 0!11011000
-Number mwH, 1, 0!01000000
-Number rI, 1, 0!11111111
-Number mwI, 1, 0!01000000
-Number rJ, 1, 0!11011111
-Number mwJ, 1, 0!01001010
+Number rA, 1, 0!11110011
+Number mwA, 1, 0!10110111
+Number rB, 1, 0!00000000
+Number mwB, 1, 0!01010010
+Number rC, 1, 0!11111110
+Number mwC, 1, 0!00000101
+Number rD, 1, 0!00101000
+Number mwD, 1, 0!00111110
+Number rE, 1, 0!10100001
+Number mwE, 1, 0!01110000
+Number rH, 1, 0!11111100
+Number mwH, 1, 0!00010000
+Number rI, 1, 0!11111000
+Number mwI, 1, 0!01111100
+Number rJ, 1, 0!11111010
+Number mwJ, 1, 0!00010001
 Number rK, 1, 0!11111111
-Number mwK, 1, 0!00100000
-Number rL, 1, 0!00000000
-Number mwL, 1, 0!10000000
-Number lr, 1, 0!01101
-Number mb, 1, 0!00011111
-Number rS1, 1, 0!01000
-Number rS2, 1, 0!10000
-Number qs, 1, 3!0000000
-Number qf, 1, 3!1000000
+Number mwK, 1, 0!01000000
+Number rL, 1, 0!11111110
+Number mwL, 1, 0!00000100
+Number lr, 1, 0!01100
+Number mb, 1, 0!00001110
+Number rS1, 1, 0!00101
+Number rS2, 1, 0!00110
+Number qs, 1, 3!0001010
+Number qf, 1, 3!1000100
 Number bw, 1, 0!01110
 
 #  Frozen: what cbp never reads, which live would only take opt.pl's trials.

@@ -21,8 +21,8 @@ void M7_raw_make( const M_raw_v & D, tcx & X ) {
   b = (b<<8) + (((c1)&255)); // 11111111
 
   c = 0;
-  c = (c<<8) + (((c1)&255)); // 11111111
-  c = (c<<4) + (((c2)&15)); // 00001111
+  c = (c<<5) + (((((c1)>>7)&1)<<4) + ((c1)&15)); // 10001111
+  c = (c<<6) + (((((c2)>>6)&1)<<5) + ((c2)&31)); // 01011111
 
   d = 0;
   d = d*6 + M7_raw_d_code[__min(11,__max(0,(code)-(1-1)))];
@@ -47,7 +47,7 @@ void M7_raw_make( const M_raw_v & D, tcx & X ) {
 
   l = 0;
   l = (l<<7) + (((((c2)>>4)&15)<<3) + ((c2)&7)); // 11110111
-  l = l*7 + M7_raw_l_code[__min(11,__max(0,(code)-(1-1)))];
+  l = l*6 + M7_raw_l_code[__min(11,__max(0,(code)-(1-1)))];
 
   s = 0;
   s = s*7 + M7_raw_s_code[__min(11,__max(0,(code)-(1-1)))];
@@ -55,7 +55,7 @@ void M7_raw_make( const M_raw_v & D, tcx & X ) {
   f = 0;
 
   m = 0;
-  m = m*7 + M7_raw_m_at[__min(11,__max(0,(at)-(1-1)))];
+  m = m*8 + M7_raw_m_at[__min(11,__max(0,(at)-(1-1)))];
 
   w = 0;
   w = w*6 + M7_raw_w_code[__min(11,__max(0,(code)-(1-1)))];

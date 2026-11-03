@@ -20,18 +20,15 @@ void M7_dcs_make( const M_dcs_v & D, tcx & X ) {
 
   b = 0;
   b = b*2 + (((lc)>0+(1-1)));
-  b = b*10 + M7_dcs_b_ls[__min(14,__max(0,(ls)-(1-1)))];
+  b = b*5 + M7_dcs_b_ls[__min(14,__max(0,(ls)-(1-1)))];
   b = b*10 + M7_dcs_b_as[__min(14,__max(0,(as)-(1-1)))];
 
   c = 0;
-  c = c*2 + (((lc)>0+(1-1)));
-  c = c*2 + (((coded)>0+(1-1)));
-  c = c*6 + M7_dcs_c_qs[__min(32,__max(0,(qs)-(1-1)))];
+  c = c*3 + (((qs)>3+(1-1))+((qs)>4+(1-1)));
 
   d = 0;
-  d = d*2 + (((lc)>0+(1-1)));
   d = d*7 + M7_dcs_d_lbn[__min(17,__max(0,(lbn)-(1-1)))];
-  d = d*8 + M7_dcs_d_abn[__min(17,__max(0,(abn)-(1-1)))];
+  d = d*9 + M7_dcs_d_abn[__min(17,__max(0,(abn)-(1-1)))];
 
   e = 0;
   e = e*2 + (((lc)>0+(1-1)));
@@ -42,43 +39,45 @@ void M7_dcs_make( const M_dcs_v & D, tcx & X ) {
   h = 0;
   h = h*2 + (((lc)>0+(1-1)));
   h = h*7 + M7_dcs_h_sz[__min(12,__max(0,(sz)-(1-1)))];
-  h = h*3 + (((psg)>0+(1-1))+((psg)>1+(1-1)));
+  h = h*2 + (((psg)>1+(1-1)));
 
   i = 0;
   i = i*2 + (((lc)>0+(1-1)));
-  i = i*6 + M7_dcs_i_prev[__min(13,__max(0,(prev)-(1-1)))];
+  i = i*2 + (((prev)>6+(1-1)));
   i = i*2 + (((coded)>0+(1-1)));
 
   j = 0;
   j = j*2 + (((lc)>0+(1-1)));
-  j = j*9 + M7_dcs_j_ls[__min(14,__max(0,(ls)-(1-1)))];
-  j = j*7 + M7_dcs_j_prev[__min(13,__max(0,(prev)-(1-1)))];
+  j = j*6 + M7_dcs_j_ls[__min(14,__max(0,(ls)-(1-1)))];
+  j = j*5 + M7_dcs_j_prev[__min(13,__max(0,(prev)-(1-1)))];
 
   k = 0;
-  k = k*7 + M7_dcs_k_as[__min(14,__max(0,(as)-(1-1)))];
+  k = k*3 + (((as)>6+(1-1))+((as)>10+(1-1)));
+  k = k*2 + (((prev)>6+(1-1)));
 
   l = 0;
   l = l*2 + (((lc)>0+(1-1)));
 
   s = 0;
   s = s*2 + (((lc)>0+(1-1)));
-  s = s*9 + M7_dcs_s_prev[__min(13,__max(0,(prev)-(1-1)))];
+  s = s*7 + M7_dcs_s_prev[__min(13,__max(0,(prev)-(1-1)))];
 
   f = 0;
   f = f*2 + (((lc)>0+(1-1)));
 
   m = 0;
+  m = m*2 + (((lc)>0+(1-1)));
   m = m*2 + (((coded)>0+(1-1)));
 
   w = 0;
-  w = w*2 + (((lc)>0+(1-1)));
-  w = w*2 + (((psg)>0+(1-1)));
+  w = w*3 + (((psg)>0+(1-1))+((psg)>1+(1-1)));
 
   t = 0;
   t = t*2 + (((lc)>0+(1-1)));
-  t = t*6 + M7_dcs_t_prev[__min(13,__max(0,(prev)-(1-1)))];
+  t = t*4 + M7_dcs_t_prev[__min(13,__max(0,(prev)-(1-1)))];
 
   n = 0;
+  n = n*2 + (((lc)>0+(1-1)));
 
   g = 0;
   X.c[0] = a;  X.c[1] = b;  X.c[2] = c;  X.c[3] = d;  X.c[4] = e;  X.c[5] = h;  X.c[6] = i;  X.c[7] = j;  X.c[8] = k;  X.c[9] = l;  X.s = s;  X.f = f;  X.m = m;  X.w = w;  X.t = t;
