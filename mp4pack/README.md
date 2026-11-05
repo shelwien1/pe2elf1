@@ -632,14 +632,19 @@ error code for it, and `FormatMessageW` gives strerror's text for it).
 
 The tools are the Windows ones, converted to Linux programs by
 [pe2elf](https://github.com/shelwien1/pe2elf). They run with its
-`winapi_shim.so`, loaded from their own directory. This needs the fixes in
-[shelwien1/pe2elf#28](https://github.com/shelwien1/pe2elf/pull/28) (until that
-is merged, its branch `claude/mp4pack-tools`). `tools_linux.sh PE2ELF_DIR
-TOOLS_DIR [OUT_DIR]` converts each `<tool>.exe` in TOOLS_DIR to
-`OUT_DIR/<tool>` and puts `winapi_shim.so` beside them:
+`winapi_shim.so`, loaded from their own directory. This needs pe2elf's main
+with [shelwien1/pe2elf#28](https://github.com/shelwien1/pe2elf/pull/28) in it
+(merged). h264p's d of a big stream also needs a fix that main does not have
+yet (`shim: no limit on VirtualAlloc's regions`). The shim kept VirtualAlloc's
+regions in a table of 4096, and h264p's decoder holds its memory in 64KB
+blocks by the thousand. Without the fix, the d of the movie below (its h264
+in 158MB parts on 4 threads) fails at once with `h264p: out of memory`;
+Windows and wine are not affected. `tools_linux.sh PE2ELF_DIR TOOLS_DIR
+[OUT_DIR]` converts each `<tool>.exe` in TOOLS_DIR to `OUT_DIR/<tool>` and
+puts `winapi_shim.so` beside them:
 
 ```
-git clone -b claude/mp4pack-tools https://github.com/shelwien1/pe2elf
+git clone https://github.com/shelwien1/pe2elf
 make -C pe2elf
 ./tools_linux.sh pe2elf mp4pack_v0 bin   # mp4pack_v0/h264p_avx2.exe -> bin/h264p_avx2 ...
 ./tools_linux.sh pe2elf mp4pack_v1 bin   # avip_avx2, ac3pack, m4vpack
@@ -837,3 +842,12 @@ converted by pe2elf. The streams pack to the same sizes. The archive is
 `.exe`. c took 17:40 (h264p 17:19), d 26:31 (h264p 26:15); the result was
 identical to the input. The Windows build under wine decompressed the Linux
 archive to an identical file too.
+
+With the aacpack that has threads (on Linux, on the same VM, with the default
+`-t`, now `4,4,1+1`, and h264p's build `h264p_cascadelake`): the two aac
+tracks (69MB and 184MB) came to 57,475,489 and 127,538,117 on 4 threads each,
+in 0:35 and 1:25 (together 185,013,606: 7,948 bytes less than the 8 parts of
+before), and their d took 0:37 and 1:24. The h264 came to 563,844,805 in
+11:41 and the archive to 748,863,229 (83.05%), c 15:04. d took 14:10 (with
+pe2elf's VirtualAlloc fix, see [Linux](#linux)), and the result was identical
+to the input.
