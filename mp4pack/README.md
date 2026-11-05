@@ -634,8 +634,9 @@ The tools are the Windows ones, converted to Linux programs by
 [pe2elf](https://github.com/shelwien1/pe2elf). They run with its
 `winapi_shim.so`, loaded from their own directory. This needs pe2elf's main
 with [shelwien1/pe2elf#28](https://github.com/shelwien1/pe2elf/pull/28) in it
-(merged). h264p's d of a big stream also needs a fix that main does not have
-yet (`shim: no limit on VirtualAlloc's regions`). The shim kept VirtualAlloc's
+(merged). h264p's d of a big stream also needs the fix in
+[shelwien1/pe2elf#29](https://github.com/shelwien1/pe2elf/pull/29) (until that
+is merged, its branch `claude/vmem-track`). The shim kept VirtualAlloc's
 regions in a table of 4096, and h264p's decoder holds its memory in 64KB
 blocks by the thousand. Without the fix, the d of the movie below (its h264
 in 158MB parts on 4 threads) fails at once with `h264p: out of memory`;
