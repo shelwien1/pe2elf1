@@ -37,7 +37,7 @@ static void NewRun() {
   J.clear(); S.clear();
   for( int i=0; i<n_tools; i++ ) tools[i] = Tool();
   n_tools = 0;
-  src_name.clear(); src_size = 0; src_crc = 0; src_tools.clear();
+  src_name.clear(); src_size = 0; src_crc = 0; src_tools.clear(); src_ver = 0;
   work.clear(); n_log = 0; status_len = 0; phase.clear();
 }
 

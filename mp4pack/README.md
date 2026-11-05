@@ -46,10 +46,10 @@ not after all the work.
    |---|---|---|
    | `.h264` | `h264p c [-L] -t N [-c C]` | 1 |
    | `.m4v` (MPEG-4 Part 2: XviD, DivX) | `m4vpack c [-L] -t N [-c C]` | 1 |
-   | `.aac` | `aacpack c [-L]`, one process per part (below) | 2 |
+   | `.aac` | `aacpack c [-L] -t N [-c C]` | 2 |
    | `.ac3` `.eac3` (Dolby Digital, and Plus) | `ac3pack c [-L] -t N [-c C]` | 2 |
    | `.mp3` `.mp2` `.mp1` `.mpa` | `mp3pack c -t N [-c C]` | 2 |
-   | `.ogg` `.oga` | `oggcomp c` | 2 |
+   | `.ogg` `.oga` | `oggcomp c [-L] -t N [-c C]` | 2 |
    | `.ttf` `.otf` `.ttc` | `ttfcomp a`, all fonts in one solid archive | 3 |
    | everything else: `s.meta`, subtitles, flac, opus, dts, hevc video, ... | `tangelo a [-L]`, all in one solid archive | 4 |
 
@@ -69,6 +69,16 @@ not after all the work.
    with it (5,760,000) to 5,096,690 (88.5%) in 6 s, the same as E-AC-3 to
    5,124,561; tangelo had made 927,282 of a 1,035,350-byte XviD stream that
    m4vpack makes 640,897.
+
+   aacpack and oggcomp have threads and levels in their newer builds
+   (`aacpack_avx2.exe`, `oggcomp_avx2.exe`): each cuts its stream into parts
+   and codes them on its threads itself, so a stream is one process
+   (aacpack's earlier builds had no threads, and mp4pack cut its streams at
+   ADTS frames, a process for each part). On the 4-thread VM here, a 19.5MB
+   AAC track came to 16,482,978 in 12 s on 4 threads (16,509,900 in 40 s on
+   one), the same in d; a 9.5MB Vorbis one to 7,449,297 in 4.3 s on 4
+   (7,444,382 in 15 s on one). Their streams are not the earlier builds'
+   (see [The archive](#the-archive)).
 
 3. mp4pack stores the packed files and an index, `mp4pack.idx`, as the
    output, one after another in its own archive (see
@@ -113,9 +123,10 @@ work) before the percentages are taken; alone, it works on the default.
 
 Within a group, jobs run in order, as many at a time as its threads allow:
 h264p, m4vpack, ac3pack and mp3pack take all of their group's threads (`-t N`),
-the aacpack parts and oggcomp one each. ttfcomp is always one process with all
-the fonts (solid compression), and so is the tangelo archive of the other
-files, except for pieces of big files (`-c`).
+aacpack and oggcomp as many as the stream has parts (see `-c`), so a small
+track takes fewer and leaves the rest to the next. ttfcomp is always one
+process with all the fonts (solid compression), and so is the tangelo archive
+of the other files, except for pieces of big files (`-c`).
 
 `0` for a group means no packer for it: its files go to tangelo instead; `0`
 for tangelo stores the other files as they are (so `-t 0,0,0,0` stores
@@ -123,9 +134,9 @@ everything).
 
 Default: `100%,100%`, that is `N,N,1+1` with N threads: the video with all of
 them, then the audio with all of them, then ttfcomp and tangelo together, one
-thread each; no thread is given out twice. h264p, m4vpack, ac3pack and mp3pack
-take their decompression threads from the stream, so for d, `-t` only sets how
-many things run at once.
+thread each; no thread is given out twice. The packers take their
+decompression threads from the stream, so for d, `-t` only sets how many things
+run at once.
 
 mp4pack shows what `-t` came to on its first line, e.g.
 `cpu: 8 threads, 4 cores, haswell (x86-64-v3), 7 free; -t 50%+50%-2 = 3+3,1+1`.
@@ -134,7 +145,7 @@ mp4pack shows what `-t` came to on its first line, e.g.
 difference here): MB, or KB with a `k` (`g`: GB). `0` or a missing number: the
 default, a part for each thread: the stream's size over its group's threads,
 rounded up, 1MB at least (for h264p, m4vpack, ac3pack and mp3pack no more than
-the memory allows, below).
+the memory allows, below); aacpack's and oggcomp's own (below).
 
 - h264p, m4vpack, ac3pack and mp3pack get it as their own `-c` (only with more
   than one thread, as they take it). Their memory grows with the part: per
@@ -142,13 +153,17 @@ the memory allows, below).
   37MB + 1.3 times it, ac3pack about 26MB and a little more, mp3pack about 9
   times it. So their default part is at most 1GB, and at most the free
   physical memory, 3/4 of it, over the threads of the groups that run at the
-  same time as theirs, less 128MB, over 2 (10 for mp3pack). (aacpack takes
-  38MB and tangelo its level's model, 1164MB at -9, whatever the part.)
-- aacpack has no threads of its own, so mp4pack cuts the `.aac` stream into
-  parts at ADTS frame boundaries and runs one aacpack per part, the parts
-  joined again on d. With N threads: N parts of the same size (1MB at least),
-  or, with `-c`, parts of at least that size. A part boundary costs ~1KB of
-  compression. With 1 thread there is one part.
+  same time as theirs, less 128MB, over 2 (10 for mp3pack). (tangelo takes
+  its level's model, 1164MB at -9, whatever the part.)
+- aacpack and oggcomp cut the stream into parts themselves: aacpack into
+  parts of 1MB at least, a model for each, oggcomp into four for each
+  thread, of 64KB to 4MB, each thread with a model of its own. They get `-c`
+  only when it is given (as their `-c`: parts of at least that size), as
+  their own sizes beat bigger parts here. mp4pack gives them as many threads
+  as the stream has parts (its size over the part size: 1MB for aacpack,
+  64KB for oggcomp, or `-c`'s), up to the group's: a 3.6MB AAC track gets 3,
+  a 900KB one 1. They take about 35MB (aacpack) and 55MB (oggcomp) for each
+  thread, whatever the part.
 - ttfcomp: no part size; one solid archive.
 - tangelo: with more than one thread, files bigger than the part size
   (default: the file's size over the threads, so a piece for each) are cut
@@ -163,26 +178,31 @@ they make no difference here). A missing or empty one: the tool's default.
 |---|---|---|---|
 | 1 | h264p | `-N`, 1 to 9, the ones its build has: `mp4pack_v0`'s has 9 7 5 3 1, from the strongest to the fastest | 9 |
 | 1 | m4vpack | `-N` as h264p: `mp4pack_v1`'s has 9 7 5 3 1 | 9 |
-| 2 | aacpack | `-N`, 1 to 9 as with h264p; `mp4pack_v0`'s has only 9 | 9 |
+| 2 | aacpack | `-N`, 1 to 9 as with h264p: the builds with threads have 9 7 5 3 1 (`mp4pack_v0`'s had only 9) | 9 |
 | 2 | ac3pack | `-N` as h264p: `mp4pack_v1`'s has 9 5 1 | 9 |
-| 2 | mp3pack, oggcomp | none | |
+| 2 | oggcomp | `-N` as h264p: the builds with threads have 9 7 3 1 (7 is nearly as strong as 9, and the fastest) | 9 |
+| 2 | mp3pack | none | |
 | 3 | ttfcomp | none | |
 | 4 | tangelo | `-N`, 1 to 9: its model takes 17, 21, 30, 48, 84, 156, 300, 588 and 1164MB (and a 16MB window), for each process, also in d | 9 |
 
 E.g. `-l 5,9,,7`: `h264p c -5` (or `m4vpack c -5`), `aacpack c -9` (or `ac3pack
-c -9`), `tangelo a -7`; ttfcomp takes no level, so its place is left empty (a
-number there would not be used, nor one for the audio when the audio is mp3 or
-vorbis). The levels are for c; d needs none. The archive itself stores them (no
-level).
+c -9`, `oggcomp c -9`), `tangelo a -7`; ttfcomp takes no level, so its place is
+left empty (a number there would not be used, nor one for the audio when the
+audio is mp3). The levels are for c; d needs none. The archive itself stores
+them (no level).
 
 Which levels a packer has depends on the build, so mp4pack asks it before using
-one: after `avip c`, for the packers the streams need, it runs the tool on a
-file that is not there, with the level (`h264p c -4 mp4pack.none ...`) and
-without it. A build without the level says so before it looks for its input,
-and ends otherwise than with its default (h264p and aacpack with exit code 2,
-not 1; m4vpack and ac3pack with 1, not 2). Then mp4pack stops (exit code 1) and
-names the levels the build has:
+one: after `avip c`, for the packers the streams need, it runs the tool on an
+empty file in the work directory, without the level and with it
+(`h264p c -4 -t 1 mp4pack.none mp4pack.none.out`). A build packs it (exit code
+0) when it takes the switches, and refuses a level it does not have. Then
+mp4pack stops (exit code 1) and names the levels the build has:
 `error: h264p_avx2.exe has no level 4 (its levels: 1 3 5 7 9); see -l`.
+aacpack and oggcomp are tried so (without a level) in d too, and in c also
+without `-l`: a build of theirs from before their threads does not take `-t`,
+and cannot unpack what the later ones packed. mp4pack stops then (exit code 2)
+before any work: `error: oggcomp_x86-64-v4.exe does not take -t: an earlier
+build?` (see [Tool builds](#tool-builds-and-the-cpu)).
 
 On a 5-second h264 sample (304,970 bytes), h264p's levels on one thread came to:
 
@@ -219,15 +239,14 @@ needs room for the restored file and its streams. A failed check is exit code
 
 On a console, a status line shows the elapsed time, the overall progress and an
 estimate of the time left, and each running job with its progress. The jobs'
-progress comes from the tools where they tell it (h264p, m4vpack, ac3pack,
-mp3pack and tangelo: the percentages they write), from what mp4pack feeds them
-or takes from them (aacpack, the archive, its extraction), else from the size
-of what they have written so far: exact where the size to come is known
-(oggcomp, ttfcomp and avip in d), by a typical ratio in c (oggcomp about 87%,
-ttfcomp about a third). avip c and ttfcomp x write only at the end, so they
-tell nothing. The time left is that of the whole, but no less than what the
-slowest job running still needs at its own pace (h264p is far slower by the
-byte than the rest).
+progress comes from the tools where they tell it (h264p, m4vpack, aacpack,
+ac3pack, mp3pack, oggcomp and tangelo: the percentages they write), from what
+mp4pack does itself (the archive, its extraction), else from the size of what
+they have written so far: exact where the size to come is known (ttfcomp and
+avip in d), by a typical ratio in c (ttfcomp about a third). avip c and
+ttfcomp x write only at the end, so they tell nothing. The time left is that
+of the whole, but no less than what the slowest job running still needs at its
+own pace (h264p is far slower by the byte than the rest).
 
 ## Lists
 
@@ -324,6 +343,14 @@ for %f in (avip aacpack h264p mp3pack oggcomp ttfcomp) do ren %f.exe %f_avx2.exe
 `mp4pack_v1` adds `ac3pack.exe` and `m4vpack.exe` (named with no target: taken
 to run anywhere) and a new `avip_avx2.exe`, which takes the old one's place;
 they go in the same directory.
+
+The aacpack and oggcomp with threads and levels (`aacpack_avx2.exe`,
+`oggcomp_avx2.exe`) take the place of the earlier ones, which mp4pack no
+longer runs: remove those. A build with a target ranked higher stays in front
+of them else (an `oggcomp_x86-64-v4.exe` of before, on an AVX-512 CPU), and
+mp4pack stops on it (see `-l`). An archive of an earlier mp4pack whose
+streams they packed needs that mp4pack and its tools (see
+[The archive](#the-archive)).
 
 With `-i T` a build has to run on `T` as well: the CPU's features are cut down
 to `T`'s before the builds are checked. Without CPUID, only the builds with no
@@ -473,7 +500,7 @@ controls look classic.
 |---|---|
 | 0 | done |
 | 1 | bad command line |
-| 2 | a file cannot be read or written, a tool is missing (or has no build that runs on the CPU) |
+| 2 | a file cannot be read or written, a tool is missing (or has no build that runs on the CPU, or an aacpack or oggcomp build from before their threads is in front; or the archive is an earlier mp4pack's with their streams) |
 | 3 | a tool failed (the end of its log is shown) |
 | 4 | d (or `-verify`'s check): not an mp4pack archive (or one of another version, or not all of one), or a stream or the result is not as it was |
 | 5 | aborted with Ctrl+C |
@@ -518,9 +545,10 @@ other.tgl               tangelo (-9, or -l's level): s.meta, subtitles, ...
 other1.tgl ...          the same: pieces of big files
 fallback.tgl            the same: streams whose packer failed
 s.0.h264.h264p          h264p (s.0.m4v.m4vp: m4vpack)
-s.1.aac.0.aacp ...      aacpack parts
+s.1.aac.aacp            aacpack
 s.2.mp3.mp3o, .mp3p     mp3pack (what is not frames, and the frames)
 s.3.ac3.ac3p            ac3pack (.eac3: s.3.eac3.ac3p)
+s.4.ogg.oggc            oggcomp
 store/...               -t ...+0: stored as they are
 ```
 
@@ -534,7 +562,7 @@ no root or drive) and each once in its member; else it stops with exit code
 `mp4pack.idx` is text:
 
 ```
-mp4pack 1
+mp4pack 2
 src <size> <crc32> <the input's name>
 tools <the tool builds used>
 stream <size> <crc32> <method> <name>          one per file from avip c
@@ -542,6 +570,17 @@ part <offset> <length> <packed file> [<name>]  what holds it (mp3pack: the
 ...                                            "outside" file; tangelo: the name
 end                                            in the archive)
 ```
+
+`mp4pack 1` is the index of mp4pack before aacpack and oggcomp had threads.
+Its aacpack and oggcomp streams were packed by those builds (aacpack's in
+parts, a `part` and a process for each), which the later ones cannot unpack
+(aacpack: `compressed by version 8, this is version 9`). d of such an archive
+stops before any work (exit code 2): `error: an earlier mp4pack's archive:
+s.1.aac needs its aacpack`; the earlier mp4pack with its tools still
+decompresses it. Its archives without those
+streams decompress as ever, and mp4gui's Container box says it of one with
+them. The earlier mp4pack refuses `mp4pack 2` (not an mp4pack archive, or a
+later version).
 
 ## Building
 
@@ -604,6 +643,7 @@ git clone -b claude/mp4pack-tools https://github.com/shelwien1/pe2elf
 make -C pe2elf
 ./tools_linux.sh pe2elf mp4pack_v0 bin   # mp4pack_v0/h264p_avx2.exe -> bin/h264p_avx2 ...
 ./tools_linux.sh pe2elf mp4pack_v1 bin   # avip_avx2, ac3pack, m4vpack
+./tools_linux.sh pe2elf newtools bin     # aacpack_avx2, oggcomp_avx2 (threads)
 cp mp4pack bin/
 bin/mp4pack c movie.mkv movie.mpk
 bin/mp4pack d movie.mpk movie2.mkv
@@ -631,9 +671,10 @@ Windows). Everything else works as described above, with these differences:
 
 The archives are the same on both systems: an archive made on one decompresses
 on the other. The index's `tools` line lists the builds (`h264p_avx2` or
-`h264p_avx2.exe`). Apart from that line, only the output of mp3pack and h264p
-with more than one thread differs (their parts come out in the order they are
-done), and it differs from run to run on Windows too.
+`h264p_avx2.exe`). Apart from that line, only the output of h264p, aacpack,
+mp3pack and oggcomp with more than one thread differs (their parts come out in
+the order they are done; the size is the same), and it differs from run to run
+on Windows too.
 
 Tested on Linux as on Windows: the sample files with the `-t`/`-c`/`-l`
 combinations, and archives from the Windows build decompressed by the Linux one
@@ -763,6 +804,23 @@ scrolled with the wheel while it had the focus; the keys (to each end),
 Ctrl+A and Ctrl+C (the clipboard had its text), Tab and Shift+Tab out of it
 and back.
 
+aacpack and oggcomp with threads and levels (on Linux and under wine, with
+`-verify`): every sample's round trip (AAC and Vorbis tracks of 18KB to
+3.6MB), a 19.5MB AAC and a 9.5MB Vorbis track on 1 and 4 threads (the same
+sizes under wine and on Linux, and each system's streams unpacked by the
+other), `-c 0,512k`, the levels (`-l ,7`; `,5` refused for oggcomp, with its
+levels 1 3 7 9; `,2` for aacpack; `,7` for an mkv with AC-3, for ac3pack), an
+earlier oggcomp build ranked in front of the new one (stopped in c and d,
+exit code 2), and archives of the earlier mp4pack (refused in d where they
+have aacpack or oggcomp streams, restored where not). mp4gui: a run with
+`-l ,7` (oggcomp `-7 -t 4`, aacpack `-7 -t 3`; their rows' progress from
+their own percentages, and their gains) and its d (the same file); for an
+earlier mp4pack's archive, the Container box's note and the status line
+(`Failed: an earlier mp4pack's archive: s.1.aac needs its aacpack`); for an
+earlier oggcomp build in front, the status line (`Failed:
+oggcomp_x86-64-v4.exe does not take -t: an earlier build?`), both whole at
+the window's 640 pixels.
+
 The movie, with `-t 4+4,1,1` (the default then) on a 4-thread Xeon VM under
 wine:
 
@@ -770,7 +828,7 @@ wine:
 |---|---|---|
 | TBB_04.mkv | 901,752,304 | |
 | h264 track, h264p -t 4 | 648,922,836 -> 564,620,814 (87.0%) | 15:18 |
-| aac tracks, aacpack in 8 parts | 253,612,715 -> 185,021,554 (73.0%) | alongside |
+| aac tracks, aacpack (its earlier build) in 8 parts | 253,612,715 -> 185,021,554 (73.0%) | alongside |
 | archive | 749,649,784 (83.1%) | c 16:32, d 23:57 |
 
 The same on Linux, on the same VM, with the Linux mp4pack and the tools

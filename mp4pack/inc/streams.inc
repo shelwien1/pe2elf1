@@ -20,7 +20,8 @@ struct Stream {
   int refs;         // c: jobs yet to read it
   int failed;       // c: its packer failed; it goes to tangelo instead
   qword cut;        // c: the part size its packer got (0: none)
-  Stream() : size(0), crc(0), m(M_TANGELO), refs(0), failed(0), cut(0) {}
+  int t;            // c: the threads its packer got (0: none of its own, as tangelo's)
+  Stream() : size(0), crc(0), m(M_TANGELO), refs(0), failed(0), cut(0), t(0) {}
 };
 
 static vector<Stream> S;
@@ -76,9 +77,10 @@ static void Succeeded( Job& j ) {
 }
 
 static string src_tools; // d: the tool builds the archive was made with
+static int src_ver;       // d: its index's version (1: an earlier mp4pack's, see ParseIndex)
 
 static string IndexText() {
-  string t = "mp4pack 1\nsrc " + Num(src_size) + " " + Hex(src_crc) + " " + src_name + "\ntools";
+  string t = "mp4pack 2\nsrc " + Num(src_size) + " " + Hex(src_crc) + " " + src_name + "\ntools";
   for( int i=0; i<n_tools; i++ ) if( tools[i].used ) t += " " + tools[i].file;
   t += "\n";
   for( size_t i=0; i<S.size(); i++ ) {
@@ -118,17 +120,21 @@ static int HexNum( const string& s, uint& v ) {
   return 0;
 }
 
-// an index (mp4pack.idx): the file it was made of, the tool builds, the
-// streams with their parts
-struct Index { string src_name, tools; qword src_size; uint src_crc; vector<Stream> s; Index() : src_size(0), src_crc(0) {} };
+// an index (mp4pack.idx): its version, the file it was made of, the tool
+// builds, the streams with their parts
+struct Index { int ver; string src_name, tools; qword src_size; uint src_crc; vector<Stream> s; Index() : ver(0), src_size(0), src_crc(0) {} };
 
 // an index's text into x; the names are checked, so that none leads out of
-// a directory (d: the work directory). 0, or 1 (why)
+// a directory (d: the work directory). 0, or 1 (why). Version 1 is an
+// mp4pack's from before aacpack and oggcomp had threads: its streams of
+// theirs are of their builds of then, which the later ones do not unpack
+// (and aacpack's could be in parts, a process for each)
 static int ParseIndex( const string& t, Index& x, string& why ) {
   vector<string> L = Lines( t );
   vector<Stream>& S = x.s;
   why = "bad mp4pack.idx";
-  if( L.empty() || (L[0]!="mp4pack 1") ) { why = "not an mp4pack archive, or a later version"; return 1; }
+  x.ver = L.empty() ? 0 : (L[0]=="mp4pack 1") ? 1 : (L[0]=="mp4pack 2") ? 2 : 0;
+  if( x.ver==0 ) { why = "not an mp4pack archive, or a later version"; return 1; }
   int f_src = 0, f_end = 0;
   for( size_t n=1; n<L.size() && !f_end; n++ ) {
     const string& l = L[n];
@@ -173,7 +179,7 @@ static int ParseIndex( const string& t, Index& x, string& why ) {
       o += p.len;
     }
     if( o!=s.size ) return 1;
-    if( (s.part.size()>1) && (s.m!=M_AACPACK) && (s.m!=M_TANGELO) ) return 1;
+    if( (s.part.size()>1) && (s.m!=M_TANGELO) && ((s.m!=M_AACPACK) || (x.ver>1)) ) return 1;
   }
   return 0;
 }
@@ -184,7 +190,7 @@ static int ReadIndex( string& why ) {
   Index x;
   if( ReadAll( PPath("mp4pack.idx"), t, 1<<26 ) ) { why = "no mp4pack.idx in it: not an mp4pack archive?"; return 1; }
   if( ParseIndex( t, x, why ) ) return 1;
-  S = x.s; src_name = x.src_name; src_size = x.src_size; src_crc = x.src_crc; src_tools = x.tools;
+  S = x.s; src_name = x.src_name; src_size = x.src_size; src_crc = x.src_crc; src_tools = x.tools; src_ver = x.ver;
   return 0;
 }
 

@@ -11,7 +11,7 @@ static int Decompress( const wstring& in, const Member& m, const wstring& out ) 
   Msg( "mp4pack d: " + U(in) + (m.off ? " (from " + Num(m.off) + ")" : string()) + " -> " + U(out) );
   if( OutputCheck( out ) || MakeWork() ) return 2;
 
-  Job x; x.label = "extract"; x.prog = 2; x.in.len = x.work = isz;
+  Job x; x.label = "extract"; x.prog = 2; x.work = isz;
   int r = ReadArchive( in, m.off, work+L"p" DS, x );
   if( r ) return r;
   string why;
@@ -22,6 +22,14 @@ static int Decompress( const wstring& in, const Member& m, const wstring& out ) 
   for( size_t i=0; i<S.size(); i++ ) if( (S[i].m!=M_STORE) && GetTool( m_tool[S[i].m] ).path.empty() ) {
     Msg( NoTool( GetTool( m_tool[S[i].m] ) ) ); return 2;
   }
+  // an earlier mp4pack's archive: its aacpack and oggcomp streams are of
+  // their builds from before their threads, which the later ones cannot unpack
+  for( size_t i=0; i<S.size(); i++ ) if( (src_ver<2) && ((S[i].m==M_AACPACK) || (S[i].m==M_OGGCOMP)) ) {
+    Msg( "error: an earlier mp4pack's archive: " + S[i].name + " needs its " + m_name[S[i].m] ); // (short: mp4gui's status line shows it)
+    Msg( "  " + GetTool( m_tool[S[i].m] ).file + " cannot unpack what " + m_name[S[i].m] + " packed before it had threads: d this archive with that mp4pack and its tools" );
+    return 2;
+  }
+  if( (r = CheckBuilds())!=0 ) return r;
 
   // the unpackers
   vector<string> ttf, tgl; // archives, in their order
@@ -29,29 +37,18 @@ static int Decompress( const wstring& in, const Member& m, const wstring& out ) 
     Stream& s = S[i];
     string u = Quote( "u" DS+s.name );
     const Part& p0 = s.part[0];
-    if( (s.m==M_H264P) || (s.m==M_M4VPACK) || (s.m==M_AC3PACK) ) {
+    if( (s.m==M_H264P) || (s.m==M_M4VPACK) || (s.m==M_AC3PACK) || (s.m==M_AACPACK) || (s.m==M_OGGCOMP) ) {
+      // (they take their threads from the stream; aacpack and oggcomp as many
+      // as it has parts, of which AudioThreads makes a guess, for the stage)
       int g = m_group[s.m];
-      Job* j = NewJob( g, th[g], string(m_name[s.m]) + " " + s.name, m_tool[s.m] );
+      int n = ((s.m==M_AACPACK) || (s.m==M_OGGCOMP)) ? AudioThreads( s.m, s.size, 0 ) : th[g];
+      Job* j = NewJob( g, n, string(m_name[s.m]) + " " + s.name, m_tool[s.m] );
       j->args = string("d") + (f_verbose ? "" : " -p") + " " + Quote("p" DS+p0.pk) + " " + u;
       j->prog = 1; j->work = s.size; j->outs.push_back( UPath(s.name) ); j->del.push_back( PPath(p0.pk) );
-    } else if( s.m==M_AACPACK ) {
-      if( MakeFile( UPath(s.name), s.size ) ) { DWORD e = GetLastError(); Msg( "cannot write " + U(UPath(s.name)) + SysErr(e) ); return 2; }
-      for( size_t k=0; k<s.part.size(); k++ ) {
-        const Part& p = s.part[k];
-        Job* j = NewJob( G_AUDIO, 1, "aacpack " + s.name + ((s.part.size()>1) ? "#"+Num(k) : string()), "aacpack" );
-        j->args = "d " + Quote("p" DS+p.pk) + " -";
-        j->out.path = UPath(s.name); j->out.off = p.off; j->out.len = p.len;
-        j->prog = 3; j->work = p.len; j->del.push_back( PPath(p.pk) );
-      }
     } else if( s.m==M_MP3PACK ) {
       Job* j = NewJob( G_AUDIO, th[G_AUDIO], "mp3pack " + s.name, "mp3pack" );
       j->args = string("d") + (f_verbose ? "" : " -p") + " " + Quote("p" DS+p0.pk) + " " + Quote("p" DS+p0.pk2) + " " + u;
       j->prog = 1; j->work = s.size; j->outs.push_back( UPath(s.name) ); j->del.push_back( PPath(p0.pk) ); j->del.push_back( PPath(p0.pk2) );
-    } else if( s.m==M_OGGCOMP ) {
-      Job* j = NewJob( G_AUDIO, 1, "oggcomp " + s.name, "oggcomp" );
-      j->args = "d " + Quote("p" DS+p0.pk) + " " + u;
-      j->prog = 4; j->expect = s.size;
-      j->work = s.size; j->outs.push_back( UPath(s.name) ); j->del.push_back( PPath(p0.pk) );
     } else if( s.m==M_STORE ) {
       if( !MoveFileW( (work+L"p" DS "store" DS+W(s.name)).c_str(), UPath(s.name).c_str() ) ) { Msg( "missing from the archive: " + s.name ); return 4; }
     } else {
@@ -65,7 +62,7 @@ static int Decompress( const wstring& in, const Member& m, const wstring& out ) 
     for( size_t i=0; i<S.size(); i++ ) if( (S[i].m==M_TTFCOMP) && (S[i].part[0].pk==ttf[a]) ) {
       j->args += " " + Quote(S[i].name); j->work += S[i].size; j->outs.push_back( UPath(S[i].name) );
     }
-    j->prog = 4; j->expect = j->work;
+    j->prog = 3; j->expect = j->work;
   }
   for( size_t a=0; a<tgl.size(); a++ ) { // the files under their names, in the archive's order (the streams')
     Job* j = NewJob( G_OTHER, 1, "tangelo " + tgl[a], "tangelo" );
@@ -116,7 +113,7 @@ static int Decompress( const wstring& in, const Member& m, const wstring& out ) 
     if( op.empty() ) { op = L"output.tmp"; tmp = 1; }
   }
   Job a; a.label = "avip d"; a.tool = "avip"; a.args = "d u" DS "s " + Quote(U(op));
-  a.prog = 4; a.expect = src_size; a.outs.push_back( tmp ? work+op : LongPath(op) );
+  a.prog = 3; a.expect = src_size; a.outs.push_back( tmp ? work+op : LongPath(op) );
   r = RunOne( a );
   if( r ) { Remove( LongPath(out) ); return (r==2) ? 5 : 3; }
   if( tmp && !MoveFileExW( (work+op).c_str(), LongPath(out).c_str(), MOVEFILE_REPLACE_EXISTING|MOVEFILE_COPY_ALLOWED ) ) {

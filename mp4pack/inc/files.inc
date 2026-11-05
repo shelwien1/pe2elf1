@@ -207,18 +207,6 @@ static int WriteAll( const wstring& path, const string& t ) {
   return r;
 }
 
-// a file of this size (filled in later, at offsets)
-static int MakeFile( const wstring& path, qword size ) {
-  HANDLE f = OpenWrite( path, CREATE_ALWAYS );
-  if( f==INVALID_HANDLE_VALUE ) return 1;
-  LARGE_INTEGER o; o.QuadPart = LONGLONG(size);
-  int r = !SetFilePointerEx( f, o, 0, FILE_BEGIN ) || !SetEndOfFile( f );
-  DWORD e = r ? GetLastError() : 0;
-  CloseHandle( f );
-  SetLastError( e );
-  return r;
-}
-
 // d (ending with a separator) and the directories above it, those that are
 // not there; 0, or the error of the first that could not be made (one that
 // cannot be made is followed by ones that cannot be, for want of it)

@@ -1,5 +1,6 @@
-// Tests of mp4pack's -t, -c and -l parsing. Build like mp4pack.exe (with
-// -municode) and run: parse_test.exe prints the failures, exits with 1 if any.
+// Tests of mp4pack's -t, -c and -l parsing, of the index's, and of the threads
+// aacpack and oggcomp get. Build like mp4pack.exe (with -municode) and run:
+// parse_test.exe prints the failures, exits with 1 if any.
 // On Linux: g++ -std=c++11 -pthread -o parse_test test/parse_test.cpp
 #define WINAPI_POSIX_NO_MAIN // (Linux: the main below)
 #pragma GCC diagnostic ignored "-Wunused-function" // (the engine's run: not used here)
@@ -21,16 +22,30 @@ static void C( const char* spec, const char* want ) {
   if( got!=want ) { printf( "FAIL -c %s: %s, not %s\n", spec, got.c_str(), want ); fails++; }
 }
 
-// the switches the packers get for these levels: h264p aacpack mp3pack ttfcomp tangelo
+// the switches the packers get for these levels: h264p aacpack oggcomp mp3pack ttfcomp tangelo
 static void L( const char* spec, const char* want ) {
   for( int g=0; g<N_GROUP; g++ ) lv[g] = NO_LEVEL;
   string got;
   if( ParseLevels( spec ) ) got = "error";
   else {
-    const int ms[] = { M_H264P, M_AACPACK, M_MP3PACK, M_TTFCOMP, M_TANGELO };
-    for( int i=0; i<5; i++ ) got += (i ? "," : "") + LevelArg( ms[i] );
+    const int ms[] = { M_H264P, M_AACPACK, M_OGGCOMP, M_MP3PACK, M_TTFCOMP, M_TANGELO };
+    for( int i=0; i<6; i++ ) got += (i ? "," : "") + LevelArg( ms[i] );
   }
   if( got!=want ) { printf( "FAIL -l %s: %s, not %s\n", spec, got.c_str(), want ); fails++; }
+}
+
+// an index: "version streams", or error
+static void I( const char* what, const string& text, const char* want ) {
+  Index x;
+  string why, got = ParseIndex( text, x, why ) ? "error" : Num(x.ver) + " " + Num(x.s.size());
+  if( got!=want ) { printf( "FAIL index %s: %s, not %s\n", what, got.c_str(), want ); fails++; }
+}
+
+// aacpack's and oggcomp's threads for a stream, with -c part and -t threads
+static void A( int m, qword size, qword part, int threads, int want ) {
+  th[G_AUDIO] = threads;
+  int got = AudioThreads( m, size, part );
+  if( got!=want ) { printf( "FAIL %s %u bytes, part %u, %d threads: %d, not %d\n", m_name[m], uint(size), uint(part), threads, got, want ); fails++; }
 }
 
 int wmain( int, wchar_t** ) {
@@ -86,12 +101,12 @@ int wmain( int, wchar_t** ) {
   C( "1,2,3,4,5", "error" );
   C( "4x", "error" );
   C( ",4", "error" );
-  L( "", ",,,," );                     // all the defaults
-  L( "5,9,9,7", "-5,-9,,,-7" );        // ttfcomp and mp3pack take none
-  L( "5", "-5,,,," );                  // missing: the default
-  L( ",,,1", ",,,,-1" );
-  L( "1+3", "-1,-3,,," );              // '+' as ','
-  L( "7,,,9", "-7,,,,-9" );
+  L( "", ",,,,," );                    // all the defaults
+  L( "5,9,9,7", "-5,-9,-9,,,-7" );     // ttfcomp and mp3pack take none
+  L( "5", "-5,,,,," );                 // missing: the default
+  L( ",,,1", ",,,,,-1" );
+  L( "1+3", "-1,-3,-3,,," );           // '+' as ','
+  L( "7,,,9", "-7,,,,,-9" );
   L( "9,9,9,9,", "error" );            // 5 levels
   L( "0", "error" );                   // h264p, aacpack and tangelo: 1 to 9
   L( "10", "error" );
@@ -103,6 +118,26 @@ int wmain( int, wchar_t** ) {
   L( "5x", "error" );
   L( "5,-", "error" );
   L( ",,,--5", "error" );
+  const string src = "src 100 0000ABCD x.mkv\ntools aacpack.exe\n", aac = "stream 100 0000ABCD aacpack x.1.aac\n";
+  I( "2", "mp4pack 2\n" + src + aac + "part 0 100 x.1.aac.aacp\nend\n", "2 1" );
+  I( "1", "mp4pack 1\n" + src + aac + "part 0 100 x.1.aac.aacp\nend\n", "1 1" );
+  I( "1, aacpack in parts", "mp4pack 1\n" + src + aac + "part 0 60 x.1.0.aacp\npart 60 40 x.1.1.aacp\nend\n", "1 1" );
+  I( "2, aacpack in parts", "mp4pack 2\n" + src + aac + "part 0 60 x.1.0.aacp\npart 60 40 x.1.1.aacp\nend\n", "error" ); // (one process for it now)
+  I( "2, tangelo's pieces", "mp4pack 2\n" + src + "stream 100 0000ABCD tangelo x.2.bin\npart 0 60 other1.tgl x.2.bin.part0\npart 60 40 other2.tgl x.2.bin.part1\nend\n", "2 1" );
+  I( "2, a gap", "mp4pack 2\n" + src + aac + "part 0 60 x.1.aac.aacp\nend\n", "error" );
+  I( "3", "mp4pack 3\n" + src + aac + "part 0 100 x.1.aac.aacp\nend\n", "error" ); // (a later version)
+  I( "no end", "mp4pack 2\n" + src + aac + "part 0 100 x.1.aac.aacp\n", "error" );
+  A( M_AACPACK, 3600000, 0, 8, 3 );           // parts of 1MB at least: 3
+  A( M_AACPACK, 19500000, 0, 8, 8 );
+  A( M_AACPACK, 19500000, 0, 64, 18 );
+  A( M_AACPACK, 900000, 0, 8, 1 );            // (1 at least)
+  A( M_AACPACK, 19500000, 4<<20, 8, 4 );      // -c 4
+  A( M_AACPACK, 19500000, 512<<10, 64, 37 );  // -c 512k
+  A( M_OGGCOMP, 2200000, 0, 8, 8 );           // parts of 64KB at least
+  A( M_OGGCOMP, 300000, 0, 8, 4 );
+  A( M_OGGCOMP, 18543, 0, 8, 1 );
+  A( M_OGGCOMP, 9500000, 4<<20, 8, 2 );       // -c 4
+  A( M_OGGCOMP, 2200000, 0, 0, 1 );           // (-t ,0: none; d: 1 at least)
   printf( fails ? "%d failed\n" : "all passed\n", fails );
   return fails!=0;
 }

@@ -10,9 +10,8 @@ static double Frac( Job& j ) {
   if( j.st!=1 ) return 0;
   double f = -1;
   if( j.prog==1 ) f = j.log.size() ? LogPct( j.log ) : -1;
-  if( (j.prog==2) && j.in.len ) f = double(j.in.done)/double(j.in.len);
-  if( (j.prog==3) && j.work ) f = std::min( 1.0, double(j.out.done)/double(j.work) );
-  if( (j.prog==4) && j.expect ) {
+  if( (j.prog==2) && j.work ) f = std::min( 1.0, double(j.done)/double(j.work) );
+  if( (j.prog==3) && j.expect ) {
     qword n = 0, z;
     for( size_t i=0; i<j.outs.size(); i++ ) if( !LiveSize( j.outs[i], z ) ) n += z;
     f = std::min( 0.99, double(n)/double(j.expect) ); // (all of it only when it is done)
@@ -47,7 +46,7 @@ static void Status( const vector<Job*>& all, const vector<Job*>& run, int force 
   // pace (h264p is much slower by the byte than the rest; not by a guess)
   if( eta ) for( size_t i=0; i<run.size(); i++ ) {
     const Job& j = *run[i];
-    if( j.prog && ((j.prog!=4) || f_dec) && (j.frac>0.02) && (j.frac<1) ) left = std::max( left, qword( double(now-j.t0)*(1-j.frac)/j.frac ) );
+    if( j.prog && ((j.prog!=3) || f_dec) && (j.frac>0.02) && (j.frac<1) ) left = std::max( left, qword( double(now-j.t0)*(1-j.frac)/j.frac ) );
   }
   if( status_hook ) { status_hook( any ? done/tot : -1, left, all ); return; }
   qword el = GetTickCount64()-t_start;
@@ -148,11 +147,7 @@ static int RunStage( const vector<Job*>& all, const vector<int>& groups ) {
     }
     vector<HANDLE> h( 1, ev_abort ); // what has not finished yet
     h.push_back( ev_wake );
-    for( size_t i=0; i<run.size(); i++ ) {
-      if( !run[i]->exited ) h.push_back( run[i]->hp );
-      if( run[i]->in.th ) h.push_back( run[i]->in.th );
-      if( run[i]->out.th ) h.push_back( run[i]->out.th );
-    }
+    for( size_t i=0; i<run.size(); i++ ) h.push_back( run[i]->hp );
     WaitForMultipleObjects( DWORD( std::min<size_t>( h.size(), MAXIMUM_WAIT_OBJECTS ) ), &h[0], FALSE, 1000 );
     if( f_abort && !fail ) { fail = 2; for( size_t i=0; i<run.size(); i++ ) TerminateProcess( run[i]->hp, 1 ); }
     for( size_t i=0; i<run.size(); ) {

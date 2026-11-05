@@ -64,7 +64,7 @@ static qword prog_at;             // when it came
 static double shown;              // the overall bar (it does not go back)
 static string result;             // the sizes and the time, when all went well
 
-// a task: a job, or a stream's parts (aacpack's, tangelo's pieces) together
+// a task: a job, or a stream's parts (tangelo's pieces) together
 struct Task { string key, label; int st, est, gain; double frac; qword work, made; }; // made: the packed bytes
 static vector<Task> tasks;        // this run's, as they came
 

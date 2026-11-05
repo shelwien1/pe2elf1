@@ -196,6 +196,10 @@ static string ArchiveText( const wstring& path ) {
     r += Pad( shared, w ) + "  " + Right( Num(u), wz ) + " -> " + Right( Num(sz), wz ) + "  " + st[k].method + ":" + names + "\r\n";
   }
   if( x.tools.size() ) r += "made with " + x.tools + "\r\n";
+  for( size_t k=0; k<x.s.size(); k++ ) if( (x.ver<2) && ((x.s[k].m==M_AACPACK) || (x.s[k].m==M_OGGCOMP)) ) { // (see ParseIndex)
+    r += "an earlier mp4pack's: its aacpack and oggcomp streams take their builds from before their threads to unpack\r\n";
+    break;
+  }
   return r;
 }
 

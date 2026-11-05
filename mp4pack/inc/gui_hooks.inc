@@ -19,8 +19,8 @@ static void HookStatus( double frac, qword eta, const vector<Job*>& all ) {
   for( size_t i=0; i<all.size(); i++ ) {
     Job& j = *all[i];
     double f = (j.st==2) ? 1 : (j.st==5) ? j.frac : (j.st!=1) ? 0 : j.prog ? Frac( j ) : -1; // (stopped: where it was)
-    if( (j.st==1) && (j.prog==4) && (f==0) ) f = -1; // (measured by what it has written, and nothing yet: ttfcomp x writes at the end)
-    JobRow r = { j.label, j.st, f, (j.prog==4) && !f_dec, gain, j.work, j.made };
+    if( (j.st==1) && (j.prog==3) && (f==0) ) f = -1; // (measured by what it has written, and nothing yet: ttfcomp x writes at the end)
+    JobRow r = { j.label, j.st, f, (j.prog==3) && !f_dec, gain, j.work, j.made };
     p.jobs.push_back( r );
   }
   EnterCriticalSection( &qlock );

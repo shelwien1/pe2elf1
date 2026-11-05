@@ -1,37 +1,9 @@
 // inc/compress.inc -- c: avip c, the packers (PackJobs, PackFailed,
-//  CheckLevels, StreamMethod), the output checked first (OutputCheck), the
-//  archive
+//  StreamMethod), their builds tried first (CheckBuilds, d's too), the
+//  output checked first (OutputCheck), the archive
 // (a part of the engine: inc/mp4pack.inc includes it, in its order)
 
 //---- c
-
-// the frame length of an ADTS header, or 0
-static uint AdtsLen( const byte* p ) {
-  if( (p[0]!=0xFF) || ((p[1]&0xF6)!=0xF0) || (((p[2]>>2)&15)>12) ) return 0;
-  uint n = ((p[3]&3)<<11) | (p[4]<<3) | (p[5]>>5);
-  return (n>=((p[1]&1) ? 7u : 9u)) ? n : 0;
-}
-
-// The first ADTS frame within 64K from t, with 3 frames in a row (or up to the
-// end) to be sure of it; t if there is none: aacpack keeps what is not AAC as
-// it is, so a cut elsewhere only costs some compression.
-static qword AdtsCut( HANDLE f, qword t, qword size ) {
-  const uint WIN = 1<<16, B = WIN+3*8192+8;
-  vector<byte> b( B );
-  LARGE_INTEGER o; o.QuadPart = LONGLONG(t);
-  DWORD n = 0;
-  if( !SetFilePointerEx( f, o, 0, FILE_BEGIN ) || !ReadFile( f, &b[0], DWORD( std::min<qword>( B, size-t ) ), &n, 0 ) ) return t;
-  for( uint i=0; (i<WIN) && (i+7<=n); i++ ) {
-    uint p = i, k;
-    for( k=0; (k<3) && (t+p<size) && (p+7<=n); k++ ) {
-      uint l = AdtsLen( &b[p] );
-      if( l==0 ) break;
-      p += l;
-    }
-    if( (k==3) || ((k>0) && (t+p==size)) ) return t+i;
-  }
-  return t;
-}
 
 // the packer jobs for the streams in S
 static int PackJobs() {
@@ -39,55 +11,28 @@ static int PackJobs() {
     Stream& s = S[i];
     string u = Quote( "u" DS+s.name );
     int si = int(i);
-    if( (s.m==M_H264P) || (s.m==M_M4VPACK) || (s.m==M_AC3PACK) ) { // one process on its group's threads, in parts (-c)
-      int g = m_group[s.m], n = th[g];
-      string pk = s.name + ((s.m==M_H264P) ? ".h264p" : (s.m==M_M4VPACK) ? ".m4vp" : ".ac3p");
-      Job* j = NewJob( g, n, string(m_name[s.m]) + " " + s.name, m_tool[s.m] );
-      if( n>1 ) s.cut = PartSize( g, s.size, 2 );
-      j->args = "c" + LevelSp(s.m) + " -t " + Num(n) + (s.cut ? " -c "+ChunkArg(s.cut) : string()) + (f_verbose ? "" : " -p")
+    if( (s.m==M_H264P) || (s.m==M_M4VPACK) || (s.m==M_AC3PACK) || (s.m==M_AACPACK) || (s.m==M_OGGCOMP) ) {
+      // one process on its group's threads, in parts (-c, else PartSize's);
+      // aacpack and oggcomp: on as many as it has parts (AudioThreads), of
+      // their own size unless -c gives one
+      int g = m_group[s.m], ao = (s.m==M_AACPACK) || (s.m==M_OGGCOMP);
+      string pk = s.name + m_ext[s.m];
+      s.t = ao ? AudioThreads( s.m, s.size, ch[G_AUDIO] ) : th[g];
+      s.cut = ao ? ch[G_AUDIO] : (s.t>1) ? PartSize( g, s.size, 2 ) : 0;
+      Job* j = NewJob( g, s.t, string(m_name[s.m]) + " " + s.name, m_tool[s.m] );
+      j->args = "c" + LevelSp(s.m) + " -t " + Num(s.t) + (s.cut ? " -c "+ChunkArg(s.cut) : string()) + (f_verbose ? "" : " -p")
               + " " + u + " " + Quote("p" DS+pk);
       j->prog = 1; j->work = s.size; j->sids.push_back( si ); j->outs.push_back( PPath(pk) );
       s.part.push_back( Part( 0, s.size, pk, "" ) );
-    } else if( s.m==M_AACPACK ) {
-      // with n threads: n parts (1MB at least: PartSize's), or parts of -c's size at least
-      qword n = th[G_AUDIO];
-      qword k = ch[G_AUDIO] ? s.size/ch[G_AUDIO] : std::min<qword>( n, s.size>>20 );
-      k = (n>1) ? std::min<qword>( std::max<qword>( k, 1 ), 4096 ) : 1;
-      vector<qword> cut( 1, 0 );
-      if( k>1 ) {
-        HANDLE f = OpenRead( UPath(s.name) );
-        if( f==INVALID_HANDLE_VALUE ) { DWORD e = GetLastError(); Msg( "cannot read " + U(UPath(s.name)) + SysErr(e) ); return 2; }
-        for( qword q=1; q<k; q++ ) {
-          qword p = AdtsCut( f, s.size*q/k, s.size );
-          if( (p>cut.back()) && (p<s.size) ) cut.push_back( p );
-        }
-        CloseHandle( f );
-      }
-      cut.push_back( s.size );
-      for( size_t q=0; q+1<cut.size(); q++ ) {
-        string pk = s.name + ((cut.size()>2) ? "."+Num(q) : string()) + ".aacp";
-        Job* j = NewJob( G_AUDIO, 1, "aacpack " + s.name + ((cut.size()>2) ? "#"+Num(q) : string()), "aacpack" );
-        j->args = "c" + LevelSp(M_AACPACK) + " - " + Quote("p" DS+pk);
-        j->in.path = UPath(s.name); j->in.off = cut[q]; j->in.len = cut[q+1]-cut[q];
-        j->prog = 2; j->work = j->in.len; j->sids.push_back( si ); j->outs.push_back( PPath(pk) );
-        s.part.push_back( Part( cut[q], cut[q+1]-cut[q], pk, "" ) );
-      }
     } else if( s.m==M_MP3PACK ) {
-      int n = th[G_AUDIO];
-      string pk = s.name + ".mp3p", pk2 = s.name + ".mp3o";
-      Job* j = NewJob( G_AUDIO, n, "mp3pack " + s.name, "mp3pack" );
-      if( n>1 ) s.cut = PartSize( G_AUDIO, s.size, 10 );
-      j->args = "c -t " + Num(n) + (s.cut ? " -c "+ChunkArg(s.cut) : string()) + (f_verbose ? "" : " -p")
+      string pk = s.name + m_ext[M_MP3PACK], pk2 = s.name + ".mp3o";
+      s.t = th[G_AUDIO];
+      Job* j = NewJob( G_AUDIO, s.t, "mp3pack " + s.name, "mp3pack" );
+      if( s.t>1 ) s.cut = PartSize( G_AUDIO, s.size, 10 );
+      j->args = "c -t " + Num(s.t) + (s.cut ? " -c "+ChunkArg(s.cut) : string()) + (f_verbose ? "" : " -p")
               + " " + u + " " + Quote("p" DS+pk) + " " + Quote("p" DS+pk2);
       j->prog = 1; j->work = s.size; j->sids.push_back( si ); j->outs.push_back( PPath(pk) ); j->outs.push_back( PPath(pk2) );
       s.part.push_back( Part( 0, s.size, pk, pk2 ) );
-    } else if( s.m==M_OGGCOMP ) {
-      string pk = s.name + ".oggc";
-      Job* j = NewJob( G_AUDIO, 1, "oggcomp " + s.name, "oggcomp" );
-      j->args = "c " + u + " " + Quote("p" DS+pk);
-      j->prog = 4; j->expect = s.size/100*87; // (it writes as it goes; vorbis comes to about 87%)
-      j->work = s.size; j->sids.push_back( si ); j->outs.push_back( PPath(pk) );
-      s.part.push_back( Part( 0, s.size, pk, "" ) );
     } else if( s.m==M_STORE ) {
       CreateDirectoryW( (work+L"p" DS "store").c_str(), 0 );
       if( !MoveFileW( UPath(s.name).c_str(), (work+L"p" DS "store" DS+W(s.name)).c_str() ) ) { DWORD e = GetLastError(); Msg( "cannot move " + U(UPath(s.name)) + SysErr(e) ); return 2; }
@@ -107,7 +52,7 @@ static int PackJobs() {
     }
     f->args += " " + Quote( S[i].name );
     f->work += S[i].size; f->sids.push_back( int(i) );
-    f->prog = 4; f->expect = f->work/100*32; // (fonts come to about a third)
+    f->prog = 3; f->expect = f->work/100*32; // (fonts come to about a third)
     f->label = "ttfcomp " + Num( f->sids.size() ) + ((f->sids.size()>1) ? " fonts" : " font");
     S[i].part.push_back( Part( 0, S[i].size, U(FileName(f->outs[0])), "" ) );
   }
@@ -188,25 +133,41 @@ static int PackFailed() {
   return r ? ((r==2) ? 5 : 3) : 0;
 }
 
-// c: the levels -l gives the packers that take one, if their streams are
-// here: their builds have to have them. A build without the level ends
-// otherwise on an input that is not there than with its default level, before
-// it looks for it (h264p and aacpack with 2 instead of 1, m4vpack and ac3pack
-// with 1 instead of 2)
-static int CheckLevels() {
-  const int ms[] = { M_H264P, M_M4VPACK, M_AACPACK, M_AC3PACK };
-  for( size_t i=0; i<sizeof(ms)/sizeof(ms[0]); i++ ) {
-    int m = ms[i], l = lv[m_group[m]], any = 0;
+// c and d: the builds of the packers of the streams in S, tried on an empty
+// file (a build that takes the switches packs it, with an exit code of 0):
+// aacpack's and oggcomp's have to take -t (their builds from before it do
+// not, and cannot unpack what the later ones packed: mp4pack runs the best
+// build for this CPU in its directory, an earlier one too), and for c a level
+// -l gives has to be one the build has. 0; else said why, 2 (a build that
+// cannot do) or 1 (a level it has not)
+static int CheckBuilds() {
+  const int ms[] = { M_H264P, M_M4VPACK, M_AACPACK, M_AC3PACK, M_OGGCOMP };
+  const string a = " -t 1 mp4pack.none mp4pack.none.out";
+  int made = 0, r = 0;
+  for( size_t i=0; (i<sizeof(ms)/sizeof(ms[0])) && !r; i++ ) {
+    int m = ms[i], l = f_dec ? NO_LEVEL : lv[m_group[m]], mt = (m==M_AACPACK) || (m==M_OGGCOMP), any = 0;
     for( size_t k=0; k<S.size(); k++ ) any |= (S[k].m==m);
-    if( !any || (l==NO_LEVEL) ) continue;
-    long long base = Probe( m_tool[m], "c mp4pack.none mp4pack.none.out" ); // (its default level: the input is not there)
-    if( (base<0) || (Probe( m_tool[m], "c -" + Num(l) + " mp4pack.none mp4pack.none.out" )==base) ) continue;
+    if( !any || ((l==NO_LEVEL) && !mt) ) continue;
+    if( !made ) { made = 1; WriteAll( work+L"mp4pack.none", string() ); }
+    const string& file = GetTool( m_tool[m] ).file;
+    long long b = Probe( m_tool[m], "c" + a );
+    if( b<0 ) continue; // (it does not run: its job says why)
+    if( b ) { // (no telling its levels then)
+      if( mt ) {
+        Msg( "error: " + file + " does not take -t: an earlier build?" ); // (short: mp4gui's status line shows it)
+        Msg( "  a build of " + string(m_name[m]) + " from before its threads? mp4pack runs the best build in its directory for this CPU: remove the earlier ones" );
+        r = 2;
+      }
+      continue;
+    }
+    if( (l==NO_LEVEL) || (Probe( m_tool[m], "c -" + Num(l) + a )==0) ) continue;
     string has;
-    for( int k=1; k<=9; k++ ) if( Probe( m_tool[m], "c -" + Num(k) + " mp4pack.none mp4pack.none.out" )==base ) has += " " + Num(k);
-    Msg( "error: " + GetTool( m_tool[m] ).file + " has no level " + Num(l) + (has.size() ? " (its levels:" + has + ")" : string()) + "; see -l" );
-    return 1;
+    for( int k=1; k<=9; k++ ) if( Probe( m_tool[m], "c -" + Num(k) + a )==0 ) has += " " + Num(k);
+    Msg( "error: " + file + " has no level " + Num(l) + (has.size() ? " (its levels:" + has + ")" : string()) + "; see -l" );
+    r = 1;
   }
-  return 0;
+  if( made ) { Remove( work+L"mp4pack.none" ); Remove( work+L"mp4pack.none.out" ); }
+  return r;
 }
 
 // c: what packs a file of avip's: its packer by the extension, if its group
@@ -300,15 +261,13 @@ static int Compress( const wstring& in, const wstring& out, int append, Member& 
     S.push_back( s );
   }
   for( int m=0; m<N_METHOD; m++ ) if( nobuild[m].size() ) Msg( "note: " + NoTool( GetTool( m_tool[m] ) ) + "; to tangelo" + LevelSp(M_TANGELO) + ": " + nobuild[m] );
-  if( (r = CheckLevels())!=0 ) return r;
+  if( (r = CheckBuilds())!=0 ) return r;
   if( (r = PackJobs())!=0 ) return r;
 
   for( size_t i=0; i<S.size(); i++ ) {
     const Stream& s = S[i];
     string d = m_name[s.m];
-    if( (s.m==M_H264P) || (s.m==M_M4VPACK) || (s.m==M_AC3PACK) ) d += LevelSp(s.m) + " -t " + Num(th[m_group[s.m]]) + (s.cut ? " -c "+ChunkArg(s.cut) : string());
-    if( s.m==M_MP3PACK ) d += " -t " + Num(th[G_AUDIO]) + (s.cut ? " -c "+ChunkArg(s.cut) : string());
-    if( s.m==M_AACPACK ) d += LevelSp(M_AACPACK) + ((s.part.size()>1) ? ", " + Num(s.part.size()) + " parts" : string());
+    if( s.t ) d += LevelSp(s.m) + " -t " + Num(s.t) + (s.cut ? " -c "+ChunkArg(s.cut) : string());
     if( s.m==M_TANGELO ) d += LevelSp(M_TANGELO) + " (" + s.part[0].pk + ((s.part.size()>1) ? ", " + Num(s.part.size()) + " pieces" : string()) + ")";
     Msg( Pad( "  " + s.name, 20 ) + Right( Num(s.size), 12 ) + "  " + d );
   }
@@ -318,7 +277,7 @@ static int Compress( const wstring& in, const wstring& out, int append, Member& 
 
   // the index and all packed, stored as they are: the output
   if( WriteAll( PPath("mp4pack.idx"), IndexText() ) ) { DWORD e = GetLastError(); Msg( "cannot write " + U(PPath("mp4pack.idx")) + SysErr(e) ); return 2; }
-  Job f; f.label = "archive"; f.prog = 3; f.work = DirSize( work+L"p" DS );
+  Job f; f.label = "archive"; f.prog = 2; f.work = DirSize( work+L"p" DS );
   if( (r = WriteArchive( work+L"p" DS, out, f, append, m ))!=0 ) return r;
   qword osz = f.made;
   Msg( Num(src_size) + " -> " + Num(osz) + " (" + Pct( double(osz), double(src_size) ) + "), " + Clock( GetTickCount64()-t_start ) );

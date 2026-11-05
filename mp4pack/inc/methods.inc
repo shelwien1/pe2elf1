@@ -12,6 +12,8 @@ enum { M_STORE, M_TANGELO, M_H264P, M_AACPACK, M_MP3PACK, M_OGGCOMP, M_TTFCOMP, 
 static const char* m_name[N_METHOD] = { "store", "tangelo", "h264p", "aacpack", "mp3pack", "oggcomp", "ttfcomp", "m4vpack", "ac3pack" };
 static const char* m_tool[N_METHOD] = { "", "tangelo", "h264p", "aacpack", "mp3pack", "oggcomp", "ttfcomp", "m4vpack", "ac3pack" };
 static const int m_group[N_METHOD] = { G_OTHER, G_OTHER, G_VIDEO, G_AUDIO, G_AUDIO, G_AUDIO, G_FONT, G_VIDEO, G_AUDIO };
+// the packed file's extension, for those that pack a stream into one file of its own
+static const char* m_ext[N_METHOD] = { "", "", ".h264p", ".aacp", ".mp3p", ".oggc", "", ".m4vp", ".ac3p" };
 
 // by the extension avip gave the stream
 static int Method( const string& name ) {

@@ -100,7 +100,7 @@ static int WriteArchive( const wstring& dir, const wstring& out, Job& j, int app
       BOOL ok = ReadFile( g, b.p, n, &k, 0 );
       if( !ok || (k!=n) ) { DWORD x = ok ? 0 : GetLastError(); why = "cannot read " + U(p) + SysErr(x); r = 2; break; }
       if( (r = WriteN( f, b.p, k ))!=0 ) { e = GetLastError(); break; }
-      left -= k; j.out.done += k;
+      left -= k; j.done += k;
       if( ArcWait( j ) ) r = 5;
     }
     CloseHandle( g );
@@ -185,7 +185,7 @@ static int ReadArchive( const wstring& in, qword off, const wstring& dir, Job& j
   if( !r && (!SetFilePointerEx( f, o, 0, FILE_BEGIN ) || ReadN( f, h, 12 ) || memcmp( h, "mp4pack", 7 )) ) { why = U(in) + ": not an mp4pack archive"; r = 4; }
   if( !r && ((h[7]<1) || (h[7]>ARC_VERSION)) ) { why = U(in) + ": an mp4pack archive of another version (" + Num(h[7]) + ", not " + Num(ARC_VERSION) + ")"; r = 4; }
   qword files = r ? 0 : GetLE( h+8, 4 );
-  j.in.done = 12;
+  j.done = 12;
   for( qword i=0; (i<files) && !r; i++ ) {
     string n;
     if( ReadN( f, h, 2 ) ) { r = 4; break; }
@@ -193,7 +193,7 @@ static int ReadArchive( const wstring& in, qword off, const wstring& dir, Job& j
     if( n.empty() || ReadN( f, &n[0], DWORD(n.size()) ) || ReadN( f, h, 8 ) ) { r = 4; break; }
     if( !ArcName( n ) ) { why = U(in) + ": a name that is not allowed in it: " + n; r = 4; break; }
     qword left = GetLE( h, 8 );
-    j.in.done += 10+n.size();
+    j.done += 10+n.size();
     wstring p = ArcPath( dir, n );
     MakeDirs( p.substr( 0, p.size()-FileName( p ).size() ) );
     HANDLE g = OpenWrite( p, CREATE_NEW ); // (each name once)
@@ -207,7 +207,7 @@ static int ReadArchive( const wstring& in, qword off, const wstring& dir, Job& j
       DWORD k = DWORD( std::min<qword>( b.n, left ) );
       if( ReadN( f, b.p, k ) ) r = 4;
       else if( WriteN( g, b.p, k ) ) { DWORD e = GetLastError(); why = "cannot write " + U(p) + SysErr(e); r = 2; }
-      else { left -= k; j.in.done += k; if( ArcWait( j ) ) r = 5; }
+      else { left -= k; j.done += k; if( ArcWait( j ) ) r = 5; }
     }
     CloseHandle( g );
   }
