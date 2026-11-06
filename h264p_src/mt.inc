@@ -328,7 +328,7 @@ struct H264pPart : CoroIo {
 
   // decompressing: each record into its part, the inserted parameter sets
   // removed, at the end of which MTwrap takes the next part from the next
-  // worker; to the record of the worker's end, after which nothing
+  // worker; to the record of the worker's end (after which nothing: MTwrap's)
   int run(IntTag<1>) {
     for (;;) {
       uint8_t h[kMtRec];
@@ -336,10 +336,11 @@ struct H264pPart : CoroIo {
       uint64_t plen = get_le(h, 8), ins = get_le(h + 8, 8), xlen = get_le(h + 16, 8);
       if (get_le(h + 32, 4) != mt_rec_crc(h) || get_le(h + 36, 4) || get_le(h + 24, 8) != next_part())
         return fail("a part's record broken, or a part lost, added or moved");
-      if (!plen) {  // the worker's end
-        uint8_t x;
+      if (!plen) {  // the worker's end: it ends here, not at the container's,
+        // so that MTwrap does not take it to wait for input (and put the others'
+        // blocks aside for it); MTwrap finds what comes after (data left in its
+        // input, a block for it after it has ended, the container read to its end)
         if (ins || xlen) return fail("a part's record broken");
-        if (read(&x, 1)) return fail("data after a worker's end");
         return 0;
       }
       if (plen > args.part_max || ins > plen || xlen > plen - ins) return fail("a part's record broken");

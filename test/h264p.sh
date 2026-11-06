@@ -245,11 +245,12 @@ if [ -n "${negative:-}" ]; then
   done
   check "-t 3 -c 1k: a cut at a block's end, a block left out or twice, d fails ($ok of $((ok + bad))); a record's xlen changed, d fails" sh -c '[ $1 -eq 0 ] && [ $2 -gt 30 ] && "$3" d "$4/kb.c" - | cmp -s - "$5" && ! "$3" d "$4/kx.c" "$4/k.264" 2>/dev/null' - "$bad" "$ok" "$bin" "$tmp" "$here/gen/x264_keyint12.264"
   # the last byte gone, or 1 to 3 bytes after the end: d fails (the coder
-  # reads exactly the bytes it wrote)
+  # reads exactly the bytes it wrote; \300, with -t an empty block of worker
+  # 0's, which MTwrap's coder writes only as a worker's first)
   for x in k m; do
     head -c -1 "$tmp/$x.c" > "$tmp/x1.c"
     check "$x.c with its last byte gone: d fails" sh -c '! "$1" d "$2/x1.c" "$2/k.264" 2>/dev/null' - "$bin" "$tmp"
-    for j in '\000' '\377' '\000\377' '\245\245\245'; do
+    for j in '\000' '\377' '\000\377' '\245\245\245' '\300'; do
       { cat "$tmp/$x.c"; printf "$j"; } > "$tmp/xj.c"
       check "$x.c with $j after it: d fails" sh -c '! "$1" d "$2/xj.c" "$2/k.264" 2>/dev/null' - "$bin" "$tmp"
     done

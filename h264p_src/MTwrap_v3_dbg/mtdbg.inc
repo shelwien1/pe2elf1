@@ -23,7 +23,7 @@
 //           bytes: the input then there
 //   write   waited for its output to be taken (chkout(): the driver writes); bytes: that buffer
 //   wait    waited for a worker (main_wait()): x 1 the parse (d) or the dealing (c) stopped by
-//           worker's full input ring (d: dynbuff refused, the worker of the output being busy),
+//           worker's full input ring (d: dynbuff refused, no other worker waiting for input),
 //           2 the input ended (the workers to finish), 0 other
 //   blk     d: a block of the container parsed, for worker: x 1 put aside in dynbuff (its input
 //           ring full), 0 into its ring. c: a block of worker's output written to the container

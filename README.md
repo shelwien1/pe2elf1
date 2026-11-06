@@ -397,7 +397,14 @@ among the others'. (Written at the part's end, as before format 12, they
 came in runs of one worker's, a part long; `d`, which reads the container in
 order, waited at each run longer than its worker's input ring until that
 worker had decoded most of it, the others idle: `d -t 32` of 124 MB in parts
-of 4 MB had 14 of its 32 workers decoding on average, now 28.) Decompressing, a worker
+of 4 MB had 14 of its 32 workers decoding on average, now 28.) Nor does `d`
+wait at such a run now, whoever made it: where the next block's worker has a
+full ring and another worker waits for input (its ring empty, not waiting to
+write, not ended), MTwrap puts the block aside and reads on to that one's
+(a container regrouped into runs of 4 MB: `d -t 4` 43 s, as the stream
+itself, where it took 51 s). A worker ends at its end record, and MTwrap
+reads the container to its end and takes anything past the workers' ends
+for broken. Decompressing, a worker
 decompresses its parts so, the inserted parameter sets left out as they
 pass, and MTwrap takes the parts from the workers in turn, as they were
 dealt. A worker writes a part's output as it comes once the parts before it

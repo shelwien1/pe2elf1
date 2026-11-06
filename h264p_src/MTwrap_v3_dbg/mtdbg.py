@@ -282,7 +282,7 @@ def analyse(run, mode, ev, width):
     n_wait = sum(1 for e in M if e.ev == 'wait')
     print('  %d waits; "W<k> ring full": the %s stopped at a block for worker k, its input ring full%s'
           % (n_wait, 'parse' if dec else 'dealing',
-             ' and dynbuff refused (the worker of the output busy)' if dec else ''))
+             ' and dynbuff refused (no other worker waiting for input)' if dec else ''))
 
     # how many coding at once
     pts = []
@@ -427,7 +427,7 @@ def analyse(run, mode, ev, width):
         if dec and blk:
             say('(the container has %d runs of one worker\'s blocks, up to %.1f MB, and an input ring holds %.1f MB:'
                 ' a run longer than its worker\'s ring holds the parse until that worker has decoded most of it,'
-                ' and dynbuff takes blocks only while the worker of the output is idle)'
+                ' and dynbuff takes blocks only while another worker waits for input)'
                 % (len(runs), mb(max(n for _, n, _ in runs)), mb(ring)), 4)
     if tot['wout'] > 0.05 * WT:
         if dec:

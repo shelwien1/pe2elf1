@@ -74,6 +74,17 @@ struct MTwrap : Coroutine {
     WaitForSingleObject( ev_main, INFINITE );
   }
 
+  // decode: whether a worker other than w waits for input that the parse
+  // could reach: its input ring empty, no blocks of its put aside, its output
+  // ring not full (one waiting to write its output, in its turn, is not
+  // waiting for input), not ended
+  uint waiting( uint w ) {
+    uint k;
+    for( k=0; k<th_N; k++ )
+      if( (k!=w) && !C1[k].f_done && (que1[k].inp()==0) && (que2[k].out()!=0) && !B.Load(k) ) return 1;
+    return 0;
+  }
+
   mtdbg_log dlog;  // the main loop's events (mtdbg.inc)
   qword dbg_t0;    // the run's start (Init())
   qword dbg_cpu0;  // the main thread's CPU time then

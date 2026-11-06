@@ -1,7 +1,9 @@
 
   c_goal = f_parts ? ~qword(0) : c_out + qword(buf1_N)*OutBufsize; // parts mode: only round-end flags (or a finished worker) switch
 
-  while( f_eof != f_eof_all ) {
+  // to the container's end, though every worker has ended (each at the end
+  // of its stream: what comes after that is broken)
+  while( (f_eof != f_eof_all) || !(f_quit && InpBuf_l==0) ) {
     //if( CheckTimer(500) ) yield(this,8);
 
     f_busy=0;
@@ -78,6 +80,10 @@
       // a block for a worker after its empty (EOF) block, or after the worker has
       // stopped, is not valid (and would otherwise pile up in dynbuff unbounded)
       if( ((f_eofblk>>(i&0x3F))&1) || C1[i&0x3F].f_done ) { f_err=1; f_quit=1; InpBuf_l=0; continue; }
+      // nor is an empty block after a worker's first: the coder writes none
+      // (loop_enc.inc: a worker's empty buffers after its first, not at all),
+      // and one after the workers' ends would go unnoticed
+      if( ((i&0xC0)==0xC0) && ((f_seen>>(i&0x3F))&1) ) { f_err=1; f_quit=1; InpBuf_l=0; continue; }
       p = que1[i&0x3F].out();
       f_dynbuff = 0;
 
@@ -88,10 +94,16 @@
           InpBug = InpBuf;
         }
 
-        // only use dynbuff if the thread has nothing to do: inp=empty, out=empty
-        // (the que1[j] check was missing: blocks went to dynbuff whenever que2[j]
-        // was momentarily empty, so a valid archive ended up mostly in RAM)
-        if( (que2[j].inp()==0) && (que1[j].inp()==0) ) {
+        // dynbuff takes the block while another worker waits for input
+        // (waiting()), so that the parse goes on to that one's blocks. Waiting
+        // here instead, the parse stood at a run of one worker's blocks longer
+        // than its ring until that worker had decoded most of it, the workers
+        // whose blocks came after it idle (when dynbuff took blocks only for an
+        // idle worker of the output). Not whenever a ring is empty for a moment
+        // (que2[j] alone was that once, and a valid archive ended up mostly in
+        // RAM): a worker waiting to write is not waiting for input, nor is one
+        // that has ended.
+        if( waiting(i&0x3F) ) {
           f_dynbuff=1; p=&tmp;
           goto ParseAnyway; // Save input in dynbuff
         }
