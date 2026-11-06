@@ -57,6 +57,15 @@ static string Clock( qword ms ) {
   return b;
 }
 
+// the speed of bytes in ms: MB/s (MB: 2^20 bytes, as -c's), two places, or
+// two figures below 0.01 (a small file's)
+static string Speed( qword bytes, qword ms ) {
+  double v = double(bytes)/double(1<<20)/(double( std::max<qword>( ms, 1 ) )/1000);
+  char b[32];
+  snprintf( b, sizeof(b), (v>=0.01) ? "%.2f MB/s" : "%.2g MB/s", v );
+  return b;
+}
+
 static void Msg( const string& s );
 
 // an error message (none after Ctrl+C: main says so) and the exit code

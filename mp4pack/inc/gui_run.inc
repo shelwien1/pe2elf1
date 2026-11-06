@@ -136,27 +136,29 @@ static void OnDone( int r ) {
   }
   if( lr ) { // a list's: how it all went (mp4pack's last line), the gain of what went well
     string sum = run_summary.size() ? run_summary : result.size() ? result : run_err; // (one file: its own line)
-    double g = (bytes_in && bytes_out) ? (run_dec ? double(bytes_in)/double(bytes_out) : double(bytes_out)/double(bytes_in)) : -1;
+    double pk = double( run_dec ? bytes_in : bytes_out ), un = double( run_dec ? bytes_out : bytes_in ); // (packed, unpacked)
     shown = (r==5) ? shown : 1;
     Marquee( c_bar, 0 );
     SendMessageW( c_bar, PBM_SETPOS, int( shown*1000 ), 0 );
-    pct_blue = !r && (g>=0);
-    SetText( c_pct, pct_blue ? Percent( 1-g ) : r ? L"" : Percent( 1 ) );
-    Split( NJ, pct_blue ? std::min( g, 1.0 ) : -1 );
+    int ok = !r && (pk>0) && (un>0);
+    SetText( c_pct, ok ? GainText( pk, un, pct_blue ) : r ? L"" : Percent( 1 ) );
+    if( !ok ) pct_blue = 0;
+    Split( NJ, ok ? GainSplit( pk, un ) : -1 );
     InvalidateRect( c_pct, 0, TRUE );
     SetText( c_phase, !r ? (run_verify ? L"all done, verified" : L"all done") : (r==5) ? L"stopped" : L"not all done" );
     SetStatus( !r ? "Done: " + sum : (r==5) ? "Stopped: " + sum : "Not all done: " + sum, r && (r!=5) );
     TaskbarShow( (!r || (r==5)) ? TBPF_NOPROGRESS : TBPF_ERROR, 0 );
   } else if( r==0 ) {
-    qword a, b;
+    qword a = 0, b = 0;
     shown = 1;
     Marquee( c_bar, 0 );
     SendMessageW( c_bar, PBM_SETPOS, 1000, 0 );
     // the gain of it all: the archive against the file (c: out to in; d: in to out)
-    pct_blue = !GetSize( LongPath(run_in), a ) && !GetSize( LongPath(run_out), b ) && a && b;
-    double g = !pct_blue ? -1 : run_dec ? double(a)/double(b) : double(b)/double(a);
-    SetText( c_pct, pct_blue ? Percent( 1-g ) : Percent( 1 ) );
-    Split( NJ, pct_blue ? std::min( g, 1.0 ) : -1 );
+    int ok = !GetSize( LongPath(run_in), a ) && !GetSize( LongPath(run_out), b ) && a && b;
+    double pk = double( run_dec ? a : b ), un = double( run_dec ? b : a );
+    SetText( c_pct, ok ? GainText( pk, un, pct_blue ) : Percent( 1 ) );
+    if( !ok ) pct_blue = 0;
+    Split( NJ, ok ? GainSplit( pk, un ) : -1 );
     InvalidateRect( c_pct, 0, TRUE );
     SetText( c_phase, run_verify ? L"done, verified" : L"done" );
     SetStatus( "Done: " + result + (run_verify ? "; verified" : "") );

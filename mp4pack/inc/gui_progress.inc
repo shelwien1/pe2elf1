@@ -114,6 +114,19 @@ static void Tasks( const Prog& p ) {
   }
 }
 
+// a gain on a bar: packed bytes of unpacked ones (c: what they came to; d:
+// what they unpack from) as its split, green to it, blue after it: the gain;
+// all green where they grew (no gain to show), -1 (none) for no bytes
+static double GainSplit( double packed, double unpacked ) {
+  return (unpacked>0) ? std::min( std::max( packed/unpacked, 0.0 ), 1.0 ) : -1;
+}
+
+// the gain's text: in blue (blue: 1) unless they grew ("-12.5%" then)
+static wstring GainText( double packed, double unpacked, int& blue ) {
+  blue = (unpacked>0) && (packed<=unpacked);
+  return (unpacked>0) ? Percent( 1-packed/unpacked ) : Percent( 1 );
+}
+
 // a bar's split: green to g, blue after it (-1: none); [NJ]: the overall bar
 static void Split( int i, double g ) {
   if( g==split[i] ) return;
@@ -135,7 +148,7 @@ static void RowShow( int i, const Task* t ) {
   wstring p;
   if( t->st==2 ) {
     if( t->key=="verify" ) { p = L"OK"; color = 1; }
-    else if( t->gain && t->work ) { g = double(t->made)/double(t->work); p = Percent( 1-g ); color = 1; g = std::min( g, 1.0 ); }
+    else if( t->gain && t->work ) { p = GainText( double(t->made), double(t->work), color ); g = GainSplit( double(t->made), double(t->work) ); }
     else p = Percent( 1 );
   } else if( t->st==3 ) { p = L"failed"; color = 2; }
   else if( t->st==5 ) p = L"stopped";
@@ -209,6 +222,11 @@ static void ShowProg() {
   SendMessageW( c_bar, PBM_SETPOS, int( shown*1000 ), 0 );
   SetText( c_pct, Percent( shown ) );
   ShowRows();
+  // the gain so far on the overall bar: its fill green for what the tasks
+  // done came to, blue for what they saved
+  double w = 0, m = 0;
+  for( size_t i=0; i<tasks.size(); i++ ) if( (tasks[i].st==2) && tasks[i].gain && tasks[i].work ) { w += double(tasks[i].work); m += double(tasks[i].made); }
+  Split( NJ, GainSplit( m, w ) );
   Title();
   RunStatus();
   TaskbarShow( f_pause ? TBPF_PAUSED : TBPF_NORMAL, shown );

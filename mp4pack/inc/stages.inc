@@ -92,7 +92,7 @@ static void HoldAll( const vector<Job*>& run ) {
   if( held ) t_held = now;
   else {
     qword d = now-t_held;
-    t_start += d; t_run += d;
+    t_start += d; t_all += d; t_run += d;
     for( size_t i=0; i<run.size(); i++ ) run[i]->t0 += d;
   }
 }
@@ -104,7 +104,7 @@ static qword PauseWait() {
   qword t = GetTickCount64();
   while( f_pause && !f_abort ) { HANDLE w[2] = { ev_abort, ev_wake }; WaitForMultipleObjects( 2, w, FALSE, 1000 ); }
   qword d = GetTickCount64()-t;
-  t_start += d; t_run += d;
+  t_start += d; t_all += d; t_run += d;
   return d;
 }
 

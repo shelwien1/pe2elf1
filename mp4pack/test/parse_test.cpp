@@ -47,11 +47,20 @@ static void N( const wchar_t* file, const char* want ) {
   if( got!=want ) { printf( "FAIL DirectName %s: %s, not %s\n", U(file).c_str(), got.c_str(), want ); fails++; }
 }
 
-// aacpack's and oggcomp's threads for a stream, with -c part and -t threads
-static void A( int m, qword size, qword part, int threads, int want ) {
-  th[G_AUDIO] = threads;
-  int got = AudioThreads( m, size, part );
-  if( got!=want ) { printf( "FAIL %s %u bytes, part %u, %d threads: %d, not %d\n", m_name[m], uint(size), uint(part), threads, got, want ); fails++; }
+// a packer's threads for a stream of group g, with -c part and -t threads
+static void A( int g, qword size, qword part, int threads, int want ) {
+  th[g] = threads;
+  int got = StreamThreads( g, size, part );
+  if( got!=want ) { printf( "FAIL %s %llu bytes, part %llu, %d threads: %d, not %d\n", g_name[g], (unsigned long long)size, (unsigned long long)part, threads, got, want ); fails++; }
+}
+
+// the part size of a stream on t threads, with -c c (and no memory limit);
+// and that as a -c
+static void P( qword size, qword c, int t, qword want, const char* arg ) {
+  ch[G_OTHER] = c;
+  qword got = PartSize( G_OTHER, size, 0, t );
+  ch[G_OTHER] = 0;
+  if( (got!=want) || (ChunkArg(got)!=arg) ) { printf( "FAIL part of %llu bytes, -c %llu, %d threads: %llu (%s), not %llu (%s)\n", (unsigned long long)size, (unsigned long long)c, t, (unsigned long long)got, ChunkArg(got).c_str(), (unsigned long long)want, arg ); fails++; }
 }
 
 int wmain( int, wchar_t** ) {
@@ -149,17 +158,27 @@ int wmain( int, wchar_t** ) {
   N( L"x.m p3", "s.0" );
   N( L"\u0424\u0438\u043b\u044c\u043c.aac", "s.0.aac" );
   I( "no end", "mp4pack 2\n" + src + aac + "part 0 100 x.1.aac.aacp\n", "error" );
-  A( M_AACPACK, 3600000, 0, 8, 3 );           // parts of 1MB at least: 3
-  A( M_AACPACK, 19500000, 0, 8, 8 );
-  A( M_AACPACK, 19500000, 0, 64, 18 );
-  A( M_AACPACK, 900000, 0, 8, 1 );            // (1 at least)
-  A( M_AACPACK, 19500000, 4<<20, 8, 4 );      // -c 4
-  A( M_AACPACK, 19500000, 512<<10, 64, 37 );  // -c 512k
-  A( M_OGGCOMP, 2200000, 0, 8, 8 );           // parts of 64KB at least
-  A( M_OGGCOMP, 300000, 0, 8, 4 );
-  A( M_OGGCOMP, 18543, 0, 8, 1 );
-  A( M_OGGCOMP, 9500000, 4<<20, 8, 2 );       // -c 4
-  A( M_OGGCOMP, 2200000, 0, 0, 1 );           // (-t ,0: none; d: 1 at least)
+  A( G_AUDIO, 3600000, 0, 8, 3 );             // 1MB for each thread at least: 3
+  A( G_AUDIO, 19500000, 0, 8, 8 );
+  A( G_AUDIO, 19500000, 0, 64, 18 );
+  A( G_AUDIO, 900000, 0, 8, 1 );              // below 1MB: one
+  A( G_AUDIO, 2200000, 0, 8, 2 );
+  A( G_AUDIO, 18543, 0, 8, 1 );
+  A( G_AUDIO, 19500000, 4<<20, 8, 4 );        // -c 4: a part for each thread at least
+  A( G_AUDIO, 19500000, 512<<10, 64, 18 );    // -c 512k: still 1MB for each
+  A( G_AUDIO, 9500000, 4<<20, 8, 2 );
+  A( G_VIDEO, qword(648)<<20, qword(200)<<20, 4, 4 ); // -c 200: parts of 128MB (at most), 5
+  A( G_AUDIO, 2200000, 0, 0, 1 );             // (-t ,0: none; d: 1 at least)
+  A( G_VIDEO, 13306934, 0, 4, 4 );
+  A( G_VIDEO, 304970, 0, 4, 1 );
+  A( G_VIDEO, qword(1)<<34, 0, 100, 64 );     // 64 at most (mtwrap's), whatever -t says
+  A( G_OTHER, qword(1)<<34, 0, 65, 64 );
+  P( qword(1)<<30, 0, 4, qword(128)<<20, "128" );       // 256MB for each thread: 128MB at most
+  P( qword(3)<<20, 0, 3, qword(1)<<20, "1" );
+  P( 500000, 0, 1, qword(1)<<20, "1" );                 // (1MB at least)
+  P( qword(1)<<30, qword(512)<<20, 4, qword(128)<<20, "128" ); // -c 512: 128MB at most too
+  P( qword(1)<<30, qword(4)<<20, 4, qword(4)<<20, "4" );
+  P( qword(1)<<30, 1536<<10, 4, 1536<<10, "1536k" );
   printf( fails ? "%d failed\n" : "all passed\n", fails );
   return fails!=0;
 }

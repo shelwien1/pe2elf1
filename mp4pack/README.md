@@ -110,6 +110,12 @@ instead). Every stream is checked against the size and CRC32 the index has for
 it before `avip d`, and the result against the input's; a mismatch is an error
 (exit code 4) and the output is removed.
 
+Both end with a line of the sizes, the time and the speed (what is unpacked:
+c's input, d's output, over the time, less pauses; MB: 2^20 bytes):
+`23628348 -> 16354296 (69.21%), 0:00:28, 0.80 MB/s`, and in d
+`16354296 -> 23628348, CRC DB546DC1 OK, 0:00:27, 0.83 MB/s`. mp4gui's
+status line shows it at the end.
+
 The tools run with the work directory as their current directory and get
 relative paths. They take ANSI command lines, so a path that does not survive
 the conversion to the ANSI code page (e.g. Cyrillic names on a Western system)
@@ -140,12 +146,18 @@ Instead of a number, `N%` is that share of the threads there are, rounded up
 free ones with `-f`. A `-N` at the end of `-t` leaves N of them out (for other
 work) before the percentages are taken; alone, it works on the default.
 
-Within a group, jobs run in order, as many at a time as its threads allow:
-h264p, m4vpack, ac3pack and mp3pack take all of their group's threads (`-t N`),
-aacpack and oggcomp as many as the stream has parts (see `-c`), so a small
-track takes fewer and leaves the rest to the next. ttfcomp is always one
-process with all the fonts (solid compression), and so is the tangelo archive
-of the other files, except for pieces of big files (`-c`).
+A number is at most 64 (`MAX_THREADS`), the most the tools' threads
+(mtwrap) take, also where the CPU has more: `-t 65` is refused, and `100%` of
+128 threads is 64.
+
+Within a group, jobs run in order, as many at a time as its threads allow. A
+packer gets its group's threads for a stream (`-t N`), but no more than one
+for each 1MB of it (`MIN_PART`): a stream below 1MB gets one thread (and no
+`-c`), a 3.6MB one at most 3. With `-c`, no more than one for each part
+either. So a small stream leaves the rest of its group's threads to the next
+job. ttfcomp is always one process with all the fonts (solid compression),
+and so is the tangelo archive of the other files, except for pieces of big
+files (`-c`).
 
 `0` for a group means no packer for it: its files go to tangelo instead; `0`
 for tangelo stores the other files as they are (so `-t 0,0,0,0` stores
@@ -161,16 +173,19 @@ mp4pack shows what `-t` came to on its first line, e.g.
 `cpu: 8 threads, 4 cores, haswell (x86-64-v3), 7 free; -t 50%+50%-2 = 3+3,1+1`.
 
 `-c C` &mdash; part sizes, in the same order (separators as in `-t`, they make no
-difference here): MB, or KB with a `k` (`g`: GB). `0` or a missing number: the
-default, a part for each thread: the stream's size over its group's threads,
-rounded up, 1MB at least (for h264p, m4vpack, ac3pack and mp3pack no more than
-the memory allows, below); aacpack's and oggcomp's own (below).
+difference here): MB, or KB with a `k` (`g`: GB); 128MB at most (`MAX_PART`):
+a bigger one is taken as 128MB. `0` or a missing number: the default, a part
+for each of a stream's threads (above): its size over them, rounded up, 1MB
+at least, 128MB at most (for h264p, m4vpack, ac3pack and mp3pack no more than
+the memory allows, below); aacpack's and oggcomp's own (below). E.g. the
+648MB h264 track of a movie on 4 threads: `h264p -t 4 -c 128` (162MB would
+be a part for each).
 
 - h264p, m4vpack, ac3pack and mp3pack get it as their own `-c` (only with more
   than one thread, as they take it). Their memory grows with the part: per
   thread, h264p takes about 0.1GB + 1.6 times the part size, m4vpack about
   37MB + 1.3 times it, ac3pack about 26MB and a little more, mp3pack about 9
-  times it. So their default part is at most 1GB, and at most the free
+  times it. So their default part is at most 128MB, and at most the free
   physical memory, 3/4 of it, over the threads of the groups that run at the
   same time as theirs, less 128MB, over 2 (10 for mp3pack). (tangelo takes
   its level's model, 1164MB at -9, whatever the part.)
@@ -178,17 +193,16 @@ the memory allows, below); aacpack's and oggcomp's own (below).
   parts of 1MB at least, a model for each, oggcomp into four for each
   thread, of 64KB to 4MB, each thread with a model of its own. They get `-c`
   only when it is given (as their `-c`: parts of at least that size), as
-  their own sizes beat bigger parts here. mp4pack gives them as many threads
-  as the stream has parts (its size over the part size: 1MB for aacpack,
-  64KB for oggcomp, or `-c`'s), up to the group's: a 3.6MB AAC track gets 3,
-  a 900KB one 1. They take about 35MB (aacpack) and 55MB (oggcomp) for each
-  thread, whatever the part.
+  their own sizes beat bigger parts here. Their threads are as above: a
+  3.6MB AAC track gets 3, a 2.2MB Vorbis one 2, a 900KB one 1. They take
+  about 35MB (aacpack) and 55MB (oggcomp) for each thread, whatever the
+  part.
 - ttfcomp: no part size; one solid archive.
 - tangelo: with more than one thread, files bigger than the part size
-  (default: the file's size over the threads, so a piece for each) are cut
-  into pieces, each its own tangelo archive, so that big streams without a
-  packer (hevc video, DTS audio) can be compressed in parallel. The other
-  files make one solid archive.
+  (default: the file's size over its threads, so a piece for each, of 1MB to
+  128MB) are cut into pieces, each its own tangelo archive, so that big
+  streams without a packer (hevc video, DTS audio) can be compressed in
+  parallel. The other files make one solid archive.
 
 `-l L` &mdash; compression levels, in the same order (separators as in `-t`,
 they make no difference here). A missing or empty one: the tool's default.
@@ -291,8 +305,9 @@ Blank lines are left out, and spaces and quotes around a name.
 
 A file that fails is told (with why) and left; the rest go on, and a line at
 the end says how it all went: `5 files: 4 done, 1 not (y.mkv); 1246023 ->
-688677 (55.27%), 0:00:04`. The exit code is then the first that failed's (5
-after Ctrl+C). An output that cannot be written (a directory that cannot be
+688677 (55.27%), 0:00:04, 0.30 MB/s` (the speed: what is unpacked, c's input
+or d's output, over the time of it all, less pauses). The exit code is then
+the first that failed's (5 after Ctrl+C). An output that cannot be written (a directory that cannot be
 made, a full disk) stops the list: the files after it are not tried. An
 archive member is only added when its file went well, and one that fails
 while it is written is taken off again, so the archive holds the files that
@@ -470,9 +485,13 @@ tools, as `mp4pack.exe` does.
   its bar shows what the stream came to in green and what it saved in blue,
   and the gain beside it in blue: an h264 stream packed to 79.3% is
   `|green 79.3%|blue 20.7%| 20.7%`. In d the unpackers' rows show the same
-  (the packed files against what they restore), and at the end the overall
-  bar shows the archive against the input (c) or the output (d). A task that
-  failed says so in red. (The bars are green on the classic look; with a
+  (the packed files against what they restore). While it runs, the overall
+  bar's fill shows the same for the tasks done so far (green for what they
+  came to, blue for what they saved), and at the end the overall bar shows
+  the archive against the input (c) or the output (d), its gain beside it.
+  What came out bigger than it was (a few bytes of subtitles in an archive,
+  with its index) has no blue: an all green bar and its gain as it is, not
+  in blue (`-209.9%`). A task that failed says so in red. (The bars are green on the classic look; with a
   visual style they are as it draws them while they run, and a finished one
   takes the green and the blue in its shading.) The taskbar button shows the
   progress too, and flashes at the end if the window is in the background.
@@ -870,6 +889,17 @@ previous mp4pack by this one, and the previous mp4pack refused a version 3
 archive (a later version). mp4gui: the Container box for an mp3, an srt, a
 ttf and an MP4 named `.m4v`, and for the mp3's archive; its c and its d
 (with no avip d row).
+
+Threads, parts and the speed (on Linux and under wine, with `-verify`): every
+sample's round trip; the stream table of the movie (its 648MB h264 track on 4
+threads: `h264p -t 4 -c 128`, with `-c 200` too), of a 23MB mkv with `-t 8`
+(its 13MB h264 `-t 8 -c 1624k`, 2.2MB Vorbis `-t 2`, 3.6MB AAC `-t 3`) and of
+a 383KB mp4 (each stream `-t 1`, no `-c`); `test/parse_test.cpp` for the
+threads (64 at most, also with 65 or 100 given to it), the parts and their
+`-c` (128MB at most, `-c`'s too). The speed on the last line of c, d and a
+list's c and d. mp4gui: the overall bar while it runs (its fill green and
+blue as the tasks done came to and saved), at the end, and for a 91-byte
+srt whose archive is bigger (all green, `-209.9%` not in blue).
 
 The movie, with `-t 4+4,1,1` (the default then) on a 4-thread Xeon VM under
 wine:

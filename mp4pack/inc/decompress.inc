@@ -40,15 +40,14 @@ static int Decompress( const wstring& in, const Member& m, const wstring& out ) 
     string u = Quote( "u" DS+s.name );
     const Part& p0 = s.part[0];
     if( (s.m==M_H264P) || (s.m==M_M4VPACK) || (s.m==M_AC3PACK) || (s.m==M_AACPACK) || (s.m==M_OGGCOMP) ) {
-      // (they take their threads from the stream; aacpack and oggcomp as many
-      // as it has parts, of which AudioThreads makes a guess, for the stage)
+      // (they take their threads from the stream: StreamThreads makes a guess
+      // of them, for the stage)
       int g = m_group[s.m];
-      int n = ((s.m==M_AACPACK) || (s.m==M_OGGCOMP)) ? AudioThreads( s.m, s.size, 0 ) : th[g];
-      Job* j = NewJob( g, n, string(m_name[s.m]) + " " + s.name, m_tool[s.m] );
+      Job* j = NewJob( g, StreamThreads( g, s.size, 0 ), string(m_name[s.m]) + " " + s.name, m_tool[s.m] );
       j->args = string("d") + (f_verbose ? "" : " -p") + " " + Quote("p" DS+p0.pk) + " " + u;
       j->prog = 1; j->work = s.size; j->outs.push_back( UPath(s.name) ); j->del.push_back( PPath(p0.pk) );
     } else if( s.m==M_MP3PACK ) {
-      Job* j = NewJob( G_AUDIO, th[G_AUDIO], "mp3pack " + s.name, "mp3pack" );
+      Job* j = NewJob( G_AUDIO, StreamThreads( G_AUDIO, s.size, 0 ), "mp3pack " + s.name, "mp3pack" );
       j->args = string("d") + (f_verbose ? "" : " -p") + " " + Quote("p" DS+p0.pk) + " " + Quote("p" DS+p0.pk2) + " " + u;
       j->prog = 1; j->work = s.size; j->outs.push_back( UPath(s.name) ); j->del.push_back( PPath(p0.pk) ); j->del.push_back( PPath(p0.pk2) );
     } else if( s.m==M_STORE ) {
@@ -135,7 +134,8 @@ static int Decompress( const wstring& in, const Member& m, const wstring& out ) 
     if( !f_keep ) Remove( LongPath(out) );
     return 4;
   }
-  Msg( Num(isz) + " -> " + Num(z) + ", CRC " + Hex(c) + " OK, " + Clock( GetTickCount64()-t_start ) );
+  qword ms = GetTickCount64()-t_start;
+  Msg( Num(isz) + " -> " + Num(z) + ", CRC " + Hex(c) + " OK, " + Clock( ms ) + ", " + Speed( z, ms ) );
   return 0;
 }
 

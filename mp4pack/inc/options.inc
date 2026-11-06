@@ -4,6 +4,17 @@
 
 //---- options
 
+// mtwrap's limit, the most threads a tool takes: no packer gets more, and
+// -t's numbers and percentages are no more, even where the CPU has more
+static const int MAX_THREADS = 64;
+
+// the largest part (chunk) a packer gets: no more, -c's too
+static const qword MAX_PART = qword(128)<<20;
+
+// the least of a stream for each thread: fewer threads for a smaller one,
+// one for a stream below it
+static const qword MIN_PART = qword(1)<<20;
+
 // "3+3,1,1", "50%+50%-2": threads of the video packers, the audio packers, ttfcomp and
 // tangelo, in that order. Each is a number, or a percentage of the threads
 // there are (all of the CPU's, or the free ones: -f), rounded up. '+' runs a
@@ -29,8 +40,8 @@ static int ParseThreads( string spec, int all ) {
     if( (g>=N_GROUP) || (*s<'0') || (*s>'9') ) return 1;
     int v = 0;
     while( (*s>='0') && (*s<='9') ) { v = v*10+(*s++-'0'); if( v>10000 ) return 1; }
-    if( *s=='%' ) { s++; v = std::min( 64, (max*v+99)/100 ); }
-    else if( v>64 ) return 1;
+    if( *s=='%' ) { s++; v = std::min( MAX_THREADS, (max*v+99)/100 ); }
+    else if( v>MAX_THREADS ) return 1;
     th[g] = v;
     if( (g==0) || (sep==',') ) stages.push_back( vector<int>() );
     stages.back().push_back( g++ );
@@ -114,43 +125,41 @@ static string LevelSp( int m ) { string a = LevelArg(m); return a.size() ? " "+a
 // files to go in it follow)
 static string TangeloA( const string& pk ) { return "a" + LevelSp(M_TANGELO) + (f_verbose ? "" : " -p") + " " + Quote(".." DS "p" DS+pk); }
 
-// a part size for a packer's -c: MB, or KB with a k
+// a part size for a packer's -c: MB, or KB with a k (1KB to MAX_PART)
 static string ChunkArg( qword c ) {
-  c = std::min<qword>( std::max<qword>( c, 1<<10 ), 1u<<30 );
+  c = std::min<qword>( std::max<qword>( c, 1<<10 ), MAX_PART );
   return (c&((1<<20)-1)) ? Num(c>>10)+"k" : Num(c>>20);
 }
 
-// the part size for a stream of group g: -c's, else a part for each of the
-// group's threads (the size over them, 1MB at least). perbyte: the memory a
-// tool takes for each byte of a part (h264p about 2, m4vpack and ac3pack less,
-// mp3pack 10; tangelo takes the same for any): then no more than its
-// threads' share of 3/4 of the memory free now (with the threads that run
-// at once), and 1024MB, the tools' most. (aacpack and oggcomp: AudioThreads)
-static qword PartSize( int g, qword size, int perbyte ) {
-  if( ch[g] ) return ch[g];
-  qword n = qword( std::max( th[g], 1 ) ), p = std::max<qword>( (size+n-1)/n, 1<<20 );
-  if( perbyte ) {
-    int t = 0;
-    for( size_t s=0; s<stages.size(); s++ ) if( std::find( stages[s].begin(), stages[s].end(), g )!=stages[s].end() )
-      for( size_t i=0; i<stages[s].size(); i++ ) t += th[stages[s][i]];
-    MEMORYSTATUSEX ms; ms.dwLength = sizeof(ms);
-    qword avail = GlobalMemoryStatusEx( &ms ) ? ms.ullAvailPhys : (qword(1)<<32);
-    qword share = avail/4*3/qword( std::max( t, 1 ) ), base = 128<<20; // (the rest of what a tool takes)
-    p = std::min( p, std::max<qword>( (share>base) ? (share-base)/perbyte : 0, 1<<20 ) );
-    p = std::min<qword>( p, 1u<<30 );
-  }
-  return p;
+// The threads a packer gets for a stream of group g: the group's (-t), no
+// more than MAX_THREADS, and so many that each has MIN_PART of it at least
+// (or a part, -c's, where that is more; MAX_PART at most, as the parts are):
+// one for a stream below 1MB. d: the tools take their threads from the
+// stream, and this (with no part) is a guess of them, for the stage.
+static int StreamThreads( int g, qword size, qword part ) {
+  qword t = qword( std::min( std::max( th[g], 1 ), MAX_THREADS ) );
+  return int( std::max<qword>( 1, std::min<qword>( t, size/std::min( std::max( part, MIN_PART ), MAX_PART ) ) ) );
 }
 
-// aacpack's and oggcomp's threads for a stream: as many as it has parts, up
-// to the audio's (-t). They cut it into parts of the size part (-c), else of
-// their own (aacpack 1MB, oggcomp four for each thread, 64KB to 4MB): of
-// that much at least. Each thread takes about 35MB (aacpack) or 55MB
-// (oggcomp) with those. d: they take the threads from the stream, and this
-// (with no part) is a guess of them, for the stage
-static int AudioThreads( int m, qword size, qword part ) {
-  if( !part ) part = (m==M_OGGCOMP) ? (64<<10) : (1<<20);
-  return int( std::max<qword>( 1, std::min<qword>( qword( std::max( th[G_AUDIO], 1 ) ), size/part ) ) );
+// The part size for a stream of group g on t threads (StreamThreads): -c's,
+// else a part for each thread (the size over them, MIN_PART at least);
+// MAX_PART at most, -c's too. perbyte (without -c): the memory a tool takes
+// for each byte of a part (h264p about 2, m4vpack and ac3pack less, mp3pack
+// 10; tangelo takes the same for any): then no more than its threads' share
+// of 3/4 of the memory free now (with the threads that run at once).
+// aacpack and oggcomp take their own unless -c gives one.
+static qword PartSize( int g, qword size, int perbyte, int t ) {
+  qword n = qword( std::max( t, 1 ) ), p = ch[g] ? ch[g] : std::max<qword>( (size+n-1)/n, MIN_PART );
+  if( !ch[g] && perbyte ) {
+    int u = 0;
+    for( size_t s=0; s<stages.size(); s++ ) if( std::find( stages[s].begin(), stages[s].end(), g )!=stages[s].end() )
+      for( size_t i=0; i<stages[s].size(); i++ ) u += th[stages[s][i]];
+    MEMORYSTATUSEX ms; ms.dwLength = sizeof(ms);
+    qword avail = GlobalMemoryStatusEx( &ms ) ? ms.ullAvailPhys : (qword(1)<<32);
+    qword share = avail/4*3/qword( std::max( u, 1 ) ), base = 128<<20; // (the rest of what a tool takes)
+    p = std::min( p, std::max<qword>( (share>base) ? (share-base)/perbyte : 0, MIN_PART ) );
+  }
+  return std::min( p, MAX_PART );
 }
 
 static string StageText() {

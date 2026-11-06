@@ -13,13 +13,14 @@ static int PackJobs() {
     string u = Quote( "u" DS+s.name );
     int si = int(i);
     if( (s.m==M_H264P) || (s.m==M_M4VPACK) || (s.m==M_AC3PACK) || (s.m==M_AACPACK) || (s.m==M_OGGCOMP) ) {
-      // one process on its group's threads, in parts (-c, else PartSize's);
-      // aacpack and oggcomp: on as many as it has parts (AudioThreads), of
-      // their own size unless -c gives one
+      // one process on its group's threads, fewer for a small stream (one
+      // below 1MB: StreamThreads), in parts with more than one (-c, else
+      // PartSize's; 128MB at most); aacpack and oggcomp: in their own parts
+      // unless -c gives them
       int g = m_group[s.m], ao = (s.m==M_AACPACK) || (s.m==M_OGGCOMP);
       string pk = s.name + m_ext[s.m];
-      s.t = ao ? AudioThreads( s.m, s.size, ch[G_AUDIO] ) : th[g];
-      s.cut = ao ? ch[G_AUDIO] : (s.t>1) ? PartSize( g, s.size, 2 ) : 0;
+      s.t = StreamThreads( g, s.size, ch[g] );
+      s.cut = (s.t<2) ? 0 : ao ? std::min( ch[g], MAX_PART ) : PartSize( g, s.size, 2, s.t );
       Job* j = NewJob( g, s.t, string(m_name[s.m]) + " " + s.name, m_tool[s.m] );
       j->args = "c" + LevelSp(s.m) + " -t " + Num(s.t) + (s.cut ? " -c "+ChunkArg(s.cut) : string()) + (f_verbose ? "" : " -p")
               + " " + u + " " + Quote("p" DS+pk);
@@ -27,9 +28,9 @@ static int PackJobs() {
       s.part.push_back( Part( 0, s.size, pk, "" ) );
     } else if( s.m==M_MP3PACK ) {
       string pk = s.name + m_ext[M_MP3PACK], pk2 = s.name + ".mp3o";
-      s.t = th[G_AUDIO];
+      s.t = StreamThreads( G_AUDIO, s.size, ch[G_AUDIO] );
       Job* j = NewJob( G_AUDIO, s.t, "mp3pack " + s.name, "mp3pack" );
-      if( s.t>1 ) s.cut = PartSize( G_AUDIO, s.size, 10 );
+      if( s.t>1 ) s.cut = PartSize( G_AUDIO, s.size, 10, s.t );
       j->args = "c -t " + Num(s.t) + (s.cut ? " -c "+ChunkArg(s.cut) : string()) + (f_verbose ? "" : " -p")
               + " " + u + " " + Quote("p" DS+pk) + " " + Quote("p" DS+pk2);
       j->prog = 1; j->work = s.size; j->sids.push_back( si ); j->outs.push_back( PPath(pk) ); j->outs.push_back( PPath(pk2) );
@@ -58,14 +59,14 @@ static int PackJobs() {
     S[i].part.push_back( Part( 0, S[i].size, U(FileName(f->outs[0])), "" ) );
   }
   // the rest: one solid tangelo archive; with more threads, files over the
-  // part size (-c, else a piece for each thread: PartSize) are cut into
-  // pieces, an archive for each. tangelo takes them by name, in their own
-  // directory (other, otherN)
+  // part size (-c, else a piece for each thread, 1MB to 128MB: PartSize) are
+  // cut into pieces, an archive for each. tangelo takes them by name, in
+  // their own directory (other, otherN)
   int n = th[G_OTHER], na = 0;
   Job* o = 0;
   for( size_t i=0; i<S.size(); i++ ) if( S[i].m==M_TANGELO ) {
     Stream& s = S[i];
-    qword c = PartSize( G_OTHER, s.size, 0 );
+    qword c = PartSize( G_OTHER, s.size, 0, StreamThreads( G_OTHER, s.size, ch[G_OTHER] ) );
     if( (n>1) && (s.size>c) ) {
       s.cut = c;
       qword k = std::min<qword>( (s.size+c-1)/c, 100000 );
@@ -304,8 +305,8 @@ static int Compress( const wstring& in, const wstring& out, int append, Member& 
   if( WriteAll( PPath("mp4pack.idx"), IndexText() ) ) { DWORD e = GetLastError(); Msg( "cannot write " + U(PPath("mp4pack.idx")) + SysErr(e) ); return 2; }
   Job f; f.label = "archive"; f.prog = 2; f.work = DirSize( work+L"p" DS );
   if( (r = WriteArchive( work+L"p" DS, out, f, append, m ))!=0 ) return r;
-  qword osz = f.made;
-  Msg( Num(src_size) + " -> " + Num(osz) + " (" + Pct( double(osz), double(src_size) ) + "), " + Clock( GetTickCount64()-t_start ) );
+  qword osz = f.made, ms = GetTickCount64()-t_start;
+  Msg( Num(src_size) + " -> " + Num(osz) + " (" + Pct( double(osz), double(src_size) ) + "), " + Clock( ms ) + ", " + Speed( src_size, ms ) );
   return 0;
 }
 

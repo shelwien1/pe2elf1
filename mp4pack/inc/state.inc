@@ -22,7 +22,8 @@ static HANDLE ev_wake;                // set with it, for the run to act at once
 static int f_verify;                  // -verify: c, then d of the archive into a temporary file, as a check
 static int f_con;                     // stderr is a console: there is a status line
 static size_t status_len;             // its length on the screen
-static qword t_start;
+static qword t_start;                 // when the file's c or d began (set back by the pauses, as these)
+static qword t_all;                   // when the run (of all its files) began
 static qword t_run;                   // when what the status line follows began
 static uint n_log;
 

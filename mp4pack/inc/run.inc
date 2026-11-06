@@ -117,7 +117,7 @@ static int RunFiles( const vector<wstring>& ins, const wstring& out0, int append
   if( dir && out.size() && !IsSep( out[out.size()-1] ) ) out += L"" DS;
   vector<wstring> used;
   string failed;
-  qword t0 = GetTickCount64();
+  t_all = GetTickCount64();
   bytes_in = bytes_out = 0; out_failed = 0;
   for( int k=0; (k<n) && !f_abort && !out_failed; k++ ) {
     wstring in = FullPath( ins[k] );
@@ -145,7 +145,8 @@ static int RunFiles( const vector<wstring>& ins, const wstring& out0, int append
     if( ok<units ) a += Num(ok) + " done, " + Num(units-ok) + " not" + (failed.size() ? " (" + failed + ")" : string()) + "; ";
     if( tried<n ) a += Num(n-tried) + " not tried" + (out_failed ? string( " (the output cannot be written)" ) : string()) + "; ";
     if( ok ) a += Num(bytes_in) + " -> " + Num(bytes_out) + (f_dec ? string() : " (" + Pct( double(bytes_out), double(bytes_in) ) + ")") + ", ";
-    a += Clock( GetTickCount64()-t0 );
+    qword ms = GetTickCount64()-t_all;
+    a += Clock( ms ) + (ok ? ", " + Speed( f_dec ? bytes_out : bytes_in, ms ) : string()); // (of what is unpacked: c's in, d's out)
     Msg( a );
     run_summary = a;
   }
