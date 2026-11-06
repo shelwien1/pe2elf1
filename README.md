@@ -13,6 +13,16 @@ Linux (gcc or clang):
 
     make                        # -> ./h264dec ./h264p
     make CXXFLAGS="-O0 -g"      # debug build
+    make CXXFLAGS="-O3 -DNDEBUG -DMTWRAP_DBG"   # -t's statistics, below
+
+With `-DMTWRAP_DBG`, h264p's runs on threads (`c -t`, and `d` of their
+streams) use `h264p_src/MTwrap_v3_dbg` (m4vpack's): MTwrap that logs what
+its main loop and each worker did, and when, and writes it to `dbg.txt` in
+the current directory as the run quits; `python3
+h264p_src/MTwrap_v3_dbg/mtdbg.py dbg.txt` says where the time went (each
+worker's coding and waits, the main loop's, the parts, a timeline). Its
+parts code as the other build's do (MTwrap's container has the workers'
+blocks in the order they come, which the logging's timing can change).
 
 Windows (MinGW): `g.bat`, as before, for h264dec, `gp.bat` for h264p.
 
@@ -192,8 +202,9 @@ parameter set and those of the part under way. `d` holds no more of a
 compressed stream than `c` makes of one, whatever it reads: a NAL unit it
 would parse past 64 MB (an SEI's messages), a part of `-t` that comes out
 longer than its record says, or a record of a part larger than `-c` lets
-`c` make, is broken as it gets there. It reads a part's compressed bytes
-as the part's model asks for them, whatever size its record says. What it
+`c` make, is broken as it gets there. No record says how long a part's
+compressed stream is: `d` reads its bytes as the part's model asks for
+them, and the next record starts where the part's decoder stops. What it
 reads past to find the next part in turn (MTwrap's container has the
 workers' blocks in the order they came: `c`'s within about a round of
 parts of each other) it holds packed: a stream made to make it hold much
@@ -384,13 +395,15 @@ then MTwrap's container of the workers' streams (a block of up to 64 KB at
 a time, tagged with its worker; a worker's record goes out as its part is
 done, its last block as far as it is filled, so that `d`, which takes the
 parts in turn, finds each within about a round of parts of the others),
-each of them a record for each of its parts: its size, the size of the
-part as compressed (with the inserted parameter sets) and where in it
-those sets are (`d` removes those bytes, whatever the part holds), the
-part's place in the stream (worker w's k-th of N: w + kN), 64 bits each,
-little-endian, and the CRC-32 of these, then the part compressed, a
-stream of h264p's with its own header; and at its end a record that says
-it ends. So `d` finds a part lost, added or moved, a stream cut where a
+each of them a record for each of its parts (m4vpack's, whose MTwrap
+h264p's follows): the size of the part as compressed (with the inserted
+parameter sets) and where in it those sets are (`d` removes those bytes,
+whatever the part holds), the part's place in the stream (worker w's k-th
+of N: w + kN), 64 bits each, little-endian, the CRC-32 of these and 32 bits
+of 0, then the part compressed, a stream of h264p's with its own header,
+which ends where its decoder stops reading (its coder writes no more than
+that, so no record says its size); and at its end a record of size 0 that
+says it ends. So `d` finds a part lost, added or moved, a stream cut where a
 part ends, and a record changed, which the parts' own CRCs do not see.
 `d` knows it by its first bytes and runs as many threads as it says. Without `-t`, or with `-t 1`, `c` writes h264p's stream of one model,
 as before (`h264c`).

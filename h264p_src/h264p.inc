@@ -72,7 +72,11 @@ namespace h264p {
 [[noreturn]] void err_fatal(const char* why);
 }
 #define MTWRAP_NOMEM() h264p::err_fatal("out of memory")
+#ifdef MTWRAP_DBG  // MTwrap_v3_dbg instead: with statistics, written to dbg.txt as a run on threads quits
+#include "MTwrap_v3_dbg/MTwrap.inc"
+#else
 #include "MTwrap_v3/MTwrap.inc"
+#endif
 
 // errors (without C++ exceptions) and memory (without the C++ library's
 // containers), then the syntax: the bitstream, its walk and the channels

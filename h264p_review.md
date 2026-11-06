@@ -822,3 +822,12 @@ A second round reviewed those commits, the video and progress reporting (`9eb0a1
 | 5cba52a | format 10: a `-t` record carries its part's place and a CRC-32 of its header, and each worker's stream ends with a record of its own, so `d` finds a part lost, added or moved, a stream cut where a part ends, or a record changed (ins/xlen among them), which each part's own CRC does not; `d -t` hands a worker's parked blocks back before reading more, so its memory stays flat on a stream with no start codes |
 
 A completeness critic and lossless fuzzing (about 16,700 round trips) found no round-trip failure in format 8 or 9; every finding above was reproduced on the build it names and verified. The corpus compresses to the same bytes as before at all five levels, but for the version byte (now 10). `d -t` peak RSS is flat in the stream's length (about 150 MB at 128 and 512 MB in, `-t 4 -c 1`). What a crafted `-t` container can still make `d` hold is bounded by the bytes it has read, not the stream: `d` reads past a worker's blocks to reach the next part in turn, and `c`'s are within about a round of each other.
+
+### m4vpack's MTwrap (format 11)
+
+m4vpack's MTwrap_v3 was h264p's already, line for line; what it had that h264p did not was `MTwrap_v3_dbg`, MTwrap with statistics, and a worker's records without a compressed size. Both are ported:
+
+- `h264p_src/MTwrap_v3_dbg` (with `mtdbg.py`): `make CXXFLAGS="-O3 -DNDEBUG -DMTWRAP_DBG"` builds h264p on it; a run on threads writes `dbg.txt`, and `mtdbg.py` says where its time went. Its parts code as the other build's do (the container's order of the workers' blocks, which is the order they come, can differ).
+- format 11: a record is m4vpack's, 40 bytes: the part's size, where its inserted parameter sets are (ins, xlen), its place, the CRC-32 of those and 32 bits of 0; a size of 0 is the worker's end. No record says how long a part's compressed stream is: `d`'s run of a part reads the worker's input where it is (`lend()`), its decoder stops where its coder stopped writing, and what it leaves is the next record (`take_back()`). Each cut, drop and doubling of the test's stream still fails, and so does a changed xlen.
+
+`c` still holds a part's compressed output until the part is done, where m4vpack writes it as it comes: h264p's model pass may find a slice that does not come out as it is and code the part again (`kRestart`), which m4vpack's coder has no need of.

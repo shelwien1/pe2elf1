@@ -212,7 +212,7 @@ if [ -n "${negative:-}" ]; then
   # with -t, a part ends with a block of its own (c86afa6): cut at the end
   # of any block, any block left out or there twice, d fails -- its
   # worker's records say their places and its end -- and a record's
-  # removed range (xlen, the 37th byte: the first record's) changed
+  # removed range (xlen, the 29th byte: the first record's) changed
   mt_blocks() {  # the offsets at which MTwrap's blocks of the -t stream $1 end
     od -An -tu1 -v -j 11 "$1" | awk '{ for (i = 1; i <= NF; i++) b[n++] = $i }
       END { p = 0; while (p < n) { k = int(b[p] / 64)
@@ -220,7 +220,7 @@ if [ -n "${negative:-}" ]; then
         p += m; print p + 11 } }'
   }
   "$bin" c -1 -t 3 -c 1k "$here/gen/x264_keyint12.264" "$tmp/kb.c"
-  printf '\001' | dd of="$tmp/kb.c" bs=1 seek=36 count=1 conv=notrunc 2>/dev/null
+  printf '\001' | dd of="$tmp/kb.c" bs=1 seek=28 count=1 conv=notrunc 2>/dev/null
   cp "$tmp/kb.c" "$tmp/kx.c"
   "$bin" c -1 -t 3 -c 1k "$here/gen/x264_keyint12.264" "$tmp/kb.c"
   ok=0 bad=0 prev=11 tot=$(wc -c < "$tmp/kb.c")
@@ -250,39 +250,45 @@ if [ -n "${negative:-}" ]; then
   for x in "$here/gen/x264_base.264" "$tmp/empty.c" "$tmp/ver.c"; do
     check "d of $(basename "$x") fails, no output" sh -c '! "$1" d "$2" "$3/n.264" 2>/dev/null && [ ! -e "$3/n.264" ] && ! ls "$3"/n.264.*.tmp > /dev/null 2>&1' - "$bin" "$x" "$tmp"
   done
-  # a part's record of -t that claims 4 GB (its size's high bytes set): d
-  # fails as its part ends short of it, without taking the 4 GB
+  # a part's record of -t that claims a part of 4 GB (its plen's high bytes
+  # set): d fails as it reads the record, without taking the 4 GB
   "$bin" c -1 -t 2 "$here/h264p/x264_16x16.264" "$tmp/m4.c" 2>/dev/null
   printf '\377\377' | dd of="$tmp/m4.c" bs=1 seek=15 conv=notrunc 2>/dev/null
   check "d of a part's record claiming 4 GB fails, in 300 MB" sh -c 'ulimit -v 300000 2>/dev/null; ! "$1" d "$2/m4.c" "$2/k.264" 2>"$2/log" && grep -q "cut short\|broken" "$2/log"' - "$bin" "$tmp"
-  # a -t 2 stream of one part, made here: the stream $2 (one model's), its
-  # record saying the part is $3 bytes, into $4 (h264p's header from $1, a
-  # c -t 2 stream's; MTwrap's: a tail block for worker 0)
-  byte() { printf "\\$(printf %03o "$1")"; }
-  le8() { local i; for i in 0 1 2 3 4 5 6 7; do byte $((($1 >> (8 * i)) & 255)); done; }
-  # a whole -t 2 container, built here (mt.inc's record format 10): h264p's
-  # header from $1 (a c -t 2 stream's), then worker 0 with one part -- the
-  # one-model stream $2, its record saying plen $3 -- and both workers'
-  # end records, into $4. A record is g_size, plen, ins, xlen, place, the
-  # CRC-32 of those 40 bytes and a zero word; a worker's end a record of 48
-  # bytes whose plen is 0; each goes in an MTwrap tail block (its worker's
-  # id, then its bytes, the first two swapped to the end).
-  mt_one() {
-    python3 -I -c 'import sys, struct, binascii
-hdr, body, plen, out = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4]
+  # -t 2 streams built here (mt.inc's record: plen, ins, xlen, place, the
+  # CRC-32 of those 32 bytes and a zero word, then the part's stream; a
+  # worker's end a record of plen 0), each record in MTwrap's blocks of its
+  # worker, after h264p's header from a c -t 2 stream ($1): "one", worker
+  # 0's one part (the one-model stream $2, its record saying plen $3) and
+  # both workers' ends, into $4; "flood", worker 1's part ($2, 3 MB of
+  # zeros) and 65,536 blocks of 2 bytes for it, worker 0 nothing; "giant",
+  # worker 0's part of 100 bytes whose stream is the first 7 bytes of $2
+  # (its magic, version and level) and 128 MB of zero bytes, and worker 1's
+  # end
+  cat > "$tmp/mtb.py" <<'PY'
+import sys, struct, binascii
+mode, hdr, body, out = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[-1]
 part = open(body, "rb").read()
-def rec(g, p, place):
-    h = struct.pack("<QQQQQ", g, p, 0, 0, place)
+def rec(plen, place):
+    h = struct.pack("<QQQQ", plen, 0, 0, place)
     return h + struct.pack("<II", binascii.crc32(h) & 0xffffffff, 0)
-def blk(w, p):
+def blk(w, p):  # a tail block: 2 to 65,533 bytes
     l = len(p) + 1
     return bytes([w | 0x80, (l >> 8) & 0xff, l & 0xff]) + p[2:] + p[1:2] + p[0:1]
-o = open(hdr, "rb").read()[:11]
-o += blk(0, rec(48 + len(part), plen, 0) + part)  # worker 0 part, place 0
-o += blk(0, rec(48, 0, 2))                          # worker 0 end, place 0 + 1*2
-o += blk(1, rec(48, 0, 1))                          # worker 1 end, place 1
-open(out, "wb").write(o)' "$1" "$2" "$3" "$4"
-  }
+f = open(out, "wb")
+f.write(open(hdr, "rb").read()[:11])
+if mode == "one":
+    f.write(blk(0, rec(int(sys.argv[4]), 0) + part) + blk(0, rec(0, 2)) + blk(1, rec(0, 1)))
+elif mode == "flood":
+    f.write(blk(1, rec(3000000, 1) + part) + blk(1, b"\0\0") * 65536)
+else:  # giant: whole blocks of worker 0 (its id, 65,535 bytes)
+    first = rec(100, 0) + part[:7]
+    f.write(blk(1, rec(0, 1)) + bytes([0]) + first + bytes(65535 - len(first)))
+    z = bytes(65536)
+    for i in range(2048): f.write(z)
+f.close()
+PY
+  mt_one() { python3 -I "$tmp/mtb.py" one "$1" "$2" "$3" "$4"; }
   # 300 MB of zeros as a part of 100 bytes, or of 1 TB, which c makes of no
   # -c: d fails as it passes 100, or at once, without holding 300 MB first
   head -c 3000000 /dev/zero > "$tmp/z3"
@@ -294,27 +300,21 @@ open(out, "wb").write(o)' "$1" "$2" "$3" "$4"
   check "d of a part longer than its record, or a record of a part larger than -c makes, fails in 250 MB" sh -c 'ulimit -v 250000 2>/dev/null; "$1" d "$2/p_ok.c" - | cmp -s - "$2/z3" && ! "$1" d "$2/p_short.c" "$2/k.264" 2>"$2/log" && grep -q "longer than its record" "$2/log" && ! "$1" d "$2/p_big.c" "$2/k.264" 2>"$2/log" && grep -q "record broken" "$2/log"' - "$bin" "$tmp"
   # two more -t 2 streams made here, which c makes nothing like: d reads
   # them in what a part of 3 MB takes and 64 MB, failing as it finds them
-  # broken. (1) a worker 1 whose part, 3 MB of zeros, waits on worker 0,
-  # which has nothing, then 65,536 blocks of 2 bytes for worker 1 (320 KB):
-  # MTwrap put each in a node of 64 KB of its own as it read past them (4
-  # GB); (2) a record that says its part is 128 MB compressed, which it
-  # is, of zero bytes: d took it whole before its model read any of it
-  tail_block() {  # MTwrap's block of the file $2 (2 to 65,533 bytes) for worker $1
-    local l=$(($(stat -c %s "$2") + 1))
-    byte $((128 + $1)); byte $((l >> 8)); byte $((l & 255)); tail -c +3 "$2"
-    byte $(od -An -tu1 -j1 -N1 "$2"); byte $(od -An -tu1 -N1 "$2")
-  }
-  { le8 $((32 + $(stat -c %s "$tmp/z3.c"))); le8 3000000; le8 0; le8 0; cat "$tmp/z3.c"; } > "$tmp/rec1"
-  printf '\201\000\003\000\000' > "$tmp/flood"
-  for i in $(seq 16); do cat "$tmp/flood" "$tmp/flood" > "$tmp/flood2" && mv "$tmp/flood2" "$tmp/flood"; done
-  { head -c 11 "$tmp/m4.c"; tail_block 1 "$tmp/rec1"; cat "$tmp/flood"; } > "$tmp/flood.c"
-  { head -c 11 "$tmp/m4.c"; byte 193; byte 0; le8 $((32 + 65503 + 2048 * 65536)); le8 100; le8 0; le8 0; head -c 7 "$tmp/z3.c"; head -c $((65503 - 7 + 2048 * 65536)) /dev/zero; } > "$tmp/giant.c"
+  # broken. (1) "flood": worker 1's part, 3 MB of zeros, waits on worker 0,
+  # which has nothing, and 65,536 blocks of 2 bytes come for worker 1 (320
+  # KB): MTwrap put each in a node of 64 KB of its own as it read past them
+  # (4 GB); (2) "giant": a part's stream of 128 MB of zero bytes after its
+  # header, which d reads only as its decoder takes it (a record said how
+  # long a part's stream was, and d took that whole before its model read
+  # any of it)
+  python3 -I "$tmp/mtb.py" flood "$tmp/m4.c" "$tmp/z3.c" "$tmp/flood.c"
+  python3 -I "$tmp/mtb.py" giant "$tmp/m4.c" "$tmp/z3.c" "$tmp/giant.c"
   lim=
   for l in 100000 125000 150000 175000 200000 225000 250000 300000 400000 500000 700000; do
     if sh -c 'ulimit -v $1 2>/dev/null || exit 1; "$2" d "$3/p_ok.c" - > /dev/null 2>&1' - $l "$bin" "$tmp"; then lim=$l; break; fi
   done
-  check "d of 65,536 blocks of 2 bytes past a waiting part, or of a record of 128 MB, fails broken in what a part of 3 MB took${lim:+ ($lim KB)} and 64 MB" sh -c '[ -z "$1" ] || ulimit -v $(($1 + 65536)); ! "$2" d "$3/flood.c" "$3/k.264" 2>"$3/log" && grep -q "broken" "$3/log" && ! grep -q "memory" "$3/log" && ! "$2" d "$3/giant.c" "$3/k.264" 2>"$3/log" && grep -q "corrupt\|broken" "$3/log" && ! grep -q "memory" "$3/log"' - "$lim" "$bin" "$tmp"
-  rm -f "$tmp/giant.c" "$tmp/flood.c" "$tmp/flood"
+  check "d of 65,536 blocks of 2 bytes past a waiting part, or of a part's stream of 128 MB, fails broken in what a part of 3 MB took${lim:+ ($lim KB)} and 64 MB" sh -c '[ -z "$1" ] || ulimit -v $(($1 + 65536)); ! "$2" d "$3/flood.c" "$3/k.264" 2>"$3/log" && grep -q "broken" "$3/log" && ! grep -q "memory" "$3/log" && ! "$2" d "$3/giant.c" "$3/k.264" 2>"$3/log" && grep -q "corrupt\|broken" "$3/log" && ! grep -q "memory" "$3/log"' - "$lim" "$bin" "$tmp"
+  rm -f "$tmp/giant.c" "$tmp/flood.c"
   # d failing to write keeps the old output; a replaced output keeps its
   # mode; an interrupted c leaves no temporary file
   echo old > "$tmp/old.264"
