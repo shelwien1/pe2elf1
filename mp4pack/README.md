@@ -1,10 +1,13 @@
 # mp4pack
 
-Lossless compression of whole mp4/mkv/avi files, for Windows and Linux (see
-[Linux](#linux)). `mp4pack.exe` is a wrapper: it takes the container apart with
-`avip`, gives each stream to the packer made for it, and stores the results in
-one simple archive of its own (see [The archive](#the-archive)). `mp4gui.exe`
-is the same with a window, on Windows (see [mp4gui](#mp4gui)).
+Lossless compression of whole mp4/mkv/avi files, and of the kinds of files
+that are in them (mp3, aac, ogg, h264 streams, fonts, subtitles ...), for
+Windows and Linux (see [Linux](#linux)). `mp4pack.exe` is a wrapper: it takes
+the container apart with `avip`, gives each stream to the packer made for it,
+and stores the results in one simple archive of its own (see
+[The archive](#the-archive)); a file that is no container goes to its packer
+as it is. `mp4gui.exe` is the same with a window, on Windows (see
+[mp4gui](#mp4gui)).
 
 ```
 mp4pack c [options] input output     compress
@@ -40,6 +43,22 @@ not after all the work.
    container into `s.meta` and one file per track (`s.0.h264`, `s.1.aac`, ...;
    mkv attachments come out as files too, e.g. fonts as `s.7.ttf`). The input's
    CRC32 is computed meanwhile.
+
+   avip splits mp4, mkv and avi. Any other file it stores whole in `s.meta`
+   (as "unknown format", or "vp meta: stored copy"), and then mp4pack packs
+   the file as it is, as the one stream, `s.0.<its extension>` (a hard link
+   to it in the work directory, else a copy). Its packer is the one its
+   extension names (the table below): mp1, mp2 and mp3 files go to mp3pack,
+   aac to aacpack, ac3 to ac3pack, ogg to oggcomp, h264 to h264p, m4v to
+   m4vpack, ttf to ttfcomp, and the rest (srt, ssa, ass, txt, anything) to
+   tangelo. An `.m4v` that is an MP4 (as Apple's are) is split by avip as an
+   mp4. These files used to go to tangelo whole, as `s.meta`. Now an mp3
+   comes to 74,366 bytes instead of 101,523, an aac to 92,897 instead of
+   124,625, an h264 stream to 234,738 instead of 302,709, and an m4v to
+   44,077 instead of 89,422 (the samples here, 129KB to 305KB). A small
+   text is 10 bytes bigger (the index says more). d restores such a file
+   without avip, and the index says it is one (`direct`, see
+   [The archive](#the-archive)).
 2. Each of avip's files goes to a packer, by its extension:
 
    | files | packer | group (`-t`/`-c`/`-l` position) |
@@ -86,10 +105,10 @@ not after all the work.
    directory once it is in (unless `-k`).
 
 **d** undoes it: the archive's files into the work directory, the unpackers,
-then `avip d`. Every stream is checked
-against the size and CRC32 the index has for it before `avip d`, and the result
-against the input's; a mismatch is an error (exit code 4) and the output is
-removed.
+then `avip d` (for a file packed as it is, its stream is moved to the output
+instead). Every stream is checked against the size and CRC32 the index has for
+it before `avip d`, and the result against the input's; a mismatch is an error
+(exit code 4) and the output is removed.
 
 The tools run with the work directory as their current directory and get
 relative paths. They take ANSI command lines, so a path that does not survive
@@ -400,7 +419,8 @@ tools, as `mp4pack.exe` does.
   one question).
 - **Input, Output**: typed or pasted (quotes around a path, as Explorer's "Copy
   as path" gives it, are taken off), chosen with `...` (the Open and Save
-  dialogs), or the input dropped on the window, or given on mp4gui's command
+  dialogs; the Open dialog shows the videos, the streams and files packed as
+  they are, and the archives, each kind also on its own, and all files), or the input dropped on the window, or given on mp4gui's command
   line (below). An input ending in `.mpk` selects Decompress. The output is
   named after the input (`x.mkv` -> `x.mkv.mpk`, and back) until you choose
   one; an existing output is replaced only after asking.
@@ -420,11 +440,14 @@ tools, as `mp4pack.exe` does.
   avip's own details of it), the attachments, then the files `avip c` would
   make, each with what would pack it as the options stand (h264p, tangelo,
   ...; e.g. `tangelo (no h264p build runs here)`), and last avip's notes on
-  the container's layout. An mp4pack archive (avip cannot read those) is
-  described by its index instead: the file it was made of (name, size,
-  CRC32), each stream with its size, what it came to and its method (the
-  fonts in `fonts.ttfc`, the files in a tangelo archive, together), and the
-  tool builds it was made with. avip runs in the background (a 1GB mkv took
+  the container's layout. A file that is no container says so, and what
+  would pack it as it is (`not mp4, mkv or avi, 128731 bytes: packed as it
+  is, without avip`, then `0.mp3  128731  mp3pack`). An mp4pack archive
+  (avip cannot read those) is described by its index instead: the file it
+  was made of (name, size, CRC32; "packed as it is" for such a file), each
+  stream with its size, what it came to and its method (the fonts in
+  `fonts.ttfc`, the files in a tangelo archive, together), and the tool
+  builds it was made with. avip runs in the background (a 1GB mkv took
   27 s here), at a lower priority; a new input stops it. Start stops it too,
   as it would compete with the run for the file, and the description is made
   when the run ends. The last four are kept, so switching between Compress
@@ -570,6 +593,13 @@ part <offset> <length> <packed file> [<name>]  what holds it (mp3pack: the
 ...                                            "outside" file; tangelo: the name
 end                                            in the archive)
 ```
+
+The first line is the version an mp4pack needs to read the index: 2, or 3
+when the file was packed as it is (not mp4, mkv or avi). Then a `direct` line
+follows `tools`, and the one stream is the file (`stream <size> <crc32>
+mp3pack s.0.mp3`: the same size and CRC32 as `src`); d moves it to the output,
+without avip. An mp4pack from before version 3 refuses such an archive (a
+later version), and reads the others as before.
 
 `mp4pack 1` is the index of mp4pack before aacpack and oggcomp had threads.
 Its aacpack and oggcomp streams were packed by those builds (aacpack's in
@@ -826,6 +856,20 @@ earlier mp4pack's archive, the Container box's note and the status line
 earlier oggcomp build in front, the status line (`Failed:
 oggcomp_x86-64-v4.exe does not take -t: an earlier build?`), both whole at
 the window's 640 pixels.
+
+Files packed as they are (on Linux and under wine, with `-verify`): an mp2,
+mp3, aac, ac3, ogg, h264, m4v, ttf, srt, ssa, ass and txt file, and an mp1
+(an mp2 named so: there was no MPEG-1 Layer I file at hand, nor an encoder
+for one); an empty file (stored), one without an extension (tangelo), one
+with an upper-case extension, one with a Cyrillic name with a space, and an
+MP4 named `.m4v` (split by avip, as before). Also a list of an mkv and such
+files into one archive and its d, and `-k` (the kept work directory holds a
+link to the input, which stays as it was when the directory is removed).
+Archives made on either system were restored on the other, archives of the
+previous mp4pack by this one, and the previous mp4pack refused a version 3
+archive (a later version). mp4gui: the Container box for an mp3, an srt, a
+ttf and an MP4 named `.m4v`, and for the mp3's archive; its c and its d
+(with no avip d row).
 
 The movie, with `-t 4+4,1,1` (the default then) on a 4-thread Xeon VM under
 wine:

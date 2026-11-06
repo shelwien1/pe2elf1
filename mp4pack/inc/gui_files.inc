@@ -66,7 +66,9 @@ static vector<wstring> FileDialog( int kind ) {
   o.Flags = OFN_EXPLORER|OFN_HIDEREADONLY|OFN_ENABLESIZING|OFN_PATHMUSTEXIST|OFN_NOCHANGEDIR;
   vector<wstring> v;
   if( kind!=1 ) {
-    o.lpstrFilter = L"Video files and mp4pack archives\0*.mp4;*.m4v;*.mkv;*.avi;*.mpk\0Video files (mp4, mkv, avi)\0*.mp4;*.m4v;*.mkv;*.avi\0"
+    o.lpstrFilter = L"Video, audio, fonts, subtitles and mp4pack archives\0*.mp4;*.m4v;*.mkv;*.avi;*.h264;*.264;*.mp3;*.mp2;*.mp1;*.mpa;*.aac;*.ac3;*.eac3;*.ogg;*.oga;*.ttf;*.otf;*.ttc;*.srt;*.ssa;*.ass;*.txt;*.mpk\0"
+                    L"Video files (mp4, mkv, avi)\0*.mp4;*.m4v;*.mkv;*.avi\0"
+                    L"Streams and files packed as they are (h264, m4v, mp3, aac, ac3, ogg, fonts, subtitles, text)\0*.h264;*.264;*.m4v;*.mp3;*.mp2;*.mp1;*.mpa;*.aac;*.ac3;*.eac3;*.ogg;*.oga;*.ttf;*.otf;*.ttc;*.srt;*.ssa;*.ass;*.txt\0"
                     L"mp4pack archives (*.mpk)\0*.mpk\0All files\0*.*\0";
     o.lpstrTitle = kind ? L"Files to add to the list" : L"The file to compress or decompress";
     o.Flags |= OFN_FILEMUSTEXIST|(kind ? OFN_ALLOWMULTISELECT : 0);

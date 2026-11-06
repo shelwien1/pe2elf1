@@ -1,5 +1,6 @@
 // inc/decompress.inc -- d: a member of an archive: its files, the unpackers,
-//  every stream checked, avip d, the output checked
+//  every stream checked, avip d (a file packed as it is: its stream), the
+//  output checked
 // (a part of the engine: inc/mp4pack.inc includes it, in its order)
 
 //---- d
@@ -16,7 +17,8 @@ static int Decompress( const wstring& in, const Member& m, const wstring& out ) 
   if( r ) return r;
   string why;
   if( ReadIndex( why ) ) { Msg( U(in) + ": " + why ); return 4; }
-  Msg( "restoring " + src_name + " (" + Num(src_size) + " bytes) from " + Num(S.size()) + ((S.size()==1) ? " file" : " files") );
+  Msg( "restoring " + src_name + " (" + Num(src_size) + " bytes) from " + Num(S.size()) + ((S.size()==1) ? " file" : " files")
+     + (src_direct ? ", packed as it is" : "") );
   if( f_verbose && src_tools.size() ) Msg( "packed with " + src_tools );
   SpaceCheck( src_size );
   for( size_t i=0; i<S.size(); i++ ) if( (S[i].m!=M_STORE) && GetTool( m_tool[S[i].m] ).path.empty() ) {
@@ -103,21 +105,28 @@ static int Decompress( const wstring& in, const Member& m, const wstring& out ) 
   }
 
   // avip d, to the output if it can take its name (or its 8.3 one), else in
-  // the work directory, moved after
-  wstring op = out;
-  int tmp = 0;
-  if( !AnsiOK(out) ) {
-    HANDLE h = OpenWrite( LongPath(out), CREATE_ALWAYS );
-    if( h!=INVALID_HANDLE_VALUE ) CloseHandle( h );
-    op = ToolName( out );
-    if( op.empty() ) { op = L"output.tmp"; tmp = 1; }
-  }
-  Job a; a.label = "avip d"; a.tool = "avip"; a.args = "d u" DS "s " + Quote(U(op));
-  a.prog = 3; a.expect = src_size; a.outs.push_back( tmp ? work+op : LongPath(op) );
-  r = RunOne( a );
-  if( r ) { Remove( LongPath(out) ); return (r==2) ? 5 : 3; }
-  if( tmp && !MoveFileExW( (work+op).c_str(), LongPath(out).c_str(), MOVEFILE_REPLACE_EXISTING|MOVEFILE_COPY_ALLOWED ) ) {
-    DWORD e = GetLastError(); Msg( "cannot move the output to " + U(out) + SysErr(e) ); return 2;
+  // the work directory, moved after; a file packed as it is: its stream moved
+  // there
+  if( src_direct ) {
+    if( !MoveFileExW( UPath(S[0].name).c_str(), LongPath(out).c_str(), MOVEFILE_REPLACE_EXISTING|MOVEFILE_COPY_ALLOWED ) ) {
+      DWORD e = GetLastError(); Msg( "cannot move the output to " + U(out) + SysErr(e) ); return 2;
+    }
+  } else {
+    wstring op = out;
+    int tmp = 0;
+    if( !AnsiOK(out) ) {
+      HANDLE h = OpenWrite( LongPath(out), CREATE_ALWAYS );
+      if( h!=INVALID_HANDLE_VALUE ) CloseHandle( h );
+      op = ToolName( out );
+      if( op.empty() ) { op = L"output.tmp"; tmp = 1; }
+    }
+    Job a; a.label = "avip d"; a.tool = "avip"; a.args = "d u" DS "s " + Quote(U(op));
+    a.prog = 3; a.expect = src_size; a.outs.push_back( tmp ? work+op : LongPath(op) );
+    r = RunOne( a );
+    if( r ) { Remove( LongPath(out) ); return (r==2) ? 5 : 3; }
+    if( tmp && !MoveFileExW( (work+op).c_str(), LongPath(out).c_str(), MOVEFILE_REPLACE_EXISTING|MOVEFILE_COPY_ALLOWED ) ) {
+      DWORD e = GetLastError(); Msg( "cannot move the output to " + U(out) + SysErr(e) ); return 2;
+    }
   }
   uint c; qword z;
   if( FileCrc( LongPath(out), c, z ) ) { DWORD e = GetLastError(); return Fail( "cannot read " + U(out) + SysErr(e), 2 ); }

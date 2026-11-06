@@ -168,7 +168,8 @@ static string ArchiveText( const wstring& path ) {
   }
   string r = "mp4pack archive, version " + Num(m.ver) + ": " + Num(m.size) + " bytes"
            + (x.src_size ? " (" + Pct( double(m.size), double(x.src_size) ) + ")" : string()) + "\r\n"
-           + "of " + x.src_name + ": " + Num(x.src_size) + " bytes, CRC32 " + Hex(x.src_crc) + "\r\n";
+           + "of " + x.src_name + ": " + Num(x.src_size) + " bytes, CRC32 " + Hex(x.src_crc)
+           + (x.direct ? ", packed as it is (not mp4, mkv or avi)" : "") + "\r\n";
   // a stream alone in its files: its line; those in a solid archive: the archive's
   size_t w = 0, wz = 0;
   for( size_t k=0; k<st.size(); k++ ) { w = std::max( w, st[k].name.size() ); wz = std::max( wz, Num( st[k].size ).size() ); }
@@ -206,8 +207,10 @@ static string ArchiveText( const wstring& path ) {
 // avip's description, its lines in this order: the container (without the
 // path avip got), what it says of the tracks (and attachments), the files c
 // would make, each with what would pack it (packers: as the options stand),
-// and last what it says of the container's layout
-static string AvipText( const string& t, const string& arg, int packers ) {
+// and last what it says of the container's layout. A file it lists none of
+// (not mp4, mkv or avi: c would store it as it is, in s.meta) is packed as it
+// is: that, and what would pack it (path, size: the file)
+static string AvipText( const string& t, const string& arg, int packers, const wstring& path, qword size ) {
   vector<string> l = Lines( t ), fn;
   vector<qword> fz;
   string head, total, body, tail;
@@ -221,6 +224,7 @@ static string AvipText( const string& t, const string& arg, int packers ) {
     else if( !s.compare( 0, 7, "layout:" ) || !s.compare( 0, 7, "struct:" ) || !s.compare( 0, 10, "chunk ops:" ) ) tail += s + "\r\n";
     else body += s + "\r\n";
   }
+  if( fn.empty() && total.empty() ) { fn.push_back( DirectName( path ).substr( 2 ) ); fz.push_back( size ); head = "not mp4, mkv or avi, " + Num(size) + " bytes: packed as it is, without avip"; }
   string r = head;
   if( total.size() ) r += "; avip c: " + Num(fn.size()) + ((fn.size()==1) ? " file, " : " files, ") + total + " bytes";
   r += "\r\n" + body;
@@ -240,7 +244,7 @@ static void InfoShow() {
   string s;
   if( info.path.size() ) {
     if( info.kind==0 ) s = "reading " + U( FileName( info.path ) ) + " ...";
-    else if( info.kind==1 ) s = AvipText( info.text, info.arg, !running && !plan_bad );
+    else if( info.kind==1 ) s = AvipText( info.text, info.arg, !running && !plan_bad, info.path, info.size );
     else s = info.text;
   }
   wstring w = W(s);

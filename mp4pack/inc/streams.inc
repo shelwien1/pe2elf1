@@ -33,6 +33,22 @@ static uint src_crc;
 static wstring UPath( const string& name ) { return work + L"u" DS + W(name); }
 static wstring PPath( const string& name ) { return work + L"p" DS + W(name); }
 
+// The one stream of a file avip cannot split (not mp4, mkv or avi), packed
+// as it is: "s.0" and the file's extension, lowercase, which names its
+// packer (Method); none if that is not 1 to 8 letters and digits.
+static string DirectName( const wstring& file ) {
+  wstring n = FileName( file );
+  size_t d = n.rfind( L'.' );
+  string e;
+  if( (d!=wstring::npos) && (n.size()-d-1>=1) && (n.size()-d-1<=8) ) for( size_t i=d+1; i<n.size(); i++ ) {
+    wchar_t c = n[i];
+    if( (c>='A') && (c<='Z') ) c += 'a'-'A';
+    if( ((c<'a') || (c>'z')) && ((c<'0') || (c>'9')) ) { e.clear(); break; }
+    e += char(c);
+  }
+  return e.size() ? "s.0." + e : "s.0";
+}
+
 static Job* NewJob( int g, int w, const string& label, const string& tool ) {
   Job* j = new Job;
   j->g = g; j->w = std::max( w, 1 ); j->label = label; j->tool = tool;
@@ -78,11 +94,12 @@ static void Succeeded( Job& j ) {
 
 static string src_tools; // d: the tool builds the archive was made with
 static int src_ver;       // d: its index's version (1: an earlier mp4pack's, see ParseIndex)
+static int src_direct;    // the file is the one stream, packed as it is (avip cannot split it)
 
 static string IndexText() {
-  string t = "mp4pack 2\nsrc " + Num(src_size) + " " + Hex(src_crc) + " " + src_name + "\ntools";
+  string t = string( "mp4pack " ) + (src_direct ? "3" : "2") + "\nsrc " + Num(src_size) + " " + Hex(src_crc) + " " + src_name + "\ntools";
   for( int i=0; i<n_tools; i++ ) if( tools[i].used ) t += " " + tools[i].file;
-  t += "\n";
+  t += src_direct ? "\ndirect\n" : "\n";
   for( size_t i=0; i<S.size(); i++ ) {
     t += "stream " + Num(S[i].size) + " " + Hex(S[i].crc) + " " + m_name[S[i].m] + " " + S[i].name + "\n";
     for( size_t k=0; k<S[i].part.size(); k++ ) {
@@ -122,18 +139,20 @@ static int HexNum( const string& s, uint& v ) {
 
 // an index (mp4pack.idx): its version, the file it was made of, the tool
 // builds, the streams with their parts
-struct Index { int ver; string src_name, tools; qword src_size; uint src_crc; vector<Stream> s; Index() : ver(0), src_size(0), src_crc(0) {} };
+struct Index { int ver, direct; string src_name, tools; qword src_size; uint src_crc; vector<Stream> s; Index() : ver(0), direct(0), src_size(0), src_crc(0) {} };
 
 // an index's text into x; the names are checked, so that none leads out of
-// a directory (d: the work directory). 0, or 1 (why). Version 1 is an
-// mp4pack's from before aacpack and oggcomp had threads: its streams of
-// theirs are of their builds of then, which the later ones do not unpack
-// (and aacpack's could be in parts, a process for each)
+// a directory (d: the work directory). 0, or 1 (why). The version is the
+// one an mp4pack needs to read it: 3 with "direct" (the file is its one
+// stream, packed as it is: avip cannot split it, nor restore it), else 2.
+// Version 1 is an mp4pack's from before aacpack and oggcomp had threads: its
+// streams of theirs are of their builds of then, which the later ones do not
+// unpack (and aacpack's could be in parts, a process for each).
 static int ParseIndex( const string& t, Index& x, string& why ) {
   vector<string> L = Lines( t );
   vector<Stream>& S = x.s;
   why = "bad mp4pack.idx";
-  x.ver = L.empty() ? 0 : (L[0]=="mp4pack 1") ? 1 : (L[0]=="mp4pack 2") ? 2 : 0;
+  x.ver = L.empty() ? 0 : (L[0]=="mp4pack 1") ? 1 : (L[0]=="mp4pack 2") ? 2 : (L[0]=="mp4pack 3") ? 3 : 0;
   if( x.ver==0 ) { why = "not an mp4pack archive, or a later version"; return 1; }
   int f_src = 0, f_end = 0;
   for( size_t n=1; n<L.size() && !f_end; n++ ) {
@@ -163,11 +182,12 @@ static int ParseIndex( const string& t, Index& x, string& why ) {
     } else if( k=="tools" ) { // (only shown)
       x.tools = l.substr( i );
       for( size_t q=0; q<x.tools.size(); q++ ) if( byte(x.tools[q])<32 ) x.tools[q] = '?';
-    }
+    } else if( (k=="direct") && (i==l.size()) && (x.ver>=3) ) x.direct = 1;
     else if( k=="end" ) f_end = 1;
     else return 1;
   }
   if( !f_src || !f_end ) return 1;
+  if( x.direct && ((S.size()!=1) || (S[0].size!=x.src_size) || (S[0].crc!=x.src_crc)) ) return 1; // (the stream is the file)
   for( size_t i=0; i<S.size(); i++ ) {
     Stream& s = S[i];
     qword o = 0;
@@ -190,7 +210,7 @@ static int ReadIndex( string& why ) {
   Index x;
   if( ReadAll( PPath("mp4pack.idx"), t, 1<<26 ) ) { why = "no mp4pack.idx in it: not an mp4pack archive?"; return 1; }
   if( ParseIndex( t, x, why ) ) return 1;
-  S = x.s; src_name = x.src_name; src_size = x.src_size; src_crc = x.src_crc; src_tools = x.tools; src_ver = x.ver;
+  S = x.s; src_name = x.src_name; src_size = x.src_size; src_crc = x.src_crc; src_tools = x.tools; src_ver = x.ver; src_direct = x.direct;
   return 0;
 }
 

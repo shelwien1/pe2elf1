@@ -1,6 +1,7 @@
-// inc/compress.inc -- c: avip c, the packers (PackJobs, PackFailed,
-//  StreamMethod), their builds tried first (CheckBuilds, d's too), the
-//  output checked first (OutputCheck), the archive
+// inc/compress.inc -- c: avip c (or, for a file it cannot split, the file as
+//  it is), the packers (PackJobs, PackFailed, StreamMethod), their builds
+//  tried first (CheckBuilds, d's too), the output checked first
+//  (OutputCheck), the archive
 // (a part of the engine: inc/mp4pack.inc includes it, in its order)
 
 //---- c
@@ -210,6 +211,20 @@ static int OutputCheck( const wstring& out ) {
   return 0;
 }
 
+// the input at to in the work directory: a hard link to it, else (Linux,
+// another file system) a symbolic one, else a copy (said so first: note).
+// 0, or 2
+static int InputLink( const wstring& in, const wstring& to, const string& note ) {
+  int linked = CreateHardLinkW( to.c_str(), LongPath(in).c_str(), 0 );
+#ifndef _WIN32
+  if( !linked ) linked = CreateSymbolicLinkW( to.c_str(), LongPath(in).c_str(), 0 ); // (another file system)
+#endif
+  if( linked ) return 0;
+  Msg( note );
+  if( CopyFileW( LongPath(in).c_str(), to.c_str(), FALSE ) ) return 0;
+  DWORD e = GetLastError(); Msg( "cannot copy the input to " + U(to) + SysErr(e) ); return 2;
+}
+
 // c of in to out (append: as a member added to the archive out); m: where
 // it went in out
 static int Compress( const wstring& in, const wstring& out, int append, Member& m ) {
@@ -221,19 +236,13 @@ static int Compress( const wstring& in, const wstring& out, int append, Member& 
   SpaceCheck( 2*src_size ); // the streams, and what they are packed into
 
   // avip c, with the input as it can take its name; meanwhile its CRC32
-  wstring ip = ToolName( in );
+  wstring ip = ToolName( in ), ours; // (ours: our link to the input, or copy)
   if( ip.empty() ) {
     wstring e = FileName( in );
     e = (e.rfind('.')!=wstring::npos) ? e.substr( e.rfind('.') ) : L"";
     ip = L"input" + (AnsiOK(e) && (e.size()<16) ? e : wstring());
-    int linked = CreateHardLinkW( (work+ip).c_str(), LongPath(in).c_str(), 0 );
-#ifndef _WIN32
-    if( !linked ) linked = CreateSymbolicLinkW( (work+ip).c_str(), LongPath(in).c_str(), 0 ); // (another file system)
-#endif
-    if( !linked ) {
-      Msg( "note: avip cannot take the input's name: copying it to the work directory" );
-      if( !CopyFileW( LongPath(in).c_str(), (work+ip).c_str(), FALSE ) ) { DWORD e = GetLastError(); Msg( "cannot copy the input to " + U(work+ip) + SysErr(e) ); return 2; }
-    }
+    ours = work+ip;
+    if( InputLink( in, ours, "note: avip cannot take the input's name: copying it to the work directory" ) ) return 2;
   }
   CrcTask ct; ct.path = LongPath(in); ct.err = 1;
   HANDLE cth = CreateThread( 0, 0, CrcThread, &ct, 0, 0 );
@@ -244,17 +253,33 @@ static int Compress( const wstring& in, const wstring& out, int append, Member& 
   if( r ) { return (r==2) ? 5 : 3; }
   if( ct.err || (ct.size!=src_size) ) return Fail( "cannot read " + U(in) + SysErr( ct.err ? ct.sys : 0 ), 2 );
   src_crc = ct.crc;
-  if( FileName(ip)==ip ) Remove( work+ip ); // (our link or copy)
 
   vector<wstring> names = ListFiles( work+L"u" DS );
   string nobuild[N_METHOD];
   if( names.empty() ) { Msg( "avip c made no files" ); return 3; }
-  Msg( "avip c: " + Num(names.size()) + ((names.size()==1) ? " file, " : " files, ") + Clock(a.t) );
+  // Not mp4, mkv or avi: avip c makes s.meta alone, the file as it is. The
+  // file is the one stream then (in u, our link to it or copy), packed as it
+  // is by the packer of its extension (else tangelo), and d restores it
+  // without avip.
+  src_direct = (names.size()==1) && (names[0]==L"s.meta");
+  if( src_direct ) {
+    string sn = DirectName( in );
+    Remove( work+L"u" DS "s.meta" );
+    if( ours.size() ) {
+      if( !MoveFileW( ours.c_str(), UPath(sn).c_str() ) ) { DWORD e = GetLastError(); Msg( "cannot move " + U(ours) + SysErr(e) ); return 2; }
+    } else if( InputLink( in, UPath(sn), "note: copying the input to the work directory (it cannot be linked there)" ) ) return 2;
+    names[0] = W(sn);
+    Msg( "avip c: not mp4, mkv or avi, " + Clock(a.t) + ": packed as it is, as " + sn );
+  } else {
+    if( ours.size() ) Remove( ours );
+    Msg( "avip c: " + Num(names.size()) + ((names.size()==1) ? " file, " : " files, ") + Clock(a.t) );
+  }
   for( size_t i=0; i<names.size(); i++ ) {
     Stream s;
     s.name = U(names[i]);
     if( !SafeName(s.name) ) { Msg( "avip c made an unexpected file: " + s.name ); return 3; }
-    if( FileCrc( UPath(s.name), s.crc, s.size ) ) { DWORD e = GetLastError(); return Fail( "cannot read " + U(UPath(s.name)) + SysErr(e), 2 ); }
+    if( src_direct ) { s.size = src_size; s.crc = src_crc; } // (the file: read for its CRC already)
+    else if( FileCrc( UPath(s.name), s.crc, s.size ) ) { DWORD e = GetLastError(); return Fail( "cannot read " + U(UPath(s.name)) + SysErr(e), 2 ); }
     int nb = 0;
     s.m = StreamMethod( s.name, s.size, &nb );
     if( nb ) { string& n = nobuild[Method(s.name)]; n += (n.size() ? ", " : "") + s.name; }

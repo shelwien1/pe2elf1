@@ -34,11 +34,17 @@ static void L( const char* spec, const char* want ) {
   if( got!=want ) { printf( "FAIL -l %s: %s, not %s\n", spec, got.c_str(), want ); fails++; }
 }
 
-// an index: "version streams", or error
+// an index: "version streams [direct]", or error
 static void I( const char* what, const string& text, const char* want ) {
   Index x;
-  string why, got = ParseIndex( text, x, why ) ? "error" : Num(x.ver) + " " + Num(x.s.size());
+  string why, got = ParseIndex( text, x, why ) ? "error" : Num(x.ver) + " " + Num(x.s.size()) + (x.direct ? " direct" : "");
   if( got!=want ) { printf( "FAIL index %s: %s, not %s\n", what, got.c_str(), want ); fails++; }
+}
+
+// the stream's name for a file packed as it is
+static void N( const wchar_t* file, const char* want ) {
+  string got = DirectName( file );
+  if( got!=want ) { printf( "FAIL DirectName %s: %s, not %s\n", U(file).c_str(), got.c_str(), want ); fails++; }
 }
 
 // aacpack's and oggcomp's threads for a stream, with -c part and -t threads
@@ -125,7 +131,23 @@ int wmain( int, wchar_t** ) {
   I( "2, aacpack in parts", "mp4pack 2\n" + src + aac + "part 0 60 x.1.0.aacp\npart 60 40 x.1.1.aacp\nend\n", "error" ); // (one process for it now)
   I( "2, tangelo's pieces", "mp4pack 2\n" + src + "stream 100 0000ABCD tangelo x.2.bin\npart 0 60 other1.tgl x.2.bin.part0\npart 60 40 other2.tgl x.2.bin.part1\nend\n", "2 1" );
   I( "2, a gap", "mp4pack 2\n" + src + aac + "part 0 60 x.1.aac.aacp\nend\n", "error" );
-  I( "3", "mp4pack 3\n" + src + aac + "part 0 100 x.1.aac.aacp\nend\n", "error" ); // (a later version)
+  I( "4", "mp4pack 4\n" + src + aac + "part 0 100 x.1.aac.aacp\nend\n", "error" ); // (a later version)
+  const string mp3 = "stream 100 0000ABCD mp3pack s.0.mp3\npart 0 100 s.0.mp3.mp3p s.0.mp3.mp3o\n";
+  I( "3, direct", "mp4pack 3\n" + src + "direct\n" + mp3 + "end\n", "3 1 direct" ); // (the file is the stream)
+  I( "3", "mp4pack 3\n" + src + aac + "part 0 100 x.1.aac.aacp\nend\n", "3 1" );
+  I( "2, direct", "mp4pack 2\n" + src + "direct\n" + mp3 + "end\n", "error" );    // (3 has it)
+  I( "3, direct x", "mp4pack 3\n" + src + "direct x\n" + mp3 + "end\n", "error" );
+  I( "3, direct, 2 streams", "mp4pack 3\n" + src + "direct\n" + mp3 + aac + "part 0 100 x.1.aac.aacp\nend\n", "error" );
+  I( "3, direct, its size", "mp4pack 3\n" + src + "direct\nstream 99 0000ABCD mp3pack s.0.mp3\npart 0 99 s.0.mp3.mp3p s.0.mp3.mp3o\nend\n", "error" );
+  I( "3, direct, its CRC", "mp4pack 3\n" + src + "direct\nstream 100 0000ABCE mp3pack s.0.mp3\npart 0 100 s.0.mp3.mp3p s.0.mp3.mp3o\nend\n", "error" );
+  N( L"song.MP3", "s.0.mp3" );
+  N( L"a.b.srt", "s.0.srt" );
+  N( L"x.h264", "s.0.h264" );
+  N( L"noext", "s.0" );
+  N( L"x.", "s.0" );
+  N( L"x.waytoolong", "s.0" );      // (1 to 8 letters and digits)
+  N( L"x.m p3", "s.0" );
+  N( L"\u0424\u0438\u043b\u044c\u043c.aac", "s.0.aac" );
   I( "no end", "mp4pack 2\n" + src + aac + "part 0 100 x.1.aac.aacp\n", "error" );
   A( M_AACPACK, 3600000, 0, 8, 3 );           // parts of 1MB at least: 3
   A( M_AACPACK, 19500000, 0, 8, 8 );

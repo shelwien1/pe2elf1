@@ -5,14 +5,16 @@
 //   mp4pack d [options] input output     decompress
 //
 // c: "avip c" splits the container into its streams and a .meta file in a work
-// directory; each stream goes to its packer -- h264p (video), aacpack, mp3pack
-// or oggcomp (audio), ttfcomp (fonts, all in one solid archive), tangelo (the
-// rest, in one solid archive; its -9, or the level -l gives) -- and the packed
-// files and an index
-// (mp4pack.idx) are stored as the output, mp4pack's own archive
-// (WriteArchive).
-// d: the archive's files (ReadArchive), the unpackers, "avip d"; every stream
-// and the result are checked against the sizes and CRC32s in the index.
+// directory; each stream goes to its packer -- h264p or m4vpack (video),
+// aacpack, ac3pack, mp3pack or oggcomp (audio), ttfcomp (fonts, all in one
+// solid archive), tangelo (the rest, in one solid archive; its -9, or the
+// level -l gives) -- and the packed files and an index (mp4pack.idx) are
+// stored as the output, mp4pack's own archive (WriteArchive). A file avip
+// cannot split (not mp4, mkv or avi: an mp3, an h264 stream, subtitles ...)
+// is the one stream, packed as it is by the packer of its extension.
+// d: the archive's files (ReadArchive), the unpackers, "avip d" (none for a
+// file packed as it is); every stream and the result are checked against the
+// sizes and CRC32s in the index.
 // Before either, the output's directory is made if it is not there, and the
 // output tried (OutputCheck); the errors end with the system's reason (SysErr).
 //
@@ -55,16 +57,20 @@ static BOOL WINAPI CtrlHandler( DWORD t ) {
 }
 
 static const char usage[] =
-"mp4pack - lossless compression of mp4/mkv/avi files with avip, h264p, m4vpack,\n"
-"aacpack, ac3pack, mp3pack, oggcomp, ttfcomp and tangelo, from mp4pack's own\n"
-"directory: the best build of each for this CPU, <tool>_<target>" EXE " by -march\n"
-"target names (h264p_haswell" EXE ", h264p_x86-64-v3" EXE ", h264p_znver4" EXE "), or\n"
-"<tool>" EXE "\n"
+"mp4pack - lossless compression of mp4/mkv/avi files, and of the streams in\n"
+"them as files, with avip, h264p, m4vpack, aacpack, ac3pack, mp3pack, oggcomp,\n"
+"ttfcomp and tangelo, from mp4pack's own directory: the best build of each for\n"
+"this CPU, <tool>_<target>" EXE " by -march target names (h264p_haswell" EXE ",\n"
+"h264p_x86-64-v3" EXE ", h264p_znver4" EXE "), or <tool>" EXE "\n"
 "usage: mp4pack c [options] input output   compress\n"
 "       mp4pack d [options] input output   decompress\n"
-"input: a file, or @list: a text file with a file on each line (UTF-8, or\n"
-"  UTF-16 with its BOM, or the ANSI code page; names relative to the current\n"
-"  directory), done one after another (one that fails is left, the rest go on)\n"
+"input: an mp4, mkv or avi file, which avip splits into its streams, or any\n"
+"  other file, packed as it is by the packer its extension names: mp1, mp2,\n"
+"  mp3 mp3pack; aac aacpack; ac3, eac3 ac3pack; ogg oggcomp; h264 h264p; m4v\n"
+"  m4vpack; ttf, otf ttfcomp; the rest (srt, ssa, txt ...) tangelo.\n"
+"  Or @list: a text file with a file on each line (UTF-8, or UTF-16 with its\n"
+"  BOM, or the ANSI code page; names relative to the current directory), done\n"
+"  one after another (one that fails is left, the rest go on)\n"
 "output: a file, or a directory (ending with \\ or /, or one that is there),\n"
 "  made if needed, for an output of each file there: c x.mkv -> x.mkv.mpk,\n"
 "  d x.mkv.mpk -> x.mkv. c of a list to a file: one archive of them all; d\n"
