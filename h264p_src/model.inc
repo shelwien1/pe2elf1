@@ -35,7 +35,7 @@ static const char* const kStage[STG_N] = {"NAL units", "headers", "bytes", "skip
 
 // the fields of the nal family: the container and what the syntax leaves out
 enum { F_MORE, F_TYPE, F_REF, F_ZEROS, F_VERB, F_LEN, F_PADCHG, F_PADON, F_PADFRAME, F_TRAIL, F_DROP, F_NBITS,
-       F_TBIT, F_CZW, F_JUNK, F_EOFZ, F_CRC, F_ALIGN, F_N };
+       F_TBIT, F_CZW, F_JUNK, F_EOFZ, F_CRC, F_ALIGN, F_BAD, F_N };
 
 // macroblock classes (ca, cb, cc, cls)
 enum { CL_NONE, CL_SKIP, CL_DIRECT, CL_16x16, CL_PART, CL_8x8, CL_INXN, CL_I16, CL_PCM };
@@ -1164,7 +1164,9 @@ struct Model : tc_rc<f_DEC> {
 #define H_INIT(F) f_##F.Init(), t_##F = nullptr;
     H264P_FAMS(H_INIT)
 #undef H_INIT
-    run_trap = nullptr;
+#ifdef H264P_FORCE_BAD
+    force_slices_ = force_mbs_ = 0;
+#endif
     memset(last_, 0, sizeof last_);
     raw_.Init();
     hdr_.Init();
@@ -1282,15 +1284,15 @@ struct Model : tc_rc<f_DEC> {
 #undef H_BYTES
     return n;
   }
-  ErrTrap* run_trap;  // the trap of the run (coro.inc): kRestart goes there
-
-  // (a build with H264P_DUMP: a compression that starts over, kRestart,
-  // drops what it dumped)
-  void dump_discard() {
-#define H_DISCARD(F) f_##F.dump_discard();
-    H264P_FAMS(H_DISCARD)
-#undef H_DISCARD
-  }
+#ifdef H264P_FORCE_BAD
+  // (a test build: every H264P_FORCE_BAD-th slice c's model pass checks
+  // found not to come out as it is, and a walk that fails on the way, in
+  // c's model pass and d's alike, at every H264P_FORCE_BAD * 41st
+  // macroblock of a CABAC slice; compress_parsed())
+  uint64_t force_slices_, force_mbs_;
+  bool force_bad_end() { return ++force_slices_ % H264P_FORCE_BAD == 0; }
+  bool force_fail_mb() { return sc_->cabac_ && ++force_mbs_ % (H264P_FORCE_BAD * 41) == 17; }
+#endif
 
   // ------------------------------------------------------------------------
   // the container: a field of the nal family, with its own last two values
@@ -1904,6 +1906,9 @@ struct Model : tc_rc<f_DEC> {
     if (!red_) col_motion(hist_.cur[a], t, f);
   }
   void mb_begin() {
+#ifdef H264P_FORCE_BAD
+    if (force_fail_mb()) err_raise("a failure forced (H264P_FORCE_BAD)");
+#endif
     if (!mb_open_) begin_mb();
   }
   void mb_end() {

@@ -9,8 +9,7 @@
 # also fails when one of its NAL units of a supported type could only be
 # stored verbatim.  It is tried at each of the model's levels in LEVELS
 # (default: all of them, "9 7 5 3 1"), and at the last one once more
-# through pipes, where the dry run writes back every NAL unit instead of
-# leaving slices to the model pass to check: the output must be the same.
+# through pipes: the output must be the same.
 # At that level, last, the stream is compressed on threads (-t, in parts of
 # at least 16 KB that start at IDR access units): on 3 threads, on 2
 # through pipes, and on 2 with the progress line on (-p), which must end
@@ -110,6 +109,18 @@ if [ -n "${negative:-}" ]; then
     shift
     if "$@"; then echo "PASS $what"; else echo "FAIL $what"; nfail=$((nfail + 1)); fi
   }
+
+  # A slice the model pass finds would not come out as it is, which no
+  # stream here has: H264P_FORCED, a build with -DH264P_FORCE_BAD=3 (make
+  # test makes one), takes every 3rd slice it checks so (its bytes after
+  # its syntax) and fails the walk of c's model pass and d's at every 123rd
+  # macroblock of a CABAC slice (its bytes, with no flag)
+  if [ -n "${H264P_FORCED:-}" ]; then
+    for s in "$here/gen/x264_slices4.264" "$here/gen/jm_hier_b.264" "$here/h264p/x264_420_10.264" "$here/h264p/jm_paff.264"; do
+      check "$(basename "$s"): slices that would not come out as they are, at the end and on the way (H264P_FORCED): c -1, -9, -t 3; d" sh -c '"$1" c -1 -v "$2" "$3/f.c" 2> "$3/log" && grep -q "would not come out as it is$" "$3/log" && grep -q "would not come out as it is (" "$3/log" && "$1" d "$3/f.c" "$3/f.264" && cmp -s "$2" "$3/f.264" && "$1" c -9 "$2" "$3/f.c" 2> /dev/null && "$1" d "$3/f.c" "$3/f.264" && cmp -s "$2" "$3/f.264" && "$1" c -1 -t 3 -c 1k "$2" "$3/f.c" 2> /dev/null && "$1" d "$3/f.c" "$3/f.264" && cmp -s "$2" "$3/f.264"' - "$H264P_FORCED" "$s" "$tmp"
+    done
+    check "x264_slices4.264: c -s with such a slice (H264P_FORCED) fails, no output" sh -c '! "$1" c -s -1 "$2" "$3/fs.c" 2> /dev/null && [ ! -e "$3/fs.c" ]' - "$H264P_FORCED" "$here/gen/x264_slices4.264" "$tmp"
+  fi
   for s in "$here"/crafted/*.264; do
     n=$(basename "$s")
     check "$n: c -9, d" sh -c 'timeout 300 "$1" c -9 "$2" "$3/k.c" 2>/dev/null && "$1" d "$3/k.c" "$3/k.264" && cmp -s "$2" "$3/k.264"' - "$bin" "$s" "$tmp"

@@ -27,18 +27,25 @@ struct ValueLog {
 
 // (a channel is made where a walk is to go, Init() telling it its log and
 // its direction: parsing, the values go on the end of the log; writing,
-// they come from it in turn)
+// they come from it in turn. fatal: the model pass's, where a walk that
+// asks for values the parse did not give is the compressor's error, not
+// the NAL unit's: err_fatal(), past the traps of the NAL unit)
 struct LogChan : Chan {
   void Init(ValueLog& log, bool w) {
     W = w;
     l_ = &log;
+    fatal = false;
+  }
+  void none() {
+    if (fatal) err_fatal("internal: more values asked for than there are");
+    fail("more values asked for than there are");
   }
   bool at_end() const { return l_->at_end(); }
 
   // a value: 32 bits, the most a value of the walk's has, or a header's
   // 64 in two
   int32_t get() {
-    if (l_->pos >= l_->v.size()) fail("more values asked for than there are");
+    if (l_->pos >= l_->v.size()) none();
     return l_->v[l_->pos++];
   }
   int io32(int x) {
@@ -64,7 +71,7 @@ struct LogChan : Chan {
       l_->v.append((const int32_t*)c, n);
       return;
     }
-    if (n > 0 && l_->v.size() - l_->pos < (size_t)n) fail("more values asked for than there are");
+    if (n > 0 && l_->v.size() - l_->pos < (size_t)n) none();
     if (n > 0) memcpy(c, l_->v.data() + l_->pos, n * sizeof(int));
     l_->pos += n;
   }
@@ -73,7 +80,7 @@ struct LogChan : Chan {
     if (!W)
       while (k > 0 && !c[k - 1]) k--;
     k = io32(k);
-    if (k < 0 || k > n) fail("more values asked for than there are");
+    if (k < 0 || k > n) none();
     io32(c, k);
     if (k < n) memset(c + k, 0, (n - k) * sizeof(int));
   }
@@ -108,6 +115,7 @@ struct LogChan : Chan {
   [[noreturn]] void fail(const char* why) override { err_raise_s(why); }
 
   ValueLog* l_;
+  bool fatal;
 };
 
 }  // namespace h264p

@@ -45,10 +45,6 @@ void progress_start(Progress& pr, const Options& opt, const char* tag, filehandl
   pr.verbose = opt.verbose;  // (-t's parts run without: no statistics for each)
 }
 
-// (the model pass checks the dry runs where the input can be read again and
-// the output written again: regular files)
-bool can_check(const char* in_name, const Output& o) { return strcmp(in_name, "-") && name_kind(in_name) == 1 && o.file; }
-
 // whether this build has level -level (else said)
 bool has_level(int level) {
   for (int l : kLevels)
@@ -120,24 +116,14 @@ int run_model(const H264pArgs& a, Progress& pr, filehandle0& f, Output& o, uint8
   return r;
 }
 
-// c of one model, on all of the stream, and again (a new model) without
-// the model pass's checks if a slice did not come out as it is
+// c of one model, on all of the stream, its output written as it comes
 template <class LV>
 struct CodeLv {
   static int run(const char* in_name, const Options& opt, filehandle0& f, Output& o) {
     Progress pr;
     H264pArgs a = call_start(pr, opt, "enc", f, in_name);
-    a.check = can_check(in_name, o);
     uint64_t raw, packed, pics;
-    int r;
-    while ((r = run_model<H264pCoro<0, LV>, 0>(a, pr, f, o, nullptr, 0, raw, packed, pics)) == kRestart) {
-      a.check = false;
-      if (!o.rewind() || fseek(f.f, 0, SEEK_SET)) {
-        say_error(&pr, "h264p: cannot start again\n");
-        r = 1;
-        break;
-      }
-    }
+    int r = run_model<H264pCoro<0, LV>, 0>(a, pr, f, o, nullptr, 0, raw, packed, pics);
     return call_end(r, f, o, false, pr, raw, packed, pics);
   }
 };

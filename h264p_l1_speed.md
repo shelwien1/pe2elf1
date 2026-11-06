@@ -321,7 +321,10 @@ instead:
   stream through pipes too and compares). The restart was tried by forcing
   a mismatch at chosen slices, and by corrupting the recorded bins and the
   input's bits as the check sees them: each was caught, and the output
-  stayed the same.
+  stayed the same. (Since format 12 there is no restart: such a slice's
+  bytes follow its syntax, after a flag, `d` walking the same values, so
+  `c` checks through pipes too and writes its output as it comes. No test
+  stream, nor 400 with bits flipped, ever restarted.)
 
 A run of CABAC data that does not end in a 1 bit, or a trailer not found,
 still goes through the write-back, as do the NAL units that are not slices.

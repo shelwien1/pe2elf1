@@ -5,7 +5,7 @@
 namespace h264p {
 
 const char kCmMagic[] = "h264c";  // compressed streams, followed by the version and level bytes
-const int kCmVersion = 11;
+const int kCmVersion = 12;
 // The CRC-32 at the end is coded XORed with this: a decoder fed past the
 // end of its input decodes zeros, and 0 is the CRC-32 of an empty stream.
 const uint32_t kCrcXor = 0x68323634;
@@ -40,8 +40,6 @@ struct H264pArgs {
   int level;        // compressing: the model's level (1-9)
   bool verbose;     // statistics, and the messages they come with (the codec tells them: coro.inc)
   bool strict;      // compressing: fail where a NAL unit of a supported type would be stored verbatim
-  bool check;       // compressing: the model pass checks the slices it can; status kRestart if one does
-                    // not come out as it is, and the input has to be compressed again without
   const char* name;  // the input's, for messages
   Progress* meter;   // the call's progress line, where its driver shows what the codec tells (coro.inc)
   // compressing a part of -t: the index in the stream of its first NAL
@@ -54,7 +52,7 @@ struct H264pArgs {
 
   void Init() {
     level = 0;
-    verbose = strict = check = false;
+    verbose = strict = false;
     name = "";
     meter = nullptr;
     nal0 = copy_at = ncopy = 0;
@@ -69,13 +67,12 @@ struct H264pArgs {
 // to be stored verbatim (why). obs: see find_trailer. Its buffers only
 // grow, for the next one.
 //
-// With check, a slice is not written back: it would come out as it is up
-// to its stop bit, unless the walk writes other values, bits or bins than
-// it reads, which the model pass checks (BinPolicy::rec, checked_bits) when this
-// returns true with checked set; rbsp is then the RBSP. With CABAC, the
-// bins of the parse go to rec, and each run of CABAC data must end in a 1
-// bit (as written, the stop bit; its bits are then what an encoder writes
-// for the bins).
+// A slice it can, it does not write back (checked): it would come out as
+// it is up to its stop bit, unless the walk writes other values, bits or
+// bins than it reads, which the model pass checks (BinPolicy::rec,
+// checked_bits); rbsp is then the RBSP. The bins of the parse go to rec,
+// and each run of CABAC data must end in a 1 bit (as written, the stop
+// bit; its bits are then what an encoder writes for the bins).
 struct DryRun {
   Trailer t;
   char why[kWhy];
@@ -106,7 +103,7 @@ struct DryRun {
     o.Quit();
   }
 
-  bool run(const NalHead& h, Context& ctx, bool check, int& obs) {
+  bool run(const NalHead& h, Context& ctx, int& obs) {
     obs = -1;
     checked = false;
     if (!nal_rbsp(h, ctx, rbsp, esc, why)) return false;
@@ -115,7 +112,7 @@ struct DryRun {
     ch.Init(log, false);
     BinPolicy bp;
     bp.Init();
-    if (check) rec.clear(), bp.rec = &rec;
+    rec.clear(), bp.rec = &rec;
     int pad;
     ErrTrap e;  // (an error: the NAL unit is stored verbatim)
     if (setjmp(e.jb)) {
@@ -125,7 +122,7 @@ struct DryRun {
     err_push(e);
     pad = read_nal(h.type, h.ref_idc, rbsp, ctx, ch, bp);
     err_pop(e);
-    if (check && rec.slice && rec.stops) {
+    if (rec.slice && rec.stops) {
       bw.set(rbsp.data(), rec.end);
       if (find_trailer(bw, pad, rbsp, t, why, obs, o)) {
         checked = true;
@@ -215,14 +212,19 @@ void cm_report(const tc_rc<0>& e, u64 in_bytes, u64 out_bytes, u64 tables, Progr
 // NAL unit: that there is one (F_MORE), its type, nal_ref_idc and the zero
 // bytes before its start code, a change of x264's padding bits (slices),
 // whether it is stored verbatim (a type the walk knows); then its syntax
-// through the model and the trailer, or its bytes. At the end, the zero
-// bytes after the last NAL unit and the CRC-32 of the stream. Bytes stored
-// as they are come in chunks (code_raw()), and a NAL unit longer than kHold
-// is stored so as it is read: neither side holds one whole.
+// through the model, (a slice) whether it came out as it is (F_BAD), and
+// the trailer, or its bytes. At the end, the zero bytes after the last NAL
+// unit and the CRC-32 of the stream. Bytes stored as they are come in
+// chunks (code_raw()), and a NAL unit longer than kHold is stored so as it
+// is read: neither side holds one whole.
 //
-// check: the dry runs leave the CABAC slices they can to the model pass to
-// check (dry_run); if one of them does not come out as it is, the model
-// has coded it, and the run ends with kRestart (its trap, coro.inc).
+// The dry runs leave the CABAC slices they can to the model pass to check
+// (DryRun). If one does not come out as it is, the model has coded it
+// already: its bytes follow, as they are (F_BAD 1; or with no flag, where
+// the walk failed on the way, as d's walk of the same values fails at the
+// same place). d walks the same values, so its model stays c's, and takes
+// the bytes. Such a slice costs its syntax and its bytes; nothing is coded
+// again, so c's output goes out as it comes.
 
 // The model's records of the last picture of each kind (History and
 // AqModel, model.inc: 535 bytes a macroblock) grow with the kinds of
@@ -289,6 +291,7 @@ struct DecompressState {
   Buf<uint8_t> b, rbsp;  // a NAL unit stored verbatim, and its RBSP
   BitWriter bw;          // a NAL unit's RBSP written
   Trailer t;             // and how it ends
+  size_t start;          // where in buf the NAL unit's payload starts (decode_parsed())
 
   void Init() {
     ctx.Init();
@@ -299,6 +302,7 @@ struct DecompressState {
     rbsp.Init();
     bw.Init();
     t.Init();
+    start = 0;
   }
   void Quit() {
     ctx.Quit();
@@ -403,33 +407,48 @@ void code_trailer(M& m, int type, Trailer& t) {
 }
 
 // The model pass of a NAL unit that parsed (h, its dry run's in s.dr):
-// its syntax through the model, then what the syntax leaves out of it (its
-// trailer). False where the check finds it would not come out as it is.
+// its syntax through the model, (a slice) whether it came out as it is,
+// then what the syntax leaves out of it (its trailer). False where the
+// check finds it would not come out as it is: its bytes are to follow.
+// (A failure of the walk on the way is d's too, where its walk of the
+// same values gets: so no flag then. What only c can fail at, the log run
+// out or a value no parse gives, the walk would not get to while it walks
+// as it read: err_fatal(), the run's end, not a stream d cannot follow.)
 template <class LV>
 bool compress_parsed(Model<0, LV>& m, CompressState& s, const NalHead& h) {
   DryRun& dr = s.dr;
   dr.log.rewind();
   LogChan log;
   log.Init(dr.log, true);
+  log.fatal = true;
   ModelChan<0, LV> ch;
   ch.Init(m, &log);
   BinPolicy bp = ch.policy();
   m.nal_begin(h.type, h.ref_idc);
   BitWriter& bw = dr.bw;
   bw.clear();
+  bool good = true;
   if (dr.checked) {
-    // (whatever fails, the NAL unit would not come out as it is)
     bp.rec = &dr.rec;
     ErrTrap e;
-    if (setjmp(e.jb)) return false;
+    if (setjmp(e.jb)) {
+      set_why(dr.why, "would not come out as it is (%s)", e.why);
+      return false;
+    }
     err_push(e);
     write_syntax(h.type, h.ref_idc, s.ctx, ch, bw, bp);
     err_pop(e);
-    if (!log.at_end() || !checked_bits(bw, bp.nobins, dr.rec, dr.rbsp)) return false;
+    good = log.at_end() && checked_bits(bw, bp.nobins, dr.rec, dr.rbsp);
+#ifdef H264P_FORCE_BAD
+    good = good && !m.force_bad_end();
+#endif
+    if (!good) set_why(dr.why, "would not come out as it is");
   } else {
     write_syntax(h.type, h.ref_idc, s.ctx, ch, bw, bp);
-    if (!log.at_end()) err_raise("internal: values left over");
+    if (!log.at_end()) err_fatal("internal: values left over");
   }
+  if (h.slice) m.nal(F_BAD, 0, !good);
+  if (!good) return false;
   code_trailer(m, h.type, dr.t);
   s.st.parsed++;
   s.st.trail += dr.t.irregular;
@@ -463,14 +482,14 @@ int compress_nal(Model<0, LV>& m, CompressState& s, const H264pArgs& a, Buf<uint
   if (lng)
     set_why(s.dr.why, "longer than %d MB", (int)(kHold >> 20));
   else
-    ok = s.dr.run(h, ctx, a.check, obs);
+    ok = s.dr.run(h, ctx, obs);
   if (ok && h.slice && !s.hist.fits(ctx.slice_kind, ctx.slice_mbs)) {
     ok = false;
     set_why(s.dr.why, "the model's records of the kinds of picture would pass %lld MB", (long long)H264P_HIST_MB);
   }
   bool padchg = ok && repad(s.det, obs, ctx.pad);
   if (padchg) {
-    ok = s.dr.run(h, ctx, a.check, obs);  // once more, with padding bits that predict this one
+    ok = s.dr.run(h, ctx, obs);  // once more, with padding bits that predict this one
     st.pad++;
   }
   if (ok && h.slice) s.hist.add(ctx.slice_kind, ctx.slice_mbs);
@@ -486,22 +505,15 @@ int compress_nal(Model<0, LV>& m, CompressState& s, const H264pArgs& a, Buf<uint
     }
   }
   if (parsed_type(h.type)) m.nal(F_VERB, h.type, !ok);
-  if (ok) {
-    if (!compress_parsed(m, s, h)) {
-      if (a.verbose) {
-        char w[64];
-        st.name_last(w, sizeof w);
-        m.tell_note("h264p: %s would not come out as it is; compressing again, writing back each", w);
-      }
-      err_jump(*m.run_trap, kRestart);
-    }
+  if (ok && compress_parsed(m, s, h)) {
     if (h.slice) tell_video(m, ctx);
     ctx.done(h.type, h.payload, h.len);
     return 0;
   }
   // (an SPS or PPS stored verbatim still defines its parameter set where
   // it could be parsed: the dry run has it so; a long one is not parsed.
-  // Done before its bytes, which a long one's reading moves.)
+  // Done before its bytes, which a long one's reading moves. A slice the
+  // model pass found would not come out as it is: its bytes after all.)
   ctx.done(h.type, h.payload, h.len);
   code_raw(m, F_LEN, h.type, nal, 1, rest);
   return st.verbatim(h.type, s.dr.why, a.verbose, a.strict, m) ? 0 : 1;
@@ -512,8 +524,7 @@ int compress_nal(Model<0, LV>& m, CompressState& s, const H264pArgs& a, Buf<uint
 // coro.inc, which tells its driver what the video is, each picture, and
 // at the end that its statistics are ready, s.st and its coder's): 0, or
 // 1 after a NAL unit -s would not store verbatim (why in m's note). An
-// error, or a slice the check finds would not come out as it is, ends the
-// run at its trap instead (coro.inc).
+// error ends the run at its trap instead (coro.inc).
 template <class LV>
 int compress_stream(Model<0, LV>& m, CompressState& s, const H264pArgs& a) {
   AnnexBReader& rd = s.rd;
@@ -542,6 +553,41 @@ int compress_stream(Model<0, LV>& m, CompressState& s, const H264pArgs& a) {
   m.rc_Quit();
   m.tell(kYieldStats);
   return 0;
+}
+
+// d's model pass of a NAL unit c's parsed (its type and nal_ref_idc
+// decoded): its syntax through the model, written on s.buf (from s.start),
+// then its trailer. A slice: false where c's model pass found it would not
+// come out as it is (F_BAD 1, or its walk failed on the way, as c's did):
+// its bytes follow.
+template <class LV>
+bool decode_parsed(Model<1, LV>& m, DecompressState& s, int type, int ref_idc, bool slice) {
+  s.start = s.buf.size();
+  ModelChan<1, LV> ch;
+  ch.Init(m, nullptr);
+  m.nal_begin(type, ref_idc);
+  BitWriter& bw = s.bw;
+  bw.clear();
+  int pad;
+  if (slice) {
+    ErrTrap e;
+    if (setjmp(e.jb)) return false;
+    err_push(e);
+    pad = write_syntax(type, ref_idc, s.ctx, ch, bw, ch.policy());
+    err_pop(e);
+    if (m.nal(F_BAD, 0, 0)) return false;
+  } else {
+    pad = write_syntax(type, ref_idc, s.ctx, ch, bw, ch.policy());
+  }
+  Trailer& t = s.t;
+  t.reset();
+  code_trailer(m, type, t);
+  if (t.irregular && ((size_t)t.drop > bw.pos() || (bw.pos() - (size_t)t.drop + t.bits.size()) & 7))
+    err_raise("corrupt stream: trailing bits");
+  apply_trailer(t, bw, pad);
+  const Buf<uint8_t>& e = bw.data();
+  escape(e.data(), e.size(), s.buf);
+  return true;
 }
 
 // Decompresses with the model m, a new one, what is left of its input
@@ -591,9 +637,14 @@ int decompress_stream(Model<1, LV>& m, DecompressState& s, const H264pArgs& a) {
       else
         ctx.pad.on = false;
     }
-    if (!parsed_type(type) || m.nal(F_VERB, type, 0)) {
+    bool slice = type == 1 || type == 5;
+    if (parsed_type(type) && !m.nal(F_VERB, type, 0) && decode_parsed(m, s, type, ref_idc, slice)) {
+      if (slice) tell_video(m, ctx);
+      ctx.done(type, buf.data() + s.start, buf.size() - s.start);
+    } else {
       // its payload held while the NAL unit has at most kHold bytes (an SPS
       // or PPS then defines its parameter set), else put out as it comes
+      // (and a slice c's model pass found would not come out as it is)
       Buf<uint8_t>& b = s.b;
       b.clear();
       bool held = true;
@@ -611,24 +662,6 @@ int decompress_stream(Model<1, LV>& m, DecompressState& s, const H264pArgs& a) {
       });
       if (held) put_verbatim(buf, type, b, ctx, s.rbsp);
       ctx.done(type, b.data(), b.size());
-    } else {
-      size_t start = buf.size();
-      ModelChan<1, LV> ch;
-      ch.Init(m, nullptr);
-      m.nal_begin(type, ref_idc);
-      BitWriter& bw = s.bw;
-      bw.clear();
-      int pad = write_syntax(type, ref_idc, ctx, ch, bw, ch.policy());
-      Trailer& t = s.t;
-      t.reset();
-      code_trailer(m, type, t);
-      if (t.irregular && ((size_t)t.drop > bw.pos() || (bw.pos() - (size_t)t.drop + t.bits.size()) & 7))
-        err_raise("corrupt stream: trailing bits");
-      apply_trailer(t, bw, pad);
-      const Buf<uint8_t>& e = bw.data();
-      escape(e.data(), e.size(), buf);
-      if (type == 1 || type == 5) tell_video(m, ctx);
-      ctx.done(type, buf.data() + start, buf.size() - start);
     }
     spill();
     tell_tick(m, ctx);

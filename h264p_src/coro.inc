@@ -30,7 +30,7 @@ struct H264pCoro : Model<f_DEC, LV> {
 
   H264pArgs args;
   State* st;
-  int status;  // the run's: 0, 1 (an error), kRestart; 1 until it has ended
+  int status;  // the run's: 0, 1 (an error); 1 until it has ended
 
   uint32_t Init(const H264pArgs* a) {
     this->coro_init();
@@ -48,28 +48,21 @@ struct H264pCoro : Model<f_DEC, LV> {
   }
 
   // The run, in a trap (err.inc) that an error ends it at: its note says
-  // why, after what was decoded is written (d keeps it); or kRestart, a
-  // slice the model pass's check found would not come out as it is
-  // (compress_nal()), what it dumped then dropped. The coroutine yields from
-  // here, its stack shallow again.
+  // why, after what was decoded is written (d keeps it). The coroutine
+  // yields from here, its stack shallow again.
   void do_process() {
     int r;
     this->io_init();
     ErrTrap t;
     if (!setjmp(t.jb)) {
       err_push(t);
-      this->run_trap = &t;
       r = run(IntTag<f_DEC>());
       err_pop(t);
-    } else if (t.code == kRestart) {
-      r = kRestart;
-      this->dump_discard();  // (what it dumped goes: it starts over)
     } else {
       r = 1;
       if (st) written(IntTag<f_DEC>());
       this->set_note("h264p: %s: %s", args.name, t.why);
     }
-    this->run_trap = nullptr;
     Quit();
     status = r;
     for (;;) yield(static_cast<Coroutine*>(this), r ? kYieldFail : kYieldEnd);
@@ -153,7 +146,7 @@ void show_stats(H264pCoro<1, LV>& c, Progress* pr) {
 }
 // What a driver shows of what its codec c, of a run with args a, tells
 // (code, each yield), after the progress line pr: the video, a message,
-// the statistics (-v); and as the run ends, its error (not a restart).
+// the statistics (-v); and as the run ends, its error.
 // (From any thread: pr's lock orders them.)
 template <int f_DEC, class LV>
 void show_told(H264pCoro<f_DEC, LV>& c, uint code, Progress* pr, const H264pArgs& a) {
@@ -161,7 +154,7 @@ void show_told(H264pCoro<f_DEC, LV>& c, uint code, Progress* pr, const H264pArgs
     if (pr) pr->video(c.video);
   } else if (code == kYieldNote) {
     say(pr, "%s", c.note);
-  } else if (code == kYieldFail && c.status == 1) {
+  } else if (code == kYieldFail) {
     say_error(pr, "%s", c.note);
   } else if (code == kYieldStats && a.verbose) {
     show_stats(c, pr);

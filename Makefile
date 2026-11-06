@@ -3,7 +3,8 @@
 #   make                         optimized build -> ./h264dec ./h264p
 #   make CXXFLAGS="-O0 -g"       debug build (asserts enabled)
 #   make test                    decode test/*.h264 and check output MD5s,
-#                                and round-trip them through h264p
+#                                and round-trip them through h264p (and
+#                                h264p_forced, its test build)
 #
 # -fno-strict-aliasing is required, not optional: the decoder type-puns its
 # motion vector / reference index arrays (ST32/LD32 etc.). Upstream OpenH264
@@ -37,12 +38,17 @@ $(OBJDIR)/h264p/%.o: h264p_src/%.cpp | $(OBJDIR)/h264p
 $(OBJDIR) $(OBJDIR)/h264p:
 	mkdir -p $@
 
-test: h264dec h264p
+# h264p's test build, in which the model pass finds slices that would not
+# come out as they are (test/h264p.sh: H264P_FORCED)
+h264p_forced: h264p_src/*.cpp h264p_src/*.inc
+	$(CXX) $(CPPFLAGS) -Ih264p_src/Lib3 $(CXXFLAGS) $(PARCH) -std=c++11 -fwrapv -fno-exceptions -fno-rtti -pthread -DH264P_FORCE_BAD=3 $(LDFLAGS) -o $@ h264p_src/h264p.cpp $(LDLIBS)
+
+test: h264dec h264p h264p_forced
 	./test/run.sh ./h264dec
-	./test/h264p.sh ./h264p
+	H264P_FORCED=./h264p_forced ./test/h264p.sh ./h264p
 
 clean:
-	rm -rf $(OBJDIR) h264dec h264p
+	rm -rf $(OBJDIR) h264dec h264p h264p_forced
 
 .PHONY: all test clean
 

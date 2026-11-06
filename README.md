@@ -164,13 +164,18 @@ macroblock syntax (skip flags, mb_type, intra modes, motion,
 coded_block_pattern, mb_qp_delta, the coefficients) and the header syntax.
 `d` decodes the values and codes them with CAVLC or CABAC as the stream did.
 `c` sees to it that this gives back the NAL unit as it was: it writes the
-NAL unit back from the values before coding them, or, a slice, checks as it
-codes it that the walk writes the bits and CABAC bins it read (should a
-slice fail that, `c` compresses the stream again, writing back every NAL
-unit first, as it always does through pipes). A NAL unit that does not come
-out the same is stored verbatim, and so is a slice that would take the
+NAL unit back from the values before coding them, or, a CABAC slice, checks
+as it codes it that the walk writes the bits and CABAC bins it read. A NAL
+unit that does not come out the same is stored verbatim: a slice that fails
+the check has been coded already, so its bytes follow its syntax (a flag
+after each slice says so; where the walk fails on the way, `d`'s walk of the
+same values fails at the same place, and the bytes follow with no flag).
+Nothing is coded again, so `c` writes its output as it comes, through pipes
+too. No stream here has such a slice (nor did 400 streams with bits
+flipped); a build with `-DH264P_FORCE_BAD=3` makes them (`make test` tries
+it). A slice that would take the
 model's records of the last picture of each kind (slice type, reference or
-not, frame or field) past 512 MB: a stream has a few kinds, 4.2 MB each at
+not, frame or field) past 512 MB is stored verbatim too: a stream has a few kinds, 4.2 MB each at
 1080p, while all 30 at the largest pictures would take 1.4 GB. A CRC-32 at
 the end checks the whole stream, and `d` takes data after the end of the
 compressed stream for corruption.
@@ -357,11 +362,9 @@ instead of overrunning it. The output is byte for byte the file-based
 h264p's (every level's output of every test stream has the MD5 it had), as
 fast.
 
-The model pass checks the slices only where the input can be read again
-(regular files, and the parts on threads, which are read whole first): a
-slice that does not come out as it is makes the front end compress the file
-again, as before; through pipes, the dry run writes back each NAL unit, as
-h264p always did. The library's
+The model pass checks the slices it can, wherever the input comes from: a
+slice that does not come out as it is goes as its bytes after its syntax
+(above), so nothing is read again. The library's
 `setjmp`/`longjmp` are GCC's builtins or, with clang, x86-64 assembly: h264p
 builds for x86 now (the plain C++ build there too); elsewhere, the
 library's `CORO_NOASM`, untested.
@@ -382,11 +385,14 @@ loses the reference pictures before it, and some compression; never
 losslessness: the bytes of a part are coded whatever they are). MTwrap (`h264p_src/MTwrap_v3`,
 mtwrap's but that it only ever waits on events, never polls with `Sleep()`;
 its parts mode: `MTwrap.md` section 11 in mtwrap) deals the
-parts in turn to N workers; a worker reads a part whole into memory and
-compresses it with a model of its own, an `H264pCoro` run as a coroutine of
-the worker's, then the next part dealt to it. Decompressing, a worker
-decompresses its parts so, removes the inserted parameter sets, and MTwrap
-takes the parts from the workers in turn, as they were dealt.
+parts in turn to N workers; a worker compresses a part with a model of its
+own, an `H264pCoro` run as a coroutine of the worker's on the part as it
+comes, its output written as it comes (as m4vpack's does: the worker holds
+neither; the splitter, which writes a part's size before it, holds the part
+as it cuts it), then the next part dealt to it. Decompressing, a worker decompresses its
+parts so, holding each until it is done, removes the inserted parameter
+sets, and MTwrap takes the parts from the workers in turn, as they were
+dealt.
 
 The stream starts with `h264m`, the version, the count of threads and the
 part size (KB, 32 bits: `d` takes a part's record that says more than `c`

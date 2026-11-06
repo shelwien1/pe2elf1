@@ -390,7 +390,7 @@ struct Output {
   const char* name;  // as given
   char* dest;        // the file (mem_alloc()'d), and the temporary one written (none: name itself)
   char* tmp;
-  bool file;  // a regular file is written: it can be written again (kRestart)
+  bool file;  // a regular file is written (through tmp, if it could be made): removed after an error
   filehandle0 g;
 
   void Init() {
@@ -468,12 +468,6 @@ struct Output {
       return false;
     }
     return true;
-  }
-  // empty again, for the call to start over (kRestart)
-  bool rewind() {
-    fclose(g.f);
-    g.f = fopen(tmp ? tmp : name, "wb");
-    return g.f != nullptr;
   }
   // The end of the call, r its status so far: what it wrote becomes the
   // output, or after an error is removed, unless keep (d keeps what it

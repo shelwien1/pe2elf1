@@ -120,10 +120,8 @@ static INLINE i64 tc_dump_get(const char *&p, const char *e) {
 //  decompressor's, fam null)
 struct tc_dump {
   FILE *f;
-  long start;  // where this model's records begin
   void Init(const char *fam) {
     f = nullptr;
-    start = 0;
     const char *dir = getenv("H264P_DUMP");
     if(!fam || !dir || !*dir)
       return;
@@ -138,27 +136,12 @@ struct tc_dump {
       err_raise("%s", why);
     }
     mem_free(fn);
-    fseek(f, 0, SEEK_END);
-    start = ftell(f);
     putc('R', f);
   }
   void Quit() {
     if(f)
       fclose(f);
     f = nullptr;
-  }
-  //  a model whose compression starts over (kRestart): its records go
-  void discard() {
-    if(!f)
-      return;
-    fflush(f);
-#ifdef _WIN32
-    _chsize_s(_fileno(f), start);
-#else
-    if(ftruncate(fileno(f), start))
-      err_raise("cannot cut a dump short");
-#endif
-    putc('R', f);  // (appended: at the end, where it was cut)
   }
   template <class... A> void rec(char tag, A... a) {
     if(!f)
@@ -371,7 +354,6 @@ template <int f_DEC, class C> struct tc_fam {
       err_raise("internal: decision node %d of a family of %d", node, ND);
     return bit_x(node, b);
   }
-  void dump_discard() { TC_DUMP(discard()); }
   i64 codes(const tcx &v, i64 x, u32 sc) {
     i64 m = code(v, ENC ? (x < 0 ? -x : x) : 0);
     if(!m)
@@ -649,8 +631,8 @@ template <int f_DEC, class C> struct tc_fam {
     int k, p, nb = 0, hst = 0, hnb = 0;
     u64 u, hu = 0;
     select(v);
-    if(UNLIKELY(ENC && x < 0))
-      err_raise("internal: a negative magnitude");
+    if(UNLIKELY(ENC && x < 0))  // (c's alone: past the traps of the NAL unit, compress_parsed())
+      err_fatal("internal: a negative magnitude");
     if(hint >= 0) {
       // hst: 1 the value agrees with the hint so far, 3 it is above, 4 below
       hst = 1;

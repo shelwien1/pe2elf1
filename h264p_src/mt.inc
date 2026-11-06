@@ -7,7 +7,7 @@
 // turn to N workers by MTwrap (MTwrap_v3, its parts mode: MTwrap.md section
 // 11). A worker codes its parts one after the other, each by a model of its
 // own: H264pCoro (coro.inc), run as a coroutine of the worker's on the part
-// read whole into memory. A worker's stream is a record for each part
+// as it comes. A worker's stream is a record for each part
 // (m4vpack's, whose MTwrap layer h264p's follows):
 //
 //   u64 plen    the size of the part as compressed (with the parameter
@@ -26,10 +26,15 @@
 // record broken, where each part's own CRC (its stream's) cannot; and no
 // record says how long a part's stream is, which d would have to take on
 // trust: a part's run reads the worker's input where it is (lend()), and
-// what it leaves is the next record's (take_back()). c holds a part's output
-// until the part is done (m4vpack writes it as it comes): its model pass may
-// find a slice that would not come out as it is, and code the part again
-// (kRestart). MTwrap's container holds the N streams; h264p's header goes
+// what it leaves is the next record's (take_back()). c writes a part's
+// record, then its output as it comes (as m4vpack does), its model reading
+// the part from the worker's input as it comes: nothing is coded again (a
+// slice the model pass finds would not come out as it is goes as its bytes
+// after its syntax, cmstream.inc), so its worker holds neither (the
+// splitter, which writes a part's size before it, holds it as it cuts it,
+// mt_cap()). d holds a part's
+// output until the part is done (the parts go out in turn, the parameter
+// sets removed). MTwrap's container holds the N streams; h264p's header goes
 // before it (kMtMagic, mt_head()). Decoding needs the same N (the header has
 // it); each part ends a round of MTwrap's decoder (yield 4), which takes the
 // parts from the workers in turn as they were dealt.
@@ -104,41 +109,32 @@ struct PartProg {
 
 // A run of a codec, H264pCoro<f_DEC, LV>, on a part: its input as src
 // gives it (src(p): the next piece at p, its size; 0, the end), its output
-// into out (grown as it fills, handed to it 64 KB at a time, to most bytes:
-// one more fails the worker); the run's status (0, 1 after an error,
-// kRestart). As it goes, its input, output and pictures from in0, out0 and
-// pics0 on are the worker's counts, what it tells is shown (show_told():
-// the parts' video once), and a line of progress may be due. As it ends,
-// rest (if any) has where the codec stopped reading the piece it had last,
-// and that piece's end (decompressing, what is past the part's stream is
-// the next record's: H264pPart::take_back()).
-template <class C, class Src>
-int run_part(const H264pArgs& a, Src& src, Buf<uint8_t>& out, uint64_t most, PartProg& prog, uint64_t in0,
-             uint64_t out0, uint64_t pics0, const byte** rest) {
+// to put (put(p, n), as it comes: buf, 64 KB, at a time); the run's status
+// (0, or 1 after an error). As it goes, its input, output and pictures from
+// in0, out0 and pics0 on are the worker's counts, what it tells is shown
+// (show_told(): the parts' video once), and a line of progress may be due.
+// As it ends, rest (if any) has where the codec stopped reading the piece
+// it had last, and that piece's end (decompressing, what is past the part's
+// stream is the next record's: H264pPart::take_back()).
+template <class C, class Src, class Put>
+int run_part(const H264pArgs& a, Src& src, Put& put, Buf<uint8_t>& buf, PartProg& prog, uint64_t in0, uint64_t out0,
+             uint64_t pics0, const byte** rest) {
   C* c = coro_new<C>();
   c->Init(&a);
   auto feed = [&]() {  // the next piece of the part (addinp() takes 32 bits), or its end
     const uint8_t* p = nullptr;
     size_t l = src(p);
     if (!l) c->f_quit = 1;
-    c->addinp((byte*)(l ? p : out.data()), (uint)l);
+    c->addinp((byte*)(l ? p : buf.data()), (uint)l);
   };
-  out.resize((size_t)Min<uint64_t>(1 << 16, most + 1));
-  c->addout(out.data(), (uint)out.size());
+  buf.resize(1 << 16);
+  c->addout(buf.data(), (uint)buf.size());
   feed();
   drive(
       *c, feed,
       [&](bool more) {
-        size_t done = (size_t)(c->outptr - out.data());
-        if (!more) {  // the end, or an error
-          out.resize(done);
-          return;
-        }
-        if (done == out.size()) {  // (the output full: twice the room, to one byte past the most)
-          if (done > most) err_raise("a part came out longer than its record says");
-          out.resize((size_t)Min<uint64_t>(2 * (uint64_t)done, most + 1));
-        }
-        c->addout(out.data() + done, (uint)Min(out.size() - done, (size_t)1 << 16));
+        put(buf.data(), (size_t)(c->outptr - buf.data()));
+        if (more) c->addout(buf.data(), (uint)buf.size());
       },
       [&](uint code) {
         show_told(*c, code, a.meter, a);
@@ -159,8 +155,8 @@ int run_part(const H264pArgs& a, Src& src, Buf<uint8_t>& out, uint64_t most, Par
 template <int f_DEC>
 struct H264pPart : CoroIo {
   H264pArgs args;
-  Buf<uint8_t> in_;   // compressing: a part, all of it, read before its model starts
-  Buf<uint8_t> out_;  // what the part's model made of it
+  Buf<uint8_t> buf_;  // the part's model's output, 64 KB at a time (run_part())
+  Buf<uint8_t> out_;  // decompressing: the part, all of it, until it is done (the parts go out in turn)
   uint64_t parts;              // the parts done
   PartProg prog;               // the input coded so far and the output (the progress line)
   uint32_t worker;             // its place among the workers (MTwrap's), dealt the parts in turn
@@ -169,14 +165,14 @@ struct H264pPart : CoroIo {
     coro_init();
     args = *a;
     worker = w;
-    in_.Init();
+    buf_.Init();
     out_.Init();
     parts = 0;
     prog.set(0, 0, 0);
     return 0;
   }
   void Quit() {
-    in_.Quit();
+    buf_.Quit();
     out_.Quit();
   }
 
@@ -203,36 +199,22 @@ struct H264pPart : CoroIo {
     say_error(args.meter, "h264p: %s: %s\n", args.name, why);
     return 1;
   }
-  // the next n bytes of the input into in_ (false: there are fewer); in_
-  // grown as they come, not by n, which a broken record can make anything
-  bool take(uint64_t n) {
-    if (n != (size_t)n) return false;
-    in_.clear();
-    while (in_.size() < n) {
-      size_t m = in_.size(), k = (size_t)Min<uint64_t>(n - m, (uint64_t)1 << 20);
-      in_.resize(m + k);
-      size_t got = read(in_.data() + m, k);
-      in_.resize(m + got);
-      if (got < k) return false;
-    }
-    return true;
-  }
-  // the part's model run on what src gives (run_part()) into out_ (most
-  // bytes), at the level of a.level (the counts from in0, out0 and pics0 on;
-  // rest, where it stopped reading)
+  // the part's model run on what src gives, its output to put (run_part()),
+  // at the level of a.level (the counts from in0, out0 and pics0 on; rest,
+  // where it stopped reading)
   template <class LV>
   struct Lv {
-    template <class Src>
-    static int run(H264pPart& w, const H264pArgs& a, Src& src, uint64_t most, uint64_t in0, uint64_t out0,
+    template <class Src, class Put>
+    static int run(H264pPart& w, const H264pArgs& a, Src& src, Put& put, uint64_t in0, uint64_t out0,
                    uint64_t pics0, const byte** rest) {
-      return run_part<H264pCoro<f_DEC, LV>>(a, src, w.out_, most, w.prog, in0, out0, pics0, rest);
+      return run_part<H264pCoro<f_DEC, LV>>(a, src, put, w.buf_, w.prog, in0, out0, pics0, rest);
     }
   };
-  template <class Src>
-  int code(const H264pArgs& a, Src& src, uint64_t most, uint64_t in0, uint64_t out0, uint64_t pics0,
+  template <class Src, class Put>
+  int code(const H264pArgs& a, Src& src, Put& put, uint64_t in0, uint64_t out0, uint64_t pics0,
            const byte** rest = nullptr) {
-    int r = with_level<Lv>(a.level, *this, a, src, most, in0, out0, pics0, rest);
-    if (r != kNoLevel) return r;  // (0, 1, or kRestart)
+    int r = with_level<Lv>(a.level, *this, a, src, put, in0, out0, pics0, rest);
+    if (r != kNoLevel) return r;  // (0 or 1)
     say_error(args.meter, "h264p: %s: a part compressed at level -%d, which this build has not\n", args.name, a.level);
     return 1;
   }
@@ -260,8 +242,9 @@ struct H264pPart : CoroIo {
   }
 
   // compressing: each part as the splitter frames it (u64 L, then u64 ins,
-  // xlen, nins and nal0, then the part, L-32 bytes) into its record, and as
-  // the parts end, the record of the worker's end
+  // xlen, nins and nal0, then the part, L-32 bytes) into its record, then
+  // the part compressed as it comes, its model reading it from the input as
+  // it comes too; and as the parts end, the record of the worker's end
   int run(IntTag<0>) {
     for (;;) {
       uint8_t h[40], rec[kMtRec];
@@ -273,40 +256,33 @@ struct H264pPart : CoroIo {
       }
       uint64_t L = get_le(h, 8), ins = get_le(h + 8, 8), xlen = get_le(h + 16, 8);
       uint64_t plen = L - 32;
-      if (n < 40 || L <= 32 || ins > plen || xlen > plen - ins || !take(plen))
+      if (n < 40 || L <= 32 || ins > plen || xlen > plen - ins)
         return fail("internal: a part framed wrong");  // (plen 0 is a worker's end)
-      // (the part can be read again: the model pass checks the slices it
-      // can, and if one does not come out as it is, the dry runs write back
-      // each, again)
-      H264pArgs a = args;
-      a.check = true;
-      a.nal0 = get_le(h + 32, 8), a.ncopy = get_le(h + 24, 8), a.copy_at = ins > 0;  // (after an AUD, if any)
-      uint64_t in0 = prog.in(), out0 = prog.out(), pics0 = prog.pics();
-      const uint64_t kAny = ~(uint64_t)0 >> 1;  // (a part's compressed size: as it comes)
-      size_t pos = 0;
-      auto src = [&](const uint8_t*& p) {  // in_, from pos on (each run from its start)
-        size_t l = Min(in_.size() - pos, (size_t)1 << 30);
-        p = in_.data() + pos;
-        pos += l;
-        return l;
-      };
-      int r = code(a, src, kAny, in0, out0, pics0);
-      if (r == kRestart) {
-        a.check = false;
-        pos = 0;
-        r = code(a, src, kAny, in0, out0, pics0);
-      }
-      if (r) return 1;
-      prog.set(in0 + plen, out0 + kMtRec + out_.size(), prog.pics());
       mt_rec(rec, plen, ins, xlen, next_part());
       write(rec, kMtRec);
-      write(out_.data(), out_.size());
+      H264pArgs a = args;
+      a.nal0 = get_le(h + 32, 8), a.ncopy = get_le(h + 24, 8), a.copy_at = ins > 0;  // (after an AUD, if any)
+      uint64_t in0 = prog.in(), out0 = prog.out() + kMtRec, pics0 = prog.pics();
+      uint64_t left = plen;
+      auto src = [&](const uint8_t*& p) {  // the worker's input where it is, to the part's end
+        if (!left || (inpptr >= inpend && !next_input())) return (size_t)0;
+        size_t l = (size_t)Min<uint64_t>((uint64_t)(inpend - inpptr), left);
+        p = inpptr;
+        inpptr += l;
+        n_in += l;
+        left -= l;
+        return l;
+      };
+      auto put = [&](const uint8_t* p, size_t l) { write(p, l); };
+      if (code(a, src, put, in0, out0, pics0)) return 1;
+      if (left) return fail("internal: a part cut short");
+      prog.set(in0 + plen, prog.out(), prog.pics());
       parts++;
-      // the record handed over now, its last buffer as far as it is filled
-      // (a round's end, as d's worker ends one): so MTwrap puts each record
-      // in its stream as its part is done, and d, which takes the parts in
+      // the part's end handed over now, its last buffer as far as it is
+      // filled (a round's end, as d's worker ends one): so MTwrap puts it in
+      // its stream as the part is done, and d, which takes the parts in
       // turn, finds the next within about a round of the others. (A worker
-      // whose records are small held them until 64 KB of them, thousands of
+      // whose parts are small held them until 64 KB of them, thousands of
       // parts, past all of which d had to read the others' and hold them.)
       before_yield();
       yield(static_cast<Coroutine*>(this), 4);
@@ -353,8 +329,13 @@ struct H264pPart : CoroIo {
         return lend(p);
       };
       uint64_t in0 = prog.in(), out0 = prog.out(), pics0 = prog.pics();
+      out_.clear();
+      auto put = [&](const uint8_t* p, size_t l) {  // (to plen bytes: one more is broken as it comes)
+        if (l > plen - out_.size()) err_raise("a part came out longer than its record says");
+        out_.append(p, l);
+      };
       const byte* rest[2] = {nullptr, nullptr};
-      int r = code(a, src, plen, in0 + kMtRec, out0, pics0, rest);
+      int r = code(a, src, put, in0 + kMtRec, out0, pics0, rest);
       take_back(rest[0], rest[1]);
       if (r) return 1;
       if (out_.size() != plen) return fail("a part did not decompress as it was compressed");

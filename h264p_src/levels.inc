@@ -46,7 +46,7 @@ const int kLevels[] = {H264P_LEVELS(H264P_FIRST)};
 #undef H264P_FIRST
 
 // with_level<F>(level, a...): F<LvN>::run(a...) for the level N of this
-// build that level is, else kNoLevel (not kRestart, -1, a run's status)
+// build that level is, else kNoLevel (not a run's status: 0 or 1)
 const int kNoLevel = -2;
 template <template <class> class F, class... A>
 int with_level(int level, A&&... a) {

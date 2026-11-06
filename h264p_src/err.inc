@@ -4,7 +4,8 @@
 // decides, by the traps it set (ErrTrap: a jmp_buf, Lib3's setjmp): the
 // innermost one takes it. So the dry run sets one around a NAL unit's
 // parse and write-back (cmstream.inc: the NAL unit is then stored
-// verbatim), the checked model pass one around a slice (compressed again),
+// verbatim), the model pass, c's and d's, one around a slice's walk (its
+// bytes follow, compress_parsed()),
 // update_params() one around a verbatim parameter set (its errors are of
 // no matter), a run, the coroutine of c or d, one around all of it
 // (coro.inc: the run then says why and ends, yield 3), and a worker of -t
@@ -20,13 +21,11 @@
 // (drive(), coro.inc), so that its own are not set on them.
 //
 // Running out of memory (mem.inc) is an error of the run, not of what it
-// was parsing: err_fatal() jumps to the outermost trap.
+// was parsing: err_fatal() jumps to the outermost trap; so does what the
+// model pass of c alone could fail at, which d could not follow
+// (compress_parsed()).
 
 namespace h264p {
-
-// a run's status when it is to be done again (CodeLv, mt.inc's parts): the
-// model pass's check found a slice that does not come out as it was
-const int kRestart = -1;
 
 struct ErrTrap {
   jmp_buf jb;
