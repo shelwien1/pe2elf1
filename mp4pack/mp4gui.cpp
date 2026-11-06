@@ -229,7 +229,9 @@ int WINAPI wWinMain( HINSTANCE hi, HINSTANCE, LPWSTR, int show ) {
 
   WNDCLASSEXW wc; memset( &wc, 0, sizeof(wc) );
   wc.cbSize = sizeof(wc); wc.lpfnWndProc = WndProc; wc.hInstance = hi;
-  wc.hCursor = LoadCursorW( 0, (LPCWSTR)IDC_ARROW ); wc.hIcon = LoadIconW( 0, (LPCWSTR)IDI_APPLICATION );
+  wc.hCursor = LoadCursorW( 0, (LPCWSTR)IDC_ARROW );
+  wc.hIcon = LoadIconW( hi, L"MP4GUI" ); // (mp4gui.rc's: the small one too, from its sizes)
+  if( !wc.hIcon ) wc.hIcon = LoadIconW( 0, (LPCWSTR)IDI_APPLICATION ); // (built without it)
   wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE+1); wc.lpszClassName = L"mp4gui";
   RegisterClassExW( &wc );
   wc.lpfnWndProc = CpuProc; wc.lpszClassName = L"mp4gui_cpu"; wc.hbrBackground = (HBRUSH)(COLOR_WINDOW+1);

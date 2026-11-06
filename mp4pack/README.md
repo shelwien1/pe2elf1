@@ -531,10 +531,17 @@ when a file is dropped on mp4gui.exe).
 
 The tools run without a console (`DETACHED_PROCESS`), so none opens a window;
 the rest is as with mp4pack.exe, whose console output comes to the window
-instead (mp4pack's `msg_hook` and `status_hook`). mp4gui.exe has no manifest
-(it is one .cpp file): the themed look comes from an activation context made
-from the one in shell32.dll, as programs without one do; where that fails, the
-controls look classic.
+instead (mp4pack's `msg_hook` and `status_hook`). mp4gui.exe has no manifest:
+the themed look comes from an activation context made from the one in
+shell32.dll, as programs without one do; where that fails, the controls look
+classic. Its one resource is its icon (`mp4gui.rc`: `mp4gui.ico`), made from
+a screen shot of it at the end of compressing an mp4 (at 192 DPI): the
+Progress box's bars, green for what the streams came to and blue for what
+they saved. From 256 to 48 pixels it shows all six bars, their right halves;
+from 32 to 16, three of them, where green turns blue, so that they stay
+bars. The window's gray is transparent. The sizes to 64 are 32-bit BMPs,
+128 and 256 PNGs. The window, the taskbar and Explorer show it; built
+without the `.rc`, mp4gui takes the stock application icon.
 
 ## Errors
 
@@ -644,10 +651,13 @@ The engine includes `x86targets.h`, a copy of cpuinfo's
 (`../cpuinfo/x86targets.h`; copy a newer one over it), so this directory
 builds on its own. For the Linux build see below.
 
-mp4gui (`./build.sh` makes it too), plain Win32 with its common dialogs:
+mp4gui (`./build.sh` makes it too), plain Win32 with its common dialogs, and
+its icon from `mp4gui.rc` by windres (with the MSVC tools: `rc mp4gui.rc`,
+and `mp4gui.res` on the link line):
 
 ```
-g++ -std=c++11 -O2 -s -static -municode -mwindows -o mp4gui.exe mp4gui.cpp -lcomdlg32 -lole32 -lshell32 -lgdi32
+windres mp4gui.rc -O coff -o mp4gui_rc.o
+g++ -std=c++11 -O2 -s -static -municode -mwindows -o mp4gui.exe mp4gui.cpp mp4gui_rc.o -lcomdlg32 -lole32 -lshell32 -lgdi32
 ```
 
 The sources: each program is one file, its main (`mp4pack.cpp`: the command

@@ -1,0 +1,7 @@
+// mp4gui.rc -- mp4gui's resources: its icon, mp4gui.ico, made from a screen
+// shot of mp4gui (at 192 DPI) at the end of compressing an mp4: the Progress
+// box's bars, green for what the streams came to and blue for what they
+// saved. 256 to 48 pixels: all six bars, their right halves; 32 to 16: three
+// of them, where green turns blue. The window's gray is transparent. The
+// window, the taskbar and Explorer show it; mp4gui.cpp loads it by its name.
+MP4GUI ICON "mp4gui.ico"
