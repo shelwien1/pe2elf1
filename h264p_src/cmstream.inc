@@ -49,6 +49,7 @@ struct H264pArgs {
   uint64_t part_max;  // decompressing -t: the most a part's record can say it is (mt.inc's mt_part_max())
   int threads;        // -t: the workers, dealt the parts in turn (a record's place: mt.inc)
   bool in_part;       // decompressing a part of -t: its stream ends where its decoder stops (the next record follows)
+  uint64_t* turn;     // decompressing -t: the place of the part whose output goes out next, the workers' (mt.inc)
 
   void Init() {
     level = 0;
@@ -59,6 +60,7 @@ struct H264pArgs {
     part_max = 0;
     threads = 1;
     in_part = false;
+    turn = nullptr;
   }
 };
 

@@ -389,10 +389,17 @@ parts in turn to N workers; a worker compresses a part with a model of its
 own, an `H264pCoro` run as a coroutine of the worker's on the part as it
 comes, its output written as it comes (as m4vpack's does: the worker holds
 neither; the splitter, which writes a part's size before it, holds the part
-as it cuts it), then the next part dealt to it. Decompressing, a worker decompresses its
-parts so, holding each until it is done, removes the inserted parameter
-sets, and MTwrap takes the parts from the workers in turn, as they were
-dealt.
+as it cuts it), then the next part dealt to it. Decompressing, a worker
+decompresses its parts so, the inserted parameter sets left out as they
+pass, and MTwrap takes the parts from the workers in turn, as they were
+dealt. A worker writes a part's output as it comes once the parts before it
+have gone to MTwrap, and holds what comes before that: MTwrap writes a
+worker's output only in its turn, so a worker writing out of turn would
+wait after its ring's 1 MB, leaving the others no more than that ahead of
+the one whose part is next (`d -t` would run on about one thread). So each
+worker still decodes up to a part ahead, while the one whose turn it is
+holds nothing, and the output starts as the first part does (`d -t 4` of
+31 MB in parts of 16 MB: 63 MB at most, was 77; as fast).
 
 The stream starts with `h264m`, the version, the count of threads and the
 part size (KB, 32 bits: `d` takes a part's record that says more than `c`

@@ -243,6 +243,8 @@ int decode_mt(const char* in_name, const Options& opt, filehandle0& f, Output& o
   a.verbose = false;  // (no statistics for each part)
   a.part_max = mt_part_max((get_le(head + sizeof kMtMagic + 1, 4) + 1) << 10);  // (the part size in KB, rounded down)
   a.threads = threads;
+  uint64_t turn = 0;  // (the workers', until d->Quit() has joined them)
+  a.turn = &turn;
   MtDec* d = coro_new<MtDec>();
   MtProg mp = {&pr, d};
   pr.counts(mt_dec_counts, &mp);

@@ -32,9 +32,10 @@
 // slice the model pass finds would not come out as it is goes as its bytes
 // after its syntax, cmstream.inc), so its worker holds neither (the
 // splitter, which writes a part's size before it, holds it as it cuts it,
-// mt_cap()). d holds a part's
-// output until the part is done (the parts go out in turn, the parameter
-// sets removed). MTwrap's container holds the N streams; h264p's header goes
+// mt_cap()). d writes a part's output as it comes too, the parameter sets
+// left out, once the parts before it have gone out, holding what comes
+// before that (the parts go out in turn: H264pPart::give()). MTwrap's
+// container holds the N streams; h264p's header goes
 // before it (kMtMagic, mt_head()). Decoding needs the same N (the header has
 // it); each part ends a round of MTwrap's decoder (yield 4), which takes the
 // parts from the workers in turn as they were dealt.
@@ -156,7 +157,7 @@ template <int f_DEC>
 struct H264pPart : CoroIo {
   H264pArgs args;
   Buf<uint8_t> buf_;  // the part's model's output, 64 KB at a time (run_part())
-  Buf<uint8_t> out_;  // decompressing: the part, all of it, until it is done (the parts go out in turn)
+  Buf<uint8_t> out_;  // decompressing: what the part made before its turn (give())
   uint64_t parts;              // the parts done
   PartProg prog;               // the input coded so far and the output (the progress line)
   uint32_t worker;             // its place among the workers (MTwrap's), dealt the parts in turn
@@ -239,6 +240,24 @@ struct H264pPart : CoroIo {
     if (end != inpend || at > inpend) return;
     n_in -= (uint64_t)(inpend - at);
     inpptr = (byte*)at;
+  }
+
+  // decompressing: l bytes of the part at place, to the output as they come
+  // once the parts before it have gone to theirs (*args.turn at its place:
+  // MTwrap takes the parts in turn, and writes a worker's only while it is
+  // its turn, so one whose output went to it before would wait on it after
+  // its ring's 1 MB, which would leave the other workers no more than that
+  // ahead of the one whose part is next); held until then (out_: so a
+  // worker holds at most the part it is on, as before, but the one whose
+  // turn it is, nothing)
+  void give(const uint8_t* p, size_t l, uint64_t place) {
+    if (!l) return;
+    if (__atomic_load_n(args.turn, __ATOMIC_ACQUIRE) != place) {
+      out_.append(p, l);
+      return;
+    }
+    if (out_.size()) write(out_.data(), out_.size()), out_.clear();
+    write(p, l);
   }
 
   // compressing: each part as the splitter frames it (u64 L, then u64 ins,
@@ -328,21 +347,28 @@ struct H264pPart : CoroIo {
         }
         return lend(p);
       };
+      // what it makes, as it comes, to plen bytes (one more is broken as it
+      // gets there), the inserted parameter sets left out: give()
       uint64_t in0 = prog.in(), out0 = prog.out(), pics0 = prog.pics();
+      uint64_t place = next_part(), pos = 0, x1 = ins + xlen;
       out_.clear();
-      auto put = [&](const uint8_t* p, size_t l) {  // (to plen bytes: one more is broken as it comes)
-        if (l > plen - out_.size()) err_raise("a part came out longer than its record says");
-        out_.append(p, l);
+      auto put = [&](const uint8_t* p, size_t l) {
+        if (l > plen - pos) err_raise("a part came out longer than its record says");
+        uint64_t e = pos + l;
+        if (pos < ins) give(p, (size_t)(Min(e, ins) - pos), place);
+        if (e > x1) give(p + (Max(pos, x1) - pos), (size_t)(e - Max(pos, x1)), place);
+        pos = e;
       };
       const byte* rest[2] = {nullptr, nullptr};
       int r = code(a, src, put, in0 + kMtRec, out0, pics0, rest);
       take_back(rest[0], rest[1]);
       if (r) return 1;
-      if (out_.size() != plen) return fail("a part did not decompress as it was compressed");
-      size_t pos = (size_t)(ins + xlen);
+      if (pos != plen) return fail("a part did not decompress as it was compressed");
       prog.set(prog.in(), out0 + plen - xlen, prog.pics());
-      write(out_.data(), (size_t)ins);
-      write(out_.data() + pos, out_.size() - pos);
+      // what it held, now (as MTwrap takes it, in turn), and the next part's
+      // turn
+      if (out_.size()) write(out_.data(), out_.size()), out_.clear();
+      __atomic_store_n(args.turn, place + 1, __ATOMIC_RELEASE);
       parts++;
       before_yield();
       yield(static_cast<Coroutine*>(this), 4);
