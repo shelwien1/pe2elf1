@@ -385,11 +385,19 @@ loses the reference pictures before it, and some compression; never
 losslessness: the bytes of a part are coded whatever they are). MTwrap (`h264p_src/MTwrap_v3`,
 mtwrap's but that it only ever waits on events, never polls with `Sleep()`;
 its parts mode: `MTwrap.md` section 11 in mtwrap) deals the
-parts in turn to N workers; a worker compresses a part with a model of its
-own, an `H264pCoro` run as a coroutine of the worker's on the part as it
-comes, its output written as it comes (as m4vpack's does: the worker holds
-neither; the splitter, which writes a part's size before it, holds the part
-as it cuts it), then the next part dealt to it. Decompressing, a worker
+parts in turn to N workers; a worker reads a part whole into memory (MTwrap
+deals a part whole to a worker before the next one's, so a worker that read
+it only as its model did would hold up the dealing once the part passed its
+input ring, 2 MB) and compresses it with a model of its own, an `H264pCoro`
+run as a coroutine of the worker's, its output written as it comes (as
+m4vpack's does), then the next part dealt to it. That the output goes as it
+comes matters to `d`: MTwrap's container has the workers' blocks in the
+order they came, so a part's are spread over the time it took to code it,
+among the others'. (Written at the part's end, as before format 12, they
+came in runs of one worker's, a part long; `d`, which reads the container in
+order, waited at each run longer than its worker's input ring until that
+worker had decoded most of it, the others idle: `d -t 32` of 124 MB in parts
+of 4 MB had 14 of its 32 workers decoding on average, now 28.) Decompressing, a worker
 decompresses its parts so, the inserted parameter sets left out as they
 pass, and MTwrap takes the parts from the workers in turn, as they were
 dealt. A worker writes a part's output as it comes once the parts before it

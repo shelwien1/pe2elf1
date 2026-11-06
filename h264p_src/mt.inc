@@ -7,7 +7,7 @@
 // turn to N workers by MTwrap (MTwrap_v3, its parts mode: MTwrap.md section
 // 11). A worker codes its parts one after the other, each by a model of its
 // own: H264pCoro (coro.inc), run as a coroutine of the worker's on the part
-// as it comes. A worker's stream is a record for each part
+// (read whole, compressing). A worker's stream is a record for each part
 // (m4vpack's, whose MTwrap layer h264p's follows):
 //
 //   u64 plen    the size of the part as compressed (with the parameter
@@ -27,12 +27,10 @@
 // record says how long a part's stream is, which d would have to take on
 // trust: a part's run reads the worker's input where it is (lend()), and
 // what it leaves is the next record's (take_back()). c writes a part's
-// record, then its output as it comes (as m4vpack does), its model reading
-// the part from the worker's input as it comes: nothing is coded again (a
-// slice the model pass finds would not come out as it is goes as its bytes
-// after its syntax, cmstream.inc), so its worker holds neither (the
-// splitter, which writes a part's size before it, holds it as it cuts it,
-// mt_cap()). d writes a part's output as it comes too, the parameter sets
+// record, then its output as it comes (as m4vpack does): nothing is coded
+// again (a slice the model pass finds would not come out as it is goes as
+// its bytes after its syntax, cmstream.inc). It reads the part whole first,
+// as m4vpack does, so that MTwrap's dealing goes on (run(IntTag<0>)). d writes a part's output as it comes too, the parameter sets
 // left out, once the parts before it have gone out, holding what comes
 // before that (the parts go out in turn: H264pPart::give()). MTwrap's
 // container holds the N streams; h264p's header goes
@@ -156,6 +154,7 @@ int run_part(const H264pArgs& a, Src& src, Put& put, Buf<uint8_t>& buf, PartProg
 template <int f_DEC>
 struct H264pPart : CoroIo {
   H264pArgs args;
+  Buf<uint8_t> in_;   // compressing: the part, all of it, read before its model starts (run(IntTag<0>))
   Buf<uint8_t> buf_;  // the part's model's output, 64 KB at a time (run_part())
   Buf<uint8_t> out_;  // decompressing: what the part made before its turn (give())
   uint64_t parts;              // the parts done
@@ -166,6 +165,7 @@ struct H264pPart : CoroIo {
     coro_init();
     args = *a;
     worker = w;
+    in_.Init();
     buf_.Init();
     out_.Init();
     parts = 0;
@@ -173,6 +173,7 @@ struct H264pPart : CoroIo {
     return 0;
   }
   void Quit() {
+    in_.Quit();
     buf_.Quit();
     out_.Quit();
   }
@@ -260,10 +261,31 @@ struct H264pPart : CoroIo {
     write(p, l);
   }
 
+  // the next n bytes of the input into in_ (false: there are fewer); in_
+  // grown as they come, not by n
+  bool take(uint64_t n) {
+    if (n != (size_t)n) return false;
+    in_.clear();
+    while (in_.size() < n) {
+      size_t m = in_.size(), k = (size_t)Min<uint64_t>(n - m, (uint64_t)1 << 20);
+      in_.resize(m + k);
+      size_t got = read(in_.data() + m, k);
+      in_.resize(m + got);
+      if (got < k) return false;
+    }
+    return true;
+  }
+
   // compressing: each part as the splitter frames it (u64 L, then u64 ins,
   // xlen, nins and nal0, then the part, L-32 bytes) into its record, then
-  // the part compressed as it comes, its model reading it from the input as
-  // it comes too; and as the parts end, the record of the worker's end
+  // the part compressed as it comes; and as the parts end, the record of the
+  // worker's end. The part is read whole first, as m4vpack's is: MTwrap's
+  // coder deals a part whole to its worker before the next worker's, so a
+  // worker that took its part only as its model read it would hold up the
+  // dealing, once the part passed its input ring (2 MB), until its model had
+  // read all but that (the other workers waiting on their parts: c -t 16 of
+  // 124 MB in parts of 4 MB on 4 cores ran on 1.96 of them, 88 s, instead
+  // of 3.92 and 49 s)
   int run(IntTag<0>) {
     for (;;) {
       uint8_t h[40], rec[kMtRec];
@@ -275,26 +297,22 @@ struct H264pPart : CoroIo {
       }
       uint64_t L = get_le(h, 8), ins = get_le(h + 8, 8), xlen = get_le(h + 16, 8);
       uint64_t plen = L - 32;
-      if (n < 40 || L <= 32 || ins > plen || xlen > plen - ins)
+      if (n < 40 || L <= 32 || ins > plen || xlen > plen - ins || !take(plen))
         return fail("internal: a part framed wrong");  // (plen 0 is a worker's end)
       mt_rec(rec, plen, ins, xlen, next_part());
       write(rec, kMtRec);
       H264pArgs a = args;
       a.nal0 = get_le(h + 32, 8), a.ncopy = get_le(h + 24, 8), a.copy_at = ins > 0;  // (after an AUD, if any)
       uint64_t in0 = prog.in(), out0 = prog.out() + kMtRec, pics0 = prog.pics();
-      uint64_t left = plen;
-      auto src = [&](const uint8_t*& p) {  // the worker's input where it is, to the part's end
-        if (!left || (inpptr >= inpend && !next_input())) return (size_t)0;
-        size_t l = (size_t)Min<uint64_t>((uint64_t)(inpend - inpptr), left);
-        p = inpptr;
-        inpptr += l;
-        n_in += l;
-        left -= l;
+      size_t pos = 0;
+      auto src = [&](const uint8_t*& p) {  // in_, from pos on
+        size_t l = Min(in_.size() - pos, (size_t)1 << 30);
+        p = in_.data() + pos;
+        pos += l;
         return l;
       };
       auto put = [&](const uint8_t* p, size_t l) { write(p, l); };
       if (code(a, src, put, in0, out0, pics0)) return 1;
-      if (left) return fail("internal: a part cut short");
       prog.set(in0 + plen, prog.out(), prog.pics());
       parts++;
       // the part's end handed over now, its last buffer as far as it is
