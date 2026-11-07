@@ -738,5 +738,17 @@ void ShiftMDCT( int j, int c ) {
   dMDCT[j]=cMDCT[j]; cMDCT[j]=c;
 }
 
+// The value c at place j, of a channel that is a copy of the other
+// (model_delta.inc), into the histories ModelMDCT() (coded, j below the
+// count) or ShiftMDCT() would have kept of it, nothing coded or learned
+void CopyMDCT( int j, int c, int coded ) {
+  if( coded ) {
+    if( l_abs(c)>1 ) av_MDCT[j] = (av_MDCT[j]*M_av_D0)/256 + l_abs(c);
+    (signs[j]<<=1) += (c<0);
+    (zeros[j]<<=1) += (c==0);
+  }
+  ShiftMDCT(j,c);
+}
+
 
 #undef SC8

@@ -6,6 +6,10 @@ Node2ii          bvflag;
 Number1ii<9>     bvdump;
 Node2ii          xbigval0;
 Node2ii          xbigval1;
+// channel 1 of a granule a copy of channel 0 (its 576 values): by the
+// frame's stereo mode and the last granule's flag
+Node2ii          dupflag[3][2];
+int              dup_last;
 
 void Init_Counts() {
 
@@ -16,12 +20,15 @@ void Init_Counts() {
   Init_Number1ii( bvdump );
   Init_Node2ii( xbigval0 );
   Init_Node2ii( xbigval1 );
+  Init_Node2ii( dupflag );
+  dup_last = 0;
 
   memset( &cc0, 0, sizeof(cc0) );
   memset( &cc1, 0, sizeof(cc1) );
 }
 
-void ProcessCounts( int i, int gr, int ch ) {
+// dup: channel 1 a copy of channel 0, whose counts it has (not coded)
+void ProcessCounts( int i, int gr, int ch, int dup ) {
 
   int k, c1, flag;
   gr_info& gi = si.gi[gr][ch];
@@ -31,6 +38,7 @@ void ProcessCounts( int i, int gr, int ch ) {
   for( k=576; k>0 && ( MDCT[k-1]==0 ); k-- );
   for( c1=k; c1>0 && ( l_abs(MDCT[c1-1])<=1 ); c1-- );
 
+  if( dup ) k=cc0[gr][0], c1=cc1[gr][0]; else
   ProcessCounts1( k, c1, i, gr, ch );
 
   int bigval = gi.big_values;

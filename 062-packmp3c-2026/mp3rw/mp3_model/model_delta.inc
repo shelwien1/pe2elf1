@@ -124,7 +124,18 @@ void ProcessDelta( void ) {
     }
   }
 
-  for( gr=0; gr<=ngr; gr++ ) for( ch=0; ch<stereo; ch++ ) ProcessCounts( ii[gr][ch], gr, ch );
+  // Channel 1 the same as channel 0, all 576 values (a mono recording in
+  // two channels, L/R): a flag, then its values are channel 0's, copied,
+  // not coded -- nor its counts, which are channel 0's
+  int dup[2] = {0,0};
+  for( gr=0; gr<=ngr; gr++ ) for( ch=0; ch<stereo; ch++ ) {
+    if( ch ) {
+      dup[gr] = !memcmp( MC[gr][1], MC[gr][0], sizeof(MC[gr][0]) ); // (decoding: the flag decoded)
+      dupflag[st_mod][dup_last].Process( rc, dup[gr], TTable[24], 16 );
+      dup_last = dup[gr];
+    }
+    ProcessCounts( ii[gr][ch], gr, ch, ch && dup[gr] );
+  }
 
   int ctext[2][2] = {0,0,0,0};
   int  ctx1[2][2] = {0,0,0,0};
@@ -141,6 +152,10 @@ void ProcessDelta( void ) {
       int i = ii[gr][ch], j;
       CalcSteps( si.gi[gr][ch], SF[gr][ch], sfb );
       m_rDelta[i].xstp = xStep; m_rDelta[i].xsfb = sfb;
+      if( ch && dup[gr] ) {
+        for( j=0; j<576; j++ ) m_rDelta[i].CopyMDCT( j, MC[gr][1][j]=MC[gr][0][j], j<cc0[gr][1] );
+        continue;
+      }
       for( j=0; j<576; j++ ) {
         if( j<cc0[gr][ch] ) {
           int curband = ((i==0) || (i==2) || (i==3) || (i==6) ) ? (sfb[j]<21 ? SF[gr][ch].l[ sfb[j] ] : 0) : 0;
