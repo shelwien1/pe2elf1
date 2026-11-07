@@ -416,6 +416,10 @@ worker still decodes up to a part ahead, while the one whose turn it is
 holds nothing, and the output starts as the first part does (`d -t 4` of
 31 MB in parts of 16 MB: 63 MB at most, was 77; as fast).
 
+`h264p_mt.md` collects the changes to this scheme (MTwrap's decoder, and
+what the workers of `c` and `d` do) for porting to the other codecs on
+MTwrap's parts mode, m4vpack among them.
+
 The stream starts with `h264m`, the version, the count of threads and the
 part size (KB, 32 bits: `d` takes a part's record that says more than `c`
 makes at that size for broken; MTwrap's rings have a size of their own),
