@@ -255,6 +255,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       if (n) p = scale_pred(v_, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &near);
     }
     const S32 A = hist.scale[ch][b], P = hist.pscale[ch][b];
+    D.dp = p >= 0 ? sf_dup(r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), p) : 0;
     D.kd = hfb ? 2 : j;
     D.ab = hfb ? 0 : vvar(s.abits[ch][b] + 1, 27);
     D.pm = s.pmode[ch][b];
@@ -383,6 +384,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     D.lp = lfe_lp;
     D.hm = lfe_hm;
     D.bd = 0;
+    D.dp = sf_dup(SF7, SF7_N, p);
     f_scl.make(D, X_);
     f_scl.select(X_);
     if (f_scl.bit(CN_HIT, ENC && v == p)) v = p;

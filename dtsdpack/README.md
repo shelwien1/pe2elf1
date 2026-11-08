@@ -9,7 +9,7 @@ to code is where the encoder chose otherwise. Decompression, with the same WAV, 
 stream byte for byte.
 
 The core of `s.2.dts` (4 minutes 25 seconds of 5.1 at 1509 kbps; 50008260 bytes) compresses to
-437489 bytes (0.87%); without its audio, dtsdpack's model gets 71.52% and `xz -9e` 88.21%.
+435729 bytes (0.87%); without its audio, dtsdpack's model gets 71.52% and `xz -9e` 88.21%.
 
 The core comes from [dtssplit](../dtssplit) (`prefix.dtsc`) or from any DTS stream; the WAV is the
 stream decoded, for instance by FFmpeg:
@@ -46,16 +46,16 @@ WAV is the one `c` had: its format, its size and the CRC of its first 64 KB are 
 
 ```
 $ dtsdpack c -s s2.dtsc s2_full.wav s2.dtsd
-s2.dtsc: 50008260 -> 437489 bytes (0.87%, -9); 24855 frames, 24855 packed; 0 bytes between frames; 5 channels and the LFE against the WAV (offset 512, correlation 1.0000)
+s2.dtsc: 50008260 -> 435729 bytes (0.87%, -9); 24855 frames, 24855 packed; 0 bytes between frames; 5 channels and the LFE against the WAV (offset 512, correlation 1.0000)
   bytes                             input     packed
   bytes kept as bytes                   0          4    0.00%
   headers, container              1059444        162    0.02%
   side information                2521040     138225    5.48%
   bit allocations                 2174812     232560   10.69%
-  scale factors                   3512740      36863    1.05%
+  scale factors                   3512740      35102    1.00%
   subband samples                40631706      31549    0.08%
   bits after the subframes         108518          1    0.00%
-  total                          50008260     439363    0.88%
+  total                          50008260     437602    0.88%
   the audio's indexes: 99.89% of the samples; the RMS's scale factors: 98.76%
   the encoder's searches on the audio: 84.90% of the ADPCM predictors; HF VQ: 78.10% of the groups, 91.65% of the vectors in them
 ```
@@ -79,10 +79,10 @@ Exit codes:
 
 | Stream | Core | dtsdpack | Without the WAV | `xz -9e` |
 |---|---:|---:|---:|---:|
-| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 437489 (0.87%) | 71.52% | 88.21% |
-| its first 3 MB (6.8 s) | 1275608 | 13635 (1.07%) | | |
-| 3 MB from its middle (5.7 s) | 1068372 | 14932 (1.40%) | | |
-| FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 28932 (1.23%) | | |
+| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 435729 (0.87%) | 71.52% | 88.21% |
+| its first 3 MB (6.8 s) | 1275608 | 13624 (1.07%) | | |
+| 3 MB from its middle (5.7 s) | 1068372 | 14885 (1.39%) | | |
+| FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 28910 (1.23%) | | |
 
 Compressing the whole of `s.2.dts`'s core takes 29 seconds (1.7 MB of core a second) and 52 MB of
 memory, decompressing it 31 seconds and 45 MB, on one thread of a 2.1 GHz Xeon.
@@ -121,7 +121,9 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   RMS (log2, 16 buckets each), and by the subband's recent misses, from adaptive counts straight to
   the range coder (15-bit probabilities: the families' are 12).
 - **The scale factors**: the table's entry nearest (linearly) the RMS of the values it scales (an
-  ADPCM subband's prediction residual): 98.8% of them.
+  ADPCM subband's prediction residual): 98.8% of them. The tables' first entries repeat values (1,
+  1, 2, 2, 2, 2, 3, ...), and among those the encoder's choice is not the rule's (the HF VQ
+  subbands, quiet, are there: 90% of theirs): the model knows when the prediction is one of them.
 - **The ADPCM predictors**: Levinson-Durbin on the autocorrelation of the subframe's subband samples
   and the 4 before them, then the code book's entry nearest the coefficients. The predictor is coded
   as its rank in that order (`vqr`, as a bucket and the bits below its top): it is the first 85% of

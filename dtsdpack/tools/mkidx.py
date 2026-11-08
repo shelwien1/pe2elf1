@@ -13,7 +13,7 @@ R = {'fld': '&111111', 'lv': '&111111', 'l2': 3, 'pos': 32, 'st': 3, 'nch': 4,
      'kd': 3, 'pk': 2, 'pn': 8, 'lp': 10, 'hm': 3,
      'hw': 4, 'nr': 16, 'nl': 16, 'ql': 22, 'm1': 23, 'm2': 23, 'sq': 3, 's1': 3,
      'c1': '&11111111', 'c2': '&11110000', 'code': 3, 'at': 40, 'cl': 257,
-     'mg': 9, 'gn': 16, 'lh': 3, 'nb': 10, 'mx': 17, 'sn': 28, 'sd': 3}
+     'mg': 9, 'gn': 16, 'lh': 3, 'nb': 10, 'mx': 17, 'sn': 28, 'sd': 3, 'dp': 4}
 R_SID = dict(R, fld=7)  # (sid's fields: SF_N)
 R_ABT = dict(R, st=10)  # (abt's st: a change, 0-9)
 R_SCL = dict(R, kd=4)   # (scl's kd: and the LFE's)
@@ -38,9 +38,9 @@ FAM = {
     'n': 'la', 'g': 'bd'},
     'The bit allocations (ABITS), against the last ones, the subband below\'s, and the audio\'s energy.'),
   'scl': ('ac3pack', 'sid', {
-    'a': 'kd pk', 'b': 'kd pk pn', 'c': 'kd pk ab', 'd': 'kd pk lp', 'e': 'kd pk hm', 'h': 'kd pk pn ab',
-    'i': 'kd pk pm pn', 'j': 'kd pk bd', 'k': 'kd pk lp pn', 'l': 'kd pk hm ab', 's': 'kd pk pn',
-    'f': 'kd pk ab', 'm': 'kd pk', 'w': 'pn', 't': 'kd pk', 'n': 'kd', 'g': 'kd'},
+    'a': 'kd pk dp', 'b': 'kd pk pn dp', 'c': 'kd pk ab', 'd': 'kd pk lp', 'e': 'kd pk hm', 'h': 'kd pk pn ab',
+    'i': 'kd pk pm pn', 'j': 'kd pk bd', 'k': 'kd pk lp pn', 'l': 'kd pk hm ab', 's': 'kd pk pn dp',
+    'f': 'kd pk ab', 'm': 'kd pk dp', 'w': 'pn', 't': 'kd pk', 'n': 'kd', 'g': 'kd'},
     'The scale factors, against the one the audio\'s RMS makes (where the WAV is bound), else the last.'),
   'hit': ('ac3pack', 'sid', {
     'a': 'nr nl', 'b': 'nr nl pm', 'c': 'nr hm', 'd': 'nl hm', 'e': 'nr ab', 'h': 'nl ab', 'i': 'nr nl hm',

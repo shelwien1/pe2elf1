@@ -9,9 +9,14 @@ constexpr int QB_N = 16;  // the buckets of how near the rounding boundary a sam
 constexpr int SB_N = 8;   // and a scale factor's RMS the midpoint between two table entries
 
 #include "tables.inc"
-constexpr int SF7_N = 125;  // the 7-bit scale factor table's entries (FFmpeg's pads it with 3 zeros)
+constexpr int SF7_N = 125, SF6_N = 63;  // the scale factor tables' entries (FFmpeg pads them with zeros)
 // the scale factors a channel's SHUFF has: their table's entries the RMS rule picks from
-static INLINE int sf_entries(int shuff) { return shuff == 6 ? SF7_N : 64; }
+static INLINE int sf_entries(int shuff) { return shuff == 6 ? SF7_N : SF6_N; }
+// whether scale factor i of table tab (nt entries) has the value of the one below (1), above (2),
+// both (3), or neither (0): the encoder's choice among such is not the RMS rule's
+static INLINE int sf_dup(const U32* tab, int nt, int i) {
+  return (i > 0 && tab[i - 1] == tab[i]) | (i + 1 < nt && tab[i + 1] == tab[i]) << 1;
+}
 
 static INLINE S32 clip23(S64 a) { return a < -(1 << 23) ? -(1 << 23) : a > (1 << 23) - 1 ? (1 << 23) - 1 : (S32)a; }
 static INLINE S64 rshift(S64 a, int bits) { return bits > 0 ? (a + (1LL << (bits - 1))) >> bits : a; }

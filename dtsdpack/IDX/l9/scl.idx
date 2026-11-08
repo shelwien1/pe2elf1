@@ -12,11 +12,13 @@ Const 0
 Index a
  a_kd: kd, 1!111
  a_pk: pk, 1!1
+ a_dp: dp, 1!111
 
 Index b
  b_kd: kd, 1!111
  b_pk: pk, 1!1
  b_pn: pn, 1!1111111
+ b_dp: dp, 1!111
 
 Index c
  c_kd: kd, 1!111
@@ -66,6 +68,7 @@ Index s
  s_kd: kd, 1!111
  s_pk: pk, 1!1
  s_pn: pn, 1!1111111
+ s_dp: dp, 1!111
 
 Index f
  f_kd: kd, 1!111
@@ -75,6 +78,7 @@ Index f
 Index m
  m_kd: kd, 1!111
  m_pk: pk, 1!1
+ m_dp: dp, 1!111
 
 Index w
  w_pn: pn, 1!1111111
