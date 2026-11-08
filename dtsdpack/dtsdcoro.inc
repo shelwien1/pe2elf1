@@ -136,6 +136,7 @@ struct DtsCoro : CoIo<Coder<f_DEC> > {
         if (B::fcost[i] > 0) fprintf(stderr, "  %-20s %10.0f\n", i < F_N ? field_name[i] : "(container)", B::fcost[i] / 8);
 #endif
     st.hits = k.n_hit, st.smp = k.n_smp, st.sf_hits = k.n_sfhit, st.sf = k.n_sf;
+    for (int i = 0; i < VK_N; i++) st.vq[i] = k.n_vq[i], st.vq_hits[i] = k.n_vqhit[i];
     return 0;
   }
 

@@ -9,5 +9,7 @@
 #include "scl_p.inc"
 #include "smp_h.inc"
 #include "smp_p.inc"
+#include "vqr_h.inc"
+#include "vqr_p.inc"
 #include "raw_h.inc"
 #include "raw_p.inc"

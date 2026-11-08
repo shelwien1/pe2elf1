@@ -144,6 +144,144 @@ static INLINE int ratio_bucket(S128 x, S128 y, int n) {
   return k < 0 ? 0 : k >= n ? n - 1 : (int)k;
 }
 
+// --- the encoder's codebook searches (as found; in integers) ---------------------------------------
+
+// The 4 ADPCM coefficients the n samples x (2^-AQ_F) predict themselves by best: the normal
+// equations of their autocorrelation (no window), solved by Levinson-Durbin in Q28, into alpha in
+// Q24 (alpha[k] multiplies the sample k + 1 before, as the codebook's entries do); *gain the
+// prediction gain in halvings (0-15). The encoder's predictor is then the codebook entry nearest
+// alpha (pvq_dist()), over the subframe's samples and the 4 before them.
+static void lpc4(const S64* x, int n, S64* alpha, int* gain) {
+  S128 r[5];
+  for (int l = 0; l <= 4; l++) {
+    r[l] = 0;
+    for (int i = l; i < n; i++) r[l] += (S128)x[i] * x[i - l];
+  }
+  for (int m = 0; m < 4; m++) alpha[m] = 0;
+  *gain = 0;
+  if (r[0] <= 0) return;
+  int sh = 0;  // (r[0] to 40 bits; |r[l]| <= r[0])
+  while ((r[0] >> sh) >= ((S128)1 << 40)) sh++;
+  S64 R[5], a[5] = {(S64)1 << 28, 0, 0, 0, 0};
+  for (int l = 0; l <= 4; l++) R[l] = (S64)(r[l] >> sh);
+  S64 err = R[0];
+  for (int i = 1; i <= 4 && err > 0; i++) {
+    S128 acc = (S128)R[i] << 28;
+    for (int j = 1; j < i; j++) acc += (S128)a[j] * R[i - j];
+    const S128 kq = -acc / err;
+    if (kq >= ((S128)1 << 28) || kq <= -((S128)1 << 28)) break;  // (unstable: the order so far)
+    const S64 k = (S64)kq;
+    S64 t[5];
+    for (int j = 0; j <= 4; j++) t[j] = a[j];
+    for (int j = 1; j < i; j++) a[j] = t[j] + (S64)(((S128)k * t[i - j]) >> 28);
+    a[i] = k;
+    err -= (S64)(((((S128)err * k) >> 28) * k) >> 28);
+  }
+  for (int m = 0; m < 4; m++) {
+    const S64 v = (-a[m + 1] + 8) >> 4;
+    alpha[m] = v < -((S64)8 << 24) ? -((S64)8 << 24) : v > ((S64)8 << 24) ? ((S64)8 << 24) : v;
+  }
+  int g = 0;
+  if (err <= 0) g = 15;
+  else
+    while (g < 15 && (err << (g + 1)) <= R[0]) g++;
+  *gain = g;
+}
+// the ADPCM codebook entry q's distance from the coefficients alpha (Q24)
+static INLINE S64 pvq_dist(int q, const S64* alpha) {
+  S64 d = 0;
+  for (int m = 0; m < 4; m++) {
+    const S64 e = alpha[m] - ((S64)ADPCM_VB[q][m] << 11);
+    d += e * e;
+  }
+  return d;
+}
+
+// The HF VQ code book as the encoder searches it: groups of 32 entries, the group whose mean is
+// nearest first, then the entry of the group nearest; the samples x (n, 2^-AQ_F) as 16 / sc times
+// them (sc the subband's scale factor), against the entries as they are
+struct HfGroups {
+  S16 s[32][32];  // each group's sum
+};
+static HfGroups hf_groups_make(void) {
+  HfGroups t;
+  for (int g = 0; g < 32; g++)
+    for (int j = 0; j < 32; j++) {
+      int s = 0;
+      for (int i = 0; i < 32; i++) s += HF_VQ[g * 32 + i][j];
+      t.s[g][j] = (S16)s;
+    }
+  return t;
+}
+static const HfGroups hf_groups = hf_groups_make();
+// group g's distance (in 2^(AQ_F + 9) sc units)
+static INLINE S128 hf_group_dist(int g, const S64* x, int n, S64 sc) {
+  S128 d = 0;
+  for (int j = 0; j < n; j++) {
+    const S128 e = (S128)x[j] * 512 - (((S128)hf_groups.s[g][j] * sc) << AQ_F);
+    d += e * e;
+  }
+  return d;
+}
+// entry q's distance (in 2^(AQ_F + 4) sc units)
+static INLINE S128 hf_dist(int q, const S64* x, int n, S64 sc) {
+  S128 d = 0;
+  for (int j = 0; j < n; j++) {
+    const S128 e = (S128)x[j] * 16 - (((S128)HF_VQ[q][j] * sc) << AQ_F);
+    d += e * e;
+  }
+  return d;
+}
+
+// Candidates in the order of their distance (k), ties by index (i): the rank of one, and the one of
+// a rank (quickselect, reordering a)
+struct KeyIx {
+  S128 k;
+  int i;
+};
+static INLINE bool key_less(const KeyIx& a, const KeyIx& b) { return a.k < b.k || (a.k == b.k && a.i < b.i); }
+static int rank_of(const KeyIx* a, int n, int at) {
+  int r = 0;
+  for (int i = 0; i < n; i++) r += key_less(a[i], a[at]);
+  return r;
+}
+static int select_rank(KeyIx* a, int n, int r) {
+  int lo = 0, hi = n - 1;
+  while (lo < hi) {
+    const KeyIx p = a[lo + (hi - lo) / 2];
+    int i = lo, j = hi;
+    while (i <= j) {
+      while (key_less(a[i], p)) i++;
+      while (key_less(p, a[j])) j--;
+      if (i <= j) {
+        const KeyIx t = a[i];
+        a[i++] = a[j];
+        a[j--] = t;
+      }
+    }
+    if (r <= j) hi = j;
+    else if (r >= i) lo = i;
+    else break;
+  }
+  return a[r].i;
+}
+// how far the best of n candidates beats the next: 0 (within 1/16) to 7 (8 times), 8 by all
+static int key_margin(const KeyIx* a, int n) {
+  int b = 0;
+  for (int i = 1; i < n; i++)
+    if (key_less(a[i], a[b])) b = i;
+  int s = -1;
+  for (int i = 0; i < n; i++)
+    if (i != b && (s < 0 || key_less(a[i], a[s]))) s = i;
+  if (s < 0) return 0;
+  const S128 d1 = a[b].k, d2 = a[s].k;
+  if (d1 <= 0) return d2 > 0 ? 8 : 0;
+  const S128 x = (d2 - d1) / ((d1 >> 4) + 1);  // (16ths of d1)
+  int m = 0;
+  while (m < 8 && x >= ((S128)1 << m)) m++;
+  return m;
+}
+
 // --- the alignment (c: found once, the header keeps it; in doubles) ---------------------------------
 
 // A core's first frames, for the alignment: the decoder's plain subband samples of bands 0-7 (those

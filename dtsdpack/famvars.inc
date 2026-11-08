@@ -3,7 +3,7 @@
 // Apart from model.inc for IDX/famtune.cpp, which replays a family's decisions without the model.
 
 // the families, X(name) each, in the order the model has them
-#define DTSD_FAMS(X) X(hdr) X(sid) X(abt) X(scl) X(smp) X(raw)
+#define DTSD_FAMS(X) X(hdr) X(sid) X(abt) X(scl) X(smp) X(vqr) X(raw)
 
 // The fields the hdr family codes, each of their own values (fld): the core frame's header and
 // coding header, a subframe's header fields, then the container's (below); and the sid family's,
@@ -26,6 +26,9 @@ enum { SF_PMODE, SF_PVQ, SF_TMODE, SF_JSHUFF, SF_JSCALE, SF_HFVQ, SF_LFE, SF_N }
 //   smp  a sample's index: 0 the audio's, 1 the one on the other side of the rounding boundary,
 //        then its magnitude, the length (the bits it takes) as a tree and the bits below the top
 //        (2-108: model_core.inc's code_len()), the rest in the mantissa plane; 109 the sign
+//   vqr  a rank (model_smp.inc's code_rank()): 13-24 its bucket (0; 1; 2-3; 4-7; ...) in unary,
+//        25-63 the bits below the bucket's top, by the bucket and their place (the first two;
+//        the rest)
 //   raw  a byte's bits, by their place in its binary tree (1-255)
 enum { HN_SAME = TC_NODE, HN_SAME2, HN_BIT, HN_N };
 enum { SN_SAME = TC_NODE, SN_SAMEP, SN_BIT, SN_IX, SN_IXPOS = SN_IX + 16, SN_N = SN_IXPOS + 16 };
@@ -36,11 +39,16 @@ constexpr int LEN_TOP = 2;     // and the bits below the top one that follow it,
 constexpr int LEN_MAX = 24;    // (lengths 0-24)
 constexpr int LEN_TOPN = ((1 << LEN_TOP) - 1) * (LEN_MAX + 1);
 enum { QN_HIT, QN_ALT, QN_LEN, QN_SIGN = QN_LEN + LEN_NODES + LEN_TOPN, QN_N };
+constexpr int RANK_BITS = 12;  // (a rank: 0 to 2^12 - 1, the ADPCM code book's)
+enum { VN_BKT = TC_NODE, VN_BIT = VN_BKT + RANK_BITS, VN_N = VN_BIT + 3 * (RANK_BITS + 1) };
+// what vqr ranks (kd): an ADPCM predictor, an HF VQ vector's group, the vector in its group
+enum { VK_PVQ, VK_HFG, VK_HFV, VK_N };
 constexpr int M_hdr_ND = HN_N, M_hdr_MND = TC_MNODE, M_hdr_NG = NHF;
 constexpr int M_sid_ND = SN_N, M_sid_MND = TC_MNODE, M_sid_NG = SF_N;
 constexpr int M_abt_ND = AN_N, M_abt_MND = TC_MNODE, M_abt_NG = 32;
 constexpr int M_scl_ND = CN_N, M_scl_MND = TC_MNODE, M_scl_NG = 4;
 constexpr int M_smp_ND = QN_N, M_smp_MND = TC_MNODE, M_smp_NG = 1;
+constexpr int M_vqr_ND = VN_N, M_vqr_MND = 1, M_vqr_NG = 1;
 constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 
 // Each family's variables, X(name) each, as M_<family>_v has them: what the model fills and the
@@ -74,6 +82,10 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      subband's last 8 indexes weren't the audio's (to 3), pm whether the subband predicts, bd the
 //      subband, m1, m2 the lengths of the two indexes before in the subband (22 none), sq the sign
 //      of the audio's index (0 none or 0, 1 +, 2 -), s1 that of the index before
+// vqr: kd what is ranked (VK_*), cc, bd, mg how far the best candidate beats the next (0 within
+//      1/16 to 7 by 8 times, 8 by all), gn the prediction gain of the subband's LPC in halvings
+//      (VK_PVQ: 0-15) or its scale factor / 8 (0-15), lh the subband's last rank of the kind (0
+//      none, 1 the best, 2 another)
 // raw: c1, c2 the bytes before, code what the bytes are (0 between frames, 1 a frame kept as bytes,
 //      2 the bits after the subframes), at the byte's place (tc_qlog; the tail's from its end), cl
 //      the byte at the place in the last field of the kind (0 none, else 1 + it)
@@ -82,6 +94,7 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 #define M_abt_VARS(X) X(bd) X(cc) X(la) X(lb) X(es) X(de) X(ls) X(pm) X(st)
 #define M_scl_VARS(X) X(kd) X(ab) X(pm) X(pk) X(pn) X(lp) X(hm) X(bd)
 #define M_smp_VARS(X) X(ab) X(hw) X(pk) X(nr) X(ql) X(hm) X(pm) X(bd) X(m1) X(m2) X(sq) X(s1)
+#define M_vqr_VARS(X) X(kd) X(cc) X(bd) X(mg) X(gn) X(lh)
 #define M_raw_VARS(X) X(c1) X(c2) X(code) X(at) X(cl)
 
 // the variables as the model gives them to a family

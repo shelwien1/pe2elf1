@@ -5,13 +5,15 @@ and APMs' parameters taken from ac3pack's tuned level -9 (NUMDIR/num_<its family
 moves both from here; this only makes the first declarations."""
 import sys
 numdir, out = sys.argv[1], sys.argv[2]
+only = sys.argv[3:]  # (families to write: all where none)
 # each variable's buckets: thresholds at every value from 1 to n-1 (n buckets), or a mask
 R = {'fld': '&111111', 'lv': '&111111', 'l2': 3, 'pos': 32, 'st': 3, 'nch': 4,
      'cc': 3, 'bd': 32, 'pq': '&111111', 'ac': 9, 'ab': 28, 'ec': 10,
      'la': 28, 'lb': 28, 'es': 33, 'de': 10, 'ls': 10, 'pm': 2,
      'kd': 3, 'pk': 2, 'pn': 8, 'lp': 10, 'hm': 3,
      'hw': 4, 'nr': 21, 'ql': 22, 'm1': 23, 'm2': 23, 'sq': 3, 's1': 3,
-     'c1': '&11111111', 'c2': '&11110000', 'code': 3, 'at': 40, 'cl': 257}
+     'c1': '&11111111', 'c2': '&11110000', 'code': 3, 'at': 40, 'cl': 257,
+     'mg': 9, 'gn': 16, 'lh': 3}
 R_SID = dict(R, fld=7)  # (sid's fields: SF_N)
 def pat(fam, v):
     r = (R_SID if fam == 'sid' else R)[v]
@@ -42,6 +44,11 @@ FAM = {
     'i': 'pk ab hw pm', 'j': 'pk ab bd', 'k': 'pk nr sq s1', 'l': 'pk ab hm nr', 's': 'pk ab nr', 'f': 'pk ab',
     'm': 'pk ab', 'w': 'nr', 't': 'ab', 'n': 'ab', 'g': ''},
     'The subband samples\' quantization indexes, against the index the audio\'s subband sample\n#  quantizes to (where the WAV is bound), else against their neighbours\'.'),
+  'vqr': ('ac3pack', 'sid', {
+    'a': 'kd mg', 'b': 'kd mg gn', 'c': 'kd bd mg', 'd': 'kd lh mg', 'e': 'kd cc bd', 'h': 'kd gn lh',
+    'i': 'kd mg lh gn', 'j': 'kd bd lh', 'k': 'kd cc mg', 'l': 'kd gn', 's': 'kd mg', 'f': 'kd gn',
+    'm': 'kd', 'w': 'mg', 't': 'kd', 'n': 'kd', 'g': 'kd'},
+    'The ranks of the ADPCM predictors and the HF VQ vectors among the code books\' entries, in the\n#  order of the encoder\'s searches on the audio (where the WAV is bound).'),
   'raw': ('ac3pack', 'raw', {
     'a': 'code', 'b': 'code c1', 'c': 'code c1 c2', 'd': 'code cl', 'e': 'code at', 'h': 'code cl c1',
     'i': 'code c1 at', 'j': 'code cl at', 'k': 'c1 c2', 'l': 'code c1', 's': 'code at', 'f': 'code c1',
@@ -49,6 +56,7 @@ FAM = {
     'Bytes kept as bytes: between frames, frames that don\'t come back, the bits after the subframes.'),
 }
 for fam, (src, nf, idx, what) in FAM.items():
+    if only and fam not in only: continue
     o = ['#  dtsdpack\'s %s family at level -9: its context indices and its tunable parameters.' % fam,
          '#  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates MOD/l9/%s_h.inc and _p.inc from' % fam,
          '#  this file and family.inc.  famvars.inc says what each variable is.', '#',

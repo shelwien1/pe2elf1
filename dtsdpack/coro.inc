@@ -50,6 +50,7 @@ struct Stats {
   U64 frames, packed, raw_parse, raw_verify;
   double in_bytes, raw_bytes;
   U64 hits, smp, sf_hits, sf;  // (-s: the samples and scale factors the audio predicted)
+  U64 vq[VK_N], vq_hits[VK_N];  // (and the code books' indexes, those its searches found)
 
   // c's summary line (out_bytes: the compressed size, at the level), and with -s the bytes by kind
   // of syntax element, the coder's cost and orig (CAT_*)
@@ -77,6 +78,12 @@ struct Stats {
       fprintf(stderr, "  %-28s %10.0f %10.0f %7.2f%%\n", "total", o / BYTE_BITS, p / BYTE_BITS, o ? PERCENT * p / o : 0.0);
       if (smp) fprintf(stderr, "  the audio's indexes: %.2f%% of the samples; the RMS's scale factors: %.2f%%\n",
                        PERCENT * hits / smp, sf ? PERCENT * sf_hits / sf : 0.0);
+      if (vq[VK_PVQ] || vq[VK_HFG])
+        fprintf(stderr, "  the encoder's searches on the audio: %.2f%% of the ADPCM predictors; HF VQ: %.2f%% of the "
+                        "groups, %.2f%% of the vectors in them\n",
+                vq[VK_PVQ] ? PERCENT * vq_hits[VK_PVQ] / vq[VK_PVQ] : 0.0,
+                vq[VK_HFG] ? PERCENT * vq_hits[VK_HFG] / vq[VK_HFG] : 0.0,
+                vq[VK_HFV] ? PERCENT * vq_hits[VK_HFV] / vq[VK_HFV] : 0.0);
     }
   }
 };

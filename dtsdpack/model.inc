@@ -130,14 +130,15 @@ struct Model : ModelSmp<f_DEC, LV> {
         break;
     }
     switch (fid) {
-      case F_PMODE:
+      case F_PMODE:  // (ec: the subband's LPC's gain)
         account(CAT_SIDE);
         v = side_code(SF_PMODE, ch, b, v, 0, 1, 1, hist.pmode[ch][b], b ? s.pmode[ch][b - 1] + 1 : 0,
-                      bound[ch] ? ac[ch][b] : 8, 0, 9);
+                      bound[ch] ? ac[ch][b] : 8, 0, bound[ch] ? imin(B::lpg[ch][b], 8) : 9);
         break;
       case F_PVQ:
         account(CAT_SIDE);
-        v = side_index(SF_PVQ, ch, b, v, 12, hist.pvq[ch][b], bound[ch] ? ac[ch][b] : 8, 0);
+        if (bound[ch]) v = B::code_pvq(ch, b, v);
+        else v = side_index(SF_PVQ, ch, b, v, 12, hist.pvq[ch][b], 8, 0);
         break;
       case F_ABITS: {
         account(CAT_ABITS);
@@ -169,7 +170,8 @@ struct Model : ModelSmp<f_DEC, LV> {
       }
       case F_HFVQ:
         account(CAT_SIDE);
-        v = side_index(SF_HFVQ, ch, b, v, 10, hist.hfvq[ch][b], bound[ch] ? ac[ch][b] : 8, 0);
+        if (bound[ch]) v = B::code_hfvq(r, s, ch, b, v);
+        else v = side_index(SF_HFVQ, ch, b, v, 10, hist.hfvq[ch][b], 8, 0);
         break;
       case F_LFE: {  // (signed: coded 128 up, against the sample before)
         account(CAT_SIDE);

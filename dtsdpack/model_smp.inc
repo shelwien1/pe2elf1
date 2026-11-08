@@ -14,6 +14,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   using B::cat;
   M_FAM(scl)
   M_FAM(smp)
+  M_FAM(vqr)
   WavIn* wav;     // the WAV (none: ok 0)
   Bind bind;      // how the core lines up with it
   const S64* fir; // the prototype filter of the frame's FILTS
@@ -31,7 +32,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   int ac[NCH][NSUB], es[NCH][NSUB], ec[NCH][NSUB];  // the subframe's subbands' autocorrelation, energy, its change
   int pscale[NCH][NSUB];   // their first scale factor's prediction (1 + it, 0 none)
   int hm[NCH];             // whether the channel's scale factor before was the prediction (0 none, 1 it was, 2 not)
+  S64 lpc[NCH][NSUB][4];   // the subframe's subbands' LPC (lpc4(): the encoder's ADPCM predictor is the entry nearest)
+  int lpg[NCH][NSUB];      // and its prediction gain in halvings
+  U8 lrank[NCH][NSUB][VK_N];  // the subband's last rank of each kind (vqr's lh)
+  KeyIx cand[4096];        // the candidates of a rank
   U64 n_smp, n_hit, n_sf, n_sfhit;  // (-s: the samples, those the audio predicted; the same of the scale factors)
+  U64 n_vq[VK_N], n_vqhit[VK_N];    // (and the ranks, those 0)
 
   void smp_start(WavIn* w, const Bind& b) {
     wav = w;
@@ -65,6 +71,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       }
       const U32* tab = r.shuff[ch] == 6 ? SF7 : SF6;
       const int nt = r.shuff[ch] == 6 ? 128 : 64;
+      for (int b = 0; b < r.nsubs[ch]; b++) {  // (the LPC over the subframe and the 4 before it)
+        S64 x[4 + NSMP];
+        for (int k = 0; k < 4; k++) x[3 - k] = xh[ch][b][k];
+        for (int j = 0; j < nsmp; j++) x[4 + j] = X[ch][b][j];
+        lpc4(x, 4 + nsmp, lpc[ch][b], &lpg[ch][b]);
+      }
       for (int b = 0; b < NSUB; b++) {
         const S64* v = X[ch][b];
         S128 e = 0, cr = (S128)v[0] * xh[ch][b][0], ee[NSSF] = {0, 0, 0, 0};
@@ -111,6 +123,56 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       h[3] = h[2], h[2] = h[1], h[1] = h[0], h[0] = x;
     }
     return n;
+  }
+
+  // --- the code books' indexes ----------------------------------------------------------------------
+
+  // A rank r in 0..2^nb - 1 (nb <= RANK_BITS), vqr's contexts selected: its bucket (0; 1; 2-3;
+  // 4-7; ...) in unary, then its bits below the bucket's top
+  int code_rank(int r, int nb) {
+    const int bk = ENC ? bit_len((U64)r) : 0;
+    int t = 0;
+    while (t < nb && f_vqr.bit(VN_BKT + t, ENC && bk > t)) t++;
+    if (t < 2) return t;
+    int m = 1;
+    for (int p = 0; p < t - 1; p++) m = 2 * m + f_vqr.bit(VN_BIT + 3 * t + imin(p, 2), ENC && ((r >> (t - 2 - p)) & 1));
+    return m;
+  }
+  // the rank of index v among the n candidates (c), or the index of the rank coded (d); kind kd
+  int code_cand(int n, int nb, int v, int kd, int ch, int b, int gn) {
+    M_vqr_v D;
+    D.kd = kd;
+    D.cc = chan_class(ch);
+    D.bd = b;
+    D.mg = key_margin(cand, n);
+    D.gn = gn;
+    D.lh = lrank[ch][b][kd];
+    B::sel(f_vqr, D);
+    int at = 0;
+    if (ENC)
+      while (cand[at].i != v) at++;
+    const int r = code_rank(ENC ? rank_of(cand, n, at) : 0, nb);
+    if (!ENC) v = select_rank(cand, n, r);
+    lrank[ch][b][kd] = r ? 2 : 1;
+    n_vq[kd]++;
+    n_vqhit[kd] += !r;
+    return v;
+  }
+  // Channel ch's subband b's ADPCM predictor v: its rank by the distance from the subband's LPC
+  S64 code_pvq(int ch, int b, S64 v) {
+    for (int q = 0; q < 4096; q++) cand[q].k = pvq_dist(q, lpc[ch][b]), cand[q].i = q;
+    return code_cand(4096, 12, (int)v, VK_PVQ, ch, b, lpg[ch][b]);
+  }
+  // Channel ch's subband b's HF VQ vector v (its scale factor coded): the rank of its group by the
+  // groups' means, then its rank in the group
+  S64 code_hfvq(const CoreRec& r, const CoreSub& s, int ch, int b, S64 v) {
+    const int si = s.scale[ch][b][0];
+    const S64 sc = r.shuff[ch] == 6 ? SF7[si] : SF6[si & 63];
+    const S64* x = X[ch][b];
+    for (int g = 0; g < 32; g++) cand[g].k = hf_group_dist(g, x, nsmp, sc), cand[g].i = g;
+    const int g = code_cand(32, 5, (int)v >> 5, VK_HFG, ch, b, imin(si >> 3, 15));
+    for (int i = 0; i < 32; i++) cand[i].k = hf_dist(g * 32 + i, x, nsmp, sc), cand[i].i = i;
+    return g * 32 + code_cand(32, 5, (int)v & 31, VK_HFV, ch, b, imin(si >> 3, 15));
   }
 
   // --- the scale factors -----------------------------------------------------------------------------
