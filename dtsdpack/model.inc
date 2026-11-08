@@ -117,6 +117,11 @@ struct Model : ModelSmp<f_DEC, LV> {
 #ifdef DTSD_FSTAT
     c->fid = fid;
 #endif
+    if (fid == F_LFEscaleIndex && B::lfe_on) {  // (coded with the first LFE sample)
+      account(CAT_SCALE);
+      v = B::lfe_scl;
+      return good();
+    }
     switch (field_kind[fid]) {
       case FK_H:
         account(CAT_HDR);
@@ -140,13 +145,20 @@ struct Model : ModelSmp<f_DEC, LV> {
         if (bound[ch]) v = B::code_pvq(ch, b, v);
         else v = side_index(SF_PVQ, ch, b, v, 12, hist.pvq[ch][b], 8, 0);
         break;
-      case F_ABITS: {
+      case F_ABITS: {  // (against the audio's energy, as the scale factor its RMS makes, and how it changed)
         account(CAT_ABITS);
         const int e = bound[ch] ? es[ch][b] : 0, le = hist.energy[ch][b];
         const int de = e && le ? dvar(e - le) : 9;
         const int ls = hist.scale[ch][b] && hist.pscale[ch][b] ? dvar(hist.scale[ch][b] - hist.pscale[ch][b]) : 9;
+        const int lbd = b && hist.abits[ch][b - 1] ? dvar(s.abits[ch][b - 1] - (hist.abits[ch][b - 1] - 1)) : 9;
+        int nb = 9, mx = 16;
+        if (e) {
+          const int n1 = b ? es[ch][b - 1] : 0, n2 = b + 1 < NSUB ? es[ch][b + 1] : 0;
+          nb = clip((e - imax(n1, n2)) / 2, -4, 4) + 4;
+          mx = imin((B::esmax[ch] - e) / 4, 15);
+        }
         v = abits_code(ch, b, v, lo, hi, hist.abits[ch][b], b ? s.abits[ch][b - 1] + 1 : 0, e, de, ls,
-                       s.pmode[ch][b]);
+                       s.pmode[ch][b], lbd, nb, mx);
         break;
       }
       case F_TMODE:
@@ -173,7 +185,17 @@ struct Model : ModelSmp<f_DEC, LV> {
         if (bound[ch]) v = B::code_hfvq(r, s, ch, b, v);
         else v = side_index(SF_HFVQ, ch, b, v, 10, hist.hfvq[ch][b], 8, 0);
         break;
-      case F_LFE: {  // (signed: coded 128 up, against the sample before)
+      case F_LFE: {  // (against the audio's, or signed: coded 128 up, against the sample before)
+        if (B::lfe_on) {
+          if (!cur_j) {
+            cat(CAT_SCALE);
+            B::code_lfe_scale(ENC ? s.lfescale : 0);
+          }
+          account(CAT_SIDE);
+          v = B::code_lfe(cur_j, v);
+          hist.lfe = (S32)v + 129;
+          break;
+        }
         account(CAT_SIDE);
         const S64 u = side_code(SF_LFE, 0, 0, v + 128, lo + 128, hi + 128, 0, hist.lfe,
                                 cur_j ? s.lfe[cur_j - 1] + 129 : 0, 8, 0, 9);

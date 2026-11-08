@@ -3,6 +3,7 @@
 
 constexpr size_t PRE_READ = 4 * MIB;  // c: the stream's start, read first to find the alignment
 constexpr int PROBES = 64;            // the blocks the alignment is found from
+constexpr int LFE_PROBES = 1024;      // and the LFE samples its channel is
 
 struct Call {
   FILE* in;
@@ -160,7 +161,8 @@ struct Call {
     static CoreRec r;                 // (large)
     static Probe pr_[4 * PROBES];     // the most energetic so far (a heap would do; few are kept)
     static double en[4 * PROBES];
-    int np = 0, nch = 0, filts = -1;
+    static S64 ln[LFE_PROBES], ly[LFE_PROBES];  // the LFE's samples (64x): their places, their values times their steps
+    int np = 0, nch = 0, filts = -1, nl = 0;
     S64 t = 0;
     const S64 tmax = (WAV_WIN - 4096) / 32;  // (the probes' audio within the window from 0)
     if (!wav.ok) return;
@@ -176,6 +178,8 @@ struct Call {
         S64 tb = t;
         for (int sf = 0; sf < r.nsubfs; sf++) {
           const CoreSub& s = r.sub[sf];
+          for (int k = 0; r.lff == 2 && k < 4 * s.nssc && nl < LFE_PROBES; k++, nl++)
+            ln[nl] = tb / 2 + k, ly[nl] = s.lfe[k] * lfe_scale(s.lfescale);
           for (int j = 0; j < s.nssc * 8; j++, tb++) {
             Probe q;
             double e = 0;
@@ -216,8 +220,24 @@ struct Call {
     }
     S64 last = 0;
     for (int k = 0; k < nb; k++) last = best[k].t > last ? best[k].t : last;
+    for (int k = 0; k < nl; k++) last = imax(last, 2 * ln[k]);
     wav.need(0, 32 * (last + 1) + 1536 + 512);
     bind = find_bind(wav, best, nb, nch, filts, &corr);
+    // the LFE: the WAV channel no core channel has whose decimation correlates best with it
+    if (bind.map[0] < 0 || nl < 16) return;
+    double bc = 0.9;
+    for (int wc = 0; wc < wav.nch; wc++) {
+      int used = 0;
+      for (int ch = 0; ch < NCH; ch++) used |= bind.map[ch] == wc;
+      if (used) continue;
+      double sxy = 0, sxx = 0, syy = 0;
+      for (int k = 0; k < nl; k++) {
+        const double x = (double)lfe_decim(wav, wc, 64 * ln[k] + bind.off), y = (double)ly[k];
+        sxy += x * y, sxx += x * x, syy += y * y;
+      }
+      const double c = sxx > 0 && syy > 0 ? sxy / sqrt(sxx * syy) : 0;
+      if (c > bc) bc = c, bind.lfe = (S8)wc;
+    }
   }
 
   // c on the call k at the level LV: its statistics into st, cost and orig

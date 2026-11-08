@@ -67,16 +67,18 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      none), ab the subband's ABITS where coded before (1 + it; 0 none), ec how its energy changes
 //      over the subframe's subsubframes (0-8, 9 none)
 // abt: bd, cc, la the last ABITS (1 + it, 0 none), lb the subband below's in the subframe (1 + it,
-//      0 none), es the audio's energy in the subband as a scale factor index (the RMS rule's, / 4;
-//      1 + it, 0 none), de its change from the last (0-8, 9 none), ls the last scale factor less
-//      the last prediction (0-8, 9 none), pm whether the subband predicts (ADPCM), st whether the
-//      subband below kept its last ABITS (0 none, 1 kept, 2 changed)
+//      0 none), es the audio's energy in the subband as a scale factor index (the RMS rule's; 1 +
+//      it, 0 none), de its change from the last (0-8, 9 none), ls the last scale factor less the
+//      last prediction (0-8, 9 none), pm whether the subband predicts (ADPCM), st how the subband
+//      below's ABITS changed from its last (0-8, 9 none), nb the energy less its neighbours'
+//      larger, in halves of scale factor steps (-4..4 as 0-8, 9 none), mx the loudest subband's in
+//      the channel less it, in 4 steps (0-15, 16 none)
 // scl: kd (0 a subband's first scale factor, 1 its second, after its transient, 2 a high-frequency
-//      VQ subband's), ab its ABITS (1 + it, 0 none), pm whether it predicts, pk whether the audio
+//      VQ subband's, 3 the LFE's), ab its ABITS (1 + it, 0 none), pm whether it predicts, pk whether the audio
 //      predicts the scale factor, pn how near its RMS lies to the midpoint between two (0-7), lp
 //      the last scale factor less the last prediction (0-8, 9 none), hm whether the channel's
 //      scale factor before was the prediction (0 none, 1 it was, 2 not), bd the subband
-// smp: ab ABITS (1-26), hw the code (1 Huffman, 2 plain, 3 block codes), pk whether the audio
+// smp: ab ABITS (1-26; 27 an LFE sample's), hw the code (1 Huffman, 2 plain, 3 block codes), pk whether the audio
 //      predicts the index, nr how near the rounding boundary its value lies (0-20: within 1/400 of
 //      a step to 1/20, 20 farther), ql the length of the audio's index (0-21), hm how many of the
 //      subband's last 8 indexes weren't the audio's (to 3), pm whether the subband predicts, bd the
@@ -91,7 +93,7 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      the byte at the place in the last field of the kind (0 none, else 1 + it)
 #define M_hdr_VARS(X) X(fld) X(lv) X(l2) X(pos) X(st) X(nch)
 #define M_sid_VARS(X) X(fld) X(cc) X(bd) X(lv) X(pq) X(st) X(ac) X(ab) X(ec)
-#define M_abt_VARS(X) X(bd) X(cc) X(la) X(lb) X(es) X(de) X(ls) X(pm) X(st)
+#define M_abt_VARS(X) X(bd) X(cc) X(la) X(lb) X(es) X(de) X(ls) X(pm) X(st) X(nb) X(mx)
 #define M_scl_VARS(X) X(kd) X(ab) X(pm) X(pk) X(pn) X(lp) X(hm) X(bd)
 #define M_smp_VARS(X) X(ab) X(hw) X(pk) X(nr) X(ql) X(hm) X(pm) X(bd) X(m1) X(m2) X(sq) X(s1)
 #define M_vqr_VARS(X) X(kd) X(cc) X(bd) X(mg) X(gn) X(lh)

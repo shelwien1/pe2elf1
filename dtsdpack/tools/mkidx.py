@@ -9,14 +9,16 @@ only = sys.argv[3:]  # (families to write: all where none)
 # each variable's buckets: thresholds at every value from 1 to n-1 (n buckets), or a mask
 R = {'fld': '&111111', 'lv': '&111111', 'l2': 3, 'pos': 32, 'st': 3, 'nch': 4,
      'cc': 3, 'bd': 32, 'pq': '&111111', 'ac': 9, 'ab': 28, 'ec': 10,
-     'la': 28, 'lb': 28, 'es': 33, 'de': 10, 'ls': 10, 'pm': 2,
+     'la': 28, 'lb': 28, 'es': '&11111111', 'de': 10, 'ls': 10, 'pm': 2,
      'kd': 3, 'pk': 2, 'pn': 8, 'lp': 10, 'hm': 3,
      'hw': 4, 'nr': 21, 'ql': 22, 'm1': 23, 'm2': 23, 'sq': 3, 's1': 3,
      'c1': '&11111111', 'c2': '&11110000', 'code': 3, 'at': 40, 'cl': 257,
-     'mg': 9, 'gn': 16, 'lh': 3}
+     'mg': 9, 'gn': 16, 'lh': 3, 'nb': 10, 'mx': 17}
 R_SID = dict(R, fld=7)  # (sid's fields: SF_N)
+R_ABT = dict(R, st=10)  # (abt's st: a change, 0-9)
+R_SCL = dict(R, kd=4)   # (scl's kd: and the LFE's)
 def pat(fam, v):
-    r = (R_SID if fam == 'sid' else R)[v]
+    r = (R_SID if fam == 'sid' else R_ABT if fam == 'abt' else R_SCL if fam == 'scl' else R)[v]
     return r if isinstance(r, str) else '1!' + '1' * (r - 1)
 FAM = {
   'hdr': ('ac3pack', 'hdr', {
@@ -30,8 +32,8 @@ FAM = {
     'm': 'fld', 'w': 'st', 't': 'fld', 'n': 'fld', 'g': 'fld'},
     'A subband\'s side information (PMODE, PVQ, TMODE, the joint scale factors, the HF VQ vectors)\n#  and the LFE samples, each field against its last value and the place before\'s.'),
   'abt': ('ac3pack', 'sid', {
-    'a': 'la', 'b': 'la lb', 'c': 'la es', 'd': 'la de', 'e': 'bd la', 'h': 'lb es bd', 'i': 'la ls',
-    'j': 'es de pm', 'k': 'la st lb', 'l': 'bd cc la', 's': 'la', 'f': 'es', 'm': 'la', 'w': 'st', 't': 'bd',
+    'a': 'bd es', 'b': 'la lb', 'c': 'la es', 'd': 'la de', 'e': 'bd la', 'h': 'lb es bd', 'i': 'es nb la',
+    'j': 'es de pm', 'k': 'bd mx nb', 'l': 'bd cc la', 's': 'la', 'f': 'es', 'm': 'la', 'w': 'st', 't': 'bd',
     'n': 'la', 'g': 'bd'},
     'The bit allocations (ABITS), against the last ones, the subband below\'s, and the audio\'s energy.'),
   'scl': ('ac3pack', 'sid', {

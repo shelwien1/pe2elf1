@@ -521,7 +521,10 @@ struct Walk {
       io.at(0, 0, i);
       WS(LFE, 8, s.lfe[i]);
     }
-    if (c.lff) WU(LFEscaleIndex, 8, s.lfescale);
+    if (c.lff) {
+      WU(LFEscaleIndex, 8, s.lfescale);
+      if (s.lfescale >= 128) return fail("an LFE scale factor out of range");
+    }
     // the subband samples
     for (int ssf = 0; ssf < s.nssc; ssf++) {
       for (int ch = 0; ch < c.npchs; ch++)

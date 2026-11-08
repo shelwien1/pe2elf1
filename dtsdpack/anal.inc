@@ -13,16 +13,19 @@ constexpr int SB_N = 8;   // and a scale factor's RMS the midpoint between two t
 static INLINE S32 clip23(S64 a) { return a < -(1 << 23) ? -(1 << 23) : a > (1 << 23) - 1 ? (1 << 23) - 1 : (S32)a; }
 static INLINE S64 rshift(S64 a, int bits) { return bits > 0 ? (a + (1LL << (bits - 1))) >> bits : a; }
 typedef __int128 S128;
+typedef unsigned __int128 U128;
 
 // How the core's channels and blocks line up with the WAV's: the analysis of block t (the core's
 // t-th subband sample since the stream's first frame) ends before sample 32 t + off of the WAV, and
 // map[ch] is the WAV's channel of core channel ch (-1 none, as for every channel without a WAV)
 struct Bind {
   S32 off;
-  S8 map[NCH];
+  S8 map[NCH];  // each core channel's WAV channel (-1 none)
+  S8 lfe;       // the LFE's (-1 none)
   void none() {
     off = 0;
     for (int ch = 0; ch < NCH; ch++) map[ch] = -1;
+    lfe = -1;
   }
 };
 
@@ -281,6 +284,133 @@ static int key_margin(const KeyIx* a, int n) {
   while (m < 8 && x >= ((S128)1 << m)) m++;
   return m;
 }
+
+// --- the LFE (the encoder's decimation, as found; in integers) --------------------------------------
+
+// The encoder's LFE samples (64x) are the WAV's LFE channel decimated by a filter near the
+// decoder's interpolation prototype (LFE_FIR), then quantized by the scale factor nearest their
+// RMS. The prototype's decimation, corrected by a short filter at the LFE's rate that a least
+// squares fit learns as the stream goes (LfeFit), makes nearly all of them.
+constexpr S64 LFE_G = 290844593;  // the prototype's decimation to the units of v times its scale (Q30; found)
+constexpr int LFE_K = 6, LFE_NT = 2 * LFE_K + 1;  // the correction's taps: the decimated samples K before to K after
+
+// the WAV channel c decimated by the prototype, the window ending at sample end, in the units
+// of an LFE value times its scale (lfe_scale())
+static S64 lfe_decim(const WavIn& w, int c, S64 end) {
+  S128 acc = 0;
+  for (int m = 0; m < 512; m++) acc += (S128)LFE_FIR[m] * w.at(c, end - 512 + m);
+  return (S64)((acc * LFE_G) >> 60);
+}
+// the LFE scale factor i's step (FFmpeg's: the 7-bit table's entry times the quantizer's 0.035,
+// times 16): an LFE value v is v times it
+static INLINE S64 lfe_scale(int i) { return ((S64)4697620 * SF7[i & 127] + (1 << 22)) >> 23; }
+
+// A number m 2^e (m 0, or |m| in [2^61, 2^62)), as the fit computes: the same everywhere
+struct Sf {
+  S64 m;
+  int e;
+};
+static INLINE int bitlen128(U128 a) {
+  const U64 hi = (U64)(a >> 64), lo = (U64)a;
+  return hi ? 128 - __builtin_clzll(hi) : lo ? 64 - __builtin_clzll(lo) : 0;
+}
+static Sf sf_make(S128 m, int e) {
+  Sf r = {0, 0};
+  if (!m) return r;
+  const int neg = m < 0;
+  U128 a = neg ? (U128)0 - (U128)m : (U128)m;
+  const int sh = bitlen128(a) - 62;
+  if (sh > 0) a >>= sh;
+  else a <<= -sh;
+  r.m = neg ? -(S64)a : (S64)a;
+  r.e = e + sh;
+  return r;
+}
+static INLINE Sf sf_mul(Sf a, Sf b) { return sf_make((S128)a.m * b.m, a.e + b.e); }
+static INLINE Sf sf_div(Sf a, Sf b) { return b.m ? sf_make(((S128)a.m << 64) / b.m, a.e - b.e - 64) : Sf{0, 0}; }
+static Sf sf_add(Sf a, Sf b) {
+  if (!a.m) return b;
+  if (!b.m) return a;
+  if (a.e < b.e) {
+    const Sf t = a;
+    a = b;
+    b = t;
+  }
+  const int d = a.e - b.e;
+  const S128 x = (S128)a.m << 62, y = d < 124 ? ((S128)b.m << 62) >> d : 0;
+  return sf_make(x + y, a.e - 62);
+}
+static INLINE Sf sf_sub(Sf a, Sf b) {
+  b.m = -b.m;
+  return sf_add(a, b);
+}
+// a times 2^q as an integer (floored), within +-2^62
+static S64 sf_int(Sf a, int q) {
+  const int e = a.e + q;
+  if (!a.m) return 0;
+  if (e >= 1) return a.m > 0 ? (S64)1 << 62 : -((S64)1 << 62);
+  return e <= -63 ? (a.m < 0 ? -1 : 0) : a.m >> -e;
+}
+
+// The correction's least squares fit: the decimated samples around each LFE sample (f, LFE_NT of
+// them) against the LFE value times its scale (y), the older ones forgotten (by 1/128 a frame),
+// ridged toward no correction. Plain data: init(), then add() each sample, refit() each frame.
+struct LfeFit {
+  S128 G[LFE_NT][LFE_NT], c[LFE_NT];  // the sums of f f' and f y
+  S64 w[LFE_NT];                      // the correction (Q30)
+
+  void init() {
+    memset((void*)this, 0, sizeof *this);
+    w[LFE_K] = (S64)1 << 30;
+  }
+  S64 predict(const S64* f) const {
+    S128 p = 0;
+    for (int k = 0; k < LFE_NT; k++) p += (S128)w[k] * f[k];
+    return (S64)(p >> 30);
+  }
+  void add(const S64* f, S64 y) {
+    for (int i = 0; i < LFE_NT; i++) {
+      for (int j = 0; j <= i; j++) G[i][j] += (S128)f[i] * f[j];
+      c[i] += (S128)f[i] * y;
+    }
+  }
+  // (G + r I) w = c + r e_K by LDL', r the mean diagonal / 2^23 (w as it was where that fails)
+  void refit() {
+    S128 tr = 0;
+    for (int i = 0; i < LFE_NT; i++) {
+      for (int j = 0; j <= i; j++) G[i][j] -= G[i][j] >> 7;
+      c[i] -= c[i] >> 7;
+      tr += G[i][i];
+    }
+    if (tr <= 0) return;
+    const Sf r = sf_make(tr / LFE_NT / ((S128)1 << 23) + 1, 0);
+    Sf L[LFE_NT][LFE_NT], D[LFE_NT], z[LFE_NT];
+    for (int j = 0; j < LFE_NT; j++) {
+      Sf d = sf_add(sf_make(G[j][j], 0), r);
+      for (int k = 0; k < j; k++) d = sf_sub(d, sf_mul(sf_mul(L[j][k], L[j][k]), D[k]));
+      if (d.m <= 0) return;
+      D[j] = d;
+      for (int i = j + 1; i < LFE_NT; i++) {
+        Sf a = sf_make(G[i][j], 0);
+        for (int k = 0; k < j; k++) a = sf_sub(a, sf_mul(sf_mul(L[i][k], L[j][k]), D[k]));
+        L[i][j] = sf_div(a, d);
+      }
+    }
+    for (int i = 0; i < LFE_NT; i++) {  // L z = b, then D, then L' w = z
+      Sf b = sf_make(c[i], 0);
+      if (i == LFE_K) b = sf_add(b, r);
+      for (int k = 0; k < i; k++) b = sf_sub(b, sf_mul(L[i][k], z[k]));
+      z[i] = b;
+    }
+    for (int i = 0; i < LFE_NT; i++) z[i] = sf_div(z[i], D[i]);
+    for (int i = LFE_NT - 1; i >= 0; i--) {
+      Sf x = z[i];
+      for (int k = i + 1; k < LFE_NT; k++) x = sf_sub(x, sf_mul(L[k][i], z[k]));
+      z[i] = x;
+    }
+    for (int i = 0; i < LFE_NT; i++) w[i] = sf_int(z[i], 30);
+  }
+};
 
 // --- the alignment (c: found once, the header keeps it; in doubles) ---------------------------------
 

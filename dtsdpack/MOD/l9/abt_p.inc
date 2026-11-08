@@ -16,7 +16,8 @@ void D9_abt_make( const M_abt_v & D, tcx & X ) {
   M_abt_VARS(M_LOCAL)
 
   a = 0;
-  a = a*28 + D9_abt_a_la[__min(27,__max(0,(la)-(1-1)))];
+  a = a*32 + D9_abt_a_bd[__min(31,__max(0,(bd)-(1-1)))];
+  a = (a<<8) + (((es)&255)); // 11111111
 
   b = 0;
   b = b*28 + D9_abt_b_la[__min(27,__max(0,(la)-(1-1)))];
@@ -24,7 +25,7 @@ void D9_abt_make( const M_abt_v & D, tcx & X ) {
 
   c = 0;
   c = c*28 + D9_abt_c_la[__min(27,__max(0,(la)-(1-1)))];
-  c = c*33 + D9_abt_c_es[__min(32,__max(0,(es)-(1-1)))];
+  c = (c<<8) + (((es)&255)); // 11111111
 
   d = 0;
   d = d*28 + D9_abt_d_la[__min(27,__max(0,(la)-(1-1)))];
@@ -36,22 +37,23 @@ void D9_abt_make( const M_abt_v & D, tcx & X ) {
 
   h = 0;
   h = h*28 + D9_abt_h_lb[__min(27,__max(0,(lb)-(1-1)))];
-  h = h*33 + D9_abt_h_es[__min(32,__max(0,(es)-(1-1)))];
+  h = (h<<8) + (((es)&255)); // 11111111
   h = h*32 + D9_abt_h_bd[__min(31,__max(0,(bd)-(1-1)))];
 
   i = 0;
+  i = (i<<8) + (((es)&255)); // 11111111
+  i = i*10 + D9_abt_i_nb[__min(9,__max(0,(nb)-(1-1)))];
   i = i*28 + D9_abt_i_la[__min(27,__max(0,(la)-(1-1)))];
-  i = i*10 + D9_abt_i_ls[__min(9,__max(0,(ls)-(1-1)))];
 
   j = 0;
-  j = j*33 + D9_abt_j_es[__min(32,__max(0,(es)-(1-1)))];
+  j = (j<<8) + (((es)&255)); // 11111111
   j = j*10 + D9_abt_j_de[__min(9,__max(0,(de)-(1-1)))];
   j = j*2 + (((pm)>0+(1-1)));
 
   k = 0;
-  k = k*28 + D9_abt_k_la[__min(27,__max(0,(la)-(1-1)))];
-  k = k*3 + (((st)>0+(1-1))+((st)>1+(1-1)));
-  k = k*28 + D9_abt_k_lb[__min(27,__max(0,(lb)-(1-1)))];
+  k = k*32 + D9_abt_k_bd[__min(31,__max(0,(bd)-(1-1)))];
+  k = k*17 + D9_abt_k_mx[__min(16,__max(0,(mx)-(1-1)))];
+  k = k*10 + D9_abt_k_nb[__min(9,__max(0,(nb)-(1-1)))];
 
   l = 0;
   l = l*32 + D9_abt_l_bd[__min(31,__max(0,(bd)-(1-1)))];
@@ -62,13 +64,13 @@ void D9_abt_make( const M_abt_v & D, tcx & X ) {
   s = s*28 + D9_abt_s_la[__min(27,__max(0,(la)-(1-1)))];
 
   f = 0;
-  f = f*33 + D9_abt_f_es[__min(32,__max(0,(es)-(1-1)))];
+  f = (f<<8) + (((es)&255)); // 11111111
 
   m = 0;
   m = m*28 + D9_abt_m_la[__min(27,__max(0,(la)-(1-1)))];
 
   w = 0;
-  w = w*3 + (((st)>0+(1-1))+((st)>1+(1-1)));
+  w = w*10 + D9_abt_w_st[__min(9,__max(0,(st)-(1-1)))];
 
   t = 0;
   t = t*32 + D9_abt_t_bd[__min(31,__max(0,(bd)-(1-1)))];

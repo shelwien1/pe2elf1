@@ -2,13 +2,14 @@
 // ac3pack's): a run, on the buffers of its input and output, at a level.
 
 // The stream: "dtsdpack", the format's version, the model's level; the WAV's binding (bind_put()):
-// how the core lines up with it (the offset, 4 bytes, and each channel's WAV channel, 8 bytes), what
-// the WAV was (whether it was one, its channels, its bytes a sample, its size, 8 bytes, and the
-// CRC-32 of its first 64 KB, 4); then the arithmetic coded data: the chunks (kind, then the records
-// of a frame, or a length and the bytes of bytes kept as bytes), the end, and the CRC-32 of the
-// stream (32 bits at 1/2 each).
-enum { DP_MAGIC = 8, DP_AT_VERSION = DP_MAGIC, DP_AT_LEVEL, DP_AT_BIND, DP_BIND = 4 + NCH + 3 + 8 + 4,
-       DP_HEAD = DP_AT_BIND + DP_BIND };  // the header's bytes
+// how the core lines up with it (the offset, 4 bytes, each channel's WAV channel, 8 bytes, and the
+// LFE's, 1), what the WAV was (whether it was one, its channels, its bytes a sample, its size, 8
+// bytes, and the CRC-32 of its first 64 KB, 4); then the arithmetic coded data: the chunks (kind,
+// then the records of a frame, or a length and the bytes of bytes kept as bytes), the end, and the
+// CRC-32 of the stream (32 bits at 1/2 each).
+enum { BO_OFF = 0, BO_MAP = 4, BO_LFE = BO_MAP + NCH, BO_OK, BO_NCH, BO_BPS, BO_SIZE, BO_CRC = BO_SIZE + 8,
+       DP_BIND = BO_CRC + 4 };  // (the binding's bytes)
+enum { DP_MAGIC = 8, DP_AT_VERSION = DP_MAGIC, DP_AT_LEVEL, DP_AT_BIND, DP_HEAD = DP_AT_BIND + DP_BIND };  // the header's
 static const U8 magic[DP_MAGIC] = {'d', 't', 's', 'd', 'p', 'a', 'c', 'k'};
 constexpr int DP_VERSION = 1;  // the format's
 
@@ -22,25 +23,26 @@ static U64 get_le(const U8* p, int n) {
 }
 // the binding into p (DP_BIND bytes), and back: the WAV as it was (got) and as it is (w), the same?
 static void bind_put(U8* p, const Bind& b, const WavIn& w) {
-  put_le(p, (U32)b.off, 4);
-  for (int ch = 0; ch < NCH; ch++) p[4 + ch] = (U8)b.map[ch];
-  p[4 + NCH] = (U8)w.ok;
-  p[5 + NCH] = (U8)w.nch;
-  p[6 + NCH] = (U8)w.bps;
-  put_le(p + 7 + NCH, w.size, 8);
-  put_le(p + 15 + NCH, w.crc, 4);
+  put_le(p + BO_OFF, (U32)b.off, 4);
+  for (int ch = 0; ch < NCH; ch++) p[BO_MAP + ch] = (U8)b.map[ch];
+  p[BO_LFE] = (U8)b.lfe;
+  p[BO_OK] = (U8)w.ok;
+  p[BO_NCH] = (U8)w.nch;
+  p[BO_BPS] = (U8)w.bps;
+  put_le(p + BO_SIZE, w.size, 8);
+  put_le(p + BO_CRC, w.crc, 4);
 }
 static Bind bind_get(const U8* p) {
   Bind b;
-  b.off = (S32)(U32)get_le(p, 4);
-  for (int ch = 0; ch < NCH; ch++) b.map[ch] = (S8)p[4 + ch];
+  b.off = (S32)(U32)get_le(p + BO_OFF, 4);
+  for (int ch = 0; ch < NCH; ch++) b.map[ch] = (S8)p[BO_MAP + ch];
+  b.lfe = (S8)p[BO_LFE];
   return b;
 }
-// what differs between the WAV the stream was compressed with (its binding at p) and w: 0 none
 static const char* bind_differs(const U8* p, const WavIn& w) {
-  if (p[4 + NCH] != (U8)w.ok || p[5 + NCH] != (U8)w.nch || p[6 + NCH] != (U8)w.bps) return "its format";
-  if (get_le(p + 15 + NCH, 4) != w.crc) return "its first 64 KB";
-  const U64 sz = get_le(p + 7 + NCH, 8);
+  if (p[BO_OK] != (U8)w.ok || p[BO_NCH] != (U8)w.nch || p[BO_BPS] != (U8)w.bps) return "its format";
+  if (get_le(p + BO_CRC, 4) != w.crc) return "its first 64 KB";
+  const U64 sz = get_le(p + BO_SIZE, 8);
   if (sz && w.size && sz != w.size) return "its size";
   return 0;
 }

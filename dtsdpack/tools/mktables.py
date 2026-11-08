@@ -47,6 +47,17 @@ for nm, al in (('ff_dca_fir_32bands_perfect', 'FIR_PERFECT'), ('ff_dca_fir_32ban
     q = [int(round(x * 2 ** 44)) for x in v]
     out.append('// %s: the prototype filter (single precision, as FFmpeg has it) times 2^44' % al)
     arr('S64', al, ['%dLL' % x for x in q], 4)
+# the LFE's 512-tap interpolation prototype (64x), as the encoder's decimation starts from it:
+# T[64 j + k] = lfe_fir_64[8 k + j], T[64 (7 - j) + 63 - k] the same (k < 32, j < 8), times 2^30
+lf = [f32(x) for x in body('ff_dca_lfe_fir_64')]
+assert len(lf) == 256
+T = [0.0] * 512
+for k in range(32):
+    for j in range(8):
+        T[64 * j + k] = lf[8 * k + j]
+        T[64 * (7 - j) + 63 - k] = lf[8 * k + j]
+out.append('// LFE_FIR: the LFE\'s 64x interpolation prototype (single precision) as 512 taps, times 2^30')
+arr('S32', 'LFE_FIR', [str(int(round(x * 2 ** 30))) for x in T], 8)
 # the encoder's cosine modulation: cos(pi (2b + 1)(2(i + 32) + 1) / 128), negated for bands b with
 # (b + 1) & 2, times 2^62
 cq = []

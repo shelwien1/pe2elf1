@@ -193,8 +193,8 @@ static int compress(const char* in_name, const char* wav_name, const char* out_n
     for (int ch = 0; ch < NCH; ch++) nb += k.bind.map[ch] >= 0;
     if (!nb) snprintf(bound, sizeof bound, "the WAV not used (nothing lines up: correlation %.3f)", k.corr);
     else
-      snprintf(bound, sizeof bound, "%d channel%s against the WAV (offset %d, correlation %.4f)", nb, nb > 1 ? "s" : "",
-               (int)k.bind.off, k.corr);
+      snprintf(bound, sizeof bound, "%d channel%s%s against the WAV (offset %d, correlation %.4f)", nb, nb > 1 ? "s" : "",
+               k.bind.lfe >= 0 ? " and the LFE" : "", (int)k.bind.off, k.corr);
   }
   r = k.close(r);
   if (!r && !o.quiet) st.report(in_name, cost, orig, (double)k.s.pos, o.level, o.stats, bound);
