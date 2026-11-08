@@ -107,12 +107,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       lfe_p[i] = lfit.predict(lfe_f[i]);
     }
     for (int ch = 0; ch < r.npchs; ch++) {
-      const int wc = bind.map[ch];
-      if (wc < 0 || wc >= wav->nch) continue;
+      if (!bind.bound(ch, wav->nch)) continue;
       bound[ch] = 1;
       S64 x[32];
       for (int j = 0; j < nsmp; j++) {
-        analyze(*wav, wc, o0 + 32 * j, fir, x);
+        analyze_bound(*wav, bind, ch, o0 + 32 * j, fir, x);
         for (int b = 0; b < NSUB; b++) X[ch][b][j] = x[b];
       }
       const U32* tab = r.shuff[ch] == 6 ? SF7 : SF6;

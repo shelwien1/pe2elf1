@@ -9,7 +9,7 @@ to code is where the encoder chose otherwise. Decompression, with the same WAV, 
 stream byte for byte.
 
 The core of `s.2.dts` (4 minutes 25 seconds of 5.1 at 1509 kbps; 50008260 bytes) compresses to
-396547 bytes (0.79%); without its audio, dtsdpack's model gets 71.76% and `xz -9e` 88.21%.
+396619 bytes (0.79%); without its audio, dtsdpack's model gets 71.76% and `xz -9e` 88.21%.
 
 The core comes from [dtssplit](../dtssplit) (`prefix.dtsc`) or from any DTS stream; the WAV is the
 stream decoded, for instance by FFmpeg:
@@ -46,7 +46,7 @@ WAV is the one `c` had: its format, its size and the CRC of its first 64 KB are 
 
 ```
 $ dtsdpack c -s s2.dtsc s2_full.wav s2.dtsd
-s2.dtsc: 50008260 -> 396547 bytes (0.79%, -9); 24855 frames, 24855 packed; 0 bytes between frames; 5 channels and the LFE against the WAV (offset 512, correlation 1.0000)
+s2.dtsc: 50008260 -> 396619 bytes (0.79%, -9); 24855 frames, 24855 packed; 0 bytes between frames; 5 channels and the LFE against the WAV (offset 512, correlation 1.0000)
   bytes                             input     packed
   bytes kept as bytes                   0          4    0.00%
   headers, container              1059444        161    0.02%
@@ -58,6 +58,7 @@ s2.dtsc: 50008260 -> 396547 bytes (0.79%, -9); 24855 frames, 24855 packed; 0 byt
   total                          50008260     398447    0.80%
   the audio's indexes: 99.89% of the samples; the RMS's scale factors: 98.76%
   the encoder's searches on the audio: 84.90% of the ADPCM predictors; HF VQ: 78.10% of the groups, 91.65% of the vectors in them
+  the binding: core channel 0 = WAV 2; core channel 1 = WAV 0; core channel 2 = WAV 1; core channel 3 = WAV 4; core channel 4 = WAV 5; LFE = WAV 3
 ```
 
 (`-s`'s byte counts are the coder's estimate, a little above what it writes.) Where stderr is a
@@ -79,20 +80,27 @@ Exit codes:
 
 | Stream | Core | dtsdpack | Without the WAV | `xz -9e` |
 |---|---:|---:|---:|---:|
-| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 396547 (0.79%) | 71.76% | 88.21% |
-| its first 3 MB (6.8 s) | 1275608 | 12485 (0.98%) | | |
-| 3 MB from its middle (5.7 s) | 1068372 | 13677 (1.28%) | | |
-| FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 25902 (1.10%) | | |
+| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 396619 (0.79%) | 71.76% | 88.21% |
+| its first 3 MB (6.8 s) | 1275608 | 12557 (0.98%) | | |
+| 3 MB from its middle (5.7 s) | 1068372 | 13749 (1.29%) | | |
+| FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 25974 (1.10%) | | |
 
 Compressing the whole of `s.2.dts`'s core takes 28 seconds (1.8 MB of core a second) and 39 MB of
 memory, decompressing it 29 seconds and 33 MB, on one thread of a 2.1 GHz Xeon. The last three
 rows were the tuning set (below); the first, the whole of `s.2.dts`, wasn't.
 
-FFmpeg's small DTS-HD MA samples (`xll_*`, 7 frames each) round-trip too. Where their core's
-channels are the WAV's channels (`xll_51_24_48_768`) the core goes to 9.1%; where only some are (the
-7.1 and 6.1 ones: 3 of the core's 5 channels line up with a WAV channel, the surrounds presumably
-being mixes) only those are bound (36-37%); where the WAV's rate is 96 or 192 kHz (the core is coded
-from a 48 kHz version of it) nothing is (41-48%).
+FFmpeg's small DTS-HD MA samples (`xll_*`, 7 frames each) round-trip too:
+
+| Sample | Core | dtsdpack | The core is |
+|---|---:|---:|---|
+| `xll_51_24_48_768` | 7168 | 721 (10.06%) | the WAV's 5.1 |
+| `xll_71_24_48_768_0` | 7168 | 560 (7.81%) | a downmix of its 7.1: every channel at -3 dB, each surround its side and rear surround |
+| `xll_71_24_48_768_1` | 7168 | 693 (9.67%) | the same, the rear surrounds' sign inverted |
+| `xll_xch_61_24_48_768` | 7168 | 1920 (26.79%) | its 6.1's 5.1, the back centre in the surrounds at about -3 dB (and in the XCH extension, kept as bytes) |
+| `xll_51_16_192_768_1`, `xll_71_24_96_768` | 7168 | 49.05%, 42.16% | coded from a 48 kHz version of the 192 or 96 kHz WAV: nothing lines up |
+
+Before the downmixes were found, the 7.1 and 6.1 ones went to 36-38%: only 3 of their core's
+channels lined up with a WAV channel, and those at the wrong gain in the 7.1 ones.
 
 ## How it works
 
@@ -148,11 +156,24 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   loudest subband's.
 
 c finds how the core lines up with the WAV before it starts (`call.inc`'s `find_alignment()`, in
-doubles; the header keeps the result): from the core's first 4 MB, the 64 blocks with the most
-energy, decoded to their plain subband samples, against the WAV's analysis at offsets -1024..1536
-for each of its channels; the best for the core's channel 0 gives the offset, and each other core
-channel gets the WAV channel that correlates best there (0.9 at least, else none). The LFE gets the
-remaining WAV channel whose decimation correlates best with the first 1024 LFE samples.
+doubles; the header keeps the result). The offset: from the core's first 4 MB, the 64 blocks with
+the most energy, decoded to their plain subband samples, against the WAV's analysis at offsets
+-1024..1536 for each of its channels; the best for the core's channel 0 gives it. Then each core
+channel (`find_mixes()`): a core may be a downmix of the WAV, as a DTS-HD MA 7.1 stream's is (its
+lossless extension's primary channel set is the 5.1 the core was coded from, each surround the side
+and the rear surround, every channel scaled: coefficients of DTS's downmix table, FFmpeg's
+`ff_dca_dmixtable`, Q15). So over
+up to 256 of the frames read first, a weighted least squares fit (each decoded subband sample by 1 /
+its step squared: the finer, the surer) of the core channel against every WAV channel and every
+pair of them gives its best single channel and its best pair, each with its gains as fitted and as
+the downmix table's entries either side (signed); of those, the one that makes the most of the
+channel's indexes exactly is its binding (a simpler one unless another makes 0.5% more), if it
+makes a fifth of them. The LFE gets the remaining WAV channel whose decimation correlates best with
+the first 1024 LFE samples. `-s` shows the binding:
+
+```
+  the binding: core channel 0 = 0.707092 WAV 2; core channel 1 = 0.707092 WAV 0; ...; core channel 3 = 0.707092 WAV 4 + 0.707092 WAV 6; ...; LFE = WAV 3
+```
 
 ### The model
 
@@ -189,16 +210,17 @@ files.
 
 ### The format
 
-"dtsdpack", the format's version (1), the level, the WAV's binding (the offset, each core channel's
-WAV channel and the LFE's, the WAV's format, size and the CRC-32 of its first 64 KB), then the
+"dtsdpack", the format's version (2), the level, the WAV's binding (the offset; each core channel's
+WAV channel, the second of its mix and their gains, Q23; the LFE's channel; the WAV's format, size
+and the CRC-32 of its first 64 KB), then the
 range coded chunks (a frame as records, bytes between frames, a frame kept as bytes), the end, and
 the CRC-32 of the core stream, which `d` checks.
 
 ## What it doesn't do
 
-- Core channels that aren't one of the WAV's (a 7.1 stream's core surrounds, presumably mixes of
-  the WAV's) aren't bound: those are coded by the model alone. So are cores coded from a resampled
-  WAV (96 and 192 kHz streams).
+- A core channel is bound to at most two of the WAV's channels: one that mixes more (a stereo core
+  downmixed from 5.1) is bound to its best two, or isn't. Cores coded from a resampled WAV (96 and
+  192 kHz streams) aren't bound at all.
 - The LFE is predicted at 64x only (LFF 2); a 128x LFE (LFF 1) is coded by the model alone.
 - Extensions in the core substream (XCH, XXCH, X96) are bytes after the subframes, kept as they are.
 - One thread, one level.

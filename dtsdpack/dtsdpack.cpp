@@ -27,9 +27,10 @@
 // index the core has, and their RMS nearly every scale factor; the encoder's searches of its code
 // books on them, nearly every ADPCM predictor and HF VQ vector; the WAV's LFE channel decimated,
 // nearly every LFE sample; and the ABITS a subband had at its energy before, most bit allocations.
-// c finds how the core's channels and blocks line up with the WAV's (and keeps it in the header);
-// the model codes each element against what the audio makes of it. Without a WAV that lines up,
-// the model codes the core by itself.
+// c finds how the core's channels and blocks line up with the WAV's, each channel one of the WAV's
+// or a mix of two of them (a 7.1 stream's core is a downmix: each surround its side and rear
+// surround), and keeps it in the header; the model codes each element against what the audio makes
+// of it. Without a WAV that lines up, the model codes the core by itself.
 //
 // The model. Each element is binarised and each decision goes to one of 8 families (fam.inc, as
 // m4vpack's, h264p's and ac3pack's): counters chosen by context indices, mixed in the logistic
@@ -47,7 +48,7 @@
 //   raw  bytes kept as bytes, the bits after the subframes
 // (Whether a subband sample's index is the audio's goes straight to the coder: model_smp.inc.)
 //
-// File format: "dtsdpack", the format version 1, the level, the WAV's binding (how the core lines
+// File format: "dtsdpack", the format version 2, the level, the WAV's binding (how the core lines
 // up with it, and what the WAV was: coro.inc), then the range coded chunks (kind: end, a frame as
 // records, bytes between frames, a frame kept as bytes; then the records or a length and the
 // bytes); after the end, the CRC-32 of the core stream.
@@ -195,15 +196,30 @@ static int compress(const char* in_name, const char* wav_name, const char* out_n
   if (!k.wav.ok)
     snprintf(bound, sizeof bound, "the WAV not used (%s)", k.wav.why);
   else {
-    int nb = 0;
-    for (int ch = 0; ch < NCH; ch++) nb += k.bind.map[ch] >= 0;
+    int nb = 0, nm = 0, ng = 0;
+    for (int ch = 0; ch < NCH; ch++)
+      if (k.bind.map[ch] >= 0) nb++, nm += k.bind.map2[ch] >= 0, ng += k.bind.map2[ch] < 0 && k.bind.g1[ch] != BIND_ONE;
+    char mix[64] = "";
+    if (nm || ng) snprintf(mix, sizeof mix, "; %d of them mixes of two, %d scaled", nm, ng);
     if (!nb) snprintf(bound, sizeof bound, "the WAV not used (nothing lines up: correlation %.3f)", k.corr);
     else
-      snprintf(bound, sizeof bound, "%d channel%s%s against the WAV (offset %d, correlation %.4f)", nb, nb > 1 ? "s" : "",
-               k.bind.lfe >= 0 ? " and the LFE" : "", (int)k.bind.off, k.corr);
+      snprintf(bound, sizeof bound, "%d channel%s%s against the WAV (offset %d, correlation %.4f%s)", nb, nb > 1 ? "s" : "",
+               k.bind.lfe >= 0 ? " and the LFE" : "", (int)k.bind.off, k.corr, mix);
   }
   r = k.close(r);
   if (!r && !o.quiet) st.report(in_name, cost, orig, (double)k.s.pos, o.level, o.stats, bound);
+  if (!r && !o.quiet && o.stats && k.wav.ok) {  // (-s: the binding: each core channel's WAV channels, and gains not 1)
+    int any = 0;
+    for (int ch = 0; ch < NCH; ch++) {
+      if (k.bind.map[ch] < 0) continue;
+      fprintf(stderr, "%s core channel %d = ", any++ ? ";" : "  the binding:", ch);
+      if (k.bind.g1[ch] != BIND_ONE || k.bind.map2[ch] >= 0) fprintf(stderr, "%.6f ", (double)k.bind.g1[ch] / BIND_ONE);
+      fprintf(stderr, "WAV %d", k.bind.map[ch]);
+      if (k.bind.map2[ch] >= 0) fprintf(stderr, " + %.6f WAV %d", (double)k.bind.g2[ch] / BIND_ONE, k.bind.map2[ch]);
+    }
+    if (k.bind.lfe >= 0) fprintf(stderr, "%s LFE = WAV %d", any++ ? ";" : "  the binding:", k.bind.lfe);
+    if (any) fprintf(stderr, "\n");
+  }
   if (!r && o.verify) r = verify(k.in, in_name, wav_name, out_name, o);
   if (k.in != stdin) fclose(k.in);
   return r;

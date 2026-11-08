@@ -2,16 +2,18 @@
 // ac3pack's): a run, on the buffers of its input and output, at a level.
 
 // The stream: "dtsdpack", the format's version, the model's level; the WAV's binding (bind_put()):
-// how the core lines up with it (the offset, 4 bytes, each channel's WAV channel, 8 bytes, and the
-// LFE's, 1), what the WAV was (whether it was one, its channels, its bytes a sample, its size, 8
-// bytes, and the CRC-32 of its first 64 KB, 4); then the arithmetic coded data: the chunks (kind,
-// then the records of a frame, or a length and the bytes of bytes kept as bytes), the end, and the
-// CRC-32 of the stream (32 bits at 1/2 each).
-enum { BO_OFF = 0, BO_MAP = 4, BO_LFE = BO_MAP + NCH, BO_OK, BO_NCH, BO_BPS, BO_SIZE, BO_CRC = BO_SIZE + 8,
+// how the core lines up with it (the offset, 4 bytes; each channel's WAV channel, 8 bytes, the
+// second WAV channel of its mix, 8, and their gains, 8 and 8 of 4 bytes; the LFE's channel, 1),
+// what the WAV was (whether it was one, its channels, its bytes a sample, its size, 8 bytes, and
+// the CRC-32 of its first 64 KB, 4); then the arithmetic coded data: the chunks (kind, then the
+// records of a frame, or a length and the bytes of bytes kept as bytes), the end, and the CRC-32
+// of the stream (32 bits at 1/2 each).
+enum { BO_OFF = 0, BO_MAP = 4, BO_MAP2 = BO_MAP + NCH, BO_G1 = BO_MAP2 + NCH, BO_G2 = BO_G1 + 4 * NCH,
+       BO_LFE = BO_G2 + 4 * NCH, BO_OK, BO_NCH, BO_BPS, BO_SIZE, BO_CRC = BO_SIZE + 8,
        DP_BIND = BO_CRC + 4 };  // (the binding's bytes)
 enum { DP_MAGIC = 8, DP_AT_VERSION = DP_MAGIC, DP_AT_LEVEL, DP_AT_BIND, DP_HEAD = DP_AT_BIND + DP_BIND };  // the header's
 static const U8 magic[DP_MAGIC] = {'d', 't', 's', 'd', 'p', 'a', 'c', 'k'};
-constexpr int DP_VERSION = 1;  // the format's
+constexpr int DP_VERSION = 2;  // the format's (2: a core channel's binding a mix of two WAV channels)
 
 static void put_le(U8* p, U64 v, int n) {
   for (int i = 0; i < n; i++) p[i] = (U8)(v >> (8 * i));
@@ -24,7 +26,12 @@ static U64 get_le(const U8* p, int n) {
 // the binding into p (DP_BIND bytes), and back: the WAV as it was (got) and as it is (w), the same?
 static void bind_put(U8* p, const Bind& b, const WavIn& w) {
   put_le(p + BO_OFF, (U32)b.off, 4);
-  for (int ch = 0; ch < NCH; ch++) p[BO_MAP + ch] = (U8)b.map[ch];
+  for (int ch = 0; ch < NCH; ch++) {
+    p[BO_MAP + ch] = (U8)b.map[ch];
+    p[BO_MAP2 + ch] = (U8)b.map2[ch];
+    put_le(p + BO_G1 + 4 * ch, (U32)b.g1[ch], 4);
+    put_le(p + BO_G2 + 4 * ch, (U32)b.g2[ch], 4);
+  }
   p[BO_LFE] = (U8)b.lfe;
   p[BO_OK] = (U8)w.ok;
   p[BO_NCH] = (U8)w.nch;
@@ -35,7 +42,12 @@ static void bind_put(U8* p, const Bind& b, const WavIn& w) {
 static Bind bind_get(const U8* p) {
   Bind b;
   b.off = (S32)(U32)get_le(p + BO_OFF, 4);
-  for (int ch = 0; ch < NCH; ch++) b.map[ch] = (S8)p[BO_MAP + ch];
+  for (int ch = 0; ch < NCH; ch++) {
+    b.map[ch] = (S8)p[BO_MAP + ch];
+    b.map2[ch] = (S8)p[BO_MAP2 + ch];
+    b.g1[ch] = (S32)(U32)get_le(p + BO_G1 + 4 * ch, 4);
+    b.g2[ch] = (S32)(U32)get_le(p + BO_G2 + 4 * ch, 4);
+  }
   b.lfe = (S8)p[BO_LFE];
   return b;
 }

@@ -4,6 +4,62 @@
 constexpr size_t PRE_READ = 4 * MIB;  // c: the stream's start, read first to find the alignment
 constexpr int PROBES = 64;            // the blocks the alignment is found from
 constexpr int LFE_PROBES = 1024;      // and the LFE samples its channel is
+constexpr int MIX_FRAMES = 256;       // and the frames each channel's mix is (find_mixes())
+constexpr int MIX_SEEN = 8192;        // (of the frames read first, at most)
+
+// The sums of a weighted least squares fit of each core channel's decoded subband samples (its
+// plain subbands', each by 1 / its step squared: the finer, the surer) against each of the WAV's
+// channels' analysis (Call::find_mixes()'s first pass)
+struct MixSums {
+  int nw;  // the WAV's channels
+  double G[NCH][WAV_CH][WAV_CH], C[NCH][WAV_CH], Y[NCH];  // (G's lower half)
+  U64 N[NCH];
+  void operator()(const CoreRec& r, const CoreSub& s, int j, S64 (*xw)[32]) {
+    for (int ch = 0; ch < r.npchs; ch++)
+      for (int b = 0; b < r.nvqsub[ch]; b++) {
+        if (!s.abits[ch][b] || s.pmode[ch][b]) continue;
+        const S64 ss = step_scale(r, s, ch, b, j >> 3);
+        if (ss <= 0) continue;
+        const double y = dequantize(s.q[ch][b][j], ss), st = (double)ss / 4194304, wt = 1 / (st * st);
+        for (int i = 0; i < nw; i++) {
+          const double xi = (double)xw[i][b] / 65536;
+          C[ch][i] += wt * xi * y;
+          for (int k = 0; k <= i; k++) G[ch][i][k] += wt * xi * ((double)xw[k][b] / 65536);
+        }
+        Y[ch] += wt * y * y;
+        N[ch]++;
+      }
+  }
+};
+// A binding's candidates for each core channel, and how many of the core's indexes each makes
+// exactly (find_mixes()'s second pass)
+struct MixCand {
+  int w1, w2;
+  S32 g1, g2;
+};
+constexpr int MIX_CANDS = 8;
+struct MixHits {
+  MixCand c[NCH][MIX_CANDS];
+  int nc[NCH];
+  U64 hits[NCH][MIX_CANDS], n[NCH];
+  void operator()(const CoreRec& r, const CoreSub& s, int j, S64 (*xw)[32]) {
+    for (int ch = 0; ch < r.npchs; ch++)
+      for (int b = 0; b < r.nvqsub[ch]; b++) {
+        if (!s.abits[ch][b] || s.pmode[ch][b]) continue;
+        const S64 ss = step_scale(r, s, ch, b, j >> 3);
+        if (ss <= 0) continue;
+        S64 lo, hi, alt;
+        S128 dist;
+        quant_range(r, ch, s.abits[ch][b], lo, hi);
+        for (int k = 0; k < nc[ch]; k++) {
+          const MixCand& m = c[ch][k];
+          const S128 v = (S128)xw[m.w1][b] * m.g1 + (m.w2 >= 0 ? (S128)xw[m.w2][b] * m.g2 : 0);
+          hits[ch][k] += requant((S64)((v + (1 << 22)) >> 23), ss, lo, hi, &dist, &alt) == s.q[ch][b][j];
+        }
+        n[ch]++;
+      }
+  }
+};
 
 struct Call {
   FILE* in;
@@ -162,7 +218,9 @@ struct Call {
     static Probe pr_[4 * PROBES];     // the most energetic so far (a heap would do; few are kept)
     static double en[4 * PROBES];
     static S64 ln[LFE_PROBES], ly[LFE_PROBES];  // the LFE's samples (64x): their places, their values times their steps
-    int np = 0, nch = 0, filts = -1, nl = 0;
+    static U32 fpos[MIX_SEEN], flen[MIX_SEEN];   // the frames that parse, for the mixes: where, how long, their first block
+    static S64 ft[MIX_SEEN];
+    int np = 0, nch = 0, filts = -1, nl = 0, nf = 0;
     S64 t = 0;
     const S64 tmax = (WAV_WIN - 4096) / 32;  // (the probes' audio within the window from 0)
     if (!wav.ok) return;
@@ -175,6 +233,7 @@ struct Call {
       const int nb = core_blocks(pre + i, (size_t)m);
       if (!core_parse(pre + i, m, r) && (filts < 0 || (r.npchs == nch && r.filts == filts))) {
         if (filts < 0) filts = r.filts, nch = r.npchs;
+        if (nf < MIX_SEEN && t + nb <= tmax) fpos[nf] = (U32)i, flen[nf] = (U32)m, ft[nf++] = t;
         S64 tb = t;
         for (int sf = 0; sf < r.nsubfs; sf++) {
           const CoreSub& s = r.sub[sf];
@@ -223,12 +282,13 @@ struct Call {
     for (int k = 0; k < nl; k++) last = imax(last, 2 * ln[k]);
     wav.need(0, 32 * (last + 1) + 1536 + 512);
     bind = find_bind(wav, best, nb, nch, filts, &corr);
+    if (bind.map[0] >= 0) find_mixes(pre, fpos, flen, ft, nf, nch, filts);
     // the LFE: the WAV channel no core channel has whose decimation correlates best with it
     if (bind.map[0] < 0 || nl < 16) return;
     double bc = 0.9;
     for (int wc = 0; wc < wav.nch; wc++) {
       int used = 0;
-      for (int ch = 0; ch < NCH; ch++) used |= bind.map[ch] == wc;
+      for (int ch = 0; ch < NCH; ch++) used |= bind.map[ch] == wc || bind.map2[ch] == wc;
       if (used) continue;
       double sxy = 0, sxx = 0, syy = 0;
       for (int k = 0; k < nl; k++) {
@@ -237,6 +297,94 @@ struct Call {
       }
       const double c = sxx > 0 && syy > 0 ? sxy / sqrt(sxx * syy) : 0;
       if (c > bc) bc = c, bind.lfe = (S8)wc;
+    }
+  }
+
+  // a pass over (up to MIX_FRAMES of) the nf frames read first, at pre (where, how long, their
+  // first blocks), evenly spaced: f(r, s, j, xw) for each block j of each of their subframes s,
+  // the WAV's channels' analysis there in xw
+  template <class F>
+  void mix_pass(pcU8 pre, const U32* pos, const U32* len, const S64* ft, int nf, int nch, int filts, F& f) {
+    static CoreRec r;
+    static S64 xw[WAV_CH][32];
+    const S64* fir = filts ? FIR_PERFECT : FIR_NONPERFECT;
+    const int ns = imin(nf, MIX_FRAMES);
+    for (int k = 0; k < ns; k++) {
+      const int i = nf <= MIX_FRAMES ? k : (int)((S64)k * nf / MIX_FRAMES);
+      if (core_parse(pre + pos[i], (int)len[i], r) || r.npchs != nch || r.filts != filts) continue;
+      S64 tb = ft[i];
+      for (int sf = 0; sf < r.nsubfs; sf++) {
+        const CoreSub& s = r.sub[sf];
+        for (int j = 0; j < s.nssc * 8; j++, tb++) {
+          for (int wc = 0; wc < wav.nch; wc++) analyze(wav, wc, 32 * tb + bind.off, fir, xw[wc]);
+          f(r, s, j, xw);
+        }
+      }
+    }
+  }
+  // How each core channel lines up with the WAV's, the offset found (bind's map, map2, g1, g2): its
+  // best single WAV channel and its best pair, by a weighted least squares fit over the frames read
+  // first (MixSums), each with its gains as fitted and as the downmix table's entries either side
+  // (gain_near()); of those, the one that makes the most of the channel's indexes exactly (MixHits;
+  // by 0.5% of them at least over the ones before it), where that is a fifth of them at least
+  // (else the channel isn't bound)
+  void find_mixes(pcU8 pre, const U32* pos, const U32* len, const S64* ft, int nf, int nch, int filts) {
+    static MixSums ms;
+    static MixHits mh;
+    S64 last = 0;
+    for (int k = 0; k < nf; k++) last = imax(last, ft[k]);
+    wav.need(0, 32 * (last + 128) + bind.off + 512);
+    memset((void*)&ms, 0, sizeof ms);
+    memset((void*)&mh, 0, sizeof mh);
+    ms.nw = wav.nch;
+    mix_pass(pre, pos, len, ft, nf, nch, filts, ms);
+    const int nw = wav.nch;
+    auto g = [&](int ch, int i, int k) { return i >= k ? ms.G[ch][i][k] : ms.G[ch][k][i]; };
+    for (int ch = 0; ch < nch; ch++) {
+      if (ms.N[ch] < 64) continue;  // (too few to tell: as find_bind() had it)
+      double rs = 1e300, rp = 1e300, gs = 0, pa = 0, pb = 0;
+      int si = -1, pi = -1, pk = -1;
+      for (int i = 0; i < nw; i++) {
+        const double gi = g(ch, i, i);
+        if (gi <= 0) continue;
+        const double a = ms.C[ch][i] / gi, res = ms.Y[ch] - a * ms.C[ch][i];
+        if (res < rs) rs = res, si = i, gs = a;
+        for (int k = i + 1; k < nw; k++) {
+          const double gk = g(ch, k, k), gik = g(ch, i, k), d = gi * gk - gik * gik;
+          if (gk <= 0 || d <= 1e-9 * gi * gk) continue;
+          const double x = (ms.C[ch][i] * gk - ms.C[ch][k] * gik) / d, z = (ms.C[ch][k] * gi - ms.C[ch][i] * gik) / d;
+          const double res2 = ms.Y[ch] - x * ms.C[ch][i] - z * ms.C[ch][k];
+          if (res2 < rp) rp = res2, pi = i, pk = k, pa = x, pb = z;
+        }
+      }
+      // the candidates, in order of preference: one channel by the table's gains (the nearer first),
+      // by the fit's; two channels by the table's, by the fit's
+      int& n = mh.nc[ch];
+      S32 ga[2], gb[2];
+      if (si >= 0) {
+        const int na = gain_near(gs, ga);
+        for (int a = 0; a < na; a++) mh.c[ch][n++] = MixCand{si, -1, ga[a], 0};
+        mh.c[ch][n++] = MixCand{si, -1, (S32)llround(gs * BIND_ONE), 0};
+      }
+      if (pi >= 0) {
+        const int na = gain_near(pa, ga), nb2 = gain_near(pb, gb);
+        for (int a = 0; a < na; a++)
+          for (int z = 0; z < nb2; z++) mh.c[ch][n++] = MixCand{pi, pk, ga[a], gb[z]};
+        mh.c[ch][n++] = MixCand{pi, pk, (S32)llround(pa * BIND_ONE), (S32)llround(pb * BIND_ONE)};
+      }
+    }
+    mix_pass(pre, pos, len, ft, nf, nch, filts, mh);
+    for (int ch = 0; ch < nch; ch++) {
+      if (!mh.nc[ch] || !mh.n[ch]) continue;
+      int bk = 0;  // (the candidates in order of preference: one channel before two, the table's gains before the fit's)
+      for (int k = 1; k < mh.nc[ch]; k++)
+        if (mh.hits[ch][k] > mh.hits[ch][bk] + mh.n[ch] / 200) bk = k;
+      const MixCand& m = mh.c[ch][bk];
+      if (mh.hits[ch][bk] * 5 < mh.n[ch]) {
+        bind.map[ch] = bind.map2[ch] = -1, bind.g1[ch] = BIND_ONE, bind.g2[ch] = 0;
+        continue;
+      }
+      bind.map[ch] = (S8)m.w1, bind.map2[ch] = (S8)m.w2, bind.g1[ch] = m.g1, bind.g2[ch] = m.w2 >= 0 ? m.g2 : 0;
     }
   }
 

@@ -29,15 +29,24 @@ static INLINE S128 shl128(S128 x, int k) { return (S128)((U128)x << k); }
 // How the core's channels and blocks line up with the WAV's: the analysis of block t (the core's
 // t-th subband sample since the stream's first frame) ends before sample 32 t + off of the WAV, and
 // map[ch] is the WAV's channel of core channel ch (-1 none, as for every channel without a WAV)
+// How the core lines up with the WAV: the offset, and each core channel as the WAV's channel map
+// times g1 plus channel map2 times g2 (Q23; map2 -1: map's alone): a downmix, as a 7.1 stream's
+// core surrounds are (each its side and rear surround, all the core's channels at -3 dB), or
+// 6.1's (the surround and the back centre at -3 dB)
+constexpr S32 BIND_ONE = 1 << 23;
 struct Bind {
   S32 off;
-  S8 map[NCH];  // each core channel's WAV channel (-1 none)
-  S8 lfe;       // the LFE's (-1 none)
+  S8 map[NCH];   // each core channel's WAV channel (-1 none)
+  S8 map2[NCH];  // the second of its mix (-1 none)
+  S32 g1[NCH], g2[NCH];  // their gains (Q23)
+  S8 lfe;        // the LFE's (-1 none)
   void none() {
     off = 0;
-    for (int ch = 0; ch < NCH; ch++) map[ch] = -1;
+    for (int ch = 0; ch < NCH; ch++) map[ch] = map2[ch] = -1, g1[ch] = BIND_ONE, g2[ch] = 0;
     lfe = -1;
   }
+  // whether core channel ch is bound to the WAV's (nw) channels
+  bool bound(int ch, int nw) const { return map[ch] >= 0 && map[ch] < nw && map2[ch] < nw; }
 };
 
 // The subband samples of the 512 samples of WAV channel c before sample o, as the encoder's
@@ -56,6 +65,37 @@ static void analyze(const WavIn& w, int c, S64 o, const S64* fir, S64* x) {
     for (int i = 0; i < 32; i++) r += (S128)a[i] * COSQ[b][i];
     x[b] = (S64)((r + ((S128)1 << (84 - AQ_F))) >> (85 - AQ_F));  // (2 r: 2^-(24 + 62) to 2^-AQ_F)
   }
+}
+
+// the subband samples of core channel ch as the binding b makes them from the WAV (analyze()'s):
+// its channel's, or the mix's
+static void analyze_bound(const WavIn& w, const Bind& b, int ch, S64 o, const S64* fir, S64* x) {
+  analyze(w, b.map[ch], o, fir, x);
+  if (b.map2[ch] < 0 && b.g1[ch] == BIND_ONE) return;
+  S64 x2[32];
+  if (b.map2[ch] >= 0) analyze(w, b.map2[ch], o, fir, x2);
+  for (int k = 0; k < 32; k++) {
+    const S128 v = (S128)x[k] * b.g1[ch] + (b.map2[ch] >= 0 ? (S128)x2[k] * b.g2[ch] : 0);
+    x[k] = (S64)((v + (1 << 22)) >> 23);
+  }
+}
+// a gain (as a fit makes it) as the downmix table's entries either side of it (Q23; a negative
+// gain the entries' negatives: the coefficients have a sign), where within 2% of it, the nearer
+// first: their number (0-2) into out
+static int gain_near(double g, S32* out) {
+  const double a = fabs(g) * 32768;
+  int lo = 0, hi = 241;
+  while (lo < hi) {  // (the last entry at most |g|)
+    const int m = (lo + hi + 1) >> 1;
+    if (DMIX[m] <= a) lo = m;
+    else hi = m - 1;
+  }
+  int c[2] = {lo, lo + 1}, n = 0;
+  if (lo == 241 || fabs(DMIX[lo] - a) > fabs(DMIX[lo + 1] - a)) c[0] = lo + 1, c[1] = lo;
+  for (int k = 0; k < 2; k++)
+    if (c[k] >= 1 && c[k] <= 241 && fabs(DMIX[c[k]] - a) <= 0.02 * DMIX[c[k]])
+      out[n++] = g < 0 ? -((S32)DMIX[c[k]] << 8) : (S32)DMIX[c[k]] << 8;
+  return n;
 }
 
 // --- the decoder's subband samples (FFmpeg dca_core.c's, bit-exact) ---------------------------------
