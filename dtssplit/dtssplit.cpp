@@ -3,13 +3,13 @@
 //
 // Usage: dtssplit c [options] input.dts prefix
 //        dtssplit d [options] prefix restored.dts
-//   c    split the stream into prefix.dts, prefix.wav and prefix.meta
+//   c    split the stream into prefix.dtsc, prefix.wav and prefix.meta
 //   d    join them back into the stream, byte for byte
 //   -v   (c) join the files written and compare the result with the input
 //   -q   no statistics
 // The input of c and the output of d can be - for stdin and stdout (not with -v).
 //
-//   prefix.dts   the core frames: a DTS stream, the lossy part as any DTS decoder plays it
+//   prefix.dtsc  the core frames: a DTS stream, the lossy part as any DTS decoder plays it
 //   prefix.wav   the samples of the lossless extension (XLL); a further layout of channels has a
 //                WAV of its own: prefix.2.wav, prefix.3.wav, ...
 //   prefix.meta  all else: the extension substream (EXSS) and XLL headers, each segment's coding
@@ -38,7 +38,7 @@
 // The meta file: "DTSSPLIT", a version byte, then records, each a tag byte and its fields (numbers
 // as LEB128 varints, signed ones zigzagged):
 //   R n bytes          bytes that aren't a frame
-//   C n                a core frame: the next n bytes of prefix.dts
+//   C n                a core frame: the next n bytes of prefix.dtsc
 //   E n bytes          an extension substream frame kept as bytes
 //   W w ...            WAV w's layout (before its first X): its channels, width and rate, the
 //                      speaker mask, the XLL channel of each WAV channel, the channel sets, the bands
@@ -2076,7 +2076,7 @@ struct Splitter {
   }
 
   void run(FILE* fi, U32& crc) {
-    dts.open(prefix + ".dts");
+    dts.open(prefix + ".dtsc");
     meta.open(prefix + ".meta");
     nwav = 0;
     Rec hr;
@@ -2181,7 +2181,7 @@ struct CmpSink : Sink {
 static void damaged(const char* why, U64 at) { die(EX_DATA, "damaged input: %s (meta file byte %llu)", why, (unsigned long long)at); }
 
 static void join(const std::string& prefix, Sink& out, U64& nbytes) {
-  const std::string mname = prefix + ".meta", dname = prefix + ".dts";
+  const std::string mname = prefix + ".meta", dname = prefix + ".dtsc";
   FILE* fm = fopen(mname.c_str(), "rb");
   if (!fm) die(EX_READ, "can't open %s", mname.c_str());
   FILE* fd = fopen(dname.c_str(), "rb");
@@ -2267,7 +2267,7 @@ static void usage(void) {
       "dtssplit - lossless split of DTS (DTS-HD Master Audio) streams and the join back\n"
       "Usage: dtssplit c [options] input.dts prefix\n"
       "       dtssplit d [options] prefix restored.dts\n"
-      "  c    split: the core frames into prefix.dts, the lossless extension's samples into\n"
+      "  c    split: the core frames into prefix.dtsc, the lossless extension's samples into\n"
       "       prefix.wav (and prefix.2.wav, ... for further channel layouts), all else into\n"
       "       prefix.meta\n"
       "  d    join them back into the stream, byte for byte\n"
@@ -2314,7 +2314,7 @@ int main(int argc, char** argv) {
     const std::string prefix = files[1];
     if (prefix == "-") die(EX_USAGE, "the prefix names files: not -");
     if (verify && !strcmp(files[0], "-")) die(EX_USAGE, "-v needs the input as a file, not -");
-    static const char* const ext[] = {".dts", ".meta", ".wav"};
+    static const char* const ext[] = {".dtsc", ".meta", ".wav"};
     for (int i = 0; i < 3; i++)
       if (strcmp(files[0], "-") && (same_file(files[0], (prefix + ext[i]).c_str()) || prefix + ext[i] == files[0]))
         die(EX_USAGE, "%s would overwrite the input", (prefix + ext[i]).c_str());

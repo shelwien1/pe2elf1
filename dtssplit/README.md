@@ -2,7 +2,7 @@
 
 dtssplit splits a DTS stream into three files and joins them back into the stream, byte for byte:
 
-- `prefix.dts`: the core frames, a DTS stream that any DTS decoder plays (the lossy part);
+- `prefix.dtsc`: the core frames, a DTS stream that any DTS decoder plays (the lossy part);
 - `prefix.wav`: the samples of the lossless extension (XLL, DTS-HD Master Audio), its prediction
   undone: the part of the audio the core leaves out, for a lossless audio compressor;
 - `prefix.meta`: all else, the extension headers and the XLL coding parameters, and every byte
@@ -17,7 +17,7 @@ dtssplit c [options] input.dts prefix
 dtssplit d [options] prefix restored.dts
 ```
 
-- `c` splits the stream into `prefix.dts`, `prefix.wav` and `prefix.meta`. A stream whose XLL
+- `c` splits the stream into `prefix.dtsc`, `prefix.wav` and `prefix.meta`. A stream whose XLL
   changes its channel layout gets a WAV for each further layout: `prefix.2.wav`,
   `prefix.3.wav`, ...
 - `d` joins them back into the stream.
@@ -29,7 +29,7 @@ says what it found and where it went:
 
 ```
 s.2.dts: 130554771 bytes: 24855 core frames, 24855 extension substream frames (24855 with XLL split), 2443 bytes between frames
-s2.dts: 50008260 bytes, the core frames
+s2.dtsc: 50008260 bytes, the core frames
 s2.wav: 229063784 bytes: 12725760 samples a channel, 6 channels, 24-bit, 48000 Hz
 s2.meta: 3615812 bytes: extension substream headers 795360, XLL headers 1734486, XLL coding parameters 1008912, frames kept as bytes 0, bytes between frames 2446, the rest 74608; 0 values clipped, 0 overlapping LSB bits
 verify: OK
@@ -56,7 +56,7 @@ predicts each channel (adaptive LPC from reflection coefficients, or a fixed pre
 the prediction residuals with Rice, hybrid Rice and binary codes, segment by segment (ETSI TS
 102 114, clause 8).
 
-- **Core frames:** to `prefix.dts` as they are.
+- **Core frames:** to `prefix.dtsc` as they are.
 - **EXSS headers and the bytes around the XLL frame, the XLL headers** (common header, channel set
   sub-headers, NAVI table, with their CRCs): to the meta file as they are.
 - **Each segment of each channel set in each band:** its coding parameters go to the meta file:
@@ -153,7 +153,7 @@ fields, so the sync-word search was tested by ignoring the static fields of `s.2
 `master_audio_7.1_24bit.dts` and two dcadec streams: every frame split.
 
 The sanitizer build (ASan, UBSan) went through 4000 mutated streams with `c -v` and 4000 damaged
-`prefix.dts`, `.wav` or `.meta` files with `d`: the streams all came back, and `d` refused the
+`prefix.dtsc`, `.wav` or `.meta` files with `d`: the streams all came back, and `d` refused the
 damaged files (exit 4, or 2 where the meta file names a WAV that isn't there) or joined them
 correctly, with no crash, sanitizer report or hang.
 
@@ -167,7 +167,7 @@ For `s.2.dts`, with xz `-9e` and FLAC (ffmpeg, `-compression_level 12`):
 |---|---:|---:|
 | `s.2.dts` | 130554771 | 100% |
 | `s.2.dts`, xz | 124891928 | 95.66% |
-| `s2.dts` (the core), xz | 44109856 | 33.79% |
+| `s2.dtsc` (the core), xz | 44109856 | 33.79% |
 | `s2.meta`, xz | 1243884 | 0.95% |
 | `s2.wav`, FLAC | 78014446 | 59.76% |
 | the three | 123368186 | 94.50% |
@@ -253,7 +253,7 @@ are LEB128 varints, signed ones zigzagged.
 | Record | Fields |
 |---|---|
 | `R` | bytes that aren't a frame |
-| `C` | a core frame: its size (its bytes are the next of `prefix.dts`) |
+| `C` | a core frame: its size (its bytes are the next of `prefix.dtsc`) |
 | `E` | an extension substream frame kept as bytes |
 | `W` | WAV w's layout, before its first `X`: channels, width, rate, bands, speaker mask, the XLL channel of each WAV channel, the channel sets' sizes and masks |
 | `X` | an EXSS frame with its XLL frame split, its samples in WAV w: the EXSS bytes before the XLL frame, the speaker-mapping flag, the XLL frame size, the XLL header bytes, each segment's coding parameters, the XLL bytes after the band data, the EXSS bytes after the XLL frame, band 0's delayed samples, the overlapping LSB bits, the clipped WAV values |
