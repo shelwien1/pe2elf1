@@ -1,0 +1,164 @@
+// coro.inc -- the compressor and the decompressor, as coroutines (Lib3's, as m4vpack's and
+// ac3pack's): a run, on the buffers of its input and output, at a level.
+
+// The stream: "dtsdpack", the format's version, the model's level; the WAV's binding (bind_put()):
+// how the core lines up with it (the offset, 4 bytes, and each channel's WAV channel, 8 bytes), what
+// the WAV was (whether it was one, its channels, its bytes a sample, its size, 8 bytes, and the
+// CRC-32 of its first 64 KB, 4); then the arithmetic coded data: the chunks (kind, then the records
+// of a frame, or a length and the bytes of bytes kept as bytes), the end, and the CRC-32 of the
+// stream (32 bits at 1/2 each).
+enum { DP_MAGIC = 8, DP_AT_VERSION = DP_MAGIC, DP_AT_LEVEL, DP_AT_BIND, DP_BIND = 4 + NCH + 3 + 8 + 4,
+       DP_HEAD = DP_AT_BIND + DP_BIND };  // the header's bytes
+static const U8 magic[DP_MAGIC] = {'d', 't', 's', 'd', 'p', 'a', 'c', 'k'};
+constexpr int DP_VERSION = 1;  // the format's
+
+static void put_le(U8* p, U64 v, int n) {
+  for (int i = 0; i < n; i++) p[i] = (U8)(v >> (8 * i));
+}
+static U64 get_le(const U8* p, int n) {
+  U64 v = 0;
+  for (int i = 0; i < n; i++) v |= (U64)p[i] << (8 * i);
+  return v;
+}
+// the binding into p (DP_BIND bytes), and back: the WAV as it was (got) and as it is (w), the same?
+static void bind_put(U8* p, const Bind& b, const WavIn& w) {
+  put_le(p, (U32)b.off, 4);
+  for (int ch = 0; ch < NCH; ch++) p[4 + ch] = (U8)b.map[ch];
+  p[4 + NCH] = (U8)w.ok;
+  p[5 + NCH] = (U8)w.nch;
+  p[6 + NCH] = (U8)w.bps;
+  put_le(p + 7 + NCH, w.size, 8);
+  put_le(p + 15 + NCH, w.crc, 4);
+}
+static Bind bind_get(const U8* p) {
+  Bind b;
+  b.off = (S32)(U32)get_le(p, 4);
+  for (int ch = 0; ch < NCH; ch++) b.map[ch] = (S8)p[4 + ch];
+  return b;
+}
+// what differs between the WAV the stream was compressed with (its binding at p) and w: 0 none
+static const char* bind_differs(const U8* p, const WavIn& w) {
+  if (p[4 + NCH] != (U8)w.ok || p[5 + NCH] != (U8)w.nch || p[6 + NCH] != (U8)w.bps) return "its format";
+  if (get_le(p + 15 + NCH, 4) != w.crc) return "its first 64 KB";
+  const U64 sz = get_le(p + 7 + NCH, 8);
+  if (sz && w.size && sz != w.size) return "its size";
+  return 0;
+}
+
+// a compression's statistics (its summary line)
+struct Stats {
+  U64 frames, packed, raw_parse, raw_verify;
+  double in_bytes, raw_bytes;
+  U64 hits, smp, sf_hits, sf;  // (-s: the samples and scale factors the audio predicted)
+
+  // c's summary line (out_bytes: the compressed size, at the level), and with -s the bytes by kind
+  // of syntax element, the coder's cost and orig (CAT_*)
+  void report(const char* name, rp<const double> cost, rp<const double> orig, double out_bytes, int level, int stats,
+              const char* bound) const {
+    static const char* const cat_name[NCAT] = {"bytes kept as bytes", "headers, container", "side information",
+                                               "bit allocations", "scale factors", "subband samples",
+                                               "bits after the subframes"};
+    int i;
+    fprintf(stderr, "%s: %.0f -> %.0f bytes (%.2f%%, -%d); %llu frames, %llu packed", name, in_bytes, out_bytes,
+            in_bytes ? PERCENT * out_bytes / in_bytes : 0.0, level, (unsigned long long)frames, (unsigned long long)packed);
+    if (frames > packed)
+      fprintf(stderr, ", %llu kept as bytes (%llu unparsable, %llu not reproduced)", (unsigned long long)(frames - packed),
+              (unsigned long long)raw_parse, (unsigned long long)raw_verify);
+    fprintf(stderr, "; %.0f bytes between frames; %s\n", raw_bytes, bound);
+    if (stats) {
+      double o = 0, p = 0;
+      fprintf(stderr, "  %-28s %10s %10s\n", "bytes", "input", "packed");
+      for (i = 0; i < NCAT; i++) {
+        fprintf(stderr, "  %-28s %10.0f %10.0f %7.2f%%\n", cat_name[i], orig[i] / BYTE_BITS, cost[i] / BYTE_BITS,
+                orig[i] ? PERCENT * cost[i] / orig[i] : 0.0);
+        o += orig[i];
+        p += cost[i];
+      }
+      fprintf(stderr, "  %-28s %10.0f %10.0f %7.2f%%\n", "total", o / BYTE_BITS, p / BYTE_BITS, o ? PERCENT * p / o : 0.0);
+      if (smp) fprintf(stderr, "  the audio's indexes: %.2f%% of the samples; the RMS's scale factors: %.2f%%\n",
+                       PERCENT * hits / smp, sf ? PERCENT * sf_hits / sf : 0.0);
+    }
+  }
+};
+
+#include "dtsdcoro.inc"  // DtsCoro: a run of c or d
+
+// A run's coroutine, on pages of its own: zeroed, and taking memory only where the run touches
+// them. coro_new() makes it (plain data: then Init()), coro_free() frees it after its Quit().
+template <class T>
+T* coro_new(void) {
+  return (T*)map_pages(sizeof(T));
+}
+template <class T>
+void coro_free(T* p) {
+  unmap_pages(p, sizeof(T));
+}
+
+// The output of a call: a file, or (c -v) the input to compare with
+struct Sink {
+  FILE* f;
+  int compare;
+  U64 pos, diff_at;
+  int differs, err;
+
+  void write(pcU8 p, size_t n) {
+    static U8 cmp[IO_BUF];  // (the main thread's)
+    if (!compare) {
+      if (n && fwrite(p, 1, n, f) != n) err = 1;
+      pos += n;
+      return;
+    }
+    while (n && !differs) {
+      const size_t k = n < sizeof(cmp) ? n : sizeof(cmp);
+      const size_t got = fread(cmp, 1, k, f);
+      size_t i;
+      for (i = 0; i < got && cmp[i] == p[i]; i++) {}
+      if (i < k) {
+        differs = 1;
+        diff_at = pos + i;
+        return;
+      }
+      pos += k;
+      p += k;
+      n -= k;
+    }
+  }
+};
+
+// Runs the coroutine c in the buffer protocol to its end: in() gives it its next input when it
+// asks (Y_IN), out(more) takes what it put in its output buffer when that is full (Y_OUT, more:
+// and gives it the next) or as it ends (Y_END, or Y_FAIL after an error: what drive() returns);
+// show(code) after each yield (what it tells, Y_AUDIO; the progress line)
+template <class C, class In, class Out, class Show>
+uint drive(C& c, In in, Out out, Show show) {
+  for (;;) {
+    const uint r = c.coro_call(&c);
+    if (r == Y_IN) in();
+    else if (r != Y_AUDIO) out(r == Y_OUT);
+    show(r);
+    if (r != Y_IN && r != Y_OUT && r != Y_AUDIO) return r;
+  }
+}
+
+// c on files: its input from f (the n bytes at pre read already, first), its output to s, and
+// show(code) after each yield
+static U8 io_bufs[2][IO_BUF];  // (the main thread's: input, output)
+template <class C, class Show>
+uint run_file(C& c, FILE* f, Sink& s, Show show, pcU8 pre = 0, size_t n = 0) {
+  const uint kIo = sizeof io_bufs[0];
+  U8 *ib = io_bufs[0], *ob = io_bufs[1];
+  c.addout(ob, kIo);
+  if (n) c.addinp((byte*)pre, (uint)n);
+  return drive(
+      c,
+      [&]() {
+        const uint l = (uint)fread(ib, 1, kIo, f);
+        if (!l) c.f_quit = 1;
+        c.addinp(ib, l);
+      },
+      [&](bool more) {
+        s.write(c.outbeg, c.getoutsize());
+        if (more) c.addout(ob, kIo);
+      },
+      show);
+}

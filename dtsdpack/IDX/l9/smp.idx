@@ -1,0 +1,146 @@
+#  dtsdpack's smp family at level -9: its context indices and its tunable parameters.
+#  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates MOD/l9/smp_h.inc and _p.inc from
+#  this file and family.inc.  famvars.inc says what each variable is.
+#
+#  The subband samples' quantization indexes, against the index the audio's subband sample
+#  quantizes to (where the WAV is bound), else against their neighbours'.
+#  (The counters', mixers' and APMs' parameters start as ac3pack's mag family's.)
+
+Prefix D9_smp
+Debug 1
+Const 0
+
+Index a
+ a_pk: pk, 1!1
+ a_ab: ab, 1!111111111111111111111111111
+ a_nr: nr, 1!11111111111111111111
+
+Index b
+ b_pk: pk, 1!1
+ b_ab: ab, 1!111111111111111111111111111
+ b_ql: ql, 1!111111111111111111111
+
+Index c
+ c_pk: pk, 1!1
+ c_nr: nr, 1!11111111111111111111
+ c_hm: hm, 1!11
+
+Index d
+ d_pk: pk, 1!1
+ d_ab: ab, 1!111111111111111111111111111
+ d_m1: m1, 1!1111111111111111111111
+
+Index e
+ e_pk: pk, 1!1
+ e_ab: ab, 1!111111111111111111111111111
+ e_m1: m1, 1!1111111111111111111111
+ e_m2: m2, 1!1111111111111111111111
+
+Index h
+ h_pk: pk, 1!1
+ h_ab: ab, 1!111111111111111111111111111
+ h_nr: nr, 1!11111111111111111111
+ h_ql: ql, 1!111111111111111111111
+
+Index i
+ i_pk: pk, 1!1
+ i_ab: ab, 1!111111111111111111111111111
+ i_hw: hw, 1!111
+ i_pm: pm, 1!1
+
+Index j
+ j_pk: pk, 1!1
+ j_ab: ab, 1!111111111111111111111111111
+ j_bd: bd, 1!1111111111111111111111111111111
+
+Index k
+ k_pk: pk, 1!1
+ k_nr: nr, 1!11111111111111111111
+ k_sq: sq, 1!11
+ k_s1: s1, 1!11
+
+Index l
+ l_pk: pk, 1!1
+ l_ab: ab, 1!111111111111111111111111111
+ l_hm: hm, 1!11
+ l_nr: nr, 1!11111111111111111111
+
+Index s
+ s_pk: pk, 1!1
+ s_ab: ab, 1!111111111111111111111111111
+ s_nr: nr, 1!11111111111111111111
+
+Index f
+ f_pk: pk, 1!1
+ f_ab: ab, 1!111111111111111111111111111
+
+Index m
+ m_pk: pk, 1!1
+ m_ab: ab, 1!111111111111111111111111111
+
+Index w
+ w_nr: nr, 1!11111111111111111111
+
+Index t
+ t_ab: ab, 1!111111111111111111111111111
+
+Index n
+#  Frozen: the mantissa mixer it is for mixes only by a hint, and nothing gives this family one.
+! n_ab: ab, 1!111111111111111111111111111
+
+Index g
+
+#  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
+Number rA, 1, 0!11111110
+Number mwA, 1, 0!00000000
+Number rB, 1, 0!11111111
+Number mwB, 1, 0!00000100
+Number rC, 1, 0!11001101
+Number mwC, 1, 0!01001111
+Number rD, 1, 0!11101001
+Number mwD, 1, 0!01000001
+Number rE, 1, 0!11111110
+Number mwE, 1, 0!00000100
+Number rH, 1, 0!11111101
+Number mwH, 1, 0!00111110
+Number rI, 1, 0!11111111
+Number mwI, 1, 0!00000100
+Number rJ, 1, 0!11111111
+Number mwJ, 1, 0!00000000
+Number rK, 1, 0!11111111
+Number mwK, 1, 0!01000000
+Number rL, 1, 0!11110011
+Number mwL, 1, 0!10000000
+Number lr, 1, 0!01111
+Number mb, 1, 0!00100011
+Number rS1, 1, 0!01000
+Number rS2, 1, 0!01000
+Number qs, 1, 3!0010001
+Number qf, 1, 3!0011110
+Number bw, 1, 0!01100
+Number rT, 1, 0!10000111
+Number mwT, 1, 0!00000000
+Number mt, 1, 0!110
+#  the mantissa mixer's rates: frozen (Index n)
+! Number lrm, 1, 0!11111
+! Number mbm, 1, 0!00011001
+Number rG, 1, 0!11111111
+Number mwG, 1, 0!00000000
+
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is direct, one that
+#  does not is hashed into 2^h rows and contexts share them.  Frozen: left live these only grow.
+! Number hA, 1, 0!10110
+! Number hB, 1, 0!10110
+! Number hC, 1, 0!10110
+! Number hD, 1, 0!10110
+! Number hE, 1, 0!10110
+! Number hH, 1, 0!10110
+! Number hI, 1, 0!10110
+! Number hJ, 1, 0!10110
+! Number hK, 1, 0!10110
+! Number hL, 1, 0!10110
+! Number hS, 1, 0!10110
+! Number hF, 1, 0!10110
+! Number hM, 1, 0!10110
+! Number hT, 1, 0!10110
+! Number hN, 1, 0!10110
