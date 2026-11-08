@@ -3,8 +3,8 @@
 //   - the heap, while it is small;
 //   - a temporary file mapped into memory, once it would grow past spill_limit (AVIP_SPILL_MB,
 //     256 MB by default): its pages belong to the file, so the system writes them out and drops
-//     them as it needs memory instead of holding them in RAM. The files go to spill_dir (AVIP_TMP,
-//     else the directory of the output) as avip-<pid>-<n>.tmp and are deleted with the Buf;
+//     them as it needs memory instead of holding them in RAM. The files go to spill_dir (-w, else
+//     AVIP_TMP, else the directory of the output) as avip-<pid>-<n>.tmp and are deleted with the Buf;
 //     SaveBuf() renames one into place as an output file;
 //   - a read-only mapping of a file (MapFileRead(), for the input and the streams): copies of it
 //     share the mapping, and one that is written to becomes a copy of its own first.
@@ -359,13 +359,14 @@ public:
   bool operator!=( const Buf& o ) const { return !(*this==o); }
 };
 
-// spill settings from the environment (AVIP_SPILL_MB, AVIP_TMP, AVIP_DEBUG_MEM); dir: the default
-// directory for spill files (the output's), "" for the current one
-static void SpillSetup( const char* outname ) {
+// spill settings from the environment (AVIP_SPILL_MB, AVIP_TMP, AVIP_DEBUG_MEM) and the command
+// line: the directory for spill files is wdir (-w; 0 none), else AVIP_TMP, else the output's
+// (outname; "": the current one)
+static void SpillSetup( const char* outname, const char* wdir ) {
   const char* e = getenv( "AVIP_SPILL_MB" );
   if( e && atoi( e )>0 ) spill_limit = qword(atoi( e ))<<20;
   mem_debug = getenv( "AVIP_DEBUG_MEM" ) ? 1 : 0;
-  const char* t = getenv( "AVIP_TMP" );
+  const char* t = wdir && *wdir ? wdir : getenv( "AVIP_TMP" );
   std::string d = t && *t ? std::string( t ) : std::string( outname );
   if( !(t && *t) ) {                                      // the output's directory
     size_t k = d.find_last_of( "/\\" );

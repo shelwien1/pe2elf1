@@ -149,7 +149,9 @@ static bool PesHeaderNext( const PesModel& m, PesCursor& c, qword after, Buf& o 
 }
 
 // what an elementary stream of stream id sid (DVD private_stream_1: sub-stream id sub, -1 for
-// none) holds, by its first bytes: the extension of its track stream
+// none) holds, by its first bytes: the extension of its track stream. n: the stream's size; it
+// reads no more than its first ES_HEAD bytes (256 KB of video, audio frames from the first 4 KB)
+static const qword ES_HEAD = (qword(1)<<18) + (qword(1)<<14);
 static std::string EsKind( int sid, int sub, const byte* p, qword n ) {
   if( sid==0xBD && sub>=0 ) return sub>=0x80 && sub<=0x87 ? "ac3" : sub>=0x88 && sub<=0x8F ? "dts" : sub>=0xA0 && sub<=0xA7 ? "pcm" :
                                    sub>=0x20 && sub<=0x3F ? "sub" : "bin";

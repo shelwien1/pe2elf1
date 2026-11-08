@@ -170,6 +170,11 @@ static long long CountUnits( int type, int param, const byte* p, qword len ) {
   return n;
 }
 
+// bytes past a unit's end that UnitLen may read to end it there. A stream cut short gives a
+// unit the length the whole stream gives (so does UnitsLen to n units) unless the cut is
+// within this much of its end: a unit cut off fails (0) or runs to the cut (all there is)
+static const qword UNIT_LOOK = 16;
+
 // total length of n units starting at p, 0 on failure (n>0)
 static qword UnitsLen( int type, int param, const byte* p, qword avail, qword n ) {
   qword pos=0;

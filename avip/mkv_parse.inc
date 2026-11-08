@@ -59,7 +59,7 @@ struct Track {
   bool KeyAt( qword f ) const { return km && f<kf.size() && kf[size_t(f)]; }
   int DefKind( qword f ) const { return dkey && KeyAt( f ) ? dkey-1 : dkind; }
   std::vector<std::pair<qword,byte> > ksb;         // SimpleBlocks: first frame, key bit
-  Buf stream; bool conv;                           // output stream, converted
+  Buf stream; bool conv; qword slen;               // output stream, converted, its size
   int nsb, ngb, nlb; std::string tsinfo;           // statistics
   qword nsamp, bytes, nblk;
   // frame data for analysis and the stream (prefix restored)
@@ -67,6 +67,9 @@ struct Track {
   const std::vector<qword>& FO() const { return strip.size() ? soff : foff; }
   const std::vector<uint>& FZ() const { return strip.size() ? ssz : fsz; }
   uint Size( qword i ) const { return FZ()[size_t(i)]; }
+  FrameSrc Frames( const byte* d ) const {         // (with stripping: back to back in sbuf)
+    FrameSrc r = InPlaceFrames( FB( d ), FO(), FZ() ); if( strip.size() ) r.end = sbuf.size(); return r;
+  }
   void Unstrip( const byte* d ) {
     if( strip.empty() ) return;
     qword L = strip.size(), tot = 0;
@@ -166,7 +169,7 @@ struct Parser {
     t.idx = -1; t.num = 0; t.ok = true; t.blob = t.enc = false; t.priv = 0; t.privlen = 0; t.rate = 0; t.chans = 0;
     t.lensize = 0; t.aacp = -1; t.xform = XF_NONE; t.szmode = t.ptype = t.pparam = 0; t.disc = 0; t.privcut = false;
     t.nbe = t.nfe = 0; t.haslast = false; t.lastabs = 0; t.nsb = t.ngb = t.nlb = 0; t.dkind = 0;
-    t.tsm = t.tck = t.tcp = t.tk = 0; t.tm = t.tc = 0; t.conv = false; t.kmode = 0; t.kbias = 0; t.seg = 0;
+    t.tsm = t.tck = t.tcp = t.tk = 0; t.tm = t.tc = 0; t.conv = false; t.slen = 0; t.kmode = 0; t.kbias = 0; t.seg = 0;
     t.nsamp = t.bytes = t.nblk = 0; t.fck = 0; t.fckp = 0; t.km = t.kp = 0; t.cpt = PT_NONE; t.cpp = 0; t.ccls = 0; t.bits = 0;
   }
 
@@ -507,10 +510,8 @@ static void ChooseSizeMode( const byte* fd, Track& t ) {
   if( n==0 ) return;
   if( t.xform==XF_ADTS || t.xform==XF_OGG ) { t.szmode = 3; return; }   // sizes carried by the transform
   if( t.cpt==PT_VOP || t.cpt==PT_M2V || t.cpt==PT_JPEG || t.cpt==PT_AU264 || t.cpt==PT_ADTS ) {   // start-code units: checked in stream context
-    Buf raw; raw.reserve( size_t(t.bytes) );
-    if( t.strip.size() ) raw = t.sbuf; else for( size_t j=0; j<n; j++ ) raw.insert( raw.end(), d+foff[j], d+foff[j]+fsz[j] );
     TrackHead h;
-    if( ChooseUnits( t.cpt, t.cpp, d, foff, fsz, raw, h ) ) {
+    if( ChooseUnits( t.cpt, t.cpp, t.Frames( fd ), n, h ) ) {
       t.szmode = 2; t.ptype = h.ptype; t.pparam = h.pparam;
       t.ucnt.assign( h.col.begin(), h.col.end() ); t.esc = h.esc;
     }
@@ -546,18 +547,18 @@ static void PutResid( Buf& st, const byte* f, int l, qword sub ) {
   st.insert( st.end(), b, b+l );
 }
 
-static void ToAnnexB( Track& t, const Buf& s, Buf& c ) {
-  ::ToAnnexB( s, [&]( qword j ) { return t.Size(j); }, t.nsamp, t.lensize, t.xhdr, c, t.xa, t.xb );
+static void ToAnnexB( Track& t, const FrameSrc& fs, XOut& c ) {
+  ::ToAnnexB( fs, t.nsamp, t.lensize, t.xhdr, c, t.xa, t.xb );
 }
 
-static void ToADTS( Track& t, const Buf& s, Buf& c ) {
-  t.xb.clear(); ::ToADTS( s, [&]( qword j ) { return t.Size(j); }, t.nsamp, t.adts, c, t.xa );
+static void ToADTS( Track& t, const FrameSrc& fs, XOut& c ) {
+  t.xb.clear(); ::ToADTS( fs, t.nsamp, t.adts, c, t.xa );
 }
 
 // Vorbis packets -> Ogg Vorbis file (header packets from the codec config).
 // trim: samples to cut from the end (lowers the final granulepos)
-static void ToOgg( Track& t, const Buf& s, Buf& c, uint serial, qword trim ) {
-  ::ToOgg( s, [&]( qword j ) { return t.Size(j); }, t.nsamp, t.vh, t.vl, t.vi, serial, trim, c );
+static void ToOgg( Track& t, const FrameSrc& fs, XOut& c, uint serial, qword trim ) {
+  ::ToOgg( fs, t.nsamp, t.vh, t.vl, t.vi, serial, trim, c );
 }
 
 // timestamp column: plain deltas, or the model with the smallest encoding.

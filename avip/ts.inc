@@ -366,11 +366,13 @@ static bool Decode( Meta& M, const std::vector<Buf>& S, Sink& out, const char** 
 
 //--- encoder -----------------------------------------------------------------
 
-struct Pes { qword size; int ts; qword pts, dts; };       // PES bytes, timestamps (mpg::PesHdr ts)
+struct Pes { qword size; int ts; qword pts, dts; size_t pj, pe; uint hl; };   // PES bytes, timestamps (mpg::PesHdr ts);
+                                                                             // its packets [pj,pe) of the PID's, header bytes
 
 struct Track {
   int pid, sid, prio, cc0, pmode; qword rate;
-  std::vector<Pes> pes; Buf s; std::vector<qword> foff; std::vector<uint> fsz;
+  std::vector<Pes> pes; std::vector<uint> fsz; qword sn;   // PES, payload sizes, stream bytes
+  const std::vector<size_t>* pk;                            // the PID's packets
   mpg::PesModel pm; std::vector<Tmpl> af; std::vector<qword> fa, pcr;
   std::vector<qword> pv, pp, pt;                            // PCRs: value, packet position, PES timestamp
   std::string ext; TrackHead h;
@@ -384,6 +386,19 @@ struct Unit { int kind; qword pos, len; int pid, trk, role; };
 // packet decisions
 enum { P_MODEL, P_AFPKT, P_AFONLY, P_XPKT, P_RAW, P_REP, P_NULL, P_BYTES };
 struct Dec { int kind, trk; qword a; bool end; };          // a: template / repeat index / bytes; end: the PES ends here
+
+// the payload of PES k of track t (its packets' payloads after the PES header), appended to o;
+// U, d, off: the units, the file, the packet offset in a unit
+static void PesPayload( const Track& t, size_t k, const std::vector<Unit>& U, const byte* d, qword off, Buf& o ) {
+  const Pes& q = t.pes[k]; const std::vector<size_t>& P = *t.pk; qword skip = q.hl;
+  for( size_t m=q.pj; m<q.pe; m++ ) {
+    const byte* b = d+U[P[m]].pos+off; int bfc = b[3]>>4&3;
+    if( !(bfc&1) ) continue;
+    qword T0 = bfc&2 ? 1+qword(b[4]) : 0, L = 184-T0;        // (T0<=184: checked when the PES was taken)
+    if( skip>=L ) { skip -= L; continue; }
+    o.insert( o.end(), b+4+T0+skip, b+188 ); skip = 0;
+  }
+}
 
 static void PutAfPart( Writer& w, const Track& t ) {
   w.u8( uint( t.cc0 | t.prio<<4 | t.pmode<<5 ) );
@@ -400,9 +415,10 @@ static int FindTmpl( std::vector<Tmpl>& v, const Buf& core ) {
   return int(v.size())-1;
 }
 
-// level 2: all models; 1: PES payloads only (track packets with their headers in the struct)
+// level 2: all models; 1: PES payloads only (track packets with their headers in the struct).
+// dry: avip's info pass: no streams (their sizes in *dry), no restore check
 static bool Encode1( const Buf& in, int level, Buf& meta, std::vector<Buf>& streams, std::vector<std::string>& names,
-                     const char** why, std::string& log ) {
+                     std::vector<qword>* dry, const char** why, std::string& log ) {
   const byte* d = in.data(); qword fs = in.size();
   int ps = PacketSize( d, fs ); qword off = ps==192 ? 4 : 0;
   if( !ps ) { *why = "no packets"; return false; }
@@ -427,7 +443,7 @@ static bool Encode1( const Buf& in, int level, Buf& meta, std::vector<Buf>& stre
   for( std::map<int,std::vector<size_t> >::iterator it=bypid.begin(); it!=bypid.end(); ++it ) {
     int pid = it->first; const std::vector<size_t>& P = it->second;
     if( pid==0x1FFF ) continue;
-    Track t; t.pid = pid; t.sid = -1; t.prio = 0; t.cc0 = 0; t.pmode = 0; t.rate = 0;
+    Track t; t.pid = pid; t.sid = -1; t.prio = 0; t.cc0 = 0; t.pmode = 0; t.rate = 0; t.sn = 0; t.pk = &P;
     for( size_t j=0; j<P.size(); ) {
       const byte* a = d+U[P[j]].pos+off;
       int afc = a[3]>>4&3;
@@ -454,9 +470,8 @@ static bool Encode1( const Buf& in, int level, Buf& meta, std::vector<Buf>& stre
         if( t.sid<0 ) t.sid = pb[3], t.prio = (a[1]>>5)&1, t.cc0 = (a[3]-1)&15;
         bool actual = BE16(pb.data()+4)==pb.size()-6;
         t.pm.Add( pb.data()+4, 2+h.len, h, actual );
-        Pes q; q.size = pb.size(); q.ts = h.ts; q.pts = h.pts; q.dts = h.dts; t.pes.push_back( q );
-        t.foff.push_back( t.s.size() ); t.fsz.push_back( uint(pb.size()-6-h.len) );
-        t.s.insert( t.s.end(), pb.begin()+size_t(6+h.len), pb.end() );
+        Pes q; q.size = pb.size(); q.ts = h.ts; q.pts = h.pts; q.dts = h.dts; q.pj = j; q.pe = e; q.hl = uint(6+h.len);
+        t.pes.push_back( q ); t.fsz.push_back( uint(pb.size()-6-h.len) ); t.sn += pb.size()-6-h.len;
         for( size_t m=0; m<mem.size(); m++ ) U[mem[m]].role = 1, U[mem[m]].trk = int(T.size());
       }
       j = e;
@@ -479,7 +494,7 @@ static bool Encode1( const Buf& in, int level, Buf& meta, std::vector<Buf>& stre
     }
     if( pes || f0<0 || it->first==0x1FFF ) continue;
     Track t; const byte* a = d+U[P[size_t(f0)]].pos+off;
-    t.pid = it->first; t.sid = 0; t.prio = (a[1]>>5)&1; t.cc0 = a[3]&15; t.pmode = 0; t.rate = 0;
+    t.pid = it->first; t.sid = 0; t.prio = (a[1]>>5)&1; t.cc0 = a[3]&15; t.pmode = 0; t.rate = 0; t.sn = 0; t.pk = &P;
     for( size_t j=0; j<P.size(); j++ ) {
       const byte* b = d+U[P[j]].pos+off;
       if( (b[3]&0xF0)==0x20 && !(b[1]&0xC0) ) U[P[j]].role = 2, U[P[j]].trk = int(T.size()+Q.size());
@@ -487,14 +502,20 @@ static bool Encode1( const Buf& in, int level, Buf& meta, std::vector<Buf>& stre
     Q.push_back( t );
   }
   auto TR = [&]( size_t i ) -> Track& { return i<T.size() ? T[i] : Q[i-T.size()]; };
-  // track streams, codecs, size models
-  streams.clear(); names.clear();
+  // track streams (the PES payloads, put together from the packets), codecs, size models
+  auto frames = [&]( const Track& t ) {
+    FrameSrc r; r.sz = t.fsz.data(); r.gf = [&U,&t,d,off]( qword k, Buf& o ) { PesPayload( t, size_t(k), U, d, off, o ); };
+    return r;
+  };
+  streams.clear(); names.clear(); if( dry ) dry->clear();
   for( size_t i=0; i<T.size(); i++ ) {
-    Track& t = T[i];
-    t.ext = mpg::EsKind( t.sid, -1, t.s.data(), t.s.size() );
-    t.h.ext = t.ext; t.h.xform = XF_NONE; t.h.nf = t.fsz.size(); t.h.szmode = SZ_EXPLICIT; t.h.col.assign( t.fsz.begin(), t.fsz.end() );
+    Track& t = T[i]; FrameSrc fr = frames( t ); qword nf = t.fsz.size();
+    { Buf hb; HeadBytes( fr, nf, mpg::ES_HEAD, hb ); t.ext = mpg::EsKind( t.sid, -1, hb.data(), t.sn ); }
+    t.h.ext = t.ext; t.h.xform = XF_NONE; t.h.nf = nf; t.h.szmode = SZ_EXPLICIT; t.h.col.assign( t.fsz.begin(), t.fsz.end() );
     int pt = UnitType( t.ext );
-    if( level>1 && pt!=PT_NONE ) ChooseUnits( pt, 0, t.s.data(), t.foff, t.fsz, t.s, t.h );
+    if( level>1 && pt!=PT_NONE ) ChooseUnits( pt, 0, fr, nf, t.h );
+    if( dry ) dry->push_back( t.sn );
+    else { streams.push_back( Buf() ); XOut o( &streams.back() ); PutFrames( fr, nf, o ); }
   }
   // the packets in order, as the decoder will see them
   struct St { qword po, size, k, ts; int cc; };
@@ -670,11 +691,10 @@ static bool Encode1( const Buf& in, int level, Buf& meta, std::vector<Buf>& stre
       static const char* pmn[3] = { "step", "dts", "rate" };
       char l[240];
       snprintf( l, sizeof(l), "pid %04X %02X: %-4s %8llu PES %11llu bytes  sizes=%s templates=%llu af=%llu pcr=%llu/%s -> %s\n", t.pid, t.sid,
-        t.ext.c_str(), (unsigned long long)t.fsz.size(), (unsigned long long)t.s.size(), t.h.szmode==SZ_UNITS ? ptname[t.h.ptype] : "explicit",
+        t.ext.c_str(), (unsigned long long)t.fsz.size(), (unsigned long long)t.sn, t.h.szmode==SZ_UNITS ? ptname[t.h.ptype] : "explicit",
         (unsigned long long)t.pm.tm.size(), (unsigned long long)t.af.size(), (unsigned long long)t.pcr.size(), pmn[t.pmode], names[i].c_str() );
       log += l;
     }
-    streams.push_back( Buf() ); streams.back().swap( t.s );
   }
   w.vint( Q.size() );
   for( size_t i=0; i<Q.size(); i++ ) {
@@ -701,21 +721,22 @@ static bool Encode1( const Buf& in, int level, Buf& meta, std::vector<Buf>& stre
   }
   w.bytes( op.b.data(), op.b.size() ); w.bytes( st.data(), st.size() );
   meta.swap( w.b );
+  if( dry ) return true;
   Meta M; Sink chk( 0, &in ); *why = "meta parse";
   return ParseMeta( meta, M ) && Decode( M, streams, chk, why );
 }
 
-static bool Encode( const Buf& in, Buf& meta, std::vector<Buf>& streams, std::vector<std::string>& names ) {
+static bool Encode( const Buf& in, Buf& meta, std::vector<Buf>& streams, std::vector<std::string>& names, std::vector<qword>* dry ) {
   const char* why = ""; std::string log;
   for( int level=2; level>=1; level-- ) {
     log.clear();
-    if( Encode1( in, level, meta, streams, names, &why, log ) && streams.size() ) {
+    if( Encode1( in, level, meta, streams, names, dry, &why, log ) && names.size() ) {
       if( verbose ) fputs( log.c_str(), stdout );
       return true;
     }
-    if( streams.size() ) fprintf( stderr, "warning: verify failed (%s)%s\n", why, level>1 ? ", retrying with fewer models" : "" );
+    if( names.size() ) fprintf( stderr, "warning: verify failed (%s)%s\n", why, level>1 ? ", retrying with fewer models" : "" );
   }
-  meta.clear(); streams.clear(); names.clear();
+  meta.clear(); streams.clear(); names.clear(); if( dry ) dry->clear();
   return false;
 }
 

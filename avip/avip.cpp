@@ -1,10 +1,11 @@
 // vp - lossless MP4/MOV, Matroska/WebM, AVI and MPEG (PS, TS, elementary stream) splitter
 //
-//   vp c [-v] input out_prefix   -> out_prefix.meta + out_prefix.<i>.<ext> per track
-//   vp d [-v] inp_prefix output  -> restores the original file byte-exact
-//   vp file                      -> info: container, per-track analysis, the streams and
-//                                   meta "vp c" would write (nothing is written); for a
-//                                   .meta: its track list
+//   vp c [-v] [-w dir] input out_prefix   -> out_prefix.meta + out_prefix.<i>.<ext> per track
+//   vp d [-v] [-w dir] inp_prefix output  -> restores the original file byte-exact
+//   vp [-w dir] file                      -> info: container, per-track analysis, the streams and
+//                                            meta "vp c" would write (nothing is written); for a
+//                                            .meta: its track list
+//   -w dir: the directory for temporary files (large buffers, see buf.inc)
 //
 // Track streams hold the frame data of each track, converted to standalone decodable
 // formats where possible (Annex B H.264/HEVC, ADTS AAC, Ogg Vorbis, WAV, ...). The .meta
@@ -12,7 +13,8 @@
 // container bytes, with everything that can be derived from the streams or other
 // container data regenerated on restore (see meta.inc and the container modules).
 // Unrecognized input: the .meta is a copy of it. The encoder verifies its output by
-// running the decoder in memory and falls back to simpler layouts, then to the copy.
+// running the decoder in memory and falls back to simpler layouts, then to the copy (not in
+// the info pass, which only counts the streams' bytes: frames.inc).
 //
 // Single translation unit: all system includes are here, the .inc modules have none.
 #define _FILE_OFFSET_BITS 64
@@ -29,6 +31,7 @@
 #include <new>
 #include <iterator>
 #include <type_traits>
+#include <functional>
 #include <errno.h>
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -54,6 +57,7 @@
 #include "aac_tables.inc"
 #include "aac_frame.inc"
 #include "units.inc"
+#include "frames.inc"
 #include "adts.inc"
 #include "annexb.inc"
 #include "xiph.inc"
@@ -99,6 +103,6 @@
 
 int main( int argc, char** argv ) {
   try { return Main( argc, argv ); }
-  catch( const SpillError& e ) { fprintf( stderr, "%s (no room on the disk, or no write access: AVIP_TMP sets the directory)\n", e.what.c_str() ); return 5; }
+  catch( const SpillError& e ) { fprintf( stderr, "%s (no room on the disk, or no write access: -w or AVIP_TMP sets the directory)\n", e.what.c_str() ); return 5; }
   catch( ... ) { fprintf( stderr, "out of memory or bad input\n" ); return 5; }
 }

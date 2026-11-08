@@ -1,5 +1,5 @@
-// stream transforms on concatenated frame data: s = frames back to back, sz(j) = size of
-// frame j (any callable), nf frames. The inverse functions return the raw frame data
+// stream transforms on a track's frames (fs, frames.inc: in place in the input, or a stream),
+// written to an XOut (kept, or only counted). The inverse functions return the raw frame data
 // and, where the transform carries them, the frame sizes.
 //
 // XF_ANNEXB: raw = sequence of [lensize-byte BE length][NAL], converted to hdr (parameter
@@ -21,33 +21,33 @@ static const qword ADTS_MAX = 8191-7;
 
 // length-prefixed NAL units -> Annex B (4-byte start codes), xhdr (parameter sets) first.
 // xa: verbatim runs of frames that aren't NAL sequences (before NAL #idx, length);
-// xb: NALs whose length doesn't end at the next start code (#idx, length)
-template<class SZ> static void ToAnnexB( const Buf& s, const SZ& sz, qword nf, int ls, const Buf& xhdr, Buf& c, IdxLen& xa, IdxLen& xb ) {
+// xb: NALs whose length doesn't end at the next start code (#idx, length): those with an
+// 00 00 00 01 inside (what follows a NAL is a start code or the end, and none can begin in a
+// NAL's last bytes and end in that start code, whose only 01 is its last byte)
+static void ToAnnexB( const FrameSrc& fs, qword nf, int ls, const Buf& xhdr, XOut& c, IdxLen& xa, IdxLen& xb ) {
   static const byte sc[4] = {0,0,0,1};
-  c.clear(); c.reserve( size_t( s.size() + xhdr.size() + (s.size()>>6) ) );
-  c.insert( c.end(), xhdr.begin(), xhdr.end() );
+  c.Reset();
+  c.Put( xhdr.data(), xhdr.size() );
   xa.clear(); xb.clear();
-  std::vector<qword> np, nl;                            // payload position in c, true length
-  const byte* p = s.data(); qword o = 0;
+  qword nn = 0;                                         // NALs so far
   for( qword j=0; j<nf; j++ ) {
-    qword z = sz(j);
+    qword z = fs.Z( j );
     if( z==0 ) continue;
-    if( CountUnits( PT_NAL, ls, p+o, z )>=0 ) {
-      for( qword e=o+z; o<e; ) {
+    const byte* p = fs.P( j );
+    if( CountUnits( PT_NAL, ls, p, z )>=0 ) {
+      for( qword o=0; o<z; ) {
         qword L=0; for( int i=0; i<ls; i++ ) L = (L<<8)|p[o+i];
         o += ls;
-        c.insert( c.end(), sc, sc+4 );
-        np.push_back( c.size() ); nl.push_back( L );
-        c.insert( c.end(), p+o, p+o+L ); o += L;
+        c.Put( sc, 4 );
+        if( NextSC( p+o, 0, L )<L ) xb.push_back( std::make_pair( nn, L ) );
+        c.Put( p+o, L ); o += L; nn++;
       }
     } else {                                            // not NALs: verbatim
-      if( xa.size() && xa.back().first==np.size() ) xa.back().second += z;
-      else xa.push_back( std::make_pair( qword(np.size()), z ) ), c.insert( c.end(), sc, sc+4 );
-      c.insert( c.end(), p+o, p+o+z ); o += z;
+      if( xa.size() && xa.back().first==nn ) xa.back().second += z;
+      else xa.push_back( std::make_pair( nn, z ) ), c.Put( sc, 4 );
+      c.Put( p, z );
     }
   }
-  for( size_t i=0; i<np.size(); i++ )
-    if( NextSC( c.data(), np[i], c.size() )!=np[i]+nl[i] ) xb.push_back( std::make_pair( qword(i), nl[i] ) );
 }
 
 static bool FromAnnexB( const Buf& c, qword hdrlen, int ls, const IdxLen& xa, const IdxLen& xb, Buf& r ) {
@@ -79,15 +79,14 @@ static bool FromAnnexB( const Buf& c, qword hdrlen, int ls, const IdxLen& xa, co
 
 // raw AAC frames -> ADTS (template tpl, frame_length per frame); xa: frames left raw
 // (empty or too long for ADTS): (#frame, size)
-template<class SZ> static void ToADTS( const Buf& s, const SZ& sz, qword nf, const byte* tpl, Buf& c, IdxLen& xa ) {
-  c.clear(); c.reserve( size_t( s.size() + 7*nf ) );
+static void ToADTS( const FrameSrc& fs, qword nf, const byte* tpl, XOut& c, IdxLen& xa ) {
+  c.Reset();
   xa.clear();
-  const byte* p = s.data(); qword o = 0;
   for( qword j=0; j<nf; j++ ) {
-    qword z = sz(j);
+    qword z = fs.Z( j );
     if( z==0 || z>ADTS_MAX ) xa.push_back( std::make_pair( j, z ) );
-    else { byte h[7]; PutADTS( h, tpl, uint(z+7) ); c.insert( c.end(), h, h+7 ); }
-    c.insert( c.end(), p+o, p+o+z ); o += z;
+    else { byte h[7]; PutADTS( h, tpl, uint(z+7) ); c.Put( h, 7 ); }
+    if( z ) c.Put( fs.P( j ), z );
   }
 }
 
@@ -116,17 +115,19 @@ static bool FromADTS( const Buf& c, qword nf, const IdxLen& xa, Buf& r, std::vec
 
 // Vorbis packets -> Ogg Vorbis file (3 header packets vh/vl first); trim: samples cut
 // from the last packet's duration (end trimming)
-template<class SZ> static void ToOgg( const Buf& s, const SZ& sz, qword nf, const byte* const* vh, const qword* vl,
-                                      const VorbisInfo& vi, uint serial, qword trim, Buf& c ) {
-  c.clear(); c.reserve( size_t( s.size() + (s.size()>>6) + 8192 + vl[0]+vl[1]+vl[2] ) );
+static void ToOgg( const FrameSrc& fs, qword nf, const byte* const* vh, const qword* vl,
+                   const VorbisInfo& vi, uint serial, qword trim, XOut& c ) {
+  static const byte none[1] = {0};
+  c.Reset();
   OggWriter w( c, serial );
   for( int h=0; h<3; h++ ) w.Packet( vh[h], vl[h], 0, h!=1 );
-  const byte* p = s.data(); qword o = 0, g = 0; uint prev = 0;
+  qword g = 0; uint prev = 0;
   for( qword j=0; j<nf; j++ ) {
-    qword z = sz(j), u = VorbisDur( vi, p+o, z, prev );
+    qword z = fs.Z( j ); const byte* p = z ? fs.P( j ) : none;
+    qword u = VorbisDur( vi, p, z, prev );
     if( j+1==nf ) u -= std::min( u, trim );
     g += u;
-    w.Packet( p+o, z, g, false ); o += z;
+    w.Packet( p, z, g, false );
   }
   w.End();
 }

@@ -8,23 +8,23 @@ namespace mp4 {
 // abscissa; disp/fl: video only.
 struct TimeIn { std::vector<qword> x, disp; std::vector<byte> fl; };
 
-static bool TimeInputs( int ckind, int lensize, const Buf& hdr, const Buf& priv, const byte* s,
-                        const std::vector<qword>& fo, qword nf, TimeIn& ti, int fck=0, uint fckp=0 ) {
+static bool TimeInputs( int ckind, int lensize, const Buf& hdr, const Buf& priv, const FrameSrc& fs,
+                        qword nf, TimeIn& ti, int fck=0, uint fckp=0 ) {
   ti.x.resize( size_t(nf+1) ); ti.disp.clear(); ti.fl.clear();
   for( qword n=0; n<=nf; n++ ) ti.x[size_t(n)] = n;
   if( ckind==1 || ckind==2 ) {
     if( lensize<1 || lensize>4 ) return false;
-    if( ckind==1 ) VideoFeat<H264State>( hdr.data(), hdr.size(), s, fo, nf, lensize, ti.disp, ti.fl );
-    else VideoFeat<HevcState>( hdr.data(), hdr.size(), s, fo, nf, lensize, ti.disp, ti.fl );
+    if( ckind==1 ) VideoFeat<H264State>( hdr.data(), hdr.size(), fs, nf, lensize, ti.disp, ti.fl );
+    else VideoFeat<HevcState>( hdr.data(), hdr.size(), fs, nf, lensize, ti.disp, ti.fl );
   } else if( ckind==3 ) {
     const byte* hp[3]; qword hl[3]; VorbisInfo vi;
     if( !SplitXiphHeaders( priv.data(), priv.size(), hp, hl ) || !VorbisParse( hp, hl, vi ) ) return false;
     uint prev = 0; qword g = 0;
-    for( qword f=0; f<nf; f++ ) ti.x[size_t(f)] = g, g += VorbisDur( vi, s+fo[size_t(f)], fo[size_t(f+1)]-fo[size_t(f)], prev );
+    for( qword f=0; f<nf; f++ ) { qword z = fs.Z( f ); ti.x[size_t(f)] = g, g += VorbisDur( vi, z ? fs.P( f ) : 0, z, prev ); }
     ti.x[size_t(nf)] = g;
   } else if( ckind==4 ) {
     ti.fl.resize( size_t(nf) );
-    for( qword f=0; f<nf; f++ ) ti.fl[size_t(f)] = FrameClass( fck, s+fo[size_t(f)], fo[size_t(f+1)]-fo[size_t(f)], fckp )&FC_KEY ? VF_KEY : 0;
+    for( qword f=0; f<nf; f++ ) { qword z = fs.Z( f ); ti.fl[size_t(f)] = FrameClass( fck, z ? fs.P( f ) : 0, z, fckp )&FC_KEY ? VF_KEY : 0; }
   } else if( ckind ) return false;
   return true;
 }

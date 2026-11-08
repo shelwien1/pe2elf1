@@ -117,17 +117,22 @@ static bool Detect( const byte* d, qword n ) {
   return false;
 }
 
-// start offsets of the AC-3 frames of stream s: from the first sync word that a frame or the
-// end follows, while frames follow each other
-static void Ac3Starts( const Buf& s, std::vector<qword>& v ) {
-  v.clear(); qword n = s.size(), q = 0;
+// start offsets of the AC-3 frames of a stream of n bytes (s, read going forward): from the
+// first sync word that a frame or the end follows, while frames follow each other
+static void Ac3Starts( StreamWin& s, qword n, std::vector<qword>& v ) {
+  v.clear(); qword q = 0;
   for( ; q+6<=n; q++ ) {
-    if( s[q]!=0x0B || s[q+1]!=0x77 ) continue;
-    qword u = UnitLen( PT_AC3, 0, s.data()+q, n-q );
-    if( u && (q+u==n || (q+u+2<=n && s[q+u]==0x0B && s[q+u+1]==0x77)) ) break;
+    s.Drop( q );
+    const byte* p = s.At( q, 6 );
+    if( p[0]!=0x0B || p[1]!=0x77 ) continue;
+    qword u = UnitLen( PT_AC3, 0, p, n-q );                 // (a frame header: the 6 bytes)
+    if( !u ) continue;
+    if( q+u==n ) break;
+    if( q+u+2<=n ) { p = s.At( q+u, 2 ); if( p[0]==0x0B && p[1]==0x77 ) break; }
   }
   while( q+6<=n ) {
-    qword u = UnitLen( PT_AC3, 0, s.data()+q, n-q );
+    s.Drop( q );
+    qword u = UnitLen( PT_AC3, 0, s.At( q, 6 ), n-q );
     if( !u ) break;
     v.push_back( q ); q += u;
   }
@@ -221,7 +226,7 @@ static bool Restore( Meta& M, const std::vector<const Buf*>& S, Sink& out, const
   for( size_t i=0; i<nt; i++ ) {
     DTrack& t = M.trk[i];
     if( t.h.szmode!=SZ_TABLES && !HeadSizes( t.h, *S[i], t.xsz, t.sz, why ) ) return false;
-    if( t.xm ) Ac3Starts( *S[i], fst[i] );
+    if( t.xm ) { FrameSrc fs = WholeStream( S[i]->data(), S[i]->size() ); StreamWin w( fs, 1 ); Ac3Starts( w, S[i]->size(), fst[i] ); }
   }
   const byte* st = M.st;
   qword pos = 0, sp = 0, kp = 0, ls = 0, lst = 0; long long pstart = -1;
@@ -308,6 +313,7 @@ struct Track {
   int sid, sub, xb, xm;                                     // stream id, sub-stream id (-1: none), bytes kept after it, their model
   std::vector<qword> xo, xexc;                              // per PES: where the kept bytes are; derived but not matching
   std::vector<qword> foff; std::vector<uint> fsz;           // payloads in the file
+  qword sn;                                                 // stream bytes
   std::vector<qword> fill;                                  // per PES: 0 (fills its packet) or size+1
   mpg::PesModel pm; std::string ext; TrackHead h;
 };
@@ -318,8 +324,9 @@ struct Unit { int kind, trk; qword pos, len; Pack pk; qword xo; };   // xo: the 
 static size_t HeadCost( const TrackHead& h ) { Writer w; PutHead( w, h ); return w.b.size(); }
 
 // level 2: all models; 1: PES payloads only (sizes explicit or units, packs and padding as bytes)
+// dry: avip's info pass: no streams (their sizes in *dry), no restore check
 static bool Encode1( const Buf& in, int level, Buf& meta, std::vector<Buf>& streams, std::vector<std::string>& names,
-                     const char** why, std::string& log ) {
+                     std::vector<qword>* dry, const char** why, std::string& log ) {
   const byte* d = in.data(); qword fs = in.size();
   std::vector<Unit> U; std::vector<Track> T; std::map<int,int> key;
   auto raw = [&]( qword p, qword n ) {
@@ -413,32 +420,35 @@ static bool Encode1( const Buf& in, int level, Buf& meta, std::vector<Buf>& stre
     }
   }
   // tracks: streams, codecs, size models
-  streams.clear(); names.clear();
+  streams.clear(); names.clear(); if( dry ) dry->clear();
   for( size_t i=0; i<T.size(); i++ ) {
-    Track& t = T[i]; Buf s;
-    for( size_t k=0; k<t.fsz.size(); k++ ) s.insert( s.end(), d+t.foff[k], d+t.foff[k]+t.fsz[k] );
-    t.ext = mpg::EsKind( t.sid, t.sub, s.data(), s.size() );
-    t.h.ext = t.ext; t.h.xform = XF_NONE; t.h.nf = t.fsz.size(); t.h.szmode = SZ_EXPLICIT; t.h.col.assign( t.fsz.begin(), t.fsz.end() );
+    Track& t = T[i];
+    FrameSrc fr = InPlaceFrames( d, t.foff, t.fsz ); qword nf = t.fsz.size();   // (read where they are)
+    t.sn = 0; for( size_t k=0; k<t.fsz.size(); k++ ) t.sn += t.fsz[k];
+    { Buf hb; HeadBytes( fr, nf, mpg::ES_HEAD, hb ); t.ext = mpg::EsKind( t.sid, t.sub, hb.data(), t.sn ); }
+    t.h.ext = t.ext; t.h.xform = XF_NONE; t.h.nf = nf; t.h.szmode = SZ_EXPLICIT; t.h.col.assign( t.fsz.begin(), t.fsz.end() );
     size_t best = HeadCost( t.h );
     int pt = UnitType( t.ext );
     TrackHead hu = t.h;
-    if( pt!=PT_NONE && ChooseUnits( pt, 0, d, t.foff, t.fsz, s, hu ) && HeadCost( hu )<best ) t.h = hu, best = HeadCost( hu );
+    if( pt!=PT_NONE && ChooseUnits( pt, 0, fr, nf, hu ) && HeadCost( hu )<best ) t.h = hu, best = HeadCost( hu );
     if( level>1 && psize ) {
       TrackHead hf = t.h; hf.szmode = SZ_TABLES; hf.col.clear(); hf.esc.clear();
       Writer w; PutCol( w, t.fill );
       if( HeadCost( hf )+w.b.size()<best ) t.h = hf;
     }
     if( level>1 && t.ext=="ac3" && t.xb==3 ) {            // DVD AC-3: frame count and first access unit derived
-      std::vector<qword> fs; Ac3Starts( s, fs ); size_t fi = 0; qword o = 0;
+      std::vector<qword> as; { StreamWin sw( fr, nf ); Ac3Starts( sw, t.sn, as ); } size_t fi = 0; qword o = 0;
       std::vector<qword> exc;
       for( size_t k=0; k<t.fsz.size(); k++ ) {
-        byte b[3]; Ac3Bytes( fs, fi, o, t.fsz[k], b );
+        byte b[3]; Ac3Bytes( as, fi, o, t.fsz[k], b );
         if( memcmp( b, d+t.xo[k], 3 ) ) exc.push_back( k );
         o += t.fsz[k];
       }
       if( 2*exc.size()<t.fsz.size() ) t.xm = 1, t.xexc.swap( exc );
     }
-    names.push_back( TrackSuffix( i, t.ext ) ); streams.push_back( Buf() ); streams.back().swap( s );
+    names.push_back( TrackSuffix( i, t.ext ) );
+    if( dry ) dry->push_back( t.sn );
+    else { streams.push_back( Buf() ); XOut o( &streams.back() ); PutFrames( fr, nf, o ); }
   }
   // ops + struct
   Writer op; Buf st; st.reserve( size_t(fs>>5) );
@@ -490,7 +500,7 @@ static bool Encode1( const Buf& in, int level, Buf& meta, std::vector<Buf>& stre
       char id[16]; if( t.sub>=0 ) snprintf( id, sizeof(id), "%02X.%02X", t.sid, t.sub ); else snprintf( id, sizeof(id), "%02X", t.sid );
       char l[240];
       snprintf( l, sizeof(l), "stream %-5s %-4s %8llu PES %11llu bytes  sizes=%s templates=%llu -> %s\n", id, t.ext.c_str(),
-        (unsigned long long)t.fsz.size(), (unsigned long long)streams[i].size(),
+        (unsigned long long)t.fsz.size(), (unsigned long long)t.sn,
         t.h.szmode==SZ_UNITS ? ptname[t.h.ptype] : t.h.szmode==SZ_TABLES ? "packet fill" : "explicit",
         (unsigned long long)t.pm.tm.size(), names[i].c_str() );
       log += l;
@@ -516,21 +526,22 @@ static bool Encode1( const Buf& in, int level, Buf& meta, std::vector<Buf>& stre
   }
   w.bytes( op.b.data(), op.b.size() ); w.bytes( st.data(), st.size() );
   meta.swap( w.b );
+  if( dry ) return true;
   Meta M; Sink chk( 0, &in ); *why = "meta parse";
   return ParseMeta( meta, M ) && Decode( M, streams, chk, why );
 }
 
-static bool Encode( const Buf& in, Buf& meta, std::vector<Buf>& streams, std::vector<std::string>& names ) {
+static bool Encode( const Buf& in, Buf& meta, std::vector<Buf>& streams, std::vector<std::string>& names, std::vector<qword>* dry ) {
   const char* why = ""; std::string log;
   for( int level=2; level>=1; level-- ) {
     log.clear();
-    if( Encode1( in, level, meta, streams, names, &why, log ) && streams.size() ) {
+    if( Encode1( in, level, meta, streams, names, dry, &why, log ) && names.size() ) {
       if( verbose ) fputs( log.c_str(), stdout );
       return true;
     }
-    if( streams.size() ) fprintf( stderr, "warning: verify failed (%s)%s\n", why, level>1 ? ", retrying with fewer models" : "" );
+    if( names.size() ) fprintf( stderr, "warning: verify failed (%s)%s\n", why, level>1 ? ", retrying with fewer models" : "" );
   }
-  meta.clear(); streams.clear(); names.clear();
+  meta.clear(); streams.clear(); names.clear(); if( dry ) dry->clear();
   return false;
 }
 

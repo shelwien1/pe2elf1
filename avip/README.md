@@ -11,14 +11,21 @@ together, byte for byte.
 ## Usage
 
 ```
-avip c [-v] input out_prefix    split: out_prefix.meta + out_prefix.<i>.<ext> per track
-avip d [-v] inp_prefix output   restore the original file
-avip file                       info: container, tracks, what c would write (nothing is written)
+avip c [-v] [-w dir] input out_prefix    split: out_prefix.meta + out_prefix.<i>.<ext> per track
+avip d [-v] [-w dir] inp_prefix output   restore the original file
+avip [-w dir] file                       info: container, tracks, what c would write (nothing is written)
 ```
 
 `-v` prints a line per track, on how its frame sizes, timing and index entries are restored, and a
 line on the layout, with the size of the `struct`: what is left in the meta as plain bytes. A file
 avip doesn't recognise, or can't split and restore exactly, becomes a `.meta` that is a copy of it.
+`-w dir` puts the temporary files (see Memory) in `dir`.
+
+The info pass prints those lines, then the streams and the meta `c` would write, with their sizes.
+It runs `c`'s analysis, but makes no streams (it only counts their bytes) and skips `c`'s check of
+the result, so it writes nothing at all, temporary files included. The check is the one thing that
+can make `c` write something else: where it fails, `c` falls back to a simpler layout, with a
+warning.
 
 With m4vpack, for an AVI with MPEG-4 Part 2 video (DivX, XviD) and MP3 audio:
 
@@ -50,12 +57,13 @@ instead of holding them. A stream that ends up in such a file is renamed into pl
 rather than written again. What avip needs in RAM no longer grows with the size of the file, only
 with its number of frames (about 360 bytes per frame of an MKV), and the output is the same,
 byte for byte. The temporary files take disk space instead: besides the outputs, about another copy
-of the largest track `c` converts (H.264 or HEVC to Annex B), which it makes while converting and
-again while checking the result (a 381 MB MKV with 331 MB of H.264: 805 MB in the output's directory
-at the peak). `AVIP_TMP` puts them in another directory, `AVIP_SPILL_MB` sets the size past which a
-buffer moves to one.
+of the largest track `c` converts (H.264 or HEVC to Annex B), which its check of the result makes
+(a 609 MB MKV with 529 MB of H.264: 1,074 MB in the output's directory at the peak, 608 MB at the
+end). `-w dir` or `AVIP_TMP` puts them in another directory (`-w` first), `AVIP_SPILL_MB` sets the
+size past which a buffer moves to one.
 
-Peak private memory (the heap; mapped file pages are the system's to drop):
+Peak private memory (the heap; mapped file pages are the system's to drop), before the mapped
+files and with them:
 
 | input | `c` before | `c` now | `d` before | `d` now |
 |---|---:|---:|---:|---:|
@@ -63,6 +71,19 @@ Peak private memory (the heap; mapped file pages are the system's to drop):
 | the same as MP4 | 2,601 MB | 269 MB | | |
 | the same as MPEG-TS (929 MB) | 2,854 MB | 508 MB | | |
 | AVI, 157 MB (DivX + MP3) | 315 MB | 165 MB | | |
+
+The analyses and conversions read the frames where they lie in the input, so no track is copied
+out to be converted (a transport stream's tracks were even copied twice: `c` on a 595 MB one took
+1,074 MB of disk at the peak, now 553 MB, its outputs). The info pass makes no streams, so it
+writes no temporary files, and needs less memory than before, when it made them as `c` does
+(609 MB inputs):
+
+| input | info before: memory | its temporary files | info now: memory |
+|---|---:|---:|---:|
+| MKV (H.264 + AAC) | 436 MB | 1,074 MB | 185 MB |
+| the same as MP4 | 326 MB | 1,074 MB | 43 MB |
+| the same as MPEG-TS | 378 MB | 1,074 MB | 246 MB |
+| DVD `.vob` (MPEG-2 + AC-3) | 341 MB | 604 MB | 82 MB |
 
 ## How it works
 

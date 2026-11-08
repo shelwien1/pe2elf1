@@ -22,8 +22,9 @@ static size_t KeyCost( const Track& t, const std::vector<byte>& kf ) {
   return RunsCost( fl ) + std::min( RunsCost( ga ), RunsCost( gr ) ) + 3*size_t( std::min( m1, m2 ) );
 }
 
+// dry: avip's info pass: no streams (their sizes in *dry), no restore check
 static bool Encode1( const Buf& in, bool usexf, bool feat, Buf& meta, std::vector<Buf>& streams, std::vector<std::string>& names,
-                     int& nxf, const char** why, std::string& log ) {
+                     std::vector<qword>* dry, int& nxf, const char** why, std::string& log ) {
   const byte* d = in.data(); qword fs = in.size();
   std::vector<Track> T; std::vector<Blk> B;
   Parser P( d, fs, T, B ); P.File();
@@ -346,18 +347,19 @@ static bool Encode1( const Buf& in, bool usexf, bool feat, Buf& meta, std::vecto
   for( size_t i=0; i<T.size(); i++ ) {
     Track& t = T[i];
     if( !t.ok || t.blob ) continue;
-    Buf& s = t.stream; Buf x; s.reserve( size_t(t.bytes) );
-    if( t.strip.size() ) s.swap( t.sbuf ); else for( size_t j=0; j<t.nsamp; j++ ) s.insert( s.end(), d+t.foff[j], d+t.foff[j]+t.fsz[j] );
+    FrameSrc fr = t.Frames( d );                     // (read where they are: the stream is made once, converted or not)
+    Buf x; XOut xo( dry ? 0 : &x );
     if( t.xform!=XF_NONE ) {
-      if( t.xform==XF_ANNEXB ) ToAnnexB( t, s, x );
-      else if( t.xform==XF_ADTS ) ToADTS( t, s, x );
+      if( t.xform==XF_ANNEXB ) ToAnnexB( t, fr, xo );
+      else if( t.xform==XF_ADTS ) ToADTS( t, fr, xo );
       else if( t.xform==XF_OGG ) {               // DiscardPadding of the last block -> final granulepos
         qword trim = t.disc>0 && t.disc<(1LL<<40) ? ( qword(t.disc)*t.vi.rate + 500000000 ) / 1000000000 : 0;
-        ToOgg( t, s, x, uint(t.idx+1), trim );
+        ToOgg( t, fr, xo, uint(t.idx+1), trim );
       }
-      else { x = t.xhdr; x.insert( x.end(), s.begin(), s.end() ); }
-      qword rawb=0; for( size_t k=0; k<t.xa.size(); k++ ) rawb += t.xa[k].second;
-      if( t.xform==XF_ANNEXB && 2*rawb>s.size() ) t.xform = XF_NONE;   // mostly not NALs: keep raw
+      else xo.Put( t.xhdr.data(), t.xhdr.size() ), PutFrames( fr, t.nsamp, xo );
+      qword rawb=0, sb=0; for( size_t k=0; k<t.xa.size(); k++ ) rawb += t.xa[k].second;
+      for( size_t j=0; j<t.nsamp; j++ ) sb += t.Size(j);
+      if( t.xform==XF_ANNEXB && 2*rawb>sb ) t.xform = XF_NONE;   // mostly not NALs: keep raw
       else t.conv = true;
     }
     // codec positions for the timestamp model (same inputs as the decoder will have)
@@ -366,15 +368,15 @@ static bool Encode1( const Buf& in, bool usexf, bool feat, Buf& meta, std::vecto
     else if( t.codec=="V_MPEGH/ISO/HEVC" && !t.enc && t.strip.empty() && t.lensize ) ckind = 3, cparam = t.lensize;
     else if( t.xform==XF_OGG ) ckind = 2;
     if( ckind ) {
-      std::vector<qword> fo( size_t(t.nsamp+1), 0 );
-      for( size_t j=0; j<t.nsamp; j++ ) fo[j+1] = fo[j]+t.Size(j);
       Buf hdr, pv;
       if( t.xform==XF_ANNEXB ) hdr = t.xhdr;
       if( ckind==2 ) { XiphLace( t.vl, 3, pv ); for( int h=0; h<3; h++ ) pv.insert( pv.end(), t.vh[h], t.vh[h]+t.vl[h] ); }
-      if( !CodecPositions( ckind, cparam, hdr, pv, s.data(), fo, t.nsamp, t.cpos ) ) ckind = 0, t.cpos.clear();
+      if( !CodecPositions( ckind, cparam, hdr, pv, fr, t.nsamp, t.cpos ) ) ckind = 0, t.cpos.clear();
     }
     ChooseTs( t, ckind, cparam, P.tcs );
-    if( t.conv ) s.swap( x ), nxf++;
+    if( t.conv ) t.stream.swap( x ), t.slen = xo.n, nxf++;
+    else if( t.strip.size() && !dry ) t.slen = t.sbuf.size(), t.stream.swap( t.sbuf );
+    else { XOut o( dry ? 0 : &t.stream ); PutFrames( fr, t.nsamp, o ); t.slen = o.n; }
   }
   ChooseKeys( T, B );
   run( 1 );
@@ -384,17 +386,17 @@ static bool Encode1( const Buf& in, bool usexf, bool feat, Buf& meta, std::vecto
 
   Writer w; PutMetaHdr( w, FMT_MKV );
   w.vint(nt);
-  streams.clear(); names.clear();
+  streams.clear(); names.clear(); if( dry ) dry->clear();
   for( size_t i=0; i<T.size(); i++ ) {
     Track& t = T[i]; if( !t.ok ) continue;
     if( t.blob ) {
-      streams.push_back( Buf( d+t.foff[0], d+t.foff[0]+t.bytes ) );
+      if( dry ) dry->push_back( t.bytes ); else streams.push_back( Buf( d+t.foff[0], d+t.foff[0]+t.bytes ) );
       TrackHead h; h.ext = t.name; h.xform = XF_BLOB; PutHead( w, h );
       names.push_back( TrackSuffix( names.size(), h.ext ) );
       if( verbose ) { char l[160]; snprintf( l, sizeof(l), "attachment %-24s %10llu bytes -> %s\n", t.codec.c_str(), (unsigned long long)t.bytes, names.back().c_str() ); log += l; }
       continue;
     }
-    streams.push_back( Buf() ); streams.back().swap( t.stream );
+    if( dry ) dry->push_back( t.slen ); else streams.push_back( Buf() ), streams.back().swap( t.stream );
     if( t.ext=="mjpeg" && t.nsamp==1 ) t.ext = "jpg";      // e.g. ffmpeg's attached_pic track
     if( t.szmode==3 && t.xform!=XF_ADTS && t.xform!=XF_OGG ) t.szmode = 0;
     TrackHead h;
@@ -459,24 +461,25 @@ static bool Encode1( const Buf& in, bool usexf, bool feat, Buf& meta, std::vecto
   w.bytes( op.b.data(), op.b.size() ); w.bytes( st.data(), st.size() );
   meta.swap( w.b );
 
+  if( dry ) return true;
   // verify: run the decoder on the actual output
   Meta M; Sink chk( 0, &in ); *why = "meta parse";
   return ParseMeta(meta,M) && Decode(M,streams,chk,why);
 }
 
-static bool Encode( const Buf& in, Buf& meta, std::vector<Buf>& streams, std::vector<std::string>& names ) {
+static bool Encode( const Buf& in, Buf& meta, std::vector<Buf>& streams, std::vector<std::string>& names, std::vector<qword>* dry ) {
   // fallbacks: without stream conversion, without the v4 layout ops, without both
   static const bool lv[4][2] = { {true,true}, {false,true}, {true,false}, {false,false} };
   const char* why = ""; int nxf = 0, nxf0 = 0; std::string log;
   for( int i=0; i<4; i++ ) {
     if( i>0 && !lv[i][0] && !nxf0 ) continue;       // no conversions: same as with them
     log.clear();
-    bool ok = Encode1( in, lv[i][0], lv[i][1], meta, streams, names, nxf, &why, log );
+    bool ok = Encode1( in, lv[i][0], lv[i][1], meta, streams, names, dry, nxf, &why, log );
     if( i==0 ) nxf0 = nxf;
     if( ok ) { if( verbose ) fputs( log.c_str(), stdout ); return true; }
     fprintf( stderr, "warning: verify failed (%s)%s\n", why, i<3 ? ", retrying with fewer transforms" : "" );
   }
-  meta.clear(); streams.clear(); names.clear();
+  meta.clear(); streams.clear(); names.clear(); if( dry ) dry->clear();
   return false;
 }
 

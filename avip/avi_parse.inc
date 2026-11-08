@@ -38,15 +38,15 @@ static void SetupTrack( Track& t, const byte* d ) {
 }
 
 // chunk sizes: explicit column, or derived from the data (checked in stream context)
-static void ChooseSizeMode( const byte* d, Track& t, const Buf& raw ) {
+static void ChooseSizeMode( Track& t, const FrameSrc& fs ) {
   t.h.szmode = SZ_EXPLICIT; t.h.ptype = t.h.pparam = 0; t.h.esc.clear();
   t.h.col.assign( t.fsz.begin(), t.fsz.end() );
   if( t.xform==XF_ADTS ) { t.h.szmode = SZ_XFORM; t.h.col.clear(); return; }
-  ChooseUnits( t.cptype, t.cpparam, d, t.foff, t.fsz, raw, t.h );
+  ChooseUnits( t.cptype, t.cpparam, fs, t.fsz.size(), t.h );
 }
 
-static void ToADTS( Track& t, const Buf& s, Buf& c ) {
-  ::ToADTS( s, [&]( qword j ) { return t.fsz[size_t(j)]; }, t.fsz.size(), t.adts, c, t.h.xa );
+static void ToADTS( Track& t, const FrameSrc& fs, XOut& c ) {
+  ::ToADTS( fs, t.fsz.size(), t.adts, c, t.h.xa );
 }
 
 enum { K_LIST, K_LEND, K_CHUNK, K_IDX1, K_IX, K_INDX, K_FLD };

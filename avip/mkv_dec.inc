@@ -31,7 +31,7 @@ static bool Restore( Meta& M, std::vector<const Buf*> S, Sink& out, const char**
     t.fo.resize( size_t(t.nsamp+1) ); t.fo[0] = 0;
     for( size_t k=0; k<t.nsamp; k++ ) t.fo[k+1] = t.fo[k]+t.sz[k];
     if( t.fo[size_t(t.nsamp)]!=s.size() ) FAIL("stream size mismatch");
-    if( t.tsmode && t.ckind && !CodecPositions( t.ckind, t.cparam, t.xhdr, t.priv, s.data(), t.fo, t.nsamp, t.cpos ) )
+    if( t.tsmode && t.ckind && !CodecPositions( t.ckind, t.cparam, t.xhdr, t.priv, FlatFrames( s.data(), t.fo ), t.nsamp, t.cpos ) )
       FAIL("bad timestamp model");
     t.kf.clear();
     if( t.km ) {

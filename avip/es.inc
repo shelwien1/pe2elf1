@@ -39,7 +39,8 @@ static std::string Kind( const byte* d, qword n ) {
   return k=="bin" ? "" : k;
 }
 
-static bool Encode( const Buf& in, Buf& meta, std::vector<Buf>& streams, std::vector<std::string>& names ) {
+// dry: avip's info pass: no stream (its size in *dry), no restore check
+static bool Encode( const Buf& in, Buf& meta, std::vector<Buf>& streams, std::vector<std::string>& names, std::vector<qword>* dry ) {
   std::string k = Kind( in.data(), in.size() );
   if( k.empty() ) return false;
   TrackHead h; h.ext = k; h.xform = XF_NONE; h.szmode = SZ_EXPLICIT;
@@ -47,8 +48,10 @@ static bool Encode( const Buf& in, Buf& meta, std::vector<Buf>& streams, std::ve
   h.nf = h.col.size();
   Writer w; PutMetaHdr( w, FMT_ES ); w.vint( 1 ); PutHead( w, h );
   meta.swap( w.b );
-  streams.assign( 1, in ); names.assign( 1, TrackSuffix( 0, k ) );
+  names.assign( 1, TrackSuffix( 0, k ) );
   if( verbose ) printf( "elementary stream: %s, %llu bytes -> %s\n", k.c_str(), (unsigned long long)in.size(), names[0].c_str() );
+  if( dry ) { streams.clear(); dry->assign( 1, in.size() ); return true; }
+  streams.assign( 1, in );
   Meta M; Sink chk( 0, &in ); const char* why = "";
   return ParseMeta( meta, M ) && Decode( M, streams, chk, &why );
 }

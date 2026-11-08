@@ -19,14 +19,16 @@ static const char* FmtName( int f ) {
   return f>=0 && f<8 ? fname[f] : "";
 }
 
-static bool EncodeAs( int f, const Buf& in, Buf& meta, std::vector<Buf>& S, std::vector<std::string>& N ) {
+// meta, streams S (named N) of input in of container f; dry: avip's info pass, the streams'
+// sizes in *dry instead (S stays empty) and no restore check
+static bool EncodeAs( int f, const Buf& in, Buf& meta, std::vector<Buf>& S, std::vector<std::string>& N, std::vector<qword>* dry ) {
   switch( f ) {
-  case FMT_MKV: return mkv::Encode( in, meta, S, N );
-  case FMT_AVI: return avi::Encode( in, meta, S, N );
-  case FMT_MP4: return mp4::Encode( in, meta, S, N );
-  case FMT_PS:  return ps::Encode( in, meta, S, N );
-  case FMT_TS:  return ts::Encode( in, meta, S, N );
-  case FMT_ES:  return es::Encode( in, meta, S, N );
+  case FMT_MKV: return mkv::Encode( in, meta, S, N, dry );
+  case FMT_AVI: return avi::Encode( in, meta, S, N, dry );
+  case FMT_MP4: return mp4::Encode( in, meta, S, N, dry );
+  case FMT_PS:  return ps::Encode( in, meta, S, N, dry );
+  case FMT_TS:  return ts::Encode( in, meta, S, N, dry );
+  case FMT_ES:  return es::Encode( in, meta, S, N, dry );
   }
   return false;
 }
@@ -98,11 +100,12 @@ static void MetaInfo( const Buf& meta, const char* fmt ) {
   }
 }
 
-// vp file: what "vp c" would produce, without writing anything (container analysis and
-// verification run in memory); for a vp meta, its track list
-static int Info( const char* fn ) {
+// vp file: what "vp c" would produce, without writing anything: the container analysis as c
+// runs it, but no streams are made (only their sizes counted) and no restore check runs, so
+// nothing needs temporary files (wdir: -w, where they would go). For a vp meta, its track list
+static int Info( const char* fn, const char* wdir ) {
   Buf inb; const Buf& in = inb;                           // (read through const: a mapped file stays mapped)
-  SpillSetup( "" );
+  SpillSetup( "", wdir );
   if( !LoadFile(fn,inb) ) { fprintf( stderr, "can't read %s\n", fn ); return 2; }
   int f = Probe( in.data(), in.size() );
   if( f==FMT_NONE ) {
@@ -121,13 +124,13 @@ static int Info( const char* fn ) {
   printf( "%s: %s, %llu bytes\n", fn, FmtName( f ), (unsigned long long)in.size() );
   fflush( stdout );
   int v0 = verbose; verbose = 1;
-  Buf meta; std::vector<Buf> S; std::vector<std::string> N;
-  bool ok = EncodeAs( f, in, meta, S, N );
+  Buf meta; std::vector<Buf> S; std::vector<std::string> N; std::vector<qword> Z;
+  bool ok = EncodeAs( f, in, meta, S, N, &Z );
   verbose = v0;
-  if( ok && S.empty() && meta.size()>=in.size() ) ok = false;
+  if( ok && N.empty() && meta.size()>=in.size() ) ok = false;
   if( !ok ) { printf( "no gain or not restorable: stored as a plain copy\n" ); return 0; }
   qword tot = meta.size();
-  for( size_t i=0; i<S.size(); i++ ) tot += S[i].size(), printf( "%s: %llu\n", N[i].c_str()+1, (unsigned long long)S[i].size() );
+  for( size_t i=0; i<N.size(); i++ ) tot += Z[i], printf( "%s: %llu\n", N[i].c_str()+1, (unsigned long long)Z[i] );
   printf( "meta: %llu\n", (unsigned long long)meta.size() );
   printf( "%llu -> %llu\n", (unsigned long long)in.size(), (unsigned long long)tot );
   return 0;
@@ -135,38 +138,44 @@ static int Info( const char* fn ) {
 
 static int Main( int argc, char** argv ) {
   // vp file: info. Else mode c|d first, then options, then the two file names ("--" ends options)
+  const char* wdir = 0;                                   // -w: the directory for temporary files
   if( argc>1 && strcmp(argv[1],"c") && strcmp(argv[1],"d") ) {
     int a = 1;
     while( a<argc && argv[a][0]=='-' && argv[a][1] ) {
       if( !strcmp(argv[a],"--") ) { a++; break; }
       if( !strcmp(argv[a],"-v") ) a++;
+      else if( !strcmp(argv[a],"-w") && a+1<argc ) wdir = argv[a+1], a += 2;
+      else if( !strcmp(argv[a],"-w") ) { fprintf( stderr, "-w needs a directory\n" ); return 1; }
       else { fprintf( stderr, "unknown option %s\n", argv[a] ); return 1; }
     }
-    if( argc-a==1 ) return Info( argv[a] );
+    if( argc-a==1 ) return Info( argv[a], wdir );
   }
   bool ok = argc>1 && (!strcmp(argv[1],"c") || !strcmp(argv[1],"d"));
   int a = 2;
   while( ok && a<argc && argv[a][0]=='-' && argv[a][1] ) {
     if( !strcmp(argv[a],"--") ) { a++; break; }
     if( !strcmp(argv[a],"-v") ) verbose=1, a++;
+    else if( !strcmp(argv[a],"-w") && a+1<argc ) wdir = argv[a+1], a += 2;
+    else if( !strcmp(argv[a],"-w") ) { fprintf( stderr, "-w needs a directory\n" ); ok = false; }
     else { fprintf( stderr, "unknown option %s\n", argv[a] ); ok = false; }
   }
   if( !ok || argc-a!=2 ) {
     fprintf( stderr,
       "vp - lossless mp4/mkv/avi/mpeg dump/restore\n"
-      "  vp c [-v] input out_prefix   split into out_prefix.meta + per-track streams\n"
-      "  vp d [-v] inp_prefix output  restore\n"
-      "  vp file                      info: container, tracks, what c would write (nothing is written)\n" );
+      "  vp c [-v] [-w dir] input out_prefix   split into out_prefix.meta + per-track streams\n"
+      "  vp d [-v] [-w dir] inp_prefix output  restore\n"
+      "  vp [-w dir] file                      info: container, tracks, what c would write (nothing is written)\n"
+      "  -w dir: temporary files go to dir (default: AVIP_TMP, else the output's directory)\n" );
     return 1;
   }
   const char* f1 = argv[a]; const char* f2 = argv[a+1];
-  SpillSetup( f2 );
+  SpillSetup( f2, wdir );
   if( argv[1][0]=='c' ) {
     Buf inb, meta; const Buf& in = inb;                     // (read through const: a mapped file stays mapped)
     if( !LoadFile(f1,inb) ) { fprintf( stderr, "can't read %s\n", f1 ); return 2; }
     std::vector<Buf> S; std::vector<std::string> N;
     int f = Probe( in.data(), in.size() );
-    bool ok = EncodeAs( f, in, meta, S, N );
+    bool ok = EncodeAs( f, in, meta, S, N, 0 );
     if( ok && S.empty() && meta.size()>=in.size() ) ok = false;     // nothing gained over a copy
     else if( !ok && f!=FMT_NONE ) fprintf( stderr, "warning: storing as a plain copy\n" );
     if( !ok ) { PlainCopy( in, meta ); S.clear(); N.clear(); }

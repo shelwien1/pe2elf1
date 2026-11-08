@@ -129,7 +129,7 @@ static bool Restore( Meta& M, const std::vector<const Buf*>& S, Sink& out, const
       std::vector<qword> fo( size_t(t.nsamp+1), 0 );
       for( qword k=0; k<t.nsamp; k++ ) fo[size_t(k+1)] = fo[size_t(k)]+t.Size(k);
       TimeIn ti; Buf none;
-      if( !TimeInputs( t.tm.ckind, t.tm.lensize, t.xform==XF_ANNEXB ? t.xhdr : none, t.priv, s.data(), fo, t.nsamp, ti, t.tm.fck, t.tm.fckp ) ) FAIL("bad timing model");
+      if( !TimeInputs( t.tm.ckind, t.tm.lensize, t.xform==XF_ANNEXB ? t.xhdr : none, t.priv, FlatFrames( s.data(), fo ), t.nsamp, ti, t.tm.fck, t.tm.fckp ) ) FAIL("bad timing model");
       TimeApply( t.tm, ti, t.nsamp, t.dur, t.dts, t.cto, t.sync );
       if( t.tm.hassdtp ) SdtpApply( t.tm, ti, nsp, t.sdtp );
       if( t.tflags&16 ) FlagsApply( t.fm, ti, t.nsamp, t.sfl );

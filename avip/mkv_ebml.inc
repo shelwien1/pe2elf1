@@ -199,31 +199,22 @@ static int LacePred( const uint* sz, int nf ) {
   return xl<el ? 1 : 3;
 }
 
-static void H264Display( const byte* hdr, qword hl, const byte* s, const std::vector<qword>& fo, qword nf, int ls, std::vector<qword>& disp ) {
-  std::vector<byte> fl;
-  VideoFeat<H264State>( hdr, hl, s, fo, nf, ls, disp, fl );
-}
-
 // codec positions for the timestamp model: 1 = H.264 display index, 2 = Vorbis sample position,
-// 3 = HEVC display index
+// 3 = HEVC display index; frames of fs
 static bool CodecPositions( int ckind, int cparam, const Buf& hdr, const Buf& priv,
-                            const byte* s, const std::vector<qword>& fo, qword nf, std::vector<qword>& cp ) {
-  if( ckind==1 ) {
+                            const FrameSrc& fs, qword nf, std::vector<qword>& cp ) {
+  std::vector<byte> fl;
+  if( ckind==1 || ckind==3 ) {
     if( cparam<1 || cparam>4 ) return false;
-    H264Display( hdr.data(), hdr.size(), s, fo, nf, cparam, cp );
-    return true;
-  }
-  if( ckind==3 ) {
-    if( cparam<1 || cparam>4 ) return false;
-    std::vector<byte> fl;
-    VideoFeat<HevcState>( hdr.data(), hdr.size(), s, fo, nf, cparam, cp, fl );
+    if( ckind==1 ) VideoFeat<H264State>( hdr.data(), hdr.size(), fs, nf, cparam, cp, fl );
+    else VideoFeat<HevcState>( hdr.data(), hdr.size(), fs, nf, cparam, cp, fl );
     return true;
   }
   if( ckind==2 ) {
     const byte* hp[3]; qword hl[3]; VorbisInfo vi;
     if( !SplitXiphHeaders( priv.data(), priv.size(), hp, hl ) || !VorbisParse( hp, hl, vi ) ) return false;
     cp.resize( size_t(nf) ); uint prev = 0; qword g = 0;
-    for( qword f=0; f<nf; f++ ) cp[size_t(f)] = g, g += VorbisDur( vi, s+fo[size_t(f)], fo[size_t(f+1)]-fo[size_t(f)], prev );
+    for( qword f=0; f<nf; f++ ) { qword z = fs.Z( f ); cp[size_t(f)] = g, g += VorbisDur( vi, z ? fs.P( f ) : 0, z, prev ); }
     return true;
   }
   return false;

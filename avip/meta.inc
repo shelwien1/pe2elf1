@@ -175,21 +175,34 @@ static bool HeadUntransform( const TrackHead& h, const Buf& c, Buf& r, std::vect
   return false;
 }
 
-// unit-derived size model for frames at d+foff[j] (sizes fsz) of raw stream raw: the
-// column and escapes if cheaper than explicit sizes (sizes checked in stream context)
-static bool ChooseUnits( int ptype, int pparam, const byte* d, const std::vector<qword>& foff, const std::vector<uint>& fsz,
-                         const Buf& raw, TrackHead& h ) {
-  qword n = fsz.size();
+// unit-derived size model for the frames of fs: the column and escapes if cheaper than explicit
+// sizes. Each size is checked in stream context, as the decoder derives it (frame j followed by
+// the frames after it): where the frames lie back to back, there; else in a window of frame j
+// and at least UNIT_LOOK bytes after it, which gives the same result (see UNIT_LOOK)
+static bool ChooseUnits( int ptype, int pparam, const FrameSrc& fs, qword n, TrackHead& h ) {
   if( ptype==PT_NONE || !n ) return false;
   auto colcost = []( const std::vector<qword>& v ) { Writer w; PutCol( w, v ); return w.b.size(); };
-  std::vector<qword> ex( fsz.begin(), fsz.end() );
+  std::vector<qword> ex( (size_t)n );
+  for( qword j=0; j<n; j++ ) ex[size_t(j)] = fs.Z( j );
   size_t best = colcost( ex );
-  std::vector<qword> v( (size_t)n ), es; qword o = 0, ne = 0;
-  for( qword j=0; j<n && ne<n/4+8; o+=fsz[size_t(j)], j++ ) {
-    qword z = fsz[size_t(j)];
+  std::vector<qword> v( (size_t)n ), es; qword ne = 0;
+  Buf win; qword wj = 0, wb = 0; size_t ws = 0;             // window: frames [wj,wb) back to back, frame wj at ws
+  for( qword j=0; j<n && ne<n/4+8; j++ ) {
+    qword z = ex[size_t(j)];
     if( !z ) { v[size_t(j)] = 1; continue; }
-    long long u = CountUnits( ptype, pparam, d+foff[size_t(j)], z );
-    if( u>0 && UnitsLen( ptype, pparam, raw.data()+o, raw.size()-o, qword(u) )==z ) v[size_t(j)] = qword(u)+1;
+    const byte* p = fs.P( j );
+    long long u = CountUnits( ptype, pparam, p, z );
+    bool ok = false;
+    if( u>0 && fs.Flat() ) ok = UnitsLen( ptype, pparam, p, fs.end-qword(p-fs.base), qword(u) )==z;
+    else if( u>0 ) {
+      if( wb<=j ) win.clear(), ws = 0, wj = wb = j;
+      for( ; wj<j; wj++ ) ws += size_t(ex[size_t(wj)]);
+      if( ws>=(size_t(1)<<20) && 2*ws>=win.size() ) win.erase( win.begin(), win.begin()+ws ), ws = 0;
+      while( wb<n && qword(win.size()-ws)<z+UNIT_LOOK ) AppendFrames( fs, wb, wb+1, win ), wb++;
+      const Buf& w = win;
+      ok = UnitsLen( ptype, pparam, w.data()+ws, w.size()-ws, qword(u) )==z;
+    }
+    if( ok ) v[size_t(j)] = qword(u)+1;
     else v[size_t(j)] = 0, es.push_back( z ), ne++;
   }
   if( ne>=n/4+8 ) return false;

@@ -1,8 +1,9 @@
 // AVI: encoder
 namespace avi {
 
+// dry: avip's info pass: no streams (their sizes in *dry), no restore check
 static bool Encode1( const Buf& in, bool usexf, bool regen, Buf& meta, std::vector<Buf>& streams, std::vector<std::string>& names,
-                     int& nxf, const char** why, std::string& log ) {
+                     std::vector<qword>* dry, int& nxf, const char** why, std::string& log ) {
   const byte* d = in.data(); qword fs = in.size();
   Parser P( d, fs ); P.File();
   nxf = 0;
@@ -451,19 +452,20 @@ static bool Encode1( const Buf& in, bool usexf, bool regen, Buf& meta, std::vect
 
   Writer w; PutMetaHdr( w, FMT_AVI );
   w.vint(nt);
-  streams.clear(); names.clear();
+  streams.clear(); names.clear(); if( dry ) dry->clear();
   for( size_t i=0; i<T.size(); i++ ) {
     Track& t = T[i]; if( !t.ok ) continue;
-    Buf s; s.reserve( size_t(t.bytes) );
-    for( size_t k=0; k<t.fsz.size(); k++ ) s.insert( s.end(), d+t.foff[k], d+t.foff[k]+t.fsz[k] );
-    ChooseSizeMode( d, t, s );
-    t.h.xform = t.xform; t.h.nf = t.fsz.size(); t.h.hdrlen = 0;
-    if( t.xform==XF_ADTS ) { Buf x; ToADTS( t, s, x ); s.swap( x ); nxf++; }
-    else if( t.xform==XF_HDR ) { Buf x = t.xhdr; x.insert( x.end(), s.begin(), s.end() ); s.swap( x ); nxf++; t.h.hdrlen = t.xhdr.size(); }
-    if( t.ext=="mp2" && s.size()>=2 && s[0]==0xFF && (s[1]&0xE0)==0xE0 ) {
-      int lay = (s[1]>>1)&3; if( lay==3 ) t.ext = "mp1"; else if( lay==1 ) t.ext = "mp3";
+    FrameSrc fr = InPlaceFrames( d, t.foff, t.fsz ); qword nf = t.fsz.size();   // (read where they are)
+    ChooseSizeMode( t, fr );
+    t.h.xform = t.xform; t.h.nf = nf; t.h.hdrlen = 0;
+    Buf s; XOut o( dry ? 0 : &s );
+    if( t.xform==XF_ADTS ) { ToADTS( t, fr, o ); nxf++; }
+    else if( t.xform==XF_HDR ) { o.Put( t.xhdr.data(), t.xhdr.size() ); PutFrames( fr, nf, o ); nxf++; t.h.hdrlen = t.xhdr.size(); }
+    else PutFrames( fr, nf, o );
+    if( t.ext=="mp2" && o.n>=2 && o.h[0]==0xFF && (o.h[1]&0xE0)==0xE0 ) {
+      int lay = (o.h[1]>>1)&3; if( lay==3 ) t.ext = "mp1"; else if( lay==1 ) t.ext = "mp3";
     }
-    streams.push_back( Buf() ); streams.back().swap( s );
+    if( dry ) dry->push_back( o.n ); else streams.push_back( Buf() ), streams.back().swap( s );
     t.h.ext = t.xext.size() && (t.xform!=XF_NONE || t.ckind!=CK_RAW) ? t.xext : t.ext;
     if( t.xform==XF_NONE && t.xext=="wav" ) t.h.ext = t.ext;
     std::string suf = TrackSuffix( names.size(), t.h.ext );
@@ -508,25 +510,26 @@ static bool Encode1( const Buf& in, bool usexf, bool regen, Buf& meta, std::vect
   }
   w.bytes( op.b.data(), op.b.size() ); w.bytes( st.data(), st.size() );
   meta.swap( w.b );
+  if( dry ) return true;
 
   // verify: run the decoder on the actual output
   Meta M; Sink chk( 0, &in ); *why = "meta parse";
   return ParseMeta(meta,M) && Decode(M,streams,chk,why);
 }
 
-static bool Encode( const Buf& in, Buf& meta, std::vector<Buf>& streams, std::vector<std::string>& names ) {
+static bool Encode( const Buf& in, Buf& meta, std::vector<Buf>& streams, std::vector<std::string>& names, std::vector<qword>* dry ) {
   // fallbacks: without stream conversion, without index/order regeneration, without both
   static const bool lv[4][2] = { {true,true}, {false,true}, {true,false}, {false,false} };
   const char* why = ""; int nxf = 0, nxf0 = 0; std::string log;
   for( int i=0; i<4; i++ ) {
     if( i>0 && !lv[i][0] && !nxf0 ) continue;
     log.clear();
-    bool ok = Encode1( in, lv[i][0], lv[i][1], meta, streams, names, nxf, &why, log );
+    bool ok = Encode1( in, lv[i][0], lv[i][1], meta, streams, names, dry, nxf, &why, log );
     if( i==0 ) nxf0 = nxf;
     if( ok ) { if( verbose ) fputs( log.c_str(), stdout ); return true; }
     fprintf( stderr, "warning: verify failed (%s)%s\n", why, i<3 ? ", retrying with fewer transforms" : "" );
   }
-  meta.clear(); streams.clear(); names.clear();
+  meta.clear(); streams.clear(); names.clear(); if( dry ) dry->clear();
   return false;
 }
 

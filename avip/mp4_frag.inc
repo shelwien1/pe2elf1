@@ -86,6 +86,16 @@ static void ParseFragments( const byte* d, qword fs, const std::vector<Box>& top
   }
 }
 
+// the samples of t where they lie in the file (so, sz: their offsets and sizes, made here)
+static FrameSrc SampleFrames( const byte* d, const Track& t, std::vector<qword>& so, std::vector<uint>& sz ) {
+  so.resize( size_t(t.nsamp) ); sz.resize( size_t(t.nsamp) );
+  for( size_t c=0; c<t.coff.size(); c++ ) {
+    qword o = t.coff[c];
+    for( qword j=t.cfirst[c]; j<t.cfirst[c]+t.spc[c]; o+=t.Size(j), j++ ) so[size_t(j)] = o, sz[size_t(j)] = t.Size(j);
+  }
+  return InPlaceFrames( d, so, sz );
+}
+
 // choose sample-size representation: derive from sample data if it's self-delimiting
 static void ChooseSizeMode( const byte* d, Track& t ) {
   t.szmode = 0; t.ptype = PT_NONE; t.pparam = 0;
@@ -96,14 +106,8 @@ static void ChooseSizeMode( const byte* d, Track& t ) {
   if( !cut ) return;
   if( t.xform==XF_ADTS || t.xform==XF_OGG ) { t.szmode = 3; return; }   // ADTS frame_length / Ogg lacing carry the sizes
   if( t.cpt==PT_VOP || t.cpt==PT_M2V || t.cpt==PT_JPEG || t.cpt==PT_AU264 ) {   // start code units: sizes checked in stream context
-    std::vector<qword> fo( (size_t)n ); std::vector<uint> fz( (size_t)n ); Buf raw; raw.reserve( size_t(t.bytes) );
-    for( size_t c=0; c<t.coff.size(); c++ ) {
-      raw.insert( raw.end(), d+t.coff[c], d+t.coff[c]+t.csz[c] );
-      qword o = t.coff[c];
-      for( qword j=t.cfirst[c]; j<t.cfirst[c]+t.spc[c]; o+=t.Size(j), j++ ) fo[size_t(j)] = o, fz[size_t(j)] = t.Size(j);
-    }
-    TrackHead h;
-    if( ChooseUnits( t.cpt, t.cpp, d, fo, fz, raw, h ) ) {
+    std::vector<qword> so; std::vector<uint> sz; TrackHead h;
+    if( ChooseUnits( t.cpt, t.cpp, SampleFrames( d, t, so, sz ), n, h ) ) {
       t.szmode = 2; t.ptype = h.ptype; t.pparam = h.pparam; t.esc.swap( h.esc );
       t.ucnt.resize( h.col.size() ); for( size_t k=0; k<h.col.size(); k++ ) t.ucnt[k] = uint(h.col[k]);
     }
@@ -151,19 +155,19 @@ static qword StructOff( qword p, const std::vector<Item>& it, const std::vector<
   return p-cut[lo];
 }
 
-// forward stream transforms: raw sample data s (sample order) -> converted stream c
-static void ToAnnexB( Track& t, const Buf& s, Buf& c ) {
-  ::ToAnnexB( s, [&]( qword j ) { return t.Size(j); }, t.nsamp, t.lensize, t.xhdr, c, t.xa, t.xb );
+// forward stream transforms: the samples (fs, in sample order) -> converted stream c
+static void ToAnnexB( Track& t, const FrameSrc& fs, XOut& c ) {
+  ::ToAnnexB( fs, t.nsamp, t.lensize, t.xhdr, c, t.xa, t.xb );
 }
 
-static void ToADTS( Track& t, const Buf& s, Buf& c ) {
-  t.xb.clear(); ::ToADTS( s, [&]( qword j ) { return t.Size(j); }, t.nsamp, t.adts, c, t.xa );
+static void ToADTS( Track& t, const FrameSrc& fs, XOut& c ) {
+  t.xb.clear(); ::ToADTS( fs, t.nsamp, t.adts, c, t.xa );
 }
 
 // Vorbis packets -> Ogg Vorbis file (header packets from the codec config).
 // trim: samples to cut from the end (lowers the final granulepos)
-static void ToOgg( Track& t, const Buf& s, Buf& c, uint serial, qword trim ) {
-  ::ToOgg( s, [&]( qword j ) { return t.Size(j); }, t.nsamp, t.vh, t.vl, t.vi, serial, trim, c );
+static void ToOgg( Track& t, const FrameSrc& fs, XOut& c, uint serial, qword trim ) {
+  ::ToOgg( fs, t.nsamp, t.vh, t.vl, t.vi, serial, trim, c );
 }
 
 // aligned chunk model fit for a dependent track (see AlignedCum): best a, rule, O by

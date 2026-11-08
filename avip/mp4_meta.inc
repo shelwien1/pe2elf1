@@ -253,7 +253,7 @@ static bool EarlyDts( const DTrack& t, const Buf& s, std::vector<qword>& dts ) {
     if( t.xsz.size()!=t.nsamp ) return false;
     std::vector<qword> fo( size_t(t.nsamp+1), 0 );
     for( qword k=0; k<t.nsamp; k++ ) fo[size_t(k+1)] = fo[size_t(k)]+t.xsz[size_t(k)];
-    if( fo.back()>s.size() || !TimeInputs( 3, 0, none, t.priv, s.data(), fo, t.nsamp, ti ) ) return false;
+    if( fo.back()>s.size() || !TimeInputs( 3, 0, none, t.priv, FlatFrames( s.data(), fo ), t.nsamp, ti ) ) return false;
   } else {
     ti.x.resize( size_t(t.nsamp+1) );
     for( qword n=0; n<=t.nsamp; n++ ) ti.x[size_t(n)] = n;

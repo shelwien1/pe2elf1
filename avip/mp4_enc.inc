@@ -70,7 +70,9 @@ static void FragPlan( const byte* d, const std::vector<Box>& top, std::vector<Tr
   }
 }
 
-static bool Encode1( const Buf& in, bool usexf, bool timing, Buf& meta, std::vector<Buf>& streams, std::vector<std::string>& names, int& nxf, const char** why, std::string& log ) {
+// dry: avip's info pass: no streams (their sizes in *dry), no restore check
+static bool Encode1( const Buf& in, bool usexf, bool timing, Buf& meta, std::vector<Buf>& streams, std::vector<std::string>& names,
+                     std::vector<qword>* dry, int& nxf, const char** why, std::string& log ) {
   const byte* d = in.data(); qword fs = in.size();
   std::vector<Track> T; std::vector<qword> bdo_pos; std::vector<char> bdo_ok;
   nxf = 0;
@@ -507,38 +509,37 @@ static bool Encode1( const Buf& in, bool usexf, bool timing, Buf& meta, std::vec
 
   Writer w; PutMetaHdr( w, FMT_MP4 );
   w.vint(nt);
-  streams.clear(); names.clear();
+  streams.clear(); names.clear(); if( dry ) dry->clear();
   for( size_t i=0; i<T.size(); i++ ) {
     Track& t = T[i]; if( !t.ok ) continue;
     if( t.blob ) {
-      streams.push_back( Buf( d+t.coff[0], d+t.coff[0]+t.csz[0] ) );
+      if( dry ) dry->push_back( t.csz[0] ); else streams.push_back( Buf( d+t.coff[0], d+t.coff[0]+t.csz[0] ) );
       TrackHead h; h.ext = t.name; h.xform = XF_BLOB; PutHead( w, h );
       names.push_back( TrackSuffix( names.size(), h.ext ) );
       if( verbose ) { char l[128]; snprintf( l, sizeof(l), "covr: %llu bytes -> %s\n", (unsigned long long)t.csz[0], names.back().c_str() ); log += l; }
       continue;
     }
-    // stream: samples in sample order, converted to an elementary stream format if possible
-    Buf s; s.reserve( size_t(t.bytes) );
-    for( size_t c=0; c<t.coff.size(); c++ ) s.insert( s.end(), d+t.coff[c], d+t.coff[c]+t.csz[c] );
-    Buf x; bool conv = false;
+    // stream: samples in sample order (read where they are), converted to an elementary stream
+    // format if possible
+    std::vector<qword> so; std::vector<uint> sz; FrameSrc fr = SampleFrames( d, t, so, sz );
+    Buf s; XOut xo( dry ? 0 : &s ); bool conv = false;
     if( t.xform!=XF_NONE ) {
-      if( t.xform==XF_ANNEXB ) ToAnnexB( t, s, x );
-      else if( t.xform==XF_OGG ) ToOgg( t, s, x, uint(t.idx+1), 0 );
-      else if( t.xform==XF_HDR ) x.reserve( t.xhdr.size()+s.size() ), x.assign( t.xhdr.begin(), t.xhdr.end() ), x.insert( x.end(), s.begin(), s.end() );
-      else ToADTS( t, s, x );
+      if( t.xform==XF_ANNEXB ) ToAnnexB( t, fr, xo );
+      else if( t.xform==XF_OGG ) ToOgg( t, fr, xo, uint(t.idx+1), 0 );
+      else if( t.xform==XF_HDR ) xo.Put( t.xhdr.data(), t.xhdr.size() ), PutFrames( fr, t.nsamp, xo );
+      else ToADTS( t, fr, xo );
       qword rawb=0; for( size_t k=0; k<t.xa.size(); k++ ) rawb += t.xa[k].second;
-      if( t.xform==XF_ANNEXB && 2*rawb>s.size() ) t.xform = XF_NONE;   // mostly not NALs: keep raw
+      if( t.xform==XF_ANNEXB && 2*rawb>t.bytes ) t.xform = XF_NONE;   // mostly not NALs: keep raw
       else conv = true;
     }
+    if( !conv ) { xo.Reset(); for( size_t c=0; c<t.coff.size(); c++ ) xo.Put( d+t.coff[c], t.csz[c] ); }
     if( t.tmok ) {                            // timing model, from the inputs the decoder will have
       int ck = t.xform==XF_OGG ? 3 : t.lensize && t.xext=="h264" ? 1 : t.lensize && t.xext=="hevc" ? 2 :
                (t.hstss || (t.tflags&16)) && t.fck!=CK_RAW && t.fck!=CK_AUDIO ? 4 : 0;
-      std::vector<qword> fo( size_t(t.nsamp+1), 0 );
-      for( qword k=0; k<t.nsamp; k++ ) fo[size_t(k+1)] = fo[size_t(k)]+t.Size(k);
       Buf pv, none;
       if( ck==3 ) { XiphLace( t.vl, 3, pv ); for( int h=0; h<3; h++ ) pv.insert( pv.end(), t.vh[h], t.vh[h]+t.vl[h] ); }
       TimeIn ti;
-      if( !TimeInputs( ck, t.lensize, t.xform==XF_ANNEXB ? t.xhdr : none, pv, s.data(), fo, t.nsamp, ti, t.fck, t.fckp ) ) ck = 0, TimeInputs( 0, 0, none, none, s.data(), fo, t.nsamp, ti );
+      if( !TimeInputs( ck, t.lensize, t.xform==XF_ANNEXB ? t.xhdr : none, pv, fr, t.nsamp, ti, t.fck, t.fckp ) ) ck = 0, TimeInputs( 0, 0, none, none, fr, t.nsamp, ti );
       std::vector<byte> sy;
       if( t.hstss ) { sy = t.ssync; sy.resize( size_t(t.nsamp), 2 ); }
       t.tm.ckind = ck; t.tm.lensize = ck==1 || ck==2 ? t.lensize : 0; t.tm.fck = ck==4 ? t.fck : 0; t.tm.fckp = ck==4 ? t.fckp : 0;
@@ -546,7 +547,7 @@ static bool Encode1( const Buf& in, bool usexf, bool timing, Buf& meta, std::vec
       if( ck==4 && t.hstss && !(t.tflags&16) ) {   // frame classes worse than no sync prediction: drop them
         qword ns = 0; for( size_t k=0; k<sy.size(); k++ ) ns += sy[k]==1;
         if( t.tm.sexc.size()>=ns ) {
-          ck = 0; TimeInputs( 0, 0, none, none, s.data(), fo, t.nsamp, ti ); t.tm.ckind = 0; t.tm.fck = 0; t.tm.fckp = 0;
+          ck = 0; TimeInputs( 0, 0, none, none, fr, t.nsamp, ti ); t.tm.ckind = 0; t.tm.fck = 0; t.tm.fckp = 0;
           TimeFit( t.tm, ti, t.nsamp, t.sdur, (t.hctts || t.fcto) ? &t.scto : 0, &sy );
         }
       }
@@ -576,12 +577,12 @@ static bool Encode1( const Buf& in, bool usexf, bool timing, Buf& meta, std::vec
         if( t.tflags&16 ) snprintf( l, sizeof(l), " flags_exc=%llu", (unsigned long long)t.fm.exc.size() ), t.tinfo += l;
       }
     }
-    if( conv ) s.swap( x ), nxf++;
-    if( t.ext=="mp3" && s.size()>=2 && s[0]==0xFF && (s[1]&0xE0)==0xE0 ) {
-      int lay = (s[1]>>1)&3;
+    if( conv ) nxf++;
+    if( t.ext=="mp3" && xo.n>=2 && xo.h[0]==0xFF && (xo.h[1]&0xE0)==0xE0 ) {
+      int lay = (xo.h[1]>>1)&3;
       if( lay==3 ) t.ext = "mp1"; else if( lay==2 ) t.ext = "mp2";
     }
-    streams.push_back( Buf() ); streams.back().swap( s );
+    if( dry ) dry->push_back( xo.n ); else streams.push_back( Buf() ), streams.back().swap( s );
 
     TrackHead h;
     h.ext = t.xform!=XF_NONE ? t.xext : t.ext;
@@ -663,25 +664,26 @@ static bool Encode1( const Buf& in, bool usexf, bool timing, Buf& meta, std::vec
   }
   w.bytes( op.b.data(), op.b.size() ); w.bytes( st.data(), st.size() );
   meta.swap( w.b );
+  if( dry ) return true;
 
   // verify: run the decoder on the actual output
   Meta M; Sink chk( 0, &in ); *why = "meta parse";
   return ParseMeta(meta,M) && Decode(M,streams,chk,why);
 }
 
-static bool Encode( const Buf& in, Buf& meta, std::vector<Buf>& streams, std::vector<std::string>& names ) {
+static bool Encode( const Buf& in, Buf& meta, std::vector<Buf>& streams, std::vector<std::string>& names, std::vector<qword>* dry ) {
   // fallbacks: without stream conversion, without the timing model, without both
   static const bool lv[4][2] = { {true,true}, {false,true}, {true,false}, {false,false} };
   const char* why = ""; int nxf = 0, nxf0 = 0; std::string log;
   for( int i=0; i<4; i++ ) {
     if( i>0 && !lv[i][0] && !nxf0 ) continue;       // no conversions: same as with them
     log.clear();
-    bool ok = Encode1( in, lv[i][0], lv[i][1], meta, streams, names, nxf, &why, log );
+    bool ok = Encode1( in, lv[i][0], lv[i][1], meta, streams, names, dry, nxf, &why, log );
     if( i==0 ) nxf0 = nxf;
     if( ok ) { if( verbose ) fputs( log.c_str(), stdout ); return true; }
     fprintf( stderr, "warning: verify failed (%s)%s\n", why, i<3 ? ", retrying with fewer transforms" : "" );
   }
-  meta.clear(); streams.clear(); names.clear();
+  meta.clear(); streams.clear(); names.clear(); if( dry ) dry->clear();
   return false;
 }
 

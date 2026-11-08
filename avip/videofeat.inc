@@ -1,7 +1,7 @@
 // display index and feature flags per sample. codec 1 = H.264, 2 = HEVC. hdr: Annex B
-// parameter sets (may be empty); samples are length-prefixed NALs (ls bytes) at s+fo[f]
+// parameter sets (may be empty); samples are length-prefixed NALs (ls bytes), frames of fs
 template<class ST>
-static void VideoFeat( const byte* hdr, qword hl, const byte* s, const std::vector<qword>& fo, qword nf, int ls,
+static void VideoFeat( const byte* hdr, qword hl, const FrameSrc& fs, qword nf, int ls,
                        std::vector<qword>& disp, std::vector<byte>& fl ) {
   ST h; bool vcl, reset; int f0; long long poc = 0;
   for( qword i=NextSC(hdr,0,hl); i<hl; ) {
@@ -15,8 +15,9 @@ static void VideoFeat( const byte* hdr, qword hl, const byte* s, const std::vect
   qword base = 0; long long last = 0;
   for( qword f=0; f<=nf; f++ ) {
     vcl = reset = false; f0 = 0; poc = last+2;
+    qword e = f<nf ? fs.Z( f ) : 0; const byte* s = e ? fs.P( f ) : 0;
     if( f<nf )
-      for( qword o=fo[size_t(f)], e=fo[size_t(f+1)]; e-o>=qword(ls); ) {
+      for( qword o=0; e-o>=qword(ls); ) {
         qword L = 0; for( int i=0; i<ls; i++ ) L = (L<<8)|s[o+i];
         o += ls;
         if( L>e-o ) break;
