@@ -147,7 +147,15 @@ struct Model : ModelSmp<f_DEC, LV> {
         break;
       case F_ABITS: {  // (against the audio's energy, as the scale factor its RMS makes, and how it changed)
         account(CAT_ABITS);
-        const int e = bound[ch] ? es[ch][b] : 0, le = hist.energy[ch][b];
+        int e = bound[ch] ? es[ch][b] : 0;
+        if (e && s.pmode[ch][b]) {  // (an ADPCM subband's: its prediction's residual's)
+          S64 x[NSMP];
+          int near;
+          const int n = B::scale_values(s, ch, b, 0, s.nssc, x);
+          e = 1 + scale_pred(x, n, r.shuff[ch] == 6 ? SF7 : SF6, r.shuff[ch] == 6 ? 128 : 64, &near);
+        }
+        B::eab[ch][b] = e;
+        const int le = hist.energy[ch][b];
         const int de = e && le ? dvar(e - le) : 9;
         const int ls = hist.scale[ch][b] && hist.pscale[ch][b] ? dvar(hist.scale[ch][b] - hist.pscale[ch][b]) : 9;
         const int lbd = b && hist.abits[ch][b - 1] ? dvar(s.abits[ch][b - 1] - (hist.abits[ch][b - 1] - 1)) : 9;
@@ -157,8 +165,10 @@ struct Model : ModelSmp<f_DEC, LV> {
           nb = clip((e - imax(n1, n2)) / 2, -4, 4) + 4;
           mx = imin((B::esmax[ch] - e) / 4, 15);
         }
+        U8* const sn = e ? &B::ab_seen[s.pmode[ch][b]][b][imin(e, 128)] : nullptr;
         v = abits_code(ch, b, v, lo, hi, hist.abits[ch][b], b ? s.abits[ch][b - 1] + 1 : 0, e, de, ls,
-                       s.pmode[ch][b], lbd, nb, mx);
+                       s.pmode[ch][b], lbd, nb, mx, sn ? *sn : 0);
+        if (sn) *sn = (U8)(checked(v, lo, hi) + 1);
         break;
       }
       case F_TMODE:
@@ -267,7 +277,7 @@ struct Model : ModelSmp<f_DEC, LV> {
         hist.scale[ch][b] = in && (!q || s.abits[ch][b]) ? s.scale[ch][b][0] + 1 : 0;
         hist.pscale[ch][b] = in && (!q || s.abits[ch][b]) ? pscale[ch][b] : 0;
         if (in && !q) hist.hfvq[ch][b] = s.hfvq[ch][b] + 1;
-        hist.energy[ch][b] = bound[ch] ? es[ch][b] : 0;
+        hist.energy[ch][b] = bound[ch] && q ? B::eab[ch][b] : 0;
         if (r.joinx[ch] && b >= r.nsubs[ch] && b < r.nsubs[r.joinx[ch] - 1]) hist.jscale[ch][b] = s.jscale[ch][b] + 129;
         pscale[ch][b] = 0;
       }

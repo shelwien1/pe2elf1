@@ -66,8 +66,10 @@ struct ModelSide : ModelHdr<f_DEC, LV> {
 
   // ABITS v (in lo..hi) of channel ch's subband b: against its last value A, the subband below's in
   // the subframe Bw (1 + them, 0 none), and the audio's energy (es, de, ls, lbd as famvars.inc says)
+  // (Sn: the ABITS the subband had the last time it had this energy, in any channel: 1 + it, 0 none;
+  // the first guess, then the last one, then the difference from the first of them there is)
   S64 abits_code(int ch, int b, S64 v, S64 lo, S64 hi, S32 A, S32 Bw, int es, int de, int ls, int pm, int lbd,
-                 int nb, int mx) {
+                 int nb, int mx, S32 Sn) {
     M_abt_v D;
     tcx X;
     D.bd = b;
@@ -81,9 +83,12 @@ struct ModelSide : ModelHdr<f_DEC, LV> {
     D.st = lbd;
     D.nb = nb;
     D.mx = mx;
+    D.sn = vvar(Sn, 27);
+    D.sd = !Sn || !A ? 0 : Sn == A ? 1 : 2;
     f_abt.make(D, X);
     f_abt.select(X);
-    v = code_val(f_abt, X, 0, v, A, Bw, A ? A - 1 : Bw ? Bw - 1 : 0, (u32)b, lo, hi);
+    const S32 c1 = Sn ? Sn : A, c2 = Sn ? A : Bw;
+    v = code_val(f_abt, X, 0, v, c1, c2, c1 ? c1 - 1 : c2 ? c2 - 1 : 0, (u32)b, lo, hi);
     ast = !A ? 0 : v == A - 1 ? 1 : 2;
     return v;
   }

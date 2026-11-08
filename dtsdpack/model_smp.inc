@@ -32,6 +32,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   U8 miss[NCH][NSUB];      // the subband's last 8 indexes, a bit each: not the audio's
   int ac[NCH][NSUB], es[NCH][NSUB], ec[NCH][NSUB];  // the subframe's subbands' autocorrelation, energy, its change
   int esmax[NCH];          // the channel's loudest subband's energy (es)
+  int eab[NCH][NSUB];      // the energy ABITS was coded against (es; an ADPCM subband's residual's)
+  U8 ab_seen[2][NSUB][129];  // the ABITS each subband had the last time it had that energy (by pm; 1 + it, 0 none)
   int pscale[NCH][NSUB];   // their first scale factor's prediction (1 + it, 0 none)
   int hm[NCH];             // whether the channel's scale factor before was the prediction (0 none, 1 it was, 2 not)
   S64 lpc[NCH][NSUB][4];   // the subframe's subbands' LPC (lpc4(): the encoder's ADPCM predictor is the entry nearest)
