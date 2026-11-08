@@ -5,3 +5,5 @@ ac3tsv/ac3tsv
 ac3tsv/ac3tsv.exe
 samples/corpus/
 ac3tsv/ac3stat
+dtssplit/dtssplit
+dtssplit/dtssplit.exe
