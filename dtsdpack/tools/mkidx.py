@@ -11,14 +11,15 @@ R = {'fld': '&111111', 'lv': '&111111', 'l2': 3, 'pos': 32, 'st': 3, 'nch': 4,
      'cc': 3, 'bd': 32, 'pq': '&111111', 'ac': 9, 'ab': 28, 'ec': 10,
      'la': 28, 'lb': 28, 'es': '&11111111', 'de': 10, 'ls': 10, 'pm': 2,
      'kd': 3, 'pk': 2, 'pn': 8, 'lp': 10, 'hm': 3,
-     'hw': 4, 'nr': 21, 'ql': 22, 'm1': 23, 'm2': 23, 'sq': 3, 's1': 3,
+     'hw': 4, 'nr': 16, 'nl': 16, 'ql': 22, 'm1': 23, 'm2': 23, 'sq': 3, 's1': 3,
      'c1': '&11111111', 'c2': '&11110000', 'code': 3, 'at': 40, 'cl': 257,
      'mg': 9, 'gn': 16, 'lh': 3, 'nb': 10, 'mx': 17}
 R_SID = dict(R, fld=7)  # (sid's fields: SF_N)
 R_ABT = dict(R, st=10)  # (abt's st: a change, 0-9)
 R_SCL = dict(R, kd=4)   # (scl's kd: and the LFE's)
+R_HIT = dict(R, pm=3)   # (hit's pm: and the LFE)
 def pat(fam, v):
-    r = (R_SID if fam == 'sid' else R_ABT if fam == 'abt' else R_SCL if fam == 'scl' else R)[v]
+    r = (R_SID if fam == 'sid' else R_ABT if fam == 'abt' else R_SCL if fam == 'scl' else R_HIT if fam == 'hit' else R)[v]
     return r if isinstance(r, str) else '1!' + '1' * (r - 1)
 FAM = {
   'hdr': ('ac3pack', 'hdr', {
@@ -41,10 +42,15 @@ FAM = {
     'i': 'kd pk pm pn', 'j': 'kd pk bd', 'k': 'kd pk lp pn', 'l': 'kd pk hm ab', 's': 'kd pk pn',
     'f': 'kd pk ab', 'm': 'kd pk', 'w': 'pn', 't': 'kd pk', 'n': 'kd', 'g': 'kd'},
     'The scale factors, against the one the audio\'s RMS makes (where the WAV is bound), else the last.'),
+  'hit': ('ac3pack', 'sid', {
+    'a': 'nr nl', 'b': 'nr nl pm', 'c': 'nr hm', 'd': 'nl hm', 'e': 'nr ab', 'h': 'nl ab', 'i': 'nr nl hm',
+    'j': 'nr ql', 'k': 'nl ql pm', 'l': 'nr nl ab', 's': 'nr nl', 'f': 'nr nl', 'm': 'nl', 'w': 'nr', 't': 'pm',
+    'n': 'pm', 'g': 'pm'},
+    'Whether a subband sample\'s index is the one the audio\'s subband sample quantizes to (where the\n#  WAV is bound), and if not, the one on the other side of the rounding boundary.'),
   'smp': ('ac3pack', 'mag', {
-    'a': 'pk ab nr', 'b': 'pk ab ql', 'c': 'pk nr hm', 'd': 'pk ab m1', 'e': 'pk ab m1 m2', 'h': 'pk ab nr ql',
-    'i': 'pk ab hw pm', 'j': 'pk ab bd', 'k': 'pk nr sq s1', 'l': 'pk ab hm nr', 's': 'pk ab nr', 'f': 'pk ab',
-    'm': 'pk ab', 'w': 'nr', 't': 'ab', 'n': 'ab', 'g': ''},
+    'a': 'pk nr nl', 'b': 'pk ab ql', 'c': 'pk nr hm', 'd': 'pk ab m1', 'e': 'pk ab m1 m2', 'h': 'pk ab nr',
+    'i': 'pk ab hw pm', 'j': 'pk ab bd', 'k': 'pk nr pm', 'l': 'pk nl ab', 's': 'pk nr nl', 'f': 'pk nl nr',
+    'm': 'pk nr', 'w': 'nl', 't': 'ab', 'n': 'ab', 'g': ''},
     'The subband samples\' quantization indexes, against the index the audio\'s subband sample\n#  quantizes to (where the WAV is bound), else against their neighbours\'.'),
   'vqr': ('ac3pack', 'sid', {
     'a': 'kd mg', 'b': 'kd mg gn', 'c': 'kd bd mg', 'd': 'kd lh mg', 'e': 'kd cc bd', 'h': 'kd gn lh',

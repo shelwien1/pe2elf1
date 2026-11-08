@@ -13,6 +13,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   using B::checked;
   using B::cat;
   M_FAM(scl)
+  M_FAM(hit)
   M_FAM(smp)
   M_FAM(vqr)
   WavIn* wav;     // the WAV (none: ok 0)
@@ -52,6 +53,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   LfeFit lfit;
   U64 n_smp, n_hit, n_sf, n_sfhit;  // (-s: the samples, those the audio predicted; the same of the scale factors)
   U64 n_vq[VK_N], n_vqhit[VK_N];    // (and the ranks, those 0)
+  // how often a subband sample's index wasn't the audio's, of how many (code_index()), by pm, hm and
+  // nearness: in each cell (nr, nl), and in each row (nl)
+  static constexpr U32 HIT_PRIOR = 16, HIT_LIMIT = 1u << 18;
+  U32 hit_c[2][4][QB_N][QB_N][2], hit_r[2][4][QB_N][2];
 
   void smp_start(WavIn* w, const Bind& b) {
     wav = w;
@@ -268,13 +273,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     const S64 ss = step_scale(r, s, ch, b, j >> 3);
     const S32 pred = pm ? adpcm_pred(s.pvq[ch][b], yh[ch][b]) : 0;
     S64 qp = 0, alt = 0;
-    int near = 0;
-    if (bound[ch]) qp = requant(X[ch][b][j] - ((S64)pred << AQ_F), ss, lo, hi, &near, &alt);
+    S128 dist = 0;
+    if (bound[ch]) qp = requant(X[ch][b][j] - ((S64)pred << AQ_F), ss, lo, hi, &dist, &alt);
     M_smp_v D;
     D.ab = a;
     D.hw = sample_coding(r, ch, a);
     D.pk = bound[ch];
-    D.nr = bound[ch] ? near : 0;
+    D.nr = bound[ch] ? near_bucket(dist, (S128)ss << AQ_F, 17) : 0;
+    // (the encoder's arithmetic errs by about its signal's level: the channel's loudest subband's)
+    D.nl = bound[ch] ? near_bucket(dist, ((S128)(r.shuff[ch] == 6 ? SF7 : SF6)[imax(esmax[ch] - 1, 0)] << 38), 28) : 0;
     D.ql = bound[ch] ? imin(bit_len((U64)(qp < 0 ? -qp : qp)), 21) : 0;
     D.hm = imin(__builtin_popcount(miss[ch][b]), 3);
     D.pm = pm;
@@ -298,12 +305,39 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // one on the other side of the rounding boundary (alt), else its magnitude and sign; *how which
   // (0 the audio's, 1 the other side's, 2 coded)
   S64 code_index(const M_smp_v& D, S64 v, int pk, S64 qp, S64 alt, S64 lo, S64 hi, int* how) {
-    B::sel(f_smp, D);
     *how = 2;
     if (pk) {
-      if (f_smp.bit(QN_HIT, ENC && v == qp)) return *how = 0, qp;
-      if (alt != qp && f_smp.bit(QN_ALT, ENC && v == alt)) return *how = 1, alt;
+      const int kd = D.ab == 27 ? 2 : D.pm;
+      M_hit_v H;
+      H.pm = kd;
+      H.nr = D.nr;
+      H.nl = D.nl;
+      H.ab = D.ab;
+      H.ql = D.ql;
+      H.hm = D.hm;
+      B::sel(f_hit, H);
+      int hit;
+      if (kd < 2) {
+        // a subband sample's index is the audio's but where the encoder's arithmetic and this
+        // analysis's differ, by how near the boundary it lies: by how often an index this near
+        // wasn't (the cell's counts, from its row's where it has few), straight to the coder (its
+        // probabilities are finer than the families')
+        U32 *cell = hit_c[kd][D.hm][D.nr][D.nl], *row = hit_r[kd][D.hm][D.nl];
+        const U64 pr = ((U64)(2 * row[0] + 1) << CO_PBITS) / (2 * (U64)row[1] + 2);
+        const U64 pc = (((U64)cell[0] << CO_PBITS) + HIT_PRIOR * pr) / (cell[1] + HIT_PRIOR);
+        hit = c->code_bit((U32)(pc < 1 ? 1 : pc > CO_ONE - 1 ? CO_ONE - 1 : pc), ENC && v == qp);
+        U32* const ts[2] = {cell, row};
+        for (int k = 0; k < 2; k++) {
+          ts[k][0] += !hit;
+          if (++ts[k][1] >= HIT_LIMIT) ts[k][0] >>= 1, ts[k][1] >>= 1;
+        }
+      } else {
+        hit = f_hit.bit(HT_HIT, ENC && v == qp);  // (the LFE's misses are the fit's: by the family)
+      }
+      if (hit) return *how = 0, qp;
+      if (alt != qp && f_hit.bit(HT_ALT, ENC && v == alt)) return *how = 1, alt;
     }
+    B::sel(f_smp, D);
     const S64 mmax = -lo > hi ? -lo : hi;
     const int maxnb = imax(bit_len((U64)mmax), 1);
     const S64 m = checked(code_len(f_smp, QN_LEN, maxnb, LV::smp::mt, ENC ? (v < 0 ? -v : v) : 0, ENC), 0, mmax);
@@ -347,13 +381,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // LFE sample i of the subframe (its value v): against its prediction at the scale factor's step
   S64 code_lfe(int i, S64 v) {
     S64 alt;
-    int near, how;
-    const S64 qp = requant(lfe_p[i], lfe_st << 6, -128, 127, &near, &alt);
+    S128 dist;
+    int how;
+    const S64 qp = requant(lfe_p[i], lfe_st << 6, -128, 127, &dist, &alt);
     M_smp_v D;
     D.ab = 27;
     D.hw = 0;
     D.pk = 1;
-    D.nr = near;
+    D.nr = near_bucket(dist, (S128)lfe_st << 22, 17);
+    D.nl = 0;
     D.ql = imin(bit_len((U64)(qp < 0 ? -qp : qp)), 21);
     D.hm = imin(__builtin_popcount(lmiss), 3);
     D.pm = 0;

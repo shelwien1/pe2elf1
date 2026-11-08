@@ -7,6 +7,8 @@
 #include "abt_p.inc"
 #include "scl_h.inc"
 #include "scl_p.inc"
+#include "hit_h.inc"
+#include "hit_p.inc"
 #include "smp_h.inc"
 #include "smp_p.inc"
 #include "vqr_h.inc"

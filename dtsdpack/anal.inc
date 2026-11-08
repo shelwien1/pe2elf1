@@ -5,7 +5,7 @@
 // header keeps it).
 
 constexpr int AQ_F = 16;  // the analysis's subband samples: in 2^-AQ_F of the decoder's units
-constexpr int QB_N = 21;  // the buckets of how near the rounding boundary a sample lies
+constexpr int QB_N = 16;  // the buckets of how near the rounding boundary a sample lies (near_bucket())
 constexpr int SB_N = 8;   // and a scale factor's RMS the midpoint between two table entries
 
 #include "tables.inc"
@@ -93,20 +93,29 @@ static INLINE void quant_range(const CoreRec& c, int ch, int a, S64& lo, S64& hi
 
 // The index the audio's subband sample v (2^-AQ_F, its ADPCM prediction taken off) quantizes to at
 // step and scale ss (round to nearest, halves away from 0, as dtsreq found the encoder), in lo..hi;
-// *alt the index on the other side of the rounding boundary nearest the value, *near how near it
-// lies: QB_N - 1 far, 0 within 1/400 of a step
-static INLINE S64 requant(S64 v, S64 ss, S64 lo, S64 hi, int* near, S64* alt) {
+// *alt the index on the other side of the rounding boundary nearest the value, *dist how far the
+// value lies from that boundary (in 2^-(AQ_F + 22))
+static INLINE S64 requant(S64 v, S64 ss, S64 lo, S64 hi, S128* dist, S64* alt) {
   const S128 num = (S128)v << 22, den = (S128)ss << AQ_F;
   const int neg = num < 0;
   const S128 a = neg ? -num : num;
   const S128 qa = (2 * a + den) / (2 * den);  // floor(a / den + 1/2)
   const S128 r = a - qa * den;                 // -den/2 .. den/2
-  const S128 d = den / 2 - (r < 0 ? -r : r);   // to the boundary
-  *near = d * 20 >= den ? QB_N - 1 : (int)(d * 400 / den);
+  *dist = den / 2 - (r < 0 ? -r : r);
   S64 q = (S64)qa, o = r >= 0 ? q + 1 : q - 1;
   if (neg) q = -q, o = -o;
   *alt = o < lo ? lo : o > hi ? hi : o;
   return q < lo ? lo : q > hi ? hi : q;
+}
+// how near a distance d lies to 0, against a unit u (both in the same units): floor(log2(d / u)) +
+// k, in 0..QB_N - 1
+static INLINE int near_bucket(S128 d, S128 u, int k) {
+  if (u <= 0) return QB_N - 1;
+  int e = 0;  // (floor(log2(d / u)), from -k up)
+  if (d <= 0) return 0;
+  while (e > -k && d < u) d <<= 1, e--;
+  while (e < QB_N - 1 - k && d >= 2 * u) u <<= 1, e++;
+  return clip(e + k, 0, QB_N - 1);
 }
 
 // The scale factor of table tab (nt entries) nearest (linearly) to the RMS of the n values v

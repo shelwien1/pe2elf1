@@ -3,7 +3,7 @@
 // Apart from model.inc for IDX/famtune.cpp, which replays a family's decisions without the model.
 
 // the families, X(name) each, in the order the model has them
-#define DTSD_FAMS(X) X(hdr) X(sid) X(abt) X(scl) X(smp) X(vqr) X(raw)
+#define DTSD_FAMS(X) X(hdr) X(sid) X(abt) X(scl) X(hit) X(smp) X(vqr) X(raw)
 
 // The fields the hdr family codes, each of their own values (fld): the core frame's header and
 // coding header, a subframe's header fields, then the container's (below); and the sid family's,
@@ -23,9 +23,12 @@ enum { SF_PMODE, SF_PVQ, SF_TMODE, SF_JSHUFF, SF_JSCALE, SF_HFVQ, SF_LFE, SF_N }
 //   abt  ABITS: code() of its difference from the last (0-12), 13 the last one, 14 the band below's
 //   scl  a scale factor: code() of its difference from the prediction (0-12), 13 the prediction,
 //        14 the last one (no prediction)
-//   smp  a sample's index: 0 the audio's, 1 the one on the other side of the rounding boundary,
-//        then its magnitude, the length (the bits it takes) as a tree and the bits below the top
-//        (2-108: model_core.inc's code_len()), the rest in the mantissa plane; 109 the sign
+//   hit  13 an LFE sample's index is the audio's (a subband sample's goes to the coder as it is:
+//        model_smp.inc's code_index()), 14 an index that isn't is the one on the other side of the
+//        rounding boundary
+//   smp  a sample's index otherwise: its magnitude, the length (the bits it takes) as a tree and
+//        the bits below the top (2-108: model_core.inc's code_len()), the rest in the mantissa
+//        plane; 109 the sign
 //   vqr  a rank (model_smp.inc's code_rank()): 13-24 its bucket (0; 1; 2-3; 4-7; ...) in unary,
 //        25-63 the bits below the bucket's top, by the bucket and their place (the first two;
 //        the rest)
@@ -47,6 +50,8 @@ constexpr int M_hdr_ND = HN_N, M_hdr_MND = TC_MNODE, M_hdr_NG = NHF;
 constexpr int M_sid_ND = SN_N, M_sid_MND = TC_MNODE, M_sid_NG = SF_N;
 constexpr int M_abt_ND = AN_N, M_abt_MND = TC_MNODE, M_abt_NG = 32;
 constexpr int M_scl_ND = CN_N, M_scl_MND = TC_MNODE, M_scl_NG = 4;
+enum { HT_HIT = TC_NODE, HT_ALT, HT_N };
+constexpr int M_hit_ND = HT_N, M_hit_MND = 1, M_hit_NG = 1;
 constexpr int M_smp_ND = QN_N, M_smp_MND = TC_MNODE, M_smp_NG = 1;
 constexpr int M_vqr_ND = VN_N, M_vqr_MND = 1, M_vqr_NG = 1;
 constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
@@ -79,11 +84,14 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      the last scale factor less the last prediction (0-8, 9 none), hm whether the channel's
 //      scale factor before was the prediction (0 none, 1 it was, 2 not), bd the subband
 // smp: ab ABITS (1-26; 27 an LFE sample's), hw the code (1 Huffman, 2 plain, 3 block codes), pk whether the audio
-//      predicts the index, nr how near the rounding boundary its value lies (0-20: within 1/400 of
-//      a step to 1/20, 20 farther), ql the length of the audio's index (0-21), hm how many of the
+//      predicts the index, nr how near the rounding boundary its value lies, as log2 of its
+//      distance in steps (0-15: 2^-17 or nearer to 2^-2 or farther), nl the same in the channel's
+//      loudest subband's RMS (0-15: 2^-28 to 2^-13), ql the length of the audio's index (0-21), hm how many of the
 //      subband's last 8 indexes weren't the audio's (to 3), pm whether the subband predicts, bd the
 //      subband, m1, m2 the lengths of the two indexes before in the subband (22 none), sq the sign
 //      of the audio's index (0 none or 0, 1 +, 2 -), s1 that of the index before
+// hit: pm 0 a subband sample, 1 one of an ADPCM subband, 2 an LFE sample; nr, nl, ab, ql, hm as
+//      smp's
 // vqr: kd what is ranked (VK_*), cc, bd, mg how far the best candidate beats the next (0 within
 //      1/16 to 7 by 8 times, 8 by all), gn the prediction gain of the subband's LPC in halvings
 //      (VK_PVQ: 0-15) or its scale factor / 8 (0-15), lh the subband's last rank of the kind (0
@@ -95,7 +103,8 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 #define M_sid_VARS(X) X(fld) X(cc) X(bd) X(lv) X(pq) X(st) X(ac) X(ab) X(ec)
 #define M_abt_VARS(X) X(bd) X(cc) X(la) X(lb) X(es) X(de) X(ls) X(pm) X(st) X(nb) X(mx)
 #define M_scl_VARS(X) X(kd) X(ab) X(pm) X(pk) X(pn) X(lp) X(hm) X(bd)
-#define M_smp_VARS(X) X(ab) X(hw) X(pk) X(nr) X(ql) X(hm) X(pm) X(bd) X(m1) X(m2) X(sq) X(s1)
+#define M_hit_VARS(X) X(pm) X(nr) X(nl) X(ab) X(ql) X(hm)
+#define M_smp_VARS(X) X(ab) X(hw) X(pk) X(nr) X(nl) X(ql) X(hm) X(pm) X(bd) X(m1) X(m2) X(sq) X(s1)
 #define M_vqr_VARS(X) X(kd) X(cc) X(bd) X(mg) X(gn) X(lh)
 #define M_raw_VARS(X) X(c1) X(c2) X(code) X(at) X(cl)
 
