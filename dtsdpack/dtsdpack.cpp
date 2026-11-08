@@ -57,7 +57,7 @@
 // licensed under the GNU Lesser General Public License, version 2.1 or later.
 //
 // Build: ./mk.sh release, or
-//   g++ -O3 -march=x86-64-v3 -ffp-contract=off -std=c++11 -ILib3 -o dtsdpack dtsdpack.cpp
+//   g++ -O3 -march=x86-64-v3 -ffp-contract=off -std=c++11 -ILib3 -pthread -o dtsdpack dtsdpack.cpp
 //   x86_64-w64-mingw32-g++ -O3 -s -static -std=c++11 -ILib3 -o dtsdpack.exe dtsdpack.cpp
 // (AVX2 or not, the files are the same.) C++11 without exceptions or RTTI (GCC's or Clang's
 // __int128 for the analysis); integer arithmetic wherever it decides what is coded, so files are

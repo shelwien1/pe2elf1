@@ -85,8 +85,8 @@ Exit codes:
 | FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 25902 (1.10%) | | |
 
 Compressing the whole of `s.2.dts`'s core takes 28 seconds (1.8 MB of core a second) and 39 MB of
-memory, decompressing it 29 seconds and 33 MB, on one thread of a 2.1 GHz Xeon. The first two
-streams and the third were the tuning set (below); the whole of `s.2.dts` wasn't.
+memory, decompressing it 29 seconds and 33 MB, on one thread of a 2.1 GHz Xeon. The last three
+rows were the tuning set (below); the first, the whole of `s.2.dts`, wasn't.
 
 FFmpeg's small DTS-HD MA samples (`xll_*`, 7 frames each) round-trip too. Where their core's
 channels are the WAV's channels (`xll_51_24_48_768`) the core goes to 9.1%; where only some are (the
@@ -180,8 +180,12 @@ tuned as ac3pack's are: `./mk.sh dump 9 DIR stream wav ...` writes what each fam
 `./mk.sh famtune 9` builds `famtune`, which codes a family's dumps again, and `IDX/ftune.py`
 hill-climbs each family's parameters against them, a bit at a time; `IDX/import.pl` folds the
 winners into the `.idx` files. The dumps were of three streams: `s.2.dts`'s first 3 MB and 3 MB of
-its middle, and FFmpeg's `master_audio_7.1_24bit.dts`. `./mk.sh check 9 stream wav ...` confirms
-that the tuning build, the shipping build and the build without AVX2 write the same files.
+its middle, and FFmpeg's `master_audio_7.1_24bit.dts`. Two runs of three passes each (the second
+after abt's last contexts, on new dumps) took each family's output on them down by: abt 6.8%, sid
+9.3%, hit 8.9%, hdr 7.1%, scl 4.1%, raw 3.3%, smp 1.5%, vqr 1.3%; and the whole of `s.2.dts`'s
+core, which wasn't in them, by 4.7% (415945 to 396547 bytes). `./mk.sh check 9 stream wav ...`
+confirms that the tuning build, the shipping build and the build without AVX2 write the same
+files.
 
 ### The format
 
@@ -208,7 +212,7 @@ the CRC-32 of the core stream, which `d` checks.
 or by hand:
 
 ```
-g++ -O3 -march=x86-64-v3 -ffp-contract=off -std=c++11 -fno-exceptions -fno-rtti -ILib3 -o dtsdpack dtsdpack.cpp
+g++ -O3 -march=x86-64-v3 -ffp-contract=off -std=c++11 -fno-exceptions -fno-rtti -ILib3 -pthread -o dtsdpack dtsdpack.cpp
 ```
 
 AVX2 or not, the files are the same. It needs GCC's or Clang's `__int128`. `MOD/` is generated
