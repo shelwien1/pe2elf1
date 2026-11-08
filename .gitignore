@@ -7,3 +7,5 @@ samples/corpus/
 ac3tsv/ac3stat
 dtssplit/dtssplit
 dtssplit/dtssplit.exe
+dtssplit/dtscore
+dtssplit/dtscore.exe

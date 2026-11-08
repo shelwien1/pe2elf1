@@ -1,48 +1,58 @@
-// dtssplit - lossless split of a DTS stream into its lossy part and a WAV, and the join back
+// dtssplit - lossless split of a DTS stream into its lossy core, a WAV and a metainfo file, and the
+// join back
 //
-// Usage: dtssplit c [options] input.dts output.ac3 output.wav
-//        dtssplit d [options] output.ac3 output.wav restored.dts
-//   c    split the stream: the side file (output.ac3, any name) and the WAV
-//   d    join the side file and the WAV back into the stream, byte for byte
-//   -v   (c) join the two files written and compare the result with the input
+// Usage: dtssplit c [options] input.dts prefix
+//        dtssplit d [options] prefix restored.dts
+//   c    split the stream into prefix.dts, prefix.wav and prefix.meta
+//   d    join them back into the stream, byte for byte
+//   -v   (c) join the files written and compare the result with the input
 //   -q   no statistics
 // The input of c and the output of d can be - for stdin and stdout (not with -v).
 //
-// A DTS-HD Master Audio stream is, frame by frame, a DTS core frame (the lossy part, which any DTS
-// decoder plays) and an extension substream (EXSS) frame that carries the lossless extension
-// (XLL): per channel the difference between the original PCM and the core's decode (or the PCM
-// itself), decorrelated in channel pairs, linear-predicted and coded with Rice and binary codes.
-// The split decodes each XLL frame down to the samples it codes, its prediction and decorrelation
-// undone, and writes them to the WAV; all else goes to the side file: the core frames and the EXSS
-// headers as they are, the XLL headers, and each segment's coding parameters (the code choices, the
-// Rice parameters, the places of the isolated samples of hybrid Rice codes, the bits after the
-// codes). The join predicts and codes the WAV's samples again with those parameters. The split
-// joins every frame back before it writes it so and compares it with the original; a frame that
-// doesn't come back the same, or that the split doesn't handle, is kept as bytes, and so is all
-// that isn't a frame. Any input therefore joins back to itself.
+//   prefix.dts   the core frames: a DTS stream, the lossy part as any DTS decoder plays it
+//   prefix.wav   the samples of the lossless extension (XLL); a further layout of channels has a
+//                WAV of its own: prefix.2.wav, prefix.3.wav, ...
+//   prefix.meta  all else: the extension substream (EXSS) and XLL headers, each segment's coding
+//                parameters, every byte that is neither a core frame nor split, and where it all goes
 //
-// The WAV holds a sample a channel for each sample of each XLL frame, its channels in WAV order
-// (the stream's speaker positions), 24-bit (16-bit for 16-bit streams; 32-bit where the XLL embeds
-// a downmix, whose lower channel sets hold the downmix unscaled). In a residual channel (the XLL's
+// A DTS-HD Master Audio stream is, frame by frame, a DTS core frame (subband ADPCM) and an EXSS frame
+// that carries the XLL frame: per channel the difference between the original PCM and the core's
+// decode (or the PCM itself), decorrelated in channel pairs, linear-predicted and coded with Rice
+// and binary codes, in one frequency band (to 96 kHz) or two (to 192 kHz). The split decodes each
+// XLL frame down to the samples it codes, its prediction, decorrelation and MSB/LSB split undone and
+// its frequency bands put together, and writes them to the WAV; the join predicts and codes them
+// again with the meta file's parameters. The split joins every frame back before it writes it so
+// and compares it with the original; a frame that doesn't come back the same, or that it doesn't
+// split (four frequency bands, XLL frames that peak bit-rate smoothing spreads over EXSS frames), is
+// kept in the meta file as bytes, and so is all that isn't a frame. Any input joins back to itself.
+//
+// The WAV holds a sample a channel for each sample of each XLL frame, its channels in WAV order (the
+// stream's speaker positions), 24-bit (16-bit for 16-bit streams; 32-bit where the XLL embeds a
+// downmix, whose lower channel sets hold the downmix unscaled). In a residual channel (the XLL's
 // usual one) a sample is the original minus the core's decode, at the XLL's precision: what the
-// lossy core leaves out of the audio. In a channel coded without the core it is the audio. A value
-// the WAV's samples can't hold is written clipped and kept in the side file.
+// lossy core leaves out of the audio. In a channel coded without the core it is the audio. The meta
+// file keeps what the WAV can't: a value too large for its samples (written clipped), the LSBs'
+// bits that overlap the MSBs (bit-width adjustment), and, with two bands, the last 7 lifted samples
+// of band 0 in each frame, which the band filter delays into the next.
 //
-// The side file: "DTSSPLIT", a version byte, then records, each a tag byte and its fields (numbers
+// The meta file: "DTSSPLIT", a version byte, then records, each a tag byte and its fields (numbers
 // as LEB128 varints, signed ones zigzagged):
 //   R n bytes          bytes that aren't a frame
-//   C n bytes          a core frame
+//   C n                a core frame: the next n bytes of prefix.dts
 //   E n bytes          an extension substream frame kept as bytes
-//   W ...              the WAV's layout (before the first X): its channels, their speaker mask,
-//                      which XLL channel each is, and the channel sets it takes
-//   X ...              an extension substream frame with its XLL frame split: the EXSS bytes
-//                      before the XLL frame, the XLL header bytes, the coding parameters of each
-//                      segment of each channel set, the XLL bytes after the band data, the EXSS
-//                      bytes after the XLL frame, the WAV values written clipped
-//   Z n crc samples    the end: the input's size and CRC-32, the WAV's samples a channel
+//   W w ...            WAV w's layout (before its first X): its channels, width and rate, the
+//                      speaker mask, the XLL channel of each WAV channel, the channel sets, the bands
+//   X w ...            an extension substream frame with its XLL frame split, its samples in WAV w:
+//                      the EXSS bytes before the XLL frame, the XLL header bytes, the coding
+//                      parameters of each segment of each channel set in each band, the XLL bytes
+//                      after the band data, the EXSS bytes after the XLL frame, band 0's delayed
+//                      samples, the overlapping LSB bits, the WAV values written clipped
+//   Z n crc k s...     the end: the input's size and CRC-32, the WAVs and their samples a channel
 //
 // Written from ETSI TS 102 114 V1.6.1 (DTS Coherent Acoustics; Core and Extensions with Additional
-// Profiles), clause 7 (the extension substream) and clause 8 (XLL).
+// Profiles), clauses 5, 7 and 8. The XLL band filter of two frequency bands, which the specification
+// leaves out, is FFmpeg's (libavcodec/dcadsp.c, dcadata.c), so this file is licensed under the GNU
+// Lesser General Public License, version 2.1 or later.
 //
 // Build: g++ -O2 -o dtssplit dtssplit.cpp
 //        x86_64-w64-mingw32-g++ -O2 -s -static -o dtssplit.exe dtssplit.cpp
@@ -52,6 +62,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <string>
 #include <utility>
 #include <vector>
@@ -61,7 +72,9 @@
 #endif
 
 typedef uint8_t U8;
+typedef int8_t S8;
 typedef uint16_t U16;
+typedef int16_t S16;
 typedef uint32_t U32;
 typedef uint64_t U64;
 typedef int32_t S32;
@@ -148,6 +161,7 @@ struct BitReader {
     pos += n;
     return (U32)(w >> (64 - n));
   }
+  U32 peek32() const { return (U32)((be64(d + (pos >> 3)) << (pos & 7)) >> 32); }  // the next 32 bits
   void skip(U64 n) {
     if (pos + n > end) {
       over = true;
@@ -216,11 +230,14 @@ struct BitWriter {
       n -= k;
     }
   }
+  void align() { put(0, (8 - nacc) & 7); }
 };
 
 // the signed value of a code's unsigned word, and back
 static inline S32 unzig(U32 u) { return u & 1 ? -(S32)(u >> 1) - 1 : (S32)(u >> 1); }
 static inline U32 zig(S32 v) { return v < 0 ? (((U32)(-(v + 1))) << 1) | 1 : (U32)v << 1; }
+
+#include "dtscore.inc"
 
 // ---------------------------------------------------------------------------------------------
 // records: built in memory, read from memory or from a file
@@ -247,14 +264,16 @@ struct Rec {
 // a reader of records: from memory (for the split's check) or a file (the join)
 struct RecIn {
   FILE* f;
+  const char* what;
   const U8* mem;
   size_t msize, mpos;
   std::vector<U8> buf;
   size_t lo, hi;
   bool bad;   // read past the end, or a number that doesn't fit
   U64 nread;  // bytes read
-  void init_file(FILE* fp) {
+  void init_file(FILE* fp, const char* name) {
     f = fp;
+    what = name;
     mem = 0;
     buf.resize(1 << 16);
     lo = hi = 0;
@@ -263,11 +282,18 @@ struct RecIn {
   }
   void init_mem(const U8* p, size_t n) {
     f = 0;
+    what = "memory";
     mem = p;
     msize = n;
     mpos = 0;
     bad = false;
     nread = 0;
+  }
+  bool refill() {
+    lo = 0;
+    hi = fread(&buf[0], 1, buf.size(), f);
+    if (!hi && ferror(f)) die(EX_READ, "can't read %s", what);
+    return hi != 0;
   }
   int u8() {
     if (!f) {
@@ -278,26 +304,16 @@ struct RecIn {
       nread++;
       return mem[mpos++];
     }
-    if (lo == hi) {
-      lo = 0;
-      hi = fread(&buf[0], 1, buf.size(), f);
-      if (!hi) {
-        if (ferror(f)) die(EX_READ, "can't read the side file");
-        bad = true;
-        return 0;
-      }
+    if (lo == hi && !refill()) {
+      bad = true;
+      return 0;
     }
     nread++;
     return buf[lo++];
   }
-  int peek_end() {  // 1 at the end of the input
+  bool at_end() {  // the end of the input
     if (!f) return mpos >= msize;
-    if (lo == hi) {
-      lo = 0;
-      hi = fread(&buf[0], 1, buf.size(), f);
-      if (!hi && ferror(f)) die(EX_READ, "can't read the side file");
-    }
-    return lo == hi;
+    return lo == hi && !refill();
   }
   U64 uv() {
     U64 x = 0;
@@ -327,17 +343,12 @@ struct RecIn {
       return;
     }
     while (n) {
-      if (lo == hi) {
-        lo = 0;
-        hi = fread(&buf[0], 1, buf.size(), f);
-        if (!hi) {
-          if (ferror(f)) die(EX_READ, "can't read the side file");
-          bad = true;
-          memset(p, 0, n);
-          return;
-        }
+      if (lo == hi && !refill()) {
+        bad = true;
+        memset(p, 0, n);
+        return;
       }
-      size_t k = hi - lo < n ? hi - lo : n;
+      const size_t k = hi - lo < n ? hi - lo : n;
       memcpy(p, &buf[lo], k);
       lo += k;
       p += k;
@@ -345,7 +356,7 @@ struct RecIn {
       nread += k;
     }
   }
-  // a length-prefixed byte string, at most max bytes
+  // a length-prefixed byte string, at most max bytes (PAD zero bytes after it, not counted)
   bool blob(std::vector<U8>& out, size_t max) {
     const U64 n = uv();
     if (bad || n > max) {
@@ -385,23 +396,25 @@ static const U8 PCM_GUID[16] = {1, 0, 0, 0, 0, 0, 0x10, 0, 0x80, 0, 0, 0xAA, 0, 
 
 struct WavOut {
   FILE* f;
+  std::string name;
   int nch, bits, rate;
   U32 mask;
-  U64 frames;   // samples a channel written
-  U64 nbytes;   // data bytes written
+  U64 frames;  // samples a channel written
+  U64 nbytes;  // data bytes written
   std::vector<U8> buf;
-  void open(FILE* fp) {
-    f = fp;
+  void open(const std::string& path) {
+    name = path;
+    f = fopen(path.c_str(), "wb");
+    if (!f) die(EX_WRITE, "can't create %s", path.c_str());
     nch = 1;
     bits = 16;
     rate = 48000;
     mask = 0;
     frames = nbytes = 0;
     U8 z[WAV_HEAD] = {0};
-    if (fwrite(z, 1, WAV_HEAD, f) != WAV_HEAD) die(EX_WRITE, "can't write the WAV");
+    if (fwrite(z, 1, WAV_HEAD, f) != WAV_HEAD) die(EX_WRITE, "can't write %s", name.c_str());
   }
-  // count values, interleaved
-  void write(const S32* v, size_t count) {
+  void write(const S32* v, size_t count) {  // count values, interleaved
     const int bps = bits / 8;
     buf.resize(count * bps);
     U8* q = &buf[0];
@@ -413,15 +426,16 @@ struct WavOut {
       if (bps == 4) q[3] = (U8)(x >> 24);
       q += bps;
     }
-    if (count && fwrite(&buf[0], 1, buf.size(), f) != buf.size()) die(EX_WRITE, "can't write the WAV");
+    if (count && fwrite(&buf[0], 1, buf.size(), f) != buf.size()) die(EX_WRITE, "can't write %s", name.c_str());
     nbytes += buf.size();
     frames += count / nch;
   }
+  U64 size() const { return WAV_HEAD + nbytes + (nbytes & 1); }
   void finish() {
     U8 h[WAV_HEAD];
     memset(h, 0, sizeof h);
     const int pad = (int)(nbytes & 1);
-    if (pad && fputc(0, f) == EOF) die(EX_WRITE, "can't write the WAV");
+    if (pad && fputc(0, f) == EOF) die(EX_WRITE, "can't write %s", name.c_str());
     const U64 riff = WAV_HEAD - 8 + nbytes + pad;
     const bool rf64 = riff > 0xFFFFFFFFull;
     memcpy(h, rf64 ? "RF64" : "RIFF", 4);
@@ -448,12 +462,13 @@ struct WavOut {
     memcpy(h + 80, PCM_GUID, 16);
     memcpy(h + 96, "data", 4);
     put32(h + 100, rf64 ? 0xFFFFFFFFu : (U32)nbytes);
-    if (fflush(f) || fseek(f, 0, SEEK_SET) || fwrite(h, 1, WAV_HEAD, f) != WAV_HEAD || fflush(f))
-      die(EX_WRITE, "can't write the WAV's header (the WAV needs to be a file)");
+    if (fflush(f) || fseek(f, 0, SEEK_SET) || fwrite(h, 1, WAV_HEAD, f) != WAV_HEAD || fclose(f))
+      die(EX_WRITE, "can't write %s's header", name.c_str());
+    f = 0;
   }
 };
 
-// any PCM WAV (RIFF or RF64, WAVE_FORMAT_PCM or EXTENSIBLE): what the join reads its samples from
+// any PCM WAV (RIFF or RF64, WAVE_FORMAT_PCM or EXTENSIBLE): what the join reads samples from
 struct WavIn {
   FILE* f;
   int nch, bits, rate;
@@ -470,11 +485,10 @@ struct WavIn {
     for (;;) {
       U8 c[8];
       if (fread(c, 1, 8, f) != 8) return "a WAV without data";
-      U64 n = get32(c + 4);
+      const U64 n = get32(c + 4);
       if (!memcmp(c, "data", 4)) {
         if (!fmt) return "a WAV without its format before its data";
-        left = rf64 && n == 0xFFFFFFFFu ? ds64 : n;
-        if (n == 0xFFFFFFFFu && !rf64) left = ~0ull;
+        left = n == 0xFFFFFFFFu ? (rf64 ? ds64 : ~0ull) : n;
         return 0;
       }
       std::vector<U8> d(n + (n & 1));
@@ -493,14 +507,13 @@ struct WavIn {
       }
     }
   }
-  // count interleaved values; false where the data ends first
-  bool read(S32* v, size_t count) {
+  bool read(S32* v, size_t count) {  // count interleaved values; false where the data ends first
     const int bps = bits / 8;
     const size_t n = count * bps;
     if (left != ~0ull && n > left) return false;
     buf.resize(n);
     if (n && fread(&buf[0], 1, n, f) != n) {
-      if (ferror(f)) die(EX_READ, "can't read the WAV");
+      if (ferror(f)) die(EX_READ, "can't read a WAV");
       return false;
     }
     if (left != ~0ull) left -= n;
@@ -520,8 +533,8 @@ struct WavIn {
 
 enum { SYNC_CORE = 0x7FFE8001, SYNC_EXSS = 0x64582025, SYNC_XLL = 0x41A29547 };
 
-// the size of the core frame at p (av bytes there), where it is one: the sync word and a header
-// whose frame size and block count are in range; 0 where it isn't
+// the size of the core frame at p (av bytes there), where its header says one is there: the sync
+// word and a frame size and block count in range; 0 where it isn't
 static int core_frame(const U8* p, size_t av) {
   if (av < 16 || be32(p) != SYNC_CORE) return 0;
   BitReader r;
@@ -561,8 +574,9 @@ struct ExssState {
 
 static int numspk(U32 mask) { return __builtin_popcount(mask) + __builtin_popcount(mask & 0xAE66); }
 
-// The XLL data of the extension substream frame p (n bytes): its offset and size; false where it
-// has none, or the header can't be followed (why says why)
+// The XLL data of the extension substream frame p (n bytes): its offset and size, and whether its
+// channels are speaker feeds (one2one: -1 where the header doesn't say); false where it has none, or
+// the header can't be followed (why says why)
 static bool exss_xll(ExssState& st, const U8* p, int n, int& off, int& size, int& one2one, const char*& why) {
   BitReader r;
   r.init(p, 32, (U64)n * 8);
@@ -593,7 +607,18 @@ static bool exss_xll(ExssState& st, const U8* p, int n, int& off, int& size, int
     st.stat = true;
   }
   if (!st.stat) {
-    why = "no extension substream static fields yet";
+    // no static fields yet: the XLL frame by its sync word (DWORD-aligned, its header's CRC holding)
+    for (int o = (hs + 3) & ~3; o + 16 <= n; o += 4)
+      if (be32(p + o) == SYNC_XLL) {
+        const int h = ((p[o + 4] & 15) << 4 | p[o + 5] >> 4) + 1;
+        if (h >= 12 && o + h <= n && !crc16(p + o + 4, h - 4)) {
+          off = o;
+          size = n - o;
+          one2one = -1;
+          return true;
+        }
+      }
+    why = "no extension substream static fields yet, and no XLL sync word";
     return false;
   }
   int asize[8], aoff[8], o = hs;
@@ -744,7 +769,7 @@ static bool exss_xll(ExssState& st, const U8* p, int n, int& off, int& size, int
 // ---------------------------------------------------------------------------------------------
 // XLL
 
-enum { XCH = 16, XCS = 16, XORD = 16, XSEG = 512, XFRAME = 65536, XWAV = 64 };
+enum { XCH = 16, XCS = 16, XORD = 16, XSEG = 512, XFRAME = 65536, XWAV = 64, XBAND = 4, XNWAV = 16, XDH = 8 };
 
 static const int FREQ[16] = {8000,  16000, 32000, 64000,  128000, 22050,  44100,  88200,
                              176400, 352800, 12000, 24000, 48000, 96000, 192000, 384000};
@@ -761,14 +786,23 @@ static const U16 RC_TAB[128] = {
     65222, 65241, 65259, 65275, 65291, 65306, 65320, 65333, 65345, 65357, 65368, 65378, 65387, 65396, 65405, 65413,
     65420, 65427, 65434, 65440, 65446, 65451, 65456, 65461, 65466, 65470, 65474, 65478, 65481, 65485, 65488, 65491};
 
-// a channel set: its sub-header (band 0), and the coding parameters as they go from segment to segment
-struct Chset {
-  int nch, resenc, pcm_res, storage_res, freq, nbands;
-  int primary, dmix_coeffs, dmix_embedded, dmix_type, hier, chmask, hier_ofs, nabits;
+// the lifting steps' coefficients of the two-band filter (FFmpeg's ff_dca_xll_band_coeff)
+static const S32 BAND_COEFF[20] = {868669,   -5931642, -1228483, 4194304,  -20577,  122631,   -393647,
+                                   904476,   -1696305, 2825313,  -4430736, 6791313, 41153,    -245210,
+                                   785564,   -1788164, 3259333,  -5074941, 6928550, -8204883};
+
+struct Band {  // a channel set's coding in a frequency band (its part of the sub-header)
   int decor, order[XCH], dcoeff[XCH / 2];
   int aorder[XCH], forder[XCH], highest;
   int rc[XCH][XORD];
+  int dmix_embedded;
   int lsb_size, nlsb[XCH], adj[XCH];  // lsb_size: the bytes at the end of a segment's data the LSB part takes
+};
+
+struct Chset {  // a channel set: its sub-header, and the coding parameters as they go from segment to segment
+  int nch, resenc, pcm_res, storage_res, freq, nbands;
+  int primary, dmix_coeffs, dmix_embedded, dmix_type, hier, chmask, hier_ofs, nabits;
+  Band band[XBAND];
   int seg_common, rice[XCH], aux[XCH], abit_a[XCH], abit_b[XCH], na[XCH];
 };
 
@@ -790,10 +824,13 @@ struct Chunk {
   U8 g1, g2;                  // the bits after the MSB part and after the LSB part: 0 zeros, 1 as kept
   U32 g1n, g2n;
   std::vector<U8> g1b, g2b;
+  int dh_code;     // band 1, segment 0: the decimator history's width (less 1)
+  S32 dh[XCH][XDH];  // and its samples, [1-7] of each channel
 };
 
 static inline S32 sat23(S32 a) { return a < -(1 << 23) ? -(1 << 23) : a > (1 << 23) - 1 ? (1 << 23) - 1 : a; }
 static inline S32 mul16(S32 a, S32 b) { return (S32)(((S64)a * b + (1 << 15)) >> 16); }
+static inline S32 mulq(S32 a, S32 b, int q) { return (S32)(((S64)a * b + (1LL << (q - 1))) >> q); }
 
 // the common header, the channel set sub-headers and the NAVI table of the XLL frame p (n bytes,
 // PAD more): 0, or why they can't be followed
@@ -871,47 +908,50 @@ static const char* xll_headers(Xll& x, const U8* p, int n, int one2one) {
         }
       }
     }
-    if (s.freq > 96000) {
-      // (two bands where bXtraFreqBands is 0, as decoders read it, though the text of 8.3.2 has 1)
-      s.nbands = r.get(1) ? 4 : 2;
-    } else {
-      s.nbands = 1;
-    }
+    // (decoders take bXtraFreqBands 0 for two bands, though the text of 8.3.2 has one)
+    s.nbands = s.freq > 96000 ? (r.get(1) ? 4 : 2) : 1;
     if (s.nbands > x.nbands) x.nbands = s.nbands;
-    s.decor = r.get(1);
     int chbits = 0;
     while ((1 << chbits) < s.nch) chbits++;
-    if (s.decor) {
-      for (int ch = 0; ch < s.nch; ch++) s.order[ch] = r.get(chbits);
-      for (int i = 0; i < s.nch / 2; i++) s.dcoeff[i] = r.get(1) ? unzig(r.get(7)) : 0;
-    } else {
-      for (int ch = 0; ch < s.nch; ch++) s.order[ch] = ch;
-    }
-    int seen = 0;
-    for (int ch = 0; ch < s.nch; ch++) {
-      if (s.order[ch] >= s.nch || (seen >> s.order[ch] & 1)) return "a channel order that isn't a permutation";
-      seen |= 1 << s.order[ch];
-    }
-    s.highest = 0;
-    for (int ch = 0; ch < s.nch; ch++) {
-      s.aorder[ch] = r.get(4);
-      if (s.aorder[ch] > s.highest) s.highest = s.aorder[ch];
-    }
-    if (s.highest > x.nsegsamples) return "a prediction order above the segment's samples";
-    for (int ch = 0; ch < s.nch; ch++) s.forder[ch] = s.aorder[ch] ? 0 : r.get(2);
-    for (int ch = 0; ch < s.nch; ch++)
-      for (int j = 0; j < s.aorder[ch]; j++) {
-        const int q = unzig(r.get(8));
-        if (q == -128) return "a reflection coefficient out of range";
-        s.rc[ch][j] = q >= 0 ? RC_TAB[q] : -(int)RC_TAB[-q];
+    for (int b = 0; b < s.nbands; b++) {
+      Band& d = s.band[b];
+      d.decor = r.get(1);
+      if (d.decor && s.nch > 1) {
+        for (int ch = 0; ch < s.nch; ch++) d.order[ch] = r.get(chbits);
+        for (int i = 0; i < s.nch / 2; i++) d.dcoeff[i] = r.get(1) ? unzig(r.get(7)) : 0;
+      } else {
+        for (int ch = 0; ch < s.nch; ch++) d.order[ch] = ch;
+        for (int i = 0; i < s.nch / 2; i++) d.dcoeff[i] = 0;
       }
-    if (x.scalable) {
-      s.lsb_size = (int)r.get(x.seg_nbits);
-      if (s.lsb_size && x.band_crc > 1) s.lsb_size += 2;
-      for (int ch = 0; ch < s.nch; ch++) s.nlsb[ch] = r.get(4);
-      for (int ch = 0; ch < s.nch; ch++) s.adj[ch] = r.get(4);
+      int seen = 0;
+      for (int ch = 0; ch < s.nch; ch++) {
+        if (d.order[ch] >= s.nch || (seen >> d.order[ch] & 1)) return "a channel order that isn't a permutation";
+        seen |= 1 << d.order[ch];
+      }
+      d.highest = 0;
+      for (int ch = 0; ch < s.nch; ch++) {
+        d.aorder[ch] = r.get(4);
+        if (d.aorder[ch] > d.highest) d.highest = d.aorder[ch];
+      }
+      if (d.highest > x.nsegsamples) return "a prediction order above the segment's samples";
+      for (int ch = 0; ch < s.nch; ch++) d.forder[ch] = d.aorder[ch] ? 0 : r.get(2);
       for (int ch = 0; ch < s.nch; ch++)
-        if (s.nlsb[ch] && !s.lsb_size) return "LSBs without an LSB part";
+        for (int j = 0; j < d.aorder[ch]; j++) {
+          const int q = unzig(r.get(8));
+          if (q == -128) return "a reflection coefficient out of range";
+          d.rc[ch][j] = q >= 0 ? RC_TAB[q] : -(int)RC_TAB[-q];
+        }
+      d.dmix_embedded = s.dmix_embedded && (b == 0 || r.get(1));
+      if ((b == 0 && x.scalable) || (b && r.get(1))) {
+        d.lsb_size = (int)r.get(x.seg_nbits);
+        if (d.lsb_size && (x.band_crc > 2 || (b == 0 && x.band_crc > 1))) d.lsb_size += 2;
+        for (int ch = 0; ch < s.nch; ch++) {
+          d.nlsb[ch] = r.get(4);
+          if (d.nlsb[ch] && !d.lsb_size) return "LSBs without an LSB part";
+        }
+      }
+      if ((b == 0 && x.scalable) || (b && r.get(1)))
+        for (int ch = 0; ch < s.nch; ch++) d.adj[ch] = r.get(4);
     }
     if (r.over || r.pos > (U64)(off + hs - 2) * 8) return "a channel set header too short";
     s.nabits = s.storage_res > 16 ? 5 : s.storage_res > 8 ? 4 : 3;
@@ -937,23 +977,31 @@ static const char* xll_headers(Xll& x, const U8* p, int n, int one2one) {
   return 0;
 }
 
-// the width of the LSB part channel ch's MSBs are shifted by (8.6.1)
-static int lsb_shift(const Xll& x, const Chset& s, int ch) {
+// the width of the LSB part a band's channel ch's MSBs are shifted by (8.6.1), and how many of its
+// LSB bits overlap the MSBs (bit-width adjustment)
+static int lsb_shift(const Xll& x, const Band& d, int ch) {
   if (x.fixed_lsb) return x.fixed_lsb;
-  return s.nlsb[ch] && s.adj[ch] ? s.nlsb[ch] - 1 + s.adj[ch] : s.nlsb[ch] + s.adj[ch];
+  return d.nlsb[ch] && d.adj[ch] ? d.nlsb[ch] - 1 + d.adj[ch] : d.nlsb[ch] + d.adj[ch];
+}
+static int lsb_overlap(const Xll& x, const Band& d, int ch) {
+  const int k = d.nlsb[ch] + d.adj[ch] - lsb_shift(x, d, ch);
+  return d.nlsb[ch] && k > 0 ? k : 0;
 }
 
-// what the split takes: band 0 alone, channel sets alike, MSB and LSB parts that split again; 0 or why not
+// what the split takes: one or two bands, channel sets alike; 0 or why not
 static const char* xll_supported(const Xll& x) {
-  if (x.nbands > 1) return "XLL frequency bands above band 0";
+  if (x.nbands > 2) return "XLL with four frequency bands";
   for (int c = 0; c < x.nchsets; c++) {
     const Chset& s = x.cs[c];
-    if (s.freq != x.cs[0].freq || s.storage_res != x.cs[0].storage_res) return "XLL channel sets unlike each other";
+    if (s.freq != x.cs[0].freq || s.storage_res != x.cs[0].storage_res || s.nbands != x.nbands)
+      return "XLL channel sets unlike each other";
     if (s.storage_res != 16 && s.storage_res != 20 && s.storage_res != 24) return "an XLL sample width not 16, 20 or 24";
-    for (int ch = 0; ch < s.nch; ch++) {
-      const int sh = lsb_shift(x, s, ch);
-      if (s.nlsb[ch] + s.adj[ch] > sh || sh > 24) return "XLL LSBs that overlap the MSBs (bit-width adjustment)";
-    }
+    for (int b = 0; b < s.nbands; b++)
+      for (int ch = 0; ch < s.nch; ch++) {
+        const Band& d = s.band[b];
+        const int sh = lsb_shift(x, d, ch);
+        if (sh > 24 || d.adj[ch] > sh || lsb_overlap(x, d, ch) > d.nlsb[ch]) return "XLL LSBs out of range";
+      }
   }
   if (x.nch > XWAV) return "too many XLL channels";
   return 0;
@@ -994,102 +1042,131 @@ static void gap_of(const U8* p, U64 a, U64 b, U8& mode, U32& nbits, std::vector<
     BitWriter w;
     w.reset();
     w.copy(p, a, b - a);
-    w.put(0, (8 - (int)(w.bits() & 7)) & 7);
+    w.align();
     keep = w.v;
   }
 }
 
-// the band data of XLL frame p: residuals and LSBs into res and lsb ([channel][sample], channel
-// sets one after the other, a set's channels in coded order), the segments' coding into ck, the
-// end of the band data into data_end; 0 or why it can't be followed
-static const char* xll_data(Xll& x, const U8* p, std::vector<Chunk>& ck, S32* res, S32* lsb, int& data_end) {
-  const int N = x.nframesamples, S = x.nsegsamples;
+// a frame's samples, by band: [band][channel][sample], channel sets one after the other, a set's
+// channels as the band data has them
+struct BandData {
+  int N, nch;
+  std::vector<S32> v[2];
+  void init(int n, int ch) {
+    N = n;
+    nch = ch;
+    for (int b = 0; b < 2; b++) v[b].assign((size_t)n * ch, 0);
+  }
+  S32* at(int b, int ch) { return &v[b][(size_t)ch * N]; }
+  const S32* at(int b, int ch) const { return &v[b][(size_t)ch * N]; }
+};
+
+// the band data of XLL frame p: residuals and LSBs into res and lsb, the segments' coding into ck
+// ([band][segment][channel set]), the end of the band data into data_end; 0 or why it can't be
+// followed
+static const char* xll_data(Xll& x, const U8* p, std::vector<Chunk>& ck, BandData& res, BandData& lsb, int& data_end) {
+  const int S = x.nsegsamples;
   U64 at = (U64)x.data_start * 8;
-  ck.assign((size_t)x.nsegs * x.nchsets, Chunk());
-  for (int seg = 0; seg < x.nsegs; seg++)
-    for (int c = 0; c < x.nchsets; c++) {
-      Chset& s = x.cs[c];
-      Chunk& k = ck[(size_t)seg * x.nchsets + c];
-      const U64 cend = at + (U64)x.navi[(size_t)seg * x.nchsets + c] * 8;
-      if (cend > (U64)x.frame_size * 8) return "band data past the frame";
-      BitReader r;
-      r.init(p, at, cend);
-      k.reuse = seg ? r.get(1) : 0;
-      if (!k.reuse) {
-        s.seg_common = k.seg_common = r.get(1);
-        const int np = s.seg_common ? 1 : s.nch;
-        for (int i = 0; i < np; i++) {
-          k.rice[i] = r.get(1);
-          k.hyb[i] = !s.seg_common && k.rice[i] ? r.get(1) : 0;
-          k.aux_code[i] = k.hyb[i] ? r.get(s.nabits) : 0;
-          s.rice[i] = k.rice[i];
-          s.aux[i] = k.hyb[i] ? k.aux_code[i] + 1 : 0;
+  ck.assign((size_t)x.nbands * x.nsegs * x.nchsets, Chunk());
+  for (int b = 0; b < x.nbands; b++)
+    for (int seg = 0; seg < x.nsegs; seg++)
+      for (int c = 0; c < x.nchsets; c++) {
+        Chset& s = x.cs[c];
+        const size_t ci = ((size_t)b * x.nsegs + seg) * x.nchsets + c;
+        if (s.nbands <= b) continue;
+        const Band& d = s.band[b];
+        Chunk& k = ck[ci];
+        const U64 cend = at + (U64)x.navi[ci] * 8;
+        if (cend > (U64)x.frame_size * 8) return "band data past the frame";
+        BitReader r;
+        r.init(p, at, cend);
+        k.reuse = seg ? r.get(1) : 0;
+        if (!k.reuse) {
+          s.seg_common = k.seg_common = r.get(1);
+          const int np = s.seg_common ? 1 : s.nch;
+          for (int i = 0; i < np; i++) {
+            k.rice[i] = r.get(1);
+            k.hyb[i] = !s.seg_common && k.rice[i] ? r.get(1) : 0;
+            k.aux_code[i] = k.hyb[i] ? r.get(s.nabits) : 0;
+            s.rice[i] = k.rice[i];
+            s.aux[i] = k.hyb[i] ? k.aux_code[i] + 1 : 0;
+          }
+          for (int i = 0; i < np; i++) {
+            if (!seg) {
+              k.a_code[i] = r.get(s.nabits);
+              s.abit_a[i] = !s.rice[i] && k.a_code[i] ? k.a_code[i] + 1 : k.a_code[i];
+              s.na[i] = s.seg_common ? d.highest : d.aorder[i];
+            } else {
+              s.abit_a[i] = 0;
+              s.na[i] = 0;
+            }
+            k.b_code[i] = r.get(s.nabits);
+            s.abit_b[i] = !s.rice[i] && k.b_code[i] ? k.b_code[i] + 1 : k.b_code[i];
+          }
         }
-        for (int i = 0; i < np; i++) {
-          if (!seg) {
-            k.a_code[i] = r.get(s.nabits);
-            s.abit_a[i] = !s.rice[i] && k.a_code[i] ? k.a_code[i] + 1 : k.a_code[i];
-            s.na[i] = s.seg_common ? s.highest : s.aorder[i];
+        k.seg_common = s.seg_common;
+        for (int ch = 0; ch < s.nch; ch++) {
+          const int i = s.seg_common ? 0 : ch;
+          S32* pa = res.at(b, x.chofs[c] + ch) + (size_t)seg * S;
+          const int na = s.na[i], nb = S - na;
+          S32* pb = pa + na;
+          if (!s.rice[i]) {
+            if (!rd_lin(r, pa, na, s.abit_a[i]) || !rd_lin(r, pb, nb, s.abit_b[i])) return "band data cut short";
           } else {
-            s.abit_a[i] = 0;
-            s.na[i] = 0;
-          }
-          k.b_code[i] = r.get(s.nabits);
-          s.abit_b[i] = !s.rice[i] && k.b_code[i] ? k.b_code[i] + 1 : k.b_code[i];
-        }
-      }
-      k.seg_common = s.seg_common;
-      for (int ch = 0; ch < s.nch; ch++) {
-        const int i = s.seg_common ? 0 : ch;
-        S32* pa = res + (size_t)(x.chofs[c] + ch) * N + (size_t)seg * S;
-        const int na = s.na[i], nb = S - na;
-        S32* pb = pa + na;
-        if (!s.rice[i]) {
-          if (!rd_lin(r, pa, na, s.abit_a[i]) || !rd_lin(r, pb, nb, s.abit_b[i])) return "band data cut short";
-        } else {
-          if (!rd_rice(r, pa, na, s.abit_a[i])) return "band data cut short";
-          if (s.aux[i]) {
-            const int niso = r.get(x.nseg_log2);
-            U8 flag[XSEG];
-            memset(flag, 0, sizeof flag);
-            k.iso[ch].resize(niso);
-            for (int j = 0; j < niso; j++) {
-              const int loc = r.get(x.nseg_log2);
-              if (loc >= nb) return "an isolated sample past its segment";
-              k.iso[ch][j] = (U16)loc;
-              flag[loc] = 1;
+            if (!rd_rice(r, pa, na, s.abit_a[i])) return "band data cut short";
+            if (s.aux[i]) {
+              const int niso = r.get(x.nseg_log2);
+              U8 flag[XSEG];
+              memset(flag, 0, sizeof flag);
+              k.iso[ch].resize(niso);
+              for (int j = 0; j < niso; j++) {
+                const int loc = r.get(x.nseg_log2);
+                if (loc >= nb) return "an isolated sample past its segment";
+                k.iso[ch][j] = (U16)loc;
+                flag[loc] = 1;
+              }
+              for (int j = 0; j < nb; j++) {
+                if (flag[j])
+                  pb[j] = unzig(r.get(s.aux[i]));
+                else if (!rd_rice1(r, s.abit_b[i], pb[j]))
+                  return "band data cut short";
+              }
+              if (r.over) return "band data cut short";
+            } else if (!rd_rice(r, pb, nb, s.abit_b[i])) {
+              return "band data cut short";
             }
-            for (int j = 0; j < nb; j++) {
-              if (flag[j])
-                pb[j] = unzig(r.get(s.aux[i]));
-              else if (!rd_rice1(r, s.abit_b[i], pb[j]))
-                return "band data cut short";
-            }
-            if (r.over) return "band data cut short";
-          } else if (!rd_rice(r, pb, nb, s.abit_b[i])) {
-            return "band data cut short";
           }
         }
-      }
-      const U64 lstart = cend - (U64)s.lsb_size * 8;
-      if (s.lsb_size && lstart < at) return "an LSB part larger than its segment";
-      if (r.pos > lstart) return "an MSB part that runs into the LSB part";
-      gap_of(p, r.pos, lstart, k.g1, k.g1n, k.g1b);
-      k.g2 = 0;
-      k.g2n = 0;
-      if (s.lsb_size) {
-        BitReader q;
-        q.init(p, lstart, cend);
-        for (int ch = 0; ch < s.nch; ch++)
-          if (s.nlsb[ch]) {
-            S32* pl = lsb + (size_t)(x.chofs[c] + ch) * N + (size_t)seg * S;
-            for (int j = 0; j < S; j++) pl[j] = (S32)q.get(s.nlsb[ch]);
+        if (seg == 0 && b == 1) {  // the decimator history
+          k.dh_code = r.get(5);
+          for (int ch = 0; ch < s.nch; ch++) {
+            k.dh[ch][0] = 0;
+            for (int j = 1; j < XDH; j++) {
+              const int nb = k.dh_code + 1;
+              k.dh[ch][j] = nb == 32 ? (S32)r.get(32) : (S32)(r.get(nb) << (32 - nb)) >> (32 - nb);
+            }
           }
-        if (q.over) return "an LSB part cut short";
-        gap_of(p, q.pos, cend, k.g2, k.g2n, k.g2b);
+          if (r.over) return "band data cut short";
+        }
+        const U64 lstart = cend - (U64)d.lsb_size * 8;
+        if (d.lsb_size && lstart < at) return "an LSB part larger than its segment";
+        if (r.pos > lstart) return "an MSB part that runs into the LSB part";
+        gap_of(p, r.pos, lstart, k.g1, k.g1n, k.g1b);
+        k.g2 = 0;
+        k.g2n = 0;
+        if (d.lsb_size) {
+          BitReader q;
+          q.init(p, lstart, cend);
+          for (int ch = 0; ch < s.nch; ch++)
+            if (d.nlsb[ch]) {
+              S32* pl = lsb.at(b, x.chofs[c] + ch) + (size_t)seg * S;
+              for (int j = 0; j < S; j++) pl[j] = (S32)q.get(d.nlsb[ch]);
+            }
+          if (q.over) return "an LSB part cut short";
+          gap_of(p, q.pos, cend, k.g2, k.g2n, k.g2b);
+        }
+        at = cend;
       }
-      at = cend;
-    }
   data_end = (int)(at >> 3);
   return 0;
 }
@@ -1117,106 +1194,208 @@ static inline S32 lpc_pred(const U32* b, int n, int o, const int* co) {
 
 static inline S32 decor_term(U32 base, int coeff) { return (S32)(((S64)(S32)base * coeff + 4) >> 3); }
 
-// the samples of the XLL frame (val: [channel][sample], a set's channels in output order) from its
-// residuals and LSBs: the prediction and the pairwise decorrelation undone, MSBs and LSBs put together
-static void xll_decode(const Xll& x, const S32* res, const S32* lsb, S32* val, std::vector<U32>& tmp) {
-  const int N = x.nframesamples;
-  tmp.resize((size_t)XCH * N);
-  for (int c = 0; c < x.nchsets; c++) {
-    const Chset& s = x.cs[c];
-    for (int ch = 0; ch < s.nch; ch++) {
-      U32* b = &tmp[(size_t)ch * N];
-      const S32* e = res + (size_t)(x.chofs[c] + ch) * N;
-      const int o = s.aorder[ch];
-      if (o) {
-        int co[XORD];
-        rc_to_lpc(s.rc[ch], o, co);
-        for (int n = 0; n < o && n < N; n++) b[n] = (U32)e[n];
-        for (int n = o; n < N; n++) b[n] = (U32)e[n] - (U32)lpc_pred(b, n, o, co);
-      } else {
-        for (int n = 0; n < N; n++) b[n] = (U32)e[n];
-        for (int j = 0; j < s.forder[ch]; j++)
-          for (int n = 1; n < N; n++) b[n] += b[n - 1];
-      }
+// the two-band filter's lifting steps on band 0 (b0[-8..N-1], its decimator history first) and band
+// 1 (b1[0..N-1]), forward (as the decoder does them) or undone (inv)
+static void band_lift(U32* b0, U32* b1, int N, bool inv) {
+  const S32* c = BAND_COEFF;
+  if (!inv) {
+    for (int s = 0; s < 4; s++) {
+      U32* dst = s & 1 ? b1 : b0;
+      const U32* src = s & 1 ? b0 : b1;
+      for (int i = 0; i < N; i++) dst[i] -= (U32)mulq((S32)src[i], c[s], 22);
     }
-    if (s.decor)
-      for (int i = 0; i < s.nch / 2; i++)
-        if (s.dcoeff[i]) {
-          const U32* bb = &tmp[(size_t)(2 * i) * N];
-          U32* bd = &tmp[(size_t)(2 * i + 1) * N];
-          for (int n = 0; n < N; n++) bd[n] += (U32)decor_term(bb[n], s.dcoeff[i]);
-        }
-    for (int i = 0; i < s.nch; i++) {
-      const int oc = s.order[i];
-      const U32* b = &tmp[(size_t)i * N];
-      S32* v = val + (size_t)(x.chofs[c] + oc) * N;
-      const int sh = lsb_shift(x, s, oc), a = s.adj[oc];
-      const S32* l = lsb + (size_t)(x.chofs[c] + oc) * N;
-      if (!sh)
-        for (int n = 0; n < N; n++) v[n] = (S32)b[n];
-      else if (s.nlsb[oc])
-        for (int n = 0; n < N; n++) v[n] = (S32)((b[n] << sh) + ((U32)l[n] << a));
-      else
-        for (int n = 0; n < N; n++) v[n] = (S32)(b[n] << sh);
+    for (int i = 0; i < 8; i++) {
+      for (int j = 0; j < N; j++) b0[j - i] -= (U32)mulq((S32)b1[j], c[i + 4], 23);
+      for (int j = 0; j < N; j++) b1[j] -= (U32)mulq((S32)b0[j - i], c[i + 12], 23);
+      for (int j = 0; j < N; j++) b0[j - i] -= (U32)mulq((S32)b1[j], c[i + 4], 23);
+    }
+  } else {
+    for (int i = 7; i >= 0; i--) {
+      for (int j = 0; j < N; j++) b0[j - i] += (U32)mulq((S32)b1[j], c[i + 4], 23);
+      for (int j = 0; j < N; j++) b1[j] += (U32)mulq((S32)b0[j - i], c[i + 12], 23);
+      for (int j = 0; j < N; j++) b0[j - i] += (U32)mulq((S32)b1[j], c[i + 4], 23);
+    }
+    for (int s = 3; s >= 0; s--) {
+      U32* dst = s & 1 ? b1 : b0;
+      const U32* src = s & 1 ? b0 : b1;
+      for (int i = 0; i < N; i++) dst[i] += (U32)mulq((S32)src[i], c[s], 22);
     }
   }
 }
 
-// the residuals and LSBs that decode to val (xll_decode's inverse); false where val doesn't split
-// into MSBs and LSBs as the frame's header says
-static bool xll_encode_samples(const Xll& x, const S32* val, S32* res, S32* lsb, std::vector<U32>& tmp) {
-  const int N = x.nframesamples;
-  tmp.resize((size_t)2 * XCH * N);
-  for (int c = 0; c < x.nchsets; c++) {
-    const Chset& s = x.cs[c];
-    for (int i = 0; i < s.nch; i++) {
-      const int oc = s.order[i];
-      U32* b = &tmp[(size_t)i * N];
-      const S32* v = val + (size_t)(x.chofs[c] + oc) * N;
-      const int sh = lsb_shift(x, s, oc), a = s.adj[oc], nl = s.nlsb[oc];
-      S32* l = lsb + (size_t)(x.chofs[c] + oc) * N;
-      if (!sh) {
-        for (int n = 0; n < N; n++) b[n] = (U32)v[n];
-      } else {
-        const U32 m = (1u << sh) - 1, am = (1u << a) - 1;
-        for (int n = 0; n < N; n++) {
-          const U32 u = (U32)v[n], rem = u & m;
-          b[n] = (U32)((S32)u >> sh);
-          if (nl) {
-            if (rem & am || (rem >> a) >> nl) return false;
-            l[n] = (S32)(rem >> a);
-          } else if (rem) {
-            return false;
-          }
+// what a frame decodes to besides its WAV values, for the meta file
+struct Extra {
+  std::vector<S32> tail;  // two bands: band 0's last 7 lifted samples, [channel][7]
+  BitWriter ovl;          // the LSB bits that overlap the MSBs, [band][channel][sample]
+};
+
+// The samples of the XLL frame (val: [channel][sample], a set's channels in output order) from its
+// residuals and LSBs: in each band the prediction and the pairwise decorrelation undone and the MSBs
+// and LSBs put together, then the bands put together
+static void xll_decode(const Xll& x, const std::vector<Chunk>& ck, const BandData& res, const BandData& lsb,
+                       S32* val, Extra& ex, std::vector<U32>& tmp) {
+  const int N = x.nframesamples, NB = x.nbands;
+  BandData out;
+  out.init(N, x.nch);
+  tmp.resize((size_t)XCH * N);
+  ex.ovl.reset();
+  for (int b = 0; b < NB; b++)
+    for (int c = 0; c < x.nchsets; c++) {
+      const Chset& s = x.cs[c];
+      const Band& d = s.band[b];
+      for (int ch = 0; ch < s.nch; ch++) {
+        U32* bb = &tmp[(size_t)ch * N];
+        const S32* e = res.at(b, x.chofs[c] + ch);
+        const int o = d.aorder[ch];
+        if (o) {
+          int co[XORD];
+          rc_to_lpc(d.rc[ch], o, co);
+          for (int n = 0; n < o && n < N; n++) bb[n] = (U32)e[n];
+          for (int n = o; n < N; n++) bb[n] = (U32)e[n] - (U32)lpc_pred(bb, n, o, co);
+        } else {
+          for (int n = 0; n < N; n++) bb[n] = (U32)e[n];
+          for (int j = 0; j < d.forder[ch]; j++)
+            for (int n = 1; n < N; n++) bb[n] += bb[n - 1];
         }
       }
+      if (d.decor)
+        for (int i = 0; i < s.nch / 2; i++)
+          if (d.dcoeff[i]) {
+            const U32* b0 = &tmp[(size_t)(2 * i) * N];
+            U32* b1 = &tmp[(size_t)(2 * i + 1) * N];
+            for (int n = 0; n < N; n++) b1[n] += (U32)decor_term(b0[n], d.dcoeff[i]);
+          }
+      for (int i = 0; i < s.nch; i++) {
+        const int oc = d.order[i];
+        const U32* bb = &tmp[(size_t)i * N];
+        S32* v = out.at(b, x.chofs[c] + oc);
+        const int sh = lsb_shift(x, d, oc), a = d.adj[oc], k = lsb_overlap(x, d, oc);
+        const S32* l = lsb.at(b, x.chofs[c] + oc);
+        if (!sh)
+          for (int n = 0; n < N; n++) v[n] = (S32)bb[n];
+        else if (d.nlsb[oc])
+          for (int n = 0; n < N; n++) {
+            v[n] = (S32)((bb[n] << sh) + ((U32)l[n] << a));
+            if (k) ex.ovl.put((U32)l[n] >> (d.nlsb[oc] - k), k);
+          }
+        else
+          for (int n = 0; n < N; n++) v[n] = (S32)(bb[n] << sh);
+      }
     }
-    if (s.decor)
-      for (int i = 0; i < s.nch / 2; i++)
-        if (s.dcoeff[i]) {
-          const U32* bb = &tmp[(size_t)(2 * i) * N];
-          U32* bd = &tmp[(size_t)(2 * i + 1) * N];
-          for (int n = 0; n < N; n++) bd[n] -= (U32)decor_term(bb[n], s.dcoeff[i]);
+  ex.ovl.align();
+  if (NB == 1) {
+    memcpy(val, &out.v[0][0], (size_t)N * x.nch * sizeof *val);
+    ex.tail.clear();
+    return;
+  }
+  ex.tail.assign((size_t)x.nch * 7, 0);
+  std::vector<U32> w0(N + XDH), w1(N);
+  for (int c = 0; c < x.nchsets; c++) {
+    const Chunk& k = ck[((size_t)1 * x.nsegs + 0) * x.nchsets + c];
+    for (int ch = 0; ch < x.cs[c].nch; ch++) {
+      const int g = x.chofs[c] + ch;
+      for (int j = 0; j < XDH; j++) w0[j] = (U32)k.dh[ch][j];
+      for (int n = 0; n < N; n++) w0[XDH + n] = (U32)out.at(0, g)[n], w1[n] = (U32)out.at(1, g)[n];
+      band_lift(&w0[XDH], &w1[0], N, false);
+      S32* v = val + (size_t)g * 2 * N;
+      for (int n = 0; n < N; n++) {
+        v[2 * n] = (S32)w1[n];
+        v[2 * n + 1] = (S32)w0[XDH + n - 7];
+      }
+      for (int j = 0; j < 7; j++) ex.tail[(size_t)g * 7 + j] = (S32)w0[XDH + N - 7 + j];
+    }
+  }
+}
+
+// The residuals and LSBs that decode to val (xll_decode's inverse); false where val doesn't, with
+// the frame's header and what the meta file kept
+static bool xll_encode_samples(const Xll& x, const std::vector<Chunk>& ck, const S32* val, const Extra& ex,
+                               BandData& res, BandData& lsb, std::vector<U32>& tmp) {
+  const int N = x.nframesamples, NB = x.nbands;
+  BandData in;
+  in.init(N, x.nch);
+  if (NB == 1) {
+    memcpy(&in.v[0][0], val, (size_t)N * x.nch * sizeof *val);
+  } else {
+    if (ex.tail.size() != (size_t)x.nch * 7) return false;
+    std::vector<U32> w0(N + XDH), w1(N);
+    for (int c = 0; c < x.nchsets; c++) {
+      const Chunk& k = ck[((size_t)1 * x.nsegs + 0) * x.nchsets + c];
+      for (int ch = 0; ch < x.cs[c].nch; ch++) {
+        const int g = x.chofs[c] + ch;
+        const S32* v = val + (size_t)g * 2 * N;
+        w0[0] = (U32)k.dh[ch][0];
+        for (int n = 0; n < N; n++) {
+          w1[n] = (U32)v[2 * n];
+          w0[XDH + n - 7] = (U32)v[2 * n + 1];
         }
-    for (int ch = 0; ch < s.nch; ch++) {
-      const U32* b = &tmp[(size_t)ch * N];
-      S32* e = res + (size_t)(x.chofs[c] + ch) * N;
-      const int o = s.aorder[ch];
-      if (o) {
-        int co[XORD];
-        rc_to_lpc(s.rc[ch], o, co);
-        for (int n = 0; n < o && n < N; n++) e[n] = (S32)b[n];
-        for (int n = o; n < N; n++) e[n] = (S32)(b[n] + (U32)lpc_pred(b, n, o, co));
-      } else {
-        U32* d = &tmp[(size_t)(XCH + ch) * N];
-        memcpy(d, b, (size_t)N * sizeof *d);
-        for (int j = 0; j < s.forder[ch]; j++)
-          for (int n = N - 1; n > 0; n--) d[n] -= d[n - 1];
-        for (int n = 0; n < N; n++) e[n] = (S32)d[n];
+        for (int j = 0; j < 7; j++) w0[XDH + N - 7 + j] = (U32)ex.tail[(size_t)g * 7 + j];
+        band_lift(&w0[XDH], &w1[0], N, true);
+        for (int j = 1; j < XDH; j++)
+          if (w0[j] != (U32)k.dh[ch][j]) return false;
+        for (int n = 0; n < N; n++) in.at(0, g)[n] = (S32)w0[XDH + n], in.at(1, g)[n] = (S32)w1[n];
       }
     }
   }
-  return true;
+  tmp.resize((size_t)2 * XCH * N);
+  std::vector<U8> ovb(ex.ovl.v);  // the overlapping LSB bits, as xll_decode wrote them
+  ovb.resize(ovb.size() + PAD);
+  BitReader ov;
+  ov.init(&ovb[0], 0, (U64)ex.ovl.v.size() * 8);
+  for (int b = 0; b < NB; b++)
+    for (int c = 0; c < x.nchsets; c++) {
+      const Chset& s = x.cs[c];
+      const Band& d = s.band[b];
+      for (int i = 0; i < s.nch; i++) {
+        const int oc = d.order[i];
+        U32* bb = &tmp[(size_t)i * N];
+        const S32* v = in.at(b, x.chofs[c] + oc);
+        const int sh = lsb_shift(x, d, oc), a = d.adj[oc], nl = d.nlsb[oc], k = lsb_overlap(x, d, oc);
+        S32* l = lsb.at(b, x.chofs[c] + oc);
+        if (!sh) {
+          for (int n = 0; n < N; n++) bb[n] = (U32)v[n];
+        } else {
+          const U32 m = (1u << sh) - 1, am = (1u << a) - 1;
+          for (int n = 0; n < N; n++) {
+            const U32 u = (U32)v[n], rem = u & m;
+            const U32 hi = k ? ov.get(k) : 0;
+            bb[n] = (U32)((S32)u >> sh) - hi;
+            if (nl) {
+              const U32 lo = rem >> a;
+              if (rem & am || (lo >> (nl - k))) return false;
+              l[n] = (S32)(lo + (hi << (nl - k)));
+            } else if (rem) {
+              return false;
+            }
+          }
+        }
+      }
+      if (d.decor)
+        for (int i = 0; i < s.nch / 2; i++)
+          if (d.dcoeff[i]) {
+            const U32* b0 = &tmp[(size_t)(2 * i) * N];
+            U32* b1 = &tmp[(size_t)(2 * i + 1) * N];
+            for (int n = 0; n < N; n++) b1[n] -= (U32)decor_term(b0[n], d.dcoeff[i]);
+          }
+      for (int ch = 0; ch < s.nch; ch++) {
+        const U32* bb = &tmp[(size_t)ch * N];
+        S32* e = res.at(b, x.chofs[c] + ch);
+        const int o = d.aorder[ch];
+        if (o) {
+          int co[XORD];
+          rc_to_lpc(d.rc[ch], o, co);
+          for (int n = 0; n < o && n < N; n++) e[n] = (S32)bb[n];
+          for (int n = o; n < N; n++) e[n] = (S32)(bb[n] + (U32)lpc_pred(bb, n, o, co));
+        } else {
+          U32* dd = &tmp[(size_t)(XCH + ch) * N];
+          memcpy(dd, bb, (size_t)N * sizeof *dd);
+          for (int j = 0; j < d.forder[ch]; j++)
+            for (int n = N - 1; n > 0; n--) dd[n] -= dd[n - 1];
+          for (int n = 0; n < N; n++) e[n] = (S32)dd[n];
+        }
+      }
+    }
+  return !ov.over && ov.end - ov.pos < 8;  // (all the overlapping bits taken, but a byte's padding)
 }
 
 static inline bool wr_lin(BitWriter& w, const S32* v, int n, int bits) {
@@ -1246,114 +1425,132 @@ static inline bool wr_rice1(BitWriter& w, S32 v, int k, U64 lim) {
 }
 
 // x's band data from its residuals and LSBs, coded as ck says; 0 or why it can't be
-static const char* xll_write_data(Xll& x, const std::vector<Chunk>& ck, const S32* res, const S32* lsb, BitWriter& w) {
-  const int N = x.nframesamples, S = x.nsegsamples;
-  for (int seg = 0; seg < x.nsegs; seg++)
-    for (int c = 0; c < x.nchsets; c++) {
-      Chset& s = x.cs[c];
-      const Chunk& k = ck[(size_t)seg * x.nchsets + c];
-      const U64 start = w.bits(), cend = start + (U64)x.navi[(size_t)seg * x.nchsets + c] * 8;
-      const U64 lstart = cend - (U64)s.lsb_size * 8;
-      if (seg) w.put(k.reuse, 1);
-      if (!k.reuse) {
-        s.seg_common = k.seg_common;
-        w.put(s.seg_common, 1);
-        const int np = s.seg_common ? 1 : s.nch;
-        for (int i = 0; i < np; i++) {
-          w.put(k.rice[i], 1);
-          if (!s.seg_common && k.rice[i]) {
-            w.put(k.hyb[i], 1);
-            if (k.hyb[i]) w.put(k.aux_code[i], s.nabits);
-          }
-          s.rice[i] = k.rice[i];
-          s.aux[i] = !s.seg_common && k.rice[i] && k.hyb[i] ? k.aux_code[i] + 1 : 0;
-        }
-        for (int i = 0; i < np; i++) {
-          if (!seg) {
-            w.put(k.a_code[i], s.nabits);
-            s.abit_a[i] = !s.rice[i] && k.a_code[i] ? k.a_code[i] + 1 : k.a_code[i];
-            s.na[i] = s.seg_common ? s.highest : s.aorder[i];
-          } else {
-            s.abit_a[i] = 0;
-            s.na[i] = 0;
-          }
-          w.put(k.b_code[i], s.nabits);
-          s.abit_b[i] = !s.rice[i] && k.b_code[i] ? k.b_code[i] + 1 : k.b_code[i];
-        }
-      }
-      for (int ch = 0; ch < s.nch; ch++) {
-        const int i = s.seg_common ? 0 : ch;
-        const S32* pa = res + (size_t)(x.chofs[c] + ch) * N + (size_t)seg * S;
-        const int na = s.na[i], nb = S - na;
-        const S32* pb = pa + na;
-        if (!s.rice[i]) {
-          if (!wr_lin(w, pa, na, s.abit_a[i]) || !wr_lin(w, pb, nb, s.abit_b[i])) return "a residual its code can't hold";
-        } else {
-          for (int j = 0; j < na; j++)
-            if (!wr_rice1(w, pa[j], s.abit_a[i], lstart)) return "a residual longer than its segment";
-          if (s.aux[i]) {
-            const std::vector<U16>& iso = k.iso[ch];
-            if (iso.size() >> x.nseg_log2) return "too many isolated samples";
-            U8 flag[XSEG];
-            memset(flag, 0, sizeof flag);
-            w.put((U32)iso.size(), x.nseg_log2);
-            for (size_t j = 0; j < iso.size(); j++) {
-              if (iso[j] >= nb) return "an isolated sample past its segment";
-              w.put(iso[j], x.nseg_log2);
-              flag[iso[j]] = 1;
+static const char* xll_write_data(Xll& x, const std::vector<Chunk>& ck, const BandData& res, const BandData& lsb,
+                                  BitWriter& w) {
+  const int S = x.nsegsamples;
+  for (int b = 0; b < x.nbands; b++)
+    for (int seg = 0; seg < x.nsegs; seg++)
+      for (int c = 0; c < x.nchsets; c++) {
+        Chset& s = x.cs[c];
+        const size_t ci = ((size_t)b * x.nsegs + seg) * x.nchsets + c;
+        if (s.nbands <= b) continue;
+        const Band& d = s.band[b];
+        const Chunk& k = ck[ci];
+        const U64 start = w.bits(), cend = start + (U64)x.navi[ci] * 8;
+        const U64 lstart = cend - (U64)d.lsb_size * 8;
+        if (seg) w.put(k.reuse, 1);
+        if (!k.reuse) {
+          s.seg_common = k.seg_common;
+          w.put(s.seg_common, 1);
+          const int np = s.seg_common ? 1 : s.nch;
+          for (int i = 0; i < np; i++) {
+            w.put(k.rice[i], 1);
+            if (!s.seg_common && k.rice[i]) {
+              w.put(k.hyb[i], 1);
+              if (k.hyb[i]) w.put(k.aux_code[i], s.nabits);
             }
-            for (int j = 0; j < nb; j++) {
-              if (flag[j]) {
-                const U32 u = zig(pb[j]);
-                if (s.aux[i] < 32 && u >> s.aux[i]) return "an isolated sample its code can't hold";
-                w.put(u, s.aux[i]);
-              } else if (!wr_rice1(w, pb[j], s.abit_b[i], lstart)) {
-                return "a residual longer than its segment";
+            s.rice[i] = k.rice[i];
+            s.aux[i] = !s.seg_common && k.rice[i] && k.hyb[i] ? k.aux_code[i] + 1 : 0;
+          }
+          for (int i = 0; i < np; i++) {
+            if (!seg) {
+              w.put(k.a_code[i], s.nabits);
+              s.abit_a[i] = !s.rice[i] && k.a_code[i] ? k.a_code[i] + 1 : k.a_code[i];
+              s.na[i] = s.seg_common ? d.highest : d.aorder[i];
+            } else {
+              s.abit_a[i] = 0;
+              s.na[i] = 0;
+            }
+            w.put(k.b_code[i], s.nabits);
+            s.abit_b[i] = !s.rice[i] && k.b_code[i] ? k.b_code[i] + 1 : k.b_code[i];
+          }
+        }
+        for (int ch = 0; ch < s.nch; ch++) {
+          const int i = s.seg_common ? 0 : ch;
+          const S32* pa = res.at(b, x.chofs[c] + ch) + (size_t)seg * S;
+          const int na = s.na[i], nb = S - na;
+          const S32* pb = pa + na;
+          if (!s.rice[i]) {
+            if (!wr_lin(w, pa, na, s.abit_a[i]) || !wr_lin(w, pb, nb, s.abit_b[i])) return "a residual its code can't hold";
+          } else {
+            for (int j = 0; j < na; j++)
+              if (!wr_rice1(w, pa[j], s.abit_a[i], lstart)) return "a residual longer than its segment";
+            if (s.aux[i]) {
+              const std::vector<U16>& iso = k.iso[ch];
+              if (iso.size() >> x.nseg_log2) return "too many isolated samples";
+              U8 flag[XSEG];
+              memset(flag, 0, sizeof flag);
+              w.put((U32)iso.size(), x.nseg_log2);
+              for (size_t j = 0; j < iso.size(); j++) {
+                if (iso[j] >= nb) return "an isolated sample past its segment";
+                w.put(iso[j], x.nseg_log2);
+                flag[iso[j]] = 1;
+              }
+              for (int j = 0; j < nb; j++) {
+                if (flag[j]) {
+                  const U32 u = zig(pb[j]);
+                  if (s.aux[i] < 32 && u >> s.aux[i]) return "an isolated sample its code can't hold";
+                  w.put(u, s.aux[i]);
+                } else if (!wr_rice1(w, pb[j], s.abit_b[i], lstart)) {
+                  return "a residual longer than its segment";
+                }
+              }
+            } else {
+              for (int j = 0; j < nb; j++)
+                if (!wr_rice1(w, pb[j], s.abit_b[i], lstart)) return "a residual longer than its segment";
+            }
+          }
+        }
+        if (seg == 0 && b == 1) {
+          w.put(k.dh_code, 5);
+          const int nbits = k.dh_code + 1;
+          for (int ch = 0; ch < s.nch; ch++)
+            for (int j = 1; j < XDH; j++) {
+              const S32 v = k.dh[ch][j];
+              if (nbits < 32 && (v < -(1 << (nbits - 1)) || v >= 1 << (nbits - 1))) return "a decimator sample its width can't hold";
+              w.put((U32)v, nbits);
+            }
+        }
+        if (w.bits() > lstart) return "an MSB part longer than its place";
+        if (k.g1) {
+          if (k.g1n != lstart - w.bits()) return "an MSB part of another length";
+          w.copy(&k.g1b[0], 0, k.g1n);
+        } else {
+          w.zeros(lstart - w.bits());
+        }
+        if (d.lsb_size) {
+          for (int ch = 0; ch < s.nch; ch++)
+            if (d.nlsb[ch]) {
+              const S32* pl = lsb.at(b, x.chofs[c] + ch) + (size_t)seg * S;
+              for (int j = 0; j < S; j++) {
+                if ((U32)pl[j] >> d.nlsb[ch]) return "an LSB its width can't hold";
+                w.put((U32)pl[j], d.nlsb[ch]);
               }
             }
+          if (w.bits() > cend) return "an LSB part longer than its place";
+          if (k.g2) {
+            if (k.g2n != cend - w.bits()) return "an LSB part of another length";
+            w.copy(&k.g2b[0], 0, k.g2n);
           } else {
-            for (int j = 0; j < nb; j++)
-              if (!wr_rice1(w, pb[j], s.abit_b[i], lstart)) return "a residual longer than its segment";
+            w.zeros(cend - w.bits());
           }
         }
       }
-      if (w.bits() > lstart) return "an MSB part longer than its place";
-      if (k.g1) {
-        if (k.g1n != lstart - w.bits()) return "an MSB part of another length";
-        w.copy(&k.g1b[0], 0, k.g1n);
-      } else {
-        w.zeros(lstart - w.bits());
-      }
-      if (s.lsb_size) {
-        for (int ch = 0; ch < s.nch; ch++)
-          if (s.nlsb[ch]) {
-            const S32* pl = lsb + (size_t)(x.chofs[c] + ch) * N + (size_t)seg * S;
-            for (int j = 0; j < S; j++) w.put((U32)pl[j], s.nlsb[ch]);
-          }
-        if (w.bits() > cend) return "an LSB part longer than its place";
-        if (k.g2) {
-          if (k.g2n != cend - w.bits()) return "an LSB part of another length";
-          w.copy(&k.g2b[0], 0, k.g2n);
-        } else {
-          w.zeros(cend - w.bits());
-        }
-      }
-    }
   return 0;
 }
 
 // ---------------------------------------------------------------------------------------------
-// the WAV's layout: which XLL channel each WAV channel is
+// a WAV's layout: which XLL channel each WAV channel is
 
 // a DTS speaker position's WAV speaker bit (0: none)
 static const U32 SPK_WAV[32] = {
-    0x4,    0x1,    0x2,     0x200,  0x400,  0x8,     0x100, 0x10,  // C L R Ls Rs LFE1 Cs Lsr
-    0x20,   0x200,  0x400,   0x40,   0x80,   0x1000,  0x2000, 0x4000,  // Rsr Lss Rss Lc Rc Lh Ch Rh
-    0,      0,      0,       0x800,  0,      0,       0x10000, 0x8000,  // LFE2 Lw Rw Oh Lhs Rhs Chr Lhr
-    0x20000, 0,     0,       0,      0,      0,       0,     0};       // Rhr Cl Ll Rl
+    0x4,     0x1,    0x2,    0x200, 0x400, 0x8,     0x100,  0x10,    // C L R Ls Rs LFE1 Cs Lsr
+    0x20,    0x200,  0x400,  0x40,  0x80,  0x1000,  0x2000, 0x4000,  // Rsr Lss Rss Lc Rc Lh Ch Rh
+    0,       0,      0,      0x800, 0,     0,       0x10000, 0x8000,  // LFE2 Lw Rw Oh Lhs Rhs Chr Lhr
+    0x20000, 0,      0,      0,     0,     0,       0,      0};      // Rhr Cl Ll Rl
 
 struct Layout {
-  int nch, bits, rate;
+  int nch, bits, rate, nbands;
   U32 mask;
   int perm[XWAV];  // the XLL channel (chofs[c] + output channel) of each WAV channel
   int nchsets, cs_nch[XCS], cs_mask[XCS];
@@ -1365,6 +1562,7 @@ static void layout_of(const Xll& x, Layout& L) {
   for (int c = 0; c < x.nchsets; c++)
     if (x.cs[c].dmix_embedded) L.bits = 32;
   L.rate = x.cs[0].freq;
+  L.nbands = x.nbands;
   L.nchsets = x.nchsets;
   int wbit[XWAV];
   U32 used = 0;
@@ -1396,17 +1594,20 @@ static void layout_of(const Xll& x, Layout& L) {
 }
 
 static bool layout_same(const Layout& a, const Layout& b) {
-  if (a.nch != b.nch || a.bits != b.bits || a.rate != b.rate || a.nchsets != b.nchsets) return false;
+  if (a.nch != b.nch || a.bits != b.bits || a.rate != b.rate || a.nbands != b.nbands || a.nchsets != b.nchsets)
+    return false;
   for (int c = 0; c < a.nchsets; c++)
     if (a.cs_nch[c] != b.cs_nch[c] || a.cs_mask[c] != b.cs_mask[c]) return false;
   return true;
 }
 
-static void put_layout(Rec& o, const Layout& L) {
+static void put_layout(Rec& o, int w, const Layout& L) {
   o.u8('W');
+  o.uv(w);
   o.uv(L.nch);
   o.uv(L.bits);
   o.uv(L.rate);
+  o.uv(L.nbands);
   o.uv(L.mask);
   for (int i = 0; i < L.nch; i++) o.uv(L.perm[i]);
   o.uv(L.nchsets);
@@ -1416,12 +1617,14 @@ static void put_layout(Rec& o, const Layout& L) {
   }
 }
 
-static bool get_layout(RecIn& in, Layout& L) {
+static inline bool get_layout(RecIn& in, Layout& L) {
   L.nch = (int)in.uv();
   L.bits = (int)in.uv();
   L.rate = (int)in.uv();
+  L.nbands = (int)in.uv();
   L.mask = (U32)in.uv();
-  if (L.nch < 1 || L.nch > XWAV || (L.bits != 16 && L.bits != 24 && L.bits != 32)) return false;
+  if (L.nch < 1 || L.nch > XWAV || (L.bits != 16 && L.bits != 24 && L.bits != 32) || L.nbands < 1 || L.nbands > 2)
+    return false;
   int seen[XWAV] = {0};
   for (int i = 0; i < L.nch; i++) {
     L.perm[i] = (int)in.uv();
@@ -1441,7 +1644,7 @@ static bool get_layout(RecIn& in, Layout& L) {
 // ---------------------------------------------------------------------------------------------
 // an X record: an extension substream frame with its XLL frame split
 
-static void put_chunk(Rec& o, Xll& x, int seg, int c, const Chunk& k) {
+static void put_chunk(Rec& o, Xll& x, int b, int seg, int c, const Chunk& k) {
   Chset& s = x.cs[c];
   o.u8(k.reuse | (k.reuse ? 0 : k.seg_common << 1) | k.g1 << 2 | k.g2 << 3);
   if (!k.reuse) {
@@ -1463,11 +1666,16 @@ static void put_chunk(Rec& o, Xll& x, int seg, int c, const Chunk& k) {
       for (size_t j = 0; j < k.iso[ch].size(); j++) o.uv(k.iso[ch][j]);
     }
   }
+  if (seg == 0 && b == 1) {
+    o.u8(k.dh_code);
+    for (int ch = 0; ch < s.nch; ch++)
+      for (int j = 1; j < XDH; j++) o.sv(k.dh[ch][j]);
+  }
   if (k.g1) o.blob(&k.g1b[0], k.g1b.size()), o.uv(k.g1n);
   if (k.g2) o.blob(&k.g2b[0], k.g2b.size()), o.uv(k.g2n);
 }
 
-static bool get_chunk(RecIn& in, Xll& x, int seg, int c, Chunk& k) {
+static bool get_chunk(RecIn& in, Xll& x, int b, int seg, int c, Chunk& k) {
   Chset& s = x.cs[c];
   const int f = in.u8();
   if (f >> 4 || (seg == 0 && (f & 1))) return false;
@@ -1478,10 +1686,10 @@ static bool get_chunk(RecIn& in, Xll& x, int seg, int c, Chunk& k) {
     s.seg_common = k.seg_common = f >> 1 & 1;
     const int np = s.seg_common ? 1 : s.nch;
     for (int i = 0; i < np; i++) {
-      const int b = in.u8();
-      k.rice[i] = b & 1;
-      k.hyb[i] = b >> 1 & 1;
-      if (b >> 2 || (k.hyb[i] && (s.seg_common || !k.rice[i]))) return false;
+      const int v = in.u8();
+      k.rice[i] = v & 1;
+      k.hyb[i] = v >> 1 & 1;
+      if (v >> 2 || (k.hyb[i] && (s.seg_common || !k.rice[i]))) return false;
       k.aux_code[i] = k.hyb[i] ? (U8)in.u8() : 0;
       k.a_code[i] = !seg ? (U8)in.u8() : 0;
       k.b_code[i] = (U8)in.u8();
@@ -1500,6 +1708,18 @@ static bool get_chunk(RecIn& in, Xll& x, int seg, int c, Chunk& k) {
       if (n >> x.nseg_log2) return false;
       k.iso[ch].resize(n);
       for (U64 j = 0; j < n; j++) k.iso[ch][j] = (U16)in.uv();
+    }
+  }
+  if (seg == 0 && b == 1) {
+    k.dh_code = in.u8();
+    if (k.dh_code > 31) return false;
+    for (int ch = 0; ch < s.nch; ch++) {
+      k.dh[ch][0] = 0;
+      for (int j = 1; j < XDH; j++) {
+        const S64 v = in.sv();
+        if (v != (S32)v) return false;
+        k.dh[ch][j] = (S32)v;
+      }
     }
   }
   if (k.g1) {
@@ -1521,37 +1741,44 @@ static bool get_chunk(RecIn& in, Xll& x, int seg, int c, Chunk& k) {
 struct Split {
   Xll x;
   std::vector<Chunk> ck;
-  std::vector<S32> res, lsb, val;
+  BandData res, lsb;
+  std::vector<S32> val;
+  Extra ex;
   std::vector<U32> tmp;
   int data_end;
 };
 
-// the clipped values of the frame's samples, in WAV order (count: nframesamples * nch)
-static void wav_values(const Xll& x, const Layout& L, const S32* val, S32* out, std::vector<std::pair<U64, S32> >& exc) {
-  const int N = x.nframesamples, W = L.nch;
+// the clipped values of the frame's samples, in WAV order (count: the frame's samples * nch)
+static void wav_values(int NS, const Layout& L, const S32* val, S32* out, std::vector<std::pair<U64, S32> >& exc) {
+  const int W = L.nch;
   const S32 lo = (S32)(-(1ll << (L.bits - 1))), hi = (S32)((1ll << (L.bits - 1)) - 1);
   exc.clear();
-  for (int n = 0; n < N; n++)
+  for (int n = 0; n < NS; n++)
     for (int w = 0; w < W; w++) {
-      const S32 v = val[(size_t)L.perm[w] * N + n];
+      const S32 v = val[(size_t)L.perm[w] * NS + n];
       const S32 c = v < lo ? lo : v > hi ? hi : v;
       if (c != v) exc.push_back(std::make_pair((U64)n * W + w, v));
       out[(size_t)n * W + w] = c;
     }
 }
 
-static void put_x(Rec& o, const U8* e, int n, int xoff, const U8* xf, int one2one, Split& sp,
+static void put_x(Rec& o, int wi, const U8* e, int n, int xoff, const U8* xf, int one2one, Split& sp,
                   const std::vector<std::pair<U64, S32> >& exc) {
   Xll& x = sp.x;
   o.u8('X');
+  o.uv(wi);
   o.blob(e, xoff);
   o.u8(one2one);
   o.uv(x.frame_size);
   o.blob(xf, x.data_start);
-  for (int seg = 0; seg < x.nsegs; seg++)
-    for (int c = 0; c < x.nchsets; c++) put_chunk(o, x, seg, c, sp.ck[(size_t)seg * x.nchsets + c]);
+  for (int b = 0; b < x.nbands; b++)
+    for (int seg = 0; seg < x.nsegs; seg++)
+      for (int c = 0; c < x.nchsets; c++)
+        if (x.cs[c].nbands > b) put_chunk(o, x, b, seg, c, sp.ck[((size_t)b * x.nsegs + seg) * x.nchsets + c]);
   o.blob(xf + sp.data_end, x.frame_size - sp.data_end);
   o.blob(e + xoff + x.frame_size, n - xoff - x.frame_size);
+  for (size_t i = 0; i < sp.ex.tail.size(); i++) o.sv(sp.ex.tail[i]);
+  o.blob(sp.ex.ovl.v.empty() ? (const U8*)"" : &sp.ex.ovl.v[0], sp.ex.ovl.v.size());
   o.uv(exc.size());
   U64 last = 0;
   for (size_t i = 0; i < exc.size(); i++) {
@@ -1567,7 +1794,7 @@ struct Samples {
   virtual ~Samples() {}
 };
 
-// An X record (its tag read) joined into out: 0, or why it can't be
+// An X record (its tag and WAV index read) joined into out: 0, or why it can't be. L: the WAV's layout.
 static const char* join_x(RecIn& in, const Layout* L, Samples& smp, std::vector<U8>& out, Split& sp,
                           std::vector<S32>& wv) {
   std::vector<U8> pre, hdr, tail, post;
@@ -1576,8 +1803,7 @@ static const char* join_x(RecIn& in, const Layout* L, Samples& smp, std::vector<
   const U64 fsize = in.uv();
   if (in.bad || one2one > 1 || fsize > (1 << 20) || !in.blob(hdr, fsize)) return "a damaged record";
   Xll& x = sp.x;
-  // the header, as the frame's start: what xll_headers reads it from
-  std::vector<U8> fb(fsize + PAD, 0);
+  std::vector<U8> fb(fsize + PAD, 0);  // the header, as the frame's start: what xll_headers reads it from
   memcpy(&fb[0], &hdr[0], hdr.size());
   const char* why = xll_headers(x, &fb[0], (int)fsize, one2one);
   if (why) return why;
@@ -1585,14 +1811,26 @@ static const char* join_x(RecIn& in, const Layout* L, Samples& smp, std::vector<
   if ((why = xll_supported(x))) return why;
   Layout fl;
   layout_of(x, fl);
-  if (!L || !layout_same(*L, fl)) return "an XLL frame unlike the WAV";
-  sp.ck.assign((size_t)x.nsegs * x.nchsets, Chunk());
-  for (int seg = 0; seg < x.nsegs; seg++)
-    for (int c = 0; c < x.nchsets; c++)
-      if (!get_chunk(in, x, seg, c, sp.ck[(size_t)seg * x.nchsets + c])) return "a damaged record";
+  if (!L || !layout_same(*L, fl)) return "an XLL frame unlike its WAV";
+  sp.ck.assign((size_t)x.nbands * x.nsegs * x.nchsets, Chunk());
+  for (int b = 0; b < x.nbands; b++)
+    for (int seg = 0; seg < x.nsegs; seg++)
+      for (int c = 0; c < x.nchsets; c++)
+        if (x.cs[c].nbands > b && !get_chunk(in, x, b, seg, c, sp.ck[((size_t)b * x.nsegs + seg) * x.nchsets + c]))
+          return "a damaged record";
   if (!in.blob(tail, fsize) || !in.blob(post, 1 << 20)) return "a damaged record";
-  const int N = x.nframesamples, W = L->nch;
-  wv.resize((size_t)N * W);
+  sp.ex.tail.assign(x.nbands > 1 ? (size_t)x.nch * 7 : 0, 0);
+  for (size_t i = 0; i < sp.ex.tail.size(); i++) {
+    const S64 v = in.sv();
+    if (v != (S32)v) return "a damaged record";
+    sp.ex.tail[i] = (S32)v;
+  }
+  std::vector<U8> ov;
+  if (!in.blob(ov, 1 << 26)) return "a damaged record";
+  sp.ex.ovl.reset();
+  sp.ex.ovl.v = ov;
+  const int NS = x.nframesamples * x.nbands, W = L->nch;
+  wv.resize((size_t)NS * W);
   if (!smp.get(&wv[0], wv.size())) return "the WAV ends early";
   const U64 nexc = in.uv();
   if (in.bad || nexc > wv.size()) return "a damaged record";
@@ -1603,16 +1841,16 @@ static const char* join_x(RecIn& in, const Layout* L, Samples& smp, std::vector<
     if (in.bad || at >= wv.size() || v != (S32)v) return "a damaged record";
     wv[at] = (S32)v;
   }
-  sp.val.resize((size_t)N * W);
-  for (int n = 0; n < N; n++)
-    for (int w = 0; w < W; w++) sp.val[(size_t)L->perm[w] * N + n] = wv[(size_t)n * W + w];
-  sp.res.assign((size_t)N * W, 0);
-  sp.lsb.assign((size_t)N * W, 0);
-  if (!xll_encode_samples(x, &sp.val[0], &sp.res[0], &sp.lsb[0], sp.tmp)) return "WAV samples the XLL frame can't code";
+  sp.val.resize((size_t)NS * W);
+  for (int n = 0; n < NS; n++)
+    for (int w = 0; w < W; w++) sp.val[(size_t)L->perm[w] * NS + n] = wv[(size_t)n * W + w];
+  sp.res.init(x.nframesamples, x.nch);
+  sp.lsb.init(x.nframesamples, x.nch);
+  if (!xll_encode_samples(x, sp.ck, &sp.val[0], sp.ex, sp.res, sp.lsb, sp.tmp)) return "WAV samples the XLL frame can't code";
   BitWriter w;
   w.reset();
   w.bytes(&hdr[0], hdr.size());
-  if ((why = xll_write_data(x, sp.ck, &sp.res[0], &sp.lsb[0], w))) return why;
+  if ((why = xll_write_data(x, sp.ck, sp.res, sp.lsb, w))) return why;
   w.bytes(&tail[0], tail.size());
   if (w.v.size() != fsize || w.nacc) return "an XLL frame of another size";
   out.clear();
@@ -1643,9 +1881,9 @@ struct WavSamples : Samples {
 // the split
 
 struct Stats {
-  U64 bytes, raw, core, exss, xsplit, wav_samples, exceptions;
-  U64 s_core, s_kept, s_exss, s_xhdr, s_param;  // the side file: core frames, frames kept as bytes,
-                                                 // EXSS headers, XLL headers, the rest of X records
+  U64 bytes, raw, core, exss, xsplit, exceptions, ovl_bits;
+  U64 m_exss, m_xhdr, m_param, m_kept, m_raw;  // the meta file: EXSS headers, XLL headers, the rest of
+                                               // X records, frames kept as bytes, bytes between frames
   std::vector<std::string> why;
   std::vector<U64> why_n;
   void kept(const char* w) {
@@ -1659,17 +1897,35 @@ struct Stats {
   }
 };
 
-struct SideOut {
+struct FileOut {
   FILE* f;
+  std::string name;
   U64 size;
-  void write(const Rec& r) {
-    if (r.b.size() && fwrite(&r.b[0], 1, r.b.size(), f) != r.b.size()) die(EX_WRITE, "can't write the side file");
-    size += r.b.size();
+  void open(const std::string& path) {
+    name = path;
+    size = 0;
+    f = fopen(path.c_str(), "wb");
+    if (!f) die(EX_WRITE, "can't create %s", path.c_str());
+  }
+  void write(const U8* p, size_t n) {
+    if (n && fwrite(p, 1, n, f) != n) die(EX_WRITE, "can't write %s", name.c_str());
+    size += n;
+  }
+  void write(const Rec& r) { write(r.b.empty() ? 0 : &r.b[0], r.b.size()); }
+  void close() {
+    if (fclose(f)) die(EX_WRITE, "can't write %s", name.c_str());
   }
 };
 
 static const U8 MAGIC[8] = {'D', 'T', 'S', 'S', 'P', 'L', 'I', 'T'};
-enum { VERSION = 1 };
+enum { VERSION = 2 };
+
+static std::string wav_name(const std::string& prefix, int w) {
+  if (!w) return prefix + ".wav";
+  char b[32];
+  snprintf(b, sizeof b, ".%d.wav", w + 1);
+  return prefix + b;
+}
 
 // the input, read through a window that holds the largest frame
 struct Input {
@@ -1706,173 +1962,185 @@ struct Input {
 
 enum { LOOK = (1 << 20) + 64, RAW_MAX = 1 << 20 };
 
-static void split_exss(const U8* e, int n, ExssState& st, Layout& L, bool& have_layout, SideOut& so, WavOut& wo,
-                       Stats& stt, Split& sp, Split& chk, std::vector<S32>& wv, std::vector<S32>& wv2) {
-  Rec o;
-  int off = 0, size = 0, one2one = 0;
-  const char* why = 0;
-  stt.exss++;
-  if (exss_xll(st, e, n, off, size, one2one, why)) {
+struct Splitter {
+  std::string prefix;
+  FileOut dts, meta;
+  WavOut wav[XNWAV];
+  Layout lay[XNWAV];
+  int nwav;
+  ExssState st;
+  Stats stt;
+  Split sp, chk;
+  std::vector<S32> wv, wv2;
+  static CoreFrame cf;
+
+  // the WAV of an XLL frame's layout (a new one where it is new): -1 where there are too many
+  int wav_of(const Layout& fl) {
+    for (int w = 0; w < nwav; w++)
+      if (layout_same(lay[w], fl)) return w;
+    return nwav < XNWAV ? nwav : -1;
+  }
+
+  // the XLL frame of the EXSS frame e (n bytes) at off split, its record into o: 0, or why not
+  const char* try_split(const U8* e, int n, int off, int size, int one2one, Rec& o, int& wi) {
     std::vector<U8> xf(size + PAD, 0);
     memcpy(&xf[0], e + off, size);
     Xll& x = sp.x;
-    if (!(why = xll_headers(x, &xf[0], size, one2one)) && !(why = xll_supported(x))) {
-      Layout fl;
-      layout_of(x, fl);
-      if (have_layout && !layout_same(L, fl)) why = "an XLL layout unlike the first frame's";
+    const char* why = xll_headers(x, &xf[0], size, one2one);
+    if (why || (why = xll_supported(x))) return why;
+    Layout fl;
+    layout_of(x, fl);
+    if ((wi = wav_of(fl)) < 0) return "more channel layouts than WAVs";
+    sp.res.init(x.nframesamples, x.nch);
+    sp.lsb.init(x.nframesamples, x.nch);
+    const int NS = x.nframesamples * x.nbands;
+    sp.val.assign((size_t)NS * x.nch, 0);
+    Xll hx = x;  // (the band data parse changes the coding state)
+    if ((why = xll_data(x, &xf[0], sp.ck, sp.res, sp.lsb, sp.data_end))) return why;
+    x = hx;
+    xll_decode(x, sp.ck, sp.res, sp.lsb, &sp.val[0], sp.ex, sp.tmp);
+    std::vector<std::pair<U64, S32> > exc;
+    wv.resize((size_t)NS * x.nch);
+    wav_values(NS, fl, &sp.val[0], &wv[0], exc);
+    o.clear();
+    put_x(o, wi, e, n, off, &xf[0], one2one, sp, exc);
+    // the check: the record joined back as the join will
+    RecIn in;
+    in.init_mem(&o.b[0], o.b.size());
+    in.u8();
+    in.uv();
+    MemSamples ms;
+    ms.v = &wv[0];
+    ms.n = wv.size();
+    std::vector<U8> back;
+    if ((why = join_x(in, &fl, ms, back, chk, wv2))) return why;
+    if (back.size() != (size_t)n || memcmp(&back[0], e, n) || in.mpos != in.msize)
+      return "an XLL frame that doesn't join back the same";
+    if (wi == nwav) {
+      lay[nwav] = fl;
+      wav[nwav].open(wav_name(prefix, nwav));
+      wav[nwav].nch = fl.nch;
+      wav[nwav].bits = fl.bits;
+      wav[nwav].rate = fl.rate;
+      wav[nwav].mask = fl.mask;
+      Rec lr;
+      put_layout(lr, nwav, fl);
+      meta.write(lr);
+      nwav++;
+    }
+    wav[wi].write(&wv[0], wv.size());
+    stt.exceptions += exc.size();
+    stt.ovl_bits += sp.ex.ovl.v.size() * 8;
+    stt.m_exss += n - x.frame_size;
+    stt.m_xhdr += x.data_start + (x.frame_size - sp.data_end);
+    stt.m_param += o.b.size() - (n - x.frame_size) - x.data_start - (x.frame_size - sp.data_end);
+    return 0;
+  }
+
+  void exss(const U8* e, int n) {
+    int off = 0, size = 0, one2one = 0, wi = 0;
+    const char* why = 0;
+    stt.exss++;
+    Rec o;
+    if (exss_xll(st, e, n, off, size, one2one, why)) {
+      why = 0;
+      for (int t = one2one < 0 ? 1 : one2one; t >= (one2one < 0 ? 0 : one2one); t--)  // (unknown: 1, then 0)
+        if (!(why = try_split(e, n, off, size, t, o, wi))) break;
       if (!why) {
-        const size_t cnt = (size_t)x.nframesamples * x.nch;
-        sp.res.assign(cnt, 0);
-        sp.lsb.assign(cnt, 0);
-        sp.val.assign(cnt, 0);
-        Xll hx = x;  // (the band data parse changes the coding state)
-        why = xll_data(x, &xf[0], sp.ck, &sp.res[0], &sp.lsb[0], sp.data_end);
-        if (!why) {
-          x = hx;
-          xll_decode(x, &sp.res[0], &sp.lsb[0], &sp.val[0], sp.tmp);
-          std::vector<std::pair<U64, S32> > exc;
-          wv.resize(cnt);
-          wav_values(x, fl, &sp.val[0], &wv[0], exc);
-          put_x(o, e, n, off, &xf[0], one2one, sp, exc);
-          // the check: the record joined back as the join will
-          RecIn in;
-          in.init_mem(&o.b[1], o.b.size() - 1);
-          MemSamples ms;
-          ms.v = &wv[0];
-          ms.n = wv.size();
-          std::vector<U8> back;
-          why = join_x(in, &fl, ms, back, chk, wv2);
-          if (!why && (back.size() != (size_t)n || memcmp(&back[0], e, n) || in.mpos != in.msize))
-            why = "an XLL frame that doesn't join back the same";
-          if (!why) {
-            if (!have_layout) {
-              L = fl;
-              have_layout = true;
-              wo.nch = L.nch;
-              wo.bits = L.bits;
-              wo.rate = L.rate;
-              wo.mask = L.mask;
-              Rec lr;
-              put_layout(lr, L);
-              so.write(lr);
-            }
-            so.write(o);
-            wo.write(&wv[0], wv.size());
-            stt.s_exss += n - x.frame_size;
-            stt.s_xhdr += x.data_start + (x.frame_size - sp.data_end);
-            stt.s_param += o.b.size() - (n - x.frame_size) - x.data_start - (x.frame_size - sp.data_end);
-            stt.xsplit++;
-            stt.wav_samples += x.nframesamples;
-            stt.exceptions += exc.size();
-            return;
-          }
-        }
+        meta.write(o);
+        stt.xsplit++;
+        return;
       }
     }
+    stt.kept(why ? why : "?");
+    o.clear();
+    o.u8('E');
+    o.blob(e, n);
+    meta.write(o);
+    stt.m_kept += o.b.size();
   }
-  stt.kept(why ? why : "?");
-  o.clear();
-  o.u8('E');
-  o.blob(e, n);
-  so.write(o);
-  stt.s_kept += o.b.size();
-}
 
-static void put_bytes(SideOut& so, int tag, const U8* p, size_t n) {
-  Rec o;
-  o.u8(tag);
-  o.blob(p, n);
-  so.write(o);
-}
-
-static FILE* open_in(const char* path, const char* what) {
-  if (!strcmp(path, "-")) {
-#ifdef _WIN32
-    _setmode(_fileno(stdin), _O_BINARY);
-#endif
-    return stdin;
+  void bytes(const U8* p, size_t n) {
+    Rec o;
+    o.u8('R');
+    o.blob(p, n);
+    meta.write(o);
+    stt.m_raw += o.b.size();
   }
-  FILE* f = fopen(path, "rb");
-  if (!f) die(EX_READ, "can't open %s %s", what, path);
-  return f;
-}
 
-static FILE* open_out(const char* path, const char* what) {
-  if (!strcmp(path, "-")) {
-#ifdef _WIN32
-    _setmode(_fileno(stdout), _O_BINARY);
-#endif
-    return stdout;
+  // a core frame at p (n bytes, av there): one where a frame or the end follows, or it parses
+  bool core_ok(const U8* p, int n, size_t av, bool eof) {
+    if ((size_t)n == av && eof) return true;
+    if ((size_t)n + 4 <= av && (be32(p + n) == SYNC_CORE || be32(p + n) == SYNC_EXSS)) return true;
+    return !core_parse(p, n, cf);
   }
-  FILE* f = fopen(path, "wb");
-  if (!f) die(EX_WRITE, "can't create %s %s", what, path);
-  return f;
-}
 
-static void split(const char* ipath, const char* spath, const char* wpath, Stats& stt, U32& crc, U64& side, U64& wav) {
-  FILE* fi = open_in(ipath, "the input");
-  SideOut so;
-  so.f = open_out(spath, "the side file");
-  so.size = 0;
-  if (!strcmp(wpath, "-")) die(EX_USAGE, "the WAV can't be stdout (its header is written last)");
-  WavOut wo;
-  wo.open(open_out(wpath, "the WAV"));
-  Rec hr;
-  hr.bytes(MAGIC, 8);
-  hr.u8(VERSION);
-  so.write(hr);
-  Input in;
-  in.init(fi);
-  ExssState st;
-  memset(&st, 0, sizeof st);
-  Layout L;
-  memset(&L, 0, sizeof L);
-  bool have_layout = false;
-  Split sp, chk;
-  std::vector<S32> wv, wv2;
-  std::vector<U8> raw;
-  crc = 0;
-  for (;;) {
-    const size_t av = in.fill(LOOK);
-    if (!av) break;
-    const U8* p = &in.buf[in.lo];
-    int n = core_frame(p, av);
-    if (n) {
-      if (raw.size()) put_bytes(so, 'R', &raw[0], raw.size()), raw.clear();
-      put_bytes(so, 'C', p, n);
-      stt.core++;
-      stt.s_core += n;
-    } else if ((n = exss_frame(p, av))) {
-      if (raw.size()) put_bytes(so, 'R', &raw[0], raw.size()), raw.clear();
-      split_exss(p, n, st, L, have_layout, so, wo, stt, sp, chk, wv, wv2);
-    } else {
-      // bytes up to the next byte that could start a sync word
-      n = 1;
-      const size_t lim = av < 65536 ? av : 65536;
-      while ((size_t)n < lim && p[n] != 0x7F && p[n] != 0x64) n++;
-      raw.insert(raw.end(), p, p + n);
-      stt.raw += n;
-      if (raw.size() >= RAW_MAX) put_bytes(so, 'R', &raw[0], raw.size()), raw.clear();
+  void run(FILE* fi, U32& crc) {
+    dts.open(prefix + ".dts");
+    meta.open(prefix + ".meta");
+    nwav = 0;
+    Rec hr;
+    hr.bytes(MAGIC, 8);
+    hr.u8(VERSION);
+    meta.write(hr);
+    Input in;
+    in.init(fi);
+    memset(&st, 0, sizeof st);
+    std::vector<U8> raw;
+    crc = 0;
+    for (;;) {
+      const size_t av = in.fill(LOOK);
+      if (!av) break;
+      const U8* p = &in.buf[in.lo];
+      int n = core_frame(p, av);
+      if (n && core_ok(p, n, av, in.eof)) {
+        if (raw.size()) bytes(&raw[0], raw.size()), raw.clear();
+        Rec o;
+        o.u8('C');
+        o.uv(n);
+        meta.write(o);
+        dts.write(p, n);
+        stt.core++;
+      } else if ((n = exss_frame(p, av))) {
+        if (raw.size()) bytes(&raw[0], raw.size()), raw.clear();
+        exss(p, n);
+      } else {
+        // bytes up to the next byte that could start a sync word
+        n = 1;
+        const size_t lim = av < 65536 ? av : 65536;
+        while ((size_t)n < lim && p[n] != 0x7F && p[n] != 0x64) n++;
+        raw.insert(raw.end(), p, p + n);
+        stt.raw += n;
+        if (raw.size() >= RAW_MAX) bytes(&raw[0], raw.size()), raw.clear();
+      }
+      crc = crc32_upd(crc, p, n);
+      stt.bytes += n;
+      in.lo += n;
     }
-    crc = crc32_upd(crc, p, n);
-    stt.bytes += n;
-    in.lo += n;
+    if (raw.size()) bytes(&raw[0], raw.size());
+    if (!nwav) {  // (a stream without XLL: an empty WAV all the same)
+      wav[0].open(wav_name(prefix, 0));
+      nwav = 1;
+      Layout z;
+      memset(&z, 0, sizeof z);
+      lay[0] = z;
+    }
+    Rec zr;
+    zr.u8('Z');
+    zr.uv(stt.bytes);
+    zr.uv(crc);
+    zr.uv(nwav);
+    for (int w = 0; w < nwav; w++) zr.uv(wav[w].frames);
+    meta.write(zr);
+    for (int w = 0; w < nwav; w++) wav[w].finish();
+    dts.close();
+    meta.close();
   }
-  if (raw.size()) put_bytes(so, 'R', &raw[0], raw.size());
-  Rec z;
-  z.u8('Z');
-  z.uv(stt.bytes);
-  z.uv(crc);
-  z.uv(wo.frames);
-  so.write(z);
-  wo.finish();
-  side = so.size;
-  wav = WAV_HEAD + wo.nbytes + (wo.nbytes & 1);
-  if (fi != stdin) fclose(fi);
-  if ((so.f != stdout && fclose(so.f)) || fclose(wo.f)) die(EX_WRITE, "can't write the output");
-}
+};
+CoreFrame Splitter::cf;
 
 // ---------------------------------------------------------------------------------------------
+#ifndef DTSSPLIT_LIB  // (dtscore.cpp takes what comes before)
 // the join
 
 struct Sink {
@@ -1910,53 +2178,75 @@ struct CmpSink : Sink {
   }
 };
 
-static void damaged(const char* why, U64 at) { die(EX_DATA, "damaged input: %s (side file byte %llu)", why, (unsigned long long)at); }
+static void damaged(const char* why, U64 at) { die(EX_DATA, "damaged input: %s (meta file byte %llu)", why, (unsigned long long)at); }
 
-static void join(const char* spath, const char* wpath, Sink& out, U64& nbytes) {
-  FILE* fs = open_in(spath, "the side file");
-  FILE* fw = fopen(wpath, "rb");
-  if (!fw) die(EX_READ, "can't open the WAV %s", wpath);
-  WavIn wi;
-  const char* why = wi.open(fw);
-  if (why) die(EX_DATA, "%s: %s", wpath, why);
+static void join(const std::string& prefix, Sink& out, U64& nbytes) {
+  const std::string mname = prefix + ".meta", dname = prefix + ".dts";
+  FILE* fm = fopen(mname.c_str(), "rb");
+  if (!fm) die(EX_READ, "can't open %s", mname.c_str());
+  FILE* fd = fopen(dname.c_str(), "rb");
+  if (!fd) die(EX_READ, "can't open %s", dname.c_str());
   RecIn in;
-  in.init_file(fs);
+  in.init_file(fm, mname.c_str());
   U8 h[9];
   in.bytes(h, 9);
-  if (in.bad || memcmp(h, MAGIC, 8)) die(EX_DATA, "%s: not a dtssplit side file", spath);
-  if (h[8] != VERSION) die(EX_DATA, "%s: format version %d, which this dtssplit (version %d) doesn't read", spath, h[8], VERSION);
-  Layout L;
-  bool have_layout = false;
+  if (in.bad || memcmp(h, MAGIC, 8)) die(EX_DATA, "%s: not a dtssplit meta file", mname.c_str());
+  if (h[8] != VERSION) die(EX_DATA, "%s: format version %d, which this dtssplit (version %d) doesn't read", mname.c_str(), h[8], VERSION);
+  Layout lay[XNWAV];
+  bool have[XNWAV] = {false};
+  WavIn wi[XNWAV];
+  FILE* wf[XNWAV] = {0};
+  U64 wsamples[XNWAV] = {0};
   Split sp;
   std::vector<S32> wv;
   std::vector<U8> buf;
-  WavSamples ws;
-  ws.w = &wi;
   U32 crc = 0;
-  U64 total = 0, frames = 0;
+  U64 total = 0;
   for (;;) {
     const U64 at = in.nread;
     const int tag = in.u8();
-    if (in.bad) damaged("the side file ends early", at);
-    if (tag == 'R' || tag == 'C' || tag == 'E') {
-      if (!in.blob(buf, tag == 'R' ? 2 * RAW_MAX : tag == 'C' ? 16384 : 1 << 20)) damaged("a damaged record", at);
+    if (in.bad) damaged("the meta file ends early", at);
+    buf.clear();
+    if (tag == 'R' || tag == 'E') {
+      if (!in.blob(buf, tag == 'R' ? 2 * RAW_MAX : 1 << 20)) damaged("a damaged record", at);
+    } else if (tag == 'C') {
+      const U64 n = in.uv();
+      if (in.bad || n < 96 || n > 16384) damaged("a damaged record", at);
+      buf.resize(n);
+      if (fread(&buf[0], 1, n, fd) != n) die(EX_DATA, "%s ends early", dname.c_str());
     } else if (tag == 'W') {
-      if (have_layout || !get_layout(in, L)) damaged("a damaged layout record", at);
-      if (wi.nch != L.nch || wi.bits != L.bits || wi.rate != L.rate)
-        die(EX_DATA, "%s: %d channels, %d-bit, %d Hz, where the side file has %d, %d-bit, %d Hz", wpath, wi.nch, wi.bits,
-            wi.rate, L.nch, L.bits, L.rate);
-      have_layout = true;
+      const U64 w = in.uv();
+      if (in.bad || w >= XNWAV || have[w] || !get_layout(in, lay[w])) damaged("a damaged layout record", at);
+      const std::string wn = wav_name(prefix, (int)w);
+      if (!(wf[w] = fopen(wn.c_str(), "rb"))) die(EX_READ, "can't open %s", wn.c_str());
+      const char* why = wi[w].open(wf[w]);
+      if (why) die(EX_DATA, "%s: %s", wn.c_str(), why);
+      if (wi[w].nch != lay[w].nch || wi[w].bits != lay[w].bits || wi[w].rate != lay[w].rate)
+        die(EX_DATA, "%s: %d channels, %d-bit, %d Hz, where the meta file has %d, %d-bit, %d Hz", wn.c_str(), wi[w].nch,
+            wi[w].bits, wi[w].rate, lay[w].nch, lay[w].bits, lay[w].rate);
+      have[w] = true;
       continue;
     } else if (tag == 'X') {
-      if ((why = join_x(in, have_layout ? &L : 0, ws, buf, sp, wv))) damaged(why, at);
-      frames += sp.x.nframesamples;
+      const U64 w = in.uv();
+      if (in.bad || w >= XNWAV || !have[w]) damaged("a damaged record", at);
+      WavSamples ws;
+      ws.w = &wi[w];
+      const char* why = join_x(in, &lay[w], ws, buf, sp, wv);
+      if (why) damaged(why, at);
+      wsamples[w] += (U64)sp.x.nframesamples * sp.x.nbands;
     } else if (tag == 'Z') {
-      const U64 n = in.uv(), c = in.uv(), f = in.uv();
-      if (in.bad || !in.peek_end()) damaged("a damaged end record", at);
+      const U64 n = in.uv(), c = in.uv(), nw = in.uv();
+      if (in.bad || nw > XNWAV) damaged("a damaged end record", at);
+      for (U64 w = 0; w < nw; w++)
+        if (in.uv() != wsamples[w]) damaged("sample counts unlike the WAVs'", at);
+      if (in.bad || !in.at_end()) damaged("a damaged end record", at);
       if (n != total || c != crc) damaged("the stream joined isn't the one split", at);
-      if (f != frames) damaged("a sample count unlike the WAV's", at);
-      S32 extra;
-      if (have_layout && wi.read(&extra, 1)) die(EX_DATA, "%s: more samples than the side file takes", wpath);
+      if (fgetc(fd) != EOF) die(EX_DATA, "%s: more than the meta file takes", dname.c_str());
+      for (U64 w = 0; w < XNWAV; w++) {
+        S32 extra;
+        if (have[w] && wi[w].read(&extra, 1)) die(EX_DATA, "%s: more samples than the meta file takes", wav_name(prefix, (int)w).c_str());
+        if (wf[w]) fclose(wf[w]);
+      }
       break;
     } else {
       damaged("an unknown record", at);
@@ -1965,8 +2255,8 @@ static void join(const char* spath, const char* wpath, Sink& out, U64& nbytes) {
     crc = crc32_upd(crc, buf.size() ? &buf[0] : 0, buf.size());
     total += buf.size();
   }
-  if (fs != stdin) fclose(fs);
-  fclose(fw);
+  fclose(fm);
+  fclose(fd);
   nbytes = total;
 }
 
@@ -1975,11 +2265,12 @@ static void join(const char* spath, const char* wpath, Sink& out, U64& nbytes) {
 static void usage(void) {
   fputs(
       "dtssplit - lossless split of DTS (DTS-HD Master Audio) streams and the join back\n"
-      "Usage: dtssplit c [options] input.dts output.ac3 output.wav\n"
-      "       dtssplit d [options] output.ac3 output.wav restored.dts\n"
-      "  c    split: the lossy core and all else but the lossless extension's samples into\n"
-      "       the side file (output.ac3), those samples into the WAV\n"
-      "  d    join the side file and the WAV back into the stream, byte for byte\n"
+      "Usage: dtssplit c [options] input.dts prefix\n"
+      "       dtssplit d [options] prefix restored.dts\n"
+      "  c    split: the core frames into prefix.dts, the lossless extension's samples into\n"
+      "       prefix.wav (and prefix.2.wav, ... for further channel layouts), all else into\n"
+      "       prefix.meta\n"
+      "  d    join them back into the stream, byte for byte\n"
       "  -v   (c) join the files written and compare the result with the input\n"
       "  -q   no statistics\n"
       "The input of c and the output of d can be - (stdin, stdout).\n",
@@ -1987,8 +2278,19 @@ static void usage(void) {
   exit(EX_USAGE);
 }
 
+static bool same_file(const char* a, const char* b) {
+  struct stat sa, sb;
+  if (stat(a, &sa) || stat(b, &sb)) return false;
+#ifdef _WIN32
+  return false;
+#else
+  return sa.st_dev == sb.st_dev && sa.st_ino == sb.st_ino;
+#endif
+}
+
 int main(int argc, char** argv) {
   crc_init();
+  dtscore_init();
   if (argc < 2 || (strcmp(argv[1], "c") && strcmp(argv[1], "d"))) usage();
   const bool cmode = argv[1][0] == 'c';
   bool verify = false, quiet = false;
@@ -2007,30 +2309,52 @@ int main(int argc, char** argv) {
       files.push_back(argv[i]);
     }
   }
-  if (files.size() != 3) usage();
+  if (files.size() != 2) usage();
   if (cmode) {
-    if (verify && (!strcmp(files[0], "-") || !strcmp(files[1], "-"))) die(EX_USAGE, "-v needs files, not -");
-    Stats st;
-    st.bytes = st.raw = st.core = st.exss = st.xsplit = st.wav_samples = st.exceptions = 0;
-    st.s_core = st.s_kept = st.s_exss = st.s_xhdr = st.s_param = 0;
+    const std::string prefix = files[1];
+    if (prefix == "-") die(EX_USAGE, "the prefix names files: not -");
+    if (verify && !strcmp(files[0], "-")) die(EX_USAGE, "-v needs the input as a file, not -");
+    static const char* const ext[] = {".dts", ".meta", ".wav"};
+    for (int i = 0; i < 3; i++)
+      if (strcmp(files[0], "-") && (same_file(files[0], (prefix + ext[i]).c_str()) || prefix + ext[i] == files[0]))
+        die(EX_USAGE, "%s would overwrite the input", (prefix + ext[i]).c_str());
+    FILE* fi = stdin;
+    if (strcmp(files[0], "-")) {
+      if (!(fi = fopen(files[0], "rb"))) die(EX_READ, "can't open the input %s", files[0]);
+    } else {
+#ifdef _WIN32
+      _setmode(_fileno(stdin), _O_BINARY);
+#endif
+    }
+    static Splitter sp;
+    sp.prefix = prefix;
+    Stats& st = sp.stt;
+    st.bytes = st.raw = st.core = st.exss = st.xsplit = st.exceptions = st.ovl_bits = 0;
+    st.m_exss = st.m_xhdr = st.m_param = st.m_kept = st.m_raw = 0;
     U32 crc;
-    U64 side, wav;
-    split(files[0], files[1], files[2], st, crc, side, wav);
+    sp.run(fi, crc);
+    if (fi != stdin) fclose(fi);
     if (!quiet) {
-      fprintf(stderr, "%s: %llu bytes: %llu core frames, %llu extension substream frames (%llu with XLL split",
-              files[0], (unsigned long long)st.bytes, (unsigned long long)st.core, (unsigned long long)st.exss,
+      fprintf(stderr, "%s: %llu bytes: %llu core frames, %llu extension substream frames (%llu with XLL split", files[0],
+              (unsigned long long)st.bytes, (unsigned long long)st.core, (unsigned long long)st.exss,
               (unsigned long long)st.xsplit);
       for (size_t i = 0; i < st.why.size(); i++)
         fprintf(stderr, "; %llu kept as bytes: %s", (unsigned long long)st.why_n[i], st.why[i].c_str());
       fprintf(stderr, "), %llu bytes between frames\n", (unsigned long long)st.raw);
+      fprintf(stderr, "%s: %llu bytes, the core frames\n", sp.dts.name.c_str(), (unsigned long long)sp.dts.size);
+      for (int w = 0; w < sp.nwav; w++)
+        fprintf(stderr, "%s: %llu bytes: %llu samples a channel, %d channels, %d-bit, %d Hz\n", sp.wav[w].name.c_str(),
+                (unsigned long long)sp.wav[w].size(), (unsigned long long)sp.wav[w].frames, sp.wav[w].nch,
+                sp.wav[w].bits, sp.wav[w].rate);
       fprintf(stderr,
-              "%s: %llu bytes: core frames %llu, extension substream headers %llu, XLL headers %llu, XLL coding "
-              "parameters %llu, frames kept as bytes %llu, the rest %llu\n",
-              files[1], (unsigned long long)side, (unsigned long long)st.s_core, (unsigned long long)st.s_exss,
-              (unsigned long long)st.s_xhdr, (unsigned long long)st.s_param, (unsigned long long)st.s_kept,
-              (unsigned long long)(side - st.s_core - st.s_exss - st.s_xhdr - st.s_param - st.s_kept));
-      fprintf(stderr, "%s: %llu bytes: %llu samples a channel, %llu values clipped\n", files[2], (unsigned long long)wav,
-              (unsigned long long)st.wav_samples, (unsigned long long)st.exceptions);
+              "%s: %llu bytes: extension substream headers %llu, XLL headers %llu, XLL coding parameters %llu, "
+              "frames kept as bytes %llu, bytes between frames %llu, the rest %llu; %llu values clipped, %llu "
+              "overlapping LSB bits\n",
+              sp.meta.name.c_str(), (unsigned long long)sp.meta.size, (unsigned long long)st.m_exss,
+              (unsigned long long)st.m_xhdr, (unsigned long long)st.m_param, (unsigned long long)st.m_kept,
+              (unsigned long long)st.m_raw,
+              (unsigned long long)(sp.meta.size - st.m_exss - st.m_xhdr - st.m_param - st.m_kept - st.m_raw),
+              (unsigned long long)st.exceptions, (unsigned long long)st.ovl_bits);
     }
     if (verify) {
       CmpSink cs;
@@ -2039,8 +2363,8 @@ int main(int argc, char** argv) {
       cs.at = 0;
       cs.diff = false;
       U64 n;
-      join(files[1], files[2], cs, n);
-      int more = fgetc(cs.f);
+      join(prefix, cs, n);
+      const int more = fgetc(cs.f);
       fclose(cs.f);
       if (cs.diff || more != EOF || n != st.bytes) {
         fprintf(stderr, "verify: FAILED at byte %llu\n", (unsigned long long)cs.at);
@@ -2050,10 +2374,18 @@ int main(int argc, char** argv) {
     }
   } else {
     FileSink fsk;
-    fsk.f = open_out(files[2], "the output");
+    if (strcmp(files[1], "-")) {
+      if (!(fsk.f = fopen(files[1], "wb"))) die(EX_WRITE, "can't create %s", files[1]);
+    } else {
+#ifdef _WIN32
+      _setmode(_fileno(stdout), _O_BINARY);
+#endif
+      fsk.f = stdout;
+    }
     U64 n;
-    join(files[0], files[1], fsk, n);
+    join(files[0], fsk, n);
     if (fsk.f != stdout ? fclose(fsk.f) : fflush(fsk.f)) die(EX_WRITE, "can't write the output");
   }
   return EX_OK;
 }
+#endif
