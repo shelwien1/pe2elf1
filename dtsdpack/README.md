@@ -9,7 +9,7 @@ to code is where the encoder chose otherwise. Decompression, with the same WAV, 
 stream byte for byte.
 
 The core of `s.2.dts` (4 minutes 25 seconds of 5.1 at 1509 kbps; 50008260 bytes) compresses to
-435729 bytes (0.87%); without its audio, dtsdpack's model gets 71.52% and `xz -9e` 88.21%.
+415945 bytes (0.83%); without its audio, dtsdpack's model gets 71.52% and `xz -9e` 88.21%.
 
 The core comes from [dtssplit](../dtssplit) (`prefix.dtsc`) or from any DTS stream; the WAV is the
 stream decoded, for instance by FFmpeg:
@@ -46,16 +46,16 @@ WAV is the one `c` had: its format, its size and the CRC of its first 64 KB are 
 
 ```
 $ dtsdpack c -s s2.dtsc s2_full.wav s2.dtsd
-s2.dtsc: 50008260 -> 435729 bytes (0.87%, -9); 24855 frames, 24855 packed; 0 bytes between frames; 5 channels and the LFE against the WAV (offset 512, correlation 1.0000)
+s2.dtsc: 50008260 -> 415945 bytes (0.83%, -9); 24855 frames, 24855 packed; 0 bytes between frames; 5 channels and the LFE against the WAV (offset 512, correlation 1.0000)
   bytes                             input     packed
   bytes kept as bytes                   0          4    0.00%
   headers, container              1059444        162    0.02%
   side information                2521040     138225    5.48%
-  bit allocations                 2174812     232560   10.69%
+  bit allocations                 2174812     212776    9.78%
   scale factors                   3512740      35102    1.00%
   subband samples                40631706      31549    0.08%
   bits after the subframes         108518          1    0.00%
-  total                          50008260     437602    0.88%
+  total                          50008260     417819    0.84%
   the audio's indexes: 99.89% of the samples; the RMS's scale factors: 98.76%
   the encoder's searches on the audio: 84.90% of the ADPCM predictors; HF VQ: 78.10% of the groups, 91.65% of the vectors in them
 ```
@@ -79,10 +79,10 @@ Exit codes:
 
 | Stream | Core | dtsdpack | Without the WAV | `xz -9e` |
 |---|---:|---:|---:|---:|
-| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 435729 (0.87%) | 71.52% | 88.21% |
-| its first 3 MB (6.8 s) | 1275608 | 13624 (1.07%) | | |
-| 3 MB from its middle (5.7 s) | 1068372 | 14885 (1.39%) | | |
-| FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 28910 (1.23%) | | |
+| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 415945 (0.83%) | 71.52% | 88.21% |
+| its first 3 MB (6.8 s) | 1275608 | 13108 (1.03%) | | |
+| 3 MB from its middle (5.7 s) | 1068372 | 14406 (1.35%) | | |
+| FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 27324 (1.16%) | | |
 
 Compressing the whole of `s.2.dts`'s core takes 29 seconds (1.7 MB of core a second) and 52 MB of
 memory, decompressing it 31 seconds and 45 MB, on one thread of a 2.1 GHz Xeon.
@@ -141,8 +141,10 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
 - **The bit allocations**: mostly a function of the subband and its energy (as the scale factor
   index its RMS makes; an ADPCM subband's residual's) that drifts slowly. The ABITS a subband had the
   last time it had this energy, in any channel, is its ABITS 85% of the time (its last one 63%): the
-  first guess, then the last one, then the difference; with the energy, its change, the neighbours'
-  and the loudest subband's as contexts.
+  first guess (none yet at this energy: the nearest energy's), then the last one, then the
+  difference. Where the ABITS seen at the energies either side are the same, it holds 98% of the
+  time, where neither is 56%: a context, with the energy, its change, the neighbours' and the
+  loudest subband's.
 
 c finds how the core lines up with the WAV before it starts (`call.inc`'s `find_alignment()`, in
 doubles; the header keeps the result): from the core's first 4 MB, the 64 blocks with the most

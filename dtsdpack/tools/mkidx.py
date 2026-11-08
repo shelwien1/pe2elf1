@@ -13,7 +13,7 @@ R = {'fld': '&111111', 'lv': '&111111', 'l2': 3, 'pos': 32, 'st': 3, 'nch': 4,
      'kd': 3, 'pk': 2, 'pn': 8, 'lp': 10, 'hm': 3,
      'hw': 4, 'nr': 16, 'nl': 16, 'ql': 22, 'm1': 23, 'm2': 23, 'sq': 3, 's1': 3,
      'c1': '&11111111', 'c2': '&11110000', 'code': 3, 'at': 40, 'cl': 257,
-     'mg': 9, 'gn': 16, 'lh': 3, 'nb': 10, 'mx': 17, 'sn': 28, 'sd': 3, 'dp': 4}
+     'mg': 9, 'gn': 16, 'lh': 3, 'nb': 10, 'mx': 17, 'sn': 28, 'sd': 3, 'dp': 4, 'nn': 16}
 R_SID = dict(R, fld=7)  # (sid's fields: SF_N)
 R_ABT = dict(R, st=10)  # (abt's st: a change, 0-9)
 R_SCL = dict(R, kd=4)   # (scl's kd: and the LFE's)
@@ -34,7 +34,7 @@ FAM = {
     'A subband\'s side information (PMODE, PVQ, TMODE, the joint scale factors, the HF VQ vectors)\n#  and the LFE samples, each field against its last value and the place before\'s.'),
   'abt': ('ac3pack', 'sid', {
     'a': 'bd es', 'b': 'la lb', 'c': 'sn la', 'd': 'sn sd de', 'e': 'bd sn', 'h': 'lb es bd', 'i': 'es nb la',
-    'j': 'es de pm', 'k': 'bd mx nb', 'l': 'bd cc la', 's': 'sn sd', 'f': 'es', 'm': 'sd', 'w': 'st', 't': 'bd',
+    'j': 'es de pm', 'k': 'sn nn', 'l': 'bd cc la', 's': 'sn sd nn', 'f': 'es', 'm': 'nn', 'w': 'st', 't': 'bd',
     'n': 'la', 'g': 'bd'},
     'The bit allocations (ABITS), against the last ones, the subband below\'s, and the audio\'s energy.'),
   'scl': ('ac3pack', 'sid', {

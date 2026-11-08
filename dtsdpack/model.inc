@@ -167,8 +167,19 @@ struct Model : ModelSmp<f_DEC, LV> {
           mx = imin((B::esmax[ch] - e) / 4, 15);
         }
         U8* const sn = e ? &B::ab_seen[s.pmode[ch][b]][b][imin(e, 128)] : nullptr;
+        int nn = 15;  // (the ABITS seen at the energies either side, against sn: below, -1..1 or none, times 4, the same above)
+        if (sn && *sn) {
+          const U8 *lo_ = sn - 1, *hi_ = e < 128 ? sn + 1 : nullptr;
+          const int a = e > 1 && *lo_ ? clip(*lo_ - *sn, -1, 1) + 1 : 3, z = hi_ && *hi_ ? clip(*hi_ - *sn, -1, 1) + 1 : 3;
+          nn = a * 4 + z;
+        }
+        int sv = sn ? *sn : 0, near_e = 0;  // (none at this energy: the nearest energy's, within 2)
+        for (int k = 1; sn && !sv && k <= 2; k++) {
+          if (e - k >= 1 && sn[-k]) sv = sn[-k], near_e = 1;
+          else if (e + k <= 128 && sn[k]) sv = sn[k], near_e = 1;
+        }
         v = abits_code(ch, b, v, lo, hi, hist.abits[ch][b], b ? s.abits[ch][b - 1] + 1 : 0, e, de, ls,
-                       s.pmode[ch][b], lbd, nb, mx, sn ? *sn : 0);
+                       s.pmode[ch][b], lbd, nb, mx, sv, near_e ? 14 : nn);
         if (sn) *sn = (U8)(checked(v, lo, hi) + 1);
         break;
       }

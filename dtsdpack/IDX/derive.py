@@ -31,7 +31,7 @@ for fn in sorted(os.listdir(os.path.join(idx, 'l9'))):
     for L in (5, 1):
         out = []
         for l in head:
-            l = l.replace('at level -9', 'at level -%d' % L).replace('MOD/l9/', 'MOD/l%d/' % L).replace('Prefix A9_', 'Prefix A%d_' % L)
+            l = l.replace('at level -9', 'at level -%d' % L).replace('MOD/l9/', 'MOD/l%d/' % L).replace('Prefix D9_', 'Prefix D%d_' % L)
             out.append(l)
         if L == 5:
             out.insert(len([x for x in head if x.startswith('#')]), '#  (Cut from level -9: its ten counters, mixer 1 and the mantissa plane.)')

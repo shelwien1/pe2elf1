@@ -271,7 +271,11 @@ the whole of `s.2.dts`:
   the VQ vectors are the nearest only 42% of the time.
 
 So, given the audio, the core takes about 2.2 MB of its 50.0 MB (4%), where a model of the core
-alone takes 78.8%.
+alone takes 78.8%. [dtsdpack](../dtsdpack) is such a coder, and goes further: it finds how the
+encoder searched its code books (the ADPCM predictor is the entry nearest the LPC of the subframe
+and the 4 samples before it, the VQ vector the best of the group of 32 whose mean is nearest), how
+it decimated the LFE, and that its bit allocations follow the subbands' energies; the core takes
+415945 bytes (0.83%).
 
 That doesn't help dtssplit as it is. There the audio isn't stored: the WAV holds the residual,
 which is the audio less the core's decode, and the core is what predicts the audio. It helps a
@@ -282,6 +286,7 @@ compressor that stores the audio and derives the core from it:
 | the core (xz), the residual (FLAC), the meta file (xz) | 123368186 | 94.50% |
 | the same, the core by a model of its fields (78.8%) | about 118.7 MB | 90.9% |
 | the audio (FLAC), the core given the audio, the meta file | about 110.4 MB | 84.5% |
+| the audio (FLAC), the core by dtsdpack, the meta file (xz) | 108641307 | 83.21% |
 
 The audio costs 29 MB more than the residual (106981478 against 78014446 bytes with FLAC), but
 the core costs 37-42 MB less. In such a compressor:
