@@ -101,8 +101,9 @@ static void MetaInfo( const Buf& meta, const char* fmt ) {
 // vp file: what "vp c" would produce, without writing anything (container analysis and
 // verification run in memory); for a vp meta, its track list
 static int Info( const char* fn ) {
-  Buf in;
-  if( !LoadFile(fn,in) ) { fprintf( stderr, "can't read %s\n", fn ); return 2; }
+  Buf inb; const Buf& in = inb;                           // (read through const: a mapped file stays mapped)
+  SpillSetup( "" );
+  if( !LoadFile(fn,inb) ) { fprintf( stderr, "can't read %s\n", fn ); return 2; }
   int f = Probe( in.data(), in.size() );
   if( f==FMT_NONE ) {
     if( !ParsesAsMeta( in ) ) { printf( "%s: unknown format, %llu bytes (stored as a plain copy)\n", fn, (unsigned long long)in.size() ); return 0; }
@@ -159,9 +160,10 @@ static int Main( int argc, char** argv ) {
     return 1;
   }
   const char* f1 = argv[a]; const char* f2 = argv[a+1];
+  SpillSetup( f2 );
   if( argv[1][0]=='c' ) {
-    Buf in, meta;
-    if( !LoadFile(f1,in) ) { fprintf( stderr, "can't read %s\n", f1 ); return 2; }
+    Buf inb, meta; const Buf& in = inb;                     // (read through const: a mapped file stays mapped)
+    if( !LoadFile(f1,inb) ) { fprintf( stderr, "can't read %s\n", f1 ); return 2; }
     std::vector<Buf> S; std::vector<std::string> N;
     int f = Probe( in.data(), in.size() );
     bool ok = EncodeAs( f, in, meta, S, N );
@@ -169,20 +171,20 @@ static int Main( int argc, char** argv ) {
     else if( !ok && f!=FMT_NONE ) fprintf( stderr, "warning: storing as a plain copy\n" );
     if( !ok ) { PlainCopy( in, meta ); S.clear(); N.clear(); }
     std::string mn = std::string(f2)+".meta";
-    if( !SaveFile(mn.c_str(),meta.data(),meta.size()) ) { fprintf( stderr, "can't write %s\n", mn.c_str() ); return 3; }
-    qword tot = meta.size();
+    qword mz = meta.size(), tot = mz;                       // (SaveBuf may rename a buffer into place, leaving it empty)
+    if( !SaveBuf(mn.c_str(),meta) ) { fprintf( stderr, "can't write %s\n", mn.c_str() ); return 3; }
     for( size_t i=0; i<S.size(); i++ ) {
-      std::string sn = std::string(f2)+N[i];
-      if( !SaveFile(sn.c_str(),S[i].data(),S[i].size()) ) { fprintf( stderr, "can't write %s\n", sn.c_str() ); return 3; }
-      tot += S[i].size();
-      printf( "%s: %llu\n", sn.c_str(), (unsigned long long)S[i].size() );
+      std::string sn = std::string(f2)+N[i]; qword z = S[i].size();
+      if( !SaveBuf(sn.c_str(),S[i]) ) { fprintf( stderr, "can't write %s\n", sn.c_str() ); return 3; }
+      tot += z;
+      printf( "%s: %llu\n", sn.c_str(), (unsigned long long)z );
     }
-    printf( "%s: %llu\n", mn.c_str(), (unsigned long long)meta.size() );
+    printf( "%s: %llu\n", mn.c_str(), (unsigned long long)mz );
     printf( "%llu -> %llu\n", (unsigned long long)in.size(), (unsigned long long)tot );
   } else {
-    Buf meta;
+    Buf mb; const Buf& meta = mb;                           // (read through const: a mapped file stays mapped)
     std::string mn = std::string(f1)+".meta";
-    if( !LoadFile(mn.c_str(),meta) ) { fprintf( stderr, "can't read %s\n", mn.c_str() ); return 2; }
+    if( !LoadFile(mn.c_str(),mb) ) { fprintf( stderr, "can't read %s\n", mn.c_str() ); return 2; }
     int f = MetaFormat( meta.data(), meta.size() );
     if( f==FMT_STORED ) return SaveOut( f2, meta.data()+1, meta.size()-1 ) ? 0 : 3;
     if( f==FMT_AVI && ParsesAsMeta( meta ) ) return DecodeWith<avi::Meta,avi::ParseMeta,avi::TrackName,avi::Decode>( meta, f1, f2 );

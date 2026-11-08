@@ -26,8 +26,24 @@
 #include <string>
 #include <algorithm>
 #include <map>
+#include <new>
+#include <iterator>
+#include <type_traits>
+#include <errno.h>
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 
 #include "base.inc"
+#include "buf.inc"
 #include "fileio.inc"
 #include "writer.inc"
 #include "reader.inc"
@@ -83,5 +99,6 @@
 
 int main( int argc, char** argv ) {
   try { return Main( argc, argv ); }
+  catch( const SpillError& e ) { fprintf( stderr, "%s (no room on the disk, or no write access: AVIP_TMP sets the directory)\n", e.what.c_str() ); return 5; }
   catch( ... ) { fprintf( stderr, "out of memory or bad input\n" ); return 5; }
 }

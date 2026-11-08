@@ -3,7 +3,6 @@
 typedef uint8_t  byte;
 typedef uint32_t uint;
 typedef uint64_t qword;
-typedef std::vector<byte> Buf;
 typedef std::vector<std::pair<qword,qword> > PosLen;   // (position, length) pairs
 typedef std::vector<std::pair<qword,qword> > IdxLen;   // (index, length) pairs: transform side info
 

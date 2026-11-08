@@ -41,6 +41,27 @@ g++ -std=c++17 -O2 -o avip avip.cpp
 `gc.bat` is the Windows build (clang++ with the VC2019 headers and libraries; its paths are the
 author's).
 
+## Memory
+
+avip maps its input into memory rather than reading it (and, restoring, the streams), and a
+buffer that grows past 256 MB moves to a temporary file mapped into memory (`avip-<pid>-<n>.tmp`,
+in the output's directory), whose pages the system writes out and drops when it needs the memory
+instead of holding them. A stream that ends up in such a file is renamed into place as the output
+rather than written again. What avip needs in RAM no longer grows with the size of the file, only
+with its number of frames (about 360 bytes per frame of an MKV), and the output is the same,
+byte for byte. The temporary files take disk space instead: while `c` checks a track it converted
+(H.264 or HEVC to Annex B), about twice that track's size besides the outputs. `AVIP_TMP` puts them
+in another directory, `AVIP_SPILL_MB` sets the size past which a buffer moves to one.
+
+Peak private memory (the heap; mapped file pages are the system's to drop):
+
+| input | `c` before | `c` now | `d` before | `d` now |
+|---|---:|---:|---:|---:|
+| MKV, 907 MB (H.264 + AAC) | 2,620 MB | 276 MB | 1,740 MB | 251 MB |
+| the same as MP4 | 2,601 MB | 269 MB | | |
+| the same as MPEG-TS (929 MB) | 2,854 MB | 508 MB | | |
+| AVI, 157 MB (DivX + MP3) | 315 MB | 165 MB | | |
+
 ## How it works
 
 The meta holds a head per track, a program of container ops and the residual container bytes (the
