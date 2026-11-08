@@ -95,6 +95,7 @@ void Init_Delta( void ) {
   InitSfb();
   Init_Counts();
   Init_Regions();
+  Init_Diff();
   for( int ch=0; ch<8; ch++ ) m_rDelta[ch].Init_RangeDelta(ch);
 }
 
@@ -126,13 +127,22 @@ void ProcessDelta( void ) {
 
   // Channel 1 the same as channel 0, all 576 values (a mono recording in
   // two channels, L/R): a flag, then its values are channel 0's, copied,
-  // not coded -- nor its counts, which are channel 0's
-  int dup[2] = {0,0};
+  // not coded -- nor its counts, which are channel 0's. Else, in dual-mono
+  // mode (dm_mode: within 16 granules of one whose channel 1 was copied or
+  // coded so), a flag for channel 1 coded as its differences from channel
+  // 0 (model_delta_diff.inc)
+  int dup[2] = {0,0}, ddiff[2] = {0,0};
   for( gr=0; gr<=ngr; gr++ ) for( ch=0; ch<stereo; ch++ ) {
     if( ch ) {
       dup[gr] = !memcmp( MC[gr][1], MC[gr][0], sizeof(MC[gr][0]) ); // (decoding: the flag decoded)
       dupflag[st_mod][dup_last].Process( rc, dup[gr], TTable[24], 16 );
       dup_last = dup[gr];
+      if( !dup[gr] && dm_mode ) {
+        if( rc.rc_ProcMode==0 ) ddiff[gr] = DiffWorth( gr ); // (decoding: the flag decoded)
+        dfFlag[df_last].Process( rc, ddiff[gr], TTable[24], 16 );
+        df_last = ddiff[gr];
+      }
+      dm_mode = dup[gr] || ddiff[gr] ? 16 : dm_mode>0 ? dm_mode-1 : 0;
     }
     ProcessCounts( ii[gr][ch], gr, ch, ch && dup[gr], ch && side_dup[gr] );
   }
@@ -154,6 +164,11 @@ void ProcessDelta( void ) {
       m_rDelta[i].xstp = xStep; m_rDelta[i].xsfb = sfb;
       if( ch && dup[gr] ) {
         for( j=0; j<576; j++ ) m_rDelta[i].CopyMDCT( j, MC[gr][1][j]=MC[gr][0][j], j<cc0[gr][1] );
+        DiffSame( gr );
+        continue;
+      }
+      if( ch && ddiff[gr] ) {
+        DiffMDCT( gr, i );
         continue;
       }
       for( j=0; j<576; j++ ) {

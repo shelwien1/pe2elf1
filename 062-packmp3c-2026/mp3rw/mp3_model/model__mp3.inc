@@ -49,6 +49,7 @@ struct mp3model: RangeCoder_v1m<rc_ProcMode>, mp3frame, C_T {
   #include "model_delta_counts.inc"
   #include "model_delta_regions.inc"
   #include "model_delta_range.inc"
+  #include "model_delta_diff.inc"
   #include "model_delta.inc"
 
   #include "model_mdb.inc"

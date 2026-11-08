@@ -17,7 +17,7 @@
 namespace mp3pack {
 
 const char kMagic[] = "mp3pk";
-const int kVersion = 4;  // (2: channel 1 a copy of channel 0, model_delta.inc; 3: of its scalefactors too; 4: and of its side information)
+const int kVersion = 5;  // (2: channel 1 a copy of channel 0, model_delta.inc; 3: of its scalefactors too; 4: and of its side information; 5: or its differences from channel 0)
 const int kHead = (int)sizeof kMagic - 1 + 1 + 1 + 4;  // the magic, the version, the threads, the part size
 const uint kIo = 1 << 16;  // the size of a call's input buffer and of its output buffer
 
