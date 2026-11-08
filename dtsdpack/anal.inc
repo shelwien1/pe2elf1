@@ -9,11 +9,17 @@ constexpr int QB_N = 16;  // the buckets of how near the rounding boundary a sam
 constexpr int SB_N = 8;   // and a scale factor's RMS the midpoint between two table entries
 
 #include "tables.inc"
+constexpr int SF7_N = 125;  // the 7-bit scale factor table's entries (FFmpeg's pads it with 3 zeros)
+// the scale factors a channel's SHUFF has: their table's entries the RMS rule picks from
+static INLINE int sf_entries(int shuff) { return shuff == 6 ? SF7_N : 64; }
 
 static INLINE S32 clip23(S64 a) { return a < -(1 << 23) ? -(1 << 23) : a > (1 << 23) - 1 ? (1 << 23) - 1 : (S32)a; }
 static INLINE S64 rshift(S64 a, int bits) { return bits > 0 ? (a + (1LL << (bits - 1))) >> bits : a; }
 typedef __int128 S128;
 typedef unsigned __int128 U128;
+// x times 2^k (C++11 leaves the left shift of a negative value undefined)
+static INLINE S64 shl64(S64 x, int k) { return (S64)((U64)x << k); }
+static INLINE S128 shl128(S128 x, int k) { return (S128)((U128)x << k); }
 
 // How the core's channels and blocks line up with the WAV's: the analysis of block t (the core's
 // t-th subband sample since the stream's first frame) ends before sample 32 t + off of the WAV, and
@@ -96,7 +102,12 @@ static INLINE void quant_range(const CoreRec& c, int ch, int a, S64& lo, S64& hi
 // *alt the index on the other side of the rounding boundary nearest the value, *dist how far the
 // value lies from that boundary (in 2^-(AQ_F + 22))
 static INLINE S64 requant(S64 v, S64 ss, S64 lo, S64 hi, S128* dist, S64* alt) {
-  const S128 num = (S128)v << 22, den = (S128)ss << AQ_F;
+  if (ss <= 0) {  // (a scale factor of 0: the 7-bit table's last 3 entries)
+    *dist = 0;
+    *alt = lo > 0 ? lo : hi < 0 ? hi : 0;
+    return *alt;
+  }
+  const S128 num = shl128(v, 22), den = (S128)ss << AQ_F;
   const int neg = num < 0;
   const S128 a = neg ? -num : num;
   const S128 qa = (2 * a + den) / (2 * den);  // floor(a / den + 1/2)
@@ -123,6 +134,7 @@ static INLINE int near_bucket(S128 d, S128 u, int k) {
 // and the next entry the other way (0 there, SB_N - 1 far)
 static int scale_pred(const S64* v, int n, const U32* tab, int nt, int* near) {
   S128 ss = 0;
+  if (n <= 0) return *near = SB_N - 1, 0;
   for (int j = 0; j < n; j++) ss += (S128)v[j] * v[j];
   const S128 ms = ss / n;  // 2^-2AQ_F
   auto sq = [](S128 x) { return x * x; };
@@ -186,7 +198,7 @@ static void lpc4(const S64* x, int n, S64* alpha, int* gain, int* gain4_ = nullp
   for (int l = 0; l <= 4; l++) R[l] = (S64)(r[l] >> sh);
   S64 err = R[0];
   for (int i = 1; i <= 4 && err > 0; i++) {
-    S128 acc = (S128)R[i] << 28;
+    S128 acc = shl128(R[i], 28);
     for (int j = 1; j < i; j++) acc += (S128)a[j] * R[i - j];
     const S128 kq = -acc / err;
     if (kq >= ((S128)1 << 28) || kq <= -((S128)1 << 28)) break;  // (unstable: the order so far)
@@ -225,7 +237,7 @@ static int pvq_gain4(int q, const S64* h, const S64* x, int n) {
 static INLINE S64 pvq_dist(int q, const S64* alpha) {
   S64 d = 0;
   for (int m = 0; m < 4; m++) {
-    const S64 e = alpha[m] - ((S64)ADPCM_VB[q][m] << 11);
+    const S64 e = alpha[m] - shl64(ADPCM_VB[q][m], 11);
     d += e * e;
   }
   return d;
@@ -252,7 +264,7 @@ static const HfGroups hf_groups = hf_groups_make();
 static INLINE S128 hf_group_dist(int g, const S64* x, int n, S64 sc) {
   S128 d = 0;
   for (int j = 0; j < n; j++) {
-    const S128 e = (S128)x[j] * 512 - (((S128)hf_groups.s[g][j] * sc) << AQ_F);
+    const S128 e = (S128)x[j] * 512 - shl128((S128)hf_groups.s[g][j] * sc, AQ_F);
     d += e * e;
   }
   return d;
@@ -261,7 +273,7 @@ static INLINE S128 hf_group_dist(int g, const S64* x, int n, S64 sc) {
 static INLINE S128 hf_dist(int q, const S64* x, int n, S64 sc) {
   S128 d = 0;
   for (int j = 0; j < n; j++) {
-    const S128 e = (S128)x[j] * 16 - (((S128)HF_VQ[q][j] * sc) << AQ_F);
+    const S128 e = (S128)x[j] * 16 - shl128((S128)HF_VQ[q][j] * sc, AQ_F);
     d += e * e;
   }
   return d;
@@ -358,7 +370,7 @@ static Sf sf_make(S128 m, int e) {
   return r;
 }
 static INLINE Sf sf_mul(Sf a, Sf b) { return sf_make((S128)a.m * b.m, a.e + b.e); }
-static INLINE Sf sf_div(Sf a, Sf b) { return b.m ? sf_make(((S128)a.m << 64) / b.m, a.e - b.e - 64) : Sf{0, 0}; }
+static INLINE Sf sf_div(Sf a, Sf b) { return b.m ? sf_make(shl128(a.m, 64) / b.m, a.e - b.e - 64) : Sf{0, 0}; }
 static Sf sf_add(Sf a, Sf b) {
   if (!a.m) return b;
   if (!b.m) return a;
@@ -368,7 +380,7 @@ static Sf sf_add(Sf a, Sf b) {
     b = t;
   }
   const int d = a.e - b.e;
-  const S128 x = (S128)a.m << 62, y = d < 124 ? ((S128)b.m << 62) >> d : 0;
+  const S128 x = shl128(a.m, 62), y = d < 124 ? shl128(b.m, 62) >> d : 0;
   return sf_make(x + y, a.e - 62);
 }
 static INLINE Sf sf_sub(Sf a, Sf b) {

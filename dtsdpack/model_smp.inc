@@ -115,7 +115,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         for (int b = 0; b < NSUB; b++) X[ch][b][j] = x[b];
       }
       const U32* tab = r.shuff[ch] == 6 ? SF7 : SF6;
-      const int nt = r.shuff[ch] == 6 ? 128 : 64;
+      const int nt = sf_entries(r.shuff[ch]);
       for (int b = 0; b < r.nsubs[ch]; b++) {  // (the LPC over the subframe and the 4 before it)
         S64 x[4 + NSMP];
         for (int k = 0; k < 4; k++) x[3 - k] = xh[ch][b][k];
@@ -252,7 +252,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       S64 v_[NSMP];
       const int n = tm ? (j ? scale_values(s, ch, b, tm, s.nssc, v_) : scale_values(s, ch, b, 0, tm, v_))
                        : scale_values(s, ch, b, 0, s.nssc, v_);
-      if (n) p = scale_pred(v_, n, r.shuff[ch] == 6 ? SF7 : SF6, max, &near);
+      if (n) p = scale_pred(v_, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &near);
     }
     const S32 A = hist.scale[ch][b], P = hist.pscale[ch][b];
     D.kd = hfb ? 2 : j;
@@ -291,7 +291,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     const S32 pred = pm ? adpcm_pred(s.pvq[ch][b], yh[ch][b]) : 0;
     S64 qp = 0, alt = 0;
     S128 dist = 0;
-    if (bound[ch]) qp = requant(X[ch][b][j] - ((S64)pred << AQ_F), ss, lo, hi, &dist, &alt);
+    if (bound[ch]) qp = requant(X[ch][b][j] - shl64(pred, AQ_F), ss, lo, hi, &dist, &alt);
     M_smp_v D;
     D.ab = a;
     D.hw = sample_coding(r, ch, a);
@@ -370,9 +370,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // the samples are coded by its step): against the one the predictions' RMS makes
   int code_lfe_scale(int v) {
     S64 x[4 * NSSF];
-    for (int i = 0; i < lfe_n; i++) x[i] = lfe_p[i] << 12;  // (RMS / 16, in 2^-AQ_F: scale_pred()'s)
+    for (int i = 0; i < lfe_n; i++) x[i] = shl64(lfe_p[i], 12);  // (RMS / 16, in 2^-AQ_F: scale_pred()'s)
     int near;
-    const int p = scale_pred(x, lfe_n, SF7, 128, &near);
+    const int p = scale_pred(x, lfe_n, SF7, SF7_N, &near);
     M_scl_v D;
     tcx X_;
     D.kd = 3;

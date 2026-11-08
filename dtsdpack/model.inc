@@ -153,7 +153,7 @@ struct Model : ModelSmp<f_DEC, LV> {
           S64 x[NSMP];
           int near;
           const int n = B::scale_values(s, ch, b, 0, s.nssc, x);
-          e = 1 + scale_pred(x, n, r.shuff[ch] == 6 ? SF7 : SF6, r.shuff[ch] == 6 ? 128 : 64, &near);
+          e = 1 + scale_pred(x, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &near);
         }
         B::eab[ch][b] = e;
         const int le = hist.energy[ch][b];
