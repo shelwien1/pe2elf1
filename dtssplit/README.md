@@ -9,6 +9,7 @@ dtssplit splits a DTS stream into three files and joins them back into the strea
   that is neither, small enough that it hardly matters what compresses it.
 
 [dtscore](#dtscore) shows what the core frames are made of, and what a model of them could take.
+[dtsreq](#dtsreq) shows how much of the core follows from the lossless audio: almost all of it.
 
 ## Usage
 
@@ -245,6 +246,79 @@ None of them codes anything with Huffman codes but TMODE (book D4). So 3634 of t
 re-coded with random Huffman books for their scale factors, ABITS, TMODE and samples, and parsed
 back: every field came back.
 
+## The core from the lossless audio
+
+A DTS-HD MA stream carries the audio its core was coded from: the XLL decode is the encoder's
+input, bit for bit. So the core can be re-derived from that audio, using the core's own side
+information. dtsreq computes the audio's subband samples with the encoder's analysis filterbank
+(the dual of the decoder's synthesis; FFmpeg's DCA encoder's transform, with the prototype filter
+of the core's `FILTS`). It then quantizes them as the core's side information says: its bit
+allocations, scale factors, transient modes, and ADPCM predictions from the decoded history. For
+the whole of `s.2.dts`:
+
+- **The analysis lines up** 512 samples ahead of the decoder's output, with a correlation of
+  1.000000 (to 6 digits), and the decoder's gain is exactly 2.
+- **99.91% of the 55.7 million quantization indexes come out exact.** The rest are off by 1:
+  values within a hair of a rounding boundary. Given the audio, a coder would spend 76 KB on
+  them, or 44 KB with a context of how near the boundary the audio's value is. That is 0.1% of the
+  40.5 MB they take as coded.
+- **The scale factors** are the table entry nearest to the RMS of what they scale (the ADPCM
+  residuals where the band predicts) for 89.7% of them: 242 KB against 3.49 MB as coded.
+- **The rest of the side information** is the encoder's own decisions and isn't predicted, but
+  it is small: the bit allocations, 0.6 MB as deltas to the frame before; the ADPCM predictors,
+  the high-frequency VQ vectors and the LFE, about 1.1 MB; the transient modes, prediction modes
+  and headers, about 0.15 MB. The predictors aren't the code book's best for the subframe, and
+  the VQ vectors are the nearest only 42% of the time.
+
+So, given the audio, the core takes about 2.2 MB of its 50.0 MB (4%), where a model of the core
+alone takes 78.8%.
+
+That doesn't help dtssplit as it is. There the audio isn't stored: the WAV holds the residual,
+which is the audio less the core's decode, and the core is what predicts the audio. It helps a
+compressor that stores the audio and derives the core from it:
+
+| `s.2.dts` | Bytes | |
+|---|---:|---:|
+| the core (xz), the residual (FLAC), the meta file (xz) | 123368186 | 94.50% |
+| the same, the core by a model of its fields (78.8%) | about 118.7 MB | 90.9% |
+| the audio (FLAC), the core given the audio, the meta file | about 110.4 MB | 84.5% |
+
+The audio costs 29 MB more than the residual (106981478 against 78014446 bytes with FLAC), but
+the core costs 37-42 MB less. In such a compressor:
+
+- the XLL frames come back from the residual, the audio less the core's decode, as dtssplit
+  rebuilds them now;
+- that takes a bit-exact core decoder, the fixed-point one the XLL encoder used (FFmpeg's
+  `-flags +bitexact` core decode is one);
+- its two ends must compute the analysis identically: in integers, not in doubles as dtsreq does.
+
+**Encoders.** FFmpeg's DCA encoder (`libavcodec/dcaenc.c`, from Alexander E. Patrakov's dcaenc) is
+the open one. It codes a core of its own decisions: its own psychoacoustic model, no transient
+modes, no VQ, no lookahead. It can't reproduce the cores of DTS's encoder, and doesn't need to.
+Its own cores follow from the audio in the same way: dtsreq finds 96.7% of the indexes of its
+1509 kb/s encode of `s.2.dts`'s first 3 MB exact, and the rest cost 33 KB of its 1060 KB. Its
+quantizer is fixed point, and its scale factors follow the peaks, not the RMS.
+
+## dtsreq
+
+```
+dtsreq input.dts full.wav
+```
+
+`full.wav` is the lossless decode of the input (`ffmpeg -i input.dts -c:a pcm_s24le full.wav`;
+FFmpeg decodes XLL bit-exactly). dtsreq finds which of the WAV's channels is which of the core's,
+and the alignment, by correlation. Then it compares every quantization index and scale factor
+with the audio's (above), and prints:
+
+- the alignment and the channel mapping;
+- by ABITS, the indexes that come out exact, and those off by 1;
+- the entropies of the indexes and scale factors, against those of their differences to the
+  audio's.
+
+Blocks whose analysis needs audio past the WAV's end are left out. The first frame of a stream cut
+in the middle decodes wrong (its decoder history is missing), but that is too few samples to
+show. `s.2.dts` takes 13 s.
+
 ## The meta file's format
 
 `DTSSPLIT`, a version byte (2), then records. Each record is a tag byte and its fields; numbers
@@ -264,6 +338,7 @@ are LEB128 varints, signed ones zigzagged.
 ```
 g++ -O2 -o dtssplit dtssplit.cpp
 g++ -O2 -o dtscore dtscore.cpp
+g++ -O2 -o dtsreq dtsreq.cpp
 x86_64-w64-mingw32-g++ -O2 -s -static -o dtssplit.exe dtssplit.cpp
 ```
 
@@ -271,4 +346,6 @@ Written from ETSI TS 102 114 V1.6.1 (DTS Coherent Acoustics; Core and Extensions
 Profiles), clauses 5, 7 and 8. FFmpeg's decoder was the check for its behaviour. XLL's two-band
 filter isn't in the specification: its lifting steps and coefficients are FFmpeg's
 (`libavcodec/dcadsp.c`, `dcadata.c`), so `dtssplit.cpp` is licensed under the GNU Lesser General
-Public License, version 2.1 or later.
+Public License, version 2.1 or later. So are dtscore and dtsreq, which include it.
+`dtsreq_tables.inc` has FFmpeg's tables of `dcadata.c`: the quantizer steps, scale factors, ADPCM
+code book and QMF prototype filters.
