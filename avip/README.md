@@ -49,9 +49,11 @@ in the output's directory), whose pages the system writes out and drops when it 
 instead of holding them. A stream that ends up in such a file is renamed into place as the output
 rather than written again. What avip needs in RAM no longer grows with the size of the file, only
 with its number of frames (about 360 bytes per frame of an MKV), and the output is the same,
-byte for byte. The temporary files take disk space instead: while `c` checks a track it converted
-(H.264 or HEVC to Annex B), about twice that track's size besides the outputs. `AVIP_TMP` puts them
-in another directory, `AVIP_SPILL_MB` sets the size past which a buffer moves to one.
+byte for byte. The temporary files take disk space instead: besides the outputs, about another copy
+of the largest track `c` converts (H.264 or HEVC to Annex B), which it makes while converting and
+again while checking the result (a 381 MB MKV with 331 MB of H.264: 805 MB in the output's directory
+at the peak). `AVIP_TMP` puts them in another directory, `AVIP_SPILL_MB` sets the size past which a
+buffer moves to one.
 
 Peak private memory (the heap; mapped file pages are the system's to drop):
 
