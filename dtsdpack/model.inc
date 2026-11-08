@@ -135,10 +135,11 @@ struct Model : ModelSmp<f_DEC, LV> {
         break;
     }
     switch (fid) {
-      case F_PMODE:  // (ec: the subband's LPC's gain)
+      case F_PMODE:  // (against the gain of the predictor the encoder would choose: ec, ab)
         account(CAT_SIDE);
         v = side_code(SF_PMODE, ch, b, v, 0, 1, 1, hist.pmode[ch][b], b ? s.pmode[ch][b - 1] + 1 : 0,
-                      bound[ch] ? ac[ch][b] : 8, 0, bound[ch] ? imin(B::lpg[ch][b], 8) : 9);
+                      bound[ch] ? ac[ch][b] : 8, bound[ch] ? imin(B::lpg4[ch][b], 27) : 0,
+                      bound[ch] ? B::pmode_gain(ch, b) : 9);
         break;
       case F_PVQ:
         account(CAT_SIDE);

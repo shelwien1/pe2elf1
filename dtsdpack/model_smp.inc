@@ -38,6 +38,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   int hm[NCH];             // whether the channel's scale factor before was the prediction (0 none, 1 it was, 2 not)
   S64 lpc[NCH][NSUB][4];   // the subframe's subbands' LPC (lpc4(): the encoder's ADPCM predictor is the entry nearest)
   int lpg[NCH][NSUB];      // and its prediction gain in halvings
+  int lpg4[NCH][NSUB];     // and in quarters of them
   U8 lrank[NCH][NSUB][VK_N];  // the subband's last rank of each kind (vqr's lh)
   KeyIx cand[4096];        // the candidates of a rank
   // the LFE (64x) against the WAV's LFE channel (bind.lfe)
@@ -119,7 +120,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         S64 x[4 + NSMP];
         for (int k = 0; k < 4; k++) x[3 - k] = xh[ch][b][k];
         for (int j = 0; j < nsmp; j++) x[4 + j] = X[ch][b][j];
-        lpc4(x, 4 + nsmp, lpc[ch][b], &lpg[ch][b]);
+        lpc4(x, 4 + nsmp, lpc[ch][b], &lpg[ch][b], &lpg4[ch][b]);
       }
       for (int b = 0; b < NSUB; b++) {
         const S64* v = X[ch][b];
@@ -205,6 +206,20 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     n_vq[kd]++;
     n_vqhit[kd] += !r;
     return v;
+  }
+  // How the encoder would gain by predicting channel ch's subband b: 0 by less than 2^(1/2) (the
+  // LPC's gain), 9 by more than 2^(9/4), else by the gain of the entry nearest the LPC over the
+  // subframe, in quarters of halvings less 2 (1-8)
+  int pmode_gain(int ch, int b) {
+    const int k = lpg4[ch][b];
+    if (k < 2 || k > 9) return k < 2 ? 0 : 9;
+    int bq = 0;
+    S64 bd = pvq_dist(0, lpc[ch][b]);
+    for (int q = 1; q < 4096; q++) {
+      const S64 d = pvq_dist(q, lpc[ch][b]);
+      if (d < bd) bd = d, bq = q;
+    }
+    return clip(pvq_gain4(bq, xh[ch][b], X[ch][b], nsmp) - 2, 1, 8);
   }
   // Channel ch's subband b's ADPCM predictor v: its rank by the distance from the subband's LPC
   S64 code_pvq(int ch, int b, S64 v) {

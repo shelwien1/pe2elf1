@@ -158,12 +158,20 @@ static INLINE int ratio_bucket(S128 x, S128 y, int n) {
 
 // --- the encoder's codebook searches (as found; in integers) ---------------------------------------
 
+// a gain in quarters of halvings: num / den against 2^(k / 4) (0-63; 63 where den is 0)
+static int gain4(S128 num, S128 den) {
+  static const S64 Q[4] = {65536, 77936, 92682, 110218};  // 2^(i / 4) in Q16
+  if (den <= 0) return 63;
+  int k = 0;
+  while (k < 63 && den * Q[(k + 1) & 3] << ((k + 1) >> 2) <= num << 16) k++;
+  return k;
+}
 // The 4 ADPCM coefficients the n samples x (2^-AQ_F) predict themselves by best: the normal
 // equations of their autocorrelation (no window), solved by Levinson-Durbin in Q28, into alpha in
 // Q24 (alpha[k] multiplies the sample k + 1 before, as the codebook's entries do); *gain the
 // prediction gain in halvings (0-15). The encoder's predictor is then the codebook entry nearest
 // alpha (pvq_dist()), over the subframe's samples and the 4 before them.
-static void lpc4(const S64* x, int n, S64* alpha, int* gain) {
+static void lpc4(const S64* x, int n, S64* alpha, int* gain, int* gain4_ = nullptr) {
   S128 r[5];
   for (int l = 0; l <= 4; l++) {
     r[l] = 0;
@@ -198,6 +206,20 @@ static void lpc4(const S64* x, int n, S64* alpha, int* gain) {
   else
     while (g < 15 && (err << (g + 1)) <= R[0]) g++;
   *gain = g;
+  if (gain4_) *gain4_ = err <= 0 ? 63 : gain4(R[0], err);
+}
+// the ADPCM codebook entry q's prediction gain over the n samples x (2^-AQ_F), the 4 before them h
+// (h[0] the last), in the open loop (gain4())
+static int pvq_gain4(int q, const S64* h, const S64* x, int n) {
+  S64 hh[4] = {h[0], h[1], h[2], h[3]};
+  S128 se = 0, ee = 0;
+  for (int j = 0; j < n; j++) {
+    const S64 e = x[j] - adpcm_pred_x(q, hh);
+    se += (S128)x[j] * x[j];
+    ee += (S128)e * e;
+    hh[3] = hh[2], hh[2] = hh[1], hh[1] = hh[0], hh[0] = x[j];
+  }
+  return gain4(se, ee);
 }
 // the ADPCM codebook entry q's distance from the coefficients alpha (Q24)
 static INLINE S64 pvq_dist(int q, const S64* alpha) {

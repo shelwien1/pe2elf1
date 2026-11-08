@@ -69,8 +69,9 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      lv its last value (0 none, else 1 + it, to 63), pq the value of the place before in the
 //      subframe (the subband below's; LFE: the sample before), st whether that one kept its last
 //      value, ac the audio's subband's lag-1 autocorrelation over the subframe (0-7, as -1..1; 8
-//      none), ab the subband's ABITS where coded before (1 + it; 0 none), ec how its energy changes
-//      over the subframe's subsubframes (0-8, 9 none)
+//      none), ab the subband's ABITS where coded before (1 + it; 0 none; PMODE: the gain of the
+//      subband's LPC, in quarters of halvings, to 27), ec how its energy changes over the
+//      subframe's subsubframes (0-8, 9 none; PMODE: model_smp.inc's pmode_gain())
 // abt: bd, cc, la the last ABITS (1 + it, 0 none), lb the subband below's in the subframe (1 + it,
 //      0 none), es the audio's energy in the subband as a scale factor index (the RMS rule's; 1 +
 //      it, 0 none), de its change from the last (0-8, 9 none), ls the last scale factor less the
