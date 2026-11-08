@@ -9,7 +9,7 @@ to code is where the encoder chose otherwise. Decompression, with the same WAV, 
 stream byte for byte.
 
 The core of `s.2.dts` (4 minutes 25 seconds of 5.1 at 1509 kbps; 50008260 bytes) compresses to
-415945 bytes (0.83%); without its audio, dtsdpack's model gets 71.52% and `xz -9e` 88.21%.
+396547 bytes (0.79%); without its audio, dtsdpack's model gets 71.76% and `xz -9e` 88.21%.
 
 The core comes from [dtssplit](../dtssplit) (`prefix.dtsc`) or from any DTS stream; the WAV is the
 stream decoded, for instance by FFmpeg:
@@ -46,16 +46,16 @@ WAV is the one `c` had: its format, its size and the CRC of its first 64 KB are 
 
 ```
 $ dtsdpack c -s s2.dtsc s2_full.wav s2.dtsd
-s2.dtsc: 50008260 -> 415945 bytes (0.83%, -9); 24855 frames, 24855 packed; 0 bytes between frames; 5 channels and the LFE against the WAV (offset 512, correlation 1.0000)
+s2.dtsc: 50008260 -> 396547 bytes (0.79%, -9); 24855 frames, 24855 packed; 0 bytes between frames; 5 channels and the LFE against the WAV (offset 512, correlation 1.0000)
   bytes                             input     packed
   bytes kept as bytes                   0          4    0.00%
-  headers, container              1059444        162    0.02%
-  side information                2521040     138225    5.48%
-  bit allocations                 2174812     212776    9.78%
-  scale factors                   3512740      35102    1.00%
-  subband samples                40631706      31549    0.08%
+  headers, container              1059444        161    0.02%
+  side information                2521040     129606    5.14%
+  bit allocations                 2174812     202747    9.32%
+  scale factors                   3512740      34389    0.98%
+  subband samples                40631706      31539    0.08%
   bits after the subframes         108518          1    0.00%
-  total                          50008260     417819    0.84%
+  total                          50008260     398447    0.80%
   the audio's indexes: 99.89% of the samples; the RMS's scale factors: 98.76%
   the encoder's searches on the audio: 84.90% of the ADPCM predictors; HF VQ: 78.10% of the groups, 91.65% of the vectors in them
 ```
@@ -79,19 +79,20 @@ Exit codes:
 
 | Stream | Core | dtsdpack | Without the WAV | `xz -9e` |
 |---|---:|---:|---:|---:|
-| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 415945 (0.83%) | 71.52% | 88.21% |
-| its first 3 MB (6.8 s) | 1275608 | 13108 (1.03%) | | |
-| 3 MB from its middle (5.7 s) | 1068372 | 14406 (1.35%) | | |
-| FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 27324 (1.16%) | | |
+| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 396547 (0.79%) | 71.76% | 88.21% |
+| its first 3 MB (6.8 s) | 1275608 | 12485 (0.98%) | | |
+| 3 MB from its middle (5.7 s) | 1068372 | 13677 (1.28%) | | |
+| FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 25902 (1.10%) | | |
 
-Compressing the whole of `s.2.dts`'s core takes 29 seconds (1.7 MB of core a second) and 52 MB of
-memory, decompressing it 31 seconds and 45 MB, on one thread of a 2.1 GHz Xeon.
+Compressing the whole of `s.2.dts`'s core takes 28 seconds (1.8 MB of core a second) and 39 MB of
+memory, decompressing it 29 seconds and 33 MB, on one thread of a 2.1 GHz Xeon. The first two
+streams and the third were the tuning set (below); the whole of `s.2.dts` wasn't.
 
 FFmpeg's small DTS-HD MA samples (`xll_*`, 7 frames each) round-trip too. Where their core's
-channels are the WAV's channels (`xll_51_24_48_768`) the core goes to 8.9%; where only some are (the
+channels are the WAV's channels (`xll_51_24_48_768`) the core goes to 9.1%; where only some are (the
 7.1 and 6.1 ones: 3 of the core's 5 channels line up with a WAV channel, the surrounds presumably
-being mixes) only those are bound (33-37%); where the WAV's rate is 96 or 192 kHz (the core is coded
-from a 48 kHz version of it) nothing is (40-48%).
+being mixes) only those are bound (36-37%); where the WAV's rate is 96 or 192 kHz (the core is coded
+from a 48 kHz version of it) nothing is (41-48%).
 
 ## How it works
 
@@ -174,10 +175,13 @@ which `IDX/idx2inc.pl` turns into `MOD/l9/` (`./mk.sh mod`; the format:
 - **vqr**: the ranks of the predictors and the HF VQ vectors.
 - **raw**: bytes kept as bytes, and the bits after the subframes.
 
-The parameters are ac3pack's tuned level -9's (its sid, mag and raw families'), not yet tuned for
-these families; the tools are there (`./mk.sh dump`, `./mk.sh famtune`, `IDX/ftune.py`, as in
-ac3pack). `./mk.sh check 9 stream wav ...` confirms that the tuning build, the shipping build and
-the build without AVX2 write the same files.
+The parameters started as ac3pack's tuned level -9's (its sid, mag and raw families'), then were
+tuned as ac3pack's are: `./mk.sh dump 9 DIR stream wav ...` writes what each family codes,
+`./mk.sh famtune 9` builds `famtune`, which codes a family's dumps again, and `IDX/ftune.py`
+hill-climbs each family's parameters against them, a bit at a time; `IDX/import.pl` folds the
+winners into the `.idx` files. The dumps were of three streams: `s.2.dts`'s first 3 MB and 3 MB of
+its middle, and FFmpeg's `master_audio_7.1_24bit.dts`. `./mk.sh check 9 stream wav ...` confirms
+that the tuning build, the shipping build and the build without AVX2 write the same files.
 
 ### The format
 

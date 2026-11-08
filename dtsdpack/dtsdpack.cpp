@@ -24,22 +24,28 @@
 // The WAV. The core was coded from the audio a DTS-HD MA stream's lossless extension decodes to:
 // that audio's subband samples, by the encoder's analysis filterbank (anal.inc, in integers), and
 // the core's own step sizes, scale factors and ADPCM predictions, give nearly every quantization
-// index the core has, and their RMS nearly every scale factor. c finds how the core's channels and
-// blocks line up with the WAV's (and keeps it in the header); the model codes each index and scale
-// factor as whether it is the audio's, and only where not, the value. Without a WAV that lines up,
+// index the core has, and their RMS nearly every scale factor; the encoder's searches of its code
+// books on them, nearly every ADPCM predictor and HF VQ vector; the WAV's LFE channel decimated,
+// nearly every LFE sample; and the ABITS a subband had at its energy before, most bit allocations.
+// c finds how the core's channels and blocks line up with the WAV's (and keeps it in the header);
+// the model codes each element against what the audio makes of it. Without a WAV that lines up,
 // the model codes the core by itself.
 //
-// The model. Each element is binarised and each decision goes to one of 6 families (fam.inc, as
+// The model. Each element is binarised and each decision goes to one of 8 families (fam.inc, as
 // m4vpack's, h264p's and ac3pack's): counters chosen by context indices, mixed in the logistic
 // domain, refined by APMs, the decision then range coded (rc.inc). famvars.inc lists what the model
 // gives each family; IDX/l<L>/<family>.idx declares a level's indices over those variables and their
 // tunable parameters, which IDX/idx2inc.pl turns into MOD/l<L>/ (mk.sh). The families:
 //   hdr  the frame's, the coding header's and the subframes' fields, against their last values
-//   sid  a subband's PMODE, PVQ, TMODE, joint scale factors, HF VQ vector; the LFE samples
-//   abt  the bit allocations, against the last ones and the audio's energy
+//   sid  a subband's PMODE (against the gain of the predictor the encoder would choose), TMODE,
+//        joint scale factors; and where the WAV isn't bound, its predictor, HF VQ vector, the LFE
+//   abt  the bit allocations, against the ABITS seen at the subband's energy, and the last ones
 //   scl  the scale factors, against the one the audio's RMS makes
-//   smp  the subband samples' indexes, against the one the audio's subband sample quantizes to
+//   hit  whether an index that isn't the audio's is the one across the rounding boundary
+//   smp  the subband samples' indexes otherwise: magnitude and sign
+//   vqr  the ranks of the predictors and the HF VQ vectors in the encoder's search order
 //   raw  bytes kept as bytes, the bits after the subframes
+// (Whether a subband sample's index is the audio's goes straight to the coder: model_smp.inc.)
 //
 // File format: "dtsdpack", the format version 1, the level, the WAV's binding (how the core lines
 // up with it, and what the WAV was: coro.inc), then the range coded chunks (kind: end, a frame as

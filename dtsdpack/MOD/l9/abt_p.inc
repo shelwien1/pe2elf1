@@ -16,66 +16,63 @@ void D9_abt_make( const M_abt_v & D, tcx & X ) {
   M_abt_VARS(M_LOCAL)
 
   a = 0;
-  a = a*32 + D9_abt_a_bd[__min(31,__max(0,(bd)-(1-1)))];
+  a = a*27 + D9_abt_a_bd[__min(31,__max(0,(bd)-(1-1)))];
   a = (a<<8) + (((es)&255)); // 11111111
 
   b = 0;
-  b = b*28 + D9_abt_b_la[__min(27,__max(0,(la)-(1-1)))];
-  b = b*28 + D9_abt_b_lb[__min(27,__max(0,(lb)-(1-1)))];
+  b = b*9 + D9_abt_b_la[__min(27,__max(0,(la)-(1-1)))];
+  b = b*8 + D9_abt_b_lb[__min(27,__max(0,(lb)-(1-1)))];
 
   c = 0;
-  c = c*28 + D9_abt_c_sn[__min(27,__max(0,(sn)-(1-1)))];
-  c = c*28 + D9_abt_c_la[__min(27,__max(0,(la)-(1-1)))];
+  c = c*23 + D9_abt_c_sn[__min(27,__max(0,(sn)-(1-1)))];
+  c = c*24 + D9_abt_c_la[__min(27,__max(0,(la)-(1-1)))];
 
   d = 0;
-  d = d*28 + D9_abt_d_sn[__min(27,__max(0,(sn)-(1-1)))];
+  d = d*9 + D9_abt_d_sn[__min(27,__max(0,(sn)-(1-1)))];
   d = d*3 + (((sd)>0+(1-1))+((sd)>1+(1-1)));
   d = d*10 + D9_abt_d_de[__min(9,__max(0,(de)-(1-1)))];
 
   e = 0;
-  e = e*32 + D9_abt_e_bd[__min(31,__max(0,(bd)-(1-1)))];
-  e = e*28 + D9_abt_e_sn[__min(27,__max(0,(sn)-(1-1)))];
+  e = e*25 + D9_abt_e_bd[__min(31,__max(0,(bd)-(1-1)))];
+  e = e*25 + D9_abt_e_sn[__min(27,__max(0,(sn)-(1-1)))];
 
   h = 0;
-  h = h*28 + D9_abt_h_lb[__min(27,__max(0,(lb)-(1-1)))];
-  h = (h<<8) + (((es)&255)); // 11111111
-  h = h*32 + D9_abt_h_bd[__min(31,__max(0,(bd)-(1-1)))];
+  h = h*3 + (((lb)>20+(1-1))+((lb)>24+(1-1)));
+  h = (h<<7) + (((es)&127)); // 01111111
+  h = h*13 + D9_abt_h_bd[__min(31,__max(0,(bd)-(1-1)))];
 
   i = 0;
   i = (i<<8) + (((es)&255)); // 11111111
-  i = i*10 + D9_abt_i_nb[__min(9,__max(0,(nb)-(1-1)))];
-  i = i*28 + D9_abt_i_la[__min(27,__max(0,(la)-(1-1)))];
+  i = i*21 + D9_abt_i_la[__min(27,__max(0,(la)-(1-1)))];
 
   j = 0;
-  j = (j<<8) + (((es)&255)); // 11111111
-  j = j*10 + D9_abt_j_de[__min(9,__max(0,(de)-(1-1)))];
-  j = j*2 + (((pm)>0+(1-1)));
+  j = j*7 + D9_abt_j_de[__min(9,__max(0,(de)-(1-1)))];
 
   k = 0;
-  k = k*28 + D9_abt_k_sn[__min(27,__max(0,(sn)-(1-1)))];
-  k = k*16 + D9_abt_k_nn[__min(15,__max(0,(nn)-(1-1)))];
+  k = k*2 + (((sn)>0+(1-1)));
+  k = k*12 + D9_abt_k_nn[__min(15,__max(0,(nn)-(1-1)))];
 
   l = 0;
-  l = l*32 + D9_abt_l_bd[__min(31,__max(0,(bd)-(1-1)))];
+  l = l*20 + D9_abt_l_bd[__min(31,__max(0,(bd)-(1-1)))];
   l = l*3 + (((cc)>0+(1-1))+((cc)>1+(1-1)));
-  l = l*28 + D9_abt_l_la[__min(27,__max(0,(la)-(1-1)))];
+  l = l*22 + D9_abt_l_la[__min(27,__max(0,(la)-(1-1)))];
 
   s = 0;
-  s = s*28 + D9_abt_s_sn[__min(27,__max(0,(sn)-(1-1)))];
-  s = s*3 + (((sd)>0+(1-1))+((sd)>1+(1-1)));
-  s = s*16 + D9_abt_s_nn[__min(15,__max(0,(nn)-(1-1)))];
+  s = s*9 + D9_abt_s_sn[__min(27,__max(0,(sn)-(1-1)))];
+  s = s*2 + (((sd)>1+(1-1)));
+  s = s*7 + D9_abt_s_nn[__min(15,__max(0,(nn)-(1-1)))];
 
   f = 0;
-  f = (f<<8) + (((es)&255)); // 11111111
+  f = (f<<6) + (((((es)>>3)&15)<<2) + ((es)&3)); // 01111011
 
   m = 0;
-  m = m*16 + D9_abt_m_nn[__min(15,__max(0,(nn)-(1-1)))];
+  m = m*8 + D9_abt_m_nn[__min(15,__max(0,(nn)-(1-1)))];
 
   w = 0;
-  w = w*10 + D9_abt_w_st[__min(9,__max(0,(st)-(1-1)))];
+  w = w*2 + (((st)>8+(1-1)));
 
   t = 0;
-  t = t*32 + D9_abt_t_bd[__min(31,__max(0,(bd)-(1-1)))];
+  t = t*3 + (((bd)>14+(1-1))+((bd)>19+(1-1)));
 
   n = 0;
   n = n*28 + D9_abt_n_la[__min(27,__max(0,(la)-(1-1)))];

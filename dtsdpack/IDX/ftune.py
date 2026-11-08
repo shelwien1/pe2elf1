@@ -51,6 +51,16 @@ for k in pats:
     if m and (not only_pats or re.search(only_pats, k)):
         fams.setdefault(m.group(1), []).append(k)
 lock = threading.Lock()
+
+def popen(cmd):
+    # (another thread's fork can hold the binary just written open a moment: ETXTBSY, so again)
+    for k in range(50):
+        try:
+            return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        except OSError as e:
+            if e.errno != 26 or k == 49:
+                raise
+            time.sleep(0.05)
 log = open('ftune.log', 'a')
 t0 = time.time()
 
@@ -79,7 +89,7 @@ def tune(fam):
 
     def measure():
         # a process per stream, at once: the cores the small families leave go to the large ones
-        ps = [subprocess.Popen(['./' + mine, fam, d], stdout=subprocess.PIPE, stderr=subprocess.PIPE) for d in dumps]
+        ps = [popen(['./' + mine, fam, d]) for d in dumps]
         tot = 0.0
         for p in ps:
             out, err = p.communicate()

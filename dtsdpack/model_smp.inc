@@ -1,8 +1,9 @@
-// model_smp.inc -- the model's scale factors and subband samples (model.inc), against the audio:
-// the WAV's subband samples by the encoder's analysis (anal.inc), which the core's own step sizes,
-// scale factors and ADPCM predictions quantize to nearly every index the core has, and whose RMS
-// makes nearly every scale factor (the scl and smp families). Where the WAV isn't bound to a
-// channel, against the last values and the neighbours'.
+// model_smp.inc -- the model's elements against the audio (model.inc): the WAV's subband samples by
+// the encoder's analysis (anal.inc), which the core's own step sizes, scale factors and ADPCM
+// predictions quantize to nearly every index the core has (the hit and smp families), whose RMS
+// makes nearly every scale factor (scl), and whose code book searches as the encoder's make nearly
+// every ADPCM predictor and HF VQ vector (vqr); the WAV's LFE channel decimated, nearly every LFE
+// sample. Where the WAV isn't bound to a channel, against the last values and the neighbours'.
 
 template <int f_DEC, class LV>
 struct ModelSmp : ModelSide<f_DEC, LV> {

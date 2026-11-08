@@ -41,7 +41,7 @@ constexpr int LEN_NODES = 32;  // a length's tree: its nodes by the bits so far 
 constexpr int LEN_TOP = 2;     // and the bits below the top one that follow it, by the length and the bits before them
 constexpr int LEN_MAX = 24;    // (lengths 0-24)
 constexpr int LEN_TOPN = ((1 << LEN_TOP) - 1) * (LEN_MAX + 1);
-enum { QN_HIT, QN_ALT, QN_LEN, QN_SIGN = QN_LEN + LEN_NODES + LEN_TOPN, QN_N };
+enum { QN_LEN = 2, QN_SIGN = QN_LEN + LEN_NODES + LEN_TOPN, QN_N };  // (0-1 unused: hit has those decisions)
 constexpr int RANK_BITS = 12;  // (a rank: 0 to 2^12 - 1, the ADPCM code book's)
 enum { VN_BKT = TC_NODE, VN_BIT = VN_BKT + RANK_BITS, VN_N = VN_BIT + 3 * (RANK_BITS + 1) };
 // what vqr ranks (kd): an ADPCM predictor, an HF VQ vector's group, the vector in its group

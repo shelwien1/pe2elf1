@@ -12,75 +12,75 @@ Const 0
 
 Index a
  a_pk: pk, 1!1
- a_nr: nr, 1!111111111111111
- a_nl: nl, 1!111111111111111
+ a_nr: nr, 1!000001000110111
+ a_nl: nl, 1!001000010001110
 
 Index b
  b_pk: pk, 1!1
- b_ab: ab, 1!111111111111111111111111111
- b_ql: ql, 1!111111111111111111111
+ b_ab: ab, 1!011001010011000000100000010
+ b_ql: ql, 1!111111111101010100000
 
 Index c
  c_pk: pk, 1!1
- c_nr: nr, 1!111111111111111
- c_hm: hm, 1!11
+ c_nr: nr, 1!000001011111001
+ c_hm: hm, 1!10
 
 Index d
  d_pk: pk, 1!1
- d_ab: ab, 1!111111111111111111111111111
- d_m1: m1, 1!1111111111111111111111
+ d_ab: ab, 1!000100110111000111101010001
+ d_m1: m1, 1!0011100000000000000000
 
 Index e
  e_pk: pk, 1!1
- e_ab: ab, 1!111111111111111111111111111
- e_m1: m1, 1!1111111111111111111111
- e_m2: m2, 1!1111111111111111111111
+ e_ab: ab, 1!010100011111000011001101000
+ e_m1: m1, 1!0001110001100000001000
+ e_m2: m2, 1!0011110011011101000000
 
 Index h
  h_pk: pk, 1!1
- h_ab: ab, 1!111111111111111111111111111
- h_nr: nr, 1!111111111111111
+ h_ab: ab, 1!010111011110101001100000000
+ h_nr: nr, 1!000000000000000
 
 Index i
  i_pk: pk, 1!1
- i_ab: ab, 1!111111111111111111111111111
+ i_ab: ab, 1!000100000111100110111100000
  i_hw: hw, 1!111
- i_pm: pm, 1!1
+ i_pm: pm, 1!0
 
 Index j
  j_pk: pk, 1!1
- j_ab: ab, 1!111111111111111111111111111
- j_bd: bd, 1!1111111111111111111111111111111
+ j_ab: ab, 1!011101001111110111111110010
+ j_bd: bd, 1!0110000100000001010000100100000
 
 Index k
  k_pk: pk, 1!1
- k_nr: nr, 1!111111111111111
+ k_nr: nr, 1!000100011000000
  k_pm: pm, 1!1
 
 Index l
  l_pk: pk, 1!1
- l_nl: nl, 1!111111111111111
- l_ab: ab, 1!111111111111111111111111111
+ l_nl: nl, 1!000000010111000
+ l_ab: ab, 1!001011000111100010101110000
 
 Index s
  s_pk: pk, 1!1
- s_nr: nr, 1!111111111111111
- s_nl: nl, 1!111111111111111
+ s_nr: nr, 1!000000011010011
+ s_nl: nl, 1!000011101101101
 
 Index f
  f_pk: pk, 1!1
- f_nl: nl, 1!111111111111111
- f_nr: nr, 1!111111111111111
+ f_nl: nl, 1!000000110000000
+ f_nr: nr, 1!000101010100000
 
 Index m
  m_pk: pk, 1!1
- m_nr: nr, 1!111111111111111
+ m_nr: nr, 1!000000000000000
 
 Index w
- w_nl: nl, 1!111111111111111
+ w_nl: nl, 1!000100000000000
 
 Index t
- t_ab: ab, 1!111111111111111111111111111
+ t_ab: ab, 1!000000010000000000000000000
 
 Index n
 #  Frozen: the mantissa mixer it is for mixes only by a hint, and nothing gives this family one.
@@ -89,36 +89,36 @@ Index n
 Index g
 
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
-Number rA, 1, 0!11111110
-Number mwA, 1, 0!00000000
-Number rB, 1, 0!11111111
-Number mwB, 1, 0!00000100
-Number rC, 1, 0!11001101
-Number mwC, 1, 0!01001111
-Number rD, 1, 0!11101001
-Number mwD, 1, 0!01000001
-Number rE, 1, 0!11111110
-Number mwE, 1, 0!00000100
-Number rH, 1, 0!11111101
-Number mwH, 1, 0!00111110
-Number rI, 1, 0!11111111
-Number mwI, 1, 0!00000100
-Number rJ, 1, 0!11111111
-Number mwJ, 1, 0!00000000
-Number rK, 1, 0!11111111
-Number mwK, 1, 0!01000000
-Number rL, 1, 0!11110011
-Number mwL, 1, 0!10000000
-Number lr, 1, 0!01111
-Number mb, 1, 0!00100011
+Number rA, 1, 0!01100100
+Number mwA, 1, 0!11111110
+Number rB, 1, 0!10001000
+Number mwB, 1, 0!00000000
+Number rC, 1, 0!01001000
+Number mwC, 1, 0!11111111
+Number rD, 1, 0!01001011
+Number mwD, 1, 0!00001001
+Number rE, 1, 0!11111111
+Number mwE, 1, 0!00001101
+Number rH, 1, 0!10111000
+Number mwH, 1, 0!00000000
+Number rI, 1, 0!11011000
+Number mwI, 1, 0!11111110
+Number rJ, 1, 0!10100101
+Number mwJ, 1, 0!00000010
+Number rK, 1, 0!01111011
+Number mwK, 1, 0!11110111
+Number rL, 1, 0!00000000
+Number mwL, 1, 0!01010001
+Number lr, 1, 0!11111
+Number mb, 1, 0!00100000
 Number rS1, 1, 0!01000
 Number rS2, 1, 0!01000
-Number qs, 1, 3!0010001
-Number qf, 1, 3!0011110
-Number bw, 1, 0!01100
-Number rT, 1, 0!10000111
-Number mwT, 1, 0!00000000
-Number mt, 1, 0!110
+Number qs, 1, 3!1110100
+Number qf, 1, 3!0111100
+Number bw, 1, 0!01110
+Number rT, 1, 0!10000000
+Number mwT, 1, 0!11111111
+Number mt, 1, 0!100
 #  the mantissa mixer's rates: frozen (Index n)
 ! Number lrm, 1, 0!11111
 ! Number mbm, 1, 0!00011001
