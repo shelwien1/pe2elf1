@@ -564,16 +564,33 @@ channel 1's scalefactors have bits: in a stereo stream the channels have
 the same scalefactors now and then by chance, and copying those cost
 more than it saved.
 
-On the 125 test inputs the two flags cost a file that never repeats a
-channel at most 132 bytes (0.03%), and a few test files gain from them (by
-2.3% at most); all of them come to 0.02% less. Streams made for them, the
-same signal in both channels (MPEG-1 with short blocks, MPEG-2, MPEG-2.5),
+In a granule whose values are the same, so is all of channel 1's side
+information but part2_3_length, which an encoder stuffs in one channel to
+fill a frame of constant bit rate (and which the model predicts from the
+values and the scalefactors' lengths as before). A third flag, before a
+granule's side information (`model_header.inc`), copies global_gain,
+scalefac_compress, the window switching, block type, subblock gains,
+preflag, scalefac_scale and count1table_select, and further on big_values
+(`model_delta_counts.inc`), table_select and the region counts
+(`model_delta_regions.inc`); and a fourth the frame's scfsi. The
+histories their stages keep (the last values of global_gain, of
+scalefac_compress and the region counts, scalefac_scale's, the block type
+predicted) are kept as coding them would have kept them. Both come only
+after a granule whose values were copied, as the scalefactors' flag.
+
+Channel 1 of `MUS_Why_Dont_You_Do_Right` now costs 931 bytes (of 281000),
+and of `MUS_EddyArnold_Rca_ItsASin` 29 KB, nearly all of it the 5% of
+granules whose values differ from channel 0's, in a few lines by one.
+On the 125 test inputs the flags cost a file that never repeats a channel
+at most 133 bytes (0.03%), and a few test files gain from them (by 2.3% at
+most); all of them come to 0.02% less. Streams made for them, the same
+signal in both channels (MPEG-1 with short blocks, MPEG-2, MPEG-2.5),
 round-trip, on threads too.
 
-| file | | packMP3 | mp3pack before | values copied | and scalefactors |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| `MUS_EddyArnold_Rca_ItsASin.mp3` | 4683131 | 1914608 | 1952936 | 1759488 | 1745071 |
-| `MUS_Why_Dont_You_Do_Right.mp3` | 6476177 | 2436623 | 2502042 | 2229774 | 2209996 |
+| file | | packMP3 | mp3pack before | values copied | and scalefactors | and side information |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `MUS_EddyArnold_Rca_ItsASin.mp3` | 4683131 | 1914608 | 1952936 | 1759488 | 1745071 | 1741896 |
+| `MUS_Why_Dont_You_Do_Right.mp3` | 6476177 | 2436623 | 2502042 | 2229774 | 2209996 | 2205506 |
 
 (mp3pack's with 1282 and 1283 bytes of outside data.)
 
@@ -634,8 +651,9 @@ not padded to 1 MB blocks as the `.dmp` file has them (`frame_dump_io.inc`,
 `FRAME_DUMP_ALIGN`). `d` runs mp3c's model into the restorer (`join.inc`,
 mp3rs's), which reads the outside data from its file the same way.
 
-The stream: the magic `mp3pk`, a version byte (3: versions 1 and 2 had no
-flags for a channel that copies the other, below), the threads (1: one model)
+The stream: the magic `mp3pk`, a version byte (4: versions 1 to 3 had no
+flags, or fewer, for a channel that copies the other, below), the threads
+(1: one model)
 and the part size in KB (u32), then the stream of mp3c's model, the bytes
 `mp3c c` writes for the dump (with one model the stream is mp3c's `.c` and
 15 bytes), or on threads MTwrap's container of the workers' streams; and the
@@ -685,12 +703,12 @@ bytes, 58188 frames), on 4 cores of the VM the rest was measured on:
 
 | | compressed | | `c` | `d` | memory |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `mp3rw c` + `mp3c c` (and back) | 27259284 and 82523 of `.out` | | 28.4 s | 28.9 s | |
-| one model | 27259299 and the same `.out` | | 28.6 s | 28.3 s | 38 MB |
-| `-t 2` | 27302182 | +0.16% | 14.3 s | 14.2 s | 123 MB |
-| `-t 4` | 27351278 | +0.34% | 7.8 s | 7.8 s | 227 MB |
-| `-t 4 -c 256k` | 27369134 | +0.40% | 7.5 s | 7.6 s | 174 MB |
-| `-t 4 -c 4` | 27299485 | +0.15% | 8.3 s | 11.0 s | 417 MB |
+| `mp3rw c` + `mp3c c` (and back) | 27259226 and 82523 of `.out` | | 28.4 s | 28.9 s | |
+| one model | 27259241 and the same `.out` | | 28.6 s | 28.3 s | 38 MB |
+| `-t 2` | 27302141 | +0.16% | 14.3 s | 14.2 s | 123 MB |
+| `-t 4` | 27351218 | +0.34% | 7.8 s | 7.8 s | 227 MB |
+| `-t 4 -c 256k` | 27369087 | +0.40% | 7.5 s | 7.6 s | 174 MB |
+| `-t 4 -c 4` | 27299434 | +0.15% | 8.3 s | 11.0 s | 417 MB |
 
 With one model, mp3pack takes the time `mp3rw` and `mp3c` take, without
 the dump between them (about 280 MB of it here). On threads the stream is

@@ -134,7 +134,7 @@ void ProcessDelta( void ) {
       dupflag[st_mod][dup_last].Process( rc, dup[gr], TTable[24], 16 );
       dup_last = dup[gr];
     }
-    ProcessCounts( ii[gr][ch], gr, ch, ch && dup[gr] );
+    ProcessCounts( ii[gr][ch], gr, ch, ch && dup[gr], ch && side_dup[gr] );
   }
 
   int ctext[2][2] = {0,0,0,0};
@@ -168,7 +168,7 @@ void ProcessDelta( void ) {
     }
   }
 
-  for( gr=0; gr<=ngr; gr++ ) for( ch=0; ch<stereo; ch++ ) ProcessRegions( gr, ch );
+  for( gr=0; gr<=ngr; gr++ ) for( ch=0; ch<stereo; ch++ ) ProcessRegions( gr, ch, ch && side_dup[gr] );
 
 }
 

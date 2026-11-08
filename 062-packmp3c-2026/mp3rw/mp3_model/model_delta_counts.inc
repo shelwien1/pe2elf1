@@ -27,8 +27,9 @@ void Init_Counts() {
   memset( &cc1, 0, sizeof(cc1) );
 }
 
-// dup: channel 1 a copy of channel 0, whose counts it has (not coded)
-void ProcessCounts( int i, int gr, int ch, int dup ) {
+// dup: channel 1 a copy of channel 0, whose counts it has (not coded);
+// sdup: and its big_values (model_header.inc's flag)
+void ProcessCounts( int i, int gr, int ch, int dup, int sdup ) {
 
   int k, c1, flag;
   gr_info& gi = si.gi[gr][ch];
@@ -42,35 +43,38 @@ void ProcessCounts( int i, int gr, int ch, int dup ) {
   ProcessCounts1( k, c1, i, gr, ch );
 
   int bigval = gi.big_values;
-  int u = (c1+1)/2;
-
-  int v = __min((k+1)/2,u+2);
-  flag = ( bigval<u || bigval>v );
-#ifndef DISABLE_bvflag
-  bvflag.Process( rc, flag, M_bvflag_wr, M_bvflag_mw ); //branch = 0;
-#endif
-  if( flag ) {
-#ifndef DISABLE_bvdump
-    bvdump.Process( rc, bigval, -1, 289, M_bvdump_wr, M_bvdump_mw );
-#endif
+  if( sdup ) {
+    bigval = si.gi[gr][0].big_values;
   } else {
-    flag = (bigval==u);
-    if( v==u ) flag=1; else {
-#ifndef DISABLE_xbigval0
-      xbigval0.Process( rc, flag, M_xbigval0_wr, M_xbigval0_mw );
+    int u = (c1+1)/2;
+
+    int v = __min((k+1)/2,u+2);
+    flag = ( bigval<u || bigval>v );
+#ifndef DISABLE_bvflag
+    bvflag.Process( rc, flag, M_bvflag_wr, M_bvflag_mw ); //branch = 0;
 #endif
-    }
-    if( flag ) bigval=u; else {
-      flag = (bigval==u+1);
-      if( v==u+1) flag=1; else {
-#ifndef DISABLE_xbigval1
-        xbigval1.Process( rc, flag, M_xbigval1_wr, M_xbigval1_mw );
+    if( flag ) {
+#ifndef DISABLE_bvdump
+      bvdump.Process( rc, bigval, -1, 289, M_bvdump_wr, M_bvdump_mw );
+#endif
+    } else {
+      flag = (bigval==u);
+      if( v==u ) flag=1; else {
+#ifndef DISABLE_xbigval0
+        xbigval0.Process( rc, flag, M_xbigval0_wr, M_xbigval0_mw );
 #endif
       }
-      if( flag ) bigval=u+1; else bigval=u+2;
+      if( flag ) bigval=u; else {
+        flag = (bigval==u+1);
+        if( v==u+1) flag=1; else {
+#ifndef DISABLE_xbigval1
+          xbigval1.Process( rc, flag, M_xbigval1_wr, M_xbigval1_mw );
+#endif
+        }
+        if( flag ) bigval=u+1; else bigval=u+2;
+      }
     }
   }
-
   if( bigval>576/2 ) BadData(); // (a broken stream: the parser takes no more)
   gi.big_values = bigval;
 

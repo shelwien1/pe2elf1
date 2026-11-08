@@ -552,6 +552,43 @@ void Process_GlGain( int& c, int ch, int gr ) {
   gprv[ch] = gcur[ch]; gcur[ch] = c;
 }
 
+// A value of channel ch not coded but copied from the other channel's
+// (model_header.inc, model_delta_regions.inc): the histories its stage
+// keeps, as coding it would have left them -- global_gain c of granule
+// gr, scalefac_compress c, the region counts c0 and c1
+void Copy_GlGain( int c, int ch, int gr ) {
+  int pglgain_e;
+
+  pglgain_e = 0;
+  pglgain_e = pglgain_e*2 + (((ch)>0+(1-1)));
+  pglgaio[pglgain_e] = pglgain[pglgain_e];
+  pglgain[pglgain_e] = c;
+  gprv[ch] = gcur[ch]; gcur[ch] = c;
+}
+void Copy_sfcomp( int c, int ch ) {
+  int psfcomp_e;
+
+  psfcomp_e = 0;
+  psfcomq[psfcomp_e] = psfcomp[psfcomp_e];
+  psfcomp[psfcomp_e] = c;
+}
+void Copy_rgxcnt( int c0, int c1, int ch ) {
+  {
+    int c = c0, prg0cnt_e;
+
+    prg0cnt_e = 0;
+    prg0cnu[prg0cnt_e] = prg0cnt[prg0cnt_e];
+    prg0cnt[prg0cnt_e] = c;
+  }
+  {
+    int rg0 = c0, c = c1, prg1cnt_e; (void)rg0;
+
+    prg1cnt_e = 0;
+    prg1cnu[prg1cnt_e] = prg1cnt[prg1cnt_e];
+    prg1cnt[prg1cnt_e] = c;
+  }
+}
+
 
 // a long-block scalefactor of MPEG-1: band i of granule gr, channel ch,
 // the band below's value k, ll bits.  Its bits are coded by the

@@ -49,6 +49,18 @@ Number1ii<3>    x_sbgain[3];
 Node2ii         x_scfsi[8][4];
 byte            p_scfsi[2][4];
 
+// Channel 1's side information channel 0's (a mono recording in two
+// channels, L/R): a flag before a granule's, then it is copied, not coded
+// -- all that is coded of it but part2_3_length (which an encoder stuffs
+// in one channel), here and in the counts (big_values) and the regions
+// (table_select, region counts) -- and a flag before the frame's scfsi.
+// As the scalefactors' (model_scale1.inc), the flags come only after a
+// granule whose values were channel 0's (model_delta.inc: dup_last).
+Node2ii         x_sidup[2][2];    // by MPEG version and the last granule's flag
+Node2ii         x_scfsidup;
+int             sidup_last;
+int             side_dup[2];      // the frame's granules' flags
+
 void Init_Header() {
 
   memset( p_scfscl,0, sizeof(p_scfscl) );
@@ -81,6 +93,53 @@ void Init_Header() {
 
   memset( p_scfsi, 0, sizeof(p_scfsi)  );
   Init_Node2ii( x_scfsi );
+
+  Init_Node2ii( x_sidup );
+  Init_Node2ii( x_scfsidup );
+  sidup_last = 0;
+  side_dup[0] = side_dup[1] = 0;
+}
+
+// whether channel 1's side information of granule gr is channel 0's, all
+// that is coded of it but part2_3_length (the encoder's flag above)
+int SideSame( int gr ) {
+  const gr_info &a = si.gi[gr][0], &b = si.gi[gr][1];
+  int i, ws = b.window_switching_flag;
+  if( a.global_gain!=b.global_gain || a.scalefac_compress!=b.scalefac_compress || a.window_switching_flag!=ws ) return 0;
+  if( (h.ID && a.preflag!=b.preflag) || a.scalefac_scale!=b.scalefac_scale || a.count1table_select!=b.count1table_select ) return 0;
+  if( a.big_values!=b.big_values ) return 0;
+  for( i=0; i<3-ws; i++ ) if( a.table_select[i]!=b.table_select[i] ) return 0;
+  if( ws ) {
+    if( a.block_type!=b.block_type || a.mixed_block_flag!=b.mixed_block_flag ) return 0;
+    for( i=0; i<3; i++ ) if( a.subblock_gain[i]!=b.subblock_gain[i] ) return 0;
+  } else {
+    if( a.region0_count!=b.region0_count || a.region1_count!=b.region1_count ) return 0;
+  }
+  return 1;
+}
+
+// channel 1's side information of granule gr copied from channel 0's (the
+// flag above): what is coded here, and the state coding it would have left
+void CopySide( int gr ) {
+  const gr_info& a = si.gi[gr][0];
+  gr_info& b = si.gi[gr][1];
+  b.global_gain = a.global_gain;
+  b.scalefac_compress = a.scalefac_compress;
+  b.window_switching_flag = a.window_switching_flag;
+  if( h.ID ) b.preflag = a.preflag;
+  b.scalefac_scale = a.scalefac_scale;
+  b.count1table_select = a.count1table_select;
+  Copy_GlGain( b.global_gain, 1, gr );
+  if( h.ID ) Copy_sfcomp( b.scalefac_compress, 1 );
+  (p_scfscl[gr][1]<<=1) += b.scalefac_scale;
+  if( b.window_switching_flag ) {
+    b.block_type = a.block_type;
+    b.mixed_block_flag = a.mixed_block_flag;
+    for( int i=0; i<3; i++ ) b.subblock_gain[i] = a.subblock_gain[i];
+    // (p_bltype as coding channel 1's block type leaves it, below)
+    if( b.block_type!=p_bltype ) p_bltype = b.block_type ? 0 : p_bltype+1;
+    if( p_bltype==3 ) p_bltype=0;
+  }
 }
 
 void ProcessHeader( void ) {
@@ -113,9 +172,15 @@ void ProcessHeader( void ) {
 
   // !!! MPEG1 only 
   if( ngr ) for( ch=0; ch<stereo; ch++ ) {
+    int dup = 0;
+    if( ch && dup_last ) {
+      if( rc.rc_ProcMode==0 ) dup = !memcmp( si.scfsi[1], si.scfsi[0], sizeof(si.scfsi[0]) ); // (decoding: the flag decoded)
+      x_scfsidup.Process( rc, dup, TTable[24], 16 );
+    }
     for( i=0,j=0; i<4; i++ ) {
+      if( dup ) si.scfsi[1][i] = si.scfsi[0][i];
 #ifndef DISABLE_s1scfsi
-      x_scfsi[ch+2*p_scfsi[ch][i]+4*j][i].Process( rc, si.scfsi[ch][i], M_x_scfsi_wr, M_x_scfsi_mw );
+      else x_scfsi[ch+2*p_scfsi[ch][i]+4*j][i].Process( rc, si.scfsi[ch][i], M_x_scfsi_wr, M_x_scfsi_mw );
 #endif
       p_scfsi[ch][i] = (j = si.scfsi[ch][i]);
     }
@@ -125,6 +190,14 @@ void ProcessHeader( void ) {
     for( ch=0; ch<stereo; ch++ ) {
 
       gr_info& gi = si.gi[gr][ch];
+      if( ch==0 ) side_dup[gr] = 0;
+      if( ch && dup_last ) {
+        int dup = 0;
+        if( rc.rc_ProcMode==0 ) dup = SideSame( gr ); // (decoding: the flag decoded)
+        x_sidup[ngr][sidup_last].Process( rc, dup, TTable[24], 16 );
+        sidup_last = side_dup[gr] = dup;
+        if( dup ) { CopySide( gr ); continue; }
+      }
 #ifndef DISABLE_glgain
       Process_GlGain( gi.global_gain, ch, gr );
 //      x_glgain[0].Process( rc, gi.global_gain, -1, 256, C_x_glgain_0_wr, C_x_glgain_0_mw );

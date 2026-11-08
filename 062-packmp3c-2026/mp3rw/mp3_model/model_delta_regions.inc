@@ -6,7 +6,9 @@ void Init_Regions() {
   Init_Number1ii( tblsel );
 }
 
-void ProcessRegions( int gr, int ch ) {
+// sdup: channel 1's side information channel 0's (model_header.inc's
+// flag): its region counts and table_select copied, not coded
+void ProcessRegions( int gr, int ch, int sdup ) {
 
   int u, i, j, d, bigval;
   int region1Start, region2Start;
@@ -14,6 +16,15 @@ void ProcessRegions( int gr, int ch ) {
   gr_info& gi = si.gi[gr][ch];
   short (&MDCT)[576] = MC[gr][ch];
   RangeCoder& rc = *this;
+
+  if( sdup ) {
+    const gr_info& a = si.gi[gr][0];
+    gi.region0_count = a.region0_count;
+    gi.region1_count = a.region1_count;
+    for( j=0; j<3; j++ ) gi.table_select[j] = a.table_select[j];
+    if( !gi.window_switching_flag ) Copy_rgxcnt( gi.region0_count, gi.region1_count, ch );
+    return;
+  }
 
   if( gi.window_switching_flag ) {   
     if( h.ID==1 ) {
