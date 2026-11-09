@@ -176,9 +176,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       }
       const U32* tab = r.shuff[ch] == 6 ? SF7 : SF6;
       const int nt = sf_entries(r.shuff[ch]);
-      for (int b = 0; b < r.nsubs[ch]; b++) {  // (the LPC over the subframe and the 4 before it)
+      for (int b = 0; b < r.nsubs[ch]; b++) {  // (the LPC over the subframe and the 4 before it: hist4())
         S64 x[4 + NSMP];
-        for (int k = 0; k < 4; k++) x[3 - k] = xh[ch][b][k];
+        S64 h[4];
+        hist4(ch, b, h);
+        for (int k = 0; k < 4; k++) x[3 - k] = h[k];
         for (int j = 0; j < nsmp; j++) x[4 + j] = X[ch][b][j];
         lpc4(x, 4 + nsmp, lpc[ch][b], &lpg[ch][b], &lpg4[ch][b]);
       }
@@ -355,11 +357,21 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     L.d = bk - AL_ND;
   }
 
+  // the 4 samples before the subframe's of channel ch's subband b (h[0] the last) as the encoder's
+  // ADPCM had them: the decoder's (an encoder runs its ADPCM closed, so a lossless WAV's predictor,
+  // PMODE and residual start from them), the audio's own where the scale factor search's rule is
+  // taken (a decoded WAV's: its values are the decoder's, the decoder's history theirs before)
+  void hist4(int ch, int b, S64* h) {
+    const int closed = !ss_rule();
+    for (int k = 0; k < 4; k++) h[k] = closed ? shl64(yh[ch][b][k], AQ_F) : xh[ch][b][k];
+  }
   // the audio's values a scale factor scales (n of them into v): channel ch's subband b over its
-  // subsubframes j0 to j1 (8 samples each), less the ADPCM prediction from its own samples where
-  // the subband predicts (the open loop's: the decoder's samples aren't decoded yet)
+  // subsubframes j0 to j1 (8 samples each), less the ADPCM prediction where the subband predicts:
+  // from the 4 samples before the subframe as the encoder had them (hist4()), then from its own
+  // (the subframe's decoder's samples aren't decoded yet)
   int scale_values(const CoreSub& s, int ch, int b, int j0, int j1, S64* v) {
-    S64 h[4] = {xh[ch][b][0], xh[ch][b][1], xh[ch][b][2], xh[ch][b][3]};
+    S64 h[4];
+    hist4(ch, b, h);
     const int pm = s.pmode[ch][b], pvq = s.pvq[ch][b];
     int n = 0;
     for (int j = 0; j < j1 * 8; j++) {
@@ -416,7 +428,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     pvq_dists(lpc[ch][b], d);
     for (int q = 1; q < 4096; q++)
       if (d[q] < d[bq]) bq = q;
-    return clip(pvq_gain4(bq, xh[ch][b], X[ch][b], nsmp) - 2, 1, 8);
+    S64 hd[4];
+    hist4(ch, b, hd);
+    return clip(pvq_gain4(bq, hd, X[ch][b], nsmp) - 2, 1, 8);
   }
   // Channel ch's subband b's ADPCM predictor v: its rank by the distance from the subband's LPC.
   // (Where the scale factor search's rule is taken, a decoded WAV's: of the first 16 in that order,
